@@ -30,6 +30,8 @@
 #include <linux/unistd.h>
 #include <linux/malloc.h>
 #include <linux/in.h>
+#define __NO_VERSION__
+#include <linux/module.h>
 
 #include <linux/sunrpc/svc.h>
 #include <linux/nfsd/nfsd.h>
@@ -451,7 +453,7 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 		goto out_nfserr;
 
 	memset(filp, 0, sizeof(*filp));
-	filp->f_op    = inode->i_fop;
+	filp->f_op    = fops_get(inode->i_fop);
 	atomic_set(&filp->f_count, 1);
 	filp->f_dentry = dentry;
 	if (access & MAY_WRITE) {
@@ -467,6 +469,7 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	if (filp->f_op && filp->f_op->open) {
 		err = filp->f_op->open(inode, filp);
 		if (err) {
+			fops_put(filp->f_op);
 			if (access & MAY_WRITE)
 				put_write_access(inode);
 
@@ -494,6 +497,7 @@ nfsd_close(struct file *filp)
 
 	if (filp->f_op && filp->f_op->release)
 		filp->f_op->release(inode, filp);
+	fops_put(filp->f_op);
 	if (filp->f_mode & FMODE_WRITE)
 		put_write_access(inode);
 }

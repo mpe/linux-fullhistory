@@ -1,5 +1,5 @@
 /*
- * $Id: mousedev.c,v 1.8 2000/05/28 17:31:36 vojtech Exp $
+ * $Id: mousedev.c,v 1.10 2000/06/23 09:23:00 vojtech Exp $
  *
  *  Copyright (c) 1999-2000 Vojtech Pavlik
  *
@@ -47,7 +47,7 @@
 #endif
 
 struct mousedev {
-	int used;
+	int exist;
 	int open;
 	int minor;
 	wait_queue_head_t wait;
@@ -172,22 +172,30 @@ static int mousedev_release(struct inode * inode, struct file * file)
 			struct input_handle *handle = mousedev_handler.handle;
 			while (handle) {
 				struct mousedev *mousedev = handle->private;
-				if (!mousedev->open)
-					input_close_device(handle);
+				if (!mousedev->open) {
+					if (mousedev->exist) {
+						input_close_device(&mousedev->handle);
+					} else {
+						input_unregister_minor(mousedev->devfs);
+						mousedev_table[mousedev->minor] = NULL;
+						kfree(mousedev);
+					}
+				}
 				handle = handle->hnext;
 			}
 		} else {
-			if (!mousedev_mix.open)	
-				input_close_device(&list->mousedev->handle);
+			if (!mousedev_mix.open) {
+				if (list->mousedev->exist) {
+					input_close_device(&list->mousedev->handle);
+				} else {
+					input_unregister_minor(list->mousedev->devfs);
+					mousedev_table[list->mousedev->minor] = NULL;
+					kfree(list->mousedev);
+				}
+			}
 		}
 	}
 	
-	if (!--list->mousedev->used) {
-		input_unregister_minor(list->mousedev->devfs);
-		mousedev_table[list->mousedev->minor] = NULL;
-		kfree(list->mousedev);
-	}
-
 	kfree(list);
 
 	return 0;
@@ -210,20 +218,20 @@ static int mousedev_open(struct inode * inode, struct file * file)
 	mousedev_table[i]->list = list;
 	file->private_data = list;
 
-	list->mousedev->used++;
-
 	if (!list->mousedev->open++) {
 		if (list->mousedev->minor == MOUSEDEV_MIX) {
 			struct input_handle *handle = mousedev_handler.handle;
 			while (handle) {
 				struct mousedev *mousedev = handle->private;
 				if (!mousedev->open)
-					input_open_device(handle);
+					if (mousedev->exist)	
+						input_open_device(handle);
 				handle = handle->hnext;
 			}
 		} else {
-			if (!mousedev_mix.open)	
-				input_open_device(&list->mousedev->handle);
+			if (!mousedev_mix.open)
+				if (list->mousedev->exist)	
+					input_open_device(&list->mousedev->handle);
 		}
 	}
 
@@ -402,7 +410,7 @@ static struct input_handle *mousedev_connect(struct input_handler *handler, stru
 	memset(mousedev, 0, sizeof(struct mousedev));
 	init_waitqueue_head(&mousedev->wait);
 
-	mousedev->used = 1;
+	mousedev->exist = 1;
 	mousedev->minor = minor;
 	mousedev_table[minor] = mousedev;
 
@@ -424,10 +432,13 @@ static void mousedev_disconnect(struct input_handle *handle)
 {
 	struct mousedev *mousedev = handle->private;
 
-	if (mousedev->open || mousedev_mix.open)
-		input_close_device(handle);
+	mousedev->exist = 0;
 
-	if (!--mousedev->used) {
+	if (mousedev->open) {
+		input_close_device(handle);
+	} else {
+		if (mousedev_mix.open)
+			input_close_device(handle);
 		input_unregister_minor(mousedev->devfs);
 		mousedev_table[mousedev->minor] = NULL;
 		kfree(mousedev);
@@ -449,7 +460,7 @@ static int __init mousedev_init(void)
 	memset(&mousedev_mix, 0, sizeof(struct mousedev));
 	init_waitqueue_head(&mousedev_mix.wait);
 	mousedev_table[MOUSEDEV_MIX] = &mousedev_mix;
-	mousedev_mix.used = 1;
+	mousedev_mix.exist = 1;
 	mousedev_mix.minor = MOUSEDEV_MIX;
 	mousedev_mix.devfs = input_register_minor("mice", MOUSEDEV_MIX, MOUSEDEV_MINOR_BASE);
 

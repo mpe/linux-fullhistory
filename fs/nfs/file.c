@@ -30,7 +30,6 @@
 #include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
-#include <asm/segment.h>
 #include <asm/system.h>
 
 #define NFSDBG_FACILITY		NFSDBG_FILE

@@ -60,7 +60,7 @@ nfsd_cache_init(void)
 	nfscache = (struct svc_cacherep *)
 		__get_free_pages(GFP_KERNEL, order);
 	if (!nfscache) {
-		printk (KERN_ERR "nfsd: cannot allocate %Zu bytes for reply cache\n", i);
+		printk (KERN_ERR "nfsd: cannot allocate %d bytes for reply cache\n", i);
 		return;
 	}
 	memset(nfscache, 0, i);
@@ -70,7 +70,7 @@ nfsd_cache_init(void)
 	if (!hash_list) {
 		free_pages ((unsigned long)nfscache, order);
 		nfscache = NULL;
-		printk (KERN_ERR "nfsd: cannot allocate %Zu bytes for hash list\n", i);
+		printk (KERN_ERR "nfsd: cannot allocate %d bytes for hash list\n", i);
 		return;
 	}
 

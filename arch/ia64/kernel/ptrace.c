@@ -7,6 +7,7 @@
  * Derived from the x86 and Alpha versions.  Most of the code in here
  * could actually be factored into a common set of routines.
  */
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>

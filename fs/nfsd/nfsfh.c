@@ -367,7 +367,7 @@ find_fh_dentry(struct super_block *sb, ino_t ino, int generation, ino_t dirino, 
 	/* It's a directory, or we are required to confirm the file's
 	 * location in the tree.
 	 */
-	dprintk("nfs_fh: need to look harder for %d/%ld\n",sb->s_dev,(long) ino);
+	dprintk("nfs_fh: need to look harder for %d/%ld\n",sb->s_dev,ino);
 	down(&sb->s_nfsd_free_path_sem);
 
 	/* claiming the semaphore might have allowed things to get fixed up */

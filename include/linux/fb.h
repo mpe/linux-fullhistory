@@ -27,6 +27,8 @@
 #define FBIOGET_VBLANK		_IOR('F', 0x12, struct fb_vblank)
 #define FBIO_ALLOC              0x4613
 #define FBIO_FREE               0x4614
+#define FBIOGET_GLYPH           0x4615
+#define FBIOGET_HWCINFO         0x4616
 
 #define FB_TYPE_PACKED_PIXELS		0	/* Packed Pixels	*/
 #define FB_TYPE_PLANES			1	/* Non interleaved planes */

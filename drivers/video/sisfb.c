@@ -43,9 +43,10 @@
 #define FALSE   0
 #define TRUE    1
 
-/* Draw Function */
+/* Draw Function 
 #define FBIOGET_GLYPH        0x4620
 #define FBIOGET_HWCINFO      0x4621
+*/
 #define BR(x)   (0x8200 | (x) << 2)
 
 #define BITBLT               0x00000000
@@ -115,7 +116,8 @@
 #define MMIO_SIZE                 0x20000	/* 128K MMIO capability */
 #define MAX_ROM_SCAN              0x10000
 
-#define RESERVED_MEM_SIZE         0x400000	/* 4M */
+#define RESERVED_MEM_SIZE_4M      0x400000	/* 4M */
+#define RESERVED_MEM_SIZE_8M      0x800000	/* 8M */
 
 /* Mode set stuff */
 #define DEFAULT_MODE      0
@@ -173,9 +175,9 @@ static struct board {
 	const char *name;
 } dev_list[] = {
 	{
-	PCI_VENDOR_ID_SIS, PCI_DEVICE_ID_SIS_300, "SIS 300"}, {
-	PCI_VENDOR_ID_SIS, PCI_DEVICE_ID_SIS_540, "SIS 540"}, {
-	PCI_VENDOR_ID_SIS, PCI_DEVICE_ID_SIS_630, "SIS 630"}, {
+	PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_300, "SIS 300"}, {
+	PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_540, "SIS 540"}, {
+	PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_630, "SIS 630"}, {
 	0, 0, NULL}
 };
 
@@ -1020,8 +1022,11 @@ static int sisfb_heap_init(void)
 	struct OH *poh;
 	u8 jTemp, tq_state;
 
-	heap_start = (unsigned long) ivideo.video_vbase + RESERVED_MEM_SIZE;
-	//heap_start = (unsigned long)ivideo.video_vbase + (video_size - RESERVED_MEM_SIZE);
+	if(ivideo.video_size > 0x800000)   /* video ram is large than 8M */
+		heap_start = (unsigned long) ivideo.video_vbase + RESERVED_MEM_SIZE_8M;
+	else
+		heap_start = (unsigned long) ivideo.video_vbase + RESERVED_MEM_SIZE_4M;
+
 	heap_end = (unsigned long) ivideo.video_vbase + ivideo.video_size;
 	heap_size = heap_end - heap_start;
 
@@ -1398,6 +1403,7 @@ static u32 get_reg3(u16 port)
 
 static u16 get_modeID_length(unsigned long ROMAddr, u16 ModeNo)
 {
+#if 0
 	unsigned char ModeID;
 	u16 modeidlength;
 	u16 usModeIDOffset;
@@ -1411,6 +1417,8 @@ static u16 get_modeID_length(unsigned long ROMAddr, u16 ModeNo)
 		ModeID = *((unsigned char *) (ROMAddr + usModeIDOffset));
 	}
 	return (modeidlength);
+#endif
+	return(10);
 }
 
 static int search_modeID(unsigned long ROMAddr, u16 ModeNo)
@@ -2467,7 +2475,11 @@ static int sisfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 	strcpy(fix->id, fb_info.modename);
 
 	fix->smem_start = ivideo.video_base;
-	fix->smem_len = RESERVED_MEM_SIZE;	/* reserved for Xserver */
+	if(ivideo.video_size > 0x800000)
+		fix->smem_len = RESERVED_MEM_SIZE_8M;	/* reserved for Xserver */
+	else
+		fix->smem_len = RESERVED_MEM_SIZE_4M;	/* reserved for Xserver */
+
 	fix->type = video_type;
 	fix->type_aux = 0;
 	if (ivideo.video_bpp == 8)

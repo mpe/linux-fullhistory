@@ -1,11 +1,5 @@
 This driver is for Compaq's SMART2 Intellegent Disk Array Controllers.
 
-WARNING:
---------
-
-This driver comes with NO WARRANTY.  It is not officially supported by
-Compaq.  Do not call technical support.  Use at your own risk.
-
 Supported Cards:
 ----------------
 
@@ -22,6 +16,7 @@ This driver is known to work with the following cards:
 	* Integrated Smart Array Controller
 	* SA 4200
 	* SA 4250ES
+	* SA 431
 
 It should also work with some really old Disk array adapters, but I am
 unable to test against these cards:

@@ -9,9 +9,11 @@
  * Copyright (C) 1999 Silicon Graphics, Inc.
  * Copyright (C) Vijay Chander(vijay@engr.sgi.com)
  *
- * 00/03/29 C. Fleckenstein  Fixed PAL/SAL update issues, began MCA bug fixes, logging issues, 
+ * 00/03/29 C. Fleckenstein  Fixed PAL/SAL update issues, began MCA bug fixes,
+ *                           logging issues, 
  *                           added min save state dump, added INIT handler. 
  */
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/sched.h>

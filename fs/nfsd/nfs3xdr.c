@@ -698,17 +698,9 @@ encode_entry(struct readdir_cd *cd, const char *name,
 		cd->eob = 1;
 		return -EINVAL;
 	}
-	*p++ = xdr_one;				   /* mark entry present */
-	p    = xdr_encode_hyper(p, ino);			   /* file id */
-	p[slen - 1] = 0;		/* don't leak kernel data */
-#ifdef XDR_ENCODE_STRING_TAKES_LENGTH
-	p    = xdr_encode_string(p, name, namlen); /* name length & name */
-#else
-	/* just like nfsproc.c */
-	*p++ = htonl((u32) namlen);
-	memcpy(p, name, namlen);
-	p += slen;
-#endif
+	*p++ = xdr_one;				 /* mark entry present */
+	p    = xdr_encode_hyper(p, ino);	 /* file id */
+	p    = xdr_encode_array(p, name, namlen);/* name length & name */
 
 	cd->offset = p;			/* remember pointer */
 	p = xdr_encode_hyper(p, NFS_OFFSET_MAX);	/* offset of next entry */

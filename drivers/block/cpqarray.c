@@ -22,7 +22,7 @@
  *    driver, you'll probably need the Compaq Array Controller Interface
  *    Specificiation (Document number ECG086/1198)
  */
-#include <linux/config.h>
+#include <linux/config.h>	/* CONFIG_PROC_FS */
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/types.h>
@@ -44,8 +44,8 @@
 
 #define SMART2_DRIVER_VERSION(maj,min,submin) ((maj<<16)|(min<<8)|(submin))
 
-#define DRIVER_NAME "Compaq SMART2 Driver (v 1.0.4)"
-#define DRIVER_VERSION SMART2_DRIVER_VERSION(1,0,4)
+#define DRIVER_NAME "Compaq SMART2 Driver (v 2.4.0)"
+#define DRIVER_VERSION SMART2_DRIVER_VERSION(2,4,0)
 #define MAJOR_NR COMPAQ_SMART2_MAJOR
 #include <linux/blk.h>
 #include <linux/blkdev.h>
@@ -73,7 +73,7 @@ static int eisa[8] = { 0, 0 ,0 ,0, 0, 0 ,0 ,0 };
  *  product = Marketing Name for the board
  *  access = Address of the struct of function pointers 
  */
-struct board_type products[] = {
+static struct board_type products[] = {
 	{ 0x0040110E, "IDA",			&smart1_access },
 	{ 0x0140110E, "IDA-2",			&smart1_access },
 	{ 0x1040110E, "IAES",			&smart1_access },
@@ -87,6 +87,7 @@ struct board_type products[] = {
 	{ 0x40400E11, "Integrated Array",	&smart4_access },
 	{ 0x40500E11, "Smart Array 4200",	&smart4_access },
 	{ 0x40510E11, "Smart Array 4250ES",	&smart4_access },
+	{ 0x40580E11, "Smart Array 431",	&smart4_access },
 };
 
 static struct hd_struct * ida;
@@ -95,7 +96,7 @@ static int * ida_blocksizes;
 static int * ida_hardsizes;
 static struct gendisk ida_gendisk[MAX_CTLR];
 
-struct proc_dir_entry *proc_array = NULL;
+static struct proc_dir_entry *proc_array = NULL;
 
 /* Debug... */
 #define DBG(s)	do { s } while(0)
@@ -106,7 +107,7 @@ struct proc_dir_entry *proc_array = NULL;
 /* Debug Extra Paranoid... */
 #define DBGPX(s) do { } while(0)
 
-void cpqarray_init(void);
+int cpqarray_init(void);
 static int cpqarray_pci_detect(void);
 static int cpqarray_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn);
 static ulong remap_pci_mem(ulong base, ulong size);
@@ -312,9 +313,8 @@ EXPORT_NO_SYMBOLS;
 /* This is a bit of a hack... */
 int __init init_module(void)
 {
-	cpqarray_init();
-	if (nr_ctlr == 0)
-		return -EIO;
+	if (cpqarray_init() == 0) /* all the block dev numbers already used */
+		return -EIO;	  /* or no controllers were found */
 	return 0;
 }
 
@@ -357,8 +357,9 @@ void cleanup_module(void)
 /*
  *  This is it.  Find all the controllers and register them.  I really hate
  *  stealing all these major device numbers.
+ *  returns the number of block devices registered.
  */
-void __init cpqarray_init(void)
+int __init cpqarray_init(void)
 {
 	void (*request_fns[MAX_CTLR])(request_queue_t *) = {
 		do_ida_request0, do_ida_request1,
@@ -367,31 +368,52 @@ void __init cpqarray_init(void)
 		do_ida_request6, do_ida_request7,
 	};
 	int i,j;
+	int num_cntlrs_reg = 0;
 
 	/* detect controllers */
 	cpqarray_pci_detect();
 	cpqarray_eisa_detect();
 	
 	if (nr_ctlr == 0)
-		return;
+		return(num_cntlrs_reg);
 
 	printk(DRIVER_NAME "\n");
 	printk("Found %d controller(s)\n", nr_ctlr);
 
 	/* allocate space for disk structs */
 	ida = kmalloc(sizeof(struct hd_struct)*nr_ctlr*NWD*16, GFP_KERNEL);
-	
 	if(ida==NULL)
-		goto bail;
-	ida_sizes =      kmalloc(sizeof(int)*nr_ctlr*NWD*16, GFP_KERNEL);
+	{
+		printk( KERN_ERR "cpqarray: out of memory");
+		return(num_cntlrs_reg);
+	}
+	
+	ida_sizes = kmalloc(sizeof(int)*nr_ctlr*NWD*16, GFP_KERNEL);
 	if(ida_sizes==NULL)
-		goto bail2;
+	{
+		kfree(ida); 
+		printk( KERN_ERR "cpqarray: out of memory");
+		return(num_cntlrs_reg);
+	}
+
 	ida_blocksizes = kmalloc(sizeof(int)*nr_ctlr*NWD*16, GFP_KERNEL);
 	if(ida_blocksizes==NULL)
-		goto bail3;
-	ida_hardsizes =  kmalloc(sizeof(int)*nr_ctlr*NWD*16, GFP_KERNEL);
+	{
+		kfree(ida);
+		kfree(ida_sizes); 
+		printk( KERN_ERR "cpqarray: out of memory");
+		return(num_cntlrs_reg);
+	}
+
+	ida_hardsizes = kmalloc(sizeof(int)*nr_ctlr*NWD*16, GFP_KERNEL);
 	if(ida_hardsizes==NULL)
-		goto bail4;
+	{
+		kfree(ida);
+		kfree(ida_sizes); 
+		kfree(ida_blocksizes);
+		printk( KERN_ERR "cpqarray: out of memory");
+		return(num_cntlrs_reg);
+	}
 
 	memset(ida, 0, sizeof(struct hd_struct)*nr_ctlr*NWD*16);
 	memset(ida_sizes, 0, sizeof(int)*nr_ctlr*NWD*16);
@@ -399,74 +421,90 @@ void __init cpqarray_init(void)
 	memset(ida_hardsizes, 0, sizeof(int)*nr_ctlr*NWD*16);
 	memset(ida_gendisk, 0, sizeof(struct gendisk)*MAX_CTLR);
 
-	/* 
+		/* 
 	 * register block devices
 	 * Find disks and fill in structs
 	 * Get an interrupt, set the Q depth and get into /proc
 	 */
 	for(i=0; i< nr_ctlr; i++) {
+	  	/* If this successful it should insure that we are the only */
+		/* instance of the driver */	
+		if (register_blkdev(MAJOR_NR+i, hba[i]->devname, &ida_fops)) {
+                        printk(KERN_ERR "cpqarray: Unable to get major number %d for ida\n",
+                                MAJOR_NR+i);
+                        continue;
+                }
+
+	
 		hba[i]->access.set_intr_mask(hba[i], 0);
 		if (request_irq(hba[i]->intr, do_ida_intr,
 			SA_INTERRUPT|SA_SHIRQ, hba[i]->devname, hba[i])) {
 
-			printk("Unable to get irq %d for %s\n", 
+			printk(KERN_ERR "cpqarray: Unable to get irq %d for %s\n", 
 				hba[i]->intr, hba[i]->devname);
+			unregister_blkdev(MAJOR_NR+i, hba[i]->devname);
 			continue;
 		}
-		if (register_blkdev(MAJOR_NR+i, hba[i]->devname, &ida_fops)) {
-			printk("Unable to get major number %d for ida\n",
-				MAJOR_NR+i);
-			continue;
-		}
-
+		num_cntlrs_reg++;
 		hba[i]->cmd_pool = (cmdlist_t *)kmalloc(
 				NR_CMDS * sizeof(cmdlist_t), GFP_KERNEL);
 		hba[i]->cmd_pool_bits = (__u32*)kmalloc(
 				((NR_CMDS+31)/32)*sizeof(__u32), GFP_KERNEL);
 		
-		if(hba[i]->cmd_pool_bits == NULL || hba[i]->cmd_pool == NULL)
+	if(hba[i]->cmd_pool_bits == NULL || hba[i]->cmd_pool == NULL)
 		{
-			int j;
+			nr_ctlr = i; 
 			if(hba[i]->cmd_pool_bits)
 				kfree(hba[i]->cmd_pool_bits);
 			if(hba[i]->cmd_pool)
 				kfree(hba[i]->cmd_pool);
-			for(j=0;i<i;j++)
-			{
-				free_irq(hba[j]->intr, hba[j]);
-				unregister_blkdev(MAJOR_NR+j, hba[j]->devname);
-				kfree(hba[j]->cmd_pool_bits);
-				kfree(hba[j]->cmd_pool);
-			}
 			free_irq(hba[i]->intr, hba[i]);
 			unregister_blkdev(MAJOR_NR+i, hba[i]->devname);
-			goto bail5;
+			num_cntlrs_reg--;
+                	printk( KERN_ERR "cpqarray: out of memory");
+
+			/* If num_cntlrs_reg == 0, no controllers worked. 
+			 *	init_module will fail, so clean up global 
+			 *	memory that clean_module would do.
+			*/	
+	
+			if (num_cntlrs_reg == 0) 
+			{
+				kfree(ida);
+				kfree(ida_sizes);
+				kfree(ida_hardsizes);
+				kfree(ida_blocksizes);
+			}
+                	return(num_cntlrs_reg);
+	
 		}
 		memset(hba[i]->cmd_pool, 0, NR_CMDS * sizeof(cmdlist_t));
 		memset(hba[i]->cmd_pool_bits, 0, ((NR_CMDS+31)/32)*sizeof(__u32));
-		printk("Finding drives on %s", hba[i]->devname);
+		printk(KERN_INFO "cpqarray: Finding drives on %s", 
+			hba[i]->devname);
 		getgeometry(i);
 		start_fwbk(i); 
 
 		hba[i]->access.set_intr_mask(hba[i], FIFO_NOT_EMPTY);
 
-		ida_procinit(i);
-	
-		blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR + i), request_fns[i]);
-		blk_queue_headactive(BLK_DEFAULT_QUEUE(MAJOR_NR + i), 0);
 
+		ida_procinit(i);
+
+		blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR + i), 
+			request_fns[i]);		
+		blk_queue_headactive(BLK_DEFAULT_QUEUE(MAJOR_NR + i), 0);
 		blksize_size[MAJOR_NR+i] = ida_blocksizes + (i*256);
 		hardsect_size[MAJOR_NR+i] = ida_hardsizes + (i*256);
-
 		read_ahead[MAJOR_NR+i] = READ_AHEAD;
+
 		ida_gendisk[i].major = MAJOR_NR + i;
 		ida_gendisk[i].major_name = "ida";
 		ida_gendisk[i].minor_shift = NWD_SHIFT;
 		ida_gendisk[i].max_p = 16;
 		ida_gendisk[i].part = ida + (i*256);
 		ida_gendisk[i].sizes = ida_sizes + (i*256);
-		/* ida_gendisk[i].nr_real is handled by getgeometry */
-
+		ida_gendisk[i].nr_real = 0; 
+	
 		/* Get on the disk list */
 		ida_gendisk[i].next = gendisk_head;
 		gendisk_head = &ida_gendisk[i];
@@ -479,21 +517,13 @@ void __init cpqarray_init(void)
 
 		ida_geninit(i);
 		for(j=0; j<NWD; j++)	
-			register_disk(&ida_gendisk[i], MKDEV(MAJOR_NR+i,j<<4),
-					16, &ida_fops, hba[i]->drv[j].nr_blks);
+			register_disk(&ida_gendisk[i], 
+				MKDEV(MAJOR_NR+i,j<<4),
+				16, &ida_fops, hba[i]->drv[j].nr_blks);
+
 	}
 	/* done ! */
-	return;
-bail5:
-	kfree(ida_hardsizes);
-bail4:
-	kfree(ida_blocksizes);
-bail3:
-	kfree(ida_sizes);
-bail2:
-	kfree(ida);
-bail:
-	printk(KERN_ERR "cpqarray: out of memory.\n");
+	return(num_cntlrs_reg);
 }
 
 /*
@@ -506,103 +536,68 @@ static int cpqarray_pci_detect(void)
 {
 	int index;
 	unchar bus=0, dev_fn=0;
+
+#define IDA_BOARD_TYPES 3
+	static int ida_vendor_id[IDA_BOARD_TYPES] = { PCI_VENDOR_ID_DEC, 
+		PCI_VENDOR_ID_NCR, PCI_VENDOR_ID_COMPAQ };
+	static int ida_device_id[IDA_BOARD_TYPES] = { PCI_DEVICE_ID_COMPAQ_42XX,		PCI_DEVICE_ID_NCR_53C1510, PCI_DEVICE_ID_COMPAQ_SMART2P };
+	int brdtype;
 	
-	/* This seems dumb, surely we could use an array of types to match ?? */
+	/* search for all PCI board types that could be for this driver */
+	for(brdtype=0; brdtype<IDA_BOARD_TYPES; brdtype++)
+	{
+		for(index=0; ; index++) {
+			if (pcibios_find_device(ida_vendor_id[brdtype],
+			 	ida_device_id[brdtype], index, &bus, &dev_fn))
+				break;
+			printk(KERN_DEBUG "cpqarray: Device %x has been found at %x %x\n",
+				ida_vendor_id[brdtype], bus, dev_fn);
+			if (index == 1000000) break;
+			if (nr_ctlr == 8) {
+				printk(KERN_WARNING "cpqarray: This driver"
+				" supports a maximum of 8 controllers.\n");
+				break;
+			}
 
-	for(index=0; ; index++) {
-		if (pcibios_find_device(PCI_VENDOR_ID_DEC,
-			 PCI_DEVICE_ID_COMPAQ_42XX, index, &bus, &dev_fn))
-			break;
-		printk(KERN_DEBUG "42XX Device has been found at %x %x\n",
-				bus, dev_fn);
-		if (index == 1000000) break;
-		if (nr_ctlr == 8) {
-			printk("This driver supports a maximum of "
-				"8 controllers.\n");
-			break;
+/* if it is a PCI_DEVICE_ID_NCR_53C1510, make sure it's 				the Compaq version of the chip */ 
+
+			if (ida_device_id[brdtype] == PCI_DEVICE_ID_NCR_53C1510)			{	
+				unsigned short subvendor=0;
+				if(pcibios_read_config_word(bus, dev_fn, 
+                        		PCI_SUBSYSTEM_VENDOR_ID, &subvendor))
+                		{
+                        		printk(KERN_DEBUG "cpqarray: failed to read subvendor\n");
+                        		continue;
+                		}
+				if(subvendor !=  PCI_VENDOR_ID_COMPAQ)
+				{
+					printk(KERN_DEBUG 
+						"cpqarray: not a Compaq integrated array controller\n");
+					continue;
+				}
+			}
+
+			hba[nr_ctlr] = kmalloc(sizeof(ctlr_info_t), GFP_KERNEL);			if(hba[nr_ctlr]==NULL)
+			{
+				printk(KERN_ERR "cpqarray: out of memory.\n");
+				continue;
+			}
+			memset(hba[nr_ctlr], 0, sizeof(ctlr_info_t));
+			if (cpqarray_pci_init(hba[nr_ctlr], bus, dev_fn) != 0)
+			{
+				kfree(hba[nr_ctlr]);
+				continue;
+			}
+			sprintf(hba[nr_ctlr]->devname, "ida%d", nr_ctlr);
+			hba[nr_ctlr]->ctlr = nr_ctlr;
+			nr_ctlr++;
+
 		}
-		
-		hba[nr_ctlr] = kmalloc(sizeof(ctlr_info_t), GFP_KERNEL);
-		if(hba[nr_ctlr]==NULL)
-		{
-			printk(KERN_ERR "cpqarray: out of memory.\n");
-			continue;
-		}
-		memset(hba[nr_ctlr], 0, sizeof(ctlr_info_t));
-		if (cpqarray_pci_init(hba[nr_ctlr], bus, dev_fn) != 0)
-			continue;
-		sprintf(hba[nr_ctlr]->devname, "ida%d", nr_ctlr);
-		hba[nr_ctlr]->ctlr = nr_ctlr;
-		nr_ctlr++;
-	}
-
-	for(index=0; ; index++) {
-		unsigned short subvendor=0;
-
-                if (pcibios_find_device(PCI_VENDOR_ID_NCR,
-                         PCI_DEVICE_ID_NCR_53C1510, index, &bus, &dev_fn))
-                        break;
-                printk(KERN_DEBUG "Integrated RAID Chip has been found at %x %x\n",
-                                bus, dev_fn);
-		if(pcibios_read_config_word(bus, dev_fn, 
-			PCI_SUBSYSTEM_VENDOR_ID, &subvendor))	
-		{
-			printk(KERN_DEBUG "cpqarray failed to read subvendor\n");
-			break;
-		}
-		if(subvendor !=  PCI_VENDOR_ID_COMPAQ)
-			break;
-		printk(KERN_DEBUG "Its a compaq RAID Chip\n");
-                if (index == 1000000) break;
-                if (nr_ctlr == 8) {
-                        printk("This driver supports a maximum of "
-                                "8 controllers.\n");
-                        break;
-                }
-
-                hba[nr_ctlr] = kmalloc(sizeof(ctlr_info_t), GFP_KERNEL);
-                if(hba[nr_ctlr]==NULL)
-                {
-                	printk(KERN_ERR "cpqarray: out of memory.\n");
-                	continue;
-                }
-                memset(hba[nr_ctlr], 0, sizeof(ctlr_info_t));
-                /* DOESNT THIS LEAK MEMORY ?????? - AC */
-                if (cpqarray_pci_init(hba[nr_ctlr], bus, dev_fn) != 0)
-                        continue;
-                sprintf(hba[nr_ctlr]->devname, "ida%d", nr_ctlr);
-                hba[nr_ctlr]->ctlr = nr_ctlr;
-                nr_ctlr++;
-        }
-
-	for(index=0; ; index++) {
-		if (pcibios_find_device(PCI_VENDOR_ID_COMPAQ,
-			PCI_DEVICE_ID_COMPAQ_SMART2P, index, &bus, &dev_fn))
-			break;
-
-		if (index == 1000000) break;
-		if (nr_ctlr == 8) {
-			printk("This driver supports a maximum of "
-				"8 controllers.\n");
-			break;
-		}
-		
-		hba[nr_ctlr] = kmalloc(sizeof(ctlr_info_t), GFP_KERNEL);
-		if(hba[nr_ctlr]==NULL)
-                {
-                	printk(KERN_ERR "cpqarray: out of memory.\n");
-                	continue;
-                }
-		memset(hba[nr_ctlr], 0, sizeof(ctlr_info_t));
-		if (cpqarray_pci_init(hba[nr_ctlr], bus, dev_fn) != 0)
-			continue;
-		sprintf(hba[nr_ctlr]->devname, "ida%d", nr_ctlr);
-		hba[nr_ctlr]->ctlr = nr_ctlr;
-		nr_ctlr++;
 	}
 
 	return nr_ctlr;
 }
+
 /*
  * Find the IO address of the controller, its IRQ and so forth.  Fill
  * in some basic stuff into the ctlr_info_t structure.
@@ -671,8 +666,9 @@ DBGINFO(
 		}
 	}
 	if (i == NR_PRODUCTS) {
-		printk("Sorry, I don't know how to access the SMART Array"
-			" controller %08lx\n", (unsigned long)board_id);
+		printk(KERN_WARNING "cpqarray: Sorry, I don't know how"
+			" to access the SMART Array controller %08lx\n", 
+				(unsigned long)board_id);
 		return -1;
 	}
 
@@ -734,8 +730,8 @@ static int cpqarray_eisa_detect(void)
 
 	while(i<8 && eisa[i]) {
 		if (nr_ctlr == 8) {
-			printk("This driver supports a maximum of "
-				"8 controllers.\n");
+			printk(KERN_WARNING "cpqarray: This driver supports"
+				" a maximum of 8 controllers.\n");
 			break;
 		}
 		board_id = inl(eisa[i]+0xC80);
@@ -744,11 +740,11 @@ static int cpqarray_eisa_detect(void)
 				break;
 
 		if (j == NR_PRODUCTS) {
-			printk("Sorry, I don't know how to access the SMART"
-			  " Array controller %08lx\n", (unsigned long)board_id);
+			printk(KERN_WARNING "cpqarray: Sorry, I don't know how"
+				" to access the SMART Array controller %08lx\n",				 (unsigned long)board_id);
 			continue;
 		}
-		hba[nr_ctlr] = kmalloc(sizeof(ctlr_info_t), GFP_KERNEL);
+		hba[nr_ctlr] = (ctlr_info_t *) kmalloc(sizeof(ctlr_info_t), GFP_KERNEL);
 		if(hba[nr_ctlr]==NULL)
 		{
 			printk(KERN_ERR "cpqarray: out of memory.\n");
@@ -885,21 +881,34 @@ static void do_ida_request(int ctlr)
 	queue_head = &blk_dev[MAJOR_NR+ctlr].request_queue.queue_head;
 
 	if (list_empty(queue_head))
-		goto doreq_done;
+	{
+		start_io(h);
+		return;
+	}
+
 	creq = blkdev_entry_next_request(queue_head);
 	if (creq->rq_status == RQ_INACTIVE)
-		goto doreq_done;
+	{	
+                start_io(h);
+                return;
+        }
+
 
 	if (ctlr != MAJOR(creq->rq_dev)-MAJOR_NR ||
-		ctlr > nr_ctlr || h == NULL) {
+		ctlr > nr_ctlr || h == NULL) 
+	{
 		printk("doreq cmd for %d, %x at %p\n",
 				ctlr, creq->rq_dev, creq);
 		complete_buffers(creq->bh, 0);
-		goto doreq_done;
+		start_io(h);
+                return;
 	}
 
 	if ((c = cmd_alloc(h)) == NULL)
-		goto doreq_done;
+	{
+                start_io(h);
+                return;
+        }
 
 	bh = creq->bh;
 
@@ -972,9 +981,9 @@ DBGPX(		printk("Done with %p\n", creq); );
 	/* Put the request on the tail of the request queue */
 	addQ(&h->reqQ, c);
 	h->Qdepth++;
-	if (h->Qdepth > h->maxQsinceinit) h->maxQsinceinit = h->Qdepth;
+	if (h->Qdepth > h->maxQsinceinit) 
+		h->maxQsinceinit = h->Qdepth;
 
-doreq_done:
 	start_io(h);
 }
 
@@ -1022,28 +1031,24 @@ static inline void complete_buffers(struct buffer_head *bh, int ok)
  */
 static inline void complete_command(cmdlist_t *cmd, int timeout)
 {
-	char buf[80];
 	int ok=1;
 
 	if (cmd->req.hdr.rcode & RCODE_NONFATAL &&
 	   (hba[cmd->ctlr]->misc_tflags & MISC_NONFATAL_WARN) == 0) {
-		sprintf(buf, "Non Fatal error on ida/c%dd%d\n",
+		printk(KERN_WARNING "Non Fatal error on ida/c%dd%d\n",
 				cmd->ctlr, cmd->hdr.unit);
-		console_print(buf);
 		hba[cmd->ctlr]->misc_tflags |= MISC_NONFATAL_WARN;
 	}
 	if (cmd->req.hdr.rcode & RCODE_FATAL) {
-		sprintf(buf, "Fatal error on ida/c%dd%d\n",
+		printk(KERN_WARNING "Fatal error on ida/c%dd%d\n",
 				cmd->ctlr, cmd->hdr.unit);
-		console_print(buf);
 		ok = 0;
 	}
 	if (cmd->req.hdr.rcode & RCODE_INVREQ) {
-				sprintf(buf, "Invalid request on ida/c%dd%d = (cmd=%x sect=%d cnt=%d sg=%d ret=%x)\n",
+				printk(KERN_WARNING "Invalid request on ida/c%dd%d = (cmd=%x sect=%d cnt=%d sg=%d ret=%x)\n",
 				cmd->ctlr, cmd->hdr.unit, cmd->req.hdr.cmd,
 				cmd->req.hdr.blk, cmd->req.hdr.blk_cnt,
 				cmd->req.hdr.sg_cnt, cmd->req.hdr.rcode);
-		console_print(buf);
 		ok = 0;	
 	}
 	if (timeout) ok = 0;
@@ -1077,10 +1082,15 @@ static void do_ida_intr(int irq, void *dev_id, struct pt_regs *regs)
 	if (istat & FIFO_NOT_EMPTY) {
 		while((a = h->access.command_completed(h))) {
 			a1 = a; a &= ~3;
-			if ((c = h->cmpQ) == NULL) goto bad_completion;
+			if ((c = h->cmpQ) == NULL)
+			{  
+				printk(KERN_WARNING "cpqarray: Completion of %08lx ignored\n", (unsigned long)a1);
+				continue;	
+			} 
 			while(c->busaddr != a) {
 				c = c->next;
-				if (c == h->cmpQ) break;
+				if (c == h->cmpQ) 
+					break;
 			}
 			/*
 			 * If we've found the command, take it off the
@@ -1096,8 +1106,6 @@ static void do_ida_intr(int irq, void *dev_id, struct pt_regs *regs)
 				}
 				continue;
 			}
-bad_completion:
-			printk("Completion of %08lx ignored\n", (unsigned long)a1);
 		}
 	}
 
@@ -1227,16 +1235,27 @@ static int ida_ctlr_ioctl(int ctlr, int dsk, ida_ioctl_t *io)
 	switch(io->cmd) {
 	case PASSTHRU_A:
 		p = kmalloc(io->sg[0].size, GFP_KERNEL);
-		if (!p) { error = -ENOMEM; goto ioctl_err_exit; }
+		if (!p) 
+		{ 
+			error = -ENOMEM; 
+			cmd_free(NULL, c); 
+			return(error);
+		}
 		copy_from_user(p, (void*)io->sg[0].addr, io->sg[0].size);
-		c->req.bp = virt_to_bus(&(io->c));
+		c->req.hdr.blk = virt_to_bus(&(io->c));
 		c->req.sg[0].size = io->sg[0].size;
 		c->req.sg[0].addr = virt_to_bus(p);
 		c->req.hdr.sg_cnt = 1;
 		break;
 	case IDA_READ:
 		p = kmalloc(io->sg[0].size, GFP_KERNEL);
-		if (!p) { error = -ENOMEM; goto ioctl_err_exit; }
+		if (!p) 
+		{ 
+                        error = -ENOMEM; 
+                        cmd_free(NULL, c);
+                        return(error);
+                }
+
 		c->req.sg[0].size = io->sg[0].size;
 		c->req.sg[0].addr = virt_to_bus(p);
 		c->req.hdr.sg_cnt = 1;
@@ -1245,7 +1264,12 @@ static int ida_ctlr_ioctl(int ctlr, int dsk, ida_ioctl_t *io)
 	case IDA_WRITE_MEDIA:
 	case DIAG_PASS_THRU:
 		p = kmalloc(io->sg[0].size, GFP_KERNEL);
-		if (!p) { error = -ENOMEM; goto ioctl_err_exit; }
+		if (!p) 
+ 		{ 
+                        error = -ENOMEM; 
+                        cmd_free(NULL, c);
+                        return(error);
+                }
 		copy_from_user(p, (void*)io->sg[0].addr, io->sg[0].size);
 		c->req.sg[0].size = io->sg[0].size;
 		c->req.sg[0].addr = virt_to_bus(p);
@@ -1284,10 +1308,8 @@ static int ida_ctlr_ioctl(int ctlr, int dsk, ida_ioctl_t *io)
 	}
 
 	io->rcode = c->req.hdr.rcode;
-	error = 0;
-ioctl_err_exit:
 	cmd_free(NULL, c);
-	return error;
+	return(0);
 }
 
 /*
@@ -1390,8 +1412,8 @@ static int sendcmd(
 		}
 		udelay(10);
 DBG(
-		printk("ida%d: idaSendPciCmd FIFO full, waiting!\n",
-		       ctlr);
+		printk(KERN_WARNING "cpqarray ida%d: idaSendPciCmd FIFO full,"
+			" waiting!\n", ctlr);
 );
 	} 
 	/*
@@ -1401,16 +1423,16 @@ DBG(
 	complete = pollcomplete(ctlr);
 	if (complete != 1) {
 		if (complete != c->busaddr) {
-			printk(
-			"ida%d: idaSendPciCmd "
+			printk( KERN_WARNING
+			"cpqarray ida%d: idaSendPciCmd "
 		      "Invalid command list address returned! (%08lx)\n",
 				ctlr, (unsigned long)complete);
 			cmd_free(info_p, c);
 			return (IO_ERROR);
 		}
 	} else {
-		printk(
-			"ida%d: idaSendPciCmd Timeout out, "
+		printk( KERN_WARNING
+			"cpqarray ida%d: idaSendPciCmd Timeout out, "
 			"No command list address returned!\n",
 			ctlr);
 		cmd_free(info_p, c);
@@ -1419,9 +1441,9 @@ DBG(
 
 	if (c->req.hdr.rcode & 0x00FE) {
 		if (!(c->req.hdr.rcode & BIG_PROBLEM)) {
-			printk(
-			"ida%d: idaSendPciCmd, error: Controller failed "
-				"at init time "
+			printk( KERN_WARNING
+			"cpqarray ida%d: idaSendPciCmd, error: "
+				"Controller failed at init time "
 				"cmd: 0x%x, return code = 0x%x\n",
 				ctlr, c->req.hdr.cmd, c->req.hdr.rcode);
 
@@ -1461,8 +1483,8 @@ static int revalidate_allvol(kdev_t dev)
 	spin_lock_irqsave(&io_request_lock, flags);
 	if (hba[ctlr]->usage_count > 1) {
 		spin_unlock_irqrestore(&io_request_lock, flags);
-		printk("Device busy for volume revalidation (usage=%d)\n",
-					hba[ctlr]->usage_count);
+		printk(KERN_WARNING "cpqarray: Device busy for volume"
+			" revalidation (usage=%d)\n", hba[ctlr]->usage_count);
 		return -EBUSY;
 	}
 	spin_unlock_irqrestore(&io_request_lock, flags);
@@ -1514,8 +1536,9 @@ static int revalidate_logvol(kdev_t dev, int maxusage)
 	spin_lock_irqsave(&io_request_lock, flags);
 	if (hba[ctlr]->drv[target].usage_count > maxusage) {
 		spin_unlock_irqrestore(&io_request_lock, flags);
-		printk("Device busy for revalidation (usage=%d)\n",
-					hba[ctlr]->drv[target].usage_count);
+		printk(KERN_WARNING "cpqarray: Device busy for "
+			"revalidation (usage=%d)\n",
+			hba[ctlr]->drv[target].usage_count);
 		return -EBUSY;
 	}
 
@@ -1581,22 +1604,28 @@ static void start_fwbk(int ctlr)
 		id_ctlr_t *id_ctlr_buf; 
 	int ret_code;
 
-	if(	hba[ctlr]->board_id != 0x40400E11)
+	if(	(hba[ctlr]->board_id != 0x40400E11)
+		&& (hba[ctlr]->board_id != 0x40480E11) )
+
 	/* Not a Integrated Raid, so there is nothing for us to do */
 		return;
-	printk(KERN_DEBUG "Starting firmware's background processing\n");
+	printk(KERN_DEBUG "cpqarray: Starting firmware's background"
+		" processing\n");
 	/* Command does not return anything, but idasend command needs a 
 		buffer */
 	id_ctlr_buf = (id_ctlr_t *)kmalloc(sizeof(id_ctlr_t), GFP_KERNEL);
 	if(id_ctlr_buf==NULL)
 	{
-		printk(KERN_WARNING "Out of memory. Unable to start background processing.\n");
+		printk(KERN_WARNING "cpqarray: Out of memory. "
+			"Unable to start background processing.\n");
 		return;
 	}		
 	ret_code = sendcmd(RESUME_BACKGROUND_ACTIVITY, ctlr, 
 		id_ctlr_buf, 0, 0, 0, 0);
 	if(ret_code != IO_OK)
-		printk(KERN_WARNING "Unable to start background processing\n");
+		printk(KERN_WARNING "cpqarray: Unable to start"
+			" background processing\n");
+
 	kfree(id_ctlr_buf);
 }
 /*****************************************************************
@@ -1620,16 +1649,38 @@ static void getgeometry(int ctlr)
 	
 	id_ldrive = (id_log_drv_t *)kmalloc(sizeof(id_log_drv_t), GFP_KERNEL);
 	if(id_ldrive == NULL)
+	{
+		printk( KERN_ERR "cpqarray:  out of memory.\n");
 		return;
+	}
+
 	id_ctlr_buf = (id_ctlr_t *)kmalloc(sizeof(id_ctlr_t), GFP_KERNEL);
 	if(id_ctlr_buf == NULL)
-		goto bail2;
+	{
+		kfree(id_ldrive);
+		printk( KERN_ERR "cpqarray:  out of memory.\n");
+		return;
+	}
+
 	id_lstatus_buf = (sense_log_drv_stat_t *)kmalloc(sizeof(sense_log_drv_stat_t), GFP_KERNEL);
 	if(id_lstatus_buf == NULL)
-		goto bail3;
+	{
+		kfree(id_ctlr_buf);
+		kfree(id_ldrive);
+		printk( KERN_ERR "cpqarray:  out of memory.\n");
+		return;
+	}
+
 	sense_config_buf = (config_t *)kmalloc(sizeof(config_t), GFP_KERNEL);
 	if(sense_config_buf == NULL)
-		goto bail4;
+	{
+		kfree(id_lstatus_buf);
+		kfree(id_ctlr_buf);
+		kfree(id_ldrive);
+		printk( KERN_ERR "cpqarray:  out of memory.\n");
+		return;
+	}
+
 	memset(id_ldrive, 0, sizeof(id_log_drv_t));
 	memset(id_ctlr_buf, 0, sizeof(id_ctlr_t));
 	memset(id_lstatus_buf, 0, sizeof(sense_log_drv_stat_t));
@@ -1648,8 +1699,15 @@ static void getgeometry(int ctlr)
 		 * so the idastubopen will fail on all logical drives
 		 * on the controller.
 		 */
-		goto geo_ret;	/* release the buf and return */
-	}
+		 /* Free all the buffers and return */ 
+		printk(KERN_ERR "cpqarray: error sending ID controller\n");
+		kfree(sense_config_buf);
+                kfree(id_lstatus_buf);
+                kfree(id_ctlr_buf);
+                kfree(id_ldrive);
+                return;
+        }
+
 	info_p->log_drives = id_ctlr_buf->nr_drvs;;
 	*(__u32*)(info_p->firm_rev) = *(__u32*)(id_ctlr_buf->firm_rev);
 	info_p->ctlr_sig = id_ctlr_buf->cfg_sig;
@@ -1663,8 +1721,9 @@ static void getgeometry(int ctlr)
 	 * Get drive geometry for all logical drives
 	 */
 	if (id_ctlr_buf->nr_drvs > 16)
-		printk("ida%d:  This driver supports 16 logical drives "
-			"per controller.\n.  Additional drives will not be "
+		printk(KERN_WARNING "cpqarray ida%d:  This driver supports "
+			"16 logical drives per controller.\n.  "
+			" Additional drives will not be "
 			"detected\n", ctlr);
 
 	for (log_unit = 0;
@@ -1687,13 +1746,17 @@ static void getgeometry(int ctlr)
 			   on the controller. 
 			 */
 			info_p->log_drv_map = 0;	
-			printk(
-			     "ida%d: idaGetGeometry - Controller failed "
-				"to report status of logical drive %d\n"
+			printk( KERN_WARNING
+			     "cpqarray ida%d: idaGetGeometry - Controller"
+				" failed to report status of logical drive %d\n"
 			 "Access to this controller has been disabled\n",
 				ctlr, log_unit);
-			goto geo_ret;	/* release the buf and return */
-
+			/* Free all the buffers and return */
+                	kfree(sense_config_buf);
+                	kfree(id_lstatus_buf);
+                	kfree(id_ctlr_buf);
+                	kfree(id_ldrive);
+                	return;
 		}
 		/*
 		   Make sure the logical drive is configured
@@ -1715,14 +1778,21 @@ static void getgeometry(int ctlr)
 				drv->sectors = id_ldrive->drv.sect_per_track;
 				info_p->log_drv_map |=	(1 << log_unit);
 
-	printk("ida/c%dd%d: blksz=%d nr_blks=%d\n",
+	printk(KERN_INFO "cpqarray ida/c%dd%d: blksz=%d nr_blks=%d\n",
 		ctlr, log_unit, drv->blk_size, drv->nr_blks);
 				ret_code = sendcmd(SENSE_CONFIG,
 						  ctlr, sense_config_buf,
 				 sizeof(config_t), 0, 0, log_unit);
 				if (ret_code == IO_ERROR) {
 					info_p->log_drv_map = 0;
-					goto geo_ret;	/* release the buf and return */
+					/* Free all the buffers and return */
+                			printk(KERN_ERR "cpqarray: error sending sense config\n");
+                			kfree(sense_config_buf);
+                			kfree(id_lstatus_buf);
+                			kfree(id_ctlr_buf);
+                			kfree(id_ldrive);
+                			return;
+
 				}
 				info_p->phys_drives =
 				    sense_config_buf->ctlr_phys_drv;
@@ -1736,12 +1806,10 @@ static void getgeometry(int ctlr)
 			log_index = log_index + 1;
 		}		/* end of if logical drive configured */
 	}			/* end of for log_unit */
-geo_ret:
 	kfree(sense_config_buf);
-bail4:	
-	kfree(id_ldrive);
-bail3:
-	kfree(id_lstatus_buf);
-bail2:	
+  	kfree(id_ldrive);
+  	kfree(id_lstatus_buf);
 	kfree(id_ctlr_buf);
+	return;
+
 }

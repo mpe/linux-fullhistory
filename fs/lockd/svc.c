@@ -235,7 +235,10 @@ lockd_up(void)
 	}
 
 	if ((error = svc_makesock(serv, IPPROTO_UDP, 0)) < 0 
-	 || (error = svc_makesock(serv, IPPROTO_TCP, 0)) < 0) {
+#ifdef CONFIG_NFSD_TCP
+	 || (error = svc_makesock(serv, IPPROTO_TCP, 0)) < 0
+#endif
+		) {
 		if (warned++ == 0) 
 			printk(KERN_WARNING
 				"lockd_up: makesock failed, error=%d\n", error);

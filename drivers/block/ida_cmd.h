@@ -191,7 +191,7 @@ typedef struct {
 	__u8	expn_fail;
 	__u8	unit_flags;
 	__u16	big_fail_map[8];
-	__u16	big_remap_map[8];
+	__u16	big_remap_map[128];
 	__u16	big_repl_map[8];
 	__u16	big_act_spare_map[8];
 	__u8	big_spar_repl_map[128];
@@ -336,7 +336,7 @@ typedef struct {
 	__u32	sense_info;
 	__u8	sense_code;
 	__u8	sense_qual;
-	__u8	residual;
+	__u32	residual;
 	__u8	reserved[4];
 	__u8	cdb[12];	
 } scsi_param_t;

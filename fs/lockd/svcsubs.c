@@ -79,7 +79,7 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 		goto out_unlock;
 
 	memset(file, 0, sizeof(*file));
-	file->f_handle = *f;
+	memcpy(&file->f_handle, f, sizeof(struct nfs_fh));
 	file->f_hash = hash;
 	init_MUTEX(&file->f_sema);
 

@@ -62,13 +62,14 @@ static void smart4_intr_mask(ctlr_info_t *h, unsigned long val)
 }
 
 /*
- *  For this card fifo is full if reading this port returns 0! 
+ *  For older cards FIFO Full = 0. 
+ *  On this card 0 means there is room, anything else FIFO Full. 
  * 
  */ 
 static unsigned long smart4_fifo_full(ctlr_info_t *h)
 {
 	
-        return (~readl(h->vaddr + S42XX_REQUEST_PORT_OFFSET));
+        return (!readl(h->vaddr + S42XX_REQUEST_PORT_OFFSET));
 }
 
 /* This type of controller returns -1 if the fifo is empty, 
@@ -81,7 +82,7 @@ static unsigned long smart4_completed(ctlr_info_t *h)
 		= readl(h->vaddr + S42XX_REPLY_PORT_OFFSET);
 
 	/* Fifo is empty */
-	if( register_value == -1)
+	if( register_value == 0xffffffff)
 		return 0; 	
 
 	/* Need to let it know we got the reply */

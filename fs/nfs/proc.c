@@ -42,8 +42,6 @@
 #include <linux/nfs2.h>
 #include <linux/nfs_fs.h>
 
-#include <asm/segment.h>
-
 #define NFSDBG_FACILITY		NFSDBG_PROC
 
 /*
@@ -203,7 +201,7 @@ nfs_proc_mknod(struct dentry *dir, struct qstr *name, struct iattr *sattr,
 	if (S_ISFIFO(mode)) {
 		sattr->ia_mode = (mode & ~S_IFMT) | S_IFCHR;
 		sattr->ia_valid &= ~ATTR_SIZE;
-	} else if (S_ISCHR(rdev) || S_ISBLK(rdev)) {
+	} else if (S_ISCHR(mode) || S_ISBLK(mode)) {
 		sattr->ia_valid |= ATTR_SIZE;
 		sattr->ia_size   = rdev;	/* get out your barf bag */
 	}

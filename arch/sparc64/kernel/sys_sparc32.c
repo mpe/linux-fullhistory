@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.151 2000/06/22 11:42:25 davem Exp $
+/* $Id: sys_sparc32.c,v 1.152 2000/06/22 17:44:47 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -3777,8 +3777,6 @@ static int nfs_getfh32_res_trans(union nfsctl_res *kres, union nfsctl_res32 *res
 {
 	return copy_to_user(res32, kres, sizeof(*res32));
 }
-
-extern asmlinkage int sys_nfsservctl(int cmd, void *arg, void *resp);
 
 int asmlinkage sys32_nfsservctl(int cmd, struct nfsctl_arg32 *arg32, union nfsctl_res32 *res32)
 {

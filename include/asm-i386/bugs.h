@@ -66,8 +66,10 @@ static void __init copro_timeout(void)
 static double __initdata x = 4195835.0;
 static double __initdata y = 3145727.0;
 
+#ifdef CONFIG_X86_XMM
 static float __initdata zero[4] = { 0.0, 0.0, 0.0, 0.0 };
 static float __initdata one[4] = { 1.0, 1.0, 1.0, 1.0 };
+#endif
 
 static void __init check_fpu(void)
 {

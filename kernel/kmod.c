@@ -95,9 +95,8 @@ int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
 	/* Drop the "current user" thing */
 	free_uid(current);
 
-	/* Give kmod all privileges.. */
+	/* Give kmod all effective privileges.. */
 	current->uid = current->euid = current->fsuid = 0;
-	cap_set_full(current->cap_inheritable);
 	cap_set_full(current->cap_effective);
 
 	/* Allow execve args to be in kernel space. */

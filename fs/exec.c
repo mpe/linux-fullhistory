@@ -484,6 +484,8 @@ int flush_old_exec(struct linux_binprm * bprm)
 	/* This is the point of no return */
 	release_old_signals(oldsig);
 
+	current->sas_ss_sp = current->sas_ss_size = 0;
+
 	if (current->euid == current->uid && current->egid == current->gid)
 		current->dumpable = 1;
 	name = bprm->filename;
@@ -585,21 +587,18 @@ int prepare_binprm(struct linux_binprm *bprm)
 	cap_clear(bprm->cap_effective);
 
 	/*  To support inheritance of root-permissions and suid-root
-         *  executables under compatibility mode, we raise the
-         *  effective and inherited bitmasks of the executable file
-         *  (translation: we set the executable "capability dumb" and
-         *  set the allowed set to maximum). We don't set any forced
-         *  bits.
+         *  executables under compatibility mode, we raise all three
+         *  capability sets for the file.
          *
          *  If only the real uid is 0, we only raise the inheritable
-         *  bitmask of the executable file (translation: we set the
-         *  allowed set to maximum and the application to "capability
-         *  smart"). 
+         *  and permitted sets of the executable file.
          */
 
 	if (!issecure(SECURE_NOROOT)) {
-		if (bprm->e_uid == 0 || current->uid == 0)
+		if (bprm->e_uid == 0 || current->uid == 0) {
 			cap_set_full(bprm->cap_inheritable);
+			cap_set_full(bprm->cap_permitted);
+		}
 		if (bprm->e_uid == 0) 
 			cap_set_full(bprm->cap_effective);
 	}
@@ -610,10 +609,12 @@ int prepare_binprm(struct linux_binprm *bprm)
          * privilege does not go against other system constraints.
          * The new Permitted set is defined below -- see (***). */
 	{
-		kernel_cap_t working =
-			cap_combine(bprm->cap_permitted,
-				    cap_intersect(bprm->cap_inheritable,
-						  current->cap_inheritable));
+		kernel_cap_t permitted, working;
+
+		permitted = cap_intersect(bprm->cap_permitted, cap_bset);
+		working = cap_intersect(bprm->cap_inheritable,
+					current->cap_inheritable);
+		working = cap_combine(permitted, working);
 		if (!cap_issubset(working, current->cap_permitted)) {
 			cap_raised = 1;
 		}
@@ -646,26 +647,29 @@ int prepare_binprm(struct linux_binprm *bprm)
  * The formula used for evolving capabilities is:
  *
  *       pI' = pI
- * (***) pP' = fP | (fI & pI)
+ * (***) pP' = (fP & X) | (fI & pI)
  *       pE' = pP' & fE          [NB. fE is 0 or ~0]
  *
  * I=Inheritable, P=Permitted, E=Effective // p=process, f=file
- * ' indicates post-exec().
+ * ' indicates post-exec(), and X is the global 'cap_bset'.
  */
 
 void compute_creds(struct linux_binprm *bprm) 
 {
-	int new_permitted = cap_t(bprm->cap_permitted) |
-		(cap_t(bprm->cap_inheritable) & 
-		 cap_t(current->cap_inheritable));
+	kernel_cap_t new_permitted, working;
+
+	new_permitted = cap_intersect(bprm->cap_permitted, cap_bset);
+	working = cap_intersect(bprm->cap_inheritable,
+				current->cap_inheritable);
+	new_permitted = cap_combine(new_permitted, working);
 
 	/* For init, we want to retain the capabilities set
          * in the init_task struct. Thus we skip the usual
          * capability rules */
 	if (current->pid != 1) {
-		cap_t(current->cap_permitted) = new_permitted;
-		cap_t(current->cap_effective) = new_permitted & 
-						cap_t(bprm->cap_effective);
+		current->cap_permitted = new_permitted;
+		current->cap_effective =
+			cap_intersect(new_permitted, bprm->cap_effective);
 	}
 	
         /* AUD: Audit candidate if current->cap_effective is set */

@@ -139,7 +139,8 @@ struct us_unusual_dev {
 	/* we search the list based on these parameters */
 	__u16 idVendor;
 	__u16 idProduct;
-	__u16 bcdDevice;
+	__u16 bcdDeviceMin;
+	__u16 bcdDeviceMax;
 
 	/* the list specifies these parameters */
 	const char* name;

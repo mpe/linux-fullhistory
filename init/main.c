@@ -233,6 +233,25 @@ static struct dev_name_struct {
 	{ "dasdg", (DASD_MAJOR << MINORBITS) + (6 << 2) },
 	{ "dasdh", (DASD_MAJOR << MINORBITS) + (7 << 2) },
 #endif
+#if defined(CONFIG_BLK_CPQ_DA) || defined(CONFIG_BLK_CPQ_DA_MODULE)
+	{ "ida/c0d0p",0x4800 },
+	{ "ida/c0d1p",0x4810 },
+	{ "ida/c0d2p",0x4820 },
+	{ "ida/c0d3p",0x4830 },
+	{ "ida/c0d4p",0x4840 },
+	{ "ida/c0d5p",0x4850 },
+	{ "ida/c0d6p",0x4860 },
+	{ "ida/c0d7p",0x4870 },
+	{ "ida/c0d8p",0x4880 },
+	{ "ida/c0d9p",0x4890 },
+	{ "ida/c0d10p",0x48A0 },
+	{ "ida/c0d11p",0x48B0 },
+	{ "ida/c0d12p",0x48C0 },
+	{ "ida/c0d13p",0x48D0 },
+	{ "ida/c0d14p",0x48E0 },
+	{ "ida/c0d15p",0x48F0 },
+#endif
+
 	{ NULL, 0 }
 };
 

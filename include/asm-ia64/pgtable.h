@@ -12,8 +12,6 @@
  * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
-#include <linux/config.h>
-
 #include <asm/mman.h>
 #include <asm/page.h>
 #include <asm/processor.h>
@@ -113,7 +111,6 @@
 
 #include <asm/bitops.h>
 #include <asm/mmu_context.h>
-#include <asm/processor.h>
 #include <asm/system.h>
 
 /*

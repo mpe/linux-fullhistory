@@ -658,7 +658,7 @@ struct svc_procedure		nfsd_procedures3[22] = {
   PROC(mknod,	 mknod,		create,		fhandle2, RC_REPLBUFF),
   PROC(remove,	 dirop,		wccstat,	fhandle,  RC_REPLBUFF),
   PROC(rmdir,	 dirop,		wccstat,	fhandle,  RC_REPLBUFF),
-  PROC(rename,	 rename,	rename,		fhandle,  RC_REPLBUFF),
+  PROC(rename,	 rename,	rename,		fhandle2, RC_REPLBUFF),
   PROC(link,	 link,		link,		fhandle2, RC_REPLBUFF),
   PROC(readdir,	 readdir,	readdir,	fhandle,  RC_NOCACHE),
   PROC(readdirplus,readdirplus,	readdir,	fhandle,  RC_NOCACHE),

@@ -1,10 +1,15 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * Initial work by:
- *   (c) 1999 Michael Gee (michael@linuxspecific.com)
+ * $Id: usb-storage.c,v 1.11 2000/06/20 03:19:31 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
+ *
+ * Developed with the assistance of:
+ *   (c) 2000 David L. Brown, Jr. (usb-storage@davidb.org)
+ *
+ * Initial work by:
+ *   (c) 1999 Michael Gee (michael@linuxspecific.com)
  *
  * This driver is based on the 'USB Mass Storage Class' document. This
  * describes in detail the protocol used to communicate with such
@@ -22,6 +27,20 @@
  *
  * Please see http://www.one-eyed-alien.net/~mdharm/linux-usb for more
  * information about this driver.
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
 #include <linux/module.h>
@@ -88,6 +107,7 @@ struct us_data {
 	char			*protocol_name;
 	u8			subclass;
 	u8			protocol;
+	u8			max_lun;
 
 	/* information about the device -- only good if device is attached */
 	u8			ifnum;		 /* interface number   */
@@ -536,8 +556,9 @@ static void invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 		/* save the old command */
 		memcpy(old_cmnd, srb->cmnd, MAX_COMMAND_SIZE);
 
+		/* set the command and the LUN */
 		srb->cmnd[0] = REQUEST_SENSE;
-		srb->cmnd[1] = 0;
+		srb->cmnd[1] = old_cmnd[1] & 0xE0;
 		srb->cmnd[2] = 0;
 		srb->cmnd[3] = 0;
 		srb->cmnd[4] = 18;
@@ -791,7 +812,7 @@ static int Bulk_max_lun(struct us_data *us)
 		  result, data);
 
 	/* if we have a successful request, return the result */
-	if (!result)
+	if (result == 1)
 		return data;
 
 	/* if we get a STALL, clear the stall */
@@ -839,6 +860,9 @@ static int Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	if (result == -EPIPE) {
 		US_DEBUGP("clearing endpoint halt for pipe 0x%x\n", pipe);
 		usb_clear_halt(us->pusb_dev, pipe);
+	} else if (result) {
+		/* unknown error -- we've got a problem */
+		return USB_STOR_TRANSPORT_ERROR;
 	}
 	
 	/* if the command transfered well, then we go to the data stage */
@@ -976,25 +1000,17 @@ static void ATAPI_command(Scsi_Cmnd *srb, struct us_data *us)
 		srb->cmnd[0] = srb->cmnd[0] | 0x20;
 		break;
 	} /* end switch on cmnd[0] */
+	
+	/* convert MODE_SELECT data here */
+	if (old_cmnd == MODE_SELECT)
+		usb_stor_scsiSense6to10(srb);
 
 	/* send the command to the transport layer */
 	invoke_transport(srb, us);
 
-	/* Fix the MODE_SENSE data if we translated the command
-	 */
-	if (old_cmnd == MODE_SENSE) {
-		unsigned char *dta = (unsigned char *)us->srb->request_buffer;
-
-		/* FIXME: we need to compress the entire data structure here
-		 */
-		dta[0] = dta[1];	/* data len */
-		dta[1] = dta[2];	/* med type */
-		dta[2] = dta[3];	/* dev-spec prm */
-		dta[3] = dta[7];	/* block desc len */
-		printk (KERN_DEBUG USB_STORAGE
-			"new MODE_SENSE_6 data = %.2X %.2X %.2X %.2X\n",
-			dta[0], dta[1], dta[2], dta[3]);
-	}
+	/* Fix the MODE_SENSE data if we translated the command */
+	if ((old_cmnd == MODE_SENSE) && (srb->result == GOOD))
+		usb_stor_scsiSense10to6(srb);
 
 	/* Fix-up the return data from an INQUIRY command to show 
 	 * ANSI SCSI rev 2 so we don't confuse the SCSI layers above us
@@ -1084,24 +1100,16 @@ static void ufi_command(Scsi_Cmnd *srb, struct us_data *us)
 		break;
 	} /* end switch on cmnd[0] */
 
+	/* convert MODE_SELECT data here */
+	if (old_cmnd == MODE_SELECT)
+		usb_stor_scsiSense6to10(srb);
+
 	/* send the command to the transport layer */
 	invoke_transport(srb, us);
 	
-	/* Fix the MODE_SENSE data here if we had to translate the command
-	 */
-	if (old_cmnd == MODE_SENSE) {
-		unsigned char *dta = (unsigned char *)us->srb->request_buffer;
-
-		/* FIXME: we need to compress the entire data structure here
-		 */
-		dta[0] = dta[1];	/* data len */
-		dta[1] = dta[2];	/* med type */
-		dta[2] = dta[3];	/* dev-spec prm */
-		dta[3] = dta[7];	/* block desc len */
-		printk (KERN_DEBUG USB_STORAGE
-			"new MODE_SENSE_6 data = %.2X %.2X %.2X %.2X\n",
-			dta[0], dta[1], dta[2], dta[3]);
-	}
+	/* Fix the MODE_SENSE data if we translated the command */
+	if ((old_cmnd == MODE_SENSE) && (srb->result == GOOD))
+		usb_stor_scsiSense10to6(srb);
 
 	/* Fix-up the return data from an INQUIRY command to show 
 	 * ANSI SCSI rev 2 so we don't confuse the SCSI layers above us
@@ -1310,9 +1318,8 @@ static int us_release(struct Scsi_Host *psh)
 	down(&(us->notify));
 	
 	/* free the data structure we were using */
-	US_DEBUGP("-- freeing private host data structure\n");
+	US_DEBUGP("-- freeing URB\n");
 	kfree(us->current_urb);
-	kfree(us);
 	(struct us_data*)psh->hostdata[0] = NULL;
 
 	/* we always have a successful release */
@@ -1536,11 +1543,10 @@ static int usb_stor_control_thread(void * __us)
 
 		switch (action) {
 		case US_ACT_COMMAND:
-			/* reject if target != 0 or if single-lun device
-			 * and LUN != 0
+			/* reject if target != 0 or if LUN is higher than
+			 * the maximum known LUN
 			 */
-			if (us->srb->target ||
-			    ((us->flags & US_FL_SINGLE_LUN) && us->srb->lun)) {
+			if (us->srb->target || (us->srb->lun > us->max_lun)) {
 				US_DEBUGP("Bad device number (%d/%d)\n",
 					  us->srb->target, us->srb->lun);
 
@@ -1623,32 +1629,37 @@ static int usb_stor_control_thread(void * __us)
 
 /* This is the list of devices we recognize, along with their flag data */
 static struct us_unusual_dev us_unusual_dev_list[] = {
-	{ 0x03f0, 0x0107, 0x0200,
-	  "HP USB CD-Writer Plus", US_SC_8070, US_PR_CB, 0}, 
-	{ 0x04e6, 0x0001, 0x0200,
-	  "Matshita LS-120", US_SC_8020, US_PR_CB, US_FL_SINGLE_LUN},
-	{ 0x04e6, 0x0002, 0x0100,
-	  "Shuttle eUSCSI Bridge", US_SC_SCSI, US_PR_BULK, US_FL_ALT_LENGTH}, 
-	{ 0x04e6, 0x0006, 0x0100,
-	  "Shuttle eUSB MMC Adapter", US_SC_SCSI, US_PR_CB, US_FL_SINGLE_LUN}, 
-	{ 0x057b, 0x0000, 0x0114,
-	  "Y-E Data Flashbuster-U", US_SC_UFI, US_PR_CB, US_FL_SINGLE_LUN},
-	{ 0x059b, 0x0030, 0x0100,
-	  "Iomega Zip 250", US_SC_SCSI, US_PR_BULK, US_FL_SINGLE_LUN},
-	{ 0x0693, 0x0002, 0x0100,
-	  "Hagiwara FlashGate SmartMedia", US_SC_SCSI, US_PR_BULK,
-	  US_FL_ALT_LENGTH},
-	{ 0x0781, 0x0001, 0x0200,
-	  "Sandisk ImageMate (SDDR-01)", US_SC_SCSI, US_PR_CB, 
-	  US_FL_SINGLE_LUN | US_FL_START_STOP},
-	{ 0x0781, 0x0002, 0x0009,
-	  "Sandisk Imagemate (SDDR-31)", US_SC_SCSI, US_PR_BULK, 
-	  US_FL_SINGLE_LUN | US_FL_IGNORE_SER},
-	{ 0x07af, 0x0005, 0x0100,
-	  "Microtech USB-SCSI-HD50", US_SC_SCSI, US_PR_BULK, US_FL_ALT_LENGTH}, 
-	{ 0x0000, 0x0000, 0x0,
-	  "", 0, 0, 0}
-};
+	{ 0x03f0, 0x0107, 0x0200, 0x0200, "HP USB CD-Writer Plus",
+		US_SC_8070, US_PR_CB, 0}, 
+	{ 0x04e6, 0x0001, 0x0200, 0x0200, "Matshita LS-120",
+		US_SC_8020, US_PR_CB, US_FL_SINGLE_LUN},
+	{ 0x04e6, 0x0002, 0x0100, 0x0100, "Shuttle eUSCSI Bridge",
+		US_SC_SCSI, US_PR_BULK, US_FL_ALT_LENGTH}, 
+	{ 0x04e6, 0x0006, 0x0100, 0x0100, "Shuttle eUSB MMC Adapter",
+		US_SC_SCSI, US_PR_CB, US_FL_SINGLE_LUN}, 
+	{ 0x054c, 0x0010, 0x0210, 0x0210, "Sony DSC-S30", 
+		US_SC_SCSI, US_PR_CB, US_FL_SINGLE_LUN | US_FL_START_STOP |
+		US_FL_MODE_XLATE | US_FL_ALT_LENGTH},
+	{ 0x054c, 0x002d, 0x0100, 0x0100, "Sony Memorystick MSAC-US1",
+		US_SC_SCSI, US_PR_CB, US_FL_SINGLE_LUN | US_FL_START_STOP |
+		US_FL_MODE_XLATE | US_FL_ALT_LENGTH},
+	{ 0x057b, 0x0000, 0x0000, 0x0299, "Y-E Data Flashbuster-U",
+		US_SC_UFI,  US_PR_CB, US_FL_SINGLE_LUN},
+	{ 0x057b, 0x0000, 0x0300, 0x9999, "Y-E Data Flashbuster-U",
+		US_SC_UFI,  US_PR_CBI, US_FL_SINGLE_LUN},
+	{ 0x0693, 0x0002, 0x0100, 0x0100, "Hagiwara FlashGate SmartMedia",
+		US_SC_SCSI, US_PR_BULK, US_FL_ALT_LENGTH},
+	{ 0x0781, 0x0001, 0x0200, 0x0200, "Sandisk ImageMate (SDDR-01)",
+		US_SC_SCSI, US_PR_CB, US_FL_SINGLE_LUN | US_FL_START_STOP},
+	{ 0x0781, 0x0002, 0x0009, 0x0009, "Sandisk Imagemate (SDDR-31)",
+		US_SC_SCSI, US_PR_BULK, US_FL_IGNORE_SER},
+	{ 0x07af, 0x0005, 0x0100, 0x0100, "Microtech USB-SCSI-HD50",
+		US_SC_SCSI, US_PR_BULK, US_FL_ALT_LENGTH}, 
+	{ 0x05ab, 0x0031, 0x0100, 0x0100, "In-System USB/IDE Bridge",
+		US_SC_8070, US_PR_BULK, US_FL_ALT_LENGTH}, 
+	{ 0x0693, 0x0005, 0x0100, 0x0100, "Hagiwara Flashgate",
+		US_SC_SCSI, US_PR_BULK, US_FL_ALT_LENGTH}, 
+	{ 0 }};
 
 /* Search our ususual device list, based on vendor/product combinations
  * to see if we can support this device.  Returns a pointer to a structure
@@ -1667,7 +1678,8 @@ static struct us_unusual_dev* us_find_dev(u16 idVendor, u16 idProduct,
 	while ((ptr->idVendor != 0x0000) && 
 	       !((ptr->idVendor == idVendor) && 
 		 (ptr->idProduct == idProduct) &&
-		 (ptr->bcdDevice == bcdDevice)))
+		 (ptr->bcdDeviceMin <= bcdDevice) &&
+		 (ptr->bcdDeviceMax >= bcdDevice)))
 		ptr++;
 	
 	/* if the search ended because we hit the end record, we failed */
@@ -1968,20 +1980,21 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			ss->transport_name = "Control/Bulk";
 			ss->transport = CB_transport;
 			ss->transport_reset = CB_reset;
+			ss->max_lun = 7;
 			break;
 			
 		case US_PR_CBI:
 			ss->transport_name = "Control/Bulk/Interrupt";
 			ss->transport = CBI_transport;
 			ss->transport_reset = CB_reset;
+			ss->max_lun = 7;
 			break;
 			
 		case US_PR_BULK:
 			ss->transport_name = "Bulk";
 			ss->transport = Bulk_transport;
 			ss->transport_reset = Bulk_reset;
-			/* FIXME: for testing purposes only */
-			Bulk_max_lun(ss);
+			ss->max_lun = Bulk_max_lun(ss);
 			break;
 			
 		default:
@@ -1993,6 +2006,10 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			break;
 		}
 		US_DEBUGP("Transport: %s\n", ss->transport_name);
+
+		/* fix for single-lun devices */
+		if (ss->flags & US_FL_SINGLE_LUN)
+			ss->max_lun = 0;
 
 		switch (ss->subclass) {
 		case US_SC_RBC:
@@ -2134,6 +2151,576 @@ static void storage_disconnect(struct usb_device *dev, void *ptr)
 	up(&(ss->dev_semaphore));
 }
 
+/**************************************************************
+ **************************************************************/
+
+#define USB_STOR_SCSI_SENSE_HDRSZ 4
+#define USB_STOR_SCSI_SENSE_10_HDRSZ 8
+
+struct usb_stor_scsi_sense_hdr
+{
+  __u8* dataLength;
+  __u8* mediumType;
+  __u8* devSpecParms;
+  __u8* blkDescLength;
+};
+
+typedef struct usb_stor_scsi_sense_hdr Usb_Stor_Scsi_Sense_Hdr;
+
+union usb_stor_scsi_sense_hdr_u
+{
+  Usb_Stor_Scsi_Sense_Hdr hdr;
+  __u8* array[USB_STOR_SCSI_SENSE_HDRSZ];
+};
+
+typedef union usb_stor_scsi_sense_hdr_u Usb_Stor_Scsi_Sense_Hdr_u;
+
+struct usb_stor_scsi_sense_hdr_10
+{
+  __u8* dataLengthMSB;
+  __u8* dataLengthLSB;
+  __u8* mediumType;
+  __u8* devSpecParms;
+  __u8* reserved1;
+  __u8* reserved2;
+  __u8* blkDescLengthMSB;
+  __u8* blkDescLengthLSB;
+};
+
+typedef struct usb_stor_scsi_sense_hdr_10 Usb_Stor_Scsi_Sense_Hdr_10;
+
+union usb_stor_scsi_sense_hdr_10_u
+{
+  Usb_Stor_Scsi_Sense_Hdr_10 hdr;
+  __u8* array[USB_STOR_SCSI_SENSE_10_HDRSZ];
+};
+
+typedef union usb_stor_scsi_sense_hdr_10_u Usb_Stor_Scsi_Sense_Hdr_10_u;
+
+void usb_stor_scsiSenseParseBuffer( Scsi_Cmnd* , Usb_Stor_Scsi_Sense_Hdr_u*,
+				    Usb_Stor_Scsi_Sense_Hdr_10_u*, int* );
+void usb_stor_print_Scsi_Cmnd( Scsi_Cmnd* cmd );
+
+int
+usb_stor_scsiSense10to6( Scsi_Cmnd* the10 )
+{
+  __u8 *buffer=0;
+  int outputBufferSize = 0;
+  int length=0;
+  struct scatterlist *sg = 0;
+  int i=0, j=0, element=0;
+  Usb_Stor_Scsi_Sense_Hdr_u the6Locations;
+  Usb_Stor_Scsi_Sense_Hdr_10_u the10Locations;
+  int sb=0,si=0,db=0,di=0;
+  int sgLength=0;
+
+#if 0
+  /* Make sure we get a MODE_SENSE_10 command */
+  if ( the10->cmnd[0] != MODE_SENSE_10 )
+    {
+      printk( KERN_ERR USB_STORAGE 
+	      "Scsi_Cmnd was not a MODE_SENSE_10.\n" );
+      return -1;
+    }
+
+  /* Now start to format the output */
+  the10->cmnd[0] = MODE_SENSE;
+#endif
+  US_DEBUGP("-- converting 10 byte sense data to 6 byte\n");
+  the10->cmnd[0] = the10->cmnd[0] & 0xBF;
+
+  /* Determine buffer locations */
+  usb_stor_scsiSenseParseBuffer( the10, &the6Locations, &the10Locations,
+				 &length );
+
+  /* Work out minimum buffer to output */
+  outputBufferSize = *the10Locations.hdr.dataLengthLSB;
+  outputBufferSize += USB_STOR_SCSI_SENSE_HDRSZ;
+
+  /* Check to see if we need to truncate the output */
+  if ( outputBufferSize > length )
+    {
+      printk( KERN_WARNING USB_STORAGE 
+	      "Had to truncate MODE_SENSE_10 buffer into MODE_SENSE.\n" );
+      printk( KERN_WARNING USB_STORAGE
+	      "outputBufferSize is %d and length is %d.\n",
+	      outputBufferSize, length );
+    }
+  outputBufferSize = length;
+
+  /* Data length */
+  if ( *the10Locations.hdr.dataLengthMSB != 0 ) /* MSB must be zero */
+    {
+      printk( KERN_WARNING USB_STORAGE 
+	      "Command will be truncated to fit in SENSE6 buffer.\n" );
+      *the6Locations.hdr.dataLength = 0xff;
+    }
+  else
+    {
+      *the6Locations.hdr.dataLength = *the10Locations.hdr.dataLengthLSB;
+    }
+
+  /* Medium type and DevSpecific parms */
+  *the6Locations.hdr.mediumType = *the10Locations.hdr.mediumType;
+  *the6Locations.hdr.devSpecParms = *the10Locations.hdr.devSpecParms;
+
+  /* Block descriptor length */
+  if ( *the10Locations.hdr.blkDescLengthMSB != 0 ) /* MSB must be zero */
+    {
+      printk( KERN_WARNING USB_STORAGE 
+	      "Command will be truncated to fit in SENSE6 buffer.\n" );
+      *the6Locations.hdr.blkDescLength = 0xff;
+    }
+  else
+    {
+      *the6Locations.hdr.blkDescLength = *the10Locations.hdr.blkDescLengthLSB;
+    }
+
+  if ( the10->use_sg == 0 )
+    {
+      buffer = the10->request_buffer;
+      /* Copy the rest of the data */
+      memmove( &(buffer[USB_STOR_SCSI_SENSE_HDRSZ]),
+	       &(buffer[USB_STOR_SCSI_SENSE_10_HDRSZ]),
+	       outputBufferSize - USB_STOR_SCSI_SENSE_HDRSZ );
+      /* initialise last bytes left in buffer due to smaller header */
+      memset( &(buffer[outputBufferSize
+	    -(USB_STOR_SCSI_SENSE_10_HDRSZ-USB_STOR_SCSI_SENSE_HDRSZ)]),
+	      0,
+	      USB_STOR_SCSI_SENSE_10_HDRSZ-USB_STOR_SCSI_SENSE_HDRSZ );
+    }
+  else
+    {
+      sg = (struct scatterlist *) the10->request_buffer;
+      /* scan through this scatterlist and figure out starting positions */
+      for ( i=0; i < the10->use_sg; i++)
+	{
+	  sgLength = sg[i].length;
+	  for ( j=0; j<sgLength; j++ )
+	    {
+	      /* get to end of header */
+	      if ( element == USB_STOR_SCSI_SENSE_HDRSZ )
+		{
+		  db=i;
+		  di=j;
+		}
+	      if ( element == USB_STOR_SCSI_SENSE_10_HDRSZ )
+		{
+		  sb=i;
+		  si=j;
+		  /* we've found both sets now, exit loops */
+		  j=sgLength;
+		  i=the10->use_sg;
+		}
+	      element++;
+	    }
+	}
+
+      /* Now we know where to start the copy from */
+      element = USB_STOR_SCSI_SENSE_HDRSZ;
+      while ( element < outputBufferSize
+	      -(USB_STOR_SCSI_SENSE_10_HDRSZ-USB_STOR_SCSI_SENSE_HDRSZ) )
+	{
+	  /* check limits */
+	  if ( sb >= the10->use_sg ||
+	       si >= sg[sb].length ||
+	       db >= the10->use_sg ||
+	       di >= sg[db].length )
+	    {
+	      printk( KERN_ERR USB_STORAGE
+		      "Buffer overrun averted, this shouldn't happen!\n" );
+	      break;
+	    }
+
+	  /* copy one byte */
+	  sg[db].address[di] = sg[sb].address[si];
+
+	  /* get next destination */
+	  if ( sg[db].length-1 == di )
+	    {
+	      db++;
+	      di=0;
+	    }
+	  else
+	    {
+	      di++;
+	    }
+
+	  /* get next source */
+	  if ( sg[sb].length-1 == si )
+	    {
+	      sb++;
+	      si=0;
+	    }
+	  else
+	    {
+	      si++;
+	    }
+
+	  element++;
+	}
+      /* zero the remaining bytes */
+      while ( element < outputBufferSize )
+	{
+	  /* check limits */
+	  if ( db >= the10->use_sg ||
+	       di >= sg[db].length )
+	    {
+	      printk( KERN_ERR USB_STORAGE
+		      "Buffer overrun averted, this shouldn't happen!\n" );
+	      break;
+	    }
+
+	  sg[db].address[di] = 0;
+
+	  /* get next destination */
+	  if ( sg[db].length-1 == di )
+	    {
+	      db++;
+	      di=0;
+	    }
+	  else
+	    {
+	      di++;
+	    }
+	  element++;
+	}
+    }
+
+  /* All done any everything was fine */
+  return 0;
+}
+
+int
+usb_stor_scsiSense6to10( Scsi_Cmnd* the6 )
+{
+  /* will be used to store part of buffer */  
+  __u8 tempBuffer[USB_STOR_SCSI_SENSE_10_HDRSZ-USB_STOR_SCSI_SENSE_HDRSZ],
+    *buffer=0;
+  int outputBufferSize = 0;
+  int length=0;
+  struct scatterlist *sg = 0;
+  int i=0, j=0, element=0;
+  Usb_Stor_Scsi_Sense_Hdr_u the6Locations;
+  Usb_Stor_Scsi_Sense_Hdr_10_u the10Locations;
+  int sb=0,si=0,db=0,di=0;
+  int lsb=0,lsi=0,ldb=0,ldi=0;
+
+#if 0
+  /* Make sure we get a MODE_SENSE command */
+  if ( the6->cmnd[0] != MODE_SENSE )
+    {
+      printk( KERN_ERR USB_STORAGE 
+	      "Scsi_Cmnd was not MODE_SENSE.\n" );
+      return -1;
+    }
+
+  /* Now start to format the output */
+  the6->cmnd[0] = MODE_SENSE_10;
+#endif
+  US_DEBUGP("-- converting 6 byte sense data to 10 byte\n");
+  the6->cmnd[0] = the6->cmnd[0] | 0x40;
+
+  /* Determine buffer locations */
+  usb_stor_scsiSenseParseBuffer( the6, &the6Locations, &the10Locations,
+				 &length );
+
+  /* Work out minimum buffer to output */
+  outputBufferSize = *the6Locations.hdr.dataLength;
+  outputBufferSize += USB_STOR_SCSI_SENSE_10_HDRSZ;
+
+  /* Check to see if we need to trucate the output */
+  if ( outputBufferSize > length )
+    {
+      printk( KERN_WARNING USB_STORAGE 
+	      "Had to truncate MODE_SENSE into MODE_SENSE_10 buffer.\n" );
+      printk( KERN_WARNING USB_STORAGE
+	      "outputBufferSize is %d and length is %d.\n",
+	      outputBufferSize, length );
+    }
+  outputBufferSize = length;
+
+  /* Block descriptor length - save these before overwriting */
+  tempBuffer[2] = *the10Locations.hdr.blkDescLengthMSB;
+  tempBuffer[3] = *the10Locations.hdr.blkDescLengthLSB;
+  *the10Locations.hdr.blkDescLengthLSB = *the6Locations.hdr.blkDescLength;
+  *the10Locations.hdr.blkDescLengthMSB = 0;
+
+  /* reserved - save these before overwriting */
+  tempBuffer[0] = *the10Locations.hdr.reserved1;
+  tempBuffer[1] = *the10Locations.hdr.reserved2;
+  *the10Locations.hdr.reserved1 = *the10Locations.hdr.reserved2 = 0;
+
+  /* Medium type and DevSpecific parms */
+  *the10Locations.hdr.devSpecParms = *the6Locations.hdr.devSpecParms;
+  *the10Locations.hdr.mediumType = *the6Locations.hdr.mediumType;
+
+  /* Data length */
+  *the10Locations.hdr.dataLengthLSB = *the6Locations.hdr.dataLength;
+  *the10Locations.hdr.dataLengthMSB = 0;
+
+  if ( !the6->use_sg )
+    {
+      buffer = the6->request_buffer;
+      /* Copy the rest of the data */
+      memmove( &(buffer[USB_STOR_SCSI_SENSE_10_HDRSZ]),
+	      &(buffer[USB_STOR_SCSI_SENSE_HDRSZ]),
+	      outputBufferSize-USB_STOR_SCSI_SENSE_10_HDRSZ );
+      /* Put the first four bytes (after header) in place */
+      memcpy( &(buffer[USB_STOR_SCSI_SENSE_10_HDRSZ]),
+	      tempBuffer,
+	      USB_STOR_SCSI_SENSE_10_HDRSZ-USB_STOR_SCSI_SENSE_HDRSZ );
+    }
+  else
+    {
+      sg = (struct scatterlist *) the6->request_buffer;
+      /* scan through this scatterlist and figure out ending positions */
+      for ( i=0; i < the6->use_sg; i++)
+	{
+	  for ( j=0; j<sg[i].length; j++ )
+	    {
+	      /* get to end of header */
+	      if ( element == USB_STOR_SCSI_SENSE_HDRSZ )
+		{
+		  ldb=i;
+		  ldi=j;
+		}
+	      if ( element == USB_STOR_SCSI_SENSE_10_HDRSZ )
+		{
+		  lsb=i;
+		  lsi=j;
+		  /* we've found both sets now, exit loops */
+		  j=sg[i].length;
+		  i=the6->use_sg;
+		  break;
+		}
+	      element++;
+	    }
+	}
+      /* scan through this scatterlist and figure out starting positions */
+      element = length-1;
+      /* destination is the last element */
+      db=the6->use_sg-1;
+      di=sg[db].length-1;
+      for ( i=the6->use_sg-1; i >= 0; i--)
+	{
+	  for ( j=sg[i].length-1; j>=0; j-- )
+	    {
+	      /* get to end of header and find source for copy */
+	      if ( element == length - 1
+		   - (USB_STOR_SCSI_SENSE_10_HDRSZ-USB_STOR_SCSI_SENSE_HDRSZ) )
+		{
+		  sb=i;
+		  si=j;
+		  /* we've found both sets now, exit loops */
+		  j=-1;
+		  i=-1;
+		}
+	      element--;
+	    }
+	}
+      /* Now we know where to start the copy from */
+      element = length-1
+	- (USB_STOR_SCSI_SENSE_10_HDRSZ-USB_STOR_SCSI_SENSE_HDRSZ);
+      while ( element >= USB_STOR_SCSI_SENSE_10_HDRSZ )
+	{
+	  /* check limits */
+	  if ( ( sb <= lsb && si < lsi ) ||
+	       ( db <= ldb && di < ldi ) )
+	    {
+	      printk( KERN_ERR USB_STORAGE
+		      "Buffer overrun averted, this shouldn't happen!\n" );
+	      break;
+	    }
+
+	  /* copy one byte */
+	  sg[db].address[di] = sg[sb].address[si];
+
+	  /* get next destination */
+	  if ( di == 0 )
+	    {
+	      db--;
+	      di=sg[db].length-1;
+	    }
+	  else
+	    {
+	      di--;
+	    }
+
+	  /* get next source */
+	  if ( si == 0 )
+	    {
+	      sb--;
+	      si=sg[sb].length-1;
+	    }
+	  else
+	    {
+	      si--;
+	    }
+
+	  element--;
+	}
+      /* copy the remaining four bytes */
+      while ( element >= USB_STOR_SCSI_SENSE_HDRSZ )
+	{
+	  /* check limits */
+	  if ( db <= ldb && di < ldi )
+	    {
+	      printk( KERN_ERR USB_STORAGE
+		      "Buffer overrun averted, this shouldn't happen!\n" );
+	      break;
+	    }
+
+	  sg[db].address[di] = tempBuffer[element-USB_STOR_SCSI_SENSE_HDRSZ];
+
+	  /* get next destination */
+	  if ( di == 0 )
+	    {
+	      db--;
+	      di=sg[db].length-1;
+	    }
+	  else
+	    {
+	      di--;
+	    }
+	  element--;
+	}
+    }
+
+  /* All done and everything was fine */
+  return 0;
+}
+
+void
+usb_stor_scsiSenseParseBuffer( Scsi_Cmnd* srb, Usb_Stor_Scsi_Sense_Hdr_u* the6,
+			       Usb_Stor_Scsi_Sense_Hdr_10_u* the10,
+			       int* length_p )
+
+{
+  int i = 0, j=0, element=0;
+  struct scatterlist *sg = 0;
+  int length = 0;
+  __u8* buffer=0;
+
+  /* are we scatter-gathering? */
+  if ( srb->use_sg != 0 )
+    {
+      /* loop over all the scatter gather structures and 
+       * get pointer to the data members in the headers
+       * (also work out the length while we're here)
+       */
+      sg = (struct scatterlist *) srb->request_buffer;
+      for (i = 0; i < srb->use_sg; i++)
+	{
+	  length += sg[i].length;
+	  /* We only do the inner loop for the headers */
+	  if ( element < USB_STOR_SCSI_SENSE_10_HDRSZ )
+	    {
+	      /* scan through this scatterlist */
+	      for ( j=0; j<sg[i].length; j++ )
+		{
+		  if ( element < USB_STOR_SCSI_SENSE_HDRSZ )
+		    {
+		      /* fill in the pointers for both header types */
+		      the6->array[element] = &(sg[i].address[j]);
+		      the10->array[element] = &(sg[i].address[j]);
+		    }
+		  else if ( element < USB_STOR_SCSI_SENSE_10_HDRSZ )
+		    {
+		      /* only the longer headers still cares now */
+		      the10->array[element] = &(sg[i].address[j]);
+		    }
+		  /* increase element counter */
+		  element++;
+		}
+	    }
+	}
+    }
+  else
+    {
+      length = srb->request_bufflen;
+      buffer = srb->request_buffer;
+      if ( length < USB_STOR_SCSI_SENSE_10_HDRSZ )
+	printk( KERN_ERR USB_STORAGE
+		"Buffer length smaller than header!!" );
+      for( i=0; i<USB_STOR_SCSI_SENSE_10_HDRSZ; i++ )
+	{
+	  if ( i < USB_STOR_SCSI_SENSE_HDRSZ )
+	    {
+	      the6->array[i] = &(buffer[i]);
+	      the10->array[i] = &(buffer[i]);
+	    }
+	  else
+	    {
+	      the10->array[i] = &(buffer[i]);
+	    }
+	}
+    }
+
+  /* Set value of length passed in */
+  *length_p = length;
+}
+
+void
+usb_stor_print_Scsi_Cmnd( Scsi_Cmnd* cmd )
+{
+  int i=0, bufferSize = cmd->request_bufflen;
+  __u8* buffer = cmd->request_buffer;
+  struct scatterlist* sg = (struct scatterlist*)cmd->request_buffer;
+
+  printk( KERN_ERR "Dumping information about %p.\n", cmd );
+  printk( KERN_ERR "cmd->cmnd[0] value is %d.\n", cmd->cmnd[0] );
+  printk( KERN_ERR "(MODE_SENSE is %d and MODE_SENSE_10 is %d)\n",
+	  MODE_SENSE, MODE_SENSE_10 );
+
+  printk( KERN_ERR "buffer is %p with length %d.\n", buffer, bufferSize );
+  for ( i=0; i<bufferSize; i+=16 )
+    {
+      printk( KERN_ERR "%2x %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x\n",
+	      buffer[i],
+	      buffer[i+1],
+	      buffer[i+2],
+	      buffer[i+3],
+	      buffer[i+4],
+	      buffer[i+5],
+	      buffer[i+6],
+	      buffer[i+7],
+	      buffer[i+8],
+	      buffer[i+9],
+	      buffer[i+10],
+	      buffer[i+11],
+	      buffer[i+12],
+	      buffer[i+13],
+	      buffer[i+14],
+	      buffer[i+15] );
+    }
+
+  printk( KERN_ERR "Buffer has %d scatterlists.\n", cmd->use_sg );
+  for ( i=0; i<cmd->use_sg; i++ )
+    {
+      printk( KERN_ERR "Length of scatterlist %d is %d.\n", i, sg[i].length );
+      printk( KERN_ERR "%2x %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x\n",
+	      sg[i].address[0],
+	      sg[i].address[1],
+	      sg[i].address[2],
+	      sg[i].address[3],
+	      sg[i].address[4],
+	      sg[i].address[5],
+	      sg[i].address[6],
+	      sg[i].address[7],
+	      sg[i].address[8],
+	      sg[i].address[9],
+	      sg[i].address[10],
+	      sg[i].address[11],
+	      sg[i].address[12],
+	      sg[i].address[13],
+	      sg[i].address[14],
+	      sg[i].address[15] );
+    }
+}
+
+/**************************************************************
+ **************************************************************/
 
 /***********************************************************************
  * Initialization and registration
@@ -2182,6 +2769,11 @@ void __exit usb_stor_exit(void)
 
 		US_DEBUGP("-- calling scsi_unregister_module()\n");
 		scsi_unregister_module(MODULE_SCSI_HA, &(us_list->htmplt));
+
+                /* Now that scsi_unregister_module is done with the host
+                 * template, we can free the us_data structure (the host
+                 * template is inline in this structure). */
+                kfree (us_list);
 
 		/* advance the list pointer */
 		us_list = next;

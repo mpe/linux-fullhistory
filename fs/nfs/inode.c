@@ -705,7 +705,7 @@ nfs_fhget(struct dentry *dentry, struct nfs_fh *fhandle,
 		(long long)fattr->fileid);
 
 	/* Install the file handle in the dentry */
-	*((struct nfs_fh *) dentry->d_fsdata) = *fhandle;
+	memcpy(dentry->d_fsdata, fhandle, sizeof(struct nfs_fh));
 
 #ifdef CONFIG_NFS_SNAPSHOT
 	/*

@@ -4,6 +4,10 @@
  * Andrew G. Morgan <morgan@transmeta.com>
  * Alexander Kjeldaas <astor@guardian.no>
  * with help from Aleph1, Roland Buresund and Andrew Main.
+ *
+ * See here for the libcap library ("POSIX draft" compliance):
+ *
+ * ftp://linux.kernel.org/pub/linux/libs/security/linux-privs/kernel-2.2/
  */ 
 
 #ifndef _LINUX_CAPABILITY_H
@@ -170,8 +174,8 @@ typedef __u32 kernel_cap_t;
 
 #define CAP_IPC_OWNER        15
 
-/* Insert and remove kernel modules */
-
+/* Insert and remove kernel modules - modify kernel without limit */
+/* Modify cap_bset */
 #define CAP_SYS_MODULE       16
 
 /* Allow ioperm/iopl access */
@@ -294,12 +298,12 @@ extern kernel_cap_t cap_bset;
 #define CAP_EMPTY_SET       to_cap_t(0)
 #define CAP_FULL_SET        to_cap_t(~0)
 #define CAP_INIT_EFF_SET    to_cap_t(~0 & ~CAP_TO_MASK(CAP_SETPCAP))
-#define CAP_INIT_INH_SET    to_cap_t(~0 & ~CAP_TO_MASK(CAP_SETPCAP))
+#define CAP_INIT_INH_SET    to_cap_t(0)
 
 #define CAP_TO_MASK(x) (1 << (x))
 #define cap_raise(c, flag)   (cap_t(c) |=  CAP_TO_MASK(flag))
 #define cap_lower(c, flag)   (cap_t(c) &= ~CAP_TO_MASK(flag))
-#define cap_raised(c, flag)  (cap_t(c) & CAP_TO_MASK(flag) & cap_bset)
+#define cap_raised(c, flag)  (cap_t(c) & CAP_TO_MASK(flag))
 
 static inline kernel_cap_t cap_combine(kernel_cap_t a, kernel_cap_t b)
 {

@@ -8,6 +8,8 @@
 #include <linux/mm.h>
 #include <asm/uaccess.h>
 
+kernel_cap_t cap_bset = CAP_INIT_EFF_SET;
+
 /* Note: never hold tasklist_lock while spinning for this one */
 spinlock_t task_capability_lock = SPIN_LOCK_UNLOCKED;
 
@@ -16,8 +18,6 @@ spinlock_t task_capability_lock = SPIN_LOCK_UNLOCKED;
  * capability set pointers may be NULL -- indicating that that set is
  * uninteresting and/or not to be changed.
  */
-
-kernel_cap_t cap_bset = CAP_FULL_SET;
 
 asmlinkage long sys_capget(cap_user_header_t header, cap_user_data_t dataptr)
 {

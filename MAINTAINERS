@@ -199,8 +199,9 @@ S:	Maintained
 COMPAQ SMART2 RAID DRIVER
 P:	Charles White	
 M:	Charles White <arrays@compaq.com>
-L:	compaqandlinux@yps.org	
-S:	Maintained
+L:	compaqandlinux@cpqlin.van-dijk.net
+W:	ftp.compaq.com/pub/products/drivers/linux
+S:	Supported	
 
 COMPUTONE INTELLIPORT MULTIPORT CARD
 P:     Doug McNash

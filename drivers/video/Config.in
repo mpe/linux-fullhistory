@@ -120,6 +120,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	 tristate '  ATI Mach64 display support (EXPERIMENTAL)' CONFIG_FB_ATY
 	 tristate '  ATI Rage 128 display support (EXPERIMENTAL)' CONFIG_FB_ATY128
 	 bool '  3Dfx Banshee/Voodoo3 display support (EXPERIMENTAL)' CONFIG_FB_3DFX
+	 tristate '  SIS 630/540 display support (EXPERIMENTAL)' CONFIG_FB_SIS
       fi
    fi
    if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then

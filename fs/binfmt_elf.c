@@ -450,7 +450,7 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		if (elf_ppnt->p_type == PT_INTERP) {
 			retval = -EINVAL;
 		  	if (elf_interpreter)
-				goto out_free_interp;
+				goto out_free_dentry;
 
 			/* This is the program interpreter used for
 			 * shared libraries - for now assume that this

@@ -11,6 +11,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (06/23/2000) gkh
+ *	Cleaned up debugging statements in a quest to find UHCI timeout bug.
+ *
  * (04/27/2000) Ryan VanderBijl
  * 	Fixed memory leak in visor_close
  *
@@ -80,10 +83,10 @@ struct usb_serial_device_type handspring_device = {
  ******************************************************************************/
 static int visor_open (struct usb_serial_port *port, struct file *filp)
 {
-	dbg("visor_open port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 
 	if (port->active) {
-		dbg ("device already open");
+		dbg (__FUNCTION__ " - device already open");
 		return -EINVAL;
 	}
 
@@ -91,7 +94,7 @@ static int visor_open (struct usb_serial_port *port, struct file *filp)
 
 	/*Start reading from the device*/
 	if (usb_submit_urb(port->read_urb))
-		dbg("usb_submit_urb(read bulk) failed");
+		dbg(__FUNCTION__  " - usb_submit_urb(read bulk) failed");
 
 	return (0);
 }
@@ -102,10 +105,10 @@ static void visor_close (struct usb_serial_port *port, struct file * filp)
 	struct usb_serial *serial = port->serial;
 	unsigned char *transfer_buffer =  kmalloc (0x12, GFP_KERNEL);
 	
-	dbg("visor_close port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 			 
 	if (!transfer_buffer) {
-		err("visor_close: kmalloc(%d) failed.", 0x12);
+		err(__FUNCTION__ " - kmalloc(%d) failed.", 0x12);
 	} else {
 		/* send a shutdown message to the device */
 		usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), VISOR_CLOSE_NOTIFICATION,
@@ -122,7 +125,7 @@ static void visor_close (struct usb_serial_port *port, struct file * filp)
 
 static void visor_throttle (struct usb_serial_port *port)
 {
-	dbg("visor_throttle port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 
 	usb_unlink_urb (port->read_urb);
 
@@ -132,10 +135,10 @@ static void visor_throttle (struct usb_serial_port *port)
 
 static void visor_unthrottle (struct usb_serial_port *port)
 {
-	dbg("visor_unthrottle port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 
 	if (usb_unlink_urb (port->read_urb))
-		dbg("usb_submit_urb(read bulk) failed");
+		dbg(__FUNCTION__ " - usb_submit_urb(read bulk) failed");
 
 	return;
 }
@@ -148,20 +151,20 @@ static int  visor_startup (struct usb_serial *serial)
 	unsigned char *transfer_buffer =  kmalloc (256, GFP_KERNEL);
 
 	if (!transfer_buffer) {
-		err("visor_startup: kmalloc(%d) failed.", 256);
+		err(__FUNCTION__ " - kmalloc(%d) failed.", 256);
 		return -ENOMEM;
 	}
 
-	dbg("visor_startup");
+	dbg(__FUNCTION__);
 
-	dbg("visor_setup: Set config to 1");
+	dbg(__FUNCTION__ " - Set config to 1");
 	usb_set_configuration (serial->dev, 1);
 
 	/* send a get connection info request */
 	response = usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), VISOR_GET_CONNECTION_INFORMATION,
 					0xc2, 0x0000, 0x0000, transfer_buffer, 0x12, 300);
 	if (response < 0) {
-		err("visor_startup: error getting connection information");
+		err(__FUNCTION__ " - error getting connection information");
 	} else {
 		struct visor_connection_info *connection_info = (struct visor_connection_info *)transfer_buffer;
 		char *string;
@@ -195,7 +198,7 @@ static int  visor_startup (struct usb_serial *serial)
 	response = usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), VISOR_REQUEST_BYTES_AVAILABLE,
 					0xc2, 0x0000, 0x0005, transfer_buffer, 0x02, 300);
 	if (response < 0) {
-		err("visor_startup: error getting bytes available request");
+		err(__FUNCTION__ " - error getting bytes available request");
 	}
 
 	kfree (transfer_buffer);

@@ -30,8 +30,6 @@
 #include <linux/nfs_mount.h>
 #include <linux/pagemap.h>
 
-#include <asm/segment.h>	/* for fs functions */
-
 #define NFS_PARANOIA 1
 /* #define NFS_DEBUG_VERBOSE 1 */
 

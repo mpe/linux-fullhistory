@@ -15,8 +15,6 @@
 #include <linux/nfs3.h>
 #include <linux/nfs_fs.h>
 
-#include <asm/segment.h>
-
 #define NFSDBG_FACILITY		NFSDBG_PROC
 
 /*
