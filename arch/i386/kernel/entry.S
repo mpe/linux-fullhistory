@@ -78,7 +78,6 @@ priority	=  8
 signal		= 12
 blocked		= 16
 flags		= 20
-errno		= 24
 dbgreg6		= 52
 dbgreg7		= 56
 exec_domain	= 60
@@ -298,18 +297,12 @@ ENTRY(system_call)
 	movl SYMBOL_NAME(current_set),%ebx
 #endif
 	andl $~CF_MASK,EFLAGS(%esp)	# clear carry - assume no errors
-	movl $0,errno(%ebx)
 	movl %db6,%edx
 	movl %edx,dbgreg6(%ebx)  # save current hardware debugging status
 	testb $0x20,flags(%ebx)		# PF_TRACESYS
 	jne 1f
 	call *%eax
 	movl %eax,EAX(%esp)		# save the return value
-	movl errno(%ebx),%edx
-	negl %edx
-	je ret_from_sys_call
-	movl %edx,EAX(%esp)
-	orl $(CF_MASK),EFLAGS(%esp)	# set carry to indicate error
 	jmp ret_from_sys_call
 	ALIGN
 1:	call SYMBOL_NAME(syscall_trace)
@@ -322,12 +315,7 @@ ENTRY(system_call)
 #else
 	movl SYMBOL_NAME(current_set),%eax
 #endif
-	movl errno(%eax),%edx
-	negl %edx
-	je 1f
-	movl %edx,EAX(%esp)
-	orl $(CF_MASK),EFLAGS(%esp)	# set carry to indicate error
-1:	call SYMBOL_NAME(syscall_trace)
+	call SYMBOL_NAME(syscall_trace)
 
 	ALIGN
 	.globl ret_from_sys_call

@@ -1,26 +1,9 @@
 
-	Linux kernel release 1.3.xx
+	Linux kernel release 2.0.xx
 
-These are the release notes for linux version 1.3.  Read them carefully,
+These are the release notes for linux version 2.0.  Read them carefully,
 as they tell you what this is all about, explain how to install the
 kernel, and what to do if something goes wrong. 
-
-Linux version 1.3 is a DEVELOPMENT kernel, and not intended for general 
-public use.  Different releases may have various and sometimes severe 
-bugs.  It is *strongly* recommended that you back up the previous kernel 
-before installing any new 1.3.xx release.
-
-If you need to use a proven and stable Linux kernel, please
-use 1.0.9 or 1.2.13.  All features found in the 1.3.xx releases
-will be contained in 2.0 when the code base has stabilized again.
-
-If you decide to use 1.3, it might be a good idea to follow the kernel
-channel, available as newsgroup (under linux.dev.kernel) and as mailing
-list.  To subscribe to the latter, e-mail majordomo@vger.rutgers.edu,
-and put in the body of the message "subscribe linux-kernel" or
-"subscribe linux-kernel-digest" for a daily digest of the mailing list
-(it is a high-traffic list). Note that getting subscribed or unsubscribed
-sometimes takes days or even weeks.
 
 WHAT IS LINUX?
 
@@ -60,16 +43,16 @@ INSTALLING the kernel:
  - If you install the full sources, do a
 
 		cd /usr/src
-		gzip -cd linux-1.3.XX.tar.gz | tar xfv -
+		gzip -cd linux-2.0.XX.tar.gz | tar xfv -
 
    to get it all put in place. Replace "XX" with the version number of the
    latest kernel.
 
- - You can also upgrade between 1.3.xx releases by patching.  For a large
-   set of revisions, it is not worth the effort since the full set of 
-   patches is bigger than a new kernel distribution. Instead, get the
-   latest full source archive and install as above. Then, get all newer
-   patch files, and do
+ - You can also upgrade between 2.0.xx releases by patching.  Each
+   patch that is released for 2.0.xx contains only bugfixes.  No
+   new features will be added to the Linux kernel until the 2.1.xx
+   development effort begins.  To install by patching, get all the
+   newer patch files and do
 
 		cd /usr/src
 		gzip -cd patchXX.gz | patch -p0
@@ -118,7 +101,6 @@ CONFIGURING the kernel:
 	"make menuconfig"  Text based color menus, radiolists & dialogs.
 	"make xconfig"     X windows based configuration tool.
    
-
 	NOTES on "make config":
 	- having unnecessary drivers will make the kernel bigger, and can
 	  under some circumstances lead to problems: probing for a
@@ -166,7 +148,10 @@ COMPILING the kernel:
 
    For some, this is on a floppy disk, in which case you can "cp
    /usr/src/linux/arch/i386/boot/zImage /dev/fd0" to make a bootable
-   floppy. 
+   floppy.  Note that as of Linux 2.0.0, a kernel copied to a 720k
+   double-density 3.5" floppy disk no longer boots.  In this case,
+   it is highly recommended that you install LILO on your
+   double-density bootfloppy or switch to high-density floppies.
 
    If you boot Linux from the hard drive, chances are you use LILO which
    uses the kernel image as specified in the file /etc/lilo.conf.  The

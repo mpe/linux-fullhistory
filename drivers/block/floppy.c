@@ -534,6 +534,7 @@ static int fd_eject(int drive)
 	udelay(500);
 	set_dor(0, ~0x80, 0);
 	udelay(500);
+	return 0;
 }
 #else
 #define fd_eject(x) -EINVAL

@@ -29,6 +29,8 @@ Current Releases
 - Gpm			 1.06
 - SysVinit		 2.60
 - Util-linux		 2.5
+- Mtools		 3.0
+- Fdutils		 4.3
 
 Upgrade notes
 *************
@@ -304,6 +306,31 @@ Please send info about any other packages that 1.3.x "broke" or about
 any new features of 1.3.x that require extra or new packages for use to
 Chris Ricker (gt1355b@prism.gatech.edu).
 
+Mtools and fdutils
+==================
+
+   The floppy ioctl numbering scheme has changed in 1.3.x. For
+backwards compatibility, the old numbering scheme was supported
+throughout 1.3.x. A warning will be printed in 2.0.x when the old
+numbers are used, and their use will be discontinued entirely in 2.1.x
+
+   In order to avoid trouble, you need to recompile any programs that
+emit floppy ioctls. These include mtools and fdutils. You can get
+mtools at:
+
+ftp://ftp.imag.fr/pub/Linux/ZLIBC/mtools/mtools-3.0.src.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/utils/disk-management/mtools-3.0.src.tar.gz
+ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/mtools-3.0.src.tar.gz
+
+You can get fdutils at:
+
+ftp://ftp.imag.fr/pub/Linux/ZLIBC/fdutils/fdutils-4.3.src.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/Misc/fdutils-4.3.src.tar.gz
+ftp://tsx-11.mit.edu/pub/linux/sources/sbin/fdutils-4.3.src.tar.gz
+
+   In the future, the ioctl used by fdformat might be discontinued
+altogether. Please use superformat (included in fdutils) instead.
+
 How to know the version of the installed programs
 *************************************************
 
@@ -408,3 +435,16 @@ Util-linux
 
 ftp://sunsite.unc.edu/pub/Linux/system/Misc/util-linux-2.5.tar.gz
 
+Mtools
+======
+
+ftp://ftp.imag.fr/pub/Linux/ZLIBC/mtools/mtools-3.0.src.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/utils/disk-management/mtools-3.0.src.tar.gz
+ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/mtools-3.0.src.tar.gz
+
+Fdutils
+=======
+
+ftp://ftp.imag.fr/pub/Linux/ZLIBC/fdutils/fdutils-4.3.src.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/Misc/fdutils-4.3.src.tar.gz
+ftp://tsx-11.mit.edu/pub/linux/sources/sbin/fdutils-4.3.src.tar.gz

@@ -74,6 +74,10 @@
 #define SIOCGIFMAP	0x8970		/* Get device parameters	*/
 #define SIOCSIFMAP	0x8971		/* Set device parameters	*/
 
+/* DLCI configuration calls */
+
+#define SIOCADDDLCI	0x8980		/* Create new DLCI device	*/
+#define SIOCDELDLCI	0x8981		/* Delete DLCI device		*/
 
 /* Device private ioctl calls */
 

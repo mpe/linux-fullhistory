@@ -333,6 +333,7 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
       case SIG('S','L'):
 	{int slen;
 	 struct SL_component * slp;
+	 struct SL_component * oldslp;
 	 slen = rr->len - 5;
 	 slp = &rr->u.SL.link;
 	 inode->i_size = symlink_len;
@@ -356,10 +357,20 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	     printk("Symlink component flag not implemented\n");
 	   };
 	   slen -= slp->len + 2;
+	   oldslp = slp;
 	   slp = (struct SL_component *) (((char *) slp) + slp->len + 2);
 
-	   if(slen < 2) break;
-	   if(!rootflag) inode->i_size += 1;
+	   if(slen < 2) {
+	     if(    ((rr->u.SL.flags & 1) != 0) 
+		    && ((oldslp->flags & 1) == 0) ) inode->i_size += 1;
+	     break;
+	   }
+
+	   /*
+	    * If this component record isnt continued, then append a '/'.
+	    */
+	   if(   (!rootflag)
+		 && ((oldslp->flags & 1) == 0) ) inode->i_size += 1;
 	 }
 	}
 	symlink_len = inode->i_size;
@@ -475,6 +486,7 @@ char * get_rock_ridge_symlink(struct inode * inode)
       break;
     case SIG('S','L'):
       {int slen;
+       struct SL_component * oldslp;
        struct SL_component * slp;
        slen = rr->len - 5;
        slp = &rr->u.SL.link;
@@ -503,10 +515,25 @@ char * get_rock_ridge_symlink(struct inode * inode)
 	   printk("Symlink component flag not implemented (%d)\n",slen);
 	 };
 	 slen -= slp->len + 2;
+	 oldslp = slp;
 	 slp = (struct SL_component *) (((char *) slp) + slp->len + 2);
 
-	 if(slen < 2) break;
-	 if(!rootflag) strcat(rpnt,"/");
+	 if(slen < 2) {
+	   /*
+	    * If there is another SL record, and this component record
+	    * isn't continued, then add a slash.
+	    */
+	   if(    ((rr->u.SL.flags & 1) != 0) 
+	       && ((oldslp->flags & 1) == 0) ) strcat(rpnt,"/");
+	   break;
+	 }
+
+	 /*
+	  * If this component record isnt continued, then append a '/'.
+	  */
+	 if(   (!rootflag)
+	    && ((oldslp->flags & 1) == 0) ) strcat(rpnt,"/");
+
        };
        break;
      case SIG('C','E'):

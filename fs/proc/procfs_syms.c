@@ -15,7 +15,9 @@ static struct symbol_table procfs_syms = {
 /* Should this be surrounded with "#ifdef CONFIG_MODULES" ? */
 #include <linux/symtab_begin.h>
 	X(proc_register),
+	X(proc_register_dynamic),
 	X(proc_unregister),
+	X(proc_root),
 	X(in_group_p),
 	X(generate_cluster),
 	X(proc_net_inode_operations),

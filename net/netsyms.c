@@ -51,6 +51,9 @@ extern void destroy_EII_client(struct datalink_proto *);
 extern void destroy_8023_client(struct datalink_proto *);
 #endif
 
+#ifdef CONFIG_DLCI_MODULE
+extern int (*dlci_ioctl_hook)(unsigned int, void *);
+#endif
 
 static struct symbol_table net_syms = {
 #include <linux/symtab_begin.h>
@@ -85,6 +88,11 @@ static struct symbol_table net_syms = {
 	X(inet_add_protocol),
 	X(inet_del_protocol),
 	X(rarp_ioctl_hook),
+
+#ifdef CONFIG_DLCI_MODULE
+        X(dlci_ioctl_hook),
+#endif
+
 	X(init_etherdev),
 	X(ip_rt_route),
 	X(icmp_send),

@@ -15,7 +15,7 @@
 
 #include <asm/segment.h>
 
-asmlinkage int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
+asmlinkage long sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 {
 	struct file * file;
 	long tmp = -1;

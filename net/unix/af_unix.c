@@ -505,6 +505,7 @@ static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 			return err;
 		skb->sk=sk;				/* So they know it is us */
 		skb->free=1;
+		skb->h.filp=NULL;
 		sk->state=TCP_CLOSE;
 		unix_mkname(sunaddr, addr_len);
 		other=unix_find_other(sunaddr->sun_path, &err);

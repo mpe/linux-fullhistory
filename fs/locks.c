@@ -257,6 +257,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	if (!(inode = filp->f_inode))
 		return (-EINVAL);
 	
+#ifdef CONFIG_LOCK_MANDATORY
 	/* Don't allow mandatory locks on files that may be memory mapped
 	 * and shared.
 	 */
@@ -268,6 +269,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 			vma = vma->vm_next_share;
 		} while (vma != inode->i_mmap);
 	}
+#endif
 
 	memcpy_fromfs(&flock, l, sizeof(flock));
 	if (!posix_make_lock(filp, &file_lock, &flock))
@@ -291,8 +293,8 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	if (count < 5) {
 		count++;
 		printk(KERN_WARNING
-		       "fcntl_setlk() called by process %d with broken flock() emulation\n",
-		       current->pid);
+		       "fcntl_setlk() called by process %d (%s) with broken flock() emulation\n",
+		       current->pid, current->comm);
 	}
 }
 #endif
@@ -332,17 +334,33 @@ void locks_remove_locks(struct task_struct *task, struct file *filp)
 
 int locks_verify_locked(struct inode *inode)
 {
+#ifdef CONFIG_LOCK_MANDATORY
 	/* Candidates for mandatory locking have the setgid bit set
 	 * but no group execute bit -  an otherwise meaningless combination.
 	 */
 	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
 		return (locks_mandatory_locked(inode));
+#endif
 	return (0);
 }
 
+int locks_verify_area(int read_write, struct inode *inode, struct file *filp,
+		      unsigned int offset, unsigned int count)
+{
+#ifdef CONFIG_LOCK_MANDATORY	 
+	/* Candidates for mandatory locking have the setgid bit set
+	 * but no group execute bit -  an otherwise meaningless combination.
+	 */
+	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
+		return (locks_mandatory_area(read_write, inode, filp, offset,
+					     count));
+#endif					     
+	return (0);
+}
+
+#ifdef CONFIG_LOCK_MANDATORY	
 int locks_mandatory_locked(struct inode *inode)
 {
-#ifdef CONFIG_LOCK_MANDATORY
 	struct file_lock *fl;
 
 	/* Search the lock list for this inode for any POSIX locks.
@@ -351,21 +369,6 @@ int locks_mandatory_locked(struct inode *inode)
 		if ((fl->fl_flags & F_POSIX) && (fl->fl_owner != current))
 			return (-EAGAIN);
 	}
-#endif	
-	return (0);
-}
-
-int locks_verify_area(int read_write, struct inode *inode, struct file *filp,
-		      unsigned int offset, unsigned int count)
-{
-	/* Candidates for mandatory locking have the setgid bit set
-	 * but no group execute bit -  an otherwise meaningless combination.
-	 */
-#ifdef CONFIG_LOCK_MANDATORY	 
-	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
-		return (locks_mandatory_area(read_write, inode, filp, offset,
-					     count));
-#endif					     
 	return (0);
 }
 
@@ -373,7 +376,6 @@ int locks_mandatory_area(int read_write, struct inode *inode,
 			 struct file *filp, unsigned int offset,
 			 unsigned int count)
 {
-#ifdef CONFIG_LOCK_MANDATORY	
 	struct file_lock *fl;
 
 repeat:
@@ -412,9 +414,9 @@ repeat:
 			goto repeat;
 		}
 	}
-#endif
 	return (0);
 }
+#endif
 
 /* Verify a "struct flock" and copy it to a "struct file_lock" as a POSIX
  * style lock.
@@ -939,10 +941,15 @@ static char *lock_get_status(struct file_lock *fl, char *p, int id, char *pfx)
 
 	p += sprintf(p, "%d:%s ", id, pfx);
 	if (fl->fl_flags & F_POSIX) {
+#ifdef CONFIG_LOCK_MANDATORY	 
 		p += sprintf(p, "%s %s ",
 			     (fl->fl_flags & F_BROKEN) ? "BROKEN" : "POSIX ",
 			     ((fl->fl_file->f_inode->i_mode & (S_IXGRP | S_ISGID))
 			      == S_ISGID) ? "MANDATORY" : "ADVISORY ");
+#else
+		p += sprintf(p, "%s ADVISORY ",
+			     (fl->fl_flags & F_BROKEN) ? "BROKEN" : "POSIX ");
+#endif
 	}
 	else {
 		p += sprintf(p, "FLOCK  ADVISORY  ");

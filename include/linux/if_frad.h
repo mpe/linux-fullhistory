@@ -24,10 +24,9 @@
 #ifndef _FRAD_H_
 #define _FRAD_H_
 
-/* Structures and constants associated with the DLCI device driver */
+#include <linux/if.h>
 
-#define DLCI_DEVADD	(SIOCDEVPRIVATE)
-#define DLCI_DEVDEL	(SIOCDEVPRIVATE + 1)
+/* Structures and constants associated with the DLCI device driver */
 
 struct dlci_add
 {

@@ -48,6 +48,7 @@
  *		Alan Cox	:	Only sendmsg/recvmsg now supported.
  *		Alan Cox	:	Locked down bind (see security list).
  *		Alan Cox	:	Loosened bind a little.
+ *		Mike McLagan	:	ADD/DEL DLCI Ioctls
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -111,6 +112,14 @@ extern int snmp_get_info(char *, char **, off_t, int, int);
 extern int afinet_get_info(char *, char **, off_t, int, int);
 extern int tcp_get_info(char *, char **, off_t, int, int);
 extern int udp_get_info(char *, char **, off_t, int, int);
+
+#ifdef CONFIG_DLCI
+extern int dlci_ioctl(unsigned int, void*);
+#endif
+
+#ifdef CONFIG_DLCI_MODULE
+int (*dlci_ioctl_hook)(unsigned int, void *) = NULL;
+#endif
 
 int (*rarp_ioctl_hook)(unsigned int,void*) = NULL;
 
@@ -1292,6 +1301,24 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			return -ENOPKG;
 #endif						
 			
+		case SIOCADDDLCI:
+		case SIOCDELDLCI:
+#ifdef CONFIG_DLCI
+			return(dlci_ioctl(cmd, (void *) arg));
+#endif
+
+#ifdef CONFIG_DLCI_MODULE
+
+#ifdef CONFIG_KERNELD
+			if (dlci_ioctl_hook == NULL)
+				request_module("dlci");
+#endif
+
+			if (dlci_ioctl_hook)
+				return((*dlci_ioctl_hook)(cmd, (void *) arg));
+#endif
+			return -ENOPKG;
+
 		default:
 			if ((cmd >= SIOCDEVPRIVATE) &&
 			   (cmd <= (SIOCDEVPRIVATE + 15)))

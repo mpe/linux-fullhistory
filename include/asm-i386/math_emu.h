@@ -1,6 +1,7 @@
-#ifndef _LINUX_MATH_EMU_H
-#define _LINUX_MATH_EMU_H
+#ifndef _I386_MATH_EMU_H
+#define _I386_MATH_EMU_H
 
+#include <asm/sigcontext.h>
 
 void restore_i387_soft(struct _fpstate *buf);
 struct _fpstate * save_i387_soft(struct _fpstate * buf);

@@ -224,15 +224,6 @@ ethif_probe(struct device *dev)
 #   define NEXT_DEV	(&sdla0_dev)
 #endif
 
-/* This must be AFTER the various FRADs so it initializes FIRST! */
-
-#ifdef CONFIG_DLCI
-    extern int dlci_init(struct device *);
-    static struct device dlci_dev = { "dlci", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, dlci_init, };
-#   undef NEXT_DEV
-#   define NEXT_DEV	(&dlci_dev)
-#endif
-
 #ifdef CONFIG_NETROM
 	extern int nr_init(struct device *);
 	

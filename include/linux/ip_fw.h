@@ -50,6 +50,12 @@
 #ifndef _IP_FW_H
 #define _IP_FW_H
 
+#include <linux/icmp.h>
+#include <linux/in.h>
+#include <linux/ip.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
+
 struct ip_fw 
 {
 	struct ip_fw  *fw_next;			/* Next firewall on chain */

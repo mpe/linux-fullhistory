@@ -830,7 +830,7 @@ int atif_ioctl(int cmd, void *arg)
 				limit=ntohs(nr->nr_lastnet);
 				if(limit-ntohs(nr->nr_firstnet) > 256)
 				{
-					printk(KERN_WARING "Too many routes/iface.\n");
+					printk(KERN_WARNING "Too many routes/iface.\n");
 					return -EINVAL;
 				}
 				for(ct=ntohs(nr->nr_firstnet);ct<=limit;ct++)

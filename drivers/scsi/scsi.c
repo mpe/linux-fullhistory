@@ -201,14 +201,14 @@ static void scsi_dump_status(void);
     #define ABORT_TIMEOUT SCSI_TIMEOUT
     #define RESET_TIMEOUT SCSI_TIMEOUT
 #else
-    #define SENSE_TIMEOUT (1*HZ)
-    #define RESET_TIMEOUT (5*HZ)
-    #define ABORT_TIMEOUT (5*HZ)
+    #define SENSE_TIMEOUT (5*HZ/10)
+    #define RESET_TIMEOUT (5*HZ/10)
+    #define ABORT_TIMEOUT (5*HZ/10)
 #endif
 
-#define MIN_RESET_DELAY (3*HZ)
+#define MIN_RESET_DELAY (2*HZ)
 
-/* Do not call reset on error if we just did a reset within 10 sec. */
+/* Do not call reset on error if we just did a reset within 15 sec. */
 #define MIN_RESET_PERIOD (15*HZ)
 
 /* The following devices are known not to tolerate a lun != 0 scan for
@@ -2255,15 +2255,16 @@ static int update_timeout(Scsi_Cmnd * SCset, int timeout)
      * it is called twice per SCSI operation: once when internal_cmnd is
      * called, and again when scsi_done completes the command.  To limit
      * the load this routine can cause, we shortcut processing if no clock
-     * ticks have occurred since the last time it was called.  This may
-     * cause the computation of least below to be inaccurate, but it will
-     * be corrected after the next clock tick.
+     * ticks have occurred since the last time it was called.
      */
 
     if (jiffies == time_start && timer_table[SCSI_TIMER].expires > 0) {
 	if(SCset){
 	    oldto = SCset->timeout;
 	    SCset->timeout = timeout;
+	    if (timeout > 0 &&
+		jiffies + timeout < timer_table[SCSI_TIMER].expires)
+		    timer_table[SCSI_TIMER].expires = jiffies + timeout;
 	}
 	restore_flags(flags);
 	return oldto;
