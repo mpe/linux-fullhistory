@@ -134,6 +134,8 @@ int __init snd_seq_system_client_init(void)
 		return -ENOMEM;
 	}
 
+	memset(&callbacks, 0, sizeof(callbacks));
+	memset(&pcallbacks, 0, sizeof(pcallbacks));
 	pcallbacks.owner = THIS_MODULE;
 	pcallbacks.event_input = event_input_timer;
 
