@@ -142,6 +142,7 @@ static void e1000_clean_rx_ring(struct e1000_adapter *adapter);
 static void e1000_set_multi(struct net_device *netdev);
 static void e1000_update_phy_info(unsigned long data);
 static void e1000_watchdog(unsigned long data);
+static void e1000_watchdog_task(struct e1000_adapter *adapter);
 static void e1000_82547_tx_fifo_stall(unsigned long data);
 static int e1000_xmit_frame(struct sk_buff *skb, struct net_device *netdev);
 static struct net_device_stats * e1000_get_stats(struct net_device *netdev);
@@ -573,6 +574,9 @@ e1000_probe(struct pci_dev *pdev,
 	init_timer(&adapter->watchdog_timer);
 	adapter->watchdog_timer.function = &e1000_watchdog;
 	adapter->watchdog_timer.data = (unsigned long) adapter;
+
+	INIT_WORK(&adapter->watchdog_task,
+		(void (*)(void *))e1000_watchdog_task, adapter);
 
 	init_timer(&adapter->phy_info_timer);
 	adapter->phy_info_timer.function = &e1000_update_phy_info;
@@ -1529,13 +1533,20 @@ e1000_82547_tx_fifo_stall(unsigned long data)
 
 /**
  * e1000_watchdog - Timer Call-back
- * @data: pointer to netdev cast into an unsigned long
+ * @data: pointer to adapter cast into an unsigned long
  **/
-
 static void
 e1000_watchdog(unsigned long data)
 {
 	struct e1000_adapter *adapter = (struct e1000_adapter *) data;
+
+	/* Do the rest outside of interrupt context */
+	schedule_work(&adapter->watchdog_task);
+}
+
+static void
+e1000_watchdog_task(struct e1000_adapter *adapter)
+{
 	struct net_device *netdev = adapter->netdev;
 	struct e1000_desc_ring *txdr = &adapter->tx_ring;
 	uint32_t link;
