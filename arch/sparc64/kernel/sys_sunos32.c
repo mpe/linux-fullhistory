@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.2 1997/07/05 07:09:16 davem Exp $
+/* $Id: sys_sunos32.c,v 1.3 1997/07/17 02:20:48 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)

@@ -1,4 +1,4 @@
-/* $Id: cgsix.c,v 1.34 1997/07/15 09:48:50 jj Exp $
+/* $Id: cgsix.c,v 1.35 1997/07/17 02:21:45 davem Exp $
  * cgsix.c: cgsix frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)

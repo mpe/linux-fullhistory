@@ -1,4 +1,4 @@
-/* $Id: creator.c,v 1.6 1997/07/15 09:48:49 jj Exp $
+/* $Id: creator.c,v 1.7 1997/07/17 02:21:47 davem Exp $
  * creator.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)

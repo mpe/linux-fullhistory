@@ -1,4 +1,4 @@
-/* $Id: namei.h,v 1.4 1997/06/07 08:32:56 ecd Exp $
+/* $Id: namei.h,v 1.5 1997/07/17 02:24:28 davem Exp $
  * linux/include/asm-sparc64/namei.h
  *
  * Routines to handle famous /usr/gnemul/s*.

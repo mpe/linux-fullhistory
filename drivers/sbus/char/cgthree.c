@@ -1,4 +1,4 @@
-/* $Id: cgthree.c,v 1.22 1997/06/06 10:56:30 jj Exp $
+/* $Id: cgthree.c,v 1.23 1997/07/17 02:21:46 davem Exp $
  * cgtree.c: cg3 frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)

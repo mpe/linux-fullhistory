@@ -1,4 +1,4 @@
-/* $Id: cgfourteen.c,v 1.23 1997/06/06 10:56:29 jj Exp $
+/* $Id: cgfourteen.c,v 1.24 1997/07/17 02:21:44 davem Exp $
  * cgfourteen.c: Sun SparcStation console support.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.12 1997/06/25 10:12:18 jj Exp $
+# $Id: Makefile,v 1.13 1997/07/16 10:12:03 jj Exp $
 # Makefile for Sparc library files..
 #
 
@@ -6,7 +6,7 @@ CFLAGS := $(CFLAGS) -ansi
 
 OBJS  = blockops.o locks.o strlen.o strncmp.o \
 	memscan.o strncpy_from_user.o strlen_user.o memcmp.o checksum.o \
-	VIScopy.o VISbzero.o VISmemset.o
+	VIScopy.o VISbzero.o VISmemset.o VIScsum.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)

@@ -1,4 +1,4 @@
-/* $Id: bwtwo.c,v 1.17 1997/06/06 10:56:28 jj Exp $
+/* $Id: bwtwo.c,v 1.18 1997/07/17 02:21:43 davem Exp $
  * bwtwo.c: bwtwo console driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
