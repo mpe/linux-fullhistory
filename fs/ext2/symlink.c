@@ -24,8 +24,8 @@
 #include <linux/mm.h>
 #include <linux/stat.h>
 
-static int ext2_readlink (struct inode *, char *, int);
-static struct dentry *ext2_follow_link(struct inode *, struct dentry *);
+static int ext2_readlink (struct dentry *, char *, int);
+static struct dentry *ext2_follow_link(struct dentry *, struct dentry *);
 
 /*
  * symlinks can't do much...
@@ -51,10 +51,12 @@ struct inode_operations ext2_symlink_inode_operations = {
 	NULL			/* smap */
 };
 
-static struct dentry * ext2_follow_link(struct inode * inode, struct dentry *base)
+static struct dentry * ext2_follow_link(struct dentry * dentry,
+					struct dentry *base)
 {
-	int error;
+	struct inode *inode = dentry->d_inode;
 	struct buffer_head * bh = NULL;
+	int error;
 	char * link;
 
 	link = (char *) inode->u.ext2_i.i_data;
@@ -72,8 +74,9 @@ static struct dentry * ext2_follow_link(struct inode * inode, struct dentry *bas
 	return base;
 }
 
-static int ext2_readlink (struct inode * inode, char * buffer, int buflen)
+static int ext2_readlink (struct dentry * dentry, char * buffer, int buflen)
 {
+	struct inode *inode = dentry->d_inode;
 	struct buffer_head * bh = NULL;
 	char * link;
 	int i;

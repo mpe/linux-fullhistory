@@ -94,9 +94,9 @@ int smb_ioctl (struct inode *, struct file *, unsigned int, unsigned long);
 struct super_block *smb_read_super(struct super_block *, void *, int);
 void smb_get_inode_attr(struct inode *, struct smb_fattr *);
 void smb_invalidate_inodes(struct smb_sb_info *);
-int  smb_revalidate_inode(struct inode *);
+int  smb_revalidate_inode(struct dentry *);
 int  smb_refresh_inode(struct inode *);
-int  smb_notify_change(struct inode *, struct iattr *);
+int  smb_notify_change(struct dentry *, struct iattr *);
 unsigned long smb_invent_inos(unsigned long);
 struct inode *smb_iget(struct super_block *, struct smb_fattr *);
 

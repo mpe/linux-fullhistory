@@ -20,8 +20,8 @@
 
 #include <asm/uaccess.h>
 
-static int sysv_readlink(struct inode *, char *, int);
-static struct dentry *sysv_follow_link(struct inode *, struct dentry *);
+static int sysv_readlink(struct dentry *, char *, int);
+static struct dentry *sysv_follow_link(struct dentry *, struct dentry *);
 
 /*
  * symlinks can't do much...
@@ -46,8 +46,10 @@ struct inode_operations sysv_symlink_inode_operations = {
 	NULL			/* permission */
 };
 
-static struct dentry *sysv_follow_link(struct inode * inode, struct dentry * base)
+static struct dentry *sysv_follow_link(struct dentry * dentry,
+					struct dentry * base)
 {
+	struct inode *inode = dentry->d_inode;
 	struct buffer_head * bh;
 
 	bh = sysv_file_bread(inode, 0, 0);
@@ -61,8 +63,9 @@ static struct dentry *sysv_follow_link(struct inode * inode, struct dentry * bas
 	return base;
 }
 
-static int sysv_readlink(struct inode * inode, char * buffer, int buflen)
+static int sysv_readlink(struct dentry * dentry, char * buffer, int buflen)
 {
+	struct inode *inode = dentry->d_inode;
 	struct buffer_head * bh;
 	char * bh_data;
 	int i;

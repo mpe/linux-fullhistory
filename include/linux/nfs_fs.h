@@ -11,9 +11,10 @@
 
 #include <linux/signal.h>
 #include <linux/sched.h>
-#include <linux/nfs.h>
 #include <linux/in.h>
+
 #include <linux/sunrpc/debug.h>
+#include <linux/nfs.h>
 #include <linux/nfs_mount.h>
 
 /*
@@ -53,11 +54,12 @@
  */
 #define NFS_SUPER_MAGIC			0x6969
 
+#define NFS_FH(dentry)			((struct nfs_fh *) ((dentry)->d_fsdata))
+#define NFS_DSERVER(dentry)		(&(dentry)->d_sb->u.nfs_sb.s_server)
 #define NFS_SERVER(inode)		(&(inode)->i_sb->u.nfs_sb.s_server)
 #define NFS_CLIENT(inode)		(NFS_SERVER(inode)->client)
 #define NFS_ADDR(inode)			(RPC_PEERADDR(NFS_CLIENT(inode)))
 #define NFS_CONGESTED(inode)		(RPC_CONGESTED(NFS_CLIENT(inode)))
-#define NFS_FH(inode)			(&(inode)->u.nfs_i.fhandle)
 
 #define NFS_READTIME(inode)		((inode)->u.nfs_i.read_cache_jiffies)
 #define NFS_OLDMTIME(inode)		((inode)->u.nfs_i.read_cache_mtime)
@@ -138,8 +140,8 @@ extern int init_nfs_fs(void);
 extern struct inode *nfs_fhget(struct super_block *, struct nfs_fh *,
 			       struct nfs_fattr *);
 extern int nfs_refresh_inode(struct inode *, struct nfs_fattr *);
-extern int nfs_revalidate(struct inode *);
-extern int _nfs_revalidate_inode(struct nfs_server *, struct inode *);
+extern int nfs_revalidate(struct dentry *);
+extern int _nfs_revalidate_inode(struct nfs_server *, struct dentry *);
 
 /*
  * linux/fs/nfs/file.c
@@ -150,6 +152,7 @@ extern struct inode_operations nfs_file_inode_operations;
  * linux/fs/nfs/dir.c
  */
 extern struct inode_operations nfs_dir_inode_operations;
+extern struct dentry_operations nfs_dentry_operations;
 extern void nfs_free_dircache(void);
 extern void nfs_invalidate_dircache(struct inode *);
 extern void nfs_invalidate_dircache_sb(struct super_block *);
@@ -162,25 +165,24 @@ extern struct inode_operations nfs_symlink_inode_operations;
 /*
  * linux/fs/nfs/locks.c
  */
-extern int nfs_lock(struct file *file, int cmd, struct file_lock *fl);
+extern int nfs_lock(struct file *, int, struct file_lock *);
 
 /*
  * linux/fs/nfs/write.c
  */
-extern int  nfs_writepage(struct inode *, struct page *);
+extern int  nfs_writepage(struct dentry *, struct page *);
 extern int  nfs_check_failed_request(struct inode *);
 extern int  nfs_check_error(struct inode *);
 extern int  nfs_flush_dirty_pages(struct inode *, pid_t, off_t, off_t);
 extern int  nfs_truncate_dirty_pages(struct inode *, unsigned long);
 extern void nfs_invalidate_pages(struct inode *);
-extern int  nfs_updatepage(struct inode *, struct page *, const char *,
+extern int  nfs_updatepage(struct dentry *, struct page *, const char *,
 			unsigned long, unsigned int, int);
 
 /*
  * linux/fs/nfs/read.c
  */
-extern int  nfs_readpage(struct inode *, struct page *);
-extern int  nfs_readpage_sync(struct inode *, struct page *);
+extern int  nfs_readpage(struct dentry *, struct page *);
 
 /*
  * linux/fs/mount_clnt.c
@@ -192,11 +194,12 @@ extern int  nfs_mount(struct sockaddr_in *, char *, struct nfs_fh *);
  * inline functions
  */
 static inline int
-nfs_revalidate_inode(struct nfs_server *server, struct inode *inode)
+nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 {
+	struct inode *inode = dentry->d_inode;
 	if (jiffies - NFS_READTIME(inode) < NFS_ATTRTIMEO(inode))
 		return 0;
-	return _nfs_revalidate_inode(server, inode);
+	return _nfs_revalidate_inode(server, dentry);
 }
 
 extern struct nfs_wreq *	nfs_failed_requests;

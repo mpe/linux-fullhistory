@@ -631,23 +631,25 @@ int ext2_sync_inode (struct inode *inode)
 	return ext2_update_inode (inode, 1);
 }
 
-int ext2_notify_change(struct inode *inode, struct iattr *iattr)
+int ext2_notify_change(struct dentry *dentry, struct iattr *iattr)
 {
+	struct inode *inode = dentry->d_inode;
 	int		retval;
 	unsigned int	flags;
 	
+	retval = -EPERM;
 	if ((iattr->ia_attr_flags &
 	     (ATTR_FLAG_APPEND | ATTR_FLAG_IMMUTABLE)) ^
 	    (inode->u.ext2_i.i_flags &
 	     (EXT2_APPEND_FL | EXT2_IMMUTABLE_FL))) {
 		if (securelevel > 0 || !fsuser())
-			return -EPERM;
-	} else
-		if ((current->fsuid != inode->i_uid) && !fsuser())
-			return -EPERM;
+			goto out;
+	} else if ((current->fsuid != inode->i_uid) && !fsuser())
+		goto out;
 
-	if ((retval = inode_change_ok(inode, iattr)) != 0)
-		return retval;
+	retval = inode_change_ok(inode, iattr);
+	if (retval != 0)
+		goto out;
 
 	inode_setattr(inode, iattr);
 	
@@ -681,7 +683,7 @@ int ext2_notify_change(struct inode *inode, struct iattr *iattr)
 		inode->u.ext2_i.i_flags &= ~EXT2_IMMUTABLE_FL;
 	}
 	mark_inode_dirty(inode);
-
-	return 0;
+out:
+	return retval;
 }
 

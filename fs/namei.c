@@ -221,33 +221,28 @@ void put_write_access(struct inode * inode)
 }
 
 /*
- * This is called when everything else fails, and we actually have
- * to go to the low-level filesystem to find out what we should do..
- *
- * We get the directory semaphore, and after getting that we also
- * make sure that nobody added the entry to the dcache in the meantime..
+ * "." and ".." are special - ".." especially so because it has to be able
+ * to know about the current root directory and parent relationships
  */
-static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
+static struct dentry * reserved_lookup(struct dentry * parent, struct qstr * name)
 {
-	struct dentry * result;
-	struct inode *dir = parent->d_inode;
+	struct dentry *result = NULL;
+	if (name->name[0] == '.') {
+		switch (name->len) {
+		default:
+			break;
+		case 2:	
+			if (name->name[1] != '.')
+				break;
 
-	down(&dir->i_sem);
-	result = d_lookup(parent, name);
-	if (!result) {
-		struct dentry * dentry = d_alloc(parent, name);
-		result = ERR_PTR(-ENOMEM);
-		if (dentry) {
-			int error = dir->i_op->lookup(dir, dentry);
-			result = dentry;
-			if (error) {
-				dput(dentry);
-				result = ERR_PTR(error);
-			}
+			if (parent != current->fs->root)
+				parent = parent->d_covers->d_parent;
+			/* fallthrough */
+		case 1:
+			result = parent;
 		}
 	}
-	up(&dir->i_sem);
-	return result;
+	return dget(result);
 }
 
 /*
@@ -274,28 +269,40 @@ static struct dentry * cached_lookup(struct dentry * parent, struct qstr * name)
 }
 
 /*
- * "." and ".." are special - ".." especially so because it has to be able
- * to know about the current root directory and parent relationships
+ * This is called when everything else fails, and we actually have
+ * to go to the low-level filesystem to find out what we should do..
+ *
+ * We get the directory semaphore, and after getting that we also
+ * make sure that nobody added the entry to the dcache in the meantime..
  */
-static struct dentry * reserved_lookup(struct dentry * parent, struct qstr * name)
+static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 {
-	struct dentry *result = NULL;
-	if (name->name[0] == '.') {
-		switch (name->len) {
-		default:
-			break;
-		case 2:	
-			if (name->name[1] != '.')
-				break;
+	struct dentry * result;
+	struct inode *dir = parent->d_inode;
 
-			if (parent != current->fs->root)
-				parent = parent->d_covers->d_parent;
-			/* fallthrough */
-		case 1:
-			result = parent;
+	down(&dir->i_sem);
+	/*
+	 * First re-do the cached lookup just in case it was created
+	 * while we waited for the directory semaphore..
+	 *
+	 * FIXME! This could use version numbering or similar to
+	 * avoid unnecessary cache lookups.
+	 */
+	result = cached_lookup(parent, name);
+	if (!result) {
+		struct dentry * dentry = d_alloc(parent, name);
+		result = ERR_PTR(-ENOMEM);
+		if (dentry) {
+			int error = dir->i_op->lookup(dir, dentry);
+			result = dentry;
+			if (error) {
+				dput(dentry);
+				result = ERR_PTR(error);
+			}
 		}
 	}
-	return dget(result);
+	up(&dir->i_sem);
+	return result;
 }
 
 static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry)
@@ -308,7 +315,7 @@ static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry
 
 			current->link_count++;
 			/* This eats the base */
-			result = inode->i_op->follow_link(inode, base);
+			result = inode->i_op->follow_link(dentry, base);
 			current->link_count--;
 			dput(dentry);
 			return result;
@@ -632,7 +639,7 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 			if (inode->i_sb && inode->i_sb->dq_op)
 				inode->i_sb->dq_op->initialize(inode, -1);
 			
-			error = do_truncate(inode, 0);
+			error = do_truncate(dentry, 0);
 		}
 		put_write_access(inode);
 		if (error)
@@ -1076,7 +1083,7 @@ static inline int do_link(const char * oldname, const char * newname)
 
 	if (dir->d_inode->i_sb && dir->d_inode->i_sb->dq_op)
 		dir->d_inode->i_sb->dq_op->initialize(dir->d_inode, -1);
-	error = dir->d_inode->i_op->link(inode, dir->d_inode, new_dentry);
+	error = dir->d_inode->i_op->link(old_dentry, dir->d_inode, new_dentry);
 
 exit_lock:
 	unlock_dir(dir);

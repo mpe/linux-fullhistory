@@ -793,8 +793,10 @@ out_no_entry:
 	goto out;
 }
 
-int ext2_link (struct inode * inode, struct inode * dir, struct dentry *dentry)
+int ext2_link (struct dentry * old_dentry,
+		struct inode * dir, struct dentry *dentry)
 {
+	struct inode *inode = old_dentry->d_inode;
 	struct ext2_dir_entry * de;
 	struct buffer_head * bh;
 	int err;

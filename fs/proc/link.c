@@ -15,8 +15,8 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 
-static int proc_readlink(struct inode *, char *, int);
-static struct dentry * proc_follow_link(struct inode *, struct dentry *);
+static int proc_readlink(struct dentry *, char *, int);
+static struct dentry * proc_follow_link(struct dentry *, struct dentry *);
 
 /*
  * PLAN9_SEMANTICS won't work any more: it used an ugly hack that broke 
@@ -60,8 +60,10 @@ struct inode_operations proc_link_inode_operations = {
 	NULL			/* permission */
 };
 
-static struct dentry * proc_follow_link(struct inode *inode, struct dentry *base)
+static struct dentry * proc_follow_link(struct dentry *dentry,
+					struct dentry *base)
 {
+	struct inode *inode = dentry->d_inode;
 	struct task_struct *p;
 	struct dentry * result;
 	int ino, pid;
@@ -73,7 +75,7 @@ static struct dentry * proc_follow_link(struct inode *inode, struct dentry *base
 	error = permission(inode, MAY_EXEC);
 	result = ERR_PTR(error);
 	if (error)
-		return result;
+		goto out;
 
 	ino = inode->i_ino;
 	pid = ino >> 16;
@@ -82,7 +84,7 @@ static struct dentry * proc_follow_link(struct inode *inode, struct dentry *base
 	p = find_task_by_pid(pid);
 	result = ERR_PTR(-ENOENT);
 	if (!p)
-		return result;
+		goto out;
 
 	switch (ino) {
 		case PROC_PID_CWD:
@@ -126,14 +128,15 @@ static struct dentry * proc_follow_link(struct inode *inode, struct dentry *base
 				break;
 			}
 	}
+out:
 	return result;
 }
 
-static int proc_readlink(struct inode * inode, char * buffer, int buflen)
+static int proc_readlink(struct dentry * dentry, char * buffer, int buflen)
 {
 	int error;
-	struct dentry * dentry = proc_follow_link(inode, NULL);
 
+	dentry = proc_follow_link(dentry, NULL);
 	error = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
 		error = -ENOENT;

@@ -783,9 +783,10 @@ void fat_write_inode(struct inode *inode)
 }
 
 
-int fat_notify_change(struct inode * inode,struct iattr * attr)
+int fat_notify_change(struct dentry * dentry, struct iattr * attr)
 {
-	struct super_block *sb = inode->i_sb;
+	struct super_block *sb = dentry->d_sb;
+	struct inode *inode = dentry->d_inode;
 	int error;
 
 	error = inode_change_ok(inode, attr);

@@ -109,15 +109,14 @@ nfs_file_close(struct inode *inode, struct file *file)
 static ssize_t
 nfs_file_read(struct file * file, char * buf, size_t count, loff_t *ppos)
 {
-	struct inode * inode = file->f_dentry->d_inode;
+	struct dentry * dentry = file->f_dentry;
 	ssize_t result;
 
-	dfprintk(VFS, "nfs: read(%x/%ld, %lu@%lu)\n",
-			inode->i_dev, inode->i_ino,
-			(unsigned long) count,
-			(unsigned long) *ppos);
+	dfprintk(VFS, "nfs: read(%s/%s, %lu@%lu)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		(unsigned long) count, (unsigned long) *ppos);
 
-	result = nfs_revalidate_inode(NFS_SERVER(inode), inode);
+	result = nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
 	if (!result)
 		result = generic_file_read(file, buf, count, ppos);
 	return result;
@@ -126,12 +125,13 @@ nfs_file_read(struct file * file, char * buf, size_t count, loff_t *ppos)
 static int
 nfs_file_mmap(struct file * file, struct vm_area_struct * vma)
 {
-	struct inode *inode = file->f_dentry->d_inode;
+	struct dentry *dentry = file->f_dentry;
 	int	status;
 
-	dfprintk(VFS, "nfs: mmap(%x/%ld)\n", inode->i_dev, inode->i_ino);
+	dfprintk(VFS, "nfs: mmap(%s/%s)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
 
-	status = nfs_revalidate_inode(NFS_SERVER(inode), inode);
+	status = nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
 	if (!status)
 		status = generic_file_mmap(file, vma);
 	return status;
@@ -163,31 +163,33 @@ nfs_fsync(struct file *file, struct dentry *dentry)
 static ssize_t
 nfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
-	struct inode * inode = file->f_dentry->d_inode;
+	struct dentry * dentry = file->f_dentry;
+	struct inode * inode = dentry->d_inode;
 	ssize_t result;
 
-	dfprintk(VFS, "nfs: write(%x/%ld (%d), %lu@%lu)\n",
-			inode->i_dev, inode->i_ino, inode->i_count,
-			(unsigned long) count, (unsigned long) *ppos);
+	dfprintk(VFS, "nfs: write(%s/%s (%d), %lu@%lu)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		inode->i_count, (unsigned long) count, (unsigned long) *ppos);
 
 	if (!inode) {
 		printk("nfs_file_write: inode = NULL\n");
 		return -EINVAL;
 	}
-	if (IS_SWAPFILE(inode)) {
-		printk("NFS: attempt to write to active swap file!\n");
-		return -EBUSY;
-	}
-	result = nfs_revalidate_inode(NFS_SERVER(inode), inode);
+	result = -EBUSY;
+	if (IS_SWAPFILE(inode))
+		goto out_swapfile;
+	result = nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
 	if (result)
 		goto out;
 
-	/* N.B. This should be impossible now -- inodes can't change mode */
-	if (!S_ISREG(inode->i_mode)) {
-		printk("nfs_file_write: write to non-file, mode %07o\n",
-			inode->i_mode);
-		return -EINVAL;
-	}
+#ifdef NFS_PARANOIA
+/* N.B. This should be impossible now -- inodes can't change mode */
+if (!S_ISREG(inode->i_mode)) {
+	printk("nfs_file_write: write to non-file, mode %07o\n",
+		inode->i_mode);
+	return -EINVAL;
+}
+#endif
 	result = count;
 	if (!count)
 		goto out;
@@ -198,6 +200,10 @@ nfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 		result = generic_file_write(file, buf, count, ppos);
 out:
 	return result;
+
+out_swapfile:
+	printk("NFS: attempt to write to active swap file!\n");
+	goto out;
 }
 
 /*

@@ -37,7 +37,7 @@ extern int close_fp(struct file *filp);
 static void ncp_read_inode(struct inode *);
 static void ncp_put_inode(struct inode *);
 static void ncp_delete_inode(struct inode *);
-static int  ncp_notify_change(struct inode *, struct iattr *);
+static int  ncp_notify_change(struct dentry *, struct iattr *);
 static void ncp_put_super(struct super_block *);
 static int  ncp_statfs(struct super_block *, struct statfs *, int);
 
@@ -210,7 +210,7 @@ static void ncp_init_root(struct ncp_server *server,
 	i->entryName[0]  = '\0';
 
 	root->finfo.opened= 0;
-	info->ino = 1;
+	info->ino = 2; /* tradition */
 	info->nw_info = root->finfo;
 }
 
@@ -354,7 +354,7 @@ static void ncp_put_super(struct super_block *sb)
 	ncp_unlock_server(server);
 
 	close_fp(server->ncp_filp);
-	kill_proc(server->m.wdog_pid, SIGTERM, 0);
+	kill_proc(server->m.wdog_pid, SIGTERM, 1);
 
 	ncp_kfree_s(server->packet, server->packet_size);
 
@@ -387,30 +387,34 @@ static int ncp_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }
 
-static int ncp_notify_change(struct inode *inode, struct iattr *attr)
+static int ncp_notify_change(struct dentry *dentry, struct iattr *attr)
 {
+	struct inode *inode = dentry->d_inode;
 	int result = 0;
 	int info_mask;
 	struct nw_modify_dos_info info;
 
-	if (!ncp_conn_valid(NCP_SERVER(inode))) {
-		return -EIO;
-	}
-	if ((result = inode_change_ok(inode, attr)) < 0)
-		return result;
+	result = -EIO;
+	if (!ncp_conn_valid(NCP_SERVER(inode)))
+		goto out;
 
+	result = inode_change_ok(inode, attr);
+	if (result < 0)
+		goto out;
+
+	result = -EPERM;
 	if (((attr->ia_valid & ATTR_UID) &&
 	     (attr->ia_uid != NCP_SERVER(inode)->m.uid)))
-		return -EPERM;
+		goto out;
 
 	if (((attr->ia_valid & ATTR_GID) &&
 	     (attr->ia_uid != NCP_SERVER(inode)->m.gid)))
-		return -EPERM;
+		goto out;
 
 	if (((attr->ia_valid & ATTR_MODE) &&
 	     (attr->ia_mode &
 	      ~(S_IFREG | S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO))))
-		return -EPERM;
+		goto out;
 
 	info_mask = 0;
 	memset(&info, 0, sizeof(info));
@@ -455,7 +459,8 @@ static int ncp_notify_change(struct inode *inode, struct iattr *attr)
 	if ((attr->ia_valid & ATTR_SIZE) != 0) {
 		int written;
 
-		DPRINTK(KERN_DEBUG "ncpfs: trying to change size to %ld\n", attr->ia_size);
+		DPRINTK(KERN_DEBUG "ncpfs: trying to change size to %ld\n",
+			attr->ia_size);
 
 		if ((result = ncp_make_open(inode, O_RDWR)) < 0) {
 			return -EACCES;
@@ -467,11 +472,8 @@ static int ncp_notify_change(struct inode *inode, struct iattr *attr)
 		   closing the file */
 		result = ncp_make_closed(inode);
 	}
-	/*
-	 * We need a dentry here ...
-	 */
-	/* ncp_invalid_dir_cache(NCP_INOP(inode)->dir->inode); */
-
+	ncp_invalid_dir_cache(dentry->d_parent->d_inode);
+out:
 	return result;
 }
 

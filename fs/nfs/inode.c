@@ -38,7 +38,7 @@
 static void nfs_read_inode(struct inode *);
 static void nfs_put_inode(struct inode *);
 static void nfs_delete_inode(struct inode *);
-static int  nfs_notify_change(struct inode *, struct iattr *);
+static int  nfs_notify_change(struct dentry *, struct iattr *);
 static void nfs_put_super(struct super_block *);
 static int  nfs_statfs(struct super_block *, struct statfs *, int);
 
@@ -180,15 +180,15 @@ struct super_block *
 nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 {
 	struct nfs_mount_data	*data = (struct nfs_mount_data *) raw_data;
-	struct sockaddr_in	srvaddr;
 	struct nfs_server	*server;
-	struct rpc_timeout	timeparms;
 	struct rpc_xprt		*xprt;
 	struct rpc_clnt		*clnt;
+	struct nfs_fh		*root_fh;
+	struct inode		*root_inode;
 	unsigned int		authflavor;
 	int			tcp;
-	kdev_t			dev = sb->s_dev;
-	struct inode		*root_inode;
+	struct sockaddr_in	srvaddr;
+	struct rpc_timeout	timeparms;
 
 	MOD_INC_USE_COUNT;
 	if (!data)
@@ -211,7 +211,6 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	lock_super(sb);
 
 	sb->s_magic      = NFS_SUPER_MAGIC;
-	sb->s_dev        = dev;
 	sb->s_op         = &nfs_sops;
 	sb->s_blocksize  = nfs_block_size(data->bsize, &sb->s_blocksize_bits);
 	sb->u.nfs_sb.s_root = data->root;
@@ -234,20 +233,18 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	timeparms.to_maxval  = tcp? RPC_MAX_TCP_TIMEOUT : RPC_MAX_UDP_TIMEOUT;
 	timeparms.to_exponential = 1;
 
-	/* Choose authentication flavor */
-	if (data->flags & NFS_MOUNT_SECURE) {
-		authflavor = RPC_AUTH_DES;
-	} else if (data->flags & NFS_MOUNT_KERBEROS) {
-		authflavor = RPC_AUTH_KRB;
-	} else {
-		authflavor = RPC_AUTH_UNIX;
-	}
-
 	/* Now create transport and client */
 	xprt = xprt_create_proto(tcp? IPPROTO_TCP : IPPROTO_UDP,
 						&srvaddr, &timeparms);
 	if (xprt == NULL)
 		goto out_no_xprt;
+
+	/* Choose authentication flavor */
+	authflavor = RPC_AUTH_UNIX;
+	if (data->flags & NFS_MOUNT_SECURE)
+		authflavor = RPC_AUTH_DES;
+	else if (data->flags & NFS_MOUNT_KERBEROS)
+		authflavor = RPC_AUTH_KRB;
 
 	clnt = rpc_create_client(xprt, server->hostname, &nfs_program,
 						NFS_VERSION, authflavor);
@@ -267,12 +264,20 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	 * Keep the super block locked while we try to get 
 	 * the root fh attributes.
 	 */
+	root_fh = kmalloc(sizeof(struct nfs_fh), GFP_KERNEL);
+	if (!root_fh)
+		goto out_no_fh;
+	*root_fh = data->root;
+
 	root_inode = nfs_fhget(sb, &data->root, NULL);
 	if (!root_inode)
 		goto out_no_root;
 	sb->s_root = d_alloc_root(root_inode, NULL);
 	if (!sb->s_root)
 		goto out_no_root;
+	sb->s_root->d_op = &nfs_dentry_operations;
+	sb->s_root->d_fsdata = root_fh;
+
 	/* We're airborne */
 	unlock_super(sb);
 
@@ -285,6 +290,8 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 out_no_root:
 	printk("nfs_read_super: get root inode failed\n");
 	iput(root_inode);
+	kfree(root_fh);
+out_no_fh:
 	rpciod_down();
 	goto out_shutdown;
 
@@ -352,36 +359,28 @@ struct inode *
 nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
 				  struct nfs_fattr *fattr)
 {
-	struct nfs_fattr newfattr;
 	int error;
-	struct inode *inode;
+	struct inode *inode = NULL;
+	struct nfs_fattr newfattr;
 
-	if (!sb) {
-		printk("nfs_fhget: super block is NULL\n");
-		return NULL;
-	}
+	if (!sb)
+		goto out_bad_args;
 	if (!fattr) {
-		error = nfs_proc_getattr(&sb->u.nfs_sb.s_server, fhandle,
-			&newfattr);
-		if (error) {
-			printk("nfs_fhget: getattr error = %d\n", -error);
-			return NULL;
-		}
 		fattr = &newfattr;
+		error = nfs_proc_getattr(&sb->u.nfs_sb.s_server, fhandle,fattr);
+		if (error)
+			goto out_bad_attr;
 	}
-	if (!(inode = iget(sb, fattr->fileid))) {
-		printk("nfs_fhget: iget failed\n");
-		return NULL;
-	}
+	inode = iget(sb, fattr->fileid);
+	if (!inode)
+		goto out_no_inode;
 #ifdef NFS_PARANOIA
 if (inode->i_dev != sb->s_dev)
 printk("nfs_fhget: impossible\n");
 #endif
 
-	if (inode->i_ino != fattr->fileid) {
-		printk("nfs_fhget: unexpected inode from iget\n");
-		return inode;
-	}
+	if (inode->i_ino != fattr->fileid)
+		goto out_bad_id;
 
 	/*
 	 * Check whether the mode has been set, as we only want to
@@ -412,29 +411,41 @@ printk("nfs_fhget: impossible\n");
 		inode->i_size  = fattr->size;
 		inode->i_mtime = fattr->mtime.seconds;
 		NFS_OLDMTIME(inode) = fattr->mtime.seconds;
-		*NFS_FH(inode) = *fhandle;
 	}
-	if (memcmp(NFS_FH(inode), fhandle, sizeof(struct nfs_fh)))
-		printk("nfs_fhget: fhandle changed!\n");
 	nfs_refresh_inode(inode, fattr);
 	dprintk("NFS: fhget(%x/%ld ct=%d)\n",
 		inode->i_dev, inode->i_ino,
 		inode->i_count);
 
+out:
 	return inode;
+
+out_bad_args:
+	printk("nfs_fhget: super block is NULL\n");
+	goto out;
+out_bad_attr:
+	printk("nfs_fhget: getattr error = %d\n", -error);
+	goto out;
+out_no_inode:
+	printk("nfs_fhget: iget failed\n");
+	goto out;
+out_bad_id:
+	printk("nfs_fhget: unexpected inode from iget\n");
+	goto out;
 }
 
 int
-nfs_notify_change(struct inode *inode, struct iattr *attr)
+nfs_notify_change(struct dentry *dentry, struct iattr *attr)
 {
+	struct inode *inode = dentry->d_inode;
+	int error;
 	struct nfs_sattr sattr;
 	struct nfs_fattr fattr;
-	int error;
 
 	/*
 	 * Make sure the inode is up-to-date.
 	 */
-	error = nfs_revalidate(inode);
+	error = nfs_revalidate(dentry);
 	if (error) {
 #ifdef NFS_PARANOIA
 printk("nfs_notify_change: revalidate failed, error=%d\n", error);
@@ -470,7 +481,7 @@ printk("nfs_notify_change: revalidate failed, error=%d\n", error);
 		sattr.atime.useconds = 0;
 	}
 
-	error = nfs_proc_setattr(NFS_SERVER(inode), NFS_FH(inode),
+	error = nfs_proc_setattr(NFS_DSERVER(dentry), NFS_FH(dentry),
 				&sattr, &fattr);
 	if (error)
 		goto out;
@@ -497,9 +508,9 @@ out:
  * Externally visible revalidation function
  */
 int
-nfs_revalidate(struct inode *inode)
+nfs_revalidate(struct dentry *dentry)
 {
-	return nfs_revalidate_inode(NFS_SERVER(inode), inode);
+	return nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
 }
 
 /*
@@ -507,38 +518,43 @@ nfs_revalidate(struct inode *inode)
  * the cached attributes have to be refreshed.
  */
 int
-_nfs_revalidate_inode(struct nfs_server *server, struct inode *inode)
+_nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 {
-	struct nfs_fattr fattr;
+	struct inode	*inode = dentry->d_inode;
 	int		 status = 0;
+	struct nfs_fattr fattr;
 
 	if (jiffies - NFS_READTIME(inode) < NFS_ATTRTIMEO(inode))
 		goto out;
 
-	dfprintk(PAGECACHE, "NFS: revalidating %x/%ld inode\n",
-			inode->i_dev, inode->i_ino);
-	status = nfs_proc_getattr(server, NFS_FH(inode), &fattr);
+	dfprintk(PAGECACHE, "NFS: revalidating %s/%s, ino=%ld\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		inode->i_ino);
+	status = nfs_proc_getattr(server, NFS_FH(dentry), &fattr);
 	if (status) {
 #ifdef NFS_PARANOIA
-printk("nfs_revalidate_inode: getattr failed, error=%d\n", status);
+printk("nfs_revalidate_inode: %s/%s getattr failed, ino=%ld, error=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_ino, status);
 #endif
-		goto done;
+		goto out;
 	}
 
 	status = nfs_refresh_inode(inode, &fattr);
-	if (status)
-		goto done;
+	if (status) {
+#ifdef NFS_PARANOIA
+printk("nfs_revalidate_inode: %s/%s refresh failed, ino=%ld, error=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_ino, status);
+#endif
+		goto out;
+	}
 	if (fattr.mtime.seconds == NFS_OLDMTIME(inode)) {
 		/* Update attrtimeo value */
 		if ((NFS_ATTRTIMEO(inode) <<= 1) > NFS_MAXATTRTIMEO(inode))
 			NFS_ATTRTIMEO(inode) = NFS_MAXATTRTIMEO(inode);
 	}
 	NFS_OLDMTIME(inode) = fattr.mtime.seconds;
-
-done:
-	dfprintk(PAGECACHE,
-		"NFS: inode %x/%ld revalidation complete (status %d).\n",
-				inode->i_dev, inode->i_ino, status);
+	dfprintk(PAGECACHE, "NFS: %s/%s revalidation complete\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
 out:
 	return status;
 }
@@ -569,7 +585,8 @@ nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 		goto out;
 	}
 	if (inode->i_ino != fattr->fileid) {
-		printk("nfs_refresh_inode: inode number mismatch\n");
+		printk("nfs_refresh_inode: mismatch, ino=%ld, fattr=%d\n",
+			inode->i_ino, fattr->fileid);
 		goto out;
 	}
 

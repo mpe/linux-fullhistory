@@ -52,6 +52,8 @@ struct {
 
 static inline void d_free(struct dentry *dentry)
 {
+	if (dentry->d_op && dentry->d_op->d_release)
+		dentry->d_op->d_release(dentry);
 	kfree(dentry->d_name.name);
 	kfree(dentry);
 }
@@ -502,6 +504,7 @@ printk("d_alloc: %d unused, pruning dcache\n", dentry_stat.nr_unused);
 	dentry->d_name.len = name->len;
 	dentry->d_name.hash = name->hash;
 	dentry->d_op = NULL;
+	dentry->d_fsdata = NULL;
 	return dentry;
 }
 

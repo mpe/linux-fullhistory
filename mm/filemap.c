@@ -260,8 +260,10 @@ static inline void add_to_page_cache(struct page * page,
  * that we could use for the cache (if it is 0 we can try to create one,
  * this is all overlapped with the IO on the previous page finishing anyway)
  */
-static unsigned long try_to_read_ahead(struct inode * inode, unsigned long offset, unsigned long page_cache)
+static unsigned long try_to_read_ahead(struct dentry * dentry,
+				unsigned long offset, unsigned long page_cache)
 {
+	struct inode *inode = dentry->d_inode;
 	struct page * page;
 	struct page ** hash;
 
@@ -282,7 +284,7 @@ static unsigned long try_to_read_ahead(struct inode * inode, unsigned long offse
 			 */
 			page = mem_map + MAP_NR(page_cache);
 			add_to_page_cache(page, inode, offset, hash);
-			inode->i_op->readpage(inode, page);
+			inode->i_op->readpage(dentry, page);
 			page_cache = 0;
 		}
 		release_page(page);
@@ -445,9 +447,9 @@ static inline int get_max_readahead(struct inode * inode)
 	return max_readahead[MAJOR(inode->i_dev)][MINOR(inode->i_dev)];
 }
 
-static inline unsigned long generic_file_readahead(int reada_ok, struct file * filp, struct inode * inode,
-	unsigned long ppos, struct page * page,
-	unsigned long page_cache)
+static inline unsigned long generic_file_readahead(int reada_ok,
+	struct file * filp, struct inode * inode,
+	unsigned long ppos, struct page * page, unsigned long page_cache)
 {
 	unsigned long max_ahead, ahead;
 	unsigned long raend;
@@ -511,7 +513,8 @@ static inline unsigned long generic_file_readahead(int reada_ok, struct file * f
 	ahead = 0;
 	while (ahead < max_ahead) {
 		ahead += PAGE_SIZE;
-		page_cache = try_to_read_ahead(inode, raend + ahead, page_cache);
+		page_cache = try_to_read_ahead(filp->f_dentry, raend + ahead,
+						page_cache);
 	}
 /*
  * If we tried to read ahead some pages,
@@ -559,7 +562,8 @@ static inline unsigned long generic_file_readahead(int reada_ok, struct file * f
 ssize_t generic_file_read(struct file * filp, char * buf,
 			  size_t count, loff_t *ppos)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct dentry *dentry = filp->f_dentry;
+	struct inode *inode = dentry->d_inode;
 	ssize_t error, read;
 	size_t pos, pgpos, page_cache;
 	int reada_ok;
@@ -716,7 +720,7 @@ no_cached_page:
 		if (reada_ok && filp->f_ramax > MIN_READAHEAD)
 			filp->f_ramax = MIN_READAHEAD;
 
-		error = inode->i_op->readpage(inode, page);
+		error = inode->i_op->readpage(dentry, page);
 		if (!error)
 			goto found_page;
 		release_page(page);
@@ -728,7 +732,7 @@ page_read_error:
 		 * Try to re-read it _once_. We do this synchronously,
 		 * because this happens only if there were errors.
 		 */
-		error = inode->i_op->readpage(inode, page);
+		error = inode->i_op->readpage(dentry, page);
 		if (!error) {
 			wait_on_page(page);
 			if (PageUptodate(page) && !PageError(page))
@@ -763,9 +767,10 @@ page_read_error:
  */
 static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long address, int no_share)
 {
+	struct dentry * dentry = area->vm_dentry;
+	struct inode * inode = dentry->d_inode;
 	unsigned long offset;
 	struct page * page, **hash;
-	struct inode * inode = area->vm_dentry->d_inode;
 	unsigned long old_page, new_page;
 
 	new_page = 0;
@@ -846,14 +851,14 @@ no_cached_page:
 	new_page = 0;
 	add_to_page_cache(page, inode, offset, hash);
 
-	if (inode->i_op->readpage(inode, page) != 0)
+	if (inode->i_op->readpage(dentry, page) != 0)
 		goto failure;
 
 	/*
 	 * Do a very limited read-ahead if appropriate
 	 */
 	if (PageLocked(page))
-		new_page = try_to_read_ahead(inode, offset + PAGE_SIZE, 0);
+		new_page = try_to_read_ahead(dentry, offset + PAGE_SIZE, 0);
 	goto found_page;
 
 page_locked_wait:
@@ -868,7 +873,7 @@ page_read_error:
 	 * because there really aren't any performance issues here
 	 * and we need to check for errors.
 	 */
-	if (inode->i_op->readpage(inode, page) != 0)
+	if (inode->i_op->readpage(dentry, page) != 0)
 		goto failure;
 	wait_on_page(page);
 	if (PageError(page))
@@ -1305,7 +1310,8 @@ ssize_t
 generic_file_write(struct file *file, const char *buf,
 		   size_t count, loff_t *ppos)
 {
-	struct inode	*inode = file->f_dentry->d_inode; 
+	struct dentry	*dentry = file->f_dentry; 
+	struct inode	*inode = dentry->d_inode; 
 	struct page	*page, **hash;
 	unsigned long	page_cache = 0;
 	unsigned long	pgpos, offset;
@@ -1367,10 +1373,10 @@ page_wait:
 		 */
 		if (!PageUptodate(page)) {
 			if (bytes < PAGE_SIZE && pgpos < inode->i_size) {
+				status = -EIO; /* two tries ... error out */
 				if (didread < 2)
-				    status = inode->i_op->readpage(inode, page);
-				else 
-				    status = -EIO; /* two tries ... error out */
+					status = inode->i_op->readpage(dentry,
+									page);
 				if (status < 0)
 					goto done_with_page;
 				didread++;
@@ -1380,7 +1386,7 @@ page_wait:
 		}
 
 		/* Alright, the page is there.  Now update it. */
-		status = inode->i_op->updatepage(inode, page, buf,
+		status = inode->i_op->updatepage(dentry, page, buf,
 							offset, bytes, sync);
 done_with_page:
 		__free_page(page);

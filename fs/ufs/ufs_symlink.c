@@ -19,8 +19,9 @@
 extern int ufs_bmap (struct inode *, int);
 
 static int
-ufs_readlink(struct inode * inode, char * buffer, int buflen)
+ufs_readlink(struct dentry * dentry, char * buffer, int buflen)
 {
+	struct inode * inode = dentry->d_inode;
 	unsigned long int block;
 	struct buffer_head * bh = NULL;
 	char * link;
@@ -71,8 +72,9 @@ ufs_readlink(struct inode * inode, char * buffer, int buflen)
  * XXX - blatantly stolen from minix fs
  */
 static struct dentry *
-ufs_follow_link(struct inode * inode, struct dentry * base)
+ufs_follow_link(struct dentry * dentry, struct dentry * base)
 {
+	struct inode * inode = dentry->d_inode;
 	unsigned long int block;
 	struct buffer_head * bh = NULL;
 	char * link;

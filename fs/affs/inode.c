@@ -220,8 +220,9 @@ affs_write_inode(struct inode *inode)
 }
 
 int
-affs_notify_change(struct inode *inode, struct iattr *attr)
+affs_notify_change(struct dentry *dentry, struct iattr *attr)
 {
+	struct inode *inode = dentry->d_inode;
 	int error;
 
 	pr_debug("AFFS: notify_change(%lu,0x%x)\n",inode->i_ino,attr->ia_valid);

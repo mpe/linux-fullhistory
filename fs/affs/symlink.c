@@ -19,8 +19,8 @@
 
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 
-static int		 affs_readlink(struct inode *, char *, int);
-static struct dentry	*affs_follow_link(struct inode *inode, struct dentry *base);
+static int		 affs_readlink(struct dentry *, char *, int);
+static struct dentry	*affs_follow_link(struct dentry *dentry, struct dentry *base);
 
 struct inode_operations affs_symlink_inode_operations = {
 	NULL,			/* no file-operations */
@@ -44,8 +44,9 @@ struct inode_operations affs_symlink_inode_operations = {
 };
 
 static int
-affs_readlink(struct inode *inode, char *buffer, int buflen)
+affs_readlink(struct inode *dentry, char *buffer, int buflen)
 {
+	struct inode *inode = dentry->d_inode;
 	struct buffer_head	*bh;
 	struct slink_front	*lf;
 	int			 i, j;
@@ -97,8 +98,9 @@ affs_readlink(struct inode *inode, char *buffer, int buflen)
 }
 
 static struct dentry *
-affs_follow_link(struct inode *inode, struct dentry *base)
+affs_follow_link(struct dentry *dentry, struct dentry *base)
 {
+	struct inode *inode = dentry->d_inode;
 	struct buffer_head	*bh;
 	struct slink_front	*lf;
 	char			*buffer;

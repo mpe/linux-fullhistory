@@ -65,8 +65,8 @@ nfs_readreq_setup(struct nfs_rreq *req, struct nfs_fh *fh,
 /*
  * Read a page synchronously.
  */
-int
-nfs_readpage_sync(struct inode *inode, struct page *page)
+static int
+nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 {
 	struct nfs_rreq	rqst;
 	unsigned long	offset = page->offset;
@@ -83,12 +83,13 @@ nfs_readpage_sync(struct inode *inode, struct page *page)
 		if (count < rsize)
 			rsize = count;
 
-		dprintk("NFS: nfs_proc_read(%s, (%x,%lx), %ld, %d, %p)\n",
-			NFS_SERVER(inode)->hostname, inode->i_dev,
-			inode->i_ino, offset, rsize, buffer);
+		dprintk("NFS: nfs_proc_read(%s, (%s/%s), %ld, %d, %p)\n",
+			NFS_SERVER(inode)->hostname,
+			dentry->d_parent->d_name.name, dentry->d_name.name,
+			offset, rsize, buffer);
 
 		/* Set up arguments and perform rpc call */
-		nfs_readreq_setup(&rqst, NFS_FH(inode), offset, buffer, rsize);
+		nfs_readreq_setup(&rqst, NFS_FH(dentry), offset, buffer, rsize);
 		result = rpc_call(NFS_CLIENT(inode), NFSPROC_READ,
 					&rqst.ra_args, &rqst.ra_res, flags);
 
@@ -160,7 +161,8 @@ nfs_readpage_result(struct rpc_task *task)
 }
 
 static inline int
-nfs_readpage_async(struct inode *inode, struct page *page)
+nfs_readpage_async(struct dentry *dentry, struct inode *inode,
+			struct page *page)
 {
 	struct nfs_rreq	*req;
 	int		result, flags;
@@ -175,7 +177,7 @@ nfs_readpage_async(struct inode *inode, struct page *page)
 	}
 
 	/* Initialize request */
-	nfs_readreq_setup(req, NFS_FH(inode), page->offset,
+	nfs_readreq_setup(req, NFS_FH(dentry), page->offset,
 				(void *) page_address(page), PAGE_SIZE);
 	req->ra_inode = inode;
 	req->ra_page = page;
@@ -209,8 +211,9 @@ nfs_readpage_async(struct inode *inode, struct page *page)
  *  -	The server is congested.
  */
 int
-nfs_readpage(struct inode *inode, struct page *page)
+nfs_readpage(struct dentry *dentry, struct page *page)
 {
+	struct inode *inode = dentry->d_inode;
 	unsigned long	address;
 	int		error = -1;
 
@@ -218,11 +221,11 @@ nfs_readpage(struct inode *inode, struct page *page)
 	set_bit(PG_locked, &page->flags);
 	address = page_address(page);
 	atomic_inc(&page->count);
-	if (!IS_SWAPFILE(inode) && !PageError(page)
-	 && NFS_SERVER(inode)->rsize >= PAGE_SIZE)
-		error = nfs_readpage_async(inode, page);
+	if (!IS_SWAPFILE(inode) && !PageError(page) &&
+	    NFS_SERVER(inode)->rsize >= PAGE_SIZE)
+		error = nfs_readpage_async(dentry, inode, page);
 	if (error < 0)		/* couldn't enqueue */
-		error = nfs_readpage_sync(inode, page);
+		error = nfs_readpage_sync(dentry, inode, page);
 	if (error < 0 && IS_SWAPFILE(inode))
 		printk("Aiee.. nfs swap-in of page failed!\n");
 	free_page(address);

@@ -1522,8 +1522,9 @@ void mark_buffer_uptodate(struct buffer_head * bh, int on)
  * mark_buffer_uptodate() functions propagate buffer state into the
  * page struct once IO has completed.
  */
-int generic_readpage(struct inode * inode, struct page * page)
+int generic_readpage(struct dentry * dentry, struct page * page)
 {
+	struct inode *inode = dentry->d_inode;
 	unsigned long block;
 	int *p, nr[PAGE_SIZE/512];
 	int i;

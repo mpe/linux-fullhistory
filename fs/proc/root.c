@@ -368,7 +368,7 @@ int proc_unregister(struct proc_dir_entry * dir, int ino)
 /*
  * /proc/self:
  */
-static int proc_self_readlink(struct inode * inode, char * buffer, int buflen)
+static int proc_self_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
 	int len;
 	char tmp[30];
@@ -380,12 +380,12 @@ static int proc_self_readlink(struct inode * inode, char * buffer, int buflen)
 	return len;
 }
 
-static struct dentry * proc_self_follow_link(struct inode *inode, struct dentry *base)
+static struct dentry * proc_self_follow_link(struct dentry *dentry,
+						struct dentry *base)
 {
-	int len;
 	char tmp[30];
 
-	len = sprintf(tmp, "%d", current->pid);
+	sprintf(tmp, "%d", current->pid);
 	return lookup_dentry(tmp, base, 1);
 }	
 

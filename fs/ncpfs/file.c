@@ -15,10 +15,11 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 #include <linux/mm.h>
-#include <linux/ncp_fs.h>
 #include <linux/locks.h>
-#include "ncplib_kernel.h"
 #include <linux/malloc.h>
+
+#include <linux/ncp_fs.h>
+#include "ncplib_kernel.h"
 
 static inline int min(int a, int b)
 {
@@ -65,7 +66,7 @@ int ncp_make_open(struct inode *inode, int right)
 		result = ncp_open_create_file_or_subdir(NCP_SERVER(inode),
 					NULL, NULL, OC_MODE_OPEN,
 					0, AR_READ, &finfo);
-		if (!result) {
+		if (result) {
 #ifdef NCPFS_PARANOIA
 printk(KERN_DEBUG "ncp_make_open: failed, result=%d\n", result);
 #endif
@@ -82,11 +83,7 @@ printk(KERN_DEBUG "ncp_make_open: failed, result=%d\n", result);
 #ifdef NCPFS_PARANOIA
 printk(KERN_DEBUG "ncp_make_open: file open, access=%x\n", access);
 #endif
-	if (((right == O_RDONLY) && ((access == O_RDONLY)
-				     || (access == O_RDWR)))
-	    || ((right == O_WRONLY) && ((access == O_WRONLY)
-					|| (access == O_RDWR)))
-	    || ((right == O_RDWR) && (access == O_RDWR)))
+	if (access == right || access == O_RDWR)
 		error = 0;
 
 out_unlock:
@@ -231,7 +228,7 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 		}
 	}
 
-	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+	inode->i_mtime = inode->i_atime = CURRENT_TIME;
 	
 	file->f_pos = pos;
 

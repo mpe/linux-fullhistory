@@ -225,7 +225,7 @@ int get_cluster(struct inode *inode,int cluster);
 
 /* inode.c */
 extern int fat_bmap(struct inode *inode,int block);
-extern int fat_notify_change(struct inode *,struct iattr *);
+extern int fat_notify_change(struct dentry *, struct iattr *);
 extern void fat_put_inode(struct inode *inode);
 extern void fat_delete_inode(struct inode *inode);
 extern void fat_put_super(struct super_block *sb);

@@ -24,8 +24,8 @@
 #include <linux/coda_cnode.h>
 #include <linux/coda_cache.h>
 
-static int coda_readlink(struct inode *inode, char *buffer, int length);
-static struct dentry *coda_follow_link(struct inode *, struct dentry *);
+static int coda_readlink(struct dentry *dentry, char *buffer, int length);
+static struct dentry *coda_follow_link(struct dentry *, struct dentry *);
 
 struct inode_operations coda_symlink_inode_operations = {
 	NULL,			/* no file-operations */
@@ -50,8 +50,9 @@ struct inode_operations coda_symlink_inode_operations = {
         NULL                    /* revalidate */
 };
 
-static int coda_readlink(struct inode *inode, char *buffer, int length)
+static int coda_readlink(struct inode *dentry, char *buffer, int length)
 {
+	struct inode *inode = dentry->d_inode;
         int len;
 	int error;
         char *buf;
@@ -83,14 +84,15 @@ static int coda_readlink(struct inode *inode, char *buffer, int length)
 	return error;
 }
 
-static struct dentry *coda_follow_link(struct inode *inode, 
-				       struct dentry *base)
+static struct dentry *coda_follow_link(struct dentry *dentry, 
+					struct dentry *base)
 {
+	struct inode *inode = dentry->d_inode;
 	int error;
 	struct cnode *cnp;
 	unsigned int len;
-	char mem[CFS_MAXPATHLEN];
 	char *path;
+	char mem[CFS_MAXPATHLEN]; /* N.B. too big for the stack? */
 ENTRY;
 	CDEBUG(D_INODE, "(%x/%ld)\n", inode->i_dev, inode->i_ino);
 	

@@ -186,8 +186,9 @@ printk("smb_invalidate_inodes\n");
  * invalidate our local caches.
  */
 int
-smb_revalidate_inode(struct inode *inode)
+smb_revalidate_inode(struct dentry *dentry)
 {
+	struct inode *inode = dentry->d_inode;
 	time_t last_time;
 	int error = 0;
 
@@ -224,8 +225,7 @@ jiffies, inode->u.smbfs_i.oldmtime);
 	{
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_revalidate: %s/%s changed, old=%ld, new=%ld\n",
-((struct dentry *)inode->u.smbfs_i.dentry)->d_parent->d_name.name,
-((struct dentry *)inode->u.smbfs_i.dentry)->d_name.name,
+dentry->d_parent->d_name.name, dentry->d_name.name,
 (long) last_time, (long) inode->i_mtime);
 #endif
 		if (!S_ISDIR(inode->i_mode))
@@ -492,22 +492,15 @@ smb_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 }
 
 int
-smb_notify_change(struct inode *inode, struct iattr *attr)
+smb_notify_change(struct dentry *dentry, struct iattr *attr)
 {
-	struct smb_sb_info *server = SMB_SERVER(inode);
-	struct dentry *dentry = inode->u.smbfs_i.dentry;
+	struct inode *inode = dentry->d_inode;
+	struct smb_sb_info *server = server_from_dentry(dentry);
 	unsigned int mask = (S_IFREG | S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO);
 	int error, changed, refresh = 0;
 	struct smb_fattr fattr;
 
-	error = -EIO;
-	if (!dentry)
-	{
-		printk("smb_notify_change: no dentry for inode!\n");
-		goto out;
-	}
-
-	error = smb_revalidate_inode(inode);
+	error = smb_revalidate_inode(dentry);
 	if (error)
 		goto out;
 

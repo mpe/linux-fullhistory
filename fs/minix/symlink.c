@@ -14,8 +14,8 @@
 
 #include <asm/uaccess.h>
 
-static int minix_readlink(struct inode *, char *, int);
-static struct dentry *minix_follow_link(struct inode *, struct dentry *);
+static int minix_readlink(struct dentry *, char *, int);
+static struct dentry *minix_follow_link(struct dentry *, struct dentry *);
 
 /*
  * symlinks can't do much...
@@ -40,8 +40,10 @@ struct inode_operations minix_symlink_inode_operations = {
 	NULL			/* permission */
 };
 
-static struct dentry * minix_follow_link(struct inode * inode, struct dentry * base)
+static struct dentry * minix_follow_link(struct dentry * dentry,
+					struct dentry * base)
 {
+	struct inode *inode = dentry->d_inode;
 	struct buffer_head * bh;
 
 	bh = minix_bread(inode, 0, 0);
@@ -55,7 +57,7 @@ static struct dentry * minix_follow_link(struct inode * inode, struct dentry * b
 	return base;
 }
 
-static int minix_readlink(struct inode * inode, char * buffer, int buflen)
+static int minix_readlink(struct dentry * dentry, char * buffer, int buflen)
 {
 	struct buffer_head * bh;
 	int i;
@@ -63,7 +65,7 @@ static int minix_readlink(struct inode * inode, char * buffer, int buflen)
 
 	if (buflen > 1023)
 		buflen = 1023;
-	bh = minix_bread(inode, 0, 0);
+	bh = minix_bread(dentry->d_inode, 0, 0);
 	if (!bh)
 		return 0;
 	i = 0;

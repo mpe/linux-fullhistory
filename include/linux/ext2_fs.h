@@ -499,9 +499,10 @@ extern int ext2_mkdir (struct inode *,struct dentry *,int);
 extern int ext2_rmdir (struct inode *,struct dentry *);
 extern int ext2_unlink (struct inode *,struct dentry *);
 extern int ext2_symlink (struct inode *,struct dentry *,const char *);
-extern int ext2_link (struct inode *, struct inode *, struct dentry *);
+extern int ext2_link (struct dentry *, struct inode *, struct dentry *);
 extern int ext2_mknod (struct inode *, struct dentry *, int, int);
-extern int ext2_rename (struct inode *, struct dentry *,struct inode *, struct dentry *);
+extern int ext2_rename (struct inode *, struct dentry *,
+			struct inode *, struct dentry *);
 
 /* super.c */
 extern void ext2_error (struct super_block *, const char *, const char *, ...)

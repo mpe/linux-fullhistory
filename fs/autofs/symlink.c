@@ -14,23 +14,24 @@
 #include <linux/sched.h>
 #include "autofs_i.h"
 
-static int autofs_readlink(struct inode *inode, char *buffer, int buflen)
+static int autofs_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
 	struct autofs_symlink *sl;
 	int len;
 
-	sl = (struct autofs_symlink *)inode->u.generic_ip;
+	sl = (struct autofs_symlink *)dentry->d_inode->u.generic_ip;
 	len = sl->len;
 	if (len > buflen) len = buflen;
-	copy_to_user(buffer,sl->data,len);
+	copy_to_user(buffer, sl->data, len);
 	return len;
 }
 
-static struct dentry * autofs_follow_link(struct inode *inode, struct dentry *base)
+static struct dentry * autofs_follow_link(struct dentry *dentry,
+					struct dentry *base)
 {
 	struct autofs_symlink *sl;
 
-	sl = (struct autofs_symlink *)inode->u.generic_ip;
+	sl = (struct autofs_symlink *)dentry->d_inode->u.generic_ip;
 	return lookup_dentry(sl->data, base, 1);
 }
 

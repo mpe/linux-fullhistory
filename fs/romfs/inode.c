@@ -391,8 +391,9 @@ out:
  */
 
 static int
-romfs_readpage(struct inode * inode, struct page * page)
+romfs_readpage(struct dentry * dentry, struct page * page)
 {
+	struct inode *inode = dentry->d_inode;
 	unsigned long buf;
 	unsigned long offset, avail, readlen;
 	int result = -EIO;
@@ -428,8 +429,9 @@ romfs_readpage(struct inode * inode, struct page * page)
 }
 
 static int
-romfs_readlink(struct inode *inode, char *buffer, int len)
+romfs_readlink(struct dentry *dentry, char *buffer, int len)
 {
+	struct inode *inode = dentry->d_inode;
 	int mylen;
 	char buf[ROMFS_MAXFN];		/* XXX dynamic */
 
@@ -450,11 +452,12 @@ out:
 	return mylen;
 }
 
-static struct dentry *romfs_follow_link(struct inode *inode, struct dentry *base)
+static struct dentry *romfs_follow_link(struct dentry *dentry,
+					struct dentry *base)
 {
+	struct inode *inode = dentry->d_inode;
 	char *link;
 	int len, cnt;
-	struct dentry *dentry;
 
 	len = inode->i_size;
 

@@ -89,7 +89,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, (int) filp->f_pos);
 	/*
 	 * Make sure our inode is up-to-date.
 	 */
-	result = smb_revalidate_inode(dir);
+	result = smb_revalidate_inode(dentry);
 	if (result)
 		goto out;
 	/*
@@ -183,7 +183,7 @@ file->f_dentry->d_name.name);
 	}
 
 	if (server->conn_pid)
-		error = smb_revalidate_inode(dir);
+		error = smb_revalidate_inode(dentry);
 	return error;
 }
 
@@ -235,7 +235,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
 			valid = 0;
 		} else if (!valid)
-			valid = (smb_revalidate_inode(inode) == 0);
+			valid = (smb_revalidate_inode(dentry) == 0);
 	} else
 	{
 	/*

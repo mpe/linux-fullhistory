@@ -69,15 +69,16 @@ asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 	return error;
 }
 
-int do_truncate(struct inode *inode, unsigned long length)
+int do_truncate(struct dentry *dentry, unsigned long length)
 {
+	struct inode *inode = dentry->d_inode;
 	int error;
 	struct iattr newattrs;
 
 	down(&inode->i_sem);
 	newattrs.ia_size = length;
 	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME;
-	error = notify_change(inode, &newattrs);
+	error = notify_change(dentry, &newattrs);
 	if (!error) {
 		/* truncate virtual mappings of this file */
 		vmtruncate(inode, length);
@@ -128,7 +129,7 @@ asmlinkage int sys_truncate(const char * path, unsigned long length)
 	if (!error) {
 		if (inode->i_sb && inode->i_sb->dq_op)
 			inode->i_sb->dq_op->initialize(inode, -1);
-		error = do_truncate(inode, length);
+		error = do_truncate(dentry, length);
 	}
 	put_write_access(inode);
 dput_and_out:
@@ -161,7 +162,7 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned long length)
 					  length<inode->i_size ? length : inode->i_size,
 					  abs(inode->i_size - length));
 		if (!error)
-			error = do_truncate(inode, length);
+			error = do_truncate(dentry, length);
 	}
 	unlock_kernel();
 	return error;
@@ -214,7 +215,7 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 		    (error = permission(inode,MAY_WRITE)) != 0)
 			goto dput_and_out;
 	}
-	error = notify_change(inode, &newattrs);
+	error = notify_change(dentry, &newattrs);
 dput_and_out:
 	dput(dentry);
 out:
@@ -261,7 +262,7 @@ asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
 		if ((error = permission(inode,MAY_WRITE)) != 0)
 			goto dput_and_out;
 	}
-	error = notify_change(inode, &newattrs);
+	error = notify_change(dentry, &newattrs);
 dput_and_out:
 	dput(dentry);
 out:
@@ -441,7 +442,7 @@ asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
 		mode = inode->i_mode;
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
-	err = notify_change(inode, &newattrs);
+	err = notify_change(dentry, &newattrs);
 out:
 	unlock_kernel();
 	return err;
@@ -474,7 +475,7 @@ asmlinkage int sys_chmod(const char * filename, mode_t mode)
 		mode = inode->i_mode;
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
-	error = notify_change(inode, &newattrs);
+	error = notify_change(dentry, &newattrs);
 
 dput_and_out:
 	dput(dentry);
@@ -530,11 +531,11 @@ static int chown_common(struct dentry * dentry, uid_t user, gid_t group)
 		error = -EDQUOT;
 		if (inode->i_sb->dq_op->transfer(inode, &newattrs, 0))
 			goto out;
-		error = notify_change(inode, &newattrs);
+		error = notify_change(dentry, &newattrs);
 		if (error)
 			inode->i_sb->dq_op->transfer(inode, &newattrs, 1);
 	} else
-		error = notify_change(inode, &newattrs);
+		error = notify_change(dentry, &newattrs);
 out:
 	return error;
 }

@@ -16,11 +16,6 @@ struct nfs_inode_info {
 	struct pipe_inode_info	pipeinfo;
 
 	/*
-	 * The file handle
-	 */
-	struct nfs_fh		fhandle;
-
-	/*
 	 * Various flags
 	 */
 	unsigned short		flags;

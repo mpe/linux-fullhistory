@@ -13,7 +13,7 @@
 /*
  * The follow_symlink operation must dput() the base.
  */
-static struct dentry * bad_follow_link(struct inode * ino, struct dentry *base)
+static struct dentry * bad_follow_link(struct dentry *dent, struct dentry *base)
 {
 	dput(base);
 	return ERR_PTR(-EIO);

@@ -25,10 +25,10 @@
 #include <linux/coda_cache.h>
 
 /* file operations */
-static int coda_readpage(struct inode * inode, struct page * page);
-static ssize_t coda_file_read(struct file *f, char *buf, size_t count, loff_t *off);
-static ssize_t coda_file_write(struct file *f, const char *buf, size_t count, loff_t *off);
-static int coda_file_mmap(struct file * file, struct vm_area_struct * vma);
+static int coda_readpage(struct dentry *, struct page *);
+static ssize_t coda_file_read(struct file *, char *, size_t, loff_t *);
+static ssize_t coda_file_write(struct file *, const char *, size_t, loff_t *);
+static int coda_file_mmap(struct file *, struct vm_area_struct *);
 
 /* exported from this file */
 int coda_fsync(struct file *, struct dentry *dentry);
@@ -74,9 +74,9 @@ struct file_operations coda_file_operations = {
 };
 
 /*  File file operations */
-static int coda_readpage(struct inode * inode, struct page * page)
+static int coda_readpage(struct dentry *dentry, struct page * page)
 {
-        struct inode *open_inode;
+        struct inode *open_inode, *inode = dentry->d_inode;
         struct cnode *cnp;
 
         ENTRY;
@@ -93,6 +93,7 @@ static int coda_readpage(struct inode * inode, struct page * page)
 
         CDEBUG(D_INODE, "coda ino: %ld, cached ino %ld, page offset: %lx\n", inode->i_ino, open_inode->i_ino, page->offset);
 
+	/* N.B. This needs the dentry for open_inode */
         generic_readpage(open_inode, page);
         EXIT;
         return 0;

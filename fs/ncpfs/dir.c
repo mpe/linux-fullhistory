@@ -105,10 +105,10 @@ ncp_dir_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 /*
  * Dentry operations routines
  */
-static int  ncp_lookup_validate(struct dentry *);
-static void ncp_delete_dentry(struct dentry *);
+static int ncp_lookup_validate(struct dentry *);
 static int ncp_hash_dentry(struct dentry *, struct qstr *);
 static int ncp_compare_dentry (struct dentry *, struct qstr *, struct qstr *);
+static void ncp_delete_dentry(struct dentry *);
 
 static struct dentry_operations ncp_dentry_operations =
 {
@@ -125,19 +125,23 @@ static struct dentry_operations ncp_dentry_operations =
  */
 #define tolower(c) (((c) >= 'A' && (c) <= 'Z') ? (c)-('A'-'a') : (c))
 
-
+/*
+ * Note: leave the hash unchanged if the directory
+ * is case-sensitive.
+ */
 static int 
 ncp_hash_dentry(struct dentry *dentry, struct qstr *this)
 {
-  unsigned long hash;
-  int i;
+	unsigned long hash;
+	int i;
 
-  hash = init_name_hash();
-  for (i=0; i<this->len ; i++)
-    hash = partial_name_hash(tolower(this->name[i]),hash);
-  this->hash = end_name_hash(hash);
-  
-  return 0;
+	if (!ncp_case_sensitive(dentry->d_inode)) {
+		hash = init_name_hash();
+		for (i=0; i<this->len ; i++)
+			hash = partial_name_hash(tolower(this->name[i]),hash);
+		this->hash = end_name_hash(hash);
+	}
+	return 0;
 }
 
 static int
@@ -202,42 +206,14 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
  */
 ino_t ncp_invent_inos(unsigned long n)
 {
-	static ino_t ino = 1;
+	static ino_t ino = 2;
 
 	if (ino + 2*n < ino)
 	{
 		/* wrap around */
-		ino += n;
+		ino = 2;
 	}
 	ino += n;
-	return ino;
-}
-
-/*
- * Check whether a dentry already exists for the given name,
- * and return the inode number if it has an inode.  This is
- * needed to keep getcwd() working.
- */
-static ino_t
-find_inode_number(struct dentry *dir, struct qstr *name)
-{
-        unsigned long hash;
-        int i;
-	struct dentry * dentry;
-	ino_t ino = 0;
-        
-        hash = init_name_hash();
-        for (i=0; i<name->len ; i++)
-                hash = partial_name_hash(tolower(name->name[i]),hash);
-        name->hash = end_name_hash(hash);
-        
-	dentry = d_lookup(dir, name);
-	if (dentry)
-	{
-		if (dentry->d_inode)
-			ino = dentry->d_inode->i_ino;
-		dput(dentry);
-	}
 	return ino;
 }
 

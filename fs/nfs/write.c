@@ -79,6 +79,7 @@ static void			nfs_wback_result(struct rpc_task *task);
 struct nfs_wreq {
 	struct rpc_listitem	wb_list;	/* linked list of req's */
 	struct rpc_task		wb_task;	/* RPC task */
+	struct dentry *		wb_dentry;	/* dentry referenced */
 	struct inode *		wb_inode;	/* inode referenced */
 	struct page *		wb_page;	/* page to be written */
 	unsigned int		wb_offset;	/* offset within page */
@@ -169,17 +170,17 @@ transfer_page_lock(struct nfs_wreq *req)
  * Offset is the data offset within the page.
  */
 static int
-nfs_writepage_sync(struct inode *inode, struct page *page,
-				unsigned long offset, unsigned int count)
+nfs_writepage_sync(struct dentry *dentry, struct inode *inode,
+		struct page *page, unsigned long offset, unsigned int count)
 {
-	struct nfs_fattr fattr;
 	unsigned int	wsize = NFS_SERVER(inode)->wsize;
 	int		result, refresh = 0, written = 0;
 	u8		*buffer;
+	struct nfs_fattr fattr;
 
-	dprintk("NFS:      nfs_writepage_sync(%x/%ld %d@%ld)\n",
-				inode->i_dev, inode->i_ino,
-				count, page->offset + offset);
+	dprintk("NFS:      nfs_writepage_sync(%s/%s %d@%ld)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		count, page->offset + offset);
 
 	buffer = (u8 *) page_address(page) + offset;
 	offset += page->offset;
@@ -188,7 +189,7 @@ nfs_writepage_sync(struct inode *inode, struct page *page,
 		if (count < wsize && !IS_SWAPFILE(inode))
 			wsize = count;
 
-		result = nfs_proc_write(NFS_SERVER(inode), NFS_FH(inode),
+		result = nfs_proc_write(NFS_DSERVER(dentry), NFS_FH(dentry),
 					IS_SWAPFILE(inode), offset, wsize,
 					buffer, &fattr);
 
@@ -380,16 +381,16 @@ update_write_request(struct nfs_wreq *req, unsigned int first,
  * Create and initialize a writeback request
  */
 static inline struct nfs_wreq *
-create_write_request(struct inode *inode, struct page *page,
-			unsigned int offset, unsigned int bytes)
+create_write_request(struct dentry *dentry, struct inode *inode,
+		struct page *page, unsigned int offset, unsigned int bytes)
 {
 	struct nfs_wreq *wreq;
 	struct rpc_clnt	*clnt = NFS_CLIENT(inode);
 	struct rpc_task	*task;
 
-	dprintk("NFS:      create_write_request(%x/%ld, %ld+%d)\n",
-				inode->i_dev, inode->i_ino,
-				page->offset + offset, bytes);
+	dprintk("NFS:      create_write_request(%s/%s, %ld+%d)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		page->offset + offset, bytes);
 
 	/* FIXME: Enforce hard limit on number of concurrent writes? */
 
@@ -408,6 +409,7 @@ create_write_request(struct inode *inode, struct page *page,
 		goto out_req;
 
 	/* Put the task on inode's writeback request list. */
+	wreq->wb_dentry = dentry;
 	wreq->wb_inode  = inode;
 	wreq->wb_pid    = current->pid;
 	wreq->wb_page   = page;
@@ -504,9 +506,9 @@ wait_on_write_request(struct nfs_wreq *req)
  * (for now), and we currently do this synchronously only.
  */
 int
-nfs_writepage(struct inode *inode, struct page *page)
+nfs_writepage(struct dentry *dentry, struct page *page)
 {
-	return nfs_writepage_sync(inode, page, 0, PAGE_SIZE);
+	return nfs_writepage_sync(dentry, dentry->d_inode, page, 0, PAGE_SIZE);
 }
 
 /*
@@ -516,16 +518,17 @@ nfs_writepage(struct inode *inode, struct page *page)
  * things with a page scheduled for an RPC call (e.g. invalidate it).
  */
 int
-nfs_updatepage(struct inode *inode, struct page *page, const char *buffer,
+nfs_updatepage(struct dentry *dentry, struct page *page, const char *buffer,
 			unsigned long offset, unsigned int count, int sync)
 {
+	struct inode *inode = dentry->d_inode;
 	struct nfs_wreq	*req;
 	int		status = 0, page_locked = 1;
 	u8		*page_addr;
 
-	dprintk("NFS:      nfs_updatepage(%x/%ld %d@%ld, sync=%d)\n",
-				inode->i_dev, inode->i_ino,
-				count, page->offset+offset, sync);
+	dprintk("NFS:      nfs_updatepage(%s/%s %d@%ld, sync=%d)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		count, page->offset+offset, sync);
 
 	set_bit(PG_locked, &page->flags);
 	page_addr = (u8 *) page_address(page);
@@ -535,7 +538,7 @@ nfs_updatepage(struct inode *inode, struct page *page, const char *buffer,
 	 */
 	if (NFS_SERVER(inode)->wsize < PAGE_SIZE) {
 		copy_from_user(page_addr + offset, buffer, count);
-		return nfs_writepage_sync(inode, page, offset, count);
+		return nfs_writepage_sync(dentry, inode, page, offset, count);
 	}
 
 	/*
@@ -560,7 +563,7 @@ nfs_updatepage(struct inode *inode, struct page *page, const char *buffer,
 
 	/* Create the write request. */
 	status = -ENOBUFS;
-	req = create_write_request(inode, page, offset, count);
+	req = create_write_request(dentry, inode, page, offset, count);
 	if (!req)
 		goto done;
 
@@ -823,7 +826,7 @@ nfs_wback_lock(struct rpc_task *task)
 {
 	struct nfs_wreq	*req = (struct nfs_wreq *) task->tk_calldata;
 	struct page	*page = req->wb_page;
-	struct inode	*inode = req->wb_inode;
+	struct dentry	*dentry = req->wb_dentry;
 
 	dprintk("NFS: %4d nfs_wback_lock (status %d flags %x)\n",
 			task->tk_pid, task->tk_status, req->wb_flags);
@@ -856,7 +859,7 @@ nfs_wback_lock(struct rpc_task *task)
 	}
 
 	/* Setup the task struct for a writeback call */
-	req->wb_args->fh = NFS_FH(inode);
+	req->wb_args->fh = NFS_FH(dentry);
 	req->wb_args->offset = page->offset + req->wb_offset;
 	req->wb_args->count  = req->wb_bytes;
 	req->wb_args->buffer = (void *) (page_address(page) + req->wb_offset);
@@ -873,16 +876,12 @@ static void
 nfs_wback_result(struct rpc_task *task)
 {
 	struct nfs_wreq *req = (struct nfs_wreq *) task->tk_calldata;
-	struct inode	*inode;
-	struct page	*page;
-	int		status;
+	struct inode	*inode = req->wb_inode;
+	struct page	*page  = req->wb_page;
+	int		status = task->tk_status;
 
 	dprintk("NFS: %4d nfs_wback_result (status %d)\n",
-				task->tk_pid, task->tk_status);
-
-	inode  = req->wb_inode;
-	page   = req->wb_page;
-	status = task->tk_status;
+		task->tk_pid, status);
 
 	if (status < 0) {
 		/*

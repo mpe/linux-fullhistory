@@ -41,7 +41,7 @@
 /* VFS super_block ops */
 static struct super_block *coda_read_super(struct super_block *, void *, int);
 static void coda_read_inode(struct inode *);
-static int  coda_notify_change(struct inode *inode, struct iattr *attr);
+static int  coda_notify_change(struct dentry *, struct iattr *);
 static void coda_put_inode(struct inode *);
 static void coda_delete_inode(struct inode *);
 static void coda_put_super(struct super_block *);
@@ -133,6 +133,7 @@ static struct super_block * coda_read_super(struct super_block *sb,
 	printk("coda_read_super: rootinode is %ld dev %d\n", 
 	       root->i_ino, root->i_dev);
 	sbi->sbi_root = root;
+	/* N.B. check this for failure */
 	sb->s_root = d_alloc_root(root, NULL);
 	unlock_super(sb);
 	EXIT;  
@@ -140,7 +141,6 @@ static struct super_block * coda_read_super(struct super_block *sb,
 
 error:
 EXIT;  
-	MOD_DEC_USE_COUNT;
 	if (sbi) {
 		sbi->sbi_vcomm = NULL;
 		sbi->sbi_root = NULL;
@@ -154,6 +154,7 @@ EXIT;
                 coda_cnode_free(ITOC(root));
         }
         sb->s_dev = 0;
+	MOD_DEC_USE_COUNT;
         return NULL;
 }
 
@@ -224,8 +225,9 @@ static void coda_delete_inode(struct inode *inode)
 	EXIT;
 }
 
-static int  coda_notify_change(struct inode *inode, struct iattr *iattr)
+static int  coda_notify_change(struct dentry *dentry, struct iattr *iattr)
 {
+	struct inode *inode = dentry->d_inode;
         struct cnode *cnp;
         struct coda_vattr vattr;
         int error;

@@ -18,8 +18,8 @@
 
 #include <asm/uaccess.h>
 
-static int nfs_readlink(struct inode *, char *, int);
-static struct dentry *nfs_follow_link(struct inode *, struct dentry *);
+static int nfs_readlink(struct dentry *, char *, int);
+static struct dentry *nfs_follow_link(struct dentry *, struct dentry *);
 
 /*
  * symlinks can't do much...
@@ -44,19 +44,20 @@ struct inode_operations nfs_symlink_inode_operations = {
 	NULL			/* permission */
 };
 
-static int nfs_readlink(struct inode *inode, char *buffer, int buflen)
+static int nfs_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
 	int error;
 	unsigned int len;
 	char *res;
 	void *mem;
 
-	dfprintk(VFS, "nfs: readlink(%x/%ld)\n", inode->i_dev, inode->i_ino);
+	dfprintk(VFS, "nfs: readlink(%s/%s)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
 
 	if (buflen > NFS_MAXPATHLEN)
 		buflen = NFS_MAXPATHLEN;
-	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), &mem,
-		&res, &len, buflen);
+	error = nfs_proc_readlink(NFS_DSERVER(dentry), NFS_FH(dentry),
+					&mem, &res, &len, buflen);
 	if (! error) {
 		copy_to_user(buffer, res, len);
 		put_user('\0', buffer + len);
@@ -66,34 +67,41 @@ static int nfs_readlink(struct inode *inode, char *buffer, int buflen)
 	return error;
 }
 
-static struct dentry * nfs_follow_link(struct inode * inode, struct dentry *base)
+static struct dentry *
+nfs_follow_link(struct dentry * dentry, struct dentry *base)
 {
 	int error;
 	unsigned int len;
 	char *res;
 	void *mem;
 	char *path;
+	struct dentry *result;
 
-	dfprintk(VFS, "nfs: follow_link(%x/%ld)\n", inode->i_dev, inode->i_ino);
+	dfprintk(VFS, "nfs: follow_link(%s/%s)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
 
-	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), &mem,
-		&res, &len, NFS_MAXPATHLEN);
+	error = nfs_proc_readlink(NFS_DSERVER(dentry), NFS_FH(dentry),
+				 &mem, &res, &len, NFS_MAXPATHLEN);
+	result = ERR_PTR(error);
+	if (error)
+		goto out_dput;
 
-	if (error) {
-		dput(base);
-		return ERR_PTR(error);
-	}
+	result = ERR_PTR(-ENOMEM);
 	path = kmalloc(len + 1, GFP_KERNEL);
-	if (!path) {
-		dput(base);
-		kfree(mem);
-		return ERR_PTR(-ENOMEM);
-	}
+	if (!path)
+		goto out_mem;
 	memcpy(path, res, len);
 	path[len] = 0;
 	kfree(mem);
 
-	base = lookup_dentry(path, base, 1);
+	result = lookup_dentry(path, base, 1);
 	kfree(path);
-	return base;
+out:
+	return result;
+
+out_mem:
+	kfree(mem);
+out_dput:
+	dput(base);
+	goto out;
 }

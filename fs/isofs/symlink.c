@@ -18,8 +18,8 @@
 
 #include <asm/uaccess.h>
 
-static int isofs_readlink(struct inode *, char *, int);
-static struct dentry * isofs_follow_link(struct inode * inode, struct dentry *base);
+static int isofs_readlink(struct dentry *, char *, int);
+static struct dentry * isofs_follow_link(struct dentry *, struct dentry *);
 
 /*
  * symlinks can't do much...
@@ -44,14 +44,14 @@ struct inode_operations isofs_symlink_inode_operations = {
 	NULL			/* permission */
 };
 
-static int isofs_readlink(struct inode * inode, char * buffer, int buflen)
+static int isofs_readlink(struct dentry * dentry, char * buffer, int buflen)
 {
         char * pnt;
 	int i;
 
 	if (buflen > 1023)
 		buflen = 1023;
-	pnt = get_rock_ridge_symlink(inode);
+	pnt = get_rock_ridge_symlink(dentry->d_inode);
 
 	if (!pnt)
 		return 0;
@@ -65,12 +65,12 @@ static int isofs_readlink(struct inode * inode, char * buffer, int buflen)
 	return i;
 }
 
-static struct dentry * isofs_follow_link(struct inode * inode, struct dentry *base)
+static struct dentry * isofs_follow_link(struct dentry * dentry,
+					struct dentry *base)
 {
 	char * pnt;
 
-	pnt = get_rock_ridge_symlink(inode);
-
+	pnt = get_rock_ridge_symlink(dentry->d_inode);
 	if(!pnt) {
 		dput(base);
 		return ERR_PTR(-ELOOP);

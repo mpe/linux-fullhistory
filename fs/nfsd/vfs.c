@@ -230,7 +230,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	if (iap->ia_valid) {
 		iap->ia_valid |= ATTR_CTIME;
 		iap->ia_ctime = CURRENT_TIME;
-		err = notify_change(inode, iap);
+		err = notify_change(dentry, iap);
 		if (err)
 			return nfserrno(-err);
 		if (EX_ISSYNC(fhp->fh_export))
@@ -475,7 +475,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 
 		ia.ia_valid = ATTR_MODE;
 		ia.ia_mode  = inode->i_mode & ~(S_ISUID | S_ISGID);
-		notify_change(inode, &ia);
+		notify_change(dentry, &ia);
 	}
 
 	fh_unlock(fhp);			/* unlock inode */
@@ -668,7 +668,7 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 	fh_lock(fhp);
 	newattrs.ia_size = size;
 	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME;
-	err = notify_change(inode, &newattrs);
+	err = notify_change(dentry, &newattrs);
 	if (!err) {
 		vmtruncate(inode, size);
 		if (inode->i_op && inode->i_op->truncate)
@@ -710,7 +710,7 @@ nfsd_readlink(struct svc_rqst *rqstp, struct svc_fh *fhp, char *buf, int *lenp)
 	UPDATE_ATIME(inode);
 	/* N.B. Why does this call need a get_fs()?? */
 	oldfs = get_fs(); set_fs(KERNEL_DS);
-	err = inode->i_op->readlink(inode, buf, *lenp);
+	err = inode->i_op->readlink(dentry, buf, *lenp);
 	set_fs(oldfs);
 
 	if (err < 0)
@@ -789,7 +789,7 @@ int
 nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 				char *fname, int len, struct svc_fh *tfhp)
 {
-	struct dentry	*ddir, *dnew;
+	struct dentry	*ddir, *dnew, *dold;
 	struct inode	*dirp, *dest;
 	int		err;
 
@@ -811,11 +811,13 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	err = -EEXIST;
 	if (dnew->d_inode)
 		goto dput_and_out;
-	dest = tfhp->fh_dentry->d_inode;
 
 	err = -EPERM;
 	if (!len)
 		goto dput_and_out;
+
+	dold = tfhp->fh_dentry;
+	dest = dold->d_inode;
 
 	err = -EACCES;
 	if (nfsd_iscovered(ddir, ffhp->fh_export))
@@ -830,7 +832,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 		goto dput_and_out;
 
 	fh_lock(ffhp);
-	err = dirp->i_op->link(dest, dirp, dnew);
+	err = dirp->i_op->link(dold, dirp, dnew);
 	fh_unlock(ffhp);
 
 	if (!err && EX_ISSYNC(ffhp->fh_export)) {

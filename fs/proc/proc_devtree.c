@@ -65,24 +65,24 @@ struct inode_operations devtree_symlink_inode_operations = {
 	NULL			/* smap */
 };
 
-static struct dentry *devtree_follow_link(struct inode *inode,
+static struct dentry *devtree_follow_link(struct dentry *dentry,
 					  struct dentry *base)
 {
 	struct proc_dir_entry * de;
 	char *link;
 
-	de = (struct proc_dir_entry *) inode->u.generic_ip;
+	de = (struct proc_dir_entry *) dentry->inode->u.generic_ip;
 	link = (char *) de->data;
 	return lookup_dentry(link, base, 1);
 }
 
-static int devtree_readlink(struct inode *inode, char *buffer, int buflen)
+static int devtree_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
 	struct proc_dir_entry * de;
 	char *link;
 	int linklen;
 
-	de = (struct proc_dir_entry *) inode->u.generic_ip;
+	de = (struct proc_dir_entry *) dentry->inode->u.generic_ip;
 	link = (char *) de->data;
 	linklen = strlen(link);
 	if (linklen > buflen)

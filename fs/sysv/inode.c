@@ -873,8 +873,9 @@ void sysv_read_inode(struct inode * inode)
 }
 
 /* To avoid inconsistencies between inodes in memory and inodes on disk. */
-extern int sysv_notify_change(struct inode *inode, struct iattr *attr)
+extern int sysv_notify_change(struct dentry *dentry, struct iattr *attr)
 {
+	struct inode *inode = dentry->d_inode;
 	int error;
 
 	if ((error = inode_change_ok(inode, attr)) != 0)

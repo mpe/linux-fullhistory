@@ -571,24 +571,25 @@ struct inode_operations {
 	struct file_operations * default_file_ops;
 	int (*create) (struct inode *,struct dentry *,int);
 	int (*lookup) (struct inode *,struct dentry *);
-	int (*link) (struct inode *,struct inode *,struct dentry *);
+	int (*link) (struct dentry *,struct inode *,struct dentry *);
 	int (*unlink) (struct inode *,struct dentry *);
 	int (*symlink) (struct inode *,struct dentry *,const char *);
 	int (*mkdir) (struct inode *,struct dentry *,int);
 	int (*rmdir) (struct inode *,struct dentry *);
 	int (*mknod) (struct inode *,struct dentry *,int,int);
-	int (*rename) (struct inode *,struct dentry *,struct inode *,struct dentry *);
-	int (*readlink) (struct inode *,char *,int);
-	struct dentry * (*follow_link) (struct inode *, struct dentry *);
-	int (*readpage) (struct inode *, struct page *);
-	int (*writepage) (struct inode *, struct page *);
+	int (*rename) (struct inode *, struct dentry *,
+			struct inode *, struct dentry *);
+	int (*readlink) (struct dentry *, char *,int);
+	struct dentry * (*follow_link) (struct dentry *, struct dentry *);
+	int (*readpage) (struct dentry *, struct page *);
+	int (*writepage) (struct dentry *, struct page *);
 	int (*bmap) (struct inode *,int);
 	void (*truncate) (struct inode *);
 	int (*permission) (struct inode *, int);
 	int (*smap) (struct inode *,int);
-	int (*updatepage) (struct inode *, struct page *, const char *,
+	int (*updatepage) (struct dentry *, struct page *, const char *,
 				unsigned long, unsigned int, int);
-	int (*revalidate) (struct inode *);
+	int (*revalidate) (struct dentry *);
 };
 
 struct super_operations {
@@ -596,7 +597,7 @@ struct super_operations {
 	void (*write_inode) (struct inode *);
 	void (*put_inode) (struct inode *);
 	void (*delete_inode) (struct inode *);
-	int (*notify_change) (struct inode *, struct iattr *);
+	int (*notify_change) (struct dentry *, struct iattr *);
 	void (*put_super) (struct super_block *);
 	void (*write_super) (struct super_block *);
 	int (*statfs) (struct super_block *, struct statfs *, int);
@@ -630,7 +631,7 @@ extern void kill_fasync(struct fasync_struct *fa, int sig);
 
 extern char * getname(const char * filename);
 extern void putname(char * name);
-extern int do_truncate(struct inode *, unsigned long);
+extern int do_truncate(struct dentry *, unsigned long);
 extern int register_blkdev(unsigned int, const char *, struct file_operations *);
 extern int unregister_blkdev(unsigned int major, const char * name);
 extern int blkdev_open(struct inode * inode, struct file * filp);
@@ -710,7 +711,7 @@ extern void sync_dev(kdev_t dev);
 extern int fsync_dev(kdev_t dev);
 extern void sync_supers(kdev_t dev);
 extern int bmap(struct inode * inode,int block);
-extern int notify_change(struct inode *, struct iattr *);
+extern int notify_change(struct dentry *, struct iattr *);
 extern int permission(struct inode * inode,int mask);
 extern int get_write_access(struct inode *inode);
 extern void put_write_access(struct inode *inode);
@@ -800,7 +801,7 @@ extern struct buffer_head * breada(kdev_t dev,int block, int size,
 
 extern int brw_page(int, struct page *, kdev_t, int [], int, int);
 
-extern int generic_readpage(struct inode *, struct page *);
+extern int generic_readpage(struct dentry *, struct page *);
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t generic_file_write(struct file *, const char*, size_t, loff_t*);
@@ -831,7 +832,6 @@ extern int file_fsync(struct file *, struct dentry *dir);
 
 extern int inode_change_ok(struct inode *, struct iattr *);
 extern void inode_setattr(struct inode *, struct iattr *);
-extern int notify_change(struct inode * inode, struct iattr * attr);
 
 /* kludge to get SCSI modules working */
 #include <linux/minix_fs.h>

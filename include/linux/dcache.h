@@ -66,6 +66,7 @@ struct dentry {
 	struct dentry_operations  *d_op;
 	struct super_block * d_sb;	/* The root of the dentry tree */
 	unsigned long d_reftime;	/* last time referenced */
+	void * d_fsdata;		/* fs-specific data */
 };
 
 struct dentry_operations {
@@ -73,6 +74,7 @@ struct dentry_operations {
 	int (*d_hash) (struct dentry *,struct qstr *);
 	int (*d_compare) (struct dentry *,struct qstr *, struct qstr *);
 	void (*d_delete)(struct dentry *);
+	void (*d_release)(struct dentry *);
 };
 
 /* the dentry parameter passed to d_hash and d_compare is the parent
