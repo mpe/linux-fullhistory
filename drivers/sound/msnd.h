@@ -189,7 +189,7 @@ typedef u8			BYTE;
 typedef u16			USHORT;
 typedef u16			WORD;
 typedef u32			DWORD;
-typedef volatile BYTE *		LPDAQD;
+typedef unsigned long		LPDAQD;
 
 /* Generic FIFO */
 typedef struct {
@@ -208,12 +208,12 @@ typedef struct multisound_dev {
 	int memid, irqid;
 	int irq, irq_ref;
 	unsigned char info;
-	volatile BYTE *base;
+	unsigned long base;
 
 	/* Motorola 56k DSP SMA */
-	volatile BYTE *SMA;
-	volatile BYTE *DAPQ, *DARQ, *MODQ, *MIDQ, *DSPQ;
-	volatile WORD *pwDSPQData, *pwMIDQData, *pwMODQData;
+	unsigned long SMA;
+	unsigned long DAPQ, DARQ, MODQ, MIDQ, DSPQ;
+	unsigned long pwDSPQData, pwMIDQData, pwMODQData;
 
 	/* State variables */
 	enum { msndClassic, msndPinnacle } type;

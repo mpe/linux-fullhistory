@@ -235,6 +235,17 @@ struct video_unit
 	int	teletext;	/* Teletext minor */
 };
 
+struct vbi_format {
+	__u32	sampling_rate;	/* in Hz */
+	__u32	samples_per_line;
+	__u32	sample_format;	/* VIDEO_PALETTE_RAW only (1 byte) */
+	__s32	start[2];	/* starting line for each frame */
+	__u32	count[2];	/* count of lines for each frame */
+	__u32	flags;
+#define	VBI_UNSYNC	1	/* can distingues between top/bottom field */
+#define	VBI_INTERLACED	2	/* lines are interlaced */
+};
+
 /* video_info is biased towards hardware mpeg encode/decode */
 /* but it could apply generically to any hardware compressor/decompressor */
 struct video_info
@@ -284,14 +295,17 @@ struct video_code
 #define VIDIOCSAUDIO		_IOW('v',17, struct video_audio)	/* Audio source, mute etc */
 #define VIDIOCSYNC		_IOW('v',18, int)			/* Sync with mmap grabbing */
 #define VIDIOCMCAPTURE		_IOW('v',19, struct video_mmap)		/* Grab frames */
-#define VIDIOCGMBUF		_IOR('v', 20, struct video_mbuf)	/* Memory map buffer info */
-#define VIDIOCGUNIT		_IOR('v', 21, struct video_unit)	/* Get attached units */
-#define VIDIOCGCAPTURE		_IOR('v',22, struct video_capture)	/* Get frame buffer */
-#define VIDIOCSCAPTURE		_IOW('v',23, struct video_capture)	/* Set frame buffer - root only */
+#define VIDIOCGMBUF		_IOR('v',20, struct video_mbuf)		/* Memory map buffer info */
+#define VIDIOCGUNIT		_IOR('v',21, struct video_unit)		/* Get attached units */
+#define VIDIOCGCAPTURE		_IOR('v',22, struct video_capture)	/* Get subcapture */
+#define VIDIOCSCAPTURE		_IOW('v',23, struct video_capture)	/* Set subcapture */
 #define VIDIOCSPLAYMODE		_IOW('v',24, struct video_play_mode)	/* Set output video mode/feature */
 #define VIDIOCSWRITEMODE	_IOW('v',25, int)			/* Set write mode */
 #define VIDIOCGPLAYINFO		_IOR('v',26, struct video_info)		/* Get current playback info from hardware */
 #define VIDIOCSMICROCODE	_IOW('v',27, struct video_code)		/* Load microcode into hardware */
+#define	VIDIOCGVBIFMT		_IOR('v',28, struct vbi_format)		/* Get VBI information */
+#define	VIDIOCSVBIFMT		_IOW('v',29, struct vbi_format)		/* Set VBI information */
+
 
 #define BASE_VIDIOCPRIVATE	192		/* 192-255 are private */
 

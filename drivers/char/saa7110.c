@@ -29,7 +29,7 @@
 #include <linux/videodev.h>
 #include "linux/video_decoder.h"
 
-#define DEBUG(x...)	x		/* remove when no long debugging */
+#define DEBUG(x...)			/* remove when no long debugging */
 
 #define SAA7110_MAX_INPUT	9	/* 6 CVBS, 3 SVHS */
 #define SAA7110_MAX_OUTPUT	0	/* its a decoder only */
@@ -224,7 +224,7 @@ static	const unsigned char initseq[] = {
 	else {
 		saa7110_write(decoder,0x21,0x16);
 		saa7110_write(decoder,0x0D,0x04);
-		printk(KERN_INFO "%s_attach: chip version %x\n", device->name, saa7110_read(decoder));
+		DEBUG(printk(KERN_INFO "%s_attach: chip version %x\n", device->name, saa7110_read(decoder)));
 		saa7110_write(decoder,0x0D,0x06);
 	}
 

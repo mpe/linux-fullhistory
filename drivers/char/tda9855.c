@@ -415,7 +415,7 @@ static int tda9855_command(struct i2c_client *client,
 
 static struct i2c_driver driver = {
         "i2c tda9855 driver",
-        I2C_DRIVERID_TDA9855, /* FIXME */
+        I2C_DRIVERID_TDA9855,
         I2C_DF_NOTIFY,
 	tda9855_probe,
         tda9855_detach,

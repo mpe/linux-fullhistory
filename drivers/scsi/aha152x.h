@@ -2,7 +2,7 @@
 #define _AHA152X_H
 
 /*
- * $Id: aha152x.h,v 1.7 1997/01/19 23:07:11 davem Exp $
+ * $Id: aha152x.h,v 2.0 1999/12/25 15:08:35 fischer Exp fischer $
  */
 
 #if defined(__KERNEL__)
@@ -10,13 +10,16 @@
 #include <linux/blk.h>
 #include "scsi.h"
 #include <asm/io.h>
+#include <linux/version.h>
 
 int aha152x_detect(Scsi_Host_Template *);
 int aha152x_command(Scsi_Cmnd *);
 int aha152x_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha152x_abort(Scsi_Cmnd *);
 int aha152x_release(struct Scsi_Host *shpnt);
-int aha152x_reset(Scsi_Cmnd *, unsigned int);
+int aha152x_device_reset(Scsi_Cmnd *);
+int aha152x_bus_reset(Scsi_Cmnd *);
+int aha152x_host_reset(Scsi_Cmnd *);
 int aha152x_biosparam(Disk *, kdev_t, int*);
 int aha152x_proc_info(char *buffer, char **start, off_t offset, int length, int hostno, int inout);
 
@@ -24,69 +27,79 @@ int aha152x_proc_info(char *buffer, char **start, off_t offset, int length, int 
    (unless we support more than 1 cmd_per_lun this should do) */
 #define AHA152X_MAXQUEUE 7
 
-#define AHA152X_REVID "Adaptec 152x SCSI driver; $Revision: 1.7 $"
+#define AHA152X_REVID "Adaptec 152x SCSI driver; $Revision: 2.0 $"
 
 /* Initial value of Scsi_Host entry */
-#define AHA152X { proc_name:          "a152x",		  \
-                  proc_info:          aha152x_proc_info,  \
-                  name:               AHA152X_REVID,	  \
-                  detect:             aha152x_detect,	  \
-                  command:	      aha152x_command,	  \
-                  queuecommand:       aha152x_queue,	  \
-                  abort:              aha152x_abort,	  \
-                  reset:              aha152x_reset,	  \
-                  release:            aha152x_release,	  \
-                  slave_attach:       0,		  \
-                  bios_param:         aha152x_biosparam,  \
-                  can_queue:          1,		  \
-                  this_id:            7,		  \
-                  sg_tablesize:       SG_ALL,		  \
-                  cmd_per_lun:        1,		  \
-                  present:            0,		  \
-                  unchecked_isa_dma:  0,		  \
-                  use_clustering:     DISABLE_CLUSTERING }
+#define AHA152X { proc_name:			"aha152x",		\
+                  proc_info:			aha152x_proc_info,	\
+                  name:				AHA152X_REVID,		\
+                  detect:			aha152x_detect,		\
+                  command:			aha152x_command,	\
+                  queuecommand:			aha152x_queue,		\
+		  eh_abort_handler:		aha152x_abort,		\
+		  eh_device_reset_handler:	aha152x_device_reset,	\
+		  eh_bus_reset_handler:		aha152x_bus_reset,	\
+		  eh_host_reset_handler:	aha152x_host_reset,	\
+                  release:			aha152x_release,	\
+                  slave_attach:			0,			\
+                  bios_param:			aha152x_biosparam,	\
+                  can_queue:			1,			\
+                  this_id:			7,			\
+                  sg_tablesize:			SG_ALL,			\
+                  cmd_per_lun:			1,			\
+                  present:			0,			\
+                  unchecked_isa_dma:		0,			\
+                  use_clustering:		DISABLE_CLUSTERING,	\
+		  use_new_eh_code:		1 }
 #endif
 
 
 /* port addresses */
-#define SCSISEQ      (shpnt->io_port+0x00)    /* SCSI sequence control */
-#define SXFRCTL0     (shpnt->io_port+0x01)    /* SCSI transfer control 0 */
-#define SXFRCTL1     (shpnt->io_port+0x02)    /* SCSI transfer control 1 */
-#define SCSISIG      (shpnt->io_port+0x03)    /* SCSI signal in/out */
-#define SCSIRATE     (shpnt->io_port+0x04)    /* SCSI rate control */
-#define SELID        (shpnt->io_port+0x05)    /* selection/reselection ID */
-#define SCSIID       SELID                    /* SCSI ID */
-#define SCSIDAT      (shpnt->io_port+0x06)    /* SCSI latched data */
-#define SCSIBUS      (shpnt->io_port+0x07)    /* SCSI data bus */
-#define STCNT0       (shpnt->io_port+0x08)    /* SCSI transfer count 0 */
-#define STCNT1       (shpnt->io_port+0x09)    /* SCSI transfer count 1 */
-#define STCNT2       (shpnt->io_port+0x0a)    /* SCSI transfer count 2 */
-#define SSTAT0       (shpnt->io_port+0x0b)    /* SCSI interrupt status 0 */
-#define SSTAT1       (shpnt->io_port+0x0c)    /* SCSI interrupt status 1 */
-#define SSTAT2       (shpnt->io_port+0x0d)    /* SCSI interrupt status 2 */
-#define SCSITEST     (shpnt->io_port+0x0e)    /* SCSI test control */
-#define SSTAT3       SCSITEST                 /* SCSI interrupt status 3 */
-#define SSTAT4       (shpnt->io_port+0x0f)    /* SCSI status 4 */
-#define SIMODE0      (shpnt->io_port+0x10)    /* SCSI interrupt mode 0 */
-#define SIMODE1      (shpnt->io_port+0x11)    /* SCSI interrupt mode 1 */
-#define DMACNTRL0    (shpnt->io_port+0x12)    /* DMA control 0 */
-#define DMACNTRL1    (shpnt->io_port+0x13)    /* DMA control 1 */
-#define DMASTAT      (shpnt->io_port+0x14)    /* DMA status */
-#define FIFOSTAT     (shpnt->io_port+0x15)    /* FIFO status */
-#define DATAPORT     (shpnt->io_port+0x16)    /* DATA port */
-#define BRSTCNTRL    (shpnt->io_port+0x18)    /* burst control */
-#define PORTA        (shpnt->io_port+0x1a)    /* PORT A */
-#define PORTB        (shpnt->io_port+0x1b)    /* PORT B */
-#define REV          (shpnt->io_port+0x1c)    /* revision */
-#define STACK        (shpnt->io_port+0x1d)    /* stack */
-#define TEST         (shpnt->io_port+0x1e)    /* test register */
+#define SCSISEQ      (HOSTIOPORT0+0x00)    /* SCSI sequence control */
+#define SXFRCTL0     (HOSTIOPORT0+0x01)    /* SCSI transfer control 0 */
+#define SXFRCTL1     (HOSTIOPORT0+0x02)    /* SCSI transfer control 1 */
+#define SCSISIG      (HOSTIOPORT0+0x03)    /* SCSI signal in/out */
+#define SCSIRATE     (HOSTIOPORT0+0x04)    /* SCSI rate control */
+#define SELID        (HOSTIOPORT0+0x05)    /* selection/reselection ID */
+#define SCSIID       SELID                 /* SCSI ID */
+#define SCSIDAT      (HOSTIOPORT0+0x06)    /* SCSI latched data */
+#define SCSIBUS      (HOSTIOPORT0+0x07)    /* SCSI data bus */
+#define STCNT0       (HOSTIOPORT0+0x08)    /* SCSI transfer count 0 */
+#define STCNT1       (HOSTIOPORT0+0x09)    /* SCSI transfer count 1 */
+#define STCNT2       (HOSTIOPORT0+0x0a)    /* SCSI transfer count 2 */
+#define SSTAT0       (HOSTIOPORT0+0x0b)    /* SCSI interrupt status 0 */
+#define SSTAT1       (HOSTIOPORT0+0x0c)    /* SCSI interrupt status 1 */
+#define SSTAT2       (HOSTIOPORT0+0x0d)    /* SCSI interrupt status 2 */
+#define SCSITEST     (HOSTIOPORT0+0x0e)    /* SCSI test control */
+#define SSTAT3       SCSITEST              /* SCSI interrupt status 3 */
+#define SSTAT4       (HOSTIOPORT0+0x0f)    /* SCSI status 4 */
+#define SIMODE0      (HOSTIOPORT1+0x10)    /* SCSI interrupt mode 0 */
+#define SIMODE1      (HOSTIOPORT1+0x11)    /* SCSI interrupt mode 1 */
+#define DMACNTRL0    (HOSTIOPORT1+0x12)    /* DMA control 0 */
+#define DMACNTRL1    (HOSTIOPORT1+0x13)    /* DMA control 1 */
+#define DMASTAT      (HOSTIOPORT1+0x14)    /* DMA status */
+#define FIFOSTAT     (HOSTIOPORT1+0x15)    /* FIFO status */
+#define DATAPORT     (HOSTIOPORT1+0x16)    /* DATA port */
+#define BRSTCNTRL    (HOSTIOPORT1+0x18)    /* burst control */
+#define PORTA        (HOSTIOPORT1+0x1a)    /* PORT A */
+#define PORTB        (HOSTIOPORT1+0x1b)    /* PORT B */
+#define REV          (HOSTIOPORT1+0x1c)    /* revision */
+#define STACK        (HOSTIOPORT1+0x1d)    /* stack */
+#define TEST         (HOSTIOPORT1+0x1e)    /* test register */
+
+#define IO_RANGE        0x20
 
 /* used in aha152x_porttest */
-#define O_PORTA      0x1a                    /* PORT A */
-#define O_PORTB      0x1b                    /* PORT B */
-#define O_DMACNTRL1  0x13                    /* DMA control 1 */
-#define O_STACK      0x1d                    /* stack */
-#define IO_RANGE     0x20
+#define O_PORTA         0x1a               /* PORT A */
+#define O_PORTB         0x1b               /* PORT B */
+#define O_DMACNTRL1     0x13               /* DMA control 1 */
+#define O_STACK         0x1d               /* stack */
+
+/* used in tc1550_porttest */
+#define O_TC_PORTA      0x0a               /* PORT A */
+#define O_TC_PORTB      0x0b               /* PORT B */
+#define O_TC_DMACNTRL1  0x03               /* DMA control 1 */
+#define O_TC_STACK      0x0d               /* stack */
 
 /* bits and bitmasks to ports */
 
@@ -118,33 +131,33 @@ int aha152x_proc_info(char *buffer, char **start, off_t offset, int length, int 
 #define BYTEALIGN    0x02
 
 /* SCSI signal IN */
-#define CDI          0x80
-#define IOI          0x40
-#define MSGI         0x20
-#define ATNI         0x10
-#define SELI         0x08
-#define BSYI         0x04
-#define REQI         0x02
-#define ACKI         0x01
+#define SIG_CDI          0x80
+#define SIG_IOI          0x40
+#define SIG_MSGI         0x20
+#define SIG_ATNI         0x10
+#define SIG_SELI         0x08
+#define SIG_BSYI         0x04
+#define SIG_REQI         0x02
+#define SIG_ACKI         0x01
 
 /* SCSI Phases */
-#define P_MASK       (MSGI|CDI|IOI)
+#define P_MASK       (SIG_MSGI|SIG_CDI|SIG_IOI)
 #define P_DATAO      (0)
-#define P_DATAI      (IOI)
-#define P_CMD        (CDI)
-#define P_STATUS     (CDI|IOI)
-#define P_MSGO       (MSGI|CDI)
-#define P_MSGI       (MSGI|CDI|IOI)
+#define P_DATAI      (SIG_IOI)
+#define P_CMD        (SIG_CDI)
+#define P_STATUS     (SIG_CDI|SIG_IOI)
+#define P_MSGO       (SIG_MSGI|SIG_CDI)
+#define P_MSGI       (SIG_MSGI|SIG_CDI|SIG_IOI)
 
 /* SCSI signal OUT */
-#define CDO          0x80
-#define IOO          0x40
-#define MSGO         0x20
-#define ATNO         0x10
-#define SELO         0x08
-#define BSYO         0x04
-#define REQO         0x02
-#define ACKO         0x01
+#define SIG_CDO          0x80
+#define SIG_IOO          0x40
+#define SIG_MSGO         0x20
+#define SIG_ATNO         0x10
+#define SIG_SELO         0x08
+#define SIG_BSYO         0x04
+#define SIG_REQO         0x02
+#define SIG_ACKO         0x01
 
 /* SCSI rate control */
 #define SXFR         0x70    /* mask */
@@ -315,38 +328,31 @@ typedef union {
 
 /* Some macros to manipulate ports and their bits */
 
-#define SETPORT(PORT, VAL)         outb( (VAL), (PORT) )
-#define SETPORTP(PORT, VAL)        outb_p( (VAL), (PORT) )
-#define SETPORTW(PORT, VAL)        outw( (VAL), (PORT) )
+#define SETPORT(PORT, VAL)	outb( (VAL), (PORT) )
+#define GETPORT(PORT)		inb( PORT )
+#define SETBITS(PORT, BITS)	outb( (inb(PORT) | (BITS)), (PORT) )
+#define CLRBITS(PORT, BITS)	outb( (inb(PORT) & ~(BITS)), (PORT) )
+#define TESTHI(PORT, BITS)	((inb(PORT) & (BITS)) == (BITS))
+#define TESTLO(PORT, BITS)	((inb(PORT) & (BITS)) == 0)
 
-#define GETPORT(PORT)              inb( PORT )
-#define GETPORTW(PORT)             inw( PORT )
+#define SETRATE(RATE)		SETPORT(SCSIRATE,(RATE) & 0x7f)
 
-#define SETBITS(PORT, BITS)        outb( (inb(PORT) | (BITS)), (PORT) )
-#define CLRBITS(PORT, BITS)        outb( (inb(PORT) & ~(BITS)), (PORT) )
-#define CLRSETBITS(PORT, CLR, SET) outb( (inb(PORT) & ~(CLR)) | (SET) , (PORT) )
-
-#define TESTHI(PORT, BITS)         ((inb(PORT) & (BITS)) == BITS)
-#define TESTLO(PORT, BITS)         ((inb(PORT) & (BITS)) == 0)
-
-#ifdef DEBUG_AHA152X
+#if defined(AHA152X_DEBUG)
 enum {
-  debug_skipports = 0x0001,
+  debug_procinfo  = 0x0001,
   debug_queue     = 0x0002,
-  debug_intr      = 0x0004,
-  debug_selection = 0x0008,
-  debug_msgo      = 0x0010,
-  debug_msgi      = 0x0020,
-  debug_status    = 0x0040,
-  debug_cmd       = 0x0080,
-  debug_datai     = 0x0100,
-  debug_datao     = 0x0200,
-  debug_abort     = 0x0400,
-  debug_done      = 0x0800,
-  debug_biosparam = 0x1000,
+  debug_locks     = 0x0004,
+  debug_intr      = 0x0008,
+  debug_selection = 0x0010,
+  debug_msgo      = 0x0020,
+  debug_msgi      = 0x0040,
+  debug_status    = 0x0080,
+  debug_cmd       = 0x0100,
+  debug_datai     = 0x0200,
+  debug_datao     = 0x0400,
+  debug_eh	  = 0x0800,
+  debug_done      = 0x1000,
   debug_phases    = 0x2000,
-  debug_queues    = 0x4000,
-  debug_reset     = 0x8000,
 };
 #endif
 

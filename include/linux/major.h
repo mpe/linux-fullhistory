@@ -117,6 +117,8 @@
 
 #define AURORA_MAJOR 79
 
+#define PHONE_MAJOR	100
+
 #define RTF_MAJOR	150
 #define RAW_MAJOR	162
 

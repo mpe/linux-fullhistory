@@ -6,7 +6,7 @@
  * Status:	  Experimental.
  * Author:	  Dag Brattli <dagb@cs.uit.no>
  * Created at:	  Sun Aug  3 13:49:59 1997
- * Modified at:   Thu Dec 16 00:47:08 1999
+ * Modified at:   Tue Dec 21 21:51:23 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  serial.c by Linus Torvalds 
  * 
@@ -218,9 +218,6 @@ irport_open(int i, unsigned int iobase, unsigned int irq)
 		ERROR(__FUNCTION__ "(), dev_alloc() failed!\n");
 		return NULL;
 	}
-	/* dev_alloc doesn't clear the struct */
-	memset(((__u8*)dev)+sizeof(char*),0,sizeof(struct net_device)-sizeof(char*));
-
 	self->netdev = dev;
 
 	/* May be overridden by piggyback drivers */
@@ -266,8 +263,6 @@ int irport_close(struct irport_cb *self)
 		rtnl_lock();
 		unregister_netdevice(self->netdev);
 		rtnl_unlock();
-		/* Must free the old-style 2.2.x device */
-		kfree(self->netdev);
 	}
 
 	/* Release the IO-port that this driver is using */

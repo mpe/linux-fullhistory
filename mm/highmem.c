@@ -331,7 +331,7 @@ repeat_page:
 	} else
 		bh->b_end_io = bounce_end_io_read;
 	bh->b_dev_id = (void *)bh_orig;
-	bh->b_rsector = -1;
+	bh->b_rsector = bh_orig->b_rsector;
 	memset(&bh->b_wait, -1, sizeof(bh->b_wait));
 	bh->b_kiobuf = NULL;
 

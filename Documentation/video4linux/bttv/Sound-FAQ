@@ -17,11 +17,11 @@ telling which card type is used.  Like this one:
 
 You should verify this is correct.  If it is'nt, you have to pass the
 correct board type as insmod argument, "insmod bttv card=2" for
-example.  The file MODULES in the driver directory has a list of valid
-arguments.  If your card is'nt listed there, you might check the
-source code for new entries which are not listed yet.  If there is'nt
-one for your card, you can check if one of the existing entries does
-work for you (just trial and error...).
+example.  The file CARDLIST has a list of valid arguments for card.
+If your card is'nt listed there, you might check the source code for
+new entries which are not listed yet.  If there is'nt one for your
+card, you can check if one of the existing entries does work for you
+(just trial and error...).
 
 Some boards have an extra processor for sound to do stereo decoding
 and other nice features.  The msp34xx chips are used by Hauppauge for
@@ -78,13 +78,19 @@ What you have to do is figure out the correct values for gpiomask and
 the audiomux array.  If you have Windows and the drivers four your
 card installed, you might to check out if you can read these registers
 values used by the windows driver.  A tool to do this is available
-from ftp://telepresence.dmem.strath.ac.uk/pub/bt848/winutil
-If you hav'nt Windows installed, this is a trial and error game...
+from ftp://telepresence.dmem.strath.ac.uk/pub/bt848/winutil.  There is
+some #ifdef'ed code in bttv.c (search for "new card") which prints
+these values before board initialization, this might help too: boot
+win, start tv app, softboot (loadlin) into linux and load bttv with
+this enabled.  If you hav'nt Windows installed, this is a trial and
+error game...
 
 Good luck,
 
   Gerd
 
 
-PS: If you have a new working entry, mail it to Ralph.  So it can be
-    included into next driver version...
+PS: If you have a new working entry, mail it to me.
+
+-- 
+Gerd Knorr <kraxel@goldbach.in-berlin.de>

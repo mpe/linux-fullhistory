@@ -791,7 +791,7 @@ static int __init init_ext2_fs(void)
         return register_filesystem(&ext2_fs_type);
 }
 
-static int __exit exit_ext2_fs(void)
+static void __exit exit_ext2_fs(void)
 {
 	unregister_filesystem(&ext2_fs_type);
 }

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Thu Dec 16 00:54:27 1999
+ * Modified at:   Tue Dec 21 21:51:54 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -113,7 +113,6 @@ static int  pc87108_pio_write(int iobase, __u8 *buf, int len, int fifo_size);
 static void pc87108_dma_write(struct pc87108 *self, int iobase);
 static void pc87108_change_speed(struct pc87108 *self, __u32 baud);
 static void pc87108_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void pc87108_wait_until_sent(struct pc87108 *self);
 static int  pc87108_is_receiving(struct pc87108 *self);
 static int  pc87108_read_dongle_id (int iobase);
 static void pc87108_init_dongle_interface (int iobase, int dongle_id);
@@ -257,9 +256,6 @@ static int pc87108_open(int i, unsigned int iobase, unsigned int board_addr,
 		ERROR(__FUNCTION__ "(), dev_alloc() failed!\n");
 		return -ENOMEM;
 	}
-	/* dev_alloc doesn't clear the struct, so lets do a little hack */
-	memset(((__u8*)dev)+sizeof(char*),0,sizeof(struct net_device)-sizeof(char*));
-
 	dev->priv = (void *) self;
 	self->netdev = dev;
 
@@ -308,8 +304,6 @@ static int pc87108_close(struct pc87108 *self)
 		rtnl_lock();
 		unregister_netdevice(self->netdev);
 		rtnl_unlock();
-		/* Must free the old-style 2.2.x device */
-		kfree(self->netdev);
 	}
 
 	/* Release the PORT that this driver is using */
@@ -666,7 +660,7 @@ static void pc87108_change_speed(struct pc87108 *self, __u32 speed)
 	__u8 bank;
 	int iobase; 
 
-	IRDA_DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "(), speed=%d\n", speed);
 
 	ASSERT(self != NULL, return;);
 
@@ -819,11 +813,11 @@ static int pc87108_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	     		pc87108_dma_write(self, iobase);
 		}
         } else {
+		self->tx_buff.data = self->tx_buff.head;
+
 	        self->tx_buff.len = async_wrap_skb(skb, self->tx_buff.data, 
 						   self->tx_buff.truesize);
-		
-		self->tx_buff.data = self->tx_buff.head;
-		
+				
 		/* Add interrupt on tx low level (will fire immediately) */
 		switch_bank(iobase, BANK0);
 		outb(IER_TXLDL_IE, iobase+IER);
@@ -992,12 +986,13 @@ static int pc87108_dma_receive(struct pc87108 *self)
 	switch_bank(iobase, BANK0);
 	outb(inb(iobase+MCR) & ~MCR_DMA_EN, iobase+MCR);
 
+	self->rx_buff.data = self->rx_buff.head;
+
 	setup_dma(self->io.dma, self->rx_buff.data, 
 		  self->rx_buff.truesize, DMA_MODE_READ);
 	
 	/* driver->media_busy = FALSE; */
 	self->io.direction = IO_RECV;
-	self->rx_buff.data = self->rx_buff.head;
 
 	/* Reset Rx FIFO. This will also flush the ST_FIFO */
 	outb(FCR_RXTH|FCR_TXTH|FCR_RXSR|FCR_FIFO_EN, iobase+FCR);
@@ -1163,9 +1158,7 @@ static void pc87108_pio_receive(struct pc87108 *self)
 	/*  Receive all characters in Rx FIFO */
 	do {
 		byte = inb(iobase+RXD);
-		async_unwrap_char(self->netdev, &self->stats, &self->rx_buff, 
-				  byte);
-
+		async_unwrap_char(self->netdev, &self->stats, &self->rx_buff, byte);
 	} while (inb(iobase+LSR) & LSR_RXDA); /* Data available */	
 }
 
@@ -1215,7 +1208,14 @@ static __u8 pc87108_sir_interrupt(struct pc87108 *self, int eir)
 	}
 	/* Check if transmission has completed */
 	if (eir & EIR_TXEMP_EV) {
-		
+		/* Check if we need to change the speed? */
+		if (self->new_speed) {
+			IRDA_DEBUG(2, __FUNCTION__ 
+				   "(), Changing speed!\n");
+			pc87108_change_speed(self, self->new_speed);
+			self->new_speed = 0;
+		}
+
 		/* Turn around and get ready to receive some data */
 		self->io.direction = IO_RECV;
 		new_ier |= IER_RXHDL_IE;
@@ -1350,19 +1350,6 @@ static void pc87108_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	outb(bsr, iobase+BSR);   /* Restore bank register */
 
 	dev->interrupt = 0;
-}
-
-/*
- * Function pc87108_wait_until_sent (self)
- *
- *    This function should put the current thread to sleep until all data 
- *    have been sent, so it is safe to f.eks. change the speed.
- */
-static void pc87108_wait_until_sent(struct pc87108 *self)
-{
-	/* Just delay 60 ms */
-	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(MSECS_TO_JIFFIES(60));
 }
 
 /*

@@ -1,8 +1,8 @@
 /* eth16i.c An ICL EtherTeam 16i and 32 EISA ethernet driver for Linux
    
-   Written 1994-1998 by Mika Kuoppala
+   Written 1994-1999 by Mika Kuoppala
    
-   Copyright (C) 1994-1998 by Mika Kuoppala
+   Copyright (C) 1994-1999 by Mika Kuoppala
    Based on skeleton.c and heavily on at1700.c by Donald Becker
 
    This software may be used and distributed according to the terms
@@ -16,7 +16,7 @@
 	  (Uses true 32 bit transfers rather than 16i compability mode)
 
    Example Module usage:
-        insmod eth16i.o ioaddr=0x2a0 mediatype=bnc
+        insmod eth16i.o io=0x2a0 mediatype=bnc
 
 	mediatype can be one of the following: bnc,tp,dix,auto,eprom
 
@@ -118,6 +118,12 @@
 				Now more shallow reset is made on
 				close.
 
+   0.34         29.06-99	Fixed one bad #ifdef.
+				Changed ioaddr -> io for consistency
+
+   0.35         01.07-99        transmit,-receive bytes were never
+                                updated in stats. 
+
    Bugs:
 	In some cases the media interface autoprobing code doesn't find 
 	the correct interface type. In this case you can 
@@ -137,7 +143,7 @@
 */
 
 static char *version = 
-    "eth16i.c: v0.33 10-09-98 Mika Kuoppala (miku@iki.fi)\n";
+    "eth16i.c: v0.35 01-Jul-1999 Mika Kuoppala (miku@iki.fi)\n";
 
 #include <linux/module.h>
 
@@ -400,7 +406,8 @@ struct eth16i_local {
 	unsigned short    tx_queue_len;         
 	unsigned int      tx_buf_size;
 	unsigned long     open_time;
-	unsigned long     tx_buffered_packets;  
+	unsigned long     tx_buffered_packets;
+	unsigned long     tx_buffered_bytes;
 	unsigned long     col_16;
 };
 
@@ -1147,9 +1154,9 @@ static int eth16i_tx(struct sk_buff *skb, struct net_device *dev)
 			}
 
 			lp->tx_buffered_packets++;
+			lp->tx_buffered_bytes = length;
 			lp->tx_queue++;
 			lp->tx_queue_len += length + 2;
-			
 		}
 		
 		lp->tx_buf_busy = 0;
@@ -1260,6 +1267,7 @@ static void eth16i_rx(struct net_device *dev)
 			skb->protocol=eth_type_trans(skb, dev);
 			netif_rx(skb);
 			lp->stats.rx_packets++;
+			lp->stats.rx_bytes += pkt_len;
 
 			if( eth16i_debug > 5 ) {
 				int i;
@@ -1368,6 +1376,7 @@ static void eth16i_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 		if(status & TX_DONE) {         /* The transmit has been done */
 			lp->stats.tx_packets = lp->tx_buffered_packets;
+			lp->stats.tx_bytes += lp->tx_buffered_bytes;
 			lp->col_16 = 0;		   
 
 			if(lp->tx_queue) {           /* Is there still packets ? */
@@ -1500,7 +1509,7 @@ static struct net_device dev_eth16i[MAX_ETH16I_CARDS] = {
 	},
 };
 
-static int ioaddr[MAX_ETH16I_CARDS] = { 0, };
+static int io[MAX_ETH16I_CARDS] = { 0, };
 #if 0
 static int irq[MAX_ETH16I_CARDS] = { 0, };
 #endif
@@ -1511,8 +1520,8 @@ static int debug = -1;
 MODULE_AUTHOR("Mika Kuoppala <miku@iki.fi>");
 MODULE_DESCRIPTION("ICL EtherTeam 16i/32 driver");
 
-MODULE_PARM(ioaddr, "1-" __MODULE_STRING(MAX_ETH16I_CARDS) "i");
-MODULE_PARM_DESC(ioaddr, "eth16i io base address");
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_ETH16I_CARDS) "i");
+MODULE_PARM_DESC(io, "eth16i io base address");
 
 #if 0
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_ETH16I_CARDS) "i");
@@ -1536,7 +1545,7 @@ int init_module(void)
 	
 		dev->name = namelist + (NAMELEN*this_dev);
 		dev->irq = 0; /* irq[this_dev]; */
-		dev->base_addr = ioaddr[this_dev];
+		dev->base_addr = io[this_dev];
 		dev->init = eth16i_probe;
 
 	        if(debug != -1)
@@ -1547,7 +1556,7 @@ int init_module(void)
 
 		dev->if_port = eth16i_parse_mediatype(mediatype[this_dev]);
 
-		if(ioaddr[this_dev] == 0)
+		if(io[this_dev] == 0)
 		{
 			if(this_dev != 0) break; /* Only autoprobe 1st one */
 
@@ -1557,7 +1566,7 @@ int init_module(void)
 		if(register_netdev(dev) != 0)
 		{
 			printk(KERN_WARNING "eth16i.c No Eth16i card found (i/o = 0x%x).\n",
-			       ioaddr[this_dev]);
+			       io[this_dev]);
 	    
 			if(found != 0) return 0;
 			return -ENXIO;

@@ -34,7 +34,6 @@ static int yenta_inquire(pci_socket_t *socket, socket_cap_t *cap)
 static int yenta_get_status(pci_socket_t *socket, unsigned int *value)
 {
 	u32 state = cb_readl(socket, CB_SOCKET_STATE);
-	u8 status;
 	unsigned int val;
 
 	/* Convert from Yenta status to old-style status */
@@ -46,10 +45,12 @@ static int yenta_get_status(pci_socket_t *socket, unsigned int *value)
 	val |= (state & CB_XVCARD) ? SS_XVCARD : 0;
 
 	/* Get the old compatibility status too.. */
-	status = exca_readb(socket, I365_STATUS);
-	val |= (status & I365_CS_WRPROT) ? SS_WRPROT : 0;
-	val |= (status & I365_CS_READY) ? SS_READY : 0;
-	val |= (status & I365_CS_POWERON) ? SS_POWERON : 0;
+	if (!(state & CB_CBCARD)) {
+		u8 status = exca_readb(socket, I365_STATUS);
+		val |= (status & I365_CS_WRPROT) ? SS_WRPROT : 0;
+		val |= (status & I365_CS_READY) ? SS_READY : 0;
+		val |= (status & I365_CS_POWERON) ? SS_POWERON : 0;
+	}
 
 printk("yenta_get_status(%p)= %x\n", socket, val);
 
@@ -120,6 +121,9 @@ printk("yenta_set_socket(%p, %d, %d, %x)\n", socket, state->Vcc, state->Vpp, sta
 	bridge &= ~CB_BRIDGE_CRST;
 	bridge |= (state->flags & SS_RESET) ? CB_BRIDGE_CRST : 0;
 	config_writew(socket, CB_BRIDGE_CONTROL, bridge);
+
+	exca_writeb(socket, I365_GBLCTL, 0x00);
+	exca_writeb(socket, I365_GENCTL, 0x00);
 
 	/* Set the IO interrupt and socket state */
 	reg = state->io_irq;
@@ -451,7 +455,11 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket)
 
 static void yenta_get_socket_capabilities(pci_socket_t *socket)
 {
-	socket->cap.features = SS_CAP_PAGE_REGS | SS_CAP_PCCARD | SS_CAP_CARDBUS;
+	/* MAGIC NUMBERS! Fixme */
+	config_writeb(socket, PCI_LATENCY_TIMER, 168);
+	config_writeb(socket, PCI_SEC_LATENCY_TIMER, 176);
+
+	socket->cap.features |= SS_CAP_PAGE_REGS | SS_CAP_PCCARD | SS_CAP_CARDBUS;
 	socket->cap.irq_mask = yenta_probe_irq(socket);
 	if (socket->cb_irq && socket->cb_irq < 16)
 		socket->cap.irq_mask |= 1 << socket->cb_irq;

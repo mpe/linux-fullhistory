@@ -17,8 +17,8 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		     */
 /* ------------------------------------------------------------------------- 
-static char rcsid[] = "$Id: i2c-velleman.c,v 1.13 1999/10/08 14:25:11 frodo Exp $";
-  ------------------------------------------------------------------------- */
+
+/* $Id: i2c-velleman.c,v 1.14 1999/12/21 23:45:58 frodo Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/ioport.h>

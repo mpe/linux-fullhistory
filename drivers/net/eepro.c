@@ -747,7 +747,7 @@ static char irqrmap[] = {-1,-1,0,1,-1,2,-1,-1,-1,0,3,4,-1,-1,-1,-1};
 static char irqrmap2[] = {-1,-1,4,0,1,2,-1,3,-1,4,5,6,7,-1,-1,-1};
 static int	eepro_grab_irq(struct net_device *dev)
 {
-	int irqlist[] = { 3, 4, 5, 7, 9, 10, 11, 12 };
+	int irqlist[] = { 3, 4, 5, 7, 9, 10, 11, 12, 0 };
 	int *irqp = irqlist, temp_reg, ioaddr = dev->base_addr;
 	
 	outb(BANK1_SELECT, ioaddr); /* be CAREFUL, BANK 1 now */

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Oct  9 09:22:27 1999
- * Modified at:   Sun Dec 12 12:24:32 1999
+ * Modified at:   Tue Dec 21 21:53:45 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -419,7 +419,7 @@ int irda_device_setup(struct net_device *dev)
         dev->hard_header_len = 0;
         dev->addr_len        = 0;
 
-	/* dev->new_style       = 1; */
+	dev->new_style       = 1;
 	/* dev->destructor      = irda_device_destructor; */
 
         dev->type            = ARPHRD_IRDA;

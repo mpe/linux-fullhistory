@@ -18,9 +18,10 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		*/
 /* --------------------------------------------------------------------	*/
-/* $Id: i2c-pcf8584.h,v 1.1 1999/07/18 14:01:33 frodo Exp $ */
 
 /* With some changes from Frodo Looijaard <frodol@dds.nl> */
+
+/* $Id: i2c-pcf8584.h,v 1.2 1999/12/21 23:45:58 frodo Exp $ */
 
 #ifndef I2C_PCF8584_H
 #define I2C_PCF8584_H 1

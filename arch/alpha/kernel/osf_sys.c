@@ -31,6 +31,9 @@
 #include <linux/shm.h>
 #include <linux/poll.h>
 #include <linux/file.h>
+#include <linux/types.h>
+#include <linux/ipc.h>
+#include <linux/shm.h>
 
 #include <asm/fpu.h>
 #include <asm/io.h>
@@ -38,6 +41,7 @@
 #include <asm/system.h>
 #include <asm/sysinfo.h>
 #include <asm/hwrpb.h>
+#include <asm/processor.h>
 
 extern int do_mount(kdev_t, const char *, const char *, char *, int, void *);
 extern int do_pipe(int *);
@@ -1441,4 +1445,104 @@ asmlinkage int sys_old_adjtimex(struct timex32 *txc_p)
 	  return -EFAULT;
 
 	return ret;
+}
+
+struct shmid_ds_old {
+	struct ipc_perm		shm_perm;	/* operation perms */
+	int			shm_segsz;	/* size of segment (bytes) */
+	__kernel_time_t		shm_atime;	/* last attach time */
+	__kernel_time_t		shm_dtime;	/* last detach time */
+	__kernel_time_t		shm_ctime;	/* last change time */
+	__kernel_ipc_pid_t	shm_cpid;	/* pid of creator */
+	__kernel_ipc_pid_t	shm_lpid;	/* pid of last operator */
+	unsigned short		shm_nattch;	/* no. of current attaches */
+	unsigned short 		shm_unused;	/* compatibility */
+	void 			*shm_unused2;	/* ditto - used by DIPC */
+	void			*shm_unused3;	/* unused */
+};
+
+struct  shminfo_old {
+	int shmmax;
+	int shmmin;
+	int shmmni;
+	int shmseg;
+	int shmall;
+};
+
+asmlinkage long sys_shmctlold(int shmid, int cmd, struct shmid_ds_old *buf)
+{
+	struct shmid_ds arg;
+	long ret;
+	mm_segment_t old_fs;
+
+	if (cmd == IPC_SET) {
+		struct shmid_ds_old tbuf;
+
+		if(copy_from_user (&tbuf, buf, sizeof(*buf)))
+			return -EFAULT;
+		arg.shm_perm = tbuf.shm_perm;
+		arg.shm_segsz = tbuf.shm_segsz;
+		arg.shm_atime = tbuf.shm_atime;
+		arg.shm_dtime = tbuf.shm_dtime;
+		arg.shm_ctime = tbuf.shm_ctime;
+		arg.shm_cpid = tbuf.shm_cpid;
+		arg.shm_lpid = tbuf.shm_lpid;
+		arg.shm_nattch = tbuf.shm_nattch;
+		arg.shm_unused = tbuf.shm_unused;
+		arg.shm_unused2 = tbuf.shm_unused2;
+		arg.shm_unused3 = tbuf.shm_unused3;
+	}
+	old_fs = get_fs ();
+	set_fs (KERNEL_DS);
+	ret = sys_shmctl(shmid, cmd, &arg);
+	set_fs (old_fs);
+	if (ret < 0)
+		return(ret);
+	switch(cmd) {
+		case IPC_INFO:
+		{
+			struct shminfo *tbuf = (struct shminfo *) &arg;
+			struct shminfo_old shminfo_oldst;
+
+			shminfo_oldst.shmmax = (tbuf->shmmax > INT_MAX ?
+						INT_MAX : tbuf->shmmax);
+			shminfo_oldst.shmmin = tbuf->shmmin;
+			shminfo_oldst.shmmni = tbuf->shmmni;
+			shminfo_oldst.shmseg = tbuf->shmseg;
+			shminfo_oldst.shmall = tbuf->shmall;
+			if (copy_to_user(buf, &shminfo_oldst, 
+						sizeof(struct shminfo_old)))
+				return -EFAULT;
+			return(ret);
+		}
+		case SHM_INFO:
+		{
+			struct shm_info *tbuf = (struct shm_info *) &arg;
+
+			if (copy_to_user (buf, tbuf, sizeof(struct shm_info)))
+				return -EFAULT;
+			return(ret);
+		}
+		case SHM_STAT:
+		case IPC_STAT:
+		{
+			struct shmid_ds_old tbuf;
+
+			tbuf.shm_perm = arg.shm_perm;
+			tbuf.shm_segsz = arg.shm_segsz;
+			tbuf.shm_atime = arg.shm_atime;
+			tbuf.shm_dtime = arg.shm_dtime;
+			tbuf.shm_ctime = arg.shm_ctime;
+			tbuf.shm_cpid = arg.shm_cpid;
+			tbuf.shm_lpid = arg.shm_lpid;
+			tbuf.shm_nattch = arg.shm_nattch;
+			tbuf.shm_unused = arg.shm_unused;
+			tbuf.shm_unused2 = arg.shm_unused2;
+			tbuf.shm_unused3 = arg.shm_unused3;
+			if (copy_to_user (buf, &tbuf, sizeof(tbuf)))
+				return -EFAULT;
+			return(ret);
+		}
+	}
+	return(ret);
 }

@@ -702,8 +702,6 @@ toshoboe_close (struct toshoboe_cb *self)
 	  rtnl_lock();
 	  unregister_netdevice(self->netdev);
 	  rtnl_unlock();
-	  /* Must free the old-style 2.2.x device */
-	  kfree(self->netdev);
   }
 
   kfree (self->taskfilebuf);
@@ -872,8 +870,6 @@ toshoboe_open (struct pci_dev *pci_dev)
 	  ERROR(__FUNCTION__ "(), dev_alloc() failed!\n");
 	  return -ENOMEM;
   }
-  /* dev_alloc doesn't clear the struct, so lets do a little hack */
-  memset(((__u8*)dev)+sizeof(char*),0,sizeof(struct net_device)-sizeof(char*));
 
   dev->priv = (void *) self;
   self->netdev = dev;

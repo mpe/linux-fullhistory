@@ -176,6 +176,7 @@ static void state_s_disconnect(struct iriap_cb *self, IRIAP_EVENT event,
 	switch (event) {
 	case IAP_CALL_REQUEST_GVBC:
 		iriap_next_client_state(self, S_CONNECTING);
+		ASSERT(self->skb == NULL, return;);
 		self->skb = skb;
 		ret = irlmp_connect_request(self->lsap, LSAP_IAS, 
 					    self->saddr, self->daddr, 

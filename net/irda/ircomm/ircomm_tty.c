@@ -1115,10 +1115,16 @@ static int ircomm_tty_data_indication(void *instance, void *sap,
 	/* 
 	 * If we receive data when hardware is stopped then something is wrong.
 	 * We try to poll the peers line settings to check if we are up todate.
+	 * Devices like WinCE can do this, and since they don't send any 
+	 * params, we can just as well declare the hardware for running.
 	 */
 	if (self->tty->hw_stopped && (self->flow == FLOW_START)) {
 		IRDA_DEBUG(0, __FUNCTION__ "(), polling for line settings!\n");
 		ircomm_param_request(self, IRCOMM_POLL, TRUE);
+
+		/* We can just as well declare the hardware for running */
+		ircomm_tty_send_initial_parameters(self);
+		ircomm_tty_link_established(self);
 	}
 
 	/* 

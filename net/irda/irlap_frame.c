@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 10:27:26 1997
- * Modified at:   Tue Dec 14 09:45:25 1999
+ * Modified at:   Tue Dec 21 11:19:19 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -66,7 +66,7 @@ static inline void irlap_insert_info(struct irlap_cb *self,
 	self->mtt_required = 0;
 	
 	/* 
-	 * Delay equals negotiated BOFs count plus the number of BOFs to 
+	 * Delay equals negotiated BOFs count, plus the number of BOFs to 
 	 * force the negotiated minimum turnaround time 
 	 */
 	cb->xbofs = self->bofs_count+self->xbofs_delay;
@@ -571,6 +571,29 @@ void irlap_send_rr_frame(struct irlap_cb *self, int command)
 }
 
 /*
+ * Function irlap_send_rd_frame (self)
+ *
+ *    Request disconnect. Used by a secondary station to request the 
+ *    disconnection of the link.
+ */
+void irlap_send_rd_frame(struct irlap_cb *self)
+{
+	struct sk_buff *skb;
+	__u8 *frame;
+
+	skb = dev_alloc_skb(16);
+	if (!skb)
+		return;
+	
+	frame = skb_put(skb, 2);
+	
+	frame[0] = self->caddr;
+	frame[1] = RD_RSP | PF_BIT;
+
+	irlap_queue_xmit(self, skb);
+}
+
+/*
  * Function irlap_recv_rr_frame (skb, info)
  *
  *    Received RR (Receive Ready) frame from peer station, no harm in
@@ -625,16 +648,56 @@ void irlap_send_frmr_frame( struct irlap_cb *self, int command)
  *
  */
 static void irlap_recv_rnr_frame(struct irlap_cb *self, struct sk_buff *skb, 
-				 struct irlap_info *info) 
+				 struct irlap_info *info, int command) 
 {
-	ASSERT(skb != NULL, return;);
-	ASSERT(info != NULL, return;);
-
 	info->nr = skb->data[1] >> 5;
 
 	IRDA_DEBUG(4, __FUNCTION__ "(), nr=%d, %ld\n", info->nr, jiffies);
 
-	irlap_do_event(self, RECV_RNR_FRAME, skb, info);
+	if (command)
+		irlap_do_event(self, RECV_RNR_CMD, skb, info);
+	else
+		irlap_do_event(self, RECV_RNR_RSP, skb, info);
+}
+
+static void irlap_recv_rej_frame(struct irlap_cb *self, struct sk_buff *skb, 
+				 struct irlap_info *info, int command)
+{
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
+
+	info->nr = skb->data[1] >> 5;
+	
+	/* Check if this is a command or a response frame */
+	if (command)
+		irlap_do_event(self, RECV_REJ_CMD, skb, info);
+	else
+		irlap_do_event(self, RECV_REJ_RSP, skb, info);
+}
+
+static void irlap_recv_srej_frame(struct irlap_cb *self, struct sk_buff *skb, 
+				  struct irlap_info *info, int command)
+{
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
+
+	info->nr = skb->data[1] >> 5;
+	
+	/* Check if this is a command or a response frame */
+	if (command)
+		irlap_do_event(self, RECV_SREJ_CMD, skb, info);
+	else
+		irlap_do_event(self, RECV_SREJ_RSP, skb, info);
+}
+
+static void irlap_recv_disc_frame(struct irlap_cb *self, struct sk_buff *skb, 
+				  struct irlap_info *info, int command)
+{
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
+
+	/* Check if this is a command or a response frame */
+	if (command)
+		irlap_do_event(self, RECV_DISC_CMD, skb, info);
+	else
+		irlap_do_event(self, RECV_RD_RSP, skb, info);
 }
 
 /*
@@ -643,8 +706,9 @@ static void irlap_recv_rnr_frame(struct irlap_cb *self, struct sk_buff *skb,
  *    Received UA (Unnumbered Acknowledgement) frame
  *
  */
-static void irlap_recv_ua_frame(struct irlap_cb *self, struct sk_buff *skb, 
-				struct irlap_info *info) 
+static inline void irlap_recv_ua_frame(struct irlap_cb *self, 
+				       struct sk_buff *skb, 
+				       struct irlap_info *info) 
 {
 	irlap_do_event(self, RECV_UA_RSP, skb, info);
 }
@@ -691,7 +755,7 @@ void irlap_send_data_primary(struct irlap_cb *self, struct sk_buff *skb)
 
 		irlap_send_i_frame( self, tx_skb, CMD_FRAME);
 	} else {
-		IRDA_DEBUG( 4, __FUNCTION__ "(), sending unreliable frame\n");
+		IRDA_DEBUG(4, __FUNCTION__ "(), sending unreliable frame\n");
 		irlap_send_ui_frame(self, skb, self->caddr, CMD_FRAME);
 		self->window -= 1;
 	}
@@ -872,13 +936,11 @@ void irlap_send_data_secondary(struct irlap_cb *self, struct sk_buff *skb)
 /*
  * Function irlap_resend_rejected_frames (nr)
  *
- *    Resend frames which has not been acknowledged. TODO: check that the 
- *    traversal of the list is atomic, i.e that no-one tries to insert or
- *    remove frames from the list while we travers it!
- * 
- *    FIXME: It is not safe to traverse a this list without locking it!
+ *    Resend frames which has not been acknowledged. Should be safe to 
+ *    traverse the list without locking it since this function will only be 
+ *    called from interrupt context (BH)
  */
-void irlap_resend_rejected_frames(struct irlap_cb *self, int command) 
+void irlap_resend_rejected_frames(struct irlap_cb *self, int command)
 {
 	struct sk_buff *tx_skb;
 	struct sk_buff *skb;
@@ -890,10 +952,9 @@ void irlap_resend_rejected_frames(struct irlap_cb *self, int command)
 	/* Initialize variables */
 	skb = tx_skb = NULL;
 
-	/* 
-	 *  Resend all unacknowledged frames 
-	 */
 	count = skb_queue_len(&self->wx_list);
+
+	/*  Resend unacknowledged frame(s) */
 	skb = skb_peek(&self->wx_list);
 	while (skb != NULL) {
 		irlap_wait_min_turn_around(self, &self->qos_tx);
@@ -903,13 +964,9 @@ void irlap_resend_rejected_frames(struct irlap_cb *self, int command)
 		 */
 		/* tx_skb = skb_clone( skb, GFP_ATOMIC); */
 		tx_skb = skb_copy(skb, GFP_ATOMIC);
-		if (tx_skb == NULL) {
-			/* Unlink tx_skb from list */
-			tx_skb->next = tx_skb->prev = NULL;
-			tx_skb->list = NULL;
-		
-			dev_kfree_skb(skb);
-			return;	
+		if (!tx_skb) {
+			IRDA_DEBUG(0, __FUNCTION__ "(), unable to copy\n");
+			return;
 		}
 		/* Unlink tx_skb from list */
 		tx_skb->next = tx_skb->prev = NULL;
@@ -938,16 +995,15 @@ void irlap_resend_rejected_frames(struct irlap_cb *self, int command)
 		 *  If our skb is the last buffer in the list, then
 		 *  we are finished, if not, move to the next sk-buffer
 		 */
-		if (skb == skb_peek_tail( &self->wx_list))
+		if (skb == skb_peek_tail(&self->wx_list))
 			skb = NULL;
 		else
 			skb = skb->next;
 	}
+#if 0 /* Not yet */
 	/* 
 	 *  We can now fill the window with additinal data frames
 	 */
-	return; /* Skip this for now, DB */
-
 	while (skb_queue_len( &self->txq) > 0) {
 		
 		IRDA_DEBUG(0, __FUNCTION__ "(), sending additional frames!\n");
@@ -968,6 +1024,52 @@ void irlap_resend_rejected_frames(struct irlap_cb *self, int command)
 				irlap_send_data_primary_poll(self, skb);
 			}
 		}
+	}
+#endif
+}
+
+void irlap_resend_rejected_frame(struct irlap_cb *self, int command)
+{
+	struct sk_buff *tx_skb;
+	struct sk_buff *skb;
+
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LAP_MAGIC, return;);
+
+	/* Initialize variables */
+	skb = tx_skb = NULL;
+
+	/*  Resend unacknowledged frame(s) */
+	skb = skb_peek(&self->wx_list);
+	if (skb != NULL) {
+		irlap_wait_min_turn_around(self, &self->qos_tx);
+
+		/* We copy the skb to be retransmitted since we will have to 
+		 * modify it. Cloning will confuse packet sniffers 
+		 */
+		/* tx_skb = skb_clone( skb, GFP_ATOMIC); */
+		tx_skb = skb_copy(skb, GFP_ATOMIC);
+		if (!tx_skb) {
+			IRDA_DEBUG(0, __FUNCTION__ "(), unable to copy\n");
+			return;	
+		}
+		/* Unlink tx_skb from list */
+		tx_skb->next = tx_skb->prev = NULL;
+		tx_skb->list = NULL;
+
+		/*
+		 *  make sure the skb->sk accounting of memory usage is sane
+		 */
+		if (skb->sk != NULL)
+			skb_set_owner_w(tx_skb, skb->sk);
+
+		/* Clear old Nr field + poll bit */
+		tx_skb->data[1] &= 0x0f;
+
+		/*  Set poll/final bit */
+		tx_skb->data[1] |= PF_BIT; /* Set p/f bit */
+	      	
+		irlap_send_i_frame(self, tx_skb, command);
 	}
 }
 
@@ -1069,7 +1171,7 @@ static void irlap_recv_frmr_frame(struct irlap_cb *self, struct sk_buff *skb,
 	frame = skb->data;
 
 	info->nr = frame[2] >> 5;          /* Next to receive */
-	info->pf = frame[2] & PF_BIT;        /* Final bit */
+	info->pf = frame[2] & PF_BIT;      /* Final bit */
 	info->ns = (frame[2] >> 1) & 0x07; /* Next to send */
 
 	w = frame[3] & 0x01;
@@ -1145,8 +1247,8 @@ void irlap_send_test_frame(struct irlap_cb *self, __u32 daddr,
  *    Receive a test frame
  *
  */
-void irlap_recv_test_frame(struct irlap_cb *self, struct sk_buff *skb, 
-			   struct irlap_info *info, int command)
+static void irlap_recv_test_frame(struct irlap_cb *self, struct sk_buff *skb, 
+				  struct irlap_info *info, int command)
 {
 	struct test_frame *frame;
 
@@ -1243,15 +1345,13 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 			irlap_recv_rr_frame(self, skb, &info, command);
 			break;
 		case RNR:
-			irlap_recv_rnr_frame(self, skb, &info);
+			irlap_recv_rnr_frame(self, skb, &info, command);
 			break;
 		case REJ:
-			IRDA_DEBUG( 0, "*** REJ frame received! ***\n");
-			dev_kfree_skb(skb);
+			irlap_recv_rej_frame(self, skb, &info, command);
 			break;
 		case SREJ:
-			IRDA_DEBUG( 0, "*** SREJ frame received! ***\n");
-			dev_kfree_skb(skb);
+			irlap_recv_srej_frame(self, skb, &info, command);
 			break;
 		default:
 			WARNING(__FUNCTION__ 
@@ -1276,12 +1376,10 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 		irlap_recv_snrm_cmd(self, skb, &info);
 		break;
 	case DM_RSP:
-		IRDA_DEBUG( 0, "DM rsp frame received!\n");
-		irlap_next_state(self, LAP_NDM);
-		dev_kfree_skb(skb);
+		irlap_do_event(self, RECV_DM_RSP, skb, &info);
 		break;
-	case DISC_CMD:
-		irlap_do_event(self, RECV_DISC_FRAME, skb, &info);
+	case DISC_CMD: /* And RD_RSP */
+		irlap_recv_disc_frame(self, skb, &info, command);
 		break;
 	case TEST_CMD:
 		irlap_recv_test_frame(self, skb, &info, command);

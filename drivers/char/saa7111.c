@@ -70,7 +70,6 @@ struct saa7111 {
 static int saa7111_write(struct saa7111 *dev, unsigned char subaddr, unsigned char data)
 {
 	int ack;
-	unsigned long flags;
 
 	LOCK_I2C_BUS(dev->bus);
 	i2c_start(dev->bus);
@@ -85,9 +84,8 @@ static int saa7111_write(struct saa7111 *dev, unsigned char subaddr, unsigned ch
 
 static int saa7111_write_block(struct saa7111 *dev, unsigned const char *data, unsigned int len)
 {
-	int ack;
+	int ack = 0;
 	unsigned subaddr;
-	unsigned long flags;
 
 	while (len > 1) {
 		LOCK_I2C_BUS(dev->bus);
@@ -110,7 +108,6 @@ static int saa7111_write_block(struct saa7111 *dev, unsigned const char *data, u
 static int saa7111_read(struct saa7111 *dev, unsigned char subaddr)
 {
 	int data;
-	unsigned long flags;
 
 	LOCK_I2C_BUS(dev->bus);
 	i2c_start(dev->bus);

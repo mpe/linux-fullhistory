@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Mar  8 14:06:12 1999
- * Modified at:   Sun Dec 12 12:23:11 1999
+ * Modified at:   Tue Dec 21 09:00:59 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -83,20 +83,21 @@ enum {
 
 #define IRLMP_ENUMDEVICES        1
 #define IRLMP_IAS_SET            2
-#define IRLMP_IAS_GET            3
-#define IRLMP_IAS_QUERY          4
-#define IRLMP_HINTS_SET          5
+#define IRLMP_IAS_QUERY          3
+#define IRLMP_HINTS_SET          4
+#define IRLMP_QOS_SET            5
+#define IRLMP_QOS_GET            6
+#define IRLMP_MAX_SDU_SIZE       7
+#define IRLMP_IAS_GET            8
 
-#define IRTTP_QOS_SET            6
-#define IRTTP_QOS_GET            7
-#define IRTTP_MAX_SDU_SIZE       8
+#define IRTTP_MAX_SDU_SIZE IRLMP_MAX_SDU_SIZE /* Compatibility */
 
 #define IAS_MAX_STRING         256
 #define IAS_MAX_OCTET_STRING  1024
 #define IAS_MAX_CLASSNAME       64
 #define IAS_MAX_ATTRIBNAME     256
 
-#define LSAP_ANY               0xff
+#define LSAP_ANY              0xff
 
 struct sockaddr_irda {
 	sa_family_t   sir_family;   /* AF_IRDA */

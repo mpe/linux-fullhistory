@@ -356,7 +356,8 @@ so you do not have to define it yourself.
 
 The i2c_probe or sensors_detect function will call the foo_detect_client
 function only for those i2c addresses that actually have a device on
-them (unless a `force' parameter was used).
+them (unless a `force' parameter was used). In addition, addresses that
+are already in use (by some other registered client) are skipped.
 
 
 The detect client function
@@ -666,12 +667,6 @@ need this. You may even set it to NULL.
   {
     return 0;
   }
-
-You should never directly call this function, but instead use the 
-general function below:
-
-  extern int i2c_control(struct i2c_client *,unsigned int, unsigned long);
-
 
 
 Sending and receiving

@@ -29,12 +29,16 @@ static struct i2c_client_address_data addr_data = {
 };
 
 static int debug =  0; /* insmod parameter */
-static int type = -1;  /* insmod parameter */
+static int type  = -1; /* insmod parameter */
+
+static int addr  =  0;
+static int this_adap;
 
 #define dprintk     if (debug) printk
 
 MODULE_PARM(debug,"i");
 MODULE_PARM(type,"i");
+MODULE_PARM(addr,"i");
 
 struct tuner
 {
@@ -164,9 +168,9 @@ static void set_tv_freq(struct i2c_client *c, int freq)
 	else
 		config = tun->UHF;
 
-#if 0   // Fix colorstandard mode change
+#if 1   // Fix colorstandard mode change
 	if (t->type == TUNER_PHILIPS_SECAM 
-		&& t->std == V4L2_STANDARD_DDD )
+	    /*&& t->std == V4L2_STANDARD_DDD*/ )
 		config |= tun->mode;
 	else
 		config &= ~tun->mode;
@@ -255,6 +259,10 @@ static int tuner_attach(struct i2c_adapter *adap, int addr,
 	struct tuner *t;
 	struct i2c_client *client;
 
+	if (this_adap > 0)
+		return -1;
+	this_adap++;
+	
         client_template.adapter = adap;
         client_template.addr = addr;
 
@@ -283,6 +291,11 @@ static int tuner_attach(struct i2c_adapter *adap, int addr,
 
 static int tuner_probe(struct i2c_adapter *adap)
 {
+	if (0 != addr) {
+		normal_i2c_range[0] = addr;
+		normal_i2c_range[1] = addr;
+	}
+	this_adap = 0;
 	if (adap->id == (I2C_ALGO_BIT | I2C_HW_B_BT848))
 		return i2c_probe(adap, &addr_data, tuner_attach);
 	return 0;

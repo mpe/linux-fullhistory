@@ -87,6 +87,7 @@
 #include <linux/rtnetlink.h>
 #include <net/br.h>
 #include <linux/proc_fs.h>
+#include <linux/br.h>
 
 #ifndef min
 #define min(a, b) (((a) <= (b)) ? (a) : (b))
@@ -2425,7 +2426,7 @@ int __init brg_probe(struct net_device *dev)
 
   /* Set up MAC address based on BogoMIPs figure for first CPU and time
    */ 
-  bogomips = (boot_cpu_data.loops_per_sec+2500)/500000 ;
+  bogomips = (loops_per_sec+2500)/500000 ;
   get_fast_time(&utime);
 
   /* Ummmm....  YES! */

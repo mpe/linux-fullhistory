@@ -1111,13 +1111,22 @@ void irttp_disconnect_indication(void *instance, void *sap, LM_REASON reason,
 	
 	self->connected = FALSE;
 	
+	/* Check if client has already tried to close the TSAP */
+	if (self->close_pend) {
+		irttp_close_tsap(self);
+		return;
+	}
+
+	/* No need to notify the client if has already tried to disconnect */
+	if (self->disconnect_pend)
+		return;
+	
 	if (self->notify.disconnect_indication)
-		self->notify.disconnect_indication(self->notify.instance, 
-						   self, reason, skb);
-	else {
+		self->notify.disconnect_indication(self->notify.instance, self,
+						   reason, skb);
+	else
 		if (skb)
 			dev_kfree_skb(skb);
-	}
 }
 
 /*
@@ -1130,6 +1139,12 @@ void irttp_disconnect_indication(void *instance, void *sap, LM_REASON reason,
 void irttp_do_data_indication(struct tsap_cb *self, struct sk_buff *skb)
 {
 	int err;
+
+	/* Check if client has already tried to close the TSAP */
+	if (self->close_pend || self->disconnect_pend) {
+		dev_kfree_skb(skb);
+		return;
+	}
 
 	err = self->notify.data_indication(self->notify.instance, self, skb);
 

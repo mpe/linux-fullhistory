@@ -43,12 +43,11 @@
 extern struct i2c_bus zoran_i2c_bus_template;
 
 #define	ZORAN_MAX_FBUFFERS	2
-#define ZORAN_MAX_FBUFFER	0x0A2000
-#define ZORAN_MAX_FBUFSIZE	(ZORAN_MAX_FBUFFERS*ZORAN_MAX_FBUFFER)
+#define	ZORAN_MAX_FBUFFER	(768*576*2)
+#define	ZORAN_MAX_FBUFSIZE	(ZORAN_MAX_FBUFFERS*ZORAN_MAX_FBUFFER)
 
-/* external declarations */
-extern unsigned long zoran_alloc_memory(void);
-extern void zoran_free_memory(void);
+#define	ZORAN_VBI_BUFFERS	2
+#define	ZORAN_VBI_BUFSIZE	(22*1024*2)
 
 struct tvcard {
 	char*	name;		/* name of the cardtype */
@@ -70,76 +69,84 @@ struct tvcard {
 #define	SVHS(x)		((x)|IS_SVHS)
 
 struct vidinfo {
-	int	status;
-#define FBUFFER_UNUSED       0
-#define FBUFFER_GRABBING     1
-#define FBUFFER_DONE         2
-	int	x,y;
-	int	w,h;
-	int	bpl;
-	int	bpp;		/* should be calculated */
-	int	format;
-	ulong	vidadr;		/* physical video address */
-	ulong*	overlay;
+	struct	vidinfo* next;	/* next active buffer			*/
+	uint	kindof;
+#define	FBUFFER_OVERLAY		0
+#define	FBUFFER_GRAB		1
+#define	FBUFFER_VBI		2
+	uint	status;
+#define FBUFFER_FREE		0
+#define FBUFFER_BUSY		1
+#define FBUFFER_DONE		2
+	ulong	fieldnr;	/* # of field, not framer!		*/
+	uint	x,y;
+	int	w,h;		/* w,h can be negative!			*/
+	uint	format;		/* index in palette2fmt[]		*/
+	uint	bpp;		/* lookup from palette2fmt[]		*/
+	uint	bpl;		/* calc: width * bpp			*/
+	ulong	busadr;		/* bus addr for DMA engine		*/
+	char*	memadr;		/* kernel addr for making copies	*/
+	ulong*	overlay;	/* kernel addr of overlay mask		*/
 };
 
 struct zoran 
 {
 	struct video_device video_dev;
-#define CARD	ztv->video_dev.name
-	struct i2c_bus	i2c;
-	struct video_picture picture;	/* Current picture params */
-	struct video_audio audio_dev;	/* Current audio params */
+#define CARD_DEBUG	KERN_DEBUG "%s(%lu): "
+#define CARD_INFO	KERN_INFO "%s(%lu): "
+#define CARD_ERR	KERN_ERR "%s(%lu): "
+#define CARD		ztv->video_dev.name,ztv->fieldnr
 
 	/* zoran chip specific details */
-	struct pci_dev*	dev;		/* ptr to PCI device */
-	ushort		id;		/* chip id */
-	unsigned char	revision;	/* chip revision */
-	int		zoran_adr;	/* bus address of IO memory */
-	char*		zoran_mem;	/* pointer to mapped IO memory */
+	struct i2c_bus	i2c;		/* i2c registration data	*/
+	struct pci_dev*	dev;		/* ptr to PCI device		*/
+	ulong		zoran_adr;	/* bus address of IO memory	*/
+	char*		zoran_mem;	/* kernel address of IO memory	*/
+	struct tvcard*	card;		/* the cardtype			*/
+	uint		norm;		/* 0=PAL, 1=NTSC, 2=SECAM	*/
+	uint		tuner_freq;	/* Current freq in kHz		*/
+	struct video_picture picture;	/* Current picture params	*/
   
 	/* videocard details */
-	int		swidth;		/* screen width */
-	int		sheight;	/* screen height */
-	int		depth;		/* depth in bits */
-
-	/* channel details */
-	int		norm;		/* 0=PAL, 1=NTSC, 2=SECAM */
-	struct tvcard*	card;		/* the cardtype */
-	int		tuner_freq;	/* in Hz */
+	uint		swidth;		/* screen width			*/
+	uint		sheight;	/* screen height		*/
+	uint		depth;		/* depth in bits		*/
 
 	/* State details */
-	struct vidinfo	overinfo;	/* overlay data */
-	struct vidinfo	grabinfo[ZORAN_MAX_FBUFFERS];	/* grabbing data */
-	struct vidinfo	readinfo;	/* reading data */
+	char*		fbuffer;	/* framebuffers for mmap	*/
+	struct vidinfo	overinfo;	/* overlay data			*/
+	struct vidinfo	grabinfo[ZORAN_MAX_FBUFFERS];	/* grabbing data*/
+	wait_queue_head_t grabq;	/* grabbers queue		*/
+
+	/* VBI details */
+	struct video_device vbi_dev;
+	struct vidinfo	readinfo[2];	/* VBI data - flip buffers	*/
+	wait_queue_head_t vbiq;		/* vbi queue			*/
 
 	/* maintenance data */
-	char*		fbuffer;	/* framebuffers for mmap */
-	int		user;		/* # users */
-	int		have_decoder;	/* did we detect a mux? */
-	int		have_tuner;	/* did we detect a tuner? */
-	int		tuner_type;	/* tuner type, when found */
-	int		running;
-	wait_queue_head_t grabq;	/* waiting capturers */
-	wait_queue_head_t readq;	/* waiting readers */
+	int		have_decoder;	/* did we detect a mux?		*/
+	int		have_tuner;	/* did we detect a tuner?	*/
+	int		users;		/* howmany video/vbi open?	*/
+	int		tuner_type;	/* tuner type, when found	*/
+	int		running;	/* are we rolling?		*/
 	rwlock_t	lock;
-	int		state;		/* what is requested of us? */
-#define STATE_READ	0
-#define STATE_GRAB	1
-#define STATE_OVERLAY	2
-	int		prevstate;
-	int		lastframe;
+	int		state;		/* what is requested of us?	*/
+#define STATE_OVERLAY	0
+#define STATE_VBI	1
+	struct vidinfo*	workqueue;	/* buffers to grab, head is active */
+	ulong		fieldnr;	/* #field, ticked every VSYNC	*/
+	ulong		lastfieldnr;	/* #field, ticked every GRAB	*/
 
-	int		interlace;	/* calculated */
+	int		vidInterlace;	/* calculated */
 	int		vidXshift;	/* calculated */
-	int		vidWidth;	/* calculated */
-	int		vidHeight;	/* calculated */
+	uint		vidWidth;	/* calculated */
+	uint		vidHeight;	/* calculated */
 };
 
 #define zrwrite(dat,adr)    writel((dat),(char *) (ztv->zoran_mem+(adr)))
 #define zrread(adr)         readl(ztv->zoran_mem+(adr))
 
-#if !defined(PDEBUG) || (PDEBUG == 0)
+#if PDEBUG == 0
 #define zrand(dat,adr)      zrwrite((dat) & zrread(adr), adr)
 #define zror(dat,adr)       zrwrite((dat) | zrread(adr), adr)
 #define zraor(dat,mask,adr) zrwrite( ((dat)&~(mask)) | ((mask)&zrread(adr)), adr)

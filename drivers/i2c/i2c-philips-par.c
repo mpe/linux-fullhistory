@@ -17,11 +17,11 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		     */
 /* ------------------------------------------------------------------------- 
-static char rcsid[] = "$Id: i2c-philips-par.c,v 1.11 1999/10/08 14:25:11 frodo Exp $";
-   ------------------------------------------------------------------------- */
 
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and even
    Frodo Looijaard <frodol@dds.nl> */
+
+/* $Id: i2c-philips-par.c,v 1.12 1999/12/21 23:45:58 frodo Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/ioport.h>

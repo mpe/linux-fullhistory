@@ -19,11 +19,11 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		     */
 /* ------------------------------------------------------------------------- */
-/* $Revision: 1.30 $ $Date: 1999/11/16 08:12:38 $*/
-/* ------------------------------------------------------------------------- */
 
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and
    Frodo Looijaard <frodol@dds.nl> */
+
+/* $Id: i2c.h,v 1.32 1999/12/21 23:45:58 frodo Exp $ */
 
 #ifndef I2C_H
 #define I2C_H
@@ -324,6 +324,10 @@ extern int i2c_detach_client(struct i2c_client *);
 extern void i2c_inc_use_client(struct i2c_client *);
 extern void i2c_dec_use_client(struct i2c_client *);
 
+/* returns -EBUSY if address has been taken, 0 if not. Note that the only
+   other place at which this is called is within i2c_attach_client; so
+   you can cheat by simply not registering. Not recommended, of course! */
+extern int i2c_check_addr (struct i2c_adapter *adapter, int addr);
 
 /* Detect function. It itterates over all possible addresses itself.
  * It will only call found_proc if some client is connected at the
@@ -427,6 +431,10 @@ union i2c_smbus_data {
 /* this is for i2c-dev.c	*/
 #define I2C_SLAVE	0x0703	/* Change slave address			*/
 				/* Attn.: Slave address is 7 or 10 bits */
+#define I2C_SLAVE_FORCE	0x0706	/* Change slave address			*/
+				/* Attn.: Slave address is 7 or 10 bits */
+                                /* This changes the address, even if it */
+                                /* is already taken!                    */
 #define I2C_TENBIT	0x0704	/* 0 for 7 bit addrs, != 0 for 10 bit   */
 
 #define I2C_FUNCS       0x0705  /* Get the adapter functionality */

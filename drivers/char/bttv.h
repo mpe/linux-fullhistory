@@ -21,7 +21,7 @@
 #ifndef _BTTV_H_
 #define _BTTV_H_
 
-#define BTTV_VERSION_CODE 0x00070a
+#define BTTV_VERSION_CODE 0x00070b
 
 #include <linux/types.h>
 #include <linux/wait.h>

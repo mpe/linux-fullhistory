@@ -21,6 +21,8 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and even
    Frodo Looijaard <frodol@dds.nl> */
 
+/* $Id: i2c-algo-bit.h,v 1.7 1999/12/21 23:45:58 frodo Exp $ */
+
 #ifndef I2C_ALGO_BIT_H
 #define I2C_ALGO_BIT_H 1
 

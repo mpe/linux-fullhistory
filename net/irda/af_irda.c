@@ -1604,7 +1604,7 @@ static int irda_setsockopt(struct socket *sock, int level, int optname,
  	struct sock *sk = sock->sk;
 	struct irda_sock *self;
 	struct irda_ias_set	ias_opt;
-	struct ias_object *	ias_obj;
+	struct ias_object      *ias_obj;
 	int opt;
 	
 	self = sk->protinfo.irda;
@@ -1676,7 +1676,7 @@ static int irda_setsockopt(struct socket *sock, int level, int optname,
 
 		IRDA_DEBUG(0, __FUNCTION__ "(), sorry not impl. yet!\n");
 		return -ENOPROTOOPT;
-	case IRTTP_MAX_SDU_SIZE:
+	case IRLMP_MAX_SDU_SIZE:
 		if (optlen < sizeof(int))
 			return -EINVAL;
 	
@@ -1904,7 +1904,7 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 				 sizeof(struct irda_device_info)))
 			return -EFAULT;
 		break;
-	case IRTTP_MAX_SDU_SIZE:
+	case IRLMP_MAX_SDU_SIZE:
 		val = self->max_data_size;
 		len = sizeof(int);
 		if (put_user(len, optlen))

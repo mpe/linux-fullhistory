@@ -54,9 +54,6 @@ extern int init_planbs(struct video_init *);
 #ifdef CONFIG_VIDEO_ZORAN
 extern int init_zoran_cards(struct video_init *);
 #endif
-#ifdef CONFIG_VIDEO_ZR36120
-extern int init_zr36120_cards(struct video_init *);
-#endif
 
 static struct video_init video_init_list[]={
 #ifdef CONFIG_VIDEO_BT848
@@ -74,9 +71,6 @@ static struct video_init video_init_list[]={
 #endif
 #ifdef CONFIG_VIDEO_ZORAN
 	{"zoran", init_zoran_cards},
-#endif	
-#ifdef CONFIG_VIDEO_ZR36120
-	{"zr36120", init_zr36120_cards},
 #endif	
 	{"end", NULL}
 };

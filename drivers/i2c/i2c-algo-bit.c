@@ -21,10 +21,7 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and even
    Frodo Looijaard <frodol@dds.nl> */
 
-
-/*
-static char alg_rcsid[] = "$Id: i2c-algo-bit.c,v 1.20 1999/11/12 11:26:20 frodo Exp $";
-*/
+/* $Id: i2c-algo-bit.c,v 1.21 1999/12/21 23:45:58 frodo Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>

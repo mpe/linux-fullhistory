@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 3
-SUBLEVEL = 35
+SUBLEVEL = 36
 EXTRAVERSION =
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -236,6 +236,10 @@ endif
 
 ifeq ($(CONFIG_I2C),y)
 DRIVERS := $(DRIVERS) drivers/i2c/i2c.a
+endif
+
+ifeq ($(CONFIG_PHONE),y)
+DRIVERS := $(DRIVERS) drivers/telephony/telephony.a
 endif
 
 include arch/$(ARCH)/Makefile

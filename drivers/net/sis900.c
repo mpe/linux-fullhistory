@@ -1221,7 +1221,7 @@ static void set_rx_mode(struct net_device *net_dev)
 
 	/* update Multicast Hash Table in Receive Filter */
 	for (i = 0; i < 8; i++) {
-+               /* why plus 0x04 ??, That makes the correct value for hash table. */
+                /* why plus 0x04 ??, That makes the correct value for hash table. */
 		outl((u32)(0x00000004+i) << RFADDR_shift, ioaddr + rfcr);
 		outl(mc_filter[i], ioaddr + rfdr);
 	}

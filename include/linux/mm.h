@@ -376,8 +376,6 @@ extern inline void free_pages(unsigned long addr, unsigned long order)
 
 extern void show_free_areas(void);
 extern void show_free_areas_node(int nid);
-extern struct page * put_dirty_page(struct task_struct * tsk, struct page *page,
-	unsigned long address);
 
 extern void clear_page_tables(struct mm_struct *, unsigned long, int);
 

@@ -7,7 +7,9 @@ changes.  Bugfixes, merged patches from other people, merged fixes
 from the kernel version, port to the new i2c stack, removed support
 for 2.0.x, code cleanups, ...
 
-You'll need the new i2c stack, download it from
+To compile this bttv version, you'll the new i2c stack.  Kernels
+newer than 2.3.34 have this already included.  If you have a older
+kernel, download it from:
 	http://www2.lm-sensors.nu/~lm78/download.html
 
 You'll find Ralphs original (mostly outdated) documentation in the

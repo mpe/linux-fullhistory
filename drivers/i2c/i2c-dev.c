@@ -23,6 +23,8 @@
    But I have used so much of his original code and ideas that it seems
    only fair to recognize him as co-author -- Frodo */
 
+/* $Id: i2c-dev.c,v 1.18 1999/12/21 23:45:58 frodo Exp $ */
+
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -277,8 +279,11 @@ int i2cdev_ioctl (struct inode *inode, struct file *file, unsigned int cmd,
 
   switch ( cmd ) {
     case I2C_SLAVE:
+    case I2C_SLAVE_FORCE:
       if ((arg > 0x3ff) || (((client->flags & I2C_M_TEN) == 0) && arg > 0x7f))
         return -EINVAL;
+      if ((cmd == I2C_SLAVE) && i2c_check_addr(client->adapter,arg))
+        return -EBUSY;
       client->addr = arg;
       return 0;
     case I2C_TENBIT:

@@ -74,6 +74,7 @@ MODULE_PARM(card,"1-4i");
 MODULE_PARM(pll,"1-4i");
 MODULE_PARM(bigendian,"i");
 MODULE_PARM(fieldnr,"i");
+MODULE_PARM(autoload,"i");
 
 #if defined(__sparc__) || defined(__powerpc__)
 static unsigned int bigendian=1;
@@ -86,6 +87,7 @@ static unsigned int radio[BTTV_MAX];
 static unsigned int card[BTTV_MAX] = { 0, 0, 0, 0 };
 static unsigned int pll[BTTV_MAX] = { 0, 0, 0, 0};
 static unsigned int fieldnr = 0;
+static unsigned int autoload = 1;
 
 
 #define I2C_TIMING (0x7<<4)
@@ -389,16 +391,24 @@ static int init_bttv_i2c(struct bttv *btv)
 }
 
 /* read I2C */
-static int I2CRead(struct bttv *btv, unsigned char addr) 
+static int I2CRead(struct bttv *btv, unsigned char addr, char *probe_for) 
 {
         unsigned char buffer = 0;
 
+	if (NULL != probe_for)
+		printk(KERN_INFO "bttv%d: i2c: checking for %s @ 0x%02x... ",
+		       btv->nr,probe_for,addr);
         btv->i2c_client.addr = addr >> 1;
         if (1 != i2c_master_recv(&btv->i2c_client, &buffer, 1)) {
-		printk("bttv%d: i2c read 0x%x: error\n",btv->nr,addr);
+		if (NULL != probe_for)
+			printk("not found\n");
+		else
+			printk(KERN_WARNING "bttv%d: i2c read 0x%x: error\n",
+			       btv->nr,addr);
                 return -1;
 	}
-	printk("bttv%d: i2c read 0x%x: %d\n",btv->nr,addr,buffer);
+	if (NULL != probe_for)
+		printk("found\n");
         return buffer;
 }
 
@@ -529,31 +539,31 @@ static void init_PXC200(struct bttv *btv)
 	printk(KERN_INFO "Initialising 12C508 PIC chip ...\n");
 	
 	tmp=I2CWrite(btv,0x1E,0x08,0,1);
-	printk(KERN_INFO "I2C Write(0x08) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x08) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	tmp=I2CWrite(btv,0x1E,0x09,0,1);
-	printk(KERN_INFO "I2C Write(0x09) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x09) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	tmp=I2CWrite(btv,0x1E,0x0a,0,1);
-	printk(KERN_INFO "I2C Write(0x0a) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x0a) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	tmp=I2CWrite(btv,0x1E,0x0b,0,1);
-	printk(KERN_INFO "I2C Write(0x0b) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x0b) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	tmp=I2CWrite(btv,0x1E,0x0c,0,1);
-	printk(KERN_INFO "I2C Write(0x0c) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x0c) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	tmp=I2CWrite(btv,0x1E,0x0d,0,1);
-	printk(KERN_INFO "I2C Write(0x0d) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x0d) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	tmp=I2CWrite(btv,0x1E,0x01,0,1);
-	printk(KERN_INFO "I2C Write(0x01) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x01) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	tmp=I2CWrite(btv,0x1E,0x02,0,1);
-	printk(KERN_INFO "I2C Write(0x02) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x02) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	tmp=I2CWrite(btv,0x1E,0x03,0,1);
-	printk(KERN_INFO "I2C Write(0x03) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x03) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	tmp=I2CWrite(btv,0x1E,0x04,0,1);
-	printk(KERN_INFO "I2C Write(0x04) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x04) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	tmp=I2CWrite(btv,0x1E,0x05,0,1);
-	printk(KERN_INFO "I2C Write(0x05) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x05) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	tmp=I2CWrite(btv,0x1E,0x06,0,1);
-	printk(KERN_INFO "I2C Write(0x06) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x06) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	tmp=I2CWrite(btv,0x1E,0x00,0,1);
-	printk(KERN_INFO "I2C Write(0x00) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F));
+	printk(KERN_INFO "I2C Write(0x00) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
 	
 	printk(KERN_INFO "PXC200 Initialised.\n");
 }
@@ -628,7 +638,7 @@ static struct tvcard tvcards[] =
 	  3, 1, 2, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0},0,
 	  1,1,1,1,0 },
         { "AVerMedia TVCapture 98",
-	  3, 1, 4, 0, 15, { 2, 3, 1, 0, 0}, { 13, 14, 11, 7, 0, 0},0,
+	  3, 4, 0, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0},0,
 	  1,1,1,1,0 },
         { "Aimslab VHX",
           3, 1, 0, 2, 7, { 2, 3, 1, 1}, { 0, 1, 2, 3, 4},0,
@@ -702,12 +712,15 @@ static struct tvcard tvcards[] =
         { "Askey/Typhoon/Anubis Magic TView",
 	  3, 1, 0, 2, 0xe00, { 2, 0, 1, 1}, {0x400, 0x400, 0x400, 0x400, 0},0,
 	  1,1,1,1,0 },
+	{ "Terratec TerraTValue",
+          3, 1, 0, 2, 0x70000, { 2, 3, 1, 1}, { 0x500, 0, 0x300, 0x900, 0x900},0,
+	  1,1,1,1,0 },
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(struct tvcard))
 
 /* ----------------------------------------------------------------------- */
 
-static void audio(struct bttv *btv, int mode)
+static void audio(struct bttv *btv, int mode, int no_irq_context)
 {
 	btaor(tvcards[btv->type].gpiomask, ~tvcards[btv->type].gpiomask,
               BT848_GPIO_OUT_EN);
@@ -739,7 +752,8 @@ static void audio(struct bttv *btv, int mode)
 		mode = AUDIO_RADIO;
 	btaor(tvcards[btv->type].audiomux[mode],
               ~tvcards[btv->type].gpiomask, BT848_GPIO_DATA);
-	call_i2c_clients(btv,AUDC_SET_INPUT,&(mode));
+	if (no_irq_context)
+		call_i2c_clients(btv,AUDC_SET_INPUT,&(mode));
 }
 
 
@@ -882,7 +896,7 @@ static void bt848_muxsel(struct bttv *btv, unsigned int input)
 	}
 	btaor((tvcards[btv->type].muxsel[input&7]&3)<<5, ~(3<<5), BT848_IFORM);
 	audio(btv, (input!=tvcards[btv->type].tuner) ? 
-              AUDIO_EXTERN : AUDIO_TUNER);
+              AUDIO_EXTERN : AUDIO_TUNER, 1);
 	btaor(tvcards[btv->type].muxsel[input]>>4,
 		~tvcards[btv->type].gpiomask2, BT848_GPIO_DATA);
 }
@@ -1418,7 +1432,7 @@ static inline void bt848_set_eogeo(struct bttv *btv, int odd, u8 vtc,
 
 
 static void bt848_set_geo(struct bttv *btv, u16 width, u16 height,
-			  u16 fmt, int pllset)
+			  u16 fmt, int no_irq_context)
 {
         u16 vscale, hscale;
 	u32 xsf, sr;
@@ -1447,7 +1461,7 @@ static void bt848_set_geo(struct bttv *btv, u16 width, u16 height,
 	btwrite(1, BT848_VBI_PACK_DEL);
 
         btv->pll.pll_ofreq = tvn->Fsc;
-	if (pllset)
+	if (no_irq_context)
 		set_pll(btv);
 
 	btwrite(fmt, BT848_COLOR_FMT);
@@ -1834,7 +1848,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 {
 	struct bttv *btv=(struct bttv *)dev;
  	int i;
-  	
+
 	switch (cmd) {
 	case VIDIOCGCAP:
 	{
@@ -2230,7 +2244,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			return -EFAULT;
 		down(&btv->lock);
 		if(v.flags&VIDEO_AUDIO_MUTE)
-			audio(btv, AUDIO_MUTE);
+			audio(btv, AUDIO_MUTE, 1);
 		/* One audio source per tuner -- huh? <GA> */
 		if(v.audio<0 || v.audio >= tvcards[btv->type].audio_inputs) {
 			up(&btv->lock);
@@ -2238,9 +2252,11 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		}
 		/* bt848_muxsel(btv,v.audio); */
 		if(!(v.flags&VIDEO_AUDIO_MUTE))
-			audio(btv, AUDIO_UNMUTE);
+			audio(btv, AUDIO_UNMUTE, 1);
 
+		up(&btv->lock);
 		call_i2c_clients(btv,cmd,&v);
+		down(&btv->lock);
 		
 		if (btv->type == BTTV_TERRATV) {
 			unsigned int con = 0;
@@ -2844,14 +2860,14 @@ static void idcard(int i)
 	   */
 	if (btv->type == BTTV_UNKNOWN) 
 	{
-		if (I2CRead(btv, I2C_HAUPEE)>=0)
+		if (I2CRead(btv, I2C_HAUPEE, "eeprom")>=0)
 		{
 			if(btv->id>849)
 				btv->type=BTTV_HAUPPAUGE878;
 			else
 			        btv->type=BTTV_HAUPPAUGE;
 
-		} else if (I2CRead(btv, I2C_STBEE)>=0) {
+		} else if (I2CRead(btv, I2C_STBEE, "eeprom")>=0) {
 			btv->type=BTTV_STB;
 
 #if 0	/* bad idea: 0xc0 is used for the tuner on _many_ boards */
@@ -2860,7 +2876,7 @@ static void idcard(int i)
 #endif
 
 		} else {
-			if (I2CRead(btv, 0x80)>=0) /* check for msp34xx */
+			if (I2CRead(btv, 0x80, "msp3400")>=0) /* check for msp34xx */
 				btv->type = BTTV_MIROPRO;
 			else
 	 			btv->type = BTTV_MIRO;
@@ -2911,43 +2927,43 @@ static void idcard(int i)
 
 	/* try to detect audio/fader chips */
 	if (tvcards[btv->type].msp34xx &&
-	    I2CRead(btv, I2C_MSP3400) >=0) {
-                printk(KERN_INFO "bttv%d: audio chip: MSP34xx\n",i);
-		request_module("msp3400");
+	    I2CRead(btv, I2C_MSP3400, "MSP34xx") >=0) {
+		if (autoload)
+			request_module("msp3400");
 	}
 
 	if (tvcards[btv->type].tda8425 &&
-	    I2CRead(btv, I2C_TDA8425) >=0) {
-                printk(KERN_INFO "bttv%d: audio chip: TDA8425\n",i);
-		request_module("tda8425");
+	    I2CRead(btv, I2C_TDA8425, "TDA8425") >=0) {
+		if (autoload)
+			request_module("tda8425");
         }
 
 	if (tvcards[btv->type].tda9840 &&
-	    I2CRead(btv, I2C_TDA9840) >=0) {
+	    I2CRead(btv, I2C_TDA9840, "TDA9840") >=0) {
 		init_tda9840(btv);
-        	printk(KERN_INFO "bttv%d: audio chip: TDA9840\n", i);
                 btv->audio_chip = TDA9840;
 		/* move this to a module too? */
 		init_tda9840(btv);
 	}
 
 	if (tvcards[btv->type].tda985x &&
-	    I2CRead(btv, I2C_TDA9850) >=0) {
-                printk(KERN_INFO "bttv%d: audio chip: TDA985x\n",i);
-		request_module("tda9855");
+	    I2CRead(btv, I2C_TDA9850, "TDA985x") >=0) {
+		if (autoload)
+			request_module("tda9855");
 	}
 
 	if (tvcards[btv->type].tea63xx &&
-	    I2CRead(btv, I2C_TEA6300)) {
-		printk(KERN_INFO "bttv%d: fader chip: TEA63xx\n",i);
-		request_module("tea6300");
+	    I2CRead(btv, I2C_TEA6300, "TEA63xx") >= 0) {
+		if (autoload)
+			request_module("tea6300");
 	}
 
 	if (tvcards[btv->type].tuner != -1) {
-		request_module("tuner");
+		if (autoload)
+			request_module("tuner");
 	}
 
-	audio(btv, AUDIO_MUTE);
+	audio(btv, AUDIO_MUTE, 1);
 }
 
 
@@ -3303,13 +3319,14 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 		if (astat&BT848_INT_HLOCK) 
 		{
 			if ((dstat&BT848_DSTATUS_HLOC) || (btv->radio))
-				audio(btv, AUDIO_ON);
+				audio(btv, AUDIO_ON,0);
 			else
-				audio(btv, AUDIO_OFF);
+				audio(btv, AUDIO_OFF,0);
 		}
     
 		if (astat&BT848_INT_I2CDONE) 
 		{
+			IDEBUG(printk ("bttv%d: IRQ_I2CDONE\n", btv->nr));
 		}
     
 		count++;

@@ -16,11 +16,11 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		     */
 /* ------------------------------------------------------------------------- */
-#define RCSID "$Id: i2c-core.c,v 1.42 1999/11/30 20:06:42 frodo Exp $"
-/* ------------------------------------------------------------------------- */
 
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi>.
    All SMBus-related things are written by Frodo Looijaard <frodol@dds.nl> */
+
+/* $Id: i2c-core.c,v 1.44 1999/12/21 23:45:58 frodo Exp $ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -451,11 +451,22 @@ int i2c_del_driver(struct i2c_driver *driver)
 	return 0;
 }
 
+int i2c_check_addr (struct i2c_adapter *adapter, int addr)
+{
+  int i;
+  for (i = 0; i < I2C_CLIENT_MAX ; i++) 
+    if (adapter->clients[i] && (adapter->clients[i]->addr == addr))
+      return -EBUSY;
+  return 0;
+}
 
 int i2c_attach_client(struct i2c_client *client)
 {
 	struct i2c_adapter *adapter = client->adapter;
 	int i;
+
+        if (i2c_check_addr(client->adapter,client->addr))
+          return -EBUSY;
 
 	for (i = 0; i < I2C_CLIENT_MAX; i++)
 		if (NULL == adapter->clients[i])
@@ -854,6 +865,10 @@ int i2c_probe(struct i2c_adapter *adapter,
   for (addr = 0x00; 
        addr <= 0x7f;
        addr++) {
+
+    /* Skip if already in use */
+    if (i2c_check_addr(adapter,addr))
+      continue;
 
     /* If it is in one of the force entries, we don't do any detection
        at all */
@@ -1311,6 +1326,7 @@ EXPORT_SYMBOL(i2c_attach_client);
 EXPORT_SYMBOL(i2c_detach_client);
 EXPORT_SYMBOL(i2c_inc_use_client);
 EXPORT_SYMBOL(i2c_dec_use_client);
+EXPORT_SYMBOL(i2c_check_addr);
 
 
 EXPORT_SYMBOL(i2c_master_send);

@@ -273,6 +273,7 @@ send_now:
 	tsk = cpu_curr(this_cpu);
 	if (preemption_goodness(tsk, p, this_cpu) > 0)
 		tsk->need_resched = 1;
+	spin_unlock_irqrestore(&runqueue_lock, flags);
 #endif
 }
 

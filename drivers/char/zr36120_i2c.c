@@ -23,9 +23,9 @@
 #include <asm/io.h>
 
 #include <linux/version.h>
+#include <linux/video_decoder.h>
 #include <asm/uaccess.h>
 
-#include "linux/video_decoder.h"
 #include "tuner.h"
 #include "zr36120.h"
 
@@ -59,23 +59,38 @@ static
 void attach_inform(struct i2c_bus *bus, int id)
 {
 	struct zoran *ztv = (struct zoran*)bus->data;
+	struct video_decoder_capability dc;
+	int rv;
 
 	switch (id) {
 	 case I2C_DRIVERID_VIDEODECODER:
-		ztv->have_decoder = 1;
-		DEBUG(printk(KERN_INFO "%s: decoder attached\n",CARD));
+		DEBUG(printk(CARD_INFO "decoder attached\n",CARD));
+
+		/* fetch the capabilites of the decoder */
+		rv = i2c_control_device(&ztv->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_GET_CAPABILITIES, &dc);
+		if (rv) {
+			DEBUG(printk(CARD_DEBUG "decoder is not V4L aware!\n",CARD));
+			break;
+		}
+		DEBUG(printk(CARD_DEBUG "capabilities %d %d %d\n",CARD,dc.flags,dc.inputs,dc.outputs));
+
+		/* Test if the decoder can de VBI transfers */
+		if (dc.flags & 16 /*VIDEO_DECODER_VBI*/)
+			ztv->have_decoder = 2;
+		else
+			ztv->have_decoder = 1;
 		break;
 	 case I2C_DRIVERID_TUNER:
 		ztv->have_tuner = 1;
-		DEBUG(printk(KERN_INFO "%s: tuner attached\n",CARD));
+		DEBUG(printk(CARD_INFO "tuner attached\n",CARD));
 		if (ztv->tuner_type >= 0)
 		{
 			if (i2c_control_device(&ztv->i2c,I2C_DRIVERID_TUNER,TUNER_SET_TYPE,&ztv->tuner_type)<0)
-			DEBUG(printk(KERN_INFO "%s: attach_inform; tuner wont be set to type %d\n",CARD,ztv->tuner_type));
+			DEBUG(printk(CARD_INFO "attach_inform; tuner wont be set to type %d\n",CARD,ztv->tuner_type));
 		}
 		break;
 	 default:
-		DEBUG(printk(KERN_INFO "%s: attach_inform; unknown device id=%d\n",CARD,id));
+		DEBUG(printk(CARD_INFO "attach_inform; unknown device id=%d\n",CARD,id));
 		break;
 	}
 }
@@ -88,14 +103,14 @@ void detach_inform(struct i2c_bus *bus, int id)
 	switch (id) {
 	 case I2C_DRIVERID_VIDEODECODER:
 		ztv->have_decoder = 0;
-		DEBUG(printk(KERN_INFO "%s: decoder detached\n",CARD));
+		DEBUG(printk(CARD_INFO "decoder detached\n",CARD));
 		break;
 	 case I2C_DRIVERID_TUNER:
 		ztv->have_tuner = 0;
-		DEBUG(printk(KERN_INFO "%s: tuner detached\n",CARD));
+		DEBUG(printk(CARD_INFO "tuner detached\n",CARD));
 		break;
 	 default:
-		DEBUG(printk(KERN_INFO "%s: detach_inform; unknown device id=%d\n",CARD,id));
+		DEBUG(printk(CARD_INFO "detach_inform; unknown device id=%d\n",CARD,id));
 		break;
 	}
 }

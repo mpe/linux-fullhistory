@@ -17,6 +17,8 @@ bttv.o
 		fieldnr=1	Count fields.  Some TV descrambling software
 				needs this, for others it only generates
 				50 useless IRQs/sec.
+		autoload=0/1	autoload helper modules (tuner, audio).
+				default is 1 (on).
 
 	remap, card, radio and pll accept up to four comma-separted arguments
 	(for multiple boards).

@@ -712,43 +712,6 @@ int remap_page_range(unsigned long from, unsigned long phys_addr, unsigned long 
 }
 
 /*
- * This routine is used to map in a page into an address space: needed by
- * execve() for the initial stack and environment pages.
- */
-struct page * put_dirty_page(struct task_struct * tsk, struct page *page,
-						 unsigned long address)
-{
-	pgd_t * pgd;
-	pmd_t * pmd;
-	pte_t * pte;
-
-	if (page_count(page) != 1)
-		printk("mem_map disagrees with %p at %08lx\n", page, address);
-	pgd = pgd_offset(tsk->mm, address);
-	pmd = pmd_alloc(pgd, address);
-	if (!pmd) {
-		__free_page(page);
-		oom(tsk);
-		return 0;
-	}
-	pte = pte_alloc(pmd, address);
-	if (!pte) {
-		__free_page(page);
-		oom(tsk);
-		return 0;
-	}
-	if (!pte_none(*pte)) {
-		pte_ERROR(*pte);
-		__free_page(page);
-		return 0;
-	}
-	flush_page_to_ram(page);
-	set_pte(pte, pte_mkwrite(mk_pte(page, PAGE_COPY)));
-/* no need for flush_tlb */
-	return page;
-}
-
-/*
  * This routine handles present pages, when users try to write
  * to a shared page. It is done by copying the page to a new address
  * and decrementing the shared-page counter for the old page.

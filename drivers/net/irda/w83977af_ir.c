@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Wed Nov  4 11:46:16 1998
- * Modified at:   Thu Dec 16 00:52:53 1999
+ * Modified at:   Tue Dec 21 21:53:09 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -244,9 +244,6 @@ int w83977af_open(int i, unsigned int iobase, unsigned int irq,
 		ERROR(__FUNCTION__ "(), dev_alloc() failed!\n");
 		return -ENOMEM;
 	}
-	/* dev_alloc doesn't clear the struct, so lets do a little hack */
-	memset(((__u8*)dev)+sizeof(char*),0,sizeof(struct net_device)-sizeof(char*));
-
 	dev->priv = (void *) self;
 	self->netdev = dev;
 
@@ -301,8 +298,6 @@ static int w83977af_close(struct w83977af_ir *self)
 		rtnl_lock();
 		unregister_netdevice(self->netdev);
 		rtnl_unlock();
-		/* Must free the old-style 2.2.x device */
-		kfree(self->netdev);
 	}
 
 	/* Release the PORT that this driver is using */
@@ -1013,8 +1008,15 @@ static __u8 w83977af_sir_interrupt(struct w83977af_ir *self, int isr)
 		}
 	}
 	/* Check if transmission has completed */
-	if (isr & ISR_TXEMP_I) {
-		
+	if (isr & ISR_TXEMP_I) {		
+		/* Check if we need to change the speed? */
+		if (self->new_speed) {
+			IRDA_DEBUG(2, __FUNCTION__ 
+				   "(), Changing speed!\n");
+			w83977af_change_speed(self, self->new_speed);
+			self->new_speed = 0;
+		}
+
 		/* Turn around and get ready to receive some data */
 		self->io.direction = IO_RECV;
 		new_icr |= ICR_ERBRI;

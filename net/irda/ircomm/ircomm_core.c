@@ -148,9 +148,10 @@ static int __ircomm_close(struct ircomm_cb *self)
 	ircomm_do_event(self, IRCOMM_DISCONNECT_REQUEST, NULL, NULL);
 
 	/* Remove TSAP */
-	if (self->tsap)
+	if (self->tsap) {
 		irttp_close_tsap(self->tsap);
-	self->tsap = NULL;
+		self->tsap = NULL;
+	}
 
 	/* Remove LSAP */
 	if (self->lsap) {

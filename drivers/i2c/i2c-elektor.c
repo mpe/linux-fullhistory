@@ -22,6 +22,8 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and even
    Frodo Looijaard <frodol@dds.nl> */
 
+/* $Id: i2c-elektor.c,v 1.13 1999/12/21 23:45:58 frodo Exp $ */
+
 #include <linux/kernel.h>
 #include <linux/ioport.h>
 #include <linux/module.h>

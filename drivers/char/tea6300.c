@@ -88,7 +88,7 @@ static struct i2c_client client_template;
 static int tea6300_write(struct i2c_client *client, int addr, int val)
 {
 	unsigned char buffer[2];
-	
+
 	buffer[0] = addr;
 	buffer[1] = val;
 	if (2 != i2c_master_send(client,buffer,2)) {
@@ -303,7 +303,7 @@ tea6300_command(struct i2c_client *client, unsigned int cmd, void *arg)
 
 static struct i2c_driver driver = {
         "i2c tea6300 driver",
-        I2C_DRIVERID_TEA6300,  /* FIXME */
+        I2C_DRIVERID_TEA6300,
         I2C_DF_NOTIFY,
 	tea6300_probe,
         tea6300_detach,

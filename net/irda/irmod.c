@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:55:39 1997
- * Modified at:   Thu Dec 16 21:46:38 1999
+ * Modified at:   Tue Dec 21 21:39:31 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
@@ -212,7 +212,7 @@ EXPORT_SYMBOL(irtty_set_packet_mode);
 
 int __init irda_init(void)
 {
-	MESSAGE("IrDA (tm) Protocols for Linux-2.2 (Dag Brattli)\n");
+	MESSAGE("IrDA (tm) Protocols for Linux-2.3 (Dag Brattli)\n");
 	
  	irlmp_init();
 	irlap_init();

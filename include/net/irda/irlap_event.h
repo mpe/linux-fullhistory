@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Wed Dec  8 10:49:17 1999
+ * Modified at:   Tue Dec 21 11:20:30 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -80,14 +80,20 @@ typedef enum {
 	RECV_TEST_RSP,
 	RECV_UA_RSP,
 	RECV_DM_RSP,
+	RECV_RD_RSP,
 	RECV_I_CMD,
 	RECV_I_RSP,
 	RECV_UI_FRAME,
 	RECV_FRMR_RSP,
 	RECV_RR_CMD,
 	RECV_RR_RSP,
-	RECV_RNR_FRAME,
-	RECV_DISC_FRAME,
+	RECV_RNR_CMD,
+	RECV_RNR_RSP,
+	RECV_REJ_CMD,
+	RECV_REJ_RSP,
+	RECV_SREJ_CMD,
+	RECV_SREJ_RSP,
+	RECV_DISC_CMD,
 
 	/* Timer events */
 	SLOT_TIMER_EXPIRED,

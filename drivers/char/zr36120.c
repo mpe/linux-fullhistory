@@ -18,9 +18,9 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -34,15 +34,18 @@
 #include <asm/pgtable.h>
 #include <asm/page.h>
 #include <linux/sched.h>
+#include <linux/video_decoder.h>
 #include <asm/segment.h>
 
 #include <linux/version.h>
 #include <asm/uaccess.h>
 
-#include "linux/video_decoder.h"
 #include "tuner.h"
 #include "zr36120.h"
 #include "zr36120_mem.h"
+
+/* mark an required function argument unused - lintism */
+#define	UNUSED(x)	(void)(x)
 
 /* sensible default */
 #ifndef CARDTYPE
@@ -52,9 +55,7 @@
 /* Anybody who uses more than four? */
 #define ZORAN_MAX 4
 
-static ulong irq1 = 0;
-
-       unsigned int triton1=0;			/* triton1 chipset? */
+static unsigned int triton1=0;			/* triton1 chipset? */
 static unsigned int cardtype[ZORAN_MAX]={ [ 0 ... ZORAN_MAX-1 ] = CARDTYPE };
 
 MODULE_AUTHOR("Pauline Middelink <middelin@polyware.nl>");
@@ -99,15 +100,21 @@ static struct tvcard tvcards[] = {
 #undef F
 #define NRTVCARDS (sizeof(tvcards)/sizeof(tvcards[0]))
 
-static struct { const char name[8]; int mode; int bpp; } palette2fmt[] = {
+#ifdef __sparc__
+#define	ENDIANESS	0
+#else
+#define	ENDIANESS	ZORAN_VFEC_LE
+#endif
+
+static struct { const char name[8]; uint mode; uint bpp; } palette2fmt[] = {
 /* n/a     */	{ "n/a",     0, 0 },
 /* GREY    */	{ "GRAY",    0, 0 },
 /* HI240   */	{ "HI240",   0, 0 },
-/* RGB565  */	{ "RGB565",  ZORAN_VFEC_RGB_RGB565|ZORAN_VFEC_LE, 2 },
-/* RGB24   */	{ "RGB24",   ZORAN_VFEC_RGB_RGB888|ZORAN_VFEC_LE|ZORAN_VFEC_PACK24, 3 },
-/* RGB32   */	{ "RGB32",   ZORAN_VFEC_RGB_RGB888|ZORAN_VFEC_LE, 4 },
-/* RGB555  */	{ "RGB555",  ZORAN_VFEC_RGB_RGB555|ZORAN_VFEC_LE, 2 },
-/* YUV422  */	{ "YUV422",  ZORAN_VFEC_RGB_YUV422|ZORAN_VFEC_LE, 3 },
+/* RGB565  */	{ "RGB565",  ZORAN_VFEC_RGB_RGB565|ENDIANESS, 2 },
+/* RGB24   */	{ "RGB24",   ZORAN_VFEC_RGB_RGB888|ENDIANESS|ZORAN_VFEC_PACK24, 3 },
+/* RGB32   */	{ "RGB32",   ZORAN_VFEC_RGB_RGB888|ENDIANESS, 4 },
+/* RGB555  */	{ "RGB555",  ZORAN_VFEC_RGB_RGB555|ENDIANESS, 2 },
+/* YUV422  */	{ "YUV422",  ZORAN_VFEC_RGB_YUV422|ENDIANESS, 2 },
 /* YUYV    */	{ "YUYV",    0, 0 },
 /* UYVY    */	{ "UYVY",    0, 0 },
 /* YUV420  */	{ "YUV420",  0, 0 },
@@ -116,23 +123,24 @@ static struct { const char name[8]; int mode; int bpp; } palette2fmt[] = {
 /* YUV422P */	{ "YUV422P", 0, 0 },
 /* YUV411P */	{ "YUV411P", 0, 0 }};
 #define NRPALETTES (sizeof(palette2fmt)/sizeof(palette2fmt[0]))
+#undef ENDIANESS
 
 /* ----------------------------------------------------------------------- */
-/* ZORAN chipset detector						   */
-/* shamelessly stolen from bttv.c					   */
+/* ZORAN chipset detector                                                 */
+/* shamelessly stolen from bttv.c                                         */
 /* Reason for beeing here: we need to detect if we are running on a        */
 /* Triton based chipset, and if so, enable a certain bit                   */
 /* ----------------------------------------------------------------------- */
-
-void handle_chipset(void)
+static
+void __init handle_chipset(void)
 {
 	struct pci_dev *dev = NULL;
-  
+
 	/* Just in case some nut set this to something dangerous */
 	if (triton1)
 		triton1 = ZORAN_VDC_TRICOM;
-	
-	while ((dev = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82437, dev))) 
+
+	while ((dev = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82437, dev)))
 	{
 		printk(KERN_INFO "zoran: Host bridge 82437FX Triton PIIX\n");
 		triton1 = ZORAN_VDC_TRICOM;
@@ -148,15 +156,15 @@ static void zoran_set_geo(struct zoran* ztv, struct vidinfo* i);
 static
 void zoran_dump(struct zoran *ztv)
 {
-	char	str[1024];
+	char	str[256];
 	char	*p=str; /* shut up, gcc! */
 	int	i;
 
 	for (i=0; i<0x60; i+=4) {
 		if ((i % 16) == 0) {
-			if (i) printk(/*KERN_DEBUG*/ "%s\n",str);
+			if (i) printk("%s\n",str);
 			p = str;
-			p+= sprintf(str, "       %04x: ",i);
+			p+= sprintf(str, KERN_DEBUG "       %04x: ",i);
 		}
 		p += sprintf(p, "%08x ",zrread(i));
 	}
@@ -165,114 +173,110 @@ void zoran_dump(struct zoran *ztv)
 static
 void reap_states(struct zoran* ztv)
 {
-	irq1++;		/* debugging... */
+	/* count frames */
+	ztv->fieldnr++;
 
 	/*
-	 * GRABBING?
+	 * Are we busy at all?
+	 * This depends on if there is a workqueue AND the
+	 * videotransfer is enabled on the chip...
 	 */
-	if ( test_bit(STATE_GRAB, &ztv->state) ) {
-		int i;
+	if (ztv->workqueue && (zrread(ZORAN_VDC) & ZORAN_VDC_VIDEN))
+	{
+		struct vidinfo* newitem;
 
-		/* are we already grabbing? */
-		if (test_bit(STATE_GRAB, &ztv->prevstate)) {
+		/* did we get a complete frame? */
+		if (zrread(ZORAN_VSTR) & ZORAN_VSTR_GRAB)
+			return;
 
-			/* did we get a complete grab? */
-			if (zrread(ZORAN_VSTR) & ZORAN_VSTR_GRAB)
-				goto out;
+DEBUG(printk(CARD_DEBUG "completed %s at %p\n",CARD,ztv->workqueue->kindof==FBUFFER_GRAB?"grab":"read",ztv->workqueue));
 
-			/* we are done with this buffer, tell everyone */
-			ztv->grabinfo[ztv->lastframe].status = FBUFFER_DONE;
+		/* we are done with this buffer, tell everyone */
+		ztv->workqueue->status = FBUFFER_DONE;
+		ztv->workqueue->fieldnr = ztv->fieldnr;
+		/* not good, here for BTTV_FIELDNR reasons */
+		ztv->lastfieldnr = ztv->fieldnr;
+
+		switch (ztv->workqueue->kindof) {
+		 case FBUFFER_GRAB:
 			wake_up_interruptible(&ztv->grabq);
+			break;
+		 case FBUFFER_VBI:
+			wake_up_interruptible(&ztv->vbiq);
+			break;
+		 default:
+			printk(CARD_INFO "somebody killed the workqueue (kindof=%d)!\n",CARD,ztv->workqueue->kindof);
 		}
 
-		/* locate a new frame to grab */
-		for (i=0; i<ZORAN_MAX_FBUFFERS; i++)
-			if (ztv->grabinfo[i].status == FBUFFER_GRABBING) {
-
-				/* there is a buffer more to be grabbed... */
-				ztv->lastframe = i;
-
-DEBUG(printk(KERN_DEBUG "irq(%ld): starting grab(%d)\n",irq1,i));
-
-				/* loadup the frame settings */
-				read_lock(&ztv->lock);
-				zoran_set_geo(ztv,&ztv->grabinfo[i]);
-				read_unlock(&ztv->lock);
-
-				zrand(~ZORAN_VDC_VIDEN,ZORAN_VDC);
-				zrand(~ZORAN_OCR_OVLEN, ZORAN_OCR);
-				zror(ZORAN_VSTR_SNAPSHOT,ZORAN_VSTR);
-				zror(ZORAN_VDC_VIDEN,ZORAN_VDC);
-
-				/* start single-shot grab */
-				zror(ZORAN_VSTR_GRAB, ZORAN_VSTR);
-				goto out;
-			}
-
-DEBUG(printk(KERN_DEBUG "irq(%ld): nothing more to grab\n",irq1));
-
-		/* turn grabbing off the next time around */
-		clear_bit(STATE_GRAB, &ztv->state);
-
-		/* force re-init of Read or Overlay settings */
-		clear_bit(STATE_READ, &ztv->prevstate);
-		clear_bit(STATE_OVERLAY, &ztv->prevstate);
+		/* item completed, skip to next item in queue */
+		write_lock(&ztv->lock);
+		newitem = ztv->workqueue->next;
+		ztv->workqueue->next = 0;	/* mark completed */
+		ztv->workqueue = newitem;
+		write_unlock(&ztv->lock);
 	}
 
 	/*
-	 * READING?
+	 * ok, so it seems we have nothing in progress right now.
+	 * Lets see if we can find some work.
 	 */
-	if ( test_bit(STATE_READ, &ztv->state) ) {
-		/* are we already reading? */
-		if (!test_bit(STATE_READ, &ztv->prevstate)) {
+	if (ztv->workqueue)
+	{
+		struct vidinfo* newitem;
+again:
 
-DEBUG(printk(KERN_DEBUG "irq(%ld): starting read\n",irq1));
+DEBUG(printk(CARD_DEBUG "starting %s at %p\n",CARD,ztv->workqueue->kindof==FBUFFER_GRAB?"grab":"read",ztv->workqueue));
 
-			read_lock(&ztv->lock);
-			zoran_set_geo(ztv,&ztv->readinfo);
-			read_unlock(&ztv->lock);
+		/* loadup the frame settings */
+		read_lock(&ztv->lock);
+		zoran_set_geo(ztv,ztv->workqueue);
+		read_unlock(&ztv->lock);
 
-			zrand(~ZORAN_VDC_VIDEN,ZORAN_VDC);
+		switch (ztv->workqueue->kindof) {
+		 case FBUFFER_GRAB:
+		 case FBUFFER_VBI:
 			zrand(~ZORAN_OCR_OVLEN, ZORAN_OCR);
 			zror(ZORAN_VSTR_SNAPSHOT,ZORAN_VSTR);
 			zror(ZORAN_VDC_VIDEN,ZORAN_VDC);
 
 			/* start single-shot grab */
 			zror(ZORAN_VSTR_GRAB, ZORAN_VSTR);
-			goto out;
+			break;
+		 default:
+			printk(CARD_INFO "what is this doing on the queue? (kindof=%d)\n",CARD,ztv->workqueue->kindof);
+			write_lock(&ztv->lock);
+			newitem = ztv->workqueue->next;
+			ztv->workqueue->next = 0;
+			ztv->workqueue = newitem;
+			write_unlock(&ztv->lock);
+			if (newitem)
+				goto again;	/* yeah, sure.. */
 		}
-
-		/* did we get a complete grab? */
-		if (zrread(ZORAN_VSTR) & ZORAN_VSTR_GRAB)
-			goto out;
-
-DEBUG(printk(KERN_DEBUG "irq(%ld): nothing more to read\n",irq1));
-
-		/* turn reading off the next time around */
-		clear_bit(STATE_READ, &ztv->state);
-		/* force re-init of Overlay settings */
-		clear_bit(STATE_OVERLAY, &ztv->prevstate);
-
-		/* we are done, tell everyone */
-		wake_up_interruptible(&ztv->readq);
+		/* bye for now */
+		return;
 	}
+DEBUG(printk(CARD_DEBUG "nothing in queue\n",CARD));
 
 	/*
-	 * OVERLAYING?
+	 * What? Even the workqueue is empty? Am i really here
+	 * for nothing? Did i come all that way to... do nothing?
 	 */
-	if ( test_bit(STATE_OVERLAY, &ztv->state) ) {
-		/* are we already overlaying? */
-		if (!test_bit(STATE_OVERLAY, &ztv->prevstate)) {
 
-DEBUG(printk(KERN_DEBUG "irq(%ld): starting overlay\n",irq1));
+	/* do we need to overlay? */
+	if (test_bit(STATE_OVERLAY, &ztv->state))
+	{
+		/* are we already overlaying? */
+		if (!(zrread(ZORAN_OCR) & ZORAN_OCR_OVLEN) ||
+		    !(zrread(ZORAN_VDC) & ZORAN_VDC_VIDEN))
+		{
+DEBUG(printk(CARD_DEBUG "starting overlay\n",CARD));
 
 			read_lock(&ztv->lock);
 			zoran_set_geo(ztv,&ztv->overinfo);
 			read_unlock(&ztv->lock);
 
-			zrand(~ZORAN_VDC_VIDEN,ZORAN_VDC);
-			zrand(~ZORAN_VSTR_SNAPSHOT,ZORAN_VSTR);
 			zror(ZORAN_OCR_OVLEN, ZORAN_OCR);
+			zrand(~ZORAN_VSTR_SNAPSHOT,ZORAN_VSTR);
 			zror(ZORAN_VDC_VIDEN,ZORAN_VDC);
 		}
 
@@ -280,18 +284,43 @@ DEBUG(printk(KERN_DEBUG "irq(%ld): starting overlay\n",irq1));
 		 * leave overlaying on, but turn interrupts off.
 		 */
 		zrand(~ZORAN_ICR_EN,ZORAN_ICR);
-		goto out;
+		return;
+	}
+
+	/* do we have any VBI idle time processing? */
+	if (test_bit(STATE_VBI, &ztv->state))
+	{
+		struct vidinfo* item;
+		struct vidinfo* lastitem;
+
+		/* protect the workqueue */
+		write_lock(&ztv->lock);
+		lastitem = ztv->workqueue;
+		if (lastitem)
+			while (lastitem->next) lastitem = lastitem->next;
+		for (item=ztv->readinfo; item!=ztv->readinfo+ZORAN_VBI_BUFFERS; item++)
+			if (item->next == 0 && item->status == FBUFFER_FREE)
+			{
+DEBUG(printk(CARD_DEBUG "%p added to queue\n",CARD,item));
+				item->status = FBUFFER_BUSY;
+				if (!lastitem)
+					ztv->workqueue = item;
+				else 
+					lastitem->next = item;
+				lastitem = item;
+			}
+		write_unlock(&ztv->lock);
+		if (ztv->workqueue)
+			goto again;	/* hey, _i_ graduated :) */
 	}
 
 	/*
-	 * THEN WE MUST BE IDLING
+	 * Then we must be realy IDLE
 	 */
-DEBUG(printk(KERN_DEBUG "irq(%ld): turning off\n",irq1));
+DEBUG(printk(CARD_DEBUG "turning off\n",CARD));
 	/* nothing further to do, disable DMA and further IRQs */
 	zrand(~ZORAN_VDC_VIDEN,ZORAN_VDC);
 	zrand(~ZORAN_ICR_EN,ZORAN_ICR);
-out:
-	ztv->prevstate = ztv->state;
 }
 
 static
@@ -301,6 +330,7 @@ void zoran_irq(int irq, void *dev_id, struct pt_regs * regs)
 	int count = 0;
 	struct zoran *ztv = (struct zoran *)dev_id;
 
+	UNUSED(irq); UNUSED(regs);
 	for (;;) {
 		/* get/clear interrupt status bits */
 		stat=zrread(ZORAN_ISR);
@@ -308,117 +338,35 @@ void zoran_irq(int irq, void *dev_id, struct pt_regs * regs)
 		if (!estat)
 			return;
 		zrwrite(estat,ZORAN_ISR);
-		IDEBUG(printk(KERN_DEBUG "%s: estat %08x\n",CARD,estat));
-		IDEBUG(printk(KERN_DEBUG "%s:  stat %08x\n",CARD,stat));
+		IDEBUG(printk(CARD_DEBUG "estat %08x\n",CARD,estat));
+		IDEBUG(printk(CARD_DEBUG " stat %08x\n",CARD,stat));
 
 		if (estat & ZORAN_ISR_CODE)
 		{
-			IDEBUG(printk(KERN_DEBUG "%s: CodReplIRQ\n",CARD));
+			IDEBUG(printk(CARD_DEBUG "CodReplIRQ\n",CARD));
 		}
 		if (estat & ZORAN_ISR_GIRQ0)
 		{
-			IDEBUG(printk(KERN_DEBUG "%s: GIRQ0\n",CARD));
+			IDEBUG(printk(CARD_DEBUG "GIRQ0\n",CARD));
 			if (!ztv->card->usegirq1)
 				reap_states(ztv);
 		}
 		if (estat & ZORAN_ISR_GIRQ1)
 		{
-			IDEBUG(printk(KERN_DEBUG "%s: GIRQ1\n",CARD));
+			IDEBUG(printk(CARD_DEBUG "GIRQ1\n",CARD));
 			if (ztv->card->usegirq1)
 				reap_states(ztv);
 		}
 
 		count++;
 		if (count > 10)
-			printk(KERN_ERR "%s: irq loop %d (%x)\n",CARD,count,estat);
+			printk(CARD_ERR "irq loop %d (%x)\n",CARD,count,estat);
 		if (count > 20)
 		{
 			zrwrite(0, ZORAN_ICR);
-			printk(KERN_ERR "%s: IRQ lockup, cleared int mask\n",CARD);
+			printk(CARD_ERR "IRQ lockup, cleared int mask\n",CARD);
 		}
 	}
-}
-
-/*
- *      Scan for a Zoran chip, request the irq and map the io memory
- */
-static int find_zoran(void)
-{
-	unsigned char command, latency;
-	int result;
-	struct zoran *ztv;
-	struct pci_dev *dev;
-	int zoran_num=0;
-
-	if (!pcibios_present())
-	{
-		DEBUG(printk(KERN_DEBUG "zoran: PCI-BIOS not present or not accessible!\n"));
-		return 0;
-	}
-
-	for (dev = pci_devices; dev != NULL; dev = dev->next)
-	{
-		if (dev->vendor != PCI_VENDOR_ID_ZORAN)
-			continue;
-		if (dev->device != PCI_DEVICE_ID_ZORAN_36120)
-			continue;
-
-		/* Ok, ZR36120 found! */
-		ztv=&zorans[zoran_num];
-		ztv->dev=dev;
-		ztv->id=dev->device;
-		ztv->zoran_mem=NULL;
-
-		ztv->zoran_adr = ztv->dev->resource[0].start;
-		pci_read_config_byte(ztv->dev, PCI_CLASS_REVISION,
-			     &ztv->revision);
-		printk(KERN_INFO "zoran: Zoran %x (rev %d) ",
-			ztv->id, ztv->revision);
-		printk("bus: %d, devfn: %d, ",
-			ztv->dev->bus->number, ztv->dev->devfn);
-		printk("irq: %d, ",ztv->dev->irq);
-		printk("memory: 0x%08x.\n", ztv->zoran_adr);
-
-		ztv->zoran_mem = ioremap(ztv->zoran_adr, 0x1000);
-		DEBUG(printk(KERN_DEBUG "zoran: mapped-memory at 0x%p\n",ztv->zoran_mem));
-
-		result = request_irq(ztv->dev->irq, zoran_irq,
-			SA_SHIRQ|SA_INTERRUPT,"zoran",(void *)ztv);
-		if (result==-EINVAL)
-		{
-			printk(KERN_ERR "zoran: Bad irq number or handler\n");
-			return -EINVAL;
-		}
-		if (result==-EBUSY)
-		{
-			printk(KERN_ERR "zoran: IRQ %d busy, change your PnP config in BIOS\n",ztv->dev->irq);
-			return result;
-		}
-		if (result < 0)
-			return result;
-
-		/* Enable bus-mastering */
-		pci_read_config_byte(ztv->dev, PCI_COMMAND, &command);
-		command|=PCI_COMMAND_MASTER|PCI_COMMAND_MEMORY;
-		pci_write_config_byte(ztv->dev, PCI_COMMAND, command);
-		pci_read_config_byte(ztv->dev, PCI_COMMAND, &command);
-		if (!(command&PCI_COMMAND_MASTER))
-		{
-			printk(KERN_ERR "zoran: PCI bus-mastering could not be enabled\n");
-			return -1;
-		}
-		pci_read_config_byte(ztv->dev, PCI_LATENCY_TIMER, &latency);
-		if (!latency)
-		{
-			latency=32;
-			pci_write_config_byte(ztv->dev, PCI_LATENCY_TIMER, latency);
-			DEBUG(printk(KERN_INFO "zoran: latency set to %d\n",latency));
-		}
-		zoran_num++;
-	}
-	if(zoran_num)
-		printk(KERN_INFO "zoran: %d Zoran card(s) found.\n",zoran_num);
-	return zoran_num;
 }
 
 static
@@ -444,31 +392,25 @@ int zoran_muxsel(struct zoran* ztv, int channel, int norm)
 static
 void zoran_cap(struct zoran* ztv, int on)
 {
-	DEBUG(printk(KERN_DEBUG "       zoran_cap(%d) at %ld, state=%x\n",on,irq1,ztv->state));
+DEBUG(printk(CARD_DEBUG "zoran_cap(%d) state=%x\n",CARD,on,ztv->state));
 
 	if (on) {
 		ztv->running = 1;
-		/* 
-		 * Clear the previous state flag. This way the irq
-		 * handler will be forced to re-examine its current
-		 * state from scratch, setting up the registers along
-		 * the way.
-		 */
-		clear_bit(STATE_OVERLAY, &ztv->prevstate);
+
 		/*
-		 * turn interrupts back on. The DMA will be enabled
+		 * turn interrupts (back) on. The DMA will be enabled
 		 * inside the irq handler when it detects a restart.
 		 */
-		zror(ZORAN_ICR_CODE|ZORAN_ICR_GIRQ0|ZORAN_ICR_GIRQ1,ZORAN_ICR);
 		zror(ZORAN_ICR_EN,ZORAN_ICR);
 	}
 	else {
-		ztv->running = 0;
 		/*
-		 * turn interrupts and DMA both off
+		 * turn both interrupts and DMA off
 		 */
 		zrand(~ZORAN_VDC_VIDEN,ZORAN_VDC);
 		zrand(~ZORAN_ICR_EN,ZORAN_ICR);
+
+		ztv->running = 0;
 	}
 }
 
@@ -488,23 +430,15 @@ void zoran_built_overlay(struct zoran* ztv, int count, struct video_clip *vcp)
 {
 	ulong*	mtop;
 	int	ystep = (ztv->vidXshift + ztv->vidWidth+31)/32;	/* next DWORD */
-	int	mult = ztv->interlace;		/* double height? */
 	int	i;
 
-	DEBUG(printk(KERN_DEBUG "       overlay at %p, ystep=%d, clips=%d\n",ztv->overinfo.overlay,ystep,count));
-	if (ztv->overinfo.overlay == 0) {
-		zrand(~ZORAN_OCR_OVLEN, ZORAN_OCR);
-		return;
+DEBUG(printk(KERN_DEBUG "       overlay at %p, ystep=%d, clips=%d\n",ztv->overinfo.overlay,ystep,count));
+
+	for (i=0; i<count; i++) {
+		struct video_clip *vp = vcp+i;
+		UNUSED(vp);
+DEBUG(printk(KERN_DEBUG "       %d: clip(%d,%d,%d,%d)\n", i,vp->x,vp->y,vp->width,vp->height));
 	}
-
-for (i=0; i<count; i++) {
-	struct video_clip *vp = vcp+i;
-	DEBUG(printk(KERN_DEBUG "       %d: clip(%d,%d,%d,%d)\n",
-		i,vp->x,vp->y,vp->width,vp->height));
-}
-
-	/* clear entire blob */
-/*	memset(ztv->overinfo.overlay, 0, 1024*1024/8); */
 
 	/*
 	 * activate the visible portion of the screen
@@ -535,18 +469,18 @@ for (i=0; i<count; i++) {
 	/* process clipping regions */
 	for (i=0; i<count; i++) {
 		int h;
-		if (vcp->x < 0 || vcp->x > ztv->overinfo.w ||
+		if (vcp->x < 0 || (uint)vcp->x > ztv->overinfo.w ||
 		    vcp->y < 0 || vcp->y > ztv->overinfo.h ||
-		    vcp->width < 0 || (vcp->x+vcp->width) > ztv->overinfo.w ||
+		    vcp->width < 0 || (uint)(vcp->x+vcp->width) > ztv->overinfo.w ||
 		    vcp->height < 0 || (vcp->y+vcp->height) > ztv->overinfo.h)
 		{
-			DEBUG(printk(KERN_DEBUG "%s: illegal clipzone (%d,%d,%d,%d) not in (0,0,%d,%d), adapting\n",CARD,vcp->x,vcp->y,vcp->width,vcp->height,ztv->overinfo.w,ztv->overinfo.h));
+			DEBUG(printk(CARD_DEBUG "illegal clipzone (%d,%d,%d,%d) not in (0,0,%d,%d), adapting\n",CARD,vcp->x,vcp->y,vcp->width,vcp->height,ztv->overinfo.w,ztv->overinfo.h));
 			if (vcp->x < 0) vcp->x = 0;
-			if (vcp->x > ztv->overinfo.w) vcp->x = ztv->overinfo.w;
+			if ((uint)vcp->x > ztv->overinfo.w) vcp->x = ztv->overinfo.w;
 			if (vcp->y < 0) vcp->y = 0;
 			if (vcp->y > ztv->overinfo.h) vcp->y = ztv->overinfo.h;
 			if (vcp->width < 0) vcp->width = 0;
-			if (vcp->x+vcp->width > ztv->overinfo.w) vcp->width = ztv->overinfo.w - vcp->x;
+			if ((uint)(vcp->x+vcp->width) > ztv->overinfo.w) vcp->width = ztv->overinfo.w - vcp->x;
 			if (vcp->height < 0) vcp->height = 0;
 			if (vcp->y+vcp->height > ztv->overinfo.h) vcp->height = ztv->overinfo.h - vcp->y;
 //			continue;
@@ -568,7 +502,7 @@ for (i=0; i<count; i++) {
 	mtop = ztv->overinfo.overlay;
 	zrwrite(virt_to_bus(mtop), ZORAN_MTOP);
 	zrwrite(virt_to_bus(mtop+ystep), ZORAN_MBOT);
-	zraor((mult*ystep)<<0,~ZORAN_OCR_MASKSTRIDE,ZORAN_OCR);
+	zraor((ztv->vidInterlace*ystep)<<0,~ZORAN_OCR_MASKSTRIDE,ZORAN_OCR);
 }
 
 struct tvnorm 
@@ -591,6 +525,17 @@ static struct tvnorm tvnorms[] = {
 };
 #define TVNORMS (sizeof(tvnorms)/sizeof(tvnorm))
 
+/*
+ * Program the chip for a setup as described in the vidinfo struct.
+ *
+ * Side-effects: calculates vidXshift, vidInterlace,
+ * vidHeight, vidWidth which are used in a later stage
+ * to calculate the overlay mask
+ *
+ * This is an internal function, as such it does not check the
+ * validity of the struct members... Spectaculair crashes will
+ * follow /very/ quick when you're wrong and the chip right :)
+ */
 static
 void zoran_set_geo(struct zoran* ztv, struct vidinfo* i)
 {
@@ -598,9 +543,9 @@ void zoran_set_geo(struct zoran* ztv, struct vidinfo* i)
 	int	stride;
 	int	winWidth, winHeight;
 	int	maxWidth, maxHeight, maxXOffset, maxYOffset;
-	int	filter;
+	long	vfec;
 
-	DEBUG(printk(KERN_DEBUG "       set_geo(rect=(%d,%d,%d,%d), norm=%d, format=%d, bpp=%d, bpl=%d, vidadr=%lx, overlay=%p)\n", i->x,i->y,i->w,i->h,ztv->norm,i->format,i->bpp,i->bpl,i->vidadr,i->overlay));
+DEBUG(printk(CARD_DEBUG "set_geo(rect=(%d,%d,%d,%d), norm=%d, format=%d, bpp=%d, bpl=%d, busadr=%lx, overlay=%p)\n",CARD,i->x,i->y,i->w,i->h,ztv->norm,i->format,i->bpp,i->bpl,i->busadr,i->overlay));
 
 	/*
 	 * make sure the DMA transfers are inhibited during our
@@ -609,9 +554,13 @@ void zoran_set_geo(struct zoran* ztv, struct vidinfo* i)
 	zrand(~ZORAN_VDC_VIDEN,ZORAN_VDC);
 
 	maxWidth = tvnorms[ztv->norm].Wa;
-	maxHeight = tvnorms[ztv->norm].Ha;
+	maxHeight = tvnorms[ztv->norm].Ha/2;
 	maxXOffset = tvnorms[ztv->norm].HStart;
 	maxYOffset = tvnorms[ztv->norm].VStart;
+
+	/* setup vfec register (keep ExtFl,TopField and VCLKPol settings) */
+	vfec = (zrread(ZORAN_VFEC) & (ZORAN_VFEC_EXTFL|ZORAN_VFEC_TOPFIELD|ZORAN_VFEC_VCLKPOL)) |
+	       (palette2fmt[i->format].mode & (ZORAN_VFEC_RGB|ZORAN_VFEC_ERRDIF|ZORAN_VFEC_LE|ZORAN_VFEC_PACK24));
 
 	/*
 	 * Set top, bottom ptrs. Since these must be DWORD aligned,
@@ -621,7 +570,9 @@ void zoran_set_geo(struct zoran* ztv, struct vidinfo* i)
 	 */
 	ztv->vidXshift = 0;
 	winWidth = i->w;
-	top = i->vidadr + i->x*i->bpp + i->y*i->bpl;
+	if (winWidth < 0)
+		winWidth = -winWidth;
+	top = i->busadr + i->x*i->bpp + i->y*i->bpl;
 	if (top & 3) {
 		ztv->vidXshift = (top & 3) / i->bpp;
 		winWidth += ztv->vidXshift;
@@ -644,30 +595,30 @@ void zoran_set_geo(struct zoran* ztv, struct vidinfo* i)
 	 * next line is DWORD aligned too (as required by spec).
 	 */
 	if ((winWidth*i->bpp) & 3) {
-		DEBUG(printk(KERN_DEBUG "       window-width enlarged by %d pixels\n",(winWidth*i->bpp) & 3));
+DEBUG(printk(KERN_DEBUG "       window-width enlarged by %d pixels\n",(winWidth*i->bpp) & 3));
 		winWidth += (winWidth*i->bpp) & 3;
 	}
 
 	/* determine the DispMode and stride */
-	if (i->h <= maxHeight/2) {
-		/* single frame suffices for this height */
-		zror(ZORAN_VFEC_DISPMOD, ZORAN_VFEC);
-		ztv->interlace = 0;
-		winHeight = i->h;
-		if (winHeight < 0)	/* can happen for read's! */
-			winHeight = -winHeight;
+	if (i->h >= 0 && i->h <= maxHeight) {
+		/* single frame grab suffices for this height. */
+		vfec |= ZORAN_VFEC_DISPMOD;
+		ztv->vidInterlace = 0;
 		stride = i->bpl - (winWidth*i->bpp);
+		winHeight = i->h;
 	}
 	else {
 		/* interleaving needed for this height */
-		zrand(~ZORAN_VFEC_DISPMOD, ZORAN_VFEC);
-		ztv->interlace = 1;
-		winHeight = i->h/2;
+		ztv->vidInterlace = 1;
 		stride = i->bpl*2 - (winWidth*i->bpp);
+		winHeight = i->h/2;
 	}
+	if (winHeight < 0)	/* can happen for VBI! */
+		winHeight = -winHeight;
+
 	/* safety net, sometimes bpl is too short??? */
 	if (stride<0) {
-		DEBUG(printk(KERN_DEBUG "%s: WARNING stride = %d\n",CARD,stride));
+DEBUG(printk(CARD_DEBUG "WARNING stride = %d\n",CARD,stride));
 		stride = 0;
 	}
 
@@ -677,86 +628,117 @@ void zoran_set_geo(struct zoran* ztv, struct vidinfo* i)
 	/* remember vidWidth, vidHeight for overlay calculations */
 	ztv->vidWidth = winWidth;
 	ztv->vidHeight = winHeight;
-DEBUG(printk(KERN_DEBUG "       top=%08lx, bottom=%08lx, winWidth=%d, winHeight=%d, maxWidth=%d, maxHeight=%d, stride=%d\n",top,bot,winWidth,winHeight,maxWidth,maxHeight,stride));
+DEBUG(printk(KERN_DEBUG "       top=%08lx, bottom=%08lx\n",top,bot));
+DEBUG(printk(KERN_DEBUG "       winWidth=%d, winHeight=%d\n",winWidth,winHeight));
+DEBUG(printk(KERN_DEBUG "       maxWidth=%d, maxHeight=%d\n",maxWidth,maxHeight));
+DEBUG(printk(KERN_DEBUG "       stride=%d\n",stride));
 
-	/* determine scales and crops */
-	if (1) {
-		int Wa, X, We, HorDcm, hcrop1, hcrop2, Hstart, Hend;
-
-A:		Wa = maxWidth;
-		X = (winWidth*64+Wa-1)/Wa;
-		We = winWidth*64/X;
-		HorDcm = 64-X;
-		hcrop1 = 2*(Wa-We)/4;
-		hcrop2 = Wa-We-hcrop1;
-		Hstart = maxXOffset + hcrop1;
-		Hend = maxXOffset + Wa-1-hcrop2;
-
+	/*
+	 * determine horizontal scales and crops
+	 */
+	if (i->w < 0) {
+		int Hstart = 1;
+		int Hend = Hstart + winWidth;
+DEBUG(printk(KERN_DEBUG "       Y: scale=0, start=%d, end=%d\n", Hstart, Hend));
+		zraor((Hstart<<10)|(Hend<<0),~(ZORAN_VFEH_HSTART|ZORAN_VFEH_HEND),ZORAN_VFEH);
+	}
+	else {
+		int Wa = maxWidth;
+		int X = (winWidth*64+Wa-1)/Wa;
+		int We = winWidth*64/X;
+		int HorDcm = 64-X;
+		int hcrop1 = 2*(Wa-We)/4;
 		/*
 		 * BUGFIX: Juha Nurmela <junki@qn-lpr2-165.quicknet.inet.fi> 
 		 * found the solution to the color phase shift.
 		 * See ChangeLog for the full explanation)
 		 */
-		if (!(Hstart & 1)) {
-DEBUG(printk(KERN_DEBUG "       correcting horizontal start/end by one\n"));
-			winWidth--;
-			goto A;
-		}
+		int Hstart = (maxXOffset + hcrop1) | 1;
+		int Hend = Hstart + We - 1;
 
 DEBUG(printk(KERN_DEBUG "       X: scale=%d, start=%d, end=%d\n", HorDcm, Hstart, Hend));
 
 		zraor((Hstart<<10)|(Hend<<0),~(ZORAN_VFEH_HSTART|ZORAN_VFEH_HEND),ZORAN_VFEH);
-		zraor((HorDcm<<14),~ZORAN_VFEC_HORDCM, ZORAN_VFEC);
+		vfec |= HorDcm<<14;
 
-		filter = ZORAN_VFEC_HFILTER_1;
-		if (HorDcm >= 48)
-			filter = ZORAN_VFEC_HFILTER_5; /* 5 tap filter */
-		else if (HorDcm >= 32)
-			filter = ZORAN_VFEC_HFILTER_4; /* 4 tap filter */
-		else if (HorDcm >= 16)
-			filter = ZORAN_VFEC_HFILTER_3; /* 3 tap filter */
-		zraor(filter, ~ZORAN_VFEC_HFILTER, ZORAN_VFEC);
+		if (HorDcm<16)
+			vfec |= ZORAN_VFEC_HFILTER_1; /* no filter */
+		else if (HorDcm<32)
+			vfec |= ZORAN_VFEC_HFILTER_3; /* 3 tap filter */
+		else if (HorDcm<48)
+			vfec |= ZORAN_VFEC_HFILTER_4; /* 4 tap filter */
+		else	vfec |= ZORAN_VFEC_HFILTER_5; /* 5 tap filter */
 	}
-	/* when height is negative, we want to read from line 0 */
+
+	/*
+	 * Determine vertical scales and crops
+	 *
+	 * when height is negative, we want to read starting at line 0
+	 * One day someone might need access to these lines...
+	 */
 	if (i->h < 0) {
 		int Vstart = 0;
 		int Vend = Vstart + winHeight;
-		int VerDcm = 0;
-DEBUG(printk(KERN_DEBUG "       Y: scale=%d, start=%d, end=%d\n", VerDcm, Vstart, Vend));
+DEBUG(printk(KERN_DEBUG "       Y: scale=0, start=%d, end=%d\n", Vstart, Vend));
 		zraor((Vstart<<10)|(Vend<<0),~(ZORAN_VFEV_VSTART|ZORAN_VFEV_VEND),ZORAN_VFEV);
-		zraor((VerDcm<<8),~ZORAN_VFEC_VERDCM, ZORAN_VFEC);
 	}
 	else {
-		int Ha = maxHeight/2;
+		int Ha = maxHeight;
 		int Y = (winHeight*64+Ha-1)/Ha;
 		int He = winHeight*64/Y;
 		int VerDcm = 64-Y;
 		int vcrop1 = 2*(Ha-He)/4;
-		int vcrop2 = Ha-He-vcrop1;
 		int Vstart = maxYOffset + vcrop1;
-		int Vend = maxYOffset + Ha-1-vcrop2;
+		int Vend = Vstart + He - 1;
 
 DEBUG(printk(KERN_DEBUG "       Y: scale=%d, start=%d, end=%d\n", VerDcm, Vstart, Vend));
 		zraor((Vstart<<10)|(Vend<<0),~(ZORAN_VFEV_VSTART|ZORAN_VFEV_VEND),ZORAN_VFEV);
-		zraor((VerDcm<<8),~ZORAN_VFEC_VERDCM, ZORAN_VFEC);
+		vfec |= VerDcm<<8;
 	}
 
 DEBUG(printk(KERN_DEBUG "       F: format=%d(=%s)\n",i->format,palette2fmt[i->format].name));
+
 	/* setup the requested format */
-	zraor(palette2fmt[i->format].mode, ~(ZORAN_VFEC_RGB|ZORAN_VFEC_LE|ZORAN_VFEC_PACK24), ZORAN_VFEC);
+	zrwrite(vfec, ZORAN_VFEC);
 }
 
-#if LINUX_VERSION_CODE >= 0x020100
 static
-unsigned int zoran_poll(struct video_device *dev, struct file *file, poll_table *wait)
+void zoran_common_open(struct zoran* ztv, int flags)
 {
-	struct zoran *ztv = (struct zoran *)dev;
+	UNUSED(flags);
 
-	poll_wait(file, &ztv->readq, wait);
+	/* already opened? */
+	if (ztv->users++ != 0)
+		return;
 
-	return (POLLIN | POLLRDNORM);
+	/* unmute audio */
+	/* /what/ audio? */
+
+	ztv->state = 0;
+
+	/* setup the encoder to the initial values */
+	ztv->picture.colour=254<<7;
+	ztv->picture.brightness=128<<8;
+	ztv->picture.hue=128<<8;
+	ztv->picture.contrast=216<<7;
+	i2c_control_device(&ztv->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_PICTURE, &ztv->picture);
+
+	/* default to the composite input since my camera is there */
+	zoran_muxsel(ztv, 0, VIDEO_MODE_PAL);
 }
-#endif
+
+static
+void zoran_common_close(struct zoran* ztv)
+{
+	if (--ztv->users != 0)
+		return;
+
+	/* mute audio */
+	/* /what/ audio? */
+
+	/* stop the chip */
+	zoran_cap(ztv, 0);
+}
 
 /*
  * Open a zoran card. Right now the flags are just a hack
@@ -764,60 +746,46 @@ unsigned int zoran_poll(struct video_device *dev, struct file *file, poll_table 
 static int zoran_open(struct video_device *dev, int flags)
 {
 	struct zoran *ztv = (struct zoran*)dev;
-	int	i;
+	struct vidinfo* item;
+	char* pos;
 
-	DEBUG(printk(KERN_DEBUG "%s: open(dev,%d)\n",CARD,flags));
+	DEBUG(printk(CARD_DEBUG "open(dev,%d)\n",CARD,flags));
 
-	switch (flags) {
-	 case 0:
-		/* already active? */
-		if (ztv->user)
-			return -EBUSY;
-		ztv->user++;
-
-		/* unmute audio */
-		/* /what/ audio? */
-
-/******************************************
- We really should be doing lazy allocing...
- ******************************************/
-		/* allocate a frame buffer */
-		if (!ztv->fbuffer)
-			ztv->fbuffer = bmalloc(ZORAN_MAX_FBUFSIZE);
-		if (!ztv->fbuffer) {
-			/* could not get a buffer, bail out */
-			ztv->user--;
-			return -ENOBUFS;
-		}
-		/* at this time we _always_ have a framebuffer */
-		memset(ztv->fbuffer,0,ZORAN_MAX_FBUFSIZE);
-
-		if (!ztv->overinfo.overlay)
-			ztv->overinfo.overlay = (void*)kmalloc(1024*1024/8, GFP_KERNEL);
-		if (!ztv->overinfo.overlay) {
-			/* could not get an overlay buffer, bail out */
-			ztv->user--;
-			bfree(ztv->fbuffer, ZORAN_MAX_FBUFSIZE);
-			return -ENOBUFS;
-		}
-		/* at this time we _always_ have a overlay */
-
-		/* clear buffer status */
-		for (i=0; i<ZORAN_MAX_FBUFFERS; i++)
-			ztv->grabinfo[i].status = FBUFFER_UNUSED;
-		ztv->state = 0;
-		ztv->prevstate = 0;
-		ztv->lastframe = -1;
-
-		/* setup the encoder to the initial values */
-		i2c_control_device(&ztv->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_PICTURE, &ztv->picture);
-
-		/* default to the compisite input since my camera is there */
-		zoran_muxsel(ztv, 0, VIDEO_MODE_PAL);
-		break;
-	 case 1:
-		break;
+	/*********************************************
+	 * We really should be doing lazy allocing...
+	 *********************************************/
+	/* allocate a frame buffer */
+	if (!ztv->fbuffer)
+		ztv->fbuffer = bmalloc(ZORAN_MAX_FBUFSIZE);
+	if (!ztv->fbuffer) {
+		/* could not get a buffer, bail out */
+		return -ENOBUFS;
 	}
+	/* at this time we _always_ have a framebuffer */
+	memset(ztv->fbuffer,0,ZORAN_MAX_FBUFSIZE);
+
+	if (!ztv->overinfo.overlay)
+		ztv->overinfo.overlay = (void*)kmalloc(1024*1024/8, GFP_KERNEL);
+	if (!ztv->overinfo.overlay) {
+		/* could not get an overlay buffer, bail out */
+		bfree(ztv->fbuffer, ZORAN_MAX_FBUFSIZE);
+		return -ENOBUFS;
+	}
+	/* at this time we _always_ have a overlay */
+
+	/* clear buffer status, and give them a DMAable address */
+	pos = ztv->fbuffer;
+	for (item=ztv->grabinfo; item!=ztv->grabinfo+ZORAN_MAX_FBUFFERS; item++)
+	{
+		item->status = FBUFFER_FREE;
+		item->memadr = pos;
+		item->busadr = virt_to_bus(pos);
+		pos += ZORAN_MAX_FBUFFER;
+	}
+
+	/* do the common part of all open's */
+	zoran_common_open(ztv, flags);
+
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -827,14 +795,20 @@ void zoran_close(struct video_device* dev)
 {
 	struct zoran *ztv = (struct zoran*)dev;
 
-	DEBUG(printk(KERN_DEBUG "%s: close(dev)\n",CARD));
+	DEBUG(printk(CARD_DEBUG "close(dev)\n",CARD));
 
-	/* we are no longer active, goodbye */
-	ztv->user--;
+	/* driver specific closure */
+	clear_bit(STATE_OVERLAY, &ztv->state);
 
-	/* mute audio */
-	/* stop the chip */
-	zoran_cap(ztv, 0);
+	zoran_common_close(ztv);
+
+        /*
+         *      This is sucky but right now I can't find a good way to
+         *      be sure its safe to free the buffer. We wait 5-6 fields
+         *      which is more than sufficient to be sure.
+         */
+        current->state = TASK_UNINTERRUPTIBLE;
+        schedule_timeout(HZ/10);        /* Wait 1/10th of a second */
 
 	/* free the allocated framebuffer */
 	if (ztv->fbuffer)
@@ -847,45 +821,138 @@ void zoran_close(struct video_device* dev)
 	MOD_DEC_USE_COUNT;
 }
 
-static
-long zoran_write(struct video_device* dev, const char* buf, unsigned long count, int nonblock)
-{
-	DEBUG(printk(KERN_DEBUG "zoran_write\n"));
-	return -EINVAL;
-}
-
+/*
+ * This read function could be used reentrant in a SMP situation.
+ *
+ * This is made possible by the spinlock which is kept till we
+ * found and marked a buffer for our own use. The lock must
+ * be released as soon as possible to prevent lock contention.
+ */
 static
 long zoran_read(struct video_device* dev, char* buf, unsigned long count, int nonblock)
 {
 	struct zoran *ztv = (struct zoran*)dev;
-	int	max;
+	unsigned long max;
+	struct vidinfo* unused = 0;
+	struct vidinfo* done = 0;
 
-	DEBUG(printk(KERN_DEBUG "zoran_read(%p,%ld,%d)\n",buf,count,nonblock));
+	DEBUG(printk(CARD_DEBUG "zoran_read(%p,%ld,%d)\n",CARD,buf,count,nonblock));
 
-	/* tell the state machine we want in too */
-	write_lock_irq(&ztv->lock);
-	ztv->readinfo.vidadr = virt_to_bus(phys_to_virt((ulong)ztv->fbuffer));
-	set_bit(STATE_READ, &ztv->state);
-	write_unlock_irq(&ztv->lock);
-	zoran_cap(ztv, 1);
+	/* find ourself a free or completed buffer */
+	for (;;) {
+		struct vidinfo* item;
 
-	/* wait for data to arrive */
-	interruptible_sleep_on(&ztv->readq);
+		write_lock_irq(&ztv->lock);
+		for (item=ztv->grabinfo; item!=ztv->grabinfo+ZORAN_MAX_FBUFFERS; item++)
+		{
+			if (!unused && item->status == FBUFFER_FREE)
+				unused = item;
+			if (!done && item->status == FBUFFER_DONE)
+				done = item;
+		}
+		if (done || unused)
+			break;
 
-	/* see if a signal did it */
-	if (signal_pending(current))
-		return -ERESTARTSYS;
+		/* no more free buffers, wait for them. */
+		write_unlock_irq(&ztv->lock);
+		if (nonblock)
+			return -EWOULDBLOCK;
+		interruptible_sleep_on(&ztv->grabq);
+		if (signal_pending(current))
+			return -EINTR;
+	}
 
-	/* give the user what he requested */
-	max = ztv->readinfo.w*ztv->readinfo.bpp - ztv->readinfo.h*ztv->readinfo.bpl;
+	/* Do we have 'ready' data? */
+	if (!done) {
+		/* no? than this will take a while... */
+		if (nonblock) {
+			write_unlock_irq(&ztv->lock);
+			return -EWOULDBLOCK;
+		}
+
+		/* mark the unused buffer as wanted */
+		unused->status = FBUFFER_BUSY;
+		unused->w = 320;
+		unused->h = 240;
+		unused->format = VIDEO_PALETTE_RGB24;
+		unused->bpp = palette2fmt[unused->format].bpp;
+		unused->bpl = unused->w * unused->bpp;
+		unused->next = 0;
+		{ /* add to tail of queue */
+		  struct vidinfo* oldframe = ztv->workqueue;
+		  if (!oldframe) ztv->workqueue = unused;
+		  else {
+		    while (oldframe->next) oldframe = oldframe->next;
+		    oldframe->next = unused;
+		  }
+		}
+		write_unlock_irq(&ztv->lock);
+
+		/* tell the state machine we want it filled /NOW/ */
+		zoran_cap(ztv, 1);
+
+		/* wait till this buffer gets grabbed */
+		while (unused->status == FBUFFER_BUSY) {
+			interruptible_sleep_on(&ztv->grabq);
+			/* see if a signal did it */
+			if (signal_pending(current))
+				return -EINTR;
+		}
+		done = unused;
+	}
+	else
+		write_unlock_irq(&ztv->lock);
+
+	/* Yes! we got data! */
+	max = done->bpl * done->h;
 	if (count > max)
 		count = max;
-	if (copy_to_user((void*)buf, (void*)ztv->fbuffer, count))
-		return -EFAULT;
+	if (copy_to_user((void*)buf, done->memadr, count))
+		count = -EFAULT;
+
+	/* keep the engine running */
+	done->status = FBUFFER_FREE;
+//	zoran_cap(ztv,1);
+
+	/* tell listeners this buffer became free */
+	wake_up_interruptible(&ztv->grabq);
 
 	/* goodbye */
+	DEBUG(printk(CARD_DEBUG "zoran_read() returns %lu\n",CARD,count));
 	return count;
 }
+
+static
+long zoran_write(struct video_device* dev, const char* buf, unsigned long count, int nonblock)
+{
+	struct zoran *ztv = (struct zoran *)dev;
+	UNUSED(ztv); UNUSED(dev); UNUSED(buf); UNUSED(count); UNUSED(nonblock);
+	DEBUG(printk(CARD_DEBUG "zoran_write\n",CARD));
+	return -EINVAL;
+}
+
+#if LINUX_VERSION_CODE >= 0x020100
+static
+unsigned int zoran_poll(struct video_device *dev, struct file *file, poll_table *wait)
+{
+	struct zoran *ztv = (struct zoran *)dev;
+	struct vidinfo* item;
+	unsigned int mask = 0;
+
+	poll_wait(file, &ztv->grabq, wait);
+
+	for (item=ztv->grabinfo; item!=ztv->grabinfo+ZORAN_MAX_FBUFFERS; item++)
+		if (item->status == FBUFFER_DONE)
+		{
+			mask |= (POLLIN | POLLRDNORM);
+			break;
+		}
+
+	DEBUG(printk(CARD_DEBUG "zoran_poll()=%x\n",CARD,mask));
+
+	return mask;
+}
+#endif
 
 /* append a new clipregion to the vector of video_clips */
 static
@@ -905,20 +972,9 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 
 	switch (cmd) {
 	 case VIDIOCGCAP:
-	 {	/* get video capabilities */
+	 {
 		struct video_capability c;
-		struct video_decoder_capability dc;
-		int rv;
-		DEBUG(printk(KERN_DEBUG "%s: GetCapabilities\n",CARD));
-
-		/* fetch the capabilites of the decoder */
-		dc.flags = 0;
-		dc.inputs = -1;
-		dc.outputs = -1;
-		rv = i2c_control_device(&ztv->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_GET_CAPABILITIES, &dc);
-		if (rv)
-			return rv;
-		DEBUG(printk(KERN_DEBUG "%s: capabilities %d %d %d\n",CARD,dc.flags,dc.inputs,dc.outputs));
+		DEBUG(printk(CARD_DEBUG "VIDIOCGCAP\n",CARD));
 
 		strcpy(c.name,ztv->video_dev.name);
 		c.type = VID_TYPE_CAPTURE|
@@ -926,25 +982,30 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 			 VID_TYPE_CLIPPING|
 			 VID_TYPE_FRAMERAM|
 			 VID_TYPE_SCALES;
-		c.channels = ztv->card->video_inputs;
-		c.audios = ztv->card->audio_inputs;
+		if (ztv->have_tuner)
+			c.type |= VID_TYPE_TUNER;
+		if (ztv->have_decoder) {
+			c.channels = ztv->card->video_inputs;
+			c.audios = ztv->card->audio_inputs;
+		} else
+			/* no decoder -> no channels */
+			c.channels = c.audios = 0;
 		c.maxwidth = 768;
 		c.maxheight = 576;
 		c.minwidth = 32;
 		c.minheight = 32;
 		if (copy_to_user(arg,&c,sizeof(c)))
 			return -EFAULT;
-		return 0;
+		break;
 	 }
 
 	 case VIDIOCGCHAN:
 	 {
 		struct video_channel v;
 		int mux;
-
 		if (copy_from_user(&v, arg,sizeof(v)))
 			return -EFAULT;
-		DEBUG(printk(KERN_DEBUG "%s: GetChannel(%d)\n",CARD,v.channel));
+		DEBUG(printk(CARD_DEBUG "VIDIOCGCHAN(%d)\n",CARD,v.channel));
 		v.flags=VIDEO_VC_AUDIO
 #ifdef VIDEO_VC_NORM
 			|VIDEO_VC_NORM
@@ -959,8 +1020,8 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 #else
 		v.norm=VIDEO_MODE_PAL;
 #endif
-		/* too many inputs? */
-		if (v.channel >= ztv->card->video_inputs)
+		/* too many inputs? no decoder -> no channels */
+		if (!ztv->have_decoder || v.channel >= ztv->card->video_inputs)
 			return -EINVAL;
 
 		/* now determine the name of the channel */
@@ -981,15 +1042,17 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 
 		if (copy_to_user(arg,&v,sizeof(v)))
 			return -EFAULT;
-		return 0;
+		break;
 	 }
 	 case VIDIOCSCHAN:
 	 {	/* set video channel */
 		struct video_channel v;
 		if (copy_from_user(&v, arg,sizeof(v)))
 			return -EFAULT;
-		DEBUG(printk(KERN_DEBUG "%s: SetChannel(%d,%d)\n",CARD,v.channel,v.norm));
-		if (v.channel >= ztv->card->video_inputs)
+		DEBUG(printk(CARD_DEBUG "VIDIOCSCHAN(%d,%d)\n",CARD,v.channel,v.norm));
+
+		/* too many inputs? no decoder -> no channels */
+		if (!ztv->have_decoder || v.channel >= ztv->card->video_inputs)
 			return -EINVAL;
 
 		if (v.norm != VIDEO_MODE_PAL &&
@@ -1007,9 +1070,10 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 		struct video_tuner v;
 		if (copy_from_user(&v, arg,sizeof(v)))
 			return -EFAULT;
+		DEBUG(printk(CARD_DEBUG "VIDIOCGTUNER(%d)\n",CARD,v.tuner));
 
-		/* Only one tuner for now */
-		if (!ztv->have_tuner && v.tuner)
+		/* Only no or one tuner for now */
+		if (!ztv->have_tuner || v.tuner)
 			return -EINVAL;
 
 		strcpy(v.name,"Television");
@@ -1021,17 +1085,17 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 
 		if (copy_to_user(arg,&v,sizeof(v)))
 			return -EFAULT;
-		return 0;
+		break;
 	 }
-
 	 case VIDIOCSTUNER:
 	 {
 		struct video_tuner v;
 		if (copy_from_user(&v, arg, sizeof(v)))
 			return -EFAULT;
+		DEBUG(printk(CARD_DEBUG "VIDIOCSTUNER(%d,%d)\n",CARD,v.tuner,v.mode));
 
-		/* Only one tuner for now */
-		if (!ztv->have_tuner && v.tuner)
+		/* Only no or one tuner for now */
+		if (!ztv->have_tuner || v.tuner)
 			return -EINVAL;
 
 		/* and it only has certain valid modes */
@@ -1047,7 +1111,7 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 	 case VIDIOCGPICT:
 	 {
 		struct video_picture p = ztv->picture;
-		DEBUG(printk(KERN_DEBUG "%s: GetPicture\n",CARD));
+		DEBUG(printk(CARD_DEBUG "VIDIOCGPICT\n",CARD));
 		p.depth = ztv->depth;
 		switch (p.depth) {
 		 case  8: p.palette=VIDEO_PALETTE_YUV422;
@@ -1063,21 +1127,21 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 		}
 		if (copy_to_user(arg, &p, sizeof(p)))
 			return -EFAULT;
-		return 0;
+		break;
 	 }
 	 case VIDIOCSPICT:
 	 {
 		struct video_picture p;
-		DEBUG(printk(KERN_DEBUG "%s: SetPicture\n",CARD));
 		if (copy_from_user(&p, arg,sizeof(p)))
 			return -EFAULT;
+		DEBUG(printk(CARD_DEBUG "VIDIOCSPICT(%d,%d,%d,%d,%d,%d,%d)\n",CARD,p.brightness,p.hue,p.colour,p.contrast,p.whiteness,p.depth,p.palette));
 
 		/* depth must match with framebuffer */
 		if (p.depth != ztv->depth)
 			return -EINVAL;
 
 		/* check if palette matches this bpp */
-		if (p.palette<1 || p.palette>NRPALETTES ||
+		if (p.palette>NRPALETTES ||
 		    palette2fmt[p.palette].bpp != ztv->overinfo.bpp)
 			return -EINVAL;
 
@@ -1088,13 +1152,13 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 
 		/* tell the decoder */
 		i2c_control_device(&ztv->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_PICTURE, &p);
-		return 0;
+		break;
 	 }
 
 	 case VIDIOCGWIN:
 	 {
 		struct video_window vw;
-		DEBUG(printk(KERN_DEBUG "%s: GetWindow\n",CARD));
+		DEBUG(printk(CARD_DEBUG "VIDIOCGWIN\n",CARD));
 		read_lock(&ztv->lock);
 		vw.x      = ztv->overinfo.x;
 		vw.y      = ztv->overinfo.y;
@@ -1102,23 +1166,21 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 		vw.height = ztv->overinfo.h;
 		vw.chromakey= 0;
 		vw.flags  = 0;
-		if (ztv->interlace)
+		if (ztv->vidInterlace)
 			vw.flags|=VIDEO_WINDOW_INTERLACE;
 		read_unlock(&ztv->lock);
 		if (copy_to_user(arg,&vw,sizeof(vw)))
 			return -EFAULT;
-		return 0;
+		break;
 	 }
 	 case VIDIOCSWIN:
 	 {
 		struct video_window vw;
 		struct video_clip *vcp;
 		int on;
-
 		if (copy_from_user(&vw,arg,sizeof(vw)))
 			return -EFAULT;
-
-		DEBUG(printk(KERN_DEBUG "%s: SetWindow(%d,%d,%d,%d,%x,%d)\n",CARD,vw.x,vw.y,vw.width,vw.height,vw.flags,vw.clipcount));
+		DEBUG(printk(CARD_DEBUG "VIDIOCSWIN(%d,%d,%d,%d,%x,%d)\n",CARD,vw.x,vw.y,vw.width,vw.height,vw.flags,vw.clipcount));
 
 		if (vw.flags)
 			return -EINVAL;
@@ -1139,6 +1201,15 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 		if (on)
 			zoran_cap(ztv, 0);
 
+		/*
+		 * strange, it seems xawtv sometimes calls us with 0
+		 * width and/or height. Ignore these values
+		 */
+		if (vw.x == 0)
+			vw.x = ztv->overinfo.x;
+		if (vw.y == 0)
+			vw.y = ztv->overinfo.y;
+
 		/* by now we are committed to the new data... */
 		write_lock_irq(&ztv->lock);
 		ztv->overinfo.x = vw.x;
@@ -1150,10 +1221,6 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 		/*
 		 *      Impose display clips
 		 */
-		if (vw.x<0)
-			new_clip(&vw, vcp, 0, 0, -vw.x, vw.height-1);
-		if (vw.y<0)
-			new_clip(&vw, vcp, 0, 0, vw.width-1,-vw.y);
 		if (vw.x+vw.width > ztv->swidth)
 			new_clip(&vw, vcp, ztv->swidth-vw.x, 0, vw.width-1, vw.height-1);
 		if (vw.y+vw.height > ztv->sheight)
@@ -1165,36 +1232,38 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 		vfree(vcp);
 
 		/* if we were on, restart the video engine */
-		if (on) zoran_cap(ztv, on);
-		return 0;
+		if (on)
+			zoran_cap(ztv, 1);
+		break;
 	 }
+
 	 case VIDIOCCAPTURE:
 	 {
 		int v;
 		get_user_ret(v,(int*)arg, -EFAULT);
-		DEBUG(printk(KERN_DEBUG "%s: Capture(%d)\n",CARD,v));
+		DEBUG(printk(CARD_DEBUG "VIDIOCCAPTURE(%d)\n",CARD,v));
 
 		if (v==0) {
-			zoran_cap(ztv, 0);
 			clear_bit(STATE_OVERLAY, &ztv->state);
+			zoran_cap(ztv, 1);
 		}
 		else {
 			/* is VIDIOCSFBUF, VIDIOCSWIN done? */
-			if (ztv->overinfo.vidadr==0 || ztv->overinfo.w==0 || ztv->overinfo.h==0)
+			if (ztv->overinfo.busadr==0 || ztv->overinfo.w==0 || ztv->overinfo.h==0)
 				return -EINVAL;
 
 			set_bit(STATE_OVERLAY, &ztv->state);
 			zoran_cap(ztv, 1);
 		}
-		return 0;
+		break;
 	 }
 
 	 case VIDIOCGFBUF:
 	 {
 		struct video_buffer v;
-		DEBUG(printk(KERN_DEBUG "%s: GetFramebuffer\n",CARD));
+		DEBUG(printk(CARD_DEBUG "VIDIOCGFBUF\n",CARD));
 		read_lock(&ztv->lock);
-		v.base   = (void *)ztv->overinfo.vidadr;
+		v.base   = (void *)ztv->overinfo.busadr;
 		v.height = ztv->sheight;
 		v.width  = ztv->swidth;
 		v.depth  = ztv->depth;
@@ -1202,19 +1271,21 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 		read_unlock(&ztv->lock);
 		if(copy_to_user(arg, &v,sizeof(v)))
 			return -EFAULT;
-		return 0;
+		break;
 	 }
 	 case VIDIOCSFBUF:
 	 {
 		struct video_buffer v;
 #if LINUX_VERSION_CODE >= 0x020100
-			if(!capable(CAP_SYS_ADMIN))
+			if(!capable(CAP_SYS_ADMIN) && !capable(CAP_SYS_ADMIN))
 #else
 			if(!suser())
 #endif
 			return -EPERM;
 		if (copy_from_user(&v, arg,sizeof(v)))
 			return -EFAULT;
+		DEBUG(printk(CARD_DEBUG "VIDIOCSFBUF(%p,%d,%d,%d,%d)\n",CARD,v.base, v.width,v.height,v.depth,v.bytesperline));
+
 		if (v.depth!=15 && v.depth!=16 && v.depth!=24 && v.depth!=32)
 			return -EINVAL;
 		if (v.bytesperline<1)
@@ -1222,48 +1293,50 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 		if (ztv->running)
 			return -EBUSY;
 		write_lock_irq(&ztv->lock);
-		ztv->overinfo.vidadr  = (unsigned long)v.base;
+		ztv->overinfo.busadr  = (ulong)v.base;
 		ztv->sheight      = v.height;
 		ztv->swidth       = v.width;
-		ztv->overinfo.bpp = ((v.depth+1)&0x38)/8;/* bytes per pixel */
 		ztv->depth        = v.depth;		/* bits per pixel */
-		ztv->overinfo.bpl = v.bytesperline;
+		ztv->overinfo.bpp = ((v.depth+1)&0x38)/8;/* bytes per pixel */
+		ztv->overinfo.bpl = v.bytesperline;	/* bytes per line */
 		write_unlock_irq(&ztv->lock);
+		break;
+	 }
 
-		DEBUG(printk(KERN_DEBUG "%s: SetFrameBuffer(%p,%dx%d, bpp %d, bpl %d)\n",CARD,v.base, v.width,v.height, ztv->overinfo.bpp, ztv->overinfo.bpl));
-		return 0;
+	 case VIDIOCKEY:
+	 {
+		/* Will be handled higher up .. */
+		break;
 	 }
 
 	 case VIDIOCSYNC:
 	 {
 		int i;
 		get_user_ret(i,(int*)arg, -EFAULT);
-		DEBUG(printk(KERN_DEBUG "%s: VIDEOCSYNC(%d)\n",CARD,i));
+		DEBUG(printk(CARD_DEBUG "VIDEOCSYNC(%d)\n",CARD,i));
 		if (i<0 || i>ZORAN_MAX_FBUFFERS)
 			return -EINVAL;
 		switch (ztv->grabinfo[i].status) {
-		 case FBUFFER_UNUSED:
+		 case FBUFFER_FREE:
 			return -EINVAL;
-		 case FBUFFER_GRABBING:
+		 case FBUFFER_BUSY:
 			/* wait till this buffer gets grabbed */
-			while (ztv->grabinfo[i].status == FBUFFER_GRABBING) {
+			while (ztv->grabinfo[i].status == FBUFFER_BUSY) {
 				interruptible_sleep_on(&ztv->grabq);
 				/* see if a signal did it */
 				if (signal_pending(current))
-					return -ERESTARTSYS;
+					return -EINTR;
 			}
-			/* fall through */
+			/* don't fall through; a DONE buffer is not UNUSED */
+			break;
 		 case FBUFFER_DONE:
-			ztv->grabinfo[i].status = FBUFFER_UNUSED;
+			ztv->grabinfo[i].status = FBUFFER_FREE;
+			/* tell ppl we have a spare buffer */
+			wake_up_interruptible(&ztv->grabq);
 			break;
 		}
-		return 0;
-	 }
-
-	 case VIDIOCKEY:
-	 {
-		/* Will be handled higher up .. */
-		return 0;
+		DEBUG(printk(CARD_DEBUG "VIDEOCSYNC(%d) returns\n",CARD,i));
+		break;
 	 }
 
 	 case VIDIOCMCAPTURE:
@@ -1272,63 +1345,67 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 		struct vidinfo* frame;
 		if (copy_from_user(&vm,arg,sizeof(vm)))
 			return -EFAULT;
+		DEBUG(printk(CARD_DEBUG "VIDIOCMCAPTURE(%d,(%d,%d),%d)\n",CARD,vm.frame,vm.width,vm.height,vm.format));
 		if (vm.frame<0 || vm.frame>ZORAN_MAX_FBUFFERS ||
 		    vm.width<32 || vm.width>768 ||
 		    vm.height<32 || vm.height>576 ||
-		    vm.format<0 || vm.format>NRPALETTES ||
+		    vm.format>NRPALETTES ||
 		    palette2fmt[vm.format].mode == 0)
 			return -EINVAL;
 
-		DEBUG(printk(KERN_DEBUG "%s: Mcapture(%d,(%d,%d),%d=%s)\n",CARD,vm.frame,vm.width,vm.height,vm.format,palette2fmt[vm.format].name));
+		/* we are allowed to take over UNUSED and DONE buffers */
 		frame = &ztv->grabinfo[vm.frame];
-		if (frame->status == FBUFFER_GRABBING)
+		if (frame->status == FBUFFER_BUSY)
 			return -EBUSY;
 
 		/* setup the other parameters if they are given */
 		write_lock_irq(&ztv->lock);
-		if (vm.width)
-			frame->w = vm.width;
-		if (vm.height)
-			frame->h = vm.height;
-		if (vm.format)
-			frame->format = vm.format;
+		frame->w = vm.width;
+		frame->h = vm.height;
+		frame->format = vm.format;
 		frame->bpp = palette2fmt[frame->format].bpp;
 		frame->bpl = frame->w*frame->bpp;
-		frame->vidadr = virt_to_bus(phys_to_virt((ulong)ztv->fbuffer+vm.frame*ZORAN_MAX_FBUFFER));
-		frame->status = FBUFFER_GRABBING;
-		set_bit(STATE_GRAB, &ztv->state);
+		frame->status = FBUFFER_BUSY;
+		frame->next = 0;
+		{ /* add to tail of queue */
+		  struct vidinfo* oldframe = ztv->workqueue;
+		  if (!oldframe) ztv->workqueue = frame;
+		  else {
+		    while (oldframe->next) oldframe = oldframe->next;
+		    oldframe->next = frame;
+		  }
+		}
 		write_unlock_irq(&ztv->lock);
-
 		zoran_cap(ztv, 1);
-		return 0;
+		break;
 	 }
 
 	 case VIDIOCGMBUF:
 	 {
 		struct video_mbuf mb;
 		int i;
-		DEBUG(printk(KERN_DEBUG "%s: GetMemoryBuffer\n",CARD));
+		DEBUG(printk(CARD_DEBUG "VIDIOCGMBUF\n",CARD));
 		mb.size = ZORAN_MAX_FBUFSIZE;
 		mb.frames = ZORAN_MAX_FBUFFERS;
 		for (i=0; i<ZORAN_MAX_FBUFFERS; i++)
 			mb.offsets[i] = i*ZORAN_MAX_FBUFFER;
 		if(copy_to_user(arg, &mb,sizeof(mb)))
 			return -EFAULT;
-		return 0;
+		break;
 	 }
 
 	 case VIDIOCGUNIT:
 	 {
 		struct video_unit vu;
-		DEBUG(printk(KERN_DEBUG "%s: GetUnit\n",CARD));
+		DEBUG(printk(CARD_DEBUG "VIDIOCGUNIT\n",CARD));
 		vu.video = ztv->video_dev.minor;
-		vu.vbi = VIDEO_NO_UNIT;
+		vu.vbi = ztv->vbi_dev.minor;
 		vu.radio = VIDEO_NO_UNIT;
 		vu.audio = VIDEO_NO_UNIT;
 		vu.teletext = VIDEO_NO_UNIT;
 		if(copy_to_user(arg, &vu,sizeof(vu)))
 			return -EFAULT;
-		return 0;
+		break;
 	 }
 
 	 case VIDIOCGFREQ:
@@ -1336,14 +1413,15 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 		unsigned long v = ztv->tuner_freq;
 		if (copy_to_user(arg,&v,sizeof(v)))
 			return -EFAULT;
-		return 0;
+		DEBUG(printk(CARD_DEBUG "VIDIOCGFREQ\n",CARD));
+		break;
 	 }
-
 	 case VIDIOCSFREQ:
 	 {
 		unsigned long v;
 		if (copy_from_user(&v, arg, sizeof(v)))
 			return -EFAULT;
+		DEBUG(printk(CARD_DEBUG "VIDIOCSFREQ\n",CARD));
 
 		if (ztv->have_tuner) {
 			int fixme = v;
@@ -1351,20 +1429,25 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 				return -EAGAIN;
 		}
 		ztv->tuner_freq = v;
-		return 0;
+		break;
 	 }
 
-	 case VIDIOCGAUDIO:
-	 case VIDIOCSAUDIO:
-	 case VIDIOCGCAPTURE:
-	 case VIDIOCSCAPTURE:
-		DEBUG(printk(KERN_DEBUG "%s: unhandled video ioctl(%x)\n",CARD,cmd));
-		return -EINVAL;
+	 /* Why isn't this in the API?
+	  * And why doesn't it take a buffer number?
+	 case BTTV_FIELDNR: 
+	 {
+		unsigned long v = ztv->lastfieldnr;
+		if (copy_to_user(arg,&v,sizeof(v)))
+			return -EFAULT;
+		DEBUG(printk(CARD_DEBUG "BTTV_FIELDNR\n",CARD));
+		break;
+	 }
+	 */
 
 	 default:
-		DEBUG(printk(KERN_DEBUG "%s: bad ioctl(%x)\n",CARD,cmd));
+		return -ENOIOCTLCMD;
 	}
-	return -EPERM;
+	return 0;
 }
 
 static
@@ -1374,7 +1457,7 @@ int zoran_mmap(struct video_device* dev, const char* adr, unsigned long size)
 	unsigned long start = (unsigned long)adr;
 	unsigned long pos;
 
-	DEBUG(printk(KERN_DEBUG "zoran_mmap(0x%p,%ld)\n",adr,size));
+	DEBUG(printk(CARD_DEBUG "zoran_mmap(0x%p,%ld)\n",CARD,adr,size));
 
 	/* sanity checks */
 	if (size > ZORAN_MAX_FBUFSIZE || !ztv->fbuffer)
@@ -1383,11 +1466,7 @@ int zoran_mmap(struct video_device* dev, const char* adr, unsigned long size)
 	/* start mapping the whole shabang to user memory */
 	pos = (unsigned long)ztv->fbuffer;
 	while (size>0) {
-#ifdef CONFIG_BIGPHYS_AREA
 		unsigned long page = virt_to_phys((void*)pos);
-#else
-		unsigned long page = kvirt_to_phys(pos);
-#endif
 		if (remap_page_range(start, page, PAGE_SIZE, PAGE_SHARED))
 			return -EAGAIN;
 		start += PAGE_SIZE;
@@ -1397,7 +1476,7 @@ int zoran_mmap(struct video_device* dev, const char* adr, unsigned long size)
 	return 0;
 }
 
-static struct video_device zoran_template=
+static struct video_device zr36120_template=
 {
 	"UNSET",
 	VID_TYPE_TUNER|VID_TYPE_CAPTURE|VID_TYPE_OVERLAY,
@@ -1419,13 +1498,412 @@ static struct video_device zoran_template=
 };
 
 static
-int init_zoran(int card)
+int vbi_open(struct video_device *dev, int flags)
+{
+	struct zoran *ztv = (struct zoran*)dev->priv;
+	struct vidinfo* item;
+
+	DEBUG(printk(CARD_DEBUG "vbi_open(dev,%d)\n",CARD,flags));
+
+	/*
+	 * During VBI device open, we continiously grab VBI-like
+	 * data in the vbi buffer when we have nothing to do.
+	 * Only when there is an explicit request for VBI data
+	 * (read call) we /force/ a read.
+	 */
+
+	/* allocate buffers */
+	for (item=ztv->readinfo; item!=ztv->readinfo+ZORAN_VBI_BUFFERS; item++)
+	{
+		item->status = FBUFFER_FREE;
+
+		/* alloc */
+		if (!item->memadr) {
+			item->memadr = bmalloc(ZORAN_VBI_BUFSIZE);
+			if (!item->memadr) {
+				/* could not get a buffer, bail out */
+				while (item != ztv->readinfo) {
+					item--;
+					bfree(item->memadr, ZORAN_VBI_BUFSIZE);
+					item->memadr = 0;
+					item->busadr = 0;
+				}
+				return -ENOBUFS;
+			}
+		}
+
+		/* determine the DMAable address */
+		item->busadr = virt_to_bus(item->memadr);
+	}
+
+	/* do the common part of all open's */
+	zoran_common_open(ztv, flags);
+
+	set_bit(STATE_VBI, &ztv->state);
+	/* start read-ahead */
+	zoran_cap(ztv, 1);
+
+	MOD_INC_USE_COUNT;
+	return 0;
+}
+
+static
+void vbi_close(struct video_device *dev)
+{
+	struct zoran *ztv = (struct zoran*)dev->priv;
+	struct vidinfo* item;
+
+	DEBUG(printk(CARD_DEBUG "vbi_close(dev)\n",CARD));
+
+	/* driver specific closure */
+	clear_bit(STATE_VBI, &ztv->state);
+
+	zoran_common_close(ztv);
+
+        /*
+         *      This is sucky but right now I can't find a good way to
+         *      be sure its safe to free the buffer. We wait 5-6 fields
+         *      which is more than sufficient to be sure.
+         */
+        current->state = TASK_UNINTERRUPTIBLE;
+        schedule_timeout(HZ/10);        /* Wait 1/10th of a second */
+
+	for (item=ztv->readinfo; item!=ztv->readinfo+ZORAN_VBI_BUFFERS; item++)
+	{
+		if (item->memadr)
+			bfree(item->memadr, ZORAN_VBI_BUFSIZE);
+		item->memadr = 0;
+	}
+
+	MOD_DEC_USE_COUNT;
+}
+
+/*
+ * This read function could be used reentrant in a SMP situation.
+ *
+ * This is made possible by the spinlock which is kept till we
+ * found and marked a buffer for our own use. The lock must
+ * be released as soon as possible to prevent lock contention.
+ */
+static
+long vbi_read(struct video_device* dev, char* buf, unsigned long count, int nonblock)
+{
+	struct zoran *ztv = (struct zoran*)dev->priv;
+	unsigned long max;
+	struct vidinfo* unused = 0;
+	struct vidinfo* done = 0;
+
+	DEBUG(printk(CARD_DEBUG "vbi_read(0x%p,%ld,%d)\n",CARD,buf,count,nonblock));
+
+	/* find ourself a free or completed buffer */
+	for (;;) {
+		struct vidinfo* item;
+
+		write_lock_irq(&ztv->lock);
+		for (item=ztv->readinfo; item!=ztv->readinfo+ZORAN_VBI_BUFFERS; item++) {
+			if (!unused && item->status == FBUFFER_FREE)
+				unused = item;
+			if (!done && item->status == FBUFFER_DONE)
+				done = item;
+		}
+		if (done || unused)
+			break;
+
+		/* no more free buffers, wait for them. */
+		write_unlock_irq(&ztv->lock);
+		if (nonblock)
+			return -EWOULDBLOCK;
+		interruptible_sleep_on(&ztv->vbiq);
+		if (signal_pending(current))
+			return -EINTR;
+	}
+
+	/* Do we have 'ready' data? */
+	if (!done) {
+		/* no? than this will take a while... */
+		if (nonblock) {
+			write_unlock_irq(&ztv->lock);
+			return -EWOULDBLOCK;
+		}
+		
+		/* mark the unused buffer as wanted */
+		unused->status = FBUFFER_BUSY;
+		unused->next = 0;
+		{ /* add to tail of queue */
+		  struct vidinfo* oldframe = ztv->workqueue;
+		  if (!oldframe) ztv->workqueue = unused;
+		  else {
+		    while (oldframe->next) oldframe = oldframe->next;
+		    oldframe->next = unused;
+		  }
+		}
+		write_unlock_irq(&ztv->lock);
+
+		/* tell the state machine we want it filled /NOW/ */
+		zoran_cap(ztv, 1);
+
+		/* wait till this buffer gets grabbed */
+		while (unused->status == FBUFFER_BUSY) {
+			interruptible_sleep_on(&ztv->vbiq);
+			/* see if a signal did it */
+			if (signal_pending(current))
+				return -EINTR;
+		}
+		done = unused;
+	}
+	else
+		write_unlock_irq(&ztv->lock);
+
+	/* Yes! we got data! */
+	max = done->bpl * -done->h;
+	if (count > max)
+		count = max;
+
+	/* check if the user gave us enough room to write the data */
+	if (!access_ok(VERIFY_WRITE, buf, count)) {
+		count = -EFAULT;
+		goto out;
+	}
+
+	/*
+	 * Now transform/strip the data from YUV to Y-only
+	 * NB. Assume the Y is in the LSB of the YUV data.
+	 */
+	{
+	unsigned char* optr = buf;
+	unsigned char* eptr = buf+count;
+
+	/* are we beeing accessed from an old driver? */
+	if (count == 2*19*2048) {
+		/*
+		 * Extreme HACK, old VBI programs expect 2048 points
+		 * of data, and we only got 864 orso. Double each 
+		 * datapoint and clear the rest of the line.
+		 * This way we have appear to have a
+		 * sample_frequency of 29.5 Mc.
+		 */
+		int x,y;
+		unsigned char* iptr = done->memadr+1;
+		for (y=done->h; optr<eptr && y<0; y++)
+		{
+			/* copy to doubled data to userland */
+			for (x=0; optr+1<eptr && x<-done->w; x++)
+			{
+				unsigned char a = iptr[x*2];
+				*optr++ = a;
+				*optr++ = a;
+			}
+			/* and clear the rest of the line */
+			for (x*=2; optr<eptr && x<done->bpl; x++)
+				*optr++ = 0;
+			/* next line */
+			iptr += done->bpl;
+		}
+	}
+	else {
+		/*
+		 * Other (probably newer) programs asked
+		 * us what geometry we are using, and are
+		 * reading the correct size.
+		 */
+		int x,y;
+		unsigned char* iptr = done->memadr+1;
+		for (y=done->h; optr<eptr && y<0; y++)
+		{
+			/* copy to doubled data to userland */
+			for (x=0; optr<eptr && x<-done->w; x++)
+				*optr++ = iptr[x*2];
+			/* and clear the rest of the line */
+			for (;optr<eptr && x<done->bpl; x++)
+				*optr++ = 0;
+			/* next line */
+			iptr += done->bpl;
+		}
+	}
+
+	/* API compliance:
+	 * place the framenumber (half fieldnr) in the last long
+	 */
+	((ulong*)eptr)[-1] = done->fieldnr/2;
+	}
+
+	/* keep the engine running */
+	done->status = FBUFFER_FREE;
+	zoran_cap(ztv, 1);
+
+	/* tell listeners this buffer just became free */
+	wake_up_interruptible(&ztv->vbiq);
+
+	/* goodbye */
+out:
+	DEBUG(printk(CARD_DEBUG "vbi_read() returns %lu\n",CARD,count));
+	return count;
+}
+
+#if LINUX_VERSION_CODE >= 0x020100
+static
+unsigned int vbi_poll(struct video_device *dev, struct file *file, poll_table *wait)
+{
+	struct zoran *ztv = (struct zoran*)dev->priv;
+	struct vidinfo* item;
+	unsigned int mask = 0;
+
+	poll_wait(file, &ztv->vbiq, wait);
+
+	for (item=ztv->readinfo; item!=ztv->readinfo+ZORAN_VBI_BUFFERS; item++)
+		if (item->status == FBUFFER_DONE)
+		{
+			mask |= (POLLIN | POLLRDNORM);
+			break;
+		}
+
+	DEBUG(printk(CARD_DEBUG "vbi_poll()=%x\n",CARD,mask));
+
+	return mask;
+}
+#endif
+
+static
+int vbi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
+{
+	struct zoran* ztv = (struct zoran*)dev->priv;
+
+	switch (cmd) {
+	 case VIDIOCGVBIFMT:
+	 {
+		struct vbi_format f;
+		DEBUG(printk(CARD_DEBUG "VIDIOCGVBIINFO\n",CARD));
+		f.sampling_rate = 14750000UL;
+		f.samples_per_line = -ztv->readinfo[0].w;
+		f.sample_format = VIDEO_PALETTE_RAW;
+		f.start[0] = f.start[1] = ztv->readinfo[0].y;
+		f.start[1] += 312;
+		f.count[0] = f.count[1] = -ztv->readinfo[0].h;
+		f.flags = VBI_INTERLACED;
+		if (copy_to_user(arg,&f,sizeof(f)))
+			return -EFAULT;
+		break;
+	 }
+	 case VIDIOCSVBIFMT:
+	 {
+		struct vbi_format f;
+		int i;
+		if (copy_from_user(&f, arg,sizeof(f)))
+			return -EFAULT;
+		DEBUG(printk(CARD_DEBUG "VIDIOCSVBIINFO(%d,%d,%d,%d,%d,%d,%d,%x)\n",CARD,f.sampling_rate,f.samples_per_line,f.sample_format,f.start[0],f.start[1],f.count[0],f.count[1],f.flags));
+
+		/* lots of parameters are fixed... (PAL) */
+		if (f.sampling_rate != 14750000UL ||
+		    f.samples_per_line > 864 ||
+		    f.sample_format != VIDEO_PALETTE_RAW ||
+		    f.start[0] < 0 ||
+		    f.start[0] != f.start[1]-312 ||
+		    f.count[0] != f.count[1] ||
+		    f.start[0]+f.count[0] >= 288 ||
+		    f.flags != VBI_INTERLACED)
+			return -EINVAL;
+
+		write_lock_irq(&ztv->lock);
+		ztv->readinfo[0].y = f.start[0];
+		ztv->readinfo[0].w = -f.samples_per_line;
+		ztv->readinfo[0].h = -f.count[0];
+		ztv->readinfo[0].bpl = f.samples_per_line*ztv->readinfo[0].bpp;
+		for (i=1; i<ZORAN_VBI_BUFFERS; i++)
+			ztv->readinfo[i] = ztv->readinfo[i];
+		write_unlock_irq(&ztv->lock);
+		break;
+	 }
+	 default:
+		return -ENOIOCTLCMD;
+	}
+	return 0;
+}
+
+static struct video_device vbi_template=
+{
+	"UNSET",
+	VID_TYPE_CAPTURE|VID_TYPE_TELETEXT,
+	VID_HARDWARE_ZR36120,
+
+	vbi_open,
+	vbi_close,
+	vbi_read,
+	zoran_write,
+#if LINUX_VERSION_CODE >= 0x020100
+	vbi_poll,		/* poll */
+#endif
+	vbi_ioctl,
+	NULL,			/* no mmap */
+	NULL,			/* no initialize */
+	NULL,			/* priv */
+	0,			/* busy */
+	-1			/* minor */
+};
+
+/*
+ *      Scan for a Zoran chip, request the irq and map the io memory
+ */
+static
+int __init find_zoran(void)
+{
+	int result;
+	struct zoran *ztv;
+	struct pci_dev *dev = NULL;
+	unsigned char revision;
+	int zoran_num=0;
+
+	if (!pcibios_present())
+	{
+		printk(KERN_DEBUG "zoran: PCI-BIOS not present or not accessible!\n");
+		return 0;
+	}
+
+	while ((dev = pci_find_device(PCI_VENDOR_ID_ZORAN,PCI_DEVICE_ID_ZORAN_36120, dev)))
+	{
+		/* Ok, a ZR36120/ZR36125 found! */
+		ztv = &zorans[zoran_num];
+		ztv->dev = dev;
+
+		pci_read_config_byte(dev, PCI_CLASS_REVISION, &revision);
+		printk(KERN_INFO "zoran: Zoran %x (rev %d) ",
+			dev->device, revision);
+		printk("bus: %d, devfn: %d, irq: %d, ",
+			dev->bus->number, dev->devfn, dev->irq);
+		printk("memory: 0x%08lx.\n", ztv->zoran_adr);
+
+		ztv->zoran_mem = ioremap(ztv->zoran_adr, 0x1000);
+		DEBUG(printk(KERN_DEBUG "zoran: mapped-memory at 0x%p\n",ztv->zoran_mem));
+
+		result = request_irq(dev->irq, zoran_irq,
+			SA_SHIRQ|SA_INTERRUPT,"zoran",(void *)ztv);
+		if (result==-EINVAL)
+		{
+			printk(KERN_ERR "zoran: Bad irq number or handler\n");
+			return -EINVAL;
+		}
+		if (result==-EBUSY)
+			printk(KERN_ERR "zoran: IRQ %d busy, change your PnP config in BIOS\n",dev->irq);
+		if (result < 0)
+			return result;
+
+		/* Enable bus-mastering */
+		pci_set_master(dev);
+
+		zoran_num++;
+	}
+	if(zoran_num)
+		printk(KERN_INFO "zoran: %d Zoran card(s) found.\n",zoran_num);
+	return zoran_num;
+}
+
+static
+int __init init_zoran(int card)
 {
 	struct zoran *ztv = &zorans[card];
 	int	i;
 
 	/* if the given cardtype valid? */
-	if (cardtype[card]<0 || cardtype[card]>=NRTVCARDS) {
+	if (cardtype[card]>=NRTVCARDS) {
 		printk(KERN_INFO "invalid cardtype(%d) detected\n",cardtype[card]);
 		return -1;
 	}
@@ -1436,19 +1914,20 @@ int init_zoran(int card)
 	zror(ZORAN_PCI_SOFTRESET,ZORAN_PCI);
 	udelay(10);
 
-	/* default setup for max. PAL size in a 1024xXXX hicolor framebuffer */
-
-	/* framegrabber details */
-	ztv->swidth=800;
-	ztv->sheight=600;
-	ztv->depth=16;
-
-	/* channel details */
-	ztv->norm=0;				/* PAL */
-	ztv->card=tvcards+cardtype[card];	/* point to the selected card */
+	/* zoran chip specific details */
+	ztv->card = tvcards+cardtype[card];	/* point to the selected card */
+	ztv->norm = 0;				/* PAL */
 	ztv->tuner_freq = 0;
 
-	ztv->overinfo.status = FBUFFER_UNUSED;
+	/* videocard details */
+	ztv->swidth = 800;
+	ztv->sheight = 600;
+	ztv->depth = 16;
+
+	/* State details */
+	ztv->fbuffer = 0;
+	ztv->overinfo.kindof = FBUFFER_OVERLAY;
+	ztv->overinfo.status = FBUFFER_FREE;
 	ztv->overinfo.x = 0;
 	ztv->overinfo.y = 0;
 	ztv->overinfo.w = 768; /* 640 */
@@ -1456,40 +1935,37 @@ int init_zoran(int card)
 	ztv->overinfo.format = VIDEO_PALETTE_RGB565;
 	ztv->overinfo.bpp = palette2fmt[ztv->overinfo.format].bpp;
 	ztv->overinfo.bpl = ztv->overinfo.bpp*ztv->swidth;
-	ztv->overinfo.vidadr = 0;
+	ztv->overinfo.busadr = 0;
+	ztv->overinfo.memadr = 0;
 	ztv->overinfo.overlay = 0;
-
-	ztv->readinfo = ztv->overinfo;
-	ztv->readinfo.w = 768;
-	ztv->readinfo.h = -22;
-	ztv->readinfo.format = VIDEO_PALETTE_YUV422;
-	ztv->readinfo.bpp = palette2fmt[ztv->readinfo.format].bpp;
-	ztv->readinfo.bpl = ztv->readinfo.w*ztv->readinfo.bpp;
-
-	/* grabbing details */
 	for (i=0; i<ZORAN_MAX_FBUFFERS; i++) {
 		ztv->grabinfo[i] = ztv->overinfo;
-		ztv->grabinfo[i].format = VIDEO_PALETTE_RGB24;
+		ztv->grabinfo[i].kindof = FBUFFER_GRAB;
 	}
+	init_waitqueue_head(&ztv->grabq);
+
+	/* VBI details */
+	ztv->readinfo[0] = ztv->overinfo;
+	ztv->readinfo[0].kindof = FBUFFER_VBI;
+	ztv->readinfo[0].w = -864;
+	ztv->readinfo[0].h = -38;
+	ztv->readinfo[0].format = VIDEO_PALETTE_YUV422;
+	ztv->readinfo[0].bpp = palette2fmt[ztv->readinfo[0].format].bpp;
+	ztv->readinfo[0].bpl = 1024*ztv->readinfo[0].bpp;
+	for (i=1; i<ZORAN_VBI_BUFFERS; i++)
+		ztv->readinfo[i] = ztv->readinfo[0];
+	init_waitqueue_head(&ztv->vbiq);
 
 	/* maintenance data */
-	ztv->fbuffer = NULL;
-	ztv->user = 0;
 	ztv->have_decoder = 0;
 	ztv->have_tuner = 0;
+	ztv->tuner_type = 0;
 	ztv->running = 0;
-	init_waitqueue_head(&ztv->grabq);
-	init_waitqueue_head(&ztv->readq);
+	ztv->users = 0;
 	ztv->lock = RW_LOCK_UNLOCKED;
-	ztv->state = 0;
-	ztv->prevstate = 0;
-	ztv->lastframe = -1;
-
-	/* picture details */
-	ztv->picture.colour=254<<7;
-	ztv->picture.brightness=128<<8;
-	ztv->picture.hue=128<<8;
-	ztv->picture.contrast=216<<7;
+	ztv->workqueue = 0;
+	ztv->fieldnr = 0;
+	ztv->lastfieldnr = 0;
 
 	if (triton1)
 		zrand(~ZORAN_VDC_TRICOM, ZORAN_VDC);
@@ -1509,7 +1985,7 @@ int init_zoran(int card)
 	zrwrite(ZORAN_PCI_SOFTRESET|(ztv->card->gpdir<<0),ZORAN_PCI);
 	/* implicit: 3 duration and recovery PCI clocks on guest 0-3 */
 	zrwrite(ztv->card->gpval<<24,ZORAN_GUEST);
-	
+
 	/* clear interrupt status */
 	zrwrite(~0, ZORAN_ISR);
 
@@ -1523,29 +1999,37 @@ int init_zoran(int card)
 	/*
 	 * Now add the template and register the device unit
 	 */
-	ztv->video_dev = zoran_template;
+	ztv->video_dev = zr36120_template;
 	strcpy(ztv->video_dev.name, ztv->i2c.name);
+	ztv->video_dev.priv = ztv;
 	if (video_register_device(&ztv->video_dev, VFL_TYPE_GRABBER) < 0)
 		return -1;
+
+	ztv->vbi_dev = vbi_template;
+	strcpy(ztv->vbi_dev.name, ztv->i2c.name);
+	ztv->vbi_dev.priv = ztv;
+	if (video_register_device(&ztv->vbi_dev, VFL_TYPE_VBI) < 0) {
+		video_unregister_device(&ztv->video_dev);
+		return -1;
+	}
 	i2c_register_bus(&ztv->i2c);
 
 	/* set interrupt mask - the PIN enable will be set later */
 	zrwrite(ZORAN_ICR_GIRQ0|ZORAN_ICR_GIRQ1|ZORAN_ICR_CODE, ZORAN_ICR);
 
-	printk(KERN_INFO "%s: installed %s\n",CARD,ztv->card->name);
+	printk(KERN_INFO "%s: installed %s\n",ztv->i2c.name,ztv->card->name);
 	return 0;
 }
 
 static
-void release_zoran(int max)
+void __exit release_zoran(int max)
 {
-	u8 command;
 	struct zoran *ztv;
 	int i;
 
 	for (i=0;i<max; i++) 
 	{
-		ztv=&zorans[i];
+		ztv = &zorans[i];
 
 		/* turn off all capturing, DMA and IRQs */
 		/* reset the zoran */
@@ -1564,31 +2048,22 @@ void release_zoran(int max)
     		/* unregister i2c_bus */
 		i2c_unregister_bus((&ztv->i2c));
 
-		/* disable PCI bus-mastering */
-		pci_read_config_byte(ztv->dev, PCI_COMMAND, &command);
- 		command&=PCI_COMMAND_MASTER;
-		pci_write_config_byte(ztv->dev, PCI_COMMAND, command);
-    
 		/* unmap and free memory */
 		if (ztv->zoran_mem)
 			iounmap(ztv->zoran_mem);
 
 		video_unregister_device(&ztv->video_dev);
+		video_unregister_device(&ztv->vbi_dev);
 	}
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+void __exit zr36120_exit(void)
 {
 	release_zoran(zoran_cards);
 }
 
-int init_module(void)
+int __init zr36120_init(void)
 {
-#else
-int init_zr36120_cards(struct video_init *unused)
-{
-#endif
 	int	card;
  
 	handle_chipset();
@@ -1607,3 +2082,6 @@ int init_zr36120_cards(struct video_init *unused)
 	}
 	return 0;
 }
+
+module_init(zr36120_init);
+module_exit(zr36120_exit);

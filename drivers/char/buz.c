@@ -3166,8 +3166,6 @@ static int zr36057_init(int i)
 			mdelay(10);
 			zr36060_reset(zr);
 			mdelay(10);
-			zr36060_sleep(zr, 1);
-			mdelay(10);
 	
 			/* display codec revision */
 			if ((rev=zr36060_read_8(zr, 0x022)) == 0x33) {
@@ -3204,8 +3202,6 @@ static int zr36057_init(int i)
 			udelay(3000);
 			zr36060_reset(zr);
 			udelay(3000);
-			zr36060_sleep(zr, 1);
-			udelay(3000);
 
 			/* display codec revision */
 			if ((rev=zr36060_read_8(zr, 0x022)) == 0x33) {
@@ -3213,8 +3209,8 @@ static int zr36057_init(int i)
 			       zr->name, zr36060_read_8(zr, 0x023));
 			} else {
 				printk(KERN_ERR "%s: Zoran ZR36060 not found (rev=%d)\n", zr->name, rev);
-//				kfree((void *) zr->stat_com);
-//				return -1;
+				kfree((void *) zr->stat_com);
+				return -1;
 			}
 			break;
 	}

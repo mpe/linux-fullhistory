@@ -150,7 +150,7 @@ struct iriap_cb *iriap_open(__u8 slsap_sel, int mode, void *priv,
 {
 	struct iriap_cb *self;
 
-	IRDA_DEBUG(0, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	self = kmalloc(sizeof(struct iriap_cb), GFP_ATOMIC);
 	if (!self) {
@@ -199,6 +199,9 @@ static void __iriap_close(struct iriap_cb *self)
 
 	del_timer(&self->watchdog_timer);
 
+	if (self->skb)
+		dev_kfree_skb(self->skb);
+
 	self->magic = 0;
 
 	kfree(self);
@@ -213,7 +216,7 @@ void iriap_close(struct iriap_cb *self)
 {
 	struct iriap_cb *entry;
 
-	IRDA_DEBUG(0, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IAS_MAGIC, return;);
@@ -233,7 +236,7 @@ static int iriap_register_lsap(struct iriap_cb *self, __u8 slsap_sel, int mode)
 {
 	notify_t notify;
 
-	IRDA_DEBUG(0, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	irda_notify_init(&notify);
 	notify.connect_confirm       = iriap_connect_confirm;
@@ -296,6 +299,7 @@ static void iriap_disconnect_indication(void *instance, void *sap,
 		IRDA_DEBUG(4, __FUNCTION__ "(), disconnect as server\n");
 		iriap_do_server_event(self, IAP_LM_DISCONNECT_INDICATION, 
 				      NULL);
+		iriap_close(self);
 	}
 
 	if (userdata)
@@ -609,8 +613,6 @@ void iriap_getvaluebyclass_response(struct iriap_cb *self, __u16 obj_id,
 		break;
 	}
 	iriap_do_r_connect_event(self, IAP_CALL_RESPONSE, skb);
-
-	iriap_close(self);
 }
 
 /*
@@ -648,16 +650,14 @@ void iriap_getvaluebyclass_indication(struct iriap_cb *self,
 	memcpy(attr, fp+n, attr_len); n+=attr_len;
 	attr[attr_len] = '\0';
 
+	/* We do not need the buffer anymore */
 	dev_kfree_skb(skb);
 
-	/* 
-	 *  Now, do some advanced parsing! :-) 
-	 */
 	IRDA_DEBUG(4, "LM-IAS: Looking up %s: %s\n", name, attr);
 	obj = irias_find_object(name);
 	
 	if (obj == NULL) {
-		IRDA_DEBUG(2, "LM-IAS: Object not found\n");
+		IRDA_DEBUG(2, "LM-IAS: Object %s not found\n", name);
 		iriap_getvaluebyclass_response(self, 0x1235, IAS_CLASS_UNKNOWN,
 					       &missing);
 		return;
@@ -666,20 +666,16 @@ void iriap_getvaluebyclass_indication(struct iriap_cb *self,
 	
 	attrib = irias_find_attrib(obj, attr);
 	if (attrib == NULL) {
-		IRDA_DEBUG(0, "LM-IAS: Attribute %s not found\n", attr);
+		IRDA_DEBUG(2, "LM-IAS: Attribute %s not found\n", attr);
 		iriap_getvaluebyclass_response(self, obj->id,
 					       IAS_ATTRIB_UNKNOWN, &missing);
 		return;
 	}
 	
-	IRDA_DEBUG(4, "LM-IAS: found %s\n", attrib->name);
-	
-	/*
-	 * We have a match; send the value.
-	 */
+	/* We have a match; send the value.  */
 	iriap_getvaluebyclass_response(self, obj->id, IAS_SUCCESS, 
 				       attrib->value);
-
+	
 	return;
 }
 

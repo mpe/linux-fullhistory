@@ -139,6 +139,7 @@ MODULE_AUTHOR ("American Megatrends Inc.");
 MODULE_DESCRIPTION ("AMI MegaRAID driver");
 #endif
 
+#include <linux/init.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -232,6 +233,8 @@ void WROUTDOOR (mega_host_config * megaCfg, u32 value)
  *
  *================================================================
  */
+static int __init megaraid_setup(char *);
+
 static int megaIssueCmd (mega_host_config * megaCfg,
 			 u_char * mboxData,
 			 mega_scb * scb,
@@ -268,8 +271,8 @@ static int ser_printk (const char *fmt,...);
 /*  Use "megaraid=skipXX" as LILO option to prohibit driver from scanning
     XX scsi id on each channel.  Used for Madrona motherboard, where SAF_TE
     processor id cannot be scanned */
-static char *megaraid;
 #ifdef MODULE
+static char *megaraid = NULL;
 MODULE_PARM(megaraid, "s");
 #endif
 static int skip_id;
@@ -1509,18 +1512,12 @@ int megaraid_detect (Scsi_Host_Template * pHostTmpl)
 {
   int count = 0;
 
-  pHostTmpl->proc_name = "megaraid";
+#ifdef MODULE
+  if (megaraid)
+      megaraid_setup(megaraid);
+#endif
 
-  skip_id = -1;
-  if (megaraid && !strncmp(megaraid,"skip",strlen("skip"))) {
-      if (megaraid[4] != '\0') {
-          skip_id = megaraid[4] - '0';
-          if (megaraid[5] != '\0') {
-              skip_id = (skip_id * 10) + (megaraid[5] - '0');
-          }
-      }
-      skip_id = (skip_id > 15) ? -1 : skip_id;
-  }
+  pHostTmpl->proc_name = "megaraid";
 
   printk ("megaraid: " MEGARAID_VERSION CRLFSTR);
 
@@ -1876,6 +1873,23 @@ int megaraid_biosparam (Disk * disk, kdev_t dev, int *geom)
 
   return 0;
 }
+
+static int __init megaraid_setup(char *str)
+{
+  skip_id = -1;
+  if (str && !strncmp(str, "skip", strlen("skip"))) {
+      if (str[4] != '\0') {
+          skip_id = str[4] - '0';
+          if (str[5] != '\0') {
+              skip_id = (skip_id * 10) + (str[5] - '0');
+          }
+      }
+      skip_id = (skip_id > 15) ? -1 : skip_id;
+  }
+  return 1;
+}
+
+__setup("megaraid=", megaraid_setup);
 
 #ifdef MODULE
 Scsi_Host_Template driver_template = MEGARAID;

@@ -19,8 +19,8 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		     */
 /* ------------------------------------------------------------------------- */
-/* $Revision: 1.4 $ $Date: 1999/12/02 02:05:34 $*/
-/* ------------------------------------------------------------------------- */
+
+/* $Id: i2c-id.h,v 1.6 1999/12/21 23:45:58 frodo Exp $ */
 
 #ifndef I2C_ID_H
 #define I2C_ID_H
@@ -71,6 +71,8 @@
 #define I2C_DRIVERID_EXP2	0xF2
 #define I2C_DRIVERID_EXP3	0xF3
 
+#define I2C_DRIVERID_MGATVO	0x0101	/* Matrox TVOut			*/
+
 #define I2C_DRIVERID_I2CDEV	900
 #define I2C_DRIVERID_I2CPROC	901
 
@@ -113,6 +115,7 @@
 #define I2C_HW_B_WNV	0x06	/* Winnov Videums			*/
 #define I2C_HW_B_VIA    0x07    /* Via vt82c586b			*/
 #define I2C_HW_B_HYDRA  0x08    /* Apple Hydra Mac I/O                  */
+#define I2C_HW_B_G400	0x09	/* Matrox G400				*/
 
 /* --- PCF 8584 based algorithms					*/
 #define I2C_HW_P_LP	0x00	/* Parallel port interface		*/

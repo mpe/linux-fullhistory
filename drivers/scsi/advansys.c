@@ -1,5 +1,5 @@
-/* $Id: advansys.c,v 1.68 1999/11/19 01:57:47 bobf Exp bobf $ */
-#define ASC_VERSION "3.2L"    /* AdvanSys Driver Version */
+/* $Id: advansys.c,v 1.69 1999/11/29 18:37:53 bobf Exp bobf $ */
+#define ASC_VERSION "3.2M"    /* AdvanSys Driver Version */
 
 /*
  * advansys.c - Linux Host Driver for AdvanSys SCSI Adapters
@@ -672,6 +672,10 @@
          1. Fix bug in adv_get_sglist() that caused an assertion failure
             at line 7475. The reqp->sgblkp pointer must be initialized
             to NULL in adv_get_sglist().
+
+     3.2M (11/29/99):
+         1. Really fix bug in adv_get_sglist().
+         2. Incorporate v2.3.29 changes into driver.
 
   J. Known Problems/Fix List (XXX)
 
@@ -5389,9 +5393,14 @@ advansys_detect(Scsi_Host_Template *tpnt)
 
             /* BIOS start address. */
             if (ASC_NARROW_BOARD(boardp)) {
-                shp->base = ((ulong) AscGetChipBiosAddress(
-                                                asc_dvc_varp->iop_base,
-                                                asc_dvc_varp->bus_type));
+#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,3,29)
+                shp->base =
+#else /* version >= v2.3.29 */
+                shp->base = (char *)
+#endif /* version < v2.3.29 */
+                        ((ulong) AscGetChipBiosAddress(
+                            asc_dvc_varp->iop_base,
+                            asc_dvc_varp->bus_type));
             } else {
                 /*
                  * Fill-in BIOS board variables. The Wide BIOS saves
@@ -5423,7 +5432,12 @@ advansys_detect(Scsi_Host_Template *tpnt)
                      * Convert x86 realmode code segment to a linear
                      * address by shifting left 4.
                      */
-                    shp->base = (boardp->bios_codeseg << 4);
+#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,3,29)
+                    shp->base =
+#else /* version >= v2.3.29 */
+                    shp->base = (char *)
+#endif /* version < v2.3.29 */
+                        ((ulong) boardp->bios_codeseg << 4);
                 } else {
                     shp->base = 0;
                 }
@@ -7476,7 +7490,7 @@ adv_get_sglist(asc_board_t *boardp, adv_req_t *reqp, Scsi_Cmnd *scp)
     slp = (struct scatterlist *) scp->request_buffer;
     sg_elem_cnt = scp->use_sg;
     prev_sg_block = NULL;
-    reqp->sgblkp == NULL;
+    reqp->sgblkp = NULL;
 
     do
     {
