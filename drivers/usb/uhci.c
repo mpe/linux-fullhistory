@@ -12,7 +12,7 @@
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Randy Dunlap
  *
- * $Id: uhci.c,v 1.139 1999/12/17 17:50:59 fliegl Exp $
+ * $Id: uhci.c,v 1.149 1999/12/26 20:57:14 acher Exp $
  */
 
 
@@ -646,7 +646,7 @@ _static int uhci_submit_bulk_urb (purb_t purb)
 	/* Build the TDs for the bulk request */
 	len = purb->transfer_buffer_length;
 	data = purb->transfer_buffer;
-	dbg (KERN_DEBUG MODSTR "uhci_submit_bulk_urb: len %d\n", len);
+	dbg (KERN_DEBUG MODSTR "uhci_submit_bulk_urb: pipe %x, len %d\n", pipe, len);
 	
 	while (len > 0) {
 		int pktsze = len;
@@ -675,7 +675,7 @@ _static int uhci_submit_bulk_urb (purb_t purb)
 		//dbg("insert td %p, len %i\n",td,pktsze);
 
 		insert_td (s, qh, td, UHCI_PTR_DEPTH);
-
+		
 		/* Alternate Data0/1 (start with Data0) */
 		usb_dotoggle (purb->dev, usb_pipeendpoint (pipe), usb_pipeout (pipe));
 	}
@@ -701,8 +701,7 @@ _static int uhci_unlink_urb (purb_t purb)
 	unsigned long flags=0;
 	struct list_head *p;
 
-	if (!purb)		// you never know... 
-
+	if (!purb)		// you never know...
 		return -1;
 
 	s = (puhci_t) purb->dev->bus->hcpriv;	// get pointer to uhci struct
@@ -720,6 +719,8 @@ _static int uhci_unlink_urb (purb_t purb)
 		// URB probably still in work
 		purb_priv = purb->hcpriv;
 		dequeue_urb (s, &purb->urb_list,1);
+		purb->status = USB_ST_URB_KILLED;	// mark urb as killed
+		
 		if(!in_interrupt()) {
 			spin_unlock_irqrestore (&s->unlink_urb_lock, flags);	// allow interrupts from here
 		}
@@ -757,8 +758,7 @@ _static int uhci_unlink_urb (purb_t purb)
 			delete_qh (s, qh);		// remove it physically
 
 		}
-		purb->status = USB_ST_URB_KILLED;	// mark urb as killed
-
+		
 #ifdef _UHCI_SLAB
 		kmem_cache_free(urb_priv_kmem, purb->hcpriv);
 #else
@@ -872,11 +872,13 @@ _static int iso_find_start (purb_t purb)
 					now, purb->start_frame, purb->number_of_packets, purb->pipe);
 				{
 					puhci_t s = (puhci_t) purb->dev->bus->hcpriv;
-					struct list_head *p = s->urb_list.next;
+					struct list_head *p;
 					purb_t u;
 					int a = -1, b = -1;
 					unsigned long flags;
+
 					spin_lock_irqsave (&s->urb_list_lock, flags);
+					p=s->urb_list.next;
 
 					for (; p != &s->urb_list; p = p->next) {
 						u = list_entry (p, urb_t, urb_list);
@@ -1093,9 +1095,10 @@ _static int search_dev_ep (puhci_t s, purb_t purb)
 		// we can accept this urb if it is not queued at this time 
 		// or if non-iso transfer requests should be scheduled for the same device and pipe
 		if ((usb_pipetype (purb->pipe) != PIPE_ISOCHRONOUS &&
-		     tmp->dev == purb->dev && tmp->pipe == purb->pipe) || (purb == tmp))
+		     tmp->dev == purb->dev && tmp->pipe == purb->pipe) || (purb == tmp)) {
+			spin_unlock_irqrestore (&s->urb_list_lock, flags);
 			return 1;	// found another urb already queued for processing
-
+		}
 	}
 
 	spin_unlock_irqrestore (&s->urb_list_lock, flags);
@@ -1122,7 +1125,7 @@ _static int uhci_submit_urb (purb_t purb)
 
 	if (search_dev_ep (s, purb)) {
 		usb_dec_dev_use (purb->dev);
-		return -ENXIO;	// no such address
+		return -ENXIO;	// urb already queued
 
 	}
 
@@ -1379,7 +1382,7 @@ _static int rh_submit_urb (purb_t purb)
 	for (i = 0; i < 8; i++)
 		uhci->rh.c_p_r[i] = 0;
 
-	dbg (KERN_DEBUG MODSTR "Root-Hub: adr: %2x cmd(%1x): %04 %04 %04 %04\n",
+	dbg(KERN_DEBUG MODSTR "Root-Hub: adr: %2x cmd(%1x): %04x %04x %04x %04x\n",
 	     uhci->rh.devnum, 8, bmRType_bReq, wValue, wIndex, wLength);
 
 	switch (bmRType_bReq) {
@@ -1519,7 +1522,7 @@ _static int rh_submit_urb (purb_t purb)
 	}
 
 
-	dbg (KERN_DEBUG MODSTR "Root-Hub stat port1: %x port2: %x \n",
+	printk (KERN_DEBUG MODSTR "Root-Hub stat port1: %x port2: %x \n",
 	     inw (io_addr + USBPORTSC1), inw (io_addr + USBPORTSC2));
 
 	purb->actual_length = len;
@@ -1681,27 +1684,32 @@ _static int process_transfer (puhci_t s, purb_t purb)
 		       	uhci_show_td (desc);	// show first TD of each transfer
 #endif
 
-		// go into error condition to keep data_toggle unchanged if short packet occurs
-		if ((purb->transfer_flags & USB_DISABLE_SPD) && (actual_length < maxlength)) {
-			ret = USB_ST_SHORT_PACKET;
-			printk (KERN_DEBUG MODSTR "process_transfer: SPD!!\n");
-			break;	// exit after this TD because SP was detected
+		// got less data than requested
+		if ( (actual_length < maxlength)) {
+			if (purb->transfer_flags & USB_DISABLE_SPD) {
+				ret = USB_ST_SHORT_PACKET;	// treat as real error
+				printk (KERN_DEBUG MODSTR "process_transfer: SPD!!\n");
+				break;	// exit after this TD because SP was detected
+			}
 
+			// short read during control-IN: re-start status stage
+			if ((usb_pipetype (purb->pipe) == PIPE_CONTROL)) {
+				if (uhci_packetid(last_desc->hw.td.info) == USB_PID_OUT) {
+					uhci_show_td (last_desc);
+					qh->hw.qh.element = virt_to_bus (last_desc);  // re-trigger status stage
+					printk("uhci: short packet during control transfer, retrigger status stage @ %p\n",last_desc);
+					purb_priv->short_control_packet=1;
+					return 0;
+				}
+			}
+			// all other cases: short read is OK
+			data_toggle = uhci_toggle (desc->hw.td.info);
+			break;
 		}
 
 		data_toggle = uhci_toggle (desc->hw.td.info);
 		//printk(KERN_DEBUG MODSTR"process_transfer: len:%d status:%x mapped:%x toggle:%d\n", actual_length, desc->hw.td.status,status, data_toggle);      
-#if 1
-		if ((usb_pipetype (purb->pipe) == PIPE_CONTROL) && (actual_length < maxlength)) {
-			if (uhci_packetid(last_desc->hw.td.info) == USB_PID_OUT) {
-				uhci_show_td (last_desc);
-				qh->hw.qh.element = virt_to_bus (last_desc);  // re-trigger status stage
-				printk("uhci: short packet during control transfer, retrigger status stage\n");
-				purb_priv->short_control_packet=1;
-				return 0;
-			}
-		}
-#endif
+
 	}
 	usb_settoggle (purb->dev, usb_pipeendpoint (purb->pipe), usb_pipeout (purb->pipe), !data_toggle);
 	transfer_finished:
@@ -1714,15 +1722,14 @@ _static int process_transfer (puhci_t s, purb_t purb)
 		status & TD_CTRL_NAK )
 	{
 		ret=0;
-		purb->status=0;
+		status=0;
 	}
 
 	unlink_qh (s, qh);
 	delete_qh (s, qh);
 
 	purb->status = status;
-	
-                                                                        	
+	                                                  	
 	dbg(KERN_DEBUG MODSTR"process_transfer: urb %p, wanted len %d, len %d status %x err %d\n",
 		purb,purb->transfer_buffer_length,purb->actual_length, purb->status, purb->error_count);
 	//dbg(KERN_DEBUG MODSTR"process_transfer: exit\n");
@@ -1748,21 +1755,15 @@ _static int process_interrupt (puhci_t s, purb_t purb)
 	{
 		desc = list_entry (p, uhci_desc_t, desc_list);
 
-		if (desc->hw.td.status & TD_CTRL_NAK) {
-			// NAKed transfer
-			//printk("TD NAK Status @%p %08x\n",desc,desc->hw.td.status);
-			goto err;
-		}
-
 		if (desc->hw.td.status & TD_CTRL_ACTIVE) {
 			// do not process active TDs
 			//printk("TD ACT Status @%p %08x\n",desc,desc->hw.td.status);
-			goto err;
+			break;
 		}
 
 		if (!desc->hw.td.status & TD_CTRL_IOC) {
-			// do not process one-shot TDs
-			goto err;
+			// do not process one-shot TDs, no recycling
+			break;
 		}
 		// extract transfer parameters from TD
 
@@ -1778,7 +1779,7 @@ _static int process_interrupt (puhci_t s, purb_t purb)
 		// if any error occured: ignore this td, and continue
 		if (status != USB_ST_NOERROR) {
 			purb->error_count++;
-			goto err;
+			goto recycle;
 		}
 		else
 			purb->actual_length = actual_length;
@@ -1794,7 +1795,7 @@ _static int process_interrupt (puhci_t s, purb_t purb)
 			purb->complete ((struct urb *) purb);
 			purb->status = USB_ST_URB_PENDING;
 		}
-
+	recycle:
 		// Recycle INT-TD if interval!=0, else mark TD as one-shot
 		if (purb->interval) {
 			desc->hw.td.status |= TD_CTRL_ACTIVE;
@@ -1804,10 +1805,9 @@ _static int process_interrupt (puhci_t s, purb_t purb)
 			usb_dotoggle (purb->dev, usb_pipeendpoint (purb->pipe), usb_pipeout (purb->pipe));
 		}
 		else {
-			desc->hw.td.status &= ~TD_CTRL_IOC;
+			desc->hw.td.status &= ~TD_CTRL_IOC; // inactivate TD
 		}
-
-	      err:
+	err:
 	}
 
 	return ret;
@@ -1882,10 +1882,12 @@ _static int process_iso (puhci_t s, purb_t purb)
 _static int process_urb (puhci_t s, struct list_head *p)
 {
 	int ret = USB_ST_NOERROR;
-	purb_t purb = list_entry (p, urb_t, urb_list);
-	spin_lock(&s->urb_list_lock);
+	purb_t purb;
 
+	spin_lock(&s->urb_list_lock);
+	purb=list_entry (p, urb_t, urb_list);
 	dbg ( /*KERN_DEBUG */ MODSTR "found queued urb: %p\n", purb);
+
 	switch (usb_pipetype (purb->pipe)) {
 	case PIPE_CONTROL:
 	case PIPE_BULK:
@@ -1933,7 +1935,7 @@ _static int process_urb (puhci_t s, struct list_head *p)
 			if (purb->complete && (!proceed || (purb->transfer_flags & USB_URB_EARLY_COMPLETE))) {
 				dbg (KERN_DEBUG MODSTR "process_transfer: calling early completion\n");
 				purb->complete ((struct urb *) purb);
-				if (!proceed && is_ring)
+				if (!proceed && is_ring && (purb->status != USB_ST_URB_KILLED))
 					uhci_submit_urb (purb);
 			}
 
@@ -1942,7 +1944,7 @@ _static int process_urb (puhci_t s, struct list_head *p)
 				tmp = purb->next;	// pointer to first urb
 
 				do {
-					if ((tmp->status != USB_ST_URB_PENDING) && uhci_submit_urb (tmp) != USB_ST_NOERROR)
+					if ((tmp->status != USB_ST_URB_PENDING) && (tmp->status != USB_ST_URB_KILLED) && uhci_submit_urb (tmp) != USB_ST_NOERROR)
 						break;
 					tmp = tmp->next;
 				}
@@ -2160,6 +2162,7 @@ _static int __init alloc_uhci (int irq, unsigned int io_addr, unsigned int io_si
 	start_hc (s);
 
 	if (request_irq (irq, uhci_interrupt, SA_SHIRQ, MODNAME, s)) {
+		printk(MODSTR KERN_ERR"request_irq %d failed!\n",irq);
 		usb_free_bus (bus);
 		reset_hc (s);
 		release_region (s->io_addr, s->io_size);
@@ -2204,9 +2207,6 @@ _static int __init start_uhci (struct pci_dev *dev)
 		/* Is it already in use? */
 		if (check_region (io_addr, io_size))
 			break;
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,8)
-		pci_enable_device (dev);
-#endif
 		/* disable legacy emulation */
 		pci_write_config_word (dev, USBLEGSUP, USBLEGSUP_DEFAULT);
 
@@ -2297,10 +2297,21 @@ int __init uhci_init (void)
 		if (type != 0)
 			continue;
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,8)
+		pci_enable_device (dev);
+#endif
+		if(!dev->irq)
+		{
+			printk(KERN_ERR MODSTR"Found UHCI device with no IRQ assigned. Check BIOS settings!\n");
+			continue;
+		}
+
 		/* Ok set it up */
 		retval = start_uhci (dev);
+	
 		if (!retval)
 			i++;
+
 	}
 
 #ifdef CONFIG_APM

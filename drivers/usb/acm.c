@@ -1,55 +1,34 @@
 /*
- * USB Abstract Control Model based on Brad Keryan's USB busmouse driver
+ * acm.c  Version 0.10
  *
- * (C) Copyright 1999 Armin Fuerst <fuerst@in.tum.de>
- * (C) Copyright 1999 Pavel Machek <pavel@suse.cz>
- * (C) Copyright 1999 Johannes Erdfelt <jerdfelt@valinux.com>
+ * Copyright (c) 1999 Armin Fuerst	<fuerst@in.tum.de>
+ * Copyright (c) 1999 Pavel Machek	<pavel@suse.cz>
+ * Copyright (c) 1999 Johannes Erdfelt	<jerdfelt@valinux.com>
+ * Copyright (c) 1999 Vojtech Pavlik	<vojtech@suse.cz>
  *
- * version 0.9: Johanness Erdfelt converted this to urb interface.
+ * USB Abstract Control Model driver for USB modems and ISDN adapters
  *
- * version 0.8: Fixed endianity bug, some cleanups. I really hate to have
- * half of driver in form if (...) { info("x"); return y; }
- * 						Pavel Machek <pavel@suse.cz>
+ * Sponsored by SuSE
  *
- * version 0.7: Added usb flow control. Fixed bug in uhci.c (what idiot
- * wrote this code? ...Oops that was me). Fixed module cleanup. Did some
- * testing at 3Com => zmodem uload+download works, pppd had trouble but
- * seems to work now. Changed Menuconfig texts "Communications Device
- * Class (ACM)" might be a bit more intuitive. Ported to 2.3.13-1 prepatch.
- * (2/8/99)
+ * ChangeLog:
+ *	v0.9  Vojtech Pavlik - thorough cleaning, URBification, almost a rewrite
+ *      v0.10 Vojtech Pavlik - some more cleanups
+ */
+
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- * version 0.6: Modularized driver, added disconnect code, improved
- * assignment of device to tty minor number.
- * (21/7/99)
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- * version 0.5: Driver now generates a tty instead of a simple character
- * device. Moved async bulk transfer to 2.3.10 kernel version. fixed a bug
- * in uhci_td_allocate. Commenetd out getstringtable which causes crash.
- * (13/7/99)
- *
- * version 0.4: Small fixes in the FIFO, cleanup. Updated Bulk transfer in
- * uhci.c. Should have the correct interface now.
- * (6/6/99)
- *
- * version 0.3: Major changes. Changed Bulk transfer to interrupt based
- * transfer. Using FIFO Buffers now. Consistent handling of open/close
- * file state and detected/nondetected device. File operations behave
- * according to this. Driver is able to send+receive now! Heureka!
- * (27/5/99)
- *
- * version 0.2: Improved Bulk transfer. TX led now flashes every time data is
- * sent. Send Encapsulated Data is not needed, nor does it do anything.
- * Why's that ?!? Thanks to Thomas Sailer for his close look at the bulk code.
- * He told me about some importand bugs. (5/21/99)
- *
- * version 0.1: Bulk transfer for uhci seems to work now, no dangling tds any
- * more. TX led of the ISDN TA flashed the first time. Does this mean it works?
- * The interrupt of the ctrl endpoint crashes the kernel => no read possible
- * (5/19/99)
- *
- * version 0.0: Driver sets up configuration, sets up data pipes, opens misc
- * device. No actual data transfer is done, since we don't have bulk transfer,
- * yet. Purely skeleton for now. (5/8/99)
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
 #include <linux/kernel.h>
@@ -64,628 +43,491 @@
 #include <linux/tty_flip.h>
 #include <linux/tty.h>
 #include <linux/module.h>
+#include <linux/config.h>
 
 #include "usb.h"
 
-#define NR_PORTS 3
-#define ACM_MAJOR 166	/* Wow, major is now officially allocated */
-
-//#define info(message...) printk(KERN_DEBUG message)
-#define info(message...)
-
-#define CTRL_STAT_DTR	1
-#define CTRL_STAT_RTS	2
-
-static struct usb_driver acm_driver;
-
-static int acm_refcount;
-
-static struct tty_driver acm_tty_driver;
-static struct tty_struct *acm_tty[NR_PORTS];
-static struct termios *acm_termios[NR_PORTS];
-static struct termios *acm_termios_locked[NR_PORTS];
-static struct acm_state acm_state_table[NR_PORTS];
-
-struct acm_state {
-	struct usb_device *dev;				//the coresponding usb device
-	int cfgnum;					//configuration number on this device
-	struct tty_struct *tty;				//the coresponding tty
-	char present;					//a device for this struct was detected => this tty is used
-	char active;					//someone has this acm's device open
-	unsigned int ctrlstate;				//Status of the serial control lines  (handshake,...)
-	unsigned int linecoding;			//Status of the line coding (Bits, Stop, Parity)
-	int writesize, readsize, ctrlsize;		//size of the usb buffers
-	char *writebuffer, *readbuffer, *ctrlbuffer;	//the usb buffers
-	char writing, reading;				//flag if transfer is running
-	unsigned int readendp,writeendp,ctrlendp;	//endpoints and
-	unsigned int readpipe,writepipe,ctrlpipe;	//pipes (are one of these obsolete?)
-	urb_t *readurb, *writeurb, *ctrlurb;
-	unsigned ctrlinterval;				//interval to poll from device
-};
-
-#define ACM_READY (acm->present && acm->active)
-
-//functions for various ACM requests
-
-void Set_Control_Line_Status(unsigned int status, struct acm_state *acm)
-{
-	struct usb_device *dev = acm->dev;
-	int ret;
-
-	info("Set_control_Line_Status\n");
-
-	ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x22, 0x22,
-		status, 0, NULL, 0, HZ);
-	if (ret < 0)
-		printk(KERN_ERR "acm: Set_Control_Line_Status failed\n");
-
-	acm->ctrlstate = status;
-}
-
-void Set_Line_Coding(unsigned int coding, struct acm_state *acm)
-{
-	struct usb_device *dev = acm->dev;
-	int ret;
-
-	info("Set_Line_Coding\n");
-
-	ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x30, 0x22,
-		coding, 0, NULL, 0, HZ);
-
-	acm->linecoding = coding;
-}
-
-//Interrupt handler for various usb events
-static void acm_irq(urb_t *urb)
-{
-	struct acm_state *acm = (struct acm_state *)urb->context;
-	unsigned char *data = urb->transfer_buffer;
-        devrequest *dr;
-
-	info("ACM_USB_IRQ\n");
-
-	if (urb->status < 0) {
-		printk(KERN_DEBUG "acm_irq: strange status received: %d\n", urb->status);
-		return;
-	}
-
-	if (!acm->present)
-		return;
-	if (!acm->active)
-		return;
-
-        dr = (devrequest *)data;
-	data += sizeof(dr);
- 
-#if 0
-        printk("reqtype: %02X\n",dr->requesttype);
-        printk("request: %02X\n",dr->request);
-	printk("wValue: %02X\n",dr->value);
-	printk("wIndex: %02X\n",dr->index);
-	printk("wLength: %02X\n",dr->length);
+#ifdef CONFIG_USB_ACM_DEBUG
+#define acm_debug(fmt,arg...)	printk(KERN_DEBUG "acm: " fmt "\n" , ##arg)
+#else
+#define acm_debug(fmt,arg...)	do {} while(0)
 #endif
 
-	switch(dr->request) {
-	case 0x00: /* Network connection */
-		printk(KERN_DEBUG "Network connection: ");
-		if (dr->request==0) printk(KERN_DEBUG "disconnected\n");
-		if (dr->request==1) printk(KERN_DEBUG "connected\n");
-		break;
+/*
+ * Major and minor numbers.
+ */
 
-	case 0x01: /* Response available */
-		printk(KERN_DEBUG "Response available\n");
-		break;
+#define ACM_TTY_MAJOR		166
+#define ACM_TTY_MINORS		8
 
-	case 0x20: /* Set serial line state */
-		printk(KERN_DEBUG "acm.c: Set serial control line state\n");
-		if ((dr->index==1) && (dr->length==2)) {
-			acm->ctrlstate = data[0] || (data[1] << 16);
-			printk(KERN_DEBUG "Serstate: %02X\n", acm->ctrlstate);
-		}
-		break;
+/*
+ * Output control lines.
+ */
+
+#define ACM_CTRL_DTR		0x01
+#define ACM_CTRL_RTS		0x02
+
+/*
+ * Input control lines and line errors.
+ */
+
+#define ACM_CTRL_DCD		0x01
+#define ACM_CTRL_DSR		0x02
+#define ACM_CTRL_BRK		0x04
+#define ACM_CTRL_RI		0x08
+
+#define ACM_CTRL_FRAMING	0x10
+#define ACM_CTRL_PARITY		0x20
+#define ACM_CTRL_OVERRUN	0x40
+
+/*
+ * Line speed and caracter encoding.
+ */
+
+struct acm_coding {
+	__u32 speed;
+	__u8 stopbits;
+	__u8 parity;
+	__u8 databits;
+} __attribute__ ((packed));
+
+/*
+ * Internal driver structures.
+ */
+
+struct acm {
+	struct usb_device *dev;				/* the coresponding usb device */
+	struct usb_config_descriptor *cfg;		/* configuration number on this device */
+	struct tty_struct *tty;				/* the coresponding tty */
+	unsigned int ctrlin;				/* input control lines (DCD, DSR, RI, break, overruns) */
+	unsigned int ctrlout;				/* output control lines (DTR, RTS) */
+	struct acm_coding linecoding;			/* line coding (bits, stop, parity) */
+	unsigned int writesize;				/* max packet size for the output bulk endpoint */
+	struct urb ctrlurb, readurb, writeurb;		/* urbs */
+	unsigned char present;				/* this device is connected to the usb bus */
+	unsigned char used;				/* someone has this acm's device open */
+};
+
+static struct usb_driver acm_driver;
+static struct acm acm_table[ACM_TTY_MINORS];
+
+#define ACM_READY(acm)	(acm->present && acm->used)
+
+/*
+ * Functions for ACM control messages.
+ */
+
+static void acm_set_control(unsigned int status, struct acm *acm)
+{
+	if (usb_control_msg(acm->dev, usb_sndctrlpipe(acm->dev, 0), 0x22, 0x22, status, 0, NULL, 0, HZ) < 0)
+		acm_debug("acm_set_control() failed");
+
+	acm_debug("output control lines: dtr%c rts%c",
+		acm->ctrlout & ACM_CTRL_DTR ? '+' : '-', acm->ctrlout & ACM_CTRL_RTS ? '+' : '-');
+}
+
+#if 0
+static void acm_set_coding(struct acm_coding *coding, struct acm *acm)
+{
+	if (usb_control_msg(acm->dev, usb_sndctrlpipe(acm->dev, 0), 0x30, 0x22, 0, 0, coding, sizeof(struct acm_coding), HZ) < 0)
+		acm_debug("acm_set_coding() failed");
+}
+
+static void acm_send_break(int ms, struct acm *acm)
+{
+	if (usb_control_msg(acm->dev, usb_sndctrlpipe(acm->dev, 0), 0x30, 0x33, ms, 0, NULL, 0, HZ) < 0)
+		acm_debug("acm_send_break() failed");
+}
+#endif
+
+/*
+ * Interrupt handler for various ACM control events
+ */
+
+static void acm_ctrl_irq(struct urb *urb)
+{
+	struct acm *acm = urb->context;
+	devrequest *dr = urb->transfer_buffer;
+	unsigned char *data = (unsigned char *)(dr + 1);
+
+	if (urb->status < 0) {
+		acm_debug("nonzero ctrl irq status received: %d", urb->status);
+		return;
+	}
+
+	if (!ACM_READY(acm)) return;
+
+	switch (dr->request) {
+
+		case 0x20: /* Set serial line state */
+
+			if ((dr->index != 1) || (dr->length != 2)) {
+				acm_debug("unknown set serial line request: index %d len %d", dr->index, dr->length);
+				return;
+			}
+
+			acm->ctrlin = data[0] | (((unsigned int) data[1]) << 8);
+
+			acm_debug("input control lines: dcd%c dsr%c break%c ring%c framing%c parity%c overrun%c",
+				acm->ctrlin & ACM_CTRL_DCD ? '+' : '-',	acm->ctrlin & ACM_CTRL_DSR ? '+' : '-',
+				acm->ctrlin & ACM_CTRL_BRK ? '+' : '-',	acm->ctrlin & ACM_CTRL_RI  ? '+' : '-',
+				acm->ctrlin & ACM_CTRL_FRAMING ? '+' : '-',	acm->ctrlin & ACM_CTRL_PARITY ? '+' : '-',
+				acm->ctrlin & ACM_CTRL_OVERRUN ? '+' : '-');
+
+			return;
+
+		default:
+			acm_debug("unknown control event received: request %d index %d len %d data0 %d data1 %d",
+				dr->request, dr->index, dr->length, data[0], data[1]);
+			return;
 	}
 
 	return;
 }
 
-static void acm_read_irq(urb_t *urb)
+static void acm_read_bulk(struct urb *urb)
 {
-	struct acm_state *acm = (struct acm_state *)urb->context; 
-       	struct tty_struct *tty = acm->tty; 
-       	unsigned char *data = acm->readbuffer;
+	struct acm *acm = urb->context;
+	struct tty_struct *tty = acm->tty;
+	unsigned char *data = urb->transfer_buffer;
 	int i;
 
-	info("ACM_READ_IRQ: state %d, %d bytes\n", urb->status, urb->actual_length);
 	if (urb->status) {
-		printk("acm_read_irq: strange state received: %d\n", urb->status);
+		acm_debug("nonzero read bulk status received: %d", urb->status);
 		return;
 	}
-	
-	if (!ACM_READY)
-		return;
 
-	for (i=0;i<urb->actual_length;i++)
-		tty_insert_flip_char(tty,data[i],0);
-  	tty_flip_buffer_push(tty);
+	if (!ACM_READY(acm)) return;
 
-	usb_submit_urb(urb);
+	for (i = 0; i < urb->actual_length; i++)
+		tty_insert_flip_char(tty, data[i], 0);
+
+	tty_flip_buffer_push(tty);
+
+	if (usb_submit_urb(urb))
+		acm_debug("failed resubmitting read urb");
 
 	return;
 }
 
-static void acm_write_irq(urb_t *urb)
+static void acm_write_bulk(struct urb *urb)
 {
-	struct acm_state *acm = (struct acm_state *)urb->context;
-       	struct tty_struct *tty = acm->tty;
+	struct acm *acm = (struct acm *)urb->context;
+	struct tty_struct *tty = acm->tty;
 
-	info("ACM_WRITE_IRQ\n");
-
-	if (!ACM_READY)
+	if (urb->status) {
+		acm_debug("nonzero write bulk status received: %d", urb->status);
 		return;
+	}
 
-	acm->writing = 0;
+	if (!ACM_READY(acm)) return;
+
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
+
 	wake_up_interruptible(&tty->write_wait);
 
 	return;
 }
 
-/*TTY STUFF*/
-static int rs_open(struct tty_struct *tty, struct file *filp)
+/*
+ * TTY handlers
+ */
+
+static int acm_tty_open(struct tty_struct *tty, struct file *filp)
 {
-	struct acm_state *acm;
-	int ret;
+	struct acm *acm = &acm_table[MINOR(tty->device)];
 
-	info("USB_FILE_OPEN\n");
-
-	tty->driver_data = acm =
-		&acm_state_table[MINOR(tty->device) - tty->driver.minor_start];
+	tty->driver_data = acm;
 	acm->tty = tty;
-	 
-	if (!acm->present)
-		return -EINVAL;
 
-	if (acm->active++)
+	if (!acm->present) return -EINVAL;
+
+	if (acm->used++) {
+		MOD_INC_USE_COUNT;
 		return 0;
- 
+	}
+
 	MOD_INC_USE_COUNT;
 
-	/* Start reading from the device */
-	FILL_INT_URB(acm->ctrlurb, acm->dev, acm->ctrlpipe,
-		acm->ctrlbuffer, acm->ctrlsize,
-		acm_irq, acm, acm->ctrlinterval);
-	ret = usb_submit_urb(acm->ctrlurb);
-	if (ret)
-		printk(KERN_ERR "acm: usb_submit_urb(INT) failed (%d)\n", ret);
-	acm->reading = 1;
+	if (usb_submit_urb(&acm->ctrlurb))
+		acm_debug("usb_submit_urb(ctrl irq) failed");
 
-	FILL_BULK_URB(acm->readurb, acm->dev, acm->readpipe, acm->readbuffer,
-		acm->readsize, acm_read_irq, acm);
-	ret = usb_submit_urb(acm->readurb);
-		
-	if (ret)
-		printk(KERN_ERR "acm: usb_submit_urb(READ) failed (%d)\n", ret);
-	acm->reading = 1;
+	if (usb_submit_urb(&acm->readurb))
+		acm_debug("usb_submit_urb(read bulk) failed");
 
-	Set_Control_Line_Status(CTRL_STAT_DTR | CTRL_STAT_RTS, acm);
+	acm_set_control(acm->ctrlout = ACM_CTRL_DTR | ACM_CTRL_RTS, acm);
 
 	return 0;
 }
 
-static void rs_close(struct tty_struct *tty, struct file *filp)
+static void acm_tty_close(struct tty_struct *tty, struct file *filp)
 {
-	struct acm_state *acm = (struct acm_state *)tty->driver_data;
+	struct acm *acm = tty->driver_data;
 
-	info("rs_close\n");
+	if (!ACM_READY(acm)) return;
 
-	if (!acm->present)
+	if (--acm->used) {
+		MOD_DEC_USE_COUNT;
 		return;
-
-	if (--acm->active)
-		goto early;
-
-	Set_Control_Line_Status(0, acm);
-
-	if (acm->writing) {
-		if (acm->writeurb)
-			usb_unlink_urb(acm->writeurb);
-		acm->writing = 0;
-	}
-	if (acm->reading) {
-		if (acm->readurb)
-			usb_unlink_urb(acm->readurb);
-		acm->reading = 0;
 	}
 
-early:
+	acm_set_control(acm->ctrlout = 0, acm);
+	usb_unlink_urb(&acm->writeurb);
+	usb_unlink_urb(&acm->readurb);
+
 	MOD_DEC_USE_COUNT;
 }
 
-static int rs_write(struct tty_struct *tty, int from_user,
-		    const unsigned char *buf, int count)
+static int acm_tty_write(struct tty_struct *tty, int from_user, const unsigned char *buf, int count)
 {
-	struct acm_state *acm = (struct acm_state *)tty->driver_data;
-	int written, ret;
+	struct acm *acm = tty->driver_data;
 
-	info("rs_write\n");
+	if (!ACM_READY(acm)) return -EINVAL;
+	if (acm->writeurb.status == -EINPROGRESS) return 0;
 
-	if (!ACM_READY)
-		return -EINVAL;
-
-	if (acm->writing) {
-		info("already writing\n");
-		return 0;
-	}
-
-	written = (count>acm->writesize) ? acm->writesize : count;
+	count = (count > acm->writesize) ? acm->writesize : count;
 
 	if (from_user)
-		copy_from_user(acm->writebuffer, buf, written);
+		copy_from_user(acm->writeurb.transfer_buffer, buf, count);
 	else
-		memcpy(acm->writebuffer, buf, written);
+		memcpy(acm->writeurb.transfer_buffer, buf, count);
 
-	//start the transfer
-	acm->writing = 1;
+	acm->writeurb.transfer_buffer_length = count;
 
-	FILL_BULK_URB(acm->writeurb, acm->dev, acm->writepipe, acm->writebuffer,
-		written, acm_write_irq, acm);
-	ret = usb_submit_urb(acm->writeurb);
-	if (ret)
-		printk("acm: usb_submit_urb(WRITE) failed: %d\n", ret);
+	if (usb_submit_urb(&acm->writeurb))
+		acm_debug("usb_submit_urb(write bulk) failed");
 
-	return written;
-} 
-
-static void rs_put_char(struct tty_struct *tty, unsigned char ch)
-{
-	printk(KERN_DEBUG "acm: rs_put_char: Who called this unsupported routine?\n");
-	BUG();
+	return count;
 }
 
-static int rs_write_room(struct tty_struct *tty)
+static int acm_tty_write_room(struct tty_struct *tty)
 {
-	struct acm_state *acm = (struct acm_state *)tty->driver_data;
-
-	info("rs_write_room\n");
-
-	if (!ACM_READY)
-		return -EINVAL;
-
-	return acm->writing ? 0 : acm->writesize;
+	struct acm *acm = tty->driver_data;
+	if (!ACM_READY(acm)) return -EINVAL;
+	return acm->writeurb.status == -EINPROGRESS ? 0 : acm->writesize;
 }
 
-static int rs_chars_in_buffer(struct tty_struct *tty)
+static int acm_tty_chars_in_buffer(struct tty_struct *tty)
 {
-	struct acm_state *acm = (struct acm_state *)tty->driver_data;
-
-//	info("rs_chars_in_buffer\n");
-
-	if (!ACM_READY)
-		return -EINVAL;
-
-	return acm->writing ? acm->writesize : 0;
+	struct acm *acm = tty->driver_data;
+	if (!ACM_READY(acm)) return -EINVAL;
+	return acm->writeurb.status == -EINPROGRESS ? acm->writesize : 0;
 }
 
-static void rs_throttle(struct tty_struct *tty)
+static void acm_tty_throttle(struct tty_struct *tty)
 {
-	struct acm_state *acm = (struct acm_state *)tty->driver_data;
-
-	info("rs_throttle\n");
-
-	if (!ACM_READY)
-		return;
-/*
-	if (I_IXOFF(tty))
-		rs_send_xchar(tty, STOP_CHAR(tty));
-*/
+	struct acm *acm = tty->driver_data;
+	if (!ACM_READY(acm)) return;
 	if (tty->termios->c_cflag & CRTSCTS)
-		Set_Control_Line_Status(acm->ctrlstate & ~CTRL_STAT_RTS, acm);
+		acm_set_control(acm->ctrlout &= ~ACM_CTRL_RTS, acm);
 }
 
-static void rs_unthrottle(struct tty_struct *tty)
+static void acm_tty_unthrottle(struct tty_struct *tty)
 {
-	struct acm_state *acm = (struct acm_state *) tty->driver_data;
-
-	info("rs_unthrottle\n");
-
-	if (!ACM_READY)
-		return;
-/*
-	if (I_IXOFF(tty))
-		rs_send_xchar(tty, STOP_CHAR(tty));
-*/
+	struct acm *acm = tty->driver_data;
+	if (!ACM_READY(acm)) return;
 	if (tty->termios->c_cflag & CRTSCTS)
-		Set_Control_Line_Status(acm->ctrlstate | CTRL_STAT_RTS, acm);
+		acm_set_control(acm->ctrlout |= ACM_CTRL_RTS, acm);
 }
 
-static int get_free_acm(void)
+static void acm_tty_set_termios(struct tty_struct *tty, struct termios *old)
 {
-	int i;
- 
-	for (i = 0; i < NR_PORTS; i++) {
-		if (!acm_state_table[i].present)
-			return i;
-	}
-	return -1;
+	acm_debug("set_termios called, but not there yet");
+	return;
 }
 
-static void * acm_probe(struct usb_device *dev, unsigned int ifnum)
+/*
+ * USB probe and disconnect routines.
+ */
+
+static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 {
-	struct acm_state *acm;
-	struct usb_interface_descriptor *interface;
-	struct usb_endpoint_descriptor *endpoint;
-	int cfgnum,acmno;
-	int swapped=0;
-	
-	info("acm_probe\n");
-	
-	if (0>(acmno=get_free_acm())) {
-		info("Too many acm devices connected\n");
+	struct acm *acm;
+	struct usb_interface_descriptor *ifcom, *ifdata;
+	struct usb_endpoint_descriptor *epctrl, *epread, *epwrite;
+	int readsize, ctrlsize, minor, i;
+	unsigned char *buf;
+	char *s = NULL;
+
+	for (minor = 0; minor < ACM_TTY_MINORS &&
+		(acm_table[minor].present || acm_table[minor].used); minor++);
+	if (acm_table[minor].present || acm_table[minor].used) {
+		acm_debug("no more free acm devices");
 		return NULL;
 	}
-	acm = &acm_state_table[acmno];
+	acm = acm_table + minor;
+	memset(acm, 0, sizeof(struct acm));
 
-	/* Only use CDC */
-	if (dev->descriptor.bDeviceClass != 2 ||
-	    dev->descriptor.bDeviceSubClass != 0 ||
-            dev->descriptor.bDeviceProtocol != 0)
+	acm->dev = dev;
+
+	if (dev->descriptor.bDeviceClass != 2 || dev->descriptor.bDeviceSubClass != 0
+		|| dev->descriptor.bDeviceProtocol != 0) {
 		return NULL;
+	}
 
-#define IFCLASS(if) ((if->bInterfaceClass << 24) | (if->bInterfaceSubClass << 16) | (if->bInterfaceProtocol << 8) | (if->bNumEndpoints))
+	for (i = 0; i < dev->descriptor.bNumConfigurations; i++) {
 
-	/* FIXME: should the driver really be doing the configuration
-	 * selecting or should the usbcore?  [different configurations
-	 * can have different bandwidth requirements] -greg */
+		acm_debug("probing config %d", i);
+		acm->cfg = dev->config + i;
 
-	printk("Acm: found device with right class...\n" );
-
-	/* Now scan all configs for a ACM configuration */
-	for (cfgnum=0;cfgnum<dev->descriptor.bNumConfigurations;cfgnum++) {
-		/* The first one should be Communications interface? */
-		interface = &dev->config[cfgnum].interface[0].altsetting[0];
-		if (IFCLASS(interface) != 0x02020101)
+		ifcom = acm->cfg->interface[0].altsetting + 0;
+		if (ifcom->bInterfaceClass != 2 || ifcom->bInterfaceSubClass != 2 ||
+		    ifcom->bInterfaceProtocol != 1 || ifcom->bNumEndpoints != 1)
 			continue;
 
-		/* Which uses an interrupt input */
-		endpoint = &interface->endpoint[0];
-		if ((endpoint->bEndpointAddress & 0x80) != 0x80 ||
-		    (endpoint->bmAttributes & 3) != 3)
-			continue;
-			
-		/* The second one should be a Data interface? */
-		interface = &dev->config[cfgnum].interface[1].altsetting[0];
-		if (interface->bInterfaceClass != 10 ||
-		    interface->bNumEndpoints != 2)
+		epctrl = ifcom->endpoint + 0;
+		if ((epctrl->bEndpointAddress & 0x80) != 0x80 || (epctrl->bmAttributes & 3) != 3)
 			continue;
 
-		/* make sure both interfaces are available for our use */
-		if (usb_interface_claimed(&dev->config[cfgnum].interface[0]) ||
-		    usb_interface_claimed(&dev->config[cfgnum].interface[1])) {
-			printk("usb-acm: required interface already has a driver\n");
-			continue;
-		}
-
-		endpoint = &interface->endpoint[0];
-		if ((endpoint->bEndpointAddress & 0x80) != 0x80)
-			swapped = 1;
-
-		/*With a bulk input */
-		endpoint = &interface->endpoint[0^swapped];
-		if ((endpoint->bEndpointAddress & 0x80) != 0x80 ||
-		    (endpoint->bmAttributes & 3) != 2)
-			continue;
-			
-		/*And a bulk output */
-		endpoint = &interface->endpoint[1^swapped];
-		if ((endpoint->bEndpointAddress & 0x80) == 0x80 ||
-		    (endpoint->bmAttributes & 3) != 2)
+		ifdata = acm->cfg->interface[1].altsetting + 0;
+		if (ifdata->bInterfaceClass != 10 || ifdata->bNumEndpoints != 2)
 			continue;
 
-		printk("USB ACM %d found on config %d\n", acmno, cfgnum);
-		usb_set_configuration(dev, dev->config[cfgnum].bConfigurationValue);
+		if (usb_interface_claimed(acm->cfg->interface + 0) ||
+		    usb_interface_claimed(acm->cfg->interface + 1))
+			continue;
 
-		acm->dev=dev;
+		epread = ifdata->endpoint + 0;
+		epwrite = ifdata->endpoint + 1;
 
-		acm->readendp=dev->config[cfgnum].interface[1].altsetting[0].endpoint[0^swapped].bEndpointAddress;
-		acm->readpipe=usb_rcvbulkpipe(dev,acm->readendp);
-		acm->readbuffer=kmalloc(acm->readsize=dev->config[cfgnum].interface[1].altsetting[0].endpoint[0^swapped].wMaxPacketSize,GFP_KERNEL);
-		acm->reading=0;
-		if (!acm->readbuffer) {
-			printk("ACM: Couldn't allocate readbuffer\n");
-			return NULL;
-		}
-		acm->readurb = usb_alloc_urb(0);
-		if (!acm->readurb) {
-			printk("acm: couldn't allocate read urb\n");
-			return NULL;
+		if ((epread->bmAttributes & 3) != 2 || (epwrite->bmAttributes & 3) != 2 ||
+		   ((epread->bEndpointAddress & 0x80) ^ (epwrite->bEndpointAddress & 0x80)) != 0x80)
+			continue;
+
+		if ((epread->bEndpointAddress & 0x80) != 0x80) {
+			epread = ifdata->endpoint + 1;
+			epwrite = ifdata->endpoint + 0;
 		}
 
-		acm->writeendp=dev->config[cfgnum].interface[1].altsetting[0].endpoint[1^swapped].bEndpointAddress;
-		acm->writepipe=usb_sndbulkpipe(dev,acm->writeendp);
-		acm->writebuffer=kmalloc(acm->writesize=dev->config[cfgnum].interface[1].altsetting[0].endpoint[1^swapped].wMaxPacketSize, GFP_KERNEL);
-		acm->writing=0;
-		if (!acm->writebuffer) {
-			printk("ACM: Couldn't allocate writebuffer\n");
-			kfree(acm->readbuffer);
-			return NULL;
-		}
-		acm->writeurb = usb_alloc_urb(0);
-		if (!acm->writeurb) {
-			printk("acm: couldn't allocate write urb\n");
-			return NULL;
-		}
+		usb_set_configuration(dev, acm->cfg->bConfigurationValue);
 
-		acm->ctrlbuffer=kmalloc(acm->ctrlsize=dev->config[cfgnum].interface[0].altsetting[0].endpoint[0].wMaxPacketSize, GFP_KERNEL);
-		acm->ctrlendp=dev->config[cfgnum].interface[0].altsetting[0].endpoint[0].bEndpointAddress;
-		acm->ctrlpipe=usb_rcvintpipe(acm->dev,acm->ctrlendp);
-		acm->ctrlinterval=dev->config[cfgnum].interface[0].altsetting[0].endpoint[0].bInterval;
-		if (!acm->ctrlbuffer) {
-			printk("acm: couldn't allocate ctrlbuffer\n");
-			return NULL;
-		}
-		acm->ctrlurb = usb_alloc_urb(0);
-		if (!acm->ctrlurb) {
-			printk("acm: couldn't allocate write urb\n");
-			return NULL;
-		}
+		ctrlsize = epctrl->wMaxPacketSize;
+		readsize = epread->wMaxPacketSize;
+		acm->writesize = epwrite->wMaxPacketSize;
 
-		acm->cfgnum = cfgnum;
-		acm->present=1;				
-		MOD_INC_USE_COUNT;
+		if (!(buf = kmalloc(ctrlsize + readsize + acm->writesize, GFP_KERNEL)))
+			return NULL;
 
-		usb_driver_claim_interface(&acm_driver,
-				&dev->config[cfgnum].interface[0], acm);
-		usb_driver_claim_interface(&acm_driver,
-				&dev->config[cfgnum].interface[1], acm);
+		FILL_INT_URB(&acm->ctrlurb, dev, usb_rcvintpipe(dev, epctrl->bEndpointAddress),
+			buf, ctrlsize, acm_ctrl_irq, acm, epctrl->bInterval);
+
+		FILL_BULK_URB(&acm->readurb, dev, usb_rcvbulkpipe(dev, epread->bEndpointAddress),
+			buf += ctrlsize, readsize, acm_read_bulk, acm);
+
+		FILL_BULK_URB(&acm->writeurb, dev, usb_sndbulkpipe(dev, epwrite->bEndpointAddress),
+			buf += readsize , acm->writesize, acm_write_bulk, acm);
+
+		printk(KERN_INFO "ttyACM%d: USB ACM device\n", minor);
+
+		usb_driver_claim_interface(&acm_driver, acm->cfg->interface + 0, acm);
+		usb_driver_claim_interface(&acm_driver, acm->cfg->interface + 1, acm);
+
+		acm->present = 1;
+
 		return acm;
 	}
+
 	return NULL;
 }
 
 static void acm_disconnect(struct usb_device *dev, void *ptr)
 {
-	struct acm_state *acm = ptr;
+	struct acm *acm = ptr;
 
-	info("acm_disconnect\n");
-	
-	if (!acm->present)
+	if (!acm->present) {
+		acm_debug("disconnect on nonexisting interface");
 		return;
-
-	acm->active=0;
-	acm->present=0;
-	if (acm->writing)
-		acm->writing=0;
-	if (acm->reading)
-		acm->reading=0;
-
-	if (acm->ctrlurb) {
-		usb_unlink_urb(acm->ctrlurb);
-		usb_free_urb(acm->ctrlurb);
-		acm->ctrlurb = NULL;
 	}
-	if (acm->readurb) {
-		usb_unlink_urb(acm->readurb);
-		usb_free_urb(acm->readurb);
-		acm->readurb = NULL;
-	}
-	if (acm->writeurb) {
-		usb_unlink_urb(acm->writeurb);
-		usb_free_urb(acm->writeurb);
-		acm->writeurb = NULL;
-	}
-	//BUG: What to do if a device is open?? Notify process or not allow cleanup?
-	kfree(acm->writebuffer);
-	kfree(acm->readbuffer);
-	kfree(acm->ctrlbuffer);
 
-	/* release the interfaces so that other drivers can have at them */
-	usb_driver_release_interface(&acm_driver,
-				&dev->config[acm->cfgnum].interface[0]);
-	usb_driver_release_interface(&acm_driver,
-				&dev->config[acm->cfgnum].interface[1]);
+	acm->present = 0;
 
-	MOD_DEC_USE_COUNT;
+	usb_unlink_urb(&acm->ctrlurb);
+	usb_unlink_urb(&acm->readurb);
+	usb_unlink_urb(&acm->writeurb);
+
+	kfree(acm->ctrlurb.transfer_buffer);
+
+	usb_driver_release_interface(&acm_driver, acm->cfg->interface + 0);
+	usb_driver_release_interface(&acm_driver, acm->cfg->interface + 1);
 }
 
-/*USB DRIVER STUFF*/
+/*
+ * USB driver structure.
+ */
+
 static struct usb_driver acm_driver = {
-	"acm",
-	acm_probe,
-	acm_disconnect,
-	{ NULL, NULL }
+	name:		"acm",
+	probe:		acm_probe,
+	disconnect:	acm_disconnect
 };
 
-int usb_acm_init(void)
+/*
+ * TTY driver structures.
+ */
+
+static int acm_tty_refcount;
+
+static struct tty_struct *acm_tty_table[ACM_TTY_MINORS];
+static struct termios *acm_tty_termios[ACM_TTY_MINORS];
+static struct termios *acm_tty_termios_locked[ACM_TTY_MINORS];
+
+static struct tty_driver acm_tty_driver = {
+	magic:			TTY_DRIVER_MAGIC,
+	driver_name:		"usb",
+	name:			"ttyACM",
+	major:			ACM_TTY_MAJOR,
+	minor_start:		0,
+	num:			ACM_TTY_MINORS,
+	type:			TTY_DRIVER_TYPE_SERIAL,
+	subtype:		SERIAL_TYPE_NORMAL,
+	flags:			TTY_DRIVER_REAL_RAW,
+
+	refcount:		&acm_tty_refcount,
+
+	table:			acm_tty_table,
+	termios:		acm_tty_termios,
+	termios_locked:		acm_tty_termios_locked,
+
+	open:			acm_tty_open,
+	close:			acm_tty_close,
+	write:			acm_tty_write,
+	write_room:		acm_tty_write_room,
+	set_termios:		acm_tty_set_termios,
+	throttle:		acm_tty_throttle,
+	unthrottle:		acm_tty_unthrottle,
+	chars_in_buffer:	acm_tty_chars_in_buffer
+};
+
+/*
+ * Init / cleanup.
+ */
+
+#ifdef MODULE
+void cleanup_module(void)
 {
-	int cnt;
+	usb_deregister(&acm_driver);
+	tty_unregister_driver(&acm_tty_driver);
+}
 
-	info("usb_acm_init\n");
+int init_module(void)
+#else
+int usb_acm_init(void)
+#endif
+{
+	memset(acm_table, 0, sizeof(struct acm) * ACM_TTY_MINORS);
 
-	//INITIALIZE GLOBAL DATA STRUCTURES
-	for (cnt = 0; cnt < NR_PORTS; cnt++)
-		memset(&acm_state_table[cnt], 0, sizeof(struct acm_state));
+	acm_tty_driver.init_termios =		tty_std_termios;
+	acm_tty_driver.init_termios.c_cflag =	B9600 | CS8 | CREAD | HUPCL | CLOCAL;
 
-	//REGISTER TTY DRIVER
-	memset(&acm_tty_driver, 0, sizeof(struct tty_driver));
-	acm_tty_driver.magic = TTY_DRIVER_MAGIC;
-	acm_tty_driver.driver_name = "usb";
-	acm_tty_driver.name = "ttyACM";
-	acm_tty_driver.major = ACM_MAJOR;
-	acm_tty_driver.minor_start = 0;
-	acm_tty_driver.num = NR_PORTS;
-	acm_tty_driver.type = TTY_DRIVER_TYPE_SERIAL;
-	acm_tty_driver.subtype = SERIAL_TYPE_NORMAL;
-	acm_tty_driver.init_termios = tty_std_termios;
-	acm_tty_driver.init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
-	acm_tty_driver.flags = TTY_DRIVER_REAL_RAW;
-	acm_tty_driver.refcount = &acm_refcount;
-	acm_tty_driver.table = acm_tty;
-	acm_tty_driver.termios = acm_termios;
-	acm_tty_driver.termios_locked = acm_termios_locked;
-
-	acm_tty_driver.open = rs_open;
-	acm_tty_driver.close = rs_close;
-	acm_tty_driver.write = rs_write;
-	acm_tty_driver.put_char = rs_put_char;
-	acm_tty_driver.flush_chars = NULL; //rs_flush_chars;
-	acm_tty_driver.write_room = rs_write_room;
-	acm_tty_driver.ioctl = NULL; //rs_ioctl
-	acm_tty_driver.set_termios = NULL; //rs_set_termios;
-	acm_tty_driver.set_ldisc = NULL;
-	acm_tty_driver.throttle = rs_throttle;
-	acm_tty_driver.unthrottle = rs_unthrottle;
-	acm_tty_driver.stop = NULL; //rs_stop;
-	acm_tty_driver.start = NULL; //rs_start;
-	acm_tty_driver.hangup = NULL; //rs_hangup;
-	acm_tty_driver.break_ctl = NULL; //rs_break;
-	acm_tty_driver.wait_until_sent = NULL; //rs_wait_until_sent;
-	acm_tty_driver.send_xchar = NULL; //rs_send_xchar;
-	acm_tty_driver.read_proc = NULL; //rs_read_proc;
-	acm_tty_driver.chars_in_buffer = rs_chars_in_buffer;
-	acm_tty_driver.flush_buffer = NULL; //rs_flush_buffer;
-	if (tty_register_driver(&acm_tty_driver)) {
-		printk(KERN_ERR "acm: failed to register tty driver\n");
-		return -EPERM;
-	}
+	if (tty_register_driver(&acm_tty_driver))
+		return -1;
 
 	if (usb_register(&acm_driver) < 0) {
 		tty_unregister_driver(&acm_tty_driver);
 		return -1;
 	}
 
-	printk(KERN_INFO "USB ACM registered.\n");
 	return 0;
 }
 
-void usb_acm_cleanup(void)
-{
-	int i;
-	struct acm_state *acm;
-
-	info("usb_acm_cleanup\n");
-		
-	for (i=0;i<NR_PORTS;i++) {
-		acm=&acm_state_table[i];
-		if (acm->present) {
-			printk("disconnecting %d\n",i);
-			acm_disconnect(acm->dev, acm);
-		}  
-	}
-	tty_unregister_driver(&acm_tty_driver);
-	
-	usb_deregister(&acm_driver);
-	
-}
-
-#ifdef MODULE
-int init_module(void)
-{
-	return usb_acm_init();
-}
-
-void cleanup_module(void)
-{
-	usb_acm_cleanup();
-}
-#endif

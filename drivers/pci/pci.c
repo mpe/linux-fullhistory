@@ -412,7 +412,7 @@ void __init pci_read_bridge_bases(struct pci_bus *child)
 	}
 }
 
-static __init struct pci_bus *pci_add_new_bus(struct pci_bus *parent, struct pci_dev *dev, int busnr)
+static struct pci_bus * __init pci_add_new_bus(struct pci_bus *parent, struct pci_dev *dev, int busnr)
 {
 	struct pci_bus *child;
 
@@ -445,7 +445,7 @@ static __init struct pci_bus *pci_add_new_bus(struct pci_bus *parent, struct pci
  * A CardBus bridge is basically the same as a regular PCI bridge,
  * except we don't scan behind it because it will be changing.
  */
-static __init int pci_scan_cardbus(struct pci_bus *bus, struct pci_dev *dev, int busnr)
+static int __init pci_scan_cardbus(struct pci_bus *bus, struct pci_dev *dev, int busnr)
 {
 	unsigned short cr;
 	unsigned int buses;
@@ -500,7 +500,7 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus);
 /*
  * If it's a bridge, scan the bus behind it.
  */
-static __init int pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int max)
+static int __init pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int max)
 {
 	unsigned int buses;
 	unsigned short cr;
@@ -566,7 +566,7 @@ static __init int pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int
  * Read interrupt line and base address registers.
  * The architecture-dependent code can tweak these, of course.
  */
-static __init void pci_read_irq(struct pci_dev *dev)
+static void __init pci_read_irq(struct pci_dev *dev)
 {
 	unsigned char irq;
 

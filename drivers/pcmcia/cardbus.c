@@ -340,10 +340,13 @@ void cb_free(socket_info_t *s)
     if (c) {
 	struct pci_dev **p;
 	/* Unlink from PCI device chain */
-	for (p = &pci_devices; *p; p = &((*p)->next)) {
+	p = &pci_devices;
+	while (*p) {
 	    struct pci_dev * dev = *p;
-	    if (dev->bus != s->cap.cb_bus)
+	    if (dev->bus != s->cap.cb_bus) {
+	    	p = &dev->next;
 		continue;
+	    }
 	    *p = dev->next;
 #ifdef CONFIG_PROC_FS
 	    pci_proc_detach_device(dev);

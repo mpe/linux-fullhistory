@@ -278,7 +278,7 @@ m8xx_init_IRQ(void)
 
         ppc8xx_pic.irq_offset = 0;
         for ( i = 0 ; i < NR_SIU_INTS ; i++ )
-                irq_desc[i].ctl = &ppc8xx_pic;
+                irq_desc[i].handler = &ppc8xx_pic;
 	
 	/* We could probably incorporate the CPM into the multilevel
 	 * interrupt structure.
@@ -288,7 +288,7 @@ m8xx_init_IRQ(void)
 
 #if defined(CONFIG_PCI)
         for ( i = NR_SIU_INTS ; i < (NR_SIU_INTS + NR_8259_INTS) ; i++ )
-                irq_desc[i].ctl = &i8259_pic;
+                irq_desc[i].handler = &i8259_pic;
         i8259_pic.irq_offset = NR_SIU_INTS;
         i8259_init();
         request_8xxirq(ISA_BRIDGE_INT, mbx_i8259_action, 0, "8259 cascade", NULL);

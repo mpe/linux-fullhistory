@@ -7,18 +7,18 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile.
 
-L_TARGET := filesystems.a
-L_OBJS    = $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
+FILESYSTEMS = $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
 O_TARGET := fs.o
 O_OBJS    = open.o read_write.o devices.o file_table.o buffer.o \
 		super.o  block_dev.o stat.o exec.o pipe.o namei.o fcntl.o \
 		ioctl.o readdir.o select.o fifo.o locks.o filesystems.o \
-		dcache.o inode.o attr.o bad_inode.o file.o iobuf.o $(BINFMTS) 
+		dcache.o inode.o attr.o bad_inode.o file.o iobuf.o \
+		$(BINFMTS) $(FILESYSTEMS)
 
 MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = coda minix ext2 fat msdos vfat proc isofs nfs umsdos ntfs \
 		hpfs sysv smbfs ncpfs ufs efs affs romfs autofs hfs lockd \
-		nfsd nls devpts adfs partitions qnx4 udf bfs openpromfs
+		nfsd nls devpts adfs partitions qnx4 udf bfs cramfs openpromfs
 
 SUB_DIRS := partitions
 
@@ -26,6 +26,22 @@ ifeq ($(CONFIG_QUOTA),y)
 O_OBJS += dquot.o
 else
 O_OBJS += noquot.o
+endif
+
+ifeq ($(CONFIG_EXT2_FS),y)
+SUB_DIRS += ext2
+else
+  ifeq ($(CONFIG_EXT2_FS),m)
+  MOD_SUB_DIRS += ext2
+  endif
+endif
+
+ifeq ($(CONFIG_CRAMFS),y)
+SUB_DIRS += cramfs
+else
+  ifeq ($(CONFIG_CRAMFS),m)
+  MOD_SUB_DIRS += cramfs
+  endif
 endif
 
 ifeq ($(CONFIG_CODA_FS),y)
@@ -41,14 +57,6 @@ SUB_DIRS += minix
 else
   ifeq ($(CONFIG_MINIX_FS),m)
   MOD_SUB_DIRS += minix
-  endif
-endif
-
-ifeq ($(CONFIG_EXT2_FS),y)
-SUB_DIRS += ext2
-else
-  ifeq ($(CONFIG_EXT2_FS),m)
-  MOD_SUB_DIRS += ext2
   endif
 endif
 

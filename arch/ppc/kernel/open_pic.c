@@ -416,13 +416,13 @@ void openpic_maptimer(u_int timer, u_int cpumask)
 void openpic_enable_irq(u_int irq)
 {
 	check_arg_irq(irq);
-	openpic_clearfield(&OpenPIC->Source[irq-irq_desc[irq].ctl->irq_offset].Vector_Priority, OPENPIC_MASK);
+	openpic_clearfield(&OpenPIC->Source[irq-irq_desc[irq].handler->irq_offset].Vector_Priority, OPENPIC_MASK);
 }
 
 void openpic_disable_irq(u_int irq)
 {
 	check_arg_irq(irq);
-	openpic_setfield(&OpenPIC->Source[irq-irq_desc[irq].ctl->irq_offset].Vector_Priority, OPENPIC_MASK);
+	openpic_setfield(&OpenPIC->Source[irq-irq_desc[irq].handler->irq_offset].Vector_Priority, OPENPIC_MASK);
 }
 
 /*

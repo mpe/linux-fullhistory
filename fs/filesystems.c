@@ -54,10 +54,6 @@ extern int init_devpts_fs(void);
 
 void __init filesystem_setup(void)
 {
-#ifdef CONFIG_EXT2_FS
-	init_ext2_fs();
-#endif
-
 #ifdef CONFIG_MINIX_FS
 	init_minix_fs();
 #endif

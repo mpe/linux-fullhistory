@@ -3,12 +3,10 @@
  *
  * Copyright (C) 1999 Cort Dougan <cort@cs.nmt.edu>
  */
-#ifndef _PPC_IRQ_CONTROL_H
-#define _PPC_IRQ_CONTROL_H
+#ifndef _PPC_HW_IRQ_H
+#define _PPC_HW_IRQ_H
 
-#include <asm/irq.h>
-#include <asm/atomic.h>
-
+#if 0
 /* Structure describing interrupts */
 struct hw_interrupt_type {
 	const char * typename;
@@ -24,8 +22,7 @@ struct irqdesc {
 	struct irqaction *action;
 	struct hw_interrupt_type *ctl;
 };
-
-extern struct irqdesc irq_desc[NR_IRQS];
+#endif
 
 struct int_control_struct
 {
@@ -53,8 +50,8 @@ extern void __no_use_save_flags(unsigned long *);
 extern void do_lost_interrupts(unsigned long);
 extern atomic_t ppc_n_lost_interrupts;
 
-#define mask_irq(irq) ({if (irq_desc[irq].ctl && irq_desc[irq].ctl->disable) irq_desc[irq].ctl->disable(irq);})
-#define unmask_irq(irq) ({if (irq_desc[irq].ctl && irq_desc[irq].ctl->enable) irq_desc[irq].ctl->enable(irq);})
-#define mask_and_ack_irq(irq) ({if (irq_desc[irq].ctl && irq_desc[irq].ctl->mask_and_ack) irq_desc[irq].ctl->mask_and_ack(irq);})
+#define mask_irq(irq) ({if (irq_desc[irq].handler && irq_desc[irq].handler->disable) irq_desc[irq].handler->disable(irq);})
+#define unmask_irq(irq) ({if (irq_desc[irq].handler && irq_desc[irq].handler->enable) irq_desc[irq].handler->enable(irq);})
+#define mask_and_ack_irq(irq) ({if (irq_desc[irq].handler && irq_desc[irq].handler->ack) irq_desc[irq].handler->ack(irq);})
 
-#endif /* _PPC_IRQ_CONTROL_H */
+#endif /* _PPC_HW_IRQ_H */

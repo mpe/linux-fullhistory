@@ -236,22 +236,38 @@ static ssize_t write_mouse(struct file * file,
 
 /*
  * Look like a PS/2 mouse, please..
- *
+ * In XFree86 (3.3.5 tested) you must select Protocol "NetMousePS/2",
+ * then use your wheel as Button 4 and 5 via ZAxisMapping 4 5.
  * The PS/2 protocol is fairly strange, but
  * oh, well, it's at least common..
  */
 static ssize_t read_mouse(struct file * file, char * buffer, size_t count, loff_t *ppos)
 {
+	DECLARE_WAITQUEUE(wait, current);
 	int retval = 0;
 	static int state = 0;
 	struct mouse_state *mouse = &static_mouse_state;
 
 	if (!mouse->present)
 		return 0;
-	/*
-	 * FIXME - Other mouse drivers handle blocking and nonblocking reads
-	 * differently here...
-	 */
+
+	if (!mouse->ready) {
+		if (file->f_flags & O_NONBLOCK) return -EAGAIN;
+
+		add_wait_queue(&mouse->wait, &wait);
+repeat:
+		set_current_state(TASK_INTERRUPTIBLE);
+		if (!mouse->ready && !signal_pending(current)) {
+			schedule();
+		goto repeat;
+		}
+		current->state = TASK_RUNNING;
+		remove_wait_queue(&mouse->wait, &wait);
+	}
+	if (signal_pending(current)) return -ERESTARTSYS;
+
+	if (!mouse->present)
+		return 0;
 	if (count) {
 		mouse->ready = 0;
 		switch (state) {
@@ -389,7 +405,7 @@ struct file_operations usb_mouse_fops = {
 	{
 		printk(KERN_DEBUG "%s(%d): mouse resume\n", __FILE__, __LINE__);
 		/* restart the usb controller's polling of the mouse */
-		
+
 		pipe = usb_rcvintpipe(mouse->dev, mouse->bEndpointAddress);
 		FILL_INT_URB(mouse->urb,mouse->dev,pipe,
 			     mouse->buffer,
@@ -411,10 +427,11 @@ struct file_operations usb_mouse_fops = {
 static void mouse_disconnect(struct usb_device *dev, void *priv)
 {
 	struct mouse_state *mouse = priv;
-
+	
 	/* stop the usb interrupt transfer */
 	if (mouse->present) {
-	  usb_unlink_urb(mouse->urb);
+		usb_unlink_urb(mouse->urb);
+		wake_up(&mouse->wait);
 	}
 
 	/* this might need work */

@@ -2150,7 +2150,7 @@
 	1948  Solo?
 	1968  ES1968 Maestro 2
 	1969  ES1969 Solo-1 Audiodrive
-	1978  ES1978 Maestro Audiodrive
+	1978  ES1978 Maestro 2E
 	2808  ES336H Fax Modem (Later Model)
 	2898  ES2898 Modem
 125e  Specialvideo Engineering SRL
@@ -2216,7 +2216,7 @@
 	e886  IT8330G
 1284  Sahara Networks, Inc.
 1285  Platform Technologies, Inc.
-	0100  PT-201C-O-P AGOGO-XP sound chip
+	0100  AGOGO sound chip (aka ESS Maestro 1)
 1286  Mazet GmbH
 1287  M-Pact, Inc.
 	001e  LS220D DVD Decoder

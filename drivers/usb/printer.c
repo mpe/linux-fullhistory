@@ -1,4 +1,3 @@
-
 /* Driver for USB Printers
  * 
  * Copyright 1999 Michael Gee (michael@linuxspecific.com)
@@ -21,6 +20,14 @@
 #include <linux/spinlock.h>
 
 #include "usb.h"
+
+/* Define IEEE_DEVICE_ID if you want to see the IEEE-1284 Device ID string.
+ * This may include the printer's serial number.
+ * An example from an HP 970C DeskJet printer is (this is one long string,
+ * with the serial number changed):
+MFG:HEWLETT-PACKARD;MDL:DESKJET 970C;CMD:MLC,PCL,PML;CLASS:PRINTER;DESCRIPTION:Hewlett-Packard DeskJet 970C;SERN:US970CSEPROF;VSTATUS:$HB0$NC0,ff,DN,IDLE,CUT,K1,C0,DP,NR,KP000,CP027;VP:0800,FL,B0;VJ:                    ;
+ */
+#define IEEE_DEVICE_ID
 
 #define NAK_TIMEOUT (HZ)				/* stall wait for printer */
 #define MAX_RETRY_COUNT ((60*60*HZ)/NAK_TIMEOUT)	/* should not take 1 minute a page! */
@@ -62,12 +69,16 @@ static struct pp_usb_data *minor_data[MAX_PRINTERS];
 static unsigned char printer_read_status(struct pp_usb_data *p)
 {
 	__u8 status;
+	int err;
 	struct usb_device *dev = p->pusb_dev;
 
-	if (usb_control_msg(dev, usb_rcvctrlpipe(dev,0),
+	err = usb_control_msg(dev, usb_rcvctrlpipe(dev,0),
 		USB_PRINTER_REQ_GET_PORT_STATUS,
 		USB_TYPE_CLASS | USB_RT_INTERFACE | USB_DIR_IN,
-		0, 0, &status, sizeof(status), HZ)) {
+		0, 0, &status, sizeof(status), HZ);
+	if (err < 0) {
+		printk(KERN_ERR "usblp%d: read_status control_msg error = %d\n",
+			p->minor, err);
  		return 0;
 	}
 	return status;
@@ -105,11 +116,15 @@ static int printer_check_status(struct pp_usb_data *p)
 static void printer_reset(struct pp_usb_data *p)
 {
 	struct usb_device *dev = p->pusb_dev;
+	int err;
 
-	usb_control_msg(dev, usb_sndctrlpipe(dev,0),
+	err = usb_control_msg(dev, usb_sndctrlpipe(dev,0),
 		USB_PRINTER_REQ_SOFT_RESET,
 		USB_TYPE_CLASS | USB_RECIP_OTHER,
 		0, 0, NULL, 0, HZ);
+	if (err < 0)
+		printk(KERN_ERR "usblp%d: reset control_msg error = %d\n",
+			p->minor, err);
 }
 
 static int open_printer(struct inode *inode, struct file *file)
@@ -125,10 +140,14 @@ static int open_printer(struct inode *inode, struct file *file)
 	p->minor = MINOR(inode->i_rdev);
 
 	if (p->isopen++) {
+		printk(KERN_ERR "usblp%d: printer is already open\n",
+			p->minor);
 		return -EBUSY;
 	}
 	if (!(p->obuf = (char *)__get_free_page(GFP_KERNEL))) {
 		p->isopen = 0;
+		printk(KERN_ERR "usblp%d: cannot allocate memory\n",
+			p->minor);
 		return -ENOMEM;
 	}
 
@@ -176,6 +195,7 @@ static ssize_t write_printer(struct file *file,
 		if (copy_from_user(p->obuf, buffer, copy_size))
 			return -EFAULT;
 		maxretry = MAX_RETRY_COUNT;
+
 		while (thistime) {
 			if (!p->pusb_dev)
 				return -ENODEV;
@@ -238,6 +258,9 @@ static ssize_t read_printer(struct file *file,
 		result = usb_bulk_msg(p->pusb_dev,
 			  usb_rcvbulkpipe(p->pusb_dev, p->bulk_in_ep),
 			  buf, this_read, &partial, HZ*20);
+		if (result < 0)
+			printk(KERN_ERR "usblp%d read_printer bulk_msg error = %d\n",
+				p->minor, result);
 
 		/* unlike writes, we don't retry a NAK, just stop now */
 		if (!result & partial)
@@ -253,6 +276,7 @@ static ssize_t read_printer(struct file *file,
 			buffer += this_read;
 		}
 	}
+
 	return read_count;
 }
 
@@ -261,6 +285,7 @@ static void *printer_probe(struct usb_device *dev, unsigned int ifnum)
 	struct usb_interface_descriptor *interface;
 	struct pp_usb_data *pp;
 	int i;
+	__u8 status;
 
 	/*
 	 * FIXME - this will not cope with combined printer/scanners
@@ -311,19 +336,20 @@ static void *printer_probe(struct usb_device *dev, unsigned int ifnum)
 			break;
 	}
 	if (i >= MAX_PRINTERS) {
-		printk(KERN_ERR "No minor table space available for USB Printer\n");
+		printk(KERN_ERR "No minor table space available for new USB printer\n");
 		return NULL;
 	}
 
-	printk(KERN_INFO "USB Printer found at address %d\n", dev->devnum);
+	printk(KERN_INFO "USB printer found at address %d\n", dev->devnum);
 
 	if (!(pp = kmalloc(sizeof(struct pp_usb_data), GFP_KERNEL))) {
-		printk(KERN_DEBUG "usb_printer: no memory!\n");
+		printk(KERN_DEBUG "USB printer: no memory!\n");
 		return NULL;
 	}
 
 	memset(pp, 0, sizeof(struct pp_usb_data));
 	minor_data[i] = PPDATA(pp);
+
 	pp->minor = i;
 	pp->pusb_dev = dev;
 	pp->maxout = (BIG_BUF_SIZE > PAGE_SIZE) ? PAGE_SIZE : BIG_BUF_SIZE;
@@ -355,37 +381,44 @@ static void *printer_probe(struct usb_device *dev, unsigned int ifnum)
 		pp->bulk_out_index,
 		pp->bulk_out_ep);
 
-#if 1
+#ifdef IEEE_DEVICE_ID
 	{
-		__u8 status;
-		__u8 ieee_id[64];	/* first 2 bytes are (big-endian) length */
-		int length = be16_to_cpup((__u16 *)ieee_id);
+		__u8 ieee_id[64]; /* first 2 bytes are (big-endian) length */
+				/* This string space may be too short. */
+		int length = (ieee_id[0] << 8) + ieee_id[1]; /* high-low */
+				/* This calc. or be16_to_cpu() both get
+				 * some weird results for <length>. */
+		int err;
 
 		/* Let's get the device id if possible. */
-		if (usb_control_msg(dev, usb_rcvctrlpipe(dev,0),
+		err = usb_control_msg(dev, usb_rcvctrlpipe(dev,0),
 		    USB_PRINTER_REQ_GET_DEVICE_ID,
 		    USB_TYPE_CLASS | USB_RT_INTERFACE | USB_DIR_IN,
 		    0, 0, ieee_id,
-		    sizeof(ieee_id)-1, HZ) == 0) {
+		    sizeof(ieee_id)-1, HZ);
+		if (err >= 0) {
 			if (ieee_id[1] < sizeof(ieee_id) - 1)
 				ieee_id[ieee_id[1]+2] = '\0';
 			else
 				ieee_id[sizeof(ieee_id)-1] = '\0';
-			printk(KERN_INFO "  usblp%d Device ID length=%d, string=%s\n",
-				pp->minor, length, &ieee_id[2]);
+			printk(KERN_INFO "usblp%d Device ID length=%d [%x:%x]\n",
+				pp->minor, length, ieee_id[0], ieee_id[1]);
+			printk(KERN_INFO "usblp%d Device ID=%s\n",
+				pp->minor, &ieee_id[2]);
 		}
 		else
-			printk(KERN_INFO "  usblp%d: error reading IEEE-1284 Device ID\n",
-				pp->minor);
-
-		status = printer_read_status(PPDATA(pp));
-		printk(KERN_INFO "  usblp%d Probe Status is %x: %s,%s,%s\n",
-			pp->minor, status,
-			(status & LP_PSELECD) ? "Selected" : "Not Selected",
-			(status & LP_POUTPA)  ? "No Paper" : "Paper",
-			(status & LP_PERRORP) ? "No Error" : "Error");
+			printk(KERN_INFO "usblp%d: error = %d reading IEEE-1284 Device ID\n",
+				pp->minor, err);
 	}
 #endif
+
+	status = printer_read_status(PPDATA(pp));
+	printk(KERN_INFO "usblp%d probe status is %x: %s,%s,%s\n",
+		pp->minor, status,
+		(status & LP_PSELECD) ? "Selected" : "Not Selected",
+		(status & LP_POUTPA)  ? "No Paper" : "Paper",
+		(status & LP_PERRORP) ? "No Error" : "Error");
+
 	return pp;
 }
 
@@ -431,7 +464,7 @@ int usb_printer_init(void)
 	if (usb_register(&printer_driver))
 		return -1;
 
-	printk(KERN_INFO "USB Printer support registered.\n");
+	printk(KERN_INFO "USB Printer driver registered.\n");
 	return 0;
 }
 

@@ -179,6 +179,16 @@ struct usb_proc_setinterface {
 
 #define USB_MAJOR 180
 
+extern int usb_hub_init(void);
+extern int usb_kbd_init(void);
+extern int usb_cpia_init(void);
+extern int usb_dc2xx_init(void);
+extern int usb_mouse_init(void);
+extern int usb_printer_init(void);
+
+extern void usb_hub_cleanup(void);
+extern void usb_mouse_cleanup(void);
+
 /* for 2.2-kernels */
  
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
@@ -217,8 +227,8 @@ typedef struct wait_queue *wait_queue_head_t;
 
 static __inline__ void wait_ms(unsigned int ms)
 {
-        current->state = TASK_UNINTERRUPTIBLE;
-        schedule_timeout(1 + ms * HZ / 1000);
+	current->state = TASK_UNINTERRUPTIBLE;
+	schedule_timeout(1 + ms * HZ / 1000);
 }
 
 typedef struct {
@@ -361,7 +371,7 @@ struct usb_interface {
 	int num_altsetting;		/* number of alternate settings */
 	int max_altsetting;             /* total memory allocated */
  
-        struct usb_driver *driver;	/* driver */
+	struct usb_driver *driver;	/* driver */
 	void *private_data;
 };
 
@@ -465,35 +475,35 @@ typedef struct urb
 
 #define FILL_CONTROL_URB(a,aa,b,c,d,e,f,g) \
     do {\
-	a->dev=aa;\
-	a->pipe=b;\
-	a->setup_packet=c;\
-	a->transfer_buffer=d;\
-	a->transfer_buffer_length=e;\
-	a->complete=f;\
-	a->context=g;\
+	(a)->dev=aa;\
+	(a)->pipe=b;\
+	(a)->setup_packet=c;\
+	(a)->transfer_buffer=d;\
+	(a)->transfer_buffer_length=e;\
+	(a)->complete=f;\
+	(a)->context=g;\
     } while (0)
 
 #define FILL_BULK_URB(a,aa,b,c,d,e,f) \
     do {\
-	a->dev=aa;\
-	a->pipe=b;\
-	a->transfer_buffer=c;\
-	a->transfer_buffer_length=d;\
-	a->complete=e;\
-	a->context=f;\
+	(a)->dev=aa;\
+	(a)->pipe=b;\
+	(a)->transfer_buffer=c;\
+	(a)->transfer_buffer_length=d;\
+	(a)->complete=e;\
+	(a)->context=f;\
     } while (0)
     
 #define FILL_INT_URB(a,aa,b,c,d,e,f,g) \
     do {\
-	a->dev=aa;\
-	a->pipe=b;\
-	a->transfer_buffer=c;\
-	a->transfer_buffer_length=d;\
-	a->complete=e;\
-	a->context=f;\
-	a->interval=g;\
-	a->start_frame=-1;\
+	(a)->dev=aa;\
+	(a)->pipe=b;\
+	(a)->transfer_buffer=c;\
+	(a)->transfer_buffer_length=d;\
+	(a)->complete=e;\
+	(a)->context=f;\
+	(a)->interval=g;\
+	(a)->start_frame=-1;\
     } while (0)
 
 purb_t usb_alloc_urb(int iso_packets);
@@ -551,7 +561,6 @@ struct usb_bus {
 	int bandwidth_isoc_reqs;	/* number of Isoc. requesters */
 
 	/* procfs entry */
-	int proc_busnum;
 	struct proc_dir_entry *proc_entry;
 };
 

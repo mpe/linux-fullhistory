@@ -135,7 +135,7 @@ static void gatwick_action(int cpl, void *dev_id, struct pt_regs *regs)
 	 * don't.  Put this here to check for it.
 	 * -- Cort
 	 */
-	if ( irq_desc[irq].ctl != &gatwick_pic )
+	if ( irq_desc[irq].handler != &gatwick_pic )
 		printk("gatwick irq not from gatwick pic\n");
 	else
 		ppc_irq_dispatch_handler( regs, irq );
@@ -361,7 +361,7 @@ pmac_pic_init(void)
 			max_irqs = 64;
 	}
 	for ( i = 0; i < max_real_irqs ; i++ )
-		irq_desc[i].ctl = &pmac_pic;
+		irq_desc[i].handler = &pmac_pic;
 
 	/* get addresses of first controller */
 	if (irqctrler) {
@@ -401,7 +401,7 @@ pmac_pic_init(void)
 		if (device_is_compatible(irqctrler, "gatwick"))
 			pmac_fix_gatwick_interrupts(irqctrler, max_real_irqs);
 		for ( i = max_real_irqs ; i < max_irqs ; i++ )
-			irq_desc[i].ctl = &gatwick_pic;
+			irq_desc[i].handler = &gatwick_pic;
 		request_irq( second_irq, gatwick_action, SA_INTERRUPT,
 			     "gatwick cascade", 0 );
 	}

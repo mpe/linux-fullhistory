@@ -29,6 +29,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    tristate 'EFS filesystem support (read only) (EXPERIMENTAL)' CONFIG_EFS_FS
 fi
 
+tristate 'Compressed ROM filessytem support' CONFIG_CRAMFS
 tristate 'ISO 9660 CDROM filesystem support' CONFIG_ISO9660_FS
 if [ "$CONFIG_ISO9660_FS" != "n" ]; then
    bool '  Microsoft Joliet CDROM extensions' CONFIG_JOLIET

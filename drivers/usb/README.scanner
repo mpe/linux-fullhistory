@@ -1,0 +1,231 @@
+Oct 19, 1999
+
+CHANGES
+
+- Ammended for linux-2.3.22+
+- Appended hp_scan.c to end of this README
+- Removed most references to HP
+
+
+OVERVIEW
+
+This README will address issues regarding how to configure the kernel
+to access a USB scanner.  Although the driver was originally conceived
+for USB HP scanners, it's general enough so that it can be used with
+other scanners.  Also, one can now pass the USB Vendor and
+Product ID's using module parameters for unknown scanners.  Refer to
+the document README.scanner_hp_sane for guidance on how to configure
+SANE to use a USB HP Scanner.
+
+
+ADDITIONAL INFORMATION
+
+http://www.linux-usb.org/
+http://www.dynamine.net/linux-usb/HOWTO/
+
+
+REQUIREMENTS
+
+A host with a USB port.  Ideally, either a UHCI (Intel) or OHCI
+(Compaq and others) hardware port should work.  However, I've only
+been able to really use an OHCI controller.  I did have access to a
+system with a UHCI controller but some very limited testing did not
+produce satisfactory results.  Luke Ordelmans
+<postbus@ordelmans.demon.nl> has reported success using the UHCI host
+controller with kernel 2.3.18 and a ChainTech motherboard.  Here
+lately I've been having better success with the ohci-hcd driver.  But
+since Linux USB support is still in a state of constant development
+that may change at a later date.  I am confident that eventually all
+the host contollers will perform without incident.
+
+A Linux kernel with USB support (preferably linux-2.3.18+)
+
+A Linux kernel with USB Scanner support.
+
+
+CONFIGURATION
+
+Using `make menuconfig` or your prefered method for configuring the
+kernel, select 'Support for USB', 'OHCI/OHCI-HCD/UHCI' depending on
+your hardware, 'USB hub support', and 'USB Scanner support'.  Compile
+and install the modules (you may need to execute `depmod -a` to update
+the module dependencies).  Testing was performed only as modules,
+YMMV.
+
+Add a device for the USB scanner:
+  linux-2.3.22 and above: `mknod /dev/usbscanner c 180 48`
+  linux-2.3.21 and below: `mknod /dev/usbscanner c 16 1`
+
+Set appropriate permissions for /dev/usbscanner (don't forget about
+group and world permissions).  Both read and write permissions are
+required for proper operation.
+
+Load the appropriate modules (if compiled as modules):
+
+  OHCI:
+    modprobe usb-ohci
+    modprobe scanner
+
+  OHCI-HCD:
+    modprobe usb-ohci-hcd
+    modprobe hub
+    modprobe scanner
+
+  UHCI:
+    modprobe usb-uhci
+    modprobe hub (don't know if this is required or not)
+    modprobe scanner
+
+That's it.  SANE should now be able to access the device.  
+
+There is a small test program (hp_scan.c -- appended below) that can
+be used to test the scanner device if it's an HP scanner that supports
+SCL.  Its purpose is to test the driver without having to
+retrieve/configure SANE.  Hp_scan.c will scan the entire bed and put
+the output into a file called 'out.dat' in the current directory.  The
+data in the file is raw data so it's not very useful for imaging.
+
+
+MODULE PARAMETERS
+
+If you have a device that wish to experiment with or try using this
+driver with, but the Vendor and Product ID's are not coded in, don't
+despair.  If the driver was compiled as a module, you can pass options
+to the driver.  Simply add 'options scanner vendor=0x####
+product=0x****' to the conf.modules/modules.conf file replacing the
+#'s and the *'s with the correct ID's.  The ID's can be retrieved from
+the messages file or using `cat /proc/bus/usb/devices` if USB /proc
+support was selected during kernel configuration.
+
+
+BUGS
+
+If you encounter any problems feel free to drop me an email.
+
+David /\/elson
+dnelson@jump.net
+http://www.jump.net/~dnelson
+
+--------------- snip -- hp_scan.c -- snip ---------------
+/*
+
+This is a really crude attempt at writing a short test program.  It's
+mostly only to be used to test connectivity with USB HP scanners that
+understand SCL.  Currently, the supported models are 4100C, 5200C,
+6200C, and the 6300C.  Note that the 4200C is *NOT* acceptable.
+
+Copyright (C) David E. Nelson <dnelson@jump.net>, 1999
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or (at
+your option) any later version.
+
+*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <error.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+/*
+   Gray Output produces about a 8945400 byte file.
+   Color Output produces a 26836200 byte file. 
+   
+   To compile: gcc -o hp_scan hp_scan.c
+*/
+
+// #define COLOR /* Undef to scan GrayScale */
+
+int send_cmd(int, const char *, int);
+int read_cmd(int, char *, int);
+
+int
+main(void) {
+
+	ssize_t cnt = 0, total_cnt = 0;
+
+	FILE *fpout;
+
+	int fp;
+	int data_size = 32768;
+
+	char *data;
+
+	static char reset_cmd[] = {'\x1b','E'};
+
+#ifdef COLOR
+	static char data_type_cmd[] = {'\x1b','*','a','5','T'}; /* Color */
+	static char data_width_cmd[] = {'\x1b','*','a','2','4','G'}; /* 24 Bit Color */
+#else
+	static char data_type_cmd[] = {'\x1b','*','a','4','T'}; /* Gray */
+	static char data_width_cmd[] = {'\x1b','*','a','8','G'}; /* 8 Bit Gray */
+#endif
+
+	static char query_cmd[] = {'\x1b', '*', 's', '2', '5', '7', 'E'};
+	static char start_scan_cmd[] = {'\x1b','*','f','0','S'};
+	
+	if(!(data=malloc(data_size))) {
+		perror("malloc failed");
+		exit (1);
+	}
+	
+	if((fp=open("/dev/usbscanner", O_RDWR)) < 0) {
+		perror("Unable to open scanner device");
+		exit (1);
+	}
+
+	if((fpout=fopen("out.dat", "w+")) == NULL) {
+		perror("Unable to open ouput file");
+		exit(1);
+	}
+
+	send_cmd(fp, reset_cmd, sizeof(reset_cmd));
+	send_cmd(fp, data_type_cmd, sizeof(data_type_cmd));
+	send_cmd(fp, data_width_cmd, sizeof(data_width_cmd));
+	send_cmd(fp, start_scan_cmd, sizeof(start_scan_cmd));
+
+	while ((cnt = read(fp, data, data_size)) > 0) {
+		printf("Read: %u\n", cnt); 
+		if(fwrite(data, sizeof(char), cnt, fpout) < 0) {
+			perror("Write to output file failed");
+			exit (1);
+		}
+		total_cnt += cnt;
+	}
+	if (cnt < 0) {
+		perror("Read from scanner failed");
+		exit (1);
+	}
+
+	printf("\nRead %lu bytes.\n", total_cnt);
+
+	send_cmd(fp, reset_cmd, sizeof(reset_cmd));
+
+	close(fp);
+	fclose(fpout);
+	return (0);
+}
+
+int
+send_cmd(int fp, const char * cmd, int length) {
+
+	int result;
+	int x;
+
+	if((result = write(fp, cmd, length)) != length) {
+		printf ("Write warning: %d bytes requested, %d written\n");
+	} else if (result < 0) {
+		perror ("send_cmd failure");
+		exit (1);
+	}
+	return (result);
+}
+	
+int
+read_cmd(int fp, char * response, int length) {
+
+	return read(fp, response, length);
+
+}

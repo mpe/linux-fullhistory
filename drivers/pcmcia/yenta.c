@@ -304,6 +304,8 @@ printk("yenta_set_map(%d, %x, %x, %x)\n", map, start, stop, card_start);
 		exca_writeb(socket, I365_ADDRWIN, addr);
 	}
 
+	exca_writeb(socket, CB_MEM_PAGE(map), start >> 24);
+
 	word = (start >> 12) & 0x0fff;
 	if (mem->flags & MAP_16BIT)
 		word |= I365_MEM_16BIT;
@@ -326,8 +328,6 @@ printk("yenta_set_map(%d, %x, %x, %x)\n", map, start, stop, card_start);
 	if (mem->flags & MAP_ATTRIB)
 		word |= I365_MEM_REG;
 	exca_writew(socket, I365_MEM(map) + I365_W_OFF, word);
-
-	exca_writeb(socket, CB_MEM_PAGE(map), start >> 24);
 
 	if (mem->flags & MAP_ACTIVE)
 		exca_writeb(socket, I365_ADDRWIN, addr | enable);

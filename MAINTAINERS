@@ -529,6 +529,12 @@ W:	http://www.linuxppc.org/
 L:	linuxppc-dev@lists.linuxppc.org
 S:	Maintained
 
+MAESTRO PCI SOUND DRIVER
+P:	Zach Brown
+M:	zab@redhat.com
+W:	http://people.redhat.com/zab/maestro/
+S:	Supported
+
 M68K
 P:	Jes Sorensen
 M:	Jes.Sorensen@cern.ch

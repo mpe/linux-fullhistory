@@ -7912,11 +7912,11 @@ CONFIG_USB_MOUSE
   The module will be called mouse.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-USB HP scanner support
-CONFIG_USB_HP_SCANNER
-  Say Y here if you want to connect a USB HP scanner to your
-  computer's USB port. Please read drivers/usb/README.hp_scanner
-  for more information.
+USB scanner support
+CONFIG_USB_SCANNER
+  Say Y here if you want to connect a USB scanner to your
+  computer's USB port. Please read drivers/usb/README.scanner
+  and drivers/usb/README.scanner_hp_sane for more information.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -11178,6 +11178,12 @@ CONFIG_SOUND_NM256
   engine.
 
   See Documentation/sound/NM256 for further information.
+
+ESS Maestro sound chipsets
+CONFIG_SOUND_MAESTRO
+  Say Y or M if you have a sound system driven by ESS's Maestro line
+  of PCI sound chips.  These include the Maestro 1, Maestro 2, and
+  Maestro 2E.  See Documentation/sound/Maestro for more details.
 
 Are you using a crosscompiler
 CONFIG_CROSSCOMPILE

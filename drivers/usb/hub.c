@@ -4,6 +4,8 @@
  * (C) Copyright 1999 Linus Torvalds
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Gregory P. Smith
+ *
+ * $Id: hub.c,v 1.15 1999/12/27 15:17:45 acher Exp $
  */
 
 #include <linux/kernel.h>
@@ -43,6 +45,12 @@ static int usb_get_hub_descriptor(struct usb_device *dev, void *data, int size)
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 		USB_REQ_GET_DESCRIPTOR, USB_DIR_IN | USB_RT_HUB,
 		USB_DT_HUB << 8, 0, data, size, HZ);
+}
+
+static int usb_clear_hub_feature(struct usb_device *dev,  int feature)
+{
+	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
+		USB_REQ_CLEAR_FEATURE, USB_RT_HUB, feature, 0 , NULL, 0, HZ);
 }
 
 static int usb_clear_port_feature(struct usb_device *dev, int port, int feature)
@@ -190,7 +198,6 @@ static int usb_hub_configure(struct usb_hub *hub)
 	printk(KERN_INFO "hub: enabling power on all ports\n");
 	for (i = 0; i < hub->nports; i++)
 		usb_set_port_feature(dev, i + 1, USB_PORT_FEAT_POWER);
-
 	return 0;
 }
 
@@ -305,7 +312,9 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 	struct usb_device *usb;
 	struct usb_port_status portsts;
 	unsigned short portstatus, portchange;
+	int tries;
 
+	wait_ms(100);
 	/* Check status */
 	if (usb_get_port_status(hub, port + 1, &portsts)<0) {
 		printk(KERN_ERR "get_port_status failed\n");
@@ -314,7 +323,8 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 
 	portstatus = le16_to_cpu(portsts.wPortStatus);
 	portchange = le16_to_cpu(portsts.wPortChange);
-	printk("hub.c: portstatus %x, change %x\n",portstatus,portchange);
+	printk("hub.c: portstatus %x, change %x, %s\n",portstatus,portchange,
+	(portstatus&(1<<USB_PORT_FEAT_LOWSPEED)?"Low Speed":"High Speed"));
 	/* If it's not in CONNECT and ENABLE state, we're done */
 	if ((!(portstatus & USB_PORT_STAT_CONNECTION)) &&
 	    (!(portstatus & USB_PORT_STAT_ENABLE))) {
@@ -324,10 +334,37 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 		return;
 	}
 	wait_ms(400);	
+
 	/* Reset the port */
-	usb_set_port_feature(hub, port + 1, USB_PORT_FEAT_RESET);
-	wait_ms(100);	
+
+#define MAX_TRIES 5
+	
+	for(tries=0;tries<MAX_TRIES;tries++) {
+		
+		usb_set_port_feature(hub, port + 1, USB_PORT_FEAT_RESET);
+		wait_ms(200);	
+		
+		if (usb_get_port_status(hub, port + 1, &portsts)<0) {
+			printk(KERN_ERR "get_port_status failed\n");
+			return;
+		}
+		portstatus = le16_to_cpu(portsts.wPortStatus);
+		portchange = le16_to_cpu(portsts.wPortChange);
+		printk("hub.c: portstatus %x, change %x, %s\n",portstatus,portchange,
+		(portstatus&(1<<USB_PORT_FEAT_LOWSPEED)?"Low Speed":"High Speed"));
+
+		if ((portstatus&(1<<USB_PORT_FEAT_ENABLE))) 
+			break;
+
+		wait_ms(200);
+	}
+
+	if (tries==MAX_TRIES) {
+		printk("hub.c: Can not enable port %i after %i retries, disabling port\n",port+1,MAX_TRIES);
+		return;
+	}
 	/* Allocate a new device struct for it */
+
 	usb = usb_alloc_dev(hub, hub->bus);
 	if (!usb) {
 		printk(KERN_ERR "couldn't allocate usb_device\n");

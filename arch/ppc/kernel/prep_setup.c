@@ -617,12 +617,12 @@ prep_init_IRQ(void)
 
 	if (OpenPIC != NULL) {
 		for ( i = 16 ; i < 36 ; i++ )
-			irq_desc[i].ctl = &open_pic;
+			irq_desc[i].handler = &open_pic;
 		openpic_init(1);
 	}
 	
         for ( i = 0 ; i < 16  ; i++ )
-                irq_desc[i].ctl = &i8259_pic;
+                irq_desc[i].handler = &i8259_pic;
         i8259_init();
 #ifdef __SMP__
 	request_irq(openpic_to_irq(OPENPIC_VEC_SPURIOUS), openpic_ipi_action,

@@ -43,8 +43,8 @@ int usb_init(void)
 #	ifdef CONFIG_USB_MOUSE
 		usb_mouse_init();
 #	endif
-#       ifdef CONFIG_USB_HP_SCANNER
-                usb_hp_scanner_init();
+#       ifdef CONFIG_USB_SCANNER
+                usb_scanner_init();
 #       endif
 #	ifdef CONFIG_USB_KBD
 		usb_kbd_init();
@@ -92,8 +92,8 @@ void cleanup_drivers(void)
 #	ifdef CONFIG_USB_MOUSE
         	usb_mouse_cleanup();
 #	endif
-#       ifdef CONFIG_USB_HP_SCANNER
-                usb_hp_scanner_cleanup();
+#       ifdef CONFIG_USB_SCANNER
+                usb_scanner_cleanup();
 #       endif
 #	ifdef CONFIG_USB_DABUSB
 		dabusb_cleanup();

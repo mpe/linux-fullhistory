@@ -723,33 +723,6 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 	return 0;
 }
 
-static struct file_system_type ext2_fs_type = {
-	"ext2", 
-	FS_REQUIRES_DEV /* | FS_IBASKET */,	/* ibaskets have unresolved bugs */
-        ext2_read_super, 
-	NULL
-};
-
-int __init init_ext2_fs(void)
-{
-        return register_filesystem(&ext2_fs_type);
-}
-
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-
-int init_module(void)
-{
-	return init_ext2_fs();
-}
-
-void cleanup_module(void)
-{
-        unregister_filesystem(&ext2_fs_type);
-}
-
-#endif
-
 int ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 {
 	unsigned long overhead;
@@ -805,3 +778,25 @@ int ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 	tmp.f_namelen = EXT2_NAME_LEN;
 	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }
+
+static struct file_system_type ext2_fs_type = {
+	"ext2", 
+	FS_REQUIRES_DEV /* | FS_IBASKET */,	/* ibaskets have unresolved bugs */
+        ext2_read_super, 
+	NULL
+};
+
+static int __init init_ext2_fs(void)
+{
+        return register_filesystem(&ext2_fs_type);
+}
+
+static int __exit exit_ext2_fs(void)
+{
+	unregister_filesystem(&ext2_fs_type);
+}
+
+EXPORT_NO_SYMBOLS;
+
+module_init(init_ext2_fs)
+module_exit(exit_ext2_fs)

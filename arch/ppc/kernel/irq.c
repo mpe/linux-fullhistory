@@ -44,6 +44,7 @@
 #include <linux/openpic.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
+#include <linux/irq.h>
 
 #include <asm/bitops.h>
 #include <asm/hydra.h>
@@ -71,7 +72,7 @@ volatile unsigned char *chrp_int_ack_special;
 
 #define NR_MASK_WORDS	((NR_IRQS + 31) / 32)
 
-struct irqdesc irq_desc[NR_IRQS] = {{0, 0}, };
+irq_desc_t irq_desc[NR_IRQS];
 int ppc_spurious_interrupts = 0;
 unsigned int ppc_local_bh_count[NR_CPUS];
 unsigned int ppc_local_irq_count[NR_CPUS];
@@ -244,8 +245,8 @@ int get_irq_list(char *buf)
 #else		
 		len += sprintf(buf+len, "%10u ", kstat_irqs(i));
 #endif /* __SMP__ */
-		if ( irq_desc[i].ctl )		
-			len += sprintf(buf+len, " %s ", irq_desc[i].ctl->typename );
+		if ( irq_desc[i].handler )		
+			len += sprintf(buf+len, " %s ", irq_desc[i].handler->typename );
 		else
 			len += sprintf(buf+len, "  None      ");
 		len += sprintf(buf+len, "    %s",action->name);

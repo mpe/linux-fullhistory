@@ -15,7 +15,7 @@
  * It should be considered a slave, with no callbacks. Callbacks
  * are evil.
  *
- * $Id: usb.c,v 1.37 1999/12/17 10:48:08 fliegl Exp $
+ * $Id: usb.c,v 1.39 1999/12/27 15:17:47 acher Exp $
  */
 
 #ifndef EXPORT_SYMTAB
@@ -36,12 +36,9 @@
 #define MODSTR "usbcore: "
 
 #ifdef USB_DEBUG
-	#define dbg printk
+	#define dbg(format, arg...) printk(format, ## arg)
 #else
-	#define dbg nix
-static void nix(const char *format, ...)
-{
-}
+	#define dbg(format, arg...)
 #endif
 
 /*

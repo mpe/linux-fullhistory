@@ -10,7 +10,7 @@
 
 #include <asm/processor.h>
 #include <asm/atomic.h>
-#include <asm/irq_control.h>
+#include <asm/hw_irq.h>
 
 /*
  * Memory barrier.

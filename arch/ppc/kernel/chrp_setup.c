@@ -249,7 +249,7 @@ chrp_setup_arch(void)
 	else
 #endif
 		ROOT_DEV = to_kdev_t(0x0802); /* sda2 (sda1 is for the kernel) */
-	
+sprintf(cmd_line, "console=ttyS0,9600 console=tty0");
 	printk("Boot arguments: %s\n", cmd_line);
 	
 	request_region(0x20,0x20,"pic1");
@@ -391,7 +391,7 @@ void chrp_post_irq(int irq)
 	 * openpic irq.  So we just check to make sure the controller
 	 * is an openpic and if it is then eoi
 	 *
-	 * We do it this way since our irq_desc[irq].ctl can change
+	 * We do it this way since our irq_desc[irq].handler can change
 	 * with RTL and no longer be open_pic -- Cort
 	 */
 	if ( irq >= open_pic.irq_offset)
@@ -413,10 +413,10 @@ void __init chrp_init_IRQ(void)
 	}
 	open_pic.irq_offset = 16;
 	for ( i = 16 ; i < NR_IRQS ; i++ )
-		irq_desc[i].ctl = &open_pic;
+		irq_desc[i].handler = &open_pic;
 	openpic_init(1);
 	for ( i = 0 ; i < 16  ; i++ )
-		irq_desc[i].ctl = &i8259_pic;
+		irq_desc[i].handler = &i8259_pic;
 	i8259_init();
 #ifdef CONFIG_XMON
 	request_irq(openpic_to_irq(HYDRA_INT_ADB_NMI),

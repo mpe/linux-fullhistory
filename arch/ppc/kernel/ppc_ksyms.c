@@ -10,6 +10,7 @@
 #include <linux/nvram.h>
 #include <linux/spinlock.h>
 #include <linux/console.h>
+#include <linux/irq.h>
 
 #include <asm/page.h>
 #include <asm/semaphore.h>

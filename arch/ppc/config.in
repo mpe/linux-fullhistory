@@ -85,12 +85,16 @@ comment 'General setup'
 
 if [ "$CONFIG_APUS" = "y" ]; then
   define_bool CONFIG_PCI n
-else if [ "$CONFIG_OAK" = "y" ]; then
+fi
+if [ "$CONFIG_OAK" = "y" ]; then
   define_bool CONFIG_PCI n
-else if [ "$CONFIG_8xx" = "y" ]; then
+fi
+if [ "$CONFIG_8xx" = "y" ]; then
     bool 'QSpan PCI' CONFIG_PCI
 else
+  if [ "$CONFIG_APUS" != "y" ]; then
     define_bool CONFIG_PCI y
+  fi
 fi
 
 bool 'Networking support' CONFIG_NET
