@@ -136,19 +136,10 @@ config NR_CPUS
 
 source "drivers/cpufreq/Kconfig"
 
-config CPU_FREQ_TABLE
-       tristate "CPU frequency table helpers"
-       depends on CPU_FREQ
-       default y
-       help
-         Many CPUFreq drivers use these helpers, so only say N here if
-	 the CPUFreq driver of your choice doesn't need these helpers.
-
-	 If in doubt, say Y.
-
 config US3_FREQ
 	tristate "UltraSPARC-III CPU Frequency driver"
-	depends on CPU_FREQ_TABLE
+	depends on CPU_FREQ
+	select CPU_FREQ_TABLE
 	help
 	  This adds the CPUFreq driver for UltraSPARC-III processors.
 
@@ -158,7 +149,8 @@ config US3_FREQ
 
 config US2E_FREQ
 	tristate "UltraSPARC-IIe CPU Frequency driver"
-	depends on CPU_FREQ_TABLE
+	depends on CPU_FREQ
+	select CPU_FREQ_TABLE
 	help
 	  This adds the CPUFreq driver for UltraSPARC-IIe processors.
 
