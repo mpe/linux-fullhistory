@@ -273,7 +273,13 @@ void UMSDOS_write_inode(struct inode *inode)
 	newattrs.ia_atime = inode->i_atime;
 	newattrs.ia_ctime = inode->i_ctime;
 	newattrs.ia_valid = ATTR_MTIME | ATTR_ATIME | ATTR_CTIME;
+	/*
+		UMSDOS_notify_change is convenient to call here
+		to update the EMD entry associated with this inode.
+		But it has the side effect to re"dirt" the inode.
+	*/
 	UMSDOS_notify_change (inode, &newattrs);
+	inode->i_dirt = 0;
 }
 
 int UMSDOS_notify_change(struct inode *inode, struct iattr *attr)
@@ -319,6 +325,7 @@ int UMSDOS_notify_change(struct inode *inode, struct iattr *attr)
 				struct file filp;
 				struct umsdos_dirent entry;
 				filp.f_pos = inode->u.umsdos_i.pos;
+				filp.f_reada = 0;
 				PRINTK (("pos = %d ",filp.f_pos));
 				/* Read only the start of the entry since we don't touch */
 				/* the name */

@@ -2856,8 +2856,8 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
       {
 	 if (request_irq(irq_used, cdu31a_interrupt, SA_INTERRUPT, "cdu31a"))
 	 {
-	    irq_used = 0;
 	    printk("Unable to grab IRQ%d for the CDU31A driver\n", irq_used);
+	    irq_used = 0;
 	 }
       }
       

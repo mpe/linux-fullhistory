@@ -624,7 +624,7 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->prot = prot;
 	sk->sleep = sock->wait;
 	sk->daddr = 0;
-	sk->saddr = ip_my_addr();
+	sk->saddr = 0 /* ip_my_addr() */;
 	sk->err = 0;
 	sk->next = NULL;
 	sk->pair = NULL;
@@ -749,6 +749,7 @@ static int inet_release(struct socket *sock, struct socket *peer)
 	/* This will destroy it. */
 	release_sock(sk);
 	sock->data = NULL;
+	sk->socket = NULL;
 	return(0);
 }
 
@@ -1261,6 +1262,10 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 /*
  * This routine must find a socket given a TCP or UDP header.
  * Everything is assumed to be in net order.
+ *
+ * We give priority to more closely bound ports: if some socket
+ * is bound to a particular foreign address, it will get the packet
+ * rather than somebody listening to any address..
  */
 
 struct sock *get_sock(struct proto *prot, unsigned short num,
@@ -1268,6 +1273,8 @@ struct sock *get_sock(struct proto *prot, unsigned short num,
 				unsigned short rnum, unsigned long laddr)
 {
 	struct sock *s;
+	struct sock *result = NULL;
+	int badness = -1;
 	unsigned short hnum;
 
 	hnum = ntohs(num);
@@ -1284,21 +1291,41 @@ struct sock *get_sock(struct proto *prot, unsigned short num,
 	for(s = prot->sock_array[hnum & (SOCK_ARRAY_SIZE - 1)];
 			s != NULL; s = s->next) 
 	{
+		int score = 0;
+
 		if (s->num != hnum) 
 			continue;
+
 		if(s->dead && (s->state == TCP_CLOSE))
 			continue;
-		if(ip_addr_match(s->saddr,laddr) == 0)
-			continue;
-		if(prot == &udp_prot)
+		/* local address matches? */
+		if (s->saddr) {
+			if (s->saddr != laddr)
+				continue;
+			score++;
+		}
+		/* remote address matches? */
+		if (s->daddr) {
+			if (s->daddr != raddr)
+				continue;
+			score++;
+		}
+		/* remote port matches? */
+		if (s->dummy_th.dest) {
+			if (s->dummy_th.dest != rnum)
+				continue;
+			score++;
+		}
+		/* perfect match? */
+		if (score == 3)
 			return s;
-		if(ip_addr_match(s->daddr,raddr)==0)
+		/* no, check if this is the best so far.. */
+		if (score <= badness)
 			continue;
-		if (s->dummy_th.dest != rnum && s->dummy_th.dest != 0) 
-			continue;
-		return(s);
+		result = s;
+		badness = score;
   	}
-  	return(NULL);
+  	return result;
 }
 
 static struct proto_ops inet_proto_ops = {

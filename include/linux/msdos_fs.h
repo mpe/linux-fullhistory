@@ -110,13 +110,9 @@ struct fat_cache {
 
 #ifdef __KERNEL__
 
-static inline struct buffer_head *msdos_sread(int dev,int sector,void **start)
+static inline struct buffer_head *msdos_sread(int dev,int sector)
 {
- 	struct buffer_head *bh = bread(dev,sector, 512);
-	if (bh != NULL){
-		*start = bh->b_data;	/* From the time of 1024 bytes block */
-	}
-	return bh;
+	return bread(dev,sector,SECTOR_SIZE);
 }
 
 

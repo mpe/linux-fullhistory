@@ -30,7 +30,7 @@ static struct file_operations msdos_file_operations = {
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
-	generic_mmap,	/* mmap */
+	generic_mmap,		/* mmap */
 	NULL,			/* no special open is needed */
 	NULL,			/* release */
 	file_fsync		/* fsync */
@@ -52,7 +52,7 @@ struct inode_operations msdos_file_inode_operations = {
 	msdos_bmap,		/* bmap */
 	msdos_truncate,		/* truncate */
 	NULL,			/* permission */
-	NULL		/* smap */
+	NULL			/* smap */
 };
 
 /*
@@ -127,12 +127,11 @@ int msdos_file_read(
 			int sector;
 			if (!(sector = msdos_smap(inode,filp->f_pos >> SECTOR_BITS)))
 				break;
-			if (!(bh = msdos_sread(inode->i_dev,sector,&data)))
+			if (!(bh = msdos_sread(inode->i_dev,sector)))
 				break;
 		}else{
 			bh = pre.bhlist[pre.nolist];
 			pre.bhlist[pre.nolist++] = NULL;
-			data = bh->b_data;
 			wait_on_buffer(bh);
 			if (!bh->b_uptodate){
 				/* read error  ? */
@@ -140,6 +139,7 @@ int msdos_file_read(
 				break;
 			}
 		}
+		data = bh->b_data;
 		offset = filp->f_pos & (SECTOR_SIZE-1);
 		filp->f_pos += (size = MIN(SECTOR_SIZE-offset,left));
 		if (MSDOS_I(inode)->i_binary) {
@@ -183,7 +183,6 @@ int msdos_file_write(
 	int error,carry;
 	char *start,*to,ch;
 	struct buffer_head *bh;
-	void *data;
 	int binary_mode = MSDOS_I(inode)->i_binary;
 
 	if (!inode) {
@@ -211,25 +210,28 @@ int msdos_file_write(
 		}
 		offset = filp->f_pos & (SECTOR_SIZE-1);
 		size = MIN(SECTOR_SIZE-offset,MAX(carry,count));
-		if (binary_mode && offset == 0 && size == SECTOR_SIZE){
+		if (binary_mode
+			&& offset == 0
+			&& (size == SECTOR_SIZE
+				|| filp->f_pos + size >= inode->i_size)){
 			/* No need to read the block first since we will */
 			/* completely overwrite it */
+			/* or at least write past the end of file */
 			if (!(bh = getblk(inode->i_dev,sector,SECTOR_SIZE))){
 				error = -EIO;
 				break;
 			}
-			data = bh->b_data;
-		}else if (!(bh = msdos_sread(inode->i_dev,sector,&data))) {
+		}else if (!(bh = msdos_sread(inode->i_dev,sector))) {
 			error = -EIO;
 			break;
 		}
 		if (binary_mode) {
-			memcpy_fromfs(data+offset,buf,written = size);
+			memcpy_fromfs(bh->b_data+offset,buf,written = size);
 			buf += size;
 		}
 		else {
 			written = left = SECTOR_SIZE-offset;
-			to = (char *) data+(filp->f_pos & (SECTOR_SIZE-1));
+			to = (char *) bh->b_data+(filp->f_pos & (SECTOR_SIZE-1));
 			if (carry) {
 				*to++ = '\n';
 				left--;

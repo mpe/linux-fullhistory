@@ -39,7 +39,7 @@ struct ipc_perm
 #define IPC_NOID	((void *) -2)		/* being allocated/destroyed */
 
 /* 
- * These are used to wrap system calls. See ipc/util.c, libipc.c 
+ * These are used to wrap system calls. See ipc/util.c.
  */
 struct ipc_kludge {
     struct msgbuf *msgp;

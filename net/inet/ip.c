@@ -200,13 +200,6 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	int tmp;
 	unsigned long src;
 
-	/*
-	 *	If there is no 'from' address as yet, then make it our loopback
-	 */
-
-	if (saddr == 0)
-		saddr = ip_my_addr();
-
 	buff = skb->data;
 
 	/*
@@ -254,6 +247,12 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 
 		raddr = (rt == NULL) ? 0 : rt->rt_gateway;
 	}
+
+	/*
+	 *	No source addr so make it our addr
+	 */
+	if (saddr == 0)
+		saddr = src;
 
 	/*
 	 *	No gateway so aim at the real destination

@@ -95,7 +95,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 				format==0?sp->write_seq-sp->rcv_ack_seq:sp->rmem_alloc, 
 				format==0?sp->acked_seq-sp->copied_seq:sp->wmem_alloc,
 				timer_active, sp->timer.expires, (unsigned) sp->retransmits,
-				sp->dead?0:SOCK_INODE(sp->socket)->i_uid);
+				sp->socket?SOCK_INODE(sp->socket)->i_uid:0);
 			if (timer_active)
 				add_timer(&sp->timer);
 			/*

@@ -1182,7 +1182,6 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 
 	mcd_invalidate_buffers();
 	mcdPresent = 1;
-	printk("\n");
 	return mem_start;
 }
 

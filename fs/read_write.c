@@ -33,7 +33,10 @@ asmlinkage int sys_readdir(unsigned int fd, struct dirent * dirent, unsigned int
 		return -EBADF;
 	error = -ENOTDIR;
 	if (file->f_op && file->f_op->readdir) {
-		error = verify_area(VERIFY_WRITE, dirent, sizeof (*dirent));
+		int size = count;
+		if (count == 1)
+			size = sizeof(*dirent);
+		error = verify_area(VERIFY_WRITE, dirent, size);
 		if (!error)
 			error = file->f_op->readdir(inode,file,dirent,count);
 	}

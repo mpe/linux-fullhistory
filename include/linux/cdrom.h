@@ -377,10 +377,16 @@ struct cdrom_read_audio
                                                 /* read type-1 data 		*/
 /*
  * preliminary extension for transferring audio frames
- * currently used by sbpcd.c
+ * currently used by cdu31a.c and sbpcd.c
  * (still may change if other drivers will use it, too):
  */
 #define	CDROMREADAUDIO		0x530e		/* (struct cdrom_read_audio)	*/
+/*
+ * preliminary extension for enable (1) / disable (0) auto-ejecting
+ * currently used by sbpcd.c
+ * (still may change if other drivers will use it, too):
+ */
+#define	CDROMEJECT_SW		0x530f		/* arg: 0 or 1 */
 
 #endif  _LINUX_CDROM_H
 

@@ -34,9 +34,10 @@
 #	  DE620_IO	The DE620 I/O-port address (0x378 == default)
 #	  DE620_IRQ	The DE620 IRQ number to use (IRQ7 == default)
 #	  DE620_DEBUG	Enable or disable DE600 debugging (default off)
-#  DEPCA		The DIGITAL series of AT Ethernet Cards (DE100, DE200)
-#	  DEPCA_IRQ	Set the desired IRQ (=0, for autoprobe)
-#	  DEPCA_DEBUG	Set the desired debug level
+#  DEPCA		The DIGITAL series of LANCE based Ethernet Cards
+#			(DEPCA, DE100, DE200/1/2, DE210, DE422 (EISA))
+#  EWRK3		The DIGITAL series of AT Ethernet Cards (DE203/4/5)
+#       EWRK3_DEBUG	Set the desired debug level
 #
 
 # The following options exist, but cannot be set in this file.
@@ -57,4 +58,5 @@ EL2_OPTS	= #-DEL2_AUI
 NE_OPTS		=
 HP_OPTS		=
 PLIP_OPTS	=
-DEPCA_OPTS	= -DDEPCA_IRQ=0 -DDEPCA_DEBUG=1
+DEPCA_OPTS	= -DDEPCA_DEBUG=1
+EWRK3_OPTS	= -DEWRK3_DEBUG=1

@@ -24,7 +24,7 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 	loff_t offset;
 	int chars;
 	int written = 0;
-	int cluster_list[4];
+	int cluster_list[8];
 	struct buffer_head * bhlist[NBUF];
 	int blocks_per_cluster;
 	unsigned int size;
@@ -159,7 +159,7 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	int blocksize_bits, i;
 	unsigned int blocks, rblocks, left;
 	int bhrequest, uptodate;
-	int cluster_list[4];
+	int cluster_list[8];
 	int blocks_per_cluster;
 	struct buffer_head ** bhb, ** bhe;
 	struct buffer_head * buflist[NBUF];

@@ -411,7 +411,7 @@ NORET_TYPE void do_exit(long code)
 		intr_count = 0;
 	}
 fake_volatile:
-	if (current->semun)
+	if (current->semundo)
 		sem_exit();
 	if (current->shm)
 		shm_exit();

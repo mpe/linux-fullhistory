@@ -319,7 +319,7 @@ int unmap_page_range(unsigned long from, unsigned long size)
 		for (pc = pcnt; pc--; page_table++) {
 			if ((page = *page_table) != 0) {
 				*page_table = 0;
-				if (1 & page) {
+				if (PAGE_PRESENT & page) {
 					if (!(mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED))
 						if (current->mm->rss > 0)
 							--current->mm->rss;

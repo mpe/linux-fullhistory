@@ -89,6 +89,10 @@
  *		Michael Pall	:	Undo the last fix in tcp_read_urg() (multi URG PUSH broke rlogin).
  *		Michael Pall	:	Fix the multi URG PUSH problem in tcp_readable(), select() after URG works now.
  *		Michael Pall	:	recv(...,MSG_OOB) never blocks in the BSD api.
+ *		Alan Cox	:	Changed the semantics of sk->socket to 
+ *					fix a race and a signal problem with
+ *					accept() and async I/O.
+ *		Alan Cox	:	Relaxed the rules on tcp_sendto().
  *
  *
  * To Fix:
@@ -1227,7 +1231,7 @@ static int tcp_sendto(struct sock *sk, unsigned char *from,
 {
 	if (flags & ~(MSG_OOB|MSG_DONTROUTE))
 		return -EINVAL;
-	if (!tcp_connected(sk->state))
+	if (sk->state == TCP_CLOSE)
 		return -ENOTCONN;
 	if (addr_len < sizeof(*addr))
 		return -EINVAL;
@@ -2084,6 +2088,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->dummy_th.res2 = 0;
 	newsk->acked_seq = skb->h.th->seq + 1;
 	newsk->copied_seq = skb->h.th->seq;
+	newsk->socket = NULL;
 
 	/*
 	 *	Grab the ttl and tos values and use them 

@@ -49,6 +49,7 @@ extern int el3_probe(struct device *);
 extern int at1500_probe(struct device *);
 extern int at1700_probe(struct device *);
 extern int depca_probe(struct device *);
+extern int ewrk3_probe(struct device *);
 extern int el1_probe(struct device *);
 extern int el16_probe(struct device *);
 extern int elplus_probe(struct device *);
@@ -107,6 +108,9 @@ ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_DEPCA		/* DEC DEPCA */
 	&& depca_probe(dev)
+#endif
+#ifdef CONFIG_EWRK3             /* DEC EtherWORKS 3 */
+        && ewrk3_probe(dev)
 #endif
 #ifdef CONFIG_EL1		/* 3c501 */
 	&& el1_probe(dev)

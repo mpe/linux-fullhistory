@@ -26,16 +26,7 @@ struct semid_ds {
   ushort          sem_nsems;      /* no. of semaphores in array */
 };
 
-
-/* One semaphore structure for each semaphore in the system. */
-struct sem {
-  short   sempid;         /* pid of last operation */
-  ushort  semval;         /* current value */
-  ushort  semncnt;        /* num procs awaiting increase in semval */
-  ushort  semzcnt;        /* num procs awaiting semval = 0 */
-};
-
-/* semop system calls takes an array of these.*/
+/* semop system calls takes an array of these. */
 struct sembuf {
   ushort  sem_num;        /* semaphore index in array */
   short   sem_op;         /* semaphore operation */
@@ -44,11 +35,12 @@ struct sembuf {
 
 /* arg for semctl system calls. */
 union semun {
-  int val;               /* value for SETVAL */
-  struct semid_ds *buf;  /* buffer for IPC_STAT & IPC_SET */
-  ushort *array;         /* array for GETALL & SETALL */
+  int val;			/* value for SETVAL */
+  struct semid_ds *buf;		/* buffer for IPC_STAT & IPC_SET */
+  ushort *array;		/* array for GETALL & SETALL */
+  struct seminfo *__buf;	/* buffer for IPC_INFO */
+  void *__pad;
 };
-
 
 struct  seminfo {
     int semmap; 
@@ -77,6 +69,15 @@ struct  seminfo {
 #define SEMUSZ  20		/* sizeof struct sem_undo */ 
 
 #ifdef __KERNEL__
+
+/* One semaphore structure for each semaphore in the system. */
+struct sem {
+  short   sempid;         /* pid of last operation */
+  ushort  semval;         /* current value */
+  ushort  semncnt;        /* num procs awaiting increase in semval */
+  ushort  semzcnt;        /* num procs awaiting semval = 0 */
+};
+
 /* ipcs ctl cmds */
 #define SEM_STAT 18	
 #define SEM_INFO 19

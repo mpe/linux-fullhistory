@@ -5,7 +5,7 @@
  *            and for "no-sound" interfaces like Lasermate and the
  *            Panasonic CI-101P.
  *
- *  NOTE:     This is release 2.6.
+ *  NOTE:     This is release 2.7.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the new CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -128,6 +128,10 @@
  *
  *  2.6  Nothing new.  
  *       
+ *  2.7  Added CDROMEJECT_SW ioctl to set the "EJECT" behavior on the fly:
+ *       0 disables, 1 enables auto-ejecting. Useful to keep the tray in
+ *       during shutdown.
+ *       
  *  TODO
  *
  *     disk change detection
@@ -203,7 +207,7 @@
 
 #include "blk.h"
 
-#define VERSION "2.6 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "2.7 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 #define SBPCD_DEBUG
 
@@ -303,6 +307,9 @@ static int autoprobe[] =
   0x320, 2, /* SPEA Media FX */
   0x340, 2, /* SPEA Media FX */
   0x350, 2, /* SPEA Media FX */
+/* due to incomplete address decoding of the SbPro card, these must be last */
+  0x630, 0, /* "sound card #9" (default) */
+  0x650, 0, /* "sound card #9" */
 #if 0
 /* some "hazardous" locations (ethernet cards) */
   0x330, 0, /* Lasermate, CI-101P, WDH-7001C */
@@ -310,9 +317,6 @@ static int autoprobe[] =
   0x370, 0, /* Lasermate, CI-101P */
   0x290, 1, /* Soundblaster 16 */
   0x310, 0, /* Lasermate, CI-101P, WDH-7001C */
-/* excluded due to incomplete address decoding of the SbPro card */
-  0x630, 0, /* "sound card #9" (default) */
-  0x650, 0, /* "sound card #9" */
 #endif
 };
 
@@ -390,6 +394,7 @@ static int sbpcd_debug =  (1<<DBG_INF) |
 #else
 static int sbpcd_debug =  (1<<DBG_INF) |
                           (1<<DBG_TOC) |
+                          (1<<DBG_MUL) |
                           (1<<DBG_UPC);
 #endif
 #endif
@@ -481,6 +486,7 @@ static struct {
 
   char drive_model[4];
   char firmware_version[4];
+  char f_eject; /* auto-eject flag: 0 or 1 */
   u_char *sbp_buf; /* Pointer to internal data buffer,
                            space allocated during sbpcd_init() */
   int sbp_first_frame;  /* First frame in buffer */
@@ -2390,7 +2396,7 @@ static int sbp_status(void)
 /*==========================================================================*/
 /*==========================================================================*/
 /*
- * ioctl support, adopted from scsi/sr_ioctl.c and mcd.c
+ * ioctl support
  */
 static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		       u_long arg)
@@ -2581,6 +2587,12 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
       DPRINTF((DBG_IOX,"SBPCD: ioctl: yy_SpinDown returned %d.\n", i));
       if (i<0) return (-EIO);
       DriveStruct[d].audio_state=0;
+      return (0);
+      
+    case CDROMEJECT_SW:
+      DPRINTF((DBG_IOC,"SBPCD: ioctl: CDROMEJECT_SW entered.\n"));
+      if (!new_drive) return (0);
+      DriveStruct[d].f_eject=arg;
       return (0);
       
     case CDROMVOLCTRL:   /* Volume control */
@@ -2918,7 +2930,9 @@ request_loop:
     }
 
   DPRINTF((DBG_BSZ,"SBPCD: read sector %d (%d sectors)\n", block, nsect));
+#if 0
   DPRINTF((DBG_MUL,"SBPCD: read LBA %d\n", block/4));
+#endif
 
   sbp_transfer();
   /* if we satisfied the request from the buffer, we're done. */
@@ -3007,7 +3021,7 @@ static void sbp_read_cmd(void)
 	  DPRINTF((DBG_MUL,"SBPCD: MultiSession: use %08X for %08X (msf)\n",
 		         blk2msf(DriveStruct[d].lba_multi+16),
                          blk2msf(block)));
-	  block=DriveStruct[d].lba_multi+16;
+	  block=DriveStruct[d].lba_multi+block;
 	}
 #endif MANY_SESSION
     }
@@ -3323,9 +3337,7 @@ static void sbpcd_release(struct inode * ip, struct file * file)
 	  do
 	    i=yy_LockDoor(0);
 	  while (i!=0);
-#if EJECT
-	  if (new_drive) yy_SpinDown();
-#endif
+	  if (DriveStruct[d].f_eject) yy_SpinDown();
 	}
     }
 }
@@ -3550,6 +3562,12 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
       DriveStruct[d].sbp_current = 0;       /* Frame being currently read */
       DriveStruct[d].CD_changed=1;
       DriveStruct[d].frame_size=CD_FRAMESIZE;
+#if EJECT
+      if (new_drive) DriveStruct[d].f_eject=1;
+      else DriveStruct[d].f_eject=0;
+#else
+      DriveStruct[d].f_eject=0;
+#endif
 
       xx_ReadStatus();
       i=ResponseStatus();  /* returns orig. status or p_busy_new */

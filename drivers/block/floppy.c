@@ -348,6 +348,7 @@ struct floppy_struct *current_type[N_DRIVE] = {
 struct floppy_struct user_params[N_DRIVE];
 
 static int floppy_sizes[256];
+static int floppy_blocksizes[256] = { 0, };
 
 /*
  * The driver is trying to determine the correct media format
@@ -2848,7 +2849,7 @@ static int floppy_open(struct inode * inode, struct file * filp)
 	if (floppy_grab_irq_and_dma())
 		return -EBUSY;
 
-	if(filp->f_flags & O_EXCL)
+	if (filp->f_flags & O_EXCL)
 		UDRS->fd_ref = -1;
 	else
 		UDRS->fd_ref++;
@@ -2956,7 +2957,10 @@ static int floppy_revalidate(dev_t dev)
 			UDRS->generation++;
 			if(!current_type[drive] && !TYPE(dev)){
 				/* auto-sensing */
-				if (!(bh = getblk(dev,0,1024))){
+				int size = floppy_blocksizes[MINOR(dev)];
+				if (!size)
+					size = 1024;
+				if (!(bh = getblk(dev,0,size))){
 					redo_fd_request();
 					return 1;
 				}
@@ -3062,6 +3066,7 @@ void floppy_init(void)
 			floppy_sizes[i] = MAX_DISK_SIZE;
 
 	blk_size[MAJOR_NR] = floppy_sizes;
+	blksize_size[MAJOR_NR] = floppy_blocksizes;
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	timer_table[FLOPPY_TIMER].fn = floppy_shutdown;
 	timer_active &= ~(1 << FLOPPY_TIMER);

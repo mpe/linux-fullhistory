@@ -3,7 +3,7 @@
 #include <linux/ipc.h>
 
 struct shmid_ds {
-	struct	ipc_perm shm_perm;	/* operation perms */
+	struct ipc_perm shm_perm;	/* operation perms */
 	int	shm_segsz;		/* size of segment (bytes) */
 	time_t	shm_atime;		/* last attach time */
 	time_t	shm_dtime;		/* last detach time */
@@ -12,9 +12,9 @@ struct shmid_ds {
 	unsigned short	shm_lpid;	/* pid of last operator */
 	short	shm_nattch;		/* no. of current attaches */
 	/* the following are private */
-	unsigned short   shm_npages;  /* size of segment (pages) */
-	unsigned long   *shm_pages;   /* array of ptrs to frames -> SHMMAX */ 
-	struct shm_desc *attaches;    /* descriptors for attaches */
+	unsigned short   shm_npages;	/* size of segment (pages) */
+	unsigned long   *shm_pages;	/* array of ptrs to frames -> SHMMAX */ 
+	struct shm_desc *attaches;	/* descriptors for attaches */
 };
 
 /* mode for attach */
@@ -34,34 +34,35 @@ struct	shminfo {
     int shmall;	
 };
 
+/* address range for shared memory attaches if no address passed to shmat() */
 #define SHM_RANGE_START	0x40000000
 #define SHM_RANGE_END	0x60000000
 
-				/* _SHM_ID_BITS is a variable you can adjust to */
-				/* tune the kernel.  It determines the value of */
-				/* SHMMNI, which specifies the maximum no. of */
-				/* shared segments (system wide).  SRB. */
-#define _SHM_ID_BITS	7		/* keep as low as possible */
-					/* a static array is declared */
-					/* using SHMMNI */
+/* format of page table entries that correspond to shared memory pages
+   currently out in swap space (see also mm/swap.c):
+   bit 0 (PAGE_PRESENT) is  = 0
+   bits 7..1 (SWP_TYPE) are = SHM_SWP_TYPE
+   bits 31..8 are used like this:
+   bits 14..8 (SHM_ID) the id of the shared memory segment
+   bits 29..15 (SHM_IDX) the index of the page within the shared memory segment
+                    (actually only bits 24..15 get used since SHMMAX is so low)
+   bit 31 (SHM_READ_ONLY) flag whether the page belongs to a read-only attach
+*/
 
-#define __SHM_IDX_BITS	(BITS_PER_PTR-2-SHM_IDX_SHIFT)
-
-/* !!!!!!!?????
- * Why reserve the two (2) high bits of the signature (shm_sgn) field?
- * Since, as far as I can see, only the high bit is used (SHM_READ_ONLY).
- *						SRB.
- */
-
-#define _SHM_IDX_BITS	(__SHM_IDX_BITS+PAGE_SHIFT>=BITS_PER_PTR?\
- BITS_PER_PTR-PAGE_SHIFT-1:__SHM_IDX_BITS)	/* sanity check */
-
-/* not present page table entry format bit 0 is 0, low byte defined in mm.h */
 #define SHM_ID_SHIFT	8
+/* Keep _SHM_ID_BITS as low as possible since SHMMNI depends on it and
+   there is a static array of size SHMMNI. */
+#define _SHM_ID_BITS	7
 #define SHM_ID_MASK	((1<<_SHM_ID_BITS)-1)
+
 #define SHM_IDX_SHIFT	(SHM_ID_SHIFT+_SHM_ID_BITS)
+#define _SHM_IDX_BITS	15
 #define SHM_IDX_MASK	((1<<_SHM_IDX_BITS)-1)
-#define SHM_READ_ONLY	(1<<(BITS_PER_PTR-1))
+
+#define SHM_READ_ONLY	(1<<31)
+
+/* We must have SHM_ID_SHIFT + _SHM_ID_BITS + _SHM_IDX_BITS + 1 <= 32
+   and SHMMAX <= (PAGE_SIZE << _SHM_IDX_BITS). */
 
 #define SHMMAX 0x3fa000				/* max shared seg size (bytes) */
 #define SHMMIN 1	 /* really PAGE_SIZE */	/* min shared seg size (bytes) */
@@ -105,5 +106,4 @@ struct	shm_desc {
 #endif /* __KERNEL__ */
 
 #endif /* _LINUX_SHM_H_ */
-
 

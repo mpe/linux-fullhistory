@@ -290,7 +290,7 @@ struct task_struct {
 	struct tty_struct *tty; /* NULL if no tty */
 /* shm stuff */
 	struct shm_desc *shm;
-	struct sem_undo *semun;
+	struct sem_undo *semundo;
 /* ldt for this task - used by Wine.  If NULL, default_ldt is used */
 	struct desc_struct *ldt;
 /* tss for this task */

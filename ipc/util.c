@@ -13,7 +13,7 @@
 #include <linux/stat.h>
 
 void ipc_init (void);
-asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr); 
+asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr);
 
 #ifdef CONFIG_SYSVIPC
 
@@ -21,16 +21,16 @@ int ipcperms (struct ipc_perm *ipcp, short flag);
 extern void sem_init (void), msg_init (void), shm_init (void);
 extern int sys_semget (key_t key, int nsems, int semflg);
 extern int sys_semop (int semid, struct sembuf *sops, unsigned nsops);
-extern int sys_semctl (int semid, int semnum, int cmd, void *arg);
+extern int sys_semctl (int semid, int semnum, int cmd, union semun arg);
 extern int sys_msgget (key_t key, int msgflg);
 extern int sys_msgsnd (int msqid, struct msgbuf *msgp, int msgsz, int msgflg);
 extern int sys_msgrcv (int msqid, struct msgbuf *msgp, int msgsz, long msgtyp,
 		       int msgflg);
 extern int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf);
-extern int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
 extern int sys_shmget (key_t key, int size, int flag);
 extern int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *addr);
 extern int sys_shmdt (char *shmaddr);
+extern int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
 
 void ipc_init (void)
 {
@@ -71,8 +71,16 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr)
 			return sys_semop (first, (struct sembuf *)ptr, second);
 		case SEMGET:
 			return sys_semget (first, second, third);
-		case SEMCTL:
-			return sys_semctl (first, second, third, ptr);
+		case SEMCTL: {
+			union semun fourth;
+			int err;
+			if (!ptr)
+				return -EINVAL;
+			if ((err = verify_area (VERIFY_READ, ptr, sizeof(long))))
+				return err;
+			fourth.__pad = (void *) get_fs_long(ptr);
+			return sys_semctl (first, second, third, fourth);
+			}
 		default:
 			return -EINVAL;
 		}
@@ -82,10 +90,13 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr)
 			return sys_msgsnd (first, (struct msgbuf *) ptr, 
 					   second, third);
 		case MSGRCV: {
-			struct ipc_kludge tmp; 
+			struct ipc_kludge tmp;
+			int err;
 			if (!ptr)
 				return -EINVAL;
-			memcpy_fromfs (&tmp,(struct ipc_kludge *) ptr, 
+			if ((err = verify_area (VERIFY_READ, ptr, sizeof(tmp))))
+				return err;
+			memcpy_fromfs (&tmp,(struct ipc_kludge *) ptr,
 				       sizeof (tmp));
 			return sys_msgrcv (first, tmp.msgp, second, tmp.msgtyp,
 					 	third);
@@ -93,14 +104,13 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr)
 		case MSGGET:
 			return sys_msgget ((key_t) first, second);
 		case MSGCTL:
-			return sys_msgctl (first, second, 
-						(struct msqid_ds *) ptr);
+			return sys_msgctl (first, second, (struct msqid_ds *) ptr);
 		default:
 			return -EINVAL;
 		}
 	if (call <= SHMCTL) 
 		switch (call) {
-		case SHMAT: /* returning shmaddr > 2G will screw up */
+		case SHMAT:
 			return sys_shmat (first, (char *) ptr, second, 
 							(ulong *) third);
 		case SHMDT: 
@@ -108,8 +118,7 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr)
 		case SHMGET:
 			return sys_shmget (first, second, third);
 		case SHMCTL:
-			return sys_shmctl (first, second, 
-						(struct shmid_ds *) ptr);
+			return sys_shmctl (first, second, (struct shmid_ds *) ptr);
 		default:
 			return -EINVAL;
 		}

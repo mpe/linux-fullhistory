@@ -35,7 +35,6 @@ static int find_first_zero(struct buffer_head *bh, int start_bit, int end_bit)
 
     int end, i, j, tmp;
     u_long *bmap;
-    char res;
 
     bmap=(u_long *)bh->b_data;
     end = end_bit >> 5;

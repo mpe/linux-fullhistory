@@ -28,6 +28,7 @@
 #include <linux/tty.h>
 #include <linux/serial.h>
 #include <linux/locks.h>
+#include <linux/string.h>
 #ifdef CONFIG_INET
 #include <linux/net.h>
 #include <linux/netdevice.h>
@@ -46,7 +47,6 @@ extern void (*do_floppy)(void);
 #endif
 
 extern int sys_tz;
-extern int ___strtok;
 extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
 
@@ -92,6 +92,13 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(open_namei),
 	X(inode_setattr),
 	X(inode_change_ok),
+	X(generic_mmap),
+	X(set_blocksize),
+	X(getblk),
+	X(bread),
+	X(brelse),
+	X(ll_rw_block),
+	X(__wait_on_buffer),
 
 	/* device registration */
 	X(register_chrdev),
@@ -156,6 +163,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(printk),
 	X(sprintf),
 	X(vsprintf),
+	X(simple_strtoul),
 	X(system_utsname),
 	X(sys_call_table),
 
@@ -206,26 +214,16 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 #endif
 	/* Added to make file system as module */
 	X(set_writetime),
-	X(getblk),
-	X(inode_setattr),
 	X(sys_tz),
-	X(inode_change_ok),
 	X(__wait_on_super),
 	X(file_fsync),
-	X(simple_strtoul),
-	X(generic_mmap),
-	X(set_blocksize),
 	X(clear_inode),
 	X(refile_buffer),
 	X(___strtok),
-	X(brelse),
-	X(bread),
 	X(init_fifo),
 	X(super_blocks),
 	X(chrdev_inode_operations),
 	X(blkdev_inode_operations),
-	X(ll_rw_block),
-	X(__wait_on_buffer),
 	X(read_ahead),
 	/********************************************************
 	 * Do not add anything below this line,

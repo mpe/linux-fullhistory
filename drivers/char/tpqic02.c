@@ -1,10 +1,9 @@
-/* $Id: tpqic02.c,v 0.4.1.4 1994/07/21 02:15:45 root Exp root $
+/* $Id: tpqic02.c,v 0.4.1.5 1994/10/29 02:46:13 root Exp root $
  *
- * Driver for tape drive support for Linux-i386 1.1.30
+ * Driver for tape drive support for Linux-i386 1.1.58
  *
  * Copyright (c) 1992, 1993, 1994 by H. H. Bergman. All rights reserved.
- * Current e-mail address: hennus@sky.nl.mugnet.org [This is a UUCP link.]
- * Secondary e-mail address: csg279@wing.rug.nl [IP connected, but flaky]
+ * Current e-mail address: hennus@sky.ow.org [This is a UUCP link.]
  * [If you are unable to reach me directly, try the TAPE mailing list
  * channel on linux-activists@niksula.hut.fi using "X-Mn-Key: TAPE" as
  * the first line in your message.]
@@ -35,6 +34,9 @@
  * You are not allowed to change this line nor the text above.
  *
  * $Log: tpqic02.c,v $
+ * Revision 0.4.1.5  1994/10/29  02:46:13  root
+ * Minor cleanups.
+ *
  * Revision 0.4.1.4  1994/07/21  02:15:45  root
  * ifdef'd DDI. Exception masks.
  *
@@ -191,10 +193,8 @@
  * Also, be careful to avoid IO conflicts with other devices!
  */
 
-#include <linux/config.h>
+#include <linux/autoconf.h>
 
-/* skip this driver if not required for this configuration */
-#if CONFIG_QIC02_TAPE
 
 /*
 #define TDEBUG
@@ -233,8 +233,8 @@
  */
 
 #ifdef CONFIG_QIC02_DYNCONF
-/* This may hold the dynamic configuration info for the interface
- * card+drive info in future versions.
+/* This holds the dynamic configuration info for the interface
+ * card+drive info if runtime configuration has been selected.
  */
 struct mtconfiginfo qic02_tape_dynconf = { 0, };	/* user settable */
 struct qic02_ccb qic02_tape_ccb = { 0, };		/* private stuff */
@@ -256,8 +256,8 @@ static volatile struct mtget ioctl_status;	/* current generic status */
 
 static volatile struct tpstatus tperror;	/* last drive status */
 
-static char rcs_revision[] = "$Revision: 0.4.1.4 $";
-static char rcs_date[] = "$Date: 1994/07/21 02:15:45 $";
+static char rcs_revision[] = "$Revision: 0.4.1.5 $";
+static char rcs_date[] = "$Date: 1994/10/29 02:46:13 $";
 
 /* Flag bits for status and outstanding requests.
  * (Could all be put in one bit-field-struct.)
@@ -285,7 +285,7 @@ static volatile unsigned long dma_bytes_done;
 static volatile unsigned dma_mode = 0;		/* !=0 also means DMA in use */
 static 		flag need_rewind = YES;
 
-static dev_t current_tape_dev = QIC02_TAPE_MAJOR << 8;
+static dev_t current_tape_dev = MKDEV(QIC02_TAPE_MAJOR, 0);
 static int extra_blocks_left = BLOCKS_BEYOND_EW;
 
 
@@ -570,7 +570,9 @@ static void report_error(int s)
 #endif
 
 
-/* perform appropriate action for certain exceptions */
+/* Perform appropriate action for certain exceptions.
+ * should return a value to indicate stop/continue (in case of bad blocks)
+ */
 static void handle_exception(int exnr, int exbits)
 {
 	if (exnr==EXC_NCART) {
@@ -1358,9 +1360,7 @@ static int do_ioctl_cmd(int cmd)
 			return do_qic_cmd(QCMD_REWIND, TIM_R);
 
 		case MTOFFL:
-			tpqputs(TPQD_IOCTLS, "MTOFFL rewinding & going offline"); /*---*/
-			/******* What exactly are we supposed to do, to take it offline????
-			 *****/
+			tpqputs(TPQD_IOCTLS, "MTOFFL rewinding & going offline");
 			/* Doing a drive select will clear (unlock) the current drive.
 			 * But that requires support for multiple drives and locking.
 			 */
@@ -1927,8 +1927,9 @@ static int qic02_tape_read(struct inode * inode, struct file * filp, char * buf,
 	}
 
 	if (TP_DIAGS(current_tape_dev))
+		/* can't print a ``long long'' (for filp->f_pos), so chop it */
 		printk(TPQIC02_NAME ": request READ, minor=%x, buf=%p, count=%x, pos=%lx, flags=%x\n",
-			MINOR(dev), buf, count, filp->f_pos, flags);
+			MINOR(dev), buf, count, (unsigned long) filp->f_pos, flags);
 
 	if (count % TAPE_BLKSIZE) {	/* Only allow mod 512 bytes at a time. */
 		tpqputs(TPQD_BLKSZ, "Wrong block size");
@@ -2100,8 +2101,9 @@ static int qic02_tape_write(struct inode * inode, struct file * filp, char * buf
 	}
 
 	if (TP_DIAGS(current_tape_dev))
+		/* can't print a ``long long'' (for filp->f_pos), so chop it */
 		printk(TPQIC02_NAME ": request WRITE, minor=%x, buf=%p, count=%x, pos=%lx, flags=%x\n",
-			MINOR(dev), buf, count, filp->f_pos, flags);
+			MINOR(dev), buf, count, (unsigned long) filp->f_pos, flags);
 
 	if (count % TAPE_BLKSIZE) {	/* only allow mod 512 bytes at a time */
 		tpqputs(TPQD_BLKSZ, "Wrong block size");
@@ -2587,7 +2589,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		if (!suser())
 			return -EPERM;
 		verify_area(VERIFY_READ, (int *) ioarg, sizeof(int));
-		c = get_fs_long((int *) ioarg);
+		c = get_user_long((int *) ioarg);
 		if (c==0) {
 			QIC02_TAPE_DEBUG = 0;
 			return 0;
@@ -2619,7 +2621,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		stp = (char *) &qic02_tape_dynconf;
 		argp = (char *) ioarg;
 		for (i=0; i<sizeof(qic02_tape_dynconf); i++) 
-			put_fs_byte(*stp++, argp++);
+			put_user_byte(*stp++, argp++);
 		return 0;
 
 	} else if (c == (MTIOCSETCONFIG & IOCCMD_MASK)) {
@@ -2646,7 +2648,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		stp = (char *) &qic02_tape_dynconf;
 		argp = (char *) ioarg;
 		for (i=0; i<sizeof(qic02_tape_dynconf); i++)
-			*stp++ = get_fs_byte(argp++);
+			*stp++ = get_user_byte(argp++);
 		if (status_zombie==NO)
 			qic02_release_resources();	/* and go zombie */
 		if (update_ifc_masks(qic02_tape_dynconf.ifc_type))
@@ -2678,7 +2680,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		stp = (char *) &operation;
 		argp = (char *) ioarg;
 		for (i=0; i<sizeof(operation); i++)
-			*stp++ = get_fs_byte(argp++);
+			*stp++ = get_user_byte(argp++);
 
 		/* ---note: mt_count is signed, negative seeks must be
 		 * ---	    translated to seeks in opposite direction!
@@ -2740,7 +2742,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		stp = (char *) &ioctl_status;
 		argp = (char *) ioarg;
 		for (i=0; i<sizeof(ioctl_status); i++) 
-			put_fs_byte(*stp++, argp++);
+			put_user_byte(*stp++, argp++);
 		return 0;
 
 
@@ -2773,7 +2775,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		stp = (char *) &ioctl_tell;
 		argp = (char *) ioarg;
 		for (i=0; i<sizeof(ioctl_tell); i++) 
-			put_fs_byte(*stp++, argp++);
+			put_user_byte(*stp++, argp++);
 		return 0;
 
 	} else
@@ -2793,7 +2795,10 @@ static struct file_operations qic02_tape_fops = {
 	NULL,				/* mmap not allowed */
 	qic02_tape_open,		/* open */
 	qic02_tape_release,		/* release */
-	NULL				/* fsync */
+	NULL,				/* fsync */
+	NULL,				/* fasync */
+	NULL,				/* check_media_change */
+	NULL				/* revalidate */
 };
 
 /* align `a' at `size' bytes. `size' must be a power of 2 */
@@ -2870,7 +2875,6 @@ static int qic02_get_resources(void)
 
 
 
-/* init() is called from chr_dev_init() in drivers/char/mem.c */
 long qic02_tape_init(long kmem_start)
 	/* Shouldn't this be a caddr_t ? */
 {
@@ -2969,5 +2973,3 @@ long qic02_tape_init(long kmem_start)
 	return kmem_start;
 } /* qic02_tape_init */
 
-
-#endif /* CONFIG_QIC02_TAPE */

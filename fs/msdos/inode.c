@@ -172,20 +172,7 @@ struct super_block *msdos_read_super(struct super_block *s,void *data,
 	}
 	cache_init();
 	lock_super(s);
-	if (MAJOR(s->s_dev) == FLOPPY_MAJOR){
-		/* Patch for floppy which lacks a table ??? */
-		static int tbdef[]={
-			1024,1024,1024,1024,1024,
-			1024,1024,1024,1024,1024,
-			1024,1024,1024,1024,1024,
-			1024,1024,1024,1024,1024,
-			1024,1024,1024,1024,1024,
-			1024,1024,1024,1024,1024,
-			1024,1024,1024,1024,1024,
-		};
-		blksize_size[FLOPPY_MAJOR] = tbdef;
-	}
-	set_blocksize (s->s_dev,SECTOR_SIZE);
+	set_blocksize(s->s_dev, SECTOR_SIZE);
 	bh = bread(s->s_dev, 0, SECTOR_SIZE);
 	unlock_super(s);
 	if (bh == NULL) {

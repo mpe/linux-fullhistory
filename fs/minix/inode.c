@@ -122,6 +122,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	if (32 != sizeof (struct minix_inode))
 		panic("bad i-node size");
 	lock_super(s);
+	set_blocksize(dev, BLOCK_SIZE);
 	if (!(bh = bread(dev,1,BLOCK_SIZE))) {
 		s->s_dev=0;
 		unlock_super(s);

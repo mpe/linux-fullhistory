@@ -256,7 +256,6 @@ int msdos_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
     struct msdos_dir_entry **de)
 {
 	int sector,offset;
-	void *data;
 
 	while (1) {
 		offset = *pos;
@@ -270,12 +269,12 @@ int msdos_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
 		if (*bh)
 			brelse(*bh);
 		PRINTK (("get_entry sector apres brelse\n"));
-		if (!(*bh = msdos_sread(dir->i_dev,sector,&data))) {
+		if (!(*bh = msdos_sread(dir->i_dev,sector))) {
 			printk("Directory sread (sector %d) failed\n",sector);
 			continue;
 		}
 		PRINTK (("get_entry apres sread\n"));
-		*de = (struct msdos_dir_entry *) (data+(offset &
+		*de = (struct msdos_dir_entry *) ((*bh)->b_data+(offset &
 		    (SECTOR_SIZE-1)));
 		return (sector << MSDOS_DPS_BITS)+((offset & (SECTOR_SIZE-1)) >>
 		    MSDOS_DIR_BITS);
@@ -344,7 +343,8 @@ static int raw_scan_sector(struct super_block *sb,int sector,char *name,
 	struct inode *inode;
 	int entry,start,done;
 
-	if (!(bh = msdos_sread(sb->s_dev,sector,(void **) &data))) return -EIO;
+	if (!(bh = msdos_sread(sb->s_dev,sector))) return -EIO;
+	data = (struct msdos_dir_entry *) bh->b_data;
 	for (entry = 0; entry < MSDOS_DPS; entry++) {
 		if (name) RSS_NAME
 		else {

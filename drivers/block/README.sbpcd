@@ -1,10 +1,18 @@
-This README belongs to release 2.6 or newer of the SoundBlaster Pro
+This README belongs to release 2.7 or newer of the SoundBlaster Pro
 (Matsushita, Kotobuki, Panasonic, CreativeLabs) CD-ROM driver for Linux.
 
 The driver is able to drive the whole family of "traditional" IDE-style (that
 has nothing to do with the new "Enhanced IDE" drive standard) Matsushita,
 Kotobuki, Panasonic drives, sometimes labelled as "CreativeLabs". The
 well-known drives are CR-521, CR-522, CR-523, CR-562, CR-563.
+
+There exists an "IBM External ISA CD-ROM Drive" which in fact is a CR-562
+with a special controller board. This drive is supported (the interface is
+of the "LaserMate" type), and it is possibly the best buy today (cheaper than
+an internal drive, and you can use it as an internal, too - f.e. plug it into
+a soundcard). If you own such a drive, please mail me the DOS driver (gzipped
+and uuencoded) and the specifications (exact name, address range etc.) I still
+have to confirm my opinion. ;-)
 
 This driver is NOT for Mitsumi or Sony or Aztech or Philips or XXX drives.
 The matter that some other brand's drives work with newer sound card
@@ -49,8 +57,8 @@ to change old drives to any ID, too. He writes in this sense:
 
 To use more than 4 drives (now that the single-speed CR-521's are as cheap as
 50$), you need a second interface card and you have to "duplicate" the driver.
-Just copy sbpcd.c into sbpcd2.c and so forth and change SBPCD_ISSUE
-accordingly.
+Just copy sbpcd.c into sbpcd2.c and so forth and change SBPCD_ISSUE (at top
+of sbpcd2.c) accordingly.
 
 The driver supports reading of data from the CD and playing of audio tracks.
 The audio part should run with WorkMan, xcdplayer, with the "non-X11" products
@@ -72,9 +80,10 @@ the beginning of each single frame.
 The software interface possibly may change a bit the day the SCSI driver
 supports it too.
 
-MultiSession is supported, "ManySession" (not recommended, see below)
-alternatively.
-Photo CDs work, too (even with my "old" CR-521).
+With the CR-562 and CR-563 drives, MultiSession is supported, "ManySession"
+(not recommended, see below) alternatively.
+Photo CDs work, too (the "old" drives like CR-521 can access only the first
+session of a photoCD).
 At ftp.gwdg.de:/pub/linux/hpcdtoppm/ is Hadmut Danisch's package to convert
 photo CD image files.
 
@@ -188,6 +197,57 @@ variants). There are CDs on the market (like the german "unifix" Linux
 distribution) which MUST get handled with a block_size of 1024. Generally,
 one can say all the CDs which hold files of the name YMTRANS.TBL are defective;
 do not use block=2048 with those.
+
+At the beginning of sbpcd.c, you will find some "#define"s (f.e. EJECT and
+JUKEBOX). With that, you can configure the driver for some special things.
+The following program disables the auto-eject feature during runtime:
+
+/*=================== begin program ========================================*/
+/*
+ * set the "eject" switch (enable/disable auto-ejecting)
+ *
+ * (c) 1994 Eberhard Moenkeberg <emoenke@gwdg.de>
+ *          may be used & enhanced freely
+ *
+ * Disables or enables the auto-eject feature at run time.
+ * Works only if a CD is in the drive (just like the feature itself ;-) 
+ * Useful for a "quiet" shutdown or for weird audio player programs.
+ */
+#define EJECT 0 /* 0: disable, 1: enable auto-ejecting */
+
+#include <stdio.h>
+#include <sys/ioctl.h>
+#include <linux/cdrom.h>
+
+static char arg=EJECT;
+static int drive;
+static int err;
+
+main(int argc, char *argv[])
+{
+/*
+ * open /dev/cdrom
+ */
+  drive=open("/dev/cdrom", 0);
+  if (drive<0)
+    {
+      fprintf(stderr, "can't open drive /dev/cdrom.\n");
+      exit (-1);
+    }
+/*
+ * set EJECT_SW
+ */
+  err=ioctl(drive, CDROMEJECT_SW, arg);
+  if (err!=0)
+    {
+      fprintf(stderr, "can't set EJECT_SW (error %d).\n", err);
+      exit (-1);
+    }
+  else
+    fprintf(stdout, "EJECT_SW set to %d\n", arg);
+}
+/*===================== end program ========================================*/
+
 
 
 Auto-probing at boot time:

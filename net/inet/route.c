@@ -542,9 +542,9 @@ struct rtable * ip_rt_route(unsigned long daddr, struct options *opt, unsigned l
 		/*
 		 *	broadcast addresses can be special cases.. 
 		 */
-		 
-		if ((rt->rt_gateway == 0) &&
-		    (rt->rt_dev->flags & IFF_BROADCAST) &&
+		if (rt->rt_flags & RTF_GATEWAY)
+			continue;		 
+		if ((rt->rt_dev->flags & IFF_BROADCAST) &&
 		    (rt->rt_dev->pa_brdaddr == daddr))
 			break;
 	}

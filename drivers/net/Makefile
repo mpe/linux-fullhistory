@@ -142,6 +142,11 @@ NETDRV_OBJS := $(NETDRV_OBJS) depca.o
 depca.o: depca.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEPCA_OPTS) -c $<
 endif
+ifdef CONFIG_EWRK3
+NETDRV_OBJS := $(NETDRV_OBJS) ewrk3.o
+ewrk3.o: ewrk3.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(EWRK3_OPTS) -c $<
+endif
 ifdef CONFIG_ATP
 NETDRV_OBJS := $(NETDRV_OBJS) atp.o
 endif
