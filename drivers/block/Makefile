@@ -100,6 +100,9 @@ block.a: $(OBJS)
 
 dep:
 	$(CPP) -M $(SRCS) > .depend
+ifdef BLOCK_MODULE_OBJS
+	$(CPP) -M -DMODULE $(BLOCK_MODULE_OBJS:.o=.c) >> .depend
+endif
 
 modules: $(BLOCK_MODULE_OBJS)
 	echo $(BLOCK_MODULE_OBJS) > ../../modules/BLOCK_MODULES

@@ -25,7 +25,7 @@ NEW!	- support for reliable operation of buggy CMD-640 interfaces
 		- use kernel command line option:   hda=serialize
 NEW!	- experimental support for DTC-2278D interfaces
 		- use kernel command line option:  hda=dtc2278
-NEW!	- run-time selectible 32bit interface support (using hdparm-2.3)
+NEW!	- run-time selectable 32bit interface support (using hdparm-2.3)
 
 Under construction:
 

@@ -70,21 +70,25 @@
 #if !(SBPCD_ISSUE-1)     /* first (or if you have only one) interface board: */
 #define CDROM_PORT 0x340 /* <-----------<< port address                      */
 #define SBPRO      0     /* <-----------<< interface type                    */
+#define MAX_DRIVES 4     /* set to 1 if the card does not use "drive select" */
 #define SOUND_BASE 0x220 /* <-----------<< sound address of this card or 0   */
 #endif
 #if !(SBPCD_ISSUE-2)     /* ==================== second interface board: === */
 #define CDROM_PORT 0x344 /* <-----------<< port address                      */
 #define SBPRO      0     /* <-----------<< interface type                    */
+#define MAX_DRIVES 4     /* set to 1 if the card does not use "drive select" */
 #define SOUND_BASE 0x000 /* <-----------<< sound address of this card or 0   */
 #endif
 #if !(SBPCD_ISSUE-3)     /* ===================== third interface board: === */
 #define CDROM_PORT 0x634 /* <-----------<< port address                      */
 #define SBPRO      1     /* <-----------<< interface type                    */
+#define MAX_DRIVES 4     /* set to 1 if the card does not use "drive select" */
 #define SOUND_BASE 0x240 /* <-----------<< sound address of this card or 0   */
 #endif
 #if !(SBPCD_ISSUE-4)     /* ==================== fourth interface board: === */
 #define CDROM_PORT 0x634 /* <-----------<< port address                      */
 #define SBPRO      0     /* <-----------<< interface type                    */
+#define MAX_DRIVES 4     /* set to 1 if the card does not use "drive select" */
 #define SOUND_BASE 0x000 /* <-----------<< sound address of this card or 0   */
 #endif
 
@@ -606,10 +610,11 @@ Read XA Parameter:
 #define CMD1_SUBCHANINF	0x11
 #define CMD2_SUBCHANINF	0x??
 
+#define CMD1_ABORT	0x08
+#define CMD2_ABORT	0x08
+#define CMDT_ABORT	0x08
+
 #define CMD2_x02	0x02
-#define CMD1_x08	0x08
-#define CMD2_x08	0x08
-#define CMDT_x08	0x08
 
 #define CMD2_SETSPEED	0xda
 
@@ -668,6 +673,7 @@ Read XA Parameter:
 #define CMDL_PLAY_MSF	0x???
 
 #define CMD0_PLAY_TI	0x0c
+#define CMD1_PLAY_TI	0x0f
 
 #define CMD0_STATUS	0x81
 #define CMD1_STATUS	0x05

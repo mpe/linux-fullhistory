@@ -12,14 +12,24 @@
  * I tried polling without the sony_sleep during the data transfers but
  * it did not speed things up any.
  *
- *  5/23/93 (rgj) changed the major number to 21 to get rid of conflict
+ * 1993-05-23 (rgj) changed the major number to 21 to get rid of conflict
  * with CDU-31A driver.  This is the also the number from the Linux
  * Device Driver Registry for the Sony Drive.  Hope nobody else is using it.
  *
- *  8/29/93 (rgj) remove the configuring of the interface board address
+ * 1993-08-29 (rgj) remove the configuring of the interface board address
  * from the top level configuration, you have to modify it in this file.
  *
- * 1/26/95 Made module-capable (Joel Katz <Stimpson@Panix.COM>)
+ * 1995-01-26 Made module-capable (Joel Katz <Stimpson@Panix.COM>)
+ *
+ * 1995-05-20
+ *  Modified to support CDU-510/515 series
+ *      (Claudio Porfiri<C.Porfiri@nisms.tei.ericsson.se>)
+ *  Fixed to report verify_area() failures
+ *      (Heiko Eissfeldt <heiko@colossus.escape.de>)
+ *
+ * 1995-06-01
+ *  More chages to support CDU-510/515 series
+ *      (Claudio Porfiri<C.Porfiri@nisms.tei.ericsson.se>)
  *
  * Things to do:
  *  - handle errors and status better, put everything into a single word
@@ -131,7 +141,7 @@
 #define MAJOR_NR CDU535_CDROM_MAJOR
 
 #ifdef MODULE
-# include "/usr/src/linux/drivers/block/blk.h"
+# include "blk.h"
 #else
 # include "blk.h"
 # define MOD_INC_USE_COUNT
@@ -155,6 +165,13 @@
 #endif
 #ifndef CDU535_MESSAGE_NAME
 # define CDU535_MESSAGE_NAME	"Sony CDU-535"
+#endif
+
+#ifndef MAX_SPINUP_RETRY
+# define MAX_SPINUP_RETRY		3	/* 1 is sufficient for most drives... */
+#endif
+#ifndef RETRY_FOR_BAD_STATUS
+# define RETRY_FOR_BAD_STATUS	100	/* in 10th of second */
 #endif
 
 #ifndef DEBUG
@@ -811,7 +828,6 @@ do_cdu535_request(void)
 	Byte status[2];
 	Byte cmd[2];
 
-
 	if (!sony_inuse) {
 		cdu_open(NULL, NULL);
 	}
@@ -870,36 +886,56 @@ do_cdu535_request(void)
 
 					/*
 					 * Read the data.  If the drive was not spinning,
-					 * spin it up and try once more.
+					 * spin it up and try some more.
 					 */
-					spin_up_retry = 0;
-					for (;;) {
-#if DEBUG > 1
-						if (check_drive_status() != 0) {
-							/* drive not ready */
-							sony_first_block = -1;
-							sony_last_block = -1;
-							end_request(0);
-							return;
-						}
-#endif
-						if (0 <= seek_and_read_N_blocks(params, read_size,
-									status, sony_buffer, (read_size * 2048)))
+					for (spin_up_retry=0 ;; ++spin_up_retry) {
+						/* This loop has been modified to support the Sony
+						 * CDU-510/515 series, thanks to Claudio Porfiri 
+						 * <C.Porfiri@nisms.tei.ericsson.se>.
+						 */
+						/*
+						 * This part is to deal with very slow hardware.  We
+						 * try at most MAX_SPINUP_RETRY times to read the same
+						 * block.  A check for seek_and_read_N_blocks' result is
+						 * performed; if the result is wrong, the CDROM's engine
+						 * is restarted and the operation is tried again.
+						 */
+						/*
+						 * 1995-06-01: The system got problems when downloading
+						 * from Slackware CDROM, the problem seems to be:
+						 * seek_and_read_N_blocks returns BAD_STATUS and we
+						 * should wait for a while before retrying, so a new
+						 * part was added to discriminate the return value from
+						 * seek_and_read_N_blocks for the various cases.
+						 */
+						int readStatus = seek_and_read_N_blocks(params, read_size,
+									status, sony_buffer, (read_size * 2048));
+						if (0 <= readStatus)	/* Good data; common case, placed first */
 							break;
-						if (!(status[0] & SONY535_STATUS1_NOT_SPINNING) ||
-															spin_up_retry) {
-							printk(CDU535_MESSAGE_NAME " Read error: 0x%.2x\n",
-									status[0]);
+						if (readStatus == NO_ROOM || spin_up_retry == MAX_SPINUP_RETRY) {
+							/* give up */
+							if (readStatus == NO_ROOM)
+								printk(CDU535_MESSAGE_NAME " No room to read from CD\n");
+							else
+								printk(CDU535_MESSAGE_NAME " Read error: 0x%.2x\n",
+										status[0]);
 							sony_first_block = -1;
 							sony_last_block = -1;
 							end_request(0);
 							return;
 						}
+						if (readStatus == BAD_STATUS) {
+							/* Sleep for a while, then retry */
+							current->state = TASK_INTERRUPTIBLE;
+							current->timeout = jiffies + RETRY_FOR_BAD_STATUS;
+							schedule();
+						}
+#if DEBUG > 0
 						printk(CDU535_MESSAGE_NAME
 							" debug: calling spin up when reading data!\n");
+#endif
 						cmd[0] = SONY535_SPIN_UP;
 						do_sony_cmd(cmd, 1, status, NULL, 0, 0);
-						spin_up_retry = 1;
 					}
 				}
 				/*
@@ -1008,7 +1044,7 @@ static int
 sony_get_subchnl_info(long arg)
 {
 	struct cdrom_subchnl schi;
-
+	int err;
 
 	/* Get attention stuff */
 	if (check_drive_status() != 0)
@@ -1018,7 +1054,9 @@ sony_get_subchnl_info(long arg)
 	if (!sony_toc_read) {
 		return -EIO;
 	}
-	verify_area(VERIFY_WRITE /* and read */ , (char *)arg, sizeof schi);
+	err = verify_area(VERIFY_WRITE /* and read */ , (char *)arg, sizeof schi);
+	if (err)
+		return err;
 
 	memcpy_fromfs(&schi, (char *)arg, sizeof schi);
 
@@ -1079,8 +1117,9 @@ cdu_ioctl(struct inode *inode,
 	unsigned int dev;
 	Byte status[2];
 	Byte cmd_buff[10], params[10];
-	int  i, dsc_status;
-
+	int  i;
+	int  dsc_status;
+	int  err;
 
 	if (!inode) {
 		return -EINVAL;
@@ -1170,7 +1209,9 @@ cdu_ioctl(struct inode *inode,
 		break;
 
 	case CDROMPLAYMSF:			/* Play starting at the given MSF address. */
-		verify_area(VERIFY_READ, (char *)arg, 6);
+		err = verify_area(VERIFY_READ, (char *)arg, 6);
+		if (err)
+			return err;
 		spin_up_drive(status);
 		set_drive_mode(SONY535_AUDIO_DRIVE_MODE, status);
 		memcpy_fromfs(params, (void *)arg, 6);
@@ -1209,7 +1250,9 @@ cdu_ioctl(struct inode *inode,
 			if (!sony_toc_read)
 				return -EIO;
 			hdr = (struct cdrom_tochdr *)arg;
-			verify_area(VERIFY_WRITE, hdr, sizeof *hdr);
+			err = verify_area(VERIFY_WRITE, hdr, sizeof *hdr);
+			if (err)
+				return err;
 			loc_hdr.cdth_trk0 = bcd_to_int(sony_toc->first_track_num);
 			loc_hdr.cdth_trk1 = bcd_to_int(sony_toc->last_track_num);
 			memcpy_tofs(hdr, &loc_hdr, sizeof *hdr);
@@ -1229,7 +1272,9 @@ cdu_ioctl(struct inode *inode,
 				return -EIO;
 			}
 			entry = (struct cdrom_tocentry *)arg;
-			verify_area(VERIFY_WRITE /* and read */ , entry, sizeof *entry);
+			err = verify_area(VERIFY_WRITE /* and read */ , entry, sizeof *entry);
+			if (err)
+				return err;
 
 			memcpy_fromfs(&loc_entry, entry, sizeof loc_entry);
 
@@ -1268,7 +1313,9 @@ cdu_ioctl(struct inode *inode,
 			sony_get_toc();
 			if (!sony_toc_read)
 				return -EIO;
-			verify_area(VERIFY_READ, (char *)arg, sizeof ti);
+			err = verify_area(VERIFY_READ, (char *)arg, sizeof ti);
+			if (err)
+				return err;
 
 			memcpy_fromfs(&ti, (char *)arg, sizeof ti);
 			if ((ti.cdti_trk0 < sony_toc->first_track_num)
@@ -1337,7 +1384,9 @@ cdu_ioctl(struct inode *inode,
 		{
 			struct cdrom_volctrl volctrl;
 
-			verify_area(VERIFY_READ, (char *)arg, sizeof volctrl);
+			err = verify_area(VERIFY_READ, (char *)arg, sizeof volctrl);
+			if (err)
+				return err;
 
 			memcpy_fromfs(&volctrl, (char *)arg, sizeof volctrl);
 			cmd_buff[0] = SONY535_SET_VOLUME;

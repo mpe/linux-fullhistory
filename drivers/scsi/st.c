@@ -119,8 +119,8 @@ st_chk_result(Scsi_Cmnd * SCpnt)
 #ifdef DEBUG
   if (debugging) {
     printk("st%d: Error: %x, cmd: %x %x %x %x %x %x Len: %d\n", dev, result,
-	   SCpnt->cmnd[0], SCpnt->cmnd[1], SCpnt->cmnd[2],
-	   SCpnt->cmnd[3], SCpnt->cmnd[4], SCpnt->cmnd[5],
+	   SCpnt->data_cmnd[0], SCpnt->data_cmnd[1], SCpnt->data_cmnd[2],
+	   SCpnt->data_cmnd[3], SCpnt->data_cmnd[4], SCpnt->data_cmnd[5],
 	   SCpnt->request_bufflen);
     if (driver_byte(result) & DRIVER_SENSE)
       print_sense("st", SCpnt);
@@ -144,15 +144,15 @@ st_chk_result(Scsi_Cmnd * SCpnt)
   if ((sense[0] & 0x70) == 0x70 &&
       scode == RECOVERED_ERROR
 #ifdef ST_RECOVERED_WRITE_FATAL
-      && SCpnt->cmnd[0] != WRITE_6
-      && SCpnt->cmnd[0] != WRITE_FILEMARKS
+      && SCpnt->data_cmnd[0] != WRITE_6
+      && SCpnt->data_cmnd[0] != WRITE_FILEMARKS
 #endif
       ) {
     scsi_tapes[dev].recover_count++;
     scsi_tapes[dev].mt_status->mt_erreg += (1 << MT_ST_SOFTERR_SHIFT);
-    if (SCpnt->cmnd[0] == READ_6)
+    if (SCpnt->data_cmnd[0] == READ_6)
       stp = "read";
-    else if (SCpnt->cmnd[0] == WRITE_6)
+    else if (SCpnt->data_cmnd[0] == WRITE_6)
       stp = "write";
     else
       stp = "ioctl";
@@ -640,6 +640,12 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       if (debugging)
 	printk( "st%d: Write protected\n", dev);
 #endif
+      if ((flags & O_ACCMODE) == O_WRONLY || (flags & O_ACCMODE) == O_RDWR) {
+	(STp->buffer)->in_use = 0;
+	STp->buffer = 0;
+	STp->in_use = 0;
+	return (-EROFS);
+      }
     }
 
     if (scsi_tapes[dev].device->host->hostt->usage_count)

@@ -2643,7 +2643,7 @@ cy_init_card(unsigned char *true_base_addr)
 
         /* The Cyclom-16Y does not decode address bit 9 and therefore
            cannot distinguish between references to chip 0 and a non-
-           existent chip 4.  If the preceeding clearing of the supposed
+           existent chip 4.  If the preceding clearing of the supposed
            chip 4 GFRCR register appears at chip 0, there is no chip 4
            and this must be a Cyclom-16Y, not a Cyclom-32Ye.
         */

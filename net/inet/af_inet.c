@@ -941,9 +941,12 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 
 	if (sock->state == SS_CONNECTING && sk->protocol == IPPROTO_TCP && (flags & O_NONBLOCK)) {
 		if (sk->err != 0)
-			return -sk->err;	/* Connection must have failed */
-		else
-			return -EALREADY;	/* Connecting is currently in progress */
+		{
+			err=sk->err;
+			sk->err=0;
+			return -err;
+		}
+		return -EALREADY;	/* Connecting is currently in progress */
 	}
   	
 	if (sock->state != SS_CONNECTING) 

@@ -148,6 +148,12 @@ typedef struct elfhdr{
   Elf32_Half	e_shstrndx;
 } Elf32_Ehdr;
 
+/* These constants define the permissions on sections in the program
+   header, p_flags. */
+#define PF_R		0x4
+#define PF_W		0x2
+#define PF_X		0x1
+
 typedef struct elf_phdr{
   Elf32_Word	p_type;
   Elf32_Off	p_offset;
@@ -234,6 +240,19 @@ typedef struct {
 #define EV_NONE		0		/* e_version, EI_VERSION */
 #define EV_CURRENT	1
 #define EV_NUM		2
+
+/* Notes used in ET_CORE */
+#define NT_PRSTATUS	1
+#define NT_PRFPREG	2
+#define NT_PRPSINFO	3
+#define NT_TASKSTRUCT	4
+
+/* Note header in a PT_NOTE section */
+typedef struct elf_note {
+  Elf32_Word	n_namesz;	/* Name size */
+  Elf32_Word	n_descsz;	/* Content size */
+  Elf32_Word	n_type;		/* Content type */
+} Elf32_Nhdr;
 
 #define ELF_START_MMAP 0x80000000
 

@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Sat Jan 14 21:39:15 1995 by faith@cs.unc.edu
+ * Revised: Mon Jun  5 09:21:54 1995 by faith@cs.unc.edu
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994, 1995 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.26 1995/01/15 02:39:19 root Exp $
+ * $Id: fdomain.c,v 5.28 1995/06/05 13:21:57 faith Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -41,7 +41,7 @@
  The following BIOS versions are supported: 2.0, 3.0, 3.2, 3.4, and 3.5.
  The following chips are supported: TMC-1800, TMC-18C50, TMC-18C30.
  Reports suggest that the driver will also work with the 36C70 chip and
- with the Quantum ISA-200S SCSI adapter.
+ with the Quantum ISA-200S and ISA-250MG SCSI adapters.
 
  Please note that the drive ordering that Future Domain implemented in BIOS
  versions 3.4 and 3.5 is the opposite of the order (currently) used by the
@@ -141,6 +141,10 @@
  and to Martin Andrews (andrewm@ccfadm.eeg.ccf.org) for the signature to
  some random TMC-1680 repackaged by IBM.
 
+ Thanks for Mark Singer (elf@netcom.com) and Richard Simpson
+ (rsimpson@ewrcsdra.demon.co.uk) for more Quantum signatures and detective
+ work on the Quantum RAM layout.
+
  All of the alpha testers deserve much thanks.
 
 
@@ -190,7 +194,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 
-#define VERSION          "$Revision: 5.26 $"
+#define VERSION          "$Revision: 5.28 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -281,7 +285,7 @@ static void              *bios_base        = NULL;
 static int               bios_major        = 0;
 static int               bios_minor        = 0;
 static int               PCI_bus           = 0;
-static int               ISA_200S          = 0;	/* Quantum ISA-200S */
+static int               Quantum           = 0;	/* Quantum board variant */
 static int               interrupt_level   = 0;
 static volatile int      in_command        = 0;
 static Scsi_Cmnd         *current_SC       = NULL;
@@ -357,18 +361,22 @@ struct signature {
    int  sig_length;
    int  major_bios_version;
    int  minor_bios_version;
-   int  flag;			/* 1 == PCI_bus, 2 == ISA_200S */
+   int  flag; /* 1 == PCI_bus, 2 == ISA_200S, 3 == ISA_250MG, 4 == ISA_200S */
 } signatures[] = {
    /*          1         2         3         4         5         6 */
    /* 123456789012345678901234567890123456789012345678901234567890 */
    { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V2.07/28/89",  5, 50,  2,  0, 0 },
    { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V1.07/28/89",  5, 50,  2,  0, 0 },
    { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V2.07/28/89", 72, 50,  2,  0, 2 },
+   { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V2.0",        73, 43,  2,  0, 3 },
+   { "FUTURE DOMAIN CORP. (C) 1991 1800-V2.0.",            72, 39,  2,  0, 4 },
    { "FUTURE DOMAIN CORP. (C) 1992 V3.00.004/02/92",        5, 44,  3,  0, 0 },
    { "FUTURE DOMAIN TMC-18XX (C) 1993 V3.203/12/93",        5, 44,  3,  2, 0 },
    { "IBM F1 P2 BIOS v1.0104/29/93",                        5, 28,  3, -1, 0 },
    { "Future Domain Corp. V1.0008/18/93",                   5, 33,  3,  4, 0 },
    { "Future Domain Corp. V1.0008/18/93",                  26, 33,  3,  4, 1 },
+				/* This next signature may not be a 3.5 bios */
+   { "Future Domain Corp. V2.0108/18/93",                   5, 33,  3,  5, 0 },
    { "FUTURE DOMAIN CORP.  V3.5008/18/93",                  5, 34,  3,  5, 0 },
    { "FUTURE DOMAIN 18c30/18c50/1800 (C) 1994 V3.5",        5, 44,  3,  5, 0 },
    { "FUTURE DOMAIN TMC-18XX",                              5, 22, -1, -1, 0 },
@@ -558,7 +566,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 	    bios_major = signatures[j].major_bios_version;
 	    bios_minor = signatures[j].minor_bios_version;
 	    PCI_bus    = (signatures[j].flag == 1);
-	    ISA_200S   = (signatures[j].flag == 2);
+	    Quantum    = (signatures[j].flag > 1) ? signatures[j].flag : 0;
 	    bios_base  = addresses[i];
 	 }
       }
@@ -580,12 +588,20 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 	 DOS (this geometry has nothing to do with physical geometry).
        */
 
-      if (ISA_200S) {		/* The Quantum board is slightly different. */
+      switch (Quantum) {
+      case 2:			/* ISA_200S */
+      case 3:			/* ISA_250MG */
 	 port_base = *((char *)bios_base + 0x1fa2)
 	       + (*((char *)bios_base + 0x1fa3) << 8);
-      } else {
+	 break;
+      case 4:			/* ISA_200S (another one) */
+	 port_base = *((char *)bios_base + 0x1fa3)
+	       + (*((char *)bios_base + 0x1fa4) << 8);
+	 break;
+      default:
 	 port_base = *((char *)bios_base + 0x1fcc)
 	       + (*((char *)bios_base + 0x1fcd) << 8);
+	 break;
       }
    
 #if DEBUG_DETECT
@@ -648,7 +664,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 	    scan more addresses.  If you have to modify this section for
 	    your installation, please send mail to faith@cs.unc.edu. */
 
-	 for (i = 0xff00; !flag && i > 0xf000; i -= 8) {
+	 for (i = 0xfff8; !flag && i > 0xe000; i -= 8) {
 	    port_base = i;
 	    if (check_region( port_base, 0x10 )) {
 #if DEBUG_DETECT
@@ -1603,10 +1619,21 @@ int fdomain_16x0_biosparam( Scsi_Disk *disk, int dev, int *info_array )
    drive = MINOR(dev) / 16;
 
    if (bios_major == 2) {
-      if (ISA_200S) {
+      switch (Quantum) {
+      case 2:			/* ISA_200S */
+				/* The value of 25 has never been verified.
+				   It should probably be 15. */
 	 i = (struct drive_info *)( (char *)bios_base + 0x1f33 + drive * 25 );
-      } else {
+	 break;
+      case 3:			/* ISA_250MG */
+	 i = (struct drive_info *)( (char *)bios_base + 0x1f36 + drive * 15 );
+	 break;
+      case 4:			/* ISA_200S (another one) */
+	 i = (struct drive_info *)( (char *)bios_base + 0x1f34 + drive * 15 );
+	 break;
+      default:
 	 i = (struct drive_info *)( (char *)bios_base + 0x1f31 + drive * 25 );
+	 break;
       }
       info_array[0] = i->heads;
       info_array[1] = i->sectors;

@@ -208,10 +208,13 @@ static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 	eppnt = elf_phdata;
 	for(i=0; i<interp_elf_ex->e_phnum; i++, eppnt++)
 	  if(eppnt->p_type == PT_LOAD) {
+	    int elf_prot = (eppnt->p_flags & PF_R) ? PROT_READ : 0;
+	    if (eppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
+	    if (eppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
 	    error = do_mmap(file, 
 			    eppnt->p_vaddr & 0xfffff000,
 			    eppnt->p_filesz + (eppnt->p_vaddr & 0xfff),
-			    PROT_READ | PROT_WRITE | PROT_EXEC,
+			    elf_prot,
 			    MAP_PRIVATE | MAP_DENYWRITE | (interp_elf_ex->e_type == ET_EXEC ? MAP_FIXED : 0),
 			    eppnt->p_offset & 0xfffff000);
 	    
@@ -530,10 +533,13 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		
 		
 		if(elf_ppnt->p_type == PT_LOAD) {
+			int elf_prot = (elf_ppnt->p_flags & PF_R) ? PROT_READ : 0;
+			if (elf_ppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
+			if (elf_ppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
 			error = do_mmap(file,
 					elf_ppnt->p_vaddr & 0xfffff000,
 					elf_ppnt->p_filesz + (elf_ppnt->p_vaddr & 0xfff),
-					PROT_READ | PROT_WRITE | PROT_EXEC,
+					elf_prot,
 					MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE,
 					elf_ppnt->p_offset & 0xfffff000);
 			
@@ -615,12 +621,15 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	printk("(brk) %x\n" , current->mm->brk);
 #endif
 
-	/* Why this, you ask???  Well SVr4 maps page 0 as read-only,
-	   and some applications "depend" upon this behavior.
-	   Since we do not have the power to recompile these, we
-	   emulate the SVr4 behavior.  Sigh.  */
-	error = do_mmap(NULL, 0, 4096, PROT_READ | PROT_EXEC,
-			MAP_FIXED | MAP_PRIVATE, 0);
+	if( current->personality == PER_SVR4 )
+	{
+		/* Why this, you ask???  Well SVr4 maps page 0 as read-only,
+		   and some applications "depend" upon this behavior.
+		   Since we do not have the power to recompile these, we
+		   emulate the SVr4 behavior.  Sigh.  */
+		error = do_mmap(NULL, 0, 4096, PROT_READ | PROT_EXEC,
+				MAP_FIXED | MAP_PRIVATE, 0);
+	}
 
 	start_thread(regs, elf_entry, bprm->p);
 	if (current->flags & PF_PTRACED)

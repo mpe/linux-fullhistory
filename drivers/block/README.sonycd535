@@ -58,13 +58,17 @@ THANKS
 ======
 
 Many thanks to Ron Jeppesen (ronj.an@site007.saic.com) for getting
-this project off the ground.  He wrote the initial release and
-the first two patches to this driver (0.1, 0.2, and 0.3).
+this project off the ground.  He wrote the initial release
+and the first two patches to this driver (0.1, 0.2, and 0.3).
 Thanks also to Eberhard Moenkeberg (emoenke@gwdg.de) for prodding
-me to place this code into the mainstream Linux source tree (as
-of Linux version 1.1.91), as well as some patches to make it a
-better device citizen.  Further thanks to "S. Joel Katz"
-<stimpson@panix.com> for his MODULE patches (see details below).
+me to place this code into the mainstream Linux source tree
+(as of Linux version 1.1.91), as well as some patches to make
+it a better device citizen.  Further thanks to "S. Joel Katz"
+<stimpson@panix.com> for his MODULE patches (see details below),
+Porfiri Claudio <C.Porfiri@nisms.tei.ericsson.se> for patches
+to make the driver work with the older CDU-510/515 series, and
+Heiko Eissfeldt <heiko@colossus.escape.de> for pointing out that
+the verify_area() checks were ignoring the results of said checks.
 
 (Acknowledgments from Ron Jeppesen in the 0.3 release:)
 Thanks to Corey Minyard who wrote the original CDU-31A driver on which

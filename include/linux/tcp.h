@@ -37,15 +37,15 @@ struct tcphdr {
 		urg:1,
 		res2:2;
 #elif defined(BIG_ENDIAN_BITFIELD)
-	__u16	res2:2,
+	__u16	doff:4,
+		res1:4,
+		res2:2,
 		urg:1,
 		ack:1,
 		psh:1,
 		rst:1,
 		syn:1,
-		fin:1,
-		doff:4,
-		res1:4;
+		fin:1;
 #else
 #error	"Adjust your <asm/byteorder.h> defines"
 #endif	

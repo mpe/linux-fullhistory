@@ -11,7 +11,7 @@
  *            Also for the TEAC CD-55A drive.
  *            Not for Funai or Sanyo drives.
  *
- *  NOTE:     This is release 3.6.
+ *  NOTE:     This is release 3.7.
  *
  *  VERSION HISTORY
  *
@@ -207,6 +207,13 @@
  *       Initial size of the READ_AUDIO buffer is 0. Can get set to any size
  *       during runtime.
  *
+ *  3.7  Introduced MAX_DRIVES for some poor interface cards (seen with TEAC
+ *       drives) which allow only one drive (ID 0); this avoids repetitive
+ *       detection under IDs 1..3. 
+ *       Elongated cmd_out_T response waiting; necessary for photo CDs with
+ *       a lot of sessions.
+ *       Bettered the sbpcd_open() behavior with TEAC drives.
+ *
  *  TODO
  *
  *     disk change detection
@@ -288,13 +295,7 @@ char kernel_version[]=UTS_RELEASE;
 
 #include "blk.h"
 
-#define VERSION "v3.6-1 Eberhard Moenkeberg <emoenke@gwdg.de>"
-
-#if 0
-#define INLINE
-#else
-#define INLINE inline
-#endif
+#define VERSION "v3.7 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 /*==========================================================================*/
 /*
@@ -406,6 +407,9 @@ extern unsigned long sbpcd4_init(unsigned long, unsigned long);
 #endif
 
 /*==========================================================================*/
+
+#define INLINE inline
+
 /*==========================================================================*/
 /*
  * the forward references:
@@ -533,8 +537,9 @@ static u_char infobuf[20];
 static u_char xa_head_buf[CD_XA_HEAD];
 static u_char xa_tail_buf[CD_XA_TAIL];
 
+static volatile u_char busy_data=0;
+static volatile u_char busy_audio=0; /* true semaphores would be safer */
 static u_long timeout;
-static u_char busy_data=0, busy_audio=0; /* true semaphores would be safer */
 static volatile u_char timed_out_delay=0;
 static volatile u_char timed_out_data=0;
 #if 0
@@ -1017,21 +1022,29 @@ static int ResponseInfo(void)
 					st=inb(CDi_status);
 					if (!(st&s_not_result_ready)) break;
 				}
-				if (j != 0 || timeout <= jiffies) break;
-				sbp_sleep(0);
+				if ((j!=0)||(timeout<=jiffies)) break;
+				sbp_sleep(1);
 				j = 1;
 			}
-			if (timeout <= jiffies) break;
+			if (timeout<=jiffies) break;
 			infobuf[i]=inb(CDi_info);
 		}
 	}
+#if 000
+	while (!(inb(CDi_status)&s_not_result_ready))
+	{
+		infobuf[i++]=inb(CDi_info);
+	}
+	j=i-response_count;
+	if (j>0) msg(DBG_INF,"ResponseInfo: got %d trailing bytes.\n",j);
+#endif 000
 	for (j=0;j<i;j++)
 		sprintf(&msgbuf[j*3]," %02X",infobuf[j]);
 	msgbuf[j*3]=0;
 	msg(DBG_CMD,"ResponseInfo:%s (%d,%d)\n",msgbuf,response_count,i);
-	st=response_count-i;
-	if (st>0) st=-st;
-	return (st);
+	j=response_count-i;
+	if (j>0) return (-j);
+	else return (i);
 }
 /*==========================================================================*/
 static void EvaluateStatus(int st)
@@ -1253,7 +1266,7 @@ static int cc_ReadError(void)
 static int cmd_out_T(void)
 {
 #undef CMDT_TRIES
-#define CMDT_TRIES 100
+#define CMDT_TRIES 1000
 	
 	static int cc_DriveReset(void);
 	int i, j, l, ntries;
@@ -1358,7 +1371,7 @@ static int cmd_out_T(void)
 			return (-D_S[d].error_state-400);
 		}
 		if (drvcmd[0]==CMDT_READ) return (0); /* handled elsewhere */
-		sbp_sleep(1);
+		sbp_sleep(10);
 		if (ntries>(CMDT_TRIES-50)) continue;
 		msg(DBG_TEA,"cmd_out_T: next CMDT_TRIES (%02X): %d.\n", drvcmd[0], ntries-1);
 	}
@@ -1414,7 +1427,7 @@ static int cmd_out(void)
 		if (D_S[d].in_SpinUp) msg(DBG_SPI,"in_SpinUp: to ResponseStatus.\n");
 		i=ResponseStatus();
 		/* builds status_bits, returns orig. status or p_busy_new */
-		if (i<0) return (-9);
+		if (i<0) return (i);
 		if (flags_cmd_out&(f_bit1|f_wait_if_busy))
 		{
 			if (!st_check)
@@ -2083,15 +2096,18 @@ static int LockDoor(void)
 		sbp_sleep(1);
 	}
 	while ((i<0)&&(j));
-	if (j==0) cc_DriveReset();
-	j=20;
-	do
-	{
-		i=cc_LockDoor(1);
-		--j;
-		sbp_sleep(1);
+	if (j==0)
+	{		
+		cc_DriveReset();
+		j=20;
+		do
+		{
+			i=cc_LockDoor(1);
+			--j;
+			sbp_sleep(1);
+		}
+		while ((i<0)&&(j));
 	}
-	while ((i<0)&&(j));
 	return (i);
 }
 /*==========================================================================*/
@@ -2243,7 +2259,7 @@ static int cc_ModeSense(void)
 	else if (famT_drive)
 	{
 		D_S[d].sense_byte=0;
-		if (infobuf[4]==0x01) D_S[d].xa_byte=0x20;
+		if (infobuf[4]==0x01) D_S[d].xa_byte=0x20; /* wrong!!!! */
 		i=2;
 	}
 	D_S[d].frame_size=make16(infobuf[i],infobuf[i+1]);
@@ -3204,7 +3220,7 @@ static int check_version(void)
 			if (D_S[d].firmware_version[j]!=lcs_firm_f4[j]) break;
 		if (j==4) D_S[d].drv_type=drv_f4;
 
-		if (!D_S[d].drv_type) ask_mail();
+		if (D_S[d].drv_type==drv_famL) ask_mail();
 	}
 	else if (famT_drive)
 	{
@@ -3382,7 +3398,7 @@ static int check_drives(void)
 	
 	msg(DBG_INI,"check_drives entered.\n");
 	ndrives=0;
-	for (j=0;j<NR_SBPCD;j++)
+	for (j=0;j<MAX_DRIVES;j++)
 	{
 		D_S[ndrives].drv_id=j;
 		if (sbpro_type==1) D_S[ndrives].drv_sel=(j&0x01)<<1|(j&0x02)>>1;
@@ -3624,7 +3640,7 @@ static int DiskInfo(void)
 		return (i);
 	}
 	if (D_S[d].f_multisession) D_S[d].sbp_bufsiz=1;  /* possibly a weird PhotoCD */
-	
+	else D_S[d].sbp_bufsiz=SBP_BUFFER_FRAMES;
 	i=cc_ReadTocEntry(D_S[d].n_first_track);
 	if (i<0)
 	{
@@ -4823,6 +4839,7 @@ static int sbpcd_open(struct inode *ip, struct file *fp)
 	{
 		cc_DriveReset();
 		i=ResponseStatus();
+		i=ResponseStatus();
 	}
 	if (i<0)
 	{
@@ -5065,12 +5082,12 @@ int init_module(void)
 		msg(DBG_INF,"Auto-Probing can cause a hang (f.e. touching an ethernet card).\n");
 		msg(DBG_INF,"If that happens, you have to reboot and use the\n");
 		msg(DBG_INF,"LILO (kernel) command line feature like:\n");
-		msg(DBG_INF,"\n   LILO boot: ... sbpcd=0x230,SoundBlaster\n");
+		msg(DBG_INF,"   LILO boot: ... sbpcd=0x230,SoundBlaster\n");
 		msg(DBG_INF,"or like:\n");
 		msg(DBG_INF,"   LILO boot: ... sbpcd=0x300,LaserMate\n");
 		msg(DBG_INF,"or like:\n");
 		msg(DBG_INF,"   LILO boot: ... sbpcd=0x330,SPEA\n");
-		msg(DBG_INF,"\nwith your REAL address.\n");
+		msg(DBG_INF,"with your REAL address.\n");
 		msg(DBG_INF,"= = = = = = = = = = END of WARNING = = = = = = = = = =\n\n");
 	}
 #endif DISTRIBUTION
@@ -5153,8 +5170,10 @@ int init_module(void)
 		
 		cc_ReadStatus();
 		i=ResponseStatus();  /* returns orig. status or p_busy_new */
+		if (famT_drive) i=ResponseStatus();  /* returns orig. status or p_busy_new */
 		if (i<0)
-			msg(DBG_INF,"init: ResponseStatus returns %02X\n",i);
+			if (i!=-402)
+				msg(DBG_INF,"init: ResponseStatus returns %d.\n",i);
 		else
 		{
 			if (st_check)

@@ -1,9 +1,9 @@
-This README belongs to release 3.5 or newer of the SoundBlaster Pro
-(Matsushita, Kotobuki, Panasonic, CreativeLabs, Longshine and soon TEAC, too)
+This README belongs to release 3.7 or newer of the SoundBlaster Pro
+(Matsushita, Kotobuki, Panasonic, CreativeLabs, Longshine and TEAC)
 CD-ROM driver for Linux.
 
 The driver is able to drive the whole family of "traditional" IDE-style (that
-has nothing to do with the new "Enhanced IDE" drive standard) Matsushita,
+is NOT the new "Enhanced IDE" or "ATAPI" drive standard) Matsushita,
 Kotobuki, Panasonic drives, sometimes labelled as "CreativeLabs". The
 well-known drives are CR-521, CR-522, CR-523, CR-562, CR-563.
 
@@ -42,6 +42,10 @@ work.
 The interface type has to get configured in /usr/include/linux/sbpcd.h, 
 because the behavior of some sound card interfaces is different.
 
+With some TEAC drives I have seen interface cards which seem to lack the
+"drive select" lines; always drive 0 gets addressed. To avoid "mirror drives"
+with such interface cards, set MAX_DRIVES to 1 and jumper your drive to ID 0.
+
 The driver respects all known drive firmware releases - my old drive is a 2.11,
 but it should work with CR-52x drives <2.01 ... >3.00 and with CR-56x drives
 <0.75 .. 5.00.
@@ -79,9 +83,8 @@ The audio part should run with WorkMan, xcdplayer, with the "non-X11" products
 CDplayer and WorkBone - tell me if it is not compatible with other software.
 
 With the CR-562 and CR-563 drives, the reading of audio frames is possible.
-This is implemented by an IOCTL function which per default reads only up to
-4 frames of 2352 bytes at once (configurable with the "READ_AUDIO" define,
-"55" is the maximum if you use sbpcd as a "module").
+This is implemented by an IOCTL function which reads READ_AUDIO frames of
+2352 bytes at once (configurable with the "READ_AUDIO" define, default is 0).
 Reading the same frame a second time gives different data; the frame data 
 start at a different position, but all read bytes are valid, and we always
 read 98 consecutive chunks (of 24 Bytes) as a frame. Reading more than 1 frame
@@ -89,8 +92,8 @@ at once possibly misses some chunks at each frame boundary. This lack has to
 get corrected by external, "higher level" software which reads the same frame 
 again and tries to find and eliminate overlapping chunks (24-byte-pieces).
 
-The transfer rate with reading audio (1-frame-pieces) is as slow as 32 kB/sec.
-This could be better reading bigger chunks, but the "missing" chunks possibly
+The transfer rate with reading audio (1-frame-pieces) currently is very slow.
+This can be better reading bigger chunks, but the "missing" chunks possibly
 occur at the beginning of each single frame.
 The software interface possibly may change a bit the day the SCSI driver
 supports it too.

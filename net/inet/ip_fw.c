@@ -961,7 +961,7 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 			ntohl(i->fw_src.s_addr),ntohl(i->fw_smsk.s_addr),
 			ntohl(i->fw_dst.s_addr),ntohl(i->fw_dmsk.s_addr),
 			ntohl(i->fw_via.s_addr),i->fw_flg);
-		len+=sprintf(buffer+len,"%u %u %lu %lu",
+		len+=sprintf(buffer+len,"%u %u %10lu %10lu",
 			i->fw_nsp,i->fw_ndp, i->fw_pcnt,i->fw_bcnt);
 		for (p = 0; p < IP_FW_MAX_PORTS; p++)
 			len+=sprintf(buffer+len, " %u", i->fw_pts[p]);
