@@ -67,13 +67,13 @@ static u_char *xd_bases[] = { (u_char *) 0xC8000,(u_char *) 0xCA000,(u_char *) 0
 
 static struct hd_struct xd[XD_MAXDRIVES << 6];
 static int xd_sizes[XD_MAXDRIVES << 6],xd_access[XD_MAXDRIVES] = { 0,0 };
+static int xd_blocksizes[XD_MAXDRIVES << 6];
 static struct gendisk xd_gendisk = { MAJOR_NR,"xd",6,1 << 6,XD_MAXDRIVES,xd_geninit,xd,xd_sizes,0,(void *) xd_info,NULL };
 static struct file_operations xd_fops = { NULL,block_read,block_write,NULL,NULL,xd_ioctl,NULL,xd_open,xd_release,block_fsync };
 
-static struct wait_queue *xd_wait_exclusive = NULL,*xd_wait_int = NULL,*xd_wait_open = NULL;
+static struct wait_queue *xd_wait_int = NULL,*xd_wait_open = NULL;
 static u_char xd_valid[XD_MAXDRIVES] = { 0,0 };
-static u_char xd_busy = 0,xd_drives = 0;
-static u_char xd_irq,xd_dma,xd_maxsectors;
+static u_char xd_drives = 0,xd_irq,xd_dma,xd_maxsectors;
 static u_short xd_iobase;
 
 /* xd_init: grab the IRQ and DMA channel and initialise the drives */
@@ -120,7 +120,7 @@ static u_char xd_detect (u_char *controller,u_char **address)
 
 	for (i = 0; i < (sizeof(xd_bases) / sizeof(xd_bases[0])) && !found; i++)
 		for (j = 1; j < (sizeof(xd_sigs) / sizeof(xd_sigs[0])) && !found; j++)
-			if (!memcmp((u_char *) (xd_bases[i] + xd_sigs[j].offset),xd_sigs[j].string,strlen(xd_sigs[j].string))) {
+			if (!memcmp(xd_bases[i] + xd_sigs[j].offset,xd_sigs[j].string,strlen(xd_sigs[j].string))) {
 				*controller = j;
 				*address = xd_bases[i];
 				found++;
@@ -144,6 +144,9 @@ static void xd_geninit (void)
 	}
 
 	xd_gendisk.nr_real = xd_drives;
+
+	for(i=0;i<(XD_MAXDRIVES << 6);i++) xd_blocksizes[i] = 1024;
+	blksize_size[MAJOR_NR] = xd_blocksizes;
 }
 
 /* xd_open: open a device */
@@ -234,8 +237,6 @@ static void xd_release (struct inode *inode, struct file *file)
 }
 
 /* xd_reread_partitions: rereads the partition table from a drive */
-
-/* xd_reread_partitions: rereads the partition table from a drive */
 static int xd_reread_partitions(int dev)
 {
 	int target = DEVICE_NR(MINOR(dev)),start = target << xd_gendisk.minor_shift,partition;
@@ -262,7 +263,7 @@ static int xd_reread_partitions(int dev)
 }
 
 /* xd_readwrite: handle a read/write request */
-static int xd_readwrite (u_char operation,u_char drive,u_char *buffer,u_int block,u_int count)
+static int xd_readwrite (u_char operation,u_char drive,char *buffer,u_int block,u_int count)
 {
 	u_char cmdblk[6],sense[4];
 	u_short track,cylinder;
@@ -285,15 +286,11 @@ static int xd_readwrite (u_char operation,u_char drive,u_char *buffer,u_int bloc
 		printk("xd_readwrite: drive = %d, head = %d, cylinder = %d, sector = %d, count = %d\n",drive,head,cylinder,sector,temp);
 #endif DEBUG_READWRITE
 
-		if (xd_busy)				/* get exclusive access to the controller */
-			sleep_on(&xd_wait_exclusive);
-		xd_busy = 1;
-
-		mode = xd_setup_dma(operation == READ ? DMA_MODE_READ : DMA_MODE_WRITE,buffer,temp * 0x200);
+		mode = xd_setup_dma(operation == READ ? DMA_MODE_READ : DMA_MODE_WRITE,(u_char *)buffer,temp * 0x200);
 		xd_build(cmdblk,operation == READ ? CMD_READ : CMD_WRITE,drive,head,cylinder,sector,temp & 0xFF,control);
 
-		switch (xd_command(cmdblk,mode,buffer,buffer,sense,XD_TIMEOUT)) {
-			case 1: printk("xd_readwrite: timeout, recalibrating drive\n"); xd_recalibrate(drive); xd_busy = 0; wake_up(&xd_wait_exclusive); return (0);
+		switch (xd_command(cmdblk,mode,(u_char *) buffer,(u_char *) buffer,sense,XD_TIMEOUT)) {
+			case 1: printk("xd_readwrite: timeout, recalibrating drive\n"); xd_recalibrate(drive); return (0);
 			case 2: switch ((sense[0] & 0x30) >> 4) {
 					case 0: printk("xd_readwrite: drive error, code = 0x%X",sense[0] & 0x0F); break;
 					case 1: printk("xd_readwrite: controller error, code = 0x%X",sense[0] & 0x0F); break;
@@ -304,12 +301,9 @@ static int xd_readwrite (u_char operation,u_char drive,u_char *buffer,u_int bloc
 					printk(" - drive = %d, head = %d, cylinder = %d, sector = %d\n",sense[1] & 0xE0,sense[1] & 0x1F,((sense[2] & 0xC0) << 2) | sense[3],sense[2] & 0x3F);
 				else
 					printk(" - no valid disk address\n");
-				xd_busy = 0; wake_up(&xd_wait_exclusive);
 				return (0);
 		}
 		count -= temp, buffer += temp * 0x200, block += temp;
-
-		xd_busy = 0; wake_up(&xd_wait_exclusive);
 	}
 	return (1);
 }

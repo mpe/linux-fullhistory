@@ -13,6 +13,8 @@
 #define	SCSI_REMOVAL_PREVENT	1
 #define	SCSI_REMOVAL_ALLOW	0
 
+extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
+
 #endif
 
 

@@ -7,11 +7,12 @@ useful if you want to compile the kernel from scratch.  It leaves out a
 LOT as well, but it shouldn't really be that hard to compile the kernel. 
 I hope. 
 
-In order to compile this version of the kernel you need GCC 2.3.3 or
-newer (older compiler versions may work, but I haven't tested it).  Some
-makefile targets require special commands which may not be available on
-all machines (see below).  Normal utilities like ls etc are not
-explicitly listed, they are assumed to be available on all systems. 
+In order to compile this version of the kernel you need GCC 2.4.3 or
+newer (older compiler versions have problems - no guarantees it will
+even compile much less work).  Some makefile targets require special
+commands which may not be available on all machines (see below).  Normal
+utilities like ls etc are not explicitly listed, they are assumed to be
+available on all systems. 
 
 Kernel sources are usually kept in /usr/src/linux.  If you have them
 elsewhere, you will have to change path names in a few places. 

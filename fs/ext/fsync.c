@@ -127,7 +127,7 @@ static int sync_dindirect(struct inode *inode, unsigned long *diblock,
 	int rc, err = 0;
 
 	rc = sync_iblock (inode, diblock, &dind_bh, wait);
-	if (rc || !inode)
+	if (rc || !dind_bh)
 		return rc;
 	
 	for (i = 0; i < addr_per_block; i++) {

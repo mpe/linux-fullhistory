@@ -12,7 +12,7 @@
 #include <linux/shm.h>
 
 void ipc_init (void);
-int sys_ipc (uint call, int first, int second, int third, void *ptr); 
+extern "C" int sys_ipc (uint call, int first, int second, int third, void *ptr); 
 
 #ifdef CONFIG_SYSVIPC
 
@@ -63,7 +63,7 @@ int ipcperms (struct ipc_perm *ipcp, short flag)
 	return 0;
 }
 
-int sys_ipc (uint call, int first, int second, int third, void *ptr) 
+extern "C" int sys_ipc (uint call, int first, int second, int third, void *ptr) 
 {
 	
 	if (call <= SEMCTL)
@@ -119,7 +119,7 @@ int sys_ipc (uint call, int first, int second, int third, void *ptr)
 
 #else /* not CONFIG_SYSVIPC */
 
-int sys_ipc (uint call, int first, int second, int third, void *ptr) 
+extern "C" int sys_ipc (uint call, int first, int second, int third, void *ptr) 
 {
     return -ENOSYS;
 }

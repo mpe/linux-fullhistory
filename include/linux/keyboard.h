@@ -135,7 +135,7 @@ extern inline void chg_vc_kbd_flag(struct kbd_struct * kbd, int flag)
 #define NR_KEYS 112
 #define NR_KEYMAPS 3
 extern const int NR_TYPES;
-extern const unsigned char max_vals[];
+extern const int max_vals[];
 extern unsigned short key_map[NR_KEYMAPS][NR_KEYS];
 
 #define KT_LATIN	0	/* we depend on this being zero */

@@ -193,7 +193,7 @@ __set_fd_set(nr, (unsigned long *) (fsp), (unsigned long *) (fdp))
  * Update: ERESTARTSYS breaks at least the xview clock binary, so
  * I'm trying ERESTARTNOHAND which restart only when you want to.
  */
-int sys_select( unsigned long *buffer )
+extern "C" int sys_select( unsigned long *buffer )
 {
 /* Perform the select(nd, in, out, ex, tv) system call. */
 	int i;

@@ -123,8 +123,8 @@ struct mscp {
 
 /* The 14F uses an array of unaligned 4-byte ints for its scatter/gather list. */
 typedef struct {
-	Longword address;
-	Longword num_bytes;
+	unsigned long address;
+	unsigned long num_bytes;
 } ultrastor_sg_list;
 
 /* This is our semaphore for mscp block availability */
@@ -341,15 +341,15 @@ static inline void build_sg_list(Scsi_Cmnd *SCpnt)
 	int i;
 
 	sl = (struct scatterlist *) SCpnt->request_buffer;
-	SCpnt->host_scribble = scsi_malloc(512);
+	SCpnt->host_scribble = (unsigned char *) scsi_malloc(512);
 	if (SCpnt->host_scribble == NULL)
 		/* Not sure what to do here; just panic for now */
 		panic("US14F: Can't allocate DMA buffer for scatter-gather list!\n");
 	/* Save ourselves some casts; can eliminate when we don't have to look at it anymore! */
 	sglist = (ultrastor_sg_list *) SCpnt->host_scribble;
 	for (i = 0; i < SCpnt->use_sg; i++) {
-		sglist[i].address = *(Longword *)&(sl[i].address);
-		sglist[i].num_bytes = *(Longword *)&(sl[i].length);
+		sglist[i].address = sl[i].address;
+		sglist[i].num_bytes = sl[i].length;
 		transfer_length += sl[i].length;
 	}
 	mscp.number_of_sg_list = (char) SCpnt->use_sg;
@@ -491,15 +491,15 @@ int ultrastor_reset(void)
     return 0;
 }
 
-int ultrastor_biosparam(int size, int dev, int *info)
+int ultrastor_biosparam(int size, int dev, int *ip)
 {
     unsigned int s = config.heads * config.sectors;
 
-    info[0] = config.heads;
-    info[1] = config.sectors;
-    info[2] = (size + (s - 1)) / s;
-/*    if (info[2] > 1024)
-	info[2] = 1024; */
+    ip[0] = config.heads;
+    ip[1] = config.sectors;
+    ip[2] = (size + (s - 1)) / s;
+/*    if (ip[2] > 1024)
+	ip[2] = 1024; */
     return 0;
 }
 

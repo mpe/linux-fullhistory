@@ -45,7 +45,7 @@ struct wait_queue * log_wait = NULL;
  * 	6 -- Disable printk's to console
  * 	7 -- Enable printk's to console
  */
-int sys_syslog(int type, char * buf, int len)
+extern "C" int sys_syslog(int type, char * buf, int len)
 {
 	unsigned long i, j, count;
 	int do_clear = 0;
@@ -118,7 +118,7 @@ int sys_syslog(int type, char * buf, int len)
 }
 			
 
-int printk(const char *fmt, ...)
+extern "C" int printk(const char *fmt, ...)
 {
 	va_list args;
 	int i,j;

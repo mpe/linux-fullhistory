@@ -491,7 +491,7 @@ inet_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
   struct sock *sk;
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -526,7 +526,7 @@ inet_setsockopt(struct socket *sock, int level, int optname,
   /* This should really pass things on to the other levels. */
   if (level != SOL_SOCKET) return(-EOPNOTSUPP);
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -591,7 +591,7 @@ inet_getsockopt(struct socket *sock, int level, int optname,
   /* This should really pass things on to the other levels. */
   if (level != SOL_SOCKET) return(-EOPNOTSUPP);
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -654,7 +654,7 @@ inet_listen(struct socket *sock, int backlog)
 {
   struct sock *sk;
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -685,7 +685,7 @@ inet_create(struct socket *sock, int protocol)
   struct proto *prot;
   int err;
 
-  sk = kmalloc(sizeof(*sk), GFP_KERNEL);
+  sk = (struct sock *) kmalloc(sizeof(*sk), GFP_KERNEL);
   if (sk == NULL) return(-ENOMEM);
   sk->num = 0;
 
@@ -759,6 +759,8 @@ inet_create(struct socket *sock, int protocol)
   sk->fin_seq = 0;
   sk->proc = 0;
   sk->rtt = TCP_WRITE_TIME;
+  sk->mdev = 0;
+  sk->backoff = 0;
   sk->packets_out = 0;
   sk->cong_window = 1; /* start with only sending one packet at a time. */
   sk->exp_growth = 1;  /* if set cong_window grow exponentially every time
@@ -859,7 +861,7 @@ inet_release(struct socket *sock, struct socket *peer)
 {
   struct sock *sk;
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) return(0);
 
   DPRINTF((DBG_INET, "inet_release(sock = %X, peer = %X)\n", sock, peer));
@@ -910,7 +912,7 @@ inet_bind(struct socket *sock, struct sockaddr *uaddr,
   struct sock *sk, *sk2;
   unsigned short snum;
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -935,7 +937,7 @@ inet_bind(struct socket *sock, struct sockaddr *uaddr,
 
   snum = ntohs(addr.sin_port);
   DPRINTF((DBG_INET, "bind sk =%X to port = %d\n", sk, snum));
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
 
   /*
    * We can't just leave the socket bound wherever it is, it might
@@ -943,7 +945,7 @@ inet_bind(struct socket *sock, struct sockaddr *uaddr,
    * be a bug here, we will leave it if the port is not privileged.
    */
   if (snum == 0) {
-	if (sk->num > PROT_SOCK) return(0);
+/*	if (sk->num > PROT_SOCK) return(0); */
 	snum = get_new_socknum(sk->prot, 0);
   }
   if (snum <= PROT_SOCK && !suser()) return(-EACCES);
@@ -955,13 +957,13 @@ inet_bind(struct socket *sock, struct sockaddr *uaddr,
 	  		sk->prot->sock_array[snum &(SOCK_ARRAY_SIZE -1)]));
 
   /* Make sure we are allowed to bind here. */
-outside_loop:
   cli();
+outside_loop:
   for(sk2 = sk->prot->sock_array[snum & (SOCK_ARRAY_SIZE -1)];
 					sk2 != NULL; sk2 = sk2->next) {
 #if 	1	/* should be below! */
 	if (sk2->num != snum) continue;
-	if (sk2->saddr != sk->saddr) continue;
+/*	if (sk2->saddr != sk->saddr) continue; */
 #endif
 	if (sk2->dead) {
 		destroy_sock(sk2);
@@ -995,7 +997,7 @@ inet_connect(struct socket *sock, struct sockaddr * uaddr,
   int err;
 
   sock->conn = NULL;
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -1051,7 +1053,7 @@ inet_accept(struct socket *sock, struct socket *newsock, int flags)
 {
   struct sock *sk1, *sk2;
 
-  sk1 = sock->data;
+  sk1 = (struct sock *) sock->data;
   if (sk1 == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -1080,7 +1082,7 @@ inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	}
   }
   newsock->data = (void *)sk2;
-  sk2->sleep = (void *)newsock->wait;
+  sk2->sleep = newsock->wait;
   newsock->conn = NULL;
   if (flags & O_NONBLOCK) return(0);
 
@@ -1124,7 +1126,7 @@ inet_getname(struct socket *sock, struct sockaddr *uaddr,
   if (len < sizeof(sin)) return(-EINVAL);
 
   sin.sin_family = AF_INET;
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -1152,7 +1154,7 @@ inet_read(struct socket *sock, char *ubuf, int size, int noblock)
 {
   struct sock *sk;
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -1165,7 +1167,7 @@ inet_read(struct socket *sock, char *ubuf, int size, int noblock)
 	put_sock(sk->num, sk);
 	sk->dummy_th.source = ntohs(sk->num);
   }
-  return(sk->prot->read(sk, ubuf, size, noblock,0));
+  return(sk->prot->read(sk, (unsigned char *) ubuf, size, noblock,0));
 }
 
 
@@ -1175,7 +1177,7 @@ inet_recv(struct socket *sock, void *ubuf, int size, int noblock,
 {
   struct sock *sk;
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -1188,7 +1190,7 @@ inet_recv(struct socket *sock, void *ubuf, int size, int noblock,
 	put_sock(sk->num, sk);
 	sk->dummy_th.source = ntohs(sk->num);
   }
-  return(sk->prot->read(sk, ubuf, size, noblock, flags));
+  return(sk->prot->read(sk, (unsigned char *) ubuf, size, noblock, flags));
 }
 
 
@@ -1197,7 +1199,7 @@ inet_write(struct socket *sock, char *ubuf, int size, int noblock)
 {
   struct sock *sk;
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -1215,7 +1217,7 @@ inet_write(struct socket *sock, char *ubuf, int size, int noblock)
 	sk->dummy_th.source = ntohs(sk->num);
   }
 
-  return(sk->prot->write(sk, ubuf, size, noblock, 0));
+  return(sk->prot->write(sk, (unsigned char *) ubuf, size, noblock, 0));
 }
 
 
@@ -1225,7 +1227,7 @@ inet_send(struct socket *sock, void *ubuf, int size, int noblock,
 {
   struct sock *sk;
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -1243,7 +1245,7 @@ inet_send(struct socket *sock, void *ubuf, int size, int noblock,
 	sk->dummy_th.source = ntohs(sk->num);
   }
 
-  return(sk->prot->write(sk, ubuf, size, noblock, flags));
+  return(sk->prot->write(sk, (unsigned char *) ubuf, size, noblock, flags));
 }
 
 
@@ -1253,7 +1255,7 @@ inet_sendto(struct socket *sock, void *ubuf, int size, int noblock,
 {
   struct sock *sk;
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -1273,7 +1275,7 @@ inet_sendto(struct socket *sock, void *ubuf, int size, int noblock,
 	sk->dummy_th.source = ntohs(sk->num);
   }
 
-  return(sk->prot->sendto(sk, ubuf, size, noblock, flags, 
+  return(sk->prot->sendto(sk, (unsigned char *) ubuf, size, noblock, flags, 
 			   (struct sockaddr_in *)sin, addr_len));
 }
 
@@ -1284,7 +1286,7 @@ inet_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 {
   struct sock *sk;
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -1300,7 +1302,7 @@ inet_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	sk->dummy_th.source = ntohs(sk->num);
   }
 
-  return(sk->prot->recvfrom(sk, ubuf, size, noblock, flags,
+  return(sk->prot->recvfrom(sk, (unsigned char *) ubuf, size, noblock, flags,
 			     (struct sockaddr_in*)sin, addr_len));
 }
 
@@ -1318,7 +1320,7 @@ inet_shutdown(struct socket *sock, int how)
 		       1->2 bit 2 snds.
 		       2->3 */
   if (how & ~SHUTDOWN_MASK) return(-EINVAL);
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -1338,7 +1340,7 @@ inet_select(struct socket *sock, int sel_type, select_table *wait )
 {
   struct sock *sk;
 
-  sk = sock->data;
+  sk = (struct sock *) sock->data;
   if (sk == NULL) {
 	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return(0);
@@ -1359,7 +1361,7 @@ inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
   DPRINTF((DBG_INET, "INET: in inet_ioctl\n"));
   sk = NULL;
-  if (sock && (sk = sock->data) == NULL) {
+  if (sock && (sk = (struct sock *) sock->data) == NULL) {
 	printk("AF_INET: Warning: sock->data = NULL: %d\n" , __LINE__);
 	return(0);
   }
@@ -1368,13 +1370,13 @@ inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case FIOSETOWN:
 	case SIOCSPGRP:
 		if (sk)
-			sk->proc = get_fs_long((void *) arg);
+			sk->proc = get_fs_long((int *) arg);
 		return(0);
 	case FIOGETOWN:
 	case SIOCGPGRP:
 		if (sk) {
 			verify_area(VERIFY_WRITE,(void *) arg, sizeof(long));
-			put_fs_long(sk->proc,(void *)arg);
+			put_fs_long(sk->proc,(int *)arg);
 		}
 		return(0);
 #if 0	/* FIXME: */

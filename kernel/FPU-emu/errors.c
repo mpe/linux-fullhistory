@@ -225,7 +225,7 @@ static struct {
 	      0x218  in reg_round.S
  */
 
-void exception(int n)
+extern "C" void exception(int n)
 {
   int i, int_type;
 
@@ -306,7 +306,7 @@ void exception(int n)
 
 
 /* Real operation attempted on two operands, one a NaN */
-void real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
+extern "C" void real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 {
   FPU_REG *x;
   int signalling;
@@ -368,7 +368,7 @@ void real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 }
 
 /* Invalid arith operation on Valid registers */
-void arith_invalid(FPU_REG *dest)
+extern "C" void arith_invalid(FPU_REG *dest)
 {
   
   if ( control_word & CW_Invalid )
@@ -385,7 +385,7 @@ void arith_invalid(FPU_REG *dest)
 
 
 /* Divide a finite number by zero */
-void divide_by_zero(int sign, FPU_REG *dest)
+extern "C" void divide_by_zero(int sign, FPU_REG *dest)
 {
 
   if ( control_word & CW_ZeroDiv )
@@ -403,7 +403,7 @@ void divide_by_zero(int sign, FPU_REG *dest)
 
 
 /* This may be called often, so keep it lean */
-void set_precision_flag_up(void)
+extern "C" void set_precision_flag_up(void)
 {
   if ( control_word & CW_Precision )
     status_word |= (SW_Precision | SW_C1);   /* The masked response */
@@ -414,7 +414,7 @@ void set_precision_flag_up(void)
 
 
 /* This may be called often, so keep it lean */
-void set_precision_flag_down(void)
+extern "C" void set_precision_flag_down(void)
 {
   if ( control_word & CW_Precision )
     {   /* The masked response */
@@ -426,7 +426,7 @@ void set_precision_flag_down(void)
 }
 
 
-int denormal_operand(void)
+extern "C" int denormal_operand(void)
 {
   if ( control_word & CW_Denormal )
     {   /* The masked response */
@@ -441,7 +441,7 @@ int denormal_operand(void)
 }
 
 
-void arith_overflow(FPU_REG *dest)
+extern "C" void arith_overflow(FPU_REG *dest)
 {
 
   if ( control_word & CW_Overflow )
@@ -468,7 +468,7 @@ void arith_overflow(FPU_REG *dest)
 }
 
 
-void arith_underflow(FPU_REG *dest)
+extern "C" void arith_underflow(FPU_REG *dest)
 {
 
   if ( control_word & CW_Underflow )

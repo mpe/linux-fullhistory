@@ -25,11 +25,19 @@ int seagate_st0x_reset(void);
 	#define NULL 0
 #endif
 
+#ifdef CONFIG_BLK_DEV_SD
 #define SEAGATE_ST0X  {"Seagate ST-01/ST-02", seagate_st0x_detect, 	\
 			 seagate_st0x_info, seagate_st0x_command,  	\
 			 seagate_st0x_queue_command, seagate_st0x_abort, \
-			 seagate_st0x_reset, NULL, seagate_st0x_biosparam,		\
+			 seagate_st0x_reset, NULL, seagate_st0x_biosparam, \
 			 1, 7, SG_ALL, 1, 0, 0}
+#else
+#define SEAGATE_ST0X  {"Seagate ST-01/ST-02", seagate_st0x_detect, 	\
+			 seagate_st0x_info, seagate_st0x_command,  	\
+			 seagate_st0x_queue_command, seagate_st0x_abort, \
+			 seagate_st0x_reset, NULL, NULL, \
+			 1, 7, SG_ALL, 1, 0, 0}
+#endif /* CONFIG_BLK_DEV_SD */
 #endif
 
 

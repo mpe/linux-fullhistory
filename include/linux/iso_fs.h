@@ -136,12 +136,23 @@ extern int find_rock_ridge_relocation(struct iso_directory_record *, struct inod
 #define ISOFS_BLOCK_BITS 11
 #define ISOFS_BLOCK_SIZE 2048
 
+#define ISOFS_BUFFER_SIZE(INODE) ((INODE)->i_sb->s_blocksize)
+#define ISOFS_BUFFER_BITS(INODE) ((INODE)->i_sb->s_blocksize_bits)
+
+#if 0
+#ifdef ISOFS_FIXED_BLOCKSIZE
 /* We use these until the buffer cache supports 2048 */
 #define ISOFS_BUFFER_BITS 10
 #define ISOFS_BUFFER_SIZE 1024
 
 #define ISOFS_BLOCK_NUMBER(X) (X<<1)
+#else
+#define ISOFS_BUFFER_BITS 11
+#define ISOFS_BUFFER_SIZE 2048
 
+#define ISOFS_BLOCK_NUMBER(X) (X)
+#endif
+#endif
 
 #define ISOFS_SUPER_MAGIC 0x9660
 #define ISOFS_FILE_UNKNOWN 0
@@ -178,9 +189,6 @@ extern struct inode_operations isofs_symlink_inode_operations;
 extern struct inode_operations isofs_chrdev_inode_operations;
 extern struct inode_operations isofs_blkdev_inode_operations;
 extern struct inode_operations isofs_fifo_inode_operations;
-
-extern struct file_operations isofs_file_operations;
-extern struct file_operations isofs_dir_operations;
 
 struct lookup_cache{
   char lock;

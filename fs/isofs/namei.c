@@ -66,7 +66,7 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 {
 	unsigned int block,i, f_pos, offset, inode_number;
 	struct buffer_head * bh;
-	char * cpnt = 0;
+	void * cpnt = NULL;
 	unsigned int old_offset;
 	unsigned int backlink;
 	int dlen, rrflag, match;
@@ -81,14 +81,15 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
   
 	f_pos = 0;
 	
-	offset = f_pos & (ISOFS_BUFFER_SIZE - 1);
-	block = isofs_bmap(dir,f_pos >> ISOFS_BUFFER_BITS);
-	if (!block || !(bh = bread(dir->i_dev,block,ISOFS_BUFFER_SIZE))) return NULL;
+	offset = f_pos & (ISOFS_BUFFER_SIZE(dir) - 1);
+	block = isofs_bmap(dir,f_pos >> ISOFS_BUFFER_BITS(dir));
+
+	if (!block || !(bh = bread(dir->i_dev,block,ISOFS_BUFFER_SIZE(dir)))) return NULL;
   
 	while (f_pos < dir->i_size) {
 		de = (struct iso_directory_record *) (offset + bh->b_data);
 		backlink = dir->i_ino;
-		inode_number = (block << ISOFS_BUFFER_BITS)+(offset & (ISOFS_BUFFER_SIZE - 1));
+		inode_number = (block << ISOFS_BUFFER_BITS(dir))+(offset & (ISOFS_BUFFER_SIZE(dir) - 1));
 		
 		/* If byte is zero, this is the end of file, or time to move to
 		   the next sector. Usually 2048 byte boundaries. */
@@ -97,8 +98,8 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 			brelse(bh);
 			offset = 0;
 			f_pos =(f_pos & ~(ISOFS_BLOCK_SIZE - 1))+ISOFS_BLOCK_SIZE;
-			block = isofs_bmap(dir,(f_pos)>>ISOFS_BUFFER_BITS);
-			if (!block || !(bh = bread(dir->i_dev,block,ISOFS_BUFFER_SIZE)))
+			block = isofs_bmap(dir,(f_pos)>>ISOFS_BUFFER_BITS(dir));
+			if (!block || !(bh = bread(dir->i_dev,block,ISOFS_BUFFER_SIZE(dir))))
 				return 0;
 			continue; /* Will kick out if past end of directory */
 		};
@@ -107,19 +108,19 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 		offset += *((unsigned char*) de);
 		f_pos += *((unsigned char*) de);
 		
+		
 		/* Handle case where the directory entry spans two blocks. Usually
 		   1024 byte boundaries */
-		
-		if (offset >=  ISOFS_BUFFER_SIZE) {
+		if (offset >=  ISOFS_BUFFER_SIZE(dir)) {
 			cpnt = kmalloc(1 << ISOFS_BLOCK_BITS, GFP_KERNEL);
-			memcpy(cpnt, bh->b_data, ISOFS_BUFFER_SIZE);
+			memcpy(cpnt, bh->b_data, ISOFS_BUFFER_SIZE(dir));
 			de = (struct iso_directory_record *) (old_offset + cpnt);
 			brelse(bh);
-			offset = f_pos & (ISOFS_BUFFER_SIZE - 1);
-			block = isofs_bmap(dir,f_pos>>ISOFS_BUFFER_BITS);
-			if (!block || !(bh = bread(dir->i_dev,block,ISOFS_BUFFER_SIZE)))
+			offset = f_pos & (ISOFS_BUFFER_SIZE(dir) - 1);
+			block = isofs_bmap(dir,f_pos>>ISOFS_BUFFER_BITS(dir));
+			if (!block || !(bh = bread(dir->i_dev,block,ISOFS_BUFFER_SIZE(dir))))
 				return 0;
-			memcpy(cpnt+ISOFS_BUFFER_SIZE, bh->b_data, ISOFS_BUFFER_SIZE);
+			memcpy(cpnt+ISOFS_BUFFER_SIZE(dir), bh->b_data, ISOFS_BUFFER_SIZE(dir));
 		}
 		
 		/* Handle the '.' case */
@@ -133,9 +134,9 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 
 		if (de->name[0]==1 && de->name_len[0]==1) {
 #if 0
-			printk("Doing .. (%d %d)",dir->i_sb->s_firstdatazone << ISOFS_BUFFER_BITS, dir->i_ino);
+			printk("Doing .. (%d %d)",dir->i_sb->s_firstdatazone << ISOFS_BUFFER_BITS(dir), dir->i_ino);
 #endif
-			if((dir->i_sb->u.isofs_sb.s_firstdatazone << ISOFS_BUFFER_BITS) != dir->i_ino)
+			if((dir->i_sb->u.isofs_sb.s_firstdatazone << ISOFS_BUFFER_BITS(dir)) != dir->i_ino)
 				inode_number = dir->u.isofs_i.i_backlink;
 			else
 				inode_number = dir->i_ino;
@@ -166,7 +167,10 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 		  };
 		};
 		match = isofs_match(namelen,name,dpnt, dlen);
-		if (cpnt) { kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS); cpnt = 0;};
+		if (cpnt) {
+			kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
+			cpnt = NULL;
+		}
 
 		if(rrflag) kfree(dpnt);
 		if (match) {
@@ -241,8 +245,9 @@ int isofs_lookup(struct inode * dir,const char * name, int len,
 
 	/* We need this backlink for the .. entry */
 	
-	if (ino_back && !(*result)->i_pipe)
-		(*result)->u.isofs_i.i_backlink = ino_back; 
+	if (ino_back && !(*result)->i_pipe) 
+	  (*result)->u.isofs_i.i_backlink = ino_back; 
+	
 	iput(dir);
 	return 0;
 }

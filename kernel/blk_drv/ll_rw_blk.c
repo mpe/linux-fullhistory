@@ -51,13 +51,23 @@ struct blk_dev_struct blk_dev[MAX_BLKDEV] = {
 };
 
 /*
- * blk_size contains the size of all block-devices:
+ * blk_size contains the size of all block-devices in units of 1024 byte
+ * sectors:
  *
  * blk_size[MAJOR][MINOR]
  *
  * if (!blk_size[MAJOR]) then no minor size checking is done.
  */
 int * blk_size[MAX_BLKDEV] = { NULL, NULL, };
+
+/*
+ * blksize_size contains the size of all block-devices:
+ *
+ * blksize_size[MAJOR][MINOR]
+ *
+ * if (!blksize_size[MAJOR]) then 1024 bytes is assumed.
+ */
+int * blksize_size[MAX_BLKDEV] = { NULL, NULL, };
 
 /* RO fail safe mechanism */
 
@@ -269,6 +279,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 
 	struct request plug;
 	int plugged;
+	int correct_size;
 	struct blk_dev_struct * dev;
 	int i, j;
 
@@ -279,16 +290,6 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	  if (nr <= 0) return;
 	};
 
-	for(j=0;j<nr; j++){
-	  if(!bh[j]) continue;
-	  if (bh[j]->b_size != 1024) {
-	    printk("ll_rw_block: only 1024-char blocks implemented (%d)\n",bh[0]->b_size);
-	    for (i=0;i<nr; i++)
-	      if (bh[i]) bh[i]->b_dirt = bh[i]->b_uptodate = 0;
-	    return;
-	  }
-	};
-
 	if ((major=MAJOR(bh[0]->b_dev)) >= MAX_BLKDEV ||
 	!(blk_dev[major].request_fn)) {
 		printk("ll_rw_block: Trying to read nonexistent block-device %04x (%d)\n",bh[0]->b_dev,bh[0]->b_blocknr);
@@ -296,6 +297,25 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		  if (bh[i]) bh[i]->b_dirt = bh[i]->b_uptodate = 0;
 		return;
 	}
+
+	for(j=0;j<nr; j++){
+	  if(!bh[j]) continue;
+	  /* Determine correct block size for this device */
+	  correct_size = BLOCK_SIZE;
+	  if(blksize_size[major] && blksize_size[major][MINOR(bh[j]->b_dev)])
+	    correct_size = blksize_size[major][MINOR(bh[j]->b_dev)];
+	  
+	  if(bh[j]->b_size != correct_size) {
+	    
+	    printk("ll_rw_block: only %d-char blocks implemented (%d)\n",
+		   correct_size, bh[j]->b_size);
+	    
+	    for (i=0;i<nr; i++)
+	      if (bh[i]) bh[i]->b_dirt = bh[i]->b_uptodate = 0;
+	    return;
+	  }
+	};
+
 	if ((rw == WRITE || rw == WRITEA) && is_read_only(bh[0]->b_dev)) {
 		printk("Can't write to read-only device 0x%X\n",bh[0]->b_dev);
 		for (i=0;i<nr; i++)
@@ -332,6 +352,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 {
 	int i;
+	int buffersize;
 	struct request * req;
 	unsigned int major = MAJOR(dev);
 
@@ -349,7 +370,9 @@ void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 		return;
 	}
 	
-	for (i=0; i<nb; i++, buf += BLOCK_SIZE)
+	buffersize = PAGE_SIZE / nb;
+
+	for (i=0; i<nb; i++, buf += buffersize)
 	{
 repeat:
 		req = request+NR_REQUEST;
@@ -364,9 +387,9 @@ repeat:
 		req->dev = dev;
 		req->cmd = rw;
 		req->errors = 0;
-		req->sector = b[i] << 1;
-		req->nr_sectors = 2;
-		req->current_nr_sectors = 2;
+		req->sector = (b[i] * buffersize) >> 9;
+		req->nr_sectors = buffersize >> 9;
+		req->current_nr_sectors = buffersize >> 9;
 		req->buffer = buf;
 		req->waiting = current;
 		req->bh = NULL;

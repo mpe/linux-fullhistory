@@ -1,86 +1,70 @@
-General setup
-.
-Kernel math emulation
-CONFIG_MATH_EMULATION y/n n
-Normal harddisk support
-CONFIG_BLK_DEV_HD y/n y
-XT harddisk support
-CONFIG_BLK_DEV_XD y/n n
-TCP/IP Networking
-CONFIG_INET y/n y
-Kernel profiling support
-CONFIG_PROFILE y/n n
-Limit memory to low 16MB
-CONFIG_MAX_16M y/n n
-System V IPC
-CONFIG_SYSVIPC y/n y
-Use -m486 flag for 486-specific optimizations
-CONFIG_M486 y/n y
+#
+# For a description of the syntax of this configuration file,
+# see the Configure script.
+#
+*
+* General setup
+*
+bool 'Kernel math emulation' CONFIG_MATH_EMULATION n
+bool 'Normal harddisk support' CONFIG_BLK_DEV_HD y
+bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
+bool 'TCP/IP networking' CONFIG_INET y
+bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
+bool 'System V IPC' CONFIG_SYSVIPC y
+bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y
+*
+* SCSI support
+*
+bool 'SCSI support?' CONFIG_SCSI n
+if [ "$CONFIG_SCSI" = "n" ]
 :
-SCSI support
-.
-SCSI support?
-CONFIG_SCSI y/n n
+: Skipping SCSI  onfiguration options...
 :
-SCSI support type (disk, tape, CDrom)
-.
-Scsi disk support
-CONFIG_BLK_DEV_SD y/n n
-Scsi tape support
-CONFIG_BLK_DEV_ST y/n n
-Scsi CDROM support
-CONFIG_BLK_DEV_SR y/n n
-.
-SCSI low-level drivers
-.
-Adaptec AHA1542 support
-CONFIG_SCSI_AHA1542 y/n n
-Adaptec AHA1740 support
-CONFIG_SCSI_AHA1740 y/n n
-Future Domain SCSI support
-CONFIG_SCSI_FUTURE_DOMAIN y/n n
-Seagate ST-02 and Future Domain TMC-8xx SCSI support
-CONFIG_SCSI_SEAGATE y/n n
-UltraStor SCSI support
-CONFIG_SCSI_ULTRASTOR y/n n
-7000FASST SCSI support
-CONFIG_SCSI_7000FASST y/n n
-.
-Filesystems
-.
-Standard (minix) fs support
-CONFIG_MINIX_FS y/n y
-Extended fs support
-CONFIG_EXT_FS y/n n
-Second extended fs support
-CONFIG_EXT2_FS y/n n
-xiafs filesystem support
-CONFIG_XIA_FS y/n n
-msdos fs support
-CONFIG_MSDOS_FS y/n y
-/proc filesystem support
-CONFIG_PROC_FS y/n y
-NFS filesystem support
-CONFIG_NFS_FS y/n n
-ISO9660 cdrom filesystem support
-CONFIG_ISO9660_FS y/n n
-.
-Various character device drivers..
-.
-Keyboard meta-key sends ESC-prefix
-CONFIG_KBD_META y/n y
-Logitech busmouse support
-CONFIG_BUSMOUSE y/n n
-PS/2 mouse (aka 'auxiliary device') support
-CONFIG_PSMOUSE y/n n
-MicroSoft busmouse support
-CONFIG_MS_BUSMOUSE y/n n
-ATIXL busmouse support
-CONFIG_ATIXL_BUSMOUSE y/n n
-Soundcard support (distributed separately)
-CONFIG_SOUND y/n n
-.
-Final check to see if you are awake
-.
-Have you edited the main Makefile for root device etc
-CONFIG_CLUEFUL y/n n
+else
+	*
+	* SCSI support type (disk, tape, CDrom)
+	*
+bool 'Scsi disk support' CONFIG_BLK_DEV_SD n
+bool 'Scsi tape support' CONFIG_BLK_DEV_ST n
+bool 'Scsi CDROM support' CONFIG_BLK_DEV_SR n
+	*
+	* SCSI low-level drivers
+	*
+bool 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 n
+bool 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 n
+bool 'Future Domain SCSI support' CONFIG_SCSI_FUTURE_DOMAIN n
+bool 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE n
+bool 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR n
+bool '7000FASST SCSI support' CONFIG_SCSI_7000FASST n
+fi
+*
+* Filesystems
+*
+bool 'Standard (minix) fs support' CONFIG_MINIX_FS y
+bool 'Extended fs support' CONFIG_EXT_FS n
+bool 'Second extended fs support' CONFIG_EXT2_FS n
+bool 'xiafs filesystem support' CONFIG_XIA_FS n
+bool 'msdos fs support' CONFIG_MSDOS_FS y
+bool '/proc filesystem support' CONFIG_PROC_FS y
+bool 'NFS filesystem support' CONFIG_NFS_FS n
+bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS n
+*
+*  character devices
+*
+bool 'Keyboard meta-key sends ESC-prefix' CONFIG_KBD_META y
+bool 'Logitech busmouse support' CONFIG_BUSMOUSE n
+bool 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE n
+bool 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE n
+bool 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE n
+bool 'Selection (cut and paste for virtual consoles)' CONFIG_SELECTION y
+bool 'QIC-02 tape support' CONFIG_TAPE_QIC02 n
+*
+* Sound
+*
+bool 'Sound card support (distributed separately)' CONFIG_SOUND n
+*
+* Kernel hacking
+*
+bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC n
+bool 'Kernel profiling support' CONFIG_PROFILE n
+

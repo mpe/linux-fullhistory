@@ -52,6 +52,27 @@ char *eth_print(unsigned char *ptr)
   return(buff);
 }
 
+void eth_setup(char *str, int *ints)
+{
+	struct device *d = dev_base;
+
+	if (!str || !*str)
+		return;
+	while (d) {
+		if (!strcmp(str,d->name)) {
+			if (ints[0] > 0)
+				d->irq=ints[1];
+			if (ints[0] > 1)
+				d->base_addr=ints[2];
+			if (ints[0] > 2)
+				d->mem_start=ints[3];
+			if (ints[0] > 3)
+				d->mem_end=ints[4];
+			break;
+		}
+		d=d->next;
+	}
+}
 
 /* Display the contents of the Ethernet MAC header. */
 void
@@ -109,7 +130,7 @@ eth_rebuild_header(void *buff, struct device *dev)
   unsigned long src, dst;
 
   DPRINTF((DBG_DEV, "ETH: Using MAC Broadcast\n"));
-  eth = buff;
+  eth = (struct ethhdr *) buff;
   src = *(unsigned long *) eth->h_source;
   dst = *(unsigned long *) eth->h_dest;
   DPRINTF((DBG_DEV, "ETH: RebuildHeader: SRC=%s ", in_ntoa(src)));

@@ -50,7 +50,7 @@ struct ei_device {
   int rx_overrun_packets;
 };
 
-#define ei_status (*(struct ei_device *)(dev->private))
+#define ei_status (*(struct ei_device *)(dev->priv))
 
 /* Some generic ethernet register configurations. */
 #define E8390_TX_IRQ_MASK 0xa	/* For register EN0_ISR */

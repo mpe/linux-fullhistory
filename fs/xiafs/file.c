@@ -42,7 +42,7 @@ static struct file_operations xiafs_file_operations = {
     NULL,			/* readdir - bad */
     NULL,			/* select - default */
     NULL,			/* ioctl - default */
-    NULL,			/* mmap */
+    generic_mmap,      		/* mmap */
     NULL,			/* no special open is needed */
     NULL,			/* release */
     xiafs_sync_file		/* fsync */

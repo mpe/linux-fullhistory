@@ -508,7 +508,7 @@ d_link_interrupt(int reg_ptr)
 	dev->interrupt = 1;
 	sti();	/* Allow other interrupts. */
 
-	localstats = (struct netstats*) dev->private;
+	localstats = (struct netstats*) dev->priv;
 
 	interrupts = d_link_read_status(dev);
 
@@ -613,7 +613,7 @@ d_link_rx_intr(struct device *dev)
 		printk("%s: Bogus packet size %d.\n", dev->name, size);
 
 	sksize = sizeof(struct sk_buff) + size;
-	if ((skb = kmalloc(sksize, GFP_ATOMIC)) == NULL) {
+	if ((skb = (struct sk_buff *) kmalloc(sksize, GFP_ATOMIC)) == NULL) {
 		if (d_link_debug) {
 				printk("%s: Couldn't allocate a sk_buff of size %d.\n",
 					dev->name, sksize);
@@ -644,7 +644,7 @@ d_link_rx_intr(struct device *dev)
 	
 	localstats->rx_packets++; /* count all receives */
 
-	if(dev_rint((void *)skb, size, IN_SKBUFF, dev)) {
+	if(dev_rint((unsigned char *)skb, size, IN_SKBUFF, dev)) {
 		printk("%s: receive buffers full.\n", dev->name);
 		return;
 	}
@@ -703,8 +703,8 @@ d_link_init(struct device *dev)
 	}
 
 	/* Initialize the device structure. */
-	dev->private = kmalloc(sizeof(struct netstats), GFP_KERNEL);
-	memset(dev->private, 0, sizeof(struct netstats));
+	dev->priv = kmalloc(sizeof(struct netstats), GFP_KERNEL);
+	memset(dev->priv, 0, sizeof(struct netstats));
 
 	for (i = 0; i < DEV_NUMBUFFS; i++)
 		dev->buffs[i] = NULL;

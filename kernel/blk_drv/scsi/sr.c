@@ -36,6 +36,8 @@ int MAX_SR=0;
 Scsi_CD * scsi_CDs;
 static int * sr_sizes;
 
+static int * sr_blocksizes;
+
 static int sr_open(struct inode *, struct file *);
 static void get_sectorsize(int);
 
@@ -352,8 +354,10 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	tries = 2;
 
       repeat:
-	if(SCpnt->request.dev <= 0)
-	  return do_sr_request();
+	if(SCpnt->request.dev <= 0) {
+	  do_sr_request();
+	  return;
+	}
 
 	dev =  MINOR(SCpnt->request.dev);
 	block = SCpnt->request.sector;	
@@ -463,12 +467,12 @@ are any multiple of 512 bytes long.  */
 	    printk("Warning - running *really* short on DMA buffers\n");
 	    SCpnt->use_sg = 0;  /* No memory left - bail out */
 	  } else {
-	    buffer = (char *) sgpnt;
+	    buffer = (unsigned char *) sgpnt;
 	    count = 0;
 	    bh = SCpnt->request.bh;
 	    if(SCpnt->request.sector % 4) {
 	      sgpnt[count].length = (SCpnt->request.sector % 4) << 9;
-	      sgpnt[count].address = scsi_malloc(sgpnt[count].length);
+	      sgpnt[count].address = (char *) scsi_malloc(sgpnt[count].length);
 	      if(!sgpnt[count].address) panic("SCSI DMA pool exhausted.");
 	      sgpnt[count].alt_address = sgpnt[count].address; /* Flag to delete
 								  if needed */
@@ -481,7 +485,7 @@ are any multiple of 512 bytes long.  */
 		sgpnt[count].length = bh->b_size;
 		sgpnt[count].alt_address = NULL;
 	      } else {
-		sgpnt[count].address = scsi_malloc(end_rec);
+		sgpnt[count].address = (char *) scsi_malloc(end_rec);
 		if(!sgpnt[count].address) panic("SCSI DMA pool exhausted.");
 		sgpnt[count].length = end_rec;
 		sgpnt[count].alt_address = sgpnt[count].address;
@@ -497,7 +501,7 @@ are any multiple of 512 bytes long.  */
 		if(dma_free_sectors < (sgpnt[count].length >> 9) + 5) {
 		  sgpnt[count].address = NULL;
 		} else {
-		  sgpnt[count].address = scsi_malloc(sgpnt[count].length);
+		  sgpnt[count].address = (char *) scsi_malloc(sgpnt[count].length);
 		};
 /* If we start running low on DMA buffers, we abort the scatter-gather
    operation, and free all of the memory we have allocated.  We want to
@@ -506,7 +510,7 @@ are any multiple of 512 bytes long.  */
 		if(sgpnt[count].address == NULL){ /* Out of dma memory */
 		  printk("Warning: Running low on SCSI DMA buffers");
 		  /* Try switching back to a non scatter-gather operation. */
-		  while(--count){
+		  while(--count >= 0){
 		    if(sgpnt[count].alt_address) 
 		      scsi_free(sgpnt[count].address, sgpnt[count].length);
 		  };
@@ -542,19 +546,19 @@ are any multiple of 512 bytes long.  */
 	    {				  
 	      this_count = ((this_count > 4 - start) ? 
 			    (4 - start) : (this_count));
-	      buffer = scsi_malloc(2048);
+	      buffer = (unsigned char *) scsi_malloc(2048);
 	    } 
 	  else if (this_count < 4)
 	    {
-	      buffer = scsi_malloc(2048);
+	      buffer = (unsigned char *) scsi_malloc(2048);
 	    }
 	  else
 	    {
 	      this_count -= this_count % 4;
-	      buffer = SCpnt->request.buffer;
+	      buffer = (unsigned char *) SCpnt->request.buffer;
 	      if (((int) buffer) + (this_count << 9) > ISA_DMA_THRESHOLD & 
 		  (scsi_hosts[SCpnt->host].unchecked_isa_dma))
-		buffer = scsi_malloc(this_count << 9);
+		buffer = (unsigned char *) scsi_malloc(this_count << 9);
 	    }
 	};
 
@@ -709,6 +713,11 @@ unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
 	sr_sizes = (int *) memory_start;
 	memory_start += MAX_SR * sizeof(int);
 	memset(sr_sizes, 0, MAX_SR * sizeof(int));
+
+	sr_blocksizes = (int *) memory_start;
+	memory_start += MAX_SR * sizeof(int);
+	for(i=0;i<MAX_SR;i++) sr_blocksizes[i] = 2048;
+	blksize_size[MAJOR_NR] = sr_blocksizes;
 
 	for (i = 0; i < NR_SR; ++i)
 		{

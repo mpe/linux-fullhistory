@@ -26,7 +26,7 @@ static int copy_flock(struct file *filp, struct file_lock *fl, struct flock *l);
 static int conflict(struct file_lock *caller_fl, struct file_lock *sys_fl);
 static int overlap(struct file_lock *fl1, struct file_lock *fl2);
 static int lock_it(struct file *filp, struct file_lock *caller);
-static struct file_lock *alloc_lock(struct file_lock **pos, struct file_lock *template);
+static struct file_lock *alloc_lock(struct file_lock **pos, struct file_lock *fl);
 static void free_lock(struct file_lock **fl);
 
 static struct file_lock file_lock_table[NR_FILE_LOCKS];
@@ -398,27 +398,27 @@ next_lock:
  */
 
 static struct file_lock *alloc_lock(struct file_lock **pos,
-				    struct file_lock *template)
+				    struct file_lock *fl)
 {
-	struct file_lock *new;
+	struct file_lock *tmp;
 
-	new = file_lock_free_list;
-	if (new == NULL)
+	tmp = file_lock_free_list;
+	if (tmp == NULL)
 		return NULL;			/* no available entry */
-	if (new->fl_owner != NULL)
+	if (tmp->fl_owner != NULL)
 		panic("alloc_lock: broken free list\n");
 
 	/* remove from free list */
-	file_lock_free_list = new->fl_next;
+	file_lock_free_list = tmp->fl_next;
 
-	*new = *template;
+	*tmp = *fl;
 
-	new->fl_next = *pos;	/* insert into file's list */
-	*pos = new;
+	tmp->fl_next = *pos;	/* insert into file's list */
+	*pos = tmp;
 
-	new->fl_owner = current;	/* FIXME: needed? */
-	new->fl_wait = NULL;
-	return new;
+	tmp->fl_owner = current;	/* FIXME: needed? */
+	tmp->fl_wait = NULL;
+	return tmp;
 }
 
 /*

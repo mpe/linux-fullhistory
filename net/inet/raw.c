@@ -57,7 +57,7 @@ raw_err (int err, unsigned char *header, unsigned long daddr,
 		err, header, daddr, saddr, protocol));
 
   if (protocol == NULL) return;
-  sk = protocol->data;
+  sk = (struct sock *) protocol->data;
   if (sk == NULL) return;
 
   /* This is meaningless in raw sockets. */
@@ -98,7 +98,7 @@ raw_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	kfree_skb(skb, FREE_READ);
 	return(0);
   }
-  sk = protocol->data;
+  sk = (struct sock *) protocol->data;
   if (sk == NULL) {
 	kfree_skb(skb, FREE_READ);
 	return(0);
@@ -194,8 +194,9 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
   sk->inuse = 1;
   skb = NULL;
   while (skb == NULL) {
-	skb = sk->prot->wmalloc(sk, len+sizeof(*skb) + sk->prot->max_header,
-								0, GFP_KERNEL);
+	skb = (struct sk_buff *) sk->prot->wmalloc(sk,
+			len+sizeof(*skb) + sk->prot->max_header,
+			0, GFP_KERNEL);
 	/* This shouldn't happen, but it could. */
 	/* FIXME: need to change this to sleep. */
 	if (skb == NULL) {
@@ -237,6 +238,20 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
 
   /* verify_area(VERIFY_WRITE, from, len);*/
   memcpy_fromfs ((unsigned char *)(skb+1)+tmp, from, len);
+
+  /* If we are using IPPROTO_RAW, we need to fill in the source address in
+     the IP header */
+
+  if(sk->protocol==IPPROTO_RAW) {
+    unsigned char *buff;
+    struct iphdr *iph;
+
+    buff = (unsigned char *)(skb + 1);
+    buff += tmp;
+    iph = (struct iphdr *)buff;
+    iph->saddr = sk->saddr;
+  }
+
   skb->len = tmp + len;
   sk->prot->queue_xmit(sk, dev, skb, 1);
   release_sock(sk);
@@ -274,7 +289,7 @@ raw_init(struct sock *sk)
 {
   struct inet_protocol *p;
 
-  p = kmalloc(sizeof (*p), GFP_KERNEL);
+  p = (struct inet_protocol *) kmalloc(sizeof (*p), GFP_KERNEL);
   if (p == NULL) return(-ENOMEM);
 
   p->handler = raw_rcv;

@@ -360,20 +360,23 @@ int open_namei(const char * pathname, int flag, int mode,
 			return -EROFS;
 		}
 	}
- 	if ((inode->i_count > 1) && (flag & 2))
+ 	if ((inode->i_count > 1) && (flag & 2)) {
  		for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
+		        struct vm_area_struct * mpnt;
  			if (!*p)
  				continue;
  			if (inode == (*p)->executable) {
  				iput(inode);
  				return -ETXTBSY;
  			}
- 			for (i=0; i < (*p)->numlibraries; i++)
- 				if (inode == (*p)->libraries[i].library) {
- 					iput(inode);
- 					return -ETXTBSY;
- 				}
+			for(mpnt = (*p)->mmap; mpnt; mpnt = mpnt->vm_next) {
+				if (inode == mpnt->vm_inode) {
+					iput(inode);
+					return -ETXTBSY;
+				}
+			}
  		}
+ 	}
 	*res_inode = inode;
 	return 0;
 }
@@ -407,7 +410,7 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 	return dir->i_op->mknod(dir,basename,namelen,mode,dev);
 }
 
-int sys_mknod(const char * filename, int mode, dev_t dev)
+extern "C" int sys_mknod(const char * filename, int mode, dev_t dev)
 {
 	int error;
 	char * tmp;
@@ -450,7 +453,7 @@ static int do_mkdir(const char * pathname, int mode)
 	return dir->i_op->mkdir(dir,basename,namelen,mode);
 }
 
-int sys_mkdir(const char * pathname, int mode)
+extern "C" int sys_mkdir(const char * pathname, int mode)
 {
 	int error;
 	char * tmp;
@@ -491,7 +494,7 @@ static int do_rmdir(const char * name)
 	return dir->i_op->rmdir(dir,basename,namelen);
 }
 
-int sys_rmdir(const char * pathname)
+extern "C" int sys_rmdir(const char * pathname)
 {
 	int error;
 	char * tmp;
@@ -532,7 +535,7 @@ static int do_unlink(const char * name)
 	return dir->i_op->unlink(dir,basename,namelen);
 }
 
-int sys_unlink(const char * pathname)
+extern "C" int sys_unlink(const char * pathname)
 {
 	int error;
 	char * tmp;
@@ -573,19 +576,19 @@ static int do_symlink(const char * oldname, const char * newname)
 	return dir->i_op->symlink(dir,basename,namelen,oldname);
 }
 
-int sys_symlink(const char * oldname, const char * newname)
+extern "C" int sys_symlink(const char * oldname, const char * newname)
 {
 	int error;
-	char * old, * new;
+	char * from, * to;
 
-	error = getname(oldname,&old);
+	error = getname(oldname,&from);
 	if (!error) {
-		error = getname(newname,&new);
+		error = getname(newname,&to);
 		if (!error) {
-			error = do_symlink(old,new);
-			putname(new);
+			error = do_symlink(from,to);
+			putname(to);
 		}
-		putname(old);
+		putname(from);
 	}
 	return error;
 }
@@ -629,19 +632,19 @@ static int do_link(struct inode * oldinode, const char * newname)
 	return dir->i_op->link(oldinode, dir, basename, namelen);
 }
 
-int sys_link(const char * oldname, const char * newname)
+extern "C" int sys_link(const char * oldname, const char * newname)
 {
 	int error;
-	char * new;
+	char * to;
 	struct inode * oldinode;
 
 	error = namei(oldname, &oldinode);
 	if (error)
 		return error;
-	error = getname(newname,&new);
+	error = getname(newname,&to);
 	if (!error) {
-		error = do_link(oldinode,new);
-		putname(new);
+		error = do_link(oldinode,to);
+		putname(to);
 	}
 	return error;
 }
@@ -701,19 +704,19 @@ static int do_rename(const char * oldname, const char * newname)
 		new_dir, new_base, new_len);
 }
 
-int sys_rename(const char * oldname, const char * newname)
+extern "C" int sys_rename(const char * oldname, const char * newname)
 {
 	int error;
-	char * old, * new;
+	char * from, * to;
 
-	error = getname(oldname,&old);
+	error = getname(oldname,&from);
 	if (!error) {
-		error = getname(newname,&new);
+		error = getname(newname,&to);
 		if (!error) {
-			error = do_rename(old,new);
-			putname(new);
+			error = do_rename(from,to);
+			putname(to);
 		}
-		putname(old);
+		putname(from);
 	}
 	return error;
 }

@@ -35,8 +35,8 @@ struct ipc_perm
 #ifdef __KERNEL__
 
 /* special shmsegs[id], msgque[id] or semary[id]  values */
-#define IPC_UNUSED ((void *) -1)
-#define IPC_NOID   ((void *) -2)          /* being allocated/destroyed */
+#define IPC_UNUSED	((void *) -1)
+#define IPC_NOID	((void *) -2)		/* being allocated/destroyed */
 
 /* 
  * These are used to wrap system calls. See ipc/util.c, libipc.c 

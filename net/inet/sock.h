@@ -83,7 +83,9 @@ struct sock {
   volatile unsigned short	urg;
   volatile unsigned short	shutdown;
   unsigned short		mss;
-  volatile short		rtt;
+  volatile unsigned long	rtt;
+  volatile unsigned long	mdev;
+  volatile unsigned short	backoff;
   volatile short		err;
   unsigned char			protocol;
   volatile unsigned char	state;

@@ -87,7 +87,7 @@ dprintf(int level, char *fmt, ...)
 
   if (level != inet_debug) return;
 
-  buff = kmalloc(256, GFP_ATOMIC);
+  buff = (char *) kmalloc(256, GFP_ATOMIC);
   if (buff != NULL) {
 	va_start(args, fmt);
 	vsprintf(buff, fmt, args);
@@ -105,7 +105,7 @@ dbg_ioctl(void *arg, int level)
 
   if (!suser()) return(-EPERM);
   verify_area(VERIFY_WRITE, (void *)arg, sizeof(int));
-  val = get_fs_long((void *)arg);
+  val = get_fs_long((int *)arg);
   switch(val) {
 	case 0:	/* OFF */
 		inet_debug = DBG_OFF;

@@ -113,7 +113,7 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
   int mask;
 
   /* Allocate an entry. */
-  rt = kmalloc(sizeof(struct rtable), GFP_ATOMIC);
+  rt = (struct rtable *) kmalloc(sizeof(struct rtable), GFP_ATOMIC);
   if (rt == NULL) {
 	DPRINTF((DBG_RT, "RT: no memory for new route!\n"));
 	return;

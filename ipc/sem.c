@@ -28,7 +28,7 @@ void sem_init (void)
 	sem_lock = NULL;
 	used_sems = used_semids = max_semid = sem_seq = 0;
 	for (i=0; i < SEMMNI; i++)
-		semary[i] = IPC_UNUSED;
+		semary[i] = (struct semid_ds *) IPC_UNUSED;
 	return;
 }
 
@@ -61,7 +61,7 @@ static int newary (key_t key, int nsems, int semflg)
 		return -ENOSPC;
 	for (id=0; id < SEMMNI; id++) 
 		if (semary[id] == IPC_UNUSED) {
-			semary[id] = IPC_NOID;
+			semary[id] = (struct semid_ds *) IPC_NOID;
 			goto found;
 		}
 	return -ENOSPC;
@@ -70,7 +70,7 @@ found:
 	used_sems += nsems;
 	sma = (struct semid_ds *) kmalloc (size, GFP_KERNEL);
 	if (!sma) {
-		semary[id] = IPC_UNUSED;
+		semary[id] = (struct semid_ds *) IPC_UNUSED;
 		used_sems -= nsems;
 		if (sem_lock)
 			wake_up (&sem_lock);
@@ -123,6 +123,7 @@ int sys_semget (key_t key, int nsems, int semflg)
 static void freeary (int id)
 {
 	struct semid_ds *sma = semary[id];
+	struct sem_undo *un;
 
 	sma->sem_perm.seq++;
 	if ((int)((++sem_seq + 1) * SEMMNI) < 0)
@@ -130,8 +131,10 @@ static void freeary (int id)
 	used_sems -= sma->sem_nsems;
 	if (id == max_semid)
 		while (max_semid && (semary[--max_semid] == IPC_UNUSED));
-	semary[id] = IPC_UNUSED;
+	semary[id] = (struct semid_ds *) IPC_UNUSED;
 	used_semids--;
+	for (un=sma->undo; un; un=un->id_next)
+	        un->semadj = 0;
 	while (sma->eventz || sma->eventn) {
 		if (sma->eventz)
 			wake_up (&sma->eventz);
@@ -139,14 +142,14 @@ static void freeary (int id)
 			wake_up (&sma->eventn);
 		schedule();
 	}
-	kfree (sma);
+	kfree_s (sma, sizeof (*sma) + sma->sem_nsems * sizeof (struct sem));
 	return;
 }
 
 int sys_semctl (int semid, int semnum, int cmd, void *arg)
 {
 	int i, id, val = 0;
-	struct semid_ds *sma, *buf, tbuf;
+	struct semid_ds *sma, *buf = NULL, tbuf;
 	struct ipc_perm *ipcp;
 	struct sem *curr;
 	struct sem_undo *un;
@@ -161,7 +164,7 @@ int sys_semctl (int semid, int semnum, int cmd, void *arg)
 	case SEM_INFO: 
 	{
 		struct seminfo seminfo, *tmp;
-		if (!arg || ! (tmp = (struct seminfo *) get_fs_long (arg)))
+		if (!arg || ! (tmp = (struct seminfo *) get_fs_long((int *)arg)))
 			return -EFAULT;
 		seminfo.semmni = SEMMNI;
 		seminfo.semmns = SEMMNS;
@@ -185,7 +188,7 @@ int sys_semctl (int semid, int semnum, int cmd, void *arg)
 	}
 
 	case SEM_STAT:
-		if (!arg || ! (buf = (struct semid_ds *) get_fs_long (arg)))
+		if (!arg || ! (buf = (struct semid_ds *) get_fs_long((int *) arg)))
 			return -EFAULT;
 		i = verify_area (VERIFY_WRITE, buf, sizeof (*sma));
 		if (i)
@@ -228,7 +231,7 @@ int sys_semctl (int semid, int semnum, int cmd, void *arg)
 		case GETNCNT: return curr->semncnt;
 		case GETZCNT: return curr->semzcnt;
 		case GETALL:
-			if (!arg || ! (array = (ushort *) get_fs_long (arg)))
+			if (!arg || ! (array = (ushort *) get_fs_long((int *) arg)))
 				return -EFAULT;
 			i = verify_area (VERIFY_WRITE, array, nsems* sizeof(short));
 			if (i)
@@ -238,7 +241,7 @@ int sys_semctl (int semid, int semnum, int cmd, void *arg)
 	case SETVAL: 
 		if (!arg)
 			return -EFAULT;
-		if ((val = (int) get_fs_long (arg))  > SEMVMX || val < 0) 
+		if ((val = (int) get_fs_long ((int *) arg))  > SEMVMX || val < 0) 
 			return -ERANGE;
 		break;
 	case IPC_RMID:
@@ -249,7 +252,7 @@ int sys_semctl (int semid, int semnum, int cmd, void *arg)
 		}
 		return -EPERM;
 	case SETALL: /* arg is a pointer to an array of ushort */
-		if (!arg || ! (array = (ushort *) get_fs_long (arg)) )
+		if (!arg || ! (array = (ushort *) get_fs_long ((int *) arg)) )
 			return -EFAULT;
 		if ((i = verify_area (VERIFY_READ, array, sizeof tbuf)))
 			return i;
@@ -259,13 +262,13 @@ int sys_semctl (int semid, int semnum, int cmd, void *arg)
 				return -ERANGE;
 		break;
 	case IPC_STAT:
-		if (!arg || !(buf = (struct semid_ds *) get_fs_long (arg))) 
+		if (!arg || !(buf = (struct semid_ds *) get_fs_long((int *) arg))) 
 			return -EFAULT;
 		if ((i = verify_area (VERIFY_WRITE, arg, sizeof tbuf)))
 			return i;
 		break;
 	case IPC_SET:
-		if (!arg || !(buf = (struct semid_ds *) get_fs_long (arg))) 
+		if (!arg || !(buf = (struct semid_ds *) get_fs_long((int *) arg))) 
 			return -EFAULT;
 		if ((i = verify_area (VERIFY_READ, buf, sizeof tbuf)))
 			return i;
@@ -320,7 +323,7 @@ int sys_semctl (int semid, int semnum, int cmd, void *arg)
 			return -EACCES;
 		for (i=0; i<nsems; i++) 
 			sma->sem_base[i].semval = sem_io[i];
-		for (un = sma->undo; un != NULL; un = un->id_next)
+		for (un = sma->undo; un; un = un->id_next)
 			un->semadj = 0;
 		if (sma->eventn)
 			wake_up (&sma->eventn);
@@ -390,9 +393,7 @@ int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 			un->proc_next = current->semun;
 			current->semun = un;
 			un->id_next = sma->undo;
-			if (sma->undo)
-				sma->undo->id_prev = un;
-			sma->undo = un->id_prev = un;
+			sma->undo = un;
 		}
 	}
 	
@@ -453,34 +454,51 @@ int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 }
 
 /*
- * add semadj values to semaphores if alowed. Silently ignore errors!
+ * add semadj values to semaphores, free undo structures.
+ * undo structures are not freed when semaphore arrays are destroyed
+ * so some of them may be out of date.
  */
 void sem_exit (void)
 {
-	struct sem_undo *un, *tmp;
+	struct sem_undo *u, *un = NULL, **up, **unp;
 	struct semid_ds *sma;
 	struct sem *sem = NULL;
 	
-	for (un = current->semun; un; kfree(un), un = tmp) {
-		un->id_prev->id_next = un->id_next;
-		if (un->id_next)
-			un->id_next->id_prev = un->id_prev;
-		tmp = un->proc_next;
+	for (up = &current->semun; (u = *up); *up = u->proc_next, kfree(u)) {
+		sma = semary[u->semid % SEMMNI];
+		if (sma == IPC_UNUSED || sma == IPC_NOID) 
+			continue;
+		if (sma->sem_perm.seq != u->semid / SEMMNI)
+			continue;
+		for (unp = &sma->undo; (un = *unp); unp = &un->id_next) {
+			if (u == un) 
+				goto found;
+		}
+		printk ("sem_exit undo list error id=%d\n", u->semid);
+		break;
+found:
+		*unp = un->id_next;
 		if (!un->semadj)
 			continue;
-		sma = semary[un->semid % SEMMNI];
-		if (sma == IPC_UNUSED || sma == IPC_NOID 
-		    || sma->sem_perm.seq != un->semid / SEMMNI)
-			continue;
-		sem = &sma->sem_base[un->sem_num];
-		if (sem->semval + un->semadj >= 0) {
-			sem->semval += un->semadj;
-			sem->sempid = current->pid;
-			sma->sem_otime = CURRENT_TIME;
-			if (un->semadj > 0 && sma->eventn)
-				wake_up (&sma->eventn);
-			if (!sem->semval && sma->eventz)
-				wake_up (&sma->eventz);
+		while (1) {
+			if (sma->sem_perm.seq != un->semid / SEMMNI)
+				break;
+			sem = &sma->sem_base[un->sem_num];
+			if (sem->semval + un->semadj >= 0) {
+				sem->semval += un->semadj;
+				sem->sempid = current->pid;
+				sma->sem_otime = CURRENT_TIME;
+				if (un->semadj > 0 && sma->eventn)
+					wake_up (&sma->eventn);
+				if (!sem->semval && sma->eventz)
+					wake_up (&sma->eventz);
+				break;
+			} 
+			if (current->signal & ~current->blocked)
+				break;
+			sem->semncnt++;
+			interruptible_sleep_on (&sma->eventn);
+			sem->semncnt--;
 		}
 	}
 	current->semun = NULL;

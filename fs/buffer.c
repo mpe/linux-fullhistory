@@ -48,6 +48,7 @@ int nr_buffers = 0;
 int buffermem = 0;
 int nr_buffer_heads = 0;
 static int min_free_pages = 20;	/* nr free pages needed before buffer grows */
+extern int *blksize_size[];
 
 /*
  * Rewrote the wait-routines to use the "new" wait-queue functionality,
@@ -153,7 +154,7 @@ int fsync_dev(dev_t dev)
 	return sync_buffers(dev, 1);
 }
 
-int sys_sync(void)
+extern "C" int sys_sync(void)
 {
 	sync_dev(0);
 	return 0;
@@ -164,7 +165,7 @@ int file_fsync (struct inode *inode, struct file *filp)
 	return fsync_dev(inode->i_dev);
 }
 
-int sys_fsync(unsigned int fd)
+extern "C" int sys_fsync(unsigned int fd)
 {
 	struct file * file;
 	struct inode * inode;
@@ -241,8 +242,8 @@ void check_disk_change(dev_t dev)
 	printk("VFS: Disk change detected on device %d/%d\n",
 					MAJOR(dev), MINOR(dev));
 	for (i=0 ; i<NR_SUPER ; i++)
-		if (super_block[i].s_dev == dev)
-			put_super(super_block[i].s_dev);
+		if (super_blocks[i].s_dev == dev)
+			put_super(super_blocks[i].s_dev);
 	invalidate_inodes(dev);
 	invalidate_buffers(dev);
 
@@ -367,6 +368,45 @@ struct buffer_head * get_hash_table(dev_t dev, int block, int size)
 		if (bh->b_dev == dev && bh->b_blocknr == block && bh->b_size == size)
 			return bh;
 		bh->b_count--;
+	}
+}
+
+void set_blocksize(dev_t dev, int size)
+{
+	int i;
+	struct buffer_head * bh, *bhnext;
+
+	if (!blksize_size[MAJOR(dev)])
+		return;
+
+	if (size != 512 && size != 1024 && size != 2048 &&  size != 4096) 
+		panic("Invalid blocksize passed to set_blocksize");
+
+	if (blksize_size[MAJOR(dev)][MINOR(dev)] == 0 && size == BLOCK_SIZE) {
+		blksize_size[MAJOR(dev)][MINOR(dev)] = size;
+		return;
+	};
+	if (blksize_size[MAJOR(dev)][MINOR(dev)] == size)
+		return;
+	sync_buffers(dev, 2);
+	blksize_size[MAJOR(dev)][MINOR(dev)] = size;
+
+  /* We need to be quite careful how we do this - we are moving entries
+     around on the free list, and we can get in a loop if we are not careful.*/
+
+	bh = free_list;
+	for (i = nr_buffers*2 ; --i > 0 ; bh = bhnext) {
+		bhnext = bh->b_next_free; 
+		if (bh->b_dev != dev)
+			continue;
+		if (bh->b_size == size)
+			continue;
+
+		wait_on_buffer(bh);
+		if (bh->b_dev == dev && bh->b_size != size)
+			bh->b_uptodate = bh->b_dirt = 0;
+		remove_from_hash_queue(bh);
+/*    put_first_free(bh); */
 	}
 }
 
@@ -500,10 +540,16 @@ struct buffer_head * bread(dev_t dev, int block, int size)
 struct buffer_head * breada(dev_t dev,int first, ...)
 {
 	va_list args;
+	unsigned int blocksize;
 	struct buffer_head * bh, *tmp;
 
 	va_start(args,first);
-	if (!(bh = getblk(dev, first, 1024))) {
+
+	blocksize = BLOCK_SIZE;
+	if (blksize_size[MAJOR(dev)] && blksize_size[MAJOR(dev)][MINOR(dev)])
+		blocksize = blksize_size[MAJOR(dev)][MINOR(dev)];
+
+	if (!(bh = getblk(dev, first, blocksize))) {
 		printk("VFS: breada: READ error on device %d/%d\n",
 						MAJOR(dev), MINOR(dev));
 		return NULL;
@@ -511,7 +557,7 @@ struct buffer_head * breada(dev_t dev,int first, ...)
 	if (!bh->b_uptodate)
 		ll_rw_block(READ, 1, &bh);
 	while ((first=va_arg(args,int))>=0) {
-		tmp = getblk(dev, first, 1024);
+		tmp = getblk(dev, first, blocksize);
 		if (tmp) {
 			if (!tmp->b_uptodate)
 				ll_rw_block(READA, 1, &tmp);
@@ -547,7 +593,7 @@ static void get_more_buffer_heads(void)
 
 	if (unused_list)
 		return;
-	page = get_free_page(GFP_KERNEL);
+	page = get_free_page(GFP_BUFFER);
 	if (!page)
 		return;
 	bh = (struct buffer_head *) page;
@@ -751,9 +797,9 @@ static inline unsigned long try_to_share_buffers(unsigned long address,
 	return try_to_load_aligned(address, dev, b, size);
 }
 
-#define COPYBLK(from,to) \
-__asm__ __volatile__("rep ; movsl" \
-	::"c" (BLOCK_SIZE/4),"S" (from),"D" (to) \
+#define COPYBLK(size,from,to) \
+__asm__ __volatile__("rep ; movsl": \
+	:"c" (((unsigned long) size) >> 2),"S" (from),"D" (to) \
 	:"cx","di","si")
 
 /*
@@ -767,7 +813,7 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
 {
 	struct buffer_head * bh[8];
 	unsigned long where;
-	int i;
+	int i, j;
 
 	if (!(prot & PAGE_RW)) {
 		where = try_to_share_buffers(address,dev,b,size);
@@ -775,17 +821,17 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
 			return where;
 	}
 	++current->maj_flt;
-	for (i=0 ; i<4 ; i++) {
+ 	for (i=0, j=0; j<PAGE_SIZE ; i++, j+= size) {
 		bh[i] = NULL;
 		if (b[i])
 			bh[i] = getblk(dev, b[i], size);
 	}
 	read_buffers(bh,4);
 	where = address;
-	for (i=0 ; i<4 ; i++,address += BLOCK_SIZE) {
+ 	for (i=0, j=0; j<PAGE_SIZE ; i++, j += size,address += size) {
 		if (bh[i]) {
 			if (bh[i]->b_uptodate)
-				COPYBLK((unsigned long) bh[i]->b_data,address);
+				COPYBLK(size, (unsigned long) bh[i]->b_data,address);
 			brelse(bh[i]);
 		}
 	}
@@ -794,9 +840,7 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
 
 /*
  * Try to increase the number of buffers available: the size argument
- * is used to determine what kind of buffers we want. Currently only
- * 1024-byte buffers are supported by the rest of the system, but I
- * think this will change eventually.
+ * is used to determine what kind of buffers we want.
  */
 void grow_buffers(int size)
 {

@@ -53,9 +53,9 @@ static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 
 	while (!from->stopped && !EMPTY(&from->write_q)) {
 		if (FULL(&to->read_q)) {
-			if (FULL(&to->secondary))
-				break;
 			TTY_READ_FLUSH(to);
+			if (FULL(&to->read_q))
+				break;
 			continue;
 		}
 		c = get_tty_queue(&from->write_q);
@@ -64,7 +64,8 @@ static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 			break;
 	}
 	TTY_READ_FLUSH(to);
-	wake_up_interruptible(&from->write_q.proc_list);
+	if (!FULL(&from->write_q))
+		wake_up_interruptible(&from->write_q.proc_list);
 	if (from->write_data_cnt) {
 		set_bit(from->line, &tty_check_write);
 		mark_bh(TTY_BH);

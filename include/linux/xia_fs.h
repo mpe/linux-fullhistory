@@ -104,9 +104,6 @@ extern struct inode_operations xiafs_file_inode_operations;
 extern struct inode_operations xiafs_dir_inode_operations;
 extern struct inode_operations xiafs_symlink_inode_operations;
 
-extern struct file_operations xiafs_file_operations;
-extern struct file_operations xiafs_dir_operations;
-
 #endif  /* _XIA_FS_H */
 
 

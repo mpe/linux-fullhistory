@@ -202,10 +202,10 @@
     extern int loopback_init(struct device *dev);
     static struct device loopback_dev = {
 	"lo",			/* Software Loopback interface		*/
-	-1,			/* recv memory end			*/
+	0x0,			/* recv memory end			*/
 	0x0,			/* recv memory start			*/
-	-1,			/* memory end				*/
-	0,			/* memory start				*/
+	0x0,			/* memory end				*/
+	0x0,			/* memory start				*/
 	0,			/* base I/O address			*/
 	0,			/* IRQ					*/
 	0, 0, 0,		/* flags				*/

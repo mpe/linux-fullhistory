@@ -21,6 +21,7 @@
 
 #include <linux/ip.h>
 
+extern int		backoff(int n);
 
 extern void		ip_print(struct iphdr *ip);
 extern int		ip_ioctl(struct sock *sk, int cmd,

@@ -20,7 +20,8 @@ SUBDIRS= sound
 
 OBJS  = tty_io.o console.o keyboard.o serial.o \
 	tty_ioctl.o pty.o lp.o vt.o mem.o mouse.o \
-	busmouse.o psaux.o msbusmouse.o atixlmouse.o
+	busmouse.o psaux.o msbusmouse.o atixlmouse.o \
+	tpqic02.o
 
 all:	chr_drv.a subdirs
 

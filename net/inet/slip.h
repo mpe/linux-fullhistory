@@ -33,10 +33,12 @@ struct slip {
   int			line;		/* SLIP channel number		*/
   struct tty_struct	*tty;		/* ptr to TTY structure		*/
   struct device		*dev;		/* easy for intr handling	*/
+  struct slcompress	*slcomp;	/* for header compression 	*/
 
   /* These are pointers to the malloc()ed frame buffers. */
   unsigned char		*rbuff;		/* receiver buffer		*/
   unsigned char		*xbuff;		/* transmitter buffer		*/
+  unsigned char		*cbuff;		/* compression buffer		*/
 
   /* These are the various pointers into the buffers. */
   unsigned char		*rhead;		/* RECV buffer pointer (head)	*/

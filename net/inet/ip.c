@@ -38,6 +38,8 @@
 #include "arp.h"
 #include "icmp.h"
 
+extern int last_retran;
+extern void sort_send(struct sock *sk);
 
 void
 ip_print(struct iphdr *ip)
@@ -212,6 +214,12 @@ ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long daddr,
   if (skb->sk) skb->sk->saddr = saddr;
 
   /* Now build the IP header. */
+
+  /* If we are using IPPROTO_RAW, then we don't need an IP header, since
+     one is being supplied to us by the user */
+
+  if(type == IPPROTO_RAW) return (tmp);
+
   iph = (struct iphdr *)buff;
   iph->version  = 4;
   iph->tos      = 0;
@@ -422,7 +430,7 @@ ip_compute_csum(unsigned char * buff, int len)
 
 
 /* Check the header of an incoming IP datagram. */
-static int
+int
 ip_csum(struct iphdr *iph)
 {
   if (iph->check == 0) return(0);
@@ -514,7 +522,7 @@ ip_forward(struct sk_buff *skb, struct device *dev)
 			in_ntoa(raddr), dev2->name, skb->len));
 
   if (dev2->flags & IFF_UP) {
-	skb2 = kmalloc(sizeof(struct sk_buff) +
+	skb2 = (struct sk_buff *) kmalloc(sizeof(struct sk_buff) +
 		       dev2->hard_header_len + skb->len, GFP_ATOMIC);
 	if (skb2 == NULL) {
 		printk("\nIP: No memory available for IP forward\n");
@@ -616,12 +624,12 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	* and then not for the last one.
 	*/
        if (ipprot->copy) {
-		skb2 = kmalloc (skb->mem_len, GFP_ATOMIC);
+		skb2 = (struct sk_buff *) kmalloc (skb->mem_len, GFP_ATOMIC);
 		if (skb2 == NULL) continue;
 		memcpy(skb2, skb, skb->mem_len);
 		skb2->mem_addr = skb2;
 		skb2->lock = 0;
-		skb2->h.raw = (void *)(
+		skb2->h.raw = (unsigned char *)(
 				(unsigned long)skb2 +
 				(unsigned long) skb->h.raw -
 				(unsigned long)skb);
@@ -702,8 +710,6 @@ ip_queue_xmit(struct sock *sk, struct device *dev,
 	} else {
 		/* See if we've got a problem. */
 		if (sk->send_tail == NULL) {
-			extern void sort_send(volatile struct sock *sk);
-
 			printk("IP: ***bug sk->send_tail == NULL != sk->send_head\n");
 			sort_send(sk);
 		} else {
@@ -712,7 +718,7 @@ ip_queue_xmit(struct sock *sk, struct device *dev,
 		}
 	}
 	sti();
-	sk->time_wait.len = sk->rtt<<1;
+	sk->time_wait.len = backoff(sk->backoff) * (2 * sk->mdev + sk->rtt);
         sk->timeout = TIME_WRITE;
         reset_timer ((struct timer *)&sk->time_wait);
   } else {
@@ -780,8 +786,23 @@ ip_retransmit(struct sock *sk, int all)
    * get through again.  Once we get through, the rtt will settle
    * back down reasonably quickly.
    */
-  sk->rtt *= 2;
-  sk->time_wait.len = sk->rtt;
+  sk->backoff++;
+  sk->time_wait.len = backoff(sk->backoff) * (2 * sk->mdev + sk->rtt);
   sk->timeout = TIME_WRITE;
   reset_timer((struct timer *)&sk->time_wait);
+
+}
+
+/* Backoff function - the subject of much research */
+int backoff(int n)
+{
+	/* Use binary exponential up to retry #4, and quadratic after that
+	 * This yields the sequence
+	 * 1, 2, 4, 8, 16, 25, 36, 49, 64, 81, 100 ...
+	 */
+
+	if(n <= 4)
+		return 1 << n;	/* Binary exponential back off */
+	else
+		return n * n;	/* Quadratic back off */
 }

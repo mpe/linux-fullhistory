@@ -27,7 +27,7 @@
 #include <linux/net.h>
 #include <linux/ddi.h>
 #include <linux/un.h>
-#include <sys/param.h>
+#include <linux/param.h>
 #include "unix.h"
 
 
@@ -63,9 +63,9 @@ int unix_get_info(char *buffer)
 		/*
 		 * Check wether buffer _may_ overflow in the next loop.
 		 * Since sockets may have very very long paths, we make
-		 * MAXPATHLEN+100 the minimum space left for a new line.
+		 * PATH_MAX+100 the minimum space left for a new line.
 		 */
-		if (pos > buffer+PAGE_SIZE-80-MAXPATHLEN) {
+		if (pos > buffer+PAGE_SIZE-80-PATH_MAX) {
 			printk("UNIX: netinfo: oops, too many sockets.\n");
 			return(pos - buffer);
 		}

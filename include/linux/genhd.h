@@ -39,7 +39,7 @@ struct gendisk {
 
 	void (*init)(void);		/* Initialization called before we do our thing */
 	struct hd_struct *part;		/* partition table */
-	int *sizes;			/* block sizes */
+	int *sizes;			/* size of device in blocks */
 	int nr_real;			/* number of real devices */
 
 	void *real_devices;		/* internal use */

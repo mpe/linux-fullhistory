@@ -43,21 +43,22 @@ static void dump_io_bitmap(void)
 /*
  * this changes the io permissions bitmap in the current task.
  */
-int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
+extern "C" int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
 {
 	unsigned long froml, lindex, tnum, numl, rindex, mask;
 	unsigned long *iop;
 
+	if (from + num <= from)
+		return -EINVAL;
+	if (from + num > IO_BITMAP_SIZE*32)
+		return -EINVAL;
+	if (!suser())
+		return -EPERM;
 	froml = from >> 5;
 	lindex = from & 0x1f;
 	tnum = lindex + num;
 	numl = (tnum + 0x1f) >> 5;
 	rindex = tnum & 0x1f;
-
-	if (!suser())
-		return -EPERM;
-	if (froml * 32 + tnum > sizeof(current->tss.io_bitmap) * 8 - 8)
-		return -EINVAL;
 
 #ifdef IODEBUG
 	printk("io: from=%d num=%d %s\n", from, num, (turn_on ? "on" : "off"));
@@ -104,7 +105,7 @@ unsigned int *stack;
  * on system-call entry - see also fork() and the signal handling
  * code.
  */
-int sys_iopl(long ebx,long ecx,long edx,
+extern "C" int sys_iopl(long ebx,long ecx,long edx,
 	     long esi, long edi, long ebp, long eax, long ds,
 	     long es, long fs, long gs, long orig_eax,
 	     long eip,long cs,long eflags,long esp,long ss)

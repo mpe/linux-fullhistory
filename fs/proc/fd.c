@@ -109,7 +109,12 @@ static int proc_lookupfd(struct inode * dir,const char * name, int len,
 			return -ENOENT;
 		ino = (pid << 16) + 0x100 + fd;
 	} else {
-		if (fd >= p->numlibraries)
+		int j = 0;
+		struct vm_area_struct * mpnt;
+		for (mpnt = p->mmap; mpnt; mpnt = mpnt->vm_next)
+			if (mpnt->vm_inode)
+				j++;
+		if (fd >= j)
 			return -ENOENT;
 		ino = (pid << 16) + 0x200 + fd;
 	}
@@ -160,9 +165,15 @@ static int proc_readfd(struct inode * inode, struct file * filp,
 				break;
 			if (!p->filp[fd] || !p->filp[fd]->f_inode)
 				continue;
-		} else
-			if (fd >= p->numlibraries)
+		} else {
+			int j = 0;
+			struct vm_area_struct * mpnt;
+			for (mpnt = p->mmap ; mpnt ; mpnt = mpnt->vm_next)
+				if (mpnt->vm_inode)
+					j++;
+			if (fd >= j)
 				break;
+		}
 		j = 10;
 		i = 1;
 		while (fd >= j) {

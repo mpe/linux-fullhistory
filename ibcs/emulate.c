@@ -20,7 +20,7 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-void iABI_emulate(struct pt_regs * regs)
+extern "C" void iABI_emulate(struct pt_regs * regs)
 {
 	printk("lcall 7,xxx: eax = %08x\n",regs->eax);
 }

@@ -55,18 +55,29 @@ static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
  * this simple algorithm to get a reasonable (although not 100% accurate)
  * value.
  */
+
+/*
+ * Use minix fs values for the number of direct and indirect blocks.  The
+ * count is now exact for the minix fs except that it counts zero blocks.
+ * Everything is in BLOCK_SIZE'd units until the assignment to
+ * tmp.st_blksize.
+ */
+#define D_B   7
+#define I_B   (BLOCK_SIZE / sizeof(unsigned short))
+
 	if (!inode->i_blksize) {
-		blocks = (tmp.st_size + 511) / 512;
-		if (blocks > 10) {
-			indirect = (blocks - 11)/256+1;
-			if (blocks > 10+256) {
-				indirect += (blocks - 267)/(256*256)+1;
-				if (blocks > 10+256+256*256)
-					indirect++;
-			}
+		blocks = (tmp.st_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+		if (blocks > D_B) {
+			indirect = (blocks - D_B + I_B - 1) / I_B;
 			blocks += indirect;
+			if (indirect > 1) {
+				indirect = (indirect - 1 + I_B - 1) / I_B;
+				blocks += indirect;
+				if (indirect > 1)
+					blocks++;
+			}
 		}
-		tmp.st_blocks = blocks;
+		tmp.st_blocks = (BLOCK_SIZE / 512) * blocks;
 		tmp.st_blksize = BLOCK_SIZE;
 	} else {
 		tmp.st_blocks = inode->i_blocks;
@@ -75,7 +86,7 @@ static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
 	memcpy_tofs(statbuf,&tmp,sizeof(tmp));
 }
 
-int sys_stat(char * filename, struct old_stat * statbuf)
+extern "C" int sys_stat(char * filename, struct old_stat * statbuf)
 {
 	struct inode * inode;
 	int error;
@@ -91,7 +102,7 @@ int sys_stat(char * filename, struct old_stat * statbuf)
 	return 0;
 }
 
-int sys_newstat(char * filename, struct new_stat * statbuf)
+extern "C" int sys_newstat(char * filename, struct new_stat * statbuf)
 {
 	struct inode * inode;
 	int error;
@@ -107,7 +118,7 @@ int sys_newstat(char * filename, struct new_stat * statbuf)
 	return 0;
 }
 
-int sys_lstat(char * filename, struct old_stat * statbuf)
+extern "C" int sys_lstat(char * filename, struct old_stat * statbuf)
 {
 	struct inode * inode;
 	int error;
@@ -123,7 +134,7 @@ int sys_lstat(char * filename, struct old_stat * statbuf)
 	return 0;
 }
 
-int sys_newlstat(char * filename, struct new_stat * statbuf)
+extern "C" int sys_newlstat(char * filename, struct new_stat * statbuf)
 {
 	struct inode * inode;
 	int error;
@@ -139,7 +150,7 @@ int sys_newlstat(char * filename, struct new_stat * statbuf)
 	return 0;
 }
 
-int sys_fstat(unsigned int fd, struct old_stat * statbuf)
+extern "C" int sys_fstat(unsigned int fd, struct old_stat * statbuf)
 {
 	struct file * f;
 	struct inode * inode;
@@ -154,7 +165,7 @@ int sys_fstat(unsigned int fd, struct old_stat * statbuf)
 	return 0;
 }
 
-int sys_newfstat(unsigned int fd, struct new_stat * statbuf)
+extern "C" int sys_newfstat(unsigned int fd, struct new_stat * statbuf)
 {
 	struct file * f;
 	struct inode * inode;
@@ -169,7 +180,7 @@ int sys_newfstat(unsigned int fd, struct new_stat * statbuf)
 	return 0;
 }
 
-int sys_readlink(const char * path, char * buf, int bufsiz)
+extern "C" int sys_readlink(const char * path, char * buf, int bufsiz)
 {
 	struct inode * inode;
 	int error;

@@ -431,6 +431,8 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     printk("Sending command (%d %x)...",mbo, done);
 #endif
 
+    any2scsi(mb[mbo].ccbptr, &ccb[mbo]); /* This gets trashed for some reason*/
+
     memset(&ccb[mbo], 0, sizeof(struct ccb));
 
     ccb[mbo].cdblen = COMMAND_SIZE(*cmd);     /* SCSI Command Descriptor Block Length */
@@ -451,7 +453,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 #endif
       int i;
       ccb[mbo].op = 2;	      /* SCSI Initiator Command  w/scatter-gather*/
-      SCpnt->host_scribble = scsi_malloc(512);
+      SCpnt->host_scribble = (unsigned char *) scsi_malloc(512);
       sgpnt = (struct scatterlist *) SCpnt->request_buffer;
       cptr = (struct chain *) SCpnt->host_scribble; 
       if (cptr == NULL) panic("aha1542.c: unable to allocate DMA memory\n");
@@ -783,10 +785,11 @@ int aha1542_reset(void)
     return 0;
 }
 
-int aha1542_biosparam(int size, int dev, int* info){
-  info[0] = 64;
-  info[1] = 32;
-  info[2] = size >> 11;
-/*  if (info[2] >= 1024) info[2] = 1024; */
+int aha1542_biosparam(int size, int dev, int * ip)
+{
+  ip[0] = 64;
+  ip[1] = 32;
+  ip[2] = size >> 11;
+/*  if (ip[2] >= 1024) ip[2] = 1024; */
   return 0;
 }

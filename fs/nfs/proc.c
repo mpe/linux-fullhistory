@@ -102,7 +102,6 @@ static inline int *xdr_decode_data(int *p, char *data, int *lenp, int maxlen)
 	if (len > maxlen)
 		return NULL;
 	memcpy(data, (char *) p, len);
-	data[len] = '\0';
 	p += (len + 3) >> 2;
 	return p;
 }
@@ -617,7 +616,7 @@ static int *nfs_rpc_header(int *p, int procedure)
 	int *p1, *p2;
 	int i;
 	static int xid = 0;
-	unsigned char *sys = system_utsname.nodename;
+	unsigned char *sys = (unsigned char *) system_utsname.nodename;
 
 	if (xid == 0) {
 		xid = CURRENT_TIME;
@@ -632,7 +631,7 @@ static int *nfs_rpc_header(int *p, int procedure)
 	*p++ = htonl(RPC_AUTH_UNIX);
 	p1 = p++;
 	*p++ = htonl(CURRENT_TIME); /* traditional, could be anything */
-	p = xdr_encode_string(p, sys);
+	p = xdr_encode_string(p, (char *) sys);
 	*p++ = htonl(current->euid);
 	*p++ = htonl(current->egid);
 	p2 = p++;

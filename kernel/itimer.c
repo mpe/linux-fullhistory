@@ -53,7 +53,7 @@ int _getitimer(int which, struct itimerval *value)
 	return(0);
 }
 
-int sys_getitimer(int which, struct itimerval *value)
+extern "C" int sys_getitimer(int which, struct itimerval *value)
 {
 	int error;
 	struct itimerval get_buffer;
@@ -98,7 +98,7 @@ int _setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 	return 0;
 }
 
-int sys_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
+extern "C" int sys_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 {
 	int error;
 	struct itimerval set_buffer, get_buffer;

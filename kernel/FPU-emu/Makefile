@@ -10,7 +10,7 @@ CFLAGS	:= $(CFLAGS) -DPARANOID $(DEBUG) -fno-builtin
 	$(CC) $(CFLAGS) $(MATH_EMULATION) -c $<
 
 .S.o:
-	$(CC) $(CFLAGS) -c $<
+	$(CC) -D__ASSEMBLER__ -c $<
 
 .s.o:
 	$(CC) -c $<
@@ -41,7 +41,8 @@ clean:
 	rm -f core *.o *.a *.s
 
 dep:
-	$(CPP) -M *.c *.S > .depend
+	$(CPP) -M *.c > .depend
+	$(CPP) -D__ASSEMBLER__ -M *.S >> .depend
 
 proto:
 	cproto -e -DMAKING_PROTO *.c >fpu_proto.h

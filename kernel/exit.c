@@ -19,7 +19,6 @@
 extern void shm_exit (void);
 extern void sem_exit (void);
 
-int sys_close(int fd);
 int getrusage(struct task_struct *, int, struct rusage *);
 
 static int generate(unsigned long sig, struct task_struct * p)
@@ -273,7 +272,7 @@ int kill_proc(int pid, int sig, int priv)
  * POSIX specifies that kill(-1,sig) is unspecified, but what we have
  * is probably wrong.  Should make it like BSD or SYSV.
  */
-int sys_kill(int pid,int sig)
+extern "C" int sys_kill(int pid,int sig)
 {
 	struct task_struct **p = NR_TASKS + task;
 	int err, retval = 0, count = 0;
@@ -366,10 +365,21 @@ fake_volatile:
 	current->root = NULL;
 	iput(current->executable);
 	current->executable = NULL;
-	for (i=0; i < current->numlibraries; i++) {
-		iput(current->libraries[i].library);
-		current->libraries[i].library = NULL;
-	}	
+	/* Release all of the old mmap stuff. */
+	
+	{
+		struct vm_area_struct * mpnt, *mpnt1;
+		mpnt = current->mmap;
+		current->mmap = NULL;
+		while (mpnt) {
+			mpnt1 = mpnt->vm_next;
+			if (mpnt->vm_ops->close)
+				mpnt->vm_ops->close(mpnt);
+			kfree(mpnt);
+			mpnt = mpnt1;
+		}
+	}
+
 	current->state = TASK_ZOMBIE;
 	current->exit_code = code;
 	current->rss = 0;
@@ -466,12 +476,12 @@ fake_volatile:
 	goto fake_volatile;
 }
 
-int sys_exit(int error_code)
+extern "C" int sys_exit(int error_code)
 {
 	do_exit((error_code&0xff)<<8);
 }
 
-int sys_wait4(pid_t pid,unsigned long * stat_addr, int options, struct rusage * ru)
+extern "C" int sys_wait4(pid_t pid,unsigned long * stat_addr, int options, struct rusage * ru)
 {
 	int flag, retval;
 	struct wait_queue wait = { current, NULL };
@@ -562,7 +572,7 @@ end_wait4:
  * sys_waitpid() remains for compatibility. waitpid() should be
  * implemented by calling sys_wait4() from libc.a.
  */
-int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options)
+extern "C" int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options)
 {
 	return sys_wait4(pid, stat_addr, options, NULL);
 }

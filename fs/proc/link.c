@@ -79,8 +79,19 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 					break;
 				case 2:
 					ino &= 0xff;
-					if (ino < p->numlibraries)
-						inode = p->libraries[ino].library;
+					{ int j = ino;
+					  struct vm_area_struct * mpnt;
+					  for(mpnt = p->mmap; mpnt && j >= 0;
+					      mpnt = mpnt->vm_next){
+					    if(mpnt->vm_inode) {
+					      if(j == 0) {
+						inode = mpnt->vm_inode;
+						break;
+					      };
+					      j--;
+					    }
+					  }
+					};
 			}
 	}
 	if (!inode)

@@ -8,10 +8,10 @@
 
 #include "../blk.h"
 #include "scsi.h"
+#include "scsi_ioctl.h"
 #include "hosts.h"
 #include "sd.h"
 
-extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 extern int revalidate_scsidisk(int, int);
 
 int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigned long arg)
@@ -19,7 +19,7 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	int dev = inode->i_rdev;
 	int host, error;
 	int diskinfo[4];
-	struct hd_geometry *loc = (void *) arg;
+	struct hd_geometry *loc = (struct hd_geometry *) arg;
 
 	switch (cmd) {
          	case HDIO_REQ:   /* Return BIOS disk parameters */

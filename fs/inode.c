@@ -88,19 +88,16 @@ void grow_inodes(void)
 	struct inode * inode;
 	int i;
 
-	page = get_free_page(GFP_KERNEL);
+	page = get_free_page(GFP_BUFFER);
 	if (!page)
 		return;
 	inode = (struct inode *) page;
-	for (i=0; i < (PAGE_SIZE / sizeof(struct inode)); i++, inode++)
-	{
-		if (!first_inode)
-		{
+	for (i=0; i < (PAGE_SIZE / sizeof(struct inode)); i++, inode++) {
+		if (!first_inode) {
 			inode->i_next = inode;
 			inode->i_prev = inode;
 			first_inode = inode;
-		}
-		else
+		} else
 			insert_inode_free(inode);
 	}
 	nr_inodes += i;
@@ -151,9 +148,9 @@ void clear_inode(struct inode * inode)
 	struct wait_queue * wait;
 
 	wait_on_inode(inode);
-	wait = ((volatile struct inode *) inode)->i_wait;
 	remove_inode_hash(inode);
 	remove_inode_free(inode);
+	wait = ((volatile struct inode *) inode)->i_wait;
 	if (inode->i_count)
 		nr_free_inodes++;
 	memset(inode,0,sizeof(*inode));
@@ -163,10 +160,13 @@ void clear_inode(struct inode * inode)
 
 int fs_may_mount(dev_t dev)
 {
-	struct inode * inode;
+	struct inode * inode, * next;
 	int i;
 
-	for (inode = first_inode, i=0; i<nr_inodes; i++, inode=inode->i_next) {
+	next = first_inode;
+	for (i = nr_inodes ; i > 0 ; i--) {
+		inode = next;
+		next = inode->i_next;	/* clear_inode() changes the queues.. */
 		if (inode->i_dev != dev)
 			continue;
 		if (inode->i_count || inode->i_dirt || inode->i_lock)
@@ -181,12 +181,13 @@ int fs_may_umount(dev_t dev, struct inode * mount_root)
 	struct inode * inode;
 	int i;
 
-	for (inode = first_inode, i=0; i<nr_inodes; i++, inode=inode->i_next) {
-		if (inode->i_dev==dev && inode->i_count)
-			if (inode == mount_root && inode->i_count == 1)
-				continue;
-			else
-				return 0;
+	inode = first_inode;
+	for (i=0 ; i < nr_inodes ; i++, inode = inode->i_next) {
+		if (inode->i_dev != dev || !inode->i_count)
+			continue;
+		if (inode == mount_root && inode->i_count == 1)
+			continue;
+		return 0;
 	}
 	return 1;
 }
@@ -266,20 +267,20 @@ int bmap(struct inode * inode, int block)
 
 void invalidate_inodes(dev_t dev)
 {
+	struct inode * inode, * next;
 	int i;
-	struct inode * inode;
 
-	inode = first_inode;
-	for(i = 0; i < nr_inodes*2; i++, inode = inode->i_next) {
-		wait_on_inode(inode);
-		if (inode->i_dev == dev) {
-			if (inode->i_count) {
-				printk("VFS: inode busy on removed device %d/%d\n",
-							MAJOR(dev), MINOR(dev));
-				continue;
-			}
-			clear_inode(inode);
+	next = first_inode;
+	for(i = nr_inodes ; i > 0 ; i--) {
+		inode = next;
+		next = inode->i_next;		/* clear_inode() changes the queues.. */
+		if (inode->i_dev != dev)
+			continue;
+		if (inode->i_count || inode->i_dirt || inode->i_lock) {
+			printk("VFS: inode busy on removed device %d/%d\n", MAJOR(dev), MINOR(dev));
+			continue;
 		}
+		clear_inode(inode);
 	}
 }
 
@@ -385,8 +386,7 @@ repeat:
 	inode->i_count = 1;
 	inode->i_nlink = 1;
 	nr_free_inodes--;
-	if (nr_free_inodes < 0)
-	{
+	if (nr_free_inodes < 0) {
 		printk ("VFS: get_empty_inode: bad free inode count.\n");
 		nr_free_inodes = 0;
 	}
@@ -396,20 +396,22 @@ repeat:
 struct inode * get_pipe_inode(void)
 {
 	struct inode * inode;
+	extern struct inode_operations pipe_inode_operations;
 
 	if (!(inode = get_empty_inode()))
 		return NULL;
 	if (!(PIPE_BASE(*inode) = (char *) get_free_page(GFP_USER))) {
-		inode->i_count = 0;
+		iput(inode);
 		return NULL;
 	}
+	inode->i_op = &pipe_inode_operations;
 	inode->i_count = 2;	/* sum of readers/writers */
 	PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
 	PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
 	PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
 	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
 	inode->i_pipe = 1;
-	inode->i_mode |= S_IFIFO;
+	inode->i_mode |= S_IFIFO | S_IRUSR | S_IWUSR;
 	inode->i_uid = current->euid;
 	inode->i_gid = current->egid;
 	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
@@ -422,8 +424,8 @@ struct inode * iget(struct super_block * sb,int nr)
 
 	if (!sb)
 		panic("VFS: iget with sb==NULL");
-repeat:
 	empty = get_empty_inode();
+repeat:
 	inode = *(hash(sb->s_dev,nr));
 	while (inode) {
 		if (inode->i_dev != sb->s_dev || inode->i_ino != nr) {
@@ -440,7 +442,7 @@ repeat:
 			int i;
 
 			for (i = 0 ; i<NR_SUPER ; i++)
-				if (super_block[i].s_covered==inode)
+				if (super_blocks[i].s_covered==inode)
 					break;
 			if (i >= NR_SUPER) {
 				printk("VFS: Mounted inode hasn't got sb\n");
@@ -449,7 +451,7 @@ repeat:
 				return inode;
 			}
 			iput(inode);
-			if (!(inode = super_block[i].s_mounted))
+			if (!(inode = super_blocks[i].s_mounted))
 				printk("VFS: Mounted device %d/%d has no rootinode\n",
 					MAJOR(inode->i_dev), MINOR(inode->i_dev));
 			else {

@@ -38,7 +38,6 @@
 #define MAJOR_NR 3
 #include "blk.h"
 
-extern void resetup_one_dev(struct gendisk *, unsigned int);
 static int revalidate_hddisk(int, int);
 
 static inline unsigned char CMOS_READ(unsigned char addr)
@@ -85,12 +84,13 @@ static int NR_HD = 0;
 
 static struct hd_struct hd[MAX_HD<<6]={{0,0},};
 static int hd_sizes[MAX_HD<<6] = {0, };
+static int hd_blocksizes[MAX_HD<<6] = {0, };
 
 #define port_read(port,buf,nr) \
-__asm__("cld;rep;insw"::"d" (port),"D" (buf),"c" (nr):"cx","di")
+__asm__("cld;rep;insw": :"d" (port),"D" (buf),"c" (nr):"cx","di")
 
 #define port_write(port,buf,nr) \
-__asm__("cld;rep;outsw"::"d" (port),"S" (buf),"c" (nr):"cx","si")
+__asm__("cld;rep;outsw": :"d" (port),"S" (buf),"c" (nr):"cx","si")
 
 #if (HD_DELAY > 0)
 unsigned long read_timer(void)
@@ -107,6 +107,22 @@ unsigned long read_timer(void)
 	return(t - i);
 }
 #endif
+
+void hd_setup(char *str, int *ints)
+{
+	int hdind = 0;
+
+	if (ints[0] != 3)
+		return;
+	if (hd_info[0].head != 0)
+		hdind=1;
+	hd_info[hdind].head = ints[2];
+	hd_info[hdind].sect = ints[3];
+	hd_info[hdind].cyl = ints[1];
+	hd_info[hdind].wpcom = 0;
+	hd_info[hdind].lzone = ints[1];
+	hd_info[hdind].ctl = (ints[2] > 8 ? 8 : 0);
+}
 
 static int win_result(void)
 {
@@ -509,7 +525,7 @@ repeat:
 static int hd_ioctl(struct inode * inode, struct file * file,
 	unsigned int cmd, unsigned long arg)
 {
-	struct hd_geometry *loc = (void *) arg;
+	struct hd_geometry *loc = (struct hd_geometry *) arg;
 	int dev, err;
 
 	if (!inode)
@@ -689,6 +705,9 @@ static void hd_geninit(void)
 		}
 	}
 	hd_gendisk.nr_real = NR_HD;
+
+	for(i=0;i<(MAX_HD << 6);i++) hd_blocksizes[i] = 1024;
+	blksize_size[MAJOR_NR] = hd_blocksizes;
 }
 
 static struct file_operations hd_fops = {

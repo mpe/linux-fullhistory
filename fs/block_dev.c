@@ -12,11 +12,13 @@
 #include <asm/system.h>
 
 extern int *blk_size[];
+extern int *blksize_size[];
 
 int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 {
-	int block = filp->f_pos >> BLOCK_SIZE_BITS;
-	int offset = filp->f_pos & (BLOCK_SIZE-1);
+	int blocksize, blocksize_bits, i;
+	int block;
+	int offset;
 	int chars;
 	int written = 0;
 	int size;
@@ -25,18 +27,32 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 	register char * p;
 
 	dev = inode->i_rdev;
+	blocksize = BLOCK_SIZE;
+	if (blksize_size[MAJOR(dev)] && blksize_size[MAJOR(dev)][MINOR(dev)])
+		blocksize = blksize_size[MAJOR(dev)][MINOR(dev)];
+
+	i = blocksize;
+	blocksize_bits = 0;
+	while(i != 1) {
+		blocksize_bits++;
+		i >>= 1;
+	}
+
+	block = filp->f_pos >> blocksize_bits;
+	offset = filp->f_pos & (blocksize-1);
+
 	if (blk_size[MAJOR(dev)])
-		size = blk_size[MAJOR(dev)][MINOR(dev)];
+		size = (blk_size[MAJOR(dev)][MINOR(dev)] << BLOCK_SIZE_BITS) >> blocksize_bits;
 	else
 		size = 0x7fffffff;
 	while (count>0) {
 		if (block >= size)
 			return written;
-		chars = BLOCK_SIZE - offset;
+		chars = blocksize - offset;
 		if (chars > count)
 			chars=count;
-		if (chars == BLOCK_SIZE)
-			bh = getblk(dev, block, BLOCK_SIZE);
+		if (chars == blocksize)
+			bh = getblk(dev, block, blocksize);
 		else
 			bh = breada(dev,block,block+1,block+2,-1);
 		block++;
@@ -63,6 +79,8 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	unsigned int block;
 	unsigned int offset;
+	int blocksize;
+	int blocksize_bits, i;
 	int blocks, left;
 	int bhrequest, uptodate;
 	struct buffer_head ** bhb, ** bhe;
@@ -74,6 +92,16 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	int read;
 
 	dev = inode->i_rdev;
+	blocksize = BLOCK_SIZE;
+	if (blksize_size[MAJOR(dev)] && blksize_size[MAJOR(dev)][MINOR(dev)])
+		blocksize = blksize_size[MAJOR(dev)][MINOR(dev)];
+	i = blocksize;
+	blocksize_bits = 0;
+	while (i != 1) {
+		blocksize_bits++;
+		i >>= 1;
+	}
+
 	offset = filp->f_pos;
 	if (blk_size[MAJOR(dev)])
 		size = blk_size[MAJOR(dev)][MINOR(dev)] << BLOCK_SIZE_BITS;
@@ -89,13 +117,13 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	if (left <= 0)
 		return 0;
 	read = 0;
-	block = offset >> BLOCK_SIZE_BITS;
-	offset &= BLOCK_SIZE-1;
-	size >>= BLOCK_SIZE_BITS;
-	blocks = (left + offset + BLOCK_SIZE - 1) >> BLOCK_SIZE_BITS;
+	block = offset >> blocksize_bits;
+	offset &= blocksize-1;
+	size >>= blocksize_bits;
+	blocks = (left + offset + blocksize - 1) >> blocksize_bits;
 	bhb = bhe = buflist;
 	if (filp->f_reada) {
-		blocks += read_ahead[MAJOR(dev)] / (BLOCK_SIZE >> 9);
+		blocks += read_ahead[MAJOR(dev)] / (blocksize >> 9);
 		if (block + blocks > size)
 			blocks = size - block;
 	}
@@ -111,14 +139,14 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	   buffers and caches. */
 
 	do {
-	        bhrequest = 0;
-	        uptodate = 1;
+		bhrequest = 0;
+		uptodate = 1;
 		while (blocks) {
 			--blocks;
-			*bhb = getblk(dev, block++, BLOCK_SIZE);
+			*bhb = getblk(dev, block++, blocksize);
 			if (*bhb && !(*bhb)->b_uptodate) {
-			        uptodate = 0;
-			        bhreq[bhrequest++] = *bhb;
+				uptodate = 0;
+				bhreq[bhrequest++] = *bhb;
 			}
 
 			if (++bhb == &buflist[NBUF])
@@ -144,10 +172,10 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 					break;
 				}
 			}			
-			if (left < BLOCK_SIZE - offset)
+			if (left < blocksize - offset)
 				chars = left;
 			else
-				chars = BLOCK_SIZE - offset;
+				chars = blocksize - offset;
 			filp->f_pos += chars;
 			left -= chars;
 			read += chars;

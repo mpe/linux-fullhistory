@@ -79,13 +79,13 @@ static int tty_select(struct inode *, struct file *, int, select_table *);
 static int tty_open(struct inode *, struct file *);
 static void tty_release(struct inode *, struct file *);
 
-int tty_register_ldisc(int disc, struct tty_ldisc *new)
+int tty_register_ldisc(int disc, struct tty_ldisc *new_ldisc)
 {
 	if (disc < N_TTY || disc >= NR_LDISCS)
 		return -EINVAL;
 	
-	if (new) {
-		ldiscs[disc] = *new;
+	if (new_ldisc) {
+		ldiscs[disc] = *new_ldisc;
 		ldiscs[disc].flags |= LDISC_FLAG_DEFINED;
 	} else
 		memset(&ldiscs[disc], 0, sizeof(struct tty_ldisc));
@@ -98,13 +98,14 @@ void put_tty_queue(char c, struct tty_queue * queue)
 	int head;
 	unsigned long flags;
 
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	save_flags(flags);
+	cli();
 	head = (queue->head + 1) & (TTY_BUF_SIZE-1);
 	if (head != queue->tail) {
 		queue->buf[queue->head] = c;
 		queue->head = head;
 	}
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	restore_flags(flags);
 }
 
 int get_tty_queue(struct tty_queue * queue)
@@ -112,12 +113,13 @@ int get_tty_queue(struct tty_queue * queue)
 	int result = -1;
 	unsigned long flags;
 
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	save_flags(flags);
+	cli();
 	if (queue->tail != queue->head) {
 		result = 0xff & queue->buf[queue->tail];
 		queue->tail = (queue->tail + 1) & (TTY_BUF_SIZE-1);
 	}
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	restore_flags(flags);
 	return result;
 }
 
@@ -133,8 +135,9 @@ int tty_read_raw_data(struct tty_struct *tty, unsigned char *bufp, int buflen)
 	unsigned char	*p = bufp;
 	unsigned long flags;
 	int head, tail;
-	
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+
+	save_flags(flags);
+	cli();
 	tail = tty->read_q.tail;
 	head = tty->read_q.head;
 	while ((result < buflen) && (tail!=head)) {
@@ -143,7 +146,7 @@ int tty_read_raw_data(struct tty_struct *tty, unsigned char *bufp, int buflen)
 		result++;
 	}
 	tty->read_q.tail = tail;
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	restore_flags(flags);
 	return result;
 }
 
@@ -155,7 +158,7 @@ void tty_write_flush(struct tty_struct * tty)
 	if (set_bit(TTY_WRITE_BUSY,&tty->flags))
 		return;
 	tty->write(tty);
-	if (clear_bit(TTY_WRITE_BUSY,&tty->flags))
+	if (!clear_bit(TTY_WRITE_BUSY,&tty->flags))
 		printk("tty_write_flush: bit already cleared\n");
 }
 
@@ -166,7 +169,7 @@ void tty_read_flush(struct tty_struct * tty)
 	if (set_bit(TTY_READ_BUSY, &tty->flags))
 		return;
 	ldiscs[tty->disc].handler(tty);
-	if (clear_bit(TTY_READ_BUSY, &tty->flags))
+	if (!clear_bit(TTY_READ_BUSY, &tty->flags))
 		printk("tty_read_flush: bit already cleared\n");
 }
 
@@ -281,7 +284,7 @@ void tty_unhangup(struct file *filp)
 	filp->f_op = &tty_fops;
 }
 
-inline int tty_hung_up_p(struct file * filp)
+int tty_hung_up_p(struct file * filp)
 {
 	return ((filp->f_op == &hung_up_tty_fops) ||
 		(filp->f_op == &vhung_up_tty_fops));
@@ -494,7 +497,7 @@ void copy_to_cooked(struct tty_struct * tty)
 		save_flags(flags); cli();
 		if (tty->read_q.tail != tty->read_q.head) {
 			c = 0xff & tty->read_q.buf[tty->read_q.tail];
-			special_flag = !clear_bit(tty->read_q.tail,
+			special_flag = clear_bit(tty->read_q.tail,
 						  &tty->readq_flags);
 			tty->read_q.tail = (tty->read_q.tail + 1) &
 				(TTY_BUF_SIZE-1);
@@ -677,10 +680,10 @@ void copy_to_cooked(struct tty_struct * tty)
 	if (tty->write_q.proc_list && LEFT(&tty->write_q) > TTY_BUF_SIZE/2)
 		wake_up_interruptible(&tty->write_q.proc_list);
 	if (tty->throttle && (LEFT(&tty->read_q) >= RQ_THRESHOLD_HW)
-	    && !clear_bit(TTY_RQ_THROTTLED, &tty->flags))
+	    && clear_bit(TTY_RQ_THROTTLED, &tty->flags))
 		tty->throttle(tty, TTY_THROTTLE_RQ_AVAIL);
 	if (tty->throttle && (LEFT(&tty->secondary) >= SQ_THRESHOLD_HW)
-	    && !clear_bit(TTY_SQ_THROTTLED, &tty->flags))
+	    && clear_bit(TTY_SQ_THROTTLED, &tty->flags))
 		tty->throttle(tty, TTY_THROTTLE_SQ_AVAIL);
 }
 
@@ -782,7 +785,7 @@ static int read_chan(struct tty_struct * tty, struct file * file, char * buf, in
 		 * now, let the low-level driver know.
 		 */
 		if (tty->throttle && (LEFT(&tty->secondary) >= SQ_THRESHOLD_HW)
-		    && !clear_bit(TTY_SQ_THROTTLED, &tty->flags))
+		    && clear_bit(TTY_SQ_THROTTLED, &tty->flags))
 			tty->throttle(tty, TTY_THROTTLE_SQ_AVAIL);
 		if (b-buf >= minimum || !current->timeout)
 			break;
@@ -1438,9 +1441,10 @@ int tty_write_data(struct tty_struct *tty, char *bufp, int buflen,
 
 #define VLEFT ((tail-head-1)&(TTY_BUF_SIZE-1))
 
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	save_flags(flags);
+	cli();
 	if (tty->write_data_cnt) {
-		__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+		restore_flags(flags);
 		return -EBUSY;
 	}
 
@@ -1457,11 +1461,11 @@ int tty_write_data(struct tty_struct *tty, char *bufp, int buflen,
 	tty->write_q.head = head;
 	if (count) {
 		tty->write_data_cnt = count;
-		tty->write_data_ptr = p;
+		tty->write_data_ptr = (unsigned char *) p;
 		tty->write_data_callback = callback;
 		tty->write_data_arg = callarg;
 	}
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	restore_flags(flags);
 	tty->write(tty);
 	return count;
 }
@@ -1487,7 +1491,7 @@ void tty_bh_routine(void * unused)
 			continue;
 		}
 		for (j=0, mask=0; j < 32; j++, line++, mask <<= 1) {
-			if (!clear_bit(j, &tty_check_write[i])) {
+			if (clear_bit(j, &tty_check_write[i])) {
 				tty = tty_table[line];
 				if (!tty || !tty->write_data_cnt)
 					continue;

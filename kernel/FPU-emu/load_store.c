@@ -70,10 +70,12 @@ void load_store_instr(char type)
       }
       break;
     case _null_:
-      return Un_impl();
+      Un_impl();
+      return;
 #ifdef PARANOID
     default:
-      return EXCEPTION(EX_INTERNAL);
+      EXCEPTION(EX_INTERNAL);
+      return;
 #endif PARANOID
     }
 

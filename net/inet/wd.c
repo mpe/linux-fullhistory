@@ -348,7 +348,7 @@ wd_block_input(struct device *dev, int count, char *buf, int ring_offset)
     }
     memcpy(buf, xfer_start, count);
     if (ei_debug > 4) {
-	unsigned short *board = xfer_start;
+	unsigned short *board = (unsigned short *) xfer_start;
 	printk("%s: wd8013 block_input(cnt=%d offset=%3x addr=%#x) = %2x %2x %2x...\n",
 	       dev->name, count, ring_offset, xfer_start,
 	       board[-1], board[0], board[1]);
@@ -368,7 +368,7 @@ wd_block_output(struct device *dev, int count, const unsigned char *buf,
 		int start_page)
 {
     unsigned char *shmem
-	= (void *)dev->mem_start + ((start_page - WD_START_PG)<<8);
+	= (unsigned char *)dev->mem_start + ((start_page - WD_START_PG)<<8);
 #if !defined(WD_no_mapout)
     int wd_cmdreg = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
     int reg5_val = ((dev->mem_start>>19) & 0x1f) | NIC16;

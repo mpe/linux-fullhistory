@@ -44,10 +44,10 @@
 #define TCP_TIMEOUT_LEN	720000	/* should be about 2 hrs		*/
 #define TCP_TIMEWAIT_LEN 1000	/* how long to wait to sucessfully 
 				 * close the socket, about 60 seconds	*/
-#define TCP_ACK_TIME	30000	/* time to delay before sending an ACK	*/
+#define TCP_ACK_TIME	3000	/* time to delay before sending an ACK	*/
 #define TCP_DONE_TIME	250	/* maximum time to wait before actually
 				 * destroying a socket			*/
-#define TCP_WRITE_TIME	30000	/* initial time to wait for an ACK,
+#define TCP_WRITE_TIME	3000	/* initial time to wait for an ACK,
 			         * after last transmit			*/
 #define TCP_CONNECT_TIME 2000	/* time to retransmit first SYN		*/
 #define TCP_SYN_RETRIES	5	/* number of times to retry openning a

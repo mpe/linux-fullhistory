@@ -343,8 +343,8 @@ static int nfs_create(struct inode *dir, const char *name, int len, int mode,
 		return -ENAMETOOLONG;
 	}
 	sattr.mode = mode;
-	sattr.uid = sattr.gid = sattr.size = -1;
-	sattr.atime.seconds = sattr.mtime.seconds = -1;
+	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
+	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
 	if ((error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
 		name, &sattr, &fhandle, &fattr))) {
 		iput(dir);
@@ -377,12 +377,12 @@ static int nfs_mknod(struct inode *dir, const char *name, int len,
 		return -ENAMETOOLONG;
 	}
 	sattr.mode = mode;
-	sattr.uid = sattr.gid = -1;
+	sattr.uid = sattr.gid = (unsigned) -1;
 	if (S_ISCHR(mode) || S_ISBLK(mode))
 		sattr.size = rdev; /* get out your barf bag */
 	else
-		sattr.size = -1;
-	sattr.atime.seconds = sattr.mtime.seconds = -1;
+		sattr.size = (unsigned) -1;
+	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
 		name, &sattr, &fhandle, &fattr);
 	if (!error)
@@ -408,8 +408,8 @@ static int nfs_mkdir(struct inode *dir, const char *name, int len, int mode)
 		return -ENAMETOOLONG;
 	}
 	sattr.mode = mode;
-	sattr.uid = sattr.gid = sattr.size = -1;
-	sattr.atime.seconds = sattr.mtime.seconds = -1;
+	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
+	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
 	error = nfs_proc_mkdir(NFS_SERVER(dir), NFS_FH(dir),
 		name, &sattr, &fhandle, &fattr);
 	if (!error)
@@ -478,8 +478,8 @@ static int nfs_symlink(struct inode *dir, const char *name, int len,
 		return -ENAMETOOLONG;
 	}
 	sattr.mode = S_IFLNK | 0777; /* SunOS 4.1.2 crashes without this! */
-	sattr.uid = sattr.gid = sattr.size = -1;
-	sattr.atime.seconds = sattr.mtime.seconds = -1;
+	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
+	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
 	error = nfs_proc_symlink(NFS_SERVER(dir), NFS_FH(dir),
 		name, symname, &sattr);
 	iput(dir);

@@ -24,34 +24,97 @@
 #define SLOW_DOWN_IO __SLOW_DOWN_IO
 #endif
 
-extern inline void outb(char value, unsigned short port)
+/* This is the more general version of outb.. */
+extern inline void __outb(unsigned char value, unsigned short port)
 {
-__asm__ __volatile__ ("outb %%al,%%dx"
-		::"a" ((char) value),"d" ((unsigned short) port));
+__asm__ __volatile__ ("outb %b0,%w1"
+		: /* no outputs */
+		:"a" (value),"d" (port));
 }
 
-extern inline unsigned int inb(unsigned short port)
+/* this is used for constant port numbers < 256.. */
+extern inline void __outbc(unsigned char value, unsigned short port)
+{
+__asm__ __volatile__ ("outb %b0,%1"
+		: /* no outputs */
+		:"a" (value),"i" (port));
+}
+
+/* general version of inb */
+extern inline unsigned int __inb(unsigned short port)
 {
 	unsigned int _v;
-__asm__ __volatile__ ("inb %%dx,%%al"
-		:"=a" (_v):"d" ((unsigned short) port),"0" (0));
+__asm__ __volatile__ ("inb %w1,%b0"
+		:"=a" (_v):"d" (port),"0" (0));
 	return _v;
 }
 
-extern inline void outb_p(char value, unsigned short port)
+/* inb with constant port nr 0-255 */
+extern inline unsigned int __inbc(unsigned short port)
 {
-__asm__ __volatile__ ("outb %%al,%%dx"
-		::"a" ((char) value),"d" ((unsigned short) port));
+	unsigned int _v;
+__asm__ __volatile__ ("inb %1,%b0"
+		:"=a" (_v):"i" (port),"0" (0));
+	return _v;
+}
+
+extern inline void __outb_p(unsigned char value, unsigned short port)
+{
+__asm__ __volatile__ ("outb %b0,%w1"
+		: /* no outputs */
+		:"a" (value),"d" (port));
 	SLOW_DOWN_IO;
 }
 
-extern inline unsigned int inb_p(unsigned short port)
+extern inline void __outbc_p(unsigned char value, unsigned short port)
+{
+__asm__ __volatile__ ("outb %b0,%1"
+		: /* no outputs */
+		:"a" (value),"i" (port));
+	SLOW_DOWN_IO;
+}
+
+extern inline unsigned int __inb_p(unsigned short port)
 {
 	unsigned int _v;
-__asm__ __volatile__ ("inb %%dx,%%al"
-		:"=a" (_v):"d" ((unsigned short) port),"0" (0));
+__asm__ __volatile__ ("inb %w1,%b0"
+		:"=a" (_v):"d" (port),"0" (0));
 	SLOW_DOWN_IO;
 	return _v;
 }
+
+extern inline unsigned int __inbc_p(unsigned short port)
+{
+	unsigned int _v;
+__asm__ __volatile__ ("inb %1,%b0"
+		:"=a" (_v):"i" (port),"0" (0));
+	SLOW_DOWN_IO;
+	return _v;
+}
+
+/*
+ * Note that due to the way __builtin_constant_p() works, you
+ *  - can't use it inside a inlien function (it will never be true)
+ *  - you don't have to worry about side effects within the __builtin..
+ */
+#define outb(val,port) \
+((__builtin_constant_p((port)) && (port) < 256) ? \
+	__outbc((val),(port)) : \
+	__outb((val),(port)))
+
+#define inb(port) \
+((__builtin_constant_p((port)) && (port) < 256) ? \
+	__inbc(port) : \
+	__inb(port))
+
+#define outb_p(val,port) \
+((__builtin_constant_p((port)) && (port) < 256) ? \
+	__outbc_p((val),(port)) : \
+	__outb_p((val),(port)))
+
+#define inb_p(port) \
+((__builtin_constant_p((port)) && (port) < 256) ? \
+	__inbc_p(port) : \
+	__inb_p(port))
 
 #endif

@@ -12,6 +12,7 @@
 #include <linux/termios.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/tty.h>
 #include <linux/fcntl.h>
@@ -30,6 +31,11 @@
 extern int session_of_pgrp(int pgrp);
 extern int do_screendump(int arg);
 extern int kill_pg(int pgrp, int sig, int priv);
+
+#ifdef CONFIG_SELECTION
+extern int set_selection(const int arg);
+extern int paste_selection(struct tty_struct *tty);
+#endif /* CONFIG_SELECTION */
 
 static void flush(struct tty_queue * queue)
 {
@@ -211,14 +217,14 @@ static int set_termio(struct tty_struct * tty, struct termio * termio,
 
 	/* take care of the packet stuff. */
 	if ((tmp_termio.c_iflag & IXON) &&
-	    ~(tty->termios->c_iflag & IXON))
+	    !(tty->termios->c_iflag & IXON))
 	  {
 	     tty->status_changed = 1;
 	     tty->ctrl_status |= TIOCPKT_DOSTOP;
 	  }
 
-	if (~(tmp_termio.c_iflag & IXON) &&
-	    (tty->termios->c_iflag & IXON))
+	if ((tty->termios->c_iflag & IXON) &&
+	    !(tmp_termio.c_iflag & IXON))
 	  {
 	     tty->status_changed = 1;
 	     tty->ctrl_status |= TIOCPKT_NOSTOP;
@@ -448,6 +454,12 @@ int tty_ioctl(struct inode * inode, struct file * file,
 					return do_screendump(arg);
 				case 1: 
 					return do_get_ps_info(arg);
+#ifdef CONFIG_SELECTION
+				case 2:
+					return set_selection(arg);
+				case 3:
+					return paste_selection(tty);
+#endif /* CONFIG_SELECTION */
 				default: 
 					return -EINVAL;
 			}

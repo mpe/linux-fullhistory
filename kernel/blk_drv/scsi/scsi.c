@@ -111,18 +111,18 @@ static struct blist blacklist[] =
    {"DENON","DRD-25X","V"},   /* A cdrom that locks up when probed at lun != 0 */
    {NULL, NULL, NULL}};	
 
-static int blacklisted(char * response_data){
+static int blacklisted(unsigned char * response_data){
   int i = 0;
-  char * pnt;
+  unsigned char * pnt;
   for(i=0; 1; i++){
     if(blacklist[i].vendor == NULL) return 0;
     pnt = &response_data[8];
     while(*pnt && *pnt == ' ') pnt++;
-    if(strncmp(blacklist[i].vendor, pnt,
+    if(memcmp(blacklist[i].vendor, pnt,
 	       strlen(blacklist[i].vendor))) continue;
     pnt = &response_data[16];
     while(*pnt && *pnt == ' ') pnt++;
-    if(strncmp(blacklist[i].model, pnt,
+    if(memcmp(blacklist[i].model, pnt,
 	       strlen(blacklist[i].model))) continue;
     return 1;
   };	
@@ -193,6 +193,7 @@ static void scan_scsis (void)
 
 		SCmd.request.dev = 0xffff; /* Mark not busy */
 		SCmd.use_sg  = 0;
+		SCmd.old_use_sg  = 0;
 		SCmd.transfersize = 0;
 		SCmd.underflow = 0;
 
@@ -312,9 +313,9 @@ static void scan_scsis (void)
 
 			/* These devices need this "key" to unlock the device
 			   so we can use it */
-			if(strncmp("INSITE", &scsi_result[8], 6) == 0 &&
-			   (strncmp("Floptical   F*8I", &scsi_result[16], 16) == 0
-			    ||strncmp("I325VM", &scsi_result[16], 6) == 0)) {
+			if(memcmp("INSITE", &scsi_result[8], 6) == 0 &&
+			   (memcmp("Floptical   F*8I", &scsi_result[16], 16) == 0
+			    || memcmp("I325VM", &scsi_result[16], 6) == 0)) {
 			  printk("Unlocked floptical drive.\n");
 			  scsi_devices[NR_SCSI_DEVICES].lockable = 0;
 			  scsi_cmd[0] = MODE_SENSE;
@@ -447,6 +448,7 @@ Scsi_Cmnd * request_queueable (struct request * req, int index)
   };
 
   SCpnt->use_sg = 0;  /* Reset the scatter-gather flag */
+  SCpnt->old_use_sg  = 0;
   SCpnt->transfersize = 0;
   SCpnt->underflow = 0;
   return SCpnt;
@@ -520,6 +522,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, int index, int wait)
   };
 
   SCpnt->use_sg = 0;  /* Reset the scatter-gather flag */
+  SCpnt->old_use_sg  = 0;
   SCpnt->transfersize = 0;      /* No default transfer size */
   SCpnt->underflow = 0;         /* Do not flag underflow conditions */
   return SCpnt;
@@ -590,8 +593,6 @@ update_timeout(SCpnt, SCpnt->timeout_per_command);
 
 static void scsi_request_sense (Scsi_Cmnd * SCpnt)
 	{
-	int old_use_sg;
-
 	cli();
 	SCpnt->flags |= WAS_SENSE;
 	update_timeout(SCpnt, SENSE_TIMEOUT);
@@ -606,10 +607,9 @@ static void scsi_request_sense (Scsi_Cmnd * SCpnt)
 
 	SCpnt->request_buffer = &SCpnt->sense_buffer;
 	SCpnt->request_bufflen = sizeof(SCpnt->sense_buffer);
-	old_use_sg = SCpnt->use_sg;
 	SCpnt->use_sg = 0;
 	internal_cmnd (SCpnt);
-	SCpnt->use_sg = old_use_sg;
+	SCpnt->use_sg = SCpnt->old_use_sg;
 	}
 
 
@@ -695,6 +695,7 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 	memcpy ((void *) SCpnt->cmnd , (void *) cmnd, 10);
 	SCpnt->request_buffer = buffer;
 	SCpnt->request_bufflen = bufflen;
+	SCpnt->old_use_sg = SCpnt->use_sg;
 
 	/* Start the timer ticking.  */
 
@@ -883,7 +884,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 						exit =  DRIVER_SENSE | SUGGEST_ABORT;
 						break;
 					default:
-						printk ("Internal error %s %s \n", __FILE__, 
+						printk ("Internal error %s %d \n", __FILE__, 
 							__LINE__);
 					}			   
 					}	
@@ -933,7 +934,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 				break;
 #endif
 			default:
-				printk ("Internal error %s %s \n"
+				printk ("Internal error %s %d \n"
 					"status byte = %d \n", __FILE__, 
 					__LINE__, status_byte(result));
 				
@@ -1036,6 +1037,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 				    sizeof(SCpnt->data_cmnd));
 			    SCpnt->request_buffer = SCpnt->buffer;
 			    SCpnt->request_bufflen = SCpnt->bufflen;
+			    SCpnt->use_sg = SCpnt->old_use_sg;
 			    internal_cmnd (SCpnt);
 			  };
 			break;	
@@ -1051,6 +1053,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 		host_busy[host]--; /* Indicate that we are free */
 		wake_up(&host_wait[host]);
 		SCpnt->result = result | ((exit & 0xff) << 24);
+		SCpnt->use_sg = SCpnt->old_use_sg;
 		SCpnt->done (SCpnt);
 		}
 
@@ -1204,12 +1207,6 @@ static void scsi_main_timeout(void)
       }
 
 /*
-	These are used to keep track of things. 
-*/
-
-static int time_start, time_elapsed;
-
-/*
 	The strategy is to cause the timer code to call scsi_times_out()
 	when the soonest timeout is pending.  
 	The arguments are used when we are queueing a new command, because
@@ -1282,7 +1279,7 @@ unsigned int dma_free_sectors = 0;
 unsigned int need_isa_buffer = 0;
 static unsigned char * dma_malloc_buffer = NULL;
 
-char *scsi_malloc(unsigned int len)
+void *scsi_malloc(unsigned int len)
 {
   unsigned int nbits, mask;
   int i, j;
@@ -1302,14 +1299,14 @@ char *scsi_malloc(unsigned int len)
 #ifdef DEBUG
 	printk("SMalloc: %d %x ",len, dma_malloc_buffer + (i << 13) + (j << 9));
 #endif
-	return (void*) ((unsigned long) dma_malloc_buffer + (i << 13) + (j << 9));
+	return (void *) ((unsigned long) dma_malloc_buffer + (i << 13) + (j << 9));
       };
     };
   sti();
   return NULL;  /* Nope.  No more */
 }
 
-int scsi_free(char *obj, unsigned int len)
+int scsi_free(void *obj, unsigned int len)
 {
   int offset;
   int page, sector, nbits, mask;
@@ -1399,8 +1396,10 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	      SCpnt->index = i;
 	      SCpnt->request.dev = -1; /* Mark not busy */
 	      SCpnt->use_sg = 0;
+	      SCpnt->old_use_sg = 0;
               SCpnt->underflow = 0;
               SCpnt->transfersize = 0;
+	      SCpnt->host_scribble = NULL;
 	      host = scsi_devices[i].host_no;
 	      if(host_queue[host])
 		host_queue[host]->prev = SCpnt;
@@ -1429,7 +1428,7 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	  if(scsi_hosts[host].unchecked_isa_dma &&
 	     memory_end > ISA_DMA_THRESHOLD &&
 	     scsi_devices[i].type != TYPE_TAPE) {
-	    dma_sectors += (BLOCK_SIZE >> 9) * scsi_hosts[host].sg_tablesize * 
+	    dma_sectors += (PAGE_SIZE >> 9) * scsi_hosts[host].sg_tablesize *
 	      scsi_hosts[host].cmd_per_lun;
 	    need_isa_buffer++;
 	  };
@@ -1445,7 +1444,7 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 
 	if(memory_start & 1) memory_start++; /* Some host adapters require
 						buffers to be word aligned */
-	dma_malloc_buffer = (char *) memory_start;
+	dma_malloc_buffer = (unsigned char *) memory_start;
 	memory_start += dma_sectors << 9;
 
 	memory_start = sd_init(memory_start, memory_end); /* init scsi disks */

@@ -13,9 +13,9 @@
 #include <linux/fcntl.h>
 #include <linux/string.h>
 
-extern int sys_close(int fd);
 extern int fcntl_getlk(unsigned int, struct flock *);
 extern int fcntl_setlk(unsigned int, unsigned int, struct flock *);
+extern int sock_fcntl (struct file *, unsigned int cmd, unsigned long arg);
 
 static int dupfd(unsigned int fd, unsigned int arg)
 {
@@ -35,7 +35,7 @@ static int dupfd(unsigned int fd, unsigned int arg)
 	return arg;
 }
 
-int sys_dup2(unsigned int oldfd, unsigned int newfd)
+extern "C" int sys_dup2(unsigned int oldfd, unsigned int newfd)
 {
 	if (oldfd >= NR_OPEN || !current->filp[oldfd])
 		return -EBADF;
@@ -58,16 +58,15 @@ int sys_dup2(unsigned int oldfd, unsigned int newfd)
 	return dupfd(oldfd,newfd);
 }
 
-int sys_dup(unsigned int fildes)
+extern "C" int sys_dup(unsigned int fildes)
 {
 	return dupfd(fildes,0);
 }
 
-int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
+extern "C" int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
-	extern int sock_fcntl (struct file *, unsigned int cmd,
-			       unsigned long arg);
+
 	if (fd >= NR_OPEN || !(filp = current->filp[fd]))
 		return -EBADF;
 	switch (cmd) {

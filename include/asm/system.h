@@ -16,11 +16,25 @@ __asm__ __volatile__ ("movl %%esp,%%eax\n\t" \
 	"mov %%ax,%%es\n\t" \
 	"mov %%ax,%%fs\n\t" \
 	"mov %%ax,%%gs" \
-	::"i" (USER_DS), "i" (USER_CS):"ax")
+	: /* no outputs */ :"i" (USER_DS), "i" (USER_CS):"ax")
 
-#define sti() __asm__ __volatile__ ("sti":::"memory")
-#define cli() __asm__ __volatile__ ("cli":::"memory")
-#define nop() __asm__ __volatile__ ("nop"::)
+#define sti() __asm__ __volatile__ ("sti": : :"memory")
+#define cli() __asm__ __volatile__ ("cli": : :"memory")
+#define nop() __asm__ __volatile__ ("nop")
+
+/*
+ * Clear and set 'TS' bit respectively
+ */
+#define clts() __asm__ __volatile__ ("clts")
+#define stts() \
+__asm__ __volatile__ ( \
+	"movl %%cr0,%%eax\n\t" \
+	"orl $8,%%eax\n\t" \
+	"movl %%eax,%%cr0" \
+	: /* no outputs */ \
+	: /* no inputs */ \
+	:"ax")
+
 
 extern inline int tas(char * m)
 {
@@ -31,12 +45,12 @@ extern inline int tas(char * m)
 }
 
 #define save_flags(x) \
-__asm__ __volatile__("pushfl ; popl %0":"=r" (x)::"memory")
+__asm__ __volatile__("pushfl ; popl %0":"=r" (x): /* no input */ :"memory")
 
 #define restore_flags(x) \
-__asm__ __volatile__("pushl %0 ; popfl"::"r" (x):"memory")
+__asm__ __volatile__("pushl %0 ; popfl": /* no output */ :"r" (x):"memory")
 
-#define iret() __asm__ __volatile__ ("iret":::"memory")
+#define iret() __asm__ __volatile__ ("iret": : :"memory")
 
 #define _set_gate(gate_addr,type,dpl,addr) \
 __asm__ __volatile__ ("movw %%dx,%%ax\n\t" \
@@ -80,11 +94,12 @@ __asm__ __volatile__ ("movw $" #limit ",%1\n\t" \
 	"movb $0x00,%5\n\t" \
 	"movb %%ah,%6\n\t" \
 	"rorl $16,%%eax" \
-	::"a" (addr+0xc0000000), "m" (*(n)), "m" (*(n+2)), "m" (*(n+4)), \
+	: /* no output */ \
+	:"a" (addr+0xc0000000), "m" (*(n)), "m" (*(n+2)), "m" (*(n+4)), \
 	 "m" (*(n+5)), "m" (*(n+6)), "m" (*(n+7)) \
 	)
 
-#define set_tss_desc(n,addr) _set_tssldt_desc(((char *) (n)),((int)(addr)),231,"0x89")
+#define set_tss_desc(n,addr) _set_tssldt_desc(((char *) (n)),((int)(addr)),235,"0x89")
 #define set_ldt_desc(n,addr) _set_tssldt_desc(((char *) (n)),((int)(addr)),23,"0x82")
 
 #endif

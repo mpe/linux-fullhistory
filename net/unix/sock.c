@@ -88,7 +88,7 @@ dprintf(int level, char *fmt, ...)
 
   if (level != unix_debug) return;
 
-  buff = kmalloc(256, GFP_KERNEL);
+  buff = (char *) kmalloc(256, GFP_KERNEL);
   if (buff != NULL) {
 	va_start(args, fmt);
 	vsprintf(buff, fmt, args);
@@ -178,7 +178,7 @@ unix_proto_send(struct socket *sock, void *buff, int len, int nonblock,
 		unsigned flags)
 {
   if (flags != 0) return(-EINVAL);
-  return(unix_proto_write(sock, buff, len, nonblock));
+  return(unix_proto_write(sock, (char *) buff, len, nonblock));
 }
 
 
@@ -188,7 +188,7 @@ unix_proto_recv(struct socket *sock, void *buff, int len, int nonblock,
 		unsigned flags)
 {
   if (flags != 0) return(-EINVAL);
-  return(unix_proto_read(sock, buff, len, nonblock));
+  return(unix_proto_read(sock, (char *) buff, len, nonblock));
 }
 
 
@@ -236,6 +236,10 @@ unix_data_alloc(void)
 static inline void
 unix_data_ref(struct unix_proto_data *upd)
 {
+  if (!upd) {
+    dprintf(1, "UNIX: data_ref: upd = NULL\n");
+    return;
+  }
   ++upd->refcnt;
   dprintf(1, "UNIX: data_ref: refing data 0x%x(%d)\n", upd, upd->refcnt);
 }
@@ -244,6 +248,10 @@ unix_data_ref(struct unix_proto_data *upd)
 static void
 unix_data_deref(struct unix_proto_data *upd)
 {
+  if (!upd) {
+    dprintf(1, "UNIX: data_deref: upd = NULL\n");
+    return;
+  }
   if (upd->refcnt == 1) {
 	dprintf(1, "UNIX: data_deref: releasing data 0x%x\n", upd);
 	if (upd->buf) {
@@ -558,10 +566,6 @@ unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblock)
 		dprintf(1, "UNIX: read: interrupted\n");
 		return(-ERESTARTSYS);
 	}
-	if (sock->state == SS_DISCONNECTING) {
-		dprintf(1, "UNIX: read: disconnected\n");
-		return(0);
-	}
   }
 
   /*
@@ -784,7 +788,7 @@ unix_ioctl(struct inode *inode, struct file *file,
   switch(cmd) {
 	case DDIOCSDBG:
 		verify_area(VERIFY_WRITE,(void *)arg, sizeof(int));
-		unix_debug = get_fs_long((void *)arg);
+		unix_debug = get_fs_long((int *)arg);
 		if (unix_debug != 0 && unix_debug != 1) {
 			unix_debug = 0;
 			return(-EINVAL);

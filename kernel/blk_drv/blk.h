@@ -1,7 +1,7 @@
 #ifndef _BLK_H
 #define _BLK_H
 
-#include <linux/fs.h>
+#include <linux/sched.h>
 #include <linux/locks.h>
 
 /*
@@ -59,17 +59,24 @@ struct sec_size {
 
 /*
  * These will have to be changed to be aware of different buffer
- * sizes etc..
+ * sizes etc.. It actually needs a major cleanup.
  */
-#define SECTOR_MASK ((1 << (BLOCK_SIZE_BITS - 9)) -1)
-#define SUBSECTOR(block) ((block) & SECTOR_MASK)
+#define SECTOR_MASK (blksize_size[MAJOR_NR] &&     \
+	blksize_size[MAJOR_NR][MINOR(CURRENT->dev)] ? \
+	((blksize_size[MAJOR_NR][MINOR(CURRENT->dev)] >> 9) - 1) :  \
+	((BLOCK_SIZE >> 9)  -  1))
+
+#define SUBSECTOR(block) (CURRENT->current_nr_sectors > 0)
 
 extern struct sec_size * blk_sec[MAX_BLKDEV];
 extern struct blk_dev_struct blk_dev[MAX_BLKDEV];
 extern struct request request[NR_REQUEST];
 extern struct wait_queue * wait_for_request;
+extern void resetup_one_dev(struct gendisk *dev, int drive);
 
 extern int * blk_size[MAX_BLKDEV];
+
+extern int * blksize_size[MAX_BLKDEV];
 
 extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
 extern int is_read_only(int dev);

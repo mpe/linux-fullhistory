@@ -18,4 +18,6 @@ extern struct vt_cons {
 	int		vt_newvt;
 } vt_cons[NR_CONSOLES];
 
+void kd_mksound(unsigned int count, unsigned int ticks);
+
 #endif /* _VT_KERN_H */

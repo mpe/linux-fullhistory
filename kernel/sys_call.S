@@ -78,7 +78,7 @@ errno		= 24
 
 ENOSYS = 38
 
-.globl _system_call,_sys_execve,_lcall7
+.globl _system_call,_lcall7
 .globl _device_not_available, _coprocessor_error
 .globl _divide_error,_debug,_nmi,_int3,_overflow,_bounds,_invalid_op
 .globl _double_fault,_coprocessor_segment_overrun
@@ -100,10 +100,10 @@ ENOSYS = 38
 	pushl %edx; \
 	pushl %ecx; \
 	pushl %ebx; \
-	movl $KERNEL_DS,%edx; \
+	movl $(KERNEL_DS),%edx; \
 	mov %dx,%ds; \
 	mov %dx,%es; \
-	movl $USER_DS,%edx; \
+	movl $(USER_DS),%edx; \
 	mov %dx,%fs
 
 #define RESTORE_ALL \
@@ -139,6 +139,15 @@ _lcall7:
 	jmp ret_from_sys_call
 
 .align 4
+handle_bottom_half:
+	pushfl
+	incl _intr_count
+	sti
+	call _do_bottom_half
+	popfl
+	decl _intr_count
+	jmp 9f
+.align 4
 reschedule:
 	pushl $ret_from_sys_call
 	jmp _schedule
@@ -150,18 +159,17 @@ _system_call:
 	cmpl _NR_syscalls,%eax
 	jae ret_from_sys_call
 	movl _current,%ebx
-	movl $0,errno(%ebx)
 	andl $~CF_MASK,EFLAGS(%esp)	# clear carry - assume no errors
-	testl $0x20,flags(%ebx)		# PF_TRACESYS
+	movl $0,errno(%ebx)
+	testb $0x20,flags(%ebx)		# PF_TRACESYS
 	jne 1f
 	call _sys_call_table(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
-	movl _current,%eax
-	movl errno(%eax),%edx
+	movl errno(%ebx),%edx
 	negl %edx
 	je ret_from_sys_call
 	movl %edx,EAX(%esp)
-	orl $CF_MASK,EFLAGS(%esp)	# set carry to indicate error
+	orl $(CF_MASK),EFLAGS(%esp)	# set carry to indicate error
 	jmp ret_from_sys_call
 .align 4
 1:	call _syscall_trace
@@ -173,20 +181,25 @@ _system_call:
 	negl %edx
 	je 1f
 	movl %edx,EAX(%esp)
-	orl $CF_MASK,EFLAGS(%esp)	# set carry to indicate error
+	orl $(CF_MASK),EFLAGS(%esp)	# set carry to indicate error
 1:	call _syscall_trace
 
 	.align 4,0x90
 ret_from_sys_call:
-	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are
-	testl $VM_MASK,%eax		# different then
+	cmpl $0,_intr_count
+	jne 2f
+	movl _bh_mask,%eax
+	andl _bh_active,%eax
+	jne handle_bottom_half
+9:	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are
+	testl $(VM_MASK),%eax		# different then
 	jne 1f
-	cmpw $USER_CS,CS(%esp)		# was old code segment supervisor ?
+	cmpw $(USER_CS),CS(%esp)	# was old code segment supervisor ?
 	jne 2f
-	cmpw $USER_DS,OLDSS(%esp)	# was stack segment user segment ?
+	cmpw $(USER_DS),OLDSS(%esp)	# was stack segment user segment ?
 	jne 2f
-1:	sti				# slow interrupts get here with interrupts disabled
-	orl $IF_MASK,%eax		# these just try to make sure
+1:	sti
+	orl $(IF_MASK),%eax		# these just try to make sure
 	andl $~NT_MASK,%eax		# the program doesn't do anything
 	movl %eax,EFLAGS(%esp)		# stupid
 	cmpl $0,_need_resched
@@ -208,7 +221,7 @@ ret_from_sys_call:
 signal_return:
 	movl %esp,%ecx
 	pushl %ecx
-	testl $VM_MASK,EFLAGS(%ecx)
+	testl $(VM_MASK),EFLAGS(%ecx)
 	jne v86_signal_return
 	pushl %ebx
 	call _do_signal
@@ -225,14 +238,6 @@ v86_signal_return:
 	popl %ebx
 	popl %ebx
 	RESTORE_ALL
-
-.align 4
-_sys_execve:
-	lea (EIP+4)(%esp),%eax  # don't forget about the return address.
-	pushl %eax
-	call _do_execve
-	addl $4,%esp
-	ret
 
 .align 4
 _divide_error:
@@ -259,10 +264,10 @@ error_code:
 	pushl %eax			# push the error code
 	lea 4(%esp),%edx
 	pushl %edx
-	movl $KERNEL_DS,%edx
+	movl $(KERNEL_DS),%edx
 	mov %dx,%ds
 	mov %dx,%es
-	movl $USER_DS,%edx
+	movl $(USER_DS),%edx
 	mov %dx,%fs
 	call *%ebx
 	addl $8,%esp
@@ -279,7 +284,6 @@ _device_not_available:
 	pushl $-1		# mark this as an int
 	SAVE_ALL
 	pushl $ret_from_sys_call
-	clts				# clear TS so that we can use math
 	movl %cr0,%eax
 	testl $0x4,%eax			# EM (math emulation bit)
 	je _math_state_restore

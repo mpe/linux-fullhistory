@@ -140,7 +140,7 @@ char emulating=0;
 #define bswapw(x) __asm__("xchgb %%al,%%ah":"=a" (x):"0" ((short)x))
 
 
-void math_emulate(long arg)
+extern "C" void math_emulate(long arg)
 {
   unsigned char  FPU_modrm;
   unsigned short code;
@@ -474,7 +474,7 @@ void __math_abort(struct info * info, unsigned int signal)
 	FPU_EIP = FPU_ORIG_EIP;
 	send_sig(signal,current,1);
 	RE_ENTRANT_CHECK_OFF
-	__asm__("movl %0,%%esp ; ret"::"g" (((long) info)-4));
+	__asm__("movl %0,%%esp ; ret": :"g" (((long) info)-4));
 #ifdef PARANOID
       printk("ERROR: wm-FPU-emu math_abort failed!\n");
 #endif PARANOID
@@ -485,7 +485,7 @@ void __math_abort(struct info * info, unsigned int signal)
 #include <linux/signal.h>
 #include <linux/sched.h>
 
-void math_emulate(long arg)
+extern "C" void math_emulate(long arg)
 {
   printk("math-meulation not enabled and no coprocessor found.\n");
   printk("killing %s.\n",current->comm);

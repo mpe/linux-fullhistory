@@ -27,6 +27,7 @@
 
 char	*rd_start;
 int	rd_length = 0;
+static int rd_blocksizes[2] = {0, 0};
 
 static void do_rd_request(void)
 {
@@ -87,6 +88,10 @@ long rd_init(long mem_start, int length)
 	cp = rd_start;
 	for (i=0; i < length; i++)
 		*cp++ = '\0';
+
+	for(i=0;i<2;i++) rd_blocksizes[i] = 1024;
+	blksize_size[MAJOR_NR] = rd_blocksizes;
+
 	return(length);
 }
 

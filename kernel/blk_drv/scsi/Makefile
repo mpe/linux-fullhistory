@@ -82,7 +82,7 @@ endif
 CFLAGS := $(CFLAGS) "-DMAX_SCSI_HOSTS=($(SCSI_HOSTS))"
 
 seagate.o: seagate.c
-	$(CC) -Wall -I$(KERNELHDRS) -c seagate.c 
+	$(CC) -Wall -I$(KERNELHDRS) -x c++ -c seagate.c 
 
 clean:
 	rm -f core *.o *.a *.s

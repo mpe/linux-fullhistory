@@ -18,15 +18,17 @@
 #include <linux/stddef.h>
 #include <linux/unistd.h>
 #include <linux/segment.h>
+#include <linux/ptrace.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
 
-extern void lcall7(void);
+extern "C" void lcall7(void);
+extern "C" void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 
 #define MAX_TASKS_PER_USER (NR_TASKS/2)
 
-extern int shm_fork (struct task_struct *, struct task_struct *);
+extern int shm_fork(struct task_struct *, struct task_struct *);
 long last_pid=0;
 
 static int find_empty_process(void)
@@ -46,7 +48,7 @@ repeat:
 		if (task[i]->pid == last_pid || task[i]->pgrp == last_pid)
 			goto repeat;
 	}
-	if (this_user_tasks > MAX_TASKS_PER_USER && !suser())
+	if (this_user_tasks > MAX_TASKS_PER_USER && current->uid)
 		return -EAGAIN;
 /* Only the super-user can fill the last available slot */
 	task_nr = 0;
@@ -61,62 +63,78 @@ repeat:
 	return -EAGAIN;
 }
 
-static struct file * copy_fd(struct file * old)
+static struct file * copy_fd(struct file * old_file)
 {
-	struct file * new = get_empty_filp();
+	struct file * new_file = get_empty_filp();
 	int error;
 
-	if (new) {
-		memcpy(new,old,sizeof(*new));
-		new->f_count = 1;
-		if (new->f_inode)
-			new->f_inode->i_count++;
-		if (new->f_op && new->f_op->open) {
-			error = new->f_op->open(new->f_inode,new);
+	if (new_file) {
+		memcpy(new_file,old_file,sizeof(struct file));
+		new_file->f_count = 1;
+		if (new_file->f_inode)
+			new_file->f_inode->i_count++;
+		if (new_file->f_op && new_file->f_op->open) {
+			error = new_file->f_op->open(new_file->f_inode,new_file);
 			if (error) {
-				iput(new->f_inode);
-				new->f_count = 0;
-				new = NULL;
+				iput(new_file->f_inode);
+				new_file->f_count = 0;
+				new_file = NULL;
 			}
 		}
 	}
-	return new;
+	return new_file;
 }
 
-#define IS_CLONE (orig_eax == __NR_clone)
-#define copy_vm(p) ((clone_flags & COPYVM)?copy_page_tables:clone_page_tables)(p)	
+int dup_mmap(struct task_struct * tsk)
+{
+	struct vm_area_struct * mpnt, **p, *tmp;
+
+	tsk->mmap = NULL;
+	p = &tsk->mmap;
+	for (mpnt = current->mmap ; mpnt ; mpnt = mpnt->vm_next) {
+		tmp = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+		if (!tmp)
+			return -ENOMEM;
+		*tmp = *mpnt;
+		tmp->vm_task = tsk;
+		tmp->vm_next = NULL;
+		if (tmp->vm_inode)
+			tmp->vm_inode->i_count++;
+		*p = tmp;
+		p = &tmp->vm_next;
+	}
+	return 0;
+}
+
+#define IS_CLONE (regs.orig_eax == __NR_clone)
+#define copy_vm(p) ((clone_flags & COPYVM)?copy_page_tables(p):clone_page_tables(p))
 
 /*
  *  Ok, this is the main fork-routine. It copies the system process
  * information (task[nr]) and sets up the necessary registers. It
  * also copies the data segment in it's entirety.
  */
-int sys_fork(long ebx,long ecx,long edx,
-		long esi, long edi, long ebp, long eax, long ds,
-		long es, long fs, long gs, long orig_eax,
-		long eip,long cs,long eflags,long esp,long ss)
+extern "C" int sys_fork(struct pt_regs regs)
 {
+	struct pt_regs * childregs;
 	struct task_struct *p;
 	int i,nr;
 	struct file *f;
 	unsigned long clone_flags = COPYVM | SIGCHLD;
 
-	p = (struct task_struct *) get_free_page(GFP_KERNEL);
+	p = (struct task_struct *) __get_free_page(GFP_KERNEL);
 	if (!p)
-		return -EAGAIN;
+		goto bad_fork;
 	nr = find_empty_process();
-	if (nr < 0) {
-		free_page((unsigned long) p);
-		return nr;
-	}
+	if (nr < 0)
+		goto bad_fork_free;
 	task[nr] = p;
 	*p = *current;
 	p->kernel_stack_page = 0;
 	p->state = TASK_UNINTERRUPTIBLE;
 	p->flags &= ~(PF_PTRACED|PF_TRACESYS);
 	p->pid = last_pid;
-	if (p->pid > 1)
-		p->swappable = 1;
+	p->swappable = 1;
 	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
 	SET_LINKS(p);
@@ -129,49 +147,46 @@ int sys_fork(long ebx,long ecx,long edx,
 	p->min_flt = p->maj_flt = 0;
 	p->cmin_flt = p->cmaj_flt = 0;
 	p->start_time = jiffies;
-	p->tss.back_link = 0;
+/*
+ * set up new TSS and kernel stack
+ */
+	p->kernel_stack_page = __get_free_page(GFP_KERNEL);
+	if (!p->kernel_stack_page)
+		goto bad_fork_cleanup;
+	p->tss.es = KERNEL_DS;
+	p->tss.cs = KERNEL_CS;
+	p->tss.ss = KERNEL_DS;
+	p->tss.ds = KERNEL_DS;
+	p->tss.fs = KERNEL_DS;
+	p->tss.gs = KERNEL_DS;
 	p->tss.ss0 = KERNEL_DS;
-	p->tss.eip = eip;
-	p->tss.eflags = eflags & 0xffffcfff;	/* iopl is always 0 for a new process */
-	p->tss.eax = 0;
-	p->tss.ecx = ecx;
-	p->tss.edx = edx;
-	p->tss.ebx = ebx;
-	p->tss.esp = esp;
+	p->tss.esp0 = p->kernel_stack_page + PAGE_SIZE;
+	p->tss.tr = _TSS(nr);
+	childregs = ((struct pt_regs *) (p->kernel_stack_page + PAGE_SIZE)) - 1;
+	p->tss.esp = (unsigned long) childregs;
+	p->tss.eip = (unsigned long) ret_from_sys_call;
+	*childregs = regs;
+	childregs->eax = 0;
+	p->tss.back_link = 0;
+	p->tss.eflags = regs.eflags & 0xffffcfff;	/* iopl is always 0 for a new process */
 	if (IS_CLONE) {
-		if (ebx)
-			p->tss.esp = ebx;
-		clone_flags = ecx;
-		if (p->tss.esp == current->tss.esp)
+		if (regs.ebx)
+			childregs->esp = regs.ebx;
+		clone_flags = regs.ecx;
+		if (childregs->esp == regs.esp)
 			clone_flags |= COPYVM;
 	}
 	p->exit_signal = clone_flags & CSIGNAL;
-	p->tss.ebp = ebp;
-	p->tss.esi = esi;
-	p->tss.edi = edi;
-	p->tss.es = es & 0xffff;
-	p->tss.cs = cs & 0xffff;
-	p->tss.ss = ss & 0xffff;
-	p->tss.ds = ds & 0xffff;
-	p->tss.fs = fs & 0xffff;
-	p->tss.gs = gs & 0xffff;
 	p->tss.ldt = _LDT(nr);
-	p->tss.trace_bitmap = offsetof(struct tss_struct,io_bitmap) << 16;
+	p->tss.bitmap = offsetof(struct tss_struct,io_bitmap);
 	set_call_gate(p->ldt+0,lcall7);
-	for (i = 0; i<IO_BITMAP_SIZE ; i++)
+	for (i = 0; i < IO_BITMAP_SIZE+1 ; i++) /* IO bitmap is actually SIZE+1 */
 		p->tss.io_bitmap[i] = ~0;
 	if (last_task_used_math == current)
-		__asm__("clts ; fnsave %0 ; frstor %0"::"m" (p->tss.i387));
-	p->kernel_stack_page = get_free_page(GFP_KERNEL);
+		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
 	p->semun = NULL; p->shm = NULL;
-	if (!p->kernel_stack_page || copy_vm(p) || shm_fork (current, p)) {
-		task[nr] = NULL;
-		REMOVE_LINKS(p);
-		free_page(p->kernel_stack_page);
-		free_page((long) p);
-		return -EAGAIN;
-	}
-	p->tss.esp0 = PAGE_SIZE + p->kernel_stack_page;
+	if (copy_vm(p) || shm_fork(current, p))
+		goto bad_fork_cleanup;
 	if (clone_flags & COPYFD) {
 		for (i=0; i<NR_OPEN;i++)
 			if ((f = p->filp[i]) != NULL)
@@ -187,12 +202,18 @@ int sys_fork(long ebx,long ecx,long edx,
 		current->root->i_count++;
 	if (current->executable)
 		current->executable->i_count++;
-	for (i=0; i < current->numlibraries ; i++)
-		if (current->libraries[i].library)
-			current->libraries[i].library->i_count++;
+	dup_mmap(p);
 	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
 	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,&(p->ldt));
 	p->counter = current->counter >> 1;
 	p->state = TASK_RUNNING;	/* do this last, just in case */
 	return p->pid;
+bad_fork_cleanup:
+	task[nr] = NULL;
+	REMOVE_LINKS(p);
+	free_page(p->kernel_stack_page);
+bad_fork_free:
+	free_page((long) p);
+bad_fork:
+	return -EAGAIN;
 }

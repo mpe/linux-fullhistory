@@ -32,7 +32,7 @@ extern void fcntl_init_locks(void);
 
 extern int root_mountflags;
 
-struct super_block super_block[NR_SUPER];
+struct super_block super_blocks[NR_SUPER];
 
 static int do_remount_sb(struct super_block *sb, int flags);
 
@@ -70,7 +70,7 @@ void sync_supers(dev_t dev)
 {
 	struct super_block * sb;
 
-	for (sb = super_block + 0 ; sb < super_block + NR_SUPER ; sb++) {
+	for (sb = super_blocks + 0 ; sb < super_blocks + NR_SUPER ; sb++) {
 		if (!sb->s_dev)
 			continue;
 		if (dev && sb->s_dev != dev)
@@ -91,13 +91,13 @@ static struct super_block * get_super(dev_t dev)
 
 	if (!dev)
 		return NULL;
-	s = 0+super_block;
-	while (s < NR_SUPER+super_block)
+	s = 0+super_blocks;
+	while (s < NR_SUPER+super_blocks)
 		if (s->s_dev == dev) {
 			wait_on_super(s);
 			if (s->s_dev == dev)
 				return s;
-			s = 0+super_block;
+			s = 0+super_blocks;
 		} else
 			s++;
 	return NULL;
@@ -140,8 +140,8 @@ static struct super_block * read_super(dev_t dev,char *name,int flags,
 						MAJOR(dev), MINOR(dev), name);
 		return NULL;
 	}
-	for (s = 0+super_block ;; s++) {
-		if (s >= NR_SUPER+super_block)
+	for (s = 0+super_blocks ;; s++) {
+		if (s >= NR_SUPER+super_blocks)
 			return NULL;
 		if (!s->s_dev)
 			break;
@@ -243,7 +243,7 @@ static int do_umount(dev_t dev)
  * functions, they should be faked here.  -- jrs
  */
 
-int sys_umount(char * name)
+extern "C" int sys_umount(char * name)
 {
 	struct inode * inode;
 	dev_t dev;
@@ -390,7 +390,7 @@ static int do_remount(const char *dir,int flags)
  * isn't present, the flags and data info isn't used, as the syscall assumes we
  * are talking to an older version that didn't understand them.
  */
-int sys_mount(char * dev_name, char * dir_name, char * type,
+extern "C" int sys_mount(char * dev_name, char * dir_name, char * type,
 	unsigned long new_flags, void * data)
 {
 	struct file_system_type * fstype;
@@ -479,7 +479,7 @@ void mount_root(void)
 	struct super_block * sb;
 	struct inode * inode;
 
-	memset(super_block, 0, sizeof(super_block));
+	memset(super_blocks, 0, sizeof(super_blocks));
 	fcntl_init_locks();
 	if (MAJOR(ROOT_DEV) == 2) {
 		printk("VFS: Insert root floppy and press ENTER");

@@ -89,6 +89,7 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 	filp->f_count++;
 	lock_super(sb);
 	sb->s_blocksize = 1024; /* XXX */
+	sb->s_blocksize_bits = 10;
 	sb->s_magic = NFS_SUPER_MAGIC;
 	sb->s_dev = dev;
 	sb->s_op = &nfs_sops;
@@ -200,17 +201,17 @@ int nfs_notify_change(int flags, struct inode *inode)
 	if (flags & NOTIFY_MODE)
 		sattr.mode = inode->i_mode;
 	else
-		sattr.mode = -1;
+		sattr.mode = (unsigned) -1;
 	if (flags & NOTIFY_UIDGID) {
 		sattr.uid = inode->i_uid;
 		sattr.gid = inode->i_gid;
 	}
 	else
-		sattr.uid = sattr.gid = -1;
+		sattr.uid = sattr.gid = (unsigned) -1;
 	if (flags & NOTIFY_SIZE)
 		sattr.size = S_ISREG(inode->i_mode) ? inode->i_size : -1;
 	else
-		sattr.size = -1;
+		sattr.size = (unsigned) -1;
 	if (flags & NOTIFY_TIME) {
 		sattr.mtime.seconds = inode->i_mtime;
 		sattr.mtime.useconds = 0;
@@ -218,8 +219,8 @@ int nfs_notify_change(int flags, struct inode *inode)
 		sattr.atime.useconds = 0;
 	}
 	else {
-		sattr.mtime.seconds = sattr.mtime.useconds = -1;
-		sattr.atime.seconds = sattr.atime.useconds = -1;
+		sattr.mtime.seconds = sattr.mtime.useconds = (unsigned) -1;
+		sattr.atime.seconds = sattr.atime.useconds = (unsigned) -1;
 	}
 	error = nfs_proc_setattr(NFS_SERVER(inode), NFS_FH(inode),
 		&sattr, &fattr);

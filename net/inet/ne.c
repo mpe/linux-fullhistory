@@ -29,14 +29,14 @@ static char *version =
 
 /* These should be in <asm/io.h> someday, borrowed from blk_drv/hd.c. */
 #define port_read(port,buf,nr) \
-__asm__("cld;rep;insw"::"d" (port),"D" (buf),"c" (nr):"cx","di")
+__asm__("cld;rep;insw": :"d" (port),"D" (buf),"c" (nr):"cx","di")
 #define port_write(port,buf,nr) \
-__asm__("cld;rep;outsw"::"d" (port),"S" (buf),"c" (nr):"cx","si")
+__asm__("cld;rep;outsw": :"d" (port),"S" (buf),"c" (nr):"cx","si")
 
 #define port_read_b(port,buf,nr) \
-__asm__("cld;rep;insb"::"d" (port),"D" (buf),"c" (nr):"cx","di")
+__asm__("cld;rep;insb": :"d" (port),"D" (buf),"c" (nr):"cx","di")
 #define port_write_b(port,buf,nr) \
-__asm__("cld;rep;outsb"::"d" (port),"S" (buf),"c" (nr):"cx","si")
+__asm__("cld;rep;outsb": :"d" (port),"S" (buf),"c" (nr):"cx","si")
 
 #define EN_CMD	 (dev->base_addr)
 #define NE_BASE	 (dev->base_addr)

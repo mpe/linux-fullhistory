@@ -55,7 +55,7 @@ static void extended_partition(struct gendisk *hd, int dev)
 		bh->b_dirt=0;
 		bh->b_uptodate=0;
 		if (*(unsigned short *) (bh->b_data+510) == 0xAA55) {
-			p = 0x1BE + (void *)bh->b_data;
+			p = (struct partition *) (0x1BE + bh->b_data);
 		/*
 		 * Process the first entry, which should be the real
 		 * data partition.
@@ -110,7 +110,7 @@ static void check_partition(struct gendisk *hd, unsigned int dev)
 	printk("  %s%c:", hd->major_name, 'a'+(minor >> hd->minor_shift));
 	current_minor += 4;  /* first "extra" minor */
 	if (*(unsigned short *) (bh->b_data+510) == 0xAA55) {
-		p = 0x1BE + (void *)bh->b_data;
+		p = (struct partition *) (0x1BE + bh->b_data);
 		for (i=1 ; i<=4 ; minor++,i++,p++) {
 			if (!(hd->part[minor].nr_sects = p->nr_sects))
 				continue;
@@ -128,7 +128,7 @@ static void check_partition(struct gendisk *hd, unsigned int dev)
 		 * check for Disk Manager partition table
 		 */
 		if (*(unsigned short *) (bh->b_data+0xfc) == 0x55AA) {
-			p = 0x1BE + (void *)bh->b_data;
+			p = (struct partition *) (0x1BE + bh->b_data);
 			for (i = 4 ; i < 16 ; i++, current_minor++) {
 				p--;
 				if ((current_minor & mask) >= mask-2)
@@ -194,7 +194,7 @@ static void setup_dev(struct gendisk *dev)
 }
 	
 /* This may be used only once, enforced by 'static int callable' */
-int sys_setup(void * BIOS)
+extern "C" int sys_setup(void * BIOS)
 {
 	static int callable = 1;
 	struct gendisk *p;

@@ -86,7 +86,7 @@ static struct {
 #define	ARP_MAX_TYPE	(sizeof(arp_types) / sizeof(arp_types[0]))
 
 
-struct arp_table *arp_table[ARP_TABLE_SIZE] = {
+struct arp_table *arp_tables[ARP_TABLE_SIZE] = {
   NULL,
 };
 struct sk_buff *arp_q = NULL;
@@ -262,7 +262,8 @@ arp_response(struct arphdr *arp1, struct device *dev)
   int hlen;
 
   /* Get some mem and initialize it for the return trip. */
-  skb = kmalloc(sizeof(struct sk_buff) + sizeof(struct arphdr) +
+  skb = (struct sk_buff *) kmalloc(sizeof(struct sk_buff) +
+  		sizeof(struct arphdr) +
 		(2 * arp1->ar_hln) + (2 * arp1->ar_pln) +
 		dev->hard_header_len, GFP_ATOMIC);
   if (skb == NULL) {
@@ -339,7 +340,7 @@ arp_lookup(unsigned long paddr)
   /* Loop through the table for the desired address. */
   hash = htonl(paddr) & (ARP_TABLE_SIZE - 1);
   cli();
-  apt = arp_table[hash];
+  apt = arp_tables[hash];
   while(apt != NULL) {
 	if (apt->ip == paddr) {
 		sti();
@@ -371,7 +372,7 @@ arp_destroy(unsigned long paddr)
   hash = htonl(paddr) & (ARP_TABLE_SIZE - 1);
 
   cli();
-  lapt = &arp_table[hash];
+  lapt = &arp_tables[hash];
   while ((apt = *lapt) != NULL) {
 	if (apt->ip == paddr) {
 		*lapt = apt->next;
@@ -396,7 +397,7 @@ arp_create(unsigned long paddr, unsigned char *addr, int hlen, int htype)
   DPRINTF((DBG_ARP, "%s, ", eth_print(addr)));
   DPRINTF((DBG_ARP, "%d, %d)\n", hlen, htype));
 
-  apt = kmalloc(sizeof(struct arp_table), GFP_ATOMIC);
+  apt = (struct arp_table *) kmalloc(sizeof(struct arp_table), GFP_ATOMIC);
   if (apt == NULL) {
 	printk("ARP: no memory available for new ARP entry!\n");
 	return(NULL);
@@ -411,8 +412,8 @@ arp_create(unsigned long paddr, unsigned char *addr, int hlen, int htype)
   memcpy(apt->ha, addr, hlen);
   apt->last_used = timer_seq;
   cli();
-  apt->next = arp_table[hash];
-  arp_table[hash] = apt;
+  apt->next = arp_tables[hash];
+  arp_tables[hash] = apt;
   sti();
   return(apt);
 }
@@ -528,8 +529,9 @@ arp_send(unsigned long paddr, struct device *dev, unsigned long saddr)
   DPRINTF((DBG_ARP, "dev=%s, ", dev->name));
   DPRINTF((DBG_ARP, "saddr=%s)\n", in_ntoa(saddr)));
 
-  skb = kmalloc(sizeof(struct sk_buff) + sizeof(struct arphdr) +
-		(2 * dev->addr_len) + (2 * 4 /* arp->plen */), GFP_ATOMIC);
+  skb = (struct sk_buff *) kmalloc(sizeof(struct sk_buff) +
+  		sizeof(struct arphdr) + (2 * dev->addr_len) +
+		(2 * 4 /* arp->plen */), GFP_ATOMIC);
   if (skb == NULL) {
 	printk("ARP: No memory available for REQUEST %s\n", in_ntoa(paddr));
 	return;
@@ -722,7 +724,7 @@ arp_get_info(char *buffer)
   i = 0;
   for (i = 0; i < ARP_TABLE_SIZE; i++) {
 	cli();
-	apt = arp_table[i];
+	apt = arp_tables[i];
 	sti();
 	while (apt != NULL) {
 		if (pos < (buffer + 4000)) {
@@ -780,7 +782,8 @@ arp_req_set(struct arpreq *req)
   }
   apt = arp_lookup(si->sin_addr.s_addr);
   if (apt == NULL) {
-	apt = arp_create(si->sin_addr.s_addr, r.arp_ha.sa_data, hlen, htype);
+	apt = arp_create(si->sin_addr.s_addr,
+		(unsigned char *) r.arp_ha.sa_data, hlen, htype);
 	if (apt == NULL) return(-ENOMEM);
   }
 

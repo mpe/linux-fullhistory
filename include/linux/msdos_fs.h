@@ -142,7 +142,7 @@ extern int msdos_subdirs(struct inode *dir);
 
 /* fat.c */
 
-extern int fat_access(struct super_block *sb,int this,int new_value);
+extern int fat_access(struct super_block *sb,int nr,int new_value);
 extern int msdos_smap(struct inode *inode,int sector);
 extern int fat_free(struct inode *inode,int skip);
 extern void cache_init(void);
@@ -178,12 +178,10 @@ extern int msdos_notify_change(int flags,struct inode *inode);
 
 /* dir.c */
 
-extern struct file_operations msdos_dir_operations;
 extern struct inode_operations msdos_dir_inode_operations;
 
 /* file.c */
 
-extern struct file_operations msdos_file_operations;
 extern struct inode_operations msdos_file_inode_operations;
 extern struct inode_operations msdos_file_inode_operations_no_bmap;
 

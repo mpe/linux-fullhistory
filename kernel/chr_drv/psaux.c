@@ -122,10 +122,11 @@ static unsigned int get_from_queue(void)
 	unsigned int result;
 	unsigned long flags;
 
-	__asm__ __volatile__ ("pushfl ; popl %0; cli":"=r" (flags));
+	save_flags(flags);
+	cli();
 	result = queue->buf[queue->tail];
 	queue->tail = (queue->tail + 1) & (AUX_BUF_SIZE-1);
-	__asm__ __volatile__ ("pushl %0 ; popfl"::"r" (flags));
+	restore_flags(flags);
 	return result;
 }
 

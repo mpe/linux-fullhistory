@@ -132,7 +132,52 @@ static int pipe_select(struct inode * inode, struct file * filp, int sel_type, s
 			select_wait(&PIPE_READ_WAIT(*inode), wait);
 			return 0;
 		case SEL_OUT:
-			if (!PIPE_FULL(*inode) || !PIPE_WRITERS(*inode))
+			if (!PIPE_FULL(*inode) || !PIPE_READERS(*inode))
+				return 1;
+			select_wait(&PIPE_WRITE_WAIT(*inode), wait);
+			return 0;
+		case SEL_EX:
+			if (!PIPE_READERS(*inode) || !PIPE_WRITERS(*inode))
+				return 1;
+			select_wait(&inode->i_wait,wait);
+			return 0;
+	}
+	return 0;
+}
+
+/*
+ * The 'connect_xxx()' functions are needed for named pipes when
+ * the open() code hasn't guaranteed a connection (O_NONBLOCK),
+ * and we need to act differently until we do get a writer..
+ */
+static int connect_read(struct inode * inode, struct file * filp, char * buf, int count)
+{
+	while (!PIPE_SIZE(*inode)) {
+		if (PIPE_WRITERS(*inode))
+			break;
+		if (filp->f_flags & O_NONBLOCK)
+			return -EAGAIN;
+		wake_up(& PIPE_WRITE_WAIT(*inode));
+		if (current->signal & ~current->blocked)
+			return -ERESTARTSYS;
+		interruptible_sleep_on(& PIPE_READ_WAIT(*inode));
+	}
+	filp->f_op = &read_pipe_fops;
+	return pipe_read(inode,filp,buf,count);
+}
+
+static int connect_select(struct inode * inode, struct file * filp, int sel_type, select_table * wait)
+{
+	switch (sel_type) {
+		case SEL_IN:
+			if (!PIPE_EMPTY(*inode)) {
+				filp->f_op = &read_pipe_fops;
+				return 1;
+			}
+			select_wait(&PIPE_READ_WAIT(*inode), wait);
+			return 0;
+		case SEL_OUT:
+			if (!PIPE_FULL(*inode))
 				return 1;
 			select_wait(&PIPE_WRITE_WAIT(*inode), wait);
 			return 0;
@@ -170,9 +215,22 @@ static void pipe_rdwr_release(struct inode * inode, struct file * filp)
 }
 
 /*
- * The three file_operations structs are not static because they
+ * The file_operations structs are not static because they
  * are also used in linux/fs/fifo.c to do operations on fifo's.
  */
+struct file_operations connecting_pipe_fops = {
+	pipe_lseek,
+	connect_read,
+	bad_pipe_rw,
+	pipe_readdir,
+	connect_select,
+	pipe_ioctl,
+	NULL,		/* no mmap on pipes.. surprise */
+	NULL,		/* no special open code */
+	pipe_read_release,
+	NULL
+};
+
 struct file_operations read_pipe_fops = {
 	pipe_lseek,
 	pipe_read,
@@ -212,7 +270,25 @@ struct file_operations rdwr_pipe_fops = {
 	NULL
 };
 
-int sys_pipe(unsigned long * fildes)
+struct inode_operations pipe_inode_operations = {
+	&rdwr_pipe_fops,
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	NULL,			/* bmap */
+	NULL,			/* truncate */
+	NULL			/* permission */
+};
+
+extern "C" int sys_pipe(unsigned long * fildes)
 {
 	struct inode * inode;
 	struct file * f[2];

@@ -38,6 +38,7 @@ static struct swap_info_struct {
 	unsigned int swap_device;
 	unsigned char * swap_map;
 	char * swap_lockmap;
+	int pages;
 	int lowest_bit;
 	int highest_bit;
 } swap_info[MAX_SWAPFILES];
@@ -79,19 +80,21 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 	if (p->swap_device) {
 		ll_rw_page(rw,p->swap_device,offset,buf);
 	} else if (p->swap_file) {
-		unsigned int zones[4];
-		unsigned int block = offset << 2;
-		int i;
+		unsigned int zones[8];
+		unsigned int block;
+		int i, j;
 
-		for (i = 0; i < 4; i++)
+		block = offset << (12 - p->swap_file->i_sb->s_blocksize_bits);
+
+		for (i=0, j=0; j< PAGE_SIZE ; i++, j +=p->swap_file->i_sb->s_blocksize)
 			if (!(zones[i] = bmap(p->swap_file,block++))) {
 				printk("rw_swap_page: bad swap file\n");
 				return;
 			}
-		ll_rw_swap_file(rw,p->swap_file->i_dev, zones,4,buf);
+		ll_rw_swap_file(rw,p->swap_file->i_dev, zones, i,buf);
 	} else
 		printk("re_swap_page: no swap file or device\n");
-	if (clear_bit(offset,p->swap_lockmap))
+	if (!clear_bit(offset,p->swap_lockmap))
 		printk("rw_swap_page: lock already cleared\n");
 	wake_up(&lock_queue);
 }
@@ -109,6 +112,7 @@ unsigned int get_swap_page(void)
 			if (p->swap_map[offset])
 				continue;
 			p->swap_map[offset] = 1;
+			nr_swap_pages--;
 			if (offset == p->highest_bit)
 				p->highest_bit--;
 			p->lowest_bit = offset;
@@ -179,8 +183,9 @@ void swap_free(unsigned long entry)
 	if (!p->swap_map[offset])
 		printk("swap_free: swap-space map bad (entry %08x)\n",entry);
 	else
-		p->swap_map[offset]--;
-	if (clear_bit(offset,p->swap_lockmap))
+		if (!--p->swap_map[offset])
+			nr_swap_pages++;
+	if (!clear_bit(offset,p->swap_lockmap))
 		printk("swap_free: lock already cleared\n");
 	wake_up(&lock_queue);
 }
@@ -199,8 +204,10 @@ void swap_in(unsigned long *table_ptr)
 		printk("No swap page in swap_in\n");
 		return;
 	}
-	if (SWP_TYPE(entry) == SHM_SWP_TYPE) 
-		return shm_no_page ((unsigned long *) table_ptr);
+	if (SWP_TYPE(entry) == SHM_SWP_TYPE) {
+		shm_no_page ((unsigned long *) table_ptr);
+		return;
+	}
 	page = get_free_page(GFP_KERNEL);
 	if (!page) {
 		oom(current);
@@ -224,11 +231,8 @@ static int try_to_swap_out(unsigned long * table_ptr)
 	page = *table_ptr;
 	if (!(PAGE_PRESENT & page))
 		return 0;
-	if (page >= high_memory) {
-		printk("try_to_swap_out: bad page (%08x)\n",page);
-		*table_ptr = 0;
+	if (page >= high_memory)
 		return 0;
-	}
 	if (mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED)
 		return 0;
 	if (PAGE_ACCESSED & page) {
@@ -262,7 +266,7 @@ static int try_to_swap_out(unsigned long * table_ptr)
  * swapping out or forgetting about. This speeds up the search when we
  * actually have to swap.
  */
-int sys_idle(void)
+extern "C" int sys_idle(void)
 {
 	need_resched = 1;
 	return 0;
@@ -399,8 +403,6 @@ void free_page(unsigned long addr)
 		printk("PC = %08x\n",*(((unsigned long *)&addr)-1));
 		return;
 	}
-	printk("Trying to free nonexistent page %08x\n",addr);
-	return;
 }
 
 /*
@@ -495,11 +497,8 @@ repeat:
 			page = *ppage;
 			if (!page)
 				continue;
-			if (!(page & PAGE_PRESENT) || (page >= high_memory)) {
-				printk("try_to_unuse: bad page directory (%d,%d:%08x)\n",nr,pgt,page);
-				*ppage = 0;
+			if (!(page & PAGE_PRESENT) || (page >= high_memory))
 				continue;
-			}
 			if (mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED)
 				continue;
 			ppage = (unsigned long *) (page & 0xfffff000);	
@@ -507,13 +506,8 @@ repeat:
 				page = *ppage;
 				if (!page)
 					continue;
-				if (page & PAGE_PRESENT) {
-					if (page >= high_memory) {
-						printk("try_to_unuse: bad page table (%d,%d,%d:%08x)\n",nr,pgt,pg,page);
-						*ppage = 0;
-					}
+				if (page & PAGE_PRESENT)
 					continue;
-				}
 				if (SWP_TYPE(page) != type)
 					continue;
 				if (!tmp) {
@@ -537,7 +531,7 @@ repeat:
 	return 0;
 }
 
-int sys_swapoff(const char * specialfile)
+extern "C" int sys_swapoff(const char * specialfile)
 {
 	struct swap_info_struct * p;
 	struct inode * inode;
@@ -572,6 +566,7 @@ int sys_swapoff(const char * specialfile)
 		p->flags = SWP_WRITEOK;
 		return i;
 	}
+	nr_swap_pages -= p->pages;
 	iput(p->swap_file);
 	p->swap_file = NULL;
 	p->swap_device = 0;
@@ -588,7 +583,7 @@ int sys_swapoff(const char * specialfile)
  *
  * The swapon system call
  */
-int sys_swapon(const char * specialfile)
+extern "C" int sys_swapon(const char * specialfile)
 {
 	struct swap_info_struct * p;
 	struct inode * swap_inode;
@@ -703,8 +698,10 @@ int sys_swapon(const char * specialfile)
 		else
 			tmp[i] = 128;
 	tmp[0] = 128;
-	p->swap_map = tmp;
+	p->swap_map = (unsigned char *) tmp;
 	p->flags = SWP_WRITEOK;
+	p->pages = j;
+	nr_swap_pages += j;
 	printk("Adding Swap: %dk swap-space\n",j<<2);
 	return 0;
 }

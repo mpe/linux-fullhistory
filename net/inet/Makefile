@@ -19,7 +19,7 @@
 
 OBJS	= Space.o sock.o utils.o route.o proc.o timer.o protocol.o loopback.o \
 	  eth.o packet.o arp.o dev.o 8390.o wd.o ne.o el.o hp.o plip.o \
-	  slip.o d_link.o auto_irq.o ip.o raw.o icmp.o tcp.o udp.o
+	  slip.o slhc.o d_link.o auto_irq.o ip.o raw.o icmp.o tcp.o udp.o
 
 ifdef CONFIG_INET
 
@@ -47,7 +47,7 @@ wd.o:		CONFIG wd.c Makefile
 		$(CC) $(CPPFLAGS) $(CFLAGS) $(WD_OPTS) -c wd.c -o $@
 
 el.o:		CONFIG el.c elreg.h Makefile
-		$(CC) $(CPPFLAGS) $(CFLAGS) -UEL2_AUI -c el.c -o $@
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(EL_OPTS) -c el.c -o $@
 
 ne.o:		CONFIG ne.c Makefile
 		$(CC) $(CPPFLAGS) $(CFLAGS) $(NE_OPTS) -c ne.c -o $@

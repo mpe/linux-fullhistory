@@ -189,10 +189,10 @@ void aha1740_intr_handle(int foo)
 	case	G2INTST_CCBRETRY:
 	case	G2INTST_CCBERROR:
 	case	G2INTST_CCBGOOD:
-	    ecbptr = (void *) ( ((ulong) inb(MBOXIN0)) +
-				((ulong) inb(MBOXIN1) <<8) +
-				((ulong) inb(MBOXIN2) <<16) +
-				((ulong) inb(MBOXIN3) <<24) );
+	    ecbptr = (struct ecb *) (	((ulong) inb(MBOXIN0)) +
+					((ulong) inb(MBOXIN1) <<8) +
+					((ulong) inb(MBOXIN2) <<16) +
+					((ulong) inb(MBOXIN3) <<24) );
 	    outb(G2CNTRL_HRDY,G2CNTRL); /* Host Ready -> Mailbox in complete */
 	    SCtmp = ecbptr->SCpnt;
 	    if (SCtmp->host_scribble)
@@ -314,7 +314,7 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
         unsigned char * ptr;
 #endif
         ecb[ecbno].sg = 1;	  /* SCSI Initiator Command  w/scatter-gather*/
-        SCpnt->host_scribble = scsi_malloc(512);
+        SCpnt->host_scribble = (unsigned char *) scsi_malloc(512);
         sgpnt = (struct scatterlist *) SCpnt->request_buffer;
         cptr = (struct aha1740_chain *) SCpnt->host_scribble; 
         if (cptr == NULL) panic("aha1740.c: unable to allocate DMA memory\n");
@@ -426,7 +426,7 @@ void aha1740_getconfig(void)
 
 int aha1740_detect(int hostnum)
 {
-    memset(ecb,0,sizeof(ecb));
+    memset(&ecb, 0, sizeof(struct ecb));
     DEB(printk("aha1740_detect: \n"));
     
     for ( slot=MINEISA; slot <= MAXEISA; slot++ )
@@ -478,13 +478,13 @@ int aha1740_reset(void)
     return 0;
 }
 
-int aha1740_biosparam(int size, int dev, int* info)
+int aha1740_biosparam(int size, int dev, int* ip)
 {
 DEB(printk("aha1740_biosparam\n"));
-  info[0] = 64;
-  info[1] = 32;
-  info[2] = size >> 11;
-/*  if (info[2] >= 1024) info[2] = 1024; */
+  ip[0] = 64;
+  ip[1] = 32;
+  ip[2] = size >> 11;
+/*  if (ip[2] >= 1024) ip[2] = 1024; */
   return 0;
 }
 

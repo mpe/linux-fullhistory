@@ -89,7 +89,7 @@ icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 	sizeof(struct iphdr) + sizeof(struct icmphdr) +
 	sizeof(struct iphdr) + 8;	/* amount of header to return */
 	   
-  skb = kmalloc(len, GFP_ATOMIC);
+  skb = (struct sk_buff *) kmalloc(len, GFP_ATOMIC);
   if (skb == NULL) return;
 
   skb->lock = 0;
@@ -112,13 +112,16 @@ icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
   }
 
   /* Re-adjust length according to actual IP header size. */
-  skb->len = offset + sizeof(struct icmphdr) + 8;
+  skb->len = offset + sizeof(struct icmphdr) + sizeof(struct iphdr) + 8;
   icmph = (struct icmphdr *) ((unsigned char *) (skb + 1) + offset);
   icmph->type = type;
   icmph->code = code;
   icmph->checksum = 0;
   icmph->un.gateway = 0;
   memcpy(icmph + 1, iph, sizeof(struct iphdr) + 8);
+
+  icmph->checksum = ip_compute_csum((unsigned char *)icmph,
+                         sizeof(struct icmphdr) + sizeof(struct iphdr) + 8);
 
   DPRINTF((DBG_ICMP, ">>\n"));
   print_icmp(icmph);
@@ -235,7 +238,7 @@ icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
   int size, offset;
 
   size = sizeof(struct sk_buff) + dev->hard_header_len + 64 + len;
-  skb2 = kmalloc(size, GFP_ATOMIC);
+  skb2 = (struct sk_buff *) kmalloc(size, GFP_ATOMIC);
   if (skb2 == NULL) {
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_READ);
@@ -268,7 +271,7 @@ icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
   icmphr->checksum = 0;
 
   if (icmph->checksum) {	/* Calculate Checksum */
-	icmphr->checksum = ip_compute_csum((void *)icmphr, len);
+	icmphr->checksum = ip_compute_csum((unsigned char *)icmphr, len);
   }
 
   /* Ship it out - free it when done */
@@ -302,7 +305,7 @@ icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
   int size, offset;
 
   size = sizeof(struct sk_buff) + dev->hard_header_len + 64 + len;
-  skb2 = kmalloc(size, GFP_ATOMIC);
+  skb2 = (struct sk_buff *) kmalloc(size, GFP_ATOMIC);
   if (skb2 == NULL) {
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_READ);
@@ -334,10 +337,10 @@ icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
   icmphr->checksum = 0;
   icmphr->un.echo.id = icmph->un.echo.id;
   icmphr->un.echo.sequence = icmph->un.echo.sequence;
-  memcpy((char *) (icmphr + 1), (char *) dev->pa_mask, sizeof(dev->pa_mask));
+  memcpy((char *) (icmphr + 1), (char *) &dev->pa_mask, sizeof(dev->pa_mask));
 
   if (icmph->checksum) {	/* Calculate Checksum */
-	icmphr->checksum = ip_compute_csum((void *)icmphr, len);
+	icmphr->checksum = ip_compute_csum((unsigned char *)icmphr, len);
   }
 
   /* Ship it out - free it when done */
@@ -383,6 +386,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 
   /* Parse the ICMP message */
   switch(icmph->type) {
+	case ICMP_TIME_EXCEEDED:
 	case ICMP_DEST_UNREACH:
 	case ICMP_SOURCE_QUENCH:
 		icmp_unreach(icmph, skb1);

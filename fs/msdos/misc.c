@@ -108,7 +108,7 @@ void unlock_fat(struct super_block *sb)
 
 int msdos_add_cluster(struct inode *inode)
 {
-	int count,this,limit,last,current,sector;
+	int count,nr,limit,last,current,sector;
 	void *data;
 	struct buffer_head *bh;
 
@@ -116,13 +116,13 @@ int msdos_add_cluster(struct inode *inode)
 	if (!MSDOS_SB(inode->i_sb)->free_clusters) return -ENOSPC;
 	lock_fat(inode->i_sb);
 	limit = MSDOS_SB(inode->i_sb)->clusters;
-	this = limit; /* to keep GCC happy */
+	nr = limit; /* to keep GCC happy */
 	for (count = 0; count < limit; count++) {
-		this = ((count+MSDOS_SB(inode->i_sb)->prev_free) % limit)+2;
-		if (fat_access(inode->i_sb,this,-1) == 0) break;
+		nr = ((count+MSDOS_SB(inode->i_sb)->prev_free) % limit)+2;
+		if (fat_access(inode->i_sb,nr,-1) == 0) break;
 	}
 #ifdef DEBUG
-printk("free cluster: %d\n",this);
+printk("free cluster: %d\n",nr);
 #endif
 	MSDOS_SB(inode->i_sb)->prev_free = (count+MSDOS_SB(inode->i_sb)->
 	    prev_free+1) % limit;
@@ -131,13 +131,13 @@ printk("free cluster: %d\n",this);
 		unlock_fat(inode->i_sb);
 		return -ENOSPC;
 	}
-	fat_access(inode->i_sb,this,MSDOS_SB(inode->i_sb)->fat_bits == 12 ?
+	fat_access(inode->i_sb,nr,MSDOS_SB(inode->i_sb)->fat_bits == 12 ?
 	    0xff8 : 0xfff8);
 	if (MSDOS_SB(inode->i_sb)->free_clusters != -1)
 		MSDOS_SB(inode->i_sb)->free_clusters--;
 	unlock_fat(inode->i_sb);
 #ifdef DEBUG
-printk("set to %x\n",fat_access(inode->i_sb,this,-1));
+printk("set to %x\n",fat_access(inode->i_sb,nr,-1));
 #endif
 	last = 0;
 	if ((current = MSDOS_I(inode)->i_start) != 0) {
@@ -152,9 +152,9 @@ printk("set to %x\n",fat_access(inode->i_sb,this,-1));
 #ifdef DEBUG
 printk("last = %d\n",last);
 #endif
-	if (last) fat_access(inode->i_sb,last,this);
+	if (last) fat_access(inode->i_sb,last,nr);
 	else {
-		MSDOS_I(inode)->i_start = this;
+		MSDOS_I(inode)->i_start = nr;
 		inode->i_dirt = 1;
 	}
 #ifdef DEBUG
@@ -162,7 +162,7 @@ if (last) printk("next set to %d\n",fat_access(inode->i_sb,last,-1));
 #endif
 	for (current = 0; current < MSDOS_SB(inode->i_sb)->cluster_size;
 	    current++) {
-		sector = MSDOS_SB(inode->i_sb)->data_start+(this-2)*
+		sector = MSDOS_SB(inode->i_sb)->data_start+(nr-2)*
 		    MSDOS_SB(inode->i_sb)->cluster_size+current;
 #ifdef DEBUG
 printk("zeroing sector %d\n",sector);
@@ -455,7 +455,7 @@ static int raw_scan(struct super_block *sb,int start,char *name,int *number,
 int msdos_parent_ino(struct inode *dir,int locked)
 {
 	static int zero = 0;
-	int error,current,prev,this;
+	int error,current,prev,nr;
 
 	if (!S_ISDIR(dir->i_mode)) panic("Non-directory fed to m_p_i");
 	if (dir->i_ino == MSDOS_ROOT_INO) return dir->i_ino;
@@ -465,21 +465,21 @@ int msdos_parent_ino(struct inode *dir,int locked)
 		if (!locked) unlock_creation();
 		return current;
 	}
-	if (!current) this = MSDOS_ROOT_INO;
+	if (!current) nr = MSDOS_ROOT_INO;
 	else {
 		if ((prev = raw_scan(dir->i_sb,current,MSDOS_DOTDOT,&zero,NULL,
 		    NULL,NULL)) < 0) {
 			if (!locked) unlock_creation();
 			return prev;
 		}
-		if ((error = raw_scan(dir->i_sb,prev,NULL,&current,&this,NULL,
+		if ((error = raw_scan(dir->i_sb,prev,NULL,&current,&nr,NULL,
 		    NULL)) < 0) {
 			if (!locked) unlock_creation();
 			return error;
 		}
 	}
 	if (!locked) unlock_creation();
-	return this;
+	return nr;
 }
 
 

@@ -51,6 +51,22 @@
 
 #include "vt_kern.h"
 
+#ifdef CONFIG_SELECTION
+#include <linux/ctype.h>
+
+/* Routines for selection control. */
+int set_selection(const int arg);
+int paste_selection(struct tty_struct *tty);
+static void clear_selection(void);
+
+/* Variables for selection control. */
+#define SEL_BUFFER_SIZE 2048
+static int sel_cons;
+static int sel_start = -1;
+static int sel_end;
+static char sel_buffer[SEL_BUFFER_SIZE] = { '\0' };
+#endif /* CONFIG_SELECTION */
+
 #define NPAR 16
 
 extern void vt_init(void);
@@ -187,8 +203,6 @@ static int console_blanked = 0;
 int blankinterval = 10*60*HZ;
 static int screen_size = 0;
 
-extern void kd_mksound(int freq, int time);
-
 /*
  * this is what the terminal answers to a ESC-Z or csi0c query.
  */
@@ -197,6 +211,7 @@ extern void kd_mksound(int freq, int time);
 
 static unsigned char * translations[] = {
 /* 8-bit Latin-1 mapped to the PC charater set: '\0' means non-printable */
+(unsigned char *)
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 	" !\"#$%&'()*+,-./0123456789:;<=>?"
@@ -211,6 +226,7 @@ static unsigned char * translations[] = {
 	"\205\240\203\376\204\206\221\207\212\202\210\211\215\241\214\213"
 	"\376\244\225\242\223\376\224\366\376\227\243\226\201\376\376\230",
 /* vt100 graphics */
+(unsigned char *)
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 	" !\"#$%&'()*+,-./0123456789:;<=>?"
@@ -226,6 +242,7 @@ static unsigned char * translations[] = {
 	"\205\240\203\376\204\206\221\207\212\202\210\211\215\241\214\213"
 	"\376\244\225\242\223\376\224\366\376\227\243\226\201\376\376\230",
 /* IBM graphics: minimal translations (CR, LF, LL, SO, SI and ESC) */
+(unsigned char *)
 	"\000\001\002\003\004\005\006\007\010\011\000\013\000\000\000\000"
 	"\020\021\022\023\024\025\026\027\030\031\032\000\034\035\036\037"
 	"\040\041\042\043\044\045\046\047\050\051\052\053\054\055\056\057"
@@ -378,7 +395,8 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 				"movl _video_num_columns,%1\n\t"
 				"rep\n\t"
 				"stosw"
-				::"a" (video_erase_char),
+				: /* no output */
+				:"a" (video_erase_char),
 				"c" ((video_num_lines-1)*video_num_columns>>1),
 				"D" (video_mem_start),
 				"S" (origin)
@@ -390,7 +408,8 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 			__asm__("cld\n\t"
 				"rep\n\t"
 				"stosw"
-				::"a" (video_erase_char),
+				: /* no output */
+				:"a" (video_erase_char),
 				"c" (video_num_columns),
 				"D" (scr_end-video_size_row)
 				:"cx","di");
@@ -403,7 +422,8 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 			"movl _video_num_columns,%%ecx\n\t"
 			"rep\n\t"
 			"stosw"
-			::"a" (video_erase_char),
+			: /* no output */
+			:"a" (video_erase_char),
 			"c" ((b-t-1)*video_num_columns>>1),
 			"D" (origin+video_size_row*t),
 			"S" (origin+video_size_row*(t+1))
@@ -423,7 +443,8 @@ static void scrdown(int currcons, unsigned int t, unsigned int b)
 		"rep\n\t"
 		"stosw\n\t"
 		"cld"
-		::"a" (video_erase_char),
+		: /* no output */
+		:"a" (video_erase_char),
 		"c" ((b-t-1)*video_num_columns>>1),
 		"D" (origin+video_size_row*b-4),
 		"S" (origin+video_size_row*(b-1)-4)
@@ -501,7 +522,8 @@ static void csi_J(int currcons, int vpar)
 	__asm__("cld\n\t"
 		"rep\n\t"
 		"stosw\n\t"
-		::"c" (count),
+		: /* no output */
+		:"c" (count),
 		"D" (start),"a" (video_erase_char)
 		:"cx","di");
 	need_wrap = 0;
@@ -531,7 +553,8 @@ static void csi_K(int currcons, int vpar)
 	__asm__("cld\n\t"
 		"rep\n\t"
 		"stosw\n\t"
-		::"c" (count),
+		: /* no output */
+		:"c" (count),
 		"D" (start),"a" (video_erase_char)
 		:"cx","di");
 	need_wrap = 0;
@@ -936,6 +959,12 @@ void con_write(struct tty_struct * tty)
 		printk("con_write: illegal tty (%d)\n", currcons);
 		return;
 	}
+#ifdef CONFIG_SELECTION
+	/* clear the selection as soon as any characters are to be written
+	   out on the console holding the selection. */
+	if (!EMPTY(&tty->write_q) && currcons == sel_cons)
+		clear_selection();
+#endif /* CONFIG_SELECTION */
 	while (!tty->stopped &&	(c = get_tty_queue(&tty->write_q)) >= 0) {
 		if (state == ESnormal && translate[c]) {
 			if (need_wrap) {
@@ -1257,9 +1286,46 @@ void * memsetw(void * s,unsigned short c,int count)
 __asm__("cld\n\t"
 	"rep\n\t"
 	"stosw"
-	::"a" (c),"D" (s),"c" (count)
+	: /* no output */
+	:"a" (c),"D" (s),"c" (count)
 	:"cx","di");
 return s;
+}
+
+void console_print(const char * b)
+{
+	int currcons = fg_console;
+	unsigned char c;
+
+	if (!printable || currcons<0 || currcons>=NR_CONSOLES)
+		return;
+	while ((c = *(b++)) != 0) {
+		if (c == 10 || c == 13 || need_wrap) {
+			if (c != 13)
+				lf(currcons);
+			cr(currcons);
+			if (c == 10 || c == 13)
+				continue;
+		}
+		*(unsigned short *) pos = (attr << 8) + c;
+		if (x == video_num_columns - 1) {
+			need_wrap = 1;
+			continue;
+		}
+		x++;
+		pos+=2;
+	}
+	set_cursor(currcons);
+	if (vt_cons[fg_console].vc_mode == KD_GRAPHICS)
+		return;
+	timer_active &= ~(1<<BLANK_TIMER);
+	if (console_blanked) {
+		timer_table[BLANK_TIMER].expires = 0;
+		timer_active |= 1<<BLANK_TIMER;
+	} else if (blankinterval) {
+		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
+		timer_active |= 1<<BLANK_TIMER;
+	}
 }
 
 /*
@@ -1279,7 +1345,6 @@ long con_init(long kmem_start)
 	long base;
 	int orig_x = ORIG_X;
 	int orig_y = ORIG_Y;
-	void console_print(const char * b);
 
 	vc_scrmembuf = (unsigned short *) kmem_start;
 	video_num_columns = ORIG_VIDEO_COLS;
@@ -1466,42 +1531,6 @@ int do_screendump(int arg)
 	return(0);
 }
 
-void console_print(const char * b)
-{
-	int currcons = fg_console;
-	unsigned char c;
-
-	if (!printable || currcons<0 || currcons>=NR_CONSOLES)
-		return;
-	while ((c = *(b++)) != 0) {
-		if (c == 10 || c == 13 || need_wrap) {
-			if (c != 13)
-				lf(currcons);
-			cr(currcons);
-			if (c == 10 || c == 13)
-				continue;
-		}
-		*(unsigned short *) pos = (attr << 8) + c;
-		if (x == video_num_columns - 1) {
-			need_wrap = 1;
-			continue;
-		}
-		x++;
-		pos+=2;
-	}
-	set_cursor(currcons);
-	if (vt_cons[fg_console].vc_mode == KD_GRAPHICS)
-		return;
-	timer_active &= ~(1<<BLANK_TIMER);
-	if (console_blanked) {
-		timer_table[BLANK_TIMER].expires = 0;
-		timer_active |= 1<<BLANK_TIMER;
-	} else if (blankinterval) {
-		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
-		timer_active |= 1<<BLANK_TIMER;
-	}
-}
-
 /*
  * All we do is set the write and ioctl subroutines; later on maybe we'll
  * dynamically allocate the console screen memory.
@@ -1514,3 +1543,199 @@ int con_open(struct tty_struct *tty, struct file * filp)
 		return -ENODEV;
 	return 0;
 }
+
+#ifdef CONFIG_SELECTION
+/* set reverse video on characters s-e of console with selection. */
+static void highlight(const int currcons, const int s, const int e)
+{
+	unsigned char *p, *p1, *p2;
+
+	p1 = (unsigned char *)origin + s + 1;
+	p2 = (unsigned char *)origin + e + 1;
+	if (p1 > p2)
+	{
+		p = p1;
+		p1 = p2;
+		p2 = p;
+	}
+	for (p = p1; p <= p2; p += 2)
+		*p = (*p & 0x88) | ((*p << 4) & 0x70) | ((*p >> 4) & 0x07);
+}
+
+/* is c in range [a-zA-Z0-9_]? */
+static inline int inword(const char c) { return (isalnum(c) || c == '_'); }
+
+/* does screen address p correspond to character at LH/RH edge of screen? */
+static inline int atedge(const int p)
+{
+	return (!(p % video_size_row) || !((p + 2) % video_size_row));
+}
+
+/* constrain v such that l <= v <= u */
+static inline short limit(const int v, const int l, const int u)
+{
+	return (v < l) ? l : ((v > u) ? u : v);
+}
+
+/* set the current selection. Invoked by ioctl(). */
+int set_selection(const int arg)
+{
+	unsigned short *args, xs, ys, xe, ye;
+	int currcons = fg_console;
+	int sel_mode, new_sel_start, new_sel_end, spc;
+	char *bp, *obp, *spos;
+	int i, ps, pe;
+	char *off = (char *)origin;
+
+	unblank_screen();
+	args = (unsigned short *)(arg + 1);
+	xs = get_fs_word(args++) - 1;
+	ys = get_fs_word(args++) - 1;
+	xe = get_fs_word(args++) - 1;
+	ye = get_fs_word(args++) - 1;
+	sel_mode = get_fs_word(args);
+
+	xs = limit(xs, 0, video_num_columns - 1);
+	ys = limit(ys, 0, video_num_lines - 1);
+	xe = limit(xe, 0, video_num_columns - 1);
+	ye = limit(ye, 0, video_num_lines - 1);
+	ps = ys * video_size_row + (xs << 1);
+	pe = ye * video_size_row + (xe << 1);
+
+	if (ps > pe)	/* make sel_start <= sel_end */
+	{
+		int tmp = ps;
+		ps = pe;
+		pe = tmp;
+	}
+
+	switch (sel_mode)
+	{
+		case 0:	/* character-by-character selection */
+		default:
+			new_sel_start = ps;
+			new_sel_end = pe;
+			break;
+		case 1:	/* word-by-word selection */
+			spc = isspace(*(off + ps));
+			for (new_sel_start = ps; ; ps -= 2)
+			{
+				if ((spc && !isspace(*(off + ps))) ||
+				    (!spc && !inword(*(off + ps))))
+					break;
+				new_sel_start = ps;
+				if (!(ps % video_size_row))
+					break;
+			}
+			spc = isspace(*(off + pe));
+			for (new_sel_end = pe; ; pe += 2)
+			{
+				if ((spc && !isspace(*(off + pe))) ||
+				    (!spc && !inword(*(off + pe))))
+					break;
+				new_sel_end = pe;
+				if (!((pe + 2) % video_size_row))
+					break;
+			}
+			break;
+		case 2:	/* line-by-line selection */
+			new_sel_start = ps - ps % video_size_row;
+			new_sel_end = pe + video_size_row
+				    - pe % video_size_row - 2;
+			break;
+	}
+	/* select to end of line if on trailing space */
+	if (new_sel_end > new_sel_start &&
+		!atedge(new_sel_end) && isspace(*(off + new_sel_end)))
+	{
+		for (pe = new_sel_end + 2; ; pe += 2)
+		{
+			if (!isspace(*(off + pe)) || atedge(pe))
+				break;
+		}
+		if (isspace(*(off + pe)))
+			new_sel_end = pe;
+	}
+	if (sel_cons != currcons)
+	{
+		clear_selection();
+		sel_cons = currcons;
+	}
+	if (sel_start == -1)	/* no current selection */
+		highlight(sel_cons, new_sel_start, new_sel_end);
+	else if (new_sel_start == sel_start)
+	{
+		if (new_sel_end == sel_end)	/* no action required */
+			return 0;
+		else if (new_sel_end > sel_end)	/* extend to right */
+			highlight(sel_cons, sel_end + 2, new_sel_end);
+		else				/* contract from right */
+			highlight(sel_cons, new_sel_end + 2, sel_end);
+	}
+	else if (new_sel_end == sel_end)
+	{
+		if (new_sel_start < sel_start)	/* extend to left */
+			highlight(sel_cons, new_sel_start, sel_start - 2);
+		else				/* contract from left */
+			highlight(sel_cons, sel_start, new_sel_start - 2);
+	}
+	else	/* some other case; start selection from scratch */
+	{
+		clear_selection();
+		highlight(sel_cons, new_sel_start, new_sel_end);
+	}
+	sel_start = new_sel_start;
+	sel_end = new_sel_end;
+	obp = bp = sel_buffer;
+	for (i = sel_start; i <= sel_end; i += 2)
+	{
+		spos = (char *)origin + i;
+		*bp++ = *spos;
+		if (!isspace(*spos))
+			obp = bp;
+		if (! ((i + 2) % video_size_row))
+		{
+			/* strip trailing blanks from line and add newline,
+			   unless non-space at end of line. */
+			if (obp != bp)
+			{
+				bp = obp;
+				*bp++ = '\n';
+			}
+			obp = bp;
+		}
+		/* check for space, leaving room for next character, possible
+		   newline, and null at end. */
+		if (bp - sel_buffer > SEL_BUFFER_SIZE - 3)
+			break;
+	}
+	*bp = '\0';
+	return 0;
+}
+
+/* insert the contents of the selection buffer into the queue of the
+   tty associated with the current console. Invoked by ioctl(). */
+int paste_selection(struct tty_struct *tty)
+{
+	char *bp = sel_buffer;
+
+	while (*bp)
+	{
+		put_tty_queue(*bp, &tty->read_q);
+		bp++;
+	}
+	TTY_READ_FLUSH(tty);
+	return 0;
+}
+
+/* remove the current selection highlight, if any, from the console holding
+   the selection. */
+static void clear_selection()
+{
+	if (sel_start != -1)
+	{
+		highlight(sel_cons, sel_start, sel_end);
+		sel_start = -1;
+	}
+}
+#endif /* CONFIG_SELECTION */

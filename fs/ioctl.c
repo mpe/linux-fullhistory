@@ -54,7 +54,7 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 }
 
 
-int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
+extern "C" int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
 	int on;

@@ -105,7 +105,4 @@ extern struct inode_operations ext_file_inode_operations;
 extern struct inode_operations ext_dir_inode_operations;
 extern struct inode_operations ext_symlink_inode_operations;
 
-extern struct file_operations ext_file_operations;
-extern struct file_operations ext_dir_operations;
-
 #endif

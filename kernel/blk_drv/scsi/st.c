@@ -47,6 +47,7 @@
 #define MAJOR_NR 9
 #include "../blk.h"
 #include "scsi.h"
+#include "scsi_ioctl.h"
 #include "st.h"
 
 #define MAX_RETRIES 5
@@ -144,7 +145,7 @@ static void decode_sns(int dev, char *sense_buffer)
 
 
 /* Convert the result to success code */
-static int st_chk_result(int dev, int result, char *sense)
+static int st_chk_result(int dev, int result, unsigned char *sense)
 {
   if (!result)
     return 0;

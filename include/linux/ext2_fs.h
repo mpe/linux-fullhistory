@@ -75,7 +75,7 @@
  * Macro-instructions used to manage fragments
  */
 #define EXT2_MIN_FRAG_SIZE		1024
-#define	EXT2_MAX_FRAG_SIZE		1024
+#define	EXT2_MAX_FRAG_SIZE		4096
 #define EXT2_MIN_FRAG_LOG_SIZE		  10
 #ifdef __KERNEL__
 # define EXT2_FRAG_SIZE(s)		((s)->u.ext2_sb.s_frag_size)
@@ -312,11 +312,9 @@ extern void ext2_truncate (struct inode *);
 
 /* dir.c */
 extern struct inode_operations ext2_dir_inode_operations;
-extern struct file_operations ext2_dir_operations;
 
 /* file.c */
 extern struct inode_operations ext2_file_inode_operations;
-extern struct file_operations ext2_file_operations;
 
 /* symlink.c */
 extern struct inode_operations ext2_symlink_inode_operations;

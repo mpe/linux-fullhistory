@@ -42,6 +42,7 @@ static struct file_operations isofs_file_operations = {
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
+	generic_mmap,		/* mmap */
 	NULL,			/* no special open is needed */
 	NULL,			/* release */
 	NULL			/* fsync */
@@ -93,10 +94,10 @@ static void isofs_determine_filetype(struct inode * inode)
 	unsigned char * pnt;
 	
 	block = isofs_bmap(inode,0);
-	if (block && (bh = bread(inode->i_dev,block, ISOFS_BUFFER_SIZE))) {
-		pnt = (char*) bh->b_data;
+	if (block && (bh = bread(inode->i_dev,block, ISOFS_BUFFER_SIZE(inode)))) {
+		pnt = (unsigned char *) bh->b_data;
 		result = ISOFS_FILE_TEXT_M;
-		for(i=0;i<(inode->i_size < ISOFS_BUFFER_SIZE ? inode->i_size : ISOFS_BUFFER_SIZE);
+		for(i=0;i<(inode->i_size < ISOFS_BUFFER_SIZE(inode) ? inode->i_size : ISOFS_BUFFER_SIZE(inode));
 		    i++,pnt++){
 			if(*pnt & 0x80) {result = ISOFS_FILE_BINARY; break;};
 			if(*pnt >= 0x20 || *pnt == 0x1a) continue;
@@ -139,9 +140,9 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 	if (left <= 0)
 		return 0;
 	read = 0;
-	block = filp->f_pos >> ISOFS_BUFFER_BITS;
-	offset = filp->f_pos & (ISOFS_BUFFER_SIZE-1);
-	blocks = (left + offset + ISOFS_BUFFER_SIZE - 1) / ISOFS_BUFFER_SIZE;
+	block = filp->f_pos >> ISOFS_BUFFER_BITS(inode);
+	offset = filp->f_pos & (ISOFS_BUFFER_SIZE(inode)-1);
+	blocks = (left + offset + ISOFS_BUFFER_SIZE(inode) - 1) / ISOFS_BUFFER_SIZE(inode);
 	bhb = bhe = buflist;
 
 	ra_blocks = read_ahead[MAJOR(inode->i_dev)] / (BLOCK_SIZE >> 9);
@@ -163,7 +164,7 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 		while (blocks) {
 		        int uptodate;
 			--blocks;
-			*bhb = getblk(inode->i_dev,isofs_bmap(inode, block++), ISOFS_BUFFER_SIZE);
+			*bhb = getblk(inode->i_dev,isofs_bmap(inode, block++), ISOFS_BUFFER_SIZE(inode));
 			uptodate = 1;
 			if (*bhb && !(*bhb)->b_uptodate) {
 			        uptodate = 0;
@@ -189,7 +190,7 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 		    if (block >= max_block) break;
 		    if(bhrequest == NBUF) break;  /* Block full */
 		    --ra_blocks;
-		    *bhb = getblk(inode->i_dev,isofs_bmap(inode, block++), ISOFS_BUFFER_SIZE);
+		    *bhb = getblk(inode->i_dev,isofs_bmap(inode, block++), ISOFS_BUFFER_SIZE(inode));
 
 		    if (*bhb && !(*bhb)->b_uptodate) {
 		      if((*bhb)->b_blocknr != nextblock) {
@@ -220,10 +221,10 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 		    }
 		  }
 		  
-		  if (left < ISOFS_BUFFER_SIZE - offset)
+		  if (left < ISOFS_BUFFER_SIZE(inode) - offset)
 		    chars = left;
 		  else
-		    chars = ISOFS_BUFFER_SIZE - offset;
+		    chars = ISOFS_BUFFER_SIZE(inode) - offset;
 		  filp->f_pos += chars;
 		  left -= chars;
 		  read += chars;

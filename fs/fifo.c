@@ -9,10 +9,6 @@
 #include <linux/errno.h>
 #include <linux/fcntl.h>
 
-extern struct file_operations read_pipe_fops;
-extern struct file_operations write_pipe_fops;
-extern struct file_operations rdwr_pipe_fops;
-
 static int fifo_open(struct inode * inode,struct file * filp)
 {
 	int retval = 0;
@@ -26,16 +22,12 @@ static int fifo_open(struct inode * inode,struct file * filp)
 	 *  POSIX.1 says that O_NONBLOCK means return with the FIFO
 	 *  opened, even when there is no process writing the FIFO.
 	 */
-		filp->f_op = &read_pipe_fops;
+		filp->f_op = &connecting_pipe_fops;
 		if (!PIPE_READERS(*inode)++)
 			wake_up(&PIPE_WRITE_WAIT(*inode));
 		if (!(filp->f_flags & O_NONBLOCK) && !PIPE_WRITERS(*inode)) {
 			PIPE_RD_OPENERS(*inode)++;
 			while (!PIPE_WRITERS(*inode)) {
-#if 0
-				if (PIPE_HEAD(*inode) != PIPE_TAIL(*inode))
-					break;
-#endif
 				if (current->signal & ~current->blocked) {
 					retval = -ERESTARTSYS;
 					break;
@@ -47,6 +39,8 @@ static int fifo_open(struct inode * inode,struct file * filp)
 		}
 		while (PIPE_WR_OPENERS(*inode))
 			interruptible_sleep_on(&PIPE_READ_WAIT(*inode));
+		if (PIPE_WRITERS(*inode))
+			filp->f_op = &read_pipe_fops;
 		if (retval && !--PIPE_READERS(*inode))
 			wake_up(&PIPE_WRITE_WAIT(*inode));
 		break;

@@ -65,6 +65,9 @@ struct super_block *xiafs_read_super(struct super_block *s, void *data,
 
     dev=s->s_dev;
     lock_super(s);
+
+    set_blocksize(dev, BLOCK_SIZE);
+
     if (!(bh = bread(dev, 0, BLOCK_SIZE))) {
         s->s_dev=0;
 	unlock_super(s);
@@ -83,6 +86,16 @@ struct super_block *xiafs_read_super(struct super_block *s, void *data,
 	return NULL;
     }
     s->s_blocksize = sp->s_zone_size;
+    s->s_blocksize_bits = 10 + sp->s_zone_shift;
+    if (s->s_blocksize != BLOCK_SIZE && 
+	(s->s_blocksize == 1024 || s->s_blocksize == 2048 ||  
+	 s->s_blocksize == 4096)) {
+      brelse(bh);
+      set_blocksize(dev, s->s_blocksize);
+      bh = bread (dev, 0,  s->s_blocksize);
+      if(!bh) return NULL;
+      sp = (struct xiafs_super_block *) (((char *)bh->b_data) + BLOCK_SIZE) ;
+    };
     s->u.xiafs_sb.s_nzones = sp->s_nzones;
     s->u.xiafs_sb.s_ninodes = sp->s_ninodes;
     s->u.xiafs_sb.s_ndatazones = sp->s_ndatazones;

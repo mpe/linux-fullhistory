@@ -86,7 +86,6 @@ struct  seminfo {
 struct sem_undo {
     struct sem_undo *proc_next;
     struct sem_undo *id_next;
-    struct sem_undo *id_prev;
     int    semid;
     short  semadj; 		/* semval adjusted by exit */
     ushort sem_num; 		/* semaphore index in array semid */

@@ -116,7 +116,7 @@ struct sigaction ei_sigaction = { ei_interrupt, 0, 0, NULL, };
 static int
 ei_open(struct device *dev)
 {
-    struct ei_device *ei_local = dev->private;
+    struct ei_device *ei_local = (struct ei_device *) dev->priv;
 
     if ( ! ei_local) {
 	printk("%s: Opening a non-existent physical device\n", dev->name);
@@ -140,7 +140,7 @@ static int
 ei_start_xmit(struct sk_buff *skb, struct device *dev)
 {
     int e8390_base = dev->base_addr;
-    struct ei_device *ei_local = dev->private;
+    struct ei_device *ei_local = (struct ei_device *) dev->priv;
     int length, send_length;
     int tmp_tbusy;    /* we must lock dev_tint in dev.c with dev->t_busy =1 */
                     /* because on a slow pc a quasi endless loop can appear */
@@ -229,7 +229,7 @@ ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	    return 1;
 	}
 	dev->trans_start = jiffies;
-	ei_block_output(dev, length, (void*)(skb+1), output_page);
+	ei_block_output(dev, length, (unsigned char *)(skb+1), output_page);
 	if (! ei_local->txing) {
 	    NS8390_trigger_send(dev, send_length, output_page);
 	    if (output_page == ei_local->tx_start_page)
@@ -243,7 +243,7 @@ ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	    tmp_tbusy = 1;
     } else {
 	dev->trans_start = jiffies;
-	ei_block_output(dev, length, (void*)(skb+1), ei_local->tx_start_page);
+	ei_block_output(dev, length, (unsigned char *)(skb+1), ei_local->tx_start_page);
 	NS8390_trigger_send(dev, send_length, ei_local->tx_start_page);
 	tmp_tbusy = 1;
     }  /* PINGPONG */
@@ -276,7 +276,7 @@ ei_interrupt(int reg_ptr)
 	return;
     }
     e8390_base = dev->base_addr;
-    ei_local = dev->private;
+    ei_local = (struct ei_device *) dev->priv;
     if (dev->interrupt || ei_local->irqlock) {
 	/* The "irqlock" check is only for testing. */
 	sti();
@@ -314,7 +314,7 @@ ei_interrupt(int reg_ptr)
 	if (interrupts & ENISR_TX) {
 	    ei_tx_intr(dev);
 	} else if (interrupts & ENISR_COUNTERS) {
-	    struct ei_device *ei_local = dev->private;
+	    struct ei_device *ei_local = (struct ei_device *) dev->priv;
 	    ei_local->soft_rx_errors += inb_p(e8390_base + EN0_COUNTER0);
 	    ei_local->soft_rx_errors += inb_p(e8390_base + EN0_COUNTER1);
 	    ei_local->missed_packets += inb_p(e8390_base + EN0_COUNTER2);
@@ -344,7 +344,7 @@ ei_tx_intr(struct device *dev)
 {
     int e8390_base = dev->base_addr;
     int status = inb(e8390_base + EN0_TSR);
-    struct ei_device *ei_local = dev->private;
+    struct ei_device *ei_local = (struct ei_device *) dev->priv;
 
     outb_p(ENISR_TX, e8390_base + EN0_ISR); /* Ack intr. */
     if ((status & ENTSR_PTX) == 0)
@@ -398,7 +398,7 @@ static void
 ei_receive(struct device *dev)
 {
     int e8390_base = dev->base_addr;
-    struct ei_device *ei_local = dev->private;
+    struct ei_device *ei_local = (struct ei_device *) dev->priv;
     int rxing_page, this_frame, next_frame, current_offset;
     int boguscount = 0;
     struct e8390_pkt_hdr rx_frame;
@@ -426,7 +426,7 @@ ei_receive(struct device *dev)
 	break;				/* Done for now */
 
       current_offset = this_frame << 8;
-      ei_block_input(dev, sizeof(rx_frame), (void *)&rx_frame,
+      ei_block_input(dev, sizeof(rx_frame), (char *)&rx_frame,
 		     current_offset);
 
       size = rx_frame.count - sizeof(rx_frame);
@@ -478,15 +478,15 @@ ei_receive(struct device *dev)
       if ((rx_frame.status & 0x0F) == ENRSR_RXOK) {
 	int sksize = sizeof(struct sk_buff) + size;
 	struct sk_buff *skb;
-	skb = kmalloc(sksize, GFP_ATOMIC);
+	skb = (struct sk_buff *) kmalloc(sksize, GFP_ATOMIC);
 	if (skb != NULL) {
 	  skb->lock = 0;
 	  skb->mem_len = sksize;
 	  skb->mem_addr = skb;
 	  /* 'skb+1' points to the start of sk_buff data area. */
-	  ei_block_input(dev, size, (void *)(skb+1),
+	  ei_block_input(dev, size, (char *)(skb+1),
 			 current_offset + sizeof(rx_frame));
-	  if (dev_rint((void *)skb, size, IN_SKBUFF, dev)) {
+	  if (dev_rint((unsigned char *)skb, size, IN_SKBUFF, dev)) {
 	      printk("%s: receive buffers full.\n", dev->name);
 	      break;
 	  }
@@ -530,7 +530,7 @@ ei_rx_overrun(struct device *dev)
 {
     int e8390_base = dev->base_addr;
     int reset_start_time = jiffies;
-    struct ei_device *ei_local = dev->private;
+    struct ei_device *ei_local = (struct ei_device *) dev->priv;
 
     /* We should already be stopped and in page0.  Remove after testing. */
     outb_p(E8390_NODMA+E8390_PAGE0+E8390_STOP, e8390_base+E8390_CMD);
@@ -578,9 +578,9 @@ ethif_init(struct device *dev)
     dev->open = &ei_open;
 
     /* Make up a ei_local structure. */
-    dev->private = kmalloc(sizeof(struct ei_device), GFP_KERNEL);
-    memset(dev->private, 0, sizeof(struct ei_device));
-    ei_local = (struct ei_device *)dev->private;
+    dev->priv = kmalloc(sizeof(struct ei_device), GFP_KERNEL);
+    memset(dev->priv, 0, sizeof(struct ei_device));
+    ei_local = (struct ei_device *)dev->priv;
 #ifndef NO_PINGPONG
     ei_local->pingpong = 1;
 #endif
@@ -600,8 +600,8 @@ ethif_init(struct device *dev)
 #endif		     
 	&& 1 ) {
 	printk("No ethernet device found.\n");
-	kfree(dev->private);
-	dev->private = NULL;
+	kfree(dev->priv);
+	dev->priv = NULL;
 	return 1;			/* ENODEV or EAGAIN would be more accurate. */
     }
 
@@ -623,9 +623,9 @@ ethdev_init(struct device *dev)
     dev->rebuild_header	= eth_rebuild_header;
     dev->type_trans	= eth_type_trans;
 
-    if (dev->private == NULL) {
-	dev->private = kmalloc(sizeof(struct ei_device), GFP_KERNEL);
-	memset(dev->private, 0, sizeof(struct ei_device));
+    if (dev->priv == NULL) {
+	dev->priv = kmalloc(sizeof(struct ei_device), GFP_KERNEL);
+	memset(dev->priv, 0, sizeof(struct ei_device));
     }
 
     dev->hard_start_xmit = &ei_start_xmit;
@@ -655,7 +655,7 @@ ethdev_init(struct device *dev)
 void NS8390_init(struct device *dev, int startp)
 {
     int e8390_base = dev->base_addr;
-    struct ei_device *ei_local = dev->private;
+    struct ei_device *ei_local = (struct ei_device *) dev->priv;
     int i;
     int endcfg = ei_local->word16 ? (0x48 | ENDCFG_WTS) : 0x48;
 

@@ -46,6 +46,7 @@ struct super_block *proc_read_super(struct super_block *s,void *data,
 {
 	lock_super(s);
 	s->s_blocksize = 1024;
+	s->s_blocksize_bits = 10;
 	s->s_magic = PROC_SUPER_MAGIC;
 	s->s_op = &proc_sops;
 	unlock_super(s);
@@ -169,8 +170,15 @@ void proc_read_inode(struct inode * inode)
 			return;
 		case 2:
 			ino &= 0xff;
-			if (ino >= p->numlibraries)
-				return;
+			{
+				int j = 0;
+				struct vm_area_struct * mpnt;
+				for (mpnt = p->mmap ; mpnt ; mpnt = mpnt->vm_next)
+					if(mpnt->vm_inode)
+						j++;
+				if (ino >= j)
+					return;
+			}
 			inode->i_op = &proc_link_inode_operations;
 			inode->i_size = 64;
 			inode->i_mode = S_IFLNK | 0700;

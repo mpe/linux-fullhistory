@@ -12,6 +12,7 @@
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/config.h>
 
 static int proc_readroot(struct inode *, struct file *, struct dirent *, int);
 static int proc_lookuproot(struct inode *,const char *,int,struct inode **);
@@ -59,7 +60,10 @@ static struct proc_dir_entry root_dir[] = {
 	{ 5,4,"kmsg" },
 	{ 6,7,"version" },
 	{ 7,4,"self" },	/* will change inode # */
-	{ 8,3,"net" }
+	{ 8,3,"net" },
+#ifdef CONFIG_DEBUG_MALLOC
+	{13,6,"malloc" },
+#endif
 };
 
 #define NR_ROOT_DIRENTRY ((sizeof (root_dir))/(sizeof (root_dir[0])))

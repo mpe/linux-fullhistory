@@ -14,6 +14,7 @@
 #	PLIP		The Crynwe PL/IP driver
 #	SLIP		The MicroWalt SLIP driver
 #	  SL_DUMP	Uses the "dump frame" debug code
+#	  SL_COMPRESSED Use CSLIP
 #	D_LINK		The D-Link DE-600 Portable Ethernet Adaptor.
 #	  D_LINK_IO	The D-Link I/O address (0x378 == default)
 #	  D_LINK_IRQ	The D-Link IRQ number to use (IRQ7 == default)
@@ -28,8 +29,10 @@
 CARDS		= -DSLIP -DPLIP -DWD80x3 -DNE2000 -DHPLAN -DEL2 -DD_LINK
 
 # For WD and SMC cards:
-OPTS		= -DEI8390=0x280 -DEI8390_IRQ=15
-WD_OPTS		= -DWD_SHMEM=0xCC000 -UFORCE_8BIT
+#OPTS		= -DEI8390=0x280 -DEI8390_IRQ=15
+#WD_OPTS		= -DWD_SHMEM=0xCC000 -UFORCE_8BIT
+OPTS		= -DEI8390=0 -DEI8390_IRQ=0
+WD_OPTS		= -DWD_SHMEM=0
 
 # For all other cards:
 #OPTS		= -DEI8390=0 -DEI8390_IRQ=0
@@ -39,5 +42,5 @@ EL_OPTS		= -UEL2_AUI
 NE_OPTS		=
 HP_OPTS		=
 PLIP_OPTS	=
-SLIP_OPTS	= -DSL_DUMP
+SLIP_OPTS	= -DSL_DUMP -DSL_COMPRESSED
 DL_OPTS		= -DD_LINK_IO=0x378 -DD_LINK_IRQ=7 -UD_LINK_DEBUG

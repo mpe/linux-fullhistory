@@ -120,9 +120,9 @@ plip_init(struct device *dev)
        dev->base_addr. */
 
     /* Initialize the device structure. */
-    dev->private = kmalloc(sizeof(struct netstats), GFP_KERNEL);
-    memset(dev->private, 0, sizeof(struct netstats));
-    localstats = (struct netstats*) dev->private;
+    dev->priv = kmalloc(sizeof(struct netstats), GFP_KERNEL);
+    memset(dev->priv, 0, sizeof(struct netstats));
+    localstats = (struct netstats*) dev->priv;
 
     for (i = 0; i < DEV_NUMBUFFS; i++)
 	dev->buffs[i] = NULL;
@@ -218,7 +218,7 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
     }
 
     dev->trans_start = jiffies;
-    ret_val = plip_write(dev, (void*)(skb+1), skb->len);
+    ret_val = plip_write(dev, (unsigned char *)(skb+1), skb->len);
     if (skb->free)
 	kfree_skb (skb, FREE_WRITE);
     dev->tbusy = 0;
@@ -272,7 +272,7 @@ plip_interrupt(int reg_ptr)
     if (plip_debug >= 4)
 	printk("%s: interrupt.\n", dev->name);
     
-    localstats = (struct netstats*) dev->private;
+    localstats = (struct netstats*) dev->priv;
     
     /* Receive the packet here. */
     if (inb(dev->base_addr + PAR_STATUS) != 0xc7) {
@@ -291,7 +291,7 @@ plip_interrupt(int reg_ptr)
     }
     boguscount = length << 5;
     sksize = sizeof(struct sk_buff) + length;
-    skb = kmalloc(sksize, GFP_ATOMIC);
+    skb = (struct sk_buff *) kmalloc(sksize, GFP_ATOMIC);
     if (skb == NULL) {
 	if (plip_debug)
 	    printk("%s: Couldn't allocate a sk_buff of size %d.\n",
@@ -304,7 +304,7 @@ plip_interrupt(int reg_ptr)
     skb->mem_addr = skb;
     {
 	/* 'skb+1' points to the start of sk_buff data area. */
-	unsigned char *buf = (void*) (skb+1);
+	unsigned char *buf = (unsigned char *) (skb+1);
 	int checksum = 0;
 
 	while (length--) {
@@ -313,7 +313,7 @@ plip_interrupt(int reg_ptr)
 	}
 	if (checksum != get_byte(dev))
 	    localstats->soft_rx_errors++;
-	else if(dev_rint((void *)skb, length, IN_SKBUFF, dev)) {
+	else if(dev_rint((unsigned char *)skb, length, IN_SKBUFF, dev)) {
 	    printk("%s: receive buffers full.\n", dev->name);
 	    localstats->rx_errors++;
 	    return;

@@ -19,6 +19,10 @@
 #define LOAD_INT(x) ((x) >> FSHIFT)
 #define LOAD_FRAC(x) LOAD_INT(((x) & (FIXED_1-1)) * 100)
 
+#ifdef CONFIG_DEBUG_MALLOC
+int get_malloc(char * buffer);
+#endif
+
 static int get_loadavg(char * buffer)
 {
 	int a, b, c;
@@ -262,13 +266,13 @@ static int get_statm(int pid, char * buffer)
 		return 0;
 	tpag = (*p)->end_code / PAGE_SIZE;
 	if ((*p)->state != TASK_ZOMBIE) {
-	  pagedir = (void *)((*p)->tss.cr3 + ((*p)->start_code >> 20));
+	  pagedir = (unsigned long *)((*p)->tss.cr3 + ((*p)->start_code >> 20));
 	  for (i = 0; i < 0x300; ++i) {
 	    if ((ptbl = pagedir[i]) == 0) {
 	      tpag -= 1024;
 	      continue;
 	    }
-	    buf = (void *)(ptbl & 0xfffff000);
+	    buf = (unsigned long *)(ptbl & 0xfffff000);
 	    for (pte = buf; pte < (buf + 1024); ++pte) {
 	      if (*pte != 0) {
 		++size;
@@ -338,6 +342,11 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 		case 12:
 			length = get_statm(pid, page);
 			break;
+#ifdef CONFIG_DEBUG_MALLOC
+		case 13:
+			length = get_malloc(page);
+			break;
+#endif
 		default:
 			free_page((unsigned long) page);
 			return -EBADF;

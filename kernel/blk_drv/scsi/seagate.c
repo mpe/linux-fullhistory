@@ -89,15 +89,17 @@ static unsigned char controller_type;	/* set to SEAGATE for ST0x boards or FD fo
 #define DATA (*(volatile unsigned char *) st0x_dr)
 
 #ifndef OVERRIDE		
-static const char *  seagate_bases[] = {(char *) 0xc8000, (char *) 0xca000, (char *) 0xcc000, (char *) 0xce000, (char *) 0xce000,
-				        (char *) 0xdc000, (char *) 0xde000};
-typedef struct 
-	{
+static const char *  seagate_bases[] = {
+	(char *) 0xc8000, (char *) 0xca000, (char *) 0xcc000,
+	(char *) 0xce000, (char *) 0xdc000, (char *) 0xde000
+};
+
+typedef struct {
 	char *signature ;
 	unsigned offset;
 	unsigned length;
 	unsigned char type;
-	} Signature;
+} Signature;
 	
 static const Signature signatures[] = {
 #ifdef CONFIG_SCSI_SEAGATE
@@ -391,7 +393,7 @@ int seagate_st0x_queue_command (Scsi_Cmnd * SCpnt,  void (*done)(Scsi_Cmnd *))
 	current_target = SCpnt->target;
 	current_lun = SCpnt->lun;
 	(const void *) current_cmnd = SCpnt->cmnd;
-	current_data = SCpnt->request_buffer;
+	current_data = (unsigned char *) SCpnt->request_buffer;
 	current_bufflen = SCpnt->request_bufflen;
 	SCint = SCpnt;
 	if(recursion_depth) {
@@ -900,7 +902,7 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
         movb %%al, (%%edi);
 "
 #endif
-"	loop 1b;" ::
+"	loop 1b;" : :
         /* input */
         "r" (st0x_dr), "S" (data), "c" (SCint->transfersize) :
         /* clobbered */
@@ -1027,7 +1029,7 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 "
 #endif
 
-"	loop 1b;" ::
+"	loop 1b;" : :
         /* input */
         "r" (st0x_dr), "D" (data), "c" (SCint->transfersize) :
         /* clobbered */
@@ -1121,8 +1123,10 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 		case REQ_CMDOUT : 
 			while (((status_read = STATUS) & STAT_BSY) && 
 			       ((status_read & REQ_MASK) == REQ_CMDOUT))
-				if (status_read & STAT_REQ)
-					DATA = *(unsigned char *) cmnd ++;
+				if (status_read & STAT_REQ) {
+					DATA = *(unsigned char *) cmnd;
+					cmnd = 1+(unsigned char *) cmnd;
+				}
 			break;
 	
 		case REQ_STATIN : 
@@ -1395,9 +1399,7 @@ int seagate_st0x_reset (void)
 #include "sd.h"
 #include "scsi_ioctl.h"
 
-extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
-
-int seagate_st0x_biosparam(int size, int dev, int* info) {
+int seagate_st0x_biosparam(int size, int dev, int* ip) {
   unsigned char buf[256 + sizeof(int) * 2], cmd[6], *data, *page;
   int *sizes, result, formatted_sectors, total_sectors;
   int cylinders, heads, sectors;
@@ -1493,9 +1495,9 @@ printk("scsi%d : heads = %d cylinders = %d sectors = %d total = %d formatted = %
       if ((cylinders > 1024) || (sectors > 64)) 
 	result = -1;
       else {
-	info[0] = heads;
-	info[1] = sectors;
-	info[2] = cylinders;
+	ip[0] = heads;
+	ip[1] = sectors;
+	ip[2] = cylinders;
       }
 
 /* 

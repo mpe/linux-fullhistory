@@ -141,10 +141,10 @@ static __inline__ void disable_dma(unsigned int dmanr)
 
 /* Clear the 'DMA Pointer Flip Flop'.
  * Write 0 for LSB/MSB, 1 for MSB/LSB access.
- * Use this once to initialize the FF to a know state.
+ * Use this once to initialize the FF to a known state.
  * After that, keep track of it. :-)
  * --- In order to do that, the DMA routines below should ---
- * --- only be used while interrupts are disbled! ---
+ * --- only be used while interrupts are disabled! ---
  */
 static __inline__ void clear_dma_ff(unsigned int dmanr)
 {

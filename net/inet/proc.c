@@ -25,7 +25,7 @@
 #include <linux/net.h>
 #include <linux/un.h>
 #include <linux/in.h>
-#include <sys/param.h>
+#include <linux/param.h>
 #include "inet.h"
 #include "timer.h"
 #include "dev.h"

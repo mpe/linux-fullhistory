@@ -36,10 +36,16 @@
 #include "sock.h"
 #include "arp.h"
 #include "slip.h"
+#include "slhc.h"
 
 
 #define	SLIP_VERSION	"0.7.5"
 
+#ifdef SL_COMPRESSED
+#define COMPRESSED_SLIP 1
+#else
+#define COMPRESSED_SLIP 0
+#endif
 
 /* Define some IP layer stuff.  Not all systems have it. */
 #ifdef SL_DUMP
@@ -64,15 +70,25 @@ ip_dump(unsigned char *ptr, int len)
 {
 #ifdef SL_DUMP
   struct iphdr *ip;
+  struct tcphdr *th;
   int dlen, doff;
 
   if (inet_debug != DBG_SLIP) return;
 
   ip = (struct iphdr *) ptr;
+  th = (struct tcphdr *) (ptr + ip->ihl * 4);
+  printk("\r%s -> %s seq %x ack %x len %d\n",
+	 in_ntoa(ip->saddr), in_ntoa(ip->daddr), 
+	 ntohl(th->seq), ntohl(th->ack_seq), ntohs(ip->tot_len));
+  return;
+
+  printk("\r*****\n");
+  printk("%x %d\n", ptr, len);
+  ip = (struct iphdr *) ptr;
   dlen = ntohs(ip->tot_len);
   doff = ((ntohs(ip->frag_off) & IPF_F_OFFSET) << 3);
 
-  printk("\r*****\n");
+
   printk("SLIP: %s->", in_ntoa(ip->saddr));
   printk("%s\n", in_ntoa(ip->daddr));
   printk(" len %u ihl %u ver %u ttl %u prot %u",
@@ -88,6 +104,17 @@ ip_dump(unsigned char *ptr, int len)
 #endif
 }
 
+void clh_dump(unsigned char *cp, int len)
+{
+  if (len > 60)
+    len = 60;
+  printk("%d:", len);
+  while (len > 0) {
+    printk(" %x", *cp++);
+    len--;
+  }
+  printk("\n\n");
+}
 
 /* Initialize a SLIP control block for use. */
 static void
@@ -100,10 +127,12 @@ sl_initialize(struct slip *sl, struct device *dev)
   sl->line		= dev->base_addr;
   sl->tty		= NULL;
   sl->dev		= dev;
+  sl->slcomp		= NULL;
 
   /* Clear all pointers. */
   sl->rbuff		= NULL;
   sl->xbuff		= NULL;
+  sl->cbuff		= NULL;
 
   sl->rhead		= NULL;
   sl->rend		= NULL;
@@ -141,10 +170,11 @@ sl_alloc(void)
   for (i = 0; i < SL_NRUNIT; i++) {
 	sl = &sl_ctrl[i];
 	if (sl->inuse == 0) {
-		__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+		save_flags(flags);
+		cli();
 		sl->inuse = 1;
 		sl->tty = NULL;
-		__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+		restore_flags(flags);
 		return(sl);
 	}
   }
@@ -159,10 +189,11 @@ sl_free(struct slip *sl)
   unsigned long flags;
 
   if (sl->inuse) {
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+  	save_flags(flags);
+  	cli();
 	sl->inuse = 0;
 	sl->tty = NULL;
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	restore_flags(flags);
   }
 }
 
@@ -173,15 +204,15 @@ sl_enqueue(struct slip *sl, unsigned char c)
 {
   unsigned long flags;
 
-  __asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+  save_flags(flags);
+  cli();
   if (sl->rhead < sl->rend) {
 	*sl->rhead = c;
 	sl->rhead++;
 	sl->rcount++;
   } else sl->roverrun++;
-  __asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+  restore_flags(flags);
 }
-
 
 /* Release 'i' bytes from a SLIP receiver buffer. */
 static inline void
@@ -189,12 +220,13 @@ sl_dequeue(struct slip *sl, int i)
 {
   unsigned long flags;
 
-  __asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+  save_flags(flags);
+  cli();
   if (sl->rhead > sl->rbuff) {
 	sl->rhead -= i;
 	sl->rcount -= i;
   }
-  __asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+  restore_flags(flags);
 }
 
 
@@ -204,10 +236,11 @@ sl_lock(struct slip *sl)
 {
   unsigned long flags;
 
-  __asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+  save_flags(flags);
+  cli();
   sl->sending = 1;
   sl->dev->tbusy = 1;
-  __asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+  restore_flags(flags);
 }
 
 
@@ -217,10 +250,11 @@ sl_unlock(struct slip *sl)
 {
   unsigned long flags;
 
-  __asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+  save_flags(flags);
+  cli();
   sl->sending = 0;
   sl->dev->tbusy = 0;
-  __asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+  restore_flags(flags);
 }
 
 
@@ -229,6 +263,42 @@ static void
 sl_bump(struct slip *sl)
 {
   int done;
+  unsigned char c;
+  unsigned long flags;
+  int count;
+
+  count = sl->rcount;
+  if (COMPRESSED_SLIP) {
+    if ((c = sl->rbuff[0]) & SL_TYPE_COMPRESSED_TCP) {
+      /* make sure we've reserved enough space for uncompress to use */
+      save_flags(flags);
+      cli();
+      if ((sl->rhead + 80) < sl->rend) {
+	sl->rhead += 80;
+	sl->rcount += 80;
+	done = 1;
+      } else {
+	sl->roverrun++;
+	done = 0;
+      }
+      restore_flags(flags);
+      if (! done)  /* not enough space available */
+	return;
+
+      if ((count = slhc_uncompress((struct slcompress *)sl->slcomp, 
+				      sl->rbuff, count)) <= 0 ) {
+	sl->errors++;
+	return;
+      }
+    } else if (c >= SL_TYPE_UNCOMPRESSED_TCP) {
+      sl->rbuff[0] &= 0x4f;
+      if ( slhc_remember((struct slcompress *)sl->slcomp, sl->rbuff, 
+			 count ) <= 0 ) {
+	sl->errors++;
+	return;
+      }
+    }
+  }
 
   DPRINTF((DBG_SLIP, "<< \"%s\" recv:\r\n", sl->dev->name));
   ip_dump(sl->rbuff, sl->rcount);
@@ -237,9 +307,11 @@ sl_bump(struct slip *sl)
   do {
 	DPRINTF((DBG_SLIP, "SLIP: packet is %d at 0x%X\n",
 					sl->rcount, sl->rbuff));
-	done = dev_rint(sl->rbuff, sl->rcount, 0, sl->dev);
+	/* clh_dump(sl->rbuff, count); */
+	done = dev_rint(sl->rbuff, count, 0, sl->dev);
 	if (done == 0 || done == 1) break;
   } while(1);
+
   sl->rpacket++;
 }
 
@@ -250,21 +322,26 @@ sl_next(struct slip *sl)
 {
   DPRINTF((DBG_SLIP, "SLIP: sl_next(0x%X) called!\n", sl));
   sl_unlock(sl);
+  dev_tint(sl->dev);
 }
 
 
 /* Encapsulate one IP datagram and stuff into a TTY queue. */
 static void
-sl_encaps(struct slip *sl, unsigned char *p, int len)
+sl_encaps(struct slip *sl, unsigned char *icp, int len)
 {
-  unsigned char *bp;
+  unsigned char *bp, *p;
   unsigned char c;
   int count;
 
   DPRINTF((DBG_SLIP, "SLIP: sl_encaps(0x%X, %d) called\n", p, len));
   DPRINTF((DBG_SLIP, ">> \"%s\" sent:\r\n", sl->dev->name));
-  ip_dump(p, len);
+  ip_dump(icp, len);
 
+  p = icp;
+  len = slhc_compress((struct slcompress *)sl->slcomp, p, len, 
+		      sl->cbuff, &p, 1);
+  
   /*
    * Send an initial END character to flush out any
    * data that may have accumulated in the receiver
@@ -426,6 +503,19 @@ sl_open(struct device *dev)
   sl->sending		= 0;
   sl->rcount		= 0;
 
+  p = (unsigned char *) kmalloc(l + 4, GFP_KERNEL);
+  if (p == NULL) {
+	DPRINTF((DBG_SLIP, "SLIP: no memory for SLIP COMPRESS buffer!\n"));
+	return(-ENOMEM);
+  }
+  sl->cbuff		= p;
+
+  sl->slcomp = slhc_init(16, 16);
+  if (sl->slcomp == NULL) {
+	DPRINTF((DBG_SLIP, "SLIP: no memory for SLCOMP!\n"));
+	return(-ENOMEM);
+  }
+
   DPRINTF((DBG_SLIP, "SLIP: channel %d opened.\n", sl->line));
   return(0);
 }
@@ -447,6 +537,9 @@ sl_close(struct device *dev)
   /* Free all SLIP frame buffers. */
   kfree(sl->rbuff);
   kfree(sl->xbuff);
+  kfree(sl->cbuff);
+  slhc_free(sl->slcomp);
+
   sl_initialize(sl, dev);
 
   DPRINTF((DBG_SLIP, "SLIP: channel %d closed.\n", sl->line));
@@ -495,7 +588,7 @@ slip_recv(struct tty_struct *tty)
 				sl->escape = 0;
 				break;
 			case END:
-				if (sl->rcount > 3) sl_bump(sl);
+				if (sl->rcount > 2) sl_bump(sl);
 				sl_dequeue(sl, sl->rcount);
 				sl->rcount = 0;
 				sl->escape = 0;

@@ -67,7 +67,7 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 	char c = 0;
 	int inode_number;
 	struct buffer_head * bh;
-	char * cpnt = 0;
+	void * cpnt = NULL;
 	unsigned int old_offset;
 	int dlen, rrflag;
 	char * dpnt;
@@ -76,9 +76,9 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
 	
-	offset = filp->f_pos & (BLOCK_SIZE - 1);
-	block = isofs_bmap(inode,(filp->f_pos)>>BLOCK_SIZE_BITS);
-	if (!block || !(bh = bread(inode->i_dev,block,ISOFS_BUFFER_SIZE)))
+	offset = filp->f_pos & (ISOFS_BUFFER_SIZE(inode) - 1);
+	block = isofs_bmap(inode,(filp->f_pos)>>ISOFS_BUFFER_BITS(inode));
+	if (!block || !(bh = bread(inode->i_dev,block,ISOFS_BUFFER_SIZE(inode))))
 		return 0;
 	
 	while (filp->f_pos < inode->i_size) {
@@ -86,7 +86,7 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 		printk("Block, offset: %x %x %x\n",block, offset, filp->f_pos);
 #endif
 		de = (struct iso_directory_record *) (offset + bh->b_data);
-		inode_number = (block << BLOCK_SIZE_BITS)+(offset & (BLOCK_SIZE - 1));
+		inode_number = (block << ISOFS_BUFFER_BITS(inode))+(offset & (ISOFS_BUFFER_SIZE(inode) - 1));
 		
 		/* If the length byte is zero, we should move on to the next CDROM sector.
 		   If we are at the end of the directory, we kick out of the while loop. */
@@ -95,8 +95,8 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 			brelse(bh);
 			offset = 0;
 			filp->f_pos =(filp->f_pos & ~(ISOFS_BLOCK_SIZE - 1))+ISOFS_BLOCK_SIZE;
-			block = isofs_bmap(inode,(filp->f_pos)>>BLOCK_SIZE_BITS);
-			if (!block || !(bh = bread(inode->i_dev,block,ISOFS_BUFFER_SIZE)))
+			block = isofs_bmap(inode,(filp->f_pos)>>ISOFS_BUFFER_BITS(inode));
+			if (!block || !(bh = bread(inode->i_dev,block,ISOFS_BUFFER_SIZE(inode))))
 				return 0;
 			continue;
 		}
@@ -108,16 +108,17 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 		old_offset = offset;
 		offset += *((unsigned char*) de);
 		filp->f_pos += *((unsigned char*) de);
-		if (offset >=  BLOCK_SIZE) {
+
+		if (offset >=  ISOFS_BUFFER_SIZE(inode)) {
 			cpnt = kmalloc(1 << ISOFS_BLOCK_BITS, GFP_KERNEL);
-			memcpy(cpnt, bh->b_data, BLOCK_SIZE);
+			memcpy(cpnt, bh->b_data, ISOFS_BUFFER_SIZE(inode));
 			de = (struct iso_directory_record *) (old_offset + cpnt);
 			brelse(bh);
-			offset = filp->f_pos & (BLOCK_SIZE - 1);
-			block = isofs_bmap(inode,(filp->f_pos)>>BLOCK_SIZE_BITS);
-			if (!block || !(bh = bread(inode->i_dev,block,ISOFS_BUFFER_SIZE)))
+			offset = filp->f_pos & (ISOFS_BUFFER_SIZE(inode) - 1);
+			block = isofs_bmap(inode,(filp->f_pos)>> ISOFS_BUFFER_BITS(inode));
+			if (!block || !(bh = bread(inode->i_dev,block,ISOFS_BUFFER_SIZE(inode))))
 				return 0;
-			memcpy(cpnt+BLOCK_SIZE, bh->b_data, BLOCK_SIZE);
+			memcpy(cpnt+ISOFS_BUFFER_SIZE(inode), bh->b_data, ISOFS_BUFFER_SIZE(inode));
 		}
 		
 		/* Handle the case of the '.' directory */
@@ -137,7 +138,7 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 			put_fs_byte('.',dirent->d_name+1);
 			i = 2;
 			dpnt = "..";
-			if((inode->i_sb->u.isofs_sb.s_firstdatazone << BLOCK_SIZE_BITS) != inode->i_ino)
+			if((inode->i_sb->u.isofs_sb.s_firstdatazone << ISOFS_BUFFER_BITS(inode)) != inode->i_ino)
 				inode_number = inode->u.isofs_i.i_backlink;
 			else
 				inode_number = inode->i_ino;
@@ -166,7 +167,7 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 			  if (rrflag == -1) {  /* This is a rock ridge reloc dir */
 			    if (cpnt) {
 				kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
-				cpnt = 0;
+				cpnt = NULL;
 			    };
 			    continue;
 			  };
@@ -204,7 +205,7 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 		if (rrflag) kfree(dpnt);
 		if (cpnt) {
 			kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
-			cpnt = 0;
+			cpnt = NULL;
 		};
 		
 		if (i) {
@@ -218,7 +219,8 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 	/* We go here for any condition we cannot handle.  We also drop through
 	   to here at the end of the directory. */
  out:
-	if (cpnt) kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
+	if (cpnt)
+		kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
 	brelse(bh);
 	return 0;
 }

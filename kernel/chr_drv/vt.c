@@ -34,7 +34,8 @@
 
 struct vt_cons vt_cons[NR_CONSOLES];
 
-extern int sys_ioperm(unsigned long from, unsigned long num, int on);
+extern "C" int sys_ioperm(unsigned long from, unsigned long num, int on);
+
 extern void change_console(unsigned int new_console);
 extern void complete_change_console(unsigned int new_console);
 extern int vt_waitactive(void);
@@ -138,7 +139,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		 */
 		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned char));
 		if (!i)
-			put_fs_byte(KB_101, (unsigned char *) arg);
+			put_fs_byte(KB_101, (char *) arg);
 		return i;
 
 	case KDADDIO:
@@ -229,11 +230,11 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		u_char s;
 
 		verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbentry));
-		if ((i = get_fs_byte(&a->kb_index)) >= NR_KEYS)
+		if ((i = get_fs_byte((char *) &a->kb_index)) >= NR_KEYS)
 			return -EINVAL;
-		if ((s = get_fs_byte(&a->kb_table)) >= NR_KEYMAPS)
+		if ((s = get_fs_byte((char *) &a->kb_table)) >= NR_KEYMAPS)
 			return -EINVAL;
-		put_fs_word(key_map[s][i], &a->kb_value);
+		put_fs_word(key_map[s][i], (short *) &a->kb_value);
 		return 0;
 	}
 
@@ -245,9 +246,9 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		u_short v;
 
 		verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbentry));
-		if ((i = get_fs_byte(&a->kb_index)) >= NR_KEYS)
+		if ((i = get_fs_byte((char *) &a->kb_index)) >= NR_KEYS)
 			return -EINVAL;
-		if ((s = get_fs_byte(&a->kb_table)) >= NR_KEYMAPS)
+		if ((s = get_fs_byte((char *) &a->kb_table)) >= NR_KEYMAPS)
 			return -EINVAL;
 		if (KTYP(v = get_fs_word(&a->kb_value)) >= NR_TYPES)
 			return -EINVAL;
@@ -268,7 +269,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			ucval |= LED_NUM;
 		if (vc_kbd_flag(kbd, VC_CAPSLOCK))
 			ucval |= LED_CAP;
-		put_fs_byte(ucval, (unsigned char *) arg);
+		put_fs_byte(ucval, (char *) arg);
 		return 0;
 
 	case KDSETLED:

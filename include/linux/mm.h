@@ -26,6 +26,7 @@ struct vm_area_struct {
 	struct task_struct * vm_task;		/* VM area parameters */
 	unsigned long vm_start;
 	unsigned long vm_end;
+	unsigned short vm_page_prot;
 	struct vm_area_struct * vm_next;	/* linked list */
 	struct vm_area_struct * vm_share;	/* linked list */
 	struct inode * vm_inode;
@@ -42,9 +43,10 @@ struct vm_area_struct {
 struct vm_operations_struct {
 	void (*open)(struct vm_area_struct * area);
 	void (*close)(struct vm_area_struct * area);
-	void (*nopage)(struct vm_area_struct * area, unsigned long address);
+	void (*nopage)(int error_code,
+		       struct vm_area_struct * area, unsigned long address);
 	void (*wppage)(struct vm_area_struct * area, unsigned long address);
-	int (*share)(struct vm_area_struct * old, struct vm_area_struct * new, unsigned long address);
+	int (*share)(struct vm_area_struct * from, struct vm_area_struct * to, unsigned long address);
 };
 
 extern unsigned long __bad_page(void);
@@ -57,6 +59,7 @@ extern unsigned long __zero_page(void);
 
 extern volatile short free_page_ptr; /* used by malloc and tcp/ip. */
 
+extern int nr_swap_pages;
 extern int nr_free_pages;
 extern unsigned long free_page_list;
 extern int nr_secondary_pages;
@@ -77,7 +80,8 @@ extern inline unsigned long get_free_page(int priority)
 	page = __get_free_page(priority);
 	if (page)
 		__asm__ __volatile__("rep ; stosl"
-			::"a" (0),"c" (1024),"D" (page)
+			: /* no outputs */ \
+			:"a" (0),"c" (1024),"D" (page)
 			:"di","cx");
 	return page;
 }
@@ -91,8 +95,8 @@ extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,
 	unsigned long address);
 extern void free_page_tables(struct task_struct * tsk);
 extern void clear_page_tables(struct task_struct * tsk);
-extern int copy_page_tables(struct task_struct * new);
-extern int clone_page_tables(struct task_struct * new);
+extern int copy_page_tables(struct task_struct * to);
+extern int clone_page_tables(struct task_struct * to);
 extern int unmap_page_range(unsigned long from, unsigned long size);
 extern int remap_page_range(unsigned long from, unsigned long to, unsigned long size, int mask);
 extern int zeromap_page_range(unsigned long from, unsigned long size, int mask);
@@ -117,13 +121,17 @@ extern void swap_in(unsigned long *table_ptr);
 extern void si_swapinfo(struct sysinfo * val);
 extern void rw_swap_page(int rw, unsigned long nr, char * buf);
 
+/* mmap.c */
+extern int do_mmap(struct file * file, unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags, unsigned long off);
+
 #define read_swap_page(nr,buf) \
 	rw_swap_page(READ,(nr),(buf))
 #define write_swap_page(nr,buf) \
 	rw_swap_page(WRITE,(nr),(buf))
 
 #define invalidate() \
-__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3":::"ax")
+__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
 
 extern unsigned long high_memory;
 

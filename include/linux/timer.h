@@ -24,6 +24,8 @@
  * NET_TIMER		tcp/ip timeout timer
  *
  * COPRO_TIMER		387 timeout for buggy hardware..
+ *
+ * TAPE_QIC02_TIMER	timer for QIC-02 tape driver (it's not hardcoded)
  */
 
 #define BLANK_TIMER	0
@@ -36,6 +38,8 @@
 #define NET_TIMER	19
 #define SOUND_TIMER	20
 #define COPRO_TIMER	21
+
+#define TAPE_QIC02_TIMER	22	/* hhb */
 
 struct timer_struct {
 	unsigned long expires;

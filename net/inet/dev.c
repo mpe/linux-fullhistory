@@ -408,7 +408,7 @@ dev_rint(unsigned char *buff, long len, int flags, struct device *dev)
   if (flags & IN_SKBUFF) {
 	skb = (struct sk_buff *) buff;
   } else {
-	skb = kmalloc(sizeof(*skb) + len, GFP_ATOMIC);
+	skb = (struct sk_buff *) kmalloc(sizeof(*skb) + len, GFP_ATOMIC);
 	if (skb == NULL) {
 		printk("dev_rint: packet dropped (no memory) !\n");
 		dropping = 1;
@@ -543,12 +543,12 @@ inet_bh(void *tmp)
 			struct sk_buff *skb2;
 
 			if (ptype->copy) {	/* copy if we need to	*/
-				skb2 = kmalloc(skb->mem_len, GFP_ATOMIC);
+				skb2 = (struct sk_buff *) kmalloc(skb->mem_len, GFP_ATOMIC);
 				if (skb2 == NULL) continue;
 				memcpy(skb2, (const void *) skb, skb->mem_len);
 				skb2->mem_addr = skb2;
 				skb2->lock = 0;
-				skb2->h.raw = (void *)(
+				skb2->h.raw = (unsigned char *)(
 				    (unsigned long) skb2 +
 				    (unsigned long) skb->h.raw -
 				    (unsigned long) skb
@@ -599,15 +599,13 @@ dev_tint(struct device *dev)
   struct sk_buff *skb;
 
   for (i = 0; i < DEV_NUMBUFFS; i++) {
+        cli();
 	while (dev->buffs[i] != NULL) {
-		cli();
 		skb = (struct sk_buff *) dev->buffs[i];
 		if (skb->magic != DEV_QUEUE_MAGIC) {
 			printk("INET: dev: skb with bad magic-%X:", skb->magic);
 			printk("squashing queue\n");
-			cli();
 			dev->buffs[i] = NULL;
-			sti();
 			continue;
 		}
 
@@ -624,7 +622,6 @@ dev_tint(struct device *dev)
 			) {
 				printk("INET: dev: *** bug bad skb->next,");
 				printk(", squashing queue\n");
-				cli();
 				dev->buffs[i] = NULL;
 			} else {
 				dev->buffs[i]= skb->next;
@@ -640,8 +637,10 @@ dev_tint(struct device *dev)
 		/* This will send it through the process again. */
 		dev->queue_xmit(skb, dev, -i - 1);
 		if (dev->tbusy) return;
+		cli();
 	}
   }
+  sti();
 }
 
 
@@ -740,8 +739,8 @@ dev_ifsioc(void *arg, unsigned int getset)
 		dev->pa_addr = (*(struct sockaddr_in *)
 				 &ifr.ifr_addr).sin_addr.s_addr;
 		dev->family = ifr.ifr_addr.sa_family;
-		dev->pa_mask = (dev->pa_addr & get_mask(dev->pa_addr));
-		dev->pa_brdaddr = dev->pa_mask | ~get_mask(dev->pa_addr);
+		dev->pa_mask = get_mask(dev->pa_addr);
+		dev->pa_brdaddr = dev->pa_addr | ~dev->pa_mask;
 		ret = 0;
 		break;
 	case SIOCGIFBRDADDR:

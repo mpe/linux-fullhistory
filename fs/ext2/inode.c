@@ -127,6 +127,7 @@ struct super_block * ext2_read_super (struct super_block * s, void * data,
 #endif
 
 	lock_super (s);
+	set_blocksize(dev, BLOCK_SIZE);
 	if (!(bh = bread (dev, 1, BLOCK_SIZE))) {
 		s->s_dev = 0;
 		unlock_super (s);
@@ -136,11 +137,22 @@ struct super_block * ext2_read_super (struct super_block * s, void * data,
 	es = (struct ext2_super_block *) bh->b_data;
 	s->s_magic = es->s_magic;
 	s->s_blocksize = EXT2_MIN_BLOCK_SIZE << es->s_log_block_size;
+	s->u.ext2_sb.s_log_block_size = es->s_log_block_size;
+	s->s_blocksize_bits = EXT2_BLOCK_SIZE_BITS(s);
+	if (s->s_blocksize != BLOCK_SIZE && 
+	    (s->s_blocksize == 1024 || s->s_blocksize == 2048 ||  
+	     s->s_blocksize == 4096)) {
+		brelse(bh);
+		set_blocksize(dev, s->s_blocksize);
+		bh = bread (dev, 0,  s->s_blocksize);
+		if(!bh)
+			return NULL;
+		es = (struct ext2_super_block *) (((char *)bh->b_data) + BLOCK_SIZE) ;
+	};
 	s->u.ext2_sb.s_inodes_count = es->s_inodes_count;
 	s->u.ext2_sb.s_blocks_count = es->s_blocks_count;
 	s->u.ext2_sb.s_r_blocks_count = es->s_r_blocks_count;
 	s->u.ext2_sb.s_first_data_block = es->s_first_data_block;
-	s->u.ext2_sb.s_log_block_size = es->s_log_block_size;
 	s->u.ext2_sb.s_log_frag_size = es->s_log_frag_size;
 	s->u.ext2_sb.s_frag_size = EXT2_MIN_FRAG_SIZE <<
 				     es->s_log_frag_size;
@@ -197,6 +209,15 @@ struct super_block * ext2_read_super (struct super_block * s, void * data,
 		brelse (bh);
 		if (!silent)
 			printk("VFS: Can't find an ext2fs filesystem on dev 0x%04x.\n",
+				   dev);
+		return NULL;
+	}
+	if (s->s_blocksize != bh->b_size) {
+		s->s_dev = 0;
+		unlock_super (s);
+		brelse (bh);
+		if (!silent)
+			printk("VFS: Unsupported blocksize on dev 0x%04x.\n",
 				   dev);
 		return NULL;
 	}
@@ -383,7 +404,7 @@ void ext2_statfs (struct super_block * sb, struct statfs * buf)
 
 	put_fs_long (EXT2_SUPER_MAGIC, &buf->f_type);
 	put_fs_long (sb->s_blocksize, &buf->f_bsize);
-	put_fs_long (sb->u.ext2_sb.s_blocks_count << sb->u.ext2_sb.s_log_block_size,
+	put_fs_long (sb->u.ext2_sb.s_blocks_count >> sb->u.ext2_sb.s_log_block_size,
 		&buf->f_blocks);
 	tmp = ext2_count_free_blocks (sb);
 	put_fs_long (tmp, &buf->f_bfree);

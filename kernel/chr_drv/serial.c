@@ -437,24 +437,24 @@ static void do_softint(void *unused)
 	struct async_struct	*info;
 	
 	for (i = 0, info = rs_table; i < NR_PORTS; i++,info++) {
-		if (!clear_bit(i, rs_event)) {
+		if (clear_bit(i, rs_event)) {
 			if (!info->tty)	
 				continue;
-			if (!clear_bit(RS_EVENT_READ_PROCESS, &info->event)) {
+			if (clear_bit(RS_EVENT_READ_PROCESS, &info->event)) {
 				TTY_READ_FLUSH(info->tty);
 			}
-			if (!clear_bit(RS_EVENT_WRITE_WAKEUP, &info->event)) {
+			if (clear_bit(RS_EVENT_WRITE_WAKEUP, &info->event)) {
 				wake_up_interruptible(&info->tty->write_q.proc_list);
 			}
-			if (!clear_bit(RS_EVENT_HANGUP, &info->event)) {
+			if (clear_bit(RS_EVENT_HANGUP, &info->event)) {
 				tty_hangup(info->tty);
 				wake_up_interruptible(&info->open_wait);
 				info->flags &= ~(ASYNC_NORMAL_ACTIVE|
 						 ASYNC_CALLOUT_ACTIVE);
 			}
-			if (!clear_bit(RS_EVENT_BREAK, &info->event))
+			if (clear_bit(RS_EVENT_BREAK, &info->event))
 				handle_rs_break(info);
-			if (!clear_bit(RS_EVENT_OPEN_WAKEUP, &info->event)) {
+			if (clear_bit(RS_EVENT_OPEN_WAKEUP, &info->event)) {
 				wake_up_interruptible(&info->open_wait);
 			}
 		}
@@ -880,7 +880,7 @@ static int get_serial_info(struct async_struct * info,
 static int set_serial_info(struct async_struct * info,
 			   struct serial_struct * new_info)
 {
-	struct serial_struct new;
+	struct serial_struct new_serial;
 	struct async_struct old_info;
 	unsigned int		i,change_irq,change_port;
 	int 			retval;
@@ -888,39 +888,39 @@ static int set_serial_info(struct async_struct * info,
 
 	if (!new_info)
 		return -EFAULT;
-	memcpy_fromfs(&new,new_info,sizeof(new));
+	memcpy_fromfs(&new_serial,new_info,sizeof(new_serial));
 	old_info = *info;
 
-	change_irq = new.irq != info->irq;
-	change_port = new.port != info->port;
+	change_irq = new_serial.irq != info->irq;
+	change_port = new_serial.port != info->port;
 
 	if (!suser()) {
 		if (change_irq || change_port ||
-		    (new.baud_base != info->baud_base) ||
-		    (new.type != info->type) ||
-		    (new.close_delay != info->close_delay) ||
-		    ((new.flags & ~ASYNC_FLAGS) !=
+		    (new_serial.baud_base != info->baud_base) ||
+		    (new_serial.type != info->type) ||
+		    (new_serial.close_delay != info->close_delay) ||
+		    ((new_serial.flags & ~ASYNC_FLAGS) !=
 		     (info->flags & ~ASYNC_FLAGS)))
 			return -EPERM;
 		info->flags = ((info->flags & ~ASYNC_SPD_MASK) |
-			       (new.flags & ASYNC_SPD_MASK));
-		info->custom_divisor = new.custom_divisor;
-		new.port = 0;	/* Prevent initialization below */
+			       (new_serial.flags & ASYNC_SPD_MASK));
+		info->custom_divisor = new_serial.custom_divisor;
+		new_serial.port = 0;	/* Prevent initialization below */
 		goto check_and_exit;
 	}
 
-	if (new.irq == 2)
-		new.irq = 9;
+	if (new_serial.irq == 2)
+		new_serial.irq = 9;
 
-	if ((new.irq > 15) || (new.port > 0xffff) ||
-	    (new.type < PORT_UNKNOWN) || (new.type > PORT_MAX)) {
+	if ((new_serial.irq > 15) || (new_serial.port > 0xffff) ||
+	    (new_serial.type < PORT_UNKNOWN) || (new_serial.type > PORT_MAX)) {
 		return -EINVAL;
 	}
 
 	/* Make sure address is not already in use */
 	for (i = 0 ; i < NR_PORTS; i++)
 		if ((info != &rs_table[i]) &&
-		    (rs_table[i].port == new.port) && rs_table[i].type)
+		    (rs_table[i].port == new_serial.port) && rs_table[i].type)
 			return -EADDRINUSE;
 
 	/*
@@ -928,14 +928,14 @@ static int set_serial_info(struct async_struct * info,
 	 * interrupts.  (We have to do this early, since we may get an
 	 * error trying to do this.)
 	 */
-	if (new.port && new.type && new.irq &&
+	if (new_serial.port && new_serial.type && new_serial.irq &&
 	    (change_irq || !(info->flags & ASYNC_INITIALIZED))) {
-		if (!IRQ_ports[new.irq]) {
+		if (!IRQ_ports[new_serial.irq]) {
 			sa.sa_handler = rs_interrupt;
 			sa.sa_flags = (SA_INTERRUPT);
 			sa.sa_mask = 0;
 			sa.sa_restorer = NULL;
-			retval = irqaction(new.irq,&sa);
+			retval = irqaction(new_serial.irq,&sa);
 			if (retval)
 				return retval;
 		}
@@ -949,12 +949,12 @@ static int set_serial_info(struct async_struct * info,
 	 * At this point, we start making changes.....
 	 */
 
-	info->baud_base = new.baud_base;
+	info->baud_base = new_serial.baud_base;
 	info->flags = ((info->flags & ~ASYNC_FLAGS) |
-			(new.flags & ASYNC_FLAGS));
-	info->custom_divisor = new.custom_divisor;
-	info->type = new.type;
-	info->close_delay = new.close_delay;
+			(new_serial.flags & ASYNC_FLAGS));
+	info->custom_divisor = new_serial.custom_divisor;
+	info->type = new_serial.type;
+	info->close_delay = new_serial.close_delay;
 
 	if (change_port || change_irq) {
 		/*
@@ -967,8 +967,8 @@ static int set_serial_info(struct async_struct * info,
 			if (change_irq && info->irq && !IRQ_ports[info->irq])
 				free_irq(info->irq);
 		}
-		info->irq = new.irq;
-		info->port = new.port;
+		info->irq = new_serial.irq;
+		info->port = new_serial.port;
 	}
 	
 check_and_exit:

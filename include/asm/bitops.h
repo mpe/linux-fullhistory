@@ -6,8 +6,8 @@
 #ifdef i386
 /*
  * These have to be done with inline assembly: that way the bit-setting
- * is guaranteed to be atomic. Both set_bit and clear_bit return 0
- * if the bit-setting went ok, != 0 if the bit already was set/cleared.
+ * is guaranteed to be atomic. All bitoperations return 0 if the bit
+ * was cleared before the operation and != 0 if it was not.
  *
  * bit 0 is the LSB of addr; bit 32 is the LSB of (addr+1).
  */
@@ -20,22 +20,22 @@ struct __dummy { unsigned long a[100]; };
 
 extern inline int set_bit(int nr, void * addr)
 {
-	unsigned char ok;
+	int oldbit;
 
-	__asm__ __volatile__("btsl %2,%1\n\tsetb %0"
-		:"=q" (ok),"=m" (ADDR)
+	__asm__ __volatile__("btsl %2,%1\n\tsbbl %0,%0"
+		:"=r" (oldbit),"=m" (ADDR)
 		:"r" (nr));
-	return ok;
+	return oldbit;
 }
 
 extern inline int clear_bit(int nr, void * addr)
 {
-	unsigned char ok;
+	int oldbit;
 
-	__asm__ __volatile__("btrl %2,%1\n\tsetnb %0"
-		:"=q" (ok),"=m" (ADDR)
+	__asm__ __volatile__("btrl %2,%1\n\tsbbl %0,%0"
+		:"=r" (oldbit),"=m" (ADDR)
 		:"r" (nr));
-	return ok;
+	return oldbit;
 }
 
 /*
@@ -44,12 +44,12 @@ extern inline int clear_bit(int nr, void * addr)
  */
 extern inline int test_bit(int nr, void * addr)
 {
-	unsigned char ok;
+	int oldbit;
 
-	__asm__ __volatile__("btl %2,%1\n\tsetb %0"
-		:"=q" (ok)
+	__asm__ __volatile__("btl %2,%1\n\tsbbl %0,%0"
+		:"=r" (oldbit)
 		:"m" (ADDR),"r" (nr));
-	return ok;
+	return oldbit;
 }
 
 #else

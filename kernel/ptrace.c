@@ -126,11 +126,11 @@ repeat:
 		page = *((unsigned long *) page);
 	}
 	if (!(page & PAGE_PRESENT)) {
-		do_no_page(0,addr,tsk,0);
+		do_no_page(PAGE_RW,addr,tsk,0);
 		goto repeat;
 	}
 	if (!(page & PAGE_RW)) {
-		do_wp_page(0,addr,tsk,0);
+		do_wp_page(PAGE_RW | PAGE_PRESENT,addr,tsk,0);
 		goto repeat;
 	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
@@ -218,7 +218,7 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 	return 0;
 }
 
-int sys_ptrace(long request, long pid, long addr, long data)
+extern "C" int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
 
@@ -380,7 +380,7 @@ int sys_ptrace(long request, long pid, long addr, long data)
 	}
 }
 
-void syscall_trace(void)
+extern "C" void syscall_trace(void)
 {
 	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
 			!= (PF_PTRACED|PF_TRACESYS))

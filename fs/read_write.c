@@ -16,7 +16,7 @@
  * Count is not yet used: but we'll probably support reading several entries
  * at once in the future. Use count=1 in the library for future expansions.
  */
-int sys_readdir(unsigned int fd, struct dirent * dirent, unsigned int count)
+extern "C" int sys_readdir(unsigned int fd, struct dirent * dirent, unsigned int count)
 {
 	int error;
 	struct file * file;
@@ -34,7 +34,7 @@ int sys_readdir(unsigned int fd, struct dirent * dirent, unsigned int count)
 	return error;
 }
 
-int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
+extern "C" int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 {
 	struct file * file;
 	int tmp = -1;
@@ -67,7 +67,7 @@ int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 	return file->f_pos;
 }
 
-int sys_read(unsigned int fd,char * buf,unsigned int count)
+extern "C" int sys_read(unsigned int fd,char * buf,unsigned int count)
 {
 	int error;
 	struct file * file;
@@ -87,7 +87,7 @@ int sys_read(unsigned int fd,char * buf,unsigned int count)
 	return file->f_op->read(inode,file,buf,count);
 }
 
-int sys_write(unsigned int fd,char * buf,unsigned int count)
+extern "C" int sys_write(unsigned int fd,char * buf,unsigned int count)
 {
 	int error;
 	struct file * file;

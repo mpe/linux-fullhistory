@@ -117,9 +117,9 @@
 #define BAD_IRQ_NAME(nr) IRQ_NAME2(bad_IRQ##nr)
 	
 #define BUILD_IRQ(chip,nr,mask) \
-void IRQ_NAME(nr); \
-void FAST_IRQ_NAME(nr); \
-void BAD_IRQ_NAME(nr); \
+extern "C" void IRQ_NAME(nr); \
+extern "C" void FAST_IRQ_NAME(nr); \
+extern "C" void BAD_IRQ_NAME(nr); \
 __asm__( \
 "\n.align 4\n" \
 "_IRQ" #nr "_interrupt:\n\t" \
@@ -136,19 +136,6 @@ __asm__( \
 	"cli\n\t" \
 	UNBLK_##chip(mask) \
 	"decl _intr_count\n\t" \
-	"jne ret_from_sys_call\n\t" \
-	"movl _bh_mask,%eax\n\t" \
-	"andl _bh_active,%eax\n\t" \
-	"je ret_from_sys_call\n\t" \
-	"incl _intr_count\n\t" \
-	"sti\n\t" \
-	"bsfl %eax,%eax\n\t" \
-	"btrl %eax,_bh_active\n\t" \
-	"pushl %eax\n\t" \
-	"call _do_bottom_half\n\t" \
-	"addl $4,%esp\n\t" \
-	"cli\n\t" \
-	"decl _intr_count\n\t" \
 	"jmp ret_from_sys_call\n" \
 "\n.align 4\n" \
 "_fast_IRQ" #nr "_interrupt:\n\t" \
@@ -160,22 +147,6 @@ __asm__( \
 	"addl $4,%esp\n\t" \
 	"cli\n\t" \
 	UNBLK_##chip(mask) \
-	"decl _intr_count\n\t" \
-	"jne 1f\n\t" \
-	"movl _bh_mask,%eax\n\t" \
-	"andl _bh_active,%eax\n\t" \
-	"jne 2f\n" \
-	"1:\t" \
-	RESTORE_MOST \
-	"\n.align 4\n" \
-	"2:\tincl _intr_count\n\t" \
-	"sti\n\t" \
-	"bsfl %eax,%eax\n\t" \
-	"btrl %eax,_bh_active\n\t" \
-	"pushl %eax\n\t" \
-	"call _do_bottom_half\n\t" \
-	"addl $4,%esp\n\t" \
-	"cli\n\t" \
 	"decl _intr_count\n\t" \
 	RESTORE_MOST \
 "\n\n.align 4\n" \

@@ -21,6 +21,7 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/mman.h>
 #include <linux/a.out.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -33,8 +34,6 @@
 
 #include <asm/segment.h>
 
-extern int sys_exit(int exit_code);
-extern int sys_close(int fd);
 extern void shm_exit (void);
 
 /*
@@ -78,11 +77,15 @@ int core_dump(long signr, struct pt_regs * regs)
 	if (!current->dumpable)
 		return 0;
 	current->dumpable = 0;
+
+	if (current->elf_executable)
+		return 0;
+
 /* See if we have enough room to write the upage.  */
 	if (current->rlim[RLIMIT_CORE].rlim_cur < PAGE_SIZE)
 		return 0;
-	__asm__("mov %%fs,%0":"=r" (fs));
-	__asm__("mov %w0,%%fs"::"r" (KERNEL_DS));
+	fs = get_fs();
+	set_fs(KERNEL_DS);
 	if (open_namei("core",O_CREAT | 2 | O_TRUNC,0600,&inode,NULL)) {
 		inode = NULL;
 		goto end_coredump;
@@ -132,7 +135,7 @@ int core_dump(long signr, struct pt_regs * regs)
 	if (hard_math) {
 		if ((dump.u_fpvalid = current->used_math) != 0) {
 			if (last_task_used_math == current)
-				__asm__("clts ; fnsave %0"::"m" (dump.i387));
+				__asm__("clts ; fnsave %0": :"m" (dump.i387));
 			else
 				memcpy(&dump.i387,&current->tss.i387.hard,sizeof(dump.i387));
 		}
@@ -141,7 +144,7 @@ int core_dump(long signr, struct pt_regs * regs)
 		   convert it into standard 387 format first.. */
 		dump.u_fpvalid = 0;
 	}
-	__asm__("mov %w0,%%fs"::"r" (KERNEL_DS));
+	set_fs(KERNEL_DS);
 /* struct user */
 	DUMP_WRITE(&dump,sizeof(dump));
 /* name of the executable */
@@ -149,7 +152,7 @@ int core_dump(long signr, struct pt_regs * regs)
 /* Now dump all of the user data.  Include malloced stuff as well */
 	DUMP_SEEK(PAGE_SIZE);
 /* now we start writing out the user space info */
-	__asm__("mov %w0,%%fs"::"r" (USER_DS));
+	set_fs(USER_DS);
 /* Dump the data area */
 	if (dump.u_dsize != 0) {
 		dump_start = dump.u_tsize << 12;
@@ -163,13 +166,13 @@ int core_dump(long signr, struct pt_regs * regs)
 		DUMP_WRITE(dump_start,dump_size);
 	};
 /* Finally dump the task struct.  Not be used by gdb, but could be useful */
-	__asm__("mov %w0,%%fs"::"r" (KERNEL_DS));
+	set_fs(KERNEL_DS);
 	DUMP_WRITE(current,sizeof(*current));
 close_coredump:
 	if (file.f_op->release)
 		file.f_op->release(inode,&file);
 end_coredump:
-	__asm__("mov %w0,%%fs"::"r" (fs));
+	set_fs(fs);
 	iput(inode);
 	return has_dumped;
 }
@@ -180,62 +183,56 @@ end_coredump:
  *
  * Also note that we take the address to load from from the file itself.
  */
-int sys_uselib(const char * library)
+extern "C" int sys_uselib(const char * library)
 {
-#define libnum	(current->numlibraries)
+	int fd, error;
+	struct file * file;
 	struct inode * inode;
-	struct buffer_head * bh;
 	struct exec ex;
-	unsigned long offset;
-	int error;
+	unsigned int len;
+	unsigned int bss;
 
-	if (!library || get_limit(USER_DS) != TASK_SIZE)
-		return -EINVAL;
-	if ((libnum >= MAX_SHARED_LIBS) || (libnum < 0))
-		return -EINVAL;
-	error = namei(library,&inode);
-	if (error)
-		return error;
-	if (!inode->i_sb || !S_ISREG(inode->i_mode) || !permission(inode,MAY_READ)) {
-		iput(inode);
-		return -EACCES;
-	}
-	if (!inode->i_op || !inode->i_op->bmap) {
-		iput(inode);
+	fd = sys_open(library, 0, 0);
+	if (fd < 0)
+		return fd;
+	file = current->filp[fd];
+	if (!file || !(inode = file->f_inode) || !file->f_op || !file->f_op->read) {
+		sys_close(fd);
 		return -ENOEXEC;
 	}
-	if (!(bh = bread(inode->i_dev,bmap(inode,0),inode->i_sb->s_blocksize))) {
-		iput(inode);
+	set_fs(KERNEL_DS);
+	if (file->f_op->read(inode, file, (char *) &ex, sizeof(ex)) != sizeof(ex)) {
+		sys_close(fd);
 		return -EACCES;
 	}
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
-	ex = *(struct exec *) bh->b_data;
-	brelse(bh);
+	set_fs(USER_DS);
+
+	/* We come in here for the regular a.out style of shared libraries */
 	if (N_MAGIC(ex) != ZMAGIC || ex.a_trsize ||
-		ex.a_drsize || ex.a_entry & 0xfff ||
-		inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
-		iput(inode);
+	    ex.a_drsize || ex.a_entry & 0xfff ||
+	    inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
+		sys_close(fd);
 		return -ENOEXEC;
 	}
-	current->libraries[libnum].library = inode;
-	current->libraries[libnum].start = ex.a_entry;
-	offset = (ex.a_data + ex.a_text + 0xfff) & 0xfffff000;
-	current->libraries[libnum].length = offset;
-	current->libraries[libnum].bss = ex.a_bss;
-	offset += ex.a_entry;
-	zeromap_page_range(offset, ex.a_bss, PAGE_COPY);
-#if 0
-	printk("VFS: Loaded library %d at %08x, length %08x\n",
-		libnum,
-		current->libraries[libnum].start,
-		current->libraries[libnum].length);
-#endif
-	libnum++;
+	if (N_MAGIC(ex) == ZMAGIC && N_TXTOFF(ex) && 
+	    (N_TXTOFF(ex) < inode->i_sb->s_blocksize)) {
+		printk("N_TXTOFF < BLOCK_SIZE. Please convert library\n");
+		sys_close(fd);
+		return -ENOEXEC;
+	}
+
+	/* Now use mmap to map the library into memory. */
+	error = do_mmap(file, ex.a_entry, ex.a_text + ex.a_data,
+		PROT_READ | PROT_WRITE | PROT_EXEC, MAP_FIXED | MAP_PRIVATE,
+		N_TXTOFF(ex));
+	sys_close(fd);
+	if (error != ex.a_entry)
+		return error;
+	len = (ex.a_text + ex.a_data + 0xfff) & 0xfffff000;
+	bss = ex.a_text + ex.a_data + ex.a_bss;
+	if (bss > len)
+		zeromap_page_range(ex.a_entry + len, bss-len, PAGE_COPY);
 	return 0;
-#undef libnum
 }
 
 /*
@@ -410,15 +407,72 @@ end_readexec:
 	return result;
 }
 
+
 /*
- * 'do_execve()' executes a new program.
- *
- * NOTE! We leave 4MB free at the top of the data-area for a loadable
- * library.
+ * This function flushes out all traces of the currently running executable so
+ * that a new one can be started
  */
-int do_execve(unsigned long * eip,long tmp,char * filename,
-	char ** argv, char ** envp)
+
+static void flush_old_exec(struct inode * inode, char * filename, int e_uid, int e_gid)
 {
+	int i;
+	int ch;
+	struct vm_area_struct * mpnt, *mpnt1;
+
+	current->dumpable = 1;
+	for (i=0; (ch = get_fs_byte(filename++)) != '\0';) {
+		if (ch == '/')
+			i = 0;
+		else
+			if (i < 15)
+				current->comm[i++] = ch;
+	}
+	current->comm[i] = '\0';
+	if (current->shm)
+		shm_exit();
+	if (current->executable) {
+		iput(current->executable);
+		current->executable = NULL;
+	}
+	/* Release all of the old mmap stuff. */
+
+	mpnt = current->mmap;
+	current->mmap = NULL;
+	while (mpnt) {
+		mpnt1 = mpnt->vm_next;
+		if (mpnt->vm_ops->close)
+			mpnt->vm_ops->close(mpnt);
+		kfree(mpnt);
+		mpnt = mpnt1;
+	}
+	if (e_uid != current->euid || e_gid != current->egid || !permission(inode,MAY_READ))
+		current->dumpable = 0;
+	current->signal = 0;
+	for (i=0 ; i<32 ; i++) {
+		current->sigaction[i].sa_mask = 0;
+		current->sigaction[i].sa_flags = 0;
+		if (current->sigaction[i].sa_handler != SIG_IGN)
+			current->sigaction[i].sa_handler = NULL;
+	}
+	for (i=0 ; i<NR_OPEN ; i++)
+		if (FD_ISSET(i,&current->close_on_exec))
+			sys_close(i);
+	FD_ZERO(&current->close_on_exec);
+	clear_page_tables(current);
+	if (last_task_used_math == current)
+		last_task_used_math = NULL;
+	current->used_math = 0;
+	current->elf_executable = 0;
+}
+
+/*
+ * sys_execve() executes a new program.
+ */
+extern "C" int sys_execve(struct pt_regs regs)
+{
+	char * filename = (char *) regs.ebx;
+	char ** argv = (char **) regs.ecx;
+	char ** envp = (char **) regs.edx;
 	struct inode * inode;
 	char buf[128];
 	unsigned long old_fs;
@@ -429,9 +483,8 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	int retval;
 	int sh_bang = 0;
 	unsigned long p=PAGE_SIZE*MAX_ARG_PAGES-4;
-	int ch;
 
-	if ((0xffff & eip[1]) != USER_CS)
+	if (regs.cs != USER_CS)
 		panic("VFS: execve called from supervisor mode");
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
 		page[i]=0;
@@ -565,8 +618,14 @@ restart_interp:
 		retval = -ENOEXEC;
 		goto exec_error2;
 	}
+	if (N_MAGIC(ex) == ZMAGIC && N_TXTOFF(ex) &&
+	    (N_TXTOFF(ex) < inode->i_sb->s_blocksize)) {
+		printk("N_TXTOFF < BLOCK_SIZE. Please convert binary.");
+		retval = -ENOEXEC;
+		goto exec_error2;
+	}
 	if (N_TXTOFF(ex) != BLOCK_SIZE && N_MAGIC(ex) != OMAGIC) {
-		printk("VFS: N_TXTOFF != BLOCK_SIZE. See a.out.h.");
+		printk("N_TXTOFF != BLOCK_SIZE. See a.out.h.");
 		retval = -ENOEXEC;
 		goto exec_error2;
 	}
@@ -579,43 +638,7 @@ restart_interp:
 		}
 	}
 /* OK, This is the point of no return */
-	current->dumpable = 1;
-	for (i=0; (ch = get_fs_byte(filename++)) != '\0';)
-		if (ch == '/')
-			i = 0;
-		else
-			if (i < 15)
-				current->comm[i++] = ch;
-	current->comm[i] = '\0';
-	if (current->shm)
-	        shm_exit();
-	if (current->executable) {
-		iput(current->executable);
-		current->executable = NULL;
-	}
-	i = current->numlibraries;
-	while (i-- > 0) {
-		iput(current->libraries[i].library);
-		current->libraries[i].library = NULL;
-	}
-	if (e_uid != current->euid || e_gid != current->egid ||
-	    !permission(inode,MAY_READ))
-		current->dumpable = 0;
-	current->numlibraries = 0;
-	for (i=0 ; i<32 ; i++) {
-		current->sigaction[i].sa_mask = 0;
-		current->sigaction[i].sa_flags = 0;
-		if (current->sigaction[i].sa_handler != SIG_IGN)
-			current->sigaction[i].sa_handler = NULL;
-	}
-	for (i=0 ; i<NR_OPEN ; i++)
-		if (FD_ISSET(i,&current->close_on_exec))
-			sys_close(i);
-	FD_ZERO(&current->close_on_exec);
-	clear_page_tables(current);
-	if (last_task_used_math == current)
-		last_task_used_math = NULL;
-	current->used_math = 0;
+	flush_old_exec(inode, filename, e_uid, e_gid);
 	p += change_ldt(ex.a_text,page);
 	p -= MAX_ARG_PAGES*PAGE_SIZE;
 	p = (unsigned long) create_tables((char *)p,argc,envc);
@@ -625,6 +648,7 @@ restart_interp:
 	current->start_stack = p;
 	current->rss = (TASK_SIZE - p + PAGE_SIZE-1) / PAGE_SIZE;
 	current->suid = current->euid = e_uid;
+	current->mmap = NULL;
 	current->sgid = current->egid = e_gid;
 	if (N_MAGIC(ex) == OMAGIC) {
 		read_exec(inode, 32, (char *) 0, ex.a_text+ex.a_data);
@@ -632,11 +656,14 @@ restart_interp:
 	} else if (!inode->i_op || !inode->i_op->bmap) {
 		read_exec(inode, 1024, (char *) 0, ex.a_text+ex.a_data);
 		iput(inode);
-	} else
+	} else {
+		if (ex.a_text & 0xfff || ex.a_data & 0xfff)
+			printk("%s: executable not page aligned\n", current->comm);
 		current->executable = inode;
+	}
 	zeromap_page_range((ex.a_text + ex.a_data + 0xfff) & 0xfffff000,ex.a_bss, PAGE_COPY);
-	eip[0] = ex.a_entry;		/* eip, magic happens :-) */
-	eip[3] = p;			/* stack pointer */
+	regs.eip = ex.a_entry;		/* eip, magic happens :-) */
+	regs.esp = p;			/* stack pointer */
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);
 	return 0;
@@ -647,3 +674,4 @@ exec_error1:
 		free_page(page[i]);
 	return(retval);
 }
+

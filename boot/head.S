@@ -29,7 +29,7 @@
  */
 startup_32:
 	cld
-	movl $KERNEL_DS,%eax
+	movl $(KERNEL_DS),%eax
 	mov %ax,%ds
 	mov %ax,%es
 	mov %ax,%fs
@@ -63,11 +63,11 @@ startup_32:
 	movl $512,%ecx
 	rep
 	stosl
-	cmpw $CL_MAGIC,CL_MAGIC_ADDR
+	cmpw $(CL_MAGIC),CL_MAGIC_ADDR
 	jne 1f
 	movl $_empty_zero_page+2048,%edi
 	movzwl CL_OFFSET,%esi
-	addl $CL_BASE_ADDR,%esi
+	addl $(CL_BASE_ADDR),%esi
 	movl $2048,%ecx
 	rep
 	movsb
@@ -127,8 +127,8 @@ startup_32:
 	call setup_paging
 	lgdt gdt_descr
 	lidt idt_descr
-	ljmp $KERNEL_CS,$1f
-1:	movl $KERNEL_DS,%eax	# reload all the segment registers
+	ljmp $(KERNEL_CS),$1f
+1:	movl $(KERNEL_DS),%eax	# reload all the segment registers
 	mov %ax,%ds		# after changing gdt.
 	mov %ax,%es
 	mov %ax,%fs
@@ -153,7 +153,7 @@ check_x87:
 	cmpb $0,%al
 	je 1f
 	movl %cr0,%eax		/* no coprocessor: have to set bits */
-	xorl $6,%eax		/* reset MP, set EM */
+	xorl $4,%eax		/* set EM */
 	movl %eax,%cr0
 	ret
 .align 2
@@ -274,7 +274,7 @@ ignore_int:
 	push %ds
 	push %es
 	push %fs
-	movl $KERNEL_DS,%eax
+	movl $(KERNEL_DS),%eax
 	mov %ax,%ds
 	mov %ax,%es
 	mov %ax,%fs

@@ -1,19 +1,20 @@
 /* errors.c */
 extern void Un_impl(void);
 extern void emu_printall(void);
-extern void exception(int n);
-extern void real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest);
-extern void arith_invalid(FPU_REG *dest);
-extern void divide_by_zero(int sign, FPU_REG *dest);
-extern void set_precision_flag_up(void);
-extern void set_precision_flag_down(void);
-extern int denormal_operand(void);
-extern void arith_overflow(FPU_REG *dest);
-extern void arith_underflow(FPU_REG *dest);
 extern void stack_overflow(void);
 extern void stack_underflow(void);
 extern void stack_underflow_i(int i);
 extern void stack_underflow_pop(int i);
+extern "C" void exception(int n);
+extern "C" void real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest);
+extern "C" void arith_invalid(FPU_REG *dest);
+extern "C" void divide_by_zero(int sign, FPU_REG *dest);
+extern "C" void set_precision_flag_up(void);
+extern "C" void set_precision_flag_down(void);
+extern "C" int denormal_operand(void);
+extern "C" void arith_overflow(FPU_REG *dest);
+extern "C" void arith_underflow(FPU_REG *dest);
+
 /* fpu_arith.c */
 extern void fadd__(void);
 extern void fmul__(void);
@@ -33,6 +34,7 @@ extern void fsubrp(void);
 extern void fsubp_(void);
 extern void fdivrp(void);
 extern void fdivp_(void);
+
 /* fpu_aux.c */
 extern void fclex(void);
 extern void finit(void);
@@ -45,34 +47,46 @@ extern void ffree_(void);
 extern void ffreep(void);
 extern void fst_i_(void);
 extern void fstp_i(void);
+
 /* fpu_entry.c */
-extern void math_emulate(long arg);
+extern "C" void math_emulate(long arg);
 extern void __math_abort(struct info *info, unsigned int signal);
+
 /* fpu_etc.c */
 extern void fp_etc(void);
+
 /* fpu_trig.c */
 extern void convert_l2reg(long *arg, FPU_REG *dest);
 extern void trig_a(void);
 extern void trig_b(void);
+
 /* get_address.c */
 extern void get_address(unsigned char FPU_modrm);
+
 /* load_store.c */
 extern void load_store_instr(char type);
+
 /* poly_2xm1.c */
 extern int poly_2xm1(FPU_REG *arg, FPU_REG *result);
+
 /* poly_atan.c */
 extern void poly_atan(FPU_REG *arg);
 extern void poly_add_1(FPU_REG *src);
+
 /* poly_l2.c */
 extern void poly_l2(FPU_REG *arg, FPU_REG *result);
 extern int poly_l2p1(FPU_REG *arg, FPU_REG *result);
+
 /* poly_sin.c */
 extern void poly_sine(FPU_REG *arg, FPU_REG *result);
+
 /* poly_tan.c */
 extern void poly_tan(FPU_REG *arg, FPU_REG *y_reg);
+
 /* reg_add_sub.c */
 extern void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w);
 extern void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w);
+
 /* reg_compare.c */
 extern int compare(FPU_REG *b);
 extern int compare_st_data(void);
@@ -82,8 +96,10 @@ extern void fcompp(void);
 extern void fucom_(void);
 extern void fucomp(void);
 extern void fucompp(void);
+
 /* reg_constant.c */
 extern void fconst(void);
+
 /* reg_ld_str.c */
 extern void reg_load_extended(void);
 extern void reg_load_double(void);
@@ -105,5 +121,6 @@ extern void frstor(void);
 extern unsigned short tag_word(void);
 extern char *fstenv(void);
 extern void fsave(void);
+
 /* reg_mul.c */
 extern void reg_mul(FPU_REG *a, FPU_REG *b, FPU_REG *dest, unsigned int control_w);

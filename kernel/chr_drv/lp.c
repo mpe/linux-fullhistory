@@ -46,7 +46,6 @@ static int lp_char_polled(char lpchar, int minor)
 	int status = 0, wait = 0;
 	unsigned long count  = 0; 
 
-	outb_p(lpchar, LP_B(minor));
 	do {
 		status = LP_S(minor);
 		count ++;
@@ -64,6 +63,7 @@ static int lp_char_polled(char lpchar, int minor)
 		lp_max_count=count;
 	}
 #endif
+	outb_p(lpchar, LP_B(minor));
 	/* must wait before taking strobe high, and after taking strobe
 	   low, according spec.  Some printers need it, others don't. */
 	while(wait != LP_WAIT(minor)) wait++;
@@ -81,12 +81,12 @@ static int lp_char_interrupt(char lpchar, int minor)
 	int wait = 0;
 	unsigned char status;
 
-	outb_p(lpchar, LP_B(minor));
 
 	if (!((status = LP_S(minor)) & LP_PACK) || (status & LP_PBUSY)
 	|| !((status = LP_S(minor)) & LP_PACK) || (status & LP_PBUSY)
 	|| !((status = LP_S(minor)) & LP_PACK) || (status & LP_PBUSY)) {
 
+		outb_p(lpchar, LP_B(minor));
 		/* must wait before taking strobe high, and after taking strobe
 		   low, according spec.  Some printers need it, others don't. */
 		while(wait != LP_WAIT(minor)) wait++;
@@ -289,8 +289,8 @@ static int lp_open(struct inode * inode, struct file * file)
 		return -EBUSY;
 
 	if ((irq = LP_IRQ(minor))) {
-		if (!(lp_table[minor].lp_buffer = kmalloc(LP_BUFFER_SIZE,
-								GFP_KERNEL)))
+		lp_table[minor].lp_buffer = (char *) kmalloc(LP_BUFFER_SIZE, GFP_KERNEL);
+		if (!lp_table[minor].lp_buffer)
 			return -ENOMEM;
 
 		sa.sa_handler = lp_interrupt;
@@ -330,6 +330,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 		    unsigned int cmd, unsigned long arg)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
+	int retval = 0;
 
 #ifdef LP_DEBUG
 	printk("lp%d ioctl, cmd: 0x%x, arg: 0x%x\n", minor, cmd, arg);
@@ -346,15 +347,15 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			LP_CHAR(minor) = arg;
 			break;
 		case LPABORT:
-			if(arg)
+			if (arg)
 				LP_F(minor) |= LP_ABORT;
-			else	LP_F(minor) &= ~LP_ABORT;
+			else
+				LP_F(minor) &= ~LP_ABORT;
 			break;
 		case LPWAIT:
 			LP_WAIT(minor) = arg;
 			break;
 		case LPSETIRQ: {
-			int ret;
 			int oldirq;
 			int newirq = arg;
 			struct lp_struct *lp = &lp_table[minor];
@@ -367,7 +368,8 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 
 			/* Allocate buffer now if we are going to need it */
 			if (!oldirq && newirq) {
-				if (!(lp->lp_buffer = kmalloc(LP_BUFFER_SIZE, GFP_KERNEL)))
+				lp->lp_buffer = (char *) kmalloc(LP_BUFFER_SIZE, GFP_KERNEL);
+				if (!lp->lp_buffer)
 					return -ENOMEM;
 			}
 
@@ -380,7 +382,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 				sa.sa_flags = SA_INTERRUPT;
 				sa.sa_mask = 0;
 				sa.sa_restorer = NULL;
-				if ((ret = irqaction(newirq, &sa))) {
+				if ((retval = irqaction(newirq, &sa))) {
 					if (oldirq) {
 						/* restore old irq */
 						irqaction(oldirq, &sa);
@@ -389,7 +391,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 						kfree_s(lp->lp_buffer, LP_BUFFER_SIZE);
 						lp->lp_buffer = NULL;
 					}
-					return ret;
+					return retval;
 				}
 			}
 			if (oldirq && !newirq) {
@@ -402,11 +404,12 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			break;
 		}
 		case LPGETIRQ:
-			arg = LP_IRQ(minor);
+			retval = LP_IRQ(minor);
 			break;
-		default: arg = -EINVAL;
+		default:
+			retval = -EINVAL;
 	}
-	return arg;
+	return retval;
 }
 
 

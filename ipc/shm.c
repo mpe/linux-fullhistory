@@ -36,7 +36,7 @@ void shm_init (void)
 	int id;
     
        	for (id = 0; id < SHMMNI; id++) 
-		shm_segs[id] = IPC_UNUSED;
+		shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
 	shm_tot = shm_rss = shm_seq = max_shmid = used_segs = 0;
 	shm_lock = NULL;
 	return;
@@ -73,7 +73,7 @@ static int newseg (key_t key, int shmflg, int size)
 		return -ENOSPC;
 	for (id=0; id < SHMMNI; id++)
 		if (shm_segs[id] == IPC_UNUSED) {
-			shm_segs[id] = IPC_NOID;
+			shm_segs[id] = (struct shmid_ds *) IPC_NOID;
 			goto found;
 		}
 	return -ENOSPC;
@@ -81,7 +81,7 @@ static int newseg (key_t key, int shmflg, int size)
 found:
 	shp = (struct shmid_ds *) kmalloc (sizeof (*shp), GFP_KERNEL);
 	if (!shp) {
-		shm_segs[id] = IPC_UNUSED;
+		shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
 		if (shm_lock)
 			wake_up (&shm_lock);
 		return -ENOMEM;
@@ -89,10 +89,10 @@ found:
 
 	shp->shm_pages = (ulong *) kmalloc (numpages*sizeof(ulong),GFP_KERNEL);
 	if (!shp->shm_pages) {
-		shm_segs[id] = IPC_UNUSED;
+		shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
 		if (shm_lock)
 			wake_up (&shm_lock);
-		kfree (shp);
+		kfree_s (shp, sizeof (*shp));
 		return -ENOMEM;
 	}
 
@@ -165,7 +165,7 @@ static void killseg (int id)
 	numpages = shp->shm_npages; 
 	if ((int)((++shm_seq + 1) * SHMMNI) < 0)
 		shm_seq = 0;
-	shm_segs[id] = IPC_UNUSED;
+	shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
 	used_segs--;
 	if (id == max_shmid) 
 		while (max_shmid && (shm_segs[--max_shmid] == IPC_UNUSED));
@@ -184,9 +184,9 @@ static void killseg (int id)
 			shm_swp--;
 		}
 	}
-	kfree(shp->shm_pages);
+	kfree_s (shp->shm_pages, numpages * sizeof (ulong));
 	shm_tot -= numpages;
-	kfree (shp);
+	kfree_s (shp, sizeof (*shp));
 	return;
 }
 
@@ -261,7 +261,7 @@ int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	
 	shp = shm_segs[id = shmid % SHMMNI];
 	if (shp == IPC_UNUSED || shp == IPC_NOID)
-		return -EIDRM;
+		return -EINVAL;
 	ipcp = &shp->shm_perm;
 	if (ipcp->seq != shmid / SHMMNI) 
 		return -EIDRM;
@@ -275,7 +275,7 @@ int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		ipcp->mode &= ~SHM_LOCKED;
 		break;
 	case SHM_LOCK:
-/* Alow superuser to lock segment in memory */
+/* Allow superuser to lock segment in memory */
 /* Should the pages be faulted in here or leave it to user? */
 /* need to determine interaction with current->swappable */
 		if (!suser())
@@ -434,7 +434,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if (!shmd)
 		return -ENOMEM;
 	if ((shp != shm_segs[id]) || (shp->shm_perm.seq != shmid / SHMMNI)) {
-		kfree (shmd);
+		kfree_s (shmd, sizeof (*shmd));
 		return -EIDRM;
 	}
 	shmd->shm_sgn = (SHM_SWP_TYPE << 1) | (id << SHM_ID_SHIFT) |
@@ -453,7 +453,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if ((err = shm_map (shmd, shmflg & SHM_REMAP))) {
 		if (--shp->shm_nattch <= 0 && shp->shm_perm.mode & SHM_DEST)
 			killseg(id);
-		kfree (shmd);
+		kfree_s (shmd, sizeof (*shmd));
 		return err;
 	}
 		
@@ -490,7 +490,7 @@ static void detach (struct shm_desc **shmdp)
 	
  found:
 	unmap_page_range (shmd->start, shp->shm_segsz); /* sleeps */
-	kfree(shmd);
+	kfree_s (shmd, sizeof (*shmd));
   	shp->shm_lpid = current->pid;
 	shp->shm_dtime = CURRENT_TIME;
 	if (--shp->shm_nattch <= 0 && shp->shm_perm.mode & SHM_DEST)
@@ -532,7 +532,7 @@ void shm_exit (void)
  */
 int shm_fork (struct task_struct *p1, struct task_struct *p2)
 {
-	struct shm_desc *shmd, *new = NULL, *tmp;
+	struct shm_desc *shmd, *new_desc = NULL, *tmp;
 	struct shmid_ds *shp;
 	int id;
 
@@ -541,21 +541,21 @@ int shm_fork (struct task_struct *p1, struct task_struct *p2)
 	for (shmd = p1->shm; shmd; shmd = shmd->task_next) {
 		tmp = (struct shm_desc *) kmalloc(sizeof(*tmp), GFP_KERNEL);
 		if (!tmp) {
-			while (new) { 
-				tmp = new->task_next; 
-				kfree(new); 
-				new = tmp; 
+			while (new_desc) { 
+				tmp = new_desc->task_next; 
+				kfree_s (new_desc, sizeof (*new_desc)); 
+				new_desc = tmp; 
 			}
 			free_page_tables (p2);
 			return -ENOMEM;
 		}
 		*tmp = *shmd;
 		tmp->task = p2;
-		tmp->task_next = new;
-		new = tmp;
+		tmp->task_next = new_desc;
+		new_desc = tmp;
 	}
-	p2->shm = new;
-	for (shmd = new; shmd; shmd = shmd->task_next) {
+	p2->shm = new_desc;
+	for (shmd = new_desc; shmd; shmd = shmd->task_next) {
 		id = (shmd->shm_sgn >> SHM_ID_SHIFT) & 0xfff;
 		shp = shm_segs[id];
 		if (shp == IPC_UNUSED) {

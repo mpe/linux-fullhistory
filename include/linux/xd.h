@@ -99,10 +99,10 @@ typedef struct {
 /* this structure defines a ROM BIOS signature */
 typedef struct {
 	u_long offset;
-	u_char *string;
+	char *string;
 	void (*init_controller)(u_char *address);
 	void (*init_drive)(u_char drive);
-	u_char *name;
+	char *name;
 } XD_SIGNATURE;
 
 extern void resetup_one_dev (struct gendisk *dev,unsigned int drive);
@@ -117,7 +117,7 @@ static void do_xd_request (void);
 static int xd_ioctl (struct inode *inode,struct file *file,unsigned int cmd,unsigned long arg);
 static void xd_release (struct inode *inode,struct file *file);
 static int xd_reread_partitions (int dev);
-static int xd_readwrite (u_char operation,u_char drive,u_char *buffer,u_int block,u_int count);
+static int xd_readwrite (u_char operation,u_char drive,char *buffer,u_int block,u_int count);
 static void xd_recalibrate (u_char drive);
 
 static void xd_interrupt_handler (int unused);

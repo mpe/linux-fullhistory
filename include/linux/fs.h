@@ -241,6 +241,7 @@ struct file_lock {
 struct super_block {
 	dev_t s_dev;
 	unsigned long s_blocksize;
+	unsigned char s_blocksize_bits;
 	unsigned char s_lock;
 	unsigned char s_rd_only;
 	unsigned char s_dirt;
@@ -310,6 +311,11 @@ struct file_system_type {
 	int requires_dev;
 };
 
+#ifdef __KERNEL__
+
+extern "C" int sys_open(const char *, int, int);
+extern "C" int sys_close(unsigned int);		/* yes, it's really unsigned */
+
 extern int getname(const char * filename, char **result);
 extern void putname(char * name);
 
@@ -325,6 +331,11 @@ extern struct inode_operations chrdev_inode_operations;
 
 extern void init_fifo(struct inode * inode);
 
+extern struct file_operations connecting_pipe_fops;
+extern struct file_operations read_pipe_fops;
+extern struct file_operations write_pipe_fops;
+extern struct file_operations rdwr_pipe_fops;
+
 extern struct file_system_type *get_fs_type(char *name);
 
 extern int fs_may_mount(dev_t dev);
@@ -333,7 +344,7 @@ extern int fs_may_remount_ro(dev_t dev);
 
 extern struct file *first_file;
 extern int nr_files;
-extern struct super_block super_block[NR_SUPER];
+extern struct super_block super_blocks[NR_SUPER];
 
 extern void grow_buffers(int size);
 extern int shrink_buffers(unsigned int priority);
@@ -371,6 +382,7 @@ extern void ll_rw_block(int rw, int nr, struct buffer_head * bh[]);
 extern void ll_rw_page(int rw, int dev, int nr, char * buffer);
 extern void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buffer);
 extern void brelse(struct buffer_head * buf);
+extern void set_blocksize(dev_t dev, int size);
 extern struct buffer_head * bread(dev_t dev, int block, int size);
 extern unsigned long bread_page(unsigned long addr,dev_t dev,int b[],int size,int prot);
 extern struct buffer_head * breada(dev_t dev,int block,...);
@@ -386,7 +398,11 @@ extern int read_ahead[];
 extern int char_write(struct inode *, struct file *, char *, int);
 extern int block_write(struct inode *, struct file *, char *, int);
 
+extern int generic_mmap(struct inode *, struct file *, unsigned long, size_t, int, unsigned long);
+
 extern int block_fsync(struct inode *, struct file *);
 extern int file_fsync(struct inode *, struct file *);
+
+#endif /* __KERNEL__ */
 
 #endif

@@ -41,24 +41,24 @@ __res;})
 
 void page_exception(void);
 
-void divide_error(void);
-void debug(void);
-void nmi(void);
-void int3(void);
-void overflow(void);
-void bounds(void);
-void invalid_op(void);
-void device_not_available(void);
-void double_fault(void);
-void coprocessor_segment_overrun(void);
-void invalid_TSS(void);
-void segment_not_present(void);
-void stack_segment(void);
-void general_protection(void);
-void page_fault(void);
-void coprocessor_error(void);
-void reserved(void);
-void alignment_check(void);
+extern "C" void divide_error(void);
+extern "C" void debug(void);
+extern "C" void nmi(void);
+extern "C" void int3(void);
+extern "C" void overflow(void);
+extern "C" void bounds(void);
+extern "C" void invalid_op(void);
+extern "C" void device_not_available(void);
+extern "C" void double_fault(void);
+extern "C" void coprocessor_segment_overrun(void);
+extern "C" void invalid_TSS(void);
+extern "C" void segment_not_present(void);
+extern "C" void stack_segment(void);
+extern "C" void general_protection(void);
+extern "C" void page_fault(void);
+extern "C" void coprocessor_error(void);
+extern "C" void reserved(void);
+extern "C" void alignment_check(void);
 
 /*static*/ void die_if_kernel(char * str, struct pt_regs * regs, long err)
 {
@@ -82,31 +82,31 @@ void alignment_check(void);
 	do_exit(SIGSEGV);
 }
 
-void do_double_fault(struct pt_regs * regs, long error_code)
+extern "C" void do_double_fault(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("double fault",regs,error_code);
 }
 
-void do_general_protection(struct pt_regs * regs, long error_code)
+extern "C" void do_general_protection(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("general protection",regs,error_code);
 }
 
-void do_alignment_check(struct pt_regs * regs, long error_code)
+extern "C" void do_alignment_check(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("alignment check",regs,error_code);
 }
 
-void do_divide_error(struct pt_regs * regs, long error_code)
+extern "C" void do_divide_error(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGFPE, current, 1);
 	die_if_kernel("divide error",regs,error_code);
 }
 
-void do_int3(struct pt_regs * regs, long error_code)
+extern "C" void do_int3(struct pt_regs * regs, long error_code)
 {
 	if (current->flags & PF_PTRACED)
 		current->blocked &= ~(1 << (SIGTRAP-1));
@@ -114,12 +114,12 @@ void do_int3(struct pt_regs * regs, long error_code)
 	die_if_kernel("int3",regs,error_code);
 }
 
-void do_nmi(struct pt_regs * regs, long error_code)
+extern "C" void do_nmi(struct pt_regs * regs, long error_code)
 {
 	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
 }
 
-void do_debug(struct pt_regs * regs, long error_code)
+extern "C" void do_debug(struct pt_regs * regs, long error_code)
 {
 	if (current->flags & PF_PTRACED)
 		current->blocked &= ~(1 << (SIGTRAP-1));
@@ -127,81 +127,96 @@ void do_debug(struct pt_regs * regs, long error_code)
 	die_if_kernel("debug",regs,error_code);
 }
 
-void do_overflow(struct pt_regs * regs, long error_code)
+extern "C" void do_overflow(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("overflow",regs,error_code);
 }
 
-void do_bounds(struct pt_regs * regs, long error_code)
+extern "C" void do_bounds(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("bounds",regs,error_code);
 }
 
-void do_invalid_op(struct pt_regs * regs, long error_code)
+extern "C" void do_invalid_op(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGILL, current, 1);
 	die_if_kernel("invalid operand",regs,error_code);
 }
 
-void do_device_not_available(struct pt_regs * regs, long error_code)
+extern "C" void do_device_not_available(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("device not available",regs,error_code);
 }
 
-void do_coprocessor_segment_overrun(struct pt_regs * regs, long error_code)
+extern "C" void do_coprocessor_segment_overrun(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGFPE, last_task_used_math, 1);
 	die_if_kernel("coprocessor segment overrun",regs,error_code);
 }
 
-void do_invalid_TSS(struct pt_regs * regs,long error_code)
+extern "C" void do_invalid_TSS(struct pt_regs * regs,long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("invalid TSS",regs,error_code);
 }
 
-void do_segment_not_present(struct pt_regs * regs,long error_code)
+extern "C" void do_segment_not_present(struct pt_regs * regs,long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("segment not present",regs,error_code);
 }
 
-void do_stack_segment(struct pt_regs * regs,long error_code)
+extern "C" void do_stack_segment(struct pt_regs * regs,long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("stack segment",regs,error_code);
 }
 
-void do_coprocessor_error(struct pt_regs * regs, long error_code)
+/*
+ * Allow the process which triggered the interrupt to recover the error
+ * condition.
+ *  - the status word is saved in the cs selector.
+ *  - the tag word is saved in the operand selector.
+ *  - the status word is then cleared and the tags all set to Empty.
+ *
+ * This will give sufficient information for complete recovery provided that
+ * the affected process knows or can deduce the code and data segments
+ * which were in force when the exception condition arose.
+ *
+ * Note that we play around with the 'TS' bit to hopefully get
+ * the correct behaviour even in the presense of the asynchronous
+ * IRQ13 behaviour
+ */
+void math_error(void)
 {
-  /*
-    Allow the process which triggered the interrupt to recover the error
-    condition.
-    The status word is saved in the cs selector.
-    The tag word is saved in the operand selector.
-    The status word is then cleared and the tags all set to Empty.
-    This will give sufficient information for complete recovery provided that
-    the affected process knows or can deduce the code and data segments
-    which were in force when the exception condition arose.
-    */
-	#define FPU_ENV (*(struct i387_hard_struct *)env)
-	char env[28];
+	struct i387_hard_struct * env;
 
-	ignore_irq13 = 1;
+	clts();
+	if (!last_task_used_math) {
+		__asm__("fnclex");
+		return;
+	}
+	env = &last_task_used_math->tss.i387.hard;
 	send_sig(SIGFPE, last_task_used_math, 1);
-
-	__asm__ __volatile__("fnstenv %0; fnclex": "=m" (FPU_ENV));
-	FPU_ENV.fcs = (FPU_ENV.swd & 0x0000ffff) | (FPU_ENV.fcs & 0xffff0000);
-	FPU_ENV.fos = FPU_ENV.twd;
-	FPU_ENV.swd &= 0xffff0000;
-	FPU_ENV.twd = 0xffffffff;
-	__asm__ __volatile__("fldenv %0"::"m" (FPU_ENV));
+	__asm__ __volatile__("fnsave %0":"=m" (*env));
+	last_task_used_math = NULL;
+	stts();
+	env->fcs = (env->swd & 0x0000ffff) | (env->fcs & 0xffff0000);
+	env->fos = env->twd;
+	env->swd &= 0xffff0000;
+	env->twd = 0xffffffff;
 }
 
-void do_reserved(struct pt_regs * regs, long error_code)
+extern "C" void do_coprocessor_error(struct pt_regs * regs, long error_code)
+{
+	ignore_irq13 = 1;
+	math_error();
+}
+
+extern "C" void do_reserved(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("reserved (15,17-47) error",regs,error_code);

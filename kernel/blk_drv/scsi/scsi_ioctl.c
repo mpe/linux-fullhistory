@@ -32,7 +32,7 @@ static int ioctl_probe(int dev, void *buffer)
 	const char * string;
 	
 	if ((temp = scsi_hosts[dev].present) && buffer) {
-		len = get_fs_long ((int *) buffer);
+		len = get_fs_long ((unsigned long *) buffer);
 		string = scsi_hosts[dev].info();
 		slen = strlen(string);
 		if (len > slen)
@@ -155,8 +155,8 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	if (!buffer)
 		return -EINVAL;
 	
-	inlen = get_fs_long((int *) buffer);
-	outlen = get_fs_long( ((int *) buffer) + 1);
+	inlen = get_fs_long((unsigned long *) buffer);
+	outlen = get_fs_long( ((unsigned long *) buffer) + 1);
 
 	cmd_in = (char *) ( ((int *)buffer) + 2);
 	opcode = get_fs_byte(cmd_in); 
@@ -165,7 +165,7 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	if(needed){
 	  needed = (needed + 511) & ~511;
 	  if (needed > MAX_BUF) needed = MAX_BUF;
-	  buf = scsi_malloc(needed);
+	  buf = (char *) scsi_malloc(needed);
 	  if (!buf) return -ENOMEM;
 	} else
 	  buf = NULL;
@@ -235,7 +235,7 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 	        case SCSI_IOCTL_GET_IDLUN:
 	                verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
 			put_fs_long(dev->id + (dev->lun << 8) + 
-				    (dev->host_no << 16), (long *) arg);
+				    (dev->host_no << 16), (unsigned long *) arg);
 			return 0;
 		case SCSI_IOCTL_PROBE_HOST:
 			return ioctl_probe(dev->host_no, arg);

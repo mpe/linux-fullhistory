@@ -11,8 +11,6 @@
  * current-task
  */
 
-#define TIMER_IRQ 0
-
 #include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -24,15 +22,19 @@
 #include <linux/time.h>
 #include <linux/ptrace.h>
 #include <linux/segment.h>
+#include <linux/delay.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
 
+#define TIMER_IRQ 0
+
 int need_resched = 0;
 int hard_math = 0;		/* set by boot/head.S */
 int ignore_irq13 = 0;		/* set if exception 16 works */
 
+extern int _setitimer(int, struct itimerval *, struct itimerval *);
 unsigned long * prof_buffer = NULL;
 unsigned long prof_len = 0;
 
@@ -43,10 +45,10 @@ unsigned long prof_len = 0;
 extern void mem_use(void);
 
 extern int timer_interrupt(void);
-extern int system_call(void);
+extern "C" int system_call(void);
 
 static unsigned long init_kernel_stack[1024];
-static struct task_struct init_task = INIT_TASK;
+struct task_struct init_task = INIT_TASK;
 
 unsigned long volatile jiffies=0;
 unsigned long startup_time=0;
@@ -70,22 +72,26 @@ struct {
 /*
  *  'math_state_restore()' saves the current math information in the
  * old math state array, and gets the new ones from the current task
+ *
+ * Careful.. There are problems with IBM-designed IRQ13 behaviour.
+ * Don't touch unless you *really* know how it works.
  */
-void math_state_restore(void)
+extern "C" void math_state_restore(void)
 {
+	__asm__ __volatile__("clts");
 	if (last_task_used_math == current)
 		return;
 	timer_table[COPRO_TIMER].expires = jiffies+50;
 	timer_active |= 1<<COPRO_TIMER;	
-	if (last_task_used_math) {
-		__asm__("fnsave %0"::"m" (last_task_used_math->tss.i387));
-	}
-	__asm__("fwait");
+	if (last_task_used_math)
+		__asm__("fnsave %0":"=m" (last_task_used_math->tss.i387));
+	else
+		__asm__("fnclex");
 	last_task_used_math = current;
 	if (current->used_math) {
-		__asm__("frstor %0"::"m" (current->tss.i387));
+		__asm__("frstor %0": :"m" (current->tss.i387));
 	} else {
-		__asm__("fninit"::);
+		__asm__("fninit");
 		current->used_math=1;
 	}
 	timer_active &= ~(1<<COPRO_TIMER);
@@ -99,50 +105,57 @@ void math_state_restore(void)
  *   NOTE!!  Task 0 is the 'idle' task, which gets called when no other
  * tasks can run. It can not be killed, and it cannot sleep. The 'state'
  * information in task[0] is never used.
+ *
+ * The "confuse_gcc" goto is used only to get better assembly code..
+ * Djikstra probably hates me.
  */
-void schedule(void)
+extern "C" void schedule(void)
 {
-	int i,next,c;
-	struct task_struct ** p;
+	int c;
+	struct task_struct * p;
+	struct task_struct * next;
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
 
+	sti();
 	need_resched = 0;
-	for(p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
-		if (!*p || ((*p)->state != TASK_INTERRUPTIBLE))
+	p = &init_task;
+	for (;;) {
+		if ((p = p->next_task) == &init_task)
+			goto confuse_gcc1;
+		if (p->state != TASK_INTERRUPTIBLE)
 			continue;
-		if ((*p)->timeout && (*p)->timeout < jiffies) {
-			(*p)->timeout = 0;
-			(*p)->state = TASK_RUNNING;
-		} else if ((*p)->signal & ~(*p)->blocked)
-			(*p)->state = TASK_RUNNING;
+		if (p->signal & ~p->blocked) {
+			p->state = TASK_RUNNING;
+			continue;
+		}
+		if (p->timeout && p->timeout < jiffies) {
+			p->timeout = 0;
+			p->state = TASK_RUNNING;
+		}
 	}
+confuse_gcc1:
 
 /* this is the scheduler proper: */
 
-	while (1) {
-		c = -1;
-		next = 0;
-		i = NR_TASKS;
-		p = &task[NR_TASKS];
-		while (--i) {
-			if (!*--p)
-				continue;
-			if ((*p)->state == TASK_RUNNING && (*p)->counter > c)
-				c = (*p)->counter, next = i;
-		}
-		if (c)
-			break;
-		for(p = &LAST_TASK ; p > &FIRST_TASK ; --p)
-			if (*p)
-				(*p)->counter = ((*p)->counter >> 1) +
-						(*p)->priority;
+	c = -1;
+	next = p = &init_task;
+	for (;;) {
+		if ((p = p->next_task) == &init_task)
+			goto confuse_gcc2;
+		if (p->state == TASK_RUNNING && p->counter > c)
+			c = p->counter, next = p;
 	}
-	sti();
+confuse_gcc2:
+	if (!c) {
+		p = &init_task;
+		while ((p = p->next_task) != &init_task)
+			p->counter = (p->counter >> 1) + p->priority;
+	}
 	switch_to(next);
 }
 
-int sys_pause(void)
+extern "C" int sys_pause(void)
 {
 	current->state = TASK_INTERRUPTIBLE;
 	schedule();
@@ -396,55 +409,59 @@ static void do_timer(struct pt_regs * regs)
 	sti();
 }
 
-int sys_alarm(long seconds)
+extern "C" int sys_alarm(long seconds)
 {
-	extern int _setitimer(int, struct itimerval *, struct itimerval *);
-	struct itimerval new, old;
+	struct itimerval it_new, it_old;
 
-	new.it_interval.tv_sec = new.it_interval.tv_usec = 0;
-	new.it_value.tv_sec = seconds;
-	new.it_value.tv_usec = 0;
-	_setitimer(ITIMER_REAL, &new, &old);
-	return(old.it_value.tv_sec + (old.it_value.tv_usec / 1000000));
+	it_new.it_interval.tv_sec = it_new.it_interval.tv_usec = 0;
+	it_new.it_value.tv_sec = seconds;
+	it_new.it_value.tv_usec = 0;
+	_setitimer(ITIMER_REAL, &it_new, &it_old);
+	return(it_old.it_value.tv_sec + (it_old.it_value.tv_usec / 1000000));
 }
 
-int sys_getpid(void)
+extern "C" int sys_getpid(void)
 {
 	return current->pid;
 }
 
-int sys_getppid(void)
+extern "C" int sys_getppid(void)
 {
 	return current->p_pptr->pid;
 }
 
-int sys_getuid(void)
+extern "C" int sys_getuid(void)
 {
 	return current->uid;
 }
 
-int sys_geteuid(void)
+extern "C" int sys_geteuid(void)
 {
 	return current->euid;
 }
 
-int sys_getgid(void)
+extern "C" int sys_getgid(void)
 {
 	return current->gid;
 }
 
-int sys_getegid(void)
+extern "C" int sys_getegid(void)
 {
 	return current->egid;
 }
 
-int sys_nice(long increment)
+extern "C" int sys_nice(long increment)
 {
+	int newprio;
+
 	if (increment < 0 && !suser())
 		return -EPERM;
-	if (increment >= current->priority)
-		increment = current->priority-1;
-	current->priority -= increment;
+	newprio = current->priority - increment;
+	if (newprio < 1)
+		newprio = 1;
+	if (newprio > 35)
+		newprio = 35;
+	current->priority = newprio;
 	return 0;
 }
 
@@ -457,8 +474,8 @@ static void show_task(int nr,struct task_struct * p)
 		p->state, p->p_pptr->pid, p->p_cptr ? p->p_cptr->pid : -1);
 	i = 0;
 	j = 4096;
-	if (!(stack = (char *) p->kernel_stack_page)) {
-		stack = (char *) init_kernel_stack;
+	if (!(stack = (unsigned char *) p->kernel_stack_page)) {
+		stack = (unsigned char *) init_kernel_stack;
 		j = sizeof(init_kernel_stack);
 	}
 	while (i<j && !*(stack++))
@@ -508,5 +525,6 @@ void sched_init(void)
 	outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
 	outb(LATCH >> 8 , 0x40);	/* MSB */
-	request_irq(TIMER_IRQ,(void (*)(int)) do_timer);
+	if (request_irq(TIMER_IRQ,(void (*)(int)) do_timer)!=0)
+		panic("Could not allocate timer IRQ!");
 }

@@ -62,6 +62,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data,
 	int dev = s->s_dev,block;
 
 	lock_super(s);
+	set_blocksize(dev, BLOCK_SIZE);
 	if (!(bh = bread(dev, 1, BLOCK_SIZE))) {
 		s->s_dev=0;
 		unlock_super(s);
@@ -70,6 +71,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data,
 	}
 	es = (struct ext_super_block *) bh->b_data;
 	s->s_blocksize = 1024;
+	s->s_blocksize_bits = 10;
 	s->u.ext_sb.s_ninodes = es->s_ninodes;
 	s->u.ext_sb.s_nzones = es->s_nzones;
 	s->u.ext_sb.s_firstdatazone = es->s_firstdatazone;

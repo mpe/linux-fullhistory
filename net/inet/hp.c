@@ -26,14 +26,14 @@ static char *version = "hp.c:v0.99-10 5/28/93 Donald Becker (becker@super.org)\n
 
 /* These should be in <asm/io.h> someday, borrowed from blk_drv/hd.c. */
 #define port_read(port,buf,nr) \
-__asm__("cld;rep;insw"::"d" (port),"D" (buf),"c" (nr):"cx","di")
+__asm__("cld;rep;insw": :"d" (port),"D" (buf),"c" (nr):"cx","di")
 #define port_write(port,buf,nr) \
-__asm__("cld;rep;outsw"::"d" (port),"S" (buf),"c" (nr):"cx","si")
+__asm__("cld;rep;outsw": :"d" (port),"S" (buf),"c" (nr):"cx","si")
 
 #define port_read_b(port,buf,nr) \
-__asm__("cld;rep;insb"::"d" (port),"D" (buf),"c" (nr):"cx","di")
+__asm__("cld;rep;insb": :"d" (port),"D" (buf),"c" (nr):"cx","di")
 #define port_write_b(port,buf,nr) \
-__asm__("cld;rep;outsb"::"d" (port),"S" (buf),"c" (nr):"cx","si")
+__asm__("cld;rep;outsb": :"d" (port),"S" (buf),"c" (nr):"cx","si")
 
 #define HP_DATAPORT	0x0c	/* "Remote DMA" data port. */
 #define HP_ID		0x07

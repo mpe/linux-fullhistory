@@ -263,7 +263,7 @@ void ext2_free_block (struct super_block * sb, unsigned long block)
 		printk ("block_group = %d\n", block_group);
 		panic ("ext2_free_block: Unable to load group bitmap");
 	}
-	if (clear_bit (bit, bh->b_data))
+	if (!clear_bit (bit, bh->b_data))
 		printk ("ext2_free_block (%04x:%d): bit already cleared\n",
 			sb->s_dev, block);
 	else {

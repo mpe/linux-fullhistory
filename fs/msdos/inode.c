@@ -69,7 +69,7 @@ static struct super_operations msdos_sops = {
 static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
     gid_t *gid,int *umask,int *debug,int *fat,int *quiet)
 {
-	char *this,*value;
+	char *this_char,*value;
 
 	*check = 'n';
 	*conversion = 'b';
@@ -78,10 +78,10 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 	*umask = current->umask;
 	*debug = *fat = *quiet = 0;
 	if (!options) return 1;
-	for (this = strtok(options,","); this; this = strtok(NULL,",")) {
-		if ((value = strchr(this,'=')) != NULL)
+	for (this_char = strtok(options,","); this_char; this_char = strtok(NULL,",")) {
+		if ((value = strchr(this_char,'=')) != NULL)
 			*value++ = 0;
-		if (!strcmp(this,"check") && value) {
+		if (!strcmp(this_char,"check") && value) {
 			if (value[0] && !value[1] && strchr("rns",*value))
 				*check = *value;
 			else if (!strcmp(value,"relaxed")) *check = 'r';
@@ -89,7 +89,7 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 			else if (!strcmp(value,"strict")) *check = 's';
 			else return 0;
 		}
-		else if (!strcmp(this,"conv") && value) {
+		else if (!strcmp(this_char,"conv") && value) {
 			if (value[0] && !value[1] && strchr("bta",*value))
 				*conversion = *value;
 			else if (!strcmp(value,"binary")) *conversion = 'b';
@@ -97,39 +97,39 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 			else if (!strcmp(value,"auto")) *conversion = 'a';
 			else return 0;
 		}
-		else if (!strcmp(this,"uid")) {
+		else if (!strcmp(this_char,"uid")) {
 			if (!value || !*value)
 				return 0;
 			*uid = simple_strtoul(value,&value,0);
 			if (*value)
 				return 0;
 		}
-		else if (!strcmp(this,"gid")) {
+		else if (!strcmp(this_char,"gid")) {
 			if (!value || !*value)
 				return 0;
 			*gid = simple_strtoul(value,&value,0);
 			if (*value)
 				return 0;
 		}
-		else if (!strcmp(this,"umask")) {
+		else if (!strcmp(this_char,"umask")) {
 			if (!value || !*value)
 				return 0;
 			*umask = simple_strtoul(value,&value,8);
 			if (*value)
 				return 0;
 		}
-		else if (!strcmp(this,"debug")) {
+		else if (!strcmp(this_char,"debug")) {
 			if (value) return 0;
 			*debug = 1;
 		}
-		else if (!strcmp(this,"fat")) {
+		else if (!strcmp(this_char,"fat")) {
 			if (!value || !*value)
 				return 0;
 			*fat = simple_strtoul(value,&value,0);
 			if (*value || (*fat != 12 && *fat != 16))
 				return 0;
 		}
-		else if (!strcmp(this,"quiet")) {
+		else if (!strcmp(this_char,"quiet")) {
 			if (value) return 0;
 			*quiet = 1;
 		}
@@ -169,6 +169,7 @@ struct super_block *msdos_read_super(struct super_block *s,void *data,
 	}
 	b = (struct msdos_boot_sector *) bh->b_data;
 	s->s_blocksize = 1024;	/* we cannot handle anything else yet */
+	s->s_blocksize_bits = 10;	/* we cannot handle anything else yet */
 
 /*
  * The DOS3 partition size limit is *not* 32M as many people think.  
@@ -260,7 +261,7 @@ struct super_block *msdos_read_super(struct super_block *s,void *data,
 
 void msdos_statfs(struct super_block *sb,struct statfs *buf)
 {
-	int free,this;
+	int free,nr;
 
 	put_fs_long(sb->s_magic,&buf->f_type);
 	put_fs_long(MSDOS_SB(sb)->cluster_size*SECTOR_SIZE,&buf->f_bsize);
@@ -270,8 +271,8 @@ void msdos_statfs(struct super_block *sb,struct statfs *buf)
 		free = MSDOS_SB(sb)->free_clusters;
 	else {
 		free = 0;
-		for (this = 2; this < MSDOS_SB(sb)->clusters+2; this++)
-			if (!fat_access(sb,this,-1)) free++;
+		for (nr = 2; nr < MSDOS_SB(sb)->clusters+2; nr++)
+			if (!fat_access(sb,nr,-1)) free++;
 		MSDOS_SB(sb)->free_clusters = free;
 	}
 	unlock_fat(sb);
@@ -305,7 +306,7 @@ void msdos_read_inode(struct inode *inode)
 {
 	struct buffer_head *bh;
 	struct msdos_dir_entry *raw_entry;
-	int this;
+	int nr;
 
 /* printk("read inode %d\n",inode->i_ino); */
 	MSDOS_I(inode)->i_busy = 0;
@@ -351,11 +352,11 @@ void msdos_read_inode(struct inode *inode)
 		}
 #endif
 		inode->i_size = 0;
-		if ((this = CF_LE_W(raw_entry->start)) != 0)
-			while (this != -1) {
+		if ((nr = CF_LE_W(raw_entry->start)) != 0)
+			while (nr != -1) {
 				inode->i_size += SECTOR_SIZE*MSDOS_SB(inode->
 				    i_sb)->cluster_size;
-				if (!(this = fat_access(inode->i_sb,this,-1)))
+				if (!(nr = fat_access(inode->i_sb,nr,-1)))
 					printk("Directory %d: bad FAT\n",
 					    inode->i_ino);
 			}

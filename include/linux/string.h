@@ -26,7 +26,8 @@ __asm__("cld\n"
 	"stosb\n\t"
 	"testb %%al,%%al\n\t"
 	"jne 1b"
-	::"S" (src),"D" (dest):"si","di","ax","memory");
+	: /* no output */
+	:"S" (src),"D" (dest):"si","di","ax","memory");
 return dest;
 }
 
@@ -42,7 +43,8 @@ __asm__("cld\n"
 	"rep\n\t"
 	"stosb\n"
 	"2:"
-	::"S" (src),"D" (dest),"c" (count):"si","di","ax","cx","memory");
+	: /* no output */
+	:"S" (src),"D" (dest),"c" (count):"si","di","ax","cx","memory");
 return dest;
 }
 
@@ -56,7 +58,8 @@ __asm__("cld\n\t"
 	"stosb\n\t"
 	"testb %%al,%%al\n\t"
 	"jne 1b"
-	::"S" (src),"D" (dest),"a" (0),"c" (0xffffffff):"si","di","ax","cx");
+	: /* no output */
+	:"S" (src),"D" (dest),"a" (0),"c" (0xffffffff):"si","di","ax","cx");
 return dest;
 }
 
@@ -75,7 +78,8 @@ __asm__("cld\n\t"
 	"jne 1b\n"
 	"2:\txorl %2,%2\n\t"
 	"stosb"
-	::"S" (src),"D" (dest),"a" (0),"c" (0xffffffff),"g" (count)
+	: /* no output */
+	:"S" (src),"D" (dest),"a" (0),"c" (0xffffffff),"g" (count)
 	:"si","di","ax","cx","memory");
 return dest;
 }
@@ -341,7 +345,8 @@ __asm__("cld\n\t"
 	"je 2f\n\t"
 	"movsw\n"
 	"2:\n"
-	::"d" (n),"D" ((long) to),"S" ((long) from)
+	: /* no output */
+	:"d" (n),"D" ((long) to),"S" ((long) from)
 	: "cx","di","si","memory");
 return (to);
 }
@@ -352,14 +357,16 @@ if (dest<src)
 __asm__("cld\n\t"
 	"rep\n\t"
 	"movsb"
-	::"c" (n),"S" (src),"D" (dest)
+	: /* no output */
+	:"c" (n),"S" (src),"D" (dest)
 	:"cx","si","di");
 else
 __asm__("std\n\t"
 	"rep\n\t"
 	"movsb\n\t"
 	"cld"
-	::"c" (n),"S" (src+n-1),"D" (dest+n-1)
+	: /* no output */
+	:"c" (n),"S" (src+n-1),"D" (dest+n-1)
 	:"cx","si","di","memory");
 return dest;
 }
@@ -401,7 +408,8 @@ extern inline void * memset(void * s,char c,size_t count)
 __asm__("cld\n\t"
 	"rep\n\t"
 	"stosb"
-	::"a" (c),"D" (s),"c" (count)
+	: /* no output */
+	:"a" (c),"D" (s),"c" (count)
 	:"cx","di","memory");
 return s;
 }

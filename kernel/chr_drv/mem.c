@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/tty.h>
 #include <linux/mouse.h>
+#include <linux/tpqic02.h>
 
 #include <linux/user.h>
 #include <linux/a.out.h>
@@ -128,7 +129,7 @@ static int write_mem(struct inode * inode, struct file * file,char * buf, int co
 static int mmap_mem(struct inode * inode, struct file * file,
 	unsigned long addr, size_t len, int prot, unsigned long off)
 {
-	if (len > high_memory || off > high_memory - len) /* avoid overflow */
+	if (off & 0xfff || off + len < off)
 		return -ENXIO;
 
 	if (remap_page_range(addr, off, len, prot))
@@ -239,7 +240,8 @@ static struct file_operations ram_fops = {
 	NULL,		/* ram_ioctl */
 	NULL,		/* ram_mmap */
 	NULL,		/* no special open code */
-	NULL		/* no special release code */
+	NULL,		/* no special release code */
+	NULL		/* fsync */
 };
 
 static struct file_operations mem_fops = {
@@ -251,7 +253,8 @@ static struct file_operations mem_fops = {
 	NULL,		/* mem_ioctl */
 	mmap_mem,
 	NULL,		/* no special open code */
-	NULL		/* no special release code */
+	NULL,		/* no special release code */
+	NULL		/* fsync */
 };
 
 static struct file_operations kmem_fops = {
@@ -263,7 +266,8 @@ static struct file_operations kmem_fops = {
 	NULL,		/* kmem_ioctl */
 	mmap_kmem,
 	NULL,		/* no special open code */
-	NULL		/* no special release code */
+	NULL,		/* no special release code */
+	NULL		/* fsync */
 };
 
 static struct file_operations null_fops = {
@@ -275,7 +279,8 @@ static struct file_operations null_fops = {
 	NULL,		/* null_ioctl */
 	NULL,		/* null_mmap */
 	NULL,		/* no special open code */
-	NULL		/* no special release code */
+	NULL,		/* no special release code */
+	NULL		/* fsync */
 };
 
 static struct file_operations port_fops = {
@@ -287,7 +292,8 @@ static struct file_operations port_fops = {
 	NULL,		/* port_ioctl */
 	NULL,		/* port_mmap */
 	NULL,		/* no special open code */
-	NULL		/* no special release code */
+	NULL,		/* no special release code */
+	NULL		/* fsync */
 };
 
 static struct file_operations zero_fops = {
@@ -311,7 +317,8 @@ static struct file_operations core_fops = {
 	NULL,		/* zero_ioctl */
 	NULL,		/* zero_mmap */
 	NULL,		/* no special open code */
-	NULL		/* no special release code */
+	NULL,		/* no special release code */
+	NULL		/* fsync */
 };
 
 static int memory_open(struct inode * inode, struct file * filp)
@@ -355,7 +362,8 @@ static struct file_operations memory_fops = {
 	NULL,		/* ioctl */
 	NULL,		/* mmap */
 	memory_open,	/* just a selector for the real open */
-	NULL		/* release */
+	NULL,		/* release */
+	NULL		/* fsync */
 };
 
 long chr_dev_init(long mem_start, long mem_end)
@@ -366,5 +374,8 @@ long chr_dev_init(long mem_start, long mem_end)
 	mem_start = lp_init(mem_start);
 	mem_start = mouse_init(mem_start);
 	mem_start = soundcard_init(mem_start);
+#if CONFIG_TAPE_QIC02
+	mem_start = tape_qic02_init(mem_start);
+#endif
 	return mem_start;
 }

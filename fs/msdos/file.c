@@ -170,7 +170,7 @@ static int msdos_file_write(struct inode *inode,struct file *filp,char *buf,
 		}
 		else {
 			written = left = SECTOR_SIZE-offset;
-			to = data+(filp->f_pos & (SECTOR_SIZE-1));
+			to = (char *) data+(filp->f_pos & (SECTOR_SIZE-1));
 			if (carry) {
 				*to++ = '\n';
 				left--;

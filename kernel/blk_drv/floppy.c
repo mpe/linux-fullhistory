@@ -120,9 +120,9 @@ static unsigned char running = 0;
 
 /*
  * The DMA channel used by the floppy controller cannot access data at
- * addresses >= 1MB
+ * addresses >= 16MB
  */
-#define LAST_DMA_ADDR	(0x100000 - BLOCK_SIZE)
+#define LAST_DMA_ADDR	(0x1000000 - BLOCK_SIZE)
 
 /*
  * globals used by 'result()'
@@ -427,7 +427,8 @@ int floppy_change(struct buffer_head * bh)
 
 #define copy_buffer(from,to) \
 __asm__("cld ; rep ; movsl" \
-	::"c" (BLOCK_SIZE/4),"S" ((long)(from)),"D" ((long)(to)) \
+	: \
+	:"c" (BLOCK_SIZE/4),"S" ((long)(from)),"D" ((long)(to)) \
 	:"cx","di","si")
 
 static void setup_DMA(void)
@@ -942,8 +943,10 @@ static void floppy_ready(void)
  * There should be a cleaner solution for that ...
  */
 		if (!reset && !recalibrate) {
-			do_floppy = (current_track && current_track != NO_TRACK)
-			    ?  shake_zero : shake_one;
+			if (current_track && current_track != NO_TRACK)
+				do_floppy = shake_zero;
+			else
+				do_floppy = shake_one;
 			output_byte(FD_RECALIBRATE);
 			output_byte(head<<2 | current_drive);
 			return;
@@ -1015,14 +1018,16 @@ repeat:
 	if (device > 3)
 		floppy = (device >> 2) + floppy_type;
 	else { /* Auto-detection */
-		if ((floppy = current_type[device & 3]) == NULL) {
+		floppy = current_type[device & 3];
+		if (!floppy) {
 			probing = 1;
-			if ((floppy = base_type[device & 3]) ==
-			    NULL) {
+			floppy = base_type[device & 3];
+			if (!floppy) {
 				request_done(0);
 				goto repeat;
 			}
-			floppy += CURRENT_ERRORS & 1;
+			if (CURRENT_ERRORS & 1)
+				floppy++;
 		}
 	}
 	if (format_status != FORMAT_BUSY) {
@@ -1098,7 +1103,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
     unsigned long param)
 {
 	int i,drive,cnt,okay;
-	struct floppy_struct *this;
+	struct floppy_struct *this_floppy;
 
 	switch (cmd) {
 		RO_IOCTLS(inode->i_rdev,param);
@@ -1119,14 +1124,14 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			cmd = FDCLRPRM;
 			break;
 		case FDGETPRM:
-			if (drive > 3) this = &floppy_type[drive >> 2];
-			else if ((this = current_type[drive & 3]) == NULL)
+			if (drive > 3) this_floppy = &floppy_type[drive >> 2];
+			else if ((this_floppy = current_type[drive & 3]) == NULL)
 				    return -ENODEV;
 			i = verify_area(VERIFY_WRITE,(void *) param,sizeof(struct floppy_struct));
 			if (i)
 				return i;
 			for (cnt = 0; cnt < sizeof(struct floppy_struct); cnt++)
-				put_fs_byte(((char *) this)[cnt],
+				put_fs_byte(((char *) this_floppy)[cnt],
 				    (char *) param+cnt);
 			return 0;
 		case FDFMTTRK:
@@ -1178,12 +1183,13 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			break;
 		case FDSETPRM:
 		case FDDEFPRM:
-			for (cnt = 0; cnt < sizeof(struct floppy_struct); cnt++)
-				((char *) &user_params[drive])[cnt] =
-				    get_fs_byte((char *) param+cnt);
+			memcpy_fromfs(user_params+drive,
+				(void *) param,
+				sizeof(struct floppy_struct));
 			current_type[drive] = &user_params[drive];
 			floppy_sizes[drive] = user_params[drive].size >> 1;
-			if (cmd == FDDEFPRM) keep_data[drive] = -1;
+			if (cmd == FDDEFPRM)
+				keep_data[drive] = -1;
 			else {
 				cli();
 				while (fdc_busy) sleep_on(&fdc_wait);
@@ -1192,7 +1198,10 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 				outb_p((current_DOR & 0xfc) | drive |
 				    (0x10 << drive),FD_DOR);
 				for (cnt = 0; cnt < 1000; cnt++) __asm__("nop");
-				keep_data[drive] = (inb(FD_DIR) & 0x80) ? 1 : 0;
+				if (inb(FD_DIR) & 0x80)
+					keep_data[drive] = 1;
+				else
+					keep_data[drive] = 0;
 				outb_p(current_DOR,FD_DOR);
 				fdc_busy = 0;
 				wake_up(&fdc_wait);

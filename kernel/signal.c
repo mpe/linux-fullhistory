@@ -19,14 +19,15 @@
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
 extern int core_dump(long signr,struct pt_regs * regs);
-int do_signal(unsigned long oldmask, struct pt_regs * regs);
 
-int sys_sgetmask(void)
+extern "C" int do_signal(unsigned long oldmask, struct pt_regs * regs);
+
+extern "C" int sys_sgetmask(void)
 {
 	return current->blocked;
 }
 
-int sys_ssetmask(int newmask)
+extern "C" int sys_ssetmask(int newmask)
 {
 	int old=current->blocked;
 
@@ -34,7 +35,7 @@ int sys_ssetmask(int newmask)
 	return old;
 }
 
-int sys_sigpending(sigset_t *set)
+extern "C" int sys_sigpending(sigset_t *set)
 {
 	int error;
 	/* fill in "set" with signals pending but blocked. */
@@ -47,7 +48,7 @@ int sys_sigpending(sigset_t *set)
 /*
  * atomically swap in the new signal mask, and wait for a signal.
  */
-int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long set)
+extern "C" int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long set)
 {
 	unsigned long mask;
 	struct pt_regs * regs = (struct pt_regs *) &restart;
@@ -97,7 +98,7 @@ static void check_pending(int signum)
 	}	
 }
 
-int sys_signal(int signum, unsigned long handler)
+extern "C" int sys_signal(int signum, unsigned long handler)
 {
 	struct sigaction tmp;
 
@@ -115,23 +116,23 @@ int sys_signal(int signum, unsigned long handler)
 	return handler;
 }
 
-int sys_sigaction(int signum, const struct sigaction * action,
+extern "C" int sys_sigaction(int signum, const struct sigaction * action,
 	struct sigaction * oldaction)
 {
-	struct sigaction new, *p;
+	struct sigaction new_sa, *p;
 
 	if (signum<1 || signum>32 || signum==SIGKILL || signum==SIGSTOP)
 		return -EINVAL;
 	p = signum - 1 + current->sigaction;
 	if (action) {
-		memcpy_fromfs(&new, action, sizeof(struct sigaction));
-		if (new.sa_flags & SA_NOMASK)
-			new.sa_mask = 0;
+		memcpy_fromfs(&new_sa, action, sizeof(struct sigaction));
+		if (new_sa.sa_flags & SA_NOMASK)
+			new_sa.sa_mask = 0;
 		else {
-			new.sa_mask |= _S(signum);
-			new.sa_mask &= _BLOCKABLE;
+			new_sa.sa_mask |= _S(signum);
+			new_sa.sa_mask &= _BLOCKABLE;
 		}
-		if (TASK_SIZE <= (unsigned long) new.sa_handler)
+		if (TASK_SIZE <= (unsigned long) new_sa.sa_handler)
 			return -EFAULT;
 	}
 	if (oldaction) {
@@ -139,18 +140,18 @@ int sys_sigaction(int signum, const struct sigaction * action,
 			memcpy_tofs(oldaction, p, sizeof(struct sigaction));
 	}
 	if (action) {
-		*p = new;
+		*p = new_sa;
 		check_pending(signum);
 	}
 	return 0;
 }
 
-extern int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
+extern "C" int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
 
 /*
  * This sets regs->esp even though we don't actually use sigstacks yet..
  */
-int sys_sigreturn(unsigned long oldmask, unsigned long eip, unsigned long esp)
+extern "C" int sys_sigreturn(unsigned long oldmask, unsigned long eip, unsigned long esp)
 {
 	struct pt_regs * regs;
 
@@ -172,7 +173,7 @@ static void setup_frame(unsigned long ** fp, unsigned long eip,
 	unsigned long * frame;
 
 #define __CODE ((unsigned long)(frame+24))
-#define CODE(x) ((void *) ((x)+__CODE))
+#define CODE(x) ((unsigned long *) ((x)+__CODE))
 	frame = *fp - 32;
 	verify_area(VERIFY_WRITE,frame,32*4);
 /* set up the "normal" stack seen by the signal handler (iBCS2) */
@@ -225,7 +226,7 @@ static void setup_frame(unsigned long ** fp, unsigned long eip,
  * the kernel can handle, and then we build all the user-level signal handling
  * stack-frames in one go after that.
  */
-int do_signal(unsigned long oldmask, struct pt_regs * regs)
+extern "C" int do_signal(unsigned long oldmask, struct pt_regs * regs)
 {
 	unsigned long mask = ~current->blocked;
 	unsigned long handler_signal = 0;
@@ -325,7 +326,7 @@ int do_signal(unsigned long oldmask, struct pt_regs * regs)
 		if (sa->sa_flags & SA_ONESHOT)
 			sa->sa_handler = NULL;
 /* force a supervisor-mode page-in of the signal handler to reduce races */
-		__asm__("testb $0,%%fs:%0"::"m" (*(char *) sa_handler));
+		__asm__("testb $0,%%fs:%0": :"m" (*(char *) sa_handler));
 		setup_frame(&frame,eip,regs,signr,sa_handler,oldmask);
 		eip = sa_handler;
 		current->blocked |= sa->sa_mask;

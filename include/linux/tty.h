@@ -346,7 +346,7 @@ extern void flush_input(struct tty_struct * tty);
 extern void flush_output(struct tty_struct * tty);
 extern void wait_until_sent(struct tty_struct * tty);
 extern void copy_to_cooked(struct tty_struct * tty);
-extern int tty_register_ldisc(int disc, struct tty_ldisc *new);
+extern int tty_register_ldisc(int disc, struct tty_ldisc *new_ldisc);
 extern int tty_read_raw_data(struct tty_struct *tty, unsigned char *bufp,
 			     int buflen);
 extern int tty_write_data(struct tty_struct *tty, char *bufp, int buflen,

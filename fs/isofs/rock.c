@@ -36,7 +36,7 @@
 
 #define CONTINUE_DECLS \
   int cont_extent = 0, cont_offset = 0, cont_size = 0;   \
-  char * buffer = 0
+  void * buffer = 0
 
 #define CHECK_CE	       			\
       {cont_extent = isonum_733(rr->u.CE.extent); \
@@ -55,24 +55,26 @@
     int block, offset; \
     struct buffer_head * bh; \
     buffer = kmalloc(cont_size,GFP_KERNEL); \
-    block = cont_extent << 1; \
+    block = cont_extent; \
     offset = cont_offset; \
-    if (offset >= 1024) block++; \
-    offset &= 1023; \
-    bh = bread(DEV, block, 1024); \
-    if (bh) { \
+    if(ISOFS_BUFFER_SIZE(DEV) == 1024) {     \
+      block <<= 1;    \
+      if (offset >= 1024) block++; \
+      offset &= 1023; \
+    };     \
+    bh = bread(DEV->i_dev, block, ISOFS_BUFFER_SIZE(DEV)); \
+    if(bh){       \
       memcpy(buffer, bh->b_data, cont_size); \
       brelse(bh); \
-      chr = buffer; \
+      chr = (unsigned char *) buffer; \
       len = cont_size; \
       cont_extent = 0; \
       cont_size = 0; \
       cont_offset = 0; \
       goto LABEL; \
-    } \
-    printk("Unable to read rock-ridge descriptor block\n"); \
+    };    \
+    printk("Unable to read rock-ridge attributes\n");    \
   }}
-
 
 /* This is the inner layer of the get filename routine, and is called
    for each system area and continuation record related to the file */
@@ -143,7 +145,7 @@ int find_rock_ridge_relocation(struct iso_directory_record * de,
       }
     };
   };
-  MAYBE_CONTINUE(repeat, inode->i_dev);
+  MAYBE_CONTINUE(repeat, inode);
   return retval;
  out:
   if(buffer) kfree(buffer);
@@ -220,7 +222,7 @@ int get_rock_ridge_filename(struct iso_directory_record * de,
       }
     };
   }
-  MAYBE_CONTINUE(repeat,inode->i_dev);
+  MAYBE_CONTINUE(repeat,inode);
   if(retname){
     *name = retname;
     *namlen = retnamlen;
@@ -330,8 +332,8 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	printk("RR CL (%x)\n",inode->i_ino);
 #endif
 	inode->u.isofs_i.i_first_extent = isonum_733(rr->u.CL.location) <<
-		(ISOFS_BLOCK_BITS - ISOFS_BUFFER_BITS);
-	reloc = iget(inode->i_sb, inode->u.isofs_i.i_first_extent << ISOFS_BUFFER_BITS);
+		(ISOFS_BLOCK_BITS - ISOFS_BUFFER_BITS(inode));
+	reloc = iget(inode->i_sb, inode->u.isofs_i.i_first_extent << ISOFS_BUFFER_BITS(inode));
 	inode->i_mode = reloc->i_mode;
 	inode->i_nlink = reloc->i_nlink;
 	inode->i_uid = reloc->i_uid;
@@ -348,7 +350,7 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
       }
     };
   }
-  MAYBE_CONTINUE(repeat,inode->i_dev);
+  MAYBE_CONTINUE(repeat,inode);
   return 0;
  out:
   if(buffer) kfree(buffer);
@@ -362,14 +364,15 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 char * get_rock_ridge_symlink(struct inode * inode)
 {
   struct buffer_head * bh;
-  unsigned char * pnt, *cpnt = 0;
+  unsigned char * pnt;
+  void * cpnt = NULL;
   char * rpnt;
   struct iso_directory_record * raw_inode;
   CONTINUE_DECLS;
   int block;
   int sig;
   int len;
-  char * chr;
+  unsigned char * chr;
   struct rock_ridge * rr;
   
   if (!inode->i_sb->u.isofs_sb.s_rock)
@@ -377,22 +380,22 @@ char * get_rock_ridge_symlink(struct inode * inode)
 
   rpnt = 0;
   
-  block = inode->i_ino >> ISOFS_BUFFER_BITS;
-  if (!(bh=bread(inode->i_dev,block, ISOFS_BUFFER_SIZE)))
+  block = inode->i_ino >> ISOFS_BUFFER_BITS(inode);
+  if (!(bh=bread(inode->i_dev,block, ISOFS_BUFFER_SIZE(inode))))
     panic("unable to read i-node block");
   
-  pnt = ((char *) bh->b_data) + (inode->i_ino & (ISOFS_BUFFER_SIZE - 1));
+  pnt = ((unsigned char *) bh->b_data) + (inode->i_ino & (ISOFS_BUFFER_SIZE(inode) - 1));
   
   raw_inode = ((struct iso_directory_record *) pnt);
   
-  if ((inode->i_ino & (ISOFS_BUFFER_SIZE - 1)) + *pnt > ISOFS_BUFFER_SIZE){
+  if ((inode->i_ino & (ISOFS_BUFFER_SIZE(inode) - 1)) + *pnt > ISOFS_BUFFER_SIZE(inode)){
     cpnt = kmalloc(1 << ISOFS_BLOCK_BITS, GFP_KERNEL);
-    memcpy(cpnt, bh->b_data, ISOFS_BUFFER_SIZE);
+    memcpy(cpnt, bh->b_data, ISOFS_BUFFER_SIZE(inode));
     brelse(bh);
-    if (!(bh = bread(inode->i_dev,++block, ISOFS_BUFFER_SIZE)))
+    if (!(bh = bread(inode->i_dev,++block, ISOFS_BUFFER_SIZE(inode))))
       panic("unable to read i-node block");
-    memcpy(cpnt+ISOFS_BUFFER_SIZE, bh->b_data, ISOFS_BUFFER_SIZE);
-    pnt = ((char *) cpnt) + (inode->i_ino & (ISOFS_BUFFER_SIZE - 1));
+    memcpy(cpnt+ISOFS_BUFFER_SIZE(inode), bh->b_data, ISOFS_BUFFER_SIZE(inode));
+    pnt = ((unsigned char *) cpnt) + (inode->i_ino & (ISOFS_BUFFER_SIZE(inode) - 1));
     raw_inode = ((struct iso_directory_record *) pnt);
   };
   
@@ -455,13 +458,14 @@ char * get_rock_ridge_symlink(struct inode * inode)
      }
     };
   };
-  MAYBE_CONTINUE(repeat,inode->i_dev);
+  MAYBE_CONTINUE(repeat,inode);
   brelse(bh);
   
   if (cpnt) {
     kfree(cpnt);
-    cpnt = 0;
+    cpnt = NULL;
   };
+
   return rpnt;
  out:
   if(buffer) kfree(buffer);

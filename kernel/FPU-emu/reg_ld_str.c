@@ -1061,7 +1061,7 @@ int reg_store_bcd(void)
 {
   char *d = (char *)FPU_data_address;
   FPU_REG t;
-  long long ll;
+  unsigned long long ll;
   unsigned char b;
   int i;
   unsigned char sign = (FPU_st0_ptr->sign == SIGN_NEG) ? 0x80 : 0;
@@ -1082,7 +1082,7 @@ int reg_store_bcd(void)
 
   reg_move(FPU_st0_ptr, &t);
   round_to_int(&t);
-  ll = *(long long *)(&t.sigl);
+  ll = *(unsigned long long *)(&t.sigl);
 
   /* Check for overflow, by comparing with 999999999999999999 decimal. */
   if ( (t.sigh > 0x0de0b6b3) ||

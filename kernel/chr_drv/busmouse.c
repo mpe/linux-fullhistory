@@ -32,6 +32,13 @@
 #include <asm/irq.h>
 
 static struct mouse_status mouse;
+static int mouse_irq = MOUSE_IRQ;
+
+void bmouse_setup(char *str, int *ints)
+{
+	if (ints[0] > 0)
+		mouse_irq=ints[1];
+}
 
 static void mouse_interrupt(int unused)
 {
@@ -63,7 +70,7 @@ static void release_mouse(struct inode * inode, struct file * file)
 	MSE_INT_OFF();
 	mouse.active = 0;
 	mouse.ready = 0;
-	free_irq(MOUSE_IRQ);
+	free_irq(mouse_irq);
 }
 
 static int open_mouse(struct inode * inode, struct file * file)
@@ -77,7 +84,7 @@ static int open_mouse(struct inode * inode, struct file * file)
 	mouse.dx = 0;
 	mouse.dy = 0;
 	mouse.buttons = 0x87;
-	if (request_irq(MOUSE_IRQ, mouse_interrupt)) {
+	if (request_irq(mouse_irq, mouse_interrupt)) {
 		mouse.active = 0;
 		return -EBUSY;
 	}

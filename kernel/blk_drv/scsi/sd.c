@@ -46,6 +46,7 @@ int NR_SD=0;
 int MAX_SD=0;
 Scsi_Disk * rscsi_disks;
 static int * sd_sizes;
+static int * sd_blocksizes;
 
 /* used to re-read partitions. */
 extern void resetup_one_dev(struct gendisk *, unsigned int);
@@ -94,14 +95,7 @@ static void sd_release(struct inode * inode, struct file * file)
 	};
 }
 
-static struct gendisk sd_gendisk;
-
-static void sd_geninit (void) {
-	int i;
-	for (i = 0; i < NR_SD; ++i)
-	  sd[i << 4].nr_sects = rscsi_disks[i].capacity;
-	sd_gendisk.nr_real = NR_SD;
-}
+static void sd_geninit(void);
 
 static struct file_operations sd_fops = {
 	NULL,			/* lseek - default */
@@ -129,6 +123,13 @@ static struct gendisk sd_gendisk = {
 	NULL,	/* internal */
 	NULL		/* next */
 };
+
+static void sd_geninit (void)
+{
+	for (int i = 0; i < NR_SD; ++i)
+		sd[i << 4].nr_sects = rscsi_disks[i].capacity;
+	sd_gendisk.nr_real = NR_SD;
+}
 
 /*
 	rw_intr is the interrupt routine for the device driver.  It will
@@ -393,8 +394,10 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 
 repeat:
 
-	if(SCpnt->request.dev <= 0)
-	  return do_sd_request();
+	if(SCpnt->request.dev <= 0) {
+	  do_sd_request();
+	  return;
+	}
 
 	dev =  MINOR(SCpnt->request.dev);
 	block = SCpnt->request.sector;
@@ -520,7 +523,7 @@ repeat:
 		if(dma_free_sectors < (bh->b_size >> 9) + 5) {
 		  sgpnt[count].address = NULL;
 		} else {
-		  sgpnt[count].address = scsi_malloc(sgpnt[count].length);
+		  sgpnt[count].address = (char *) scsi_malloc(sgpnt[count].length);
 		};
 /* If we start running low on DMA buffers, we abort the scatter-gather
    operation, and free all of the memory we have allocated.  We want to
@@ -529,7 +532,7 @@ repeat:
 		if(sgpnt[count].address == NULL){ /* Out of dma memory */
 		  printk("Warning: Running low on SCSI DMA buffers");
 		  /* Try switching back to a non scatter-gather operation. */
-		  while(--count){
+		  while(--count >= 0){
 		    if(sgpnt[count].alt_address) 
 		      scsi_free(sgpnt[count].address, sgpnt[count].length);
 		  };
@@ -553,7 +556,7 @@ repeat:
 	if(SCpnt->use_sg == 0){
 	  if (((int) buff) + (this_count << 9) > ISA_DMA_THRESHOLD && 
 	    (scsi_hosts[SCpnt->host].unchecked_isa_dma)) {
-	    buff = scsi_malloc(this_count << 9);
+	    buff = (char *) scsi_malloc(this_count << 9);
 	    if(buff == NULL) panic("Ran out of DMA buffers.");
 	    if (SCpnt->request.cmd == WRITE)
 	      memcpy(buff, (char *)SCpnt->request.buffer, this_count << 9);
@@ -813,6 +816,11 @@ unsigned long sd_init(unsigned long memory_start, unsigned long memory_end)
 	sd_sizes = (int *) memory_start;
 	memory_start += (MAX_SD << 4) * sizeof(int);
 	memset(sd_sizes, 0, (MAX_SD << 4) * sizeof(int));
+
+	sd_blocksizes = (int *) memory_start;
+	memory_start += (MAX_SD << 4) * sizeof(int);
+	for(i=0;i<(MAX_SD << 4);i++) sd_blocksizes[i] = 1024;
+	blksize_size[MAJOR_NR] = sd_blocksizes;
 
 	sd = (struct hd_struct *) memory_start;
 	memory_start += (MAX_SD << 4) * sizeof(struct hd_struct);

@@ -19,7 +19,13 @@
  *           really attached to the machine.  Don't know what this does to
  *           Logitech bus mice, but all it does is read ports.
  *
- * version 0.3
+ * Modified by Christoph Niemann (niemann@rubdv15.etdv.ruhr-uni-bochum.de)
+ * Changes:  Better interrupt-handler (like in busmouse.c).
+ *	     Some changes to reduce code-size.
+ *	     Changed dectection code to use inb_p() instead of doing empty
+ *	     loops to delay i/o.
+ *
+ * version 0.3a
  */
 
 #include <linux/kernel.h>
@@ -55,19 +61,19 @@ static void ms_mouse_interrupt(int unused)
 	outb(MS_MSE_COMMAND_MODE, MS_MSE_CONTROL_PORT);
 	outb((inb(MS_MSE_DATA_PORT) & 0xdf), MS_MSE_DATA_PORT);
 
-	mouse.buttons = buttons;
-	mouse.latch_buttons |= buttons;
-	mouse.dx += dx;
-	mouse.dy += dy;
-	mouse.ready = 1;
-	wake_up_interruptible(&mouse.wait);
+	if (dx != 0 || dy != 0 || buttons != mouse.buttons) {
+		mouse.buttons = buttons;
+		mouse.dx += dx;
+		mouse.dy += dy;
+		mouse.ready = 1;
+		wake_up_interruptible(&mouse.wait);
+	}
 }
 
 static void release_mouse(struct inode * inode, struct file * file)
 {
 	MS_MSE_INT_OFF();
-	mouse.active = 0;
-	mouse.ready = 0; 
+	mouse.active = mouse.ready = 0; 
 	free_irq(MOUSE_IRQ);
 }
 
@@ -78,10 +84,8 @@ static int open_mouse(struct inode * inode, struct file * file)
 	if (mouse.active)
 		return -EBUSY;
 	mouse.active = 1;
-	mouse.ready = 0;
-	mouse.dx = 0;
-	mouse.dy = 0;	
-	mouse.buttons = mouse.latch_buttons = 0x80;
+	mouse.ready = mouse.dx = mouse.dy = 0;	
+	mouse.buttons = 0x80;
 	if (request_irq(MOUSE_IRQ, ms_mouse_interrupt)) {
 		mouse.active = 0;
 		return -EBUSY;
@@ -105,23 +109,12 @@ static int read_mouse(struct inode * inode, struct file * file, char * buffer, i
 		return -EINVAL;
 	if (!mouse.ready)
 		return -EAGAIN;
-	put_fs_byte(mouse.latch_buttons | 0x80, buffer);
-	if (mouse.dx < -127)
-		mouse.dx = -127;
-	if (mouse.dx > 127)
-		mouse.dx =  127;
-	put_fs_byte((char)mouse.dx, buffer + 1);
-	if (mouse.dy < -127)
-		mouse.dy = -127;
-	if (mouse.dy > 127)
-		mouse.dy =  127;
-	put_fs_byte((char) -mouse.dy, buffer + 2);
+	put_fs_byte(mouse.buttons | 0x80, buffer);
+	put_fs_byte((char)(mouse.dx<-127 ? -127 : mouse.dx>127 ? 127 : mouse.dx), buffer + 1);
+	put_fs_byte((char)(mouse.dy<-127 ? 127 : mouse.dy>127 ? -127 : -mouse.dy), buffer + 2);
 	for (i = 3; i < count; i++)
 		put_fs_byte(0x00, buffer + i);
-	mouse.dx = 0;
-	mouse.dy = 0;
-	mouse.latch_buttons = mouse.buttons;
-	mouse.ready = 0;
+	mouse.dx = mouse.dy = mouse.ready = 0;
 	return i;	
 }
 
@@ -147,45 +140,32 @@ struct file_operations ms_bus_mouse_fops = {
 	release_mouse,
 };
 
-#define MS_DELAY 100000
-
 unsigned long ms_bus_mouse_init(unsigned long kmem_start)
 {
-	register int mse_byte;
-	int i, delay_val, msfound = 1;
+	int mse_byte, i;
 
-	mouse.present = 0;
-	mouse.active = mouse.ready = 0;
-	mouse.buttons = mouse.latch_buttons = 0x80;
+	mouse.present = mouse.active = mouse.ready = 0;
+	mouse.buttons = 0x80;
 	mouse.dx = mouse.dy = 0;
 	mouse.wait = NULL;
-	if (inb(MS_MSE_SIGNATURE_PORT) == 0xde) {
-		for (delay_val=0; delay_val<MS_DELAY;)
-			delay_val++;
+	if (inb_p(MS_MSE_SIGNATURE_PORT) == 0xde) {
 
-		mse_byte = inb(MS_MSE_SIGNATURE_PORT);
-		for (delay_val=0; delay_val<MS_DELAY; )
-			delay_val++;
+		mse_byte = inb_p(MS_MSE_SIGNATURE_PORT);
 
 		for (i = 0; i < 4; i++) {
-			for (delay_val=0; delay_val<MS_DELAY;)
-				delay_val++;
-			if (inb(MS_MSE_SIGNATURE_PORT) == 0xde) {
-				for (delay_val=0; delay_val<MS_DELAY; )
-					delay_val++;
-				if (inb(MS_MSE_SIGNATURE_PORT) == mse_byte)
-					msfound = 0;
+			if (inb_p(MS_MSE_SIGNATURE_PORT) == 0xde) {
+				if (inb_p(MS_MSE_SIGNATURE_PORT) == mse_byte)
+					mouse.present = 1;
 				else
-					msfound = 1;
+					mouse.present = 0;
 			} else
-				msfound = 1;
+				mouse.present = 0;
 		}
 	}
-	if (msfound == 1) {
+	if (mouse.present == 0) {
 		return kmem_start;
 	}
 	MS_MSE_INT_OFF();
-	mouse.present = 1;
-	printk("Microsoft Bus mouse detected and installed.\n");
+	printk("Microsoft BusMouse detected and installed.\n");
 	return kmem_start;
 }

@@ -316,8 +316,8 @@ struct scatterlist {
 
 #define ISA_DMA_THRESHOLD (0x00ffffff)
 
-char *   scsi_malloc(unsigned int);
-int      scsi_free(char *, unsigned int);
+void *   scsi_malloc(unsigned int);
+int      scsi_free(void *, unsigned int);
 extern unsigned int dma_free_sectors;   /* How much room do we have left */
 extern unsigned int need_isa_buffer;   /* True if some devices need indirection
 				 buffers */
@@ -352,6 +352,8 @@ typedef struct scsi_cmnd {
 
 /* These elements define the operation we ultimately want to perform */
 	unsigned char data_cmnd[12];
+	unsigned short old_use_sg;  /* We save  use_sg here when requesting
+				       sense info */
 	unsigned short use_sg;  /* Number of pieces of scatter-gather */
 	unsigned short sglist_len;  /* size of malloc'd scatter-gather list */
 	unsigned bufflen;     /* Size of data buffer */

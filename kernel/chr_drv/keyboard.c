@@ -86,7 +86,7 @@ static k_hand key_handler[] = {
 };
 
 /* maximum values each key_handler can handle */
-const u_char max_vals[] = {
+const int max_vals[] = {
 	255, 25, 13, 16, 4, 255, 3, 255
 };
 
@@ -155,7 +155,8 @@ static void keyboard_interrupt(int int_pt_regs)
 	 *  code and E0 AA follows break code. We do our own book-keeping,
 	 *  so we will just ignore these.
 	 */
-	if (kbd_dead(KGD_E0) && (scancode == 0x2a || scancode == 0xaa))
+	if (kbd_dead(KGD_E0) && (scancode == 0x2a || scancode == 0xaa ||
+				 scancode == 0x36 || scancode == 0xb6))
 		goto end_kbd_intr;
 	/*
 	 *  Repeat a key only if the input buffers are empty or the
@@ -193,7 +194,7 @@ static void keyboard_interrupt(int int_pt_regs)
 #if 0
 			printk("keyboard: scancode (%02x) not in range 00 - %2x\n", scancode, E0_BASE - 1);
 #endif
-			scancode = 0;
+			goto end_kbd_intr;
 		}
 
 		if (kbd_dead(KGD_E0)) {
@@ -204,14 +205,19 @@ static void keyboard_interrupt(int int_pt_regs)
 					i = -1;
 					break;
 				}
-			if (i != -1)
+			if (i != -1) {
+#if 0
 				printk("keyboard: unknown scancode e0 %02x\n", scancode);
+#endif
+				goto end_kbd_intr;
+			}
 		}
 
 		key_code = key_map[shift_state][scancode];
 		(*key_handler[key_code >> 8])(key_code & 0xff, break_flag);
 	     }
 end_kbd_intr:
+	return;
 }
 
 static void put_queue(int ch)
@@ -281,7 +287,7 @@ static void show_ptregs(void)
 	printk("\n");
 	printk("EIP: %04x:%08x",0xffff & pt_regs->cs,pt_regs->eip);
 	if (pt_regs->cs & 3)
-		printk(" ESP: %04x:%08x",0xffff & pt_regs->cs,pt_regs->eip);
+		printk(" ESP: %04x:%08x",0xffff & pt_regs->ss,pt_regs->esp);
 	printk(" EFLAGS: %08x\n",pt_regs->eflags);
 	printk("EAX: %08x EBX: %08x ECX: %08x EDX: %08x\n",
 		pt_regs->orig_eax,pt_regs->ebx,pt_regs->ecx,pt_regs->edx);
@@ -427,18 +433,18 @@ unsigned int handle_diacr(unsigned int ch)
 	"`\340bcd\350fgh\354jklmn\362pqrst\371vwxyz{|}~",   /* accent grave */
 
 	" \301BCD\311FGH\315JKLMN\323PQRST\332VWX\335Z[\\]^_"
-	"`\341bcd\351fgh\355jklmn\363pqrst\372vwxyz{|}~",   /* accent acute */
+	"`\341bcd\351fgh\355jklmn\363pqrst\372vwx\375z{|}~", /* accent acute */
 
 	" \302BCD\312FGH\316JKLMN\324PQRST\333VWXYZ[\\]^_"
 	"`\342bcd\352fgh\356jklmn\364pqrst\373vwxyz{|}~",   /* circumflex */
 
-	" \303BCDEFGHIJKLMN\325PQRSTUVWXYZ[\\]^_"
+	" \303BCDEFGHIJKLM\321\325PQRSTUVWXYZ[\\]^_"
 	"`\343bcdefghijklm\361\365pqrstuvwxyz{|}~",	    /* tilde */
 
-	" \304BCD\313FGH\316JKLMN\326PQRST\334VWXYZ[\\]^_"
+	" \304BCD\313FGH\317JKLMN\326PQRST\334VWXYZ[\\]^_"
 	"`\344bcd\353fgh\357jklmn\366pqrst\374vwx\377z{|}~" /* dieresis */
 	};
-	int d = diacr;
+	int d = diacr, e;
 
 	if (diacr == -1)
 		return ch;
@@ -447,10 +453,13 @@ unsigned int handle_diacr(unsigned int ch)
 	if (ch == ' ')
 		return ret_diacr[d];
 
-	if (ch < 64 || ch > 122)
-		return ch;
-
-	return accent_table[d][ch - 64];
+	if (ch >= 64 && ch <= 122) {
+		e = accent_table[d][ch - 64];
+		if (e != ch)
+			return e;
+	}
+	put_queue(ret_diacr[d]);
+	return ch;
 }
 
 static void do_cons(unsigned char value, char up_flag)
@@ -487,7 +496,7 @@ static void do_fn(unsigned char value, char up_flag)
 			return;
 		}
 	}
-	if (kbd_flags & ALT_KEYS) {
+	if ((kbd_flags & ALT_KEYS) && value < 12) {
 		want_console = value;
 		return;
 	}
@@ -661,10 +670,10 @@ static int send_data(unsigned char data)
 			if (acknowledge)
 				return 1;
 			if (resend)
-				goto repeat;
+				break;
 		}
-		return 0;
-repeat:
+		if (!resend)
+			return 0;
 	} while (retries-- > 0);
 	return 0;
 }
@@ -684,7 +693,7 @@ repeat:
  */
 static void kbd_bh(void * unused)
 {
-	static unsigned char old_leds = -1;
+	static unsigned char old_leds = 0xff;
 	unsigned char leds = kbd_table[fg_console].flags & LED_MASK;
 
 	if (leds != old_leds) {
@@ -729,7 +738,7 @@ void hard_reset_now(void)
 				/* nothing */;
 			outb(0xfe,0x64);	 /* pulse reset low */
 		}
-		__asm__("\tlidt _no_idt"::);
+		__asm__("\tlidt _no_idt");
 	}
 }
 

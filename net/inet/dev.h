@@ -86,7 +86,7 @@ struct device {
   unsigned short	  type;		/* interface hardware type	*/
   unsigned long		  trans_start;	/* ??				*/
   unsigned short	  hard_header_len;	/* hardware hdr length	*/
-  void			  *private;	/* pointer to private data	*/
+  void			  *priv;	/* pointer to private data	*/
 
   /* Interface address info. */
   unsigned char		  broadcast[MAX_ADDR_LEN];	/* hw bcast add	*/

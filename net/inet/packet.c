@@ -50,7 +50,7 @@ packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 {
   struct sock *sk;
 
-  sk = pt->data;
+  sk = (struct sock *) pt->data;
   skb->dev = dev;
   skb->len += dev->hard_header_len;
 
@@ -118,7 +118,7 @@ packet_sendto(struct sock *sk, unsigned char *from, int len,
   } else
 	return(-EINVAL);
 
-  skb = sk->prot->wmalloc(sk, len+sizeof(*skb), 0, GFP_KERNEL);
+  skb = (struct sk_buff *) sk->prot->wmalloc(sk, len+sizeof(*skb), 0, GFP_KERNEL);
 
   /* This shouldn't happen, but it could. */
   if (skb == NULL) {
@@ -171,7 +171,7 @@ packet_init(struct sock *sk)
 {
   struct packet_type *p;
 
-  p = kmalloc(sizeof(*p), GFP_KERNEL);
+  p = (struct packet_type *) kmalloc(sizeof(*p), GFP_KERNEL);
   if (p == NULL) return(-ENOMEM);
 
   p->func = packet_rcv;

@@ -67,6 +67,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	}
 	ms = (struct minix_super_block *) bh->b_data;
 	s->s_blocksize = 1024;
+	s->s_blocksize_bits = 10;
 	s->u.minix_sb.s_ninodes = ms->s_ninodes;
 	s->u.minix_sb.s_nzones = ms->s_nzones;
 	s->u.minix_sb.s_imap_blocks = ms->s_imap_blocks;
@@ -136,7 +137,9 @@ void minix_statfs(struct super_block *sb, struct statfs *buf)
 
 	put_fs_long(MINIX_SUPER_MAGIC, &buf->f_type);
 	put_fs_long(1024, &buf->f_bsize);
-	put_fs_long(sb->u.minix_sb.s_nzones << sb->u.minix_sb.s_log_zone_size, &buf->f_blocks);
+	tmp = sb->u.minix_sb.s_nzones - sb->u.minix_sb.s_firstdatazone;
+	tmp <<= sb->u.minix_sb.s_log_zone_size;
+	put_fs_long(tmp, &buf->f_blocks);
 	tmp = minix_count_free_blocks(sb);
 	put_fs_long(tmp, &buf->f_bfree);
 	put_fs_long(tmp, &buf->f_bavail);

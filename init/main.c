@@ -20,6 +20,8 @@
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/fs.h>
+#include <linux/ctype.h>
+#include <linux/delay.h>
 
 extern unsigned long * prof_buffer;
 extern unsigned long prof_len;
@@ -49,6 +51,7 @@ static inline _syscall1(int,dup,int,fd)
 static inline _syscall3(int,execve,const char *,file,char **,argv,char **,envp)
 static inline _syscall3(int,open,const char *,file,int,flag,int,mode)
 static inline _syscall1(int,close,int,fd)
+static inline _syscall1(int,exit,int,exitcode)
 static inline _syscall3(pid_t,waitpid,pid_t,pid,int *,wait_stat,int,options)
 
 static inline pid_t wait(int * wait_stat)
@@ -68,8 +71,11 @@ extern void floppy_init(void);
 extern void sock_init(void);
 extern long rd_init(long mem_start, int length);
 extern long kernel_mktime(struct mktime * time);
-extern unsigned long simple_strtoul(const char *cp,char **endp,unsigned int
-    base);
+extern unsigned long simple_strtoul(const char *,char **,unsigned int);
+
+extern void hd_setup(char *str, int *ints);
+extern void bmouse_setup(char *str, int *ints);
+extern void eth_setup(char *str, int *ints);
 
 #ifdef CONFIG_SYSVIPC
 extern void ipc_init(void);
@@ -83,7 +89,7 @@ extern unsigned long scsi_dev_init(unsigned long, unsigned long);
  */
 #define PARAM	empty_zero_page
 #define EXT_MEM_K (*(unsigned short *) (PARAM+2))
-#define DRIVE_INFO (*(struct drive_info *) (PARAM+0x80))
+#define DRIVE_INFO (*(struct drive_info_struct *) (PARAM+0x80))
 #define SCREEN_INFO (*(struct screen_info *) (PARAM+0))
 #define MOUNT_ROOT_RDONLY (*(unsigned short *) (PARAM+0x1F2))
 #define RAMDISK_SIZE (*(unsigned short *) (PARAM+0x1F8))
@@ -137,8 +143,8 @@ static void time_init(void)
 	startup_time = kernel_mktime(&time);
 }
 
-static unsigned long memory_start = 0; /* After mem_init, stores the */
-				       /* amount of free user memory */
+static unsigned long memory_start = 0;	/* After mem_init, stores the */
+					/* amount of free user memory */
 static unsigned long memory_end = 0;
 static unsigned long low_memory_start = 0;
 
@@ -151,7 +157,7 @@ static char * envp_rc[] = { "HOME=/", "TERM=console", NULL };
 static char * argv[] = { "-/bin/sh",NULL };
 static char * envp[] = { "HOME=/usr/root", "TERM=console", NULL };
 
-struct drive_info { char dummy[32]; } drive_info;
+struct drive_info_struct { char dummy[32]; } drive_info;
 struct screen_info screen_info;
 
 unsigned char aux_device_present;
@@ -161,6 +167,80 @@ int root_mountflags = 0;
 static char fpu_error = 0;
 
 static char command_line[80] = { 0, };
+
+char *get_options(char *str, int *ints) 
+{
+	char *cur = str;
+	int i=1;
+
+	while (cur && isdigit(*cur) && i <= 10) {
+		ints[i++] = simple_strtoul(cur,NULL,0);
+		if ((cur = strchr(cur,',')) != NULL)
+			cur++;
+	}
+	ints[0] = i-1;
+	return(cur);
+}
+
+struct {
+	char *str;
+	void (*setup_func)(char *, int *);
+} bootsetups[] = {
+#ifdef CONFIG_INET
+	{ "ether=", eth_setup },
+#endif
+#ifdef CONFIG_BLK_DEV_HD
+	{ "hd=", hd_setup },
+#endif
+#ifdef CONFIG_BUSMOUSE
+	{ "bmouse=", bmouse_setup },
+#endif
+	{ 0, 0 }
+};
+
+int checksetup(char *line)
+{
+	int i = 0;
+	int ints[11];
+
+	while (bootsetups[i].str) {
+		int n = strlen(bootsetups[i].str);
+		if (!strncmp(line,bootsetups[i].str,n)) {
+			bootsetups[i].setup_func(get_options(line+n,ints), ints);
+			return(0);
+		}
+		i++;
+	}
+	return(1);
+}
+
+unsigned long loops_per_sec = 1;
+
+static void calibrate_delay(void)
+{
+	int ticks;
+
+	printk("Calibrating delay loop.. ");
+	while (loops_per_sec <<= 1) {
+		ticks = jiffies;
+		__delay(loops_per_sec);
+		ticks = jiffies - ticks;
+		if (ticks >= HZ) {
+			__asm__("mull %1 ; divl %2"
+				:"=a" (loops_per_sec)
+				:"d" (HZ),
+				 "r" (ticks),
+				 "0" (loops_per_sec)
+				:"dx");
+			printk("ok - %d.%02d BogoMips (tm)\n",
+				loops_per_sec/500000,
+				(loops_per_sec/5000) % 100);
+			return;
+		}
+	}
+	printk("failed\n");
+}
+	
 
 /*
  * This is a simple kernel command line parsing function: it parses
@@ -176,6 +256,8 @@ static char command_line[80] = { 0, };
 static void parse_options(char *line)
 {
 	char *next;
+	char *devnames[] = { "hda", "hdb", "sda", "sdb", "sdc", "sdd", "sde", "fd", NULL };
+	int devnums[]    = { 0x300, 0x340, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0};
 	int args, envs;
 
 	if (!*line)
@@ -190,25 +272,31 @@ static void parse_options(char *line)
 		 * check for kernel options first..
 		 */
 		if (!strncmp(line,"root=",5)) {
-			ROOT_DEV = simple_strtoul(line+5,NULL,16);
-			continue;
-		}
-		if (!strcmp(line,"ro")) {
+			int n;
+			line += 5;
+			if (strncmp(line,"/dev/",5)) {
+				ROOT_DEV = simple_strtoul(line,NULL,16);
+				continue;
+			}
+			line += 5;
+			for (n = 0 ; devnames[n] ; n++) {
+				int len = strlen(devnames[n]);
+				if (!strncmp(line,devnames[n],len)) {
+					ROOT_DEV = devnums[n]+simple_strtoul(line+len,NULL,16);
+					break;
+				}
+			}
+		} else if (!strcmp(line,"ro"))
 			root_mountflags |= MS_RDONLY;
-			continue;
-		}
-		if (!strcmp(line,"rw")) {
+		else if (!strcmp(line,"rw"))
 			root_mountflags &= ~MS_RDONLY;
-			continue;
-		}
-		if (!strcmp(line,"no387")) {
+		else if (!strcmp(line,"no387")) {
 			hard_math = 0;
 			__asm__("movl %%cr0,%%eax\n\t"
-				"andl $0xFFFFFFF9,%%eax\n\t"
-				"orl $0x4,%%eax\n\t"
-				"movl %%eax,%%cr0\n\t" ::: "ax");
-			continue;
-		}
+				"orl $0xE,%%eax\n\t"
+				"movl %%eax,%%cr0\n\t" : : : "ax");
+		} else
+			checksetup(line);
 		/*
 		 * Then check if it's an environment variable or
 		 * an option.
@@ -238,7 +326,7 @@ static void copro_timeout(void)
 	outb_p(0,0xf0);
 }
 
-void start_kernel(void)
+extern "C" void start_kernel(void)
 {
 /*
  * Interrupts are still disabled. Do necessary setups, then
@@ -294,6 +382,7 @@ void start_kernel(void)
 	ipc_init();
 #endif
 	sti();
+	calibrate_delay();
 	/*
 	 * check if exception 16 works correctly.. This is truly evil
 	 * code: it disables the high 8 interrupts to make sure that
@@ -306,18 +395,18 @@ void start_kernel(void)
 	if (hard_math) {
 		unsigned short control_word;
 
+		printk("Checking 386/387 coupling... ");
 		timer_table[COPRO_TIMER].expires = jiffies+50;
 		timer_table[COPRO_TIMER].fn = copro_timeout;
 		timer_active |= 1<<COPRO_TIMER;
-		printk("You have a bad 386/387 coupling.\r");
 		__asm__("clts ; fninit ; fnstcw %0 ; fwait":"=m" (*&control_word));
 		control_word &= 0xffc0;
-		__asm__("fldcw %0 ; fwait"::"m" (*&control_word));
+		__asm__("fldcw %0 ; fwait": :"m" (*&control_word));
 		outb_p(inb_p(0x21) | (1 << 2), 0x21);
 		__asm__("fldz ; fld1 ; fdiv %st,%st(1) ; fwait");
 		timer_active &= ~(1<<COPRO_TIMER);
 		if (!fpu_error)
-			printk("Math coprocessor using %s error reporting.\n",
+			printk("Ok, fpu using %s error reporting.\n",
 				ignore_irq13?"exception 16":"irq13");
 	}
 	move_to_user_mode();
@@ -365,9 +454,9 @@ void init(void)
 	if (!(pid=fork())) {
 		close(0);
 		if (open("/etc/rc",O_RDONLY,0))
-			_exit(1);
+			exit(1);
 		execve("/bin/sh",argv_rc,envp_rc);
-		_exit(2);
+		exit(2);
 	}
 	if (pid>0)
 		while (pid != wait(&i))
@@ -383,7 +472,7 @@ void init(void)
 			(void) open("/dev/tty1",O_RDWR,0);
 			(void) dup(0);
 			(void) dup(0);
-			_exit(execve("/bin/sh",argv,envp));
+			exit(execve("/bin/sh",argv,envp));
 		}
 		while (1)
 			if (pid == wait(&i))
@@ -391,5 +480,5 @@ void init(void)
 		printf("\n\rchild %d died with code %04x\n\r",pid,i);
 		sync();
 	}
-	_exit(0);	/* NOTE! _exit, not exit() */
+	exit(0);
 }

@@ -45,7 +45,7 @@ static struct file_operations ext2_file_operations = {
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
 	ext2_ioctl,		/* ioctl - default */
-	NULL,			/* mmap */
+	generic_mmap,  		/* mmap */
 	NULL,			/* no special open is needed */
 	NULL,			/* release */
 	ext2_sync_file		/* fsync */
@@ -79,7 +79,8 @@ struct inode_operations ext2_file_inode_operations = {
 	struct buffer_head * bhreq[NBUF];
 	struct buffer_head * buflist[NBUF];
 	struct super_block * sb;
-	unsigned int size, err;
+	unsigned int size;
+	int err;
 
 	if (!inode) {
 		printk ("ext2_file_read: inode = NULL\n");
@@ -107,7 +108,8 @@ struct inode_operations ext2_file_inode_operations = {
 	blocks = (left + offset + sb->s_blocksize - 1) >> EXT2_BLOCK_SIZE_BITS(sb);
 	bhb = bhe = buflist;
 	if (filp->f_reada) {
-		blocks += read_ahead[MAJOR(inode->i_dev)] / (BLOCK_SIZE >> 9);
+		blocks += read_ahead[MAJOR(inode->i_dev)] >>
+			(EXT2_BLOCK_SIZE_BITS(sb) - 9);
 		if (block + blocks > size)
 			blocks = size - block;
 	}

@@ -93,10 +93,11 @@ int ext2_check_dir_entry (char * function, struct inode * dir,
 static int ext2_readdir (struct inode * inode, struct file * filp,
 			 struct dirent * dirent, int count)
 {
-	unsigned int offset, i, err;
+	unsigned int offset, i;
 	struct buffer_head * bh;
 	struct ext2_dir_entry * de;
 	struct super_block * sb;
+	int err;
 	
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;

@@ -235,7 +235,7 @@ void ext2_free_inode (struct inode * inode)
 		printk ("block_group = %d\n", block_group);
 		panic ("ext2_free_inode: Unable to load bitmap");
 	}
-	if (clear_bit (bit, bh->b_data))
+	if (!clear_bit (bit, bh->b_data))
 		printk ("ext2_free_inode (%04x:%d): bit already cleared\n",
 			sb->s_dev, inode->i_ino);
 	else {
@@ -438,6 +438,7 @@ repeat:
 	es->s_free_inodes_count --;
 	sb->u.ext2_sb.s_sbh->b_dirt = 1;
 	sb->s_dirt = 1;
+	inode->i_mode = mode;
 	inode->i_sb = sb;
 	inode->i_count = 1;
 	inode->i_nlink = 1;

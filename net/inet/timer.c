@@ -89,7 +89,7 @@ reset_timer(struct timer *t)
 						t, t->when, jiffies));
   if (t == NULL) {
 	printk("*** reset timer NULL timer\n");
-	__asm__ ("\t int $3\n"::);
+	__asm__ ("\t int $3\n");
   }
   if (t->running) {
         DPRINTF((DBG_TMR, "t->running has value of %d, len %d\n",
@@ -109,6 +109,7 @@ reset_timer(struct timer *t)
         t->len = 3;		/* happen (negative values ?) - don't ask me why ! -FB */
   
   delete_timer(t);
+  cli();
   t->when = timer_seq + t->len;
 
   /* First see if it goes at the beginning. */
@@ -234,24 +235,34 @@ net_timer(void)
 			 * to check for that.
 			 */
 			if (sk->send_head != NULL) {
-				if (before(jiffies, sk->send_head->when +
-							sk->rtt)) {
-					sk->time_wait.len = sk->rtt;
+				if (jiffies < (sk->send_head->when +
+					       backoff(sk->backoff) *
+					       (2 * sk->mdev + sk->rtt))) {
+/* printk("timer: not yet\n"); */
+					sk->time_wait.len = 
+					  (sk->send_head->when +
+					   backoff(sk->backoff) *
+					   (2 * sk->mdev + sk->rtt)) - jiffies;
 					sk->timeout = TIME_WRITE;
 					reset_timer(&sk->time_wait);
 					release_sock(sk);
 					break;
 				}
+/* printk("timer: seq %d retrans %d out %d cong %d\n", sk->send_head->h.seq,
+       sk->retransmits, sk->packets_out, sk->cong_window); */
 				DPRINTF((DBG_TMR, "retransmitting.\n"));
 				sk->prot->retransmit(sk, 0);
-
-				if (sk->retransmits > TCP_RETR1) {
+				if ((sk->state == TCP_ESTABLISHED &&
+				     sk->retransmits != 0 &&
+				     (sk->retransmits & 7) == 0) ||
+				    (sk->state != TCP_ESTABLISHED &&
+				     sk->retransmits > TCP_RETR1)) {
 					DPRINTF((DBG_TMR, "timer.c TIME_WRITE time-out 1\n"));
 					arp_destroy(sk->daddr);
 					ip_route_check(sk->daddr);
 				}
-
-				if (sk->retransmits > TCP_RETR2) {
+				if (sk->state != TCP_ESTABLISHED &&
+				    sk->retransmits > TCP_RETR2) {
 					DPRINTF((DBG_TMR, "timer.c TIME_WRITE time-out 2\n"));
 					sk->err = ETIMEDOUT;
 					if (sk->state == TCP_FIN_WAIT1 ||
@@ -280,14 +291,19 @@ net_timer(void)
 				sk->state = TCP_CLOSE;
 			}
 
-			if (sk->retransmits > TCP_RETR1) {
+			if ((sk->state == TCP_ESTABLISHED &&
+			     sk->retransmits != 0 &&
+			     (sk->retransmits & 7) == 0) ||
+			    (sk->state != TCP_ESTABLISHED &&
+			     sk->retransmits > TCP_RETR1)) {
 				DPRINTF((DBG_TMR, "timer.c TIME_KEEPOPEN time-out 1\n"));
 				arp_destroy(sk->daddr);
 				ip_route_check(sk->daddr);
 				release_sock(sk);
 				break;
 			}
-			if (sk->retransmits > TCP_RETR2) {
+			if (sk->state != TCP_ESTABLISHED &&
+			    sk->retransmits > TCP_RETR2) {
 				DPRINTF((DBG_TMR, "timer.c TIME_KEEPOPEN time-out 2\n"));
 				arp_destroy (sk->daddr);
 				sk->err = ETIMEDOUT;

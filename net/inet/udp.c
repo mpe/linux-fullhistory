@@ -210,7 +210,7 @@ udp_send(struct sock *sk, struct sockaddr_in *sin,
 
   /* Allocate a copy of the packet. */
   size = sizeof(struct sk_buff) + sk->prot->max_header + len;
-  skb = sk->prot->wmalloc(sk, size, 0, GFP_KERNEL);
+  skb = (struct sk_buff *) sk->prot->wmalloc(sk, size, 0, GFP_KERNEL);
   if (skb == NULL) return(-ENOMEM);
 
   skb->lock     = 0;
@@ -327,7 +327,7 @@ udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 
 			if (!suser()) return(-EPERM);
 			verify_area(VERIFY_WRITE, (void *)arg, sizeof(int));
-			val = get_fs_long((void *)arg);
+			val = get_fs_long((int *)arg);
 			switch(val) {
 				case 0:
 					inet_debug = 0;

@@ -283,7 +283,8 @@ int xiafs_new_zone(struct super_block * sb, u_long prev_addr)
 void xiafs_free_inode(struct inode * inode)
 {
     struct buffer_head * bh;
-    int tmp;
+    struct super_block * sb;
+    unsigned long ino;
 
     if (!inode)
         return;
@@ -292,16 +293,17 @@ void xiafs_free_inode(struct inode * inode)
         printk("XIA-FS: bad inode (%s %d)\n", WHERE_ERR);
 	return;
     }
-    bh = get_imap_zone(inode->i_sb, inode->i_ino, NULL);
+    sb = inode->i_sb;
+    ino = inode->i_ino;
+    bh = get_imap_zone(sb, ino, NULL);
     if (!bh)
 	return;
-    tmp = inode->i_ino & (XIAFS_BITS_PER_Z(inode->i_sb)-1);
-    if (clear_bit(tmp, bh->b_data))
-        printk("XIA-FS: bit %d (0x%x) already cleared (%s %d)\n",
-	       inode->i_ino, inode->i_ino, WHERE_ERR);
-    bh->b_dirt = 1;
-    xiafs_unlock_super(inode->i_sb, inode->i_sb->u.xiafs_sb.s_imap_cached);
     clear_inode(inode);
+    if (clear_bit(ino & (XIAFS_BITS_PER_Z(sb)-1), bh->b_data))
+        printk("XIA-FS: bit %d (0x%x) already cleared (%s %d)\n",
+		ino, ino, WHERE_ERR);
+    bh->b_dirt = 1;
+    xiafs_unlock_super(sb, sb->u.xiafs_sb.s_imap_cached);
 }
 
 struct inode * xiafs_new_inode(struct inode * dir)

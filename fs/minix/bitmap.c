@@ -18,7 +18,8 @@
 __asm__("cld\n\t" \
 	"rep\n\t" \
 	"stosl" \
-	::"a" (0),"c" (BLOCK_SIZE/4),"D" ((long) (addr)):"cx","di")
+	: \
+	:"a" (0),"c" (BLOCK_SIZE/4),"D" ((long) (addr)):"cx","di")
 
 #define find_first_zero(addr) ({ \
 int __res; \
@@ -90,7 +91,7 @@ void minix_free_block(struct super_block * sb, int block)
 		printk("minix_free_block: nonexistent bitmap buffer\n");
 		return;
 	}
-	if (clear_bit(bit,bh->b_data))
+	if (!clear_bit(bit,bh->b_data))
 		printk("free_block (%04x:%d): bit already cleared\n",sb->s_dev,block);
 	bh->b_dirt = 1;
 	return;
@@ -142,6 +143,7 @@ unsigned long minix_count_free_blocks(struct super_block *sb)
 void minix_free_inode(struct inode * inode)
 {
 	struct buffer_head * bh;
+	unsigned long ino;
 
 	if (!inode)
 		return;
@@ -165,14 +167,15 @@ void minix_free_inode(struct inode * inode)
 		printk("free_inode: inode 0 or nonexistent inode\n");
 		return;
 	}
-	if (!(bh=inode->i_sb->u.minix_sb.s_imap[inode->i_ino>>13])) {
+	ino = inode->i_ino;
+	if (!(bh=inode->i_sb->u.minix_sb.s_imap[ino >> 13])) {
 		printk("free_inode: nonexistent imap in superblock\n");
 		return;
 	}
-	if (clear_bit(inode->i_ino&8191,bh->b_data))
-		printk("free_inode: bit %d already cleared.\n",inode->i_ino);
-	bh->b_dirt = 1;
 	clear_inode(inode);
+	if (!clear_bit(ino & 8191, bh->b_data))
+		printk("free_inode: bit %d already cleared.\n",ino);
+	bh->b_dirt = 1;
 }
 
 struct inode * minix_new_inode(const struct inode * dir)

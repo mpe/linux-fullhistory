@@ -785,27 +785,27 @@ int ext2_link (struct inode * oldinode, struct inode * dir,
 	return 0;
 }
 
-static int subdir (struct inode * new, struct inode * old)
+static int subdir (struct inode * new_inode, struct inode * old_inode)
 {
 	int ino;
 	int result;
 
-	new->i_count ++;
+	new_inode->i_count ++;
 	result = 0;
 	for (;;) {
-		if (new == old) {
+		if (new_inode == old_inode) {
 			result = 1;
 			break;
 		}
-		if (new->i_dev != old->i_dev)
+		if (new_inode->i_dev != old_inode->i_dev)
 			break;
-		ino = new->i_ino;
-		if (ext2_lookup (new, "..", 2, &new))
+		ino = new_inode->i_ino;
+		if (ext2_lookup (new_inode, "..", 2, &new_inode))
 			break;
-		if (new->i_ino == ino)
+		if (new_inode->i_ino == ino)
 			break;
 	}
-	iput (new);
+	iput (new_inode);
 	return result;
 }
 

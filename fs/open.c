@@ -21,12 +21,12 @@
 
 extern void fcntl_remove_locks(struct task_struct *, struct file *);
 
-int sys_ustat(int dev, struct ustat * ubuf)
+extern "C" int sys_ustat(int dev, struct ustat * ubuf)
 {
 	return -ENOSYS;
 }
 
-int sys_statfs(const char * path, struct statfs * buf)
+extern "C" int sys_statfs(const char * path, struct statfs * buf)
 {
 	struct inode * inode;
 	int error;
@@ -46,7 +46,7 @@ int sys_statfs(const char * path, struct statfs * buf)
 	return 0;
 }
 
-int sys_fstatfs(unsigned int fd, struct statfs * buf)
+extern "C" int sys_fstatfs(unsigned int fd, struct statfs * buf)
 {
 	struct inode * inode;
 	struct file * file;
@@ -65,7 +65,7 @@ int sys_fstatfs(unsigned int fd, struct statfs * buf)
 	return 0;
 }
 
-int sys_truncate(const char * path, unsigned int length)
+extern "C" int sys_truncate(const char * path, unsigned int length)
 {
 	struct inode * inode;
 	int error;
@@ -91,7 +91,7 @@ int sys_truncate(const char * path, unsigned int length)
 	return error;
 }
 
-int sys_ftruncate(unsigned int fd, unsigned int length)
+extern "C" int sys_ftruncate(unsigned int fd, unsigned int length)
 {
 	struct inode * inode;
 	struct file * file;
@@ -114,7 +114,7 @@ int sys_ftruncate(unsigned int fd, unsigned int length)
  * must be owner or have write permission.
  * Else, update from *times, must be owner or super user.
  */
-int sys_utime(char * filename, struct utimbuf * times)
+extern "C" int sys_utime(char * filename, struct utimbuf * times)
 {
 	struct inode * inode;
 	long actime,modtime;
@@ -155,7 +155,7 @@ int sys_utime(char * filename, struct utimbuf * times)
  * XXX we should use the real ids for checking _all_ components of the
  * path.  Now we only use them for the final compenent of the path.
  */
-int sys_access(const char * filename,int mode)
+extern "C" int sys_access(const char * filename,int mode)
 {
 	struct inode * inode;
 	int res, i_mode;
@@ -189,7 +189,7 @@ int sys_access(const char * filename,int mode)
 	return -EACCES;
 }
 
-int sys_chdir(const char * filename)
+extern "C" int sys_chdir(const char * filename)
 {
 	struct inode * inode;
 	int error;
@@ -210,7 +210,7 @@ int sys_chdir(const char * filename)
 	return (0);
 }
 
-int sys_chroot(const char * filename)
+extern "C" int sys_chroot(const char * filename)
 {
 	struct inode * inode;
 	int error;
@@ -231,7 +231,7 @@ int sys_chroot(const char * filename)
 	return (0);
 }
 
-int sys_fchmod(unsigned int fd, mode_t mode)
+extern "C" int sys_fchmod(unsigned int fd, mode_t mode)
 {
 	struct inode * inode;
 	struct file * file;
@@ -252,7 +252,7 @@ int sys_fchmod(unsigned int fd, mode_t mode)
 	return notify_change(NOTIFY_MODE, inode);
 }
 
-int sys_chmod(const char * filename, mode_t mode)
+extern "C" int sys_chmod(const char * filename, mode_t mode)
 {
 	struct inode * inode;
 	int error;
@@ -278,7 +278,7 @@ int sys_chmod(const char * filename, mode_t mode)
 	return error;
 }
 
-int sys_fchown(unsigned int fd, uid_t user, gid_t group)
+extern "C" int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 {
 	struct inode * inode;
 	struct file * file;
@@ -305,7 +305,7 @@ int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	return -EPERM;
 }
 
-int sys_chown(const char * filename, uid_t user, gid_t group)
+extern "C" int sys_chown(const char * filename, uid_t user, gid_t group)
 {
 	struct inode * inode;
 	int error;
@@ -350,7 +350,7 @@ int sys_chown(const char * filename, uid_t user, gid_t group)
  * for the internal routines (ie open_namei()/follow_link() etc). 00 is
  * used by symlinks.
  */
-int sys_open(const char * filename,int flags,int mode)
+extern "C" int sys_open(const char * filename,int flags,int mode)
 {
 	struct inode * inode;
 	struct file * f;
@@ -414,7 +414,7 @@ int sys_open(const char * filename,int flags,int mode)
 	return (fd);
 }
 
-int sys_creat(const char * pathname, int mode)
+extern "C" int sys_creat(const char * pathname, int mode)
 {
 	return sys_open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
@@ -442,7 +442,7 @@ int close_fp(struct file *filp)
 	return 0;
 }
 
-int sys_close(unsigned int fd)
+extern "C" int sys_close(unsigned int fd)
 {	
 	struct file * filp;
 
@@ -459,7 +459,7 @@ int sys_close(unsigned int fd)
  * This routine simulates a hangup on the tty, to arrange that users
  * are given clean terminals at login time.
  */
-int sys_vhangup(void)
+extern "C" int sys_vhangup(void)
 {
 	struct tty_struct *tty;
 

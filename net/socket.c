@@ -65,8 +65,6 @@ static struct proto_ops *pops[NPROTO];
 static int net_debug = 0;
 
 
-extern int sys_close(int fd);
-
 #ifdef SOCK_DEBUG
 /* Module debugging. */
 static void
@@ -374,7 +372,8 @@ sock_awaitconn(struct socket *mysock, struct socket *servsock)
   wake_up(servsock->wait);
   if (mysock->state != SS_CONNECTED) {
 	interruptible_sleep_on(mysock->wait);
-	if (mysock->state != SS_CONNECTED) {
+	if (mysock->state != SS_CONNECTED &&
+	    mysock->state != SS_DISCONNECTING) {
 		/*
 		 * if we're not connected we could have been
 		 * 1) interrupted, so we need to remove ourselves
@@ -807,7 +806,7 @@ sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
  * we have this level of indirection. Not a lot of overhead, since more of
  * the work is done via read/write/select directly.
  */
-int
+extern "C" int
 sys_socketcall(int call, unsigned long *args)
 {
   switch(call) {
@@ -909,7 +908,7 @@ net_ioctl(unsigned int cmd, unsigned long arg)
   switch(cmd) {
 	case DDIOCSDBG:
 		verify_area(VERIFY_WRITE, (void *)arg, sizeof(int));
-		net_debug = get_fs_long((void *)arg);
+		net_debug = get_fs_long((int *)arg);
 		if (net_debug != 0 && net_debug != 1) {
 			net_debug = 0;
 			return(-EINVAL);

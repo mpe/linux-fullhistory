@@ -388,7 +388,7 @@ int wd7000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
  	if (SCpnt->use_sg > WD7000_SG)
  	    panic("WD7000: requesting too many scatterblocks\n");
 #endif
- 	SCpnt->host_scribble = scsi_malloc(WD7000_SCRIBBLE);
+ 	SCpnt->host_scribble = (unsigned char *) scsi_malloc(WD7000_SCRIBBLE);
 	sgb = (Sgb *) SCpnt->host_scribble;
  	if (sgb == NULL)
             panic("wd7000_queuecommand: scsi_malloc() failed.\n");
@@ -597,16 +597,16 @@ int wd7000_reset(void)
 }
 
 
-int wd7000_biosparam(int size, int dev, int* info)
+int wd7000_biosparam(int size, int dev, int* ip)
 /*
  *  This is borrowed directly from aha1542.c, but my disks are organized
  *   this way, so I think it will work OK.
  */
 {
-  info[0] = 64;
-  info[1] = 32;
-  info[2] = (size + 2047) >> 11;
-/*  if (info[2] >= 1024) info[2] = 1024; */
+  ip[0] = 64;
+  ip[1] = 32;
+  ip[2] = (size + 2047) >> 11;
+/*  if (ip[2] >= 1024) ip[2] = 1024; */
   return 0;
 }
 

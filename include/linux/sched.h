@@ -12,6 +12,7 @@
 #define HZ 100
 
 #include <linux/tasks.h>
+#include <asm/system.h>
 
 /*
  * User space process size: 3GB. This is hardcoded into a few places,
@@ -75,51 +76,56 @@ extern unsigned long avenrun[];		/* Load averages */
 #define NULL ((void *) 0)
 #endif
 
-#define MAX_SHARED_LIBS 16
+#ifdef __KERNEL__
 
 extern void sched_init(void);
 extern void show_state(void);
-extern void schedule(void);
 extern void trap_init(void);
 extern void panic(const char * str);
 
-typedef int (*fn_ptr)();
+extern "C" void schedule(void);
+
+#endif /* __KERNEL__ */
+
+struct i387_hard_struct {
+	long	cwd;
+	long	swd;
+	long	twd;
+	long	fip;
+	long	fcs;
+	long	foo;
+	long	fos;
+	long	st_space[20];	/* 8*10 bytes for each FP-reg = 80 bytes */
+};
+
+struct i387_soft_struct {
+	long	cwd;
+	long	swd;
+	long	twd;
+	long	fip;
+	long	fcs;
+	long	foo;
+	long	fos;
+	long    top;
+	struct fpu_reg	regs[8];	/* 8*16 bytes for each FP-reg = 128 bytes */
+	unsigned char	lookahead;
+	struct info	*info;
+	unsigned long	entry_eip;
+};
 
 union i387_union {
-	struct i387_hard_struct {
-		long	cwd;
-		long	swd;
-		long	twd;
-		long	fip;
-		long	fcs;
-		long	foo;
-		long	fos;
-		long	st_space[20];	/* 8*10 bytes for each FP-reg = 80 bytes */
-	} hard;
-	struct i387_soft_struct {
-		long	cwd;
-		long	swd;
-		long	twd;
-		long	fip;
-		long	fcs;
-		long	foo;
-		long	fos;
-		long    top;
-		struct fpu_reg	regs[8];	/* 8*16 bytes for each FP-reg = 128 bytes */
-		unsigned char	lookahead;
-		struct info	*info;
-		unsigned long	entry_eip;
-	} soft;
+	struct i387_hard_struct hard;
+	struct i387_soft_struct soft;
 };
 
 struct tss_struct {
-	unsigned long	back_link;	/* 16 high bits zero */
+	unsigned short	back_link,__blh;
 	unsigned long	esp0;
-	unsigned long	ss0;		/* 16 high bits zero */
+	unsigned short	ss0,__ss0h;
 	unsigned long	esp1;
-	unsigned long	ss1;		/* 16 high bits zero */
+	unsigned short	ss1,__ss1h;
 	unsigned long	esp2;
-	unsigned long	ss2;		/* 16 high bits zero */
+	unsigned short	ss2,__ss2h;
 	unsigned long	cr3;
 	unsigned long	eip;
 	unsigned long	eflags;
@@ -128,15 +134,16 @@ struct tss_struct {
 	unsigned long	ebp;
 	unsigned long	esi;
 	unsigned long	edi;
-	unsigned long	es;		/* 16 high bits zero */
-	unsigned long	cs;		/* 16 high bits zero */
-	unsigned long	ss;		/* 16 high bits zero */
-	unsigned long	ds;		/* 16 high bits zero */
-	unsigned long	fs;		/* 16 high bits zero */
-	unsigned long	gs;		/* 16 high bits zero */
-	unsigned long	ldt;		/* 16 high bits zero */
-	unsigned long	trace_bitmap;	/* bits: trace 0, bitmap 16-31 */
-	unsigned long	io_bitmap[IO_BITMAP_SIZE];
+	unsigned short	es, __esh;
+	unsigned short	cs, __csh;
+	unsigned short	ss, __ssh;
+	unsigned short	ds, __dsh;
+	unsigned short	fs, __fsh;
+	unsigned short	gs, __gsh;
+	unsigned short	ldt, __ldth;
+	unsigned short	trace, bitmap;
+	unsigned long	io_bitmap[IO_BITMAP_SIZE+1];
+	unsigned long	tr;
 	union i387_union i387;
 };
 
@@ -150,13 +157,15 @@ struct task_struct {
 	unsigned long flags;	/* per process flags, defined below */
 	int errno;
 /* various fields */
+	struct task_struct *next_task, *prev_task;
 	struct sigaction sigaction[32];
 	unsigned long saved_kernel_stack;
 	unsigned long kernel_stack_page;
 	int exit_code, exit_signal;
+	int elf_executable:1;
 	int dumpable:1;
 	int swappable:1;
-	unsigned long start_code,end_code,end_data,brk,start_stack;
+	unsigned long start_code,end_code,end_data,brk,start_stack,start_mmap;
 	unsigned long arg_start, arg_end, env_start, env_end;
 	long pid,pgrp,session,leader;
 	int	groups[NGROUPS];
@@ -195,13 +204,6 @@ struct task_struct {
 	struct vm_area_struct * mmap;
 	struct shm_desc *shm;
 	struct sem_undo *semun;
-	struct {
-		struct inode * library;
-		unsigned long start;
-		unsigned long length;
-		unsigned long bss;
-	} libraries[MAX_SHARED_LIBS];
-	int numlibraries;
 	struct file * filp[NR_OPEN];
 	fd_set close_on_exec;
 /* ldt for this task - not currently used */
@@ -231,9 +233,10 @@ struct task_struct {
  */
 #define INIT_TASK \
 /* state etc */	{ 0,15,15,0,0,0,0, \
+/* schedlink */	&init_task,&init_task, \
 /* signals */	{{ 0, },}, \
 /* stack */	0,0, \
-/* ec,brk... */	0,0,0,0,0,0,0,0,0, \
+/* ec,brk... */	0,0,0,0,0,0,0,0,0,0,0, \
 /* argv.. */	0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \
@@ -250,21 +253,26 @@ struct task_struct {
 /* vm86_info */	NULL, 0, \
 /* fs info */	0,-1,0022,NULL,NULL,NULL,NULL, \
 /* ipc */	NULL, NULL, \
-/* libraries */	{ { NULL, 0, 0, 0}, }, 0, \
 /* filp */	{NULL,}, \
 /* cloe */	{{ 0, }}, \
 		{ \
 /* ldt */		{0,0}, \
 		}, \
-/*tss*/	{0,sizeof(init_kernel_stack) + (long) &init_kernel_stack, \
-	 KERNEL_DS,0,0,0,0,(long) &swapper_pg_dir,\
-	 0,0,0,0,0,0,0,0, \
-	 0,0,USER_DS,USER_DS,USER_DS,USER_DS,USER_DS,USER_DS, \
-	 _LDT(0),0x80000000,{0xffffffff}, \
-		{ { 0, }, } \
+/*tss*/	{0,0, \
+	 sizeof(init_kernel_stack) + (long) &init_kernel_stack, KERNEL_DS, 0, \
+	 0,0,0,0,0,0, \
+	 (long) &swapper_pg_dir, \
+	 0,0,0,0,0,0,0,0,0,0, \
+	 USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0, \
+	 _LDT(0),0, \
+	 0, 0x8000, \
+/* ioperm */ 	{0xffffffff, }, \
+	 _TSS(0), \
+/* 387 state */	{ { 0, }, } \
 	} \
 }
 
+extern struct task_struct init_task;
 extern struct task_struct *task[NR_TASKS];
 extern struct task_struct *last_task_used_math;
 extern struct task_struct *current;
@@ -288,7 +296,7 @@ extern int in_group_p(gid_t grp);
 
 extern int request_irq(unsigned int irq,void (*handler)(int));
 extern void free_irq(unsigned int irq);
-extern int irqaction(unsigned int irq,struct sigaction * new);
+extern int irqaction(unsigned int irq,struct sigaction * sa);
 
 /*
  * Entry into gdt where to find first TSS. GDT layout:
@@ -307,8 +315,8 @@ extern int irqaction(unsigned int irq,struct sigaction * new);
 #define FIRST_LDT_ENTRY (FIRST_TSS_ENTRY+1)
 #define _TSS(n) ((((unsigned long) n)<<4)+(FIRST_TSS_ENTRY<<3))
 #define _LDT(n) ((((unsigned long) n)<<4)+(FIRST_LDT_ENTRY<<3))
-#define load_TR(n) __asm__("ltr %%ax"::"a" (_TSS(n)))
-#define load_ldt(n) __asm__("lldt %%ax"::"a" (_LDT(n)))
+#define load_TR(n) __asm__("ltr %%ax": /* no output */ :"a" (_TSS(n)))
+#define load_ldt(n) __asm__("lldt %%ax": /* no output */ :"a" (_LDT(n)))
 #define store_TR(n) \
 __asm__("str %%ax\n\t" \
 	"subl %2,%%eax\n\t" \
@@ -321,11 +329,9 @@ __asm__("str %%ax\n\t" \
  * This also clears the TS-flag if the task we switched to has used
  * tha math co-processor latest.
  */
-#define switch_to(n) {\
-struct {long a,b;} __tmp; \
+#define switch_to(tsk) \
 __asm__("cmpl %%ecx,_current\n\t" \
 	"je 1f\n\t" \
-	"movw %%dx,%1\n\t" \
 	"cli\n\t" \
 	"xchgl %%ecx,_current\n\t" \
 	"ljmp %0\n\t" \
@@ -334,10 +340,10 @@ __asm__("cmpl %%ecx,_current\n\t" \
 	"jne 1f\n\t" \
 	"clts\n" \
 	"1:" \
-	::"m" (*&__tmp.a),"m" (*&__tmp.b), \
-	"d" (_TSS(n)),"c" ((long) task[n]) \
-	:"cx"); \
-}
+	: /* no output */ \
+	:"m" (*(((char *)&tsk->tss.tr)-4)), \
+	 "c" (tsk) \
+	:"cx")
 
 #define PAGE_ALIGN(n) (((n)+0xfff)&0xfffff000)
 
@@ -346,10 +352,11 @@ __asm__("movw %%dx,%0\n\t" \
 	"rorl $16,%%edx\n\t" \
 	"movb %%dl,%1\n\t" \
 	"movb %%dh,%2" \
-	::"m" (*((addr)+2)), \
-	  "m" (*((addr)+4)), \
-	  "m" (*((addr)+7)), \
-	  "d" (base) \
+	: /* no output */ \
+	:"m" (*((addr)+2)), \
+	 "m" (*((addr)+4)), \
+	 "m" (*((addr)+7)), \
+	 "d" (base) \
 	:"dx")
 
 #define _set_limit(addr,limit) \
@@ -359,9 +366,10 @@ __asm__("movw %%dx,%0\n\t" \
 	"andb $0xf0,%%dh\n\t" \
 	"orb %%dh,%%dl\n\t" \
 	"movb %%dl,%1" \
-	::"m" (*(addr)), \
-	  "m" (*((addr)+6)), \
-	  "d" (limit) \
+	: /* no output */ \
+	:"m" (*(addr)), \
+	 "m" (*((addr)+6)), \
+	 "d" (limit) \
 	:"dx")
 
 #define set_base(ldt,base) _set_base( ((char *)&(ldt)) , base )
@@ -384,7 +392,8 @@ extern inline void add_wait_queue(struct wait_queue ** p, struct wait_queue * wa
 		printk("add_wait_queue (%08x): wait->next = %08x\n",pc,wait->next);
 	}
 #endif
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	save_flags(flags);
+	cli();
 	if (!*p) {
 		wait->next = wait;
 		*p = wait;
@@ -392,7 +401,7 @@ extern inline void add_wait_queue(struct wait_queue ** p, struct wait_queue * wa
 		wait->next = (*p)->next;
 		(*p)->next = wait;
 	}
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	restore_flags(flags);
 }
 
 extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
@@ -403,7 +412,8 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 	unsigned long ok = 0;
 #endif
 
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	save_flags(flags);
+	cli();
 	if ((*p == wait) &&
 #ifdef DEBUG
 	    (ok = 1) &&
@@ -422,7 +432,7 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 		tmp->next = wait->next;
 	}
 	wait->next = NULL;
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	restore_flags(flags);
 #ifdef DEBUG
 	if (!ok) {
 		printk("removed wait_queue not on list.\n");
@@ -474,6 +484,8 @@ static inline unsigned long get_limit(unsigned long segment)
 }
 
 #define REMOVE_LINKS(p) \
+	(p)->next_task->prev_task = (p)->prev_task; \
+	(p)->prev_task->next_task = (p)->next_task; \
 	if ((p)->p_osptr) \
 		(p)->p_osptr->p_ysptr = (p)->p_ysptr; \
 	if ((p)->p_ysptr) \
@@ -482,6 +494,10 @@ static inline unsigned long get_limit(unsigned long segment)
 		(p)->p_pptr->p_cptr = (p)->p_osptr
 
 #define SET_LINKS(p) \
+	(p)->next_task = &init_task; \
+	(p)->prev_task = init_task.prev_task; \
+	init_task.prev_task->next_task = (p); \
+	init_task.prev_task = (p); \
 	(p)->p_ysptr = NULL; \
 	if (((p)->p_osptr = (p)->p_pptr->p_cptr) != NULL) \
 		(p)->p_osptr->p_ysptr = p; \

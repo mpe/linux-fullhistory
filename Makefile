@@ -3,6 +3,10 @@ all:	Version zImage
 
 .EXPORT_ALL_VARIABLES:
 
+BASH = $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
+	  else if [ -x /bin/bash ]; then echo /bin/bash; \
+	  else echo sh; fi ; fi)
+
 #
 # Make "config" the default target if there is no configuration file or
 # "depend" the target if there is no top-level dependency information.
@@ -15,13 +19,6 @@ else
 CONFIGURATION = depend
 endif
 else
-CONFIGURATION = config
-endif
-
-#
-# This probably won't help at all...
-#
-ifndef CONFIG_CLUEFUL
 CONFIGURATION = config
 endif
 
@@ -53,7 +50,7 @@ SVGA_MODE=	-DSVGA_MODE=3
 # standard CFLAGS
 #
 
-CFLAGS = -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer
+CFLAGS = -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer -x c++
 
 ifdef CONFIG_M486
 CFLAGS := $(CFLAGS) -m486
@@ -105,7 +102,7 @@ lilo: $(CONFIGURE) Image
 	/etc/lilo/install
 
 config:
-	sh Configure $(OPTS) < config.in
+	$(BASH) Configure $(OPTS) < config.in
 	mv .config~ .config
 	$(MAKE) soundconf
 
@@ -119,7 +116,7 @@ tools/./version.h: tools/version.h
 
 tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.10\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.11\" > tools/version.h
 	@echo \#define UTS_VERSION \"\#`cat .version` `date`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
@@ -198,6 +195,9 @@ tools/zSystem:	boot/head.o init/main.o tools/version.o linuxsubdirs
 fs: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=fs
 
+lib: dummy
+	$(MAKE) linuxsubdirs SUBDIRS=lib
+
 mm: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=mm
 
@@ -213,11 +213,11 @@ clean:
 
 mrproper: clean
 	rm -f include/linux/autoconf.h tools/version.h
-	rm -f .version .config*
+	rm -f .version .config* config.old
 	rm -f .depend `find . -name .depend -print`
 
 backup: mrproper
-	cd .. && tar cf - linux | gzip -9 > backup.z
+	cd .. && tar cf - linux | gzip -9 > backup.gz
 	sync
 
 depend dep:
