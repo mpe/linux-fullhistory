@@ -27,9 +27,7 @@
 #include <linux/poll.h>
 #include <linux/file.h>
 
-#include <linux/ncp.h>
 #include <linux/ncp_fs.h>
-#include <linux/ncp_fs_sb.h>
 
 #ifdef CONFIG_NCPFS_PACKET_SIGNING
 #include "ncpsign_kernel.h"

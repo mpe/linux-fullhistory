@@ -181,38 +181,6 @@ bad_page_fault(struct pt_regs *regs, unsigned long address)
 }
 
 #ifdef CONFIG_8xx
-/*
- * I need a va to pte function for the MPC8xx so I can set the cache
- * attributes on individual pages used by the Communication Processor
- * Module.
- */
-pte_t *va_to_pte(struct task_struct *tsk, unsigned long address)
-{
-        pgd_t *dir;
-        pmd_t *pmd;
-        pte_t *pte;
-        
-        dir = pgd_offset(tsk->mm, address & PAGE_MASK);
-        if (dir)
-        {
-                pmd = pmd_offset(dir, address & PAGE_MASK);
-                if (pmd && pmd_present(*pmd))
-                {
-                        pte = pte_offset(pmd, address & PAGE_MASK);
-                        if (pte && pte_present(*pte))
-                        {
-                                return(pte);
-                        }
-                } else
-                {
-                        return (0);
-                }
-        } else
-        {
-                return (0);
-        }
-        return (0);
-}
 
 unsigned long va_to_phys(unsigned long address)
 {

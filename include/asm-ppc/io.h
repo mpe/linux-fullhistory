@@ -19,11 +19,9 @@
 #define PREP_ISA_MEM_BASE 	0xc0000000
 #define PREP_PCI_DRAM_OFFSET 	0x80000000
 
-#ifdef CONFIG_MBX
-#define _IO_BASE        0x80000000
-#define _ISA_MEM_BASE   0
-#define PCI_DRAM_OFFSET 0x80000000
-#else /* CONFIG_MBX8xx */
+#ifdef CONFIG_8xx
+#include <asm/mpc8xx.h>
+#else
 #ifdef CONFIG_APUS
 #define _IO_BASE 0
 #define _ISA_MEM_BASE 0
@@ -36,7 +34,7 @@ extern unsigned long pci_dram_offset;
 #define _ISA_MEM_BASE	isa_mem_base
 #define PCI_DRAM_OFFSET	pci_dram_offset
 #endif /* CONFIG_APUS */
-#endif /* CONFIG_MBX8xx */
+#endif /* CONFIG_8xx */
 
 #define readb(addr) in_8((volatile unsigned char *)(addr))
 #define writeb(b,addr) out_8((volatile unsigned char *)(addr), (b))

@@ -1,7 +1,7 @@
 /*
  * misc.c
  *
- * $Id: misc.c,v 1.1 1999/02/17 05:00:06 cort Exp $
+ * $Id: misc.c,v 1.2 1999/09/14 05:55:29 dmalek Exp $
  * 
  * Adapted for PowerPC by Gary Thomas
  *
@@ -17,11 +17,8 @@
 #include <asm/page.h>
 #include <asm/processor.h>
 #include <asm/mmu.h>
-#ifdef CONFIG_MBX
-#include <asm/mbx.h>
-#endif
-#ifdef CONFIG_FADS
-#include <asm/fads.h>
+#ifdef CONFIG_8xx
+#include <asm/mpc8xx.h>
 #endif
 
 /*
@@ -34,40 +31,36 @@
 char *avail_ram;
 char *end_avail;
 
-/* Because of the limited amount of memory on the MBX, it presents
+/* See comment below.....
+*/
+unsigned int initrd_offset, initrd_size;
+
+/* Because of the limited amount of memory on embedded, it presents
  * loading problems.  The biggest is that we load this boot program
  * into a relatively low memory address, and the Linux kernel Bss often
  * extends into this space when it get loaded.  When the kernel starts
  * and zeros the BSS space, it also writes over the information we
  * save here and pass to the kernel (command line and board info).
- * On the MBX we grab some known memory holes to hold this information.
+ * On these boards, we grab some known memory holes to hold this information.
  */
-#if defined(CONFIG_SERIAL_CONSOLE)
-char cmd_preset[] = "console=ttyS0,9600n8";
-#else
-char cmd_preset[] = "";
-#endif
 char	cmd_buf[256];
 char	*cmd_line = cmd_buf;
 
-char	*root_string = "root=/dev/nfs";
+char	*root_string = "root=/dev/nfs rw";
 char	*nfsaddrs_string = "nfsaddrs=";
 char	*nfsroot_string = "nfsroot=";
 char	*defroot_string = "/sys/mbxroot";
+char	*ramroot_string = "root=/dev/ram";
 int	do_ipaddrs(char **cmd_cp, int echo);
 void	do_nfsroot(char **cmd_cp, char *dp);
 int	strncmp(const char * cs,const char * ct,size_t count);
 char	*strrchr(const char * s, int c);
 
-RESIDUAL hold_resid_buf;
-RESIDUAL *hold_residual = &hold_resid_buf;
+bd_t hold_resid_buf;
+bd_t *hold_residual = &hold_resid_buf;
 unsigned long initrd_start = 0, initrd_end = 0;
 char *zimage_start;
 int zimage_size;
-
-char *vidmem = (char *)0xC00B8000;
-int lines, cols;
-int orig_x, orig_y;
 
 void puts(const char *);
 void putc(const char c);
@@ -88,7 +81,7 @@ void exit()
 	while(1); 
 }
 
-/* The MBX is just the serial port.
+/* The MPC8xx is just the serial port.
 */
 tstc(void)
 {
@@ -118,7 +111,6 @@ void puts(const char *s)
                         serial_putchar('\r');
         }
 }
-
 
 void * memcpy(void * __dest, __const void * __src,
 			    int __n)
@@ -231,45 +223,43 @@ void gunzip(void *dst, int dstlen, unsigned char *src, int *lenp)
 unsigned char sanity[0x2000];
 
 unsigned long
-decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, RESIDUAL *residual)
+decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, bd_t *bp)
 {
 	int timer;
 	extern unsigned long start;
 	char *cp, ch;
-	unsigned long i, motorola_id = 0;
-	char needs_reloc = 0;
-	BATU *u;
-	BATL *l;
+	unsigned long i;
 	char	*dp;
 
-	lines = 25;
-	cols = 80;
-	orig_x = 0;
-	orig_y = 24;
+	/* These values must be variables.  If not, the compiler optimizer
+	 * will remove some code, causing the size of the code to vary
+	 * when these values are zero.  This is bad because we first
+	 * compile with these zero to determine the size and offsets
+	 * in an image, than compile again with these set to the proper
+	 * discovered value.....Ya know, we used to read these from the
+	 * header a long time ago.....
+	 */
+	initrd_offset = INITRD_OFFSET;
+	initrd_size = INITRD_SIZE;
 
 	/* Grab some space for the command line and board info.  Since
 	 * we no longer use the ELF header, but it was loaded, grab
 	 * that space.
 	 */
+#ifdef CONFIG_MBX
 	cmd_line = (char *)(load_addr - 0x10000);
-	hold_residual = (RESIDUAL *)(cmd_line + sizeof(cmd_buf));
+#else
+	cmd_line = (char *)(0x200000);
+#endif
+	hold_residual = (bd_t *)(cmd_line + sizeof(cmd_buf));
 	/* copy board data */
-	if (residual)
-		memcpy(hold_residual,residual,sizeof(bd_t));
+	if (bp)
+		memcpy(hold_residual,bp,sizeof(bd_t));
 
-	/* MBX/prep sometimes put the residual/board info at the end of mem 
-	 * assume 16M for now  -- Cort
-	 * To boot on standard MBX boards with 4M, we can't use initrd,
-	 * and we have to assume less memory.  -- Dan
+	/* Set end of memory available to us.  It is always the highest
+	 * memory address provided by the board information.
 	 */
-	if ( INITRD_OFFSET )
-		end_avail = (char *)0x01000000;
-	else
-		end_avail = (char *)0x00400000;
-
-	/* let residual data tell us it's higher */
-	if ( (unsigned long)residual > 0x00800000 )
-		end_avail = (char *)PAGE_ALIGN((unsigned long)residual);
+	end_avail = (char *)(bp->bi_memsize);
 
 	puts("loaded at:     "); puthex(load_addr);
 	puts(" "); puthex((unsigned long)(load_addr + (4*num_words))); puts("\n");
@@ -281,11 +271,11 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 		puts("\n");
 	}
 
-	if ( residual )
+	if ( bp )
 	{
-		puts("board data at: "); puthex((unsigned long)residual);
+		puts("board data at: "); puthex((unsigned long)bp);
 		puts(" ");
-		puthex((unsigned long)((unsigned long)residual + sizeof(bd_t)));
+		puthex((unsigned long)((unsigned long)bp + sizeof(bd_t)));
 		puts("\n");
 		puts("relocated to:  ");
 		puthex((unsigned long)hold_residual);
@@ -299,11 +289,11 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	zimage_start = (char *)(load_addr - 0x10000 + ZIMAGE_OFFSET);
 	zimage_size = ZIMAGE_SIZE;
 
-	if ( INITRD_OFFSET )
-		initrd_start = load_addr - 0x10000 + INITRD_OFFSET;
+	if ( initrd_offset )
+		initrd_start = load_addr - 0x10000 + initrd_offset;
 	else
 		initrd_start = 0;
-	initrd_end = INITRD_SIZE + initrd_start;
+	initrd_end = initrd_size + initrd_start;
 
 	/*
 	 * setup avail_ram - this is the first part of ram usable
@@ -321,57 +311,41 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	puts("zimage at:     "); puthex((unsigned long)zimage_start);
 	puts(" "); puthex((unsigned long)(zimage_size+zimage_start)); puts("\n");
 	/*
-	 * don't relocate the zimage if it was loaded above 16M since
-	 * things get weird if we try to relocate -- Cort
-	 * We don't relocate zimage on a base MBX board because of
-	 * insufficient memory.  In this case we don't have initrd either,
-	 * so use that as an indicator.  -- Dan
+	 * There is no reason (yet) to relocate zImage for embedded boards.
+	 * To support boot from flash rom on 8xx embedded boards, I
+	 * assume if zimage start is over 16M we are booting from flash.
+	 * In this case, avilable ram will start just above the space we
+	 * have allocated for the command buffer and board information.
 	 */
-	
-	/* Determine if we have a Motorola board */
-	needs_reloc = 0;
-	if ( (( (unsigned long)zimage_start <= 0x01000000 ) && initrd_start)
-		|| needs_reloc)
-	{
-		memcpy ((void *)PAGE_ALIGN(-PAGE_SIZE+(unsigned long)end_avail-zimage_size),
-			(void *)zimage_start, zimage_size );	
-		zimage_start = (char *)PAGE_ALIGN(-PAGE_SIZE+(unsigned long)end_avail-zimage_size);
-		end_avail = (char *)zimage_start;
-		puts("relocated to:  "); puthex((unsigned long)zimage_start);
-		puts(" ");
-		puthex((unsigned long)zimage_size+(unsigned long)zimage_start);
-		puts("\n");
-	}
+	if ((unsigned long)zimage_start > 0x01000000)
+		avail_ram = (char *)PAGE_ALIGN((unsigned long)hold_residual + sizeof(bd_t));
 
 	/* relocate initrd */
 	if ( initrd_start )
 	{
 		puts("initrd at:     "); puthex(initrd_start);
 		puts(" "); puthex(initrd_end); puts("\n");
-		/*
-		 * Memory is really tight on the MBX (we can assume 4M)
-		 * so put the initrd at the TOP of ram, and set end_avail
-		 * to right after that.
-		 *
-		 * I should do something like this for prep, too and keep
-		 * a variable end_of_DRAM to keep track of what we think the
-		 * max ram is.
-		 * -- Cort
+
+		/* We only have to relocate initrd if we find it is in Flash
+		 * rom.  This is because the kernel thinks it can toss the
+		 * pages into the free memory pool after it is done.  Use
+		 * the same 16M test.
 		 */
-		if (needs_reloc)
-		{
-			memcpy ((void *)PAGE_ALIGN(-PAGE_SIZE+
-				(unsigned long)end_avail-INITRD_SIZE),
+		if ((unsigned long)initrd_start > 0x01000000) {
+			memcpy ((void *)PAGE_ALIGN(-PAGE_SIZE+(unsigned long)end_avail-INITRD_SIZE),
 				(void *)initrd_start,
-				INITRD_SIZE );
-			initrd_start = PAGE_ALIGN(-PAGE_SIZE+
-				(unsigned long)end_avail-INITRD_SIZE);
-			initrd_end = initrd_start + INITRD_SIZE;
+				initrd_size );
+			initrd_start = PAGE_ALIGN(-PAGE_SIZE+(unsigned long)end_avail-INITRD_SIZE);
+			initrd_end = initrd_start + initrd_size;
 			end_avail = (char *)initrd_start;
 			puts("relocated to:  "); puthex(initrd_start);
 			puts(" "); puthex(initrd_end); puts("\n");
 		}
+		else {
+			avail_ram = (char *)PAGE_ALIGN((unsigned long)initrd_end);
+		}
 	}
+
 
 	puts("avail ram:     "); puthex((unsigned long)avail_ram); puts(" ");
 	puthex((unsigned long)end_avail); puts("\n");
@@ -379,8 +353,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	puts("\nLinux/PPC load: ");
 	timer = 0;
 	cp = cmd_line;
-	memcpy (cmd_line, cmd_preset, sizeof(cmd_preset));
-	while ( *cp ) putc(*cp++);
+
 	while (timer++ < 5*1000) {
 		if (tstc()) {
 			while ((ch = getc()) != '\n' && ch != '\r') {
@@ -388,11 +361,6 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 					if (cp != cmd_line) {
 						cp--;
 						puts("\b \b");
-					}
-				  } else if (ch == '?') {
-					if (!do_ipaddrs(&cp, 1)) {
-						  *cp++ = ch;
-						  putc(ch);
 					}
 				} else {
 					*cp++ = ch;
@@ -404,188 +372,33 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 		udelay(1000);  /* 1 msec */
 	}
 	*cp = 0;
-	/* The MBX does not currently have any default boot strategy.
-	 * If the command line is not filled in, we will automatically
-	 * create the default network boot.
+
+	/* If the command line is not filled in, we will automatically
+	 * create the default boot.
 	 */
 	if (cmd_line[0] == 0) {
-		dp = root_string;
+
+		/* An initrd on these boards means we booted from Flash
+		 * ROM and want to use the ramdisk as the root file system.
+		 * Otherwise, we perform a diskless NFS boot.
+		 */
+		if (initrd_start)
+			dp = ramroot_string;
+		else
+			dp = root_string;
 		while (*dp != 0)
 			*cp++ = *dp++;
-		*cp++ = ' ';
-
-		dp = nfsaddrs_string;
-		while (*dp != 0)
-			*cp++ = *dp++;
-		dp = cp;
-		do_ipaddrs(&cp, 0);
-		*cp++ = ' ';
-
-		/* Add the server address to the root file system path.
-		*/
-		dp = strrchr(dp, ':');
-		dp++;
-		do_nfsroot(&cp, dp);
 		*cp = 0;
 	}
+
 	puts("\n");
 
-	/* mappings on early boot can only handle 16M */
-	if ( (int)(cmd_line[0]) > (16<<20))
-		puts("cmd_line located > 16M\n");
-	if ( (int)hold_residual > (16<<20))
-		puts("hold_residual located > 16M\n");
-	if ( initrd_start > (16<<20))
-		puts("initrd_start located > 16M\n");
-       
 	puts("Uncompressing Linux...");
 
 	gunzip(0, 0x400000, zimage_start, &zimage_size);
 	puts("done.\n");
 	puts("Now booting the kernel\n");
 	return (unsigned long)hold_residual;
-}
-
-int
-do_ipaddrs(char **cmd_cp, int echo)
-{
-	char	*cp, *ip, ch;
-	unsigned char	ipd;
-	int	i, j, retval;
-
-	/* We need to create the string:
-	 *	<my_ip>:<serv_ip>
-	 */
-	cp = *cmd_cp;
-	retval = 0;
-
-	if ((cp - 9) >= cmd_line) {
-		if (strncmp(cp - 9, "nfsaddrs=", 9) == 0) {
-			ip = (char *)0xfa000060;
-			retval = 1;
-			for (j=0; j<2; j++) {
-				for (i=0; i<4; i++) {
-					ipd = *ip++;
-
-					ch = ipd/100;
-					if (ch) {
-						ch += '0';
-						if (echo)
-							putc(ch);
-						*cp++ = ch;
-						ipd -= 100 * (ch - '0');
-					}
-
-					ch = ipd/10;
-					if (ch) {
-						ch += '0';
-						if (echo)
-							putc(ch);
-						*cp++ = ch;
-						ipd -= 10 * (ch - '0');
-					}
-
-					ch = ipd + '0';
-					if (echo)
-						putc(ch);
-					*cp++ = ch;
-
-					ch = '.';
-					if (echo)
-						putc(ch);
-					*cp++ = ch;
-				}
-
-				/* At the end of the string, remove the
-				 * '.' and replace it with a ':'.
-				 */
-				*(cp - 1) = ':';
-				if (echo) {
-					putc('\b'); putc(':');
-				}
-			}
-
-			/* At the end of the second string, remove the
-			 * '.' from both the command line and the
-			 * screen.
-			 */
-			--cp;
-			putc('\b'); putc(' '); putc('\b');
-		}
-	}
-	*cmd_cp = cp;
-	return(retval);
-}
-
-void
-do_nfsroot(char **cmd_cp, char *dp)
-{
-	char	*cp, *rp, *ep;
-
-	/* The boot argument (i.e /sys/mbxroot/zImage) is stored
-	 * at offset 0x0078 in NVRAM.  We use this path name to
-	 * construct the root file system path.
-	 */
-	cp = *cmd_cp;
-
-	/* build command string.
-	*/
-	rp = nfsroot_string;
-	while (*rp != 0)
-		*cp++ = *rp++;
-
-	/* Add the server address to the path.
-	*/
-	while (*dp != ' ')
-		*cp++ = *dp++;
-	*cp++ = ':';
-
-	rp = (char *)0xfa000078;
-	ep = strrchr(rp, '/');
-
-	if (ep != 0) {
-		while (rp < ep)
-			*cp++ = *rp++;
-	}
-	else {
-		rp = defroot_string;
-		while (*rp != 0)
-			*cp++ = *rp++;
-	}
-
-	*cmd_cp = cp;
-}
-
-size_t strlen(const char * s)
-{
-	const char *sc;
-
-	for (sc = s; *sc != '\0'; ++sc)
-		/* nothing */;
-	return sc - s;
-}
-
-int strncmp(const char * cs,const char * ct,size_t count)
-{
-	register signed char __res = 0;
-
-	while (count) {
-		if ((__res = *cs - *ct++) != 0 || !*cs++)
-			break;
-		count--;
-	}
-
-	return __res;
-}
-
-char * strrchr(const char * s, int c)
-{
-       const char *p = s + strlen(s);
-       do {
-           if (*p == (char)c)
-               return (char *)p;
-       } while (--p >= s);
-       return NULL;
 }
 
 void puthex(unsigned long val)

@@ -58,7 +58,7 @@ unsigned char printer_read_status(struct pp_usb_data *p)
 	dr.value = 0;
 	dr.index = 0;
 	dr.length = 1;
-	if (dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr, &status, 1)) {
+	if (dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr, &status, 1, HZ)) {
 		return 0;
 	}
 	return status;
@@ -104,7 +104,7 @@ void printer_reset(struct pp_usb_data *p)
 	dr.value = 0;
 	dr.index = 0;
 	dr.length = 0;
-	dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev,0), &dr, NULL, 0);
+	dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev,0), &dr, NULL, 0, HZ);
 }
 
 static int open_printer(struct inode * inode, struct file * file)
@@ -129,10 +129,11 @@ static int open_printer(struct inode * inode, struct file * file)
 
 	printer_check_status(p);
 
-
 	file->private_data = p;
 //	printer_reset(p);
 	init_waitqueue_head(&p->wait_q);
+
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -143,13 +144,12 @@ static int close_printer(struct inode * inode, struct file * file)
 	free_page((unsigned long)p->obuf);
 	p->isopen = 0;
 	file->private_data = NULL;
+	/* free the resources if the printer is no longer around */
 	if(!p->pusb_dev) {
 		minor_data[p->minor] = NULL;
 		kfree(p);
-
-		MOD_DEC_USE_COUNT;
-
 	}
+	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -184,7 +184,7 @@ static ssize_t write_printer(struct file * file,
 			}
 			result = p->pusb_dev->bus->op->bulk_msg(p->pusb_dev,
 					 usb_sndbulkpipe(p->pusb_dev, endpoint_num),
-					 obuf, thistime, &partial);
+					 obuf, thistime, &partial, HZ*20);
 			if (partial) {
 				obuf += partial;
 				thistime -= partial;
@@ -243,7 +243,7 @@ static ssize_t read_printer(struct file * file,
 
 		result = p->pusb_dev->bus->op->bulk_msg(p->pusb_dev,
 			  usb_rcvbulkpipe(p->pusb_dev, endpoint_num),
-			  buf, this_read, &partial);
+			  buf, this_read, &partial, HZ*20);
 
 		/* unlike writes, we don't retry a NAK, just stop now */
 		if (!result & partial)
@@ -344,7 +344,7 @@ static int printer_probe(struct usb_device *dev)
 		dr.value = 0;
 		dr.index = 0;
 		dr.length = sizeof(ieee_id) - 1;
-		if (dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr, ieee_id, sizeof(ieee_id)-1) == 0) {
+		if (dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr, ieee_id, sizeof(ieee_id)-1, HZ) == 0) {
 			if (ieee_id[1] < sizeof(ieee_id) - 1)
 				ieee_id[ieee_id[1]+2] = '\0';
 			else
@@ -373,7 +373,6 @@ static void printer_disconnect(struct usb_device *dev)
 	minor_data[pp->minor] = NULL;
 	kfree(pp);
 	dev->private = NULL;		/* just in case */
-	MOD_DEC_USE_COUNT;
 }
 
 static struct usb_driver printer_driver = {
@@ -402,8 +401,6 @@ int usb_printer_init(void)
 {
 	int result;
 
-	MOD_INC_USE_COUNT;
-	
 	if ((result = register_chrdev(USB_PRINTER_MAJOR, "usblp", &usb_printer_fops)) < 0) {
 		printk(KERN_WARNING "usbprinter: Cannot register device\n");
 		return result;

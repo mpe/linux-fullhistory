@@ -17,7 +17,6 @@
 #include <linux/malloc.h>
 #include <linux/ioport.h>
 
-#include <asm/pci.h>
 #include <asm/page.h>
 
 #undef DEBUG
@@ -125,26 +124,20 @@ pci_find_parent_resource(struct pci_dev *dev, struct resource *res)
 	int i;
 	struct resource *best = NULL;
 
-	while (bus) {
-		for(i=0; i<4; i++) {
-			struct resource *r = bus->resource[i];
-			if (!r)
-				continue;
-			if (res->start && !(res->start >= r->start && res->end <= r->end))
-				continue;	/* Not contained */
-			if ((res->flags ^ r->flags) & (IORESOURCE_IO | IORESOURCE_MEM))
-				continue;	/* Wrong type */
-			if (!((res->flags ^ r->flags) & IORESOURCE_PREFETCH))
-				return r;	/* Exact match */
-			if ((res->flags & IORESOURCE_PREFETCH) && !(r->flags & IORESOURCE_PREFETCH))
-				best = r;	/* Approximating prefetchable by non-prefetchable */
-		}
-		if (best)
-			return best;
-		bus = bus->parent;
+	for(i=0; i<4; i++) {
+		struct resource *r = bus->resource[i];
+		if (!r)
+			continue;
+		if (res->start && !(res->start >= r->start && res->end <= r->end))
+			continue;	/* Not contained */
+		if ((res->flags ^ r->flags) & (IORESOURCE_IO | IORESOURCE_MEM))
+			continue;	/* Wrong type */
+		if (!((res->flags ^ r->flags) & IORESOURCE_PREFETCH))
+			return r;	/* Exact match */
+		if ((res->flags & IORESOURCE_PREFETCH) && !(r->flags & IORESOURCE_PREFETCH))
+			best = r;	/* Approximating prefetchable by non-prefetchable */
 	}
-	printk(KERN_ERR "PCI: Bug: Parent resource not found!\n");
-	return NULL;
+	return best;
 }
 
 
@@ -193,44 +186,15 @@ pci_set_master(struct pci_dev *dev)
 
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 	if (! (cmd & PCI_COMMAND_MASTER)) {
-		printk("PCI: Enabling bus mastering for device %s\n", dev->name);
+		printk("PCI: Enabling bus mastering for device %s\n", dev->slot_name);
 		cmd |= PCI_COMMAND_MASTER;
 		pci_write_config_word(dev, PCI_COMMAND, cmd);
 	}
 	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &lat);
 	if (lat < 16) {
-		printk("PCI: Increasing latency timer of device %s to 64\n", dev->name);
+		printk("PCI: Increasing latency timer of device %s to 64\n", dev->slot_name);
 		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 64);
 	}
-}
-
-/*
- * Assign new address to PCI resource.  We hope our resource information
- * is complete.  On the PC, we don't re-assign resources unless we are
- * forced to do so or the driver asks us to.
- *
- * Expects start=0, end=size-1, flags=resource type.
- */
-int __init pci_assign_resource(struct pci_dev *dev, int i)
-{
-	struct resource *r = &dev->resource[i];
-	struct resource *pr = pci_find_parent_resource(dev, r);
-	unsigned long size = r->end + 1;
-
-	if (!pr)
-		return -EINVAL;
-	if (r->flags & IORESOURCE_IO) {
-		if (size > 0x100)
-			return -EFBIG;
-		if (allocate_resource(pr, r, size, 0x1000, ~0, 1024))
-			return -EBUSY;
-	} else {
-		if (allocate_resource(pr, r, size, 0x10000000, ~0, size))
-			return -EBUSY;
-	}
-	if (i < 6)
-		pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + 4*i, r->start);
-	return 0;
 }
 
 /*
@@ -296,7 +260,7 @@ void __init pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 				res->end = res->start + (((unsigned long) ~l) << 32);
 #else
 			if (l) {
-				printk(KERN_ERR "PCI: Unable to handle 64-bit address for device %s\n", dev->name);
+				printk(KERN_ERR "PCI: Unable to handle 64-bit address for device %s\n", dev->slot_name);
 				res->start = 0;
 				res->flags = 0;
 				continue;
@@ -305,6 +269,7 @@ void __init pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 		}
 	}
 	if (rom) {
+		dev->rom_base_reg = rom;
 		res = &dev->resource[PCI_ROM_RESOURCE];
 		pci_read_config_dword(dev, rom, &l);
 		pci_write_config_dword(dev, rom, ~PCI_ROM_ADDRESS_ENABLE);
@@ -324,14 +289,18 @@ void __init pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 	pci_write_config_word(dev, PCI_COMMAND, cmd);
 }
 
-void __init pci_read_bridge_bases(struct pci_dev *dev, struct pci_bus *child)
+void __init pci_read_bridge_bases(struct pci_bus *child)
 {
+	struct pci_dev *dev = child->self;
 	u8 io_base_lo, io_limit_lo;
 	u16 mem_base_lo, mem_limit_lo, io_base_hi, io_limit_hi;
 	u32 mem_base_hi, mem_limit_hi;
 	unsigned long base, limit;
 	struct resource *res;
 	int i;
+
+	if (!dev)		/* It's a host bus, nothing to read */
+		return;
 
 	for(i=0; i<3; i++)
 		child->resource[i] = &dev->resource[PCI_BRIDGE_RESOURCES+i];
@@ -425,31 +394,27 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 		dev_cache = NULL;
 		dev->vendor = l & 0xffff;
 		dev->device = (l >> 16) & 0xffff;
-		sprintf(dev->name, "%02x:%02x.%d", bus->number, PCI_SLOT(devfn), PCI_FUNC(devfn));
+		sprintf(dev->slot_name, "%02x:%02x.%d", bus->number, PCI_SLOT(devfn), PCI_FUNC(devfn));
 		pci_name_device(dev);
 
 		pci_read_config_dword(dev, PCI_CLASS_REVISION, &class);
 		class >>= 8;				    /* upper 3 bytes */
 		dev->class = class;
 		class >>= 8;
-		dev->hdr_type = hdr_type;
+		dev->hdr_type = hdr_type & 0x7f;
 
-		switch (hdr_type & 0x7f) {		    /* header type */
+		switch (dev->hdr_type) {		    /* header type */
 		case PCI_HEADER_TYPE_NORMAL:		    /* standard header */
 			if (class == PCI_CLASS_BRIDGE_PCI)
 				goto bad;
 			/*
-			 * If the card generates interrupts, read IRQ number
-			 * (some architectures change it during pcibios_fixup())
+			 * Read interrupt line and base address registers.
+			 * The architecture-dependent code can tweak these, of course.
 			 */
 			pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &irq);
 			if (irq)
 				pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &irq);
 			dev->irq = irq;
-			/*
-			 * read base address registers, again pcibios_fixup() can
-			 * tweak these
-			 */
 			pci_read_bases(dev, 6, PCI_ROM_ADDRESS);
 			pci_read_config_word(dev, PCI_SUBSYSTEM_VENDOR_ID, &dev->subsystem_vendor);
 			pci_read_config_word(dev, PCI_SUBSYSTEM_ID, &dev->subsystem_device);
@@ -468,8 +433,8 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 			break;
 		default:				    /* unknown header */
 		bad:
-			printk(KERN_ERR "PCI: %02x:%02x [%04x/%04x/%06x] has unknown header type %02x, ignoring.\n",
-			       bus->number, dev->devfn, dev->vendor, dev->device, class, hdr_type);
+			printk(KERN_ERR "PCI: device %s has unknown header type %02x, ignoring.\n",
+				dev->slot_name, hdr_type);
 			continue;
 		}
 

@@ -526,10 +526,13 @@ static int chown_common(struct dentry * dentry, uid_t user, gid_t group)
 	 * non-root user, remove the setuid bit.
 	 * 19981026	David C Niemi <niemi@tux.org>
 	 *
+	 * Changed this to apply to all users, including root, to avoid
+	 * some races. This is the behavior we had in 2.0. The check for
+	 * non-root was definitely wrong for 2.2 anyway, as it should
+	 * have been using CAP_FSETID rather than fsuid -- 19990830 SD.
 	 */
 	if ((inode->i_mode & S_ISUID) == S_ISUID &&
-		!S_ISDIR(inode->i_mode)
-		&& current->fsuid) 
+		!S_ISDIR(inode->i_mode))
 	{
 		newattrs.ia_mode &= ~S_ISUID;
 		newattrs.ia_valid |= ATTR_MODE;
@@ -539,9 +542,11 @@ static int chown_common(struct dentry * dentry, uid_t user, gid_t group)
 	 * by a non-root user, remove the setgid bit UNLESS there is no group
 	 * execute bit (this would be a file marked for mandatory locking).
 	 * 19981026	David C Niemi <niemi@tux.org>
+	 *
+	 * Removed the fsuid check (see the comment above) -- 19990830 SD.
 	 */
 	if (((inode->i_mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP)) 
-		&& !S_ISDIR(inode->i_mode) && current->fsuid) 
+		&& !S_ISDIR(inode->i_mode))
 	{
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;

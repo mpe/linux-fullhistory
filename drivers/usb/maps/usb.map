@@ -223,11 +223,11 @@ keycode 104 = F13
 keycode 105 = F14             
 
 # modifiers
-keycode 120 = Control
-keycode 121 = Shift
-keycode 122 = Alt
-keycode 123 = Window
-keycode 124 = Control_R
-keycode 125 = Shift_R
-keycode 126 = Alt_R
-keycode 127 = Window_R
+keycode 224 = Control
+keycode 225 = Shift
+keycode 226 = Alt
+keycode 227 = Window
+keycode 228 = Control_R
+keycode 229 = Shift_R
+keycode 230 = Alt_R
+keycode 231 = Window_R

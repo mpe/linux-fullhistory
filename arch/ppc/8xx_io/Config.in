@@ -1,0 +1,16 @@
+#
+# MPC8xx Communication options
+#
+if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
+  mainmenu_option next_comment
+  comment 'MPC8xx Communication Options'
+  bool 'CPM SCC Ethernet' CONFIG_SCC_ENET
+  if [ "$CONFIG_SCC_ENET" = "y" ]; then
+  bool 'Ethernet on SCC1' CONFIG_SCC1_ENET
+    if [ "$CONFIG_SCC1_ENET" != "y" ]; then
+      bool 'Ethernet on SCC2' CONFIG_SCC2_ENET
+    fi
+  fi
+  bool '860T FEC Ethernet' CONFIG_FEC_ENET
+  endmenu
+fi

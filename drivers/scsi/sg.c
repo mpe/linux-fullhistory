@@ -16,41 +16,28 @@
  *
  *  Borrows code from st driver. Thanks to Alessandro Rubini's "dd" book.
  */
- static char * sg_version_str = "Version: 2.1.34 (990603)";
- static int sg_version_num = 20134; /* 2 digits for each component */
+ static char * sg_version_str = "Version: 2.3.35 (990708)";
+ static int sg_version_num = 20335; /* 2 digits for each component */
 /*
  *  D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au), notes:
  *      - scsi logging is available via SCSI_LOG_TIMEOUT macros. First
  *        the kernel/module needs to be built with CONFIG_SCSI_LOGGING
- *        (otherwise the macros compile to empty statements), then do
- *        something like: 'echo "scsi log all" > /proc/scsi/scsi' to log
- *        everything or 'echo "scsi log {token} #N" > /proc/scsi/scsi'
- *        where {token} is one of [error,timeout,scan,mlqueue,mlcomplete,
- *        llqueue,llcomplete,hlqueue,hlcomplete,ioctl] and #N is 0...7
- *        (with 0 meaning off). For example: 'scsi log timeout 7 > 
- *        /proc/scsi/scsi' to get all logging messages from this driver.
- *        Should use hlcomplete but it is too "noisy" (sd uses it).
- *
- *      - This driver obtains memory (heap) for the low-level driver to
- *        transfer/dma to and from. It is obtained from up to 3 sources:
- *              - obtain heap via get_free_pages()
- *              - obtain heap from the shared scsi dma pool
- *              - obtain heap from kernel directly (kmalloc) [last choice]
- *        Each open() attempts to obtain a "reserve" buffer of
- *        SG_DEF_RESERVED_SIZE bytes (or 0 bytes if opened O_RDONLY). The
- *        amount actually obtained [which could be 0 bytes] can be found from
- *        the SG_GET_RESERVED_SIZE ioctl(). This reserved buffer size can
- *        be changed by calling the SG_SET_RESERVED_SIZE ioctl(). Since this
- *        is an ambit claim, it should be followed by a SG_GET_RESERVED_SIZE
- *        ioctl() to find out how much was actually obtained.
- *        A subsequent write() to this file descriptor will use the
- *        reserved buffer unless:
- *              - it is already in use (eg during command queuing)
- *              - or the write() needs a buffer size larger than the
- *                reserved size
- *        In these cases the write() will attempt to get the required memory
- *        for the duration of this request but, if memory is low, it may
- *        fail with ENOMEM.
+ *        (otherwise the macros compile to empty statements). 
+ *        Then before running the program to be debugged enter: 
+ *          # echo "scsi log timeout 7" > /proc/scsi/scsi 
+ *        This will send copious output to the console and the log which
+ *        is usually /var/log/messages. To turn off debugging enter:
+ *          # echo "scsi log timeout 0" > /proc/scsi/scsi 
+ *        The 'timeout' token was chosen because it is relatively unused.
+ *        The token 'hlcomplete' should be used but that triggers too
+ *        much output from the sd device driver. To dump the current
+ *        state of the SCSI mid level data structures enter:
+ *          # echo "scsi dump 1" > /proc/scsi/scsi 
+ *        To dump the state of sg's data structures get the 'sg_debug'
+ *        program from the utilities and enter:
+ *          # sg_debug /dev/sga 
+ *        or any valid sg device name. The state of _all_ sg devices
+ *        will be sent to the console and the log.
  *
  *      - The 'alt_address' field in the scatter_list structure and the
  *        related 'mem_src' indicate the source of the heap allocation.
@@ -146,7 +133,8 @@ typedef struct sg_fd /* holds the state of a file descriptor */
 {
     struct sg_fd * nextfp; /* NULL when last opened fd on this device */
     struct sg_device * parentdp;     /* owning device */
-    wait_queue_head_t read_wait;   /* queue read until command done */
+    wait_queue_head_t read_wait;     /* queue read until command done */
+    wait_queue_head_t write_wait;    /* write waits on pending read */
     int timeout;                     /* defaults to SG_DEFAULT_TIMEOUT */
     Sg_scatter_hold reserve;  /* buffer held for this file descriptor */
     unsigned save_scat_len;   /* original length of trunc. scat. element */
@@ -160,7 +148,7 @@ typedef struct sg_fd /* holds the state of a file descriptor */
     char cmd_q;         /* 1 -> allow command queuing, 0 -> don't */
     char underrun_flag; /* 1 -> flag underruns, 0 -> don't, 2 -> test */
     char next_cmd_len;  /* 0 -> automatic (def), >0 -> use on next write() */
-} Sg_fd; /* 1208 bytes long on i386 */
+} Sg_fd; /* 1212 bytes long on i386 */
 
 typedef struct sg_device /* holds the state of each scsi generic device */
 {
@@ -210,7 +198,6 @@ static void sg_debug_all(const Sg_fd * sfp);
 
 static Sg_device * sg_dev_arr = NULL;
 static const int size_sg_header = sizeof(struct sg_header);
-
 
 
 static int sg_open(struct inode * inode, struct file * filp)
@@ -360,6 +347,8 @@ static ssize_t sg_read(struct file * filp, char * buf,
         count = (srp->header.result == 0) ? 0 : -EIO;
         sg_finish_rem_req(srp, NULL, 0);
     }
+    if (! sfp->cmd_q)
+        wake_up_interruptible(&sfp->write_wait);
     return count;
 }
 
@@ -391,10 +380,21 @@ static ssize_t sg_write(struct file * filp, const char * buf,
     if (count < (size_sg_header + 6))
         return -EIO;   /* The minimum scsi command length is 6 bytes. */ 
 
-    srp = sg_add_request(sfp);
-    if (! srp) {
-        SCSI_LOG_TIMEOUT(1, printk("sg_write: queue full, domain error\n"));
-        return -EDOM;
+    if (! (srp = sg_add_request(sfp))) {
+        if (sfp->cmd_q) {
+            SCSI_LOG_TIMEOUT(1, printk("sg_write: queue full\n"));
+            return -EDOM;
+        }
+        else { /* old semantics: wait for pending read() to finish */
+            if (filp->f_flags & O_NONBLOCK)
+                return -EAGAIN;
+            k = 0;
+            __wait_event_interruptible(sfp->write_wait, 
+                                   (srp = sg_add_request(sfp)),
+                                   k);
+            if (k)
+                return k; /* -ERESTARTSYS because signal hit process */
+        }
     }
     __copy_from_user(&srp->header, buf, size_sg_header); 
     buf += size_sg_header;
@@ -404,7 +404,7 @@ static ssize_t sg_write(struct file * filp, const char * buf,
         if (sfp->next_cmd_len > MAX_COMMAND_SIZE) {
             SCSI_LOG_TIMEOUT(1, printk("sg_write: command length too long\n"));
             sfp->next_cmd_len = 0;
-            return -EDOM;
+            return -EIO;
         }
         cmd_size = sfp->next_cmd_len;
         sfp->next_cmd_len = 0; /* reset so only this write() effected */
@@ -490,7 +490,12 @@ static int sg_ioctl(struct inode * inode, struct file * filp,
     switch(cmd_in)
     {
     case SG_SET_TIMEOUT:
-        return get_user(sfp->timeout, (int *)arg);
+        result =  get_user(val, (int *)arg);
+        if (result) return result;
+        if (val < 0)
+            return -EIO;
+        sfp->timeout = val;
+        return 0;
     case SG_GET_TIMEOUT:  /* N.B. User receives timeout as return value */
         return sfp->timeout; /* strange ..., for backward compatibility */
     case SG_SET_FORCE_LOW_DMA:
@@ -519,9 +524,12 @@ static int sg_ioctl(struct inode * inode, struct file * filp,
             __put_user((int)sdp->device->id, &sg_idp->scsi_id);
             __put_user((int)sdp->device->lun, &sg_idp->lun);
             __put_user((int)sdp->device->type, &sg_idp->scsi_type);
+            __put_user((short)sdp->device->host->cmd_per_lun, 
+                       &sg_idp->h_cmd_per_lun);
+            __put_user((short)sdp->device->queue_depth, 
+                       &sg_idp->d_queue_depth);
             __put_user(0, &sg_idp->unused1);
             __put_user(0, &sg_idp->unused2);
-            __put_user(0, &sg_idp->unused3);
             return 0;
         }
     case SG_SET_FORCE_PACK_ID:
@@ -605,6 +613,13 @@ static int sg_ioctl(struct inode * inode, struct file * filp,
         return put_user(sg_version_num, (int *)arg);
     case SG_EMULATED_HOST:
         return put_user(sdp->device->host->hostt->emulated, (int *)arg);
+    case SG_SCSI_RESET:
+        if (! scsi_block_when_processing_errors(sdp->device))
+            return -EBUSY;
+        result = get_user(val, (int *)arg);
+        if (result) return result;
+        /* Don't do anything till scsi mod level visibility */
+        return 0;
     case SCSI_IOCTL_SEND_COMMAND:
         /* Allow SCSI_IOCTL_SEND_COMMAND without checking suser() since the
            user already has read/write access to the generic device and so
@@ -686,6 +701,9 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
     Sg_fd * sfp;
     Sg_request * srp = NULL;
     int closed = 0;
+    static const int min_sb_len = 
+                SG_MAX_SENSE > sizeof(SCpnt->sense_buffer) ? 
+                        sizeof(SCpnt->sense_buffer) : SG_MAX_SENSE;
 
     if ((NULL == sg_dev_arr) || (dev < 0) || (dev >= sg_template.dev_max)) {
         SCSI_LOG_TIMEOUT(1, printk("sg__done: bad args dev=%d\n", dev));
@@ -727,8 +745,7 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
 
     SCSI_LOG_TIMEOUT(4, printk("sg__done: dev=%d, scsi_stat=%d, res=0x%x\n", 
                 dev, (int)status_byte(SCpnt->result), (int)SCpnt->result));
-    memcpy(srp->header.sense_buffer, SCpnt->sense_buffer,
-           sizeof(SCpnt->sense_buffer));
+    memcpy(srp->header.sense_buffer, SCpnt->sense_buffer, min_sb_len);
     switch (host_byte(SCpnt->result)) 
     { /* This setup of 'result' is for backward compatibility and is best
          ignored by the user who should use target, host + driver status */
@@ -798,7 +815,7 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
 /* Now wake up any sg_read() that is waiting for this packet. */
     wake_up_interruptible(&sfp->read_wait);
     if ((sfp->async_qp) && (! closed))
-        kill_fasync(sfp->async_qp, SIGPOLL);
+        kill_fasync(sfp->async_qp, SIGPOLL, POLL_IN);
 }
 
 static void sg_debug_all(const Sg_fd * sfp)
@@ -1491,13 +1508,15 @@ static Sg_fd * sg_add_sfp(Sg_device * sdp, int dev, int get_reserved)
         return sdp->headfp;
     }
     sfp = (Sg_fd *)sg_low_malloc(sizeof(Sg_fd), 0, SG_HEAP_KMAL, 0);
-    if (!sfp)
-	return NULL;
-
-    memset(sfp, 0, sizeof(Sg_fd));
-    sfp->my_mem_src = SG_HEAP_KMAL;
-
-    init_waitqueue_head(&sfp->read_wait);    
+    if (sfp) {
+        memset(sfp, 0, sizeof(Sg_fd));
+        sfp->my_mem_src = SG_HEAP_KMAL;
+        init_waitqueue_head(&sfp->read_wait);
+        init_waitqueue_head(&sfp->write_wait);
+    }
+    else
+        return NULL;
+        
     sfp->timeout = SG_DEFAULT_TIMEOUT;
     sfp->force_packid = SG_DEF_FORCE_PACK_ID;
     sfp->low_dma = (SG_DEF_FORCE_LOW_DMA == 0) ?

@@ -1,7 +1,11 @@
 /*
  * USB Abstract Control Model based on Brad Keryan's USB busmouse driver 
  *
- * Armin Fuerst 5/8/1999
+ * Armin Fuerst 5/8/1999 <armin.please@put.your.email.here.!!!!>
+ *
+ * version 0.8: Fixed endianity bug, some cleanups. I really hate to have
+ * half of driver in form if (...) { info("x"); return y; }
+ * 						Pavel Machek <pavel@suse.de>
  *
  * version 0.7: Added usb flow control. Fixed bug in uhci.c (what idiot
  * wrote this code? ...Oops that was me). Fixed module cleanup. Did some
@@ -63,8 +67,8 @@
 #define NR_PORTS 3
 #define ACM_MAJOR 166
 
-#define info(message); printk(message);
-//#define info(message);
+//#define info(message...); printk(message);
+#define info(message...);
 
 #define CTRL_STAT_DTR	1
 #define CTRL_STAT_RTS	2
@@ -94,6 +98,7 @@ struct acm_state {
 	unsigned ctrlinterval;				//interval to poll from device
 };
 
+#define ACM_READY (acm->present && acm->active)
 
 //functions for various ACM requests
 
@@ -108,7 +113,7 @@ void Set_Control_Line_Status (unsigned int status,struct acm_state *acm)
 	dr.value = status;
 	dr.index = 0;
 	dr.length = 0;
-	acm->dev->bus->op->control_msg(acm->dev, usb_sndctrlpipe(acm->dev,0), &dr, NULL, 0);
+	acm->dev->bus->op->control_msg(acm->dev, usb_sndctrlpipe(acm->dev,0), &dr, NULL, 0, HZ);
 
 	acm->ctrlstate=status;
 }
@@ -124,7 +129,7 @@ void Set_Line_Coding (unsigned int coding,struct acm_state *acm)
 	dr.value = coding;
 	dr.index = 0;
 	dr.length = 0;
-	acm->dev->bus->op->control_msg(acm->dev, usb_sndctrlpipe(acm->dev,0), &dr, NULL, 0);
+	acm->dev->bus->op->control_msg(acm->dev, usb_sndctrlpipe(acm->dev,0), &dr, NULL, 0, HZ);
 	
 	acm->linecoding=coding;
 }
@@ -139,20 +144,16 @@ static int acm_irq(int state, void *__buffer, int count, void *dev_id)
 		
 	info("ACM_USB_IRQ\n");
 
-	if (!acm->present) {
-		info("NO ACM DEVICE REGISTERED\n");
+	if (!acm->present)
 		return 0;
-	}
-	if (!acm->active) {
-		info ("ACM DEVICE NOT OPEN\n");
+	if (!acm->active)
 		return 1;
-	}
        
         dr=__buffer;
 	data=__buffer;
 	data+=sizeof(dr);
  
-#if 1
+#if 0
         printk("reqtype: %02X\n",dr->requesttype);
         printk("request: %02X\n",dr->request);
 	printk("wValue: %02X\n",dr->value);
@@ -161,31 +162,26 @@ static int acm_irq(int state, void *__buffer, int count, void *dev_id)
 #endif
 	
 	switch(dr->request) {
-	  //Network connection 
-	  case 0x00:
-	    printk("Network connection: ");
-	    if (dr->request==0) info("disconnected\n");
-	    if (dr->request==1) info("connected\n");
-	    break;
+	case 0x00: /* Network connection */
+		printk("Network connection: ");
+		if (dr->request==0) printk("disconnected\n");
+		if (dr->request==1) printk("connected\n");
+		break;
 	    
-    	  //Response available
-	  case 0x01:
-	    printk("Response available\n");
-	    break;
+	case 0x01: /* Response available */
+		printk("Response available\n");
+		break;
 	
-	  //Set serial line state
-	  case 0x20:
-	    printk("Set serial control line state\n");
-	    if ((dr->index==1)&&(dr->length==2)) {
-	      acm->ctrlstate=* ((unsigned short int *)data);
-	      printk("Serstate: %02X\n",acm->ctrlstate);
-	    }
-	    break;
+	case 0x20: /* Set serial line state */
+		printk("acm.c: Set serial control line state\n");
+		if ((dr->index==1)&&(dr->length==2)) {
+			acm->ctrlstate= data[0] || (data[1] << 16);
+			printk("Serstate: %02X\n",acm->ctrlstate);
+		}
+		break;
 	}
 
-	//info("Done\n");
-	//Continue transfer
-	return 1;
+	return 1; /* Continue transfer */
 }
 
 static int acm_read_irq(int state, void *__buffer, int count, void *dev_id)
@@ -195,29 +191,20 @@ static int acm_read_irq(int state, void *__buffer, int count, void *dev_id)
        	unsigned char* data=__buffer;
 	int i;
 
-	info("ACM_READ_IRQ\n");
+	info("ACM_READ_IRQ: state %d, %d bytes\n", state, count);
+	if (state) {
+		printk( "acm_read_irq: strange state received: %x\n", state );
+		return 1;
+	}
 	
-	if (!acm->present) {
-		info("NO ACM DEVICE REGISTERED\n");
-		//Stop transfer
-		return 0;
-	}
+	if (!ACM_READY)
+		return 0;	/* stop transfer */
 
-	if (!acm->active) {
-		info ("ACM DEVICE NOT OPEN\n");
-		//Stop transfer
-		return 0;
-	}
-
-//	printk("%d %s\n",count,data);
-	for (i=0;i<count;i++) {
-		 tty_insert_flip_char(tty,data[i],0);
-  	}
+	for (i=0;i<count;i++)
+		tty_insert_flip_char(tty,data[i],0);
   	tty_flip_buffer_push(tty);
-  	
-	//info("Done\n");
-  	//Continue transfer
-	return 1;
+
+	return 1; /* continue transfer */
 }
 
 static int acm_write_irq(int state, void *__buffer, int count, void *dev_id)
@@ -227,16 +214,8 @@ static int acm_write_irq(int state, void *__buffer, int count, void *dev_id)
 
 	info("ACM_WRITE_IRQ\n");
 
-	if (!acm->present) {
-		info("NO ACM DEVICE REGISTERED\n");
-		//Stop transfer
-		return 0;
-	}
-	if (!acm->active) {
-		info ("ACM DEVICE NOT OPEN\n");
-		//Stop transfer
-		return 0;
-	}
+	if (!ACM_READY)
+		return 0; /* stop transfer */
 
 	usb_terminate_bulk(acm->dev, acm->writetransfer);
 	acm->writing=0;
@@ -244,9 +223,7 @@ static int acm_write_irq(int state, void *__buffer, int count, void *dev_id)
 		(tty->ldisc.write_wakeup)(tty);
 	wake_up_interruptible(&tty->write_wait);
 	
-	//info("Done\n");
-	//Stop transfer
-	return 0;
+	return 0; /* stop tranfer */
 }
 
 /*TTY STUFF*/
@@ -260,22 +237,16 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	tty->driver_data=acm=&acm_state_table[MINOR(tty->device)-tty->driver.minor_start];
 	acm->tty=tty;
 	 
-	if (!acm->present) {
-		info("NO ACM DEVICE REGISTERED\n");
+	if (!acm->present)
 		return -EINVAL;
-	}
 
-	if (acm->active) {
-		info ("ACM DEVICE ALREADY OPEN\n");
-		return -EINVAL;
-	}
-	acm->active=1;
+	if (acm->active++)
+		return 0;
  
-	/*Start reading from the device*/
+	/* Start reading from the device */
 	ret = usb_request_irq(acm->dev,acm->ctrlpipe, acm_irq, acm->ctrlinterval, acm, &acm->ctrltransfer);
-	if (ret) {
+	if (ret)
 		printk (KERN_WARNING "usb-acm: usb_request_irq failed (0x%x)\n", ret);
-	}
 	acm->reading=1;
 	acm->readtransfer=usb_request_bulk(acm->dev,acm->readpipe, acm_read_irq, acm->readbuffer, acm->readsize, acm);
 	
@@ -289,15 +260,11 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	struct acm_state *acm = (struct acm_state *) tty->driver_data; 
 	info("rs_close\n");
 	
-	if (!acm->present) {
-		info("NO ACM DEVICE REGISTERED\n");
+	if (!acm->present)
 		return;
-	}
 
-	if (!acm->active) {
-		info ("ACM DEVICE NOT OPEN\n");
+	if (--acm->active)
 		return;
-	}
 
 	Set_Control_Line_Status (0, acm);
 	
@@ -309,9 +276,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		usb_terminate_bulk(acm->dev, acm->readtransfer);
 		acm->reading=0;
 	}
-//  usb_release_irq(acm->dev,acm->ctrltransfer, acm->ctrlpipe);
-	
-	acm->active=0;
+//	usb_release_irq(acm->dev,acm->ctrltransfer, acm->ctrlpipe);
 }
 
 static int rs_write(struct tty_struct * tty, int from_user,
@@ -322,15 +287,8 @@ static int rs_write(struct tty_struct * tty, int from_user,
 	
 	info("rs_write\n");
 
-	if (!acm->present) {
-		info("NO ACM DEVICE REGISTERED\n");
+	if (!ACM_READY)
 		return -EINVAL;
-	}
-
-	if (!acm->active) {
-		info ("ACM DEVICE NOT OPEN\n");
-		return -EINVAL;
-	}
 	
 	if (acm->writing) {
 		info ("already writing\n");
@@ -339,14 +297,8 @@ static int rs_write(struct tty_struct * tty, int from_user,
 
 	written=(count>acm->writesize) ? acm->writesize : count;
 	  
-	if (from_user) {
-		//info("fromuser\n");
-		copy_from_user(acm->writebuffer,buf,written);
-	}
-	else {
-		//info("notfromuser\n");
-		memcpy(acm->writebuffer,buf,written);
-	}  
+	if (from_user) copy_from_user(acm->writebuffer,buf,written);
+	else	       memcpy(acm->writebuffer,buf,written);
 
 	//start the transfer
 	acm->writing=1;
@@ -359,18 +311,8 @@ static void rs_put_char(struct tty_struct *tty, unsigned char ch)
 {
 	struct acm_state *acm = (struct acm_state *) tty->driver_data; 
 	
-	info("rs_put_char\n");
-	
-	if (!acm->present) {
-		info("NO ACM DEVICE REGISTERED\n");
-		return;
-	}
-
-	if (!acm->active) {
-		info ("ACM DEVICE NOT OPEN\n");
-		return;
-	}
-//  printk("%c\n",ch);
+	printk( "acm: rs_put_char: Who called this unsupported routine?\n" );
+	BUG();
 }                   
 
 static int rs_write_room(struct tty_struct *tty) 
@@ -379,42 +321,22 @@ static int rs_write_room(struct tty_struct *tty)
 
 	info("rs_write_room\n");
 	
-	if (!acm->present) {
-		info("NO ACM DEVICE REGISTERED\n");
+	if (!ACM_READY)
 		return -EINVAL;
-	}
-
-	if (!acm->active) {
-		info ("ACM DEVICE NOT OPEN\n");
-		return -EINVAL;
-	}
 	
-	if (acm->writing) {
-		return 0;
-	}
-	return acm->writesize;
+	return acm->writing ? 0 : acm->writesize;
 }
 
 static int rs_chars_in_buffer(struct tty_struct *tty) 
 {
 	struct acm_state *acm = (struct acm_state *) tty->driver_data; 
 
-	info("rs_chars_in_buffer\n");
+//	info("rs_chars_in_buffer\n");
 	
-	if (!acm->present) {
-		info("NO ACM DEVICE REGISTERED\n");
+	if (!ACM_READY)
 		return -EINVAL;
-	}
-
-	if (!acm->active) {
-		info ("ACM DEVICE NOT OPEN\n");
-		return -EINVAL;
-	}
 	
-	if (acm->writing) {
-		return acm->writesize;
-	}
-	return 0;
+	return acm->writing ? acm->writesize :  0;
 }
 
 static void rs_throttle(struct tty_struct * tty)
@@ -423,21 +345,12 @@ static void rs_throttle(struct tty_struct * tty)
 	
 	info("rs_throttle\n");
 	
-	if (!acm->present) {
-		info("NO ACM DEVICE REGISTERED\n");
+	if (!ACM_READY)
 		return;
-	}
-
-	if (!acm->active) {
-		info ("ACM DEVICE NOT OPEN\n");
-		return;
-	}
-
 /*	
 	if (I_IXOFF(tty))
 		rs_send_xchar(tty, STOP_CHAR(tty));
 */    
-
 	if (tty->termios->c_cflag & CRTSCTS)
 		Set_Control_Line_Status (acm->ctrlstate & ~CTRL_STAT_RTS, acm);
 }
@@ -448,21 +361,12 @@ static void rs_unthrottle(struct tty_struct * tty)
 	
 	info("rs_unthrottle\n");
 	
-	if (!acm->present) {
-		info("NO ACM DEVICE REGISTERED\n");
+	if (!ACM_READY)
 		return;
-	}
-
-	if (!acm->active) {
-		info ("ACM DEVICE NOT OPEN\n");
-		return;
-	}
-
 /*	
 	if (I_IXOFF(tty))
 		rs_send_xchar(tty, STOP_CHAR(tty));
 */    
-
 	if (tty->termios->c_cflag & CRTSCTS)
 		Set_Control_Line_Status (acm->ctrlstate | CTRL_STAT_RTS, acm);
 }
@@ -521,7 +425,8 @@ static int acm_probe(struct usb_device *dev)
 		    interface->bNumEndpoints != 2)
 			continue;
 
-		if ((endpoint->bEndpointAddress & 0x80) == 0x80)
+		endpoint = &interface->endpoint[0];
+		if ((endpoint->bEndpointAddress & 0x80) != 0x80)
 			swapped = 1;
 
 		/*With a bulk input */
@@ -578,10 +483,8 @@ static void acm_disconnect(struct usb_device *dev)
 
 	info("acm_disconnect\n");
 	
-	if (!acm->present) {
-		printk("device not present\n");
+	if (!acm->present)
 		return;
-	}
 
 	printk("disconnecting\n");
 	
@@ -593,7 +496,7 @@ static void acm_disconnect(struct usb_device *dev)
 		usb_terminate_bulk(acm->dev, acm->readtransfer);
 		acm->reading=0;
 	}
-//  usb_release_irq(acm->dev,acm->ctrltransfer, acm->ctrlpipe);
+	usb_release_irq(acm->dev,acm->ctrltransfer, acm->ctrlpipe);
 	//BUG: What to do if a device is open?? Notify process or not allow cleanup?
 	acm->active=0;
 	acm->present=0;
@@ -643,9 +546,9 @@ int usb_acm_init(void)
 	acm_tty_driver.open = rs_open;
 	acm_tty_driver.close = rs_close;
 	acm_tty_driver.write = rs_write;
-	acm_tty_driver.put_char = rs_put_char; //FUCKIN BUG IN DOKU!!!
+	acm_tty_driver.put_char = rs_put_char;
 	acm_tty_driver.flush_chars = NULL; //rs_flush_chars;
-	acm_tty_driver.write_room = rs_write_room; //ANBOTHER FUCKIN BUG!!
+	acm_tty_driver.write_room = rs_write_room;
 	acm_tty_driver.ioctl = NULL; //rs_ioctl;
 	acm_tty_driver.set_termios = NULL; //rs_set_termios;
 	acm_tty_driver.set_ldisc = NULL; 

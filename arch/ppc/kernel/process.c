@@ -1,5 +1,5 @@
 /*
- * $Id: process.c,v 1.95 1999/08/31 06:54:07 davem Exp $
+ * $Id: process.c,v 1.97 1999/09/14 19:07:42 cort Exp $
  *
  *  linux/arch/ppc/kernel/process.c
  *
@@ -162,7 +162,7 @@ _switch_to(struct task_struct *prev, struct task_struct *new,
 	  struct task_struct **last)
 {
 	struct thread_struct *new_thread, *old_thread;
-	int s;
+	unsigned long s;
 	
 	__save_flags(s);
 	__cli();
@@ -513,7 +513,7 @@ void __init ll_puts(const char *s)
 	 * vidmem just needs to be setup for it.
 	 * -- Cort
 	 */
-	if ( ! is_prep )
+	if ( _machine != _MACH_prep )
 		return;
 	x = orig_x;
 	y = orig_y;

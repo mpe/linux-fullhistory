@@ -354,7 +354,8 @@ chrp_setup_pci_ptrs(void)
                 else
                 {
 			if ( !strncmp("IBM,7043-150", get_property(find_path_device("/"), "name", NULL),12) ||
-			     !strncmp("IBM,7046-155", get_property(find_path_device("/"), "name", NULL),12) )
+			     !strncmp("IBM,7046-155", get_property(find_path_device("/"), "name", NULL),12) ||
+			     !strncmp("IBM,7046-B50", get_property(find_path_device("/"), "name", NULL),12) )
 			{
 				pci_dram_offset = 0;
 				isa_mem_base = 0x80000000;

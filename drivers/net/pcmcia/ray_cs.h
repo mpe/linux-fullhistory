@@ -17,9 +17,14 @@ struct beacon_rx {
                   + sizeof(struct tim_element)];
 };
 
+/* Return values for get_free{,_tx}_ccs */
+#define ECCSFULL  (-1)
+#define ECCSBUSY  (-2)
+#define ECARDGONE (-3)
+
 typedef struct ray_dev_t {
     int card_status;
-	int authentication_state;
+    int authentication_state;
     dev_node_t  node;
     window_handle_t amem_handle;   /* handle to window for attribute memory  */
     window_handle_t rmem_handle;   /* handle to window for rx buffer on card */
@@ -28,6 +33,8 @@ typedef struct ray_dev_t {
     UCHAR *rmem;                   /* pointer to receive buffer window       */
     dev_link_t *finder;            /* pointer back to dev_link_t for card    */
     struct timer_list timer;
+    int tx_ccs_lock;
+    int ccs_lock;
     int   dl_param_ccs;
     union {
         struct b4_startup_params b4;

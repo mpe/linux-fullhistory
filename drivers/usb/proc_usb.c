@@ -509,8 +509,10 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 	struct usb_device *dev = (struct usb_device *)dp->data;
 	struct ezusb_ctrltransfer ctrl;
 	struct ezusb_bulktransfer bulk;
+	struct ezusb_old_ctrltransfer octrl;
+	struct ezusb_old_bulktransfer obulk;
 	struct ezusb_setinterface setintf;
-	unsigned int len1, ep, pipe;
+	unsigned int len1, ep, pipe, cfg;
 	unsigned long len2;
 	unsigned char *tbuf;
 	int i;
@@ -525,24 +527,28 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 		if (!capable(CAP_SYS_RAWIO))
 			return -EPERM;
 		copy_from_user_ret(&ctrl, (void *)arg, sizeof(ctrl), -EFAULT);
-		if (ctrl.dlen > PAGE_SIZE)
+		if (ctrl.length > PAGE_SIZE)
 			return -EINVAL;
 		if (!(tbuf = (unsigned char *)__get_free_page(GFP_KERNEL)))
 			return -ENOMEM;
 		if (ctrl.requesttype & 0x80) {
-			if (ctrl.dlen && !access_ok(VERIFY_WRITE, ctrl.data, ctrl.dlen)) {
+			if (ctrl.length && !access_ok(VERIFY_WRITE, ctrl.data, ctrl.length)) {
 				free_page((unsigned long)tbuf);
 				return -EINVAL;
 			}
-			i = dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev, 0), (devrequest *)&ctrl, tbuf, ctrl.dlen);
-			if (!i && ctrl.dlen) {
-				copy_to_user_ret(ctrl.data, tbuf, ctrl.dlen, -EFAULT);
+			i = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), ctrl.request, ctrl.requesttype,
+					    ctrl.value, ctrl.index, tbuf, ctrl.length, 
+					    (ctrl.timeout * HZ + 500) / 1000);
+			if (!i && ctrl.length) {
+				copy_to_user_ret(ctrl.data, tbuf, ctrl.length, -EFAULT);
 			}
 		} else {
-			if (ctrl.dlen) {
-				copy_from_user_ret(tbuf, ctrl.data, ctrl.dlen, -EFAULT);
+			if (ctrl.length) {
+				copy_from_user_ret(tbuf, ctrl.data, ctrl.length, -EFAULT);
 			}
-			i = dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), (devrequest *)&ctrl, tbuf, ctrl.dlen);
+			i = usb_control_msg(dev, usb_sndctrlpipe(dev, 0), ctrl.request, ctrl.requesttype,
+					    ctrl.value, ctrl.index, tbuf, ctrl.length, 
+					    (ctrl.timeout * HZ + 500) / 1000);
 		}
 		free_page((unsigned long)tbuf);
 		if (i) {
@@ -577,7 +583,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 				free_page((unsigned long)tbuf);
 				return -EINVAL;
 			}
-			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2);
+			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, (ctrl.timeout * HZ + 500) / 1000);
 			if (!i && len2) {
 				copy_to_user_ret(bulk.data, tbuf, len2, -EFAULT);
 			}
@@ -585,12 +591,91 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 			if (len1) {
 				copy_from_user_ret(tbuf, bulk.data, len1, -EFAULT);
 			}
-			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2);
+			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, (ctrl.timeout * HZ + 500) / 1000);
 		}
 		free_page((unsigned long)tbuf);
 		if (i) {
 			printk(KERN_WARNING "procusb: EZUSB_BULK failed ep 0x%x len %u ret %d\n", 
 			       bulk.ep, bulk.len, i);
+			return -ENXIO;
+		}
+		return len2;
+
+	case EZUSB_OLD_CONTROL:
+		if (obsolete_warn < 20) {
+			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_OLD_CONTROL ioctl\n",
+			       current->pid, current->comm);
+			obsolete_warn++;
+		}
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		copy_from_user_ret(&octrl, (void *)arg, sizeof(octrl), -EFAULT);
+		if (octrl.dlen > PAGE_SIZE)
+			return -EINVAL;
+		if (!(tbuf = (unsigned char *)__get_free_page(GFP_KERNEL)))
+			return -ENOMEM;
+		if (octrl.requesttype & 0x80) {
+			if (octrl.dlen && !access_ok(VERIFY_WRITE, octrl.data, octrl.dlen)) {
+				free_page((unsigned long)tbuf);
+				return -EINVAL;
+			}
+			i = dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev, 0), (devrequest *)&octrl, tbuf, octrl.dlen, HZ);
+			if (!i && octrl.dlen) {
+				copy_to_user_ret(octrl.data, tbuf, octrl.dlen, -EFAULT);
+			}
+		} else {
+			if (octrl.dlen) {
+				copy_from_user_ret(tbuf, octrl.data, octrl.dlen, -EFAULT);
+			}
+			i = dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), (devrequest *)&octrl, tbuf, octrl.dlen, HZ);
+		}
+		free_page((unsigned long)tbuf);
+		if (i) {
+			printk(KERN_WARNING "procusb: EZUSB_OLD_CONTROL failed rqt %u rq %u len %u ret %d\n", 
+			       octrl.requesttype, octrl.request, octrl.length, i);
+			return -ENXIO;
+		}
+		return 0;
+
+	case EZUSB_OLD_BULK:
+		if (obsolete_warn < 20) {
+			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_OLD_BULK ioctl\n",
+			       current->pid, current->comm);
+			obsolete_warn++;
+		}
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		copy_from_user_ret(&obulk, (void *)arg, sizeof(obulk), -EFAULT);
+		if (obulk.ep & 0x80)
+			pipe = usb_rcvbulkpipe(dev, obulk.ep & 0x7f);
+		else
+			pipe = usb_sndbulkpipe(dev, obulk.ep & 0x7f);
+		if (!usb_maxpacket(dev, pipe, !(obulk.ep & 0x80)))
+			return -EINVAL;
+		len1 = obulk.len;
+		if (len1 > PAGE_SIZE)
+			len1 = PAGE_SIZE;
+		if (!(tbuf = (unsigned char *)__get_free_page(GFP_KERNEL)))
+			return -ENOMEM;
+		if (obulk.ep & 0x80) {
+			if (len1 && !access_ok(VERIFY_WRITE, obulk.data, len1)) {
+				free_page((unsigned long)tbuf);
+				return -EINVAL;
+			}
+			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
+			if (!i && len2) {
+				copy_to_user_ret(obulk.data, tbuf, len2, -EFAULT);
+			}
+		} else {
+			if (len1) {
+				copy_from_user_ret(tbuf, obulk.data, len1, -EFAULT);
+			}
+			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
+		}
+		free_page((unsigned long)tbuf);
+		if (i) {
+			printk(KERN_WARNING "procusb: EZUSB_OLD_BULK failed ep 0x%x len %u ret %d\n", 
+			       obulk.ep, obulk.len, i);
 			return -ENXIO;
 		}
 		return len2;
@@ -621,6 +706,20 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 		if (usb_set_interface(dev, setintf.interface, setintf.altsetting))
 			return -EINVAL;
 		return 0;
+
+	case EZUSB_SETCONFIGURATION:
+		if (obsolete_warn < 20) {
+			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_SETCONFIGURATION ioctl\n",
+			       current->pid, current->comm);
+			obsolete_warn++;
+		}
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		get_user_ret(cfg, (unsigned int *)arg, -EFAULT);
+		if (usb_set_configuration(dev, cfg) < 0)
+			return -EINVAL;
+		return 0;
+
 	}
 	return -ENOIOCTLCMD;
 }
@@ -633,8 +732,10 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 	struct usb_device *dev = (struct usb_device *)dp->data;
 	struct usb_proc_ctrltransfer ctrl;
 	struct usb_proc_bulktransfer bulk;
+	struct usb_proc_old_ctrltransfer octrl;
+	struct usb_proc_old_bulktransfer obulk;
 	struct usb_proc_setinterface setintf;
-	unsigned int len1, ep, pipe;
+	unsigned int len1, ep, pipe, cfg;
 	unsigned long len2;
 	unsigned char *tbuf;
 	int i;
@@ -655,7 +756,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			}
 			i = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), ctrl.request, 
 					    ctrl.requesttype, ctrl.value, ctrl.index, tbuf, 
-					    ctrl.length);
+					    ctrl.length, (ctrl.timeout * HZ + 500) / 1000);
 			if (!i && ctrl.length) {
 				copy_to_user_ret(ctrl.data, tbuf, ctrl.length, -EFAULT);
 			}
@@ -665,7 +766,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			}
 			i = usb_control_msg(dev, usb_sndctrlpipe(dev, 0), ctrl.request, 
 					    ctrl.requesttype, ctrl.value, ctrl.index, tbuf, 
-					    ctrl.length);
+					    ctrl.length, (ctrl.timeout * HZ + 500) / 1000);
 		}
 		free_page((unsigned long)tbuf);
 		if (i) {
@@ -695,7 +796,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 				free_page((unsigned long)tbuf);
 				return -EINVAL;
 			}
-			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2);
+			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, (bulk.timeout * HZ + 500) / 1000);
 			if (!i && len2) {
 				copy_to_user_ret(bulk.data, tbuf, len2, -EFAULT);
 			}
@@ -703,12 +804,85 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			if (len1) {
 				copy_from_user_ret(tbuf, bulk.data, len1, -EFAULT);
 			}
-			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2);
+			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, (bulk.timeout * HZ + 500) / 1000);
 		}
 		free_page((unsigned long)tbuf);
 		if (i) {
 			printk(KERN_WARNING "/proc/bus/usb: USB_PROC_BULK failed ep 0x%x len %u ret %d\n", 
 			       bulk.ep, bulk.len, i);
+			return -ENXIO;
+		}
+		return len2;
+
+	case USB_PROC_OLD_CONTROL:
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		copy_from_user_ret(&octrl, (void *)arg, sizeof(octrl), -EFAULT);
+		if (octrl.length > PAGE_SIZE)
+			return -EINVAL;
+		if (!(tbuf = (unsigned char *)__get_free_page(GFP_KERNEL)))
+			return -ENOMEM;
+		if (octrl.requesttype & 0x80) {
+			if (octrl.length && !access_ok(VERIFY_WRITE, octrl.data, octrl.length)) {
+				free_page((unsigned long)tbuf);
+				return -EINVAL;
+			}
+			i = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), octrl.request, 
+					    octrl.requesttype, octrl.value, octrl.index, tbuf, 
+					    octrl.length, HZ);
+			if (!i && octrl.length) {
+				copy_to_user_ret(octrl.data, tbuf, octrl.length, -EFAULT);
+			}
+		} else {
+			if (octrl.length) {
+				copy_from_user_ret(tbuf, octrl.data, octrl.length, -EFAULT);
+			}
+			i = usb_control_msg(dev, usb_sndctrlpipe(dev, 0), octrl.request, 
+					    octrl.requesttype, octrl.value, octrl.index, tbuf, 
+					    octrl.length, HZ);
+		}
+		free_page((unsigned long)tbuf);
+		if (i) {
+			printk(KERN_WARNING "/proc/bus/usb: USB_PROC_OLD_CONTROL failed rqt %u rq %u len %u ret %d\n", 
+			       octrl.requesttype, octrl.request, octrl.length, i);
+			return -ENXIO;
+		}
+		return 0;
+
+	case USB_PROC_OLD_BULK:
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		copy_from_user_ret(&obulk, (void *)arg, sizeof(obulk), -EFAULT);
+		if (obulk.ep & 0x80)
+			pipe = usb_rcvbulkpipe(dev, obulk.ep & 0x7f);
+		else
+			pipe = usb_sndbulkpipe(dev, obulk.ep & 0x7f);
+		if (!usb_maxpacket(dev, pipe, !(obulk.ep & 0x80)))
+			return -EINVAL;
+		len1 = obulk.len;
+		if (len1 > PAGE_SIZE)
+			len1 = PAGE_SIZE;
+		if (!(tbuf = (unsigned char *)__get_free_page(GFP_KERNEL)))
+			return -ENOMEM;
+		if (obulk.ep & 0x80) {
+			if (len1 && !access_ok(VERIFY_WRITE, obulk.data, len1)) {
+				free_page((unsigned long)tbuf);
+				return -EINVAL;
+			}
+			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
+			if (!i && len2) {
+				copy_to_user_ret(obulk.data, tbuf, len2, -EFAULT);
+			}
+		} else {
+			if (len1) {
+				copy_from_user_ret(tbuf, obulk.data, len1, -EFAULT);
+			}
+			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
+		}
+		free_page((unsigned long)tbuf);
+		if (i) {
+			printk(KERN_WARNING "/proc/bus/usb: USB_PROC_OLD_BULK failed ep 0x%x len %u ret %d\n", 
+			       obulk.ep, obulk.len, i);
 			return -ENXIO;
 		}
 		return len2;
@@ -730,10 +904,21 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			return -EINVAL;
 		return 0;
 
+	case USB_PROC_SETCONFIGURATION:
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		get_user_ret(cfg, (unsigned int *)arg, -EFAULT);
+		if (usb_set_configuration(dev, cfg) < 0)
+			return -EINVAL;
+		return 0;
+
 	case EZUSB_CONTROL:
 	case EZUSB_BULK:
+	case EZUSB_OLD_CONTROL:
+	case EZUSB_OLD_BULK:
 	case EZUSB_RESETEP:
 	case EZUSB_SETINTERFACE:
+	case EZUSB_SETCONFIGURATION:
 		return usbdev_ioctl_ezusbcompat(inode, file, cmd, arg);
 	}
 	return -ENOIOCTLCMD;

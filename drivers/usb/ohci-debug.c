@@ -80,7 +80,7 @@ void show_ohci_ed(struct ohci_ed *ed)
 
 	printk(KERN_DEBUG "   ohci ED:\n");
 	printk(KERN_DEBUG "     status     =  0x%x\n", stat);
-	printk(KERN_DEBUG "       %sMPS %d%s%s%s%s tc%d e%d fa%d%s\n",
+	printk(KERN_DEBUG "       %sMPS %d%s%s%s%s tc%d e%d fa%d [HCD_%d%s]\n",
 			skip ? "Skip " : "",
 			mps,
 			isoc ? " Isoc." : "",
@@ -91,7 +91,8 @@ void show_ohci_ed(struct ohci_ed *ed)
 			toggle,
 			endnum,
 			funcaddr,
-			(stat & ED_ALLOCATED) ? " Allocated" : "");
+			ohci_ed_hcdtype(ed) >> 27,
+			(stat & ED_ALLOCATED) ? ", Allocated" : "");
 	printk(KERN_DEBUG "     tail_td    =  0x%x\n", ed_tail_td(ed));
 	printk(KERN_DEBUG "     head_td    =  0x%x\n", ed_head_td(ed));
 	printk(KERN_DEBUG "     next_ed    =  0x%x\n", le32_to_cpup(&ed->next_ed));

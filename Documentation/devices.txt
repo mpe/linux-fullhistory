@@ -1215,7 +1215,7 @@ Your cooperation is appreciated.
 		  1 = /dev/comx1	COMX channel 1
 		    ...
 
-    block	Sixth IDE hard disk/CD-ROM interface
+    block	Seventh IDE hard disk/CD-ROM interface
 		  0 = /dev/hdm		Master: whole disk (or CD-ROM)
 		 64 = /dev/hdn		Slave: whole disk (or CD-ROM)
 
@@ -1227,7 +1227,7 @@ Your cooperation is appreciated.
 		  1 = /dev/i2c1		Second I2C adapter
 		    ...
 
-    block	Seventh IDE hard disk/CD-ROM interface
+    block	Eighth IDE hard disk/CD-ROM interface
 		  0 = /dev/hdo		Master: whole disk (or CD-ROM)
 		 64 = /dev/hdp		Slave: whole disk (or CD-ROM)
 
@@ -1241,7 +1241,7 @@ Your cooperation is appreciated.
 		 30 = /dev/mtd15	16th MTD (rw)
 		 31 = /dev/mtdr15	16th MTD (ro)
 
-    block	Eighth IDE hard disk/CD-ROM interface
+    block	Ninth IDE hard disk/CD-ROM interface
 		  0 = /dev/hdq		Master: whole disk (or CD-ROM)
 		 64 = /dev/hdr		Slave: whole disk (or CD-ROM)
 
@@ -1253,7 +1253,7 @@ Your cooperation is appreciated.
 		  1 = /dev/can1		Second CAN-Bus controller
 		    ...
 
-    block	Ninth IDE hard disk/CD-ROM interface
+    block	Tenth IDE hard disk/CD-ROM interface
 		  0 = /dev/hds		Master: whole disk (or CD-ROM)
 		 64 = /dev/hdt		Slave: whole disk (or CD-ROM)
 

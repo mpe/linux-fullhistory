@@ -16,7 +16,6 @@
 #include <linux/ioport.h>
 
 #include <asm/cache.h>
-#include <asm/pci.h>
 
 
 #define DEBUG_CONFIG 0
@@ -108,9 +107,12 @@ pdev_assign_unassigned_resources(struct pci_dev *dev, u32 min_io, u32 min_mem)
 	   (ie. do not respond to memory space writes) when it is left
 	   enabled.  A good example are QlogicISP adapters.  */
 
-	pci_read_config_dword(dev, PCI_ROM_ADDRESS, &reg);
-	reg &= ~PCI_ROM_ADDRESS_ENABLE;
-	pci_write_config_dword(dev, PCI_ROM_ADDRESS, reg);
+	if (dev->rom_base_reg) {
+		pci_read_config_dword(dev, dev->rom_base_reg, &reg);
+		reg &= ~PCI_ROM_ADDRESS_ENABLE;
+		pci_write_config_dword(dev, dev->rom_base_reg, reg);
+		dev->resource[PCI_ROM_RESOURCE].flags &= ~PCI_ROM_ADDRESS_ENABLE;
+	}
 
 	/* All of these (may) have I/O scattered all around and may not
 	   use I/O base address registers at all.  So we just have to

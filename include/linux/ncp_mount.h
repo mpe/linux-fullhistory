@@ -9,9 +9,7 @@
 #define _LINUX_NCP_MOUNT_H
 
 #include <linux/types.h>
-#include <linux/ipx.h>
 #include <linux/ncp.h>
-#include <linux/ncp_fs_i.h>
 
 #define NCP_MOUNT_VERSION 3
 

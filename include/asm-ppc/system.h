@@ -1,5 +1,5 @@
 /*
- * $Id: system.h,v 1.48 1999/09/05 11:56:40 paulus Exp $
+ * $Id: system.h,v 1.49 1999/09/11 18:37:54 cort Exp $
  *
  * Copyright (C) 1999 Cort Dougan <cort@cs.nmt.edu>
  */
@@ -103,6 +103,11 @@ extern void __global_restore_flags(unsigned long);
 #define restore_flags(x) __global_restore_flags(x)
 
 #endif /* !__SMP__ */
+
+#define local_irq_disable()		__cli()
+#define local_irq_enable()		__sti()
+#define local_irq_save(flags)		__save_and_cli(flags)
+#define local_irq_restore(flags)	__restore_flags(flags)
 
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
 

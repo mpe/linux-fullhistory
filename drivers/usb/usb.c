@@ -22,6 +22,11 @@
 
 #include "usb.h"
 
+static int usb_find_driver(struct usb_device *);
+static void usb_check_support(struct usb_device *);
+static void usb_driver_purge(struct usb_driver *, struct usb_device *);
+
+
 /*
  * We have a per-interface "registered driver" list.
  */
@@ -179,7 +184,8 @@ int check_bandwidth_alloc (unsigned int old_alloc, long bustime)
 	new_alloc = old_alloc + bustime;
 		/* what new total allocated bus time would be */
 
-	PRINTD ("usb-bandwidth-alloc: was: %ld, new: %ld, bustime = %ld us, Pipe allowed: %s",
+	PRINTD ("usb-bandwidth-alloc: was: %u, new: %u, "
+		"bustime = %ld us, Pipe allowed: %s",
 		old_alloc, new_alloc, bustime,
 		(new_alloc <= FRAME_TIME_MAX_USECS_ALLOC) ?
 			"yes" : "no");
@@ -318,7 +324,6 @@ void usb_free_dev(struct usb_device *dev)
 {
 	if (atomic_dec_and_test(&dev->refcnt)) {
 		usb_destroy_configuration(dev);
-
 		dev->bus->op->deallocate(dev);
 		kfree(dev);
 	}
@@ -681,7 +686,7 @@ int usb_set_address(struct usb_device *dev)
 	dr.index = 0;
 	dr.length = 0;
 
-	return dev->bus->op->control_msg(dev, usb_snddefctrl(dev), &dr, NULL, 0);
+	return dev->bus->op->control_msg(dev, usb_snddefctrl(dev), &dr, NULL, 0, HZ);
 }
 
 int usb_get_descriptor(struct usb_device *dev, unsigned char type, unsigned char index, void *buf, int size)
@@ -697,7 +702,7 @@ int usb_get_descriptor(struct usb_device *dev, unsigned char type, unsigned char
 	dr.length = size;
 
 	while (i--) {
-		if (!(result = dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr, buf, size))
+		if (!(result = dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr, buf, size, HZ))
 		    || result == USB_ST_STALL)
 			break;
 	}
@@ -714,7 +719,7 @@ int usb_get_string(struct usb_device *dev, unsigned short langid, unsigned char 
 	dr.index = langid;
 	dr.length = size;
 
-	return dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr, buf, size);
+	return dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr, buf, size, HZ);
 }
 
 int usb_get_device_descriptor(struct usb_device *dev)
@@ -740,7 +745,7 @@ int usb_get_status (struct usb_device *dev, int type, int target, void *data)
 	dr.index = target;
 	dr.length = 2;
 
-	return dev->bus->op->control_msg (dev, usb_rcvctrlpipe (dev,0), &dr, data, 2);
+	return dev->bus->op->control_msg (dev, usb_rcvctrlpipe (dev,0), &dr, data, 2, HZ);
 }
 
 int usb_get_protocol(struct usb_device *dev)
@@ -754,7 +759,7 @@ int usb_get_protocol(struct usb_device *dev)
 	dr.index = 1;
 	dr.length = 1;
 
-	if (dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev, 0), &dr, buf, 1))
+	if (dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev, 0), &dr, buf, 1, HZ))
 		return -1;
 
 	return buf[0];
@@ -770,7 +775,7 @@ int usb_set_protocol(struct usb_device *dev, int protocol)
 	dr.index = 1;
 	dr.length = 0;
 
-	if (dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0))
+	if (dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0, HZ))
 		return -1;
 
 	return 0;
@@ -788,7 +793,7 @@ int usb_set_idle(struct usb_device *dev,  int duration, int report_id)
 	dr.index = 1;
 	dr.length = 0;
 
-	if (dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0))
+	if (dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0, HZ))
 		return -1;
 
 	return 0;
@@ -838,7 +843,7 @@ int usb_clear_halt(struct usb_device *dev, int endp)
 	dr.index = endp;
 	dr.length = 0;
 
-	result = dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev,0), &dr, NULL, 0);
+	result = dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev,0), &dr, NULL, 0, HZ);
 
 	/* don't clear if failed */
 	if (result)
@@ -850,7 +855,7 @@ int usb_clear_halt(struct usb_device *dev, int endp)
 	dr.length = 2;
 	status = 0xffff;
 
-	result = dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr, &status, 2);
+	result = dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr, &status, 2, HZ);
 
 	if (result)
 	    return result;
@@ -876,7 +881,7 @@ int usb_set_interface(struct usb_device *dev, int interface, int alternate)
 	dr.index = interface;
 	dr.length = 0;
 
-	if (dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0))
+	if (dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0, HZ))
 		return -1;
 
 	dev->ifnum = interface;
@@ -907,7 +912,7 @@ int usb_set_configuration(struct usb_device *dev, int configuration)
 		printk(KERN_INFO "usb: selecting invalid configuration %d\n", configuration);
 		return -1;
 	}
-	if (dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0))
+	if (dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0, HZ))
 		return -1;
 
 	dev->actconfig = cp;
@@ -927,7 +932,7 @@ int usb_get_report(struct usb_device *dev, unsigned char type, unsigned char id,
 	dr.index = index;
 	dr.length = size;
 
-	if (dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev, 0), &dr, buf, size))
+	if (dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev, 0), &dr, buf, size, HZ))
 		return -1;
 
 	return 0;
@@ -962,9 +967,9 @@ int usb_get_configuration(struct usb_device *dev)
 		/* We grab the first 8 bytes so we know how long the whole */
 		/*  configuration is */
 		result = usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, buffer, 8);
-		if (result)
+		if (result < 0)
 	    		return -1;
-
+		
   	  	/* Get the full buffer */
 		le16_to_cpus(&desc->wTotalLength);
 
@@ -1115,7 +1120,7 @@ int usb_new_device(struct usb_device *dev)
 	return 0;
 }
 
-int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size)
+int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size, int timeout)
 {
         devrequest dr;
 
@@ -1125,7 +1130,7 @@ int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u
         dr.index = cpu_to_le16p(&index);
         dr.length = cpu_to_le16p(&size);
 
-        return dev->bus->op->control_msg(dev, pipe, &dr, data, size);
+        return dev->bus->op->control_msg(dev, pipe, &dr, data, size, timeout);
 }
 
 int usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id, void **handle)

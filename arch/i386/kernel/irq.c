@@ -22,7 +22,6 @@
 
 #include <linux/ptrace.h>
 #include <linux/errno.h>
-#include <linux/kernel_stat.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/ioport.h>
@@ -30,14 +29,13 @@
 #include <linux/timex.h>
 #include <linux/malloc.h>
 #include <linux/random.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#include <linux/kernel_stat.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/bitops.h>
-#include <asm/smp.h>
 #include <asm/pgtable.h>
 #include <asm/delay.h>
 #include <asm/desc.h>
@@ -48,7 +46,7 @@
 unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
 
-atomic_t nmi_counter;
+extern atomic_t nmi_counter[NR_CPUS];
 
 /*
  * Linux has a controller-independent x86 interrupt architecture.
@@ -75,13 +73,60 @@ spinlock_t irq_controller_lock = SPIN_LOCK_UNLOCKED;
 /*
  * Controller mappings for all interrupt sources:
  */
-irq_desc_t irq_desc[NR_IRQS] __cacheline_aligned = { [0 ... NR_IRQS-1] = { 0, &no_irq_type, }};
+irq_desc_t irq_desc[NR_IRQS] __cacheline_aligned =
+				{ [0 ... NR_IRQS-1] = { 0, &no_irq_type, }};
 
 /*
  * Special irq handlers.
  */
 
 void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
+
+/*
+ * Generic no controller code
+ */
+
+static void enable_none(unsigned int irq) { }
+static unsigned int startup_none(unsigned int irq) { return 0; }
+static void disable_none(unsigned int irq) { }
+static void ack_none(unsigned int irq)
+{
+/*
+ * 'what should we do if we get a hw irq event on an illegal vector'.
+ * each architecture has to answer this themselves, it doesnt deserve
+ * a generic callback i think.
+ */
+#if CONFIG_X86
+	printk("unexpected IRQ trap at vector %02x\n", irq);
+#ifdef __SMP__
+	/*
+	 * Currently unexpected vectors happen only on SMP and APIC.
+	 * We _must_ ack these because every local APIC has only N
+	 * irq slots per priority level, and a 'hanging, unacked' IRQ
+	 * holds up an irq slot - in excessive cases (when multiple
+	 * unexpected vectors occur) that might lock up the APIC
+	 * completely.
+	 */
+	ack_APIC_irq();
+#endif
+#endif
+}
+
+/* startup is the same as "enable", shutdown is same as "disable" */
+#define shutdown_none	disable_none
+#define end_none	enable_none
+
+struct hw_interrupt_type no_irq_type = {
+	"none",
+	startup_none,
+	shutdown_none,
+	enable_none,
+	disable_none,
+	ack_none,
+	end_none
+};
+
+volatile unsigned long irq_err_count;
 
 /*
  * Generic, controller-independent functions:
@@ -106,22 +151,30 @@ int get_irq_list(char *buf)
 #ifndef __SMP__
 		p += sprintf(p, "%10u ", kstat_irqs(i));
 #else
-		for (j=0; j<smp_num_cpus; j++)
+		for (j = 0; j < smp_num_cpus; j++)
 			p += sprintf(p, "%10u ",
 				kstat.irqs[cpu_logical_map(j)][i]);
 #endif
 		p += sprintf(p, " %14s", irq_desc[i].handler->typename);
 		p += sprintf(p, "  %s", action->name);
 
-		for (action=action->next; action; action = action->next) {
+		for (action=action->next; action; action = action->next)
 			p += sprintf(p, ", %s", action->name);
-		}
 		*p++ = '\n';
 	}
-	p += sprintf(p, "NMI: %10u\n", atomic_read(&nmi_counter));
-#ifdef __SMP__
-	p += sprintf(p, "ERR: %10lu\n", ipi_count);
-#endif		
+	p += sprintf(p, "NMI: ");
+	for (j = 0; j < smp_num_cpus; j++)
+		p += sprintf(p, "%10u ",
+			atomic_read(nmi_counter+cpu_logical_map(j)));
+	p += sprintf(p, "\n");
+#if CONFIG_SMP
+	p += sprintf(p, "LOC: ");
+	for (j = 0; j < smp_num_cpus; j++)
+		p += sprintf(p, "%10u ",
+			apic_timer_irqs[cpu_logical_map(j)]);
+	p += sprintf(p, "\n");
+#endif
+	p += sprintf(p, "ERR: %10lu\n", irq_err_count);
 	return p - buf;
 }
 
@@ -520,7 +573,7 @@ asmlinkage unsigned int do_IRQ(struct pt_regs regs)
 	kstat.irqs[cpu][irq]++;
 	desc = irq_desc + irq;
 	spin_lock(&irq_controller_lock);
-	irq_desc[irq].handler->ack(irq);
+	desc->handler->ack(irq);
 	/*
 	   REPLAY is when Linux resends an IRQ that was dropped earlier
 	   WAITING is used by probe to mark irqs that are being tested
@@ -570,9 +623,8 @@ asmlinkage unsigned int do_IRQ(struct pt_regs regs)
 		spin_unlock(&irq_controller_lock);
 	}
 	desc->status &= ~IRQ_INPROGRESS;
-	if (!(desc->status & IRQ_DISABLED)){
-			irq_desc[irq].handler->end(irq);
-	}
+	if (!(desc->status & IRQ_DISABLED))
+		desc->handler->end(irq);
 	spin_unlock(&irq_controller_lock);
 
 	/*

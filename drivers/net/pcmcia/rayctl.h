@@ -142,8 +142,6 @@ struct adhoc_beacon
 };
 /*****************************************************************************/
 /*****************************************************************************/
-
-
 /* #define C_MAC_HDR_2_WEP 0x40 */
 /* TX/RX CCS constants */
 #define TX_HEADER_LENGTH 0x1C
@@ -151,6 +149,9 @@ struct adhoc_beacon
 #define TX_AUTHENTICATE_LENGTH (TX_HEADER_LENGTH + 6)
 #define TX_AUTHENTICATE_LENGTH_MSB (TX_AUTHENTICATE_LENGTH >> 8)
 #define TX_AUTHENTICATE_LENGTH_LSB (TX_AUTHENTICATE_LENGTH & 0xff)
+#define TX_DEAUTHENTICATE_LENGTH (TX_HEADER_LENGTH + 2)
+#define TX_DEAUTHENTICATE_LENGTH_MSB (TX_AUTHENTICATE_LENGTH >> 8)
+#define TX_DEAUTHENTICATE_LENGTH_LSB (TX_AUTHENTICATE_LENGTH & 0xff)
 #define FCS_LEN           4
 
 #define ADHOC                 0
@@ -324,17 +325,23 @@ struct adhoc_beacon
 #define CARD_ASSOC_COMPLETE (6)
 #define CARD_ASSOC_FAILED   (16)
 
-/*** Values for authentication_state */
+/*** Values for authentication_state ***********************************/
 #define UNAUTHENTICATED     (0)
 #define AWAITING_RESPONSE   (1)
 #define AUTHENTICATED       (2)
 #define NEED_TO_AUTH        (3)
 
-/*** Values for authentication type */
+/*** Values for authentication type ************************************/
 #define OPEN_AUTH_REQUEST   (1)
 #define OPEN_AUTH_RESPONSE  (2)
-
-
+#define BROADCAST_DEAUTH    (0xc0)
+/*** Values for timer functions ****************************************/
+#define TODO_NOTHING              (0)
+#define TODO_VERIFY_DL_START      (-1)
+#define TODO_START_NET            (-2)
+#define TODO_JOIN_NET             (-3)
+#define TODO_AUTHENTICATE_TIMEOUT (-4)
+#define TODO_SEND_CCS             (-5)
 /***********************************************************************/
 /* Parameter passing structure for update/report parameter CCS's */
 struct object_id {

@@ -68,6 +68,7 @@ struct serial_struct {
 #define ZILOG_CLOSING		0x08000000 /* Serial port is closing */
 #define ZILOG_CTS_FLOW		0x04000000 /* Do CTS flow control */
 #define ZILOG_CHECK_CD		0x02000000 /* i.e., CLOCAL */
+#define ZILOG_SLEEPING		0x01000000 /* have shut it down for sleep */
 
 /* Software state per channel */
 

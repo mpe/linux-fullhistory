@@ -233,7 +233,6 @@ struct kbdiacr accent_table[MAX_DIACR] = {
 	{'A', 'A', '\305'},	{'a', 'a', '\345'},
 	{'A', 'E', '\306'},	{'a', 'e', '\346'},
 	{',', 'C', '\307'},	{',', 'c', '\347'},
-	{'\'', 'C', '\307'},	{'\'', 'c', '\347'},
 	{'`', 'E', '\310'},	{'`', 'e', '\350'},
 	{'\'', 'E', '\311'},	{'\'', 'e', '\351'},
 	{'^', 'E', '\312'},	{'^', 'e', '\352'},
@@ -260,4 +259,4 @@ struct kbdiacr accent_table[MAX_DIACR] = {
 	{'s', 'z', '\337'},	{'i', 'j', '\377'},
 };
 
-unsigned int accent_table_size = 70;
+unsigned int accent_table_size = 68;

@@ -96,7 +96,6 @@ struct hw_interrupt_type i8259_pic = {
         " i8259    ",
         NULL,
         NULL,
-        NULL,
         i8259_unmask_irq,
         i8259_mask_irq,
         i8259_mask_and_ack_irq,

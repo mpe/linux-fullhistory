@@ -106,6 +106,9 @@ extern struct cpuinfo_x86 cpu_data[];
 #define current_cpu_data boot_cpu_data
 #endif
 
+#define cpu_has_tsc \
+		(cpu_data[smp_processor_id()].x86_capability & X86_FEATURE_TSC)
+
 extern char ignore_irq13;
 
 extern void identify_cpu(struct cpuinfo_x86 *);

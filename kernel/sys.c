@@ -997,6 +997,17 @@ asmlinkage long sys_prctl(int option, unsigned long arg2, unsigned long arg3,
 		case PR_GET_PDEATHSIG:
 			error = put_user(current->pdeath_signal, (int *)arg2);
 			break;
+		case PR_GET_DUMPABLE:
+			if (current->dumpable)
+				error = 1;
+			break;
+		case PR_SET_DUMPABLE:
+			if (arg2 != 0 && arg2 != 1) {
+				error = -EINVAL;
+				break;
+			}
+			current->dumpable = arg2;
+			break;
 		default:
 			error = -EINVAL;
 			break;

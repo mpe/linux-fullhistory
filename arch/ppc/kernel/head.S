@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.143 1999/09/05 11:56:28 paulus Exp $
+ *  $Id: head.S,v 1.147 1999/09/15 23:58:53 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -333,8 +333,12 @@ label:						\
 	.long	ret_from_except
 
 /* System reset */
-#ifdef CONFIG_SMP /* MVME/MTX start the secondary here */
+#ifdef CONFIG_SMP /* MVME/MTX and gemini start the secondary here */
+#ifdef CONFIG_GEMINI
+	STD_EXCEPTION(0x100, Reset, __secondary_start_gemini)
+#else /* CONFIG_GEMINI */
 	STD_EXCEPTION(0x100, Reset, __secondary_start_psurge)
+#endif /* CONFIG_GEMINI */
 #else
 	STD_EXCEPTION(0x100, Reset, UnknownException)
 #endif
@@ -421,6 +425,8 @@ HardwareInterrupt:
 	li	r20,MSR_KERNEL
 	li	r4,0
 	bl	transfer_to_handler
+	.globl do_IRQ_intercept
+do_IRQ_intercept:
 	.long	do_IRQ;
 	.long	ret_from_except
 	
@@ -461,7 +467,17 @@ FPUnavailable:
 	.long	KernelFP
 	.long	ret_from_except
 
-	STD_EXCEPTION(0x900, Decrementer, timer_interrupt)
+	. = 0x900
+Decrementer:
+	EXCEPTION_PROLOG
+	addi	r3,r1,STACK_FRAME_OVERHEAD
+	li	r20,MSR_KERNEL
+	bl	transfer_to_handler
+	.globl timer_interrupt_intercept
+timer_interrupt_intercept:
+	.long	timer_interrupt
+	.long	ret_from_except
+
 	STD_EXCEPTION(0xa00, Trap_0a, UnknownException)
 	STD_EXCEPTION(0xb00, Trap_0b, UnknownException)
 
@@ -1011,6 +1027,20 @@ __secondary_hold:
 	mr	r24,r3			/* cpu # */
 	blr
 
+	.globl	__secondary_start_gemini
+__secondary_start_gemini:
+1011:	b	1011b
+	
+        mfspr   r4,HID0
+        ori     r4,r4,HID0_ICFI
+        li      r3,0
+        ori     r3,r3,HID0_ICE
+        andc    r4,r4,r3
+        mtspr   HID0,r4
+        sync
+        bl      prom_init
+        b       __secondary_start
+	
 	.globl	__secondary_start_psurge
 __secondary_start_psurge:
 	li	r24,1			/* cpu # */

@@ -40,7 +40,6 @@
 #include <asm/hwrpb.h>
 #include <asm/dma.h>
 #include <asm/io.h>
-#include <asm/pci.h>
 
 #include "proto.h"
 #include "pci_impl.h"

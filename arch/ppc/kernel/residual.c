@@ -1,5 +1,5 @@
 /*
- * $Id: residual.c,v 1.15 1999/05/14 07:24:27 davem Exp $
+ * $Id: residual.c,v 1.16 1999/09/17 17:23:09 cort Exp $
  *
  * Code to deal with the PReP residual data.
  *
@@ -49,6 +49,9 @@
 #include <linux/ide.h>
 #include <asm/ide.h>
 
+
+unsigned char __res[sizeof(RESIDUAL)] __prepdata = {0,};
+RESIDUAL *res = (RESIDUAL *)&__res;
 
 const char * PnP_BASE_TYPES[] __initdata = {
   "Reserved",

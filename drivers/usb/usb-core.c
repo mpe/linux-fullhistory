@@ -31,6 +31,9 @@
 
 int usb_init(void)
 {
+#ifdef CONFIG_USB_PROC
+	proc_usb_init ();
+#endif
 #ifndef CONFIG_USB_MODULE
 #	ifdef CONFIG_USB_UHCI
 		uhci_init();
@@ -59,6 +62,9 @@ int usb_init(void)
 #	ifdef CONFIG_USB_PRINTER
 		usb_printer_init();
 #	endif
+#	ifdef CONFIG_USB_SERIAL
+		usb_serial_init();
+#	endif
 #	ifdef CONFIG_USB_CPIA
 		usb_cpia_init();
 #	endif
@@ -68,9 +74,6 @@ int usb_init(void)
 #	ifdef CONFIG_USB_SCSI
 		usb_scsi_init();
 #	endif
-#endif
-#ifdef CONFIG_USB_PROC
-	proc_usb_init ();
 #endif
 	return 0;
 }

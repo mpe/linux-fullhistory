@@ -517,6 +517,9 @@ static struct super_block *sysv_read_super(struct super_block *sb,
 		unlock_super(sb);
 		return NULL;
 	}
+#ifndef CONFIG_SYSV_FS_WRITE
+	sb->s_flags |= MS_RDONLY;
+#endif
 	unlock_super(sb);
 	sb->s_dirt = 1;
 	/* brelse(bh);  resp.  brelse(bh1); brelse(bh2);
@@ -912,15 +915,15 @@ abort:
 	return err;
 
 abort_negative:
-	printk("sysv_getblk: block < 0\n");
+	printk("sysv_get_block: block < 0\n");
 	goto abort;
 
 abort_too_big:
-	printk("sysv_getblk: block > big\n");
+	printk("sysv_get_block: block > big\n");
 	goto abort;
 }
 
-struct buffer_head *sysv_getblk(struct inode *inode, unsigned int block, int create)
+static struct buffer_head *sysv_getblk(struct inode *inode, unsigned int block, int create)
 {
 	struct buffer_head dummy;
 	int error;
@@ -930,9 +933,9 @@ struct buffer_head *sysv_getblk(struct inode *inode, unsigned int block, int cre
 	error = sysv_get_block(inode, block, &dummy, create);
 	if (!error && buffer_mapped(&dummy)) {
 		struct buffer_head *bh;
-		bh = getblk(dummy.b_dev, dummy.b_blocknr, BLOCK_SIZE);
+		bh = getblk(dummy.b_dev, dummy.b_blocknr, inode->i_sb->sv_block_size);
 		if (buffer_new(&dummy)) {
-			memset(bh->b_data, 0, BLOCK_SIZE);
+			memset(bh->b_data, 0, inode->i_sb->sv_block_size);
 			mark_buffer_uptodate(bh, 1);
 			mark_buffer_dirty(bh, 1);
 		}
@@ -1168,18 +1171,16 @@ int sysv_sync_inode(struct inode * inode)
 
 /* Every kernel module contains stuff like this. */
 
-static struct file_system_type sysv_fs_type[3] = {
-	{"xenix",    FS_REQUIRES_DEV, sysv_read_super, NULL},
-	{"sysv",     FS_REQUIRES_DEV, sysv_read_super, NULL},
-	{"coherent", FS_REQUIRES_DEV, sysv_read_super, NULL}
+static struct file_system_type sysv_fs_type[] = {
+	{"sysv",     FS_REQUIRES_DEV, sysv_read_super, NULL}
 };
 
 int __init init_sysv_fs(void)
 {
 	int i;
-	int ouch;
+	int ouch = 0;
 
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < sizeof(sysv_fs_type)/sizeof(sysv_fs_type[0]); i++) {
 		if ((ouch = register_filesystem(&sysv_fs_type[i])) != 0)
 			break;
 	}
@@ -1198,7 +1199,7 @@ void cleanup_module(void)
 {
 	int i;
 
-	for (i = 0; i < 3; i++)
+	for (i = 0; i < sizeof(sysv_fs_type)/sizeof(sysv_fs_type[0]); i++)
 		/* No error message if this breaks... that's OK... */
 		unregister_filesystem(&sysv_fs_type[i]);
 }

@@ -1,3 +1,33 @@
+Sat Sep 11  18:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.2c
+	- Handle correctly (hopefully) jiffies wrap-around.
+	- Restore the entry used to detect 875 until revision 0xff.
+	  (I removed it inadvertently, it seems :) )
+	- Replace __initfunc() which is deprecated stuff by __init which 
+	  is not yet so. ;-)
+	- Add support of some 'resource handling' for linux-2.3.13.
+	  Basically the BARs have been changed to something more complex 
+	  in the pci_dev structure.
+	- Remove some deprecated code.
+
+Sat May 10  11:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* revision pre-3.2b-1
+	- Support for the 53C895A by Pamela Delaney <pam.delaney@lsil.com>
+	  The 53C895A contains all of the features of the 896 but has only 
+	  one channel and has a 32 bit PCI bus. It does 64 bit PCI addressing 
+	  using dual cycle PCI data transfers.
+	- Miscellaneous minor fixes.
+	- Some additions to the README.ncr53c8xx file.
+
+Sun Apr 11  10:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.2a
+	- Add 'hostid:#id' boot option. This option allows to change the 
+	  default SCSI id the driver uses for controllers.
+	- Remove nvram layouts and driver set-up structures from the C source,
+	  and use the one defined in sym53c8xx_defs.h file.
+	  (shared by both drivers).
+	- Set for now MAX LUNS to 16 (instead of 8).
+
 Thu Mar 11  23:00 1999 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.2	  (8xx-896 driver bundle)
 	- Only define the host template in ncr53c8xx.h and include the 

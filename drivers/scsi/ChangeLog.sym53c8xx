@@ -1,3 +1,132 @@
+Sat Sep 11  11:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.5e
+	- New linux-2.3.13 __setup scheme support added.
+	- Cleanup of the extended error status handling:
+	  Use 1 bit per error type.
+	- Also save the extended error status prior to auto-sense.
+	- Add the FE_DIFF chip feature bit to indicate support of 
+	  diff probing from GPIO3 (825/825A/876/875).
+	- Remove the quirk handling that has been useless since day one.
+	- Work-around PCI chips being reported twice on some platforms.
+	- Add some redundant PCI reads in order to deal with common 
+	  bridge misbehaviour regarding posted write flushing.
+	- Add some other conditionnal code for people who have to deal 
+	  with really broken bridges (they will have to edit a source 
+	  file to try these options).
+	- Handle correctly (hopefully) jiffies wrap-around.
+	- Restore the entry used to detect 875 until revision 0xff.
+	  (I removed it inadvertently, it seems :) )
+	- Replace __initfunc() which is deprecated stuff by __init which 
+	  is not yet so. ;-)
+	- Rewrite the MESSAGE IN scripts more generic by using a MOVE 
+	  table indirect. Extended messages of any size are accepted now.
+	  (Size is limited to 8 for now, but a constant is just to be 
+	  increased if necessary)
+	- Fix some bug in the fully untested MDP handling:) and share 
+	  some code between MDP handling and residual calculation.
+	- Calculate the data transfer residual as the 2's complement 
+	  integer (A positive value in returned on data overrun, and 
+	  a negative one on underrun).
+	- Add support of some 'resource handling' for linux-2.3.13.
+	  Basically the BARs have been changed to something more complex 
+	  in the pci_dev structure.
+	- Remove some deprecated code.
+
+Sat Jun  5  11:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.5c
+	- Donnot negotiate on auto-sense if we are currently using 8 bit 
+	  async transfer for the target.
+	- Only check for SISL/RAID on i386 platforms.
+	  (A problem has been reported on PPC with that code).
+	- On MSG REJECT for a negotiation, the driver attempted to restart 
+	  the SCRIPT processor when this one was already running.
+
+Sat May 29  12:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.5b
+	- Force negotiation prior auto-sense.
+	  This ensures that the driver will be able to grab the sense data 
+	  from a device that has received a BUS DEVICE RESET message from 
+	  another initiator.
+	- Complete all disconnected CCBs for a logical UNIT if we are told 
+	  about a UNIT ATTENTION for a RESET condition by this target.
+	- Add the control command 'cleardev' that allows to send a ABORT  
+	  message to a logical UNIT (for test purpose).
+
+Tue May 25  23:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.5a
+	- Add support for task abort and bus device reset SCSI message 
+	  and implement proper synchonisation with SCRIPTS to handle 
+          correctly task abortion without races.
+	- Send an ABORT message (if untagged) or ABORT TAG message (if tagged)
+	  when the driver is told to abort a command that is disconnected and 
+	  complete the command with appropriate error.
+	  If the aborted command is not yet started, remove it from the start 
+	  queue and complete it with error.
+	- Add the control command 'resetdev' that allows to send a BUS 
+	  DEVICE RESET message to a target (for test purpose).
+	- Clean-up some unused or useless code.
+
+Fri May 21  23:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.5
+	- Add support for CHMOV with Wide controllers.
+	- Handling of the SWIDE (low byte residue at the end of a CHMOV 
+	  in DATA IN phase with WIDE transfer when the byte count gets odd).
+	- Handling of the IGNORE WIDE RESIDUE message.
+	  Handled from SCRIPTS as possible with some optimizations when both 
+	  a wide device and the controller are odd at the same time (SWIDE 
+	  present and IGNORE WIDE RESIDUE message on the BUS at the same time).
+	- Check against data OVERRUN/UNDERRUN condition at the end of a data 
+	  transfer, whatever a SWIDE is present (OVERRUN in DATA IN phase) 
+	  or the SODL is full (UNDERRUN in DATA out phase).
+	- Handling of the MODIFY DATA POINTER message.
+	  This one cannot be handled from SCRIPTS, but hopefully it will not
+	  happen very often. :)
+	- Large rewrite of the SCSI MESSAGE handling.
+
+Sun May 9  11:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.4
+	- Support for IMMEDIATE ARBITRATION.
+	  See the README file for detailed information about this feature.
+	  Requires both a compile option and a boot option.
+	- Minor SCRIPTS optimization in reselection pattern for LUN 0.
+	- Simpler algorithm to deal with SCSI command starvation.
+	  Just use 2 tag counters in flip/flop and switch to the other 
+	  one every 3 seconds.
+	- Do some work in SCRIPTS after the SELECT instruction and prior 
+	  to testing for a PHASE. SYMBIOS say this feature is working fine. 
+	  (Btw, only problems with Toshiba 3401B had been reported).
+	- Measure the PCI clock speed and donnot attach controllers if 
+	  result is greater than 37 MHz. Since the precision of the 
+	  algorithm (from Stefan Esser) is better than 2%, this should 
+	  be fine.
+	- Fix the misdetection of SYM53C875E (was detected as a 876).
+	- Fix the misdetection of SYM53C810 not A (was detected as a 810A).
+	- Support for up to 256 TAGS per LUN (CMD_PER_LUN).
+	  Currently limited to 255 due to Linux limitation. :)
+	- Support for up to 508 active commands (CAN_QUEUE).
+	- Support for the 53C895A by Pamela Delaney <pam.delaney@lsil.com>
+	  The 53C895A contains all of the features of the 896 but has only 
+	  one channel and has a 32 bit PCI bus. It does 64 bit PCI addressing 
+	  using dual cycle PCI data transfers.
+	- Miscellaneous minor fixes.
+	- Some additions to the README.ncr53c8xx file.
+
+Tue Apr 15  10:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.3e
+	- Support for any number of LUNs (64) (SPI2-compliant).
+	  (Btw, this may only be ever usefull under linux-2.2 ;-))
+
+Sun Apr 11  10:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.3d
+	- Add 'hostid:#id' boot option. This option allows to change the 
+	  default SCSI id the driver uses for controllers.
+	- Make SCRIPTS not use self-mastering for PCI.
+	  There were still 2 places the driver used this feature of the 
+	  53C8XX family.
+	- Move some data structures (nvram layouts and driver set-up) to 
+	  the sym53c8xx_defs.h file. So, the both drivers will share them.
+	- Set MAX LUNS to 16 (instead of 8).
+
 Sat Mar 20  21:00 1999 Gerard Roudier (groudier@club-internet.fr)
 	* version sym53c8xx-1.3b
 	- Add support for NCR PQS PDS.

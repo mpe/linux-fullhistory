@@ -9,11 +9,12 @@
 
 O_TARGET := 8xx_io.a
 O_OBJS	= commproc.o uart.o
-ifdef CONFIG_MBX
-O_OBJS += enet.o
-endif
-ifdef CONFIG_FADS
+
+ifdef CONFIG_FEC_ENET
 O_OBJS += fec.o
+endif
+ifdef CONFIG_SCC_ENET
+O_OBJS += enet.o
 endif
 
 include $(TOPDIR)/Rules.make

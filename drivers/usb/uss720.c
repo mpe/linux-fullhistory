@@ -31,6 +31,7 @@
  *                  ECP currently untested
  *   0.3  10.08.99  fixing merge errors
  *   0.4  13.08.99  Added Vendor/Product ID of Brad Hard's cable
+ *   0.5  20.09.99  usb_control_msg wrapper used
  *
  */
 
@@ -61,17 +62,11 @@ static int get_1284_register(struct parport *pp, unsigned char reg, unsigned cha
 	static const unsigned char regindex[9] = {
 		4, 0, 1, 5, 5, 0, 2, 3, 6
 	};
-        devrequest dr;
         int ret;
 
 	if (!usbdev)
 		return -1;
-        dr.requesttype = 0xc0;
-        dr.request = 3;
-        dr.value = ((unsigned int)reg) << 8;
-        dr.index = 0;
-        dr.length = 7;
-        ret = usbdev->bus->op->control_msg(usbdev, usb_rcvctrlpipe(usbdev,0), &dr, priv->reg, 7);
+        ret = usb_control_msg(usbdev, usb_rcvctrlpipe(usbdev,0), 3, 0xc0, ((unsigned int)reg) << 8, 0, priv->reg, 7, HZ);
         if (ret) {
                 printk(KERN_DEBUG "uss720: get_1284_register(%d) failed, status 0x%x\n",
 		       (unsigned int)reg, ret);
@@ -95,17 +90,11 @@ static int set_1284_register(struct parport *pp, unsigned char reg, unsigned cha
 {
 	struct parport_uss720_private *priv = pp->private_data;
 	struct usb_device *usbdev = priv->usbdev;
-        devrequest dr;
         int ret;
 
 	if (!usbdev)
 		return -1;
-        dr.requesttype = 0x40;
-        dr.request = 4;
-        dr.value = (((unsigned int)reg) << 8) | val;
-        dr.index = 0;
-        dr.length = 0;
-        ret = usbdev->bus->op->control_msg(usbdev, usb_sndctrlpipe(usbdev,0), &dr, NULL, 0);
+        ret = usb_control_msg(usbdev, usb_sndctrlpipe(usbdev,0), 4, 0x40, (((unsigned int)reg) << 8) | val, 0, NULL, 0, HZ);
         if (ret) {
                 printk(KERN_DEBUG "uss720: set_1284_register(%u,0x%02x) failed, status 0x%x\n", 
 		       (unsigned int)reg, (unsigned int)val, ret);
@@ -374,7 +363,7 @@ static size_t parport_uss720_epp_write_data(struct parport *pp, const void *buf,
 		return 0;
 	if (change_mode(pp, ECR_EPP))
 		return 0;
-	i = usbdev->bus->op->bulk_msg(usbdev, usb_sndbulkpipe(usbdev, 1), buf, length, &rlen);
+	i = usbdev->bus->op->bulk_msg(usbdev, usb_sndbulkpipe(usbdev, 1), buf, length, &rlen, HZ*20);
 	if (i)
 		printk(KERN_ERR "uss720: sendbulk ep 1 buf %p len %u rlen %lu\n", buf, length, rlen);
 	change_mode(pp, ECR_PS2);
@@ -435,7 +424,7 @@ static size_t parport_uss720_ecp_write_data(struct parport *pp, const void *buff
 		return 0;
 	if (change_mode(pp, ECR_ECP))
 		return 0;
-	i = usbdev->bus->op->bulk_msg(usbdev, usb_sndbulkpipe(usbdev, 1), buffer, len, &rlen);
+	i = usbdev->bus->op->bulk_msg(usbdev, usb_sndbulkpipe(usbdev, 1), buffer, len, &rlen, HZ*20);
 	if (i)
 		printk(KERN_ERR "uss720: sendbulk ep 1 buf %p len %u rlen %lu\n", buffer, len, rlen);
 	change_mode(pp, ECR_PS2);
@@ -453,7 +442,7 @@ static size_t parport_uss720_ecp_read_data(struct parport *pp, void *buffer, siz
 		return 0;
 	if (change_mode(pp, ECR_ECP))
 		return 0;
-	i = usbdev->bus->op->bulk_msg(usbdev, usb_rcvbulkpipe(usbdev, 2), buffer, len, &rlen);
+	i = usbdev->bus->op->bulk_msg(usbdev, usb_rcvbulkpipe(usbdev, 2), buffer, len, &rlen, HZ*20);
 	if (i)
 		printk(KERN_ERR "uss720: recvbulk ep 2 buf %p len %u rlen %lu\n", buffer, len, rlen);
 	change_mode(pp, ECR_PS2);
@@ -486,7 +475,7 @@ static size_t parport_uss720_write_compat(struct parport *pp, const void *buffer
 		return 0;
 	if (change_mode(pp, ECR_PPF))
 		return 0;
-	i = usbdev->bus->op->bulk_msg(usbdev, usb_sndbulkpipe(usbdev, 1), buffer, len, &rlen);
+	i = usbdev->bus->op->bulk_msg(usbdev, usb_sndbulkpipe(usbdev, 1), buffer, len, &rlen, HZ*20);
 	if (i)
 		printk(KERN_ERR "uss720: sendbulk ep 1 buf %p len %u rlen %lu\n", buffer, len, rlen);
 	change_mode(pp, ECR_PS2);

@@ -15,11 +15,11 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/adb.h>
+#include <linux/cuda.h>
+#include <linux/pmu.h>
 
 #include <asm/init.h>
-#include <asm/adb.h>
-#include <asm/cuda.h>
-#include <asm/pmu.h>
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/io.h>
@@ -55,11 +55,14 @@ __pmac
 
 unsigned long pmac_get_rtc_time(void)
 {
+#ifdef CONFIG_ADB
 	struct adb_request req;
+#endif
 
 	/* Get the time from the RTC */
-	switch (adb_hardware) {
-	case ADB_VIACUDA:
+	switch (sys_ctrler) {
+#ifdef CONFIG_ADB_CUDA
+	case SYS_CTRLER_CUDA:
 		if (cuda_request(&req, NULL, 2, CUDA_PACKET, CUDA_GET_TIME) < 0)
 			return 0;
 		while (!req.complete)
@@ -69,7 +72,9 @@ unsigned long pmac_get_rtc_time(void)
 			       req.reply_len);
 		return (req.reply[3] << 24) + (req.reply[4] << 16)
 			+ (req.reply[5] << 8) + req.reply[6] - RTC_OFFSET;
-	case ADB_VIAPMU:
+#endif /* CONFIG_ADB_CUDA */
+#ifdef CONFIG_ADB_PMU
+	case SYS_CTRLER_PMU:
 		if (pmu_request(&req, NULL, 1, PMU_READ_RTC) < 0)
 			return 0;
 		while (!req.complete)
@@ -79,6 +84,7 @@ unsigned long pmac_get_rtc_time(void)
 			       req.reply_len);
 		return (req.reply[1] << 24) + (req.reply[2] << 16)
 			+ (req.reply[3] << 8) + req.reply[4] - RTC_OFFSET;
+#endif /* CONFIG_ADB_PMU */
 	default:
 		return 0;
 	}
@@ -141,13 +147,12 @@ int __init via_calibrate_decr(void)
 /*
  * Reset the time after a sleep.
  */
-static int time_sleep_notify(struct notifier_block *this, unsigned long event,
-			     void *x)
+static int time_sleep_notify(struct pmu_sleep_notifier *self, int when)
 {
 	static unsigned long time_diff;
 
-	switch (event) {
-	case PBOOK_SLEEP:
+	switch (when) {
+	case PBOOK_SLEEP_NOW:
 		time_diff = xtime.tv_sec - pmac_get_rtc_time();
 		break;
 	case PBOOK_WAKE:
@@ -157,11 +162,11 @@ static int time_sleep_notify(struct notifier_block *this, unsigned long event,
 		last_rtc_update = xtime.tv_sec;
 		break;
 	}
-	return NOTIFY_DONE;
+	return PBOOK_SLEEP_OK;
 }
 
-static struct notifier_block time_sleep_notifier = {
-	time_sleep_notify, NULL, 100
+static struct pmu_sleep_notifier time_sleep_notifier = {
+	time_sleep_notify, SLEEP_LEVEL_MISC,
 };
 #endif /* CONFIG_PMAC_PBOOK */
 
@@ -176,7 +181,7 @@ void __init pmac_calibrate_decr(void)
 	int freq, *fp, divisor;
 
 #ifdef CONFIG_PMAC_PBOOK
-	notifier_chain_register(&sleep_notifier_list, &time_sleep_notifier);
+	pmu_register_sleep_notifier(&time_sleep_notifier);
 #endif /* CONFIG_PMAC_PBOOK */
 
 	if (via_calibrate_decr())

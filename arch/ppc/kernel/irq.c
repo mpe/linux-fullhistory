@@ -1,5 +1,5 @@
 /*
- * $Id: irq.c,v 1.109 1999/09/05 11:56:31 paulus Exp $
+ * $Id: irq.c,v 1.113 1999/09/17 17:22:56 cort Exp $
  *
  *  arch/ppc/kernel/irq.c
  *
@@ -79,8 +79,8 @@ volatile unsigned char *chrp_int_ack_special;
 
 #define NR_MASK_WORDS	((NR_IRQS + 31) / 32)
 
+struct irqdesc irq_desc[NR_IRQS] = {{0, 0}, };
 int ppc_spurious_interrupts = 0;
-
 unsigned int ppc_local_bh_count[NR_CPUS];
 unsigned int ppc_local_irq_count[NR_CPUS];
 struct irqaction *ppc_irq_action[NR_IRQS];
@@ -124,9 +124,16 @@ void irq_kfree(void *ptr)
 	kfree(ptr);
 }
 
-struct irqdesc irq_desc[NR_IRQS] = {{0, 0}, };
-
+#ifndef CONFIG_8xx
 int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
+#else
+/* Name change so we can catch standard drivers that potentially mess up
+ * the internal interrupt controller on 8xx and 82xx.  Just bear with me,
+ * I don't like this either and I am searching a better solution.  For
+ * now, this is what I need. -- Dan
+ */
+int request_8xxirq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
+#endif
 	unsigned long irqflags, const char * devname, void *dev_id)
 {
 	struct irqaction *old, **p, *action;
@@ -186,7 +193,11 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 
 void free_irq(unsigned int irq, void *dev_id)
 {
+#ifndef CONFIG_8xx
 	request_irq(irq, NULL, 0, NULL, dev_id);
+#else
+	request_8xxirq(irq, NULL, 0, NULL, dev_id);
+#endif
 }
 
 /* XXX should implement irq disable depth like on intel */
@@ -277,11 +288,27 @@ void ppc_irq_dispatch_handler(struct pt_regs *regs, int irq)
 asmlinkage void do_IRQ(struct pt_regs *regs, int isfake)
 {
 	int cpu = smp_processor_id();
+	int irq;
 
-        hardirq_enter(cpu);
-        ppc_md.do_IRQ(regs, cpu, isfake);
-        hardirq_exit(cpu);
+        hardirq_enter( cpu );
+
+	/* every arch is required to have a get_irq -- Cort */
+	irq = ppc_md.get_irq( regs );
+	if ( irq < 0 )
+	{
+                printk(KERN_DEBUG "Bogus interrupt %d from PC = %lx\n",
+                       irq, regs->nip);
+                ppc_spurious_interrupts++;
+		return;
+	}
+	ppc_irq_dispatch_handler( regs, irq );
+	if ( ppc_md.post_irq )
+		ppc_md.post_irq( irq );
+	
+        hardirq_exit( cpu );
 }
+
+
 
 unsigned long probe_irq_on (void)
 {
@@ -469,7 +496,7 @@ static inline void get_irqlock(int cpu)
  */
 void __global_cli(void)
 {
-	unsigned int flags;
+	unsigned long flags;
 	
 	__save_flags(flags);
 	if (flags & (1 << 15)) {

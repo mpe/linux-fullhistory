@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/entry.S
  *
- *  $Id: entry.S,v 1.3 1999/09/05 11:56:26 paulus Exp $
+ *  $Id: entry.S,v 1.4 1999/09/14 05:18:14 dmalek Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -26,6 +26,7 @@
 #include "ppc_asm.h"
 #include <asm/processor.h>
 #include <asm/page.h>
+#include <asm/mmu.h>
 #include <linux/errno.h>
 #include <linux/sys.h>
 #include <linux/config.h>

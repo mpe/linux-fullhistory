@@ -26,10 +26,6 @@ else
   endif
 endif
 
-ifdef CONFIG_PIIX4_ACPI
-O_OBJS += piix4_acpi.o
-endif
-
 include $(TOPDIR)/Rules.make
 
 fastdep:

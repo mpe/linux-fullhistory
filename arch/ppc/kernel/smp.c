@@ -1,10 +1,12 @@
 /*
- * $Id: smp.c,v 1.62 1999/09/05 11:56:34 paulus Exp $
+ * $Id: smp.c,v 1.68 1999/09/17 19:38:05 cort Exp $
  *
  * Smp support for ppc.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) borrowing a great
  * deal of code from the sparc and intel versions.
+ *
+ * Copyright (C) 1999 Cort Dougan <cort@cs.nmt.edu>
  *
  * Support for PReP (Motorola MTX/MVME) SMP by Troy Benjegerdes
  * (troy@microux.com, hozer@drgw.net)
@@ -34,9 +36,9 @@
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/smp.h>
+#include <asm/gemini.h>
 
 #include "time.h"
-int first_cpu_booted = 0;
 int smp_threads_ready = 0;
 volatile int smp_commenced = 0;
 int smp_num_cpus = 1;
@@ -251,7 +253,6 @@ void __init smp_boot_cpus(void)
 
         printk("Entering SMP Mode...\n");
 	/* let other processors know to not do certain initialization */
-	first_cpu_booted = 1;
 	smp_num_cpus = 1;
         smp_store_cpu_info(0);
 
@@ -276,7 +277,7 @@ void __init smp_boot_cpus(void)
 	 */
 	cacheflush_time = 5 * 1024;
 
-	if ( !(_machine & (_MACH_Pmac|_MACH_chrp)) )
+	if ( !(_machine & (_MACH_Pmac|_MACH_chrp|_MACH_gemini)) )
 	{
 		printk("SMP not supported on this machine.\n");
 		return;
@@ -297,6 +298,10 @@ void __init smp_boot_cpus(void)
 #endif
 		cpu_nr = smp_chrp_cpu_nr;
 		break;
+	case _MACH_gemini:
+                cpu_nr = (readb(GEMINI_CPUSTAT) & GEMINI_CPU_COUNT_MASK)>>2;
+                cpu_nr = (cpu_nr == 0) ? 4 : cpu_nr;
+		break;
 	}
 
 	/*
@@ -307,7 +312,6 @@ void __init smp_boot_cpus(void)
 	{
 		int c;
 		struct pt_regs regs;
-		struct task_struct *idle;
 		
 		/* create a process for the processor */
 		/* we don't care about the values in regs since we'll
@@ -359,6 +363,10 @@ void __init smp_boot_cpus(void)
 				   *(ulong *)get_property(device, "reg", NULL),
 				   __pa(__secondary_start_chrp), i);
 #endif			
+			break;
+		case _MACH_gemini:
+			openpic_init_processor( 1<<i );
+			openpic_init_processor( 0 );
 			break;
 		}
 		

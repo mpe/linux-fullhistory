@@ -33,6 +33,8 @@
 #include <linux/pci.h>
 #include <linux/openpic.h>
 #include <linux/version.h>
+#include <linux/adb.h>
+#include <linux/module.h>
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -46,7 +48,6 @@
 #include <asm/dma.h>
 #include <asm/machdep.h>
 #include <asm/irq.h>
-#include <asm/adb.h>
 #include <asm/hydra.h>
 #include <asm/keyboard.h>
 
@@ -55,14 +56,6 @@
 #include "i8259.h"
 #include "open_pic.h"
 
-/* Fixme - need to move these into their own .c and .h file */
-extern void i8259_mask_and_ack_irq(unsigned int irq_nr);
-extern void i8259_set_irq_mask(unsigned int irq_nr);
-extern void i8259_mask_irq(unsigned int irq_nr);
-extern void i8259_unmask_irq(unsigned int irq_nr);
-extern void i8259_init(void);
-
-/* Fixme - remove this when it is fixed. - Corey */
 extern volatile unsigned char *chrp_int_ack_special;
 
 unsigned long chrp_get_rtc_time(void);
@@ -91,7 +84,6 @@ extern void mackbd_leds(unsigned char leds);
 extern void mackbd_init_hw(void);
 extern unsigned char mackbd_sysrq_xlate[128];
 
-/* for the mac fs */
 kdev_t boot_dev;
 
 extern PTE *Hash, *Hash_end;
@@ -185,12 +177,11 @@ chrp_get_cpuinfo(char *buffer)
 }
 
 /*
-     *  Fixes for the National Semiconductor PC78308VUL SuperI/O
-     *
-     *  Some versions of Open Firmware incorrectly initialize the IRQ settings
-     *  for keyboard and mouse
-     */
-
+ *  Fixes for the National Semiconductor PC78308VUL SuperI/O
+ *
+ *  Some versions of Open Firmware incorrectly initialize the IRQ settings
+ *  for keyboard and mouse
+ */
 static inline void __init sio_write(u8 val, u8 index)
 {
 	outb(index, 0x15c);
@@ -236,7 +227,7 @@ static void __init sio_init(void)
 
 
 void __init
-	   chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
+chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	extern char cmd_line[];
 	struct device_node *device;
@@ -358,6 +349,46 @@ chrp_irq_cannonicalize(u_int irq)
 	}
 }
 
+int chrp_get_irq( struct pt_regs *regs )
+{
+        int irq;
+
+        irq = openpic_irq( smp_processor_id() );
+        if (irq == IRQ_8259_CASCADE)
+        {
+                /*
+                 * This magic address generates a PCI IACK cycle.
+                 */
+		if ( chrp_int_ack_special )
+			irq = *chrp_int_ack_special;
+		else
+			irq = i8259_irq( smp_processor_id() );
+                /*
+                 * Acknowledge as soon as possible to allow i8259
+                 * interrupt nesting                         */
+                openpic_eoi( smp_processor_id() );
+        }
+        if (irq == OPENPIC_VEC_SPURIOUS)
+                /*
+                 * Spurious interrupts should never be
+                 * acknowledged
+                 */
+		irq = -1;
+	return irq;
+}
+
+void chrp_post_irq(int irq)
+{
+	/*
+	 * If it's an i8259 irq then we've already done the
+	 * openpic irq.  So we just check to make sure the controller
+	 * is an openpic and if it is then eoi -- Cort
+	 */
+	if ( irq_desc[irq].ctl == &open_pic )
+		openpic_eoi( smp_processor_id() );
+}
+
+#if 0
 void
 chrp_do_IRQ(struct pt_regs *regs,
 	    int            cpu,
@@ -432,9 +463,9 @@ out:
         if (!openpic_eoi_done)
                 openpic_eoi(0);
 }
+#endif
 
-void __init
-	   chrp_init_IRQ(void)
+void __init chrp_init_IRQ(void)
 {
 	struct device_node *np;
 	int i;
@@ -465,11 +496,8 @@ void __init
 }
 
 void __init
-	   chrp_init2(void)
+chrp_init2(void)
 {
-	adb_init();
-
-	/* Should this be here? - Corey */
 	pmac_nvram_init();
 }
 
@@ -482,8 +510,9 @@ int chrp_ide_ports_known = 0;
 ide_ioreg_t chrp_ide_regbase[MAX_HWIFS];
 ide_ioreg_t chrp_idedma_regbase;
 
-void chrp_ide_probe(void) {
-
+void
+chrp_ide_probe(void)
+{
         struct pci_dev *pdev = pci_find_device(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105, NULL);
 
         chrp_ide_ports_known = 1;
@@ -570,11 +599,12 @@ chrp_ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_
 		hw->irq = chrp_ide_irq;
 }
 
+#if defined(CONFIG_BLK_DEV_IDE_MODULE)
 EXPORT_SYMBOL(chrp_ide_irq);
 EXPORT_SYMBOL(chrp_ide_ports_known);
 EXPORT_SYMBOL(chrp_ide_regbase);
 EXPORT_SYMBOL(chrp_ide_probe);
-
+#endif
 #endif
 
 void __init
@@ -601,7 +631,8 @@ void __init
 	ppc_md.get_cpuinfo    = chrp_get_cpuinfo;
 	ppc_md.irq_cannonicalize = chrp_irq_cannonicalize;
 	ppc_md.init_IRQ       = chrp_init_IRQ;
-	ppc_md.do_IRQ         = chrp_do_IRQ;
+	ppc_md.get_irq        = chrp_get_irq;
+	ppc_md.post_irq	      = chrp_post_irq;
 		
 	ppc_md.init           = chrp_init2;
 
@@ -616,7 +647,7 @@ void __init
 
 #ifdef CONFIG_VT
 #ifdef CONFIG_MAC_KEYBOAD
-	if ( adb_hardware == ADB_NONE )
+	if (adb_driver == NULL)
 	{
 		ppc_md.kbd_setkeycode    = pckbd_setkeycode;
 		ppc_md.kbd_getkeycode    = pckbd_getkeycode;
@@ -678,7 +709,8 @@ void __init
 	if ( ppc_md.progress ) ppc_md.progress("Linux/PPC "UTS_RELEASE"\n", 0x0);
 }
 
-void chrp_progress(char *s, unsigned short hex)
+void
+chrp_progress(char *s, unsigned short hex)
 {
 	extern unsigned int rtas_data;
 	int max_width, width;

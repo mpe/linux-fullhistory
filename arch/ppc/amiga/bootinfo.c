@@ -16,9 +16,11 @@
 
 extern char cmd_line[CL_SIZE];
 
-int num_memory = 0;
-struct mem_info memory[NUM_MEMINFO];
-struct mem_info ramdisk;
+extern int num_memory;
+extern int m68k_realnum_memory;
+extern struct mem_info memory[NUM_MEMINFO];
+extern struct mem_info m68k_memory[NUM_MEMINFO];
+extern struct mem_info ramdisk;
 
 extern int amiga_parse_bootinfo(const struct bi_record *);
 extern int atari_parse_bootinfo(const struct bi_record *);
@@ -42,6 +44,11 @@ void __init parse_bootinfo(const struct bi_record *record)
 		    memory[num_memory].addr = data[0];
 		    memory[num_memory].size = data[1];
 		    num_memory++;
+
+		    /* FIXME: duplicate for m68k drivers. */
+		    m68k_memory[m68k_realnum_memory].addr = data[0];
+		    m68k_memory[m68k_realnum_memory].size = data[1];
+		    m68k_realnum_memory++;
 		} else
 		    printk("parse_bootinfo: too many memory chunks\n");
 		break;

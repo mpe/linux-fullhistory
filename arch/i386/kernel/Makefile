@@ -43,7 +43,7 @@ else
 endif
 
 ifdef CONFIG_SMP
-O_OBJS += smp.o trampoline.o
+O_OBJS += smp.o smpboot.o trampoline.o
 endif
 
 ifdef CONFIG_X86_IO_APIC

@@ -5,6 +5,7 @@
  *  Modified for big endian by J.F. Chadima and David S. Miller
  *  Modified 1997 Peter Waltenberg, Bill Hawes, David Woodhouse for 2.1 dcache
  *  Modified 1998 Wolfram Pienkoss for NLS
+ *  Modified 1999 Wolfram Pienkoss for directory caching
  *
  */
 
@@ -19,6 +20,8 @@
 #include <linux/malloc.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
+#include <linux/pagemap.h>
+
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
 #include <asm/unaligned.h>
@@ -28,12 +31,12 @@
 #include <linux/nls.h>
 #endif
 
-#include <linux/ncp.h>
 #include <linux/ncp_fs.h>
-#include <linux/ncp_fs_sb.h>
 
 #define NCP_MIN_SYMLINK_SIZE	8
 #define NCP_MAX_SYMLINK_SIZE	512
+
+#define NCP_BLOCK_SIZE		512
 
 int ncp_negotiate_buffersize(struct ncp_server *, int, int *);
 int ncp_negotiate_size_and_options(struct ncp_server *server, int size,
@@ -62,7 +65,7 @@ int ncp_modify_file_or_subdir_dos_info_path(struct ncp_server *, struct inode *,
 int ncp_del_file_or_subdir2(struct ncp_server *, struct dentry*);
 int ncp_del_file_or_subdir(struct ncp_server *, struct inode *, char *);
 int ncp_open_create_file_or_subdir(struct ncp_server *, struct inode *, char *,
-			       int, __u32, int, struct nw_file_info *);
+				int, __u32, int, struct ncp_entry_info *);
 
 int ncp_initialize_search(struct ncp_server *, struct inode *,
 		      struct nw_search_sequence *target);
@@ -88,8 +91,8 @@ ncp_ClearPhysicalRecord(struct ncp_server *server,
 
 #ifdef CONFIG_NCPFS_MOUNT_SUBDIR
 int
-ncp_mount_subdir(struct ncp_server* server, __u8 volNumber, 
-		 __u8 srcNS, __u32 srcDirEntNum);
+ncp_mount_subdir(struct ncp_server *, struct nw_info_struct *,
+			__u8, __u8, __u32);
 #endif	/* CONFIG_NCPFS_MOUNT_SUBDIR */
 
 #ifdef CONFIG_NCPFS_NLS
@@ -169,5 +172,37 @@ vol2io(struct ncp_server *server, char *name, int case_trans)
 
 #endif /* CONFIG_NCPFS_NLS */
 
-#endif /* _NCPLIB_H */
+#define NCP_GET_AGE(dentry)	(jiffies - (dentry)->d_time)
+#define NCP_MAX_AGE		(server->dentry_ttl)
+#define NCP_TEST_AGE(server,dentry)	(NCP_GET_AGE(dentry) < NCP_MAX_AGE)
 
+static inline void
+ncp_age_dentry(struct ncp_server* server, struct dentry* dentry)
+{
+	dentry->d_time = jiffies - server->dentry_ttl;
+}
+
+static inline void
+ncp_new_dentry(struct dentry* dentry)
+{
+	dentry->d_time = jiffies;
+}
+
+#define NCP_FPOS_EMPTY	0	/* init value for fpos variables. */
+
+struct ncp_cache_control {
+	struct nw_search_sequence seq;
+	int		firstcache;
+	int		currentpos;
+	int		cachehead;
+	int		cachetail;
+	int		eof;
+};
+
+#define NCP_DIRCACHE_SIZE	(PAGE_CACHE_SIZE-sizeof(struct ncp_cache_control))
+struct ncp_seq_cache {
+	struct ncp_cache_control ctl;
+	unsigned char cache[NCP_DIRCACHE_SIZE];
+};
+
+#endif /* _NCPLIB_H */

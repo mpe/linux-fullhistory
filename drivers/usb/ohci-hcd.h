@@ -12,7 +12,7 @@
  * [ Open Host Controller Interface driver for USB. ]
  * [ (C) Copyright 1999 Linus Torvalds (uhci.c) ]
  * [ (C) Copyright 1999 Gregory P. Smith <greg@electricrain.com> ]
- * [ $Log: ohci.c,v $ ]
+ * [ _Log: ohci-hcd.h,v _
  * [ Revision 1.1  1999/04/05 08:32:30  greg ]
  * 
  * v4.0 1999/08/18

@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.148 1999/09/05 11:56:34 paulus Exp $
+ * $Id: setup.c,v 1.159 1999/09/18 18:40:38 dmalek Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -13,9 +13,6 @@
 #include <linux/blk.h>
 
 #include <asm/init.h>
-#include <asm/adb.h>
-#include <asm/cuda.h>
-#include <asm/pmu.h>
 #include <asm/residual.h>
 #include <asm/io.h>
 #include <linux/ide.h>
@@ -27,8 +24,8 @@
 #include <asm/setup.h>
 #include <asm/amigappc.h>
 #include <asm/smp.h>
-#ifdef CONFIG_MBX
-#include <asm/mbx.h>
+#ifdef CONFIG_8xx
+#include <asm/mpc8xx.h>
 #include <asm/8xx_immap.h>
 #endif
 #include <asm/bootx.h>
@@ -52,7 +49,7 @@ extern void prep_init(unsigned long r3,
                       unsigned long r6,
                       unsigned long r7);
 
-extern void mbx_init(unsigned long r3,
+extern void m8xx_init(unsigned long r3,
 		     unsigned long r4,
 		     unsigned long r5,
 		     unsigned long r6,
@@ -74,18 +71,17 @@ extern boot_infos_t *boot_infos;
 extern char cmd_line[512];
 char saved_command_line[256];
 unsigned char aux_device_present;
-
+struct int_control_struct int_control;
 struct ide_machdep_calls ppc_ide_md;
 
 unsigned long ISA_DMA_THRESHOLD;
 unsigned long DMA_MODE_READ, DMA_MODE_WRITE;
 
-/* Temporary hacks until machdep.h is fully done. */
+#ifndef CONFIG_MACH_SPECIFIC
 int _machine = 0;
-/* do we have OF? */
 int have_of = 0;
-int is_prep = 0;
-int is_chrp = 0;
+#endif /* CONFIG_MACH_SPECIFIC */
+
 #ifdef CONFIG_MAGIC_SYSRQ
 unsigned long SYSRQ_KEY;
 #endif /* CONFIG_MAGIC_SYSRQ */
@@ -98,13 +94,11 @@ struct machdep_calls ppc_md;
 
 
 /* copy of the residual data */
-#ifndef CONFIG_MBX
-unsigned char __res[sizeof(RESIDUAL)] __prepdata = {0,};
+#ifndef CONFIG_8xx
+extern unsigned char __res[sizeof(RESIDUAL)];
 #else
-unsigned char __res[sizeof(bd_t)] = {0,};
+extern unsigned char __res[sizeof(bd_t)];
 #endif
-
-RESIDUAL *res = (RESIDUAL *)&__res;
 
 /*
  * Perhaps we can put the pmac screen_info[] here
@@ -112,7 +106,7 @@ RESIDUAL *res = (RESIDUAL *)&__res;
  * Until we get multiple-console support in here
  * that is.  -- Cort
  */ 
-#ifndef CONFIG_MBX
+#ifndef CONFIG_8xx
 struct screen_info screen_info = {
 	0, 25,			/* orig-x, orig-y */
 	0,			/* unused */
@@ -136,7 +130,7 @@ void __init pmac_find_display(void)
 {
 }
 
-#else /* CONFIG_MBX */
+#else /* CONFIG_8xx */
 
 /* We need this to satisfy some external references until we can
  * strip the kernel down.
@@ -152,7 +146,7 @@ struct screen_info screen_info = {
 	0,			/* orig-video-isVGA */
 	16			/* orig-video-points */
 };
-#endif /* CONFIG_MBX */
+#endif /* CONFIG_8xx */
 
 void machine_restart(char *cmd)
 {
@@ -267,6 +261,7 @@ int get_cpuinfo(char *buffer)
 		 * Assume here that all clock rates are the same in a
 		 * smp system.  -- Cort
 		 */
+#ifndef CONFIG_8xx
 		if ( have_of )
 		{
 			struct device_node *cpu_node;
@@ -290,6 +285,7 @@ int get_cpuinfo(char *buffer)
 			len += sprintf(len+buffer, "clock\t\t: %dMHz\n",
 				       *fp / 1000000);
 		}
+#endif
 
 		if (ppc_md.setup_residual != NULL)
 		{
@@ -345,9 +341,8 @@ unsigned long __init
 identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		 unsigned long r6, unsigned long r7)
 {
-#ifdef __SMP__
-	if ( first_cpu_booted ) return 0;
-#endif /* __SMP__ */
+
+#ifndef CONFIG_8xx
 	if ( ppc_md.progress ) ppc_md.progress("id mach(): start", 0x100);
 	
 #ifndef CONFIG_MACH_SPECIFIC
@@ -358,68 +353,46 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		r3 = 0;
 	}
 	/* prep boot loader tells us if we're prep or not */
-	else if ( *(unsigned long *)(KERNELBASE) == (0xdeadc0de) ) {
+	else if ( *(unsigned long *)(KERNELBASE) == (0xdeadc0de) )
+	{
 		_machine = _MACH_prep;
-		is_prep = 1;
-	} else {
+	} else
+	{
 		char *model;
+		struct device_node *root;
 
 		have_of = 1;
-		
+
 		/* prom_init has already been called from __start */
-		finish_device_tree();
+		if (boot_infos)
+			relocate_nodes();
+
 		/* ask the OF info if we're a chrp or pmac */
-		model = get_property(find_path_device("/"), "device_type", NULL);
-		if ( model && !strncmp("chrp",model,4) )
-		{
-			_machine = _MACH_chrp;
-			is_chrp = 1;
-		}
-		else
-		{
-			model = get_property(find_path_device("/"),
-					     "model", NULL);
-			if ( model && !strncmp(model, "IBM", 3))
-			{
+		/* we need to set _machine before calling finish_device_tree */
+		root = find_path_device("/");
+		if (root != 0) {
+			/* assume pmac unless proven to be chrp -- Cort */
+			_machine = _MACH_Pmac;
+			model = get_property(root, "device_type", NULL);
+			if (model && !strncmp("chrp", model, 4))
 				_machine = _MACH_chrp;
-				is_chrp = 1;
-			}
-			else
-			{
-				_machine = _MACH_Pmac;
+			else {
+				model = get_property(root, "model", NULL);
+				if (model && !strncmp(model, "IBM", 3))
+					_machine = _MACH_chrp;
 			}
 		}
 
+		finish_device_tree();
 	}
-#else /* CONFIG_MACH_SPECIFIC */
-
-#ifdef CONFIG_PREP
-	_machine = _MACH_prep;
-	is_prep  = 1;
-#elif defined(CONFIG_CHRP)
-	_machine = _MACH_chrp;
-	is_chrp  = 1;
-	have_of  = 1;
-#elif defined(CONFIG_PMAC)
-	_machine = _MACH_Pmac;
-	have_of  = 1;
-#elif defined(CONFIG_MBX)
-	_machine = _MACH_mbx;
-#elif defined(CONFIG_FADS)
-	_machine = _MACH_fads;
-#elif defined(CONFIG_APUS)
-	_machine = _MACH_apus;
-#elif defined(CONFIG_GEMINI)
-	_machine = _MACH_gemini;
-#else
-#error "Machine not defined correctly"
-#endif /* CONFIG_APUS */
 #endif /* CONFIG_MACH_SPECIFIC */
 
 	if ( have_of )
 	{
 #ifdef CONFIG_MACH_SPECIFIC
 		/* prom_init has already been called from __start */
+		if (boot_infos)
+			relocate_nodes();
 		finish_device_tree();
 #endif /* CONFIG_MACH_SPECIFIC	*/
 		/*
@@ -473,6 +446,11 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		cmd_line[sizeof(cmd_line) - 1] = 0;
 	}
 
+	int_control.int_sti = __no_use_sti;
+	int_control.int_cli = __no_use_cli;
+	int_control.int_save_flags = __no_use_save_flags;
+	int_control.int_restore_flags = __no_use_restore_flags;
+	
 	switch (_machine)
 	{
 	case _MACH_Pmac:
@@ -489,14 +467,11 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
                 apus_init(r3, r4, r5, r6, r7);
 		break;
 #endif
-#ifdef CONFIG_MBX
-        case _MACH_mbx:
-                mbx_init(r3, r4, r5, r6, r7);
-                break;
-#endif
+#ifdef CONFIG_GEMINI
 	case _MACH_gemini:
 		gemini_init(r3, r4, r5, r6, r7);
 		break;
+#endif		
 	default:
 		printk("Unknown machine type in identify_machine!\n");
 	}
@@ -505,6 +480,17 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		extern int __map_without_bats;
 		__map_without_bats = 1;
 	}
+#else /* CONFIG_8xx */
+	int_control.int_sti = __no_use_sti;
+	int_control.int_cli = __no_use_cli;
+	int_control.int_save_flags = __no_use_save_flags;
+	int_control.int_restore_flags = __no_use_restore_flags;
+
+        m8xx_init(r3, r4, r5, r6, r7);
+#endif
+
+	/* this is for modules since _machine can be a define -- Cort */
+	ppc_md.ppc_machine = _machine;
 
 	if ( ppc_md.progress ) ppc_md.progress("id mach(): done", 0x200);
 	return 0;

@@ -97,6 +97,15 @@ ifeq ($(CONFIG_USB_PRINTER),m)
   MIX_OBJS += printer.o  
 endif
 
+ifeq ($(CONFIG_USB_SERIAL),y)
+  L_OBJS += serial.o
+endif
+
+ifeq ($(CONFIG_USB_SERIAL),m)
+  M_OBJS += serial.o
+  MIX_OBJS += serial.o  
+endif
+
 ifeq ($(CONFIG_USB_KBD),y)
   L_OBJS += keyboard.o keymap.o
 endif

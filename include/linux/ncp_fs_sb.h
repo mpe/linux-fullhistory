@@ -8,9 +8,8 @@
 #ifndef _NCP_FS_SB
 #define _NCP_FS_SB
 
-#include <asm/semaphore.h>
-#include <linux/ncp_mount.h>
 #include <linux/types.h>
+#include <linux/ncp_mount.h>
 
 #ifdef __KERNEL__
 
@@ -51,9 +50,6 @@ struct ncp_server {
 	int has_subfunction;
 	int ncp_reply_size;
 
-	struct ncp_inode_info root;
-	struct dentry* root_dentry;
-
 	int root_setuped;
 
 /* info for packet signing */
@@ -75,10 +71,16 @@ struct ncp_server {
 		void*  data;
 	} priv;
 
-	struct ncp_nls_ioctl nls_charsets;	/* NLS user data */
-	struct nls_table *nls_vol;    /* codepage used on volume */
-	struct nls_table *nls_io;     /* charset used for input and display */
+	/* nls info: codepage for volume and charset for I/O */
+	struct nls_table *nls_vol;
+	struct nls_table *nls_io;
+
+	/* maximum age in jiffies */
+	int dentry_ttl;
 };
+
+#define ncp_sb_info	ncp_server
+
 
 static inline int ncp_conn_valid(struct ncp_server *server)
 {

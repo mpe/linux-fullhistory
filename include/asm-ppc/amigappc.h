@@ -16,30 +16,24 @@
 
 #ifndef __ASSEMBLY__
 
-#ifndef iobarrier_rw /* Don't include io.h - avoid circular dependency */
-#define iobarrier_rw() eieio()
-#endif
+/* #include <asm/system.h> */
+#define mb()  __asm__ __volatile__ ("sync" : : : "memory")
 
 #define APUS_WRITE(_a_, _v_)				\
 do {							\
 	(*((volatile unsigned char *)(_a_)) = (_v_));	\
-	iobarrier_rw ();				\
+	mb();						\
 } while (0)
 
-#define APUS_READ(_a_, _v_) 				\
+#define APUS_READ(_a_, _v_)				\
 do {							\
 	(_v_) = (*((volatile unsigned char *)(_a_)));	\
-	iobarrier_rw ();				\
+	mb();						\
 } while (0)
 #endif /* ndef __ASSEMBLY__ */
 
 /* Maybe add a [#ifdef WANT_ZTWOBASE] condition to amigahw.h? */
 #define zTwoBase (0x80000000)
-
-/* At CYBERBASEp we find the following sum:
- * -KERNELBASE+CyberStormMemoryBase
- */
-#define CYBERBASEp (0xfff00000)
 
 #define APUS_IPL_BASE   	(zTwoBase + 0x00f60000)
 #define APUS_REG_RESET    	(APUS_IPL_BASE + 0x00)

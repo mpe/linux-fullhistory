@@ -126,7 +126,7 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 {
 	unsigned int status;
 	struct uhci_td *tmp;
-	int count = 1000;
+	int count = 1000, bytesreceived = 0;
 
 	if (rval)
 		*rval = 0;
@@ -144,8 +144,10 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 	do {
 		status = uhci_status_bits(tmp->status);
 
-		if (status) {
-			if (debug) {
+		if (status)
+			break;
+#if 0
+		if (debug) {
 				/* Must reset the toggle on first error */
     				if (uhci_debug) {
 					printk(KERN_DEBUG "Set toggle from %x rval %ld\n",
@@ -161,6 +163,13 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 			if (rval && ((tmp->info & 0xFF) == USB_PID_IN))
 				*rval += uhci_actual_length(tmp->status);
 		}
+#endif
+		/* The length field is only valid if the TD was completed */
+		if (!(tmp->status & TD_CTRL_ACTIVE) && uhci_packetin(tmp->info)) {
+			bytesreceived += uhci_actual_length(tmp->status);
+			if (rval)
+				*rval += uhci_actual_length(tmp->status);
+		}
 
 		if ((tmp->link & UHCI_PTR_TERM) ||
 		    (tmp->link & UHCI_PTR_QH))
@@ -173,8 +182,35 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 		printk(KERN_ERR "runaway td's in uhci_td_result!\n");
 		/* Force debugging on */
 		debug = 1;
-	} else if (!status)
-    		return USB_ST_NOERROR;
+	} else {
+		/* If we got to the last TD */
+
+		/* No error */
+		if (!status)
+			return USB_ST_NOERROR;
+
+		/* APC BackUPS Pro kludge */
+		/* It tries to send all of the descriptor instead of */
+		/*  the amount we requested */
+		if (tmp->status & TD_CTRL_IOC &&
+		    tmp->status & TD_CTRL_ACTIVE &&
+		    tmp->status & TD_CTRL_NAK)
+			return USB_ST_NOERROR;
+
+#if 0
+		/* We got to an error, but the controller hasn't finished */
+		/*  with it, yet */
+		if (tmp->status & TD_CTRL_ACTIVE)
+			return USB_ST_NOCHANGE;
+#endif
+
+		/* If this wasn't the last TD and SPD is set, ACTIVE */
+		/*  is not and NAK isn't then we received a short */
+		/*  packet */
+		if (tmp->status & TD_CTRL_SPD &&
+		    !(tmp->status & TD_CTRL_NAK))
+			return USB_ST_NOERROR;
+	}
 
 	/* Some debugging code */
 	if (debug && uhci_debug) {
@@ -1035,7 +1071,7 @@ static int uhci_generic_completed(int status, void *buffer, int len, void *dev_i
 }
 
 /* td points to the last td in the list, which interrupts on completion */
-static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, struct uhci_td *last)
+static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, struct uhci_td *last, int timeout)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	struct uhci_qh *qh = uhci_qh_alloc(dev);
@@ -1053,7 +1089,8 @@ static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, stru
 	/* Add it into the skeleton */
 	uhci_insert_qh(&dev->uhci->skel_control_qh, qh);
 
-	schedule_timeout(HZ * 5);	/* 5 seconds */
+	/* wait a user specified reasonable amount of time */
+	schedule_timeout(timeout);
 
 	remove_wait_queue(&qh->wakeup, &wait);
 
@@ -1094,7 +1131,7 @@ static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, stru
  * there is no restriction on length of transfers
  * anymore
  */
-static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devrequest *cmd, void *data, int len)
+static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devrequest *cmd, void *data, int len, int timeout)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
 	struct uhci_td *first, *td, *prevtd;
@@ -1184,7 +1221,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devre
 	td->link = UHCI_PTR_TERM;			/* Terminate */
 
 	/* Start it up.. */
-	ret = uhci_run_control(dev, first, td);
+	ret = uhci_run_control(dev, first, td, timeout);
 
 	count = 1000;
 	td = first;
@@ -1231,7 +1268,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devre
  */
 
 /* td points to the last td in the list, which interrupts on completion */
-static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct uhci_td *last, unsigned long *rval)
+static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct uhci_td *last, unsigned long *rval, int timeout)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	struct uhci_qh *qh = uhci_qh_alloc(dev);
@@ -1249,7 +1286,8 @@ static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct 
 	/* Add it into the skeleton */
 	uhci_insert_qh(&dev->uhci->skel_bulk_qh, qh);
 
-	schedule_timeout(HZ * 5);	/* 5 seconds */
+	/* wait a user specified reasonable amount of time */
+	schedule_timeout(timeout);
 
 	remove_wait_queue(&qh->wakeup, &wait);
 
@@ -1272,7 +1310,7 @@ static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct 
  * A bulk message is only built up from
  * the data phase
  */
-static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, unsigned long *rval)
+static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, unsigned long *rval, int timeout)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
 	struct uhci_td *first, *td, *prevtd;
@@ -1334,7 +1372,7 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	/* CHANGE DIRECTION HERE! SAVE IT SOMEWHERE IN THE ENDPOINT!!! */
 
 	/* Start it up.. */
-	ret = uhci_run_bulk(dev, first, td, rval);
+	ret = uhci_run_bulk(dev, first, td, rval, timeout);
 
 	{
 		int count = 100;
@@ -1570,6 +1608,7 @@ static void uhci_check_configuration(struct uhci *uhci)
 	} while (nr < maxchild);
 }
 
+#if 0
 static int fixup_isoc_desc (struct uhci_td *td)
 {
 	struct usb_isoc_desc    *isocdesc = td->dev_id;
@@ -1621,6 +1660,7 @@ static int fixup_isoc_desc (struct uhci_td *td)
 
 	return 0;
 }
+#endif /* 0 */
 
 static void uhci_interrupt_notify(struct uhci *uhci)
 {
@@ -2097,7 +2137,7 @@ static int start_uhci(struct pci_dev *dev)
 	for (i = 0; i < 6; i++) {
 		unsigned int io_addr = dev->resource[i].start;
 		unsigned int io_size =
-			dev->resource[i].end - dev->resource[i].start;
+			dev->resource[i].end - dev->resource[i].start + 1;
 
 		/* IO address? */
 		if (!(dev->resource[i].flags & 1))
@@ -2106,6 +2146,9 @@ static int start_uhci(struct pci_dev *dev)
 		/* Is it already in use? */
 		if (check_region(io_addr, io_size))
 			break;
+
+                /* disable legacy emulation */
+                pci_write_config_word(dev, USBLEGSUP, USBLEGSUP_DEFAULT);
 
 		return found_uhci(dev->irq, io_addr, io_size);
 	}

@@ -45,7 +45,6 @@ struct poll_table_struct;
 #define BLOCK_SIZE (1<<BLOCK_SIZE_BITS)
 
 /* And dynamically-tunable limits and defaults: */
-extern int max_inodes;
 extern int max_files, nr_files, nr_free_files;
 extern int max_super_blocks, nr_super_blocks;
 
@@ -270,6 +269,7 @@ void init_buffer(struct buffer_head *, bh_end_io_t *, void *);
 #include <linux/adfs_fs_i.h>
 #include <linux/qnx4_fs_i.h>
 #include <linux/udf_fs_i.h>
+#include <linux/ncp_fs_i.h>
 
 /*
  * Attribute flags.  These should be or-ed together to figure out what
@@ -383,6 +383,7 @@ struct inode {
 		struct adfs_inode_info		adfs_i;
 		struct qnx4_inode_info		qnx4_i;
 		struct udf_inode_info		udf_i;
+		struct ncp_inode_info		ncpfs_i;
 		struct socket			socket_i;
 		void				*generic_ip;
 	} u;
@@ -513,6 +514,7 @@ extern int fasync_helper(int, struct file *, int, struct fasync_struct **);
 #include <linux/adfs_fs_sb.h>
 #include <linux/qnx4_fs_sb.h>
 #include <linux/udf_fs_sb.h>
+#include <linux/ncp_fs_sb.h>
 
 extern struct list_head super_blocks;
 
@@ -558,6 +560,7 @@ struct super_block {
 		struct adfs_sb_info	adfs_sb;
 		struct qnx4_sb_info	qnx4_sb;
 		struct udf_sb_info	udf_sb;
+		struct ncp_sb_info	ncpfs_sb;
 		void			*generic_sbp;
 	} u;
 	/*

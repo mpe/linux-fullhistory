@@ -38,7 +38,7 @@ int ncp_make_open(struct inode *inode, int right)
 {
 	int error, result;
 	int access;
-	struct nw_file_info finfo;
+	struct ncp_entry_info finfo;
 
 	error = -EINVAL;
 	if (!inode) {
@@ -259,7 +259,6 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 
 	if (pos > inode->i_size) {
 		inode->i_size = pos;
-		ncp_invalid_dir_cache(dentry->d_parent->d_inode);
 	}
 	DPRINTK(KERN_DEBUG "ncp_file_write: exit %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);

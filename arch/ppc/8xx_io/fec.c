@@ -33,7 +33,7 @@
 
 #include <asm/8xx_immap.h>
 #include <asm/pgtable.h>
-#include <asm/fads.h>
+#include <asm/mpc8xx.h>
 #include <asm/irq.h>
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
@@ -123,7 +123,7 @@ static	ushort	my_enet_addr[] = { 0x0800, 0x3e26, 0x1559 };
  */
 typedef struct mii_list {
 	uint	mii_regval;
-	void	(*mii_func)(uint val);
+	void	(*mii_func)(int val);
 	struct	mii_list *mii_next;
 } mii_list_t;
 
@@ -244,7 +244,7 @@ fec_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Push the data cache so the CPM does not get stale memory
 	 * data.
 	 */
-	/*flush_dcache_range(skb->data, skb->data + skb->len);*/
+	flush_dcache_range(skb->data, skb->data + skb->len);
 
 	/* Send it on its way.  Tell CPM its ready, interrupt when done,
 	 * its the last BD of the frame, and to put the CRC on the end.
@@ -282,7 +282,7 @@ fec_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 static	void
 fec_enet_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 {
-	struct net_device *dev = dev_id;
+	struct	net_device *dev = dev_id;
 	struct	fec_enet_private *fep;
 	volatile cbd_t	*bdp;
 	volatile fec_t	*ep;
@@ -600,6 +600,9 @@ mii_status(uint mii_reg)
 		else
 			printk(", Half-Duplex\n");
 	}
+	if (((mii_reg >> 18) & 0x1f) == 0x1f) {
+		printk("fec: %x\n", mii_reg);
+	}
 }
 
 static	void
@@ -609,6 +612,7 @@ mii_startup_cmds(void)
 	/* Read status registers to clear any pending interrupt.
 	*/
 	mii_queue(mk_mii_read(1), mii_status);
+#ifndef CONFIG_RPXCLASSIC
 	mii_queue(mk_mii_read(18), mii_status);
 
 	/* Read extended chip status register.
@@ -616,8 +620,23 @@ mii_startup_cmds(void)
 	mii_queue(mk_mii_read(0x14), mii_status);
 
 	/* Enable Link status change interrupts.
-	mii_queue(mk_mii_write(0x11, 0x0002), NULL);
 	*/
+	mii_queue(mk_mii_write(0x11, 0x0002), NULL);
+
+#ifdef CONFIG_FADS
+	/* FADS uses the TRSTE in the BCSR, which is kind of weird.
+	 * This really controls the startup default configuration.
+	 * Changing the state of TRSTE once powered up doesn't do
+	 * anything, you have to whack the control register.
+	 * This of course screws up any autoconfig that was done.......
+	 */
+	mii_queue(mk_mii_write(0, 0x1000), NULL);
+#endif
+#else
+	/* Experimenting with the QS6612 PHY....not done yet.
+	*/
+	mii_queue(mk_mii_read(31), mii_status);
+#endif
 }
 
 /* This supports the mii_link interrupt below.
@@ -676,7 +695,7 @@ mii_relink(uint mii_reg)
 static	void
 mii_link_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 {
-	struct net_device *dev = dev_id;
+	struct	net_device *dev = dev_id;
 	struct	fec_enet_private *fep;
 	volatile fec_t	*ep;
 
@@ -691,8 +710,19 @@ mii_link_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 	 * as part of the "normal" processing.
 	 */
 	mii_queue(mk_mii_read(1), mii_relink);
+#ifndef CONFIG_RPXCLASSIC
+	
+	/* Unique to LevelOne PHY.
+	*/
 	mii_queue(mk_mii_read(18), mii_relink);
 	mii_queue(mk_mii_read(20), mii_relink);
+#else
+
+	/* Unique to QS6612 PHY.
+	*/
+	mii_queue(mk_mii_read(6), mii_relink);
+	mii_queue(mk_mii_read(31), mii_relink);
+#endif
 }
 
 static int
@@ -788,9 +818,9 @@ static void set_multicast_list(struct net_device *dev)
 	}
 }
 
-/* Initialize the FECC Ethernet on 860T.
+/* Initialize the FEC Ethernet on 860T.
  */
-int __init m8xx_enet_init(void)
+int __init fec_enet_init(void)
 {
 	struct net_device *dev;
 	struct fec_enet_private *fep;
@@ -802,7 +832,10 @@ int __init m8xx_enet_init(void)
 	cbd_t		*cbd_base;
 	volatile	immap_t	*immap;
 	volatile	fec_t	*fecp;
-	unsigned char	rtc_save_cfg, rtc_val;
+	unsigned char	*iap;
+	bd_t		*bd;
+
+	bd = (bd_t *)__res;
 
 	immap = (immap_t *)IMAP_ADDR;	/* pointer to internal registers */
 
@@ -833,14 +866,26 @@ int __init m8xx_enet_init(void)
 
 	fecp->fec_ivec = (FEC_INTERRUPT/2) << 29;
 
+	/* Right now, all of the boards supply the ethernet address in
+	 * the board descriptor.  If someone doesn't we can just use
+	 * the hard coded address in this driver for testing (this is
+	 * a Motorola address for a board I have, so it is unlikely to
+	 * be used elsewhere).
+	 */
+	eap = (unsigned char *)&my_enet_addr[0];
+#if 1
+	iap = bd->bi_enetaddr;
+	for (i=0; i<6; i++)
+		dev->dev_addr[i] = *eap++ = *iap++;
+#else
+	for (i=0; i<6; i++)
+		dev->dev_addr[i] = *eap++;
+#endif
+
 	/* Set station address.
 	*/
 	fecp->fec_addr_low = (my_enet_addr[0] << 16) | my_enet_addr[1];
 	fecp->fec_addr_high = my_enet_addr[2];
-
-	eap = (unsigned char *)&my_enet_addr[0];
-	for (i=0; i<6; i++)
-		dev->dev_addr[i] = *eap++;
 
 	/* Reset all multicast.
 	*/
@@ -855,8 +900,8 @@ int __init m8xx_enet_init(void)
 	/* Allocate memory for buffer descriptors.
 	*/
 	if (((RX_RING_SIZE + TX_RING_SIZE) * sizeof(cbd_t)) > PAGE_SIZE) {
-		printk("FECC init error.  Need more space.\n");
-		printk("FECC initialization failed.\n");
+		printk("FEC init error.  Need more space.\n");
+		printk("FEC initialization failed.\n");
 		return 1;
 	}
 	mem_addr = __get_free_page(GFP_KERNEL);
@@ -864,7 +909,7 @@ int __init m8xx_enet_init(void)
 
 	/* Make it uncached.
 	*/
-	pte = va_to_pte(&init_task, (int)mem_addr);
+	pte = find_pte(&init_mm, (int)mem_addr);
 	pte_val(*pte) |= _PAGE_NO_CACHE;
 	flush_tlb_page(current->mm->mmap, mem_addr);
 
@@ -891,7 +936,7 @@ int __init m8xx_enet_init(void)
 
 		/* Make it uncached.
 		*/
-		pte = va_to_pte(&init_task, mem_addr);
+		pte = find_pte(&init_mm, mem_addr);
 		pte_val(*pte) |= _PAGE_NO_CACHE;
 		flush_tlb_page(current->mm->mmap, mem_addr);
 
@@ -948,9 +993,9 @@ int __init m8xx_enet_init(void)
 	/* Install our interrupt handlers.  The 860T FADS board uses
 	 * IRQ2 for the MII interrupt.
 	 */
-	if (request_irq(FEC_INTERRUPT, fec_enet_interrupt, 0, "fec", dev) != 0)
+	if (request_8xxirq(FEC_INTERRUPT, fec_enet_interrupt, 0, "fec", dev) != 0)
 		panic("Could not allocate FEC IRQ!");
-	if (request_irq(SIU_IRQ2, mii_link_interrupt, 0, "mii", dev) != 0)
+	if (request_8xxirq(SIU_IRQ2, mii_link_interrupt, 0, "mii", dev) != 0)
 		panic("Could not allocate MII IRQ!");
 
 	dev->base_addr = (unsigned long)fecp;

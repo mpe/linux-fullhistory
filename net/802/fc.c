@@ -88,7 +88,10 @@ int fc_rebuild_header(struct sk_buff *skb)
 		printk("fc_rebuild_header: Don't know how to resolve type %04X addresses ?\n",(unsigned int)htons(fcllc->ethertype));
 		return 0;
 	}
-
+#ifdef CONFIG_INET
 	return arp_find(fch->daddr, skb);
+#else
+	return 0;
+#endif
 }
 	

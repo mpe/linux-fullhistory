@@ -1,10 +1,10 @@
-The Linux NCR53C8XX driver README file
+The Linux NCR53C8XX/SYM53C8XX drivers README file
 
 Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-10 March 1999
+29 May 1999
 ===============================================================================
 
 1.  Introduction
@@ -25,14 +25,39 @@ Written by Gerard Roudier <groudier@club-internet.fr>
       8.6  Clear profile counters
       8.7  Set flag (no_disc)
       8.8  Set verbose level
+      8.9  Reset all logical units of a target
+      8.10 Abort all tasks of all logical units of a target
 9.  Configuration parameters
 10. Boot setup commands
       10.1 Syntax
       10.2 Available arguments
+             10.2.1  Master parity checking
+             10.2.2  Scsi parity checking
+             10.2.3  Scsi disconnections
+             10.2.4  Special features
+             10.2.5  Ultra SCSI support
+             10.2.6  Default number of tagged commands
+             10.2.7  Default synchronous period factor
+             10.2.8  Negotiate synchronous with all devices
+             10.2.9  Verbosity level
+             10.2.10 Debug mode
+             10.2.11 Burst max
+             10.2.12 LED support
+             10.2.13 Max wide
+             10.2.14 Differential mode
+             10.2.15 IRQ mode
+             10.2.16 Reverse probe
+             10.2.17 Fix up PCI configuration space
+             10.2.18 Serial NVRAM
+             10.2.19 Check SCSI BUS 
+             10.2.20 Exclude a host from being attached
+             10.2.21 Suggest a default SCSI id for hosts
+             10.2.22 Enable use of IMMEDIATE ARBITRATION
       10.3 Advised boot setup commands
       10.4 PCI configuration fix-up boot option
       10.5 Serial NVRAM support boot option
       10.6 SCSI BUS checking boot option
+      10.7 IMMEDIATE ARBITRATION boot option
 11. Some constants and flags of the ncr53c8xx.h header file
 12. Installation
 13. Architecture dependent features
@@ -43,6 +68,8 @@ Written by Gerard Roudier <groudier@club-internet.fr>
       14.4 Possible data corruption during a Memory Write and Invalidate
       14.5 IRQ sharing problems
 15. SCSI problem troubleshooting
+      15.1 Problem tracking
+      15.2 Understanding hardware error reports
 16. Synchonous transfer negotiation tables
       16.1 Synchronous timings for 53C875 and 53C860 Ultra-SCSI controllers
       16.2 Synchronous timings for fast SCSI-2 53C8XX controllers
@@ -69,11 +96,12 @@ The original driver has been written for 386bsd and FreeBSD by:
 It is now available as a bundle of 2 drivers:
 
 - ncr53c8xx generic driver that supports all the SYM53C8XX family including 
-  the ealiest 810 rev. 1 and the latest 896 2 channels LVD SCSI controller.
+  the ealiest 810 rev. 1, the latest 896 (2 channel LVD SCSI controller) and
+  the new 895A (1 channel LVD SCSI controller).
 - sym53c8xx enhanced driver (a.k.a. 896 drivers) that drops support of oldest 
   chips in order to gain advantage of new features, as LOAD/STORE intructions 
   available since the 810A and hardware phase mismatch available with the 
-  latest 896.
+  896 and the 895A.
 
 You can find technical information about the NCR 8xx family in the
 PCI-HOWTO written by Michael Will and in the SCSI-HOWTO written by
@@ -95,15 +123,17 @@ Usefull SCSI tools written by Eric Youngdale are available at tsx-11:
 These tools are not ALPHA but quite clean and work quite well.
 It is essential you have the 'scsiinfo' package.
 
-This short documentation only describes the features of the NCR53C8XX
-driver, configuration parameters and control commands available
-through the proc SCSI file system read / write operations.
+This short documentation describes the features of the generic and enhanced
+drivers, configuration parameters and control commands available through 
+the proc SCSI file system read / write operations.
 
 This driver has been tested OK with linux/i386, Linux/Alpha and Linux/PPC.
 
 Latest driver version and patches are available at:
 
           ftp://ftp.tux.org/pub/people/gerard-roudier
+or
+          ftp://ftp.symbios.com/mirror/ftp.tux.org/pub/tux/roudier/drivers
 
 I am not a native speaker of English and there are probably lots of
 mistakes in this README file. Any help will be welcome.
@@ -136,6 +166,7 @@ Chip   SDMS BIOS   Wide   SCSI std.   Max. sync   driver         driver
 875        Y         Y      FAST20    40 MB/s        Y             Y
 876        Y         Y      FAST20    40 MB/s        Y             Y
 895        Y         Y      FAST40    80 MB/s        Y             Y
+895A       Y         Y      FAST40    80 MB/s        Y             Y
 896        Y         Y      FAST40    80 MB/s        Y             Y
 
 
@@ -156,21 +187,25 @@ Serial NVRAM:          Symbios and Tekram formats
 
 3.1 Optimized SCSI SCRIPTS.
 
-The 810A, 825A, 875, 895 and newest 896 support new SCSI SCRIPTS instructions 
-named LOAD and STORE that allow to move 1 DWORD from/to an IO register to/from 
-memory much faster that the MOVE MEMORY instruction that is supported by the 
-53c7xx and 53c8xx family. The LOAD/STORE instructions support absolute and 
-DSA relative addressing modes. The SCSI SCRIPTS had been entirely rewritten 
-using LOAD/STORE instead of MOVE MEMORY instructions.
+The 810A, 825A, 875, 895, 896 and 895A support new SCSI SCRIPTS instructions 
+named LOAD and STORE that allow to move up to 1 DWORD from/to an IO register 
+to/from memory much faster that the MOVE MEMORY instruction that is supported 
+by the 53c7xx and 53c8xx family.
+The LOAD/STORE instructions support absolute and DSA relative addressing 
+modes.  The SCSI SCRIPTS had been entirely rewritten using LOAD/STORE instead 
+of MOVE MEMORY instructions.
 
 3.2 New features of the SYM53C896 (64 bit PCI dual LVD SCSI controller)
 
-The 896 allows to handle the phase mismatch context saving from SCRIPTS 
-(avoids the phase mismatch interrupt that stops the SCSI processor 
+The 896 and the 895A allows handling of the phase mismatch context from 
+SCRIPTS (avoids the phase mismatch interrupt that stops the SCSI processor 
 until the C code has saved the context of the transfer).
 Implementing this without using LOAD/STORE instructions would be painfull 
-and I did'nt even try it. This chip also supports 64 bit PCI transactions 
-and addressing. The SCRIPTS processor is not true 64 bit, but uses segment 
+and I did'nt even want to try it.
+
+The 896 chip supports 64 bit PCI transactions and addressing, while the 
+895A supports 32 bit PCI transactions and 64 bit addressing.
+The SCRIPTS processor of these chips is not true 64 bit, but uses segment 
 registers for bit 32-63. Another interesting feature is that LOAD/STORE 
 instructions that address the on-chip RAM (8k) remain internal to the chip.
 
@@ -219,9 +254,13 @@ The maximum number of simultaneous tagged commands queued to a device
 is currently set to 8 by default.  This value is suitable for most SCSI
 disks.  With large SCSI disks (>= 2GB, cache >= 512KB, average seek time
 <= 10 ms), using a larger value may give better performances.
-The driver supports up to 64 commands per device, but using more than 
-32 is generally not worth it, unless you are using a very large disk 
-or disk array.
+
+The sym53c8xx driver supports up to 255 commands per device, and the 
+generic ncr53c8xx driver supports up to 64, but using more than 32 is 
+generally not worth-while, unless you are using a very large disk or disk 
+array. It is noticeable that most of recent hard disks seem not to accept 
+more than 64 simultaneous commands. So, using more than 64 queued commands 
+is probably just resource wasting.
 
 If your controller does not have NVRAM or if it is managed by the SDMS 
 BIOS/SETUP, you can configure tagged queueing feature and device queue 
@@ -491,6 +530,24 @@ Available commands:
     The driver default verbose level is 1. This command allows to change 
     th driver verbose level after boot-up.
 
+8.9 Reset all logical units of a target
+
+    resetdev <target>
+
+    target:    target number
+    The driver will try to send a BUS DEVICE RESET message to the target.
+    (Only supported by the SYM53C8XX driver and provided for test purpose)
+
+8.10 Abort all tasks of all logical units of a target
+
+    cleardev <target>
+
+    target:    target number
+    The driver will try to send a ABORT message to all the logical units 
+    of the target.
+    (Only supported by the SYM53C8XX driver and provided for test purpose)
+
+
 9. Configuration parameters
 
 If the firmware of all your devices is perfect enough, all the
@@ -566,10 +623,11 @@ CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
 Setup commands can be passed to the driver either at boot time or as a 
 string variable using 'insmod'.
 
-A boot setup command for the ncr53c8xx driver begins with the driver name 
-"ncr53c8xx=". The kernel syntax parser then expects an optionnal list of
-integers separated with comma followed by an optionnal list of  comma- 
-separated strings. Example of boot setup command under lilo prompt:
+A boot setup command for the ncr53c8xx (sym53c8xx) driver begins with the 
+driver name "ncr53c8xx="(sym53c8xx). The kernel syntax parser then expects 
+an optionnal list of integers separated with comma followed by an optional 
+list of  comma-separated strings. Example of boot setup command under lilo 
+prompt:
 
 lilo: linux root=/dev/hda2 ncr53c8xx=tags:4,sync:10,debug:0x200
 
@@ -582,7 +640,7 @@ Since comma seems not to be allowed when defining a string variable using
 The following command will install driver module with the same options as 
 above.
 
-insmod ncr53c8xx.o ncr53c8xx="tags:4 sync:10 debug:0x200"
+    insmod ncr53c8xx.o ncr53c8xx="tags:4 sync:10 debug:0x200"
 
 For the moment, the integer list of arguments is discarded by the driver. 
 It will be used in the future in order to allow a per controller setup.
@@ -590,40 +648,53 @@ It will be used in the future in order to allow a per controller setup.
 Each string argument must be specified as "keyword:value". Only lower-case 
 characters and digits are allowed.
 
+In a system that contains multiple 53C8xx adapters insmod will install the 
+specified driver on each adapter. To exclude a chip use the 'excl' keyword.
+
+The sequence of commands, 
+
+    insmod sym53c8xx sym53c8xx=excl:0x1400
+    insmod ncr53c8xx
+
+installs the sym53c8xx driver on all adapters except the one at IO port 
+address 0x1400 and then installs the ncr53c8xx driver to the adapter at IO 
+port address 0x1400.
+
+
 10.2 Available arguments
 
-Master parity checking
-      mpar:y     enabled
-      mpar:n     disabled
+10.2.1  Master parity checking
+        mpar:y     enabled
+        mpar:n     disabled
 
-Scsi parity checking
-      spar:y     enabled
-      spar:n     disabled
+10.2.2  Scsi parity checking
+        spar:y     enabled
+        spar:n     disabled
 
-Scsi disconnections
-      disc:y     enabled
-      disc:n     disabled
+10.2.3  Scsi disconnections
+        disc:y     enabled
+        disc:n     disabled
  
-Special features
+10.2.4  Special features
    Only apply to 810A, 825A, 860, 875 and 895 controllers.
    Have no effect with other ones.
-      specf:y    (or 1) enabled
-      specf:n    (or 0) disabled
-      specf:3           enabled except Memory Write And Invalidate
+        specf:y    (or 1) enabled
+        specf:n    (or 0) disabled
+        specf:3           enabled except Memory Write And Invalidate
    The default driver setup is 'specf:3'. As a consequence, option 'specf:y' 
    must be specified in the boot setup command to enable Memory Write And 
    Invalidate.
 
-Ultra SCSI support
+10.2.5  Ultra SCSI support
    Only apply to 860, 875 and 895 controllers.
    Have no effect with other ones.
-      ultra:2    Ultra2 enabled
-      ultra:1    Ultra enabled
-      ultra:n    disabled
+        ultra:2    Ultra2 enabled
+        ultra:1    Ultra enabled
+        ultra:n    disabled
 
-Default number of tagged commands
-      tags:0     (or tags:1 ) tagged command queuing disabled
-      tags:#tags (#tags  > 1) tagged command queuing enabled
+10.2.6  Default number of tagged commands
+        tags:0     (or tags:1 ) tagged command queuing disabled
+        tags:#tags (#tags  > 1) tagged command queuing enabled
   #tags will be truncated to the max queued commands configuration parameter.
   This option also allows to specify a command queue depth for each device 
   that support tagged command queueing.
@@ -635,9 +706,9 @@ Default number of tagged commands
       - controller #1 target #1 logical unit #2                -> 32 commands,
       - all other logical units (all targets, all controllers) -> 10 commands.
 
-Default synchronous period factor
-      sync:255     disabled (asynchronous transfer mode)
-      sync:#factor
+10.2.7  Default synchronous period factor
+        sync:255     disabled (asynchronous transfer mode)
+        sync:#factor
   #factor = 10     Ultra-2 SCSI 40 Mega-transfers / second
   #factor = 11     Ultra-2 SCSI 33 Mega-transfers / second
   #factor < 25     Ultra   SCSI 20 Mega-transfers / second
@@ -646,19 +717,19 @@ Default synchronous period factor
   In all cases, the driver will use the minimum transfer period supported by 
   controllers according to NCR53C8XX chip type.
 
-Negotiate synchronous with all devices
-  (force sync nego)
-      fsn:y      enabled
-      fsn:n      disabled
+10.2.8  Negotiate synchronous with all devices
+        (force sync nego)
+        fsn:y      enabled
+        fsn:n      disabled
 
-Verbosity level
-      verb:0     minimal
-      verb:1     normal
-      verb:2     too much
+10.2.9  Verbosity level
+        verb:0     minimal
+        verb:1     normal
+        verb:2     too much
 
-Debug mode
-      debug:0	 clear debug flags
-      debug:#x   set debug flags
+10.2.10 Debug mode
+        debug:0	 clear debug flags
+        debug:#x   set debug flags
   #x is an integer value combining the following power-of-2 values:
   DEBUG_ALLOC       0x1
   DEBUG_PHASE       0x2
@@ -677,10 +748,10 @@ Debug mode
   You can play safely with DEBUG_NEGO. However, some of these flags may 
   generate bunches of syslog messages. 
 
-Burst max
-      burst:0    burst disabled
-      burst:255  get burst length from initial IO register settings.
-      burst:#x   burst enabled (1<<#x burst transfers max)
+10.2.11 Burst max
+        burst:0    burst disabled
+        burst:255  get burst length from initial IO register settings.
+        burst:#x   burst enabled (1<<#x burst transfers max)
   #x is an integer value which is log base 2 of the burst transfers max.
   The NCR53C875 and NCR53C825A support up to 128 burst transfers (#x = 7).
   Other chips only support up to 16 (#x = 4).
@@ -688,42 +759,42 @@ Burst max
   and revision ids. By default the driver uses the maximum value supported 
   by the chip.
 
-LED support
-     led:1      enable  LED support
-     led:0      disable LED support
+10.2.12 LED support
+        led:1      enable  LED support
+        led:0      disable LED support
   Donnot enable LED support if your scsi board does not use SDMS BIOS.
   (See 'Configuration parameters')
 
-Max wide
-    wide:1      wide scsi enabled
-    wide:0      wide scsi disabled
+10.2.13 Max wide
+        wide:1      wide scsi enabled
+        wide:0      wide scsi disabled
   Some scsi boards use a 875 (ultra wide) and only supply narrow connectors.
   If you have connected a wide device with a 50 pins to 68 pins cable 
   converter, any accepted wide negotiation will break further data transfers.
   In such a case, using "wide:0" in the bootup command will be helpfull. 
 
-Differential mode
-    diff:0	never set up diff mode
-    diff:1	set up diff mode if BIOS set it
-    diff:2	always set up diff mode
-    diff:3	set diff mode if GPIO3 is not set
+10.2.14 Differential mode
+        diff:0	never set up diff mode
+        diff:1	set up diff mode if BIOS set it
+        diff:2	always set up diff mode
+        diff:3	set diff mode if GPIO3 is not set
 
-IRQ mode
-    irqm:0	always open drain
-    irqm:1	same as initial settings (assumed BIOS settings)
-    irqm:2	always totem pole
-    irqm:0x10	driver will not use SA_SHIRQ flag when requesting irq
-    irqm:0x20	driver will not use SA_INTERRUPT flag when requesting irq
+10.2.15 IRQ mode
+        irqm:0     always open drain
+        irqm:1     same as initial settings (assumed BIOS settings)
+        irqm:2     always totem pole
+        irqm:0x10  driver will not use SA_SHIRQ flag when requesting irq
+        irqm:0x20  driver will not use SA_INTERRUPT flag when requesting irq
 
     (Bits 0x10 and 0x20 can be combined with hardware irq mode option)
 
-Reverse probe
-    revprob:n   probe chip ids from the PCI configuration in this order:
-                810, 815, 820, 860, 875, 885, 895, 896
-    revprob:y   probe chip ids in the reverse order.
+10.2.16 Reverse probe
+        revprob:n   probe chip ids from the PCI configuration in this order:
+                    810, 815, 820, 860, 875, 885, 895, 896
+        revprob:y   probe chip ids in the reverse order.
 
-Fix up PCI configuration space
-    pcifix:<option bits>
+10.2.17 Fix up PCI configuration space
+        pcifix:<option bits>
 
     Available option bits:
         0x0:   No attempt to fix PCI configuration space registers values.
@@ -733,24 +804,51 @@ Fix up PCI configuration space
 
     Use 'pcifix:7' in order to allow the driver to fix up all PCI features.
 
-Serial NVRAM
-    nvram:n     do not look for serial NVRAM
-    nvram:y     test controllers for onboard serial NVRAM
+10.2.18 Serial NVRAM
+        nvram:n     do not look for serial NVRAM
+        nvram:y     test controllers for onboard serial NVRAM
+        (alternate binary form)
+        mvram=<bits options>
+        0x01   look for NVRAM  (equivalent to nvram=y)
+        0x02   ignore NVRAM "Synchronous negotiation" parameters for all devices
+        0x04   ignore NVRAM "Wide negotiation"  parameter for all devices
+        0x08   ignore NVRAM "Scan at boot time" parameter for all devices
+        0x80   also attach controllers set to OFF in the NVRAM (sym53c8xx only)
 
-Check SCSI BUS 
-    buschk:<option bits>
+10.2.19 Check SCSI BUS 
+        buschk:<option bits>
 
     Available option bits:
         0x0:   No check.
         0x1:   Check and donnot attach the controller on error.  
         0x2:   Check and just warn on error.
 
-Exclude hosts from being attached
-    excl=<io_address>
+10.2.20 Exclude a host from being attached
+        excl=<io_address>
 
     Prevent host at a given io address from being attached.
     For example 'ncr53c8xx=excl:0xb400,excl:0xc000' indicate to the 
     ncr53c8xx driver not to attach hosts at address 0xb400 and 0xc000.
+
+10.2.21 Suggest a default SCSI id for hosts
+        hostid:255	no id suggested.
+        hostid:#x   (0 < x < 7) x suggested for hosts SCSI id.
+
+    If a host SCSI id is available from the NVRAM, the driver will ignore 
+    any value suggested as boot option. Otherwise, if a suggested value 
+    different from 255 has been supplied, it will use it. Otherwise, it will 
+    try to deduce the value previously set in the hardware and use value 
+    7 if the hardware value is zero.
+
+10.2.22 Enable use of IMMEDIATE ARBITRATION
+        (only supported by the sym53c8xx driver. See 10.7 for more details)
+        iarb:0    donnot use this feature.
+        iarb:#x   use this feature according to bit fields as follow:
+
+    bit 0 (1) : enable IARB each time the initiator has been reselected 
+                when it arbitrated for the SCSI BUS.
+    (#x >> 4) : maximum number of successive settings of IARB if the initiator 
+                win arbitration and it has other commands to send to a device.
 
 Boot fail safe
     safe:y	load the following assumed fail safe initial setup
@@ -775,6 +873,7 @@ Boot fail safe
   differential support		from BIOS settings	diff:1
   irq mode			from BIOS settings	irqm:1
   SCSI BUS check		donnot attach on error	buschk:1
+  immediate arbitration		disabled		iarb:0
 
 10.3 Advised boot setup commands
 
@@ -837,7 +936,11 @@ use them too.
 nvram:n     do not look for serial NVRAM
 nvram:y     test controllers for onboard serial NVRAM
 
-This option is described below (see 17. Serial NVRAM support).
+This option can also been entered as an hexadecimal value that allows 
+to control what information the driver will get from the NVRAM and what 
+information it will ignore.
+For details see '17. Serial NVRAM support'.
+
 When this option is enabled, the driver tries to detect all boards using 
 a Serial NVRAM. This memory is used to hold user set up parameters.
 
@@ -873,12 +976,17 @@ mvram=<bits options>
       0x02   ignore NVRAM "Synchronous negotiation" parameters for all devices
       0x04   ignore NVRAM "Wide negotiation"  parameter for all devices
       0x08   ignore NVRAM "Scan at boot time" parameter for all devices
+      0x80   also attach controllers set to OFF in the NVRAM (sym53c8xx only)
 
-My Atlas Wide only boots cleanly in 8 bits asynchronous data transfer 
-mode. However, it works flawlessly at 20 MB/second with the driver.
-Using "nvram=0x7" allows me to boot in 8 bits/async and to let the driver 
-use its setup for synchronous and wide negotiations.
+Option 0x80 is only supported by the sym53c8xx driver and is disabled by 
+default. Result is that, by default (option not set), the sym53c8xx driver 
+will not attach controllers set to OFF in the NVRAM.
 
+The ncr53c8xx always tries to attach all the controllers. Option 0x80 has 
+not been added to the ncr53c8xx driver, since it has been reported to 
+confuse users who use this driver since a long time. If you desire a 
+controller not to be attached by the ncr53c8xx driver at Linux boot, you 
+must use the 'excl' driver boot option.
 
 10.6 SCSI BUS checking boot option.
 
@@ -893,6 +1001,45 @@ Unfortunately, the following common SCSI BUS problems are not detected:
 - Bad quality terminators.
 On the other hand, either bad cabling, broken devices, not conformant 
 devices, ... may cause a SCSI signal to be wrong when te driver reads it.
+
+10.7 IMMEDIATE ARBITRATION boot option
+
+This option is only supported by the SYM53C8XX driver (not by the NCR53C8XX).
+
+SYMBIOS 53C8XX chips are able to arbitrate for the SCSI BUS as soon as they 
+have detected an expected disconnection (BUS FREE PHASE). For this process 
+to be started, bit 1 of SCNTL1 IO register must be set when the chip is 
+connected to the SCSI BUS.
+
+When this feature has been enabled for the current connection, the chip has 
+every chance to win arbitration if only devices with lower priority are 
+competing for the SCSI BUS. By the way, when the chip is using SCSI id 7, 
+then it will for sure win the next SCSI BUS arbitration.
+
+Since, there is no way to know what devices are trying to arbitrate for the 
+BUS, using this feature can be extremally unfair. So, you are not advised 
+to enable it, or at most enable this feature for the case the chip lost 
+the previous arbitration (boot option 'iarb:1').
+
+This feature has the following advantages:
+
+a) Allow the initiator with ID 7 to win arbitration when it wants so.
+b) Overlap at least 4 micro-seconds of arbitration time with the execution 
+   of SCRIPTS that deal with the end of the current connection and that 
+   starts the next job.
+
+Hmmm... But (a) may just prevent other devices from reselecting the initiator, 
+and delay data transfers or status/completions, and (b) may just waste 
+SCSI BUS bandwidth if the SCRIPTS execution lasts more than 4 micro-seconds.
+
+The use of IARB needs the SCSI_NCR_IARB_SUPPORT option to have been defined 
+at compile time and the 'iarb' boot option to have been set to a non zero 
+value at boot time. It is not that usefull for real work, but can be used 
+to stress SCSI devices or for some applications that can gain advantage of 
+it. By the way, if you experience badnesses like 'unexpected disconnections', 
+'bad reselections', etc... when using IARB on heavy IO load, you should not 
+be surprised, because force-feeding anything and blocking its arse at the 
+same time cannot work for a long time. :-))
 
 
 11. Some constants and flags of the ncr53c8xx.h header file
@@ -1107,6 +1254,8 @@ then the request of the IRQ obviously will not succeed for all the drivers.
 
 15. SCSI problem troubleshooting
 
+15.1 Problem tracking
+
 Most SCSI problems are due to a non conformant SCSI bus or to buggy
 devices.  If infortunately you have SCSI problems, you can check the
 following things:
@@ -1153,6 +1302,77 @@ Try to enable one feature at a time with control commands.  For example:
 Once you have found the device and the feature that cause problems, just 
 disable that feature for that device.
 
+15.2 Understanding hardware error reports
+
+When the driver detects an unexpected error condition, it may display a 
+message of the following pattern.
+
+sym53c876-0:1: ERROR (0:48) (1-21-65) (f/95) @ (script 7c0:19000000).
+sym53c876-0: script cmd = 19000000
+sym53c876-0: regdump: da 10 80 95 47 0f 01 07 75 01 81 21 80 01 09 00.
+
+Some fields in such a message may help you understand the cause of the 
+problem, as follows:
+
+sym53c876-0:1: ERROR (0:48) (1-21-65) (f/95) @ (script 7c0:19000000).
+............A.........B.C....D.E..F....G.H.......I.....J...K.......
+
+Field A : target number.
+  SCSI ID of the device the controller was talking with at the moment the 
+  error occurs.
+
+Field B : DSTAT io register (DMA STATUS)
+  Bit 0x40 : MDPE Master Data Parity Error
+             Data parity error detected on the PCI BUS.
+  Bit 0x20 : BF   Bus Fault
+             PCI bus fault condition detected
+  Bit 0x01 : IID  Illegal Instruction Detected
+             Set by the chip when it detects an Illegal Instruction format 
+             on some condition that makes an instruction illegal.
+  Bit 0x80 : DFE Dma Fifo Empty
+             Pure status bit that does not indicate an error.
+  If the reported DSTAT value contains a combination of MDPE (0x40), 
+  BF (0x20), then the cause may be likely due to a PCI BUS problem.
+
+Field C : SIST io register (SCSI Interrupt Status)
+  Bit 0x08 : SGE  SCSI GROSS ERROR
+             Indicates that the chip detected a severe error condition 
+             on the SCSI BUS that prevents the SCSI protocol from functionning
+             properly.
+  Bit 0x04 : UDC  Undexpected Disconnection
+             Indicates that the device released the SCSI BUS when the chip 
+             was not expecting this to happen. A device may behave so to 
+             indicate the SCSI initiator that an error condition not reportable              using the SCSI protocol has occured.
+  Bit 0x02 : RST  SCSI BUS Reset
+             Generally SCSI targets donnot reset the SCSI BUS, although any 
+             device on the BUS can reset it at any time.
+  Bit 0x01 : PAR  Parity
+             SCSI parity error detected.
+  On a faulty SCSI BUS, any error condition among SGE (0x08), UDC (0x04) and 
+  PAR (0x01) may be detected by the chip. If your SCSI system sometimes 
+  encounters such error conditions, especially SCSI GROSS ERROR, then a SCSI 
+  BUS problem is likely the cause of these errors.
+
+For fields D,E,F,G and H, you may look into the sym53c8xx_defs.h file 
+that contains some minimal comments on IO register bits.
+Field D : SOCL  Scsi Output Control Latch
+          This register reflects the state of the SCSI control lines the 
+          chip want to drive or compare against.
+Field E : SBCL  Scsi Bus Control Lines
+          Actual value of control lines on the SCSI BUS.
+Field F : SBDL  Scsi Bus Data Lines
+          Actual value of data lines on the SCSI BUS.
+Field G : SXFER  SCSI Transfer
+          Contains the setting of the Synchronous Period for output and 
+          the current Synchronous offset (offset 0 means asynchronous).
+Field H : SCNTL3 Scsi Control Register 3
+          Contains the setting of timing values for both asynchronous and 
+          synchronous data transfers. 
+
+Understanding Fields I, J, K and dumps requires to have good knowledge of 
+SCSI standards, chip cores functionnals and internal driver data structures.
+You are not required to decode and understand them, unless you want to help 
+maintain the driver code.
 
 16. Synchonous transfer negotiation tables
 

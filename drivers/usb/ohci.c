@@ -15,7 +15,7 @@
  * Architecture" book by Mindshare, Inc.  It was a reasonable introduction
  * and overview of USB and the two dominant host controller interfaces
  * however you're better off just reading the real specs available
- * from www.usb.org as you'll need them to get enough detailt to
+ * from www.usb.org as you'll need them to get enough details to
  * actually implement a HCD.  The book has many typos and omissions
  * Beware, the specs are the victim of a committee.
  *
@@ -24,7 +24,7 @@
  *
  * No filesystems were harmed in the development of this code.
  *
- * $Id: ohci.c,v 1.43 1999/05/16 22:35:24 greg Exp $
+ * $Id: ohci.c,v 1.77 1999/09/16 04:30:19 greg Exp $
  */
 
 #include <linux/config.h>
@@ -201,7 +201,6 @@ static void ohci_add_ed_to_hw(struct ohci_ed *ed, void* hw_listhead_p)
 	spin_unlock_irqrestore(&ohci_edtd_lock, flags);
 } /* ohci_add_ed_to_hw() */
 
-
 /*
  *  Put a control ED on the controller's list
  */
@@ -275,24 +274,19 @@ struct ohci_ed *ohci_get_periodic_ed(struct ohci_device *dev, int period,
 	for (;;) {
 		int_ed = bus_to_virt(le32_to_cpup(&int_ed->next_ed));
 		/* stop if we get to the end or to another dummy ED. */
-		if (int_ed == 0)
-			break;
+		if (!int_ed)
+			break;  /* return NULL */
 		status = le32_to_cpup(&int_ed->status);
-		if ((status & OHCI_ED_FA) == 0)
-			break;
+		if ((status & OHCI_ED_FA) == 0) {
+			int_ed = NULL;
+			break;  /* return NULL */
+		}
 		/* check whether all the appropriate fields match */
 		if ((status & 0x7ffa7ff) == req_status)
-			return int_ed;
+			break;  /* return int_ed */
 	}
-	return 0;
-}
-
-/*
- *  Put an isochronous ED on the controller's list
- */
-inline void ohci_add_isoc_ed(struct ohci *ohci, struct ohci_ed *ed)
-{
-	ohci_add_periodic_ed(ohci, ed, 1);
+	spin_unlock_irqrestore(&ohci_edtd_lock, flags);
+	return int_ed;
 }
 
 
@@ -326,14 +320,14 @@ static void ohci_wait_sof(struct ohci_regs *regs)
  * adds it to a list of EDs to destroy during the SOF interrupt
  * processing would be useful (and be callable from an interrupt).
  */
-void ohci_wait_for_ed_safe(struct ohci_regs *regs, struct ohci_ed *ed, int ed_type)
+void ohci_wait_for_ed_safe(struct ohci_regs *regs, struct ohci_ed *ed)
 {
 	__u32 *hw_listcurrent;
 
 	/* tell the controller to skip this ED */
 	ed->status |= cpu_to_le32(OHCI_ED_SKIP);
 
-	switch (ed_type) {
+	switch (ohci_ed_hcdtype(ed)) {
 	case HCD_ED_CONTROL:
 		hw_listcurrent = &regs->ed_controlcurrent;
 		break;
@@ -370,7 +364,7 @@ void ohci_wait_for_ed_safe(struct ohci_regs *regs, struct ohci_ed *ed, int ed_ty
  *  
  *  Note that the SKIP bit is left on in the removed ED.
  */
-void ohci_remove_norm_ed_from_hw(struct ohci *ohci, struct ohci_ed *ed, int ed_type)
+void ohci_remove_norm_ed_from_hw(struct ohci *ohci, struct ohci_ed *ed)
 {
 	unsigned long flags;
 	struct ohci_regs *regs = ohci->regs;
@@ -378,6 +372,7 @@ void ohci_remove_norm_ed_from_hw(struct ohci *ohci, struct ohci_ed *ed, int ed_t
 	__u32 bus_ed = virt_to_bus(ed);
 	__u32 bus_cur;
 	__u32 *hw_listhead_p;
+	__u32 ed_type = ohci_ed_hcdtype(ed);
 
 	if (ed == NULL || !bus_ed)
 		return;
@@ -391,7 +386,9 @@ void ohci_remove_norm_ed_from_hw(struct ohci *ohci, struct ohci_ed *ed, int ed_t
 		hw_listhead_p = &regs->ed_bulkhead;
 		break;
 	default:
-		printk(KERN_ERR "Unknown HCD ED type %d.\n", ed_type);
+#ifdef OHCI_DEBUG
+		printk(KERN_ERR "Wrong HCD ED type: %d.\n", ed_type);
+#endif
 		return;
 	}
 
@@ -426,31 +423,13 @@ void ohci_remove_norm_ed_from_hw(struct ohci *ohci, struct ohci_ed *ed, int ed_t
 	/*
 	 * Make sure this ED is not being accessed by the HC as we speak.
 	 */
-	ohci_wait_for_ed_safe(regs, ed, ed_type);
+	ohci_wait_for_ed_safe(regs, ed);
 
 	/* clear any links from the ED for safety */
 	ed->next_ed = 0;
 
 	spin_unlock_irqrestore(&ohci_edtd_lock, flags);
 } /* ohci_remove_norm_ed_from_hw() */
-
-/*
- *  Remove an ED from the controller's control list.  Note that the SKIP bit
- *  is left on in the removed ED.
- */
-inline void ohci_remove_control_ed(struct ohci *ohci, struct ohci_ed *ed)
-{
-	ohci_remove_norm_ed_from_hw(ohci, ed, HCD_ED_CONTROL);
-}
-
-/*
- *  Remove an ED from the controller's bulk list.  Note that the SKIP bit
- *  is left on in the removed ED.
- */
-inline void ohci_remove_bulk_ed(struct ohci *ohci, struct ohci_ed *ed)
-{
-	ohci_remove_norm_ed_from_hw(ohci, ed, HCD_ED_BULK);
-}
 
 
 /*
@@ -476,7 +455,7 @@ void ohci_remove_periodic_ed(struct ohci *ohci, struct ohci_ed *ed)
 	while (cur_ed) {
 		if (ed == cur_ed) {		/* remove the ED */
 			/* set its SKIP bit and be sure its not in use */
-			ohci_wait_for_ed_safe(ohci->regs, ed, HCD_ED_INT);
+			ohci_wait_for_ed_safe(ohci->regs, ed);
 
 			/* unlink it */
 			spin_lock_irqsave(&ohci_edtd_lock, flags);
@@ -503,6 +482,20 @@ void ohci_remove_periodic_ed(struct ohci *ohci, struct ohci_ed *ed)
 		}
 	}
 } /* ohci_remove_periodic_ed() */
+
+
+/*
+ *  Remove an ED from the host controller, choosing 
+ */
+void ohci_remove_ed(struct ohci *ohci, struct ohci_ed *ed)
+{
+	/* Remove the ED from the HC */
+	if (ohci_ed_hcdtype(ed) & HCD_ED_NORMAL) {
+		ohci_remove_norm_ed_from_hw(ohci, ed);
+	} else {
+		ohci_remove_periodic_ed(ohci, ed);
+	}
+} /* ohci_remove_ed() */
 
 
 /*
@@ -573,7 +566,7 @@ void ohci_remove_device(struct ohci *ohci, int devnum)
  *  Remove a TD from the given EDs TD list.  The TD is freed as well.
  *  (so far this function hasn't been needed)
  */
-static void ohci_remove_td_from_ed(struct ohci_td *td, struct ohci_ed *ed)
+void ohci_remove_td_from_ed(struct ohci_td *td, struct ohci_ed *ed)
 {
 	unsigned long flags;
 	struct ohci_td *head_td;
@@ -670,10 +663,9 @@ static struct ohci_td *ohci_get_free_td(struct ohci_device *dev)
  * pool.  Return NULL if none are left.
  *
  * NOTE: This function does not allocate and attach the dummy_td.
- * That is done in ohci_fill_ed().  FIXME: it should probably be moved
- * into here.
+ * That is done in ohci_fill_ed().  [should we really do that here?]
  */
-static struct ohci_ed *ohci_get_free_ed(struct ohci_device *dev)
+static struct ohci_ed *ohci_get_free_ed(struct ohci_device *dev, __u32 ed_type)
 {
 	int idx;
 
@@ -687,6 +679,7 @@ static struct ohci_ed *ohci_get_free_ed(struct ohci_device *dev)
 			new_ed->status |= cpu_to_le32(OHCI_ED_SKIP);
 			/* mark it as allocated */
 			allocate_ed(new_ed);
+			ohci_ed_set_hcdtype(new_ed, ed_type);
 			new_ed->ohci_dev = dev;
 			return new_ed;
 		}
@@ -764,8 +757,7 @@ struct ohci_td *ohci_fill_new_td(struct ohci_td *td, int dir, int toggle, __u32 
  *  force the Allocated bit on.
  */
 struct ohci_ed *ohci_fill_ed(struct ohci_device *dev, struct ohci_ed *ed,
-			     int maxpacketsize, int lowspeed, int endp_id,
-			     int isoc_tds)
+			     int maxpacketsize, int lowspeed, int endp_id)
 {
 	struct ohci_td *dummy_td;
 
@@ -789,11 +781,12 @@ struct ohci_ed *ohci_fill_ed(struct ohci_device *dev, struct ohci_ed *ed,
 	/* set the head TD to the dummy and clear the Carry & Halted bits */
 	ed->_head_td = ed->tail_td;
 
-	ed->status = cpu_to_le32(
+	ed->status &= cpu_to_le32(OHCI_ED_HCD_MASK);
+	ed->status |= cpu_to_le32(
 		ed_set_maxpacket(maxpacketsize) |
 		ed_set_speed(lowspeed) |
 		(endp_id & 0x7ff) |
-		((isoc_tds == 0) ? OHCI_ED_F_NORM : OHCI_ED_F_ISOC));
+		((ohci_ed_hcdtype(ed) != HCD_ED_ISOC) ? OHCI_ED_F_NORM : OHCI_ED_F_ISOC));
 	allocate_ed(ed);
 	ed->next_ed = 0;
 
@@ -959,7 +952,7 @@ static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	/* Get an ED and TD */
 	interrupt_ed = ohci_get_periodic_ed(dev, period, pipe, 0);
 	if (interrupt_ed == 0) {
-		interrupt_ed = ohci_get_free_ed(dev);
+		interrupt_ed = ohci_get_free_ed(dev, HCD_ED_INT);
 		if (!interrupt_ed) {
 			printk(KERN_ERR "Out of EDs on device %p in ohci_request_irq\n", dev);
 			return (-ENOMEM);
@@ -970,7 +963,7 @@ static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 		 * device number (function address), and type of TD.
 		 */
 		ohci_fill_ed(dev, interrupt_ed, maxps, usb_pipeslow(pipe),
-			     usb_pipe_endpdev(pipe), 0 /* normal TDs */);
+			     usb_pipe_endpdev(pipe) );
 		interrupt_ed->status &= cpu_to_le32(~OHCI_ED_SKIP);
 
 		/* Assimilate the new ED into the collective */
@@ -1077,7 +1070,7 @@ int ohci_release_irq(struct usb_device *usb, void* handle)
 static void * ohci_generic_trans(struct usb_device *usb_dev, int pipe,
 	int data_td_toggle, int round, int autofree,
 	void *dev_id, usb_device_irq handler, void *data, int len,
-	int ed_type, struct ohci_td *setup_td, struct ohci_td *status_td)
+	__u32 ed_type, struct ohci_td *setup_td, struct ohci_td *status_td)
 {
 	struct ohci_device *dev = usb_to_ohci(usb_dev);
 	struct ohci_ed *trans_ed;
@@ -1089,7 +1082,7 @@ static void * ohci_generic_trans(struct usb_device *usb_dev, int pipe,
 		printk(KERN_DEBUG "ohci_request_trans()\n");
 #endif
 
-	trans_ed = ohci_get_free_ed(dev);
+	trans_ed = ohci_get_free_ed(dev, ed_type);
 	if (!trans_ed) {
 		printk("usb-ohci: couldn't get ED for dev %p\n", dev);
 		return NULL;
@@ -1142,8 +1135,7 @@ static void * ohci_generic_trans(struct usb_device *usb_dev, int pipe,
 	ohci_fill_ed(dev, trans_ed,
 		usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe)),
 		usb_pipeslow(pipe),
-		usb_pipe_endpdev(pipe),
-		(ed_type == HCD_ED_ISOC) );
+		usb_pipe_endpdev(pipe) );
 
 	/* initialize the toggle carry flag in the ED */
 	if (usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)))
@@ -1202,7 +1194,7 @@ gt_free_and_exit:
  *
  * This function is NOT safe to call from an interrupt.
  */
-static int ohci_terminate_trans(struct usb_device *usb_dev, void *handle, int ed_type)
+static int ohci_terminate_trans(struct usb_device *usb_dev, void *handle)
 {
 	struct ohci_ed *req_ed = (struct ohci_ed *) handle;
 	struct ohci_device *dev = usb_to_ohci(usb_dev);
@@ -1213,20 +1205,10 @@ static int ohci_terminate_trans(struct usb_device *usb_dev, void *handle, int ed
 
 	/* stop the transfer & collect the number of bytes */
 	/* (this is the non-interrupt safe function call) */
-	ohci_wait_for_ed_safe(regs, req_ed, ed_type);
+	ohci_wait_for_ed_safe(regs, req_ed);
 
-	/* Remove the ED from the appropriate HC list */
-	switch (ed_type) {
-		case HCD_ED_ISOC:
-			ohci_remove_periodic_ed(dev->ohci, req_ed);
-			break;
-		case HCD_ED_CONTROL:
-			ohci_remove_control_ed(dev->ohci, req_ed);
-			break;
-		case HCD_ED_BULK:
-			ohci_remove_bulk_ed(dev->ohci, req_ed);
-			break;
-	}
+	/* Remove the ED from the HC */
+	ohci_remove_ed(dev->ohci, req_ed);
 
 	ohci_free_ed(req_ed);	/* return it to the pool */
 
@@ -1252,7 +1234,15 @@ static int ohci_control_completed(int stats, void *buffer, int len, void *dev_id
 	/* pass the TDs completion status back to control_msg */
 	if (dev_id) {
 		int *completion_status = (int *)dev_id;
-		*completion_status = stats;
+
+		switch (stats) {
+		case USB_ST_NOERROR:
+		case USB_ST_DATAOVERRUN:
+			*completion_status = len;
+			break;
+		default:
+			*completion_status = -stats;
+		}
 	}
 
 	wake_up(&control_wakeup);
@@ -1274,13 +1264,13 @@ static int ohci_control_completed(int stats, void *buffer, int len, void *dev_id
  * This function can NOT be called from an interrupt.
  */
 static int ohci_control_msg(struct usb_device *usb_dev, unsigned int pipe,
-			    devrequest *cmd, void *data, int len)
+			    devrequest *cmd, void *data, int len, int timeout)
 {
 	struct ohci_device *dev = usb_to_ohci(usb_dev);
 	void *trans_handle;
 	struct ohci_td *setup_td, *status_td;
 	DECLARE_WAITQUEUE(wait, current);
-	int completion_status = -1;
+	int completion_status = USB_ST_TIMEOUT;
 	devrequest our_cmd;
 
 	/* byte-swap fields of cmd if necessary */
@@ -1356,8 +1346,8 @@ static int ohci_control_msg(struct usb_device *usb_dev, unsigned int pipe,
 		return USB_ST_INTERNALERROR;
 	}
 
-	/* wait a "reasonable" amount of time for it to complete */
-	schedule_timeout(HZ);
+	/* wait a user defined amount of time for it to complete */
+	schedule_timeout(timeout);
 
 	remove_wait_queue(&control_wakeup, &wait);
 
@@ -1369,9 +1359,12 @@ static int ohci_control_msg(struct usb_device *usb_dev, unsigned int pipe,
 	 * Also, since the TDs were autofreed, there is no guarantee that
 	 * they haven't been reclaimed by another transfer by now...
 	 */
-	if (completion_status != 0) {
-		const char *what = (completion_status < 0)? "timed out":
-			cc_names[completion_status & 0xf];
+	if (completion_status < 0) {
+		const char *what;
+		if (completion_status == USB_ST_TIMEOUT) 
+		        what = "timed out";
+		else
+		        what = cc_names[(-completion_status) & 0xf];
 		printk(KERN_ERR "ohci_control_msg: %s on pipe %x cmd %x %x %x %x %x",
 		       what, pipe, cmd->requesttype, cmd->request,
 		       cmd->value, cmd->index, cmd->length);
@@ -1422,10 +1415,8 @@ static int ohci_control_msg(struct usb_device *usb_dev, unsigned int pipe,
 	/* no TD cleanup, the TDs were auto-freed as they finished */
 
 	/* remove the generic_trans ED from the HC and free it */
-	ohci_terminate_trans(usb_dev, trans_handle, HCD_ED_CONTROL);
+	ohci_terminate_trans(usb_dev, trans_handle);
 
-	if (completion_status < 0)
-		completion_status = USB_ST_TIMEOUT;
 	return completion_status;
 } /* ohci_control_msg() */
 
@@ -1471,7 +1462,7 @@ static void * ohci_request_bulk(struct usb_device *usb_dev, unsigned int pipe, u
  */
 static int ohci_terminate_bulk(struct usb_device *usb_dev, void * handle)
 {
-	return ohci_terminate_trans(usb_dev, handle, HCD_ED_CONTROL);
+	return ohci_terminate_trans(usb_dev, handle);
 } /* ohci_terminate_bulk() */
 
 
@@ -1536,24 +1527,6 @@ static int ohci_bulk_msg_td_handler(int stats, void *buffer, int len, void *dev_
 } /* ohci_bulk_msg_td_handler() */
 
 
-/*
- * Request to send or receive bulk data for a blocking bulk_msg call.
- *
- * bulk_request->bytes_transferred_p is a pointer to an integer that
- * will be set to the number of bytes that have been successfully
- * transferred upon completion.  The interrupt handler will update it
- * after each internal TD completes successfully.
- */
-static struct ohci_ed* ohci_request_bulk_msg(struct ohci_bulk_msg_request_state *bulk_request)
-{
-	/* initialize the internal counter */
-	bulk_request->_bytes_done = 0;
-
-	return ohci_request_bulk(bulk_request->usb_dev, bulk_request->pipe,
-			ohci_bulk_msg_td_handler,
-			bulk_request->data, bulk_request->length,
-			bulk_request);
-} /* ohci_request_bulk_msg() */
 
 
 static DECLARE_WAIT_QUEUE_HEAD(bulk_wakeup);
@@ -1574,7 +1547,7 @@ static int ohci_bulk_msg_completed(int stats, void *buffer, int len, void *dev_i
 } /* ohci_bulk_msg_completed() */
 
 
-static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, unsigned long *bytes_transferred_p)
+static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, unsigned long *bytes_transferred_p, int timeout)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	int completion_status = USB_ST_INTERNALERROR;
@@ -1598,6 +1571,7 @@ static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	req.bytes_transferred_p = bytes_transferred_p;
 	req.dev_id = &completion_status;
 	req.completion = ohci_bulk_msg_completed;
+	req._bytes_done = 0;
 	if (bytes_transferred_p)
 		*bytes_transferred_p = 0;
 
@@ -1611,10 +1585,20 @@ static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	current->state = TASK_UNINTERRUPTIBLE;
 	add_wait_queue(&bulk_wakeup, &wait);
 
-	req_ed = ohci_request_bulk_msg(&req);
+	/*
+ 	 * Request to send or receive bulk data for a blocking bulk_msg call.
+ 	 *
+ 	 * req.bytes_transferred_p is a pointer to an integer that
+ 	 * will be set to the number of bytes that have been successfully
+ 	 * transferred upon completion.  The interrupt handler will update it
+ 	 * after each internal TD completes successfully.
+ 	 */
+	req_ed = ohci_request_bulk(usb_dev, pipe,
+			ohci_bulk_msg_td_handler,
+			data, len, &req);
 
-	/* FIXME this should to wait for a caller specified time... */
-	schedule_timeout(HZ*5);
+	/* wait for a caller specified time... */
+	schedule_timeout(timeout);
 
 	/* completion_status will only stay in this state of the
 	 * request never finished */
@@ -1629,7 +1613,7 @@ static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 		 * a previously requested bulk transfer. -greg */
 
 		/* stop the transfer & collect the number of bytes */
-		ohci_wait_for_ed_safe(regs, req_ed, HCD_ED_BULK);
+		ohci_wait_for_ed_safe(regs, req_ed);
 
 		/* Get the number of bytes transferred out of the head TD
 		 * on the ED if it didn't finish while we were waiting. */
@@ -1659,7 +1643,7 @@ static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	remove_wait_queue(&bulk_wakeup, &wait);
 
 	/* remove the ED from the HC */
-	ohci_remove_bulk_ed(usb_to_ohci(usb_dev)->ohci, req_ed);
+	ohci_remove_norm_ed_from_hw(usb_to_ohci(usb_dev)->ohci, req_ed);
 
 	/* save the toggle value back into the usb_dev */
 	usb_settoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe),
@@ -1681,31 +1665,19 @@ static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 
 
 /*
- * Allocate a new USB device to be attached to an OHCI controller
+ * Allocate a new USB device attached to this OHCI controller
  */
-static struct usb_device *ohci_usb_allocate(struct usb_device *parent)
+static int ohci_dev_allocate(struct usb_device *usb_dev)
 {
-	struct usb_device *usb_dev;
 	struct ohci_device *dev;
 	int idx;
-
-	/*
-	 * Allocate the generic USB device
-	 */
-	usb_dev = kmalloc(sizeof(*usb_dev), GFP_KERNEL);
-	if (!usb_dev)
-		return NULL;
-
-	memset(usb_dev, 0, sizeof(*usb_dev));
 
 	/*
 	 * Allocate an OHCI device (EDs and TDs for this device)
 	 */
 	dev = kmalloc(sizeof(*dev), GFP_KERNEL);
-	if (!dev) {
-		kfree(usb_dev);
-		return NULL;
-	}
+	if (!dev)
+		return -1;
 
 	memset(dev, 0, sizeof(*dev));
 
@@ -1721,80 +1693,71 @@ static struct usb_device *ohci_usb_allocate(struct usb_device *parent)
 	usb_dev->hcpriv = dev;
 	dev->usb = usb_dev;
 
-	/*
-	 * Link the device to its parent (hub, etc..) if any.
-	 */
-	usb_dev->parent = parent;
+	if (usb_dev->parent)
+		dev->ohci = usb_to_ohci(usb_dev->parent)->ohci;
 
-	if (parent) {
-		usb_dev->bus = parent->bus;
-		dev->ohci = usb_to_ohci(parent)->ohci;
-	}
-
-	return usb_dev;
-} /* ohci_usb_allocate() */
+	return 0;
+} /* ohci_dev_allocate() */
 
 
 /*
- * Free a usb device.
- *
- * TODO This function needs to take better care of the EDs and TDs, etc.
+ * Free a usb device on this ohci controller.
  */
-static int ohci_usb_deallocate(struct usb_device *usb_dev)
+static int ohci_dev_deallocate(struct usb_device *usb_dev)
 {
 	struct ohci_device *dev = usb_to_ohci(usb_dev);
 
 	ohci_remove_device(dev->ohci, usb_dev->devnum);
 
-	/* kfree(usb_to_ohci(usb_dev)); */
-	/* kfree(usb_dev); */
+	kfree(usb_to_ohci(usb_dev));
 	return 0;
 }
 
-
-static void *ohci_alloc_isochronous (struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id)
+static int ohci_get_current_frame_number(struct usb_device *usb_dev)
 {
-	return NULL;
+	return USB_ST_NOTSUPPORTED;
 }
 
-static void ohci_delete_isochronous (struct usb_device *dev, void *_isodesc)
+static int ohci_alloc_isochronous (struct usb_device *usb_dev,
+unsigned int pipe, int frame_count, void *context,
+struct usb_isoc_desc **isocdesc)
+{
+	return USB_ST_NOTSUPPORTED;
+}
+
+static void ohci_delete_isochronous (struct usb_isoc_desc *isocdesc)
 {
 	return;
 }
 
-static int ohci_sched_isochronous (struct usb_device *usb_dev, void *_isodesc, void *_pisodesc)
+static int ohci_sched_isochronous (struct usb_isoc_desc *isocdesc,
+struct usb_isoc_desc *pr_isocdesc)
 {
 	return USB_ST_NOTSUPPORTED;
 }
 
-static int ohci_unsched_isochronous (struct usb_device *usb_dev, void *_isodesc)
+static int ohci_unsched_isochronous (struct usb_isoc_desc *isocdesc)
 {
 	return USB_ST_NOTSUPPORTED;
 }
-
-static int ohci_compress_isochronous (struct usb_device *usb_dev, void *_isodesc)
-{
-	return USB_ST_NOTSUPPORTED;
-}
-
 
 /*
  * functions for the generic USB driver
  */
 struct usb_operations ohci_device_operations = {
-	ohci_usb_allocate,
-	ohci_usb_deallocate,
+	ohci_dev_allocate,
+	ohci_dev_deallocate,
 	ohci_control_msg,
 	ohci_bulk_msg,
 	ohci_request_irq,
 	ohci_release_irq,
 	ohci_request_bulk,
 	ohci_terminate_bulk,
+        ohci_get_current_frame_number,
 	ohci_alloc_isochronous,
 	ohci_delete_isochronous,
 	ohci_sched_isochronous,
-	ohci_unsched_isochronous,
-	ohci_compress_isochronous
+	ohci_unsched_isochronous
 };
 
 
@@ -1887,8 +1850,10 @@ static int start_hc(struct ohci *ohci)
 	/* Enter the USB Operational state & start the frames a flowing.. */
 	writel_set(OHCI_USB_OPER, &ohci->regs->control);
 	
-	/* Enable control lists */
-	writel_set(OHCI_USB_IE | OHCI_USB_CLE | OHCI_USB_BLE, &ohci->regs->control);
+	/* Enable control lists, claim the host controller */
+	writel_set(
+		OHCI_USB_IE | OHCI_USB_CLE | OHCI_USB_BLE,
+		&ohci->regs->control);
 
 	/* Force global power enable -gal@cs.uni-magdeburg.de */
 	/* 
@@ -1988,10 +1953,11 @@ static void ohci_connect_change(struct ohci * ohci, int port)
 	/*
 	 * Allocate a device for the new thingy that's been attached
 	 */
-	usb_dev = ohci_usb_allocate(root_hub->usb);
-	dev = usb_dev->hcpriv;
+	usb_dev = usb_alloc_dev(root_hub->usb, root_hub->usb->bus);
+	if (!usb_dev)
+	        return;
 
-	dev->ohci = ohci;
+	dev = usb_dev->hcpriv;
 
 	usb_connect(dev->usb);
 
@@ -2360,6 +2326,8 @@ static struct ohci *alloc_ohci(void* mem_base)
 	struct usb_bus *bus;
 	struct ohci_device *dev;
 	struct usb_device *usb;
+        struct ohci_hcca *hcca;
+	u32 ctrl;
 
 #if 0
 	printk(KERN_DEBUG "entering alloc_ohci %p\n", mem_base);
@@ -2368,22 +2336,28 @@ static struct ohci *alloc_ohci(void* mem_base)
 	ohci = kmalloc(sizeof(*ohci), GFP_KERNEL);
 	if (!ohci)
 		return NULL;
-
 	memset(ohci, 0, sizeof(*ohci));
 
 	ohci->irq = -1;
 	ohci->regs = mem_base;
 	INIT_LIST_HEAD(&ohci->interrupt_list);
 
-	bus = kmalloc(sizeof(*bus), GFP_KERNEL);
-	if (!bus)
-		return NULL;
+	/*
+	 * Allocate the Host Controller Communications Area on a 256
+	 * byte boundary.  XXX take the easy way out and just grab a
+	 * page as that's guaranteed to have a nice boundary.
+	 */
+	hcca = (struct ohci_hcca *) __get_free_page(GFP_KERNEL);
+	if (hcca == NULL)
+	        goto au_free_ohci;
+	memset(hcca, 0, sizeof(struct ohci_hcca));
 
-	memset(bus, 0, sizeof(*bus));
+        bus = usb_alloc_bus(&ohci_device_operations);
+        if (!bus)
+                goto au_free_hcca;
 
 	ohci->bus = bus;
 	bus->hcpriv = ohci;
-	bus->op = &ohci_device_operations;
 
 	/*
 	 * Allocate the USB device structure and root hub.
@@ -2393,25 +2367,21 @@ static struct ohci *alloc_ohci(void* mem_base)
 	 * a nice pool of memory with pointers to endpoint descriptors
 	 * for the different interrupts.
 	 */
-	usb = ohci_usb_allocate(NULL);
+	usb = usb_alloc_dev(NULL, bus);
 	if (!usb)
-		return NULL;
+		goto au_free_bus;
 
-	dev = usb_to_ohci(usb);
-	ohci->bus->root_hub= ohci_to_usb(dev);
 	usb->bus = bus;
+	
+	dev = usb_to_ohci(usb);
+	dev->ohci = ohci;
+	dev->hcca = hcca;
+
+	ohci->bus->root_hub = ohci_to_usb(dev);
 
 	/* Initialize the root hub */
 	dev->ohci = ohci;    /* link back to the controller */
 
-	/*
-	 * Allocate the Host Controller Communications Area on a 256
-	 * byte boundary.  XXX take the easy way out and just grab a
-	 * page as that's guaranteed to have a nice boundary.
-	 */
-	dev->hcca = (struct ohci_hcca *) __get_free_page(GFP_KERNEL);
-	memset(dev->hcca, 0, sizeof(struct ohci_hcca));
- 
 	/* Tell the controller where the HCCA is */
 	writel(virt_to_bus(dev->hcca), &ohci->regs->hcca);
 
@@ -2431,6 +2401,25 @@ static struct ohci *alloc_ohci(void* mem_base)
 	}
 	printk(KERN_DEBUG "usb-ohci: %d root hub ports found\n", usb->maxchild);
 
+
+	/*
+	 *	Fix up legacy mode
+         */
+	     	 		
+	ctrl = readl(&ohci->regs->control);  
+	if(ctrl&OHCI_USB_IR)
+	{
+		int ct = 0; 
+		/* Ask SMM for the controls */
+	        writel(8, &ohci->regs->cmdstatus);
+	        printk(KERN_INFO "usb-ohci: switching interface from legacy mode.\n");
+	        while((readl(&ohci->regs->control)&OHCI_USB_IR) && ct < 250)
+	        {
+	        	udelay(100);
+	         	ct++;
+	         }
+	}
+	
 	/*
 	 * Initialize the ED polling "tree" (for simplicity's sake in
 	 * this driver many nodes in the tree will be identical)
@@ -2485,6 +2474,15 @@ static struct ohci *alloc_ohci(void* mem_base)
 #endif
 
 	return ohci;
+
+au_free_bus:
+	usb_free_bus(bus);
+au_free_hcca:
+	free_page((unsigned long)hcca);
+au_free_ohci:
+	kfree(ohci);
+	return NULL;
+
 } /* alloc_ohci() */
 
 
@@ -2752,6 +2750,8 @@ static int init_ohci(struct pci_dev *dev)
 	/* If its OHCI, its memory */
 	if (mem_base & PCI_BASE_ADDRESS_SPACE_IO)
 		return -ENODEV;
+
+	pci_set_master(dev);
 
 	/* Get the memory address and map it for IO */
 	mem_base = dev->resource[0].start;

@@ -129,6 +129,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_SIM710),y)
+L_OBJS += sim710.o
+else
+  ifeq ($(CONFIG_SCSI_SIM710),m)
+  M_OBJS += sim710.o
+  endif
+endif
+
 ifeq ($(CONFIG_A4000T_SCSI),y)
 L_OBJS += amiga7xx.o 53c7xx.o
 else
@@ -681,6 +689,17 @@ include $(TOPDIR)/Rules.make
 
 53c7xx.o : 53c7xx_d.h
 
+sim710_d.h: sim710.scr script_asm.pl
+	ln -sf sim710.scr fake7.c
+	$(CPP) -traditional -DCHIP=710 fake7.c | grep -v '^#' | perl -s script_asm.pl -ncr7x0_family
+	mv script.h sim710_d.h
+	mv scriptu.h sim710_u.h
+	rm fake7.c
+
+sim710_u.h: sim710_d.h
+
+sim710.o : sim710_d.h
+ 
 initio.o: ini9100u.c i91uscsi.c
 	$(CC) $(CFLAGS) -c ini9100u.c -o ini9100u.o
 	$(CC) $(CFLAGS) -c i91uscsi.c -o i91uscsi.o

@@ -11,7 +11,6 @@
 #define _LINUX_NCP_H
 
 #include <linux/types.h>
-#include <linux/ipx.h>
 
 #define NCP_PTYPE                (0x11)
 #define NCP_PORT                 (0x0451)
@@ -56,21 +55,6 @@ struct ncp_volume_info {
 	__u8 sectors_per_block;
 	char volume_name[NCP_VOLNAME_LEN + 1];
 };
-
-/* these define the attribute byte as seen by NCP */
-#define aRONLY     (ntohl(0x01000000))
-#define aHIDDEN    (__constant_ntohl(0x02000000))
-#define aSYSTEM    (__constant_ntohl(0x04000000))
-#define aEXECUTE   (ntohl(0x08000000))
-#define aDIR       (ntohl(0x10000000))
-#define aARCH      (ntohl(0x20000000))
-#define aSHARED	   (ntohl(0x80000000))
-#define aDONTSUBALLOCATE (ntohl(1L<<(11+8)))
-#define aTRANSACTIONAL   (ntohl(1L<<(12+8)))
-#define aPURGE		 (ntohl(1L<<(16-8)))
-#define aRENAMEINHIBIT	 (ntohl(1L<<(17-8)))
-#define aDELETEINHIBIT	 (ntohl(1L<<(18-8)))
-#define aDONTCOMPRESS	 (nothl(1L<<(27-24)))
 
 #define AR_READ      (ntohs(0x0100))
 #define AR_WRITE     (ntohs(0x0200))
@@ -184,15 +168,6 @@ struct nw_modify_dos_info {
 	__u16 inheritanceGrantMask __attribute__((packed));
 	__u16 inheritanceRevokeMask __attribute__((packed));
 	__u32 maximumSpace __attribute__((packed));
-};
-
-struct nw_file_info {
-	struct nw_info_struct i;
-	int opened;
-	int access;
-	__u32 server_file_handle __attribute__((packed));
-	__u8 open_create_action __attribute__((packed));
-	__u8 file_handle[6] __attribute__((packed));
 };
 
 struct nw_search_sequence {

@@ -23,6 +23,8 @@
 #define rdtscll(val) \
      __asm__ __volatile__ ("rdtsc" : "=A" (val))
 
+#define write_tsc(val1,val2) wrmsr(0x10, val1, val2)
+
 #define rdpmc(counter,low,high) \
      __asm__ __volatile__("rdpmc" \
 			  : "=a" (low), "=d" (high) \

@@ -13,13 +13,11 @@ SUB_DIRS     :=
 MOD_SUB_DIRS := $(SUB_DIRS)
 
 L_TARGET := macintosh.a
+L_OBJS   :=
 M_OBJS   :=
 
-ifndef CONFIG_MBX
-L_OBJS   := via-cuda.o macio-adb.o via-pmu.o mediabay.o
-endif
-ifeq ($(CONFIG_MAC_KEYBOARD),y)
-LX_OBJS  := adb.o
+ifeq ($(CONFIG_PMAC_PBOOK),y)
+  L_OBJS += mediabay.o
 endif
 
 ifeq ($(CONFIG_MAC_SERIAL),y)
@@ -38,8 +36,36 @@ else
   endif
 endif
 
-ifdef CONFIG_MAC_KEYBOARD
-L_OBJS += mac_keyb.o
+ifdef CONFIG_ADB
+  LX_OBJS  := adb.o
+endif
+
+ifdef CONFIG_ADB_KEYBOARD
+  L_OBJS += mac_keyb.o
+endif
+
+ifdef CONFIG_ADB_MACII
+  L_OBJS += via-macii.o
+endif
+
+ifdef CONFIG_ADB_MACIISI
+  L_OBJS += via-maciisi.o
+endif
+
+ifdef CONFIG_ADB_CUDA
+  L_OBJS += via-cuda.o
+endif
+
+ifdef CONFIG_ADB_IOP
+  L_OBJS += adb-iop.o
+endif
+
+ifdef CONFIG_ADB_PMU
+  L_OBJS += via-pmu.o
+endif
+
+ifdef CONFIG_ADB_MACIO
+  L_OBJS += macio-adb.o
 endif
 
 include $(TOPDIR)/Rules.make

@@ -34,33 +34,33 @@ static int usb_get_hub_descriptor(struct usb_device *dev, void *data, int size)
 {
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 		USB_REQ_GET_DESCRIPTOR, USB_DIR_IN | USB_RT_HUB,
-		USB_DT_HUB << 8, 0, data, size);
+		USB_DT_HUB << 8, 0, data, size, HZ);
 }
 
 static int usb_clear_port_feature(struct usb_device *dev, int port, int feature)
 {
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-		USB_REQ_CLEAR_FEATURE, USB_RT_PORT, feature, port, NULL, 0);
+		USB_REQ_CLEAR_FEATURE, USB_RT_PORT, feature, port, NULL, 0, HZ);
 }
 
 static int usb_set_port_feature(struct usb_device *dev, int port, int feature)
 {
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-		USB_REQ_SET_FEATURE, USB_RT_PORT, feature, port, NULL, 0);
+		USB_REQ_SET_FEATURE, USB_RT_PORT, feature, port, NULL, 0, HZ);
 }
 
 static int usb_get_hub_status(struct usb_device *dev, void *data)
 {
 	/* FIXME: Don't hardcode 4 */
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
-		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RT_HUB, 0, 0, data, 4);
+		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RT_HUB, 0, 0, data, 4, HZ);
 }
 
 static int usb_get_port_status(struct usb_device *dev, int port, void *data)
 {
 	/* FIXME: Don't hardcode 4 */
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
-		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RT_PORT, 0, port, data, 4);
+		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RT_PORT, 0, port, data, 4, HZ);
 }
 
 /*

@@ -202,11 +202,6 @@ void pcibios_fixup_bus(struct pci_bus *pbus)
 {
 }
 
-int pcibios_assign_resource(struct pci_dev *pdev, int resource)
-{
-	return 0;
-}
-
 char * __init pcibios_setup(char *str)
 {
 	if (!strcmp(str, "onboardfirst")) {

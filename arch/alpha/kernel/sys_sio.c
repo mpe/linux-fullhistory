@@ -28,7 +28,6 @@
 #include <asm/pgtable.h>
 #include <asm/core_apecs.h>
 #include <asm/core_lca.h>
-#include <asm/pci.h>
 
 #include "proto.h"
 #include "irq_impl.h"

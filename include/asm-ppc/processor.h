@@ -34,7 +34,7 @@
 #define MSR_RI		(1<<1)		/* Recoverable Exception */
 #define MSR_LE		(1<<0)		/* Little-Endian enable */
 
-#ifdef CONFIG_APUS
+#ifdef CONFIG_APUS_FAST_EXCEPT
 #define MSR_		MSR_ME|MSR_IP|MSR_RI
 #else
 #define MSR_		MSR_ME|MSR_RI
@@ -104,6 +104,7 @@
 #define _MACH_bseip   128 /* Bright Star Engineering ip-Engine */
 #define _MACH_yk      256 /* Motorola Yellowknife */
 #define _MACH_gemini  512 /* Synergy Microsystems gemini board */
+#define _MACH_classic 1024  /* RPCG RPX-Classic 8xx board */
 
 /* see residual.h for these */
 #define _PREP_Motorola 0x01  /* motorola prep */
@@ -212,13 +213,12 @@ n:
 #define SR15	15
 
 #ifndef __ASSEMBLY__
+#ifndef CONFIG_MACH_SPECIFIC
 extern int _machine;
-
-/* Temporary hacks until we can clean things up better - Corey */
 extern int have_of;
-extern int is_prep;
 extern int is_chrp;
 extern int is_powerplus;
+#endif /* CONFIG_MACH_SPECIFIC */
 
 /* what kind of prep workstation we are */
 extern int _prep_type;
@@ -331,5 +331,28 @@ void _nmask_and_or_msr(unsigned long nmask, unsigned long or_val);
 
 #endif /* ndef ASSEMBLY*/
 
-  
+#ifdef CONFIG_MACH_SPECIFIC
+#if defined(CONFIG_PREP)
+#define _machine _MACH_prep
+#define have_of 0
+#elif defined(CONFIG_CHRP)
+#define _machine _MACH_chrp
+#define have_of 1
+#elif defined(CONFIG_PMAC)
+#define _machine _MACH_Pmac
+#define have_of 1
+#elif defined(CONFIG_8xx)
+#define _machine _MACH_8xx
+#define have_of 0
+#elif defined(CONFIG_APUS)
+#define _machine _MACH_apus
+#define have_of 0
+#elif defined(CONFIG_GEMINI)
+#define _machine _MACH_gemini
+#define have_of 0
+#else
+#error "Machine not defined correctly"
+#endif
+#endif /* CONFIG_MACH_SPECIFIC */
+
 #endif /* __ASM_PPC_PROCESSOR_H */

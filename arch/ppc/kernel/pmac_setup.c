@@ -43,6 +43,9 @@
 #include <linux/console.h>
 #include <linux/ide.h>
 #include <linux/pci.h>
+#include <linux/adb.h>
+#include <linux/cuda.h>
+#include <linux/pmu.h>
 
 #include <asm/init.h>
 #include <asm/prom.h>
@@ -51,9 +54,6 @@
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/pci-bridge.h>
-#include <asm/adb.h>
-#include <asm/cuda.h>
-#include <asm/pmu.h>
 #include <asm/ohare.h>
 #include <asm/mediabay.h>
 #include <asm/feature.h>
@@ -166,16 +166,24 @@ pmac_get_cpuinfo(char *buffer)
 	/* find ram info */
 	np = find_devices("memory");
 	if (np != 0) {
+		int n;
 		struct reg_property *reg = (struct reg_property *)
-			get_property(np, "reg", NULL);
+			get_property(np, "reg", &n);
+		
 		if (reg != 0) {
-			len += sprintf(buffer+len, "memory\t\t: %dMB\n",
-				       reg->size >> 20);
+			unsigned long total = 0;
+
+			for (n /= sizeof(struct reg_property); n > 0; --n)
+				total += (reg++)->size;
+			len += sprintf(buffer+len, "memory\t\t: %luMB\n",
+				       total >> 20);
 		}
 	}
 
 	/* Checks "l2cr-value" property in the registry */
 	np = find_devices("cpus");		
+	if (np == 0)
+		np = find_type_devices("cpu");		
 	if (np != 0) {
 		unsigned int *l2cr = (unsigned int *)
 			get_property(np, "l2cr-value", NULL);
@@ -267,6 +275,8 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p)
 	/* Checks "l2cr-value" property in the registry */
 	if ( (_get_PVR() >> 16) == 8) {
 		struct device_node *np = find_devices("cpus");		
+		if (np == 0)
+			np = find_type_devices("cpu");		
 		if (np != 0) {
 			unsigned int *l2cr = (unsigned int *)
 				get_property(np, "l2cr-value", NULL);
@@ -290,8 +300,12 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p)
 	zs_kgdb_hook(0);
 #endif
 
+#ifdef CONFIG_ADB_CUDA
 	find_via_cuda();
+#endif	
+#ifdef CONFIG_ADB_PMU
 	find_via_pmu();
+#endif	
 
 #ifdef CONFIG_DUMMY_CONSOLE
 	conswitchp = &dummy_con;
@@ -360,9 +374,10 @@ kdev_t boot_dev;
 void __init
 pmac_init2(void)
 {
-	adb_init();
 	pmac_nvram_init();
+#ifdef CONFIG_PMAC_PBOOK	
 	media_bay_init();
+#endif	
 }
 
 #ifdef CONFIG_SCSI
@@ -470,19 +485,24 @@ void note_bootable_part(kdev_t dev, int part)
 void
 pmac_restart(char *cmd)
 {
+#ifdef CONFIG_ADB_CUDA
 	struct adb_request req;
+#endif /* CONFIG_ADB_CUDA */
 
-	switch (adb_hardware) {
-	case ADB_VIACUDA:
+	switch (sys_ctrler) {
+#ifdef CONFIG_ADB_CUDA
+	case SYS_CTRLER_CUDA:
 		cuda_request(&req, NULL, 2, CUDA_PACKET,
 			     CUDA_RESET_SYSTEM);
 		for (;;)
 			cuda_poll();
 		break;
-
-	case ADB_VIAPMU:
+#endif /* CONFIG_ADB_CUDA */
+#ifdef CONFIG_ADB_PMU		
+	case SYS_CTRLER_PMU:
 		pmu_restart();
 		break;
+#endif /* CONFIG_ADB_PMU */		
 	default:
 	}
 }
@@ -490,19 +510,24 @@ pmac_restart(char *cmd)
 void
 pmac_power_off(void)
 {
+#ifdef CONFIG_ADB_CUDA
 	struct adb_request req;
+#endif /* CONFIG_ADB_CUDA */
 
-	switch (adb_hardware) {
-	case ADB_VIACUDA:
+	switch (sys_ctrler) {
+#ifdef CONFIG_ADB_CUDA
+	case SYS_CTRLER_CUDA:
 		cuda_request(&req, NULL, 2, CUDA_PACKET,
 			     CUDA_POWERDOWN);
 		for (;;)
 			cuda_poll();
 		break;
-
-	case ADB_VIAPMU:
+#endif /* CONFIG_ADB_CUDA */
+#ifdef CONFIG_ADB_PMU
+	case SYS_CTRLER_PMU:
 		pmu_shutdown();
 		break;
+#endif /* CONFIG_ADB_PMU */
 	default:
 	}
 }
@@ -609,7 +634,7 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.get_cpuinfo    = pmac_get_cpuinfo;
 	ppc_md.irq_cannonicalize = NULL;
 	ppc_md.init_IRQ       = pmac_pic_init;
-	ppc_md.do_IRQ         = pmac_do_IRQ;
+	ppc_md.get_irq        = pmac_get_irq;
 	ppc_md.init           = pmac_init2;
 
 	ppc_md.restart        = pmac_restart;
@@ -621,7 +646,7 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.get_rtc_time   = pmac_get_rtc_time;
 	ppc_md.calibrate_decr = pmac_calibrate_decr;
 
-#if defined(CONFIG_VT) && defined(CONFIG_MAC_KEYBOARD)
+#if defined(CONFIG_VT) && defined(CONFIG_ADB_KEYBOARD)
 	ppc_md.kbd_setkeycode    = mackbd_setkeycode;
 	ppc_md.kbd_getkeycode    = mackbd_getkeycode;
 	ppc_md.kbd_translate     = mackbd_translate;
@@ -648,4 +673,3 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
         ppc_ide_md.io_base = _IO_BASE;	/* actually too early for this :-( */
 #endif		
 }
-

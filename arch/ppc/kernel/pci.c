@@ -1,5 +1,5 @@
 /*
- * $Id: pci.c,v 1.60 1999/09/08 03:04:07 cort Exp $
+ * $Id: pci.c,v 1.64 1999/09/17 18:01:53 cort Exp $
  * Common pmac/prep/chrp pci routines. -- Cort
  */
 
@@ -92,7 +92,7 @@ static void __init pcibios_claim_resources(struct pci_bus *bus)
 				struct resource *pr;
 				if (!r->start)
 					continue;
-				pr = pci_find_parent_resource(dev, r);
+				pr = pci_find_parent_resource(dev, r, 0);
 				if (!pr || request_resource(pr, r) < 0)
 				{
 					printk(KERN_ERR "PCI: Address space collision on region %d of device %s\n", idx, dev->name);
@@ -117,7 +117,7 @@ char __init *pcibios_setup(char *str)
 	return str;
 }
 
-#ifndef CONFIG_MBX
+#ifndef CONFIG_8xx
 /* Recursively searches any node that is of type PCI-PCI bridge. Without
  * this, the old code would miss children of P2P bridges and hence not
  * fix IRQ's for cards located behind P2P bridges.
@@ -141,8 +141,3 @@ void __init fix_intr(struct device_node *node, struct pci_dev *dev)
 	}
 }
 #endif
-
-int pcibios_assign_resource(struct pci_dev *pdev, int resource)
-{
-	return 0;
-}

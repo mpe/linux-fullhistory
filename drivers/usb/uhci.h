@@ -53,6 +53,10 @@
 #define   USBPORTSC_PR		0x0200	/* Port Reset */
 #define   USBPORTSC_SUSP	0x1000	/* Suspend */
 
+/* Legacy support register */
+#define USBLEGSUP 0xc0
+#define USBLEGSUP_DEFAULT 0x2000 /* only PIRQ enable set */
+
 #define UHCI_NULL_DATA_SIZE	0x7ff	/* for UHCI controller TD */
 
 #define UHCI_PTR_BITS		0x000F

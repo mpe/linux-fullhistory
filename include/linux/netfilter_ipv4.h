@@ -58,4 +58,10 @@ void nf_debug_ip_finish_output2(struct sk_buff *skb);
 #endif /*__KERNEL__*/
 #endif /*CONFIG_NETFILTER_DEBUG*/
 
+/* Arguments for setsockopt SOL_IP: */
+/* 2.0 firewalling went from 64 through 71 (and +256, +512, etc). */
+/* 2.2 firewalling (+ masq) went from 64 through 76 */
+/* 2.4 firewalling went 64 through 67. */
+#define SO_ORIGINAL_DST 80
+
 #endif /*__LINUX_IP_NETFILTER_H*/

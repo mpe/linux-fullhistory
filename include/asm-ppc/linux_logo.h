@@ -12,14 +12,6 @@
  */
  
 #include <linux/config.h>
-#ifdef CONFIG_APUS
-#include <asm-m68k/linux_logo.h>
-
-#undef linux_logo_banner
-#define linux_logo_banner "Linux/PPC version " UTS_RELEASE
-
-#else
-
 #include <linux/init.h>
 
 #define linux_logo_banner "Linux/PPC version " UTS_RELEASE
@@ -48,4 +40,3 @@ extern unsigned char linux_logo16_blue[];
 extern unsigned char linux_logo16[];
 
 #endif
-#endif /* CONFIG_APUS */

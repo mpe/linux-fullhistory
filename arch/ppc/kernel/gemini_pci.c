@@ -244,7 +244,6 @@ __init void layout_bus( struct pci_bus *bus )
 
 void __init gemini_pcibios_fixup(void)
 {
-	struct pci_bus *bus;
 	unsigned long orig_mem_base, orig_io_base;
 	
 	orig_mem_base = pci_mem_base;

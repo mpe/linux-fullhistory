@@ -127,7 +127,7 @@ repeat:
 			goto repeat;
 		}
 		if (page_count(page) != 2)
-			printk("hm, busy page invalidated? (not necesserily a bug)\n");
+			printk("hm, busy page invalidated? (not necessarily a bug)\n");
 		lru_cache_del(page);
 
 		remove_page_from_inode_queue(page);

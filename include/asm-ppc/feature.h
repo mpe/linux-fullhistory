@@ -36,6 +36,8 @@ enum system_feature {
 	FEATURE_BMac_reset,
 	FEATURE_BMac_IO_enable,
 	FEATURE_Modem_Reset,
+	FEATURE_IDE_DiskPower,
+	FEATURE_IDE_Reset,
 	FEATURE_last,
 };
 

@@ -9,7 +9,9 @@
  * Note: Make no assumptions about hardware or architecture in this file!
  *
  * Author: Tim Waugh <tim@cyberelk.demon.co.uk>
+ * Fixed AUTOFD polarity in ecp_forward_to_reverse().  Fred Barnes, 1999
  */
+
 
 #include <linux/config.h>
 #include <linux/parport.h>
@@ -336,7 +338,7 @@ int ecp_forward_to_reverse (struct parport *port)
 	/* Event 38: Set nAutoFd low */
 	parport_frob_control (port,
 			      PARPORT_CONTROL_AUTOFD,
-			      0);
+			      PARPORT_CONTROL_AUTOFD);
 	parport_data_reverse (port);
 	udelay (5);
 
@@ -524,12 +526,12 @@ size_t parport_ieee1284_ecp_read_data (struct parport *port,
 			if (count && dev->port->irq != PARPORT_IRQ_NONE) {
 				parport_release (dev);
 				current->state = TASK_INTERRUPTIBLE;
-				schedule_timeout ((HZ + 99) / 25);
+				schedule_timeout ((HZ + 24) / 25);
 				parport_claim_or_block (dev);
 			}
 			else
 				/* We must have the device claimed here. */
-				parport_wait_event (port, (HZ + 99) / 25);
+				parport_wait_event (port, (HZ + 24) / 25);
 
 			/* Is there a signal pending? */
 			if (signal_pending (current))
@@ -610,10 +612,11 @@ size_t parport_ieee1284_ecp_read_data (struct parport *port,
 			count += rle_count;
 			DPRINTK (KERN_DEBUG "%s: decompressed to %d bytes\n",
 				 port->name, rle_count);
-		}
-		else
+		} else {
 			/* Normal data byte. */
-			*buf++ = byte, count++;
+			*buf = byte;
+			buf++, count++;
+		}
 	}
 
  out:

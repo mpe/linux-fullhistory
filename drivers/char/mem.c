@@ -50,7 +50,7 @@ extern void prom_con_init(void);
 #ifdef CONFIG_MDA_CONSOLE
 extern void mda_console_init(void);
 #endif
-#if defined(CONFIG_PPC) || defined(CONFIG_MAC)
+#if defined(CONFIG_ADB)
 extern void adbdev_init(void);
 #endif
 #ifdef CONFIG_USB
@@ -667,7 +667,7 @@ int __init chr_dev_init(void)
 #ifdef CONFIG_VIDEO_BT848
 	i2c_init();
 #endif
-#if defined(CONFIG_PPC) || defined(CONFIG_MAC)
+#if defined(CONFIG_ADB)
 	adbdev_init();
 #endif
 #ifdef CONFIG_VIDEO_DEV

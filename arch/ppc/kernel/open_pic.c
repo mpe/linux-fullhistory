@@ -33,7 +33,6 @@ struct hw_interrupt_type open_pic = {
 	" OpenPIC  ",
 	NULL,
 	NULL,
-	NULL,
 	openpic_enable_irq,
 	openpic_disable_irq,
 	0,
@@ -352,6 +351,13 @@ void openpic_cause_IPI(u_int cpu, u_int ipi, u_int cpumask)
 	openpic_write(&OpenPIC->THIS_CPU.IPI_Dispatch(ipi), cpumask);
 }
 
+void openpic_enable_IPI(u_int ipi)
+{
+	check_arg_ipi(ipi);
+	openpic_clearfield(&OpenPIC->Global.IPI_Vector_Priority(ipi),
+			   OPENPIC_MASK);
+}
+
 /*
  *  Initialize a timer interrupt (and disable it)
  *
@@ -384,13 +390,13 @@ void openpic_maptimer(u_int timer, u_int cpumask)
 void openpic_enable_irq(u_int irq)
 {
 	check_arg_irq(irq);
-	openpic_clearfield(&OpenPIC->Source[irq].Vector_Priority, OPENPIC_MASK);
+	openpic_clearfield(&OpenPIC->Source[irq-irq_desc[irq].ctl->irq_offset].Vector_Priority, OPENPIC_MASK);
 }
 
 void openpic_disable_irq(u_int irq)
 {
 	check_arg_irq(irq);
-	openpic_setfield(&OpenPIC->Source[irq].Vector_Priority, OPENPIC_MASK);
+	openpic_setfield(&OpenPIC->Source[irq-irq_desc[irq].ctl->irq_offset].Vector_Priority, OPENPIC_MASK);
 }
 
 /*

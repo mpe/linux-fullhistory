@@ -9,11 +9,28 @@
 #include <asm/mmu.h>
 #include <asm/page.h>
 
+#ifndef CONFIG_8xx
 extern void local_flush_tlb_all(void);
 extern void local_flush_tlb_mm(struct mm_struct *mm);
 extern void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
 extern void local_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			    unsigned long end);
+#else /* CONFIG_8xx */
+#define __tlbia()	asm volatile ("tlbia" : : )
+
+extern inline void local_flush_tlb_all(void)
+	{ __tlbia(); }
+extern inline void local_flush_tlb_mm(struct mm_struct *mm)
+	{ __tlbia(); }
+extern inline void local_flush_tlb_page(struct vm_area_struct *vma,
+				unsigned long vmaddr)
+	{ __tlbia(); }
+extern inline void local_flush_tlb_range(struct mm_struct *mm,
+				unsigned long start, unsigned long end)
+	{ __tlbia(); }
+extern inline void flush_hash_page(unsigned context, unsigned long va)
+	{ }
+#endif
 
 #define flush_tlb_all local_flush_tlb_all
 #define flush_tlb_mm local_flush_tlb_mm
@@ -636,22 +653,6 @@ extern void kernel_set_cachemode (unsigned long address, unsigned long size,
 
 #define io_remap_page_range remap_page_range 
 
-#ifdef CONFIG_8xx
-#define __tlbia()	asm volatile ("tlbia" : : )
-
-extern inline void local_flush_tlb_all(void)
-	{ __tlbia(); }
-extern inline void local_flush_tlb_mm(struct mm_struct *mm)
-	{ __tlbia(); }
-extern inline void local_flush_tlb_page(struct vm_area_struct *vma,
-				unsigned long vmaddr)
-	{ __tlbia(); }
-extern inline void local_flush_tlb_range(struct mm_struct *mm,
-				unsigned long start, unsigned long end)
-	{ __tlbia(); }
-extern inline void flush_hash_page(unsigned context, unsigned long va)
-	{ }
-#endif
 
 #endif __ASSEMBLY__
 #endif /* _PPC_PGTABLE_H */

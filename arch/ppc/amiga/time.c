@@ -15,7 +15,7 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 	unsigned int day, unsigned int hour,
 	unsigned int min, unsigned int sec);
 
-unsigned long apus_get_rtc_time(void)
+unsigned long m68k_get_rtc_time(void)
 {
 	unsigned int year, mon, day, hour, min, sec;
 
@@ -30,7 +30,7 @@ unsigned long apus_get_rtc_time(void)
 	return mktime(year, mon, day, hour, min, sec);
 }
 
-int apus_set_rtc_time(unsigned long nowtime)
+int m68k_set_rtc_time(unsigned long nowtime)
 {
   if (mach_set_clock_mmss)
     return mach_set_clock_mmss (nowtime);
@@ -89,4 +89,6 @@ void apus_heartbeat (void)
                 dist = period / 4;
 	}
 #endif
+	/* should be made smarter */
+	ppc_md.heartbeat_count = 1;
 }

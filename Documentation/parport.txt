@@ -67,7 +67,7 @@ If you compile the parport code into the kernel, then you can use
 kernel boot parameters to get the same effect.  Add something like the
 following to your LILO command line:
 
-	parport=0x3bc parport=0x378,7 parport=0x278,auto
+	parport=0x3bc parport=0x378,7 parport=0x278,auto,nofifo
 
 You can have many `parport=...' statements, one for each port you want
 to add.  Adding `parport=0' to the kernel command-line will disable

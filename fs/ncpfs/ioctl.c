@@ -16,7 +16,6 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 
-#include <linux/ncp.h>
 #include <linux/ncp_fs.h>
 
 #include "ncplib_kernel.h"
@@ -110,7 +109,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		}
 		if (server->root_setuped) return -EBUSY;
 		server->root_setuped = 1;
-		return ncp_conn_logged_in(server);
+		return ncp_conn_logged_in(inode->i_sb);
 
 	case NCP_IOC_GET_FS_INFO:
 
@@ -162,9 +161,19 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 				return -EACCES;
 			}
 			if (server->m.mounted_vol[0]) {
-				sr.volNumber = server->root.finfo.i.volNumber;
-				sr.dirEntNum = server->root.finfo.i.dirEntNum;
-				sr.namespace = server->name_space[sr.volNumber];
+				struct dentry* dentry = inode->i_sb->s_root;
+
+				if (dentry) {
+					struct inode* inode = dentry->d_inode;
+				
+					if (inode) {
+						sr.volNumber = NCP_FINFO(inode)->volNumber;
+						sr.dirEntNum = NCP_FINFO(inode)->dirEntNum;
+						sr.namespace = server->name_space[sr.volNumber];
+					} else
+						DPRINTK(KERN_DEBUG "ncpfs: s_root->d_inode==NULL\n");
+				} else
+					DPRINTK(KERN_DEBUG "ncpfs: s_root==NULL\n");
 			} else {
 				sr.volNumber = -1;
 				sr.namespace = 0;
@@ -178,6 +187,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 	case NCP_IOC_SETROOT:
 		{
 			struct ncp_setroot_ioctl sr;
+			struct nw_info_struct i;
 			struct dentry* dentry;
 
 			if (   (permission(inode, MAY_WRITE) != 0)
@@ -191,31 +201,30 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 					   sizeof(sr))) return -EFAULT;
 			if (sr.volNumber < 0) {
 				server->m.mounted_vol[0] = 0;
-				server->root.finfo.i.volNumber = NCP_NUMBER_OF_VOLUMES + 1;
-				server->root.finfo.i.dirEntNum = 0;
-				server->root.finfo.i.DosDirNum = 0;
+				i.volNumber = NCP_NUMBER_OF_VOLUMES + 1;
+				i.dirEntNum = 0;
+				i.DosDirNum = 0;
 			} else if (sr.volNumber >= NCP_NUMBER_OF_VOLUMES) {
 				return -EINVAL;
-			} else {
-				if (ncp_mount_subdir(server, sr.volNumber, sr.namespace, sr.dirEntNum)) {
+			} else
+				if (ncp_mount_subdir(server, &i, sr.volNumber,
+						sr.namespace, sr.dirEntNum))
 					return -ENOENT;
-				}
-			}
-			dentry = server->root_dentry;
+
+			dentry = inode->i_sb->s_root;
 			server->root_setuped = 1;
 			if (dentry) {
 				struct inode* inode = dentry->d_inode;
 				
 				if (inode) {
-					NCP_FINFO(inode)->volNumber = server->root.finfo.i.volNumber;
-					NCP_FINFO(inode)->dirEntNum = server->root.finfo.i.dirEntNum;
-					NCP_FINFO(inode)->DosDirNum = server->root.finfo.i.DosDirNum;
-				} else {
-					DPRINTK(KERN_DEBUG "ncpfs: root_dentry->d_inode==NULL\n");
-				}
-			} else {
-				DPRINTK(KERN_DEBUG "ncpfs: root_dentry==NULL\n");
-			}
+					NCP_FINFO(inode)->volNumber = i.volNumber;
+					NCP_FINFO(inode)->dirEntNum = i.dirEntNum;
+					NCP_FINFO(inode)->DosDirNum = i.DosDirNum;
+				} else
+					DPRINTK(KERN_DEBUG "ncpfs: s_root->d_inode==NULL\n");
+			} else
+				DPRINTK(KERN_DEBUG "ncpfs: s_root==NULL\n");
+
 			return 0;
 		}
 #endif	/* CONFIG_NCPFS_MOUNT_SUBDIR */
@@ -503,12 +512,12 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
  * Thanks Petr Vandrovec for idea and many hints.
  */
 	case NCP_IOC_SETCHARSETS:
-		if (   (permission(inode, MAY_WRITE) != 0)
-		    && (current->uid != server->m.mounted_uid))
-		{
+		if ((permission(inode, MAY_WRITE) != 0) &&
+				 (current->uid != server->m.mounted_uid))
 			return -EACCES;
-		}
-		if (server->root_setuped) return -EBUSY;
+		if (server->root_setuped)
+			return -EBUSY;
+
 		{
 			struct ncp_nls_ioctl user;
 			struct nls_table *codepage;
@@ -516,28 +525,28 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 			struct nls_table *oldset_io;
 			struct nls_table *oldset_cp;
 			
-			if (copy_from_user(&user, 
-					   (struct ncp_nls_ioctl*)arg,
-					    sizeof(user))) return -EFAULT;
+			if (copy_from_user(&user, (struct ncp_nls_ioctl*)arg,
+					sizeof(user)))
+				return -EFAULT;
 
 			codepage = NULL;
-			if (!user.codepage[0]) {
+			user.codepage[NCP_IOCSNAME_LEN] = 0;
+			if (!user.codepage[0])
 				codepage = load_nls_default();
-			}
 			else {
 				codepage = load_nls(user.codepage);
-				if (! codepage) {
+				if (!codepage) {
 					return -EBADRQC;
 				}
 			}
 
 			iocharset = NULL;
-			if (user.iocharset[0] == 0) {
+			user.iocharset[NCP_IOCSNAME_LEN] = 0;
+			if (user.iocharset[0] == 0)
 				iocharset = load_nls_default();
-			}
 			else {
 				iocharset = load_nls(user.iocharset);
-				if (! iocharset) {
+				if (!iocharset) {
 					unload_nls(codepage);
 					return -EBADRQC;
 				}
@@ -547,18 +556,80 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 			server->nls_vol = codepage;
 			oldset_io = server->nls_io;
 			server->nls_io = iocharset;
-			server->nls_charsets = user;
-			if (oldset_cp) unload_nls(oldset_cp);
-			if (oldset_io) unload_nls(oldset_io);
+
+			if (oldset_cp)
+				unload_nls(oldset_cp);
+			if (oldset_io)
+				unload_nls(oldset_io);
+
 			return 0;
 		}
 		
 	case NCP_IOC_GETCHARSETS: /* not tested */
-		if (copy_to_user((struct ncp_nls_ioctl*)arg,
-				&(server->nls_charsets),
-				sizeof(server->nls_charsets))) return -EFAULT;
-		return 0;
+		{
+			struct ncp_nls_ioctl user;
+
+			memset(&user, 0, sizeof(user));
+			if (server->nls_vol)
+				if (server->nls_vol->charset) {
+					strncpy(user.codepage,
+						server->nls_vol->charset,
+						NCP_IOCSNAME_LEN);
+					user.codepage[NCP_IOCSNAME_LEN] = 0;
+					if (!strcmp(user.codepage, "default"))
+						/* unfortunately, we cannot set
+						   'default' charset... maybe
+						   we should change load_nls()?
+						   It is easy, do not initialize
+						   'tables' in fs/nls/nls_base.c
+						   with NULL, but with
+						   'default_table'... */
+						memset(user.codepage, 0,
+							sizeof(user.codepage));
+				}
+
+			if (server->nls_io)
+				if (server->nls_io->charset) {
+					strncpy(user.iocharset,
+						server->nls_io->charset,
+						NCP_IOCSNAME_LEN);
+					user.iocharset[NCP_IOCSNAME_LEN] = 0;
+					if (!strcmp(user.iocharset, "default"))
+						memset(user.iocharset, 0,
+							sizeof(user.iocharset));
+				}
+
+			if (copy_to_user((struct ncp_nls_ioctl*)arg, &user,
+					sizeof(user)))
+				return -EFAULT;
+
+			return 0;
+		}
 #endif /* CONFIG_NCPFS_NLS */
+	case NCP_IOC_SETDENTRYTTL:
+		if ((permission(inode, MAY_WRITE) != 0) &&
+				 (current->uid != server->m.mounted_uid))
+			return -EACCES;
+		{
+			u_int32_t user;
+
+			if (copy_from_user(&user, (u_int32_t*)arg, sizeof(user)))
+				return -EFAULT;
+			/* 20 secs at most... */
+			if (user > 20000)
+				return -EINVAL;
+			user = (user * HZ) / 1000;
+			server->dentry_ttl = user;
+			return 0;
+		}
+		
+	case NCP_IOC_GETDENTRYTTL:
+		{
+			u_int32_t user = (server->dentry_ttl * 1000) / HZ;
+			if (copy_to_user((u_int32_t*)arg, &user, sizeof(user)))
+				return -EFAULT;
+			return 0;
+		}
 
 	default:
 		return -EINVAL;

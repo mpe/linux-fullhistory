@@ -9,6 +9,7 @@
 #endif
 
 struct pt_regs;
+struct pci_bus;	
 
 struct machdep_calls {
 	void		(*setup_arch)(unsigned long * memory_start_p,
@@ -20,8 +21,9 @@ struct machdep_calls {
 	/* Optional, may be NULL. */
 	unsigned int	(*irq_cannonicalize)(unsigned int irq);
 	void		(*init_IRQ)(void);
-	void		(*do_IRQ)(struct pt_regs *regs, int cpu, int isfake);
-
+	int		(*get_irq)(struct pt_regs *);
+	void		(*post_irq)( int );
+	
 	/* A general init function, called by ppc_init in init/main.c.
 	   May be NULL. */
 	void		(*init)(void);
@@ -72,8 +74,9 @@ struct machdep_calls {
 	int (*pcibios_write_config_dword)(unsigned char bus,
 		unsigned char dev_fn, unsigned char offset, unsigned int val);
 	void (*pcibios_fixup)(void);
-struct pci_bus;	
 	void (*pcibios_fixup_bus)(struct pci_bus *);
+	/* this is for modules, since _machine can be a define -- Cort */
+	int ppc_machine;
 };
 
 extern struct machdep_calls ppc_md;
@@ -89,7 +92,7 @@ struct boot_info
 	unsigned long magic_start;
 	char cmd_line[256];
 	char boot_loader[128];
-	int _machine;
+	int _machine_type;
 	unsigned long initrd_start, initrd_size;
 	unsigned long systemmap_start, systemmap_size;
 	unsigned long prom_entry;
@@ -97,4 +100,14 @@ struct boot_info
 	unsigned long magic_end;
 };
 struct boot_info *binfo;
+
+/*
+ * Power macintoshes have either a CUDA or a PMU controlling
+ * system reset, power, NVRAM, RTC.
+ */
+enum sys_ctrler_kind {
+	SYS_CTRLER_CUDA = 1,
+	SYS_CTRLER_PMU = 2,
+} sys_ctrler;
+
 #endif /* _PPC_MACHDEP_H */

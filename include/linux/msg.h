@@ -11,31 +11,10 @@
 #define MSG_NOERROR     010000  /* no error if message is too big */
 #define MSG_EXCEPT      020000  /* recv any msg except of specified type.*/
 
-#ifdef __KERNEL__
-
-/* one msqid structure for each queue on the system */
-struct msqid_ds_kern {
-	struct ipc_perm msg_perm;
-	struct msg *msg_first;		/* first message on queue */
-	struct msg *msg_last;		/* last message in queue */
-	__kernel_time_t msg_stime;	/* last msgsnd time */
-	__kernel_time_t msg_rtime;	/* last msgrcv time */
-	__kernel_time_t msg_ctime;	/* last change time */
-	wait_queue_head_t wwait;
-	wait_queue_head_t rwait;
-	unsigned short msg_cbytes;	/* current number of bytes on queue */
-	unsigned short msg_qnum;	/* number of messages in queue */
-	unsigned short msg_qbytes;	/* max number of bytes on queue */
-	__kernel_ipc_pid_t msg_lspid;	/* pid of last msgsnd */
-	__kernel_ipc_pid_t msg_lrpid;	/* last receive pid */
-};
-
-#endif
-
 struct msqid_ds {
 	struct ipc_perm msg_perm;
-	struct msg *msg_first;		/* first message on queue */
-	struct msg *msg_last;		/* last message in queue */
+	struct msg *msg_first;		/* first message on queue,unused  */
+	struct msg *msg_last;		/* last message in queue,unused */
 	__kernel_time_t msg_stime;	/* last msgsnd time */
 	__kernel_time_t msg_rtime;	/* last msgrcv time */
 	__kernel_time_t msg_ctime;	/* last change time */
@@ -66,9 +45,9 @@ struct msginfo {
 	unsigned short  msgseg; 
 };
 
-#define MSGMNI   128   /* <= 1K */     /* max # of msg queue identifiers */
-#define MSGMAX  4056   /* <= 4056 */   /* max size of message (bytes) */
-#define MSGMNB 16384   /* ? */        /* default max size of a message queue */
+#define MSGMNI   128   /* <= 32768 */     /* max # of msg queue identifiers */
+#define MSGMAX  4056   /* <= 4056 (?)*/   /* max size of message (bytes) */
+#define MSGMNB 16384   /* <= MAX_INT */   /* default max size of a message queue */
 
 /* unused */
 #define MSGPOOL (MSGMNI*MSGMNB/1024)  /* size in kilobytes of message pool */
@@ -79,15 +58,6 @@ struct msginfo {
 #define MSGSEG (__MSGSEG <= 0xffff ? __MSGSEG : 0xffff)
 
 #ifdef __KERNEL__
-
-/* one msg structure for each message */
-struct msg {
-	struct msg *msg_next;   /* next message on queue */
-	long  msg_type;          
-	char *msg_spot;         /* message text address */
-	time_t msg_stime;       /* msgsnd time */
-	short msg_ts;           /* message text size */
-};
 
 asmlinkage long sys_msgget (key_t key, int msgflg);
 asmlinkage long sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg);

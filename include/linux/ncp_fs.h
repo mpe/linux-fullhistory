@@ -12,18 +12,8 @@
 #include <linux/in.h>
 #include <linux/types.h>
 
-#include <linux/ncp_mount.h>
-
-/* NLS charsets by ioctl */
-#define NCP_IOCSNAME_LEN 20
-struct ncp_nls_ioctl
-{
-	unsigned char codepage[NCP_IOCSNAME_LEN+1];
-	unsigned char iocharset[NCP_IOCSNAME_LEN+1];
-};
-                
-#include <linux/ncp_fs_sb.h>
-#include <linux/ncp_fs_i.h>
+#include <linux/ipx.h>
+#include <linux/ncp_no.h>
 
 /*
  * ioctl commands
@@ -91,6 +81,14 @@ struct ncp_privatedata_ioctl
 	void*		data;		/* ~1000 for NDS */
 };
 
+/* NLS charsets by ioctl */
+#define NCP_IOCSNAME_LEN 20
+struct ncp_nls_ioctl
+{
+	unsigned char codepage[NCP_IOCSNAME_LEN+1];
+	unsigned char iocharset[NCP_IOCSNAME_LEN+1];
+};
+
 #define	NCP_IOC_NCPREQUEST		_IOR('n', 1, struct ncp_ioctl_request)
 #define	NCP_IOC_GETMOUNTUID		_IOW('n', 2, __kernel_uid_t)
 
@@ -123,6 +121,9 @@ struct ncp_privatedata_ioctl
 #define NCP_IOC_GETCHARSETS		_IOWR('n', 11, struct ncp_nls_ioctl)
 #define NCP_IOC_SETCHARSETS		_IOR('n', 11, struct ncp_nls_ioctl)
 
+#define NCP_IOC_GETDENTRYTTL		_IOW('n', 12, __u32)
+#define NCP_IOC_SETDENTRYTTL		_IOR('n', 12, __u32)
+
 /*
  * The packet size to allocate. One page should be enough.
  */
@@ -151,53 +152,27 @@ struct ncp_privatedata_ioctl
 #define DDPRINTK(format, args...)
 #endif
 
-/* The readdir cache size controls how many directory entries are
- * cached.
- */
-#define NCP_READDIR_CACHE_SIZE        64
-
 #define NCP_MAX_RPC_TIMEOUT (6*HZ)
 
-/*
- * This is the ncpfs part of the inode structure. This must contain
- * all the information we need to work with an inode after creation.
- * (Move to ncp_fs_i.h once it stabilizes, and add a union in fs.h)
- */
-struct ncpfs_i {
-	__u32	dirEntNum __attribute__((packed));
-	__u32	DosDirNum __attribute__((packed));
-	__u32	volNumber __attribute__((packed));
-#ifdef CONFIG_NCPFS_SMALLDOS
-	__u32	origNS;
-#endif
-#ifdef CONFIG_NCPFS_STRONG
-	__u32	nwattr;
-#endif
-	int	opened;
-	int	access;
-	__u32	server_file_handle __attribute__((packed));
-	__u8	open_create_action __attribute__((packed));
-	__u8	file_handle[6] __attribute__((packed));
-};
 
-/*
- * This is an extension of the nw_file_info structure with
- * the additional information we need to create an inode.
- */
-struct ncpfs_inode_info {
-	ino_t	ino;		/* dummy inode number */
-	struct nw_file_info nw_info;
+struct ncp_entry_info {
+	struct nw_info_struct	i;
+	ino_t			ino;
+	int			opened;
+	int			access;
+	__u32			server_file_handle __attribute__((packed));
+	__u8			open_create_action __attribute__((packed));
+	__u8			file_handle[6] __attribute__((packed));
 };
 
 /* Guess, what 0x564c is :-) */
 #define NCP_SUPER_MAGIC  0x564c
 
 
-#define NCP_SBP(sb)          ((struct ncp_server *)((sb)->u.generic_sbp))
+#define NCP_SBP(sb)		(&((sb)->u.ncpfs_sb))
 
-#define NCP_SERVER(inode)    NCP_SBP((inode)->i_sb)
-/* We don't have an ncpfs union yet, so use smbfs ... */
-#define NCP_FINFO(inode)     ((struct ncpfs_i *)&((inode)->u.smbfs_i))
+#define NCP_SERVER(inode)	NCP_SBP((inode)->i_sb)
+#define NCP_FINFO(inode)	(&((inode)->u.ncpfs_i))
 
 #ifdef DEBUG_NCP_MALLOC
 
@@ -230,17 +205,14 @@ static inline void ncp_kfree_s(void *obj, int size)
 /* linux/fs/ncpfs/inode.c */
 int ncp_notify_change(struct dentry *, struct iattr *attr);
 struct super_block *ncp_read_super(struct super_block *, void *, int);
-struct inode *ncp_iget(struct super_block *, struct ncpfs_inode_info *);
-void ncp_update_inode(struct inode *, struct nw_file_info *);
-void ncp_update_inode2(struct inode *, struct nw_file_info *);
+struct inode *ncp_iget(struct super_block *, struct ncp_entry_info *);
+void ncp_update_inode(struct inode *, struct ncp_entry_info *);
+void ncp_update_inode2(struct inode *, struct ncp_entry_info *);
 extern int init_ncp_fs(void);
 
 /* linux/fs/ncpfs/dir.c */
 extern struct inode_operations ncp_dir_inode_operations;
-int ncp_conn_logged_in(struct ncp_server *);
-void ncp_init_dir_cache(void);
-void ncp_invalid_dir_cache(struct inode *);
-void ncp_free_dir_cache(void);
+int ncp_conn_logged_in(struct super_block *);
 int ncp_date_dos2unix(__u16 time, __u16 date);
 void ncp_date_unix2dos(int unix_date, __u16 * time, __u16 * date);
 

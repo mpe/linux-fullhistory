@@ -31,7 +31,6 @@
 #include <asm/processor.h>
 #include <asm/reboot.h>
 #include <asm/sni.h>
-#include <asm/pci.h>
 
 /*
  * Initial irq handlers.

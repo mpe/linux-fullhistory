@@ -59,27 +59,42 @@ static __inline__ int irq_cannonicalize(int irq)
  * from such devices as CPM, PCMCIA, RTC, PIT, TimeBase and Decrementer.
  * There are eight external interrupts (IRQs) that can be configured
  * as either level or edge sensitive. 
- * On the MBX implementation, there is also the possibility of an 8259
+ *
+ * The 82xx can have up to 64 interrupts on the internal controller.
+ *
+ * On some implementations, there is also the possibility of an 8259
  * through the PCI and PCI-ISA bridges.
  */
-#define NR_IRQS	(16+16) /* 8259 has 16, too -- Cort */
+#ifdef CONFIG_82xx
+#define NR_SIU_INTS	64
+#else
+#define NR_SIU_INTS	16
+#endif
 
-#define	SIU_IRQ0	(0+16)	/* Highest priority */
-#define	SIU_LEVEL0	(1+16)
-#define	SIU_IRQ1	(2+16)
-#define	SIU_LEVEL1	(3+16)
-#define	SIU_IRQ2	(4+16)
-#define	SIU_LEVEL2	(5+16)
-#define	SIU_IRQ3	(6+16)
-#define	SIU_LEVEL3	(7+16)
-#define	SIU_IRQ4	(8+16)
-#define	SIU_LEVEL4	(9+16)
-#define	SIU_IRQ5	(10+16)
-#define	SIU_LEVEL5	(11+16)
-#define	SIU_IRQ6	(12+16)
-#define	SIU_LEVEL6	(13+16)
-#define	SIU_IRQ7	(14+16)
-#define	SIU_LEVEL7	(15+16)
+#define NR_IRQS	(NR_SIU_INTS + NR_8259_INTS)
+
+/* These values must be zero-based and map 1:1 with the SIU configuration.
+ * They are used throughout the 8xx/82xx I/O subsystem to generate
+ * interrupt masks, flags, and other control patterns.  This is why the
+ * current kernel assumption of the 8259 as the base controller is such
+ * a pain in the butt.
+ */
+#define	SIU_IRQ0	(0)	/* Highest priority */
+#define	SIU_LEVEL0	(1)
+#define	SIU_IRQ1	(2)
+#define	SIU_LEVEL1	(3)
+#define	SIU_IRQ2	(4)
+#define	SIU_LEVEL2	(5)
+#define	SIU_IRQ3	(6)
+#define	SIU_LEVEL3	(7)
+#define	SIU_IRQ4	(8)
+#define	SIU_LEVEL4	(9)
+#define	SIU_IRQ5	(10)
+#define	SIU_LEVEL5	(11)
+#define	SIU_IRQ6	(12)
+#define	SIU_LEVEL6	(13)
+#define	SIU_IRQ7	(14)
+#define	SIU_LEVEL7	(15)
 
 /* The internal interrupts we can configure as we see fit.
  * My personal preference is CPM at level 2, which puts it above the
@@ -95,21 +110,11 @@ static __inline__ int irq_cannonicalize(int irq)
  */
 #define	mk_int_int_mask(IL) (1 << (7 - (IL/2)))
 
-#ifdef CONFIG_MBX
-/* These are defined (and fixed) by the MBX hardware implementation.*/
-#define POWER_FAIL_INT	SIU_IRQ0	/* Power fail */
-#define TEMP_HILO_INT	SIU_IRQ1	/* Temperature sensor */
-#define QSPAN_INT	SIU_IRQ2	/* PCI Bridge (DMA CTLR?) */
-#define ISA_BRIDGE_INT	SIU_IRQ3	/* All those PC things */
-#define COMM_L_INT	SIU_IRQ6	/* MBX Comm expansion connector pin */
-#define STOP_ABRT_INT	SIU_IRQ7	/* Stop/Abort header pin */
-#endif /* CONFIG_MBX */
+/* Now include the board configuration specific associations.
+*/
+#include <asm/mpc8xx.h>
 
-#ifdef CONFIG_FADS
-#define FEC_INTERRUPT	SIU_LEVEL1	/* FEC interrupt */
-#endif
-
-/* always the same on MBX -- Cort */
+/* always the same on 8xx -- Cort */
 static __inline__ int irq_cannonicalize(int irq)
 {
 	return irq;

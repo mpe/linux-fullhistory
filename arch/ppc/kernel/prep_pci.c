@@ -1,5 +1,5 @@
 /*
- * $Id: prep_pci.c,v 1.39 1999/08/31 15:42:39 cort Exp $
+ * $Id: prep_pci.c,v 1.40 1999/09/17 17:23:05 cort Exp $
  * PReP pci functions.
  * Originally by Gary Thomas
  * rewritten and updated by Cort Dougan (cort@cs.nmt.edu)
@@ -39,7 +39,8 @@ unsigned char *Motherboard_routes;
 /* Used for Motorola to store system config register */
 static unsigned long	*ProcInfo;
 
-extern void chrp_do_IRQ(struct pt_regs *,int , int);
+extern int chrp_get_irq(struct pt_regs *);
+extern void chrp_post_irq(int);
 
 /* Tables for known hardware */   
 
@@ -734,7 +735,8 @@ int __init raven_init(void)
 	OpenPIC_InitSenses = mvme2600_openpic_initsenses;
 	OpenPIC_NumInitSenses = sizeof(mvme2600_openpic_initsenses);
 
-	ppc_md.do_IRQ = chrp_do_IRQ;
+	ppc_md.get_irq = chrp_get_irq;
+	ppc_md.post_irq = chrp_post_irq;
 	
 	/* If raven is present on Motorola store the system config register
 	 * for later use.

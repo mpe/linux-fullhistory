@@ -209,6 +209,8 @@ EXPORT_SYMBOL(parport_device_coords);
 EXPORT_SYMBOL(parport_daisy_deselect_all);
 EXPORT_SYMBOL(parport_daisy_select);
 EXPORT_SYMBOL(parport_daisy_init);
+EXPORT_SYMBOL(parport_find_device);
+EXPORT_SYMBOL(parport_find_class);
 #endif
 
 void inc_parport_count(void)

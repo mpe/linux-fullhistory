@@ -1,10 +1,8 @@
 #ifndef __ASM_SPINLOCK_H
 #define __ASM_SPINLOCK_H
 
-/* Simple spin lock operations.  There are two variants, one clears IRQ's
- * on the local processor, one does not.
- *
- * We make no fairness assumptions. They have a cost.
+/*
+ * Simple spin lock operations.
  */
 
 typedef struct {
@@ -23,19 +21,6 @@ extern int spin_trylock(spinlock_t *lock);
 
 #define spin_lock(lp)			_spin_lock(lp)
 #define spin_unlock(lp)			_spin_unlock(lp)
-
-#define spin_lock_irq(lock) \
-	do { __cli(); spin_lock(lock); } while (0)
-#define spin_lock_bh(___lk) do { local_bh_disable(); spin_lock(___lk); } while(0)
-
-#define spin_unlock_irq(lock) \
-	do { spin_unlock(lock); __sti(); } while (0)
-#define spin_unlock_bh(___lk) do { spin_unlock(___lk); local_bh_enable(); } while(0)
-
-#define spin_lock_irqsave(lock, flags) \
-	do { __save_flags(flags); __cli(); spin_lock(lock); } while (0)
-#define spin_unlock_irqrestore(lock, flags) \
-	do { spin_unlock(lock); __restore_flags(flags); } while (0)
 
 extern unsigned long __spin_trylock(volatile unsigned long *lock);
 

@@ -18,7 +18,9 @@
 #define OH_BAY_IDE_ENABLE	8
 #define OH_BAY_FLOPPY_ENABLE	0x10
 #define OH_IDE_ENABLE		0x20
+#define OH_IDE_POWER		0x40	/* a guess */
 #define OH_BAY_ENABLE		0x80
+#define OH_IDE_RESET		0x100	/* 0-based, a guess */
 #define OH_SCC_ENABLE		0x200
 #define OH_MESH_ENABLE		0x400
 #define OH_FLOPPY_ENABLE	0x800

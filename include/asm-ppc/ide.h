@@ -178,7 +178,11 @@ typedef union {
 /*
  * The following are not needed for the non-m68k ports
  */
+#ifdef CONFIG_APUS
+#define ide_ack_intr(hwif) (hwif->hw.ack_intr ? hwif->hw.ack_intr(hwif) : 1)
+#else
 #define ide_ack_intr(hwif)		(1)
+#endif
 #define ide_release_lock(lock)		do {} while (0)
 #define ide_get_lock(lock, hdlr, data)	do {} while (0)
 

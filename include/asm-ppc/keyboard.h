@@ -16,11 +16,8 @@
 #ifdef __KERNEL__
 
 #include <linux/config.h>
-#include <asm/adb.h>
+#include <linux/adb.h>
 #include <asm/machdep.h>
-#ifdef CONFIG_APUS
-#include <asm-m68k/keyboard.h>
-#else
 
 #define KEYBOARD_IRQ			1
 #define DISABLE_KBD_DURING_INTERRUPTS	0
@@ -74,8 +71,6 @@ static inline void kbd_init_hw(void)
 #define kbd_sysrq_xlate	(ppc_md.ppc_kbd_sysrq_xlate)
 
 extern unsigned long SYSRQ_KEY;
-
-#endif /* CONFIG_APUS */
 
 #endif /* __KERNEL__ */
 

@@ -4,12 +4,13 @@
  *
  * I copied the basic skeleton from the lance driver, because I did not
  * know how to write the Linux driver, but I did know how the LANCE worked.
- * This version of the driver is specific to the MBX implementation,
- * since the board contains control registers external to the processor
- * for the control of the MC68160 SIA/transceiver.  The MPC860 manual
- * describes connections using the internal parallel port I/O.
  *
- * The MBX860 uses the CPM SCC1 serial port for the Ethernet interface.
+ * This version of the driver is somewhat selectable for the different
+ * processor/board combinations.  It works for the boards I know about
+ * now, and should be easily modified to include others.  Some of the
+ * configuration information is contained in "commproc.h" and the
+ * remainder is here.
+ *
  * Buffer descriptors are kept in the CPM dual port RAM, and the frame
  * buffers are in the host memory.
  *
@@ -21,7 +22,6 @@
  * small packets.
  *
  */
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -39,7 +39,7 @@
 
 #include <asm/8xx_immap.h>
 #include <asm/pgtable.h>
-#include <asm/fads.h>
+#include <asm/mpc8xx.h>
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
 #include "commproc.h"
@@ -164,16 +164,17 @@ static void set_multicast_list(struct net_device *dev);
 */
 /*static	ushort	my_enet_addr[] = { 0x0800, 0x3e26, 0x1559 };*/
 
-/* Right now, only the boards with an 860 use SCC1 for the Ethernet.
- * All others use SCC2.  We may need to make this board specific someday.
+/* Typically, 860(T) boards use SCC1 for Ethernet, and other 8xx boards
+ * use SCC2.  This is easily extended if necessary.
  */
-#ifndef CONFIG_MPC860
-/*static	ushort	my_enet_addr[] = { 0x2700, 0x00ec, 0x1000 };*/
+#ifdef CONFIG_SCC2_ENET
 #define CPM_CR_ENET	CPM_CR_CH_SCC2
 #define PROFF_ENET	PROFF_SCC2
 #define SCC_ENET	1		/* Index, not number! */
 #define CPMVEC_ENET	CPMVEC_SCC2
-#else
+#endif
+
+#ifdef CONFIG_SCC1_ENET
 #define CPM_CR_ENET CPM_CR_CH_SCC1
 #define PROFF_ENET	PROFF_SCC1
 #define SCC_ENET	0
@@ -326,7 +327,7 @@ cpm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 static void
 cpm_enet_interrupt(void *dev_id)
 {
-	struct net_device *dev = dev_id;
+	struct	net_device *dev = dev_id;
 	volatile struct	cpm_enet_private *cep;
 	volatile cbd_t	*bdp;
 	ushort	int_events;
@@ -357,43 +358,10 @@ cpm_enet_interrupt(void *dev_id)
 	 * I don't know if "normally" implies TXB is set when the buffer
 	 * descriptor is closed.....trial and error :-).
 	 */
-#if 0
-	if (int_events & SCCE_ENET_TXE) {
-
-		/* Transmission errors.
-		*/
-		bdp = cep->dirty_tx;
-#ifndef final_version
-		printk("CPM ENET xmit error %x\n", bdp->cbd_sc);
-		if (bdp->cbd_sc & BD_ENET_TX_READY)
-			printk("HEY! Enet xmit interrupt and TX_READY.\n");
-#endif
-		if (bdp->cbd_sc & BD_ENET_TX_HB)	/* No heartbeat */
-			cep->stats.tx_heartbeat_errors++;
-		if (bdp->cbd_sc & BD_ENET_TX_LC)	/* Late collision */
-			cep->stats.tx_window_errors++;
-		if (bdp->cbd_sc & BD_ENET_TX_RL)	/* Retrans limit */
-			cep->stats.tx_aborted_errors++;
-		if (bdp->cbd_sc & BD_ENET_TX_UN)	/* Underrun */
-			cep->stats.tx_fifo_errors++;
-		if (bdp->cbd_sc & BD_ENET_TX_CSL)	/* Carrier lost */
-			cep->stats.tx_carrier_errors++;
-
-		cep->stats.tx_errors++;
-
-		/* No heartbeat or Lost carrier are not really bad errors.
-		 * The others require a restart transmit command.
-		 */
-		if (bdp->cbd_sc &
-		    (BD_ENET_TX_LC | BD_ENET_TX_RL | BD_ENET_TX_UN))
-			must_restart = 1;
-	}
-#endif
 
 	/* Transmit OK, or non-fatal error.  Update the buffer descriptors.
 	*/
 	if (int_events & (SCCE_ENET_TXE | SCCE_ENET_TXB)) {
-#if 1
 	    bdp = cep->dirty_tx;
 	    while ((bdp->cbd_sc&BD_ENET_TX_READY)==0) {
 		if ((bdp==cep->cur_tx) && (cep->tx_full == 0))
@@ -421,13 +389,7 @@ cpm_enet_interrupt(void *dev_id)
 		}
 
 		cep->stats.tx_packets++;
-#else
-		bdp = cep->dirty_tx;
-#if 1
-		if (bdp->cbd_sc & BD_ENET_TX_READY)
-			printk("HEY! Enet xmit interrupt and TX_READY.\n");
-#endif
-#endif
+
 		/* Deferred means some collisions occurred during transmit,
 		 * but we eventually sent the packet OK.
 		 */
@@ -697,9 +659,7 @@ static void set_multicast_list(struct net_device *dev)
  * transmit and receive to make sure we don't catch the CPM with some
  * inconsistent control information.
  */
-/* until this gets cleared up -- Cort */
-int __init cpm_enet_init() { m8xx_enet_init(); }
-int __init m8xx_enet_init(void)
+int __init cpm_enet_init(void)
 {
 	struct net_device *dev;
 	struct cpm_enet_private *cep;
@@ -718,7 +678,7 @@ int __init m8xx_enet_init(void)
 
 	immap = (immap_t *)IMAP_ADDR;	/* and to internal registers */
 
-	bd = (bd_t *)res;
+	bd = (bd_t *)__res;
 
 	/* Allocate some private information.
 	*/
@@ -830,8 +790,8 @@ int __init m8xx_enet_init(void)
 	ep->sen_maxflr = PKT_MAXBUF_SIZE;   /* maximum frame length register */
 	ep->sen_minflr = PKT_MINBUF_SIZE;  /* minimum frame length register */
 
-	ep->sen_maxd1 = PKT_MAXBUF_SIZE;	/* maximum DMA1 length */
-	ep->sen_maxd2 = PKT_MAXBUF_SIZE;	/* maximum DMA2 length */
+	ep->sen_maxd1 = PKT_MAXBLR_SIZE;	/* maximum DMA1 length */
+	ep->sen_maxd2 = PKT_MAXBLR_SIZE;	/* maximum DMA2 length */
 
 	/* Clear hash tables.
 	*/
@@ -849,6 +809,9 @@ int __init m8xx_enet_init(void)
 	 * If we performed a MBX diskless boot, the Ethernet controller
 	 * has been initialized and we copy the address out into our
 	 * own structure.
+	 *
+	 * All other types of boards supply the address in the board
+	 * information structure, so we copy that into the controller.
 	 */
 	eap = (unsigned char *)&(ep->sen_paddrh);
 #ifndef CONFIG_MBX
@@ -891,7 +854,7 @@ int __init m8xx_enet_init(void)
 
 		/* Make it uncached.
 		*/
-		pte = va_to_pte(&init_task, mem_addr);
+		pte = find_pte(&init_mm, mem_addr);
 		pte_val(*pte) |= _PAGE_NO_CACHE;
 		flush_tlb_page(current->mm->mmap, mem_addr);
 
@@ -983,7 +946,9 @@ int __init m8xx_enet_init(void)
 
 	dev->base_addr = (unsigned long)ep;
 	dev->priv = cep;
+#if 0
 	dev->name = "CPM_ENET";
+#endif
 
 	/* The CPM Ethernet specific entries in the device structure. */
 	dev->open = cpm_enet_open;
@@ -996,7 +961,7 @@ int __init m8xx_enet_init(void)
 	*/
 	sccp->scc_gsmrl |= (SCC_GSMRL_ENR | SCC_GSMRL_ENT);
 
-	printk("CPM ENET Version 0.1, ");
+	printk("%s: CPM ENET Version 0.2, ", dev->name);
 	for (i=0; i<5; i++)
 		printk("%02x:", dev->dev_addr[i]);
 	printk("%02x\n", dev->dev_addr[5]);

@@ -14,7 +14,7 @@
  * [ Open Host Controller Interface driver for USB. ]
  * [ (C) Copyright 1999 Linus Torvalds (uhci.c) ]
  * [ (C) Copyright 1999 Gregory P. Smith <greg@electricrain.com> ]
- * [ $Log: ohci.c,v $ ]
+ * [ _Log: ohci-hcd.c,v _
  * [ Revision 1.1  1999/04/05 08:32:30  greg ]
  * 
  * v4.2 1999/09/05 ISO API alpha, new dev alloc, neg Error-codes
@@ -224,7 +224,7 @@ static int sohci_release_irq(struct usb_device *usb_dev, void * ed)
 	return 0;
 }
 
-static int sohci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devrequest *cmd, void *data, int len)
+static int sohci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devrequest *cmd, void *data, int len, int timeout)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	struct ohci_state state = {0, TD_NOTACCESSED};
@@ -254,7 +254,7 @@ static int sohci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devr
     OHCI_DEBUG(printk("USB HC trans req ed %x: %x :", ed->hwINFO, (unsigned int ) ed); )
  	OHCI_DEBUG({ int i; for( i= 0; i<8 ;i++) printk(" %4x", ((unsigned int *) ed)[i]) ; printk("\n"); }; )
  	if (ED_STATE(ed) != ED_OPER)  ohci_link_ed(ohci, ed);
- 	schedule_timeout(HZ*5);
+ 	schedule_timeout(timeout);
    
     if(state.status == TD_NOTACCESSED) {	
     	current->state = TASK_UNINTERRUPTIBLE;
@@ -266,7 +266,7 @@ static int sohci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devr
 	return state.status;
 }
 
-static int sohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, unsigned long *rval)
+static int sohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, unsigned long *rval, int timeout)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	struct ohci_state state = {0, TD_NOTACCESSED};
@@ -286,7 +286,7 @@ static int sohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *d
 	ohci_trans_req(ohci, ed, 0, NULL, data, len, (__OHCI_BAG) &state, (__OHCI_BAG) &wait,(usb_pipeout(pipe))?BULK_OUT:BULK_IN, sohci_blocking_handler);
 	if (ED_STATE(ed) != ED_OPER)  ohci_link_ed(ohci, ed);
 	
-	schedule_timeout(HZ*5);
+	schedule_timeout(timeout);
 
 	if(state.status == TD_NOTACCESSED) {		
     	current->state = TASK_UNINTERRUPTIBLE;

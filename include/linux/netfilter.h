@@ -77,7 +77,8 @@ struct nf_sockopt_ops
 int nf_register_hook(struct nf_hook_ops *reg);
 void nf_unregister_hook(struct nf_hook_ops *reg);
 
-/* Functions to register get/setsockopt ranges (non-inclusive). */
+/* Functions to register get/setsockopt ranges (non-inclusive).  You
+   need to check permissions yourself! */
 int nf_register_sockopt(struct nf_sockopt_ops *reg);
 void nf_unregister_sockopt(struct nf_sockopt_ops *reg);
 

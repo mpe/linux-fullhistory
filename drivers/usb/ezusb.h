@@ -31,6 +31,23 @@
 
 /* --------------------------------------------------------------------- */
 
+struct ezusb_old_ctrltransfer {
+	/* keep in sync with usb.h:devrequest */
+	unsigned char requesttype;
+	unsigned char request;
+	unsigned short value;
+	unsigned short index;
+	unsigned short length;
+	unsigned int dlen;
+	void *data;
+};
+
+struct ezusb_old_bulktransfer {
+	unsigned int ep;
+	unsigned int len;
+	void *data;
+};
+
 struct ezusb_ctrltransfer {
 	/* keep in sync with usb.h:devrequest */
 	unsigned char requesttype;
@@ -38,14 +55,14 @@ struct ezusb_ctrltransfer {
 	unsigned short value;
 	unsigned short index;
 	unsigned short length;
-	/* pointer to data */
-	unsigned dlen;
+	unsigned int timeout;  /* in milliseconds */
 	void *data;
 };
 
 struct ezusb_bulktransfer {
 	unsigned int ep;
 	unsigned int len;
+	unsigned int timeout;  /* in milliseconds */
 	void *data;
 };
 
@@ -84,8 +101,10 @@ struct ezusb_asynciso {
 	struct ezusb_isoframestat isostat[0];
 };
 
-#define EZUSB_CONTROL           _IOWR('E', 0, struct ezusb_ctrltransfer)
+#define EZUSB_CONTROL           _IOWR('E', 1, struct ezusb_ctrltransfer)
 #define EZUSB_BULK              _IOWR('E', 2, struct ezusb_bulktransfer)
+#define EZUSB_OLD_CONTROL       _IOWR('E', 0, struct ezusb_old_ctrltransfer)
+#define EZUSB_OLD_BULK          _IOWR('E', 2, struct ezusb_old_bulktransfer)
 #define EZUSB_RESETEP           _IOR('E', 3, unsigned int)
 #define EZUSB_SETINTERFACE      _IOR('E', 4, struct ezusb_setinterface)
 #define EZUSB_SETCONFIGURATION  _IOR('E', 5, unsigned int)

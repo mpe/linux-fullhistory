@@ -4,9 +4,6 @@
 
 #include <linux/config.h>
 
-#ifdef CONFIG_APUS
-#include <asm-m68k/serial.h>
-#else
 #ifdef CONFIG_GEMINI
 #include <asm/gemini_serial.h>
 #else
@@ -20,20 +17,18 @@
  */
 #define BASE_BAUD ( 1843200 / 16 )
 
-#ifdef CONFIG_PMAC
-/*
- * Auto-probing will cause machine checks on powermacs.
- */
-#define SERIAL_PORT_DFNS
-  
 #ifdef CONFIG_SERIAL_MANY_PORTS
 #define RS_TABLE_SIZE  64
 #else
 #define RS_TABLE_SIZE  4
 #endif
 
-#else
+#ifdef CONFIG_PMAC
+/*
+ * Auto-probing will cause machine checks on powermacs.
+ */
 #define SERIAL_PORT_DFNS
+#else
 /*
  * PReP, CHRP, etc.
  */
@@ -143,4 +138,3 @@
 
 #endif /* CONFIG_PMAC */
 #endif /* CONFIG_GEMINI */
-#endif /* CONFIG_APUS */

@@ -14,7 +14,6 @@
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
-#include <asm/pci.h>
 
 #define __EXTERN_INLINE inline
 #include <asm/io.h>

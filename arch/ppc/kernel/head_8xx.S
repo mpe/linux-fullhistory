@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/except_8xx.S
  *
- *  $Id: head_8xx.S,v 1.2 1999/08/23 02:53:19 paulus Exp $
+ *  $Id: head_8xx.S,v 1.4 1999/09/18 18:43:19 dmalek Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -28,6 +28,8 @@
 #include <asm/page.h>
 #include <linux/config.h>
 #include <asm/mmu.h>
+#include <asm/cache.h>
+#include <asm/pgtable.h>
 	
 	.text
 	.globl	_stext
@@ -109,25 +111,19 @@ __start:
 	mtspr	MI_AP, r8
 	mtspr	MD_AP, r8
 
-/* We will get these from a configuration file as soon as I verify
- * the extraneous bits don't cause problems in the TLB.
- */
-#if defined(CONFIG_MBX) || defined(CONFIG_RPXLITE)
-#define BOOT_IMMR      0xfa000000
-#endif
-#ifdef CONFIG_BSEIP
-#define BOOT_IMMR      0xff000000
-#endif
-	/* Map another 8 MByte at 0xfa000000 to get the processor
+	/* Map another 8 MByte at the IMMR to get the processor
 	 * internal registers (among other things).
 	 */
-	lis     r8, BOOT_IMMR@h         /* Create vaddr for TLB */
+	mfspr	r9, 638			/* Get current IMMR */
+	andis.	r9, r9, 0xff80		/* Get 8Mbyte boundary */
+
+	mr	r8, r9			/* Create vaddr for TLB */
 	ori	r8, r8, MD_EVALID	/* Mark it valid */
 	mtspr	MD_EPN, r8
 	li	r8, MD_PS8MEG		/* Set 8M byte page */
 	ori	r8, r8, MD_SVALID	/* Make it valid */
 	mtspr	MD_TWC, r8
-	lis     r8, BOOT_IMMR@h         /* Create paddr for TLB */
+	mr	r8, r9			/* Create paddr for TLB */
 	ori	r8, r8, MI_BOOTINIT|0x2 /* Inhibit cache -- Cort */
 	mtspr	MD_RPN, r8
 
@@ -301,6 +297,8 @@ HardwareInterrupt:
 	li	r20,MSR_KERNEL
 	li	r4,0
 	bl	transfer_to_handler
+	.globl do_IRQ_intercept
+do_IRQ_intercept:
 	.long	do_IRQ;
 	.long	ret_from_except
 	
@@ -335,7 +333,17 @@ ProgramCheck:
 */
 	STD_EXCEPTION(0x800, FPUnavailable, UnknownException)
 
-	STD_EXCEPTION(0x900, Decrementer, timer_interrupt)
+	. = 0x900
+Decrementer:
+	EXCEPTION_PROLOG
+	addi	r3,r1,STACK_FRAME_OVERHEAD
+	li	r20,MSR_KERNEL
+	bl	transfer_to_handler
+	.globl timer_interrupt_intercept
+timer_interrupt_intercept:
+	.long	timer_interrupt
+	.long	ret_from_except
+
 	STD_EXCEPTION(0xa00, Trap_0a, UnknownException)
 	STD_EXCEPTION(0xb00, Trap_0b, UnknownException)
 
@@ -553,7 +561,6 @@ DataTLBError:
 	mtcr	r21
 	lwz	r21, 4(r0)
 	b	DataAccess
-#endif /* CONFIG_8xx */
 
 	STD_EXCEPTION(0x1500, Trap_15, UnknownException)
 	STD_EXCEPTION(0x1600, Trap_16, UnknownException)

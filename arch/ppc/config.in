@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.103 1999/09/01 19:04:44 cort Exp $
+# $Id: config.in,v 1.106 1999/09/14 19:21:18 cort Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -10,16 +10,33 @@ define_bool CONFIG_PPC y
 choice 'Processor type' \
 	"6xx/7xx		CONFIG_6xx \
 	 630/Power3(64-Bit) 	CONFIG_PPC64 \
-	 860/821		CONFIG_8xx" 6xx/7xx
+	 82xx		 	CONFIG_82xx \
+	 8xx			CONFIG_8xx" 6xx/7xx
 
-choice 'Machine Type' \
+if [ "$CONFIG_8xx" = "y" ]; then
+  choice 'Processor Model' \
+  	"821	CONFIG_MPC821 \
+  	 823	CONFIG_MPC823 \
+  	 850	CONFIG_MPC850 \
+  	 855	CONFIG_MPC855 \
+  	 860	CONFIG_MPC860 \
+  	 860T	CONFIG_MPC860T" 860
+  define_bool CONFIG_SERIAL_CONSOLE y
+  choice 'Machine Type' \
+	"RPX-Lite	CONFIG_RPXLITE \
+	 RPX-Classic	CONFIG_RPXCLASSIC \
+	 BSE-IP		CONFIG_BSEIP \
+  	 MBX		CONFIG_MBX \
+	 WinCept	CONFIG_WINCEPT" RPX-Lite
+else
+  choice 'Machine Type' \
 	"PowerMac	CONFIG_PMAC \
 	 PReP/MTX	CONFIG_PREP \
 	 CHRP		CONFIG_CHRP \
 	 PowerMac/PReP/CHRP	CONFIG_ALL_PPC \
 	 Gemini		CONFIG_GEMINI \
-  	 APUS           CONFIG_APUS \
-	 MBX		CONFIG_MBX" PowerMac
+  	 APUS           CONFIG_APUS" PowerMac
+fi
 
 bool 'Symmetric multi-processing support' CONFIG_SMP
 if [ "$CONFIG_ALL_PPC" != "y" ];then
@@ -35,10 +52,6 @@ else
 fi
 endmenu
 
-if [ "$CONFIG_MBX" = "y" ];then
-  define_bool CONFIG_SERIAL_CONSOLE y
-fi
-
 mainmenu_option next_comment
 comment 'General setup'
 
@@ -52,7 +65,11 @@ fi
 if [ "$CONFIG_APUS" = "y" ]; then
   define_bool CONFIG_PCI n
 else
-  define_bool CONFIG_PCI y
+  if [ "$CONFIG_8xx" = "y" ]; then
+    bool 'QSpan PCI' CONFIG_PCI
+  else
+    define_bool CONFIG_PCI y
+  fi
 fi
 
 bool 'Networking support' CONFIG_NET
@@ -67,23 +84,32 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
 source drivers/parport/Config.in
 
-bool 'Support for VGA Console' CONFIG_VGA_CONSOLE
-bool 'Support for frame buffer devices' CONFIG_FB
-if [ "$CONFIG_FB" = "y" ]; then
-  bool 'Backward compatibility mode for Xpmac' CONFIG_FB_COMPAT_XPMAC
+if [ "$CONFIG_8xx" != "y" ]; then
+  bool 'Support for VGA Console' CONFIG_VGA_CONSOLE
+  bool 'Support for frame buffer devices' CONFIG_FB
+  if [ "$CONFIG_FB" = "y" ]; then
+    bool 'Backward compatibility mode for Xpmac' CONFIG_FB_COMPAT_XPMAC
+  fi
+
+  bool 'Power management support for PowerBooks' CONFIG_PMAC_PBOOK
+  bool 'Support for PowerMac floppy' CONFIG_MAC_FLOPPY
+  tristate 'Support for PowerMac serial ports' CONFIG_MAC_SERIAL
+  if [ "$CONFIG_MAC_SERIAL" = "y" ]; then
+     bool '   Support for console on serial port' CONFIG_SERIAL_CONSOLE
+  fi
+  bool 'Apple Desktop Bus (ADB) support' CONFIG_ADB
+  if [ "$CONFIG_ADB" = "y" ]; then
+     bool '   Include CUDA ADB driver' CONFIG_ADB_CUDA
+     bool '   Include MacIO ADB driver' CONFIG_ADB_MACIO
+     bool '   Include PMU (Powerbook) ADB driver' CONFIG_ADB_PMU
+     bool 'Support for ADB keyboard' CONFIG_ADB_KEYBOARD 
+  fi
+  bool 'Support for Open Firmware device tree in /proc' CONFIG_PROC_DEVICETREE
+  bool 'Support for TotalImpact TotalMP' CONFIG_TOTALMP
+  bool 'Support for early boot text console (BootX only)' CONFIG_BOOTX_TEXT
+  bool 'Support for Motorola Hot Swap' CONFIG_MOTOROLA_HOTSWAP
 fi
 
-bool 'Power management support for PowerBook 3400/2400' CONFIG_PMAC_PBOOK
-bool 'Support for PowerMac keyboard' CONFIG_MAC_KEYBOARD
-bool 'Support for PowerMac floppy' CONFIG_MAC_FLOPPY
-tristate 'Support for PowerMac serial ports' CONFIG_MAC_SERIAL
-if [ "$CONFIG_MAC_SERIAL" = "y" ]; then
-   bool '   Support for console on serial port' CONFIG_SERIAL_CONSOLE
-fi
-bool 'Support for Open Firmware device tree in /proc' CONFIG_PROC_DEVICETREE
-bool 'Support for TotalImpact TotalMP' CONFIG_TOTALMP
-bool 'Support for early boot text console (BootX only)' CONFIG_BOOTX_TEXT
-bool 'Support for Motorola Hot Swap' CONFIG_MOTOROLA_HOTSWAP
 if [ "$CONFIG_PREP" = "y" -o "$CONFIG_ALL_PPC" = "y" ]; then
   bool 'PReP bootloader kernel arguments' CONFIG_CMDLINE_BOOL y
   if [ "$CONFIG_CMDLINE_BOOL" = "y" ] ; then
@@ -182,6 +208,10 @@ if [ "$CONFIG_SOUND" != "n" ]; then
 fi
 
 endmenu
+
+if [ "$CONFIG_8xx" = "y" ]; then
+source arch/ppc/8xx_io/Config.in
+fi
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

@@ -29,14 +29,14 @@ static NVRAM_MAP *nvram=(NVRAM_MAP *)&nvramData[0];
 
 unsigned char *rs_pcNvRAM;
 
-unsigned char prep_nvram_read_val(int addr)
+unsigned char __prep prep_nvram_read_val(int addr)
 {
 	outb(addr, PREP_NVRAM_AS0);
 	outb(addr>>8, PREP_NVRAM_AS1);
 	return inb(PREP_NVRAM_DATA);
 }
   
-void prep_nvram_write_val(int           addr,
+void __prep prep_nvram_write_val(int           addr,
 			  unsigned char val)
 {
 	outb(addr, PREP_NVRAM_AS0);
@@ -47,12 +47,12 @@ void prep_nvram_write_val(int           addr,
 /*
  * Most Radstone boards have NvRAM memory mapped at offset 8M in ISA space
  */
-unsigned char rs_nvram_read_val(int addr)
+unsigned char __prep rs_nvram_read_val(int addr)
 {
 	return rs_pcNvRAM[addr];
 }
   
-void rs_nvram_write_val(int addr,
+void __prep rs_nvram_write_val(int addr,
 			unsigned char val)
 {
 	rs_pcNvRAM[addr]=val;
@@ -113,7 +113,7 @@ void __init init_prep_nvram(void)
 }
 
 __prep
-char *prep_nvram_get_var(const char *name)
+char __prep *prep_nvram_get_var(const char *name)
 {
 	char *cp;
 	int  namelen;
@@ -133,7 +133,7 @@ char *prep_nvram_get_var(const char *name)
 }
 
 __prep
-char *prep_nvram_first_var(void)
+char __prep *prep_nvram_first_var(void)
 {
         if (nvram->Header.GELength == 0) {
 		return NULL;
@@ -144,7 +144,7 @@ char *prep_nvram_first_var(void)
 }
 
 __prep
-char *prep_nvram_next_var(char *name)
+char __prep *prep_nvram_next_var(char *name)
 {
 	char *cp;
 

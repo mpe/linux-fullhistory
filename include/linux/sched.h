@@ -142,6 +142,8 @@ extern void init_idle(void);
 extern void show_state(void);
 extern void cpu_init (void);
 extern void trap_init(void);
+extern void update_one_process( struct task_struct *p,
+	unsigned long ticks, unsigned long user, unsigned long system, int cpu);
 
 #define	MAX_SCHEDULE_TIMEOUT	LONG_MAX
 extern signed long FASTCALL(schedule_timeout(signed long timeout));

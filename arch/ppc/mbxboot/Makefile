@@ -1,5 +1,5 @@
 #
-# arch/ppc/boot/Makefile
+# arch/ppc/mbxboot/Makefile
 #
 # This file is subject to the terms and conditions of the GNU General Public
 # License.  See the file "COPYING" in the main directory of this archive
@@ -14,7 +14,7 @@
 .s.o:
 	$(AS) -o $*.o $<
 .c.o:
-	$(CC) $(CFLAGS)  -DINITRD_OFFSET=$(IOFF) -DINITRD_SIZE=$(ISZ) -DZIMAGE_OFFSET=$(ZOFF) -DZIMAGE_SIZE=$(ZSZ) -DKERNELBASE=$(KERNELBASE) -c -o $*.o $<
+	$(CC) $(CFLAGS)  -DINITRD_OFFSET=$(IOFF) -DINITRD_SIZE=$(ISZ) -DZIMAGE_OFFSET=$(ZOFF) -DZIMAGE_SIZE=$(ZSZ) -c -o $*.o $<
 .S.s:
 	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.o $<
 .S.o:
@@ -29,30 +29,46 @@ TFTPIMAGE=/tftpboot/zImage.mbx
 ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00100000
 GZIP_FLAGS = -v9
 
-OBJECTS := head.o misc.o ../coffboot/zlib.o mbxtty.o
-CFLAGS = -O2 -DSTDC_HEADERS -fno-builtin -I$(TOPDIR)/include -DCONFIG_MBX
+OBJECTS := head.o misc.o ../coffboot/zlib.o m8xx_tty.o
+CFLAGS = -O2 -DSTDC_HEADERS -fno-builtin -I$(TOPDIR)/include -DCONFIG_8xx
 OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJCOPY_ARGS = -O elf32-powerpc
+
+ifeq ($(CONFIG_MBX),y)
+OBJECTS += pci.o qspan_pci.o
+CFLAGS += -DCONFIG_MBX
+endif
+ifeq ($(CONFIG_RPXLITE),y)
+CFLAGS += -DCONFIG_RPXLITE
+OBJECTS += iic.o embed_config.o
+endif
+ifeq ($(CONFIG_RPXCLASSIC),y)
+CFLAGS += -DCONFIG_RPXCLASSIC
+OBJECTS += iic.o embed_config.o pci.o qspan_pci.o
+endif
+ifeq ($(CONFIG_BSEIP),y)
+CFLAGS += -DCONFIG_BSEIP
+OBJECTS += iic.o embed_config.o
+endif
 
 all:	zImage
 
 zvmlinux.initrd: zvmlinux
-	$(LD) $(ZLINKFLAGS) -o zvmlinux.initrd.tmp $(OBJECTS)
+	$(LD) $(ZLINKFLAGS) -o zvmlinux.initrd.tmp1 $(OBJECTS)
 	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment \
 		--add-section=initrd=ramdisk.image.gz \
 		--add-section=image=../coffboot/vmlinux.gz \
-		zvmlinux.initrd.tmp zvmlinux.initrd
-	$(CC) $(CFLAGS) -DINITRD_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd initrd` \
-		-DINITRD_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd initrd` \
-		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd image` \
-		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd image` \
-		-DKERNELBASE=$(KERNELBASE) -c -o misc.o misc.c
+		zvmlinux.initrd.tmp1 zvmlinux.initrd1
+	$(CC) $(CFLAGS) -DINITRD_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd1 initrd` \
+		-DINITRD_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd1 initrd` \
+		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd1 image` \
+		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd1 image` \
+		-c -o misc.o misc.c
 	$(LD) $(ZLINKFLAGS) -o zvmlinux.initrd.tmp $(OBJECTS)
 	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment \
 		--add-section=initrd=ramdisk.image.gz \
 		--add-section=image=../coffboot/vmlinux.gz \
 		zvmlinux.initrd.tmp $@
-	rm zvmlinux.initrd.tmp
 
 zImage: zvmlinux
 	ln -sf zvmlinux zImage
@@ -73,7 +89,7 @@ zvmlinux: $(OBJECTS) ../coffboot/vmlinux.gz
 #
 	$(CC) $(CFLAGS) -DINITRD_OFFSET=0 -DINITRD_SIZE=0 \
 		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux image` \
-		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux image` -DKERNELBASE=$(KERNELBASE) \
+		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux image` \
 		-c -o misc.o misc.c
 	$(LD) $(ZLINKFLAGS) -o zvmlinux.tmp $(OBJECTS)
 	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment --add-section=image=../coffboot/vmlinux.gz \

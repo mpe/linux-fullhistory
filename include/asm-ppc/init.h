@@ -11,7 +11,7 @@
 	__argpmac
 	
 #define __prep __attribute__ ((__section__ (".text.prep")))
-#define __prepdata /* __attribute__ ((__section__ (".data.prep")))*/
+#define __prepdata __attribute__ ((__section__ (".data.prep")))
 #define __prepfunc(__argprep) \
 	__argprep __prep; \
 	__argprep

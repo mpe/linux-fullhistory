@@ -78,9 +78,10 @@
 #define CPIA_YUYV	0
 #define CPIA_UYVY	1
 
-#define STREAM_BUF_SIZE	(PAGE_SIZE * 4)
+#define STREAM_BUF_SIZE		(PAGE_SIZE * 4)
+/* #define STREAM_BUF_SIZE	(FRAMES_PER_DESC * FRAME_SIZE_PER_DESC) */
 
-#define SCRATCH_BUF_SIZE (STREAM_BUF_SIZE * 2)
+#define SCRATCH_BUF_SIZE	(STREAM_BUF_SIZE * 2)
 
 #define FRAMES_PER_DESC		10
 #define FRAME_SIZE_PER_DESC	960	/* Shouldn't be hardcoded */
@@ -91,30 +92,74 @@ enum {
 	STATE_LINES,		/* Parsing lines */
 };
 
+#define CPIA_MAGIC	0x1968
+struct cpia_frame_header {
+	__u16 magic;		/* 0 - 1 */
+	__u16 timestamp;	/* 2 - 3 */
+	__u16 unused;		/* 4 - 5 */
+	__u16 timestamp1;	/* 6 - 7 */
+	__u8  unused1[8];	/* 8 - 15 */
+	__u8  video_size;	/* 16 0 = QCIF, 1 = CIF */
+	__u8  sub_sample;	/* 17 0 = 4:2:0, 1 = 4:2:2 */
+	__u8  yuv_order;	/* 18 0 = YUYV, 1 = UYVY */
+	__u8  unused2[5];	/* 19 - 23 */
+	__u8  col_start;	/* 24 */
+	__u8  col_end;		/* 25 */
+	__u8  row_start;	/* 26 */
+	__u8  row_end;		/* 27 */
+	__u8  comp_enable;	/* 28 0 = non compressed, 1 = compressed */
+	__u8  decimation;	/* 29 0 = no decimation, 1 = decimation */
+	__u8  y_thresh;		/* 30 */
+	__u8  uv_thresh;	/* 31 */
+	__u8  system_state;	/* 32 */
+	__u8  grab_state;	/* 33 */
+	__u8  stream_state;	/* 34 */
+	__u8  fatal_error;	/* 35 */
+	__u8  cmd_error;	/* 36 */
+	__u8  debug_flags;	/* 37 */
+	__u8  camera_state_7;	/* 38 */
+	__u8  camera_state_8;	/* 39 */
+	__u8  cr_achieved;	/* 40 */
+	__u8  fr_achieved;	/* 41 */
+	__u8  unused3[22];	/* 42 - 63 */
+};
+
 struct usb_device;
 
 struct cpia_sbuf {
 	char *data;
-	int len;
 	struct usb_isoc_desc *isodesc;
-#if 0
-	void *isodesc;
-#endif
 };
 
 enum {
-	FRAME_READY,		/* Ready to grab into */
+	FRAME_UNUSED,		/* Unused (no MCAPTURE) */
+	FRAME_READY,		/* Ready to start grabbing */
 	FRAME_GRABBING,		/* In the process of being grabbed into */
 	FRAME_DONE,		/* Finished grabbing, but not been synced yet */
-	FRAME_UNUSED,		/* Unused (no MCAPTURE) */
+	FRAME_ERROR,		/* Something bad happened while processing */
 };
 
 struct cpia_frame {
-	char *data;
-	int width;
-	int height;
-	int state;
+	char *data;		/* Frame buffer */
+
+	struct cpia_frame_header header;	/* Header from stream */
+
+	int width;		/* Width application is expecting */
+	int height;		/* Height */
+
+	int hdrwidth;		/* Width the frame actually is */
+	int hdrheight;		/* Height */
+
+	int grabstate;		/* State of grabbing */
+	int scanstate;		/* State of scanning */
+
+	int curline;		/* Line of frame we're working on */
+
+	wait_queue_head_t wq;	/* Processes waiting */
 };
+
+#define CPIA_NUMFRAMES	2
+#define CPIA_NUMSBUF	2
 
 struct usb_cpia {
 	struct video_device vdev;
@@ -122,23 +167,22 @@ struct usb_cpia {
 	/* Device structure */
 	struct usb_device *dev;
 
-	int streaming;
+	int streaming;		/* Are we streaming Isochronous? */
+	int grabbing;		/* Are we grabbing? */
 
-	char *fbuf;			/* Videodev buffer area */
+	int compress;		/* Should the next frame be compressed? */
+
+	char *fbuf;		/* Videodev buffer area */
 
 	int curframe;
-	struct cpia_frame frame[2];	/* Double buffering */
+	struct cpia_frame frame[CPIA_NUMFRAMES];	/* Double buffering */
 
-	int receivesbuf;		/* Current receiving sbuf */
-	struct cpia_sbuf sbuf[3];	/* Triple buffering */
+	int cursbuf;		/* Current receiving sbuf */
+	struct cpia_sbuf sbuf[CPIA_NUMSBUF];		/* Double buffering */
 
-	int state;			/* Current scanning state */
-	int curline;
-
-	char scratch[SCRATCH_BUF_SIZE];
+	/* Scratch space from the Isochronous pipe */
+	unsigned char scratch[SCRATCH_BUF_SIZE];
 	int scratchlen;
-
-	wait_queue_head_t wq;
 };
 
 #endif

@@ -57,21 +57,17 @@
    left out.  If you compile with PCMCIA_DEBUG=0, the debug code will
    be present but disabled -- but it can then be enabled for specific
    modules at load time with a 'pc_debug=#' option to insmod.
-
-   I found that  adding -DPCMCIA_DEBUG to the compile options during
-   the 'make config' resulted in cardmgr not finding any sockets.
-   Therefore, this module uses RAYLINK_DEBUG instead.
-   The module option to use is ray_debug=#
-    where # is 1 for modest output
-               2 for more output
-               ...
 */
 
 #ifdef RAYLINK_DEBUG
-static int ray_debug = RAYLINK_DEBUG;
-MODULE_PARM(ray_debug, "i");
-/* #define DEBUG(n, args...) if (ray_debug>(n)) printk(KERN_DEBUG args); */
-#define DEBUG(n, args...) if (ray_debug>(n)) printk(args);
+#define PCMCIA_DEBUG RAYLINK_DEBUG
+#endif
+#ifdef PCMCIA_DEBUG
+static int ray_debug = 0;
+static int pc_debug = PCMCIA_DEBUG;
+MODULE_PARM(pc_debug, "i");
+/* #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args); */
+#define DEBUG(n, args...) if (pc_debug>(n)) printk(args);
 #else
 #define DEBUG(n, args...)
 #endif
@@ -137,7 +133,6 @@ void start_net(u_long local);
 /* void start_net(ray_dev_t *local); */
 
 int ray_cs_proc_read(char *buf, char **start, off_t off, int len, int spare);
-
 /* Create symbol table for registering with kernel in init_module */
 EXPORT_SYMBOL(ray_dev_ioctl);
 EXPORT_SYMBOL(ray_rx);
@@ -147,40 +142,30 @@ EXPORT_SYMBOL(ray_rx);
 /* Bit map of interrupts to choose from */
 /* This means pick from 15, 14, 12, 11, 10, 9, 7, 5, 4, and 3 */
 static u_long irq_mask = 0xdeb8;
-MODULE_PARM(irq_mask,"i");
 
 /* ADHOC=0, Infrastructure=1 */
 static int net_type = ADHOC;
-MODULE_PARM(net_type,"i");
 
 /* Hop dwell time in Kus (1024 us units defined by 802.11) */
 static int hop_dwell = 128;
-MODULE_PARM(hop_dwell,"i");
 
 /* Beacon period in Kus */
 static int beacon_period = 256;
-MODULE_PARM(beacon_period,"i");
 
 /* power save mode (0 = off, 1 = save power) */
 static int psm = 0;
-MODULE_PARM(psm,"i");
 
 /* String for network's Extended Service Set ID. 32 Characters max */
 static char *essid = NULL;
-MODULE_PARM(essid,"s");
 
 /* Default to encapsulation unless translation requested */
 static int translate = 1;
-MODULE_PARM(translate,"i");
 
 static int country = USA;
-MODULE_PARM(country,"i");
 
 static int sniffer = 0;
-MODULE_PARM(sniffer,"i");
 
 static int bc = 0;
-MODULE_PARM(bc,"i");
 
 /* 48 bit physical card address if overriding card's real physical
  * address is required.  Since IEEE 802.11 addresses are 48 bits
@@ -193,7 +178,6 @@ MODULE_PARM(bc,"i");
  * things will happen if it is not 0 in a card address.
  */
 static char *phy_addr = NULL;
-MODULE_PARM(phy_addr,"s");
 
 
 /* The dev_info variable is the "key" that is used to match up this
@@ -214,7 +198,22 @@ static dev_link_t *dev_list = NULL;
    'priv' pointer in a dev_link_t structure can be used to point to
    a device-specific private data structure, like this.
 */
-static const unsigned int ray_mem_speed = 0x2A;
+static unsigned int ray_mem_speed = 0x2A;
+
+MODULE_AUTHOR("Corey Thomas <corey@world.std.com>");
+MODULE_DESCRIPTION("Raylink/WebGear wireless LAN driver");
+MODULE_PARM(irq_mask,"i");
+MODULE_PARM(net_type,"i");
+MODULE_PARM(hop_dwell,"i");
+MODULE_PARM(beacon_period,"i");
+MODULE_PARM(psm,"i");
+MODULE_PARM(essid,"s");
+MODULE_PARM(translate,"i");
+MODULE_PARM(country,"i");
+MODULE_PARM(sniffer,"i");
+MODULE_PARM(bc,"i");
+MODULE_PARM(phy_addr,"s");
+MODULE_PARM(ray_mem_speed, "i");
 
 static UCHAR b5_default_startup_parms[] = {
     0,   0,                         /* Adhoc station */
@@ -284,7 +283,7 @@ static UCHAR b4_default_startup_parms[] = {
 /*===========================================================================*/
 static unsigned char eth2_llc[] = {0xaa, 0xaa, 3, 0, 0, 0};
 
-static char rcsid[] = " $Id: ray_cs.c,v 1.60 1999/09/01 20:58:45 corey Exp $ - Corey Thomas corey@world.std.com";
+static char rcsid[] = "Raylink/WebGear wireless LAN - Corey <Thomas corey@world.std.com>";
 
 #ifdef CONFIG_PROC_FS
 struct proc_dir_entry ray_cs_proc_entry = {
@@ -358,7 +357,7 @@ dev_link_t *ray_attach(void)
     local->finder = link;
     link->dev = &local->node;
     local->card_status = CARD_INSERTED;
-	local->authentication_state = UNAUTHENTICATED;
+    local->authentication_state = UNAUTHENTICATED;
     local->num_multi = 0;
     DEBUG(2,"ray_attach link = %p,  dev = %p,  local = %p, intr = %p\n",
           link,dev,local,&ray_interrupt);
@@ -442,8 +441,6 @@ void ray_detach(dev_link_t *link)
     if (link->state & DEV_CONFIG) {
         ray_release((u_long)link);
         if(link->state & DEV_STALE_CONFIG) {
-            DEBUG(0,"ray_cs: detach postponed, '%s' "
-              "still locked\n", link->dev->dev_name);
             link->state |= DEV_STALE_LINK;
             return;
         }
@@ -472,7 +469,7 @@ void ray_detach(dev_link_t *link)
 =============================================================================*/
 #define CS_CHECK(fn, args...) \
 while ((last_ret=CardServices(last_fn=(fn),args))!=0) goto cs_failed
-#define MAX_TUPLE_SIZE 80
+#define MAX_TUPLE_SIZE 128
 void ray_config(dev_link_t *link)
 {
     client_handle_t handle = link->handle;
@@ -480,7 +477,7 @@ void ray_config(dev_link_t *link)
     cisparse_t parse;
     int last_fn, last_ret;
     int i;
-    u_char buf[80];
+    u_char buf[MAX_TUPLE_SIZE];
     win_req_t req;
     memreq_t mem;
     struct net_device *dev = (struct net_device *)link->priv;
@@ -498,6 +495,19 @@ void ray_config(dev_link_t *link)
     CS_CHECK(ParseTuple, handle, &tuple, &parse);
     link->conf.ConfigBase = parse.config.base;
     link->conf.Present = parse.config.rmask[0];
+
+    /* Determine card type and firmware version */
+    buf[0] = buf[MAX_TUPLE_SIZE - 1] = 0;
+    tuple.DesiredTuple = CISTPL_VERS_1;
+    CS_CHECK(GetFirstTuple, handle, &tuple);
+    tuple.TupleData = buf;
+    tuple.TupleDataMax = MAX_TUPLE_SIZE;
+    tuple.TupleOffset = 2;
+    CS_CHECK(GetTupleData, handle, &tuple);
+
+    for (i=0; i<tuple.TupleDataLen - 4; i++) 
+        if (buf[i] == 0) buf[i] = ' ';
+    printk(KERN_INFO "ray_cs Detected: %s\n",buf);
 
     /* Configure card */
     link->state |= DEV_CONFIG;
@@ -562,7 +572,10 @@ void ray_config(dev_link_t *link)
     }
 
     link->state &= ~DEV_CONFIG_PENDING;
-    DEBUG(0, "ray_cs device loaded\n");
+    printk(KERN_INFO "%s: RayLink, irq %d, hw_addr ",
+       dev->name, dev->irq);
+    for (i = 0; i < 6; i++)
+    printk("%02X%s", dev->dev_addr[i], ((i<5) ? ":" : "\n"));
 
     return;
 
@@ -594,7 +607,8 @@ int ray_init(struct net_device *dev)
 
     /* Check Power up test status and get mac address from card */
     if (local->startup_res.startup_word != 0x80) {
-DEBUG(0,"ray_init ERROR card status = %2x\n", local->startup_res.startup_word);
+    printk(KERN_INFO "ray_init ERROR card status = %2x\n",
+           local->startup_res.startup_word);
         local->card_status = CARD_INIT_ERROR;
         return -1;
     }
@@ -619,16 +633,12 @@ DEBUG(0,"ray_init ERROR card status = %2x\n", local->startup_res.startup_word);
     if (parse_addr(phy_addr, local->sparm.b4.a_mac_addr))
     {
         p = local->sparm.b4.a_mac_addr;
-        DEBUG(1,"ray_cs phy address overridden = %2x %2x %2x %2x %2x %2x\n",\
-              p[0],p[1],p[2],p[3],p[4],p[5]);
     }
     else
     {
         memcpy(&local->sparm.b4.a_mac_addr,
                &local->startup_res.station_addr, ADDRLEN);
         p = local->sparm.b4.a_mac_addr;
-        DEBUG(1,"ray_cs phy addr= %2x %2x %2x %2x %2x %2x\n",\
-              p[0],p[1],p[2],p[3],p[4],p[5]);
     }
 
     clear_interrupt(local); /* Clear any interrupt from the card */
@@ -647,7 +657,7 @@ int dl_startup_params(struct net_device *dev)
 
     DEBUG(1,"dl_startup_params entered\n");
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_cs dl_startup_params - device not present\n");
+        DEBUG(2,"ray_cs dl_startup_params - device not present\n");
         return -1;
     }
     
@@ -661,14 +671,15 @@ int dl_startup_params(struct net_device *dev)
 
     
     /* Fill in the CCS fields for the ECF */
-    if ((ccsindex = get_free_ccs(local)) == -1) return -1;
+    if ((ccsindex = get_free_ccs(local)) < 0) return -1;
     local->dl_param_ccs = ccsindex;
     pccs = ((struct ccs *)(local->sram + CCS_BASE)) + ccsindex;
     writeb(CCS_DOWNLOAD_STARTUP_PARAMS, &pccs->cmd);
     DEBUG(2,"dl_startup_params start ccsindex = %d\n", local->dl_param_ccs);
     /* Interrupt the firmware to process the command */
     if (interrupt_ecf(local, ccsindex)) {
-        DEBUG(0,"ray dl_startup_params failed - ECF not ready for intr\n");
+        printk(KERN_INFO "ray dl_startup_params failed - "
+           "ECF not ready for intr\n");
         local->card_status = CARD_DL_PARAM_ERROR;
         writeb(CCS_BUFFER_FREE, &(pccs++)->buffer_status);
         return -2;
@@ -723,11 +734,11 @@ void init_startup_params(ray_dev_t *local)
         local->sparm.b4.a_curr_country_code = country;
         local->sparm.b4.a_hop_pattern_length = 
             hop_pattern_length[(int)country] - 1;
-		if (bc)
-		{
-			local->sparm.b4.a_ack_timeout = 0x50;
-			local->sparm.b4.a_sifs = 0x3f;
-		}
+        if (bc)
+        {
+            local->sparm.b4.a_ack_timeout = 0x50;
+            local->sparm.b4.a_sifs = 0x3f;
+        }
     }
     else {    /* Version 5 uses real kus values */
         memcpy((UCHAR *)&local->sparm.b5, b5_default_startup_parms, 
@@ -756,30 +767,29 @@ void verify_dl_startup(u_long data)
     ray_dev_t *local = (ray_dev_t *)data;
     struct ccs *pccs = ((struct ccs *)(local->sram + CCS_BASE)) + local->dl_param_ccs;
     UCHAR status;
-/*    UCHAR *p = local->sram + HOST_TO_ECF_BASE; */
     dev_link_t *link = local->finder;
 
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_cs verify_dl_startup - device not present\n");
+        DEBUG(2,"ray_cs verify_dl_startup - device not present\n");
         return;
     }
-#ifdef RAYLINK_DEBUG
-    {
-	int i;
-        DEBUG(2,"verify_dl_startup parameters sent via ccs %d:\n",\
-              local->dl_param_ccs);
-        for (i=0; i<sizeof(struct b5_startup_params); i++)
-        {
-            DEBUG(1," %2x ", readb(local->sram + HOST_TO_ECF_BASE + i));
+#ifdef PCMCIA_DEBUG
+    if (pc_debug > 2) {
+    int i;
+    printk(KERN_DEBUG "verify_dl_startup parameters sent via ccs %d:\n",
+           local->dl_param_ccs);
+        for (i=0; i<sizeof(struct b5_startup_params); i++) {
+            printk(" %2x", readb(local->sram + HOST_TO_ECF_BASE + i));
         }
-        DEBUG(1,"\n");
+    printk("\n");
     }
 #endif
 
     status = readb(&pccs->buffer_status);
     if (status!= CCS_BUFFER_FREE)
     {
-        DEBUG(0,"Download startup params failed.  Status = %d\n",status);
+        printk(KERN_INFO "Download startup params failed.  Status = %d\n",
+           status);
         local->card_status = CARD_DL_PARAM_ERROR;
         return;
     }
@@ -799,11 +809,11 @@ void start_net(u_long data)
     int ccsindex;
     dev_link_t *link = local->finder;
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_cs start_net - device not present\n");
+        DEBUG(2,"ray_cs start_net - device not present\n");
         return;
     }
     /* Fill in the CCS fields for the ECF */
-    if ((ccsindex = get_free_ccs(local)) == -1) return;
+    if ((ccsindex = get_free_ccs(local)) < 0) return;
     pccs = ((struct ccs *)(local->sram + CCS_BASE)) + ccsindex;
     writeb(CCS_START_NETWORK, &pccs->cmd);
     writeb(0, &pccs->var.start_network.update_param);
@@ -827,11 +837,11 @@ void join_net(u_long data)
     dev_link_t *link = local->finder;
     
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_cs join_net - device not present\n");
+        DEBUG(2,"ray_cs join_net - device not present\n");
         return;
     }
     /* Fill in the CCS fields for the ECF */
-    if ((ccsindex = get_free_ccs(local)) == -1) return;
+    if ((ccsindex = get_free_ccs(local)) < 0) return;
     pccs = ((struct ccs *)(local->sram + CCS_BASE)) + ccsindex;
     writeb(CCS_JOIN_NETWORK, &pccs->cmd);
     writeb(0, &pccs->var.join_network.update_param);
@@ -867,7 +877,7 @@ void ray_release(u_long arg)
         link->state |= DEV_STALE_CONFIG;
         return;
     }
-	del_timer(&local->timer);
+    del_timer(&local->timer);
     if (link->dev != '\0') unregister_netdev(dev);
     /* Unlink the device chain */
     link->dev = NULL;
@@ -962,28 +972,20 @@ int ray_dev_init(struct net_device *dev)
 
     DEBUG(1,"ray_dev_init(dev=%p)\n",dev);
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_dev_init - device not present\n");
+        DEBUG(2,"ray_dev_init - device not present\n");
         return -1;
     }
     /* Download startup parameters */
     if ( (i = dl_startup_params(dev)) < 0)
     {
-        DEBUG(0,"ray_dev_init dl_startup_params failed - returns 0x%x/n",i);
+        printk(KERN_INFO "ray_dev_init dl_startup_params failed - "
+           "returns 0x%x/n",i);
         return -1;
     }
     
     /* copy mac and broadcast addresses to linux device */
     memcpy(&dev->dev_addr, &local->sparm.b4.a_mac_addr, ADDRLEN);
     memset(dev->broadcast, 0xff, ETH_ALEN);
-
-#ifdef RAYLINK_DEBUG
-    {
-    UCHAR *p;
-    p = (UCHAR *)(local->startup_res.station_addr);
-    DEBUG(1,"ray_dev_init card hardware mac addr = %2x %2x %2x %2x %2x %2x\n",\
-          p[0],p[1],p[2],p[3],p[4],p[5]);
-    }
-#endif
 
     DEBUG(2,"ray_dev_init ending\n");
     return 0;
@@ -996,7 +998,7 @@ int ray_dev_config(struct net_device *dev, struct ifmap *map)
     /* Dummy routine to satisfy device structure */
     DEBUG(1,"ray_dev_config(dev=%p,ifmap=%p)\n",dev,map);
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_dev_config - device not present\n");
+        DEBUG(2,"ray_dev_config - device not present\n");
         return -1;
     }
 
@@ -1010,13 +1012,13 @@ int ray_dev_start_xmit(struct sk_buff *skb, struct net_device *dev)
     short length;
 
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_dev_start_xmit - device not present\n");
+        DEBUG(2,"ray_dev_start_xmit - device not present\n");
         return -1;
     }
     DEBUG(3,"ray_dev_start_xmit(skb=%p, dev=%p)\n",skb,dev);
     if (dev->tbusy)
     {
-        DEBUG(2,"ray_dev_start_xmit busy\n");
+        printk(KERN_NOTICE "ray_dev_start_xmit busy\n");
         return 1;
     }
     if (local->authentication_state == NEED_TO_AUTH) {
@@ -1031,7 +1033,7 @@ int ray_dev_start_xmit(struct sk_buff *skb, struct net_device *dev)
     length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
     switch (ray_hw_xmit( skb->data, length, dev, DATA_TYPE)) {
         case XMIT_NO_CCS:
-	    case XMIT_NEED_AUTH:
+        case XMIT_NEED_AUTH:
             dev->tbusy = 1;
             return 1;
         case XMIT_NO_INTR:
@@ -1058,15 +1060,20 @@ int ray_hw_xmit(unsigned char* data, int len, struct net_device* dev,
     DEBUG(3,"ray_hw_xmit(data=%p, len=%d, dev=%p)\n",data,len,dev);
     if (len + TX_HEADER_LENGTH > TX_BUF_SIZE)
     {
-        DEBUG(0,"ray_hw_xmit packet to large %d bytes\n",len);
+        printk(KERN_INFO "ray_hw_xmit packet too large: %d bytes\n",len);
         return XMIT_MSG_BAD;
     }
-    if ((ccsindex = get_free_tx_ccs(local)) == -1)
-    {
-        DEBUG(2,"ray_hw_xmit - No free tx ccs\n");
+	switch (ccsindex = get_free_tx_ccs(local)) {
+	case ECCSBUSY:
+		DEBUG(2,"ray_hw_xmit tx_ccs table busy\n");
+	case ECCSFULL:
+        DEBUG(2,"ray_hw_xmit No free tx ccs\n");
+	case ECARDGONE:
         dev->tbusy = 1;
         return XMIT_NO_CCS;
-    }
+	default:
+		break;
+	}
     addr = TX_BUF_BASE + (ccsindex << 11);
 
     if (msg_type == DATA_TYPE) {
@@ -1186,7 +1193,7 @@ int ray_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
     int err = 0;
 
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_dev_ioctl - device not present\n");
+        DEBUG(2,"ray_dev_ioctl - device not present\n");
         return -1;
     }
     DEBUG(2,"ray_cs IOCTL dev=%p, ifr=%p, cmd = 0x%x\n",dev,ifr,cmd);
@@ -1258,16 +1265,14 @@ void ray_reset(struct net_device *dev) {
 int interrupt_ecf(ray_dev_t *local, int ccs)
 {
     int i = 50;
-/*    UCHAR *p = (local->amem + CIS_OFFSET + ECF_INTR_OFFSET); */
     dev_link_t *link = local->finder;
 
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_cs interrupt_ecf - device not present\n");
+        DEBUG(2,"ray_cs interrupt_ecf - device not present\n");
         return -1;
     }
     DEBUG(2,"interrupt_ecf(local=%p, ccs = 0x%x\n",local,ccs);
 
-/*    while ( i && (*p & ECF_INTR_SET))  i--; */
     while ( i && 
             (readb(local->amem + CIS_OFFSET + ECF_INTR_OFFSET) & ECF_INTR_SET))
         i--;
@@ -1275,8 +1280,8 @@ int interrupt_ecf(ray_dev_t *local, int ccs)
         DEBUG(2,"ray_cs interrupt_ecf card not ready for interrupt\n");
         return -1;
     }
-
-    *(local->sram + SCB_BASE) = ccs;
+	/* Fill the mailbox, then kick the card */
+    writeb(ccs, local->sram + SCB_BASE);
     writeb(ECF_INTR_SET, local->amem + CIS_OFFSET + ECF_INTR_OFFSET);
     return 0;
 } /* interrupt_ecf */
@@ -1290,19 +1295,26 @@ int get_free_tx_ccs(ray_dev_t *local)
     dev_link_t *link = local->finder;
 
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_cs get_free_tx_ccs - device not present\n");
-        return -1;
+        DEBUG(2,"ray_cs get_free_tx_ccs - device not present\n");
+        return ECARDGONE;
     }
+
+    if (test_and_set_bit(0,&local->tx_ccs_lock)) {
+        DEBUG(1,"ray_cs tx_ccs_lock busy\n");
+        return ECCSBUSY;
+    } 
 
     for (i=0; i < NUMBER_OF_TX_CCS; i++) {
         if (readb(&(pccs+i)->buffer_status) == CCS_BUFFER_FREE) {
             writeb(CCS_BUFFER_BUSY, &(pccs+i)->buffer_status);
             writeb(CCS_END_LIST, &(pccs+i)->link);
+			local->tx_ccs_lock = 0;
             return i;
         }
     }
-    DEBUG(1,"ray_cs ERROR no free tx CCS for raylink card\n");
-    return -1;
+	local->tx_ccs_lock = 0;
+    DEBUG(2,"ray_cs ERROR no free tx CCS for raylink card\n");
+    return ECCSFULL;
 } /* get_free_tx_ccs */
 /*===========================================================================*/
 /* Get next free CCS                                                         */
@@ -1314,25 +1326,33 @@ int get_free_ccs(ray_dev_t *local)
     dev_link_t *link = local->finder;
 
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_cs get_free_ccs - device not present\n");
-        return -1;
+        DEBUG(2,"ray_cs get_free_ccs - device not present\n");
+        return ECARDGONE;
     }
+    if (test_and_set_bit(0,&local->ccs_lock)) {
+        DEBUG(1,"ray_cs ccs_lock busy\n");
+        return ECCSBUSY;
+    } 
+
     for (i = NUMBER_OF_TX_CCS; i < NUMBER_OF_CCS; i++) {
         if (readb(&(pccs+i)->buffer_status) == CCS_BUFFER_FREE) {
             writeb(CCS_BUFFER_BUSY, &(pccs+i)->buffer_status);
             writeb(CCS_END_LIST, &(pccs+i)->link);
+			local->ccs_lock = 0;
             return i;
         }
     }
+	local->ccs_lock = 0;
     DEBUG(1,"ray_cs ERROR no free CCS for raylink card\n");
-    return -1;
+    return ECCSFULL;
 } /* get_free_ccs */
 /*===========================================================================*/
 void authenticate_timeout(u_long data)
 {
     ray_dev_t *local = (ray_dev_t *)data;
     del_timer(&local->timer);
-    DEBUG(0,"ray_cs Authentication with access point failed - timeout\n");
+    printk(KERN_INFO "ray_cs Authentication with access point failed"
+       " - timeout\n");
     join_net((u_long)local);
 }
 /*===========================================================================*/
@@ -1381,26 +1401,26 @@ struct enet_statistics *ray_get_stats(struct net_device *dev)
     dev_link_t *link = local->finder;
     struct status *p = (struct status *)(local->sram + STATUS_BASE);
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_cs enet_statistics - device not present\n");
+        DEBUG(2,"ray_cs enet_statistics - device not present\n");
         return &local->stats;
     }
-    if (p->mrx_overflow_for_host)
+    if (readb(&p->mrx_overflow_for_host))
     {
-        local->stats.rx_over_errors += ntohs(p->mrx_overflow);
-        p->mrx_overflow = 0;
-        p->mrx_overflow_for_host = 0;
+        local->stats.rx_over_errors += ntohs(readb(&p->mrx_overflow));
+        writeb(0,&p->mrx_overflow);
+        writeb(0,&p->mrx_overflow_for_host);
     }
-    if (p->mrx_checksum_error_for_host)
+    if (readb(&p->mrx_checksum_error_for_host))
     {
-        local->stats.rx_crc_errors += ntohs(p->mrx_checksum_error);
-        p->mrx_checksum_error = 0;
-        p->mrx_checksum_error_for_host = 0;
+        local->stats.rx_crc_errors += ntohs(readb(&p->mrx_checksum_error));
+        writeb(0,&p->mrx_checksum_error);
+        writeb(0,&p->mrx_checksum_error_for_host);
     }
-    if (p->rx_hec_error_for_host)
+    if (readb(&p->rx_hec_error_for_host))
     {
-        local->stats.rx_frame_errors += ntohs(p->rx_hec_error);
-        p->rx_hec_error = 0;
-        p->rx_hec_error_for_host = 0;
+        local->stats.rx_frame_errors += ntohs(readb(&p->rx_hec_error));
+        writeb(0,&p->rx_hec_error);
+        writeb(0,&p->rx_hec_error_for_host);
     }
     return &local->stats;
 }
@@ -1414,11 +1434,11 @@ void ray_update_parm(struct net_device *dev, UCHAR objid, UCHAR *value, int len)
     struct ccs *pccs;
 
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(0,"ray_update_parm - device not present\n");
+        DEBUG(2,"ray_update_parm - device not present\n");
         return;
     }
 
-    if ((ccsindex = get_free_ccs(local)) == -1)
+    if ((ccsindex = get_free_ccs(local)) < 0)
     {
         DEBUG(0,"ray_update_parm - No free ccs\n");
         return;
@@ -1449,12 +1469,12 @@ static void ray_update_multi_list(struct net_device *dev, int all)
     UCHAR *p = local->sram + HOST_TO_ECF_BASE;
 
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(1,"ray_update_multi_list - device not present\n");
+        DEBUG(2,"ray_update_multi_list - device not present\n");
         return;
     }
     else 
-        DEBUG(1,"ray_update_multi_list(%p)\n",dev);
-    if ((ccsindex = get_free_ccs(local)) == -1)
+        DEBUG(2,"ray_update_multi_list(%p)\n",dev);
+    if ((ccsindex = get_free_ccs(local)) < 0)
     {
         DEBUG(1,"ray_update_multi - No free ccs\n");
         return;
@@ -1491,7 +1511,7 @@ static void set_multicast_list(struct net_device *dev)
     ray_dev_t *local = (ray_dev_t *)dev->priv;
     UCHAR promisc;
 
-    DEBUG(1,"ray_cs set_multicast_list(%p)\n",dev);
+    DEBUG(2,"ray_cs set_multicast_list(%p)\n",dev);
 
     if (dev->flags & IFF_PROMISC)
     {
@@ -1534,30 +1554,23 @@ void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
     UCHAR cmd;
     UCHAR status;
 
-    if (dev == NULL) {
-        link = dev_list;
-        dev = (struct net_device *)link->priv;
-        DEBUG(4,"ray_cs interrupt dev  = %p, link = %p\n",dev,link);
-        if (dev->irq != irq)
-        {
-            DEBUG(0,"ray_cs interrupt irq %d for unknown device.\n", irq);
-            return;
-        }
-    }
+    if ((dev == NULL) || !dev->start)
+    return;
+
     DEBUG(4,"ray_cs: interrupt for *dev=%p\n",dev);
 
-    if (dev->interrupt) {
+    if (test_and_set_bit(0,&dev->interrupt)) {
         printk("ray_cs Reentering interrupt handler not allowed\n");
         return;
     }
-    dev->interrupt = 1;
+
     local = (ray_dev_t *)dev->priv;
     link = (dev_link_t *)local->finder;
     if ( ! (link->state & DEV_PRESENT) || link->state & DEV_SUSPEND ) {
-        DEBUG(1,"ray_cs interrupt from device not present or suspended.\n");
+        DEBUG(2,"ray_cs interrupt from device not present or suspended.\n");
         return;
     }
-    rcsindex = ((struct scb *)(local->sram))->rcs_index;
+    rcsindex = readb(&((struct scb *)(local->sram))->rcs_index);
 
     if (rcsindex >= (NUMBER_OF_CCS + NUMBER_OF_RCS))
     {
@@ -1602,7 +1615,7 @@ void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
         case CCS_JOIN_NETWORK:
             if (status == CCS_COMMAND_COMPLETE) {
                 if (readb(&pccs->var.start_network.net_initiated) == 1) {
-                    DEBUG(0,"ray_cs interrupt network \"%s\"started\n",\
+                    DEBUG(0,"ray_cs interrupt network \"%s\" started\n",\
                           local->sparm.b4.a_current_ess_id);
                 }
                 else {
@@ -1741,16 +1754,16 @@ void ray_rx(struct net_device *dev, ray_dev_t *local, struct rcs *prcs)
     switch(readb(pmsg))
     {
     case DATA_TYPE:
-	    DEBUG(4,"ray_rx data type\n");
+        DEBUG(4,"ray_rx data type\n");
         rx_data(dev, prcs, pkt_addr, rx_len);
         break;
     case AUTHENTIC_TYPE:
-	    DEBUG(4,"ray_rx authentic type\n");
+        DEBUG(4,"ray_rx authentic type\n");
         if (sniffer) rx_data(dev, prcs, pkt_addr, rx_len);
         else rx_authenticate(local, prcs, pkt_addr, rx_len);
         break;
     case DEAUTHENTIC_TYPE:
-	    DEBUG(4,"ray_rx deauth type\n");
+        DEBUG(4,"ray_rx deauth type\n");
         if (sniffer) rx_data(dev, prcs, pkt_addr, rx_len);
         else rx_deauthenticate(local, prcs, pkt_addr, rx_len);
         break;
@@ -1758,7 +1771,7 @@ void ray_rx(struct net_device *dev, ray_dev_t *local, struct rcs *prcs)
         DEBUG(3,"ray_cs rx NULL msg\n");
         break;
     case BEACON_TYPE:
-	    DEBUG(4,"ray_rx beacon type\n");
+        DEBUG(4,"ray_rx beacon type\n");
         if (sniffer) rx_data(dev, prcs, pkt_addr, rx_len);
 
         copy_from_rx_buff(local, (UCHAR *)&local->last_bcn, pkt_addr, 
@@ -1909,19 +1922,24 @@ void untranslate(ray_dev_t *local, struct sk_buff *skb, int len)
     struct ethhdr *peth;
     UCHAR srcaddr[ADDRLEN];
     UCHAR destaddr[ADDRLEN];
-    int i;
 
-    if (local->sparm.b5.a_acting_as_ap_status != TYPE_STA)  
+    if (local->sparm.b5.a_acting_as_ap_status != TYPE_STA)
         memcpy(destaddr, pmac->addr_3, ADDRLEN);
     else
         memcpy(destaddr, pmac->addr_1, ADDRLEN);
     memcpy(srcaddr, pmac->addr_2, ADDRLEN);
 
-    DEBUG(3,"skb->data before untranslate");
+#ifdef PCMCIA_DEBUG
+    if (pc_debug > 3) {
+    int i;
+    printk(KERN_DEBUG "skb->data before untranslate");
     for (i=0;i<64;i++) 
-        DEBUG(3,"%02x ",skb->data[i]);
-    DEBUG(3,"\ntype = %08x, xsap = %08x, org = %08x\n",type,xsap,org);
-    DEBUG(3,"untranslate skb->data = %p\n",skb->data);
+        printk("%02x ",skb->data[i]);
+    printk("\n" KERN_DEBUG "type = %08x, xsap = %08x, org = %08x\n",
+           type,xsap,org);
+    printk(KERN_DEBUG "untranslate skb->data = %p\n",skb->data);
+    }
+#endif
 
     if ( xsap != SNAP_ID) {
         /* not a snap type so leave it alone */
@@ -1971,10 +1989,15 @@ void untranslate(ray_dev_t *local, struct sk_buff *skb, int len)
     DEBUG(3,"untranslate after skb_pull(%d), skb->data = %p\n",delta,skb->data);
     memcpy(peth->h_dest, destaddr, ADDRLEN);
     memcpy(peth->h_source, srcaddr, ADDRLEN);
-    DEBUG(3,"skb->data after untranslate:");
-    for (i=0;i<64;i++) 
-        DEBUG(3,"%02x ",skb->data[i]);
-    DEBUG(3,"\n");
+#ifdef PCMCIA_DEBUG
+    if (pc_debug > 3) {
+    int i;
+    printk(KERN_DEBUG "skb->data after untranslate:");
+    for (i=0;i<64;i++)
+        printk("%02x ",skb->data[i]);
+    printk("\n");
+    }
+#endif
 } /* end untranslate */
 /*===========================================================================*/
 /* Copy data from circular receive buffer to PC memory.
@@ -2020,7 +2043,7 @@ void authenticate(ray_dev_t *local)
     dev_link_t *link = local->finder;
     DEBUG(0,"ray_cs Starting authentication.\n");
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(1,"ray_cs authenticate - device not present\n");
+        DEBUG(2,"ray_cs authenticate - device not present\n");
         return;
     }
 
@@ -2046,37 +2069,37 @@ void rx_authenticate(ray_dev_t *local, struct rcs *prcs,
     del_timer(&local->timer);
 
     copy_from_rx_buff(local, buff, pkt_addr, rx_len & 0xff);
-	/* if we are trying to get authenticated */
+    /* if we are trying to get authenticated */
     if (local->sparm.b4.a_network_type == ADHOC) {
-		DEBUG(1,"ray_cs rx_auth var= %02x %02x %02x %02x %02x %02x\n", msg->var[0],msg->var[1],msg->var[2],msg->var[3],msg->var[4],msg->var[5]);
-		if (msg->var[2] == 1) {
+        DEBUG(1,"ray_cs rx_auth var= %02x %02x %02x %02x %02x %02x\n", msg->var[0],msg->var[1],msg->var[2],msg->var[3],msg->var[4],msg->var[5]);
+        if (msg->var[2] == 1) {
                     DEBUG(0,"ray_cs Sending authentication response.\n");
                     if (!build_auth_frame (local, msg->mac.addr_2, OPEN_AUTH_RESPONSE)) {
                         local->authentication_state = NEED_TO_AUTH;
                         memcpy(local->auth_id, msg->mac.addr_2, ADDRLEN);
                     }
-		}
-	}
-	else /* Infrastructure network */
-	{
-		if (local->authentication_state == AWAITING_RESPONSE) {
-			/* Verify authentication sequence #2 and success */
-			if (msg->var[2] == 2) {
-				if ((msg->var[3] | msg->var[4]) == 0) {
-					DEBUG(1,"Authentication successful\n");
-					local->card_status = CARD_AUTH_COMPLETE;
-					associate(local);
-					local->authentication_state = AUTHENTICATED;
-				}
-				else {
-					DEBUG(0,"Authentication refused\n");
-					local->card_status = CARD_AUTH_REFUSED;
-					join_net((u_long)local);
-					local->authentication_state = UNAUTHENTICATED;
-				}
-			}
-		}
-	}
+        }
+    }
+    else /* Infrastructure network */
+    {
+        if (local->authentication_state == AWAITING_RESPONSE) {
+            /* Verify authentication sequence #2 and success */
+            if (msg->var[2] == 2) {
+                if ((msg->var[3] | msg->var[4]) == 0) {
+                    DEBUG(1,"Authentication successful\n");
+                    local->card_status = CARD_AUTH_COMPLETE;
+                    associate(local);
+                    local->authentication_state = AUTHENTICATED;
+                }
+                else {
+                    DEBUG(0,"Authentication refused\n");
+                    local->card_status = CARD_AUTH_REFUSED;
+                    join_net((u_long)local);
+                    local->authentication_state = UNAUTHENTICATED;
+                }
+            }
+        }
+    }
 
 } /* end rx_authenticate */
 /*===========================================================================*/
@@ -2087,11 +2110,11 @@ void associate(ray_dev_t *local)
     struct net_device *dev = link->priv;
     int ccsindex;
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(1,"ray_cs associate - device not present\n");
+        DEBUG(2,"ray_cs associate - device not present\n");
         return;
     }
     /* If no tx buffers available, return*/
-    if ((ccsindex = get_free_ccs(local)) == -1)
+    if ((ccsindex = get_free_ccs(local)) < 0)
     {
 /* TBD should never be here but... what if we are? */
         DEBUG(1,"ray_cs associate - No free ccs\n");
@@ -2125,7 +2148,7 @@ void rx_deauthenticate(ray_dev_t *local, struct rcs *prcs,
     struct rx_msg *msg = (struct rx_msg *)buff;
 */
     DEBUG(0,"Deauthentication frame received\n");
-	local->authentication_state = UNAUTHENTICATED;
+    local->authentication_state = UNAUTHENTICATED;
     /* Need to reauthenticate or rejoin depending on reason code */
 /*  copy_from_rx_buff(local, buff, pkt_addr, rx_len & 0xff);
  */
@@ -2256,9 +2279,8 @@ int  build_auth_frame(ray_dev_t *local, UCHAR *dest, int auth_type)
     int ccsindex;
 
     /* If no tx buffers available, return */
-    if ((ccsindex = get_free_tx_ccs(local)) == -1)
+    if ((ccsindex = get_free_tx_ccs(local)) < 0)
     {
-/* TBD should never be here but... what if we are? */
         DEBUG(1,"ray_cs send authenticate - No free tx ccs\n");
         return -1;
     }

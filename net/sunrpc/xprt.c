@@ -789,11 +789,29 @@ done:
 	return result;
 }
 
+static __inline__ void tcp_output_record(struct rpc_xprt *xprt)
+{
+	if(xprt->snd_sent && xprt->snd_task)
+		dprintk("RPC: write space\n");
+	if(xprt->write_space == 0)
+	{
+		xprt->write_space = 1;
+		if (xprt->snd_task && !RPC_IS_RUNNING(xprt->snd_task))
+		{
+			if(xprt->snd_sent)
+				dprintk("RPC: Write wakeup snd_sent =%d\n",
+					xprt->snd_sent);
+			rpc_wake_up_task(xprt->snd_task);			
+		}
+	}
+}
+
 /*
  *	TCP task queue stuff
  */
  
-static struct rpc_xprt *rpc_xprt_pending = NULL;	/* Chain by rx_pending of rpc_xprt's */
+static struct rpc_xprt *rpc_rx_xprt_pending = NULL;	/* Chain by rx_pending of rpc_xprt's */
+static struct rpc_xprt *rpc_tx_xprt_pending = NULL;	/* Chain by tx_pending of rpc_xprt's */
 
 /*
  *	This is protected from tcp_data_ready and the stack as its run
@@ -811,11 +829,11 @@ void rpciod_tcp_dispatcher(void)
 	 *	Empty each pending socket
 	 */
 	 
-	while((xprt=rpc_xprt_pending)!=NULL)
+	while((xprt=rpc_rx_xprt_pending)!=NULL)
 	{
 		int safe_retry=0;
 		
-		rpc_xprt_pending=xprt->rx_pending;
+		rpc_rx_xprt_pending=xprt->rx_pending;
 		xprt->rx_pending_flag=0;
 		
 		dprintk("rpciod_tcp_dispatcher: Processing %p\n", xprt);
@@ -839,6 +857,13 @@ void rpciod_tcp_dispatcher(void)
 				printk(KERN_WARNING "RPC: unexpected error %d from tcp_input_record\n",
 					result);
 		}
+	}
+
+	while((xprt=rpc_tx_xprt_pending)!=NULL)
+	{
+		rpc_tx_xprt_pending = xprt->tx_pending;
+		xprt->tx_pending_flag = 0;
+		tcp_output_record(xprt);
 	}
 }
 
@@ -877,12 +902,12 @@ static void tcp_data_ready(struct sock *sk, int len)
 	{
 		int start_queue=0;
 
-		dprintk("RPC:     xprt queue %p\n", rpc_xprt_pending);
-		if(rpc_xprt_pending==NULL)
+		dprintk("RPC:     xprt queue %p\n", rpc_rx_xprt_pending);
+		if(rpc_rx_xprt_pending==NULL)
 			start_queue=1;
 		xprt->rx_pending_flag=1;
-		xprt->rx_pending=rpc_xprt_pending;
-		rpc_xprt_pending=xprt;
+		xprt->rx_pending=rpc_rx_xprt_pending;
+		rpc_rx_xprt_pending=xprt;
 		if (start_queue)
 		  {
 		    tcp_rpciod_queue();
@@ -924,18 +949,16 @@ tcp_write_space(struct sock *sk)
 
 	if (!(xprt = xprt_from_sock(sk)))
 		return;
-	if(xprt->snd_sent && xprt->snd_task)
-		dprintk("RPC: write space\n");
-	if(xprt->write_space == 0)
-	{
-		xprt->write_space = 1;
-		if (xprt->snd_task && !RPC_IS_RUNNING(xprt->snd_task))
-		{
-			if(xprt->snd_sent)
-				dprintk("RPC: Write wakeup snd_sent =%d\n",
-					xprt->snd_sent);
-			rpc_wake_up_task(xprt->snd_task);			
-		}
+	if (!xprt->tx_pending_flag) {
+		int start_queue = 0;
+
+		if (rpc_tx_xprt_pending == NULL)
+			start_queue = 1;
+		xprt->tx_pending_flag = 1;
+		xprt->tx_pending = rpc_tx_xprt_pending;
+		rpc_tx_xprt_pending = xprt;
+		if (start_queue)
+			tcp_rpciod_queue();
 	}
 }
 

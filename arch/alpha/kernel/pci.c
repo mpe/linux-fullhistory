@@ -10,7 +10,6 @@
 #include <linux/pci.h>
 #include <linux/init.h>
 #include <linux/ioport.h>
-#include <asm/pci.h>
 #include <asm/machvec.h>
 
 #include "proto.h"
@@ -81,6 +80,13 @@ pcibios_assign_special(void)
 	for (dev = pci_devices; dev; dev = dev->next) {
 		if (dev->class >> 8 != PCI_CLASS_STORAGE_IDE)
 			continue;
+		/* Resource 1 of IDE controller is the address of HD_CMD
+		   register which actually occupies a single byte (0x3f6
+		   for ide0) in reported 0x3f4-3f7 range. We have to fix
+		   that to avoid resource conflict with AT-style floppy
+		   controller. */
+		dev->resource[1].start += 2;
+		dev->resource[1].end = dev->resource[1].start;
 	        for (i = 0; i < PCI_NUM_RESOURCES; i++) {
 			if (dev->resource[i].flags)
 				pci_claim_resource(dev, i);

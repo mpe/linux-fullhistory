@@ -20,11 +20,13 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     AHA-2920C
     AHA-2930
     AHA-2930U
+    AHA-2930CU
     AHA-2930U2
     AHA-2940               
     AHA-2940W              
     AHA-2940U              
     AHA-2940UW
+    AHA-2940UW-PRO
     AHA-2940AU 
     AHA-2940U2W
     AHA-2940U2
@@ -37,6 +39,7 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     AHA-2950U2
     AHA-2950U2W
     AHA-2950U2B
+    AHA-29160M
     AHA-3940
     AHA-3940U
     AHA-3940W
@@ -45,6 +48,8 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     AHA-3940U2W
     AHA-3950U2B
     AHA-3950U2D
+    AHA-3960D
+    AHA-39160M
     AHA-3985
     AHA-3985U
     AHA-3985W
@@ -159,6 +164,12 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
         on your controller.  This helps those people who have cards without
         a SEEPROM make sure that linux and all other operating systems think
         the same way about your hard drives.
+
+    "aic7xxx=scbram" - Some cards have external SCB RAM that can be used to
+        give the card more hardware SCB slots.  This allows the driver to use
+	that SCB RAM.  Without this option, the driver won't touch the SCB
+	RAM because it is known to cause problems on a few cards out there
+	(such as 3985 class cards).
 	
     "aic7xxx=irq_trigger:x" - Replace x with either 0 or 1 to force the kernel
         to use the correct IRQ type for your card.  This only applies to EISA
@@ -464,10 +475,9 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
   FTP sites
   ------------------------------
     ftp://ftp.redhat.com/pub/aic/
-      - Primary site for Doug Ledford developed driver releases
-    ftp://ftp.dialnet.net/pub/linux/aic7xxx
-      - Temporary mirror of the redhat.com ftp site while people
-        get used to the new address
+      - Out of date.  I used to keep stuff here, but too many people
+        complained about having a hard time getting into Red Hat's ftp
+	server.  So use the web site below instead.
     ftp://ftp.pcnet.com/users/eischen/Linux/
       - Dan Eischen's driver distribution area
     ftp://ekf2.vsb.cz/pub/linux/kernel/aic7xxx/ftp.teleport.com/
@@ -475,10 +485,8 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
 
   Web sites
   ------------------------------
-    http://developer.redhat.com/aic7xxx/
-      - Primary web site maintained by Doug Ledford.  I haven't actually
-        put anything up yet....but I'm planning on it.  This information
-	is put here as an add for the vapor page :)
+    http://people.redhat.com/dledford/aic7xxx.html
+      - Primary web site maintained by Doug Ledford.
 
 Dean W. Gehnert
 deang@teleport.com

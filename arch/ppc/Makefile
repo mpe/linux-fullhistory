@@ -27,7 +27,7 @@ CFLAGS		:= $(CFLAGS) -I$(HPATH) -D__powerpc__ -fsigned-char -msoft-float \
 CPP		= $(CC) -E $(CFLAGS)
 
 ifdef CONFIG_8xx
-CFLAGS := $(CFLAGS) -mcpu=860
+CFLAGS := $(CFLAGS) -mcpu=860 -I../8xx_io
 endif
 
 ifdef CONFIG_PPC64
@@ -45,7 +45,7 @@ SUBDIRS := $(SUBDIRS) $(ARCH_SUBDIRS)
 ARCHIVES := arch/ppc/kernel/kernel.o arch/ppc/mm/mm.o arch/ppc/lib/lib.o $(ARCHIVES)
 CORE_FILES := arch/ppc/kernel/kernel.o arch/ppc/mm/mm.o arch/ppc/lib/lib.o $(CORE_FILES)
 
-ifdef CONFIG_8xx
+ifdef CONFIG_MATH_EMULATION
 SUBDIRS += arch/ppc/math-emu
 ARCHIVES += arch/ppc/math-emu/math-emu.o
 CORE_FILES += arch/ppc/math-emu/math-emu.o
@@ -77,7 +77,7 @@ checks:
 
 BOOT_TARGETS = zImage znetboot.initrd zImage.initrd
 
-ifdef CONFIG_MBX
+ifdef CONFIG_8xx
 $(BOOT_TARGETS): $(CHECKS) vmlinux
 	@$(MAKECOFFBOOT) $@
 	@$(MAKEMBXBOOT) $@

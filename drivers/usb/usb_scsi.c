@@ -142,7 +142,7 @@ static int us_one_transfer(struct us_data *us, int pipe, char *buf, int length)
 	do {
 	    /*US_DEBUGP("Bulk xfer %x(%d)\n", (unsigned int)buf, this_xfer);*/
 	    result = us->pusb_dev->bus->op->bulk_msg(us->pusb_dev, pipe, buf, 
-						    this_xfer, &partial);
+						    this_xfer, &partial, HZ*5);
 
 	    if (result != 0 || partial != this_xfer)
 		US_DEBUGP("bulk_msg returned %d xferred %lu/%d\n",
@@ -263,7 +263,6 @@ static int pop_CB_reset(struct us_data *us)
 {
     unsigned char cmd[12];
     devrequest dr;
-    int result;
 
     US_DEBUGP("pop_CB_reset\n");
     dr.requesttype = USB_TYPE_CLASS | USB_RT_INTERFACE;
@@ -276,7 +275,7 @@ static int pop_CB_reset(struct us_data *us)
     cmd[1] = 4;
     us->pusb_dev->bus->op->control_msg(us->pusb_dev, 
 					usb_sndctrlpipe(us->pusb_dev,0),
-					&dr, cmd, 12);
+					&dr, cmd, 12, HZ);
 
     /* long wait for reset */
 
@@ -338,7 +337,7 @@ static int pop_CB_command(Scsi_Cmnd *srb)
 	    }
 	    result = us->pusb_dev->bus->op->control_msg(us->pusb_dev, 
 						  usb_sndctrlpipe(us->pusb_dev,0),
-						  &dr, cmd, us->fixedlength);
+						  &dr, cmd, us->fixedlength, HZ);
 	    if (!done_start && (us->subclass == US_SC_UFI /*|| us->subclass == US_SC_8070*/)
 		 && cmd[0] == TEST_UNIT_READY && result) {
 		/* as per spec try a start command, wait and retry */
@@ -349,7 +348,7 @@ static int pop_CB_command(Scsi_Cmnd *srb)
 		cmd[4] = 1;		/* start */
 		result = us->pusb_dev->bus->op->control_msg(us->pusb_dev, 
 						      usb_sndctrlpipe(us->pusb_dev,0),
-						      &dr, cmd, us->fixedlength);
+						      &dr, cmd, us->fixedlength, HZ);
 		wait_ms(100);
 		retry++;
 		continue;
@@ -357,7 +356,7 @@ static int pop_CB_command(Scsi_Cmnd *srb)
 	} else
 	    result = us->pusb_dev->bus->op->control_msg(us->pusb_dev, 
 						  usb_sndctrlpipe(us->pusb_dev,0),
-						  &dr, srb->cmnd, srb->cmd_len);
+						  &dr, srb->cmnd, srb->cmd_len, HZ);
 	if (/*result != USB_ST_STALL &&*/ result != USB_ST_TIMEOUT)
 	    return result;
     }
@@ -389,7 +388,7 @@ static int pop_CB_status(Scsi_Cmnd *srb)
 	    dr.length = 2;
 	    result = us->pusb_dev->bus->op->control_msg(us->pusb_dev, 
 						  usb_rcvctrlpipe(us->pusb_dev,0),
-						  &dr, status, sizeof(status));
+						  &dr, status, sizeof(status), HZ);
 	    if (result != USB_ST_TIMEOUT)
 		break;
 	}
@@ -452,7 +451,6 @@ static int pop_CB_status(Scsi_Cmnd *srb)
 
 static int pop_CBI(Scsi_Cmnd *srb)
 {
-    struct us_data *us = (struct us_data *)srb->host_scribble;
     int result;
 
     /* run the command */
@@ -500,7 +498,7 @@ static int pop_Bulk_reset(struct us_data *us)
     dr.index = 0;
     dr.length = 0;
 
-    result = us->pusb_dev->bus->op->control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0), &dr, NULL, 0);
+    result = us->pusb_dev->bus->op->control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0), &dr, NULL, 0, HZ);
     if (result)
 	US_DEBUGP("Bulk hard reset failed %d\n", result);
     usb_clear_halt(us->pusb_dev, us->ep_in | 0x80);
@@ -546,7 +544,7 @@ static int pop_Bulk(Scsi_Cmnd *srb)
 	      bcb.Tag, bcb.DataTransferLength, bcb.Flags, bcb.Length);
     result = us->pusb_dev->bus->op->bulk_msg(us->pusb_dev,
 		     usb_sndbulkpipe(us->pusb_dev, us->ep_out), &bcb, 
-					    US_BULK_CB_WRAP_LEN, &partial);
+					    US_BULK_CB_WRAP_LEN, &partial, HZ*5);
     if (result) {
 	US_DEBUGP("Bulk command result %x\n", result);
 	return DID_ABORT << 16;
@@ -570,7 +568,7 @@ static int pop_Bulk(Scsi_Cmnd *srb)
     do {
 	result = us->pusb_dev->bus->op->bulk_msg(us->pusb_dev,
 			 usb_rcvbulkpipe(us->pusb_dev, us->ep_in), &bcs, 
-						US_BULK_CS_WRAP_LEN, &partial);
+						US_BULK_CS_WRAP_LEN, &partial, HZ*5);
 	if (result == USB_ST_STALL || result == USB_ST_TIMEOUT)
 	    stall++;
 	else
@@ -1296,7 +1294,7 @@ static int scsi_probe(struct usb_device *dev)
 	    dr.index = 0;
 	    dr.value = 0;
 	    dr.length = 0;
-	    ss->pusb_dev->bus->op->control_msg(ss->pusb_dev, usb_rcvctrlpipe(dev,0), &dr, qstat, 2);
+	    ss->pusb_dev->bus->op->control_msg(ss->pusb_dev, usb_rcvctrlpipe(dev,0), &dr, qstat, 2, HZ);
 	    US_DEBUGP("C0 status %x %x\n", qstat[0], qstat[1]);
 	    init_waitqueue_head(&ss->ip_waitq);
 	    ss->irqpipe = usb_rcvctrlpipe(ss->pusb_dev, ss->ep_int);
@@ -1413,8 +1411,6 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	unsigned int offset;
-
 	usb_deregister(&scsi_driver);
 }
 #endif

@@ -439,8 +439,6 @@ static void __init smp_init(void)
 
 #endif
 
-extern void initialize_secondary(void);
-
 /*
  *	Activate the first processor.
  */
@@ -448,14 +446,6 @@ extern void initialize_secondary(void);
 asmlinkage void __init start_kernel(void)
 {
 	char * command_line;
-
-#ifdef __SMP__
-	static int boot_cpu = 1;
-	/* "current" has been set up, we need to load it now */
-	if (!boot_cpu)
-		initialize_secondary();
-	boot_cpu = 0;
-#endif
 
 /*
  * Interrupts are still disabled. Do necessary setups, then

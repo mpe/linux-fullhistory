@@ -26,7 +26,16 @@
 #include <asm/feature.h>
 #include <asm/mediabay.h>
 #include <asm/init.h>
+#include <linux/adb.h>
+#include <linux/pmu.h>
 
+#ifdef CONFIG_PMAC_PBOOK
+static int mb_notify_sleep(struct pmu_sleep_notifier *self, int when);
+static struct pmu_sleep_notifier mb_sleep_notifier = {
+	mb_notify_sleep,
+	SLEEP_LEVEL_MEDIABAY,
+};
+#endif
 
 #undef MB_USE_INTERRUPTS
 
@@ -77,13 +86,13 @@ int media_bay_count = 0;
  * Hold the media-bay reset signal true for this many ticks
  * after a device is inserted before releasing it.
  */
-#define MB_RESET_COUNT	20
+#define MB_RESET_COUNT	40
 
 /*
  * Wait this many ticks after an IDE device (e.g. CD-ROM) is inserted
  * (or until the device is ready) before registering the IDE interface.
  */
-#define MB_IDE_WAIT	1000
+#define MB_IDE_WAIT	1500
 
 static void poll_media_bay(int which);
 static void set_media_bay(int which, int id);
@@ -156,6 +165,10 @@ media_bay_init(void)
 	if (media_bay_count)
 	{
 		printk(KERN_INFO "Registered %d media-bay(s)\n", media_bay_count);
+
+#ifdef CONFIG_PMAC_PBOOK
+		pmu_register_sleep_notifier(&mb_sleep_notifier);
+#endif /* CONFIG_PMAC_PBOOK */
 
 		kernel_thread(media_bay_task, NULL, 0);
 	}
@@ -298,9 +311,16 @@ poll_media_bay(int which)
 	int id = MB_CONTENTS(which);
 
 	if (id == media_bays[which].last_value) {
-		if (id != media_bays[which].content_id
-		    && ++media_bays[which].value_count >= MB_STABLE_COUNT)
- 			set_media_bay(which, id);
+	    if (id != media_bays[which].content_id
+	        && ++media_bays[which].value_count >= MB_STABLE_COUNT) {
+	        /* If the device type changes without going thru "MB_NO", we force
+	           a pass by "MB_NO" to make sure things are properly reset */
+	        if ((id != MB_NO) && (media_bays[which].content_id != MB_NO)) {
+		    set_media_bay(which, MB_NO);
+		    udelay(500);
+		}
+ 		set_media_bay(which, id);
+ 	    }
 	} else {
 		media_bays[which].last_value = id;
 		media_bays[which].value_count = 0;
@@ -319,27 +339,28 @@ set_media_bay(int which, int id)
 	
 	switch (id) {
 	case MB_CD:
-		feature_clear(bay->dev_node, FEATURE_Mediabay_floppy_enable);
 		feature_set(bay->dev_node, FEATURE_Mediabay_enable);
-		feature_set(bay->dev_node, FEATURE_CD_power);
 		feature_set(bay->dev_node, FEATURE_Mediabay_IDE_enable);
+		udelay(500);
+		feature_set(bay->dev_node, FEATURE_CD_power);
 		printk(KERN_INFO "media bay %d contains a CD-ROM drive\n", which);
 		break;
 	case MB_FD:
-		feature_clear(bay->dev_node, FEATURE_CD_power);
 		feature_set(bay->dev_node, FEATURE_Mediabay_enable);
 		feature_set(bay->dev_node, FEATURE_Mediabay_floppy_enable);
 		feature_set(bay->dev_node, FEATURE_SWIM3_enable);
 		printk(KERN_INFO "media bay %d contains a floppy disk drive\n", which);
 		break;
 	case MB_NO:
-		feature_clear(bay->dev_node, FEATURE_Mediabay_floppy_enable);
 		feature_clear(bay->dev_node, FEATURE_CD_power);
+		feature_clear(bay->dev_node, FEATURE_Mediabay_enable);
+		feature_clear(bay->dev_node, FEATURE_Mediabay_floppy_enable);
+		feature_clear(bay->dev_node, FEATURE_Mediabay_IDE_enable);
+		feature_clear(bay->dev_node, FEATURE_SWIM3_enable);
+		feature_set(bay->dev_node, FEATURE_Mediabay_reset);
 		printk(KERN_INFO "media bay %d is empty\n", which);
 		break;
 	default:
-		feature_clear(bay->dev_node, FEATURE_Mediabay_floppy_enable);
-		feature_clear(bay->dev_node, FEATURE_CD_power);
 		feature_set(bay->dev_node, FEATURE_Mediabay_enable);
 		printk(KERN_INFO "media bay %d contains an unknown device (%d)\n",
 		       which, id);
@@ -348,3 +369,62 @@ set_media_bay(int which, int id)
 	
 	udelay(500);
 }
+
+#ifdef CONFIG_PMAC_PBOOK
+/*
+ * notify clients before sleep and reset bus afterwards
+ */
+int __pmac
+mb_notify_sleep(struct pmu_sleep_notifier *self, int when)
+{
+	volatile struct media_bay_info* bay;
+	int i;
+	
+	switch (when) {
+	case PBOOK_SLEEP_REQUEST:
+	case PBOOK_SLEEP_REJECT:
+		break;
+		
+	case PBOOK_SLEEP_NOW:
+		for (i=0; i<media_bay_count; i++) {
+			bay = &media_bays[i];
+			feature_clear(bay->dev_node, FEATURE_Mediabay_enable);
+			feature_clear(bay->dev_node, FEATURE_Mediabay_IDE_enable);
+			feature_clear(bay->dev_node, FEATURE_SWIM3_enable);
+			feature_clear(bay->dev_node, FEATURE_Mediabay_floppy_enable);
+			feature_set(bay->dev_node, FEATURE_Mediabay_reset);
+			feature_clear(bay->dev_node, FEATURE_CD_power);
+			out_8(&media_bays[i].addr->contents, 0x70);
+		}
+		break;
+	case PBOOK_WAKE:
+		for (i=0; i<media_bay_count; i++) {
+			bay = &media_bays[i];
+			feature_set(bay->dev_node, FEATURE_Mediabay_enable);
+			/* I suppose this is enough delay to stabilize MB_CONTENT ... */
+			mdelay(10);
+			/* We re-enable the bay using it's previous content only if
+			   it did not change */
+			if (MB_CONTENTS(i) == bay->content_id) {
+				set_media_bay(i, bay->content_id);
+				if (bay->content_id != MB_NO) {
+					mdelay(400);
+					/* Clear the bay reset */
+					feature_clear(bay->dev_node, FEATURE_Mediabay_reset);
+					/* This small delay makes sure the device has time
+					   to assert the BUSY bit (used by IDE sleep) */
+					udelay(100);
+					/* We reset the state machine timers in case we were in the
+					   middle of a wait loop */
+					if (bay->reset_timer)
+						bay->reset_timer = MB_RESET_COUNT;
+					if (bay->cd_timer)
+						bay->cd_timer = MB_IDE_WAIT;
+				}
+			}
+		}
+		break;
+	}
+	return PBOOK_SLEEP_OK;
+}
+#endif /* CONFIG_PMAC_PBOOK */

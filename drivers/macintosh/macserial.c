@@ -36,13 +36,21 @@
 #include <asm/segment.h>
 #include <asm/bitops.h>
 #include <asm/feature.h>
-#include <asm/adb.h>
-#include <asm/pmu.h>
+#include <linux/adb.h>
+#include <linux/pmu.h>
 #ifdef CONFIG_KGDB
 #include <asm/kgdb.h>
 #endif
 
 #include "macserial.h"
+
+#ifdef CONFIG_PMAC_PBOOK
+static int serial_notify_sleep(struct pmu_sleep_notifier *self, int when);
+static struct pmu_sleep_notifier serial_sleep_notifier = {
+	serial_notify_sleep,
+	SLEEP_LEVEL_MISC,
+};
+#endif
 
 /*
  * It would be nice to dynamically allocate everything that
@@ -1909,6 +1917,10 @@ probe_sccs()
 	}
 	*pp = 0;
 	zs_channels_found = n;
+#ifdef CONFIG_PMAC_PBOOK
+	if (n)
+		pmu_register_sleep_notifier(&serial_sleep_notifier);
+#endif /* CONFIG_PMAC_PBOOK */
 }
 
 /* rs_init inits the driver */
@@ -2470,3 +2482,40 @@ void __init zs_kgdb_hook(int tty_num)
 	set_debug_traps(); /* init stub */
 }
 #endif /* ifdef CONFIG_KGDB */
+
+#ifdef CONFIG_PMAC_PBOOK
+/*
+ * notify clients before sleep and reset bus afterwards
+ */
+int
+serial_notify_sleep(struct pmu_sleep_notifier *self, int when)
+{
+	int i;
+	
+	switch (when) {
+	case PBOOK_SLEEP_REQUEST:
+	case PBOOK_SLEEP_REJECT:
+		break;
+		
+	case PBOOK_SLEEP_NOW:
+		for (i=0; i<zs_channels_found; i++) {
+			struct mac_serial *info = &zs_soft[i];
+			if (info->flags & ZILOG_INITIALIZED) {
+				shutdown(info);
+				info->flags |= ZILOG_SLEEPING;
+			}
+		}
+		break;
+	case PBOOK_WAKE:
+		for (i=0; i<zs_channels_found; i++) {
+			struct mac_serial *info = &zs_soft[i];
+			if (info->flags & ZILOG_SLEEPING) {
+				info->flags &= ~ZILOG_SLEEPING;
+				startup(info, 0);
+			}
+		}
+		break;
+	}
+	return PBOOK_SLEEP_OK;
+}
+#endif /* CONFIG_PMAC_PBOOK */

@@ -88,6 +88,7 @@ SECTIONS
   __initcall_end = .;
   . = ALIGN(4096);
   __init_end = .;
+
   . = ALIGN(4096);
   __pmac_begin = .;
   .text.pmac : { *(.text.pmac) }
@@ -101,6 +102,13 @@ SECTIONS
   .data.prep : { *(.data.prep) }
   . = ALIGN(4096);
   __prep_end = .;
+
+  . = ALIGN(4096);
+  __apus_begin = .;
+  .text.apus : { *(.text.apus) }
+  .data.apus : { *(.data.apus) }
+  . = ALIGN(4096);
+  __apus_end = .;
 
   . = ALIGN(4096);
   __apus_begin = .;

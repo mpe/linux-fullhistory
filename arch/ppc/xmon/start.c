@@ -1,19 +1,26 @@
 /*
  * Copyright (C) 1996 Paul Mackerras.
  */
+#include <linux/config.h>
 #include <linux/string.h>
 #include <asm/machdep.h>
 #include <asm/io.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
-#include <asm/adb.h>
+#include <linux/adb.h>
+#include <linux/pmu.h>
 #include <asm/prom.h>
+#include <asm/bootx.h>
 
 static volatile unsigned char *sccc, *sccd;
 unsigned long TXRDY, RXRDY;
 extern void xmon_printf(const char *fmt, ...);
+extern void map_bootx_text(void);
+extern void drawchar(char);
+extern void drawstring(const char *str);
 
-static int console = 1;
+static int console = 0;
+static int use_screen = 0;
 
 void buf_access(void)
 {
@@ -29,10 +36,21 @@ xmon_map_scc(void)
 	if ( _machine == _MACH_Pmac )
 	{
 		struct device_node *np;
+		extern boot_infos_t *boot_infos;
+		unsigned long addr;
+
+#ifdef CONFIG_BOOTX_TEXT
+		if (boot_infos != 0 && find_via_pmu()) {
+			printk(KERN_INFO "xmon uses screen and keyboard\n");
+			use_screen = 1;
+			map_bootx_text();
+			return;
+		}
+#endif
 #ifdef CHRP_ESCC
-		unsigned long addr = 0xc1013020;
+		addr = 0xc1013020;
 #else
-		unsigned long addr = 0xf3013020;
+		addr = 0xf3013020;
 #endif
 		TXRDY = 4;
 		RXRDY = 1;
@@ -73,11 +91,19 @@ xmon_write(void *handle, void *ptr, int nb)
     char *p = ptr;
     int i, ct;
 
+#ifdef CONFIG_BOOTX_TEXT
+    if (use_screen) {
+	/* write it on the screen */
+	for (i = 0; i < nb; ++i)
+	    drawchar(*p++);
+	return nb;
+    }
+#endif
     if (!scc_initialized)
 	xmon_init_scc();
     for (i = 0; i < nb; ++i) {
 	while ((*sccc & TXRDY) == 0)
-	    if (adb_hardware == ADB_VIAPMU)
+	    if (sys_ctrler == SYS_CTRLER_PMU)
 		pmu_poll();
 	buf_access();
 	if ( console && (*p != '\r'))
@@ -92,17 +118,85 @@ xmon_write(void *handle, void *ptr, int nb)
     return i;
 }
 
+int xmon_wants_key;
+int xmon_pmu_keycode;
+
+#ifdef CONFIG_BOOTX_TEXT
+static int xmon_pmu_shiftstate;
+
+static unsigned char xmon_keytab[128] =
+	"asdfhgzxcv\000bqwer"				/* 0x00 - 0x0f */
+	"yt123465=97-80o]"				/* 0x10 - 0x1f */
+	"u[ip\rlj'k;\\,/nm."				/* 0x20 - 0x2f */
+	"\t `\177\0\033\0\0\0\0\0\0\0\0\0\0"		/* 0x30 - 0x3f */
+	"\0.\0*\0+\0\0\0\0\0/\r\0-\0"			/* 0x40 - 0x4f */
+	"\0\0000123456789\0\0\0";			/* 0x50 - 0x5f */
+
+static unsigned char xmon_shift_keytab[128] =
+	"ASDFHGZXCV\000BQWER"				/* 0x00 - 0x0f */
+	"YT!@#$^%+(&=*)}O"				/* 0x10 - 0x1f */
+	"U{IP\rLJ\"K:|<?NM>"				/* 0x20 - 0x2f */
+	"\t ~\177\0\033\0\0\0\0\0\0\0\0\0\0"		/* 0x30 - 0x3f */
+	"\0.\0*\0+\0\0\0\0\0/\r\0-\0"			/* 0x40 - 0x4f */
+	"\0\0000123456789\0\0\0";			/* 0x50 - 0x5f */
+
+static int
+xmon_get_pmu_key(void)
+{
+	int k, t, on;
+
+	xmon_wants_key = 1;
+	for (;;) {
+		xmon_pmu_keycode = -1;
+		t = 0;
+		on = 0;
+		do {
+			if (--t < 0) {
+				on = 1 - on;
+				drawchar(on? 0xdb: 0x20);
+				drawchar('\b');
+				t = 200000;
+			}
+			pmu_poll();
+		} while (xmon_pmu_keycode == -1);
+		k = xmon_pmu_keycode;
+		if (on)
+			drawstring(" \b");
+
+		/* test for shift keys */
+		if ((k & 0x7f) == 0x38 || (k & 0x7f) == 0x7b) {
+			xmon_pmu_shiftstate = (k & 0x80) == 0;
+			continue;
+		}
+		if (k >= 0x80)
+			continue;	/* ignore up transitions */
+		k = (xmon_pmu_shiftstate? xmon_shift_keytab: xmon_keytab)[k];
+		if (k != 0)
+			break;
+	}
+	xmon_wants_key = 0;
+	return k;
+}
+#endif /* CONFIG_BOOTX_TEXT */
+
 int
 xmon_read(void *handle, void *ptr, int nb)
 {
     char *p = ptr;
     int i;
 
+#ifdef CONFIG_BOOTX_TEXT
+    if (use_screen) {
+	for (i = 0; i < nb; ++i)
+	    *p++ = xmon_get_pmu_key();
+	return i;
+    }
+#endif
     if (!scc_initialized)
 	xmon_init_scc();
     for (i = 0; i < nb; ++i) {
 	while ((*sccc & RXRDY) == 0)
-	    if (adb_hardware == ADB_VIAPMU)
+	    if (sys_ctrler == SYS_CTRLER_PMU)
 		pmu_poll();
 	buf_access();
 #if 0	

@@ -53,6 +53,8 @@ static unsigned int cpu_6xx[16] = {
 	0, 0, 14, 0, 0, 13, 5, 9, 6, 11, 8, 10, 0, 12, 7, 0
 };
 
+int chrp_get_irq(struct pt_regs *);
+void chrp_post_irq(int);		 
 
 static inline unsigned long _get_HID1(void)
 {
@@ -479,7 +481,7 @@ void __init gemini_calibrate_decr(void)
 void __init gemini_init(unsigned long r3, unsigned long r4, unsigned long r5,
 			unsigned long r6, unsigned long r7)
 {
-	void chrp_do_IRQ(struct pt_regs *, int, int);
+	int chrp_get_irq( struct pt_regs * );
 	void layout_bus( struct pci_bus * );
  
 	gemini_setup_pci_ptrs();
@@ -501,7 +503,8 @@ void __init gemini_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.get_cpuinfo = gemini_get_cpuinfo;
 	ppc_md.irq_cannonicalize = NULL;
 	ppc_md.init_IRQ = gemini_init_IRQ;
-	ppc_md.do_IRQ = chrp_do_IRQ;
+	ppc_md.get_irq = chrp_get_irq;
+	ppc_md.post_irq = chrp_post_irq;
 	ppc_md.init = NULL;
 
 	ppc_md.restart = gemini_restart;

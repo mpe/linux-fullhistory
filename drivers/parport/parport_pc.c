@@ -10,6 +10,7 @@
  *
  * Cleaned up include files - Russell King <linux@arm.uk.linux.org>
  * DMA support - Bert De Jonghe <bert@sophis.be>
+ * Many ECP bugs fixed.  Fred Barnes & Jamie Lokier, 1999
  */
 
 /* This driver should work with any hardware that is broadly compatible
@@ -73,7 +74,12 @@
 static void frob_econtrol (struct parport *pb, unsigned char m,
 			   unsigned char v)
 {
-	outb ((inb (ECONTROL (pb)) & ~m) ^ v, ECONTROL (pb));
+	unsigned char ectr = inb (ECONTROL (pb));
+#ifdef DEBUG_PARPORT
+	printk (KERN_DEBUG "frob_econtrol(%02x,%02x): %02x -> %02x\n",
+		m, v, ectr, (ectr & ~m) ^ v);
+#endif
+	outb ((ectr & ~m) ^ v, ECONTROL (pb));
 }
 
 #ifdef CONFIG_PARPORT_PC_FIFO
@@ -94,11 +100,8 @@ static int change_mode(struct parport *p, int m)
 	oecr = inb (ecr);
 	mode = (oecr >> 5) & 0x7;
 	if (mode == m) return 0;
-	if (mode && m)
-		/* We have to go through mode 000 */
-		change_mode (p, ECR_SPP);
 
-	if (m < 2 && !(parport_read_control (p) & 0x20)) {
+	if (mode >= 2 && !(priv->ctr & 0x20)) {
 		/* This mode resets the FIFO, so we may
 		 * have to wait for it to drain first. */
 		long expire = jiffies + p->physport->cad->timeout;
@@ -125,6 +128,13 @@ static int change_mode(struct parport *p, int m)
 					break;
 			}
 		}
+	}
+
+	if (mode >= 2 && m >= 2) {
+		/* We have to go through mode 001 */
+		oecr &= ~(7 << 5);
+		oecr |= ECR_PS2 << 5;
+		outb (oecr, ecr);
 	}
 
 	/* Set the mode. */
@@ -160,11 +170,11 @@ static int get_fifo_residue (struct parport *p)
 		residue);
 
 	/* Reset the FIFO. */
-	frob_econtrol (p, 0xe0, 0x20);
+	frob_econtrol (p, 0xe0, ECR_PS2 << 5);
 	parport_frob_control (p, PARPORT_CONTROL_STROBE, 0);
 
 	/* Now change to config mode and clean up. FIXME */
-	frob_econtrol (p, 0xe0, 0xe0);
+	frob_econtrol (p, 0xe0, ECR_CNF << 5);
 	cnfga = inb (CONFIGA (p));
 	printk (KERN_DEBUG "%s: cnfgA contains 0x%02x\n", p->name, cnfga);
 
@@ -177,7 +187,7 @@ static int get_fifo_residue (struct parport *p)
 	 * PWord != 1 byte. */
 
 	/* Back to PS2 mode. */
-	frob_econtrol (p, 0xe0, 0x20);
+	frob_econtrol (p, 0xe0, ECR_PS2 << 5);
 
 	return residue;
 }
@@ -209,9 +219,9 @@ static int clear_epp_timeout(struct parport *pb)
 /*
  * Access functions.
  *
- * These aren't static because they may be used by the parport_xxx_yyy
- * macros.  extern __inline__ versions of several of these are in
- * parport_pc.h.
+ * Most of these aren't static because they may be used by the
+ * parport_xxx_yyy macros.  extern __inline__ versions of several
+ * of these are in parport_pc.h.
  */
 
 static void parport_pc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
@@ -229,21 +239,6 @@ unsigned char parport_pc_read_data(struct parport *p)
 	return inb (DATA (p));
 }
 
-unsigned char __frob_control (struct parport *p, unsigned char mask,
-			      unsigned char val)
-{
-	const unsigned char wm = (PARPORT_CONTROL_STROBE |
-				  PARPORT_CONTROL_AUTOFD |
-				  PARPORT_CONTROL_INIT |
-				  PARPORT_CONTROL_SELECT);
-	struct parport_pc_private *priv = p->physport->private_data;
-	unsigned char ctr = priv->ctr;
-	ctr = (ctr & ~mask) ^ val;
-	ctr &= priv->ctr_writable; /* only write writable bits. */
-	outb (ctr, CONTROL (p));
-	return priv->ctr = ctr & wm; /* update soft copy */
-}
-
 void parport_pc_write_control(struct parport *p, unsigned char d)
 {
 	const unsigned char wm = (PARPORT_CONTROL_STROBE |
@@ -253,18 +248,22 @@ void parport_pc_write_control(struct parport *p, unsigned char d)
 
 	/* Take this out when drivers have adapted to the newer interface. */
 	if (d & 0x20) {
-			printk (KERN_DEBUG "%s (%s): use data_reverse for this!\n",
-					p->name, p->cad->name);
-			parport_pc_data_reverse (p);
+		printk (KERN_DEBUG "%s (%s): use data_reverse for this!\n",
+			p->name, p->cad->name);
+		parport_pc_data_reverse (p);
 	}
 
-	__frob_control (p, wm, d & wm);
+	__parport_pc_frob_control (p, wm, d & wm);
 }
 
 unsigned char parport_pc_read_control(struct parport *p)
 {
+	const unsigned char wm = (PARPORT_CONTROL_STROBE |
+				  PARPORT_CONTROL_AUTOFD |
+				  PARPORT_CONTROL_INIT |
+				  PARPORT_CONTROL_SELECT);
 	const struct parport_pc_private *priv = p->physport->private_data;
-	return priv->ctr; /* Use soft copy */
+	return priv->ctr & wm; /* Use soft copy */
 }
 
 unsigned char parport_pc_frob_control (struct parport *p, unsigned char mask,
@@ -277,16 +276,20 @@ unsigned char parport_pc_frob_control (struct parport *p, unsigned char mask,
 
 	/* Take this out when drivers have adapted to the newer interface. */
 	if (mask & 0x20) {
-			printk (KERN_DEBUG "%s (%s): use data_reverse for this!\n",
-					p->name, p->cad->name);
+		printk (KERN_DEBUG "%s (%s): use data_%s for this!\n",
+			p->name, p->cad->name,
+			(val & 0x20) ? "reverse" : "forward");
+		if (val & 0x20)
 			parport_pc_data_reverse (p);
+		else
+			parport_pc_data_forward (p);
 	}
 
 	/* Restrict mask and val to control lines. */
 	mask &= wm;
 	val &= wm;
 
-	return __frob_control (p, mask, val);
+	return __parport_pc_frob_control (p, mask, val);
 }
 
 unsigned char parport_pc_read_status(struct parport *p)
@@ -296,22 +299,22 @@ unsigned char parport_pc_read_status(struct parport *p)
 
 void parport_pc_disable_irq(struct parport *p)
 {
-	__frob_control (p, 0x10, 0);
+	__parport_pc_frob_control (p, 0x10, 0);
 }
 
 void parport_pc_enable_irq(struct parport *p)
 {
-	__frob_control (p, 0x10, 0x10);
+	__parport_pc_frob_control (p, 0x10, 0x10);
 }
 
 void parport_pc_data_forward (struct parport *p)
 {
-	__frob_control (p, 0x20, 0);
+	__parport_pc_frob_control (p, 0x20, 0);
 }
 
 void parport_pc_data_reverse (struct parport *p)
 {
-	__frob_control (p, 0x20, 0x20);
+	__parport_pc_frob_control (p, 0x20, 0x20);
 }
 
 void parport_pc_init_state(struct pardevice *dev, struct parport_state *s)
@@ -469,7 +472,7 @@ static size_t parport_pc_fifo_write_block_pio (struct parport *port,
 	frob_econtrol (port, (1<<4), (1<<4)); /* nErrIntrEn */
 
 	/* Forward mode. */
-	parport_pc_data_forward (port);
+	parport_pc_data_forward (port); /* Must be in PS2 mode */
 
 	while (left) {
 		unsigned char byte;
@@ -559,7 +562,7 @@ static size_t parport_pc_fifo_write_block_dma (struct parport *port,
 	frob_econtrol (port, (1<<4), (1<<4)); /* nErrIntrEn */
 
 	/* Forward mode. */
-	parport_pc_data_forward (port);
+	parport_pc_data_forward (port); /* Must be in PS2 mode */
 
 	while (left) {
 		long expire = jiffies + port->physport->cad->timeout;
@@ -656,8 +659,8 @@ size_t parport_pc_compat_write_block_pio (struct parport *port,
 						      length, flags);
 
 	/* Set up parallel port FIFO mode.*/
+	parport_pc_data_forward (port); /* Must be in PS2 mode */
 	change_mode (port, ECR_PPF); /* Parallel port FIFO */
-	parport_pc_data_forward (port);
 	port->physport->ieee1284.phase = IEEE1284_PH_FWD_DATA;
 
 	/* Write the data to the FIFO. */
@@ -687,8 +690,8 @@ size_t parport_pc_compat_write_block_pio (struct parport *port,
 			outb (0, FIFO (port));
 		}
 
-		/* Reset the FIFO. */
-		frob_econtrol (port, 0xe0, 0);
+		/* Reset the FIFO and return to PS2 mode. */
+		frob_econtrol (port, 0xe0, ECR_PS2 << 5);
 
 		/* De-assert strobe. */
 		parport_frob_control (port, PARPORT_CONTROL_STROBE, 0);
@@ -727,8 +730,8 @@ size_t parport_pc_ecp_write_block_pio (struct parport *port,
 	}
 
 	/* Set up ECP parallel port mode.*/
+	parport_pc_data_forward (port); /* Must be in PS2 mode */
 	change_mode (port, ECR_ECP); /* ECP FIFO */
-	parport_pc_data_forward (port);
 	port->physport->ieee1284.phase = IEEE1284_PH_FWD_DATA;
 
 	/* Write the data to the FIFO. */
@@ -758,17 +761,20 @@ size_t parport_pc_ecp_write_block_pio (struct parport *port,
 			outb (0, FIFO (port));
 		}
 
-		/* Reset the FIFO. */
-		frob_econtrol (port, 0xe0, 0);
+		/* Reset the FIFO and return to PS2 mode. */
+		frob_econtrol (port, 0xe0, ECR_PS2 << 5);
+
+		/* De-assert strobe. */
 		parport_frob_control (port, PARPORT_CONTROL_STROBE, 0);
 
 		/* Host transfer recovery. */
+		parport_pc_data_reverse (port); /* Must be in PS2 mode */
+		udelay (5);
+		parport_frob_control (port, PARPORT_CONTROL_INIT, 0);
+		parport_wait_peripheral (port, PARPORT_STATUS_PAPEROUT, 0);
 		parport_frob_control (port,
 				      PARPORT_CONTROL_INIT,
 				      PARPORT_CONTROL_INIT);
-		parport_pc_data_reverse (port);
-		parport_wait_peripheral (port, PARPORT_STATUS_PAPEROUT, 0);
-		parport_frob_control (port, PARPORT_CONTROL_INIT, 0);
 		parport_wait_peripheral (port,
 					 PARPORT_STATUS_PAPEROUT,
 					 PARPORT_STATUS_PAPEROUT);
@@ -819,21 +825,21 @@ size_t parport_pc_ecp_read_block_pio (struct parport *port,
 		parport_frob_control (port,
 				      PARPORT_CONTROL_AUTOFD,
 				      PARPORT_CONTROL_AUTOFD);
-		parport_pc_data_reverse (port);
+		parport_pc_data_reverse (port); /* Must be in PS2 mode */
 		udelay (5);
 
 		/* Event 39: Set nInit low to initiate bus reversal */
 		parport_frob_control (port,
 				      PARPORT_CONTROL_INIT,
-				      PARPORT_CONTROL_INIT);
+				      0);
 
 		/* Event 40: PError goes low */
 		parport_wait_peripheral (port, PARPORT_STATUS_PAPEROUT, 0);
 	}
 
 	/* Set up ECP parallel port mode.*/
+	parport_pc_data_reverse (port); /* Must be in PS2 mode */
 	change_mode (port, ECR_ECP); /* ECP FIFO */
-	parport_pc_data_reverse (port);
 	port->ieee1284.phase = IEEE1284_PH_REV_DATA;
 
 	/* Do the transfer. */
@@ -1054,7 +1060,6 @@ static int __maybe_init parport_ECR_present(struct parport *pb)
 	struct parport_pc_private *priv = pb->private_data;
 	unsigned char r = 0xc;
 
-	priv->ecr = 0;
 	outb (r, CONTROL (pb));
 	if ((inb (ECONTROL (pb)) & 0x3) == (r & 0x3)) {
 		outb (r ^ 0x2, CONTROL (pb)); /* Toggle bit 1 */
@@ -1120,9 +1125,9 @@ static int __maybe_init parport_PS2_supported(struct parport *pb)
 	/* cancel input mode */
 	parport_pc_data_forward (pb);
 
-	if (ok)
+	if (ok) {
 		pb->modes |= PARPORT_MODE_TRISTATE;
-	else {
+	} else {
 		struct parport_pc_private *priv = pb->private_data;
 		priv->ctr_writable &= ~0x20;
 	}
@@ -1180,8 +1185,8 @@ static int __maybe_init parport_ECP_supported(struct parport *pb)
 	priv->writeIntrThreshold = i;
 
 	/* Find out readIntrThreshold */
-	frob_econtrol (pb, 0xe0, ECR_PS2 << 5); /* Reset FIFO */
-	parport_pc_data_reverse (pb);
+	frob_econtrol (pb, 0xe0, ECR_PS2 << 5); /* Reset FIFO and enable PS2 */
+	parport_pc_data_reverse (pb); /* Must be in PS2 mode */
 	frob_econtrol (pb, 0xe0, ECR_TST << 5); /* Test FIFO */
 	frob_econtrol (pb, 1<<2, 1<<2);
 	frob_econtrol (pb, 1<<2, 0);
@@ -1544,12 +1549,10 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 	if (base_hi && !check_region(base_hi,3)) {
 		parport_ECR_present(p);
 		parport_ECP_supported(p);
-		parport_ECPPS2_supported(p);
 	}
 	if (base != 0x3bc) {
 		if (!check_region(base+0x3, 5)) {
-			parport_EPP_supported(p);
-			if (!(p->modes & PARPORT_MODE_EPP))
+			if (!parport_EPP_supported(p))
 				parport_ECPEPP_supported(p);
 		}
 	}
@@ -1558,8 +1561,10 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 		kfree (priv);
 		return NULL;
 	}
-
-	parport_PS2_supported (p);
+	if (priv->ecr)
+		parport_ECPPS2_supported(p);
+	else
+		parport_PS2_supported (p);
 
 	if (!(p = parport_register_port(base, PARPORT_IRQ_NONE,
 					PARPORT_DMA_NONE, ops))) {
@@ -1672,9 +1677,10 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 	/* Done probing.  Now put the port into a sensible start-up state.
 	 * SELECT | INIT also puts IEEE1284-compliant devices into
 	 * compatibility mode. */
-	if (p->modes & PARPORT_MODE_ECP)
+	if (priv->ecr)
 		/*
 		 * Put the ECP detected port in PS2 mode.
+		 * Do this also for ports that have ECR but don't do ECP.
 		 */
 		outb (0x34, ECONTROL (p));
 

@@ -148,7 +148,7 @@ ncp_negotiate_size_and_options(struct ncp_server *server,
 	int result;
 
 	/* there is minimum */
-	if (size < 512) size = 512;
+	if (size < NCP_BLOCK_SIZE) size = NCP_BLOCK_SIZE;
 
 	ncp_init_request(server);
 	ncp_add_word(server, htons(size));
@@ -162,7 +162,7 @@ ncp_negotiate_size_and_options(struct ncp_server *server,
 
 	/* NCP over UDP returns 0 (!!!) */
 	result = ntohs(ncp_reply_word(server, 0));
-	if (result >= 512) size=min(result, size);
+	if (result >= NCP_BLOCK_SIZE) size=min(result, size);
 	*ret_size = size;
 	*ret_options = ncp_reply_byte(server, 4);
 
@@ -264,7 +264,7 @@ static void ncp_extract_file_info(void *structure, struct nw_info_struct *target
 	memcpy(target, structure, info_struct_size);
 	name_len = structure + info_struct_size;
 	target->nameLen = *name_len;
-	strncpy(target->entryName, name_len + 1, *name_len);
+	memcpy(target->entryName, name_len + 1, *name_len);
 	target->entryName[*name_len] = '\0';
 	return;
 }
@@ -406,9 +406,8 @@ ncp_ObtainSpecificDirBase(struct ncp_server *server,
 }
 
 int
-ncp_mount_subdir(struct ncp_server *server,
-		__u8 volNumber,
-		__u8 srcNS, __u32 dirEntNum)
+ncp_mount_subdir(struct ncp_server *server, struct nw_info_struct *i,
+			__u8 volNumber, __u8 srcNS, __u32 dirEntNum)
 {
 	int dstNS;
 	int result;
@@ -422,9 +421,9 @@ ncp_mount_subdir(struct ncp_server *server,
 		return result;
 	}
 	server->name_space[volNumber] = dstNS;
-	server->root.finfo.i.volNumber = volNumber;
-	server->root.finfo.i.dirEntNum = newDirEnt;
-	server->root.finfo.i.DosDirNum = newDosEnt;
+	i->volNumber = volNumber;
+	i->dirEntNum = newDirEnt;
+	i->DosDirNum = newDosEnt;
 	server->m.mounted_vol[1] = 0;
 	server->m.mounted_vol[0] = 'X';
 	return 0;
@@ -467,7 +466,7 @@ ncp_lookup_volume(struct ncp_server *server, char *volname,
 		volnum, server->name_space[volnum]);
 
 	target->nameLen = strlen(volname);
-	strcpy(target->entryName, volname);
+	memcpy(target->entryName, volname, target->nameLen+1);
 	target->attributes = aDIR;
 	/* set dates to Jan 1, 1986  00:00 */
 	target->creationTime = target->modifyTime = cpu_to_le16(0x0000);
@@ -583,7 +582,7 @@ int ncp_open_create_file_or_subdir(struct ncp_server *server,
 				   int open_create_mode,
 				   __u32 create_attributes,
 				   int desired_acc_rights,
-				   struct nw_file_info *target)
+				   struct ncp_entry_info *target)
 {
 	__u16 search_attribs = ntohs(0x0600);
 	__u8  volnum = target->i.volNumber;

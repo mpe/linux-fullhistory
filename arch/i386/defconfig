@@ -360,6 +360,7 @@ CONFIG_82C710_MOUSE=y
 #
 # Misc devices
 #
+CONFIG_ACPI=y
 
 #
 # Filesystems

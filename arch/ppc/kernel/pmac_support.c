@@ -12,8 +12,8 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/prom.h>
-#include <asm/adb.h>
-#include <asm/pmu.h>
+#include <linux/adb.h>
+#include <linux/pmu.h>
 
 /*
  * Read and write the non-volatile RAM on PowerMacs and CHRP machines.
@@ -47,7 +47,7 @@ void pmac_nvram_init(void)
 	} else if (nvram_naddrs == 2) {
 		nvram_addr = ioremap(dp->addrs[0].address, dp->addrs[0].size);
 		nvram_data = ioremap(dp->addrs[1].address, dp->addrs[1].size);
-	} else if (nvram_naddrs == 0 && adb_hardware == ADB_VIAPMU) {
+	} else if (nvram_naddrs == 0 && sys_ctrler == SYS_CTRLER_PMU) {
 		nvram_naddrs = -1;
 	} else {
 		printk(KERN_ERR "Don't know how to access NVRAM with %d addresses\n",
@@ -55,6 +55,7 @@ void pmac_nvram_init(void)
 	}
 }
 
+#ifdef CONFIG_NVRAM
 unsigned char nvram_read_byte(int addr)
 {
 	struct adb_request req;
@@ -100,3 +101,4 @@ void nvram_write_byte(unsigned char val, int addr)
 	}
 	eieio();
 }
+#endif /* CONFIG_NVRAM */

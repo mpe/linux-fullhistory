@@ -13,7 +13,6 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/types.h>
-#include <asm/pci.h>
 
 #ifdef CONFIG_PCI
 

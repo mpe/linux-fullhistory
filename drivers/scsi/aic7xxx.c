@@ -269,7 +269,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.1.19"
+#define AIC7XXX_C_VERSION  "5.1.20"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -878,13 +878,14 @@ typedef enum {
   AHC_SG_PRELOAD       = 0x0080,
   AHC_SPIOCAP          = 0x0100,
   AHC_ULTRA3           = 0x0200,
+  AHC_NEW_AUTOTERM     = 0x0400,
   AHC_AIC7770_FE       = AHC_FENONE,
   AHC_AIC7850_FE       = AHC_SPIOCAP,
   AHC_AIC7860_FE       = AHC_ULTRA|AHC_SPIOCAP,
   AHC_AIC7870_FE       = AHC_FENONE,
   AHC_AIC7880_FE       = AHC_ULTRA,
   AHC_AIC7890_FE       = AHC_MORE_SRAM|AHC_CMD_CHAN|AHC_ULTRA2|
-                         AHC_QUEUE_REGS|AHC_SG_PRELOAD,
+                         AHC_QUEUE_REGS|AHC_SG_PRELOAD|AHC_NEW_AUTOTERM,
   AHC_AIC7895_FE       = AHC_MORE_SRAM|AHC_CMD_CHAN|AHC_ULTRA,
   AHC_AIC7896_FE       = AHC_AIC7890_FE,
   AHC_AIC7892_FE       = AHC_AIC7890_FE|AHC_ULTRA3,
@@ -1351,7 +1352,14 @@ static int aic7xxx_dump_sequencer = 0;
  * would result in never finding any devices :)
  */
 static int aic7xxx_no_probe = 0;
-
+/*
+ * On some machines, enabling the external SCB RAM isn't reliable yet.  I
+ * haven't had time to make test patches for things like changing the
+ * timing mode on that external RAM either.  Some of those changes may
+ * fix the problem.  Until then though, we default to external SCB RAM
+ * off and give a command line option to enable it.
+ */
+static int aic7xxx_scbram = 0;
 /*
  * So that insmod can find the variable and make it point to something
  */
@@ -1450,13 +1458,12 @@ aic_inb(struct aic7xxx_host *p, long port)
   unsigned char x;
   if(p->maddr)
   {
-    x = p->maddr[port];
+    x = readb(p->maddr + port);
   }
   else
   {
     x = inb(p->base + port);
   }
-  mb();
   return(x);
 #else
   return(inb(p->base + port));
@@ -1469,7 +1476,7 @@ aic_outb(struct aic7xxx_host *p, unsigned char val, long port)
 #ifdef MMAPIO
   if(p->maddr)
   {
-    p->maddr[port] = val;
+    writeb(val, p->maddr + port);
   }
   else
   {
@@ -1513,6 +1520,7 @@ aic7xxx_setup(char *s, int *dummy)
     { "pci_parity", &aic7xxx_pci_parity },
     { "dump_card", &aic7xxx_dump_card },
     { "dump_sequencer", &aic7xxx_dump_sequencer },
+    { "scbram", &aic7xxx_scbram },
     { "tag_info",    NULL }
   };
 
@@ -6193,7 +6201,7 @@ aic7xxx_handle_scsiint(struct aic7xxx_host *p, unsigned char intstat)
         cmd->result = 0;
         scb = NULL;
       }
-      if (scb->cmd == p->dev_dtr_cmnd[TARGET_INDEX(scb->cmd)])
+      else if (scb->cmd == p->dev_dtr_cmnd[TARGET_INDEX(scb->cmd)])
       {
         /*
          * Turn off the needsdtr, needwdtr, and needppr bits since this device
@@ -6541,6 +6549,105 @@ aic7xxx_check_scbs(struct aic7xxx_host *p, char *buffer)
 }
 #endif
 
+
+/*+F*************************************************************************
+ * Function:
+ *   aic7xxx_handle_command_completion_intr
+ *
+ * Description:
+ *   SCSI command completion interrupt handler.
+ *-F*************************************************************************/
+static void
+aic7xxx_handle_command_completion_intr(struct aic7xxx_host *p)
+{
+  struct aic7xxx_scb *scb = NULL;
+  Scsi_Cmnd *cmd;
+  unsigned char scb_index;
+
+#ifdef AIC7XXX_VERBOSE_DEBUGGING
+  if( (p->isr_count < 16) && (aic7xxx_verbose > 0xffff) )
+    printk(INFO_LEAD "Command Complete Int.\n", p->host_no, -1, -1, -1);
+#endif
+    
+  /*
+   * Read the INTSTAT location after clearing the CMDINT bit.  This forces
+   * any posted PCI writes to flush to memory.  Gerard Roudier suggested
+   * this fix to the possible race of clearing the CMDINT bit but not
+   * having all command bytes flushed onto the qoutfifo.
+   */
+  aic_outb(p, CLRCMDINT, CLRINT);
+  aic_inb(p, INTSTAT);
+  /*
+   * The sequencer will continue running when it
+   * issues this interrupt. There may be >1 commands
+   * finished, so loop until we've processed them all.
+   */
+
+  while (p->qoutfifo[p->qoutfifonext] != SCB_LIST_NULL)
+  {
+    scb_index = p->qoutfifo[p->qoutfifonext];
+    p->qoutfifo[p->qoutfifonext++] = SCB_LIST_NULL;
+    if ( scb_index >= p->scb_data->numscbs )
+      scb = NULL;
+    else
+      scb = p->scb_data->scb_array[scb_index];
+    if (scb == NULL)
+    {
+      printk(WARN_LEAD "CMDCMPLT with invalid SCB index %d\n", p->host_no,
+        -1, -1, -1, scb_index);
+      continue;
+    }
+    else if (!(scb->flags & SCB_ACTIVE) || (scb->cmd == NULL))
+    {
+      printk(WARN_LEAD "CMDCMPLT without command for SCB %d, SCB flags "
+        "0x%x, cmd 0x%lx\n", p->host_no, -1, -1, -1, scb_index, scb->flags,
+        (unsigned long) scb->cmd);
+      continue;
+    }
+    else if (scb->flags & SCB_QUEUED_ABORT)
+    {
+      pause_sequencer(p);
+      if ( ((aic_inb(p, LASTPHASE) & PHASE_MASK) != P_BUSFREE) &&
+           (aic_inb(p, SCB_TAG) == scb->hscb->tag) )
+      {
+        unpause_sequencer(p, FALSE);
+        continue;
+      }
+      aic7xxx_reset_device(p, scb->cmd->target, scb->cmd->channel,
+        scb->cmd->lun, scb->hscb->tag);
+      scb->flags &= ~(SCB_QUEUED_FOR_DONE | SCB_RESET | SCB_ABORT |
+        SCB_QUEUED_ABORT);
+      unpause_sequencer(p, FALSE);
+    }
+    else if (scb->flags & SCB_ABORT)
+    {
+      /*
+       * We started to abort this, but it completed on us, let it
+       * through as successful
+       */
+      scb->flags &= ~(SCB_ABORT|SCB_RESET);
+    }
+    switch (status_byte(scb->hscb->target_status))
+    {
+      case QUEUE_FULL:
+      case BUSY:
+        scb->hscb->target_status = 0;
+        scb->cmd->result = 0;
+        aic7xxx_error(scb->cmd) = DID_OK;
+        break;
+      default:
+        cmd = scb->cmd;
+        if (scb->hscb->residual_SG_segment_count != 0)
+        {
+          aic7xxx_calculate_residual(p, scb);
+        }
+        cmd->result |= (aic7xxx_error(cmd) << 16);
+        aic7xxx_done(p, scb);
+        break;
+    }      
+  }
+}
+
 /*+F*************************************************************************
  * Function:
  *   aic7xxx_isr
@@ -6600,95 +6707,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
    */
   if (intstat & CMDCMPLT)
   {
-    struct aic7xxx_scb *scb = NULL;
-    Scsi_Cmnd *cmd;
-    unsigned char scb_index;
-
-#ifdef AIC7XXX_VERBOSE_DEBUGGING
-    if( (p->isr_count < 16) && (aic7xxx_verbose > 0xffff) )
-      printk(INFO_LEAD "Command Complete Int.\n", p->host_no, -1, -1, -1);
-#endif
-    
-    /*
-     * Clear interrupt status before running the completion loop.
-     * This eliminates a race condition whereby a command could
-     * complete between the last check of qoutfifo and the
-     * CLRCMDINT statement.  This would result in us thinking the
-     * qoutfifo was empty when it wasn't, and in actuality be a lost
-     * completion interrupt.  With multiple devices or tagged queueing
-     * this could be very bad if we caught all but the last completion
-     * and no more are imediately sent.
-     */
-    aic_outb(p, CLRCMDINT, CLRINT);
-    /*
-     * The sequencer will continue running when it
-     * issues this interrupt. There may be >1 commands
-     * finished, so loop until we've processed them all.
-     */
-
-    while (p->qoutfifo[p->qoutfifonext] != SCB_LIST_NULL)
-    {
-      scb_index = p->qoutfifo[p->qoutfifonext];
-      p->qoutfifo[p->qoutfifonext++] = SCB_LIST_NULL;
-      if ( scb_index >= p->scb_data->numscbs )
-        scb = NULL;
-      else
-        scb = p->scb_data->scb_array[scb_index];
-      if (scb == NULL)
-      {
-        printk(WARN_LEAD "CMDCMPLT with invalid SCB index %d\n", p->host_no,
-          -1, -1, -1, scb_index);
-        continue;
-      }
-      else if (!(scb->flags & SCB_ACTIVE) || (scb->cmd == NULL))
-      {
-        printk(WARN_LEAD "CMDCMPLT without command for SCB %d, SCB flags "
-          "0x%x, cmd 0x%lx\n", p->host_no, -1, -1, -1, scb_index, scb->flags,
-          (unsigned long) scb->cmd);
-        continue;
-      }
-      else if (scb->flags & SCB_QUEUED_ABORT)
-      {
-        pause_sequencer(p);
-        if ( ((aic_inb(p, LASTPHASE) & PHASE_MASK) != P_BUSFREE) &&
-             (aic_inb(p, SCB_TAG) == scb->hscb->tag) )
-        {
-          unpause_sequencer(p, FALSE);
-          continue;
-        }
-        aic7xxx_reset_device(p, scb->cmd->target, scb->cmd->channel,
-          scb->cmd->lun, scb->hscb->tag);
-        scb->flags &= ~(SCB_QUEUED_FOR_DONE | SCB_RESET | SCB_ABORT |
-          SCB_QUEUED_ABORT);
-        unpause_sequencer(p, FALSE);
-      }
-      else if (scb->flags & SCB_ABORT)
-      {
-        /*
-         * We started to abort this, but it completed on us, let it
-         * through as successful
-         */
-        scb->flags &= ~(SCB_ABORT|SCB_RESET);
-      }
-      switch (status_byte(scb->hscb->target_status))
-      {
-        case QUEUE_FULL:
-        case BUSY:
-          scb->hscb->target_status = 0;
-          scb->cmd->result = 0;
-          aic7xxx_error(scb->cmd) = DID_OK;
-          break;
-        default:
-          cmd = scb->cmd;
-          if (scb->hscb->residual_SG_segment_count != 0)
-          {
-            aic7xxx_calculate_residual(p, scb);
-          }
-          cmd->result |= (aic7xxx_error(cmd) << 16);
-          aic7xxx_done(p, scb);
-          break;
-      }      
-    }
+    aic7xxx_handle_command_completion_intr(p);
   }
 
   if (intstat & BRKADRINT)
@@ -7619,9 +7638,10 @@ configure_termination(struct aic7xxx_host *p)
     aic_outb(p, SEEMS | SEECS, SEECTL);
     sxfrctl1 &= ~STPWEN;
     if ( (p->adapter_control & CFAUTOTERM) ||
-         (p->features & AHC_ULTRA2) )
+         (p->features & AHC_NEW_AUTOTERM) )
     {
-      if ( (p->adapter_control & CFAUTOTERM) && !(p->features & AHC_ULTRA2) )
+      if ( (p->adapter_control & CFAUTOTERM) &&
+          !(p->features & AHC_NEW_AUTOTERM) )
       {
         printk(KERN_INFO "(scsi%d) Warning - detected auto-termination\n",
                p->host_no);
@@ -7635,7 +7655,7 @@ configure_termination(struct aic7xxx_host *p)
       }
       /* Configure auto termination. */
 
-      if (p->features & AHC_ULTRA2)
+      if (p->features & AHC_NEW_AUTOTERM)
       {
         if (aic7xxx_override_term == -1)
           aic7xxx_ultra2_term_detect(p, &enableSE_low, &enableSE_high,
@@ -7668,7 +7688,7 @@ configure_termination(struct aic7xxx_host *p)
       if (max_target <= 8)
         internal68_present = 0;
 
-      if ( !(p->features & AHC_ULTRA2) )
+      if ( !(p->features & AHC_NEW_AUTOTERM) )
       {
         if (max_target > 8)
         {
@@ -7698,7 +7718,7 @@ configure_termination(struct aic7xxx_host *p)
        * SE Low Term Enable = BRDDAT5 (7890)
        * LVD High Term Enable = BRDDAT4 (7890)
        */
-      if ( !(p->features & AHC_ULTRA2) &&
+      if ( !(p->features & AHC_NEW_AUTOTERM) &&
            (internal50_present && internal68_present && external_present) )
       {
         printk(KERN_INFO "(scsi%d) Illegal cable configuration!!  Only two\n",
@@ -7731,7 +7751,7 @@ configure_termination(struct aic7xxx_host *p)
              (external_present   ? 1 : 0)) <= 1) ||
            (enableSE_low != 0) )
       {
-        if (p->features & AHC_ULTRA2)
+        if (p->features & AHC_NEW_AUTOTERM)
           brddat |= BRDDAT5;
         else
           sxfrctl1 |= STPWEN;
@@ -7762,7 +7782,7 @@ configure_termination(struct aic7xxx_host *p)
     {
       if (p->adapter_control & CFSTERM)
       {
-        if (p->features & AHC_ULTRA2)
+        if (p->features & AHC_NEW_AUTOTERM)
           brddat |= BRDDAT5;
         else
           sxfrctl1 |= STPWEN;
@@ -9409,7 +9429,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
        AHC_PAGESCBS | AHC_BIOS_ENABLED, AHC_AIC7880_FE,     18,
        32, C46 },
       {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7887, AHC_AIC7880,
-       AHC_PAGESCBS | AHC_BIOS_ENABLED, AHC_AIC7880_FE,     18,
+       AHC_PAGESCBS | AHC_BIOS_ENABLED, AHC_AIC7880_FE | AHC_NEW_AUTOTERM, 18,
        32, C46 },
       {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7888, AHC_AIC7880,
        AHC_PAGESCBS | AHC_BIOS_ENABLED, AHC_AIC7880_FE,     18,
@@ -9539,7 +9559,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
           temp_p->base = pdev->resource[0].start;
           temp_p->mbase = pdev->resource[1].start;
           current_p = list_p;
-	  while(current_p)
+	  while(current_p && temp_p)
 	  {
 	    if ( ((current_p->pci_bus == temp_p->pci_bus) &&
 	          (current_p->pci_device_fn == temp_p->pci_device_fn)) ||
@@ -9958,7 +9978,8 @@ aic7xxx_detect(Scsi_Host_Template *template)
 #endif
               if (temp_p->features & AHC_ULTRA2)
               {
-                if (aic_inb(temp_p, DSCOMMAND0) & RAMPSM_ULTRA2)
+                if ( (aic_inb(temp_p, DSCOMMAND0) & RAMPSM_ULTRA2) &&
+                     (aic7xxx_scbram) )
                 {
                   aic_outb(temp_p,
                            aic_inb(temp_p, DSCOMMAND0) & ~SCBRAMSEL_ULTRA2,
@@ -9966,12 +9987,33 @@ aic7xxx_detect(Scsi_Host_Template *template)
                   temp_p->flags |= AHC_EXTERNAL_SRAM;
                   devconfig |= EXTSCBPEN;
                 }
+                else if (aic_inb(temp_p, DSCOMMAND0) & RAMPSM_ULTRA2)
+                {
+                  printk(KERN_INFO "aic7xxx: <%s> at PCI %d/%d\n", 
+                    board_names[aic_pdevs[i].board_name_index],
+                    PCI_SLOT(temp_p->pci_device_fn),
+                    PCI_FUNC(temp_p->pci_device_fn));
+                  printk("aic7xxx: external SCB RAM detected, "
+                         "but not enabled\n");
+                }
               }
-              else if (devconfig & RAMPSM)
+              else
               {
-                devconfig &= ~SCBRAMSEL;
-                devconfig |= EXTSCBPEN;
-                temp_p->flags |= AHC_EXTERNAL_SRAM;
+                if ((devconfig & RAMPSM) && (aic7xxx_scbram))
+                {
+                  devconfig &= ~SCBRAMSEL;
+                  devconfig |= EXTSCBPEN;
+                  temp_p->flags |= AHC_EXTERNAL_SRAM;
+                }
+                else if (devconfig & RAMPSM)
+                {
+                  printk(KERN_INFO "aic7xxx: <%s> at PCI %d/%d\n", 
+                    board_names[aic_pdevs[i].board_name_index],
+                    PCI_SLOT(temp_p->pci_device_fn),
+                    PCI_FUNC(temp_p->pci_device_fn));
+                  printk("aic7xxx: external SCB RAM detected, "
+                         "but not enabled\n");
+                }
               }
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,92)
               pci_write_config_dword(pdev, DEVCONFIG, devconfig);
@@ -11588,13 +11630,17 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
     if ( aic7xxx_scb_on_qoutfifo(p, scb) )
     {
       if(aic7xxx_verbose & VERBOSE_RESET_RETURN)
-        printk(INFO_LEAD "SCB on qoutfifo, returning.\n", p->host_no,
+        printk(INFO_LEAD "SCB on qoutfifo, completing.\n", p->host_no,
           CTL_OF_SCB(scb));
-      aic7xxx_run_done_queue(p, TRUE);
+      if ((aic_inb(p,INTSTAT) & CMDCMPLT) == 0)
+        printk(INFO_LEAD "missed CMDCMPLT interrupt!\n", p->host_no,
+          CTL_OF_SCB(scb));
+      aic7xxx_handle_command_completion_intr(p);
+      aic7xxx_done_cmds_complete(p);
       aic7xxx_run_waiting_queues(p);
       unpause_sequencer(p, FALSE);
       DRIVER_UNLOCK
-      return(SCSI_RESET_NOT_RUNNING);
+      return(SCSI_RESET_SUCCESS);
     }
     if ( flags & SCSI_RESET_SUGGEST_HOST_RESET )
     {

@@ -6,7 +6,7 @@
  *
  * (C) Copyright 1999 Gregory P. Smith <greg@electricrain.com>
  *
- * $Id: ohci.h,v 1.24 1999/05/16 10:18:26 greg Exp $
+ * $Id: ohci.h,v 1.40 1999/09/05 07:26:46 greg Exp $
  */
 
 #include <linux/list.h>
@@ -148,17 +148,43 @@ struct ohci_ed {
 #define OHCI_ED_EN	(0xf << 7)
 #define OHCI_ED_FA	(0x7f)
 
+
 #define ed_get_en(ed)	((le32_to_cpup(&(ed)->status) & OHCI_ED_EN) >> 7)
 #define ed_get_fa(ed)	(le32_to_cpup(&(ed)->status) & OHCI_ED_FA)
 
 /* NOTE: bits 27-31 of the status dword are reserved for the HCD */
+#define OHCI_ED_HCD_MASK	(0x1f << 27)
 /*
  * We'll use this status flag for to mark if an ED is in use by the
- * driver or not.  If the bit is set, it is being used.
+ * driver or not.  If the bit is set, it is being used.  (bit 31)
  */
 #define ED_ALLOCATED	(1 << 31)
 #define ed_allocated(ed)	(le32_to_cpup(&(ed).status) & ED_ALLOCATED)
 #define allocate_ed(ed)		((ed)->status |= cpu_to_le32(ED_ALLOCATED))
+
+/*
+ * These store the endpoint transfer type for this ED in the status
+ * field.  (bits 27 and 28)
+ *   Bit 28:
+ *     0 = Periodic ED
+ *       Bit 27:
+ *         0 = Isochronous
+ *         1 = Interrupt
+ *     1 = Normal ED
+ *       Bit 27:
+ *         0 = Control
+ *         1 = Bulk
+ */
+#define HCD_ED_NORMAL	(1 << 28)  /* (2 << 27) */
+#define HCD_ED_ISOC     (0)
+#define HCD_ED_INT      (1 << 27)
+#define HCD_ED_CONTROL  (2 << 27)
+#define HCD_ED_BULK     (3 << 27)
+#define HCD_ED_MASK	(3 << 27)
+
+#define ohci_ed_hcdtype(ed)	(le32_to_cpup(&(ed)->status) & HCD_ED_MASK)
+#define ohci_ed_set_hcdtype(ed, t)	( (ed)->status = ((ed)->status & ~cpu_to_le32(HCD_ED_MASK)) | cpu_to_le32((t) & HCD_ED_MASK) )
+
 
 /*
  * The HCCA (Host Controller Communications Area) is a 256 byte
@@ -299,15 +325,6 @@ struct ohci_regs {
 	} roothub;
 } __attribute((aligned(32)));
 
-/*
- * These are used by internal ED managing functions as a
- * parameter to state the type of ED to deal with (when it matters).
- */
-#define HCD_ED_ISOC     (0)
-#define HCD_ED_INT      (1)
-#define HCD_ED_CONTROL  (2)
-#define HCD_ED_BULK     (3)
-
 /* 
  * Read a MMIO register and re-write it after ANDing with (m)
  */
@@ -368,12 +385,16 @@ struct ohci_regs {
 /*
  * Control register masks
  */
+#define OHCI_USB_RESUME		(1 << 6)
 #define OHCI_USB_OPER		(2 << 6)
 #define OHCI_USB_SUSPEND	(3 << 6)
 #define OHCI_USB_PLE		(1 << 2)  /* Periodic (interrupt) list enable */
 #define OHCI_USB_IE		(1 << 3)  /* Isochronous list enable */
 #define OHCI_USB_CLE		(1 << 4)  /* Control list enable */
 #define OHCI_USB_BLE		(1 << 5)  /* Bulk list enable */
+#define OHCI_USB_IR		(1 << 8)  /* Int. Routing, HCD ownership */
+#define OHCI_USB_RWC		(1 << 9)  /* Remote Wakeup Connected */
+#define OHCI_USB_RWE		(1 << 10) /* Remote Wakeup Enable */
 
 /*
  * Command status register masks

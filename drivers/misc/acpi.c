@@ -18,6 +18,11 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+/*
+ * See http://www.geocities.com/SiliconValley/Hardware/3165/
+ * for the user-level ACPI stuff
+ */
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/miscdevice.h>
@@ -252,6 +257,7 @@ static int __init acpi_map_tables(void)
  */
 static void acpi_unmap_tables(void)
 {
+	acpi_idle = NULL;
 	acpi_dsdt_addr = 0;
 	acpi_facp_addr = 0;
 	acpi_unmap_table((struct acpi_table *) acpi_facp);
@@ -355,6 +361,48 @@ static struct miscdevice acpi_device =
 	NULL
 };
 
+/* Make it impossible to enter L2/L3 until after we've initialized */
+static unsigned long acpi_p_lvl2_lat = ~0UL;
+static unsigned long acpi_p_lvl3_lat = ~0UL;
+
+/* Initialize to guaranteed harmless port read */
+static u16 acpi_p_lvl2 = 0x80;
+static u16 acpi_p_lvl3 = 0x80;
+
+static void acpi_idle_handler(void)
+{
+	unsigned long time;
+	static int sleep_level = 1;
+
+	time = inl(acpi_facp->pm_tmr);
+	switch (sleep_level) {
+	case 1:
+		__asm__ __volatile__("sti ; hlt": : :"memory");
+		break;
+	case 2:
+		inb(acpi_p_lvl2);
+		break;
+	case 3:
+		/* Disable PCI arbitration while sleeping, to avoid DMA corruption? */
+		if (acpi_facp->pm2_cnt) {
+			unsigned int port = acpi_facp->pm2_cnt;
+			outb(inb(port) | ACPI_ARB_DIS, port);
+			inb(acpi_p_lvl3);
+			outb(inb(port) & ~ACPI_ARB_DIS, port);
+			break;
+		}
+		inb(acpi_p_lvl3);
+	}
+	time = (inl(acpi_facp->pm_tmr) - time) & ACPI_TMR_MASK;
+
+	if (time > acpi_p_lvl3_lat)
+		sleep_level = 3;
+	else if (time > acpi_p_lvl2_lat)
+		sleep_level = 2;
+	else
+		sleep_level = 1;
+}
+
 /*
  * Initialize and enable ACPI
  */
@@ -376,6 +424,17 @@ static int __init acpi_init(void)
 	if (misc_register(&acpi_device)) {
 		printk(KERN_ERR "ACPI: misc. register failed\n");
 	}
+
+	/*
+	 * Set up the ACPI idle function. Note that we can't really
+	 * do this with multiple CPU's, we'd need a per-CPU ACPI
+	 * device..
+	 */
+#ifdef __SMP__
+	if (smp_num_cpus > 1)
+		return 0;
+#endif
+	acpi_idle = acpi_idle_handler;
 	return 0;
 }
 

@@ -641,36 +641,9 @@ a20_wait:
 	out	#0xf1,al
 	call	delay
 
-! well, that went ok, I hope. Now we have to reprogram the interrupts :-(
-! we put them right after the intel-reserved hardware interrupts, at
-! int 0x20-0x2F. There they won't mess up anything. Sadly IBM really
-! messed this up with the original PC, and they haven't been able to
-! rectify it afterwards. Thus the bios puts interrupts at 0x08-0x0f,
-! which is used for the internal hardware interrupts as well. We just
-! have to reprogram the 8259's, and it isn't fun.
+! well, that went ok, I hope. Now we mask all interrupts - the rest
+! is done in init_IRQ().
 
-	mov	al,#0x11		! initialization sequence
-	out	#0x20,al		! send it to 8259A-1
-	call	delay
-	out	#0xA0,al		! and to 8259A-2
-	call	delay
-	mov	al,#0x20		! start of hardware int's (0x20)
-	out	#0x21,al
-	call	delay
-	mov	al,#0x28		! start of hardware int's 2 (0x28)
-	out	#0xA1,al
-	call	delay
-	mov	al,#0x04		! 8259-1 is master
-	out	#0x21,al
-	call	delay
-	mov	al,#0x02		! 8259-2 is slave
-	out	#0xA1,al
-	call	delay
-	mov	al,#0x01		! 8086 mode for both
-	out	#0x21,al
-	call	delay
-	out	#0xA1,al
-	call	delay
 	mov	al,#0xFF		! mask off all interrupts for now
 	out	#0xA1,al
 	call	delay

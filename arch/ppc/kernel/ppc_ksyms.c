@@ -21,9 +21,9 @@
 #include <asm/bitops.h>
 #include <asm/checksum.h>
 #include <asm/pgtable.h>
-#include <asm/adb.h>
-#include <asm/cuda.h>
-#include <asm/pmu.h>
+#include <linux/adb.h>
+#include <linux/cuda.h>
+#include <linux/pmu.h>
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/pci-bridge.h>
@@ -31,6 +31,9 @@
 #include <asm/feature.h>
 #include <asm/dma.h>
 #include <asm/machdep.h>
+#ifdef __SMP__
+#include <asm/smplock.h>
+#endif /* __SMP__ */
 
 /* Tell string.h we don't want memcpy etc. as cpp defines */
 #define EXPORT_SYMTAB_STROPS
@@ -47,6 +50,8 @@ extern atomic_t ppc_n_lost_interrupts;
 extern void do_lost_interrupts(unsigned long);
 extern int do_signal(sigset_t *, struct pt_regs *);
 
+asmlinkage long long __ashrdi3(long long, int);
+asmlinkage long long __lshrdi3(long long, int);
 asmlinkage int abs(int);
 
 EXPORT_SYMBOL(clear_page);
@@ -67,15 +72,24 @@ EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(disable_irq_nosync);
 EXPORT_SYMBOL(ppc_local_irq_count);
 EXPORT_SYMBOL(ppc_local_bh_count);
+#ifdef __SMP__
+EXPORT_SYMBOL(kernel_flag);
+#endif /* __SMP__ */
 
+#ifndef CONFIG_8xx
 EXPORT_SYMBOL(isa_io_base);
 EXPORT_SYMBOL(isa_mem_base);
 EXPORT_SYMBOL(pci_dram_offset);
+#endif
 EXPORT_SYMBOL(ISA_DMA_THRESHOLD);
 EXPORT_SYMBOL(DMA_MODE_READ);
 EXPORT_SYMBOL(DMA_MODE_WRITE);
+#ifndef CONFIG_8xx
+#if defined(CONFIG_PREP) || defined(CONFIG_ALL_PPC)
 EXPORT_SYMBOL(_prep_type);
 EXPORT_SYMBOL(ucSystemType);
+#endif
+#endif
 
 EXPORT_SYMBOL(atomic_add);
 EXPORT_SYMBOL(atomic_sub);
@@ -175,20 +189,30 @@ EXPORT_SYMBOL(_write_lock);
 EXPORT_SYMBOL(_write_unlock);
 #endif
 
+#ifndef CONFIG_MACH_SPECIFIC
 EXPORT_SYMBOL(_machine);
+#endif
 EXPORT_SYMBOL(ppc_md);
 
+#ifdef CONFIG_ADB
+/*
+ * This could be more fine-grained, but for now assume if we have
+ * ADB we have it all -- Cort
+ */
 EXPORT_SYMBOL(adb_request);
 EXPORT_SYMBOL(adb_register);
 EXPORT_SYMBOL(cuda_request);
 EXPORT_SYMBOL(cuda_poll);
 EXPORT_SYMBOL(pmu_request);
 EXPORT_SYMBOL(pmu_poll);
+#endif /* CONFIG_ADB */
 #ifdef CONFIG_PMAC_PBOOK
-EXPORT_SYMBOL(sleep_notifier_list);
+EXPORT_SYMBOL(pmu_register_sleep_notifier);
+EXPORT_SYMBOL(pmu_unregister_sleep_notifier);
 EXPORT_SYMBOL(pmu_enable_irled);
 #endif CONFIG_PMAC_PBOOK
 EXPORT_SYMBOL(abort);
+#ifndef CONFIG_8xx
 EXPORT_SYMBOL(find_devices);
 EXPORT_SYMBOL(find_type_devices);
 EXPORT_SYMBOL(find_compatible_devices);
@@ -200,15 +224,18 @@ EXPORT_SYMBOL(pci_device_loc);
 EXPORT_SYMBOL(feature_set);
 EXPORT_SYMBOL(feature_clear);
 EXPORT_SYMBOL(feature_test);
+#endif
 #ifdef CONFIG_SCSI
 EXPORT_SYMBOL(note_scsi_host);
 #endif
 EXPORT_SYMBOL(kd_mksound);
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_NVRAM
 EXPORT_SYMBOL(nvram_read_byte);
 EXPORT_SYMBOL(nvram_write_byte);
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_NVRAM */
 
+EXPORT_SYMBOL_NOVERS(__ashrdi3);
+EXPORT_SYMBOL_NOVERS(__lshrdi3);
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memset);
 EXPORT_SYMBOL_NOVERS(memmove);
@@ -216,8 +243,17 @@ EXPORT_SYMBOL_NOVERS(memscan);
 EXPORT_SYMBOL_NOVERS(memcmp);
 
 EXPORT_SYMBOL(abs);
+#ifndef CONFIG_8xx
 EXPORT_SYMBOL(device_is_compatible);
+#endif
 
 #ifdef CONFIG_VT
 EXPORT_SYMBOL(screen_info);
 #endif
+
+EXPORT_SYMBOL(int_control);
+EXPORT_SYMBOL(timer_interrupt_intercept);
+EXPORT_SYMBOL(timer_interrupt);
+extern unsigned long do_IRQ_intercept;
+EXPORT_SYMBOL(do_IRQ_intercept);
+EXPORT_SYMBOL(irq_desc);

@@ -59,6 +59,9 @@ fi
 tristate 'ROM filesystem support' CONFIG_ROMFS_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
+if [ "$CONFIG_SYSV_FS" != "n" -a "$CONFIG_EXPERIMENTAL" ]; then
+  bool '   SYSV filesystem write support (DANGEROUS)' CONFIG_SYSV_FS_WRITE
+fi
 tristate 'UFS filesystem support' CONFIG_UFS_FS
 if [ "$CONFIG_UFS_FS" != "n" ]; then
   bool '   UFS filesystem write support (experimental)' CONFIG_UFS_FS_WRITE

@@ -424,6 +424,14 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 				goto done;
 		}
 
+		/* don't be too light against the d/i cache since
+		   shrink_mmap() almost never fail when there's
+		   really plenty of memory free. */
+		count -= shrink_dcache_memory(priority, gfp_mask);
+		count -= shrink_icache_memory(priority, gfp_mask);
+		if (count <= 0)
+			goto done;
+
 		/* Try to get rid of some shared memory pages.. */
 		if (gfp_mask & __GFP_IO) {
 			while (shm_swap(priority, gfp_mask)) {
@@ -437,8 +445,6 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 			if (!--count)
 				goto done;
 		}
-
-		shrink_dcache_memory(priority, gfp_mask);
 	} while (--priority >= 0);
 done:
 

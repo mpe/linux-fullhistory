@@ -89,11 +89,11 @@ MachineCheckException(struct pt_regs *regs)
 {
 	if ( !user_mode(regs) )
 	{
-#ifdef CONFIG_MBX
-		/* the mbx pci read routines can cause machine checks -- Cort */
+#if defined(CONFIG_8xx) && defined(CONFIG_PCI)
+		/* the qspan pci read routines can cause machine checks -- Cort */
 		bad_page_fault(regs,regs->dar);
 		return;
-#endif /* CONFIG_MBX */
+#endif
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
 		if (debugger_fault_handler) {
 			debugger_fault_handler(regs);
@@ -241,10 +241,14 @@ SoftwareEmulation(struct pt_regs *regs)
 		panic("Kernel Mode Software FPU Emulation");
 	}
 
+#ifdef CONFIG_MATH_EMULATION
 	if ((errcode = do_mathemu(regs))) {
+#else
+	if ((errcode = Soft_emulate_8xx(regs))) {
+#endif
 		if (errcode > 0)
 			_exception(SIGFPE, regs);
-		else if (errcode == -EFAULT;
+		else if (errcode == -EFAULT)
 			_exception(SIGSEGV, regs);
 		else
 			_exception(SIGILL, regs);

@@ -14,15 +14,30 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/sched.h>
+#include <linux/adb.h>
+#include <linux/cuda.h>
+#ifdef CONFIG_PPC
 #include <asm/prom.h>
-#include <asm/adb.h>
-#include <asm/cuda.h>
+#include <asm/machdep.h>
+#else
+#include <asm/macintosh.h>
+#include <asm/macints.h>
+#include <asm/machw.h>
+#include <asm/mac_via.h>
+#endif
 #include <asm/io.h>
-#include <asm/pgtable.h>
 #include <asm/system.h>
 #include <linux/init.h>
 
 static volatile unsigned char *via;
+
+#ifdef CONFIG_MAC
+#define CUDA_IRQ IRQ_MAC_ADB
+#define __openfirmware
+#define eieio()
+#else
+#define CUDA_IRQ vias->intrs[0].line
+#endif
 
 /* VIA registers - spaced 0x200 bytes apart */
 #define RS		0x200		/* skip between registers */
@@ -73,27 +88,38 @@ static unsigned char cuda_rbuf[16];
 static unsigned char *reply_ptr;
 static int reading_reply;
 static int data_index;
+#ifdef CONFIG_PPC
 static struct device_node *vias;
+#endif
 static int cuda_fully_inited = 0;
 
-static int init_via(void);
+static int cuda_probe(void);
+static int cuda_init(void);
+static int cuda_init_via(void);
 static void cuda_start(void);
-static void via_interrupt(int irq, void *arg, struct pt_regs *regs);
+static void cuda_interrupt(int irq, void *arg, struct pt_regs *regs);
 static void cuda_input(unsigned char *buf, int nb, struct pt_regs *regs);
-static int cuda_adb_send_request(struct adb_request *req, int sync);
+static int cuda_send_request(struct adb_request *req, int sync);
 static int cuda_adb_autopoll(int devs);
-static int cuda_adb_reset_bus(void);
-static int cuda_send_request(struct adb_request *req);
+void cuda_poll(void);
+static int cuda_reset_adb_bus(void);
+static int cuda_write(struct adb_request *req);
 
+int cuda_request(struct adb_request *req,
+		 void (*done)(struct adb_request *), int nbytes, ...);
 
-static struct adb_controller	cuda_controller = {
-	ADB_VIACUDA,
-	cuda_adb_send_request,
+struct adb_driver via_cuda_driver = {
+	"CUDA",
+	cuda_probe,
+	cuda_init,
+	cuda_send_request,
+	/*cuda_write,*/
 	cuda_adb_autopoll,
-	cuda_adb_reset_bus,
-	cuda_poll
+	cuda_poll,
+	cuda_reset_adb_bus
 };
 
+#ifdef CONFIG_PPC
 void
 find_via_cuda()
 {
@@ -106,7 +132,7 @@ find_via_cuda()
 #if 0
     { int i;
 
-    printk("via_cuda_init: node = %p, addrs =", vias->node);
+    printk("find_via_cuda: node = %p, addrs =", vias->node);
     for (i = 0; i < vias->n_addrs; ++i)
 	printk(" %x(%x)", vias->addrs[i].address, vias->addrs[i].size);
     printk(", intrs =");
@@ -124,31 +150,56 @@ find_via_cuda()
     via = (volatile unsigned char *) ioremap(vias->addrs->address, 0x2000);
 
     cuda_state = idle;
+    sys_ctrler = SYS_CTRLER_CUDA;
+}
+#endif /* CONFIG_PPC */
 
-    if (!init_via()) {
-	printk(KERN_ERR "init_via failed\n");
-	via = NULL;
-    }
-
-   adb_controller = &cuda_controller;
+static int
+cuda_probe()
+{
+#ifdef CONFIG_PPC
+    if (sys_ctrler != SYS_CTRLER_CUDA)
+	return -ENODEV;
+#else
+    if (macintosh_config->adb_type != MAC_ADB_CUDA)
+	return -ENODEV;
+    via = via1;
+#endif
+    return 0;
 }
 
-void
-via_cuda_init(void)
+static int
+cuda_init(void)
 {
-    if (via == NULL)
-	return;
+    int err;
 
-    if (request_irq(vias->intrs[0].line, via_interrupt, 0, "VIA", (void *)0)) {
-	printk(KERN_ERR "VIA: can't get irq %d\n", vias->intrs[0].line);
-	return;
+    if (via == NULL)
+	return -ENODEV;
+
+    err = cuda_init_via();
+    if (err) {
+	printk(KERN_ERR "cuda_probe: init_via() failed\n");
+	via = NULL;
+	return err;
     }
 
-    /* Clear and enable interrupts */
+    /* Clear and enable interrupts, but only on PPC. On 68K it's done  */
+    /* for us by the the main VIA driver in arch/m68k/mac/via.c        */
+
+#ifndef CONFIG_MAC
     via[IFR] = 0x7f; eieio();	/* clear interrupts by writing 1s */
     via[IER] = IER_SET|SR_INT; eieio();	/* enable interrupt from SR */
+#endif
+
+    if (request_irq(CUDA_IRQ, cuda_interrupt, 0, "ADB", cuda_interrupt)) {
+	printk(KERN_ERR "cuda_init: can't get irq %d\n", CUDA_IRQ);
+	return -EAGAIN;
+    }
+
+    printk("adb: CUDA driver v0.5 for Unified ADB.\n");
 
     cuda_fully_inited = 1;
+    return 0;
 }
 
 #define WAIT_FOR(cond, what)				\
@@ -156,14 +207,14 @@ via_cuda_init(void)
 	for (x = 1000; !(cond); --x) {			\
 	    if (x == 0) {				\
 		printk("Timeout waiting for " what);	\
-		return 0;				\
+		return -ENXIO;				\
 	    }						\
 	    udelay(100);					\
 	}						\
     } while (0)
 
 static int
-init_via()
+cuda_init_via()
 {
     int x;
 
@@ -172,7 +223,9 @@ init_via()
     via[ACR] = (via[ACR] & ~SR_CTRL) | SR_EXT;		/* SR data in */
     eieio();
     x = via[SR]; eieio();	/* clear any left-over data */
+#ifndef CONFIG_MAC
     via[IER] = 0x7f; eieio();	/* disable interrupts from VIA */
+#endif
     eieio();
 
     /* delay 4ms and then clear any pending interrupt */
@@ -198,12 +251,12 @@ init_via()
     x = via[SR]; eieio();
     via[B] |= TIP; eieio();	/* should be unnecessary */
 
-    return 1;
+    return 0;
 }
 
 /* Send an ADB command */
 static int
-cuda_adb_send_request(struct adb_request *req, int sync)
+cuda_send_request(struct adb_request *req, int sync)
 {
     int i;
 
@@ -214,7 +267,7 @@ cuda_adb_send_request(struct adb_request *req, int sync)
   
     req->reply_expected = 1;
 
-    i = cuda_send_request(req);
+    i = cuda_write(req);
     if (i)
 	return i;
 
@@ -243,7 +296,7 @@ cuda_adb_autopoll(int devs)
 
 /* Reset adb bus - how do we do this?? */
 static int
-cuda_adb_reset_bus(void)
+cuda_reset_adb_bus(void)
 {
     struct adb_request req;
 
@@ -276,11 +329,11 @@ cuda_request(struct adb_request *req, void (*done)(struct adb_request *),
 	req->data[i] = va_arg(list, int);
     va_end(list);
     req->reply_expected = 1;
-    return cuda_send_request(req);
+    return cuda_write(req);
 }
 
 static int
-cuda_send_request(struct adb_request *req)
+cuda_write(struct adb_request *req)
 {
     unsigned long flags;
 
@@ -336,17 +389,17 @@ cuda_start()
 void
 cuda_poll()
 {
-    int ie;
+    unsigned long flags;
 
-    __save_flags(ie);
-    __cli();
+    save_flags(flags);
+    cli();
     if (via[IFR] & SR_INT)
-	via_interrupt(0, 0, 0);
-    __restore_flags(ie);
+	cuda_interrupt(0, 0, 0);
+    restore_flags(flags);
 }
 
 static void
-via_interrupt(int irq, void *arg, struct pt_regs *regs)
+cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 {
     int x, status;
     struct adb_request *req;
@@ -355,7 +408,7 @@ via_interrupt(int irq, void *arg, struct pt_regs *regs)
 	return;
 
     status = (~via[B] & (TIP|TREQ)) | (via[ACR] & SR_OUT); eieio();
-    /* printk("via_interrupt: state=%d status=%x\n", cuda_state, status); */
+    /* printk("cuda_interrupt: state=%d status=%x\n", cuda_state, status); */
     switch (cuda_state) {
     case idle:
 	/* CUDA has sent us the first byte of data - unsolicited */
@@ -469,7 +522,7 @@ via_interrupt(int irq, void *arg, struct pt_regs *regs)
 	break;
 
     default:
-	printk("via_interrupt: unknown cuda_state %d?\n", cuda_state);
+	printk("cuda_interrupt: unknown cuda_state %d?\n", cuda_state);
     }
 }
 
@@ -489,10 +542,4 @@ cuda_input(unsigned char *buf, int nb, struct pt_regs *regs)
 	    printk(" %.2x", buf[i]);
 	printk("\n");
     }
-}
-
-int
-cuda_present(void)
-{
-	return (adb_controller && (adb_controller->kind == ADB_VIACUDA) && via);
 }

@@ -243,6 +243,15 @@ is386:	pushl %ecx		# restore original EFLAGS
 	xorl %eax,%eax
 	lldt %ax
 	cld			# gcc2 wants the direction flag cleared at all times
+#ifdef __SMP__
+	movb ready, %cl	
+	cmpb $1,%cl
+	je 1f			# the first CPU calls start_kernel
+				# all other CPUs call initialize_secondary
+	call SYMBOL_NAME(initialize_secondary)
+	jmp L6
+1:
+#endif
 	call SYMBOL_NAME(start_kernel)
 L6:
 	jmp L6			# main should never return here, but

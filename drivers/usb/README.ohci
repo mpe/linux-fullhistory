@@ -1,5 +1,17 @@
 [This is the readme for ohci.c, ohci-debug.c and ohci.h]
 
+September 05, 1999 17:03:21
+
+I haven't updated this file in a while.  I have started merging good
+ideas from the ohci-hcd driver into this code as well as simplifying
+the code where I can.  Isochronous transfers still need to be ported
+over from ohci-hcd.  Large control and bulk transfers should be
+working much better now.
+
+A big thanks goes to 3Com and APC for donating me a modem and UPS to
+test with!  They aren't working with OHCI quite yet but we hope to
+change that soon.
+
 June 23, 1999 00:31:20 PST
 
 I now have bulk support in a reasonably working state.  The only

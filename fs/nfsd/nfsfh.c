@@ -824,7 +824,7 @@ printk("lookup_by_inode: ino %ld not found in %s\n", ino, parent->d_name.name);
 printk("lookup_by_inode: found %s\n", dirent.name);
 #endif
 
-	dentry = lookup_dentry(dirent.name, dget(parent), 0);
+	dentry = lookup_dentry(dirent.name, parent, 0);
 	if (!IS_ERR(dentry)) {
 		if (dentry->d_inode && dentry->d_inode->i_ino == ino)
 			goto out;
@@ -1007,7 +1007,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 		/*
 		 * ... then search for the inode in the parent directory.
 		 */
-		dentry = lookup_by_inode(parent, u32_to_ino_t(fh->fh_ino));
+		dentry = lookup_by_inode(dget(parent), u32_to_ino_t(fh->fh_ino));
 		dput(parent);
 		if (dentry)
 			goto out;

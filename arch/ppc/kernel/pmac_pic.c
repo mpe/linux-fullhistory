@@ -102,7 +102,6 @@ struct hw_interrupt_type pmac_pic = {
         " PMAC-PIC ",
         NULL,
         NULL,
-        NULL,
         pmac_unmask_irq,
         pmac_mask_irq,
         pmac_mask_and_ack_irq,
@@ -111,7 +110,6 @@ struct hw_interrupt_type pmac_pic = {
 
 struct hw_interrupt_type gatwick_pic = {
 	" GATWICK  ",
-	NULL,
 	NULL,
 	NULL,
 	pmac_unmask_irq,
@@ -143,6 +141,7 @@ static void gatwick_action(int cpl, void *dev_id, struct pt_regs *regs)
 		ppc_irq_dispatch_handler( regs, irq );
 }
 
+#if 0
 void
 pmac_do_IRQ(struct pt_regs *regs,
 	    int            cpu,
@@ -155,19 +154,13 @@ pmac_do_IRQ(struct pt_regs *regs,
         /* IPI's are a hack on the powersurge -- Cort */
         if ( cpu != 0 )
         {
-                if (!isfake)
-                {
 #ifdef CONFIG_XMON
-                        static int xmon_2nd;
-                        if (xmon_2nd)
-                                xmon(regs);
+		static int xmon_2nd;
+		if (xmon_2nd)
+			xmon(regs);
 #endif
-                        smp_message_recv();
-                        goto out;
-                }
-                /* could be here due to a do_fake_interrupt call but we don't
-                   mess with the controller from the second cpu -- Cort */
-                goto out;
+		smp_message_recv();
+		return -1;
         }
 
         {
@@ -214,11 +207,65 @@ pmac_do_IRQ(struct pt_regs *regs,
 out:
 #endif /* CONFIG_SMP */
 }
+#endif
+
+int
+pmac_get_irq(struct pt_regs *regs)
+{
+	int irq;
+	unsigned long bits = 0;
+
+#ifdef __SMP__
+        /* IPI's are a hack on the powersurge -- Cort */
+        if ( smp_processor_id() != 0 )
+        {
+#ifdef CONFIG_XMON
+		static int xmon_2nd;
+		if (xmon_2nd)
+			xmon(regs);
+#endif
+		smp_message_recv();
+		return -1;
+        }
+
+        {
+                unsigned int loops = MAXCOUNT;
+                while (test_bit(0, &global_irq_lock)) {
+                        if (smp_processor_id() == global_irq_holder) {
+                                printk("uh oh, interrupt while we hold global irq lock!\n");
+#ifdef CONFIG_XMON
+                                xmon(0);
+#endif
+                                break;
+                        }
+                        if (loops-- == 0) {
+                                printk("do_IRQ waiting for irq lock (holder=%d)\n", global_irq_holder);
+#ifdef CONFIG_XMON
+                                xmon(0);
+#endif
+                        }
+                }
+        }
+#endif /* __SMP__ */
+
+        for (irq = max_real_irqs - 1; irq > 0; irq -= 32) {
+                int i = irq >> 5;
+                bits = ld_le32(&pmac_irq_hw[i]->flag)
+                        | ppc_lost_interrupts[i];
+                if (bits == 0)
+                        continue;
+                irq -= cntlzw(bits);
+                break;
+        }
+
+	return irq;
+}
 
 /* This routine will fix some missing interrupt values in the device tree
  * on the gatwick mac-io controller used by some PowerBooks
  */
-static void __init pmac_fix_gatwick_interrupts(struct device_node *gw, int irq_base)
+static void __init
+pmac_fix_gatwick_interrupts(struct device_node *gw, int irq_base)
 {
 	struct device_node *node;
 	int count;
@@ -362,3 +409,41 @@ pmac_pic_init(void)
 	request_irq(20, xmon_irq, 0, "NMI - XMON", 0);
 #endif	/* CONFIG_XMON */
 }
+
+#ifdef CONFIG_PMAC_PBOOK
+/*
+ * These procedures are used in implementing sleep on the powerbooks.
+ * sleep_save_intrs() saves the states of all interrupt enables
+ * and disables all interupts except for the nominated one.
+ * sleep_restore_intrs() restores the states of all interrupt enables.
+ */
+unsigned int sleep_save_mask[2];
+
+void
+sleep_save_intrs(int viaint)
+{
+	sleep_save_mask[0] = ppc_cached_irq_mask[0];
+	sleep_save_mask[1] = ppc_cached_irq_mask[1];
+	ppc_cached_irq_mask[0] = 0;
+	ppc_cached_irq_mask[1] = 0;
+	set_bit(viaint, ppc_cached_irq_mask);
+	out_le32(&pmac_irq_hw[0]->enable, ppc_cached_irq_mask[0]);
+	if (max_real_irqs > 32)
+		out_le32(&pmac_irq_hw[1]->enable, ppc_cached_irq_mask[1]);
+	mb();
+}
+
+void
+sleep_restore_intrs(void)
+{
+	int i;
+
+	out_le32(&pmac_irq_hw[0]->enable, 0);
+	if (max_real_irqs > 32)
+		out_le32(&pmac_irq_hw[1]->enable, 0);
+	mb();
+	for (i = 0; i < max_real_irqs; ++i)
+		if (test_bit(i, sleep_save_mask))
+			pmac_unmask_irq(i);
+}
+#endif /* CONFIG_PMAC_PBOOK */

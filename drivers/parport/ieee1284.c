@@ -161,15 +161,15 @@ static void parport_ieee1284_terminate (struct parport *port)
 		/* Terminate from EPP mode. */
 
 		/* Event 68: Set nInit low */
-		parport_frob_control (port,
-				      PARPORT_CONTROL_INIT,
-				      PARPORT_CONTROL_INIT);
+		parport_frob_control (port, PARPORT_CONTROL_INIT, 0);
 		udelay (50);
 
 		/* Event 69: Set nInit high, nSelectIn low */
 		parport_frob_control (port,
-				      PARPORT_CONTROL_SELECT,
-				      PARPORT_CONTROL_SELECT);
+				      PARPORT_CONTROL_SELECT
+				      | PARPORT_CONTROL_INIT,
+				      PARPORT_CONTROL_SELECT
+				      | PARPORT_CONTROL_INIT);
 		break;
 		
 	default:

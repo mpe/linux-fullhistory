@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.183 1999/09/05 19:29:44 cort Exp $
+ *  $Id: init.c,v 1.188 1999/09/18 18:40:44 dmalek Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -47,7 +47,7 @@
 #include <asm/residual.h>
 #include <asm/uaccess.h>
 #include <asm/8xx_immap.h>
-#include <asm/mbx.h>
+#include <asm/mpc8xx.h>
 #include <asm/smp.h>
 #include <asm/bootx.h>
 #include <asm/machdep.h>
@@ -73,7 +73,7 @@ unsigned long ioremap_base;
 unsigned long ioremap_bot;
 unsigned long avail_start;
 extern int num_memory;
-extern struct mem_info memory[NUM_MEMINFO];
+extern struct mem_info memory[];
 extern boot_infos_t *boot_infos;
 #ifndef __SMP__
 struct pgtable_cache_struct quicklists;
@@ -86,9 +86,9 @@ unsigned long *pmac_find_end_of_memory(void);
 unsigned long *apus_find_end_of_memory(void);
 unsigned long *gemini_find_end_of_memory(void);
 extern unsigned long *find_end_of_memory(void);
-#ifdef CONFIG_MBX
-unsigned long *mbx_find_end_of_memory(void);
-#endif /* CONFIG_MBX */
+#ifdef CONFIG_8xx
+unsigned long *m8xx_find_end_of_memory(void);
+#endif /* CONFIG_8xx */
 static void mapin_ram(void);
 void map_page(unsigned long va, unsigned long pa, int flags);
 extern void die_if_kernel(char *,struct pt_regs *,long);
@@ -997,9 +997,6 @@ void __init free_initmem(void)
  */
 void __init MMU_init(void)
 {
-#ifdef __SMP__
-	if ( first_cpu_booted ) return;
-#endif /* __SMP__ */
 	if ( ppc_md.progress ) ppc_md.progress("MMU:enter", 0x111);
 #ifndef CONFIG_8xx
 	if (have_of)
@@ -1054,9 +1051,6 @@ void __init MMU_init(void)
 		setbat(0, 0xfff00000, 0xfff00000, 0x00020000, RAM_PAGE);
 		/* Map chip and ZorroII memory */
 		setbat(1, zTwoBase,   0x00000000, 0x01000000, IO_PAGE);
-		/* Note: a temporary hack in arch/ppc/amiga/setup.c
-		   (kernel_map) remaps individual IO regions to
-		   0x90000000. */
 		break;
 	case _MACH_gemini:
 		setbat(0, 0xf0000000, 0xf0000000, 0x10000000, IO_PAGE);
@@ -1065,9 +1059,9 @@ void __init MMU_init(void)
 	}
 	ioremap_bot = ioremap_base;
 #else /* CONFIG_8xx */
-#ifdef CONFIG_MBX
-	end_of_DRAM = mbx_find_end_of_memory();
-#endif /* CONFIG_MBX */
+
+	end_of_DRAM = m8xx_find_end_of_memory();
+
         /* Map in all of RAM starting at KERNELBASE */
         mapin_ram();
 
@@ -1076,13 +1070,25 @@ void __init MMU_init(void)
          * All of this fits into the same 4Mbyte region, so it only
          * requires one page table page.
          */
+        ioremap(IMAP_ADDR, IMAP_SIZE);
+#ifdef CONFIG_MBX
         ioremap(NVRAM_ADDR, NVRAM_SIZE);
         ioremap(MBX_CSR_ADDR, MBX_CSR_SIZE);
-        ioremap(IMAP_ADDR, IMAP_SIZE);
         ioremap(PCI_CSR_ADDR, PCI_CSR_SIZE);
-	/* ide needs to be able to get at PCI space -- Cort */
-        ioremap(0x80000000, 0x4000);
-        ioremap(0x81000000, 0x4000);
+
+	/* Map some of the PCI/ISA I/O space to get the IDE interface.
+	*/
+        ioremap(PCI_ISA_IO_ADDR, 0x4000);
+        ioremap(PCI_IDE_ADDR, 0x4000);
+#endif
+#ifdef CONFIG_RPXLITE
+	ioremap(RPX_CSR_ADDR, RPX_CSR_SIZE);
+	ioremap(HIOX_CSR_ADDR, HIOX_CSR_SIZE);
+#endif
+#ifdef CONFIG_RPXCLASSIC
+        ioremap(PCI_CSR_ADDR, PCI_CSR_SIZE);
+	ioremap(RPX_CSR_ADDR, RPX_CSR_SIZE);
+#endif
 #endif /* CONFIG_8xx */
 	if ( ppc_md.progress ) ppc_md.progress("MMU:exit", 0x211);
 }
@@ -1231,55 +1237,8 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 	mem_init_done = 1;
 }
 
-#ifdef CONFIG_MBX
-/*
- * This is a big hack right now, but it may turn into something real
- * someday.
- *
- * For the MBX860 (at this time anyway), there is nothing to initialize
- * associated the PROM.  Rather than include all of the prom.c
- * functions in the image just to get prom_init, all we really need right
- * now is the initialization of the physical memory region.
- */
-unsigned long __init *mbx_find_end_of_memory(void)
-{
-	unsigned long kstart, ksize;
-	bd_t	*binfo;
-	volatile memctl8xx_t	*mcp;
-	unsigned long *ret;
-	
-	binfo = (bd_t *)res;
-
-	/*
-	 * The MBX does weird things with the mmaps for ram.
-	 * If there's no DIMM, it puts the onboard DRAM at
-	 * 0, if there is a DIMM it sticks it at 0 and puts
-	 * the DRAM at the end of the DIMM.
-	 *
-	 * In fact, it might be the best idea to just read the DRAM
-	 * config registers and set the mem areas accordingly.
-	 */
-	mcp = (memctl8xx_t *)(&(((immap_t *)IMAP_ADDR)->im_memctl));
-	append_mem_piece(&phys_mem, 0, binfo->bi_memsize);
-#if 0
-	phys_mem.regions[0].address = 0;
-	phys_mem.regions[0].size = binfo->bi_memsize;	
-	phys_mem.n_regions = 1;
-#endif	
-	
-	ret = __va(phys_mem.regions[0].address+
-		   phys_mem.regions[0].size);
-
-	phys_avail = phys_mem;
-
-	kstart = __pa(_stext);	/* should be 0 */
-	ksize = PAGE_ALIGN(_end - _stext);
-	remove_mem_piece(&phys_avail, kstart, ksize, 0);
-	return ret;
-}
-#endif /* CONFIG_MBX */
-
 #ifndef CONFIG_8xx
+#if defined(CONFIG_PMAC) || defined(CONFIG_PPC_ALL)
 /*
  * On systems with Open Firmware, collect information about
  * physical RAM and which pieces are already in use.
@@ -1372,7 +1331,9 @@ unsigned long __init *pmac_find_end_of_memory(void)
 #undef RAM_LIMIT
 	return __va(total);
 }
+#endif /* defined(CONFIG_PMAC) || defined(CONFIG_PPC_ALL) */
 
+#if defined(CONFIG_PREP) || defined(CONFIG_PPC_ALL)
 /*
  * This finds the amount of physical ram and does necessary
  * setup for prep.  This is pretty architecture specific so
@@ -1404,7 +1365,10 @@ unsigned long __init *prep_find_end_of_memory(void)
 
 	return (__va(total));
 }
+#endif /* defined(CONFIG_PREP) || defined(CONFIG_PPC_ALL) */
 
+
+#if defined(CONFIG_GEMINI) || defined(CONFIG_PPC_ALL)
 unsigned long __init *gemini_find_end_of_memory(void)
 {
 	unsigned long total, kstart, ksize, *ret;
@@ -1425,6 +1389,7 @@ unsigned long __init *gemini_find_end_of_memory(void)
 	remove_mem_piece( &phys_avail, kstart, ksize, 0 );
 	return ret;
 }
+#endif /* defined(CONFIG_GEMINI) || defined(CONFIG_PPC_ALL) */
 
 #ifdef CONFIG_APUS
 #define HARDWARE_MAPPED_SIZE (512*1024)
@@ -1601,5 +1566,38 @@ static void __init hash_init(void)
 				   (unsigned long) &hash_page[1]);
 	}
 	if ( ppc_md.progress ) ppc_md.progress("hash:done", 0x205);
+}
+#else /* CONFIG_8xx */
+/*
+ * This is a big hack right now, but it may turn into something real
+ * someday.
+ *
+ * For the 8xx boards (at this time anyway), there is nothing to initialize
+ * associated the PROM.  Rather than include all of the prom.c
+ * functions in the image just to get prom_init, all we really need right
+ * now is the initialization of the physical memory region.
+ */
+unsigned long __init *m8xx_find_end_of_memory(void)
+{
+	unsigned long kstart, ksize;
+	bd_t	*binfo;
+	unsigned long *ret;
+	extern unsigned char __res[];
+	
+	binfo = (bd_t *)__res;
+
+	phys_mem.regions[0].address = 0;
+	phys_mem.regions[0].size = binfo->bi_memsize;	
+	phys_mem.n_regions = 1;
+	
+	ret = __va(phys_mem.regions[0].address+
+		   phys_mem.regions[0].size);
+
+	phys_avail = phys_mem;
+
+	kstart = __pa(_stext);	/* should be 0 */
+	ksize = PAGE_ALIGN(_end - _stext);
+	remove_mem_piece(&phys_avail, kstart, ksize, 0);
+	return ret;
 }
 #endif /* ndef CONFIG_8xx */

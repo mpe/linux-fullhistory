@@ -39,9 +39,10 @@ typedef struct bd_info {
  * NVRAM, Status/Control registers, CPM Dual Port RAM, and the PCI
  * Bridge CSRs 1:1 into the kernel address space.
  */
-#define PCI_ISA_IO_ADDR		((uint)0x80000000)
+#define PCI_ISA_IO_ADDR		((unsigned)0x80000000)
 #define PCI_ISA_IO_SIZE		((uint)(512 * 1024 * 1024))
-#define PCI_ISA_MEM_ADDR	((uint)0xc0000000)
+#define PCI_IDE_ADDR		((unsigned)0x81000000)
+#define PCI_ISA_MEM_ADDR	((unsigned)0xc0000000)
 #define PCI_ISA_MEM_SIZE	((uint)(512 * 1024 * 1024))
 #define PCMCIA_MEM_ADDR		((uint)0xe0000000)
 #define PCMCIA_MEM_SIZE		((uint)(64 * 1024 * 1024))
@@ -59,4 +60,29 @@ typedef struct bd_info {
 #define IMAP_SIZE		((uint)(64 * 1024))
 #define PCI_CSR_ADDR		((uint)0xfa210000)
 #define PCI_CSR_SIZE		((uint)(64 * 1024))
+
+/* Map additional physical space into well known virtual addresses.  Due
+ * to virtual address mapping, these physical addresses are not accessible
+ * in a 1:1 virtual to physical mapping.
+ */
+#define ISA_IO_VIRT_ADDR	((uint)0xfa220000)
+#define ISA_IO_VIRT_SIZE	((uint)64 * 1024)
+
+/* Interrupt assignments.
+ * These are defined (and fixed) by the MBX hardware implementation.
+ */
+#define POWER_FAIL_INT	SIU_IRQ0	/* Power fail */
+#define TEMP_HILO_INT	SIU_IRQ1	/* Temperature sensor */
+#define QSPAN_INT	SIU_IRQ2	/* PCI Bridge (DMA CTLR?) */
+#define ISA_BRIDGE_INT	SIU_IRQ3	/* All those PC things */
+#define COMM_L_INT	SIU_IRQ6	/* MBX Comm expansion connector pin */
+#define STOP_ABRT_INT	SIU_IRQ7	/* Stop/Abort header pin */
+
+/* The MBX uses the 8259.
+*/
+#define NR_8259_INTS	16
+
+/* Generic 8xx type
+*/
+#define _MACH_8xx (_MACH_mbx)
 #endif

@@ -45,17 +45,34 @@ _GLOBAL(reloc_offset)
 	mtlr	r0
 	blr
 
-_GLOBAL(__cli)
+/* void __no_use_save_flags(unsigned long *flags) */
+_GLOBAL(__no_use_save_flags)
+	mfmsr	r4
+	stw	r4,0(r3)
+	blr
+
+/* void __no_use_restore_flags(unsigned long flags) */	
+_GLOBAL(__no_use_restore_flags)
+	andi.	r4,r3,MSR_EE
+	bne	10f
+	lis	r4,ppc_n_lost_interrupts@ha
+	lwz	r4,ppc_n_lost_interrupts@l(r4)
+	cmpi	0,r4,0		/* lost interrupts to process first? */
+	bne-	do_lost_interrupts
+10:	sync
+	mtmsr	r3
+	isync
+	blr
+	
+_GLOBAL(__no_use_cli)
 	mfmsr	r0		/* Get current interrupt state */
 	rlwinm	r3,r0,16+1,32-1,31	/* Extract old value of 'EE' */
-	li	r4,0		/* Need [unsigned] value of MSR_EE */
-	ori	r4,r4,MSR_EE	/* Set to turn off bit */
-	andc	r0,r0,r4	/* Clears bit in (r4) */
+	rlwinm	r0,r0,0,17,15	/* clear MSR_EE in r0 */
 	sync			/* Some chip revs have problems here... */
 	mtmsr	r0		/* Update machine state */
 	blr			/* Done */
 
-_GLOBAL(__sti)
+_GLOBAL(__no_use_sti)
 	lis	r4,ppc_n_lost_interrupts@ha
 	lwz	r4,ppc_n_lost_interrupts@l(r4)
 	mfmsr	r3		/* Get current state */
@@ -472,6 +489,7 @@ _GLOBAL(_outsl_ns)
  *
  *  ashrdi3:     XXXYYY/ZZZAAA -> SSSXXX/YYYZZZ
  *  ashldi3:     XXXYYY/ZZZAAA -> YYYZZZ/AAA000
+ *  lshrdi3:     XXXYYY/ZZZAAA -> 000XXX/YYYZZZ
  */
 _GLOBAL(__ashrdi3)
 	li	r6,32
@@ -481,7 +499,7 @@ _GLOBAL(__ashrdi3)
 	or	r4,r4,r7	/* YYYZZZ */
 	sraw	r3,r3,r5	/* SSSXXX */
 	blr
-	
+
 _GLOBAL(__ashldi3)
 	li	r6,32
 	sub	r6,r6,r5
@@ -489,6 +507,15 @@ _GLOBAL(__ashldi3)
 	slw	r4,r4,r5	/* AAA000 */
 	slw	r3,r3,r5	/* YYY--- */
 	or	r3,r3,r7	/* YYYZZZ */
+	blr
+
+_GLOBAL(__lshrdi3)
+	li	r6,32
+	sub	r6,r6,r5
+	slw	r7,r3,r6        /* isolate YYY */
+	srw	r4,r4,r5        /* isolate ZZZ */
+	or	r4,r4,r7        /* YYYZZZ */
+	srw	r3,r3,r5        /* 000XXX */
 	blr
 
 _GLOBAL(abs)
@@ -553,36 +580,42 @@ _GLOBAL(_get_PVR)
 	Author:	Terry Greeniaus (tgree@phys.ualberta.ca)
 	Please e-mail updates to this file to me, thanks!
 */
+/* Usage:
+	
+	When setting the L2CR register, you must do a few special
+	things.  If you are enabling the cache, you must perform a
+	global invalidate.  If you are disabling the cache, you must
+	flush the cache contents first.  This routine takes care of
+	doing these things.  When first enabling the cache, make sure
+	you pass in the L2CR you want, as well as passing in the
+	global invalidate bit set.  A global invalidate will only be
+	performed if the L2I bit is set in applyThis.  When enabling
+	the cache, you should also set the L2E bit in applyThis.  If
+	you want to modify the L2CR contents after the cache has been
+	enabled, the recommended procedure is to first call
+	__setL2CR(0) to disable the cache and then call it again with
+	the new values for L2CR.  Examples:
+
+	_setL2CR(0)		- disables the cache
+	_setL2CR(0xB3A04000)	- enables my G3 upgrade card:
+				- L2E set to turn on the cache
+				- L2SIZ set to 1MB
+				- L2CLK set to 1:1
+				- L2RAM set to pipelined synchronous late-write
+				- L2I set to perform a global invalidation
+				- L2OH set to 0.5 nS
+				- L2DF set because this upgrade card
+				  requires it
+
+	A similar call should work for your card.  You need to know
+	the correct setting for your card and then place them in the
+	fields I have outlined above.  Other fields support optional
+	features, such as L2DO which caches only data, or L2TS which
+	causes cache pushes from the L1 cache to go to the L2 cache
+	instead of to main memory.
+*/
 
 _GLOBAL(_set_L2CR)
-	/* Usage:
-	
-		When setting the L2CR register, you must do a few special things.  If you are enabling the
-		cache, you must perform a global invalidate.  If you are disabling the cache, you must
-		flush the cache contents first.  This routine takes care of doing these things.  When first
-		enabling the cache, make sure you pass in the L2CR you want, as well as passing in the
-		global invalidate bit set.  A global invalidate will only be performed if the L2I bit is set
-		in applyThis.  When enabling the cache, you should also set the L2E bit in applyThis.  If you
-		want to modify the L2CR contents after the cache has been enabled, the recommended
-		procedure is to first call __setL2CR(0) to disable the cache and then call it again with
-		the new values for L2CR.  Examples:
-	
-			_setL2CR(0)			-	disables the cache
-			_setL2CR(0xB3A04000)		-	enables my G3 upgrade card:
-							-	L2E set to turn on the cache
-							-	L2SIZ set to 1MB
-							-	L2CLK set to 1:1
-							-	L2RAM set to pipelined syncronous late-write
-							-	L2I set to perform a global invalidation
-							-	L2OH set to 0.5 nS
-							-	L2DF set because this upgrade card requires it
-	
-		A similar call should work for your card.  You need to know the correct setting for your
-		card and then place them in the fields I have outlined above.  Other fields support optional
-		features, such as L2DO which caches only data, or L2TS which causes cache pushes from
-		the L1 cache to go to the L2 cache instead of to main memory.
-	*/
-	
 	/* Make sure this is a 750 chip */
 	mfspr	r4,PVR
 	rlwinm	r4,r4,16,16,31
@@ -594,76 +627,74 @@ _GLOBAL(_set_L2CR)
 thisIs750:
 	/* Get the current enable bit of the L2CR into r4 */
 	mfspr	r4,L2CR
-	rlwinm	r4,r4,0,0,0
+	mfmsr	r7
 	
 	/* See if we want to perform a global inval this time. */
-	rlwinm	r6,r3,0,10,10		/* r6 contains the new invalidate bit */
-	rlwinm.	r5,r3,0,0,0		/* r5 contains the new enable bit */
-	rlwinm	r3,r3,0,11,9		/* Turn off the invalidate bit */
-	rlwinm	r3,r3,0,1,31		/* Turn off the enable bit */
-	or	r3,r3,r4		/* Keep the enable bit the same as it was for now. */
-	bne	dontDisableCache	/* Only disable the cache if L2CRApply has the enable bit off */
+	rlwinm	r6,r3,0,10,10	/* r6 contains the new invalidate bit */
+	rlwinm.	r5,r3,0,0,0	/* r5 contains the new enable bit */
+	rlwinm	r3,r3,0,11,9	/* Turn off the invalidate bit */
+	rlwimi	r3,r4,0,0,0	/* Keep the enable bit the same as it was. */
+	bne	dontDisableCache /* Only disable the cache if L2CRApply
+				    has the enable bit off */
 
 disableCache:
-	/* Disable the cache.  First, we turn off data relocation. */
-	mfmsr	r7
-	rlwinm	r4,r7,0,28,26		/* Turn off DR bit */
-	rlwinm	r4,r4,0,17,15		/* Turn off EE bit - an external exception while we are flushing
-					   the cache is fatal (comment this line and see!) */
+	/* Disable the cache.  First, we turn off interrupts.
+	   An interrupt while we are flushing the cache could bring
+	   in data which may not get properly flushed. */
+	rlwinm	r4,r7,0,17,15	/* Turn off EE bit */
 	sync
 	mtmsr	r4
 	sync
 	
-	/*
-		Now, read the first 2MB of memory to put new data in the cache.
-		(Actually we only need the size of the L2 cache plus
-		the size of the L1 cache, but 2MB will cover everything just to be safe).
-	*/
+/*
+	Now, read the first 2MB of memory to put new data in the cache.
+	(Actually we only need the size of the L2 cache plus the size
+	of the L1 cache, but 2MB will cover everything just to be safe).
+*/
 	lis	r4,0x0001
 	mtctr	r4
-	li	r4,0
-loadLoop:
-	lwzx	r0,r0,r4
+	lis	r4,KERNELBASE@h
+1:	lwzx	r0,r0,r4
 	addi	r4,r4,0x0020		/* Go to start of next cache line */
-	bdnz	loadLoop
+	bdnz	1b
 	
 	/* Now, flush the first 2MB of memory */
 	lis	r4,0x0001
 	mtctr	r4
-	li	r4,0
+	lis	r4,KERNELBASE@h
 	sync
-flushLoop:
-	dcbf	r0,r4
+2:	dcbf	r0,r4
 	addi	r4,r4,0x0020	/* Go to start of next cache line */
-	bdnz	flushLoop
+	bdnz	2b
 	
 	/* Turn off the L2CR enable bit. */
 	rlwinm	r3,r3,0,1,31
-	
-	/* Reenable data relocation. */
-	sync
-	mtmsr	r7
-	sync
 	
 dontDisableCache:
 	/* Set up the L2CR configuration bits */
 	sync
 	mtspr	L2CR,r3
 	sync
+
+	/* Reenable interrupts if necessary. */
+	mtmsr	r7
+	sync
+	
 	cmplwi	r6,0
 	beq	noInval
 	
 	/* Perform a global invalidation */
 	oris	r3,r3,0x0020
 	sync
-	mtspr	1017,r3
+	mtspr	L2CR,r3
 	sync
-invalCompleteLoop:			/* Wait for the invalidation to complete */
-	mfspr	r3,1017
+
+	/* Wait for the invalidation to complete */
+3:	mfspr	r3,L2CR
 	rlwinm.	r4,r3,0,31,31
-	bne	invalCompleteLoop
+	bne	3b
 	
-	rlwinm	r3,r3,0,11,9;		/* Turn off the L2I bit */
+	rlwinm	r3,r3,0,11,9		/* Turn off the L2I bit */
 	sync
 	mtspr	L2CR,r3
 	sync
@@ -672,8 +703,7 @@ noInval:
 	/* See if we need to enable the cache */
 	cmplwi	r5,0
 	beqlr
-	
-enableCache:
+
 	/* Enable the cache */
 	oris	r3,r3,0x8000
 	mtspr	L2CR,r3
@@ -967,7 +997,7 @@ sys_call_table:
 	.long sys_getresuid	/* 165 */
 	.long sys_query_module
 	.long sys_poll
-#ifdef CONFIG_NFSD	
+#ifdef CONFIG_NFSD
 	.long sys_nfsservctl
 #else
 	.long sys_ni_syscall

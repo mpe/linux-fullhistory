@@ -38,13 +38,7 @@
 #include <linux/delay.h>
 #include <asm/uaccess.h>
 #include <asm/8xx_immap.h>
-
-#ifdef CONFIG_MBX
-#include <asm/mbx.h>
-#endif
-#ifdef CONFIG_FADS
-#include <asm/fads.h>
-#endif
+#include <asm/mpc8xx.h>
 #include "commproc.h"
 
 #ifdef CONFIG_SERIAL_CONSOLE
@@ -101,18 +95,40 @@ static int serial_console_setup(struct console *co, char *options);
  * The SMCs do not support any modem control signals.
  */
 #define smc_scc_num	hub6
-#define SCC_NUM_BASE	2
 
-/* The index into the CPM registers for the first SCC in the table.
+/* SMC2 is sometimes used for low performance TDM interfaces.  Define
+ * this as 1 if you want SMC2 as a serial port UART managed by this driver.
+ * Define this as 0 if you wish to use SMC2 for something else.
+ */
+#define USE_SMC2 1
+
+/* Define SCC to ttySx mapping.
 */
-#define SCC_IDX_BASE	1
+#define SCC_NUM_BASE	(USE_SMC2 + 1)	/* SCC base tty "number" */
 
+/* Define which SCC is the first one to use for a serial port.  These
+ * are 0-based numbers, i.e. this assumes the first SCC (SCC1) is used
+ * for Ethernet, and the first available SCC for serial UART is SCC2.
+ * NOTE:  IF YOU CHANGE THIS, you have to change the PROFF_xxx and
+ * interrupt vectors in the table below to match.
+ */
+#define SCC_IDX_BASE	1	/* table index */
+
+/* Processors other than the 860 only get SMCs configured by default.
+ * Either they don't have SCCs or they are allocated somewhere else.
+ * Of course, there are now 860s without some SCCs, so we will need to
+ * address that someday.
+ */
 static struct serial_state rs_table[] = {
 	/* UART CLK   PORT          IRQ      FLAGS  NUM   */
 	{ 0,     0, PROFF_SMC1, CPMVEC_SMC1,   0,    0 },    /* SMC1 ttyS0 */
-	{ 0,     0, PROFF_SMC2, CPMVEC_SMC2,   0,    1 },    /* SMC1 ttyS0 */
-	{ 0,     0, PROFF_SCC2, CPMVEC_SCC2,   0,    2 },    /* SCC2 ttyS2 */
-	{ 0,     0, PROFF_SCC3, CPMVEC_SCC3,   0,    3 },    /* SCC3 ttyS3 */
+#if USE_SMC2
+	{ 0,     0, PROFF_SMC2, CPMVEC_SMC2,   0,    1 },    /* SMC2 ttyS1 */
+#endif
+#if defined(CONFIG_MPC860) || defined(CONFIG_MPC860T)
+	{ 0,     0, PROFF_SCC2, CPMVEC_SCC2,   0, SCC_NUM_BASE},    /* SCC2 ttyS2 */
+	{ 0,     0, PROFF_SCC3, CPMVEC_SCC3,   0, SCC_NUM_BASE + 1},    /* SCC3 ttyS3 */
+#endif
 };
 
 #define NR_PORTS	(sizeof(rs_table)/sizeof(struct serial_state))
@@ -820,15 +836,10 @@ static void change_speed(ser_info_t *info)
 
 	/* Determine divisor based on baud rate */
 	i = cflag & CBAUD;
-	if (i & CBAUDEX) {
-		i &= ~CBAUDEX;
-		if (i < 1 || i > 4) 
-			info->tty->termios->c_cflag &= ~CBAUDEX;
-		else
-			i += 15;
-	}
-
-	baud_rate = baud_table[i];
+	if (i >= (sizeof(baud_table)/sizeof(int)))
+		baud_rate = 9600;
+	else
+		baud_rate = baud_table[i];
 
 	info->timeout = (TX_BUF_SIZE*HZ*bits);
 	info->timeout += HZ/50;		/* Add .02 seconds of slop */
@@ -1692,7 +1703,7 @@ static void rs_8xx_wait_until_sent(struct tty_struct *tty, int timeout)
 		schedule_timeout(char_time);
 		if (signal_pending(current))
 			break;
-		if (timeout && time_after(jiffies, orig_jiffies + timeout))
+		if (timeout && ((orig_jiffies + timeout) < jiffies))
 			break;
 		bdp = info->tx_cur;
 	} while (bdp->cbd_sc & BD_SC_READY);
@@ -2251,6 +2262,13 @@ long __init console_8xx_init(long kmem_start, long kmem_end)
 
 #endif
 
+/* This will be used for all boards when the MBX board information
+ * is modified to include a default baud rate.
+ */
+#ifndef CONFIG_MBX
+static	int	baud_idx;
+#endif
+
 /*
  * The serial driver boot-time initialization code!
  */
@@ -2291,7 +2309,11 @@ int __init rs_8xx_init(void)
 	serial_driver.subtype = SERIAL_TYPE_NORMAL;
 	serial_driver.init_termios = tty_std_termios;
 	serial_driver.init_termios.c_cflag =
+#ifndef CONFIG_MBX
+		baud_idx | CS8 | CREAD | HUPCL | CLOCAL;
+#else
 		B9600 | CS8 | CREAD | HUPCL | CLOCAL;
+#endif
 	serial_driver.flags = TTY_DRIVER_REAL_RAW;
 	serial_driver.refcount = &serial_refcount;
 	serial_driver.table = serial_table;
@@ -2337,12 +2359,21 @@ int __init rs_8xx_init(void)
 
 	/* Configure SMCs Tx/Rx instead of port B parallel I/O.
 	*/
+#if USE_SMC2
 	cp->cp_pbpar |= 0x00000cc0;
 	cp->cp_pbdir &= ~0x00000cc0;
 	cp->cp_pbodr &= ~0x00000cc0;
+#else
+	/* This will only enable SMC1 if you want SMC2 for something else.
+	*/
+	cp->cp_pbpar |= 0x000000c0;
+	cp->cp_pbdir &= ~0x000000c0;
+	cp->cp_pbodr &= ~0x000000c0;
+#endif
 
 	/* Configure SCC2 and SCC3 instead of port A parallel I/O.
 	 */
+#if defined(CONFIG_MPC860) || defined(CONFIG_MPC860T)
 #ifndef CONFIG_MBX
 	/* The "standard" configuration through the 860.
 	*/
@@ -2366,15 +2397,16 @@ int __init rs_8xx_init(void)
 	immap->im_ioport.iop_pcdir |= 0x03c6;
 	immap->im_ioport.iop_pcpar &= ~0x03c6;
 
-	/* Wire BRG1 to SMC1 and BRG2 to SMC2.
-	*/
-	cp->cp_simode = 0x10000000;
-
 	/* Connect SCC2 and SCC3 to NMSI.  Connect BRG3 to SCC2 and
 	 * BRG4 to SCC3.
 	 */
 	cp->cp_sicr &= ~0x00ffff00;
 	cp->cp_sicr |= 0x001b1200;
+#endif
+
+	/* Wire BRG1 to SMC1 and BRG2 to SMC2.
+	*/
+	cp->cp_simode = 0x10000000;
 
 	for (i = 0, state = rs_table; i < NR_PORTS; i++,state++) {
 		state->magic = SSTATE_MAGIC;
@@ -2580,7 +2612,12 @@ int __init rs_8xx_init(void)
 
 			/* Set up the baud rate generator.
 			*/
+#ifndef CONFIG_MBX
+			m8xx_cpm_setbrg(state->smc_scc_num,
+							baud_table[baud_idx]);
+#else
 			m8xx_cpm_setbrg(state->smc_scc_num, 9600);
+#endif
 
 			/* If the port is the console, enable Rx and Tx.
 			*/
@@ -2599,12 +2636,26 @@ int __init rs_8xx_init(void)
 static int __init serial_console_setup(struct console *co, char *options)
 {
 	struct		serial_state *ser;
-	uint		mem_addr, dp_addr;
+	uint		mem_addr, dp_addr, bidx;
 	volatile	cbd_t		*bdp;
 	volatile	cpm8xx_t	*cp;
 	volatile	smc_t		*sp;
 	volatile	smc_uart_t	*up;
+
+#ifndef CONFIG_MBX
+	bd_t				*bd;
+
+	bd = (bd_t *)__res;
+
+	for (bidx = 0; bidx < (sizeof(baud_table) / sizeof(int)); bidx++)
+		if (bd->bi_baudrate == baud_table[bidx])
+			break;
+
+	co->cflag = CREAD|CLOCAL|bidx|CS8;
+	baud_idx = bidx;
+#else
 	co->cflag = CREAD|CLOCAL|B9600|CS8;
+#endif
 
 	ser = rs_table + co->index;
 
@@ -2670,7 +2721,11 @@ static int __init serial_console_setup(struct console *co, char *options)
 
 	/* Set up the baud rate generator.
 	*/
+#ifndef CONFIG_MBX
+	m8xx_cpm_setbrg(ser->smc_scc_num, bd->bi_baudrate);
+#else
 	m8xx_cpm_setbrg(ser->smc_scc_num, 9600);
+#endif
 
 	/* And finally, enable Rx and Tx.
 	*/

@@ -8,7 +8,7 @@
 #include <linux/delay.h>
 #include <linux/sched.h>
 #include <asm/prom.h>
-#include <asm/adb.h>
+#include <linux/adb.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/hydra.h>
@@ -59,28 +59,38 @@ static volatile struct adb_regs *adb;
 static struct adb_request *current_req, *last_req;
 static unsigned char adb_rbuf[16];
 
+static int macio_probe(void);
+static int macio_init(void);
 static void macio_adb_interrupt(int irq, void *arg, struct pt_regs *regs);
-static int macio_adb_send_request(struct adb_request *req, int sync);
+static int macio_send_request(struct adb_request *req, int sync);
 static int macio_adb_autopoll(int devs);
 static void macio_adb_poll(void);
 static int macio_adb_reset_bus(void);
 static void completed(void);
 
-static struct adb_controller	macio_controller = {
-	ADB_MACIO,
-	macio_adb_send_request,
+struct adb_driver macio_adb_driver = {
+	"MACIO",
+	macio_probe,
+	macio_init,
+	macio_send_request,
+	/*macio_write,*/
 	macio_adb_autopoll,
-	macio_adb_reset_bus,
-	macio_adb_poll
+	macio_adb_poll,
+	macio_adb_reset_bus
 };
 
-void macio_adb_init(void)
+int macio_probe(void)
+{
+	return find_compatible_devices("adb", "chrp,adb0")? 0: -ENODEV;
+}
+
+int macio_init(void)
 {
 	struct device_node *adbs;
 
 	adbs = find_compatible_devices("adb", "chrp,adb0");
 	if (adbs == 0)
-		return;
+		return -ENXIO;
 
 #if 0
 	{ int i;
@@ -101,7 +111,7 @@ void macio_adb_init(void)
 			0, "ADB", (void *)0)) {
 		printk(KERN_ERR "ADB: can't get irq %d\n",
 		       adbs->intrs[0].line);
-		return;
+		return -EAGAIN;
 	}
 
 	out_8(&adb->ctrl.r, 0);
@@ -112,12 +122,7 @@ void macio_adb_init(void)
 	out_8(&adb->autopoll.r, APE);
 	out_8(&adb->intr_enb.r, DFB | TAG);
 
-	adb_controller = &macio_controller;
-//	adb_hardware = ADB_MACIO;
-
-//	adb_send_request = macio_adb_send_request;
-//	adb_autopoll = macio_adb_autopoll;
-//	adb_reset_bus = macio_reset_bus;
+	return 0;
 }
 
 static int macio_adb_autopoll(int devs)
@@ -143,7 +148,7 @@ static int macio_adb_reset_bus(void)
 }
 
 /* Send an ADB command */
-static int macio_adb_send_request(struct adb_request *req, int sync)
+static int macio_send_request(struct adb_request *req, int sync)
 {
 	unsigned long mflags;
 	int i;

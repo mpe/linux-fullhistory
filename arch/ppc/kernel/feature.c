@@ -41,7 +41,9 @@ static u32 feature_bits_pbook[] = {
 	OH_BAY_FLOPPY_ENABLE,	/* FEATURE_Mediabay_floppy_enable */
 	0,			/* FEATURE_BMac_reset */
 	0,			/* FEATURE_BMac_IO_enable */
-	0			/* FEATURE_Modem_Reset -> guess...*/
+	0,			/* FEATURE_Modem_Reset -> guess... */
+	OH_IDE_POWER,		/* FEATURE_IDE_DiskPower -> guess... */
+	OH_IDE_RESET		/* FEATURE_IDE_Reset (0 based) -> guess... */
 };
 
 /* assume these are the same as the ohare until proven otherwise */
@@ -63,7 +65,9 @@ static u32 feature_bits_heathrow[] = {
 	OH_BAY_FLOPPY_ENABLE,	/* FEATURE_Mediabay_floppy_enable */
 	0x80000000,		/* FEATURE_BMac_reset */
 	0x60000000,		/* FEATURE_BMac_IO_enable */
-	0x02000000		/* FEATURE_Modem_Reset -> guess...*/
+	0x02000000,		/* FEATURE_Modem_Reset -> guess...*/
+	OH_IDE_POWER,		/* FEATURE_IDE_DiskPower -> guess... */
+	OH_IDE_RESET		/* FEATURE_IDE_Reset (0 based) -> guess... */
 };
 
 /* definition of a feature controller object */
@@ -191,9 +195,10 @@ feature_set(struct device_node* device, enum system_feature f)
 
 	save_flags(flags);
 	cli();
-	st_le32( controllers[controller].reg,
-		 ld_le32(controllers[controller].reg) |
+	out_le32( controllers[controller].reg,
+		 in_le32(controllers[controller].reg) |
 		 controllers[controller].bits[f]);
+	(void)in_le32(controllers[controller].reg);
 	restore_flags(flags);
 	udelay(10);
 	
@@ -220,9 +225,10 @@ feature_clear(struct device_node* device, enum system_feature f)
 
 	save_flags(flags);
 	cli();
-	st_le32( controllers[controller].reg,
-		 ld_le32(controllers[controller].reg) &
+	out_le32( controllers[controller].reg,
+		 in_le32(controllers[controller].reg) &
 		 ~(controllers[controller].bits[f]));
+	(void)in_le32(controllers[controller].reg);
 	restore_flags(flags);
 	udelay(10);
 	
@@ -241,7 +247,7 @@ feature_test(struct device_node* device, enum system_feature f)
 	if (controller < 0)
 		return controller;
 	
-	return (ld_le32(controllers[controller].reg) &
+	return (in_le32(controllers[controller].reg) &
 		controllers[controller].bits[f]) != 0;
 }
 

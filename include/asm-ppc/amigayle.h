@@ -1,1 +1,1 @@
-#include "../asm-m68k/amigayle.h"
+#include <asm-m68k/amigayle.h>

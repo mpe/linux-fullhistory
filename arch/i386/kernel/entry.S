@@ -323,9 +323,14 @@ ENTRY(debug)
 	jmp error_code
 
 ENTRY(nmi)
+	pushl %eax
+	SAVE_ALL
+	movl %esp,%edx
 	pushl $0
-	pushl $ SYMBOL_NAME(do_nmi)
-	jmp error_code
+	pushl %edx
+	call SYMBOL_NAME(do_nmi)
+	addl $8,%esp
+	RESTORE_ALL
 
 ENTRY(int3)
 	pushl $0

@@ -516,11 +516,10 @@ pressure:
 	/*
 	 * Try pruning the dcache to free up some dquots ...
 	 */
-	count = select_dcache(128, 0);
 	if (count) {
 		printk(KERN_DEBUG "get_empty_dquot: pruning %d\n", count);
 		prune_dcache(count);
-		free_inode_memory(count);
+		prune_icache(count);
 		goto repeat;
 	}
 

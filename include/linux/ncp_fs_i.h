@@ -8,29 +8,24 @@
 #ifndef _LINUX_NCP_FS_I
 #define _LINUX_NCP_FS_I
 
-#include <linux/ncp.h>
-
 #ifdef __KERNEL__
 
-enum ncp_inode_state {
-	NCP_INODE_VALID = 19,	/* Inode currently in use */
-	NCP_INODE_LOOKED_UP,	/* directly before iget */
-	NCP_INODE_CACHED,	/* in a path to an inode which is in use */
-	NCP_INODE_INVALID
-};
-
 /*
- * ncp fs inode data (in memory only)
+ * This is the ncpfs part of the inode structure. This must contain
+ * all the information we need to work with an inode after creation.
  */
 struct ncp_inode_info {
-	enum ncp_inode_state state;
-	int nused;		/* for directories:
-				   number of references in memory */
-	struct ncp_inode_info *dir;
-	struct ncp_inode_info *next, *prev;
-	struct inode *inode;
-	struct nw_file_info finfo;
+	__u32	dirEntNum __attribute__((packed));
+	__u32	DosDirNum __attribute__((packed));
+	__u32	volNumber __attribute__((packed));
+	__u32	nwattr;
+	int	opened;
+	int	access;
+	__u32	server_file_handle __attribute__((packed));
+	__u8	open_create_action __attribute__((packed));
+	__u8	file_handle[6] __attribute__((packed));
 };
 
-#endif
-#endif
+#endif	/* __KERNEL__ */
+
+#endif	/* _LINUX_NCP_FS_I */

@@ -42,7 +42,7 @@ kmem_cache_t *dentry_cache;
  * This hash-function tries to avoid losing too many bits of hash
  * information, yet avoid using a prime hash-size or similar.
  */
-#define D_HASHBITS     10
+#define D_HASHBITS     14
 #define D_HASHSIZE     (1UL << D_HASHBITS)
 #define D_HASHMASK     (D_HASHSIZE-1)
 
@@ -193,72 +193,6 @@ int d_invalidate(struct dentry * dentry)
 
 	d_drop(dentry);
 	return 0;
-}
-
-/*
- * Select less valuable dentries to be pruned when we need
- * inodes or memory. The selected dentries are moved to the
- * old end of the list where prune_dcache() can find them.
- * 
- * Negative dentries are included in the selection so that
- * they don't accumulate at the end of the list. The count
- * returned is the total number of dentries selected, which
- * may be much larger than the requested number of inodes.
- */
-int select_dcache(int inode_count, int page_count)
-{
-	struct list_head *next, *tail = &dentry_unused;
-	int found = 0;
-	int depth = dentry_stat.nr_unused >> 1;
-	unsigned long max_value = 4;
-
-	if (page_count)
-		max_value = -1;
-
-	next = tail->prev;
-	while (next != &dentry_unused && depth--) {
-		struct list_head *tmp = next;
-		struct dentry *dentry = list_entry(tmp, struct dentry, d_lru);
-		struct inode *inode = dentry->d_inode;
-		unsigned long value = 0;	
-
-		next = tmp->prev;
-		if (dentry->d_count) {
-			dentry_stat.nr_unused--;
-			list_del(tmp);
-			INIT_LIST_HEAD(tmp);
-			continue;
-		}
-
-		/*
-		 * Select dentries based on the page cache count ...
-		 * should factor in number of uses as well. We take
-		 * all negative dentries so that they don't accumulate.
-		 * (We skip inodes that aren't immediately available.)
-		 */
-		if (inode) {
-			value = inode->i_nrpages;	
-			if (value >= max_value)
-				continue;
-			if (inode->i_state || inode->i_count > 1)
-				continue;
-		}
-
-		/*
-		 * Move the selected dentries behind the tail.
-		 */
-		if (tmp != tail->prev) {
-			list_del(tmp);
-			list_add(tmp, tail->prev);
-		}
-		tail = tmp;
-		found++;
-		if (inode && --inode_count <= 0)
-			break;
-		if (page_count && (page_count -= value) <= 0)
-			break;
-	}
-	return found;
 }
 
 /*
@@ -470,7 +404,7 @@ void shrink_dcache_parent(struct dentry * parent)
  *  ...
  *   6 - base-level: try to shrink a bit.
  */
-void shrink_dcache_memory(int priority, unsigned int gfp_mask)
+int shrink_dcache_memory(int priority, unsigned int gfp_mask)
 {
 	if (gfp_mask & __GFP_IO) {
 		int count = 0;
@@ -479,7 +413,15 @@ void shrink_dcache_memory(int priority, unsigned int gfp_mask)
 			count = dentry_stat.nr_unused / priority;
 		prune_dcache(count);
 		unlock_kernel();
+		/* FIXME: kmem_cache_shrink here should tell us
+		   the number of pages freed, and it should
+		   work in a __GFP_DMA/__GFP_BIGMEM behaviour
+		   to free only the interesting pages in
+		   function of the needs of the current allocation. */
+		kmem_cache_shrink(dentry_cache);
 	}
+
+	return 0;
 }
 
 #define NAME_ALLOC_LEN(len)	((len+16) & ~15)

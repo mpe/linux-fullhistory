@@ -123,17 +123,19 @@ struct mpc_config_intsrc
 	unsigned char mpc_dstirq;
 };
 
-#define MP_INT_VECTORED		0
-#define MP_INT_NMI		1
-#define MP_INT_SMI		2
-#define MP_INT_EXTINT		3
+enum mp_irq_source_types {
+	mp_INT = 0,
+	mp_NMI = 1,
+	mp_SMI = 2,
+	mp_ExtINT = 3
+};
 
 #define MP_IRQDIR_DEFAULT	0
 #define MP_IRQDIR_HIGH		1
 #define MP_IRQDIR_LOW		3
 
 
-struct mpc_config_intlocal
+struct mpc_config_lintsrc
 {
 	unsigned char mpc_type;
 	unsigned char mpc_irqtype;
@@ -150,7 +152,7 @@ struct mpc_config_intlocal
  *	Default configurations
  *
  *	1	2 CPU ISA 82489DX
- *	2	2 CPU EISA 82489DX no IRQ 8 or timer chaining
+ *	2	2 CPU EISA 82489DX neither IRQ 0 timer nor IRQ 13 DMA chaining
  *	3	2 CPU EISA 82489DX
  *	4	2 CPU MCA 82489DX
  *	5	2 CPU ISA+PCI
@@ -165,21 +167,19 @@ struct mpc_config_intlocal
 extern int smp_found_config;
 extern void init_smp_config(void);
 extern unsigned long smp_alloc_memory(unsigned long mem_base);
-extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;
 extern unsigned long cpu_online_map;
-extern volatile int cpu_number_map[NR_CPUS];
 extern volatile unsigned long smp_invalidate_needed;
+extern int pic_mode;
 extern void smp_flush_tlb(void);
-
-extern volatile unsigned long cpu_callin_map[NR_CPUS];
+extern int get_maxlvt(void);
 extern void smp_message_irq(int cpl, void *dev_id, struct pt_regs *regs);
 extern void smp_send_reschedule(int cpu);
-extern unsigned long ipi_count;
 extern void smp_invalidate_rcv(void);		/* Process an NMI */
 extern void smp_local_timer_interrupt(struct pt_regs * regs);
 extern void (*mtrr_hook) (void);
-extern void setup_APIC_clock (void);
+extern void setup_APIC_clocks(void);
+extern volatile int cpu_number_map[NR_CPUS];
 extern volatile int __cpu_logical_map[NR_CPUS];
 extern inline int cpu_logical_map(int cpu)
 {
@@ -196,12 +196,35 @@ extern __inline unsigned long apic_read(unsigned long reg)
 	return *((volatile unsigned long *)(APIC_BASE+reg));
 }
 
+extern unsigned int apic_timer_irqs [NR_CPUS];
+
+#ifdef CONFIG_X86_GOOD_APIC
+# define FORCE_READ_AROUND_WRITE 0
+# define apic_readaround(x)
+#else
+# define FORCE_READ_AROUND_WRITE 1
+# define apic_readaround(x) apic_read(x)
+#endif
+
+#define apic_write_around(x,y) \
+		do { apic_readaround(x); apic_write(x,y); } while (0)
+
+extern inline void ack_APIC_irq(void)
+{
+        /* Clear the IPI */
+
+	apic_readaround(APIC_EOI);
+	/*
+	 * on P6+ cores (CONFIG_X86_GOOD_APIC) ack_APIC_irq() actually
+	 * gets compiled as a single instruction ... yummie.
+	 */
+        apic_write(APIC_EOI, 0); /* Docs say use 0 for future compatibility */
+}
 
 /*
  *	General functions that each host system must provide.
  */
  
-extern void smp_callin(void);
 extern void smp_boot_cpus(void);
 extern void smp_store_cpu_info(int id);		/* Store per CPU info (like the initial udelay numbers */
 

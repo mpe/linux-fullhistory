@@ -58,10 +58,17 @@ struct desc_struct default_ldt[] = { { 0, 0 }, { 0, 0 }, { 0, 0 },
  */
 struct desc_struct idt_table[256] __attribute__((__section__(".data.idt"))) = { {0, 0}, };
 
+extern int console_loglevel;
+
+static inline void console_silent(void)
+{
+	console_loglevel = 0;
+}
+
 static inline void console_verbose(void)
 {
-	extern int console_loglevel;
-	console_loglevel = 15;
+	if (console_loglevel)
+		console_loglevel = 15;
 }
 
 #define DO_ERROR(trapnr, signr, str, name, tsk) \
@@ -202,8 +209,6 @@ void die(const char * str, struct pt_regs * regs, long err)
 	printk("%s: %04lx\n", str, err & 0xffff);
 	show_registers(regs);
 
-spin_lock_irq(&die_lock);
-
 	spin_unlock_irq(&die_lock);
 	do_exit(SIGSEGV);
 }
@@ -292,7 +297,11 @@ static void mem_parity_error(unsigned char reason, struct pt_regs * regs)
 {
 	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
 	printk("You probably have a hardware problem with your RAM chips\n");
-}	
+
+	/* Clear and disable the memory parity error line. */
+	reason = (reason & 0xf) | 4;
+	outb(reason, 0x61);
+}
 
 static void io_check_error(unsigned char reason, struct pt_regs * regs)
 {
@@ -301,8 +310,8 @@ static void io_check_error(unsigned char reason, struct pt_regs * regs)
 	printk("NMI: IOCK error (debug interrupt?)\n");
 	show_registers(regs);
 
-	/* Re-enable the IOCK line, wait for a few seconds */
-	reason |= 8;
+	/* Re-enable the IOCK line, wait for a few seconds */
+	reason = (reason & 0xf) | 8;
 	outb(reason, 0x61);
 	i = 2000;
 	while (--i) udelay(1000);
@@ -325,18 +334,107 @@ static void unknown_nmi_error(unsigned char reason, struct pt_regs * regs)
 	printk("Do you have a strange power saving mode enabled?\n");
 }
 
+atomic_t nmi_counter[NR_CPUS];
+
+#if CONFIG_SMP
+
+int nmi_watchdog = 1;
+
+static int __init setup_nmi_watchdog(char *str)
+{
+        get_option(&str, &nmi_watchdog);
+        return 1;
+}
+
+__setup("nmi_watchdog=", setup_nmi_watchdog);
+
+extern spinlock_t console_lock;
+static spinlock_t nmi_print_lock = SPIN_LOCK_UNLOCKED;
+
+inline void nmi_watchdog_tick(struct pt_regs * regs)
+{
+	/*
+	 * the best way to detect wether a CPU has a 'hard lockup' problem
+	 * is to check it's local APIC timer IRQ counts. If they are not
+	 * changing then that CPU has some problem.
+	 *
+	 * as these watchdog NMI IRQs are broadcasted to every CPU, here
+	 * we only have to check the current processor.
+	 *
+	 * since NMIs dont listen to _any_ locks, we have to be extremely
+	 * careful not to rely on unsafe variables. The printk might lock
+	 * up though, so we have to break up console_lock first ...
+	 * [when there will be more tty-related locks, break them up
+	 *  here too!]
+	 */
+
+	static unsigned int last_irq_sums [NR_CPUS] = { 0, },
+				alert_counter [NR_CPUS] = { 0, };
+
+	/*
+	 * Since current-> is always on the stack, and we always switch
+	 * the stack NMI-atomically, it's safe to use smp_processor_id().
+	 */
+	int sum, cpu = smp_processor_id();
+
+	sum = apic_timer_irqs[cpu];
+
+	if (last_irq_sums[cpu] == sum) {
+		/*
+		 * Ayiee, looks like this CPU is stuck ...
+		 * wait a few IRQs (5 seconds) before doing the oops ...
+		 */
+		alert_counter[cpu]++;
+		if (alert_counter[cpu] == 5*HZ) {
+			spin_lock(&nmi_print_lock);
+			spin_unlock(&console_lock); // we are in trouble anyway
+			printk("NMI Watchdog detected LOCKUP on CPU%d, registers:\n", cpu);
+			show_registers(regs);
+			printk("console shuts up ...\n");
+			console_silent();
+			spin_unlock(&nmi_print_lock);
+			do_exit(SIGSEGV);
+		}
+	} else {
+		last_irq_sums[cpu] = sum;
+		alert_counter[cpu] = 0;
+	}
+}
+#endif
+
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
 	unsigned char reason = inb(0x61);
-	extern atomic_t nmi_counter;
 
-	atomic_inc(&nmi_counter);
+	atomic_inc(nmi_counter+smp_processor_id());
+	if (!(reason & 0xc0)) {
+#if CONFIG_SMP
+		/*
+		 * Ok, so this is none of the documented NMI sources,
+		 * so it must be the NMI watchdog.
+		 */
+		if (nmi_watchdog) {
+			nmi_watchdog_tick(regs);
+			return;
+		} else
+			unknown_nmi_error(reason, regs);
+#else
+		unknown_nmi_error(reason, regs);
+#endif
+		return;
+	}
 	if (reason & 0x80)
 		mem_parity_error(reason, regs);
 	if (reason & 0x40)
 		io_check_error(reason, regs);
-	if (!(reason & 0xc0))
-		unknown_nmi_error(reason, regs);
+	/*
+	 * Reassert NMI in case it became active meanwhile
+	 * as it's edge-triggered.
+	 */
+	outb(0x8f, 0x70);
+	inb(0x71);		/* dummy */
+	outb(0x0f, 0x70);
+	inb(0x71);		/* dummy */
 }
 
 /*
@@ -455,6 +553,7 @@ asmlinkage void do_spurious_interrupt_bug(struct pt_regs * regs,
 asmlinkage void math_state_restore(struct pt_regs regs)
 {
 	__asm__ __volatile__("clts");		/* Allow maths ops (or we recurse) */
+
 	if(current->used_math)
 		__asm__("frstor %0": :"m" (current->thread.i387));
 	else
@@ -489,7 +588,6 @@ void __init trap_init_f00f_bug(void)
 	pmd_t * pmd;
 	pte_t * pte;
 
-return;
 	/*
 	 * Allocate a new page in virtual address space, 
 	 * move the IDT into it and write protect this page.
@@ -658,7 +756,7 @@ cobalt_init(void)
 	 */
 	set_fixmap(FIX_APIC_BASE, APIC_PHYS_BASE);
 	printk("Local APIC ID %lx\n", apic_read(APIC_ID));
-	printk("Local APIC Version %lx\n", apic_read(APIC_VERSION));
+	printk("Local APIC Version %lx\n", apic_read(APIC_LVR));
 
 	set_fixmap(FIX_CO_CPU, CO_CPU_PHYS);
 	printk("Cobalt Revision %lx\n", co_cpu_read(CO_CPU_REV));
@@ -679,7 +777,7 @@ void __init trap_init(void)
 
 	set_trap_gate(0,&divide_error);
 	set_trap_gate(1,&debug);
-	set_trap_gate(2,&nmi);
+	set_intr_gate(2,&nmi);
 	set_system_gate(3,&int3);	/* int3-5 can be called from all */
 	set_system_gate(4,&overflow);
 	set_system_gate(5,&bounds);

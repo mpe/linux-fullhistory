@@ -146,14 +146,10 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 	if [ "$CONFIG_PCI" != "n" ]; then
 	  dep_tristate 'Adaptec AIC7xxx support' CONFIG_SCSI_AIC7XXX $CONFIG_SCSI
 	  if [ "$CONFIG_SCSI_AIC7XXX" != "n" ]; then
-	    bool '   Enable tagged command queueing' CONFIG_AIC7XXX_TAGGED_QUEUEING Y
-	    bool '   Override driver defaults for commands per LUN' CONFIG_OVERRIDE_CMDS N
-	    if [ "$CONFIG_OVERRIDE_CMDS" != "n" ]; then
-	      int  '   Maximum number of commands per LUN' CONFIG_AIC7XXX_CMDS_PER_LUN 8
-	    fi
-	    bool '   Enable SCB paging' CONFIG_AIC7XXX_PAGE_ENABLE N
+	    bool '   Enable Tagged Command Queueing (TCQ) by default' CONFIG_AIC7XXX_TCQ_ON_BY_DEFAULT
+	    int  '   Maximum number of TCQ commands per device' CONFIG_AIC7XXX_CMDS_PER_DEVICE 8
 	    bool '   Collect statistics to report in /proc' CONFIG_AIC7XXX_PROC_STATS N
-	    int  '   Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 15
+	    int  '   Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 5
 	  fi
 	  dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
 	  if [ "$CONFIG_SCSI_NCR53C8XX" != "n" ]; then

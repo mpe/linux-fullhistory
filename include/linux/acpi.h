@@ -64,8 +64,12 @@
 #define ACPI_SLP_EN   0x2000
 
 /* PM_TMR masks */
-#define ACPI_TMR_VAL_MASK   0x00ffffff
-#define ACPI_E_TMR_VAL_MASK 0xff000000
+#define ACPI_TMR_MASK   0x00ffffff
+#define ACPI_TMR_HZ	3580000 /* 3.58 MHz */
+
+/* strangess to avoid integer overflow */
+#define ACPI_uS_TO_TMR_TICKS(val) \
+  (((val) * (ACPI_TMR_HZ / 10000)) / 100)
 
 /* PM2_CNT flags */
 #define ACPI_ARB_DIS 0x01
@@ -152,5 +156,11 @@ struct acpi_find_tables {
 	unsigned long facp;
 	unsigned long dsdt;
 };
+
+#ifdef __KERNEL__
+
+extern void (*acpi_idle)(void);
+
+#endif
 
 #endif /* _LINUX_ACPI_H */

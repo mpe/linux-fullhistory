@@ -27,32 +27,39 @@
  */
 
 /*
- * Special IRQ vectors used by the SMP architecture:
+ * Special IRQ vectors used by the SMP architecture, 0x30-0x4f
  *
- * (some of the following vectors are 'rare', they are merged
- *  into a single vector (FUNCTION_VECTOR) to save vector space.
- *  TLB, reschedule and local APIC vectors are performance-critical.)
+ *  some of the following vectors are 'rare', they are merged
+ *  into a single vector (CALL_FUNCTION_VECTOR) to save vector space.
+ *  TLB, reschedule and local APIC vectors are performance-critical.
  */
-#define RESCHEDULE_VECTOR	0x30
-#define INVALIDATE_TLB_VECTOR	0x31
-#define STOP_CPU_VECTOR		0x40
-#define LOCAL_TIMER_VECTOR	0x41
-#define CALL_FUNCTION_VECTOR	0x50
+#define INVALIDATE_TLB_VECTOR	0x30
+#define LOCAL_TIMER_VECTOR	0x31
+#define RESCHEDULE_VECTOR	0x40
+
+/* 'rare' vectors: */
+#define CALL_FUNCTION_VECTOR	0x41
+
+/*
+ * These IRQs should never really happen on perfect hardware running
+ * a perfect kernel, but we nevertheless print a message to catch the
+ * rest ;) Subtle, the APIC architecture mandates the spurious vector
+ * to have bits 0-3 set to 1. Note that these vectors do not occur
+ * normally, so we violate the 'only 2 vectors per priority level'
+ * rule here.
+ */
+#define SPURIOUS_APIC_VECTOR	0x3f
+#define ERROR_APIC_VECTOR	0x43
 
 /*
  * First APIC vector available to drivers: (vectors 0x51-0xfe)
+ * we start at 0x51 to spread out vectors between priority levels
+ * evenly. (note that 0x80 is the syscall vector)
  */
 #define IRQ0_TRAP_VECTOR	0x51
 
-/*
- * This IRQ should never happen, but we print a message nevertheless.
- */
-#define SPURIOUS_APIC_VECTOR	0xff
-
 extern int irq_vector[NR_IRQS];
 #define IO_APIC_VECTOR(irq)	irq_vector[irq]
-
-extern void init_IRQ_SMP(void);
 
 /*
  * Various low-level irq details needed by irq.c, process.c,
@@ -65,18 +72,20 @@ extern void no_action(int cpl, void *dev_id, struct pt_regs *regs);
 extern void mask_irq(unsigned int irq);
 extern void unmask_irq(unsigned int irq);
 extern void disable_8259A_irq(unsigned int irq);
+extern void enable_8259A_irq(unsigned int irq);
 extern int i8259A_irq_pending(unsigned int irq);
-extern void ack_APIC_irq(void);
+extern void make_8259A_irq(unsigned int irq);
+extern void init_8259A(int aeoi);
 extern void FASTCALL(send_IPI_self(int vector));
 extern void init_VISWS_APIC_irqs(void);
 extern void setup_IO_APIC(void);
 extern int IO_APIC_get_PCI_irq_vector(int bus, int slot, int fn);
-extern void make_8259A_irq(unsigned int irq);
 extern void send_IPI(int dest, int vector);
 extern void init_pic_mode(void);
 extern void print_IO_APIC(void);
 
 extern unsigned long io_apic_irqs;
+extern volatile unsigned long irq_err_count;
 
 extern char _stext, _etext;
 
@@ -214,6 +223,7 @@ static inline void x86_do_profile (unsigned long eip)
 
 #ifdef __SMP__ /*more of this file should probably be ifdefed SMP */
 static inline void hw_resend_irq(struct hw_interrupt_type *h, unsigned int i) {
+	if (IO_APIC_IRQ(i))
 		send_IPI_self(IO_APIC_VECTOR(i));
 }
 #else

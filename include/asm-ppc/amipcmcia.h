@@ -1,1 +1,1 @@
-#include "../asm-m68k/amipcmcia.h"
+#include <asm-m68k/amipcmcia.h>

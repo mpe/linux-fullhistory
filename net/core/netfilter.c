@@ -310,9 +310,6 @@ static int nf_sockopt(struct sock *sk, int pf, int val,
 	struct list_head *i;
 	int ret;
 
-	if (!capable(CAP_NET_ADMIN))
-		return -EPERM;
-
 	if (down_interruptible(&nf_sockopt_mutex) != 0)
 		return -EINTR;
 

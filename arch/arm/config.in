@@ -7,6 +7,11 @@ mainmenu_name "Linux Kernel Configuration"
 define_bool CONFIG_ARM y
 
 mainmenu_option next_comment
+comment 'Code maturity level options'
+bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
+endmenu
+
+mainmenu_option next_comment
 comment 'System and processor type'
 
 choice 'ARM system type'	\
@@ -17,24 +22,24 @@ choice 'ARM system type'	\
 	 FootBridge-based	CONFIG_FOOTBRIDGE" RiscPC
 
 if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
-  bool 'FootBridge in HOST mode' CONFIG_HOST_FOOTBRIDGE
-  if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
-    define_bool CONFIG_ADDIN_FOOTBRIDGE n
-  else
-    define_bool CONFIG_ADDIN_FOOTBRIDGE y
-  fi
+   bool 'FootBridge in HOST mode' CONFIG_HOST_FOOTBRIDGE
+   if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
+      define_bool CONFIG_ADDIN_FOOTBRIDGE n
+   else
+      define_bool CONFIG_ADDIN_FOOTBRIDGE y
+   fi
 fi
 
 if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
-  bool '  Include support for Intel EBSA285' CONFIG_ARCH_EBSA285
-  bool '  Include support for Chalice CATS boards' CONFIG_CATS
-  bool '  Include support for Corel NetWinder' CONFIG_ARCH_NETWINDER
+   bool '  Include support for Intel EBSA285' CONFIG_ARCH_EBSA285
+   bool '  Include support for Chalice CATS boards' CONFIG_CATS
+   bool '  Include support for Corel NetWinder' CONFIG_ARCH_NETWINDER
 fi
 
 if [ "$CONFIG_ADDIN_FOOTBRIDGE" = "y" ]; then
-  # If we get any other footbridge-based plug-in boards, then
-  # add your architecture options here
-  define_bool CONFIG_ARCH_CO285 y
+   # If we get any other footbridge-based plug-in boards, then
+   # add your architecture options here
+   define_bool CONFIG_ARCH_CO285 y
 fi
 
 #
@@ -44,9 +49,9 @@ fi
 if [ "$CONFIG_ARCH_ARC" = "y" -o \
      "$CONFIG_ARCH_A5K" = "y" -o \
      "$CONFIG_ARCH_RPC" = "y" ]; then
-  define_bool CONFIG_ARCH_ACORN y
+   define_bool CONFIG_ARCH_ACORN y
 else
-  define_bool CONFIG_ARCH_ACORN n
+   define_bool CONFIG_ARCH_ACORN n
 fi
 
 #
@@ -56,33 +61,33 @@ fi
 #
 if [ "$CONFIG_ARCH_ARC" = "y" -o \
      "$CONFIG_ARCH_A5K" = "y" ]; then
-  define_bool CONFIG_CPU_32 n
-  define_bool CONFIG_CPU_26 y
+   define_bool CONFIG_CPU_32 n
+   define_bool CONFIG_CPU_26 y
 
-  #
-  # Select memory size
-  #
-  bool '2MB physical memory' CONFIG_PAGESIZE_16
+   #
+   # Select memory size
+   #
+   bool '2MB physical memory' CONFIG_PAGESIZE_16
 else
-  define_bool CONFIG_CPU_32 y
-  define_bool CONFIG_CPU_26 n
+   define_bool CONFIG_CPU_32 y
+   define_bool CONFIG_CPU_26 n
 
-  #
-  # Select CPU and optimisation dependent on architecture
-  #
-  if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
-       "$CONFIG_FOOTBRIDGE" = "y" -o \
-       "$CONFIG_ARCH_NEXUSPCI" = "y" ]; then
-    define_bool CONFIG_CPU_32v4 y
-    define_bool CONFIG_CPU_SA110 y
-  else
-  if [ "$CONFIG_ARCH_RPC" = "y" ]; then
-    define_bool CONFIG_CPU_32v3 y
-    bool 'Support ARM610' CONFIG_CPU_ARM6
-    bool 'Support ARM710' CONFIG_CPU_ARM7
-    bool 'Support StrongARM110' CONFIG_CPU_SA110
-  fi
-  fi
+   #
+   # Select CPU and optimisation dependent on architecture
+   #
+   if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
+        "$CONFIG_FOOTBRIDGE" = "y" -o \
+        "$CONFIG_ARCH_NEXUSPCI" = "y" ]; then
+      define_bool CONFIG_CPU_32v4 y
+      define_bool CONFIG_CPU_SA110 y
+   else
+      if [ "$CONFIG_ARCH_RPC" = "y" ]; then
+	 define_bool CONFIG_CPU_32v3 y
+	 bool 'Support ARM610' CONFIG_CPU_ARM6
+	 bool 'Support ARM710' CONFIG_CPU_ARM7
+	 bool 'Support StrongARM110' CONFIG_CPU_SA110
+      fi
+   fi
 fi
 
 #
@@ -90,7 +95,7 @@ fi
 #
 if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o \
      "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
-  define_bool CONFIG_PCI y
+   define_bool CONFIG_PCI y
 fi
 
 #
@@ -98,18 +103,15 @@ fi
 #
 if [ "$CONFIG_CATS" = "y" -o \
      "$CONFIG_ARCH_NETWINDER" = "y" ]; then
-  define_bool CONFIG_ISA_DMA y
+   define_bool CONFIG_ISA_DMA y
 else
-  define_bool CONFIG_ISA_DMA n
+   define_bool CONFIG_ISA_DMA n
 fi
 
 endmenu
 
-mainmenu_option next_comment
-comment 'Code maturity level options'
-bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
-if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
-  bool 'Enable kernel-mode alignment trap handler (EXPERIMENTAL)' CONFIG_ALIGNMENT_TRAP
+if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" -a "$CONFIG_EXPERIMENTAL" ]; then
+   bool 'Enable kernel-mode alignment trap handler (EXPERIMENTAL)' CONFIG_ALIGNMENT_TRAP
 fi
 #bool 'Split text into discardable sections' CONFIG_TEXT_SECTIONS
 endmenu
@@ -118,8 +120,8 @@ mainmenu_option next_comment
 comment 'Loadable module support'
 bool 'Enable loadable module support' CONFIG_MODULES
 if [ "$CONFIG_MODULES" = "y" ]; then
-  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
-  bool 'Kernel module loader' CONFIG_KMOD
+   bool '  Set version information on all symbols for modules' CONFIG_MODVERSIONS
+   bool '  Kernel module loader' CONFIG_KMOD
 fi
 endmenu
 
@@ -134,41 +136,41 @@ tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 if [ "$CONFIG_CPU_32" = "y" ]; then
-  tristate 'RISC OS personality' CONFIG_ARTHUR
+   tristate 'RISC OS personality' CONFIG_ARTHUR
 fi
 
 tristate 'Parallel port support' CONFIG_PARPORT
 if [ "$CONFIG_PARPORT" != "n" ]; then
-  if [ "$CONFIG_ARCH_ARC" = "y" ]; then
-    dep_tristate '  Archimedes hardware' CONFIG_PARPORT_ARC $CONFIG_PARPORT
-  fi
-  dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
-# If exactly one hardware type is selected then parport will optimise away
-# support for loading any others.  Defeat this if the user is keen.
-  if [ "$CONFIG_PARPORT_PC" = "n" -o "$CONFIG_PARPORT_ARC" = "n" ]; then
-    if [ "$CONFIG_PARPORT_PC" != "n" -o "$CONFIG_PARPORT_ARC" != "n" ]; then
-      bool '   Support foreign hardware' CONFIG_PARPORT_OTHER
-    fi
-  fi
+   if [ "$CONFIG_ARCH_ARC" = "y" ]; then
+      dep_tristate '  Archimedes hardware' CONFIG_PARPORT_ARC $CONFIG_PARPORT
+   fi
+   dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
+   # If exactly one hardware type is selected then parport will optimise away
+   # support for loading any others.  Defeat this if the user is keen.
+   if [ "$CONFIG_PARPORT_PC" = "n" -o "$CONFIG_PARPORT_ARC" = "n" ]; then
+      if [ "$CONFIG_PARPORT_PC" != "n" -o "$CONFIG_PARPORT_ARC" != "n" ]; then
+         bool '   Support foreign hardware' CONFIG_PARPORT_OTHER
+      fi
+   fi
 fi
 if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
      "$CONFIG_ARCH_NETWINDER" = "y" -o \
      "$CONFIG_CATS" = "y" ]; then
-  string 'Initial kernel command string' CONFIG_CMDLINE
+   string 'Initial kernel command string' CONFIG_CMDLINE
 fi
 if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \
      "$CONFIG_ARCH_EBSA110" = "y" -o   \
      "$CONFIG_ARCH_EBSA285" = "y" -o   \
      "$CONFIG_ARCH_CO285" = "y" ]; then
-  bool 'Timer and CPU usage LEDs' CONFIG_LEDS
-  if [ "$CONFIG_LEDS" = "y" ]; then
-    if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \
-         "$CONFIG_ARCH_EBSA285" = "y" -o   \
-	 "$CONFIG_ARCH_CO285" = "y" ]; then
-      bool '  Timer LED' CONFIG_LEDS_TIMER
-      bool '  CPU usage LED' CONFIG_LEDS_CPU
-    fi
-  fi
+   bool 'Timer and CPU usage LEDs' CONFIG_LEDS
+   if [ "$CONFIG_LEDS" = "y" ]; then
+      if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \
+           "$CONFIG_ARCH_EBSA285" = "y" -o   \
+	   "$CONFIG_ARCH_CO285" = "y" ]; then
+	 bool '  Timer LED' CONFIG_LEDS_TIMER
+	 bool '  CPU usage LED' CONFIG_LEDS_CPU
+      fi
+   fi
 fi
 endmenu
 
@@ -179,48 +181,48 @@ source drivers/pnp/Config.in
 source drivers/block/Config.in
 
 if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
-  source drivers/acorn/block/Config.in
+   source drivers/acorn/block/Config.in
 fi
 
 source drivers/char/Config.in
 if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
-  if [ "$CONFIG_MOUSE" = "y" ]; then
-    if [ "$CONFIG_ARCH_RPC" != "y" ]; then
-      define_bool CONFIG_KBDMOUSE y
-    else
-      define_bool CONFIG_RPCMOUSE y
-    fi
-  fi
+   if [ "$CONFIG_MOUSE" = "y" ]; then
+      if [ "$CONFIG_ARCH_RPC" != "y" ]; then
+	 define_bool CONFIG_KBDMOUSE y
+      else
+	 define_bool CONFIG_RPCMOUSE y
+      fi
+   fi
 fi
 
 source drivers/usb/Config.in
 
 if [ "$CONFIG_VT" = "y" ]; then
-  mainmenu_option next_comment
-  comment 'Console drivers'
-  if [ "$CONFIG_ARCH_ACORN" != "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
-    bool 'VGA text console' CONFIG_VGA_CONSOLE
-  fi
-  bool 'Support Frame buffer devices' CONFIG_FB
-  source drivers/video/Config.in
-  endmenu
+   mainmenu_option next_comment
+   comment 'Console drivers'
+   if [ "$CONFIG_ARCH_ACORN" != "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
+      bool 'VGA text console' CONFIG_VGA_CONSOLE
+   fi
+   bool 'Support Frame buffer devices' CONFIG_FB
+   source drivers/video/Config.in
+   endmenu
 fi
 
 if [ "$CONFIG_NET" = "y" ]; then
-  source net/Config.in
+   source net/Config.in
 
-  source net/ax25/Config.in
+   source net/ax25/Config.in
 
-  source net/irda/Config.in
+   source net/irda/Config.in
 
-  mainmenu_option next_comment
-  comment 'Network device support'
+   mainmenu_option next_comment
+   comment 'Network device support'
 
-  bool 'Network device support?' CONFIG_NETDEVICES
-  if [ "$CONFIG_NETDEVICES" = "y" ]; then
-    source drivers/net/Config.in
-  fi
-  endmenu
+   bool 'Network device support?' CONFIG_NETDEVICES
+   if [ "$CONFIG_NETDEVICES" = "y" ]; then
+      source drivers/net/Config.in
+   fi
+   endmenu
 fi
 
 # mainmenu_option next_comment
@@ -238,19 +240,19 @@ comment 'SCSI support'
 tristate 'SCSI support?' CONFIG_SCSI
 
 if [ "$CONFIG_SCSI" != "n" ]; then
-  source drivers/scsi/Config.in
+   source drivers/scsi/Config.in
 fi
 endmenu
 
 if [ "$CONFIG_ARCH_ACORN" = "y" -o "$CONFIG_PCI" = "y" ]; then
-  mainmenu_option next_comment
-  comment 'Sound'
+   mainmenu_option next_comment
+   comment 'Sound'
 
-  tristate 'Sound support' CONFIG_SOUND
-  if [ "$CONFIG_SOUND" != "n" ]; then
-    source drivers/sound/Config.in
-  fi
-  endmenu
+   tristate 'Sound support' CONFIG_SOUND
+   if [ "$CONFIG_SOUND" != "n" ]; then
+      source drivers/sound/Config.in
+   fi
+   endmenu
 fi
 
 source fs/Config.in

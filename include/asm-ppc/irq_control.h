@@ -1,5 +1,5 @@
 /*
- * $Id: irq_control.h,v 1.2 1999/07/17 20:23:58 cort Exp $
+ * $Id: irq_control.h,v 1.8 1999/09/15 23:58:48 cort Exp $
  *
  * Copyright (C) 1999 Cort Dougan <cort@cs.nmt.edu>
  */
@@ -11,74 +11,52 @@
 #include <asm/irq.h>
 #include <asm/atomic.h>
 
+/* Structure describing interrupts */
+struct hw_interrupt_type {
+	const char * typename;
+	void (*startup)(unsigned int irq);
+	void (*shutdown)(unsigned int irq);
+	void (*enable)(unsigned int irq);
+	void (*disable)(unsigned int irq);
+	void (*mask_and_ack)(unsigned int irq);
+	int irq_offset;
+};
+
+struct irqdesc {
+	struct irqaction *action;
+	struct hw_interrupt_type *ctl;
+};
+
+extern struct irqdesc irq_desc[NR_IRQS];
+
+struct int_control_struct
+{
+	void (*int_cli)(void);
+	void (*int_sti)(void);
+	void (*int_restore_flags)(unsigned long);
+	void (*int_save_flags)(unsigned long *);
+};
+extern struct int_control_struct int_control;
+extern unsigned long timer_interrupt_intercept;
+extern unsigned long do_IRQ_intercept;
+void timer_interrupt(struct pt_regs *);
+
+extern void __no_use_sti(void);
+extern void __no_use_cli(void);
+extern void __no_use_restore_flags(unsigned long);
+extern void __no_use_save_flags(unsigned long *);
+
+#define __cli() int_control.int_cli()
+#define __sti() int_control.int_sti()
+#define __save_flags(flags) int_control.int_save_flags(&flags)
+#define __restore_flags(flags) int_control.int_restore_flags(flags)
+#define __save_and_cli(flags) ({__save_flags(flags);__cli();})
+
 extern void do_lost_interrupts(unsigned long);
 extern atomic_t ppc_n_lost_interrupts;
 
-#define __no_use_save_flags(flags) \
-	({__asm__ __volatile__ ("mfmsr %0" : "=r" ((flags)) : : "memory"); })
-
-extern __inline__ void __no_use_restore_flags(unsigned long flags)
-{
-        if ((flags & MSR_EE) && atomic_read(&ppc_n_lost_interrupts) != 0) {
-                do_lost_interrupts(flags);
-        } else {
-                __asm__ __volatile__ ("sync; mtmsr %0; isync"
-                              : : "r" (flags) : "memory");
-        }
-}
-
-extern __inline__ void __no_use_sti(void)
-{
-	unsigned long flags;
-
-	__asm__ __volatile__ ("mfmsr %0": "=r" (flags));
-	flags |= MSR_EE;
-	if ( atomic_read(&ppc_n_lost_interrupts) )
-		do_lost_interrupts(flags);
-	__asm__ __volatile__ ("sync; mtmsr %0; isync":: "r" (flags));
-}
-
-extern __inline__ void __no_use_cli(void)
-{
-	unsigned long flags;
-	__asm__ __volatile__ ("mfmsr %0": "=r" (flags));
-	flags &= ~MSR_EE;
-	__asm__ __volatile__ ("sync; mtmsr %0; isync":: "r" (flags));
-}
-
-#define __no_use_mask_irq(irq) ({if (irq_desc[irq].ctl && irq_desc[irq].ctl->disable) irq_desc[irq].ctl->disable(irq);})
-#define __no_use_unmask_irq(irq) ({if (irq_desc[irq].ctl && irq_desc[irq].ctl->enable) irq_desc[irq].ctl->enable(irq);})
-#define __no_use_mask_and_ack_irq(irq) ({if (irq_desc[irq].ctl && irq_desc[irq].ctl->mask_and_ack) irq_desc[irq].ctl->mask_and_ack(irq);})
-
-#ifdef CONFIG_RTL
-
-/* the rtl system provides these -- Cort */
-extern void __sti(void);
-extern void __cli(void);
-extern void __restore_flags(unsigned int);
-extern unsigned int __return_flags(void);
-#define __save_flags(flags) (flags = __return_flags())
-
-#define rtl_hard_cli __no_use_cli
-#define rtl_hard_sti __no_use_sti
-#define rtl_hard_save_flags(flags) __no_use_save_flags(flags)
-#define rtl_hard_restore_flags(flags) __no_use_restore_flags(flags)
-
-#define rtl_hard_mask_irq(irq) __no_use_mask_irq(irq)
-#define rtl_hard_unmask_irq(irq) __no_use_unmask_irq(irq)
-#define rtl_hard_mask_and_ack_irq(irq) __no_use_mask_and_ack_irq(irq)
-
-#else /* CONFIG_RTL */
-
-#define __cli __no_use_cli
-#define __sti __no_use_sti
-#define __save_flags(flags) __no_use_save_flags(flags)
-#define __restore_flags(flags) __no_use_restore_flags(flags)
-
-#define mask_irq(irq) __no_use_mask_irq(irq)
-#define unmask_irq(irq) __no_use_unmask_irq(irq)
-#define mask_and_ack_irq(irq) __no_use_mask_and_ack_irq(irq)
-
-#endif /* CONFIG_RTL */
+#define mask_irq(irq) ({if (irq_desc[irq].ctl && irq_desc[irq].ctl->disable) irq_desc[irq].ctl->disable(irq);})
+#define unmask_irq(irq) ({if (irq_desc[irq].ctl && irq_desc[irq].ctl->enable) irq_desc[irq].ctl->enable(irq);})
+#define mask_and_ack_irq(irq) ({if (irq_desc[irq].ctl && irq_desc[irq].ctl->mask_and_ack) irq_desc[irq].ctl->mask_and_ack(irq);})
 
 #endif /* _PPC_IRQ_CONTROL_H */

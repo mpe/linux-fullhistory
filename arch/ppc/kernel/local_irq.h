@@ -4,28 +4,9 @@
 
 #include <linux/kernel_stat.h>
 #include <linux/interrupt.h>
+#include <asm/irq_control.h>
 
 void ppc_irq_dispatch_handler(struct pt_regs *regs, int irq);
-
-/* Structure describing interrupts */
-struct hw_interrupt_type {
-	const char * typename;
-	void (*startup)(unsigned int irq);
-	void (*shutdown)(unsigned int irq);
-	void (*handle)(unsigned int irq, struct pt_regs * regs);
-	void (*enable)(unsigned int irq);
-	void (*disable)(unsigned int irq);
-	void (*mask_and_ack)(unsigned int irq);
-	int irq_offset;
-};
-
-struct irqdesc {
-	struct irqaction *action;
-	struct hw_interrupt_type *ctl;
-};
-
-extern struct irqdesc irq_desc[NR_IRQS];
-
 
 #define NR_MASK_WORDS	((NR_IRQS + 31) / 32)
 

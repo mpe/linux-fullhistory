@@ -21,7 +21,6 @@ struct cpuinfo_PPC {
 };
 extern struct cpuinfo_PPC cpu_data[NR_CPUS];
 
-extern int first_cpu_booted;
 extern unsigned long smp_proc_in_lock[NR_CPUS];
 
 extern void smp_message_pass(int target, int msg, unsigned long data, int wait);

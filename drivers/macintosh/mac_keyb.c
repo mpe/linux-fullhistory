@@ -39,12 +39,13 @@
 #include <linux/init.h>
 #include <linux/tty_flip.h>
 #include <linux/config.h>
+#include <linux/notifier.h>
 
 #include <asm/bitops.h>
-#include <asm/adb.h>
-#include <asm/cuda.h>
-#include <asm/pmu.h>
 
+#include <linux/adb.h>
+#include <linux/cuda.h>
+#include <linux/pmu.h>
 #include <linux/kbd_kern.h>
 #include <linux/kbd_ll.h>
 
@@ -239,7 +240,7 @@ static void init_trackball(int id);
 static void init_turbomouse(int id);
 static void init_microspeed(int id);
 
-#ifdef CONFIG_ADBMOUSE
+#ifdef CONFIG_ADB_MOUSE
 /* XXX: Hook for mouse driver */
 void (*adb_mouse_interrupt_hook)(unsigned char *, int);
 int adb_emulate_buttons = 0;
@@ -250,6 +251,7 @@ int adb_button3_keycode = 0x7c; /* right option key */
 extern int console_loglevel;
 
 extern struct kbd_struct kbd_table[];
+extern wait_queue_head_t keypress_wait;
 
 extern void handle_scancode(unsigned char, int);
 
@@ -334,7 +336,7 @@ input_keycode(int keycode, int repeat)
 	if (!repeat)
 		del_timer(&repeat_timer);
 
-#ifdef CONFIG_ADBMOUSE
+#ifdef CONFIG_ADB_MOUSE
 	/*
 	 * XXX: Add mouse button 2+3 fake codes here if mouse open.
 	 *	Keep track of 'button' states here as we only send 
@@ -364,7 +366,7 @@ input_keycode(int keycode, int repeat)
 		}
 		return;
 	}
-#endif /* CONFIG_ADBMOUSE */
+#endif /* CONFIG_ADB_MOUSE */
 
 	if (kbd->kbdmode != VC_RAW) {
 		if (!up_flag && !dont_repeat[keycode]) {
@@ -420,7 +422,7 @@ static void mac_put_queue(int ch)
 	}
 }
 
-#ifdef CONFIG_ADBMOUSE
+#ifdef CONFIG_ADB_MOUSE
 static void
 mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 {
@@ -552,7 +554,7 @@ mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 		}
 	}
 }
-#endif /* CONFIG_ADBMOUSE */
+#endif /* CONFIG_ADB_MOUSE */
 
 /* XXX Needs to get rid of this, see comments in pmu.c */
 extern int backlight_level;
@@ -566,7 +568,11 @@ buttons_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 	 */
 	 
 	/* Ignore data from register other than 0 */
+#if 0
 	if ((adb_hardware != ADB_VIAPMU) || (data[0] & 0x3) || (nb < 2))
+#else
+	if ((data[0] & 0x3) || (nb < 2))
+#endif
 		return;
 		
 	switch (data[1]&0xf )
@@ -592,22 +598,26 @@ buttons_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 		/* brightness decrease */
 		case 0xa:
 			/* down event */
+#ifdef CONFIG_PPC
 			if ( data[1] == (data[1]&0xf) ) {
 				if (backlight_level > 2)
 					pmu_set_brightness(backlight_level-2);
 				else
 					pmu_set_brightness(0);
 			}
+#endif
 			break;
 		/* brightness increase */
 		case 0x9:
 			/* down event */
+#ifdef CONFIG_PPC
 			if ( data[1] == (data[1]&0xf) ) {
 				if (backlight_level < 0x1e)
 					pmu_set_brightness(backlight_level+2);
 				else 
 					pmu_set_brightness(0x1f);
 			}
+#endif
 			break;
 	}
 }
@@ -672,8 +682,14 @@ static void leds_done(struct adb_request *req)
 
 void __init mackbd_init_hw(void)
 {
+#ifdef CONFIG_PPC
 	if ( (_machine != _MACH_chrp) && (_machine != _MACH_Pmac) )
-	    return;
+		return;
+#endif
+#ifdef CONFIG_MAC
+	if (!MACH_IS_MAC)
+		return;
+#endif
 
 	/* setup key map */
 	memcpy(key_maps[0], macplain_map, sizeof(plain_map));
@@ -684,7 +700,7 @@ void __init mackbd_init_hw(void)
 	memcpy(key_maps[8], macalt_map, sizeof(plain_map));
 	memcpy(key_maps[12], macctrl_alt_map, sizeof(plain_map));
 
-#ifdef CONFIG_ADBMOUSE
+#ifdef CONFIG_ADB_MOUSE
 	/* initialize mouse interrupt hook */
 	adb_mouse_interrupt_hook = NULL;
 #endif
@@ -720,9 +736,9 @@ mackeyb_probe(void)
 	struct adb_request req;
 	int i;
 
-#ifdef CONFIG_ADBMOUSE
+#ifdef CONFIG_ADB_MOUSE
 	adb_register(ADB_MOUSE, 0, &mouse_ids, mouse_input);
-#endif /* CONFIG_ADBMOUSE */
+#endif /* CONFIG_ADB_MOUSE */
 
 	adb_register(ADB_KEYBOARD, 0, &keyboard_ids, keyboard_input);
 	adb_register(0x07, 0x1F, &buttons_ids, buttons_input);

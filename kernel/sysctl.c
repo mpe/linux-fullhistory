@@ -256,8 +256,6 @@ static ctl_table fs_table[] = {
 	 0444, NULL, &proc_dointvec},
 	{FS_STATINODE, "inode-state", &inodes_stat, 7*sizeof(int),
 	 0444, NULL, &proc_dointvec},
-	{FS_MAXINODE, "inode-max", &max_inodes, sizeof(int),
-	 0644, NULL, &proc_dointvec},
 	{FS_NRFILE, "file-nr", &nr_files, 3*sizeof(int),
 	 0444, NULL, &proc_dointvec},
 	{FS_MAXFILE, "file-max", &max_files, sizeof(int),

@@ -86,7 +86,6 @@ extern void pckbd_init_hw(void);
 extern unsigned char pckbd_sysrq_xlate[128];
 
 extern void prep_setup_pci_ptrs(void);
-extern void chrp_do_IRQ(struct pt_regs *regs, int cpu, int isfake);
 extern char saved_command_line[256];
 
 int _prep_type;
@@ -114,8 +113,7 @@ extern int rd_image_start;	/* starting block # of image */
 unsigned long vgacon_remap_base;
 #endif
 
-__prep
-int
+int __prep
 prep_get_cpuinfo(char *buffer)
 {
 	extern char *Motherboard_map_name;
@@ -312,7 +310,7 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
 	 * it's the only way to support both addrs from one binary.
 	 * -- Cort
 	 */
-	if ( is_prep )
+	if ( _machine == _MACH_prep )
 	{
 		extern struct card_info snd_installed_cards[];
 		struct card_info  *snd_ptr;
@@ -486,7 +484,7 @@ void __init mk48t59_calibrate_decr(void)
 	count_period_den = freq / 1000000;
 }
 
-void
+void __prep
 prep_restart(char *cmd)
 {
         unsigned long i = 10000;
@@ -509,7 +507,7 @@ prep_restart(char *cmd)
 /*
  * This function will restart a board regardless of port 92 functionality
  */
-void
+void __prep
 prep_direct_restart(char *cmd)
 {
 	u32 jumpaddr=0xfff00100;
@@ -532,7 +530,7 @@ prep_direct_restart(char *cmd)
 	 */
 }
 
-void
+void __prep
 prep_halt(void)
 {
         unsigned long flags;
@@ -552,13 +550,14 @@ prep_halt(void)
 	 */
 }
 
-void
+void __prep
 prep_power_off(void)
 {
 	prep_halt();
 }
 
-int prep_setup_residual(char *buffer)
+int __prep
+prep_setup_residual(char *buffer)
 {
         int len = 0;
 
@@ -576,7 +575,7 @@ int prep_setup_residual(char *buffer)
 	return len;
 }
 
-u_int
+u_int __prep
 prep_irq_cannonicalize(u_int irq)
 {
 	if (irq == 2)
@@ -589,7 +588,8 @@ prep_irq_cannonicalize(u_int irq)
 	}
 }
 
-void                           
+#if 0
+void __prep
 prep_do_IRQ(struct pt_regs *regs, int cpu, int isfake)
 {
         int irq;
@@ -602,6 +602,13 @@ prep_do_IRQ(struct pt_regs *regs, int cpu, int isfake)
 		return;
 	}
         ppc_irq_dispatch_handler( regs, irq );
+}
+#endif
+
+int __prep
+prep_get_irq(struct pt_regs *regs)
+{
+	return i8259_irq(smp_processor_id());
 }		
 
 void __init
@@ -628,19 +635,19 @@ prep_init_IRQ(void)
 /*
  * IDE stuff.
  */
-void
+void __prep
 prep_ide_insw(ide_ioreg_t port, void *buf, int ns)
 {
 	_insw((unsigned short *)((port)+_IO_BASE), buf, ns);
 }
 
-void
+void __prep
 prep_ide_outsw(ide_ioreg_t port, void *buf, int ns)
 {
 	_outsw((unsigned short *)((port)+_IO_BASE), buf, ns);
 }
 
-int
+int __prep
 prep_ide_default_irq(ide_ioreg_t base)
 {
 	switch (base) {
@@ -653,7 +660,7 @@ prep_ide_default_irq(ide_ioreg_t base)
 	}
 }
 
-ide_ioreg_t
+ide_ioreg_t __prep
 prep_ide_default_io_base(int index)
 {
 	switch (index) {
@@ -666,13 +673,13 @@ prep_ide_default_io_base(int index)
 	}
 }
 
-int
+int __prep
 prep_ide_check_region(ide_ioreg_t from, unsigned int extent)
 {
         return check_region(from, extent);
 }
 
-void
+void __prep
 prep_ide_request_region(ide_ioreg_t from,
 			unsigned int extent,
 			const char *name)
@@ -680,14 +687,14 @@ prep_ide_request_region(ide_ioreg_t from,
         request_region(from, extent, name);
 }
 
-void
+void __prep
 prep_ide_release_region(ide_ioreg_t from,
 			unsigned int extent)
 {
         release_region(from, extent);
 }
 
-void
+void __prep
 prep_ide_fix_driveid(struct hd_driveid *id)
 {
 }
@@ -776,7 +783,7 @@ prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.irq_cannonicalize = prep_irq_cannonicalize;
 	ppc_md.init_IRQ       = prep_init_IRQ;
 	/* this gets changed later on if we have an OpenPIC -- Cort */
-	ppc_md.do_IRQ         = prep_do_IRQ;
+	ppc_md.get_irq        = prep_get_irq;
 	ppc_md.init           = NULL;
 
 	ppc_md.restart        = prep_restart;

@@ -31,7 +31,7 @@ static void __init quirk_passive_release(struct pci_dev *dev)
 	while ((d = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_0, d))) {
 		pci_read_config_byte(d, 0x82, &dlc);
 		if (!(dlc & 1<<1)) {
-			printk("PCI: PIIX3: Enabling Passive Release on %s\n", d->name);
+			printk("PCI: PIIX3: Enabling Passive Release on %s\n", d->slot_name);
 			dlc |= 1<<1;
 			pci_write_config_byte(d, 0x82, dlc);
 		}
@@ -99,7 +99,7 @@ static void pci_do_fixups(struct pci_dev *dev, int pass, struct pci_fixup *f)
  		    (f->vendor == dev->vendor || f->vendor == (u16) PCI_ANY_ID) &&
  		    (f->device == dev->device || f->device == (u16) PCI_ANY_ID)) {
 #ifdef DEBUG
-			printk("PCI: Calling quirk %p for %s\n", f->hook, dev->name);
+			printk("PCI: Calling quirk %p for %s\n", f->hook, dev->slot_name);
 #endif
 			f->hook(dev);
 		}
