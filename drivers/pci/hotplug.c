@@ -71,7 +71,8 @@ static int pci_visit_bus (struct pci_visit * fn, struct pci_bus_wrapped *wrapped
 	struct pci_dev_wrapped wrapped_dev;
 	int result = 0;
 
-	DBG("scanning bus %02x\n", wrapped_bus->bus->number);
+	DBG("PCI: Scanning bus %04x:%02x\n", pci_domain_nr(wrapped_bus->bus),
+		wrapped_bus->bus->number);
 
 	if (fn->pre_visit_pci_bus) {
 		result = fn->pre_visit_pci_bus(wrapped_bus, wrapped_parent);
@@ -106,8 +107,7 @@ static int pci_visit_bridge (struct pci_visit * fn,
 	struct pci_bus_wrapped wrapped_bus;
 	int result = 0;
 
-	DBG("scanning bridge %02x, %02x\n", PCI_SLOT(wrapped_dev->dev->devfn),
-	    PCI_FUNC(wrapped_dev->dev->devfn));
+	DBG("PCI: Scanning bridge %s\n", pci_name(wrapped_dev->dev));
 
 	if (fn->visit_pci_dev) {
 		result = fn->visit_pci_dev(wrapped_dev, wrapped_parent);
@@ -153,8 +153,7 @@ int pci_visit_dev(struct pci_visit *fn, struct pci_dev_wrapped *wrapped_dev,
 				return result;
 			break;
 		default:
-			DBG("scanning device %02x, %02x\n",
-			    PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
+			DBG("PCI: Scanning device %s\n", pci_name(dev));
 			if (fn->visit_pci_dev) {
 				result = fn->visit_pci_dev (wrapped_dev,
 							    wrapped_parent);
@@ -169,4 +168,3 @@ int pci_visit_dev(struct pci_visit *fn, struct pci_dev_wrapped *wrapped_dev,
 	return result;
 }
 EXPORT_SYMBOL(pci_visit_dev);
-

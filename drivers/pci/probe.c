@@ -422,7 +422,7 @@ int __devinit pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int max
 
 	pci_read_config_dword(dev, PCI_PRIMARY_BUS, &buses);
 
-	DBG("Scanning behind PCI bridge %s, config %06x, pass %d\n",
+	DBG("PCI: Scanning behind PCI bridge %s, config %06x, pass %d\n",
 	    pci_name(dev), buses & 0xffffff, pass);
 
 	/* Disable MasterAbortMode during probing to avoid reporting
@@ -559,8 +559,8 @@ static int pci_setup_device(struct pci_dev * dev)
 	dev->class = class;
 	class >>= 8;
 
-	DBG("Found %02x:%02x [%04x/%04x] %06x %02x\n", dev->bus->number,
-	    dev->devfn, dev->vendor, dev->device, class, dev->hdr_type);
+	DBG("PCI: Found %s [%04x/%04x] %06x %02x\n", pci_name(dev),
+	    dev->vendor, dev->device, class, dev->hdr_type);
 
 	/* "Unknown power state" */
 	dev->current_state = 4;
@@ -815,7 +815,7 @@ unsigned int __devinit pci_scan_child_bus(struct pci_bus *bus)
 	unsigned int devfn, pass, max = bus->secondary;
 	struct pci_dev *dev;
 
-	DBG("Scanning bus %02x\n", bus->number);
+	DBG("PCI: Scanning bus %04x:%02x\n", pci_domain_nr(bus), bus->number);
 
 	/* Go find them, Rover! */
 	for (devfn = 0; devfn < 0x100; devfn += 8)
@@ -825,7 +825,7 @@ unsigned int __devinit pci_scan_child_bus(struct pci_bus *bus)
 	 * After performing arch-dependent fixup of the bus, look behind
 	 * all PCI-to-PCI bridges on this bus.
 	 */
-	DBG("Fixups for bus %02x\n", bus->number);
+	DBG("PCI: Fixups for bus %04x:%02x\n", pci_domain_nr(bus), bus->number);
 	pcibios_fixup_bus(bus);
 	for (pass=0; pass < 2; pass++)
 		list_for_each_entry(dev, &bus->devices, bus_list) {
@@ -841,7 +841,8 @@ unsigned int __devinit pci_scan_child_bus(struct pci_bus *bus)
 	 *
 	 * Return how far we've got finding sub-buses.
 	 */
-	DBG("Bus scan for %02x returning with max=%02x\n", bus->number, max);
+	DBG("PCI: Bus scan for %04x:%02x returning with max=%02x\n",
+		pci_domain_nr(bus), bus->number, max);
 	return max;
 }
 
