@@ -730,7 +730,7 @@ proc_delete_dentry(struct dentry * dentry)
 	d_drop(dentry);
 }
 
-static struct dentry_operations proc_dentry_operations =
+struct dentry_operations proc_dentry_operations =
 {
 	NULL,			/* revalidate */
 	NULL,			/* d_hash */

@@ -351,6 +351,7 @@ static inline int proc_scsi_unregister(struct proc_dir_entry *driver, int x)
     }
 }
 
+extern struct dentry_operations proc_dentry_operations;
 extern struct super_block *proc_read_super(struct super_block *,void *,int);
 extern int init_proc_fs(void);
 extern struct inode * proc_get_inode(struct super_block *, int, struct proc_dir_entry *);
