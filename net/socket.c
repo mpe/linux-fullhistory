@@ -1302,27 +1302,19 @@ void sock_init(void)
 #ifdef CONFIG_NETLINK
 	init_netlink();
 #endif		 
+	/*
+	 *	Attach the routing/device information port.
+	 */
+
+#if defined(CONFIG_RTNETLINK)
+	netlink_attach(NETLINK_ROUTE, netlink_donothing);
+#endif
 
 	/*
 	 *	Initialize the protocols module. 
 	 */
 
 	proto_init();
-
-#ifdef CONFIG_NET
-	/* 
-	 *	Initialize the DEV module. 
-	 */
-
-	dev_init();
-  
-	/*
-	 *	And the bottom half handler 
-	 */
-
-	bh_base[NET_BH].routine= net_bh;
-	enable_bh(NET_BH);
-#endif  
 }
 
 int socket_get_info(char *buffer, char **start, off_t offset, int length)

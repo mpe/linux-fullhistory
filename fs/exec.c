@@ -171,6 +171,11 @@ int aout_core_dump(long signr, struct pt_regs * regs)
 	char corefile[6+sizeof(current->comm)];
 	unsigned long dump_start, dump_size;
 	struct user dump;
+#ifdef __alpha__
+#       define START_DATA(u)	(u.start_data)
+#else
+#       define START_DATA(u)	(u.u_tsize << PAGE_SHIFT)
+#endif
 
 	if (!current->dumpable)
 		return 0;
@@ -211,7 +216,7 @@ int aout_core_dump(long signr, struct pt_regs * regs)
 		goto close_coredump;
 	has_dumped = 1;
        	strncpy(dump.u_comm, current->comm, sizeof(current->comm));
-	dump.u_ar0 = (struct pt_regs *)(((unsigned long)(&dump.regs)) - ((unsigned long)(&dump)));
+	dump.u_ar0 = (void *)(((unsigned long)(&dump.regs)) - ((unsigned long)(&dump)));
 	dump.signal = signr;
 	dump_thread(regs, &dump);
 
@@ -228,7 +233,7 @@ int aout_core_dump(long signr, struct pt_regs * regs)
 
 /* make sure we actually have a data and stack area to dump */
 	set_fs(USER_DS);
-	if (verify_area(VERIFY_READ, (void *) (dump.u_tsize << PAGE_SHIFT), dump.u_dsize << PAGE_SHIFT))
+	if (verify_area(VERIFY_READ, (void *) START_DATA(dump), dump.u_dsize << PAGE_SHIFT))
 		dump.u_dsize = 0;
 	if (verify_area(VERIFY_READ, (void *) dump.start_stack, dump.u_ssize << PAGE_SHIFT))
 		dump.u_ssize = 0;
@@ -242,7 +247,7 @@ int aout_core_dump(long signr, struct pt_regs * regs)
 	set_fs(USER_DS);
 /* Dump the data area */
 	if (dump.u_dsize != 0) {
-		dump_start = dump.u_tsize << PAGE_SHIFT;
+		dump_start = START_DATA(dump);
 		dump_size = dump.u_dsize << PAGE_SHIFT;
 		DUMP_WRITE(dump_start,dump_size);
 	}
@@ -456,16 +461,12 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 	return p;
 }
 
-unsigned long setup_arg_pages(unsigned long text_size,unsigned long * page)
+unsigned long setup_arg_pages(unsigned long text_size, unsigned long * page)
 {
-	unsigned long code_limit,data_limit,code_base,data_base;
+	unsigned long data_base;
 	int i;
 
-	code_limit = STACK_TOP;
-	data_limit = STACK_TOP;
-	code_base = data_base = 0;
-	current->mm->start_code = code_base;
-	data_base += data_limit;
+	data_base = STACK_TOP;
 	for (i=MAX_ARG_PAGES-1 ; i>=0 ; i--) {
 		data_base -= PAGE_SIZE;
 		if (page[i]) {
@@ -473,7 +474,7 @@ unsigned long setup_arg_pages(unsigned long text_size,unsigned long * page)
 			put_dirty_page(current,page[i],data_base);
 		}
 	}
-	return data_limit;
+	return STACK_TOP;
 }
 
 /*

@@ -58,6 +58,7 @@
 # ifndef CONFIG_MODVERSIONS
 	char kernel_version[]= UTS_RELEASE;
 # endif
+#define optcd_init init_module
 #else
 # define MOD_INC_USE_COUNT
 # define MOD_DEC_USE_COUNT
@@ -1402,28 +1403,19 @@ void optcd_setup(char *str, int *ints) {
 		optcd_port = ints[1];
 }
 
-#ifndef MODULE
-#define RETURN_EIO return mem_start
-#else
-#define RETURN_EIO return -EIO
-#endif
-
 /*
  * Test for presence of drive and initialize it. Called at boot time.
  */
-#ifndef MODULE
-unsigned long optcd_init(unsigned long mem_start, unsigned long mem_end) {
-#else
-int init_module(void) {
-#endif
+
+int optcd_init(void) {
 	if (optcd_port <= 0) {
 		printk("optcd: no Optics Storage CDROM Initialization\n");
-		RETURN_EIO;
+		return -EIO;
 	}
 	if (check_region(optcd_port, 4)) {
 		printk("optcd: conflict, I/O port 0x%x already used\n",
 			optcd_port);
-		RETURN_EIO;
+		return -EIO;
 	}
 
 	if (!check_region(ISP16_DRIVE_SET_PORT, 5)) {
@@ -1443,38 +1435,34 @@ int init_module(void) {
 
     if ( isp16_config( optcd_port, ISP16_SONY, 0, 0 ) < 0 ) {
       printk( "ISP16 cdrom interface has not been properly configured.\n" );
-      RETURN_EIO;
+      return -EIO;
     }
   }
 	}
 
 	if (!optResetDrive()) {
 		printk("optcd: drive at 0x%x not ready\n", optcd_port);
-		RETURN_EIO;
+		return -EIO;
 	}
 	if (!version_ok()) {
 		printk("optcd: unknown drive detected; aborting\n");
-		RETURN_EIO;
+		return -EIO;
 	}
 	if (optCmd(COMINITDOUBLE) < 0) {
 		printk("optcd: cannot init double speed mode\n");
-		RETURN_EIO;
+		return -EIO;
 	}
 	if (register_blkdev(MAJOR_NR, "optcd", &opt_fops) != 0)
 	{
 		printk("optcd: unable to get major %d\n", MAJOR_NR);
-		RETURN_EIO;
+		return -EIO;
 	}
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	read_ahead[MAJOR_NR] = 4;
 	request_region(optcd_port, 4, "optcd");
 	optPresent = 1;
 	printk("optcd: 8000 AT CDROM at 0x%x\n", optcd_port);
-#ifndef MODULE
-	return mem_start;
-#else
 	return 0;
-#endif
 }
 
 #ifdef MODULE

@@ -32,6 +32,9 @@
  *	Miquel van Smoorenburg	:	BSD API fixes.
  *	Miquel van Smoorenburg	:	Metrics.
  *		Alan Cox	:	Use __u32 properly
+ *		Alan Cox	:	Aligned routing errors more closely with BSD
+ *					our system is still very different.
+ *		Alan Cox	:	Faster /proc handling
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -59,6 +62,7 @@
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/icmp.h>
+#include <net/netlink.h>
 
 /*
  *	The routing table list
@@ -75,14 +79,14 @@ static struct rtable *rt_loopback = NULL;
 
 /*
  *	Remove a routing table entry.
- *	Should we return a status value here ?
  */
 
-static void rt_del(__u32 dst, __u32 mask,
+static int rt_del(__u32 dst, __u32 mask,
 		char *devname, __u32 gtw, short rt_flags, short metric)
 {
 	struct rtable *r, **rp;
 	unsigned long flags;
+	int found=0;
 
 	rp = &rt_base;
 	
@@ -117,11 +121,17 @@ static void rt_del(__u32 dst, __u32 mask,
 		 
 		if (rt_loopback == r)
 			rt_loopback = NULL;
+		ip_netlink_msg(RTMSG_DELROUTE, dst, gtw, mask, rt_flags, metric, r->rt_dev->name);
 		kfree_s(r, sizeof(struct rtable));
+		found=1;
 	} 
 	rt_stamp++;		/* New table revision */
 	
 	restore_flags(flags);
+	
+	if(found)
+		return 0;
+	return -ESRCH;
 }
 
 
@@ -342,6 +352,7 @@ void ip_rt_add(short flags, __u32 dst, __u32 mask,
 		*rp = r->rt_next;
 		if (rt_loopback == r)
 			rt_loopback = NULL;
+		ip_netlink_msg(RTMSG_DELROUTE, dst,gw, mask, flags, metric, rt->rt_dev->name);
 		kfree_s(r, sizeof(struct rtable));
 	}
 	
@@ -384,8 +395,9 @@ void ip_rt_add(short flags, __u32 dst, __u32 mask,
 	/*
 	 *	Restore the interrupts and return
 	 */
-	 
+
 	restore_flags(cpuflags);
+	ip_netlink_msg(RTMSG_NEWROUTE, dst,gw, mask, flags, metric, rt->rt_dev->name);
 	return;
 }
 
@@ -429,7 +441,7 @@ static int rt_new(struct rtentry *r)
 		dev = dev_get(devname);
 		putname(devname);
 		if (!dev)
-			return -EINVAL;
+			return -ENODEV;
 	}
 	
 	/*
@@ -541,16 +553,23 @@ static int rt_kill(struct rtentry *r)
 	 * metric can become negative here if it wasn't filled in
 	 * but that's a fortunate accident; we really use that in rt_del.
 	 */
-	rt_del((__u32)trg->sin_addr.s_addr, (__u32)msk->sin_addr.s_addr, devname,
+	err=rt_del((__u32)trg->sin_addr.s_addr, (__u32)msk->sin_addr.s_addr, devname,
 		(__u32)gtw->sin_addr.s_addr, r->rt_flags, r->rt_metric - 1);
 	if ( devname != NULL )
 		putname(devname);
-	return 0;
+	return err;
 }
 
 
 /* 
  *	Called from the PROCfs module. This outputs /proc/net/route.
+ *
+ *	We preserve the old format but pad the buffers out. This means that
+ *	we can spin over the other entries as we read them. Remember the
+ *	gated BGP4 code could need to read 60,000+ routes on occasion (thats
+ *	about 7Mb of data). To do that ok we will need to also cache the
+ *	last route we got to (reads will generally be following on from
+ *	one another without gaps).
  */
  
 int rt_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
@@ -559,24 +578,32 @@ int rt_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 	int len=0;
 	off_t pos=0;
 	off_t begin=0;
-	int size;
+	char temp[129];
 
-	len += sprintf(buffer,
-		 "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n");
-	pos=len;
-  
-	/*
-	 *	This isn't quite right -- r->rt_dst is a struct! 
-	 */
-	 
+	if(offset<128)
+	{
+		sprintf(buffer,"%-127s\n","Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT");
+		pos=128;
+  	}
+  	
 	for (r = rt_base; r != NULL; r = r->rt_next) 
 	{
-        	size = sprintf(buffer+len, "%s\t%08lX\t%08lX\t%02X\t%d\t%lu\t%d\t%08lX\t%d\t%lu\t%u\n",
+		/*
+		 *	Spin through entries until we are ready
+		 */
+		if(pos+128<offset)
+		{
+			pos+=128;
+			continue;
+		}
+					
+        	sprintf(temp, "%s\t%08lX\t%08lX\t%02X\t%d\t%lu\t%d\t%08lX\t%d\t%lu\t%u",
 			r->rt_dev->name, (unsigned long)r->rt_dst, (unsigned long)r->rt_gateway,
 			r->rt_flags, r->rt_refcnt, r->rt_use, r->rt_metric,
 			(unsigned long)r->rt_mask, (int)r->rt_mss, r->rt_window, (int)r->rt_irtt);
-		len+=size;
-		pos+=size;
+		sprintf(buffer+len,"%-127s\n",temp);
+		len+=128;
+		pos+=128;
 		if(pos<offset)
 		{
 			len=0;

@@ -18,10 +18,9 @@
  *		Cache manager under test. Forwarding in vague test mode
  *	Todo:
  *		Flow control
- *		Tunnels
- *		Wipe cache on mrouted exit
+ *		Finish Tunnels
  *		Debug cache ttl handling properly
- *		Resolve IFF_ALLMULTI for most cards
+ *		Resolve IFF_ALLMULTI for rest of cards
  */
 
 #include <asm/system.h>
@@ -895,7 +894,7 @@ done:
  
 void ip_mr_init(void)
 {
-	printk("Linux IP multicast router 0.02pre-working 8)\n");
+	printk("Linux IP multicast router 0.04-might-work 8)\n");
 	register_netdevice_notifier(&ip_mr_notifier);
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IPMR_VIF, 9 ,"ip_mr_vif",

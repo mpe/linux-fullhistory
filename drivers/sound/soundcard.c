@@ -218,8 +218,8 @@ static struct file_operations sound_fops =
   sound_release
 };
 
-long
-soundcard_init (long mem_start)
+int
+soundcard_init (void)
 {
 #ifndef MODULE
   register_chrdev (SOUND_MAJOR, "sound", &sound_fops);
@@ -227,31 +227,31 @@ soundcard_init (long mem_start)
 
   soundcard_configured = 1;
 
-  mem_start = sndtable_init (mem_start);	/* Initialize call tables and
-						 * detect cards */
+  sndtable_init ();		/* Initialize call tables and
+				 * detect cards */
 
   if (!(soundcards_installed = sndtable_get_cardcount ()))
-    return mem_start;		/* No cards detected */
+    return 0;			/* No cards detected */
 
 #ifndef EXCLUDE_AUDIO
   if (num_audiodevs)		/* Audio devices present */
     {
-      mem_start = DMAbuf_init (mem_start);
-      mem_start = audio_init (mem_start);
+      DMAbuf_init ();
+      audio_init ();
     }
 #endif
 
 #ifndef EXCLUDE_MIDI
   if (num_midis)
-    mem_start = MIDIbuf_init (mem_start);
+    MIDIbuf_init ();
 #endif
 
 #ifndef EXCLUDE_SEQUENCER
   if (num_midis + num_synths)
-    mem_start = sequencer_init (mem_start);
+    sequencer_init ();
 #endif
 
-  return mem_start;
+  return 0;
 }
 
 #ifdef MODULE

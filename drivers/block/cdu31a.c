@@ -2918,13 +2918,12 @@ static int cdu31a_block_size;
 /*
  * Initialize the driver.
  */
-#ifndef MODULE
-unsigned long
-cdu31a_init(unsigned long mem_start, unsigned long mem_end)
-#else
-int
-init_module(void)
+#ifdef MODULE
+#define cdu31a_init init_module
 #endif
+
+int
+cdu31a_init(void)
 {
    struct s_sony_drive_config drive_config;
    unsigned int res_size;
@@ -3000,11 +2999,7 @@ init_module(void)
       if (register_blkdev(MAJOR_NR,"cdu31a",&scd_fops))
       {
 	 printk("Unable to get major %d for CDU-31a\n", MAJOR_NR);
-#ifdef MODULE
 	 return -EIO;
-#else
-	 return mem_start;
-#endif
       }
 
       if (SONY_HWC_DOUBLE_SPEED(drive_config))
@@ -3078,7 +3073,6 @@ init_module(void)
 
    disk_changed = 1;
    
-#ifdef MODULE
    if (drive_found)
    {
       return(0);
@@ -3087,9 +3081,6 @@ init_module(void)
    {
       return -EIO;
    }
-#else
-   return mem_start;
-#endif
 }
 
 #ifdef MODULE

@@ -204,9 +204,12 @@ static struct file_operations vcs_fops = {
 	NULL		/* fsync */
 };
 
-long vcs_init(long kmem_start)
+int vcs_init(void)
 {
-	if (register_chrdev(VCS_MAJOR, "vcs", &vcs_fops))
+	int error;
+
+	error = register_chrdev(VCS_MAJOR, "vcs", &vcs_fops);
+	if (error)
 		printk("unable to get major %d for vcs device", VCS_MAJOR);
-	return kmem_start;
+	return error;
 }

@@ -84,7 +84,6 @@ History:
 #ifdef MODULE			/* OK, so some of this is stolen */
 #include <linux/module.h>	
 #include <linux/version.h>
-#include <linux/malloc.h>
 #ifndef CONFIG_MODVERSIONS
 char kernel_version[]=UTS_RELEASE;
 #endif
@@ -102,6 +101,7 @@ char kernel_version[]=UTS_RELEASE;
 #include <linux/cdrom.h>
 #include <linux/ioport.h>
 #include <linux/mm.h>
+#include <linux/malloc.h>
 
 #include <asm/io.h>
 
@@ -1064,9 +1064,7 @@ void cleanup(int level)
     free_irq(cm206_irq);
   case 2: 
   case 1: 
-#ifdef MODULE
     kfree(cd);
-#endif
     release_region(cm206_base, 16);
   default:
   }
@@ -1126,8 +1124,6 @@ int probe_irq(int nr) {
 #endif
 
 #ifdef MODULE
-#define OK  0
-#define ERROR  -EIO
 
 static int cm206[2] = {0,0};	/* for compatible `insmod' parameter passing */
 void parse_options(void) 
@@ -1145,18 +1141,12 @@ void parse_options(void)
   }
 }
 
-#else MODULE
-
-#define OK  mem_start+size
-#define ERROR  mem_start
+#define cm206_init init_module
 
 #endif MODULE
 
-#ifdef MODULE
-int init_module(void)
-#else 
-unsigned long cm206_init(unsigned long mem_start, unsigned long mem_end)
-#endif
+
+int cm206_init(void)
 {
   uch e=0;
   long int size=sizeof(struct cm206_struct);
@@ -1171,16 +1161,12 @@ unsigned long cm206_init(unsigned long mem_start, unsigned long mem_end)
   cm206_base = probe_base_port(auto_probe ? 0 : cm206_base);
   if (!cm206_base) {
     printk(" can't find adapter!\n");
-    return ERROR;
+    return -EIO;
   }
   printk(" adapter at 0x%x", cm206_base);
   request_region(cm206_base, 16, "cm206");
-#ifdef MODULE
   cd = (struct cm206_struct *) kmalloc(size, GFP_KERNEL);
-  if (!cd) return ERROR;
-#else 
-  cd = (struct cm206_struct *) mem_start;
-#endif
+  if (!cd) return -EIO;
   /* Now we have found the adaptor card, try to reset it. As we have
    * found out earlier, this process generates an interrupt as well,
    * so we might just exploit that fact for irq probing! */
@@ -1189,7 +1175,7 @@ unsigned long cm206_init(unsigned long mem_start, unsigned long mem_end)
   if (cm206_irq<=0) {
     printk("can't find IRQ!\n");
     cleanup(1);
-    return ERROR;
+    return -EIO;
   }
   else printk(" IRQ %d found\n", cm206_irq);
 #else
@@ -1200,7 +1186,7 @@ unsigned long cm206_init(unsigned long mem_start, unsigned long mem_end)
     {
       printk(" drive not there\n");
       cleanup(1);
-      return ERROR;
+      return -EIO;
     }
   e = send_receive_polled(c_gimme);
   printk("Firmware revision %d", e & dcf_revision_code);
@@ -1211,13 +1197,13 @@ unsigned long cm206_init(unsigned long mem_start, unsigned long mem_end)
   if (request_irq(cm206_irq, cm206_interrupt, 0, "cm206")) {
     printk("\nUnable to reserve IRQ---aborted\n");
     cleanup(2);
-    return ERROR;
+    return -EIO;
   }
   printk(".\n");
   if (register_blkdev(MAJOR_NR, "cm206", &cm206_fops) != 0) {
     printk("Cannot register for major %d!\n", MAJOR_NR);
     cleanup(3);
-    return ERROR;
+    return -EIO;
   }
   blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
   read_ahead[MAJOR_NR] = 16;	/* reads ahead what? */
@@ -1231,10 +1217,8 @@ unsigned long cm206_init(unsigned long mem_start, unsigned long mem_end)
   cd->max_sectors = (inw(r_data_status) & ds_ram_size) ? 24 : 97;
   printk("%d kB adapter memory available, "  
 	 " %ld bytes kernel memory used.\n", cd->max_sectors*2, size);
-  return OK;
+  return 0;
 }
-#undef OK
-#undef ERROR
 
 #ifdef MODULE
 void cleanup_module(void)

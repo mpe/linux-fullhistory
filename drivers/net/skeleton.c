@@ -179,7 +179,7 @@ static int netcard_probe1(struct device *dev, int ioaddr)
 		 * This makes it easier to free the memory when this driver
 		 * is used as a module.
 		 */
-		dev = init_etherdev(0, 0, 0);
+		dev = init_etherdev(0, 0);
 		if (dev == NULL)
 			return -ENOMEM;
 	}

@@ -161,6 +161,6 @@ struct lp_struct {
  * function prototypes
  */
 
-extern long lp_init(long);
+extern int lp_init(void);
 
 #endif

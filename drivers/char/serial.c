@@ -13,8 +13,8 @@
  *
  * This module exports the following rs232 io functions:
  *
- *	long rs_init(long);
- * 	int  rs_open(struct tty_struct * tty, struct file * filp)
+ *	int rs_init(void);
+ * 	int rs_open(struct tty_struct * tty, struct file * filp)
  */
 
 #include <linux/errno.h>
@@ -2572,7 +2572,7 @@ static void autoconfig(struct async_struct * info)
 /*
  * The serial driver boot-time initialization code!
  */
-long rs_init(long kmem_start)
+int rs_init(void)
 {
 	int i;
 	struct async_struct * info;
@@ -2695,7 +2695,7 @@ long rs_init(long kmem_start)
 				break;
 		}
 	}
-	return kmem_start;
+	return 0;
 }
 
 /*

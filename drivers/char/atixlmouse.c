@@ -13,6 +13,9 @@
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
+
+char kernel_version[] = UTS_RELEASE;
+#define atixl_busmouse_init init_module
 #else
 #define MOD_INC_USE_COUNT
 #define MOD_DEC_USE_COUNT
@@ -109,29 +112,31 @@ static int fasync_mouse(struct inode *inode, struct file *filp, int on)
 
 static void release_mouse(struct inode * inode, struct file * file)
 {
+	fasync_mouse(inode, file, 0);
+	if (--mouse.active)
+		return;
 	ATIXL_MSE_INT_OFF(); /* Interrupts are really shut down here */
-	mouse.active = 0;
 	mouse.ready = 0;
 	free_irq(ATIXL_MOUSE_IRQ);
-	fasync_mouse(inode, file, 0);
+	MOD_DEC_USE_COUNT;
 }
 
 static int open_mouse(struct inode * inode, struct file * file)
 {
 	if (!mouse.present)
 		return -EINVAL;
-	if (mouse.active)
+	if (mouse.active++)
+		return 0;
+	if (request_irq(ATIXL_MOUSE_IRQ, mouse_interrupt, 0, "ATIXL mouse")) {
+		mouse.active--;
 		return -EBUSY;
-	mouse.active = 1;
+	}
 	mouse.ready = 0;
 	mouse.dx = 0;
 	mouse.dy = 0;
 	mouse.buttons = mouse.latch_buttons = 0;
-	if (request_irq(ATIXL_MOUSE_IRQ, mouse_interrupt, 0, "ATIXL mouse")) {
-		mouse.active = 0;
-		return -EBUSY;
-	}
 	ATIXL_MSE_INT_ON(); /* Interrupts are really enabled here */
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -200,13 +205,8 @@ static struct mouse atixl_mouse = {
 	ATIXL_BUSMOUSE, "atixl", &atixl_busmouse_fops
 };
 
-#ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 
-int init_module(void)
-#else
-unsigned long atixl_busmouse_init(unsigned long kmem_start)
-#endif
+int atixl_busmouse_init(void)
 {
 	unsigned char a,b,c;
 
@@ -217,11 +217,7 @@ unsigned long atixl_busmouse_init(unsigned long kmem_start)
 		printk("\nATI Inport ");
 	else{
 		mouse.present = 0;
-#ifdef MODULE
 		return -EIO;
-#else
-		return kmem_start;
-#endif
 	}
 	outb(0x80, ATIXL_MSE_CONTROL_PORT);	/* Reset the Inport device */
 	outb(0x07, ATIXL_MSE_CONTROL_PORT);	/* Select Internal Register 7 */
@@ -234,18 +230,16 @@ unsigned long atixl_busmouse_init(unsigned long kmem_start)
 	mouse.wait = NULL;
 	printk("Bus mouse detected and installed.\n");
 	mouse_register(&atixl_mouse);
-#ifdef MODULE
 	return 0;
-#else
-	return kmem_start;
-#endif
 }
 
 #ifdef MODULE
 void cleanup_module(void)
 {
-	if (MOD_IN_USE)
+	if (MOD_IN_USE) {
 		printk("atixlmouse: in use, remove delayed\n");
+		return;
+	}
 	mouse_deregister(&atixl_mouse);
 }
 #endif

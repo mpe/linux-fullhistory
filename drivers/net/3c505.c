@@ -1258,7 +1258,7 @@ elp_init (struct device *dev)
 	adapter = (elp_device *)(dev->priv = kmalloc(sizeof(elp_device), GFP_KERNEL));
 	CHECK_NULL(adapter);
 	if (adapter == NULL)
-		return -ENOMEM;
+		return;
 	memset(&(adapter->stats), 0, sizeof(struct enet_statistics));
 
 	/*

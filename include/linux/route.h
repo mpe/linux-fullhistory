@@ -8,6 +8,8 @@
  * Version:	@(#)route.h	1.0.3	05/27/93
  *
  * Authors:	Original taken from Berkeley UNIX 4.3, (c) UCB 1986-1988
+ *		for the purposes of compatibility only.
+ *
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *
  *		This program is free software; you can redistribute it and/or
@@ -22,7 +24,8 @@
 
 
 /* This structure gets passed by the SIOCADDRT and SIOCDELRT calls. */
-struct rtentry {
+struct rtentry 
+{
 	unsigned long	rt_hash;	/* hash key for lookups		*/
 	struct sockaddr	rt_dst;		/* target address		*/
 	struct sockaddr	rt_gateway;	/* gateway addr (RTF_GATEWAY)	*/
@@ -50,4 +53,26 @@ struct rtentry {
 #define RTF_IRTT	0x0100		/* Initial round trip time	  */
 #define RTF_REJECT	0x0200		/* Reject route			  */
 
+/*
+ *	This structure is passed from the kernel to user space by netlink
+ *	routing/device announcements
+ */
+
+struct netlink_rtinfo
+{
+	unsigned long	rtmsg_type;
+	struct sockaddr rtmsg_dst;
+	struct sockaddr rtmsg_gateway;
+	struct sockaddr rtmsg_genmask;
+	short 		rtmsg_flags;
+	short		rtmsg_metric;
+	char		rtmsg_device[16];
+};
+
+#define RTMSG_NEWROUTE		0x01
+#define RTMSG_DELROUTE		0x02
+#define RTMSG_NEWDEVICE		0x11
+#define RTMSG_DELDEVICE		0x12
+
 #endif	/* _LINUX_ROUTE_H */
+

@@ -354,7 +354,7 @@ int el16_probe1(struct device *dev, int ioaddr)
 
 	/* Allocate a new 'dev' if needed. */
 	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct net_local), 0);
+		dev = init_etherdev(0, sizeof(struct net_local));
 
 	if (net_debug  &&  version_printed++ == 0)
 		printk(version);
@@ -427,6 +427,8 @@ int el16_probe1(struct device *dev, int ioaddr)
 	dev->get_stats	= el16_get_stats;
 
 	ether_setup(dev);	/* Generic ethernet behaviour */
+	
+	dev->flags&=~IFF_MULTICAST;	/* Multicast doesn't work */
 
 	return 0;
 }

@@ -414,6 +414,8 @@ int eexp_probe1(struct device *dev, short ioaddr)
 	
 	ether_setup(dev);
 	
+	dev->flags&=~IFF_MULTICAST;
+		
 	return 0;
 }
 

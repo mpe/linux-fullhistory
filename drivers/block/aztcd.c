@@ -142,6 +142,7 @@
 # ifndef CONFIG_MODVERSIONS
     char kernel_version[]= UTS_RELEASE;
 # endif
+#define aztcd_init init_module
 #endif
 
 #include <linux/errno.h>
@@ -1524,22 +1525,15 @@ static struct file_operations azt_fops = {
 /*
  * Test for presence of drive and initialize it.  Called at boot time.
  */
-#ifndef MODULE 
-unsigned long aztcd_init(unsigned long mem_start, unsigned long mem_end)
-#else
-int init_module(void)
-#endif
+
+int aztcd_init(void)
 {       long int count, max_count;
 	unsigned char result[50];
 	int st;
 
 	if (azt_port <= 0) {
 	  printk("aztcd: no Aztech CD-ROM Initialization");
-#ifndef MODULE
-	  return (mem_start);
-#else
           return -EIO;
-#endif	  
 	}
 	printk("aztcd: Aztech, Orchid, Okano, Wearnes CD-ROM Driver (C) 1994,1995 W.Zimmermann\n");
 	printk("aztcd: DriverVersion=%s  BaseAddress=0x%x \n",AZT_VERSION,azt_port);
@@ -1547,22 +1541,14 @@ int init_module(void)
 	if (check_region(azt_port, 4)) {
 	  printk("aztcd: conflict, I/O port (%X) already used\n",
 		 azt_port);
-#ifndef MODULE
-	  return (mem_start);
-#else
           return -EIO;
-#endif	  
 	}
 
 #ifdef AZT_SW32   /*CDROM connected to Soundwave32 card*/
         if ((0xFF00 & inw(AZT_SW32_ID_REG)) != 0x4500)
            { printk("aztcd: no Soundwave32 card detected at base:%x init:%x config:%x id:%x\n",
 		 AZT_SW32_BASE_ADDR,AZT_SW32_INIT,AZT_SW32_CONFIG_REG,AZT_SW32_ID_REG);
-#ifndef MODULE
-	         return (mem_start);
-#else
                  return -EIO;
-#endif	  
 	   }
         else                
            { printk("aztcd: Soundwave32 card detected at %x  Version %x\n",
@@ -1590,7 +1576,7 @@ int init_module(void)
 #ifndef MODULE
              if (azt_cont!=0x79)   
 	        { printk("aztcd: no AZTECH CD-ROM drive found-Try boot parameter aztcd=<BaseAddress>,0x79\n");
-	          return (mem_start);
+	          return -EIO;
                 }
 #else        
              if (0)
@@ -1611,11 +1597,7 @@ int init_module(void)
 	          STEN_LOW;
 	          if (inb(DATA_PORT)!=AFL_OP_OK)    /*OP_OK?*/
 	             { printk("aztcd: no AZTECH CD-ROM drive found\n");
-#ifndef MODULE
-	               return (mem_start);
-#else
                        return -EIO;
-#endif	     
 	             } 
 	          for (count = 0; count < AZT_TIMEOUT; count++); 
 	             { count=count*2;          /* delay a bit */
@@ -1623,11 +1605,7 @@ int init_module(void)
 	             }                        
 	          if ((st=getAztStatus())==-1)
 	             { printk("aztcd: Drive Status Error Status=%x\n",st);
-#ifndef MODULE
-	               return (mem_start);
-#else
                        return -EIO;
-#endif	      
 	             }
 #ifdef AZT_DEBUG
 	          printk("aztcd: Status = %x\n",st);
@@ -1673,22 +1651,14 @@ int init_module(void)
 	       for (count=1;count<5;count++) printk("%c",result[count]);
 	       printk("\n");
 	       printk("aztcd: Aborted\n");
-#ifndef MODULE
-	       return (mem_start);
-#else
                return -EIO;
-#endif 	          
 	     }
 	 }
 	if (register_blkdev(MAJOR_NR, "aztcd", &azt_fops) != 0)
 	{
 		printk("aztcd: Unable to get major %d for Aztech CD-ROM\n",
 		       MAJOR_NR);
-#ifndef MODULE		       
-		return (mem_start);
-#else
                 return -EIO;
-#endif		
 	}
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	read_ahead[MAJOR_NR] = 4;
@@ -1699,11 +1669,7 @@ int init_module(void)
 	aztPresent = 1;
 	aztCloseDoor();
 	printk("aztcd: End Init\n");
-#ifndef MODULE
-	return (mem_start);
-#else
         return (0);
-#endif
 }
 
 

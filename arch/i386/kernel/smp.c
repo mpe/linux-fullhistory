@@ -304,8 +304,14 @@ void smp_scan_config(unsigned long base, unsigned long length)
 							mpf->mpf_feature1);
 						return;
 				}
+				/*
+				 *	Read the physical hardware table. If there isn't one
+				 *	the processors present are 0 and 1.
+				 */
 				if(mpf->mpf_physptr)
 					smp_read_mpc((void *)mpf->mpf_physptr);
+				else
+					cpu_present_map=3;
 				printk("Processors: %d\n", num_processors);
 			}
 		}

@@ -85,7 +85,9 @@
 #include <linux/hdreg.h>
 #include <linux/pci.h>
 #include <linux/bios32.h>
+
 #include <asm/io.h>
+#include <asm/dma.h>
 
 #include "ide.h"
 
@@ -352,9 +354,9 @@ void ide_init_triton (byte bus, byte fn)
 			unsigned long *table;
 			request_region(base, 8, hwif->name);
 			hwif->dma_base  = base;
-			table = ide_alloc(2 * PRD_ENTRIES * sizeof(long), 4096);
+			table = (void *) __get_dma_pages(GFP_KERNEL, 0);
 			hwif->dmatable = table;
-			outl((unsigned long) table, base + 4);
+			outl(virt_to_bus(table), base + 4);
 			hwif->dmaproc  = &triton_dmaproc;
 		}
 		printk("\n    %s timing: (0x%04x) sample_CLKs=%d, recovery_CLKs=%d\n",

@@ -715,6 +715,8 @@ de600_probe(struct device *dev)
 
 	ether_setup(dev);
 	
+	dev->flags&=~IFF_MULTICAST;
+	
 	select_prn();
 	return 0;
 }

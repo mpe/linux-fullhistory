@@ -27,6 +27,8 @@
  *		Greg Page	: 802.2 and SNAP stuff.
  *		Alan Cox	: MAC layer pointers/new format.
  *		Paul Gortmaker	: eth_copy_and_sum shouldn't csum padding.
+ *		Alan Cox	: Protect against forwarding explosions with
+ *				  older network drivers and IFF_ALLMULTI
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -184,7 +186,12 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 			skb->pkt_type=PACKET_MULTICAST;
 	}
 	
-	else if(dev->flags&IFF_PROMISC)
+	/*
+	 *	This ALLMULTI check should be redundant by 1.4
+	 *	so don't forget to remove it.
+	 */
+	 
+	else if(dev->flags&(IFF_PROMISC|IFF_ALLMULTI))
 	{
 		if(memcmp(eth->h_dest,dev->dev_addr, ETH_ALEN))
 			skb->pkt_type=PACKET_OTHERHOST;

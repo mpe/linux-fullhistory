@@ -1,0 +1,25 @@
+The PPP support for this kernel requires the 2.2.0a version of the
+pppd daemon. You will find the current version of the daemon on
+sunsite.unc.edu in the /pub/Linux/system/Network/serial directory.
+
+Sunsite has many mirror sites. Please feel free to obtain it from
+a mirror site close to you.
+
+If you attempt to use a version of pppd which is not compatible
+then you will have some error condition. It usually is reflected
+in that an ioctl operation will generate a fatal error.
+
+Please do not use earlier versions of the 2.2 package. If you
+obtained a copy from merit.edu or bellatrix then please get an
+update from the sunsite site.
+
+The CCP (Compression Control Protocol) which is supported by this
+code is functional. You will need a compatible BSD compressor on
+your peer site to use the code.
+
+The BSD compression code will only build as a loadable module. There
+was an earlier version which would build it into the kernel but that
+functionality has been removed for various reasons.
+
+--
+Al Longyear                      longyear@netcom.com

@@ -38,10 +38,10 @@
 static struct mouse mouse_list = { 0, "head", NULL, &mouse_list, &mouse_list };
 
 #ifndef MODULE
-extern unsigned long bus_mouse_init(unsigned long);
-extern unsigned long psaux_init(unsigned long);
-extern unsigned long ms_bus_mouse_init(unsigned long);
-extern unsigned long atixl_busmouse_init(unsigned long);
+extern int bus_mouse_init(void);
+extern int psaux_init(void);
+extern int ms_bus_mouse_init(void);
+extern int atixl_busmouse_init(void);
 #endif
 
 static int mouse_open(struct inode * inode, struct file * file)
@@ -79,6 +79,7 @@ int mouse_register(struct mouse * mouse)
 {
 	if (mouse->next || mouse->prev)
 		return -EBUSY;
+	MOD_INC_USE_COUNT;
 	mouse->next = &mouse_list;
 	mouse->prev = mouse_list.prev;
 	mouse->prev->next = mouse;
@@ -90,6 +91,7 @@ int mouse_deregister(struct mouse * mouse)
 {
 	if (!mouse->next || !mouse->prev)
 		return -EINVAL;
+	MOD_DEC_USE_COUNT;
 	mouse->prev->next = mouse->next;
 	mouse->next->prev = mouse->prev;
 	mouse->next = NULL;
@@ -99,53 +101,40 @@ int mouse_deregister(struct mouse * mouse)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
-
-int init_module(void)
-#else
-unsigned long mouse_init(unsigned long kmem_start)
+#define mouse_init init_module
 #endif
+
+int mouse_init(void)
 {
 #ifndef MODULE
 #ifdef CONFIG_BUSMOUSE
-	kmem_start = bus_mouse_init(kmem_start);
+	bus_mouse_init();
 #endif
 #if defined CONFIG_PSMOUSE || defined CONFIG_82C710_MOUSE
-	kmem_start = psaux_init(kmem_start);
+	psaux_init();
 #endif
 #ifdef CONFIG_MS_BUSMOUSE
-	kmem_start = ms_bus_mouse_init(kmem_start);
+	ms_bus_mouse_init();
 #endif
 #ifdef CONFIG_ATIXL_BUSMOUSE
- 	kmem_start = atixl_busmouse_init(kmem_start);
+ 	atixl_busmouse_init();
 #endif
 #endif /* !MODULE */
 	if (register_chrdev(MOUSE_MAJOR,"mouse",&mouse_fops)) {
 	  printk("unable to get major %d for mouse devices\n",
 		 MOUSE_MAJOR);
-#ifdef MODULE
 		return -EIO;
-#endif
 	}
-#ifdef MODULE
 	return 0;
-#else
-	return kmem_start;
-#endif
 }
 
 #ifdef MODULE
 void cleanup_module(void)
 {
-	mouse_data *c = mouse_list, *n;
 	if (MOD_IN_USE) {
 		printk("mouse: in use, remove delayed\n");
 		return;
 	}
 	unregister_chrdev(MOUSE_MAJOR, "mouse");
-	while (c) {
-		n = c->next;
-		kfree(c);
-		c = n;
-	}
 }
 #endif

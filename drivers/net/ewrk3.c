@@ -1885,7 +1885,7 @@ cleanup_module(void)
   } else {
     release_region(thisEthwrk.base_addr, EWRK3_TOTAL_SIZE);
     unregister_netdev(&thisEthwrk);
-    free(thisEthwrk.priv);
+    kfree(thisEthwrk.priv);
     thisEthwrk.priv = NULL;
   }
 }

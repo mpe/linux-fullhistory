@@ -585,7 +585,7 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 	}
 }
 
-long blk_dev_init(long mem_start, long mem_end)
+int blk_dev_init(void)
 {
 	struct request * req;
 
@@ -596,13 +596,13 @@ long blk_dev_init(long mem_start, long mem_end)
 	}
 	memset(ro_bits,0,sizeof(ro_bits));
 #ifdef CONFIG_BLK_DEV_IDE
-	mem_start = ide_init(mem_start,mem_end); /* this MUST preceed hd_init */
+	ide_init();		/* this MUST preceed hd_init */
 #endif
 #ifdef CONFIG_BLK_DEV_HD
-	mem_start = hd_init(mem_start,mem_end);
+	hd_init();
 #endif
 #ifdef CONFIG_BLK_DEV_XD
-	mem_start = xd_init(mem_start,mem_end);
+	xd_init();
 #endif
 #ifdef CONFIG_BLK_DEV_FD
 	floppy_init();
@@ -610,36 +610,34 @@ long blk_dev_init(long mem_start, long mem_end)
 	outb_p(0xc, 0x3f2);
 #endif
 #ifdef CONFIG_CDU31A
-	mem_start = cdu31a_init(mem_start,mem_end);
+	cdu31a_init();
 #endif CONFIG_CDU31A
 #ifdef CONFIG_MCD
-	mem_start = mcd_init(mem_start,mem_end);
+	mcd_init();
 #endif CONFIG_MCD
 #ifdef CONFIG_MCDX
-	mem_start = mcdx_init(mem_start,mem_end);
+	mcdx_init();
 #endif CONFIG_MCDX
 #ifdef CONFIG_SBPCD
-	mem_start = sbpcd_init(mem_start, mem_end);
+	sbpcd_init();
 #endif CONFIG_SBPCD
 #ifdef CONFIG_AZTCD
-        mem_start = aztcd_init(mem_start,mem_end);
+        aztcd_init();
 #endif CONFIG_AZTCD
 #ifdef CONFIG_CDU535
-	mem_start = sony535_init(mem_start,mem_end);
+	sony535_init();
 #endif CONFIG_CDU535
 #ifdef CONFIG_GSCD
-	mem_start = gscd_init(mem_start, mem_end);
+	gscd_init();
 #endif CONFIG_GSCD
 #ifdef CONFIG_CM206
-	mem_start = cm206_init(mem_start, mem_end);
+	cm206_init();
 #endif
 #ifdef CONFIG_OPTCD
-	mem_start = optcd_init(mem_start,mem_end);
+	optcd_init();
 #endif CONFIG_OPTCD
 #ifdef CONFIG_SJCD
-	mem_start = sjcd_init(mem_start,mem_end);
+	sjcd_init();
 #endif CONFIG_SJCD
-	if (ramdisk_size)
-		mem_start += rd_init(mem_start, ramdisk_size*1024);
-	return mem_start;
+	return 0;
 }

@@ -33,6 +33,7 @@ struct kbd_struct {
 #define VC_SHIFTRLOCK	KG_SHIFTR	/* shiftr lock mode */
 #define VC_CTRLLLOCK	KG_CTRLL 	/* ctrll lock mode */
 #define VC_CTRLRLOCK	KG_CTRLR 	/* ctrlr lock mode */
+	unsigned char slockstate; 	/* for `sticky' Shift, Ctrl, etc. */
 
 	unsigned char ledmode:2; 	/* one 2-bit value */
 #define LED_SHOW_FLAGS 0        /* traditional state */
@@ -61,7 +62,7 @@ struct kbd_struct {
 
 extern struct kbd_struct kbd_table[];
 
-extern unsigned long kbd_init(unsigned long);
+extern int kbd_init(void);
 
 extern unsigned char getledstate(void);
 extern void setledstate(struct kbd_struct *kbd, unsigned int led);
@@ -104,6 +105,11 @@ extern inline void clr_vc_kbd_led(struct kbd_struct * kbd, int flag)
 extern inline void chg_vc_kbd_lock(struct kbd_struct * kbd, int flag)
 {
 	kbd->lockstate ^= 1 << flag;
+}
+
+extern inline void chg_vc_kbd_slock(struct kbd_struct * kbd, int flag)
+{
+	kbd->slockstate ^= 1 << flag;
 }
 
 extern inline void chg_vc_kbd_mode(struct kbd_struct * kbd, int flag)

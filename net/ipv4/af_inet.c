@@ -1615,6 +1615,7 @@ void inet_proto_init(struct net_proto *pro)
 #if defined(CONFIG_IP_MROUTE)
 	ip_mr_init();
 #endif
+
 	/*
 	 *	Create all the /proc entries.
 	 */

@@ -438,16 +438,6 @@ static unsigned int	stl_baudrates[] = {
 /*****************************************************************************/
 
 /*
- *	Memory allocation vars. These keep track of what memory allocation
- *	we can currently use. They help deal with memory in a consistent
- *	way, whether during init or run-time.
- */
-static int	stl_meminited = 0;
-static long	stl_memend;
-
-/*****************************************************************************/
-
-/*
  *	Define some handy local macros...
  */
 #ifndef	MIN
@@ -463,13 +453,10 @@ static long	stl_memend;
 #ifdef MODULE
 int		init_module(void);
 void		cleanup_module(void);
-#else
-static void	stl_meminit(long base);
-static long	stl_memhalt(void);
 #endif
 static void	*stl_memalloc(int len);
 
-long		stl_init(long kmem_start);
+int		stl_init(void);
 static int	stl_open(struct tty_struct *tty, struct file *filp);
 static void	stl_close(struct tty_struct *tty, struct file *filp);
 static int	stl_write(struct tty_struct *tty, int from_user, const unsigned char *buf, int count);
@@ -533,7 +520,7 @@ int init_module()
 
 	save_flags(flags);
 	cli();
-	stl_init(0);
+	stl_init();
 	restore_flags(flags);
 
 	return(0);
@@ -628,33 +615,9 @@ void cleanup_module()
  *	memory and it will do the right thing.
  */
 
-#ifndef MODULE
-
-static void stl_meminit(long base)
-{
-	stl_memend = base;
-	stl_meminited = 1;
-}
-
-static long stl_memhalt()
-{
-	stl_meminited = 0;
-	return(stl_memend);
-}
-
-#endif
-
 static void *stl_memalloc(int len)
 {
-	void	*mem;
-
-	if (stl_meminited) {
-		mem = (void *) stl_memend;
-		stl_memend += len;
-	} else {
-		mem = (void *) kmalloc(len, GFP_KERNEL);
-	}
-	return(mem);
+	return (void *) kmalloc(len, GFP_KERNEL);
 }
 
 /*****************************************************************************/
@@ -2902,13 +2865,9 @@ static int stl_initbrds()
 
 /*****************************************************************************/
 
-long stl_init(long kmem_start)
+int stl_init(void)
 {
 	printk("%s: version %s\n", stl_drvname, stl_drvversion);
-
-#ifndef	MODULE
-	stl_meminit(kmem_start);
-#endif
 
 	stl_initbrds();
 
@@ -2964,10 +2923,7 @@ long stl_init(long kmem_start)
 	if (tty_register_driver(&stl_callout))
 		printk("STALLION: failed to register callout driver\n");
 
-#ifndef	MODULE
-	kmem_start = stl_memhalt();
-#endif
-	return(kmem_start);
+	return 0;
 }
 
 /*****************************************************************************/

@@ -252,34 +252,10 @@ static struct device slip_bootstrap = {
   
 #if defined(CONFIG_PPP)
 extern int ppp_init(struct device *);
-#ifdef CONFIG_PPP_LOTS
-
-    static struct device ppp15_dev={"ppp15",0,0,0,0,15,0,0,0,0,NEXT_DEV,ppp_init};
-    static struct device ppp14_dev={"ppp14",0,0,0,0,14,0,0,0,0,&ppp15_dev,ppp_init};
-    static struct device ppp13_dev={"ppp13",0,0,0,0,13,0,0,0,0,&ppp14_dev,ppp_init};
-    static struct device ppp12_dev={"ppp12",0,0,0,0,12,0,0,0,0,&ppp13_dev,ppp_init};
-    static struct device ppp11_dev={"ppp11",0,0,0,0,11,0,0,0,0,&ppp12_dev,ppp_init};
-    static struct device ppp10_dev={"ppp10",0,0,0,0,10,0,0,0,0,&ppp11_dev,ppp_init};
-    static struct device ppp9_dev={"ppp9",0,0,0,0,9,0,0,0,0,&ppp10_dev,ppp_init};
-    static struct device ppp8_dev={"ppp8",0,0,0,0,8,0,0,0,0,&ppp9_dev,ppp_init};
-    static struct device ppp7_dev={"ppp7",0,0,0,0,7,0,0,0,0,&ppp8_dev,ppp_init};
-    static struct device ppp6_dev={"ppp6",0,0,0,0,6,0,0,0,0,&ppp7_dev,ppp_init};
-    static struct device ppp5_dev={"ppp5",0,0,0,0,5,0,0,0,0,&ppp6_dev,ppp_init};
-    static struct device ppp4_dev={"ppp4",0,0,0,0,4,0,0,0,0,&ppp5_dev,ppp_init};
-#   undef	NEXT_DEV
-#   define	NEXT_DEV	(&ppp4_dev)
-#endif	/* CONFIG_PPP_LOTS */
-
-static struct device ppp3_dev = {
-    "ppp3", 0x0, 0x0, 0x0, 0x0, 3, 0, 0, 0, 0, NEXT_DEV,  ppp_init, };
-static struct device ppp2_dev = {
-    "ppp2", 0x0, 0x0, 0x0, 0x0, 2, 0, 0, 0, 0, &ppp3_dev, ppp_init, };
-static struct device ppp1_dev = {
-    "ppp1", 0x0, 0x0, 0x0, 0x0, 1, 0, 0, 0, 0, &ppp2_dev, ppp_init, };
-static struct device ppp0_dev = {
-    "ppp0", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, &ppp1_dev, ppp_init, };
+static struct device ppp_bootstrap = {
+    "ppp_proto", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, ppp_init, };
 #undef NEXT_DEV
-#define NEXT_DEV (&ppp0_dev)
+#define NEXT_DEV (&ppp_bootstrap)
 #endif   /* PPP */
 
 #ifdef CONFIG_DUMMY

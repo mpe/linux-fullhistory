@@ -151,6 +151,7 @@
 #include <linux/igmp.h>
 #include <linux/ip_fw.h>
 #include <linux/mroute.h>
+#include <net/netlink.h>
 
 #define CONFIG_IP_DEFRAG
 
@@ -1682,7 +1683,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		 * If this fragment needs masquerading, make it so...
 		 * (Dont masquerade de-masqueraded fragments)
 		 */
-		if (!(is_frag&4) && fw_res==2)
+		if (!(is_frag&4) && fw_res==FW_MASQUERADE)
 			ip_fw_masquerade(&skb, dev2);
 #endif
 		IS_SKB(skb);
@@ -3562,14 +3563,60 @@ static struct packet_type ip_packet_type =
 	NULL,
 };
 
+#ifdef CONFIG_RTNETLINK
+
+/*
+ *	Netlink hooks for IP
+ */
+ 
+void ip_netlink_msg(unsigned long msg, __u32 daddr, __u32 gw, __u32 mask, short flags, short metric, char *name)
+{
+	struct sk_buff *skb=alloc_skb(sizeof(struct netlink_rtinfo), GFP_ATOMIC);
+	struct netlink_rtinfo *nrt;
+	struct sockaddr_in *s;
+	if(skb==NULL)
+		return;
+	nrt=(struct netlink_rtinfo *)skb_put(skb, sizeof(struct netlink_rtinfo));
+	nrt->rtmsg_type=msg;
+	s=(struct sockaddr_in *)&nrt->rtmsg_dst;
+	s->sin_family=AF_INET;
+	s->sin_addr.s_addr=daddr;
+	s=(struct sockaddr_in *)&nrt->rtmsg_gateway;
+	s->sin_family=AF_INET;
+	s->sin_addr.s_addr=gw;
+	s=(struct sockaddr_in *)&nrt->rtmsg_genmask;
+	s->sin_family=AF_INET;
+	s->sin_addr.s_addr=mask;
+	nrt->rtmsg_flags=flags;
+	nrt->rtmsg_metric=metric;
+	strcpy(nrt->rtmsg_device,name);
+	netlink_post(NETLINK_ROUTE, skb);
+}	
+
+#endif
+
 /*
  *	Device notifier
  */
  
 static int ip_rt_event(unsigned long event, void *ptr)
 {
+	struct device *dev=ptr;
 	if(event==NETDEV_DOWN)
-		ip_rt_flush(ptr);
+	{
+		ip_netlink_msg(RTMSG_DELDEVICE, 0,0,0,0,0,dev->name);
+		ip_rt_flush(dev);
+	}
+/*
+ *	Join the intial group if multicast.
+ */		
+	if(event==NETDEV_UP)
+	{
+#ifdef CONFIG_IP_MULTICAST	
+		ip_mc_allhost(dev);
+#endif		
+		ip_netlink_msg(RTMSG_NEWDEVICE, 0,0,0,0,0,dev->name);
+	}
 	return NOTIFY_DONE;
 }
 

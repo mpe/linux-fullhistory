@@ -38,6 +38,7 @@ extern unsigned short plain_map[NR_KEYS];
 #define KT_META		8
 #define KT_ASCII	9
 #define KT_LOCK		10
+#define KT_SLOCK	12
 
 #define K(t,v)		(((t)<<8)|(v))
 #define KTYP(x)		((x) >> 8)
@@ -406,6 +407,15 @@ extern unsigned short plain_map[NR_KEYS];
 #define K_SHIFTRLOCK	K(KT_LOCK,KG_SHIFTR)
 #define K_CTRLLLOCK	K(KT_LOCK,KG_CTRLL)
 #define K_CTRLRLOCK	K(KT_LOCK,KG_CTRLR)
+
+#define K_SHIFT_SLOCK	K(KT_SLOCK,KG_SHIFT)
+#define K_CTRL_SLOCK	K(KT_SLOCK,KG_CTRL)
+#define K_ALT_SLOCK	K(KT_SLOCK,KG_ALT)
+#define K_ALTGR_SLOCK	K(KT_SLOCK,KG_ALTGR)
+#define K_SHIFTL_SLOCK	K(KT_SLOCK,KG_SHIFTL)
+#define K_SHIFTR_SLOCK	K(KT_SLOCK,KG_SHIFTR)
+#define K_CTRLL_SLOCK	K(KT_SLOCK,KG_CTRLL)
+#define K_CTRLR_SLOCK	K(KT_SLOCK,KG_CTRLR)
 
 #define NR_LOCK		8
 

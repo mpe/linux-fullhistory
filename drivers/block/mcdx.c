@@ -191,7 +191,7 @@ struct s_drive_stuff {
 	changed elsewhere. */
 
 /* declared in blk.h */
-unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end);
+int mcdx_init(void);
 void do_mcdx_request(void);
 
 int check_mcdx_media_change(kdev_t);
@@ -274,12 +274,6 @@ static struct file_operations mcdx_fops = {
 };
 
 /* KERNEL INTERFACE FUNCTIONS **************************************/ 
-
-#ifdef MODULE
-#define     free(x, y)      kfree((x))
-#else
-#define     free(x, y)      (mem_start -= y)
-#endif
 
 static int 
 mcdx_ioctl(
@@ -955,7 +949,7 @@ int init_module(void)
 	int i;
 	int drives = 0;
 
-	mcdx_init(0, 0);
+	mcdx_init();
 	for (i = 0; i < MCDX_NDRIVES; i++)  {
 		if (mcdx_stuffp[i]) {
 		TRACE((INIT, "init_module() drive %d stuff @ %p\n",
@@ -1026,7 +1020,7 @@ void warn(const char* fmt, ...)
 }
 
 
-unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end)
+int mcdx_init(void)
 {
 	int drive;
 
@@ -1047,17 +1041,11 @@ unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end)
 		
 		TRACE((INIT, "init() try drive %d\n", drive));
 
-#ifdef MODULE
 		TRACE((MALLOC, "init() malloc %d bytes\n", size));
 		if (!(stuffp = kmalloc(size, GFP_KERNEL))) {
 			WARN(("init() malloc failed\n"));
 			break; 
 		}
-#else
-        TRACE((INIT, "adjust mem_start\n"));
-        stuffp = (struct s_drive_stuff *) mem_start;
-        mem_start += size;
-#endif
 
 		TRACE((INIT, "init() got %d bytes for drive stuff @ %p\n", sizeof(*stuffp), stuffp));
 
@@ -1084,7 +1072,7 @@ unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end)
                     stuffp->wreg_data, 
                     stuffp->wreg_data + MCDX_IO_SIZE - 1));
 			TRACE((MALLOC, "init() free stuffp @ %p\n", stuffp));
-            free(stuffp, size);
+            kfree(stuffp);
 			TRACE((INIT, "init() continue at next drive\n"));
 			continue; /* next drive */
 		}
@@ -1101,7 +1089,7 @@ unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end)
                     MCDX,
                     stuffp->wreg_data, stuffp->irq));
 			TRACE((MALLOC, "init() free stuffp @ %p\n", stuffp));
-            free(stuffp, size);
+            kfree(stuffp);
 			TRACE((INIT, "init() continue at next drive\n"));
 			continue;
 		}
@@ -1129,7 +1117,7 @@ unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end)
 		if (!stuffp->present) {
             WARN(("%s=0x%3p,%d: Init failed. No Mitsumi CD-ROM?.\n",
                     MCDX, stuffp->wreg_data, stuffp->irq));
-			free(stuffp, size);
+			kfree(stuffp);
 			continue; /* next drive */
 		}
 
@@ -1138,7 +1126,7 @@ unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end)
             WARN(("%s=0x%3p,%d: Init failed. Can't get major %d.\n",
                     MCDX,
                     stuffp->wreg_data, stuffp->irq, MAJOR_NR));
-			free(stuffp, size);
+			kfree(stuffp);
 			continue; /* next drive */
 		}
 
@@ -1156,7 +1144,7 @@ unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end)
                     MCDX,
                     stuffp->wreg_data, stuffp->irq, stuffp->irq));
 			stuffp->irq = 0;
-			free(stuffp, size);
+			kfree(stuffp);
 			continue;
 		}
 		request_region((unsigned int) stuffp->wreg_data, 
@@ -1188,7 +1176,7 @@ unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end)
 		TRACE((INIT, "init() mcdx_stuffp[%d] = %p\n", drive, stuffp));
 	}
 
-	return mem_start;
+	return 0;
 }
 
 

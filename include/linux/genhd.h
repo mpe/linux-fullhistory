@@ -14,8 +14,11 @@
 #ifdef __alpha__
 #define CONFIG_OSF_PARTITION 1
 #endif
-	
-#define EXTENDED_PARTITION 5
+
+/* These two have identical behaviour; use the second one if DOS fdisk gets
+   confused about extended/logical partitions starting past cylinder 1023. */	
+#define DOS_EXTENDED_PARTITION 5
+#define LINUX_EXTENDED_PARTITION 0x85
 
 #define DM6_PARTITION		0x54	/* has DDO: use xlated geom & offset */
 #define EZD_PARTITION		0x55	/* EZ-DRIVE:  same as DM6 (we think) */
@@ -57,7 +60,6 @@ struct gendisk {
 	struct gendisk *next;
 };
 
-extern int NR_GENDISKS;			/* total */
 extern struct gendisk *gendisk_head;	/* linked list of disks */
 
 #endif

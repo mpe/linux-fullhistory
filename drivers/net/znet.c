@@ -640,11 +640,11 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
 	short ioaddr = dev->base_addr;
 
-	if (num_addrs < 0) {
+	if (num_addrs == -1) {
 		/* Enable promiscuous mode */
 		i593_init[7] &= ~3;		i593_init[7] |= 1;
 		i593_init[13] &= ~8;	i593_init[13] |= 8;
-	} else if (num_addrs > 0) {
+	} else if (num_addrs != 0) {
 		/* Enable accept-all-multicast mode */
 		i593_init[7] &= ~3;		i593_init[7] |= 0;
 		i593_init[13] &= ~8;	i593_init[13] |= 8;

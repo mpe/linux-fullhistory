@@ -54,34 +54,6 @@
 #define MAX_ETH_CARDS 16 /* same as the number if irq's in irq2dev[] */
 static struct device *ethdev_index[MAX_ETH_CARDS];
 
-unsigned long lance_init(unsigned long mem_start, unsigned long mem_end);
-unsigned long pi_init(unsigned long mem_start, unsigned long mem_end);
-unsigned long apricot_init(unsigned long mem_start, unsigned long mem_end);
-unsigned long dec21040_init(unsigned long mem_start, unsigned long mem_end);
-
-/*
-  net_dev_init() is our network device initialization routine.
-  It's called from init/main.c with the start and end of free memory,
-  and returns the new start of free memory.
-  */
-
-unsigned long net_dev_init (unsigned long mem_start, unsigned long mem_end)
-{
-
-	/* Network device initialization for devices that must allocate
-	   low-memory or contiguous DMA buffers.
-	   */
-#if defined(CONFIG_LANCE)
-	mem_start = lance_init(mem_start, mem_end);
-#endif
-#if defined(CONFIG_PI)
-	mem_start = pi_init(mem_start, mem_end);
-#endif	
-#if defined(CONFIG_DEC_ELCP)
-	mem_start = dec21040_init(mem_start, mem_end);
-#endif	
-	return mem_start;
-}
 
 /* Fill in the fields of the device structure with ethernet-generic values.
 
@@ -94,7 +66,7 @@ unsigned long net_dev_init (unsigned long mem_start, unsigned long mem_end)
  */
 
 struct device *
-init_etherdev(struct device *dev, int sizeof_priv, unsigned long *mem_startp)
+init_etherdev(struct device *dev, int sizeof_priv)
 {
 	int new_device = 0;
 	int i;
@@ -114,11 +86,7 @@ init_etherdev(struct device *dev, int sizeof_priv, unsigned long *mem_startp)
 						dev = cur_dev;
 						dev->init = NULL;
 						sizeof_priv = (sizeof_priv + 3) & ~3;
-						if (mem_startp && *mem_startp ) {
-							dev->priv = (void*) *mem_startp;
-							*mem_startp += sizeof_priv;
-						} else
-							dev->priv = sizeof_priv
+						dev->priv = sizeof_priv
 							  ? kmalloc(sizeof_priv, GFP_KERNEL)
 							  :	NULL;
 						if (dev->priv) memset(dev->priv, 0, sizeof_priv);
@@ -128,11 +96,7 @@ init_etherdev(struct device *dev, int sizeof_priv, unsigned long *mem_startp)
 
 		alloc_size &= ~3;		/* Round to dword boundary. */
 
-		if (mem_startp && *mem_startp ) {
-			dev = (struct device *)*mem_startp;
-			*mem_startp += alloc_size;
-		} else
-			dev = (struct device *)kmalloc(alloc_size, GFP_KERNEL);
+		dev = (struct device *)kmalloc(alloc_size, GFP_KERNEL);
 		memset(dev, 0, alloc_size);
 		if (sizeof_priv)
 			dev->priv = (void *) (dev + 1);

@@ -60,7 +60,18 @@ static int netlink_err(struct sk_buff *skb)
 	kfree_skb(skb, FREE_READ);
 	return -EUNATCH;
 }
- 
+
+/*
+ *	Exported do nothing receiver for one way
+ *	interfaces.
+ */
+  
+int netlink_donothing(struct sk_buff *skb)
+{
+	kfree_skb(skb, FREE_READ);
+	return -EINVAL;
+}
+
 /*
  *	Write a message to the kernel side of a communication link
  */
@@ -190,19 +201,22 @@ void netlink_detach(int unit)
 int netlink_post(int unit, struct sk_buff *skb)
 {
 	unsigned long flags;
-	int ret;
-	save_flags(flags);
-	cli();
-	if(rdq_size[unit]+skb->len>MAX_QBYTES)
-		ret=-EWOULDBLOCK;
-	else
+	int ret=0;
+	if(open_map&(1<<unit))
 	{
-		skb_queue_tail(&skb_queue_rd[unit], skb);
-		rdq_size[unit]+=skb->len;
-		ret=0;
-		wake_up_interruptible(&read_space_wait[MAX_LINKS]);
+		save_flags(flags);
+		cli();
+		if(rdq_size[unit]+skb->len>MAX_QBYTES)
+			ret=-EWOULDBLOCK;
+		else
+		{	
+			skb_queue_tail(&skb_queue_rd[unit], skb);
+			rdq_size[unit]+=skb->len;
+			ret=0;
+			wake_up_interruptible(&read_space_wait[unit]);
+		}
+		restore_flags(flags);
 	}
-	restore_flags(flags);
 	return ret;
 }
 
@@ -213,7 +227,7 @@ char kernel_version[]=UTS_RELEASE;
 int init_module(void)
 {
 	int ct;
-	printk("Network Kernel/User communications module 0.01 ALPHA\n");
+	printk("Network Kernel/User communications module 0.03\n");
 	if (register_chrdev(NET_MAJOR,"netlink",&netlink_fops)) {
 		printk("netlink: unable to get major %d\n", NET_MAJOR);
 		return -EIO;

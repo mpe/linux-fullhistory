@@ -121,7 +121,7 @@ static int  gscd_bcd2bin          (unsigned char bcd);
 
 /*    common GoldStar Initialization    */
 
-static long my_gscd_init (unsigned long , unsigned long);
+static int my_gscd_init (void);
 
 
 /*      lo-level cmd-Funktionen    */
@@ -969,12 +969,12 @@ int init_module (void)
 long err;
 
 
-     /* call the GoldStar-init with dummys */
-     err = my_gscd_init ( 10, 20 );
+     /* call the GoldStar-init */
+     err = my_gscd_init ( );
 
      if ( err < 0 )
      {
-         return -EIO;
+         return err;
      }
      else
      {
@@ -1006,18 +1006,15 @@ void cleanup_module (void)
 
 
 /* Test for presence of drive and initialize it.  Called only at boot time. */
-unsigned long gscd_init (unsigned long mem_start, unsigned long mem_end)
+int gscd_init (void)
 {
-unsigned long err;
-
-   err = my_gscd_init ( mem_start, mem_end );
-   return ( labs(err));
+   return my_gscd_init ();
 }
 
 
 /* This is the common initalisation for the GoldStar drive. */
 /* It is called at boot time AND for module init.           */
-long my_gscd_init (unsigned long mem_start, unsigned long mem_end)
+int my_gscd_init (void)
 {
 int i;
 int result;
@@ -1028,7 +1025,7 @@ int result;
         if (check_region(gscd_port, 4)) 
         {
 	  printk("GSCD: Init failed, I/O port (%X) already in use.\n", gscd_port);
-	  return -mem_start;
+	  return -EIO;
 	}
 	  
 
@@ -1037,7 +1034,7 @@ int result;
         if ( result == 0x09 )
         {
            printk ("GSCD: DMA kann ich noch nicht!\n" );
-           return -mem_start;
+           return -EIO;
         }
  
         if ( result == 0x0b )
@@ -1047,14 +1044,14 @@ int result;
            if ( i == 0 )
            {
               printk ( "GSCD: GoldStar CD-ROM Drive is not found.\n" );
-              return -mem_start;
+              return -EIO;
            }
         }
 
         if ( (result != 0x0b) && (result != 0x09) )
         {
               printk ("GSCD: GoldStar Interface Adapter does not exist or H/W error\n" );
-              return -mem_start;
+              return -EIO;
         }          		            
 
         /* reset all drives */
@@ -1072,7 +1069,7 @@ int result;
 	{
 		printk("GSCD: Unable to get major %d for GoldStar CD-ROM\n",
 		       MAJOR_NR);
-		return -mem_start;
+		return -EIO;
 	}
 
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
@@ -1084,7 +1081,7 @@ int result;
 	request_region(gscd_port, 4, "gscd");
 
         printk ( "GSCD: GoldStar CD-ROM Drive found.\n" );
-	return mem_start;
+	return 0;
 }
 
 static void gscd_hsg2msf (long hsg, struct msf *msf)

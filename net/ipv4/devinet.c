@@ -107,14 +107,14 @@ int ip_chk_addr(unsigned long addr)
 	 
 	for (dev = dev_base; dev != NULL; dev = dev->next) 
 	{
-		if (!(dev->flags & IFF_UP))
+		if ((!(dev->flags & IFF_UP)) || dev->family!=AF_INET)
 			continue;
 		/*
 		 *	If the protocol address of the device is 0 this is special
 		 *	and means we are address hunting (eg bootp).
 		 */
 		 
-		if ((dev->pa_addr == 0)/* || (dev->flags&IFF_PROMISC)*/)
+		if (dev->pa_addr == 0)
 			return IS_MYADDR;
 		/*
 		 *	Is it the exact IP address? 

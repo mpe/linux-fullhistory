@@ -33,6 +33,7 @@ extern unsigned long event;
 #define CLONE_FS	0x00000200	/* set if fs info shared between processes */
 #define CLONE_FILES	0x00000400	/* set if open files shared between processes */
 #define CLONE_SIGHAND	0x00000800	/* set if signal handlers shared */
+#define CLONE_PID	0x00001000	/* set if pid shared */
 
 /*
  * These are the constant used to fake the fixed-point load-average

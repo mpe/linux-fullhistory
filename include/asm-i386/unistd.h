@@ -271,6 +271,34 @@ static inline pid_t wait(int * wait_stat)
 	return waitpid(-1,wait_stat,0);
 }
 
+/*
+ * This is the mechanism for creating a new kernel thread.
+ *
+ * NOTE! Only a kernel-only process(ie the swapper or direct descendants
+ * who haven't done an "execve()") should use this: it will work within
+ * a system call from a "real" process, but the process memory space will
+ * not be free'd until both the parent and the child have exited.
+ */
+static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
+{
+	long retval;
+
+	__asm__ __volatile__(
+		"int $0x80\n\t"		/* Linux/i386 system call */
+		"testl %0,%0\n\t"	/* child or parent? */
+		"jne 1f\n\t"		/* parent - jump */
+		"pushl %3\n\t"		/* push argument */
+		"call *%4\n\t"		/* call fn */
+		"movl %2,%0\n\t"	/* exit */
+		"int $0x80\n"
+		"1:\t"
+		:"=a" (retval)
+		:"0" (__NR_clone), "i" (__NR_exit),
+		 "r" (arg), "r" (fn),
+		 "b" (flags | CLONE_VM));
+	return retval;
+}
+
 #endif
 
 #endif /* _ASM_I386_UNISTD_H_ */

@@ -123,7 +123,7 @@ struct aux_queue {
 
 static struct aux_queue *queue;
 static int aux_ready = 0;
-static int aux_busy = 0;
+static int aux_count = 0;
 static int aux_present = 0;
 static int poll_aux_status(void);
 static int poll_aux_status_nosleep(void);
@@ -131,7 +131,7 @@ static int fasync_aux(struct inode *inode, struct file *filp, int on);
 
 #ifdef CONFIG_82C710_MOUSE
 static int qp_present = 0;
-static int qp_busy = 0;
+static int qp_count = 0;
 static int qp_data = QP_DATA;
 static int qp_status = QP_STATUS;
 
@@ -260,13 +260,15 @@ static void qp_interrupt(int cpl, struct pt_regs * regs)
 
 static void release_aux(struct inode * inode, struct file * file)
 {
+	fasync_aux(inode, file, 0);
+	if (--aux_count)
+		return;
 	aux_write_cmd(AUX_INTS_OFF);		/* disable controller ints */
 	poll_aux_status();
 	outb_p(AUX_DISABLE,AUX_COMMAND);      	/* Disable Aux device */
 	poll_aux_status();
 	free_irq(AUX_IRQ);
-	fasync_aux(inode, file, 0);
-	aux_busy = 0;
+	MOD_DEC_USE_COUNT;
 }
 
 #ifdef CONFIG_82C710_MOUSE
@@ -274,6 +276,9 @@ static void release_qp(struct inode * inode, struct file * file)
 {
 	unsigned char status;
 
+	fasync_aux(inode, file, 0);
+	if (--qp_count)
+		return;
 	if (!poll_qp_status())
 		printk("Warning: Mouse device busy in release_qp()\n");
 	status = inb_p(qp_status);
@@ -281,8 +286,7 @@ static void release_qp(struct inode * inode, struct file * file)
 	if (!poll_qp_status())
 		printk("Warning: Mouse device busy in release_qp()\n");
 	free_irq(QP_IRQ);
-	fasync_aux(inode, file, 0);
-	qp_busy = 0;
+	MOD_DEC_USE_COUNT;
 }
 #endif
 
@@ -304,15 +308,16 @@ static int fasync_aux(struct inode *inode, struct file *filp, int on)
 static int open_aux(struct inode * inode, struct file * file)
 {
 	if (!aux_present)
-		return -EINVAL;
-	if (aux_busy)
+		return -ENODEV;
+	if (aux_count++)
+		return 0;
+	if (!poll_aux_status()) {
+		aux_count--;
 		return -EBUSY;
-	if (!poll_aux_status())
-		return -EBUSY;
-	aux_busy = 1;
+	}
 	queue->head = queue->tail = 0;		/* Flush input queue */
 	if (request_irq(AUX_IRQ, aux_interrupt, 0, "PS/2 Mouse")) {
-		aux_busy = 0;
+		aux_count--;
 		return -EBUSY;
 	}
 	poll_aux_status();
@@ -321,14 +326,14 @@ static int open_aux(struct inode * inode, struct file * file)
 	aux_write_cmd(AUX_INTS_ON);		/* enable controller ints */
 	poll_aux_status();
 	aux_ready = 0;
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
 #ifdef CONFIG_82C710_MOUSE
 /*
  * Install interrupt handler.
- * Enable the device, enable interrupts. Set qp_busy
- * (allow only one opener at a time.)
+ * Enable the device, enable interrupts. 
  */
 
 static int open_qp(struct inode * inode, struct file * file)
@@ -338,13 +343,13 @@ static int open_qp(struct inode * inode, struct file * file)
 	if (!qp_present)
 		return -EINVAL;
 
-	if (qp_busy)
-		return -EBUSY;
+	if (qp_count++)
+		return 0;
 
-	if (request_irq(QP_IRQ, qp_interrupt, 0, "PS/2 Mouse"))
+	if (request_irq(QP_IRQ, qp_interrupt, 0, "PS/2 Mouse")) {
+		qp_count--;
 		return -EBUSY;
-
-	qp_busy = 1;
+	}
 
 	status = inb_p(qp_status);
 	status |= (QP_ENABLE|QP_RESET);
@@ -358,11 +363,15 @@ static int open_qp(struct inode * inode, struct file * file)
 
 	while (!poll_qp_status()) {
 		printk("Error: Mouse device busy in open_qp()\n");
+		qp_count--;
+		status &= ~(QP_ENABLE|QP_INTS_ON);
+		outb_p(status, qp_status);
+		free_irq(QP_IRQ);
 		return -EBUSY;
 	}
 
 	outb_p(AUX_ENABLE_DEV, qp_data);	/* Wake up mouse */
-
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 #endif
@@ -481,7 +490,7 @@ static struct mouse psaux_mouse = {
 	PSMOUSE_MINOR, "ps2aux", &psaux_fops
 };
 
-unsigned long psaux_init(unsigned long kmem_start)
+int psaux_init(void)
 {
 	int qp_found = 0;
 
@@ -500,15 +509,10 @@ unsigned long psaux_init(unsigned long kmem_start)
 	 	aux_present = 1;
 		kbd_read_mask = AUX_OBUF_FULL;
 	} else {
-#ifdef MODULE
 		return -EIO;
-#else
-		return kmem_start;              /* No mouse at all */
-#endif
 	}
 	mouse_register(&psaux_mouse);
-	queue = (struct aux_queue *) kmem_start;
-	kmem_start += sizeof (struct aux_queue);
+	queue = (struct aux_queue *) kmalloc(sizeof(*queue), GFP_KERNEL);
 	memset(queue, 0, sizeof(*queue));
 	queue->head = queue->tail = 0;
 	queue->proc_list = NULL;
@@ -528,11 +532,7 @@ unsigned long psaux_init(unsigned long kmem_start)
 		poll_aux_status_nosleep();             /* Disable interrupts */
 		outb_p(AUX_INTS_OFF, AUX_OUTPUT_PORT); /*  on the controller */
 	}
-#ifdef MODULE
 	return 0;
-#else
-	return kmem_start;
-#endif
 }
 
 #ifdef MODULE

@@ -231,12 +231,6 @@ int dev_open(struct device *dev)
 		/*
 		 *	Initialise multicasting status 
 		 */
-#ifdef CONFIG_IP_MULTICAST
-		/* 
-		 *	Join the all host group 
-		 */
-		ip_mc_allhost(dev);
-#endif				
 		dev_mc_upload(dev);
 		notifier_call_chain(&netdev_chain, NETDEV_UP, dev);
 	}
@@ -367,7 +361,7 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 
 	save_flags(flags);
 	cli();	
-	if (/*dev_nit && */!where) 	/* Always keep order. It helps other hosts
+	if (!where)	 	/* Always keep order. It helps other hosts
 					   far more than it costs us */
 	{
 		skb_queue_tail(dev->buffs + pri,skb);
@@ -1314,10 +1308,28 @@ int dev_ioctl(unsigned int cmd, void *arg)
  *	present) and leaves us with a valid list of present and active devices.
  *
  */
- 
-void dev_init(void)
+extern int lance_init(void);
+extern int pi_init(void);
+extern int dec21040_init(void);
+
+int net_dev_init(void)
 {
 	struct device *dev, **dp;
+
+	/*
+	 * This is VeryUgly(tm).
+	 *
+	 * Some devices want to be initialized eary..
+	 */
+#if defined(CONFIG_LANCE)
+	lance_init();
+#endif
+#if defined(CONFIG_PI)
+	pi_init();
+#endif	
+#if defined(CONFIG_DEC_ELCP)
+	dec21040_init();
+#endif	
 
 	/*
 	 *	Add the devices.
@@ -1346,11 +1358,16 @@ void dev_init(void)
 			dp = &dev->next;
 		}
 	}
+
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_DEV, 3, "dev",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, &proc_net_inode_operations,
 		dev_get_info
 	});
+
+	bh_base[NET_BH].routine = net_bh;
+	enable_bh(NET_BH);
+	return 0;
 }
 

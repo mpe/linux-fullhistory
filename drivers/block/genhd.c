@@ -23,12 +23,19 @@
 #include <linux/major.h>
 #include <linux/string.h>
 
+#include <asm/system.h>
+
 struct gendisk *gendisk_head = NULL;
 
 static int current_minor = 0;
 extern int *blk_size[];
 extern void rd_load(void);
 extern int ramdisk_size;
+
+extern int chr_dev_init(void);
+extern int blk_dev_init(void);
+extern int scsi_dev_init(void);
+extern int net_dev_init(void);
 
 static void print_minor_name (struct gendisk *hd, int minor)
 {
@@ -61,6 +68,12 @@ static void add_partition (struct gendisk *hd, int minor, int start, int size)
 	hd->part[minor].start_sect = start;
 	hd->part[minor].nr_sects   = size;
 	print_minor_name(hd, minor);
+}
+
+static inline int is_extended_partition(struct partition *p)
+{
+	return (p->sys_ind == DOS_EXTENDED_PARTITION ||
+		p->sys_ind == LINUX_EXTENDED_PARTITION);
 }
 
 #ifdef CONFIG_MSDOS_PARTITION
@@ -120,7 +133,7 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 		 * First process the data partition(s)
 		 */
 		for (i=0; i<4; i++, p++) {
-		    if (!p->nr_sects || p->sys_ind == EXTENDED_PARTITION)
+		    if (!p->nr_sects || is_extended_partition(p))
 		      continue;
 
 		    /* Check the 3rd and 4th entries -
@@ -149,7 +162,7 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 		 */
 		p -= 4;
 		for (i=0; i<4; i++, p++)
-		  if(p->nr_sects && p->sys_ind == EXTENDED_PARTITION)
+		  if(p->nr_sects && is_extended_partition(p))
 		    break;
 		if (i == 4)
 		  goto done;	 /* nothing left to do */
@@ -254,7 +267,7 @@ check_table:
 		if (!p->nr_sects)
 			continue;
 		add_partition(hd, minor, first_sector+p->start_sect, p->nr_sects);
-		if (p->sys_ind == EXTENDED_PARTITION) {
+		if (is_extended_partition(p)) {
 			printk(" <");
 			/*
 			 * If we are rereading the partition table, we need
@@ -266,9 +279,10 @@ check_table:
 			  	>> (BLOCK_SIZE_BITS - 9);
 			extended_partition(hd, MKDEV(hd->major, minor));
 			printk(" >");
-			/* prevent someone doing mkfs or mkswap on
-			   an extended partition */
-			hd->part[minor].nr_sects = 0;
+			/* prevent someone doing mkfs or mkswap on an
+			   extended partition, but leave room for LILO */
+			if (hd->part[minor].nr_sects > 2)
+				hd->part[minor].nr_sects = 2;
 		}
 	}
 	/*
@@ -456,13 +470,22 @@ void device_setup(void)
 	struct gendisk *p;
 	int nr=0;
 
+	chr_dev_init();
+	blk_dev_init();
+	sti();
+#ifdef CONFIG_SCSI
+	scsi_dev_init();
+#endif
+#ifdef CONFIG_INET
+	net_dev_init();
+#endif
 	console_map_init();
 
 	for (p = gendisk_head ; p ; p=p->next) {
 		setup_dev(p);
 		nr += p->nr_real;
 	}
-		
+
 	if (ramdisk_size)
 		rd_load();
 }

@@ -218,7 +218,7 @@ extern Scsi_Device * scsi_devices;
  *  Initializes all SCSI devices.  This scans all scsi busses.
  */ 
 
-extern unsigned long scsi_dev_init (unsigned long, unsigned long);
+extern int scsi_dev_init (void);
 
 struct scatterlist {
     char *  address;    /* Location data is to be transferred to */

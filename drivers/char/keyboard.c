@@ -13,6 +13,7 @@
  * Diacriticals redone & other small changes, aeb@cwi.nl, June 1993
  * Added decr/incr_console, dynamic keymaps, Unicode support,
  * dynamic function/string keys, led setting,  Sept 1994
+ * `Sticky' modifier keys, 951006.
  * 
  */
 
@@ -124,12 +125,12 @@ typedef void (k_handfn)(unsigned char value, char up_flag);
 
 static k_handfn
 	do_self, do_fn, do_spec, do_pad, do_dead, do_cons, do_cur, do_shift,
-	do_meta, do_ascii, do_lock, do_lowercase, do_ignore;
+	do_meta, do_ascii, do_lock, do_lowercase, do_slock, do_ignore;
 
 static k_hand key_handler[16] = {
 	do_self, do_fn, do_spec, do_pad, do_dead, do_cons, do_cur, do_shift,
-	do_meta, do_ascii, do_lock, do_lowercase,
-	do_ignore, do_ignore, do_ignore, do_ignore
+	do_meta, do_ascii, do_lock, do_lowercase, do_slock,
+	do_ignore, do_ignore, do_ignore
 };
 
 typedef void (*void_fnp)(void);
@@ -151,7 +152,8 @@ static void_fnp spec_fn_table[] = {
 const int max_vals[] = {
 	255, SIZE(func_table) - 1, SIZE(spec_fn_table) - 1, NR_PAD - 1,
 	NR_DEAD - 1, 255, 3, NR_SHIFT - 1,
-	255, NR_ASCII - 1, NR_LOCK - 1, 255
+	255, NR_ASCII - 1, NR_LOCK - 1, 255,
+	NR_LOCK - 1
 };
 
 const int NR_TYPES = SIZE(max_vals);
@@ -530,7 +532,7 @@ static void keyboard_interrupt(int irq, struct pt_regs *regs)
 		u_char type;
 
 		/* the XOR below used to be an OR */
-		int shift_final = shift_state ^ kbd->lockstate;
+		int shift_final = shift_state ^ kbd->lockstate ^ kbd->slockstate;
 		ushort *key_map = key_maps[shift_final];
 
 		if (key_map != NULL) {
@@ -548,6 +550,8 @@ static void keyboard_interrupt(int irq, struct pt_regs *regs)
 				}
 			    }
 			    (*key_handler[type])(keysym & 0xff, up_flag);
+			    if (type != KT_SLOCK)
+			      kbd->slockstate = 0;
 			} else {
 			    /* maybe only if (kbd->kbdmode == VC_UNICODE) ? */
 			    if (!up_flag)
@@ -1028,6 +1032,13 @@ static void do_lock(unsigned char value, char up_flag)
 	chg_vc_kbd_lock(kbd, value);
 }
 
+static void do_slock(unsigned char value, char up_flag)
+{
+	if (up_flag || rep)
+		return;
+	chg_vc_kbd_slock(kbd, value);
+}
+
 /*
  * send_data sends a character to the keyboard and waits
  * for a acknowledge, possibly retrying if asked to. Returns
@@ -1165,7 +1176,7 @@ static void kbd_bh(void * unused)
 	sti();
 }
 
-unsigned long kbd_init(unsigned long kmem_start)
+int kbd_init(void)
 {
 	int i;
 	struct kbd_struct kbd0;
@@ -1174,6 +1185,7 @@ unsigned long kbd_init(unsigned long kmem_start)
 	kbd0.ledflagstate = kbd0.default_ledflagstate = KBD_DEFLEDS;
 	kbd0.ledmode = LED_SHOW_FLAGS;
 	kbd0.lockstate = KBD_DEFLOCK;
+	kbd0.slockstate = 0;
 	kbd0.modeflags = KBD_DEFMODE;
 	kbd0.kbdmode = VC_XLATE;
  
@@ -1202,5 +1214,5 @@ unsigned long kbd_init(unsigned long kmem_start)
 #endif
 	mark_bh(KEYBOARD_BH);
 	enable_bh(KEYBOARD_BH);
-	return kmem_start;
+	return 0;
 }

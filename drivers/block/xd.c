@@ -115,18 +115,18 @@ static u_char xd_override = 0, xd_type = 0;
 static u_short xd_iobase = 0;
 
 /* xd_init: register the block device number and set up pointer tables */
-u_long xd_init (u_long mem_start,u_long mem_end)
+int xd_init (void)
 {
 	if (register_blkdev(MAJOR_NR,"xd",&xd_fops)) {
 		printk("xd_init: unable to get major number %d\n",MAJOR_NR);
-		return (mem_start);
+		return -1;
 	}
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	read_ahead[MAJOR_NR] = 8;	/* 8 sector (4kB) read ahead */
 	xd_gendisk.next = gendisk_head;
 	gendisk_head = &xd_gendisk;
 
-	return mem_start;
+	return 0;
 }
 
 /* xd_detect: scan the possible BIOS ROM locations for the signature strings */

@@ -111,11 +111,11 @@
 
 #ifdef MODULE
 # include <linux/module.h>
-# include <linux/malloc.h>
 # include <linux/version.h>
 # ifndef CONFIG_MODVERSIONS
 	char kernel_version[]= UTS_RELEASE;
 # endif
+#define sony535_init init_module
 #else
 # define MOD_INC_USE_COUNT
 # define MOD_DEC_USE_COUNT
@@ -131,6 +131,7 @@
 #include <linux/hdreg.h>
 #include <linux/genhd.h>
 #include <linux/mm.h>
+#include <linux/malloc.h>
 
 #define REALLY_SLOW_IO
 #include <asm/system.h>
@@ -225,33 +226,31 @@ static unsigned short data_reg;
 
 static int initialized = 0;			/* Has the drive been initialized? */
 static int sony_disc_changed = 1;	/* Has the disk been changed
-									   since the last check? */
+					   since the last check? */
 static int sony_toc_read = 0;		/* Has the table of contents been
-									   read? */
+					   read? */
 static unsigned int sony_buffer_size;	/* Size in bytes of the read-ahead
-										   buffer. */
+					   buffer. */
 static unsigned int sony_buffer_sectors;	/* Size (in 2048 byte records) of
-											   the read-ahead buffer. */
+						   the read-ahead buffer. */
 static unsigned int sony_usage = 0;	/* How many processes have the
-									   drive open. */
+					   drive open. */
 
 static int sony_first_block = -1;	/* First OS block (512 byte) in
-									   the read-ahead buffer */
+					   the read-ahead buffer */
 static int sony_last_block = -1;	/* Last OS block (512 byte) in
-									   the read-ahead buffer */
+					   the read-ahead buffer */
 
 static struct s535_sony_toc *sony_toc;	/* Points to the table of
-										   contents. */
+					   contents. */
+
 static struct s535_sony_subcode *last_sony_subcode;		/* Points to the last
-														   subcode address read */
-#ifndef MODULE
-static Byte *sony_buffer;		/* Points to the read-ahead buffer */
-#else
+								   subcode address read */
 static Byte **sony_buffer;		/* Points to the pointers
-								   to the sector buffers */
-#endif
+					   to the sector buffers */
+
 static int sony_inuse = 0;		/* is the drive in use? Only one
-								   open at a time allowed */
+					   open at a time allowed */
 
 /*
  * The audio status uses the values from read subchannel data as specified
@@ -607,25 +606,16 @@ set_drive_mode(int mode, Byte status[2])
  *  it returns one of the standard error returns.
  ***************************************************************************/
 static int
-#ifndef MODULE
-seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
-					   Byte * data_buff, int buf_size)
-#else
 seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
 					   Byte **buff, int buf_size)
-#endif
 {
 	const int block_size = 2048;
 	Byte cmd_buff[7];
 	int  i;
 	int  read_status;
 	int  retry_count;
-#ifndef MODULE
-	Byte *start_pos = data_buff;
-#else
 	Byte *data_buff;
 	int  sector_count = 0;
-#endif
 
 	if (buf_size < ((long)block_size) * n_blocks)
 		return NO_ROOM;
@@ -651,9 +641,7 @@ seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
 			}
 			if ((read_status & SONY535_DATA_NOT_READY_BIT) == 0) {
 				/* data is ready, read it */
-#ifdef MODULE
 				data_buff = buff[sector_count++];
-#endif
 				for (i = 0; i < block_size; i++)
 					*data_buff++ = inb(data_reg);	/* unrolling this loop does not seem to help */
 				break;			/* exit the timeout loop */
@@ -667,11 +655,7 @@ seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
 	/* read all the data, now read the status */
 	if ((i = read_exec_status(status)) != 0)
 		return i;
-#ifndef MODULE
-	return data_buff - start_pos;
-#else
 	return block_size * sector_count;
-#endif
 }	/* seek_and_read_N_blocks() */
 
 /****************************************************************************
@@ -938,14 +922,9 @@ do_cdu535_request(void)
 				 * The data is in memory now, copy it to the buffer and advance to the
 				 * next block to read.
 				 */
-#ifndef MODULE
-				copyoff = (block - sony_first_block) * 512;
-				memcpy(CURRENT->buffer, sony_buffer + copyoff, 512);
-#else
 				copyoff = block - sony_first_block;
 				memcpy(CURRENT->buffer,
 					   sony_buffer[copyoff / 4] + 512 * (copyoff % 4), 512);
-#endif
 
 				block += 1;
 				nsect -= 1;
@@ -1519,13 +1498,8 @@ static struct file_operations cdu_fops =
 /*
  * Initialize the driver.
  */
-#ifndef MODULE
-unsigned long
-sony535_init(unsigned long mem_start, unsigned long mem_end)
-#else
 int
-init_module(void)
-#endif
+sony535_init(void)
 {
 	struct s535_sony_drive_config drive_config;
 	Byte cmd_buff[3];
@@ -1533,13 +1507,11 @@ init_module(void)
 	Byte status[2];
 	int  retry_count;
 	int  tmp_irq;
-#ifdef MODULE
 	int  i;
-#endif
 
 	/* Setting the base I/O address to 0 will disable it. */
 	if ((sony535_cd_base_io == 0xffff)||(sony535_cd_base_io == 0))
-		goto bail;
+		return 0;
 
 	/* Set up all the register locations */
 	result_reg = sony535_cd_base_io;
@@ -1561,11 +1533,7 @@ init_module(void)
 #endif
 	if (check_region(sony535_cd_base_io,4)) {
 		printk(CDU535_MESSAGE_NAME ": my base address is not free!\n");
-#ifndef MODULE
-		return mem_start;
-#else
 		return -EIO;
-#endif
 	}
 	/* look for the CD-ROM, follows the procedure in the DOS driver */
 	inb(select_unit_reg);
@@ -1639,24 +1607,11 @@ init_module(void)
 				if (register_blkdev(MAJOR_NR, CDU535_HANDLE, &cdu_fops)) {
 					printk("Unable to get major %d for %s\n",
 							MAJOR_NR, CDU535_MESSAGE_NAME);
-#ifndef MODULE
-					return mem_start;
-#else
 					return -EIO;
-#endif
 				}
 				blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 				read_ahead[MAJOR_NR] = 8;	/* 8 sector (4kB) read-ahead */
 
-#ifndef MODULE
-				sony_toc = (struct s535_sony_toc *)mem_start;
-				mem_start += sizeof *sony_toc;
-				last_sony_subcode = (struct s535_sony_subcode *)mem_start;
-				mem_start += sizeof *last_sony_subcode;
-				sony_buffer = (Byte *)mem_start;
-				mem_start += sony_buffer_size;
-
-#else /* MODULE */
 				sony_toc = (struct s535_sony_toc *)
 					kmalloc(sizeof *sony_toc, GFP_KERNEL);
 				if (sony_toc == NULL)
@@ -1685,7 +1640,6 @@ init_module(void)
 						return -ENOMEM;
 					}
 				}
-#endif /* MODULE */
 				initialized = 1;
 			}
 		}
@@ -1693,18 +1647,10 @@ init_module(void)
 
 	if (!initialized) {
 		printk("Did not find a " CDU535_MESSAGE_NAME " drive\n");
-#ifdef MODULE
 		return -EIO;
-#endif
-	} else {
-		request_region(sony535_cd_base_io, 4, CDU535_HANDLE);
 	}
-bail:
-#ifndef MODULE
-	return mem_start;
-#else
+	request_region(sony535_cd_base_io, 4, CDU535_HANDLE);
 	return 0;
-#endif
 }
 
 #ifndef MODULE

@@ -205,7 +205,7 @@ int at1700_probe1(struct device *dev, short ioaddr)
 
 	/* Allocate a new 'dev' if needed. */
 	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct net_local), 0);
+		dev = init_etherdev(0, sizeof(struct net_local));
 
 	/* Grab the region so that we can find another board if the IRQ request
 	   fails. */
@@ -623,9 +623,18 @@ static void
 set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
 	short ioaddr = dev->base_addr;
-	if (num_addrs) {
+	if (num_addrs) 
+	{
+		/*
+		 *	We must make the kernel realise we had to move
+		 *	into promisc mode or we start all out war on
+		 *	the cable. - AC
+		 */
+		dev->flags|=IFF_PROMISC;		
+	
 		outb(3, ioaddr + RX_MODE);	/* Enable promiscuous mode */
-	} else
+	} 
+	else
 		outb(2, ioaddr + RX_MODE);	/* Disable promiscuous, use normal mode */
 }
 #ifdef MODULE

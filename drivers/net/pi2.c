@@ -79,9 +79,6 @@
 #define DEF_B_SQUELDELAY 3	/* 30 mS */
 #define DEF_B_CLOCKMODE 0	/* Normal clock mode */
 
-struct device *init_etherdev(struct device *dev, int sizeof_private,
-			     unsigned long *mem_startp);
-
 static const char *version =
 "PI: V0.8 ALPHA April 23 1995 David Perry (dp@hydra.carleton.ca)\n";
 
@@ -1207,7 +1204,7 @@ static void chipset_init(struct device *dev)
 }
 
 
-unsigned long pi_init(unsigned long mem_start, unsigned long mem_end)
+int pi_init(void)
 {
     int *port;
     int ioaddr = 0;
@@ -1236,7 +1233,7 @@ unsigned long pi_init(unsigned long mem_start, unsigned long mem_end)
 	break;
     default:
 	printk("PI: ERROR: No card found\n");
-	return mem_start;
+	return -EIO;
     }
 
     /* Link a couple of device structures into the chain */
@@ -1247,9 +1244,7 @@ unsigned long pi_init(unsigned long mem_start, unsigned long mem_end)
     */
     register_netdev(&pi0a);
     
-    pi0a.priv=(void *)mem_start;
-    mem_start+=sizeof(struct pi_local) + (DMA_BUFF_SIZE + sizeof(struct mbuf)) * 4
-			 + 8;	/* for alignment */
+    pi0a.priv = kmalloc(sizeof(struct pi_local) + (DMA_BUFF_SIZE + sizeof(struct mbuf)) * 4, GFP_KERNEL | GFP_DMA);
 			
     pi0a.dma = PI_DMA;
     pi0a.base_addr = ioaddr + 2;
@@ -1259,9 +1254,7 @@ unsigned long pi_init(unsigned long mem_start, unsigned long mem_end)
     register_netdev(&pi0b);
     pi0b.base_addr = ioaddr;
     pi0b.irq = 0;
-    pi0b.priv=(void *)mem_start;
-    mem_start+=sizeof(struct pi_local) + (DMA_BUFF_SIZE + sizeof(struct mbuf)) * 4
-			 + 8;	/* for alignment */
+    pi0b.priv = kmalloc(sizeof(struct pi_local) + (DMA_BUFF_SIZE + sizeof(struct mbuf)) * 4, GFP_KERNEL | GFP_DMA);
 
     /* Now initialize them */
     pi_probe(&pi0a, card_type);
@@ -1269,7 +1262,7 @@ unsigned long pi_init(unsigned long mem_start, unsigned long mem_end)
 
     pi0b.irq = pi0a.irq;	/* IRQ is shared */
     
-    return mem_start;
+    return 0;
 }
 
 static int valid_dma_page(unsigned long addr, unsigned long dev_buffsize)

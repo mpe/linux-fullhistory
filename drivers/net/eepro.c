@@ -792,7 +792,15 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 	short ioaddr = dev->base_addr;
 	unsigned short mode;
 
-	if (num_addrs < -1 || num_addrs > 63) {
+	if (num_addrs <= -1 || num_addrs > 63) {
+		/*
+		 *	We must make the kernel realise we had to move
+		 *	into promisc mode or we start all out war on
+		 *	the cable. If it was a promisc rewquest the
+		 *	flag is already set. If not we assert it.
+		 */
+		dev->flags|=IFF_PROMISC;		
+
 		outb(BANK2_SELECT, ioaddr); /* be CAREFULL, BANK 2 now */
 		mode = inb(ioaddr + REG2);
 		outb(mode | PRMSC_Mode, ioaddr + REG2);	

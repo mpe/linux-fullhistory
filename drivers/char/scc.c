@@ -158,7 +158,7 @@
 #define Z8530_MAJOR 34
 #endif
 
-long scc_init(long kmem_start);
+int scc_init(void);
 
 int scc_open(struct tty_struct *tty, struct file *filp);
 static void scc_close(struct tty_struct *tty, struct file *filp);
@@ -2298,7 +2298,7 @@ static void scc_stop(struct tty_struct *tty)
 /* * 			Init SCC driver 			      * */
 /* ******************************************************************** */
 
-long scc_init (long kmem_start)
+int scc_init (void)
 {
 	int chip, chan;
 	register io_port ctrl;
@@ -2418,6 +2418,6 @@ long scc_init (long kmem_start)
 #endif
 
 	
-	return kmem_start;
+	return 0;
 }
 #endif

@@ -6,7 +6,7 @@
 #define MS_BUSMOUSE_MINOR 2
 #define ATIXL_BUSMOUSE_MINOR 3
 
-unsigned long mouse_init(unsigned long);
+extern int mouse_init(void);
 
 struct mouse {
 	int minor;

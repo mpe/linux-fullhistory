@@ -41,6 +41,7 @@
  *	Thomas Quinot		:	Fixed port spoofing.
  *	Alan Cox		:	Cleaned up retransmits in spoofing.
  *	Alan Cox		:	Cleaned up length setting.
+ *	Wouter Gadeyne		:	Fixed masquerading support of ftp PORT commands
  *
  *	All the real work was done by .....
  *
@@ -586,15 +587,33 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
 	struct ip_masq *ms;
 	char buf[24];		/* xxx.xxx.xxx.xxx,ppp,ppp\000 */
 	int diff;
+	__u32 seq;
 	
 	/*
-	 * Adjust seq and ack_seq with delta-offset for
-	 * the packets AFTER this one...
+	 * Adjust seq with delta-offset for all packets after the most recent resized PORT command
+	 * and with previous_delta offset for all packets before most recent resized PORT
 	 */
-	if (ftp->delta && after(ftp->init_seq,th->seq)) 
+	
+	/*
+	 * seq & seq_ack are in network byte order; need conversion before comparing
+	 */
+	seq=ntohl(th->seq);
+	if (ftp->delta || ftp->previous_delta)
 	{
-		th->seq += ftp->delta;
-/* 		th->ack_seq += ftp->delta;*/
+		if(after(seq,ftp->init_seq) ) 
+		{
+			th->seq = htonl(seq + ftp->delta);
+#ifdef DEBUG_MASQ
+			printk("masq_revamp : added delta (%d) to seq\n",ftp->delta);
+#endif
+		}
+		else
+		{
+			th->seq = htonl(seq + ftp->previous_delta);
+#ifdef DEBUG_MASQ
+	 		printk("masq_revamp : added previous_delta (%d) to seq\n",ftp->previous_delta);
+#endif
+		}
 	}
 
 	while (skb->len - ((unsigned char *)data - skb->h.raw) > 18)
@@ -626,8 +645,9 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
 
 		from = (p1<<24) | (p2<<16) | (p3<<8) | p4;
 		port = (p5<<8) | p6;
+#ifdef MASQ_DEBUG
 		printk("PORT %lX:%X detected\n",from,port);
-	
+#endif	
 		/*
 		 * Now create an masquerade entry for it
 		 */
@@ -638,7 +658,12 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
 		ms->src      = htonl(from);	/* derived from PORT cmd */
 		ms->sport    = htons(port);	/* derived from PORT cmd */
 		ms->dst      = iph->daddr;
-		ms->dport    = htons(20);	/* ftp-data */
+		/*
+		 * Hardcoding 20 as dport is not always correct
+		 * At least 1 Windows ftpd uses a random port number instead of 20
+		 * Leave it undefined for now & wait for the first connection request to fill it out
+		 */ 
+		ms->dport    = htons(FTP_DPORT_TBD);	/* ftp-data */
 		ms->timer.expires = jiffies+MASQUERADE_EXPIRE_TCP_FIN;
 		add_timer(&ms->timer);
 
@@ -666,7 +691,6 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
 			/*
 			 * simple case, just replace the old PORT cmd
  			 */
- 			ftp->init_seq = 0;
  			memcpy(p,buf,strlen(buf));
  			return skb;
  		}
@@ -681,24 +705,27 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
  		 *	FIXME: use ftp->init_seq_valid - 0 is a valid sequence.
  		 */
  		 
- 		if(!ftp->init_seq || after(ftp->init_seq,th->seq))
+ 		if(!ftp->init_seq || after(seq,ftp->init_seq) )
+ 		{
+ 			ftp->previous_delta=ftp->delta;
  			ftp->delta+=diff;
+ 			ftp->init_seq = seq;
+ 		}
+ 		
  		/*
  		 * Sizes differ, make a copy
  		 */
- printk("MASQUERADE: resizing needed for %d bytes (%ld)\n",ftp->delta, skb->len);
- 		if (!ftp->init_seq)
- 			ftp->init_seq = th->seq;
- 
-		skb2 = alloc_skb(MAX_HEADER + skb->len+ftp->delta, GFP_ATOMIC);
+#ifdef DEBUG_MASQ
+                printk("MASQUERADE: resizing needed for %d bytes (%ld)\n",diff, skb->len);
+#endif
+		skb2 = alloc_skb(MAX_HEADER + skb->len+diff, GFP_ATOMIC);
  		if (skb2 == NULL) {
  			printk("MASQUERADE: No memory available\n");
  			return skb;
  		}
  		skb2->free = skb->free;
  		skb_reserve(skb2,MAX_HEADER);
- 		skb_put(skb2,skb->len + ftp->delta);
-/* 		skb2->h.raw = &skb2->data[skb->h.raw - skb->data];*/
+ 		skb_put(skb2,skb->len + diff);
 		skb2->h.raw = skb2->data + (skb->h.raw - skb->data);
 		iph=skb2->h.iph;
 		/*
@@ -716,6 +743,12 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
  		memcpy(&skb2->data[(p - (char *)skb->data)], buf, strlen(buf));
 		memcpy(&skb2->data[(p - (char *)skb->data) + strlen(buf)], data,
 			skb->len - (data-(char *)skb->data));
+
+		/*
+		 * Update tot_len field in ip header !
+		 * Sequence numbers were allready modified in original packet
+		 */
+		iph->tot_len = htons(skb->len + diff);
 
 		/*
 		 * Problem, how to replace the new skb with old one,
@@ -877,6 +910,7 @@ int ip_fw_demasquerade(struct sk_buff *skb_ptr)
  		ntohl(iph->saddr), ntohs(portptr[0]),
  		ntohl(iph->daddr), ntohs(portptr[1]));
 #endif
+
  	/*
  	 * reroute to original host:port if found...
  	 *
@@ -891,13 +925,22 @@ int ip_fw_demasquerade(struct sk_buff *skb_ptr)
  	{
  		if (iph->protocol==ms->protocol &&
 		    (iph->saddr==ms->dst || iph->protocol==IPPROTO_UDP) && 
- 		    portptr[0]==ms->dport &&
+ 		    (ms->dport==htons(FTP_DPORT_TBD) || portptr[0]==ms->dport) &&
  		    portptr[1]==ms->mport)
  		{
+ 		
  			int size = skb_ptr->len - ((unsigned char *)portptr - skb_ptr->h.raw);
  			iph->daddr = ms->src;
  			portptr[1] = ms->sport;
  			
+ 			if(ms->dport==htons(FTP_DPORT_TBD))
+ 			{
+ 				ms->dport=portptr[0];
+#ifdef DEBUG_MASQ
+	 			printk("demasq : Filled out dport entry (%d) based on initial connect attempt from FTP deamon\n",ntohs(ms->dport));
+#endif
+			}
+
  			/*
  			 * Yug! adjust UDP/TCP and IP checksums
  			 */
@@ -905,14 +948,32 @@ int ip_fw_demasquerade(struct sk_buff *skb_ptr)
  				recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,size);
  			else
  			{
+ 				__u32 ack_seq;
  				/*
-				 * Adjust seq and ack_seq with delta-offset for
-				 * the packets AFTER this one...
+				 * Adjust ack_seq with delta-offset for
+				 * the packets AFTER most recent PORT command has caused a shift
+				 * for packets before most recent PORT command, use previous_delta
 				 */
-				if (ms->delta && after(ms->init_seq,th->ack_seq)) 
+#ifdef DEBUG_MASQ
+	 			printk("demasq : delta=%d ; previous_delta=%d ; init_seq=%lX ; ack_seq=%lX ; after=%d\n",ms->delta,ms->previous_delta,ntohl(ms->init_seq),ntohl(th->ack_seq),after(ntohl(th->ack_seq),ntohl(ms->init_seq)));
+#endif
+				ack_seq=ntohl(th->ack_seq);
+				if (ms->delta || ms->previous_delta)
 				{
-/*					th->seq += ms->delta;*/
-			 		th->ack_seq -= ms->delta;
+					if(after(ack_seq,ms->init_seq))
+					{
+				 		th->ack_seq = htonl(ack_seq-ms->delta);
+#ifdef DEBUG_MASQ
+						printk("demasq : substracted delta (%d) from ack_seq\n",ms->delta);
+#endif
+					}
+					else
+					{
+				 		th->ack_seq = htonl(ack_seq-ms->previous_delta);
+#ifdef DEBUG_MASQ
+						printk("demasq : substracted previous_delta (%d) from ack_seq\n",ms->previous_delta);
+#endif
+					}
 				}
  				tcp_send_check((struct tcphdr *)portptr,iph->saddr,iph->daddr,size,skb_ptr->sk);
  			}
@@ -1568,7 +1629,7 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 	unsigned long flags;
 	int len=0;
 	
-	len=sprintf(buffer,"Prc FromIP   FPrt ToIP     TPrt Masq Init-seq Delta Expires\n"); 
+	len=sprintf(buffer,"Prc FromIP   FPrt ToIP     TPrt Masq Init-seq Delta PDelta Expires\n"); 
 	save_flags(flags);
 	cli();
 	
@@ -1578,12 +1639,12 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 		int timer_active = del_timer(&ms->timer);
 		if (!timer_active)
 			ms->timer.expires = jiffies;
-		len+=sprintf(buffer+len,"%s %08lX:%04X %08lX:%04X %04X %08X %5d %lu\n",
+		len+=sprintf(buffer+len,"%s %08lX:%04X %08lX:%04X %04X %08X %5d %5d %lu\n",
 			strProt[ms->protocol==IPPROTO_TCP],
 			ntohl(ms->src),ntohs(ms->sport),
 			ntohl(ms->dst),ntohs(ms->dport),
 			ntohs(ms->mport),
-			ms->init_seq,ms->delta,ms->timer.expires-jiffies);
+			ms->init_seq,ms->delta,ms->previous_delta,ms->timer.expires-jiffies);
 		if (timer_active)
 			add_timer(&ms->timer);
 

@@ -37,7 +37,7 @@ static const char *version = "lance.c:v1.08 4/10/95 dplatt@3do.com\n";
 #include <linux/skbuff.h>
 
 static unsigned int lance_portlist[] = {0x300, 0x320, 0x340, 0x360, 0};
-unsigned long lance_probe1(int ioaddr, unsigned long mem_start);
+void lance_probe1(int ioaddr);
 
 #ifdef HAVE_DEVLIST
 struct netdev_entry lance_drv =
@@ -187,8 +187,7 @@ struct lance_init_block {
 
 struct lance_private {
 	/* The Tx and Rx ring entries must be aligned on 8-byte boundaries.
-	   This is accomplished by allocating 7 extra bytes for the struct
-	   and adjusting the start of the struct to be 8-byte aligned.  */
+	   This is always true for kmalloc'ed memory */
 	struct lance_rx_head rx_ring[RX_RING_SIZE];
 	struct lance_tx_head tx_ring[TX_RING_SIZE];
 	struct lance_init_block		init_block;
@@ -270,11 +269,11 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
    before the memory management system is started, and thus well before the
    other probes. */
 
-unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
+int lance_init(void)
 {
 	int *port;
 
-	if (mem_end <= 16*1024*1024)
+	if (high_memory <= 16*1024*1024)
 		lance_need_isa_bounce_buffers = 0;
 
 #if defined(CONFIG_PCI)
@@ -308,9 +307,9 @@ unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 				pcibios_write_config_word(pci_bus, pci_device_fn,
 										  PCI_COMMAND, pci_command);
 			}
-			printk("Found PCnet/PCI at %#x, irq %d (mem_start is %#lx).\n",
-				   pci_ioaddr, pci_irq_line, mem_start);
-			mem_start = lance_probe1(pci_ioaddr, mem_start);
+			printk("Found PCnet/PCI at %#x, irq %d.\n",
+				   pci_ioaddr, pci_irq_line);
+			lance_probe1(pci_ioaddr);
 			pci_irq_line = 0;
 		}
 	}
@@ -326,14 +325,14 @@ unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 			
 			if ((offset14 == 0x52 || offset14 == 0x57) &&
 				((offset15 = inb(ioaddr + 15)) == 0x57 || offset15 == 0x44))
-				mem_start = lance_probe1(ioaddr, mem_start);
+				lance_probe1(ioaddr);
 		}
 	}
 
-	return mem_start;
+	return 0;
 }
 
-unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
+void lance_probe1(int ioaddr)
 {
 	struct device *dev;
 	struct lance_private *lp;
@@ -372,7 +371,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 
 	outw(0x0000, ioaddr+LANCE_ADDR); /* Switch to window 0 */
 	if (inw(ioaddr+LANCE_DATA) != 0x0004)
-		return mem_start;
+		return;
 
 	/* Get the version of the chip. */
 	outw(88, ioaddr+LANCE_ADDR);
@@ -385,7 +384,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 		if (lance_debug > 2)
 			printk("  LANCE chip version is %#x.\n", chip_version);
 		if ((chip_version & 0xfff) != 0x003)
-			return mem_start;
+			return;
 		chip_version = (chip_version >> 12) & 0xffff;
 		for (lance_version = 1; chip_table[lance_version].id_number; lance_version++) {
 			if (chip_table[lance_version].id_number == chip_version)
@@ -393,14 +392,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 		}
 	}
 
-	dev = init_etherdev(0, 7
-						+ ((sizeof(struct lance_private) + 7) & ~7)
-						+ PKT_BUF_SZ*RX_RING_SIZE
-						+ (lance_need_isa_bounce_buffers
-						   ? PKT_BUF_SZ*TX_RING_SIZE
-						   : 0),
-						&mem_start);
-
+	dev = init_etherdev(0, 0);
 	chipname = chip_table[lance_version].name;
 	printk("%s: %s at %#3x,", dev->name, chipname, ioaddr);
 
@@ -412,13 +404,14 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 	dev->base_addr = ioaddr;
 	request_region(ioaddr, LANCE_TOTAL_SIZE, chip_table[lance_version].name);
 
-	/* Make certain the data structures used by the LANCE are aligned. */
-	dev->priv = (void *)(((int)dev->priv + 7) & ~7);
-	lp = (struct lance_private *)dev->priv;
+	/* Make certain the data structures used by the LANCE are aligned and DMAble. */
+	lp = (struct lance_private *) kmalloc(sizeof(*lp), GFP_DMA | GFP_KERNEL);
+	dev->priv = lp;
 	lp->name = chipname;
-	lp->rx_buffs = (long)lp + ((sizeof(struct lance_private) + 7) & ~7);
-	lp->tx_bounce_buffs = (char (*)[PKT_BUF_SZ])
-						   (lp->rx_buffs + PKT_BUF_SZ*RX_RING_SIZE);
+	lp->rx_buffs = (unsigned long) kmalloc(PKT_BUF_SZ*RX_RING_SIZE, GFP_DMA | GFP_KERNEL);
+	lp->tx_bounce_buffs = NULL;
+	if (lance_need_isa_bounce_buffers)
+		lp->tx_bounce_buffs = kmalloc(PKT_BUF_SZ*TX_RING_SIZE, GFP_DMA | GFP_KERNEL);
 
 	lp->chip_version = lance_version;
 
@@ -490,7 +483,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 			printk(", probed IRQ %d", dev->irq);
 		else {
 			printk(", failed to detect IRQ line.\n");
-			return mem_start;
+			return;
 		}
 
 		/* Check for the initialization done bit, 0x0100, which means
@@ -504,7 +497,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 	} else if (dev->dma) {
 		if (request_dma(dev->dma, chipname)) {
 			printk("DMA %d allocation failed.\n", dev->dma);
-			return mem_start;
+			return;
 		} else
 			printk(", assigned DMA %d.\n", dev->dma);
 	} else {			/* OK, we have to auto-DMA. */
@@ -539,7 +532,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 		}
 		if (i == 4) {			/* Failure: bail. */
 			printk("DMA detection failed.\n");
-			return mem_start;
+			return;
 		}
 	}
 
@@ -560,7 +553,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 	dev->get_stats = &lance_get_stats;
 	dev->set_multicast_list = &set_multicast_list;
 
-	return mem_start;
+	return;
 }
 
 
@@ -1082,6 +1075,7 @@ lance_get_stats(struct device *dev)
 }
 
 /* Set or clear the multicast filter for this adaptor.
+   num_addrs == -2		All multicasts
    num_addrs == -1		Promiscuous mode, receive all packets
    num_addrs == 0		Normal mode, clear multicast list
    num_addrs > 0		Multicast mode, receive normal and MC packets, and do
@@ -1095,7 +1089,7 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 	outw(0, ioaddr+LANCE_ADDR);
 	outw(0x0004, ioaddr+LANCE_DATA); /* Temporarily stop the lance.	 */
 
-	if (num_addrs >= 0) {
+	if (num_addrs >= 0 || num_addrs==-2) {
 		short multicast_table[4];
 		int i;
 		/* We don't use the multicast table, but rely on upper-layer filtering. */

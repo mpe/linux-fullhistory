@@ -1777,7 +1777,7 @@ long console_init(long kmem_start, long kmem_end)
  * Ok, now we can initialize the rest of the tty devices and can count
  * on memory allocations, interrupts etc..
  */
-long tty_init(long kmem_start)
+int tty_init(void)
 {
 	if (sizeof(struct tty_struct) > PAGE_SIZE)
 		panic("size of tty structure > PAGE_SIZE!");
@@ -1786,21 +1786,21 @@ long tty_init(long kmem_start)
 	if (register_chrdev(TTYAUX_MAJOR,"cua",&tty_fops))
 		panic("unable to get major %d for tty device", TTYAUX_MAJOR);
 
-	kmem_start = kbd_init(kmem_start);
-	kmem_start = rs_init(kmem_start);
+	kbd_init();
+	rs_init();
 #ifdef CONFIG_SCC
-	kmem_start = scc_init(kmem_start);
+	scc_init();
 #endif
 #ifdef CONFIG_CYCLADES
-	kmem_start = cy_init(kmem_start);
+	cy_init();
 #endif
 #ifdef CONFIG_STALLION
-	kmem_start = stl_init(kmem_start);
+	stl_init();
 #endif
 #ifdef CONFIG_ISTALLION
-	kmem_start = stli_init(kmem_start);
+	stli_init();
 #endif
-	kmem_start = pty_init(kmem_start);
-	kmem_start = vcs_init(kmem_start);
-	return kmem_start;
+	pty_init();
+	vcs_init();
+	return 0;
 }

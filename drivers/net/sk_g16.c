@@ -807,6 +807,8 @@ int SK_probe(struct device *dev, short ioaddr)
     /* Set the generic fields of the device structure */
 
     ether_setup(dev);
+    
+    dev->flags &= ~IFF_MULTICAST;
 
     /* Initialize private structure */
 

@@ -61,10 +61,18 @@ static int read_core(struct inode * inode, struct file * file,char * buf, int co
 	int count1;
 	char * pnt;
 	struct user dump;
+#ifdef __i386__
+#	define FIRST_MAPPED	PAGE_SIZE	/* we don't have page 0 mapped on x86.. */
+#else
+#	define FIRST_MAPPED	0
+#endif
 
 	memset(&dump, 0, sizeof(struct user));
 	dump.magic = CMAGIC;
 	dump.u_dsize = MAP_NR(high_memory);
+#ifdef __alpha__
+	dump.start_data = PAGE_OFFSET;
+#endif
 
 	if (count < 0)
 		return -EINVAL;
@@ -87,14 +95,14 @@ static int read_core(struct inode * inode, struct file * file,char * buf, int co
 		read += count1;
 	}
 
-	while (p < 2*PAGE_SIZE && count > 0) {
+	while (count > 0 && p < PAGE_SIZE + FIRST_MAPPED) {
 		put_user(0,buf);
 		buf++;
 		p++;
 		count--;
 		read++;
 	}
-	memcpy_tofs(buf,(void *) (PAGE_OFFSET + p - PAGE_SIZE),count);
+	memcpy_tofs(buf, (void *) (PAGE_OFFSET + p - PAGE_SIZE), count);
 	read += count;
 	file->f_pos += read;
 	return read;

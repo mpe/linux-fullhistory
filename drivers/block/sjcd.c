@@ -1353,7 +1353,7 @@ static struct {
  * Test for presence of drive and initialize it. Called at boot time.
  * Probe cdrom, find out version and status.
  */
-unsigned long sjcd_init( unsigned long mem_start, unsigned long mem_end ){
+int sjcd_init( void ){
   int i;
 
   if ( (isp16_type=isp16_detect()) < 0 )
@@ -1368,13 +1368,13 @@ unsigned long sjcd_init( unsigned long mem_start, unsigned long mem_end ){
 
     if ( isp16_config( sjcd_port, expected_drive, sjcd_irq, sjcd_dma ) < 0 ) {
       printk( "ISP16 cdrom interface has not been properly configured.\n" );
-      return(mem_start);
+      return -1;
     }
   }
 
   if( register_blkdev( MAJOR_NR, "sjcd", &sjcd_fops ) != 0 ){
     printk( "Unable to get major %d for Sanyo CD-ROM\n", MAJOR_NR );
-    return( mem_start );
+    return -1;
   }
   
   blk_dev[ MAJOR_NR ].request_fn = DEVICE_REQUEST;
@@ -1383,7 +1383,7 @@ unsigned long sjcd_init( unsigned long mem_start, unsigned long mem_end ){
   if( check_region( sjcd_port, 4 ) ){
     printk( "Init failed, I/O port (%X) is already in use\n",
 	   sjcd_port );
-    return( mem_start );
+    return -1;
   }
   
   printk( "Sanyo CDR-H94A:" );
@@ -1395,7 +1395,7 @@ unsigned long sjcd_init( unsigned long mem_start, unsigned long mem_end ){
     if( !( inb( SJCDPORT( 1 ) ) & 0x04 ) ) break;
   if( i == 0 ){
     printk( " No device at 0x%x found.\n", sjcd_port );
-    return( mem_start );
+    return -1;
   }
   
   sjcd_send_cmd( SCMD_RESET );
@@ -1412,7 +1412,7 @@ unsigned long sjcd_init( unsigned long mem_start, unsigned long mem_end ){
 	     ( int )sjcd_version.minor );
   } else {
     printk( " Read version failed.\n" );
-    return( mem_start );
+    return -1;
   }
 
   /*
@@ -1427,7 +1427,7 @@ unsigned long sjcd_init( unsigned long mem_start, unsigned long mem_end ){
 	 sjcd_port, sjcd_irq );
 
   sjcd_present++;
-  return( mem_start );
+  return 0;
 }
 
 /*

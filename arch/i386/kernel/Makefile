@@ -33,6 +33,8 @@ head.o: head.S $(TOPDIR)/include/linux/tasks.h
 hexify:
 	$(HOSTCC) hexify.c -o hexify
 
+smp.c: trampoline.hex
+
 trampoline.hex: trampoline hexify
 	(dd if=trampoline bs=1 skip=32 | ./hexify >trampoline.hex )
 

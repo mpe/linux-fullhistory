@@ -95,8 +95,14 @@ extern long mod_use_count_;
 int Using_Versions; /* gcc will handle this global (used as a flag) correctly */
 #endif
 
+#ifdef MODULE
 #define MOD_INC_USE_COUNT      mod_use_count_++
 #define MOD_DEC_USE_COUNT      mod_use_count_--
 #define MOD_IN_USE	       (mod_use_count_ != 0)
+#else
+#define MOD_INC_USE_COUNT	do { } while (0)
+#define MOD_DEC_USE_COUNT	do { } while (0)
+#define MOD_IN_USE		1
+#endif
 
 #endif

@@ -16,7 +16,7 @@
  *     'int vc_resize(unsigned long lines, unsigned long cols)'
  *     'void vc_disallocate(unsigned int currcons)'
  *
- *     'long con_init(long)'
+ *     'unsigned long con_init(unsigned long)'
  *     'int con_open(struct tty_struct *tty, struct file * filp)'
  *     'void con_write(struct tty_struct * tty)'
  *     'void console_print(const char * b)'
@@ -1369,6 +1369,7 @@ static void reset_terminal(int currcons, int do_clear)
 	clr_kbd(kbdapplic);
 	clr_kbd(lnm);
 	kbd_table[currcons].lockstate = 0;
+	kbd_table[currcons].slockstate = 0;
 	kbd_table[currcons].ledmode = LED_SHOW_FLAGS;
 	kbd_table[currcons].ledflagstate = kbd_table[currcons].default_ledflagstate;
 	set_leds();
@@ -1990,7 +1991,7 @@ static void con_setsize(unsigned long rows, unsigned long cols)
 }
 
 /*
- *  long con_init(long);
+ *  unsigned long con_init(unsigned long);
  *
  * This routine initializes console interrupts, and does nothing
  * else. If you want the screen to clear, call tty_write with
@@ -1999,7 +2000,7 @@ static void con_setsize(unsigned long rows, unsigned long cols)
  * Reads the information preserved by setup.s to determine the current display
  * type and sets everything accordingly.
  */
-long con_init(long kmem_start)
+unsigned long con_init(unsigned long kmem_start)
 {
 	const char *display_desc = "????";
 	int currcons = 0;

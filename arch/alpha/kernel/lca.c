@@ -305,10 +305,22 @@ unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 
 
 
+/*
+ * Constants used during machine-check handling.  I suppose these
+ * could be moved into lca.h but I don't see much reason why anybody
+ * else would want to use them.
+ */
+#define ESR_EAV	(1UL<< 0)	/* error address valid */
+#define ESR_CEE	(1UL<< 1)	/* correctable error */
+#define ESR_UEE (1UL<< 2)	/* uncorrectable error */
+#define ESR_NXM (1UL<<12)	/* non-existent memory */
+
+
 void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *regs)
 {
 	const char * reason;
 	union el_lca el;
+	char buf[128];
 
 	printk("lca: machine check (la=0x%lx)\n", la);
 	el.c = (struct el_common *) la;
@@ -332,31 +344,50 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 	      case MCHK_K_SIO_IOCHK:	reason = "SIO IOCHK occurred on ISA bus"; break;
 	      case MCHK_K_DCSR:		reason = "MCHK_K_DCSR"; break;
 	      case MCHK_K_UNKNOWN:
-	      default:			reason = "reason for machine-check unknown"; break;
+	      default:
+		sprintf(buf, "reason for machine-check unknown (0x%lx)", el.s->reason);
+		reason = buf;
+		break;
 	}
+
+	wrmces(rdmces());	/* reset machine check pending flag */
 
 	switch (el.c->size) {
 	      case sizeof(struct el_lca_mcheck_short):
 		printk("  Reason: %s (short frame%s):\n",
-		       reason, el.h->retry ? ", retryable" : "");
-		printk("\tesr: %lx  ear: %lx\n", el.s->esr, el.s->ear);
-		printk("\tdc_stat: %lx  ioc_stat0: %lx  ioc_stat1: %lx\n",
+		       reason, el.c->retry ? ", retryable" : "");
+		printk("    esr: %lx  ear: %lx\n", el.s->esr, el.s->ear);
+		printk("    dc_stat: %lx  ioc_stat0: %lx  ioc_stat1: %lx\n",
 		       el.s->dc_stat, el.s->ioc_stat0, el.s->ioc_stat1);
+		if (el.c->retry &&
+		    (el.s->esr & (ESR_EAV|ESR_CEE|ESR_UEE|ESR_NXM)) == (ESR_EAV|ESR_CEE))
+		{
+			unsigned long addr, val;
+
+			/* temporarily disable processor/system correctable error logging: */
+			wrmces(0x18);
+			addr = el.s->ear & ~ (0x7<<29 | 0x7);
+			addr += IDENT_ADDR;
+			printk("  correcting quadword at address %lx\n", addr);
+			val = *(volatile long *)addr;
+			*(volatile long *)addr = val;
+			/* reenable all machine checks: */
+			wrmces(0x00);
+		}
 		break;
 
 	      case sizeof(struct el_lca_mcheck_long):
 		printk("  Reason: %s (long frame%s):\n",
-		       reason, el.h->retry ? ", retryable" : "");
-		printk("\treason: %lx  exc_addr: %lx  dc_stat: %lx\n", 
+		       reason, el.c->retry ? ", retryable" : "");
+		printk("    reason: %lx  exc_addr: %lx  dc_stat: %lx\n", 
 		       el.l->pt[0], el.l->exc_addr, el.l->dc_stat);
-		printk("\tesr: %lx  ear: %lx  car: %lx\n", el.l->esr, el.l->ear, el.l->car);
-		printk("\tioc_stat0: %lx  ioc_stat1: %lx\n", el.l->ioc_stat0, el.l->ioc_stat1);
+		printk("    esr: %lx  ear: %lx  car: %lx\n", el.l->esr, el.l->ear, el.l->car);
+		printk("    ioc_stat0: %lx  ioc_stat1: %lx\n", el.l->ioc_stat0, el.l->ioc_stat1);
 		break;
 
 	      default:
 		printk("  Unknown errorlog size %d\n", el.c->size);
 	}
-	wrmces(rdmces());		/* reset machine check asap */
 }
 
 #endif /* CONFIG_ALPHA_LCA */

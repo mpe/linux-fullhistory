@@ -765,6 +765,13 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;
+	/*
+	 *	We must make the kernel realise we had to move
+	 *	into promisc mode or we start all out war on
+	 *	the cable. - AC
+	 */
+	if(num_addrs)
+		dev->flags|=IFF_PROMISC;		
 	lp->addr_mode = num_addrs ? CMR2h_PROMISC : CMR2h_Normal;
 	write_reg_high(ioaddr, CMR2, lp->addr_mode);
 }

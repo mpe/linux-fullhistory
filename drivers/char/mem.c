@@ -23,7 +23,7 @@
 #include <asm/pgtable.h>
 
 #ifdef CONFIG_SOUND
-extern long soundcard_init(long mem_start);
+int soundcard_init(void);
 #endif
 
 static int read_ram(struct inode * inode, struct file * file, char * buf, int count)
@@ -403,41 +403,27 @@ static struct file_operations memory_fops = {
 	NULL		/* fsync */
 };
 
-#ifdef CONFIG_FTAPE
-char* ftape_big_buffer;
-#endif
-
-long chr_dev_init(long mem_start, long mem_end)
+int chr_dev_init(void)
 {
 	if (register_chrdev(MEM_MAJOR,"mem",&memory_fops))
 		printk("unable to get major %d for memory devs\n", MEM_MAJOR);
 #ifdef CONFIG_RANDOM
 	rand_initialize();
 #endif
-	mem_start = tty_init(mem_start);
+	tty_init();
 #ifdef CONFIG_PRINTER
-	mem_start = lp_init(mem_start);
+	lp_init();
 #endif
 #if defined (CONFIG_BUSMOUSE) || defined (CONFIG_82C710_MOUSE) || \
     defined (CONFIG_PSMOUSE) || defined (CONFIG_MS_BUSMOUSE) || \
     defined (CONFIG_ATIXL_BUSMOUSE)
-	mem_start = mouse_init(mem_start);
+	mouse_init();
 #endif
 #ifdef CONFIG_SOUND
-	mem_start = soundcard_init(mem_start);
+	soundcard_init();
 #endif
 #if CONFIG_QIC02_TAPE
-	mem_start = qic02_tape_init(mem_start);
+	qic02_tape_init();
 #endif
-/*
- *      Rude way to allocate kernel memory buffer for tape device
- */
-#ifdef CONFIG_FTAPE
-        /* allocate NR_FTAPE_BUFFERS 32Kb buffers at aligned address */
-        ftape_big_buffer= (char*) ((mem_start + 0x7fff) & ~0x7fff);
-        printk( "ftape: allocated %d buffers aligned at: %p\n",
-               NR_FTAPE_BUFFERS, ftape_big_buffer);
-        mem_start = (long) ftape_big_buffer + NR_FTAPE_BUFFERS * 0x8000;
-#endif 
-	return mem_start;
+	return 0;
 }

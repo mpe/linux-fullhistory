@@ -129,7 +129,7 @@ int hp_probe1(struct device *dev, int ioaddr)
 	}
 
 	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct ei_device), 0);
+		dev = init_etherdev(0, sizeof(struct ei_device));
 
 	printk("%s: %s (ID %02x) at %#3x,", dev->name, name, board_id, ioaddr);
 

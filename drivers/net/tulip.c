@@ -154,8 +154,7 @@ struct tulip_private {
 	int pad0, pad1;						/* Used for 8-byte alignment */
 };
 
-static unsigned long tulip_probe1(unsigned long mem_start, int ioaddr,
-								  int irq);
+static void tulip_probe1(int ioaddr, int irq);
 static int tulip_open(struct device *dev);
 static void tulip_init_ring(struct device *dev);
 static int tulip_start_xmit(struct sk_buff *skb, struct device *dev);
@@ -174,7 +173,7 @@ static int set_mac_address(struct device *dev, void *addr);
    ourselves.  This is done by having the initialization occur before
    the 'kmalloc()' memory management system is started. */
 
-unsigned long dec21040_init(unsigned long mem_start, unsigned long mem_end)
+int dec21040_init(void)
 {
 
     if (pcibios_present()) {
@@ -195,11 +194,11 @@ unsigned long dec21040_init(unsigned long mem_start, unsigned long mem_end)
 			if (tulip_debug > 2)
 				printk("Found DEC PCI Tulip at I/O %#lx, IRQ %d.\n",
 					   pci_ioaddr, pci_irq_line);
-			mem_start = tulip_probe1(mem_start, pci_ioaddr, pci_irq_line);
+			tulip_probe1(pci_ioaddr, pci_irq_line);
 		}
 	}
 
-	return mem_start;
+	return 0;
 }
 #endif
 #ifdef MODULE
@@ -210,7 +209,7 @@ static int tulip_probe(struct device *dev)
 }
 #endif
 
-unsigned long tulip_probe1(unsigned long mem_start, int ioaddr, int irq)
+static void tulip_probe1(int ioaddr, int irq)
 {
 	static int did_version = 0;			/* Already printed version info. */
 	struct device *dev;
@@ -220,9 +219,7 @@ unsigned long tulip_probe1(unsigned long mem_start, int ioaddr, int irq)
 	if (tulip_debug > 0  &&  did_version++ == 0)
 		printk(version);
 
-	dev = init_etherdev(0, sizeof(struct tulip_private)
-						+ PKT_BUF_SZ*RX_RING_SIZE,
-						&mem_start);
+	dev = init_etherdev(0, 0);
 
 	printk("%s: DEC 21040 Tulip at %#3x,", dev->name, ioaddr);
 
@@ -252,9 +249,9 @@ unsigned long tulip_probe1(unsigned long mem_start, int ioaddr, int irq)
 	dev->irq = irq;
 
 	/* Make certain the data structures are quadword aligned. */
-	dev->priv = (void *)(((int)dev->priv + 7) & ~7);
-	tp = (struct tulip_private *)dev->priv;
-	tp->rx_buffs = (long)dev->priv + sizeof(struct tulip_private);
+	tp = kmalloc(sizeof(*tp), GFP_KERNEL | GFP_DMA);
+	dev->priv = tp;
+	tp->rx_buffs = kmalloc(PKT_BUF_SZ*RX_RING_SIZE, GFP_KERNEL | GFP_DMA);
 
 	/* The Tulip-specific entries in the device structure. */
 	dev->open = &tulip_open;
@@ -268,7 +265,7 @@ unsigned long tulip_probe1(unsigned long mem_start, int ioaddr, int irq)
 	dev->set_mac_address = &set_mac_address;
 #endif
 
-	return mem_start;
+	return;
 }
 
 

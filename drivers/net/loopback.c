@@ -125,8 +125,11 @@ static int loopback_open(struct device *dev)
 int loopback_init(struct device *dev)
 {
 	int i;
-
-	dev->mtu		= 2000;			/* MTU			*/
+#ifdef CONFIG_SKB_LARGE
+	dev->mtu		= 7900;			/* MTU			*/
+#else
+	dev->mtu		= 3800;
+#endif	
 	dev->tbusy		= 0;
 	dev->hard_start_xmit	= loopback_xmit;
 	dev->open		= NULL;
@@ -140,7 +143,7 @@ int loopback_init(struct device *dev)
 	dev->family		= AF_INET;
 #ifdef CONFIG_INET    
 	dev->pa_addr		= in_aton("127.0.0.1");
-	dev->pa_brdaddr	= in_aton("127.255.255.255");
+	dev->pa_brdaddr		= in_aton("127.255.255.255");
 	dev->pa_mask		= in_aton("255.0.0.0");
 	dev->pa_alen		= 4;
 #endif  

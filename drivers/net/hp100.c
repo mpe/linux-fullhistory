@@ -876,13 +876,13 @@ static void hp100_set_multicast_list( struct device *dev, int num_addrs, void *a
   hp100_page( MAC_CTRL );
   hp100_andb( ~(HP100_RX_EN | HP100_TX_EN), MAC_CFG_1 );	/* stop rx/tx */
 
-  if ( num_addrs < 0 )
+  if ( num_addrs == -1 )
     {
       lp -> mac2_mode = HP100_MAC2MODE6;  /* promiscuous mode, all good */
       lp -> mac1_mode = HP100_MAC1MODE6;  /* packets on the net */
     }
    else
-  if ( num_addrs > 0 )
+  if ( num_addrs != 0 )
     {
       lp -> mac2_mode = HP100_MAC2MODE5;  /* multicast mode, packets for me */
       lp -> mac1_mode = HP100_MAC1MODE5;  /* broadcasts and all multicasts */

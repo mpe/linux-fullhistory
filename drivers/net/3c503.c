@@ -183,7 +183,7 @@ el2_probe1(struct device *dev, int ioaddr)
     request_region(ioaddr, EL2_IO_EXTENT,"3c503");
 
     if (dev == NULL)
-	dev = init_etherdev(0, sizeof(struct ei_device), 0);
+	dev = init_etherdev(0, sizeof(struct ei_device));
 
     if (ei_debug  &&  version_printed++ == 0)
 	printk(version);

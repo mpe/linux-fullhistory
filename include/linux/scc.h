@@ -557,4 +557,4 @@ struct rx_timer_CB {
 
 /* global functions */
 
-extern long scc_init(long kmem_start);
+extern int scc_init(void);

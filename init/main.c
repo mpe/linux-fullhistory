@@ -36,16 +36,14 @@ static char printbuf[1024];
 
 extern int console_loglevel;
 
-extern void init(void);
+static int init(void *);
+
 extern void init_IRQ(void);
 extern void init_modules(void);
 extern long console_init(long, long);
 extern long kmalloc_init(long,long);
-extern long blk_dev_init(long,long);
-extern long chr_dev_init(long,long);
 extern void sock_init(void);
 extern long rd_init(long mem_start, int length);
-unsigned long net_dev_init(unsigned long, unsigned long);
 extern long pci_init(long, long);
 
 extern void bmouse_setup(char *str, int *ints);
@@ -96,13 +94,10 @@ extern void optcd_setup(char *str, int *ints);
 #ifdef CONFIG_SJCD
 extern void sjcd_setup(char *str, int *ints);
 #endif CONFIG_SJCD
-void ramdisk_setup(char *str, int *ints);
+static void ramdisk_setup(char *str, int *ints);
 
 #ifdef CONFIG_SYSVIPC
 extern void ipc_init(void);
-#endif
-#ifdef CONFIG_SCSI
-extern unsigned long scsi_dev_init(unsigned long, unsigned long);
 #endif
 
 /*
@@ -255,7 +250,7 @@ struct {
 	{ 0, 0 }
 };
 
-void ramdisk_setup(char *str, int *ints)
+static void ramdisk_setup(char *str, int *ints)
 {
    if (ints[0] > 0 && ints[1] >= 0)
       ramdisk_size = ints[1];
@@ -419,8 +414,6 @@ static void parse_options(char *line)
 
 extern void setup_arch(char **, unsigned long *, unsigned long *);
 
-static char init_stack[PAGE_SIZE];
-
 #ifdef CONFIG_SMP
 /*
  *	Activate a secondary processor.
@@ -435,6 +428,12 @@ asmlinkage void start_secondary(void)
 		idle();
 }
 
+int smp_idle(void * unused)
+{
+	for (;;)
+		idle();
+}
+
 /*
  *	Called by CPU#0 to activate the rest.
  */
@@ -445,20 +444,12 @@ static void smp_init(void)
 	smp_boot_cpus();
 	
 	/*
-	 *	Create the slave init tasks. At this point
-	 *	fork will create them all ask task 0
+	 *	Create the slave init tasks as sharing pid 0.
 	 */
 
 	for(i=1;i<smp_num_cpus;i++)
 	{
-		fork();
-		/* We are forking multiple process 0's. This makes it harder
-		   to tell them apart than we would like ;) */
-		if(current!=task[0])
-		{
-			for(;;)
-				idle();
-		}
+		kernel_thread(smp_idle, NULL, CLONE_PID);
 		/*
 		 *	Assume linear processor numbering
 		 */
@@ -525,18 +516,11 @@ asmlinkage void start_kernel(void)
 	memory_start = kmalloc_init(memory_start,memory_end);
 	sti();
 	calibrate_delay();
-	memory_start = chr_dev_init(memory_start,memory_end);
-	memory_start = blk_dev_init(memory_start,memory_end);
-	sti();
-#ifdef CONFIG_SCSI
-	memory_start = scsi_dev_init(memory_start,memory_end);
-#endif
-#ifdef CONFIG_INET
-	memory_start = net_dev_init(memory_start,memory_end);
-#endif
 	memory_start = inode_init(memory_start,memory_end);
 	memory_start = file_table_init(memory_start,memory_end);
 	memory_start = name_cache_init(memory_start,memory_end);
+	if (ramdisk_size)
+		memory_start += rd_init(memory_start, ramdisk_size*1024);
 	mem_init(memory_start,memory_end);
 	buffer_init();
 	sock_init();
@@ -550,9 +534,8 @@ asmlinkage void start_kernel(void)
 #ifdef CONFIG_SMP	
 	smp_init();
 #endif
-	/* we count on the clone going ok */
-	if (!clone(CLONE_VM, init_stack+sizeof(init_stack)))
-		init();
+	/* we count on the initial thread going ok */
+	kernel_thread(init, NULL, 0);
 /*
  * task[0] is meant to be used as an "idle" task: it may not sleep, but
  * it might do some general things like count free pages or it could be
@@ -577,7 +560,15 @@ static int printf(const char *fmt, ...)
 	return i;
 }
 
-void init(void)
+static int do_shell(void * input)
+{
+	close(0);
+	if (open("/etc/rc",O_RDONLY,0))
+		return -1;
+	return execve("/bin/sh",argv_rc,envp_rc);
+}
+
+static int init(void * unused)
 {
 	int pid,i;
 
@@ -607,13 +598,7 @@ void init(void)
 	execve("/sbin/init",argv_init,envp_init);
 	/* if this fails, fall through to original stuff */
 
-	if (!(pid=fork())) {
-		close(0);
-		if (open("/etc/rc",O_RDONLY,0))
-			_exit(1);
-		execve("/bin/sh",argv_rc,envp_rc);
-		_exit(2);
-	}
+	pid = kernel_thread(do_shell, "/etc/rc", 0);
 	if (pid>0)
 		while (pid != wait(&i))
 			/* nothing */;
@@ -636,5 +621,5 @@ void init(void)
 		printf("\n\rchild %d died with code %04x\n\r",pid,i);
 		sync();
 	}
-	_exit(0);
+	return -1;
 }

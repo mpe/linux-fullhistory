@@ -43,6 +43,8 @@ typedef unsigned long sigset_t;		/* at least 32 bits */
 #define SIGUSR2		31
 
 #define SIGPOLL	SIGIO
+#define SIGPWR	SIGINFO
+#define SIGIOT	SIGABRT
 
 /*
  * sa_flags values: SA_STACK is not currently supported, but will allow the

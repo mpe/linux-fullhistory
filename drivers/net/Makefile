@@ -139,6 +139,10 @@ else
   endif
 endif
 
+ifneq ($(CONFIG_PPP),n)
+  M_OBJS += bsd_comp.o
+endif
+
 ifeq ($(CONFIG_SLIP),y)
 L_OBJS += slip.o
 CONFIG_SLHC_BUILTIN = y

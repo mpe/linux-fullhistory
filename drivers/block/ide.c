@@ -171,6 +171,8 @@
 #include <linux/errno.h>
 #include <linux/hdreg.h>
 #include <linux/genhd.h>
+#include <linux/malloc.h>
+
 #include <asm/byteorder.h>
 #include <asm/irq.h>
 #include <asm/segment.h>
@@ -458,6 +460,10 @@ static void ide_geninit (struct gendisk *gd)
 
 	for (unit = 0; unit < gd->nr_real; ++unit) {
 		ide_drive_t *drive = &hwif->drives[unit];
+#ifdef CONFIG_BLK_DEV_IDECD
+		if (drive->present && drive->media == cdrom)
+			ide_cdrom_setup(drive);
+#endif /* CONFIG_BLK_DEV_IDECD */
 		drive->part[0].nr_sects = current_capacity(drive);
 		if (!drive->present || drive->media != disk) {
 			drive->part[0].start_sect = -1; /* skip partition check */
@@ -470,33 +476,6 @@ static void ide_geninit (struct gendisk *gd)
 	 * if ever called a second time for this major (never happens).
 	 */
 	gd->real_devices = hwif->drives[0].name;  /* name of first drive */
-}
-
-/*
- * ide_alloc(): memory allocation for use *only* during driver initialization.
- * If "within_area" is non-zero, the memory will be allocated such that
- * it lies entirely within a "within_area" sized area (eg. 4096).  This is
- * needed for DMA stuff.  "within_area" must be a power of two (not validated).
- * All allocations are longword aligned.
- */
-static unsigned long ide_mem_start = 0uL;	/* used by ide_alloc() */
-
-void *ide_alloc (unsigned long bytecount, unsigned long within_area)
-{
-	const unsigned long longsize_m1 = (sizeof(long) - 1);
-	void *p;
-
-	if (!ide_mem_start)
-		panic("ide: ide_alloc() not valid now\n");
-	ide_mem_start = (ide_mem_start + longsize_m1) & ~longsize_m1;
-	if (within_area) {
-		unsigned long fraction = within_area - (ide_mem_start & (within_area - 1));
-		if (fraction < bytecount)
-			ide_mem_start += fraction; /* realign to a new page */
-	}
-	p = (void *) ide_mem_start;
-	ide_mem_start += (bytecount + longsize_m1) & ~longsize_m1;
-	return p;
 }
 
 /*
@@ -517,10 +496,10 @@ static void init_gendisk (ide_hwif_t *hwif)
 			break;
 	}
 	minors    = units * (1<<PARTN_BITS);
-	gd        = ide_alloc (sizeof(struct gendisk), 0);
-	gd->sizes = ide_alloc (minors * sizeof(int), 0);
-	gd->part  = ide_alloc (minors * sizeof(struct hd_struct), 0);
-	bs        = ide_alloc (minors*sizeof(int), 0);
+	gd        = kmalloc (sizeof(struct gendisk), GFP_KERNEL);
+	gd->sizes = kmalloc (minors * sizeof(int), GFP_KERNEL);
+	gd->part  = kmalloc (minors * sizeof(struct hd_struct), GFP_KERNEL);
+	bs        = kmalloc (minors*sizeof(int), GFP_KERNEL);
 
 	/* cdroms and msdos f/s are examples of non-1024 blocksizes */
 	blksize_size[hwif->major] = bs;
@@ -1980,7 +1959,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	struct hd_driveid *id;
 	unsigned long capacity, check;
 
-	id = drive->id = ide_alloc (SECTOR_WORDS*4, 0);
+	id = drive->id = kmalloc (SECTOR_WORDS*4, GFP_KERNEL);
 	ide_input_data(drive, id, SECTOR_WORDS);	/* read 512 bytes of id info */
 	sti();
 
@@ -2311,10 +2290,6 @@ static void probe_for_drives (ide_hwif_t *hwif)
 		for (unit = 0; unit < 2; ++unit) { /* note the hardcoded '2' */
 			ide_drive_t *drive = &hwif->drives[unit];
 			(void) probe_for_drive (drive);
-#ifdef CONFIG_BLK_DEV_IDECD
-			if (drive->present && drive->media == cdrom)
-				ide_cdrom_setup(drive);
-#endif /* CONFIG_BLK_DEV_IDECD */
 		}
 		for (unit = 0; unit < MAX_DRIVES; ++unit) {
 			ide_drive_t *drive = &hwif->drives[unit];
@@ -2771,7 +2746,7 @@ static int init_irq (ide_hwif_t *hwif)
 	 * Got the irq,  now set everything else up
 	 */
 	if ((hwgroup = irq_to_hwgroup[hwif->irq]) == NULL) {
-		hwgroup = ide_alloc (sizeof(ide_hwgroup_t), 0);
+		hwgroup = kmalloc (sizeof(ide_hwgroup_t), GFP_KERNEL);
 		irq_to_hwgroup[hwif->irq] = hwgroup;
 		hwgroup->hwif 	 = hwif->next = hwif;
 		hwgroup->rq      = NULL;
@@ -2941,11 +2916,10 @@ static void ide_init_pci (void)
 /*
  * This is gets invoked once during initialization, to set *everything* up
  */
-unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
+int ide_init (void)
 {
 	int h;
 
-	ide_mem_start = mem_start;	/* for ide_alloc () */
 	init_ide_data ();
 	/*
 	 * First, we determine what hardware is present
@@ -3025,7 +2999,5 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 			hwif->present = 1;	/* success */
 		}
 	}
-	mem_start = ide_mem_start;
-	ide_mem_start = 0uL;	/* prevent further use of ide_alloc() */
-	return mem_start;
+	return 0;
 }

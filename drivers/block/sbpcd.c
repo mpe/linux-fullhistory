@@ -314,19 +314,19 @@ char kernel_version[]=UTS_RELEASE;
  */
 #if !(SBPCD_ISSUE-1)
 #define DO_SBPCD_REQUEST(a) do_sbpcd_request(a)
-#define SBPCD_INIT(a,b) sbpcd_init(a,b)
+#define SBPCD_INIT(a) sbpcd_init(a)
 #endif
 #if !(SBPCD_ISSUE-2)
 #define DO_SBPCD_REQUEST(a) do_sbpcd2_request(a)
-#define SBPCD_INIT(a,b) sbpcd2_init(a,b)
+#define SBPCD_INIT(a) sbpcd2_init(a)
 #endif
 #if !(SBPCD_ISSUE-3)
 #define DO_SBPCD_REQUEST(a) do_sbpcd3_request(a)
-#define SBPCD_INIT(a,b) sbpcd3_init(a,b)
+#define SBPCD_INIT(a) sbpcd3_init(a)
 #endif
 #if !(SBPCD_ISSUE-4)
 #define DO_SBPCD_REQUEST(a) do_sbpcd4_request(a)
-#define SBPCD_INIT(a,b) sbpcd4_init(a,b)
+#define SBPCD_INIT(a) sbpcd4_init(a)
 #endif
 /*==========================================================================*/
 #if SBPCD_DIS_IRQ
@@ -406,13 +406,13 @@ static int sbpcd[] = {CDROM_PORT, SBPRO}; /* probe with user's setup only */
  */
 #if !(SBPCD_ISSUE-1)
 #ifdef CONFIG_SBPCD2
-extern unsigned long sbpcd2_init(unsigned long, unsigned long);
+extern int sbpcd2_init(void);
 #endif
 #ifdef CONFIG_SBPCD3
-extern unsigned long sbpcd3_init(unsigned long, unsigned long);
+extern int sbpcd3_init(void);
 #endif
 #ifdef CONFIG_SBPCD4
-extern unsigned long sbpcd4_init(unsigned long, unsigned long);
+extern int sbpcd4_init(void);
 #endif
 #endif
 
@@ -5096,7 +5096,7 @@ static int config_spea(void)
 #ifdef MODULE
 int init_module(void)
 #else
-	unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
+int SBPCD_INIT(void)
 #endif MODULE
 {
 	int i=0, j=0;
@@ -5279,7 +5279,6 @@ int init_module(void)
 		D_S[j].sbp_bufsiz=SBP_BUFFER_FRAMES;
 		if (D_S[j].drv_type&drv_fam1)
 			if (READ_AUDIO>0) D_S[j].sbp_audsiz=READ_AUDIO;
-#ifdef MODULE
 		D_S[j].sbp_buf=(u_char *) vmalloc(D_S[j].sbp_bufsiz*CD_FRAMESIZE);
 		if (D_S[j].sbp_buf==NULL)
 		{
@@ -5293,15 +5292,6 @@ int init_module(void)
 			if (D_S[j].aud_buf==NULL) msg(DBG_INF,"audio buffer (%d frames) not available.\n",D_S[j].sbp_audsiz);
 			else msg(DBG_INF,"audio buffer size: %d frames.\n",D_S[j].sbp_audsiz);
 		}
-#else
-		D_S[j].sbp_buf=(u_char *)mem_start;
-		mem_start += D_S[j].sbp_bufsiz*CD_FRAMESIZE;
-		if (D_S[j].sbp_audsiz>0)
-		{
-			D_S[j].aud_buf=(u_char *)mem_start;
-			mem_start += D_S[j].sbp_audsiz*CD_FRAMESIZE_RAW;
-		}
-#endif MODULE
 		/*
 		 * set the block size
 		 */
@@ -5315,16 +5305,16 @@ int init_module(void)
  init_done:
 #if !(SBPCD_ISSUE-1)
 #ifdef CONFIG_SBPCD2
-	mem_start=sbpcd2_init(mem_start, mem_end);
+	sbpcd2_init();
 #endif
 #ifdef CONFIG_SBPCD3
-	mem_start=sbpcd3_init(mem_start, mem_end);
+	sbpcd3_init();
 #endif
 #ifdef CONFIG_SBPCD4
-	mem_start=sbpcd4_init(mem_start, mem_end);
+	sbpcd4_init();
 #endif
 #endif
-	return (mem_start);
+	return 0;
 #endif MODULE
 }
 /*==========================================================================*/

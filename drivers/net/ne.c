@@ -284,7 +284,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
 
 
     if (dev == NULL)
-	dev = init_etherdev(0, sizeof(struct ei_device), 0);
+	dev = init_etherdev(0, sizeof(struct ei_device));
 
     if (dev->irq < 2) {
 	autoirq_setup(0);

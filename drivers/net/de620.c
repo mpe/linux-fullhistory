@@ -468,7 +468,15 @@ get_stats(struct device *dev)
 static void
 de620_set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
-	if (num_addrs) { /* Enable promiscuous mode */
+	if (num_addrs) 
+	{ /* Enable promiscuous mode */
+		/*
+		 *	We must make the kernel realise we had to move
+		 *	into promisc mode or we start all out war on
+		 *	the cable. - AC
+		 */
+		dev->flags|=IFF_PROMISC;		
+	
 		de620_set_register(dev, W_TCR, (TCR_DEF & ~RXPBM) | RXALL);
 	}
 	else { /* Disable promiscuous mode, use normal mode */

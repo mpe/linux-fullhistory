@@ -31,6 +31,9 @@
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
+
+char kernel_version[] = UTS_RELEASE;
+#define bus_mouse_init init_module
 #else
 #define MOD_INC_USE_COUNT
 #define MOD_DEC_USE_COUNT
@@ -113,37 +116,38 @@ static int fasync_mouse(struct inode *inode, struct file *filp, int on)
 }
 
 /*
- * close access to the mouse (can deal with multiple
- * opens if allowed in the future)
+ * close access to the mouse
  */
 
 static void close_mouse(struct inode * inode, struct file * file)
 {
-	if (--mouse.active == 0) {
-	    MSE_INT_OFF();
-	    free_irq(mouse_irq);
-	}
 	fasync_mouse(inode, file, 0);
+	if (--mouse.active)
+		return;
+	MSE_INT_OFF();
+	free_irq(mouse_irq);
+	MOD_DEC_USE_COUNT;
 }
 
 /*
- * open access to the mouse, currently only one open is
- * allowed.
+ * open access to the mouse
  */
 
 static int open_mouse(struct inode * inode, struct file * file)
 {
 	if (!mouse.present)
 		return -EINVAL;
-	if (mouse.active)
+	if (mouse.active++)
+		return 0;
+	if (request_irq(mouse_irq, mouse_interrupt, 0, "Busmouse")) {
+		mouse.active--;
 		return -EBUSY;
+	}
 	mouse.ready = 0;
 	mouse.dx = 0;
 	mouse.dy = 0;
 	mouse.buttons = 0x87;
-	if (request_irq(mouse_irq, mouse_interrupt, 0, "Busmouse"))
-		return -EBUSY;
-	mouse.active = 1;
+	MOD_INC_USE_COUNT;
 	MSE_INT_ON();
 	return 0;
 }
@@ -208,26 +212,16 @@ static int read_mouse(struct inode * inode, struct file * file, char * buffer, i
 }
 
 /*
- * select for mouse input, must disable the mouse interrupt while checking
- * mouse.ready/select_wait() to avoid race condition (though in reality
- * such a condition is not fatal to the proper operation of the mouse since
- * multiple interrupts generally occur).
+ * select for mouse input
  */
-
 static int mouse_select(struct inode *inode, struct file *file, int sel_type, select_table * wait)
 {
-    int r = 0;
-
-    if (sel_type == SEL_IN) {
-    	MSE_INT_OFF();
-    	if (mouse.ready) {
-    	    r = 1;
-    	} else {
-	    select_wait(&mouse.wait, wait);
+	if (sel_type == SEL_IN) {
+	    	if (mouse.ready)
+			return 1;
+		select_wait(&mouse.wait, wait);
     	}
-    	MSE_INT_ON();
-    }
-    return(r);
+	return 0;
 }
 
 struct file_operations bus_mouse_fops = {
@@ -248,13 +242,7 @@ static struct mouse bus_mouse = {
 	LOGITECH_BUSMOUSE, "busmouse", &bus_mouse_fops
 };
 
-#ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
-
-int init_module(void)
-#else
-unsigned long bus_mouse_init(unsigned long kmem_start)
-#endif
+int bus_mouse_init(void)
 {
 	int i;
 
@@ -264,11 +252,7 @@ unsigned long bus_mouse_init(unsigned long kmem_start)
 		/* busy loop */;
 	if (inb(MSE_SIGNATURE_PORT) != MSE_SIGNATURE_BYTE) {
 		mouse.present = 0;
-#ifdef MODULE
 		return -EIO;
-#else
-		return kmem_start;
-#endif
 	}
 	outb(MSE_DEFAULT_MODE, MSE_CONFIG_PORT);
 	MSE_INT_OFF();
@@ -282,11 +266,7 @@ unsigned long bus_mouse_init(unsigned long kmem_start)
 	printk("Logitech Bus mouse detected and installed with IRQ %d.\n",
 	       mouse_irq);
 	mouse_register(&bus_mouse);
-#ifdef MODULE
 	return 0;
-#else
-	return kmem_start;
-#endif
 }
 
 #ifdef MODULE

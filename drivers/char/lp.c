@@ -559,22 +559,17 @@ static int lp_probe(int offset)
 char kernel_version[]=UTS_RELEASE;
 int io[] = {0, 0, 0};
 int irq[] = {0, 0, 0};
-
-int init_module(void)
-#else
-long lp_init(long kmem_start)
+#define lp_init init_module
 #endif
+
+int lp_init(void)
 {
 	int offset = 0;
 	int count = 0;
 
 	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
 		printk("lp: unable to get major %d\n", LP_MAJOR);
-#ifdef MODULE
 		return -EIO;
-#else
-		return kmem_start;
-#endif
 	}
 #ifdef MODULE
 	/* When user feeds parameters, use them */
@@ -610,11 +605,7 @@ long lp_init(long kmem_start)
 	if (count == 0)
 		printk("lp: Driver configured but no interfaces found.\n");
 
-#ifdef MODULE
 	return 0;
-#else
-	return kmem_start;
-#endif
 }
 
 #ifdef MODULE

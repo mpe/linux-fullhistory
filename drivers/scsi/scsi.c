@@ -2258,95 +2258,47 @@ int scsi_free(void *obj, unsigned int len)
     return 0;
 }
 
-/*
- * These are special functions that can be used to obtain memory at boot time.
- * They act line a malloc function, but they simply take memory from the pool 
- */
-
-static unsigned long scsi_init_memory_start = 0;
-static unsigned long scsi_memory_lower_value = 0;
-static unsigned long scsi_memory_upper_value = 0;
-int scsi_loadable_module_flag; /* Set after we scan builtin drivers */
 
 void * scsi_init_malloc(unsigned int size, int priority)
 {
-    unsigned long retval;
-    int order, a_size;
+    void * retval;
     
-    /* Use the statically allocated memory instead of kmalloc  (DB) */
-#if defined(USE_STATIC_SCSI_MEMORY)
-    if(scsi_loadable_module_flag && !(priority & GFP_DMA))
-#else
-	if(scsi_loadable_module_flag)
-#endif
-	{
-	    /*
-	     * For buffers used by the DMA pool, we assume page aligned 
-	     * structures.
-	     */
-            if ((size % PAGE_SIZE) == 0) {
-                for (order = 0, a_size = PAGE_SIZE;
-                     a_size < size; order++, a_size <<= 1)
-                    ;
-                retval =
-                    (unsigned long) __get_dma_pages(priority & GFP_LEVEL_MASK,
-                                                    order);
-            }
-            else
-                retval = (unsigned long) kmalloc(size, priority);
+    /*
+     * For buffers used by the DMA pool, we assume page aligned 
+     * structures.
+     */
+    if ((size % PAGE_SIZE) == 0) {
+	int order, a_size;
+	for (order = 0, a_size = PAGE_SIZE;
+             a_size < size; order++, a_size <<= 1)
+            ;
+        retval = (void *) __get_dma_pages(priority & GFP_LEVEL_MASK,
+	                                            order);
+    } else
+        retval = kmalloc(size, priority);
 
-	} else {
-	    /*
-	     * Keep all memory aligned on 16-byte boundaries. Some host 
-	     * adaptors (e.g. BusLogic BT-445S) require DMA buffers to be 
-	     * aligned that way.
-	     */
-	    size = (size + 15) & ~15;
-	    
-	    if(scsi_loadable_module_flag &&
-	       (scsi_init_memory_start + size) > scsi_memory_upper_value) {
-		retval = 0;
-		printk("scsi_init_malloc: no more statically allocated memory.\n");
-	    }
-	    else {
-		retval = scsi_init_memory_start;
-		scsi_init_memory_start += size;
-	    }
-	}
     if (retval)
-	memset((void *) retval, 0, size);
-    return (void *) retval;
+	memset(retval, 0, size);
+    return retval;
 }
 
 
 void scsi_init_free(char * ptr, unsigned int size)
 { 
-    int order, a_size;
+    /*
+     * We need this special code here because the DMA pool assumes
+     * page aligned data.  Besides, it is wasteful to allocate
+     * page sized chunks with kmalloc.
+     */
+    if ((size % PAGE_SIZE) == 0) {
+    	int order, a_size;
 
-    /* We need to compare addresses to see whether this was kmalloc'd or not */
-    
-    if((unsigned long) ptr >= scsi_init_memory_start ||
-       (unsigned long) ptr <  scsi_memory_lower_value) {
-	/*
-	 * We need this special code here because the DMA pool assumes
-	 * page aligned data.  Besides, it is wasteful to allocate
-	 * page sized chunks with kmalloc.
-	 */
-        if ((size % PAGE_SIZE) == 0) {
-            for (order = 0, a_size = PAGE_SIZE;
-                 a_size < size; order++, a_size <<= 1)
-                ;
-            free_pages((unsigned long)ptr, order);
-        }
-        else
-            kfree(ptr);
-    } else {
-	/* Use the same alignment as scsi_init_malloc() */
-	size = (size + 15) & ~15;
-	
-	if(((unsigned long) ptr) + size == scsi_init_memory_start)
-	    scsi_init_memory_start = (unsigned long) ptr;
-    }
+	for (order = 0, a_size = PAGE_SIZE;
+	     a_size < size; order++, a_size <<= 1)
+	    ;
+	free_pages((unsigned long)ptr, order);
+    } else
+	kfree(ptr);
 }
 
 void scsi_build_commandblocks(Scsi_Device * SDpnt)
@@ -2382,11 +2334,10 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
 
 /*
  * scsi_dev_init() is our initialization routine, which in turn calls host
- * initialization, bus scanning, and sd/st initialization routines.  It
- * should be called from main().
+ * initialization, bus scanning, and sd/st initialization routines. 
  */
 
-unsigned long scsi_dev_init (unsigned long memory_start, unsigned long memory_end)
+int scsi_dev_init(void)
 {
     struct Scsi_Host * host = NULL;
     Scsi_Device * SDpnt;
@@ -2400,13 +2351,6 @@ unsigned long scsi_dev_init (unsigned long memory_start, unsigned long memory_en
     /* Yes we're here... */
     dispatch_scsi_info_ptr = dispatch_scsi_info;
 
-    /* Init a few things so we can "malloc" memory. */
-    scsi_loadable_module_flag = 0;
-    
-    /* Align everything on 16-byte boundaries. */
-    scsi_init_memory_start = (memory_start + 15) & ~ 15;
-    scsi_memory_lower_value = scsi_init_memory_start;
-    
     timer_table[SCSI_TIMER].fn = scsi_main_timeout;
     timer_table[SCSI_TIMER].expires = 0;
 
@@ -2445,7 +2389,7 @@ unsigned long scsi_dev_init (unsigned long memory_start, unsigned long memory_en
     if (scsi_devicelist)
 	dma_sectors = 16;  /* Base value we use */
     
-    if (memory_end-1 > ISA_DMA_THRESHOLD)
+    if (high_memory-1 > ISA_DMA_THRESHOLD)
 	scsi_need_isa_bounce_buffers = 1;
     else
 	scsi_need_isa_bounce_buffers = 0;
@@ -2459,7 +2403,7 @@ unsigned long scsi_dev_init (unsigned long memory_start, unsigned long memory_en
 				 host->cmd_per_lun;
 	
 	if(host->unchecked_isa_dma &&
-	   memory_end - 1 > ISA_DMA_THRESHOLD &&
+	   high_memory - 1 > ISA_DMA_THRESHOLD &&
 	   SDpnt->type != TYPE_TAPE) {
 	    dma_sectors += (PAGE_SIZE >> 9) * host->sg_tablesize *
 		host->cmd_per_lun;
@@ -2491,23 +2435,8 @@ unsigned long scsi_dev_init (unsigned long memory_start, unsigned long memory_en
     for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
 	if(sdtpnt->finish && sdtpnt->nr_dev)
 	    (*sdtpnt->finish)();
-    
-    scsi_loadable_module_flag = 1;
-    
-    /* This allocates statically some extra memory to be used for modules,
-     * until the kmalloc problem is fixed (DB) 
-     */
-    
-#if defined(USE_STATIC_SCSI_MEMORY)
-    scsi_memory_upper_value = scsi_init_memory_start + 256 * 1024;
-    printk ("SCSI memory: total %ldKb, used %ldKb, free %ldKb.\n",
-	    (scsi_memory_upper_value - scsi_memory_lower_value) / 1024,
-	    (scsi_init_memory_start - scsi_memory_lower_value) / 1024,
-	    (scsi_memory_upper_value - scsi_init_memory_start) / 1024);
-    return scsi_memory_upper_value;
-#else
-    return scsi_init_memory_start;
-#endif
+
+    return 0;
 }
 
 static void print_inquiry(unsigned char *data)
@@ -2577,7 +2506,7 @@ int scsi_proc_info(char *buffer, char **start, off_t offset, int length,
 	while (HBA_ptr) {
 #if 0
 	    size += sprintf(buffer+len,"scsi%2d: %s\n", (int) HBA_ptr->host_no, 
-                            HBA_ptr->hostt->procname);
+	                    HBA_ptr->hostt->procname);
 	    len += size; 
 	    pos = begin + len;
 #endif
@@ -2909,10 +2838,10 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	if(shpnt->hostt == tpnt) {
 	    if(shpnt->loaded_as_module) {
 		pcount = next_scsi_host;
-                /* Remove the /proc/scsi directory entry */
+	        /* Remove the /proc/scsi directory entry */
 #if CONFIG_PROC_FS 
-                proc_scsi_unregister(tpnt->proc_dir, 
-                                     shpnt->host_no + PROC_SCSI_FILE);
+	        proc_scsi_unregister(tpnt->proc_dir, 
+	                             shpnt->host_no + PROC_SCSI_FILE);
 #endif   
 		if(tpnt->release)
 		    (*tpnt->release)(shpnt);
@@ -2991,7 +2920,7 @@ static int scsi_register_device_module(struct Scsi_Device_Template * tpnt)
      * init function.
      */
     if(tpnt->init && tpnt->dev_noticed)
-        if ((*tpnt->init)()) return 1;
+	if ((*tpnt->init)()) return 1;
     
     /*
      * Now actually connect the devices to the new driver.

@@ -33,6 +33,9 @@
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
+
+char kernel_version[] = UTS_RELEASE;
+#define ms_bus_mouse_init init_module
 #else
 #define MOD_INC_USE_COUNT
 #define MOD_DEC_USE_COUNT
@@ -96,26 +99,29 @@ static int fasync_mouse(struct inode *inode, struct file *filp, int on)
 
 static void release_mouse(struct inode * inode, struct file * file)
 {
-	MS_MSE_INT_OFF();
-	mouse.active = mouse.ready = 0; 
-	free_irq(MOUSE_IRQ);
 	fasync_mouse(inode, file, 0);
+	if (--mouse.active)
+		return;
+	MS_MSE_INT_OFF();
+	mouse.ready = 0; 
+	free_irq(MOUSE_IRQ);
+	MOD_DEC_USE_COUNT;
 }
 
 static int open_mouse(struct inode * inode, struct file * file)
 {
 	if (!mouse.present)
 		return -EINVAL;
-	if (mouse.active)
-		return -EBUSY;
-	mouse.active = 1;
-	mouse.ready = mouse.dx = mouse.dy = 0;	
-	mouse.buttons = 0x80;
+	if (mouse.active++)
+		return 0;
 	if (request_irq(MOUSE_IRQ, ms_mouse_interrupt, 0, "MS Busmouse")) {
-		mouse.active = 0;
+		mouse.active--;
 		return -EBUSY;
 	}
+	mouse.ready = mouse.dx = mouse.dy = 0;	
+	mouse.buttons = 0x80;
 	outb(MS_MSE_START, MS_MSE_CONTROL_PORT);
+	MOD_INC_USE_COUNT;
 	MS_MSE_INT_ON();	
 	return 0;
 }
@@ -175,13 +181,7 @@ static struct mouse ms_bus_mouse = {
 	MICROSOFT_BUSMOUSE, "msbusmouse", &ms_bus_mouse_fops
 };
 
-#ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
-
-int init_module(void)
-#else
-unsigned long ms_bus_mouse_init(unsigned long kmem_start)
-#endif
+int ms_bus_mouse_init(void)
 {
 	int mse_byte, i;
 
@@ -207,33 +207,24 @@ unsigned long ms_bus_mouse_init(unsigned long kmem_start)
 				mouse.present = 0;
 		}
 	}
-	if (mouse.present == 0) {
-#ifdef MODULE
-	  return -EIO;
-#else
-		return kmem_start;
-#endif
-	}
+	if (mouse.present == 0)
+		return -EIO;
 	MS_MSE_INT_OFF();
 	request_region(MS_MSE_CONTROL_PORT, 0x04, "MS Busmouse");
 	printk("Microsoft BusMouse detected and installed.\n");
 	mouse_register(&ms_bus_mouse);
-#ifdef MODULE
 	return 0;
-#else
-	return kmem_start;
-#endif
 }
 
 #ifdef MODULE
 void cleanup_module(void)
 {
-	if (MOD_IN_USE)
+	if (MOD_IN_USE) {
 		printk("msbusmouse: in use, remove delayed\n");
-	else {
-		mouse_deregister(&ms_bus_mouse);
-		release_region(MS_MSE_CONTROL_PORT, 0x04);
+		return;
 	}
+	mouse_deregister(&ms_bus_mouse);
+	release_region(MS_MSE_CONTROL_PORT, 0x04);
 }
 #endif
 

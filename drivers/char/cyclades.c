@@ -20,8 +20,8 @@ static char rcsid[] =
  * This version does not support shared irq's.
  *
  * This module exports the following rs232 io functions:
- *   long cy_init(long);
- *   int  cy_open(struct tty_struct *tty, struct file *filp);
+ *   int cy_init(void);
+ *   int cy_open(struct tty_struct *tty, struct file *filp);
  *
  * $Log: cyclades.c,v $
  * Revision 1.36.3.2  1995/09/08  22:07:14  bentson
@@ -2729,8 +2729,8 @@ cy_init_card(unsigned char *true_base_addr,int index)
     If there are more cards with more ports than have been statically
     allocated above, a warning is printed and the extra ports are ignored.
  */
-long
-cy_init(long kmem_start)
+int
+cy_init(void)
 {
   struct cyclades_port	*info;
   struct cyclades_card *cinfo;
@@ -2873,7 +2873,7 @@ scrn[1] = '\0';
 		/* info->timeout */
 	    }
     }
-    return kmem_start;
+    return 0;
     
 } /* cy_init */
 

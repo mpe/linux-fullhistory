@@ -211,7 +211,7 @@ int pty_open(struct tty_struct *tty, struct file * filp)
 	return 0;
 }
 
-long pty_init(long kmem_start)
+int pty_init(void)
 {
 	memset(&pty_state, 0, sizeof(pty_state));
 	memset(&pty_driver, 0, sizeof(struct tty_driver));
@@ -260,5 +260,5 @@ long pty_init(long kmem_start)
 	if (tty_register_driver(&pty_slave_driver))
 		panic("Couldn't register pty slave driver");
 	
-	return kmem_start;
+	return 0;
 }

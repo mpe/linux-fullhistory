@@ -119,7 +119,7 @@ int wd_probe1(struct device *dev, int ioaddr)
 		return ENODEV;
 
 	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct ei_device), 0);
+		dev = init_etherdev(0, sizeof(struct ei_device));
 
 	printk("%s: WD80x3 at %#3x, ", dev->name, ioaddr);
 	for (i = 0; i < 6; i++)

@@ -272,20 +272,21 @@ extern struct tty_ldisc ldiscs[];
 extern int fg_console;
 extern struct wait_queue * keypress_wait;
 
-extern long rs_init(long);
-extern long lp_init(long);
-extern long con_init(long);
-extern long pty_init(long);
-extern long tty_init(long);
-extern long vcs_init(long);
+extern unsigned long con_init(unsigned long);
+
+extern int rs_init(void);
+extern int lp_init(void);
+extern int pty_init(void);
+extern int tty_init(void);
+extern int vcs_init(void);
 #ifdef CONFIG_CYCLADES
-extern long cy_init(long);
+extern int cy_init(void);
 #endif
 #ifdef CONFIG_STALLION
-extern long stl_init(long);
+extern int stl_init(void);
 #endif
 #ifdef CONFIG_ISTALLION
-extern long stli_init(long);
+extern int stli_init(void);
 #endif
 
 extern int tty_paranoia_check(struct tty_struct *tty, kdev_t device,

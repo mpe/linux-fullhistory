@@ -578,7 +578,8 @@ asmlinkage void do_entInt(unsigned long type, unsigned long vector, unsigned lon
 			machine_check(vector, la_ptr, &regs);
 			break;
 		case 3:
-#if defined(CONFIG_ALPHA_JENSEN) || defined(CONFIG_ALPHA_NONAME)
+#if defined(CONFIG_ALPHA_JENSEN) || defined(CONFIG_ALPHA_NONAME) || \
+    defined(CONFIG_ALPHA_SRM)
 			srm_device_interrupt(vector, &regs);
 #elif defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
 			cabriolet_and_eb66p_device_interrupt(vector, &regs);

@@ -38,51 +38,51 @@
 #define SUBSECTOR(block) (CURRENT->current_nr_sectors > 0)
 
 #ifdef CONFIG_CDU31A
-extern unsigned long cdu31a_init(unsigned long, unsigned long);
+extern int cdu31a_init(void);
 #endif CONFIG_CDU31A
 #ifdef CONFIG_MCD
-extern unsigned long mcd_init(unsigned long, unsigned long);
+extern int mcd_init(void);
 #endif CONFIG_MCD
 #ifdef CONFIG_MCDX
-extern unsigned long mcdx_init(unsigned long, unsigned long);
+extern int mcdx_init(void);
 #endif CONFIG_MCDX
 #ifdef CONFIG_SBPCD
-extern unsigned long sbpcd_init(unsigned long, unsigned long);
+extern int sbpcd_init(void);
 #endif CONFIG_SBPCD
 #ifdef CONFIG_AZTCD
-extern unsigned long aztcd_init(unsigned long, unsigned long);
+extern int aztcd_init(void);
 #endif CONFIG_AZTCD
 #ifdef CONFIG_CDU535
-extern unsigned long sony535_init(unsigned long, unsigned long);
+extern int sony535_init(void);
 #endif CONFIG_CDU535
 #ifdef CONFIG_GSCD
-extern unsigned long gscd_init(unsigned long, unsigned long);
+extern int gscd_init(void);
 #endif CONFIG_GSCD
 #ifdef CONFIG_CM206
-extern unsigned long cm206_init(unsigned long, unsigned long);
+extern int cm206_init(void);
 #endif CONFIG_CM206
 #ifdef CONFIG_OPTCD
-extern unsigned long optcd_init(unsigned long, unsigned long);
+extern int optcd_init(void);
 #endif CONFIG_OPTCD
 #ifdef CONFIG_SJCD
-extern unsigned long sjcd_init(unsigned long, unsigned long);
+extern int sjcd_init(void);
 #endif CONFIG_SJCD
 #ifdef CONFIG_BLK_DEV_HD
-extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
+extern int hd_init(void);
 #endif
 #ifdef CONFIG_BLK_DEV_IDE
-extern unsigned long ide_init(unsigned long mem_start, unsigned long mem_end);
+extern int ide_init(void);
 #endif
+#ifdef CONFIG_BLK_DEV_XD
+extern int xd_init(void);
+#endif
+
 extern void set_device_ro(kdev_t dev,int flag);
 
 extern int floppy_init(void);
 extern void rd_load(void);
 extern long rd_init(long mem_start, int length);
 extern int ramdisk_size;
-
-#ifdef CONFIG_BLK_DEV_XD
-extern unsigned long xd_init(unsigned long mem_start, unsigned long mem_end);
-#endif
 
 #define RO_IOCTLS(dev,where) \
   case BLKROSET: if (!suser()) return -EACCES; \

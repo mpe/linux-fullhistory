@@ -70,6 +70,7 @@
 # ifndef CONFIG_MODVERSIONS
     char kernel_version[]= UTS_RELEASE;
 # endif
+#define mcd_init init_module
 #else
 # define MOD_INC_USE_COUNT
 # define MOD_DEC_USE_COUNT
@@ -1169,23 +1170,15 @@ static struct file_operations mcd_fops = {
  * Test for presence of drive and initialize it.  Called at boot time.
  */
 
-#ifndef MODULE
-unsigned long
-mcd_init(unsigned long mem_start, unsigned long mem_end)
-#else
-int init_module(void)
-#endif
+int
+mcd_init(void)
 {
 	int count;
 	unsigned char result[3];
 
 	if (mcd_port <= 0 || mcd_irq <= 0) {
 	  printk("skip mcd_init\n");
-#ifndef MODULE
-	  return mem_start;
-#else
           return -EIO;
-#endif
 	}
 
 	printk("mcd=0x%x,%d: ", mcd_port, mcd_irq);
@@ -1194,22 +1187,13 @@ int init_module(void)
 	{
 		printk("Unable to get major %d for Mitsumi CD-ROM\n",
 		       MAJOR_NR);
-#ifndef MODULE
-		return mem_start;
-#else
                 return -EIO;
-#endif
-              
 	}
 
         if (check_region(mcd_port, 4)) {
 	  printk("Init failed, I/O port (%X) already in use\n",
 		 mcd_port);
-#ifndef MODULE		 
-	  return mem_start;
-#else
           return -EIO;
-#endif	  
 	}
 	  
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
@@ -1229,11 +1213,7 @@ int init_module(void)
 	if (count >= 2000000) {
 		printk("Init failed. No mcd device at 0x%x irq %d\n",
 		     mcd_port, mcd_irq);
-#ifndef MODULE
-		return mem_start;
-#else
                 return -EIO;
-#endif                
 	}
 	count = inb(MCDPORT(0));		/* pick up the status */
 	
@@ -1242,19 +1222,11 @@ int init_module(void)
 		if(getValue(result+count)) {
 			printk("mitsumi get version failed at 0x%d\n",
 			       mcd_port);
-#ifndef MODULE
-			return mem_start;
-#else
                         return -EIO;
-#endif
 		}	
 
 	if (result[0] == result[1] && result[1] == result[2])
-#ifndef MODULE
-		return mem_start;
-#else
                 return -EIO;
-#endif
 	printk("Mitsumi status, type and version : %02X %c %x ",
 	       result[0],result[1],result[2]);
 
@@ -1276,11 +1248,7 @@ int init_module(void)
 	if (request_irq(mcd_irq, mcd_interrupt, SA_INTERRUPT, "Mitsumi CD"))
 	{
 		printk("Unable to get IRQ%d for Mitsumi CD-ROM\n", mcd_irq);
-#ifndef MODULE
-		return mem_start;
-#else
                 return -EIO;
-#endif
 	}
 	request_region(mcd_port, 4,"mcd");
 
@@ -1296,11 +1264,7 @@ int init_module(void)
 
 	mcd_invalidate_buffers();
 	mcdPresent = 1;
-#ifndef MODULE	
-	return mem_start;
-#else
         return 0;
-#endif
 }
 
 

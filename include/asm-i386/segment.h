@@ -81,7 +81,7 @@ static inline unsigned long __get_user(const void * y, int size)
 }
 
 /*
- * These are depracated..
+ * These are deprecated..
  */
 
 static inline unsigned char get_user_byte(const char * addr)

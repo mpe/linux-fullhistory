@@ -58,7 +58,7 @@ if [ "$CONFIG_IP_FORWARD" = "y" -a "$CONFIG_IP_FIREWALL" = "y" ]; then
   bool 'IP: firewall packet logging' CONFIG_IP_FIREWALL_VERBOSE y
   bool 'IP: masquerading (ALPHA)' CONFIG_IP_MASQUERADE n
 fi
-if [ "$CONFIG_IP_FORWARD" = "y" -a "$CONFIG_IP_MULTICAST" = "y" -a "$CONFIG_NET_IPIP" = "y" ]; then
+if [ "$CONFIG_IP_FORWARD" = "y" -a "$CONFIG_IP_MULTICAST" = "y" ]; then
   bool 'IP: multicast routing(in progress)' CONFIG_IP_MROUTE n
 fi
 comment '(it is safe to leave these untouched)'
@@ -76,6 +76,9 @@ if [ "$CONFIG_AX25" = "y" ]; then
   bool 'Amateur Radio NET/ROM' CONFIG_NETROM n
 fi
 bool 'Kernel/User network link driver(ALPHA)' CONFIG_NETLINK n
+if [ "$CONFIG_NETLINK" = "y" ]; then
+  bool 'Routing messages' CONFIG_RTNETLINK y
+fi
 fi
 
 comment 'SCSI support'
@@ -137,17 +140,17 @@ if [ "$CONFIG_NETDEVICES" = "n" ]; then
 comment 'Skipping network driver configuration options...'
 
 else
-tristate 'Dummy net driver support' CONFIG_DUMMY y
+tristate 'Dummy net driver support' CONFIG_DUMMY m
 tristate 'SLIP (serial line) support' CONFIG_SLIP n
 if [ "$CONFIG_SLIP" != "n" ]; then
   bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED y
 fi
 tristate 'PPP (point-to-point) support' CONFIG_PPP n
-if [ "$CONFIG_PPP" != "n" ]; then
-  bool ' 16 channels instead of 4' CONFIG_PPP_LOTS n
+if [ ! "$CONFIG_PPP" = "n" ]; then
+comment 'CCP compressors for PPP are only built as modules.'
 fi
 if [ "$CONFIG_AX25" = "y" ]; then
-	bool 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC y
+	bool 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC n
 else
 	bool 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC n
 fi
@@ -182,15 +185,15 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 		tristate 'EtherExpress support' CONFIG_EEXPRESS n
 		bool 'NI5210 support' CONFIG_NI52 n
 		bool 'NI6510 support' CONFIG_NI65 n
-		if [ "$CONFIG_AX25" = "y" ]; then
-			bool 'Ottawa PI and PI/2 support' CONFIG_PI y
-		fi
 		tristate 'WaveLAN support' CONFIG_WAVELAN n
 	fi
 	tristate 'HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS n
 	tristate 'HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN n
 	tristate 'HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100 n
 	tristate 'NE2000/NE1000 support' CONFIG_NE2000 y
+	if [ "$CONFIG_AX25" = "y" ]; then
+		bool 'Ottawa PI and PI/2 support' CONFIG_PI y
+	fi
 	bool 'SK_G16 support' CONFIG_SK_G16 n
 fi
 bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA n

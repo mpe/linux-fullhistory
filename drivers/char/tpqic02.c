@@ -2870,17 +2870,17 @@ static int qic02_get_resources(void)
 } /* qic02_get_resources */
 
 
-long qic02_tape_init(long kmem_start)
+int qic02_tape_init(void)
 	/* Shouldn't this be a caddr_t ? */
 {
 
 	if (TPSTATSIZE != 6) {
 		printk(TPQIC02_NAME ": internal error: tpstatus struct incorrect!\n");
-		return kmem_start;
+		return -ENODEV;
 	}
 	if ((TPQBUF_SIZE<512) || (TPQBUF_SIZE>=0x10000)) {
 		printk(TPQIC02_NAME ": internal error: DMA buffer size out of range\n");
-		return kmem_start;
+		return -ENODEV;
 	}
 
 	QIC02_TAPE_DEBUG = TPQD_DEFAULT_FLAGS;
@@ -2901,7 +2901,7 @@ long qic02_tape_init(long kmem_start)
 # endif
 		 rcs_revision, rcs_date);
 	if (qic02_get_resources())
-		return kmem_start;
+		return -ENODEV;
 #else
 	printk(TPQIC02_NAME ": Runtime config, %s, %s\n", 
 		 rcs_revision, rcs_date);
@@ -2921,7 +2921,7 @@ long qic02_tape_init(long kmem_start)
 #ifndef CONFIG_MAX_16M
 	if (buffaddr+TPQBUF_SIZE>=0x1000000) {
 		printk(TPQIC02_NAME ": DMA buffer *must* be in lower 16MB\n");
-		return kmem_start;
+		return -ENODEV;
 	}
 #endif
 
@@ -2932,7 +2932,7 @@ long qic02_tape_init(long kmem_start)
 		free_irq(QIC02_TAPE_IRQ);
 		free_dma(QIC02_TAPE_DMA);
 #endif
-		return kmem_start;
+		return -ENODEV;
 	}
 
 	/* prepare timer */
@@ -2948,7 +2948,7 @@ long qic02_tape_init(long kmem_start)
 		free_irq(QIC02_TAPE_IRQ);
 		free_dma(QIC02_TAPE_DMA);
 		unregister_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME);
-		return kmem_start;
+		return -ENODEV;
 	} else {
 		if (is_exception()) {
 			tpqputs(TPQD_ALWAYS, "exception detected\n");
@@ -2967,6 +2967,6 @@ long qic02_tape_init(long kmem_start)
 	ioctl_status.mt_fileno	= 0;	/* number of current file on tape */
 	ioctl_status.mt_blkno	= 0;	/* number of current (logical) block */
 
-	return kmem_start;
+	return 0;
 } /* qic02_tape_init */
 

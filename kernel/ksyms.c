@@ -349,6 +349,7 @@ struct symbol_table symbol_table = {
 	X(unregister_netdev),
 	X(ether_setup),
 	X(eth_type_trans),
+	X(eth_copy_and_sum),
 	X(alloc_skb),
 	X(kfree_skb),
 	X(dev_alloc_skb),

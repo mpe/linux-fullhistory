@@ -140,10 +140,11 @@ struct ip_masq {
 	struct timer_list timer;	/* Expiration timer */
 	__u16 		protocol;	/* Which protocol are we talking? */
 	__u32 		src, dst;	/* Source and destination IP addresses */
-	__u16		sport,dport;	/* Source and destoination ports */
+	__u16		sport,dport;	/* Source and destination ports */
 	__u16		mport;		/* Masquaraded port */
 	__u32		init_seq;	/* Add delta from this seq. on */
 	short		delta;		/* Delta in sequence numbers */
+	short		previous_delta;	/* Delta in sequence numbers before last resized PORT command */
 	char		sawfin;		/* Did we saw an FIN packet? */
 };
 extern struct ip_masq *ip_msq_hosts;
@@ -186,6 +187,7 @@ extern void ip_fw_init(void);
  
 #define PORT_MASQ_BEGIN	60000
 #define PORT_MASQ_END	(PORT_MASQ_BEGIN+4096)
+#define FTP_DPORT_TBD (PORT_MASQ_END+1) /* Avoid using hardcoded port 20 for ftp data connection */
 #endif
 
 #endif /* _IP_FW_H */

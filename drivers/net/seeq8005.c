@@ -54,8 +54,6 @@ static const char *version =
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include "seeq8005.h"
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
-									unsigned long *mem_startp);
 
 /* First, a few definitions that the brave might change. */
 /* A zero-terminated list of I/O addresses to be probed. */
@@ -277,7 +275,7 @@ static int seeq8005_probe1(struct device *dev, int ioaddr)
 
 	/* Allocate a new 'dev' if needed. */
 	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct net_local), 0);
+		dev = init_etherdev(0, sizeof(struct net_local));
 
 	if (net_debug  &&  version_printed++ == 0)
 		printk(version);
@@ -336,6 +334,8 @@ static int seeq8005_probe1(struct device *dev, int ioaddr)
 
 	/* Fill in the fields of the device structure with ethernet values. */
 	ether_setup(dev);
+	
+	dev->flags &= ~IFF_MULTICAST;
 
 	return 0;
 }

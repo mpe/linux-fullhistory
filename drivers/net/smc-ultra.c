@@ -139,7 +139,7 @@ int ultra_probe1(struct device *dev, int ioaddr)
 		return ENODEV;
 
 	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct ei_device), 0);
+		dev = init_etherdev(0, sizeof(struct ei_device));
 	if (dev == NULL) /* Still.. */
 		return ENOMEM; /* Out of memory ?? */
 

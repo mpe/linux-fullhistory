@@ -29,40 +29,51 @@
 
 int nr_tasks=1;
 int nr_running=1;
-long last_pid=0;
 
 static int find_empty_process(void)
 {
 	int i;
-	int this_user_tasks;
 	struct task_struct *p;
 
 	if (nr_tasks >= NR_TASKS - MIN_TASKS_LEFT_FOR_ROOT) {
 		if (current->uid)
 			return -EAGAIN;
 	}
-repeat:
-	if(smp_threads_ready) {
-		if ((++last_pid) & 0xffff8000)
-			last_pid=1;
+	if (current->uid) {
+		long max_tasks = current->rlim[RLIMIT_NPROC].rlim_cur;
+
+		if (max_tasks < nr_tasks) {
+			for_each_task (p) {
+				if (p->uid == current->uid)
+					if (--max_tasks < 0)
+						return -EAGAIN;
+			}
+		}
 	}
-	this_user_tasks = 0;
-	for_each_task (p) {
-		if (p->uid == current->uid)
-			this_user_tasks++;
-		if (smp_threads_ready && (p->pid == last_pid ||
-		    p->pgrp == last_pid ||
-		    p->session == last_pid))
-			goto repeat;
-	}
-	if (this_user_tasks > current->rlim[RLIMIT_NPROC].rlim_cur)
-		if (current->uid)
-			return -EAGAIN;
 	for (i = 0 ; i < NR_TASKS ; i++) {
 		if (!task[i])
 			return i;
 	}
 	return -EAGAIN;
+}
+
+static int get_pid(unsigned long flags)
+{
+	static int last_pid = 0;
+	struct task_struct *p;
+
+	if (flags & CLONE_PID)
+		return current->pid;
+repeat:
+	if ((++last_pid) & 0xffff8000)
+		last_pid=1;
+	for_each_task (p) {
+		if (p->pid == last_pid ||
+		    p->pgrp == last_pid ||
+		    p->session == last_pid)
+			goto repeat;
+	}
+	return last_pid;
 }
 
 static int dup_mmap(struct mm_struct * mm)
@@ -214,7 +225,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	*(unsigned long *) p->kernel_stack_page = STACK_MAGIC;
 	p->state = TASK_UNINTERRUPTIBLE;
 	p->flags &= ~(PF_PTRACED|PF_TRACESYS);
-	p->pid = last_pid;
+	p->pid = get_pid(clone_flags);
 	p->next_run = NULL;
 	p->prev_run = NULL;
 	p->p_pptr = p->p_opptr = current;

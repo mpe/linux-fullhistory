@@ -256,6 +256,7 @@ static int ni65_probe1(struct device *dev,int ioaddr)
 
   ether_setup(dev);
 
+  dev->flags 	     &= ~IFF_MULTICAST;
   dev->interrupt      = 0;
   dev->tbusy          = 0;
   dev->start          = 0;
