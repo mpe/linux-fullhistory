@@ -326,7 +326,7 @@ static unsigned char *cy_isa_addresses[] = {
 /* This is the per-card data structure containing address, irq, number of
    channels, etc. This driver supports a maximum of NR_CARDS cards. If
    you need to install more boards, change this constant in the definition
-   bellow. No other change is necesary to support more boards. */
+   bellow. No other change is necessary to support more boards. */
 
 #define NR_CARDS	4
 
@@ -2836,7 +2836,7 @@ cy_init(void)
     /* the code below is responsible to find the boards. Each different
        type of board has its own detection routine. If a board is found,
        the next cy_card structure available is set by the detection
-       routine. These funcions are responsible for checking the availability
+       routine. These functions are responsible for checking the availability
        of cy_card and cy_port data structures and updating the
        cy_next_channel. */
 

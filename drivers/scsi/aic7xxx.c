@@ -348,8 +348,8 @@ struct seeprom_config {
 /*
  * BIOS Control Bits
  */
-#define CFSUPREM	0x0001		/* support all removeable drives */
-#define CFSUPREMB	0x0002		/* support removeable drives for boot only */
+#define CFSUPREM	0x0001		/* support all removable drives */
+#define CFSUPREMB	0x0002		/* support removable drives for boot only */
 #define CFBIOSEN	0x0004		/* BIOS enabled */
 /* UNUSED		0x0008 */
 #define CFSM2DRV	0x0010		/* support more than two drives */
@@ -421,7 +421,7 @@ struct seeprom_config {
   UNPAUSE_SEQUENCER(p);
 
 /*
- * If an error occurs during a data transfer phase, run the comand
+ * If an error occurs during a data transfer phase, run the command
  * to completion - it's easier that way - making a note of the error
  * condition in this location. This then will modify a DID_OK status
  * into an appropriate error for the higher-level SCSI code.
@@ -541,7 +541,7 @@ static struct {
   const char *errmesg;
 } hard_error[] = {
   { ILLHADDR,  "Illegal Host Access" },
-  { ILLSADDR,  "Illegal Sequencer Address referrenced" },
+  { ILLSADDR,  "Illegal Sequencer Address referenced" },
   { ILLOPCODE, "Illegal Opcode in sequencer program" },
   { PARERR,    "Sequencer Ram Parity Error" }
 };
@@ -633,7 +633,7 @@ struct aic7xxx_host_config {
 
 /*
  * Valid SCSIRATE values. (p. 3-17)
- * Provides a mapping of tranfer periods in ns to the proper value to
+ * Provides a mapping of transfer periods in ns to the proper value to
  * stick in the scsiscfr reg to use that transfer rate.
  */
 static struct {
@@ -952,7 +952,7 @@ aic7xxx_delay(int seconds)
  *
  * Description:
  *   Return a string containing just the RCS version number from either
- *   an Id or Revison RCS clause.
+ *   an Id or Revision RCS clause.
  *-F*************************************************************************/
 const char *
 rcs_version(const char *version_info)
@@ -1517,7 +1517,7 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, char channel,
    * Go through the entire SCB array now and look for
    * commands for this target that are active.  These
    * are other (most likely tagged) commands that
-   * were disconnected when the reset occured.
+   * were disconnected when the reset occurred.
    */
   for (i = 0; i < p->numscb; i++)
   {
@@ -2235,7 +2235,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs * regs)
           int found;
 
           /*
-           * Go back to async/narrow transfers and renogiate.
+           * Go back to async/narrow transfers and renegotiate.
            */
           aic7xxx_unbusy_target(scsi_id, channel, base);
           p->needsdtr |= (p->needsdtr_copy & target_mask);
@@ -2641,7 +2641,7 @@ aic7xxx_probe(int slot, int base)
  *   The DI_2840 bit of the STATUS_2840 is connected to the data in line
  *   of the serial EEPROM.  The EEPROM_TF bit of STATUS_2840 register is
  *   useful in that it gives us an 800 nsec timer.  After a read from the
- *   SEECTL_2840 register the timing flag is cleard and goes high 800 nsec
+ *   SEECTL_2840 register the timing flag is cleared and goes high 800 nsec
  *   later.
  *
  *-F*************************************************************************/
@@ -2784,7 +2784,7 @@ read_2840_seeprom(int base, struct seeprom_config *sc)
  *     -------------------------------------------------------------------
  *     READ        1    10   A5 - A0             Reads data stored in memory,
  *                                               starting at specified address
- *     EWEN        1    00   11XXXX              Write enable must preceed
+ *     EWEN        1    00   11XXXX              Write enable must precede
  *                                               all programming modes
  *     ERASE       1    11   A5 - A0             Erase register A5A4A3A2A1A0
  *     WRITE       1    01   A5 - A0   D15 - D0  Writes register
@@ -3332,7 +3332,7 @@ aic7xxx_register(Scsi_Host_Template *template,
 
   /*
    * For the 294x cards, clearing DIAGLEDEN and DIAGLEDON, will
-   * take the card out of diagnostic mode and make the host adatper
+   * take the card out of diagnostic mode and make the host adapter
    * LED follow bus activity (will not always be on).
    */
   outb(sblkctl & ~(DIAGLEDEN | DIAGLEDON), SBLKCTL + base);
@@ -3897,7 +3897,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
           }
 
           /*
-           * Read esundry information from PCI BIOS.
+           * Read sundry information from PCI BIOS.
            */
           error = pcibios_read_config_dword(pci_bus, pci_device_fn,
                                             PCI_BASE_ADDRESS_0, &io_port);
@@ -3918,7 +3918,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
           if((csize_lattime & LATTIME) == 0)
           {
             /* Default to 64 PCLKS (is this a good value?) */
-            /* This may also be availble in the SEEPROM?? */
+            /* This may also be available in the SEEPROM?? */
             csize_lattime |= (64 << 8);
           }
           pcibios_write_config_dword(pci_bus, pci_device_fn,

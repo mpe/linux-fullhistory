@@ -951,7 +951,7 @@ int ftape_wakeup_drive(wake_up_types method)
 	default:
 		result = -ENODEV;	/* unknown wakeup method */
 	}
-	/*  If wakeup succeeded we should't get and error here..
+	/*  If wakeup succeeded we shouldn't get and error here..
 	 */
 	if (result == 0) {
 		result = ftape_report_raw_drive_status(&status);

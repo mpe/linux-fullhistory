@@ -10,7 +10,7 @@ preferably many more.
 2.	Try and release a few ALPHA test versions to the net. Announce them
 onto the kernel channel and await results. This is especially important
 for device drivers because often thats the only way you will find things
-like the fact version 3 firmware needs a magic fix you didnt know about, or
+like the fact version 3 firmware needs a magic fix you didn't know about, or
 some clown changed the chips on a board and not its name (Don't laugh look
 at the SMC etherpower for that).
 
@@ -29,7 +29,7 @@ become a generalised kernel feature ready for next time.
 	PLEASE try and include any credit lines you want added with the
 patch. It avoids people being missed off by mistake and makes it easier to
 know who wants adding and who doesn't.
-	PLEASE Document known bugs. If it doesnt work for everything or
+	PLEASE Document known bugs. If it doesn't work for everything or
 does something very odd once a month document it.
 
 6.	Make sure you have the right to send any changes you make. If you
@@ -72,6 +72,12 @@ M:	pjb27@cam.ac.uk
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
+3C505 NETWORK DRIVER
+P:	Philip Blundell
+M:	phil@tazenda.demon.co.uk
+L:	linux-net@vger.rutgers.edu
+S:	Maintained
+
 APM DRIVER
 P:      Rik Faith & Stephen Rothwell
 M:      faith@cs.unc.edu, Stephen.Rothwell@canb.auug.org.au
@@ -87,7 +93,7 @@ S:	Maintained
 AX.25 NETWORK LAYER
 P:	Jon Naylor
 M:	jsn@cs.nott.ac.uk
-L:	linux-hams@vger.rutges.edu
+L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
 BUSLOGIC SCSI DRIVER
@@ -160,7 +166,7 @@ S:	Maintained
 NETROM NETWORK LAYER
 P:	Jon Naylor
 M:	jsn@cs.nott.ac.uk
-L:	linux-hams@vger.rutges.edu
+L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
 NETWORKING [GENERAL]:

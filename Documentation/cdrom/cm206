@@ -12,11 +12,11 @@ Features as of version 0.33
 
 Features as of version 0.28
 ---------------------------
-- Full speed stransfer rate (300 kB/s).
+- Full speed transfer rate (300 kB/s).
 - Minimum kernel memory usage for buffering (less than 3 kB).
 - Multisession support.
 - Tray locking.
-- Statistcics of driver accessible to the user.
+- Statistics of driver accessible to the user.
 - Module support.
 - Auto-probing of adapter card's base port and irq line,
   also configurable at boot time or module load time.

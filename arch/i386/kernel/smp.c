@@ -37,7 +37,7 @@
 #include <asm/smp.h>
 
 /*
- *	Why isnt this somewhere standard ??
+ *	Why isn't this somewhere standard ??
  */
  
 extern __inline int max(int a,int b)
@@ -699,10 +699,10 @@ void smp_boot_cpus(void)
 			kernel_stacks[i]=stack;
 			install_trampoline(stack);
 
-			printk("Booting processor %d stack %p: ",i,stack);			/* So we set whats up   */
+			printk("Booting processor %d stack %p: ",i,stack);			/* So we set what's up   */
 
 			/*				
-			 *	This gunge runs the startup process for
+			 *	This grunge runs the startup process for
 			 *	the targeted processor.
 			 */
 

@@ -1339,7 +1339,7 @@ cleanup_module(void)
 			{
 				/*
 				 * VSV = if dev->start==0, then device
-				 * unregistred while close proc.
+				 * unregistered while close proc.
 				 */ 
 				if (slip_ctrls[i]->dev.start)
 					unregister_netdev(&(slip_ctrls[i]->dev));
@@ -1375,7 +1375,7 @@ static void sl_outfill(unsigned long sls)
 	{
 		if( test_bit(SLF_OUTWAIT, &sl->flags) )
 		{
-			/* no packets was transmited, do outfill */
+			/* no packets were transmitted, do outfill */
 #ifdef CONFIG_SLIP_MODE_SLIP6
 			unsigned char s = (sl->mode & SL_MODE_SLIP6)?0x70:END;
 #else

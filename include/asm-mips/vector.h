@@ -47,7 +47,7 @@ struct feature {
 
 /*
  * Similar to the above this is a structure that describes various
- * CPU dependend features.
+ * CPU dependent features.
  *
  * FIXME: This vector isn't being used yet
  */

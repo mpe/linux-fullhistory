@@ -83,7 +83,7 @@
 
 #define OPERATION_MODE_1		0xEF8B		/* R	Control								*/
 #	define	O_M_1_CDROM_TYPE	0x03		/* R	CD-ROM		3=SCSI, 2=Sony, 0=no CD-ROM interface		*/
-#	define O_M_1_FM_TYPE		0x04		/* R	FM		1=sterero, 0=mono FM chip			*/
+#	define O_M_1_FM_TYPE		0x04		/* R	FM		1=stereo, 0=mono FM chip			*/
 #	define O_M_1_PCM_TYPE 		0x08		/* R	PCM		1=16-bit Codec, 0=8-bit DAC			*/
 #define OPERATION_MODE_2		0xFF8B		/* R	Control								*/
 #	define O_M_2_PCS_ENABLED	0x02		/* R	PC speaker	PC speaker emulation 1=enabled, 0=disabled	*/

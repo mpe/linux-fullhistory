@@ -194,7 +194,7 @@
                           ALPHA support from <jestabro@amt.tay1.dec.com>
       0.41    26-Jun-95   Added verify_area() calls in depca_ioctl() from
                           suggestion by <heiko@colossus.escape.de>
-      0.42    27-Dec-95   Add 'mem' shared memory assigment for loadable 
+      0.42    27-Dec-95   Add 'mem' shared memory assignment for loadable 
                           modules.
                           Add 'adapter_name' for loadable modules when no PROM.
 			  Both above from a suggestion by 
@@ -999,7 +999,7 @@ depca_tx(struct device *dev)
 
     if (status < 0) {                          /* Packet not yet sent! */
       break;
-    } else if (status & T_ERR) {               /* An error occured. */
+    } else if (status & T_ERR) {               /* An error occurred. */
       status = readl(&lp->tx_ring[entry].misc);
       lp->stats.tx_errors++;
       if (status & TMD3_RTRY) lp->stats.tx_aborted_errors++;

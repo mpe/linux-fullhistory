@@ -55,7 +55,7 @@ unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
 	return memory_start;
 }
 
-/* Typing sync at the prom promptcalls the function pointed to by
+/* Typing sync at the prom prompt calls the function pointed to by
  * romvec->pv_synchook which I set to the following function.
  * This should sync all filesystems and return, for now it just
  * prints out pretty messages and returns.

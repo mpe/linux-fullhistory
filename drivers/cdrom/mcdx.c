@@ -35,7 +35,7 @@
  *  Jon Tombs, Bjorn Ekwall (module support)
  *  Daniel v. Mosnenck (he sent me the Technical and Programming Reference)
  *  Gerd Knorr (he lent me his PhotoCD)
- *  Nils Faerber and Roger E. Wolff (extensivly tested the LU portion)
+ *  Nils Faerber and Roger E. Wolff (extensively tested the LU portion)
  *  Andreas Kies (testing the mysterious hang up's)
  *  ... somebody forgotten?
  *  
@@ -130,7 +130,7 @@ struct s_version {
 /* Per drive/controller stuff **************************************/
 
 struct s_drive_stuff {
-	/* waitquenes */
+	/* waitqueues */
     struct wait_queue *busyq;
     struct wait_queue *lockq;
     struct wait_queue *sleepq;
@@ -145,7 +145,7 @@ struct s_drive_stuff {
 	/* cd infos */
 	struct s_diskinfo di;
 	struct s_multi multi;
-	struct s_subqcode* toc;	/* first enty of the toc array */
+	struct s_subqcode* toc;	/* first entry of the toc array */
 	struct s_subqcode start;
     struct s_subqcode stop;
 	int xa;					/* 1 if xa disk */
@@ -592,7 +592,7 @@ void do_mcdx_request()
 				      CURRENT->sector,
 				      CURRENT->nr_sectors))) {
               /*INFO(("do_request() read error\n"));*/
-			  xwarn("do_requst() read error\n");
+			  xwarn("do_request() read error\n");
               if (stuffp->status & MCDX_ST_EOM) {
                   CURRENT->sector += CURRENT->nr_sectors;
                   CURRENT->nr_sectors = 0;
@@ -636,7 +636,7 @@ mcdx_open(struct inode *ip, struct file *fp)
     from the hardware status register). 
     If the last eject is too recent, an autoclose wouldn't probably
     be what we want ..., if we can't read the CD after an autoclose
-    no further autclose's will be tried */
+    no further autocloses will be tried */
 	if (inb((unsigned int) stuffp->rreg_status) & MCDX_RBIT_DOOR) {
         if (jiffies - stuffp->ejected < ACLOSE_INHIBIT) return -EIO;
         if (stuffp->autoclose) mcdx_closedoor(stuffp, 1);
@@ -847,7 +847,7 @@ void mcdx_setup(char *str, int *pi)
 static void mcdx_delay(struct s_drive_stuff *stuff, long jifs)
 /*	This routine is used for sleeping.
 	May be we could use a simple count loop w/ jumps to itself, but 
-	I wanna make this independend of cpu speed. [1 jiffie is 1/HZ] sec */
+	I wanna make this independent of cpu speed. [1 jiffy is 1/HZ] sec */
 {
     unsigned long tout = jiffies + jifs;
     if (jifs < 0) return;
@@ -899,7 +899,7 @@ mcdx_intr(int irq, void *dev_id, struct pt_regs* regs)
 			xinfo(  "intr() irq %d    status 0x%02x\n", 
 					irq, inb((unsigned int) stuffp->rreg_data));
 		} else {
-			xinfo(  "intr() irq %d ambigous hw status\n", irq);
+			xinfo(  "intr() irq %d ambiguous hw status\n", irq);
 		}
 	} else {
 		TRACE((IRQ, "irq() irq %d ok, status %02x\n", irq, b));
@@ -925,9 +925,9 @@ mcdx_talk (
 {
 	int st;
     char c;
-    int disgard;
+    int discard;
 
-    if ((disgard = (buffer == NULL))) buffer = &c;
+    if ((discard = (buffer == NULL))) buffer = &c;
 
     while (stuffp->lock) {
 		interruptible_sleep_on(&stuffp->lockq); 
@@ -966,7 +966,7 @@ mcdx_talk (
         }
         st = *bp;
         sz--;
-        if (!disgard) bp++;
+        if (!discard) bp++;
 
         TRACE((TALK, "talk() got status 0x%02x\n", st));
 
@@ -999,7 +999,7 @@ mcdx_talk (
                         cmd[0], tries - 1, tries == 2 ? "y" : "ies"));
                 st = -1; break;
             }
-            if (!disgard) bp++;
+            if (!discard) bp++;
             TRACE((TALK, "talk() got 0x%02x\n", *(bp - 1)));
         }
     }
@@ -1080,7 +1080,7 @@ void trace(int level, const char* fmt, ...)
 	if (level < 1) return;
 	va_start(args, fmt);
 	if (sizeof(s) < vsprintf(s, fmt, args))
-		printk(MCDX ":: dprintf exeeds limit!!\n");
+		printk(MCDX ":: dprintf exceeds limit!!\n");
 	else printk(MCDX ":: %s", s);
 	va_end(args);
 }
@@ -1092,7 +1092,7 @@ void warn(const char* fmt, ...)
 	va_list args;
 	va_start(args, fmt);
 	if (sizeof(s) < vsprintf(s, fmt, args))
-		printk(MCDX ":: dprintf exeeds limit!!\n");
+		printk(MCDX ":: dprintf exceeds limit!!\n");
 	else printk(MCDX ": %s", s);
 	va_end(args);
 }
@@ -1265,7 +1265,7 @@ static int
 mcdx_transfer(struct s_drive_stuff *stuffp,
 		char *p, int sector, int nr_sectors)
 /*	This seems to do the actually transfer.  But it does more.  It
-	keeps track of errors ocurred and will (if possible) fall back
+	keeps track of errors occurred and will (if possible) fall back
 	to single speed on error. 
 	Return:	-1 on timeout or other error
 			else status byte (as in stuff->st) */
@@ -1279,7 +1279,7 @@ mcdx_transfer(struct s_drive_stuff *stuffp,
 	else return ans;
 
 	if (stuffp->readerrs && stuffp->readcmd == READ1X) {
-		WARN(("XXX Alrady reading 1x -- no chance\n"));
+		WARN(("XXX Already reading 1x -- no chance\n"));
 		return -1;
 	}
 
@@ -1327,7 +1327,7 @@ static int mcdx_xfer(struct s_drive_stuff *stuffp,
 
 	do {
 		/* wait for the drive become idle, but first
-		   check for possible occured errors --- the drive
+		   check for possible occurred errors --- the drive
 		   seems to report them asynchronously */
 
 	    current->timeout = jiffies + 5 * HZ;

@@ -39,6 +39,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
   if [ "$CONFIG_SCSI_NCR53C7xx" != "n" ]; then
     bool '   always negotiate synchronous transfers' CONFIG_SCSI_NCR53C7xx_sync
     bool '   allow FAST-SCSI [10MHz]' CONFIG_SCSI_NCR53C7xx_FAST
+    bool '   allow DISCONNECT' CONFIG_SCSI_NCR53C7xx_DISCONNECT
   fi
 fi
 dep_tristate 'Always IN2000 SCSI support (test release)' CONFIG_SCSI_IN2000 $CONFIG_SCSI

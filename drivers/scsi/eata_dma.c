@@ -1057,7 +1057,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
      */
     /*
      * If we are using a ISA board, we can't use extended SG,
-     * because we would need exessive amounts of memory for
+     * because we would need excessive amounts of memory for
      * bounce buffers.
      */
     if (gc->SG_64K == TRUE && ntohs(gc->SGsiz) == 64 && hd->bustype != IS_ISA){

@@ -88,7 +88,7 @@ special no                      # address of special function register
 option  0                       # option to set via sfr
 
 
-chip	- this is just a delimiter to make sccinit a bit simplier to
+chip	- this is just a delimiter to make sccinit a bit simpler to
 	  program. A parameter has no effect.
 
 data_a  - the address of the data port A of this Z8530 (needed)
@@ -256,7 +256,7 @@ mode nrzi		# HDLC encoding mode
 			#
 rxbuffers 8		# number of rx buffers allocated
 			# 		(option, default is 4)
-txbuffers 16		# number of tx buffers allocatd
+txbuffers 16		# number of tx buffers allocated
 			#		(option, default is 16)
 bufsize	384		# size of buffers. Note that this must include
 			# the AX.25 header, not only the data field!
@@ -281,11 +281,11 @@ slip    off
 
 The order WITHIN these sections is unimportant. The order OF these
 sections IS important. The MODEM parameters are set with the first
-recognized KISS paramer...
+recognized KISS parameter...
 
 Please note that you can initialize the board only once after boot. 
-You can change all paramters but "mode" and "clock" later with the
-Sccparam program or through KISS. Just to avoid securety holes... 
+You can change all parameters but "mode" and "clock" later with the
+Sccparam program or through KISS. Just to avoid security holes... 
 
 (1) this divider is usually mounted on the SCC-PBC (PA0HZP) or not
     present at all (BayCom). It feeds back the output of the DPLL 
@@ -512,7 +512,7 @@ tail:
      Example: sccparam /dev/scc2 4
 
 full:
-     The full-duplex mode switch. This can be one of the folowing 
+     The full-duplex mode switch. This can be one of the following 
      values:
 
      0:   The interface will operate in CSMA mode (the normal 
@@ -568,7 +568,7 @@ idle
 maxdefer
      This is the maximum time (in seconds) to wait for a free channel
      to send. When this timer expires the transmitter will be keyed 
-     IMMEDIATLY. If you love to get trouble with other users you
+     IMMEDIATELY. If you love to get trouble with other users you
      should set this to a very low value ;-)
 
      Example: sccparam /dev/scc0 maxdefer 240	# 2 minutes
@@ -658,14 +658,14 @@ Delayed processing of received data: This depends on
 
 - a high interrupt load
 
-- a high load of the maching --- running X, Xmorph, XV and Povray,
+- a high load of the machine --- running X, Xmorph, XV and Povray,
   while compiling the kernel... hmm ... even with 32 MB RAM ...  ;-)
 
 - NET's speed itself.
 
 
 Kernel panics: please read to /linux/README and find out if it
-really occured within the scc driver.
+really occurred within the scc driver.
 
 If you can't solve a problem, send me
 
@@ -784,7 +784,7 @@ got it up-and-running?
 
 
 Many thanks to Linus Torvalds and Alan Cox for including the driver
-in the LinuX standard distribution and their support.
+in the Linux standard distribution and their support.
 
 Joerg Reuter	ampr-net: dl1bke@db0pra.ampr.org
 		AX-25   : DL1BKE @ DB0ACH.#NRW.DEU.EU

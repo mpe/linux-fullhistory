@@ -468,9 +468,8 @@ void ll_rw_page(int rw, kdev_t dev, unsigned long page, char * buffer)
 		default:
 			panic("ll_rw_page: bad block dev cmd, must be R/W");
 	}
-	if (mem_map[MAP_NR(buffer)].locked)
+	if (set_bit(PG_locked, &mem_map[MAP_NR(buffer)].flags))
 		panic ("ll_rw_page: page already locked");
-	mem_map[MAP_NR(buffer)].locked = 1;
 	brw_page(rw, (unsigned long) buffer, dev, &block, PAGE_SIZE, 0);
 }
 
@@ -636,7 +635,7 @@ int blk_dev_init(void)
 	loop_init();
 #endif
 #ifdef CONFIG_BLK_DEV_IDE
-	ide_init();		/* this MUST preceed hd_init */
+	ide_init();		/* this MUST precede hd_init */
 #endif
 #ifdef CONFIG_BLK_DEV_HD
 	hd_init();

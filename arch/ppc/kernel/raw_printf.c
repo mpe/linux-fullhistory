@@ -470,7 +470,7 @@ struct screen {
 		EBRACEQ			/* saw ESC[= */
 	} state;		/* command parser state */
 	int	cx;		/* the first escape seq argument */
-	int	cy;		/* the second escap seq argument */
+	int	cy;		/* the second escape seq argument */
 	int	*accp;		/* pointer to the current processed argument */
 	int	row;		/* current column */
 	int	so;		/* standout mode */

@@ -9,7 +9,7 @@
  * now we especially support the R10000 by not invalidating entries out of
  * the TLB before calling the C handlers.
  *
- * This code is evil magic. Read appendix f (coprozessor 0 hazards) of
+ * This code is evil magic. Read appendix f (coprocessor 0 hazards) of
  * all R4xx0 manuals and think about that MIPS means "Microprocessor without
  * Interlocked Pipeline Stages" before you even think about changing this code!
  */
@@ -141,7 +141,7 @@ reload_pgd_entries:
 		 * There are two possible causes for an invalid (tlbl)
 		 * exception:
 		 * 1) pages with present bit set but the valid bit clear
-		 * 2) nonexistant pages
+		 * 2) nonexistent pages
 		 * Case one needs fast handling, therefore don't save
 		 * registers yet.
 		 *
@@ -768,7 +768,7 @@ done:		j	ra
  *
  * MIPS doesn't need any external MMU info: the kernel page tables contain
  * all the necessary information.  We use this hook though to load the
- * TLB as early as possible with uptodate information avoiding unecessary
+ * TLB as early as possible with uptodate information avoiding unnecessary
  * exceptions.
  *
  * Parameters: a0 - struct vm_area_struct *vma	(ignored)
@@ -778,7 +778,7 @@ done:		j	ra
 		.set	noreorder
 		LEAF(update_mmu_cache)
 		/*
-		 * Step 1: Wipe out old TLB information.  Not shure if
+		 * Step 1: Wipe out old TLB information.  Not sure if
 		 * we really need that step; call it paranoia ...
 		 * In order to do that we need to disable interrupts.
 		 */

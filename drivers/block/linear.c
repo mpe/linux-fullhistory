@@ -41,7 +41,7 @@ static int linear_run (int minor, struct md_dev *mddev)
 
   /*
      Find out the smallest device. This was previously done
-     at registery time, but since it violates modularity,
+     at registry time, but since it violates modularity,
      I moved it here... Any comment ? ;-)
    */
 
@@ -63,7 +63,7 @@ static int linear_run (int minor, struct md_dev *mddev)
   {
     data->hash_table[i].dev0=devices[minor]+cur;
 
-    if (size>=data->smallest->size) /* If we completly fill the slot */
+    if (size>=data->smallest->size) /* If we completely fill the slot */
     {
       data->hash_table[i++].dev1=NULL;
       size-=data->smallest->size;

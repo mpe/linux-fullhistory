@@ -296,7 +296,7 @@ asmlinkage void math_state_restore(void)
  *	we simply have to do the restore each context switch and
  *	set the flag. switch_to() will always save the state in
  *	case we swap processors. We also don't use the coprocessor
- *	timer - IRQ 13 mode isnt used with SMP machines (thank god).
+ *	timer - IRQ 13 mode isn't used with SMP machines (thank god).
  *
  *	If this actually works it will be a miracle however
  */

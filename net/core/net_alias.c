@@ -115,7 +115,7 @@ nat_addr32(struct net_alias_type *nat, struct sockaddr *sa)
 
 /*
  * hashing code for alias_info->hash_tab entries
- * 4 bytes -> 1/2 byte using xor condimented by af
+ * 4 bytes -> 1/2 byte using xor complemented by af
  */
 
 static __inline__ unsigned
@@ -1106,7 +1106,7 @@ net_alias_dev_chk32(struct device *main_dev, int family, __u32 addr32,
 
 /*
  * select closest (main or alias) device to <src,dst> addresses given. if no
- * further info is available, return main_dev (for easier calling arrangment).
+ * further info is available, return main_dev (for easier calling arrangement).
  *
  * Should be called early at xxx_rcv() time for device selection
  */

@@ -9,8 +9,12 @@
 
 MOD_SUB_DIRS := ipv4
 ALL_SUB_DIRS := 802 ax25 bridge core ethernet ipv4 ipx unix appletalk netrom 
-SUB_DIRS     := 802 core ethernet unix
+SUB_DIRS     := core ethernet unix
 MOD_LIST_NAME := NET_MISC_MODULES
+
+ifeq ($(CONFIG_NET),y)
+SUB_DIRS += 802
+endif
 
 ifeq ($(CONFIG_INET),y)
 SUB_DIRS += ipv4
@@ -46,8 +50,10 @@ endif
 
 L_TARGET     := network.a
 L_OBJS	     := socket.o protocols.o sysctl_net.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
+ifeq ($(CONFIG_NET),y)
 ifeq ($(CONFIG_MODULES),y)
 LX_OBJS = netsyms.o
+endif
 endif
 
 M_OBJS	     :=

@@ -14,7 +14,7 @@ The preconfigured I/O address is 0200h and the default memory address
 
 Use them and you will not have to worry about configuring anything.
 
-You can configure the driver via lilo. HAve  look at the end of this
+You can configure the driver via lilo. Have a look at the end of this
 message. The default settings vanish as soon as you give a digi= commandline.
 You can give multiple digi= commandline parameters to define multiple
 boards.
@@ -87,7 +87,7 @@ Christoph Lameter (clameter@fuller.edu) 6. April 1996.
 Changes v1.5.5:
 
 The ability to use the kernel's command line to pass in the configuration for 
-boards.  Using LILO's APPEND command, a string of comma seperated identifiers 
+boards.  Using LILO's APPEND command, a string of comma separated identifiers 
 or integers can be used.  The 6 values in order are:
 
    Enable/Disable this card,

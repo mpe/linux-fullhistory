@@ -6,7 +6,7 @@
  *		PACKET - implements raw packet sockets.
  *
  *		Doesn't belong in IP but its currently too hooked into ip
- *		to seperate.
+ *		to separate.
  *
  * Version:	@(#)packet.c	1.0.6	05/25/93
  *

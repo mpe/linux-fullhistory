@@ -402,7 +402,7 @@ static int isdn_tty_write(struct tty_struct *tty, int from_user, const u_char * 
 				bufptr = info->xmit_buf;
 				buflen = info->xmit_count;
 				if (dev->mdm.atmodem[i].mdmreg[13] & 2) {
-					/* Add T.70 simplyfied header */
+					/* Add T.70 simplified header */
 
 #ifdef ISDN_DEBUG_MODEM_DUMP
 					isdn_dumppkt("T70pack1:", bufptr, buflen, 40);
@@ -1208,7 +1208,7 @@ int isdn_tty_modem_init(void)
 
 /*
  * An incoming call-request has arrived.
- * Search the tty-devices for an aproppriate device and bind
+ * Search the tty-devices for an appropriate device and bind
  * it to the ISDN-Channel.
  * Return Index to dev->mdm or -1 if none found.
  */
@@ -2008,7 +2008,7 @@ void isdn_tty_modem_xmit(void)
 						bufptr = info->xmit_buf;
 						buflen = info->xmit_count;
 						if (dev->mdm.atmodem[midx].mdmreg[13] & 2) {
-							/* Add T.70 simplyfied header */
+							/* Add T.70 simplified header */
 #ifdef ISDN_DEBUG_MODEM_DUMP
 							isdn_dumppkt("T70pack3:", bufptr, buflen, 40);
 #endif
@@ -2041,7 +2041,7 @@ void isdn_tty_modem_xmit(void)
 #if FUTURE
 /*
  * A packet has been output successfully.
- * Search the tty-devices for an aproppriate device, decrement it's
+ * Search the tty-devices for an appropriate device, decrement its
  * counter for outstanding packets, and set CTS if this counter reaches 0.
  */
 void isdn_tty_bsent(int drv, int chan)

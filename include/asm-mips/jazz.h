@@ -53,7 +53,7 @@
  * Some characters for the LED control registers
  * The original Mips machines seem to have a LED display
  * with integrated decoder while the Acer machines can
- * control each of the seven segments and the dot independend.
+ * control each of the seven segments and the dot independently.
  * It's only a toy, anyway...
  */
 #define LED_DOT                 0x01
@@ -227,7 +227,7 @@ typedef struct {
 
 #define JAZZ_R4030_CACHE_MTNC   0xE0000030	/* Cache Maintenance */
 #define JAZZ_R4030_R_FAIL_ADDR  0xE0000038	/* Remote Failed Address */
-#define JAZZ_R4030_M_FAIL_ADDR  0xE0000040	/* Memory Failed Adresss */
+#define JAZZ_R4030_M_FAIL_ADDR  0xE0000040	/* Memory Failed Address */
 
 #define JAZZ_R4030_CACHE_PTAG   0xE0000048	/* I/O Cache Physical Tag */
 #define JAZZ_R4030_CACHE_LTAG   0xE0000050	/* I/O Cache Logical Tag */

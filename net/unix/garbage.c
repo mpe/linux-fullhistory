@@ -10,7 +10,7 @@
  *	enable it. The bold can add it in themselves.
  *
  * Chopped about by Alan Cox 22/3/96 to make it fit the AF_UNIX socket problem.
- * If it doesnt work blame me, it worked when Barak sent it.
+ * If it doesn't work blame me, it worked when Barak sent it.
  *
  * Assumptions:
  *

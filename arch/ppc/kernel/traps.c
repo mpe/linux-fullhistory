@@ -2,7 +2,7 @@
  *  linux/arch/ppc/kernel/traps.c
  *
  *  Copyright (C) 1995  Gary Thomas
- *  Adapted for PowerPC by Gary THomas
+ *  Adapted for PowerPC by Gary Thomas
  */
 
 /*

@@ -69,7 +69,7 @@ by these three reference systems. There are many anomalies.
 Originally I wrote (about SunOS):
  "For one thing, calls to open() for a file fail with EAGAIN if another
   process holds a mandatory lock on the file. However, processes already
-  holding open file descriptors can carry on using them. Wierd!"
+  holding open file descriptors can carry on using them. Weird!"
 
 Well, all my reference systems do it, so I decided to go with the flow.
 My gut feeling is that only calls to open() and creat() with O_TRUNC should be
@@ -147,6 +147,6 @@ Warning!
 
 Not even root can override a mandatory lock, so runaway process can wreak
 havoc if they lock crucial files. The way around it is to change the file
-permissions (remove the setgid bit) before trying to read or wite to it.
+permissions (remove the setgid bit) before trying to read or write to it.
 Of course, that might be a bit tricky if the system is hung :-(
 

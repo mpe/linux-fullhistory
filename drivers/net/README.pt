@@ -24,7 +24,7 @@ the diff.  You will have to re-configure the kernel again before you
 recompile it. 
 
 The driver is not real good at the moment for finding the card.  You can
-'help' it by changing the order of the potiential addresses in the structure
+'help' it by changing the order of the potential addresses in the structure
 found in the pt_init() function so the address of where the card is is put
 first.
 

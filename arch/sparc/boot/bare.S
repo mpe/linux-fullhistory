@@ -144,7 +144,7 @@ bzero_bss_loop:
 	bl	bzero_bss_loop
 	nop
 
-	call	C_LABEL(init_me)	! Fun with imperical constants and prom
+	call	C_LABEL(init_me)	! Fun with empirical constants and prom
 	nop
 
 	/* Dump back into the prom */

@@ -167,7 +167,7 @@ static int md_ioctl (struct inode *inode, struct file *file,
     devices[minor][index].dev=dev;
 
     /* Lock the device by inserting a dummy inode. This doesn't
-       smeel very good, but I need to be consistent with the
+       smell very good, but I need to be consistent with the
        mount stuff, specially with fs_may_mount. If someone have
        a better idea, please help ! */
     
@@ -177,7 +177,7 @@ static int md_ioctl (struct inode *inode, struct file *file,
     insert_inode_hash (devices[minor][index].inode);
     
     /* Devices sizes are rounded to a multiple of page (needed for
-       paging). This is NOT done by fdisk when partitionning,
+       paging). This is NOT done by fdisk when partitioning,
        but that's a DOS thing anyway... */
     
     devices[minor][index].size=gen_real->sizes[MINOR(dev)] & ~((PAGE_SIZE >> 10)-1);
@@ -347,7 +347,7 @@ static int md_open (struct inode *inode, struct file *file)
   int minor=MINOR(inode->i_rdev);
 
   md_dev[minor].busy++;
-  return (0);			/* Always succed */
+  return (0);			/* Always succeed */
 }
 
 
@@ -428,13 +428,13 @@ static void do_md_request (void)
 
     switch (remap_request (minor, req))
     {
-      case REDIRECTED_BHREQ:	/* Allright, redirection was succesful */
+      case REDIRECTED_BHREQ:	/* All right, redirection was successful */
       req->rq_status=RQ_INACTIVE;
       wake_up (&wait_for_request);
       break;
 
       case REDIRECTED_REQ:
-      break;			/* Redirected whole request (for swaping) */
+      break;			/* Redirected whole request (for swapping) */
       
       case REDIRECT_FAILED:	/* Swap redirection failed in RAID-[15] */
       end_request (0, req);

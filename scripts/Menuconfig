@@ -166,7 +166,7 @@ function hex () {
 #
 function choice () {
 	#
-	# Need to remember params cause the're gonna get reset.
+	# Need to remember params cause they're gonna get reset.
 	#
 	title=$1
 	choices=$2
@@ -393,7 +393,7 @@ function l_int () {
 }
 
 #
-# Create a dialog for entering a hexidecimal into a kernel option.
+# Create a dialog for entering a hexadecimal into a kernel option.
 #
 function l_hex () {
 	while true
@@ -430,7 +430,7 @@ function l_hex () {
 #
 function l_choice () {
 	#
-	# Need to remember params cause the're gonna get reset.
+	# Need to remember params cause they're gonna get reset.
 	#
 	title="$1"
 	choices="$2"
@@ -597,7 +597,7 @@ function parse_config_files () {
 	# environment in order for all of this to work.  Leaving
 	# them on the disk as executables screws up the recursion
 	# in activate_menu(), among other things.  Once they are
-	# sourced we can disgard them.
+	# sourced we can discard them.
 	#
 	for i in MCmenu*
 	do
@@ -629,7 +629,7 @@ function activate_menu () {
 
 		case "$ret" in
 		0|3|4|5)
-			defaults="$selection$defaults"  #psuedo stack
+			defaults="$selection$defaults"  #pseudo stack
 			case "$ret" in
 			0) eval $selection   ;;
 			3) eval $selection y ;;
@@ -1033,7 +1033,7 @@ Fractions will not be accepted.  \
 Use the <TAB> key to move from the input field to the buttons below it."
 
 inputbox_instructions_hex="\
-Please enter a hexidecimal value. \
+Please enter a hexadecimal value. \
 Use the <TAB> key to move from the input field to the buttons below it."
 
 backtitle="Linux Kernel Configuration"

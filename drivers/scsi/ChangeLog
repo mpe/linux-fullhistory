@@ -71,16 +71,16 @@ Wed Jul 19 09:18:28 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 	* Linux 1.3.5 released.
 
 	* Native wide, multichannel and /proc/scsi support now in official
-	kernel distibution.
+	kernel distribution.
  
-        * scsi.c/h, hosts.c/h et al reindended to increase readability
+        * scsi.c/h, hosts.c/h et al reindented to increase readability
 	(especially on 80 column wide terminals).
 
 	* scsi.c, scsi_proc.c, ../../fs/proc/inode.c: Added
 	/proc/scsi/scsi which allows root to scan for hotplugged devices.
 
 	* scsi.c (scsi_proc_info): Added, to support /proc/scsi/scsi.
-	(scan_scsis): Added some 'spagetti' code to allow scanning for
+	(scan_scsis): Added some 'spaghetti' code to allow scanning for
 	single devices.
 	
 
@@ -105,9 +105,9 @@ Thu May  4 17:58:48 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 	scsi_malloc returned memory for it.	
 
 	* eata_dma.c (register_HBA) (eata_queue): Add support for
-	large scatter/gatter tables and set use_clustering accordingly
+	large scatter/gather tables and set use_clustering accordingly
 
-	* hosts.c: Make use_clustering changable in the Scsi_Host structure.
+	* hosts.c: Make use_clustering changeable in the Scsi_Host structure.
 
 Wed Apr 12 15:25:52 1995  Eric Youngdale  (eric@andante)
 
@@ -119,9 +119,9 @@ Wed Apr 12 15:25:52 1995  Eric Youngdale  (eric@andante)
 	cards.
 
 	* eata_dma.c: Update to 2.3.5r. Modularize. Improved error handling
-        thruout and fixed bug interrupt routine which resulted in shifted 
+        throughout and fixed bug interrupt routine which resulted in shifted 
         status bytes. Added blink LED state checks for ISA and EISA HBAs.
-        Memory mamagement bug seems to have disapeared ==> increasing 
+        Memory management bug seems to have disappeared ==> increasing 
         C_P_L_CURRENT_MAX to 16 for now. Decreasing C_P_L_DIV to 3 for 
         performance reasons.  
 

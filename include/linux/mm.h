@@ -9,6 +9,7 @@
 extern unsigned long high_memory;
 
 #include <asm/page.h>
+#include <asm/atomic.h>
 
 #ifdef __KERNEL__
 
@@ -115,17 +116,8 @@ struct vm_operations_struct {
  * page-cache.  -- sct 
  */
 typedef struct page {
-	unsigned int count;
-	unsigned dirty:16,
-		 age:8,
-		 uptodate:1,
-		 error:1,
-		 referenced:1,
-		 locked:1,
-		 free_after:1,
-		 dma:1,
-		 unused:1,
-		 reserved:1;
+	atomic_t count;
+	unsigned flags;	/* atomic flags, some possibly updated asynchronously */
 	struct wait_queue *wait;
 	struct page *next;
 
@@ -137,7 +129,28 @@ typedef struct page {
 	struct page *prev;
 	struct page *prev_hash;
 	struct buffer_head * buffers;
+	unsigned dirty:16,
+		 age:8;
 } mem_map_t;
+
+/* Page flag bit values */
+#define PG_locked	 0
+#define PG_error	 1
+#define PG_referenced	 2
+#define PG_uptodate	 3
+#define PG_freeafter	 4
+#define PG_DMA		 5
+#define PG_reserved	31
+
+/* Make it prettier to test the above... */
+#define PageLocked(page)	(test_bit(PG_locked, &(page)->flags))
+#define PageError(page)		(test_bit(PG_error, &(page)->flags))
+#define PageReferenced(page)	(test_bit(PG_referenced, &(page)->flags))
+#define PageDirty(page)		(test_bit(PG_dirty, &(page)->flags))
+#define PageUptodate(page)	(test_bit(PG_uptodate, &(page)->flags))
+#define PageFreeafter(page)	(test_bit(PG_freeafter, &(page)->flags))
+#define PageDMA(page)		(test_bit(PG_DMA, &(page)->flags))
+#define PageReserved(page)	(test_bit(PG_reserved, &(page)->flags))
 
 extern mem_map_t * mem_map;
 
@@ -251,21 +264,22 @@ static inline int expand_stack(struct vm_area_struct * vma, unsigned long addres
 static inline struct vm_area_struct * find_vma (struct task_struct * task, unsigned long addr)
 {
 	struct vm_area_struct * result = NULL;
-	struct vm_area_struct * tree;
 
-	if (!task->mm)
-		return NULL;
-	for (tree = task->mm->mmap_avl ; ; ) {
-		if (tree == avl_empty)
-			return result;
-		if (tree->vm_end > addr) {
-			if (tree->vm_start <= addr)
-				return tree;
-			result = tree;
-			tree = tree->vm_avl_left;
-		} else
-			tree = tree->vm_avl_right;
+	if (task->mm) {
+		struct vm_area_struct * tree = task->mm->mmap_avl;
+		for (;;) {
+			if (tree == avl_empty)
+				break;
+			if (tree->vm_end > addr) {
+				result = tree;
+				if (tree->vm_start <= addr)
+					break;
+				tree = tree->vm_avl_left;
+			} else
+				tree = tree->vm_avl_right;
+		}
 	}
+	return result;
 }
 
 /* Look up the first VMA which intersects the interval start_addr..end_addr-1,

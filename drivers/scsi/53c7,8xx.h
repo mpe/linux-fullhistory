@@ -981,7 +981,7 @@ extern inline void * phys_to_virt(unsigned long address)
 #define OPTION_DEBUG_CORRUPTION	0x1000000	/* Detect script corruption */
 #define OPTION_DEBUG_SDTR       0x2000000	/* Debug SDTR problem */
 #define OPTION_DEBUG_MISMATCH 	0x4000000 	/* Debug phase mismatches */
-#define OPTION_DISCONNECT	0x8000000	/* Allow disconect */
+#define OPTION_DISCONNECT	0x8000000	/* Allow disconnect */
 #define OPTION_DEBUG_DISCONNECT 0x10000000	
 #define OPTION_ALWAYS_SYNCHRONOUS 0x20000000	/* Negotiate sync. transfers
 						   on power up */
@@ -1063,7 +1063,7 @@ struct NCR53c7x0_event {
  *
  * 1.  A fixed portion, for things which are not accessed directly by static NCR
  *	code (ie, are referenced only by the Linux side of the driver,
- *	or only by dynamically genreated code).  
+ *	or only by dynamically generated code).  
  *
  * 2.  The DSA portion, for things which are accessed directly by static NCR
  *	code.
@@ -1116,7 +1116,7 @@ struct NCR53c7x0_cmd {
     u32 *data_transfer_end;		/* Address after end of data transfer o
     	    	    	    	    	   routines */
 /* 
- * The following three fields were moved from the DSA propper to here
+ * The following three fields were moved from the DSA proper to here
  * since only dynamically generated NCR code refers to them, meaning
  * we don't need dsa_* absolutes, and it is simpler to let the 
  * host code refer to them directly.

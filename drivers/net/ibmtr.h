@@ -87,7 +87,7 @@
                              encountered a serious problem and has closed
                              itself.  Whoa.  */
 #define SRB_RESP_INT 0x20 /* Bit 5 - SRB response.  The adapter has accepted
-                             an SRB request and set the return code withing
+                             an SRB request and set the return code within
                              the SRB. */
 #define ASB_FREE_INT 0x10 /* Bit 4 - ASB free.  The adapter has read the ASB
                                                                           and this area can be safely reused. This interrupt
@@ -121,7 +121,7 @@
 #define RESP_IN_ASB 0x10 /* Bit 4 - Indicates that you have placed a response
                                                                     (an ASB) in the shared RAM which is available for
                                                                          the adapter's use. */
-/* Bit 3 - Indicates that you are ready to ut an SRB in the shared RAM, but that a previous */
+/* Bit 3 - Indicates that you are ready to put an SRB in the shared RAM, but that a previous */
 /*         command is still pending.  The adapter will then interrupt you when the previous */
 /*         command is completed */
 /* Bit 2 - Indicates that you are ready to put an ASB in the shared RAM, but that a previous */
@@ -169,7 +169,7 @@
 #define SET_PAGE(x)
 #endif
 
-typedef enum { IN_PROGRESS, SUCCES, FAILURE, CLOSED } open_state;
+typedef enum { IN_PROGRESS, SUCCESS, FAILURE, CLOSED } open_state;
 
 /* do_tok_int possible values */
 #define FIRST_INT 1

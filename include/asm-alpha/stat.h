@@ -13,7 +13,7 @@ struct old_stat {
 	unsigned long	st_atime;
 	unsigned long	st_mtime;
 	unsigned long	st_ctime;
-	unsigned int	st_blkize;
+	unsigned int	st_blksize;
 	int		st_blocks;
 	unsigned int	st_flags;
 	unsigned int	st_gen;

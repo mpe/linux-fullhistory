@@ -10,7 +10,7 @@
  * 	drew@colorado.edu
  *	+1 (303) 666-5836
  *
- *  The AM53C974_nobios_detect code was origininally developed by
+ *  The AM53C974_nobios_detect code was originally developed by
  *   Robin Cutshaw (robin@xfree86.org) and is used here in a 
  *   modified form.
  *

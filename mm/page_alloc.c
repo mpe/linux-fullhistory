@@ -89,6 +89,10 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 {
 	unsigned long index = map_nr >> (1 + order);
 	unsigned long mask = (~0UL) << order;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
 
 #define list(x) (mem_map+(x))
 
@@ -104,23 +108,10 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 		map_nr &= mask;
 	}
 	add_mem_queue(&free_area[order].list, list(map_nr));
+
 #undef list
-}
 
-static inline void check_free_buffers(mem_map_t * map)
-{
-	struct buffer_head * bh;
-
-	bh = map->buffers;
-	if (bh) {
-		struct buffer_head *tmp = bh;
-		do {
-			if (tmp->b_list == BUF_SHARED
-			    && tmp->b_dev != B_FREE)
-				refile_buffer(tmp);
-			tmp = tmp->b_this_page;
-		} while (tmp != bh);
-	}
+	restore_flags(flags);
 }
 
 void free_pages(unsigned long addr, unsigned long order)
@@ -129,24 +120,13 @@ void free_pages(unsigned long addr, unsigned long order)
 
 	if (map_nr < MAP_NR(high_memory)) {
 		mem_map_t * map = mem_map + map_nr;
-		if (map->reserved)
+		if (PageReserved(map))
 			return;
-		if (map->count) {
-			unsigned long flag;
-			save_flags(flag);
-			cli();
-			if (!--map->count) {
-				free_pages_ok(map_nr, order);
-				delete_from_swap_cache(map_nr);
-			}
-			restore_flags(flag);
-			if (map->count == 1)
-				check_free_buffers(map);
+		if (atomic_dec_and_test(&map->count)) {
+			delete_from_swap_cache(map_nr);
+			free_pages_ok(map_nr, order);
 			return;
 		}
-		printk("Trying to free free memory (%08lx): memory probably corrupted\n",addr);
-		printk("PC = %p\n", __builtin_return_address(0));
-		return;
 	}
 }
 
@@ -155,7 +135,7 @@ void free_pages(unsigned long addr, unsigned long order)
  */
 #define MARK_USED(index, order, area) \
 	change_bit((index) >> (1+(order)), (area)->map)
-#define CAN_DMA(x) ((x)->dma)
+#define CAN_DMA(x) (PageDMA(x))
 #define ADDRESS(x) (PAGE_OFFSET + ((x) << PAGE_SHIFT))
 #define RMQUEUE(order, dma) \
 do { struct free_area_struct * area = free_area+order; \
@@ -282,8 +262,7 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	memset(mem_map, 0, start_mem - (unsigned long) mem_map);
 	do {
 		--p;
-		p->dma = 1;
-		p->reserved = 1;
+		p->flags = (1 << PG_DMA) | (1 << PG_reserved);
 	} while (p > mem_map);
 
 	for (i = 0 ; i < NR_MEM_LISTS ; i++) {

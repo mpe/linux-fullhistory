@@ -27,7 +27,7 @@ asmlinkage unsigned long sys_getpagesize(void)
 
 /*
  * sys_pipe() is the normal C calling standard for creating
- * a pipe. It's not the way unix tranditionally does this, though.
+ * a pipe. It's not the way unix traditionally does this, though.
  */
 asmlinkage void sparc_pipe(struct pt_regs *regs)
 {

@@ -39,7 +39,7 @@
  *
  * Copyright (c) 1994 Pauline Middelink
  *
- * The pieces which added masquerading functionality are totaly
+ * The pieces which added masquerading functionality are totally
  * my responsibility and have nothing to with the original authors
  * copyright or doing.
  *

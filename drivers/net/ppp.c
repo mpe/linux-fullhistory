@@ -245,7 +245,7 @@ static ppp_ctrl_t *ppp_list = NULL;
 #define BUFFER_TYPE_TTY_RD	3  /* tty read buffer	    */
 #define BUFFER_TYPE_VJ		4  /* vj compression buffer */
 
-/* Define this string only once for all macro envocations */
+/* Define this string only once for all macro invocations */
 static char ppp_warning[] = KERN_WARNING "PPP: ALERT! not INUSE! %d\n";
 
 static char szVersion[]		= PPP_VERSION;
@@ -344,7 +344,7 @@ ppp_first_time (void)
 		"PPP: version %s (dynamic channel allocation)"
 		"\n", szVersion);
 
-#ifndef MODULE /* slhc module logic has its own copyright announcment */
+#ifndef MODULE /* slhc module logic has its own copyright announcement */
 	printk (KERN_INFO
 		"TCP compression code copyright 1989 Regents of the "
 		"University of California\n");
@@ -354,7 +354,7 @@ ppp_first_time (void)
 		"PPP Dynamic channel allocation code copyright 1995 "
 		"Caldera, Inc.\n");
 /*
- * Register the tty dicipline
+ * Register the tty discipline
  */	
 	(void) memset (&ppp_ldisc, 0, sizeof (ppp_ldisc));
 	ppp_ldisc.magic		= TTY_LDISC_MAGIC;
@@ -571,7 +571,7 @@ ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
  */
 	dev = ppp2dev (ppp);
 	mru = new_mru;
-	/* allow for possible escapement of every character */
+	/* allow for possible escaping of every character */
 	mtu = (new_mtu * 2) + 20;
 
 	/* RFC 1331, section 7.2 says the minimum value is 1500 bytes */
@@ -1854,7 +1854,7 @@ ppp_stuff_char (struct ppp *ppp, register struct ppp_buffer *buf,
 }
 
 /*
- * Procedure to encode the data with the proper escapement and send the
+ * Procedure to encode the data with the proper escaping and send the
  * data to the remote system.
  */
 
@@ -3458,7 +3458,7 @@ cleanup_module(void)
 		return;
 	}
 /*
- * Release the tty registration of the line dicipline so that no new entries
+ * Release the tty registration of the line discipline so that no new entries
  * may be created.
  */
 	status = tty_register_ldisc (N_PPP, NULL);

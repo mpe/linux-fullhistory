@@ -43,6 +43,7 @@
 
 #define NFS_SERVER(inode)		(&(inode)->i_sb->u.nfs_sb.s_server)
 #define NFS_FH(inode)			(&(inode)->u.nfs_i.fhandle)
+#define NFS_RENAMED_DIR(inode)		((inode)->u.nfs_i.silly_rename_dir)
 #define NFS_READTIME(inode)		((inode)->u.nfs_i.read_cache_jiffies)
 #define NFS_OLDMTIME(inode)		((inode)->u.nfs_i.read_cache_mtime)
 #define NFS_CACHEINV(inode) \
@@ -123,6 +124,7 @@ extern struct inode_operations nfs_file_inode_operations;
 /* linux/fs/nfs/dir.c */
 
 extern struct inode_operations nfs_dir_inode_operations;
+extern void nfs_sillyrename_cleanup(struct inode *);
 extern void nfs_kfree_cache(void);
 
 /* linux/fs/nfs/symlink.c */

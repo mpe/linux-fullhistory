@@ -1,5 +1,5 @@
 /* $Id: init_me.c,v 1.2 1995/11/25 00:57:44 davem Exp $
- * init_me.c:  Initialize imperical constants and gather some info from
+ * init_me.c:  Initialize empirical constants and gather some info from
  *             the boot prom.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -9,9 +9,9 @@
 #include <asm/oplib.h>
 #include <asm/vac-ops.h>
 
-#include "imperical.h"   /* Don't ask... */
+#include "empirical.h"   /* Don't ask... */
 
-#define DEBUG_INIT_ME    /* Tell me whats goin on */
+#define DEBUG_INIT_ME    /* Tell me what's goin on */
 
 unsigned int nwindows;   /* Set in bare.S */
 unsigned int nwindowsm1;

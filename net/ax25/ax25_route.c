@@ -17,7 +17,7 @@
  *
  *	History
  *	AX.25 020	Jonathan(G4KLX)	First go.
- *	AX.25 022	Jonathan(G4KLX)	Added the actual meat to this - we now have a nice mheard list.
+ *	AX.25 022	Jonathan(G4KLX)	Added the actual meat to this - we now have a nice heard list.
  *	AX.25 025	Alan(GW4PTS)	First cut at autobinding by route scan.
  *	AX.25 028b	Jonathan(G4KLX)	Extracted AX25 control block from the
  *					sock structure. Device removal now
@@ -110,7 +110,7 @@ static inline void ax25_route_invert(ax25_digi *in, ax25_digi *out)
  *   - try to alloc a new entry
  *   - overwrite the oldest, not manually added entry if this fails.
  *
- * * updated on receiption of frames directed to us _only_
+ * * updated on reception of frames directed to us _only_
  *
  */
 

@@ -31,7 +31,7 @@
  *			from ioctl call. New drives added to black list.
  *
  *  Version 0.06	More code cleanup. Readahead is enabled only for
- *			detected hard drives, not included in readahed
+ *			detected hard drives, not included in readahead
  *			black list.
  * 
  *  Version 0.07	Changed to more conservative drive tuning policy.
@@ -498,7 +498,7 @@ static void set_readahead_mode(int mode, int if_num, int dr_num)
 	if (mode)
 		b &= ~mask;	/* Enable readahead for specific drive */
 	else
-		b |= mask;	/* Disable readahed for specific drive */
+		b |= mask;	/* Disable readahead for specific drive */
 	put_cmd640_reg(port, b);
 }		
 

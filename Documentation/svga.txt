@@ -12,7 +12,7 @@ kernel decompression starts and works only on 80X86 machines.
    IF YOU USE THIS FEATURE, I'LL BE MUCH PLEASED IF YOU SEND ME A MAIL
 DESCRIBING YOUR EXPERIENCE WITH IT. BUG REPORTS ARE ALSO WELCOME.
 
-   The video mode to be used is selected by a kernel paramater which can be
+   The video mode to be used is selected by a kernel parameter which can be
 specified in the kernel Makefile (the SVGA_MODE=... line) or by the "vga=..."
 option of LILO or by the "vidmode" utility (present in standard Linux utility
 packages). You can use the following settings of this parameter:
@@ -83,7 +83,7 @@ the standard modes (80x25 and 80x50) followed by "special" modes (80x28 and
 finally SVGA modes for the auto-detected adapter.
 
    If you enter "scan" instead of item number / mode ID, the program will try
-to scan your video modes in a slightly aggresive, but much more accurate way.
+to scan your video modes in a slightly aggressive, but much more accurate way.
 This should reveal all video modes supported by your BIOS. During this process,
 the screen will flash wildly and strange things will appear. If you are afraid
 this could damage your monitor, don't use this functions. After scanning, the

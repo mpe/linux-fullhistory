@@ -31,10 +31,10 @@
  *
  * Revision 1.14  1995/12/18  18:23:37  fritz
  * Support for ICN-2B Cards.
- * Change for supporting user-setable service-octet.
+ * Change for supporting user-settable service-octet.
  *
  * Revision 1.13  1995/10/29  21:41:07  fritz
- * Added support for DriverId's, added Jan's patches for Kernelversions.
+ * Added support for DriverId's, added Jan's patches for Kernel versions.
  *
  * Revision 1.12  1995/04/29  13:07:35  fritz
  * Added support for new Euro-ISDN-firmware
@@ -51,7 +51,7 @@
  *
  * Revision 1.8  1995/03/15  12:49:44  fritz
  * Added support for SPV's
- * Splitted pollbchan_work ifor calling send-routine directly
+ * Split pollbchan_work ifor calling send-routine directly
  *
  * Revision 1.7  1995/02/20  03:48:03  fritz
  * Added support of new request_region-function.
@@ -642,7 +642,7 @@ static void icn_pollit(icn_dev * dev)
 /*
  * Check Statusqueue-Pointer from isdn-card.
  * If there are new status-replies from the interface, check
- * them against B-Channel-connects/disconnects and set flags arrcordingly.
+ * them against B-Channel-connects/disconnects and set flags accordingly.
  * Wake-Up any processes, who are reading the status-device.
  * If there are B-Channels open, initiate a timer-callback to
  * icn_pollbchan().
@@ -794,7 +794,7 @@ static int icn_loadboot(u_char * buffer, icn_dev * dev)
 		dev->mvalid = 1;
 	}
 	restore_flags(flags);
-	OUTB_P(0, ICN_RUN);	/* Reset Controler */
+	OUTB_P(0, ICN_RUN);	/* Reset Controller */
 	OUTB_P(0, ICN_MAPRAM);	/* Disable RAM     */
 	icn_shiftout(ICN_CFG, 0x0f, 3, 4);	/* Windowsize= 16k */
 	icn_shiftout(ICN_CFG, (unsigned long) dev->shmem, 23, 10);	/* Set RAM-Addr.   */
@@ -1484,7 +1484,7 @@ void cleanup_module(void)
 		dev2->interface.statcallb(&cmd);
 	}
 	if (dev->rvalid) {
-		OUTB_P(0, ICN_RUN);	/* Reset Controler      */
+		OUTB_P(0, ICN_RUN);	/* Reset Controller     */
 		OUTB_P(0, ICN_MAPRAM);	/* Disable RAM          */
 		release_region(dev->port, ICN_PORTLEN);
 	}

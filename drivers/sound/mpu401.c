@@ -522,7 +522,7 @@ mpu401_open (int dev, int mode,
      *  Verify that the device is really running.
      *  Some devices (such as Ensoniq SoundScape don't
      *  work before the on board processor (OBP) is initialized
-     *  by downloadin it's microcode.
+     *  by downloading its microcode.
    */
 
   if (!devc->initialized)
@@ -667,7 +667,7 @@ retry:
 	      ok = 1;
 	  }
 	else
-	  {			/* Device is not currently open. Use simplier method */
+	  {			/* Device is not currently open. Use simpler method */
 	    if (read_data (devc) == MPU_ACK)
 	      ok = 1;
 	  }
@@ -894,7 +894,7 @@ mpu_synth_open (int dev, int mode)
      *  Verify that the device is really running.
      *  Some devices (such as Ensoniq SoundScape don't
      *  work before the on board processor (OBP) is initialized
-     *  by downloadin it's microcode.
+     *  by downloading its microcode.
    */
 
   if (!devc->initialized)

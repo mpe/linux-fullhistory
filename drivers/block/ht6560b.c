@@ -12,7 +12,7 @@
  *
  *  Version 0.03        Some cleanups
  *
- * I reviewed some assembler sourcer listings of htide drivers and found
+ * I reviewed some assembler source listings of htide drivers and found
  * out how they setup those cycle time interfacing values, as they at Holtek
  * call them. IDESETUP.COM that is supplied with the drivers figures out
  * optimal values and fetches those values to drivers. I found out that

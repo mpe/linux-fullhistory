@@ -313,7 +313,7 @@ extern unsigned long lca_init (unsigned long mem_start, unsigned long mem_end);
 
 /*
  * Data structure for handling LCA machine checks.  Correctable errors
- * result in a short logout frame, uncorrectably ones in a long one.
+ * result in a short logout frame, uncorrectable ones in a long one.
  */
 struct el_lca_mcheck_short {
 	struct el_common	h;		/* common logout header */

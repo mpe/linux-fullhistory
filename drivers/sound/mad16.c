@@ -33,7 +33,7 @@
  *      OPTi 82C929     MAD16 Pro
  *      OPTi 82C930     (Not supported yet)
  *
- * These audio interface chips don't prduce sound themselves. They just
+ * These audio interface chips don't produce sound themselves. They just
  * connect some other components (OPL-[234] and a WSS compatible codec)
  * to the PC bus and perform I/O, DMA and IRQ address decoding. There is
  * also a UART for the MPU-401 mode (not 82C928/Mozart).
@@ -201,7 +201,7 @@ detect_mad16 (void)
       return 0;
     }
 
-  mad_write (MC1_PORT, tmp ^ 0x80);	/* Togge a bit */
+  mad_write (MC1_PORT, tmp ^ 0x80);	/* Toggle a bit */
   if ((tmp2 = mad_read (MC1_PORT)) != (tmp ^ 0x80))	/* Compare the bit */
     {
       mad_write (MC1_PORT, tmp);	/* Restore */

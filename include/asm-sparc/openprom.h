@@ -8,7 +8,7 @@
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
-/* Imperical constants... */
+/* Empirical constants... */
 #define KADB_DEBUGGER_BEGVM     0xffc00000    /* Where kern debugger is in virt-mem */
 #define	LINUX_OPPROM_BEGVM	0xffd00000
 #define	LINUX_OPPROM_ENDVM	0xfff00000

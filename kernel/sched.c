@@ -219,7 +219,7 @@ static void process_timeout(unsigned long __data)
 }
 
 /*
- * This is the function that decides how desireable a process is..
+ * This is the function that decides how desirable a process is..
  * You can weigh different processes against each other depending
  * on what CPU they've run on lately etc to try to handle cache
  * and TLB miss penalties.
@@ -1099,7 +1099,7 @@ asmlinkage int sys_getegid(void)
 
 /*
  * This has been replaced by sys_setpriority.  Maybe it should be
- * moved into the arch depedent tree for those ports that require
+ * moved into the arch dependent tree for those ports that require
  * it for backward compatibility?
  */
 asmlinkage int sys_nice(int increment)

@@ -11,7 +11,7 @@
 /*
  * entry.S contains the system-call and fault low-level handling routines.
  * This also contains the timer-interrupt handler, as well as all interrupts
- * and faults that can result in a task-switch. The ISA dependend TLB
+ * and faults that can result in a task-switch. The ISA dependent TLB
  * code is in arch/mips/kernel/<cputype>.S
  */
 #include <linux/sys.h>
@@ -109,7 +109,7 @@ EXPORT(return)	RESTORE_ALL
 		.set	at
 
 /*
- * Beware: interrupt, fast_interrupt and bad_interrupt have unusal
+ * Beware: interrupt, fast_interrupt and bad_interrupt have unusual
  * calling conventions to speedup the mess.
  *
  * t1 - interrupt number

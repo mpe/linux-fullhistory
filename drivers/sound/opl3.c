@@ -266,7 +266,7 @@ opl3_detect (int ioaddr, int *osp)
       detected_model = 3;
 
       /*
-       * Detect availability of OPL4 (_experimental_). Works propably
+       * Detect availability of OPL4 (_experimental_). Works probably
        * only after a cold boot. In addition the OPL4 port
        * of the chip may not be connected to the PC bus at all.
        */

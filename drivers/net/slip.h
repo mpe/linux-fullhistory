@@ -102,7 +102,7 @@ struct slip {
 #define SL_MODE_AX25	4
 #define SL_MODE_ADAPTIVE 8
 #ifdef CONFIG_SLIP_SMART  
-  unsigned char		outfill;	/* # of sec betwen outfill packet */
+  unsigned char		outfill;	/* # of sec between outfill packet */
   unsigned char		keepalive;	/* keepalive seconds		*/
   struct timer_list	outfill_timer;
   struct timer_list	keepalive_timer;

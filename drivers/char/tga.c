@@ -434,7 +434,7 @@ void set_vesa_blanking(const unsigned long arg)
 }
 
 /*
- * video init code, called from withing the PCI bus probing code;
+ * video init code, called from within the PCI bus probing code;
  * when TGA console is configured, at the end of the probing code,
  * we call here to look for a TGA device, and proceed...
  */
@@ -566,7 +566,7 @@ tga_init_video()
 	TGA_WRITE_REG(0x12345678, TGA_BLOCK_COLOR0_REG);
 	TGA_WRITE_REG(0x12345678, TGA_BLOCK_COLOR1_REG);
 
-	/* init video timeing regs for 640x480 @ 60 Hz */
+	/* init video timing regs for 640x480 @ 60 Hz */
 	TGA_WRITE_REG(0x018608a0, TGA_HORIZ_REG);
 	TGA_WRITE_REG(0x084251e0, TGA_VERT_REG);
 

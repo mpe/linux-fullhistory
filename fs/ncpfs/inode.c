@@ -53,7 +53,7 @@ static void
 ncp_read_inode(struct inode *inode)
 {
         /* Our task should be extremely simple here. We only have to
-           look up the infomation somebody else (ncp_iget) put into
+           look up the information somebody else (ncp_iget) put into
            the inode tree. The address of this information is the
            inode->i_ino. Just to make sure everything went well, we
            check it's there. */

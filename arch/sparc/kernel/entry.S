@@ -370,7 +370,7 @@ rie_checkbh:
 
 	RESTORE_ALL
 
-	/* This routine handles illegal isntructions and privileged
+	/* This routine handles illegal instructions and privileged
 	 * instruction attempts from user code.
 	 */
 	.align	4
@@ -652,7 +652,7 @@ linux_trap_nmi_sun4c:
 	SAVE_ALL
 
 	/* Ugh, we need to clear the IRQ line.  This is now
-	 * a very sun4c specific trap hanler...
+	 * a very sun4c specific trap handler...
 	 */
 	sethi	%hi(C_LABEL(interrupt_enable)), %l5
 	ld	[%l5 + %lo(C_LABEL(interrupt_enable))], %l5

@@ -113,7 +113,7 @@
 #define SND_DEV_DSP16	5	/* Like /dev/dsp but 16 bits/sample */
 #define SND_DEV_STATUS	6	/* /dev/sndstat */
 /* #7 not in use now. Was in 2.4. Free for use after v3.0. */
-#define SND_DEV_SEQ2	8	/* /dev/sequecer, level 2 interface */
+#define SND_DEV_SEQ2	8	/* /dev/sequencer, level 2 interface */
 #define SND_DEV_SNDPROC 9	/* /dev/sndproc for programmable devices */
 #define SND_DEV_PSS	SND_DEV_SNDPROC
 
@@ -143,8 +143,8 @@ struct address_info {
 	char *name;
 	int driver_use_1;	/* Driver defined field 1 */
 	int driver_use_2;	/* Driver defined field 2 */
-	int *osp;	/* OS spesific info */
-	int card_subtype;	/* Driver spesific. Usually 0 */
+	int *osp;	/* OS specific info */
+	int card_subtype;	/* Driver specific. Usually 0 */
 };
 
 #define SYNTH_MAX_VOICES	32

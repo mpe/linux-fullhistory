@@ -22,8 +22,8 @@ OBJS  = milo.o a.out.o
 DROP_SECTIONS	= .reginfo .mdebug
 
 #
-# The new options of binutils 2.6 help to shrink object files alot.
-# This is especially usefull for booting from floppy.  Though we
+# The new options of binutils 2.6 help to shrink object files a lot.
+# This is especially useful for booting from floppy.  Though we
 # don't yet require everyone to have binutils 2.6 installed.
 #
 OBJDUMP_VERSION =  $(word 4,$(shell $(OBJDUMP) --version))

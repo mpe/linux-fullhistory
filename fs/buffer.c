@@ -1095,7 +1095,7 @@ int brw_page(int rw, unsigned long address, kdev_t dev, int b[], int size, int b
 	struct page *page;
 
 	page = mem_map + MAP_NR(address);
-	page->uptodate = 0;
+	clear_bit(PG_uptodate, &page->flags);
 	bh = create_buffers(address, size);
 	if (!bh)
 		return -ENOMEM;
@@ -1152,8 +1152,8 @@ int brw_page(int rw, unsigned long address, kdev_t dev, int b[], int size, int b
 		ll_rw_block(rw, nr, arr);
 	else {
 		unsigned long flags;
-		page->locked = 0;
-		page->uptodate = 1;
+		clear_bit(PG_locked, &page->flags);
+		set_bit(PG_uptodate, &page->flags);
 		wake_up(&page->wait);
 		next = bh;
 		save_flags(flags);
@@ -1183,7 +1183,7 @@ void mark_buffer_uptodate(struct buffer_head * bh, int on)
 			tmp=tmp->b_this_page;
 		} while (tmp && tmp != bh);
 		if (page_uptodate)
-			mem_map[MAP_NR(bh->b_data)].uptodate = 1;
+			set_bit(PG_uptodate, &mem_map[MAP_NR(bh->b_data)].flags);
 	} else
 		clear_bit(BH_Uptodate, &bh->b_state);
 }
@@ -1200,7 +1200,7 @@ void unlock_buffer(struct buffer_head * bh)
 	if (!test_bit(BH_FreeOnIO, &bh->b_state))
 		return;
 	page = mem_map + MAP_NR(bh->b_data);
-	if (!page->locked) {
+	if (!PageLocked(page)) {
 		printk ("Whoops: unlock_buffer: "
 			"async io complete on unlocked page\n");
 		return;
@@ -1221,7 +1221,7 @@ void unlock_buffer(struct buffer_head * bh)
 
 	/* OK, go ahead and complete the async IO on this page. */
 	save_flags(flags);
-	page->locked = 0;
+	clear_bit(PG_locked, &page->flags);
 	wake_up(&page->wait);
 	cli();
 	tmp = bh;
@@ -1238,10 +1238,9 @@ void unlock_buffer(struct buffer_head * bh)
 		tmp = tmp->b_this_page;
 	} while (tmp != bh);
 	restore_flags(flags);
-	if (page->free_after) {
+	if (clear_bit(PG_freeafter, &page->flags)) {
 		extern int nr_async_pages;
 		nr_async_pages--;
-		page->free_after = 0;
 		free_page(page_address(page));
 	}
 	wake_up(&buffer_wait);
@@ -1251,7 +1250,7 @@ void unlock_buffer(struct buffer_head * bh)
  * Generic "readpage" function for block devices that have the normal
  * bmap functionality. This is most of the block device filesystems.
  * Reads the page asynchronously --- the unlock_buffer() and
- * mark_buffer_uptodate() functions propogate buffer state into the
+ * mark_buffer_uptodate() functions propagate buffer state into the
  * page struct once IO has completed.
  */
 int generic_readpage(struct inode * inode, struct page * page)
@@ -1262,7 +1261,7 @@ int generic_readpage(struct inode * inode, struct page * page)
 
 	address = page_address(page);
 	page->count++;
-	page->locked = 1;
+	set_bit(PG_locked, &page->flags);
 	
 	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
 	block = page->offset >> inode->i_sb->s_blocksize_bits;

@@ -80,7 +80,7 @@ typedef unsigned long int 		dword;
 #define	RCR		4
 #define RCR_SOFTRESET	0x8000 	/* resets the chip */	
 #define	RCR_STRIP_CRC	0x200	/* strips CRC */
-#define RCR_ENABLE	0x100	/* IFF this is set, we can recieve packets */
+#define RCR_ENABLE	0x100	/* IFF this is set, we can receive packets */
 #define RCR_ALMUL	0x4 	/* receive all multicast packets */
 #define	RCR_PROMISC	0x2	/* enable promiscuous mode */
 
@@ -227,12 +227,12 @@ static const char * interfaces[ 2 ] = { "TP", "AUI" };
 }
 
 /*----------------------------------------------------------------------
- . Define the interrupts that I want to recieve from the card
+ . Define the interrupts that I want to receive from the card
  . 
  . I want: 
  .  IM_EPH_INT, for nasty errors
- .  IM_RCV_INT, for happy recieved packets
- .  IM_RX_OVRN_INT, because I have to kick the reciever
+ .  IM_RCV_INT, for happy received packets
+ .  IM_RX_OVRN_INT, because I have to kick the receiver
  --------------------------------------------------------------------------*/
 #define SMC_INTERRUPT_MASK   (IM_EPH_INT | IM_RX_OVRN_INT | IM_RCV_INT) 
 

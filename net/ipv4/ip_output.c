@@ -548,7 +548,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
  *
  *	The callback has five args, an arbitrary pointer (copy of frag),
  *	the source IP address (may depend on the routing table), the 
- *	destination adddress (char *), the offset to copy from, and the
+ *	destination address (char *), the offset to copy from, and the
  *	length to be copied.
  * 
  */
@@ -1068,7 +1068,7 @@ static int ip_rt_event(struct notifier_block *this, unsigned long event, void *p
 		ip_rt_flush(dev);
 	}
 /*
- *	Join the intial group if multicast.
+ *	Join the initial group if multicast.
  */		
 	if(event==NETDEV_UP)
 	{

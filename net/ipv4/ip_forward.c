@@ -216,7 +216,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 #ifndef CONFIG_IP_NO_ICMP_REDIRECT
 		if (dev == dev2 && 
 			!((iph->saddr^dev->pa_addr)&dev->pa_mask) &&
-			/* The daddr!=raddr test isnt obvious - what its doing
+			/* The daddr!=raddr test isn't obvious - what its doing
 			   is avoiding sending a frame the receiver will not 
 			   believe anyway.. */
 			iph->daddr != raddr/*ANK*/ && !opt->srr)

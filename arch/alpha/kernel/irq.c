@@ -387,7 +387,7 @@ static inline void isa_device_interrupt(unsigned long vector,
 
 	/*
 	 * It seems to me that the probability of two or more *device*
-	 * interrupts occuring at almost exactly the same time is
+	 * interrupts occurring at almost exactly the same time is
 	 * pretty low.  So why pay the price of checking for
 	 * additional interrupts here if the common case can be
 	 * handled so much easier?

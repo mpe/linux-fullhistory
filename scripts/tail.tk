@@ -10,7 +10,7 @@ frame .f0_bot.r
 frame .f0_bot.l
 
 #
-# Read the users settings from .config.  These wil override whatever is
+# Read the user's settings from .config.  These will override whatever is
 # in config.in.  Don't do this if the user specified a -D to force
 # the defaults.
 #

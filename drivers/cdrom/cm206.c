@@ -268,7 +268,7 @@ static void cm206_interrupt(int sig, void *dev_id, struct pt_regs * regs) /* you
       stats(sync_error);
     }
     else if (cd->intr_ds & ds_toc_ready) {
-				/* do something appropiate */
+				/* do something appropriate */
     }
     /* couldn't see why this interrupt, maybe due to init */
     else {			

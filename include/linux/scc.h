@@ -163,7 +163,7 @@ struct scc_stat {
         long spints;            /* Special receiver interrupts */
 
         long txframes;          /* Packets sent */
-        long rxframes;          /* Number of Frames Actally Received */
+        long rxframes;          /* Number of Frames Actually Received */
         long rxerrs;            /* CRC Errors */
         long txerrs;		/* KISS errors */
         
@@ -192,7 +192,7 @@ struct scc_modem {
 };
 
 struct ioctl_command {
-	int  	 command;	/* one of the KISS-Commands devined above */
+	int  	 command;	/* one of the KISS-Commands defined above */
 	unsigned param;		/* KISS-Param */
 };
 

@@ -61,7 +61,7 @@ static int fdc_data_rate = 0;	/* default rate = 500 Kbps */
 static int fdc_seek_rate = 14;	/* default rate = 2 msec @ 500 Kbps */
 static void (*do_ftape) (void);
 static int fdc_fifo_state;	/* original fifo setting - fifo enabled */
-static int fdc_fifo_thr;	/* original fifo setting - thresshold */
+static int fdc_fifo_thr;	/* original fifo setting - threshold */
 static int fdc_lock_state;	/* original lock setting - locked */
 static int fdc_fifo_locked = 0;	/* has fifo && lock set ? */
 static byte fdc_precomp = 0;	/* sets fdc to default precomp. value */
@@ -854,7 +854,7 @@ int setup_fdc_and_dma(buffer_struct * buff, unsigned char operation)
 	set_dma_count(fdc.dma, SECTOR_SIZE * buff->sector_count);
 #ifdef GCC_2_4_5_BUG
 	/*  This seemingly stupid construction confuses the gcc-2.4.5
-	 *  code generater enough to create correct code.
+	 *  code generator enough to create correct code.
 	 */
 	if (1) {
 		int i;
@@ -920,7 +920,7 @@ int fdc_fifo_enable(void)
 			fdc_fifo_state = (reg[8] & 0x20) == 0;
 			fdc_lock_state = reg[7] & 0x80;
 			fdc_fifo_thr = 1 + (reg[8] & 0x0f);
-			TRACEx3(5, "original fifo state: %sabled, thresshold %d, %slocked",
+			TRACEx3(5, "original fifo state: %sabled, threshold %d, %slocked",
 				(fdc_fifo_state) ? "en" : "dis",
 			   fdc_fifo_thr, (fdc_lock_state) ? "" : "not ");
 			/*  If fdc is already locked, unlock it first !
@@ -933,7 +933,7 @@ int fdc_fifo_enable(void)
 					result = -EIO;
 				}
 			}
-			/*  Enable fifo and set thresshold at xx bytes to allow a
+			/*  Enable fifo and set threshold at xx bytes to allow a
 			 *  reasonably large latency and reduce number of dma bursts.
 			 */
 			fdc_ready_wait(100);

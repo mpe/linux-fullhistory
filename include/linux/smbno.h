@@ -45,7 +45,7 @@
 #define ERRnotconnected 233     /* No process on other end of named pipe */
 #define ERRmoredata 234         /* More data to be returned */
 #define ERROR_EAS_DIDNT_FIT 275 /* Extended attributes didn't fit */
-#define ERROR_EAS_NOT_SUPPORTED 282 /* Extended attributes not suppored */
+#define ERROR_EAS_NOT_SUPPORTED 282 /* Extended attributes not supported */
 
 /* Error codes for the ERRSRV class */
 

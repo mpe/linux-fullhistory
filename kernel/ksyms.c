@@ -354,7 +354,7 @@ struct symbol_table symbol_table = {
 	X(disk_name),	/* for md.c */
 #endif
  	
-	/* bimfm_aout */
+	/* binfmt_aout */
 	X(get_write_access),
 	X(put_write_access),
 

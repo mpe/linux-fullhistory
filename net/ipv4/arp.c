@@ -51,7 +51,7 @@
  *		Alan Cox	:	Missing unlock in device events.
  *		Eckes		:	ARP ioctl control errors.
  *		Alexey Kuznetsov:	Arp free fix.
- *		Manuel Rodriguez:	Gratutious ARP.
+ *		Manuel Rodriguez:	Gratuitous ARP.
  *              Jonathan Layes  :       Added arpd support through kerneld 
  *                                      message queue (960314)
  */
@@ -901,7 +901,7 @@ static void arp_send_q(struct arp_table *entry)
 				in_ntoa(entry->ip));
 		/* Can't flush the skb, because RFC1122 says to hang on to */
 		/* at least one from any unresolved entry.  --MS */
-		/* Whats happened is that someone has 'unresolved' the entry
+		/* What's happened is that someone has 'unresolved' the entry
 		   as we got to use it - this 'can't happen' -- AC */
 		return;
 	}
@@ -1906,7 +1906,7 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 		dev = dev1;
 	}
 
-	/* this needs to be checked only for dev=dev1 but it doesnt hurt */	
+	/* this needs to be checked only for dev=dev1 but it doesn't hurt */	
 	if (r->arp_ha.sa_family != dev->type)	
 		return -EINVAL;
 		
@@ -2148,7 +2148,7 @@ int arp_ioctl(unsigned int cmd, void *arg)
 		case SIOCSARP:
 			return arp_req_set(&r, dev);
 		case OLD_SIOCDARP:
-			/* old  SIOCDARP destoyes both
+			/* old  SIOCDARP destroys both
 			 * normal and proxy mappings
 			 */
 			r.arp_flags &= ~ATF_PUBL;

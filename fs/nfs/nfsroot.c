@@ -154,7 +154,7 @@ extern asmlinkage int sys_socket(int family, int type, int protocol);
  ***************************************************************************/
 
 /*
- * Setup and initialize all network devices. If there is a user-prefered
+ * Setup and initialize all network devices. If there is a user-preferred
  * interface, ignore all other interfaces.
  */
 static int root_dev_open(void)
@@ -1541,7 +1541,7 @@ static int *root_nfs_call(int *end)
 
 	/*
 	 * First connect the UDP socket to a server port, then send the
-	 * packet out, and finally check wether the answer is OK.
+	 * packet out, and finally check whether the answer is OK.
 	 */
 	if (nfs_sock_inode->u.socket_i.ops->connect &&
 	    nfs_sock_inode->u.socket_i.ops->connect(&nfs_sock_inode->u.socket_i,

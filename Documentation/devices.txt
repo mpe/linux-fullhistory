@@ -2,14 +2,14 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		     Last revised: April 1, 1996
+		     Last revised: April 10, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
 is a registry of allocated major device numbers, as well as the
 recommended /dev directory nodes for these devices.
 
-The lastest version of this list is included with the Linux kernel
+The latest version of this list is included with the Linux kernel
 sources in LaTeX and ASCII form.  In case of discrepancy, the LaTeX
 version is authoritative.
 
@@ -48,14 +48,17 @@ an unreasonable effort.
 		  0 = /dev/ram0		First RAM disk
 		    ...
 		  7 = /dev/ram7		Eighth RAM disk
+		250 = /dev/initrd	Initial RAM disk
 
 		Older kernels had /dev/ramdisk (1, 1) here.
+		/dev/initrd refers to a RAM disk which was preloaded
+		by the boot loader.
 		    
   2 char	Pseudo-TTY masters
 		  0 = /dev/ptyp0	First PTY master
 		  1 = /dev/ptyp1	Second PTY master
 		    ...
-		256 = /dev/ptyef	256th PTY master
+		255 = /dev/ptyef	256th PTY master
 
 		Pseudo-tty's are named as follows:
 		* Masters are "pty", slaves are "tty";
@@ -109,7 +112,7 @@ an unreasonable effort.
 		(2) Autodetectable format in a Double Density (720K) drive only
 		(3) Autodetectable format in a High Density (1440K) drive only
 
-		NOTE: THe letter in the device name (d, q, h or u)
+		NOTE: The letter in the device name (d, q, h or u)
 		signifies the type of drive: 5.25" Double Density (d),
 		5.25" Quad Density (q), 5.25" High Density (h) or 3.5"
 		(any model, u).  The use of the capital letters D, H
@@ -231,6 +234,7 @@ an unreasonable effort.
 		  4 = /dev/amigamouse	Amiga mouse (68k/Amiga)
 		  5 = /dev/atarimouse	Atari mouse
 		  6 = /dev/sunmouse	Sun mouse
+		  7 = /dev/amigamouse1	Second Amiga mouse
 		128 = /dev/beep		Fancy beep device
 		129 = /dev/modreq	Kernel module load request
 		130 = /dev/watchdog	Watchdog timer port
@@ -238,6 +242,7 @@ an unreasonable effort.
 		132 = /dev/hwtrap	Hardware fault trap
 		133 = /dev/exttrp	External device trap
 		134 = /dev/apm_bios	Advanced Power Management BIOS
+		135 = /dev/rtc		Real Time Clock
 
  11 char	Raw keyboard device
 		  0 = /dev/kbd		Raw keyboard device
@@ -308,8 +313,12 @@ an unreasonable effort.
 		(see major number 3).
 
  15 char	Joystick
-		  0 = /dev/js0		First joystick
-		  1 = /dev/js1		Second joystick
+		  0 = /dev/js0		First analog joystick
+		  1 = /dev/js1		Second analog joystick
+		    ...
+		128 = /dev/djs0		First digital joystick
+		129 = /dev/djs1		Second digital joystick
+		    ...
     block	Sony CDU-31A/CDU-33A CD-ROM
 		  0 = /dev/sonycd	Sony CDU-31a CD-ROM
 
@@ -468,7 +477,7 @@ an unreasonable effort.
 		      ...
 		 63 = /dev/fb1user7
 
-		The universal frame buffer device is currenly only
+		The universal frame buffer device is currently only
 		supported on Linux/68k and Linux/SPARC.  The plain
 		device accesses the frame buffer at current resolution
 		(Linux/68k calls this device "current",
@@ -627,16 +636,18 @@ an unreasonable effort.
 		 50 = /dev/ml16pb-c1	Second card, second counter/timer
 		 51 = /dev/ml16pb-c2	Second card, third counter/timer
 		      ...
+    block	Reserved for Linux/AP+
 
- 40		Matrox Meteor frame grabber
+ 40 char	Matrox Meteor frame grabber
 		  0 = /dev/mmetfgrab	Matrox Meteor frame grabber
+    block	Reserved for Linux/AP+
 
- 41		Yet Another Micro Monitor
+ 41 char	Yet Another Micro Monitor
 		  0 = /dev/yamm		Yet Another Micro Monitor
 
  42		Demo/sample use
 
-		This number is indended for use in sample code, as
+		This number is intended for use in sample code, as
 		well as a general "example" device number.  It
 		should never be used for a device driver that is being
 		distributed; either obtain an official number or use
@@ -673,12 +684,7 @@ an unreasonable effort.
 		  1 = /dev/cur1		Callout device corresponding to ttyR1
 		      ...
 
- 48 char	Matter replicator
-		  0 = /dev/replicator	Matter replicator
-
-		See RFC 1437 for the data format accepted by this device.
-
- 49-59		UNALLOCATED
+ 48-59		UNALLOCATED
 
  60-63		LOCAL/EXPERIMENTAL USE
 		Allocated for local/experimental use.  For devices not
@@ -689,12 +695,7 @@ an unreasonable effort.
 
 120-127		LOCAL/EXPERIMENTAL USE
 
-128-223		UNALLOCATED
-
-224-239		SEE NOTE
-		This range is no longer allocated to
-		local/experimental use, since the feedback I received
-		was all in favour of realignment.
+128-239		UNALLOCATED
 
 240-254		LOCAL/EXPERIMENTAL USE
 
@@ -730,7 +731,7 @@ Note: the last device is letter X-digit 0-letter R.
 It is recommended that these links exist on all systems:
 
 /dev/core	/proc/kcore	symbolic	Backward compatibility
-/dev/ramdisk	ram1		symbolic	Backward compatibility
+/dev/ramdisk	ram0		symbolic	Backward compatibility
 /dev/scd?	sr?		hard		Alternate SCSI CD-ROM name
 
 
@@ -752,7 +753,7 @@ exist, they should have the following uses.
 
 /dev/modem should not be used for a modem which supports dialin as
 well as dialout, as it tends to cause lock file problems.  If it
-exists, /dev/modem shold point to the appropriate dialout (alternate)
+exists, /dev/modem should point to the appropriate dialout (alternate)
 device.
 
 For SCSI devices, /dev/tape and /dev/cdrom should point to the

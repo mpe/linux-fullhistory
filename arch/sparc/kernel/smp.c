@@ -14,12 +14,12 @@ volatile int smp_msg_id;
 
 static volatile int smp_commenced = 0;
 
-/* The only guarenteed locking primitive available on all Sparc
- * processors is 'ldstub [%addr_reg + imm], %dest_reg' which atomicly
+/* The only guaranteed locking primitive available on all Sparc
+ * processors is 'ldstub [%addr_reg + imm], %dest_reg' which atomically
  * places the current byte at the effective address into dest_reg and
  * places 0xff there afterwards.  Pretty lame locking primitive
  * compared to the Alpha and the intel no?  Most Sparcs have 'swap'
- * instruction which is muct better...
+ * instruction which is much better...
  */
 klock_t kernel_lock;
 

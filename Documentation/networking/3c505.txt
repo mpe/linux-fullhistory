@@ -1,0 +1,33 @@
+The 3Com Etherlink Plus (3c505) driver.
+
+This driver now uses DMA.  There is currently no support for PIO operation.
+The default DMA channel is 6, and is set at compile time.
+
+If no base address is given at boot time, the driver will autoprobe
+ports 0x300, 0x280 and 0x310 (in that order).  If no IRQ is given, the driver
+will try to probe for it.
+
+The driver can be used as a loadable module.  See net-modules.txt for details
+of the parameters it can take.
+
+At the moment, the driver probably won't work with old (revision 2) hardware.
+
+There is one compile-time setting in the CONFIG file:
+ELP_DEBUG
+ The driver debug level.  It's probably best to leave it at 0 most of the time.
+ If you are having trouble, setting it to 1 may give you more information.
+ Any higher setting is too verbose for most purposes.
+
+To do:
+ Support for old boards
+ Make DMA configurable at run time
+ Improve probe/setup code
+ Test multicast and promiscuous operation
+
+Authors:
+ The driver is mainly written by Craig Southeren, email
+ <craigs@ineluki.apana.org.au>.
+ Parts of the driver (adapting the driver to 1.1.4+ kernels,
+ IRQ/address detection, some changes) and this README by
+ Juha Laiho <jlaiho@ichaos.nullnet.fi>.
+ DMA mode, more fixes, etc, by Philip Blundell <pjb27@cam.ac.uk>

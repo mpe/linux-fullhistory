@@ -1,6 +1,6 @@
   EQL Driver: Serial IP Load Balancing HOWTO
   Simon "Guru Aleph-Null" Janes, simon@ncm.com
-  v1.1, Feburary 27, 1995
+  v1.1, February 27, 1995
 
   This is the manual for the EQL device driver. EQL is a software device
   that lets you load-balance IP serial links (SLIP or uncompressed PPP)
@@ -104,7 +104,7 @@
 
   In rc.inet1, ifconfig the eql device to the IP address you usually use
   for your machine, and the MTU you prefer for your SLIP lines.	One
-  could argue that MTU should be roughly half the usuall size for two
+  could argue that MTU should be roughly half the usual size for two
   modems, one-third for three, one-fourth for four, etc...  But going
   too far below 296 is probably overkill. Here is an example ifconfig
   command that sets up the eql device:
@@ -265,7 +265,7 @@
   o  icee from LinuxNET patched 1.1.86 without any rejects and was able
      to boot the kernel and enslave a couple of ISDN PPP links.
 
-  5.1.	Randoph Bentson's Test Report
+  5.1.	Randolph Bentson's Test Report
 
 
 

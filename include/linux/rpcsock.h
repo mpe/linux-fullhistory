@@ -1,7 +1,7 @@
 /*
  *  rpcsock.h	Declarations for the RPC call interface.
  *
- *  Coypright (C) 1995, 1996 Olaf Kirch <okir@monad.swb.de>
+ *  Copyright (C) 1995, 1996 Olaf Kirch <okir@monad.swb.de>
  */
 
 

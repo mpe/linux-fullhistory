@@ -17,7 +17,7 @@ Wed Jan 10 10:08:00 1996    <tytso@rsts-11.mit.edu>
 		decremented.
 
 	* serial.c (startup, rs_open): Remove race condition that could
-		cuase a memory leak of one page.  (Fortunately, both race
+		cause a memory leak of one page.  (Fortunately, both race
 		conditions were relatively rare in practice.)
 
 Tue Dec  5 13:21:27 1995    <tytso@rsts-11.mit.edu>

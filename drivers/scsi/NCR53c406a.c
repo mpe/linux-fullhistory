@@ -61,7 +61,7 @@
 
 #define WATCHDOG 5000000
 
-#define SYNC_MODE 0 		/* Synchrounous transfer mode */
+#define SYNC_MODE 0 		/* Synchronous transfer mode */
 
 #if DEBUG
 #undef NCR53C406A_DEBUG
@@ -379,7 +379,7 @@ static __inline__ int NCR53c406a_pio_read(unsigned char *request,
             len=128; break;
         }
         
-        if ((i & 0x40) && len == 0) { /* fifo empty and interrupt occured */
+        if ((i & 0x40) && len == 0) { /* fifo empty and interrupt occurred */
             return 0;
         }
         
@@ -911,7 +911,7 @@ NCR53c406a_intr(int unused, void *dev_id, struct pt_regs *regs){
         
     case 0x02:			/* COMMAND */
         current_SC->SCp.phase = command_ph;
-        printk("NCR53c406a: Warning: Unknown interupt occured in command phase!\n");
+        printk("NCR53c406a: Warning: Unknown interrupt occurred in command phase!\n");
         break;
         
     case 0x03:			/* STATUS */

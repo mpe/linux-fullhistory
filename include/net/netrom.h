@@ -40,7 +40,7 @@
 #define NR_DEFAULT_N2		3			/* Number of Retries */
 #define	NR_DEFAULT_T4		(180 * PR_SLOWHZ)	/* Transport Busy Delay */
 #define	NR_DEFAULT_WINDOW	4			/* Default Window Size	*/
-#define	NR_DEFAULT_OBS		6			/* Default Obscolesence Count */
+#define	NR_DEFAULT_OBS		6			/* Default Obsolescence Count */
 #define	NR_DEFAULT_QUAL		10			/* Default Neighbour Quality */
 #define	NR_DEFAULT_TTL		16			/* Default Time To Live */
 #define NR_MODULUS 		256

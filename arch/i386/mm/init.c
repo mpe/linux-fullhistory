@@ -84,7 +84,7 @@ void show_mem(void)
 	i = high_memory >> PAGE_SHIFT;
 	while (i-- > 0) {
 		total++;
-		if (mem_map[i].reserved)
+		if (PageReserved(mem_map+i))
 			reserved++;
 		else if (!mem_map[i].count)
 			free++;
@@ -235,18 +235,18 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	 * controller as well..
 	 */
 	while (start_low_mem < 0x9f000) {
-		mem_map[MAP_NR(start_low_mem)].reserved = 0;
+		clear_bit(PG_reserved, &mem_map[MAP_NR(start_low_mem)].flags);
 		start_low_mem += PAGE_SIZE;
 	}
 
 	while (start_mem < high_memory) {
-		mem_map[MAP_NR(start_mem)].reserved = 0;
+		clear_bit(PG_reserved, &mem_map[MAP_NR(start_mem)].flags);
 		start_mem += PAGE_SIZE;
 	}
 	for (tmp = 0 ; tmp < high_memory ; tmp += PAGE_SIZE) {
 		if (tmp >= MAX_DMA_ADDRESS)
-			mem_map[MAP_NR(tmp)].dma = 0;
-		if (mem_map[MAP_NR(tmp)].reserved) {
+			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);
+		if (PageReserved(mem_map+MAP_NR(tmp))) {
 			if (tmp >= 0xA0000 && tmp < 0x100000)
 				reservedpages++;
 			else if (tmp < (unsigned long) &_etext)
@@ -292,7 +292,7 @@ void si_meminfo(struct sysinfo *val)
 	val->freeram = nr_free_pages << PAGE_SHIFT;
 	val->bufferram = buffermem;
 	while (i-- > 0)  {
-		if (mem_map[i].reserved)
+		if (PageReserved(mem_map+i))
 			continue;
 		val->totalram++;
 		if (!mem_map[i].count)

@@ -5,7 +5,7 @@
  * a PnP compatible chip which contains a CS4231A codec, SB emulation,
  * a MPU401 compatible MIDI port, joystick and synthesizer and IDE CD-ROM 
  * interfaces. This is just a temporary driver until full PnP support
- * gets inplemented. Just the WSS codec, FM synth and the MIDI ports are
+ * gets implemented. Just the WSS codec, FM synth and the MIDI ports are
  * supported. Other interfaces are left uninitialized.
  */
 /*

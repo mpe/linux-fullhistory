@@ -2989,7 +2989,7 @@ static int scsi_register_device_module(struct Scsi_Device_Template * tpnt)
 	if(tpnt->attach)  (*tpnt->attach)(SDpnt);
 	/*
 	 * If this driver attached to the device, and we no longer
-	 * have anything attached, release the scso command blocks.
+	 * have anything attached, release the scsi command blocks.
 	 */
 	if(SDpnt->attached && SDpnt->has_cmdblocks == 0)
 	    scsi_build_commandblocks(SDpnt);

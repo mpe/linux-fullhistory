@@ -29,7 +29,7 @@
  */
 
 /*
- * The original EtherExpress driver was just about useable, but
+ * The original EtherExpress driver was just about usable, but
  * suffered from a long startup delay, a hard limit of 16k memory
  * usage on the card (EtherExpress 16s have either 32k or 64k),
  * and random locks under load. The last was particularly annoying
@@ -74,7 +74,7 @@
  * never reset the card *after* booting the kernel - once at probe time
  * must be sufficient, and we'll just have to put up with that failing
  * occasionally (or buy a new NIC). By the way, this looks like a 
- * definate card bug, since Intel's own driver for DOS does exactly the
+ * definite card bug, since Intel's own driver for DOS does exactly the
  * same.
  */
 
@@ -183,7 +183,7 @@ unsigned short start_code[] = {
 	0x0000,0x0000,          /* address of ISCP (lo,hi) */
 
 	0x0001,                 /* ISCP: busy - cleared after reset */
-	0x0008,0x0000,0x0000,   /* offsett,address (lo,hi) of SCB */
+	0x0008,0x0000,0x0000,   /* offset,address (lo,hi) of SCB */
 
 	0x0000,0x0000,          /* SCB: status, commands */
 	0x0000,0x0000,          /* links to first command block, first receive descriptor */
@@ -687,7 +687,7 @@ static void eexp_hw_tx(struct device *dev, unsigned short *buf, unsigned short l
  * Sanity check the suspected EtherExpress card
  * Read hardware address, reset card, size memory and
  * initialize buffer memory pointers. These should
- * probably be held in dev->priv, incase someone has 2
+ * probably be held in dev->priv, in case someone has 2
  * differently configured cards in their box (Arghhh!)
  */
 
@@ -953,7 +953,7 @@ static void eexp_hw_txrestart(struct device *dev)
 
 /*
  * Writes down the list of transmit buffers into card
- * memory. Initial seperate, repeated transmits link
+ * memory. Initial separate, repeated transmits link
  * them into a circular list, such that the CU can
  * be constantly active, and unlink them as we reap
  * transmitted packet buffers, so the CU doesn't loop

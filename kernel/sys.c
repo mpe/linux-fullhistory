@@ -778,7 +778,7 @@ asmlinkage int sys_newuname(struct new_utsname * name)
 
 /*
  * Move these to arch dependent dir since they are for
- * backward compatiblity only?
+ * backward compatibility only?
  */
 asmlinkage int sys_uname(struct old_utsname * name)
 {

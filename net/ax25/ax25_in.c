@@ -107,7 +107,7 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 					skbn->data = skb_put(skbn, hdrlen);	/* get space for info */
 					memcpy(skbn->data, skbo->data, hdrlen);	/* copy address field */
 					skb_pull(skbo, hdrlen + 2);		/* start of data */
-					skb_pull(skbn, hdrlen + 1);		/* dito */
+					skb_pull(skbn, hdrlen + 1);		/* ditto */
 
 					/* copy data from first fragment */
 

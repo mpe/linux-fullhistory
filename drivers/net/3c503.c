@@ -579,7 +579,7 @@ el2_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_off
 
 /*
  *  Here I also try to get data as fast as possible. I am betting that I
- *  can read one extra byte without clobering anything in the kernel because
+ *  can read one extra byte without clobbering anything in the kernel because
  *  this would only occur on an odd byte-count and allocation of skb->data
  *  is word-aligned. Variable 'count' is NOT checked. Caller must check
  *  for a valid count. 

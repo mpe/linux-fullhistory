@@ -619,7 +619,7 @@ setvde:	call	outidx
 set_80x60:
 	call	set_80x30	! Set 480 scans
 	call	set_8pt		! And 8-pt font
-	mov	ax,#0xdf12	! VGA vertial display end
+	mov	ax,#0xdf12	! VGA vertical display end
 	mov	[force_size],#0x503c
 	jmp	setvde
 

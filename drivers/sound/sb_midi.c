@@ -44,7 +44,7 @@
  * future version of this driver.
  */
 
-extern int      sb_dsp_ok;	/* Set to 1 atfer successful initialization */
+extern int      sb_dsp_ok;	/* Set to 1 after successful initialization */
 extern int      sbc_base;
 
 extern int      sb_midi_mode;

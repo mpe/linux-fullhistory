@@ -48,7 +48,7 @@
  * Some characters for the LED control registers
  * The original Mips machines seem to have a LED display
  * with integrated decoder while the Acer machines can
- * control each of the seven segments and the dot independend.
+ * control each of the seven segments and the dot independently.
  * It only a toy, anyway...
  */
 #define LED_DOT                 0x01

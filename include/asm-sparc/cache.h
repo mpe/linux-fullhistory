@@ -14,7 +14,7 @@
  * alternate address space.  The IDC bit must be off in the ICCR on
  * HyperSparcs for these accesses to work.  The code below does not do
  * any checking, the caller must do so.  These routines are for
- * diagnostics only, but coule end up being useful.  Use with care.
+ * diagnostics only, but could end up being useful.  Use with care.
  * Also, you are asking for trouble if you execute these in one of the
  * three instructions following a %asr/%psr access or modification.
  */

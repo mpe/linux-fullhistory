@@ -17,7 +17,7 @@
  * We only support the following commands.
  */
 #define SETNAME                    1	/* set hostname                  */
-#define FLUSH_CACHE		   3	/* writeback and invalide caches */
+#define FLUSH_CACHE		   3	/* writeback and invalidate caches */
 #define MIPS_FIXADE                7	/* control address error fixing  */
 #define MIPS_ATOMIC_SET		2001	/* atomically set variable       */
 

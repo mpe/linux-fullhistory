@@ -92,7 +92,7 @@
  */
 
 /*
- * 1995/10/18 -- Ralf Baechle -- Portability cleanup; move machine dependend
+ * 1995/10/18 -- Ralf Baechle -- Portability cleanup; move machine dependent
  * features to asm/floppy.h.
  */
 
@@ -2793,7 +2793,7 @@ static int fd_copyout(void *param, const void *address, int size)
 
 	ECALL(verify_area(VERIFY_WRITE,param,size));
 	fd_cacheflush(address, size); /* is this necessary ??? */
-	/* Ralf: Yes; only the l2 cache is completly chipset
+	/* Ralf: Yes; only the l2 cache is completely chipset
 	   controlled */
 	memcpy_tofs(param,(void *) address, size);
 	return 0;
@@ -3270,7 +3270,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			LOCK_FDC(drive,1);
 
 			/* do the actual eject. Fails on
-			 * non-Sparc archtitectures */
+			 * non-Sparc architectures */
 			ret=fd_eject(UNIT(drive)); 
 
 			/* switch the motor off, in order to make the

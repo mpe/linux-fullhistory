@@ -2,7 +2,7 @@
  * eth82586.h: Intel EtherExpress defines
  *
  * Written 1995 by John Sullivan
- * See eexpress.c for furthur details
+ * See eexpress.c for further details
  * documentation and usage to do.
  */
 
@@ -89,7 +89,7 @@
  * SCB defines
  */
 
-/* these functions take the SCB status word and test the relavent status bit */
+/* these functions take the SCB status word and test the relevant status bit */
 #define SCB_complete(s) ((s&0x8000)!=0)
 #define SCB_rxdframe(s) ((s&0x4000)!=0)
 #define SCB_CUdead(s) ((s&0x2000)!=0)

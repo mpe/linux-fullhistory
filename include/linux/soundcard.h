@@ -140,7 +140,7 @@
  *	Sample loading mechanism for internal synthesizers (/dev/sequencer)
  *	The following patch_info structure has been designed to support
  *	Gravis UltraSound. It tries to be universal format for uploading
- *	sample based patches but is propably too limited.
+ *	sample based patches but is probably too limited.
  */
 
 struct patch_info {
@@ -575,7 +575,7 @@ typedef struct {
  * Buffer status queries.
  */
 typedef struct audio_buf_info {
-			int fragments;	/* # of available fragments (partially usend ones not counted) */
+			int fragments;	/* # of available fragments (partially used ones not counted) */
 			int fragstotal;	/* Total # of fragments allocated */
 			int fragsize;	/* Size of a fragment in bytes */
 
@@ -722,7 +722,7 @@ typedef struct copr_msg {
 /* 
  * The AD1848 codec and compatibles have three line level inputs
  * (line, aux1 and aux2). Since each card manufacturer have assigned
- * different meanings to these inputs, it's inpractical to assign
+ * different meanings to these inputs, it's impractical to assign
  * specific meanings (line, cd, synth etc.) to them.
  */
 #define SOUND_MIXER_LINE1	14	/* Input source 1  (aux1) */
@@ -1077,7 +1077,7 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
 #define SEQ_PANNING(dev, voice, pos) SEQ_CONTROL(dev, voice, CTL_PAN, (pos+128) / 2)
 
 /*
- * Timing and syncronization macros
+ * Timing and synchronization macros
  */
 
 #define _TIMER_EVENT(ev, parm)		{_SEQ_NEEDBUF(8);\

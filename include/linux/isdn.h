@@ -102,7 +102,7 @@
 #define ISDN_USAGE_EXCLUSIVE 64 /* This bit is set, if channel is exclusive */
 #define ISDN_USAGE_OUTGOING 128 /* This bit is set, if channel is outgoing  */
 
-#define ISDN_MODEM_ANZREG    20        /* Number of Medem-Registers        */
+#define ISDN_MODEM_ANZREG    20        /* Number of Modem-Registers        */
 #define ISDN_MSNLEN          20
 
 typedef struct {
@@ -240,7 +240,7 @@ typedef struct {
 #define ISDN_NET_CALLBACK   0x04       /* callback incoming phonenumber     */
 #define ISDN_NET_CLONE      0x08       /* clone a tmp interface when called */
 #define ISDN_NET_TMP        0x10       /* tmp interface until getting an IP */
-#define ISDN_NET_DYNAMIC    0x20       /* this link is dynamically allocted */
+#define ISDN_NET_DYNAMIC    0x20       /* this link is dynamically allocated */
 #define ISDN_NET_MAGIC      0x49344C02 /* for paranoia-checking             */
 
 /* Phone-list-element */
@@ -263,7 +263,7 @@ typedef struct isdn_net_local_s {
   int                    flags;        /* Connection-flags                 */
   int                    dialstate;    /* State for dialing                */
   int                    dialretry;    /* Counter for Dialout-retries      */
-  int                    dialmax;      /* Max. Nuber of Dial-retries       */
+  int                    dialmax;      /* Max. Number of Dial-retries      */
   char                   msn[ISDN_MSNLEN]; /* MSNs/EAZs for this interface */
   int                    dtimer;       /* Timeout-counter for dialing      */
   u_char                 p_encap;      /* Packet encapsulation             */
@@ -405,7 +405,7 @@ typedef struct {
   char                mdmcmd[255];     /* Modem-Commandbuffer              */
 } atemu;
 
-/* Descripion of one ISDN-tty */
+/* Description of one ISDN-tty */
 typedef struct {
   int                msr[ISDN_MAX_CHANNELS];	  /* Modem-statusregister   */
   int                mlr[ISDN_MAX_CHANNELS];	  /* Line-statusregister    */

@@ -75,9 +75,9 @@
 
 /*
  * The maximum address that we can perform a DMA transfer to on this platform
- * This discribes only the PC style part of the DMA logic like on Deskstations
+ * This describes only the PC style part of the DMA logic like on Deskstations
  * or Acer PICA but not the much more versatile DMA logic used for the
- * local devices on Acer PICA or Mangnums.
+ * local devices on Acer PICA or Magnums.
  */
 #define MAX_DMA_ADDRESS		0x1000000
 

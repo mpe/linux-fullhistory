@@ -696,7 +696,7 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 			      ms.addr.msf.frame, DiskInfo.lastSession.min,
 			      DiskInfo.lastSession.sec, DiskInfo.lastSession.frame);
 		  else
-		      printk("atzcd multisession %d, lba:0x%08x [%02x:%02x.%02x])\n",
+		      printk("aztcd multisession %d, lba:0x%08x [%02x:%02x.%02x])\n",
 			      ms.xa_flag, ms.addr.lba, DiskInfo.lastSession.min,
 			      DiskInfo.lastSession.sec, DiskInfo.lastSession.frame);
 #endif

@@ -734,7 +734,7 @@ static void sdla_receive(struct device *dev)
 
          if (i == CONFIG_DLCI_MAX)
          {
-            printk(KERN_NOTICE "%s: Recieved packet from invalid DLCI %i, ignoring.", dev->name, dlci);
+            printk(KERN_NOTICE "%s: Received packet from invalid DLCI %i, ignoring.", dev->name, dlci);
             flp->stats.rx_errors++;
             cmd->opp_flag = 0;
             break;
@@ -773,7 +773,7 @@ static void sdla_receive(struct device *dev)
 
          if (i == CONFIG_DLCI_MAX)
          {
-            printk(KERN_NOTICE "%s: Recieved packet from invalid DLCI %i, ignoring.", dev->name, dlci);
+            printk(KERN_NOTICE "%s: Received packet from invalid DLCI %i, ignoring.", dev->name, dlci);
             flp->stats.rx_errors++;
             pbuf->opp_flag = 0;
             break;
@@ -838,7 +838,7 @@ static void sdla_isr(int irq, void *dev_id, struct pt_regs * regs)
 
    if (!flp->initialized)
    {
-      printk(KERN_WARNING "%s: irq %d for unintialiazed device.\n", dev->name, irq);
+      printk(KERN_WARNING "%s: irq %d for uninitialized device.\n", dev->name, irq);
       return;
    }
 
@@ -1134,7 +1134,7 @@ static int sdla_config(struct device *dev, struct frad_conf *conf, int get)
       if (err)
          return(err);
 
-      /* no sense reading if the CPU isnt' started */
+      /* no sense reading if the CPU isn't started */
       if (dev->start)
       {
          size = sizeof(data);

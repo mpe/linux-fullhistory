@@ -8,7 +8,7 @@
  * block. These routines take care of the administration needed to
  * have a consistent diskquota tracking system. The ideas of both
  * user and group quotas are based on the Melbourne quota system as
- * used on BSD derivated systems. The internal implementation is 
+ * used on BSD derived systems. The internal implementation is 
  * based on the LINUX inode-subsystem with added complexity of the
  * diskquota system. This implementation is not based on any BSD
  * kernel sourcecode.
@@ -757,7 +757,7 @@ static u_long isize_to_blocks(size_t isize, size_t blksize)
 }
 
 /*
- * Externaly referenced funtions trough dq_operations.
+ * Externally referenced functions through dquot_operations.
  */
 int dquot_alloc_block(const struct inode *inode, unsigned long number)
 {
@@ -872,7 +872,7 @@ int dquot_transfer(struct inode *inode, struct iattr *iattr, char direction)
 	}
 
 	/*
-	 * Finaly perform the needed transfer from transfer_from to transfer_to.
+	 * Finally perform the needed transfer from transfer_from to transfer_to.
 	 * And release any pointer to dquots not needed anymore.
 	 */
 	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {

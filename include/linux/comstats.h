@@ -68,7 +68,7 @@ typedef struct {
 
 
 /*
- *	Board stats structure. Returns usefull info about the board.
+ *	Board stats structure. Returns useful info about the board.
  */
 
 #define	COM_MAXPANELS	8

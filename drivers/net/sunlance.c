@@ -64,7 +64,7 @@ static char *lancestr = "LANCE";
 #define	LE_C0_ERR	0x8000	/* Error: set if BAB, SQE, MISS or ME is set */
 #define	LE_C0_BABL	0x4000	/* BAB:  Babble: tx timeout. */
 #define	LE_C0_CERR	0x2000	/* SQE:  Signal quality error */
-#define	LE_C0_MISS	0x1000	/* MISS: Missed a packaed */
+#define	LE_C0_MISS	0x1000	/* MISS: Missed a packet */
 #define	LE_C0_MERR	0x0800	/* ME:   Memory error */
 #define	LE_C0_RINT	0x0400	/* Received interrupt */
 #define	LE_C0_TINT	0x0200	/* Transmitter Interrupt */
@@ -73,7 +73,7 @@ static char *lancestr = "LANCE";
 #define	LE_C0_INEA	0x0040	/* Interrupt enable */
 #define	LE_C0_RXON	0x0020	/* Receiver on */
 #define	LE_C0_TXON	0x0010	/* Transmitter on */
-#define	LE_C0_TDMD	0x0008	/* Transmiter demand */
+#define	LE_C0_TDMD	0x0008	/* Transmitter demand */
 #define	LE_C0_STOP	0x0004	/* Stop the card */
 #define	LE_C0_STRT	0x0002	/* Start the card */
 #define	LE_C0_INIT	0x0001	/* Init the card */
@@ -96,12 +96,12 @@ static char *lancestr = "LANCE";
 #define LE_T1_OWN       0x80    /* Lance owns the packet */
 #define LE_T1_ERR       0x40    /* Error summary */
 #define LE_T1_EONE      0x08    /* Error: one retry needed */
-#define LE_T1_EDEF      0x04    /* Error: defered */
+#define LE_T1_EDEF      0x04    /* Error: deferred */
 #define LE_T1_SOP       0x02    /* Start of packet */
 #define LE_T1_EOP       0x01    /* End of packet */
 
 #define LE_T3_BUF       0x8000  /* Buffer error */
-#define LE_T3_UFL       0x4000  /* Error undeflow */
+#define LE_T3_UFL       0x4000  /* Error underflow */
 #define LE_T3_LCOL      0x1000  /* Error late collision */
 #define LE_T3_CLOS      0x0800  /* Error carrier loss */
 #define LE_T3_RTY       0x0400  /* Error retry */
@@ -216,7 +216,7 @@ lance_init_ring (struct device *dev)
     int leptr;
     int i;
     
-    /* Lock out other processes while setting up harware */
+    /* Lock out other processes while setting up hardware */
     dev->tbusy = 1;
     lp->rx_new = lp->tx_new = 0;
     lp->rx_old = lp->tx_old = 0;
@@ -402,7 +402,7 @@ lance_tx (struct device *dev)
 	    if (status & LE_T3_CLOS) lp->stats.tx_carrier_errors++;
 	    if (status & LE_T3_LCOL) lp->stats.tx_window_errors++;
 
-	    /* buffer errors and underflows turn off the transmiter */
+	    /* buffer errors and underflows turn off the transmitter */
 	    /* Restart the adapter */
 	    if (status & (LE_T3_BUF|LE_T3_UFL)){
 		lp->stats.tx_fifo_errors++;
@@ -590,7 +590,7 @@ lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	    if (tickssofar < 100)
 		    status = -1;
 	    else {
-		    printk ("%s: trasmit timed out, status %04x, resetting\n",
+		    printk ("%s: transmit timed out, status %04x, resetting\n",
 			    dev->name, ll->rdp);
 		    lance_reset (dev);
 	    }

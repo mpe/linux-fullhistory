@@ -155,7 +155,7 @@ tx_full and tbusy flags.
 */
 
 /* Memory accessed from LANCE card must be aligned on 8-byte boundaries.
-   But we can't believe that kmalloc()'ed memory satisfyes it. -- SAW */
+   But we can't believe that kmalloc()'ed memory satisfies it. -- SAW */
 #define LANCE_KMALLOC(x) \
 	((void *) (((unsigned long)kmalloc((x)+7, GFP_DMA | GFP_KERNEL)+7) & ~7))
 

@@ -24,7 +24,7 @@
  *  1.5.3 March 9, 1996 Christoph Lameter: Fixed 115.2K Support. Memory
  *		allocation harmonized with 1.3.X Series.
  *  1.5.4 March 30, 1996 Christoph Lameter: Fixup for 1.3.81. Use init_bh
- *		instead of direct assigment to kernel arrays.
+ *		instead of direct assignment to kernel arrays.
  *  1.5.5 April 5, 1996 Major device numbers corrected.
  *              Mike McLagan<mike.mclagan@linux.org>: Add setup
  *              variable handling, instead of using the old pcxxconfig.h
@@ -946,7 +946,7 @@ void pcxx_setup(char *str, int *ints)
 		numcards, board_desc[board.type], board_mem[board.type], 
 		board.numports, board.port, (unsigned int) board.membase);
 
-	/* keep track of my inital minor number */
+	/* keep track of my initial minor number */
         if (numcards)
 		boards[numcards].first_minor = boards[numcards-1].first_minor + boards[numcards-1].numports;
 	else

@@ -2,7 +2,7 @@
 # Sound driver configuration
 #
 #--------
-# There is another confic script which is compatible with rest of
+# There is another config script which is compatible with rest of
 # the kernel. It can be activated by running 'make mkscript' in this
 # directory. Please note that this is an _experimental_ feature which
 # doesn't work with all cards (PSS, SM Wave, AudioTriX Pro).

@@ -1,6 +1,6 @@
 /* $Id: pconf.h,v 1.2 1995/11/25 02:32:20 davem Exp $
  * pconf.h: pathconf() and fpathconf() defines for SunOS
- *          system call compatability.
+ *          system call compatibility.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -13,7 +13,7 @@
 
 #define _PCONF_LINK       1 /* Max number of links to an object        */
 #define _PCONF_CANON      2 /* TTY input buffer line size              */
-#define _PCONF_INPUT      3 /* Biggest packet a tty can inbibe at once */
+#define _PCONF_INPUT      3 /* Biggest packet a tty can imbibe at once */
 #define _PCONF_NAME       4 /* Filename length max                     */
 #define _PCONF_PATH       5 /* Max size of a pathname                  */
 #define _PCONF_PIPE       6 /* Buffer size for a pipe                  */

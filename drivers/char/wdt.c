@@ -48,7 +48,7 @@ int irq=14;
 #define WD_TIMO (100*60)		/* 1 minute */
 
 /*
- *	Programming suppoort
+ *	Programming support
  */
  
 static void wdt_ctr_mode(int ctr, int mode)
@@ -213,7 +213,7 @@ static struct file_operations wdt_fops = {
 	wdt_release
 };
 
-static struct miscdevice wdt_mouse=
+static struct miscdevice wdt_miscdev=
 {
 	WATCHDOG_MINOR,
 	"wdt",
@@ -221,7 +221,7 @@ static struct miscdevice wdt_mouse=
 };
 
 #ifdef CONFIG_WDT_501
-static struct miscdevice temp_mouse=
+static struct miscdevice temp_miscdev=
 {
 	TEMP_MINOR,
 	"temperature",
@@ -239,9 +239,9 @@ int init_module(void)
 		printk("IRQ %d is not free.\n", irq);
 		return -EIO;
 	}
-	mouse_register(&wdt_mouse);
+	misc_register(&wdt_miscdev);
 #ifdef CONFIG_WDT_501	
-	mouse_register(&temp_mouse);
+	misc_register(&temp_miscdev);
 #endif	
 	request_region(io, 8, "wdt501");
 	return 0;
@@ -249,9 +249,9 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	mouse_deregister(&wdt_mouse);
+	misc_deregister(&wdt_miscdev);
 #ifdef CONFIG_WDT_501	
-	misc_deregister(&temp_mouse);
+	misc_deregister(&temp_miscdev);
 #endif	
 	release_region(io,8);
 	free_irq(irq, NULL);
@@ -267,9 +267,9 @@ int wdt_init(void)
 		printk("IRQ %d is not free.\n", irq);
 		return -EIO;
 	}
-	mouse_register(&wdt_mouse);
+	misc_register(&wdt_miscdev);
 #ifdef CONFIG_WDT_501	
-	misc_register(&temp_mouse);
+	misc_register(&temp_miscdev);
 #endif	
 	request_region(io, 8, "wdt501");
 	return 0;

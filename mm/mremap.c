@@ -155,11 +155,11 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 
 /*
  * Expand (or shrink) an existing mapping, potentially moving it at the
- * same time (controlled by the "may_move" flag and available VM space)
+ * same time (controlled by the MREMAP_MAYMOVE flag and available VM space)
  */
 asmlinkage unsigned long sys_mremap(unsigned long addr,
 	unsigned long old_len, unsigned long new_len,
-	int may_move)
+	unsigned long flags)
 {
 	struct vm_area_struct *vma;
 
@@ -215,7 +215,7 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	 * We weren't able to just expand or shrink the area,
 	 * we need to create a new one and move it..
 	 */
-	if (!may_move)
-		return -ENOMEM;
-	return move_vma(vma, addr, old_len, new_len);
+	if (flags & MREMAP_MAYMOVE)
+		return move_vma(vma, addr, old_len, new_len);
+	return -ENOMEM;
 }

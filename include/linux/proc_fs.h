@@ -131,7 +131,7 @@ enum scsi_directory_inos {
 	PROC_SCSI_PPA,
 	PROC_SCSI_SCSI_DEBUG,	
 	PROC_SCSI_NOT_PRESENT,
-	PROC_SCSI_FILE,                        /* I'm asuming here that we */
+	PROC_SCSI_FILE,                        /* I'm assuming here that we */
 	PROC_SCSI_LAST = (PROC_SCSI_FILE + 16) /* won't ever see more than */
 };                                             /* 16 HBAs in one machine   */
 

@@ -148,7 +148,7 @@ static void internal_setup(int board, char *str, int *ints) {
  *
  * Purpose : LILO command line initialization of the overrides array,
  * 
- * Inputs : str - unused, ints - array of integer paramters with ints[0] 
+ * Inputs : str - unused, ints - array of integer parameters with ints[0] 
  * 	equal to the number of ints.
  */
 
@@ -161,7 +161,7 @@ void generic_NCR5380_setup (char *str, int *ints) {
  *
  * Purpose : LILO command line initialization of the overrides array,
  * 
- * Inputs : str - unused, ints - array of integer paramters with ints[0] 
+ * Inputs : str - unused, ints - array of integer parameters with ints[0] 
  * 	equal to the number of ints.
  */
 
@@ -260,13 +260,13 @@ int generic_NCR5380_release_resources(struct Scsi_Host * instance)
 /*
  * Function : int generic_NCR5380_biosparam(Disk * disk, kdev_t dev, int *ip)
  *
- * Purpose : Generates a BIOS / DOS compatable H-C-S mapping for 
+ * Purpose : Generates a BIOS / DOS compatible H-C-S mapping for 
  *	the specified device / size.
  * 
  * Inputs : size = size of device in sectors (512 bytes), dev = block device
  *	major / minor, ip[] = {heads, sectors, cylinders}  
  *
- * Returns : allways 0 (success), initializes ip
+ * Returns : always 0 (success), initializes ip
  *	
  */
 
@@ -375,7 +375,7 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
 	printk("53C400r: no 53C80 gated irq after transfer");
 #if (NDEBUG & NDEBUG_C400_PREAD)
     else
-	printk("53C400r: Got 53C80 interupt and tried to clear it\n");
+	printk("53C400r: Got 53C80 interrupt and tried to clear it\n");
 #endif
 
 /* DON'T DO THIS - THEY NEVER ARRIVE!
@@ -499,7 +499,7 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
      */
     if (i) {
 #if (NDEBUG & NDEBUG_C400_PWRITE)
-	prink("53C400w: got 53C80 gated irq (last block)\n");
+	printk("53C400w: got 53C80 gated irq (last block)\n");
 #endif
 	if (!((i=NCR5380_read(BUS_AND_STATUS_REG)) & BASR_END_DMA_TRANSFER))
 	    printk("53C400w: No END OF DMA bit - WHOOPS! BASR=%0x\n",i);

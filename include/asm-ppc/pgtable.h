@@ -19,7 +19,7 @@
  * simplest way to split this was literally in half.  Also, life is so
  * much simpler for the kernel if the machine hardware resources are
  * always mapped in.  Thus, some additional space is given up to the
- * kernel space to accomodate this.
+ * kernel space to accommodate this.
  *
  * CAUTION! Some of the trade-offs make sense for the PreP platform on
  * which this code was originally developed.  When it migrates to other
@@ -35,7 +35,7 @@
  * of the logical address.  These 4 bits address a "virtual segment id"
  * which is unique per task/page combination for user addresses and
  * fixed for the kernel addresses.  Thus, the kernel space can be simply
- * shared [indeed at low overhead] amoung all tasks.
+ * shared [indeed at low overhead] among all tasks.
  *
  * The basic virtual address space is thus:
  *

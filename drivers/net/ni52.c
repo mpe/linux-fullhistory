@@ -38,7 +38,7 @@
  *   The internal sysbus seems to be slow. So we often lose packets because of
  *   overruns while receiving from a fast remote host. 
  *   This can slow down TCP connections. Maybe the newer ni5210 cards are better.
- *   my experinece is, that if a machine sends with more then about 500-600K/s
+ *   my experience is, that if a machine sends with more then about 500-600K/s
  *   the fifo/sysbus overflows.
  * 
  * IMPORTANT NOTE:
@@ -166,7 +166,7 @@ sizeof(nop_cmd) = 8;
     if(!p->scb->cmd_cuc) break; \
     DELAY_18(); \
     if(i == 16383) { \
-      printk("%s: scb_cmd timed out: %04x,%04x .. disabeling i82586!!\n",dev->name,p->scb->cmd_cuc,p->scb->cus); \
+      printk("%s: scb_cmd timed out: %04x,%04x .. disabling i82586!!\n",dev->name,p->scb->cmd_cuc,p->scb->cus); \
        if(!p->reseted) { p->reseted = 1; ni_reset586(); } } } }
 
 #define WAIT_4_SCB_CMD_RUC() { int i; \
@@ -174,7 +174,7 @@ sizeof(nop_cmd) = 8;
     if(!p->scb->cmd_ruc) break; \
     DELAY_18(); \
     if(i == 16383) { \
-      printk("%s: scb_cmd (ruc) timed out: %04x,%04x .. disabeling i82586!!\n",dev->name,p->scb->cmd_ruc,p->scb->rus); \
+      printk("%s: scb_cmd (ruc) timed out: %04x,%04x .. disabling i82586!!\n",dev->name,p->scb->cmd_ruc,p->scb->rus); \
        if(!p->reseted) { p->reseted = 1; ni_reset586(); } } } }
 
 #define WAIT_4_STAT_COMPL(addr) { int i; \
@@ -1234,7 +1234,7 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
       next_nop = 0;
 
     p->xmit_cmds[p->xmit_count]->cmd_status  = 0;
-	/* linkpointer of xmit-command allready points to next nop cmd */
+	/* linkpointer of xmit-command already points to next nop cmd */
     p->nop_cmds[next_nop]->cmd_link = make16((p->nop_cmds[next_nop]));
     p->nop_cmds[next_nop]->cmd_status = 0;
 

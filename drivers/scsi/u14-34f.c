@@ -3,7 +3,7 @@
  *
  *      13 Jun 1995 rev. 2.01 for linux 1.2.10
  *         HAVE_OLD_UX4F_FIRMWARE should be defined for U34F boards when
- *         the firmware prom is not the lastest one (28008-006).
+ *         the firmware prom is not the latest one (28008-006).
  *
  *      11 Mar 1995 rev. 2.00 for linux 1.2.0
  *          Fixed a bug which prevented media change detection for removable

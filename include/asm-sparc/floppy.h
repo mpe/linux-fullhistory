@@ -94,7 +94,7 @@ static int FDC2=-1;
 #define N_FDC    1
 #define N_DRIVE  8
 
-/* No 64k boundry crossing problems on the Sparc. */
+/* No 64k boundary crossing problems on the Sparc. */
 #define CROSS_64KB(a,s) (0)
 
 /* Routines unique to each controller type on a Sun. */
@@ -345,7 +345,7 @@ static int sun_floppy_init(void)
 	fdc_status = &sun_fdc->status_82077;
 
 	/* This controller detection technique is from the netbsd
-	 * Sun floppy driver, origionally Chris Torek of BSDI came
+	 * Sun floppy driver, originally Chris Torek of BSDI came
 	 * up with this.  It seems to work pretty well.
 	 */
 	if(sun_fdc->dor_82077 == 0x80) {
@@ -359,7 +359,7 @@ static int sun_floppy_init(void)
 	}
 
 	/* P3: The only reliable way which I found for ejection
-	 * of boot floppy. AUXIO_FLPY_EJCT is not enougth alone.
+	 * of boot floppy. AUXIO_FLPY_EJCT is not enough alone.
 	 */
 	set_auxio(AUXIO_FLPY_EJCT, 0); /* Bring EJECT line to normal. */
 	udelay(1000);

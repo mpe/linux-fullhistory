@@ -120,7 +120,7 @@ default boot name while booting):
 	cdu31a=<base address>,<interrupt>[,PAS]
 
 The base address needs to have "0x" in front of it, since it is in
-hex.  For instanc, to configure a drive at address 320 on interrupt 5,
+hex.  For instance, to configure a drive at address 320 on interrupt 5,
 use the following:
 
 	cdu31a=0x320,5

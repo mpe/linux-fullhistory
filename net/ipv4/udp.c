@@ -45,7 +45,7 @@
  *	Arnt Gulbrandsen 	:	New udp_send and stuff
  *		Alan Cox	:	Cache last socket
  *		Alan Cox	:	Route cache
- *		Jon Peatfield	:	Minor efficientcy fix to sendto().
+ *		Jon Peatfield	:	Minor efficiency fix to sendto().
  *		Mike Shaver	:	RFC1122 checks.
  *		Alan Cox	:	Nonblocking error fix.
  *
@@ -58,7 +58,7 @@
  
 /* RFC1122 Status:
    4.1.3.1 (Ports):
-     SHOULD send ICMP_PORT_UNREACHABLE in reponse to datagrams to 
+     SHOULD send ICMP_PORT_UNREACHABLE in response to datagrams to 
        an un-listened port. (OK)
    4.1.3.2 (IP Options)
      MUST pass IP options from IP -> application (OK)
@@ -73,7 +73,7 @@
    4.1.3.5 (UDP Multihoming)
      MUST allow application to specify source address (OK)
      SHOULD be able to communicate the chosen src addr up to application
-       when application doesn't choose (NOT YET - doesnt seem to be in the BSD API)
+       when application doesn't choose (NOT YET - doesn't seem to be in the BSD API)
        [Does opening a SOCK_PACKET and snooping your output count 8)]
    4.1.3.6 (Invalid Addresses)
      MUST discard invalid source addresses (NOT YET -- will be implemented
@@ -262,7 +262,7 @@ static void udp_getfrag(const void *p, __u32 saddr, char * to, unsigned int offs
 }
 
 /*
- *	Uncheckummed UDP is sufficiently criticial to stuff like ATM video conferencing
+ *	Unchecksummed UDP is sufficiently critical to stuff like ATM video conferencing
  *	that we use two routines for this for speed. Probably we ought to have a CONFIG_FAST_NET
  *	set for >10Mb/second boards to activate this sort of coding. Timing needed to verify if
  *	this is a valid decision.
@@ -640,7 +640,7 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		   go and stomp on the garbage sender... */
 
 	  /* RFC1122: OK.  Discards the bad packet silently (as far as */
-	  /* the network is concered, anyway) as per 4.1.3.4 (MUST). */
+	  /* the network is concerned, anyway) as per 4.1.3.4 (MUST). */
 
 		NETDEBUG(printk("UDP: bad checksum. From %08lX:%d to %08lX:%d ulen %d\n",
 		       ntohl(saddr),ntohs(uh->source),

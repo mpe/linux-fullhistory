@@ -144,7 +144,7 @@ void flush_thread(void)
  * Parent -->  %o0 == childs  pid, %o1 == 0
  * Child  -->  %o0 == parents pid, %o1 == 1
  *
- * NOTE: We have a seperate fork kpsr/kwim because
+ * NOTE: We have a separate fork kpsr/kwim because
  *       the parent could change these values between
  *       sys_fork invocation and when we reach here
  *       if the parent should sleep while trying to

@@ -68,7 +68,7 @@
 #define SEEQSTAT_FIFO_EMPTY	(0x4000)
 #define SEEQSTAT_FIFO_DIR	(0x8000)	/* 1=read, 0=write */
 
-#define SEEQCFG1_BUFFER_MASK	(0x000f)	/* define what mapps into the BUFFER register */
+#define SEEQCFG1_BUFFER_MASK	(0x000f)	/* define what maps into the BUFFER register */
 #define SEEQCFG1_BUFFER_MAC0	(0x0000)	/* MAC station addresses 0-5 */
 #define SEEQCFG1_BUFFER_MAC1	(0x0001)
 #define SEEQCFG1_BUFFER_MAC2	(0x0002)

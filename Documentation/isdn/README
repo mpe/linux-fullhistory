@@ -270,7 +270,7 @@ README for the ISDN-subsystem
        ATTENTION:
 
        Due to limited hardware-capabilities, there is no way to check the
-       existence of a card. Therefore you need to be shure your card's setup
+       existence of a card. Therefore you need to be sure your card's setup
        is correct. Also there are bugs in the printed manual of some newer
        16.3 cards. The manual tells the port has to be 0x180. THIS IS WRONG!!
        0xd80 is the correct value! Have a look to the kernel-syslog. With
@@ -317,7 +317,7 @@ README for the ISDN-subsystem
 
          m0,i0,p0,d0 ... mn,in,pn,dn have the same meanings like the
                                      parameters described for the kernel-
-                                     version above. Watchout: different
+                                     version above. Watch out: different
                                      sequence!
 
      3.2.2 ICN driver.
@@ -369,8 +369,8 @@ README for the ISDN-subsystem
      the card must be appended to the command line.
 
      -> The two LEDs at the back cover of the card (ICN-2B: 4 LEDs) must be
-        blinking intermittingly now. If a connection is up, the corresponding
-        led lits continuously.
+        blinking intermittently now. If a connection is up, the corresponding
+        led is lit continuously.
 
    b) If you only intend to use ttys, you are nearly ready now.
 

@@ -4,7 +4,7 @@ Changelog for version 3.5.2
 Since 3.5.1
 - TB Maui initialization support
 Since 3.5
-- Improved handling of playback underrunt situations.
+- Improved handling of playback underrun situations.
 
 Since 3.5-beta10
 - Bug fixing
@@ -82,7 +82,7 @@ configure to handle this.
 modularized version. They can be enabled by using init_trace=1 in
 the insmod command line (insmod sound init_trace=1).
 - More AIX stuff.
-- Added support for syncronizing dsp/audio devices with /dev/sequencer.
+- Added support for synchronizing dsp/audio devices with /dev/sequencer.
 - mmap() support for dsp/audio devices.
 
 Since 3.5-alpha5
@@ -106,13 +106,13 @@ Since 3.5-alpha2
 - Fixed random protection fault in gus_wave.c
 
 Since 3.5-alpha1
-- Modified to work with Linux-1.3.33 and leater
+- Modified to work with Linux-1.3.33 and later
 - Some minor changes
 
 Since 3.0.2
 - Support for CS4232 based PnP cards (AcerMagic S23 etc).
 - Full duplex support for some CS4231, CS4232 and AD1845 based cards
-(GUA MAX, AudioTrix Pro, AcerMagic S23 and many MAD16/Mozart cards
+(GUS MAX, AudioTrix Pro, AcerMagic S23 and many MAD16/Mozart cards
 having a codec mentioned above).
 - Almost fully rewritten loadable modules support.
 - Fixed some bugs.

@@ -1289,7 +1289,7 @@ _GLOBAL(flush_data_cache)
  * This routine switches between two different tasks.  The process
  * state of one is saved on it's kernel stack.  Then the state
  * of the other is restored from it's kernel stack.  The memory
- * management hardware is updated to the second processes's state.
+ * management hardware is updated to the second process's state.
  * Finally, we can return to the second process, via the 'return'.
  *
  * Note: there are two ways to get to the "going out" portion

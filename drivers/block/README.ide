@@ -43,7 +43,7 @@ NEW!	- support for secondary interface on the FGI/Holtek HT-6560B VLB i/f
 NEW!	- experimental support for various IDE chipsets
 		- use appropriate kernel command line option from list below
 NEW!	- support for drives with a stuck WRERR_STAT bit
-NEW!	- support for removeable devices, including door lock/unlock
+NEW!	- support for removable devices, including door lock/unlock
 NEW!	- transparent support for DiskManager 6.0x and "Dynamic Disk Overlay"
 	- works with Linux fdisk, LILO, loadlin, bootln, etc..
 NEW!	- mostly transparent support for EZ-Drive disk translation software
@@ -536,7 +536,7 @@ Sleepy# hdparm -t /dev/hda
  Estimating raw driver speed: 16 MB in  2.51 seconds = 6.37 MB/sec
 
 > Not sure I was much help to you, but I'm glad to hear you got it
-> working--and pretty impressivly at that. :-)
+> working--and pretty impressively at that. :-)
 
 Mmm, well, about that... I've found that my Connor drive (/dev/hda) is
 pretty fast when I have my system configured like this. I'm still not

@@ -1226,7 +1226,7 @@ static __u16 ipx_set_checksum(ipx_packet *packet,int length)
 	sum=(sum&0xffff)+(sum>>16);
 
 	/*
-	 *	It's a pitty there's no concept of carry in C 
+	 *	It's a pity there's no concept of carry in C 
 	 */
 
 	if(sum>=0x10000)
@@ -1505,7 +1505,7 @@ static int ipx_get_info(char *buffer, char **start, off_t offset,
 					s->protinfo.af_ipx.dest_addr.node[5],
 					htons(s->protinfo.af_ipx.dest_addr.sock));
 			}
-			len += sprintf (buffer+len,"%08lX  %08lX  ", 
+			len += sprintf (buffer+len,"%08X  %08X  ", 
 				s->wmem_alloc, s->rmem_alloc);
 			len += sprintf (buffer+len,"%02X     %03d\n", 
 				s->state, SOCK_INODE(s->socket)->i_uid);

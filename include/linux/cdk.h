@@ -36,8 +36,8 @@
  */
 
 /*
- *	Define the set of importrant shared memory addresses. These are
- *	required to intialize the board and get things started. All of these
+ *	Define the set of important shared memory addresses. These are
+ *	required to initialize the board and get things started. All of these
  *	addresses are relative to the start of the shared memory.
  */
 #define	CDK_SIGADDR	0x200
@@ -204,7 +204,7 @@ typedef struct cdkmem {
 
 /*
  *	Define the port setting structure, and all those defines that go along
- *	with it. Basically this structure defines the charcateristics of this
+ *	with it. Basically this structure defines the characteristics of this
  *	port: baud rate, chars, parity, input/output char cooking etc.
  */
 typedef struct asyport {
@@ -374,7 +374,7 @@ typedef struct {
 /*
  *	Define the stats structure kept for each port. This is a useful set
  *	of data collected for each port on the slave. The A_GETSTATS command
- *	is used to retrive this data from the slave.
+ *	is used to retrieve this data from the slave.
  */
 typedef struct asystats {
 	unsigned long	opens;
@@ -430,7 +430,7 @@ typedef struct cdkctrl {
  *	Each device on the slave passes data to and from the host via a ring
  *	queue in shared memory. Define a ring queue structure to hold the
  *	vital information about each ring queue. Two ring queues will be
- *	allocated for each port, one for reveice data and one for transmit
+ *	allocated for each port, one for receive data and one for transmit
  *	data.
  */
 typedef struct cdkasyrq {
@@ -443,7 +443,7 @@ typedef struct cdkasyrq {
 /*
  *	Each asynchronous port is defined in shared memory by the following
  *	structure. It contains a control block to command a device, and also
- *	the neccessary data channel information as well.
+ *	the necessary data channel information as well.
  */
 typedef struct cdkasy {
 	cdkctrl_t	ctrl;
@@ -461,7 +461,7 @@ typedef struct cdkasy {
 
 /*
  *	Define the set of ioctls used by the driver to do special things
- *	to the board. These include interrupting it, and initializeing
+ *	to the board. These include interrupting it, and initializing
  *	the driver after board startup and shutdown.
  */
 #include <linux/ioctl.h>

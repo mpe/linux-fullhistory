@@ -75,7 +75,7 @@
  *	Arnt Gulbrandsen	:	ip_build_xmit
  *		Alan Cox	:	Per socket routing cache
  *		Alan Cox	:	Fixed routing cache, added header cache.
- *		Alan Cox	:	Loopback didnt work right in original ip_build_xmit - fixed it.
+ *		Alan Cox	:	Loopback didn't work right in original ip_build_xmit - fixed it.
  *		Alan Cox	:	Only send ICMP_REDIRECT if src/dest are the same net.
  *		Alan Cox	:	Incoming IP option handling.
  *		Alan Cox	:	Set saddr on raw output frames as per BSD.
@@ -572,7 +572,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #ifdef CONFIG_IP_MROUTE		 
 		/*
 		 *	Forward the last copy to the multicast router. If
-		 *	there is a pending raw deliery however make a copy
+		 *	there is a pending raw delivery however make a copy
 		 *	and forward that.
 		 */
 		 

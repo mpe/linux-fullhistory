@@ -32,7 +32,7 @@
 /*
  * the following defines are the initial values used when the 
  * bridge is booted.  These may be overridden when this bridge is
- * not the root bridge.  These are the reccomended default values 
+ * not the root bridge.  These are the recommended default values 
  * from the 802.1d specification.
  */
 #define BRIDGE_MAX_AGE		20

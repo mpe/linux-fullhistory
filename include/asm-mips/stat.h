@@ -15,7 +15,7 @@ struct old_stat {
 	unsigned int	st_atime, st_res1;
 	unsigned int	st_mtime, st_res2;
 	unsigned int	st_ctime, st_res3;
-	unsigned int	st_blkize;
+	unsigned int	st_blksize;
 	int		st_blocks;
 	unsigned int	st_flags;
 	unsigned int	st_gen;

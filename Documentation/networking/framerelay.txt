@@ -5,7 +5,7 @@ are assigned by your network supplier, they give you the number/numbers of
 the Virtual Connections (VC) assigned to you.
 
 Each DLCI is a point-to-point link between your machine and a remote one.
-As such, a seperate device is needed to accomodate the routing.  Within the
+As such, a separate device is needed to accommodate the routing.  Within the
 net-tools archives is 'dlcicfg'.  This program will communicate with the
 base "DLCI" device, and create new net devices named 'dlci00', 'dlci01'... 
 The configuration script will ask you how many DLCI's you need, as well as

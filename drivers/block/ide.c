@@ -108,13 +108,13 @@
  *			add flag to ignore WRERR_STAT for some drives
  *			 courtesy of David.H.West@um.cc.umich.edu
  *			assembly syntax tweak to vlb_sync
- *			removeable drive support from scuba@cs.tu-berlin.de
+ *			removable drive support from scuba@cs.tu-berlin.de
  *			add transparent support for DiskManager-6.0x "Dynamic
  *			 Disk Overlay" (DDO), most of this is in genhd.c
  *			eliminate "multiple mode turned off" message at boot
  *  Version 4.10	fix bug in ioctl for "hdparm -c3"
  *			fix DM6:DDO support -- now works with LILO, fdisk, ...
- *			don't treat some naughty WD drives as removeable
+ *			don't treat some naughty WD drives as removable
  *  Version 4.11	updated DM6 support using info provided by OnTrack
  *  Version 5.00	major overhaul, multmode setting fixed, vlb_sync fixed
  *			added support for 3rd/4th/alternative IDE ports
@@ -330,7 +330,7 @@ static void init_hwif_data (unsigned int index)
 	hwif->ctl_port	= hwif->io_base ? hwif->io_base+0x206 : 0x000;
 #ifdef CONFIG_BLK_DEV_HD
 	if (hwif->io_base == HD_DATA)
-		hwif->noprobe = 1; /* may be overriden by ide_setup() */
+		hwif->noprobe = 1; /* may be overridden by ide_setup() */
 #endif /* CONFIG_BLK_DEV_HD */
 	hwif->major	= ide_hwif_to_major[index];
 	hwif->name[0]	= 'i';
@@ -1783,7 +1783,7 @@ static int ide_open(struct inode * inode, struct file * filp)
 	if (drive->media == ide_tape)
 		return idetape_blkdev_open (inode, filp, drive);
 #endif	/* CONFIG_BLK_DEV_IDETAPE */
-	if (drive->removeable) {
+	if (drive->removable) {
 		byte door_lock[] = {WIN_DOORLOCK,0,0,0};
 		struct request rq;
 		check_disk_change(inode->i_rdev);
@@ -1822,7 +1822,7 @@ static void ide_release(struct inode * inode, struct file * file)
 			return;
 		}
 #endif	/* CONFIG_BLK_DEV_IDETAPE */
-		if (drive->removeable) {
+		if (drive->removable) {
 			byte door_unlock[] = {WIN_DOORUNLOCK,0,0,0};
 			struct request rq;
 			invalidate_buffers(inode->i_rdev);
@@ -2107,7 +2107,7 @@ static int ide_check_media_change (kdev_t i_rdev)
 	if (drive->media == ide_cdrom)
 		return ide_cdrom_check_media_change (drive);
 #endif	/* CONFIG_BLK_DEV_IDECD */
-	if (drive->removeable) /* for disks */
+	if (drive->removable) /* for disks */
 		return 1;	/* always assume it was changed */
 	return 0;
 }
@@ -2195,7 +2195,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 				printk ("CDROM drive\n");
 				drive->media = ide_cdrom;
  				drive->present = 1;
-				drive->removeable = 1;
+				drive->removable = 1;
 				return;
 #else
 				printk ("CDROM ");
@@ -2207,7 +2207,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 				if (idetape_identify_device (drive,id)) {
 					drive->media = ide_tape;
 					drive->present = 1;
-					drive->removeable = 1;
+					drive->removable = 1;
 					if (drive->autotune != 2 && HWIF(drive)->dmaproc != NULL) {
 						if (!HWIF(drive)->dmaproc(ide_dma_check, drive))
 							printk(", DMA");
@@ -2234,15 +2234,15 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	}
 #endif /* CONFIG_BLK_DEV_IDEATAPI */
 
-	/* check for removeable disks (eg. SYQUEST), ignore 'WD' drives */
-	if (id->config & (1<<7)) {	/* removeable disk ? */
+	/* check for removable disks (eg. SYQUEST), ignore 'WD' drives */
+	if (id->config & (1<<7)) {	/* removable disk ? */
 		if (id->model[0] != 'W' || id->model[1] != 'D')
-			drive->removeable = 1;
+			drive->removable = 1;
 	}
 
-	/* SunDisk drives: treat as non-removeable, force one unit */
+	/* SunDisk drives: treat as non-removable, force one unit */
 	if (id->model[0] == 'S' && id->model[1] == 'u') {
-		drive->removeable = 0;
+		drive->removable = 0;
 		if (drive->select.all & (1<<4)) {
 		    drive->present = 0;
 		    return;
@@ -2462,7 +2462,7 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 }
 
 /*
- * probe_for_drive() tests for existance of a given drive using do_probe().
+ * probe_for_drive() tests for existence of a given drive using do_probe().
  *
  * Returns:	0  no device was found
  *		1  device was found (note: drive->present might still be 0)

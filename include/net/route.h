@@ -55,7 +55,7 @@
  * Prevents LRU trashing, entries considered equivalent,
  * if the difference between last use times is less then this number.
  */
-#define RT_CACHE_BUBBLE_THRESHOULD	(HZ*5)
+#define RT_CACHE_BUBBLE_THRESHOLD	(HZ*5)
 
 #include <linux/route.h>
 

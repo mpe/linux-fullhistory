@@ -23,7 +23,7 @@
 
 /*	PROCEDURE TO REPORT NEW PCI DEVICES
  * We are trying to collect informations on new PCI devices, using
- * the standart PCI identification procedure. If some warning is
+ * the standard PCI identification procedure. If some warning is
  * displayed at boot time, please report 
  *	- /proc/pci
  *	- your exact hardware description. Try to find out

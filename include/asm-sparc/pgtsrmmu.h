@@ -160,7 +160,7 @@ extern inline unsigned int srmmu_get_faddr(void)
 	return retval;
 }
 
-/* This is guarenteed on all SRMMU's. */
+/* This is guaranteed on all SRMMU's. */
 extern inline void srmmu_flush_whole_tlb(void)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :

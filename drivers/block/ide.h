@@ -309,7 +309,7 @@ typedef struct ide_drive_s {
 	unsigned noprobe 	: 1;	/* from:  hdx=noprobe */
 	unsigned keep_settings  : 1;	/* restore settings after drive reset */
 	unsigned busy		: 1;	/* currently doing revalidate_disk() */
-	unsigned removeable	: 1;	/* 1 if need to do check_media_change */
+	unsigned removable	: 1;	/* 1 if need to do check_media_change */
 	unsigned using_dma	: 1;	/* disk is using dma for read/write */
 	unsigned forced_geom	: 1;	/* 1 if hdx=c,h,s was given at boot */
 	unsigned unmask		: 1;	/* flag: okay to unmask other irqs */
@@ -420,7 +420,7 @@ typedef struct hwif_s {
 	unsigned	no_unmask  : 1;	/* disallow setting unmask bits */
 	unsigned	got_irq    : 1;	/* 1 = already alloc'd our irq */
 #ifdef CONFIG_BLK_DEV_PROMISE
-	unsigned	is_promise2: 1;	/* 2nd i/f on promose DC4030 */
+	unsigned	is_promise2: 1;	/* 2nd i/f on promise DC4030 */
 #endif /* CONFIG_BLK_DEV_PROMISE */
 #if (DISK_RECOVERY_TIME > 0)
 	unsigned long	last_time;	/* time when previous rq was done */
@@ -621,7 +621,7 @@ void ide_cdrom_setup (ide_drive_t *);
  *	idetape_identify_device is called during device probing stage to
  *	probe for an ide atapi tape drive and to initialize global variables
  *	in ide-tape.c which provide the link between the character device
- *	and the correspoding block device.
+ *	and the corresponding block device.
  *
  *	Returns 1 if an ide tape was detected and is supported.
  *	Returns 0 otherwise.

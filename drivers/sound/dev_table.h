@@ -43,7 +43,7 @@ extern int sound_started;
 
 struct driver_info {
 	char *driver_id;
-	int card_subtype;	/* Driver spesific. Usually 0 */
+	int card_subtype;	/* Driver specific. Usually 0 */
 	int card_type;		/*	From soundcard.h	*/
 	char *name;
 	long (*attach) (long mem_start, struct address_info *hw_config);
@@ -521,7 +521,7 @@ void sound_setup (char *str, int *ints);
 
 int sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan);
 void sound_free_dmap (int dev, struct dma_buffparms *dmap);
-extern int soud_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc *info);
+extern int sound_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc *info);
 void install_pnp_sounddrv(struct pnp_sounddev *drv);
 int sndtable_probe (int unit, struct address_info *hw_config);
 int sndtable_init_card (int unit, struct address_info *hw_config);

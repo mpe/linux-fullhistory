@@ -744,7 +744,7 @@ midi_synth_send_sysex (int dev, unsigned char *bytes, int len)
       if (!midi_devs[orig_dev]->putc (orig_dev, bytes[i]))
 	{
 /*
- * Hardware leve buffer is full. Abort the sysex message.
+ * Hardware level buffer is full. Abort the sysex message.
  */
 
 	  int             timeout = 0;

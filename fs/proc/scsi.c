@@ -195,7 +195,7 @@ static int proc_scsilseek(struct inode * inode, struct file * file,
 	return(file->f_pos);
     case 2:		     /* This ugly hack allows us to    */
 	if (offset)	     /* to determine the length of the */
-	    return(-EINVAL); /* file and then later savely to  */ 
+	    return(-EINVAL); /* file and then later safely to  */ 
 	proc_readscsi(inode, file, 0, -1); /* seek in it       */ 
 	return(file->f_pos);
     default:

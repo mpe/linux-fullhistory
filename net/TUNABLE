@@ -51,7 +51,7 @@ IP_FRAG_TIME		Time we hold a fragment for. (tunable)
 PORT_MASQ_BEGIN		First port reserved for masquerade (tunable)
 PORT_MASQ_END		Last port used for masquerade	(tunable)
 MASQUERADE_EXPIRE_TCP_FIN	Time we keep a masquerade for after a FIN
-MASUQERADE_EXPIRE_UDP	Time we keep a UDP masquerade for (tunable)
+MASQUERADE_EXPIRE_UDP	Time we keep a UDP masquerade for (tunable)
 MAXVIFS			Maximum mrouted vifs (1-32)
 MFC_LINES		Lines in the multicast router cache (tunable)
 SK_RMEM_MAX		Max memory a socket owns for receive (tunable)

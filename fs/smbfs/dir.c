@@ -136,7 +136,7 @@ smb_dir_read(struct inode *inode, struct file *filp, char *buf, int count)
  *  count   ---  Number of entries to be read. Should indicate the total 
  *               buffer space available for filling with dirents.
  * Return values:
- *     < 0     ---  An error occured (linux/errno.h).
+ *     < 0     ---  An error occurred (linux/errno.h).
  *     = 0     ---
  *     > 0     ---  Success, amount of bytes written to dirent.
  * Notes:

@@ -58,7 +58,7 @@ butions), which must be a valid block device with major number 29 and reside
 in directory /dev. To mount a CD-ROM, your kernel needs to have the ISO9660-
 filesystem support included.
 
-PLEASE NOTE: aztcd.c has been developped in parallel to the linux kernel,
+PLEASE NOTE: aztcd.c has been developed in parallel to the linux kernel,
 which had and is having many major and minor changes which are not backward
 compatible. Quite definitely aztcd.c version 1.80 and newer will NOT work
 in kernels older than 1.3.33. So please always use the most recent version
@@ -110,7 +110,7 @@ filesystem, you have to recompile your kernel:
   Users of other drives should read chapter OTHER DRIVES of this file.
   You also can configure that address by kernel boot parameter aztcd=... 
 - There are some other points, which may be configured, e.g. auto-eject the
-  CD when umounting a drive, tray locking etc., see aztcd.h for details.
+  CD when unmounting a drive, tray locking etc., see aztcd.h for details.
 - Build a new kernel, configure it for 'Aztech/Orchid/Okano/Wearnes support' 
   (if you want aztcd to be part of the kernel). Do not configure it for
   'Aztech... support', if you want to use aztcd as a run time loadable module. 
@@ -176,7 +176,7 @@ soundcard and CDROM, then warm boot (or use loadlin) their PC to start
 Linux.
 Support for the CDROM-interface of SoundWave32-soundcards is directly
 implemented in the AZTECH driver. Please edit /usr/src/linux/include/aztdc.h,
-uncomment line '#define AZT_SW32' and set the appropiate value for
+uncomment line '#define AZT_SW32' and set the appropriate value for
 AZT_BASE_ADDR and AZT_SW32_BASE_ADDR. This support was tested with an Orchid
 CDS-3110 connected to a SoundWave32.
 If you want your soundcard to be supported, find out, how it needs to be

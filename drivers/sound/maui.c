@@ -193,7 +193,7 @@ download_code (void)
 
 		if (c != 0x80)
 		  {
-		    printk ("Doanload not acknowledged\n");
+		    printk ("Download not acknowledged\n");
 		    return 0;
 		  }
 		else if (!(lines++ % 10))
@@ -463,7 +463,7 @@ attach_maui (long mem_start, struct address_info *hw_config)
       struct synth_operations *synth;
 
       /*
-       * Intercept patch loading calls so that they canbe handled
+       * Intercept patch loading calls so that they can be handled
        * by the Maui driver.
        */
 

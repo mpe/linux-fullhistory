@@ -124,7 +124,7 @@ struct strip
 
 	struct tty_struct *tty;			/* ptr to TTY structure		*/
 	char               if_name[8];		/* Dynamically generated name	*/
-	struct device       dev;		/* Our device stucture		*/
+	struct device       dev;		/* Our device structure		*/
 };
 /************************************************************************/
 /* Utility routines for disabling and restoring interrupts		*/
@@ -385,7 +385,7 @@ There are three types of results:
    UnStuffData returns new_src < end to indicate that there are more bytes
    to be read.
 
-Note: The decoding may be dstructive, in that it may alter the source
+Note: The decoding may be destructive, in that it may alter the source
 data in the process of decoding it (this is necessary to allow a follow-on
 call to resume correctly). */
 
@@ -578,7 +578,7 @@ static void strip_write_some_more(struct tty_struct *tty)
 
 	if (strip_info->tx_left > 0) 
 	{	/* If some data left, send it */
-		/* Must disable interrupts because othewise the write_wakeup might
+		/* Must disable interrupts because otherwise the write_wakeup might
 		 * happen before we've had a chance to update the tx_left and
 		 *  tx_head fields
  		 */
@@ -867,7 +867,7 @@ static void process_packet(struct strip *strip_info)
     }
     name_end = ptr++;
 
-    /* Check for SRIP key, and skip over it */
+    /* Check for STRIP key, and skip over it */
     if (ptr[0] != ProtocolKey.c[0] ||
         ptr[1] != ProtocolKey.c[1] ||
         ptr[2] != ProtocolKey.c[2] ||
@@ -1150,7 +1150,7 @@ static int strip_close_low(struct device *dev)
 
 /* 
  *	This routine is called by DDI when the
- *	(dyamically assigned) device is registered
+ *	(dynamically assigned) device is registered
  */
  
 static int strip_dev_init(struct device *dev)

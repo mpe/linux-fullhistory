@@ -509,7 +509,7 @@ l3down(struct PStack *st,
 				  break;
 		  if (i == downsl_1tr6t_len) {
 			  if (DEBUG_1TR6 > 0) {
-				  printk(KERN_INFO "isdnl3down unhandled 1tr6 state %d primitiv %x\n", st->l3.state, pr);
+				  printk(KERN_INFO "isdnl3down unhandled 1tr6 state %d primitive %x\n", st->l3.state, pr);
 			  }
 		  } else
 			  downstatelist_1tr6t[i].rout(st, pr, ibh);

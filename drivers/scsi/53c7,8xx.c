@@ -65,11 +65,20 @@
 #include <linux/config.h>
 
 #ifdef CONFIG_SCSI_NCR53C7xx_sync
+#ifdef CONFIG_SCSI_NCR53C7xx_DISCONNECT
 #define PERM_OPTIONS (OPTION_IO_MAPPED|OPTION_DEBUG_TEST1|OPTION_DISCONNECT|\
 	OPTION_SYNCHRONOUS|OPTION_ALWAYS_SYNCHRONOUS)
 #else
+#define PERM_OPTIONS (OPTION_IO_MAPPED|OPTION_DEBUG_TEST1|\
+	OPTION_SYNCHRONOUS|OPTION_ALWAYS_SYNCHRONOUS)
+#endif
+#else
+#ifdef CONFIG_SCSI_NCR53C7xx_DISCONNECT
 #define PERM_OPTIONS (OPTION_IO_MAPPED|OPTION_DEBUG_TEST1|OPTION_DISCONNECT|\
 	OPTION_SYNCHRONOUS)
+#else
+#define PERM_OPTIONS (OPTION_IO_MAPPED|OPTION_DEBUG_TEST1|OPTION_SYNCHRONOUS)
+#endif
 #endif
 
 /*
@@ -349,7 +358,7 @@ static Scsi_Host_Template *the_template = NULL;
  * next command for a given I/T/L combination after the first has completed;
  * incurring our interrupt latency between SCSI commands.
  *
- * To allow furthur pipelining of the NCR and host CPU operation, we want 
+ * To allow further pipelining of the NCR and host CPU operation, we want 
  * to set things up so that immediately on termination of a command destined 
  * for a given LUN, we get that LUN busy again.  
  * 
@@ -361,7 +370,7 @@ static Scsi_Host_Template *the_template = NULL;
  * which starts execution immediately, inserting the command at the head 
  * of the start queue if the NCR chip is selected or reselected.
  *
- * We would chanage so that we keep a list of outstanding commands 
+ * We would change so that we keep a list of outstanding commands 
  * for each unit, rather than a single running_list.  We'd insert 
  * a new command into the right running list; if the NCR didn't 
  * have something running for that yet, we'd put it in the 
@@ -391,13 +400,13 @@ static Scsi_Host_Template *the_template = NULL;
  *
  * 3.  Parity checking is currently disabled, and a few things should 
  *     happen here now that we support synchronous SCSI transfers :
- *     1.  On soft-reset, we shuld set the EPC (Enable Parity Checking)
+ *     1.  On soft-reset, we should set the EPC (Enable Parity Checking)
  *	   and AAP (Assert SATN/ on parity error) bits in SCNTL0.
  *	
  *     2.  We should enable the parity interrupt in the SIEN0 register.
  * 
  *     3.  intr_phase_mismatch() needs to believe that message out is 
- *	   allways an "acceptable" phase to have a mismatch in.  If 
+ *	   always an "acceptable" phase to have a mismatch in.  If 
  *	   the old phase was MSG_IN, we should send a MESSAGE PARITY 
  *	   error.  If the old phase was something else, we should send
  *	   a INITIATOR_DETECTED_ERROR message.  Note that this could
@@ -422,7 +431,7 @@ static Scsi_Host_Template *the_template = NULL;
  *		command completion signaling.   Need to modify all 
  *		SDID, SCID, etc. registers, and table indirect select code 
  *		since these use bit fielded (ie 1<<target) instead of 
- *		binary encoded target ids.  Need to accomodate
+ *		binary encoded target ids.  Need to accommodate
  *		different register mappings, probably scan through
  *		the SCRIPT code and change the non SFBR register operand
  *		of all MOVE instructions.
@@ -456,7 +465,7 @@ static Scsi_Host_Template *the_template = NULL;
  * 
  * So that we only need two SCSI scripts, we need to modify things so
  * that we fixup register accesses in READ/WRITE instructions, and 
- * we'll also have to accomodate the bit vs. binary encoding of IDs
+ * we'll also have to accommodate the bit vs. binary encoding of IDs
  * with the 7xx chips.
  */
 
@@ -692,7 +701,7 @@ find_host (int host) {
  * Purpose : KGDB interface which will allow us to negotiate for 
  * 	synchronous transfers.  This ill be replaced with a more 
  * 	integrated function; perhaps a new entry in the scsi_host 
- *	structure, accessable via an ioctl() or perhaps /proc/scsi.
+ *	structure, accessible via an ioctl() or perhaps /proc/scsi.
  *
  * Inputs : host - number of SCSI host; target - number of target.
  *
@@ -728,7 +737,7 @@ request_synchronous (int host, int target) {
     cli();
     if (hostdata->initiate_sdtr & (1 << target)) {
 	restore_flags(flags);
-	printk (KERN_ALERT "target %d allready doing SDTR\n", target);
+	printk (KERN_ALERT "target %d already doing SDTR\n", target);
 	return -1;
     } 
     hostdata->initiate_sdtr |= (1 << target);
@@ -1352,7 +1361,7 @@ normal_init (Scsi_Host_Template *tpnt, int board, int chip,
  * using a 'C' call on the host processor.
  *
  * Therefore, there's no need for the NCR chip to directly manipulate
- * this data, and we should put it wherever is most convienient for 
+ * this data, and we should put it wherever is most convenient for 
  * Linux.
  */
     if (track_events) 
@@ -1858,7 +1867,7 @@ NCR53c8xx_run_tests (struct Scsi_Host *host) {
 	/* 
 	 * This is currently a .5 second timeout, since (in theory) no slow 
 	 * board will take that long.  In practice, we've seen one 
-	 * pentium which ocassionally fails with this, but works with 
+	 * pentium which occasionally fails with this, but works with 
 	 * 10 times as much?
 	 */
 
@@ -2143,7 +2152,7 @@ abnormal_finished (struct NCR53c7x0_cmd *cmd, int result) {
 	    hostdata->dsa_next), ncr_search = *ncr_prev, --left);
 
     if (left < 0) 
-	printk("scsi%d: loop detected in ncr reonncect list\n",
+	printk("scsi%d: loop detected in ncr reconnect list\n",
 	    host->host_no);
     else if (ncr_search) 
 	if (found)
@@ -2517,7 +2526,7 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	    hostdata->dsp_changed = 1;
 	    break;
 	default:
-	    printk ("scsi%d : unsupported message, resjecting\n",
+	    printk ("scsi%d : unsupported message, rejecting\n",
 		host->host_no);
 	    hostdata->dsp = hostdata->script + hostdata->E_reject_message /
 		sizeof(u32);
@@ -3391,7 +3400,7 @@ NCR53c8x0_soft_reset (struct Scsi_Host *host) {
  * Function static struct NCR53c7x0_cmd *allocate_cmd (Scsi_Cmnd *cmd)
  * 
  * Purpose : Return the first free NCR53c7x0_cmd structure (which are 
- * 	reused in a LIFO maner to minimize cache thrashing).
+ * 	reused in a LIFO manner to minimize cache thrashing).
  *
  * Side effects : If we haven't yet scheduled allocation of NCR53c7x0_cmd
  *	structures for this device, do so.  Attempt to complete all scheduled
@@ -3419,11 +3428,11 @@ allocate_cmd (Scsi_Cmnd *cmd) {
 		"         target = %d, lun = %d, %s\n",
 	    host->host_no, hostdata->num_cmds, host->can_queue,
 	    cmd->target, cmd->lun, (hostdata->cmd_allocated[cmd->target] &
-		(1 << cmd->lun)) ? "allready allocated" : "not allocated");
+		(1 << cmd->lun)) ? "already allocated" : "not allocated");
 
 /*
  * If we have not yet reserved commands for this I_T_L nexus, and
- * the device exists (as indicated by permanant Scsi_Cmnd structures
+ * the device exists (as indicated by permanent Scsi_Cmnd structures
  * being allocated under 1.3.x, or being outside of scan_scsis in 
  * 1.2.x), do so now.
  */
@@ -3568,7 +3577,7 @@ create_cmd (Scsi_Cmnd *cmd) {
     }
 
     /*
-     * New code : so that active pointers work correctly irregardless
+     * New code : so that active pointers work correctly regardless
      * 	of where the saved data pointer is at, we want to immediately
      * 	enter the dynamic code after selection, and on a non-data
      * 	phase perform a CALL to the non-data phase handler, with
@@ -3603,7 +3612,7 @@ create_cmd (Scsi_Cmnd *cmd) {
 
     /*
      * The saved data pointer is set up so that a RESTORE POINTERS message 
-     * will start the data transfer over at the beggining.
+     * will start the data transfer over at the beginning.
      */
 
     tmp->saved_data_pointer = virt_to_bus (hostdata->script) + 
@@ -3854,7 +3863,7 @@ create_cmd (Scsi_Cmnd *cmd) {
  * Side effects :
  *      cmd is added to the per instance driver issue_queue, with major
  *      twiddling done to the host specific fields of cmd.  If the
- *      process_issue_queue corouting isn't running, it is restarted.
+ *      process_issue_queue coroutine isn't running, it is restarted.
  * 
  * NOTE : we use the host_scribble field of the Scsi_Cmnd structure to 
  *	hold our own data, and pervert the ptr field of the SCp field
@@ -3914,7 +3923,7 @@ NCR53c7xx_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *)) {
     cli();
     /*
      * REQUEST SENSE commands are inserted at the head of the queue 
-     * so that we do not clear the contingent allegience condition
+     * so that we do not clear the contingent allegiance condition
      * they may be looking at.
      */
 
@@ -3940,7 +3949,7 @@ NCR53c7xx_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *)) {
  *	free slot in the schedule list or by terminating it immediately.
  *
  * Inputs : 
- *	host - SCSI host adater; hostdata - hostdata structure for 
+ *	host - SCSI host adapter; hostdata - hostdata structure for 
  *	this adapter; cmd - a pointer to the command; should have 
  *	the host_scribble field initialized to point to a valid 
  *	
@@ -3970,7 +3979,7 @@ to_schedule_list (struct Scsi_Host *host, struct NCR53c7x0_hostdata *hostdata,
     cli();
     
     /* 
-     * Work arround race condition : if an interrupt fired and we 
+     * Work around race condition : if an interrupt fired and we 
      * got disabled forget about this command.
      */
 
@@ -4043,7 +4052,7 @@ to_schedule_list (struct Scsi_Host *host, struct NCR53c7x0_hostdata *hostdata,
 static __inline__ int
 busyp (struct Scsi_Host *host, struct NCR53c7x0_hostdata *hostdata, 
     Scsi_Cmnd *cmd) {
-    /* FIXME : in the future, this needs to accomodate SCSI-II tagged
+    /* FIXME : in the future, this needs to accommodate SCSI-II tagged
        queuing, and we may be able to play with fairness here a bit.
      */
     return hostdata->busy[cmd->target][cmd->lun];
@@ -4057,7 +4066,7 @@ busyp (struct Scsi_Host *host, struct NCR53c7x0_hostdata *hostdata,
  *	overflows when the scsi_done() function is invoked recursively.
  * 
  * NOTE : process_issue_queue exits with interrupts *disabled*, so the 
- *	caller must renable them if it desires.
+ *	caller must reenable them if it desires.
  * 
  * NOTE : process_issue_queue should be called from both 
  *	NCR53c7x0_queue_command() and from the interrupt handler 
@@ -4273,7 +4282,7 @@ intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 	 *
 	 * - A synchronous offset which causes the SCSI FIFO to be overwritten.
 	 *
-	 * - A REQ which causes the maxmimum synchronous offset programmed in 
+	 * - A REQ which causes the maximum synchronous offset programmed in 
 	 * 	the SXFER register to be exceeded.
 	 *
 	 * - A phase change with an outstanding synchronous offset.
@@ -4618,7 +4627,7 @@ abort_connected (struct Scsi_Host *host) {
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	host->hostdata;
 /* FIXME : this probably should change for production kernels; at the 
-   least, counter sould move to a per-host structure. */
+   least, counter should move to a per-host structure. */
     static int counter = 5;
 #ifdef NEW_ABORT
     int sstat, phase, offset;
@@ -4934,7 +4943,7 @@ intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
     /*
      * Some SCSI devices will interpret a command as they read the bytes
      * off the SCSI bus, and may decide that the command is Bogus before 
-     * they've read the entire commad off the bus.
+     * they've read the entire command off the bus.
      */
     } else if (dsp == hostdata->script + hostdata->E_cmdout_cmdout / sizeof 
 	(u32)) {
@@ -5364,7 +5373,7 @@ print_insn (struct Scsi_Host *host, const u32 *insn,
 	    prefix, insn);
     } else {
 /* 
- * FIXME : (void *) cast in virt_to_bus should be unecessary, because
+ * FIXME : (void *) cast in virt_to_bus should be unnecessary, because
  * 	it should take const void * as argument.
  */
 	sprintf(buf, "%s0x%lx (virt 0x%p) : 0x%08x 0x%08x (virt 0x%p)", 
@@ -5603,7 +5612,7 @@ NCR53c7xx_reset (Scsi_Cmnd *cmd) {
      * get new commands.
      *
      * We can't let this happen until after we've re-initialized the driver
-     * structures, and can't reinitilize those structures until after we've 
+     * structures, and can't reinitialize those structures until after we've 
      * dealt with their contents.
      *
      * So, we need to find all of the commands which were running, stick
@@ -5693,7 +5702,7 @@ insn_to_offset (Scsi_Cmnd *cmd, u32 *insn) {
 
 /*
  * With the current code implementation, if the insn is inside dynamically 
- * generated code, the data pointer will be the instruction preceeding 
+ * generated code, the data pointer will be the instruction preceding 
  * the next transfer segment.
  */
 
@@ -6083,7 +6092,7 @@ hard_reset (struct Scsi_Host *host) {
  *	so we don't perturb hostdata.  We don't use a field of the 
  *	NCR53c7x0_cmd structure since we may not have allocated one 
  *	for the command causing the reset.) of Scsi_Cmnd structures that 
- *  	had propogated bellow the Linux issue queue level.  If free is set, 
+ *  	had propagated below the Linux issue queue level.  If free is set, 
  *	free the NCR53c7x0_cmd structures which are associated with 
  *	the Scsi_Cmnd structures, and clean up any internal 
  *	NCR lists that the commands were on.  If issue is set,
@@ -6153,7 +6162,7 @@ return_outstanding_commands (struct Scsi_Host *host, int free, int issue) {
  * Purpose : disables the given NCR host, causing all commands
  * 	to return a driver error.  Call this so we can unload the
  * 	module during development and try again.  Eventually, 
- * 	we should be able to find clean workarrounds for these
+ * 	we should be able to find clean workarounds for these
  * 	problems.
  *
  * Inputs : host - hostadapter to twiddle
@@ -6298,7 +6307,7 @@ dump_events (struct Scsi_Host *host, int count) {
 	    i = (i ? i - 1 : hostdata->event_size -1), --count) {
 	    save_flags(flags);
 /*
- * By copying the event we're currently examinging with interrupts
+ * By copying the event we're currently examining with interrupts
  * disabled, we can do multiple printk(), etc. operations and 
  * still be guaranteed that they're happening on the same 
  * event structure.

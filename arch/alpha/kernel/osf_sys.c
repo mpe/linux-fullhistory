@@ -75,7 +75,7 @@ static int osf_filldir(void * __buf, const char * name, int namlen, off_t offset
 	struct osf_dirent_callback * buf = (struct osf_dirent_callback *) __buf;
 	int reclen = ROUND_UP(NAME_OFFSET(dirent) + namlen + 1);
 
-	buf->error = -EINVAL;		/* unly used if we fail */
+	buf->error = -EINVAL;		/* only used if we fail */
 	if (reclen > buf->count)
 		return -EINVAL;
 	if (buf->basep) {
@@ -304,7 +304,7 @@ static void putdev(struct inode * inode)
 
 /*
  * We can't actually handle ufs yet, so we translate UFS mounts to
- * ext2fs mounts... I wouldn't mind a USF filesystem, but the UFS
+ * ext2fs mounts... I wouldn't mind a UFS filesystem, but the UFS
  * layout is so braindead it's a major headache doing it..
  */
 static int osf_ufs_mount(char * dirname, struct ufs_args * args, int flags)

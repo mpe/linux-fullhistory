@@ -62,7 +62,7 @@ struct __sysctl_args {
 
 /* CTL_VM names: */
 #define VM_SWAPCTL	1	/* struct: Set vm swapping control */
-#define VM_KSWAPD	2	/* struct: control background pagout */
+#define VM_KSWAPD	2	/* struct: control background pageout */
 #define VM_FREEPG	3	/* struct: Set free page thresholds */
 #define VM_BDFLUSH	4	/* struct: Control buffer cache flushing */
 #define VM_MAXID	5

@@ -68,6 +68,8 @@ static void nfs_read_inode(struct inode * inode)
 
 static void nfs_put_inode(struct inode * inode)
 {
+	if (NFS_RENAMED_DIR(inode))
+		nfs_sillyrename_cleanup(inode);
 	if (inode->i_pipe)
 		clear_inode(inode);
 }

@@ -46,7 +46,7 @@
 #undef CONF_PROFILE_TLB
 
 /*
- * Disable all caching.  Usefull to find trouble with caches in drivers.
+ * Disable all caching.  Useful to find trouble with caches in drivers.
  */
 #undef CONF_DISABLE_KSEG0_CACHING
 

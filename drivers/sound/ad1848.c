@@ -624,7 +624,7 @@ static int
 set_speed (ad1848_info * devc, int arg)
 {
   /*
-     * The sampling speed is encoded in the least significant nible of I8. The
+     * The sampling speed is encoded in the least significant nibble of I8. The
      * LSB selects the clock source (0=24.576 MHz, 1=16.9344 Mhz) and other
      * three bits select the divisor (indirectly):
      *
@@ -992,7 +992,7 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
 
   ad_write (devc, 8, fs);
   /*
-   * Write to I8 starts resyncronization. Wait until it completes.
+   * Write to I8 starts resynchronization. Wait until it completes.
    */
   timeout = 10000;
   while (timeout > 0 && inb (devc->base) == 0x80)
@@ -1006,7 +1006,7 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
       ad_write (devc, 28, fs);
 
       /*
-         * Write to I28 starts resyncronization. Wait until it completes.
+         * Write to I28 starts resynchronization. Wait until it completes.
        */
       timeout = 10000;
       while (timeout > 0 && inb (devc->base) == 0x80)
@@ -1588,7 +1588,7 @@ ad1848_unload (int io_base, int irq, int dma_playback, int dma_capture, int shar
 	}
     }
   else
-    printk ("ad1848: Can't find device to be undoaded. Base=%x\n",
+    printk ("ad1848: Can't find device to be unloaded. Base=%x\n",
 	    io_base);
 }
 
@@ -1871,7 +1871,7 @@ ad1848_tmr_start (int dev, unsigned int usecs)
 {
   unsigned long   flags;
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
-  unsigned long   xtal_nsecs;	/* nanoseconds per xtal oscillaror tick */
+  unsigned long   xtal_nsecs;	/* nanoseconds per xtal oscillator tick */
   unsigned long   divider;
 
   save_flags (flags);

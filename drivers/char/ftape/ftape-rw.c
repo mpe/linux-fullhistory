@@ -529,7 +529,7 @@ static int validate(int id)
 	 *  if off-track the error will be approximately 2 * segments_per_track.
 	 */
 	if (location.track == -1) {
-		return 1;	/* unforseen situation, don't generate error */
+		return 1;	/* unforeseen situation, don't generate error */
 	} else {
 		/*  Use margin of segments_per_track on both sides because ftape
 		 *  needs some margin and the error we're looking for is much larger !

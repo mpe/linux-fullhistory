@@ -5,7 +5,7 @@
  *	been a further revision of this protocol since which is now supported.
  *
  *	If you have trouble with this module be careful what gcc you have used,
- *	the older version didnt come out right using gcc 2.5.8, the newer one
+ *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
  *	Authors:
@@ -40,7 +40,7 @@
  *					the mrouted version on that device.
  *		Chih-Jen Chang	:	Added the max_resp_time parameter to
  *		Tsu-Sheng Tsao		igmp_heard_query(). Using this parameter
- *					to identify the multicast router verion
+ *					to identify the multicast router version
  *					and do what the IGMP version 2 specified.
  *		Chih-Jen Chang	:	Added a timer to revert to IGMP V2 router
  *		Tsu-Sheng Tsao		if the specified time expired.

@@ -36,7 +36,7 @@ This driver provides some information on what it has detected in
 /proc/scsi/g_NCR5380/x where x is the scsi card number as detected at boot
 time. More info to come in the future.
 
-When NCR53c400 support is compiled in, BIOS paramaters will be returned by
+When NCR53c400 support is compiled in, BIOS parameters will be returned by
 the driver (the raw 5380 driver does not and I don't plan to fiddle with
 it!).
 
@@ -44,7 +44,7 @@ This driver works as a module.
 
 Kevin Lentin
 K.Lentin@cs.monash.edu.au
-REAME file for the Linux g_NCR5380 driver.
+README file for the Linux g_NCR5380 driver.
 
 (c) 1993 Drew Eckhard
 NCR53c400 extensions (c) 1994,1995,1996 Kevin Lentin
@@ -82,7 +82,7 @@ This driver provides some information on what it has detected in
 /proc/scsi/g_NCR5380/x where x is the scsi card number as detected at boot
 time. More info to come in the future.
 
-When NCR53c400 support is compiled in, BIOS paramaters will be returned by
+When NCR53c400 support is compiled in, BIOS parameters will be returned by
 the driver (the raw 5380 driver does not and I don't plan to fiddle with
 it!).
 

@@ -66,7 +66,7 @@
  * 3.02  Sep 16, 1995 -- Stick total disk capacity in partition table as well.
  *                       Make VERBOSE_IDE_CD_ERRORS dump failed command again.
  *                       Dump out more information for ILLEGAL REQUEST errs.
- *                       Fix handling of errors occuring before the
+ *                       Fix handling of errors occurring before the
  *                        packet command is transferred.
  *                       Fix transfers with odd bytelengths.
  * 3.03  Oct 27, 1995 -- Some Creative drives have an id of just `CD'.
@@ -91,6 +91,7 @@
  *                       Switch to using MSF addressing for audio commands.
  *                       Reformat to match kernel tabbing style.
  *                       Add CDROM_GET_UPC ioctl.
+ * 3.10  Apr 10, 1996 -- Fix compilation error with STANDARD_ATAPI.
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
@@ -2110,7 +2111,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 
 	case CDROMSUBCHNL: {
 		struct atapi_cdrom_subchnl scbuf;
-		int stat, msf_flag;
+		int stat;
 		struct cdrom_subchnl subchnl;
 
 		stat = verify_area (VERIFY_WRITE, (void *) arg,
@@ -2548,13 +2549,13 @@ void ide_cdrom_setup (ide_drive_t *drive)
 	else
 		CDROM_CONFIG_FLAGS (drive)->drq_interrupt = 0;
 
+#if ! STANDARD_ATAPI
 	CDROM_CONFIG_FLAGS (drive)->old_readcd = 0;
 	CDROM_CONFIG_FLAGS (drive)->toctracks_as_bcd = 0;
 	CDROM_CONFIG_FLAGS (drive)->tocaddr_as_bcd = 0;
 	CDROM_CONFIG_FLAGS (drive)->playmsf_as_bcd = 0;
 	CDROM_CONFIG_FLAGS (drive)->subchan_as_bcd = 0;
 
-#if ! STANDARD_ATAPI
 	if (drive->id != NULL) {
 		if (strcmp (drive->id->model, "V003S0DS") == 0 &&
 		    drive->id->fw_rev[4] == '1' &&

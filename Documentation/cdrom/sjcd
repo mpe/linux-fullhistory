@@ -10,13 +10,13 @@ This is the README for the sjcd cdrom driver, version 1.6.
 
 This file is meant as a tips & tricks edge for the usage of the SANYO CDR-H94A
 cdrom drive. It will grow as the questions arise. ;-)
-For info on configuring the ISP16 sound card look at Documetation/cdrom/isp16.
+For info on configuring the ISP16 sound card look at Documentation/cdrom/isp16.
 
-The driver should work with any of the Panasonic, Sony or Mitsum style
+The driver should work with any of the Panasonic, Sony or Mitsumi style
 CDROM interface.
 The cdrom interface on Media Magic's soft configurable sound card ISP16,
 which used to be included in the driver, is now supported in a separate module.
-This initilisation module will probably also work with other interfaces
+This initialisation module will probably also work with other interfaces
 based on an OPTi 82C928 or 82C929 chip (like MAD16 and Mozart): see the
 documentation Documentation/cdrom/isp16.
 
@@ -31,7 +31,7 @@ The default configuration parameters are:
   base address 0x340
   no irq
   no dma
-(Acctulay the CDR-H94A doesn't know how to use irq and dma.)
+(Actually the CDR-H94A doesn't know how to use irq and dma.)
 As of version 1.2, setting base address at boot time is supported
 through the use of command line options: type at the "boot:" prompt:
   linux sjcd=<base_address>
@@ -41,7 +41,7 @@ in the appropriate section of /etc/lilo.conf
 If you're building a kernel yourself you can set your default base
 i/o address with SJCD_BASE_ADDR in include/linux/sjcd.h.
 
-The sjcd driver supports beng loaded as a module. The following
+The sjcd driver supports being loaded as a module. The following
 command will set the base i/o address on the fly (assuming you
 have installed the module in an appropriate place).
   insmod sjcd.o sjcd_base=<base_address>

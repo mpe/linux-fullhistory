@@ -270,7 +270,7 @@ struct NCR5380_hostdata {
     long time_read[8];				/* time to do reads */
     long time_write[8];				/* time to do writes */
     unsigned long bytes_read[8];		/* bytes read */
-    unsigned long bytes_write[8];		/* byytes written */
+    unsigned long bytes_write[8];		/* bytes written */
     unsigned pendingr;
     unsigned pendingw;
 #endif

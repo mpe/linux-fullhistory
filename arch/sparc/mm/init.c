@@ -131,7 +131,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	};
 
 	/* Initialize the protection map with non-constant values
-	 * MMU dependant values.
+	 * MMU dependent values.
 	 */
 	protection_map[0] = PAGE_NONE;
 	protection_map[1] = PAGE_READONLY;

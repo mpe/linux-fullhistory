@@ -314,7 +314,7 @@ CONFIG_MIPS_MAGNUM_4000
   have access to a machine on the Internet that has one of the
   programs lynx, netscape or Mosaic).
 
-Support for Olivetty M700
+Support for Olivetti M700
 CONFIG_OLIVETTI_M700
   This is a machine with a R4000 100 MHz CPU. To compile a Linux
   kernel that runs on these, say Y here. For details about Linux
@@ -504,7 +504,7 @@ CONFIG_PCI
 PCI bridge optimization (experimental)
 CONFIG_PCI_OPTIMIZE
   This can improve access times for some hardware devices under
-  certain BIOSes if your computer uses a PCI bussystem. This is
+  certain BIOSes if your computer uses a PCI bus system. This is
   recommended; say Y.
 
 Intel 430FX (Triton) chipset DMA support
@@ -1865,7 +1865,7 @@ CONFIG_VORTEX
 Other ISA cards
 CONFIG_NET_ISA
   If your network (ethernet) card hasn't been mentioned yet and its
-  bussystem (that's the way the components of the card talk to each
+  bus system (that's the way the components of the card talk to each
   other) is ISA (as opposed to EISA, VLB or PCI), say Y. Make sure you
   know the name of your card. Read the Ethernet-HOWTO, available via
   ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. If
@@ -3131,7 +3131,7 @@ CONFIG_ISDN_DRV_TELES
 # LocalWords:  unc edu docs emu README kB BLK DEV FD Thinkpad fd MFM RLL IDE gz
 # LocalWords:  cdrom harddisk diskless netboot nfs xzvf ATAPI MB harddrives ide
 # LocalWords:  HD harddisks CDROMs IDECD NEC MITSUMI filesystem XT XD PCI bios
-# LocalWords:  ISA EISA Microchannel VESA BIOSes bussystem IPC SYSVIPC ipc Ctrl
+# LocalWords:  ISA EISA Microchannel VESA BIOSes IPC SYSVIPC ipc Ctrl
 # LocalWords:  BINFMT Linkable http ac uk jo html GCC Sparc AVANTI CABRIOLET EB
 # LocalWords:  netscape gcc LD CC toplevel MODVERSIONS insmod rmmod modprobe IP
 # LocalWords:  genksyms INET loopback gatewaying ethernet internet PPP ARP Arp
@@ -3173,7 +3173,7 @@ CONFIG_ISDN_DRV_TELES
 # LocalWords:  bsd comp Sparcstation le SunOS ie Gracilis PackeTwin PT pt LU FX
 # LocalWords:  FX TEAC SoundBlaster CR CreativeLabs LCS mS ramdisk IDETAPE cmd
 # LocalWords:  Vertos Genoa Funai hsfs NCP NetWare tgz APM apm ioctls UltraLite
-# LocalWords:  TravelMate CDT LCD backlight VC RPC Mips Olivetty DECStation AXP
+# LocalWords:  TravelMate CDT LCD backlight VC RPC Mips DECStation AXP
 # LocalWords:  PMAX MILO Alphas Multia Tseng linuxelf endian mipsel mips drv HT
 # LocalWords:  KERNELD kerneld callouts AdvanSys advansys diskquotas Admin WDT
 # LocalWords:  wdt hdb hdc bugfix SiS vlb Acculogic CSA DTC dtc Holtek ht QDI

@@ -51,7 +51,7 @@ static int      max_synthdev = 0;
 /*
  * The seq_mode gives the operating mode of the sequencer:
  *      1 = level1 (the default)
- *      2 = level2 (extended capabilites)
+ *      2 = level2 (extended capabilities)
  */
 
 #define SEQ_1	1

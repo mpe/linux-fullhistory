@@ -188,7 +188,7 @@
  Thanks to Adam Bowen for the signature to the 1610M/MER/MEX scsi cards, to
  Martin Andrews (andrewm@ccfadm.eeg.ccf.org) for the signature to some
  random TMC-1680 repackaged by IBM; and to Mintak Ng (mintak@panix.com) for
- the version 3.61 BIOS siganture.
+ the version 3.61 BIOS signature.
 
  Thanks for Mark Singer (elf@netcom.com) and Richard Simpson
  (rsimpson@ewrcsdra.demon.co.uk) for more Quantum signatures and detective
@@ -1146,7 +1146,7 @@ const char *fdomain_16x0_info( struct Scsi_Host *ignore )
 /*
  * inout : decides on the direction of the dataflow and the meaning of the 
  *         variables
- * buffer: If inout==FALSE data is beeing written to it else read from it
+ * buffer: If inout==FALSE data is being written to it else read from it
  * *start: If inout==FALSE start of the valid data in the buffer
  * offset: If inout==FALSE offset from the beginning of the imaginary file 
  *         from which we start writing into the buffer

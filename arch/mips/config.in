@@ -13,7 +13,7 @@ bool 'Support for Deskstation RPC44' CONFIG_DESKSTATION_RPC44
 bool 'Support for Deskstation Tyne' CONFIG_DESKSTATION_TYNE
 bool 'Support for Mips Magnum 3000' CONFIG_MIPS_MAGNUM_3000
 bool 'Support for Mips Magnum 4000' CONFIG_MIPS_MAGNUM_4000
-bool 'Support for Olivetty M700' CONFIG_OLIVETTI_M700
+bool 'Support for Olivetti M700' CONFIG_OLIVETTI_M700
 if [ "$CONFIG_ACER_PICA_61" = "y" -o \
      "$CONFIG_MIPS_MAGNUM_4000" = "y" -o \
      "$CONFIG_OLIVETTI_M700" = "y" ]; then

@@ -331,7 +331,7 @@ int do_sysctl_strategy (ctl_table *table,
 
 /*
  * This function only checks permission for changing the security level
- * If the tests are successfull, the actual change is done by
+ * If the tests are successful, the actual change is done by
  * do_sysctl_strategy
  */
 static int do_securelevel_strategy (ctl_table *table, 

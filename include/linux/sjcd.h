@@ -113,8 +113,8 @@
 #define S_READ_DATA( port, buf, nr )      insb( port, buf, nr )
 
 /*
- * We assume that there are no audio disks with TOC lenght more than this
- * number (I personally have never seen disks with morethan 20 fragments).
+ * We assume that there are no audio disks with TOC length more than this
+ * number (I personally have never seen disks with more than 20 fragments).
  */
 #define SJCD_MAX_TRACKS		100
 

@@ -74,7 +74,7 @@
  *						"Most Buggiest Code You've Ever Seen" (TM)
  *			HaJo(DD8NE)		Implementation of a T5 (idle) timer
  *			Joerg(DL1BKE)		Renamed T5 to IDLE and changed behaviour:
- *						the timer gets reloaded on every received or transmited
+ *						the timer gets reloaded on every received or transmitted
  *						I frame for IP or NETROM. The idle timer is not active
  *						on "vanilla AX.25" connections. Furthermore added PACLEN
  *						to provide AX.25-layer based fragmentation (like WAMPES)
@@ -85,7 +85,7 @@
  *	To do:
  *		Restructure the ax25_rcv code to be cleaner/faster and
  *		copy only when needed.
- *		Consider better arbitary protocol support.
+ *		Consider better arbitrary protocol support.
  */
  
 #include <linux/config.h>
@@ -348,7 +348,7 @@ static ax25_cb *ax25_find_cb(ax25_address *my_addr, ax25_address *dest_addr, str
 }
 
 /*
- *	Look for any matching address - RAW sockets can bind to arbitary names
+ *	Look for any matching address - RAW sockets can bind to arbitrary names
  */
 static struct sock *ax25_addr_match(ax25_address *addr)
 {
@@ -393,7 +393,7 @@ static void ax25_send_to_raw(struct sock *sk, struct sk_buff *skb, int proto)
 /*
  *	Deferred destroy.
  */
-void ax25_destory_socket(ax25_cb *);
+void ax25_destroy_socket(ax25_cb *);
 
 /*
  *	Handler for deferred kills.
@@ -1670,7 +1670,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	 */
 	skb_pull(skb, size_ax25_addr(&dp));
 
-	/* For our port addreses ? */
+	/* For our port addresses ? */
 	if (ax25cmp(&dest, dev_addr) == 0)
 		mine = 1;
 

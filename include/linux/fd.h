@@ -113,7 +113,7 @@ typedef char floppy_drive_name[16];
 
 
 /*
- * Drive parameters (user modifyable)
+ * Drive parameters (user modifiable)
  */
 struct floppy_drive_params {
 	char cmos;			/* cmos type */
@@ -185,7 +185,7 @@ enum {
 
 
 /*
- * Current drive state (not directly modifyable by user, readonly)
+ * Current drive state (not directly modifiable by user, readonly)
  */
 struct floppy_drive_struct {
 	signed char flags;
@@ -340,7 +340,7 @@ struct floppy_raw_cmd {
 	void *data;
 	char *kernel_data; /* location of data buffer in the kernel */
 	struct floppy_raw_cmd *next; /* used for chaining of raw cmd's 
-				      * withing the kernel */
+				      * within the kernel */
 	long length; /* in: length of dma transfer. out: remaining bytes */
 	long phys_length; /* physical length, if different from dma length */
 	int buffer_length; /* length of allocated buffer */

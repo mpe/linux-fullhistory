@@ -130,7 +130,7 @@ static int raid0_run (int minor, struct md_dev *mddev)
   {
     data->hash_table[i].zone0=data->strip_zone+cur;
 
-    if (size>=data->smallest->size)/* If we completly fill the slot */
+    if (size>=data->smallest->size)/* If we completely fill the slot */
     {
       data->hash_table[i++].zone1=NULL;
       size-=data->smallest->size;

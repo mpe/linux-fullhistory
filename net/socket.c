@@ -34,6 +34,7 @@
  *					stuff.
  *		Alan Cox	:	sendmsg/recvmsg basics.
  *		Tom Dyas	:	Export net symbols.
+ *		Marcin Dalecki	:	Fixed problems with CONFIG_NET="n".
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -75,7 +76,7 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 
-#ifdef CONFIG_MODULES
+#if defined(CONFIG_MODULES) && defined(CONFIG_NET)
 extern void export_net_symbols(void);
 #endif
 
@@ -1421,7 +1422,7 @@ void sock_init(void)
 	 *	Export networking symbols to the world.
 	 */
 
-#ifdef CONFIG_MODULES
+#if defined(CONFIG_MODULES) && defined(CONFIG_NET)
 	export_net_symbols();
 #endif
 }

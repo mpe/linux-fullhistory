@@ -36,7 +36,7 @@
 
    This program is free software; you can redistribute it and/or modify 
    it under the terms of the (modified) GNU General Public License 
-   delivered with the LinuX kernel source.
+   delivered with the Linux kernel source.
    
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -455,7 +455,7 @@ scc_dequeue_buffer(struct mbuf **queue)
 #endif
 		*queue = buffer->next;		/* new head of chain */
 		
-		buffer->next = NULLBUF;		/* for securety only... */
+		buffer->next = NULLBUF;		/* for security only... */
 		buffer->prev = NULLBUF;
 		buffer->rw_ptr = buffer->data;
 	} 
@@ -707,7 +707,7 @@ scc_get_buffer(struct scc_channel *scc, char type)
 
 /* ----> interrupt service routine for the 8530 <---- */
 
-/* it's recommendet to keep this function "inline" ;-) */
+/* it's recommended to keep this function "inline" ;-) */
 
 static inline void
 scc_isr_dispatch(register struct scc_channel *scc, register int vector)
@@ -754,7 +754,7 @@ scc_isr(int irq, void *dev_id, struct pt_regs *regs)
 						/* ...not forever! */
           
 			/* Extract channel number and status from vector. */
-			/* Isolate channel nummer */
+			/* Isolate channel number */
 			/* Call handler */
 	        
 			if (vector & 0x01) break; 
@@ -794,7 +794,7 @@ scc_isr(int irq, void *dev_id, struct pt_regs *regs)
 			vector=Inb(q);                  /* Read the vector */
         
 		        /* Extract channel number and status from vector. */
-		        /* Isolate channel nummer */
+		        /* Isolate channel number */
 		        /* Call handler */
         
 
@@ -1147,7 +1147,7 @@ static inline void init_brg(register struct scc_channel *scc)
 }
 
 /*
- * Initalization according to the Z8530 manual (SGS-Thomson's version):
+ * Initialization according to the Z8530 manual (SGS-Thomson's version):
  *
  * 1. Modes and constants
  *

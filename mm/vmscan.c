@@ -83,11 +83,12 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 		return 0;
 
 	page_map = mem_map + MAP_NR(page);
-	if (page_map->reserved || page_map->locked ||
-	    (dma && !page_map->dma))
+	if (PageReserved(page_map)
+	    || PageLocked(page_map)
+	    || (dma && !PageDMA(page_map)))
 		return 0;
 	/* Deal with page aging.  Pages age from being unused; they
-	 * rejuvinate on being accessed.  Only swap old pages (age==0
+	 * rejuvenate on being accessed.  Only swap old pages (age==0
 	 * is oldest). */
 	if ((pte_dirty(pte) && delete_from_swap_cache(MAP_NR(page))) 
 	    || pte_young(pte))  {

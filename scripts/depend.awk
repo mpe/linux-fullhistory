@@ -1,8 +1,8 @@
 # This is an awk script which does dependencies. We do NOT want it to
-# recursivly follow #include directives.
+# recursively follow #include directives.
 #
 # The HPATH environment variable should be set to indicate where to look
-# for include files.  The -I infront of the path is optional.
+# for include files.  The -I in front of the path is optional.
 
 #
 # Surely there is a more elegant way to see if a file exists.  Anyone know

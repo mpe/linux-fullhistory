@@ -11,7 +11,7 @@
  *
  *	FIXME:
  *		We ought to handle the retransmits with a single list and a 
- *	seperate fast timer for when it is needed.
+ *	separate fast timer for when it is needed.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -449,7 +449,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 		{
 			skb_pull(skb,sizeof(struct ddpehdr)-4);
 			/*
-			 *	The uper two remaining bytes are the port 
+			 *	The upper two remaining bytes are the port 
 			 *	numbers	we just happen to need. Now put the 
 			 *	length in the lower two.
 			 */

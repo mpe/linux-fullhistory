@@ -62,7 +62,7 @@ kernel deadlock (which is worse than a panic).
 - QIC-3020/TR-3: 1Mbps support works.  Neal is capable of reading and
   writing data to a tape.  ftape will automatically detect the type of
   tape (e.g. TR-3 vs QIC-80) and move the fdc in and out of
-  "perpendicular mode" as neccesarry.
+  "perpendicular mode" as necessary.
 - 2Mbps support is disabled by default, since it is not fully
   debugged.  If you are adventurous, remove -DFDC_82078SL in the
   Makefile and see what happens :-)
@@ -273,7 +273,7 @@ a segment proves to be unrecoverable and then skips the
 bad segment.
 This causes most applications to continue to work (tar
 and afio) loosing only a small amount (up to 29 Kb) of data.
-Retried read operations will now be done slighly off-track
+Retried read operations will now be done slightly off-track
 to improve the chance of success. Serious head off-track
 errors will be detected.
 
@@ -290,7 +290,7 @@ values.
 
 Kernels and compilers
 ---------------------
-Ftape is currently being developped using the 2.5.8 compiler.
+Ftape is currently being developed using the 2.5.8 compiler.
 The older 2.4.5 probably works too (Set option in Makefile!).
 I have no experience with any later compilers nor Elf support.
 Any information on this is welcome.
@@ -372,7 +372,7 @@ Bas.
 
 ===== Release notes for ftape-2.02d, 30/04/95 =====
 
-- Improved abortion on signals: Interrupt will make a gracefull
+- Improved abortion on signals: Interrupt will make a graceful
   exit, Kill will be less nice and should be used if everything
   else fails.
 - Included check for tape-head off track.
@@ -541,7 +541,7 @@ Major new features:
   The error correction code can handle up to three of these hard
   errors provided there are no other errors in that segment (32 Kb).
   
-- Allows writing to tapes with defects (although the risc of loosing
+- Allows writing to tapes with defects (although the risk of loosing
   data increases !)
   Look for the media-defects entry printed with the statistics when
   the tape is closed. A non-zero value here shows a bad tape.

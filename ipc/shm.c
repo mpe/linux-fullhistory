@@ -712,7 +712,7 @@ int shm_swap (int prio, int dma)
 	pte_val(page) = shp->shm_pages[idx];
 	if (!pte_present(page))
 		goto check_table;
-	if (dma && !mem_map[MAP_NR(pte_page(page))].dma)
+	if (dma && !PageDMA(MAP_NR(pte_page(page)) + mem_map))
 		goto check_table;
 	swap_attempts++;
 

@@ -291,7 +291,7 @@ static void determine_progress(buffer_struct * buff, error_cause cause, int mode
 	/*  Sector_offset points to the problem area, except if we got
 	 *  a data_crc_error. In that case it points one past the failing
 	 *  sector.
-	 *  Now adjust sector_offset so it allways points one past he
+	 *  Now adjust sector_offset so it always points one past he
 	 *  failing sector. I.e. skip the bad sector.
 	 */
 	if (cause != no_error) {
@@ -495,7 +495,7 @@ find_resume_point(buffer_struct * buff)
 	 *  If there are any soft errors before the failing sector,
 	 *  find the first soft error and return the sector offset.
 	 *  Otherwise find the last hard error.
-	 *  Note: there should allways be at least one hard or soft error !
+	 *  Note: there should always be at least one hard or soft error !
 	 */
 	if (buff->sector_offset < 1 || buff->sector_offset > 32) {
 		TRACEx1(1, "bug: sector_offset = %d", buff->sector_offset);
@@ -732,7 +732,7 @@ fdc_isr(void)
 								if (in[1] & 0x02) {
 									TRACE(1, "media not writable");
 								} else {
-									TRACE(-1, "unforseen write error");
+									TRACE(-1, "unforeseen write error");
 								}
 								fdc_mode = fdc_idle;
 								break;
@@ -757,7 +757,7 @@ fdc_isr(void)
 			++expected_stray_interrupts;
 		}
 	} else { /* !FDC_BUSY  */
-		/*  clear interrupt, cause should be gotten by issueing
+		/*  clear interrupt, cause should be gotten by issuing
 		 *  a Sense Interrupt Status command.
 		 */
 		if (fdc_mode == fdc_recalibrating || fdc_mode == fdc_seeking) {

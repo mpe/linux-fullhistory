@@ -219,7 +219,7 @@ static struct sock *nr_find_peer(unsigned char index, unsigned char id)
 /*
  *	Deferred destroy.
  */
-void nr_destory_socket(struct sock *);
+void nr_destroy_socket(struct sock *);
 
 /*
  *	Handler for deferred kills.

@@ -222,7 +222,7 @@ unsigned char inverse_translate(int glyph) {
  *
  * The "old" variants are for translation directly to font (using the
  * 0xf000-0xf0ff "transparent" Unicodes) whereas the "new" variants set
- * Unicodes explictly.
+ * Unicodes explicitly.
  */
 int con_set_trans_old(unsigned char * arg)
 {

@@ -49,10 +49,10 @@ A = ACCUM
  * a later time.  This problem cannot be resolved by holding a single entry
  * in scratch ram since a reconnecting target can request sense and this will
  * create yet another SCB waiting for selection.  The solution used here is to 
- * use byte 27 of the SCB as a psuedo-next pointer and to thread a list
+ * use byte 27 of the SCB as a pseudo-next pointer and to thread a list
  * of SCBs that are awaiting selection.  Since 0-0xfe are valid SCB offsets, 
  * SCB_LIST_NULL is 0xff which is out of range.  The kernel driver must
- * add an entry to this list everytime a request sense occurs.  The sequencer
+ * add an entry to this list every time a request sense occurs.  The sequencer
  * will automatically consume the entries.
  */
 
@@ -91,7 +91,7 @@ start2:
  * locks out on a per target basis instead of target/lun.  Although this
  * is not ideal for devices that have multiple luns active at the same
  * time, it is faster than looping through all SCB's looking for active
- * commands.  It may be benificial to make findscb a more general procedure
+ * commands.  It may be beneficial to make findscb a more general procedure
  * to see if the added cost of the search is negligible.  This code also 
  * assumes that the kernel driver will clear the active flags on board 
  * initialization, board reset, and a target SELTO.  Tagged commands
@@ -171,10 +171,10 @@ start_selection:
 	jmp     wait_for_selection
 
 mk_identify:
-	and	A,DISCENB,SCB_CONTROL	/* mask off disconnect privledge */
+	and	A,DISCENB,SCB_CONTROL	/* mask off disconnect privilege */
 
 	and	MSG0,0x7,SCB_TCL	/* lun */
-	or	MSG0,A			/* or in disconnect privledge */
+	or	MSG0,A			/* or in disconnect privilege */
 	or	MSG0,MSG_IDENTIFY
 	mvi	MSG_LEN, 1
 
@@ -559,7 +559,7 @@ mesgin_complete:
  * instead of always uploading the scb.  If the status is SCSI_CHECK,
  * the driver will download a new scb requesting sense to replace
  * the old one, modify the "waiting for selection" SCB list and set 
- * RETURN_1 to 0x80.  If RETURN_1 is set to 0x80 the sequencer imediately
+ * RETURN_1 to 0x80.  If RETURN_1 is set to 0x80 the sequencer immediately
  * jumps to main loop where it will run down the waiting SCB list.
  * If the kernel driver does not wish to request sense, it need
  * only clear RETURN_1, and the command is allowed to complete.  We don't 
@@ -575,7 +575,7 @@ mesgin_complete:
  * alternatives are to pause the sequencer on all command completes (yuck),
  * dma the resid directly to the host (slick, we may have space to do it now)
  * or have the sequencer pause itself when it encounters a non-zero resid 
- * (unecessary pause just to flag the command -yuck-, but takes one instruction
+ * (unnecessary pause just to flag the command -yuck-, but takes one instruction
  * and since it shouldn't happen that often is good enough for our purposes).  
  */
 resid:
@@ -607,7 +607,7 @@ test_immediate:
 	test    SCB_CMDLEN,0xff jnz complete  /* Immediate message complete */
 /*
  * Pause the sequencer until the driver gets around to handling the command
- * complete.  This is so that any action that might require carefull timing
+ * complete.  This is so that any action that might require careful timing
  * with the completion of this command can occur.
  */
 	mvi	INTSTAT,IMMEDDONE
@@ -731,7 +731,7 @@ get_tag:
 	mvi	ARG_1	call inb_next	/* tag value */
 /*
  * See if the tag is in range.  The tag is < SCBCOUNT if we add
- * the complement of SCBCOUNT to the incomming tag and there is
+ * the complement of SCBCOUNT to the incoming tag and there is
  * no carry.
  */
 	mov	A,COMP_SCBCOUNT	
@@ -777,7 +777,7 @@ p_busfree:
 	mvi	CLRSINT1,CLRATNO
 
 /*
- * if this is an immediate command, perform a psuedo command complete to
+ * if this is an immediate command, perform a pseudo command complete to
  * notify the driver.
  */
 	test	SCB_CMDLEN,0xff	jz status_ok
@@ -1009,8 +1009,8 @@ ndx_dtr_2:
  * If we need to negotiate transfer parameters, build the WDTR or SDTR message
  * starting at the address passed in SINDEX.  DINDEX is modified on return.
  * The SCSI-II spec requires that Wide negotiation occur first and you can
- * only negotiat one or the other at a time otherwise in the event of a message
- * reject, you wouldn't be able to tell which message was the culpret.
+ * only negotiate one or the other at a time otherwise in the event of a message
+ * reject, you wouldn't be able to tell which message was the culprit.
  */
 mk_dtr:
 	test	SCB_CONTROL,NEEDWDTR jnz  mk_wdtr_16bit

@@ -43,11 +43,11 @@ struct wic_net {
 #define NET_MODE_MCAST		0x04	/* receive mcasts */
 #define NET_MODE_PROM		0x08	/* promiscuous */
 #define NET_MODE_HC		0x10	/* is a hop coordinator */
-#define NET_MODE_HC_VALID	0x20	/* hc addres is valid */
+#define NET_MODE_HC_VALID	0x20	/* hc address is valid */
 #define NET_MODE_HCAP		0x40	/* hc is also ap */
 #define NET_MODE_HC_KNOWN	0x80	/* hc is known */
-	unsigned char rts_lo;		/* rts threshhold */
-	unsigned char rts_hi;		/* rts threshhold */
+	unsigned char rts_lo;		/* rts threshold */
+	unsigned char rts_hi;		/* rts threshold */
 	unsigned char retry;		/* retry limit */
 	unsigned char hc_ula[6];	/* ula of hc */
 	unsigned char key[4];		/* network key */
@@ -86,12 +86,12 @@ struct wic_sys {
 	unsigned char cca_mode;		/* cca flags */
 #define CCA_PKT_DET_BSY		0x01	/* busy if packet is detected */
 #define CCA_VIRT_CARR		0x02	/* use virtual carrier */
-#define CCA_RSSI_BSY		0x04	/* busy if rssi > thresshold */
+#define CCA_RSSI_BSY		0x04	/* busy if rssi > threshold */
 #define CCA_DATA_BSY		0x08	/* busy if valid data > XXX usec */
 	unsigned char dwell_hi;		/* dwell time */
 	unsigned char dwell_lo;		/* dwell time */
 	unsigned char hc_timeout;	/* HC timeout */
-	unsigned char rssi;		/* rssi threshhold */
+	unsigned char rssi;		/* rssi threshold */
 	unsigned char hc_rssi;		/* rssi of last hc frame */
 	unsigned char hc_rssi_chan;	/* channel of hc rssi value */
 };

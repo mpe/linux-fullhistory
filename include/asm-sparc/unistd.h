@@ -11,7 +11,7 @@
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  *
- * SunOS compatability based upon preliminary work which is:
+ * SunOS compatibility based upon preliminary work which is:
  *
  * Copyright (C) 1995 Adrian M. Rodriguez (adrian@remus.rutgers.edu)
  */

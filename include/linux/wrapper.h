@@ -33,8 +33,8 @@
 #define vma_get_end(v) v->vm_end
 #define vma_get_page_prot(v) v->vm_page_prot
 
-#define mem_map_reserve(p) mem_map[p].reserved = 1
-#define mem_map_unreserve(p) mem_map[p].reserved = 0
+#define mem_map_reserve(p) set_bit(PG_reserved, &mem_map[p].flags)
+#define mem_map_unreserve(p) clear_bit(PG_reserved, &mem_map[p].flags)
 #define mem_map_inc_count(p) mem_map[p].count++
 #define mem_map_dec_count(p) mem_map[p].count--
 #endif

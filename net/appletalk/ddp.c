@@ -19,7 +19,7 @@
  *		Alan Cox		:	Added firewall hooks.
  *		Alan Cox		:	Supports new ARPHRD_LOOPBACK
  *		Christer Weinigel	: 	Routing and /proc fixes.
- *		Bradford Johnson	:	Locatalk.
+ *		Bradford Johnson	:	Localtalk.
  *		Tom Dyas		:	Module support.
  *		Alan Cox		:	Hooks for PPP (based on the
  *						localtalk hook).
@@ -381,7 +381,7 @@ static int atif_probe_device(struct atalk_iface *atif)
 			return 0;
 		}
 		/*
-		 *	If it didnt like our faked request then fail:
+		 *	If it didn't like our faked request then fail:
 		 *	This should check against -ENOIOCTLCMD and fall
 		 *	through. That needs us to fix all the devices up
 		 *	properly. We can then also dump the localtalk test.
@@ -704,7 +704,7 @@ void atrtr_device_down(struct device *dev)
 }
 
 /*
- *	A device event has occured. Watch for devices going down and
+ *	A device event has occurred. Watch for devices going down and
  *	delete our use of them (iface and route).
  */
 
@@ -996,7 +996,7 @@ unsigned short atalk_checksum(struct ddpehdr *ddp, int len)
 	
 /*
  *	Generic fcntl calls are already dealt with. If we don't need funny ones
- *	this is the all you need. Async I/O is also seperate.
+ *	this is the all you need. Async I/O is also separate.
  */
   
 static int atalk_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
@@ -1306,7 +1306,7 @@ static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
 	
 	if(addr->sat_family!=AF_APPLETALK)
 		return -EAFNOSUPPORT;
-#if 0 	/* Netatalk doesnt check this */
+#if 0 	/* Netatalk doesn't check this */
 	if(addr->sat_addr.s_node==ATADDR_BCAST && !sk->broadcast)
 		return -EPERM;
 #endif		
@@ -1412,7 +1412,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	/*
 	 *	Fix up the length field	[Ok this is horrible but otherwise
 	 *	I end up with unions of bit fields and messy bit field order
-	 *	compiler/endian dependancies..]
+	 *	compiler/endian dependencies..]
 	 */
 
 	*((__u16 *)ddp)=ntohs(*((__u16 *)ddp));
@@ -1655,7 +1655,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 			return(-EINVAL);
 		if(usat->sat_family != AF_APPLETALK)
 			return -EINVAL;
-#if 0 	/* netatalk doesnt implement this check */
+#if 0 	/* netatalk doesn't implement this check */
 		if(usat->sat_addr.s_node==ATADDR_BCAST && !sk->broadcast)
 			return -EPERM;
 #endif			
@@ -1723,7 +1723,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 	/*
 	 *	Fix up the length field	[Ok this is horrible but otherwise
 	 *	I end up with unions of bit fields and messy bit field order
-	 *	compiler/endian dependancies..
+	 *	compiler/endian dependencies..
 	 */
 	*((__u16 *)ddp)=ntohs(*((__u16 *)ddp));
 

@@ -178,7 +178,7 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 	sync_mem();
 	regs->cp0_epc = pc;
 	/*
-	 * New thread looses kernel priviledges.
+	 * New thread loses kernel privileges.
 	 */
 	regs->cp0_status = (regs->cp0_status & ~(ST0_CU0|ST0_KSU)) | KSU_USER;
 	/*

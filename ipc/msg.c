@@ -417,7 +417,7 @@ asmlinkage int sys_msgget (key_t key, int msgflg)
 	
 	/*
 	 * If the IPC_KERNELD flag is set, the key is forced to IPC_PRIVATE,
-	 * and a designated kerneld message queue is created/refered to
+	 * and a designated kerneld message queue is created/referred to
 	 */
 	if ((msgflg & IPC_KERNELD)) {
 		int i;
@@ -599,7 +599,7 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 			return -EPERM;
 		/*
 		 * There is only one kerneld message queue,
-		 * mark it as non-existant
+		 * mark it as non-existent
 		 */
 		if ((kerneld_msqid >= 0) && (msqid == kerneld_msqid))
 			kerneld_msqid = -1;

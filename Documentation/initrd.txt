@@ -259,7 +259,7 @@ auto-detection).
 Last not least, CDrom distributors may use it for better installation from CD,
 either using a LILO boot floppy and bootstrapping a bigger ramdisk via
 initrd from CD, or using LOADLIN to directly load the ramdisk from CD
-without need of floppys.
+without need of floppies.
 
 Since initrd is a fairly generic mechanism, it is likely that additional
 uses will be found.
@@ -282,5 +282,5 @@ A preliminary version of LILO 18 is available on
 ftp://lrcftp.epfl.ch/pub/people/almesber/lilo/lilo.18dev3.tar.gz
 
 A very simple example for building an image for initrd, also including
-the programm 'freeramdisk', can be found on
+the program 'freeramdisk', can be found on
 ftp://elserv.ffm.fgan.de/pub/linux/loadlin-1.6/initrd-example.tgz

@@ -294,7 +294,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 /*
  * Here I tried to implement support for multisession-CD's
  * 
- * Much of this has do be done with vendor-specific SCSI-commands, becauce
+ * Much of this has do be done with vendor-specific SCSI-commands, because
  * multisession is newer than the SCSI-II standard.
  * So I have to complete it step by step. Useful information is welcome.
  *

@@ -16,16 +16,16 @@ Wed 2-Aug-95  <matti.aarnio@utu.fi>
 	driver developer can use, others should not confuse themselves.)
 
 	In many cases it is highly preferred that insmod:ing is done
-	ONLY with defining an explicite address for the card, AND BY
+	ONLY with defining an explicit address for the card, AND BY
 	NOT USING AUTO-PROBING!
 
-	Now most cards have some explicitely defined base address, they
+	Now most cards have some explicitly defined base address, they
 	are compiled with (to avoid auto-probing, among other things).
 	If that compiled value does not match your actual configuration,
 	do use  "io=0xXXX" -parameter for the  insmod, and give there
 	a value matching your environment.
 
-	If you are adventureous, you can ask the driver to autoprobe
+	If you are adventurous, you can ask the driver to autoprobe
 	by using "io=0" parameter, however it is potentially dangerous
 	thing to do in a live system.  (If you don't know where the
 	card is located, you can try autoprobing, and after possible
@@ -50,7 +50,7 @@ specifying multiple comma separated values, such as:
 	insmod 3c503.o io=0x280,0x300,0x330,0x350  xcvr=0,1,0,1
 
 The above would have the one module controlling four 3c503 cards, with card 2
-and 4 using external transcievers. The "insmod" manual describes the usage
+and 4 using external transceivers. The "insmod" manual describes the usage
 of comma separated value lists.
 
 It is *STRONGLY RECOMMENDED* that you supply "io=" instead of autoprobing.

@@ -23,7 +23,7 @@
 #define  DVMA_LEN       0x00040000  /* Size of the DVMA address space */
 #define  DVMA_END       0xfff40000
 
-/* IOMMU Mapping area, must be on a 16MB boundry!  Note this
+/* IOMMU Mapping area, must be on a 16MB boundary!  Note this
  * doesn't count the DVMA areas, the prom lives between the
  * iommu mapping area (for scsi transfer buffers) and the
  * dvma upper range (for lance packet ring buffers).

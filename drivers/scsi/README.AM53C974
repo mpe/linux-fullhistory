@@ -23,7 +23,7 @@ Copyright 1993, Drew Eckhardt
   drew@colorado.edu
   +1 (303) 666-5836
  
-The AM53C974_nobios_detect code was origininally developed by
+The AM53C974_nobios_detect code was originally developed by
 Robin Cutshaw (robin@xfree86.org) and is used here in a 
 slightly modified form.
  
@@ -69,7 +69,7 @@ Features
 --------
 This driver supports asynchronous and synchronous SCSI-I and SCSI-II devices.
 It is capable of transfer rate and synchronous negotiation (see below).
-The driver supportes scatter-gather. Transfers are DMA based, but do not 
+The driver supports scatter-gather. Transfers are DMA based, but do not 
 (yet) make use of the AM53/79C974 MDL mode.
 Max. transfer rate is 10MHz (whatever this is in real life). The transfer
 rate is negotiated with each device (see dmesg output).
@@ -88,7 +88,7 @@ SCSI device on the bus:
   - in case of sync. communication, the sync. offset
 
 The sync. offset specifies the number of bytes that can be sent or 
-reveived from the SCSI bus without ACK resp. REQ signal.
+received from the SCSI bus without ACK resp. REQ signal.
 CAUTION: USING SYNCHRONOUS MODE ON LONG SCSI CABLES MAY CAUSE 
          COMMUNICATION PROBLEMS LEADING TO LOSS OF DATA. 
 
@@ -149,7 +149,7 @@ The driver assumes that the controller's SCSI-ID (usually 7) has been
 correctly loaded by the BIOS into the controller's register during
 system boot. If the driver detects that the controller's SCSI ID is not 
 '7' it will print out a warning. If this happens to you please correct
-seeting of the controller's SCSI-ID. If it is wrong, then edit the 
+setting of the controller's SCSI-ID. If it is wrong, then edit the 
 AM53C974_SCSI_ID definition in file AM53C974.h accordingly.
 
 
@@ -202,7 +202,7 @@ catch the problem by pressing the 'r' key. The driver will automatically enter
 single-step mode if it has detected something weird.
 
 
-Author's Contact Adress
+Author's Contact Address
 -----------------------
 Email: fri@rsx42sun0.dofn.de
 Phone: x49-7545-2256 (office), x49-7541-42305 (home)

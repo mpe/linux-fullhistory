@@ -23,7 +23,7 @@
 
 /* made this a static array since alpha and intel aren't.
    thomas made it a dynamic array and had to add lots of stuff to other parts
-   of linux to make sure the pages were contigous and such.  the static array
+   of linux to make sure the pages were contiguous and such.  the static array
    seems much easier
    making it 8k for now.  will change later.
       -- Cort

@@ -353,7 +353,7 @@ void umsdos_lookup_patch (
 				of the data of a file. It can translate
 				silently from MsDOS text file format to Unix
 				one (crlf -> lf) while reading, and the reverse
-				while writting. This is activated using the mount
+				while writing. This is activated using the mount
 				option conv=....
 
 				This is not useful for Linux file in promoted

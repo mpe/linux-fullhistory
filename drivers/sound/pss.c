@@ -824,7 +824,7 @@ probe_pss_mss (struct address_info *hw_config)
 
   /*
      * For some reason the card returns 0xff in the WSS status register
-     * immediately after boot. Propably MIDI+SB emulation algorithm
+     * immediately after boot. Probably MIDI+SB emulation algorithm
      * downloaded to the ADSP2115 spends some time initializing the card.
      * Let's try to wait until it finishes this task.
    */

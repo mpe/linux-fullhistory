@@ -39,9 +39,9 @@ hardware configuration.
 
 I have recently had conversations with the Senior Product Marketing Manager at
 BusLogic regarding the needs of free software developers, and he has reaffirmed
-BusLogic's committment to providing the technical information and support we
+BusLogic's commitment to providing the technical information and support we
 need to take full advantage of their products.  BusLogic has also been very
-accomodating in providing technical documentation, as well as access to their
+accommodating in providing technical documentation, as well as access to their
 engineering staff for technical questions and advice.  In addition, they have
 loaned me ISA cards for configuration testing, and even allowed me use of their
 technical support lab to test EISA configurations, since I don't have an EISA
@@ -210,7 +210,7 @@ file "BusLogic.c".  The following examples may be useful as a starting point:
 
     This command line selects default probing and a concurrency of 1 which also
     disables tagged queuing.  It may be useful if problems arise during
-    installation on a system with a flakey SCSI configuration.  In cases of a
+    installation on a system with a flaky SCSI configuration.  In cases of a
     marginal SCSI configuration it may also be beneficial to disable fast
     transfers and/or synchronous negotiation using AutoSCSI on "C" series
     boards.  Disconnect/reconnect may also be disabled for fast devices such as

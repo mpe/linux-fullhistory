@@ -269,7 +269,7 @@ extern __inline__ void  dev_unlock_list(void)
 }
 
 /*
- *	This almost never occurs, isnt in performance critical paths
+ *	This almost never occurs, isn't in performance critical paths
  *	and we can thus be relaxed about it
  */
  

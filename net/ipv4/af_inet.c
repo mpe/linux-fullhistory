@@ -307,6 +307,7 @@ void destroy_sock(struct sock *sk)
   	 */
   	 
   	delete_timer(sk);
+	del_timer(&sk->delack_timer);
 	del_timer(&sk->retransmit_timer);
 	
 	/*
@@ -673,6 +674,7 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->prot = prot;
 	sk->sleep = sock->wait;
 	init_timer(&sk->timer);
+	init_timer(&sk->delack_timer);
 	init_timer(&sk->retransmit_timer);
 	sk->timer.data = (unsigned long)sk;
 	sk->timer.function = &net_timer;

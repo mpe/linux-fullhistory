@@ -27,8 +27,8 @@
  .    o   ( a LOT of advice from Becker as well )
  .
  . History:
- .	12/07/95  Erik Stahlman  written, got recieve/xmit handled 
- . 	01/03/96  Erik Stahlman  worked out some bugs, actually useable!!! :-)
+ .	12/07/95  Erik Stahlman  written, got receive/xmit handled 
+ . 	01/03/96  Erik Stahlman  worked out some bugs, actually usable!!! :-)
  .	01/06/96  Erik Stahlman	 cleaned up some, better testing, etc 
  .	01/29/96  Erik Stahlman	 fixed autoirq, added multicast
  . 	02/01/96  Erik Stahlman	 1. disabled all interrupts in smc_reset
@@ -99,7 +99,7 @@ static const char *version =
 
 /*
  . Do you want to use 32 bit xfers?  This should work on all chips, as
- . the chipset is designed to accomodate them.   
+ . the chipset is designed to accommodate them.   
 */
 #define USE_32_BIT 1
 
@@ -206,7 +206,7 @@ struct smc_local {
  . and sets up the appropriate device parameters.   
  . NOTE: Interrupts are *OFF* when this procedure is called.
  .
- . NB:This shouldn't be static since it is refered to externally.
+ . NB:This shouldn't be static since it is referred to externally.
 */
 int smc_init(struct device *dev);
 
@@ -262,7 +262,7 @@ static void smc_interrupt(int irq, void *, struct pt_regs *regs);
 static void smc_interrupt(int irq, struct pt_regs *regs);
 #endif 
 /*
- . This is a seperate procedure to handle the receipt of a packet, to
+ . This is a separate procedure to handle the receipt of a packet, to
  . leave the interrupt code looking slightly cleaner 
 */ 
 inline static void smc_rcv( struct device *dev );
@@ -318,7 +318,7 @@ static void smc_reset( int ioaddr );
 /* Enable Interrupts, Receive, and Transmit */
 static void smc_enable( int ioaddr );
 
-/* this puts the device in an inactve state */
+/* this puts the device in an inactive state */
 static void smc_shutdown( int ioaddr );
 
 #ifndef NO_AUTOPROBE
@@ -374,8 +374,8 @@ static void smc_reset( int ioaddr )
 	outw( TCR_CLEAR, ioaddr + TCR );
 
 	/* set the control register to automatically
-	   release succesfully transmitted packets, to make the best 
-	   use out of our limitted memory */
+	   release successfully transmitted packets, to make the best 
+	   use out of our limited memory */
 	SMC_SELECT_BANK( 1 );
 	outw( inw( ioaddr + CONTROL ) | CTL_AUTO_RELEASE , ioaddr + CONTROL );	
 
@@ -415,7 +415,7 @@ static void smc_enable( int ioaddr )
  . Purpose:  closes down the SMC91xxx chip.
  . Method:   
  .	1. zero the interrupt mask
- .	2. clear the enable recieve flag
+ .	2. clear the enable receive flag
  .	3. clear the enable xmit flags
  .
  . TODO: 
@@ -741,7 +741,7 @@ static void smc_hardware_send_packet( struct device * dev )
  |   Input parameters: 
  |	dev->base_addr == 0, try to find all possible locations
  |	dev->base_addr == 1, return failure code
- |	dev->base_addr == 2, always allocate space,  and return sucess
+ |	dev->base_addr == 2, always allocate space,  and return success
  |	dev->base_addr == <anything else>   this is the address to check 
  |
  |   Output: 
@@ -915,7 +915,7 @@ static int smc_probe( int ioaddr )
 	SMC_SELECT_BANK(3);
 	revision_register  = inw( ioaddr + REVISION );
 	if ( !chip_ids[ ( revision_register  >> 4 ) & 0xF  ] ) { 
-		/* I don't regonize this chip, so... */
+		/* I don't recognize this chip, so... */
 		printk(CARDNAME ": IO %x: Unrecognized revision register:"
 			" %x, Contact author. \n", ioaddr, revision_register );
 
@@ -1009,7 +1009,7 @@ static int  smc_initcard(struct device *dev, int ioaddr)
 	revision_register  = inw( ioaddr + REVISION );
 	version_string = chip_ids[ ( revision_register  >> 4 ) & 0xF  ];
 	if ( !version_string ) {
-		/* I shouldnt' get here because this call was done before.... */ 
+		/* I shouldn't get here because this call was done before.... */ 
 		return -ENODEV;
 	}
 
@@ -1337,7 +1337,7 @@ static void smc_interrupt(int irq, struct pt_regs * regs)
 		if (status & IM_RCV_INT) {
 			/* Got a packet(s). */
 			PRINTK2((KERN_WARNING CARDNAME
-				": Recieve Interrupt\n"));
+				": Receive Interrupt\n"));
 			smc_rcv(dev);
 		} else if (status & IM_TX_INT ) {
 			PRINTK2((KERN_WARNING CARDNAME
@@ -1590,7 +1590,7 @@ static void smc_tx( struct device * dev )
 	if ( tx_status & TS_LOSTCAR ) lp->stats.tx_carrier_errors++;
 	if ( tx_status & TS_LATCOL  ) {
 		printk(KERN_DEBUG CARDNAME 
-			": Late collision occured on last xmit.\n");
+			": Late collision occurred on last xmit.\n");
 		lp->stats.tx_window_errors++;
 	}
 #if 0
@@ -1675,7 +1675,7 @@ static void smc_set_multicast_list(struct device *dev)
 		outw( inw(ioaddr + RCR ) | RCR_PROMISC, ioaddr + RCR );
 
 /* BUG?  I never disable promiscuous mode if multicasting was turned on. 
-   Now, I turn off promiscouos mode, but I don't do anything to multicasting
+   Now, I turn off promiscuous mode, but I don't do anything to multicasting
    when promiscuous mode is turned on. 
 */
 

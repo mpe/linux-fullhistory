@@ -284,7 +284,7 @@ isdn_net_stat_callback(int idx, int cmd)
 }
 
 /*
- * Check, if a numer contains wilcard-characters, in which case it
+ * Check, if a number contains wildcard-characters, in which case it
  * is for incoming purposes only.
  */
 static int
@@ -622,7 +622,7 @@ isdn_net_log_packet(u_char * buf, isdn_net_local * lp)
 /*
  * Generic routine to send out an skbuf.
  * If lowlevel-device does not support supports skbufs, use
- * standard send-routine, else sind directly.
+ * standard send-routine, else send directly.
  *
  * Return: 0 on success, !0 on failure.
  * Side-effects: ndev->tbusy is cleared on success.
@@ -665,7 +665,7 @@ isdn_net_xmit(struct device *ndev, isdn_net_local *lp, struct sk_buff *skb)
 {
         int ret;
 
-	/* For the other encaps the header has allready been built */
+	/* For the other encaps the header has already been built */
 #ifdef CONFIG_ISDN_PPP
 	if (lp->p_encap == ISDN_NET_ENCAP_SYNCPPP)
 		return (isdn_ppp_xmit(skb, ndev));
@@ -867,9 +867,9 @@ static struct enet_statistics *
 }
 
 /*      This is simply a copy from std. eth.c EXCEPT we pull ETH_HLEN
- *      instead of dev->hard_header_len off. This is done, because the
- *      lowlevel-driver has already pulled of it's stuff, when we get
- *      here and this routine only get's called whit p_encap == ETHER.
+ *      instead of dev->hard_header_len off. This is done because the
+ *      lowlevel-driver has already pulled off its stuff when we get
+ *      here and this routine only gets called with p_encap == ETHER.
  *      Determine the packet's protocol ID. The rule here is that we
  *      assume 802.3 if the type field is short enough to be a length.
  *      This is normal practice and works for any 'now in use' protocol.
@@ -908,7 +908,7 @@ unsigned short isdn_net_type_trans(struct sk_buff *skb, struct device *dev)
         /*
          *      This is a magic hack to spot IPX packets. Older Novell breaks
          *      the protocol design and runs IPX over 802.3 without an 802.2 LLC
-         *      layer. We look for FFFF which isnt a used 802.2 SSAP/DSAP. This
+         *      layer. We look for FFFF which isn't a used 802.2 SSAP/DSAP. This
          *      won't work for fault tolerant netware but does for the rest.
          */
         if (*(unsigned short *)rawp == 0xFFFF)
@@ -1014,7 +1014,7 @@ isdn_net_receive_callback(int idx, u_char * buf, int len)
 }
 
 /*
- *  receive callback for lovlevel drivers, which support skb's
+ *  receive callback for lowlevel drivers, which support skb's
  */
 
 int
@@ -1077,7 +1077,7 @@ my_eth_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 
 /*
  *  build an header
- *  depends on encaps that is beeing used.
+ *  depends on encaps that is being used.
  */
  
 static int
@@ -1217,7 +1217,7 @@ isdn_net_init(struct device *ndev)
 
 	/* 
 	 *  up till binding we ask the protocol layer to reserve as much
-	 *  as we migth need for HL layer
+	 *  as we might need for HL layer
          */
 	
 	for (drvidx = 0; drvidx < ISDN_MAX_DRIVERS; drvidx++)
@@ -1239,7 +1239,7 @@ isdn_net_init(struct device *ndev)
 
 /*
  * I picked the pattern-matching-functions from an old GNU-tar version (1.10)
- * It was originaly written and put to PD by rs@mirror.TMC.COM (Rich Salz)
+ * It was originally written and put to PD by rs@mirror.TMC.COM (Rich Salz)
  */
 
 static int
@@ -1256,11 +1256,11 @@ isdn_net_Star(char *s, char *p)
  * This function gets a string in s and checks, if it matches the pattern
  * given in p. It returns 1 on success, 0 otherwise.
  *
- * Posible Patterns:
+ * Possible Patterns:
  *
  * '?'     matches one character
  * '*'     matches zero or more characters
- * [xyz]   matches the set of charcters in brackets.
+ * [xyz]   matches the set of characters in brackets.
  * [^xyz]  matches any single character not in the set of characters
  */
 
@@ -1347,7 +1347,7 @@ isdn_net_swap_usage(int i1, int i2)
 
 /*
  * An incoming call-request has arrived.
- * Search the interface-chain for an aproppriate interface.
+ * Search the interface-chain for an appropriate interface.
  * If found, connect the interface to the ISDN-channel and initiate
  * D- and B-Channel-setup. If secure-flag is set, accept only
  * configured phone-numbers. If callback-flag is set, initiate
@@ -1420,7 +1420,7 @@ isdn_net_find_icall(int di, int ch, int idx, char *num)
 #endif
 	swapped = 0;
 	while (p) {
-		/* If last check has trigered as binding-swap, revert it */
+		/* If last check has triggered as binding-swap, revert it */
 		switch (swapped) {
 		case 2:
 			isdn_net_swap_usage(idx, sidx);
@@ -1836,7 +1836,7 @@ char *
 
 /*
  * Set interface-parameters.
- * Allways set all parameters, so the user-level application is responsible
+ * Always set all parameters, so the user-level application is responsible
  * for not overwriting existing setups. It has to get the current
  * setup first, if only selected parameters are to be changed.
  */

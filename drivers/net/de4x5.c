@@ -53,7 +53,7 @@
     achieved by letting the driver autoprobe as if it were compiled into the
     kernel, except that there is no autoprobing of the IRQ lines. This is of
     no great  consequence except do make sure  you're not sharing interrupts
-    with  anything that cannot  accomodate  interrupt sharing!  The existing
+    with  anything that cannot  accommodate  interrupt sharing!  The existing
     register_netdevice() code will only allow one device to be registered at
     a time. 
 
@@ -108,7 +108,7 @@
     applies most particularly to the DC21140 based cards).
 
     I've changed the timing routines to  use the kernel timer and scheduling
-    functions  so that the  hangs  and other assorted  problems that occured
+    functions  so that the  hangs  and other assorted  problems that occurred
     while autosensing the  media  should be gone.  A  bonus  for the DC21040
     auto  media sense algorithm is  that it can now  use one that is more in
     line with the  rest (the DC21040  chip doesn't  have a hardware  timer).
@@ -173,7 +173,7 @@
 			  Made changes suggested by <jeff@router.patch.net>:
 			    Change driver to detect all DECchip based cards
 			    with DEC_ONLY restriction a special case.
-			    Changed driver to autprobe as a module. No irq
+			    Changed driver to autoprobe as a module. No irq
 			    checking is done now - assume BIOS is good!
 			  Added SMC9332 detection <manabe@Roy.dsl.tutics.ac.jp>
       0.41    21-Mar-96   Don't check for get_hw_addr checksum unless DEC card
@@ -1156,7 +1156,7 @@ de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    
 	if (sts & STS_SE) {              /* Bus Error */
 	    STOP_DE4X5;
-	    printk("%s: Fatal bus error occured, sts=%#8x, device stopped.\n",
+	    printk("%s: Fatal bus error occurred, sts=%#8x, device stopped.\n",
 		   dev->name, sts);
 	    return;
 	}

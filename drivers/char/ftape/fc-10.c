@@ -14,7 +14,7 @@
 
    Modified to use an array of addresses and generally cleaned up (made
    much shorter) 4 June 94, dosemu isn't that good at writing short code it
-   would seem :-). Made independant of 0x180, but I doubt it will work
+   would seem :-). Made independent of 0x180, but I doubt it will work
    at any other address.
 
    Modified for distribution with ftape source. 21 June 94, SJL.

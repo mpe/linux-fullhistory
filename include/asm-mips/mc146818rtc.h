@@ -1,5 +1,5 @@
 /*
- * Machine dependend access functions for RTC registers.
+ * Machine dependent access functions for RTC registers.
  */
 #ifndef __ASM_MIPS_MC146818RTC_H
 #define __ASM_MIPS_MC146818RTC_H

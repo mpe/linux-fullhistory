@@ -939,7 +939,7 @@ D: Author, Emacs VC and GUD modes
 N: Bernhard Kaindl
 E: bartelt@computerhaus.at
 D: Author of a menu based configuration tool, kmenu, which 
-D: is the precedessor of 'make menuconfig' and 'make xconfig'.
+D: is the predecessor of 'make menuconfig' and 'make xconfig'.
 S: Tallak 95
 S: 8103 Rein
 S: Austria

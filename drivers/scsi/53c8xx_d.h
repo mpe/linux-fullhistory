@@ -130,7 +130,7 @@ ABSOLUTE dsa_temp_addr_dsa_value = 0	; Address of this DSA value
 ; loaded with the address of the next DSA structure and
 ; reselected_check_next is called if a failure occurs.
 ;
-; Perhaps more conscisely, the net effect of the mess is 
+; Perhaps more concisely, the net effect of the mess is 
 ;
 ; for (dsa = reconnect_dsa_head, dest = &reconnect_dsa_head, 
 ;     src = NULL; dsa; dest = &dsa->next, dsa = dsa->next) {
@@ -310,7 +310,7 @@ dsa_code_check_reselect:
 
 at 0x0000003e : */	0x720a0000,0x00000000,
 /*
-; FIXME : we need to accomodate bit fielded and binary here for '7xx/'8xx chips
+; FIXME : we need to accommodate bit fielded and binary here for '7xx/'8xx chips
 	JUMP REL (wrong_dsa), IF NOT dsa_temp_target, AND MASK 0xf8
 
 at 0x00000040 : */	0x8084f800,0x00ffff48,
@@ -335,7 +335,7 @@ at 0x00000047 : */	0x78380000,0x00000000,
 
 at 0x00000049 : */	0x72340000,0x00000000,
 /*
-; FIXME : we need to accomodate bit fielded and binary here for '7xx/'8xx chips
+; FIXME : we need to accommodate bit fielded and binary here for '7xx/'8xx chips
 	JUMP REL (wrong_dsa), IF NOT dsa_temp_lun, AND MASK 0xf8
 
 at 0x0000004b : */	0x8084f800,0x00ffff1c,
@@ -403,7 +403,7 @@ ABSOLUTE schedule = 0 		; Array of JUMP dsa_begin or JUMP (next),
 
 ; Linked lists of DSA structures
 ABSOLUTE reconnect_dsa_head = 0	; Link list of DSAs which can reconnect
-ABSOLUTE addr_reconnect_dsa_head = 0 ; Address of variable contataining
+ABSOLUTE addr_reconnect_dsa_head = 0 ; Address of variable containing
 				; address of reconnect_dsa_head
 
 ; These select the source and destination of a MOVE MEMORY instruction
@@ -748,7 +748,7 @@ at 0x00000093 : */	0x1a000000,0x00000048,
 ;
 ;	After control has passed to one of the user provided 
 ;	DATA_IN or DATA_OUT routines, back calls are made to 
-;	other_tranfer_in or other_transfer_out to handle non-DATA IN
+;	other_transfer_in or other_transfer_out to handle non-DATA IN
 ;	and DATA OUT phases respectively, with the state of the active
 ;	data pointer being preserved in TEMP.
 ;
@@ -906,7 +906,7 @@ at 0x000000cd : */	0x80080000,0x00000000,
 
 
 ; Note that other_out and other_in loop until a non-data phase
-; is discoverred, so we only execute return statements when we
+; is discovered, so we only execute return statements when we
 ; can go on to the next data phase block move statement.
 
 ENTRY other_out
@@ -1018,7 +1018,7 @@ at 0x000000f7 : */	0x80080000,0x000003ac,
 ;	caller hasn't read the first byte of the message.  munge_message
 ;	is called when the caller has read the first byte of the message,
 ;	and left it in SFBR.  msg_in_restart is called when the caller 
-;	hasnt read the first byte of the message, and wishes RETURN
+;	hasn't read the first byte of the message, and wishes RETURN
 ;	to transfer control back to the address of the conditional
 ;	CALL instruction rather than to the instruction after it.
 ;
@@ -1761,7 +1761,7 @@ at 0x000001d9 : */	0x98080000,0x00010000,
 ;
 ; 2.  The NCR53c810 was selected or reselected by another device.
 ;
-; 3.  The bus was allready busy since we were selected or reselected
+; 3.  The bus was already busy since we were selected or reselected
 ;	before starting the command.
 
 wait_reselect_failed:
@@ -1990,7 +1990,7 @@ at 0x00000220 : */	0x58000008,0x00000000,
 ; so we need to sink/source one byte of data to allow the transition.
 ;
 ; For the sake of safety, we'll only source one byte of data in all 
-; cases, but to accomodate the SCSI-I dain bramage, we'll sink an  
+; cases, but to accommodate the SCSI-I dain bramage, we'll sink an  
 ; arbitrary number of bytes.
     JUMP spew_cmd, WHEN CMD
 

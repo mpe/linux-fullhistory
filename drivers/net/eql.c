@@ -2,7 +2,7 @@
  * Equalizer Load-balancer for serial network interfaces.
  *
  * (c) Copyright 1995 Simon "Guru Aleph-Null" Janes
- * NCM: Network and Communications Mangement, Inc.
+ * NCM: Network and Communications Management, Inc.
  *
  *
  *	This software may be used and distributed according to the terms
@@ -73,7 +73,7 @@ static const char *version =
  * infinite sleep in a lock somewhere..
  *
  * Revision 3.2  1995/01/15  16:46:06  guru
- * Log trimmed of non-pertinant 1.x branch messages
+ * Log trimmed of non-pertinent 1.x branch messages
  *
  * Revision 3.1  1995/01/15  14:41:45  guru
  * New Scheduler and timer stuff...
@@ -664,7 +664,7 @@ static void eql_delete_slave(slave_t *slave)
 
 
 #if 0				/* not currently used, will be used
-				   when we realy use a priority queue */
+				   when we really use a priority queue */
 static long slave_Bps(slave_t *slave)
 {
 	return (slave->priority_Bps);
@@ -738,7 +738,7 @@ static void eql_delete_slave_queue(slave_queue_t *queue)
 	slave_t *zapped;
 	/*
 	 *	This should only be called when there isn't a
-	 *	timer running that scans the data periodicaly.. 
+	 *	timer running that scans the data periodically.. 
 	 *	dev_close stops the timer... 
 	 */
 

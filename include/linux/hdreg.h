@@ -51,8 +51,8 @@
 #define WIN_SETIDLE1		0xE3
 #define WIN_SETIDLE2		0x97
 
-#define WIN_DOORLOCK		0xde	/* lock door on removeable drives */
-#define WIN_DOORUNLOCK		0xdf	/* unlock door on removeable drives */
+#define WIN_DOORLOCK		0xde	/* lock door on removable drives */
+#define WIN_DOORUNLOCK		0xdf	/* unlock door on removable drives */
 
 #define WIN_MULTREAD		0xC4	/* read sectors using multiple mode */
 #define WIN_MULTWRITE		0xC5	/* write sectors using multiple mode */

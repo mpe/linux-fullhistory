@@ -14,7 +14,7 @@
 
     This stuff compiles as a loadable module (I developed it on 1.3.77).
     Simply type mkmodule, and insmod nfs.o. This will start for nfsiod's
-    at the same time (which will show up under the pesudonym of insmod in
+    at the same time (which will show up under the pseudonym of insmod in
     ps-style listings).
 
     Alternatively, you can put it right into the kernel: remove everything
@@ -51,9 +51,9 @@
      *	Async RPC will not be tried when server->rsize < PAGE_SIZE.
 
      *	When an error occurs, nfsiod has no way of returning
-    	the error code to the user process. Theerefore, it flags
+    	the error code to the user process. Therefore, it flags
     	page->error and wakes up all processes waiting on that
-    	page (they usually do so from withing generic_readpage).
+    	page (they usually do so from within generic_readpage).
 
     	generic_readpage finds that the page is still not
     	uptodate, and calls nfs_readpage again. This time around,

@@ -511,7 +511,7 @@ int eata_pio_reset(Scsi_Cmnd * cmd)
 	sp->result = DID_RESET << 16;
 	
 	/* This mailbox is terminated */
-	printk("eata_pio_reset: resetted ccb %d.\n",x);
+	printk("eata_pio_reset: reset ccb %d.\n",x);
 	HD(cmd)->ccb[x].status = FREE;
 	
 	restore_flags(flags);

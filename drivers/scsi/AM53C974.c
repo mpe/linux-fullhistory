@@ -30,7 +30,7 @@
  * 	drew@colorado.edu
  *	+1 (303) 666-5836
  *
- *  The AM53C974_nobios_detect code was origininally developed by
+ *  The AM53C974_nobios_detect code was originally developed by
  *   Robin Cutshaw (robin@xfree86.org) and is used here in a 
  *   slightly modified form.
  *
@@ -1374,7 +1374,7 @@ AM53C974_write_8(SOFREG, (SOFREG_SO & hostdata->sync_off[target]) |
 * Purpose : handle phase changes                                       *
 *                                                                      *
 * Inputs : instance - which AM53C974                                   *
-*          statreg - stus register                                     *
+*          statreg - status register                                     *
 *          isreg - internal state register                             *
 *          instreg - interrupt status register                         *
 *          cfifo - number of bytes in FIFO                             *

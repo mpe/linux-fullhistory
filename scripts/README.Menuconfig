@@ -9,7 +9,7 @@ Some kernel features may be built directly into the kernel.
 Some may be made into loadable runtime modules.  Some features
 may be completely removed altogether.  There are also certain
 kernel parameters which are not really features, but must be 
-entered in as decimal or hexidecimal numbers or possibly text.
+entered in as decimal or hexadecimal numbers or possibly text.
 
 Menu items beginning with (*), (M) or ( ) represent features 
 configured to be built in, modularized or removed respectively.
@@ -76,7 +76,7 @@ o  To see available help for the item, use the cursor keys to highlight
 Data Entry
 -----------
 o  Enter the requested information and press <ENTER>
-   If you are entering hexidecimal values, it is not necessary to
+   If you are entering hexadecimal values, it is not necessary to
    add the '0x' prefix to the entry.
 
 o  For help, use the <TAB> or cursor keys to highlight the help option
@@ -131,7 +131,7 @@ complete rebuild of lxdialog by changing to it's directory and doing
 If you use Menuconfig in an XTERM window make sure you have your 
 $TERM variable set to point to a xterm definition which supports color.
 Otherwise, Menuconfig will look rather bad.  Menuconfig will not 
-display correctly in a RXVT window because rxvt display's only one
+display correctly in a RXVT window because rxvt displays only one
 intensity of color, bright.
 
 Menuconfig will display larger menus on screens or xterms which are
@@ -157,8 +157,8 @@ WARNING: It is not recommended that you change any defines in
          are brave, you may tinker with color.h to tune the colors to
          your preference.
 
-COMPATABILITY ISSUE:
-         There have been some compatability problems reported with
+COMPATIBILITY ISSUE:
+         There have been some compatibility problems reported with
          older versions of bash and sed.  I am trying to work these
          out but it is preferable that you upgrade those utilities.
 

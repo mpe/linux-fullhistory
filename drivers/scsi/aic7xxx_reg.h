@@ -24,7 +24,7 @@
 /*
  * This header is shared by the sequencer code and the kernel level driver.
  *
- * All page numbers refer to the Adaptec AIC-7770 Data Book availible from
+ * All page numbers refer to the Adaptec AIC-7770 Data Book available from
  * Adaptec's Technical Documents Department 1-800-934-2766
  */
 
@@ -94,7 +94,7 @@
 #define		P_STATUS	0xc0
 #define		P_MESGIN	0xe0
 /*
- * SCSI Contol Signal Write Register (p. 3-16).
+ * SCSI Control Signal Write Register (p. 3-16).
  * Writing to this register modifies the control signals on the bus.  Only
  * those signals that are allowed in the current mode (Initiator/Target) are
  * asserted.
@@ -132,9 +132,9 @@
 
 /*
  * SCSI Latched Data (p. 3-19).
- * Read/Write latchs used to transfer data on the SCSI bus during
+ * Read/Write latches used to transfer data on the SCSI bus during
  * Automatic or Manual PIO mode.  SCSIDATH can be used for the
- * upper byte of a 16bit wide asyncronouse data phase transfer.
+ * upper byte of a 16bit wide asynchronous data phase transfer.
  */
 #define SCSIDATL		0x006
 #define SCSIDATH		0x007
@@ -234,7 +234,7 @@
  * transfered on the SCSI bus.  They are counted up in the same
  * manner as STCNT is counted down.  SHADDR should always be used
  * to determine the address of the last byte transfered since HADDR
- * can be squewed by write ahead.
+ * can be skewed by write ahead.
  */
 #define	SHADDR			0x014
 #define	SHADDR0			0x014
@@ -289,7 +289,7 @@
  * Sequencer RAM Data (p. 3-34)
  * Single byte window into the Scratch Ram area starting at the address
  * specified by SEQADDR0 and SEQADDR1.  To write a full word, simply write
- * four bytes in sucessesion.  The SEQADDRs will increment after the most
+ * four bytes in succession.  The SEQADDRs will increment after the most
  * significant byte is written
  */
 #define SEQRAM			0x061
@@ -376,7 +376,7 @@
 
 /*
  * Host Control (p. 3-47) R/W
- * Overal host control of the device.
+ * Overall host control of the device.
  */
 #define HCNTRL			0x087
 /*    UNUSED			0x80 */
@@ -398,9 +398,9 @@
 #define			SEND_REJECT	0x11	/* sending a message reject */
 #define			NO_IDENT	0x21	/* no IDENTIFY after reconnect*/
 #define			NO_MATCH	0x31	/* no cmd match for reconnect */
-#define			SDTR_MSG	0x41	/* SDTR message recieved */
-#define			WDTR_MSG	0x51	/* WDTR message recieved */
-#define			REJECT_MSG	0x61	/* Reject message recieved */
+#define			SDTR_MSG	0x41	/* SDTR message received */
+#define			WDTR_MSG	0x51	/* WDTR message received */
+#define			REJECT_MSG	0x61	/* Reject message received */
 #define			BAD_STATUS	0x71	/* Bad status from target */
 #define			RESIDUAL	0x81	/* Residual byte count != 0 */
 #define			ABORT_TAG	0x91	/* Sent an ABORT_TAG message */
@@ -484,7 +484,7 @@
 
 /*
  * Queue In FIFO (p. 3-60)
- * Input queue for queued SCBs (commands that the seqencer has yet to start)
+ * Input queue for queued SCBs (commands that the sequencer has yet to start)
  */
 #define QINFIFO			0x09b
 
@@ -511,9 +511,9 @@
  * The two reserved bytes at SCBARRAY+1[23] are expected to be set to
  * zero. Bit 3 in SCBARRAY+0 is used as an internal flag to indicate
  * whether or not to DMA an SCB from host ram. This flag prevents the
- * "re-fetching" of transactions that are requed because the target is
+ * "re-fetching" of transactions that are requeued because the target is
  * busy with another command. We also use bits 6 & 7 to indicate whether
- * or not to initiate SDTR or WDTR repectively when starting this command.
+ * or not to initiate SDTR or WDTR respectively when starting this command.
  */
 #define SCBARRAY		0x0a0
 #define	SCB_CONTROL		0x0a0
@@ -633,7 +633,7 @@
 #define TARG_SCRATCH		0x020
 
 /*
- * The sequencer will stick the frist byte of any rejected message here so
+ * The sequencer will stick the first byte of any rejected message here so
  * we can see what is getting thrown away.
  */
 #define REJBYTE			0x031

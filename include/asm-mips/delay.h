@@ -36,7 +36,7 @@ extern __inline__ void udelay(unsigned long usecs)
 
 /*
  * The different variants for 32/64 bit are pure paranoia. The typical
- * range of numbers that apprears for MIPS machines avoids overflows.
+ * range of numbers that appears for MIPS machines avoids overflows.
  */
 extern __inline__ unsigned long muldiv(unsigned long a, unsigned long b, unsigned long c)
 {

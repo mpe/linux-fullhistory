@@ -28,7 +28,7 @@ unsigned int csum_partial(const unsigned char *buff, int len, unsigned int sum)
 
 	/*
 	 * The GCC generated code for handling carry bits makes
-	 * it strongly desireable to do this in assembler!
+	 * it strongly desirable to do this in assembler!
 	 */
     __asm__("
 	.set	noreorder

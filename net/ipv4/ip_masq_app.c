@@ -271,12 +271,12 @@ static __inline__ void masq_fix_ack_seq(const struct ip_masq_seq *ms_seq, struct
                 if(after(ack_seq,ms_seq->init_seq)) {
                         th->ack_seq = htonl(ack_seq-ms_seq->delta);
 #if DEBUG_CONFIG_IP_MASQ_APP
-                        printk("masq_fix_ack_seq() : substracted delta (%d) from ack_seq\n",ms_seq->delta);
+                        printk("masq_fix_ack_seq() : subtracted delta (%d) from ack_seq\n",ms_seq->delta);
 #endif
                 } else {
                         th->ack_seq = htonl(ack_seq-ms_seq->previous_delta);
 #if DEBUG_CONFIG_IP_MASQ_APP
-                        printk("masq_fix_ack_seq() : substracted previous_delta (%d) from ack_seq\n",ms_seq->previous_delta);
+                        printk("masq_fix_ack_seq() : subtracted previous_delta (%d) from ack_seq\n",ms_seq->previous_delta);
 #endif
                 }
         }

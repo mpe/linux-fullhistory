@@ -42,7 +42,7 @@
  *  1.5 Module support and bugfixes.
  *      Tray locking.
  *  1.6 Removed ISP16 code from this driver.
- *      Allow only to set io base address on comand line: sjcd=<io_base>
+ *      Allow only to set io base address on command line: sjcd=<io_base>
  *      Changes to Documentation/cdrom/sjcd
  *      Added cleanup after any error in the initialisation.
  *
@@ -329,7 +329,7 @@ static int sjcd_check_status( void ){
 }
 
 /*
- * This is just timout counter, and nothing more. Surprized ? :-)
+ * This is just timeout counter, and nothing more. Surprised ? :-)
  */
 static volatile long sjcd_status_timeout;
 
@@ -528,7 +528,7 @@ static int sjcd_update_toc( void ){
   }
 
   /*
-   * Get the disk lenght info.
+   * Get the disk length info.
    */
   sjcd_send_1_cmd( SCMD_GET_DISK_INFO, SCMD_GET_D_SIZE );
   sjcd_receive_status();
@@ -1023,7 +1023,7 @@ static void sjcd_poll( void ){
   case SJCD_S_READ:{
     if( sjcd_status_valid ? 1 : sjcd_check_status() ){
       /*
-       * Previos command is completed.
+       * Previous command is completed.
        */
       if( !sjcd_status_valid || sjcd_command_failed ){
 #if defined( SJCD_TRACE )
@@ -1146,7 +1146,7 @@ static void sjcd_poll( void ){
 
       /*
        * Everything seems to be OK. Just read the frame and recalculate
-       * indecis.
+       * indices.
        */
       sjcd_buf_bn[ sjcd_buf_in ] = -1; /* ??? */
       insb( SJCDPORT( 2 ), sjcd_buf + 2048 * sjcd_buf_in, 2048 );
@@ -1272,7 +1272,7 @@ static void do_sjcd_request( void ){
   sjcd_transfer_is_active = 1;
   while( CURRENT_IS_VALID ){
     /*
-     * Who of us are paranoic?
+     * Who of us are paranoiac?
      */
     if( CURRENT->bh && !buffer_locked(CURRENT->bh) )
       panic( DEVICE_NAME ": block not locked" );

@@ -38,7 +38,7 @@
  *	Alexey Kuznetsov	:	Massive rework to support tree based routing,
  *					routing caches and better behaviour.
  *		
- *		Olaf Erb	:	irtt wasnt being copied right.
+ *		Olaf Erb	:	irtt wasn't being copied right.
  *		Bjorn Ekwall	:	Kerneld route support.
  *		Alan Cox	:	Multicast fixed (I hope)
  * 		Pavel Krauz	:	Limited broadcast fixed
@@ -466,7 +466,7 @@ static struct fib_info * fib_create_info(__u32 gw, struct device * dev,
 		 *	If you want to increase MTU for some net (local subnet)
 		 *	use "route add .... mss xxx".
 		 *
-		 * 	The MTU isnt currently always used and computed as it
+		 * 	The MTU isn't currently always used and computed as it
 		 *	should be as far as I can tell. [Still verifying this is right]
 		 */
 		if ((flags & RTF_GATEWAY) && mss > 576)
@@ -981,7 +981,7 @@ static void rt_free(struct rtable * rt)
 }
 
 /*
- * RT "bottom half" handlers. Called with masked inetrrupts.
+ * RT "bottom half" handlers. Called with masked interrupts.
  */
 
 static __inline__ void rt_kick_free_queue(void)
@@ -1087,7 +1087,7 @@ void ip_rt_check_expire()
 				 * LRU ordering.
 				 */
 
-				if (rth->rt_lastuse + RT_CACHE_BUBBLE_THRESHOULD < rth_next->rt_lastuse ||
+				if (rth->rt_lastuse + RT_CACHE_BUBBLE_THRESHOLD < rth_next->rt_lastuse ||
 				    (rth->rt_lastuse < rth_next->rt_lastuse &&
 				     rth->rt_use < rth_next->rt_use))
 				{

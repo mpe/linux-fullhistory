@@ -51,7 +51,7 @@ struct scp_struct
 struct iscp_struct
 {
   unsigned char  busy;          /* 586 clears after successful init */
-  unsigned char  zero_dummy;    /* hast to be zero */
+  unsigned char  zero_dummy;    /* has to be zero */
   unsigned short scb_offset;    /* pointeroffset to the scb_base */
   char          *scb_base;      /* base-address of all 16-bit offsets */
 };

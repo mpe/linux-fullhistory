@@ -53,7 +53,7 @@ void invalidate_inode_pages(struct inode * inode)
 
 	p = &inode->i_pages;
 	while ((page = *p) != NULL) {
-		if (page->locked) {
+		if (PageLocked(page)) {
 			p = &page->next;
 			continue;
 		}
@@ -86,7 +86,7 @@ repeat:
 
 		/* page wholly truncated - free it */
 		if (offset >= start) {
-			if (page->locked) {
+			if (PageLocked(page)) {
 				wait_on_page(page);
 				goto repeat;
 			}
@@ -118,10 +118,11 @@ int shrink_mmap(int priority, int dma)
 
 	priority = (limit<<2) >> priority;
 	page = mem_map + clock;
-	while (priority-- > 0) {
-		if (page->locked)
+	do {
+		priority--;
+		if (PageLocked(page))
 			goto next;
-		if (dma && !page->dma)
+		if (dma && !PageDMA(page))
 			goto next;
 		/* First of all, regenerate the page's referenced bit
                    from any buffers in the page */
@@ -131,7 +132,7 @@ int shrink_mmap(int priority, int dma)
 			do {
 				if (buffer_touched(tmp)) {
 					clear_bit(BH_Touched, &tmp->b_state);
-					page->referenced = 1;
+					set_bit(PG_referenced, &page->flags);
 				}
 				tmp = tmp->b_this_page;
 			} while (tmp != bh);
@@ -142,21 +143,32 @@ int shrink_mmap(int priority, int dma)
 		   no page is currently in both the page cache and the
 		   buffer cache; we'd have to modify the following
 		   test to allow for that case. */
-		if (page->count > 1)
-			page->referenced = 1;
-		else if (page->referenced)
-			page->referenced = 0;
-		else if (page->count) {
-			/* The page is an old, unshared page --- try
-                           to discard it. */
-			if (page->inode) {
-				remove_page_from_hash_queue(page);
-				remove_page_from_inode_queue(page);
-				free_page(page_address(page));
-				return 1;
-			}
-			if (bh && try_to_free_buffer(bh, &bh, 6))
-				return 1;
+
+		switch (page->count) {
+			case 1:
+				/* If it has been referenced recently, don't free it */
+				if (clear_bit(PG_referenced, &page->flags))
+					break;
+
+				/* is it a page cache page? */
+				if (page->inode) {
+					remove_page_from_hash_queue(page);
+					remove_page_from_inode_queue(page);
+					free_page(page_address(page));
+					return 1;
+				}
+
+				/* is it a buffer cache page? */
+				if (bh && try_to_free_buffer(bh, &bh, 6))
+					return 1;
+				break;
+
+			default:
+				/* more than one users: we can't throw it away */
+				set_bit(PG_referenced, &page->flags);
+				/* fall through */
+			case 0:
+				/* nothing */
 		}
 next:
 		page++;
@@ -165,7 +177,7 @@ next:
 			clock = 0;
 			page = mem_map;
 		}
-	}
+	} while (priority > 0);
 	return 0;
 }
 
@@ -223,6 +235,16 @@ void update_vm_cache(struct inode * inode, unsigned long pos, const char * buf, 
 	} while (count);
 }
 
+static inline void add_to_page_cache(struct page * page,
+	struct inode * inode, unsigned long offset)
+{
+	page->count++;
+	page->flags &= ~((1 << PG_uptodate) | (1 << PG_error));
+	page->offset = offset;
+	add_page_to_inode_queue(inode, page);
+	add_page_to_hash_queue(inode, page);
+}
+
 /*
  * Try to read ahead in the file. "page_cache" is a potentially free page
  * that we could use for the cache (if it is 0 we can try to create one,
@@ -250,15 +272,8 @@ static unsigned long try_to_read_ahead(struct inode * inode, unsigned long offse
 	 * Ok, add the new page to the hash-queues...
 	 */
 	page = mem_map + MAP_NR(page_cache);
-	page->count++;
-	page->uptodate = 0;
-	page->error = 0;
-	page->offset = offset;
-	add_page_to_inode_queue(inode, page);
-	add_page_to_hash_queue(inode, page);
-
+	add_to_page_cache(page, inode, offset);
 	inode->i_op->readpage(inode, page);
-
 	free_page(page_cache);
 	return 0;
 #else
@@ -278,7 +293,7 @@ void __wait_on_page(struct page *page)
 repeat:
 	run_task_queue(&tq_disk);
 	current->state = TASK_UNINTERRUPTIBLE;
-	if (page->locked) {
+	if (PageLocked(page)) {
 		schedule();
 		goto repeat;
 	}
@@ -297,11 +312,120 @@ repeat:
  * of the logic when it comes to error handling etc.
  */
 #define MAX_READAHEAD (PAGE_SIZE*8)
+#define MIN_READAHEAD (PAGE_SIZE)
+
+static inline unsigned long generic_file_readahead(struct file * filp, struct inode * inode,
+	int try_async, unsigned long pos, struct page * page,
+	unsigned long page_cache)
+{
+	unsigned long max_ahead, ahead;
+	unsigned long rapos, ppos;
+
+	ppos = pos & PAGE_MASK;
+/*
+ * If the current page is locked, try some synchronous read-ahead in order
+ * to avoid too small IO requests.
+ */
+	if (PageLocked(page)) {
+		max_ahead = filp->f_ramax;
+		rapos = ppos;
+/*		try_async = 1  */ /* Seems questionnable */
+	}
+/*
+ * The current page is not locked
+ * It may be the moment to try asynchronous read-ahead.
+ */
+	else {
+/*
+ * Compute the position of the last page we have tried to read
+ */
+		rapos = filp->f_rapos & PAGE_MASK;
+		if (rapos) rapos -= PAGE_SIZE;
+/*
+ * If asynchronous is the good tactics and if the current position is
+ * inside the previous read-ahead window,
+ * check the last red page:
+ * - if locked, previous IO request is probably not complete, and we will
+ *    not try to do another IO request.
+ * - if not locked, previous IO request is probably complete, and it is the
+ *    good moment to try a new asynchronous read-ahead request.
+ * try_async = 2 means that we have to force unplug of the device in
+ * order to force call to the strategy routine of the disk driver and 
+ * start IO asynchronously.
+ */
+		if (try_async == 1 && pos <= filp->f_rapos &&
+			 pos + filp->f_ralen >= filp->f_rapos) {
+			struct page *a_page;
+/*
+ * Add ONE page to max_ahead in order to try to have the same IO max size as
+ * synchronous read-ahead (MAX_READAHEAD + 1)*PAGE_SIZE.
+ */
+			max_ahead = filp->f_ramax + PAGE_SIZE;
+
+			if (rapos < inode->i_size) {
+				a_page = find_page(inode, rapos);
+				if (a_page) {
+					if (PageLocked(a_page))
+						max_ahead = 0;
+					a_page->count--;
+				}
+			}
+			else
+				max_ahead = 0;
+			try_async = 2;
+		}
+		else {
+			max_ahead = 0;
+		}
+	}
+
+/*
+ * Try to read pages.
+ * We hope that ll_rw_blk() plug/unplug, coalescence and sort will work fine
+ * enough to avoid too bad actuals IO requests.
+ */
+	ahead = 0;
+	while (ahead < max_ahead) {
+		ahead += PAGE_SIZE;
+		page_cache = try_to_read_ahead(inode, rapos + ahead, page_cache);
+	}
+/*
+ * If we tried to read some pages,
+ * Store the length of the current read-ahead window.
+ * If necessary,
+ *    Try to force unplug of the device in order to start an asynchronous
+ *    read IO.
+ */
+	if (ahead > 0) {
+		filp->f_ralen = ahead;
+		if (try_async == 2) {
+/*
+ * Schedule() should be changed to run_task_queue(...)
+ */
+			run_task_queue(&tq_disk);
+			try_async = 1;
+		}
+	}
+/*
+ * Compute the new read-ahead position.
+ * It is the position of the next byte.
+ */
+	filp->f_rapos = rapos + ahead + PAGE_SIZE;
+/*
+ * Wait on the page if necessary
+ */
+	if (PageLocked(page)) {
+		__wait_on_page(page);
+	}
+	return page_cache;
+}
+
+
 int generic_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	int error, read;
 	unsigned long pos, page_cache;
-	unsigned long ra_pos, ra_end;	/* read-ahead */
+	int try_async;
 	
 	if (count <= 0)
 		return 0;
@@ -310,13 +434,67 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 	page_cache = 0;
 
 	pos = filp->f_pos;
-	ra_pos = filp->f_reada;
-	ra_end = MAX_READAHEAD;
-	if (!ra_pos) {
-		ra_pos = (pos + PAGE_SIZE) & PAGE_MASK;
-		ra_end = 0;
+/*
+ * Dont beleive f_reada
+ * --------------------
+ * f_reada is set to 0 by seek operations.
+ * If we beleive f_reada, small seek ops break asynchronous read-ahead.
+ * That may be quite bad for small seeks or rewrites operations.
+ * I prefer to check if the current position is inside the previous read-ahead
+ * window.
+ * If that's true, I assume that the file accesses are sequential enough to
+ * continue asynchronous read-ahead.
+ */
+	if (pos <= filp->f_rapos && pos + filp->f_ralen >= filp->f_rapos) {
+		filp->f_reada = 1;
 	}
-	ra_end += pos + count;
+/*
+ * Do minimum read-ahead at the beginning of the file.
+ * Some tools only read the start of the file only.
+ * Break read-ahead if the file position is after the previous read ahead
+ * position or if read-ahead position is 0.
+ */
+	else if (pos+count < MIN_READAHEAD || !filp->f_rapos ||
+	         pos > filp->f_rapos) {
+		filp->f_reada = 0;
+	}
+
+/*
+ * Now f_reada = 1 means that asynchronous read-ahead is the good tactics.
+ * Will try asynchrous read-ahead as soon as possible.
+ * Double the max read ahead size each time.
+ *   That euristic avoid to do some large IO for files that are not really
+ *   accessed sequentialy.
+ */
+	if (filp->f_reada) {
+		try_async = 1;
+		filp->f_ramax += filp->f_ramax;
+	}
+/*
+ * f_reada = 0 means that asynchronous read_ahead is quite bad.
+ * Will not try asynchronous read-ahead first.
+ * Reset to zero, read-ahead context.
+ */
+	else {
+		try_async = 0;
+		filp->f_rapos = 0;
+		filp->f_ralen = 0;
+		filp->f_ramax = 0;
+	}
+
+/*
+ * Compute a good value for read-ahead max
+ * Try first some value near count.
+ * Do at least MIN_READAHEAD and at most MAX_READAHEAD.
+ * (Should be a little reworked)
+ */
+	if (filp->f_ramax < count)
+		filp->f_ramax = count & PAGE_MASK;
+
+	if (filp->f_ramax < MIN_READAHEAD)
+		filp->f_ramax = MIN_READAHEAD;
+	else if (filp->f_ramax > MAX_READAHEAD)
+		filp->f_ramax = MAX_READAHEAD;
 
 	for (;;) {
 		struct page *page;
@@ -360,24 +538,9 @@ found_page:
 		if (nr > count)
 			nr = count;
 
-		/*
-		 * We may want to do read-ahead.. Do this only
-		 * if we're waiting for the current page to be
-		 * filled in, and if
-		 *  - we're going to read more than this page
-		 *  - if "f_reada" is set
-		 */
-		if (page->locked) {
-			while (ra_pos < ra_end) {
-				page_cache = try_to_read_ahead(inode, ra_pos, page_cache);
-				ra_pos += PAGE_SIZE;
-				if (!page->locked)
-					goto unlocked_page;
-			}
-			__wait_on_page(page);
-		}
-unlocked_page:
-		if (!page->uptodate)
+		page_cache = generic_file_readahead(filp, inode, try_async, pos, page, page_cache);
+
+		if (!PageUptodate(page))
 			goto read_page;
 		if (nr > inode->i_size - pos)
 			nr = inode->i_size - pos;
@@ -399,12 +562,7 @@ new_page:
 		addr = page_cache;
 		page = mem_map + MAP_NR(page_cache);
 		page_cache = 0;
-		page->count++;
-		page->uptodate = 0;
-		page->error = 0;
-		page->offset = pos & PAGE_MASK;
-		add_page_to_inode_queue(inode, page);
-		add_page_to_hash_queue(inode, page);
+		add_to_page_cache(page, inode, pos & PAGE_MASK);
 
 		/*
 		 * Error handling is tricky. If we get a read error,
@@ -422,32 +580,17 @@ read_page:
 		break;
 	}
 
-	if (read) {
-		error = read;
-
-#ifdef WE_SHOULD_DO_SOME_EXTRA_CHECKS
-		/*
-		 * Start some extra read-ahead if we haven't already
-		 * read ahead enough..
-		 */
-		while (ra_pos < ra_end) {
-			page_cache = try_to_read_ahead(inode, ra_pos, page_cache);
-			ra_pos += PAGE_SIZE;
-		}
-		run_task_queue(&tq_disk);
-#endif
-
-		filp->f_pos = pos;
-		filp->f_reada = ra_pos;
-		if (!IS_RDONLY(inode)) {
-			inode->i_atime = CURRENT_TIME;
-			inode->i_dirt = 1;
-		}
-	}
+	filp->f_pos = pos;
+	filp->f_reada = 1;
 	if (page_cache)
 		free_page(page_cache);
-
-	return error;
+	if (!IS_RDONLY(inode)) {
+		inode->i_atime = CURRENT_TIME;
+		inode->i_dirt = 1;
+	}
+	if (!read)
+		read = error;
+	return read;
 }
 
 /*
@@ -470,14 +613,9 @@ static inline unsigned long fill_page(struct inode * inode, unsigned long offset
 		return 0;
 	page = mem_map + MAP_NR(new_page);
 	new_page = 0;
-	page->count++;
-	page->uptodate = 0;
-	page->error = 0;
-	page->offset = offset;
-	add_page_to_inode_queue(inode, page);
-	add_page_to_hash_queue(inode, page);
+	add_to_page_cache(page, inode, offset);
 	inode->i_op->readpage(inode, page);
-	if (page->locked)
+	if (PageLocked(page))
 		new_page = try_to_read_ahead(inode, offset + PAGE_SIZE, 0);
 found_page:
 	if (new_page)
@@ -490,7 +628,7 @@ found_page_dont_free:
 /*
  * Semantics for shared and private memory areas are different past the end
  * of the file. A shared mapping past the last page of the file is an error
- * and results in a SIBGUS, while a private mapping just maps in a zero page.
+ * and results in a SIGBUS, while a private mapping just maps in a zero page.
  */
 static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long address, int no_share)
 {

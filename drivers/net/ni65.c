@@ -59,7 +59,7 @@
 #include "ni65.h"
 
 /*
- * the current setting allows max. perforamnce
+ * the current setting allows max. performance
  * for 'RCV_PARANOIA_CHECK' read the 'known problems' part in 
  * the header of this file
  */
@@ -505,7 +505,7 @@ static void ni65_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 
   if(i < RMDNUM) {
     p->rmdnum = (p->rmdnum + 8 - i) & (RMDNUM - 1);
-    printk(KERN_ERR "%s: Ooops, receive ring currupted\n",dev->name);
+    printk(KERN_ERR "%s: Ooops, receive ring corrupted\n",dev->name);
 
     ni65_recv_intr(dev,csr0);
   }

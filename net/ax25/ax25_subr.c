@@ -31,7 +31,7 @@
  *					Killed a silly bug in the DAMA code.
  *			Joerg(DL1BKE)	Found the real bug in ax25.h, sri.
  *	AX.25 032	Joerg(DL1BKE)	Added ax25_queue_length to count the number of
- *					enqeued buffers of a socket..
+ *					enqueued buffers of a socket..
  */
 
 #include <linux/config.h>
@@ -521,7 +521,7 @@ int ax25_queue_length(ax25_cb *ax25, struct sk_buff *skb)
  *	need a driver level request to switch duplex mode, that does either
  *	SCC changing, PI config or KISS as required.
  *
- *	Not to mention this request isnt currently reliable.
+ *	Not to mention this request isn't currently reliable.
  */
  
 void ax25_kiss_cmd(ax25_cb *ax25, unsigned char cmd, unsigned char param)

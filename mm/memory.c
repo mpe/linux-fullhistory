@@ -195,7 +195,7 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte, int cow)
 		return;
 	}
 	page_nr = MAP_NR(pte_page(pte));
-	if (page_nr >= MAP_NR(high_memory) || mem_map[page_nr].reserved) {
+	if (page_nr >= MAP_NR(high_memory) || PageReserved(mem_map+page_nr)) {
 		set_pte(new_pte, pte);
 		return;
 	}
@@ -308,7 +308,7 @@ static inline void forget_pte(pte_t page)
 		return;
 	if (pte_present(page)) {
 		unsigned long addr = pte_page(page);
-		if (addr >= high_memory || mem_map[MAP_NR(addr)].reserved)
+		if (addr >= high_memory || PageReserved(mem_map+MAP_NR(addr)))
 			return;
 		free_page(addr);
 		if (current->mm->rss <= 0)
@@ -467,7 +467,7 @@ static inline void remap_pte_range(pte_t * pte, unsigned long address, unsigned 
 	do {
 		pte_t oldpage = *pte;
 		pte_clear(pte);
-		if (offset >= high_memory || mem_map[MAP_NR(offset)].reserved)
+		if (offset >= high_memory || PageReserved(mem_map+MAP_NR(offset)))
 			set_pte(pte, mk_pte(offset, prot));
 		forget_pte(oldpage);
 		address += PAGE_SIZE;
@@ -624,7 +624,7 @@ void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	 */
 	if (mem_map[MAP_NR(old_page)].count != 1) {
 		if (new_page) {
-			if (mem_map[MAP_NR(old_page)].reserved)
+			if (PageReserved(mem_map + MAP_NR(old_page)))
 				++vma->vm_mm->rss;
 			copy_page(old_page,new_page);
 			flush_page_to_ram(old_page);
@@ -677,18 +677,14 @@ int verify_area(int type, const void * addr, unsigned long size)
 	 * case where we use a fake user buffer with get_fs/set_fs()) we
 	 * don't expect to find the address in the user vm map.
 	 */
-	if (!size || get_fs() == get_ds())
+	if (!size || get_fs() == KERNEL_DS)
 		return 0;
 
 	vma = find_vma(current, start);
 	if (!vma)
 		goto bad_area;
-	if (vma->vm_start <= start)
-		goto good_area;
-	if (!(vma->vm_flags & VM_GROWSDOWN))
-		goto bad_area;
-	if (expand_stack(vma, start))
-		goto bad_area;
+	if (vma->vm_start > start)
+		goto check_stack;
 
 good_area:
 	if (type == VERIFY_WRITE)
@@ -742,6 +738,12 @@ check_wp_fault_by_hand:
 			goto bad_area;;
 	}
 	return 0;
+
+check_stack:
+	if (!(vma->vm_flags & VM_GROWSDOWN))
+		goto bad_area;
+	if (expand_stack(vma, start))
+		goto good_area;
 
 bad_area:
 	return -EFAULT;

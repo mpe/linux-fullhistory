@@ -175,7 +175,7 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 	if (codesize & MOD_AUTOCLEAN) {
 		/*
 		 * set autoclean marker from codesize...
-		 * set useage count to "zero"
+		 * set usage count to "zero"
 		 */
 		codesize &= ~MOD_AUTOCLEAN;
 		GET_USE_COUNT(mp) = MOD_AUTOCLEAN;

@@ -335,7 +335,7 @@ alpha_fp_emul_imprecise (struct pt_regs *regs, unsigned long write_mask)
 	 *
 	 * Branches, jumps, TRAPBs, EXCBs and calls to PALcode all
 	 * bound the trap shadow, so we need not look any further than
-	 * up to the first occurance of such an instruction.
+	 * up to the first occurrence of such an instruction.
 	 */
 	while (write_mask) {
 		insn = get_user((__u32*)(trigger_pc));

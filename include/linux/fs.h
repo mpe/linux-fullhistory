@@ -320,7 +320,7 @@ struct file {
 	loff_t f_pos;
 	unsigned short f_flags;
 	unsigned short f_count;
-	loff_t f_reada;
+	unsigned long f_reada, f_ramax, f_rapos, f_ralen;
 	struct file *f_next, *f_prev;
 	int f_owner;		/* pid or -pgrp where SIGIO should be sent */
 	struct inode * f_inode;

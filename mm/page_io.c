@@ -64,7 +64,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 	if (p->swap_device) {
 		if (!wait) {
 			page->count++;
-			page->free_after = 1;
+			set_bit(PG_freeafter, &page->flags);
 			nr_async_pages++;
 		}
 		ll_rw_page(rw,p->swap_device,offset,buf);

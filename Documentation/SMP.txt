@@ -11,7 +11,7 @@ o	Fix sys_idle to exit/enter kernel state and do hlt's.
 o	Fix scheduler decisions to reschedule. Per cpu reschedule ?
 o	Clean up message pass.
 o	Test for B stepping processors.
-o	Clean up processor specific/independant split.
+o	Clean up processor specific/independent split.
 o	Document it all.	[PARTLY DONE]
 o	Halt other CPU's on reset/panic doesn't always work.
 o	Dont waste page at 4K - dont need it now.(watch the GDT code).

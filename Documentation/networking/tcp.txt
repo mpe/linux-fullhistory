@@ -29,7 +29,7 @@ off immediately if possible, but otherwise queue and compute the body
 checksum in the copy. 
 
 When a write is done we try to clear any pending events and piggy back them.
-If the window is full we queue full sized frames. On the firs timeout in
+If the window is full we queue full sized frames. On the first timeout in
 zero window we split this.
 
 On a timer we walk the retransmit list to send any retransmits, update the

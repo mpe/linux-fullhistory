@@ -2472,7 +2472,7 @@ struct asc_stats {
 	ulong 	cont_xfer;		/* contiguous transfer total (512 byte units) */
 	ulong 	sg_cnt;			/* # scatter-gather I/O requests received */
 	ulong 	sg_elem;		/* scatter-gather element total */
-	ulong 	sg_xfer;		/* scatter-gather tranfer total (512 byte units) */
+	ulong 	sg_xfer;		/* scatter-gather transfer total (512 byte units) */
 	ulong 	error;			/* # AscExeScsiQueue() ASC_ERROR returns. */
 	/*
 	 * Number of times interrupts disabled in advansys_queuecommand() and
@@ -2758,7 +2758,7 @@ advansys_detect(Scsi_Host_Template *tpnt)
 	if (detect_called == ASC_FALSE) {
 		detect_called = ASC_TRUE;
 	} else {
-		printk("AdvanSys SCSI: advansys_detect() mulitple calls ignored\n");
+		printk("AdvanSys SCSI: advansys_detect() multiple calls ignored\n");
 		return 0;
 	}
 
@@ -2780,7 +2780,7 @@ advansys_detect(Scsi_Host_Template *tpnt)
 	 */
 	if (asc_iopflag == ASC_TRUE) {
 		for (ioport = 0; ioport < ASC_NUM_BOARD_SUPPORTED; ioport++) {
-			ASC_DBG2(1, "asdvansys_detect: asc_ioport[%d] %x\n",
+			ASC_DBG2(1, "advansys_detect: asc_ioport[%d] %x\n",
 				ioport, asc_ioport[ioport]);
 			if (asc_ioport[ioport] != 0) {
 				for (iop = 0; iop < ASC_IOADR_TABLE_MAX_IX; iop++) {

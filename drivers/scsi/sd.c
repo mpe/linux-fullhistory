@@ -118,7 +118,7 @@ static int sd_open(struct inode * inode, struct file * filp)
 	}
 
 	/*
-	 * Similarily, if the device has the write protect tab set,
+	 * Similarly, if the device has the write protect tab set,
 	 * have the open fail if the user expects to be able to write
 	 * to the thing.
 	 */
@@ -1168,7 +1168,7 @@ static int sd_init_onedisk(int i)
 	for (m=i<<4; m<((i+1)<<4); m++){
 	    sd_hardsizes[m] = hard_sector;
 	}
-        mb = (hard_sector * rscsi_disks[i].capacity) / (1024*1024);
+        mb = rscsi_disks[i].capacity / 1024 * hard_sector / 1024;
         /* sz = div(m/100, 10);  this seems to not be in the libr */
         m = (mb + 50) / 100;
         sz_quot = m / 10;

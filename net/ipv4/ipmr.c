@@ -50,7 +50,7 @@
 #include <net/checksum.h>
 
 /*
- *	Multicast router conrol variables
+ *	Multicast router control variables
  */
 
 static struct vif_device vif_table[MAXVIFS];		/* Devices 		*/

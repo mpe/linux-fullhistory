@@ -1,5 +1,5 @@
 
-Description of the Interface between Linklevel an Harwarelevel
+Description of the Interface between Linklevel and Hardwarelevel
   of isdn4linux:
 
 
@@ -10,7 +10,7 @@ Description of the Interface between Linklevel an Harwarelevel
   register_isdn() with a pointer to that struct. Prior to that, it has
   to preset some of the fields of isdn_if. The LL sets the rest of
   the fields. All further communication is done via callbacks using
-  the funtion-pointers defined in isdn_if.
+  the function-pointers defined in isdn_if.
 
   ATTENTION, CHANGES since version 0.6 are marked with   "***CHANGE0.6"!
   ATTENTION, CHANGES since version 0.7 are marked with   "***CHANGE0.7"!
@@ -114,7 +114,7 @@ Description of the Interface between Linklevel an Harwarelevel
 
   int (*writebuf)(int, int, u_char*, int, int);
 
-    This field has to be preset by the HL-driver. The given funtion will
+    This field has to be preset by the HL-driver. The given function will
     be called by the LL for delivering data to be send via B-Channel.
 
     Parameter:
@@ -150,7 +150,7 @@ Description of the Interface between Linklevel an Harwarelevel
       oversized packets etc.)
 
 NOTE on writebuf and writebuf_skb:
-    The HL-driver may initialize one of the field's to NULL, in which case
+    The HL-driver may initialize one of the fields to NULL, in which case
     the LL will call the non-NULL function only.
 
   int (*writecmd)(u_char*, int, int);
@@ -160,7 +160,7 @@ NOTE on writebuf and writebuf_skb:
     to the card) The data-format is hardware-specific. This function is
     intended for debugging only. It is not necessary for normal operation
     and never will be called by the tty-emulation- or network-code. If
-    this functin is not supported, the driver has to set NULL here.
+    this function is not supported, the driver has to set NULL here.
 
     Parameter:
       u_char* pointer to data.
@@ -176,11 +176,11 @@ NOTE on writebuf and writebuf_skb:
   int (*readstat)(u_char*, int, int);
 
     This field has to be preset by the HL-driver. The given function will be
-    called to perform read-requests on /dev/isdnctrl (i.e. reading repies
+    called to perform read-requests on /dev/isdnctrl (i.e. reading replies
     from the card) The data-format is hardware-specific. This function is
     intended for debugging only. It is not necessary for normal operation
     and never will be called by the tty-emulation- or network-code. If
-    this functin is not supported, the driver has to set NULL here.
+    this function is not supported, the driver has to set NULL here.
 
     Parameter:
       u_char* pointer to data.
@@ -201,16 +201,16 @@ NOTE on writebuf and writebuf_skb:
    status-info of /dev/isdninfo. Furthermore it is used as Id for binding
    net-interfaces to a specific channel. If a string of length zero is
    given, upon return, isdn4linux will replace it by a generic name. (line0,
-   line1 etc.) It is recommended, to make this string configurabele during
+   line1 etc.) It is recommended to make this string configurable during
    module-load-time. (copy a global variable to this string.) For doing that,
    modules 1.2.8 or newer are necessary.
 
 2. Description of the commands, a HL-driver has to support:
 
-   All commands will be performed by calling the funtion command() described
+   All commands will be performed by calling the function command() described
    above from within the LL. The field command of the struct-parameter will
    contain the desired command, the field driver always is set to the
-   apropriate driver-Id.
+   appropriate driver-Id.
 
    Until now, the following commands are defined:
 
@@ -218,10 +218,10 @@ NOTE on writebuf and writebuf_skb:
    ISDN_CMD_IOCTL:
 
      This command is intended for performing ioctl-calls for configuring
-     hardware or similar purposes (setting port-adresses, loading firmware
+     hardware or similar purposes (setting port-addresses, loading firmware
      etc.) For this purpose, in the LL all ioctl-calls with an argument
      >= ISDN_IOCTL_DRVIOCTL (0x100) will be handed transparently to this
-     function after substracting 0x100 and placing the result in arg.
+     function after subtracting 0x100 and placing the result in arg.
      Example:
        If a userlevel-program calls ioctl(0x101,...) the function gets
        called with the field command set to 1.
@@ -313,7 +313,7 @@ NOTE on writebuf and writebuf_skb:
       num         = ASCII-String, containing the desired EAZ's/MSN's
                     (comma-separated). If an empty String is given, the
                     HL-driver should respond to ALL incoming calls,
-                    regardless of the destination-adress.
+                    regardless of the destination-address.
       ***CHANGE0.6: New since this version the "empty-string"-feature.
 
   ISDN_CMD_GETEAZ: (currently unused)
@@ -433,7 +433,7 @@ NOTE on writebuf and writebuf_skb:
 
   All status-changes are signaled via calling the previously described
   function statcallb(). The field command of the struct isdn_cmd has
-  to be set by the HL-driver with the apropriate Status-Id (event-number).
+  to be set by the HL-driver with the appropriate Status-Id (event-number).
   The field arg has to be set to the channel-number (locally to the driver,
   starting with 0) to which this event applies. (Exception: STAVAIL-event)
 
@@ -487,7 +487,7 @@ NOTE on writebuf and writebuf_skb:
 
   ISDN_STAT_DCONN:
 
-   With this call, the HL-driver signals the successful establishement of
+   With this call, the HL-driver signals the successful establishment of
    a D-Channel-connection. (Response to ISDN_CMD_ACCEPTD or ISDN_CMD_DIAL)
 
     Parameter:
@@ -498,9 +498,9 @@ NOTE on writebuf and writebuf_skb:
 
   ISDN_STAT_BCONN:
 
-   With this call, the HL-driver signals the successful establishement of
+   With this call, the HL-driver signals the successful establishment of
    a B-Channel-connection. (Response to ISDN_CMD_ACCEPTB or because the
-   remote-station has initiated establishement)
+   remote-station has initiated establishment)
 
     Parameter:
       driver      = driver-Id

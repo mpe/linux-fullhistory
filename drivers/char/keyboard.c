@@ -1273,9 +1273,9 @@ static int kbd_wait_for_input(void)
 		data = inb(KBD_DATA_REG);
 
                 /*
-                 * Check to see if a timeout error has occured.  This means
+                 * Check to see if a timeout error has occurred.  This means
                  * that transmission was started but did not complete in the
-                 * normal time cycle.  PERR is set when a parity error occured
+                 * normal time cycle.  PERR is set when a parity error occurred
                  * in the last transmission.
                  */
                 if (status & (KBD_GTO | KBD_PERR)) {

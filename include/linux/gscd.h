@@ -9,7 +9,7 @@
  */
 
 
-/* The Interface Card default address is 0x340. This will work fo most
+/* The Interface Card default address is 0x340. This will work for most
    applications. Address selection is accomplished by jumpers PN801-1 to
    PN801-4 on the GoldStar Interface Card.
    Appropriate settings are: 0x300, 0x310, 0x320, 0x330, 0x340, 0x350, 0x360

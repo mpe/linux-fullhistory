@@ -40,7 +40,7 @@
 	- modified shared memory and mmio access port the driver to 
           alpha platform (structure access -> readb/writeb)
 
-   Chagnes by Steve Kipisz (bungy@ibm.net or kipisz@vnet.ibm.com)
+   Changes by Steve Kipisz (bungy@ibm.net or kipisz@vnet.ibm.com)
                            (January 18 1996):
         - swapped WWOR and WWCR in ibmtr.h
         - moved some init code from tok_probe into trdev_init.  The
@@ -52,7 +52,7 @@
 
    Warnings !!!!!!!!!!!!!!
       This driver is only partially sanitized for support of multiple
-      adapters.  It will almost definately fail if more than one
+      adapters.  It will almost definitely fail if more than one
       active adapter is identified.
 */
 	
@@ -246,7 +246,7 @@ int tok_probe(struct device *dev)
 		   where it is?).  We also have a coded interrupt address. */
 		
 		segment = inb(PIOaddr);
-		/* out of range values so we'll assume non-existant IO device */
+		/* out of range values so we'll assume non-existent IO device */
 		if (segment < 0x40 || segment > 0xe0) { 
 			PIOaddr = 0; 
 			continue; /* clear to flag fail and try next */
@@ -599,7 +599,7 @@ static int tok_open(struct device *dev)
 	
 	if (ti->open_status==IN_PROGRESS) sleep_on(&ti->wait_for_reset);
 	
-	if (ti->open_status==SUCCES) {
+	if (ti->open_status==SUCCESS) {
 		dev->tbusy=0;
 		dev->interrupt=0;
 		dev->start=1;
@@ -820,7 +820,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 					} else {
 						ti->exsap_station_id=
 							readw(ti->srb+offsetof(struct dlc_open_sap, station_id));
-						ti->open_status=SUCCES; /* TR adapter is now available */
+						ti->open_status=SUCCESS; /* TR adapter is now available */
 						wake_up(&ti->wait_for_reset);
 					}
 					break;

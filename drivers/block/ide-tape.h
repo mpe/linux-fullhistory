@@ -97,7 +97,7 @@
 #endif
 
 /*
- *	ide-tape currently uses two continous buffers, each of the size of
+ *	ide-tape currently uses two continuous buffers, each of the size of
  *	one stage. By default, those buffers are allocated at initialization
  *	time and never released, since dynamic allocation of pages bigger
  *	than PAGE_SIZE may fail as memory becomes fragmented.
@@ -344,7 +344,7 @@ typedef struct idetape_buffer_head_s {
  */
 
 typedef struct idetape_pipeline_stage_s {
-	struct request rq;				/* The correspoding request */
+	struct request rq;				/* The corresponding request */
 	idetape_buffer_head_t *bh;			/* The data buffers */
 	struct idetape_pipeline_stage_s *next,*prev;	/* Pointers to the next and previous stages */
 } idetape_pipeline_stage_t;
@@ -479,7 +479,7 @@ typedef struct {
 	 */
 	
 	struct request *active_data_request;	/* Pointer to the request which is waiting in the device request queue */
-	char *data_buffer;			/* The correspoding data buffer (for read/write requests) */
+	char *data_buffer;			/* The corresponding data buffer (for read/write requests) */
 	int data_buffer_size;			/* Data buffer size (chosen based on the tape's recommendation */
 
 	char *merge_buffer;			/* Temporary buffer for user <-> kernel space data transfer */

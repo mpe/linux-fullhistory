@@ -13,7 +13,7 @@
 #define MSR_TGPR	(1<<17)		/* TLB Update registers in use */
 #define MSR_ILE		(1<<16)		/* Interrupt Little-Endian enable */
 #define MSR_EE		(1<<15)		/* External Interrupt enable */
-#define MSR_PR		(1<<14)		/* Supervisor/User privelege */
+#define MSR_PR		(1<<14)		/* Supervisor/User privilege */
 #define MSR_FP		(1<<13)		/* Floating Point enable */
 #define MSR_ME		(1<<12)		/* Machine Check enable */
 #define MSR_FE0		(1<<11)		/* Floating Exception mode 0 */

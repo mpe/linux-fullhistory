@@ -202,7 +202,7 @@ struct timex {
 #define TIME_INS	1	/* insert leap second */
 #define TIME_DEL	2	/* delete leap second */
 #define TIME_OOP	3	/* leap second in progress */
-#define TIME_WAIT	4	/* leap second has occured */
+#define TIME_WAIT	4	/* leap second has occurred */
 #define TIME_ERROR	5	/* clock not synchronized */
 #define TIME_BAD	TIME_ERROR /* bw compat */
 

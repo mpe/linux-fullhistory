@@ -13,9 +13,9 @@
 		Masayoshi UTAKA (utaka@ace.yk.fujitsu.co.jp)
 			for testing this driver.
 		H. NEGISHI (agy, negishi@sun45.psd.cs.fujitsu.co.jp)
-			for sugestion of some program modification.
+			for suggestion of some program modification.
 		Masahiro SEKIGUCHI <seki@sysrap.cs.fujitsu.co.jp>
-			for sugestion of some program modification.
+			for suggestion of some program modification.
 		Kazutoshi MORIOKA (morioka@aurora.oaks.cs.fujitsu.co.jp)
 			for testing this driver.
 

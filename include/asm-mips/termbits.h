@@ -26,7 +26,7 @@ struct termios {
 	tcflag_t c_cflag;		/* control mode flags */
 	tcflag_t c_lflag;		/* local mode flags */
 	/*
-	 * Seems nonexistant in the ABI, but Linux assumes existence ...
+	 * Seems nonexistent in the ABI, but Linux assumes existence ...
 	 */
 	cc_t c_line;			/* line discipline */
 	cc_t c_cc[NCCS];		/* control characters */

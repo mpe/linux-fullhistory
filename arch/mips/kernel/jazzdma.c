@@ -4,7 +4,7 @@
  * Mips Jazz DMA controller support
  * (C) 1995 Andreas Busse
  *
- * NOTE: Some of the argument checkings could be removed when
+ * NOTE: Some of the argument checking could be removed when
  * things have settled down. Also, instead of returning 0xffffffff
  * on failure of vdma_alloc() one could leave page #0 unused
  * and return the more usual NULL pointer as logical address.

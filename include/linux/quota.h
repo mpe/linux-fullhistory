@@ -70,8 +70,6 @@
 #define USRQUOTA  0		/* element used for user quotas */
 #define GRPQUOTA  1		/* element used for group quotas */
 
-#include <linux/mount.h>
-
 /*
  * Definitions for the default names of the quotas files.
  */
@@ -150,8 +148,10 @@ struct dqstats {
 
 #ifdef __KERNEL__
 
+#include <linux/mount.h>
+
 /*
- * Maximum lenght of a message generated in the quota system,
+ * Maximum length of a message generated in the quota system,
  * that needs to be kicked onto the tty.
  */
 #define MAX_QUOTA_MESSAGE 75

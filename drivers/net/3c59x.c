@@ -127,7 +127,7 @@ limit of 4K.
 
 #define TCOM_VENDOR_ID	0x10B7		/* 3Com's manufacturer's ID. */
 
-/* Operational defintions.
+/* Operational definitions.
    These are not used by other compilation units and thus are not
    exported in a ".h" file.
 
@@ -141,7 +141,7 @@ limit of 4K.
 /* The top five bits written to EL3_CMD are a command, the lower
    11 bits are the parameter, if applicable.
    Note that 11 parameters bits was fine for ethernet, but the new chip
-   can handle FDDI lenght frames (~4500 octets) and now parameters count
+   can handle FDDI length frames (~4500 octets) and now parameters count
    32-bit 'Dwords' rather than octets. */
 
 enum vortex_cmd {
@@ -247,7 +247,7 @@ static void set_multicast_list(struct device *dev);
 /* Unlike the other PCI cards the 59x cards don't need a large contiguous
    memory region, so making the driver a loadable module is feasible.
 
-   Unfortuneately maximizing the shared code between the integrated and
+   Unfortunately maximizing the shared code between the integrated and
    module version of the driver results in a complicated set of initialization
    procedures.
    init_module() -- modules /  tc59x_init()  -- built-in
@@ -255,7 +255,7 @@ static void set_multicast_list(struct device *dev);
    vortex_scan()  		 The common routine that scans for PCI and EISA cards
    vortex_found_device() Allocate a device structure when we find a card.
 					Different versions exist for modules and built-in.
-   vortex_probe1()		Fill in the device structure -- this is seperated
+   vortex_probe1()		Fill in the device structure -- this is separated
 					so that the modules code can put it in dev->init.
 */
 /* This driver uses 'options' to pass the media type, full-duplex flag, etc. */
@@ -713,7 +713,7 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 		int i = 4;
 
 		while (--i > 0	&&	(tx_status = inb(ioaddr + TxStatus)) > 0) {
-			if (tx_status & 0x3C) {		/* A Tx-disabling error occured.  */
+			if (tx_status & 0x3C) {		/* A Tx-disabling error occurred.  */
 				if (vortex_debug > 2)
 				  printk("%s: Tx error, status %2.2x.\n",
 						 dev->name, tx_status);
@@ -956,7 +956,7 @@ vortex_close(struct device *dev)
 	free_shared_irq(dev->irq, dev);
 #else
 	free_irq(dev->irq, NULL);
-	/* Mmmm, we should diable all interrupt sources here. */
+	/* Mmmm, we should disable all interrupt sources here. */
 	irq2dev_map[dev->irq] = 0;
 #endif
 
@@ -1005,7 +1005,7 @@ static void update_stats(int ioaddr, struct device *dev)
 	vp->stats.tx_packets			+= (inb(ioaddr + 9)&0x30) << 4;
 	/* Rx packets	*/				inb(ioaddr + 7);   /* Must read to clear */
 	/* Tx deferrals */				inb(ioaddr + 8);
-	/* Don't bother with register 9, an extention of registers 6&7.
+	/* Don't bother with register 9, an extension of registers 6&7.
 	   If we do use the 6&7 values the atomic update assumption above
 	   is invalid. */
 	inw(ioaddr + 10);	/* Total Rx and Tx octets. */

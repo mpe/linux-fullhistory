@@ -88,7 +88,7 @@ extern void __copy_page(unsigned long from, unsigned long to);
  * physical address by a single 'and' operation and gain 6 additional
  * bits for storing information which isn't present in a normal
  * MIPS page table.
- * Since the Mips has choosen some quite missleading names for the
+ * Since the Mips has chosen some quite misleading names for the
  * valid and dirty bits they're defined here but only their synonyms
  * will be used.
  */
@@ -545,7 +545,7 @@ extern pgd_t swapper_pg_dir[1024];
 /*
  * MIPS doesn't need any external MMU info: the kernel page tables contain
  * all the necessary information.  We use this hook though to load the
- * TLB as early as possible with uptodate information avoiding unecessary
+ * TLB as early as possible with uptodate information avoiding unnecessary
  * exceptions.
  */
 extern void update_mmu_cache(struct vm_area_struct * vma,

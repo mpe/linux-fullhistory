@@ -483,7 +483,7 @@ smb_connect(struct smb_server *server)
         
 /*****************************************************************************/
 /*                                                                           */
-/*  This routine was once taken from nfs, wich is for udp. Here TCP does     */
+/*  This routine was once taken from nfs, which is for udp. Here TCP does     */
 /*  most of the ugly stuff for us (thanks, Alan!)                            */
 /*                                                                           */
 /*****************************************************************************/

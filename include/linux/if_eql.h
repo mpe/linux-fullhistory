@@ -2,7 +2,7 @@
  * Equalizer Load-balancer for serial network interfaces.
  *
  * (c) Copyright 1995 Simon "Guru Aleph-Null" Janes
- * NCM: Network and Communications Mangement, Inc.
+ * NCM: Network and Communications Management, Inc.
  *
  *
  *	This software may be used and distributed according to the terms

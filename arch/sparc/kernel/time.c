@@ -171,7 +171,7 @@ static void clock_probe(void)
 		master_l10_limit = &(sun4c_timers->timer_limit10);
 		master_l10_counter = &(sun4c_timers->cur_count10);
 	} else {
-		/* XXX FIx this SHIT... UP and MP sun4m configurations
+		/* XXX Fix this SHIT... UP and MP sun4m configurations
 		 * XXX have completely different layouts for the counter
 		 * XXX registers. AIEEE!!!
 		 */

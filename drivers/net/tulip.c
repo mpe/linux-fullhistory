@@ -303,8 +303,8 @@ enum tulip_offsets {
 #define	TRING_CLEAR			0x00000000	/* clear */
 #define	TRING_ERROR			0x00008000	/* error summary */
 #define	TRING_ETxTO			0x00004000	/* Tx time out */
-#define	TRING_ELCOLL		0x00000200	/* late collition */
-#define	TRING_EFCOLL		0x00000100	/* fatal collition */
+#define	TRING_ELCOLL		0x00000200	/* late collision */
+#define	TRING_EFCOLL		0x00000100	/* fatal collision */
 #define	TRING_ELCARR		0x00000800	/* carrier lost */
 #define	TRING_ENCARR		0x00000400	/* no carrier */
 #define	TRING_ENOHB			0x00000080	/* heartbeat fail */
@@ -565,7 +565,7 @@ generic21040_select(struct device *dev)
 	dev->if_port &= 3;
 	printk("%s: enabling %s port.\n",
 		   dev->name, dev->if_port ?  "AUI":"10baseT");
-	/* Set the full duplux match frame. */
+	/* Set the full duplex match frame. */
 	tio_write(FULL_DUPLEX_MAGIC, CSR11);
 	tio_write(TSIAC_RESET, CSR13);
 	/* Reset the serial interface */
@@ -1344,7 +1344,7 @@ int tulip_probe(struct device *dev)
 				/* Remove I/O space marker in bit 0. */
 				pci_ioaddr &= ~3;
 #ifdef	MODULE
-				/* cmpare requested IRQ/IO address */
+				/* compare requested IRQ/IO address */
 				if (dev && dev->irq && dev->base_addr &&
 					(dev->irq != pci_irq
 					 || dev->base_addr != pci_ioaddr)) continue;

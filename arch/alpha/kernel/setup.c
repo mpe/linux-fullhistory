@@ -132,7 +132,7 @@ void setup_arch(char **cmdline_p,
 	/* Hack for Jensen... since we're restricted to 8 or 16 
 	 * chars for boot flags depending on the boot mode,
 	 * we need some shorthand.  This should do for 
-	 * installation.  Later we'll add other abbreviaitions
+	 * installation.  Later we'll add other abbreviations
 	 * as well...
 	 */
 	if(strcmp(COMMAND_LINE, "INSTALL") == 0) {

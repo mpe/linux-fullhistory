@@ -96,7 +96,7 @@ typedef struct {
 	 */
 	volatile unsigned remaining;
 
-	/* points to next segment (contigious) to be handled,
+	/* points to next segment (contiguous) to be handled,
 	 * or is zero if no read-ahead is allowed.
 	 */
 	volatile unsigned next_segment;

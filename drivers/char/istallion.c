@@ -130,8 +130,8 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  *	catch is that the kernel functions required to do this are not
  *	normally exported symbols, so you will have to do some extra work
  *	for this to be used in the loadable module form of the driver.
- *	Unfortunately this doesn't work either if you linke the driver into
- *	the kernel, sincethe memory management code is not set up early
+ *	Unfortunately this doesn't work either if you linked the driver into
+ *	the kernel, since the memory management code is not set up early
  *	enough (before our initialization routine is run).
  */
 #define	STLI_HIMEMORY	0
@@ -152,7 +152,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
 
 /*
  *	Define some important driver characteristics. Device major numbers
- *	allocated as per Linux Device Registery.
+ *	allocated as per Linux Device Registry.
  */
 #ifndef	STL_SIOMEMMAJOR
 #define	STL_SIOMEMMAJOR		28
@@ -329,7 +329,7 @@ static int		stli_shared = 0;
 /*
  *	Per board state flags. Used with the state field of the board struct.
  *	Not really much here... All we need to do is keep track of whether
- *	the board has been detected, and whether it is actully running a slave
+ *	the board has been detected, and whether it is actually running a slave
  *	or not.
  */
 #define	BST_FOUND	0x1
@@ -415,7 +415,7 @@ int		stli_eisaprobe = STLI_EISAPROBE;
 
 /*
  *	Hardware configuration info for ECP boards. These defines apply
- *	to the directly accessable io ports of the ECP. There is a set of
+ *	to the directly accessible io ports of the ECP. There is a set of
  *	defines for each ECP board type, ISA, EISA and MCA.
  */
 #define	ECP_IOSIZE	4
@@ -472,7 +472,7 @@ int		stli_eisaprobe = STLI_EISAPROBE;
 
 /*
  *	Hardware configuration info for ONboard and Brumby boards. These
- *	defines apply to the directly accessable io ports of these boards.
+ *	defines apply to the directly accessible io ports of these boards.
  */
 #define	ONB_IOSIZE	16
 #define	ONB_MEMSIZE	(64 * 1024)
@@ -910,7 +910,7 @@ static int stli_open(struct tty_struct *tty, struct file *filp)
 /*
  *	On the first open of the device setup the port hardware, and
  *	initialize the per port data structure. Since initializing the port
- *	requires serval commands to the board we will need to wait for any
+ *	requires several commands to the board we will need to wait for any
  *	other open that is already initializing the port.
  */
 	portp->tty = tty;
@@ -1470,9 +1470,9 @@ static int stli_write(struct tty_struct *tty, int from_user, const unsigned char
  *	big problem is that we do not want shared memory enabled when we are
  *	sleeping (other boards may be serviced while asleep). Something else
  *	to note here is the reading of the tail twice. Since the boards
- *	shared memory can be on an 8-bit bus then we need to be very carefull
+ *	shared memory can be on an 8-bit bus then we need to be very careful
  *	reading 16 bit quantities - since both the board (slave) and host
- *	cound be writing and reading at the same time.
+ *	could be writing and reading at the same time.
  */
 	if (from_user) {
 		save_flags(flags);
@@ -2286,9 +2286,9 @@ static void stli_flushbuffer(struct tty_struct *tty)
 /*
  *	Generic send command routine. This will send a message to the slave,
  *	of the specified type with the specified argument. Must be very
- *	carefull of data that will be copied out from shared memory -
+ *	careful of data that will be copied out from shared memory -
  *	containing command results. The command completion is all done from
- *	a poll routine that does not have user coontext. Therefore you cannot
+ *	a poll routine that does not have user context. Therefore you cannot
  *	copy back directly into user space, or to the kernel stack of a
  *	process. This routine does not sleep, so can be called from anywhere.
  */
@@ -2338,7 +2338,7 @@ static void stli_sendcmd(stlibrd_t *brdp, stliport_t *portp, unsigned long cmd, 
 /*
  *	Read data from shared memory. This assumes that the shared memory
  *	is enabled and that interrupts are off. Basically we just empty out
- *	the shared memory buffer into the tty buffer. Must be carefull to
+ *	the shared memory buffer into the tty buffer. Must be careful to
  *	handle the case where we fill up the tty buffer, but still have
  *	more chars to unload.
  */
@@ -2599,7 +2599,7 @@ static inline int stli_hostcmd(stlibrd_t *brdp, int channr)
 
 /*
  *	Driver poll routine. This routine polls the boards in use and passes
- *	messages back up to host when neccesary. This is actually very
+ *	messages back up to host when necessary. This is actually very
  *	CPU efficient, since we will always have the kernel poll clock, it
  *	adds only a few cycles when idle (since board service can be
  *	determined very easily), but when loaded generates no interrupts
@@ -2831,7 +2831,7 @@ static void stli_mkasysigs(asysigs_t *sp, int dtr, int rts)
 
 /*
  *	Convert the signals returned from the slave into a local TIOCM type
- *	signals value. We keep them localy in TIOCM format.
+ *	signals value. We keep them locally in TIOCM format.
  */
 
 static long stli_mktiocm(unsigned long sigvalue)
@@ -3431,7 +3431,7 @@ static void *stli_mapbrdmem(unsigned long physaddr, unsigned int size)
 		return((void *) NULL);
 	}
 	if ((rc = remap_page_range((TASK_SIZE + ((unsigned long) virtaddr)), physaddr, size, PAGE_IOMEM))) {
-		printk("STALLION: failed to map phyiscal address=%x, errno=%d\n", (int) physaddr, rc);
+		printk("STALLION: failed to map physical address=%x, errno=%d\n", (int) physaddr, rc);
 		return((void *) NULL);
 	}
 	return(virtaddr);
@@ -3908,7 +3908,7 @@ static int stli_eisamemprobe(stlibrd_t *brdp)
  *	First up we reset the board, to get it into a known state. There
  *	is only 2 board types here we need to worry about. Don;t use the
  *	standard board init routine here, it programs up the shared
- *	memopry address, and we don't know it yet...
+ *	memory address, and we don't know it yet...
  */
 	if (brdp->brdtype == BRD_ECPE) {
 		outb(0x1, (brdp->iobase + ECP_EIBRDENAB));

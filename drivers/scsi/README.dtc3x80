@@ -1,4 +1,4 @@
-REAME file for the Linux DTC3180/3280 scsi driver.
+README file for the Linux DTC3180/3280 scsi driver.
 by Ray Van Tassle (rayvt@comm.mot.com)  March 1996
 Based on the generic & core NCR5380 code by Drew Eckhard
 

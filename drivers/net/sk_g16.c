@@ -1722,7 +1722,7 @@ static struct enet_statistics *SK_get_stats(struct device *dev)
  * Globals        : None
  * Update History :
  *     YY/MM/DD  uid  Description
- *     95/10/18  ACox  Noew multicast calling scheme
+ *     95/10/18  ACox  New multicast calling scheme
 -*/
 
 

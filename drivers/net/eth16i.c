@@ -378,7 +378,7 @@ static int eth16i_probe1(struct device *dev, short ioaddr)
 {
   static unsigned version_printed = 0;
   unsigned int irq = 0;
-  boot = 1;          /* To inform initilization that we are in boot probe */
+  boot = 1;          /* To inform initialization that we are in boot probe */
 
   /*
      The MB86985 chip has on register which holds information in which 
@@ -650,12 +650,12 @@ static int eth16i_receive_probe_packet(short ioaddr)
     if( (jiffies - starttime) > TIMEOUT_TICKS) {
       
       if(eth16i_debug > 1)
-	printk("Timeout occured waiting transmit packet received\n");
+	printk("Timeout occurred waiting transmit packet received\n");
       starttime = jiffies;
       while((inb(ioaddr + RX_STATUS_REG) & 0x80) == 0) {
 	if( (jiffies - starttime) > TIMEOUT_TICKS) {
 	if(eth16i_debug > 1)
-	  printk("Timeout occured waiting receive packet\n");
+	  printk("Timeout occurred waiting receive packet\n");
         return -1;
         }
       }
@@ -992,7 +992,7 @@ static void eth16i_rx(struct device *dev)
 	     dev->name, inb(ioaddr + RECEIVE_MODE_REG), status);
   
       if( !(status & PKT_GOOD) ) {
-	/* Hmm..something went wrong. Let's check what error occured */
+	/* Hmm..something went wrong. Let's check what error occurred */
 	lp->stats.rx_errors++;
 	if( status & PKT_SHORT     ) lp->stats.rx_length_errors++;
 	if( status & PKT_ALIGN_ERR ) lp->stats.rx_frame_errors++;
@@ -1015,7 +1015,7 @@ static void eth16i_rx(struct device *dev)
 
 	skb = dev_alloc_skb(pkt_len + 3);
 	if( skb == NULL ) {
-	  printk("%s: Could'n allocate memory for packet (len %d)\n", 
+	  printk("%s: Couldn't allocate memory for packet (len %d)\n", 
 		 dev->name, pkt_len);
 	  outb(RX_BUF_SKIP_PACKET, ioaddr + FILTER_SELF_RX_REG);
 	  lp->stats.rx_dropped++;
@@ -1118,7 +1118,7 @@ static void eth16i_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
       if(lp->tx_queue) {           /* Is there still packets ? */
 	  /* There was packet(s) so start transmitting and write also
-	   how many packets there is to be sended */
+	   how many packets there is to be sent */
 	outb(TX_START | lp->tx_queue, ioaddr + TRANSMIT_START_REG);
 	lp->tx_queue = 0;
 	lp->tx_queue_len = 0;

@@ -994,7 +994,7 @@ int gscd_init (void)
 }
 
 
-/* This is the common initalisation for the GoldStar drive. */
+/* This is the common initialisation for the GoldStar drive. */
 /* It is called at boot time AND for module init.           */
 int my_gscd_init (void)
 {

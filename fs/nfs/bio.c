@@ -51,8 +51,8 @@ do_read_nfs_sync(struct inode * inode, struct page * page)
 
 	dprintk("NFS: do_read_nfs_sync(%p)\n", page);
 
-	page->locked = 1;
-	page->error = 0;
+	set_bit(PG_locked, &page->flags);
+	clear_bit(PG_error, &page->flags);
 
 	do {
 		if (count < rsize)
@@ -77,9 +77,9 @@ do_read_nfs_sync(struct inode * inode, struct page * page)
 	if (refresh) {
 		nfs_refresh_inode(inode, &fattr);
 		result = 0;
-		page->uptodate = 1;
+		set_bit(PG_uptodate, &page->flags);
 	}
-	page->locked = 0;
+	clear_bit(PG_locked, &page->flags);
 	wake_up(&page->wait);
 	return result;
 }
@@ -100,13 +100,13 @@ nfs_read_cb(int result, struct nfsiod_req *req)
 	if (result >= 0
 	 && (result = nfs_proc_read_reply(&req->rq_rpcreq)) >= 0) {
 		succ++;
-		page->uptodate = 1;
+		set_bit(PG_uptodate, &page->flags);
 	} else {
 		fail++;
 		printk("BIO: %d successful reads, %d failures\n", succ, fail);
-		page->error = 1;
+		set_bit(PG_error, &page->flags);
 	}
-	page->locked = 0;
+	clear_bit(PG_locked, &page->flags);
 	wake_up(&page->wait);
 	free_page(page_address(page));
 }
@@ -119,8 +119,8 @@ do_read_nfs_async(struct inode *inode, struct page *page)
 
 	dprintk("NFS: do_read_nfs_async(%p)\n", page);
 
-	page->locked = 1;
-	page->error = 0;
+	set_bit(PG_locked, &page->flags);
+	clear_bit(PG_error, &page->flags);
 
 	if (!(req = nfsiod_reserve(NFS_SERVER(inode), nfs_read_cb)))
 		goto done;
@@ -138,7 +138,7 @@ do_read_nfs_async(struct inode *inode, struct page *page)
 	if (result < 0) {
 		dprintk("NFS: deferring async READ request.\n");
 		nfsiod_release(req);
-		page->locked = 0;
+		clear_bit(PG_locked, &page->flags);
 		wake_up(&page->wait);
 	}
 
@@ -155,7 +155,7 @@ nfs_readpage(struct inode *inode, struct page *page)
 	dprintk("NFS: nfs_readpage %08lx\n", page_address(page));
 	address = page_address(page);
 	page->count++;
-	if (!page->error && NFS_SERVER(inode)->rsize >= PAGE_SIZE)
+	if (!PageError(page) && NFS_SERVER(inode)->rsize >= PAGE_SIZE)
 		error = do_read_nfs_async(inode, page);
 	if (error < 0)		/* couldn't enqueue */
 		error = do_read_nfs_sync(inode, page);

@@ -235,7 +235,7 @@ static int seeq8005_probe1(struct device *dev, int ioaddr)
 
 #if 0	
 	/* 
-	 * testing the packet buffer memory doesnt work yet
+	 * testing the packet buffer memory doesn't work yet
 	 * but all other buffer accesses do 
 	 *			- fixing is not a priority
 	 */

@@ -21,7 +21,7 @@ static struct idp_struct idprom_buff;
 
 /* Here is the master table of Sun machines which use some implementation
  * of the Sparc CPU and have a meaningful IDPROM machtype value that we
- * know about.  See asm-sparc/machines.h for imperical constants.
+ * know about.  See asm-sparc/machines.h for empirical constants.
  */
 struct Sun_Machine_Models Sun_Machines[NUM_SUN_MACHINES] = {
 /* First, Sun4's */

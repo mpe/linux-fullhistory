@@ -22,6 +22,12 @@ struct nfs_inode_info {
 	 */
 	unsigned long read_cache_jiffies;
 	unsigned long read_cache_mtime;
+	/*
+	 * This is to support the clandestine rename on unlink.
+	 * Instead of the directory inode, we might as well keep its
+	 * NFS FH, but that requires a kmalloc.
+	 */
+	struct inode *silly_rename_dir;
 };
 
 #endif

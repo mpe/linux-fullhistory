@@ -165,7 +165,7 @@ void do_sys(struct pt_regs *regs)
 	if (narg > 4)
 	{
 		/*
-		 * Verify that we can savely get the additional parameters
+		 * Verify that we can safely get the additional parameters
 		 * from the user stack.  Of course I could read the params
 		 * from unaligned addresses ...  Consider this a programming
 		 * course caliber .45.

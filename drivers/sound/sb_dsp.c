@@ -124,7 +124,7 @@ sb_dsp_command (unsigned char val)
   unsigned long   limit;
 
   limit = jiffies + HZ / 10;	/*
-				   * The timeout is 0.1 secods
+				   * The timeout is 0.1 seconds
 				 */
 
   /*
@@ -202,7 +202,7 @@ sbintr (int irq, void *dev_id, struct pt_regs *dummy)
 
       if (!(src & 1))
 	return;			/*
-				 * Not a DSP interupt
+				 * Not a DSP interrupt
 				 */
     }
 
@@ -711,7 +711,7 @@ sb_dsp_prepare_for_input (int dev, int bsize, int bcount)
 	{			/* !AudioDrive */
 
 	  /* Select correct dma channel
-	     * for 16/8 bit acccess
+	     * for 16/8 bit access
 	   */
 	  audio_devs[my_dev]->dmachan1 =
 	    audio_devs[my_dev]->dmachan2 =
@@ -1332,7 +1332,7 @@ ess_init (int ess_minor)	/* ESS1688 Initialization */
  *    Set DMA configuration register
  */
 
-  cfg = 0x50;			/* Extended mode DMA ebable */
+  cfg = 0x50;			/* Extended mode DMA enable */
 
   if (sbc_dma > 3 || sbc_dma < 0 || sbc_dma == 2)
     {

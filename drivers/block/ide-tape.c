@@ -127,7 +127,7 @@
  *                       Our data transfer buffer is allocated on startup,
  *                        rather than before each data transfer. This should
  *                        ensure that we will indeed have a data buffer.
- * Ver 1.1   Dec 14 95   Fixed random problems which occured when the tape
+ * Ver 1.1   Dec 14 95   Fixed random problems which occurred when the tape
  *                        shared an interface with another device.
  *                        (poll_for_dsc was a complete mess).
  *                       Removed some old (non-active) code which had
@@ -484,9 +484,9 @@
 typedef union {
 	unsigned all			:8;
 	struct {
-		unsigned check		:1;	/* Error occured */
+		unsigned check		:1;	/* Error occurred */
 		unsigned idx		:1;	/* Reserved */
-		unsigned corr		:1;	/* Correctable error occured */
+		unsigned corr		:1;	/* Correctable error occurred */
 		unsigned drq		:1;	/* Data is request by the device */
 		unsigned dsc		:1;	/* Set when a media access command is finished */
 						/* Reads / Writes are NOT media access commands */
@@ -659,7 +659,7 @@ typedef struct {
 	unsigned bpu		:1;	/* Block Position Unknown */	
 	unsigned reserved0_543	:3;	/* Reserved */
 	unsigned eop		:1;	/* End Of Partition */
-	unsigned bop		:1;	/* Begining Of Partition */
+	unsigned bop		:1;	/* Beginning Of Partition */
 	byte partition_num;		/* Partition Number */
 	byte reserved_2;		/* Reserved */
 	byte reserved_3;		/* Reserved */
@@ -701,14 +701,14 @@ typedef struct {
 	byte ascq;			/* Additional Sense Code Qualifier */
 	byte replaceable_unit_code;	/* Field Replaceable Unit Code */
 	unsigned sk_specific1 	:7;	/* Sense Key Specific */
-	unsigned sksv		:1;	/* Sense Key Specific informatio is valid */
+	unsigned sksv		:1;	/* Sense Key Specific information is valid */
 	byte sk_specific2;		/* Sense Key Specific */
 	byte sk_specific3;		/* Sense Key Specific */
 	byte pad [2];			/* Padding to 20 bytes */
 } idetape_request_sense_result_t;
 
 /*
- *	Follows structures which are realted to the SELECT SENSE / MODE SENSE
+ *	Follows structures which are related to the SELECT SENSE / MODE SENSE
  *	packet commands. Those packet commands are still not supported
  *	by ide-tape.
  */
@@ -1102,7 +1102,7 @@ int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 		else
 			printk ("%d ns\n",id->eide_dma_min);
 
-		printk ("Manafactuer\'s Recommended Multi-word cycle: ");
+		printk ("Manufacturer\'s Recommended Multi-word cycle: ");
 		if (id->eide_dma_time == 0)
 			printk ("Not supported\n");
 		else
@@ -1143,7 +1143,7 @@ int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 
 	if (gcw.drq_type != 2) {
 		printk ("ide-tape: Sorry, DRQ types other than Accelerated DRQ\n");
-		printk ("ide-tape: are still not supproted by the driver\n");support=0;
+		printk ("ide-tape: are still not supported by the driver\n");support=0;
 	}
 
 	if (gcw.packet_size != 0) {
@@ -1288,8 +1288,8 @@ void idetape_setup (ide_drive_t *drive)
 	 *	tape when its internal buffer is about 50% full. This will
 	 *	dramatically reduce our polling frequency and will also
 	 *	leave enough time for the ongoing request of the other device
-	 *	to complete before the buffer is completly empty. We will
-	 *	then completly refill the buffer with requests from our
+	 *	to complete before the buffer is completely empty. We will
+	 *	then completely refill the buffer with requests from our
 	 *	internal pipeline.
 	 *
 	 *	When operating in the non-pipelined operation mode, we
@@ -1425,7 +1425,7 @@ void idetape_get_mode_sense_results (ide_drive_t *drive)
  *		interrupts will be issued.
  *
  *	3.	ATAPI Tape media access commands have immediate status with a
- *		delayed process. In case of a successfull initiation of a
+ *		delayed process. In case of a successful initiation of a
  *		media access packet command, the DSC bit will be set when the
  *		actual execution of the command is finished. 
  *		Since the tape drive will not issue an interrupt, we have to
@@ -2032,7 +2032,7 @@ void idetape_put_back_postponed_request (ide_drive_t *drive)
 	(void) ide_do_drive_cmd (drive, tape->postponed_rq, ide_next);
 
 	/*
-	 * 	Note that the procedure done here is differnet than the method
+	 * 	Note that the procedure done here is different than the method
 	 *	we are using in idetape_queue_pc_head - There we are putting
 	 *	request(s) before our currently called request.
 	 *
@@ -3259,7 +3259,7 @@ int idetape_add_chrdev_read_request (ide_drive_t *drive,int blocks,char *buffer)
 /*
  *	idetape_add_chrdev_write_request tries to add a character device
  *	originated write request to our pipeline. In case we don't succeed,
- *	we revert to non-piplined operation mode for this request.
+ *	we revert to non-pipelined operation mode for this request.
  *
  *	1.	Try to allocate a new pipeline stage.
  *	2.	If we can't, wait for more and more requests to be serviced
@@ -3626,7 +3626,7 @@ void idetape_blkdev_release (struct inode *inode, struct file *filp, ide_drive_t
 /*
  *	Our character device read / write functions.
  *
- *	The tape is optimized to maximize throughput when it is transfering
+ *	The tape is optimized to maximize throughput when it is transferring
  *	an integral number of the "continuous transfer limit", which is
  *	a parameter of the specific tape (26 KB on my particular tape).
  *
@@ -3784,7 +3784,7 @@ int idetape_chrdev_write (struct inode *inode, struct file *file, const char *bu
  *	Our character device ioctls.
  *
  *	General mtio.h magnetic io commands are supported here, and not in
- *	the correspoding block interface.
+ *	the corresponding block interface.
  *
  *	The following ioctls are supported:
  *
@@ -3798,7 +3798,7 @@ int idetape_chrdev_write (struct inode *inode, struct file *file, const char *bu
  *
  *			Note that we do not actually return the tape's
  *			block size. Rather, we provide the recommended
- *			number of bytes which sould be used as a "user
+ *			number of bytes which should be used as a "user
  *			block size" with the character device read/write
  *			functions to maximize throughput.
  *
@@ -3893,7 +3893,7 @@ int idetape_chrdev_ioctl (struct inode *inode, struct file *file, unsigned int c
  *	MTWEOF	-	Writes mt_count filemarks. Tape is positioned after
  *			the last written filemark.
  *
- *	MTREW	-	Rewindes tape.
+ *	MTREW	-	Rewinds tape.
  *
  *	MTOFFL	-	Puts the tape drive "Offline": Rewinds the tape and
  *			prevents further access until the media is replaced.
@@ -4221,7 +4221,7 @@ int idetape_position_tape (ide_drive_t *drive,unsigned long block)
 }
 
 /*
- *	Rewinds the tape to the Begining Of the current Partition (BOP).
+ *	Rewinds the tape to the Beginning Of the current Partition (BOP).
  *
  *	We currently support only one partition.
  */ 
@@ -4331,7 +4331,7 @@ idetape_pipeline_stage_t *idetape_kmalloc_stage (ide_drive_t *drive)
 }
 
 /*
- *	idetape_kfree_stage calls kfree to completly free a stage, along with
+ *	idetape_kfree_stage calls kfree to completely free a stage, along with
  *	its related buffers.
  */
  

@@ -201,7 +201,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 
 /*
  * The 4MB page is guessing..  Detailed in the infamous "Chapter H"
- * of the Pentium details, but assuming intel did the straigtforward
+ * of the Pentium details, but assuming intel did the straightforward
  * thing, this bit set in the page directory entry just means that
  * the page directory entry points directly to a 4MB-aligned block of
  * memory. 
@@ -254,7 +254,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 
 /* page table for 0-4MB for everybody */
 extern unsigned long pg0[1024];
-/* zero page used for unitialized stuff */
+/* zero page used for uninitialized stuff */
 extern unsigned long empty_zero_page[1024];
 
 /*

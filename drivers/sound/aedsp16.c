@@ -170,7 +170,7 @@
    I think the request regions should be done this way:
 
    if (check_region(...))
-   return ERR; // I/O region alredy reserved
+   return ERR; // I/O region already reserved
    device_probe(...);
    device_attach(...);
    request_region(...); // reserve only when we are sure all is okay
@@ -178,12 +178,12 @@
    Request the 2x0h region in any case if we are using this card.
 
    NOTE: the "(sbpro)" string with which we are requesting the aedsp16 region
-   (see code) does not mean necessarly that we are emulating sbpro.
+   (see code) does not mean necessarily that we are emulating sbpro.
    It mean that the region is the sbpro I/O ports region. We use this
    region to access the control registers of the card, and if emulating
    sbpro, I/O sbpro registers too. If we are emulating MSS, the sbpro
    registers are not used, in no way, to emulate an sbpro: they are
-   used only for configuration pourposes.
+   used only for configuration purposes.
 
    Someone pointed out that should be possible use both the SBPRO and MSS
    modes because the sound card have all the two chipsets, supposing that
@@ -222,7 +222,7 @@
    one sound card of the emulated type (read the NOTES above)
    - Moved the sb init routine from the attach to the very first
    probe in sb_card.c
-   - Rearrangemens and cleanups
+   - Rearrangements and cleanups
    - Wiped out some unnecessary code and variables: this is kernel
    code so it is better save some TEXT and DATA
    - Fixed the request_region code. We must allocate the aedsp16 (sbpro)
@@ -263,7 +263,7 @@
 #define CMD6 0x8c		/* Enable Microsoft Sound System mode   */
 
 /*
- * Offsets of AEDSP16 DSP I/O ports. The offest is added to portbase
+ * Offsets of AEDSP16 DSP I/O ports. The offset is added to portbase
  * to have the actual I/O port.
  * Register permissions are:
  * (wo) == Write Only
@@ -516,7 +516,7 @@ GetCardVersion (int port)
       if ((ret = ReadData (port)) == -1)
 	return -1;
       /*
-         * We alredy know how many int are stored (2), so we know when the
+         * We already know how many int are stored (2), so we know when the
          * string is finished.
        */
       ver[len++] = ret;
@@ -536,7 +536,7 @@ GetCardName (int port)
     {
       if ((ret = ReadData (port)) == -1)
 	/*
-	   * If no more data availabe, return to the caller, no error if len>0.
+	   * If no more data available, return to the caller, no error if len>0.
 	   * We have no other way to know when the string is finished.
 	 */
 	return (len ? 0 : -1);
@@ -666,7 +666,7 @@ int
 InitAEDSP16_SBPRO (struct address_info *hw_config)
 {
   /*
-     * If the card is alredy init'ed MSS, we can not init it to SBPRO too
+     * If the card is already init'ed MSS, we can not init it to SBPRO too
      * because the board can not emulate simultaneously MSS and SBPRO.
    */
   if (ae_init & INIT_MSS)
@@ -683,7 +683,7 @@ InitAEDSP16_SBPRO (struct address_info *hw_config)
     {
       if (check_region (hw_config->io_base, 0x0f))
 	{
-	  printk ("AEDSP16/SBPRO I/O port region is alredy in use.\n");
+	  printk ("AEDSP16/SBPRO I/O port region is already in use.\n");
 	  return -1;
 	}
     }
@@ -721,7 +721,7 @@ int
 InitAEDSP16_MSS (struct address_info *hw_config)
 {
   /*
-     * If the card is alredy init'ed SBPRO, we can not init it to MSS too
+     * If the card is already init'ed SBPRO, we can not init it to MSS too
      * because the board can not emulate simultaneously MSS and SBPRO.
    */
   if (ae_init & INIT_SBPRO)
@@ -736,7 +736,7 @@ InitAEDSP16_MSS (struct address_info *hw_config)
    */
   if (check_region (hw_config->io_base, 0x08))
     {
-      printk ("MSS I/O port region is alredy in use.\n");
+      printk ("MSS I/O port region is already in use.\n");
       return -1;
     }
 
@@ -748,7 +748,7 @@ InitAEDSP16_MSS (struct address_info *hw_config)
     {
       if (check_region (AEDSP16_BASE, 0x0f))
 	{
-	  printk ("AEDSP16 I/O port region is alredy in use.\n");
+	  printk ("AEDSP16 I/O port region is already in use.\n");
 	  return -1;
 	}
     }
@@ -801,7 +801,7 @@ InitAEDSP16_MPU401 (struct address_info *hw_config)
    */
   if (check_region (hw_config->io_base, 0x02))
     {
-      printk ("SB I/O port region is alredy in use.\n");
+      printk ("SB I/O port region is already in use.\n");
       return -1;
     }
 
@@ -813,7 +813,7 @@ InitAEDSP16_MPU401 (struct address_info *hw_config)
     {
       if (check_region (AEDSP16_BASE, 0x0f))
 	{
-	  printk ("AEDSP16 I/O port region is alredy in use.\n");
+	  printk ("AEDSP16 I/O port region is already in use.\n");
 	  return -1;
 	}
     }

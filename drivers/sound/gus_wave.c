@@ -1481,7 +1481,7 @@ guswave_open (int dev, int mode)
 
   if ((err = DMAbuf_open_dma (gus_devnum)) < 0)
     {
-      printk ("GUS: Loading saples without DMA\n");
+      printk ("GUS: Loading samples without DMA\n");
       gus_no_dma = 1;		/* Upload samples using PIO */
     }
   else

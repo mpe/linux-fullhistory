@@ -386,7 +386,7 @@ static int checksetup(char *line)
 }
 
 /* this should be approx 2 Bo*oMips to start (note initial shift), and will
-   still work even if initally too large, it will just take slightly longer */
+   still work even if initially too large, it will just take slightly longer */
 unsigned long loops_per_sec = (1<<12);
 
 /* This is the number of bits of precision for the loops_per_second.  Each

@@ -10,15 +10,15 @@ mt_trans(int pd, int mt)
 			if (mt == mtdesc_n0[i].mt)
 				return (mtdesc_n0[i].descr);
 		}
-		return ("unkown Message Type PD=N0");
+		return ("unknown Message Type PD=N0");
 	} else if (pd == PROTO_DIS_N1) {
 		for (i = 0; i < (sizeof(mtdesc_n1) / sizeof(struct MTypeDesc)); i++) {
 			if (mt == mtdesc_n1[i].mt)
 				return (mtdesc_n1[i].descr);
 		}
-		return ("unkown Message Type PD=N1");
+		return ("unknown Message Type PD=N1");
 	}
-	return ("unkown Protokolldiscriminator");
+	return ("unknown Protokolldiscriminator");
 }
 
 static void

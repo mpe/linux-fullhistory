@@ -72,7 +72,7 @@ struct fbgattr {
         int     emu_types[FB_ATTR_NEMUTYPES]; /* supported emulations */
 };
 #define FBIOSATTR  _IOW('F', 5, struct fbgattr) /* Unsupported: */
-#define FBIOGATTR  _IOR('F', 6, struct fbgattr)	/* supporoted */
+#define FBIOGATTR  _IOR('F', 6, struct fbgattr)	/* supported */
 
 #define FBIOSVIDEO _IOW('F', 7, int)
 #define FBIOGVIDEO _IOR('F', 8, int)

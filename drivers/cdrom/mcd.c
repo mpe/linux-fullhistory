@@ -48,13 +48,13 @@
 	I added code for FX001 D to drop from double speed to single speed 
 	when encountering errors... this helps with some "problematic" CD's
 	that are supposedly "OUT OF TOLERANCE" (but are really shitty presses!)
-	severly scratched, or possibly slightly warped! I have noticed that
+	severely scratched, or possibly slightly warped! I have noticed that
 	the Mitsumi 2x/4x drives are just less tolerant and the firmware is 
 	not smart enough to drop speed,	so let's just kludge it with software!
 	****** THE 4X SPEED MITSUMI DRIVES HAVE THE SAME PROBLEM!!!!!! ******
 	Anyone want to "DONATE" one to me?! ;) I hear sometimes they are
 	even WORSE! ;)
-	** HINT... HINT... TAKE NOTES MITSUMI This could save some hassels with
+	** HINT... HINT... TAKE NOTES MITSUMI This could save some hassles with
 	certain "large" CD's that have data on the outside edge in your 
 	DOS DRIVERS .... Accuracy counts... speed is secondary ;)
 	17 June 95 Modifications By Andrew J. Kroll <ag784@freenet.buffalo.edu>
@@ -719,7 +719,7 @@ mcd_poll(void)
 	if (mcdDouble == 1 && McdTries == MCD_RETRY_ATTEMPTS && MCMD_DATA_READ == MCMD_2X_READ) 
 		{
 		MCMD_DATA_READ = MCMD_PLAY_READ; /* Uhhh, Ummmm, muhuh-huh! */
-		mcd1xhold = SINGLE_HOLD_SECTORS; /* Hey Bevis! */
+		mcd1xhold = SINGLE_HOLD_SECTORS; /* Hey Beavis! */
 		printk(" Speed now 1x");	 /* Pull my finger! */
 		}
 	}

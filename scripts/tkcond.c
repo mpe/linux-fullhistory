@@ -19,7 +19,7 @@
  * This file contains the code to further process the conditions from
  * the "ifdef" clauses.
  *
- * The conditions are assumed to be one of the folowing formats
+ * The conditions are assumed to be one of the following formats
  *
  * simple_condition:= "$VARIABLE" == y/n/m
  * simple_condition:= "$VARIABLE != y/n/m
@@ -94,7 +94,7 @@ static void free_condition(struct condition * cnd)
 
 /*
  * Walk all of the conditions, and look for choice values.  Convert
- * the tokens into something more digestable.
+ * the tokens into something more digestible.
  */
 void fix_choice_cond()
 {
@@ -120,7 +120,7 @@ void fix_choice_cond()
 
 	  /*
 	   * Look ahead for what we are comparing this to.  There should
-	   * be one operator inbetween.
+	   * be one operator in between.
 	   */
 	  cond2 = cond->next->next;
 	  strcpy(tmpbuf, cond->variable.cfg->label);

@@ -41,7 +41,7 @@
 #define SO_BSDCOMPAT	14
 
 /*
- * Wierd.  There are two ABIs; in the old one SOCK_STREAM and SOCK_DGRAM
+ * Weird.  There are two ABIs; in the old one SOCK_STREAM and SOCK_DGRAM
  * have swapped values.  I choose to be compatible with the new one.
  */
 #define SOCK_DGRAM	1		/* datagram (conn.less) socket	*/

@@ -75,11 +75,11 @@
  *	Some examples:
  *		{ BRD_EASYIO, 0x2a0, 0, 0, 10, 0 }
  *	This line would configure an EasyIO board (4 or 8, no difference),
- *	at io addres 2a0 and irq 10.
+ *	at io address 2a0 and irq 10.
  *	Another example:
  *		{ BRD_ECH, 0x2a8, 0x280, 0, 12, 0 },
  *	This line will configure an EasyConnection 8/32 board at primary io
- *	addres 2a8, secondary io address 280 and irq 12.
+ *	address 2a8, secondary io address 280 and irq 12.
  *	Enter as many lines into this array as you want (only the first 4
  *	will actually be used!). Any combination of EasyIO and EasyConnection
  *	boards can be specified. EasyConnection 8/32 boards can share their
@@ -109,7 +109,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
 
 /*
  *	Define some important driver characteristics. Device major numbers
- *	allocated as per Linux Device Registery.
+ *	allocated as per Linux Device Registry.
  */
 #ifndef	STL_SIOMEMMAJOR
 #define	STL_SIOMEMMAJOR		28
@@ -206,7 +206,7 @@ static int	stl_numintrs = 0;
  *	Define a ring queue structure for each port. This will hold the
  *	TX data waiting to be output. Characters are fed into this buffer
  *	from the line discipline (or even direct from user space!) and
- *	then fed into the UARTs during interrupts. Will use a clasic ring
+ *	then fed into the UARTs during interrupts. Will use a classic ring
  *	queue here for this. The good thing about this type of ring queue
  *	is that the head and tail pointers can be updated without interrupt
  *	protection - since "write" code only needs to change the head, and
@@ -344,7 +344,7 @@ static char	*stl_brdnames[] = {
 
 /*
  *	Hardware ID bits for the EasyIO and ECH boards. These defines apply
- *	to the directly accessable io ports of these boards (not the cd1400
+ *	to the directly accessible io ports of these boards (not the cd1400
  *	uarts - they are in cd1400.h).
  */
 #define	EIO_8PORTRS	0x04
@@ -2168,9 +2168,9 @@ static void stl_setport(stlport_t *portp, struct termios *tiosp)
 
 /*
  *	Setup cd1400 enhanced modes if we can. In particular we want to
- *	handle as much of the flow control as possbile automatically. As
+ *	handle as much of the flow control as possible automatically. As
  *	well as saving a few CPU cycles it will also greatly improve flow
- *	control reliablilty.
+ *	control reliability.
  */
 	if (tiosp->c_iflag & IXON) {
 		cor2 |= COR2_TXIBE;
@@ -2309,7 +2309,7 @@ static int stl_getsignals(stlport_t *portp)
 /*****************************************************************************/
 
 /*
- *	Enable/Disable the Transmitter and/or Reciever.
+ *	Enable/Disable the Transmitter and/or Receiver.
  */
 
 static void stl_enablerxtx(stlport_t *portp, int rx, int tx)
@@ -2345,7 +2345,7 @@ static void stl_enablerxtx(stlport_t *portp, int rx, int tx)
 /*****************************************************************************/
 
 /*
- *	Start/stop the Transmitter and/or Reciever.
+ *	Start/stop the Transmitter and/or Receiver.
  */
 
 static void stl_startrxtx(stlport_t *portp, int rx, int tx)
@@ -2431,7 +2431,7 @@ static void stl_sendbreak(stlport_t *portp, long len)
 /*
  *	Map in interrupt vector to this driver. Check that we don't
  *	already have this vector mapped, we might be sharing this
- *	interrupt accross multiple boards.
+ *	interrupt across multiple boards.
  */
 
 static int stl_mapirq(int irq)
@@ -2650,7 +2650,7 @@ static int stl_initech(stlbrd_t *brdp)
 	status = 0;
 
 /*
- *	Set up the initial board register contents for boards. This varys a
+ *	Set up the initial board register contents for boards. This varies a
  *	bit between the different board types. So we need to handle each
  *	separately. Also do a check that the supplied IRQ is good.
  */

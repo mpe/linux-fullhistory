@@ -30,7 +30,7 @@ o	Protocol header cache support			[TESTED]
 o	Fixed ip_build_xmit loopback bugs		[TESTED]
 o	Fixes for SIOCGSTAMP on SOCK_PACKET		[TESTED]
 o	Perfect hash on net_bh().			[TESTED]
-o	Sonix ISDN driver.				[SEPERATED/SENT]
+o	Sonix ISDN driver.				[SEPARATED/SENT]
 o	Use ip_build_xmit for raw sockets		[TESTED]
 o	3c501 fixed for speed				[TESTED]
 ------->>>>>  ALPHA 002  <<<<<--------
@@ -40,7 +40,7 @@ o	Merged in G4KLX AX.25 state machine, with KA9Q
 o	Massive loopback device bug fixed		[TESTED]
 ------->>>>> ALPHA 003 <<<<<----------
 o	Revised code layout				[TESTED]
-o	More bug fixes (tracroute etc)			[TESTED]
+o	More bug fixes (traceroute etc)			[TESTED]
 ------->>>>> ALPHA 004 <<<<<----------
 o	IP build xmit fragment fixes			[TESTED]
 o	TCP SWS probe fix				[TESTED]

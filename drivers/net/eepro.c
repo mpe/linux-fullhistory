@@ -841,7 +841,7 @@ set_multicast_list(struct device *dev)
 		/*
 		 *	We must make the kernel realise we had to move
 		 *	into promisc mode or we start all out war on
-		 *	the cable. If it was a promisc rewquest the
+		 *	the cable. If it was a promisc request the
 		 *	flag is already set. If not we assert it.
 		 */
 		dev->flags|=IFF_PROMISC;		
@@ -868,7 +868,7 @@ set_multicast_list(struct device *dev)
 		unsigned short status, *eaddrs;
 		int i, boguscount = 0;
 		
-		/* Disable RX and TX interrupts.  Neccessary to avoid
+		/* Disable RX and TX interrupts.  Necessary to avoid
 		   corruption of the HOST_ADDRESS_REG by interrupt
 		   service routines. */
 		outb(ALL_MASK, ioaddr + INT_MASK_REG);
@@ -1007,7 +1007,7 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 			tx_available = lp->tx_start - lp->tx_end;
 		else tx_available = XMT_RAM;
 
-		/* Disable RX and TX interrupts.  Neccessary to avoid
+		/* Disable RX and TX interrupts.  Necessary to avoid
 		   corruption of the HOST_ADDRESS_REG by interrupt
 		   service routines. */
 		outb(ALL_MASK, ioaddr + INT_MASK_REG);

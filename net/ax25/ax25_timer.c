@@ -97,7 +97,7 @@ static void ax25_timer(unsigned long param)
 	switch (ax25->state) {
 		case AX25_STATE_0:
 			/* Magic here: If we listen() and a new link dies before it
-			   is accepted() it isnt 'dead' so doesnt get removed. */
+			   is accepted() it isn't 'dead' so doesn't get removed. */
 			if (ax25->sk == NULL || ax25->sk->destroy || (ax25->sk->state == TCP_LISTEN && ax25->sk->dead)) {
 				del_timer(&ax25->timer);
 				ax25_destroy_socket(ax25);

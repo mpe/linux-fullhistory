@@ -859,7 +859,7 @@ int isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 		} else {
 			/* skb_push(skb, 5); Done in isdn_net_header () */
 			skb->data[4] = MP_BEGIN_FRAG | MP_END_FRAG;	/* (B)egin & (E)ndbit .. */
-			skb->data[5] = (mp_seqno >> 16) & 0xff;	/* sequence nubmer: 24bit */
+			skb->data[5] = (mp_seqno >> 16) & 0xff;	/* sequence number: 24bit */
 			skb->data[6] = (mp_seqno >> 8) & 0xff;
 			skb->data[7] = (mp_seqno >> 0) & 0xff;
 			skb->data[8] = proto;	/* PID compression */
@@ -868,7 +868,7 @@ int isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 	}
 #endif
 	skb->data[0] = 0xff;        /* All Stations */
-	skb->data[1] = 0x03;        /* Unumbered information */
+	skb->data[1] = 0x03;        /* Unnumbered information */
 	skb->data[2] = proto >> 8;
 	skb->data[3] = proto & 0xff;
 

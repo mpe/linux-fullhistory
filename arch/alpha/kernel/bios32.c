@@ -457,7 +457,7 @@ static inline void enable_ide(long ide_base)
  * adheres to the PCI-PCI bridge specification.   This says that the interrupts on
  * the other side of a bridge are swizzled in the following manner:
  *
- * Dev    Interrupt   Interupt 
+ * Dev    Interrupt   Interrupt 
  *        Pin on      Pin on 
  *        Device      Connector
  *

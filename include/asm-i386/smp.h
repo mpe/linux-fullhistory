@@ -244,7 +244,7 @@ extern __inline int smp_processor_id(void)
  *	a process across CPUs. Such a transfer incurs misses on the L1
  *	cache, and on a P6 or P5 with multiple L2 caches L2 hits. My
  *	gut feeling is this will vary by board in value. For a board
- *	with seperate L2 cache it probably depends also on the RSS, and
+ *	with separate L2 cache it probably depends also on the RSS, and
  *	for a board with shared L2 cache it ought to decay fast as other
  *	processes are run.
  */

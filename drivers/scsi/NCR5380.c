@@ -1220,7 +1220,7 @@ static void NCR5380_main (void) {
 			 * in hostdata->connected, OR has terminated the
 			 * command.
 			 *
-			 * With successfull commands, we fall through
+			 * With successful commands, we fall through
 			 * and see if we can do an information transfer,
 			 * with failures we will restart.
 			 */
@@ -1947,7 +1947,7 @@ static int do_abort (struct Scsi_Host *host) {
      * other phase and will have to source/sink data.
      * 
      * We really don't care what value was on the bus or what value
-     * the target see's, so we just handshake.
+     * the target sees, so we just handshake.
      */
     
     while (!(tmp = NCR5380_read(STATUS_REG)) & SR_REQ);
@@ -2310,7 +2310,7 @@ static int NCR5380_transfer_dma (struct Scsi_Host *instance,
 #endif
 	if (NCR5380_read(BUS_AND_STATUS_REG) & BASR_IRQ) {
 #if (NDEBUG & NDEBUG_C400_PWRITE)
-	    printk("53C400w:    got it, reading reset interupt reg\n");
+	    printk("53C400w:    got it, reading reset interrupt reg\n");
 #endif
 	    NCR5380_read(RESET_PARITY_INTERRUPT_REG);
 	} else {

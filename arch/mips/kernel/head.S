@@ -115,14 +115,14 @@
 		.set	noreorder
 		NESTED(kernel_entry, 16, sp)
 		/*
-		 * The followin two symbols are used for kernel profiling.
+		 * The following two symbols are used for kernel profiling.
 		 */
 		EXPORT(stext)
 		EXPORT(_stext)
 
 #ifdef CONF_DISABLE_KSEG0_CACHING
 		/*
-		 * Disable all caching for KSEG0.  This option is usefull
+		 * Disable all caching for KSEG0.  This option is useful
 		 * when cache trouble with drivers is suspected
 		 */
 		mfc0	t0,CP0_CONFIG
@@ -142,7 +142,7 @@
 
 		/*
 		 * Initialize low level part of memory management
-		 * First flush the TLB to make shure that we don't get a
+		 * First flush the TLB to make sure that we don't get a
 		 * TLB shutdown during wire_mappings.
 		 */
 		jal	tlbflush

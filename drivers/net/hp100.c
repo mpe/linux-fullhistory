@@ -148,7 +148,7 @@ struct hp100_private {
   u_char *mem_ptr_virt;		    /* virtual memory mapped area, maybe NULL */
   u_char *mem_ptr_phys;		    /* physical memory mapped area */
   short lan_type;		    /* 10Mb/s, 100Mb/s or -1 (error) */
-  int hub_status;		    /* login to hub was successfull? */
+  int hub_status;		    /* login to hub was successful? */
   u_char mac1_mode;
   u_char mac2_mode;
   struct enet_statistics stats;
@@ -382,7 +382,7 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
     {
       mem_ptr_phys = (u_char *)( hp100_inw( MEM_MAP_LSW ) | 
                                ( hp100_inw( MEM_MAP_MSW ) << 16 ) );
-      (u_int)mem_ptr_phys &= ~0x1fff;	/* 8k aligment */
+      (u_int)mem_ptr_phys &= ~0x1fff;	/* 8k alignment */
       if ( bus == HP100_BUS_ISA && ( (u_long)mem_ptr_phys & ~0xfffff ) != 0 )
         {
           mem_ptr_phys = NULL;

@@ -8,7 +8,7 @@
  * Copyright (C) 1994, 1995 by Ralf Baechle
  *
  * Note that the quad functions are only being used for the 64 bit kernel and
- * therefore it isn't really important that they will be misscompiled for
+ * therefore it isn't really important that they will be miscompiled for
  * 32-bit kernels.
  */
 #ifndef __ASM_MIPS_SEGMENT_H

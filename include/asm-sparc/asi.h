@@ -101,7 +101,7 @@
 #define ASI_M_IC_FLCLEAR   0x36
 #define ASI_M_DC_FLCLEAR   0x37
 
-#define ASI_M_DCDR         0x39   /* Data Cache Diagnostics Registerl rw, ss */
+#define ASI_M_DCDR         0x39   /* Data Cache Diagnostics Register rw, ss */
 
 /* Sparc V9 TI UltraSparc ASI's (V8 ploos ploos) */
 

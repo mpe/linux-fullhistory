@@ -29,7 +29,7 @@ extern struct mostek48t02 *mstk48t02_regs;
 /* Control register values. */
 #define MSTK_CREG_WRITE    0x80   /* Must set this before placing values. */
 #define MSTK_CREG_READ     0x40   /* Stop the clock, I want to fetch values. */
-#define MSTK_CREG_SIGN     0x20   /* Grrr... whats this??? */
+#define MSTK_CREG_SIGN     0x20   /* Grrr... what's this??? */
 
 #define MSTK_YR_ZERO       1968   /* If year reg has zero, it is 1968 */
 #define MSTK_CVT_YEAR(yr)  ((yr) + MSTK_YR_ZERO)

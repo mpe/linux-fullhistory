@@ -1,6 +1,6 @@
 /* $Id: isdn_net.h,v 1.1 1996/02/11 02:35:13 fritz Exp fritz $
  *
- * header for Linux ISDN subsystem, network releted funtions (linklevel).
+ * header for Linux ISDN subsystem, network related functions (linklevel).
  *
  * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
  * Copyright 1995,96    by Thinking Objects Software GmbH Wuerzburg

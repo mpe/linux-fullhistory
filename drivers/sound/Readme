@@ -23,7 +23,7 @@ It's very likely that this driver version is incompatible with
 Linux versions later than 2.x.
 
 Packages "snd-util-3.5.tar.gz" and "snd-data-0.1.tar.Z"
-contain usefull utilities to be used with this driver.
+contain useful utilities to be used with this driver.
 
 If you are looking for the installation instructions, please
 look at Readme.linux.
@@ -40,7 +40,7 @@ Contributors
 ------------
 
 This driver contains code by several contributors. In addition several other
-persons have given usefull suggestions. The following is a list of major
+persons have given useful suggestions. The following is a list of major
 contributors. (I could have forgotten some names.)
 
 	Craig Metz	1/2 of the PAS16 Mixer and PCM support
@@ -72,7 +72,7 @@ contributors. (I could have forgotten some names.)
 	Riccardo Facchetti Audio Excel DSP 16 (aedsp16) support
 	James Hightower Spotting a tiny but important bug in CS423x support.
 
-There are propably many other names missing. If you have sent me some
+There are probably many other names missing. If you have sent me some
 patches and your name is not in the above list, please inform me.
 
 Sponsors etc.
@@ -87,7 +87,7 @@ Ensoniq Corp,		a SoundScape card and extensive amount of assistance
 MediaTriX Peripherals Inc, a AudioTriX Pro card + SDK
 Acer, Inc.		a pair of AcerMagic S23 cards.
 
-In addition the following companies have provided me sufficial amount
+In addition the following companies have provided me sufficient amount
 of technical information at least some of their products (free or $$$):
 
 Advanced Gravis Computer Technology Ltd.
@@ -119,7 +119,7 @@ If you get an error message when trying to use the driver, please look
 at /var/adm/messages for more verbose error message.
 
 
-In general the easiest way to diagnoze problems is to do "cat /dev/sndstat".
+In general the easiest way to diagnose problems is to do "cat /dev/sndstat".
 
 If you get an error message, there are some problems with the driver setup:
 
@@ -127,7 +127,7 @@ If you get an error message, there are some problems with the driver setup:
 	the sound driver are missing. Use the script at the end of
 	linux/drivers/sound/Readme.linux to create them.
 
-	- "No such device" telss that the sound driver is not in the kernel.
+	- "No such device" shows that the sound driver is not in the kernel.
 	You have to reconfigure and recompile the kernel to have the sound
 	driver. Compiling the driver doesn't help alone. You have to boot
 	with the newly compiled one before the driver becomes active.
@@ -142,7 +142,7 @@ The following errors are likely with /dev/dsp and /dev/audio.
 	this particular device. For example /dev/audio and /dev/dsp will not
 	work if "digitized voice support" was not enabled during "make config".
 	
-	- "Device or resource busy". Propably the IRQ (or DMA) channel 
+	- "Device or resource busy". Probably the IRQ (or DMA) channel 
 	required by the soundcard is in use by some other device/driver.
 
 	- "I/O error". Almost certainly (99%) it's an IRQ or DMA conflict.

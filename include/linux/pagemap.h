@@ -47,7 +47,6 @@ static inline unsigned long _page_hashfn(struct inode * inode, unsigned long off
 static inline struct page * find_page(struct inode * inode, unsigned long offset)
 {
 	struct page *page;
-	unsigned long flags;
 
 	for (page = page_hash(inode, offset); page ; page = page->next_hash) {
 		if (page->inode != inode)
@@ -55,11 +54,8 @@ static inline struct page * find_page(struct inode * inode, unsigned long offset
 		if (page->offset != offset)
 			continue;
 		/* Found the page. */
-		save_flags(flags);
-		cli();
-		page->referenced = 1;
-		page->count++;
-		restore_flags(flags);
+		atomic_inc(&page->count);
+		set_bit(PG_referenced, &page->flags);
 		break;
 	}
 	return page;
@@ -84,7 +80,7 @@ static inline void add_page_to_hash_queue(struct inode * inode, struct page * pa
 	struct page **p = &page_hash(inode,page->offset);
 
 	page_cache_size++;
-	page->referenced = 1;
+	set_bit(PG_referenced, &page->flags);
 	page->age = PAGE_AGE_VALUE;
 	page->prev_hash = NULL;
 	if ((page->next_hash = *p) != NULL)
@@ -123,7 +119,7 @@ static inline void add_page_to_inode_queue(struct inode * inode, struct page * p
 extern void __wait_on_page(struct page *);
 static inline void wait_on_page(struct page * page)
 {
-	if (page->locked)
+	if (PageLocked(page))
 		__wait_on_page(page);
 }
 

@@ -5,7 +5,7 @@
  * Address range for shared memory attaches if no address passed to
  * shmat().  These ought to be changed to something >4GB so 32-bit
  * errors are caught more easily.  However, they don't seem to be used
- * execept for ELF stuff, so it's not really critical until we get ELF
+ * except for ELF stuff, so it's not really critical until we get ELF
  * support for the Alpha.
  */
 #define SHM_RANGE_START	0x50000000

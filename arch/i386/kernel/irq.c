@@ -541,7 +541,7 @@ void init_IRQ(void)
 	for (i = 0; i < 16 ; i++)
 		set_intr_gate(0x20+i,bad_interrupt[i]);
 	/* This bit is a hack because we don't send timer messages to all processors yet */
-	/* It has to here .. it doesnt work if you put it down the bottom - assembler explodes 8) */
+	/* It has to be here .. it doesn't work if you put it down the bottom - assembler explodes 8) */
 #ifdef __SMP__	
 	set_intr_gate(0x20+i, interrupt[i]);	/* IRQ '16' - IPI for rescheduling */
 #endif	

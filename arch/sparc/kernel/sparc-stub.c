@@ -4,7 +4,7 @@
  * Modifications to run under Linux
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  *
- * This file origionally came from the gdb sources, and the
+ * This file originally came from the gdb sources, and the
  * copyright notices have been retained below.
  */
 
@@ -430,7 +430,7 @@ hexToInt(char **ptr, int *intValue)
 }
 
 /*
- * This function does all command procesing for interfacing to gdb.  It
+ * This function does all command processing for interfacing to gdb.  It
  * returns 1 if you should skip the instruction at the trap address, 0
  * otherwise.
  */

@@ -117,7 +117,7 @@
 struct icmp_mib icmp_statistics;
 
 /* An array of errno for error messages from dest unreach. */
-/* RFC 1122: 3.2.2.1 States that NET_UNREACH, HOS_UNREACH and SR_FAIELD MUST be considered 'transient errrs'. */
+/* RFC 1122: 3.2.2.1 States that NET_UNREACH, HOS_UNREACH and SR_FAIELD MUST be considered 'transient errs'. */
 
 struct icmp_err icmp_err_convert[] = {
   { ENETUNREACH,	0 },	/*	ICMP_NET_UNREACH	*/
@@ -136,7 +136,7 @@ struct icmp_err icmp_err_convert[] = {
 };
 
 /*
- *	A spare long used to speed up statistics udpating
+ *	A spare long used to speed up statistics updating
  */
  
 unsigned long dummy;

@@ -72,7 +72,7 @@ get the test suite that comes with the vfat distribution at
 This tests quite a few parts of the vfat filesystem and additional
 tests for new features or untested features would be appreciated.
 
-NOTES ON THE STRUCTURE OF THE VFAT FILESYTEM
+NOTES ON THE STRUCTURE OF THE VFAT FILESYSTEM
 ----------------------------------------------------------------------
 (This documentation was provided by Galen C. Hunt <gchunt@cs.rochester.edu>
  and lightly annotated by Gordon Chaffee).
@@ -196,7 +196,7 @@ Finally, note that the extended name is stored in Unicode.  Each Unicode
 character takes two bytes.
 
 
-NOTES ON UNICODE TRANSLATION IN VFAT FILESYTEM
+NOTES ON UNICODE TRANSLATION IN VFAT FILESYSTEM
 ----------------------------------------------------------------------
 (Information provided by Steve Searle <steve@mgu.bath.ac.uk>)
 

@@ -164,6 +164,7 @@ struct sock
 	__u32			acked_seq;
 	__u32			copied_seq;
 	__u32			rcv_ack_seq;
+	unsigned short		rcv_ack_cnt;		/* count of same ack */
 	__u32			window_seq;
 	__u32			fin_seq;
 	__u32			urg_seq;
@@ -288,7 +289,7 @@ struct sock
 	struct tcphdr		dummy_th;
 	struct timer_list	keepalive_timer;	/* TCP keepalive hack */
 	struct timer_list	retransmit_timer;	/* TCP retransmit timer */
-	struct timer_list	ack_timer;		/* TCP delayed ack timer */
+	struct timer_list	delack_timer;		/* TCP delayed ack timer */
 	int			ip_xmit_timeout;	/* Why the timeout is running */
 	struct rtable		*ip_route_cache;	/* Cached output route */
 	unsigned char		ip_hdrincl;		/* Include headers ? */

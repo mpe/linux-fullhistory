@@ -64,7 +64,7 @@ mad16_sb_dsp_command (unsigned char val)
   unsigned long   limit;
 
   limit = jiffies + HZ / 10;	/*
-				   * The timeout is 0.1 secods
+				   * The timeout is 0.1 seconds
 				 */
 
   /*

@@ -206,7 +206,7 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 	/*
 	 *	This is a magic hack to spot IPX packets. Older Novell breaks
 	 *	the protocol design and runs IPX over 802.3 without an 802.2 LLC
-	 *	layer. We look for FFFF which isnt a used 802.2 SSAP/DSAP. This
+	 *	layer. We look for FFFF which isn't a used 802.2 SSAP/DSAP. This
 	 *	won't work for fault tolerant netware but does for the rest.
 	 */
 	if (*(unsigned short *)rawp == 0xFFFF)

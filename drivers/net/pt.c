@@ -42,7 +42,7 @@
 
 #define DEF_A_SPEED	4800		/* 4800 baud */
 #define DEF_A_TXDELAY	350		/* 350 mS */
-#define DEF_A_PERSIST	64		/* 25% persistance */
+#define DEF_A_PERSIST	64		/* 25% persistence */
 #define DEF_A_SLOTIME	10		/* 10 mS */
 #define DEF_A_SQUELDELAY 30		/* 30 mS */
 #define DEF_A_CLOCKMODE	0		/* Normal clock mode */
@@ -540,7 +540,7 @@ int pt_init(void)
     }
 
     /*
-     * Link a couple of device structres into the chain
+     * Link a couple of device structures into the chain
      *
      * For the A port
      * Allocate space for 4 buffers even though we only need 3,
@@ -680,7 +680,7 @@ static void pt_rts(struct pt_local *lp, int x)
             {
                 if (lp->speed)		/* internally clocked */
                 {
-                    /* Repogram BRG from 32x clock for Rx DPLL */
+                    /* Reprogram BRG from 32x clock for Rx DPLL */
                     /* BRG off, keep PClk source */
                     wrtscc(lp->cardbase, cmd, R14, BRSRC);
                     br = lp->speed;
@@ -690,7 +690,7 @@ static void pt_rts(struct pt_local *lp, int x)
                     
                     /* SEARCH mode, BRG source */
                     wrtscc(lp->cardbase, cmd, R14, BRSRC | SEARCH);
-                    /* Enalbe the BRG */
+                    /* Enable the BRG */
                     wrtscc(lp->cardbase, cmd, R14, BRSRC | BRENABL);
                 }
             }
@@ -801,7 +801,7 @@ static int pt_probe(struct device *dev)
     lp->base = dev->base_addr;
     lp->cardbase = dev->base_addr & 0x3f0;
 	
-    /* These need to be initialsed before scc_init() is called.
+    /* These need to be initialised before scc_init() is called.
      */
     lp->xtal = XTAL;
     
@@ -916,7 +916,7 @@ static int pt_probe(struct device *dev)
  * sometime after booting when the 'ifconfig' program is run.
  *
  * This routine should set everything up anew at each open, even
- * registers that 'should' only be set once at bott, so that there is
+ * registers that 'should' only be set once at boot, so that there is
  * a non-reboot way to recover if something goes wrong.
  * derived from last half of tsync_attach()
  */
@@ -1193,7 +1193,7 @@ static void pt_txisr(struct pt_local *lp)
 	    {
 	        lp->tstate = DEFER;
 	        tdelay(lp, 100);
-	        /* DEFER until DCD transistion or timeout */
+	        /* DEFER until DCD transition or timeout */
 	        wrtscc(lp->cardbase, cmd, R15, DCDIE);
 	        restore_flags(flags);
 	        return;
@@ -1230,7 +1230,7 @@ static void pt_txisr(struct pt_local *lp)
 	        lp->sndbuf = NULL;
 	        if ((rdscc(lp->cardbase, cmd, R0) & TxEOM))
 	        {
-	            /* Did we underrum */
+	            /* Did we underrun */
 	            lp->stats.tx_errors++;
 	            lp->stats.tx_fifo_errors++;
 	            wrtscc(lp->cardbase, cmd, R0, SEND_ABORT);
@@ -1253,7 +1253,7 @@ static void pt_txisr(struct pt_local *lp)
 	   restore_flags(flags);
 	   return;
 	default:
-		printk("PT: pt_txisr(): Invlaid tstate (%d) for chan %s.\n", lp->tstate, (cmd & CHANA? "A": "B") );
+		printk("PT: pt_txisr(): Invalid tstate (%d) for chan %s.\n", lp->tstate, (cmd & CHANA? "A": "B") );
 		pt_rts(lp, OFF);
 		lp->tstate = IDLE;
 		break;		
@@ -1392,7 +1392,7 @@ static void pt_rxisr(struct device *dev)
                  skb = dev_alloc_skb(sksize);
                  if (skb == NULL)
                  {
-                     printk("PT: %s: Memory squeze, dropping packet.\n", dev->name);
+                     printk("PT: %s: Memory squeeze, dropping packet.\n", dev->name);
                      lp->stats.rx_dropped++;
                      restore_flags(flags);
                      return;
@@ -1701,7 +1701,7 @@ static void pt_exisr(struct pt_local *lp)
         /* slotime has timed out */
     case DEFER:
         /* Check DCD - debounce it
-         * see Intel Micrommunications Handbook, p2-308
+         * see Intel Microcommunications Handbook, p2-308
          */
         wrtscc(lp->cardbase, cmd, R0, RES_EXT_INT);
         wrtscc(lp->cardbase, cmd, R0, RES_EXT_INT);
@@ -1709,7 +1709,7 @@ static void pt_exisr(struct pt_local *lp)
         {
             lp->tstate = DEFER;
             tdelay(lp, 100);
-            /* DEFER until DCD transistion or timeout */
+            /* DEFER until DCD transition or timeout */
             wrtscc(lp->cardbase, cmd, R15, DCDIE);
             restore_flags(flags);
             return;
@@ -1761,7 +1761,7 @@ static void pt_exisr(struct pt_local *lp)
 
     }
     
-    /* Check for DCD transistions */
+    /* Check for DCD transitions */
     if ( (st & DCD) != (lp->saved_RR0 & DCD))
     {
 #ifdef PT_DEBUG    

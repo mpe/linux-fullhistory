@@ -48,7 +48,7 @@ int nr_async_pages = 0;
 
 /*
  * Constants for the page aging mechanism: the maximum age (actually,
- * the maximum "youthfulness"); the quanta by which pages rejuvinate
+ * the maximum "youthfulness"); the quanta by which pages rejuvenate
  * and age; and the initial age for new pages. 
  */
 

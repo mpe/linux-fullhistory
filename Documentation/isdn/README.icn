@@ -11,7 +11,7 @@ WWW   http:/www.think.de
 
 
 The card communicates with the PC by two interfaces:
-  1. A range of 4 successive port-addresses, whos base address can be 
+  1. A range of 4 successive port-addresses, whose base address can be 
      configured with the switches.
   2. A memory window with 16KB-256KB size, which can be setup in 16k steps
      over the whole range of 16MB. Isdn4linux only uses a 16k window.
@@ -27,7 +27,7 @@ Setting up the IO-address dipswitches for the ICN-ISDN-card:
 
      (0 = switch closed, 1 = switch open)
 
-     S3 S2 S1  Basie-address
+     S3 S2 S1  Base-address
       0  0  0  0x300
       0  0  1  0x310
       0  1  0  0x320 (Default for isdn4linux)
@@ -41,7 +41,7 @@ Setting up the IO-address dipswitches for the ICN-ISDN-card:
 
      (0 = switch closed, 1 = switch open)
 
-     S1 S2 S3 S4  Basis-Adresse
+     S1 S2 S3 S4  Base-Address
       0  0  0  0  0x300
       0  0  0  1  0x310
       0  0  1  0  0x320 (Default for isdn4linux)

@@ -30,6 +30,7 @@
 					   stacks do signed 16bit maths! */
 #define MIN_WINDOW	2048
 #define MAX_ACK_BACKLOG	2
+#define MAX_DUP_ACKS	2
 #define MIN_WRITE_SPACE	2048
 #define TCP_WINDOW_DIFF	2048
 
@@ -150,6 +151,7 @@ extern void tcp_send_fin(struct sock *sk);
 extern void tcp_send_synack(struct sock *, struct sock *, struct sk_buff *);
 extern void tcp_send_skb(struct sock *, struct sk_buff *);
 extern void tcp_send_ack(struct sock *sk);
+extern void tcp_send_delayed_ack(struct sock *sk, int timeout);
 extern void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
 	  struct proto *prot, struct options *opt, struct device *dev, int tos, int ttl);
 
@@ -162,6 +164,7 @@ extern void tcp_cache_zap(void);
 /* tcp_timer.c */
 #define     tcp_reset_msl_timer(x,y,z)	reset_timer(x,y,z)
 extern void tcp_reset_xmit_timer(struct sock *, int, unsigned long);
+extern void tcp_delack_timer(unsigned long);
 extern void tcp_retransmit_timer(unsigned long);
 
 /*
@@ -180,93 +183,78 @@ static inline u32 tcp_init_seq(void)
 	return tv.tv_usec+tv.tv_sec*1000000;
 }
 
-/*
- *      This function returns the amount that we can raise the
- *      usable window based on the following constraints
- *  
- *	1. The window can never be shrunk once it is offered (RFC 793)
- *	2. We limit memory per socket
- *	3. No reason to raise the window if the other side has
- *	   lots of room to play with.
- */
-
-static __inline__ unsigned short tcp_raise_window(struct sock *sk)
+static __inline__ int tcp_old_window(struct sock * sk)
 {
-	long free_space;
-	long window;
-
-
-	/* 
-         * compute the actual window i.e. 
-         * old_window - received_bytes_on_that_win.
-	 */
-	window = sk->window - (sk->acked_seq - sk->lastwin_seq);	
-
-	free_space = sock_rspace(sk);
-	if (free_space > 1024)
-		free_space &= ~0x3FF; /* make free space a multiple of 1024 */
-
-	if(sk->window_clamp)
-		free_space = min(sk->window_clamp, free_space);
-
-	if (sk->mss == 0)
-		sk->mss = sk->mtu;
- 
-	if ( window < 0 ) {	
-		window = 0;
-		printk(KERN_DEBUG "TRW: win < 0 w=%d 1=%u 2=%u\n", 
-		       sk->window, sk->acked_seq, sk->lastwin_seq);
-	}
-	
-	if ( (free_space - window) >= min(sk->mss, MAX_WINDOW/2) )
-		return ((free_space - window) / sk->mss) * sk->mss;
-
-	return 0;
+	return sk->window - (sk->acked_seq - sk->lastwin_seq);
 }
 
-static __inline__ unsigned short tcp_select_window(struct sock *sk)
+static __inline__ int tcp_new_window(struct sock * sk)
 {
-	long free_space = sock_rspace(sk);
-	long window;
+	int window = sock_rspace(sk);
 
-	if (free_space > 1024)
-		free_space &= ~0x3FF;	/* make free space a multiple of 1024 */
+	if (window > 1024)
+		window &= ~0x3FF;	/* make free space a multiple of 1024 */
 
-	if (sk->window_clamp)
-		free_space = min(sk->window_clamp, free_space);
-	
-	/*
-	 * compute the actual window i.e.
-	 * old_window - received_bytes_on_that_win
-	 */
-
-	if (sk->mss == 0)
-		sk->mss = sk->mtu;
-
-	window = sk->window - (sk->acked_seq - sk->lastwin_seq);
-
-	if ( window < 0 ) {
-		window = 0;
-		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
-			sk->window, sk->acked_seq, sk->lastwin_seq);
-	}
+	if (sk->window_clamp && sk->window_clamp < window)
+		window = sk->window_clamp;
 
 	/*
-	 * RFC 1122:
+	 * RFC 1122 says:
+	 *
 	 * "the suggested [SWS] avoidance algoritm for the receiver is to keep
 	 *  RECV.NEXT + RCV.WIN fixed until:
 	 *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
 	 *
-	 * i.e. don't raise the right edge of the window until you can't raise
-	 * it MSS bytes
+	 * Experiments against BSD and Solaris machines show that following
+	 * these rules results in the BSD and Solaris machines making very
+	 * bad guesses about how much data they can have in flight.
+	 *
+	 * Instead we follow the BSD lead and offer a window that gives
+	 * the size of the current free space, truncated to a multiple
+	 * of 1024 bytes. If the window is smaller than
+	 * 	min(sk->mss, MAX_WINDOW/2)
+	 * then we adversize the window as having size 0, unless this
+	 * would shrink the window we offered last time.
+	 * This results in as much as double the throughput as the original
+	 * implementation.
 	 */
 
-	if ( (free_space - window) >= min(sk->mss, MAX_WINDOW/2) )
-		window += ((free_space - window) / sk->mss) * sk->mss;
+	if (sk->mss == 0)
+		sk->mss = sk->mtu;
 
-	sk->window = window;
-	sk->lastwin_seq = sk->acked_seq;
+	/* BSD style SWS avoidance
+	 * Note that RFC1122 only says we must do silly window avoidance,
+	 * it does not require that we use the suggested algorithm.
+	 */
 
+	if (window < min(sk->mss, MAX_WINDOW/2))
+		window = 0;
+
+	return window;
+}
+
+/*
+ * Return true if we should raise the window when we
+ * have cleaned up the receive queue. We don't want to
+ * do this normally, only if it makes sense to avoid
+ * zero window probes..
+ *
+ * We do this only if we can raise the window noticeably.
+ */
+static __inline__ int tcp_raise_window(struct sock * sk)
+{
+	return tcp_new_window(sk) >= 2*tcp_old_window(sk);
+}
+
+static __inline__ unsigned short tcp_select_window(struct sock *sk)
+{
+	int window = tcp_new_window(sk);
+
+	/* Don't allow a shrinking window */
+	if (window > tcp_old_window(sk)) {
+		sk->window = window;
+		sk->lastwin_seq = sk->acked_seq;
+	}
 	return sk->window;
 }
 
@@ -328,7 +316,7 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	case TCP_CLOSE:
 		tcp_cache_zap();
 		/* Should be about 2 rtt's */
-   		reset_timer(sk, TIME_DONE, min(sk->rtt * 2, TCP_DONE_TIME));
+		reset_timer(sk, TIME_DONE, min(sk->rtt * 2, TCP_DONE_TIME));
 		/* fall through */
 	default:
 		if (oldstate==TCP_ESTABLISHED)

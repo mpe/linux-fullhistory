@@ -216,7 +216,7 @@ void do_page_fault(struct pt_regs *regs, unsigned long address, unsigned long er
   }
   if (vma->vm_end - address > current->rlim[RLIMIT_STACK].rlim_cur)
   {
-    printk("stack2: vma->vm_end-addres %x rlim %x\n", vma->vm_end - address,
+    printk("stack2: vma->vm_end-address %x rlim %x\n", vma->vm_end - address,
 	   current->rlim[RLIMIT_STACK].rlim_cur);
     printk("stack2: vm_end %x address = %x\n", vma->vm_end,address);
     printk("stack2: gpr[1]=%x ip = %x; current=%x[%d]; mm=%x; mmap=%x; address = %x error_code = %x\n",regs->gpr[1],regs->nip, current,current->pid,current->mm,current->mm->mmap, address, error_code);

@@ -40,8 +40,8 @@
  *		in the meantime (BSD loses the path and gives up).
  *	accept() returns 0 length path for an unbound connector. BSD returns 16
  *		and a null first byte in the path (but not for gethost/peername - BSD bug ??)
- *	socketpair(...SOCK_RAW..) doesnt panic the kernel.
- *	BSD af_unix apprently has connect forgetting to block properly.
+ *	socketpair(...SOCK_RAW..) doesn't panic the kernel.
+ *	BSD af_unix apparently has connect forgetting to block properly.
  */
 
 #include <linux/config.h>
@@ -1075,7 +1075,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 			msg->msg_accrightslen);
 		if(msg->msg_accrightslen<sizeof(struct cmsghdr)
 #if 0 
-/*		investigate this furthur -- Stevens example doen't seem to care */
+/*		investigate this further -- Stevens example doesn't seem to care */
 		||
 		   cm->cmsg_type!=SCM_RIGHTS ||
 		   cm->cmsg_level!=SOL_SOCKET ||

@@ -23,6 +23,19 @@
 #include <linux/config.h>
 #include <net/tcp.h>
 
+#include <linux/interrupt.h>
+
+/*
+ *	Get rid of any delayed acks, we sent one already..
+ */
+static __inline__ void clear_delayed_acks(struct sock * sk)
+{
+	sk->ack_timed = 0;
+	sk->ack_backlog = 0;
+	sk->bytes_rcv = 0;
+	del_timer(&sk->delack_timer);
+}
+
 /*
  *	This is the main buffer sending routine. We queue the buffer
  *	having checked it is sane seeming.
@@ -106,7 +119,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		/*
 		 *	This is going straight out
 		 */
-		 
+		clear_delayed_acks(sk);		 
 		th->ack_seq = htonl(sk->acked_seq);
 		th->window = htons(tcp_select_window(sk));
 
@@ -122,10 +135,6 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		 
 		sk->prot->queue_xmit(sk, skb->dev, skb, 0);
 		
-		
-		sk->ack_backlog = 0;
-		sk->bytes_rcv = 0;
-
 		/*
 		 *	Set for next retransmit based on expected ACK time.
 		 *	FIXME: We set this every time which means our 
@@ -290,10 +299,8 @@ void tcp_write_xmit(struct sock *sk)
 			 */
 			 
 			sk->prot->queue_xmit(sk, skb->dev, skb, skb->free);
-			
-			
-			sk->ack_backlog = 0;
-			sk->bytes_rcv = 0;
+
+			clear_delayed_acks(sk);
 
 			/*
 			 *	Again we slide the timer wrongly
@@ -339,7 +346,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		/*		   (the skb_pull() changes skb->data while we may   */
 		/*		   actually try to send the data. Ouch. A side	    */
 		/*		   effect is that we'll send some unnecessary data, */
-		/*		   but the alternative is disasterous...	    */
+		/*		   but the alternative is disastrous...	    */
 		
 		if (skb_device_locked(skb))
 			break;
@@ -429,8 +436,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 			 */
 		 
 			th->ack_seq = htonl(sk->acked_seq);
-			sk->ack_backlog = 0;
-			sk->bytes_rcv = 0;
+			clear_delayed_acks(sk);
 			th->window = ntohs(tcp_select_window(sk));
 			tcp_send_check(th, sk->saddr, sk->daddr, size, skb);
 		
@@ -631,7 +637,7 @@ void tcp_send_fin(struct sock *sk)
 	buff->end_seq = sk->write_seq;
 	t1->seq = htonl(buff->seq);
 	t1->ack_seq = htonl(sk->acked_seq);
-	t1->window = htons(sk->window=tcp_select_window(sk));
+	t1->window = htons(tcp_select_window(sk));
 	t1->fin = 1;
 	tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), buff);
 
@@ -747,6 +753,39 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 }
 
 /*
+ *	Set up the timers for sending a delayed ack..
+ *
+ *      rules for delaying an ack:
+ *      - delay time <= 0.5 HZ
+ *      - must send at least every 2 full sized packets
+ *      - we don't have a window update to send
+ */
+void tcp_send_delayed_ack(struct sock * sk, int max_timeout)
+{
+	unsigned long timeout, now;
+
+	/* Calculate new timeout */
+	now = jiffies;
+	timeout = sk->ato;
+	if (timeout > max_timeout)
+		timeout = max_timeout;
+	timeout += now;
+	if (sk->bytes_rcv > sk->max_unacked) {
+		timeout = now;
+		mark_bh(TIMER_BH);
+	}
+
+	/* Use new timeout only if there wasn't a older one earlier  */
+	if (!del_timer(&sk->delack_timer) || timeout < sk->delack_timer.expires)
+		sk->delack_timer.expires = timeout;
+
+	sk->ack_backlog++;
+	add_timer(&sk->delack_timer);
+}
+
+
+
+/*
  *	This routine sends an ack and also updates the window. 
  */
  
@@ -765,10 +804,8 @@ void tcp_send_ack(struct sock *sk)
 	 *	is on we are just doing an ACK timeout and need to switch
 	 *	to a keepalive.
 	 */
-	 
-	sk->ack_backlog = 0;
-	sk->bytes_rcv = 0;
-	sk->ack_timed = 0;
+
+	clear_delayed_acks(sk);
 
 	if (sk->send_head == NULL
 	    && skb_queue_empty(&sk->write_queue)
@@ -794,12 +831,8 @@ void tcp_send_ack(struct sock *sk)
 		 *	bandwidth on slow links to send a spare ack than
 		 *	resend packets. 
 		 */
-		 
-		sk->ack_backlog++;
-		if (sk->ip_xmit_timeout != TIME_WRITE && tcp_connected(sk->state)) 
-		{
-			tcp_reset_xmit_timer(sk, TIME_WRITE, HZ);
-		}
+
+		tcp_send_delayed_ack(sk, HZ/2);
 		return;
 	}
 
@@ -829,12 +862,10 @@ void tcp_send_ack(struct sock *sk)
   	 *	Fill in the packet and send it
   	 */
   	 
-	sk->window = tcp_select_window(sk);
-
 	memcpy(t1, &sk->dummy_th, sizeof(*t1));
 	t1->seq     = htonl(sk->sent_seq);
   	t1->ack_seq = htonl(sk->acked_seq);
-	t1->window  = htons(sk->window);
+	t1->window  = htons(tcp_select_window(sk));
 
   	tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), buff);
   	if (sk->debug)
@@ -879,7 +910,7 @@ void tcp_write_wakeup(struct sock *sk)
 		/*
 	    	 * We are probing the opening of a window
 	    	 * but the window size is != 0
-	    	 * must have been a result SWS advoidance ( sender )
+	    	 * must have been a result SWS avoidance ( sender )
 	    	 */
 	    
 	    	struct iphdr *iph;

@@ -9,7 +9,7 @@ The detection and configuration of this interface used to be included
 in both the sjcd and optcd cdrom driver. Drives supported by these
 drivers came packed with Media Magic's multi media kit, which also
 included the ISP16 card. The idea (thanks Leo Spiekman)
-to move it from thes drivers into a separate module and moreover, not to
+to move it from these drivers into a separate module and moreover, not to
 rely on the MAD16 sound driver, are as follows:
 -duplication of code in the kernel is a waste of resources and should
  be avoided;
@@ -24,7 +24,7 @@ The ISP16, MAD16 and Mozart sound cards have an OPTi 82C928 or an
 OPTi 82C929 chip.  The interface on these cards should work with
 any cdrom attached to the card, which is 'electrically' compatible
 with Sanyo/Panasonic, Sony or Mitsumi non-ide drives. However, the
-command sets for any propriatary drives may differ
+command sets for any proprietary drives may differ
 (and hence may not be supported in the kernel) from these four types.
 For a fact I know the interface works and the way of configuration
 as described in this documentation works in combination with the
@@ -46,7 +46,7 @@ Booting the kernel through the boot manager LILO allows the use
 of some command line options on the 'LILO boot:' prompt. At boot time
 press Alt or Shift while the LILO prompt is written on the screen and enter
 any kernel options. Alternatively these options may be used in
-the apropriate section in /etc/lilo.conf. Adding 'append="<cmd_line_options>"'
+the appropriate section in /etc/lilo.conf. Adding 'append="<cmd_line_options>"'
 will do the trick as well.
 The syntax of 'cmd_line_options' is
 
@@ -68,7 +68,7 @@ The values 0 for irq and dma indicate that they are not used, and
 the drive will be used in 'polling' mode. The values 5 and 7 for irq
 should be avoided in order to avoid any conflicts with optional
 sound card configuration.
-The syntax of the command line does not allow the specifiaction of
+The syntax of the command line does not allow the specification of
 irq when there's nothing specified for the base address and no
 specification of dma when there is no specification of irq.
 The value 'nosip16' for drive_type, which may be used as the first

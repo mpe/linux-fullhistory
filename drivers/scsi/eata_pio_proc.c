@@ -30,7 +30,7 @@ int eata_pio_set_info(char *buffer, int length, struct Scsi_Host *HBA_ptr)
  * eata_proc_info
  * inout : decides on the direction of the dataflow and the meaning of the 
  *         variables
- * buffer: If inout==FALSE data is beeing written to it else read from it
+ * buffer: If inout==FALSE data is being written to it else read from it
  * *start: If inout==FALSE start of the valid data in the buffer
  * offset: If inout==FALSE offset from the beginning of the imaginary file 
  *         from which we start writing into the buffer
@@ -56,7 +56,7 @@ int eata_pio_proc_info(char *buffer, char **start, off_t offset, int length,
 	HBA_ptr = SD(HBA_ptr)->next;
     }        
 
-    if(inout == TRUE) /* Has data been writen to the file ? */ 
+    if(inout == TRUE) /* Has data been written to the file ? */ 
 	return(eata_pio_set_info(buffer, length, HBA_ptr));
 
     if (offset == 0)

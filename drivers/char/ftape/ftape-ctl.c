@@ -841,7 +841,7 @@ void ftape_init_driver(void)
 	drive_type.vendor_id = UNKNOWN_VENDOR;
 	drive_type.speed = 0;
 	drive_type.wake_up = unknown_wake_up;
-	drive_type.name = "Unkown";
+	drive_type.name = "Unknown";
 
 	timeout.seek = 650 * SECOND;
 	timeout.reset = 670 * SECOND;

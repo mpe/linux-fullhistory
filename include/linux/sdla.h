@@ -67,7 +67,7 @@ struct sdla_mem {
 #define SDLA_WINDOW_SIZE		0x2000
 #define SDLA_ADDR_MASK			0x1FFF
 
-/* largest handlable block of data */
+/* largest handleable block of data */
 #define SDLA_MAX_DATA			4080
 #define SDLA_MAX_MTU			4072	/* MAX_DATA - sizeof(fradhdr) */
 #define SDLA_MAX_DLCI			24

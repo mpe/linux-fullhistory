@@ -168,7 +168,7 @@
 /*
  *  IRQChannelReg bits/masks.
  */
-#define HP100_ZERO_WAIT_EN	0x80	/* 0:No, 1:Yes assers NOWS signal */
+#define HP100_ZERO_WAIT_EN	0x80	/* 0:No, 1:Yes asserts NOWS signal */
 #define HP100_LEVEL_IRQ		0x10	/* 0:Edge, 1:Level type interrupts. */
                                         /*   Only valid on EISA cards. */
 #define HP100_IRQ_MASK		0x0F	/* Isolate the IRQ bits */
@@ -241,7 +241,7 @@
 #define HP100_RX_IDLE		0x80	/* 0:Yes, 1:No currently receiving pkts */
 #define HP100_TX_IDLE		0x40	/* 0:Yes, 1:No currently Txing pkts */
 #define HP100_RX_EN		0x20	/* 0:No, 1:Yes allow receiving of pkts */
-#define HP100_TX_EN		0x10	/* 0:No, 1:Yes allow transmiting of pkts */
+#define HP100_TX_EN		0x10	/* 0:No, 1:Yes allow transmitting of pkts */
 #define HP100_ACC_ERRORED	0x08	/* 0:No, 1:Yes allow Rx of errored pkts */
 #define HP100_ACC_MC		0x04	/* 0:No, 1:Yes allow Rx of multicast pkts */
 #define HP100_ACC_BC		0x02	/* 0:No, 1:Yes allow Rx of broadcast pkts */

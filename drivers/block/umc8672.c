@@ -32,7 +32,7 @@
  * #define UMC_DRIVE0 11
  * in the beginning of the driver, which sets the speed of drive 0 to 11 (there
  * are some lines present). 0 - 11 are allowed speed values. These values are
- * the results from the DOS speed test programm supplied from UMC. 11 is the 
+ * the results from the DOS speed test program supplied from UMC. 11 is the 
  * highest speed (about PIO mode 3)
  */
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */

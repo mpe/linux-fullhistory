@@ -4,6 +4,8 @@
  *  Copyright (C) 1992  Rick Sladkey
  *
  *  nfs directory handling functions
+ *
+ * 10 Apr 1996	Added silly rename for unlink	--okir
  */
 
 #include <linux/sched.h>
@@ -481,6 +483,51 @@ static int nfs_rmdir(struct inode *dir, const char *name, int len)
 	return error;
 }
 
+static int nfs_sillyrename(struct inode *dir, const char *name, int len)
+{
+	struct inode	*inode;
+	char		silly[14];
+	int		slen, ret;
+
+	dir->i_count++;
+	if (nfs_lookup(dir, name, len, &inode) < 0)
+		return -EIO;		/* arbitrary */
+	if (inode->i_count == 1 || NFS_RENAMED_DIR(inode)) {
+		iput(inode);
+		return -EIO;
+	}
+	slen = sprintf(silly, ".nfs%ld", inode->i_ino);
+
+	if (len == slen && !strncmp(name, silly, len)) {
+		iput(inode);
+		return -EIO;		/* DWIM */
+	}
+	ret = nfs_proc_rename(NFS_SERVER(dir), NFS_FH(dir), name,
+					       NFS_FH(dir), silly);
+	if (ret >= 0) {
+		nfs_lookup_cache_remove(dir, NULL, name);
+		nfs_lookup_cache_remove(dir, NULL, silly);
+		NFS_RENAMED_DIR(inode) = dir;
+		dir->i_count++;
+	}
+	iput(inode);
+	return ret;
+}
+
+void nfs_sillyrename_cleanup(struct inode *inode)
+{
+	struct inode	*dir = NFS_RENAMED_DIR(inode);
+	char		silly[14];
+	int		error, slen;
+
+	slen = sprintf(silly, ".nfs%ld", inode->i_ino);
+	if ((error = nfs_unlink(dir, silly, slen)) < 0) {
+		printk("NFS silly_rename cleanup failed (err = %d)\n",
+					-error);
+	}
+	NFS_RENAMED_DIR(inode) = NULL;
+}
+
 static int nfs_unlink(struct inode *dir, const char *name, int len)
 {
 	int error;
@@ -494,9 +541,11 @@ static int nfs_unlink(struct inode *dir, const char *name, int len)
 		iput(dir);
 		return -ENAMETOOLONG;
 	}
-	error = nfs_proc_remove(NFS_SERVER(dir), NFS_FH(dir), name);
-	if (!error)
-		nfs_lookup_cache_remove(dir, NULL, name);
+	if ((error = nfs_sillyrename(dir, name, len)) < 0) {
+		error = nfs_proc_remove(NFS_SERVER(dir), NFS_FH(dir), name);
+		if (!error)
+			nfs_lookup_cache_remove(dir, NULL, name);
+	}
 	iput(dir);
 	return error;
 }

@@ -261,7 +261,7 @@ typedef struct {
   /*27*/ { "Software Reset Occurred", 0, },\
   /*28*/ { "Diagnostic Mode 1 Error", 1, },\
   /*29*/ { "Diagnostic Mode 2 Error", 1, },\
-  /*30*/ { "Command Received During Non-Interruptable Process", 1, },\
+  /*30*/ { "Command Received During Non-Interruptible Process", 1, },\
   /*31*/ { "Rate or Format Selection Error", 1, },\
   /*32*/ { "Illegal Command While in High Speed Mode", 1, },\
   /*33*/ { "Illegal Seek Segment Value", 1, },\

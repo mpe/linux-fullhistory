@@ -179,7 +179,7 @@ struct cdrom_read
 };
 
 /*
- * extensions for transfering audio frames
+ * extensions for transferring audio frames
  * currently used by sbpcd.c, cdu31a.c, ide-cd.c
  */
 struct cdrom_read_audio

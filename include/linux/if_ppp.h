@@ -92,7 +92,7 @@
  */
 
 struct npioctl {
-    int		protocol;	/* PPP procotol, e.g. PPP_IP */
+    int		protocol;	/* PPP protocol, e.g. PPP_IP */
     enum NPmode	mode;
 };
 

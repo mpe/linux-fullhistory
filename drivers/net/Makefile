@@ -8,7 +8,7 @@
 include CONFIG
 
 L_TARGET := net.a
-L_OBJS   := Space.o auto_irq.o net_init.o loopback.o
+L_OBJS   := auto_irq.o
 M_OBJS   :=
 MOD_LIST_NAME := NET_MODULES
 
@@ -29,6 +29,10 @@ else
       CONFIG_SLHC_MODULE = y
     endif
   endif
+endif
+
+ifeq ($(CONFIG_NET),y)
+L_OBJS += Space.o net_init.o loopback.o
 endif
 
 ifeq ($(CONFIG_SEEQ8005),y)

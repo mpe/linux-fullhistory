@@ -8,12 +8,12 @@
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 
-/* This routine, for consistancy, returns the ram parameters in the
- * V0 prom memory descriptor format.  I choose this format becuase I
+/* This routine, for consistency, returns the ram parameters in the
+ * V0 prom memory descriptor format.  I choose this format because I
  * think it was the easiest to work with.  I feel the religious
  * arguments now... ;)  Also, I return the linked lists sorted to
- * prevent paging_init() upset stomache as I have not yet written
- * the pepto-bismal kernel module yet.
+ * prevent paging_init() upset stomach as I have not yet written
+ * the pepto-bismol kernel module yet.
  */
 
 struct linux_prom_registers prom_reg_memlist[64];

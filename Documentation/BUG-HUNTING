@@ -5,7 +5,7 @@ It's a brute force approach but it works pretty well.
 
 You need:
 
-        . A reproducable bug - it has to happen predictably (sorry)
+        . A reproducible bug - it has to happen predictably (sorry)
         . All the kernel tar files from a revision that worked to the
           revision that doesn't
 

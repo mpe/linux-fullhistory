@@ -83,7 +83,7 @@ extern __inline__ int prim_spin_lock_nb(struct spinlock *sp)
 
 
 /*
- *	These wrap the locking primtives up for usage
+ *	These wrap the locking primitives up for usage
  */
  
 extern __inline__ void spinlock(struct spinlock *sp)
@@ -126,7 +126,7 @@ extern __inline__ void spintestlock(struct spinlock *sp)
 extern __inline__ void spintestunlock(struct spinlock *sp)
 {
 	/*
-	 *	A testlock doesnt update the lock chain so we
+	 *	A testlock doesn't update the lock chain so we
 	 *	must not update it on free
 	 */
 	prim_spin_unlock(sp);

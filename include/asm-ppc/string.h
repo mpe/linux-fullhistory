@@ -20,7 +20,7 @@ extern inline void * memset(void * s,int c,size_t count)
 	return s;
 }
 #define __HAVE_ARCH_STRSTR
-/* Return the first ocurrence of NEEDLE in HAYSTACK.  */
+/* Return the first occurrence of NEEDLE in HAYSTACK.  */
 extern inline char *
 strstr(const char *haystack, const char *needle)
 {

@@ -226,7 +226,7 @@ void ip_options_fragment(struct sk_buff * skb)
 }
 
 /*
- * Verify options and fill pointers in struct optinos.
+ * Verify options and fill pointers in struct options.
  * Caller should clear *opt, and set opt->data.
  * If opt == NULL, then skb->data should point to IP header.
  */

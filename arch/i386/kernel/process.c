@@ -65,7 +65,7 @@ static void hard_idle(void)
 				 is an error calling the idle routine, we
 				 should hlt if possible.  We need to check
 				 need_resched again because an interrupt
-				 may have occured in apm_do_idle(). */
+				 may have occurred in apm_do_idle(). */
 			start_bh_atomic();
 			if (!apm_do_idle() && !need_resched)
 				__asm__("hlt");

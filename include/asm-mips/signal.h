@@ -48,7 +48,7 @@ typedef struct {
 #define SIGWINCH	20	/* Window size change (4.3 BSD, Sun).  */
 #define SIGURG		21	/* Urgent condition on socket (4.2 BSD).  */
 #define SIGIO		22	/* I/O now possible (4.2 BSD).  */
-#define SIGPOLL		SIGIO	/* Pollable event occured (System V).  */
+#define SIGPOLL		SIGIO	/* Pollable event occurred (System V).  */
 #define SIGSTOP		23	/* Stop, unblockable (POSIX).  */
 #define SIGTSTP		24	/* Keyboard stop (POSIX).  */
 #define SIGCONT		25	/* Continue (POSIX).  */

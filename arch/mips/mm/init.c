@@ -169,7 +169,7 @@ void __copy_page(unsigned long from, unsigned long to)
 		/*
 		 * The page copied most is the COW empty_zero_page.  Since we
 		 * know it's contents we can avoid the writeback reading of
-		 * the page.  Speeds up the standard case alot.
+		 * the page.  Speeds up the standard case a lot.
 		 */
 		__zeropage(to);
 	}

@@ -23,7 +23,7 @@
 #       FDC_BASE        - sets base address (only!) if using non-standard fdc
 #       FDC_IRQ         - sets interrupt if FDC_BASE is defined
 #       FDC_DMA         - sets dma channel if FDC_BASE is defined
-#       MACH2           - Support for Mountain MACH-2 contoller at either 1E0
+#       MACH2           - Support for Mountain MACH-2 controller at either 1E0
 #                         or 3E0, don't forget the FDC_OPT's !
 #	CLK_48MHZ	- Set to 1. If you have a i82078-1 FDC and it does not
 #			  work, try setting it to 0. (only used for i82078-1's)

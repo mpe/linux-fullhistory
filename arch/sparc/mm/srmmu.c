@@ -721,7 +721,7 @@ void srmmu_mapioaddr(unsigned long physaddr, unsigned long virt_addr, int bus_ty
 	ptep = srmmu_pte_offset(pmdp, virt_addr);
 	tmp = (physaddr >> 4) | SRMMU_ET_PTE;
 
-	/* I need to test whether this is consistant over all
+	/* I need to test whether this is consistent over all
 	 * sun4m's.  The bus_type represents the upper 4 bits of
 	 * 36-bit physical address on the I/O space lines...
 	 */
@@ -1278,7 +1278,7 @@ void init_swift(void)
 	mreg |= (SWIFT_IE | SWIFT_DE); /* I & D caches on */
 
 	/* The Swift branch folding logic is completely broken.  At
-	 * trap time, if things are just right, if can mistakedly
+	 * trap time, if things are just right, if can mistakenly
 	 * thing that a trap is coming from kernel mode when in fact
 	 * it is coming from user mode (it misexecutes the branch in
 	 * the trap code).  So you see things like crashme completely

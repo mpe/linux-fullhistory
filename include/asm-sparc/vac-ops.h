@@ -67,7 +67,7 @@
 /* The indexing of cache lines creates a problem.  Because the line
  * field of a virtual address extends past the page offset within
  * the virtual address it is possible to have what are called
- * 'bad aliases' which will create inconsistancies.  So we must make
+ * 'bad aliases' which will create inconsistencies.  So we must make
  * sure that within a context that if a physical page is mapped
  * more than once, that 'extra' line bits are the same.  If this is
  * not the case, and thus is a 'bad alias' we must turn off the

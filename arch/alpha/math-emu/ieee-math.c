@@ -10,9 +10,9 @@
  * GNU General Public License.
  */
 /*
- * The orginal code did not have any comments. I have created many
+ * The original code did not have any comments. I have created many
  * comments as I fix the bugs in the code.  My comments are based on
- * my observation and interpretation of the code.  If the orginal
+ * my observation and interpretation of the code.  If the original
  * author would have spend a few minutes to comment the code, we would
  * never had a problem of misinterpretation.  -HA
  *

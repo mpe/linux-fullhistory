@@ -211,7 +211,7 @@ static const char *version =
 /**************************************************************************/
 
 /* Normally, the ARCnet device needs to be assigned a name (default arc0). 
- * Ethernet devices have a fucntion to automatically try eth0, eth1, etc
+ * Ethernet devices have a function to automatically try eth0, eth1, etc
  * until a free name is found.  To name the ARCnet device using an "eth?"
  * device name, define this option.
  */

@@ -37,7 +37,7 @@
  */
 
 /*
- * This version is for use with contigious buffers on Linux-derived systems.
+ * This version is for use with contiguous buffers on Linux-derived systems.
  *
  *  ==FILEVERSION 4==
  *

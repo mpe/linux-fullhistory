@@ -64,7 +64,7 @@ static struct symbol_table arch_symbol_table = {
 	X(__constant_c_memset),
 	/*
 	 * The following are special because they're not called
-	 * explictly (the C compiler or assembler generates them in
+	 * explicitly (the C compiler or assembler generates them in
 	 * response to division operations).  Fortunately, their
 	 * interface isn't gonna change any time soon now, so it's OK
 	 * to leave it out of version control.

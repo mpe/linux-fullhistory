@@ -115,7 +115,7 @@
 #define EISA_IOB        0x1f	/* Compare bits for I/O Base Address */
 
 /*
-** I/O Congiguration/Management Register bit definitions (EWRK3_CMR)
+** I/O Configuration/Management Register bit definitions (EWRK3_CMR)
 */
 #define CMR_RA          0x80    /* Read Ahead */
 #define CMR_WB          0x40    /* Write Behind */
