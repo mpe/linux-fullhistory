@@ -234,12 +234,11 @@ struct input_event {
 #define KEY_RECORD		167		
 #define KEY_REWIND		168		
 #define KEY_PHONE		169
-#define KEY_CALENDAR		170
-#define KEY_NOTEPAD		171
-#define KEY_PROG3		172
-#define KEY_PRINT		173
-#define KEY_SOUND		174
-#define KEY_FULLSCREEN		175
+#define KEY_CONFIG		171
+#define KEY_HOMEPAGE		172
+#define KEY_REFRESH		173
+#define KEY_EXIT		174
+#define KEY_MOVE		175
 
 #define KEY_UNKNOWN		180
 

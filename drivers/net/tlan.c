@@ -694,10 +694,7 @@ static int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
 
 	if ( ! priv->phyOnline ) {
 		TLAN_DBG( TLAN_DEBUG_TX, "TRANSMIT:  %s PHY is not ready\n", dev->name );
-		if (in_irq())
-			dev_kfree_skb_irq(skb);
-		else
-			dev_kfree_skb(skb);
+		dev_kfree_skb_any(skb);
 		return 0;
 	}
 
@@ -754,12 +751,8 @@ static int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
 
 	CIRC_INC( priv->txTail, TLAN_NUM_TX_LISTS );
 
-	if ( bbuf ) {
-		if (in_irq())
-			dev_kfree_skb_irq(skb);
-		else
-			dev_kfree_skb(skb);
-	}
+	if ( bbuf )
+		dev_kfree_skb_any(skb);
 		
 	dev->trans_start = jiffies;
 	return 0;
@@ -1626,10 +1619,7 @@ void TLan_FreeLists( struct net_device *dev )
 			list = priv->txList + i;
 			skb = (struct sk_buff *) list->buffer[9].address;
 			if ( skb ) {
-				if (in_irq())
-					dev_kfree_skb_irq( skb );
-				else
-					dev_kfree_skb( skb );
+				dev_kfree_skb_any( skb );
 				list->buffer[9].address = 0;
 			}
 		}
@@ -1638,10 +1628,7 @@ void TLan_FreeLists( struct net_device *dev )
 			list = priv->rxList + i;
 			skb = (struct sk_buff *) list->buffer[9].address;
 			if ( skb ) {
-				if (in_irq())
-					dev_kfree_skb_irq( skb );
-				else
-					dev_kfree_skb( skb );
+				dev_kfree_skb_any( skb );
 				list->buffer[9].address = 0;
 			}
 		}

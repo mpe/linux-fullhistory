@@ -64,7 +64,7 @@
 /* Configuration section **************************************************** */
 
 /* Set the following macro to 1 to reload the ISP2x00's firmware.  This is
-   version 1.15.37 of the isp2100's firmware and version 2.00.16 of the 
+   version 1.17.30 of the isp2100's firmware and version 2.00.40 of the 
    isp2200's firmware. 
 */
 
@@ -91,7 +91,7 @@
 /* #define TRACE_ISP             1 */
 
 
-#define DEFAULT_LOOP_COUNT	10000000
+#define DEFAULT_LOOP_COUNT	1000000000
 
 /* End Configuration section ************************************************ */
 
@@ -632,6 +632,17 @@ struct init_cb {
 #define QLOGICFC_MAX_LUN	128
 #define QLOGICFC_MAX_LOOP_ID	0x7d
 
+/* the following connection options only apply to the 2200.  i have only
+ * had success with LOOP_ONLY and P2P_ONLY.
+ */
+
+#define LOOP_ONLY              0
+#define P2P_ONLY               1
+#define LOOP_PREFERED          2
+#define P2P_PREFERED           3
+
+#define CONNECTION_PREFERENCE  LOOP_ONLY
+
 /* adapter_state values */
 #define AS_FIRMWARE_DEAD      -1
 #define AS_LOOP_DOWN           0
@@ -762,7 +773,7 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 			hostdata->queued = 0;
 			/* set up the control block */
 			hostdata->control_block.version = 0x1;
-			hostdata->control_block.firm_opts = 0x000e;
+			hostdata->control_block.firm_opts = 0x800e;
 			hostdata->control_block.max_frame_len = 2048;
 			hostdata->control_block.max_iocb = QLOGICFC_REQ_QUEUE_LEN;
 			hostdata->control_block.exec_throttle = QLOGICFC_CMD_PER_LUN;
@@ -780,6 +791,8 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 			hostdata->control_block.req_queue_addr_lo = virt_to_bus_low32(hostdata->req);
 			hostdata->control_block.req_queue_addr_high = virt_to_bus_high32(hostdata->req);
 
+
+			hostdata->control_block.add_firm_opts |= CONNECTION_PREFERENCE<<4;
 			hostdata->adapter_state = AS_LOOP_DOWN;
 			hostdata->explore_timer.data = 1;
 			hostdata->host_id = hosts;

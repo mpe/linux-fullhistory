@@ -13,6 +13,7 @@
  *		RMK	1.03	Added support for EtherLan500 cards
  *  23-11-1997	RMK	1.04	Added media autodetection
  *  16-04-1998	RMK	1.05	Improved media autodetection
+ *  10-02-2000	RMK	1.06	Updated for 2.3.43
  *
  * Insmod Module Parameters
  * ------------------------
@@ -61,7 +62,7 @@ static const card_ids __init etherh_cids[] = {
 MODULE_AUTHOR("Russell King");
 MODULE_DESCRIPTION("i3 EtherH driver");
 
-static char *version = "etherh [500/600/600A] ethernet driver (c) 1998 R.M.King v1.05\n";
+static char *version = "etherh [500/600/600A] ethernet driver (c) 2000 R.M.King v1.06\n";
 
 #define ETHERH500_DATAPORT	0x200	/* MEMC */
 #define ETHERH500_NS8390	0x000	/* MEMC */
@@ -190,8 +191,8 @@ etherh_block_output (struct net_device *dev, int count, const unsigned char *buf
 	
 	if (ei_status.dmaing) {
 		printk ("%s: DMAing conflict in etherh_block_input: "
-			" DMAstat %d irqlock %d intr %ld\n", dev->name,
-			ei_status.dmaing, ei_status.irqlock, dev->interrupt);
+			" DMAstat %d irqlock %d\n", dev->name,
+			ei_status.dmaing, ei_status.irqlock);
 		return;
 	}
 
@@ -248,8 +249,8 @@ etherh_block_input (struct net_device *dev, int count, struct sk_buff *skb, int 
 
 	if (ei_status.dmaing) {
 		printk ("%s: DMAing conflict in etherh_block_input: "
-			" DMAstat %d irqlock %d intr %ld\n", dev->name,
-			ei_status.dmaing, ei_status.irqlock, dev->interrupt);
+			" DMAstat %d irqlock %d\n", dev->name,
+			ei_status.dmaing, ei_status.irqlock);
 		return;
 	}
 
@@ -287,8 +288,8 @@ etherh_get_header (struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_p
 
 	if (ei_status.dmaing) {
 		printk ("%s: DMAing conflict in etherh_get_header: "
-			" DMAstat %d irqlock %d intr %ld\n", dev->name,
-			ei_status.dmaing, ei_status.irqlock, dev->interrupt);
+			" DMAstat %d irqlock %d\n", dev->name,
+			ei_status.dmaing, ei_status.irqlock);
 		return;
 	}
 
@@ -359,6 +360,7 @@ etherh_probe1(struct net_device *dev)
 	unsigned int addr, i, reg0, tmp;
 	const char *dev_type;
 	const char *if_type;
+	const char *name = "etherh";
 
 	addr = dev->base_addr;
 
@@ -367,13 +369,13 @@ etherh_probe1(struct net_device *dev)
 
 	switch (dev->mem_end) {
 	case PROD_I3_ETHERLAN500:
-		dev_type = "500 ";
+		dev_type = "500";
 		break;
 	case PROD_I3_ETHERLAN600:
-		dev_type = "600 ";
+		dev_type = "600";
 		break;
 	case PROD_I3_ETHERLAN600A:
-		dev_type = "600A ";
+		dev_type = "600A";
 		break;
 	default:
 		dev_type = "";
@@ -382,7 +384,8 @@ etherh_probe1(struct net_device *dev)
 	reg0 = inb (addr);
 	if (reg0 == 0xff) {
 		if (net_debug & DEBUG_INIT)
-			printk ("%s: etherh error: NS8390 command register wrong\n", dev->name);
+			printk("%s: %s error: NS8390 command register wrong\n",
+				dev->name, name);
 		return -ENODEV;
 	}
 
@@ -393,34 +396,35 @@ etherh_probe1(struct net_device *dev)
 	inb (addr + EN0_COUNTER0);
 	if (inb (addr + EN0_COUNTER0) != 0) {
 		if (net_debug & DEBUG_INIT)
-			printk ("%s: etherh error: NS8390 not found\n", dev->name);
+			printk("%s: %s error: NS8390 not found\n",
+				dev->name, name);
 		outb (reg0, addr);
 		outb (tmp, addr + 13);
 		return -ENODEV;
 	}
 
-	if (ethdev_init (dev))
+	if (ethdev_init(dev))
 		return -ENOMEM;
 
-	request_region (addr, 16, "etherh");
+	request_region(addr, 16, name);
 
-	printk("%s: etherh %sfound at %lx, IRQ%d, ether address ",
-		dev->name, dev_type, dev->base_addr, dev->irq);
+	printk("%s: %s %s at %lx, IRQ%d, ether address ",
+		dev->name, name, dev_type, dev->base_addr, dev->irq);
 
 	for (i = 0; i < 6; i++)
 		printk (i == 5 ? "%2.2x " : "%2.2x:", dev->dev_addr[i]);
 
-	ei_status.name = "etherh";
-	ei_status.word16 = 1;
-	ei_status.tx_start_page = ETHERH_TX_START_PAGE;
-	ei_status.rx_start_page = ei_status.tx_start_page + TX_PAGES;
-	ei_status.stop_page = ETHERH_STOP_PAGE;
-	ei_status.reset_8390 = etherh_reset;
-	ei_status.block_input = etherh_block_input;
-	ei_status.block_output = etherh_block_output;
-	ei_status.get_8390_hdr = etherh_get_header;
-	dev->open = etherh_open;
-	dev->stop = etherh_close;
+	ei_status.name		= name;
+	ei_status.word16	= 1;
+	ei_status.tx_start_page	= ETHERH_TX_START_PAGE;
+	ei_status.rx_start_page	= ei_status.tx_start_page + TX_PAGES;
+	ei_status.stop_page	= ETHERH_STOP_PAGE;
+	ei_status.reset_8390	= etherh_reset;
+	ei_status.block_input	= etherh_block_input;
+	ei_status.block_output	= etherh_block_output;
+	ei_status.get_8390_hdr	= etherh_get_header;
+	dev->open		= etherh_open;
+	dev->stop		= etherh_close;
 
 	/* select 10bT */
 	ei_status.interface_num = 0;
@@ -567,7 +571,8 @@ init_all_cards(void)
 		my_ethers[i] = dev;
 
 		if (register_netdev(dev) != 0) {
-			printk (KERN_WARNING "No etherh card found at %08lX\n", dev->base_addr);
+			printk(KERN_ERR "No etherh card found at %08lX\n",
+				dev->base_addr);
 			if (ec[i]) {
 				ecard_release(ec[i]);
 				ec[i] = NULL;

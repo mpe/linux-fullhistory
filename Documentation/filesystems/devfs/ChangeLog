@@ -1438,3 +1438,15 @@ Changes for patch v158
 Work sponsored by SGI
 
 - Ported to kernel 2.3.46-pre2
+===============================================================================
+Changes for patch v159
+
+Work sponsored by SGI
+
+- Fixed drivers/block/md.c
+  Thanks to Mike Galbraith <mikeg@weiden.de>
+
+- Documentation fixes
+
+- Moved device registration from <lp_init> to <lp_register>
+  Thanks to Tim Waugh <twaugh@redhat.com>

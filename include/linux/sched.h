@@ -389,44 +389,45 @@ struct task_struct {
  *  INIT_TASK is used to set up the first task table, touch at
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
-#define INIT_TASK(name) \
-/* state etc */	{ 0,0,0,KERNEL_DS,&default_exec_domain,0, \
-/* avg_slice */	0, -1, \
-/* counter */	DEF_PRIORITY,DEF_PRIORITY,SCHED_OTHER, \
-/* mm */	NULL, &init_mm, \
-/* has_cpu */	0,0, \
-/* run_list */	LIST_HEAD_INIT(init_task.run_list), \
-/* next_task */	&init_task,&init_task, \
-/* last_proc */	0, \
-/* binfmt */	NULL, \
-/* ec,brk... */	0,0,0,0,0,0, \
-/* pid etc.. */	0,0,0,0,0, \
-/* proc links*/ &init_task,&init_task,NULL,NULL,NULL, \
-/* pidhash */	NULL, NULL, \
-/* chld wait */	__WAIT_QUEUE_HEAD_INITIALIZER(name.wait_chldexit), NULL, \
-/* timeout */	0,0,0,0,0,0,0, \
-/* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
-/* utime */	{0,0,0,0},0, \
-/* per CPU times */ {0, }, {0, }, \
-/* flt */	0,0,0,0,0,0, \
-/* swp */	0, \
-/* process credentials */					\
-/* uid etc */	0,0,0,0,0,0,0,0,				\
-/* suppl grps*/ 0, {0,},					\
-/* caps */      CAP_INIT_EFF_SET,CAP_INIT_INH_SET,CAP_FULL_SET, \
-/* user */	NULL,						\
-/* rlimits */   INIT_RLIMITS, \
-/* math */	0, \
-/* comm */	"swapper", \
-/* fs info */	0,NULL, \
-/* ipc */	NULL, NULL, \
-/* thread */	INIT_THREAD, \
-/* fs */	&init_fs, \
-/* files */	&init_files, \
-/* signals */	SPIN_LOCK_UNLOCKED, &init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, 0, 0, \
-/* exec cts */	0,0, \
-/* exit_sem */	__MUTEX_INITIALIZER(name.exit_sem),	\
+#define INIT_TASK(tsk)	\
+{									\
+    state:		0,						\
+    flags:		0,						\
+    sigpending:		0,						\
+    addr_limit:		KERNEL_DS,					\
+    exec_domain:	&default_exec_domain,				\
+    lock_depth:		-1,						\
+    counter:		DEF_PRIORITY,					\
+    priority:		DEF_PRIORITY,					\
+    policy:		SCHED_OTHER,					\
+    mm:			NULL,						\
+    active_mm:		&init_mm,					\
+    run_list:		LIST_HEAD_INIT(tsk.run_list),			\
+    next_task:		&tsk,						\
+    prev_task:		&tsk,						\
+    p_opptr:		&tsk,						\
+    p_pptr:		&tsk,						\
+    wait_chldexit:	__WAIT_QUEUE_HEAD_INITIALIZER(tsk.wait_chldexit),\
+    real_timer:		{						\
+	function:		it_real_fn				\
+    },									\
+    cap_effective:	CAP_INIT_EFF_SET,				\
+    cap_inheritable:	CAP_INIT_INH_SET,				\
+    cap_permitted:	CAP_FULL_SET,					\
+    rlim:		INIT_RLIMITS,					\
+    comm:		"swapper",					\
+    thread:		INIT_THREAD,					\
+    fs:			&init_fs,					\
+    files:		&init_files,					\
+    sigmask_lock:	SPIN_LOCK_UNLOCKED,				\
+    sig:		&init_signals,					\
+    signal:		{{0}},						\
+    blocked:		{{0}},						\
+    sigqueue:		NULL,						\
+    sigqueue_tail:	&tsk.sigqueue,					\
+    exit_sem:		__MUTEX_INITIALIZER(tsk.exit_sem)		\
 }
+
 
 #ifndef INIT_TASK_SIZE
 # define INIT_TASK_SIZE	2048*sizeof(long)

@@ -96,6 +96,10 @@ extern struct processor {
 	 * Idle the processor
 	 */
 	int (*_do_idle)(void);
+	/*
+	 * flush I cache for a page
+	 */
+	void (*_flush_icache_page)(unsigned long address);
 } processor;
 
 extern const struct processor arm6_processor_functions;
@@ -123,6 +127,7 @@ extern const struct processor sa110_processor_functions;
 #define cpu_flush_icache_area(start,end)	processor._flush_icache_area(start,end)
 #define cpu_cache_wback_area(start,end)		processor._cache_wback_area(start,end)
 #define cpu_cache_purge_area(start,end)		processor._cache_purge_area(start,end)
+#define cpu_flush_icache_page(virt)		processor._flush_icache_page(virt)
 
 #define cpu_switch_mm(pgd,tsk)			cpu_set_pgd(__virt_to_phys((unsigned long)(pgd)))
 

@@ -278,6 +278,7 @@ static const char SysKonnectBuildNumber[] =
 
 #define DEV_KFREE_SKB(skb) dev_kfree_skb(skb)
 #define DEV_KFREE_SKB_IRQ(skb) dev_kfree_skb_irq(skb)
+#define DEV_KFREE_SKB_ANY(skb) dev_kfree_skb_any(skb)
 
 /* function prototypes ******************************************************/
 static void	FreeResources(struct net_device *dev);
@@ -1701,10 +1702,7 @@ SK_U64	PhysAddr;	/* address of DMA mapping */
 				 pTxd->pMBuf->len);
 
 		/* free message */
-		if (in_irq())
-			DEV_KFREE_SKB_IRQ(pTxd->pMBuf);
-		else
-			DEV_KFREE_SKB(pTxd->pMBuf); /* free message */
+		DEV_KFREE_SKB_ANY(pTxd->pMBuf);
 		pTxPort->TxdRingFree++;
 		pTxd->TBControl &= ~TX_CTRL_SOFTWARE;
 		pTxd = pTxd->pNextTxd; /* point behind fragment with EOF */
@@ -3143,10 +3141,7 @@ SK_MBUF		*pNextMbuf;
 	pFreeMbuf = pMbuf;
 	do {
 		pNextMbuf = pFreeMbuf->pNext;
-		if (in_irq())
-			DEV_KFREE_SKB_IRQ(pFreeMbuf->pOs);
-		else
-			DEV_KFREE_SKB(pFreeMbuf->pOs);
+		DEV_KFREE_SKB_ANY(pFreeMbuf->pOs);
 		pFreeMbuf = pNextMbuf;
 	} while ( pFreeMbuf != NULL );
 } /* SkDrvFreeRlmtMbuf */

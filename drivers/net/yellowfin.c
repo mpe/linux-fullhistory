@@ -75,7 +75,6 @@ static int gx_fix = 0;
 #error You must compile this driver with "-O".
 #endif
 
-#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/modversions.h>

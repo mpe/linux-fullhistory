@@ -831,15 +831,17 @@ handle_irq(int irq, struct pt_regs * regs)
 unsigned long
 probe_irq_on(void)
 {
-	unsigned int i;
+	int i;
 	unsigned long delay;
+	unsigned long val;
 
 	/* Something may have generated an irq long ago and we want to
 	   flush such a longstanding irq before considering it as spurious. */
 	spin_lock_irq(&irq_controller_lock);
-	for (i = NR_IRQS-1; i > 0; i--) 
+	for (i = NR_IRQS-1; i >= 0; i--)
 		if (!irq_desc[i].action) 
-			irq_desc[i].handler->startup(i);
+			if(irq_desc[i].handler->startup(i))
+				irq_desc[i].status |= IRQ_PENDING;
 	spin_unlock_irq(&irq_controller_lock);
 
 	/* Wait for longstanding interrupts to trigger. */
@@ -850,7 +852,7 @@ probe_irq_on(void)
 	   if a longstanding irq happened in the previous stage, it may have
 	   masked itself) first, enable any unassigned irqs. */
 	spin_lock_irq(&irq_controller_lock);
-	for (i = NR_IRQS-1; i > 0; i--) {
+	for (i = NR_IRQS-1; i >= 0; i--) {
 		if (!irq_desc[i].action) {
 			irq_desc[i].status |= IRQ_AUTODETECT | IRQ_WAITING;
 			if(irq_desc[i].handler->startup(i))
@@ -868,6 +870,7 @@ probe_irq_on(void)
 	/*
 	 * Now filter out any obviously spurious interrupts
 	 */
+	val = 0;
 	spin_lock_irq(&irq_controller_lock);
 	for (i=0; i<NR_IRQS; i++) {
 		unsigned int status = irq_desc[i].status;
@@ -879,11 +882,43 @@ probe_irq_on(void)
 		if (!(status & IRQ_WAITING)) {
 			irq_desc[i].status = status & ~IRQ_AUTODETECT;
 			irq_desc[i].handler->shutdown(i);
+			continue;
 		}
+
+		if (i < 64)
+			val |= 1 << i;
 	}
 	spin_unlock_irq(&irq_controller_lock);
 
-	return 0x12345678;
+	return val;
+}
+
+/*
+ * Return a mask of triggered interrupts (this
+ * can handle only legacy ISA interrupts).
+ */
+unsigned int probe_irq_mask(unsigned long val)
+{
+	int i;
+	unsigned int mask;
+
+	mask = 0;
+	spin_lock_irq(&irq_controller_lock);
+	for (i = 0; i < 16; i++) {
+		unsigned int status = irq_desc[i].status;
+
+		if (!(status & IRQ_AUTODETECT))
+			continue;
+
+		if (!(status & IRQ_WAITING))
+			mask |= 1 << i;
+
+		irq_desc[i].status = status & ~IRQ_AUTODETECT;
+		irq_desc[i].handler->shutdown(i);
+	}
+	spin_unlock_irq(&irq_controller_lock);
+
+	return mask & val;
 }
 
 /*
@@ -893,12 +928,9 @@ probe_irq_on(void)
  */
 
 int
-probe_irq_off(unsigned long unused)
+probe_irq_off(unsigned long val)
 {
 	int i, irq_found, nr_irqs;
-
-	if (unused != 0x12345678)
-		printk("Bad IRQ probe from %lx\n", (&unused)[-1]);
 
 	nr_irqs = 0;
 	irq_found = 0;

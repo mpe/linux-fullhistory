@@ -1,7 +1,7 @@
 /*
  * linux/arch/arm/drivers/net/ether1.c
  *
- * (C) Copyright 1996,1997,1998 Russell King
+ * (C) Copyright 1996-2000 Russell King
  *
  * Acorn ether1 driver (82586 chip)
  *  for Acorn machines
@@ -28,6 +28,7 @@
  *				TDR now only reports failure when chip reports non-zero
  *				TDR time-distance.
  * 1.05	RMK	31/12/1997	Removed calls to dev_tint for 2.1
+ * 1.06	RMK	10/02/2000	Updated for 2.3.43
  */
 
 #include <linux/module.h>
@@ -64,9 +65,16 @@ static unsigned int net_debug = NET_DEBUG;
 #define RX_AREA_START	0x05000
 #define RX_AREA_END	0x0fc00
 
-#define tx_done(dev) 0
+static int ether1_open(struct net_device *dev);
+static int ether1_sendpacket(struct sk_buff *skb, struct net_device *dev);
+static void ether1_interrupt(int irq, void *dev_id, struct pt_regs *regs);
+static int ether1_close(struct net_device *dev);
+static struct enet_statistics *ether1_getstats(struct net_device *dev);
+static void ether1_setmulticastlist(struct net_device *dev);
+static void ether1_timeout(struct net_device *dev);
+
 /* ------------------------------------------------------------------------- */
-static char *version = "ether1 ethernet driver (c) 1995 Russell King v1.05\n";
+static char *version = "ether1 ethernet driver (c) 2000 Russell King v1.06\n";
 
 #define BUS_16 16
 #define BUS_8  8
@@ -636,11 +644,11 @@ ether1_probe1(struct net_device *dev)
 	if (net_debug && version_printed++ == 0)
 		printk (KERN_INFO "%s", version);
 
-	printk (KERN_INFO "%s: ether1 found [%d, %04lx, %d]", dev->name, priv->bus_type,
-		dev->base_addr, dev->irq);
-
 	request_region (dev->base_addr, 16, "ether1");
 	request_region (dev->base_addr + 0x800, 4096, "ether1(ram)");
+
+	printk (KERN_INFO "%s: ether1 at %lx, IRQ%d, ether address ",
+		dev->name, dev->base_addr, dev->irq);
 
 	for (i = 0; i < 6; i++)
 		printk (i==0?" %02x":i==5?":%02x\n":":%02x", dev->dev_addr[i]);
@@ -650,11 +658,13 @@ ether1_probe1(struct net_device *dev)
 		return 1;
 	}
 
-	dev->open		    = ether1_open;
-	dev->stop		    = ether1_close;
+	dev->open		= ether1_open;
+	dev->stop		= ether1_close;
 	dev->hard_start_xmit    = ether1_sendpacket;
-	dev->get_stats	    = ether1_getstats;
+	dev->get_stats		= ether1_getstats;
 	dev->set_multicast_list = ether1_setmulticastlist;
+	dev->tx_timeout		= ether1_timeout;
+	dev->watchdog_timeo	= 5 * HZ / 100;
 
 	/* Fill in the fields of the device structure with ethernet values */
 	ether_setup (dev);
@@ -727,37 +737,17 @@ ether1_txalloc (struct net_device *dev, int size)
 	return start;
 }
 
-static void
-ether1_restart (struct net_device *dev, char *reason)
-{
-	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
-	priv->stats.tx_errors ++;
-
-	if (reason)
-		printk (KERN_WARNING "%s: %s - resetting device\n", dev->name, reason);
-	else
-		printk (" - resetting device\n");
-
-	ether1_reset (dev);
-
-	dev->start = 0;
-	dev->tbusy = 0;
-
-	if (ether1_init_for_open (dev))
-		printk (KERN_ERR "%s: unable to restart interface\n", dev->name);
-
-	dev->start = 1;
-}
-
 static int
 ether1_open (struct net_device *dev)
 {
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
 
-	if (request_irq (dev->irq, ether1_interrupt, 0, "ether1", dev))
-		return -EAGAIN;
-
 	MOD_INC_USE_COUNT;
+
+	if (request_irq(dev->irq, ether1_interrupt, 0, "ether1", dev)) {
+		MOD_DEC_USE_COUNT;
+		return -EAGAIN;
+	}
 
 	memset (&priv->stats, 0, sizeof (struct enet_statistics));
 
@@ -767,94 +757,93 @@ ether1_open (struct net_device *dev)
 		return -EAGAIN;
 	}
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 
 	return 0;
+}
+
+static void
+ether1_timeout(struct net_device *dev)
+{
+	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
+
+	printk(KERN_WARNING "%s: transmit timeout, network cable problem?\n",
+		dev->name);
+	printk(KERN_WARNING "%s: resetting device\n", dev->name);
+
+	ether1_reset (dev);
+
+	if (ether1_init_for_open (dev))
+		printk (KERN_ERR "%s: unable to restart interface\n", dev->name);
+
+	priv->stats.tx_errors++;
+	netif_wake_queue(dev);
 }
 
 static int
 ether1_sendpacket (struct sk_buff *skb, struct net_device *dev)
 {
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
+	int len = (ETH_ZLEN < skb->len) ? skb->len : ETH_ZLEN;
+	int tmp, tst, nopaddr, txaddr, tbdaddr, dataddr;
+	unsigned long flags;
+	tx_t tx;
+	tbd_t tbd;
+	nop_t nop;
 
-	if (priv->restart)
-		ether1_restart (dev, NULL);
+	if (priv->restart) {
+		printk(KERN_WARNING "%s: resetting device\n", dev->name);
 
-	if (dev->tbusy) {
-		/*
-		 * If we get here, some higher level has decided that we are broken.
-		 * There should really be a "kick me" function call instead.
-		 */
-		int tickssofar = jiffies - dev->trans_start;
+		ether1_reset(dev);
 
-		if (tickssofar < 5)
-			return 1;
-
-		/* Try to restart the adapter. */
-		ether1_restart (dev, "transmit timeout, network cable problem?");
-		dev->trans_start = jiffies;
+		if (ether1_init_for_open(dev))
+			printk(KERN_ERR "%s: unable to restart interface\n", dev->name);
 	}
 
 	/*
-	 * Block a timer-based transmit from overlapping.  This could better be
-	 * done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
+	 * insert packet followed by a nop
 	 */
-	if (test_and_set_bit (0, (void *)&dev->tbusy) != 0)
-		printk (KERN_WARNING "%s: transmitter access conflict.\n", dev->name);
-	else {
-		int len = (ETH_ZLEN < skb->len) ? skb->len : ETH_ZLEN;
-		int tmp, tst, nopaddr, txaddr, tbdaddr, dataddr;
-		unsigned long flags;
-		tx_t tx;
-		tbd_t tbd;
-		nop_t nop;
+	txaddr = ether1_txalloc (dev, TX_SIZE);
+	tbdaddr = ether1_txalloc (dev, TBD_SIZE);
+	dataddr = ether1_txalloc (dev, len);
+	nopaddr = ether1_txalloc (dev, NOP_SIZE);
 
-		/*
-		 * insert packet followed by a nop
-		 */
-		txaddr = ether1_txalloc (dev, TX_SIZE);
-		tbdaddr = ether1_txalloc (dev, TBD_SIZE);
-		dataddr = ether1_txalloc (dev, len);
-		nopaddr = ether1_txalloc (dev, NOP_SIZE);
+	tx.tx_status = 0;
+	tx.tx_command = CMD_TX | CMD_INTR;
+	tx.tx_link = nopaddr;
+	tx.tx_tbdoffset = tbdaddr;
+	tbd.tbd_opts = TBD_EOL | len;
+	tbd.tbd_link = I82586_NULL;
+	tbd.tbd_bufl = dataddr;
+	tbd.tbd_bufh = 0;
+	nop.nop_status = 0;
+	nop.nop_command = CMD_NOP;
+	nop.nop_link = nopaddr;
 
-		tx.tx_status = 0;
-		tx.tx_command = CMD_TX | CMD_INTR;
-		tx.tx_link = nopaddr;
-		tx.tx_tbdoffset = tbdaddr;
-		tbd.tbd_opts = TBD_EOL | len;
-		tbd.tbd_link = I82586_NULL;
-		tbd.tbd_bufl = dataddr;
-		tbd.tbd_bufh = 0;
-		nop.nop_status = 0;
-		nop.nop_command = CMD_NOP;
-		nop.nop_link = nopaddr;
+	save_flags_cli(flags);
+	ether1_writebuffer (dev, &tx, txaddr, TX_SIZE);
+	ether1_writebuffer (dev, &tbd, tbdaddr, TBD_SIZE);
+	ether1_writebuffer (dev, skb->data, dataddr, len);
+	ether1_writebuffer (dev, &nop, nopaddr, NOP_SIZE);
+	tmp = priv->tx_link;
+	priv->tx_link = nopaddr;
 
-		save_flags_cli (flags);
-		ether1_writebuffer (dev, &tx, txaddr, TX_SIZE);
-		ether1_writebuffer (dev, &tbd, tbdaddr, TBD_SIZE);
-		ether1_writebuffer (dev, skb->data, dataddr, len);
-		ether1_writebuffer (dev, &nop, nopaddr, NOP_SIZE);
-		tmp = priv->tx_link;
-		priv->tx_link = nopaddr;
+	/* now reset the previous nop pointer */
+	ether1_outw (dev, txaddr, tmp, nop_t, nop_link, NORMALIRQS);
 
-		/* now reset the previous nop pointer */
-		ether1_outw (dev, txaddr, tmp, nop_t, nop_link, NORMALIRQS);
+	restore_flags(flags);
 
-		restore_flags (flags);
+	/* handle transmit */
+	dev->trans_start = jiffies;
 
-		/* handle transmit */
-		dev->trans_start = jiffies;
-
-		/* check to see if we have room for a full sized ether frame */
-		tmp = priv->tx_head;
-		tst = ether1_txalloc (dev, TX_SIZE + TBD_SIZE + NOP_SIZE + ETH_FRAME_LEN);
-		priv->tx_head = tmp;
-		if (tst != -1)
-			dev->tbusy = 0;
-	}
+	/* check to see if we have room for a full sized ether frame */
+	tmp = priv->tx_head;
+	tst = ether1_txalloc (dev, TX_SIZE + TBD_SIZE + NOP_SIZE + ETH_FRAME_LEN);
+	priv->tx_head = tmp;
 	dev_kfree_skb (skb);
+
+	if (tst == -1)
+		netif_stop_queue(dev);
 
 	return 0;
 }
@@ -957,9 +946,7 @@ again:
 	tst = ether1_txalloc (dev, TX_SIZE + TBD_SIZE + NOP_SIZE + ETH_FRAME_LEN);
 	priv->tx_head = caddr;
 	if (tst != -1)
-		dev->tbusy = 0;
-    
-	mark_bh (NET_BH);
+		netif_wake_queue(dev);
 }
 
 static void
@@ -1024,8 +1011,6 @@ ether1_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
 	int status;
 
-	dev->interrupt = 1;
-
 	status = ether1_inw (dev, SCB_ADDR, scb_t, scb_status, NORMALIRQS);
 
 	if (status) {
@@ -1065,8 +1050,6 @@ ether1_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 		}
 	} else
 	        outb (CTRL_ACK, REG_CONTROL);
-
-	dev->interrupt = 0;
 }
 
 static int
@@ -1075,9 +1058,6 @@ ether1_close (struct net_device *dev)
 	ether1_reset (dev);
 
 	free_irq(dev->irq, dev);
-
-	dev->start = 0;
-	dev->tbusy = 0;
 
 	MOD_DEC_USE_COUNT;
 
@@ -1110,7 +1090,7 @@ ether1_setmulticastlist (struct net_device *dev)
 static struct ether_dev {
 	struct expansion_card	*ec;
 	char			name[9];
-	struct net_device		dev;
+	struct net_device	dev;
 } ether_devs[MAX_ECARDS];
 
 int

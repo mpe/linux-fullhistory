@@ -296,19 +296,5 @@ int nfs3svc_encode_entry(struct readdir_cd *, const char *name,
 int nfs3svc_encode_entry_plus(struct readdir_cd *, const char *name,
 				int namlen, off_t offset, ino_t ino);
 
-#ifdef __KERNEL__
-
-/*
- * This is needed in nfs_readdir for encoding NFS3 directory cookies.
- */
-static inline u32 *
-enc64(u32 *p, u64 val)
-{
-	*p++ = htonl(val >> 32);
-	*p++ = htonl(val & 0xffffffff);
-	return p;
-}
-
-#endif /* __KERNEL__ */
 
 #endif /* _LINUX_NFSD_XDR3_H */

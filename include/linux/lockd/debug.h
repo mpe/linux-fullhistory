@@ -45,6 +45,7 @@ char *		  nlm_procname(u32);
 #define NLMDBG_CLNTSUBS		0x0020
 #define NLMDBG_SVCSUBS		0x0040
 #define NLMDBG_HOSTCACHE	0x0080
+#define NLMDBG_XDR		0x0100
 #define NLMDBG_ALL		0x7fff
 
 

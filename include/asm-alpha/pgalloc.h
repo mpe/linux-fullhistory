@@ -9,7 +9,17 @@
 #define flush_cache_range(mm, start, end)	do { } while (0)
 #define flush_cache_page(vma, vmaddr)		do { } while (0)
 #define flush_page_to_ram(page)			do { } while (0)
-#define flush_icache_range(start, end)		do { } while (0)
+/*
+ * The icache is not coherent with the dcache on alpha, thus before
+ * running self modified code like kernel modules we must always run
+ * an imb().
+ */
+#ifndef __SMP__
+#define flush_icache_range(start, end)		imb()
+#else
+#define flush_icache_range(start, end)		smp_imb()
+extern void smp_imb(void);
+#endif
 #define flush_icache_page(vma, page)		do { } while (0)
 
 /*
@@ -96,6 +106,18 @@ static inline void flush_tlb(void)
 	flush_tlb_current(current->mm);
 }
 
+/*
+ * Flush a specified range of user mapping page tables
+ * from TLB.
+ * Although Alpha uses VPTE caches, this can be a nop, as Alpha does
+ * not have finegrained tlb flushing, so it will flush VPTE stuff
+ * during next flush_tlb_range.
+ */
+static inline void flush_tlb_pgtables(struct mm_struct *mm,
+	unsigned long start, unsigned long end)
+{
+}
+
 #ifndef __SMP__
 /*
  * Flush everything (kernel mapping may also have
@@ -144,18 +166,6 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 	unsigned long start, unsigned long end)
 {
 	flush_tlb_mm(mm);
-}
-
-/*
- * Flush a specified range of user mapping page tables
- * from TLB.
- * Although Alpha uses VPTE caches, this can be a nop, as Alpha does
- * not have finegrained tlb flushing, so it will flush VPTE stuff
- * during next flush_tlb_range.
- */
-static inline void flush_tlb_pgtables(struct mm_struct *mm,
-	unsigned long start, unsigned long end)
-{
 }
 
 #else /* __SMP__ */

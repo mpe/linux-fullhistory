@@ -1,7 +1,7 @@
 /*
  * include/linux/sunrpc/xdr.h
  *
- * Copyright (C) 1995, 1996 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1995-1997 Olaf Kirch <okir@monad.swb.de>
  */
 
 #ifndef _SUNRPC_XDR_H_
@@ -64,6 +64,25 @@ u32 *	xdr_decode_string(u32 *p, char **sp, int *lenp, int maxlen);
 u32 *	xdr_encode_netobj(u32 *p, const struct xdr_netobj *);
 u32 *	xdr_decode_netobj(u32 *p, struct xdr_netobj *);
 u32 *	xdr_decode_netobj_fixed(u32 *p, void *obj, unsigned int len);
+
+/*
+ * Decode 64bit quantities (NFSv3 support)
+ */
+static inline u32 *
+xdr_encode_hyper(u32 *p, __u64 val)
+{
+	*p++ = htonl(val >> 32);
+	*p++ = htonl(val & 0xFFFFFFFF);
+	return p;
+}
+
+static inline u32 *
+xdr_decode_hyper(u32 *p, __u64 *valp)
+{
+	*valp  = ((__u64) ntohl(*p++)) << 32;
+	*valp |= ntohl(*p++);
+	return p;
+}
 
 /*
  * Adjust iovec to reflect end of xdr'ed data (RPC client XDR)

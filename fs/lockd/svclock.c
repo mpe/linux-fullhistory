@@ -98,9 +98,10 @@ nlmsvc_lookup_block(struct nlm_file *file, struct nlm_lock *lock, int remove)
 				lock->fl.fl_end, lock->fl.fl_type);
 	for (head = &nlm_blocked; (block = *head); head = &block->b_next) {
 		fl = &block->b_call.a_args.lock.fl;
-		dprintk("       check f=%p pd=%d %ld-%ld ty=%d\n",
+		dprintk("lockd: check f=%p pd=%d %ld-%ld ty=%d cookie=%x\n",
 				block->b_file, fl->fl_pid, fl->fl_start,
-				fl->fl_end, fl->fl_type);
+				fl->fl_end, fl->fl_type,
+				*(unsigned int*)(block->b_call.a_args.cookie.data));
 		if (block->b_file == file && nlm_compare_locks(fl, &lock->fl)) {
 			if (remove)
 				*head = block->b_next;
@@ -129,6 +130,8 @@ nlmsvc_find_block(struct nlm_cookie *cookie)
 	struct nlm_block *block;
 
 	for (block = nlm_blocked; block; block = block->b_next) {
+		dprintk("cookie: head of blocked queue %p, block %p\n", 
+			nlm_blocked, block);
 		if (nlm_cookie_match(&block->b_call.a_args.cookie,cookie))
 			break;
 	}
@@ -310,7 +313,13 @@ again:
 		switch(-error) {
 		case 0:
 			return nlm_granted;
-		case EDEADLK:			/* no applicable NLM status */
+		case EDEADLK:
+#ifdef CONFIG_LOCKD_V4
+			return nlm4_deadlock; /* will be downgraded to lck_deined if this
+					       * is a NLMv1,3 request */
+#else
+			/* no applicable NLM status */
+#endif
 		case EAGAIN:
 			return nlm_lck_denied;
 		default:			/* includes ENOLCK */
@@ -541,6 +550,8 @@ nlmsvc_grant_callback(struct rpc_task *task)
 	unsigned long		timeout;
 
 	dprintk("lockd: GRANT_MSG RPC callback\n");
+	dprintk("callback: looking for cookie %x \n", 
+		*(unsigned int *)(call->a_args.cookie.data));
 	if (!(block = nlmsvc_find_block(&call->a_args.cookie))) {
 		dprintk("lockd: no block for cookie %x\n", *(u32 *)(call->a_args.cookie.data));
 		return;
@@ -617,7 +628,7 @@ nlmsvc_retry_blocked(void)
 	dprintk("nlmsvc_retry_blocked(%p, when=%ld)\n",
 			nlm_blocked,
 			nlm_blocked? nlm_blocked->b_when : 0);
-	while ((block = nlm_blocked) && block->b_when < jiffies) {
+	while ((block = nlm_blocked) && block->b_when <= jiffies) {
 		dprintk("nlmsvc_retry_blocked(%p, when=%ld, done=%d)\n",
 			block, block->b_when, block->b_done);
 		if (block->b_done)

@@ -18,6 +18,8 @@
  *
  *	1.0	16 February 2000, Tigran Aivazian <tigran@sco.com>
  *		Initial release.
+ *	1.01	18 February 2000, Tigran Aivazian <tigran@sco.com>
+ *		Added read() support + cleanups.
  */
 
 #include <linux/init.h>
@@ -31,7 +33,7 @@
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 
-#define MICROCODE_VERSION 	"1.0"
+#define MICROCODE_VERSION 	"1.01"
 
 MODULE_DESCRIPTION("CPU (P6) microcode update driver");
 MODULE_AUTHOR("Tigran Aivazian <tigran@ocston.org>");
@@ -40,11 +42,12 @@ EXPORT_NO_SYMBOLS;
 /* VFS interface */
 static int microcode_open(struct inode *, struct file *);
 static int microcode_release(struct inode *, struct file *);
+static ssize_t microcode_read(struct file *, char *, size_t, loff_t *);
 static ssize_t microcode_write(struct file *, const char *, size_t, loff_t *);
 
 
 /* internal helpers to do the work */
-static void do_microcode_update(void);
+static int do_microcode_update(void);
 static void do_update_one(void *);
 
 /*
@@ -56,8 +59,10 @@ static unsigned long microcode_status = 0;
 /* the actual array of microcode blocks, each 2048 bytes */
 static struct microcode * microcode = NULL;
 static unsigned int microcode_num = 0;
+static char *mc_applied = NULL; /* holds an array of applied microcode blocks */
 
 static struct file_operations microcode_fops = {
+	read:		microcode_read,
 	write:		microcode_write,
 	open:		microcode_open,
 	release:	microcode_release,
@@ -71,21 +76,32 @@ static struct proc_dir_entry *proc_microcode;
 
 static int __init microcode_init(void)
 {
-	/* write-only /proc/driver/microcode file, one day may become read-write.. */
-	proc_microcode = create_proc_entry("microcode", S_IWUSR, proc_root_driver);
+	int size;
+
+	proc_microcode = create_proc_entry("microcode", S_IWUSR|S_IRUSR, proc_root_driver);
 	if (!proc_microcode) {
-		printk(KERN_ERR "microcode: can't create /proc/driver/microcode entry\n");
+		printk(KERN_ERR "microcode: can't create /proc/driver/microcode\n");
 		return -ENOMEM;
 	}
 	proc_microcode->ops = &microcode_inops;
-	printk(KERN_ERR "P6 Microcode Update Driver v%s registered\n", MICROCODE_VERSION);
+	size = smp_num_cpus * sizeof(struct microcode);
+	mc_applied = kmalloc(size, GFP_KERNEL);
+	if (!mc_applied) {
+		remove_proc_entry("microcode", proc_root_driver);
+		printk(KERN_ERR "microcode: can't allocate memory to hold applied microcode\n");
+		return -ENOMEM;
+	}
+	memset(mc_applied, 0, size); /* so that reading from offsets corresponding to failed
+	                                update makes this obvious */
+	printk(KERN_INFO "P6 Microcode Update Driver v%s registered\n", MICROCODE_VERSION);
 	return 0;
 }
 
 static void __exit microcode_exit(void)
 {
 	remove_proc_entry("microcode", proc_root_driver);
-	printk(KERN_ERR "P6 Microcode Update Driver v%s unregistered\n", MICROCODE_VERSION);
+	kfree(mc_applied);
+	printk(KERN_INFO "P6 Microcode Update Driver v%s unregistered\n", MICROCODE_VERSION);
 }
 
 module_init(microcode_init);
@@ -117,22 +133,27 @@ static int microcode_release(struct inode *inode, struct file *file)
 }
 
 
-static void do_microcode_update(void)
+static int do_microcode_update(void)
 {
-	if (smp_call_function(do_update_one, NULL, 1, 0) != 0)
+	int err;
+
+	if (smp_call_function(do_update_one, &err, 1, 1) != 0)
 		panic("do_microcode_update(): timed out waiting for other CPUs\n");
-	do_update_one(NULL);
+	do_update_one(&err);
+
+	return err;
 }
 
-static void do_update_one(void *unused)
+static void do_update_one(void *arg)
 {
+	int *err = (int *)arg;
 	struct cpuinfo_x86 * c;
 	unsigned int pf = 0, val[2], rev, sig;
 	int i, id;
 
 	id = smp_processor_id();
 	c = cpu_data + id;
-
+	*err = 1; /* be pessimistic */
 
 	if (c->x86_vendor != X86_VENDOR_INTEL || c->x86 < 6)
 		return;
@@ -156,9 +177,11 @@ static void do_update_one(void *unused)
 					" %d (current=%d)\n", id, microcode[i].rev, rev);
 			} else { 
 				int sum = 0;
-				struct microcode *m = &microcode[i];
-				unsigned int *sump = (unsigned int *)(m+1);
+				struct microcode *m, *mcslot;
+				unsigned int *sump;
 
+				m = &microcode[i];
+				sump = (unsigned int *)(m+1);
 				while (--sump >= (unsigned int *)m)
 					sum += *sump;
 				if (sum != 0) {
@@ -169,23 +192,39 @@ static void do_update_one(void *unused)
 				wrmsr(0x79, (unsigned int)(m->bits), 0);
 				__asm__ __volatile__ ("cpuid");
 				rdmsr(0x8B, val[0], val[1]);
-				printk(KERN_ERR "microcode: CPU%d microcode updated "
-						"from revision %d to %d\n", id, rev, val[1]);
+				*err = 0;
+				mcslot = (struct microcode *)mc_applied + id;
+				memcpy(mcslot, m, sizeof(struct microcode));
+				printk(KERN_ERR "microcode: CPU%d updated from revision "
+					"%d to %d, date=%08x\n", id, rev, val[1], m->date);
 			}
 			break;
 		}
 }
 
+static ssize_t microcode_read(struct file *file, char *buf, size_t len, loff_t *ppos)
+{
+	size_t fsize = smp_num_cpus * sizeof(struct microcode);
+
+	if (!proc_microcode->size || *ppos >= fsize)
+		return 0; /* EOF */
+	if (*ppos + len > fsize)
+		len = fsize - *ppos;
+	if (copy_to_user(buf, mc_applied + *ppos, len))
+		return -EFAULT;
+	*ppos += len;
+	return len;
+}
+
 static ssize_t microcode_write(struct file *file, const char *buf, size_t len, loff_t *ppos)
 {
+	int err;
+
 	if (len % sizeof(struct microcode) != 0) {
 		printk(KERN_ERR "microcode: can only write in N*%d bytes units\n", 
 			sizeof(struct microcode));
 		return -EINVAL;
-		return -EINVAL;
 	}
-	if (!capable(CAP_SYS_RAWIO))
-		return -EPERM;
 	lock_kernel();
 	microcode_num = len/sizeof(struct microcode);
 	microcode = vmalloc(len);
@@ -198,7 +237,11 @@ static ssize_t microcode_write(struct file *file, const char *buf, size_t len, l
 		unlock_kernel();
 		return -EFAULT;
 	}
-	do_microcode_update();
+	err = do_microcode_update();
+	if (err)
+		len = (size_t)err;
+	else
+		proc_microcode->size = smp_num_cpus * sizeof(struct microcode);
 	vfree(microcode);
 	unlock_kernel();
 	return len;

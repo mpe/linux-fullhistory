@@ -1,5 +1,5 @@
 /*
- * acm.c  Version 0.15
+ * acm.c  Version 0.16
  *
  * Copyright (c) 1999 Armin Fuerst	<fuerst@in.tum.de>
  * Copyright (c) 1999 Pavel Machek	<pavel@suse.cz>
@@ -18,6 +18,7 @@
  *	v0.13 - added termios, added hangup
  *	v0.14 - sized down struct acm
  *	v0.15 - fixed flow control again - characters could be lost
+ *	v0.16 - added code for modems with swapped data and control interfaces
  */
 
 /*
@@ -473,29 +474,34 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 	for (i = 0; i < dev->descriptor.bNumConfigurations; i++) {
 
 		cfacm = dev->config + i;
+
 		dbg("probing config %d", cfacm->bConfigurationValue);
 
+		if (cfacm->bNumInterfaces != 2 || 
+		    usb_interface_claimed(cfacm->interface + 0) ||
+		    usb_interface_claimed(cfacm->interface + 1))
+			continue;
+
 		ifcom = cfacm->interface[0].altsetting + 0;
+		ifdata = cfacm->interface[1].altsetting + 0;
+
+		if (ifdata->bInterfaceClass != 10 || ifdata->bNumEndpoints != 2) {
+			ifcom = cfacm->interface[1].altsetting + 0;
+			ifdata = cfacm->interface[0].altsetting + 0;
+			if (ifdata->bInterfaceClass != 10 || ifdata->bNumEndpoints != 2)
+				continue;
+		}
+
 		if (ifcom->bInterfaceClass != 2 || ifcom->bInterfaceSubClass != 2 ||
 		    ifcom->bInterfaceProtocol != 1 || ifcom->bNumEndpoints != 1)
 			continue;
 
 		epctrl = ifcom->endpoint + 0;
-		if ((epctrl->bEndpointAddress & 0x80) != 0x80 || (epctrl->bmAttributes & 3) != 3)
-			continue;
-
-		ifdata = cfacm->interface[1].altsetting + 0;
-		if (ifdata->bInterfaceClass != 10 || ifdata->bNumEndpoints != 2)
-			continue;
-
-		if (usb_interface_claimed(cfacm->interface + 0) ||
-		    usb_interface_claimed(cfacm->interface + 1))
-			continue;
-
 		epread = ifdata->endpoint + 0;
 		epwrite = ifdata->endpoint + 1;
 
-		if ((epread->bmAttributes & 3) != 2 || (epwrite->bmAttributes & 3) != 2 ||
+		if ((epctrl->bEndpointAddress & 0x80) != 0x80 || (epctrl->bmAttributes & 3) != 3 ||
+		   (epread->bmAttributes & 3) != 2 || (epwrite->bmAttributes & 3) != 2 ||
 		   ((epread->bEndpointAddress & 0x80) ^ (epwrite->bEndpointAddress & 0x80)) != 0x80)
 			continue;
 

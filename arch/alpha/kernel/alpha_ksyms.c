@@ -36,6 +36,7 @@
 extern struct hwrpb_struct *hwrpb;
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(struct pt_regs *, elf_fpregset_t *);
+extern spinlock_t kernel_flag;
 
 /* these are C runtime functions with special calling conventions: */
 extern void __divl (void);
@@ -51,6 +52,7 @@ EXPORT_SYMBOL(alpha_mv);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(disable_irq_nosync);
+EXPORT_SYMBOL(probe_irq_mask);
 EXPORT_SYMBOL(screen_info);
 EXPORT_SYMBOL(perf_irq);
 
@@ -165,13 +167,16 @@ EXPORT_SYMBOL_NOVERS(__rwsem_wake);
  */
 
 #ifdef __SMP__
+EXPORT_SYMBOL(kernel_flag);
 EXPORT_SYMBOL(synchronize_irq);
 EXPORT_SYMBOL(flush_tlb_all);
 EXPORT_SYMBOL(flush_tlb_mm);
 EXPORT_SYMBOL(flush_tlb_page);
 EXPORT_SYMBOL(flush_tlb_range);
+EXPORT_SYMBOL(smp_imb);
 EXPORT_SYMBOL(cpu_data);
 EXPORT_SYMBOL(__cpu_number_map);
+EXPORT_SYMBOL(smp_num_cpus);
 EXPORT_SYMBOL(global_irq_holder);
 EXPORT_SYMBOL(__global_cli);
 EXPORT_SYMBOL(__global_sti);

@@ -1,6 +1,8 @@
 #ifndef __ASM_ARM_UNALIGNED_H
 #define __ASM_ARM_UNALIGNED_H
 
+#include <linux/types.h>
+
 #define get_unaligned(ptr) \
 	((__typeof__(*(ptr)))__get_unaligned_size((ptr), sizeof(*(ptr))))
 

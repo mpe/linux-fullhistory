@@ -24,6 +24,8 @@
 #include <asm/ecard.h>
 #include <asm/io.h>
 
+extern char *ide_xfer_verbose (byte xfer_rate);
+
 /*
  * Maximum number of interfaces per card
  */

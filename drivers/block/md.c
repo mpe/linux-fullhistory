@@ -3314,7 +3314,7 @@ int md__init md_init (void)
 		return (-1);
 	}
 	devfs_handle = devfs_mk_dir (NULL, "md", 0, NULL);
-	devfs_register_series (devfs_handle, "%u", MAX_MD_DEV,DEVFS_FL_DEFAULT,
+	devfs_register_series (devfs_handle, "%u",MAX_MD_DEVS,DEVFS_FL_DEFAULT,
 			       MAJOR_NR, 0, S_IFBLK | S_IRUSR | S_IWUSR, 0, 0,
 			       &md_fops, NULL);
 

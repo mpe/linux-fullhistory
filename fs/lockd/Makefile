@@ -10,6 +10,11 @@
 O_TARGET := lockd.o
 O_OBJS   := clntlock.o clntproc.o host.o svc.o svclock.o svcshare.o \
 	    svcproc.o svcsubs.o mon.o xdr.o
+
+ifdef CONFIG_LOCKD_V4
+ O_OBJS += xdr4.o svc4proc.o
+endif
+
 OX_OBJS  := lockd_syms.o
 M_OBJS   := $(O_TARGET)
 

@@ -713,6 +713,7 @@ unsigned long probe_irq_on(void)
 		if (!(status & IRQ_WAITING)) {
 			irq_desc[i].status = status & ~IRQ_AUTODETECT;
 			irq_desc[i].handler->shutdown(i);
+			continue;
 		}
 
 		if (i < 32)

@@ -49,7 +49,7 @@ if [ "$CONFIG_MK7" = "y" ]; then
    define_bool CONFIG_X86_USE_3DNOW y
 fi
 
-if [ "$CONFIG_M686" = "y" -a "$CONFIG_PROC_FS" = "y" ]; then
+if [ "$CONFIG_PROC_FS" = "y" ]; then
    tristate '/proc/driver/microcode - Intel P6 CPU microcode support' CONFIG_MICROCODE
 fi
 

@@ -14,7 +14,7 @@
 
 static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 {
-	char *cp, *i_name, *i_name_start, *i_arg;
+	char *cp, *i_name, *i_arg;
 	struct dentry * dentry;
 	char interp[128];
 	int retval;
@@ -44,17 +44,15 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	for (cp = bprm->buf+2; (*cp == ' ') || (*cp == '\t'); cp++);
 	if (*cp == '\0') 
 		return -ENOEXEC; /* No interpreter name found */
-	i_name_start = i_name = cp;
+	i_name = cp;
 	i_arg = 0;
-	for ( ; *cp && (*cp != ' ') && (*cp != '\t'); cp++) {
- 		if (*cp == '/')
-			i_name = cp+1;
-	}
+	for ( ; *cp && (*cp != ' ') && (*cp != '\t'); cp++)
+		/* nothing */
 	while ((*cp == ' ') || (*cp == '\t'))
 		*cp++ = '\0';
 	if (*cp)
 		i_arg = cp;
-	strcpy (interp, i_name_start);
+	strcpy (interp, i_name);
 	/*
 	 * OK, we've parsed out the interpreter name and
 	 * (optional) argument.

@@ -188,10 +188,8 @@ static int multicast_filter_limit = 64;
 
 /* 'options' is used to pass a transceiver override or full-duplex flag
    e.g. "options=16" for FD, "options=32" for 100mbps-only. */
-#if MODULE_SETUP_FIXED
 static int full_duplex[] = {-1, -1, -1, -1, -1, -1, -1, -1};
 static int options[] = {-1, -1, -1, -1, -1, -1, -1, -1};
-#endif
 static int debug = -1;			/* The debug level */
 
 /* A few values that may be tweaked. */
@@ -214,7 +212,8 @@ static int debug = -1;			/* The debug level */
 #error You must compile this driver with "-O".
 #endif
 
-#include <linux/version.h>
+
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -237,12 +236,8 @@ static int debug = -1;			/* The debug level */
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("Intel i82557/i82558 PCI EtherExpressPro driver");
 MODULE_PARM(debug, "i");
-
-#if MODULE_OPTIONS_FIXED
 MODULE_PARM(options, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(8) "i");
-#endif
-
 MODULE_PARM(congenb, "i");
 MODULE_PARM(txfifo, "i");
 MODULE_PARM(rxfifo, "i");
@@ -256,6 +251,21 @@ MODULE_PARM(multicast_filter_limit, "i");
 #define PFX EEPRO100_MODULE_NAME ": "
 
 #define RUN_AT(x) (jiffies + (x))
+
+/* ACPI power states don't universally work (yet) */
+#ifndef CONFIG_EEPRO100_PM
+#undef pci_set_power_state
+#define pci_set_power_state null_set_power_state
+static inline int null_set_power_state(struct pci_dev *dev, int state)
+{
+	return 0;
+}
+#endif /* CONFIG_EEPRO100_PM */
+
+
+/* compile-time switch to en/disable slow PIO */
+#undef USE_IO
+
 
 int speedo_debug = 1;
 
@@ -522,6 +532,7 @@ static int __devinit eepro100_init_one (struct pci_dev *pdev,
 	u16 eeprom[0x100];
 	int acpi_idle_state = 0, pm, irq;
 	unsigned long ioaddr;
+	static int card_idx = -1;
 
 	static int did_version = 0;			/* Already printed version info. */
 
@@ -531,6 +542,8 @@ static int __devinit eepro100_init_one (struct pci_dev *pdev,
 	ioaddr = pci_resource_start (pdev, 1);
 #endif
 	irq = pdev->irq;
+
+	card_idx++;
 	
 	if (!request_region (pci_resource_start (pdev, 1),
 			     pci_resource_len (pdev, 1),
@@ -578,10 +591,8 @@ static int __devinit eepro100_init_one (struct pci_dev *pdev,
 
 	if (dev->mem_start > 0)
 		option = dev->mem_start;
-#if MODULE_SETUP_FIXED
 	else if (card_idx >= 0  &&  options[card_idx] >= 0)
 		option = options[card_idx];
-#endif
 	else
 		option = 0;
 
@@ -735,12 +746,10 @@ static int __devinit eepro100_init_one (struct pci_dev *pdev,
 	
 	sp->full_duplex = option >= 0 && (option & 0x10) ? 1 : 0;
 
-#if MODULE_SETUP_FIXED
 	if (card_idx >= 0) {
 		if (full_duplex[card_idx] >= 0)
 			sp->full_duplex = full_duplex[card_idx];
 	}
-#endif
 
 	sp->default_port = option >= 0 ? (option & 0x0f) : 0;
 
@@ -773,8 +782,8 @@ err_out_free_tx_ring:
 err_out_iounmap:
 #ifndef USE_IO
 	iounmap ((void *)ioaddr);
-#endif
 err_out_free_mmio_region:
+#endif
 	release_mem_region (pci_resource_start (pdev, 0),
 			    pci_resource_len (pdev, 0));
 err_out_free_pio_region:
@@ -1288,9 +1297,7 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				/* Free the original skb. */
 				if (sp->tx_skbuff[entry]) {
 					sp->stats.tx_packets++;	/* Count only user packets. */
-#if LINUX_VERSION_CODE > 0x20127
 					sp->stats.tx_bytes += sp->tx_skbuff[entry]->len;
-#endif
 					pci_unmap_single(sp->pdev,
 							 le32_to_cpu(sp->tx_ring[entry].tx_buf_addr0),
 							 sp->tx_skbuff[entry]->len);
@@ -1412,9 +1419,7 @@ speedo_rx(struct net_device *dev)
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
 			sp->stats.rx_packets++;
-#if LINUX_VERSION_CODE > 0x20127
 			sp->stats.rx_bytes += pkt_len;
-#endif
 		}
 		entry = (++sp->cur_rx) % RX_RING_SIZE;
 	}
@@ -1485,9 +1490,6 @@ speedo_close(struct net_device *dev)
 			pci_unmap_single(sp->pdev,
 					 sp->rx_ring_dma[i],
 					 PKT_BUF_SZ + sizeof(struct RxFD));
-#if LINUX_VERSION_CODE < 0x20100
-			skb->free = 1;
-#endif
 			dev_kfree_skb(skb);
 		}
 	}

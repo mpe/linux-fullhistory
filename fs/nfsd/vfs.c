@@ -1557,7 +1557,7 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	if (cd.offset) {
 #ifdef CONFIG_NFSD_V3
 		if (rqstp->rq_vers == 3)
-			(void)enc64(cd.offset, file.f_pos);
+			(void)xdr_encode_hyper(cd.offset, file.f_pos);
 		else
 #endif /* CONFIG_NFSD_V3 */
 			*cd.offset = htonl(file.f_pos);

@@ -287,6 +287,12 @@ ENTRY(cpu_sa1100_flush_icache_area)
 		mcr	p15, 0, r0, c7, c5, 0		@ flush I cache
 		mov	pc, lr
 
+		.align	5
+ENTRY(cpu_sa110_flush_icache_page)
+ENTRY(cpu_sa1100_flush_icache_page)
+		mcr	p15, 0, r0, c7, c5, 0		@ flush I cache
+		mov	pc, lr
+
 /*
  * Function: sa110_data_abort ()
  * Params  : r0 = address of aborted instruction
@@ -504,6 +510,7 @@ ENTRY(sa110_processor_functions)
 		.word	cpu_sa110_cache_purge_area
 		.word	cpu_sa110_flush_tlb_page
 		.word	cpu_sa110_do_idle
+		.word	cpu_sa110_flush_icache_page
 		.size	sa110_processor_functions, . - sa110_processor_functions
 
 		.type	cpu_sa110_info, #object
@@ -535,6 +542,7 @@ ENTRY(sa1100_processor_functions)
 		.word	cpu_sa1100_cache_purge_area
 		.word	cpu_sa1100_flush_tlb_page
 		.word	cpu_sa1100_do_idle
+		.word	cpu_sa1100_flush_icache_page
 		.size	sa1100_processor_functions, . - sa1100_processor_functions
 
 cpu_sa1100_info:

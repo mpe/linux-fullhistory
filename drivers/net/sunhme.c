@@ -1,4 +1,4 @@
-/* $Id: sunhme.c,v 1.90 2000/02/16 10:36:16 davem Exp $
+/* $Id: sunhme.c,v 1.91 2000/02/17 18:29:02 davem Exp $
  * sunhme.c: Sparc HME/BigMac 10/100baseT half/full duplex auto switching,
  *           auto carrier detecting ethernet driver.  Also known as the
  *           "Happy Meal Ethernet" found on SunSwift SBUS cards.
@@ -1209,10 +1209,7 @@ static void happy_meal_clean_rings(struct happy_meal *hp)
 			rxd = &hp->happy_block->happy_meal_rxd[i];
 			dma_addr = hme_read_desc32(hp, &rxd->rx_addr);
 			hme_dma_unmap(hp, dma_addr, RX_BUF_ALLOC_SIZE);
-			if (in_irq())
-				dev_kfree_skb_irq(skb);
-			else
-				dev_kfree_skb(skb);
+			dev_kfree_skb_any(skb);
 			hp->rx_skbs[i] = NULL;
 		}
 	}
@@ -1226,10 +1223,7 @@ static void happy_meal_clean_rings(struct happy_meal *hp)
 			txd = &hp->happy_block->happy_meal_txd[i];
 			dma_addr = hme_read_desc32(hp, &txd->tx_addr);
 			hme_dma_unmap(hp, dma_addr, skb->len);
-			if (in_irq())
-				dev_kfree_skb_irq(skb);
-			else
-				dev_kfree_skb(skb);
+			dev_kfree_skb_any(skb);
 			hp->tx_skbs[i] = NULL;
 		}
 	}

@@ -1,3 +1,5 @@
+#include <asm/mman.h>
+
 /*
  * Cache flushing...
  */
@@ -41,6 +43,12 @@
 
 #define flush_icache_range(_start,_end)					\
 	cpu_flush_icache_area((_start), (_end) - (_start))
+
+#define flush_icache_page(vma,pg)					\
+	do {								\
+		if ((vma)->vm_flags & PROT_EXEC)			\
+			cpu_flush_icache_page(page_address(pg));	\
+	} while (0)
 
 /*
  * We don't have a MEMC chip...

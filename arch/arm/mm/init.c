@@ -163,7 +163,7 @@ void show_mem(void)
 void __init paging_init(void)
 {
 	void *zero_page, *bad_page, *bad_table;
-	unsigned int zone_size[MAX_NR_ZONES];
+	unsigned long zone_size[MAX_NR_ZONES];
 	int i;
 
 #ifdef CONFIG_CPU_32

@@ -34,7 +34,16 @@ nlm_fopen(struct svc_rqst *rqstp, struct knfs_fh *f, struct file *filp)
 	if (!nfserr)
 		dget(filp->f_dentry);
 	fh_put(&fh);
-	return nfserr;
+ 	/* nlm and nfsd don't share error codes.
+	 * we invent: 0 = no error
+	 *            1 = stale file handle
+	 *	      2 = other error
+	 */
+	if (nfserr == 0)
+		return 0;
+	else if (nfserr == nfserr_stale)
+		return 1;
+	else return 2;
 }
 
 static void

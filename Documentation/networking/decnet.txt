@@ -24,7 +24,7 @@
 Be sure to turn on the following options:
 
     CONFIG_DECNET (obviously)
-    CONFIG_PROCFS (to see what's going on)
+    CONFIG_PROC_FS (to see what's going on)
     CONFIG_SYSCTL (for easy configuration)
 
 if you want to try out router support (not properly debugged yet)

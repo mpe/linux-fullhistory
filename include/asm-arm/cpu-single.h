@@ -35,6 +35,7 @@
 #define cpu_flush_icache_area		cpu_fn(CPU_NAME,_flush_icache_area)
 #define cpu_cache_wback_area		cpu_fn(CPU_NAME,_cache_wback_area)
 #define cpu_cache_purge_area		cpu_fn(CPU_NAME,_cache_purge_area)
+#define cpu_flush_icache_page		cpu_fn(CPU_NAME,_flush_icache_page)
 
 #ifndef __ASSEMBLY__
 
@@ -65,6 +66,7 @@ extern unsigned long cpu_reset(void);
 extern void cpu_flush_icache_area(unsigned long start, unsigned long size);
 extern void cpu_cache_wback_area(unsigned long start, unsigned long end);
 extern void cpu_cache_purge_area(unsigned long start, unsigned long end);
+extern void cpu_flush_icache_page(unsigned long virt);
 
 #define cpu_switch_mm(pgd,tsk) cpu_set_pgd(__virt_to_phys((unsigned long)(pgd)))
 

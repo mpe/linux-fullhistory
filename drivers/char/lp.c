@@ -674,6 +674,8 @@ void __init lp_setup(char *str, int *ints)
 
 static int lp_register(int nr, struct parport *port)
 {
+	char name[8];
+
 	lp_table[nr].dev = parport_register_device(port, "lp", 
 						   NULL, NULL, NULL, 0,
 						   (void *) &lp_table[nr]);
@@ -683,6 +685,12 @@ static int lp_register(int nr, struct parport *port)
 
 	if (reset)
 		lp_reset(nr);
+
+	sprintf (name, "%d", nr);
+	devfs_register (devfs_handle, name, 0,
+			DEVFS_FL_DEFAULT, LP_MAJOR, nr,
+			S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
+			&lp_fops, NULL);
 
 	printk(KERN_INFO "lp%d: using %s (%s).\n", nr, port->name, 
 	       (port->irq == PARPORT_IRQ_NONE)?"polling":"interrupt-driven");
@@ -781,20 +789,6 @@ int __init lp_init (void)
 	}
 
 	devfs_handle = devfs_mk_dir (NULL, "printers", 0, NULL);
-	if (lp_count) {
-		for (i = 0; i < LP_NO; ++i)
-		{
-		    char name[8];
-
-		    if (!(lp_table[i].flags & LP_EXIST)) 
-			continue; /* skip this entry: it doesn't exist. */
-		    sprintf (name, "%d", i);
-		    devfs_register (devfs_handle, name, 0,
-				    DEVFS_FL_DEFAULT, LP_MAJOR, i,
-				    S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
-				    &lp_fops, NULL);
-		}
-	}
 
 	if (!lp_count) {
 		printk (KERN_INFO "lp: driver loaded but no devices found\n");

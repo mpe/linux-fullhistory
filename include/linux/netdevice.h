@@ -498,6 +498,9 @@ extern __inline__ void netif_device_attach(struct net_device *dev)
 		netif_wake_queue(dev);
 }
 
+/* Use this variant when it is known for sure that it
+ * is executing from interrupt context.
+ */
 extern __inline__ void dev_kfree_skb_irq(struct sk_buff *skb)
 {
 	if (atomic_dec_and_test(&skb->users)) {
@@ -512,6 +515,16 @@ extern __inline__ void dev_kfree_skb_irq(struct sk_buff *skb)
 	}
 }
 
+/* Use this variant in places where it could be invoked
+ * either from interrupt or non-interrupt context.
+ */
+extern __inline__ void dev_kfree_skb_any(struct sk_buff *skb)
+{
+	if (in_irq())
+		dev_kfree_skb_irq(skb);
+	else
+		dev_kfree_skb(skb);
+}
 
 #define HAVE_NETIF_RX 1
 extern void		netif_rx(struct sk_buff *skb);

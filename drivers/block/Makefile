@@ -326,6 +326,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_BLK_DEV_LVM),y)
+L_OBJS += lvm.o lvm-snap.o
+else
+   ifeq ($(CONFIG_BLK_DEV_LVM),m)
+   M_OBJS += lvm-mod.o
+   endif
+endif
+
 ifeq ($(CONFIG_BLK_DEV_MD),y)
 LX_OBJS += md.o
 
@@ -354,13 +362,9 @@ else
 endif
 
 ifeq ($(CONFIG_MD_RAID5),y)
-LX_OBJS += xor.o
-CFLAGS_xor.o := $(PROFILING) -fomit-frame-pointer
 L_OBJS += raid5.o
 else
   ifeq ($(CONFIG_MD_RAID5),m)
-  LX_OBJS += xor.o
-  CFLAGS_xor.o := $(PROFILING) -fomit-frame-pointer
   M_OBJS += raid5.o
   endif
 endif
@@ -407,3 +411,6 @@ ide-mod.o: ide.o ide-features.o $(IDE_OBJS)
 
 ide-probe-mod.o: ide-probe.o ide-geometry.o
 	$(LD) $(LD_RFLAG) -r -o $@ ide-probe.o ide-geometry.o
+
+lvm-mod.o:	lvm.o lvm-snap.o
+	$(LD) -r -o $@ lvm.o lvm-snap.o

@@ -8,6 +8,7 @@
  * Code supporting the DP264 (EV6+TSUNAMI).
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/mm.h>
@@ -85,7 +86,7 @@ static struct hw_interrupt_type clipper_irq_type = {
 	end_clipper_irq
 };
 
-static unsigned long cached_irq_mask = ~0UL;
+static unsigned long cached_irq_mask;
 
 #define TSUNAMI_SET_IRQ_MASK(cpu, value)	\
 do {						\
@@ -141,25 +142,24 @@ dp264_flush_irq_mask(unsigned long mask)
 	unsigned long value;
 
 #ifdef CONFIG_SMP
-	value = ~mask;
-	do_flush_smp_irq_mask(value);
+	do_flush_smp_irq_mask(mask);
 #endif
 
-	value = ~mask | (1UL << 55) | 0xffff; /* isa irqs always enabled */
+	value = mask | (1UL << 55) | 0xffff; /* isa irqs always enabled */
 	do_flush_irq_mask(value);
 }
 
 static void
 enable_tsunami_irq(unsigned int irq)
 {
-	cached_irq_mask &= ~(1UL << irq);
+	cached_irq_mask |= 1UL << irq;
 	dp264_flush_irq_mask(cached_irq_mask);
 }
 
 static void
 disable_tsunami_irq(unsigned int irq)
 {
-	cached_irq_mask |= 1UL << irq;
+	cached_irq_mask &= ~(1UL << irq);
 	dp264_flush_irq_mask(cached_irq_mask);
 }
 
@@ -168,26 +168,26 @@ clipper_flush_irq_mask(unsigned long mask)
 {
 	unsigned long value;
 
+	value = mask >> 16;
 #ifdef CONFIG_SMP
-	value = ~mask >> 16;
 	do_flush_smp_irq_mask(value);
 #endif
 
-	value = (~mask >> 16) | (1UL << 55); /* master ISA enable */
+	value = value | (1UL << 55); /* master ISA enable */
 	do_flush_irq_mask(value);
 }
 
 static void
 enable_clipper_irq(unsigned int irq)
 {
-	cached_irq_mask &= ~(1UL << irq);
+	cached_irq_mask |= 1UL << irq;
 	clipper_flush_irq_mask(cached_irq_mask);
 }
 
 static void
 disable_clipper_irq(unsigned int irq)
 {
-	cached_irq_mask |= 1UL << irq;
+	cached_irq_mask &= ~(1UL << irq);
 	clipper_flush_irq_mask(cached_irq_mask);
 }
 
@@ -278,6 +278,9 @@ init_TSUNAMI_irqs(struct hw_interrupt_type * ops)
 			continue;
 		if (i < 16)
 			continue;
+		/* only irqs between 16 and 47 are tsunami irqs */
+		if (i >= 48)
+			break;
 		irq_desc[i].status = IRQ_DISABLED | IRQ_LEVEL;
 		irq_desc[i].handler = ops;
 	}
@@ -298,7 +301,7 @@ dp264_init_irq(void)
 	init_RTC_irq();
 	init_TSUNAMI_irqs(&tsunami_irq_type);
 
-	dp264_flush_irq_mask(~0UL);
+	dp264_flush_irq_mask(0UL);
 }
 
 static void __init
@@ -316,7 +319,7 @@ clipper_init_irq(void)
 	init_RTC_irq();
 	init_TSUNAMI_irqs(&clipper_irq_type);
 
-	clipper_flush_irq_mask(~0UL);
+	clipper_flush_irq_mask(0UL);
 }
 
 

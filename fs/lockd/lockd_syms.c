@@ -39,4 +39,15 @@ EXPORT_SYMBOL(nlmsvc_ops);
 EXPORT_SYMBOL(nlmsvc_grace_period);
 EXPORT_SYMBOL(nlmsvc_timeout);
 
+#ifdef CONFIG_LOCKD_V4
+
+/* NLM4 exported symbols */ 
+EXPORT_SYMBOL(nlm4_rofs);
+EXPORT_SYMBOL(nlm4_stale_fh);
+EXPORT_SYMBOL(nlm4_deadlock);
+EXPORT_SYMBOL(nlm4_failed);
+EXPORT_SYMBOL(nlm4_fbig);
+
+#endif
+
 #endif /* CONFIG_MODULES */

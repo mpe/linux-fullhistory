@@ -1,4 +1,4 @@
-/* $Id: sunbmac.c,v 1.16 2000/02/16 10:36:18 davem Exp $
+/* $Id: sunbmac.c,v 1.17 2000/02/17 18:29:04 davem Exp $
  * sunbmac.c: Driver for Sparc BigMAC 100baseT ethernet adapters.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -190,20 +190,14 @@ static void bigmac_clean_rings(struct bigmac *bp)
 
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		if (bp->rx_skbs[i] != NULL) {
-			if (in_irq())
-				dev_kfree_skb_irq(bp->rx_skbs[i]);
-			else
-				dev_kfree_skb(bp->rx_skbs[i]);
+			dev_kfree_skb_any(bp->rx_skbs[i]);
 			bp->rx_skbs[i] = NULL;
 		}
 	}
 
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		if (bp->tx_skbs[i] != NULL) {
-			if (in_irq())
-				dev_kfree_skb_irq(bp->tx_skbs[i]);
-			else
-				dev_kfree_skb(bp->tx_skbs[i]);
+			dev_kfree_skb_any(bp->tx_skbs[i]);
 			bp->tx_skbs[i] = NULL;
 		}
 	}

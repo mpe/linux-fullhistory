@@ -833,23 +833,45 @@ static void hid_configure_usage(struct hid_device *device, struct hid_field *fie
 			}
 			break;
 
-		case HID_UP_HOTKEY:
+		case HID_UP_CONSUMER:	/* USB HUT v1.1, pages 56-62 */
 			
 			switch (usage->hid & HID_USAGE) {
 
-				case 0x0034: usage->code = KEY_PHONE;		break;
-				case 0x0036: usage->code = KEY_NOTEPAD;		break;
-				case 0x008a: usage->code = KEY_MAIL;		break;
-				case 0x0095: usage->code = KEY_CALENDAR;	break;
-				case 0x00b7: usage->code = KEY_PRINT;		break;
-				case 0x00b8: usage->code = KEY_HELP;		break;
-				case 0x00cd: usage->code = KEY_SOUND;		break;
-				case 0x00e2: usage->code = KEY_PROG1;		break;
-				case 0x00e9: usage->code = KEY_PROG2;		break;
-				case 0x00ea: usage->code = KEY_PROG3;		break;
-				case 0x018a: usage->code = KEY_WWW;		break;
-				case 0x0223: usage->code = KEY_FULLSCREEN;	break;
-				default:     usage->code = KEY_UNKNOWN;		break;
+				case 0x034: usage->code = KEY_SLEEP;		break;
+				case 0x036: usage->code = BTN_MISC;		break;
+				case 0x08a: usage->code = KEY_WWW;		break;
+				case 0x095: usage->code = KEY_HELP;		break;
+
+				case 0x0b4: usage->code = KEY_REWIND;		break;
+				case 0x0b5: usage->code = KEY_NEXTSONG;		break;
+				case 0x0b6: usage->code = KEY_PREVIOUSSONG;	break;
+				case 0x0b7: usage->code = KEY_STOPCD;		break;
+				case 0x0b8: usage->code = KEY_EJECTCD;		break;
+				case 0x0cd: usage->code = KEY_PLAYPAUSE;	break;
+
+				case 0x0e2: usage->code = KEY_MUTE;		break;
+				case 0x0e9: usage->code = KEY_VOLUMEUP;		break;
+				case 0x0ea: usage->code = KEY_VOLUMEDOWN;	break;
+
+				case 0x183: usage->code = KEY_CONFIG;		break;
+				case 0x18a: usage->code = KEY_MAIL;		break;
+				case 0x192: usage->code = KEY_CALC;		break;
+				case 0x194: usage->code = KEY_FILE;		break;
+
+				case 0x21a: usage->code = KEY_UNDO;		break;
+				case 0x21b: usage->code = KEY_COPY;		break;
+				case 0x21c: usage->code = KEY_CUT;		break;
+				case 0x21d: usage->code = KEY_PASTE;		break;
+
+				case 0x221: usage->code = KEY_FIND;		break;
+				case 0x223: usage->code = KEY_HOMEPAGE;		break;
+				case 0x224: usage->code = KEY_BACK;		break;
+				case 0x225: usage->code = KEY_FORWARD;		break;
+				case 0x226: usage->code = KEY_STOP;		break;
+				case 0x227: usage->code = KEY_REFRESH;		break;
+				case 0x22a: usage->code = KEY_BOOKMARKS;	break;
+
+				default:    usage->code = KEY_UNKNOWN;		break;
 
 			}
 		

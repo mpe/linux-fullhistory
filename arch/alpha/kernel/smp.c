@@ -871,6 +871,22 @@ smp_call_function (void (*func) (void *info), void *info, int retry, int wait)
 }
 
 static void
+ipi_imb(void)
+{
+	imb();
+}
+
+void
+smp_imb(void)
+{
+	/* Must wait other processors to flush their icache before continue. */
+	if (smp_call_function(ipi_imb, NULL, 1, 1))
+		printk(KERN_CRIT "smp_imb: timed out\n");
+
+	imb();
+}
+
+static void
 ipi_flush_tlb_all(void *ignored)
 {
 	tbia();

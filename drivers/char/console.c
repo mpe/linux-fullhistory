@@ -1816,6 +1816,8 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 	unsigned long draw_from = 0, draw_to = 0;
 	struct vt_struct *vt = (struct vt_struct *)tty->driver_data;
 	u16 himask, charmask;
+	const unsigned char *orig_buf = NULL;
+	int orig_count;
 
 	currcons = vt->vc_num;
 	if (!vc_cons_allocated(currcons)) {
@@ -1828,9 +1830,13 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 	    return 0;
 	}
 
-	down(&con_buf_sem);
+	orig_buf = buf;
+	orig_count = count;
 
 	if (from_user) {
+		down(&con_buf_sem);
+
+again:
 		if (count > CON_BUF_SIZE)
 			count = CON_BUF_SIZE;
 		if (copy_from_user(con_buf, buf, count)) {
@@ -1969,7 +1975,21 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 	spin_unlock_irq(&console_lock);
 
 out:
-	up(&con_buf_sem);
+	if (from_user) {
+		/* If the user requested something larger than
+		 * the CON_BUF_SIZE, and the tty is not stopped,
+		 * keep going.
+		 */
+		if ((orig_count > CON_BUF_SIZE) && !tty->stopped) {
+			orig_count -= CON_BUF_SIZE;
+			orig_buf += CON_BUF_SIZE;
+			count = orig_count;
+			buf = orig_buf;
+			goto again;
+		}
+
+		up(&con_buf_sem);
+	}
 
 	return n;
 #undef FLUSH

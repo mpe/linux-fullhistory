@@ -37,18 +37,16 @@ fi
 tristate 'Minix fs support' CONFIG_MINIX_FS
 
 tristate 'NTFS filesystem support (read only)' CONFIG_NTFS_FS
-dep_bool '  NTFS write support (DANGEROUS)' CONFIG_NTFS_RW $CONFIG_NTFS_FS $CONFIG_EXPERIMENTAL
+if [ "$CONFIG_NTFS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   bool '  NTFS write support (DANGEROUS)' CONFIG_NTFS_RW
+fi
 
 tristate 'OS/2 HPFS filesystem support' CONFIG_HPFS_FS
 
 bool '/proc filesystem support' CONFIG_PROC_FS
 
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool '/dev filesystem support (EXPERIMENTAL)' CONFIG_DEVFS_FS
-  if [ "$CONFIG_DEVFS_FS" = "y" ]; then
-    bool '  Debug devfs' CONFIG_DEVFS_DEBUG
-  fi
-fi
+dep_bool '/dev filesystem support (EXPERIMENTAL)' CONFIG_DEVFS_FS $CONFIG_EXPERIMENTAL
+dep_bool '  Debug devfs' CONFIG_DEVFS_DEBUG $CONFIG_DEVFS_FS
 
 # It compiles as a module for testing only.  It should not be used
 # as a module in general.  If we make this "tristate", a bunch of people
@@ -57,23 +55,28 @@ fi
 dep_bool '/dev/pts filesystem for Unix98 PTYs' CONFIG_DEVPTS_FS $CONFIG_UNIX98_PTYS
 
 dep_tristate 'QNX4 filesystem support (read only) (EXPERIMENTAL)' CONFIG_QNX4FS_FS $CONFIG_EXPERIMENTAL
-dep_bool '  QNX4FS write support (DANGEROUS)' CONFIG_QNX4FS_RW $CONFIG_QNX4FS_FS
+if [ "$CONFIG_QNX4FS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   bool '  QNX4FS write support (DANGEROUS)' CONFIG_QNX4FS_RW
+fi
 
 tristate 'ROM filesystem support' CONFIG_ROMFS_FS
 
 tristate 'Second extended fs support' CONFIG_EXT2_FS
 
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
-dep_bool '  SYSV filesystem write support (DANGEROUS)' CONFIG_SYSV_FS_WRITE $CONFIG_SYSV_FS $CONFIG_EXPERIMENTAL
+if [ "$CONFIG_SYSV_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   bool '  SYSV filesystem write support (DANGEROUS)' CONFIG_SYSV_FS_WRITE
+fi
 
 tristate 'UDF filesystem support (read only)' CONFIG_UDF_FS
 if [ "$CONFIG_UDF_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool '  UDF write support (DANGEROUS)' CONFIG_UDF_RW
+   bool '  UDF write support (DANGEROUS)' CONFIG_UDF_RW
 fi
 
 tristate 'UFS filesystem support (read only)' CONFIG_UFS_FS
-dep_bool '  UFS filesystem write support (DANGEROUS)' CONFIG_UFS_FS_WRITE $CONFIG_UFS_FS $CONFIG_EXPERIMENTAL
-
+if [ "$CONFIG_UFS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   bool '  UFS filesystem write support (DANGEROUS)' CONFIG_UFS_FS_WRITE
+fi
 
 if [ "$CONFIG_NET" = "y" ]; then
 
@@ -87,7 +90,9 @@ if [ "$CONFIG_INET" = "y" ]; then
    dep_bool '  Root file system on NFS' CONFIG_ROOT_NFS $CONFIG_NFS_FS $CONFIG_IP_PNP
 
    tristate 'NFS server support' CONFIG_NFSD
-   dep_bool '  Provide NFSv3 server support (EXPERIMENTAL)' CONFIG_NFSD_V3 $CONFIG_NFSD $CONFIG_EXPERIMENTAL
+   if [ "$CONFIG_NFSD" != "n" ]; then
+      bool '  Provide NFSv3 server support (EXPERIMENTAL)' CONFIG_NFSD_V3
+   fi
 
    if [ "$CONFIG_NFS_FS" = "y" -o "$CONFIG_NFSD" = "y" ]; then
       define_tristate CONFIG_SUNRPC y
@@ -100,6 +105,9 @@ if [ "$CONFIG_INET" = "y" ]; then
 	 define_tristate CONFIG_SUNRPC n
 	 define_tristate CONFIG_LOCKD n
       fi
+   fi
+   if [ "$CONFIG_NFSD_V3" == "y" ]; then
+     define_bool CONFIG_LOCKD_V4 y
    fi
    tristate 'SMB filesystem support (to mount WfW shares etc.)' CONFIG_SMB_FS
 fi

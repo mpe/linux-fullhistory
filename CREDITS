@@ -1271,10 +1271,6 @@ S: Markham, Ontario
 S: L3R 8B2
 S: Canada
 
-N: Andrzej M. Krzysztofowicz
-E: ankry@mif.pg.gda.pl
-D: Some 8-bit XT disk driver and /devfs hacking 
-
 N: Andreas S. Krebs
 E: akrebs@altavista.net
 D: CYPRESS CY82C693 chipset IDE, Digital's PC-Alpha 164SX boards
@@ -1289,7 +1285,7 @@ S: USA
 
 N: Andrzej M. Krzysztofowicz
 E: ankry@mif.pg.gda.pl
-D: XT disk driver
+D: Some 8-bit XT disk driver and devfs hacking 
 D: Aladdin 1533/1543(C) chipset IDE
 D: PIIX chipset IDE
 S: ul. Matemblewska 1B/10
@@ -1528,6 +1524,13 @@ D: XF86_Mach32
 D: XF86_Mach8
 D: XF86_8514
 D: cfdisk (curses based disk partitioning program)
+
+N: Heinz Mauelshagen
+E: mge@EZ-Darmstadt.Telekom.de
+D: Logical Volume Manager
+S: Bartningstr. 12
+S: 64289 Darmstadt
+S: Germany 
 
 N: Mike McLagan
 E: mike.mclagan@linux.org

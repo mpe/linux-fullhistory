@@ -1260,6 +1260,29 @@ CONFIG_PARIDE_ON26
   called on26.o. You must also have a high-level driver for the type
   of device that you want to support.
 
+Logical Volume Manager (LVM) support
+CONFIG_BLK_DEV_LVM
+  This driver lets you combine several hard disks, hard disk partitions,
+  multiple devices or even loop devices (for evaluation purposes) into
+  a volume group. Imagine a volume group as a kind of virtual disk.
+  Logical volumes, which can be thought of as virtual partitions,
+  can be created in the volume group.  You can resize volume groups and
+  logical volumes after creation time, corresponding to new capacity needs.
+  Logical volumes are accessed as block devices named
+  /dev/VolumeGroupName/LogicalVolumeName.
+
+  For details see /usr/src/linux/Documentaion/LVM-HOWTO.
+
+  To get the newest software see <http://linux.msede.com/lvm>.
+
+Logical Volume Manager proc filesystem information
+CONFIG_LVM_PROC_FS
+  If you say Y here, you are able to access overall Logical Volume Manager,
+  Volume Group, Logical and Physical Volume information in /proc/lvm.
+
+  To use this option, you have to check, that the "proc filesystem support"
+  (CONFIG_PROC_FS) is enabled too.
+
 Multiple devices driver support
 CONFIG_BLK_DEV_MD
   This driver lets you combine several hard disk partitions into one
@@ -8764,8 +8787,8 @@ CONFIG_NFSD
 Provide NFSv3 server support (EXPERIMENTAL)
 CONFIG_NFSD_V3
   If you would like to include the NFSv3 server was well as the NFSv2
-  server, say Y here.  File locking, via the NLMv4 protocol, is not
-  supported yet. If unsure, say N.
+  server, say Y here.  File locking, via the NLMv4 protocol, is also
+  supported. If unsure, say N.
 
 OS/2 HPFS filesystem support
 CONFIG_HPFS_FS

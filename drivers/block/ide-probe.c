@@ -406,7 +406,7 @@ static void probe_hwif (ide_hwif_t *hwif)
 	ide_ioreg_t ide_control_reg 	= hwif->io_ports[IDE_CONTROL_OFFSET];
 	ide_ioreg_t region_low 		= hwif->io_ports[IDE_DATA_OFFSET];
 	ide_ioreg_t region_high 	= region_low;
-	ide_ioreg_t region_request	= 8;
+	unsigned int region_request	= 8;
 	int i;
 
 	if (hwif->noprobe)
