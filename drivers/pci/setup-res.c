@@ -136,6 +136,7 @@ pdev_sort_resources(struct pci_dev *dev,
 	for (i = 0; i < PCI_NUM_RESOURCES; i++) {
 		struct resource *r;
 		struct resource_list *list, *tmp;
+		unsigned long r_size;
 
 		/* PCI-PCI bridges may have I/O ports or
 		   memory on the primary bus */
@@ -144,15 +145,23 @@ pdev_sort_resources(struct pci_dev *dev,
 			continue;
 
 		r = &dev->resource[i];
+		r_size = r->end - r->start;
+		
 		if (!(r->flags & type_mask) || r->parent)
 			continue;
+		if (!r_size) {
+			printk(KERN_WARNING "PCI: Ignore bogus resource %d "
+					 "[%lx:%lx] of %s\n",
+					  i, r->start, r->end, dev->name);
+			continue;
+		}
 		for (list = head; ; list = list->next) {
 			unsigned long size = 0;
 			struct resource_list *ln = list->next;
 
 			if (ln)
 				size = ln->res->end - ln->res->start;
-			if (r->end - r->start > size) {
+			if (r_size > size) {
 				tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
 				tmp->next = ln;
 				tmp->res = r;

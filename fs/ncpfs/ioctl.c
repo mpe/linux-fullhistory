@@ -165,7 +165,6 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 			return 0;
 		}
 
-#ifdef CONFIG_NCPFS_MOUNT_SUBDIR
 	case NCP_IOC_GETROOT:
 		{
 			struct ncp_setroot_ioctl sr;
@@ -241,7 +240,6 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 
 			return 0;
 		}
-#endif	/* CONFIG_NCPFS_MOUNT_SUBDIR */
 
 #ifdef CONFIG_NCPFS_PACKET_SIGNING	
 	case NCP_IOC_SIGN_INIT:
@@ -374,7 +372,6 @@ outrel:
 		}
 #endif	/* CONFIG_NCPFS_IOCTL_LOCKING */
 
-#ifdef CONFIG_NCPFS_NDS_DOMAINS
 	case NCP_IOC_GETOBJECTNAME:
 		if (current->uid != server->m.mounted_uid) {
 			return -EACCES;
@@ -503,7 +500,6 @@ outrel:
 			if (old) ncp_kfree_s(old, oldlen);
 			return 0;
 		}
-#endif	/* CONFIG_NCPFS_NDS_DOMAINS */
 
 #ifdef CONFIG_NCPFS_NLS
 /* Here we are select the iocharset and the codepage for NLS.

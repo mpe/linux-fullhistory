@@ -400,13 +400,6 @@ static struct sk_buff *netlink_build_message(ipq_queue_element_t *e, int *errp)
 	if (e->info->outdev) strcpy(pm->outdev_name, e->info->outdev->name);
 	else pm->outdev_name[0] = '\0';
 	pm->hw_protocol = e->skb->protocol;
-	if (e->skb->rx_dev) {
-		pm->hw_type = e->skb->rx_dev->type;
-		if (e->skb->rx_dev->hard_header_parse)
-			pm->hw_addrlen =
-				e->skb->rx_dev->hard_header_parse(e->skb,
-				                                  pm->hw_addr);
-	}
 	if (data_len)
 		memcpy(pm->payload, e->skb->data, data_len);
 	nlh->nlmsg_len = skb->tail - old_tail;

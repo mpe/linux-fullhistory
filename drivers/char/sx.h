@@ -31,7 +31,7 @@ struct sx_port {
   int                     c_dcd;
   struct sx_board         *board;
   int                     line;
-  int                     locks;
+  long                    locks;
 };
 
 struct sx_board {

@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.95 2000/11/10 04:49:56 davem Exp $
+/*  $Id: init.c,v 1.96 2000/11/30 08:51:50 anton Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -579,7 +579,8 @@ void si_meminfo(struct sysinfo *val)
 
 void flush_page_to_ram(struct page *page)
 {
-	unsigned long vaddr = (unsigned long) kmap(page);
-	__flush_page_to_ram(vaddr);
-	kunmap(page);
+	unsigned long vaddr = (unsigned long)page_address(page);
+
+	if (vaddr)
+		__flush_page_to_ram(vaddr);
 }

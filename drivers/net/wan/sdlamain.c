@@ -106,14 +106,7 @@ static int active;			/* number of active cards */
 static sdla_t* card_array;	/* adapter data space */
 
 /* Task queue element for creating a 'thread' */
-static struct tq_struct sdla_tq =
-{
-	NULL,		/* .next */
-	0,		/* .sync */
-	&sdla_poll,	/* .routine */
-	NULL		/* .data */
-}; 
-
+static struct tq_struct sdla_tq = { routine: sdla_poll };
 
 /******* Kernel Loadable Module Entry Points ********************************/
 

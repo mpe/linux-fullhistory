@@ -2,18 +2,21 @@
 /* Defines for NAND Flash Translation Layer  */
 /* (c) 1999 Machine Vision Holdings, Inc.    */
 /* Author: David Woodhouse <dwmw2@mvhi.com>  */
-/* $Id: nftl.h,v 1.6 2000/03/31 15:12:20 dwmw2 Exp $ */
+/* $Id: nftl.h,v 1.9 2000/11/07 05:48:49 ollie Exp $ */
 
 #ifndef __MTD_NFTL_H__
 #define __MTD_NFTL_H__
 
+#ifndef __BOOT__
 #include <linux/mtd/mtd.h>
+#endif
 
 /* Block Control Information */
 
 struct nftl_bci {
 	unsigned char ECCSig[6];
-	__u16 Status;
+	__u8 Status;
+	__u8 Status1;
 }__attribute__((packed));
 
 /* Unit Control Information */
@@ -32,7 +35,8 @@ struct nftl_uci1 {
 } __attribute__((packed));
 
 struct nftl_uci2 {
-	__u32 WriteInh;
+        __u16 FoldMark;
+        __u16 FoldMark1;
 	__u32 unused;
 } __attribute__((packed));
 
@@ -60,10 +64,12 @@ struct NFTLMediaHeader {
 #define MAX_ERASE_ZONES (8192 - 512)
 
 #define ERASE_MARK 0x3c69
-#define BLOCK_FREE 0xffff
-#define BLOCK_USED 0x5555
-#define BLOCK_IGNORE 0x1111
-#define BLOCK_DELETED 0x0000
+#define SECTOR_FREE 0xff
+#define SECTOR_USED 0x55
+#define SECTOR_IGNORE 0x11
+#define SECTOR_DELETED 0x00
+
+#define FOLD_MARK_IN_PROGRESS 0x5555
 
 #define ZONE_GOOD 0xff
 #define ZONE_BAD_ORIGINAL 0
@@ -71,6 +77,11 @@ struct NFTLMediaHeader {
 
 #ifdef __KERNEL__
 
+/* these info are used in ReplUnitTable */
+#define BLOCK_NIL          0xffff /* last block of a chain */
+#define BLOCK_FREE         0xfffe /* free block */
+#define BLOCK_NOTEXPLORED  0xfffd /* non explored block, only used during mounting */
+#define BLOCK_RESERVED     0xfffc /* bios block or bad block */
 
 struct NFTLrecord {
 	struct mtd_info *mtd;
@@ -83,18 +94,27 @@ struct NFTLrecord {
 	unsigned char sectors;
 	unsigned short cylinders;
 	__u16 numvunits;
-	__u16 lastEUN;
+	__u16 lastEUN;                  /* should be suppressed */
 	__u16 numfreeEUNs;
-	__u16 LastFreeEUN; /* To speed up finding a free EUN */
+	__u16 LastFreeEUN; 		/* To speed up finding a free EUN */
 	__u32 long nr_sects;
 	int head,sect,cyl;
-	__u16 *EUNtable; /* [numvunits]: First EUN for each virtual unit  */
-	__u16 *VirtualUnitTable; /* [numEUNs]: VirtualUnitNumber for each */
-	__u16 *ReplUnitTable; /* [numEUNs]: ReplUnitNumber for each */
+	__u16 *EUNtable; 		/* [numvunits]: First EUN for each virtual unit  */
+	__u16 *ReplUnitTable; 		/* [numEUNs]: ReplUnitNumber for each */
+        unsigned int nb_blocks;		/* number of physical blocks */
+        unsigned int nb_boot_blocks;	/* number of blocks used by the bios */
+        struct erase_info instr;
 };
 
+int NFTL_mount(struct NFTLrecord *s);
+int NFTL_formatblock(struct NFTLrecord *s, int block);
+
+#ifndef NFTL_MAJOR
 #define NFTL_MAJOR 93
+#endif
+
 #define MAX_NFTLS 16
+#define MAX_SECTORS_PER_UNIT 32
 
 #endif /* __KERNEL__ */
 

@@ -123,6 +123,7 @@
  *               - avoided inline strings functions lvm_strlen etc.
  *    14/02/2000 - support for 2.3.43
  *               - integrated Andrea Arcangeli's snapshot code
+ *    07/12/2000 - make sure lvm_make_request_fn returns correct value - 0 or 1 - NeilBrown
  *
  */
 
@@ -1488,8 +1489,10 @@ static void lvm_dummy_device_request(request_queue_t * t)
  */
 static int lvm_make_request_fn(request_queue_t *q, int rw, struct buffer_head *bh)
 {
-	lvm_map(bh, rw);
-	return 1;
+	if (lvm_map(bh, rw)<0)
+		return 0; /* failure, buffer_IO_error has been called, don't recurse */
+	else
+		return 1; /* all ok, mapping done, call lower level driver */
 }
 
 /*

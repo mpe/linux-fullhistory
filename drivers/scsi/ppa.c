@@ -41,7 +41,7 @@ typedef struct {
 	mode:		PPA_AUTODETECT,	\
 	host:		-1,		\
 	cur_cmd:	NULL,		\
-	ppa_tq:		{0, 0, ppa_interrupt, NULL},	\
+	ppa_tq:		{ routine: ppa_interrupt },	\
 	jstart:		0,		\
 	failed:		0,		\
 	p_busy:		0		\
@@ -111,7 +111,14 @@ int ppa_detect(Scsi_Host_Template * host)
     struct Scsi_Host *hreg;
     int ports;
     int i, nhosts, try_again;
-    struct parport *pb = parport_enumerate();
+    struct parport *pb;
+
+    /*
+     * unlock to allow the lowlevel parport driver to probe
+     * the irqs
+     */
+    spin_unlock_irq(&io_request_lock);
+    pb = parport_enumerate();
 
     printk("ppa: Version %s\n", PPA_VERSION);
     nhosts = 0;
@@ -119,6 +126,7 @@ int ppa_detect(Scsi_Host_Template * host)
 
     if (!pb) {
 	printk("ppa: parport reports no devices.\n");
+	spin_lock_irq(&io_request_lock);
 	return 0;
     }
   retry_entry:
@@ -143,6 +151,7 @@ int ppa_detect(Scsi_Host_Template * host)
 		    printk(KERN_ERR "ppa%d: failed to claim parport because a "
 		      "pardevice is owning the port for too longtime!\n",
 			   i);
+		    spin_lock_irq(&io_request_lock);
 		    return 0;
 		}
 	    }
@@ -212,11 +221,14 @@ int ppa_detect(Scsi_Host_Template * host)
 	    printk("  cable is marked with \"AutoDetect\", this is what has\n");
 	    printk("  happened.\n");
 	    return 0;
+	    spin_lock_irq(&io_request_lock);
 	}
 	try_again = 1;
 	goto retry_entry;
-    } else
+    } else {
+	spin_lock_irq(&io_request_lock);
 	return 1;		/* return number of hosts detected */
+    }
 }
 
 /* This is to give the ppa driver a way to modify the timings (and other

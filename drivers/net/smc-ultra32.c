@@ -61,7 +61,7 @@ static const char *version = "smc-ultra32.c: 06/97 v1.00\n";
 #include "8390.h"
 
 int ultra32_probe(struct net_device *dev);
-int ultra32_probe1(struct net_device *dev, int ioaddr);
+static int ultra32_probe1(struct net_device *dev, int ioaddr);
 static int ultra32_open(struct net_device *dev);
 static void ultra32_reset_8390(struct net_device *dev);
 static void ultra32_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
@@ -105,48 +105,64 @@ static int ultra32_close(struct net_device *dev);
 
 int __init ultra32_probe(struct net_device *dev)
 {
-	const char *ifmap[] = {"UTP No Link", "", "UTP/AUI", "UTP/BNC"};
-	int ioaddr, edge, media;
+	int ioaddr;
 
 	if (!EISA_bus) return -ENODEV;
 
+	SET_MODULE_OWNER(dev);
+
 	/* EISA spec allows for up to 16 slots, but 8 is typical. */
 	for (ioaddr = 0x1000 + ULTRA32_BASE; ioaddr < 0x9000; ioaddr += 0x1000)
-	if (check_region(ioaddr, ULTRA32_IO_EXTENT) == 0 &&
-	    inb(ioaddr + ULTRA32_IDPORT) != 0xff &&
-	    inl(ioaddr + ULTRA32_IDPORT) == ULTRA32_ID) {
-		media = inb(ioaddr + ULTRA32_CFG7) & 0x03;
-		edge = inb(ioaddr + ULTRA32_CFG5) & 0x08;
-		printk("SMC Ultra32 in EISA Slot %d, Media: %s, %s IRQs.\n",
-		       ioaddr >> 12, ifmap[media],
-		       (edge ? "Edge Triggered" : "Level Sensitive"));
 		if (ultra32_probe1(dev, ioaddr) == 0)
-		  return 0;
-	}
+			return 0;
+
 	return -ENODEV;
 }
 
-int __init ultra32_probe1(struct net_device *dev, int ioaddr)
+static int __init ultra32_probe1(struct net_device *dev, int ioaddr)
 {
-	int i;
+	int i, edge, media, retval;
 	int checksum = 0;
 	const char *model_name;
-	static unsigned version_printed = 0;
+	static unsigned version_printed;
 	/* Values from various config regs. */
-	unsigned char idreg = inb(ioaddr + 7);
-	unsigned char reg4 = inb(ioaddr + 4) & 0x7f;
+	unsigned char idreg;
+	unsigned char reg4;
+	const char *ifmap[] = {"UTP No Link", "", "UTP/AUI", "UTP/BNC"};
+
+	if (!request_region(ioaddr, ULTRA32_IO_EXTENT, dev->name))
+		return -EBUSY;
+
+	if (inb(ioaddr + ULTRA32_IDPORT) == 0xff ||
+	    inl(ioaddr + ULTRA32_IDPORT) != ULTRA32_ID) {
+		retval = -ENODEV;
+		goto out;
+	}
+
+	media = inb(ioaddr + ULTRA32_CFG7) & 0x03;
+	edge = inb(ioaddr + ULTRA32_CFG5) & 0x08;
+	printk("SMC Ultra32 in EISA Slot %d, Media: %s, %s IRQs.\n",
+		ioaddr >> 12, ifmap[media],
+		(edge ? "Edge Triggered" : "Level Sensitive"));
+
+	idreg = inb(ioaddr + 7);
+	reg4 = inb(ioaddr + 4) & 0x7f;
 
 	/* Check the ID nibble. */
-	if ((idreg & 0xf0) != 0x20) 			/* SMC Ultra */
-		return -ENODEV;
+	if ((idreg & 0xf0) != 0x20) {			/* SMC Ultra */
+		retval = -ENODEV;
+		goto out;
+	}
 
 	/* Select the station address register set. */
 	outb(reg4, ioaddr + 4);
 
 	for (i = 0; i < 8; i++)
 		checksum += inb(ioaddr + 8 + i);
-	if ((checksum & 0xff) != 0xff)
-		return -ENODEV;
+	if ((checksum & 0xff) != 0xff) {
+		retval = -ENODEV;
+		goto out;
+	}
 
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
@@ -175,7 +191,8 @@ int __init ultra32_probe1(struct net_device *dev, int ioaddr)
 	if ((inb(ioaddr + ULTRA32_CFG5) & 0x40) == 0) {
 		printk("\nsmc-ultra32: Card RAM is disabled!  "
 		       "Run EISA config utility.\n");
-		return -ENODEV;
+		retval = -ENODEV;
+		goto out;
 	}
 	if ((inb(ioaddr + ULTRA32_CFG2) & 0x04) == 0)
 		printk("\nsmc-ultra32: Ignoring Bus-Master enable bit.  "
@@ -186,7 +203,8 @@ int __init ultra32_probe1(struct net_device *dev, int ioaddr)
 		int irq = irqmap[inb(ioaddr + ULTRA32_CFG5) & 0x07];
 		if (irq == 0) {
 			printk(", failed to detect IRQ line.\n");
-			return -EAGAIN;
+			retval = -EAGAIN;
+			goto out;
 		}
 		dev->irq = irq;
 	}
@@ -194,11 +212,9 @@ int __init ultra32_probe1(struct net_device *dev, int ioaddr)
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk (", no memory for dev->priv.\n");
-                return -ENOMEM;
+                retval = -ENOMEM;
+		goto out;
         }
-
-	/* OK, we are certain this is going to work.  Setup the device. */
-	request_region(ioaddr, ULTRA32_IO_EXTENT, model_name);
 
 	/* The 8390 isn't at the base address, so fake the offset */
 	dev->base_addr = ioaddr + ULTRA32_NIC_OFFSET;
@@ -229,15 +245,20 @@ int __init ultra32_probe1(struct net_device *dev, int ioaddr)
 	NS8390_init(dev, 0);
 
 	return 0;
+out:
+	release_region(ioaddr, ULTRA32_IO_EXTENT);
+	return retval;
 }
 
 static int ultra32_open(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr - ULTRA32_NIC_OFFSET; /* ASIC addr */
 	int irq_flags = (inb(ioaddr + ULTRA32_CFG5) & 0x08) ? 0 : SA_SHIRQ;
+	int retval;
 
-	if (request_irq(dev->irq, ei_interrupt, irq_flags, ei_status.name, dev))
-		return -EAGAIN;
+	retval = request_irq(dev->irq, ei_interrupt, irq_flags, dev->name, dev);
+	if (retval)
+		return retval;
 
 	outb(ULTRA32_MEMENB, ioaddr); /* Enable Shared Memory. */
 	outb(0x80, ioaddr + ULTRA32_CFG6); /* Enable Interrupts. */
@@ -248,7 +269,6 @@ static int ultra32_open(struct net_device *dev)
 	outb_p(E8390_NODMA+E8390_PAGE0, dev->base_addr);
 	outb(0xff, dev->base_addr + EN0_ERWCNT);
 	ei_open(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -266,8 +286,6 @@ static int ultra32_close(struct net_device *dev)
 	free_irq(dev->irq, dev);
 
 	NS8390_init(dev, 0);
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

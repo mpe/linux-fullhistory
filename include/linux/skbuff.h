@@ -65,8 +65,7 @@ struct sk_buff {
 	struct sk_buff_head * list;		/* List we are on				*/
 	struct sock	*sk;			/* Socket we are owned by 			*/
 	struct timeval	stamp;			/* Time we arrived				*/
-	struct net_device	*dev;			/* Device we arrived on/are leaving by		*/
-	struct net_device	*rx_dev;
+	struct net_device	*dev;		/* Device we arrived on/are leaving by		*/
 
 	/* Transport layer header */
 	union
@@ -110,8 +109,7 @@ struct sk_buff {
 	unsigned int 	len;			/* Length of actual data			*/
 	unsigned int	csum;			/* Checksum 					*/
 	volatile char 	used;			/* Data moved to user and not MSG_PEEK		*/
-	unsigned char	is_clone,		/* We are a clone				*/
-			cloned, 		/* head may be cloned (check refcnt to be sure). */
+	unsigned char	cloned, 		/* head may be cloned (check refcnt to be sure). */
   			pkt_type,		/* Packet class					*/
   			ip_summed;		/* Driver fed us an IP checksum			*/
 	__u32		priority;		/* Packet queueing priority			*/

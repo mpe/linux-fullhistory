@@ -879,9 +879,6 @@ static int skmca_open(struct SKMCA_NETDEV *dev)
 	dev->interrupt = 0;
 	dev->tbusy = 0;
 	dev->start = 0;
-#endif
-
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
 #endif
 
@@ -900,7 +897,7 @@ static int skmca_close(struct SKMCA_NETDEV *dev)
 		free_irq(dev->irq, dev);
 	dev->irq = 0;
 
-#ifdef MODULE
+#if (LINUX_VERSION_CODE < 0x02032a)
 	MOD_DEC_USE_COUNT;
 #endif
 
@@ -1086,6 +1083,8 @@ int skmca_probe(struct SKMCA_NETDEV *dev)
 
 	if (MCA_bus == 0)
 		return -ENODEV;
+
+	SET_MODULE_OWNER(dev);
 
 	/* start address of 1 --> forced detection */
 

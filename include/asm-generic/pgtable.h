@@ -26,7 +26,7 @@ static inline pte_t ptep_get_and_clear(pte_t *ptep)
 	return pte;
 }
 
-static inline void ptep_clear_wrprotect(pte_t *ptep)
+static inline void ptep_set_wrprotect(pte_t *ptep)
 {
 	pte_t old_pte = *ptep;
 	set_pte(ptep, pte_wrprotect(old_pte));

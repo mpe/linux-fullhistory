@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.50 2000/10/24 22:54:26 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.51 2000/12/08 17:15:53 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -224,12 +224,6 @@ static inline int ip_local_deliver_finish(struct sk_buff *skb)
 #ifdef CONFIG_NETFILTER_DEBUG
 	nf_debug_ip_local_deliver(skb);
 #endif /*CONFIG_NETFILTER_DEBUG*/
-
-	/* Free rx_dev before enqueueing to sockets */
-	if (skb->rx_dev) {
-		dev_put(skb->rx_dev);
-		skb->rx_dev = NULL;
-	}
 
         /* Point into the IP datagram, just past the header. */
         skb->h.raw = skb->nh.raw + iph->ihl*4;

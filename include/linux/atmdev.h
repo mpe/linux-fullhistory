@@ -257,7 +257,7 @@ enum {
 #define ATM_ATMOPT_CLP	1	/* set CLP bit */
 
 
-typedef struct { unsigned int bits; } atm_vcc_flags_t;
+typedef struct { unsigned long bits; } atm_vcc_flags_t;
 
 
 struct atm_vcc {

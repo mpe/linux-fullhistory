@@ -2,9 +2,14 @@
 
 ## Copyright (c) 1998 Michael Zucchi, All Rights Reserved        ##
 ## Copyright (C) 2000  Tim Waugh <twaugh@redhat.com>             ##
+## 								 ##
+## #define enhancements by Armin Kuster <akuster@mvista.com>	 ## 
+## Copyright (c) 2000 MontaVista Software, Inc.			 ##   
 ##                                                               ##
 ## This software falls under the GNU General Public License.     ##
 ## Please read the COPYING file for more information             ##
+
+# w.o. 03-11-2000: added the '-filelist' option.
 
 #
 # This will read a 'c' file and scan for embedded comments in the
@@ -150,6 +155,8 @@ $output_mode = "man";
 $blankline = $blankline_man;
 $modulename = "API Documentation";
 $function_only = 0;
+$filelist = '';
+
 while ($ARGV[0] =~ m/^-(.*)/) {
     $cmd = shift @ARGV;
     if ($cmd eq "-html") {
@@ -186,6 +193,8 @@ while ($ARGV[0] =~ m/^-(.*)/) {
 	$verbose = 1;
     } elsif (($cmd eq "-h") || ($cmd eq "--help")) {
 	usage();
+    } elsif ($cmd eq '-filelist') {
+	    $filelist = shift @ARGV;
     }
 }
 
@@ -663,8 +672,14 @@ sub dump_function {
     $prototype =~ s/^extern+ //;
     $prototype =~ s/^inline+ //;
     $prototype =~ s/^__inline__+ //;
+    $prototype =~ s/^#define+ //; #ak added
 
-    if ($prototype =~ m/^()([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
+    if ($prototype =~ m/^()([a-zA-Z0-9_~:]+)\s*\(([^\(]*)\)/ ||
+	$prototype =~ m/^(\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\(]*)\)/ ||
+	$prototype =~ m/^(\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\(]*)\)/ ||
+	$prototype =~ m/^(\w+\s+\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\(]*)\)/ ||
+	$prototype =~ m/^(\w+\s+\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\(]*)\)/ ||
+	$prototype =~ m/^()([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
 	$prototype =~ m/^(\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
 	$prototype =~ m/^(\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
 	$prototype =~ m/^(\w+\s+\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
@@ -781,13 +796,28 @@ $section_default = "Description";	# default section
 $section_intro = "Introduction";
 $section = $section_default;
 
-$lineno = 0;
+if( $filelist ne '' ) {
+	open(FLIST,"<$filelist") or die "Can't open file list $filelist";
+	while(<FLIST>) {
+		chop;
+		process_file($_);
+	}
+}
+
 foreach $file (@ARGV) {
     chomp($file);
+    process_file($file);
+}
+
+sub process_file($) {
+    my ($file) = @_;
+
     if (!open(IN,"<$file")) {
 	print STDERR "Error: Cannot open file $file\n";
-	next;
+	return;
     }
+
+    $lineno = 0;
     while (<IN>) {
 	$lineno++;
 
@@ -877,7 +907,7 @@ foreach $file (@ARGV) {
 	    elsif (/([^\{]*)/) {
 		$prototype .= $1;
 	    }
-	    if (/\{/) {
+	    if (/\{/ || /\#/) { # added for #define AK
 		$prototype =~ s@/\*.*?\*/@@gos;	# strip comments.
 		$prototype =~ s@[\r\n]+@ @gos; # strip newlines/cr's.
 		$prototype =~ s@^ +@@gos; # strip leading spaces

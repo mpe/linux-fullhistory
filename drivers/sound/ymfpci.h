@@ -247,7 +247,7 @@ struct ymf_pcm {
 };
 
 struct ymf_unit {
-	unsigned int rev;	/* PCI revision */
+	u8 rev;				/* PCI revision */
 	void *reg_area_virt;
 	void *work_ptr;				// +
 
@@ -275,13 +275,13 @@ struct ymf_unit {
 	u16 ac97_features;
 
 	struct pci_dev *pci;
-	int inst;		/* Unit number (instance) */
 
 	spinlock_t reg_lock;
 	spinlock_t voice_lock;
 
 	/* soundcore stuff */
 	int dev_audio;
+	struct semaphore open_sem;
 
 	struct list_head ymf_devs;
 	struct ymf_state *states[1];			// *
@@ -331,10 +331,6 @@ struct ymf_pcm_format {
 
 struct ymf_state {
 	struct ymf_unit *unit;			/* backpointer */
-
-	/* single open lock mechanism, only used for recording */
-	struct semaphore open_sem;
-	wait_queue_head_t open_wait;
 
 	/* virtual channel number */
 	int virt;				// * unused a.t.m.

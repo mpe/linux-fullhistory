@@ -2352,19 +2352,16 @@ static mdk_personality_t raid5_personality=
 	sync_request:	raid5_sync_request
 };
 
-int raid5_init (void)
+static int md__init raid5_init (void)
 {
 	return register_md_personality (RAID5, &raid5_personality);
 }
 
-#ifdef MODULE
-int init_module (void)
-{
-	return raid5_init();
-}
-
-void cleanup_module (void)
+static void raid5_exit (void)
 {
 	unregister_md_personality (RAID5);
 }
-#endif
+
+module_init(raid5_init);
+module_exit(raid5_exit);
+

@@ -87,9 +87,7 @@ History:
 #include <asm/bitops.h>
 #include <asm/io.h>
 
-#ifdef MODULE
 #include <linux/module.h>
-#endif
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -877,9 +875,6 @@ static int ibmlana_open(struct IBMLANA_NETDEV *dev)
 	dev->interrupt = 0;
 	dev->tbusy = 0;
 	dev->start = 1;
-#endif
-
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
 #endif
 
@@ -897,7 +892,7 @@ static int ibmlana_close(struct IBMLANA_NETDEV *dev)
 		free_irq(dev->irq, dev);
 	dev->irq = 0;
 
-#ifdef MODULE
+#if (LINUX_VERSION_CODE < 0x02032a)
 	MOD_DEC_USE_COUNT;
 #endif
 
@@ -1042,6 +1037,10 @@ int ibmlana_probe(struct IBMLANA_NETDEV *dev)
 	int base = 0, irq = 0, iobase = 0, memlen = 0;
 	ibmlana_priv *priv;
 	ibmlana_medium medium;
+
+#if (LINUX_VERSION_CODE >= 0x02032a)
+	SET_MODULE_OWNER(dev);
+#endif
 
 	/* can't work without an MCA bus ;-) */
 
@@ -1192,14 +1191,11 @@ int ibmlana_probe(struct IBMLANA_NETDEV *dev)
 
 #define DEVMAX 5
 
-static struct IBMLANA_NETDEV moddevs[DEVMAX] = {
-	{ init: ibmlana_probe }, { init: ibmlana_probe }, 
-	{ init: ibmlana_probe }, { init: ibmlana_probe },
-	{ init: ibmlana_probe }
-};
-
-int irq = 0;
-int io = 0;
+static struct IBMLANA_NETDEV moddevs[DEVMAX];
+static int irq;
+static int io;
+MODULE_PARM(irq, "i");
+MODULE_PARM(io, "i");
 
 int init_module(void)
 {
@@ -1207,7 +1203,9 @@ int init_module(void)
 
 	startslot = 0;
 	for (z = 0; z < DEVMAX; z++) {
-		strcpy(moddevs[z].name, "     ");
+		moddevs[z].init = ibmlana_probe;
+		moddevs[z].irq = irq;
+		moddevs[z].base_addr = io;
 		res = register_netdev(moddevs + z);
 		if (res != 0)
 			return (z > 0) ? 0 : -EIO;

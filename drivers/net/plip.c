@@ -349,18 +349,18 @@ plip_init_dev(struct net_device *dev, struct parport *pb)
 	nl->nibble	= PLIP_NIBBLE_WAIT;
 
 	/* Initialize task queue structures */
-	nl->immediate.next = NULL;
+	INIT_LIST_HEAD(&nl->immediate.list);
 	nl->immediate.sync = 0;
 	nl->immediate.routine = (void (*)(void *))plip_bh;
 	nl->immediate.data = dev;
 
-	nl->deferred.next = NULL;
+	INIT_LIST_HEAD(&nl->deferred.list);
 	nl->deferred.sync = 0;
 	nl->deferred.routine = (void (*)(void *))plip_kick_bh;
 	nl->deferred.data = dev;
 
 	if (dev->irq == -1) {
-		nl->timer.next = NULL;
+		INIT_LIST_HEAD(&nl->timer.list);
 		nl->timer.sync = 0;
 		nl->timer.routine = (void (*)(void *))plip_timer_bh;
 		nl->timer.data = dev;

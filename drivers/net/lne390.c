@@ -50,7 +50,7 @@ static const char *version =
 #include "8390.h"
 
 int lne390_probe(struct net_device *dev);
-int lne390_probe1(struct net_device *dev, int ioaddr);
+static int lne390_probe1(struct net_device *dev, int ioaddr);
 
 static int lne390_open(struct net_device *dev);
 static int lne390_close(struct net_device *dev);
@@ -108,8 +108,10 @@ int __init lne390_probe(struct net_device *dev)
 	unsigned short ioaddr = dev->base_addr;
 	int ret;
 
+	SET_MODULE_OWNER(dev);
+
 	if (ioaddr > 0x1ff) {		/* Check a single specified location. */
-		if (!request_region(ioaddr, LNE390_IO_EXTENT, "lne390"))
+		if (!request_region(ioaddr, LNE390_IO_EXTENT, dev->name))
 			return -EBUSY;
 		ret = lne390_probe1(dev, ioaddr);
 		if (ret)
@@ -128,7 +130,7 @@ int __init lne390_probe(struct net_device *dev)
 
 	/* EISA spec allows for up to 16 slots, but 8 is typical. */
 	for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000) {
-		if (!request_region(ioaddr, LNE390_IO_EXTENT, "lne390"))
+		if (!request_region(ioaddr, LNE390_IO_EXTENT, dev->name))
 			continue;
 		if (lne390_probe1(dev, ioaddr) == 0)
 			return 0;
@@ -138,7 +140,7 @@ int __init lne390_probe(struct net_device *dev)
 	return -ENODEV;
 }
 
-int __init lne390_probe1(struct net_device *dev, int ioaddr)
+static int __init lne390_probe1(struct net_device *dev, int ioaddr)
 {
 	int i, revision, ret;
 	unsigned long eisa_id;
@@ -195,11 +197,11 @@ int __init lne390_probe1(struct net_device *dev, int ioaddr)
 	}
 	printk(" IRQ %d,", dev->irq);
 
-	if (request_irq(dev->irq, ei_interrupt, 0, "lne390", dev)) {
+	if ((ret = request_irq(dev->irq, ei_interrupt, 0, dev->name, dev))) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		kfree(dev->priv);
 		dev->priv = NULL;
-		return -EAGAIN;
+		return ret;
 	}
 
 	if (dev->mem_start == 0) {
@@ -356,7 +358,6 @@ static void lne390_block_output(struct net_device *dev, int count,
 static int lne390_open(struct net_device *dev)
 {
 	ei_open(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -367,21 +368,12 @@ static int lne390_close(struct net_device *dev)
 		printk("%s: Shutting down ethercard.\n", dev->name);
 
 	ei_close(dev);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 #ifdef MODULE
 #define MAX_LNE_CARDS	4	/* Max number of LNE390 cards per module */
-static struct net_device dev_lne[MAX_LNE_CARDS] = {
-	{
-		"",
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
+static struct net_device dev_lne[MAX_LNE_CARDS];
 static int io[MAX_LNE_CARDS];
 static int irq[MAX_LNE_CARDS];
 static int mem[MAX_LNE_CARDS];

@@ -1,9 +1,10 @@
-/* $Id: piggyback.c,v 1.3 2000/03/11 00:22:26 zaitcev Exp $
+/* $Id: piggyback.c,v 1.4 2000/12/05 00:48:57 anton Exp $
    Simple utility to make a single-image install kernel with initial ramdisk
    for Sparc tftpbooting without need to set up nfs.
-   
+
    Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
-   
+   Pete Zaitcev <zaitcev@yahoo.com> endian fixes for cross-compiles, 2000.
+
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 2 of the License, or
@@ -34,6 +35,24 @@
  * as PROM looks for a.out image only.
  */
 
+unsigned short ld2(char *p)
+{
+	return (p[0] << 8) | p[1];
+}
+
+unsigned int ld4(char *p)
+{
+	return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
+}
+
+void st4(char *p, unsigned int x)
+{
+	p[0] = x >> 24;
+	p[1] = x >> 16;
+	p[2] = x >> 8;
+	p[3] = x;
+}
+
 void usage(void)
 {
 	/* fs_img.gz is an image of initial ramdisk. */
@@ -50,7 +69,8 @@ void die(char *str)
 
 int main(int argc,char **argv)
 {
-	char buffer [1024], *q, *r;
+	static char aout_magic[] = { 0x01, 0x03, 0x01, 0x07 };
+	unsigned char buffer[1024], *q, *r;
 	unsigned int i, j, k, start, end, offset;
 	FILE *map;
 	struct stat s;
@@ -74,21 +94,20 @@ int main(int argc,char **argv)
 	}
 	if ((image = open(argv[1],O_RDWR)) < 0) die(argv[1]);
 	if (read(image,buffer,512) != 512) die(argv[1]);
-	if (!memcmp (buffer, "\177ELF", 4)) {
-		unsigned int *p = (unsigned int *)(buffer + *(unsigned int *)(buffer + 28));
-	    
-		i = p[1] + *(unsigned int *)(buffer + 24) - p[2];
+	if (memcmp (buffer, "\177ELF", 4) == 0) {
+		q = buffer + ld4(buffer + 28);
+		i = ld4(q + 4) + ld4(buffer + 24) - ld4(q + 8);
 		if (lseek(image,i,0) < 0) die("lseek");
 		if (read(image,buffer,512) != 512) die(argv[1]);
 		j = 0;
-	} else if (*(unsigned int *)buffer == 0x01030107) {
+	} else if (memcmp(buffer, aout_magic, 4) == 0) {
 		i = j = 32;
 	} else {
 		fprintf (stderr, "Not ELF nor a.out. Don't blame me.\n");
 		exit(1);
 	}
 	k = i;
-	i += ((*(unsigned short *)(buffer + j + 2))<<2) - 512;
+	i += (ld2(buffer + j + 2)<<2) - 512;
 	if (lseek(image,i,0) < 0) die("lseek");
 	if (read(image,buffer,1024) != 1024) die(argv[1]);
 	for (q = buffer, r = q + 512; q < r; q += 4) {
@@ -101,10 +120,12 @@ int main(int argc,char **argv)
 	}
 	offset = i + (q - buffer) + 10;
 	if (lseek(image, offset, 0) < 0) die ("lseek");
-	*(unsigned *)buffer = 0;
-	*(unsigned *)(buffer + 4) = 0x01000000;
-	*(unsigned *)(buffer + 8) = ((end + 32 + 4095) & ~4095);
-	*(unsigned *)(buffer + 12) = s.st_size;
+
+	st4(buffer, 0);
+	st4(buffer + 4, 0x01000000);
+	st4(buffer + 8, (end + 32 + 4095) & ~4095);
+	st4(buffer + 12, s.st_size);
+
 	if (write(image,buffer+2,14) != 14) die (argv[1]);
 	if (lseek(image, k - start + ((end + 32 + 4095) & ~4095), 0) < 0) die ("lseek");
 	if ((tail = open(argv[3],O_RDONLY)) < 0) die(argv[3]);

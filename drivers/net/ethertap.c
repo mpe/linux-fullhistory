@@ -67,6 +67,8 @@ struct net_local
  
 int __init ethertap_probe(struct net_device *dev)
 {
+	SET_MODULE_OWNER(dev);
+
 	memcpy(dev->dev_addr, "\xFE\xFD\x00\x00\x00\x00", 6);
 	if (dev->mem_start & 0xf)
 		ethertap_debug = dev->mem_start & 0x7;
@@ -116,13 +118,9 @@ static int ethertap_open(struct net_device *dev)
 	if (ethertap_debug > 2)
 		printk("%s: Doing ethertap_open()...", dev->name);
 
-	MOD_INC_USE_COUNT;
-
 	lp->nl = netlink_kernel_create(dev->base_addr, ethertap_rx);
-	if (lp->nl == NULL) {
-		MOD_DEC_USE_COUNT;
+	if (lp->nl == NULL)
 		return -ENOBUFS;
-	}
 	netif_start_queue(dev);
 	return 0;
 }
@@ -324,7 +322,6 @@ static int ethertap_close(struct net_device *dev)
 		sock_release(sk->socket);
 	}
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

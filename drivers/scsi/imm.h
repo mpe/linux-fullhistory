@@ -10,7 +10,7 @@
 #ifndef _IMM_H
 #define _IMM_H
 
-#define   IMM_VERSION   "2.04 (for Linux 2.4.0)"
+#define   IMM_VERSION   "2.05 (for Linux 2.4.0)"
 
 /* 
  * 10 Apr 1998 (Good Friday) - Received EN144302 by email from Iomega.
@@ -60,6 +60,9 @@
  *    added CONFIG_SCSI_IZIP_SLOW_CTR option
  *                                                      [2.03]
  *  Fix kernel panic on scsi timeout.		20Aug00 [2.04]
+ *
+ *  Avoid io_request_lock problems.
+ *  John Cavan <johncavan@home.com>		16Nov00 [2.05]
  */
 /* ------ END OF USER CONFIGURABLE PARAMETERS ----- */
 

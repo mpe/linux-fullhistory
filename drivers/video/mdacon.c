@@ -77,10 +77,8 @@ static int	mda_last_vc  = 16;
 
 static struct vc_data	*mda_display_fg = NULL;
 
-#ifdef MODULE_PARM
 MODULE_PARM(mda_first_vc, "1-255i");
 MODULE_PARM(mda_last_vc,  "1-255i");
-#endif
 
 /* MDA register values
  */
@@ -200,11 +198,7 @@ void __init mdacon_setup(char *str, int *ints)
 }
 #endif
 
-#ifdef MODULE
-static int mda_detect(void)
-#else
 static int __init mda_detect(void)
-#endif
 {
 	int count=0;
 	u16 *p, p_save;
@@ -287,11 +281,7 @@ static int __init mda_detect(void)
 	return 1;
 }
 
-#ifdef MODULE
-static void mda_initialize(void)
-#else
 static void __init mda_initialize(void)
-#endif
 {
 	write_mda_b(97, 0x00);		/* horizontal total */
 	write_mda_b(80, 0x01);		/* horizontal displayed */
@@ -316,11 +306,7 @@ static void __init mda_initialize(void)
 	outb_p(0x00, mda_gfx_port);
 }
 
-#ifdef MODULE
-static const char *mdacon_startup(void)
-#else
 static const char __init *mdacon_startup(void)
-#endif
 {
 	mda_num_columns = 80;
 	mda_num_lines   = 25;
@@ -605,11 +591,7 @@ const struct consw mda_con = {
 	con_invert_region:	mdacon_invert_region,
 };
 
-#ifdef MODULE
-void mda_console_init(void)
-#else
 void __init mda_console_init(void)
-#endif
 {
 	if (mda_first_vc > mda_last_vc)
 		return;

@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.159 2000/11/06 06:59:04 davem Exp $
+/*  $Id: init.c,v 1.161 2000/12/09 20:16:58 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -111,6 +111,17 @@ void update_mmu_cache(struct vm_area_struct *vma, unsigned long address, pte_t p
 		clear_bit(PG_dcache_dirty, &page->flags);
 	}
 	__update_mmu_cache(vma, address, pte);
+}
+
+/* In arch/sparc64/mm/ultra.S */
+extern void __flush_icache_page(unsigned long);
+
+void flush_icache_range(unsigned long start, unsigned long end)
+{
+	unsigned long kaddr;
+
+	for (kaddr = start; kaddr < end; kaddr += PAGE_SIZE)
+		__flush_icache_page(__get_phys(kaddr));
 }
 
 /*

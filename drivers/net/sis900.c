@@ -241,6 +241,7 @@ static int __devinit sis900_probe (struct pci_dev *pci_dev, const struct pci_dev
 	net_dev = init_etherdev(NULL, sizeof(struct sis900_private));
 	if (!net_dev)
 		return -ENOMEM;
+	SET_MODULE_OWNER(net_dev);
 
 	if (!request_region(ioaddr, SIS900_TOTAL_SIZE, net_dev->name)) {
 		printk(KERN_ERR "sis900.c: can't allocate I/O space at 0x%lX\n", ioaddr);
@@ -530,8 +531,7 @@ sis900_open(struct net_device *net_dev)
 	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;
 	long ioaddr = net_dev->base_addr;
 	u8  revision;
-
-	MOD_INC_USE_COUNT;
+	int ret;
 
 	/* Soft reset the chip. */
 	sis900_reset(net_dev);
@@ -541,10 +541,9 @@ sis900_open(struct net_device *net_dev)
 	if (revision == SIS630E_REV || revision == SIS630EA1_REV)
 		sis630e_set_eq(net_dev);
 
-	if (request_irq(net_dev->irq, &sis900_interrupt, SA_SHIRQ, net_dev->name, net_dev)) {
-		MOD_DEC_USE_COUNT;
-		return -EAGAIN;
-	}
+	ret = request_irq(net_dev->irq, &sis900_interrupt, SA_SHIRQ, net_dev->name, net_dev);
+	if (ret)
+		return ret;
 
 	sis900_init_rxfilter(net_dev);
 
@@ -1278,8 +1277,6 @@ sis900_close(struct net_device *net_dev)
 	}
 
 	/* Green! Put the chip in low-power mode. */
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

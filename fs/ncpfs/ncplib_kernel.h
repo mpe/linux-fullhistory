@@ -96,16 +96,14 @@ ncp_ClearPhysicalRecord(struct ncp_server *server,
 			__u32 offset, __u32 length);
 #endif	/* CONFIG_NCPFS_IOCTL_LOCKING */
 
-#ifdef CONFIG_NCPFS_MOUNT_SUBDIR
 int
 ncp_mount_subdir(struct ncp_server *, struct nw_info_struct *,
 			__u8, __u8, __u32);
-#endif	/* CONFIG_NCPFS_MOUNT_SUBDIR */
 
 #ifdef CONFIG_NCPFS_NLS
 
-inline unsigned char ncp__tolower(struct nls_table *, unsigned char);
-inline unsigned char ncp__toupper(struct nls_table *, unsigned char);
+unsigned char ncp__tolower(struct nls_table *, unsigned char);
+unsigned char ncp__toupper(struct nls_table *, unsigned char);
 int ncp__io2vol(struct ncp_server *, unsigned char *, unsigned int *,
 				const unsigned char *, unsigned int, int);
 int ncp__vol2io(struct ncp_server *, unsigned char *, unsigned int *,

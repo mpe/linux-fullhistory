@@ -1,5 +1,6 @@
 /*
- * $Id: mtdchar.c,v 1.7 2000/06/30 15:54:19 dwmw2 Exp $
+ * Almost: $Id: mtdchar.c,v 1.21 2000/12/09 21:15:12 dwmw2 Exp $
+ * (With some of the compatibility for previous kernels taken out)
  *
  * Character-device access to raw MTD devices.
  *
@@ -13,6 +14,20 @@
 #include <linux/mtd/mtd.h>
 #include <linux/malloc.h>
 
+#ifdef CONFIG_DEVFS_FS
+#include <linux/devfs_fs_kernel.h>
+static void mtd_notify_add(struct mtd_info* mtd);
+static void mtd_notify_remove(struct mtd_info* mtd);
+static struct mtd_notifier notifier = {
+	mtd_notify_add,
+	mtd_notify_remove,
+	NULL
+};
+static devfs_handle_t devfs_dir_handle = NULL;
+static devfs_handle_t devfs_rw_handle[MAX_MTD_DEVICES];
+static devfs_handle_t devfs_ro_handle[MAX_MTD_DEVICES];
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,0)
 static loff_t mtd_lseek (struct file *file, loff_t offset, int orig)
 #else
@@ -22,11 +37,11 @@ static int mtd_lseek (struct inode *inode, struct file *file, off_t offset, int 
 	struct mtd_info *mtd=(struct mtd_info *)file->private_data;
 
 	switch (orig) {
-	case 0: 
+	case 0:
 		/* SEEK_SET */
 		file->f_pos = offset;
 		break;
-	case 1: 
+	case 1:
 		/* SEEK_CUR */
 		file->f_pos += offset;
 		break;
@@ -34,11 +49,11 @@ static int mtd_lseek (struct inode *inode, struct file *file, off_t offset, int 
 		/* SEEK_END */
 		file->f_pos =mtd->size + offset;
 		break;
-	default: 
+	default:
 		return -EINVAL;
 	}
 
-	if (file->f_pos < 0) 
+	if (file->f_pos < 0)
 		file->f_pos = 0;
 	else if (file->f_pos >= mtd->size)
 		file->f_pos = mtd->size - 1;
@@ -54,7 +69,7 @@ static int mtd_open(struct inode *inode, struct file *file)
 	int devnum = minor >> 1;
 	struct mtd_info *mtd;
 
-	DEBUG(0, "MTD_open\n");
+	DEBUG(MTD_DEBUG_LEVEL0, "MTD_open\n");
 
 	if (devnum >= MAX_MTD_DEVICES)
 		return -ENODEV;
@@ -86,7 +101,7 @@ static release_t mtd_close(struct inode *inode,
 {
 	struct mtd_info *mtd;
 
-	DEBUG(0, "MTD_close\n");
+	DEBUG(MTD_DEBUG_LEVEL0, "MTD_close\n");
 
 	mtd = (struct mtd_info *)file->private_data;
 	
@@ -115,7 +130,7 @@ static int mtd_read(struct inode *inode,struct file *file, char *buf, int count)
 	int ret=0;
 	char *kbuf;
 	
-	DEBUG(0,"MTD_read\n");
+	DEBUG(MTD_DEBUG_LEVEL0,"MTD_read\n");
 
 	if (FILE_POS + count > mtd->size)
 		count = mtd->size - FILE_POS;
@@ -124,7 +139,7 @@ static int mtd_read(struct inode *inode,struct file *file, char *buf, int count)
 		return 0;
 	
 	/* FIXME: Use kiovec in 2.3 or 2.2+rawio, or at
-	 * least split the IO into smaller chunks. 
+	 * least split the IO into smaller chunks.
 	 */
 	
 	kbuf = vmalloc(count);
@@ -157,7 +172,7 @@ static read_write_t mtd_write(struct inode *inode,struct file *file, const char 
 	size_t retlen;
 	int ret=0;
 
-	DEBUG(0,"MTD_write\n");
+	DEBUG(MTD_DEBUG_LEVEL0,"MTD_write\n");
 	
 	if (FILE_POS == mtd->size)
 		return -ENOSPC;
@@ -208,7 +223,7 @@ static int mtd_ioctl(struct inode *inode, struct file *file,
 	int ret = 0;
 	u_long size;
 	
-	DEBUG(0, "MTD_ioctl\n");
+	DEBUG(MTD_DEBUG_LEVEL0, "MTD_ioctl\n");
 
 	size = (cmd & IOCSIZE_MASK) >> IOCSIZE_SHIFT;
 	if (cmd & IOC_IN) {
@@ -222,8 +237,9 @@ static int mtd_ioctl(struct inode *inode, struct file *file,
 	
 	switch (cmd) {
 	case MEMGETINFO:
-		copy_to_user((struct mtd_info *)arg, mtd,
-			     sizeof(struct mtd_info_user));
+		if (copy_to_user((struct mtd_info *)arg, mtd,
+				 sizeof(struct mtd_info_user)))
+			return -EFAULT;
 		break;
 
 	case MEMERASE:
@@ -238,28 +254,23 @@ static int mtd_ioctl(struct inode *inode, struct file *file,
 			init_waitqueue_head(&waitq);
 
 			memset (erase,0,sizeof(struct erase_info));
-			copy_from_user(&erase->addr, (u_long *)arg,
-				       2 * sizeof(u_long));
+			if (copy_from_user(&erase->addr, (u_long *)arg,
+					   2 * sizeof(u_long))) {
+				kfree(erase);
+				return -EFAULT;
+			}
 			erase->mtd = mtd;
 			erase->callback = mtd_erase_callback;
 			erase->priv = (unsigned long)&waitq;
 			
-			/* FIXME: Allow INTERRUPTIBLE. Which means
-			   not having the wait_queue head on the stack
-			   
-			   Does it? Why? Who wrote this? Was it my alter 
-			   ago - the intelligent one? Or was it the stupid 
-			   one, and now I'm being clever I don't know what
-			   it was on about?
-
-			   dwmw2.
-
-			   It was the intelligent one. If the wq_head is
-			   on the stack, and we leave because we got 
-			   interrupted, then the wq_head is no longer 
-			   there when the callback routine tries to
-			   wake us up --> BOOM!.
-
+			/*
+			  FIXME: Allow INTERRUPTIBLE. Which means
+			  not having the wait_queue head on the stack.
+			  
+			  If the wq_head is on the stack, and we
+			  leave because we got interrupted, then the
+			  wq_head is no longer there when the
+			  callback routine tries to wake us up.
 			*/
 			current->state = TASK_UNINTERRUPTIBLE;
 			add_wait_queue(&waitq, &wait);
@@ -281,7 +292,8 @@ static int mtd_ioctl(struct inode *inode, struct file *file,
 		void *databuf;
 		ssize_t retlen;
 		
-		copy_from_user(&buf, (struct mtd_oob_buf *)arg, sizeof(struct mtd_oob_buf));
+		if (copy_from_user(&buf, (struct mtd_oob_buf *)arg, sizeof(struct mtd_oob_buf)))
+			return -EFAULT;
 		
 		if (buf.length > 0x4096)
 			return -EINVAL;
@@ -298,11 +310,13 @@ static int mtd_ioctl(struct inode *inode, struct file *file,
 		if (!databuf)
 			return -ENOMEM;
 		
-		copy_from_user(databuf, buf.ptr, buf.length);
+		if (copy_from_user(databuf, buf.ptr, buf.length))
+			return -EFAULT;
 
 		ret = (mtd->write_oob)(mtd, buf.start, buf.length, &retlen, databuf);
 
-		copy_to_user((void *)arg + sizeof(loff_t), &retlen, sizeof(ssize_t));
+		if (copy_to_user((void *)arg + sizeof(loff_t), &retlen, sizeof(ssize_t)))
+			ret = -EFAULT;
 
 		kfree(databuf);
 		break;
@@ -315,7 +329,8 @@ static int mtd_ioctl(struct inode *inode, struct file *file,
 		void *databuf;
 		ssize_t retlen;
 
-		copy_from_user(&buf, (struct mtd_oob_buf *)arg, sizeof(struct mtd_oob_buf));
+		if (copy_from_user(&buf, (struct mtd_oob_buf *)arg, sizeof(struct mtd_oob_buf)))
+			return -EFAULT;
 		
 		if (buf.length > 0x4096)
 			return -EINVAL;
@@ -334,19 +349,42 @@ static int mtd_ioctl(struct inode *inode, struct file *file,
 		
 		ret = (mtd->read_oob)(mtd, buf.start, buf.length, &retlen, databuf);
 
-		copy_to_user((void *)arg + sizeof(loff_t), &retlen, sizeof(ssize_t));
-
-		if (retlen)
-			copy_to_user(buf.ptr, databuf, retlen);
-
+		if (copy_to_user((void *)arg + sizeof(loff_t), &retlen, sizeof(ssize_t)))
+			ret = -EFAULT;
+		else if (retlen && copy_to_user(buf.ptr, databuf, retlen))
+			ret = -EFAULT;
+		
 		kfree(databuf);
 		break;
 	}
-			     
-			     
-		
-		
 
+	case MEMLOCK:
+	{
+		unsigned long adrs[2];
+
+		if (copy_from_user(adrs ,(void *)arg, 2* sizeof(unsigned long)))
+			return -EFAULT;
+
+		if (!mtd->lock)
+			ret = -EOPNOTSUPP;
+		else
+			ret = mtd->lock(mtd, adrs[0], adrs[1]);
+	}
+
+	case MEMUNLOCK:
+	{
+		unsigned long adrs[2];
+
+		if (copy_from_user(adrs, (void *)arg, 2* sizeof(unsigned long)))
+			return -EFAULT;
+
+		if (!mtd->unlock)
+			ret = -EOPNOTSUPP;
+		else
+			ret = mtd->unlock(mtd, adrs[0], adrs[1]);
+	}
+
+		
 	default:
 	  printk("Invalid ioctl %x (MEMGETINFO = %x)\n",cmd, MEMGETINFO);
 		ret = -EINVAL;
@@ -366,31 +404,84 @@ static struct file_operations mtd_fops = {
 };
 
 
-#if LINUX_VERSION_CODE < 0x20300
-#ifdef MODULE
+#ifdef CONFIG_DEVFS_FS
+/* Notification that a new device has been added. Create the devfs entry for
+ * it. */
+
+static void mtd_notify_add(struct mtd_info* mtd)
+{
+	char name[8];
+
+	if (!mtd)
+		return;
+
+	sprintf(name, "%d", mtd->index);
+	devfs_rw_handle[mtd->index] = devfs_register(devfs_dir_handle, name,
+			DEVFS_FL_DEFAULT, MTD_CHAR_MAJOR, mtd->index*2,
+			S_IFCHR | S_IRUGO | S_IWUGO,
+			&mtd_fops, NULL);
+
+	sprintf(name, "%dro", mtd->index);
+	devfs_ro_handle[mtd->index] = devfs_register(devfs_dir_handle, name,
+			DEVFS_FL_DEFAULT, MTD_CHAR_MAJOR, mtd->index*2+1,
+			S_IFCHR | S_IRUGO | S_IWUGO,
+			&mtd_fops, NULL);
+}
+
+static void mtd_notify_remove(struct mtd_info* mtd)
+{
+	if (!mtd)
+		return;
+
+	devfs_unregister(devfs_rw_handle[mtd->index]);
+	devfs_unregister(devfs_ro_handle[mtd->index]);
+}
+#endif
+
+#if LINUX_VERSION_CODE < 0x20212 && defined(MODULE)
 #define init_mtdchar init_module
 #define cleanup_mtdchar cleanup_module
-#endif
 #endif
 
 mod_init_t init_mtdchar(void)
 {
-	
-	if (register_chrdev(MTD_CHAR_MAJOR,"mtd",&mtd_fops)) {
+#ifdef CONFIG_DEVFS_FS
+	int i;
+	char name[8];
+	struct mtd_info* mtd;
+
+	if (devfs_register_chrdev(MTD_CHAR_MAJOR, "mtd", &mtd_fops))
+	{
 		printk(KERN_NOTICE "Can't allocate major number %d for Memory Technology Devices.\n",
 		       MTD_CHAR_MAJOR);
 		return -EAGAIN;
 	}
+
+	devfs_dir_handle = devfs_mk_dir(NULL, "mtd", NULL);
+
+	register_mtd_user(&notifier);
+#else
+	if (register_chrdev(MTD_CHAR_MAJOR, "mtd", &mtd_fops))
+	{
+		printk(KERN_NOTICE "Can't allocate major number %d for Memory Technology Devices.\n",
+		       MTD_CHAR_MAJOR);
+		return -EAGAIN;
+	}
+#endif
 
 	return 0;
 }
 
 mod_exit_t cleanup_mtdchar(void)
 {
-	unregister_chrdev(MTD_CHAR_MAJOR,"mtd");
+#ifdef CONFIG_DEVFS_FS
+	unregister_mtd_user(&notifier);
+	devfs_unregister(devfs_dir_handle);
+	devfs_unregister_chrdev(MTD_CHAR_MAJOR, "mtd");
+#else
+	unregister_chrdev(MTD_CHAR_MAJOR, "mtd");
+#endif
 }
 
-#if LINUX_VERSION_CODE > 0x20300
 module_init(init_mtdchar);
 module_exit(cleanup_mtdchar);
-#endif

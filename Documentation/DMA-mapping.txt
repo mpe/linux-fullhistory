@@ -341,7 +341,7 @@ to use the pci_dma_sync_*() interfaces.
 			struct my_card_header *hp;
 
 			/* Examine the header to see if we wish
-			 * to except the data.  But synchronize
+			 * to accept the data.  But synchronize
 			 * the DMA transfer with the CPU first
 			 * so that we see updated contents.
 			 */

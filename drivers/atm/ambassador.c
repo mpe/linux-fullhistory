@@ -2397,7 +2397,7 @@ static int __init amb_probe (void) {
       
 #ifdef FILL_RX_POOLS_IN_BH
       // initialise bottom half
-      dev->bh.next = 0;
+      INIT_LIST_HEAD(&dev->bh.list);
       dev->bh.sync = 0;
       dev->bh.routine = (void (*)(void *)) fill_rx_pools;
       dev->bh.data = dev;

@@ -57,7 +57,7 @@ static unsigned int hppclan_portlist[] __initdata =
 #define HP_16BSTOP_PG	0xFF	/* Same, for 16 bit cards. */
 
 int hp_probe(struct net_device *dev);
-int hp_probe1(struct net_device *dev, int ioaddr);
+static int hp_probe1(struct net_device *dev, int ioaddr);
 
 static int hp_open(struct net_device *dev);
 static int hp_close(struct net_device *dev);
@@ -83,7 +83,9 @@ static char irqmap[16] __initdata= { 0, 0, 4, 6, 8,10, 0,14, 0, 4, 2,12,0,0,0,0}
 int __init hp_probe(struct net_device *dev)
 {
 	int i;
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
+
+	SET_MODULE_OWNER(dev);
 
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return hp_probe1(dev, base_addr);
@@ -97,14 +99,14 @@ int __init hp_probe(struct net_device *dev)
 	return -ENODEV;
 }
 
-int __init hp_probe1(struct net_device *dev, int ioaddr)
+static int __init hp_probe1(struct net_device *dev, int ioaddr)
 {
 	int i, retval, board_id, wordmode;
 	const char *name;
 	static unsigned version_printed;
 
 	if (!request_region(ioaddr, HP_IO_EXTENT, dev->name))
-		return -ENODEV;
+		return -EBUSY;
 
 	/* Check for the HP physical address, 08 00 09 xx xx xx. */
 	/* This really isn't good enough: we may pick up HP LANCE boards
@@ -206,7 +208,6 @@ static int
 hp_open(struct net_device *dev)
 {
 	ei_open(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -214,7 +215,6 @@ static int
 hp_close(struct net_device *dev)
 {
 	ei_close(dev);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -373,17 +373,9 @@ hp_init_card(struct net_device *dev)
 
 #ifdef MODULE
 #define MAX_HP_CARDS	4	/* Max number of HP cards per module */
-static struct net_device dev_hp[MAX_HP_CARDS] = {
-	{
-		"",
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
-static int io[MAX_HP_CARDS] = { 0, };
-static int irq[MAX_HP_CARDS]  = { 0, };
+static struct net_device dev_hp[MAX_HP_CARDS];
+static int io[MAX_HP_CARDS];
+static int irq[MAX_HP_CARDS];
 
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_HP_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_HP_CARDS) "i");

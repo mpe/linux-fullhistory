@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: reassembly.c,v 1.20 2000/11/28 13:48:03 davem Exp $
+ *	$Id: reassembly.c,v 1.22 2000/12/08 17:41:54 davem Exp $
  *
  *	Based on: net/ipv4/ip_fragment.c
  *
@@ -78,7 +78,6 @@ struct frag_queue
 	struct sk_buff		*fragments;
 	int			len;
 	int			meat;
-	struct net_device	*dev;
 	int			iif;
 	__u8			last_in;	/* has first/last segment arrived? */
 #define COMPLETE		4
@@ -476,8 +475,8 @@ static void ip6_frag_queue(struct frag_queue *fq, struct sk_buff *skb,
 	else
 		fq->fragments = skb;
 
-	fq->dev = skb->dev;
 	fq->iif = skb->dev->ifindex;
+	skb->dev = NULL;
 	fq->meat += skb->len;
 	atomic_add(skb->truesize, &ip6_frag_mem);
 
@@ -507,7 +506,8 @@ err:
  *	queue is eligible for reassembly i.e. it is not COMPLETE,
  *	the last and the first frames arrived and all the bits are here.
  */
-static u8* ip6_frag_reasm(struct frag_queue *fq, struct sk_buff **skb_in)
+static u8 *ip6_frag_reasm(struct frag_queue *fq, struct sk_buff **skb_in,
+			  struct net_device *dev)
 {
 	struct sk_buff *fp, *head = fq->fragments;
 	struct sk_buff *skb;
@@ -541,7 +541,7 @@ static u8* ip6_frag_reasm(struct frag_queue *fq, struct sk_buff **skb_in)
 
 	skb->mac.raw = skb->data;
 	skb->nh.ipv6h = (struct ipv6hdr *) skb->data;
-	skb->dev = fq->dev;
+	skb->dev = dev;
 	skb->protocol = __constant_htons(ETH_P_IPV6);
 	skb->pkt_type = head->pkt_type;
 	FRAG6_CB(skb)->h = FRAG6_CB(head)->h;
@@ -579,6 +579,7 @@ u8* ipv6_reassembly(struct sk_buff **skbp, __u8 *nhptr)
 {
 	struct sk_buff *skb = *skbp; 
 	struct frag_hdr *fhdr = (struct frag_hdr *) (skb->h.raw);
+	struct net_device *dev = skb->dev;
 	struct frag_queue *fq;
 	struct ipv6hdr *hdr;
 
@@ -616,7 +617,7 @@ u8* ipv6_reassembly(struct sk_buff **skbp, __u8 *nhptr)
 
 		if (fq->last_in == (FIRST_IN|LAST_IN) &&
 		    fq->meat == fq->len)
-			ret = ip6_frag_reasm(fq, skbp);
+			ret = ip6_frag_reasm(fq, skbp, dev);
 
 		spin_unlock(&fq->lock);
 		fq_put(fq);

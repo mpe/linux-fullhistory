@@ -1,4 +1,4 @@
-// $Id: octagon-5066.c,v 1.10 2000/07/13 14:04:23 dwmw2 Exp $
+// $Id: octagon-5066.c,v 1.12 2000/11/27 08:50:22 dwmw2 Exp $
 /* ######################################################################
 
    Octagon 5066 MTD Driver. 
@@ -151,32 +151,32 @@ static void oct5066_copy_to(struct map_info *map, unsigned long to, const void *
 
 static struct map_info oct5066_map[2] = {
 	{
-		"Octagon 5066 Socket",
-		512 * 1024,
-		1,
-		oct5066_read8,
-		oct5066_read16,
-		oct5066_read32,
-		oct5066_copy_from,
-		oct5066_write8,
-		oct5066_write16,
-		oct5066_write32,
-		oct5066_copy_to,
-		1<<6
+		name: "Octagon 5066 Socket",
+		size: 512 * 1024,
+		buswidth: 1,
+		read8: oct5066_read8,
+		read16: oct5066_read16,
+		read32: oct5066_read32,
+		copy_from: oct5066_copy_from,
+		write8: oct5066_write8,
+		write16: oct5066_write16,
+		write32: oct5066_write32,
+		copy_to: oct5066_copy_to,
+		map_priv_1: 1<<6
 	},
 	{
-		"Octagon 5066 Internal Flash",
-		2 * 1024 * 1024,
-		1,
-		oct5066_read8,
-		oct5066_read16,
-		oct5066_read32,
-		oct5066_copy_from,
-		oct5066_write8,
-		oct5066_write16,
-		oct5066_write32,
-		oct5066_copy_to,
-		2<<6
+		name: "Octagon 5066 Internal Flash",
+		size: 2 * 1024 * 1024,
+		buswidth: 1,
+		read8: oct5066_read8,
+		read16: oct5066_read16,
+		read32: oct5066_read32,
+		copy_from: oct5066_copy_from,
+		write8: oct5066_write8,
+		write16: oct5066_write16,
+		write32: oct5066_write32,
+		copy_to: oct5066_copy_to,
+		map_priv_1: 2<<6
 	}
 };
 
@@ -213,12 +213,9 @@ static int __init OctProbe()
    return 0;
 }
 
-#if LINUX_VERSION_CODE < 0x20300
-#ifdef MODULE
+#if LINUX_VERSION_CODE < 0x20212 && defined(MODULE)
 #define init_oct5066 init_module
 #define cleanup_oct5066 cleanup_module
-#endif
-#define __exit
 #endif
 
 void cleanup_oct5066(void)
@@ -284,7 +281,5 @@ int __init init_oct5066(void)
 	return 0;
 }
 
-#if LINUX_VERSION_CODE > 0x20300
 module_init(init_oct5066);
 module_exit(cleanup_oct5066);
-#endif

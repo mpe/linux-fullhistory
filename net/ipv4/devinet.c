@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.38 2000/08/19 23:22:56 davem Exp $
+ *	Version: $Id: devinet.c,v 1.39 2000/12/10 22:24:11 davem Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License

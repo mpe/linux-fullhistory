@@ -1,14 +1,10 @@
 /*
- * $Id: mtdcore.c,v 1.13 2000/07/13 14:27:37 dwmw2 Exp $
+ * $Id: mtdcore.c,v 1.27 2000/12/10 01:10:09 dwmw2 Exp $
  *
- * Core registration and callback routines for MTD 
+ * Core registration and callback routines for MTD
  * drivers and users.
  *
  */
-
-#ifdef MTD_DEBUG
-#define DEBUGLVL debug
-#endif
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -29,67 +25,12 @@
 
 #include <linux/mtd/mtd.h>
 
-#ifdef MTD_DEBUG
-static int debug = MTD_DEBUG;
-MODULE_PARM(debug, "i");
-#endif
-
-/* Init code required for 2.2 kernels */
-
-#if LINUX_VERSION_CODE < 0x20300
-
-#ifdef CONFIG_MTD_DOC1000
-extern int init_doc1000(void);
-#endif
-#ifdef CONFIG_MTD_DOCPROBE
-extern int init_doc(void);
-#endif
-#ifdef CONFIG_MTD_PHYSMAP
-extern int init_physmap(void);
-#endif
-#ifdef CONFIG_MTD_RPXLITE
-extern int init_rpxlite(void);
-#endif
-#ifdef CONFIG_MTD_OCTAGON
-extern int init_octagon5066(void);
-#endif
-#ifdef CONFIG_MTD_PNC2000
-extern int init_pnc2000(void);
-#endif
-#ifdef CONFIG_MTD_VMAX
-extern int init_vmax301(void);
-#endif
-#ifdef CONFIG_MTD_MIXMEM
-extern int init_mixmem(void);
-#endif
-#ifdef CONFIG_MTD_PMC551
-extern int init_pmc551(void);
-#endif
-#ifdef CONFIG_MTD_NORA
-extern int init_nora(void);
-#endif
-#ifdef CONFIG_FTL
-extern int init_ftl(void);
-#endif
-#ifdef CONFIG_NFTL
-extern int init_nftl(void);
-#endif
-#ifdef CONFIG_MTD_BLOCK
-extern int init_mtdblock(void);
-#endif
-#ifdef CONFIG_MTD_CHAR
-extern int init_mtdchar(void);
-#endif
-
-#endif /* LINUX_VERSION_CODE < 0x20300 */
-
-
 static DECLARE_MUTEX(mtd_table_mutex);
 static struct mtd_info *mtd_table[MAX_MTD_DEVICES];
 static struct mtd_notifier *mtd_notifiers = NULL;
 
 /**
- *	add_mtd_device - register an MTD device 
+ *	add_mtd_device - register an MTD device
  *	@mtd: pointer to new MTD device info structure
  *
  *	Add a device to the list of MTD devices present in the system, and
@@ -110,6 +51,7 @@ int add_mtd_device(struct mtd_info *mtd)
 			struct mtd_notifier *not=mtd_notifiers;
 
 			mtd_table[i] = mtd;
+			mtd->index = i;
 			DEBUG(0, "mtd: Giving out device %d to %s\n",i, mtd->name);
 			while (not)
 			{
@@ -126,7 +68,7 @@ int add_mtd_device(struct mtd_info *mtd)
 }
 
 /**
- *	del_mtd_device - unregister an MTD device 
+ *	del_mtd_device - unregister an MTD device
  *	@mtd: pointer to MTD device info structure
  *
  *	Remove a device from the list of MTD devices present in the system,
@@ -194,7 +136,7 @@ void register_mtd_user (struct mtd_notifier *new)
  *	@new: pointer to notifier info structure
  *
  *	Removes a callback function pair from the list of 'users' to be
- *	notified upon addition or removal of MTD devices. Causes the 
+ *	notified upon addition or removal of MTD devices. Causes the
  *	'remove' callback to be immediately invoked for each MTD device
  *	currently present in the system.
  */
@@ -232,7 +174,7 @@ int unregister_mtd_user (struct mtd_notifier *old)
  *	@mtd: last known address of the required MTD device
  *	@num: internal device number of the required MTD device
  *
- *	Given a number and NULL address, return the num'th entry in the device 
+ *	Given a number and NULL address, return the num'th entry in the device
  *	table, if any.	Given an address and num == -1, search the device table
  *	for a device with that address and return if it's still present. Given
  *	both, return the num'th driver only if its address matches. Return NULL
@@ -313,10 +255,10 @@ static inline int mtd_proc_info (char *buf, int i)
 {
 	struct mtd_info *this = mtd_table[i];
 
-	if (!this) 
+	if (!this)
 		return 0;
 
-	return sprintf(buf, "mtd%d: %8.8lx \"%s\"\n", i, this->size, 
+	return sprintf(buf, "mtd%d: %8.8lx \"%s\"\n", i, this->size,
 		       this->name);
 }
 
@@ -330,7 +272,7 @@ static int mtd_read_proc ( char *page, char **start, off_t off,int count
 {
 	int len = 0, l, i;
         off_t   begin = 0;
-      
+
 	down(&mtd_table_mutex);
 
         for (i=0; i< MAX_MTD_DEVICES; i++) {
@@ -374,79 +316,13 @@ struct proc_dir_entry mtd_proc_entry = {
 /*====================================================================*/
 /* Init code */
 
-#if LINUX_VERSION_CODE < 0x20300
-
-static inline  void init_others(void) 
-{
-	/* Shedloads of calls to init functions of all the
-	 * other drivers and users of MTD, which we can
-	 * ditch in 2.3 because of the sexy new way of 
-	 * finding init routines.
-	 */
-#ifdef CONFIG_MTD_DOC1000
-	init_doc1000();
-#endif
-#ifdef CONFIG_MTD_DOCPROBE
-	init_doc(); /* This covers both the DiskOnChip 2000 
-		     * and the DiskOnChip Millennium. 
-		     * Theoretically all other DiskOnChip
-		     * devices too. */
-#endif
-#ifdef CONFIG_MTD_PHYSMAP
-	init_physmap();
-#endif
-#ifdef CONFIG_MTD_RPXLITE
-	init_rpxlite();
-#endif
-#ifdef CONFIG_MTD_OCTAGON
-	init_octagon5066();
-#endif
-#ifdef CONFIG_MTD_PNC2000
-	init_pnc2000();
-#endif
-#ifdef CONFIG_MTD_VMAX
-	init_vmax301();
-#endif
-#ifdef CONFIGF_MTD_MIXMEM
-	init_mixmem();
-#endif
-#ifdef CONFIG_MTD_PMC551
-	init_pmc551();
-#endif
-#ifdef CONFIG_MTD_NORA
-	init_nora();
-#endif
-#ifdef CONFIG_MTD_MTDRAM
-	init_mtdram();
-#endif
-#ifdef CONFIG_FTL
-	init_ftl();
-#endif
-#ifdef CONFIG_NFTL
-	init_nftl();
-#endif
-#ifdef CONFIG_MTD_BLOCK
-	init_mtdblock();
-#endif
-#ifdef CONFIG_MTD_CHAR
-	init_mtdchar();
-#endif
-}
-
-#ifdef MODULE
+#if  LINUX_VERSION_CODE < 0x20212 && defined(MODULE)
 #define init_mtd init_module
 #define cleanup_mtd cleanup_module
 #endif
 
-#endif /* LINUX_VERSION_CODE < 0x20300 */
-
 mod_init_t init_mtd(void)
 {
-	int i;
-	DEBUG(1, "INIT_MTD:\n");	
-	for (i=0; i<MAX_MTD_DEVICES; i++)
-		mtd_table[i]=NULL;
-
 #ifdef CONFIG_PROC_FS
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,0)
 	if ((proc_mtd = create_proc_entry( "mtd", 0, 0 )))
@@ -454,12 +330,12 @@ mod_init_t init_mtd(void)
 #else
         proc_register_dynamic(&proc_root,&mtd_proc_entry);
 #endif
-
 #endif
 
-#if LINUX_VERSION_CODE < 0x20300
-	init_others();
+#if LINUX_VERSION_CODE < 0x20212
+	init_mtd_devices();
 #endif
+
 #ifdef CONFIG_PM
 	mtd_pm_dev = pm_register(PM_UNKNOWN_DEV, 0, mtd_pm_callback);
 #endif
@@ -468,13 +344,13 @@ mod_init_t init_mtd(void)
 
 mod_exit_t cleanup_mtd(void)
 {
-	unregister_chrdev(MTD_CHAR_MAJOR, "mtd");
 #ifdef CONFIG_PM
 	if (mtd_pm_dev) {
 		pm_unregister(mtd_pm_dev);
 		mtd_pm_dev = NULL;
 	}
 #endif
+
 #ifdef CONFIG_PROC_FS
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,0)
         if (proc_mtd)
@@ -484,10 +360,8 @@ mod_exit_t cleanup_mtd(void)
 #endif
 #endif
 }
-      
-#if LINUX_VERSION_CODE > 0x20300
+
 module_init(init_mtd);
 module_exit(cleanup_mtd);
-#endif
 
 

@@ -91,7 +91,7 @@ struct smc_mca_adapters_t {
 	char *name;
 };
 
-const struct smc_mca_adapters_t smc_mca_adapters[] = {
+static const struct smc_mca_adapters_t smc_mca_adapters[] = {
     { 0x61c8, "SMC Ethercard PLUS Elite/A BNC/AUI (WD8013EP/A)" },
     { 0x61c9, "SMC Ethercard PLUS Elite/A UTP/AUI (WD8013WP/A)" },
     { 0x6fc0, "WD Ethercard PLUS/A (WD8003E/A or WD8003ET/A)" },
@@ -114,12 +114,14 @@ int __init ultramca_probe(struct net_device *dev)
 	int adapter = 0;
 	int tbase = 0;
 	int tirq = 0;
-	int base_addr = dev ? dev->base_addr : 0;
-	int irq = dev ? dev->irq : 0;
+	int base_addr = dev->base_addr;
+	int irq = dev->irq;
 
 	if (!MCA_bus) {
 		return -ENODEV;
 	}
+
+	SET_MODULE_OWNER(dev);
 
 	if (base_addr || irq) {
 		printk(KERN_INFO "Probing for SMC MCA adapter");
@@ -340,7 +342,6 @@ static int ultramca_open(struct net_device *dev)
 	 */
 
 	ei_open(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -424,8 +425,6 @@ static int ultramca_close_card(struct net_device *dev)
          * "just in case"...
 	 */
 
-	MOD_DEC_USE_COUNT;
-
 	return 0;
 }
 
@@ -435,18 +434,9 @@ static int ultramca_close_card(struct net_device *dev)
 
 #define MAX_ULTRAMCA_CARDS 4	/* Max number of Ultra cards per module */
 
-static struct net_device dev_ultra[MAX_ULTRAMCA_CARDS] =
-{
-	{
-		"",
-	        0, 0, 0, 0,
-	        0, 0,
-	        0, 0, 0, NULL, NULL
-	},
-};
-
-static int io[MAX_ULTRAMCA_CARDS] = { 0, };
-static int irq[MAX_ULTRAMCA_CARDS]  = { 0, };
+static struct net_device dev_ultra[MAX_ULTRAMCA_CARDS];
+static int io[MAX_ULTRAMCA_CARDS];
+static int irq[MAX_ULTRAMCA_CARDS];
 
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_ULTRAMCA_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_ULTRAMCA_CARDS) "i");

@@ -140,7 +140,7 @@ if [ "$CONFIG_MWINCHIP3D" = "y" ]; then
 fi
 tristate 'Toshiba Laptop support' CONFIG_TOSHIBA
 
-tristate '/dev/cpu/microcode - Intel P6 CPU microcode support' CONFIG_MICROCODE
+tristate '/dev/cpu/microcode - Intel IA32 CPU microcode support' CONFIG_MICROCODE
 tristate '/dev/cpu/*/msr - Model-specific register support' CONFIG_X86_MSR
 tristate '/dev/cpu/*/cpuid - CPU information support' CONFIG_X86_CPUID
 

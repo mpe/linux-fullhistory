@@ -305,9 +305,6 @@ struct yellowfin_private {
 	   for status. */
 	struct yellowfin_desc rx_ring[RX_RING_SIZE];
 	struct yellowfin_desc tx_ring[TX_RING_SIZE*2];
-	const char *product_name;
-	struct net_device *next_module;
-	void *priv_addr;					/* Unaligned address for kfree */
 	/* The addresses of receive-in-place skbuffs. */
 	struct sk_buff* rx_skbuff[RX_RING_SIZE];
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
@@ -425,8 +422,6 @@ static int yellowfin_open(struct net_device *dev)
 	if (yellowfin_debug > 1)
 		printk(KERN_DEBUG "%s: yellowfin_open() irq %d.\n",
 			   dev->name, dev->irq);
-
-	MOD_INC_USE_COUNT;
 
 	yellowfin_init_ring(dev);
 
@@ -1110,8 +1105,6 @@ static int yellowfin_close(struct net_device *dev)
 			   dev->name, bogus_rx);
 	}
 #endif
-	MOD_DEC_USE_COUNT;
-
 	return 0;
 }
 
@@ -1230,24 +1223,19 @@ static int __devinit yellowfin_init_one(struct pci_dev *pdev,
 	chip_idx = ent->driver_data;
 	flags = chip_info[chip_idx].flags;
 
-	dev = init_etherdev(NULL, 0);
+	dev = init_etherdev(NULL, sizeof(*yp));
 	if (!dev) {
 		printk (KERN_ERR PFX "cannot allocate ethernet device\n");
 		return -ENOMEM;
 	}
+	SET_MODULE_OWNER(dev);
 
-	dev->priv = kmalloc(sizeof(*yp) + PRIV_ALIGN, GFP_KERNEL);
-	if (!dev->priv)
-		goto err_out_free_netdev;
-	yp = (void *)(((long)dev->priv + PRIV_ALIGN) & ~PRIV_ALIGN);
-	memset(yp, 0, sizeof(*yp));
-	yp->priv_addr = dev->priv;	/* store real addr for kfree */
-	dev->priv = yp;			/* use aligned addr */
+	yp = dev->priv;
 
 	if (!request_region (pci_resource_start (pdev, 0),
 			     YELLOWFIN_SIZE, YELLOWFIN_MODULE_NAME)) {
 		printk (KERN_ERR PFX "cannot obtain I/O port region\n");
-		goto err_out_free_priv;
+		goto err_out_free_netdev;
 	}
 	if (!request_mem_region (pci_resource_start (pdev, 1),
 			         YELLOWFIN_SIZE, YELLOWFIN_MODULE_NAME)) {
@@ -1255,8 +1243,8 @@ static int __devinit yellowfin_init_one(struct pci_dev *pdev,
 		goto err_out_free_pio_region;
 	}
 	
-	/* XXX check enable_device for failure */
-	pci_enable_device (pdev);
+	if (pci_enable_device (pdev))
+		goto err_out_free_mmio_region;
 	pci_set_master (pdev);
 
 #ifdef USE_IO_OPS
@@ -1264,7 +1252,8 @@ static int __devinit yellowfin_init_one(struct pci_dev *pdev,
 #else
 	real_ioaddr = ioaddr = pci_resource_start (pdev, 1);
 	ioaddr = (long) ioremap(ioaddr, YELLOWFIN_SIZE);
-	/* XXX check for failure */
+	if (!ioaddr)
+		goto err_out_free_mmio_region;
 #endif
 	irq = pdev->irq;
 
@@ -1348,10 +1337,10 @@ static int __devinit yellowfin_init_one(struct pci_dev *pdev,
 	
 	return 0;
 
+err_out_free_mmio_region:
+	release_mem_region (pci_resource_start (pdev, 1), YELLOWFIN_SIZE);
 err_out_free_pio_region:
 	release_region (pci_resource_start (pdev, 0), YELLOWFIN_SIZE);
-err_out_free_priv:
-	kfree (dev->priv);
 err_out_free_netdev:
 	unregister_netdev (dev);
 	kfree (dev);
@@ -1363,23 +1352,18 @@ static void __devexit yellowfin_remove_one (struct pci_dev *pdev)
 	struct net_device *dev = pdev->driver_data;
 	struct yellowfin_private *np;
 
-	if (!dev) {
-		printk (KERN_ERR "remove non-existent device\n");
-		return;
-	}
-	np = (struct yellowfin_private *) dev->priv;
+	if (!dev)
+		BUG();
+	np = dev->priv;
 
 	unregister_netdev (dev);
 
-#ifdef USE_IO_OPS
 	release_region (dev->base_addr, YELLOWFIN_SIZE);
-#else
-	iounmap ((void *) dev->base_addr);
 	release_mem_region (dev->base_addr, YELLOWFIN_SIZE);
-#endif
 
-	if (np->priv_addr)
-		kfree (np->priv_addr);
+#ifndef USE_IO_OPS
+	iounmap ((void *) dev->base_addr);
+#endif
 
 	kfree (dev);
 }
@@ -1398,11 +1382,7 @@ static int __init yellowfin_init (void)
 	if (debug)					/* Emit version even if no cards detected. */
 		printk(KERN_INFO "%s", version);
 
-	if (pci_register_driver (&yellowfin_driver) > 0)
-		return 0;
-
-	pci_unregister_driver (&yellowfin_driver);
-	return -ENODEV;
+	return pci_module_init (&yellowfin_driver);
 }
 
 

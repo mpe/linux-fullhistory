@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.221 2000/11/28 17:04:10 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.222 2000/12/08 17:15:53 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1648,6 +1648,8 @@ process:
 
 	if (sk->state == TCP_TIME_WAIT)
 		goto do_time_wait;
+
+	skb->dev = NULL;
 
 	bh_lock_sock(sk);
 	ret = 0;

@@ -179,7 +179,7 @@ static int md_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
 		return mddev->pers->make_request(mddev, rw, bh);
 	else {
 		buffer_IO_error(bh);
-		return -1;
+		return 0;
 	}
 }
 
@@ -203,6 +203,7 @@ static mddev_t * alloc_mddev (kdev_t dev)
 	init_MUTEX(&mddev->resync_sem);
 	MD_INIT_LIST_HEAD(&mddev->disks);
 	MD_INIT_LIST_HEAD(&mddev->all_mddevs);
+	atomic_set(&mddev->active, 0);
 
 	/*
 	 * The 'base' mddev is the one with data NULL.
@@ -656,32 +657,25 @@ static void unbind_rdev_from_array (mdk_rdev_t * rdev)
 static int lock_rdev (mdk_rdev_t *rdev)
 {
 	int err = 0;
+	struct block_device *bdev;
 
-	/*
-	 * First insert a dummy inode.
-	 */
-	if (rdev->inode)
-		MD_BUG();
-	rdev->inode = get_empty_inode();
-	if (!rdev->inode)
+	bdev = bdget(rdev->dev);
+	if (bdev == NULL)
 		return -ENOMEM;
- 	/*
-	 * we dont care about any other fields
-	 */
-	rdev->inode->i_dev = rdev->inode->i_rdev = rdev->dev;
-	insert_inode_hash(rdev->inode);
-
-	memset(&rdev->filp, 0, sizeof(rdev->filp));
-	rdev->filp.f_mode = 3; /* read write */
+	err = blkdev_get(bdev, FMODE_READ|FMODE_WRITE, 0, BDEV_FILE);
+	if (!err) {
+		rdev->bdev = bdev;
+	}
 	return err;
 }
 
 static void unlock_rdev (mdk_rdev_t *rdev)
 {
-	if (!rdev->inode)
+	if (!rdev->bdev)
 		MD_BUG();
-	iput(rdev->inode);
-	rdev->inode = NULL;
+	blkdev_put(rdev->bdev, BDEV_FILE);
+	bdput(rdev->bdev);
+	rdev->bdev = NULL;
 }
 
 static void export_rdev (mdk_rdev_t * rdev)
@@ -1149,7 +1143,7 @@ static int md_import_device (kdev_t newdev, int on_disk)
 
 abort_free:
 	if (rdev->sb) {
-		if (rdev->inode)
+		if (rdev->bdev)
 			unlock_rdev(rdev);
 		free_disk_sb(rdev);
 	}
@@ -1718,12 +1712,20 @@ out:
 
 #define STILL_MOUNTED KERN_WARNING \
 "md: md%d still mounted.\n"
+#define	STILL_IN_USE \
+"md: md%d still in use.\n"
 
 static int do_md_stop (mddev_t * mddev, int ro)
 {
 	int err = 0, resync_interrupted = 0;
 	kdev_t dev = mddev_to_kdev(mddev);
 
+ 	if (atomic_read(&mddev->active)>1) {
+ 		printk(STILL_IN_USE, mdidx(mddev));
+ 		OUT(-EBUSY);
+ 	}
+ 
+ 	/* this shouldn't be needed as above would have fired */
 	if (!ro && get_super(dev)) {
 		printk (STILL_MOUNTED, mdidx(mddev));
 		OUT(-EBUSY);
@@ -1859,8 +1861,10 @@ static void autorun_array (mddev_t *mddev)
  * the 'same_array' list. Then order this list based on superblock
  * update time (freshest comes first), kick out 'old' disks and
  * compare superblocks. If everything's fine then run it.
+ *
+ * If "unit" is allocated, then bump its reference count
  */
-static void autorun_devices (void)
+static void autorun_devices (kdev_t countdev)
 {
 	struct md_list_head candidates;
 	struct md_list_head *tmp;
@@ -1902,6 +1906,12 @@ static void autorun_devices (void)
 			continue;
 		}
 		mddev = alloc_mddev(md_kdev);
+ 		if (mddev == NULL) {
+ 			printk("md: cannot allocate memory for md drive.\n");
+ 			break;
+ 		}
+ 		if (md_kdev == countdev)
+ 			atomic_inc(&mddev->active);
 		printk("created md%d\n", mdidx(mddev));
 		ITERATE_RDEV_GENERIC(candidates,pending,rdev,tmp) {
 			bind_rdev_to_array(rdev, mddev);
@@ -1945,7 +1955,7 @@ static void autorun_devices (void)
 #define AUTORUNNING KERN_INFO \
 "md: auto-running md%d.\n"
 
-static int autostart_array (kdev_t startdev)
+static int autostart_array (kdev_t startdev, kdev_t countdev)
 {
 	int err = -EINVAL, i;
 	mdp_super_t *sb = NULL;
@@ -2002,7 +2012,7 @@ static int autostart_array (kdev_t startdev)
 	/*
 	 * possibly return codes
 	 */
-	autorun_devices();
+	autorun_devices(countdev);
 	return 0;
 
 abort:
@@ -2077,7 +2087,7 @@ int md__init md_run_setup(void)
 			md_list_add(&rdev->pending, &pending_raid_disks);
 		}
 
-		autorun_devices();
+		autorun_devices(-1);
 	}
 
 	dev_cnt = -1; /* make sure further calls to md_autodetect_dev are ignored */
@@ -2607,6 +2617,8 @@ static int md_ioctl (struct inode *inode, struct file *file,
 				err = -ENOMEM;
 				goto abort;
 			}
+			atomic_inc(&mddev->active);
+
 			/*
 			 * alloc_mddev() should possibly self-lock.
 			 */
@@ -2640,7 +2652,7 @@ static int md_ioctl (struct inode *inode, struct file *file,
 			/*
 			 * possibly make it lock the array ...
 			 */
-			err = autostart_array((kdev_t)arg);
+			err = autostart_array((kdev_t)arg, dev);
 			if (err) {
 				printk("autostart %s failed!\n",
 					partition_name((kdev_t)arg));
@@ -2820,14 +2832,26 @@ abort:
 static int md_open (struct inode *inode, struct file *file)
 {
 	/*
-	 * Always succeed
+	 * Always succeed, but increment the usage count
 	 */
+	mddev_t *mddev = kdev_to_mddev(inode->i_rdev);
+	if (mddev)
+		atomic_inc(&mddev->active);
 	return (0);
+}
+
+static int md_release (struct inode *inode, struct file * file)
+{
+	mddev_t *mddev = kdev_to_mddev(inode->i_rdev);
+	if (mddev)
+		atomic_dec(&mddev->active);
+	return 0;
 }
 
 static struct block_device_operations md_fops=
 {
 	open:		md_open,
+	release:	md_release,
 	ioctl:		md_ioctl,
 };
 
@@ -3576,12 +3600,6 @@ static void md_geninit (void)
 	create_proc_read_entry("mdstat", 0, NULL, md_status_read_proc, NULL);
 #endif
 }
-void hsm_init (void);
-void translucent_init (void);
-void linear_init (void);
-void raid0_init (void);
-void raid1_init (void);
-void raid5_init (void);
 
 int md__init md_init (void)
 {
@@ -3617,18 +3635,6 @@ int md__init md_init (void)
 	md_register_reboot_notifier(&md_notifier);
 	raid_table_header = register_sysctl_table(raid_root_table, 1);
 
-#ifdef CONFIG_MD_LINEAR
-	linear_init ();
-#endif
-#ifdef CONFIG_MD_RAID0
-	raid0_init ();
-#endif
-#ifdef CONFIG_MD_RAID1
-	raid1_init ();
-#endif
-#ifdef CONFIG_MD_RAID5
-	raid5_init ();
-#endif
 	md_geninit();
 	return (0);
 }

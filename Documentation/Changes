@@ -185,10 +185,10 @@ PCMCIA (PC Card) support is now partially implemented in the main
 kernel source.  Pay attention when you recompile your kernel ;-).
 Also, be sure to upgrade to the latest pcmcia-cs release.
 
-Intel P6 microcode
-------------------
+Intel IA32 microcode
+--------------------
 
-A driver has been added to allow updating of Intel P6 microcode,
+A driver has been added to allow updating of Intel IA32 microcode,
 accessible as both a devfs regular file and as a normal (misc)
 character device.  If you are not using devfs you may need to:
 
@@ -198,6 +198,13 @@ chmod 0644 /dev/cpu/microcode
 
 as root before you can use this.  You'll probably also want to
 get the user-space microcode_ctl utility to use with this.
+
+If you have compiled the driver as a module you may need to add
+the following line:
+
+alias char-major-10-184 microcode
+
+to your /etc/modules.conf file.
 
 Networking
 ==========

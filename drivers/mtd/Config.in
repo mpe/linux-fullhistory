@@ -1,15 +1,21 @@
 
-# $Id: Config.in,v 1.20 2000/07/13 12:40:46 scote1 Exp $
+# $Id: No. :) $
 
 mainmenu_option next_comment
 comment 'Memory Technology Devices (MTD)'
 
 tristate 'Memory Technology Device (MTD) support' CONFIG_MTD
 
-if [ "$CONFIG_MTD" != "n" ]; then
-   dep_tristate '  M-Systems Disk-On-Chip 1000 support' CONFIG_MTD_DOC1000 $CONFIG_MTD
-   dep_tristate '  M-Systems Disk-On-Chip 2000' CONFIG_MTD_DOC2000 $CONFIG_MTD
-   dep_tristate '  M-Systems Disk-On-Chip Millennium' CONFIG_MTD_DOC2001 $CONFIG_MTD
+if [ "$CONFIG_MTD" = "y" -o "$CONFIG_MTD" = "m" ]; then
+   bool 'Debugging' CONFIG_MTD_DEBUG
+   if [ "$CONFIG_MTD_DEBUG" = "y" ]; then
+      int '  Debugging verbosity (0 = quiet, 3 = noisy)' CONFIG_MTD_DEBUG_VERBOSE 0
+   fi
+
+comment 'Disk-On-Chip Device Drivers'
+   dep_tristate '  M-Systems Disk-On-Chip 1000' CONFIG_MTD_DOC1000 $CONFIG_MTD
+   dep_tristate '  M-Systems Disk-On-Chip 2000 and Millennium' CONFIG_MTD_DOC2000 $CONFIG_MTD
+   dep_tristate '  M-Systems Disk-On-Chip Millennium-only alternative driver' CONFIG_MTD_DOC2001 $CONFIG_MTD
    if [ "$CONFIG_MTD_DOC2001" = "y" -o "$CONFIG_MTD_DOC2000" = "y" ]; then
       define_tristate CONFIG_MTD_DOCPROBE y
    else
@@ -19,6 +25,13 @@ if [ "$CONFIG_MTD" != "n" ]; then
 	 define_tristate CONFIG_MTD_DOCPROBE n
       fi
    fi
+   if [ "$CONFIG_MTD_DOCPROBE" = "y" -o "$CONFIG_MTD_DOCPROBE" = "m" ]; then
+      hex  '    Physical address of DiskOnChip' CONFIG_MTD_DOCPROBE_ADDRESS 0x0000
+      bool '    Probe high addresses' CONFIG_MTD_DOCPROBE_HIGH
+      bool '    Probe for 0x55 0xAA BIOS Extension Signature' CONFIG_MTD_DOCPROBE_55AA
+   fi
+
+comment 'RAM/ROM Device Drivers'
    dep_tristate '  Use extra onboard system memory as MTD device' CONFIG_MTD_SLRAM $CONFIG_MTD
    dep_tristate '  Ramix PMC551 PCI Mezzanine ram card support' CONFIG_MTD_PMC551 $CONFIG_MTD $CONFIG_PCI
    if [ "$CONFIG_MTD_PMC551" != "n" ]; then
@@ -31,20 +44,21 @@ if [ "$CONFIG_MTD" != "n" ]; then
       int 'Size of the erase sectors in kB' CONFIG_MTDRAM_ERASE_SIZE 128
    fi
 
-comment 'MTD drivers for mapped chips'
+comment 'Linearly Mapped Flash Device Drivers'
    dep_tristate '  Common Flash Interface (CFI) support' CONFIG_MTD_CFI $CONFIG_MTD
    dep_tristate '    CFI support for Intel/Sharp Extended Command Set chips' CONFIG_MTD_CFI_INTELEXT $CONFIG_MTD_CFI
    dep_tristate '    CFI support for AMD/Fujitsu Standard Command Set chips' CONFIG_MTD_CFI_AMDSTD $CONFIG_MTD_CFI
+   dep_tristate '  Support for RAM chips in bus mapping' CONFIG_MTD_RAM $CONFIG_MTD
+   dep_tristate '  Support for ROM chips in bus mapping' CONFIG_MTD_ROM $CONFIG_MTD
 
 # These will later become config-options
 define_bool CONFIG_MTD_JEDEC n
-define_bool CONFIG_MTD_RAM n
-define_bool CONFIG_MTD_ROM n
 
-   dep_tristate '    Flash chip mapping in physical memory' CONFIG_MTD_PHYSMAP $CONFIG_MTD_CFI
-   if [ "$CONFIG_MTD_PHYSMAP" != "n" ]; then
-      hex 'Physical start location of flash chip mapping' CONFIG_MTD_PHYSMAP_START 0x8000000
-      hex 'Physical length of flash chip mapping' CONFIG_MTD_PHYSMAP_LEN 0x4000000
+   dep_tristate '  Flash chip mapping in physical memory' CONFIG_MTD_PHYSMAP $CONFIG_MTD_CFI
+   if [ "$CONFIG_MTD_PHYSMAP" = "y" -o "$CONFIG_MTD_PHYSMAP" = "m" ]; then
+      hex '    Physical start location of flash chip mapping' CONFIG_MTD_PHYSMAP_START 0x8000000
+      hex '    Physical length of flash chip mapping' CONFIG_MTD_PHYSMAP_LEN 0x4000000
+      int '    Bus width in octets' CONFIG_MTD_PHYSMAP_BUSWIDTH 2
    fi
 
 comment 'Drivers for chip mappings'
@@ -57,11 +71,11 @@ comment 'Drivers for chip mappings'
 
 comment 'User modules and translation layers for MTD devices'
    dep_tristate '  Direct chardevice access to MTD devices' CONFIG_MTD_CHAR $CONFIG_MTD
-   dep_tristate '  Pseudo-blockdevice access to MTD devices' CONFIG_MTD_BLOCK $CONFIG_MTD
+   dep_tristate '  Caching blockdevice access to MTD devices' CONFIG_MTD_BLOCK $CONFIG_MTD
    dep_tristate '  FTL (Flash Translation Layer) support' CONFIG_FTL $CONFIG_MTD
    dep_tristate '  NFTL (NAND Flash Translation Layer) support' CONFIG_NFTL $CONFIG_MTD
-   if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_NFTL" != "n" ]; then
-      bool '    Write support for NFTL (EXPERIMENTAL)' CONFIG_NFTL_RW
+   if [ "$CONFIG_NFTL" = "y" -o "$CONFIG_NFTL" = "m" ]; then
+      bool '    Write support for NFTL (BETA)' CONFIG_NFTL_RW
    fi
 fi
 

@@ -274,6 +274,17 @@ static struct hp100_pci_id hp100_pci_ids[] = {
 
 #define HP100_PCI_IDS_SIZE	(sizeof(hp100_pci_ids)/sizeof(struct hp100_pci_id))
 
+#if LINUX_VERSION_CODE >= 0x20400
+static struct pci_device_id hp100_pci_tbl[] __initdata = {
+	{ PCI_VENDOR_ID_HP, PCI_DEVICE_ID_HP_J2585A, PCI_ANY_ID, PCI_ANY_ID, },
+	{ PCI_VENDOR_ID_HP, PCI_DEVICE_ID_HP_J2585B, PCI_ANY_ID, PCI_ANY_ID, },
+	{ PCI_VENDOR_ID_COMPEX, PCI_DEVICE_ID_COMPEX_ENET100VG4, PCI_ANY_ID, PCI_ANY_ID, },
+	{ PCI_VENDOR_ID_COMPEX2, PCI_DEVICE_ID_COMPEX2_100VG, PCI_ANY_ID, PCI_ANY_ID, },
+	{ }			/* Terminating entry */
+};
+MODULE_DEVICE_TABLE(pci, hp100_pci_tbl);
+#endif /* LINUX_VERSION_CODE >= 0x20400 */
+
 static int hp100_rx_ratio = HP100_DEFAULT_RX_RATIO;
 static int hp100_priority_tx = HP100_DEFAULT_PRIORITY_TX;
 static int hp100_mode = 1;
@@ -761,6 +772,7 @@ static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, 
   /* Reset statistics (counters) */
   hp100_clear_stats( lp, ioaddr );
 
+  SET_MODULE_OWNER(dev);
   ether_setup( dev );
 
   /* If busmaster mode is wanted, a dma-capable memory area is needed for
@@ -1154,8 +1166,6 @@ static int hp100_open( struct net_device *dev )
       return -EAGAIN;
     }
 
-  MOD_INC_USE_COUNT;
-
   dev->trans_start = jiffies;
   netif_start_queue(dev);
 
@@ -1201,7 +1211,6 @@ static int hp100_close( struct net_device *dev )
   printk( "hp100: %s: close LSW = 0x%x\n", dev->name, hp100_inw(OPTION_LSW) );
 #endif
 
-  MOD_DEC_USE_COUNT;
   return 0;
 }
 

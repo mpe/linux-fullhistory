@@ -520,6 +520,7 @@ static struct sock *x25_make_new(struct sock *osk)
 	sk->state       = TCP_ESTABLISHED;
 	sk->sleep       = osk->sleep;
 	sk->zapped      = osk->zapped;
+	sk->backlog_rcv = osk->backlog_rcv;
 
 	x25->t21        = osk->protinfo.x25->t21;
 	x25->t22        = osk->protinfo.x25->t22;
@@ -867,7 +868,7 @@ static int x25_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct 
 		return -EINVAL;
 
 	/* we currently don't support segmented records at the user interface */
-	if (!(msg->msg_flags & MSG_EOR))
+	if (!(msg->msg_flags & (MSG_EOR|MSG_OOB)))
 		return -EINVAL;
 
 	if (sk->zapped)

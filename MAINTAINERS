@@ -640,7 +640,7 @@ M:	jgarzik@mandrakesoft.com
 W:	http://sourceforge.net/projects/gkernel/
 S:	Maintained
 
-INTEL P6 MICROCODE UPDATE SUPPORT
+INTEL IA32 MICROCODE UPDATE SUPPORT
 P:	Tigran Aivazian
 M:	tigran@veritas.com
 S:	Maintained

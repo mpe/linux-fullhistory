@@ -13442,13 +13442,13 @@ CONFIG_TOSHIBA
   Toshiba Linux utilities website at:
   http://www.buzzard.org.uk/toshiba/
 
-/dev/cpu/microcode - Intel P6 CPU microcode support
+/dev/cpu/microcode - Intel IA32 CPU microcode support
 CONFIG_MICROCODE
   If you say Y here and also to "/dev file system support" in the
   'File systems' section, you will be able to update the microcode on
-  Intel processors in the P6 family, e.g. Pentium Pro, Pentium II,
-  Pentium III, Xeon etc. You will obviously need the actual microcode
-  binary data itself which is not shipped with the Linux kernel.
+  Intel processors in the IA32 family, e.g. Pentium Pro, Pentium II,
+  Pentium III, Pentium 4, Xeon etc. You will obviously need the actual 
+  microcode binary data itself which is not shipped with the Linux kernel.
 
   For latest news and information on obtaining all the required
   ingredients for this driver, check:
@@ -13457,7 +13457,9 @@ CONFIG_MICROCODE
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called microcode.o. If you want to compile it as
-  a module, say M here and read Documentation/modules.txt.
+  a module, say M here and read Documentation/modules.txt. If you use
+  modprobe or kmod you may also want to add the line
+  'alias char-major-10-184 microcode' to your /etc/modules.conf file.
 
 /dev/cpu/*/msr - Model-specific register support
 CONFIG_X86_MSR

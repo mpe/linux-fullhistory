@@ -508,6 +508,7 @@ static int __devinit via_rhine_init_one (struct pci_dev *pdev,
 			card_idx);
 		goto err_out_free_dma;
 	}
+	SET_MODULE_OWNER(dev);
 	
 	/* request all PIO and MMIO regions just to make sure
 	 * noone else attempts to use any portion of our I/O space */
@@ -694,15 +695,12 @@ static int via_rhine_open(struct net_device *dev)
 	long ioaddr = dev->base_addr;
 	int i;
 
-	MOD_INC_USE_COUNT;
-
 	/* Reset the chip. */
 	writew(CmdReset, ioaddr + ChipCmd);
 
-	if (request_irq(dev->irq, &via_rhine_interrupt, SA_SHIRQ, dev->name, dev)) {
-		MOD_DEC_USE_COUNT;
-		return -EBUSY;
-	}
+	i = request_irq(dev->irq, &via_rhine_interrupt, SA_SHIRQ, dev->name, dev);
+	if (i)
+		return i;
 
 	if (debug > 1)
 		printk(KERN_DEBUG "%s: via_rhine_open() irq %d.\n",
@@ -712,7 +710,6 @@ static int via_rhine_open(struct net_device *dev)
 									   &np->tx_bufs_dma);
 	if (np->tx_bufs == NULL) {
 		free_irq(dev->irq, dev);
-		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 
@@ -1402,8 +1399,6 @@ static int via_rhine_close(struct net_device *dev)
 	}
 	pci_free_consistent(np->pdev, PKT_BUF_SZ * TX_RING_SIZE,
 						np->tx_bufs, np->tx_bufs_dma);
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

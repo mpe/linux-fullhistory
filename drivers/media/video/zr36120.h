@@ -130,7 +130,7 @@ struct zoran
 	int		tuner_type;	/* tuner type, when found	*/
 	int		running;	/* are we rolling?		*/
 	rwlock_t	lock;
-	int		state;		/* what is requested of us?	*/
+	long		state;		/* what is requested of us?	*/
 #define STATE_OVERLAY	0
 #define STATE_VBI	1
 	struct vidinfo*	workqueue;	/* buffers to grab, head is active */

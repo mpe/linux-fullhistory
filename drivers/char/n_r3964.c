@@ -1157,12 +1157,12 @@ static int r3964_open(struct tty_struct *tty)
     * Add 'on_timer' to timer task queue
     * (will be called from timer bh)
     */
-   pInfo->bh_1.next = NULL;
+   INIT_LIST_HEAD(&pInfo->bh_1.list);
    pInfo->bh_1.sync = 0;
    pInfo->bh_1.routine = &on_timer_1;
    pInfo->bh_1.data = pInfo;
    
-   pInfo->bh_2.next = NULL;
+   INIT_LIST_HEAD(&pInfo->bh_2.list);
    pInfo->bh_2.sync = 0;
    pInfo->bh_2.routine = &on_timer_2;
    pInfo->bh_2.data = pInfo;
@@ -1174,7 +1174,6 @@ static int r3964_open(struct tty_struct *tty)
 
 static void r3964_close(struct tty_struct *tty)
 {
-   struct tq_struct *tq, *prev;
    struct r3964_info *pInfo=(struct r3964_info*)tty->disc_data;
    struct r3964_client_info *pClient, *pNext;
    struct r3964_message *pMsg;
@@ -1187,19 +1186,12 @@ static void r3964_close(struct tty_struct *tty)
      * Make sure that our task queue isn't activated.  If it
      * is, take it out of the linked list.
      */
-    save_flags(flags);
-    cli();
-
-    for (tq=tq_timer, prev=0; tq; prev=tq, tq=tq->next) {
-         if ((tq == &pInfo->bh_1) || (tq==&pInfo->bh_2)) {
-             if (prev)
-                 prev->next = tq->next;
-             else
-                 tq_timer = tq->next;
-             break;
-         }
-    }
-    restore_flags(flags);
+    spin_lock_irqsave(&tqueue_lock, flags);
+    if (pInfo->bh_1.sync)
+    	list_del(&pInfo->bh_1.list);
+    if (pInfo->bh_2.sync)
+    	list_del(&pInfo->bh_2.list);
+    spin_unlock_irqrestore(&tqueue_lock, flags);
 
    /* Remove client-structs and message queues: */
     pClient=pInfo->firstClient;

@@ -79,8 +79,10 @@ int __init mvme147lance_probe(struct net_device *dev)
 	u_long address;
 
 	if (!MACH_IS_MVME147 || called)
-		return(ENODEV);
+		return(-ENODEV);
 	called++;
+
+	SET_MODULE_OWNER(dev);
 
 	dev->priv = kmalloc(sizeof(struct m147lance_private), GFP_KERNEL);
 	if (dev->priv == NULL)
@@ -173,7 +175,6 @@ static int m147lance_open(struct net_device *dev)
 	m147_pcc->lan_cntrl=0;       /* clear the interrupts (if any) */
 	m147_pcc->lan_cntrl=0x08 | 0x04;     /* Enable irq 4 */
 
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -182,7 +183,6 @@ static int m147lance_close(struct net_device *dev)
 	/* disable interrupts at boardlevel */
 	m147_pcc->lan_cntrl=0x0; /* disable interrupts */
 	lance_close(dev);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

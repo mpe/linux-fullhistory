@@ -62,7 +62,7 @@ int alloc_divert_blk(struct net_device *dev)
 		if (dev->divert == NULL) {
 			printk(KERN_DEBUG "divert: unable to allocate divert_blk for %s\n",
 			       dev->name);
-			return -EFAULT;
+			return -ENOMEM;
 		} else {
 			memset(dev->divert, 0, sizeof(struct divert_blk));
 		}

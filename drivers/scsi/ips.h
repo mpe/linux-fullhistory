@@ -929,7 +929,7 @@ typedef struct ips_ha {
    char              *ioctl_data;         /* IOCTL data area            */
    u32                ioctl_datasize;     /* IOCTL data size            */
    u32                cmd_in_progress;    /* Current command in progress*/
-   u32                flags;              /* HA flags                   */
+   long               flags;              /* HA flags                   */
    u8                 waitflag;           /* are we waiting for cmd     */
    u8                 active;
    u16                reset_count;        /* number of resets           */

@@ -1738,7 +1738,7 @@ dbg( "digi_startup: TOP" );
 		init_waitqueue_head( &priv->dp_flush_wait );
 		priv->dp_in_close = 0;
 		init_waitqueue_head( &priv->dp_close_wait );
-		priv->dp_wakeup_task.next = NULL;
+		INIT_LIST_HEAD(&priv->dp_wakeup_task.list);
 		priv->dp_wakeup_task.sync = 0;
 		priv->dp_wakeup_task.routine = (void *)digi_wakeup_write_lock;
 		priv->dp_wakeup_task.data = (void *)(&serial->port[i]);

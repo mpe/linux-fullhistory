@@ -613,10 +613,10 @@ pci_dma_supported(struct pci_dev *pdev, dma_addr_t mask)
 	/* Check that we have a scatter-gather arena that fits.  */
 	hose = pdev ? pdev->sysdata : pci_isa_hose;
 	arena = hose->sg_isa;
-	if (arena && arena->dma_base + arena->size <= mask)
+	if (arena && arena->dma_base + arena->size - 1 <= mask)
 		return 1;
 	arena = hose->sg_pci;
-	if (arena && arena->dma_base + arena->size <= mask)
+	if (arena && arena->dma_base + arena->size - 1 <= mask)
 		return 1;
 
 	return 0;

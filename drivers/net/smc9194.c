@@ -256,15 +256,7 @@ inline static void smc_tx( struct net_device * dev );
  . Test if a given location contains a chip, trying to cause as
  . little damage as possible if it's not a SMC chip.
 */
-static int smc_probe( int ioaddr );
-
-/*
- . this routine initializes the cards hardware, prints out the configuration
- . to the system log as well as the vanity message, and handles the setup
- . of a device parameter.
- . It will give an error if it can't initialize the card.
-*/
-static int smc_initcard( struct net_device *, int ioaddr );
+static int smc_probe(struct net_device *dev, int ioaddr);
 
 /*
  . A rather simple routine to print out a packet for debugging purposes.
@@ -714,35 +706,20 @@ static void smc_hardware_send_packet( struct net_device * dev )
 int __init smc_init(struct net_device *dev)
 {
 	int i;
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
+
+	SET_MODULE_OWNER(dev);
 
 	/*  try a specific location */
-	if (base_addr > 0x1ff)	{
-		int	error;
-		error = smc_probe(base_addr);
-		if ( 0 == error ) {
-			return smc_initcard( dev, base_addr );
-		}
-		return error;
-	} else {
-		if ( 0 != base_addr ) {
-			return -ENXIO;
-		}
-	}
+	if (base_addr > 0x1ff)
+		return smc_probe(dev, base_addr);
+	else if (base_addr != 0)
+		return -ENXIO;
 
 	/* check every ethernet address */
-	for (i = 0; smc_portlist[i]; i++) {
-		int ioaddr = smc_portlist[i];
-
-		/* check if the area is available */
-		if (check_region( ioaddr , SMC_IO_EXTENT))
-			continue;
-
-		/* check this specific address */
-		if ( smc_probe( ioaddr ) == 0)  {
-			return smc_initcard( dev, ioaddr  );
-		}
-	}
+	for (i = 0; smc_portlist[i]; i++)
+		if (smc_probe(dev, smc_portlist[i]) == 0)
+			return 0;
 
 	/* couldn't find anything */
 	return -ENODEV;
@@ -837,57 +814,6 @@ int __init smc_findirq( int ioaddr )
  .---------------------------------------------------------------------
  */
 
-static int __init smc_probe( int ioaddr )
-{
-	unsigned int	bank;
-	word	revision_register;
-	word  base_address_register;
-
-	/* First, see if the high byte is 0x33 */
-	bank = inw( ioaddr + BANK_SELECT );
-	if ( (bank & 0xFF00) != 0x3300 ) {
-		return -ENODEV;
-	}
-	/* The above MIGHT indicate a device, but I need to write to further
- 	 	test this.  */
-	outw( 0x0, ioaddr + BANK_SELECT );
-	bank = inw( ioaddr + BANK_SELECT );
-	if ( (bank & 0xFF00 ) != 0x3300 ) {
-		return -ENODEV;
-	}
-	/* well, we've already written once, so hopefully another time won't
- 	   hurt.  This time, I need to switch the bank register to bank 1,
-	   so I can access the base address register */
-	SMC_SELECT_BANK(1);
-	base_address_register = inw( ioaddr + BASE );
-	if ( ioaddr != ( base_address_register >> 3 & 0x3E0 ) )  {
-		printk(CARDNAME ": IOADDR %x doesn't match configuration (%x)."
-			"Probably not a SMC chip\n",
-			ioaddr, base_address_register >> 3 & 0x3E0 );
-		/* well, the base address register didn't match.  Must not have
-		   been a SMC chip after all. */
-		return -ENODEV;
-	}
-
-	/*  check if the revision register is something that I recognize.
-	    These might need to be added to later, as future revisions
-	    could be added.  */
-	SMC_SELECT_BANK(3);
-	revision_register  = inw( ioaddr + REVISION );
-	if ( !chip_ids[ ( revision_register  >> 4 ) & 0xF  ] ) {
-		/* I don't recognize this chip, so... */
-		printk(CARDNAME ": IO %x: Unrecognized revision register:"
-			" %x, Contact author. \n", ioaddr, revision_register );
-
-		return -ENODEV;
-	}
-
-	/* at this point I'll assume that the chip is an SMC9xxx.
-	   It might be prudent to check a listing of MAC addresses
-	   against the hardware address, or do some other tests. */
-	return 0;
-}
-
 /*---------------------------------------------------------------
  . Here I do typical initialization tasks.
  .
@@ -902,23 +828,72 @@ static int __init smc_probe( int ioaddr )
  . o  GRAB the region
  .-----------------------------------------------------------------
 */
-static int __init smc_initcard(struct net_device *dev, int ioaddr)
+static int __init smc_probe(struct net_device *dev, int ioaddr)
 {
-	int i;
+	int i, memory, retval;
+	static unsigned version_printed;
+	unsigned int bank;
 
-	static unsigned version_printed = 0;
+	const char *version_string;
+	const char *if_string;
 
 	/* registers */
-	word	revision_register;
-	word	configuration_register;
-	word  	memory_info_register;
-	word 	memory_cfg_register;
+	word revision_register;
+	word base_address_register;
+	word configuration_register;
+	word memory_info_register;
+	word memory_cfg_register;
 
-	const char *	version_string;
-	const char *	if_string;
-	int	memory;
+	/* Grab the region so that no one else tries to probe our ioports. */
+	if (!request_region(ioaddr, SMC_IO_EXTENT, dev->name))
+		return -EBUSY;
 
-	int   irqval;
+	/* First, see if the high byte is 0x33 */
+	bank = inw( ioaddr + BANK_SELECT );
+	if ( (bank & 0xFF00) != 0x3300 ) {
+		retval = -ENODEV;
+		goto err_out;
+	}
+	/* The above MIGHT indicate a device, but I need to write to further
+ 	 	test this.  */
+	outw( 0x0, ioaddr + BANK_SELECT );
+	bank = inw( ioaddr + BANK_SELECT );
+	if ( (bank & 0xFF00 ) != 0x3300 ) {
+		retval = -ENODEV;
+		goto err_out;
+	}
+	/* well, we've already written once, so hopefully another time won't
+ 	   hurt.  This time, I need to switch the bank register to bank 1,
+	   so I can access the base address register */
+	SMC_SELECT_BANK(1);
+	base_address_register = inw( ioaddr + BASE );
+	if ( ioaddr != ( base_address_register >> 3 & 0x3E0 ) )  {
+		printk(CARDNAME ": IOADDR %x doesn't match configuration (%x)."
+			"Probably not a SMC chip\n",
+			ioaddr, base_address_register >> 3 & 0x3E0 );
+		/* well, the base address register didn't match.  Must not have
+		   been a SMC chip after all. */
+		retval = -ENODEV;
+		goto err_out;
+	}
+
+	/*  check if the revision register is something that I recognize.
+	    These might need to be added to later, as future revisions
+	    could be added.  */
+	SMC_SELECT_BANK(3);
+	revision_register  = inw( ioaddr + REVISION );
+	if ( !chip_ids[ ( revision_register  >> 4 ) & 0xF  ] ) {
+		/* I don't recognize this chip, so... */
+		printk(CARDNAME ": IO %x: Unrecognized revision register:"
+			" %x, Contact author. \n", ioaddr, revision_register );
+
+		retval = -ENODEV;
+		goto err_out;
+	}
+
+	/* at this point I'll assume that the chip is an SMC9xxx.
+	   It might be prudent to check a listing of MAC addresses
+	   against the hardware address, or do some other tests. */
 
 	if (version_printed++ == 0)
 		printk("%s", version);
@@ -956,7 +931,8 @@ static int __init smc_initcard(struct net_device *dev, int ioaddr)
 	version_string = chip_ids[ ( revision_register  >> 4 ) & 0xF  ];
 	if ( !version_string ) {
 		/* I shouldn't get here because this call was done before.... */
-		return -ENODEV;
+		retval = -ENODEV;
+		goto err_out;
 	}
 
 	/* is it using AUI or 10BaseT ? */
@@ -1003,7 +979,8 @@ static int __init smc_initcard(struct net_device *dev, int ioaddr)
 	}
 	if (dev->irq == 0 ) {
 		printk(CARDNAME": Couldn't autodetect your IRQ. Use irq=xx.\n");
-		return -ENODEV;
+		retval = -ENODEV;
+		goto err_out;
 	}
 	if (dev->irq == 2) {
 		/* Fixup for users that don't know that IRQ 2 is really IRQ 9,
@@ -1014,7 +991,7 @@ static int __init smc_initcard(struct net_device *dev, int ioaddr)
 
 	/* now, print out the card info, in a short format.. */
 
-	printk(CARDNAME ": %s(r:%d) at %#3x IRQ:%d INTF:%s MEM:%db ",
+	printk("%s: %s(r:%d) at %#3x IRQ:%d INTF:%s MEM:%db ", dev->name,
 		version_string, revision_register & 0xF, ioaddr, dev->irq,
 		if_string, memory );
 	/*
@@ -1029,8 +1006,10 @@ static int __init smc_initcard(struct net_device *dev, int ioaddr)
 	/* Initialize the private structure. */
 	if (dev->priv == NULL) {
 		dev->priv = kmalloc(sizeof(struct smc_local), GFP_KERNEL);
-		if (dev->priv == NULL)
-			return -ENOMEM;
+		if (dev->priv == NULL) {
+			retval = -ENOMEM;
+			goto err_out;
+		}
 	}
 	/* set the private data to zero by default */
 	memset(dev->priv, 0, sizeof(struct smc_local));
@@ -1039,15 +1018,14 @@ static int __init smc_initcard(struct net_device *dev, int ioaddr)
 	ether_setup(dev);
 
 	/* Grab the IRQ */
-      	irqval = request_irq(dev->irq, &smc_interrupt, 0, CARDNAME, dev);
-      	if (irqval) {
-       	  printk(CARDNAME": unable to get IRQ %d (irqval=%d).\n",
-		dev->irq, irqval);
-       	  return -EAGAIN;
+      	retval = request_irq(dev->irq, &smc_interrupt, 0, dev->name, dev);
+      	if (retval) {
+		printk("%s: unable to get IRQ %d (irqval=%d).\n", dev->name,
+			dev->irq, retval);
+		kfree(dev->priv);
+		dev->priv = NULL;
+  	  	goto err_out;
       	}
-
-	/* Grab the region so that no one else tries to probe our ioports. */
-	request_region(ioaddr, SMC_IO_EXTENT, CARDNAME);
 
 	dev->open		        = smc_open;
 	dev->stop		        = smc_close;
@@ -1058,6 +1036,10 @@ static int __init smc_initcard(struct net_device *dev, int ioaddr)
 	dev->set_multicast_list 	= smc_set_multicast_list;
 
 	return 0;
+
+err_out:
+	release_region(ioaddr, SMC_IO_EXTENT);
+	return retval;
 }
 
 #if SMC_DEBUG > 2
@@ -1111,8 +1093,6 @@ static int smc_open(struct net_device *dev)
 
 	/* clear out all the junk that was put here before... */
 	memset(dev->priv, 0, sizeof(struct smc_local));
-
-	MOD_INC_USE_COUNT;
 
 	/* reset the hardware */
 
@@ -1504,7 +1484,6 @@ static int smc_close(struct net_device *dev)
 	smc_shutdown( dev->base_addr );
 
 	/* Update the statistics here. */
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1577,8 +1556,7 @@ static void smc_set_multicast_list(struct net_device *dev)
 
 #ifdef MODULE
 
-static struct net_device devSMC9194 = { init: smc_init };
-
+static struct net_device devSMC9194;
 static int io;
 static int irq;
 static int ifport;
@@ -1599,6 +1577,7 @@ int init_module(void)
 	devSMC9194.base_addr = io;
 	devSMC9194.irq       = irq;
 	devSMC9194.if_port	= ifport;
+	devSMC9194.init   	= smc_init;
 	if ((result = register_netdev(&devSMC9194)) != 0)
 		return result;
 

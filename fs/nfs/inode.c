@@ -594,6 +594,11 @@ nfs_fill_inode(struct inode *inode, struct nfs_fh *fh, struct nfs_fattr *fattr)
 	nfs_refresh_inode(inode, fattr);
 }
 
+struct nfs_find_desc {
+	struct nfs_fh		*fh;
+	struct nfs_fattr	*fattr;
+};
+
 /*
  * In NFSv3 we can have 64bit inode numbers. In order to support
  * this, and re-exported directories (also seen in NFSv2)
@@ -603,13 +608,16 @@ nfs_fill_inode(struct inode *inode, struct nfs_fh *fh, struct nfs_fattr *fattr)
 static int
 nfs_find_actor(struct inode *inode, unsigned long ino, void *opaque)
 {
-	struct nfs_fattr *fattr = (struct nfs_fattr *)opaque;
+	struct nfs_find_desc	*desc = (struct nfs_find_desc *)opaque;
+	struct nfs_fh		*fh = desc->fh;
+	struct nfs_fattr	*fattr = desc->fattr;
 
 	if (NFS_FSID(inode) != fattr->fsid)
 		return 0;
 	if (NFS_FILEID(inode) != fattr->fileid)
 		return 0;
-
+	if (memcmp(&inode->u.nfs_i.fh, fh, sizeof(inode->u.nfs_i.fh)) != 0)
+		return 0;
 	return 1;
 }
 
@@ -640,8 +648,6 @@ nfs_inode_is_stale(struct inode *inode, struct nfs_fh *fh, struct nfs_fattr *fat
  * the vfs read_inode function because there is no way to pass the
  * file handle or current attributes into the read_inode function.
  *
- * We provide a special check for NetApp .snapshot directories to avoid
- * inode aliasing problems. All snapshot inodes are anonymous (unhashed).
  */
 struct inode *
 nfs_fhget(struct dentry *dentry, struct nfs_fh *fhandle,
@@ -652,41 +658,16 @@ nfs_fhget(struct dentry *dentry, struct nfs_fh *fhandle,
 	dprintk("NFS: nfs_fhget(%s/%s fileid=%Ld)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		(long long)fattr->fileid);
-
-#ifdef CONFIG_NFS_SNAPSHOT
-	/*
-	 * Check for NetApp snapshot dentries, and get an 
-	 * unhashed inode to avoid aliasing problems.
-	 */
-	if ((dentry->d_parent->d_inode->u.nfs_i.flags & NFS_IS_SNAPSHOT) ||
-	    (dentry->d_name.len == 9 &&
-	     memcmp(dentry->d_name.name, ".snapshot", 9) == 0)) {
-		struct inode *inode = new_inode(sb);
-		if (!inode)
-			goto out;
-		inode->i_ino = nfs_fattr_to_ino_t(fattr);
-		nfs_read_inode(inode);
-		nfs_fill_inode(inode, fhandle, fattr);
-		inode->u.nfs_i.flags |= NFS_IS_SNAPSHOT;
-		dprintk("NFS: nfs_fhget(snapshot ino=%ld)\n", inode->i_ino);
-	out:
-		return inode;
-	}
-#endif
 	return __nfs_fhget(sb, fhandle, fattr);
 }
 
 /*
  * Look up the inode by super block and fattr->fileid.
- *
- * Note carefully the special handling of busy inodes (i_count > 1).
- * With the kernel 2.1.xx dcache all inodes except hard links must
- * have i_count == 1 after iget(). Otherwise, it indicates that the
- * server has reused a fileid (i_ino) and we have a stale inode.
  */
 static struct inode *
 __nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr)
 {
+	struct nfs_find_desc desc = { fh, fattr };
 	struct inode *inode = NULL;
 	unsigned long ino;
 
@@ -700,29 +681,7 @@ __nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr)
 
 	ino = nfs_fattr_to_ino_t(fattr);
 
-	while((inode = iget4(sb, ino, nfs_find_actor, fattr)) != NULL) {
-
-		/*
-		 * Check for busy inodes, and attempt to get rid of any
-		 * unused local references. If successful, we release the
-		 * inode and try again.
-		 *
-		 * Note that the busy test uses the values in the fattr,
-		 * as the inode may have become a different object.
-		 * (We can probably handle modes changes here, too.)
-		 */
-		if (!nfs_inode_is_stale(inode, fh, fattr))
-			break;
-
-		dprintk("__nfs_fhget: inode (%x/%Ld) still busy, i_count=%d\n",
-			inode->i_dev, (long long)NFS_FILEID(inode),
-		        atomic_read(&inode->i_count));
-		nfs_zap_caches(inode);
-		remove_inode_hash(inode);
-		iput(inode);
-	}
-
-	if (!inode)
+	if (!(inode = iget4(sb, ino, nfs_find_actor, &desc)))
 		goto out_no_inode;
 
 	nfs_fill_inode(inode, fh, fattr);

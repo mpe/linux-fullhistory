@@ -31,9 +31,7 @@ extern int sdla_c_setup(void);
 extern int comx_init(void);
 extern int lmc_setup(void);
 
-extern int abyss_probe(void);
 extern int madgemc_probe(void);
-extern int tms_pci_probe(void);
 
 /* Pad device name to IFNAMSIZ=16. F.e. __PAD6 is string of 9 zeros. */
 #define __PAD6 "\0\0\0\0\0\0\0\0\0"
@@ -115,16 +113,9 @@ struct net_probe pci_probes[] __initdata = {
 /*
  *	Token Ring Drivers
  */  
-#ifdef CONFIG_ABYSS
-	{abyss_probe, 0},
-#endif
 #ifdef CONFIG_MADGEMC
 	{madgemc_probe, 0},
 #endif
-#ifdef CONFIG_TMSPCI
-	{tms_pci_probe, 0},
-#endif
- 
 	{NULL, 0},
 };
 

@@ -623,7 +623,7 @@ void netdev_state_change(struct net_device *dev)
 
 void dev_load(const char *name)
 {
-	if (!__dev_get_by_name(name) && capable(CAP_SYS_MODULE))
+	if (!dev_get(name) && capable(CAP_SYS_MODULE))
 		request_module(name);
 }
 
@@ -881,8 +881,6 @@ void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
 
 			skb2->h.raw = skb2->nh.raw;
 			skb2->pkt_type = PACKET_OUTGOING;
-			skb2->rx_dev = skb->dev;
-			dev_hold(skb2->rx_dev);
 			ptype->func(skb2, skb->dev, ptype);
 		}
 	}
@@ -1135,10 +1133,7 @@ int netif_rx(struct sk_buff *skb)
 				goto drop;
 
 enqueue:
-			if (skb->rx_dev)
-				dev_put(skb->rx_dev);
-			skb->rx_dev = skb->dev;
-			dev_hold(skb->rx_dev);
+			dev_hold(skb->dev);
 			__skb_queue_tail(&queue->input_pkt_queue,skb);
 			__cpu_raise_softirq(this_cpu, NET_RX_SOFTIRQ);
 			local_irq_restore(flags);
@@ -1212,11 +1207,11 @@ static int deliver_to_old_ones(struct packet_type *pt, struct sk_buff *skb, int 
  */
 static __inline__ void skb_bond(struct sk_buff *skb)
 {
-	struct net_device *dev = skb->rx_dev;
+	struct net_device *dev = skb->dev;
 	
 	if (dev->master) {
 		dev_hold(dev->master);
-		skb->dev = skb->rx_dev = dev->master;
+		skb->dev = dev->master;
 		dev_put(dev);
 	}
 }
@@ -1326,6 +1321,7 @@ static void net_rx_action(struct softirq_action *h)
 
 	for (;;) {
 		struct sk_buff *skb;
+		struct net_device *rx_dev;
 
 		local_irq_disable();
 		skb = __skb_dequeue(&queue->input_pkt_queue);
@@ -1336,10 +1332,13 @@ static void net_rx_action(struct softirq_action *h)
 
 		skb_bond(skb);
 
+		rx_dev = skb->dev;
+
 #ifdef CONFIG_NET_FASTROUTE
 		if (skb->pkt_type == PACKET_FASTROUTE) {
 			netdev_rx_stat[this_cpu].fastroute_deferred_out++;
 			dev_queue_xmit(skb);
+			dev_put(rx_dev);
 			continue;
 		}
 #endif
@@ -1375,6 +1374,7 @@ static void net_rx_action(struct softirq_action *h)
 			if (skb->dev->br_port != NULL &&
 			    br_handle_frame_hook != NULL) {
 				handle_bridge(skb, pt_prev);
+				dev_put(rx_dev);
 				continue;
 			}
 #endif
@@ -1404,6 +1404,8 @@ static void net_rx_action(struct softirq_action *h)
 			} else
 				kfree_skb(skb);
 		}
+
+		dev_put(rx_dev);
 
 		if (bugdet-- < 0 || jiffies - start_time > 1)
 			goto softnet_break;
@@ -2313,6 +2315,12 @@ int register_netdevice(struct net_device *dev)
 #endif
 
 	if (dev_boot_phase) {
+#ifdef CONFIG_NET_DIVERT
+		ret = alloc_divert_blk(dev);
+		if (ret)
+			return ret;
+#endif /* CONFIG_NET_DIVERT */
+		
 		/* This is NOT bug, but I am not sure, that all the
 		   devices, initialized before netdev module is started
 		   are sane. 
@@ -2338,12 +2346,6 @@ int register_netdevice(struct net_device *dev)
 		dev_hold(dev);
 		write_unlock_bh(&dev_base_lock);
 
-#ifdef CONFIG_NET_DIVERT
-		ret = alloc_divert_blk(dev);
-		if (ret)
-			return ret;
-#endif /* CONFIG_NET_DIVERT */
-		
 		/*
 		 *	Default initial state at registry is that the
 		 *	device is present.
@@ -2354,6 +2356,12 @@ int register_netdevice(struct net_device *dev)
 		return 0;
 	}
 
+#ifdef CONFIG_NET_DIVERT
+	ret = alloc_divert_blk(dev);
+	if (ret)
+		return ret;
+#endif /* CONFIG_NET_DIVERT */
+	
 	dev->iflink = -1;
 
 	/* Init, if this function is available */
@@ -2392,12 +2400,6 @@ int register_netdevice(struct net_device *dev)
 	dev_hold(dev);
 	dev->deadbeaf = 0;
 	write_unlock_bh(&dev_base_lock);
-
-#ifdef CONFIG_NET_DIVERT
-	ret = alloc_divert_blk(dev);
-	if (ret)
-		return ret;
-#endif /* CONFIG_NET_DIVERT */
 
 	/* Notify protocols, that a new device appeared. */
 	notifier_call_chain(&netdev_chain, NETDEV_REGISTER, dev);

@@ -474,6 +474,7 @@ static int __devinit TLan_probe1(struct pci_dev *pdev,
 		printk(KERN_ERR "TLAN: Could not allocate memory for device.\n");
 		return -ENOMEM;
 	}
+	SET_MODULE_OWNER(dev);
 	
 	priv = dev->priv;
 		
@@ -814,14 +815,11 @@ static int TLan_Open( struct net_device *dev )
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	int		err;
 	
-	MOD_INC_USE_COUNT;
-	
 	priv->tlanRev = TLan_DioRead8( dev->base_addr, TLAN_DEF_REVISION );
 	err = request_irq( dev->irq, TLan_HandleInterrupt, SA_SHIRQ, TLanSignature, dev );
 	
 	if ( err ) {
 		printk(KERN_ERR "TLAN:  Cannot open %s because IRQ %d is already in use.\n", dev->name, dev->irq );
-		MOD_DEC_USE_COUNT;
 		return err;
 	}
 	
@@ -1097,8 +1095,6 @@ static int TLan_Close(struct net_device *dev)
 	free_irq( dev->irq, dev );
 	TLan_FreeLists( dev );
 	TLAN_DBG( TLAN_DEBUG_GNRL, "Device %s closed.\n", dev->name );
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 

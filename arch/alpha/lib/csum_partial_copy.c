@@ -2,6 +2,8 @@
  * csum_partial_copy - do IP checksumming and copy
  *
  * (C) Copyright 1996 Linus Torvalds
+ * accellerated versions (and 21264 assembly versions ) contributed by
+ *	Rick Gorton	<rick.gorton@alpha-processor.com>
  *
  * Don't look at this too closely - you'll go mad. The things
  * we do for performance..
@@ -66,6 +68,31 @@ __asm__ __volatile__("insqh %1,%2,%0":"=r" (z):"r" (x),"r" (y))
 		: "m"(__m(addr)), "rJ"(x), "0"(0));	\
 	__puu_err;					\
 })
+
+
+static inline unsigned short from64to16(unsigned long x)
+{
+	/* Using extract instructions is a bit more efficient
+	   than the original shift/bitmask version.  */
+
+	union {
+		unsigned long	ul;
+		unsigned int	ui[2];
+		unsigned short	us[4];
+	} in_v, tmp_v, out_v;
+
+	in_v.ul = x;
+	tmp_v.ul = (unsigned long) in_v.ui[0] + (unsigned long) in_v.ui[1];
+
+	/* Since the bits of tmp_v.sh[3] are going to always be zero,
+	   we don't have to bother to add that in.  */
+	out_v.ul = (unsigned long) tmp_v.us[0] + (unsigned long) tmp_v.us[1]
+			+ (unsigned long) tmp_v.us[2];
+
+	/* Similarly, out_v.us[2] is always zero for the final add.  */
+	return out_v.us[0] + out_v.us[1];
+}
+
 
 
 /*
@@ -335,13 +362,7 @@ do_csum_partial_copy_from_user(const char *src, char *dst, int len,
 					soff, doff, len-8, checksum,
 					partial_dest, errp);
 		}
-		/* 64 -> 33 bits */
-		checksum = (checksum & 0xffffffff) + (checksum >> 32);
-		/* 33 -> < 32 bits */
-		checksum = (checksum & 0xffff) + (checksum >> 16);
-		/* 32 -> 16 bits */
-		checksum = (checksum & 0xffff) + (checksum >> 16);
-		checksum = (checksum & 0xffff) + (checksum >> 16);
+		checksum = from64to16 (checksum);
 	}
 	return checksum;
 }

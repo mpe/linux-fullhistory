@@ -55,9 +55,9 @@ strchr:
 	or	t2, t3, t0	# E : bits set iff char match or zero match
 
 	andnot	t0, t4, t0	# E : clear garbage bits
-	cttz	t3, a2		# U0 : speculative (in case we get a match)
+	cttz	t0, a2		# U0 : speculative (in case we get a match)
 	nop			# E :
-	bne	t0, $found	# U : Stall on t0
+	bne	t0, $found	# U :
 
 	/*
 	 * Yuk.  This loop is going to stall like crazy waiting for the

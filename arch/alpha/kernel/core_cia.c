@@ -700,11 +700,11 @@ do_init_arch(int is_pyxis)
 
 	*(vip)CIA_IOC_PCI_W1_BASE = 0x40000000 | 1;
 	*(vip)CIA_IOC_PCI_W1_MASK = (0x40000000 - 1) & 0xfff00000;
-	*(vip)CIA_IOC_PCI_T1_BASE = 0;
+	*(vip)CIA_IOC_PCI_T1_BASE = 0 >> 2;
 
 	*(vip)CIA_IOC_PCI_W2_BASE = 0x80000000 | 1;
 	*(vip)CIA_IOC_PCI_W2_MASK = (0x40000000 - 1) & 0xfff00000;
-	*(vip)CIA_IOC_PCI_T2_BASE = 0x40000000;
+	*(vip)CIA_IOC_PCI_T2_BASE = 0x40000000 >> 2;
 
 	*(vip)CIA_IOC_PCI_W3_BASE = 0;
 }

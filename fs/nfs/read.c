@@ -116,8 +116,8 @@ nfs_readpage_sync(struct file *file, struct inode *inode, struct page *page)
 		lock_kernel();
 		result = NFS_PROTO(inode)->read(inode, cred, &fattr, flags,
 						offset, rsize, buffer, &eof);
-		unlock_kernel();
 		nfs_refresh_inode(inode, &fattr);
+		unlock_kernel();
 
 		/*
 		 * Even if we had a partial success we can't mark the page

@@ -78,9 +78,9 @@ extern int decnet_log_martians;
 static void dn_log_martian(struct sk_buff *skb, const char *msg)
 {
 	if (decnet_log_martians && net_ratelimit()) {
-		char *devname = skb->rx_dev ? skb->rx_dev->name : "???";
+		char *devname = skb->dev ? skb->dev->name : "???";
 		struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
-		printk(KERN_INFO "DECnet: Martian packet (%s) rx_dev=%s src=0x%04hx dst=0x%04hx srcport=0x%04hx dstport=0x%04hx\n", msg, devname, cb->src, cb->dst, cb->src_port, cb->dst_port);
+		printk(KERN_INFO "DECnet: Martian packet (%s) dev=%s src=0x%04hx dst=0x%04hx srcport=0x%04hx dstport=0x%04hx\n", msg, devname, cb->src, cb->dst, cb->src_port, cb->dst_port);
 	}
 }
 
@@ -782,7 +782,7 @@ free_out:
 
 int dn_nsp_rx(struct sk_buff *skb)
 {
-	return NF_HOOK(PF_DECnet, NF_DN_LOCAL_IN, skb, skb->rx_dev, NULL, dn_nsp_rx_packet);
+	return NF_HOOK(PF_DECnet, NF_DN_LOCAL_IN, skb, skb->dev, NULL, dn_nsp_rx_packet);
 }
 
 /*

@@ -43,7 +43,7 @@ static struct file_operations proc_file_operations = {
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
-/* 4K page size but our output routines use some slack for overruns */
+/* buffer size is one page but our output routines use some slack for overruns */
 #define PROC_BLOCK_SIZE	(PAGE_SIZE - 1024)
 
 static ssize_t

@@ -176,14 +176,15 @@ static int __blk_cleanup_queue(struct list_head *head)
  * blk_cleanup_queue: - release a &request_queue_t when it is no longer needed
  * @q:    the request queue to be released
  *
- * Description:  blk_cleanup_queue is the pair to blk_init_queue().  It should
- *     be called when a request queue is being released; typically when a block
- *     device is being de-registered.
- *     Currently, its primary task it to free all the &struct request structures
- *     that were allocated to the queue.
- * Caveat:
- *     Hopefully the low level driver will have finished any outstanding
- *     requests first...
+ * Description:
+ *     blk_cleanup_queue is the pair to blk_init_queue().  It should
+ *     be called when a request queue is being released; typically
+ *     when a block device is being de-registered.  Currently, its
+ *     primary task it to free all the &struct request structures that
+ *     were allocated to the queue.
+ * Caveat: 
+ *     Hopefully the low level driver will have finished any
+ *     outstanding requests first...
  **/
 void blk_cleanup_queue(request_queue_t * q)
 {
@@ -234,19 +235,21 @@ void blk_queue_headactive(request_queue_t * q, int active)
  * @plug: the function to be called to plug a queue
  *
  * Description:
- *   A request queue will be "plugged" if a request is added to it while it
- *   is empty.  This allows a number of requests to be added before any are
- *   processed, thus providing an opportunity for these requests to be merged
- *   or re-ordered.
- *   The default plugging function (generic_plug_device()) sets the "plugged"
- *   flag for the queue and adds a task to the $tq_disk task queue to unplug
- *   the queue and call the request function at a later time.
+ *   A request queue will be "plugged" if a request is added to it
+ *   while it is empty.  This allows a number of requests to be added
+ *   before any are processed, thus providing an opportunity for these
+ *   requests to be merged or re-ordered.
+ *   The default plugging function (generic_plug_device()) sets the
+ *   "plugged" flag for the queue and adds a task to the $tq_disk task
+ *   queue to unplug the queue and call the request function at a
+ *   later time.
  *
- *   A device driver may provide an alternate plugging function by passing it to
- *   blk_queue_pluggable().   This function should set the "plugged" flag if it
- *   want calls to the request_function to be blocked, and should place a
- *   task on $tq_disk which will unplug the queue.  Alternately it can simply
- *   do nothing and there-by disable plugging of the device.
+ *   A device driver may provide an alternate plugging function by
+ *   passing it to blk_queue_pluggable().  This function should set
+ *   the "plugged" flag if it want calls to the request_function to be
+ *   blocked, and should place a task on $tq_disk which will unplug
+ *   the queue.  Alternately it can simply do nothing and there-by
+ *   disable plugging of the device.
  **/
 
 void blk_queue_pluggable (request_queue_t * q, plug_device_fn *plug)
@@ -261,14 +264,21 @@ void blk_queue_pluggable (request_queue_t * q, plug_device_fn *plug)
  * @mfn: the alternate make_request function
  *
  * Description:
- *    The normal way for &struct buffer_heads to be passed to a device driver
- *    it to collect into requests on a request queue, and allow the device
- *    driver to select requests off that queue when it is ready.  This works
- *    well for many block devices. However some block devices (typically
- *    virtual devices such as md or lvm) do not benefit from the processes on
- *    the request queue, and are served best by having the requests passed
- *    directly to them.  This can be achieved by providing a function to
- *    blk_queue_make_request().
+ *    The normal way for &struct buffer_heads to be passed to a device
+ *    driver is for them to be collected into requests on a request
+ *    queue, and then to allow the device driver to select requests
+ *    off that queue when it is ready.  This works well for many block
+ *    devices. However some block devices (typically virtual devices
+ *    such as md or lvm) do not benefit from the processing on the
+ *    request queue, and are served best by having the requests passed
+ *    directly to them.  This can be achieved by providing a function
+ *    to blk_queue_make_request().
+ *
+ * Caveat:
+ *    The driver that does this *must* be able to deal appropriately
+ *    with buffers in "highmemory", either by calling bh_kmap() to get
+ *    a kernel mapping, to by calling create_bounce() to create a
+ *    buffer in normal memory.
  **/
 
 void blk_queue_make_request(request_queue_t * q, make_request_fn * mfn)
@@ -637,7 +647,10 @@ static void attempt_merge(request_queue_t * q,
 	next = blkdev_next_request(req);
 	if (req->sector + req->nr_sectors != next->sector)
 		return;
-	if (req->cmd != next->cmd || req->rq_dev != next->rq_dev || req->nr_sectors + next->nr_sectors > max_sectors || next->sem)
+	if (req->cmd != next->cmd
+	    || req->rq_dev != next->rq_dev
+	    || req->nr_sectors + next->nr_sectors > max_sectors
+	    || next->sem)
 		return;
 	/*
 	 * If we are not allowed to merge these requests, then
@@ -749,7 +762,8 @@ again:
 		goto get_rq;
 	}
 
-	el_ret = elevator->elevator_merge_fn(q, &req, bh, rw, &max_sectors, &max_segments);
+	el_ret = elevator->elevator_merge_fn(q, &req, bh, rw,
+					     &max_sectors, &max_segments);
 	switch (el_ret) {
 
 		case ELEVATOR_BACK_MERGE:
@@ -833,6 +847,40 @@ end_io:
 	return 0;
 }
 
+/**
+ * generic_make_request: hand a buffer head to it's device driver for I/O
+ * @rw:  READ, WRITE, or READA - what sort of I/O is desired.
+ * @bh:  The buffer head describing the location in memory and on the device.
+ *
+ * generic_make_request() is used to make I/O requests of block
+ * devices. It is passed a &struct buffer_head and a &rw value.  The
+ * %READ and %WRITE options are (hopefully) obvious in meaning.  The
+ * %READA value means that a read is required, but that the driver is
+ * free to fail the request if, for example, it cannot get needed
+ * resources immediately.
+ *
+ * generic_make_request() does not return any status.  The
+ * success/failure status of the request, along with notification of
+ * completion, is delivered asynchronously through the bh->b_end_io
+ * function described (one day) else where.
+ *
+ * The caller of generic_make_request must make sure that b_page,
+ * b_addr, b_size are set to describe the memory buffer, that b_rdev
+ * and b_rsector are set to describe the device address, and the
+ * b_end_io and optionally b_private are set to describe how
+ * completion notification should be signaled.  BH_Mapped should also
+ * be set (to confirm that b_dev and b_blocknr are valid).
+ *
+ * generic_make_request and the drivers it calls may use b_reqnext,
+ * and may change b_rdev and b_rsector.  So the values of these fields
+ * should NOT be depended on after the call to generic_make_request.
+ * Because of this, the caller should record the device address
+ * information in b_dev and b_blocknr.
+ *
+ * Apart from those fields mentioned above, no other fields, and in
+ * particular, no other flags, are changed by generic_make_request or
+ * any lower level drivers.
+ * */
 void generic_make_request (int rw, struct buffer_head * bh)
 {
 	int major = MAJOR(bh->b_rdev);
@@ -886,8 +934,18 @@ void generic_make_request (int rw, struct buffer_head * bh)
 }
 
 
-/*
- * Submit a buffer head for IO.
+/**
+ * submit_bh: submit a buffer_head to the block device later for I/O
+ * @rw: whether to %READ or %WRITE, or mayve to %READA (read ahead)
+ * @bh: The &struct buffer_head which describes the I/O
+ *
+ * submit_bh() is very similar in purpose to generic_make_request(), and
+ * uses that function to do most of the work.
+ *
+ * The extra functionality provided by submit_bh is to determine
+ * b_rsector from b_blocknr and b_size, and to set b_rdev from b_dev.
+ * This is is appropriate for IO requests that come from the buffer
+ * cache and page cache which (currently) always use aligned blocks.
  */
 void submit_bh(int rw, struct buffer_head * bh)
 {
@@ -915,9 +973,36 @@ static void end_buffer_io_sync(struct buffer_head *bh, int uptodate)
 	unlock_buffer(bh);
 }
 
-/* This function can be used to request a number of buffers from a block
-   device. Currently the only restriction is that all buffers must belong to
-   the same device */
+/**
+ * ll_rw_block: low-level access to block devices
+ * @rw: whether to %READ or %WRITE or maybe %READA (readahead)
+ * @nr: number of &struct buffer_heads in the array
+ * @bhs: array of pointers to &struct buffer_head
+ *
+ * ll_rw_block() takes an array of pointers to &struct buffer_heads,
+ * and requests an I/O operation on them, either a %READ or a %WRITE.
+ * The third %READA option is described in the documentation for
+ * generic_make_request() which ll_rw_block() calls.
+ *
+ * This function provides extra functionality that is not in
+ * generic_make_request() that is relevant to buffers in the buffer
+ * cache or page cache.  In particular it drops any buffer that it
+ * cannot get a lock on (with the BH_Lock state bit), any buffer that
+ * appears to be clean when doing a write request, and any buffer that
+ * appears to be up-to-date when doing read request.  Further it marks
+ * as clean buffers that are processed for writing (the buffer cache
+ * wont assume that they are actually clean until the buffer gets
+ * unlocked).
+ *
+ * ll_rw_block sets b_end_io to simple completion handler that marks
+ * the buffer up-to-date (if approriate), unlocks the buffer and wakes
+ * any waiters.  As client that needs a more interesting completion
+ * routine should call submit_bh() (or generic_make_request())
+ * directly.
+ *
+ * Caveat:
+ *  All of the buffers must be for the same device, and must also be
+ *  of the current approved size for the device.  */
 
 void ll_rw_block(int rw, int nr, struct buffer_head * bhs[])
 {

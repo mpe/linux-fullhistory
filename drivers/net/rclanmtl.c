@@ -1561,7 +1561,7 @@ RC_RETURN
 RCResetLANCard(U16 AdapterID, U16 ResourceFlags, PU32 ReturnAddr, PFNCALLBACK CallbackFunction)
 {
     unsigned long off;
-    unsigned long *pMsg;
+    PU32 pMsg;
     PPAB pPab;
     int i;
     long timeout = 0;

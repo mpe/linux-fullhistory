@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.127 2000/11/28 17:04:10 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.128 2000/12/08 17:15:54 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -1575,6 +1575,8 @@ process:
 		goto discard_and_relse;
 	if(sk->state == TCP_TIME_WAIT)
 		goto do_time_wait;
+
+	skb->dev = NULL;
 
 	bh_lock_sock(sk);
 	ret = 0;

@@ -120,7 +120,9 @@ static void hpp_io_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hd
 int __init hp_plus_probe(struct net_device *dev)
 {
 	int i;
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
+
+	SET_MODULE_OWNER(dev);
 
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return hpp_probe1(dev, base_addr);
@@ -270,7 +272,6 @@ hpp_open(struct net_device *dev)
 	outw(Perf_Page, ioaddr + HP_PAGING);
 
 	ei_open(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -285,7 +286,6 @@ hpp_close(struct net_device *dev)
 	outw((option_reg & ~EnableIRQ) | MemDisable | NICReset | ChipReset,
 		 ioaddr + HPP_OPTION);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -402,17 +402,9 @@ hpp_mem_block_output(struct net_device *dev, int count,
 
 #ifdef MODULE
 #define MAX_HPP_CARDS	4	/* Max number of HPP cards per module */
-static struct net_device dev_hpp[MAX_HPP_CARDS] = {
-	{
-		"",
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
-static int io[MAX_HPP_CARDS] = { 0, };
-static int irq[MAX_HPP_CARDS]  = { 0, };
+static struct net_device dev_hpp[MAX_HPP_CARDS];
+static int io[MAX_HPP_CARDS];
+static int irq[MAX_HPP_CARDS];
 
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_HPP_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_HPP_CARDS) "i");

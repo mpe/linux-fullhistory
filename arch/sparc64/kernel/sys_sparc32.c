@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.166 2000/11/10 04:49:56 davem Exp $
+/* $Id: sys_sparc32.c,v 1.168 2000/12/11 18:59:35 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -2966,6 +2966,7 @@ static int copy_strings32(int argc, u32 * argv, struct linux_binprm *bprm)
 
 			err = copy_from_user(kaddr + offset, (char *)A(str),
 					     bytes_to_copy);
+			flush_dcache_page(page);
 			flush_page_to_ram(page);
 			kunmap(page);
 
@@ -4133,6 +4134,7 @@ asmlinkage unsigned long sys32_mremap(unsigned long addr,
 	unsigned long old_len, unsigned long new_len,
 	unsigned long flags, u32 __new_addr)
 {
+	struct vm_area_struct *vma;
 	unsigned long ret = -EINVAL;
 	unsigned long new_addr = AA(__new_addr);
 
@@ -4141,6 +4143,9 @@ asmlinkage unsigned long sys32_mremap(unsigned long addr,
 	if (addr > 0xf0000000UL - old_len)
 		goto out;
 	down(&current->mm->mmap_sem);
+	vma = find_vma(current->mm, addr);
+	if (vma && (vma->vm_flags & VM_SHARED))
+		current->thread.flags |= SPARC_FLAG_MMAPSHARED;
 	if (flags & MREMAP_FIXED) {
 		if (new_addr > 0xf0000000UL - new_len)
 			goto out_sem;
@@ -4148,13 +4153,14 @@ asmlinkage unsigned long sys32_mremap(unsigned long addr,
 		ret = -ENOMEM;
 		if (!(flags & MREMAP_MAYMOVE))
 			goto out_sem;
-		new_addr = get_unmapped_area (addr, new_len);
+		new_addr = get_unmapped_area(addr, new_len);
 		if (!new_addr)
 			goto out_sem;
 		flags |= MREMAP_FIXED;
 	}
 	ret = do_mremap(addr, old_len, new_len, flags, new_addr);
 out_sem:
+	current->thread.flags &= ~(SPARC_FLAG_MMAPSHARED);
 	up(&current->mm->mmap_sem);
 out:
 	return ret;       

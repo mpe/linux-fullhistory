@@ -1023,7 +1023,8 @@ static int epp_open(struct net_device *dev)
 	struct baycom_state *bc;
         struct parport *pp;
 	const struct tq_struct run_bh = {
-		0, 0, (void *)(void *)epp_bh, dev
+		routine: (void *)(void *)epp_bh,
+		data: dev
 	};
 	unsigned int i, j;
 	unsigned char tmp[128];

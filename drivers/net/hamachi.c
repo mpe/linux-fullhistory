@@ -580,6 +580,7 @@ static int __init hamachi_init_one (struct pci_dev *pdev,
 		iounmap((char *)ioaddr);
 		return -ENOMEM;
 	}
+	SET_MODULE_OWNER(dev);
 
 #ifdef TX_CHECKSUM
 	printk("check that skbcopy in ip_queue_xmit isn't happening\n");
@@ -787,12 +788,9 @@ static int hamachi_open(struct net_device *dev)
 	u_int32_t rx_int_var, tx_int_var;
 	u_int16_t fifo_info;
 
-	MOD_INC_USE_COUNT;
-
-	if (request_irq(dev->irq, &hamachi_interrupt, SA_SHIRQ, dev->name, dev)) {
-		MOD_DEC_USE_COUNT;
-		return -EAGAIN;
-	}
+	i = request_irq(dev->irq, &hamachi_interrupt, SA_SHIRQ, dev->name, dev);
+	if (i)
+		return i;
 
 	if (hamachi_debug > 1)
 		printk(KERN_DEBUG "%s: hamachi_open() irq %d.\n",
@@ -1753,8 +1751,6 @@ static int hamachi_close(struct net_device *dev)
 	}
 
 	writeb(0x00, ioaddr + LEDCtrl);
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

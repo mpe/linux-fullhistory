@@ -41,7 +41,7 @@ N: Tigran A. Aivazian
 E: tigran@veritas.com
 W: http://www.ocston.org/~tigran
 D: BFS filesystem
-D: Intel P6 CPU microcode update support
+D: Intel IA32 CPU microcode update support
 D: Various kernel patches
 S: United Kingdom
 

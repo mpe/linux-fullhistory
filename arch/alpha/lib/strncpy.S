@@ -27,6 +27,10 @@ strncpy:
 	beq	$18, 0f
 	mov	$26, $23	# set return address
 	br	__stxncpy	# do the work of the copy
+
 0:	ret
+	nop
+	nop
+	nop
 
 	.end strncpy

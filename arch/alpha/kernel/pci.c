@@ -90,10 +90,8 @@ quirk_cypress_ide_ports(struct pci_dev *dev)
 {
 	if (dev->class >> 8 != PCI_CLASS_STORAGE_IDE)
 		return;
-	dev->resource[1].start |= 2;
-	dev->resource[1].end = dev->resource[1].start;
-	pci_claim_resource(dev, 0);
-	pci_claim_resource(dev, 1);
+	dev->resource[0].flags = 0;
+	dev->resource[1].flags = 0;
 }
 
 static void __init

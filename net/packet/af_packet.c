@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- * Version:	$Id: af_packet.c,v 1.46 2000/10/24 21:26:19 davem Exp $
+ * Version:	$Id: af_packet.c,v 1.47 2000/12/08 17:15:54 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -264,11 +264,6 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,  struct 
 	strncpy(spkt->spkt_device, dev->name, sizeof(spkt->spkt_device));
 	spkt->spkt_protocol = skb->protocol;
 
-	if (skb->rx_dev) {
-		dev_put(skb->rx_dev);
-		skb->rx_dev = NULL;
-	}
-
 	/*
 	 *	Charge the memory to the socket. This is done specifically
 	 *	to prevent sockets using all the memory up.
@@ -482,17 +477,13 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,  struct packe
 	if (dev->hard_header_parse)
 		sll->sll_halen = dev->hard_header_parse(skb, sll->sll_addr);
 
-	if (skb->rx_dev) {
-		dev_put(skb->rx_dev);
-		skb->rx_dev = NULL;
-	}
-
 #ifdef CONFIG_FILTER
 	if (skb->len > snaplen)
 		__skb_trim(skb, snaplen);
 #endif
 
 	skb_set_owner_r(skb, sk);
+	skb->dev = NULL;
 	spin_lock(&sk->receive_queue.lock);
 	po->stats.tp_packets++;
 	__skb_queue_tail(&sk->receive_queue, skb);

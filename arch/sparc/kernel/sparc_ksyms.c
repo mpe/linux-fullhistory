@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.104 2000/09/06 05:43:00 anton Exp $
+/* $Id: sparc_ksyms.c,v 1.105 2000/12/11 05:24:25 anton Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -111,6 +111,11 @@ EXPORT_SYMBOL_PRIVATE(_rw_read_enter);
 EXPORT_SYMBOL_PRIVATE(_rw_read_exit);
 EXPORT_SYMBOL_PRIVATE(_rw_write_enter);
 #endif
+/* semaphores */
+EXPORT_SYMBOL(__up);
+EXPORT_SYMBOL(__down);
+EXPORT_SYMBOL(__down_trylock);
+EXPORT_SYMBOL(__down_interruptible);
 /* rw semaphores */
 EXPORT_SYMBOL_NOVERS(___down_read);
 EXPORT_SYMBOL_NOVERS(___down_write);

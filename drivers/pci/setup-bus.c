@@ -205,7 +205,7 @@ pbus_assign_resources(struct pci_bus *bus, struct pbus_set_ranges_data *ranges)
 	}
 }
 
-void __init 
+void __init
 pci_assign_unassigned_resources(void)
 {
 	struct pbus_set_ranges_data ranges;
@@ -215,8 +215,8 @@ pci_assign_unassigned_resources(void)
 	for(ln=pci_root_buses.next; ln != &pci_root_buses; ln=ln->next) {
 		struct pci_bus *b = pci_bus_b(ln);
 
-		ranges.io_start = b->resource[0]->start;
-		ranges.mem_start = b->resource[1]->start;
+		ranges.io_start = b->resource[0]->start + PCIBIOS_MIN_IO;
+		ranges.mem_start = b->resource[1]->start + PCIBIOS_MIN_MEM;
 		ranges.io_end = ranges.io_start;
 		ranges.mem_end = ranges.mem_start;
 		ranges.found_vga = 0;

@@ -2040,7 +2040,6 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 	int		pageind;
 	int		bhind;
 	int		offset;
-	int		sectors = size>>9;
 	unsigned long	blocknr;
 	struct kiobuf *	iobuf = NULL;
 	struct page *	map;
@@ -2092,9 +2091,8 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 				tmp->b_this_page = tmp;
 
 				init_buffer(tmp, end_buffer_io_kiobuf, iobuf);
-				tmp->b_rdev = tmp->b_dev = dev;
+				tmp->b_dev = dev;
 				tmp->b_blocknr = blocknr;
-				tmp->b_rsector = blocknr*sectors;
 				tmp->b_state = (1 << BH_Mapped) | (1 << BH_Lock) | (1 << BH_Req);
 
 				if (rw == WRITE) {
@@ -2108,7 +2106,7 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 
 				atomic_inc(&iobuf->io_count);
 
-				generic_make_request(rw, tmp);
+				submit_bh(rw, tmp);
 				/* 
 				 * Wait for IO if we have got too much 
 				 */

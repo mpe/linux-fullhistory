@@ -76,7 +76,7 @@ static unsigned char* hscx_versions[]={"A1", NULL, "A2", NULL, "A3", "2.1"};
 struct mixcom_privdata {
 	u16	clock;
 	char	channel;
-	char	txbusy;
+	long	txbusy;
 	struct sk_buff *sending;
 	unsigned tx_ptr;
 	struct sk_buff *recving;

@@ -20,12 +20,30 @@ ifeq ($(CONFIG_ALPHA_EV67),y)
   ev67 := ev67-
 endif
 
-OBJS  = __divqu.o __remqu.o __divlu.o __remlu.o memset.o memcpy.o io.o \
-	checksum.o csum_partial_copy.o $(ev67)strlen.o \
-	$(ev67)strcat.o $(ev6)strcpy.o $(ev67)strncat.o $(ev6)strncpy.o \
-	stxcpy.o stxncpy.o $(ev67)strchr.o strrchr.o memchr.o \
-	$(ev6)copy_user.o $(ev6)clear_user.o $(ev6)strncpy_from_user.o \
-	$(ev67)strlen_user.o $(ev6)csum_ipv6_magic.o strcasecmp.o fpreg.o \
+OBJS =	__divqu.o __remqu.o __divlu.o __remlu.o \
+	$(ev6)memset.o \
+	$(ev6)memcpy.o \
+	memmove.o \
+	io.o \
+	checksum.o \
+	csum_partial_copy.o \
+	$(ev67)strlen.o \
+	$(ev67)strcat.o \
+	strcpy.o \
+	$(ev67)strncat.o \
+	strncpy.o \
+	$(ev6)stxcpy.o \
+	$(ev6)stxncpy.o \
+	$(ev67)strchr.o \
+	strrchr.o \
+	$(ev6)memchr.o \
+	$(ev6)copy_user.o \
+	$(ev6)clear_user.o \
+	$(ev6)strncpy_from_user.o \
+	$(ev67)strlen_user.o \
+	$(ev6)csum_ipv6_magic.o \
+	strcasecmp.o \
+	fpreg.o \
 	callback_srm.o srm_puts.o srm_printk.o
 
 lib.a: $(OBJS)

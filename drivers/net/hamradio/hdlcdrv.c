@@ -287,7 +287,7 @@ void hdlcdrv_receiver(struct net_device *dev, struct hdlcdrv_state *s)
 
 /* ---------------------------------------------------------------------- */
 
-static void inline do_kiss_params(struct hdlcdrv_state *s,
+static inline void do_kiss_params(struct hdlcdrv_state *s,
 				  unsigned char *data, unsigned long len)
 {
 
@@ -889,14 +889,7 @@ EXPORT_SYMBOL(hdlcdrv_unregister_hdlcdrv);
 
 /* --------------------------------------------------------------------- */
 
-#ifdef MODULE
-
-MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
-MODULE_DESCRIPTION("Packet Radio network interface HDLC encoder/decoder");
-
-/* --------------------------------------------------------------------- */
-
-int __init init_module(void)
+static int __init hdlcdrv_init_driver(void)
 {
 	printk(KERN_INFO "hdlcdrv: (C) 1996-2000 Thomas Sailer HB9JNX/AE4WA\n");
 	printk(KERN_INFO "hdlcdrv: version 0.8 compiled " __TIME__ " " __DATE__ "\n");
@@ -905,10 +898,16 @@ int __init init_module(void)
 
 /* --------------------------------------------------------------------- */
 
-void cleanup_module(void)
+static void __exit hdlcdrv_cleanup_driver(void)
 {
 	printk(KERN_INFO "hdlcdrv: cleanup\n");
 }
 
-#endif /* MODULE */
+/* --------------------------------------------------------------------- */
+
+MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
+MODULE_DESCRIPTION("Packet Radio network interface HDLC encoder/decoder");
+module_init(hdlcdrv_init_driver);
+module_exit(hdlcdrv_cleanup_driver);
+
 /* --------------------------------------------------------------------- */

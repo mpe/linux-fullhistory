@@ -121,8 +121,8 @@ static void     net_tx_timeout(struct net_device *dev);
 
 /* Example routines you must write ;->. */
 #define tx_done(dev) 1
-extern void	hardware_send_packet(short ioaddr, char *buf, int length);
-extern void 	chipset_init(struct net_device *dev, int startp);
+static void	hardware_send_packet(short ioaddr, char *buf, int length);
+static void 	chipset_init(struct net_device *dev, int startp);
 
 /*
  * Check for a network adaptor of this type, and return '0' iff one exists.
@@ -135,7 +135,9 @@ int __init
 netcard_probe(struct net_device *dev)
 {
 	int i;
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
+
+	SET_MODULE_OWNER(dev);
 
 	if (base_addr > 0x1ff)    /* Check a single specified location. */
 		return netcard_probe1(dev, base_addr);
@@ -360,8 +362,6 @@ net_open(struct net_device *dev)
 	 */
 	netif_start_queue(dev);
 
-	MOD_INC_USE_COUNT;
-
 	return 0;
 }
 
@@ -574,8 +574,6 @@ net_close(struct net_device *dev)
 
 	/* Update the statistics here. */
 
-	MOD_DEC_USE_COUNT;
-
 	return 0;
 
 }
@@ -589,11 +587,8 @@ static struct net_device_stats *net_get_stats(struct net_device *dev)
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;
 
-	cli();
 	/* Update the statistics from the device registers. */
 	lp->stats.rx_missed_errors = inw(ioaddr+1);
-	sti();
-
 	return &lp->stats;
 }
 
@@ -633,7 +628,7 @@ set_multicast_list(struct net_device *dev)
 
 #ifdef MODULE
 
-static struct net_device this_device = { init: netcard_probe };
+static struct net_device this_device;
 static int io = 0x300;
 static int irq;
 static int dma;
@@ -652,6 +647,7 @@ int init_module(void)
 	this_device.irq       = irq;
 	this_device.dma       = dma;
 	this_device.mem_start = mem;
+	this_device.init      = netcard_probe;
 
 	if ((result = register_netdev(&this_device)) != 0)
 		return result;

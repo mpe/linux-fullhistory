@@ -55,12 +55,12 @@ struct comx_channel {
 	unsigned char	line_status;
 
 	struct timer_list lineup_timer;	// against line jitter
-	int		lineup_pending;
+	long int	lineup_pending;
 	unsigned char	lineup_delay;
 
 #if 0
 	struct timer_list reset_timer; // for board resetting
-	int		reset_pending;
+	long		reset_pending;
 	int		reset_timeout;
 #endif
 

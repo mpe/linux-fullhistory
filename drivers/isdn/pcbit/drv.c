@@ -135,7 +135,7 @@ int pcbit_init_dev(int board, int mem_base, int irq)
 	dev->b2->id = 1;
 
 
-	dev->qdelivery.next = NULL;
+	INIT_LIST_HEAD(&dev->qdelivery.list);
 	dev->qdelivery.sync = 0;
 	dev->qdelivery.routine = pcbit_deliver;
 	dev->qdelivery.data = dev;

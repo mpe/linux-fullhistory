@@ -2868,7 +2868,7 @@ int awc_private_init(struct net_device * dev){
 	
 	priv->command_semaphore_on = 0;
 	priv->unlock_command_postponed = 0;
-	priv->immediate_bh.next 	= NULL;
+	INIT_LIST_HEAD(&priv->immediate_bh.list);
 	priv->immediate_bh.sync 	= 0;
 	priv->immediate_bh.routine 	= (void *)(void *)awc_bh;
 	priv->immediate_bh.data 	= dev;

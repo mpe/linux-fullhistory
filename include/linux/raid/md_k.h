@@ -165,8 +165,7 @@ struct mdk_rdev_s
 	mddev_t *mddev;			/* RAID array if running */
 	unsigned long last_events;	/* IO event timestamp */
 
-	struct inode *inode;		/* Lock inode */
-	struct file filp;		/* Lock file */
+	struct block_device *bdev;	/* block device handle */
 
 	mdp_super_t *sb;
 	unsigned long sb_offset;
@@ -206,6 +205,7 @@ struct mddev_s
 	struct semaphore		reconfig_sem;
 	struct semaphore		recovery_sem;
 	struct semaphore		resync_sem;
+	atomic_t			active;
 
 	atomic_t			recovery_active; /* blocks scheduled, but not written */
 	md_wait_queue_head_t		recovery_wait;

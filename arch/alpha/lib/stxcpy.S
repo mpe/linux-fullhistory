@@ -1,4 +1,5 @@
-/* stxcpy.S
+/*
+ * arch/alpha/lib/stxcpy.S
  * Contributed by Richard Henderson (rth@tamu.edu)
  *
  * Copy a null-terminated string from SRC to DST.

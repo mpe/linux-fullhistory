@@ -1585,7 +1585,7 @@ alloc_dma_rcv_ctx(struct ti_ohci *ohci, int ctx, int num_desc,
 
         /* initialize bottom handler */
         d->task.sync = 0;
-        d->task.next = NULL;
+        INIT_LIST_HEAD(&d->task.list);
         d->task.routine = dma_rcv_bh;
         d->task.data = (void*)d;
 

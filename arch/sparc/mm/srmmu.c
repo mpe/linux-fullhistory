@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.224 2000/11/09 22:40:05 davem Exp $
+/* $Id: srmmu.c,v 1.225 2000/11/30 08:37:31 anton Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -51,7 +51,6 @@ enum mbus_module srmmu_modtype;
 unsigned int hwbug_bitmask;
 int vac_cache_size;
 int vac_line_size;
-int vac_badbits;
 
 extern struct resource sparc_iomap;
 
@@ -1286,75 +1285,6 @@ static void srmmu_destroy_context(struct mm_struct *mm)
 	}
 }
 
-static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
-				       unsigned long address, pte_t pte)
-{
-	if((vma->vm_flags & (VM_WRITE|VM_SHARED)) == (VM_WRITE|VM_SHARED)) {
-		struct vm_area_struct *vmaring;
-		struct file *file;
-		struct address_space *mapping;
-		unsigned long flags, offset, vaddr, start;
-		int alias_found = 0;
-		pgd_t *pgdp;
-		pmd_t *pmdp;
-		pte_t *ptep;
-
-		__save_and_cli(flags);
-
-		file = vma->vm_file;
-		if (!file)
-			goto done;
-		mapping = file->f_dentry->d_inode->i_mapping;
-		offset = (address & PAGE_MASK) - vma->vm_start;
-		spin_lock(&mapping->i_shared_lock);
-		vmaring = mapping->i_mmap_shared; 
-		if (vmaring != NULL) do {
-			/* Do not mistake ourselves as another mapping. */
-			if(vmaring == vma)
-				continue;
-
-			vaddr = vmaring->vm_start + offset;
-			if ((vaddr ^ address) & vac_badbits) {
-				alias_found++;
-				start = vmaring->vm_start;
-				while (start < vmaring->vm_end) {
-					pgdp = srmmu_pgd_offset(vmaring->vm_mm, start);
-					if(!pgdp) goto next;
-					pmdp = srmmu_pmd_offset(pgdp, start);
-					if(!pmdp) goto next;
-					ptep = srmmu_pte_offset(pmdp, start);
-					if(!ptep) goto next;
-
-					if((pte_val(*ptep) & SRMMU_ET_MASK) == SRMMU_VALID) {
-#if 0
-						printk("Fixing USER/USER alias [%ld:%08lx]\n",
-						       vmaring->vm_mm->context, start);
-#endif
-						flush_cache_page(vmaring, start);
-						srmmu_set_pte(ptep, __pte((pte_val(*ptep) &
-								     ~SRMMU_CACHE)));
-						flush_tlb_page(vmaring, start);
-					}
-				next:
-					start += PAGE_SIZE;
-				}
-			}
-		} while ((vmaring = vmaring->vm_next_share) != NULL);
-		spin_unlock(&mapping->i_shared_lock);
-
-		if(alias_found && ((pte_val(pte) & SRMMU_CACHE) != 0)) {
-			pgdp = srmmu_pgd_offset(vma->vm_mm, address);
-			pmdp = srmmu_pmd_offset(pgdp, address);
-			ptep = srmmu_pte_offset(pmdp, address);
-			flush_cache_page(vma, address);
-			srmmu_set_pte(ptep, __pte((pte_val(*ptep) & ~SRMMU_CACHE)));
-			flush_tlb_page(vma, address);
-		}
-	done:
-		__restore_flags(flags);
-	}
-}
-
 /* Init various srmmu chip types. */
 static void __init srmmu_is_bad(void)
 {
@@ -1389,7 +1319,6 @@ static void __init init_vac_layout(void)
 			}
 
 			vac_cache_size = cache_lines * vac_line_size;
-			vac_badbits = (vac_cache_size - 1) & PAGE_MASK;
 #ifdef CONFIG_SMP
 			if(vac_cache_size > max_size)
 				max_size = vac_cache_size;
@@ -1410,7 +1339,6 @@ static void __init init_vac_layout(void)
 #ifdef CONFIG_SMP
 	vac_cache_size = max_size;
 	vac_line_size = min_line_size;
-	vac_badbits = (vac_cache_size - 1) & PAGE_MASK;
 #endif
 	printk("SRMMU: Using VAC size of %d bytes, line size %d bytes.\n",
 	       (int)vac_cache_size, (int)vac_line_size);
@@ -1465,7 +1393,6 @@ static void __init init_hypersparc(void)
 	BTFIXUPSET_CALL(flush_page_for_dma, hypersparc_flush_page_for_dma, BTFIXUPCALL_NOP);
 
 
-	BTFIXUPSET_CALL(update_mmu_cache, srmmu_vac_update_mmu_cache, BTFIXUPCALL_NORM);
 	poke_srmmu = poke_hypersparc;
 
 	hypersparc_setup_blockops();
@@ -1532,7 +1459,6 @@ static void __init init_cypress_common(void)
 	BTFIXUPSET_CALL(flush_sig_insns, cypress_flush_sig_insns, BTFIXUPCALL_NOP);
 	BTFIXUPSET_CALL(flush_page_for_dma, cypress_flush_page_for_dma, BTFIXUPCALL_NOP);
 
-	BTFIXUPSET_CALL(update_mmu_cache, srmmu_vac_update_mmu_cache, BTFIXUPCALL_NORM);
 	poke_srmmu = poke_cypress;
 }
 

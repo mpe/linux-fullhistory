@@ -1,4 +1,5 @@
-/* stxncpy.S
+/*
+ * arch/alpha/lib/stxncpy.S
  * Contributed by Richard Henderson (rth@tamu.edu)
  *
  * Copy no more than COUNT bytes of the null-terminated string from

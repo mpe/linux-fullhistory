@@ -354,11 +354,11 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 	lock_vma_mappings(vma);
 	spin_lock(&mm->page_table_lock);
 	__insert_vm_struct(mm, vma);
+	unlock_vma_mappings(vma);
 	if (correct_wcount)
 		atomic_inc(&file->f_dentry->d_inode->i_writecount);
 	merge_segments(mm, vma->vm_start, vma->vm_end);
 	spin_unlock(&mm->page_table_lock);
-	unlock_vma_mappings(vma);
 	
 	mm->total_vm += len >> PAGE_SHIFT;
 	if (flags & VM_LOCKED) {
@@ -858,9 +858,9 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	lock_vma_mappings(vma);
 	spin_lock(&mm->page_table_lock);
 	__insert_vm_struct(mm, vma);
+	unlock_vma_mappings(vma);
 	merge_segments(mm, vma->vm_start, vma->vm_end);
 	spin_unlock(&mm->page_table_lock);
-	unlock_vma_mappings(vma);
 	
 	mm->total_vm += len >> PAGE_SHIFT;
 	if (flags & VM_LOCKED) {
@@ -1034,20 +1034,23 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 			avl_remove(mpnt, &mm->mmap_avl);
 		prev->vm_end = mpnt->vm_end;
 		prev->vm_next = mpnt->vm_next;
+		mm->map_count--;
 		if (mpnt->vm_ops && mpnt->vm_ops->close) {
 			mpnt->vm_pgoff += (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
 			mpnt->vm_start = mpnt->vm_end;
 			spin_unlock(&mm->page_table_lock);
-			unlock_vma_mappings(mpnt);
 			mpnt->vm_ops->close(mpnt);
-			lock_vma_mappings(mpnt);
-			spin_lock(&mm->page_table_lock);
-		}
-		mm->map_count--;
+		} else
+			spin_unlock(&mm->page_table_lock);
+
+		lock_vma_mappings(mpnt);
 		__remove_shared_vm_struct(mpnt);
+		unlock_vma_mappings(mpnt);
 		if (mpnt->vm_file)
 			fput(mpnt->vm_file);
 		kmem_cache_free(vm_area_cachep, mpnt);
 		mpnt = prev;
+
+		spin_lock(&mm->page_table_lock);
 	}
 }

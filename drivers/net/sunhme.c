@@ -1,4 +1,4 @@
-/* $Id: sunhme.c,v 1.104 2000/11/17 01:40:00 davem Exp $
+/* $Id: sunhme.c,v 1.105 2000/12/05 02:00:36 anton Exp $
  * sunhme.c: Sparc HME/BigMac 10/100baseT half/full duplex auto switching,
  *           auto carrier detecting ethernet driver.  Also known as the
  *           "Happy Meal Ethernet" found on SunSwift SBUS cards.
@@ -1492,18 +1492,18 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 
 	/* Shut up the MIF. */
 	HMD(("happy_meal_init: Disable all MIF irqs (old[%08x]), ",
-	     hme_read32(hp, &tregs->int_mask)));
+	     hme_read32(hp, tregs + TCVR_IMASK)));
 	hme_write32(hp, tregs + TCVR_IMASK, 0xffff);
 
 	/* See if we can enable the MIF frame on this card to speak to the DP83840. */
 	if (hp->happy_flags & HFLAG_FENABLE) {
 		HMD(("use frame old[%08x], ",
-		     hme_read32(hp, &tregs->cfg)));
+		     hme_read32(hp, tregs + TCVR_CFG)));
 		hme_write32(hp, tregs + TCVR_CFG,
 			    hme_read32(hp, tregs + TCVR_CFG) & ~(TCV_CFG_BENABLE));
 	} else {
 		HMD(("use bitbang old[%08x], ",
-		     hme_read32(hp, &tregs->cfg)));
+		     hme_read32(hp, tregs + TCVR_CFG)));
 		hme_write32(hp, tregs + TCVR_CFG,
 			    hme_read32(hp, tregs + TCVR_CFG) | TCV_CFG_BENABLE);
 	}

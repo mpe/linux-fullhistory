@@ -547,7 +547,7 @@ static void dummy_start_output(struct sparcaudio_driver *drv, __u8 * buffer,
         dummy_chip->perchip_info.play.active = 1;
 
         /* fake an "interrupt" to deal with this block */
-        dummy_chip->tqueue.next = NULL;
+        INIT_LIST_HEAD(&dummy_chip->tqueue.list);
         dummy_chip->tqueue.sync = 0;
         dummy_chip->tqueue.routine = dummy_output_done_task;
         dummy_chip->tqueue.data = drv;

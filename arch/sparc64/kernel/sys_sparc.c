@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.46 2000/08/29 07:01:54 davem Exp $
+/* $Id: sys_sparc.c,v 1.47 2000/11/29 05:56:12 anton Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -40,6 +40,8 @@ asmlinkage unsigned long sys_getpagesize(void)
 	return PAGE_SIZE;
 }
 
+#define COLOUR_ALIGN(addr)	(((addr)+SHMLBA-1)&~(SHMLBA-1))
+
 unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 {
 	struct vm_area_struct * vmm;
@@ -51,7 +53,11 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 		return 0;
 	if (!addr)
 		addr = TASK_UNMAPPED_BASE;
-	addr = PAGE_ALIGN(addr);
+
+	if (current->thread.flags & SPARC_FLAG_MMAPSHARED)
+		addr = COLOUR_ALIGN(addr);
+	else
+		addr = PAGE_ALIGN(addr);
 
 	task_size -= len;
 
@@ -66,6 +72,8 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 		if (!vmm || addr + len <= vmm->vm_start)
 			return addr;
 		addr = vmm->vm_end;
+		if (current->thread.flags & SPARC_FLAG_MMAPSHARED)
+			addr = COLOUR_ALIGN(addr);
 	}
 }
 
@@ -232,9 +240,14 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 			goto out_putf;
 	}
 
+	if (flags & MAP_SHARED)
+		current->thread.flags |= SPARC_FLAG_MMAPSHARED;
+
 	down(&current->mm->mmap_sem);
 	retval = do_mmap(file, addr, len, prot, flags, off);
 	up(&current->mm->mmap_sem);
+
+	current->thread.flags &= ~(SPARC_FLAG_MMAPSHARED);
 
 out_putf:
 	if (file)
@@ -264,6 +277,7 @@ asmlinkage unsigned long sys64_mremap(unsigned long addr,
 	unsigned long old_len, unsigned long new_len,
 	unsigned long flags, unsigned long new_addr)
 {
+	struct vm_area_struct *vma;
 	unsigned long ret = -EINVAL;
 	if (current->thread.flags & SPARC_FLAG_32BIT)
 		goto out;
@@ -272,6 +286,9 @@ asmlinkage unsigned long sys64_mremap(unsigned long addr,
 	if (addr < PAGE_OFFSET && addr + old_len > -PAGE_OFFSET)
 		goto out;
 	down(&current->mm->mmap_sem);
+	vma = find_vma(current->mm, addr);
+	if (vma && (vma->vm_flags & VM_SHARED))
+		current->thread.flags |= SPARC_FLAG_MMAPSHARED;
 	if (flags & MREMAP_FIXED) {
 		if (new_addr < PAGE_OFFSET &&
 		    new_addr + new_len > -PAGE_OFFSET)
@@ -280,13 +297,14 @@ asmlinkage unsigned long sys64_mremap(unsigned long addr,
 		ret = -ENOMEM;
 		if (!(flags & MREMAP_MAYMOVE))
 			goto out_sem;
-		new_addr = get_unmapped_area (addr, new_len);
+		new_addr = get_unmapped_area(addr, new_len);
 		if (!new_addr)
 			goto out_sem;
 		flags |= MREMAP_FIXED;
 	}
 	ret = do_mremap(addr, old_len, new_len, flags, new_addr);
 out_sem:
+	current->thread.flags &= ~(SPARC_FLAG_MMAPSHARED);
 	up(&current->mm->mmap_sem);
 out:
 	return ret;       

@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.41 2000/11/27 07:46:31 anton Exp $
+/* $Id: ioport.c,v 1.42 2000/12/05 00:56:36 anton Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -586,7 +586,8 @@ void pci_free_consistent(struct pci_dev *pdev, size_t n, void *p, dma_addr_t ba)
  * Once the device is given the dma address, the device owns this memory
  * until either pci_unmap_single or pci_dma_sync_single is performed.
  */
-dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr, size_t size, int direction)
+dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr, size_t size,
+    int direction)
 {
 	if (direction == PCI_DMA_NONE)
 		BUG();

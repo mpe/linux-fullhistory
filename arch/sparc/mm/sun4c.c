@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.201 2000/11/09 22:39:36 davem Exp $
+/* $Id: sun4c.c,v 1.202 2000/12/01 03:17:31 anton Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -2373,78 +2373,6 @@ static int sun4c_check_pgt_cache(int low, int high)
 	return freed;
 }
 
-/* There are really two cases of aliases to watch out for, and these
- * are:
- *
- *     1) A user's page which can be aliased with the kernels virtual
- *        mapping of the physical page.
- *
- *     2) Multiple user mappings of the same inode/anonymous object
- *        such that two copies of the same data for the same phys page
- *        can live (writable) in the cache at the same time.
- *
- * We handle number 1 by flushing the kernel copy of the page always
- * after COW page operations.
- *
- * NOTE: We are a bit slowed down now because the VMA arg is indeed used
- *       now, so our ref/mod bit tracking quick userfaults eat a few more
- *       cycles than they used to.
- */
-static void sun4c_vac_alias_fixup(struct vm_area_struct *vma, unsigned long address, pte_t pte)
-{
-	pgd_t *pgdp;
-	pte_t *ptep;
-
-	if (vma->vm_file) {
-		struct address_space *mapping;
-		unsigned long offset = (address & PAGE_MASK) - vma->vm_start;
-		struct vm_area_struct *vmaring;
-		int alias_found = 0;
-
-		mapping = vma->vm_file->f_dentry->d_inode->i_mapping;
-		spin_lock(&mapping->i_shared_lock);
-		vmaring = mapping->i_mmap_shared; 
-		if (vmaring != NULL) do {
-			unsigned long vaddr = vmaring->vm_start + offset;
-			unsigned long start;
-
-			/* Do not mistake ourselves as another mapping. */
-			if (vmaring == vma)
-				continue;
-
-			if (S4CVAC_BADALIAS(vaddr, address)) {
-				alias_found++;
-				start = vmaring->vm_start;
-				while (start < vmaring->vm_end) {
-					pgdp = sun4c_pgd_offset(vmaring->vm_mm, start);
-					if (!pgdp)
-						goto next;
-					ptep = sun4c_pte_offset((pmd_t *) pgdp, start);
-					if (!ptep)
-						goto next;
-
-					if (pte_val(*ptep) & _SUN4C_PAGE_PRESENT) {
-						flush_cache_page(vmaring, start);
-						*ptep = __pte(pte_val(*ptep) |
-							      _SUN4C_PAGE_NOCACHE);
-						flush_tlb_page(vmaring, start);
-					}
-				next:
-					start += PAGE_SIZE;
-				}
-			}
-		} while ((vmaring = vmaring->vm_next_share) != NULL);
-		spin_unlock(&mapping->i_shared_lock);
-
-		if (alias_found && !(pte_val(pte) & _SUN4C_PAGE_NOCACHE)) {
-			pgdp = sun4c_pgd_offset(vma->vm_mm, address);
-			ptep = sun4c_pte_offset((pmd_t *) pgdp, address);
-			*ptep = __pte(pte_val(*ptep) | _SUN4C_PAGE_NOCACHE);
-			pte = *ptep;
-		}
-	}
-}
-
 /* An experiment, turn off by default for now... -DaveM */
 #define SUN4C_PRELOAD_PSEG
 
@@ -2486,8 +2414,6 @@ void sun4c_update_mmu_cache(struct vm_area_struct *vma, unsigned long address, p
 #endif
 			start += PAGE_SIZE;
 		}
-		if ((vma->vm_flags & (VM_WRITE|VM_SHARED)) == (VM_WRITE|VM_SHARED))
-			sun4c_vac_alias_fixup(vma, address, pte);
 #ifndef SUN4C_PRELOAD_PSEG
 		sun4c_put_pte(address, pte_val(pte));
 #endif
@@ -2499,9 +2425,6 @@ void sun4c_update_mmu_cache(struct vm_area_struct *vma, unsigned long address, p
 		remove_lru(entry);
 		add_lru(entry);
 	}
-
-	if ((vma->vm_flags & (VM_WRITE|VM_SHARED)) == (VM_WRITE|VM_SHARED))
-		sun4c_vac_alias_fixup(vma, address, pte);
 
 	sun4c_put_pte(address, pte_val(pte));
 	restore_flags(flags);

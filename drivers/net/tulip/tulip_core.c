@@ -52,7 +52,7 @@ const char * const medianame[] = {
 
 /* Set the copy breakpoint for the copy-only-tiny-buffer Rx structure. */
 #if defined(__alpha__) || defined(__arm__) || defined(__hppa__) \
-	|| defined(__sparc_)
+	|| defined(__sparc_) || defined(__ia64__)
 static int rx_copybreak = 1518;
 #else
 static int rx_copybreak = 100;
@@ -71,7 +71,7 @@ static int rx_copybreak = 100;
 	ToDo: Non-Intel setting could be better.
 */
 
-#if defined(__alpha__)
+#if defined(__alpha__) || defined(__ia64__)
 static int csr0 = 0x01A00000 | 0xE000;
 #elif defined(__i386__) || defined(__powerpc__)
 static int csr0 = 0x01A00000 | 0x8000;

@@ -1,4 +1,4 @@
-/* $Id: pcic.c,v 1.19 2000/11/08 04:49:17 davem Exp $
+/* $Id: pcic.c,v 1.20 2000/12/05 00:56:36 anton Exp $
  * pcic.c: Sparc/PCI controller support
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
@@ -556,8 +556,8 @@ static void pcic_map_pci_device(struct linux_pcic *pcic,
 				 */
 				printk("PCIC: Skipping I/O space at 0x%lx,"
 				    "this will Oops if a driver attaches;"
-				    "device '%s' (%x,%x)\n", address, namebuf,
-	    			    dev->device, dev->vendor);
+				    "device '%s' at %02x:%02x)\n", address,
+				    namebuf, dev->bus->number, dev->devfn);
 			}
 		}
 	}
@@ -568,12 +568,12 @@ pcic_fill_irq(struct linux_pcic *pcic, struct pci_dev *dev, int node)
 {
 	struct pcic_ca2irq *p;
 	int i, ivec;
-	char namebuf[64];  /* P3 remove */
+	char namebuf[64];
 
 	if (node == 0 || node == -1) {
 		strcpy(namebuf, "???");
 	} else {
-		prom_getstring(node, "name", namebuf, sizeof(namebuf)); /* P3 remove */
+		prom_getstring(node, "name", namebuf, sizeof(namebuf));
 	}
 
 	if ((p = pcic->pcic_imap) == 0) {
@@ -612,8 +612,8 @@ pcic_fill_irq(struct linux_pcic *pcic, struct pci_dev *dev, int node)
 		if (p->irq == 0 || p->irq >= 15) {	/* Corrupted map */
 			printk("PCIC: BAD IRQ %d\n", p->irq); for (;;) {}
 		}
-		printk("PCIC: setting irq %x for device (%x,%x)\n",
-		    p->irq, dev->device, dev->vendor);
+		printk("PCIC: setting irq %d at pin %d for device %02x:%02x\n",
+		    p->irq, p->pin, dev->bus->number, dev->devfn);
 		dev->irq = p->irq;
 
 		i = p->pin;

@@ -747,6 +747,25 @@ static void __init isapnp_add_fixed_mem32_resource(struct pci_dev *dev,
 }
 
 /*
+ *  Parse card name for ISA PnP device.
+ */ 
+ 
+static void __init 
+isapnp_parse_name(char *name, unsigned int name_max, unsigned short *size)
+{
+	if (name[0] == '\0') {
+		unsigned short size1 = *size >= name_max ? (name_max - 1) : *size;
+		isapnp_peek(name, size1);
+		name[size1] = '\0';
+		*size -= size1;
+		
+		/* clean whitespace from end of string */
+		while (size1 > 0  &&  name[--size1] == ' ') 
+			name[size1] = '\0';
+	}	
+}
+
+/*
  *  Parse resource map for logical device.
  */
 
@@ -843,12 +862,7 @@ static int __init isapnp_create_device(struct pci_bus *card,
 			size = 0;
 			break;
 		case _LTAG_ANSISTR:
-			if (dev->name[0] == '\0') {
-				unsigned short size1 = size > 47 ? 47 : size;
-				isapnp_peek(dev->name, size1);
-				dev->name[size1] = '\0';
-				size -= size1;
-			}
+			isapnp_parse_name(dev->name, sizeof(dev->name), &size);
 			break;
 		case _LTAG_UNICODESTR:
 			/* silently ignore */
@@ -914,12 +928,7 @@ static void __init isapnp_parse_resource_map(struct pci_bus *card)
 		case _STAG_VENDOR:
 			break;
 		case _LTAG_ANSISTR:
-			if (card->name[0] == '\0') {
-				unsigned short size1 = size > 47 ? 47 : size;
-				isapnp_peek(card->name, size1);
-				card->name[size1] = '\0';
-				size -= size1;
-			}
+			isapnp_parse_name(card->name, sizeof(card->name), &size);
 			break;
 		case _LTAG_UNICODESTR:
 			/* silently ignore */

@@ -1,5 +1,5 @@
 
-/* $Id: mtd.h,v 1.17 2000/07/04 07:24:49 jgg Exp $ */
+/* $Id: mtd.h,v 1.26 2000/10/30 17:18:04 sjhill Exp $ */
 
 #ifndef __MTD_MTD_H__
 #define __MTD_MTD_H__
@@ -10,6 +10,7 @@
 #include <linux/types.h>
 #include <linux/mtd/compatmac.h>
 #include <linux/module.h>
+#include <linux/uio.h>
 
 #endif /* __KERNEL__ */
 
@@ -61,7 +62,8 @@ struct mtd_oob_buf {
 
 // Types of automatic ECC/Checksum available
 #define MTD_ECC_NONE		0 	// No automatic ECC available
-#define MTD_ECC_RS_DiskOnChip   1       // Automatic ECC on DiskOnChip
+#define MTD_ECC_RS_DiskOnChip	1	// Automatic ECC on DiskOnChip
+#define MTD_ECC_SW		2	// SW ECC for Toshiba & Samsung devices
 
 struct mtd_info_user {
 	u_char type;
@@ -78,6 +80,8 @@ struct mtd_info_user {
 #define MEMERASE                _IOW('M', 2, struct erase_info_user)
 #define MEMWRITEOOB             _IOWR('M', 3, struct mtd_oob_buf)
 #define MEMREADOOB              _IOWR('M', 4, struct mtd_oob_buf)
+#define MEMLOCK                 _IOW('M', 5, struct erase_info_user)
+#define MEMUNLOCK               _IOW('M', 6, struct erase_info_user)
 
 #ifndef __KERNEL__
 
@@ -123,6 +127,7 @@ struct mtd_info {
 
 	// Kernel-only stuff starts here.
 	char *name;
+	int index;
 
 	u_long bank_size;
 
@@ -144,8 +149,21 @@ struct mtd_info {
 
 	int (*read_oob) (struct mtd_info *mtd, loff_t from, size_t len, size_t *retlen, u_char *buf);
 	int (*write_oob) (struct mtd_info *mtd, loff_t to, size_t len, size_t *retlen, const u_char *buf);
-	
+
+	/* iovec-based read/write methods. We need these especially for NAND flash,
+	   with its limited number of write cycles per erase.
+	   NB: The 'count' parameter is the number of _vectors_, each of 
+	   which contains an (ofs, len) tuple.
+	*/
+	int (*readv) (struct mtd_info *mtd, struct iovec *vecs, unsigned long count, loff_t from, size_t *retlen);
+	int (*writev) (struct mtd_info *mtd, const struct iovec *vecs, unsigned long count, loff_t to, size_t *retlen);
+
+	/* Sync */
 	void (*sync) (struct mtd_info *mtd);
+
+	/* Chip-supported device locking */
+	int (*lock) (struct mtd_info *mtd, loff_t ofs, size_t len);
+	int (*unlock) (struct mtd_info *mtd, loff_t ofs, size_t len);
 
 	/* Power Management functions */
 	int (*suspend) (struct mtd_info *mtd);
@@ -198,20 +216,32 @@ extern int unregister_mtd_user (struct mtd_notifier *old);
 #define MTD_UNPOINT(mtd, arg) (*(mtd->unpoint))(mtd, (u_char *)arg)
 #define MTD_READ(mtd, args...) (*(mtd->read))(mtd, args)
 #define MTD_WRITE(mtd, args...) (*(mtd->write))(mtd, args)
+#define MTD_READV(mtd, args...) (*(mtd->readv))(mtd, args)
+#define MTD_WRITEV(mtd, args...) (*(mtd->writev))(mtd, args)
+#define MTD_READECC(mtd, args...) (*(mtd->read_ecc))(mtd, args)
+#define MTD_WRITEECC(mtd, args...) (*(mtd->write_ecc))(mtd, args)
 #define MTD_READOOB(mtd, args...) (*(mtd->read_oob))(mtd, args)
 #define MTD_WRITEOOB(mtd, args...) (*(mtd->write_oob))(mtd, args)
 #define MTD_SYNC(mtd) do { if (mtd->sync) (*(mtd->sync))(mtd);  } while (0) 
 #endif /* MTDC */
 
-/* Debugging macros */
+/*
+ * Debugging macro and defines
+ */
+#define MTD_DEBUG_LEVEL0	(0)	/* Quiet   */
+#define MTD_DEBUG_LEVEL1	(1)	/* Audible */
+#define MTD_DEBUG_LEVEL2	(2)	/* Loud    */
+#define MTD_DEBUG_LEVEL3	(3)	/* Noisy   */
 
-#ifdef DEBUGLVL
-#define DEBUG(n, args...) if (DEBUGLVL>(n)) printk(KERN_DEBUG args)
-#else
+#ifdef CONFIG_MTD_DEBUG
+#define DEBUG(n, args...)			\
+	if (n <=  CONFIG_MTD_DEBUG_VERBOSE) {	\
+		printk(KERN_INFO args);	\
+	}
+#else /* CONFIG_MTD_DEBUG */
 #define DEBUG(n, args...)
-#endif
+#endif /* CONFIG_MTD_DEBUG */
 
 #endif /* __KERNEL__ */
-
 
 #endif /* __MTD_MTD_H__ */

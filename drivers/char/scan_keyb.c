@@ -120,7 +120,7 @@ int register_scan_keyboard(void (*scan)(unsigned char *buffer),
 void __init scan_kbd_init(void)
 {
 
-	task_scan_kbd.next=NULL;
+	INIT_LIST_HEAD(task_scan_kbd.list);
 	task_scan_kbd.sync=0;
 	task_scan_kbd.routine=scan_kbd;
 	task_scan_kbd.data=NULL;

@@ -161,24 +161,3 @@ void * memcpy(void * dest, const void *src, size_t n)
 
 /* For backward modules compatibility, define __memcpy.  */
 asm("__memcpy = memcpy; .globl __memcpy");
-
-void *memmove (void *dest, const void *src, size_t n)
-{
-	if (dest <= src) {
-		if (!(((unsigned long) dest ^ (unsigned long) src) & 7))
-			__memcpy_aligned_up ((unsigned long) dest,
-					     (unsigned long) src, n);
-		else
-			__memcpy_unaligned_up ((unsigned long) dest,
-					       (unsigned long) src, n);
-	}
-	else {
-		if (!(((unsigned long) dest ^ (unsigned long) src) & 7))
-			__memcpy_aligned_dn ((unsigned long) dest,
-					     (unsigned long) src, n);
-		else
-			__memcpy_unaligned_dn ((unsigned long) dest,
-					       (unsigned long) src, n);
-	}
-	return dest;
-}

@@ -350,6 +350,8 @@ int __init ewrk3_probe(struct net_device *dev)
 	int tmp = num_ewrk3s, status = -ENODEV;
 	u_long iobase = dev->base_addr;
 
+	SET_MODULE_OWNER(dev);
+
 	if ((iobase == 0) && loading_module) {
 		printk("Autoprobing is not supported when loading a module based driver.\n");
 		status = -EIO;
@@ -680,8 +682,6 @@ static int ewrk3_open(struct net_device *dev)
 		printk(KERN_ERR "      Run the 'ewrk3setup' utility or remove the hard straps.\n");
 		return -EINVAL;
 	}
-
-	MOD_INC_USE_COUNT;
 
 	return status;
 }
@@ -1132,8 +1132,6 @@ static int ewrk3_close(struct net_device *dev)
 	if (!lp->hard_strapped) {
 		free_irq(dev->irq, dev);
 	}
-	MOD_DEC_USE_COUNT;
-
 	return 0;
 }
 
@@ -1860,15 +1858,7 @@ static int ewrk3_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 }
 
 #ifdef MODULE
-static char devicename[9] =
-{0,};
-static struct net_device thisEthwrk =
-{
-	devicename,		/* device name is inserted by /linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0x300, 5,		/* I/O address, IRQ */
-	0, 0, 0, NULL, ewrk3_probe};
-
+static struct net_device thisEthwrk;
 static int io = 0x300;		/* <--- EDIT THESE LINES FOR YOUR CONFIGURATION */
 static int irq = 5;		/* or use the insmod io= irq= options           */
 
@@ -1879,6 +1869,7 @@ int init_module(void)
 {
 	thisEthwrk.base_addr = io;
 	thisEthwrk.irq = irq;
+	thisEthwrk.init = ewrk3_probe;
 	if (register_netdev(&thisEthwrk) != 0)
 		return -EIO;
 	return 0;

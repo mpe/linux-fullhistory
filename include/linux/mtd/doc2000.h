@@ -2,7 +2,7 @@
 /* Linux driver for Disk-On-Chip 2000       */
 /* (c) 1999 Machine Vision Holdings, Inc.   */
 /* Author: David Woodhouse <dwmw2@mvhi.com> */
-/* $Id: doc2000.h,v 1.8 2000/07/10 15:46:29 dwmw2 Exp $ */
+/* $Id: doc2000.h,v 1.12 2000/11/03 12:43:43 dwmw2 Exp $ */
 
 #ifndef __MTD_DOC2000_H__
 #define __MTD_DOC2000_H__
@@ -44,15 +44,23 @@
  * Others use readb/writeb 
  */
 #if defined(__arm__) 
-#define ReadDOC(adr, reg)      ((unsigned char)(*(__u32 *)(((unsigned long)adr)+(DoC_##reg<<2))))
-#define WriteDOC(d, adr, reg)  do{ *(__u32 *)(((unsigned long)adr)+(DoC_##reg<<2)) = (__u32)d} while(0)
+#define ReadDOC_(adr, reg)      ((unsigned char)(*(__u32 *)(((unsigned long)adr)+(reg<<2))))
+#define WriteDOC_(d, adr, reg)  do{ *(__u32 *)(((unsigned long)adr)+(reg<<2)) = (__u32)d} while(0)
 #elif defined(__ppc__)
-#define ReadDOC(adr, reg)      ((unsigned char)(*(__u16 *)(((unsigned long)adr)+(DoC_##reg<<1))))
-#define WriteDOC(d, adr, reg)  do{ *(__u16 *)(((unsigned long)adr)+(DoC_##reg<<1)) = (__u16)d} while(0)
+#define ReadDOC_(adr, reg)      ((unsigned char)(*(__u16 *)(((unsigned long)adr)+(reg<<1))))
+#define WriteDOC_(d, adr, reg)  do{ *(__u16 *)(((unsigned long)adr)+(reg<<1)) = (__u16)d} while(0)
 #else
-#define ReadDOC(adr, reg)      readb(((unsigned long)adr) + DoC_##reg)
-#define WriteDOC(d, adr, reg)  writeb(d, ((unsigned long)adr) + DoC_##reg)
+#define ReadDOC_(adr, reg)      readb(((unsigned long)adr) + reg)
+#define WriteDOC_(d, adr, reg)  writeb(d, ((unsigned long)adr) + reg)
 #endif
+
+#if defined(__i386__)
+#define USE_MEMCPY
+#endif
+
+/* These are provided to directly use the DoC_xxx defines */
+#define ReadDOC(adr, reg)      ReadDOC_(adr,DoC_##reg)
+#define WriteDOC(d, adr, reg)  WriteDOC_(d,adr,DoC_##reg)
 
 #define DOC_MODE_RESET 		0
 #define DOC_MODE_NORMAL 	1
@@ -80,9 +88,10 @@
 #define DOC_TOGGLE_BIT 		0x04
 #define DOC_ECC_RESV 		0x02
 #define DOC_ECC_IGNORE		0x01
+
 /* We have to also set the reserved bit 1 for enable */
 #define DOC_ECC_EN (DOC_ECC__EN | DOC_ECC_RESV)
-#define DOC_ECC_DIS (DOC_ECC_IGNORE | DOC_ECC_RESV)
+#define DOC_ECC_DIS (DOC_ECC_RESV)
 
 struct Nand {
 	char floor, chip;
@@ -97,15 +106,23 @@ struct Nand {
 #define MAX_FLOORS_MIL 4
 #define MAX_CHIPS_MIL 1
 
+#define ADDR_COLUMN 1
+#define ADDR_PAGE 2
+#define ADDR_COLUMN_PAGE 3
+
 struct DiskOnChip {
 	unsigned long physadr;
 	unsigned long virtadr;
 	unsigned long totlen;
 	char ChipID; /* Type of DiskOnChip */
+	int ioreg;
 	
 	unsigned long mfr; /* Flash IDs - only one type of flash per device */
 	unsigned long id;
 	int chipshift;
+	char page256;
+	char pageadrlen;
+	unsigned long erasesize;
 	
 	int curfloor;
 	int curchip;
@@ -115,5 +132,6 @@ struct DiskOnChip {
 	struct mtd_info *nextdoc;
 };
 
+int doc_decode_ecc(unsigned char sector[512], unsigned char ecc1[6]);
 
 #endif /* __MTD_DOC2000_H__ */

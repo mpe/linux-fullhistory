@@ -1,7 +1,7 @@
 /*
- * $Id: rpxlite.c,v 1.2 2000/07/04 12:16:26 dwmw2 Exp $
+ * $Id: rpxlite.c,v 1.8 2000/12/09 22:00:31 dwmw2 Exp $
  *
- * Handle the strange 16-in-32-bit mapping on the RPXLite board
+ * Handle mapping of the flash on the RPX Lite and CLLF boards
  */
 
 #include <linux/module.h>
@@ -12,124 +12,74 @@
 #include <linux/mtd/map.h>
 
 
-#define WINDOW_ADDR 0x8000000
-#define WINDOW_SIZE 0x2000000
-
-#define MAP_TO_ADR(x) ( ( ( x & ~1 ) << 1 ) | (x&1) )
+#define WINDOW_ADDR 0xfe000000
+#define WINDOW_SIZE 0x800000
 
 static struct mtd_info *mymtd;
 
 __u8 rpxlite_read8(struct map_info *map, unsigned long ofs)
 {
-	return readb(map->map_priv_1 + MAP_TO_ADR(ofs));
+	return readb(map->map_priv_1 * ofs);
 }
 
 __u16 rpxlite_read16(struct map_info *map, unsigned long ofs)
 {
-	return readw(map->map_priv_1 + MAP_TO_ADR(ofs));
+	return readw(map->map_priv_1 + ofs);
 }
 
 __u32 rpxlite_read32(struct map_info *map, unsigned long ofs)
 {
-	return readl(map->map_priv_1 + MAP_TO_ADR(ofs));
+	return readl(map->map_priv_1 + ofs);
 }
 
 void rpxlite_copy_from(struct map_info *map, void *to, unsigned long from, ssize_t len)
 {
-	if (from & 1) {
-		*(__u8 *)to = readb(map->map_priv_1 + MAP_TO_ADR(from));
-		from++;
-		len--;
-	}
-	/* Can't do this if it's not aligned */
-	if (!((unsigned long)to & 1)) {
-		unsigned long fromadr = MAP_TO_ADR(from);
-
-		while (len > 1) {
-			*(__u16 *)to = readw(map->map_priv_1 + fromadr);
-			to += 2;
-			fromadr += 4;
-			from += 2;
-			len -= 2;
-		}
-	}
-	while(len) {
-		*(__u8 *)to = readb(map->map_priv_1 + MAP_TO_ADR(from));
-		to++;
-		from++;
-		len--;
-	}
+	memcpy_fromio(to, (void *)(map->map_priv_1 + from), len);
 }
 
 void rpxlite_write8(struct map_info *map, __u8 d, unsigned long adr)
 {
-	writeb(d, map->map_priv_1 + MAP_TO_ADR(adr));
+	writeb(d, map->map_priv_1 + adr);
 }
 
 void rpxlite_write16(struct map_info *map, __u16 d, unsigned long adr)
 {
-	writew(d, map->map_priv_1 + MAP_TO_ADR(adr));
+	writew(d, map->map_priv_1 + adr);
 }
 
 void rpxlite_write32(struct map_info *map, __u32 d, unsigned long adr)
 {
-	writel(d, map->map_priv_1 + MAP_TO_ADR(adr));
+	writel(d, map->map_priv_1 + adr);
 }
 
 void rpxlite_copy_to(struct map_info *map, unsigned long to, const void *from, ssize_t len)
 {
-	if (to & 1) {
-		writeb(*(__u8 *)from, map->map_priv_1 + MAP_TO_ADR(to));
-		from++;
-		len--;
-	}
-	/* Can't do this if it's not aligned */
-	if (!((unsigned long)from & 1)) {
-		unsigned long toadr = map->map_priv_1 + MAP_TO_ADR(to);
-
-		while (len > 1) {
-			writew(*(__u16 *)from, toadr);
-			from += 2;
-			toadr += 4;
-			to += 2;
-			len -= 2;
-		}
-	}
-	while(len) {
-		writeb(*(__u8 *)from, map->map_priv_1 + MAP_TO_ADR(to));
-		to++;
-		from++;
-		len--;
-	}
+	memcpy_toio((void *)(map->map_priv_1 + to), from, len);
 }
 
 struct map_info rpxlite_map = {
-	"RPXLITE",
-	WINDOW_SIZE,
-	2,
-	rpxlite_read8,
-	rpxlite_read16,
-	rpxlite_read32,
-	rpxlite_copy_from,
-	rpxlite_write8,
-	rpxlite_write16,
-	rpxlite_write32,
-	rpxlite_copy_to,
-	0,
-	0
+	name: "RPX",
+	size: WINDOW_SIZE,
+	buswidth: 4,
+	read8: rpxlite_read8,
+	read16: rpxlite_read16,
+	read32: rpxlite_read32,
+	copy_from: rpxlite_copy_from,
+	write8: rpxlite_write8,
+	write16: rpxlite_write16,
+	write32: rpxlite_write32,
+	copy_to: rpxlite_copy_to
 };
 
-#if LINUX_VERSION_CODE < 0x20300
-#ifdef MODULE
+#if LINUX_VERSION_CODE < 0x20212 && defined(MODULE)
 #define init_rpxlite init_module
 #define cleanup_rpxlite cleanup_module
-#endif
 #endif
 
 int __init init_rpxlite(void)
 {
-       	printk(KERN_NOTICE "rpxlite flash device: %x at %x\n", WINDOW_SIZE, WINDOW_ADDR);
-	rpxlite_map.map_priv_1 = (unsigned long)ioremap(WINDOW_ADDR, WINDOW_SIZE * 2);
+	printk(KERN_NOTICE "RPX Lite or CLLF flash device: %x at %x\n", WINDOW_SIZE*4, WINDOW_ADDR);
+	rpxlite_map.map_priv_1 = (unsigned long)ioremap(WINDOW_ADDR, WINDOW_SIZE * 4);
 
 	if (!rpxlite_map.map_priv_1) {
 		printk("Failed to ioremap\n");
@@ -158,3 +108,6 @@ static void __exit cleanup_rpxlite(void)
 		rpxlite_map.map_priv_1 = 0;
 	}
 }
+
+module_init(init_rpxlite);
+module_exit(cleanup_rpxlite);

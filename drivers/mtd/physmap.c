@@ -1,5 +1,5 @@
 /*
- * $Id: physmap.c,v 1.2 2000/07/11 09:42:32 dwmw2 Exp $
+ * $Id: physmap.c,v 1.8 2000/11/27 08:50:22 dwmw2 Exp $
  *
  * Normal mappings of chips in physical memory
  */
@@ -15,6 +15,7 @@
 
 #define WINDOW_ADDR CONFIG_MTD_PHYSMAP_START
 #define WINDOW_SIZE CONFIG_MTD_PHYSMAP_LEN
+#define BUSWIDTH CONFIG_MTD_PHYSMAP_BUSWIDTH
 
 static struct mtd_info *mymtd;
 
@@ -59,32 +60,28 @@ void physmap_copy_to(struct map_info *map, unsigned long to, const void *from, s
 }
 
 struct map_info physmap_map = {
-	"Physically mapped flash",
-	WINDOW_SIZE,
-	2,
-	physmap_read8,
-	physmap_read16,
-	physmap_read32,
-	physmap_copy_from,
-	physmap_write8,
-	physmap_write16,
-	physmap_write32,
-	physmap_copy_to,
-	0,
-	0
+	name: "Physically mapped flash",
+	size: WINDOW_SIZE,
+	buswidth: BUSWIDTH,
+	read8: physmap_read8,
+	read16: physmap_read16,
+	read32: physmap_read32,
+	copy_from: physmap_copy_from,
+	write8: physmap_write8,
+	write16: physmap_write16,
+	write32: physmap_write32,
+	copy_to: physmap_copy_to
 };
 
-#if LINUX_VERSION_CODE < 0x20300
-#ifdef MODULE
+#if LINUX_VERSION_CODE < 0x20212 && defined(MODULE)
 #define init_physmap init_module
 #define cleanup_physmap cleanup_module
-#endif
 #endif
 
 int __init init_physmap(void)
 {
        	printk(KERN_NOTICE "physmap flash device: %x at %x\n", WINDOW_SIZE, WINDOW_ADDR);
-	physmap_map.map_priv_1 = (unsigned long)ioremap(WINDOW_SIZE, WINDOW_ADDR);
+	physmap_map.map_priv_1 = (unsigned long)ioremap(WINDOW_ADDR, WINDOW_SIZE);
 
 	if (!physmap_map.map_priv_1) {
 		printk("Failed to ioremap\n");
@@ -99,6 +96,7 @@ int __init init_physmap(void)
 		return 0;
 	}
 
+	iounmap((void *)physmap_map.map_priv_1);
 	return -ENXIO;
 }
 
@@ -113,3 +111,7 @@ static void __exit cleanup_physmap(void)
 		physmap_map.map_priv_1 = 0;
 	}
 }
+
+module_init(init_physmap);
+module_exit(cleanup_physmap);
+

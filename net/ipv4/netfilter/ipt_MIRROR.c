@@ -50,7 +50,7 @@ static int route_mirror(struct sk_buff *skb)
 
 	/* check if the interface we are leaving by is the same as the
            one we arrived on */
-	if (skb->rx_dev == rt->u.dst.dev) {
+	if (skb->dev == rt->u.dst.dev) {
 		/* Drop old route. */
 		dst_release(skb->dst);
 		skb->dst = &rt->u.dst;

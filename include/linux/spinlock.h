@@ -65,7 +65,7 @@
 #elif (DEBUG_SPINLOCKS < 2)
 
 typedef struct {
-	volatile unsigned int lock;
+	volatile unsigned long lock;
 } spinlock_t;
 #define SPIN_LOCK_UNLOCKED (spinlock_t) { 0 }
 
@@ -80,7 +80,7 @@ typedef struct {
 #else /* (DEBUG_SPINLOCKS >= 2) */
 
 typedef struct {
-	volatile unsigned int lock;
+	volatile unsigned long lock;
 	volatile unsigned int babble;
 	const char *module;
 } spinlock_t;

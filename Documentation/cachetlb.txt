@@ -257,7 +257,7 @@ the proper points in time.
 
 Here is the new interface:
 
-  void copy_user_page(void *from, void *to, unsigned long address)
+  void copy_user_page(void *to, void *from, unsigned long address)
   void clear_user_page(void *to, unsigned long address)
 
 	These two routines store data in user anonymous or COW

@@ -298,6 +298,33 @@ static int pirq_sis_set(struct pci_dev *router, struct pci_dev *dev, int pirq, i
 	return 1;
 }
 
+/*
+ * VLSI: nibble offset 0x74 - educated guess due to routing table and
+ *       config space of VLSI 82C534 PCI-bridge/router (1004:0102)
+ *       Tested on HP OmniBook 800 covering PIRQ 1, 2, 4, 8 for onboard
+ *       devices, PIRQ 3 for non-pci(!) soundchip and (untested) PIRQ 6
+ *       for the busbridge to the docking station.
+ */
+
+static int pirq_vlsi_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
+{
+	if (pirq > 8) {
+		printk("VLSI router pirq escape (%d)\n", pirq);
+		return 0;
+	}
+	return read_config_nybble(router, 0x74, pirq-1);
+}
+
+static int pirq_vlsi_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
+{
+	if (pirq > 8) {
+		printk("VLSI router pirq escape (%d)\n", pirq);
+		return 0;
+	}
+	write_config_nybble(router, 0x74, pirq-1, irq);
+	return 1;
+}
+
 #ifdef CONFIG_PCI_BIOS
 
 static int pirq_bios_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
@@ -329,6 +356,7 @@ static struct irq_router pirq_routers[] = {
 
 	{ "NatSemi", PCI_VENDOR_ID_CYRIX, PCI_DEVICE_ID_CYRIX_5520, pirq_cyrix_get, pirq_cyrix_set },
 	{ "SIS", PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_503, pirq_sis_get, pirq_sis_set },
+	{ "VLSI 82C534", PCI_VENDOR_ID_VLSI, PCI_DEVICE_ID_VLSI_82C534, pirq_vlsi_get, pirq_vlsi_set },
 	{ "default", 0, 0, NULL, NULL }
 };
 
@@ -374,7 +402,7 @@ static void __init pirq_find_router(void)
 		pirq_router_dev->slot_name);
 }
 
-static struct irq_info *pirq_get_info(struct pci_dev *dev, int pin)
+static struct irq_info *pirq_get_info(struct pci_dev *dev)
 {
 	struct irq_routing_table *rt = pirq_table;
 	int entries = (rt->size - sizeof(struct irq_routing_table)) / sizeof(struct irq_info);
@@ -392,25 +420,28 @@ static void pcibios_test_irq_handler(int irq, void *dev_id, struct pt_regs *regs
 
 static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 {
+	u8 pin;
 	struct irq_info *info;
-	int i, pirq, pin, newirq;
+	int i, pirq, newirq;
 	int irq = 0;
 	u32 mask;
 	struct irq_router *r = pirq_router;
-	struct pci_dev *dev2, *d;
+	struct pci_dev *dev2;
 	char *msg = NULL;
 
 	if (!pirq_table)
 		return 0;
 
 	/* Find IRQ routing entry */
-	pin = pci_get_interrupt_pin(dev, &d);
-	if (pin < 0) {
+	pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
+	if (!pin) {
 		DBG(" -> no interrupt pin\n");
 		return 0;
 	}
-	DBG("IRQ for %s(%d) via %s", dev->slot_name, pin, d->slot_name);
-	info = pirq_get_info(d, pin);
+	pin = pin - 1;
+	
+	DBG("IRQ for %s:%d", dev->slot_name, pin);
+	info = pirq_get_info(dev);
 	if (!info) {
 		DBG(" -> not found in routing table\n");
 		return 0;
@@ -443,7 +474,7 @@ static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 	DBG(" -> newirq=%d", newirq);
 
 	/* Try to get current IRQ */
-	if (r->get && (irq = r->get(pirq_router_dev, d, pirq))) {
+	if (r->get && (irq = r->get(pirq_router_dev, dev, pirq))) {
 		DBG(" -> got IRQ %d\n", irq);
 		msg = "Found";
 		/* We refuse to override the dev->irq information. Give a warning! */
@@ -453,7 +484,7 @@ static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 	    	}
 	} else if (newirq && r->set && (dev->class >> 8) != PCI_CLASS_DISPLAY_VGA) {
 		DBG(" -> assigning IRQ %d", newirq);
-		if (r->set(pirq_router_dev, d, pirq, newirq)) {
+		if (r->set(pirq_router_dev, dev, pirq, newirq)) {
 			eisa_set_level_irq(newirq);
 			DBG(" ... OK\n");
 			msg = "Assigned";
@@ -473,9 +504,14 @@ static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 
 	/* Update IRQ for all devices with the same pirq value */
 	pci_for_each_dev(dev2) {
-		if ((pin = pci_get_interrupt_pin(dev2, &d)) >= 0 &&
-		    (info = pirq_get_info(d, pin)) &&
-		    info->irq[pin].link == pirq) {
+		pci_read_config_byte(dev2, PCI_INTERRUPT_PIN, &pin);
+		if (!pin)
+			continue;
+		pin--;
+		info = pirq_get_info(dev2);
+		if (!info)
+			continue;
+		if (info->irq[pin].link == pirq) {
 			dev2->irq = irq;
 			pirq_penalty[irq]++;
 			if (dev != dev2)

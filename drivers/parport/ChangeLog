@@ -1,3 +1,9 @@
+2000-11-21  Tim Waugh  <twaugh@redhat.com>
+
+	* parport_pc.c (parport_pc_ecp_write_block_pio): Fix
+	reverse-to-forward logic.  Spotted by Roland Kuck
+	<rci@cityweb.de>.
+
 2000-09-16  Cesar Eduardo Barros  <cesarb@nitnet.com.br>
 
 	* parport_pc.c (sio_via_686a_probe): Handle case

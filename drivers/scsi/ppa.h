@@ -10,7 +10,7 @@
 #ifndef _PPA_H
 #define _PPA_H
 
-#define   PPA_VERSION   "2.05 (for Linux 2.2.x)"
+#define   PPA_VERSION   "2.06 (for Linux 2.2.x)"
 
 /* 
  * this driver has been hacked by Matteo Frigo (athena@theory.lcs.mit.edu)
@@ -58,6 +58,9 @@
  *     Tim Waugh <twaugh@redhat.com>
  *                                                      [2.04]
  * Fix kernel panic on scsi timeout, 2000-08-18		[2.05]
+ *
+ * Avoid io_request_lock problems.
+ * John Cavan <johncavan@home.com>			[2.06]
  */
 /* ------ END OF USER CONFIGURABLE PARAMETERS ----- */
 

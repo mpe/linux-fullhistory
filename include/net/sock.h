@@ -1169,6 +1169,7 @@ static inline int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	}
 #endif /* CONFIG_FILTER */
 
+	skb->dev = NULL;
 	skb_set_owner_r(skb, sk);
 	skb_queue_tail(&sk->receive_queue, skb);
 	if (!sk->dead)

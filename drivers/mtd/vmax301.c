@@ -1,4 +1,4 @@
-// $Id: vmax301.c,v 1.13 2000/07/03 10:01:38 dwmw2 Exp $
+// $Id: vmax301.c,v 1.15 2000/11/27 08:50:22 dwmw2 Exp $
 /* ######################################################################
 
    Tempustech VMAX SBC301 MTD Driver.
@@ -142,45 +142,42 @@ static void vmax301_copy_to(struct map_info *map, unsigned long to, const void *
 
 static struct map_info vmax_map[2] = {
 	{
-		"VMAX301 Internal Flash",
-		3*2*1024*1024,
-		1,
-		vmax301_read8,
-		vmax301_read16,
-		vmax301_read32,
-		vmax301_copy_from,
-		vmax301_write8,
-		vmax301_write16,
-		vmax301_write32,
-		vmax301_copy_to,
-		WINDOW_START + WINDOW_LENGTH,
-		0xFFFFFFFF
+		name: "VMAX301 Internal Flash",
+		size: 3*2*1024*1024,
+		buswidth: 1,
+		read8: vmax301_read8,
+		read16: vmax301_read16,
+		read32: vmax301_read32,
+		copy_from: vmax301_copy_from,
+		write8: vmax301_write8,
+		write16: vmax301_write16,
+		write32: vmax301_write32,
+		copy_to: vmax301_copy_to,
+		map_priv_1: WINDOW_START + WINDOW_LENGTH,
+		map_priv_2: 0xFFFFFFFF
 	},
 	{
-		"VMAX301 Socket",
-		0,
-		1,
-		vmax301_read8,
-		vmax301_read16,
-		vmax301_read32,
-		vmax301_copy_from,
-		vmax301_write8,
-		vmax301_write16,
-		vmax301_write32,
-		vmax301_copy_to,
-		WINDOW_START + (3*WINDOW_LENGTH),
-		0xFFFFFFFF
+		name: "VMAX301 Socket",
+		size: 0,
+		buswidth: 1,
+		read8: vmax301_read8,
+		read16: vmax301_read16,
+		read32: vmax301_read32,
+		copy_from: vmax301_copy_from,
+		write8: vmax301_write8,
+		write16: vmax301_write16,
+		write32: vmax301_write32,
+		copy_to: vmax301_copy_to,
+		map_priv_1: WINDOW_START + (3*WINDOW_LENGTH),
+		map_priv_2: 0xFFFFFFFF
 	}
 };
 
 static struct mtd_info *vmax_mtd[2] = {NULL, NULL};
 
-#if LINUX_VERSION_CODE < 0x20300
-#ifdef MODULE
+#if LINUX_VERSION_CODE < 0x20212 && defined(MODULE)
 #define init_vmax301 init_module
 #define cleanup_vmax301 cleanup_module
-#endif
-#define __exit
 #endif
 
 static void __exit cleanup_vmax301(void)
@@ -237,7 +234,5 @@ int __init init_vmax301(void)
 	return 0;
 }
 
-#if LINUX_VERSION_CODE > 0x20300
 module_init(init_vmax301);
 module_exit(cleanup_vmax301);
-#endif

@@ -542,7 +542,7 @@ static inline void copy_flags(unsigned long clone_flags, struct task_struct *p)
  * arch/ia64/kernel/process.c.
  */
 int do_fork(unsigned long clone_flags, unsigned long stack_start,
-	    struct pt_regs *regs, unsigned long stack_top)
+	    struct pt_regs *regs, unsigned long stack_size)
 {
 	int retval = -ENOMEM;
 	struct task_struct *p;
@@ -637,7 +637,7 @@ int do_fork(unsigned long clone_flags, unsigned long stack_start,
 		goto bad_fork_cleanup_fs;
 	if (copy_mm(clone_flags, p))
 		goto bad_fork_cleanup_sighand;
-	retval = copy_thread(0, clone_flags, stack_start, stack_top, p, regs);
+	retval = copy_thread(0, clone_flags, stack_start, stack_size, p, regs);
 	if (retval)
 		goto bad_fork_cleanup_sighand;
 	p->semundo = NULL;

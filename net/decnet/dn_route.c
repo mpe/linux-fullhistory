@@ -526,6 +526,7 @@ static int dn_forward(struct sk_buff *skb)
 {
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 	struct dst_entry *dst = skb->dst;
+	struct net_device *dev = skb->dev;
 	struct neighbour *neigh;
 	int err = -EINVAL;
 
@@ -551,7 +552,7 @@ static int dn_forward(struct sk_buff *skb)
 	else
 		cb->rt_flags &= ~DN_RT_F_IE;
 
-	return NF_HOOK(PF_DECnet, NF_DN_FORWARD, skb, skb->rx_dev, skb->dev, neigh->output);
+	return NF_HOOK(PF_DECnet, NF_DN_FORWARD, skb, dev, skb->dev, neigh->output);
 
 
 error:
@@ -985,7 +986,6 @@ int dn_cache_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh, void *arg)
 		}
 		skb->protocol = __constant_htons(ETH_P_DNA_RT);
 		skb->dev = dev;
-		skb->rx_dev = dev;
 		cb->src = src;
 		cb->dst = dst;
 		local_bh_disable();
@@ -1002,7 +1002,6 @@ int dn_cache_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh, void *arg)
 	if (skb->dev)
 		dev_put(skb->dev);
 	skb->dev = NULL;
-	skb->rx_dev = NULL;
 	if (err)
 		goto out_free;
 	skb->dst = &rt->u.dst;

@@ -1,5 +1,5 @@
 /*
- * $Id: nora.c,v 1.12 2000/07/13 10:32:33 dwmw2 Exp $
+ * $Id: nora.c,v 1.17 2000/12/03 19:32:21 dwmw2 Exp $
  *
  * This is so simple I love it.
  */
@@ -58,19 +58,17 @@ void nora_copy_to(struct map_info *map, unsigned long to, const void *from, ssiz
 }
 
 struct map_info nora_map = {
-  "NORA",
-  WINDOW_SIZE,
-  2,
-  nora_read8,
-  nora_read16,
-  nora_read32,
-  nora_copy_from,
-  nora_write8,
-  nora_write16,
-  nora_write32,
-  nora_copy_to,
-  0,
-  0
+	name: "NORA",
+	size: WINDOW_SIZE,
+	buswidth: 2,
+	read8: nora_read8,
+	read16: nora_read16,
+	read32: nora_read32,
+	copy_from: nora_copy_from,
+	write8: nora_write8,
+	write16: nora_write16,
+	write32: nora_write32,
+	copy_to: nora_copy_to
 };
 
 
@@ -140,7 +138,7 @@ static struct mtd_info nora_mtds[4] = {  /* boot, kernel, ramdisk, fs */
 	{
 		type: MTD_NORFLASH,
 		flags: MTD_CAP_NORFLASH,
-		size: 0xf00000,
+		size: 0x900000,
 		erasesize: 0x20000,
 		name: "NORA root filesystem",
 		module: THIS_MODULE,
@@ -155,9 +153,9 @@ static struct mtd_info nora_mtds[4] = {  /* boot, kernel, ramdisk, fs */
 	{
 		type: MTD_NORFLASH,
 		flags: MTD_CAP_NORFLASH,
-		size: 0x1000000,
+		size: 0x1600000,
 		erasesize: 0x20000,
-		name: "NORA main filesystem",
+		name: "NORA second filesystem",
 		module: THIS_MODULE,
 		erase: nora_mtd_erase,
 		read: nora_mtd_read,
@@ -165,15 +163,14 @@ static struct mtd_info nora_mtds[4] = {  /* boot, kernel, ramdisk, fs */
 		suspend: nora_mtd_suspend,
 		resume: nora_mtd_resume,
 		sync: nora_mtd_sync,
-		priv: (void *)0x1000000
+		priv: (void *)0xa00000
 	}
 };
 
-#if LINUX_VERSION_CODE < 0x20300
-#ifdef MODULE
+
+#if LINUX_VERSION_CODE < 0x20212 && defined(MODULE)
 #define init_nora init_module
 #define cleanup_nora cleanup_module
-#endif
 #endif
 
 int __init init_nora(void)
@@ -186,10 +183,10 @@ int __init init_nora(void)
 		mymtd->module = &__this_module;
 #endif
 		
-		add_mtd_device(&nora_mtds[3]);
+		add_mtd_device(&nora_mtds[2]);
 		add_mtd_device(&nora_mtds[0]);
 		add_mtd_device(&nora_mtds[1]);
-		add_mtd_device(&nora_mtds[2]);
+		add_mtd_device(&nora_mtds[3]);
 		return 0;
 	}
 
@@ -199,10 +196,13 @@ int __init init_nora(void)
 static void __exit cleanup_nora(void)
 {
 	if (mymtd) {
-		del_mtd_device(&nora_mtds[2]);
+		del_mtd_device(&nora_mtds[3]);
 		del_mtd_device(&nora_mtds[1]);
 		del_mtd_device(&nora_mtds[0]);
-		del_mtd_device(&nora_mtds[3]);
+		del_mtd_device(&nora_mtds[2]);
 		map_destroy(mymtd);
 	}
 }
+
+module_init(init_nora);
+module_exit(cleanup_nora);

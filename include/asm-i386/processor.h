@@ -464,7 +464,8 @@ struct microcode {
 	unsigned int bits[500];
 };
 
-#define MICROCODE_IOCFREE	_IO('6',0) /* because it is for P6 */
+/* '6' because it used to be for P6 only (but now covers Pentium 4 as well) */
+#define MICROCODE_IOCFREE	_IO('6',0)
 
 /* REP NOP (PAUSE) is a good thing to insert into busy-wait loops. */
 extern inline void rep_nop(void)

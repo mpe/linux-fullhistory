@@ -742,11 +742,11 @@ static int keyspan_pda_startup (struct usb_serial *serial)
 	if (!priv)
 		return (1); /* error */
 	init_waitqueue_head(&serial->port[0].write_wait);
-	priv->wakeup_task.next = NULL;
+	INIT_LIST_HEAD(&priv->wakeup_task.list);
 	priv->wakeup_task.sync = 0;
 	priv->wakeup_task.routine = (void *)keyspan_pda_wakeup_write;
 	priv->wakeup_task.data = (void *)(&serial->port[0]);
-	priv->unthrottle_task.next = NULL;
+	INIT_LIST_HEAD(&priv->unthrottle_task.list);
 	priv->unthrottle_task.sync = 0;
 	priv->unthrottle_task.routine = (void *)keyspan_pda_request_unthrottle;
 	priv->unthrottle_task.data = (void *)(serial);

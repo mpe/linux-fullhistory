@@ -7,7 +7,5 @@ dep_mbool '  Clear remove/delete inhibit when needed' CONFIG_NCPFS_STRONG $CONFI
 dep_mbool '  Use NFS namespace if available' CONFIG_NCPFS_NFS_NS $CONFIG_NCP_FS
 dep_mbool '  Use LONG (OS/2) namespace if available' CONFIG_NCPFS_OS2_NS $CONFIG_NCP_FS
 dep_mbool '  Lowercase DOS filenames' CONFIG_NCPFS_SMALLDOS $CONFIG_NCP_FS
-dep_mbool '  Allow mounting of volume subdirectories' CONFIG_NCPFS_MOUNT_SUBDIR $CONFIG_NCP_FS
-dep_mbool '  NDS authentication support' CONFIG_NCPFS_NDS_DOMAINS $CONFIG_NCP_FS
 dep_mbool '  Use Native Language Support' CONFIG_NCPFS_NLS $CONFIG_NCP_FS
 dep_mbool '  Enable symbolic links and execute flags' CONFIG_NCPFS_EXTRAS $CONFIG_NCP_FS

@@ -51,7 +51,7 @@ typedef struct {
 	mode:		IMM_AUTODETECT,	\
 	host:		-1,		\
 	cur_cmd:	NULL,		\
-	imm_tq:		{0, 0, imm_interrupt, NULL},    \
+	imm_tq:		{ routine: imm_interrupt },    \
 	jstart:		0,		\
 	failed:		0,		\
 	dp:		0,		\
@@ -122,7 +122,14 @@ int imm_detect(Scsi_Host_Template * host)
     struct Scsi_Host *hreg;
     int ports;
     int i, nhosts, try_again;
-    struct parport *pb = parport_enumerate();
+    struct parport *pb;
+
+    /*
+     * unlock to allow the lowlevel parport driver to probe
+     * the irqs
+     */
+    spin_unlock_irq(&io_request_lock);
+    pb = parport_enumerate();
 
     printk("imm: Version %s\n", IMM_VERSION);
     nhosts = 0;
@@ -130,6 +137,7 @@ int imm_detect(Scsi_Host_Template * host)
 
     if (!pb) {
 	printk("imm: parport reports no devices.\n");
+	spin_lock_irq(&io_request_lock);
 	return 0;
     }
   retry_entry:
@@ -154,6 +162,7 @@ int imm_detect(Scsi_Host_Template * host)
 		    printk(KERN_ERR "imm%d: failed to claim parport because a "
 		      "pardevice is owning the port for too longtime!\n",
 			   i);
+		    spin_lock_irq(&io_request_lock);
 		    return 0;
 		}
 	    }
@@ -208,12 +217,16 @@ int imm_detect(Scsi_Host_Template * host)
 	nhosts++;
     }
     if (nhosts == 0) {
-	if (try_again == 1)
+	if (try_again == 1) {
+	    spin_lock_irq(&io_request_lock);
 	    return 0;
+	}
 	try_again = 1;
 	goto retry_entry;
-    } else
+    } else {
+	spin_lock_irq (&io_request_lock);
 	return 1;		/* return number of hosts detected */
+    }
 }
 
 /* This is to give the imm driver a way to modify the timings (and other

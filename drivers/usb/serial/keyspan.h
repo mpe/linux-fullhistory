@@ -34,6 +34,7 @@
 #ifndef __LINUX_USB_SERIAL_KEYSPAN_H
 #define __LINUX_USB_SERIAL_KEYSPAN_H
 
+#include <linux/config.h>
 
 	/* Function prototypes for Keyspan serial converter */
 static int  keyspan_open		(struct usb_serial_port *port,

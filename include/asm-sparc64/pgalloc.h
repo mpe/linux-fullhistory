@@ -1,4 +1,4 @@
-/* $Id: pgalloc.h,v 1.13 2000/11/06 06:59:04 davem Exp $ */
+/* $Id: pgalloc.h,v 1.14 2000/12/09 04:15:24 anton Exp $ */
 #ifndef _SPARC64_PGALLOC_H
 #define _SPARC64_PGALLOC_H
 
@@ -18,9 +18,14 @@
 #define flush_cache_page(vma, page) \
 	flush_cache_mm((vma)->vm_mm)
 
-/* These operations are unnecessary on the SpitFire since D-CACHE is write-through. */
-#define flush_icache_range(start, end)		do { } while (0)
+/* This is unnecessary on the SpitFire since D-CACHE is write-through. */
 #define flush_page_to_ram(page)			do { } while (0)
+
+/* 
+ * icache doesnt snoop local stores and we don't use block commit stores
+ * (which invalidate icache lines) during module load, so we need this.
+ */
+extern void flush_icache_range(unsigned long start, unsigned long end);
 
 extern void __flush_dcache_page(void *addr, int flush_icache);
 #define flush_dcache_page(page) \

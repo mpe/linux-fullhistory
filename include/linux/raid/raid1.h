@@ -7,7 +7,6 @@ struct mirror_info {
 	int		number;
 	int		raid_disk;
 	kdev_t		dev;
-	int		next;
 	int		sect_limit;
 	int		head_position;
 

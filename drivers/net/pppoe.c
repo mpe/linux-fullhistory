@@ -785,8 +785,7 @@ int pppoe_sendmsg(struct socket *sock, struct msghdr *m,
 	skb_reserve(skb, dev->hard_header_len);
 	skb->nh.raw = skb->data;
 
-	skb->rx_dev = skb->dev = dev;
-	dev_hold(skb->rx_dev);
+	skb->dev = dev;
 
 	skb->priority = sk->priority;
 	skb->protocol = __constant_htons(ETH_P_PPP_SES);
@@ -869,11 +868,7 @@ int __pppoe_xmit(struct sock *sk, struct sk_buff *skb)
 
 	skb->nh.raw = skb->data;
 
-	/* Change device of skb, update reference counts */
-	if(skb->rx_dev)
-	    dev_put(skb->rx_dev);
-	skb->rx_dev = skb->dev = dev;
-	dev_hold(skb->rx_dev);
+	skb->dev = dev;
 
 	dev->hard_header(skb, dev, ETH_P_PPP_SES,
 			 sk->protinfo.pppox->pppoe_pa.remote,

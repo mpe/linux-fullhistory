@@ -86,7 +86,9 @@ int __init wd_probe(struct net_device *dev)
 {
 	int i;
 	struct resource *r;
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
+
+	SET_MODULE_OWNER(dev);
 
 	if (base_addr > 0x1ff) {	/* Check a user specified location. */
 		r = request_region(base_addr, WD_IO_EXTENT, "wd-probe");
@@ -96,7 +98,7 @@ int __init wd_probe(struct net_device *dev)
 		if (i != 0)  
 			release_resource(r);
 		else
-			r->name = ei_status.name;
+			r->name = dev->name;
 		return i;
 	}
 	else if (base_addr != 0)	/* Don't probe at all. */
@@ -108,7 +110,7 @@ int __init wd_probe(struct net_device *dev)
 		if (r == NULL)
 			continue;
 		if (wd_probe1(dev, ioaddr) == 0) {
-			r->name = ei_status.name;
+			r->name = dev->name;
 			return 0;
 		}
 		release_resource(r);
@@ -263,11 +265,12 @@ static int __init wd_probe1(struct net_device *dev, int ioaddr)
 
 	/* Snarf the interrupt now.  There's no point in waiting since we cannot
 	   share and the board will usually be enabled. */
-	if (request_irq(dev->irq, ei_interrupt, 0, model_name, dev)) {
+	i = request_irq(dev->irq, ei_interrupt, 0, dev->name, dev);
+	if (i) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		kfree(dev->priv);
 		dev->priv = NULL;
-		return -EAGAIN;
+		return i;
 	}
 
 	/* OK, were are certain this is going to work.  Setup the device. */
@@ -324,7 +327,6 @@ wd_open(struct net_device *dev)
   outb(ei_status.reg0, ioaddr); /* WD_CMDREG */
 
   ei_open(dev);
-  MOD_INC_USE_COUNT;
   return 0;
 }
 
@@ -430,8 +432,6 @@ wd_close(struct net_device *dev)
 
 	/* And disable the shared memory. */
 	outb(ei_status.reg0 & ~WD_MEMENB, wd_cmdreg);
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

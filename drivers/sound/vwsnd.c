@@ -144,6 +144,8 @@
 #include <linux/module.h>
 #include <linux/init.h>
 
+#include <linux/sched.h>
+#include <linux/semaphore.h>
 #include <linux/stddef.h>
 #include <linux/spinlock.h>
 #include <linux/smp_lock.h>

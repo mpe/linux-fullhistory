@@ -270,7 +270,7 @@ static inline int
 nfs_revalidate_inode(struct nfs_server *server, struct inode *inode)
 {
 	if (time_before(jiffies, NFS_READTIME(inode)+NFS_ATTRTIMEO(inode)))
-		return 0;
+		return NFS_STALE(inode) ? -ESTALE : 0;
 	return __nfs_revalidate_inode(server, inode);
 }
 

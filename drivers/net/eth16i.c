@@ -440,8 +440,10 @@ int __init eth16i_probe(struct net_device *dev)
 {
 	int i;
 	int ioaddr;
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
     
+	SET_MODULE_OWNER(dev);
+
 	if(eth16i_debug > 4) 
 		printk(KERN_DEBUG "Probing started for %s\n", cardname);
 
@@ -979,8 +981,6 @@ static int eth16i_open(struct net_device *dev)
 	outw(ETH16I_INTR_ON, ioaddr + TX_INTR_REG);  
 
 	netif_start_queue(dev);
-	MOD_INC_USE_COUNT;
-
 	return 0;
 }
 
@@ -1006,8 +1006,6 @@ static int eth16i_close(struct net_device *dev)
 	/* outw(0xffff, ioaddr + TX_STATUS_REG);    */
 	
 	outb(0x00, ioaddr + CONFIG_REG_1);
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

@@ -778,9 +778,13 @@ size_t parport_pc_ecp_write_block_pio (struct parport *port,
 	/* Switch to forward mode if necessary. */
 	if (port->physport->ieee1284.phase != IEEE1284_PH_FWD_IDLE) {
 		/* Event 47: Set nInit high. */
-		parport_frob_control (port, PARPORT_CONTROL_INIT, 0);
+		parport_frob_control (port,
+				      PARPORT_CONTROL_INIT
+				      | PARPORT_CONTROL_AUTOFD,
+				      PARPORT_CONTROL_INIT
+				      | PARPORT_CONTROL_AUTOFD);
 
-		/* Event 40: PError goes high. */
+		/* Event 49: PError goes high. */
 		r = parport_wait_peripheral (port,
 					     PARPORT_STATUS_PAPEROUT,
 					     PARPORT_STATUS_PAPEROUT);

@@ -386,6 +386,7 @@ static int __devinit natsemi_probe1 (struct pci_dev *pdev,
 	dev = init_etherdev(NULL, sizeof (struct netdev_private));
 	if (!dev)
 		return -ENOMEM;
+	SET_MODULE_OWNER(dev);
 
 	{
 		void *mmio;
@@ -559,12 +560,8 @@ static int netdev_open(struct net_device *dev)
 
 	/* Do we need to reset the chip??? */
 
-	MOD_INC_USE_COUNT;
-
-	if (request_irq(dev->irq, &intr_handler, SA_SHIRQ, dev->name, dev)) {
-		MOD_DEC_USE_COUNT;
-		return -EAGAIN;
-	}
+	i = request_irq(dev->irq, &intr_handler, SA_SHIRQ, dev->name, dev);
+	if (i) return i;
 
 	if (debug > 1)
 		printk(KERN_DEBUG "%s: netdev_open() irq %d.\n",
@@ -1178,8 +1175,6 @@ static int netdev_close(struct net_device *dev)
 #if 0
 	writel(0x0200, ioaddr + ChipConfig); /* Power down Xcvr. */
 #endif
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

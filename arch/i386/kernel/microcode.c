@@ -4,13 +4,13 @@
  *	Copyright (C) 2000 Tigran Aivazian
  *
  *	This driver allows to upgrade microcode on Intel processors
- *	belonging to P6 family - PentiumPro, Pentium II, 
- *	Pentium III, Xeon etc.
+ *	belonging to IA-32 family - PentiumPro, Pentium II, 
+ *	Pentium III, Xeon, Pentium 4, etc.
  *
- *	Reference: Section 8.10 of Volume III, Intel Pentium III Manual, 
- *	Order Number 243192 or free download from:
+ *	Reference: Section 8.10 of Volume III, Intel Pentium 4 Manual, 
+ *	Order Number 245472 or free download from:
  *		
- *	http://developer.intel.com/design/pentiumii/manuals/243192.htm
+ *	http://developer.intel.com/design/pentium4/manuals/245472.htm
  *
  *	For more information, go to http://www.urbanmyth.org/microcode
  *
@@ -44,6 +44,9 @@
  *		to be 0 on my machine which is why it worked even when I
  *		disabled update by the BIOS)
  *		Thanks to Eric W. Biederman <ebiederman@lnxi.com> for the fix.
+ *	1.08	11 Dec 2000, Richard Schaal <richard.schaal@intel.com> and
+ *			     Tigran Aivazian <tigran@veritas.com>
+ *		Intel Pentium 4 processor support and bugfixes.
  */
 
 #include <linux/init.h>
@@ -58,11 +61,19 @@
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 
-#define MICROCODE_VERSION 	"1.07"
+#define MICROCODE_VERSION 	"1.08"
 
-MODULE_DESCRIPTION("Intel CPU (P6) microcode update driver");
+MODULE_DESCRIPTION("Intel CPU (IA-32) microcode update driver");
 MODULE_AUTHOR("Tigran Aivazian <tigran@veritas.com>");
 EXPORT_NO_SYMBOLS;
+
+#define MICRO_DEBUG 0
+
+#if MICRO_DEBUG
+#define printf(x...) printk(##x)
+#else
+#define printf(x...)
+#endif
 
 /* VFS interface */
 static int microcode_open(struct inode *, struct file *);
@@ -81,6 +92,7 @@ static unsigned int microcode_num;  /* number of chunks in microcode */
 static char *mc_applied;            /* array of applied microcode blocks */
 static unsigned int mc_fsize;       /* file size of /dev/cpu/microcode */
 
+/* we share file_operations between misc and devfs mechanisms */
 static struct file_operations microcode_fops = {
 	owner:		THIS_MODULE,
 	read:		microcode_read,
@@ -99,23 +111,27 @@ static devfs_handle_t devfs_handle;
 
 static int __init microcode_init(void)
 {
-	int error = 0;
+	int error;
 
-	if (misc_register(&microcode_dev) < 0) {
+	error = misc_register(&microcode_dev);
+	if (error)
 		printk(KERN_WARNING 
 			"microcode: can't misc_register on minor=%d\n",
 			MICROCODE_MINOR);
-		error = 1;
-	}
+
 	devfs_handle = devfs_register(NULL, "cpu/microcode",
 			DEVFS_FL_DEFAULT, 0, 0, S_IFREG | S_IRUSR | S_IWUSR, 
 			&microcode_fops, NULL);
 	if (devfs_handle == NULL && error) {
 		printk(KERN_ERR "microcode: failed to devfs_register()\n");
-		return -EINVAL;
+		goto out;
 	}
-	printk(KERN_INFO "P6 Microcode Update Driver v%s\n", MICROCODE_VERSION);
-	return 0;
+	printk(KERN_INFO 
+		"IA-32 Microcode Update Driver: v%s <tigran@veritas.com>\n", 
+		MICROCODE_VERSION);
+
+out:
+	return error;
 }
 
 static void __exit microcode_exit(void)
@@ -124,12 +140,12 @@ static void __exit microcode_exit(void)
 	devfs_unregister(devfs_handle);
 	if (mc_applied)
 		kfree(mc_applied);
-	printk(KERN_INFO "P6 Microcode Update Driver v%s unregistered\n", 
+	printk(KERN_INFO "IA-32 Microcode Update Driver v%s unregistered\n", 
 			MICROCODE_VERSION);
 }
 
-module_init(microcode_init);
-module_exit(microcode_exit);
+module_init(microcode_init)
+module_exit(microcode_exit)
 
 static int microcode_open(struct inode *unused1, struct file *unused2)
 {
@@ -175,18 +191,19 @@ static void do_update_one(void *unused)
 	unsigned int pf = 0, val[2], rev, sig;
 	int i,found=0;
 
-	req->err = 1; /* assume the worst */
+	req->err = 1; /* assume update will fail on this cpu */
 
-	if (c->x86_vendor != X86_VENDOR_INTEL || c->x86 != 6){
-		printk(KERN_ERR "microcode: CPU%d not an Intel P6\n", cpu_num);
+	if (c->x86_vendor != X86_VENDOR_INTEL || c->x86 < 6 ||
+		test_bit(X86_FEATURE_IA64, &c->x86_capability)){
+		printk(KERN_ERR "microcode: CPU%d not a capable Intel processor\n", cpu_num);
 		return;
 	}
 
 	sig = c->x86_mask + (c->x86_model<<4) + (c->x86<<8);
 
-	if (c->x86_model >= 5) {
-		/* get processor flags from BBL_CR_OVRD MSR (0x17) */
-		rdmsr(0x17, val[0], val[1]);
+	if ((c->x86_model >= 5) || (c->x86 > 6)) {
+		/* get processor flags from MSR 0x17 */
+		rdmsr(MSR_IA32_PLATFORM_ID, val[0], val[1]);
 		pf = 1 << ((val[1] >> 18) & 7);
 	}
 
@@ -195,9 +212,28 @@ static void do_update_one(void *unused)
 		    microcode[i].ldrver == 1 && microcode[i].hdrver == 1) {
 
 			found=1;
-			wrmsr(0x8B, 0, 0);
+
+			printf("Microcode\n");
+			printf("   Header Revision %d\n",microcode[i].hdrver);
+			printf("   Date %x/%x/%x\n",
+				((microcode[i].date >> 24 ) & 0xff),
+				((microcode[i].date >> 16 ) & 0xff),
+				(microcode[i].date & 0xFFFF));
+			printf("   Type %x Family %x Model %x Stepping %x\n",
+				((microcode[i].sig >> 12) & 0x3),
+				((microcode[i].sig >> 8) & 0xf),
+				((microcode[i].sig >> 4) & 0xf),
+				((microcode[i].sig & 0xf)));
+			printf("   Checksum %x\n",microcode[i].cksum);
+			printf("   Loader Revision %x\n",microcode[i].ldrver);
+			printf("   Processor Flags %x\n\n",microcode[i].pf);
+
+			/* trick, to work even if there was no prior update by the BIOS */
+			wrmsr(MSR_IA32_UCODE_REV, 0, 0);
 			__asm__ __volatile__ ("cpuid" : : : "ax", "bx", "cx", "dx");
-			rdmsr(0x8B, val[0], rev);
+
+			/* get current (on-cpu) revision into rev (ignore val[0]) */
+			rdmsr(MSR_IA32_UCODE_REV, val[0], rev);
 			if (microcode[i].rev < rev) {
 				printk(KERN_ERR 
 					"microcode: CPU%d not 'upgrading' to earlier revision"
@@ -219,13 +255,20 @@ static void do_update_one(void *unused)
 					break;
 				}
 
-				wrmsr(0x79, (unsigned int)(m->bits), 0);
-				__asm__ __volatile__ ("cpuid" : : : "ax", "bx", "cx", "dx");
-				rdmsr(0x8B, val[0], val[1]);
+				/* write microcode via MSR 0x79 */
+				wrmsr(MSR_IA32_UCODE_WRITE, (unsigned int)(m->bits), 0);
 
+				/* serialize */
+				__asm__ __volatile__ ("cpuid" : : : "ax", "bx", "cx", "dx");
+
+				/* get the current revision from MSR 0x8B */
+				rdmsr(MSR_IA32_UCODE_REV, val[0], val[1]);
+
+				/* notify the caller of success on this cpu */
 				req->err = 0;
 				req->slot = i;
-				printk(KERN_ERR "microcode: CPU%d updated from revision "
+
+				printk(KERN_INFO "microcode: CPU%d updated from revision "
 						"%d to %d, date=%08x\n", 
 						cpu_num, rev, val[1], m->date);
 			}
@@ -239,18 +282,21 @@ static void do_update_one(void *unused)
 
 static ssize_t microcode_read(struct file *file, char *buf, size_t len, loff_t *ppos)
 {
-	if (*ppos >= mc_fsize)
-		return 0;
+	ssize_t ret = 0;
+
 	down_read(&microcode_rwsem);
+	if (*ppos >= mc_fsize)
+		goto out;
 	if (*ppos + len > mc_fsize)
 		len = mc_fsize - *ppos;
-	if (copy_to_user(buf, mc_applied + *ppos, len)) {
-		up_read(&microcode_rwsem);
-		return -EFAULT;
-	}
+	ret = -EFAULT;
+	if (copy_to_user(buf, mc_applied + *ppos, len))
+		goto out;
 	*ppos += len;
+	ret = len;
+out:
 	up_read(&microcode_rwsem);
-	return len;
+	return ret;
 }
 
 static ssize_t microcode_write(struct file *file, const char *buf, size_t len, loff_t *ppos)
@@ -267,8 +313,8 @@ static ssize_t microcode_write(struct file *file, const char *buf, size_t len, l
 		mc_applied = kmalloc(smp_num_cpus*sizeof(struct microcode),
 				GFP_KERNEL);
 		if (!mc_applied) {
-			printk(KERN_ERR "microcode: out of memory for saved microcode\n");
 			up_write(&microcode_rwsem);
+			printk(KERN_ERR "microcode: out of memory for saved microcode\n");
 			return -ENOMEM;
 		}
 	}
@@ -307,10 +353,12 @@ static int microcode_ioctl(struct inode *inode, struct file *file,
 		case MICROCODE_IOCFREE:
 			down_write(&microcode_rwsem);
 			if (mc_applied) {
+				int bytes = smp_num_cpus * sizeof(struct microcode);
+
 				devfs_set_file_size(devfs_handle, 0);
 				kfree(mc_applied);
 				mc_applied = NULL;
-				printk(KERN_INFO "microcode: freed %d bytes\n", mc_fsize);
+				printk(KERN_INFO "microcode: freed %d bytes\n", bytes);
 				mc_fsize = 0;
 				up_write(&microcode_rwsem);
 				return 0;

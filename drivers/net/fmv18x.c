@@ -134,6 +134,8 @@ int __init fmv18x_probe(struct net_device *dev)
 	int i;
 	int base_addr = dev->base_addr;
 
+	SET_MODULE_OWNER(dev);
+
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return fmv18x_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
@@ -318,8 +320,6 @@ static int net_open(struct net_device *dev)
 
 	/* Enable both Tx and Rx interrupts */
 	outw(0x8182, ioaddr+TX_INTR);
-
-	MOD_INC_USE_COUNT;
 
 	return 0;
 }
@@ -568,8 +568,6 @@ static int net_close(struct net_device *dev)
 
 	/* Power-down the chip.  Green, green, green! */
 	outb(0x00, ioaddr + CONFIG_1);
-
-	MOD_DEC_USE_COUNT;
 
 	/* Set the ethernet adaptor disable IRQ */
 	outb(0x00, ioaddr + FJ_CONFIG1);

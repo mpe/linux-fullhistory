@@ -105,7 +105,9 @@ static int ultra_close_card(struct net_device *dev);
 int __init ultra_probe(struct net_device *dev)
 {
 	int i;
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
+
+	SET_MODULE_OWNER(dev);
 
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return ultra_probe1(dev, base_addr);
@@ -272,7 +274,6 @@ ultra_open(struct net_device *dev)
 	outb_p(E8390_NODMA+E8390_PAGE0, dev->base_addr);
 	outb(0xff, dev->base_addr + EN0_ERWCNT);
 	ei_open(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -411,8 +412,6 @@ ultra_close_card(struct net_device *dev)
 
 	/* We should someday disable shared memory and change to 8-bit mode
 	   "just in case"... */
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

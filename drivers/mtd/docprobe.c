@@ -3,7 +3,7 @@
 /* Probe routines common to all DoC devices */
 /* (c) 1999 Machine Vision Holdings, Inc.   */
 /* Author: David Woodhouse <dwmw2@mvhi.com> */
-/* $Id: docprobe.c,v 1.10 2000/07/13 14:23:20 dwmw2 Exp $ */
+/* $Id: docprobe.c,v 1.21 2000/12/03 19:32:34 dwmw2 Exp $ */
 
 
 
@@ -26,6 +26,21 @@
 #define DOC_PASSIVE_PROBE
 */
 
+
+/* DOC_SINGLE_DRIVER:
+   Millennium driver has been merged into DOC2000 driver.
+
+   The newly-merged driver doesn't appear to work for writing. It's the
+   same with the DiskOnChip 2000 and the Millennium. If you have a 
+   Millennium and you want write support to work, remove the definition
+   of DOC_SINGLE_DRIVER below to use the old doc2001-specific driver.
+
+   Otherwise, it's left on in the hope that it'll annoy someone with
+   a Millennium enough that they go through and work out what the 
+   difference is :)
+*/
+#define DOC_SINGLE_DRIVER
+
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <asm/errno.h>
@@ -44,21 +59,36 @@
 #include <linux/mtd/doc2000.h>
 
 /* Where to look for the devices? */
+#ifndef CONFIG_MTD_DOCPROBE_ADDRESS
+#define CONFIG_MTD_DOCPROBE_ADDRESS 0
+#endif
 
-#if defined (__alpha__) || defined(__i386__)
-static unsigned long __initdata doc_locations[] = { 
-		0xc8000, 0xca000, 0xcc000, 0xce000, 
-		0xd0000, 0xd2000, 0xd4000, 0xd6000,
-		0xd8000, 0xda000, 0xdc000, 0xde000, 
-		0xe0000, 0xe2000, 0xe4000, 0xe6000, 
-		0xe8000, 0xea000, 0xec000, 0xee000, 0 };
-#elif defined(__ppc__)
+
+static unsigned long doc_config_location = CONFIG_MTD_DOCPROBE_ADDRESS;
+MODULE_PARM(doc_config_location, "l");
+
+
 static unsigned long __initdata doc_locations[] = {
-		0xe4000000, 0};
+#if defined (__alpha__) || defined(__i386__)
+#ifdef CONFIG_MTD_DOCPROBE_HIGH
+	0xfffc8000, 0xfffca000, 0xfffcc000, 0xfffce000, 
+	0xfffd0000, 0xfffd2000, 0xfffd4000, 0xfffd6000,
+	0xfffd8000, 0xfffda000, 0xfffdc000, 0xfffde000, 
+	0xfffe0000, 0xfffe2000, 0xfffe4000, 0xfffe6000, 
+	0xfffe8000, 0xfffea000, 0xfffec000, 0xfffee000,
+#else /*  CONFIG_MTD_DOCPROBE_HIGH */
+	0xc8000, 0xca000, 0xcc000, 0xce000, 
+	0xd0000, 0xd2000, 0xd4000, 0xd6000,
+	0xd8000, 0xda000, 0xdc000, 0xde000, 
+	0xe0000, 0xe2000, 0xe4000, 0xe6000, 
+	0xe8000, 0xea000, 0xec000, 0xee000,
+#endif /*  CONFIG_MTD_DOCPROBE_HIGH */
+#elif defined(__ppc__)
+	0xe4000000,
 #else 
 #warning Unknown architecture for DiskOnChip. No default probe locations defined
 #endif
-
+	0 };
 
 /* doccheck: Probe a given memory window to see if there's a DiskOnChip present */
 
@@ -71,10 +101,13 @@ static inline int __init doccheck(unsigned long potential, unsigned long physadr
 #endif
 
 	/* Routine copied from the Linux DOC driver */
-	
-	/* Check for 0x55 0xAA signature at beginning of window */
+
+#ifdef CONFIG_MTD_DOCPROBE_55AA
+	/* Check for 0x55 0xAA signature at beginning of window,
+	   this is no longer true once we remove the IPL (for Millennium */
 	if (ReadDOC(window, Sig1) != 0x55 || ReadDOC(window, Sig2) != 0xaa)
 		return 0;
+#endif /* CONFIG_MTD_DOCPROBE_55AA */
 
 #ifndef DOC_PASSIVE_PROBE	
 	/* It's not possible to cleanly detect the DiskOnChip - the
@@ -118,9 +151,10 @@ static inline int __init doccheck(unsigned long potential, unsigned long physadr
 		break;
 		
 	default:
+#ifndef CONFIG_MTD_DOCPROBE_55AA
 		printk(KERN_WARNING "Possible DiskOnChip with unknown ChipID %2.2X found at 0x%lx\n",
 		       ChipID, physadr);
-
+#endif
 #ifndef DOC_PASSIVE_PROBE
 		/* Put back the contents of the DOCControl register, in case it's not
 		 * actually a DiskOnChip.
@@ -177,28 +211,35 @@ static void DoC_Probe(unsigned long physadr)
 		this->physadr = physadr;
 		this->ChipID = ChipID;
 		sprintf(namebuf, "with ChipID %2.2X", ChipID);
-		
+
 		switch(ChipID) {
 		case DOC_ChipID_Doc2k:
 			name="2000";
 			im_funcname = "DoC2k_init";
 			im_modname = "doc2000";
 			break;
-
+			
 		case DOC_ChipID_DocMil:
 			name="Millennium";
+#ifdef DOC_SINGLE_DRIVER
+			im_funcname = "DoC2k_init";
+			im_modname = "doc2000";
+#else
 			im_funcname = "DoCMil_init";
 			im_modname = "doc2001";
+#endif /* DOC_SINGLE_DRIVER */
 			break;
 		}
+
 		if (im_funcname)
 			initroutine = inter_module_get_request(im_funcname, im_modname);
+
 		if (initroutine) {
 			(*initroutine)(mtd);
 			inter_module_put(im_funcname);
 			return;
 		}
-		printk("Cannot find driver for DiskOnChip %s at 0x%X\n", name, physadr);
+		printk("Cannot find driver for DiskOnChip %s at 0x%lX\n", name, physadr);
 	}
 	iounmap((void *)docptr);
 }
@@ -210,11 +251,8 @@ static void DoC_Probe(unsigned long physadr)
  *
  ****************************************************************************/
 
-#if LINUX_VERSION_CODE < 0x20300
-#ifdef MODULE
+#if LINUX_VERSION_CODE < 0x20212 && defined(MODULE)
 #define init_doc init_module
-#endif
-#define __exit
 #endif
 
 int __init init_doc(void)
@@ -223,19 +261,22 @@ int __init init_doc(void)
 	
 	printk(KERN_NOTICE "M-Systems DiskOnChip driver. (C) 1999 Machine Vision Holdings, Inc.\n");
 #ifdef PRERELEASE
-	printk(KERN_INFO "$Id: docprobe.c,v 1.10 2000/07/13 14:23:20 dwmw2 Exp $\n");
+	printk(KERN_INFO "$Id: docprobe.c,v 1.21 2000/12/03 19:32:34 dwmw2 Exp $\n");
 #endif
-	
-	for (i=0; doc_locations[i]; i++) {
-		DoC_Probe(doc_locations[i]);
+	if (doc_config_location) {
+		printk("Using configured probe address 0x%lx\n", doc_config_location);
+		DoC_Probe(doc_config_location);
+	} else {
+		for (i=0; doc_locations[i]; i++) {
+			DoC_Probe(doc_locations[i]);
+		}
 	}
-	
+	/* So it looks like we've been used and we get unloaded */
+	MOD_INC_USE_COUNT;
+	MOD_DEC_USE_COUNT;
 	return 0;
 	
 }
 
-
-#if LINUX_VERSION_CODE > 0x20300
 module_init(init_doc);
-#endif
 

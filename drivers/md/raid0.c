@@ -275,16 +275,18 @@ static int raid0_make_request (mddev_t *mddev,
 
 bad_map:
 	printk ("raid0_make_request bug: can't convert block across chunks or bigger than %dk %ld %d\n", chunk_size, bh->b_rsector, bh->b_size >> 10);
-	return -1;
+	goto outerr;
 bad_hash:
 	printk("raid0_make_request bug: hash==NULL for block %ld\n", block);
-	return -1;
+	goto outerr;
 bad_zone0:
 	printk ("raid0_make_request bug: hash->zone0==NULL for block %ld\n", block);
-	return -1;
+	goto outerr;
 bad_zone1:
 	printk ("raid0_make_request bug: hash->zone1==NULL for block %ld\n", block);
-	return -1;
+ outerr:
+	buffer_IO_error(bh);
+	return 0;
 }
 			   
 static int raid0_status (char *page, mddev_t *mddev)
@@ -333,24 +335,17 @@ static mdk_personality_t raid0_personality=
 	status:		raid0_status,
 };
 
-#ifndef MODULE
-
-void raid0_init (void)
+static int md__init raid0_init (void)
 {
-	register_md_personality (RAID0, &raid0_personality);
+	return register_md_personality (RAID0, &raid0_personality);
 }
 
-#else
-
-int init_module (void)
-{
-	return (register_md_personality (RAID0, &raid0_personality));
-}
-
-void cleanup_module (void)
+static void raid0_exit (void)
 {
 	unregister_md_personality (RAID0);
 }
 
-#endif
+module_init(raid0_init);
+module_exit(raid0_exit);
+
 

@@ -163,7 +163,7 @@ smb_data_ready(struct sock *sk, int len)
 		found_data(sk);
 		return;
 	}
-	job->cb.next = NULL;
+	INIT_LIST_HEAD(&job->cb.list);
 	job->cb.sync = 0;
 	job->cb.routine = smb_data_callback;
 	job->cb.data = job;

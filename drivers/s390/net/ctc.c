@@ -1313,7 +1313,7 @@ static int ctc_open(net_device *dev)
                                 return -ENOMEM;
                 }
                 init_waitqueue_head(&privptr->channel[i].wait);
-                privptr->channel[i].tq.next = NULL;
+                INIT_LIST_HEAD(&privptr->channel[i].tq.list);
                 privptr->channel[i].tq.sync = 0;
                 privptr->channel[i].tq.routine = (void *)(void *)ctc_irq_bh;
                 privptr->channel[i].tq.data = &privptr->channel[i]; 

@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *	Ian P. Morris		<I.P.Morris@soton.ac.uk>
  *
- *	$Id: ip6_input.c,v 1.17 2000/02/27 19:42:53 davem Exp $
+ *	$Id: ip6_input.c,v 1.18 2000/12/08 17:15:54 davem Exp $
  *
  *	Based in linux/net/ipv4/ip_input.c
  *
@@ -145,11 +145,6 @@ static inline int ip6_input_finish(struct sk_buff *skb)
 		hdr = skb->nh.ipv6h;
 	}
 	len = skb->tail - skb->h.raw;
-
-	if (skb->rx_dev) {
-		dev_put(skb->rx_dev);
-		skb->rx_dev = NULL;
-	}
 
 	raw_sk = raw_v6_htable[nexthdr&(MAX_INET_PROTOS-1)];
 	if (raw_sk)

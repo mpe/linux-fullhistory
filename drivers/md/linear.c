@@ -84,21 +84,19 @@ static int linear_run (mddev_t *mddev)
 		dev_info_t *disk = conf->disks + j;
 
 		if (size < 0) {
-			table->dev1 = disk;
-			table++;
+			table[-1].dev1 = disk;
 		}
 		size += disk->size;
 
-		while (size) {
+		while (size>0) {
 			table->dev0 = disk;
-			size -= conf->smallest->size;
-			if (size < 0)
-				break;
 			table->dev1 = NULL;
+			size -= conf->smallest->size;
 			table++;
 		}
 	}
-	table->dev1 = NULL;
+	if (table-conf->hash_table != nb_zone)
+		BUG();
 
 	return 0;
 
@@ -136,7 +134,8 @@ static int linear_make_request (mddev_t *mddev,
 		if (!hash->dev1) {
 			printk ("linear_make_request : hash->dev1==NULL for block %ld\n",
 						block);
-			return -1;
+			buffer_IO_error(bh);
+			return 0;
 		}
 		tmp_dev = hash->dev1;
 	} else
@@ -145,7 +144,8 @@ static int linear_make_request (mddev_t *mddev,
 	if (block >= (tmp_dev->size + tmp_dev->offset)
 				|| block < tmp_dev->offset) {
 		printk ("linear_make_request: Block %ld out of bounds on dev %s size %ld offset %ld\n", block, kdevname(tmp_dev->dev), tmp_dev->size, tmp_dev->offset);
-		return -1;
+		buffer_IO_error(bh);
+		return 0;
 	}
 	bh->b_rdev = tmp_dev->dev;
 	bh->b_rsector = bh->b_rsector - (tmp_dev->offset << 1);
@@ -190,24 +190,16 @@ static mdk_personality_t linear_personality=
 	status:		linear_status,
 };
 
-#ifndef MODULE
-
-void md__init linear_init (void)
+static int md__init linear_init (void)
 {
-	register_md_personality (LINEAR, &linear_personality);
+	return register_md_personality (LINEAR, &linear_personality);
 }
 
-#else
-
-int init_module (void)
-{
-	return (register_md_personality (LINEAR, &linear_personality));
-}
-
-void cleanup_module (void)
+static void linear_exit (void)
 {
 	unregister_md_personality (LINEAR);
 }
 
-#endif
 
+module_init(linear_init);
+module_exit(linear_exit);

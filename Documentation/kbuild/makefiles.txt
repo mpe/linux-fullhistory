@@ -32,6 +32,8 @@ This document describes the Linux kernel Makefiles.
      7.6  Compilation flags
      7.7  Miscellaneous variables
   8  New-style variables
+     8.1  New variables
+     8.2  Converting to old-style
   9  Compatibility with Linux Kernel 2.2
  10  Credits
 
@@ -521,6 +523,8 @@ contains boilerplate code which converts from new-style variables to
 old-style variables.  This is because Rules.make processes only the
 old-style variables.
 
+See section 8.2 ("Converting to old-style") for examples.
+
 
 
 --- 6.4 Rules.make section
@@ -679,6 +683,25 @@ The public interface of Rules.make consists of the following variables:
 	options still control whether or not its $(O_TARGET) goes into
 	vmlinux.  See the $(M_OBJS) example below.
 
+	Sometimes the ordering of all $(OX_OBJS) files before all
+	$(O_OBJS) files can be a problem, particularly if both
+	$(O_OBJS) files and $(OX_OBJS) files contain __initcall
+	declarations where order is important.   To avoid this imposed
+	ordering, the use of $(OX_OBJS) can be dropped altogether and
+	$(MIX_OBJS) used instead.
+
+	If this approach is used, then:
+	 - All objects to be linked into vmlinux should be listed in
+	   $(O_OBJS) in the desired order.
+	 - All objects to be created as modules should be listed in
+	   $(M_OBJS)
+	 - All objects that export symbols should also be listed in
+	   $(MIX_OBJS).
+
+	This has the same effect as maintaining the
+	exported/non-exported split, except that there is more control
+	over the ordering of object files in vmlinux.
+	
 
 
 --- 7.3 Library file goals
@@ -865,6 +888,14 @@ The public interface of Rules.make consists of the following variables:
 			$(LD) -r -o $@ $(sb-objs)
 
 
+	As is mentioned in section 7.2 ("Object file goals"),
+	$(MIX_OBJS) can also be used simply to list all objects that
+	export any symbols.  If this approach is taken, then
+	$(O_OBJS), $(L_OBJS), $(M_OBJS) and $(MI_OBJS) should simply
+	lists all of the vmlinux object files, library object files,
+	module object files and intermediate module files
+	respectively.  Duplication between $(MI_OBJS) and $(MIX_OBJS)
+	is not a problem.
 
 --- 7.6 Compilation flags
 
@@ -992,6 +1023,8 @@ Makefile has a section of boilerplate code that converts the new-style
 variables into old-style variables.  There is also some mixing, where
 people define most variables using "new style" but then fall back to
 "old style" for a few lines.
+
+--- 8.1 New variables
 
     obj-y obj-m obj-n obj-
 
@@ -1184,6 +1217,41 @@ people define most variables using "new style" but then fall back to
 	This means nls should be added to (subdir-y) and $(subdir-m) if
 	CONFIG_NFS = y.
 
+--- 8.2 Converting to old-style
+
+	The following example is taken from drivers/usb/Makefile.
+	Note that this uses MIX_OBJS to avoid the need for OX_OBJS and
+	MX_OBJS and thus to maintain the ordering of objects in $(obj-y)
+
+		# Translate to Rules.make lists.
+		multi-used	:= $(filter $(list-multi), $(obj-y) $(obj-m))
+		multi-objs	:= $(foreach m, $(multi-used), $($(basename $(m))-objs))
+		active-objs	:= $(sort $(multi-objs) $(obj-y) $(obj-m))
+
+		O_OBJS		:= $(obj-y)
+		M_OBJS		:= $(obj-m)
+		MIX_OBJS	:= $(filter $(export-objs), $(active-objs))
+
+	An example for libraries from drivers/acorn/scsi/Makefile:
+
+		# Translate to Rules.make lists.
+
+		L_OBJS		:= $(filter-out $(export-objs), $(obj-y))
+		LX_OBJS		:= $(filter     $(export-objs), $(obj-y))
+		M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
+		MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
+
+	As ordering is not so important in libraries, this still uses
+	LX_OBJS and MX_OBJS, though (presumably) it could be changed to
+	use MIX_OBJS as follows:
+
+		active-objs	:= $(sort $(obj-y) $(obj-m))
+		L_OBJS		:= $(obj-y)
+		M_OBJS		:= $(obj-m)
+		MIX_OBJS	:= $(filter $(export-objs), $(active-objs))
+		
+
+	which is clearly shorted and arguably clearer.
 
 === 9 Compatibility with Linux Kernel 2.2
 

@@ -463,16 +463,12 @@ static int raid1_read_balance (raid1_conf_t *conf, struct buffer_head *bh)
 	if (conf->resync_mirrors)
 		goto rb_out;
 	
-	if (conf->working_disks < 2) {
-		int i = 0;
-		
-		while( !conf->mirrors[new_disk].operational &&
-				(i < MD_SB_DISKS) ) {
-			new_disk = conf->mirrors[new_disk].next;
-			i++;
-		}
-		
-		if (i >= MD_SB_DISKS) {
+
+	/* make sure that disk is operational */
+	while( !conf->mirrors[new_disk].operational) {
+		if (new_disk <= 0) new_disk = conf->raid_disks;
+		new_disk--;
+		if (new_disk == disk) {
 			/*
 			 * This means no working disk was found
 			 * Nothing much to do, lets not change anything
@@ -480,11 +476,13 @@ static int raid1_read_balance (raid1_conf_t *conf, struct buffer_head *bh)
 			 */
 			
 			new_disk = conf->last_used;
-		}
-		
-		goto rb_out;
-	}
 
+			goto rb_out;
+		}
+	}
+	disk = new_disk;
+	/* now disk == new_disk == starting point for search */
+	
 	/*
 	 * Don't touch anything for sequential reads.
 	 */
@@ -501,16 +499,16 @@ static int raid1_read_balance (raid1_conf_t *conf, struct buffer_head *bh)
 	
 	if (conf->sect_count >= conf->mirrors[new_disk].sect_limit) {
 		conf->sect_count = 0;
-		
-		while( new_disk != conf->mirrors[new_disk].next ) {
-			if ((conf->mirrors[new_disk].write_only) ||
-				(!conf->mirrors[new_disk].operational) )
-				continue;
-			
-			new_disk = conf->mirrors[new_disk].next;
-			break;
-		}
-		
+
+		do {
+			if (new_disk<=0)
+				new_disk = conf->raid_disks;
+			new_disk--;
+			if (new_disk == disk)
+				break;
+		} while ((conf->mirrors[new_disk].write_only) ||
+			 (!conf->mirrors[new_disk].operational));
+
 		goto rb_out;
 	}
 	
@@ -519,8 +517,10 @@ static int raid1_read_balance (raid1_conf_t *conf, struct buffer_head *bh)
 	
 	/* Find the disk which is closest */
 	
-	while( conf->mirrors[disk].next != conf->last_used ) {
-		disk = conf->mirrors[disk].next;
+	do {
+		if (disk <= 0)
+			disk = conf->raid_disks;
+		disk--;
 		
 		if ((conf->mirrors[disk].write_only) ||
 				(!conf->mirrors[disk].operational))
@@ -534,7 +534,7 @@ static int raid1_read_balance (raid1_conf_t *conf, struct buffer_head *bh)
 			current_distance = new_distance;
 			new_disk = disk;
 		}
-	}
+	} while (disk != conf->last_used);
 
 rb_out:
 	conf->mirrors[new_disk].head_position = this_sector + sectors;
@@ -702,16 +702,6 @@ static int raid1_status (char *page, mddev_t *mddev)
 	return sz;
 }
 
-static void unlink_disk (raid1_conf_t *conf, int target)
-{
-	int disks = MD_SB_DISKS;
-	int i;
-
-	for (i = 0; i < disks; i++)
-		if (conf->mirrors[i].next == target)
-			conf->mirrors[i].next = conf->mirrors[target].next;
-}
-
 #define LAST_DISK KERN_ALERT \
 "raid1: only one disk left and IO error.\n"
 
@@ -735,7 +725,6 @@ static void mark_disk_bad (mddev_t *mddev, int failed)
 	mdp_super_t *sb = mddev->sb;
 
 	mirror->operational = 0;
-	unlink_disk(conf, failed);
 	mark_disk_faulty(sb->disks+mirror->number);
 	mark_disk_nonsync(sb->disks+mirror->number);
 	mark_disk_inactive(sb->disks+mirror->number);
@@ -786,25 +775,6 @@ static int raid1_error (mddev_t *mddev, kdev_t dev)
 #undef DISK_FAILED
 #undef START_SYNCING
 
-/*
- * Insert the spare disk into the drive-ring
- */
-static void link_disk(raid1_conf_t *conf, struct mirror_info *mirror)
-{
-	int j, next;
-	int disks = MD_SB_DISKS;
-	struct mirror_info *p = conf->mirrors;
-
-	for (j = 0; j < disks; j++, p++)
-		if (p->operational && !p->write_only) {
-			next = p->next;
-			p->next = mirror->raid_disk;
-			mirror->next = next;
-			return;
-		}
-
-	printk("raid1: bug: no read-operational devices\n");
-}
 
 static void print_raid1_conf (raid1_conf_t *conf)
 {
@@ -826,6 +796,32 @@ static void print_raid1_conf (raid1_conf_t *conf)
 			tmp->number,tmp->raid_disk,tmp->used_slot,
 			partition_name(tmp->dev));
 	}
+}
+
+static void close_sync(raid1_conf_t *conf)
+{
+	mddev_t *mddev = conf->mddev;
+	/* If reconstruction was interrupted, we need to close the "active" and "pending"
+	 * holes.
+	 * we know that there are no active rebuild requests, os cnt_active == cnt_ready ==0
+	 */
+	/* this is really needed when recovery stops too... */
+	spin_lock_irq(&conf->segment_lock);
+	conf->start_active = conf->start_pending;
+	conf->start_ready = conf->start_pending;
+	wait_event_lock_irq(conf->wait_ready, !conf->cnt_pending, conf->segment_lock);
+	conf->start_active =conf->start_ready = conf->start_pending = conf->start_future;
+	conf->start_future = mddev->sb->size+1;
+	conf->cnt_pending = conf->cnt_future;
+	conf->cnt_future = 0;
+	conf->phase = conf->phase ^1;
+	wait_event_lock_irq(conf->wait_ready, !conf->cnt_pending, conf->segment_lock);
+	conf->start_active = conf->start_ready = conf->start_pending = conf->start_future = 0;
+	conf->phase = 0;
+	conf->cnt_future = conf->cnt_done;;
+	conf->cnt_done = 0;
+	spin_unlock_irq(&conf->segment_lock);
+	wake_up(&conf->wait_done);
 }
 
 static int raid1_diskop(mddev_t *mddev, mdp_disk_t **d, int state)
@@ -940,6 +936,7 @@ static int raid1_diskop(mddev_t *mddev, mdp_disk_t **d, int state)
 	 * Deactivate a spare disk:
 	 */
 	case DISKOP_SPARE_INACTIVE:
+		close_sync(conf);
 		sdisk = conf->mirrors + spare_disk;
 		sdisk->operational = 0;
 		sdisk->write_only = 0;
@@ -952,7 +949,7 @@ static int raid1_diskop(mddev_t *mddev, mdp_disk_t **d, int state)
 	 * property)
 	 */
 	case DISKOP_SPARE_ACTIVE:
-
+		close_sync(conf);
 		sdisk = conf->mirrors + spare_disk;
 		fdisk = conf->mirrors + failed_disk;
 
@@ -1017,7 +1014,6 @@ static int raid1_diskop(mddev_t *mddev, mdp_disk_t **d, int state)
 		 */
 		fdisk->spare = 0;
 		fdisk->write_only = 0;
-		link_disk(conf, fdisk);
 
 		/*
 		 * if we activate a spare, we definitely replace a
@@ -1244,27 +1240,7 @@ static void raid1syncd (void *data)
 		conf->resync_mirrors = 0;
 	}
 
-	/* If reconstruction was interrupted, we need to close the "active" and "pending"
-	 * holes.
-	 * we know that there are no active rebuild requests, os cnt_active == cnt_ready ==0
-	 */
-	/* this is really needed when recovery stops too... */
-	spin_lock_irq(&conf->segment_lock);
-	conf->start_active = conf->start_pending;
-	conf->start_ready = conf->start_pending;
-	wait_event_lock_irq(conf->wait_ready, !conf->cnt_pending, conf->segment_lock);
-	conf->start_active =conf->start_ready = conf->start_pending = conf->start_future;
-	conf->start_future = mddev->sb->size+1;
-	conf->cnt_pending = conf->cnt_future;
-	conf->cnt_future = 0;
-	conf->phase = conf->phase ^1;
-	wait_event_lock_irq(conf->wait_ready, !conf->cnt_pending, conf->segment_lock);
-	conf->start_active = conf->start_ready = conf->start_pending = conf->start_future = 0;
-	conf->phase = 0;
-	conf->cnt_future = conf->cnt_done;;
-	conf->cnt_done = 0;
-	spin_unlock_irq(&conf->segment_lock);
-	wake_up(&conf->wait_done);
+	close_sync(conf);
 
 	up(&mddev->recovery_sem);
 	raid1_shrink_buffers(conf);
@@ -1325,6 +1301,7 @@ static int raid1_sync_request (mddev_t *mddev, unsigned long block_nr)
 	struct raid1_bh *r1_bh;
 	struct buffer_head *bh;
 	int bsize;
+	int disk;
 
 	spin_lock_irq(&conf->segment_lock);
 	if (!block_nr) {
@@ -1377,6 +1354,16 @@ static int raid1_sync_request (mddev_t *mddev, unsigned long block_nr)
 	 * could dedicate one to rebuild and others to
 	 * service read requests ..
 	 */
+	disk = conf->last_used;
+	/* make sure disk is operational */
+	while (!conf->mirrors[disk].operational) {
+		if (disk <= 0) disk = conf->raid_disks;
+		disk--;
+		if (disk == conf->last_used)
+			break;
+	}
+	conf->last_used = disk;
+	
 	mirror = conf->mirrors+conf->last_used;
 	
 	r1_bh = raid1_alloc_buf (conf);
@@ -1396,7 +1383,7 @@ static int raid1_sync_request (mddev_t *mddev, unsigned long block_nr)
 	bh->b_list = BUF_LOCKED;
 	bh->b_dev = mirror->dev;
 	bh->b_rdev = mirror->dev;
-	bh->b_state = (1<<BH_Req) | (1<<BH_Mapped);
+	bh->b_state = (1<<BH_Req) | (1<<BH_Mapped) | (1<<BH_Lock);
 	if (!bh->b_page)
 		BUG();
 	if (!bh->b_data)
@@ -1717,19 +1704,10 @@ static int raid1_run (mddev_t *mddev)
 	 * find the first working one and use it as a starting point
 	 * to read balancing.
 	 */
-	for (j = 0; !conf->mirrors[j].operational; j++)
+	for (j = 0; !conf->mirrors[j].operational && j < MD_SB_DISKS; j++)
 		/* nothing */;
 	conf->last_used = j;
 
-	/*
-	 * initialize the 'working disks' list.
-	 */
-	for (i = conf->raid_disks - 1; i >= 0; i--) {
-		if (conf->mirrors[i].operational) {
-			conf->mirrors[i].next = j;
-			j = i;
-		}
-	}
 
 	if (conf->working_disks != sb->raid_disks) {
 		printk(KERN_ALERT "raid1: md%d, not all disks are operational -- trying to recover array\n", mdidx(mddev));
@@ -1882,19 +1860,16 @@ static mdk_personality_t raid1_personality=
 	sync_request:	raid1_sync_request
 };
 
-int raid1_init (void)
+static int md__init raid1_init (void)
 {
 	return register_md_personality (RAID1, &raid1_personality);
 }
 
-#ifdef MODULE
-int init_module (void)
-{
-	return raid1_init();
-}
-
-void cleanup_module (void)
+static void raid1_exit (void)
 {
 	unregister_md_personality (RAID1);
 }
-#endif
+
+module_init(raid1_init);
+module_exit(raid1_exit);
+

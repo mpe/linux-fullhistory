@@ -367,6 +367,7 @@ static int __devinit w840_probe1 (struct pci_dev *pdev,
 	dev = init_etherdev(NULL, sizeof(*np));
 	if (!dev)
 		return -ENOMEM;
+	SET_MODULE_OWNER(dev);
 
 #ifdef USE_IO_OPS
 	ioaddr = pci_resource_start(pdev, 0);
@@ -623,12 +624,9 @@ static int netdev_open(struct net_device *dev)
 
 	writel(0x00000001, ioaddr + PCIBusCfg);		/* Reset */
 
-	MOD_INC_USE_COUNT;
-
-	if (request_irq(dev->irq, &intr_handler, SA_SHIRQ, dev->name, dev)) {
-		MOD_DEC_USE_COUNT;
-		return -EAGAIN;
-	}
+	i = request_irq(dev->irq, &intr_handler, SA_SHIRQ, dev->name, dev);
+	if (i)
+		return i;
 
 	if (debug > 1)
 		printk(KERN_DEBUG "%s: w89c840_open() irq %d.\n",
@@ -1304,8 +1302,6 @@ static int netdev_close(struct net_device *dev)
 			dev_kfree_skb(np->tx_skbuff[i]);
 		np->tx_skbuff[i] = 0;
 	}
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

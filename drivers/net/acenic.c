@@ -2223,7 +2223,7 @@ static int ace_open(struct net_device *dev)
 	/*
 	 * Setup the bottom half rx ring refill handler
 	 */
-	ap->immediate.next = NULL;
+	INIT_LIST_HEAD(&ap->immediate.list);
 	ap->immediate.sync = 0;
 	ap->immediate.routine = (void *)(void *)ace_bh;
 	ap->immediate.data = dev;
