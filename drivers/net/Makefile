@@ -8,6 +8,8 @@ obj-m           :=
 obj-n           :=
 obj-            :=
 
+mod-subdirs     := wan
+
 O_TARGET := net.o
 
 # All of the (potential) objects that export symbols.

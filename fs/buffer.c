@@ -1693,6 +1693,9 @@ int block_read_full_page(struct page *page, get_block_t *get_block)
 				set_bit(BH_Uptodate, &bh->b_state);
 				continue;
 			}
+			/* get_block() might have updated the buffer synchronously */
+			if (buffer_uptodate(bh))
+				continue;
 		}
 
 		arr[nr] = bh;

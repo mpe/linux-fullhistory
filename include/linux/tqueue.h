@@ -53,22 +53,22 @@ extern task_queue tq_timer, tq_immediate, tq_disk;
  * To implement your own list of active bottom halfs, use the following
  * two definitions:
  *
- * DECLARE_TASK_QUEUE(my_bh);
- * struct tq_struct run_my_bh = {
- * 	routine: (void (*)(void *)) run_task_queue,
- *	data: &my_bh
+ * DECLARE_TASK_QUEUE(my_tqueue);
+ * struct tq_struct my_task = {
+ * 	routine: (void (*)(void *)) my_routine,
+ *	data: &my_data
  * };
  *
- * To activate a bottom half on your list, use:
+ * To activate a bottom half on a list, use:
  *
- *     queue_task(tq_pointer, &my_bh);
+ *	queue_task(&my_task, &my_tqueue);
  *
- * To run the bottom halfs on your list put them on the immediate list by:
+ * To later run the queued tasks use
  *
- *     queue_task(&run_my_bh, &tq_immediate);
+ *	run_task_queue(&my_tqueue);
  *
- * This allows you to do deferred procession.  For example, you could
- * have a bottom half list tq_timer, which is marked active by the timer
+ * This allows you to do deferred processing.  For example, you could
+ * have a task queue called tq_timer, which is executed within the timer
  * interrupt.
  */
 
@@ -78,8 +78,7 @@ extern spinlock_t tqueue_lock;
  * Queue a task on a tq.  Return non-zero if it was successfully
  * added.
  */
-static inline int queue_task(struct tq_struct *bh_pointer,
-			   task_queue *bh_list)
+static inline int queue_task(struct tq_struct *bh_pointer, task_queue *bh_list)
 {
 	int ret = 0;
 	if (!test_and_set_bit(0,&bh_pointer->sync)) {
@@ -95,32 +94,13 @@ static inline int queue_task(struct tq_struct *bh_pointer,
 /*
  * Call all "bottom halfs" on a given list.
  */
+
+extern void __run_task_queue(task_queue *list);
+
 static inline void run_task_queue(task_queue *list)
 {
-	while (!list_empty(list)) {
-		unsigned long flags;
-		struct list_head *next;
-
-		spin_lock_irqsave(&tqueue_lock, flags);
-		next = list->next;
-		if (next != list) {
-			void *arg;
-			void (*f) (void *);
-			struct tq_struct *p;
-
-			list_del(next);
-			p = list_entry(next, struct tq_struct, list);
-			arg = p->data;
-			f = p->routine;
-			p->sync = 0;
-			spin_unlock_irqrestore(&tqueue_lock, flags);
-
-			if (f)
-				f(arg);
-			continue;
-		}
-		spin_unlock_irqrestore(&tqueue_lock, flags);
-	}
+	if (TQ_ACTIVE(*list))
+		__run_task_queue(list);
 }
 
 #endif /* _LINUX_TQUEUE_H */

@@ -115,18 +115,18 @@ DevFS is now in the kernel.  See Documentation/filesystems/devfs/* in
 the kernel source tree for all the gory details.
 
 System V shared memory is now implemented via a virtual filesystem.
-You do not have to mount it to use it as long as you can live with the
-default maxima for shared memory and segments.  If you wish to change
-these variables, you have to mount it with the options nr_blocks
-and / or nr_inodes.  POSIX shared memory is also now implemented via a
-virtual filesystem.  If you want to use it, you'll need to mount the
-filesystem.  The recommended mount location is /dev/shm, and adding the
-following line to /etc/fstab should take care of things:
+You do not have to mount it to use it. SYSV shared memory limits are
+set via /proc/sys/kernel/shm{max,all,mni}.  You should mount the
+filesystem under /dev/shm to be able to use POSIX shared
+memory. Adding the following line to /etc/fstab should take care of
+things:
 
 none		/dev/shm	shm		defaults	0 0
 
 Remember to create the directory that you intend to mount shm on if
-necessary.
+necessary (The entry is automagically created if you use devfs). You
+can set limits for the number of blocks and inodes used by the
+filesystem with the mount options nr_blocks and nr_inodes.
 
 The Logical Volume Manager (LVM) is now in the kernel.  If you want to
 use this, you'll need to install the necessary LVM toolset.

@@ -7,14 +7,11 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-O_TARGET := 8260_io.a
-O_OBJS	= commproc.o uart.o
+O_TARGET		:= 8260_io.o
 
-ifdef CONFIG_FEC_ENET
-O_OBJS += fcc_enet.o
-endif
-ifdef CONFIG_SCC_ENET
-O_OBJS += enet.o
-endif
+obj-y			:= commproc.o uart.o
+
+obj-$(CONFIG_FEC_ENET)	+= fcc_enet.o
+obj-$(CONFIG_SCC_ENET)	+= enet.o
 
 include $(TOPDIR)/Rules.make

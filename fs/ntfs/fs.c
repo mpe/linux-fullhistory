@@ -963,8 +963,10 @@ static void __exit exit_ntfs_fs(void)
 EXPORT_NO_SYMBOLS;
 MODULE_AUTHOR("Martin von Löwis");
 MODULE_DESCRIPTION("NTFS driver");
+#ifdef DEBUG
 MODULE_PARM(ntdebug, "i");
 MODULE_PARM_DESC(ntdebug, "Debug level");
+#endif
 
 module_init(init_ntfs_fs)
 module_exit(exit_ntfs_fs)

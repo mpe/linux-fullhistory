@@ -129,15 +129,6 @@ struct vm_operations_struct {
 };
 
 /*
- * A swap entry has to fit into a "unsigned long", as
- * the entry is hidden in the "index" field of the
- * swapper address space.
- */
-typedef struct {
-	unsigned long val;
-} swp_entry_t;
-
-/*
  * Try to keep the most commonly accessed fields in single cache lines
  * here (16 bytes or greater).  This ordering should be particularly
  * beneficial on 32-bit processors.
@@ -390,7 +381,10 @@ extern void show_free_areas_node(pg_data_t *pgdat);
 
 extern void clear_page_tables(struct mm_struct *, unsigned long, int);
 
-extern int map_zero_setup(struct vm_area_struct *);
+int shmem_swapout(struct page * page, struct file *file);
+struct page * shmem_nopage(struct vm_area_struct * vma, unsigned long address, int no_share);
+struct file *shmem_file_setup(char * name, loff_t size);
+extern int shmem_zero_setup(struct vm_area_struct *);
 
 extern void zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long size);
 extern int copy_page_range(struct mm_struct *dst, struct mm_struct *src, struct vm_area_struct *vma);

@@ -603,6 +603,8 @@ dirty_page_rescan:
 		 */
 		if (PageDirty(page)) {
 			int (*writepage)(struct page *) = page->mapping->a_ops->writepage;
+			int result;
+
 			if (!writepage)
 				goto page_active;
 
@@ -619,12 +621,16 @@ dirty_page_rescan:
 			page_cache_get(page);
 			spin_unlock(&pagemap_lru_lock);
 
-			writepage(page);
+			result = writepage(page);
 			page_cache_release(page);
 
 			/* And re-start the thing.. */
 			spin_lock(&pagemap_lru_lock);
-			continue;
+			if (result != 1)
+				continue;
+			/* writepage refused to do anything */
+			SetPageDirty(page);
+			goto page_active;
 		}
 
 		/*

@@ -15,6 +15,7 @@
 #include <linux/interrupt.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#include <linux/tqueue.h>
 
 /*
    - No shared variables, all the data are CPU local.
@@ -288,4 +289,28 @@ void __init softirq_init()
 	open_softirq(HI_SOFTIRQ, tasklet_hi_action, NULL);
 }
 
+void __run_task_queue(task_queue *list)
+{
+	struct list_head head, *next;
+	unsigned long flags;
 
+	spin_lock_irqsave(&tqueue_lock, flags);
+	list_add(&head, list);
+	list_del_init(list);
+	spin_unlock_irqrestore(&tqueue_lock, flags);
+
+	next = head.next;
+	while (next != &head) {
+		void (*f) (void *);
+		struct tq_struct *p;
+
+		p = list_entry(next, struct tq_struct, list);
+		next = next->next;
+		/* Debug: force an oops from people who delete entries */
+		next->prev->next = next->prev->prev = 0;
+		f = p->routine;
+		p->sync = 0;
+		if (f)
+			f(p->data);
+	}
+}

@@ -345,11 +345,6 @@ void sem_exit (void)
     return;
 }
 
-int shm_swap (int prio, int gfp_mask)
-{
-    return 0;
-}
-
 asmlinkage long sys_semget (key_t key, int nsems, int semflg)
 {
 	return -ENOSYS;
@@ -404,15 +399,6 @@ asmlinkage long sys_shmdt (char *shmaddr)
 asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 {
 	return -ENOSYS;
-}
-
-void shm_unuse(swp_entry_t entry, struct page *page)
-{
-}
-
-int map_zero_setup(struct vm_area_struct *vma)
-{
-	return -EINVAL;
 }
 
 #endif /* CONFIG_SYSVIPC */

@@ -333,7 +333,7 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 		if (error)
 			goto unmap_and_free_vma;
 	} else if (flags & MAP_SHARED) {
-		error = map_zero_setup(vma);
+		error = shmem_zero_setup(vma);
 		if (error)
 			goto free_vma;
 	}

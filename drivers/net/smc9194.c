@@ -50,10 +50,11 @@
  .	04/14/00  Heiko Pruessing (SMA Regelsysteme)  Fixed bug in chip memory
  .				 allocation
  .      08/20/00  Arnaldo Melo   fix kfree(skb) in smc_hardware_send_packet
+ .      12/15/00  Christian Jullien fix "Warning: kfree_skb on hard IRQ"
  ----------------------------------------------------------------------------*/
 
 static const char *version =
-	"smc9194.c:v0.13 04/14/00 by Erik Stahlman (erik@vt.edu)\n";
+	"smc9194.c:v0.14 12/15/00 by Erik Stahlman (erik@vt.edu)\n";
 
 #include <linux/module.h>
 #include <linux/version.h>
@@ -615,7 +616,7 @@ static void smc_hardware_send_packet( struct net_device * dev )
 	if ( packet_no & 0x80 ) {
 		/* or isn't there?  BAD CHIP! */
 		printk(KERN_DEBUG CARDNAME": Memory allocation failed. \n");
-		dev_kfree_skb(skb);
+		dev_kfree_skb_irq(skb);
 		lp->saved_skb = NULL;
 		netif_wake_queue(dev);
 		return;
@@ -678,7 +679,7 @@ static void smc_hardware_send_packet( struct net_device * dev )
 	PRINTK2((CARDNAME": Sent packet of length %d \n",length));
 
 	lp->saved_skb = NULL;
-	dev_kfree_skb (skb);
+	dev_kfree_skb_irq (skb);
 
 	dev->trans_start = jiffies;
 

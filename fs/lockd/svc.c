@@ -312,7 +312,6 @@ out:
 #ifdef MODULE
 /* New module support in 2.1.18 */
 
-EXPORT_NO_SYMBOLS;
 MODULE_AUTHOR("Olaf Kirch <okir@monad.swb.de>");
 MODULE_DESCRIPTION("NFS file locking service version " LOCKD_VERSION ".");
 MODULE_PARM(nlm_grace_period, "10-240l");

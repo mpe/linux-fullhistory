@@ -283,6 +283,7 @@ extern void set_bh_page(struct buffer_head *bh, struct page *page, unsigned long
 #include <linux/efs_fs_i.h>
 #include <linux/coda_fs_i.h>
 #include <linux/romfs_fs_i.h>
+#include <linux/shmem_fs.h>
 #include <linux/smb_fs_i.h>
 #include <linux/hfs_fs_i.h>
 #include <linux/adfs_fs_i.h>
@@ -441,6 +442,7 @@ struct inode {
 		struct ufs_inode_info		ufs_i;
 		struct efs_inode_info		efs_i;
 		struct romfs_inode_info		romfs_i;
+		struct shmem_inode_info		shmem_i;
 		struct coda_inode_info		coda_i;
 		struct smb_inode_info		smbfs_i;
 		struct hfs_inode_info		hfs_i;
@@ -685,6 +687,7 @@ struct super_block {
 		struct affs_sb_info	affs_sb;
 		struct ufs_sb_info	ufs_sb;
 		struct efs_sb_info	efs_sb;
+		struct shmem_sb_info	shmem_sb;
 		struct romfs_sb_info	romfs_sb;
 		struct smb_sb_info	smbfs_sb;
 		struct hfs_sb_info	hfs_sb;

@@ -542,8 +542,8 @@ void lock_page(struct page *page)
  * a rather lightweight function, finding and getting a reference to a
  * hashed page atomically, waiting for it if it's locked.
  */
-static struct page * __find_get_page(struct address_space *mapping,
-				unsigned long offset, struct page **hash)
+struct page * __find_get_page(struct address_space *mapping,
+			      unsigned long offset, struct page **hash)
 {
 	struct page *page;
 

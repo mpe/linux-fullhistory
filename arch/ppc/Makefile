@@ -72,12 +72,12 @@ MAKETREEBOOT = $(MAKE) -C arch/$(ARCH)/treeboot
 
 ifdef CONFIG_8xx
 SUBDIRS += arch/ppc/8xx_io
-DRIVERS += arch/ppc/8xx_io/8xx_io.a
+DRIVERS += arch/ppc/8xx_io/8xx_io.o
 endif
 
 ifdef CONFIG_8260
 SUBDIRS += arch/ppc/8260_io
-DRIVERS += arch/ppc/8260_io/8260_io.a
+DRIVERS += arch/ppc/8260_io/8260_io.o
 endif
 
 ifdef CONFIG_APUS

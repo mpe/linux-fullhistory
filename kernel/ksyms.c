@@ -524,6 +524,7 @@ EXPORT_SYMBOL(init_bh);
 EXPORT_SYMBOL(remove_bh);
 EXPORT_SYMBOL(tasklet_init);
 EXPORT_SYMBOL(tasklet_kill);
+EXPORT_SYMBOL(__run_task_queue);
 
 /* init task, for moving kthread roots - ought to export a function ?? */
 

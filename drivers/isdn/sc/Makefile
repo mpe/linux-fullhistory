@@ -2,7 +2,7 @@
 
 # The target object and module list name.
 
-O_TARGET	:= sc_drv
+O_TARGET	:= sc_drv.o
 
 # Objects that export symbols.
 

@@ -95,7 +95,7 @@ if [ "$CONFIG_ISDN_DRV_EICON" != "n" ]; then
       dep_bool  '    Eicon PCI DIVA Server BRI/PRI/4BRI support' CONFIG_ISDN_DRV_EICON_PCI $CONFIG_PCI
       bool      '    Eicon S,SX,SCOM,Quadro,S2M support' CONFIG_ISDN_DRV_EICON_ISA
    fi
-   dep_tristate '  Build Eicon driver type standalone' CONFIG_ISDN_DRV_EICON_DIVAS
+   tristate '  Build Eicon driver type standalone' CONFIG_ISDN_DRV_EICON_DIVAS
 fi
 
 # CAPI subsystem
