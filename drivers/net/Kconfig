@@ -44,6 +44,7 @@ config DUMMY
 config BONDING
 	tristate "Bonding driver support"
 	depends on NETDEVICES
+	depends on INET
 	---help---
 	  Say 'Y' or 'M' if you wish to be able to 'bond' multiple Ethernet
 	  Channels together. This is called 'Etherchannel' by Cisco,
