@@ -726,12 +726,7 @@ static int tcp_select(struct sock *sk, int sel_type, select_table *wait)
 			return 0;
 		if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV)
 			break;
-		/*
-		 * This is now right thanks to a small fix
-		 * by Matt Dillon.
-		 */
-
-		if (sock_wspace(sk) < sk->mtu+128+sk->prot->max_header)
+		if (sk->wmem_alloc*2 > sk->sndbuf)
 			break;
 		return 1;
 

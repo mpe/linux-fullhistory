@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/cmd640.c	Version 0.12  Jul 22, 1996
+ *  linux/drivers/block/cmd640.c	Version 0.13  Jul 23, 1996
  *
  *  Copyright (C) 1995-1996  Linus Torvalds & authors (see below)
  */
@@ -61,6 +61,7 @@
  *			irq unmasking disabled for reliability.  -lp
  *			try to be even smarter about the second port.  -lp
  *			tidy up source code formatting.  -ml
+ *  Version 0.13	permit irq unmasking again.  -ml
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -451,7 +452,9 @@ int ide_probe_for_cmd640x(void)
 	 */
 	ide_hwifs[0].chipset = ide_cmd640;
 	ide_hwifs[0].tuneproc = &cmd640_tune_drive;
+#if 0
 	ide_hwifs[0].no_unmask = 1;
+#endif
 
 	if (ide_hwifs[0].drives[0].autotune == 0)
 		ide_hwifs[0].drives[0].autotune = 1;
@@ -470,8 +473,9 @@ int ide_probe_for_cmd640x(void)
 
 		ide_hwifs[1].chipset = ide_cmd640;
 		ide_hwifs[1].tuneproc = &cmd640_tune_drive;
+#if 0
 		ide_hwifs[1].no_unmask = 1;
-
+#endif
 		if (ide_hwifs[1].drives[0].autotune == 0)
 			ide_hwifs[1].drives[0].autotune = 1;
 		if (ide_hwifs[1].drives[1].autotune == 0)

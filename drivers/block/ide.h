@@ -296,18 +296,6 @@ typedef union {
 		} b;
 	} special_t;
 
-#ifdef __BIG_ENDIAN_BITFIELD
-typedef union {
-	unsigned all			: 8;	/* all of the bits together */
-	struct {
-		unsigned bit7		: 1;	/* always 1 */
-		unsigned lba		: 1;	/* using LBA instead of CHS */
-		unsigned bit5		: 1;	/* always 1 */
-		unsigned unit		: 1;	/* drive select number, 0 or 1 */
-		unsigned head		: 4;	/* always zeros here */
-	} b;
-	} select_t;
-#else /* __BIG_ENDIAN_BITFIELD */
 typedef union {
 	unsigned all			: 8;	/* all of the bits together */
 	struct {
@@ -318,7 +306,6 @@ typedef union {
 		unsigned bit7		: 1;	/* always 1 */
 	} b;
 	} select_t;
-#endif /* __BIG_ENDIAN_BITFIELD */
 
 typedef struct ide_drive_s {
 	special_t	special;	/* special action flags */
@@ -332,7 +319,6 @@ typedef struct ide_drive_s {
 	unsigned unmask		: 1;	/* flag: okay to unmask other irqs */
 	unsigned nobios		: 1;	/* flag: do not probe bios for drive */
 	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
-	unsigned ignore_unexp	: 1;	/* flag: ignore unexpected_intr's */
 #if FAKE_FDISK_FOR_EZDRIVE
 	unsigned remap_0_to_1	: 1;	/* flag: partitioned with ezdrive */
 #endif /* FAKE_FDISK_FOR_EZDRIVE */

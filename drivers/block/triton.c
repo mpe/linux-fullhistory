@@ -7,7 +7,7 @@
 
 /*
  * This module provides support for the Bus Master IDE DMA function
- * of the Intel PCI Triton chipset (82371FB).
+ * of the Intel PCI Triton I/II chipsets (i82371FB or i82371SB).
  *
  * DMA is currently supported only for hard disk drives (not cdroms).
  *
@@ -15,11 +15,11 @@
  * after broader experience has been obtained with hard disks.
  *
  * Up to four drives may be enabled for DMA, and the Triton chipset will
- * (hopefully) arbitrate the PCI bus among them.  Note that the 82371FB chip
+ * (hopefully) arbitrate the PCI bus among them.  Note that the i82371 chip
  * provides a single "line buffer" for the BM IDE function, so performance of
  * multiple (two) drives doing DMA simultaneously will suffer somewhat,
  * as they contest for that resource bottleneck.  This is handled transparently
- * inside the 82371FB chip.
+ * inside the i82371 chip.
  *
  * By default, DMA support is prepared for use, but is currently enabled only
  * for drives which support multi-word DMA mode2 (mword2), or which are
@@ -322,7 +322,7 @@ static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 
 /*
  * print_triton_drive_flags() displays the currently programmed options
- * in the 82371 (Triton) for a given drive.
+ * in the i82371 (Triton) for a given drive.
  *
  *	If fastDMA  is "no", then slow ISA timings are used for DMA data xfers.
  *	If fastPIO  is "no", then slow ISA timings are used for PIO data xfers.
@@ -382,7 +382,7 @@ void ide_init_triton (byte bus, byte fn)
 	unsigned short pcicmd;
 	unsigned int bmiba, timings;
 
-	printk("ide: 82371 PIIX (Triton) on PCI bus %d function %d\n", bus, fn);
+	printk("ide: i82371 PIIX (Triton) on PCI bus %d function %d\n", bus, fn);
 	/*
 	 * See if IDE and BM-DMA features are enabled:
 	 */

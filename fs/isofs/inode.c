@@ -189,7 +189,7 @@ static unsigned int isofs_get_last_session(kdev_t dev)
 	  printk("isofs.inode: vol_desc_start = %d\n", ms_info.addr.lba);
 	}
 #endif 0
-      if (i==0) vol_desc_start=ms_info.addr.lba;
+      if ((i==0)&&(ms_info.xa_flag)) vol_desc_start=ms_info.addr.lba;
     }
   return vol_desc_start;
 }

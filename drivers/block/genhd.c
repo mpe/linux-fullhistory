@@ -326,7 +326,9 @@ check_table:
 			 */
 			for (i = 0; i < 4 ; i++) {
 				struct partition *q = &p[i];
-				if (NR_SECTS(q) && q->sector == 1 && q->end_sector == 63) {
+				if (NR_SECTS(q)
+				   && (q->sector & 63) == 1
+				   && (q->end_sector & 63) == 63) {
 					unsigned int heads = q->end_head + 1;
 					if (heads == 32 || heads == 64 || heads == 128) {
 

@@ -56,6 +56,11 @@
  *             Christian Daudt :       igmp_heard_report now only calls
  *                                     igmp_timer_expire if tm->running is
  *                                     true (960216).
+ *		Malcolm Beattie :	ttl comparison wrong in igmp_rcv made
+ *					igmp_heard_query never trigger. Expiry
+ *					miscalculation fixed in igmp_heard_query
+ *					and random() made to return unsigned to
+ *					prevent negative expiry times.
  */
 
 
@@ -207,7 +212,7 @@ static void igmp_stop_timer(struct ip_mc_list *im)
   }
 }
 
-extern __inline__ int random(void)
+extern __inline__ unsigned int random(void)
 {
 	static unsigned long seed=152L;
 	seed=seed*69069L+1;
@@ -326,7 +331,7 @@ static void igmp_heard_query(struct device *dev,unsigned char max_resp_time)
 		{
 			if(im->tm_running)
 			{
-				if(im->timer.expires>max_resp_time*HZ/IGMP_TIMER_SCALE)
+				if(im->timer.expires>jiffies+max_resp_time*HZ/IGMP_TIMER_SCALE)
 				{
 					igmp_stop_timer(im);
 					igmp_start_timer(im,max_resp_time);
@@ -447,7 +452,7 @@ int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	}
 	ih=(struct igmphdr *)skb->h.raw;
 
-	if(skb->len <sizeof(struct igmphdr) || skb->ip_hdr->ttl>1 || ip_compute_csum((void *)skb->h.raw,sizeof(struct igmphdr)))
+	if(skb->len <sizeof(struct igmphdr) || skb->ip_hdr->ttl<1 || ip_compute_csum((void *)skb->h.raw,sizeof(struct igmphdr)))
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;

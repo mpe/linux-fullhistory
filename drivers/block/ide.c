@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.45  Jul 22, 1996
+ *  linux/drivers/block/ide.c	Version 5.46  Jul 23, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -243,6 +243,9 @@
  *			add a throttle to the unexpected_intr() messages
  * Version 5.45		fix ugly parameter parsing bugs (thanks Derek)
  *			include Gadi's magic fix for cmd640 unexpected_intr
+ *			include mc68000 patches from Geert Uytterhoeven
+ *			add Gadi's fix for PCMCIA cdroms
+ * Version 5.46		remove the mc68000 #ifdefs for 2.0.x
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -1625,7 +1628,6 @@ static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 	byte stat;
 	unsigned int unit;
 	ide_hwif_t *hwif = hwgroup->hwif;
-	static unsigned long last_time = 0;
 
 	/*
 	 * handle the unexpected interrupt
@@ -1638,8 +1640,10 @@ static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 					continue;
 				SELECT_DRIVE(hwif,drive);
 				if (!OK_STAT(stat=GET_STAT(), drive->ready_stat, BAD_STAT)) {
-					if ((last_time + (HZ/2)) < jiffies && !drive->ignore_unexp) {
-						last_time = jiffies;
+					/* Try to not flood the console with msgs */
+					static unsigned long last_msgtime = 0;
+					if ((last_msgtime + (HZ/2)) < jiffies) {
+						last_msgtime = jiffies;
 						(void) ide_dump_status(drive, "unexpected_intr", stat);
 					}
 				}
@@ -2210,7 +2214,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		if ((id->model[0] == 'N' && id->model[1] == 'E') /* NEC */
 		 || (id->model[0] == 'F' && id->model[1] == 'X') /* Mitsumi */
 		 || (id->model[0] == 'P' && id->model[1] == 'i'))/* Pioneer */
-			bswap ^= 1;	/* Vertos drives may still be weird */
+			bswap = 0;	/* Vertos drives may still be weird */
 	}
 	ide_fixstring (id->model,     sizeof(id->model),     bswap);
 	ide_fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);
@@ -2383,15 +2387,10 @@ static void delay_10ms (void)
  */
 static int try_to_identify (ide_drive_t *drive, byte cmd)
 {
-	int irqs, rc;
+	int hd_status, rc;
 	unsigned long timeout;
-#ifdef CONFIG_BLK_DEV_CMD640
-	int retry = 0;
-	int hd_status;
+	int irqs = 0;
 
-try_again:
-#endif /* CONFIG_BLK_DEV_CMD640 */
-	irqs = 0;
 	if (!HWIF(drive)->irq) {		/* already got an IRQ? */
 		probe_irq_off(probe_irq_on());	/* clear dangling irqs */
 		irqs = probe_irq_on();		/* start monitoring irqs */
@@ -2458,19 +2457,9 @@ try_again:
 #ifdef CONFIG_BLK_DEV_CMD640
 			if (HWIF(drive)->chipset == ide_cmd640) {
 				extern byte (*get_cmd640_reg)(int);
-				byte reg9  = get_cmd640_reg(0x09);
 				printk("%s: Hmmm.. probably a driver problem.\n", drive->name);
-				printk("%s: cmd640 reg 09h == 0x%02x\n", drive->name, reg9);
+				printk("%s: cmd640 reg 09h == 0x%02x\n", drive->name, get_cmd640_reg(9));
 				printk("%s: cmd640 reg 51h == 0x%02x\n", drive->name, get_cmd640_reg(0x51));
-				if (reg9 == 0x0a) {
-					printk("%s: perhaps PCI INTA has not been set to IRQ15?\n", drive->name);
-					if (retry++ == 0) {
-						extern void (*put_cmd640_reg)(int, int);
-						printk("%s: switching secondary interface to legacy mode\n", drive->name);
-						put_cmd640_reg(0x09,0x00);
-						goto try_again;
-					}
-				}
 			}
 #endif /* CONFIG_BLK_DEV_CMD640 */
 		}

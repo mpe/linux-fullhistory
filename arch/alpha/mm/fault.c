@@ -84,7 +84,6 @@ good_area:
 		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
 	}
-	tbis(address);
 	handle_mm_fault(vma, address, cause > 0);
 	return;
 
