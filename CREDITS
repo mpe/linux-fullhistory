@@ -68,6 +68,7 @@ D: Parport hacker
 D: Implemented a workaround for some interrupt buggy printers
 D: Author of pscan that helps to fix lp/parport bug
 D: Author of lil (Linux Interrupt Latency benchmark)
+D: Fixed the shm swap deallocation at swapoff time (try_to_unuse message)
 D: Various other kernel hacks
 S: Via Ciaclini 26
 S: Imola 40026

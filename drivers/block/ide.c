@@ -2637,6 +2637,12 @@ __initfunc(static void probe_for_hwifs (void))
 		(void) init_pdc4030();
 	}
 #endif /* CONFIG_BLK_DEV_PDC4030 */
+#ifdef CONFIG_BLK_DEV_IDE_PMAC
+	{
+		extern void pmac_ide_probe(void);
+		pmac_ide_probe();
+	}
+#endif /* CONFIG_BLK_DEV_IDE_PMAC */
 }
 
 __initfunc(void ide_init_builtin_drivers (void))

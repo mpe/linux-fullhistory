@@ -106,6 +106,10 @@ ifeq ($(CONFIG_BLK_DEV_CMD640),y)
 IDE_OBJS += cmd640.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_IDE_PMAC),y)
+IDE_OBJS += ide-pmac.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_IDEPCI),y)
 IDE_OBJS += ide-pci.o
 endif

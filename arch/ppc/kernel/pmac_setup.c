@@ -44,7 +44,6 @@
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
-#include <asm/ide.h>
 #include <asm/pci-bridge.h>
 #include <asm/adb.h>
 #include <asm/cuda.h>
@@ -272,95 +271,4 @@ __initfunc(void note_bootable_part(kdev_t dev, int part))
 		printk(" (root)");
 	}
 }
-
-#ifdef CONFIG_BLK_DEV_IDE
-int pmac_ide_ports_known;
-ide_ioreg_t pmac_ide_regbase[MAX_HWIFS];
-int pmac_ide_irq[MAX_HWIFS];
-
-__initfunc(void pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq))
-{
-	int i;
-
-	*p = 0;
-	if (base == 0)
-		return;
-	if (base == mb_cd_base && !check_media_bay(MB_CD)) {
-		mb_cd_index = -1;
-		return;
-	}
-	for (i = 0; i < 8; ++i)
-		*p++ = base + i * 0x10;
-	*p = base + 0x160;
-	if (irq != NULL) {
-		*irq = 0;
-		for (i = 0; i < MAX_HWIFS; ++i) {
-			if (base == pmac_ide_regbase[i]) {
-				*irq = pmac_ide_irq[i];
-				break;
-			}
-		}
-	}
-}
-
-__initfunc(void pmac_ide_probe(void))
-{
-	struct device_node *np;
-	int i;
-	struct device_node *atas;
-	struct device_node *p, **pp, *removables, **rp;
-
-	pp = &atas;
-	rp = &removables;
-	p = find_devices("ATA");
-	if (p == NULL)
-		p = find_devices("IDE");
-	if (p == NULL)
-		p = find_type_devices("ide");
-	if (p == NULL)
-		p = find_type_devices("ata");
-	/* Move removable devices such as the media-bay CDROM
-	   on the PB3400 to the end of the list. */
-	for (; p != NULL; p = p->next) {
-		if (p->parent && p->parent->name
-		    && strcasecmp(p->parent->name, "media-bay") == 0) {
-			*rp = p;
-			rp = &p->next;
-		} else {
-			*pp = p;
-			pp = &p->next;
-		}
-	}
-	*rp = NULL;
-	*pp = removables;
-
-	for (i = 0, np = atas; i < MAX_HWIFS && np != NULL; np = np->next) {
-		if (np->n_addrs == 0) {
-			printk(KERN_WARNING "ide: no address for device %s\n",
-			       np->full_name);
-			continue;
-		}
-		pmac_ide_regbase[i] = (unsigned long)
-			ioremap(np->addrs[0].address, 0x200);
-		if (np->n_intrs == 0) {
-			printk("ide: no intrs for device %s, using 13\n",
-			       np->full_name);
-			pmac_ide_irq[i] = 13;
-		} else {
-			pmac_ide_irq[i] = np->intrs[0].line;
-		}
-
-		if (np->parent && np->parent->name
-		    && strcasecmp(np->parent->name, "media-bay") == 0) {
-			mb_cd_index = i;
-			mb_cd_base = pmac_ide_regbase[i];
-			mb_cd_irq = pmac_ide_irq[i];
-		}
-
-		++i;
-	}
-
-	pmac_ide_ports_known = 1;
-}
-#endif /* CONFIG_BLK_DEV_IDE */
 

@@ -95,8 +95,6 @@ static __inline__ int ide_default_irq(ide_ioreg_t base)
 static __inline__ ide_ioreg_t ide_default_io_base(int index)
 {
         if (_machine == _MACH_Pmac) {
-		if (!pmac_ide_ports_known)
-			pmac_ide_probe();
 		return pmac_ide_regbase[index];
 	}
 	if (_machine == _MACH_mbx) return index;

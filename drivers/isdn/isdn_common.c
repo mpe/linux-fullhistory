@@ -1787,6 +1787,7 @@ static struct file_operations isdn_fops =
 	isdn_ioctl,             /* isdn_ioctl */
 	NULL,                   /* isdn_mmap */
 	isdn_open,
+	NULL,			/* flush */
 	isdn_close,
 	NULL                    /* fsync */
 };

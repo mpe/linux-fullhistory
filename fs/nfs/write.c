@@ -56,18 +56,6 @@
 #include <linux/nfs_fs.h>
 #include <asm/uaccess.h>
 
-/*
- * NOTE! We must NOT default to soft-mounting: that breaks too many
- * programs that depend on POSIX behaviour of uninterruptible reads
- * and writes.
- *
- * Until we have a per-mount soft/hard mount policy that we can honour
- * we must default to hard mounting!
- *
- * And yes, this should be "interruptible", not soft.
- */
-#define IS_SOFT 0
-
 #define NFS_PARANOIA 1
 #define NFSDBG_FACILITY		NFSDBG_PAGECACHE
 
@@ -730,29 +718,21 @@ int
 nfs_flush_dirty_pages(struct inode *inode, pid_t pid, off_t offset, off_t len)
 {
 	struct nfs_wreq *last = NULL;
-	int result = 0, cancel = 0;
+	int result = 0;
 
 	dprintk("NFS:      flush_dirty_pages(%x/%ld for pid %d %ld/%ld)\n",
 		inode->i_dev, inode->i_ino, current->pid, offset, len);
 
-	if (IS_SOFT && signalled()) {
-		nfs_cancel_dirty(inode, pid);
-		cancel = 1;
-	}
-
 	for (;;) {
-		if (IS_SOFT && signalled()) {
-			if (!cancel)
-				nfs_cancel_dirty(inode, pid);
-			result = -ERESTARTSYS;
-			break;
-		}
-
 		/* Flush all pending writes for the pid and file region */
 		last = nfs_flush_pages(inode, pid, offset, len, 0);
 		if (last == NULL)
 			break;
-		wait_on_write_request(last);
+		result = wait_on_write_request(last);
+		if (result) {
+			nfs_cancel_dirty(inode,pid);
+			break;
+		}
 	}
 
 	return result;

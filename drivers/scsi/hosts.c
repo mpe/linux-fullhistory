@@ -518,10 +518,18 @@ scsi_unregister(struct Scsi_Host * sh){
     
     /* If we are removing the last host registered, it is safe to reuse
      * its host number (this avoids "holes" at boot time) (DB) 
+     * It is also safe to reuse those of numbers directly below which have
+     * been released earlier (to avoid some holes in numbering).
      */
-    if (max_scsi_hosts == next_scsi_host)
-	max_scsi_hosts--;
-    
+    if(sh->host_no == max_scsi_hosts - 1) {
+	while(--max_scsi_hosts >= next_scsi_host) {
+	    shpnt = scsi_hostlist;
+	    while(shpnt && shpnt->host_no != max_scsi_hosts - 1)
+		shpnt = shpnt->next;
+	    if(shpnt)
+		break;
+	}
+    }
     next_scsi_host--;
     scsi_init_free((char *) sh, sizeof(struct Scsi_Host) + sh->extra_bytes);
 }

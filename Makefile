@@ -73,6 +73,12 @@ ROOT_DEV = CURRENT
 #INSTALL_PATH=/boot
 
 #
+# INSTALL_MOD_PATH specifies a prefix to MODLIB for module directory 
+# relocations required by build roots.  This is not defined in the
+# makefile but the arguement can be passed to make if needed.
+#
+
+#
 # If you want to preset the SVGA mode, uncomment the next line and
 # set SVGA_MODE to whatever number you want.
 # Set it to -DSVGA_MODE=NORMAL_VGA if you just want the EGA/VGA mode.
@@ -289,7 +295,7 @@ $(patsubst %, _mod_%, $(SUBDIRS)) : include/linux/version.h
 
 modules_install:
 	@( \
-	MODLIB=/lib/modules/$(VERSION).$(PATCHLEVEL).$(SUBLEVEL); \
+	MODLIB=$(INSTALL_MOD_PATH)/lib/modules/$(VERSION).$(PATCHLEVEL).$(SUBLEVEL); \
 	cd modules; \
 	MODULES=""; \
 	inst_mod() { These="`cat $$1`"; MODULES="$$MODULES $$These"; \

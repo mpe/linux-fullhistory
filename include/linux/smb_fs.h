@@ -9,7 +9,6 @@
 #ifndef _LINUX_SMB_FS_H
 #define _LINUX_SMB_FS_H
 
-#include <linux/dirent.h>
 #include <linux/smb.h>
 
 /*

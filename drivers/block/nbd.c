@@ -81,9 +81,18 @@ static int nbd_xmit(int send, struct socket *sock, char *buf, int size)
 	int result;
 	struct msghdr msg;
 	struct iovec iov;
+	unsigned long flags;
 
 	oldfs = get_fs();
 	set_fs(get_ds());
+
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	oldset = current->blocked;
+	sigfillset(&current->blocked);
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
+
+
 	do {
 		sigset_t oldset;
 
@@ -98,21 +107,10 @@ static int nbd_xmit(int send, struct socket *sock, char *buf, int size)
 		msg.msg_namelen = 0;
 		msg.msg_flags = 0;
 
-		spin_lock_irq(&current->sigmask_lock);
-		oldset = current->blocked;
-		sigfillset(&current->blocked);
-		recalc_sigpending(current);
-		spin_unlock_irq(&current->sigmask_lock);
-
 		if (send)
 			result = sock_sendmsg(sock, &msg, size);
 		else
 			result = sock_recvmsg(sock, &msg, size, 0);
-
-		spin_lock_irq(&current->sigmask_lock);
-		current->blocked = oldset;
-		recalc_sigpending(current);
-		spin_unlock_irq(&current->sigmask_lock);
 
 		if (result <= 0) {
 #ifdef PARANOIA
@@ -124,6 +122,12 @@ static int nbd_xmit(int send, struct socket *sock, char *buf, int size)
 		size -= result;
 		buf += result;
 	} while (size > 0);
+
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	current->blocked = oldset;
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
+
 	set_fs(oldfs);
 	return result;
 }
@@ -295,8 +299,6 @@ static void do_nbd_request(void)
 		requests_in++;
 #endif
 		req->errors = 0;
-
-		nbd_send_req(lo->sock, req);	/* Why does this block?         */
 		CURRENT = CURRENT->next;
 		req->next = NULL;
 		if (lo->head == NULL) {
@@ -306,6 +308,10 @@ static void do_nbd_request(void)
 			lo->head->next = req;
 			lo->head = req;
 		}
+
+		spin_unlock_irq(&io_request_lock);
+		nbd_send_req(lo->sock, req);	/* Why does this block?         */
+		spin_lock_irq(&io_request_lock);
 		continue;
 
 	      error_out:

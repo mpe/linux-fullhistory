@@ -1961,11 +1961,13 @@ smb_proc_getattr(struct dentry *dir, struct smb_fattr *fattr)
 	smb_init_dirent(server, fattr);
 
 	/*
-	 * Win 95 is painfully slow at returning trans2 getattr info,
-	 * so we provide the SMB_FIX_OLDATTR option switch.
+	 * Select whether to use core or trans2 getattr.
  	 */
 	if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2) {
-		if (server->mnt->version & SMB_FIX_OLDATTR)
+		/*
+		 * Win 95 appears to break with the trans2 getattr.
+ 	 	 */
+		if (server->mnt->version & (SMB_FIX_OLDATTR|SMB_FIX_WIN95))
 			goto core_attr;
 		if (server->mnt->version & SMB_FIX_DIRATTR)
 			result = smb_proc_getattr_ff(server, dir, fattr);

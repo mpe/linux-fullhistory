@@ -190,12 +190,6 @@ net-tools.  This will also fix other problems.  For example, the format
 of /proc/net/dev changed; as a result, an older ifconfig will
 incorrectly report errors.
 
-   As of 2.1.102, the firewalling code has been replaced with
-firewalling chains.  See
-http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html for
-more information.  Among other things, you'll now need to use ipchains
-instead of ipfwadm to configure your filters.
-
    The IP firewalling code has been replaced: ipfwadm will no longer
 work.  You need to obtain `ipchains', available from
 http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html
