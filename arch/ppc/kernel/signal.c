@@ -8,6 +8,8 @@
 
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
@@ -28,7 +30,9 @@ asmlinkage int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
 asmlinkage int sys_sigsuspend(unsigned long set, int p2, int p3, int p4, int p6, int p7, struct pt_regs *regs)
 {
 	unsigned long mask;
+	int ret = -EINTR;
 
+	lock_kernel();
 	mask = current->blocked;
 	current->blocked = set & _BLOCKABLE;
 	regs->gpr[3] = -EINTR;
@@ -39,15 +43,20 @@ printk("Task: %x[%d] - SIGSUSPEND at %x, Mask: %x\n", current, current->pid, reg
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
 		if (do_signal(mask,regs))
-			return -EINTR;
+			goto out;
 	}
+out:
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_sigreturn(struct pt_regs *regs)
 {
 	struct sigcontext_struct *sc;
 	struct pt_regs *int_regs;
-	int signo;
+	int signo, ret;
+
+	lock_kernel();
 #if 1 	
 	if (verify_area(VERIFY_READ, (void *) regs->gpr[1], sizeof(sc))
 	    || (regs->gpr[1] >=KERNELBASE))
@@ -58,8 +67,8 @@ asmlinkage int sys_sigreturn(struct pt_regs *regs)
 	int_regs = sc->regs;
 	signo = sc->signal;
 	sc++;  /* Pop signal 'context' */
-	if (sc == (struct sigcontext_struct *)(int_regs))
-	{ /* Last stacked signal */
+	if (sc == (struct sigcontext_struct *)(int_regs)) {
+		/* Last stacked signal */
 #if 0	
 		/* This doesn't work - it blows away the return address! */
 		memcpy(regs, int_regs, sizeof(*regs));
@@ -76,20 +85,24 @@ asmlinkage int sys_sigreturn(struct pt_regs *regs)
 			regs->nip -= 4; /* Back up & retry system call */
 			regs->result = 0;
 		}
-		return (regs->result);
-	} else
-	{ /* More signals to go */
+		ret = (regs->result);
+	} else { /* More signals to go */
 		regs->gpr[1] = (unsigned long)sc;
 		regs->gpr[3] = sc->signal;
 		regs->gpr[4] = sc->regs;
 		regs->link = (unsigned long)((sc->regs)+1);
 		regs->nip = sc->handler;
-		return (sc->signal);
+		ret = sc->signal;
 	}
+	goto out;
+
 badframe:
 	/*printk("sys_sigreturn(): badstack regs %x cur %s/%d\n",
 	 regs,current->comm,current->pid);*/
-  do_exit(SIGSEGV);
+	do_exit(SIGSEGV);
+out:
+	unlock_kernel();
+	return ret;
 }
 
 
@@ -104,159 +117,167 @@ badframe:
  */
 asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 {
-  unsigned long mask = ~current->blocked;
-  unsigned long handler_signal = 0;
-  unsigned long *frame = NULL;
-  unsigned long *trampoline;
-  unsigned long *regs_ptr;
-  unsigned long nip = 0;
-  unsigned long signr;
-  int bitno;
-  struct sigcontext_struct *sc;
-  struct sigaction * sa;
-  int s;
+	unsigned long mask;
+	unsigned long handler_signal = 0;
+	unsigned long *frame = NULL;
+	unsigned long *trampoline, *regs_ptr;
+	unsigned long nip = 0;
+	unsigned long signr;
+	struct sigcontext_struct *sc;
+	struct sigaction * sa;
+	int bitno, s, ret;
 
-  while ((signr = current->signal & mask)) {
-    for (bitno = 0;  bitno < 32;  bitno++)
-    {
-      if (signr & (1<<bitno)) break;
-    }
-    signr = bitno;
+	lock_kernel();
+	mask = ~current->blocked;
+	while ((signr = current->signal & mask)) {
+		for (bitno = 0;  bitno < 32;  bitno++)
+			if (signr & (1<<bitno))
+				break;
+		signr = bitno;
 
-    current->signal &= ~(1<<signr);  /* Clear bit */
-    sa = current->sig->action + signr;
-    signr++;
-    if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
-      current->exit_code = signr;
-      current->state = TASK_STOPPED;
-      notify_parent(current);
-      schedule();
-      if (!(signr = current->exit_code))
-	continue;
-      current->exit_code = 0;
-      if (signr == SIGSTOP)
-	continue;
-      if (_S(signr) & current->blocked) {
-	current->signal |= _S(signr);
-	continue;
-      }
-      sa = current->sig->action + signr - 1;
-    }
-    if (sa->sa_handler == SIG_IGN) {
-      if (signr != SIGCHLD)
-	continue;
-      /* check for SIGCHLD: it's special */
-      while (sys_waitpid(-1,NULL,WNOHANG) > 0)
-	/* nothing */;
-      continue;
-    }
-    if (sa->sa_handler == SIG_DFL) {
-      if (current->pid == 1)
-	continue;
-      switch (signr) {
-      case SIGCONT: case SIGCHLD: case SIGWINCH:
-	continue;
+		current->signal &= ~(1<<signr);  /* Clear bit */
+		sa = current->sig->action + signr;
+		signr++;
+		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
+			current->exit_code = signr;
+			current->state = TASK_STOPPED;
+			notify_parent(current);
+			schedule();
+			if (!(signr = current->exit_code))
+				continue;
+			current->exit_code = 0;
+			if (signr == SIGSTOP)
+				continue;
+			if (_S(signr) & current->blocked) {
+				current->signal |= _S(signr);
+				continue;
+			}
+			sa = current->sig->action + signr - 1;
+		}
+		if (sa->sa_handler == SIG_IGN) {
+			if (signr != SIGCHLD)
+				continue;
+			/* check for SIGCHLD: it's special */
+			while (sys_waitpid(-1,NULL,WNOHANG) > 0)
+				/* nothing */;
+			continue;
+		}
+		if (sa->sa_handler == SIG_DFL) {
+			if (current->pid == 1)
+				continue;
+			switch (signr) {
+			case SIGCONT: case SIGCHLD: case SIGWINCH:
+				continue;
 
-      case SIGSTOP: case SIGTSTP: case SIGTTIN: case SIGTTOU:
-	if (current->flags & PF_PTRACED)
-	  continue;
-	current->state = TASK_STOPPED;
-	current->exit_code = signr;
-	if (!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags &
-	      SA_NOCLDSTOP))
-	  notify_parent(current);
-	schedule();
-	continue;
+			case SIGSTOP: case SIGTSTP: case SIGTTIN: case SIGTTOU:
+				if (current->flags & PF_PTRACED)
+					continue;
+				current->state = TASK_STOPPED;
+				current->exit_code = signr;
+				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags &
+				      SA_NOCLDSTOP))
+					notify_parent(current);
+				schedule();
+				continue;
 
-      case SIGQUIT: case SIGILL: case SIGTRAP:
-      case SIGIOT: case SIGFPE: case SIGSEGV:
-	if (current->binfmt && current->binfmt->core_dump) {
-	  if (current->binfmt->core_dump(signr, regs))
-	    signr |= 0x80;
+			case SIGQUIT: case SIGILL: case SIGTRAP:
+			case SIGIOT: case SIGFPE: case SIGSEGV:
+				if (current->binfmt && current->binfmt->core_dump) {
+					if (current->binfmt->core_dump(signr, regs))
+						signr |= 0x80;
+				}
+				/* fall through */
+			default:
+				current->signal |= _S(signr & 0x7f);
+				do_exit(signr);
+			}
+		}
+
+		/* handle signal */
+		if ((int)regs->orig_gpr3 >= 0) {
+			if ((int)regs->result == -ERESTARTNOHAND ||
+			    ((int)regs->result == -ERESTARTSYS &&
+			     !(sa->sa_flags & SA_RESTART)))
+				(int)regs->result = -EINTR;
+		}
+		handler_signal |= 1 << (signr-1);
+		mask &= ~sa->sa_mask;
 	}
-	/* fall through */
-      default:
-	current->signal |= _S(signr & 0x7f);
-	do_exit(signr);
-      }
-    }
-    /* handle signal */
-    
-    if ((int)regs->orig_gpr3 >= 0) {
-      if ((int)regs->result == -ERESTARTNOHAND ||
-	  ((int)regs->result == -ERESTARTSYS && !(sa->sa_flags & SA_RESTART)))
-	(int)regs->result = -EINTR;
-    }
-    handler_signal |= 1 << (signr-1);
-    mask &= ~sa->sa_mask;
-  }
-  if (!handler_signal)		/* no handler will be called - return 0 */
-  {
-    return 0;
-  }
+	ret = 0;
+	if (!handler_signal)		/* no handler will be called - return 0 */
+		goto out;
 
+	nip = regs->nip;
+	frame = (unsigned long *) regs->gpr[1];
 
-  nip = regs->nip;
-  frame = (unsigned long *) regs->gpr[1];
-  /* Build trampoline code on stack */
-  frame -= 2;
-  trampoline = frame;
+	/* Build trampoline code on stack */
+	frame -= 2;
+	trampoline = frame;
 #if 1
-  /* verify stack is valid for writing regs struct */
-  if (verify_area(VERIFY_WRITE,(void *)frame, sizeof(long)*2+sizeof(*regs))
-      || (frame >= KERNELBASE ))
-    goto badframe;
+	/* verify stack is valid for writing regs struct */
+	if (verify_area(VERIFY_WRITE,(void *)frame, sizeof(long)*2+sizeof(*regs))
+	    || (frame >= KERNELBASE ))
+		goto badframe;
 #endif
-  trampoline[0] = 0x38007777;  /* li r0,0x7777 */
-  trampoline[1] = 0x44000002;  /* sc           */
-  frame -= sizeof(*regs) / sizeof(long);
-  regs_ptr = frame;
-  memcpy(regs_ptr, regs, sizeof(*regs));
-  signr = 1;
-  sa = current->sig->action;
+	trampoline[0] = 0x38007777;  /* li r0,0x7777 */
+	trampoline[1] = 0x44000002;  /* sc           */
+	frame -= sizeof(*regs) / sizeof(long);
+	regs_ptr = frame;
+	memcpy(regs_ptr, regs, sizeof(*regs));
+	signr = 1;
+	sa = current->sig->action;
   
-  
-  for (mask = 1 ; mask ; sa++,signr++,mask += mask) {
-    if (mask > handler_signal)
-      break;
-    if (!(mask & handler_signal))
-      continue;
+	for (mask = 1 ; mask ; sa++,signr++,mask += mask) {
+		if (mask > handler_signal)
+			break;
+		if (!(mask & handler_signal))
+			continue;
 
-    frame -= sizeof(struct sigcontext_struct) / sizeof(long);
+		frame -= sizeof(struct sigcontext_struct) / sizeof(long);
 #if 1
-    if (verify_area(VERIFY_WRITE,(void *)frame,
-		    sizeof(struct sigcontext_struct)/sizeof(long)))
-      goto badframe;
+		if (verify_area(VERIFY_WRITE,(void *)frame,
+				sizeof(struct sigcontext_struct)/sizeof(long)))
+			goto badframe;
 #endif    
-    sc = (struct sigcontext_struct *)frame;
-    nip = (unsigned long) sa->sa_handler;
+		sc = (struct sigcontext_struct *)frame;
+		nip = (unsigned long) sa->sa_handler;
 #if 0 /* Old compiler */		
-    nip = *(unsigned long *)nip;
+		nip = *(unsigned long *)nip;
 #endif		
-    if (sa->sa_flags & SA_ONESHOT)
-      sa->sa_handler = NULL;
-    sc->handler = nip;
-    sc->oldmask = current->blocked;
-    sc->regs = (unsigned long)regs_ptr;
-    sc->signal = signr;
-    current->blocked |= sa->sa_mask;
-    regs->gpr[3] = signr;
-    regs->gpr[4] = (unsigned long)regs_ptr;
-  }
-  regs->link = (unsigned long)trampoline;
-  regs->nip = nip;
-  regs->gpr[1] = (unsigned long)sc;
-  /* The DATA cache must be flushed here to insure coherency */
-  /* between the DATA & INSTRUCTION caches.  Since we just */
-  /* created an instruction stream using the DATA [cache] space */
-  /* and since the instruction cache will not look in the DATA */
-  /* cache for new data, we have to force the data to go on to */
-  /* memory and flush the instruction cache to force it to look */
-  /* there.  The following function performs this magic */
-  flush_instruction_cache();
-  return 1;
+		if (sa->sa_flags & SA_ONESHOT)
+			sa->sa_handler = NULL;
+		sc->handler = nip;
+		sc->oldmask = current->blocked;
+		sc->regs = (unsigned long)regs_ptr;
+		sc->signal = signr;
+		current->blocked |= sa->sa_mask;
+		regs->gpr[3] = signr;
+		regs->gpr[4] = (unsigned long)regs_ptr;
+	}
+	regs->link = (unsigned long)trampoline;
+	regs->nip = nip;
+	regs->gpr[1] = (unsigned long)sc;
+
+	/* The DATA cache must be flushed here to insure coherency
+	 * between the DATA & INSTRUCTION caches.  Since we just
+	 * created an instruction stream using the DATA [cache] space
+	 * and since the instruction cache will not look in the DATA
+	 * cache for new data, we have to force the data to go on to
+	 * memory and flush the instruction cache to force it to look
+	 * there.  The following function performs this magic
+	 */
+	flush_instruction_cache();
+	ret = 1;
+	goto out;
+
 badframe:
-  /*  printk("do_signal(): badstack signr %d frame %x regs %x cur %s/%d\n",
-	 signr,frame,regs,current->comm,current->pid);*/
-  do_exit(SIGSEGV);
+#if 0
+	printk("do_signal(): badstack signr %d frame %x regs %x cur %s/%d\n",
+	       signr, frame, regs, current->comm, current->pid);
+#endif
+	do_exit(SIGSEGV);
+
+out:
+	unlock_kernel();
+	return ret;
 }

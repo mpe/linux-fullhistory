@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_symlink.c,v 1.6 1996/10/30 06:00:36 davem Exp $
+ * $Id: ufs_symlink.c,v 1.7 1997/01/26 07:14:29 davem Exp $
  *
  */
 
@@ -139,7 +139,7 @@ static struct file_operations ufs_symlink_operations = {
 	NULL,			/* read */
 	NULL,			/* write */
 	NULL,			/* readdir */
-	NULL,			/* select */
+	NULL,			/* poll */
 	NULL,			/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* open */

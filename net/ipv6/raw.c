@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.5 1996/10/29 22:45:53 roque Exp $
+ *	$Id: raw.c,v 1.7 1997/01/26 07:14:56 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -449,7 +449,7 @@ struct proto rawv6_prot = {
 	NULL,
 	NULL,
 	NULL,
-	datagram_select,
+	datagram_poll,
 	NULL,
 	rawv6_init_sk,
 	NULL,

@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.6 1996/12/12 19:22:09 davem Exp $
+ *	$Id: af_inet6.c,v 1.8 1997/01/26 07:14:56 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -727,7 +727,7 @@ struct proto_ops inet6_stream_ops = {
 	inet6_socketpair,		/* a do nothing	*/
 	inet_accept,			/* ok		*/
 	inet6_getname, 
-	inet_select,			/* ok		*/
+	inet_poll,			/* ok		*/
 	inet6_ioctl,			/* must change  */
 	inet_listen,			/* ok		*/
 	inet_shutdown,			/* ok		*/
@@ -748,7 +748,7 @@ struct proto_ops inet6_dgram_ops = {
 	inet6_socketpair,		/* a do nothing	*/
 	inet_accept,			/* ok		*/
 	inet6_getname, 
-	datagram_select,		/* ok		*/
+	datagram_poll,			/* ok		*/
 	inet6_ioctl,			/* must change  */
 	inet_listen,			/* ok		*/
 	inet_shutdown,			/* ok		*/

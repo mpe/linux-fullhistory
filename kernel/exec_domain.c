@@ -2,6 +2,9 @@
 #include <linux/ptrace.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
+#include <linux/module.h>
 
 static asmlinkage void no_lcall7(struct pt_regs * regs);
 
@@ -34,14 +37,14 @@ static asmlinkage void no_lcall7(struct pt_regs * regs)
    * personality set incorrectly.  Check to see whether SVr4 is available,
    * and use it, otherwise give the user a SEGV.
    */
-	if (current->exec_domain && current->exec_domain->use_count)
-		(*current->exec_domain->use_count)--;
+	if (current->exec_domain && current->exec_domain->module)
+		__MOD_DEC_USE_COUNT(current->exec_domain->module);
 
 	current->personality = PER_SVR4;
 	current->exec_domain = lookup_exec_domain(current->personality);
 
-	if (current->exec_domain && current->exec_domain->use_count)
-		(*current->exec_domain->use_count)++;
+	if (current->exec_domain && current->exec_domain->module)
+		__MOD_INC_USE_COUNT(current->exec_domain->module);
 
 	if (current->exec_domain && current->exec_domain->handler
 	&& current->exec_domain->handler != no_lcall7) {
@@ -103,21 +106,27 @@ asmlinkage int sys_personality(unsigned long personality)
 {
 	struct exec_domain *it;
 	unsigned long old_personality;
+	int ret;
 
+	lock_kernel();
+	ret = current->personality;
 	if (personality == 0xffffffff)
-		return current->personality;
+		goto out;
 
+	ret = -EINVAL;
 	it = lookup_exec_domain(personality);
 	if (!it)
-		return -EINVAL;
+		goto out;
 
 	old_personality = current->personality;
-	if (current->exec_domain && current->exec_domain->use_count)
-		(*current->exec_domain->use_count)--;
+	if (current->exec_domain && current->exec_domain->module)
+		__MOD_DEC_USE_COUNT(current->exec_domain->module);
 	current->personality = personality;
 	current->exec_domain = it;
-	if (current->exec_domain->use_count)
-		(*current->exec_domain->use_count)++;
-
-	return old_personality;
+	if (current->exec_domain->module)
+		__MOD_INC_USE_COUNT(current->exec_domain->module);
+	ret = old_personality;
+out:
+	unlock_kernel();
+	return ret;
 }

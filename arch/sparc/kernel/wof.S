@@ -1,4 +1,4 @@
-/* $Id: wof.S,v 1.31 1996/12/28 18:14:22 davem Exp $
+/* $Id: wof.S,v 1.32 1997/01/06 06:52:43 davem Exp $
  * wof.S: Sparc window overflow handler.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -243,8 +243,6 @@ spnwin_patch3:	and	%twin_tmp, 0xff, %twin_tmp	! patched on 7win Sparcs
 	mov	%saved_g6, %g6
 	STORE_PT_ALL(sp, t_psr, t_pc, t_npc, g1)
 	mov	%l4, %g6
-
-	ENTER_SYSCALL
 
 	/* Turn on traps and call c-code to deal with it. */
 	wr	%t_psr, PSR_ET, %psr

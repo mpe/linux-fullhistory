@@ -12,6 +12,8 @@
 #include <linux/errno.h>
 #include <linux/time.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -80,15 +82,19 @@ static int _getitimer(int which, struct itimerval *value)
 
 asmlinkage int sys_getitimer(int which, struct itimerval *value)
 {
-	int error;
+	int error = -EFAULT;
 	struct itimerval get_buffer;
 
+	lock_kernel();
 	if (!value)
-		return -EFAULT;
+		goto out;
 	error = _getitimer(which, &get_buffer);
 	if (error)
-		return error;
-	return copy_to_user(value, &get_buffer, sizeof(get_buffer)) ? -EFAULT : 0;
+		goto out;
+	error = copy_to_user(value, &get_buffer, sizeof(get_buffer)) ? -EFAULT : 0;
+out:
+	unlock_kernel();
+	return error;
 }
 
 void it_real_fn(unsigned long __data)
@@ -154,21 +160,26 @@ asmlinkage int sys_setitimer(int which, struct itimerval *value, struct itimerva
 	int error;
 	struct itimerval set_buffer, get_buffer;
 
+	lock_kernel();
 	if (value) {
 		error = verify_area(VERIFY_READ, value, sizeof(*value));
 		if (error)
-			return error;
+			goto out;
 		error = copy_from_user(&set_buffer, value, sizeof(set_buffer));
-		if (error)
-			return -EFAULT;
+		if (error) {
+			error = -EFAULT;
+			goto out;
+		}
 	} else
 		memset((char *) &set_buffer, 0, sizeof(set_buffer));
 
 	error = _setitimer(which, &set_buffer, ovalue ? &get_buffer : 0);
 	if (error || !ovalue)
-		return error;
+		goto out;
 
 	if (copy_to_user(ovalue, &get_buffer, sizeof(get_buffer)))
 		error = -EFAULT; 
+out:
+	unlock_kernel();
 	return error;
 }

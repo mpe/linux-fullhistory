@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.41 1996/12/28 18:14:21 davem Exp $
+/* $Id: rtrap.S,v 1.44 1997/01/14 05:56:17 davem Exp $
  * rtrap.S: Return from Sparc trap low-level code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -46,25 +46,25 @@ rtrap_7win_patch5:	and	%g1, 0x7f, %g1
 
 	.globl	ret_trap_entry, rtrap_patch1, rtrap_patch2
 	.globl	rtrap_patch3, rtrap_patch4, rtrap_patch5
+	.globl	C_LABEL(ret_trap_lockless_ipi)
 ret_trap_entry:
-	sethi	%hi(C_LABEL(intr_count)), %g2
-	ld	[%g2 + %lo(C_LABEL(intr_count))], %g3
-	orcc	%g0, %g3, %g0
-	bne	0f
-	 sethi	%hi(C_LABEL(bh_active)), %l3
-	sethi	%hi(C_LABEL(bh_mask)), %l4
+	sethi	%hi(C_LABEL(intr_count)), %g4
+	ld	[%g4 + %lo(C_LABEL(intr_count))], %g5
+	orcc	%g5, 0x0, %g0
+	sethi	%hi(C_LABEL(bh_active)), %l3
+	bne	C_LABEL(ret_trap_lockless_ipi)
+	 sethi	%hi(C_LABEL(bh_mask)), %l4
 9:
 	ld	[%l4 + %lo(C_LABEL(bh_mask))], %g5
 	ld	[%l3 + %lo(C_LABEL(bh_active))], %g4
-	sethi	%hi(C_LABEL(intr_count)), %l7
 	andcc	%g4, %g5, %g0
-	be	0f
-	 mov	1, %g7
+	be	C_LABEL(ret_trap_lockless_ipi)
+	 nop
 	call	C_LABEL(do_bottom_half)
-	 st	%g7, [%l7 + %lo(C_LABEL(intr_count))]
-	b	9b
-	 st	%g0, [%l7 + %lo(C_LABEL(intr_count))]
-0:
+	 nop
+	b,a	9b
+
+C_LABEL(ret_trap_lockless_ipi):
 	andcc	%t_psr, PSR_PS, %g0
 	be	1f
 	 sethi	%hi(C_LABEL(need_resched)), %twin_tmp1
@@ -164,8 +164,6 @@ ret_trap_userwins_ok:
 	LOAD_PT_YREG(sp, g1)
 	LOAD_PT_GLOBALS(sp)
 
-	LEAVE_SYSCALL
-
 	wr	%t_psr, 0x0, %psr
 	WRITE_PAUSE
 
@@ -219,8 +217,6 @@ rtrap_patch5:	and	%g1, 0xff, %g1
 1:
 	LOAD_PT_ALL(sp, t_psr, t_pc, t_npc, g1)
 2:
-	LEAVE_SYSCALL
-
 	wr	%t_psr, 0x0, %psr
 	WRITE_PAUSE
 

@@ -22,6 +22,11 @@ extern void request_region(unsigned int from, unsigned int extent,const char *na
 extern void release_region(unsigned int from, unsigned int extent);
 extern int get_ioport_list(char *);
 
+#ifdef __sparc__
+extern unsigned int occupy_region(unsigned int base, unsigned int end,
+				  unsigned int num, unsigned int align,
+				  const char *name);
+#endif
 
 #define HAVE_AUTOIRQ
 extern void *irq2dev_map[16];		/* Use only if you own the IRQ. */

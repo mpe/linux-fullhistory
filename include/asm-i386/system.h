@@ -74,9 +74,6 @@ __asm__("str %%ax\n\t" \
 		__asm__ __volatile__("fwait"); \
 		prev->flags&=~PF_USEDFPU;	 \
 	} \
-	prev->lock_depth=syscall_count; \
-	kernel_counter+=next->lock_depth-prev->lock_depth; \
-	syscall_count=next->lock_depth; \
 __asm__("pushl %%edx\n\t" \
 	"movl "SYMBOL_NAME_STR(apic_reg)",%%edx\n\t" \
 	"movl 0x20(%%edx), %%edx\n\t" \

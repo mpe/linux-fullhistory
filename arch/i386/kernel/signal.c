@@ -8,6 +8,8 @@
 
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
@@ -30,8 +32,11 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs);
 asmlinkage int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long set)
 {
 	unsigned long mask;
-	struct pt_regs * regs = (struct pt_regs *) &restart;
+	struct pt_regs * regs;
+	int res = -EINTR;
 
+	lock_kernel();
+	regs = (struct pt_regs *) &restart;
 	mask = current->blocked;
 	current->blocked = set & _BLOCKABLE;
 	regs->eax = -EINTR;
@@ -39,8 +44,11 @@ asmlinkage int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long 
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
 		if (do_signal(mask,regs))
-			return -EINTR;
+			goto out;
 	}
+out:
+	unlock_kernel();
+	return res;
 }
 
 static inline void restore_i387_hard(struct _fpstate *buf)
@@ -100,7 +108,9 @@ if (   (tmp & 0xfffc)     /* not a NULL selectors */ \
 __asm__("mov %w0,%%" #seg: :"r" (tmp)); }
 	struct sigcontext * context;
 	struct pt_regs * regs;
+	int res;
 
+	lock_kernel();
 	regs = (struct pt_regs *) &__unused;
 	context = (struct sigcontext *) regs->esp;
 	if (verify_area(VERIFY_READ, context, sizeof(*context)))
@@ -126,7 +136,9 @@ __asm__("mov %w0,%%" #seg: :"r" (tmp)); }
 			goto badframe;
 		restore_i387(buf);
 	}
-	return context->eax;
+	res = context->eax;
+	unlock_kernel();
+	return res;
 badframe:
 	do_exit(SIGSEGV);
 }
@@ -295,10 +307,13 @@ static void handle_signal(unsigned long signr, struct sigaction *sa,
  */
 asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 {
-	unsigned long mask = ~current->blocked;
+	unsigned long mask;
 	unsigned long signr;
 	struct sigaction * sa;
+	int res;
 
+	lock_kernel();
+	mask = ~current->blocked;
 	while ((signr = current->signal & mask)) {
 		/*
 		 *	This stops gcc flipping out. Otherwise the assembler
@@ -371,7 +386,8 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 			}
 		}
 		handle_signal(signr, sa, oldmask, regs);
-		return 1;
+		res = 1;
+		goto out;
 	}
 
 	/* Did we come from a system call? */
@@ -384,5 +400,8 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 			regs->eip -= 2;
 		}
 	}
-	return 0;
+	res = 0;
+out:
+	unlock_kernel();
+	return res;
 }

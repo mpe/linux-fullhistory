@@ -22,6 +22,8 @@
 #include <linux/locks.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/pgtable.h>
@@ -1222,18 +1224,20 @@ asmlinkage int sys_msync(unsigned long start, size_t len, int flags)
 {
 	unsigned long end;
 	struct vm_area_struct * vma;
-	int unmapped_error, error;
+	int unmapped_error, error = -EINVAL;
 
+	lock_kernel();
 	if (start & ~PAGE_MASK)
-		return -EINVAL;
+		goto out;
 	len = (len + ~PAGE_MASK) & PAGE_MASK;
 	end = start + len;
 	if (end < start)
-		return -EINVAL;
+		goto out;
 	if (flags & ~(MS_ASYNC | MS_INVALIDATE | MS_SYNC))
-		return -EINVAL;
+		goto out;
+	error = 0;
 	if (end == start)
-		return 0;
+		goto out;
 	/*
 	 * If the interval [start,end) covers some unmapped address ranges,
 	 * just ignore them, but return -EFAULT at the end.
@@ -1242,8 +1246,9 @@ asmlinkage int sys_msync(unsigned long start, size_t len, int flags)
 	unmapped_error = 0;
 	for (;;) {
 		/* Still start < end. */
+		error = -EFAULT;
 		if (!vma)
-			return -EFAULT;
+			goto out;
 		/* Here start < vma->vm_end. */
 		if (start < vma->vm_start) {
 			unmapped_error = -EFAULT;
@@ -1254,15 +1259,19 @@ asmlinkage int sys_msync(unsigned long start, size_t len, int flags)
 			if (start < end) {
 				error = msync_interval(vma, start, end, flags);
 				if (error)
-					return error;
+					goto out;
 			}
-			return unmapped_error;
+			error = unmapped_error;
+			goto out;
 		}
 		/* Here vma->vm_start <= start < vma->vm_end < end. */
 		error = msync_interval(vma, start, vma->vm_end, flags);
 		if (error)
-			return error;
+			goto out;
 		start = vma->vm_end;
 		vma = vma->vm_next;
 	}
+out:
+	unlock_kernel();
+	return error;
 }

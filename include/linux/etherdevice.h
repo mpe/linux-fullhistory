@@ -24,7 +24,7 @@
 #ifndef _LINUX_ETHERDEVICE_H
 #define _LINUX_ETHERDEVICE_H
 
-
+#include <linux/config.h>
 #include <linux/if_ether.h>
 
 #ifdef __KERNEL__
@@ -37,9 +37,17 @@ extern void		eth_header_cache_update(struct hh_cache *hh, struct device *dev,
 						unsigned char * haddr);
 extern int		eth_header_cache(struct dst_entry *dst, struct dst_entry *neigh,
 					 struct hh_cache *hh);
+extern struct device	* init_etherdev(struct device *, int);
+
+#ifdef CONFIG_IP_ROUTER
+static void inline eth_copy_and_sum (struct sk_buff *dest, unsigned char *src, int len, int base)
+{
+    memcpy (dest->data, src, len);
+}
+#else
 extern void		eth_copy_and_sum(struct sk_buff *dest,
 				unsigned char *src, int length, int base);
-extern struct device	* init_etherdev(struct device *, int);
+#endif
 
 #endif
 

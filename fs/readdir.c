@@ -10,6 +10,8 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -55,23 +57,28 @@ static int fillonedir(void * __buf, const char * name, int namlen, off_t offset,
 
 asmlinkage int old_readdir(unsigned int fd, void * dirent, unsigned int count)
 {
-	int error;
+	int error = -EBADF;
 	struct file * file;
 	struct readdir_callback buf;
 
+	lock_kernel();
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-		return -EBADF;
+		goto out;
+	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
-		return -ENOTDIR;
+		goto out;
 	error = verify_area(VERIFY_WRITE, dirent, sizeof(struct old_linux_dirent));
 	if (error)
-		return error;
+		goto out;
 	buf.count = 0;
 	buf.dirent = dirent;
 	error = file->f_op->readdir(file->f_inode, file, &buf, fillonedir);
 	if (error < 0)
-		return error;
-	return buf.count;
+		goto out;
+	error = buf.count;
+out:
+	unlock_kernel();
+	return error;
 }
 
 /*
@@ -121,25 +128,32 @@ asmlinkage int sys_getdents(unsigned int fd, void * dirent, unsigned int count)
 	struct file * file;
 	struct linux_dirent * lastdirent;
 	struct getdents_callback buf;
-	int error;
+	int error = -EBADF;
 
+	lock_kernel();
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-		return -EBADF;
+		goto out;
+	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
-		return -ENOTDIR;
+		goto out;
 	error = verify_area(VERIFY_WRITE, dirent, count);
 	if (error)
-		return error;
+		goto out;
 	buf.current_dir = (struct linux_dirent *) dirent;
 	buf.previous = NULL;
 	buf.count = count;
 	buf.error = 0;
 	error = file->f_op->readdir(file->f_inode, file, &buf, filldir);
 	if (error < 0)
-		return error;
+		goto out;
 	lastdirent = buf.previous;
-	if (!lastdirent)
-		return buf.error;
-	put_user(file->f_pos, &lastdirent->d_off);
-	return count - buf.count;
+	if (!lastdirent) {
+		error = buf.error;
+	} else {
+		put_user(file->f_pos, &lastdirent->d_off);
+		error = count - buf.count;
+	}
+out:
+	unlock_kernel();
+	return error;
 }

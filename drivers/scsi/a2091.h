@@ -1,6 +1,6 @@
 #ifndef A2091_H
 
-/* $Id: a2091.h,v 1.4 1996/04/25 20:57:48 root Exp root $
+/* $Id: a2091.h,v 1.4 1997/01/19 23:07:09 davem Exp $
  *
  * Header file for the Commodore A2091 Zorro II SCSI controller for Linux
  *
@@ -34,7 +34,7 @@ int wd33c93_reset(Scsi_Cmnd *, unsigned int);
 extern struct proc_dir_entry proc_scsi_a2091;
 
 #define A2091_SCSI {  /* next */                NULL,            \
-		      /* usage_count */         NULL,	         \
+		      /* module */         NULL,	         \
 		      /* proc_dir_entry */      &proc_scsi_a2091, \
 		      /* proc_info */           NULL,            \
 		      /* name */                "Commodore A2091/A590 SCSI", \
@@ -59,7 +59,7 @@ extern struct proc_dir_entry proc_scsi_a2091;
 /*
  * if the transfer address ANDed with this results in a non-zero
  * result, then we can't use DMA.
- */ 
+ */
 #define A2091_XFER_MASK  (0xff000001)
 
 typedef struct {

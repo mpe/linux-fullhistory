@@ -111,7 +111,7 @@ static void sl_outfill(unsigned long sls);
 static inline struct slip *
 sl_alloc(void)
 {
-	slip_ctrl_t *slp;
+	slip_ctrl_t *slp = NULL;
 	int i;
 
 	if (slip_ctrls == NULL) return NULL;	/* Master array missing ! */
@@ -1123,7 +1123,7 @@ int slip_init_ctrl_dev(struct device *dummy)
 	sl_ldisc.write  = NULL;
 	sl_ldisc.ioctl  = (int (*)(struct tty_struct *, struct file *,
 				   unsigned int, unsigned long)) slip_ioctl;
-	sl_ldisc.select = NULL;
+	sl_ldisc.poll   = NULL;
 	sl_ldisc.receive_buf = slip_receive_buf;
 	sl_ldisc.receive_room = slip_receive_room;
 	sl_ldisc.write_wakeup = slip_write_wakeup;

@@ -212,7 +212,7 @@ static struct file_operations initrd_fops = {
 	initrd_read,	/* read */
 	NULL,		/* write */
 	NULL,		/* readdir */
-	NULL,		/* select */
+	NULL,		/* poll */
 	NULL, 		/* ioctl */
 	NULL,		/* mmap */
 	NULL,		/* open */
@@ -254,7 +254,7 @@ static struct file_operations fd_fops = {
 	block_read,	/* read - block dev read */
 	block_write,	/* write - block dev write */
 	NULL,		/* readdir - not here! */
-	NULL,		/* select */
+	NULL,		/* poll */
 	rd_ioctl, 	/* ioctl */
 	NULL,		/* mmap */
 	rd_open,	/* open */

@@ -2385,7 +2385,7 @@ static struct proto_ops ax25_proto_ops = {
 	ax25_socketpair,
 	ax25_accept,
 	ax25_getname,
-	datagram_select,
+	datagram_poll,
 	ax25_ioctl,
 	ax25_listen,
 	ax25_shutdown,

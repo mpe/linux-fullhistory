@@ -24,6 +24,8 @@
  * within the United States, $35 abroad.
  */
 #include <linux/config.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #if 0
 # define DBG_DEVS(args)		printk args
@@ -1217,6 +1219,7 @@ asmlinkage int sys_pciconfig_read(
 	unsigned int uint;
 	long err = 0;
 
+	lock_kernel();
 	switch (len) {
 	    case 1:
 		err = pcibios_read_config_byte(bus, dfn, off, &ubyte);
@@ -1240,6 +1243,7 @@ asmlinkage int sys_pciconfig_read(
 		err = -EINVAL;
 		break;
 	}
+	unlock_kernel();
 	return err;
 }
 asmlinkage int sys_pciconfig_write(
@@ -1254,6 +1258,7 @@ asmlinkage int sys_pciconfig_write(
 	unsigned int uint;
 	long err = 0;
 
+	lock_kernel();
 	switch (len) {
 	    case 1:
 		err = get_user(ubyte, buf);
@@ -1286,6 +1291,7 @@ asmlinkage int sys_pciconfig_write(
 		err = -EINVAL;
 		break;
 	}
+	unlock_kernel();
 	return err;
 }
 

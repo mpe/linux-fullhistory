@@ -24,17 +24,22 @@
 #include <linux/ufs_fs.h>
 #include <linux/romfs_fs.h>
 #include <linux/major.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 extern void device_setup(void);
 extern void binfmt_setup(void);
+extern void free_initmem(void);
 
 /* This may be used only once, enforced by 'static int callable' */
 asmlinkage int sys_setup(void)
 {
 	static int callable = 1;
+	int err = -1;
 
+	lock_kernel();
 	if (!callable)
-		return -1;
+		goto out;
 	callable = 0;
 
 	device_setup();
@@ -106,6 +111,12 @@ asmlinkage int sys_setup(void)
 #endif
 
 	mount_root();
-	return 0;
+	
+	free_initmem();
+	
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 

@@ -10,9 +10,15 @@
 #include <linux/string.h>
 #include <linux/user.h>
 #include <linux/elfcore.h>
+#include <linux/socket.h>
+#include <linux/in.h>
+#include <linux/in6.h>
+
 #include <asm/io.h>
 #include <asm/hwrpb.h>
 #include <asm/uaccess.h>
+#include <asm/processor.h>
+#include <asm/checksum.h>
 
 
 extern void bcopy (const char *src, char *dst, int len);
@@ -58,6 +64,7 @@ EXPORT_SYMBOL(strlen);
 EXPORT_SYMBOL(strncmp);
 EXPORT_SYMBOL(strncpy);
 EXPORT_SYMBOL(strnlen);
+EXPORT_SYMBOL(strncat);
 EXPORT_SYMBOL(strstr);
 EXPORT_SYMBOL(strtok);
 EXPORT_SYMBOL(strchr);
@@ -72,6 +79,11 @@ EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(hwrpb);
 EXPORT_SYMBOL(wrusp);
 EXPORT_SYMBOL(__kernel_thread);
+EXPORT_SYMBOL(start_thread);
+
+EXPORT_SYMBOL(csum_tcpudp_magic);
+EXPORT_SYMBOL(ip_fast_csum);
+EXPORT_SYMBOL(ip_compute_csum);
 
 /*
  * The following are specially called from the uaccess assembly stubs.

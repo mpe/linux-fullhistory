@@ -444,11 +444,6 @@ cleanup_module (void)
 {
   int             i;
 
-  if (MOD_IN_USE)
-    {
-      return;
-    }
-
   if (chrdev_registered)
     unregister_chrdev (sound_major, "sound");
 
@@ -638,6 +633,9 @@ fatal_error__This_version_is_not_compatible_with_this_kernel;
 #endif
 
 static int      dma_buffsize = DSP_BUFFSIZE;
+#ifdef MODULE_PARM
+MODULE_PARM(dma_buffsize, "i");
+#endif
 
 int
 sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)

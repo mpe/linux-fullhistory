@@ -422,7 +422,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			if (!ipv4_config.source_route) {
 				if (ipv4_config.log_martians)
 					printk(KERN_INFO "source route option %08lx -> %08lx\n",
-				       ntohl(iph->saddr), ntohl(iph->daddr));
+					       ntohl(iph->saddr), ntohl(iph->daddr));
 				goto drop;
 			}
 			if (RT_LOCALADDR(((struct rtable*)skb->dst)->rt_flags) &&

@@ -118,15 +118,8 @@ struct thread_struct
 #define INIT_MMAP { &init_mm, 0, 0x40000000, \
 		      PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
 
-#ifdef KERNEL_STACK_BUFFER
-/* give a 1 page buffer below the stack - if change then change ppc_machine.h */
-#define alloc_kernel_stack()  \
-          (memset((void *)__get_free_pages(GFP_KERNEL,1,0),0,KERNEL_STACK_SIZE+PAGE_SIZE)+PAGE_SIZE)
-#define free_kernel_stack(page) free_pages((page)-PAGE_SIZE,1)
-#else
-#define alloc_kernel_stack()    get_free_page(GFP_KERNEL)
-#define free_kernel_stack(page) free_page((page))
-#endif
+/* Free all resources held by a thread. */
+extern void release_thread(struct task_struct *);
 
 /*
  * Return saved PC of a blocked thread. For now, this is the "user" PC
@@ -141,6 +134,20 @@ static inline unsigned long thread_saved_pc(struct thread_struct *t)
 #define _PROC_Be       2
 
 int _Processor;
+
+/* Allocation and freeing of basic task resources. */
+#define alloc_task_struct()	kmalloc(sizeof(struct task_struct), GFP_KERNEL)
+#define free_task_struct(p)	kfree(p)
+
+#ifdef KERNEL_STACK_BUFFER
+/* give a 1 page buffer below the stack - if change then change ppc_machine.h */
+#define alloc_kernel_stack()  \
+          (memset((void *)__get_free_pages(GFP_KERNEL,1,0),0,KERNEL_STACK_SIZE+PAGE_SIZE)+PAGE_SIZE)
+#define free_kernel_stack(page) free_pages((page)-PAGE_SIZE,1)
+#else
+#define alloc_kernel_stack()    get_free_page(GFP_KERNEL)
+#define free_kernel_stack(page) free_page((page))
+#endif
 
 #endif /* ASSEMBLY*/
 

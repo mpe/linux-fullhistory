@@ -1,4 +1,4 @@
-/* $Id: string.h,v 1.27 1996/10/27 08:55:50 davem Exp $
+/* $Id: string.h,v 1.28 1997/01/15 16:01:54 jj Exp $
  * string.h: External definitions for optimized assembly string
  *           routines for the Linux Kernel.
  *
@@ -15,8 +15,17 @@
 /* First the mem*() things. */
 #define __HAVE_ARCH_BCOPY
 #define __HAVE_ARCH_MEMMOVE
+extern void __memmove(void *,const void *,__kernel_size_t);
+
+#undef memmove
+#define memmove(_to, _from, _n) \
+({ \
+	__memmove(_to, _from, _n); \
+	_to; \
+})
+
 #define __HAVE_ARCH_MEMCPY
-extern void *__memcpy(void *,const void *,__kernel_size_t);
+extern void __memcpy(void *,const void *,__kernel_size_t);
 
 extern inline void *__constant_memcpy(void *to, const void *from, __kernel_size_t n)
 {

@@ -101,7 +101,7 @@ static int st_attach(Scsi_Device *);
 static int st_detect(Scsi_Device *);
 static void st_detach(Scsi_Device *);
 
-struct Scsi_Device_Template st_template = {NULL, "tape", "st", NULL, TYPE_TAPE, 
+struct Scsi_Device_Template st_template = {NULL, "tape", "st", NULL, TYPE_TAPE,
 					     SCSI_TAPE_MAJOR, 0, 0, 0, 0,
 					     st_detect, st_init,
 					     NULL, st_attach, st_detach};
@@ -586,19 +586,21 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     STp->nbr_waits = STp->nbr_finished = 0;
 #endif
 
-    if (scsi_tapes[dev].device->host->hostt->usage_count)
-	(*scsi_tapes[dev].device->host->hostt->usage_count)++;
-    if(st_template.usage_count) (*st_template.usage_count)++;
+    if (scsi_tapes[dev].device->host->hostt->module)
+	__MOD_INC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
+    if(st_template.module)
+	__MOD_INC_USE_COUNT(st_template.module);
 
     memset ((void *) &cmd[0], 0, 10);
     cmd[0] = TEST_UNIT_READY;
 
     SCpnt = st_do_scsi(NULL, STp, cmd, 0, ST_LONG_TIMEOUT, MAX_READY_RETRIES);
     if (!SCpnt) {
-      if (scsi_tapes[dev].device->host->hostt->usage_count)
-	  (*scsi_tapes[dev].device->host->hostt->usage_count)--;
-      if(st_template.usage_count) (*st_template.usage_count)--;
-      return (-EBUSY);
+	if (scsi_tapes[dev].device->host->hostt->module)
+	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
+	if(st_template.module)
+	    __MOD_DEC_USE_COUNT(st_template.module);
+	return (-EBUSY);
     }
 
     if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
@@ -715,9 +717,10 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	       STp->block_size);
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
-	if (scsi_tapes[dev].device->host->hostt->usage_count)
-	    (*scsi_tapes[dev].device->host->hostt->usage_count)--;
-	if(st_template.usage_count) (*st_template.usage_count)--;
+	if (scsi_tapes[dev].device->host->hostt->module)
+	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
+	if(st_template.module)
+	    __MOD_DEC_USE_COUNT(st_template.module);
 	return (-EIO);
       }
       STp->drv_write_prot = ((STp->buffer)->b_data[2] & 0x80) != 0;
@@ -746,9 +749,10 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       if ((flags & O_ACCMODE) == O_WRONLY || (flags & O_ACCMODE) == O_RDWR) {
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
-	if (scsi_tapes[dev].device->host->hostt->usage_count)
-	    (*scsi_tapes[dev].device->host->hostt->usage_count)--;
-	if(st_template.usage_count) (*st_template.usage_count)--;
+	if (scsi_tapes[dev].device->host->hostt->module)
+	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
+	if(st_template.module)
+	    __MOD_DEC_USE_COUNT(st_template.module);
 	return (-EROFS);
       }
     }
@@ -764,9 +768,10 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       if ((STp->partition = find_partition(inode)) < 0) {
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
-	if (scsi_tapes[dev].device->host->hostt->usage_count)
-	    (*scsi_tapes[dev].device->host->hostt->usage_count)--;
-	if(st_template.usage_count) (*st_template.usage_count)--;
+	if (scsi_tapes[dev].device->host->hostt->module)
+	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
+	if(st_template.module)
+	    __MOD_DEC_USE_COUNT(st_template.module);
 	return STp->partition;
       }
       STp->new_partition = STp->partition;
@@ -780,9 +785,10 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	  (i = set_mode_densblk(inode, STp, STm)) < 0) {
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
-	if (scsi_tapes[dev].device->host->hostt->usage_count)
-	    (*scsi_tapes[dev].device->host->hostt->usage_count)--;
-	if(st_template.usage_count) (*st_template.usage_count)--;
+	if (scsi_tapes[dev].device->host->hostt->module)
+	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
+	if(st_template.module)
+	    __MOD_DEC_USE_COUNT(st_template.module);
 	return i;
       }
       if (STp->default_drvbuffer != 0xff) {
@@ -913,9 +919,10 @@ out:
     }
 
     STp->in_use = 0;
-    if (scsi_tapes[dev].device->host->hostt->usage_count)
-      (*scsi_tapes[dev].device->host->hostt->usage_count)--;
-    if(st_template.usage_count) (*st_template.usage_count)--;
+    if (scsi_tapes[dev].device->host->hostt->module)
+	__MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
+    if(st_template.module)
+	__MOD_DEC_USE_COUNT(st_template.module);
 
     return;
 }
@@ -1215,7 +1222,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf,
 	STps->eof = ST_NOEOF;
 
     return( total);
-}   
+}
 
 /* Read data from the tape. Returns zero in the normal case, one if the
    eof status has changed, and the negative error code in case of a
@@ -1573,7 +1580,7 @@ st_log_options(Scsi_Tape *STp, ST_mode *STm, int dev)
 #endif
 }
 
-  
+
 	static int
 st_set_options(struct inode * inode, long options)
 {
@@ -1850,7 +1857,7 @@ st_int_ioctl(struct inode * inode,
 	 fileno += arg;
        blkno = 0;
        at_sm &= (arg == 0);
-       break; 
+       break;
      case MTBSFM:
        chg_eof = FALSE; /* Changed from the FSF after this */
      case MTBSF:
@@ -1873,7 +1880,7 @@ st_int_ioctl(struct inode * inode,
 	 fileno -= arg;
        blkno = (-1);  /* We can't know the block number */
        at_sm &= (arg == 0);
-       break; 
+       break;
      case MTFSR:
        cmd[0] = SPACE;
        cmd[1] = 0x00; /* Space Blocks */
@@ -1888,7 +1895,7 @@ st_int_ioctl(struct inode * inode,
        if (blkno >= 0)
 	 blkno += arg;
        at_sm &= (arg == 0);
-       break; 
+       break;
      case MTBSR:
        cmd[0] = SPACE;
        cmd[1] = 0x00; /* Space Blocks */
@@ -1907,7 +1914,7 @@ st_int_ioctl(struct inode * inode,
        if (blkno >= 0)
 	 blkno -= arg;
        at_sm &= (arg == 0);
-       break; 
+       break;
      case MTFSS:
        cmd[0] = SPACE;
        cmd[1] = 0x04; /* Space Setmarks */
@@ -1923,7 +1930,7 @@ st_int_ioctl(struct inode * inode,
 	 blkno = fileno = (-1);
 	 at_sm = 1;
        }
-       break; 
+       break;
      case MTBSS:
        cmd[0] = SPACE;
        cmd[1] = 0x04; /* Space Setmarks */
@@ -1944,7 +1951,7 @@ st_int_ioctl(struct inode * inode,
 	 blkno = fileno = (-1);
 	 at_sm = 1;
        }
-       break; 
+       break;
      case MTWEOF:
      case MTWSM:
        if (STp->write_prot)
@@ -1970,7 +1977,7 @@ st_int_ioctl(struct inode * inode,
 	 fileno += arg;
        blkno = 0;
        at_sm = (cmd_in == MTWSM);
-       break; 
+       break;
      case MTREW:
        cmd[0] = REZERO_UNIT;
 #if ST_NOWAIT
@@ -1982,22 +1989,22 @@ st_int_ioctl(struct inode * inode,
 	 printk(ST_DEB_MSG "st%d: Rewinding tape.\n", dev);
 #endif
        fileno = blkno = at_sm = 0 ;
-       break; 
+       break;
      case MTOFFL:
      case MTLOAD:
      case MTUNLOAD:
        cmd[0] = START_STOP;
        if (cmd_in == MTLOAD)
 	 cmd[4] |= 1;
-       /* 
-        * If arg >= 1 && arg <= 6 Enhanced load/unload in HP C1553A 
+       /*
+        * If arg >= 1 && arg <= 6 Enhanced load/unload in HP C1553A
        */
        if (cmd_in != MTOFFL &&
 	   arg >= 1 + MT_ST_HPLOADER_OFFSET
 	   && arg <= 6 + MT_ST_HPLOADER_OFFSET) {
 #if DEBUG
 	   if (debugging) {
-	       printk(ST_DEB_MSG "st%d: Enhanced %sload slot %2ld.\n", 
+	       printk(ST_DEB_MSG "st%d: Enhanced %sload slot %2ld.\n",
 		      dev, (cmd[4]) ? "" : "un",
 		      arg - MT_ST_HPLOADER_OFFSET);
 	   }
@@ -2019,7 +2026,7 @@ st_int_ioctl(struct inode * inode,
        }
 #endif
        fileno = blkno = at_sm = 0 ;
-       break; 
+       break;
      case MTNOP:
 #if DEBUG
        if (debugging)
@@ -2039,7 +2046,7 @@ st_int_ioctl(struct inode * inode,
 	 printk(ST_DEB_MSG "st%d: Retensioning tape.\n", dev);
 #endif
        fileno = blkno = at_sm = 0;
-       break; 
+       break;
      case MTEOM:
        if (!STp->fast_mteom) {
 	 /* space to the end of tape */
@@ -2062,7 +2069,7 @@ st_int_ioctl(struct inode * inode,
 #endif
        blkno = 0;
        at_sm = 0;
-       break; 
+       break;
      case MTERASE:
        if (STp->write_prot)
 	 return (-EACCES);
@@ -2120,7 +2127,7 @@ st_int_ioctl(struct inode * inode,
        if (cmd_in == MTSETDRVBUFFER)
 	 (STp->buffer)->b_data[2] = (arg & 7) << 4;
        else
-	 (STp->buffer)->b_data[2] = 
+	 (STp->buffer)->b_data[2] =
 	   STp->drv_buffer << 4;
        (STp->buffer)->b_data[3] = 8;     /* block descriptor length */
        if (cmd_in == MTSETDENSITY) {
@@ -2349,15 +2356,15 @@ get_location(struct inode * inode, unsigned int *block, int *partition,
     else {
       result = 0;
       if ((STp->device)->scsi_level < SCSI_2) {
-	*block = ((STp->buffer)->b_data[0] << 16) 
-	+ ((STp->buffer)->b_data[1] << 8) 
+	*block = ((STp->buffer)->b_data[0] << 16)
+	+ ((STp->buffer)->b_data[1] << 8)
 	+ (STp->buffer)->b_data[2];
 	*partition = 0;
       }
       else {
 	*block = ((STp->buffer)->b_data[4] << 24)
-	  + ((STp->buffer)->b_data[5] << 16) 
-	  + ((STp->buffer)->b_data[6] << 8) 
+	  + ((STp->buffer)->b_data[5] << 16)
+	  + ((STp->buffer)->b_data[6] << 8)
 	  + (STp->buffer)->b_data[7];
 	*partition = (STp->buffer)->b_data[1];
 	if (((STp->buffer)->b_data[0] & 0x80) &&
@@ -2711,9 +2718,9 @@ st_ioctl(struct inode * inode,struct file * file,
 	* to this device.  If the user wants to rewind the tape,
 	* then reset the flag and allow access again.
 	*/
-       if(mtc.mt_op != MTREW && 
+       if(mtc.mt_op != MTREW &&
 	  mtc.mt_op != MTOFFL &&
-	  mtc.mt_op != MTRETEN && 
+	  mtc.mt_op != MTRETEN &&
 	  mtc.mt_op != MTERASE &&
 	  mtc.mt_op != MTSEEK &&
 	  mtc.mt_op != MTEOM)
@@ -3008,13 +3015,13 @@ static int st_attach(Scsi_Device * SDp){
 
    if(SDp->type != TYPE_TAPE) return 1;
 
-   if(st_template.nr_dev >= st_template.dev_max) 
+   if(st_template.nr_dev >= st_template.dev_max)
      {
      	SDp->attached--;
      	return 1;
      }
 
-   for(tpnt = scsi_tapes, i=0; i<st_template.dev_max; i++, tpnt++) 
+   for(tpnt = scsi_tapes, i=0; i<st_template.dev_max; i++, tpnt++)
      if(!tpnt->device) break;
 
    if(i >= st_template.dev_max) panic ("scsi_devices corrupt (st)");
@@ -3082,10 +3089,10 @@ static int st_detect(Scsi_Device * SDp)
   if(SDp->type != TYPE_TAPE) return 0;
 
   printk(KERN_INFO
-	 "Detected scsi tape st%d at scsi%d, channel %d, id %d, lun %d\n", 
+	 "Detected scsi tape st%d at scsi%d, channel %d, id %d, lun %d\n",
 	 st_template.dev_noticed++,
-	 SDp->host->host_no, SDp->channel, SDp->id, SDp->lun); 
-  
+	 SDp->host->host_no, SDp->channel, SDp->id, SDp->lun);
+
   return 1;
 }
 
@@ -3189,8 +3196,8 @@ static void st_detach(Scsi_Device * SDp)
 {
   Scsi_Tape * tpnt;
   int i;
-  
-  for(tpnt = scsi_tapes, i=0; i<st_template.dev_max; i++, tpnt++) 
+
+  for(tpnt = scsi_tapes, i=0; i<st_template.dev_max; i++, tpnt++)
     if(tpnt->device == SDp) {
       tpnt->device = NULL;
       SDp->attached--;
@@ -3205,11 +3212,11 @@ static void st_detach(Scsi_Device * SDp)
 #ifdef MODULE
 
 int init_module(void) {
-  st_template.usage_count = &__this_module.usecount;
+  st_template.module = &__this_module;
   return scsi_register_module(MODULE_SCSI_DEV, &st_template);
 }
 
-void cleanup_module( void) 
+void cleanup_module( void)
 {
   int i;
 

@@ -118,6 +118,10 @@
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
 #endif
 
+#ifdef __sparc__
+int serial_console;
+#endif
+
 struct tty_driver console_driver;
 static int console_refcount;
 static struct tty_struct *console_table[MAX_NR_CONSOLES];
@@ -151,8 +155,10 @@ extern void compute_shiftstate(void);
 extern void reset_palette(int currcons);
 extern void set_palette(void);
 extern unsigned long con_type_init(unsigned long, const char **);
+extern void con_type_init_finish(void);
 extern int set_get_cmap(unsigned char *, int);
 extern int set_get_font(unsigned char *, int, int);
+extern void rs_cons_hook(int chip, int out, int channel);
 
 /* Description of the hardware situation */
 unsigned char	video_type;		/* Type of display being used	*/
@@ -640,40 +646,30 @@ void scrup(int currcons, unsigned int t, unsigned int b)
 	} else {
 		unsigned short * d = (unsigned short *) (origin+video_size_row*t);
 		unsigned short * s = (unsigned short *) (origin+video_size_row*(t+1));
-		unsigned int count = (b-t-1) * video_num_columns;
 
-		while (count) {
-			count--;
-			scr_writew(scr_readw(s++), d++);
-		}
-		count = video_num_columns;
-		while (count) {
-			count--;
-			scr_writew(video_erase_char, d++);
-		}
+		memcpyw(d, s, (b-t-1) * video_size_row);
+		memsetw(d + (b-t-1) * video_num_columns, video_erase_char, video_size_row);
 	}
 }
 
 void
 scrdown(int currcons, unsigned int t, unsigned int b)
 {
-	unsigned short *d, *s;
+	unsigned short *s;
 	unsigned int count;
 
 	if (b > video_num_lines || t >= b)
 		return;
-	d = (unsigned short *) (origin+video_size_row*b);
-	s = (unsigned short *) (origin+video_size_row*(b-1));
-	count = (b-t-1)*video_num_columns;
-	while (count) {
-		count--;
-		scr_writew(scr_readw(--s), --d);
+	s = (unsigned short *) (origin+video_size_row*(b-2));
+	if (b >= t + 1) {
+		count = b - t - 1;
+		while (count) {
+			count--;
+			memcpyw(s + video_num_columns, s, video_size_row);
+			s -= video_num_columns;
+		}
 	}
-	count = video_num_columns;
-	while (count) {
-		count--;
-		scr_writew(video_erase_char, --d);
-	}
+	memsetw(s + video_num_columns, video_erase_char, video_size_row);
 	has_scrolled = 1;
 }
 
@@ -746,10 +742,7 @@ static void csi_J(int currcons, int vpar)
 		default:
 			return;
 	}
-	while (count) {
-		count--;
-		scr_writew(video_erase_char, start++);
-	}
+	memsetw(start, video_erase_char, 2*count);
 	need_wrap = 0;
 }
 
@@ -774,28 +767,17 @@ static void csi_K(int currcons, int vpar)
 		default:
 			return;
 	}
-	while (count) {
-		count--;
-		scr_writew(video_erase_char, start++);
-	}
+	memsetw(start, video_erase_char, 2 * count);
 	need_wrap = 0;
 }
 
 static void csi_X(int currcons, int vpar) /* erase the following vpar positions */
 {					  /* not vt100? */
-	unsigned long count;
-	unsigned short * start;
-
 	if (!vpar)
 		vpar++;
 
-	start = (unsigned short *) pos;
-	count = (vpar > video_num_columns-x) ? (video_num_columns-x) : vpar;
-
-	while (count) {
-		count--;
-		scr_writew(video_erase_char, start++);
-	}
+	memsetw((unsigned short *) pos, video_erase_char,
+		(vpar > video_num_columns-x) ? 2 * (video_num_columns-x) : 2 * vpar);
 	need_wrap = 0;
 }
 
@@ -1348,8 +1330,10 @@ static void con_stop(struct tty_struct *tty)
 	console_num = MINOR(tty->device) - (tty->driver.minor_start);
 	if (!vc_cons_allocated(console_num))
 		return;
+#if !CONFIG_AP1000
 	set_vc_kbd_led(kbd_table + console_num, VC_SCROLLOCK);
 	set_leds();
+#endif
 }
 
 /*
@@ -1363,8 +1347,10 @@ static void con_start(struct tty_struct *tty)
 	console_num = MINOR(tty->device) - (tty->driver.minor_start);
 	if (!vc_cons_allocated(console_num))
 		return;
+#if !CONFIG_AP1000
 	clr_vc_kbd_led(kbd_table + console_num, VC_SCROLLOCK);
 	set_leds();
+#endif
 }
 
 static void con_flush_chars(struct tty_struct *tty)
@@ -1383,6 +1369,11 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 	int c, tc, ok, n = 0;
 	unsigned int currcons;
 	struct vt_struct *vt = (struct vt_struct *)tty->driver_data;
+
+#if CONFIG_AP1000
+        ap_write(1,buf,count);
+        return(count);
+#endif
 
 	currcons = vt->vc_num;
 	if (!vc_cons_allocated(currcons)) {
@@ -1846,10 +1837,10 @@ static int con_write(struct tty_struct * tty, int from_user,
 		     const unsigned char *buf, int count)
 {
 	int	retval;
-	
+
 	retval = do_con_write(tty, from_user, buf, count);
 	con_flush_chars(tty);
-	
+
 	return retval;
 }
 
@@ -1891,6 +1882,10 @@ void console_print(const char * b)
 	unsigned char c;
 	static int printing = 0;
 
+#if CONFIG_AP1000
+        prom_printf(b);
+        return;
+#endif
 	if (!printable || printing)
 		return;	 /* console not yet initialized */
 	printing = 1;
@@ -2026,6 +2021,19 @@ unsigned long con_init(unsigned long kmem_start)
 	int orig_x = ORIG_X;
 	int orig_y = ORIG_Y;
 
+#ifdef __sparc__
+	if (serial_console) {
+		fg_console = 0;
+
+#if CONFIG_SUN_SERIAL
+		rs_cons_hook(0, 0, serial_console);
+		rs_cons_hook(0, 1, serial_console);
+#endif
+
+		return kmem_start;
+	}
+#endif
+
 	memset(&console_driver, 0, sizeof(struct tty_driver));
 	console_driver.magic = TTY_DRIVER_MAGIC;
 	console_driver.name = "tty";
@@ -2056,6 +2064,9 @@ unsigned long con_init(unsigned long kmem_start)
 	if (tty_register_driver(&console_driver))
 		panic("Couldn't register console driver\n");
 
+#if CONFIG_AP1000
+        return(kmem_start);
+#endif
 	con_setsize(ORIG_VIDEO_LINES, ORIG_VIDEO_COLS);
 
 	timer_table[BLANK_TIMER].fn = blank_screen;
@@ -2110,7 +2121,8 @@ unsigned long con_init(unsigned long kmem_start)
 
 	printable = 1;
 	if ( video_type == VIDEO_TYPE_VGAC || video_type == VIDEO_TYPE_EGAC
-	    || video_type == VIDEO_TYPE_EGAM || video_type == VIDEO_TYPE_TGAC )
+	    || video_type == VIDEO_TYPE_EGAM || video_type == VIDEO_TYPE_TGAC 
+	     || video_type == VIDEO_TYPE_SUN )
 	{
 		default_font_height = video_font_height = ORIG_VIDEO_POINTS;
 		/* This may be suboptimal but is a safe bet - go with it */
@@ -2129,6 +2141,8 @@ unsigned long con_init(unsigned long kmem_start)
 		display_desc, video_num_columns, video_num_lines,
 		MIN_NR_CONSOLES, (MIN_NR_CONSOLES == 1) ? "" : "s",
 	        MAX_NR_CONSOLES);
+
+	con_type_init_finish();
 
 	/*
 	 * can't register TGA yet, because PCI bus probe has *not* taken

@@ -335,11 +335,7 @@ static int run_nfsiod(void *dummy)
 {
 	int	ret;
 
-#ifdef __SMP__
 	lock_kernel();
-	syscall_count++;
-#endif
-
 	MOD_INC_USE_COUNT;
 	exit_mm(current);
 	current->session = 1;
@@ -347,6 +343,7 @@ static int run_nfsiod(void *dummy)
 	sprintf(current->comm, "nfsiod");
 	ret = nfsiod();
 	MOD_DEC_USE_COUNT;
+	unlock_kernel();
 	return ret;
 }
 

@@ -28,6 +28,7 @@
 #include <linux/ioport.h>
 #include <linux/hdreg.h>
 #include <linux/mm.h>
+#include <linux/slab.h>
 #include <linux/major.h>
 #include <linux/blk.h>
 #ifdef CONFIG_ROOT_NFS
@@ -67,6 +68,7 @@ extern long kmalloc_init(long,long);
 extern void sock_init(void);
 extern unsigned long pci_init(unsigned long, unsigned long);
 extern long mca_init(long, long);
+extern long sbus_init(long, long);
 extern void sysctl_init(void);
 
 extern void smp_setup(char *str, int *ints);
@@ -198,6 +200,10 @@ extern void wdt_setup(char *str, int *ints);
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
 extern void ipc_init(void);
+#endif
+
+#ifdef __sparc__
+extern int serial_console;
 #endif
 
 /*
@@ -607,6 +613,12 @@ static void parse_root_dev(char * line)
 		{ "sonycd",  0x1800 },
 		{ "eza",     0x2800 },
 		{ "bpcd",    0x2900 },
+#if CONFIG_APBLOCK
+		{ "apblock", APBLOCK_MAJOR << 8},
+#endif
+#if CONFIG_DDV
+		{ "ddv", DDV_MAJOR << 8},
+#endif
 		{ NULL, 0 }
 	};
 
@@ -753,45 +765,28 @@ asmlinkage void start_secondary(void)
 
 
 
-/*
- *	Called by CPU#0 to activate the rest.
- */
- 
+/* Called by boot processor to activate the rest. */
 static void smp_init(void)
 {
 	int i, j;
-	smp_boot_cpus();
-	
-	/*
-	 *	Create the slave init tasks as sharing pid 0.
-	 *
-	 *	This should only happen if we have virtual CPU numbers
-	 *	higher than 0.
-	 */
 
+	/* Get other processors into their bootup holding patterns. */
+	smp_boot_cpus();
+
+	/* Create the slave init tasks as sharing pid 0.  This should only
+	 * happen if we have virtual CPU numbers higher than 0.
+	 */
 	for (i=1; i<smp_num_cpus; i++)
 	{
-		struct task_struct *n, *p;
-
-		j = cpu_logical_map[i];
-		/*
-		 *	We use kernel_thread for the idlers which are
-		 *	unlocked tasks running in kernel space.
+		/* We use kernel_thread for the idlers which are
+		 * unlocked tasks running in kernel space.
 		 */
 		kernel_thread(cpu_idle, NULL, CLONE_PID);
-		/*
-		 *	Don't assume linear processor numbering
-		 */
+
+		/* Don't assume linear processor numbering */
+		j = cpu_logical_map[i];
 		current_set[j]=task[i];
 		current_set[j]->processor=j;
-		cli();
-		n = task[i]->next_run;
-		p = task[i]->prev_run;
-		nr_running--;
-		n->prev_run = p;
-		p->next_run = n;
-		task[i]->next_run = task[i]->prev_run = task[i];
-		sti();
 	}
 }		
 
@@ -859,6 +854,9 @@ asmlinkage void start_kernel(void)
 		memory_start += prof_len * sizeof(unsigned int);
 		memset(prof_buffer, 0, prof_len * sizeof(unsigned int));
 	}
+#ifdef CONFIG_SBUS
+	memory_start = sbus_init(memory_start,memory_end);
+#endif
 	memory_start = console_init(memory_start,memory_end);
 #ifdef CONFIG_PCI
 	memory_start = pci_init(memory_start,memory_end);
@@ -867,19 +865,22 @@ asmlinkage void start_kernel(void)
 	memory_start = mca_init(memory_start,memory_end);
 #endif
 	memory_start = kmalloc_init(memory_start,memory_end);
+	memory_start = kmem_cache_init(memory_start, memory_end);
 	sti();
 	calibrate_delay();
 	memory_start = inode_init(memory_start,memory_end);
 	memory_start = file_table_init(memory_start,memory_end);
 	memory_start = name_cache_init(memory_start,memory_end);
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (initrd_start && initrd_start < memory_start) {
+	if (initrd_start && !initrd_below_start_ok && initrd_start < memory_start) {
 		printk(KERN_CRIT "initrd overwritten (0x%08lx < 0x%08lx) - "
 		    "disabling it.\n",initrd_start,memory_start);
 		initrd_start = 0;
 	}
 #endif
 	mem_init(memory_start,memory_end);
+	kmem_cache_sizes_init();
+	vma_init();
 	buffer_init();
 	sock_init();
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
@@ -943,6 +944,14 @@ static int init(void * unused)
 	/* Start the background pageout daemon. */
 	kernel_thread(kswapd, NULL, 0);
 
+#if CONFIG_AP1000
+	/* Start the async paging daemon. */
+	{
+	  extern int asyncd(void *);	 
+	  kernel_thread(asyncd, NULL, 0);
+	}
+#endif
+
 #ifdef CONFIG_BLK_DEV_INITRD
 	real_root_dev = ROOT_DEV;
 	real_root_mountflags = root_mountflags;
@@ -979,8 +988,8 @@ static int init(void * unused)
 	root_mountflags = real_root_mountflags;
 	if (mount_initrd && ROOT_DEV != real_root_dev && ROOT_DEV == MKDEV(RAMDISK_MAJOR,0)) {
 		int error;
-		int pid,i;
-		
+		int i, pid;
+
 		pid = kernel_thread(do_linuxrc, "/linuxrc", SIGCHLD);
 		if (pid>0)
 			while (pid != wait(&i));
@@ -992,17 +1001,18 @@ static int init(void * unused)
 		}
 	}
 #endif
-	
-	/*
-	 *	This keeps serial console MUCH cleaner, but does assume
-	 *	the console driver checks there really is a video device
-	 *	attached (Sparc effectively does).
-	 */
 
-	if ((open("/dev/tty1",O_RDWR,0) < 0) &&
-	    (open("/dev/ttyS0",O_RDWR,0) < 0))
-		printk("Unable to open an initial console.\n");
-			
+#ifdef __sparc__
+        if (serial_console == 1) {
+                (void) open("/dev/cua0", O_RDWR, 0);
+        } else if (serial_console == 2) {
+                (void) open("/dev/cua1", O_RDWR, 0);
+        } else {
+#endif
+                (void) open("/dev/tty1", O_RDWR, 0);
+#ifdef __sparc__
+        }
+#endif
 	(void) dup(0);
 	(void) dup(0);
 	
@@ -1013,7 +1023,7 @@ static int init(void * unused)
 	 * trying to recover a really broken machine.
 	 */
 
-	if (execute_command)
+	if(execute_command)
 		execve(execute_command,argv_init,envp_init);
 	execve("/sbin/init",argv_init,envp_init);
 	execve("/etc/init",argv_init,envp_init);

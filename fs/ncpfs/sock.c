@@ -341,9 +341,9 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 	unsigned short fs;
 	int result;
 	char *start = server->packet;
-	select_table wait_table;
-	struct select_table_entry entry;
-	int (*select) (struct inode *, struct file *, int, select_table *);
+	poll_table wait_table;
+	struct poll_table_entry entry;
+	int (*select) (struct inode *, poll_table *);
 	int init_timeout, max_timeout;
 	int timeout;
 	int retrans;
@@ -362,7 +362,7 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 
 	file = server->ncp_filp;
 	inode = file->f_inode;
-	select = file->f_op->select;
+	select = file->f_op->poll;
 	sock = &inode->u.socket_i;
 	if (!sock)
 	{
@@ -418,8 +418,7 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 		wait_table.nr = 0;
 		wait_table.entry = &entry;
 		current->state = TASK_INTERRUPTIBLE;
-		if (   !select(inode, file, SEL_IN, &wait_table)
-		    && !select(inode, file, SEL_IN, NULL))
+		if (!select(inode, &wait_table))
 		{
 			if (timeout > max_timeout)
 			{

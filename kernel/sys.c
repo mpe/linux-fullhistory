@@ -21,6 +21,8 @@
 #include <linux/fcntl.h>
 #include <linux/acct.h>
 #include <linux/tty.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
 #include <linux/apm_bios.h>
 #endif
@@ -74,13 +76,15 @@ static int proc_sel(struct task_struct *p, int which, int who)
 asmlinkage int sys_setpriority(int which, int who, int niceval)
 {
 	struct task_struct *p;
-	int error = ESRCH;
+	int error = EINVAL;
 	unsigned int priority;
 
+	lock_kernel();
 	if (which > 2 || which < 0)
-		return -EINVAL;
+		goto out;
 
 	/* normalize: avoid signed division (rounding problems) */
+	error = ESRCH;
 	priority = niceval;
 	if (niceval < 0)
 		priority = -niceval;
@@ -109,6 +113,8 @@ asmlinkage int sys_setpriority(int which, int who, int niceval)
 		else
 			p->priority = priority;
 	}
+out:
+	unlock_kernel();
 	return -error;
 }
 
@@ -121,9 +127,11 @@ asmlinkage int sys_getpriority(int which, int who)
 {
 	struct task_struct *p;
 	long max_prio = -ESRCH;
+	int ret = -EINVAL;
 
+	lock_kernel();
 	if (which > 2 || which < 0)
-		return -EINVAL;
+		goto out;
 
 	for_each_task (p) {
 		if (!proc_sel(p, which, who))
@@ -135,7 +143,10 @@ asmlinkage int sys_getpriority(int which, int who)
 	/* scale the priority from timeslice to 0..40 */
 	if (max_prio > 0)
 		max_prio = (max_prio * 20 + DEF_PRIORITY/2) / DEF_PRIORITY;
-	return max_prio;
+	ret = max_prio;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 #ifndef __alpha__
@@ -194,11 +205,16 @@ extern asmlinkage int sys_kill(int, int);
  */
 asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 {
+	int error = -EPERM;
+
+	lock_kernel();
 	if (!suser())
-		return -EPERM;
+		goto out;
+	error = -EINVAL;
 	if (magic != 0xfee1dead || 
 	    (magic_too != 672274793 && magic_too != 85072278))
-		return -EINVAL;
+		goto out;
+	error = 0;
 	if (flag == 0x01234567)
 	{
 		notifier_call_chain(&boot_notifier_list, SYS_DOWN, NULL);
@@ -220,8 +236,10 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 		notifier_call_chain(&boot_notifier_list, SYS_HALT, NULL);
 		do_exit(0);
 	} else
-		return -EINVAL;
-	return (0);
+		error = -EINVAL;
+out:
+	unlock_kernel();
+	return error;
 }
 
 /*
@@ -260,14 +278,16 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 {
 	int old_rgid = current->gid;
 	int old_egid = current->egid;
+	int err = -EPERM;
 
+	lock_kernel();
 	if (rgid != (gid_t) -1) {
 		if ((old_rgid == rgid) ||
 		    (current->egid==rgid) ||
 		    suser())
 			current->gid = rgid;
 		else
-			return(-EPERM);
+			goto out;
 	}
 	if (egid != (gid_t) -1) {
 		if ((old_rgid == egid) ||
@@ -277,7 +297,7 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 			current->fsgid = current->egid = egid;
 		else {
 			current->gid = old_rgid;
-			return(-EPERM);
+			goto out;
 		}
 	}
 	if (rgid != (gid_t) -1 ||
@@ -286,7 +306,10 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 	current->fsgid = current->egid;
 	if (current->egid != old_egid)
 		current->dumpable = 0;
-	return 0;
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 /*
@@ -295,16 +318,21 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 asmlinkage int sys_setgid(gid_t gid)
 {
 	int old_egid = current->egid;
+	int err = -EPERM;
 
+	lock_kernel();
 	if (suser())
 		current->gid = current->egid = current->sgid = current->fsgid = gid;
 	else if ((gid == current->gid) || (gid == current->sgid))
 		current->egid = current->fsgid = gid;
 	else
-		return -EPERM;
+		goto out;
+	err = 0;
 	if (current->egid != old_egid)
 		current->dumpable = 0;
-	return 0;
+out:
+	unlock_kernel();
+	return err;
 }
   
 static char acct_active = 0;
@@ -353,66 +381,70 @@ int acct_process(long exitcode)
 
 asmlinkage int sys_acct(const char *name)
 {
-   struct inode *inode = (struct inode *)0;
-   char *tmp;
-   int error;
+	struct inode *inode = (struct inode *)0;
+	char *tmp;
+	int error = -EPERM;
 
-   if (!suser())
-      return -EPERM;
+	lock_kernel();
+	if (!suser())
+		goto out;
 
-   if (name == (char *)0) {
-      if (acct_active) {
-         if (acct_file.f_op->release)
-            acct_file.f_op->release(acct_file.f_inode, &acct_file);
+	if (name == (char *)0) {
+		if (acct_active) {
+			if (acct_file.f_op->release)
+				acct_file.f_op->release(acct_file.f_inode, &acct_file);
 
-         if (acct_file.f_inode != (struct inode *) 0)
-            iput(acct_file.f_inode);
+			if (acct_file.f_inode != (struct inode *) 0)
+				iput(acct_file.f_inode);
 
-         acct_active = 0;
-      }
-      return 0;
-   } else {
-      if (!acct_active) {
+			acct_active = 0;
+		}
+		error = 0;
+	} else {
+		error = -EBUSY;
+		if (!acct_active) {
+			if ((error = getname(name, &tmp)) != 0)
+				goto out;
 
-         if ((error = getname(name, &tmp)) != 0)
-            return (error);
+			error = open_namei(tmp, O_RDWR, 0600, &inode, 0);
+			putname(tmp);
+			if (error)
+				goto out;
 
-         error = open_namei(tmp, O_RDWR, 0600, &inode, 0);
-         putname(tmp);
+			error = -EACCES;
+			if (!S_ISREG(inode->i_mode)) {
+				iput(inode);
+				goto out;
+			}
 
-         if (error)
-            return (error);
+			error = -EIO;
+			if (!inode->i_op || !inode->i_op->default_file_ops || 
+			    !inode->i_op->default_file_ops->write) {
+				iput(inode);
+				goto out;
+			}
 
-         if (!S_ISREG(inode->i_mode)) {
-            iput(inode);
-            return -EACCES;
-         }
+			acct_file.f_mode = 3;
+			acct_file.f_flags = 0;
+			acct_file.f_count = 1;
+			acct_file.f_inode = inode;
+			acct_file.f_pos = inode->i_size;
+			acct_file.f_reada = 0;
+			acct_file.f_op = inode->i_op->default_file_ops;
 
-         if (!inode->i_op || !inode->i_op->default_file_ops || 
-             !inode->i_op->default_file_ops->write) {
-            iput(inode);
-            return -EIO;
-         }
+			if(acct_file.f_op->open)
+				if(acct_file.f_op->open(acct_file.f_inode, &acct_file)) {
+					iput(inode);
+					goto out;
+				}
 
-         acct_file.f_mode = 3;
-         acct_file.f_flags = 0;
-         acct_file.f_count = 1;
-         acct_file.f_inode = inode;
-         acct_file.f_pos = inode->i_size;
-         acct_file.f_reada = 0;
-         acct_file.f_op = inode->i_op->default_file_ops;
-
-         if (acct_file.f_op->open)
-            if (acct_file.f_op->open(acct_file.f_inode, &acct_file)) {
-               iput(inode);
-               return -EIO;
-            }
-
-         acct_active = 1;
-         return 0;
-      } else
-         return -EBUSY;
-   }
+			acct_active = 1;
+			error = 0;
+		}
+	}
+out:
+	unlock_kernel();
+	return error;
 }
 
 #ifndef __alpha__
@@ -467,16 +499,20 @@ asmlinkage int sys_old_syscall(void)
  */
 asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 {
-	int old_ruid = current->uid;
-	int old_euid = current->euid;
+	int old_ruid;
+	int old_euid;
+	int err = -EPERM;
 
+	lock_kernel();
+	old_ruid = current->uid;
+	old_euid = current->euid;
 	if (ruid != (uid_t) -1) {
 		if ((old_ruid == ruid) || 
 		    (current->euid==ruid) ||
 		    suser())
 			current->uid = ruid;
 		else
-			return(-EPERM);
+			goto out;
 	}
 	if (euid != (uid_t) -1) {
 		if ((old_ruid == euid) ||
@@ -486,7 +522,7 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 			current->fsuid = current->euid = euid;
 		else {
 			current->uid = old_ruid;
-			return(-EPERM);
+			goto out;
 		}
 	}
 	if (ruid != (uid_t) -1 ||
@@ -495,7 +531,10 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 	current->fsuid = current->euid;
 	if (current->euid != old_euid)
 		current->dumpable = 0;
-	return 0;
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 /*
@@ -512,16 +551,22 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 asmlinkage int sys_setuid(uid_t uid)
 {
 	int old_euid = current->euid;
+	int retval = 0;
 
+	lock_kernel();
 	if (suser())
 		current->uid = current->euid = current->suid = current->fsuid = uid;
 	else if ((uid == current->uid) || (uid == current->suid))
 		current->fsuid = current->euid = uid;
-	else
-		return -EPERM;
+	else {
+		retval = -EPERM;
+		goto out;
+	}
 	if (current->euid != old_euid)
 		current->dumpable = 0;
-	return(0);
+out:
+	unlock_kernel();
+	return retval;
 }
 
 
@@ -532,36 +577,43 @@ asmlinkage int sys_setuid(uid_t uid)
 asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 {
 	uid_t old_ruid, old_euid, old_suid;
+	int err = -EPERM;
 
+	lock_kernel();
 	old_ruid = current->uid;
 	old_euid = current->euid;
 	old_suid = current->suid;
 
 	if ((ruid != (uid_t) -1) && (ruid != current->uid) &&
 	    (ruid != current->euid) && (ruid != current->suid))
-		return -EPERM;
+		goto out;
 	if ((euid != (uid_t) -1) && (euid != current->uid) &&
 	    (euid != current->euid) && (euid != current->suid))
-		return -EPERM;
+		goto out;
 	if ((suid != (uid_t) -1) && (suid != current->uid) &&
 	    (suid != current->euid) && (suid != current->suid))
-		return -EPERM;
+		goto out;
 	if (ruid != (uid_t) -1)
 		current->uid = ruid;
 	if (euid != (uid_t) -1)
 		current->euid = euid;
 	if (suid != (uid_t) -1)
 		current->suid = suid;
-	return 0;
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 asmlinkage int sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
 {
 	int retval;
 
+	lock_kernel();
 	if (!(retval = put_user(current->uid, ruid)) &&
 	    !(retval = put_user(current->euid, euid)))
 		retval = put_user(current->suid, suid);
+	unlock_kernel();
 	return retval;
 }
 
@@ -574,13 +626,16 @@ asmlinkage int sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
  */
 asmlinkage int sys_setfsuid(uid_t uid)
 {
-	int old_fsuid = current->fsuid;
+	int old_fsuid;
 
+	lock_kernel();
+	old_fsuid = current->fsuid;
 	if (uid == current->uid || uid == current->euid ||
 	    uid == current->suid || uid == current->fsuid || suser())
 		current->fsuid = uid;
 	if (current->fsuid != old_fsuid)
 		current->dumpable = 0;
+	unlock_kernel();
 	return old_fsuid;
 }
 
@@ -589,19 +644,24 @@ asmlinkage int sys_setfsuid(uid_t uid)
  */
 asmlinkage int sys_setfsgid(gid_t gid)
 {
-	int old_fsgid = current->fsgid;
+	int old_fsgid;
 
+	lock_kernel();
+	old_fsgid = current->fsgid;
 	if (gid == current->gid || gid == current->egid ||
 	    gid == current->sgid || gid == current->fsgid || suser())
 		current->fsgid = gid;
 	if (current->fsgid != old_fsgid)
 		current->dumpable = 0;
+	unlock_kernel();
 	return old_fsgid;
 }
 
 asmlinkage long sys_times(struct tms * tbuf)
 {
 	int error;
+
+	lock_kernel();
 	if (tbuf) {
 		error = put_user(current->utime,&tbuf->tms_utime);
 		if (!error)
@@ -611,9 +671,12 @@ asmlinkage long sys_times(struct tms * tbuf)
 		if (!error)
 			error =	put_user(current->cstime,&tbuf->tms_cstime);
 		if (error)
-			return error;	
+			goto out;
 	}
-	return jiffies;
+	error = jiffies;
+out:
+	unlock_kernel();
+	return error;
 }
 
 /*
@@ -631,89 +694,127 @@ asmlinkage long sys_times(struct tms * tbuf)
 asmlinkage int sys_setpgid(pid_t pid, pid_t pgid)
 {
 	struct task_struct * p;
+	int err = -EINVAL;
 
+	lock_kernel();
 	if (!pid)
 		pid = current->pid;
 	if (!pgid)
 		pgid = pid;
 	if (pgid < 0)
-		return -EINVAL;
+		goto out;
 	for_each_task(p) {
 		if (p->pid == pid)
 			goto found_task;
 	}
-	return -ESRCH;
+	err = -ESRCH;
+	goto out;
 
 found_task:
+	err = -ESRCH;
 	if (p->p_pptr == current || p->p_opptr == current) {
+		err = -EPERM;
 		if (p->session != current->session)
-			return -EPERM;
+			goto out;
+		err = -EACCES;
 		if (p->did_exec)
-			return -EACCES;
+			goto out;
 	} else if (p != current)
-		return -ESRCH;
+		goto out;
+	err = -EPERM;
 	if (p->leader)
-		return -EPERM;
+		goto out;
 	if (pgid != pid) {
 		struct task_struct * tmp;
 		for_each_task (tmp) {
 			if (tmp->pgrp == pgid &&
-			 tmp->session == current->session)
+			    tmp->session == current->session)
 				goto ok_pgid;
 		}
-		return -EPERM;
+		goto out;
 	}
 
 ok_pgid:
 	p->pgrp = pgid;
-	return 0;
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 asmlinkage int sys_getpgid(pid_t pid)
 {
 	struct task_struct * p;
+	int ret;
 
-	if (!pid)
-		return current->pgrp;
-	for_each_task(p) {
-		if (p->pid == pid)
-			return p->pgrp;
+	lock_kernel();
+	if (!pid) {
+		ret = current->pgrp;
+	} else {
+		for_each_task(p) {
+			if (p->pid == pid) {
+				ret = p->pgrp;
+				goto out;
+			}
+		}
+		ret = -ESRCH;
 	}
-	return -ESRCH;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_getpgrp(void)
 {
-	return current->pgrp;
+	int ret;
+
+	lock_kernel();
+	ret = current->pgrp;
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_getsid(pid_t pid)
 {
 	struct task_struct * p;
+	int ret;
 
-	if (!pid)
-		return current->session;
-	for_each_task(p) {
-		if (p->pid == pid)
-			return p->session;
+	lock_kernel();
+	if (!pid) {
+		ret = current->session;
+	} else {
+		for_each_task(p) {
+			if (p->pid == pid) {
+				ret = p->session;
+				goto out;
+			}
+		}
+		ret = -ESRCH;
 	}
-	return -ESRCH;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_setsid(void)
 {
 	struct task_struct * p;
+	int err = -EPERM;
 
+	lock_kernel();
 	for_each_task(p) {
 		if (p->pgrp == current->pid)
-		        return -EPERM;
+		        goto out;
 	}
 
 	current->leader = 1;
 	current->session = current->pgrp = current->pid;
 	current->tty = NULL;
 	current->tty_old_pgrp = 0;
-	return current->pgrp;
+	err = current->pgrp;
+out:
+	unlock_kernel();
+	return err;
 }
 
 /*
@@ -721,34 +822,44 @@ asmlinkage int sys_setsid(void)
  */
 asmlinkage int sys_getgroups(int gidsetsize, gid_t *grouplist)
 {
-	int i;
+	int i, err = -EINVAL;
 
+	lock_kernel();
 	if (gidsetsize < 0)
-		return -EINVAL;
+		goto out;
 	i = current->ngroups;
 	if (gidsetsize) {
+		err = -EINVAL;
 		if (i > gidsetsize)
-		        return -EINVAL;
+		        goto out;
+		err = -EFAULT;
 		if (copy_to_user(grouplist, current->groups, sizeof(gid_t)*i))
-			return -EFAULT;
+			goto out;
 	}
-	return i;
+	err = i;
+out:
+	unlock_kernel();
+	return err;
 }
 
 asmlinkage int sys_setgroups(int gidsetsize, gid_t *grouplist)
 {
-	int	err;
+	int err = -EPERM;
 
+	lock_kernel();
 	if (!suser())
-		return -EPERM;
+		goto out;
+	err = -EINVAL;
 	if ((unsigned) gidsetsize > NGROUPS)
-		return -EINVAL;
+		goto out;
 	err = copy_from_user(current->groups, grouplist, gidsetsize * sizeof(gid_t));
 	if (err) {
 		gidsetsize = 0;
 		err = -EFAULT;
 	} 
 	current->ngroups = gidsetsize;
+out:
+	unlock_kernel();
 	return err;
 }
 
@@ -773,11 +884,17 @@ out:
 
 asmlinkage int sys_newuname(struct new_utsname * name)
 {
+	int err = -EFAULT;
+
+	lock_kernel();
 	if (!name)
-		return -EFAULT;
+		goto out;
 	if (copy_to_user(name,&system_utsname,sizeof *name))
-		return -EFAULT;
-	return 0;
+		goto out;
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 #ifndef __alpha__
@@ -788,17 +905,22 @@ asmlinkage int sys_newuname(struct new_utsname * name)
  */
 asmlinkage int sys_uname(struct old_utsname * name)
 {
-	int error = -EFAULT;;
+	int error = -EFAULT;
+
+	lock_kernel();
 	if (name && !copy_to_user(name, &system_utsname, sizeof (*name)))
 		error = 0;
+	unlock_kernel();
 	return error;
 }
 
 asmlinkage int sys_olduname(struct oldold_utsname * name)
 {
-	int error;
+	int error = -EFAULT;
+
+	lock_kernel();
 	if (!name)
-		return -EFAULT;
+		goto out;
 	error = copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
 	if (!error)
 		error = put_user(0,name->sysname+__OLD_UTS_LEN);
@@ -818,36 +940,49 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 		error = copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
 	if (!error)
 		error = put_user(0,name->machine+__OLD_UTS_LEN);
-	return error ? -EFAULT : 0;
+	error = error ? -EFAULT : 0;
+out:
+	unlock_kernel();
+	return error;
 }
 
 #endif
 
 asmlinkage int sys_sethostname(char *name, int len)
 {
-	int error;
+	int error = -EPERM;
 
+	lock_kernel();
 	if (!suser())
-		return -EPERM;
+		goto out;
+	error = -EINVAL;
 	if (len < 0 || len > __NEW_UTS_LEN)
-		return -EINVAL;
+		goto out;
 	error = copy_from_user(system_utsname.nodename, name, len);
-	if (error)
-		return -EFAULT;
+	if (error) {
+		error = -EFAULT;
+		goto out;
+	}
 	system_utsname.nodename[len] = 0;
-	return 0;
+out:
+	unlock_kernel();
+	return error;
 }
 
 asmlinkage int sys_gethostname(char *name, int len)
 {
-	int i;
+	int i, err = -EINVAL;
 
+	lock_kernel();
 	if (len < 0)
-		return -EINVAL;
+		goto out;
 	i = 1+strlen(system_utsname.nodename);
 	if (i > len)
 		i = len;
-	return copy_to_user(name, system_utsname.nodename, i) ? -EFAULT : 0;
+	err = copy_to_user(name, system_utsname.nodename, i) ? -EFAULT : 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 /*
@@ -856,48 +991,66 @@ asmlinkage int sys_gethostname(char *name, int len)
  */
 asmlinkage int sys_setdomainname(char *name, int len)
 {
-	int error;
+	int error = -EPERM;
 	
+	lock_kernel();
 	if (!suser())
-		return -EPERM;
+		goto out;
+	error = -EINVAL;
 	if (len < 0 || len > __NEW_UTS_LEN)
-		return -EINVAL;
+		goto out;
 	error = copy_from_user(system_utsname.domainname, name, len);
 	if (error)
-		return -EFAULT;
-	system_utsname.domainname[len] = 0;
-	return 0;
+		error = -EFAULT;
+	else
+		system_utsname.domainname[len] = 0;
+out:
+	unlock_kernel();
+	return error;
 }
 
 asmlinkage int sys_getrlimit(unsigned int resource, struct rlimit *rlim)
 {
+	int error;
+
+	lock_kernel();
 	if (resource >= RLIM_NLIMITS)
-		return -EINVAL;
-	return copy_to_user(rlim, current->rlim + resource, sizeof(*rlim)) 
-			? -EFAULT : 0 ;
+		error = -EINVAL;
+	else
+		error = copy_to_user(rlim, current->rlim + resource, sizeof(*rlim))
+			? -EFAULT : 0;
+	unlock_kernel();
+	return error;
 }
 
 asmlinkage int sys_setrlimit(unsigned int resource, struct rlimit *rlim)
 {
 	struct rlimit new_rlim, *old_rlim;
-	int err;
+	int err = -EINVAL;
 
+	lock_kernel();
 	if (resource >= RLIM_NLIMITS)
-		return -EINVAL;
+		goto out;
 	err = copy_from_user(&new_rlim, rlim, sizeof(*rlim));
-	if (err)
-		return -EFAULT;	
+	if (err) {
+		err = -EFAULT;
+		goto out;
+	}
 	old_rlim = current->rlim + resource;
+	err = -EPERM;
 	if (((new_rlim.rlim_cur > old_rlim->rlim_max) ||
 	     (new_rlim.rlim_max > old_rlim->rlim_max)) &&
 	    !suser())
-		return -EPERM;
+		goto out;
 	if (resource == RLIMIT_NOFILE) {
 		if (new_rlim.rlim_cur > NR_OPEN || new_rlim.rlim_max > NR_OPEN)
-			return -EPERM;
+			goto out;
 	}
 	*old_rlim = new_rlim;
-	return 0;
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 /*
@@ -911,7 +1064,9 @@ asmlinkage int sys_setrlimit(unsigned int resource, struct rlimit *rlim)
 int getrusage(struct task_struct *p, int who, struct rusage *ru)
 {
 	struct rusage r;
+	int err;
 
+	lock_kernel();
 	memset((char *) &r, 0, sizeof(r));
 	switch (who) {
 		case RUSAGE_SELF:
@@ -942,20 +1097,31 @@ int getrusage(struct task_struct *p, int who, struct rusage *ru)
 			r.ru_nswap = p->nswap + p->cnswap;
 			break;
 	}
-	return copy_to_user(ru, &r, sizeof(r)) ? -EFAULT : 0;
+	err = copy_to_user(ru, &r, sizeof(r)) ? -EFAULT : 0;
+	unlock_kernel();
+	return err;
 }
 
 asmlinkage int sys_getrusage(int who, struct rusage *ru)
 {
+	int err = -EINVAL;
+
+	lock_kernel();
 	if (who != RUSAGE_SELF && who != RUSAGE_CHILDREN)
-		return -EINVAL;
-	return getrusage(current, who, ru);
+		goto out;
+	err = getrusage(current, who, ru);
+out:
+	unlock_kernel();
+	return err;
 }
 
 asmlinkage int sys_umask(int mask)
 {
-	int old = current->fs->umask;
+	int old;
 
+	lock_kernel();
+	old = current->fs->umask;
 	current->fs->umask = mask & S_IRWXUGO;
+	unlock_kernel();
 	return (old);
 }

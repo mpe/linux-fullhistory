@@ -346,7 +346,7 @@ struct hmeal_tcvregs {
 #define LPA_10FULL              0x0040  /* Can do 10mbps full-duplex   */
 #define LPA_100HALF             0x0080  /* Can do 100mbps half-duplex  */
 #define LPA_100FULL             0x0100  /* Can do 100mbps full-duplex  */
-#define LPA_100BASE4            0x0100  /* Can do 100mbps 4k packets   */
+#define LPA_100BASE4            0x0200  /* Can do 100mbps 4k packets   */
 #define LPA_RESV                0x1c00  /* Unused...                   */
 #define LPA_RFAULT              0x2000  /* Link partner faulted        */
 #define LPA_LPACK               0x4000  /* Link partner acked us       */

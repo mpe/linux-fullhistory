@@ -249,7 +249,9 @@ int fsync_dev(kdev_t dev)
 
 asmlinkage int sys_sync(void)
 {
+	lock_kernel();
 	fsync_dev(0);
+	unlock_kernel();
 	return 0;
 }
 
@@ -262,29 +264,39 @@ asmlinkage int sys_fsync(unsigned int fd)
 {
 	struct file * file;
 	struct inode * inode;
+	int err = 0;
 
+	lock_kernel();
 	if (fd>=NR_OPEN || !(file=current->files->fd[fd]) || !(inode=file->f_inode))
-		return -EBADF;
-	if (!file->f_op || !file->f_op->fsync)
-		return -EINVAL;
-	if (file->f_op->fsync(inode,file))
-		return -EIO;
-	return 0;
+		err = -EBADF;
+	else if (!file->f_op || !file->f_op->fsync)
+		err = -EINVAL;
+	else if (file->f_op->fsync(inode,file))
+		err = -EIO;
+	unlock_kernel();
+	return err;
 }
 
 asmlinkage int sys_fdatasync(unsigned int fd)
 {
 	struct file * file;
 	struct inode * inode;
+	int err = -EBADF;
 
+	lock_kernel();
 	if (fd>=NR_OPEN || !(file=current->files->fd[fd]) || !(inode=file->f_inode))
-		return -EBADF;
+		goto out;
+	err = -EINVAL;
 	if (!file->f_op || !file->f_op->fsync)
-		return -EINVAL;
+		goto out;
 	/* this needs further work, at the moment it is identical to fsync() */
 	if (file->f_op->fsync(inode,file))
-		return -EIO;
-	return 0;
+		err = -EIO;
+	else
+		err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 void invalidate_buffers(kdev_t dev)
@@ -1546,33 +1558,42 @@ asmlinkage int sync_old_buffers(void)
 
 asmlinkage int sys_bdflush(int func, long data)
 {
-	int i;
+	int i, error = -EPERM;
 
+	lock_kernel();
 	if (!suser())
-		return -EPERM;
+		goto out;
 
-	if (func == 1)
-		 return sync_old_buffers();
+	if (func == 1) {
+		 error = sync_old_buffers();
+		 goto out;
+	}
 
 	/* Basically func 1 means read param 1, 2 means write param 1, etc */
 	if (func >= 2) {
 		i = (func-2) >> 1;
+		error = -EINVAL;
 		if (i < 0 || i >= N_PARAM)
-			return -EINVAL;
+			goto out;
 		if((func & 1) == 0) {
-			return put_user(bdf_prm.data[i], (int*)data);
-		};
+			error = put_user(bdf_prm.data[i], (int*)data);
+			goto out;
+		}
 		if (data < bdflush_min[i] || data > bdflush_max[i])
-			return -EINVAL;
+			goto out;
 		bdf_prm.data[i] = data;
-		return 0;
+		error = 0;
+		goto out;
 	};
 
 	/* Having func 0 used to launch the actual bdflush and then never
-	return (unless explicitly killed). We return zero here to 
-	remain semi-compatible with present update(8) programs. */
-
-	return 0;
+	 * return (unless explicitly killed). We return zero here to 
+	 * remain semi-compatible with present update(8) programs.
+	 */
+	error = 0;
+out:
+	unlock_kernel();
+	return error;
 }
 
 /* This is the actual bdflush daemon itself. It used to be started from
@@ -1613,11 +1634,7 @@ int bdflush(void * unused)
 	 *	and other internals and thus be subject to the SMP locking
 	 *	rules. (On a uniprocessor box this does nothing).
 	 */
-	 
-#ifdef __SMP__
 	lock_kernel();
-	syscall_count++;
-#endif
 		 
 	for (;;) {
 #ifdef DEBUG

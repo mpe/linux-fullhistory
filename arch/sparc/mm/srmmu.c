@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.123 1996/12/31 09:53:00 davem Exp $
+/* $Id: srmmu.c,v 1.128 1997/01/12 12:07:00 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -46,14 +46,6 @@ int vac_badbits;
 extern unsigned long sparc_iobase_vaddr;
 
 #ifdef __SMP__
-extern void smp_capture(void);
-extern void smp_release(void);
-#else
-#define smp_capture()
-#define smp_release()
-#endif /* !(__SMP__) */
-
-#ifdef __SMP__
 #define FLUSH_BEGIN(mm)
 #define FLUSH_END
 #else
@@ -61,7 +53,7 @@ extern void smp_release(void);
 #define FLUSH_END	}
 #endif
 
-/* #define USE_CHUNK_ALLOC 1 */
+#define USE_CHUNK_ALLOC 1
 
 static unsigned long (*mmu_getpage)(void);
 static void (*ctxd_set)(ctxd_t *ctxp, pgd_t *pgdp);
@@ -70,6 +62,7 @@ static void (*pmd_set)(pmd_t *pmdp, pte_t *ptep);
 static void (*flush_page_for_dma)(unsigned long page);
 static void (*flush_cache_page_to_uncache)(unsigned long page);
 static void (*flush_tlb_page_for_cbit)(unsigned long page);
+static void (*flush_chunk)(unsigned long chunk);
 #ifdef __SMP__
 static void (*local_flush_page_for_dma)(unsigned long page);
 static void (*local_flush_cache_page_to_uncache)(unsigned long page);
@@ -328,7 +321,7 @@ static int garbage_calls = 0;
 
 #define OTHER_PAGE(p,q)	(((unsigned long)(p) ^ (unsigned long)(q)) & PAGE_MASK)
 
-static inline int garbage_collect(unsigned long **cnks, int n, int cpp)
+static int garbage_collect(unsigned long **cnks, int n, int cpp)
 {
 	struct chunk *root = (struct chunk *)*cnks;
 	struct chunk *p, *q, *curr, *next;
@@ -424,8 +417,7 @@ static inline int garbage_collect(unsigned long **cnks, int n, int cpp)
 	return water;
 }
 
-
-static inline unsigned long *get_small_chunk(void)
+static unsigned long *get_small_chunk(void)
 {
 	unsigned long *rval;
 	unsigned long flags;
@@ -467,6 +459,7 @@ static inline unsigned long *get_small_chunk(void)
 	lcjiffies = jiffies;
 	restore_flags(flags);
 	memset(rval, 0, 256);
+	flush_chunk((unsigned long)rval);
 	return rval;
 }
 
@@ -486,7 +479,7 @@ static inline void free_small_chunk(unsigned long *it)
 	restore_flags(flags);
 }
 
-static inline unsigned long *get_big_chunk(void)
+static unsigned long *get_big_chunk(void)
 {
 	unsigned long *rval;
 	unsigned long flags;
@@ -516,6 +509,7 @@ static inline unsigned long *get_big_chunk(void)
 	bcjiffies = jiffies;
 	restore_flags(flags);
 	memset(rval, 0, 1024);
+	flush_chunk((unsigned long)rval);
 	return rval;
 }
 
@@ -980,6 +974,10 @@ static void tsunami_flush_sig_insns(struct mm_struct *mm, unsigned long insn_add
 	tsunami_flush_icache();
 }
 
+static void tsunami_flush_chunk(unsigned long chunk)
+{
+}
+
 static void tsunami_flush_tlb_all(void)
 {
 	srmmu_flush_whole_tlb();
@@ -1087,6 +1085,10 @@ static void swift_flush_cache_page_to_uncache(unsigned long page)
 	swift_flush_dcache();
 }
 
+static void swift_flush_chunk(unsigned long chunk)
+{
+}
+
 static void swift_flush_tlb_all(void)
 {
 	srmmu_flush_whole_tlb();
@@ -1157,6 +1159,10 @@ static void viking_flush_cache_page(struct vm_area_struct *vma, unsigned long pa
 
 /* Non-mxcc vikings are copy-back but are pure-physical so no flushing. */
 static void viking_flush_page_to_ram(unsigned long page)
+{
+}
+
+static void viking_mxcc_flush_chunk(unsigned long chunk)
 {
 }
 
@@ -1249,6 +1255,11 @@ static void viking_no_mxcc_flush_page(unsigned long page)
 			break;
 		}
 	}
+}
+
+static void viking_nomxcc_flush_chunk(unsigned long chunk)
+{
+	viking_no_mxcc_flush_page(chunk);
 }
 
 /* Viking is IO cache coherent, but really only on MXCC. */
@@ -1544,6 +1555,11 @@ static void cypress_flush_page_to_ram(unsigned long page)
 	} while(line != page);
 }
 
+static void cypress_flush_chunk(unsigned long chunk)
+{
+	cypress_flush_page_to_ram(chunk);
+}
+
 /* Cypress is also IO cache coherent. */
 static void cypress_flush_page_for_dma(unsigned long page)
 {
@@ -1711,7 +1727,6 @@ static void hypersparc_flush_cache_all(void)
 static void hypersparc_flush_cache_mm(struct mm_struct *mm)
 {
 	register int ctr asm("g5");
-	unsigned long tmp1;
 
 	FLUSH_BEGIN(mm)
 	ctr = 0;
@@ -1728,66 +1743,135 @@ static void hypersparc_flush_cache_mm(struct mm_struct *mm)
 	: "0" (ctr), "i" (UWINMASK_OFFSET)
 	: "g4");
 
+	/* Gcc can bite me... */
+#if !defined(__svr4__) && !defined(__ELF__)
 	__asm__ __volatile__("
-	1:	subcc	%0, %2, %0		! hyper_flush_cache_user
+	sethi	%hi(_vac_line_size), %g1
+	ld	[%g1 + %lo(_vac_line_size)], %o1
+	sethi	%hi(_vac_cache_size), %g2
+	ld	[%g2 + %lo(_vac_cache_size)], %o0");
+#else
+	__asm__ __volatile__("
+	sethi	%hi(vac_line_size), %g1
+	ld	[%g1 + %lo(vac_line_size)], %o1
+	sethi	%hi(vac_cache_size), %g2
+	ld	[%g2 + %lo(vac_cache_size)], %o0");
+#endif
+
+	__asm__ __volatile__("
+		add	%%o1, %%o1, %%g1
+		add	%%o1, %%g1, %%g2
+		add	%%o1, %%g2, %%g3
+		add	%%o1, %%g3, %%g4
+		add	%%o1, %%g4, %%g5
+		add	%%o1, %%g5, %%o4
+		add	%%o1, %%o4, %%o5
+	1:	subcc	%%o0, %%o5, %%o0		! hyper_flush_cache_user
+		sta	%%g0, [%%o0 + %%g0] %0
+		sta	%%g0, [%%o0 + %%o1] %0
+		sta	%%g0, [%%o0 + %%g1] %0
+		sta	%%g0, [%%o0 + %%g2] %0
+		sta	%%g0, [%%o0 + %%g3] %0
+		sta	%%g0, [%%o0 + %%g4] %0
+		sta	%%g0, [%%o0 + %%g5] %0
 		bne	1b
-		 sta	%%g0, [%0] %3
-		sta	%%g0, [%%g0] %4		! hyper_flush_whole_icache"
-	: "=&r" (tmp1)
-	: "0" (vac_cache_size), "r" (vac_line_size), "i" (ASI_M_FLUSH_USER),
-	  "i" (ASI_M_FLUSH_IWHOLE));
+		 sta	%%g0, [%%o0 + %%o4] %0
+		sta	%%g0, [%%g0 + %%g0] %1		! hyper_flush_whole_icache"
+	: : "i" (ASI_M_FLUSH_USER), "i" (ASI_M_FLUSH_IWHOLE));
 	FLUSH_END
 }
 
 /* The things we do for performance... */
 static void hypersparc_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 {
-	register int ctr asm("g5");
-	unsigned long tmp1;
-
 	FLUSH_BEGIN(mm)
-	ctr = 0;
 	__asm__ __volatile__("
-	1:	ld	[%%g6 + %2], %%g4	! flush user windows
-		orcc	%%g0, %%g4, %%g0
-		add	%0, 1, %0
-		bne	1b
-		 save	%%sp, -64, %%sp
-	2:	subcc	%0, 1, %0
-		bne	2b
-		 restore %%g0, %%g0, %%g0"
-	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4");
-	tmp1 = vac_cache_size; start &= PAGE_MASK; end = PAGE_ALIGN(end);
-	if((end - start) >= (tmp1 << 2)) {
-		__asm__ __volatile__("
-		1:	subcc	%0, %2, %0	! hyper_flush_cache_user
-			bne	1b
-			 sta	%%g0, [%0] %3
-			sta	%%g0, [%%g0] %4"
-		: "=&r" (tmp1) : "0" (tmp1), "r" (vac_line_size),
-		  "i" (ASI_M_FLUSH_USER), "i" (ASI_M_FLUSH_IWHOLE));
-	} else {
-		tmp1 = srmmu_get_context(); srmmu_set_context(mm->context);
-		__asm__ __volatile__("
-			sub	%0, %3, %0
-		1:	or	%0, 0x400, %%g4
-			lda	[%%g4] %4, %%g4
-			orcc	%%g4, 0x0, %%g0
-			be	3f
-			 sethi	%%hi(0x1000), %%g5
-		2:	subcc	%%g5, %7, %%g5	! hyper_flush_cache_page
-			bne	2b
-			 sta	%%g0, [%0 + %%g5] %5
-		3:	cmp	%0, %2
-			bne	1b
-			 sub	%0, %3, %0
-			sta	%%g0, [%%g0] %6	! hyper_flush_whole_icache"
-		: "=&r" (end)
-		: "0" (end), "r" (start), "r" (PAGE_SIZE), "i" (ASI_M_FLUSH_PROBE),
-		  "i" (ASI_M_FLUSH_PAGE), "i" (ASI_M_FLUSH_IWHOLE), "r" (vac_line_size)
-		: "g4", "g5");
-		(void) srmmu_get_fstatus(); srmmu_set_context(tmp1);
-	}
+	mov	0, %%g5
+1:	ld	[%%g6 + %0], %%g4
+	orcc	%%g0, %%g4, %%g0
+	add	%%g5, 1, %%g5
+	bne	1b
+	 save	%%sp, -64, %%sp
+2:	subcc	%%g5, 1, %%g5
+	bne	2b
+	 restore %%g0, %%g0, %%g0
+	" : : "i" (UWINMASK_OFFSET));
+#if !defined(__svr4__) && !defined(__ELF__)
+	__asm__ __volatile__("
+	sethi	%hi(_vac_line_size), %g1
+	ld	[%g1 + %lo(_vac_line_size)], %o4
+	sethi	%hi(_vac_cache_size), %g2
+	ld	[%g2 + %lo(_vac_cache_size)], %o3");
+#else
+	__asm__ __volatile__("
+	sethi	%hi(vac_line_size), %g1
+	ld	[%g1 + %lo(vac_line_size)], %o4
+	sethi	%hi(vac_cache_size), %g2
+	ld	[%g2 + %lo(vac_cache_size)], %o3");
+#endif
+	/* Close your eyes... */
+	__asm__ __volatile__("
+	add	%%o2, (%0 - 1), %%o2
+	andn	%%o1, (%0 - 1), %%o1
+	add	%%o4, %%o4, %%o5
+	andn	%%o2, (%0 - 1), %%o2
+	add	%%o4, %%o5, %%g1
+	sub	%%o2, %%o1, %%g4
+	add	%%o4, %%g1, %%g2
+	sll	%%o3, 2, %%g5
+	add	%%o4, %%g2, %%g3
+	cmp	%%g4, %%g5
+	add	%%o4, %%g3, %%g4
+	blu	0f
+	 add	%%o4, %%g4, %%g5
+	add	%%o4, %%g5, %%g7
+1:	subcc	%%o3, %%g7, %%o3
+	sta	%%g0, [%%o3 + %%g0] %1
+	sta	%%g0, [%%o3 + %%o4] %1
+	sta	%%g0, [%%o3 + %%o5] %1
+	sta	%%g0, [%%o3 + %%g1] %1
+	sta	%%g0, [%%o3 + %%g2] %1
+	sta	%%g0, [%%o3 + %%g3] %1
+	sta	%%g0, [%%o3 + %%g4] %1
+	bne	1b
+	 sta	%%g0, [%%o3 + %%g5] %1
+	b,a	9f
+0:	ld	[%%o0 + %3], %%o0
+	mov	%2, %%g7
+	lda	[%%g7] %4, %%o3
+	sta	%%o0, [%%g7] %4
+	sethi	%%hi(%0), %%g7
+	sub	%%o2, %%g7, %%o0
+1:	or	%%o0, 0x400, %%g7
+	lda	[%%g7] %5, %%g7
+	orcc	%%g7, 0x0, %%g0
+	be,a	3f
+	 mov	%%o0, %%o2
+	add	%%o4, %%g5, %%g7
+2:	sub	%%o2, %%g7, %%o2
+	sta	%%g0, [%%o2 + %%g0] %6
+	sta	%%g0, [%%o2 + %%o4] %6
+	sta	%%g0, [%%o2 + %%o5] %6
+	sta	%%g0, [%%o2 + %%g1] %6
+	sta	%%g0, [%%o2 + %%g2] %6
+	sta	%%g0, [%%o2 + %%g3] %6
+	andcc	%%o2, 0xffc, %%g0
+	sta	%%g0, [%%o2 + %%g4] %6
+	bne	2b
+	 sta	%%g0, [%%o2 + %%g5] %6
+3:	sethi	%%hi(%0), %%g7
+	cmp	%%o2, %%o1
+	bne	1b
+	 sub	%%o2, %%g7, %%o0
+	mov	%8, %%g5
+	lda	[%%g5] %4, %%g0
+	mov	%2, %%g7
+	sta	%%o3, [%%g7] %4
+9:	sta	%%g0, [%%g0 + %%g0] %7
+"	: : "i" (PAGE_SIZE), "i" (ASI_M_FLUSH_USER), "i" (SRMMU_CTX_REG),
+	    "i" ((const unsigned long)(&(((struct mm_struct *)0)->context))),
+	    "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PROBE), "i" (ASI_M_FLUSH_PAGE),
+	    "i" (ASI_M_FLUSH_IWHOLE), "i" (SRMMU_FAULT_STATUS));
 	FLUSH_END
 }
 
@@ -1796,65 +1880,127 @@ static void hypersparc_flush_cache_range(struct mm_struct *mm, unsigned long sta
  */
 static void hypersparc_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
 {
-	struct mm_struct *mm = vma->vm_mm;
-	register int ctr asm("g5");
-	unsigned long tmp1;
-
-	FLUSH_BEGIN(mm)
-	ctr = 0;
 	__asm__ __volatile__("
-	1:	ld	[%%g6 + %2], %%g4	! flush user windows
-		orcc	%%g0, %%g4, %%g0
-		add	%0, 1, %0
-		bne	1b
-		 save	%%sp, -64, %%sp
-	2:	subcc	%0, 1, %0
-		bne	2b
-		 restore %%g0, %%g0, %%g0"
-	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4");
+	ld	[%%o0 + %0], %%g4
+	ld	[%%g4 + %1], %%o0
+"	: : "i" ((const unsigned long)(&(((struct vm_area_struct *)0)->vm_mm))),
+	    "i" ((const unsigned long)(&(((struct mm_struct *)0)->context))));
+#ifndef __SMP__
 	__asm__ __volatile__("
-		mov	0x200, %%g4
-		lda	[%%g4] %6, %1
-		sta	%0, [%%g4] %6
-		or	%3, 0x400, %0
-		lda	[%0] %9, %0
-		orcc	%0, 0x0, %%g0
-		be	2f
-		 sethi	%%hi(0x1000), %0
-	1:	subcc	%0, %5, %0		! hyper_flush_cache_page
-		bne	1b
-		 sta	%%g0, [%3 + %0] %7
-	2:	andcc	%4, 0x4, %%g0
-		sta	%1, [%%g4] %6
-		bne,a	1f
-		 sta	%%g0, [%%g0] %8
-1:"	: "=&r" (tmp1), "=&r" (ctr)
-	: "0" (mm->context), "r" (page & PAGE_MASK), "r" (vma->vm_flags),
-	  "r" (vac_line_size), "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PAGE),
-	  "i" (ASI_M_FLUSH_IWHOLE), "i" (ASI_M_FLUSH_PROBE)
-	: "g4");
-	(void) srmmu_get_fstatus();
-	FLUSH_END
+	cmp	%o0, -1
+	bne	1f
+	 mov	0, %g5
+	retl");
+#else
+	__asm__ __volatile__("mov	0, %g5");	/* else we die a horrible death */
+#endif
+	__asm__ __volatile__("
+1:	 ld	[%%g6 + %0], %%g4	! flush user windows
+	orcc	%%g0, %%g4, %%g0
+	add	%%g5, 1, %%g5
+	bne	1b
+	 save	%%sp, -64, %%sp
+2:	subcc	%%g5, 1, %%g5
+	bne	2b
+	 restore %%g0, %%g0, %%g0"
+	: : "i" (UWINMASK_OFFSET));
+#if !defined(__svr4__) && !defined(__ELF__)
+	__asm__ __volatile__("
+	sethi	%hi(_vac_line_size), %g1
+	ld	[%g1 + %lo(_vac_line_size)], %o4");
+#else
+	__asm__ __volatile__("
+	sethi	%hi(vac_line_size), %g1
+	ld	[%g1 + %lo(vac_line_size)], %o4");
+#endif
+	__asm__ __volatile__("
+	mov	%0, %%o3
+	andn	%%o1, (%4 - 1), %%o1
+	lda	[%%o3] %1, %%o2
+	sta	%%o0, [%%o3] %1
+	or	%%o1, 0x400, %%o5
+	lda	[%%o5] %3, %%o5
+	orcc	%%o5, 0x0, %%g0
+	be	2f
+	 sethi	%%hi(%4), %%g7
+	add	%%o4, %%o4, %%o5
+	add	%%o1, %%g7, %%o1
+	add	%%o4, %%o5, %%g1
+	add	%%o4, %%g1, %%g2
+	add	%%o4, %%g2, %%g3
+	add	%%o4, %%g3, %%g4
+	add	%%o4, %%g4, %%g5
+	add	%%o4, %%g5, %%g7
+1:	sub	%%o1, %%g7, %%o1		! hyper_flush_cache_page
+	sta	%%g0, [%%o1 + %%g0] %5
+	sta	%%g0, [%%o1 + %%o4] %5
+	sta	%%g0, [%%o1 + %%o5] %5
+	sta	%%g0, [%%o1 + %%g1] %5
+	sta	%%g0, [%%o1 + %%g2] %5
+	sta	%%g0, [%%o1 + %%g3] %5
+	andcc	%%o1, 0xffc, %%g0
+	sta	%%g0, [%%o1 + %%g4] %5
+	bne	1b
+	 sta	%%g0, [%%o1 + %%g5] %5
+	sta	%%g0, [%%g0 + %%g0] %6
+2:	mov	%0, %%g4
+	sta	%%o2, [%%g4] %1
+	mov	%2, %%g7
+	retl
+	 lda	[%%g7] %1, %%g0
+"	: : "i" (SRMMU_CTX_REG), "i" (ASI_M_MMUREGS), "i" (SRMMU_FAULT_STATUS),
+	    "i" (ASI_M_FLUSH_PROBE), "i" (PAGE_SIZE), "i" (ASI_M_FLUSH_PAGE),
+	    "i" (ASI_M_FLUSH_IWHOLE));
 }
 
 /* HyperSparc is copy-back. */
 static void hypersparc_flush_page_to_ram(unsigned long page)
 {
-	page &= PAGE_MASK;
+#if !defined(__svr4__) && !defined(__ELF__)
 	__asm__ __volatile__("
-	lda	[%0] %2, %%g4
-	orcc	%%g4, 0x0, %%g0
+	sethi	%hi(_vac_line_size), %g1
+	ld	[%g1 + %lo(_vac_line_size)], %o4");
+#else
+	__asm__ __volatile__("
+	sethi	%hi(vac_line_size), %g1
+	ld	[%g1 + %lo(vac_line_size)], %o4");
+#endif
+	__asm__ __volatile__("
+	andn	%%o0, (%0 - 1), %%o0
+	add	%%o4, %%o4, %%o5
+	or	%%o0, 0x400, %%g7
+	lda	[%%g7] %2, %%g5
+	add	%%o4, %%o5, %%g1
+	orcc	%%g5, 0x0, %%g0
 	be	2f
-	 sethi	%%hi(%7), %%g5
-1:	subcc	%%g5, %6, %%g5		! hyper_flush_cache_page
+	 add	%%o4, %%g1, %%g2
+	sethi	%%hi(%0), %%g5
+	add	%%o4, %%g2, %%g3
+	add	%%o0, %%g5, %%o0
+	add	%%o4, %%g3, %%g4
+	add	%%o4, %%g4, %%g5
+	add	%%o4, %%g5, %%g7
+1:	sub	%%o0, %%g7, %%o0
+	sta	%%g0, [%%o0 + %%g0] %1
+	sta	%%g0, [%%o0 + %%o4] %1
+	sta	%%g0, [%%o0 + %%o5] %1
+	sta	%%g0, [%%o0 + %%g1] %1
+	sta	%%g0, [%%o0 + %%g2] %1
+	sta	%%g0, [%%o0 + %%g3] %1
+	andcc	%%o0, 0xffc, %%g0
+	sta	%%g0, [%%o0 + %%g4] %1
 	bne	1b
-	 sta	%%g0, [%1 + %%g5] %3
-2:	lda	[%4] %5, %%g0"
+	 sta	%%g0, [%%o0 + %%g5] %1
+2:	mov	%3, %%g1
+	lda	[%%g1] %4, %%g0"
 	: /* no outputs */
-	: "r" (page | 0x400), "r" (page), "i" (ASI_M_FLUSH_PROBE),
-	  "i" (ASI_M_FLUSH_PAGE), "r" (SRMMU_FAULT_STATUS), "i" (ASI_M_MMUREGS),
-	  "r" (vac_line_size), "i" (PAGE_SIZE)
-	: "g4", "g5");
+	: "i" (PAGE_SIZE), "i" (ASI_M_FLUSH_PAGE), "i" (ASI_M_FLUSH_PROBE),
+	  "i" (SRMMU_FAULT_STATUS), "i" (ASI_M_MMUREGS));
+}
+
+static void hypersparc_flush_chunk(unsigned long chunk)
+{
+	hypersparc_flush_page_to_ram(chunk);
 }
 
 /* HyperSparc is IO cache coherent. */
@@ -1891,23 +2037,41 @@ static void hypersparc_flush_cache_page_to_uncache(unsigned long page)
 
 static unsigned long hypersparc_getpage(void)
 {
-	unsigned long page = get_free_page(GFP_KERNEL);
+	register unsigned long page asm("i0");
 
+	page = get_free_page(GFP_KERNEL);
+#if !defined(__svr4__) && !defined(__ELF__)
 	__asm__ __volatile__("
-	lda	[%0] %2, %%g4
-	orcc	%%g4, 0x0, %%g0
-	be	2f
-	 sethi	%%hi(%7), %%g5
-1:	subcc	%%g5, %6, %%g5		! hyper_flush_cache_page
+	sethi	%hi(_vac_line_size), %g1
+	ld	[%g1 + %lo(_vac_line_size)], %o4");
+#else
+	__asm__ __volatile__("
+	sethi	%hi(vac_line_size), %g1
+	ld	[%g1 + %lo(vac_line_size)], %o4");
+#endif
+	__asm__ __volatile__("
+	sethi	%%hi(%0), %%g5
+	add	%%o4, %%o4, %%o5
+	add	%%o4, %%o5, %%g1
+	add	%%o4, %%g1, %%g2
+	add	%%o4, %%g2, %%g3
+	add	%%i0, %%g5, %%o0
+	add	%%o4, %%g3, %%g4
+	add	%%o4, %%g4, %%g5
+	add	%%o4, %%g5, %%g7
+1:	sub	%%o0, %%g7, %%o0
+	sta	%%g0, [%%o0 + %%g0] %1
+	sta	%%g0, [%%o0 + %%o4] %1
+	sta	%%g0, [%%o0 + %%o5] %1
+	sta	%%g0, [%%o0 + %%g1] %1
+	sta	%%g0, [%%o0 + %%g2] %1
+	sta	%%g0, [%%o0 + %%g3] %1
+	andcc	%%o0, 0xffc, %%g0
+	sta	%%g0, [%%o0 + %%g4] %1
 	bne	1b
-	 sta	%%g0, [%1 + %%g5] %3
-2:	lda	[%4] %5, %%g0"
+	 sta	%%g0, [%%o0 + %%g5] %1"
 	: /* no outputs */
-	: "r" (page | 0x400), "r" (page), "i" (ASI_M_FLUSH_PROBE),
-	  "i" (ASI_M_FLUSH_PAGE), "r" (SRMMU_FAULT_STATUS), "i" (ASI_M_MMUREGS),
-	  "r" (vac_line_size), "i" (PAGE_SIZE)
-	: "g4", "g5");
-
+	: "i" (PAGE_SIZE), "i" (ASI_M_FLUSH_PAGE));
 	return page;
 }
 
@@ -1989,21 +2153,7 @@ static void hypersparc_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp)
 {
 	unsigned long page = ((unsigned long) pgdp) & PAGE_MASK;
 
-	__asm__ __volatile__("
-	lda	[%0] %2, %%g4
-	orcc	%%g4, 0x0, %%g0
-	be	2f
-	 sethi	%%hi(%7), %%g5
-1:	subcc	%%g5, %6, %%g5		! hyper_flush_cache_page
-	bne	1b
-	 sta	%%g0, [%1 + %%g5] %3
-2:	lda	[%4] %5, %%g0"
-	: /* no outputs */
-	: "r" (page | 0x400), "r" (page), "i" (ASI_M_FLUSH_PROBE),
-	  "i" (ASI_M_FLUSH_PAGE), "r" (SRMMU_FAULT_STATUS), "i" (ASI_M_MMUREGS),
-	  "r" (vac_line_size), "i" (PAGE_SIZE)
-	: "g4", "g5");
-
+	hypersparc_flush_page_to_ram(page);
 	if(tsk->mm->context != NO_CONTEXT) {
 		flush_cache_mm(tsk->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
@@ -3101,6 +3251,8 @@ __initfunc(static void init_hypersparc(void))
 	flush_cache_page_to_uncache = hypersparc_flush_cache_page_to_uncache;
 	flush_tlb_page_for_cbit = hypersparc_flush_tlb_page_for_cbit;
 
+	flush_chunk = hypersparc_flush_chunk; /* local flush _only_ */
+
 	ctxd_set = hypersparc_ctxd_set;
 	switch_to_context = hypersparc_switch_to_context;
 	init_new_context = hypersparc_init_new_context;
@@ -3164,6 +3316,8 @@ __initfunc(static void init_cypress_common(void))
 	flush_tlb_mm = cypress_flush_tlb_mm;
 	flush_tlb_page = cypress_flush_tlb_page;
 	flush_tlb_range = cypress_flush_tlb_range;
+
+	flush_chunk = cypress_flush_chunk; /* local flush _only_ */
 
 	flush_page_to_ram = cypress_flush_page_to_ram;
 	flush_sig_insns = cypress_flush_sig_insns;
@@ -3273,6 +3427,8 @@ __initfunc(static void init_swift(void))
 	flush_cache_page = swift_flush_cache_page;
 	flush_cache_range = swift_flush_cache_range;
 
+	flush_chunk = swift_flush_chunk; /* local flush _only_ */
+
 	flush_tlb_all = swift_flush_tlb_all;
 	flush_tlb_mm = swift_flush_tlb_mm;
 	flush_tlb_page = swift_flush_tlb_page;
@@ -3318,6 +3474,8 @@ __initfunc(static void init_tsunami(void))
 	flush_cache_mm = tsunami_flush_cache_mm;
 	flush_cache_page = tsunami_flush_cache_page;
 	flush_cache_range = tsunami_flush_cache_range;
+
+	flush_chunk = tsunami_flush_chunk; /* local flush _only_ */
 
 	flush_tlb_all = tsunami_flush_tlb_all;
 	flush_tlb_mm = tsunami_flush_tlb_mm;
@@ -3410,6 +3568,8 @@ __initfunc(static void init_viking(void))
 
 		flush_cache_page_to_uncache = viking_no_mxcc_flush_page;
 
+		flush_chunk = viking_nomxcc_flush_chunk; /* local flush _only_ */
+
 		/* We need this to make sure old viking takes no hits
 		 * on it's cache for dma snoops to workaround the
 		 * "load from non-cacheable memory" interrupt bug.
@@ -3421,6 +3581,8 @@ __initfunc(static void init_viking(void))
 		srmmu_name = "TI Viking/MXCC";
 		viking_mxcc_present = 1;
 		flush_cache_page_to_uncache = viking_mxcc_flush_page;
+
+		flush_chunk = viking_mxcc_flush_chunk; /* local flush _only_ */
 
 		/* MXCC vikings lack the DMA snooping bug. */
 		flush_page_for_dma = viking_flush_page_for_dma;
@@ -3518,10 +3680,6 @@ extern unsigned long spwin_mmu_patchme, fwin_mmu_patchme,
 extern unsigned long spwin_srmmu_stackchk, srmmu_fwin_stackchk,
 	tsetup_srmmu_stackchk, srmmu_rett_stackchk;
 
-#ifdef __SMP__
-extern unsigned long rirq_mmu_patchme, srmmu_reti_stackchk;
-#endif
-
 extern unsigned long srmmu_fault;
 
 #define PATCH_BRANCH(insn, dest) do { \
@@ -3538,9 +3696,6 @@ __initfunc(static void patch_window_trap_handlers(void))
 	PATCH_BRANCH(fwin_mmu_patchme, srmmu_fwin_stackchk);
 	PATCH_BRANCH(tsetup_mmu_patchme, tsetup_srmmu_stackchk);
 	PATCH_BRANCH(rtrap_mmu_patchme, srmmu_rett_stackchk);
-#ifdef __SMP__
-	PATCH_BRANCH(rirq_mmu_patchme, srmmu_reti_stackchk);
-#endif
 	PATCH_BRANCH(sparc_ttable[SP_TRAP_TFLT].inst_three, srmmu_fault);
 	PATCH_BRANCH(sparc_ttable[SP_TRAP_DFLT].inst_three, srmmu_fault);
 	PATCH_BRANCH(sparc_ttable[SP_TRAP_DACC].inst_three, srmmu_fault);

@@ -8,6 +8,8 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -111,6 +113,7 @@ void try_to_clear_window_buffer(struct pt_regs *regs, int who)
 	struct thread_struct *tp;
 	int window;
 
+	lock_kernel();
 	flush_user_windows();
 	tp = &current->tss;
 	for(window = 0; window < tp->w_saved; window++) {
@@ -121,4 +124,5 @@ void try_to_clear_window_buffer(struct pt_regs *regs, int who)
 			do_exit(SIGILL);
 	}
 	tp->w_saved = 0;
+	unlock_kernel();
 }

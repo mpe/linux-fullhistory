@@ -100,7 +100,7 @@ struct linux_binfmt script_format = {
 #ifndef MODULE
 	NULL, 0, load_script, NULL, NULL
 #else
-	NULL, &__this_module.usecount, load_script, NULL, NULL
+	NULL, &__this_module, load_script, NULL, NULL
 #endif
 };
 

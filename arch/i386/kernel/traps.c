@@ -20,6 +20,8 @@
 #include <linux/config.h>
 #include <linux/timer.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -38,24 +40,29 @@ static inline void console_verbose(void)
 #define DO_ERROR(trapnr, signr, str, name, tsk) \
 asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 { \
+	lock_kernel(); \
 	tsk->tss.error_code = error_code; \
 	tsk->tss.trap_no = trapnr; \
 	force_sig(signr, tsk); \
 	die_if_kernel(str,regs,error_code); \
+	unlock_kernel(); \
 }
 
 #define DO_VM86_ERROR(trapnr, signr, str, name, tsk) \
 asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 { \
+	lock_kernel(); \
 	if (regs->eflags & VM_MASK) { \
 		if (!handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, trapnr)) \
-			return; \
+			goto out; \
 		/* else fall through */ \
 	} \
 	tsk->tss.error_code = error_code; \
 	tsk->tss.trap_no = trapnr; \
 	force_sig(signr, tsk); \
 	die_if_kernel(str,regs,error_code); \
+out: \
+	unlock_kernel(); \
 }
 
 #define get_seg_byte(seg,addr) ({ \
@@ -194,18 +201,22 @@ DO_ERROR(18, SIGSEGV, "reserved", reserved, current)
 
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {
+	lock_kernel();
 	if (regs->eflags & VM_MASK) {
 		handle_vm86_fault((struct kernel_vm86_regs *) regs, error_code);
-		return;
+		goto out;
 	}
 	die_if_kernel("general protection",regs,error_code);
 	current->tss.error_code = error_code;
 	current->tss.trap_no = 13;
 	force_sig(SIGSEGV, current);	
+out:
+	unlock_kernel();
 }
 
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
+	lock_kernel();
 #ifdef CONFIG_SMP_NMI_INVAL
 	smp_flush_tlb_rcv();
 #else
@@ -215,13 +226,15 @@ asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 	printk("power saving mode enabled.\n");
 #endif	
 #endif
+	unlock_kernel();
 }
 
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 {
+	lock_kernel();
 	if (regs->eflags & VM_MASK) {
 		handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, 1);
-		return;
+		goto out;
 	}
 	force_sig(SIGTRAP, current);
 	current->tss.trap_no = 1;
@@ -231,9 +244,11 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 		__asm__("movl %0,%%db7"
 			: /* no output */
 			: "r" (0));
-		return;
+		goto out;
 	}
 	die_if_kernel("debug",regs,error_code);
+out:
+	unlock_kernel();
 }
 
 /*
@@ -245,6 +260,7 @@ void math_error(void)
 {
 	struct task_struct * task;
 
+	lock_kernel();
 	clts();
 #ifdef __SMP__
 	task = current;
@@ -253,7 +269,7 @@ void math_error(void)
 	last_task_used_math = NULL;
 	if (!task) {
 		__asm__("fnclex");
-		return;
+		goto out;
 	}
 #endif
 	/*
@@ -266,18 +282,26 @@ void math_error(void)
 	force_sig(SIGFPE, task);
 	task->tss.trap_no = 16;
 	task->tss.error_code = 0;
+#ifndef __SMP__
+out:
+#endif
+	unlock_kernel();
 }
 
 asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
 {
+	lock_kernel();
 	ignore_irq13 = 1;
 	math_error();
+	unlock_kernel();
 }
 
 asmlinkage void do_spurious_interrupt_bug(struct pt_regs * regs,
 					  long error_code)
 {
+	lock_kernel();
 	printk("Ignoring P6 Local APIC Spurious Interrupt Bug...\n");
+	unlock_kernel();
 }
 
 /*
@@ -289,6 +313,7 @@ asmlinkage void do_spurious_interrupt_bug(struct pt_regs * regs,
  */
 asmlinkage void math_state_restore(void)
 {
+	lock_kernel();
 	__asm__ __volatile__("clts");		/* Allow maths ops (or we recurse) */
 
 /*
@@ -301,7 +326,7 @@ asmlinkage void math_state_restore(void)
  */
 #ifndef __SMP__
 	if (last_task_used_math == current)
-		return;
+		goto out;
 	if (last_task_used_math)
 		__asm__("fnsave %0":"=m" (last_task_used_math->tss.i387));
 	else
@@ -320,16 +345,22 @@ asmlinkage void math_state_restore(void)
 		current->used_math = 1;
 	}
 	current->flags|=PF_USEDFPU;		/* So we fnsave on switch_to() */
+#ifndef __SMP__
+out:
+#endif
+	unlock_kernel();
 }
 
 #ifndef CONFIG_MATH_EMULATION
 
 asmlinkage void math_emulate(long arg)
 {
-  printk("math-emulation not enabled and no coprocessor found.\n");
-  printk("killing %s.\n",current->comm);
-  force_sig(SIGFPE,current);
-  schedule();
+	lock_kernel();
+	printk("math-emulation not enabled and no coprocessor found.\n");
+	printk("killing %s.\n",current->comm);
+	force_sig(SIGFPE,current);
+	schedule();
+	unlock_kernel();
 }
 
 #endif /* CONFIG_MATH_EMULATION */

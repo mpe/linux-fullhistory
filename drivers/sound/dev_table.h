@@ -508,9 +508,12 @@ struct sound_timer_operations {
 
 #if defined(MODULE) || (!defined(linux) && !defined(_AIX))
 	int trace_init = 0;
-#   else
+#else
 	int trace_init = 1;
-#   endif
+#endif
+#ifdef MODULE_PARM
+MODULE_PARM(trace_init, "i");
+#endif
 
 #else
 	extern struct audio_operations * audio_devs[MAX_AUDIO_DEV]; extern int num_audiodevs;

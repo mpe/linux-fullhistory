@@ -44,7 +44,7 @@ static struct file_operations sysv_file_operations = {
 	sysv_file_read,		/* read */
 	sysv_file_write,	/* write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */

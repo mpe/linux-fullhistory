@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.71 1996/12/29 20:46:02 davem Exp $
+/* $Id: sys_sunos.c,v 1.75 1997/01/26 07:12:31 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -8,22 +8,6 @@
  *
  * Copyright (C) 1995 Adrian M. Rodriguez (adrian@remus.rutgers.edu)
  *
- * The sunos_poll routine is based on iBCS2's poll routine, this
- * is the copyright message for that file:
- *
- * This file contains the procedures for the handling of poll.
- *
- * Copyright (C) 1994 Eric Youngdale
- *
- * Created for Linux based loosely upon linux select code, which
- * in turn is loosely based upon Mathius Lattner's minix
- * patches by Peter MacDonald. Heavily edited by Linus.
- *
- * Poll is used by SVr4 instead of select, and it has considerably
- * more functionality.  Parts of it are related to STREAMS, and since
- * we do not have streams, we fake it.  In fact, select() still exists
- * under SVr4, but libc turns it into a poll() call instead.  We attempt
- * to do the inverse mapping.
  */
 
 #include <linux/kernel.h>
@@ -46,6 +30,8 @@
 #include <linux/malloc.h>
 #include <linux/pagemap.h>
 #include <linux/errno.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #ifndef KERNEL_DS
@@ -79,19 +65,22 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 	struct file * file = NULL;
 	unsigned long retval, ret_type;
 
+	lock_kernel();
 	current->personality |= PER_BSD;
 	if(flags & MAP_NORESERVE) {
 		printk("%s: unimplemented SunOS MAP_NORESERVE mmap() flag\n",
 		       current->comm);
 		flags &= ~MAP_NORESERVE;
 	}
+	retval = -EBADF;
 	if(!(flags & MAP_ANONYMOUS))
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-			return -EBADF;
+			goto out;
+	retval = -ENOMEM;
 	if(!(flags & MAP_FIXED) && !addr) {
 		addr = get_unmapped_area(addr, len);
 		if(!addr)
-			return -ENOMEM;
+			goto out;
 	}
 	/* If this is ld.so or a shared library doing an mmap
 	 * of /dev/zero, transform it into an anonymous mapping.
@@ -108,19 +97,23 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 	flags &= ~_MAP_NEW;
 
 	/* See asm-sparc/uaccess.h */
+	retval = -EINVAL;
 	if((len > (TASK_SIZE - PAGE_SIZE)) || (addr > (TASK_SIZE-len-PAGE_SIZE)))
-		return -EINVAL;
+		goto out;
 
 	if(sparc_cpu_model == sun4c) {
-		if(((addr >= 0x20000000) && (addr < 0xe0000000)))
-			return current->mm->brk;
+		if(((addr >= 0x20000000) && (addr < 0xe0000000))) {
+			retval = current->mm->brk;
+			goto out;
+		}
 	}
 
 	retval = do_mmap(file, addr, len, prot, flags, off);
-	if(ret_type)
-		return retval;
-	else
-		return ((retval < PAGE_OFFSET) ? 0 : retval);
+	if(!ret_type)
+		retval = ((retval < PAGE_OFFSET) ? 0 : retval);
+out:
+	unlock_kernel();
+	return retval;
 }
 
 /* lmbench calls this, just say "yeah, ok" */
@@ -135,23 +128,26 @@ asmlinkage int sunos_mctl(unsigned long addr, unsigned long len, int function, c
  */
 asmlinkage int sunos_brk(unsigned long brk)
 {
-	int freepages;
+	int freepages, retval = -ENOMEM;
 	unsigned long rlim;
 	unsigned long newbrk, oldbrk;
 
+	lock_kernel();
 	if(sparc_cpu_model == sun4c) {
-		if(brk >= 0x20000000 && brk < 0xe0000000)
-			return -ENOMEM;
+		if(brk >= 0x20000000 && brk < 0xe0000000) {
+			goto out;
+		}
 	}
 
 	if (brk < current->mm->end_code)
-		return -ENOMEM;
+		goto out;
 
 	newbrk = PAGE_ALIGN(brk);
 	oldbrk = PAGE_ALIGN(current->mm->brk);
+	retval = 0;
 	if (oldbrk == newbrk) {
 		current->mm->brk = brk;
-		return 0;
+		goto out;
 	}
 
 	/*
@@ -160,22 +156,23 @@ asmlinkage int sunos_brk(unsigned long brk)
 	if (brk <= current->mm->brk) {
 		current->mm->brk = brk;
 		do_munmap(newbrk, oldbrk-newbrk);
-		return 0;
+		goto out;
 	}
 	/*
 	 * Check against rlimit and stack..
 	 */
+	retval = -ENOMEM;
 	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
 	if (rlim >= RLIM_INFINITY)
 		rlim = ~0;
 	if (brk - current->mm->end_code > rlim)
-		return -ENOMEM;
+		goto out;
 
 	/*
 	 * Check against existing mmap mappings.
 	 */
 	if (find_vma_intersection(current->mm, oldbrk, newbrk+PAGE_SIZE))
-		return -ENOMEM;
+		goto out;
 
 	/*
 	 * stupid algorithm to decide if we have enough memory: while
@@ -190,7 +187,7 @@ asmlinkage int sunos_brk(unsigned long brk)
 	freepages -= num_physpages >> 4;
 	freepages -= (newbrk-oldbrk) >> PAGE_SHIFT;
 	if (freepages < 0)
-		return -ENOMEM;
+		goto out;
 	/*
 	 * Ok, we have probably got enough memory - let it rip.
 	 */
@@ -198,20 +195,25 @@ asmlinkage int sunos_brk(unsigned long brk)
 	do_mmap(NULL, oldbrk, newbrk-oldbrk,
 		PROT_READ|PROT_WRITE|PROT_EXEC,
 		MAP_FIXED|MAP_PRIVATE, 0);
-	return 0;
+	retval = 0;
+out:
+	unlock_kernel();
+	return retval;
 }
 
 asmlinkage unsigned long sunos_sbrk(int increment)
 {
 	int error;
-	unsigned long oldbrk = current->mm->brk;
+	unsigned long oldbrk;
 
 	/* This should do it hopefully... */
+	lock_kernel();
+	oldbrk = current->mm->brk;
 	error = sunos_brk(((int) current->mm->brk) + increment);
-	if(error)
-		return error;
-	else
-		return oldbrk;
+	if(!error)
+		error = oldbrk;
+	unlock_kernel();
+	return error;
 }
 
 /* XXX Completely undocumented, and completely magic...
@@ -221,8 +223,10 @@ asmlinkage unsigned long sunos_sbrk(int increment)
  */
 asmlinkage unsigned long sunos_sstk(int increment)
 {
+	lock_kernel();
 	printk("%s: Call to sunos_sstk(increment<%d>) is unsupported\n",
 	       current->comm, increment);
+	unlock_kernel();
 	return -1;
 }
 
@@ -243,10 +247,11 @@ static char *vstrings[] = {
 asmlinkage void sunos_vadvise(unsigned long strategy)
 {
 	/* I wanna see who uses this... */
+	lock_kernel();
 	printk("%s: Advises us to use %s paging strategy\n",
 	       current->comm,
 	       strategy <= 3 ? vstrings[strategy] : "BOGUS");
-	return; /* We don't do diddly... */
+	unlock_kernel();
 }
 
 /* Same as vadvise, and just as bogus, but for a range of virtual
@@ -270,11 +275,12 @@ asmlinkage void sunos_madvise(unsigned long address, unsigned long len,
 			      unsigned long strategy)
 {
 	/* I wanna see who uses this... */
+	lock_kernel();
 	printk("%s: Advises us to use %s paging strategy for addr<%08lx> len<%08lx>\n",
 	       current->comm,
 	       strategy <= 4 ? mstrings[strategy] : "BOGUS",
 	       address, len);
-	return; /* We don't do diddly... */
+	unlock_kernel();
 }
 
 /* Places into character array, the status of all the pages in the passed
@@ -293,33 +299,39 @@ asmlinkage int sunos_mincore(unsigned long addr, unsigned long len, char *array)
 	pmd_t *pmdp;
 	pte_t *ptep;
 	unsigned long limit;
-	int num_pages, pnum;
+	int num_pages, pnum, retval = -EINVAL;
 
+	lock_kernel();
 	if(addr & ~(PAGE_MASK))
-		return -EINVAL;
+		goto out;
 
 	num_pages = (len / PAGE_SIZE);
+	retval = -EFAULT;
 	if(verify_area(VERIFY_WRITE, array, num_pages))
-		return -EFAULT;
+		goto out;
+	retval = -ENOMEM;
 	if((addr >= PAGE_OFFSET) || ((addr + len) > PAGE_OFFSET))
-		return -ENOMEM; /* I'm sure you're curious about kernel mappings.. */
+		goto out; /* I'm sure you're curious about kernel mappings.. */
 
 	/* Wheee, go through pte's */
 	pnum = 0;
 	for(limit = addr + len; addr < limit; addr += PAGE_SIZE, pnum++) {
 		pgdp = pgd_offset(current->mm, addr);
 		if(pgd_none(*pgdp))
-			return -ENOMEM; /* As per SunOS manpage */
+			goto out; /* As per SunOS manpage */
 		pmdp = pmd_offset(pgdp, addr);
 		if(pmd_none(*pmdp))
-			return -ENOMEM; /* As per SunOS manpage */
+			goto out; /* As per SunOS manpage */
 		ptep = pte_offset(pmdp, addr);
 		if(pte_none(*ptep))
-			return -ENOMEM; /* As per SunOS manpage */
+			goto out; /* As per SunOS manpage */
 		/* Page in core or Swapped page? */
 		__put_user((pte_present(*ptep) ? 1 : 0), &array[pnum]);
 	}
-	return 0; /* Success... I think... */
+	retval = 0; /* Success... I think... */
+out:
+	unlock_kernel();
+	return retval;
 }
 
 /* This just wants the soft limit (ie. rlim_cur element) of the RLIMIT_NOFILE
@@ -339,10 +351,12 @@ asmlinkage unsigned long sunos_sigblock(unsigned long blk_mask)
 	unsigned long flags;
 	unsigned long old;
 
+	lock_kernel();
 	save_and_cli(flags);
 	old = current->blocked;
 	current->blocked |= (blk_mask & _BLOCKABLE);
 	restore_flags(flags);
+	unlock_kernel();
 	return old;
 }
 
@@ -351,10 +365,12 @@ asmlinkage unsigned long sunos_sigsetmask(unsigned long newmask)
 	unsigned long flags;
 	unsigned long retval;
 
+	lock_kernel();
 	save_and_cli(flags);
 	retval = current->blocked;
 	current->blocked = newmask & _BLOCKABLE;
 	restore_flags(flags);
+	unlock_kernel();
 	return retval;
 }
 
@@ -410,14 +426,17 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 	struct file * file;
 	struct sunos_dirent * lastdirent;
 	struct sunos_dirent_callback buf;
-	int error;
+	int error = -EBADF;
 
+	lock_kernel();
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-		return -EBADF;
+		goto out;
+	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
-		return -ENOTDIR;
+		goto out;
+	error = -EINVAL;
 	if(cnt < (sizeof(struct sunos_dirent) + 255))
-		return -EINVAL;
+		goto out;
 
 	buf.curr = (struct sunos_dirent *) dirent;
 	buf.previous = NULL;
@@ -425,12 +444,17 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 	buf.error = 0;
 	error = file->f_op->readdir(file->f_inode, file, &buf, sunos_filldir);
 	if (error < 0)
-		return error;
+		goto out;
 	lastdirent = buf.previous;
-	if (!lastdirent)
-		return buf.error;
-	put_user(file->f_pos, &lastdirent->d_off);
-	return cnt - buf.count;
+	if (!lastdirent) {
+		error = buf.error;
+	} else {
+		put_user(file->f_pos, &lastdirent->d_off);
+		error = cnt - buf.count;
+	}
+out:
+	unlock_kernel();
+	return error;
 }
 
 /* Old sunos getdirentries, severely broken compatibility stuff here. */
@@ -477,14 +501,17 @@ asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsi
 	struct file * file;
 	struct sunos_direntry * lastdirent;
 	struct sunos_direntry_callback buf;
-	int error;
+	int error = -EBADF;
 
+	lock_kernel();
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-		return -EBADF;
+		goto out;
+	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
-		return -ENOTDIR;
+		goto out;
+	error = -EINVAL;
 	if(cnt < (sizeof(struct sunos_direntry) + 255))
-		return -EINVAL;
+		goto out;
 
 	buf.curr = (struct sunos_direntry *) dirent;
 	buf.previous = NULL;
@@ -492,26 +519,36 @@ asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsi
 	buf.error = 0;
 	error = file->f_op->readdir(file->f_inode, file, &buf, sunos_filldirentry);
 	if (error < 0)
-		return error;
+		goto out;
 	lastdirent = buf.previous;
-	if (!lastdirent)
-		return buf.error;
-	put_user(file->f_pos, basep);
-	return cnt - buf.count;
+	if (!lastdirent) {
+		error = buf.error;
+	} else {
+		put_user(file->f_pos, basep);
+		error = cnt - buf.count;
+	}
+out:
+	unlock_kernel();
+	return error;
 }
 
 asmlinkage int sunos_getdomainname(char *name, int len)
 {
         int nlen = strlen(system_utsname.domainname);
+	int ret = -EFAULT;
 
+	lock_kernel();
         if (nlen < len)
                 len = nlen;
 
 	if(len > __NEW_UTS_LEN)
-		return -EFAULT;
+		goto out;
 	if(copy_to_user(name, system_utsname.domainname, len))
-		return -EFAULT;
-	return 0;
+		goto out;
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 struct sunos_utsname {
@@ -525,22 +562,29 @@ struct sunos_utsname {
 
 asmlinkage int sunos_uname(struct sunos_utsname *name)
 {
+	int ret = -EFAULT;
+
+	lock_kernel();
 	if(!name)
-		return -EFAULT;
+		goto out;
 	if(copy_to_user(&name->sname[0], &system_utsname.sysname[0], sizeof(name->sname) - 1))
-		return -EFAULT;
+		goto out;
 	copy_to_user(&name->nname[0], &system_utsname.nodename[0], sizeof(name->nname) - 1);
 	put_user('\0', &name->nname[8]);
 	copy_to_user(&name->rel[0], &system_utsname.release[0], sizeof(name->rel) - 1);
 	copy_to_user(&name->ver[0], &system_utsname.version[0], sizeof(name->ver) - 1);
 	copy_to_user(&name->mach[0], &system_utsname.machine[0], sizeof(name->mach) - 1);
-	return 0;
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sunos_nosys(void)
 {
 	struct pt_regs *regs;
 
+	lock_kernel();
 	regs = current->tss.kregs;
 	current->tss.sig_address = regs->pc;
 	current->tss.sig_desc = regs->u_regs[UREG_G1];
@@ -548,6 +592,7 @@ asmlinkage int sunos_nosys(void)
 	printk("Process makes ni_syscall number %d, register dump:\n",
 	       (int) regs->u_regs[UREG_G1]);
 	show_regs(regs);
+	unlock_kernel();
 	return -ENOSYS;
 }
 
@@ -556,33 +601,51 @@ asmlinkage int sunos_nosys(void)
  */
 asmlinkage int sunos_fpathconf(int fd, int name)
 {
+	int ret;
+
+	lock_kernel();
 	switch(name) {
 	case _PCONF_LINK:
-		return LINK_MAX;
+		ret = LINK_MAX;
+		break;
 	case _PCONF_CANON:
-		return MAX_CANON;
+		ret = MAX_CANON;
+		break;
 	case _PCONF_INPUT:
-		return MAX_INPUT;
+		ret = MAX_INPUT;
+		break;
 	case _PCONF_NAME:
-		return NAME_MAX;
+		ret = NAME_MAX;
+		break;
 	case _PCONF_PATH:
-		return PATH_MAX;
+		ret = PATH_MAX;
+		break;
 	case _PCONF_PIPE:
-		return PIPE_BUF;
-	case _PCONF_CHRESTRICT:
-		return 1; /* XXX Investigate XXX */
-	case _PCONF_NOTRUNC:
-		return 0; /* XXX Investigate XXX */
+		ret = PIPE_BUF;
+		break;
+	case _PCONF_CHRESTRICT:		/* XXX Investigate XXX */
+		ret = 1;
+		break;
+	case _PCONF_NOTRUNC:		/* XXX Investigate XXX */
 	case _PCONF_VDISABLE:
-		return 0;
+		ret = 0;
+		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
+		break;
 	}
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sunos_pathconf(char *path, int name)
 {
-	return sunos_fpathconf(0, name); /* XXX cheese XXX */
+	int ret;
+
+	lock_kernel();
+	ret = sunos_fpathconf(0, name); /* XXX cheese XXX */
+	unlock_kernel();
+	return ret;
 }
 
 /* SunOS mount system call emulation */
@@ -591,9 +654,14 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp);
 
 asmlinkage int sunos_select(int width, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 {
+	int ret;
+
 	/* SunOS binaries expect that select won't change the tvp contents */
+	lock_kernel();
 	current->personality |= STICKY_TIMEOUTS;
-	return sys_select (width, inp, outp, exp, tvp);
+	ret = sys_select (width, inp, outp, exp, tvp);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage void sunos_nop(void)
@@ -757,15 +825,17 @@ asmlinkage int
 sunos_mount(char *type, char *dir, int flags, void *data)
 {
 	int linux_flags = MS_MGC_MSK; /* new semantics */
+	int ret = -EINVAL;
 	char *dev_fname = 0;
 
+	lock_kernel();
 	/* We don't handle the integer fs type */
 	if ((flags & SMNT_NEWTYPE) == 0)
-		return -EINVAL;
+		goto out;
 
 	/* Do not allow for those flags we don't support */
 	if (flags & (SMNT_GRPID|SMNT_NOSUB|SMNT_MULTI|SMNT_SYS5))
-		return -EINVAL;
+		goto out;
 
 	if(flags & SMNT_REMOUNT)
 		linux_flags |= MS_REMOUNT;
@@ -780,14 +850,20 @@ sunos_mount(char *type, char *dir, int flags, void *data)
 	} else if(strcmp(type, "minix") == 0) {
 		dev_fname = (char *) data;
 	} else if(strcmp(type, "nfs") == 0) {
-		return sunos_nfs_mount (dir, flags, data);
+		ret = sunos_nfs_mount (dir, flags, data);
+		goto out;
         } else if(strcmp(type, "ufs") == 0) {
 		printk("Warning: UFS filesystem mounts unsupported.\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto out;
 	} else if(strcmp(type, "proc")) {
-		return -ENODEV;
+		ret = -ENODEV;
+		goto out;
 	}
-	return sys_mount(dev_fname, dir, type, linux_flags, NULL);
+	ret = sys_mount(dev_fname, dir, type, linux_flags, NULL);
+out:
+	unlock_kernel();
+	return ret;
 }
 
 extern asmlinkage int sys_setsid(void);
@@ -795,217 +871,102 @@ extern asmlinkage int sys_setpgid(pid_t, pid_t);
 
 asmlinkage int sunos_setpgrp(pid_t pid, pid_t pgid)
 {
+	int ret;
+
 	/* So stupid... */
+	lock_kernel();
 	if((!pid || pid == current->pid) &&
 	   !pgid) {
 		sys_setsid();
-		return 0;
+		ret = 0;
 	} else {
-		return sys_setpgid(pid, pgid);
+		ret = sys_setpgid(pid, pgid);
 	}
+	unlock_kernel();
+	return ret;
 }
 
 /* So stupid... */
 extern asmlinkage int sys_wait4(pid_t, unsigned int *, int, struct rusage *);
 asmlinkage int sunos_wait4(pid_t pid, unsigned int *stat_addr, int options, struct rusage *ru)
 {
-	return sys_wait4((pid ? pid : -1), stat_addr, options, ru);
+	int ret;
+
+	lock_kernel();
+	ret = sys_wait4((pid ? pid : -1), stat_addr, options, ru);
+	unlock_kernel();
+	return ret;
 }
 
 extern int kill_pg(int, int, int);
 asmlinkage int sunos_killpg(int pgrp, int sig)
 {
-	return kill_pg(pgrp, sig, 0);
+	int ret;
+
+	lock_kernel();
+	ret = kill_pg(pgrp, sig, 0);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sunos_audit(void)
 {
+	lock_kernel();
 	printk ("sys_audit\n");
+	unlock_kernel();
 	return -1;
 }
 
 extern asmlinkage unsigned long sunos_gethostid(void)
 {
-	return ((unsigned long)idprom->id_machtype << 24) |
-	       (unsigned long)idprom->id_sernum;
+	unsigned long ret;
+
+	lock_kernel();
+	ret = ((unsigned long)idprom->id_machtype << 24) |
+		(unsigned long)idprom->id_sernum;
+	unlock_kernel();
+	return ret;
 }
 
 extern asmlinkage long sunos_sysconf (int name)
 {
+	long ret;
+
+	lock_kernel();
 	switch (name){
 	case _SC_ARG_MAX:
-		return ARG_MAX;
+		ret = ARG_MAX;
+		break;
 	case _SC_CHILD_MAX:
-		return CHILD_MAX;
+		ret = CHILD_MAX;
+		break;
 	case _SC_CLK_TCK:
-		return HZ;
+		ret = HZ;
+		break;
 	case _SC_NGROUPS_MAX:
-		return NGROUPS_MAX;
+		ret = NGROUPS_MAX;
+		break;
 	case _SC_OPEN_MAX:
-		return OPEN_MAX;
+		ret = OPEN_MAX;
+		break;
 	case _SC_JOB_CONTROL:
-		return 1;	/* yes, we do support job control */
+		ret = 1;	/* yes, we do support job control */
+		break;
 	case _SC_SAVED_IDS:
-		return 1;	/* yes, we do support saved uids  */
+		ret = 1;	/* yes, we do support saved uids  */
+		break;
 	case _SC_VERSION:
 		/* mhm, POSIX_VERSION is in /usr/include/unistd.h
 		 * should it go on /usr/include/linux?
 		 */
-		return  199009L; 
-	}
-	return -1;
-}
-
-#define POLL_ROUND_UP(x,y) (((x)+(y)-1)/(y))
-
-#define POLLIN 1
-#define POLLPRI 2
-#define POLLOUT 4
-#define POLLERR 8
-#define POLLHUP 16
-#define POLLNVAL 32
-#define POLLRDNORM 64
-#define POLLWRNORM POLLOUT
-#define POLLRDBAND 128
-#define POLLWRBAND 256
-
-#define LINUX_POLLIN (POLLRDNORM | POLLRDBAND | POLLIN)
-#define LINUX_POLLOUT (POLLWRBAND | POLLWRNORM | POLLOUT)
-#define LINUX_POLLERR (POLLERR)
-
-static inline void free_wait(select_table * p)
-{
-	struct select_table_entry * entry = p->entry + p->nr;
-
-	while (p->nr > 0) {
-		p->nr--;
-		entry--;
-		remove_wait_queue(entry->wait_address,&entry->wait);
-	}
-}
-
-
-/* Copied directly from fs/select.c */
-static int check(int flag, select_table * wait, struct file * file)
-{
-	struct inode * inode;
-	struct file_operations *fops;
-	int (*select) (struct inode *, struct file *, int, select_table *);
-
-	inode = file->f_inode;
-	if ((fops = file->f_op) && (select = fops->select))
-		return select(inode, file, flag, wait)
-		    || (wait && select(inode, file, flag, NULL));
-	if (S_ISREG(inode->i_mode))
-		return 1;
-	return 0;
-}
-
-struct poll {
-	int fd;
-	short events;
-	short revents;
-};
-
-int sunos_poll(struct poll * ufds, size_t nfds, int timeout)
-{
-        int i,j, count, fdcount, retflag;
-	struct poll * fdpnt;
-	struct poll * fds, *fds1;
-	select_table wait_table, *wait;
-	struct select_table_entry *entry;
-
-	if (nfds > NR_OPEN)
-		return -EINVAL;
-
-	if (!(entry = (struct select_table_entry*)__get_free_page(GFP_KERNEL))
-	|| !(fds = (struct poll *)kmalloc(nfds*sizeof(struct poll), GFP_KERNEL)))
-		return -ENOMEM;
-
-	if(copy_from_user(fds, ufds, nfds*sizeof(struct poll))) {
-		free_page((unsigned long)entry);
-		kfree(fds);
-		return -EFAULT;
-	}
-
-	if (timeout < 0)
-		current->timeout = 0x7fffffff;
-	else {
-		current->timeout = jiffies + POLL_ROUND_UP(timeout, (1000/HZ));
-		if (current->timeout <= jiffies)
-			current->timeout = 0;
-	}
-
-	count = 0;
-	wait_table.nr = 0;
-	wait_table.entry = entry;
-	wait = &wait_table;
-
-	for(fdpnt = fds, j = 0; j < (int)nfds; j++, fdpnt++) {
-		i = fdpnt->fd;
-		fdpnt->revents = 0;
-		if (!current->files->fd[i] || !current->files->fd[i]->f_inode)
-			fdpnt->revents = POLLNVAL;
-	}
-repeat:
-	current->state = TASK_INTERRUPTIBLE;
-	for(fdpnt = fds, j = 0; j < (int)nfds; j++, fdpnt++) {
-		i = fdpnt->fd;
-
-		if(i < 0) continue;
-		if (!current->files->fd[i] || !current->files->fd[i]->f_inode) continue;
-
-		if ((fdpnt->events & LINUX_POLLIN)
-		&& check(SEL_IN, wait, current->files->fd[i])) {
-			retflag = 0;
-			if (fdpnt->events & POLLIN)
-				retflag = POLLIN;
-			if (fdpnt->events & POLLRDNORM)
-				retflag = POLLRDNORM;
-			fdpnt->revents |= retflag; 
-			count++;
-			wait = NULL;
-		}
-
-		if ((fdpnt->events & LINUX_POLLOUT) &&
-		check(SEL_OUT, wait, current->files->fd[i])) {
-			fdpnt->revents |= (LINUX_POLLOUT & fdpnt->events);
-			count++;
-			wait = NULL;
-		}
-
-		if (check(SEL_EX, wait, current->files->fd[i])) {
-			fdpnt->revents |= POLLHUP;
-			count++;
-			wait = NULL;
-		}
-	}
-
-	if ((current->signal & (~current->blocked)))
-		return -EINTR;
-
-	wait = NULL;
-	if (!count && current->timeout > jiffies) {
-		schedule();
-		goto repeat;
-	}
-
-	free_wait(&wait_table);
-	free_page((unsigned long) entry);
-
-	/* OK, now copy the revents fields back to user space. */
-	fds1 = fds;
-	fdcount = 0;
-	for(i=0; i < (int)nfds; i++, ufds++, fds++) {
-		if (fds->revents) {
-			fdcount++;
-		}
-		__put_user(fds->revents, &ufds->revents);
-	}
-	kfree(fds1);
-	current->timeout = 0;
-	current->state = TASK_RUNNING;
-	return fdcount;
+		ret = 199009L; 
+		break;
+	default:
+		ret = -1;
+		break;
+	};
+	unlock_kernel();
+	return ret;
 }
 
 extern asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg);
@@ -1016,7 +977,9 @@ asmlinkage int sunos_semsys(int op, unsigned long arg1, unsigned long arg2,
 			    unsigned long arg3, void *ptr)
 {
 	union semun arg4;
+	int ret;
 
+	lock_kernel();
 	switch (op) {
 	case 0:
 		/* Most arguments match on a 1:1 basis but cmd doesn't */
@@ -1038,16 +1001,22 @@ asmlinkage int sunos_semsys(int op, unsigned long arg1, unsigned long arg2,
 		}
 		/* sys_semctl(): */
 		arg4.__pad=ptr; /* value to modify semaphore to */
-		return sys_semctl((int)arg1, (int)arg2, (int)arg3, arg4 );
+		ret = sys_semctl((int)arg1, (int)arg2, (int)arg3, arg4 );
+		break;
 	case 1:
 		/* sys_semget(): */
-		return sys_semget((key_t)arg1, (int)arg2, (int)arg3);
+		ret = sys_semget((key_t)arg1, (int)arg2, (int)arg3);
+		break;
 	case 2:
 		/* sys_semop(): */
-		return sys_semop((int)arg1, (struct sembuf *)arg2, (unsigned)arg3);
+		ret = sys_semop((int)arg1, (struct sembuf *)arg2, (unsigned)arg3);
+		break;
 	default:
-		return -EINVAL;
-	}
+		ret = -EINVAL;
+		break;
+	};
+	unlock_kernel();
+	return ret;
 }
     
 extern asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr);
@@ -1061,32 +1030,43 @@ asmlinkage int sunos_shmsys(int op, unsigned long arg1, unsigned long arg2,
 	unsigned long raddr;
 	int rval;
 
+	lock_kernel();
 	switch(op) {
 	case 0:
 		/* sys_shmat(): attach a shared memory area */
 		rval = sys_shmat((int)arg1,(char *)arg2,(int)arg3,&raddr);
-		if(rval != 0)
-			return rval;
-		return (int) raddr;
+		if(!rval)
+			rval = (int) raddr;
+		break;
 	case 1:
 		/* sys_shmctl(): modify shared memory area attr. */
 		rval = sys_shmctl((int)arg1,(int)arg2,(struct shmid_ds *)arg3);
-		return (rval);
+		break;
 	case 2:
 		/* sys_shmdt(): detach a shared memory area */
-		return sys_shmdt((char *)arg1);
+		rval = sys_shmdt((char *)arg1);
+		break;
 	case 3:
 		/* sys_shmget(): get a shared memory area */
-		return sys_shmget((key_t)arg1,(int)arg2,(int)arg3);
+		rval = sys_shmget((key_t)arg1,(int)arg2,(int)arg3);
+		break;
 	default:
-		return -EINVAL;
-	}
+		rval = -EINVAL;
+		break;
+	};
+	unlock_kernel();
+	return rval;
 }
 
 asmlinkage int sunos_open(const char *filename, int flags, int mode)
 {
+	int ret;
+
+	lock_kernel();
 	current->personality |= PER_BSD;
-	return sys_open (filename, flags, mode);
+	ret = sys_open (filename, flags, mode);
+	unlock_kernel();
+	return ret;
 }
 
 
@@ -1115,37 +1095,72 @@ extern asmlinkage int sys_writev(unsigned long fd, const struct iovec * vector, 
 
 asmlinkage int sunos_read(unsigned int fd,char *buf,int count)
 {
-	return check_nonblock(sys_read(fd,buf,count),fd);
+	int ret;
+
+	lock_kernel();
+	ret = check_nonblock(sys_read(fd,buf,count),fd);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sunos_readv(unsigned long fd, const struct iovec * vector, long count)
 {
-	return check_nonblock(sys_readv(fd,vector,count),fd);
+	int ret;
+
+	lock_kernel();
+	ret = check_nonblock(sys_readv(fd,vector,count),fd);
+	lock_kernel();
+	return ret;
 }
 
 asmlinkage int sunos_write(unsigned int fd,char *buf,int count)
 {
-	return check_nonblock(sys_write(fd,buf,count),fd);
+	int ret;
+
+	lock_kernel();
+	ret = check_nonblock(sys_write(fd,buf,count),fd);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sunos_writev(unsigned long fd, const struct iovec * vector, long count)
 {
-	return check_nonblock(sys_writev(fd,vector,count),fd);
+	int ret;
+
+	lock_kernel();
+	ret = check_nonblock(sys_writev(fd,vector,count),fd);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sunos_recv(int fd, void * ubuf, int size, unsigned flags)
 {
-	return check_nonblock(sys_recv(fd,ubuf,size,flags),fd);
+	int ret;
+
+	lock_kernel();
+	ret = check_nonblock(sys_recv(fd,ubuf,size,flags),fd);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sunos_send(int fd, void * buff, int len, unsigned flags)
 {
-	return check_nonblock(sys_send(fd,buff,len,flags),fd);
+	int ret;
+
+	lock_kernel();
+	ret = check_nonblock(sys_send(fd,buff,len,flags),fd);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sunos_accept(int fd, struct sockaddr *sa, int *addrlen)
 {
-	return check_nonblock(sys_accept(fd,sa,addrlen),fd);	
+	int ret;
+
+	lock_kernel();
+	ret = check_nonblock(sys_accept(fd,sa,addrlen),fd);	
+	unlock_kernel();
+	return ret;
 }
 
 #define SUNOS_SV_INTERRUPT 2
@@ -1157,33 +1172,38 @@ asmlinkage int sunos_sigaction(int signum, const struct sigaction *action,
 {
 	struct sigaction new_sa, *p;
 	const  int sigaction_size = sizeof (struct sigaction) - sizeof (void *);
-	int err;
+	int err = -EINVAL;
 
+	lock_kernel();
 	current->personality |= PER_BSD;
 
 	if (signum<1 || signum>32)
-		return -EINVAL;
+		goto out;
 
 	p = signum - 1 + current->sig->action;
 	if (action) {
+		err = -EFAULT;
 		if(copy_from_user(&new_sa, action, sigaction_size))
-			return -EFAULT;
+			goto out;
+		err = -EINVAL;
 		if (signum==SIGKILL || signum==SIGSTOP)
-			return -EINVAL;
+			goto out;
 		memset(&new_sa, 0, sizeof(struct sigaction));
+		err = -EFAULT;
 		if(copy_from_user(&new_sa, action, sigaction_size))
-			return -EFAULT;	
+			goto out;
 		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
 			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
 			if (err)
-				return err;
+				goto out;
 		}
 		new_sa.sa_flags ^= SUNOS_SV_INTERRUPT;
 	}
 
 	if (oldaction) {
+		err = -EFAULT;
 		if (copy_to_user(oldaction, p, sigaction_size))
-			return -EFAULT;	
+			goto out;	
 		if (oldaction->sa_flags & SA_RESTART)
 			oldaction->sa_flags &= ~SA_RESTART;
 		else
@@ -1194,8 +1214,10 @@ asmlinkage int sunos_sigaction(int signum, const struct sigaction *action,
 		*p = new_sa;
 		check_pending(signum);
 	}
-
-	return 0;
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 
@@ -1206,34 +1228,32 @@ asmlinkage int sunos_setsockopt(int fd, int level, int optname, char *optval,
 				int optlen)
 {
 	int tr_opt = optname;
+	int ret;
 
-	if (level == SOL_IP)
-	{
-		/*
-		 *	Multicast socketopts (ttl, membership)
-		 */
+	lock_kernel();
+	if (level == SOL_IP) {
+		/* Multicast socketopts (ttl, membership) */
 		if (tr_opt >=2 && tr_opt <= 6)
-		{
 			tr_opt += 30;
-		}
 	}
-	return sys_setsockopt(fd, level, tr_opt, optval, optlen);
+	ret = sys_setsockopt(fd, level, tr_opt, optval, optlen);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sunos_getsockopt(int fd, int level, int optname, char *optval,
 				int *optlen)
 {
 	int tr_opt = optname;
+	int ret;
 
-	if (level == SOL_IP)
-	{
-		/*
-		 *	Multicast socketopts (ttl, membership)
-		 */
+	lock_kernel();
+	if (level == SOL_IP) {
+		/* Multicast socketopts (ttl, membership) */
 		if (tr_opt >=2 && tr_opt <= 6)
-		{
 			tr_opt += 30;
-		}
 	}
-	return sys_getsockopt(fd, level, tr_opt, optval, optlen);
+	ret = sys_getsockopt(fd, level, tr_opt, optval, optlen);
+	unlock_kernel();
+	return ret;
 }

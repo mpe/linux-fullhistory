@@ -119,7 +119,7 @@ static struct file_operations misc_fops = {
 	NULL,		/* read */
 	NULL,		/* write */
 	NULL,		/* readdir */
-	NULL,		/* select */
+	NULL,		/* poll */
 	NULL,		/* ioctl */
 	NULL,		/* mmap */
         misc_open,

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.33 1996/12/24 08:59:33 davem Exp $
+/* $Id: sys_sparc.c,v 1.34 1997/01/06 06:52:35 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -17,6 +17,8 @@
 #include <linux/shm.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/ipc.h>
@@ -33,11 +35,19 @@ extern asmlinkage unsigned long sys_brk(unsigned long brk);
 
 asmlinkage unsigned long sparc_brk(unsigned long brk)
 {
+	unsigned long ret;
+
+	lock_kernel();
 	if(sparc_cpu_model == sun4c) {
-		if(brk >= 0x20000000 && brk < 0xe0000000)
-			return current->mm->brk;
+		if(brk >= 0x20000000 && brk < 0xe0000000) {
+			ret = current->mm->brk;
+			goto out;
+		}
 	}
-	return sys_brk(brk);
+	ret = sys_brk(brk);
+out:
+	unlock_kernel();
+	return ret;
 }
 
 /*
@@ -49,13 +59,15 @@ asmlinkage int sparc_pipe(struct pt_regs *regs)
 	int fd[2];
 	int error;
 
+	lock_kernel();
 	error = do_pipe(fd);
-	if (error) {
-		return error;
-	} else {
-		regs->u_regs[UREG_I1] = fd[1];
-		return fd[0];
-	}
+	if (error)
+		goto out;
+	regs->u_regs[UREG_I1] = fd[1];
+	error = fd[0];
+out:
+	unlock_kernel();
+	return error;
 }
 
 /*
@@ -66,52 +78,67 @@ asmlinkage int sparc_pipe(struct pt_regs *regs)
 
 asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, long fifth)
 {
-	int version;
+	int version, err;
 
+	lock_kernel();
 	version = call >> 16; /* hack for backward compatibility */
 	call &= 0xffff;
 
 	if (call <= SEMCTL)
 		switch (call) {
 		case SEMOP:
-			return sys_semop (first, (struct sembuf *)ptr, second);
+			err = sys_semop (first, (struct sembuf *)ptr, second);
+			goto out;
 		case SEMGET:
-			return sys_semget (first, second, third);
+			err = sys_semget (first, second, third);
+			goto out;
 		case SEMCTL: {
 			union semun fourth;
+			err = -EINVAL;
 			if (!ptr)
-				return -EINVAL;
+				goto out;
+			err = -EFAULT;
 			if(get_user(fourth.__pad, (void **)ptr))
-				return -EFAULT;
-			return sys_semctl (first, second, third, fourth);
+				goto out;
+			err = sys_semctl (first, second, third, fourth);
+			goto out;
 			}
 		default:
-			return -EINVAL;
+			err = -EINVAL;
+			goto out;
 		}
 	if (call <= MSGCTL) 
 		switch (call) {
 		case MSGSND:
-			return sys_msgsnd (first, (struct msgbuf *) ptr, 
-					   second, third);
+			err = sys_msgsnd (first, (struct msgbuf *) ptr, 
+					  second, third);
+			goto out;
 		case MSGRCV:
 			switch (version) {
 			case 0: {
 				struct ipc_kludge tmp;
+				err = -EINVAL;
 				if (!ptr)
-					return -EINVAL;
+					goto out;
+				err = -EFAULT;
 				if(copy_from_user(&tmp,(struct ipc_kludge *) ptr, sizeof (tmp)))
-					return -EFAULT;
-				return sys_msgrcv (first, tmp.msgp, second, tmp.msgtyp, third);
+					goto out;
+				err = sys_msgrcv (first, tmp.msgp, second, tmp.msgtyp, third);
+				goto out;
 				}
 			case 1: default:
-				return sys_msgrcv (first, (struct msgbuf *) ptr, second, fifth, third);
+				err = sys_msgrcv (first, (struct msgbuf *) ptr, second, fifth, third);
+				goto out;
 			}
 		case MSGGET:
-			return sys_msgget ((key_t) first, second);
+			err = sys_msgget ((key_t) first, second);
+			goto out;
 		case MSGCTL:
-			return sys_msgctl (first, second, (struct msqid_ds *) ptr);
+			err = sys_msgctl (first, second, (struct msqid_ds *) ptr);
+			goto out;
 		default:
-			return -EINVAL;
+			err = -EINVAL;
+			goto out;
 		}
 	if (call <= SHMCTL) 
 		switch (call) {
@@ -119,28 +146,37 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			switch (version) {
 			case 0: default: {
 				ulong raddr;
-				int err;
-
 				err = sys_shmat (first, (char *) ptr, second, &raddr);
 				if (err)
-					return err;
+					goto out;
+				err = -EFAULT;
 				if(put_user (raddr, (ulong *) third))
-					return -EFAULT;
-				return 0;
+					goto out;
+				err = 0;
+				goto out;
 				}
 			case 1:	/* iBCS2 emulator entry point */
-				return sys_shmat (first, (char *) ptr, second, (ulong *) third);
+				err = sys_shmat (first, (char *) ptr, second, (ulong *) third);
+				goto out;
 			}
 		case SHMDT: 
-			return sys_shmdt ((char *)ptr);
+			err = sys_shmdt ((char *)ptr);
+			goto out;
 		case SHMGET:
-			return sys_shmget (first, second, third);
+			err = sys_shmget (first, second, third);
+			goto out;
 		case SHMCTL:
-			return sys_shmctl (first, second, (struct shmid_ds *) ptr);
+			err = sys_shmctl (first, second, (struct shmid_ds *) ptr);
+			goto out;
 		default:
-			return -EINVAL;
+			err = -EINVAL;
+			goto out;
 		}
-	return -EINVAL;
+	else
+		err = -EINVAL;
+out:
+	unlock_kernel();
+	return err;
 }
 
 extern unsigned long get_unmapped_area(unsigned long addr, unsigned long len);
@@ -151,30 +187,37 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 	unsigned long off)
 {
 	struct file * file = NULL;
-	long retval;
+	unsigned long retval = -EBADF;
 
+	lock_kernel();
 	if (!(flags & MAP_ANONYMOUS)) {
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd])){
-			return -EBADF;
+			goto out;
 	    }
 	}
+	retval = -ENOMEM;
 	if(!(flags & MAP_FIXED) && !addr) {
 		addr = get_unmapped_area(addr, len);
 		if(!addr){
-			return -ENOMEM;
+			goto out;
 		}
 	}
 
 	/* See asm-sparc/uaccess.h */
+	retval = -EINVAL;
 	if((len > (TASK_SIZE - PAGE_SIZE)) || (addr > (TASK_SIZE-len-PAGE_SIZE)))
-		return -EINVAL;
+		goto out;
 
 	if(sparc_cpu_model == sun4c) {
-		if(((addr >= 0x20000000) && (addr < 0xe0000000)))
-			return current->mm->brk;
+		if(((addr >= 0x20000000) && (addr < 0xe0000000))) {
+			retval = current->mm->brk;
+			goto out;
+		}
 	}
 
 	retval = do_mmap(file, addr, len, prot, flags, off);
+out:
+	unlock_kernel();
 	return retval;
 }
 
@@ -182,8 +225,10 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 asmlinkage unsigned long
 c_sys_nis_syscall (struct pt_regs *regs)
 {
+	lock_kernel();
 	printk ("Unimplemented SPARC system call %d\n",(int)regs->u_regs[1]);
 	show_regs (regs);
+	unlock_kernel();
 	return -ENOSYS;
 }
 
@@ -192,6 +237,7 @@ c_sys_nis_syscall (struct pt_regs *regs)
 asmlinkage void
 sparc_breakpoint (struct pt_regs *regs)
 {
+	lock_kernel();
 #ifdef DEBUG_SPARC_BREAKPOINT
         printk ("TRAP: Entering kernel PC=%x, nPC=%x\n", regs->pc, regs->npc);
 #endif
@@ -199,6 +245,7 @@ sparc_breakpoint (struct pt_regs *regs)
 #ifdef DEBUG_SPARC_BREAKPOINT
 	printk ("TRAP: Returning to space: PC=%x nPC=%x\n", regs->pc, regs->npc);
 #endif
+	unlock_kernel();
 }
 
 extern void check_pending(int signum);
@@ -207,33 +254,38 @@ asmlinkage int
 sparc_sigaction (int signum, const struct sigaction *action, struct sigaction *oldaction)
 {
 	struct sigaction new_sa, *p;
+	int err = -EINVAL;
 
+	lock_kernel();
 	if(signum < 0) {
 		current->tss.new_signal = 1;
 		signum = -signum;
 	}
 
 	if (signum<1 || signum>32)
-		return -EINVAL;
+		goto out;
 	p = signum - 1 + current->sig->action;
 	if (action) {
-		int err = verify_area(VERIFY_READ,action,sizeof(struct sigaction));
+		err = verify_area(VERIFY_READ,action,sizeof(struct sigaction));
 		if (err)
-			return err;
+			goto out;
+		err = -EINVAL;
 		if (signum==SIGKILL || signum==SIGSTOP)
-			return -EINVAL;
+			goto out;
+		err = -EFAULT;
 		if(copy_from_user(&new_sa, action, sizeof(struct sigaction)))
-			return -EFAULT;	
+			goto out;	
 		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
 			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
 			if (err)
-				return err;
+				goto out;
 		}
 	}
 
 	if (oldaction) {
+		err = -EFAULT;
 		if (copy_to_user(oldaction, p, sizeof(struct sigaction)))
-			return -EFAULT;	
+			goto out;	
 	}
 
 	if (action) {
@@ -241,7 +293,10 @@ sparc_sigaction (int signum, const struct sigaction *action, struct sigaction *o
 		check_pending(signum);
 	}
 
-	return 0;
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 #ifndef CONFIG_AP1000

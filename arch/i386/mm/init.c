@@ -289,6 +289,11 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	return;
 }
 
+void free_initmem(void)
+{
+	/* To be written */
+}
+
 void si_meminfo(struct sysinfo *val)
 {
 	int i;

@@ -40,7 +40,7 @@ struct file_operations fat_dir_operations = {
 	fat_dir_read,		/* read */
 	NULL,			/* write - bad */
 	fat_readdir,		/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	fat_dir_ioctl,		/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */

@@ -325,7 +325,7 @@ int in2000_reset(Scsi_Cmnd *, unsigned int);
 #define IN2000_HOST_ID  7
 
 #define IN2000 {  NULL,                /* link pointer for modules */ \
-                  NULL,                /* usage_count for modules */ \
+                  NULL,                /* module pointer for modules */ \
                   &proc_scsi_in2000,   /* pointer to /proc/scsi directory entry */ \
                   in2000_proc_info,    /* pointer to proc info function */ \
                   "Always IN2000",     /* device name */ \

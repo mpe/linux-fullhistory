@@ -38,6 +38,8 @@
 #include <linux/ipc.h>
 #include <linux/stat.h>
 #include <linux/malloc.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -130,26 +132,33 @@ found:
 
 asmlinkage int sys_semget (key_t key, int nsems, int semflg)
 {
-	int id;
+	int id, err = -EINVAL;
 	struct semid_ds *sma;
 
+	lock_kernel();
 	if (nsems < 0 || nsems > SEMMSL)
-		return -EINVAL;
-	if (key == IPC_PRIVATE)
-		return newary(key, nsems, semflg);
-	if ((id = findkey (key)) == -1) {  /* key not used */
+		goto out;
+	if (key == IPC_PRIVATE) {
+		err = newary(key, nsems, semflg);
+	} else if ((id = findkey (key)) == -1) {  /* key not used */
 		if (!(semflg & IPC_CREAT))
-			return -ENOENT;
-		return newary(key, nsems, semflg);
+			err = -ENOENT;
+		else
+			err = newary(key, nsems, semflg);
+	} else if (semflg & IPC_CREAT && semflg & IPC_EXCL) {
+		err = -EEXIST;
+	} else {
+		sma = semary[id];
+		if (nsems > sma->sem_nsems)
+			err = -EINVAL;
+		else if (ipcperms(&sma->sem_perm, semflg))
+			err = -EACCES;
+		else
+			err = (int) sma->sem_perm.seq * SEMMNI + id;
 	}
-	if (semflg & IPC_CREAT && semflg & IPC_EXCL)
-		return -EEXIST;
-	sma = semary[id];
-	if (nsems > sma->sem_nsems)
-		return -EINVAL;
-	if (ipcperms(&sma->sem_perm, semflg))
-		return -EACCES;
-	return (unsigned int) sma->sem_perm.seq * SEMMNI + id;
+out:
+	unlock_kernel();
+	return err;
 }
 
 /* Manage the doubly linked list sma->sem_pending as a FIFO:
@@ -368,9 +377,11 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 	unsigned int nsems;
 	ushort *array = NULL;
 	ushort sem_io[SEMMSL];
+	int err = -EINVAL;
 
+	lock_kernel();
 	if (semid < 0 || semnum < 0 || cmd < 0)
-		return -EINVAL;
+		goto out;
 
 	switch (cmd) {
 	case IPC_INFO:
@@ -391,42 +402,48 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 			seminfo.semusz = used_semids;
 			seminfo.semaem = used_sems;
 		}
-		i = verify_area(VERIFY_WRITE, tmp, sizeof(struct seminfo));
-		if (i)
-			return i;
+		err = verify_area(VERIFY_WRITE, tmp, sizeof(struct seminfo));
+		if (err)
+			goto out;
 		copy_to_user (tmp, &seminfo, sizeof(struct seminfo));
-		return max_semid;
+		err = max_semid;
+		goto out;
 	}
 
 	case SEM_STAT:
 		buf = arg.buf;
-		i = verify_area (VERIFY_WRITE, buf, sizeof (*buf));
-		if (i)
-			return i;
+		err = verify_area (VERIFY_WRITE, buf, sizeof (*buf));
+		if (err)
+			goto out;
+		err = -EINVAL;
 		if (semid > max_semid)
-			return -EINVAL;
+			goto out;
 		sma = semary[semid];
 		if (sma == IPC_UNUSED || sma == IPC_NOID)
-			return -EINVAL;
+			goto out;
+		err = -EACCES;
 		if (ipcperms (&sma->sem_perm, S_IRUGO))
-			return -EACCES;
+			goto out;
 		id = (unsigned int) sma->sem_perm.seq * SEMMNI + semid;
 		tbuf.sem_perm   = sma->sem_perm;
 		tbuf.sem_otime  = sma->sem_otime;
 		tbuf.sem_ctime  = sma->sem_ctime;
 		tbuf.sem_nsems  = sma->sem_nsems;
 		copy_to_user (buf, &tbuf, sizeof(*buf));
-		return id;
+		err = id;
+		goto out;
 	}
 
 	id = (unsigned int) semid % SEMMNI;
 	sma = semary [id];
+	err = -EINVAL;
 	if (sma == IPC_UNUSED || sma == IPC_NOID)
-		return -EINVAL;
+		goto out;
 	ipcp = &sma->sem_perm;
 	nsems = sma->sem_nsems;
+	err = -EIDRM;
 	if (sma->sem_perm.seq != (unsigned int) semid / SEMMNI)
-		return -EIDRM;
+		goto out;
 
 	switch (cmd) {
 	case GETVAL:
@@ -434,8 +451,9 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 	case GETNCNT:
 	case GETZCNT:
 	case SETVAL:
+		err = -EINVAL;
 		if (semnum >= nsems)
-			return -EINVAL;
+			goto out;
 		curr = &sma->sem_base[semnum];
 		break;
 	}
@@ -446,8 +464,9 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 	case GETNCNT:
 	case GETZCNT:
 	case GETALL:
+		err = -EACCES;
 		if (ipcperms (ipcp, S_IRUGO))
-			return -EACCES;
+			goto out;
 		switch (cmd) {
 		case GETVAL : return curr->semval;
 		case GETPID : return curr->sempid;
@@ -455,60 +474,68 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		case GETZCNT: return count_semzcnt(sma,semnum);
 		case GETALL:
 			array = arg.array;
-			i = verify_area (VERIFY_WRITE, array, nsems*sizeof(ushort));
-			if (i)
-				return i;
+			err = verify_area (VERIFY_WRITE, array, nsems*sizeof(ushort));
+			if (err)
+				goto out;
 		}
 		break;
 	case SETVAL:
 		val = arg.val;
+		err = -ERANGE;
 		if (val > SEMVMX || val < 0)
-			return -ERANGE;
+			goto out;
 		break;
 	case IPC_RMID:
 		if (suser() || current->euid == ipcp->cuid || current->euid == ipcp->uid) {
 			freeary (id);
-			return 0;
+			err = 0;
+			goto out;
 		}
-		return -EPERM;
+		err = -EPERM;
+		goto out;
 	case SETALL: /* arg is a pointer to an array of ushort */
 		array = arg.array;
-		if ((i = verify_area (VERIFY_READ, array, nsems*sizeof(ushort))))
-			return i;
+		if ((err = verify_area (VERIFY_READ, array, nsems*sizeof(ushort))))
+			goto out;
 		copy_from_user (sem_io, array, nsems*sizeof(ushort));
 		for (i = 0; i < nsems; i++)
-			if (sem_io[i] > SEMVMX)
-				return -ERANGE;
+			if (sem_io[i] > SEMVMX) {
+				err = -ERANGE;
+				goto out;
+			}
 		break;
 	case IPC_STAT:
 		buf = arg.buf;
-		if ((i = verify_area (VERIFY_WRITE, buf, sizeof(*buf))))
-			return i;
+		if ((err = verify_area (VERIFY_WRITE, buf, sizeof(*buf))))
+			goto out;
 		break;
 	case IPC_SET:
 		buf = arg.buf;
-		if ((i = verify_area (VERIFY_READ, buf, sizeof (*buf))))
-			return i;
+		if ((err = verify_area (VERIFY_READ, buf, sizeof (*buf))))
+			goto out;
 		copy_from_user (&tbuf, buf, sizeof (*buf));
 		break;
 	}
 
+	err = -EIDRM;
 	if (semary[id] == IPC_UNUSED || semary[id] == IPC_NOID)
-		return -EIDRM;
+		goto out;
 	if (sma->sem_perm.seq != (unsigned int) semid / SEMMNI)
-		return -EIDRM;
+		goto out;
 
 	switch (cmd) {
 	case GETALL:
+		err = -EACCES;
 		if (ipcperms (ipcp, S_IRUGO))
-			return -EACCES;
+			goto out;
 		for (i = 0; i < sma->sem_nsems; i++)
 			sem_io[i] = sma->sem_base[i].semval;
 		copy_to_user (array, sem_io, nsems*sizeof(ushort));
 		break;
 	case SETVAL:
+		err = -EACCES;
 		if (ipcperms (ipcp, S_IWUGO))
-			return -EACCES;
+			goto out;
 		for (un = sma->undo; un; un = un->id_next)
 			un->semadj[semnum] = 0;
 		curr->semval = val;
@@ -523,12 +550,15 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 			ipcp->mode = (ipcp->mode & ~S_IRWXUGO)
 				| (tbuf.sem_perm.mode & S_IRWXUGO);
 			sma->sem_ctime = CURRENT_TIME;
-			return 0;
+			err = 0;
+			goto out;
 		}
-		return -EPERM;
+		err = -EPERM;
+		goto out;
 	case IPC_STAT:
+		err = -EACCES;
 		if (ipcperms (ipcp, S_IRUGO))
-			return -EACCES;
+			goto out;
 		tbuf.sem_perm   = sma->sem_perm;
 		tbuf.sem_otime  = sma->sem_otime;
 		tbuf.sem_ctime  = sma->sem_ctime;
@@ -536,8 +566,9 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		copy_to_user (buf, &tbuf, sizeof(*buf));
 		break;
 	case SETALL:
+		err = -EACCES;
 		if (ipcperms (ipcp, S_IWUGO))
-			return -EACCES;
+			goto out;
 		for (i = 0; i < nsems; i++)
 			sma->sem_base[i].semval = sem_io[i];
 		for (un = sma->undo; un; un = un->id_next)
@@ -548,47 +579,58 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		update_queue(sma);
 		break;
 	default:
-		return -EINVAL;
+		err = -EINVAL;
+		goto out;
 	}
-	return 0;
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 {
-	int i, id, size, error;
+	int i, id, size, error = -EINVAL;
 	struct semid_ds *sma;
 	struct sembuf sops[SEMOPM], *sop;
 	struct sem_undo *un;
 	int undos = 0, alter = 0;
 
+	lock_kernel();
 	if (nsops < 1 || semid < 0)
-		return -EINVAL;
+		goto out;
+	error = -E2BIG;
 	if (nsops > SEMOPM)
-		return -E2BIG;
+		goto out;
+	error = -EFAULT;
 	if (!tsops)
-		return -EFAULT;
+		goto out;
 	if ((i = verify_area (VERIFY_READ, tsops, nsops * sizeof(*tsops))))
-		return i;
+		goto out;
 	copy_from_user (sops, tsops, nsops * sizeof(*tsops));
 	id = (unsigned int) semid % SEMMNI;
+	error = -EINVAL;
 	if ((sma = semary[id]) == IPC_UNUSED || sma == IPC_NOID)
-		return -EINVAL;
+		goto out;
+	error = -EIDRM;
 	if (sma->sem_perm.seq != (unsigned int) semid / SEMMNI)
-		return -EIDRM;
+		goto out;
 	for (i = 0; i < nsops; i++) {
 		sop = &sops[i];
+		error = -EFBIG;
 		if (sop->sem_num >= sma->sem_nsems)
-			return -EFBIG;
+			goto out;
 		if (sop->sem_flg & SEM_UNDO)
 			undos++;
 		if (sop->sem_op)
 			alter++;
 	}
+	error = -EACCES;
 	if (ipcperms(&sma->sem_perm, alter ? S_IWUGO : S_IRUGO))
-		return -EACCES;
+		goto out;
 	error = try_semop(sma, sops, nsops);
 	if (error < 0)
-		return error;
+		goto out;
 	if (undos) {
 		/* Make sure we have an undo structure
 		 * for this process and this semaphore set.
@@ -599,8 +641,10 @@ asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 		if (!un) {
 			size = sizeof(struct sem_undo) + sizeof(short)*sma->sem_nsems;
 			un = (struct sem_undo *) kmalloc(size, GFP_ATOMIC);
-			if (!un)
-				return -ENOMEM;
+			if (!un) {
+				error = -ENOMEM;
+				goto out;
+			}
 			memset(un, 0, size);
 			un->semadj = (short *) &un[1];
 			un->semid = semid;
@@ -616,7 +660,7 @@ asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 		error = do_semop(sma, sops, nsops, un, current->pid);
 		/* maybe some queued-up processes were waiting for this */
 		update_queue(sma);
-		return error;
+		goto out;
 	} else {
 		/* We need to sleep on this operation, so we put the current
 		 * task into the pending queue and go to sleep.
@@ -639,12 +683,15 @@ asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 		 */
 		if (!queue.prev) {
 			/* operation is finished, update_queue() removed us */
-			return queue.status;
+			error = queue.status;
 		} else {
 			remove_from_queue(sma,&queue);
-			return -EINTR;
+			error = -EINTR;
 		}
 	}
+out:
+	unlock_kernel();
+	return error;
 }
 
 /*

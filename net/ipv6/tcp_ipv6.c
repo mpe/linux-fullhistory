@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.6 1996/12/12 19:22:18 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.7 1997/01/26 07:14:57 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -1236,7 +1236,7 @@ struct proto tcpv6_prot = {
 	NULL,
 	tcp_write_wakeup,
 	tcp_read_wakeup,
-	tcp_select,
+	tcp_poll,
 	tcp_ioctl,
 	tcp_v6_init_sock,
 	tcp_v6_destroy_sock,

@@ -1,0 +1,36 @@
+#
+# Makefile for the linux kernel.
+#
+# Note! Dependencies are done automagically by 'make dep', which also
+# removes any old dependencies. DON'T put your own dependencies here
+# unless it's something special (ie not a .c file).
+#
+# Note 2! The CFLAGS definitions are now in the main makefile...
+
+#
+# sbus audio drivers
+#
+
+O_TARGET := sparcaudio.o
+O_OBJS   :=
+M_OBJS   :=
+
+ifeq ($(CONFIG_SPARCAUDIO_AMD7930),y)
+M=y
+O_OBJS += amd7930.o
+else
+  ifeq ($(CONFIG_SPARCAUDIO_AMD7930),m)
+  MM=y
+  M_OBJS += amd7930.o
+  endif
+endif
+
+ifdef M
+O_OBJS += audio.o
+else
+  ifdef MM
+  M_OBJS += audio.o
+  endif
+endif
+
+include $(TOPDIR)/Rules.make

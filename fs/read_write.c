@@ -14,6 +14,8 @@
 #include <linux/mm.h>
 #include <linux/uio.h>
 #include <linux/malloc.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -60,6 +62,7 @@ asmlinkage long sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 	struct file * file;
 	struct inode * inode;
 
+	lock_kernel();
 	retval = -EBADF;
 	if (fd >= NR_OPEN ||
 	    !(file = current->files->fd[fd]) ||
@@ -70,6 +73,7 @@ asmlinkage long sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 		goto bad;
 	retval = llseek(inode, file, offset, origin);
 bad:
+	unlock_kernel();
 	return retval;
 }
 
@@ -82,6 +86,7 @@ asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 	struct inode * inode;
 	long long offset;
 
+	lock_kernel();
 	retval = -EBADF;
 	if (fd >= NR_OPEN ||
 	    !(file = current->files->fd[fd]) ||
@@ -101,8 +106,8 @@ asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 		if (retval)
 			retval = -EFAULT;
 	}
-
 bad:
+	unlock_kernel();
 	return retval;
 }
 
@@ -113,6 +118,7 @@ asmlinkage long sys_read(unsigned int fd, char * buf, unsigned long count)
 	struct inode * inode;
 	long (*read)(struct inode *, struct file *, char *, unsigned long);
 
+	lock_kernel();
 	error = -EBADF;
 	file = fget(fd);
 	if (!file)
@@ -133,6 +139,7 @@ asmlinkage long sys_read(unsigned int fd, char * buf, unsigned long count)
 out:
 	fput(file, inode);
 bad_file:
+	unlock_kernel();
 	return error;
 }
 
@@ -143,6 +150,7 @@ asmlinkage long sys_write(unsigned int fd, const char * buf, unsigned long count
 	struct inode * inode;
 	long (*write)(struct inode *, struct file *, const char *, unsigned long);
 
+	lock_kernel();
 	error = -EBADF;
 	file = fget(fd);
 	if (!file)
@@ -164,6 +172,7 @@ asmlinkage long sys_write(unsigned int fd, const char * buf, unsigned long count
 out:
 	fput(file, inode);
 bad_file:
+	unlock_kernel();
 	return error;
 }
 
@@ -259,26 +268,34 @@ asmlinkage long sys_readv(unsigned long fd, const struct iovec * vector, unsigne
 {
 	struct file * file;
 	struct inode * inode;
+	long err = -EBADF;
 
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) || !(inode = file->f_inode))
-		return -EBADF;
+	lock_kernel();
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) || !(inode=file->f_inode))
+		goto out;
 	if (!(file->f_mode & 1))
-		return -EBADF;
-	return do_readv_writev(VERIFY_WRITE, inode, file, vector, count);
+		goto out;
+	err = do_readv_writev(VERIFY_WRITE, inode, file, vector, count);
+out:
+	unlock_kernel();
+	return err;
 }
 
 asmlinkage long sys_writev(unsigned long fd, const struct iovec * vector, unsigned long count)
 {
-	int error;
+	int error = -EBADF;
 	struct file * file;
 	struct inode * inode;
 
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) || !(inode = file->f_inode))
-		return -EBADF;
+	lock_kernel();
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) || !(inode=file->f_inode))
+		goto out;
 	if (!(file->f_mode & 2))
-		return -EBADF;
+		goto out;
 	down(&inode->i_sem);
 	error = do_readv_writev(VERIFY_READ, inode, file, vector, count);
 	up(&inode->i_sem);
+out:
+	unlock_kernel();
 	return error;
 }

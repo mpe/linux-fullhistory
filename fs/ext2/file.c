@@ -49,7 +49,7 @@ static struct file_operations ext2_file_operations = {
 	generic_file_read,	/* read */
 	ext2_file_write,	/* write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	ext2_ioctl,		/* ioctl */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */

@@ -475,7 +475,7 @@ struct qlogicpti {
 	unsigned char             bursts;
 	struct	host_param        host_param;
 	struct	dev_param         dev_param[MAX_TARGETS];
-	
+
 	volatile unsigned char   *sreg;
 #define SREG_TPOWER               0x80   /* State of termpwr           */
 #define SREG_FUSE                 0x40   /* State of on board fuse     */
@@ -717,7 +717,7 @@ struct qlogicpti {
 
 #define QLOGICPTI {							   \
 	/* next */		NULL,					   \
-	/* usage_count */	NULL,					   \
+	/* module */		NULL,					   \
 	/* proc dir */		NULL,					   \
 	/* procfs info */	NULL,					   \
 	/* name */		NULL,					   \

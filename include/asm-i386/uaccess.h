@@ -108,6 +108,25 @@ extern unsigned long search_exception_table(unsigned long);
 #define __put_user(x,ptr) \
   __put_user_nocheck((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)))
 
+/*
+ * The "xxx_ret" versions return constant specified in third argument, if
+ * something bad happens. These macros can be optimized for the
+ * case of just returning from the function xxx_ret is used.
+ */
+
+#define put_user_ret(x,ptr,ret) ({ \
+if (put_user(x,ptr)) return ret; })
+
+#define get_user_ret(x,ptr,ret) ({ \
+if (get_user(x,ptr)) return ret; })
+
+#define __put_user_ret(x,ptr,ret) ({ \
+if (__put_user(x,ptr)) return ret; })
+
+#define __get_user_ret(x,ptr,ret) ({ \
+if (__get_user(x,ptr)) return ret; })
+
+
 
 extern long __put_user_bad(void);
 
@@ -387,6 +406,15 @@ __constant_copy_from_user_nocheck(void *to, const void *from, unsigned long n)
 	 __constant_copy_from_user((to),(from),(n)) :	\
 	 __generic_copy_from_user((to),(from),(n)))
 
+#define copy_to_user_ret(to,from,n,retval) ({ \
+if (copy_to_user(to,from,n)) \
+	return retval; \
+})
+
+#define copy_from_user_ret(to,from,n,retval) ({ \
+if (copy_from_user(to,from,n)) \
+	return retval; \
+})
 
 #define __copy_to_user(to,from,n)			\
 	(__builtin_constant_p(n) ?			\

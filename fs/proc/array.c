@@ -46,6 +46,7 @@
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>
+#include <linux/slab.h>
 #include <linux/smp.h>
 
 #include <asm/uaccess.h>
@@ -1057,6 +1058,9 @@ static long get_root_array(char * page, int type, char **start,
 		case PROC_STAT:
 			return get_kstat(page);
 
+		case PROC_SLABINFO:
+			return get_slabinfo(page);
+
 		case PROC_DEVICES:
 			return get_device_list(page);
 
@@ -1180,7 +1184,7 @@ static struct file_operations proc_array_operations = {
 	array_read,
 	NULL,		/* array_write */
 	NULL,		/* array_readdir */
-	NULL,		/* array_select */
+	NULL,		/* array_poll */
 	NULL,		/* array_ioctl */
 	NULL,		/* mmap */
 	NULL,		/* no special open code */
@@ -1226,7 +1230,7 @@ static struct file_operations proc_arraylong_operations = {
 	arraylong_read,
 	NULL,		/* array_write */
 	NULL,		/* array_readdir */
-	NULL,		/* array_select */
+	NULL,		/* array_poll */
 	NULL,		/* array_ioctl */
 	NULL,		/* mmap */
 	NULL,		/* no special open code */

@@ -1111,10 +1111,10 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		    get_user(list, &ud->entries);
 		    i = verify_area(VERIFY_READ, (void *) list,
 				    ct*sizeof(struct unipair));
+		    if(!i)
+			    return con_set_unimap(ct, list);
 		}
-		if (i)
-		  return i;
-		return con_set_unimap(ct, list);
+		return i;
 	      }
 
 	case GIO_UNIMAP:
@@ -1130,10 +1130,10 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		    if (ct)
 		      i = verify_area(VERIFY_WRITE, (void *) list,
 				      ct*sizeof(struct unipair));
+		    if(!i)
+			    return con_get_unimap(ct, &(ud->entry_ct), list);
 		}
-		if (i)
-		  return i;
-		return con_get_unimap(ct, &(ud->entry_ct), list);
+		return i;
 	      }
 	case VT_LOCKSWITCH:
 		if (!suser())

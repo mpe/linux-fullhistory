@@ -10,6 +10,9 @@
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/string.h>
+#include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
@@ -35,20 +38,33 @@ static inline int dupfd(unsigned int fd, unsigned int arg)
 
 asmlinkage int sys_dup2(unsigned int oldfd, unsigned int newfd)
 {
+	int err = -EBADF;
+
+	lock_kernel();
 	if (oldfd >= NR_OPEN || !current->files->fd[oldfd])
-		return -EBADF;
+		goto out;
+	err = newfd;
 	if (newfd == oldfd)
-		return newfd;
+		goto out;
+	err = -EBADF;
 	if (newfd >= NR_OPEN)
-		return -EBADF;	/* following POSIX.1 6.2.1 */
+		goto out;	/* following POSIX.1 6.2.1 */
 
 	sys_close(newfd);
-	return dupfd(oldfd,newfd);
+	err = dupfd(oldfd,newfd);
+out:
+	unlock_kernel();
+	return err;
 }
 
 asmlinkage int sys_dup(unsigned int fildes)
 {
-	return dupfd(fildes,0);
+	int ret;
+
+	lock_kernel();
+	ret = dupfd(fildes,0);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
@@ -56,29 +72,37 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	struct file * filp;
 	struct task_struct *p;
 	int task_found = 0;
+	long err = -EBADF;
 
+	lock_kernel();
 	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
-		return -EBADF;
+		goto out;
+	err = 0;
 	switch (cmd) {
 		case F_DUPFD:
-			return dupfd(fd,arg);
+			err = dupfd(fd,arg);
+			break;
 		case F_GETFD:
-			return FD_ISSET(fd, &current->files->close_on_exec);
+			err = FD_ISSET(fd, &current->files->close_on_exec);
+			break;
 		case F_SETFD:
 			if (arg&1)
 				FD_SET(fd, &current->files->close_on_exec);
 			else
 				FD_CLR(fd, &current->files->close_on_exec);
-			return 0;
+			break;
 		case F_GETFL:
-			return filp->f_flags;
+			err = filp->f_flags;
+			break;
 		case F_SETFL:
 			/*
 			 * In the case of an append-only file, O_APPEND
 			 * cannot be cleared
 			 */
+			err = -EPERM;
 			if (IS_APPEND(filp->f_inode) && !(arg & O_APPEND))
-				return -EPERM;
+				break;
+			err = 0;
 			if ((arg & FASYNC) && !(filp->f_flags & FASYNC) &&
 			    filp->f_op->fasync)
 				filp->f_op->fasync(filp->f_inode, filp, 1);
@@ -93,13 +117,16 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 					   O_NDELAY | FASYNC);
 			filp->f_flags |= arg & (O_APPEND | O_NONBLOCK |
 						O_NDELAY | FASYNC);
-			return 0;
+			break;
 		case F_GETLK:
-			return fcntl_getlk(fd, (struct flock *) arg);
+			err = fcntl_getlk(fd, (struct flock *) arg);
+			break;
 		case F_SETLK:
-			return fcntl_setlk(fd, cmd, (struct flock *) arg);
+			err = fcntl_setlk(fd, cmd, (struct flock *) arg);
+			break;
 		case F_SETLKW:
-			return fcntl_setlk(fd, cmd, (struct flock *) arg);
+			err = fcntl_setlk(fd, cmd, (struct flock *) arg);
+			break;
 		case F_GETOWN:
 			/*
 			 * XXX If f_owner is a process group, the
@@ -108,7 +135,8 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			 * current syscall conventions, the only way
 			 * to fix this will be in libc.
 			 */
-			return filp->f_owner;
+			err = filp->f_owner;
+			break;
 		case F_SETOWN:
 			/*
 			 *	Add the security checks - AC. Without
@@ -139,29 +167,35 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 				if ((p->pid == arg) || (p->pid == -arg) || 
 				    (p->pgrp == -arg)) {
 					task_found++;
+					err = -EPERM;
 					if ((p->session != current->session) &&
 					    (p->uid != current->uid) &&
 					    (p->euid != current->euid) &&
 					    !suser())
-						return -EPERM;
+						goto out;
 					break;
 				}
 			}
+			err = -EINVAL;
 			if ((task_found == 0) && !suser())
-				return -EINVAL;
+				break;
 		fasync_ok:
+			err = 0;
 			filp->f_owner = arg;
 			if (S_ISSOCK (filp->f_inode->i_mode))
-				sock_fcntl (filp, F_SETOWN, arg);
-			return 0;
+				err = sock_fcntl (filp, F_SETOWN, arg);
+			break;
 		default:
 			/* sockets need a few special fcntls. */
 			if (S_ISSOCK (filp->f_inode->i_mode))
-			  {
-			     return (sock_fcntl (filp, cmd, arg));
-			  }
-			return -EINVAL;
+				err = sock_fcntl (filp, cmd, arg);
+			else
+				err = -EINVAL;
+			break;
 	}
+out:
+	unlock_kernel();
+	return err;
 }
 
 void kill_fasync(struct fasync_struct *fa, int sig)

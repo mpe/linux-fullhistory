@@ -3644,7 +3644,7 @@ static struct file_operations idetape_fops = {
 	idetape_chrdev_read,	/* read  */
 	idetape_chrdev_write,	/* write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select */
+	NULL,			/* poll */
 	idetape_chrdev_ioctl,	/* ioctl */
 	NULL,			/* mmap */
 	idetape_chrdev_open,	/* open */

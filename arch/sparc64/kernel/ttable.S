@@ -1,4 +1,4 @@
-/* $Id: ttable.S,v 1.3 1996/12/28 18:39:43 davem Exp $
+/* $Id: ttable.S,v 1.4 1997/01/16 13:43:24 jj Exp $
  * ttable.S: Sparc V9 Trap Table(s) with SpitFire extensions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -216,6 +216,11 @@ tl1_f4o:	FILL_4_OTHER_TL1
 tl1_f5o:	FILL_5_OTHER_TL1
 tl1_f6o:	FILL_6_OTHER_TL1
 tl1_f7o:	FILL_7_OTHER_TL1
+
+#if 0
+/* Unless we are going to have software trap insns in the kernel code, we
+ * don't need this. For now we just save 8KB.
+ */
 tl1_sunos:	BTRAPTL1(0x100)
 tl1_bkpt:	BREAKPOINT_TRAP
 tl1_resv102:	BTRAPTL1(0x102)
@@ -252,3 +257,4 @@ tl1_resv173:	BTRAPTL1(0x173) BTRAPTL1(0x174) BTRAPTL1(0x175) BTRAPTL1(0x176)
 tl1_resv177:	BTRAPTL1(0x177) BTRAPTL1(0x178) BTRAPTL1(0x179) BTRAPTL1(0x17a)
 tl1_resv17b:	BTRAPTL1(0x17b) BTRAPTL1(0x17c)	BTRAPTL1(0x17d) BTRAPTL1(0x17e)
 tl1_resv17f:	BTRAPTL1(0x17f)
+#endif

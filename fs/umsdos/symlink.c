@@ -116,7 +116,7 @@ static struct file_operations umsdos_symlink_operations = {
 	NULL,				/* read */
 	NULL,				/* write */
 	NULL,				/* readdir - bad */
-	NULL,				/* select - default */
+	NULL,				/* poll - default */
 	NULL,				/* ioctl - default */
 	NULL,				/* mmap */
 	NULL,				/* no special open is needed */

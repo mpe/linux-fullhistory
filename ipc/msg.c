@@ -15,6 +15,8 @@
 #include <linux/malloc.h>
 #include <linux/kerneld.h>
 #include <linux/interrupt.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -393,15 +395,25 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 
 asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
 {
+	int ret;
+
 	/* IPC_KERNELD is used as a marker for kernel level calls */
-	return real_msgsnd(msqid, msgp, msgsz, msgflg & ~IPC_KERNELD);
+	lock_kernel();
+	ret = real_msgsnd(msqid, msgp, msgsz, msgflg & ~IPC_KERNELD);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz,
 	long msgtyp, int msgflg)
 {
+	int ret;
+
 	/* IPC_KERNELD is used as a marker for kernel level calls */
-	return real_msgrcv (msqid, msgp, msgsz, msgtyp, msgflg & ~IPC_KERNELD);
+	lock_kernel();
+	ret = real_msgrcv (msqid, msgp, msgsz, msgtyp, msgflg & ~IPC_KERNELD);
+	unlock_kernel();
+	return ret;
 }
 
 static int findkey (key_t key)
@@ -463,51 +475,60 @@ found:
 
 asmlinkage int sys_msgget (key_t key, int msgflg)
 {
-	int id;
+	int id, ret = -EPERM;
 	struct msqid_ds *msq;
 	
 	/*
 	 * If the IPC_KERNELD flag is set, the key is forced to IPC_PRIVATE,
 	 * and a designated kerneld message queue is created/referred to
 	 */
+	lock_kernel();
 	if ((msgflg & IPC_KERNELD)) {
 		int i;
 		if (!suser())
-			return -EPERM;
+			goto out;
 #ifdef NEW_KERNELD_PROTOCOL
 		if ((msgflg & IPC_KERNELD) == OLDIPC_KERNELD) {
 			printk(KERN_ALERT "Please recompile your kerneld daemons!\n");
-			return -EPERM;
+			goto out;
 		}
 #endif
+		ret = -ENOSPC;
 		if ((kerneld_msqid == -1) && (kerneld_msqid =
 				newque(IPC_PRIVATE, msgflg & S_IRWXU)) < 0)
-			return -ENOSPC;
+			goto out;
 		for (i = 0; i < MAX_KERNELDS; ++i) {
 			if (kerneld_arr[i] == 0) {
 				kerneld_arr[i] = current->pid;
 				++n_kernelds;
-				return kerneld_msqid;
+				ret = kerneld_msqid;
+				goto out;
 			}
 		}
-		return -ENOSPC;
+		goto out;
 	}
 	/* else it is a "normal" request */
 	if (key == IPC_PRIVATE) 
-		return newque(key, msgflg);
-	if ((id = findkey (key)) == -1) { /* key not used */
+		ret = newque(key, msgflg);
+	else if ((id = findkey (key)) == -1) { /* key not used */
 		if (!(msgflg & IPC_CREAT))
-			return -ENOENT;
-		return newque(key, msgflg);
+			ret = -ENOENT;
+		else
+			ret = newque(key, msgflg);
+	} else if (msgflg & IPC_CREAT && msgflg & IPC_EXCL) {
+		ret = -EEXIST;
+	} else {
+		msq = msgque[id];
+		if (msq == IPC_UNUSED || msq == IPC_NOID)
+			ret = -EIDRM;
+		else if (ipcperms(&msq->msg_perm, msgflg))
+			ret = -EACCES;
+		else
+			ret = (unsigned int) msq->msg_perm.seq * MSGMNI + id;
 	}
-	if (msgflg & IPC_CREAT && msgflg & IPC_EXCL)
-		return -EEXIST;
-	msq = msgque[id];
-	if (msq == IPC_UNUSED || msq == IPC_NOID)
-		return -EIDRM;
-	if (ipcperms(&msq->msg_perm, msgflg))
-		return -EACCES;
-	return (unsigned int) msq->msg_perm.seq * MSGMNI + id;
+out:
+	unlock_kernel();
+	return ret;
 } 
 
 static void freeque (int id)
@@ -537,18 +558,20 @@ static void freeque (int id)
 
 asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 {
-	int id, err;
+	int id, err = -EINVAL;
 	struct msqid_ds *msq;
 	struct msqid_ds tbuf;
 	struct ipc_perm *ipcp;
 	
+	lock_kernel();
 	if (msqid < 0 || cmd < 0)
-		return -EINVAL;
+		goto out;
+	err = -EFAULT;
 	switch (cmd) {
 	case IPC_INFO: 
 	case MSG_INFO: 
 		if (!buf)
-			return -EFAULT;
+			goto out;
 	{ 
 		struct msginfo msginfo;
 		msginfo.msgmni = MSGMNI;
@@ -566,23 +589,26 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		}
 		err = verify_area (VERIFY_WRITE, buf, sizeof (struct msginfo));
 		if (err)
-			return err;
+			goto out;
 		copy_to_user (buf, &msginfo, sizeof(struct msginfo));
-		return max_msqid;
+		err = max_msqid;
+		goto out;
 	}
 	case MSG_STAT:
 		if (!buf)
-			return -EFAULT;
+			goto out;
 		err = verify_area (VERIFY_WRITE, buf, sizeof (*buf));
 		if (err)
-			return err;
+			goto out;
+		err = -EINVAL;
 		if (msqid > max_msqid)
-			return -EINVAL;
+			goto out;
 		msq = msgque[msqid];
 		if (msq == IPC_UNUSED || msq == IPC_NOID)
-			return -EINVAL;
+			goto out;
+		err = -EACCES;
 		if (ipcperms (&msq->msg_perm, S_IRUGO))
-			return -EACCES;
+			goto out;
 		id = (unsigned int) msq->msg_perm.seq * MSGMNI + msqid;
 		tbuf.msg_perm   = msq->msg_perm;
 		tbuf.msg_stime  = msq->msg_stime;
@@ -594,36 +620,40 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		tbuf.msg_lspid  = msq->msg_lspid;
 		tbuf.msg_lrpid  = msq->msg_lrpid;
 		copy_to_user (buf, &tbuf, sizeof(*buf));
-		return id;
+		err = id;
+		goto out;
 	case IPC_SET:
 		if (!buf)
-			return -EFAULT;
+			goto out;
 		err = verify_area (VERIFY_READ, buf, sizeof (*buf));
 		if (err)
-			return err;
+			goto out;
 		copy_from_user (&tbuf, buf, sizeof (*buf));
 		break;
 	case IPC_STAT:
 		if (!buf)
-			return -EFAULT;
+			goto out;
 		err = verify_area (VERIFY_WRITE, buf, sizeof(*buf));
 		if (err)
-			return err;
+			goto out;
 		break;
 	}
 
 	id = (unsigned int) msqid % MSGMNI;
 	msq = msgque [id];
+	err = -EINVAL;
 	if (msq == IPC_UNUSED || msq == IPC_NOID)
-		return -EINVAL;
+		goto out;
+	err = -EIDRM;
 	if (msq->msg_perm.seq != (unsigned int) msqid / MSGMNI)
-		return -EIDRM;
+		goto out;
 	ipcp = &msq->msg_perm;
 
 	switch (cmd) {
 	case IPC_STAT:
+		err = -EACCES;
 		if (ipcperms (ipcp, S_IRUGO))
-			return -EACCES;
+			goto out;
 		tbuf.msg_perm   = msq->msg_perm;
 		tbuf.msg_stime  = msq->msg_stime;
 		tbuf.msg_rtime  = msq->msg_rtime;
@@ -634,24 +664,28 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		tbuf.msg_lspid  = msq->msg_lspid;
 		tbuf.msg_lrpid  = msq->msg_lrpid;
 		copy_to_user (buf, &tbuf, sizeof (*buf));
-		return 0;
+		err = 0;
+		goto out;
 	case IPC_SET:
+		err = -EPERM;
 		if (!suser() && current->euid != ipcp->cuid && 
 		    current->euid != ipcp->uid)
-			return -EPERM;
+			goto out;
 		if (tbuf.msg_qbytes > MSGMNB && !suser())
-			return -EPERM;
+			goto out;
 		msq->msg_qbytes = tbuf.msg_qbytes;
 		ipcp->uid = tbuf.msg_perm.uid;
 		ipcp->gid =  tbuf.msg_perm.gid;
 		ipcp->mode = (ipcp->mode & ~S_IRWXUGO) | 
 			(S_IRWXUGO & tbuf.msg_perm.mode);
 		msq->msg_ctime = CURRENT_TIME;
-		return 0;
+		err = 0;
+		goto out;
 	case IPC_RMID:
+		err = -EPERM;
 		if (!suser() && current->euid != ipcp->cuid && 
 		    current->euid != ipcp->uid)
-			return -EPERM;
+			goto out;
 		/*
 		 * There is only one kerneld message queue,
 		 * mark it as non-existent
@@ -659,10 +693,15 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		if ((kerneld_msqid >= 0) && (msqid == kerneld_msqid))
 			kerneld_msqid = -1;
 		freeque (id); 
-		return 0;
+		err = 0;
+		goto out;
 	default:
-		return -EINVAL;
+		err = -EINVAL;
+		goto out;
 	}
+out:
+	unlock_kernel();
+	return err;
 }
 
 /*

@@ -9,12 +9,6 @@
 #endif
 
 /*
- * Unlocked, temporary IO buffer_heads gets moved to the reuse_list
- * once their page becomes unlocked.  
- */
-extern struct buffer_head *reuse_list;
-
-/*
  * Buffer cache locking - note that interrupts may only unlock, not
  * lock buffers.
  */

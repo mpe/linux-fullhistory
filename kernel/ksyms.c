@@ -12,7 +12,6 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/smp.h>
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 #include <linux/cdrom.h>
@@ -50,10 +49,11 @@
 #include <linux/swap.h>
 #include <linux/ctype.h>
 
-extern unsigned char aux_device_present, kbd_read_mask;
-#ifdef __i386__
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_HD)
 extern struct drive_info_struct drive_info;
 #endif
+
+extern unsigned char aux_device_present, kbd_read_mask;
 
 #ifdef CONFIG_PCI
 #include <linux/bios32.h>
@@ -181,7 +181,7 @@ EXPORT_SYMBOL(register_cdrom);
 EXPORT_SYMBOL(unregister_cdrom);
 EXPORT_SYMBOL(cdrom_fops);
 #endif
- 
+
 /* block device driver support */
 EXPORT_SYMBOL(block_read);
 EXPORT_SYMBOL(block_write);
@@ -201,7 +201,8 @@ EXPORT_SYMBOL(blkdev_release);
 EXPORT_SYMBOL(gendisk_head);
 EXPORT_SYMBOL(resetup_one_dev);
 EXPORT_SYMBOL(unplug_device);
-#ifdef __i386__
+
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_HD)
 EXPORT_SYMBOL(drive_info);
 #endif
 

@@ -263,7 +263,7 @@ static struct file_operations fb_fops = {
 	fb_read,	/* read		*/
 	fb_write,	/* write	*/
 	NULL,		/* readdir 	*/
-	NULL,		/* select 	*/
+	NULL,		/* poll 	*/
 	fb_ioctl,	/* ioctl 	*/
 	fb_mmap,	/* mmap		*/
 	fb_open,	/* open 	*/

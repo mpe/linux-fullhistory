@@ -23,6 +23,7 @@
 #include <linux/if_arp.h>
 #include <linux/skbuff.h>
 #include <linux/termios.h>	/* For TIOCOUTQ/INQ */
+#include <linux/poll.h>
 #include <net/datalink.h>
 #include <net/p8022.h>
 #include <net/psnap.h>
@@ -711,11 +712,11 @@ static int netbeui_shutdown(struct socket *sk,int how)
 	return -EOPNOTSUPP;
 }
 
-static int netbeui_select(struct socket *sock , int sel_type, select_table *wait)
+static int netbeui_poll(struct socket *sock, poll_table *wait)
 {
 	netbeui_socket *sk=(netbeui_socket *)sock->data;
 
-	return datagram_select(sk,sel_type,wait);
+	return datagram_poll(sk,wait);
 }
 
 /*
@@ -810,7 +811,7 @@ static struct proto_ops netbeui_proto_ops = {
 	netbeui_socketpair,
 	netbeui_accept,
 	netbeui_getname,
-	netbeui_select,
+	netbeui_poll,
 	netbeui_ioctl,
 	netbeui_listen,
 	netbeui_shutdown,

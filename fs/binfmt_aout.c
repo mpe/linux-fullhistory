@@ -37,7 +37,7 @@ static struct linux_binfmt aout_format = {
 #ifndef MODULE
 	NULL, NULL, load_aout_binary, load_aout_library, aout_core_dump
 #else
-	NULL, &__this_module.usecount, load_aout_binary, load_aout_library, aout_core_dump
+	NULL, &__this_module, load_aout_binary, load_aout_library, aout_core_dump
 #endif
 };
 
@@ -63,7 +63,7 @@ while (file.f_op->write(inode,&file,(char *)(addr),(nr)) != (nr)) goto close_cor
 if (file.f_op->llseek) { \
 	if (file.f_op->llseek(inode,&file,(offset),0) != (offset)) \
  		goto close_coredump; \
-} else file.f_pos = (offset)		
+} else file.f_pos = (offset)
 
 /*
  * Routine writes a core dump image in the current directory.
@@ -85,10 +85,17 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 	char corefile[6+sizeof(current->comm)];
 	unsigned long dump_start, dump_size;
 	struct user dump;
-#ifdef __alpha__
+#if defined(__alpha__)
 #       define START_DATA(u)	(u.start_data)
-#else
+#elif defined(__sparc__)
+#       define START_DATA(u)    (u.u_tsize)
+#elif defined(__i386__)
 #       define START_DATA(u)	(u.u_tsize << PAGE_SHIFT)
+#endif
+#ifdef __sparc__
+#       define START_STACK(u)   ((regs->u_regs[UREG_FP]) & ~(PAGE_SIZE - 1))
+#else
+#       define START_STACK(u)   (u.start_stack)
 #endif
 
 	if (!current->dumpable || current->mm->count != 1)
@@ -131,45 +138,76 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 	has_dumped = 1;
 	current->flags |= PF_DUMPCORE;
        	strncpy(dump.u_comm, current->comm, sizeof(current->comm));
+#ifndef __sparc__
 	dump.u_ar0 = (void *)(((unsigned long)(&dump.regs)) - ((unsigned long)(&dump)));
+#endif
 	dump.signal = signr;
 	dump_thread(regs, &dump);
 
 /* If the size of the dump file exceeds the rlimit, then see what would happen
    if we wrote the stack, but not the data area.  */
+#ifdef __sparc__
+	if ((dump.u_dsize+dump.u_ssize) >
+	    current->rlim[RLIMIT_CORE].rlim_cur)
+		dump.u_dsize = 0;
+#else
 	if ((dump.u_dsize+dump.u_ssize+1) * PAGE_SIZE >
 	    current->rlim[RLIMIT_CORE].rlim_cur)
 		dump.u_dsize = 0;
+#endif
 
 /* Make sure we have enough room to write the stack and data areas. */
+#ifdef __sparc__
+	if ((dump.u_ssize) >
+	    current->rlim[RLIMIT_CORE].rlim_cur)
+		dump.u_ssize = 0;
+#else
 	if ((dump.u_ssize+1) * PAGE_SIZE >
 	    current->rlim[RLIMIT_CORE].rlim_cur)
 		dump.u_ssize = 0;
+#endif
 
 /* make sure we actually have a data and stack area to dump */
 	set_fs(USER_DS);
+#ifdef __sparc__
+	if (verify_area(VERIFY_READ, (void *) START_DATA(dump), dump.u_dsize))
+		dump.u_dsize = 0;
+	if (verify_area(VERIFY_READ, (void *) START_STACK(dump), dump.u_ssize))
+		dump.u_ssize = 0;
+#else
 	if (verify_area(VERIFY_READ, (void *) START_DATA(dump), dump.u_dsize << PAGE_SHIFT))
 		dump.u_dsize = 0;
-	if (verify_area(VERIFY_READ, (void *) dump.start_stack, dump.u_ssize << PAGE_SHIFT))
+	if (verify_area(VERIFY_READ, (void *) START_STACK(dump), dump.u_ssize << PAGE_SHIFT))
 		dump.u_ssize = 0;
+#endif
 
 	set_fs(KERNEL_DS);
 /* struct user */
 	DUMP_WRITE(&dump,sizeof(dump));
 /* Now dump all of the user data.  Include malloced stuff as well */
+#ifndef __sparc__
 	DUMP_SEEK(PAGE_SIZE);
+#endif
 /* now we start writing out the user space info */
 	set_fs(USER_DS);
 /* Dump the data area */
 	if (dump.u_dsize != 0) {
 		dump_start = START_DATA(dump);
+#ifdef __sparc__
+		dump_size = dump.u_dsize;
+#else
 		dump_size = dump.u_dsize << PAGE_SHIFT;
+#endif
 		DUMP_WRITE(dump_start,dump_size);
 	}
 /* Now prepare to dump the stack area */
 	if (dump.u_ssize != 0) {
-		dump_start = dump.start_stack;
+		dump_start = START_STACK(dump);
+#ifdef __sparc__
+		dump_size = dump.u_ssize;
+#else
 		dump_size = dump.u_ssize << PAGE_SHIFT;
+#endif
 		DUMP_WRITE(dump_start,dump_size);
 	}
 /* Finally dump the task struct.  Not be used by gdb, but could be useful */
@@ -210,6 +248,11 @@ static unsigned long * create_aout_tables(char * p, struct linux_binprm * bprm)
 	int envc = bprm->envc;
 
 	sp = (unsigned long *) ((-(unsigned long)sizeof(char *)) & (unsigned long) p);
+#ifdef __sparc__
+	/* This imposes the proper stack alignment for a new process. */
+	sp = (unsigned long *) (((unsigned long) sp) & ~7);
+	if ((envc+argc+3)&1) --sp;
+#endif
 #ifdef __alpha__
 /* whee.. test-programs are so much fun. */
 	put_user(0, --sp);
@@ -259,8 +302,7 @@ static unsigned long * create_aout_tables(char * p, struct linux_binprm * bprm)
  * libraries.  There is no binary dependent code anywhere else.
  */
 
-static inline int
-do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
+static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
 	struct exec ex;
 	struct file * file;
@@ -271,8 +313,8 @@ do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	unsigned long rlim;
 
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
-	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC && 
-	     N_MAGIC(ex) != QMAGIC) ||
+	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
+	     N_MAGIC(ex) != QMAGIC && N_MAGIC(ex) != NMAGIC) ||
 	    N_TRSIZE(ex) || N_DRSIZE(ex) ||
 	    bprm->inode->i_size < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
 		return -ENOEXEC;
@@ -306,6 +348,9 @@ do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 	/* OK, This is the point of no return */
 	flush_old_exec(bprm);
+#ifdef __sparc__
+	memcpy(&current->tss.core_exec, &ex, sizeof(struct exec));
+#endif
 
 	current->mm->end_code = ex.a_text +
 		(current->mm->start_code = N_TXTADDR(ex));
@@ -319,8 +364,25 @@ do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	current->suid = current->euid = current->fsuid = bprm->e_uid;
 	current->sgid = current->egid = current->fsgid = bprm->e_gid;
  	current->flags &= ~PF_FORKNOEXEC;
+#ifdef __sparc__
+	if (N_MAGIC(ex) == NMAGIC) {
+		/* Fuck me plenty... */
+		error = do_mmap(NULL, N_TXTADDR(ex), ex.a_text,
+				PROT_READ|PROT_WRITE|PROT_EXEC,
+				MAP_FIXED|MAP_PRIVATE, 0);
+		read_exec(bprm->inode, fd_offset, (char *) N_TXTADDR(ex),
+			  ex.a_text, 0);
+		error = do_mmap(NULL, N_DATADDR(ex), ex.a_data,
+				PROT_READ|PROT_WRITE|PROT_EXEC,
+				MAP_FIXED|MAP_PRIVATE, 0);
+		read_exec(bprm->inode, fd_offset + ex.a_text, (char *) N_DATADDR(ex),
+			  ex.a_data, 0);
+		goto beyond_if;
+	}
+#endif
+
 	if (N_MAGIC(ex) == OMAGIC) {
-#ifdef __alpha__
+#if defined(__alpha__) || defined(__sparc__)
 		do_mmap(NULL, N_TXTADDR(ex) & PAGE_MASK,
 			ex.a_text+ex.a_data + PAGE_SIZE - 1,
 			PROT_READ|PROT_WRITE|PROT_EXEC,
@@ -334,11 +396,12 @@ do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		read_exec(bprm->inode, 32, (char *) 0, ex.a_text+ex.a_data, 0);
 #endif
 	} else {
-		if (ex.a_text & 0xfff || ex.a_data & 0xfff)
+		if ((ex.a_text & 0xfff || ex.a_data & 0xfff) &&
+		    (N_MAGIC(ex) != NMAGIC))
 			printk(KERN_NOTICE "executable not page aligned\n");
-		
+
 		fd = open_inode(bprm->inode, O_RDONLY);
-		
+
 		if (fd < 0)
 			return fd;
 		file = current->files->fd[fd];
@@ -362,7 +425,7 @@ do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			send_sig(SIGKILL, current, 0);
 			return error;
 		}
-		
+
  		error = do_mmap(file, N_DATADDR(ex), ex.a_data,
 				PROT_READ | PROT_WRITE | PROT_EXEC,
 				MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE,
@@ -374,21 +437,21 @@ do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		}
 	}
 beyond_if:
-	if (current->exec_domain && current->exec_domain->use_count)
-		(*current->exec_domain->use_count)--;
-	if (current->binfmt && current->binfmt->use_count)
-		(*current->binfmt->use_count)--;
+	if (current->exec_domain && current->exec_domain->module)
+		__MOD_DEC_USE_COUNT(current->exec_domain->module);
+	if (current->binfmt && current->binfmt->module)
+		__MOD_DEC_USE_COUNT(current->binfmt->module);
 	current->exec_domain = lookup_exec_domain(current->personality);
 	current->binfmt = &aout_format;
-	if (current->exec_domain && current->exec_domain->use_count)
-		(*current->exec_domain->use_count)++;
-	if (current->binfmt && current->binfmt->use_count)
-		(*current->binfmt->use_count)++;
+	if (current->exec_domain && current->exec_domain->module)
+		__MOD_INC_USE_COUNT(current->exec_domain->module);
+	if (current->binfmt && current->binfmt->module)
+		__MOD_INC_USE_COUNT(current->binfmt->module);
 
 	set_brk(current->mm->start_brk, current->mm->brk);
 
 	p = setup_arg_pages(p, bprm);
-	
+
 	p = (unsigned long) create_aout_tables((char *)p, bprm);
 	current->mm->start_stack = p;
 #ifdef __alpha__
@@ -399,6 +462,7 @@ beyond_if:
 		send_sig(SIGTRAP, current, 0);
 	return 0;
 }
+
 
 static int
 load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
@@ -421,10 +485,10 @@ do_load_aout_library(int fd)
 	unsigned int bss;
 	unsigned int start_addr;
 	unsigned long error;
-	
+
 	file = current->files->fd[fd];
 	inode = file->f_inode;
-	
+
 	if (!file || !file->f_op)
 		return -EACCES;
 
@@ -447,12 +511,12 @@ do_load_aout_library(int fd)
 	    inode->i_size < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
 		return -ENOEXEC;
 	}
-	if (N_MAGIC(ex) == ZMAGIC && N_TXTOFF(ex) && 
+	if (N_MAGIC(ex) == ZMAGIC && N_TXTOFF(ex) &&
 	    (N_TXTOFF(ex) < inode->i_sb->s_blocksize)) {
 		printk("N_TXTOFF < BLOCK_SIZE. Please convert library\n");
 		return -ENOEXEC;
 	}
-	
+
 	if (N_FLAGS(ex)) return -ENOEXEC;
 
 	/* For  QMAGIC, the starting address is 0x20 into the page.  We mask
@@ -504,4 +568,3 @@ void cleanup_module( void) {
 	unregister_binfmt(&aout_format);
 }
 #endif
-

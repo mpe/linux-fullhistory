@@ -31,7 +31,7 @@ static struct file_operations isofs_dir_operations =
 	NULL,			/* read */
 	NULL,			/* write - bad */
 	isofs_readdir,		/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* no special open code */
 	NULL,			/* no special release code */

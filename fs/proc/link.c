@@ -33,7 +33,7 @@ static struct file_operations proc_fd_link_operations = {
 	NULL,			/* read - bad */
 	NULL,			/* write - bad */
 	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* very special open code */

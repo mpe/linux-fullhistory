@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.58 1996/12/18 06:33:41 tridge Exp $
+/*  $Id: irq.c,v 1.59 1997/01/06 06:52:21 davem Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -21,6 +21,8 @@
 #include <linux/malloc.h>
 #include <linux/random.h>
 #include <linux/init.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>
@@ -204,6 +206,8 @@ void handler_irq(int irq, struct pt_regs * regs)
 	struct irqaction * action;
 	unsigned int cpu_irq;
 	
+	lock_kernel();
+	intr_count++;
 	cpu_irq = irq & NR_IRQS;
 	action = *(cpu_irq + irq_action);
 	kstat.interrupts[cpu_irq]++;
@@ -213,7 +217,22 @@ void handler_irq(int irq, struct pt_regs * regs)
 		action->handler(irq, action->dev_id, regs);
 		action = action->next;
 	} while (action);
+	intr_count--;
+	unlock_kernel();
 }
+
+#ifdef CONFIG_BLK_DEV_FD
+extern void floppy_interrupt(int irq, void *dev_id, struct pt_regs *regs);
+
+void sparc_floppy_irq(int irq, void *dev_id, struct pt_regs *regs)
+{
+	lock_kernel();
+	intr_count++;
+	floppy_interrupt(irq, dev_id, regs);
+	intr_count--;
+	unlock_kernel();
+}
+#endif
 
 /* Fast IRQ's on the Sparc can only have one routine attached to them,
  * thus no sharing possible.

@@ -1,4 +1,4 @@
-/* $Id: sigcontext.h,v 1.1 1996/12/26 14:22:36 davem Exp $ */
+/* $Id: sigcontext.h,v 1.2 1997/01/19 22:32:15 ecd Exp $ */
 #ifndef _ASMsparc64_SIGCONTEXT_H
 #define _ASMsparc64_SIGCONTEXT_H
 
@@ -39,19 +39,27 @@ struct sigcontext {
 };
 
 typedef struct {
-	struct     pt_regs32 si_regs;
-	unsigned   int si_float_regs [64];
-	unsigned   int si_fsr;
-	unsigned   int si_fpqdepth;
+	struct pt_regs32	si_regs;
+	int			si_mask;
+} __siginfo32_t;
+
+typedef struct {
+	unsigned int si_float_regs [64];
+	unsigned int si_fsr;
+	unsigned int si_fpqdepth;
 	struct {
 		unsigned int *insn_addr;
 		unsigned int insn;
 	} si_fpqueue [16];
-	int si_mask;
-} __siginfo32_t;
+} __siginfo_fpu32_t;
+
 
 typedef struct {
 	struct     pt_regs si_regs;
+	int si_mask;
+} __siginfo_t;
+
+typedef struct {
 	unsigned   long si_float_regs [64];
 	unsigned   long si_fsr;
 	unsigned   int si_fpqdepth;
@@ -59,8 +67,7 @@ typedef struct {
 		unsigned int *insn_addr;
 		unsigned int insn;
 	} si_fpqueue [16];
-	int si_mask;
-} __siginfo_t;
+} __siginfo_fpu_t;
 
 #endif /* !(__ASSEMBLY__) */
 

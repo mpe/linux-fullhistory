@@ -1,14 +1,12 @@
 /* linux/arch/sparc/lib/memset.S: Sparc optimized memset and bzero code
  * Hand optimized from GNU libc's memset
  * Copyright (C) 1991,1996 Free Software Foundation
- * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
 
 #include <asm/cprefix.h>
 #include <asm/ptrace.h>
-
-#define HANDLE_UNALIGNED 1
 
 	/* Store 64 bytes at (BASE + OFFSET) using value SOURCE. */
 #define ZERO_BIG_BLOCK(base, offset, source)    \
@@ -44,13 +42,6 @@ C_LABEL(memset):
 	or	%g3, %g2, %g3
 	b	1f
 	 mov	%o2, %o1
-
-#if HANDLE_UNALIGNED
-/* As this is highly unprobable, we optimize the other case (4 aligned)
- * Define HANDLE_UNALIGNED to 0, if all the alignment work is done by
- * the trap. Then we have to hope nobody will memset something unaligned
- * with large counts, as this would lead to a lot of traps...
- */
 3:
 	cmp	%o2, 3
 	be	2f
@@ -66,19 +57,16 @@ C_LABEL(memset):
 	add	%o1, %o2, %o1
 	b	4f
 	 sub	%o0, %o2, %o0
-#endif /* HANDLE_UNALIGNED */
 
 C_LABEL(__bzero):
 	mov	%g0, %g3
 1:
+ 	mov	%o0, %g1
 	cmp	%o1, 7
 	bleu	7f
-	 mov	%o0, %g1
+	 andcc	%o0, 3, %o2
 
-#if HANDLE_UNALIGNED
-	andcc	%o0, 3, %o2
 	bne	3b
-#endif /* HANDLE_UNALIGNED */
 4:
 	 andcc	%o0, 4, %g0
 
@@ -113,7 +101,6 @@ C_LABEL(__bzero):
 bzero_table:
 	ZERO_LAST_BLOCKS(%o0, 0x48, %g2)
 	ZERO_LAST_BLOCKS(%o0, 0x08, %g2)
-
 6:
 	be	8f
 	 andcc	%o1, 4, %g0
@@ -134,11 +121,17 @@ bzero_table:
 	 stb	%g3, [%o0]
 8:
 	retl
-	 mov	%g1,%o0
-
-/* Don't care about alignment here. It is highly 
- * unprobable and at most two traps may happen
- */
+	 mov	%g1, %o0
 7:
-	b	6b
+	be	6b
 	 orcc	%o1, 0, %g0
+
+	be	0f
+8:
+	 add	%o0, 1, %o0
+	subcc	%o1, 1, %o1
+	bne,a	8b
+	 stb	%g3, [%o0 - 1]
+0:
+	retl
+	 mov	%g1, %o0

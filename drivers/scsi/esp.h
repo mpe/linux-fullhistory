@@ -396,7 +396,7 @@ extern struct proc_dir_entry proc_scsi_esp;
 
 #define SCSI_SPARC_ESP {                                                               \
 /* struct SHT *next */                                         NULL,                   \
-/* long *usage_count */                                        NULL,                   \
+/* struct module *module */                                    NULL,                   \
 /* struct proc_dir_entry *proc_dir */                          &proc_scsi_esp,         \
 /* int (*proc_info)(char *, char **, off_t, int, int, int) */  &esp_proc_info,         \
 /* const char *name */                                         "Sun ESP 100/100a/200", \

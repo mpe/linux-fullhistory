@@ -75,6 +75,7 @@ struct vm_area_struct {
 
 #define VM_EXECUTABLE	0x1000
 #define VM_LOCKED	0x2000
+#define VM_IO           0x4000  /* Memory mapped I/O or similar */
 
 #define VM_STACK_FLAGS	0x0177
 
@@ -273,6 +274,7 @@ extern void oom(struct task_struct * tsk);
 extern void si_meminfo(struct sysinfo * val);
 
 /* mmap.c */
+extern void vma_init(void);
 extern unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off);
 extern void merge_segments(struct mm_struct *, unsigned long, unsigned long);

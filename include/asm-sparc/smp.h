@@ -15,6 +15,8 @@ struct prom_cpuinfo {
 	int prom_node;
 	int mid;
 };
+extern int linux_num_cpus;	/* number of CPUs probed  */
+
 #endif /* !(__ASSEMBLY__) */
 
 #ifdef __SMP__
@@ -31,8 +33,13 @@ struct cpuinfo_sparc {
 
 extern struct cpuinfo_sparc cpu_data[NR_CPUS];
 
-typedef __volatile__ unsigned char klock_t;
-extern klock_t kernel_flag;
+struct klock_info {
+	unsigned char kernel_flag;
+	unsigned char akp;
+	unsigned char irq_udt;
+};
+
+extern struct klock_info klock_info;
 
 #define KLOCK_HELD       0xff
 #define KLOCK_CLEAR      0x00
@@ -45,12 +52,8 @@ extern int smp_found_cpus;
 extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;
 extern __volatile__ unsigned long smp_invalidate_needed[NR_CPUS];
-extern __volatile__ unsigned long kernel_counter;
-extern __volatile__ unsigned char active_kernel_processor;
 extern void smp_message_irq(void);
 extern unsigned long ipi_count;
-extern __volatile__ unsigned long kernel_counter;
-extern __volatile__ unsigned long syscall_count;
 
 extern void print_lock_state(void);
 
@@ -167,6 +170,11 @@ extern __inline__ __volatile__ int read_smp_counter(volatile int *ctr)
 #define SMP_FROM_INT		1
 #define SMP_FROM_SYSCALL	2
 
+#else /* !(__SMP__) */
+
+#define smp_capture()		do { } while(0)
+#define smp_release()		do { } while(0)
+ 
 #endif /* !(__SMP__) */
 
 #endif /* !(_SPARC_SMP_H) */

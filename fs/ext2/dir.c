@@ -39,7 +39,7 @@ static struct file_operations ext2_dir_operations = {
 	ext2_dir_read,		/* read */
 	NULL,			/* write - bad */
 	ext2_readdir,		/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	ext2_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */

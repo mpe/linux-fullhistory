@@ -2885,7 +2885,7 @@ static struct file_operations scd_fops = {
    block_read,             /* read - general block-dev read */
    block_write,            /* write - general block-dev write */
    NULL,                   /* readdir - bad */
-   NULL,                   /* select */
+   NULL,                   /* poll */
    scd_ioctl,              /* ioctl */
    NULL,                   /* mmap */
    scd_open,               /* open */

@@ -39,7 +39,7 @@ static struct file_operations nfs_dir_operations = {
 	nfs_dir_read,		/* read - bad */
 	NULL,			/* write - bad */
 	nfs_readdir,		/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	nfs_dir_open,		/* open - revalidate */

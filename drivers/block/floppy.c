@@ -3704,7 +3704,7 @@ static struct file_operations floppy_fops = {
 	floppy_read,		/* read - general block-dev read */
 	floppy_write,		/* write - general block-dev write */
 	NULL,		       	/* readdir - bad */
-	NULL,			/* select */
+	NULL,			/* poll */
 	fd_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	floppy_open,		/* open */
@@ -4128,6 +4128,7 @@ static void floppy_release_irq_and_dma(void)
 extern char *get_options(char *str, int *ints);
 
 char *floppy=NULL;
+MODULE_PARM(floppy, "s");
 
 static void parse_floppy_cfg_string(char *cfg)
 {

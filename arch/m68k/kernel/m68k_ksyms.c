@@ -20,32 +20,32 @@ extern int dump_fpu(elf_fpregset_t *);
 
 /* platform dependent support */
 
-EXPORT_SYMBOLS(memcmp);
-EXPORT_SYMBOLS(m68k_machtype);
-EXPORT_SYMBOLS(m68k_cputype);
-EXPORT_SYMBOLS(m68k_is040or060);
-EXPORT_SYMBOLS(cache_push);
-EXPORT_SYMBOLS(cache_push_v);
-EXPORT_SYMBOLS(cache_clear);
-EXPORT_SYMBOLS(mm_vtop);
-EXPORT_SYMBOLS(mm_ptov);
-EXPORT_SYMBOLS(mm_end_of_chunk);
-EXPORT_SYMBOLS(m68k_debug_device);
-EXPORT_SYMBOLS(request_irq);
-EXPORT_SYMBOLS(free_irq);
-EXPORT_SYMBOLS(dump_fpu);
-EXPORT_SYMBOLS(dump_thread);
-EXPORT_SYMBOLS(strnlen);
-EXPORT_SYMBOLS(strrchr);
-EXPORT_SYMBOLS(strstr);
+EXPORT_SYMBOL(memcmp);
+EXPORT_SYMBOL(m68k_machtype);
+EXPORT_SYMBOL(m68k_cputype);
+EXPORT_SYMBOL(m68k_is040or060);
+EXPORT_SYMBOL(cache_push);
+EXPORT_SYMBOL(cache_push_v);
+EXPORT_SYMBOL(cache_clear);
+EXPORT_SYMBOL(mm_vtop);
+EXPORT_SYMBOL(mm_ptov);
+EXPORT_SYMBOL(mm_end_of_chunk);
+EXPORT_SYMBOL(m68k_debug_device);
+EXPORT_SYMBOL(request_irq);
+EXPORT_SYMBOL(free_irq);
+EXPORT_SYMBOL(dump_fpu);
+EXPORT_SYMBOL(dump_thread);
+EXPORT_SYMBOL(strnlen);
+EXPORT_SYMBOL(strrchr);
+EXPORT_SYMBOL(strstr);
 
 /* The following are special because they're not called
    explicitly (the C compiler generates them).  Fortunately,
    their interface isn't gonna change any time soon now, so
    it's OK to leave it out of version control.  */
-EXPORT_SYMBOLS_NOVERS(__ashrdi3);
-EXPORT_SYMBOLS_NOVERS(memcpy);
-EXPORT_SYMBOLS_NOVERS(memset);
+EXPORT_SYMBOL_NOVERS(__ashrdi3);
+EXPORT_SYMBOL_NOVERS(memcpy);
+EXPORT_SYMBOL_NOVERS(memset);
 
-EXPORT_SYMBOLS_NOVERS(__down_failed);
-EXPORT_SYMBOLS_NOVERS(__up_wakeup);
+EXPORT_SYMBOL_NOVERS(__down_failed);
+EXPORT_SYMBOL_NOVERS(__up_wakeup);

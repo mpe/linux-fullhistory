@@ -192,8 +192,6 @@ extern void smp_message_irq(int cpl, void *dev_id, struct pt_regs *regs);
 extern void smp_reschedule_irq(int cpl, struct pt_regs *regs);
 extern unsigned long ipi_count;
 extern void smp_invalidate_rcv(void);		/* Process an NMI */
-extern volatile unsigned long kernel_counter;
-extern volatile unsigned long syscall_count;
 
 /*
  *	General functions that each host system must provide.
@@ -204,7 +202,7 @@ extern void smp_boot_cpus(void);
 extern void smp_store_cpu_info(int id);		/* Store per cpu info (like the initial udelay numbers */
 
 extern volatile unsigned long smp_proc_in_lock[NR_CPUS]; /* for computing process time */
-extern volatile unsigned long smp_process_available;
+extern volatile int smp_process_available;
 
 /*
  *	APIC handlers: Note according to the Intel specification update
@@ -233,6 +231,52 @@ extern __inline unsigned long apic_read(unsigned long reg)
 extern __inline int smp_processor_id(void)
 {
 	return GET_APIC_ID(apic_read(APIC_ID));
+}
+
+/* These read/change the "processes available" counter in the scheduler. */
+extern __inline__ __volatile__ void inc_smp_counter(volatile int *ctr)
+{
+	int cpu = smp_processor_id();
+	while(set_bit(31, ctr))
+	{
+		while(test_bit(31,ctr))
+		{
+			if(clear_bit(cpu,&smp_invalidate_needed))
+			{
+				unsigned long tmpreg;
+				__asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3"
+						     : "=r" (tmpreg) : : "memory");
+				set_bit(cpu,&cpu_callin_map[0]);
+			}
+		}
+	}
+	*ctr = (*ctr + 1);
+	clear_bit(31, ctr);
+}
+
+extern __inline__ __volatile__ void dec_smp_counter(volatile int *ctr)
+{
+	int cpu = smp_processor_id();
+	while(set_bit(31, ctr))
+	{
+		while(test_bit(31,ctr))
+		{
+			if(clear_bit(cpu,&smp_invalidate_needed))
+			{
+				unsigned long tmpreg;
+				__asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3"
+						     : "=r" (tmpreg) : : "memory");
+				set_bit(cpu,&cpu_callin_map[0]);
+			}
+		}
+	}
+	*ctr = (*ctr - 1);
+	clear_bit(31, ctr);
+}
+
+extern __inline__ __volatile__ int read_smp_counter(volatile int *ctr)
+{
+	return (*ctr & 0x7fffffff);
 }
 
 #endif /* !ASSEMBLY */

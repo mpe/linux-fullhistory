@@ -15,11 +15,15 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
+#include <asm/namei.h>
 
 #define ACC_MODE(x) ("\000\004\002\006"[(x)&O_ACCMODE])
+
 
 /*
  * In order to reduce some races, while at the same time doing additional
@@ -265,6 +269,7 @@ static int _namei(const char * pathname, struct inode * base,
 	int namelen,error;
 	struct inode * inode;
 
+	translate_namei(pathname, base, follow_links, res_inode);
 	*res_inode = NULL;
 	error = dir_namei(pathname, &namelen, &basename, base, &base);
 	if (error)
@@ -331,13 +336,15 @@ int namei(const char *pathname, struct inode **res_inode)
  * which is a lot more logical, and also allows the "no perm" needed
  * for symlinks (where the permissions are checked later).
  */
-int open_namei(const char * pathname, int flag, int mode,
+int
+open_namei(const char * pathname, int flag, int mode,
                struct inode ** res_inode, struct inode * base)
 {
 	const char * basename;
 	int namelen,error;
 	struct inode * dir, *inode;
 
+	translate_open_namei(pathname, flag, mode, res_inode, base);
 	mode &= S_IALLUGO & ~current->fs->umask;
 	mode |= S_IFREG;
 	error = dir_namei(pathname, &namelen, &basename, base, &dir);
@@ -499,8 +506,11 @@ asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
 	int error;
 	char * tmp;
 
+	lock_kernel();
+	error = -EPERM;
 	if (S_ISDIR(mode) || (!S_ISFIFO(mode) && !fsuser()))
-		return -EPERM;
+		goto out;
+	error = -EINVAL;
 	switch (mode & S_IFMT) {
 	case 0:
 		mode |= S_IFREG;
@@ -508,13 +518,15 @@ asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
 	case S_IFREG: case S_IFCHR: case S_IFBLK: case S_IFIFO: case S_IFSOCK:
 		break;
 	default:
-		return -EINVAL;
+		goto out;
 	}
 	error = getname(filename,&tmp);
 	if (!error) {
 		error = do_mknod(tmp,mode,dev);
 		putname(tmp);
 	}
+out:
+	unlock_kernel();
 	return error;
 }
 
@@ -595,12 +607,14 @@ asmlinkage int sys_mkdir(const char * pathname, int mode)
 	int error;
 	char * tmp;
 
+	lock_kernel();
 	error = getname(pathname,&tmp);
 	if (!error) {
 		remove_trailing_slashes(tmp);
 		error = do_mkdir(tmp,mode);
 		putname(tmp);
 	}
+	unlock_kernel();
 	return error;
 }
 
@@ -646,12 +660,14 @@ asmlinkage int sys_rmdir(const char * pathname)
 	int error;
 	char * tmp;
 
+	lock_kernel();
 	error = getname(pathname,&tmp);
 	if (!error) {
 		remove_trailing_slashes(tmp);
 		error = do_rmdir(tmp);
 		putname(tmp);
 	}
+	unlock_kernel();
 	return error;
 }
 
@@ -697,11 +713,13 @@ asmlinkage int sys_unlink(const char * pathname)
 	int error;
 	char * tmp;
 
+	lock_kernel();
 	error = getname(pathname,&tmp);
 	if (!error) {
 		error = do_unlink(tmp);
 		putname(tmp);
 	}
+	unlock_kernel();
 	return error;
 }
 
@@ -745,6 +763,7 @@ asmlinkage int sys_symlink(const char * oldname, const char * newname)
 	int error;
 	char * from, * to;
 
+	lock_kernel();
 	error = getname(oldname,&from);
 	if (!error) {
 		error = getname(newname,&to);
@@ -754,6 +773,7 @@ asmlinkage int sys_symlink(const char * oldname, const char * newname)
 		}
 		putname(from);
 	}
+	unlock_kernel();
 	return error;
 }
 
@@ -817,16 +837,19 @@ asmlinkage int sys_link(const char * oldname, const char * newname)
 	char * to;
 	struct inode * oldinode;
 
+	lock_kernel();
 	error = lnamei(oldname, &oldinode);
 	if (error)
-		return error;
+		goto out;
 	error = getname(newname,&to);
 	if (error) {
 		iput(oldinode);
-		return error;
+		goto out;
 	}
 	error = do_link(oldinode,to);
 	putname(to);
+out:
+	unlock_kernel();
 	return error;
 }
 
@@ -905,6 +928,7 @@ asmlinkage int sys_rename(const char * oldname, const char * newname)
 	int error;
 	char * from, * to;
 
+	lock_kernel();
 	error = getname(oldname,&from);
 	if (!error) {
 		error = getname(newname,&to);
@@ -916,5 +940,6 @@ asmlinkage int sys_rename(const char * oldname, const char * newname)
 		}
 		putname(from);
 	}
+	unlock_kernel();
 	return error;
 }

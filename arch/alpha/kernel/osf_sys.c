@@ -14,6 +14,8 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/stddef.h>
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
@@ -52,12 +54,15 @@ asmlinkage int osf_set_program_attributes(
 	unsigned long text_start, unsigned long text_len,
 	unsigned long bss_start, unsigned long bss_len)
 {
-	struct mm_struct *mm = current->mm;
+	struct mm_struct *mm;
 
+	lock_kernel();
+	mm = current->mm;
 	mm->end_code = bss_start + bss_len;
 	mm->brk = bss_start + bss_len;
 	printk("set_program_attributes(%lx %lx %lx %lx)\n",
 		text_start, text_len, bss_start, bss_len);
+	unlock_kernel();
 	return 0;
 }
 
@@ -151,12 +156,17 @@ asmlinkage int osf_getpriority(int which, int who, int a2, int a3, int a4,
 	extern int sys_getpriority(int, int);
 	int prio;
 
+	/*
+	 * We don't need to aquire the kernel lock here, because
+	 * all of these operations are local. sys_getpriority
+	 * will get the lock as required..
+	 */
 	prio = sys_getpriority(which, who);
-	if (prio < 0)
-		return prio;
-
-	regs.r0 = 0;		/* special return: no errors */
-	return 20 - prio;
+	if (prio >= 0) {
+		regs.r0 = 0;		/* special return: no errors */
+		prio = 20 - prio;
+	}
+	return prio;
 }
 
 
@@ -168,25 +178,39 @@ asmlinkage unsigned long sys_madvise(void)
 	return 0;
 }
 
+/*
+ * No need to aquire the kernel lock, we're local..
+ */
 asmlinkage unsigned long sys_getxuid(int a0, int a1, int a2, int a3, int a4, int a5,
 				     struct pt_regs regs)
 {
-	(&regs)->r20 = current->euid;
-	return current->uid;
+	struct task_struct * tsk = current;
+	(&regs)->r20 = tsk->euid;
+	return tsk->uid;
 }
 
 asmlinkage unsigned long sys_getxgid(int a0, int a1, int a2, int a3, int a4, int a5,
 				     struct pt_regs regs)
 {
-	(&regs)->r20 = current->egid;
-	return current->gid;
+	struct task_struct * tsk = current;
+	(&regs)->r20 = tsk->egid;
+	return tsk->gid;
 }
 
 asmlinkage unsigned long sys_getxpid(int a0, int a1, int a2, int a3, int a4, int a5,
 				     struct pt_regs regs)
 {
-	(&regs)->r20 = current->p_opptr->pid;
-	return current->pid;
+	struct task_struct *tsk = current;
+
+	/* 
+	 * This isn't strictly "local" any more and we should actually
+	 * aquire the kernel lock. The "p_opptr" pointer might change
+	 * if the parent goes away (or due to ptrace). But any race
+	 * isn't actually going to matter, as if the parent happens
+	 * to change we can happily return either of the pids.
+	 */
+	(&regs)->r20 = tsk->p_opptr->pid;
+	return tsk->pid;
 }
 
 asmlinkage unsigned long osf_mmap(unsigned long addr, unsigned long len,
@@ -194,15 +218,20 @@ asmlinkage unsigned long osf_mmap(unsigned long addr, unsigned long len,
 				  unsigned long off)
 {
 	struct file *file = NULL;
+	unsigned long ret = -EBADF;
 
+	lock_kernel();
 	if (flags & (MAP_HASSEMAPHORE | MAP_INHERIT | MAP_UNALIGNED))
 		printk("%s: unimplemented OSF mmap flags %04lx\n", current->comm, flags);
 	if (!(flags & MAP_ANONYMOUS)) {
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-			return -EBADF;
+			goto out;
 	}
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-	return do_mmap(file, addr, len, prot, flags, off);
+	ret = do_mmap(file, addr, len, prot, flags, off);
+out:
+	unlock_kernel();
+	return ret;
 }
 
 
@@ -245,22 +274,27 @@ asmlinkage int osf_statfs(char *path, struct osf_statfs *buffer, unsigned long b
 	struct inode *inode;
 	int retval;
 
+	lock_kernel();
 	if (bufsiz > sizeof(struct osf_statfs))
 		 bufsiz = sizeof(struct osf_statfs);
 	retval = verify_area(VERIFY_WRITE, buffer, bufsiz);
 	if (retval)
-		return retval;
+		goto out;
 	retval = namei(path, &inode);
 	if (retval)
-		return retval;
+		goto out;
+	retval = -ENOSYS;
 	if (!inode->i_sb->s_op->statfs) {
 		iput(inode);
-		return -ENOSYS;
+		goto out;
 	}
 	inode->i_sb->s_op->statfs(inode->i_sb, &linux_stat, sizeof(linux_stat));
 	linux_to_osf_statfs(&linux_stat, buffer);
 	iput(inode);
-	return 0;
+	retval = 0;
+out:
+	unlock_kernel();
+	return retval;
 }
 
 asmlinkage int osf_fstatfs(unsigned long fd, struct osf_statfs *buffer, unsigned long bufsiz)
@@ -270,20 +304,27 @@ asmlinkage int osf_fstatfs(unsigned long fd, struct osf_statfs *buffer, unsigned
 	struct inode *inode;
 	int retval;
 
+	lock_kernel();
 	retval = verify_area(VERIFY_WRITE, buffer, bufsiz);
 	if (retval)
-		return retval;
+		goto out;
 	if (bufsiz > sizeof(struct osf_statfs))
 		 bufsiz = sizeof(struct osf_statfs);
+	retval = -EBADF;
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-		return -EBADF;
+		goto out;
+	retval = -ENOENT;
 	if (!(inode = file->f_inode))
-		return -ENOENT;
+		goto out;
+	retval = -ENOSYS;
 	if (!inode->i_sb->s_op->statfs)
-		return -ENOSYS;
+		goto out;
 	inode->i_sb->s_op->statfs(inode->i_sb, &linux_stat, sizeof(linux_stat));
 	linux_to_osf_statfs(&linux_stat, buffer);
-	return 0;
+	retval = 0;
+out:
+	unlock_kernel();
+	return retval;
 }
 
 /*
@@ -431,9 +472,9 @@ static int osf_procfs_mount(char *dirname, struct procfs_args *args, int flags)
 
 asmlinkage int osf_mount(unsigned long typenr, char *path, int flag, void *data)
 {
-	int retval;
+	int retval = -EINVAL;
 
-	retval = -EINVAL;
+	lock_kernel();
 	switch (typenr) {
 	case 1:
 		retval = osf_ufs_mount(path, (struct ufs_args *) data, flag);
@@ -447,12 +488,18 @@ asmlinkage int osf_mount(unsigned long typenr, char *path, int flag, void *data)
 	default:
 		printk("osf_mount(%ld, %x)\n", typenr, flag);
 	}
+	unlock_kernel();
 	return retval;
 }
 
 asmlinkage int osf_umount(char *path, int flag)
 {
-	return sys_umount(path);
+	int ret;
+
+	lock_kernel();
+	ret = sys_umount(path);
+	unlock_kernel();
+	return ret;
 }
 
 /*
@@ -466,11 +513,12 @@ asmlinkage int osf_usleep_thread(struct timeval *sleep, struct timeval *remain)
 	unsigned long ticks;
 	int retval;
 
+	lock_kernel();
 	retval = verify_area(VERIFY_READ, sleep, sizeof(*sleep));
 	if (retval)
-		return retval;
+		goto out;
 	if (remain && (retval = verify_area(VERIFY_WRITE, remain, sizeof(*remain))))
-		return retval;
+		goto out;
 	copy_from_user(&tmp, sleep, sizeof(*sleep));
 	ticks = tmp.tv_usec;
 	ticks = (ticks + (1000000 / HZ) - 1) / (1000000 / HZ);
@@ -478,8 +526,9 @@ asmlinkage int osf_usleep_thread(struct timeval *sleep, struct timeval *remain)
 	current->timeout = ticks + jiffies;
 	current->state = TASK_INTERRUPTIBLE;
 	schedule();
+	retval = 0;
 	if (!remain)
-		return 0;
+		goto out;
 	ticks = jiffies;
 	if (ticks < current->timeout)
 		ticks = current->timeout - ticks;
@@ -489,26 +538,38 @@ asmlinkage int osf_usleep_thread(struct timeval *sleep, struct timeval *remain)
 	tmp.tv_sec = ticks / HZ;
 	tmp.tv_usec = ticks % HZ;
 	copy_to_user(remain, &tmp, sizeof(*remain));
-	return 0;
+out:
+	unlock_kernel();
+	return retval;
 }
 
 asmlinkage int osf_utsname(char *name)
 {
-	int error = verify_area(VERIFY_WRITE, name, 5 * 32);
+	int error;
+
+	lock_kernel();
+	error = verify_area(VERIFY_WRITE, name, 5 * 32);
 	if (error)
-		return error;
+		goto out;
 	copy_to_user(name + 0, system_utsname.sysname, 32);
 	copy_to_user(name + 32, system_utsname.nodename, 32);
 	copy_to_user(name + 64, system_utsname.release, 32);
 	copy_to_user(name + 96, system_utsname.version, 32);
 	copy_to_user(name + 128, system_utsname.machine, 32);
-	return 0;
+out:
+	unlock_kernel();
+	return error;
 }
 
 asmlinkage int osf_swapon(const char *path, int flags, int lowat, int hiwat)
 {
+	int ret;
+
 	/* for now, simply ignore lowat and hiwat... */
-	return sys_swapon(path, flags);
+	lock_kernel();
+	ret = sys_swapon(path, flags);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage unsigned long sys_getpagesize(void)
@@ -527,11 +588,15 @@ asmlinkage int sys_pipe(int a0, int a1, int a2, int a3, int a4, int a5,
 	int fd[2];
 	int error;
 
+	lock_kernel();
 	error = do_pipe(fd);
 	if (error)
-		return error;
+		goto out;
 	(&regs)->r20 = fd[1];
-	return fd[0];
+	error = fd[0];
+out:
+	unlock_kernel();
+	return error;
 }
 
 /*
@@ -542,9 +607,10 @@ asmlinkage int osf_getdomainname(char *name, int namelen)
 	unsigned len;
 	int i, error;
 
+	lock_kernel();
 	error = verify_area(VERIFY_WRITE, name, namelen);
 	if (error)
-		return error;
+		goto out;
 
 	len = namelen;
 	if (namelen > 32)
@@ -555,23 +621,29 @@ asmlinkage int osf_getdomainname(char *name, int namelen)
 		if (system_utsname.domainname[i] == '\0')
 			break;
 	}
-	return 0;
+out:
+	unlock_kernel();
+	return error;
 }
 
 
 asmlinkage long osf_shmat(int shmid, void *shmaddr, int shmflg)
 {
 	unsigned long raddr;
-	int err;
+	long err;
 
+	lock_kernel();
 	err = sys_shmat(shmid, shmaddr, shmflg, &raddr);
 	if (err)
-		return err;
+		goto out;
 	/*
 	 * This works because all user-level addresses are
 	 * non-negative longs!
 	 */
-	return raddr;
+	err = raddr;
+out:
+	unlock_kernel();
+	return err;
 }
 
 
@@ -645,46 +717,44 @@ asmlinkage long osf_proplist_syscall(enum pl_code code, union pl_args *args)
 	long error;
 	int *min_buf_size_ptr;
 
+	lock_kernel();
 	switch (code) {
 	case PL_SET:
 		error = verify_area(VERIFY_READ, &args->set.nbytes,
 				    sizeof(args->set.nbytes));
-		if (error)
-			return error;
-		return args->set.nbytes;
-
+		if (!error)
+			error = args->set.nbytes;
+		break;
 	case PL_FSET:
 		error = verify_area(VERIFY_READ, &args->fset.nbytes,
 				    sizeof(args->fset.nbytes));
-		if (error)
-			return error;
-		return args->fset.nbytes;
-
+		if (!error)
+			error = args->fset.nbytes;
+		break;
 	case PL_GET:
 		get_user(min_buf_size_ptr, &args->get.min_buf_size);
 		error = verify_area(VERIFY_WRITE, min_buf_size_ptr,
 				    sizeof(*min_buf_size_ptr));
-		if (error)
-			return error;
-		put_user(0, min_buf_size_ptr);
-		return 0;
-
+		if (!error)
+			put_user(0, min_buf_size_ptr);
+		break;
 	case PL_FGET:
 		get_user(min_buf_size_ptr, &args->fget.min_buf_size);
 		error = verify_area(VERIFY_WRITE, min_buf_size_ptr,
 				    sizeof(*min_buf_size_ptr));
-		if (error)
-			return error;
-		put_user(0, min_buf_size_ptr);
-		return 0;
-
+		if (!error)
+			put_user(0, min_buf_size_ptr);
+		break;
 	case PL_DEL:
 	case PL_FDEL:
-		return 0;
-
+		error = 0;
+		break;
 	default:
-		return -EOPNOTSUPP;
-	}
+		error = -EOPNOTSUPP;
+		break;
+	};
+	unlock_kernel();
+	return error;
 }
 
 /*
@@ -701,6 +771,7 @@ asmlinkage unsigned long alpha_create_module(char *module_name, unsigned long si
 	asmlinkage unsigned long sys_create_module(char *, unsigned long);
 	long retval;
 
+	lock_kernel();
 	retval = sys_create_module(module_name, size);
 	/*
 	 * we get either a module address or an error number,
@@ -709,10 +780,12 @@ asmlinkage unsigned long alpha_create_module(char *module_name, unsigned long si
 	 * much larger.
 	 */
 	if (retval + 1000 > 0)
-		return retval;
+		goto out;
 
 	/* tell entry.S:syscall_error that this is NOT an error: */
 	regs.r0 = 0;
+out:
+	unlock_kernel();
 	return retval;
 }
 
@@ -731,21 +804,26 @@ asmlinkage long osf_sysinfo(int command, char *buf, long count)
 	};
 	unsigned long offset;
 	char *res;
-	long len;
+	long len, err = -EINVAL;
 
+	lock_kernel();
 	offset = command-1;
 	if (offset >= sizeof(sysinfo_table)/sizeof(char *)) {
 		/* Digital unix has a few unpublished interfaces here */
 		printk("sysinfo(%d)", command);
-		return -EINVAL;
+		goto out;
 	}
 	res = sysinfo_table[offset];
 	len = strlen(res)+1;
 	if (len > count)
 		len = count;
 	if (copy_to_user(buf, res, len))
-		return -EFAULT;
-	return 0;
+		err = -EFAULT;
+	else
+		err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer, unsigned long nbytes,
@@ -753,15 +831,17 @@ asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer, unsigned
 {
 	extern unsigned long rdfpcr(void);
 	unsigned long fpcw;
+	unsigned long ret = -EOPNOTSUPP;
 
+	lock_kernel();
 	switch (op) {
 	case 45:		/* GSI_IEEE_FP_CONTROL */
 		/* build and return current fp control word: */
 		fpcw = current->tss.flags & IEEE_TRAP_ENABLE_MASK;
 		fpcw |= ((rdfpcr() >> 52) << 17) & IEEE_STATUS_MASK;
 		put_user(fpcw, (unsigned long *) buffer);
-		return 0;
-
+		ret = 0;
+		break;
 	case 46:		/* GSI_IEEE_STATE_AT_SIGNAL */
 		/*
 		 * Not sure anybody will ever use this weird stuff.  These
@@ -769,11 +849,11 @@ asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer, unsigned
 		 * be used when a signal handler starts executing.
 		 */
 		break;
-
 	default:
 		break;
 	}
-	return -EOPNOTSUPP;
+	unlock_kernel();
+	return ret;
 }
 
 
@@ -781,15 +861,17 @@ asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer, unsigned
 					int *start, void *arg)
 {
 	unsigned long fpcw;
+	unsigned long ret = -EOPNOTSUPP;
 
+	lock_kernel();
 	switch (op) {
 	case 14:		/* SSI_IEEE_FP_CONTROL */
 		/* update trap enable bits: */
 		get_user(fpcw, (unsigned long *) buffer);
 		current->tss.flags &= ~IEEE_TRAP_ENABLE_MASK;
 		current->tss.flags |= (fpcw & IEEE_TRAP_ENABLE_MASK);
-		return 0;
-
+		ret = 0;
+		break;
 	case 15:		/* SSI_IEEE_STATE_AT_SIGNAL */
 	case 16:		/* SSI_IEEE_IGNORE_STATE_AT_SIGNAL */
 		/*
@@ -800,5 +882,6 @@ asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer, unsigned
 	default:
 		break;
 	}
-	return -EOPNOTSUPP;
+	unlock_kernel();
+	return ret;
 }

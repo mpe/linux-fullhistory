@@ -38,7 +38,7 @@ struct file_operations cdrom_fops =
         block_read,                     /* read - general block-dev read */
         block_write,                    /* write - general block-dev write */
         NULL,                           /* readdir */
-        NULL,                           /* select */
+        NULL,                           /* poll */
         cdrom_ioctl,                    /* ioctl */
         NULL,                           /* mmap */
         cdrom_open,                     /* open */

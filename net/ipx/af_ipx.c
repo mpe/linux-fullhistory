@@ -2339,7 +2339,7 @@ static struct proto_ops ipx_dgram_ops = {
 	ipx_socketpair,
 	ipx_accept,
 	ipx_getname,
-	datagram_select,
+	datagram_poll,
 	ipx_ioctl,
 	ipx_listen,
 	ipx_shutdown,

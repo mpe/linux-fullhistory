@@ -56,7 +56,7 @@ static struct file_operations smb_dir_operations =
 	smb_dir_read,		/* read - bad */
 	NULL,			/* write - bad */
 	smb_readdir,		/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	smb_ioctl,		/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */

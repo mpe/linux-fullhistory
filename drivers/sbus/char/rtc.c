@@ -1,4 +1,4 @@
-/* $Id: rtc.c,v 1.6 1996/11/21 16:57:50 jj Exp $
+/* $Id: rtc.c,v 1.9 1997/01/26 07:13:40 davem Exp $
  *
  * Linux/SPARC Real Time Clock Driver
  * Copyright (C) 1996 Thomas K. Dyas (tdyas@eden.rutgers.edu)
@@ -17,6 +17,7 @@
 #include <linux/miscdevice.h>
 #include <linux/malloc.h>
 #include <linux/fcntl.h>
+#include <linux/poll.h>
 #include <linux/init.h>
 #include <asm/mostek.h>
 #include <asm/system.h>
@@ -128,7 +129,7 @@ static struct file_operations rtc_fops = {
 	NULL,		/* rtc_read */
 	NULL,		/* rtc_write */
 	NULL,		/* rtc_readdir */
-	NULL,		/* rtc_select */
+	NULL,		/* rtc_poll */
 	rtc_ioctl,
 	NULL,		/* rtc_mmap */
 	rtc_open,
@@ -137,16 +138,22 @@ static struct file_operations rtc_fops = {
 
 static struct miscdevice rtc_dev = { RTC_MINOR, "rtc", &rtc_fops };
 
+EXPORT_NO_SYMBOLS;
+
 #ifdef MODULE
 int init_module(void)
 #else
 __initfunc(int rtc_init(void))
 #endif
 {
-#ifdef MODULE
-	register_symtab(0);
-#endif
-	misc_register(&rtc_dev);
+	int error;
+
+	error = misc_register(&rtc_dev);
+	if (error) {
+		printk(KERN_ERR "rtc: unable to get misc minor\n");
+		return error;
+	}
+
 	return 0;
 }
 

@@ -1375,7 +1375,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	struct rtable *rt;
 	unsigned char *sha, *tha;
 	u32 sip, tip;
-	
+
 /*
  *	The hardware length of the packet should match the hardware length
  *	of the device.  Similarly, the hardware types should match.  The
@@ -1415,7 +1415,18 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 #else
 	if (arp->ar_hln != dev->addr_len    || 
-     		dev->type != ntohs(arp->ar_hrd) || 
+#if CONFIG_AP1000
+	    /*
+	     * ARP from cafe-f was found to use ARPHDR_IEEE802 instead of
+	     * the expected ARPHDR_ETHER.
+	     */
+	    (strcmp(dev->name,"fddi") == 0 && 
+	     arp->ar_hrd != ARPHRD_ETHER && arp->ar_hrd != ARPHRD_IEEE802) ||
+	    (strcmp(dev->name,"fddi") != 0 &&
+	     dev->type != ntohs(arp->ar_hrd)) ||
+#else
+	    dev->type != ntohs(arp->ar_hrd) || 
+#endif
 		dev->flags & IFF_NOARP          ||
 	        skb->pkt_type == PACKET_OTHERHOST ||
 		arp->ar_pln != 4) {

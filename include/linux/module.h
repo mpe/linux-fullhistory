@@ -7,6 +7,8 @@
 #ifndef _LINUX_MODULE_H
 #define _LINUX_MODULE_H
 
+#include <linux/config.h>
+
 #ifdef __GENKSYMS__
 #  define _set_ver(sym) sym
 #  undef  MODVERSIONS
@@ -22,7 +24,7 @@
 /* Don't need to bring in all of uaccess.h just for this decl.  */
 struct exception_table_entry;
 
-/* Used by get_kernel_syms, which is depreciated.  */
+/* Used by get_kernel_syms, which is obsolete.  */
 struct kernel_sym
 {
 	unsigned long value;
@@ -73,6 +75,7 @@ struct module
 	   to examine them.  */
 	const struct module_persist *persist_start;
 	const struct module_persist *persist_end;
+	int (*can_unload)(void);
 };
 
 struct module_info
@@ -80,6 +83,7 @@ struct module_info
   unsigned long addr;
   unsigned long size;
   unsigned long flags;
+	   long usecount;
 };
 
 /* Bits of module.flags.  */
@@ -99,20 +103,27 @@ struct module_info
 #define QM_SYMBOLS	4
 #define QM_INFO		5
 
+/* When struct module is extended, we must test whether the new member
+   is present in the header received from insmod before we can use it.  
+   This function returns true if the member is present.  */
+
+#define mod_member_present(mod,member) 					\
+	((unsigned long)(&((struct module *)0L)->member + 1)		\
+	 <= (mod)->size_of_struct)
+
 /* Backwards compatibility definition.  */
 
 #define GET_USE_COUNT(module)	((module)->usecount)
 
-/* When the struct module is extended, new values must be examined using
-   this macro.  It returns a pointer to the member if available, NULL
-   otherwise. */
+/* Poke the use count of a module.  */
 
-#define mod_opt_member(mod,member) 					\
-	({ struct module *_mod = (mod);					\
-	   __typeof__(_mod->member) *_mem = &_mod->member;		\
-	   ((char *)(_mem+1) > (char *)_mod + _mod->size_of_struct	\
-	    ? (__typeof__(_mod->member) *)NULL : _mem);			\
-	})
+#define __MOD_INC_USE_COUNT(mod)					\
+	((mod)->usecount++, (mod)->flags |= MOD_VISITED|MOD_USED_ONCE)
+#define __MOD_DEC_USE_COUNT(mod)					\
+	((mod)->usecount--, (mod)->flags |= MOD_VISITED)
+#define __MOD_IN_USE(mod)						\
+	(mod_member_present((mod), can_unload) && (mod)->can_unload	\
+	 ? (mod)->can_unload() : (mod)->usecount)
 
 /* Indirect stringification.  */
 
@@ -170,13 +181,9 @@ __asm__(".section .modinfo\n\t.previous");
 /* Define the module variable, and usage macros.  */
 extern struct module __this_module;
 
-#define MOD_INC_USE_COUNT 					\
-	(__this_module.usecount++,				\
-	 __this_module.flags |= MOD_VISITED|MOD_USED_ONCE)
-#define MOD_DEC_USE_COUNT					\
-	(__this_module.usecount--, __this_module.flags |= MOD_VISITED)
-#define MOD_IN_USE						\
-	(__this_module.usecount != 0)
+#define MOD_INC_USE_COUNT	__MOD_INC_USE_COUNT(&__this_module)
+#define MOD_DEC_USE_COUNT	__MOD_DEC_USE_COUNT(&__this_module)
+#define MOD_IN_USE		__MOD_IN_USE(&__this_module)
 
 #ifndef __NO_VERSION__
 #include <linux/version.h>
@@ -221,12 +228,6 @@ extern struct module *module_list;
 
 /* We want the EXPORT_SYMBOL tag left intact for recognition.  */
 
-#elif !defined(EXPORT_SYMTAB) && defined(CONFIG_MODULES)
-
-#define __EXPORT_SYMBOL(sym,str)   error EXPORT_SYMTAB_not_defined
-#define EXPORT_SYMBOL(var)	   error EXPORT_SYMTAB_not_defined
-#define EXPORT_SYMBOL_NOVERS(var)  error EXPORT_SYMTAB_not_defined
-
 #elif !defined(AUTOCONF_INCLUDED)
 
 #define __EXPORT_SYMBOL(sym,str)   error config_must_be_included_before_module
@@ -238,6 +239,14 @@ extern struct module *module_list;
 #define __EXPORT_SYMBOL(sym,str)
 #define EXPORT_SYMBOL(var)
 #define EXPORT_SYMBOL_NOVERS(var)
+
+#elif !defined(EXPORT_SYMTAB)
+
+/* If things weren't set up in the Makefiles to get EXPORT_SYMTAB defined,
+   then they weren't set up to run genksyms properly so MODVERSIONS breaks.  */
+#define __EXPORT_SYMBOL(sym,str)   error EXPORT_SYMTAB_not_defined
+#define EXPORT_SYMBOL(var)	   error EXPORT_SYMTAB_not_defined
+#define EXPORT_SYMBOL_NOVERS(var)  error EXPORT_SYMTAB_not_defined
 
 #else
 

@@ -21,15 +21,16 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err,
 		   unsigned long *r9_15)
 {
 	long i;
-	unsigned long sp;
+	unsigned long sp, ra;
 	unsigned int * pc;
 
 	if (regs->ps & 8)
 		return;
 	printk("%s(%d): %s %ld\n", current->comm, current->pid, str, err);
 	sp = (unsigned long) (regs+1);
+	__get_user(ra, (unsigned long *)sp);
 	printk("pc = [<%016lx>] ps = %04lx\n", regs->pc, regs->ps);
-	printk("rp = [<%016lx>] sp = %016lx\n", regs->r26, sp);
+	printk("rp = [<%016lx>] ra = [<%016lx>]\n", regs->r26, ra);
 	printk("r0 = %016lx  r1 = %016lx\n", regs->r0, regs->r1);
 	printk("r2 = %016lx  r3 = %016lx\n", regs->r2, regs->r3);
 	printk("r4 = %016lx  r5 = %016lx\n", regs->r4, regs->r5);
@@ -49,13 +50,17 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err,
 	printk("r20= %016lx  r21= %016lx\n", regs->r20, regs->r21);
 	printk("r22= %016lx  r23= %016lx\n", regs->r22, regs->r23);
 	printk("r24= %016lx  r25= %016lx\n", regs->r24, regs->r25);
-	printk("r26= %016lx  r27= %016lx\n", regs->r26, regs->r27);
-	printk("r28= %016lx  r29= %016lx\n", regs->r28, regs->gp);
+	printk("r27= %016lx  r28= %016lx\n", regs->r27, regs->r28);
+	printk("gp = %016lx  sp = %016lx\n", regs->gp, sp);
 
 	printk("Code:");
 	pc = (unsigned int *) regs->pc;
-	for (i = -3; i < 6; i++)
-		printk("%c%08x%c",i?' ':'<',pc[i],i?' ':'>');
+	for (i = -3; i < 6; i++) {
+		unsigned int insn;
+		if (__get_user(insn, pc+i))
+			break;
+		printk("%c%08x%c",i?' ':'<',insn,i?' ':'>');
+	}
 	printk("\n");
 	do_exit(SIGSEGV);
 }

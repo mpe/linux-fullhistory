@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.76 1996/12/30 00:31:09 davem Exp $
+/* $Id: head.S,v 1.78 1997/01/06 06:52:20 davem Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -19,6 +19,7 @@
 #include <asm/page.h>
 #include <asm/kdebug.h>
 #include <asm/winmacro.h>
+#include <asm/errno.h>
 
 	.data
 /* 
@@ -973,8 +974,8 @@ sun4c_continue_boot:
 		mov	0, %fp			/* And for good luck */
 
 		/* Zero out our BSS section. */
-		set	C_LABEL(edata) , %o0	! First address of BSS
-		set	C_LABEL(end) , %o1	! Last address of BSS
+		set	C_LABEL(__bss_start) , %o0	! First address of BSS
+		set	C_LABEL(end) , %o1		! Last address of BSS
 		add	%o0, 0x1, %o0
 1:	
 		stb	%g0, [%o0]
@@ -1051,17 +1052,6 @@ sun4c_continue_boot:
 		PATCH_INSN(rtrap_7win_patch3, rtrap_patch3)
 		PATCH_INSN(rtrap_7win_patch4, rtrap_patch4)
 		PATCH_INSN(rtrap_7win_patch5, rtrap_patch5)
-
-#ifdef __SMP__
-
-		/* Patch for returning from an ipi... */
-		PATCH_INSN(rirq_7win_patch1, rirq_patch1)
-		PATCH_INSN(rirq_7win_patch2, rirq_patch2)
-		PATCH_INSN(rirq_7win_patch3, rirq_patch3)
-		PATCH_INSN(rirq_7win_patch4, rirq_patch4)
-		PATCH_INSN(rirq_7win_patch5, rirq_patch5)
-
-#endif
 
 		/* Patch for killing user windows from the register file. */
 		PATCH_INSN(kuw_patch1_7win, kuw_patch1)
@@ -1201,3 +1191,8 @@ C_LABEL(lvl14_save):
 	.word	0
 	.word	t_irq14
 
+        .section        ".fixup",#alloc,#execinstr
+        .globl  __ret_efault
+__ret_efault:
+        ret
+         restore %g0, -EFAULT, %o0

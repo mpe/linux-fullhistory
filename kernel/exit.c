@@ -6,6 +6,7 @@
 
 #undef DEBUG_PROC_TREE
 
+#include <linux/config.h>
 #include <linux/wait.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -16,6 +17,9 @@
 #include <linux/tty.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
+#include <linux/module.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -69,7 +73,7 @@ void force_sig(unsigned long sig, struct task_struct * p)
 			wake_up_process(p);
 	}
 }
-		
+
 
 int send_sig(unsigned long sig,struct task_struct * p,int priv)
 {
@@ -131,7 +135,7 @@ void release(struct task_struct * p)
 			current->cmin_flt += p->min_flt + p->cmin_flt;
 			current->cmaj_flt += p->maj_flt + p->cmaj_flt;
 			current->cnswap += p->nswap + p->cnswap;
-			kfree(p);
+			free_task_struct(p);
 			return;
 		}
 	panic("trying to release non-existent task");
@@ -153,14 +157,14 @@ int bad_task_ptr(struct task_struct *p)
 			return 0;
 	return 1;
 }
-	
+
 /*
  * This routine scans the pid tree and makes sure the rep invariant still
  * holds.  Used for debugging only, since it's very slow....
  *
  * It looks a lot scarier than it really is.... we're doing nothing more
- * than verifying the doubly-linked list found in p_ysptr and p_osptr, 
- * and checking it corresponds with the process tree defined by p_cptr and 
+ * than verifying the doubly-linked list found in p_ysptr and p_osptr,
+ * and checking it corresponds with the process tree defined by p_cptr and
  * p_pptr;
  */
 void audit_ptree(void)
@@ -320,8 +324,11 @@ asmlinkage int sys_kill(int pid,int sig)
 {
 	int err, retval = 0, count = 0;
 
-	if (!pid)
-		return(kill_pg(current->pgrp,sig,0));
+	lock_kernel();
+	if (!pid) {
+		err = kill_pg(current->pgrp,sig,0);
+		goto out;
+	}
 	if (pid == -1) {
 		struct task_struct * p;
 		for_each_task(p) {
@@ -331,20 +338,26 @@ asmlinkage int sys_kill(int pid,int sig)
 					retval = err;
 			}
 		}
-		return(count ? retval : -ESRCH);
+		err = count ? retval : -ESRCH;
+		goto out;
 	}
-	if (pid < 0) 
-		return(kill_pg(-pid,sig,0));
+	if (pid < 0) {
+		err = kill_pg(-pid,sig,0);
+		goto out;
+	}
 	/* Normal kill */
-	return(kill_proc(pid,sig,0));
+	err = kill_proc(pid,sig,0);
+out:
+	unlock_kernel();
+	return err;
 }
 
 /*
  * Determine if a process group is "orphaned", according to the POSIX
  * definition in 2.2.2.52.  Orphaned process groups are not to be affected
- * by terminal-generated stop signals.  Newly orphaned process groups are 
+ * by terminal-generated stop signals.  Newly orphaned process groups are
  * to receive a SIGHUP and a SIGCONT.
- * 
+ *
  * "I ask you, have you ever known what it is to be an orphan?"
  */
 static int will_become_orphaned_pgrp(int pgrp, struct task_struct * ignored_task)
@@ -352,7 +365,7 @@ static int will_become_orphaned_pgrp(int pgrp, struct task_struct * ignored_task
 	struct task_struct *p;
 
 	for_each_task(p) {
-		if ((p == ignored_task) || (p->pgrp != pgrp) || 
+		if ((p == ignored_task) || (p->pgrp != pgrp) ||
 		    (p->state == TASK_ZOMBIE) ||
 		    (p->p_pptr->pid == 1))
 			continue;
@@ -495,7 +508,7 @@ void exit_mm(struct task_struct *tsk)
 	__exit_mm(tsk);
 }
 
-/* 
+/*
  * Send signals to all our closest relatives so that they know
  * to properly mourn us..
  */
@@ -504,7 +517,7 @@ static void exit_notify(void)
 	struct task_struct * p;
 
 	forget_original_parent(current);
-	/* 
+	/*
 	 * Check to see if any process groups have become orphaned
 	 * as a result of our exiting, and if they have any stopped
 	 * jobs, send them a SIGHUP and then a SIGCONT.  (POSIX 3.2.2.2)
@@ -522,10 +535,10 @@ static void exit_notify(void)
 	}
 	/* Let father know we died */
 	notify_parent(current);
-	
+
 	/*
 	 * This loop does two things:
-	 * 
+	 *
   	 * A.  Make init inherit all the child processes
 	 * B.  Check to see if any process groups have become orphaned
 	 *	as a result of our exiting, and if they have any stopped
@@ -546,7 +559,7 @@ static void exit_notify(void)
 			notify_parent(p);
 		/*
 		 * process group orphan check
-		 * Case ii: Our child is in a different pgrp 
+		 * Case ii: Our child is in a different pgrp
 		 * than we are, and it was the only connection
 		 * outside, so the child pgrp is now orphaned.
 		 */
@@ -575,6 +588,9 @@ fake_volatile:
 	sem_exit();
 	kerneld_exit();
 	__exit_mm(current);
+#if CONFIG_AP1000
+	exit_msc(current);
+#endif
 	__exit_files(current);
 	__exit_fs(current);
 	__exit_sighand(current);
@@ -585,10 +601,10 @@ fake_volatile:
 #ifdef DEBUG_PROC_TREE
 	audit_ptree();
 #endif
-	if (current->exec_domain && current->exec_domain->use_count)
-		(*current->exec_domain->use_count)--;
-	if (current->binfmt && current->binfmt->use_count)
-		(*current->binfmt->use_count)--;
+	if (current->exec_domain && current->exec_domain->module)
+		__MOD_DEC_USE_COUNT(current->exec_domain->module);
+	if (current->binfmt && current->binfmt->module)
+		__MOD_DEC_USE_COUNT(current->binfmt->module);
 	schedule();
 /*
  * In order to get rid of the "volatile function does return" message
@@ -608,7 +624,9 @@ fake_volatile:
 
 asmlinkage int sys_exit(int error_code)
 {
+	lock_kernel();
 	do_exit((error_code&0xff)<<8);
+	unlock_kernel();
 }
 
 asmlinkage int sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struct rusage * ru)
@@ -617,18 +635,20 @@ asmlinkage int sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struct
 	struct wait_queue wait = { current, NULL };
 	struct task_struct *p;
 
+	lock_kernel();
 	if (stat_addr) {
-		flag = verify_area(VERIFY_WRITE, stat_addr, sizeof(*stat_addr));
-		if (flag)
-			return flag;
+		retval = verify_area(VERIFY_WRITE, stat_addr, sizeof(*stat_addr));
+		if (retval)
+			goto out;
 	}
 	if (ru) {
-		flag = verify_area(VERIFY_WRITE, ru, sizeof(*ru));
-		if (flag)
-			return flag;
+		retval = verify_area(VERIFY_WRITE, ru, sizeof(*ru));
+		if (retval)
+			goto out;
 	}
+	retval = -EINVAL;
 	if (options & ~(WNOHANG|WUNTRACED|__WCLONE))
-	    return -EINVAL;
+	    goto out;
 
 	add_wait_queue(&current->wait_chldexit,&wait);
 repeat:
@@ -699,6 +719,8 @@ repeat:
 	retval = -ECHILD;
 end_wait4:
 	remove_wait_queue(&current->wait_chldexit,&wait);
+out:
+	unlock_kernel();
 	return retval;
 }
 
@@ -710,7 +732,12 @@ end_wait4:
  */
 asmlinkage int sys_waitpid(pid_t pid,unsigned int * stat_addr, int options)
 {
-	return sys_wait4(pid, stat_addr, options, NULL);
+	int ret;
+
+	lock_kernel();
+	ret = sys_wait4(pid, stat_addr, options, NULL);
+	unlock_kernel();
+	return ret;
 }
 
 #endif

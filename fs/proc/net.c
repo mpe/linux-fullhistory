@@ -88,7 +88,7 @@ static struct file_operations proc_net_operations = {
 	proc_readnet,		/* read - bad */
 	NULL,			/* write - bad */
 	NULL,			/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */

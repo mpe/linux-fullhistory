@@ -1,4 +1,4 @@
-/* $Id: k1275d.c,v 1.1 1996/12/27 08:49:12 jj Exp $
+/* $Id: k1275d.c,v 1.2 1997/01/02 14:14:44 jj Exp $
  * k1275d.c: Sun IEEE 1275 PROM kernel daemon
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -12,6 +12,12 @@
 #include <asm/oplib.h>
 
 #define p1275sect __attribute__ ((__section__ (".p1275")))
+
+static void (*prom_cif_handler)(long *) p1275sect;
+static long prom_cif_stack;
+static void (*prom_do_it)(void);
+static long prom_args [23] p1275sect;
+static char prom_buffer [4096] p1275sect;
 
 static void prom_doit (void) p1275sect;
 
@@ -33,12 +39,6 @@ static void prom_doit (void)
 	restore;
 	" : : "r" (prom_cif_stack), "r" (prom_cif_handler));
 }
-
-static void (*prom_cif_handler)(long *) p1275sect;
-static void prom_cif_stack;
-static void (*prom_do_it)(void);
-static long prom_args [23] p1275sect;
-static char prom_buffer [4096] p1275sect;
 
 long prom_handle_command(char *service, long fmt, ...)
 {

@@ -558,23 +558,29 @@ static struct file_operations openprom_fops = {
 	NULL,			/* openprom_read */
 	NULL,			/* openprom_write */
 	NULL,			/* openprom_readdir */
-	NULL,			/* openprom_select */
+	NULL,			/* openprom_poll */
 	openprom_ioctl,
 	NULL,			/* openprom_mmap */
 	openprom_open,
 	openprom_release
 };
 
-static struct miscdevice misc_openprom = {
+static struct miscdevice openprom_dev = {
 	SUN_OPENPROM_MINOR, "openprom", &openprom_fops
 };
 
+EXPORT_NO_SYMBOLS;
+
+#ifdef MODULE
+int init_module(void)
+#else
 __initfunc(int openprom_init(void))
+#endif
 {
 	unsigned long flags;
 	int error;
 
-	error = misc_register(&misc_openprom);
+	error = misc_register(&openprom_dev);
 	if (error) {
 		printk(KERN_ERR "openprom: unable to get misc minor\n");
 		return error;
@@ -587,7 +593,7 @@ __initfunc(int openprom_init(void))
 
 	if (options_node == 0 || options_node == -1) {
 		printk(KERN_ERR "openprom: unable to find options node\n");
-		misc_deregister(&misc_openprom);
+		misc_deregister(&openprom_dev);
 		return -EIO;
 	}
 
@@ -596,15 +602,9 @@ __initfunc(int openprom_init(void))
 
 #ifdef MODULE
 
-int init_module(void)
-{
-	register_symtab(0);
-	return openprom_init();
-}
-
 void cleanup_module(void)
 {
-	misc_deregister(&misc_openprom);
+	misc_deregister(&openprom_dev);
 }
 
 #endif

@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.85 1996/12/18 06:43:23 tridge Exp $
+/* $Id: fault.c,v 1.86 1997/01/06 06:52:52 davem Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -15,6 +15,8 @@
 #include <linux/smp.h>
 #include <linux/signal.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -143,7 +145,7 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 #if 0
 	static unsigned long last_one;
 #endif
-
+	lock_kernel();
 	down(&mm->mmap_sem);
 	if(text_fault)
 		address = regs->pc;
@@ -198,7 +200,7 @@ good_area:
 	}
 	handle_mm_fault(vma, address, write);
 	up(&mm->mmap_sem);
-	return;
+	goto out;
 	/*
 	 * Something tried to access memory that isn't in our memory map..
 	 * Fix it, but check if it's kernel or user first..
@@ -215,7 +217,7 @@ bad_area:
 		regs->pc = fixup;
 		regs->npc = regs->pc + 4;
 		regs->u_regs[UREG_G2] = g2;
-		return;
+		goto out;
 	}
 	/* Did we have an exception handler installed? */
 	if(current->tss.ex.count == 1) {
@@ -235,7 +237,7 @@ bad_area:
 			regs->u_regs[UREG_G1] = -EFAULT;
 			regs->u_regs[UREG_G2] = address - current->tss.ex.address;
 			regs->u_regs[UREG_G3] = current->tss.ex.pc;
-			return;
+			goto out;
 		}
 	}
 	if(from_user) {
@@ -246,7 +248,7 @@ bad_area:
 		tsk->tss.sig_address = address;
 		tsk->tss.sig_desc = SUBSIG_NOMAPPING;
 		send_sig(SIGSEGV, tsk, 1);
-		return;
+		goto out;
 	}
 	if((unsigned long) address < PAGE_SIZE) {
 		printk(KERN_ALERT "Unable to handle kernel NULL "
@@ -260,6 +262,8 @@ bad_area:
 	printk(KERN_ALERT "tsk->mm->pgd = %08lx\n",
 	       (unsigned long) tsk->mm->pgd);
 	die_if_kernel("Oops", regs);
+out:
+	unlock_kernel();
 }
 
 asmlinkage void do_sun4c_fault(struct pt_regs *regs, int text_fault, int write,
@@ -372,25 +376,31 @@ void window_overflow_fault(void)
 {
 	unsigned long sp;
 
+	lock_kernel();
 	sp = current->tss.rwbuf_stkptrs[0];
 	if(((sp + 0x38) & PAGE_MASK) != (sp & PAGE_MASK))
 		force_user_fault(sp + 0x38, 1);
 	force_user_fault(sp, 1);
+	unlock_kernel();
 }
 
 void window_underflow_fault(unsigned long sp)
 {
+	lock_kernel();
 	if(((sp + 0x38) & PAGE_MASK) != (sp & PAGE_MASK))
 		force_user_fault(sp + 0x38, 0);
 	force_user_fault(sp, 0);
+	unlock_kernel();
 }
 
 void window_ret_fault(struct pt_regs *regs)
 {
 	unsigned long sp;
 
+	lock_kernel();
 	sp = regs->u_regs[UREG_FP];
 	if(((sp + 0x38) & PAGE_MASK) != (sp & PAGE_MASK))
 		force_user_fault(sp + 0x38, 0);
 	force_user_fault(sp, 0);
+	unlock_kernel();
 }

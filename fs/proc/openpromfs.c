@@ -1,4 +1,4 @@
-/* $Id: openpromfs.c,v 1.9 1996/12/23 05:54:21 davem Exp $
+/* $Id: openpromfs.c,v 1.12 1997/01/26 07:14:18 davem Exp $
  * openpromfs.c: /proc/openprom handling routines
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -9,6 +9,7 @@
 #include <linux/string.h>
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
+#include <linux/init.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -462,7 +463,7 @@ static struct file_operations openpromfs_prop_ops = {
 	property_read,		/* read */
 	property_write,		/* write - bad */
 	NULL,			/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
@@ -495,7 +496,7 @@ static struct file_operations openpromfs_nodenum_ops = {
 	nodenum_read,		/* read */
 	NULL,			/* write - bad */
 	NULL,			/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
@@ -528,7 +529,7 @@ static struct file_operations openprom_alias_operations = {
 	NULL,			/* read - bad */
 	NULL,			/* write - bad */
 	openpromfs_readdir,	/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
@@ -909,7 +910,11 @@ static int openpromfs_unlink (struct inode *dir, const char *name, int len)
 }
 
 /* {{{ init section */
+#ifndef MODULE
+__initfunc(static int check_space (u16 n))
+#else
 static int check_space (u16 n)
+#endif
 {
 	unsigned long pages;
 
@@ -929,7 +934,11 @@ static int check_space (u16 n)
 	return 0;
 }
 
+#ifndef MODULE
+__initfunc(static u16 get_nodes (u16 parent, u32 node))
+#else
 static u16 get_nodes (u16 parent, u32 node)
+#endif
 {
 	char *p;
 	u16 n = last_node++, i;
@@ -1043,8 +1052,11 @@ void openpromfs_use (struct inode *inode, int inc)
 
 #ifndef MODULE
 #define RET(x)
-void openpromfs_init (void)
+__initfunc(void openpromfs_init (void))
 #else
+
+EXPORT_NO_SYMBOLS;
+
 #define RET(x) -x
 int init_module (void)
 #endif
@@ -1062,7 +1074,9 @@ int init_module (void)
 	}
 	nodes[last_node].first_prop = first_prop;
 	proc_openprom_iops = proc_openprom_register (openpromfs_readdir,
-				openpromfs_lookup, openpromfs_use, &devices);
+				                     openpromfs_lookup,
+						     openpromfs_use,
+						     &devices);
 	return RET(0);
 }
 

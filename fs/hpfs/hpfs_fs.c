@@ -153,7 +153,7 @@ static const struct file_operations hpfs_file_ops =
 	hpfs_file_read,			/* read */
 	NULL,				/* write */
 	NULL,				/* readdir - bad */
-	NULL,				/* select - default */
+	NULL,				/* poll - default */
 	NULL,				/* ioctl - default */
 	generic_file_mmap,		/* mmap */
 	NULL,				/* no special open is needed */
@@ -197,7 +197,7 @@ static const struct file_operations hpfs_dir_ops =
 	hpfs_dir_read,			/* read */
 	NULL,				/* write - bad */
 	hpfs_readdir,			/* readdir */
-	NULL,				/* select - default */
+	NULL,				/* poll - default */
 	NULL,				/* ioctl - default */
 	NULL,				/* mmap */
 	NULL,				/* no special open code */

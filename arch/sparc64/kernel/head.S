@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.4 1996/12/28 18:39:42 davem Exp $
+/* $Id: head.S,v 1.6 1997/01/06 20:32:44 jj Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -7,6 +7,7 @@
 #include <asm/pstate.h>
 #include <asm/spitfire.h>
 #include <asm/pgtable.h>
+#include <asm/errno.h>
 
 	.text
 
@@ -14,7 +15,6 @@
 
 sparc64_boot:
 	rdpr	%ver, %g1			/* Get VERSION register.	*/
-	mov	%o4, %g2			/* Get OpenPROM vector.		*/
 
 	/* We must be careful, 32-bit OpenBOOT will get confused if it
 	 * tries to save away a register window to a 64-bit kernel
@@ -76,10 +76,7 @@ execute_in_high_mem:
 	stx	%g4, [%g7]
 	set	nwindowsm1, %g6
 	stx	%g5, [%g6]
-	set	romvec, %g7
-	stx	%g2, [%g7]
-	set	prom_sp, %g7
-	stx	%sp, [%g7]
+	mov	%sp, %o1			! second argument to prom_init
 	set	swapper_pg_dir, %g6
 	set	PAGE_OFFSET, %g4		! this stays here for a long time
 	sub	%g6, %g4, %g5
@@ -97,7 +94,7 @@ execute_in_high_mem:
 	/* XXX Map in PROM 32-bit trampoline code. */
 	
 	call	prom_init
-	 mov	%o4, %o0
+	 mov	%o4, %o0			! OpenPROM cif handler
 
 	/* Off we go.... */
 	call	start_kernel
@@ -106,9 +103,13 @@ execute_in_high_mem:
 	/* Not reached... */
 
 	.data
-	.align	4
-	.globl	nwindows, nwindowsm1, romvec, prom_sp
+	.align	8
+	.globl	nwindows, nwindowsm1 
 nwindows:	.xword	0
 nwindowsm1:	.xword	0
-romvec:		.xword	0
-prom_sp:	.xword	0
+
+	.section	".fixup",#alloc,#execinstr
+	.globl	__ret_efault
+__ret_efault:
+	ret
+	 restore %g0, -EFAULT, %o0

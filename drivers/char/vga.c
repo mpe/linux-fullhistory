@@ -248,6 +248,11 @@ con_type_init(unsigned long kmem_start, const char **display_desc)
 }
 
 void
+con_type_init_finish(void)
+{
+}
+
+void
 get_scrmem(int currcons)
 {
 	memcpyw((unsigned short *)vc_scrbuf[currcons],

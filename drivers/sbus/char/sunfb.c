@@ -1,4 +1,4 @@
-/* $Id: sunfb.c,v 1.19 1996/12/23 10:16:15 ecd Exp $
+/* $Id: sunfb.c,v 1.20 1997/01/26 07:13:40 davem Exp $
  * sunfb.c: Sun generic frame buffer support.
  *
  * Copyright (C) 1995, 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -298,7 +298,7 @@ static struct file_operations graphdev_fops =
 	NULL,			/* read */
 	NULL,			/* write */
 	NULL,			/* readdir */
-	NULL,			/* select */
+	NULL,			/* poll */
 	fb_ioctl,
 	fb_mmap,
 	fb_open,		/* open */

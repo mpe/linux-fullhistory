@@ -35,7 +35,6 @@
 
 static unsigned long dummy;
 
-extern int linux_num_cpus;
 struct sun4m_intregs *sun4m_interrupts;
 unsigned long *irq_rcvreg = &dummy;
 

@@ -2818,7 +2818,7 @@ struct file_operations ide_fops[] = {{
 	block_read,		/* read - general block-dev read */
 	block_write,		/* write - general block-dev write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select */
+	NULL,			/* poll */
 	ide_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	ide_open,		/* open */

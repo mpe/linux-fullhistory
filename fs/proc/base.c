@@ -19,7 +19,7 @@ static struct file_operations proc_base_operations = {
 	NULL,			/* read - bad */
 	NULL,			/* write - bad */
 	proc_readdir,		/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */

@@ -44,7 +44,7 @@ ni65		YES		YES		YES		Software(#)
 seeq		NO		NO		NO		N/A
 sk_g16		NO		NO		YES		N/A
 smc-ultra	YES		YES		YES		Hardware
-sunlance	YES		YES		YES		Software(#)
+sunlance	YES		YES		YES		Hardware
 tulip		YES		YES		YES		Hardware
 wavelan		YES		PROMISC		YES		Hardware
 wd		YES		YES		YES		Hardware

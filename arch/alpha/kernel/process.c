@@ -13,6 +13,8 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/stddef.h>
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
@@ -31,6 +33,9 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
+/*
+ * No need to aquire the kernel lock, we're entirely local..
+ */
 asmlinkage int sys_sethae(unsigned long hae, unsigned long a1, unsigned long a2,
 	unsigned long a3, unsigned long a4, unsigned long a5,
 	struct pt_regs regs)
@@ -41,14 +46,21 @@ asmlinkage int sys_sethae(unsigned long hae, unsigned long a1, unsigned long a2,
 
 asmlinkage int sys_idle(void)
 {
+	int ret = -EPERM;
+
+	lock_kernel();
 	if (current->pid != 0)
-		return -EPERM;
+		goto out;
 
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
 	for (;;) {
 		schedule();
 	}
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 void hard_reset_now(void)
@@ -246,10 +258,13 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 	int error;
 	char * filename;
 
+	lock_kernel();
 	error = getname((char *) a0, &filename);
 	if (error)
-		return error;
+		goto out;
 	error = do_execve(filename, (char **) a1, (char **) a2, &regs);
 	putname(filename);
+out:
+	unlock_kernel();
 	return error;
 }

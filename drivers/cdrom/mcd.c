@@ -1158,7 +1158,7 @@ static struct file_operations mcd_fops = {
 	block_read,		/* read - general block-dev read */
 	block_write,		/* write - general block-dev write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select */
+	NULL,			/* poll */
 	mcd_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	mcd_open,		/* open */

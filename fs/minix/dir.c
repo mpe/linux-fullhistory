@@ -27,7 +27,7 @@ static struct file_operations minix_dir_operations = {
 	minix_dir_read,		/* read */
 	NULL,			/* write - bad */
 	minix_readdir,		/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */

@@ -15,6 +15,8 @@
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -35,6 +37,8 @@ asmlinkage void do_bottom_half(void)
 	unsigned long mask, left;
 	void (**bh)(void);
 
+	lock_kernel();
+	intr_count=1;
 	sti();
 	bh = bh_base;
 	active = bh_active & bh_mask;
@@ -48,7 +52,11 @@ asmlinkage void do_bottom_half(void)
 			fn();
 		}
 	}
-	return;
+	goto out;
 bad_bh:
 	printk ("irq.c:bad bottom half entry %08lx\n", mask);
+out:
+	intr_count=0;
+	unlock_kernel();
+	return;
 }

@@ -49,7 +49,7 @@
 
 #if RCS
 static const char *mcdx_c_version
-		= "$Id: mcdx.c,v 1.12 1996/06/05 01:38:38 heiko Exp $";
+		= "$Id: mcdx.c,v 1.21 1997/01/26 07:12:59 davem Exp $";
 #endif
 
 #include <linux/version.h>
@@ -280,7 +280,7 @@ static struct file_operations mcdx_fops = {
 	block_read,		/* read - general block-dev read */
 	block_write,	/* write - general block-dev write */
 	NULL,			/* no readdir */
-	NULL,			/* no select */
+	NULL,			/* no poll */
 	mcdx_ioctl,		/* ioctl() */
 	NULL,			/* no mmap */
 	mcdx_open,		/* open() */
@@ -1170,7 +1170,7 @@ int mcdx_init(void)
 	xwarn("Version 2.14(hs) \n");
 #endif
 
-	xwarn("$Id: mcdx.c,v 1.12 1996/06/05 01:38:38 heiko Exp $\n");
+	xwarn("$Id: mcdx.c,v 1.21 1997/01/26 07:12:59 davem Exp $\n");
 
 	/* zero the pointer array */
 	for (drive = 0; drive < MCDX_NDRIVES; drive++)

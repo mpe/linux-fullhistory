@@ -46,7 +46,7 @@ static struct file_operations proc_scsi_operations = {
     proc_readscsi,	/* read	   */
     proc_writescsi,	/* write   */
     proc_readdir,	/* readdir */
-    NULL,		/* select  */
+    NULL,		/* poll    */
     NULL,		/* ioctl   */
     NULL,		/* mmap	   */
     NULL,		/* no special open code	   */

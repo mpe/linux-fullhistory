@@ -16,4 +16,10 @@
 #define MAX_TASKS_PER_USER (NR_TASKS/2)
 #define MIN_TASKS_LEFT_FOR_ROOT 4
 
+
+/*
+ * This controls the maximum pid allocated to a process
+ */
+#define PID_MAX 0x8000
+
 #endif

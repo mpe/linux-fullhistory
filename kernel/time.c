@@ -25,6 +25,8 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/timex.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -64,11 +66,13 @@ asmlinkage int sys_time(int * tloc)
 {
 	int i;
 
+	lock_kernel();
 	i = CURRENT_TIME;
 	if (tloc) {
 		if (put_user(i,tloc))
 			i = -EFAULT;
 	}
+	unlock_kernel();
 	return i;
 }
 
@@ -80,12 +84,14 @@ asmlinkage int sys_time(int * tloc)
  */
 asmlinkage int sys_stime(int * tptr)
 {
-	int value;
+	int value = -EPERM;
 
+	lock_kernel();
 	if (!suser())
-		return -EPERM;
+		goto out;
+	value = -EFAULT;
 	if (get_user(value, tptr))
-		return -EFAULT;
+		goto out;
 	cli();
 	xtime.tv_sec = value;
 	xtime.tv_usec = 0;
@@ -93,24 +99,33 @@ asmlinkage int sys_stime(int * tptr)
 	time_maxerror = MAXPHASE;
 	time_esterror = MAXPHASE;
 	sti();
-	return 0;
+	value = 0;
+out:
+	unlock_kernel();
+	return value;
 }
 
 #endif
 
 asmlinkage int sys_gettimeofday(struct timeval *tv, struct timezone *tz)
 {
+	int err = -EFAULT;
+
+	lock_kernel();
 	if (tv) {
 		struct timeval ktv;
 		do_gettimeofday(&ktv);
 		if (copy_to_user(tv, &ktv, sizeof(ktv)))
-			return -EFAULT;
+			goto out;
 	}
 	if (tz) {
 		if (copy_to_user(tz, &sys_tz, sizeof(sys_tz)))
-			return -EFAULT;
+			goto out;
 	}
-	return 0;
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 /*
@@ -151,16 +166,19 @@ asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
 	static int	firsttime = 1;
 	struct timeval	new_tv;
 	struct timezone new_tz;
+	int err = -EPERM;
 
+	lock_kernel();
 	if (!suser())
-		return -EPERM;
+		goto out;
+	err = -EFAULT;
 	if (tv) {
 		if (copy_from_user(&new_tv, tv, sizeof(*tv)))
-			return -EFAULT;
+			goto out;
 	}
 	if (tz) {
 		if (copy_from_user(&new_tz, tz, sizeof(*tz)))
-			return -EFAULT;
+			goto out;
 		sys_tz = new_tz;
 		if (firsttime) {
 			firsttime = 0;
@@ -170,7 +188,10 @@ asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
 	}
 	if (tv)
 		do_settimeofday(&new_tv);
-	return 0;
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 long pps_offset = 0;		/* pps time offset (us) */
@@ -197,35 +218,33 @@ void (*hardpps_ptr)(struct timeval *) = (void (*)(struct timeval *))0;
 asmlinkage int sys_adjtimex(struct timex *txc_p)
 {
         long ltemp, mtemp, save_adjust;
-	int error;
+	int error = -EFAULT;
+	struct timex txc;		/* Local copy of parameter */
 
-	/* Local copy of parameter */
-	struct timex txc;
-
+	lock_kernel();
 	/* Copy the user data space into the kernel copy
 	 * structure. But bear in mind that the structures
 	 * may change
 	 */
-	error = copy_from_user(&txc, txc_p, sizeof(struct timex));
-	if (error)
-		return -EFAULT;	
+	if(copy_from_user(&txc, txc_p, sizeof(struct timex)))
+		goto out;	
 
 	/* In order to modify anything, you gotta be super-user! */
+	error = -EPERM;
 	if (txc.modes && !suser())
-		return -EPERM;
+		goto out;
 
-	/* Now we validate the data before disabling interrupts
-	 */
-
+	/* Now we validate the data before disabling interrupts */
+	error = -EINVAL;
 	if (txc.modes != ADJ_OFFSET_SINGLESHOT && (txc.modes & ADJ_OFFSET))
 	  /* adjustment Offset limited to +- .512 seconds */
 	  if (txc.offset <= - MAXPHASE || txc.offset >= MAXPHASE )
-	    return -EINVAL;
+	    goto out;
 
 	/* if the quartz is off by more than 10% something is VERY wrong ! */
 	if (txc.modes & ADJ_TICK)
 	  if (txc.tick < 900000/HZ || txc.tick > 1100000/HZ)
-	    return -EINVAL;
+	    goto out;
 
 	cli();
 
@@ -343,5 +362,8 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 
 	sti();
 
-	return copy_to_user(txc_p, &txc, sizeof(struct timex)) ? -EFAULT : time_state;
+	error = copy_to_user(txc_p, &txc, sizeof(struct timex)) ? -EFAULT : time_state;
+out:
+	unlock_kernel();
+	return error;
 }

@@ -1,6 +1,6 @@
 #ifndef A3000_H
 
-/* $Id: a3000.h,v 1.3 1996/04/25 20:58:09 root Exp root $
+/* $Id: a3000.h,v 1.4 1997/01/19 23:07:10 davem Exp $
  *
  * Header file for the Amiga 3000 built-in SCSI controller for Linux
  *
@@ -34,7 +34,7 @@ int wd33c93_reset(Scsi_Cmnd *, unsigned int);
 extern struct proc_dir_entry proc_scsi_a3000;
 
 #define A3000_SCSI {  /* next */                NULL,            \
-		      /* usage_count */         NULL,	         \
+		      /* module */         NULL,	         \
 		      /* proc_dir_entry */      &proc_scsi_a3000, \
 		      /* proc_info */           NULL,            \
 		      /* name */                "Amiga 3000 built-in SCSI", \
@@ -59,7 +59,7 @@ extern struct proc_dir_entry proc_scsi_a3000;
 /*
  * if the transfer address ANDed with this results in a non-zero
  * result, then we can't use DMA.
- */ 
+ */
 #define A3000_XFER_MASK  (0x00000003)
 
 typedef struct {

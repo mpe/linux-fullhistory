@@ -72,7 +72,7 @@ static struct file_operations ftape_cdev =
 	ftape_read,		/* read */
 	ftape_write,		/* write */
 	NULL,			/* readdir */
-	NULL,			/* select */
+	NULL,			/* poll */
 	ftape_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	ftape_open,		/* open */
@@ -129,16 +129,16 @@ int ftape_init(void)
 	printk(KERN_INFO "ftape-2.08 960314\n"
 	       KERN_INFO " (c) 1993-1995 Bas Laarhoven (bas@vimec.nl)\n"
 	       KERN_INFO " (c) 1995-1996 Kai Harrekilde-Petersen (khp@dolphinics.no)\n"
-	KERN_INFO " QIC-117 driver for QIC-40/80/3010/3020 tape drives\n"
-	       KERN_INFO " Compiled for kernel version %s"
+	       KERN_INFO " QIC-117 driver for QIC-40/80/3010/3020 tape drives\n"
+	       KERN_INFO " Compiled for kernel version " UTS_RELEASE
 #ifdef MODVERSIONS
 	       " with versioned symbols"
 #endif
-	       "\n", kernel_version);
+	       "\n");
 #else /* !MODULE */
 	/* print a short no-nonsense boot message */
 	printk("ftape-2.08 960314 for Linux 1.3.70\n");
-#endif				/* MODULE */
+#endif /* MODULE */
 	TRACE(3, "installing QIC-117 ftape driver...");
 	if (register_chrdev(QIC117_TAPE_MAJOR, "ft", &ftape_cdev)) {
 		TRACE(1, "register_chrdev failed");

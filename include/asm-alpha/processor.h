@@ -58,9 +58,6 @@ struct thread_struct {
 	0 \
 }
 
-#define alloc_kernel_stack()    __get_free_page(GFP_KERNEL)
-#define free_kernel_stack(page) free_page((page))
-
 #include <asm/ptrace.h>
 
 /*
@@ -83,5 +80,14 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
  * Do necessary setup to start up a newly executed thread.
  */
 extern void start_thread(struct pt_regs *, unsigned long, unsigned long);
+
+/* Free all resources held by a thread. */
+extern void release_thread(struct task_struct *);
+
+/* Allocation and freeing of basic task resources. */
+#define alloc_task_struct()	kmalloc(sizeof(struct task_struct), GFP_KERNEL)
+#define alloc_kernel_stack(p)	__get_free_page(GFP_KERNEL)
+#define free_task_struct(p)	kfree(p)
+#define free_kernel_stack(page) free_page((page))
 
 #endif /* __ASM_ALPHA_PROCESSOR_H */

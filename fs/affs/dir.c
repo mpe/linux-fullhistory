@@ -32,7 +32,7 @@ static struct file_operations affs_dir_operations = {
 	affs_dir_read,		/* read */
 	NULL,			/* write - bad */
 	affs_readdir,		/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */

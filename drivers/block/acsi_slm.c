@@ -279,7 +279,7 @@ static struct file_operations slm_fops = {
 	slm_read,		/* read - status reading */
 	slm_write,		/* write - printing data write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select */
+	NULL,			/* poll */
 	slm_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	slm_open,		/* open */

@@ -14,6 +14,8 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/stddef.h>
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
@@ -133,19 +135,30 @@ switch_to(struct task_struct *prev, struct task_struct *new)
 
 asmlinkage int sys_debug(unsigned long r3)
 {
-  if ( !strcmp(current->comm,"crashme"))
-    printk("sys_debug(): r3 (syscall) %d\n", r3);
+	lock_kernel();
+	if (!strcmp(current->comm,"crashme"))
+		printk("sys_debug(): r3 (syscall) %d\n", r3);
+	unlock_kernel();
+	return 0;
 }
 
 asmlinkage int sys_idle(void)
 {
-  if (current->pid != 0)
-    return -EPERM;
-  /* endless idle loop with no priority at all */
-  current->counter = -100;
-  for (;;) {
-    schedule();
-  }
+	int ret = -EPERM;
+
+	lock_kernel();
+	if (current->pid != 0)
+		goto out;
+
+	/* endless idle loop with no priority at all */
+	current->counter = -100;
+	for (;;) {
+		schedule();
+	}
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 void show_regs(struct pt_regs * regs)
@@ -232,7 +245,12 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 
 asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6, struct pt_regs *regs)
 {
-  return do_fork(SIGCHLD, regs->gpr[1], regs);
+	int ret;
+
+	lock_kernel();
+	ret = do_fork(SIGCHLD, regs->gpr[1], regs);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
@@ -242,6 +260,7 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 	int error;
 	char * filename;
 
+	lock_kernel();
 	/* getname does it's own verification of the address
 	   when it calls get_max_filename() but
 	   it will assume it's valid if get_fs() == KERNEL_DS
@@ -265,9 +284,7 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 #endif
 	error = getname((char *) a0, &filename);
 	if (error)
-	{
-	  return error;
-	}
+		goto out;
 	flush_instruction_cache();
 	error = do_execve(filename, (char **) a1, (char **) a2, regs);
 #if 0
@@ -277,6 +294,8 @@ printk("EXECVE - file = '%s', error = %d\n", filename, error);
 }
 #endif
 	putname(filename);
+out:
+	unlock_kernel();
 	return error;
 }
 
@@ -284,7 +303,10 @@ asmlinkage int sys_clone(int p1, int p2, int p3, int p4, int p5, int p6, struct 
 {
 	unsigned long clone_flags = p1;
 	int res;
+
+	lock_kernel();
 	res = do_fork(clone_flags, regs->gpr[1], regs);
+	unlock_kernel();
 	return res;
 }
 
@@ -339,9 +361,9 @@ print_kernel_backtrace(void)
 inline void start_thread(struct pt_regs * regs,
                          unsigned long eip, unsigned long esp)
 {
-  regs->nip = eip;
-  regs->gpr[1] = esp;
-  regs->msr = MSR_USER;
-  set_fs(USER_DS);
+	regs->nip = eip;
+	regs->gpr[1] = esp;
+	regs->msr = MSR_USER;
+	set_fs(USER_DS);
 }
 

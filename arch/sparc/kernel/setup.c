@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.79 1996/12/23 10:57:02 ecd Exp $
+/*  $Id: setup.c,v 1.80 1997/01/25 02:39:54 miguel Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -12,7 +12,7 @@
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
 #include <linux/malloc.h>
-#include <linux/smp.h>
+#include <asm/smp.h>
 #include <linux/user.h>
 #include <linux/a.out.h>
 #include <linux/tty.h>
@@ -183,11 +183,11 @@ __initfunc(static void boot_flags_init(char *commands))
 #ifdef CONFIG_SUN_SERIAL
 			case 'a':
 				rs_kgdb_hook(0);
-				printk("KGDB: Using serial line /dev/ttya.\n");
+				prom_printf("KGDB: Using serial line /dev/ttya.\n");
 				break;
 			case 'b':
 				rs_kgdb_hook(1);
-				printk("KGDB: Using serial line /dev/ttyb.\n");
+				prom_printf("KGDB: Using serial line /dev/ttyb.\n");
 				break;
 #endif
 #ifdef CONFIG_AP1000
@@ -327,6 +327,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	}
 	if((boot_flags & BOOTME_KGDB)) {
 		set_debug_traps();
+		prom_printf ("Breakpoint!\n");
 		breakpoint();
 	}
 
@@ -440,8 +441,6 @@ extern char *sparc_cpu_type[];
 extern char *sparc_fpu_type[];
 
 extern char *smp_info(void);
-
-extern int linux_num_cpus;
 
 int get_cpuinfo(char *buffer)
 {

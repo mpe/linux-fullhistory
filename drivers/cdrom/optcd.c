@@ -1,5 +1,5 @@
 /*	linux/drivers/cdrom/optcd.c - Optics Storage 8000 AT CDROM driver
-	$Id: optcd.c,v 1.29 1996/02/22 22:38:30 root Exp $
+	$Id: optcd.c,v 1.11 1997/01/26 07:13:00 davem Exp $
 
 	Copyright (C) 1995 Leo Spiekman (spiekman@dutette.et.tudelft.nl)
 
@@ -2002,7 +2002,7 @@ static struct file_operations opt_fops = {
 	block_read,		/* read - general block-dev read */
 	block_write,		/* write - general block-dev write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select */
+	NULL,			/* poll */
 	opt_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	opt_open,		/* open */

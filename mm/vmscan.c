@@ -5,7 +5,7 @@
  *
  *  Swap reorganised 29.12.95, Stephen Tweedie.
  *  kswapd added: 7.1.96  sct
- *  Version: $Id: vmscan.c,v 1.4.2.2 1996/01/20 18:22:47 linux Exp $
+ *  Version: $Id: vmscan.c,v 1.21 1997/01/06 06:54:03 davem Exp $
  */
 
 #include <linux/mm.h>
@@ -20,6 +20,7 @@
 #include <linux/fs.h>
 #include <linux/swapctl.h>
 #include <linux/smp_lock.h>
+#include <linux/slab.h>
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
@@ -347,9 +348,13 @@ int try_to_free_page(int priority, int dma, int wait)
 				return 1;
 			state = 1;
 		case 1:
-			if (shm_swap(i, dma))
+			if (kmem_cache_reap(i, dma, wait))
 				return 1;
 			state = 2;
+		case 2:
+			if (shm_swap(i, dma))
+				return 1;
+			state = 3;
 		default:
 			if (swap_out(i, dma, wait))
 				return 1;
@@ -368,7 +373,7 @@ int try_to_free_page(int priority, int dma, int wait)
 int kswapd(void *unused)
 {
 	int i;
-	char *revision="$Revision: 1.4.2.2 $", *s, *e;
+	char *revision="$Revision: 1.21 $", *s, *e;
 	
 	current->session = 1;
 	current->pgrp = 1;
@@ -380,11 +385,7 @@ int kswapd(void *unused)
 	 *	and other internals and thus be subject to the SMP locking
 	 *	rules. (On a uniprocessor box this does nothing).
 	 */
-	 
-#ifdef __SMP__
 	lock_kernel();
-	syscall_count++;
-#endif
 
 	/* Give kswapd a realtime priority. */
 	current->policy = SCHED_FIFO;

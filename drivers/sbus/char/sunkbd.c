@@ -14,6 +14,7 @@
 #include <linux/signal.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
+#include <linux/poll.h>
 #include <linux/random.h>
 #include <linux/init.h>
 
@@ -62,7 +63,8 @@ extern void reset_vc(unsigned int new_console);
 extern void scrollback(int);
 extern void scrollfront(int);
 
-unsigned char kbd_read_mask = 0x01;	/* modified by psaux.c */
+unsigned char kbd_read_mask = 0x01;	  /* modified by psaux.c */
+unsigned char aux_device_present = 0x00;  /* To make kernel/ksyms.c happy */
 
 /*
  * global state includes the following, and various static variables
@@ -1240,14 +1242,11 @@ kbd_fasync (struct inode *inode, struct file *filp, int on)
 	return 0;
 }
 
-static int
-kbd_select (struct inode *i, struct file *f, int sel_type, select_table *wait)
+static unsigned int kbd_poll (struct file *f, poll_table *wait)
 {
-	if (sel_type != SEL_IN)
-		return 0;
+	poll_wait(&kbd_wait, wait);
 	if (kbd_head != kbd_tail)
-		return 1;
-	select_wait (&kbd_wait, wait);
+		return POLLIN | POLLRDNORM;
 	return 0;
 }
 
@@ -1355,7 +1354,7 @@ file_operations kbd_fops =
 	kbd_read,		/* read */
 	NULL,			/* write */
 	NULL,			/* readdir */
-	kbd_select,		/* select */
+	kbd_poll,		/* poll */
 	kbd_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	kbd_open,		/* open */

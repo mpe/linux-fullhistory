@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.47 1996/12/30 00:31:12 davem Exp $ */
+/* $Id: system.h,v 1.51 1997/01/25 01:33:05 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
@@ -55,14 +55,12 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 #define SWITCH_ENTER \
 	cli(); \
 	if(prev->flags & PF_USEDFPU) { \
+		put_psr(get_psr() | PSR_EF); \
 		fpsave(&prev->tss.float_regs[0], &prev->tss.fsr, \
 		       &prev->tss.fpqueue[0], &prev->tss.fpqdepth); \
 		prev->flags &= ~PF_USEDFPU; \
 		prev->tss.kregs->psr &= ~PSR_EF; \
-	} \
-	prev->lock_depth = syscall_count; \
-	kernel_counter += (next->lock_depth - prev->lock_depth); \
-	syscall_count = next->lock_depth;
+	}
 
 #define SWITCH_EXIT sti();
 #define SWITCH_DO_LAZY_FPU
@@ -235,33 +233,21 @@ extern char spdeb_buf[256];
 
 extern __inline__ unsigned long xchg_u32(__volatile__ unsigned long *m, unsigned long val)
 {
-	__asm__ __volatile__("
-	rd	%%psr, %%g3
-	andcc	%%g3, %3, %%g0
-	bne	1f
-	 nop
-	wr	%%g3, %3, %%psr
-	nop
-	nop
-	nop
-1:
-	ld	[%1], %%g2
-	andcc	%%g3, %3, %%g0
-	st	%2, [%1]
-	bne	1f
-	 nop
-	wr	%%g3, 0x0, %%psr
-	nop
-	nop
-	nop
-1:
-	mov	%%g2, %0
-	"
-        : "=&r" (val)
-        : "r" (m), "0" (val), "i" (PSR_PIL)
-        : "g2", "g3");
+	register unsigned long *ptr asm("g1");
+	register unsigned long ret asm("g2");
 
-	return val;
+	ptr = (unsigned long *) m;
+	ret = val;
+
+	__asm__ __volatile__("
+	mov	%%o7, %%g4
+	call	___xchg32
+	 add	%%o7, 8, %%o7
+"	: "=&r" (ret)
+	: "0" (ret), "r" (ptr)
+	: "g3", "g4", "g7", "memory");
+
+	return ret;
 }
 
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))

@@ -7,13 +7,15 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/slab.h>
 #include <linux/shm.h>
 #include <linux/errno.h>
 #include <linux/mman.h>
 #include <linux/string.h>
-#include <linux/malloc.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -41,6 +43,9 @@ pgprot_t protection_map[16] = {
 	__S000, __S001, __S010, __S011, __S100, __S101, __S110, __S111
 };
 
+/* SLAB cache for vm_area_struct's. */
+kmem_cache_t *vm_area_cachep;
+
 /*
  * Check that a process has enough memory to allocate a
  * new virtual mapping.
@@ -64,54 +69,62 @@ static inline int vm_enough_memory(long pages)
 
 asmlinkage unsigned long sys_brk(unsigned long brk)
 {
-	unsigned long rlim;
+	unsigned long rlim, retval;
 	unsigned long newbrk, oldbrk;
 	struct mm_struct *mm = current->mm;
 
+	lock_kernel();
+	retval = mm->brk;
 	if (brk < mm->end_code)
-		return mm->brk;
+		goto out;
 	newbrk = PAGE_ALIGN(brk);
 	oldbrk = PAGE_ALIGN(mm->brk);
-	if (oldbrk == newbrk)
-		return mm->brk = brk;
+	if (oldbrk == newbrk) {
+		retval = mm->brk = brk;
+		goto out;
+	}
 
 	/*
 	 * Always allow shrinking brk
 	 */
 	if (brk <= mm->brk) {
-		mm->brk = brk;
+		retval = mm->brk = brk;
 		do_munmap(newbrk, oldbrk-newbrk);
-		return brk;
+		goto out;
 	}
 	/*
 	 * Check against rlimit and stack..
 	 */
+	retval = mm->brk;
 	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
 	if (rlim >= RLIM_INFINITY)
 		rlim = ~0;
 	if (brk - mm->end_code > rlim)
-		return mm->brk;
+		goto out;
 
 	/*
 	 * Check against existing mmap mappings.
 	 */
 	if (find_vma_intersection(mm, oldbrk, newbrk+PAGE_SIZE))
-		return mm->brk;
+		goto out;
 
 	/*
 	 * Check if we have enough memory..
 	 */
 	if (!vm_enough_memory((newbrk-oldbrk) >> PAGE_SHIFT))
-		return mm->brk;
+		goto out;
 
 	/*
 	 * Ok, looks good - let it rip.
 	 */
 	if(do_mmap(NULL, oldbrk, newbrk-oldbrk,
-		PROT_READ|PROT_WRITE|PROT_EXEC,
-		   MAP_FIXED|MAP_PRIVATE, 0) != oldbrk)
-		return mm->brk;
-	return mm->brk = brk;
+		   PROT_READ|PROT_WRITE|PROT_EXEC,
+		   MAP_FIXED|MAP_PRIVATE, 0) == oldbrk)
+		mm->brk = brk;
+	retval = mm->brk;
+out:
+	unlock_kernel();
+	return retval;
 }
 
 /*
@@ -215,8 +228,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if (file && (!file->f_op || !file->f_op->mmap))
 		return -ENODEV;
 
-	vma = (struct vm_area_struct *)kmalloc(sizeof(struct vm_area_struct),
-		GFP_KERNEL);
+	vma = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 	if (!vma)
 		return -ENOMEM;
 
@@ -256,7 +268,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	/* Check against address space limit. */
 	if ((mm->total_vm << PAGE_SHIFT) + len
 	    > current->rlim[RLIMIT_AS].rlim_cur) {
-		kfree(vma);
+		kmem_cache_free(vm_area_cachep, vma);
 		return -ENOMEM;
 	}
 
@@ -264,7 +276,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if ((vma->vm_flags & (VM_SHARED | VM_WRITE)) == VM_WRITE) {
 		if (!(flags & MAP_NORESERVE) &&
 		    !vm_enough_memory(len >> PAGE_SHIFT)) {
-			kfree(vma);
+			kmem_cache_free(vm_area_cachep, vma);
 			return -ENOMEM;
 		}
 	}
@@ -273,7 +285,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		int error = file->f_op->mmap(file->f_inode, file, vma);
 	
 		if (error) {
-			kfree(vma);
+			kmem_cache_free(vm_area_cachep, vma);
 			return error;
 		}
 	}
@@ -284,7 +296,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 
 	/* merge_segments might have merged our vma, so we can't use it any more */
 	mm->total_vm += len >> PAGE_SHIFT;
-	if (flags & VM_LOCKED) {
+	if ((flags & VM_LOCKED) && !(flags & VM_IO)) {
 		unsigned long start = addr;
 		mm->locked_vm += len >> PAGE_SHIFT;
 		do {
@@ -751,7 +763,7 @@ static void unmap_fixup(struct vm_area_struct *area,
 	else {
 	/* Unmapping a hole: area->vm_start < addr <= end < area->vm_end */
 		/* Add end mapping -- leave beginning for below */
-		mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
+		mpnt = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 
 		if (!mpnt)
 			return;
@@ -767,7 +779,7 @@ static void unmap_fixup(struct vm_area_struct *area,
 	}
 
 	/* construct whatever mapping is needed */
-	mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
+	mpnt = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 	if (!mpnt)
 		return;
 	*mpnt = *area;
@@ -782,7 +794,12 @@ static void unmap_fixup(struct vm_area_struct *area,
 
 asmlinkage int sys_munmap(unsigned long addr, size_t len)
 {
-	return do_munmap(addr, len);
+	int ret;
+
+	lock_kernel();
+	ret = do_munmap(addr, len);
+	unlock_kernel();
+	return ret;
 }
 
 /*
@@ -851,7 +868,7 @@ int do_munmap(unsigned long addr, size_t len)
 		zap_page_range(current->mm, st, size);
 		flush_tlb_range(current->mm, st, end);
 		unmap_fixup(mpnt, st, size);
-		kfree(mpnt);
+		kmem_cache_free(vm_area_cachep, mpnt);
 	} while (free);
 
 	/* we could zap the page tables here too.. */
@@ -896,7 +913,7 @@ void exit_mmap(struct mm_struct * mm)
 		zap_page_range(mm, start, size);
 		if (mpnt->vm_inode)
 			iput(mpnt->vm_inode);
-		kfree(mpnt);
+		kmem_cache_free(vm_area_cachep, mpnt);
 		mpnt = next;
 	}
 }
@@ -1045,9 +1062,19 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 		remove_shared_vm_struct(mpnt);
 		if (mpnt->vm_inode)
 			mpnt->vm_inode->i_count--;
-		kfree_s(mpnt, sizeof(*mpnt));
+		kmem_cache_free(vm_area_cachep, mpnt);
 		mpnt = prev;
 	}
 no_vma:
 	up(&mm->mmap_sem);
+}
+
+void vma_init(void)
+{
+	vm_area_cachep = kmem_cache_create("vm_area_struct",
+					   sizeof(struct vm_area_struct),
+					   sizeof(long)*8, SLAB_HWCACHE_ALIGN,
+					   NULL, NULL);
+	if(!vm_area_cachep)
+		panic("vma_init: Cannot alloc vm_area_struct cache.");
 }

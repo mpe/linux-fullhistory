@@ -5,6 +5,8 @@
  */
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
@@ -29,8 +31,11 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs *regs);
 asmlinkage int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long set)
 {
 	unsigned long mask;
-	struct pt_regs * regs = (struct pt_regs *) &restart;
+	struct pt_regs * regs;
+	int ret = -EINTR;
 
+	lock_kernel();
+	regs = (struct pt_regs *) &restart;
 	mask = current->blocked;
 	current->blocked = set & _BLOCKABLE;
 	regs->reg2 = -EINTR;
@@ -38,8 +43,11 @@ asmlinkage int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long 
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
 		if (do_signal(mask,regs))
-			return -EINTR;
+			goto out;
 	}
+out:
+	unlock_kernel();
+	return ret;
 }
 
 /*
@@ -48,7 +56,9 @@ asmlinkage int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long 
 asmlinkage int sys_sigreturn(struct pt_regs *regs)
 {
 	struct sigcontext_struct *context;
+	int ret;
 
+	lock_kernel();
 	/*
 	 * We don't support fixing ADEL/ADES exceptions for signal stack frames.
 	 * No big loss - who doesn't care about the alignment of this stack
@@ -99,10 +109,14 @@ asmlinkage int sys_sigreturn(struct pt_regs *regs)
 	 * disable syscall checks
 	 */
 	regs->orig_reg2 = -1;
-	return context->sc_v0;
+	goto out;
 
 badframe:
 	do_exit(SIGSEGV);
+out:
+	ret = context->sc_v0;
+	unlock_kernel();
+	return ret;
 }
 
 /*
@@ -239,13 +253,16 @@ static void setup_frame(struct sigaction * sa, struct sc **fp,
  */
 asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 {
-	unsigned long mask = ~current->blocked;
+	unsigned long mask;
 	unsigned long handler_signal = 0;
 	struct sc *frame = NULL;
 	unsigned long pc = 0;
 	unsigned long signr;
 	struct sigaction * sa;
+	int ret;
 
+	lock_kernel();
+	mask = ~current->blocked;
 	while ((signr = current->signal & mask)) {
 		signr = ffz(~signr);
 		clear_bit(signr, &current->signal);
@@ -331,8 +348,9 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 		regs->reg2 = regs->orig_reg2;
 		regs->cp0_epc -= 8;
 	}
+	ret = 0;
 	if (!handler_signal)		/* no handler will be called - return 0 */
-		return 0;
+		goto out;
 	pc = regs->cp0_epc;
 	frame = (struct sc *) regs->reg29;
 	signr = 1;
@@ -353,5 +371,8 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 	regs->reg31 = (unsigned long) frame->code;	/* Return address */
 	regs->cp0_epc = pc;		/* "return" to the first handler */
 
-	return 1;
+	ret = 1;
+out:
+	unlock_kernel();
+	return ret;
 }

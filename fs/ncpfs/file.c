@@ -255,7 +255,7 @@ static struct file_operations ncp_file_operations = {
 	ncp_file_read,		/* read */
 	ncp_file_write,		/* write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	ncp_ioctl,		/* ioctl */
 	ncp_mmap,		/* mmap */
 	NULL,                   /* open */

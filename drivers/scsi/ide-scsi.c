@@ -240,7 +240,7 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 
 #if IDESCSI_DEBUG_LOG
 	printk (KERN_INFO "ide-scsi: Reached idescsi_pc_intr interrupt handler\n");
-#endif /* IDESCSI_DEBUG_LOG */	
+#endif /* IDESCSI_DEBUG_LOG */
 
 	if (clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 #if IDESCSI_DEBUG_LOG
@@ -651,7 +651,7 @@ Scsi_Host_Template idescsi_template = IDESCSI;
 int init_module (void)
 {
 	idescsi_init ();
-	idescsi_template.usage_count = &__this_module.usecount;
+	idescsi_template.module = &__this_module;
 	scsi_register_module (MODULE_SCSI_HA, &idescsi_template);
 	return 0;
 }

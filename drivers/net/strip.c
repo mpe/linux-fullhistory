@@ -2752,7 +2752,7 @@ int strip_init_ctrl_dev(struct device *dummy)
     strip_ldisc.read         = NULL;
     strip_ldisc.write        = NULL;
     strip_ldisc.ioctl        = strip_ioctl;
-    strip_ldisc.select       = NULL;
+    strip_ldisc.poll         = NULL;
     strip_ldisc.receive_buf  = strip_receive_buf;
     strip_ldisc.receive_room = strip_receive_room;
     strip_ldisc.write_wakeup = strip_write_some_more;

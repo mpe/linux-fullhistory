@@ -7,6 +7,8 @@
 #include <linux/config.h>
 #include <asm/uaccess.h>
 #include <linux/vmalloc.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 /*
  * Originally by Anonymous (as far as I know...)
@@ -118,6 +120,7 @@ sys_create_module(const char *name_user, size_t size)
 	long namelen, error;
 	struct module *mod;
 
+	lock_kernel();
 	if (!suser()) {
 		error = -EPERM;
 		goto err0;
@@ -150,11 +153,12 @@ sys_create_module(const char *name_user, size_t size)
 
 	module_list = mod;	/* link it in */
 
-	return (unsigned long) mod;
-
+	error = (long) mod;
+	goto err0;
 err1:
 	put_mod_name(name);
 err0:
+	unlock_kernel();
 	return error;
 }
 
@@ -167,14 +171,13 @@ sys_init_module(const char *name_user, struct module *mod_user)
 {
 	struct module mod_tmp, *mod;
 	char *name, *n_name;
-	long namelen, n_namelen, i, error;
+	long namelen, n_namelen, i, error = -EPERM;
 	unsigned long mod_user_size;
 	struct module_ref *dep;
 
-	if (!suser()) {
-		error = -EPERM;
+	lock_kernel();
+	if (!suser())
 		goto err0;
-	}
 	if ((namelen = get_mod_name(name_user, &name)) < 0) {
 		error = namelen;
 		goto err0;
@@ -184,14 +187,13 @@ sys_init_module(const char *name_user, struct module *mod_user)
 		goto err1;
 	}
 
-	/* Check for legal module header sizes.  */
+	/* Check module header size.  We allow a bit of slop over the 
+	   size we are familiar with to cope with a version of insmod
+	   for a newer kernel.  But don't over do it. */
 	if ((error = get_user(mod_user_size, &mod_user->size_of_struct)) != 0)
 		goto err1;
-	switch (mod_user_size) {
-	  case sizeof(struct module):
-	  case &((struct module *)0L)->persist_start:
-		break;
-	  default:
+	if (mod_user_size < (unsigned long)&((struct module *)0L)->persist_start
+	    || mod_user_size > sizeof(struct module) + 16*sizeof(void*)) {
 		printk(KERN_ERR "init_module: Invalid module header size.\n"
 		       KERN_ERR "A new version of the modutils is likely "
 				"needed.\n");
@@ -264,6 +266,11 @@ sys_init_module(const char *name_user, struct module *mod_user)
 		goto err2;
 	}
 #endif
+	if (mod_member_present(mod, can_unload)
+	    && mod->can_unload && !bound(mod->can_unload, 0, mod)) {
+		printk(KERN_ERR "init_module: mod->can_unload out of bounds.\n");
+		goto err2;
+	}
 
 #undef bound
 
@@ -279,14 +286,12 @@ sys_init_module(const char *name_user, struct module *mod_user)
 		printk(KERN_ERR "init_module: changed module name to "
 				"`%s' from `%s'\n",
 		       n_name, mod_tmp.name);
-		error = -EINVAL;
 		goto err3;
 	}
 
 	/* Ok, that's about all the sanity we can stomach; copy the rest.  */
 
-	error = copy_from_user(mod+1, mod_user+1, mod->size-sizeof(*mod));
-	if (error) {
+	if (copy_from_user(mod+1, mod_user+1, mod->size-sizeof(*mod))) {
 		error = -EFAULT;
 		goto err3;
 	}
@@ -301,7 +306,6 @@ sys_init_module(const char *name_user, struct module *mod_user)
 		if (d == mod) {
 			printk(KERN_ERR "init_module: self-referential "
 					"dependancy in mod->deps.\n");
-			error = -EINVAL;
 			goto err3;
 		}
 
@@ -310,13 +314,15 @@ sys_init_module(const char *name_user, struct module *mod_user)
 
 		printk(KERN_ERR "init_module: found dependancy that is "
 				"(no longer?) a module.\n");
-		error = -EINVAL;
 		goto err3;
 		
 	found_dep:
 		dep->ref = mod;
 		dep->next_ref = d->refs;
 		d->refs = dep;
+		/* Being referenced by a dependant module counts as a 
+		   use as far as kerneld is concerned.  */
+		d->flags |= MOD_USED_ONCE;
 	}
 
 	/* Free our temporary memory.  */
@@ -327,13 +333,15 @@ sys_init_module(const char *name_user, struct module *mod_user)
 	mod->usecount = 1;
 	if (mod->init && mod->init() != 0) {
 		mod->usecount = 0;
-		return -EBUSY;
+		error = -EBUSY;
+		goto err0;
 	}
 	mod->usecount--;
 
 	/* And set it running.  */
 	mod->flags |= MOD_RUNNING;
-	return 0;
+	error = 0;
+	goto err0;
 
 err3:
 	put_mod_name(n_name);
@@ -342,6 +350,7 @@ err2:
 err1:
 	put_mod_name(name);
 err0:
+	unlock_kernel();
 	return error;
 }
 
@@ -350,45 +359,53 @@ sys_delete_module(const char *name_user)
 {
 	struct module *mod, *next;
 	char *name;
-	long error;
+	long error = -EPERM;
 
+	lock_kernel();
 	if (!suser())
-		return -EPERM;
+		goto out;
 
 	if (name_user) {
 		if ((error = get_mod_name(name_user, &name)) < 0)
-			return error;
+			goto out;
 		if (error == 0) {
+			error = -EINVAL;
 			put_mod_name(name);
-			return -EINVAL;
+			goto out;
 		}
+		error = -ENOENT;
 		if ((mod = find_module(name)) == NULL) {
 			put_mod_name(name);
-			return -ENOENT;
+			goto out;
 		}
 		put_mod_name(name);
-		if (mod->refs != NULL || mod->usecount != 0)
-			return -EBUSY;
+		error = -EBUSY;
+ 		if (mod->refs != NULL || __MOD_IN_USE(mod))
+			goto out;
 
 		free_module(mod);
-		return 0;
+		error = 0;
+		goto out;
 	}
 
 	/* Do automatic reaping */
 	for (mod = module_list; mod != &kernel_module; mod = next) {
 		next = mod->next;
 		if (mod->refs == NULL &&
-		    mod->usecount == 0 &&
 		    ((mod->flags
 		      & (MOD_AUTOCLEAN|MOD_RUNNING|MOD_DELETED|MOD_USED_ONCE))
-		     == (MOD_AUTOCLEAN|MOD_RUNNING|MOD_USED_ONCE))) {
+		     == (MOD_AUTOCLEAN|MOD_RUNNING|MOD_USED_ONCE)) &&
+		    !__MOD_IN_USE(mod)) {
 			if (mod->flags & MOD_VISITED)
 				mod->flags &= ~MOD_VISITED;
 			else
 				free_module(mod);
 		}
 	}
-	return 0;
+	error = 0;
+out:
+	unlock_kernel();
+	return error;
 }
 
 /* Query various bits about modules.  */
@@ -418,7 +435,8 @@ qm_modules(char *buf, size_t bufsize, size_t *ret)
 		return 0;
 
 calc_space_needed:
-	for (space += len; mod; mod = mod->next)
+	space += len;
+	while ((mod = mod->next) != &kernel_module)
 		space += strlen(mod->name)+1;
 
 	if (put_user(space, ret))
@@ -460,7 +478,8 @@ qm_deps(struct module *mod, char *buf, size_t bufsize, size_t *ret)
 		return 0;
 
 calc_space_needed:
-	for (space += len; i < mod->ndeps; ++i)
+	space += len;
+	while (++i < mod->ndeps)
 		space += strlen(mod->deps[i].dep->name)+1;
 
 	if (put_user(space, ret))
@@ -503,7 +522,8 @@ qm_refs(struct module *mod, char *buf, size_t bufsize, size_t *ret)
 		return 0;
 
 calc_space_needed:
-	for (space += len; ref; ref = ref->next_ref)
+	space += len;
+	while ((ref = ref->next_ref) != NULL)
 		space += strlen(ref->ref->name)+1;
 
 	if (put_user(space, ret))
@@ -528,14 +548,14 @@ qm_symbols(struct module *mod, char *buf, size_t bufsize, size_t *ret)
 
 	space = mod->nsyms * 2*sizeof(void *);
 
-	if (!access_ok(VERIFY_WRITE, buf, space))
-		return -EFAULT;
-
 	i = len = 0;
 	s = mod->syms;
 
 	if (space > bufsize)
 		goto calc_space_needed;
+
+	if (!access_ok(VERIFY_WRITE, buf, space))
+		return -EFAULT;
 
 	bufsize -= space;
 	vals = (unsigned long *)buf;
@@ -562,8 +582,8 @@ qm_symbols(struct module *mod, char *buf, size_t bufsize, size_t *ret)
 		return 0;
 
 calc_space_needed:
-	for (space += len; i < mod->nsyms; ++i, ++s)
-		space += strlen(s->name)+1;
+	for (; i < mod->nsyms; ++i, ++s)
+		space += strlen((++s)->name)+1;
 
 	if (put_user(space, ret))
 		return -EFAULT;
@@ -584,6 +604,8 @@ qm_info(struct module *mod, char *buf, size_t bufsize, size_t *ret)
 		info.addr = (unsigned long)mod;
 		info.size = mod->size;
 		info.flags = mod->flags;
+		info.usecount = (mod_member_present(mod, can_unload)
+				 && mod->can_unload ? -1 : mod->usecount);
 
 		if (copy_to_user(buf, &info, sizeof(struct module_info)))
 			return -EFAULT;
@@ -601,20 +623,25 @@ sys_query_module(const char *name_user, int which, char *buf, size_t bufsize,
 		 size_t *ret)
 {
 	struct module *mod;
+	int err;
 
+	lock_kernel();
 	if (name_user == NULL)
 		mod = &kernel_module;
 	else {
 		long namelen;
 		char *name;
 
-		if ((namelen = get_mod_name(name_user, &name)) < 0)
-			return namelen;
+		if ((namelen = get_mod_name(name_user, &name)) < 0) {
+			err = namelen;
+			goto out;
+		}
+		err = -ENOENT;
 		if (namelen == 0)
 			mod = &kernel_module;
 		else if ((mod = find_module(name)) == NULL) {
 			put_mod_name(name);
-			return -ENOENT;
+			goto out;
 		}
 		put_mod_name(name);
 	}
@@ -622,28 +649,38 @@ sys_query_module(const char *name_user, int which, char *buf, size_t bufsize,
 	switch (which)
 	{
 	case 0:
-		return 0;
+		err = 0;
+		break;
 	case QM_MODULES:
-		return qm_modules(buf, bufsize, ret);
+		err = qm_modules(buf, bufsize, ret);
+		break;
 	case QM_DEPS:
-		return qm_deps(mod, buf, bufsize, ret);
+		err = qm_deps(mod, buf, bufsize, ret);
+		break;
 	case QM_REFS:
-		return qm_refs(mod, buf, bufsize, ret);
+		err = qm_refs(mod, buf, bufsize, ret);
+		break;
 	case QM_SYMBOLS:
-		return qm_symbols(mod, buf, bufsize, ret);
+		err = qm_symbols(mod, buf, bufsize, ret);
+		break;
 	case QM_INFO:
-		return qm_info(mod, buf, bufsize, ret);
+		err = qm_info(mod, buf, bufsize, ret);
+		break;
+	default:
+		err = -EINVAL;
+		break;
 	}
-
-	return -EINVAL;
+out:
+	unlock_kernel();
+	return err;
 }
 
 /*
  * Copy the kernel symbol table to user space.  If the argument is
  * NULL, just return the size of the table.
  *
- * This call is depreciated in favour of query_module+QM_SYMBOLS which
- * does not arbitrarily limit the length of the symbol.
+ * This call is obsolete.  New programs should use query_module+QM_SYMBOLS
+ * which does not arbitrarily limit the length of symbols.
  */
 
 asmlinkage int
@@ -652,13 +689,14 @@ sys_get_kernel_syms(struct kernel_sym *table)
 	struct module *mod;
 	int i;
 
+	lock_kernel();
 	for (mod = module_list, i = 0; mod; mod = mod->next) {
 		/* include the count for the module name! */
 		i += mod->nsyms + 1;
 	}
 
 	if (table == NULL)
-		return i;
+		goto out;
 
 	for (mod = module_list, i = 0; mod; mod = mod->next) {
 		struct kernel_sym ksym;
@@ -675,7 +713,7 @@ sys_get_kernel_syms(struct kernel_sym *table)
 		ksym.name[sizeof(ksym.name)-1] = '\0';
 
 		if (copy_to_user(table, &ksym, sizeof(ksym)) != 0)
-			return i;
+			goto out;
 		++i, ++table;
 
 		if (mod->nsyms == 0)
@@ -687,10 +725,12 @@ sys_get_kernel_syms(struct kernel_sym *table)
 			ksym.name[sizeof(ksym.name)-1] = '\0';
 
 			if (copy_to_user(table, &ksym, sizeof(ksym)) != 0)
-				return i;
+				goto out;
 			++i, ++table;
 		}
 	}
+out:
+	unlock_kernel();
 	return i;
 }
 
@@ -771,15 +811,16 @@ int get_module_list(char *p)
 		long len;
 		const char *q;
 
-#define safe_copystr(str, len)						\
+#define safe_copy_str(str, len)						\
 		do {							\
 			if (left < len)					\
 				goto fini;				\
 			memcpy(p, str, len); p += len, left -= len;	\
 		} while (0)
+#define safe_copy_cstr(str)	safe_copy_str(str, sizeof(str)-1)
 
         	len = strlen(mod->name);
-		safe_copystr(mod->name, len);
+		safe_copy_str(mod->name, len);
 
 		if ((len = 20 - len) > 0) {
 			if (left < len)
@@ -790,47 +831,45 @@ int get_module_list(char *p)
 		}
 
 		len = sprintf(tmpstr, "%8lu", mod->size);
-		safe_copystr(tmpstr, len);
+		safe_copy_str(tmpstr, len);
 
 		if (mod->flags & MOD_RUNNING) {
-			len = sprintf(tmpstr, "%4lu", mod->usecount);
-			safe_copystr(tmpstr, len);
+			len = sprintf(tmpstr, "%4ld",
+				      (mod_member_present(mod, can_unload)
+				       && mod->can_unload
+				       ? -1 : mod->usecount));
+			safe_copy_str(tmpstr, len);
 		}
 
 		if (mod->flags & MOD_DELETED)
-			q = "  (deleted)";
-		else if (mod->flags & MOD_RUNNING)
-			q = "";
-		else
-			q = "  (uninitialized)";
-		len = strlen(q);
-		safe_copystr(q, len);
-
-		safe_copystr("\t", 1);
+			safe_copy_cstr(" (deleted)");
+		else if (mod->flags & MOD_RUNNING) {
+			if (mod->flags & MOD_AUTOCLEAN)
+				safe_copy_cstr(" (autoclean)");
+			if (!(mod->flags & MOD_USED_ONCE))
+				safe_copy_cstr(" (unused)");
+		} else
+			safe_copy_cstr(" (uninitialized)");
 
 		if ((ref = mod->refs) != NULL) {
-			safe_copystr("[", 1);
+			safe_copy_cstr(" [");
 			while (1) {
 				q = ref->ref->name;
 				len = strlen(q);
-				safe_copystr(q, len);
+				safe_copy_str(q, len);
 
 				if ((ref = ref->next_ref) != NULL)
-					safe_copystr(" ", 1);
+					safe_copy_cstr(" ");
 				else
 					break;
 			}
-			safe_copystr("]", 1);
+			safe_copy_cstr("]");
 		}
 
-		if ((mod->flags & (MOD_RUNNING | MOD_AUTOCLEAN))
-		    == (MOD_RUNNING | MOD_AUTOCLEAN)) {
-			safe_copystr(" (autoclean)", 12);
-		}
+		safe_copy_cstr("\n");
 
-		safe_copystr("\n", 1);
-
-#undef safe_copystr
+#undef safe_copy_str
+#undef safe_copy_cstr
 	}
 
 fini:

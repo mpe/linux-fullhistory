@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.22 1996/12/19 08:06:32 davem Exp $
+/* $Id: time.c,v 1.23 1997/01/26 04:28:34 davem Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -238,6 +238,8 @@ __initfunc(void time_init(void))
 {
 	unsigned int year, mon, day, hour, min, sec;
 	struct mostek48t02 *mregs;
+
+	do_get_fast_time = do_gettimeofday;
 
 #if CONFIG_AP1000
 	init_timers(timer_interrupt);

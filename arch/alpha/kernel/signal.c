@@ -12,6 +12,8 @@
 #include <linux/ptrace.h>
 #include <linux/unistd.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
@@ -38,6 +40,9 @@ extern int ptrace_cancel_bpt (struct task_struct *child);
  *
  * We change the range to -1 .. 1 in order to let gcc easily
  * use the conditional move instructions.
+ *
+ * Note that we don't need to aquire the kernel lock for SMP
+ * operation, as all of this is local to this thread.
  */
 asmlinkage unsigned long osf_sigprocmask(int how, unsigned long newmask,
 	long a2, long a3, long a4, long a5, struct pt_regs regs)
@@ -73,14 +78,20 @@ asmlinkage unsigned long osf_sigprocmask(int how, unsigned long newmask,
  */
 asmlinkage int do_sigsuspend(unsigned long mask, struct pt_regs * regs, struct switch_stack * sw)
 {
-	unsigned long oldmask = current->blocked;
+	unsigned long oldmask;
+
+	lock_kernel();
+	oldmask = current->blocked;
 	current->blocked = mask & _BLOCKABLE;
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
 		if (do_signal(oldmask,regs, sw, 0, 0))
-			return -EINTR;
+			goto out;
 	}
+out:
+	unlock_kernel();
+	return -EINTR;
 }
 
 /*
@@ -93,6 +104,7 @@ asmlinkage void do_sigreturn(struct sigcontext * sc,
 	int i;
 
 	/* verify that it's a good sigcontext before using it */
+	lock_kernel();
 	if (verify_area(VERIFY_READ, sc, sizeof(*sc)))
 		do_exit(SIGSEGV);
 	get_user(ps, &sc->sc_ps);
@@ -145,6 +157,7 @@ asmlinkage void do_sigreturn(struct sigcontext * sc,
 	/* send SIGTRAP if we're single-stepping: */
 	if (ptrace_cancel_bpt (current))
 		send_sig(SIGTRAP, current, 1);
+	unlock_kernel();
 }
 
 /*
@@ -279,10 +292,13 @@ asmlinkage int do_signal(unsigned long oldmask,
 	struct switch_stack * sw,
 	unsigned long r0, unsigned long r19)
 {
-	unsigned long mask = ~current->blocked;
+	unsigned long mask;
 	unsigned long signr, single_stepping;
 	struct sigaction * sa;
+	int ret;
 
+	lock_kernel();
+	mask = ~current->blocked;
 	single_stepping = ptrace_cancel_bpt(current);
 
 	while ((signr = current->signal & mask) != 0) {
@@ -356,7 +372,8 @@ asmlinkage int do_signal(unsigned long oldmask,
 		if (single_stepping) {
 			ptrace_set_bpt(current);	/* re-set breakpoint */
 		}
-		return 1;
+		ret = 1;
+		goto out;
 	}
 	if (r0 &&
 	    (regs->r0 == ERESTARTNOHAND ||
@@ -369,5 +386,8 @@ asmlinkage int do_signal(unsigned long oldmask,
 	if (single_stepping) {
 		ptrace_set_bpt(current);	/* re-set breakpoint */
 	}
-	return 0;
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }

@@ -1,3 +1,8 @@
+Sat Jan 18 15:51:45 1997  Richard Henderson  <richard@twiddle.rth.home>
+
+	* Don't play with usage_count directly, instead hand around
+	the module header and use the module macros.
+
 Fri May 17 00:00:00 1996  Leonard N. Zubkoff <lnz@dandelion.com>
 
 	* BusLogic Driver Version 2.0.3 Released.
@@ -40,10 +45,10 @@ Wed Jul 19 10:09:17 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
 	* eata_dma.c (eata_queue)(eata_int_handler): Added code to do
 	command latency measurements if requested by root through
-	/proc/scsi interface. 
+	/proc/scsi interface.
 	Throughout Use HZ constant for time references.
 
-	* eata_pio.c: Use HZ constant for time references. 
+	* eata_pio.c: Use HZ constant for time references.
 
 	* aic7xxx.c, aic7xxx.h, aic7xxx_asm.c: Changed copyright from BSD
 	to GNU style.
@@ -54,7 +59,7 @@ Wed Jul 19 09:25:30 1995  Michael Neuffer <neuffer@goofy.zdv.uni-mainz.de>
 
 	* Linux 1.3.10 released.
 
-	* scsi_proc.c (dispatch_scsi_info): Removed unused variable.	
+	* scsi_proc.c (dispatch_scsi_info): Removed unused variable.
 
 Wed Jul 19 09:25:30 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
@@ -62,11 +67,11 @@ Wed Jul 19 09:25:30 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
 	* scsi.c Blacklist concept expanded to 'support' more device
 	deficiencies. blacklist[] renamed to device_list[]
-	(scan_scsis): Code cleanup.  
-	
+	(scan_scsis): Code cleanup.
+
 	* scsi_debug.c (scsi_debug_proc_info): Added support to control
-	device lockup simulation via /proc/scsi interface.  
-	
+	device lockup simulation via /proc/scsi interface.
+
 
 Wed Jul 19 09:22:34 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
@@ -80,7 +85,7 @@ Wed Jul 19 09:18:28 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
 	* Native wide, multichannel and /proc/scsi support now in official
 	kernel distribution.
- 
+
         * scsi.c/h, hosts.c/h et al reindented to increase readability
 	(especially on 80 column wide terminals).
 
@@ -94,7 +99,7 @@ Wed Jul 19 09:18:28 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
 Thu Jun 20 15:20:27 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
-        * proc.c: Renamed to scsi_proc.c 
+        * proc.c: Renamed to scsi_proc.c
 
 Mon Jun 12 20:32:45 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
@@ -102,15 +107,15 @@ Mon Jun 12 20:32:45 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
 Mon May 15 19:33:14 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
-	* scsi.c: Added native multichannel and wide scsi support. 
+	* scsi.c: Added native multichannel and wide scsi support.
 
-	* proc.c (dispatch_scsi_info) (build_proc_dir_hba_entries): 
-	Updated /proc/scsi interface.  
+	* proc.c (dispatch_scsi_info) (build_proc_dir_hba_entries):
+	Updated /proc/scsi interface.
 
 Thu May  4 17:58:48 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
 	* sd.c (requeue_sd_request): Zero out the scatterlist only if
-	scsi_malloc returned memory for it.	
+	scsi_malloc returned memory for it.
 
 	* eata_dma.c (register_HBA) (eata_queue): Add support for
 	large scatter/gather tables and set use_clustering accordingly
@@ -127,11 +132,11 @@ Wed Apr 12 15:25:52 1995  Eric Youngdale  (eric@andante)
 	cards.
 
 	* eata_dma.c: Update to 2.3.5r. Modularize. Improved error handling
-        throughout and fixed bug interrupt routine which resulted in shifted 
+        throughout and fixed bug interrupt routine which resulted in shifted
         status bytes. Added blink LED state checks for ISA and EISA HBAs.
-        Memory management bug seems to have disappeared ==> increasing 
-        C_P_L_CURRENT_MAX to 16 for now. Decreasing C_P_L_DIV to 3 for 
-        performance reasons.  
+        Memory management bug seems to have disappeared ==> increasing
+        C_P_L_CURRENT_MAX to 16 for now. Decreasing C_P_L_DIV to 3 for
+        performance reasons.
 
 	* scsi.c: If we get a FMK, EOM, or ILI when attempting to scan
 	the bus, assume that it was just noise on the bus, and ignore
@@ -211,8 +216,8 @@ Mon Feb 20 08:57:17 1995  Eric Youngdale  (eric@andante)
 	* hosts.h: Change io_port to long int from short.
 
  	* 53c7,8xx.c: crash on AEN fixed, SCSI reset is no longer a NOP,
- 	  NULL pointer panic on odd UDCs fixed, two bugs in diagnostic output 
- 	  fixed, should initialize correctly if left running, now loadable, 
+ 	  NULL pointer panic on odd UDCs fixed, two bugs in diagnostic output
+ 	  fixed, should initialize correctly if left running, now loadable,
   	  new memory allocation, extraneous diagnostic output suppressed,
  	  splx() replaced with save/restore flags. [ Drew ]
 
@@ -243,7 +248,7 @@ Wed Feb 15 10:52:56 1995  Eric Youngdale  (eric@andante)
 
 	* eata.c: Update to 1.17.
 
-	* eata_dma.c: Update to 2.31a. Add more support for /proc/scsi. 
+	* eata_dma.c: Update to 2.31a. Add more support for /proc/scsi.
         Continuing modularization. Less crashes because of the bug in the
         memory management ==> increase C_P_L_CURRENT_MAX to 10
         and decrease C_P_L_DIV to 4.
@@ -315,13 +320,13 @@ Wed Feb  1 09:20:45 1995  Eric Youngdale  (eric@andante)
 	* NCR5380.c: Update interrupt handler with new arglist.  Minor
 	cleanups.
 
-	* eata_dma.c: Begin to modularize.  Add hooks for /proc/scsi.  
+	* eata_dma.c: Begin to modularize.  Add hooks for /proc/scsi.
 	New version 2.3.0a. Add code in interrupt handler to allow
-        certain CDROM drivers to be detected which return a 
+        certain CDROM drivers to be detected which return a
         CHECK_CONDITION during SCSI bus scan. Add opcode check to get
         all DATA IN and DATA OUT phases right. Utilize HBA_interpret flag.
 	Improvements in HBA identification. Various other minor stuff.
-	
+
 	* hosts.c: Initialize ->dma_channel and ->io_port when registering
 	a new host.
 
@@ -370,7 +375,7 @@ Mon Jan 23 23:53:10 1995  Eric Youngdale  (eric@andante)
 	* 53c7,8xx.h: Change SG size to 127.
 
 	* eata_dma: Update to version 2.10i. Remove bug in the registration
-        of multiple HBAs and channels. Minor other improvements and stylistic 
+        of multiple HBAs and channels. Minor other improvements and stylistic
         changes.
 
 	* scsi.c: Test for Toshiba XM-3401TA and exclude from detection
@@ -396,7 +401,7 @@ Sun Jan 22 22:08:46 1995  Eric Youngdale  (eric@andante)
 	* aha152x.c: Update to version 1.8 from Juergen.
 
 	* eata_dma.c: Update from Michael Neuffer.
-        Remove hard limit of 2 commands per lun and make it better 
+        Remove hard limit of 2 commands per lun and make it better
         configurable. Improvements in HBA identification.
 
 	* in2000.c: Fix biosparam to support large disks.
@@ -413,7 +418,7 @@ Wed Jan 18 23:33:09 1995  Eric Youngdale  (eric@andante)
 	* buslogic.c: Likewise.
 
 	* eata_dma.c: Use min of 2 cmd_per_lun for OCS_enabled boards.
-          
+
 	* scsi.c: Make RECOVERED_ERROR a SUGGEST_IS_OK.
 
 	* sd.c: Fail if we are opening a non-existent partition.
@@ -425,7 +430,7 @@ Wed Jan 18 23:33:09 1995  Eric Youngdale  (eric@andante)
 	* sr_ioctl.c: Remove CDROMMULTISESSION_SYS ioctl.
 
 	* ultrastor.c: Fix bug in call to ultrastor_interrupt (wrong #args).
- 
+
 Mon Jan 16 07:18:23 1995  Eric Youngdale  (eric@andante)
 
 	* Linux 1.1.82 released.
@@ -635,7 +640,7 @@ Fri Dec 23 13:36:25 1994  Eric Youngdale  (eric@andante)
 
 	* st.c: New version from Kai - add better support for backspace.
 
-	* u14-34f.c: New version from Dario.  Supports blocking. 
+	* u14-34f.c: New version from Dario.  Supports blocking.
 
 Wed Dec 14 14:46:30 1994  Eric Youngdale  (eric@andante)
 
@@ -733,7 +738,7 @@ Tue Nov 29 18:48:42 1994  Eric Youngdale  (eric@andante)
 	status.
 
 	* README.st: Document this.
-	
+
 	* sr.c: Bugfix (do not subtract CD_BLOCK_OFFSET) for photo-cd
 	code.
 
@@ -811,7 +816,7 @@ Tue Nov 29 15:43:50 1994  Eric Youngdale  (eric@andante.aib.com)
 	* hosts.h: Add n_io_port to Scsi_Host (used when releasing module).
 
 	* hosts.c: Initialize block field.
-	
+
 	* in2000.c: Remove "static" declarations from exported functions.
 
 	* in2000.h: Likewise.
@@ -1083,7 +1088,7 @@ Sat Aug  6 21:29:36 1994  Eric Youngdale  (eric@andante)
 
 	* constants.c: Fix typo (;;).
 
-	* g_NCR5380.c: 
+	* g_NCR5380.c:
 	* pas16.c:  Correct usage of NCR5380_init.
 
 	* scsi.c: Remove redundant (and unused variables).
@@ -1279,7 +1284,7 @@ Sat Jul  9 15:01:03 1994  Eric Youngdale  (eric@esp22)
 	when we discover a device.  Free pointer before returning.
 	Change scsi_devices into a linked list.
 
-	* scsi.c (scan_scsis): Change to only scan one host. 
+	* scsi.c (scan_scsis): Change to only scan one host.
 	(scsi_dev_init): Loop over all detected hosts, and scan them.
 
 	* hosts.c  (scsi_init_free): Change so that  number of extra bytes
@@ -1331,7 +1336,7 @@ Thu Jun 16 10:31:59 1994  Eric Youngdale  (eric@esp22)
 	larger SG lists.
 
 	* ultrastor.c: Changes from me - use scsi_register to register
-	host.  Add some consistency checking, 
+	host.  Add some consistency checking,
 
 Wed Jun  1 21:12:13 1994  Eric Youngdale  (eric@esp22)
 
@@ -1447,7 +1452,7 @@ Wed Apr 13 11:33:02 1994
 	* Linux 1.1.3 released.
 
 	* fdomain.c: Update to version 5.16 (Handle different FIFO sizes
-	better).  
+	better).
 
 Fri Apr  8 08:57:19 1994
 
@@ -1472,7 +1477,7 @@ Sun Apr 17 00:17:39 1994
 	* Linux 1.0, patchlevel 9 released.
 
 	* fdomain.c: Update to version 5.16 (Handle different FIFO sizes
-	better).  
+	better).
 
 Thu Apr  7 08:36:20 1994
 
@@ -1555,7 +1560,7 @@ Tue Feb  1 15:47:43 1994
 
 	* wd7000.c (wd_bases): Fix typo in last change.
 
-Mon Jan 24 17:37:23 1994  
+Mon Jan 24 17:37:23 1994
 
 	* pl14u released.
 
@@ -1569,25 +1574,25 @@ Mon Jan 24 17:37:23 1994
 
 	* NCR5380.c: Update from Drew - should work a lot better now.
 
-Sat Jan  8 15:13:10 1994  
+Sat Jan  8 15:13:10 1994
 
 	* pl14o released.
 
 	* sr_ioctl.c: Zero reserved field before trying to set audio volume.
 
-Wed Jan  5 13:21:10 1994  
+Wed Jan  5 13:21:10 1994
 
 	* pl14m released.
 
 	* fdomain.c: Update to version 5.8.  No functional difference???
 
-Tue Jan  4 14:26:13 1994  
+Tue Jan  4 14:26:13 1994
 
 	* pl14l released.
 
 	* ultrastor.c: Remove outl, inl functions (now provided elsewhere).
 
-Mon Jan  3 12:27:25 1994  
+Mon Jan  3 12:27:25 1994
 
 	* pl14k released.
 
@@ -1595,7 +1600,7 @@ Mon Jan  3 12:27:25 1994
 
 	* fdomain.c: Ditto.
 
-Wed Dec 29 09:47:20 1993  
+Wed Dec 29 09:47:20 1993
 
 	* pl14i released.
 
@@ -1603,7 +1608,7 @@ Wed Dec 29 09:47:20 1993
 
 	* st.c: Update of tape driver from Kai.
 
-Tue Dec 21 09:18:30 1993  
+Tue Dec 21 09:18:30 1993
 
 	* pl14g released.
 
@@ -1617,11 +1622,11 @@ Tue Dec 21 09:18:30 1993
 	do not report this properly).  Set needs_sector_size flag if
 	drive did not return sensible sector size.
 
-Mon Dec 13 12:13:47 1993  
+Mon Dec 13 12:13:47 1993
 
 	* aha152x.c: Update to version .101 from Juergen.
 
-Mon Nov 29 03:03:00 1993  
+Mon Nov 29 03:03:00 1993
 
         * linux 0.99.14 released.
 
@@ -1655,7 +1660,7 @@ Mon Nov 29 03:03:00 1993
 	* hosts.c: Support new low-level adapters.  Allow for more than
 	one adapter of a given type.
 
-	* hosts.h: Allow for more than one adapter of a given type. 
+	* hosts.h: Allow for more than one adapter of a given type.
 
 	* scsi.c:  Add scsi_device_types array, if NEEDS_JUMPSTART is set
 	after a low-level reset, start the command again.  Sort blacklist,
@@ -1699,7 +1704,7 @@ Mon Nov 29 03:03:00 1993
 	wd7000.c: Supply jumpstart flag for reset.  Do not round up
 	number of cylinders in biosparam function.
 
-Sat Sep  4 20:49:56 1993  
+Sat Sep  4 20:49:56 1993
 
     * 0.99pl13 released.
 
@@ -1721,7 +1726,7 @@ Sat Sep  4 20:49:56 1993
 
     * st.c: Change sense to unsigned.
 
-Thu Aug  5 11:59:18 1993  
+Thu Aug  5 11:59:18 1993
 
     * 0.99pl12 released.
 
@@ -1775,7 +1780,7 @@ Thu Aug  5 11:59:18 1993
     unchecked_isa_dma flag, even though this may not be needed (gets set
     later).
 
-Sat Jul 17 18:32:44 1993  
+Sat Jul 17 18:32:44 1993
 
     * 0.99pl11 released.  C++ compilable.
 
@@ -1807,7 +1812,7 @@ Sat Jul 17 18:32:44 1993
     * sr.c: Set up blocksize array for all discs.  Fix bug in freeing
     buffers if we run out of dma pool.
 
-Thu Jun  2 17:58:11 1993  
+Thu Jun  2 17:58:11 1993
 
     * 0.99pl10 released.
 
@@ -1833,7 +1838,7 @@ Thu Jun  2 17:58:11 1993
     * wd7000.c: Allow another condition for power on that are normal
     and do not require a panic.
 
-Thu Apr 22 23:10:11 1993  
+Thu Apr 22 23:10:11 1993
 
     * 0.99pl9 released.
 
@@ -1848,7 +1853,7 @@ Thu Apr 22 23:10:11 1993
     * scsi_ioctl.c: Further bugfix to ioctl_probe.
 
     * sd.c: Use long instead of int for last parameter in sd_ioctl.
-    Initialize transfersize and underflow fields.    
+    Initialize transfersize and underflow fields.
 
     * sd_ioctl.c: Ditto for sd_ioctl(,,,,);
 
@@ -1866,7 +1871,7 @@ Thu Apr 22 23:10:11 1993
 
     * wd7000.c: Change () to (void) in wd7000_enable_dma.
 
-Wed Mar 31 16:36:25 1993  
+Wed Mar 31 16:36:25 1993
 
     * 0.99pl8 released.
 
@@ -1912,7 +1917,7 @@ Wed Mar 31 16:36:25 1993
 
 
 
-Sat Mar 13 17:31:29 1993  
+Sat Mar 13 17:31:29 1993
 
     * 0.99pl7 released.
 
@@ -1928,7 +1933,7 @@ Sat Mar 13 17:31:29 1993
 
     * ultrastor.c: Update to use scatter-gather.
 
-Sat Feb 20 17:57:15 1993  
+Sat Feb 20 17:57:15 1993
 
     * 0.99pl6 released.
 
@@ -1943,7 +1948,7 @@ Sat Feb 20 17:57:15 1993
 
     * wd7000.c: Undo previous change.
 
-Sat Feb  6 11:20:43 1993  
+Sat Feb  6 11:20:43 1993
 
     * 0.99pl5 released.
 
@@ -1952,7 +1957,7 @@ Sat Feb  6 11:20:43 1993
     * wd7000.c: Check at more addresses for bios.  Fix bug in biosparam
     (heads & sectors turned around).
 
-Wed Jan 20 18:13:59 1993  
+Wed Jan 20 18:13:59 1993
 
     * 0.99pl4 released.
 
@@ -1965,7 +1970,7 @@ Wed Jan 20 18:13:59 1993
     with Syquest cartridge drives (used to crash kernel), because
     they do not disconnect with large data transfers.
 
-Tue Jan 12 14:33:36 1993  
+Tue Jan 12 14:33:36 1993
 
     * 0.99pl3 released.
 
@@ -1980,7 +1985,7 @@ Tue Jan 12 14:33:36 1993
 
     * st.c: Changes from Kai.
 
-Wed Dec 30 20:03:47 1992  
+Wed Dec 30 20:03:47 1992
 
     * 0.99pl2 released.
 
@@ -2001,7 +2006,7 @@ Wed Dec 30 20:03:47 1992
 
     * wd7000.c (wd7000_set_sync): Remove redundant function.
 
-Sun Dec 20 16:26:24 1992  
+Sun Dec 20 16:26:24 1992
 
     * 0.99pl1 released.
 
@@ -2013,6 +2018,6 @@ Sun Dec 20 16:26:24 1992
     * st.c: Patches from Kai - change timeout values, improve end of tape
     handling.
 
-Sun Dec 13 18:15:23 1992  
+Sun Dec 13 18:15:23 1992
 
     * 0.99 kernel released.  Baseline for this ChangeLog.

@@ -1,9 +1,10 @@
-/*  $Id: signal32.c,v 1.1 1996/12/26 10:16:41 davem Exp $
+/*  $Id: signal32.c,v 1.3 1997/01/19 22:32:30 ecd Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  *  Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
+ *  Copyright (C) 1997 Eddie C. Dost   (ecd@skynet.be)
  */
 
 #include <linux/sched.h>
@@ -67,10 +68,11 @@ struct signal_sframe32 {
  */
 
 struct new_signal_frame32 {
-	struct      sparc_stackf_32 ss;
-	__siginfo32_t info;
-	unsigned    int __pad;
-	unsigned    int insns [2];
+	struct sparc_stackf_32	ss;
+	__siginfo32_t		info;
+	__siginfo_fpu32_t	*fpu_save;
+	unsigned int		insns [2];
+	__siginfo_fpu32_t	fpu_state;
 };
 
 /* Align macros */
@@ -119,6 +121,34 @@ asmlinkage void do_sigsuspend32(struct pt_regs *regs)
 	_sigpause32_common(regs->u_regs[UREG_I0], regs);
 }
 
+
+static inline void
+restore_fpu_state(struct pt_regs *regs, __siginfo_fpu32_t *fpu)
+{
+#ifdef __SMP__
+	if (current->flags & PF_USEDFPU)
+		regs->psr &= ~(TSTATE_PEF);
+#else
+	if (current == last_task_used_math) {
+		last_task_used_math = 0;
+		regs->psr &= ~(TSTATE_PEF);
+	}
+#endif
+	current->used_math = 1;
+	current->flags &= ~PF_USEDFPU;
+
+	copy_32bit_to_kernel_fpuregs(&current->tss.float_regs[0],
+				     &sf->info.si_float_regs[0],
+				     (sizeof(unsigned int) * 64));
+	__get_user(current->tss.fsr, &fpu->si_fsr);
+	__get_user(current->tss.fpqdepth, &fpu->si_fpqdepth);
+	if (current->tss.fpqdepth != 0)
+		copy_from_user(&current->tss.fpqueue[0],
+			       &fpu->si_fpqueue[0],
+			       ((sizeof(unsigned long) +
+			       (sizeof(unsigned long *)))*16));
+}
+
 void do_new_sigreturn32(struct pt_regs *regs)
 {
 	struct new_signal_frame32 *sf;
@@ -138,33 +168,19 @@ void do_new_sigreturn32(struct pt_regs *regs)
 		do_exit (SIGSEGV);
 		return;
 	}
-	
-	/* 2. Restore the state */
-	copy_32bit_to_kernel_ptregs (regs, &sf->info.si_regs, sizeof (struct pt_regs));
 
-	/* User can only change condition codes and FPU enabling in the %tstate. */
+	/* 2. Restore the state */
+	copy_32bit_to_kernel_ptregs (regs, &sf->info.si_regs,
+				     sizeof (struct pt_regs));
+
+	/* User can only change condition codes and FPU enabling in %tstate. */
 	regs->tstate &= ~(TSTATE_ICC | TSTATE_PEF);
 	regs->tstate |= psr_to_tstate_icc(sf->info.si_regs.psr);
 	regs->tstate |= (sf->info.si_regs.psr & PSR_EF);
 
-	if (regs->tstate & TSTATE_PEF) {
-		regs->psr &= ~(TSTATE_PEF);
-#ifndef __SMP__
-		if(current == last_task_used_math)
-			last_task_used_math = 0;
-#endif
-		current->used_math = 1;
-		current->flags &= ~(PF_USEDFPU);
+	if (sf->fpu_save)
+		restore_fpu_state(regs, sf->fpu_state);
 
-		/* Copy signal FPU state into thread struct FPU state. */
-		copy_32bit_to_kernel_fpuregs(&current->tss.float_regs[0],
-					     &sf->info.si_float_regs[0],
-					     (sizeof(unsigned int) * 64));
-		current->tss.fsr = sf->info.si_fsr;
-		if((current->tss.fpqdepth = sf->info.si_fpqdepth) != 0)
-		    memcpy(&current->tss.fpqueue[0], &sf->info.si_fpqueue[0],
-		           ((sizeof(unsigned int) + (sizeof(unsigned int *))) * 16));
-	}
 	current->blocked = sf->info.si_mask & _BLOCKABLE;
 }
 
@@ -284,77 +300,80 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	regs->npc = (regs->pc + 4);
 }
 
-/* To align the structure properly. */
+
+static inline void
+save_fpu_state(struct pt_regs *regs, __siginfo_fpu32_t *fpu)
+{
+#ifdef __SMP__
+	if (current->flags & PF_USEDFPU) {
+		put_psr(get_psr() | PSR_EF);
+		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
+		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
+		regs->psr &= ~(PSR_EF);
+		current->flags &= ~(PF_USEDFPU);
+	}
+#else
+	if (current == last_task_used_math) {
+		put_psr(get_psr() | PSR_EF);
+		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
+		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
+		last_task_used_math = 0;
+		regs->psr &= ~(PSR_EF);
+	}
+#endif
+	copy_to_user(&fpu->si_float_regs[0], &current->tss.float_regs[0],
+		     (sizeof(unsigned long) * 64));
+	__put_user(current->tss.fsr, &fpu->si_fsr);
+	__put_user(current->tss.fpqdepth, &fpu->si_fpqdepth);
+	if (current->tss.fpqdepth != 0)
+		copy_to_user(&fpu->si_fpqueue[0], &current->tss.fpqueue[0],
+			     ((sizeof(unsigned long) +
+			     (sizeof(unsigned long *)))*16));
+	current->used_math = 0;
+}
 
 static inline void
 new_setup_frame32(struct sigaction *sa, struct pt_regs *regs,
 		  int signo, unsigned long oldmask)
 {
 	struct new_signal_frame32 *sf;
+	int sigframe_size;
 
 	/* 1. Make sure everything is clean */
 	synchronize_user_stack();
-	sf = (struct new_signal_frame *) regs->u_regs[UREG_FP];
-	sf = (struct new_signal_frame *) (((unsigned long) sf)-NF_ALIGNEDSZ);
+	sigframe_size = NF_ALIGNEDSZ;
+	if (!current->used_math)
+		sigframe_size -= sizeof(__siginfo_fpu32_t);
+
+	sf = (struct new_signal_frame *)(regs->u_regs[UREG_FP] - sigframe_size);
 	
-	if (invalid_frame_pointer (sf, sizeof(struct new_signal_frame))){
+	if (invalid_frame_pointer (sf, sigframe_size)){
 		do_exit(SIGILL);
 		return;
 	}
 
 	if (current->tss.w_saved != 0){
-		printk ("%s[%d]: Invalid user stack frame for signal delivery.\n",
-			current->comm, current->pid);
+		printk ("%s[%d]: Invalid user stack frame for "
+			"signal delivery.\n", current->comm, current->pid);
 		do_exit (SIGILL);
 		return;
 	}
 
 	/* 2. Save the current process state */
 	memcpy (&sf->info.si_regs, regs, sizeof (struct pt_regs));
-#ifdef __SMP__
-	if(current->flags & PF_USEDFPU) {
-		put_psr(get_psr() | PSR_EF);
-		fpsave (&sf->info.si_float_regs [0], &sf->info.si_fsr,
-			&sf->info.si_fpqueue[0], &sf->info.si_fpqdepth);
 
-		/* Save a copy into thread struct as well. */
-		memcpy(&current->tss.float_regs[0], &sf->info.si_float_regs[0],
-		       (sizeof(unsigned long) * 64));
-		current->tss.fsr = sf->info.si_fsr;
-		if((current->tss.fpqdepth = sf->info.si_fpqdepth) != 0)
-		    memcpy(&current->tss.fpqueue[0], &sf->info.si_fpqueue[0],
-			   ((sizeof(unsigned long) + (sizeof(unsigned long *))) * 16));
-
-		regs->psr &= ~(PSR_EF);
-		current->flags &= ~(PF_USEDFPU);
+	if (current->used_math) {
+		save_fpu_state(regs, &sf->fpu_state);
+		sf->fpu_save = &sf->fpu_state;
+	} else {
+		sf->fpu_save = NULL;
 	}
-#else
-	if(current == last_task_used_math) {
-		put_psr(get_psr() | PSR_EF);
-		fpsave (&sf->info.si_float_regs [0], &sf->info.si_fsr,
-			&sf->info.si_fpqueue[0], &sf->info.si_fpqdepth);
-
-		/* Save a copy into thread struct as well. */
-		memcpy(&current->tss.float_regs[0], &sf->info.si_float_regs[0],
-		       (sizeof(unsigned long) * 64));
-		current->tss.fsr = sf->info.si_fsr;
-		if((current->tss.fpqdepth = sf->info.si_fpqdepth) != 0)
-		    memcpy(&current->tss.fpqueue[0], &sf->info.si_fpqueue[0],
-			   ((sizeof(unsigned long) + (sizeof(unsigned long *))) * 16));
-
-		last_task_used_math = NULL;
-		regs->psr &= ~(PSR_EF);
-	}
-#endif
-
-	/* This new thread of control has not used the FPU. */
-	current->used_math = 0;
 
 	sf->info.si_mask = oldmask;
-	memcpy (sf, (char *) regs->u_regs [UREG_FP], sizeof (struct reg_window));
+	memcpy (sf, (char *)regs->u_regs [UREG_FP], sizeof(struct reg_window));
 	
 	/* 3. return to kernel instructions */
-	sf->insns [0] = 0x821020d8; /* mov __NR_sigreturn,%g1 */
+	sf->insns [0] = 0x821020d8; /* mov __NR_sigreturn, %g1 */
 	sf->insns [1] = 0x91d02010; /* t 0x10 */
 
 	/* 4. signal handler back-trampoline and parameters */
@@ -503,7 +522,7 @@ svr4_getcontext32(svr4_ucontext_t *uc, struct pt_regs *regs)
 	gr = &mc->greg;
 	
 	/* We only have < 32 signals, fill the first slot only */
-	__put_user(current->sig->action->sa_mask, &uc->sigmask.sigbits [0]);
+	__put_user(current->blocked, &uc->sigmask.sigbits [0]);
 
 	/* Store registers */
 	__put_user(regs->pc, &uc->mcontext.greg [SVR4_PC]);

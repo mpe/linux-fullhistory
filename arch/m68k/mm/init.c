@@ -477,6 +477,11 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	       datapages << (PAGE_SHIFT-10));
 }
 
+void free_initmem(void)
+{
+	/* To be written */
+}
+
 void si_meminfo(struct sysinfo *val)
 {
     unsigned long i;

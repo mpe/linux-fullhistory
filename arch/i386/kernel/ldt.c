@@ -8,6 +8,8 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/vmalloc.h>
 
 #include <asm/uaccess.h>
@@ -117,11 +119,17 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 
 asmlinkage int sys_modify_ldt(int func, void *ptr, unsigned long bytecount)
 {
+	int ret;
+
+	lock_kernel();
 	if (func == 0)
-		return read_ldt(ptr, bytecount);
-	if (func == 1)
-		return write_ldt(ptr, bytecount, 1);
-	if (func == 0x11)
-		return write_ldt(ptr, bytecount, 0);
-	return -ENOSYS;
+		ret = read_ldt(ptr, bytecount);
+	else if (func == 1)
+		ret = write_ldt(ptr, bytecount, 1);
+	else  if (func == 0x11)
+		ret = write_ldt(ptr, bytecount, 0);
+	else
+		ret = -ENOSYS;
+	unlock_kernel();
+	return ret;
 }

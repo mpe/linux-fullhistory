@@ -140,9 +140,6 @@ struct thread_struct {
 	NULL, 0, 0, 0, 0 /* vm86_info */, \
 }
 
-#define alloc_kernel_stack()    __get_free_page(GFP_KERNEL)
-#define free_kernel_stack(page) free_page((page))
-
 #define start_thread(regs, new_eip, new_esp) do {\
 	unsigned long seg = USER_DS; \
 	__asm__("mov %w0,%%fs ; mov %w0,%%gs":"=r" (seg) :"0" (seg)); \
@@ -155,6 +152,9 @@ struct thread_struct {
 	regs->esp = new_esp; \
 } while (0)
 
+/* Free all resources held by a thread. */
+extern void release_thread(struct task_struct *);
+
 /*
  * Return saved PC of a blocked thread.
  */
@@ -162,5 +162,11 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
 	return ((unsigned long *)t->esp)[3];
 }
+
+/* Allocation and freeing of basic task resources. */
+#define alloc_task_struct()	kmalloc(sizeof(struct task_struct), GFP_KERNEL)
+#define alloc_kernel_stack(p)	__get_free_page(GFP_KERNEL)
+#define free_task_struct(p)	kfree(p)
+#define free_kernel_stack(page) free_page((page))
 
 #endif /* __ASM_I386_PROCESSOR_H */

@@ -1,4 +1,4 @@
-/* $Id: advansys.h,v 1.12 1996/09/23 18:12:02 bobf Exp bobf $ */
+/* $Id: advansys.h,v 1.5 1997/01/19 23:07:10 davem Exp $ */
 /*
  * advansys.h - Linux Host Driver for AdvanSys SCSI Adapters
  *
@@ -57,7 +57,7 @@ void advansys_setup(char *, int *);
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,0)
 #define ADVANSYS { \
 	NULL,					/* struct SHT *next */ \
-	NULL,					/* int *usage_count */ \
+	NULL,					/* struct module *module */ \
 	"advansys",				/* char *name */ \
 	advansys_detect,		/* int (*detect)(struct SHT *) */ \
 	advansys_release,		/* int (*release)(struct Scsi_Host *) */ \
@@ -95,7 +95,7 @@ void advansys_setup(char *, int *);
 #else /* version >= v1.3.0 */
 #define ADVANSYS { \
 	NULL,					/* struct SHT *next */ \
-	NULL,					/* long *usage_count */ \
+	NULL,					/* struct module *module */ \
 	&proc_scsi_advansys,	/* struct proc_dir_entry *proc_dir */ \
 	advansys_proc_info,	\
 			/* int (*proc_info)(char *, char **, off_t, int, int, int) */ \

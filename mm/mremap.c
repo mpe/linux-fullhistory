@@ -8,11 +8,13 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/shm.h>
 #include <linux/errno.h>
 #include <linux/mman.h>
 #include <linux/string.h>
-#include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/swap.h>
 
 #include <asm/uaccess.h>
@@ -129,8 +131,7 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 {
 	struct vm_area_struct * new_vma;
 
-	new_vma = (struct vm_area_struct *)
-		kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	new_vma = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 	if (new_vma) {
 		unsigned long new_addr = get_unmapped_area(addr, new_len);
 
@@ -149,7 +150,7 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 			current->mm->total_vm += new_len >> PAGE_SHIFT;
 			return new_addr;
 		}
-		kfree(new_vma);
+		kmem_cache_free(vm_area_cachep, new_vma);
 	}
 	return -ENOMEM;
 }
@@ -163,9 +164,11 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	unsigned long flags)
 {
 	struct vm_area_struct *vma;
+	unsigned long ret = -EINVAL;
 
+	lock_kernel();
 	if (addr & ~PAGE_MASK)
-		return -EINVAL;
+		goto out;
 	old_len = PAGE_ALIGN(old_len);
 	new_len = PAGE_ALIGN(new_len);
 
@@ -173,29 +176,33 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	 * Always allow a shrinking remap: that just unmaps
 	 * the unnecessary pages..
 	 */
+	ret = addr;
 	if (old_len > new_len) {
 		do_munmap(addr+new_len, old_len - new_len);
-		return addr;
+		goto out;
 	}
 
 	/*
 	 * Ok, we need to grow..
 	 */
+	ret = -EFAULT;
 	vma = find_vma(current->mm, addr);
 	if (!vma || vma->vm_start > addr)
-		return -EFAULT;
+		goto out;
 	/* We can't remap across vm area boundaries */
 	if (old_len > vma->vm_end - addr)
-		return -EFAULT;
+		goto out;
 	if (vma->vm_flags & VM_LOCKED) {
 		unsigned long locked = current->mm->locked_vm << PAGE_SHIFT;
 		locked += new_len - old_len;
+		ret = -EAGAIN;
 		if (locked > current->rlim[RLIMIT_MEMLOCK].rlim_cur)
-			return -EAGAIN;
+			goto out;
 	}
+	ret = -ENOMEM;
 	if ((current->mm->total_vm << PAGE_SHIFT) + (new_len - old_len)
 	    > current->rlim[RLIMIT_AS].rlim_cur)
-		return -ENOMEM;
+		goto out;
 
 	/* old_len exactly to the end of the area.. */
 	if (old_len == vma->vm_end - addr &&
@@ -210,7 +217,8 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 			current->mm->total_vm += pages;
 			if (vma->vm_flags & VM_LOCKED)
 				current->mm->locked_vm += pages;
-			return addr;
+			ret = addr;
+			goto out;
 		}
 	}
 
@@ -219,6 +227,10 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	 * we need to create a new one and move it..
 	 */
 	if (flags & MREMAP_MAYMOVE)
-		return move_vma(vma, addr, old_len, new_len);
-	return -ENOMEM;
+		ret = move_vma(vma, addr, old_len, new_len);
+	else
+		ret = -ENOMEM;
+out:
+	unlock_kernel();
+	return ret;
 }

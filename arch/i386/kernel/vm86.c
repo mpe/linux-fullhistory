@@ -10,6 +10,8 @@
 #include <linux/string.h>
 #include <linux/ptrace.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -62,8 +64,10 @@
 
 asmlinkage struct pt_regs * save_v86_state(struct kernel_vm86_regs * regs)
 {
+	struct pt_regs *ret;
 	unsigned long tmp;
 
+	lock_kernel();
 	if (!current->tss.vm86_info) {
 		printk("no vm86_info: BAD\n");
 		do_exit(SIGSEGV);
@@ -79,7 +83,9 @@ asmlinkage struct pt_regs * save_v86_state(struct kernel_vm86_regs * regs)
 	}
 	current->tss.esp0 = current->saved_kernel_stack;
 	current->saved_kernel_stack = 0;
-	return KVM86->regs32;
+	ret = KVM86->regs32;
+	unlock_kernel();
+	return ret;
 }
 
 static void mark_screen_rdonly(struct task_struct * tsk)
@@ -126,21 +132,27 @@ asmlinkage int sys_vm86old(struct vm86_struct * v86)
 					 * This remains on the stack until we
 					 * return to 32 bit user space.
 					 */
-	struct task_struct *tsk = current;
-	int tmp;
+	struct task_struct *tsk;
+	int tmp, ret = -EPERM;
 
+	lock_kernel();
+	tsk = current;
 	if (tsk->saved_kernel_stack)
-		return -EPERM;
+		goto out;
 	tmp  = copy_from_user(&info, v86, VM86_REGS_SIZE1);
 	tmp += copy_from_user(&info.regs.VM86_REGS_PART2, &v86->regs.VM86_REGS_PART2,
 		(long)&info.vm86plus - (long)&info.regs.VM86_REGS_PART2);
+	ret = -EFAULT;
 	if (tmp)
-		return -EFAULT;
+		goto out;
 	memset(&info.vm86plus, 0, (int)&info.regs32 - (int)&info.vm86plus);
 	info.regs32 = (struct pt_regs *) &v86;
 	tsk->tss.vm86_info = v86;
 	do_sys_vm86(&info, tsk);
-	return 0;	/* we never return here */
+	ret = 0;	/* we never return here */
+out:
+	unlock_kernel();
+	return ret;
 }
 
 
@@ -151,37 +163,46 @@ asmlinkage int sys_vm86(unsigned long subfunction, struct vm86plus_struct * v86)
 					 * This remains on the stack until we
 					 * return to 32 bit user space.
 					 */
-	struct task_struct *tsk = current;
-	int tmp;
+	struct task_struct *tsk;
+	int tmp, ret;
 
+	lock_kernel();
+	tsk = current;
 	switch (subfunction) {
 		case VM86_REQUEST_IRQ:
 		case VM86_FREE_IRQ:
 		case VM86_GET_IRQ_BITS:
 		case VM86_GET_AND_RESET_IRQ:
-			return do_vm86_irq_handling(subfunction,(int)v86);
+			ret = do_vm86_irq_handling(subfunction,(int)v86);
+			goto out;
 		case VM86_PLUS_INSTALL_CHECK:
 			/* NOTE: on old vm86 stuff this will return the error
 			   from verify_area(), because the subfunction is
 			   interpreted as (invalid) address to vm86_struct.
 			   So the installation check works.
 			 */
-			return 0;
+			ret = 0;
+			goto out;
 	}
 
 	/* we come here only for functions VM86_ENTER, VM86_ENTER_NO_BYPASS */
+	ret = -EPERM;
 	if (tsk->saved_kernel_stack)
-		return -EPERM;
+		goto out;
 	tmp  = copy_from_user(&info, v86, VM86_REGS_SIZE1);
 	tmp += copy_from_user(&info.regs.VM86_REGS_PART2, &v86->regs.VM86_REGS_PART2,
 		(long)&info.regs32 - (long)&info.regs.VM86_REGS_PART2);
+	ret = -EFAULT;
 	if (tmp)
-		return -EFAULT;
+		goto out;
 	info.regs32 = (struct pt_regs *) &subfunction;
 	info.vm86plus.is_vm86pus = 1;
 	tsk->tss.vm86_info = (struct vm86_struct *)v86;
 	do_sys_vm86(&info, tsk);
-	return 0;	/* we never return here */
+	ret = 0;	/* we never return here */
+out:
+	unlock_kernel();
+	return ret;
 }
 
 
@@ -232,6 +253,7 @@ static void do_sys_vm86(struct kernel_vm86_struct *info, struct task_struct *tsk
 	tsk->tss.screen_bitmap = info->screen_bitmap;
 	if (info->flags & VM86_SCREEN_BITMAP)
 		mark_screen_rdonly(tsk);
+	unlock_kernel();
 	__asm__ __volatile__(
 		"xorl %%eax,%%eax; mov %%ax,%%fs; mov %%ax,%%gs\n\t"
 		"movl %0,%%esp\n\t"
@@ -247,6 +269,7 @@ static inline void return_to_32bit(struct kernel_vm86_regs * regs16, int retval)
 
 	regs32 = save_v86_state(regs16);
 	regs32->eax = retval;
+	unlock_kernel();
 	__asm__ __volatile__("movl %0,%%esp\n\t"
 		"jmp ret_from_sys_call"
 		: : "r" (regs32), "b" (current));
@@ -408,20 +431,27 @@ cannot_handle:
 
 int handle_vm86_trap(struct kernel_vm86_regs * regs, long error_code, int trapno)
 {
+	int ret;
+
+	lock_kernel();
 	if (VMPI.is_vm86pus) {
 		if ( (trapno==3) || (trapno==1) )
 			return_to_32bit(regs, VM86_TRAP + (trapno << 8));
 		do_int(regs, trapno, (unsigned char *) (regs->ss << 4), SP(regs));
-		return 1;
+		ret = 1;
+		goto out;
 	}
+	ret = 0;
 	if (trapno !=1)
-		return 0; /* we let this handle by the calling routine */
+		goto out; /* we let this handle by the calling routine */
 	if (current->flags & PF_PTRACED)
 		current->blocked &= ~(1 << (SIGTRAP-1));
 	send_sig(SIGTRAP, current, 1);
 	current->tss.trap_no = trapno;
 	current->tss.error_code = error_code;
-	return 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 
@@ -436,8 +466,9 @@ void handle_vm86_fault(struct kernel_vm86_regs * regs, long error_code)
 #define VM86_FAULT_RETURN \
 	if (VMPI.force_return_for_pic  && (VEFLAGS & IF_MASK)) \
 		return_to_32bit(regs, VM86_PICRETURN); \
-	return;
+	goto out;
 	                                   
+	lock_kernel();
 	csp = (unsigned char *) (regs->cs << 4);
 	ssp = (unsigned char *) (regs->ss << 4);
 	sp = SP(regs);
@@ -501,7 +532,7 @@ void handle_vm86_fault(struct kernel_vm86_regs * regs, long error_code)
 				return_to_32bit(regs, VM86_INTx + (intno << 8));
 		}
 		do_int(regs, intno, ssp, sp);
-		return;
+		goto out;
 	}
 
 	/* iret */
@@ -534,6 +565,8 @@ void handle_vm86_fault(struct kernel_vm86_regs * regs, long error_code)
 	default:
 		return_to_32bit(regs, VM86_UNKNOWN);
 	}
+out:
+	unlock_kernel();
 }
 
 /* ---------------- vm86 special IRQ passing stuff ----------------- */
@@ -554,18 +587,19 @@ static void irq_handler(int intno, void *dev_id, struct pt_regs * regs) {
 	int irq_bit;
 	unsigned long flags;
 	
+	lock_kernel();
 	save_flags(flags);
 	cli();
 	irq_bit = 1 << intno;
-	if ((irqbits & irq_bit) || ! vm86_irqs[intno].tsk) {
-		restore_flags(flags);
-		return;
-	}
+	if ((irqbits & irq_bit) || ! vm86_irqs[intno].tsk)
+		goto out;
 	irqbits |= irq_bit;
 	if (vm86_irqs[intno].sig)
 		send_sig(vm86_irqs[intno].sig, vm86_irqs[intno].tsk, 1);
 	/* else user will poll for IRQs */
+out:
 	restore_flags(flags);
+	unlock_kernel();
 }
 
 static inline void free_vm86_irq(int irqnumber)

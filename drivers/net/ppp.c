@@ -51,7 +51,7 @@
 #define PPP_MAX_DEV	256
 #endif
 
-/* $Id: ppp.c,v 1.5 1995/06/12 11:36:53 paulus Exp $
+/* $Id: ppp.c,v 1.27 1997/01/26 07:13:29 davem Exp $
  * Added dynamic allocation of channels to eliminate
  *   compiled-in limits on the number of channels.
  *
@@ -65,6 +65,7 @@
 #include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
+#include <linux/poll.h>
 #include <linux/interrupt.h>
 #include <linux/ptrace.h>
 #include <linux/ioport.h>
@@ -195,8 +196,7 @@ static int ppp_tty_write (struct tty_struct *, struct file *, const __u8 *,
 			  unsigned int);
 static int ppp_tty_ioctl (struct tty_struct *, struct file *, unsigned int,
                           unsigned long);
-static int ppp_tty_select (struct tty_struct *tty, struct inode *inode,
-		      struct file *filp, int sel_type, select_table * wait);
+static unsigned int ppp_tty_poll (struct tty_struct *tty, struct file *filp, poll_table * wait);
 static int ppp_tty_open (struct tty_struct *);
 static void ppp_tty_close (struct tty_struct *);
 static int ppp_tty_room (struct tty_struct *tty);
@@ -365,7 +365,7 @@ ppp_first_time (void)
 	ppp_ldisc.read		= ppp_tty_read;
 	ppp_ldisc.write		= ppp_tty_write;
 	ppp_ldisc.ioctl		= ppp_tty_ioctl;
-	ppp_ldisc.select	= ppp_tty_select;
+	ppp_ldisc.poll		= ppp_tty_poll;
 	ppp_ldisc.receive_room	= ppp_tty_room;
 	ppp_ldisc.receive_buf	= ppp_tty_receive;
 	ppp_ldisc.write_wakeup	= ppp_tty_wakeup;
@@ -680,7 +680,7 @@ ppp_release (struct ppp *ppp)
 
 	ppp_ccp_closed (ppp);
 
-        /* Ensure that the pppd process is not hanging on select() */
+        /* Ensure that the pppd process is not hanging on poll() */
         wake_up_interruptible (&ppp->read_wait);
         wake_up_interruptible (&ppp->write_wait);
 
@@ -2165,12 +2165,11 @@ ppp_set_compression (struct ppp *ppp, struct ppp_option_data *odp)
 			nb = CCP_MAX_OPTION_LENGTH;
 
 		error = verify_area (VERIFY_READ, ptr, nb);
+		if(!error)
+			copy_from_user (ccp_option, ptr, nb);
 	}
-
 	if (error != 0)
 		return error;
-
-	copy_from_user (ccp_option, ptr, nb);
 
 	if (ccp_option[1] < 2)	/* preliminary check on the length byte */
 		return (-EINVAL);
@@ -2581,65 +2580,35 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 /*
  * TTY callback.
  *
- * Process the select() statement for the PPP device.
+ * Process the poll() statement for the PPP device.
  */
 
-static int
-ppp_tty_select (struct tty_struct *tty, struct inode *inode,
-		struct file *filp, int sel_type, select_table * wait)
+static unsigned int
+ppp_tty_poll (struct tty_struct *tty, struct file *filp, poll_table * wait)
 {
 	struct ppp *ppp = tty2ppp (tty);
-	int result = 1;
-/*
- * Verify the status of the PPP device.
- */
-	if (!ppp)
-		return -EBADF;
+	unsigned int mask = 0;
 
-	if (ppp->magic != PPP_MAGIC)
-		return -EBADF;
+	if(ppp && ppp->magic == PPP_MAGIC) {
+		CHECK_PPP (0);
 
-	CHECK_PPP (0);
-/*
- * Branch on the type of select mode. A read request must lock the user
- * buffer area.
- */
-	switch (sel_type) {
-	case SEL_IN:
-		if (set_bit (0, &ppp->ubuf->locked) == 0) {
-			/* Test for the presence of data in the queue */
-			if (ppp->ubuf->head != ppp->ubuf->tail) {
-				clear_bit (0, &ppp->ubuf->locked);
-				break;
-			}
-			clear_bit (0, &ppp->ubuf->locked);
-		}		/* fall through */
-/*
- * Exceptions or read errors.
- */
-	case SEL_EX:
-		/* Is this a pty link and the remote disconnected? */
-		if (tty->flags & (1 << TTY_OTHER_CLOSED))
-			break;
+		poll_wait(&ppp->read_wait, wait);
+		poll_wait(&ppp->write_wait, wait);
 
-		/* Is this a local link and the modem disconnected? */
-		if (tty_hung_up_p (filp))
-			break;
-
-		select_wait (&ppp->read_wait, wait);
-		result = 0;
-		break;
-/*
- * Write mode. A write is allowed if there is no current transmission.
- */
-	case SEL_OUT:
-		if (ppp->tbuf->locked != 0) {
-			select_wait (&ppp->write_wait, wait);
-			result = 0;
+		/* Must lock the user buffer area while checking. */
+		if(set_bit(0, &ppp->ubuf->locked) == 0) {
+			if(ppp->ubuf->head != ppp->ubuf->tail)
+				mask |= POLLIN | POLLRDNORM;
+			clear_bit(0, &ppp->ubuf->locked);
 		}
-		break;
+		if(tty->flags & (1 << TTY_OTHER_CLOSED))
+			mask |= POLLHUP;
+		if(tty_hung_up_p(filp))
+			mask |= POLLHUP;
+		if(ppp->tbuf->locked == 0)
+			mask |= POLLOUT | POLLWRNORM;
 	}
-	return result;
+	return mask;
 }
 
 /*************************************************************

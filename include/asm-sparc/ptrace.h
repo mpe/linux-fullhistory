@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.23 1996/11/25 03:30:24 ecd Exp $ */
+/* $Id: ptrace.h,v 1.24 1997/01/06 06:53:23 davem Exp $ */
 #ifndef _SPARC_PTRACE_H
 #define _SPARC_PTRACE_H
 
@@ -73,7 +73,7 @@ extern void show_regs(struct pt_regs *);
 #define REGWIN_SZ         0x40
 #endif
 
-/* First generic task_struct offsets. sizeof(task_struct)=1552 */
+/* First generic task_struct offsets. sizeof(task_struct)=1568 */
 #define TASK_STATE        0x000
 #define TASK_PRIORITY     0x008
 #define TASK_SIGNAL       0x00c
@@ -81,6 +81,7 @@ extern void show_regs(struct pt_regs *);
 #define TASK_FLAGS        0x014
 #define TASK_SAVED_KSTACK 0x054
 #define TASK_KSTACK_PG    0x058
+#define TASK_LOCK_DEPTH   0x618
 
 /* Thread stuff. */
 #define THREAD_UMASK      0x1e0
@@ -99,10 +100,6 @@ extern void show_regs(struct pt_regs *);
 #define THREAD_FSR        0x530
 #define THREAD_SIGSTK     0x5b8
 #define THREAD_FLAGS      0x5c0
-#define THREAD_EX_COUNT   0x5c8
-#define THREAD_EX_PC      0x5cc
-#define THREAD_EX_EXPC    0x5d0
-#define THREAD_EX_ADDR    0x5d4
 #define THREAD_DS         0x5d8
 #define THREAD_MM         0x608
 #define THREAD_MM_CTX     0x008

@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.43 1996/12/23 10:16:12 ecd Exp $
+/* $Id: suncons.c,v 1.44 1997/01/25 02:47:10 miguel Exp $
  *
  * suncons.c: Sun SparcStation console support.
  *
@@ -74,6 +74,7 @@
 #include <asm/sbus.h>
 #include <asm/fbio.h>
 #include <asm/io.h>
+#include <asm/smp.h>
 
 #include "../../char/kbd_kern.h"
 #include "../../char/vt_kern.h"
@@ -383,7 +384,7 @@ __initfunc(void serial_finish_init(void (*printfunc)(const char *)))
 
 __initfunc(void con_type_init_finish(void))
 {
-	int i;
+	int i, cpu;
 	char *p = con_fb_base + skip_bytes;
 	char q[2] = {0,5};
 	int currcons = 0;
@@ -408,14 +409,17 @@ __initfunc(void con_type_init_finish(void))
 			fbinfo[0].color_map CM(i+32,2) = linux_logo_blue [i];
 		}
 		(*fbinfo [0].loadcmap)(&fbinfo [0], 0, LINUX_LOGO_COLORS + 32);
-		for (i = 0; i < 80; i++, p += chars_per_line)
-			memcpy (p, linux_logo + 80 * i, 80);
+		for (i = 0; i < 80; i++, p += chars_per_line){
+		        for (cpu = 0; cpu < linux_num_cpus; cpu++){
+				memcpy (p + (cpu * 84), linux_logo + 80 * i, 80);
+			}
+		}
 	} else if (con_depth == 1) {
 		for (i = 0; i < 80; i++, p += chars_per_line)
 			memcpy (p, linux_logo_bw + 10 * i, 10);
 	}
 	putconsxy(0, q);
-	ush = (unsigned short *) video_mem_base + video_num_columns * 2 + 20;
+	ush = (unsigned short *) video_mem_base + video_num_columns * 2 + 20 + 80 * (linux_num_cpus - 1);
 
 	for (p = "Linux/SPARC version " UTS_RELEASE; *p; p++, ush++) {
 		*ush = (attr << 8) + *p;
@@ -1163,6 +1167,7 @@ __initfunc(unsigned long sun_console_init(unsigned long memory_start))
 		prom_printf("Could not probe console, bailing out...\n");
 		prom_halt();
 	}
+	
 	sun_clear_screen();
 	for (i = FRAME_BUFFERS; i > 1; i--)
 		if (fbinfo[i - 1].type.fb_type != FBTYPE_NOTYPE) break;

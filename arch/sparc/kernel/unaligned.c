@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.13 1996/11/26 14:01:57 jj Exp $
+/* $Id: unaligned.c,v 1.15 1997/01/16 14:14:42 davem Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -14,6 +14,8 @@
 #include <asm/processor.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 /* #define DEBUG_MNA */
 
@@ -206,7 +208,7 @@ __asm__ __volatile__ (								\
 	: : "r" (dest_reg), "r" (size), "r" (saddr), "r" (is_signed)		\
 	: "l1", "l2", "g7", "g1");						\
 })
-
+	
 #define store_common(dst_addr, size, src_val, errh) ({				\
 __asm__ __volatile__ (								\
 	"ld	[%2], %%l1\n"							\
@@ -332,6 +334,7 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 	enum direction dir = decode_direction(insn);
 	int size = decode_access_size(insn);
 
+	lock_kernel();
 	if(!ok_for_kernel(insn) || dir == both) {
 		printk("Unsupported unaligned load/store trap for kernel at <%08lx>.\n",
 		       regs->pc);
@@ -344,8 +347,6 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 		" mov	%1, %%o1\n\t"
 		: : "r" (regs), "r" (insn)
 		: "o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g4", "g5", "g7");
-
-		return;
 	} else {
 		unsigned long addr = compute_effective_address(regs, insn);
 
@@ -379,6 +380,7 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 		}
 		advance(regs);
 	}
+	unlock_kernel();
 }
 
 static inline int ok_for_user(struct pt_regs *regs, unsigned int insn,
@@ -431,6 +433,7 @@ asmlinkage void user_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 {
 	enum direction dir;
 
+	lock_kernel();
 	if(!(current->tss.flags & SPARC_FLAG_UNALIGNED) ||
 	   (((insn >> 30) & 3) != 3))
 		goto kill_user;
@@ -477,15 +480,16 @@ asmlinkage void user_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 			" mov	%1, %%o1\n\t"
 			: : "r" (regs), "r" (insn)
 			: "o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g4", "g5", "g7");
-
-			return;
+			goto out;
 		}
 		advance(regs);
-		return;
+		goto out;
 	}
 
 kill_user:
 	current->tss.sig_address = regs->pc;
 	current->tss.sig_desc = SUBSIG_PRIVINST;
 	send_sig(SIGBUS, current, 1);
+out:
+	unlock_kernel();
 }

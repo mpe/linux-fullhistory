@@ -41,6 +41,7 @@
 #include <linux/signal.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
+#include <linux/poll.h>
 #include <linux/miscdevice.h>
 #include <linux/random.h>
 #include <linux/delay.h>
@@ -216,15 +217,13 @@ static long read_mouse(struct inode * inode, struct file * file,
 }
 
 /*
- * select for mouse input
+ * poll for mouse input
  */
-static int mouse_select(struct inode *inode, struct file *file, int sel_type, select_table * wait)
+static unsigned int mouse_poll(struct file *file, poll_table * wait)
 {
-	if (sel_type == SEL_IN) {
-	    	if (mouse.ready)
-			return 1;
-		select_wait(&mouse.wait, wait);
-    	}
+	poll_wait(&mouse.wait, wait);
+	if (mouse.ready)
+		return POLLIN | POLLRDNORM;
 	return 0;
 }
 
@@ -233,7 +232,7 @@ struct file_operations bus_mouse_fops = {
 	read_mouse,
 	write_mouse,
 	NULL, 		/* mouse_readdir */
-	mouse_select, 	/* mouse_select */
+	mouse_poll, 	/* mouse_poll */
 	NULL, 		/* mouse_ioctl */
 	NULL,		/* mouse_mmap */
 	open_mouse,

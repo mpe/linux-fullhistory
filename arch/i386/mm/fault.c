@@ -14,6 +14,8 @@
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -96,6 +98,8 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	unsigned long fixup;
 	int write;
 
+	lock_kernel();
+
 	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
 	down(&mm->mmap_sem);
@@ -154,7 +158,7 @@ good_area:
 		if (bit < 32)
 			tsk->tss.screen_bitmap |= 1 << bit;
 	}
-	return;
+	goto out;
 
 /*
  * Something tried to access memory that isn't in our memory map..
@@ -167,7 +171,7 @@ bad_area:
 	if ((fixup = search_exception_table(regs->eip)) != 0) {
 		printk(KERN_DEBUG "Exception at [<%lx>] (%lx)\n", regs->eip, fixup);
 		regs->eip = fixup;
-		return;
+		goto out;
 	}
 
 	if (error_code & 4) {
@@ -175,7 +179,7 @@ bad_area:
 		tsk->tss.error_code = error_code;
 		tsk->tss.trap_no = 14;
 		force_sig(SIGSEGV, tsk);
-		return;
+		goto out;
 	}
 /*
  * Oops. The kernel tried to access some bad page. We'll have to
@@ -188,7 +192,7 @@ bad_area:
 		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
 		flush_tlb();
 		printk("This processor honours the WP bit even when in supervisor mode. Good.\n");
-		return;
+		goto out;
 	}
 	if (address < PAGE_SIZE) {
 		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
@@ -209,4 +213,6 @@ bad_area:
 	}
 	die_if_kernel("Oops", regs, error_code);
 	do_exit(SIGKILL);
+out:
+	unlock_kernel();
 }

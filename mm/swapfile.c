@@ -6,6 +6,8 @@
  */
 
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/sched.h>
 #include <linux/head.h>
 #include <linux/kernel.h>
@@ -319,17 +321,18 @@ static int try_to_unuse(unsigned int type)
 
 asmlinkage int sys_swapoff(const char * specialfile)
 {
-	struct swap_info_struct * p;
+	struct swap_info_struct * p = NULL;
 	struct inode * inode;
 	struct file filp;
 	int i, type, prev;
-	int err;
+	int err = -EPERM;
 
+	lock_kernel();
 	if (!suser())
-		return -EPERM;
+		goto out;
 	err = namei(specialfile,&inode);
 	if (err)
-		return err;
+		goto out;
 	prev = -1;
 	for (type = swap_list.head; type >= 0; type = swap_info[type].next) {
 		p = swap_info + type;
@@ -345,9 +348,10 @@ asmlinkage int sys_swapoff(const char * specialfile)
 		}
 		prev = type;
 	}
+	err = -EINVAL;
 	if (type < 0){
 		iput(inode);
-		return -EINVAL;
+		goto out;
 	}
 	if (prev < 0) {
 		swap_list.head = p->next;
@@ -372,7 +376,7 @@ asmlinkage int sys_swapoff(const char * specialfile)
 		else
 			swap_info[prev].next = p - swap_info;
 		p->flags = SWP_WRITEOK;
-		return err;
+		goto out;
 	}
 	if(p->swap_device){
 		memset(&filp, 0, sizeof(filp));		
@@ -396,7 +400,10 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	free_page((long) p->swap_lockmap);
 	p->swap_lockmap = NULL;
 	p->flags = 0;
-	return 0;
+	err = 0;
+out:
+	unlock_kernel();
+	return err;
 }
 
 /*
@@ -410,19 +417,20 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	struct inode * swap_inode;
 	unsigned int type;
 	int i, j, prev;
-	int error;
+	int error = -EPERM;
 	struct file filp;
 	static int least_priority = 0;
 
-	memset(&filp, 0, sizeof(filp));
+	lock_kernel();
 	if (!suser())
-		return -EPERM;
+		goto out;
+	memset(&filp, 0, sizeof(filp));
 	p = swap_info;
 	for (type = 0 ; type < nr_swapfiles ; type++,p++)
 		if (!(p->flags & SWP_USED))
 			break;
 	if (type >= MAX_SWAPFILES)
-		return -EPERM;
+		goto out;
 	if (type >= nr_swapfiles)
 		nr_swapfiles = type+1;
 	p->flags = SWP_USED;
@@ -538,7 +546,8 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	} else {
 		swap_info[prev].next = p - swap_info;
 	}
-	return 0;
+	error = 0;
+	goto out;
 bad_swap:
 	if(filp.f_op && filp.f_op->release)
 		filp.f_op->release(filp.f_inode,&filp);
@@ -551,6 +560,8 @@ bad_swap_2:
 	p->swap_map = NULL;
 	p->swap_lockmap = NULL;
 	p->flags = 0;
+out:
+	unlock_kernel();
 	return error;
 }
 

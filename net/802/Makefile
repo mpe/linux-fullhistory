@@ -13,7 +13,7 @@ O_OBJS	  = p8023.o sysctl_net_802.o
 ifeq ($(CONFIG_LLC),y)
 SUB_DIRS += transit
 O_OBJS += llc_sendpdu.o llc_utility.o cl2llc.o
-OX_OBJS += llc_macinit.o 
+OX_OBJS += llc_macinit.o
 
 endif
 

@@ -1,4 +1,4 @@
-/* atomic.h: These really suck for now.
+/* atomic.h: These still suck, but the I-cache hit rate is higher.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -12,8 +12,12 @@ typedef int atomic_t;
 #include <asm/system.h>
 #include <asm/psr.h>
 
-/*
- * Make sure gcc doesn't try to be clever and move things around
+/* We do the bulk of the actual work out of line in two common
+ * routines in assembler, see arch/sparc/lib/atomic.S for the
+ * "fun" details.
+ */
+
+/* Make sure gcc doesn't try to be clever and move things around
  * on us. We need to use _exactly_ the address the user gave us,
  * not some alias that contains the same information.
  */
@@ -21,118 +25,74 @@ typedef int atomic_t;
 
 static __inline__ void atomic_add(atomic_t i, atomic_t *v)
 {
+	register atomic_t *ptr asm("g1");
+	register atomic_t increment asm("g2");
+
+	ptr = (atomic_t *) __atomic_fool_gcc(v);
+	increment = i;
+
 	__asm__ __volatile__("
-	rd	%%psr, %%g2
-	andcc	%%g2, %2, %%g0
-	bne	1f
-	 nop
-	wr	%%g2, %2, %%psr
-	nop
-	nop
-	nop
-1:
-	ld	[%0], %%g3
-	add	%%g3, %1, %%g3
-	andcc	%%g2, %2, %%g0
-	st	%%g3, [%0]
-	bne	1f
-	 nop
-	wr	%%g2, 0x0, %%psr
-	nop
-	nop
-	nop
-1:
-"	: /* no outputs */
-	: "r" (__atomic_fool_gcc(v)), "r" (i), "i" (PSR_PIL)
-	: "g2", "g3");
+	mov	%%o7, %%g4
+	call	___atomic_add
+	 add	%%o7, 8, %%o7
+"	: "=&r" (increment)
+	: "0" (increment), "r" (ptr)
+	: "g3", "g4", "g7", "memory");
 }
 
 static __inline__ void atomic_sub(atomic_t i, atomic_t *v)
 {
+	register atomic_t *ptr asm("g1");
+	register atomic_t increment asm("g2");
+
+	ptr = (atomic_t *) __atomic_fool_gcc(v);
+	increment = i;
+
 	__asm__ __volatile__("
-	rd	%%psr, %%g2
-	andcc	%%g2, %2, %%g0
-	bne	1f
-	 nop
-	wr	%%g2, %2, %%psr
-	nop
-	nop
-	nop
-1:
-	ld	[%0], %%g3
-	sub	%%g3, %1, %%g3
-	andcc	%%g2, %2, %%g0
-	st	%%g3, [%0]
-	bne	1f
-	 nop
-	wr	%%g2, 0x0, %%psr
-	nop
-	nop
-	nop
-1:
-"	: /* no outputs */
-	: "r" (__atomic_fool_gcc(v)), "r" (i), "i" (PSR_PIL)
-	: "g2", "g3");
+	mov	%%o7, %%g4
+	call	___atomic_sub
+	 add	%%o7, 8, %%o7
+"	: "=&r" (increment)
+	: "0" (increment), "r" (ptr)
+	: "g3", "g4", "g7", "memory");
 }
 
 static __inline__ int atomic_add_return(atomic_t i, atomic_t *v)
 {
-	__asm__ __volatile__("
-	rd	%%psr, %%g2
-	andcc	%%g2, %3, %%g0
-	bne	1f
-	 nop
-	wr	%%g2, %3, %%psr
-	nop
-	nop
-	nop
-1:
-	ld	[%1], %%g3
-	add	%%g3, %2, %0
-	andcc	%%g2, %3, %%g0
-	st	%0, [%1]
-	bne	1f
-	 nop
-	wr	%%g2, 0x0, %%psr
-	nop
-	nop
-	nop
-1:
-"	: "=&r" (i)
-	: "r" (__atomic_fool_gcc(v)), "0" (i), "i" (PSR_PIL)
-	: "g2", "g3");
+	register atomic_t *ptr asm("g1");
+	register atomic_t increment asm("g2");
 
-	return i;
+	ptr = (atomic_t *) __atomic_fool_gcc(v);
+	increment = i;
+
+	__asm__ __volatile__("
+	mov	%%o7, %%g4
+	call	___atomic_add
+	 add	%%o7, 8, %%o7
+"	: "=&r" (increment)
+	: "0" (increment), "r" (ptr)
+	: "g3", "g4", "g7", "memory");
+
+	return increment;
 }
 
 static __inline__ int atomic_sub_return(atomic_t i, atomic_t *v)
 {
-	__asm__ __volatile__("
-	rd	%%psr, %%g2
-	andcc	%%g2, %3, %%g0
-	bne	1f
-	 nop
-	wr	%%g2, %3, %%psr
-	nop
-	nop
-	nop
-1:
-	ld	[%1], %%g3
-	sub	%%g3, %2, %0
-	andcc	%%g2, %3, %%g0
-	st	%0, [%1]
-	bne	1f
-	 nop
-	wr	%%g2, 0x0, %%psr
-	nop
-	nop
-	nop
-1:
-"	: "=&r" (i)
-	: "r" (__atomic_fool_gcc(v)), "0" (i), "i" (PSR_PIL)
-	: "g2", "g3");
+	register atomic_t *ptr asm("g1");
+	register atomic_t increment asm("g2");
 
-	return i;
+	ptr = (atomic_t *) __atomic_fool_gcc(v);
+	increment = i;
+
+	__asm__ __volatile__("
+	mov	%%o7, %%g4
+	call	___atomic_sub
+	 add	%%o7, 8, %%o7
+"	: "=&r" (increment)
+	: "0" (increment), "r" (ptr)
+	: "g3", "g4", "g7", "memory");
+
+	return increment;
 }
 
 #define atomic_dec_return(v) atomic_sub_return(1,(v))

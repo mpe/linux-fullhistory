@@ -170,7 +170,7 @@ int ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc, struct device **de
 int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen)
 {
 	int val,err;
-	unsigned char ucval;
+	unsigned char ucval = 0;
 #if defined(CONFIG_IP_FIREWALL) || defined(CONFIG_IP_ACCT)
 	struct ip_fw tmp_fw;
 #endif	

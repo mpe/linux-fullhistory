@@ -8,6 +8,8 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
@@ -487,27 +489,30 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 			   int a4, int a5, struct pt_regs regs)
 {
 	struct task_struct *child;
-	struct user * dummy;
+	long ret;
 
-	dummy = NULL;
-
+	lock_kernel();
 	DBG(DBG_MEM, ("request=%ld pid=%ld addr=0x%lx data=0x%lx\n",
 		      request, pid, addr, data));
+	ret = -EPERM;
 	if (request == PTRACE_TRACEME) {
 		/* are we already being traced? */
 		if (current->flags & PF_PTRACED)
-			return -EPERM;
+			goto out;
 		/* set the ptrace bit in the process flags. */
 		current->flags |= PF_PTRACED;
-		return 0;
+		ret = 0;
+		goto out;
 	}
 	if (pid == 1)		/* you may not mess with init */
-		return -EPERM;
+		goto out;
+	ret = -ESRCH;
 	if (!(child = get_task(pid)))
-		return -ESRCH;
+		goto out;
 	if (request == PTRACE_ATTACH) {
+		ret = -EPERM;
 		if (child == current)
-			return -EPERM;
+			goto out;
 		if ((!child->dumpable ||
 		     (current->uid != child->euid) ||
 		     (current->uid != child->suid) ||
@@ -515,10 +520,10 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 		     (current->gid != child->egid) ||
 		     (current->gid != child->sgid) ||
 		     (current->gid != child->gid)) && !suser())
-			return -EPERM;
+			goto out;
 		/* the same process cannot be attached many times */
 		if (child->flags & PF_PTRACED)
-			return -EPERM;
+			goto out;
 		child->flags |= PF_PTRACED;
 		if (child->p_pptr != current) {
 			REMOVE_LINKS(child);
@@ -526,20 +531,22 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 			SET_LINKS(child);
 		}
 		send_sig(SIGSTOP, child, 1);
-		return 0;
+		ret = 0;
+		goto out;
 	}
+	ret = -ESRCH;
 	if (!(child->flags & PF_PTRACED)) {
 		DBG(DBG_MEM, ("child not traced\n"));
-		return -ESRCH;
+		goto out;
 	}
 	if (child->state != TASK_STOPPED) {
 		DBG(DBG_MEM, ("child process not stopped\n"));
 		if (request != PTRACE_KILL)
-			return -ESRCH;
+			goto out;
 	}
 	if (child->p_pptr != current) {
 		DBG(DBG_MEM, ("child not parent of this process\n"));
-		return -ESRCH;
+		goto out;
 	}
 
 	switch (request) {
@@ -547,37 +554,41 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 		case PTRACE_PEEKTEXT: /* read word at location addr. */
 		case PTRACE_PEEKDATA: {
 			unsigned long tmp;
-			int res;
 
-			res = read_long(child, addr, &tmp);
+			ret = read_long(child, addr, &tmp);
 			DBG(DBG_MEM, ("peek %#lx->%#lx\n", addr, tmp));
-			if (res < 0)
-				return res;
+			if (ret < 0)
+				goto out;
 			regs.r0 = 0;	/* special return: no errors */
-			return tmp;
+			ret = tmp;
+			goto out;
 		}
 
 	/* read register number ADDR. */
 		case PTRACE_PEEKUSR:
 			regs.r0 = 0;	/* special return: no errors */
 			DBG(DBG_MEM, ("peek $%ld=%#lx\n", addr, regs.r0));
-			return get_reg(child, addr);
+			ret = get_reg(child, addr);
+			goto out;
 
 	/* when I and D space are separate, this will have to be fixed. */
 		case PTRACE_POKETEXT: /* write the word at location addr. */
 		case PTRACE_POKEDATA:
 			DBG(DBG_MEM, ("poke %#lx<-%#lx\n", addr, data));
-			return write_long(child, addr, data);
+			ret = write_long(child, addr, data);
+			goto out;
 
 		case PTRACE_POKEUSR: /* write the specified register */
 			DBG(DBG_MEM, ("poke $%ld<-%#lx\n", addr, data));
-			return put_reg(child, addr, data);
+			ret = put_reg(child, addr, data);
+			goto out;
 
 		case PTRACE_SYSCALL: /* continue and stop at next
 					(return from) syscall */
 		case PTRACE_CONT: { /* restart after signal. */
+			ret = -EIO;
 			if ((unsigned long) data > NSIG)
-				return -EIO;
+				goto out;
 			if (request == PTRACE_SYSCALL)
 				child->flags |= PF_TRACESYS;
 			else
@@ -586,7 +597,8 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 			wake_up_process(child);
         /* make sure single-step breakpoint is gone. */
 			ptrace_cancel_bpt(child);
-			return data;
+			ret = data;
+			goto out;
 		}
 
 /*
@@ -601,23 +613,27 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 			}
         /* make sure single-step breakpoint is gone. */
 			ptrace_cancel_bpt(child);
-			return 0;
+			ret = 0;
+			goto out;
 		}
 
 		case PTRACE_SINGLESTEP: {  /* execute single instruction. */
+			ret = -EIO;
 			if ((unsigned long) data > NSIG)
-				return -EIO;
+				goto out;
 			child->debugreg[4] = -1;	/* mark single-stepping */
 			child->flags &= ~PF_TRACESYS;
 			wake_up_process(child);
 			child->exit_code = data;
 	/* give it a chance to run. */
-			return 0;
+			ret = 0;
+			goto out;
 		}
 
 		case PTRACE_DETACH: { /* detach a process that was attached. */
+			ret = -EIO;
 			if ((unsigned long) data > NSIG)
-				return -EIO;
+				goto out;
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 			wake_up_process(child);
 			child->exit_code = data;
@@ -626,19 +642,25 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 			SET_LINKS(child);
         /* make sure single-step breakpoint is gone. */
 			ptrace_cancel_bpt(child);
-			return 0;
+			ret = 0;
+			goto out;
 		}
 
 		default:
-		  return -EIO;
+		  ret = -EIO;
+		  goto out;
 	  }
+out:
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage void syscall_trace(void)
 {
+	lock_kernel();
 	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
 			!= (PF_PTRACED|PF_TRACESYS))
-		return;
+		goto out;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;
 	notify_parent(current);
@@ -651,4 +673,6 @@ asmlinkage void syscall_trace(void)
 	if (current->exit_code)
 		current->signal |= (1 << (current->exit_code - 1));
 	current->exit_code = 0;
+out:
+	unlock_kernel();
 }

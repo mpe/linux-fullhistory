@@ -607,6 +607,25 @@ void complete_change_console(unsigned int new_console)
 	if (vt_cons[new_console]->vc_mode == KD_TEXT)
 		set_palette() ;
 	
+#ifdef CONFIG_SUN_CONSOLE
+	if (old_vc_mode != vt_cons[new_console]->vc_mode)
+	{
+		extern void set_cursor(int currcons);
+		extern void hide_cursor(void);
+
+	 	if (old_vc_mode == KD_GRAPHICS)
+		{
+			extern void sun_clear_margin(void);
+			extern void render_screen(void);
+			
+			sun_clear_margin();
+			render_screen();
+			set_cursor(fg_console);
+		}
+		else
+			hide_cursor();
+	}
+#endif		
 	/*
 	 * Wake anyone waiting for their VT to activate
 	 */
@@ -1922,7 +1941,9 @@ int tty_init(void)
 	if (tty_register_driver(&dev_console_driver))
 		panic("Couldn't register /dev/console driver\n");
 	
+#if !CONFIG_NO_KEYBOARD
 	kbd_init();
+#endif
 #ifdef CONFIG_ESPSERIAL  /* init ESP before rs, so rs doesn't see the port */
 	espserial_init();
 #endif

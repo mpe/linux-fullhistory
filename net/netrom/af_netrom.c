@@ -1365,7 +1365,7 @@ static struct proto_ops nr_proto_ops = {
 	nr_socketpair,
 	nr_accept,
 	nr_getname,
-	datagram_select,
+	datagram_poll,
 	nr_ioctl,
 	nr_listen,
 	nr_shutdown,

@@ -54,9 +54,6 @@ struct thread_struct {
 	{0, 0}, 0, {0,}, {0, 0, 0}, {0,}, \
 }
 
-#define alloc_kernel_stack()    __get_free_page(GFP_KERNEL)
-#define free_kernel_stack(page) free_page((page))
-
 /*
  * Do necessary setup to start up a newly executed thread.
  */
@@ -78,6 +75,9 @@ static inline void start_thread(struct pt_regs * regs, unsigned long pc,
 	wrusp(usp);
 }
 
+/* Free all resources held by a thread. */
+extern void release_thread(struct task_struct *);
+
 /*
  * Return saved PC of a blocked thread.
  */
@@ -93,5 +93,11 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 	else
 		return sw->retpc;
 }
+
+/* Allocation and freeing of basic task resources. */
+#define alloc_task_struct()	kmalloc(sizeof(struct task_struct), GFP_KERNEL)
+#define alloc_kernel_stack(p)	__get_free_page(GFP_KERNEL)
+#define free_task_struct(p)	kfree(p)
+#define free_kernel_stack(page) free_page((page))
 
 #endif

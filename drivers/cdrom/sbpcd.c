@@ -5247,7 +5247,7 @@ static struct file_operations sbpcd_fops =
 	block_read,             /* read - general block-dev read */
 	block_write,            /* write - general block-dev write */
 	NULL,                   /* readdir - bad */
-	NULL,                   /* select */
+	NULL,                   /* poll */
 	sbpcd_ioctl,            /* ioctl */
 	NULL,                   /* mmap */
 	sbpcd_open,             /* open */

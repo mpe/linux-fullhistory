@@ -274,7 +274,7 @@ static struct file_operations z2_fops =
         block_read,             /* read - general block-dev read */
         block_write,            /* write - general block-dev write */
         NULL,                   /* readdir - bad */
-        NULL,                   /* select */
+        NULL,                   /* poll */
         NULL,                   /* ioctl */
         NULL,                   /* mmap */
         z2_open,                /* open */

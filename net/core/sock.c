@@ -95,6 +95,7 @@
 #include <linux/net.h>
 #include <linux/fcntl.h>
 #include <linux/mm.h>
+#include <linux/slab.h>
 #include <linux/interrupt.h>
 
 #include <asm/uaccess.h>
@@ -367,6 +368,8 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
   	return err;
 }
 
+static kmem_cache_t *sk_cachep;
+
 /*
  *	All socket objects are allocated here. This is for future
  *	usage.
@@ -374,16 +377,22 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
  
 struct sock *sk_alloc(int priority)
 {
-	struct sock *sk=(struct sock *)kmalloc(sizeof(*sk), priority);
-	if(!sk)
-		return NULL;
-	memset(sk, 0, sizeof(*sk));
+	struct sock *sk = kmem_cache_alloc(sk_cachep, priority);
+
+	if(sk)
+		memset(sk, 0, sizeof(struct sock));
 	return sk;
 }
 
 void sk_free(struct sock *sk)
 {
-	kfree_s(sk,sizeof(*sk));
+	kmem_cache_free(sk_cachep, sk);
+}
+
+void sk_init(void)
+{
+	sk_cachep = kmem_cache_create("sock", sizeof(struct sock), 0,
+				      SLAB_HWCACHE_ALIGN, 0, 0);
 }
 
 /*

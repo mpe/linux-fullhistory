@@ -16,7 +16,7 @@ extern int idescsi_reset (Scsi_Cmnd *cmd, unsigned int resetflags);
 
 #define IDESCSI								\
 {	NULL,			/* next		*/			\
-	NULL,			/* usage_count	*/			\
+	NULL,			/* module	*/			\
 	NULL,			/* proc_dir	*/			\
 	NULL,			/* proc_info	*/			\
 	"idescsi",		/* name		*/			\

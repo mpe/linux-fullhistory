@@ -119,6 +119,67 @@ int check_region(unsigned int from, unsigned int num)
 	return (find_gap(&iolist, from, num) == NULL) ? -EBUSY : 0;
 }
 
+#ifdef __sparc__   /* Why to carry unused code on other architectures? */
+/*
+ * This is for architectures with MMU-managed ports (sparc).
+ */
+unsigned int occupy_region(unsigned int base, unsigned int end,
+			unsigned int num, unsigned int align, const char *name)
+{
+	unsigned int from = 0, till;
+	unsigned long flags;
+	int i;
+	resource_entry_t *p;		/* Scanning ptr */
+	resource_entry_t *p1;		/* === p->next */
+	resource_entry_t *s;		/* Found slot */
+
+	if (base > end-1)
+		return 0;
+	if (num > end - base)
+		return 0;
+
+	for (i = 0; i < IOTABLE_SIZE; i++)
+		if (iotable[i].num == 0)
+			break;
+	if (i == IOTABLE_SIZE) {
+		/* Driver prints a warning typicaly. */
+		return 0;
+	}
+
+	save_flags(flags);
+	cli();
+	/* printk("occupy: search in %08x[%x] ", base, end - base); */
+	s = NULL;
+	for (p = &iolist; p != NULL; p = p1) {
+		p1 = p->next;
+		/* Find window in list */
+		from = (p->from+p->num + align-1) & ~(align-1);
+		till = (p1 == NULL)? (unsigned) (0 - align): p1->from;
+		/* printk(" %08x:%08x", from, till); */
+		/* Clip window with base and end */
+		if (from < base) from = base;
+		if (till > end) till = end;
+		/* See if result is large enougth */
+		if (from < till && from + num < till) {
+			s = p;
+			break;
+		}
+	}
+	/* printk("\r\n"); */
+	restore_flags(flags);
+
+	if (s == NULL)
+		return 0;
+
+	iotable[i].name = name;
+	iotable[i].from = from;
+	iotable[i].num = num;
+	iotable[i].next = s->next;
+	s->next = &iotable[i];
+	return from;
+}
+#endif
+
 /* Called from init/main.c to reserve IO ports. */
 void reserve_setup(char *str, int *ints)
 {

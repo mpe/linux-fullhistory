@@ -74,7 +74,7 @@ extern struct proc_dir_entry proc_scsi_isp1020;
 
 #define QLOGICISP {							   \
 	/* next */		NULL,					   \
-	/* usage_count */	NULL,					   \
+	/* module */		NULL,					   \
 	/* proc dir */		NULL,					   \
 	/* procfs info */	NULL,					   \
 	/* name */		NULL,					   \

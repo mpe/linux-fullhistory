@@ -126,6 +126,7 @@ preproc:
 	CASE(' ',preproc);
 	CASE('\t',preproc);
 	CASE('i',i_preproc);
+	CASE('e',e_preproc);
 	GETNEXT
 
 skippreproc:
@@ -137,6 +138,15 @@ skippreproc:
 skippreprocslash:
 	GETNEXT;
 	GETNEXT;
+	goto skippreproc;
+
+e_preproc:
+	GETNEXT
+	NOTCASE('l',skippreproc);
+	GETNEXT
+	NOTCASE('i',skippreproc);
+	GETNEXT
+	CASE('f',if_line);
 	goto skippreproc;
 
 i_preproc:

@@ -1778,7 +1778,7 @@ static struct proto_ops atalk_dgram_ops = {
 	atalk_socketpair,
 	atalk_accept,
 	atalk_getname,
-	datagram_select,
+	datagram_poll,
 	atalk_ioctl,
 	atalk_listen,
 	atalk_shutdown,

@@ -1,6 +1,6 @@
 #ifndef GVP11_H
 
-/* $Id: gvp11.h,v 1.5 1996/04/25 20:58:31 root Exp root $
+/* $Id: gvp11.h,v 1.4 1997/01/19 23:07:12 davem Exp $
  *
  * Header file for the GVP Series II SCSI controller for Linux
  *
@@ -35,7 +35,7 @@ int wd33c93_reset(Scsi_Cmnd *, unsigned int);
 extern struct proc_dir_entry proc_scsi_gvp11;
 
 #define GVP11_SCSI {  /* next */                NULL,            \
-		      /* usage_count */         NULL,	         \
+		      /* module */              NULL,	         \
                       /* proc_dir_entry */      &proc_scsi_gvp11, \
 		      /* proc_info */           NULL,            \
 		      /* name */                "GVP Series II SCSI", \
@@ -60,7 +60,7 @@ extern struct proc_dir_entry proc_scsi_gvp11;
 /*
  * if the transfer address ANDed with this results in a non-zero
  * result, then we can't use DMA.
- */ 
+ */
 #define GVP11_XFER_MASK  (0xff000001)
 
 typedef struct {

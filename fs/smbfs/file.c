@@ -215,7 +215,7 @@ static struct file_operations smb_file_operations =
 	smb_file_read,		/* read */
 	smb_file_write,		/* write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	smb_ioctl,		/* ioctl */
 	smb_mmap,		/* mmap */
 	NULL,			/* open */

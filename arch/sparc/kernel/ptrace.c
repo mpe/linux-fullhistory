@@ -15,6 +15,8 @@
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -256,8 +258,7 @@ static int write_byte(struct task_struct * tsk, unsigned long addr,
  * is a valid errno will mean setting the condition codes to indicate
  * an error return.  This doesn't work, so we have this hook.
  */
-static inline void
-pt_error_return(struct pt_regs *regs, unsigned long error)
+static inline void pt_error_return(struct pt_regs *regs, unsigned long error)
 {
 	regs->u_regs[UREG_I0] = error;
 	regs->psr |= PSR_C;
@@ -265,8 +266,7 @@ pt_error_return(struct pt_regs *regs, unsigned long error)
 	regs->npc += 4;
 }
 
-static inline void
-pt_succ_return(struct pt_regs *regs, unsigned long value)
+static inline void pt_succ_return(struct pt_regs *regs, unsigned long value)
 {
 	regs->u_regs[UREG_I0] = value;
 	regs->psr &= ~PSR_C;
@@ -497,6 +497,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 	unsigned long addr2 = regs->u_regs[UREG_I4];
 	struct task_struct *child;
 
+	lock_kernel();
 #ifdef DEBUG_PTRACE
 	{
 		char *s;
@@ -518,32 +519,33 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		/* are we already being traced? */
 		if (current->flags & PF_PTRACED) {
 			pt_error_return(regs, EPERM);
-			return;
+			goto out;
 		}
 		/* set the ptrace bit in the process flags. */
 		current->flags |= PF_PTRACED;
 		pt_succ_return(regs, 0);
-		return;
+		goto out;
 	}
 #ifndef ALLOW_INIT_TRACING
 	if(pid == 1) {
 		/* Can't dork with init. */
 		pt_error_return(regs, EPERM);
-		return;
+		goto out;
 	}
 #endif
 	if(!(child = get_task(pid))) {
 		pt_error_return(regs, ESRCH);
-		return;
+		goto out;
 	}
 
-	if(request == PTRACE_SUNATTACH || request == PTRACE_ATTACH) {
+	if (((current->personality & PER_BSD) && (request == PTRACE_SUNATTACH))
+	    || (!(current->personality & PER_BSD) && (request == PTRACE_ATTACH))) {
 		if(child == current) {
 			/* Try this under SunOS/Solaris, bwa haha
 			 * You'll never be able to kill the process. ;-)
 			 */
 			pt_error_return(regs, EPERM);
-			return;
+			goto out;
 		}
 		if((!child->dumpable ||
 		    (current->uid != child->euid) ||
@@ -551,12 +553,12 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		    (current->gid != child->egid) ||
 		    (current->gid != child->gid)) && !suser()) {
 			pt_error_return(regs, EPERM);
-			return;
+			goto out;
 		}
 		/* the same process cannot be attached many times */
 		if (child->flags & PF_PTRACED) {
 			pt_error_return(regs, EPERM);
-			return;
+			goto out;
 		}
 		child->flags |= PF_PTRACED;
 		if(child->p_pptr != current) {
@@ -566,22 +568,23 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		}
 		send_sig(SIGSTOP, child, 1);
 		pt_succ_return(regs, 0);
-		return;
+		goto out;
 	}
-	if(!(child->flags & PF_PTRACED) && (request!=PTRACE_SUNATTACH) &&
-	   (request!=PTRACE_ATTACH)) {
+	if (!(child->flags & PF_PTRACED)
+	    && ((current->personality & PER_BSD) && (request != PTRACE_SUNATTACH))
+	    && (!(current->personality & PER_BSD) && (request != PTRACE_ATTACH))) {
 		pt_error_return(regs, ESRCH);
-		return;
+		goto out;
 	}
 	if(child->state != TASK_STOPPED) {
 		if(request != PTRACE_KILL) {
 			pt_error_return(regs, ESRCH);
-			return;
+			goto out;
 		}
 	}
 	if(child->p_pptr != current) {
 		pt_error_return(regs, ESRCH);
-		return;
+		goto out;
 	}
 	switch(request) {
 	case PTRACE_PEEKTEXT: /* read word at location addr. */ 
@@ -592,24 +595,24 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		/* Non-word alignment _not_ allowed on Sparc. */
 		if(addr & (sizeof(unsigned long) - 1)) {
 			pt_error_return(regs, EINVAL);
-			return;
+			goto out;
 		}
 		res = read_long(child, addr, &tmp);
 		if (res < 0) {
 			pt_error_return(regs, -res);
-			return;
+			goto out;
 		}
 		pt_os_succ_return(regs, tmp, (long *) data);
-		return;
+		goto out;
 	}
 
 	case PTRACE_PEEKUSR:
 		read_sunos_user(regs, addr, child, (long *) data);
-		return;
+		goto out;
 
 	case PTRACE_POKEUSR:
 		write_sunos_user(regs, addr, child);
-		return;
+		goto out;
 
 	case PTRACE_POKETEXT: /* write the word at location addr. */
 	case PTRACE_POKEDATA: {
@@ -619,7 +622,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		/* Non-word alignment _not_ allowed on Sparc. */
 		if(addr & (sizeof(unsigned long) - 1)) {
 			pt_error_return(regs, EINVAL);
-			return;
+			goto out;
 		}
 		vma = find_extend_vma(child, addr);
 		res = write_long(child, addr, data);
@@ -627,7 +630,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			pt_error_return(regs, -res);
 		else
 			pt_succ_return(regs, res);
-		return;
+		goto out;
 	}
 
 	case PTRACE_GETREGS: {
@@ -636,8 +639,10 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		int rval;
 
 		rval = verify_area(VERIFY_WRITE, pregs, sizeof(struct pt_regs));
-		if(rval)
-			return pt_error_return(regs, -rval);
+		if(rval) {
+			pt_error_return(regs, -rval);
+			goto out;
+		}
 		__put_user(cregs->psr, (&pregs->psr));
 		__put_user(cregs->pc, (&pregs->pc));
 		__put_user(cregs->npc, (&pregs->npc));
@@ -648,7 +653,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 #ifdef DEBUG_PTRACE
 		printk ("PC=%x nPC=%x o7=%x\n", cregs->pc, cregs->npc, cregs->u_regs [15]);
 #endif
-		return;
+		goto out;
 	}
 
 	case PTRACE_SETREGS: {
@@ -661,8 +666,10 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		 * bits in the psr.
 		 */
 		i = verify_area(VERIFY_READ, pregs, sizeof(struct pt_regs));
-		if(i)
-			return pt_error_return(regs, -i);
+		if(i) {
+			pt_error_return(regs, -i);
+			goto out;
+		}
 		__get_user(psr, (&pregs->psr));
 		__get_user(pc, (&pregs->pc));
 		__get_user(npc, (&pregs->npc));
@@ -678,7 +685,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		for(i = 1; i < 16; i++)
 			__get_user(cregs->u_regs[i], (&pregs->u_regs[i-1]));
 		pt_succ_return(regs, 0);
-		return;
+		goto out;
 	}
 
 	case PTRACE_GETFPREGS: {
@@ -696,8 +703,10 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		int i;
 
 		i = verify_area(VERIFY_WRITE, fps, sizeof(struct fps));
-		if(i)
-			return pt_error_return(regs, -i);
+		if(i) {
+			pt_error_return(regs, -i);
+			goto out;
+		}
 		for(i = 0; i < 32; i++)
 			__put_user(child->tss.float_regs[i], (&fps->regs[i]));
 		__put_user(child->tss.fsr, (&fps->fsr));
@@ -710,7 +719,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			__put_user(child->tss.fpqueue[i].insn, (&fps->fpq[i].insn));
 		}
 		pt_succ_return(regs, 0);
-		return;
+		goto out;
 	}
 
 	case PTRACE_SETFPREGS: {
@@ -728,8 +737,10 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		int i;
 
 		i = verify_area(VERIFY_READ, fps, sizeof(struct fps));
-		if(i)
-			return pt_error_return(regs, -i);
+		if(i) {
+			pt_error_return(regs, -i);
+			goto out;
+		}
 		copy_from_user(&child->tss.float_regs[0], &fps->regs[0], (32 * 4));
 		__get_user(child->tss.fsr, (&fps->fsr));
 		__get_user(child->tss.fpqdepth, (&fps->fpqd));
@@ -739,7 +750,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			__get_user(child->tss.fpqueue[i].insn, (&fps->fpq[i].insn));
 		}
 		pt_succ_return(regs, 0);
-		return;
+		goto out;
 	}
 
 	case PTRACE_READTEXT:
@@ -750,17 +761,21 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		int res, len = data;
 
 		res = verify_area(VERIFY_WRITE, dest, len);
-		if(res)
-			return pt_error_return(regs, -res);
+		if(res) {
+			pt_error_return(regs, -res);
+			goto out;
+		}
 		while(len) {
 			res = read_byte(child, src, &tmp);
-			if(res < 0)
-				return pt_error_return(regs, -res);
+			if(res < 0) {
+				pt_error_return(regs, -res);
+				goto out;
+			}
 			__put_user(tmp, dest);
 			src++; dest++; len--;
 		}
 		pt_succ_return(regs, 0);
-		return;
+		goto out;
 	}
 
 	case PTRACE_WRITETEXT:
@@ -770,19 +785,23 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		int res, len = data;
 
 		res = verify_area(VERIFY_READ, src, len);
-		if(res)
-			return pt_error_return(regs, -res);
+		if(res) {
+			pt_error_return(regs, -res);
+			goto out;
+		}
 		while(len) {
 			unsigned long tmp;
 
 			__get_user(tmp, src);
 			res = write_byte(child, dest, tmp);
-			if(res < 0)
-				return pt_error_return(regs, -res);
+			if(res < 0) {
+				pt_error_return(regs, -res);
+				goto out;
+			}
 			src++; dest++; len--;
 		}
 		pt_succ_return(regs, 0);
-		return;
+		goto out;
 	}
 
 	case PTRACE_SYSCALL: /* continue and stop at (return from) syscall */
@@ -791,12 +810,12 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 	case PTRACE_CONT: { /* restart after signal. */
 		if ((unsigned long) data > NSIG) {
 			pt_error_return(regs, EIO);
-			return;
+			goto out;
 		}
 		if (addr != 1) {
 			if (addr & 3) {
 				pt_error_return(regs, EINVAL);
-				return;
+				goto out;
 			}
 #ifdef DEBUG_PTRACE
 			printk ("Original: %08lx %08lx\n", child->tss.kregs->pc, child->tss.kregs->npc);
@@ -821,7 +840,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 #endif
 		wake_up_process(child);
 		pt_succ_return(regs, 0);
-		return;
+		goto out;
 	}
 
 /*
@@ -832,18 +851,18 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 	case PTRACE_KILL: {
 		if (child->state == TASK_ZOMBIE) {	/* already dead */
 			pt_succ_return(regs, 0);
-			return;
+			goto out;
 		}
 		wake_up_process(child);
 		child->exit_code = SIGKILL;
 		pt_succ_return(regs, 0);
-		return;
+		goto out;
 	}
 
 	case PTRACE_SUNDETACH: { /* detach a process that was attached. */
 		if ((unsigned long) data > NSIG) {
 			pt_error_return(regs, EIO);
-			return;
+			goto out;
 		}
 		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 		wake_up_process(child);
@@ -852,25 +871,28 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		child->p_pptr = child->p_opptr;
 		SET_LINKS(child);
 		pt_succ_return(regs, 0);
-		return;
+		goto out;
 	}
 
 	/* PTRACE_DUMPCORE unsupported... */
 
 	default:
 		pt_error_return(regs, EIO);
-		return;
+		goto out;
 	}
+out:
+	unlock_kernel();
 }
 
 asmlinkage void syscall_trace(void)
 {
+	lock_kernel();
 #ifdef DEBUG_PTRACE
 	printk("%s [%d]: syscall_trace\n", current->comm, current->pid);
 #endif
 	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
 			!= (PF_PTRACED|PF_TRACESYS))
-		return;
+		goto out;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;
 	current->tss.flags ^= MAGIC_CONSTANT;
@@ -889,4 +911,6 @@ asmlinkage void syscall_trace(void)
 		current->signal |= (1 << (current->exit_code - 1));
 	}
 	current->exit_code = 0;
+out:
+	unlock_kernel();
 }

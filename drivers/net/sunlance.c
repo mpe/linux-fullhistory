@@ -1,59 +1,69 @@
-/* lance.c: Linux/Sparc/Lance driver */
-/*
-	 Written 1995, 1996 by Miguel de Icaza
-  Sources:
-	 The Linux  depca driver
-	 The Linux  lance driver.
-	 The Linux  skeleton driver.
-         The NetBSD Sparc/Lance driver.
-	 Theo de Raadt (deraadt@openbsd.org)
-	 NCR92C990 Lan Controller manual
-
-1.4:
-	 Added support to run with a ledma on the Sun4m
-1.5:
-         Added multiple card detection.
-
-	 4/17/96: Burst sizes and tpe selection on sun4m by Eddie C. Dost
-	          (ecd@skynet.be)
-
-	 5/15/96: auto carrier detection on sun4m by Eddie C. Dost
-	          (ecd@skynet.be)
-
-         5/17/96: lebuffer on scsi/ether cards now work David S. Miller
-		  (davem@caip.rutgers.edu)
-
-	 5/29/96: override option 'tpe-link-test?', if it is 'false', as
-		  this disables auto carrier detection on sun4m. Eddie C. Dost
-	          (ecd@skynet.be)
-1.7:
-	 6/26/96: Bug fix for multiple ledmas, miguel.
-1.8:
-         Stole multicast code from depca.c, fixed lance_tx.
-1.9:
-         Fixed the multicast code (Pedro Roque)
-
-	 8/28/96: Send fake packet in lance_open() if auto_select is true,
-		  so we can detect the carrier loss condition in time.
-		  Eddie C. Dost (ecd@skynet.be)
-
-	 9/15/96: Align rx_buf so that eth_copy_and_sum() won't cause an
-		  MNA trap during chksum_partial_copy(). (ecd@skynet.be)
-
-	11/17/96: Handle LE_C0_MERR in lance_interrupt(). (ecd@skynet.be)
-
-	12/22/96: Don't loop forever in lance_rx() on incomplete packets.
-		  This was the sun4c killer. Shit, stupid bug.
-		  (ecd@skynet.be)
-*/
+/* $Id: sunlance.c,v 1.52 1997/01/25 23:29:56 ecd Exp $
+ * lance.c: Linux/Sparc/Lance driver
+ *
+ *	Written 1995, 1996 by Miguel de Icaza
+ * Sources:
+ *	The Linux  depca driver
+ *	The Linux  lance driver.
+ *	The Linux  skeleton driver.
+ *	The NetBSD Sparc/Lance driver.
+ *	Theo de Raadt (deraadt@openbsd.org)
+ *	NCR92C990 Lan Controller manual
+ *
+ * 1.4:
+ *	Added support to run with a ledma on the Sun4m
+ *
+ * 1.5:
+ *	Added multiple card detection.
+ *
+ *	 4/17/96: Burst sizes and tpe selection on sun4m by Eddie C. Dost
+ *		  (ecd@skynet.be)
+ *
+ *	 5/15/96: auto carrier detection on sun4m by Eddie C. Dost
+ *		  (ecd@skynet.be)
+ *
+ *	 5/17/96: lebuffer on scsi/ether cards now work David S. Miller
+ *		  (davem@caip.rutgers.edu)
+ *
+ *	 5/29/96: override option 'tpe-link-test?', if it is 'false', as
+ *		  this disables auto carrier detection on sun4m. Eddie C. Dost
+ *		  (ecd@skynet.be)
+ *
+ * 1.7:
+ *	 6/26/96: Bug fix for multiple ledmas, miguel.
+ *
+ * 1.8:
+ *		  Stole multicast code from depca.c, fixed lance_tx.
+ *
+ * 1.9:
+ *	 8/21/96: Fixed the multicast code (Pedro Roque)
+ *
+ *	 8/28/96: Send fake packet in lance_open() if auto_select is true,
+ *		  so we can detect the carrier loss condition in time.
+ *		  Eddie C. Dost (ecd@skynet.be)
+ *
+ *	 9/15/96: Align rx_buf so that eth_copy_and_sum() won't cause an
+ *		  MNA trap during chksum_partial_copy(). (ecd@skynet.be)
+ *
+ *	11/17/96: Handle LE_C0_MERR in lance_interrupt(). (ecd@skynet.be)
+ *
+ *	12/22/96: Don't loop forever in lance_rx() on incomplete packets.
+ *		  This was the sun4c killer. Shit, stupid bug.
+ *		  (ecd@skynet.be)
+ *
+ * 1.10:
+ *	 1/26/97: Modularize driver. (ecd@skynet.be)
+ */
 
 #undef DEBUG_DRIVER
 
 static char *version =
-	"sunlance.c:v1.9 21/Aug/96 Miguel de Icaza (miguel@nuclecu.unam.mx)\n";
+	"sunlance.c:v1.10 26/Jan/97 Miguel de Icaza (miguel@nuclecu.unam.mx)\n";
 
 static char *lancestr = "LANCE";
 static char *lancedma = "LANCE DMA";
+
+#include <linux/module.h>
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -211,12 +221,18 @@ struct lance_private {
 	int rx_old, tx_old;
     
 	struct enet_statistics stats;
-	struct Linux_SBus_DMA *ledma; /* if set this points to ledma and arch=4m */
+	struct Linux_SBus_DMA *ledma; /* If set this points to ledma    */
+				      /* and arch = sun4m		*/
 
-	int tpe;		      /* cable-selection is TPE */
-	int auto_select;	      /* cable-selection by carrier */
-	int burst_sizes;	      /* ledma SBus burst sizes */
-	unsigned short busmaster_regval, pio_buffer;
+	int tpe;		      /* cable-selection is TPE		*/
+	int auto_select;	      /* cable-selection by carrier	*/
+	int burst_sizes;	      /* ledma SBus burst sizes		*/
+
+	unsigned short busmaster_regval;
+	unsigned short pio_buffer;
+
+	struct device		 *dev;		  /* Backpointer	*/
+	struct lance_private	 *next_module;
 };
 
 #define TX_BUFFS_AVAIL ((lp->tx_old<=lp->tx_new)?\
@@ -240,6 +256,10 @@ int sparc_lance_debug = 2;
  */
 
 #define LANCE_ADDR(x) ((int)(x) & ~0xff000000)
+
+#ifdef MODULE
+static struct lance_private *root_lance_dev = NULL;
+#endif
 
 /* Load the CSR registers */
 static void load_csrs (struct lance_private *lp)
@@ -686,6 +706,9 @@ static int lance_open (struct device *dev)
 		flush = ll->rdp;
 	}
 
+	if (!status)
+		MOD_INC_USE_COUNT;
+
 	return status;
 }
 
@@ -702,7 +725,7 @@ static int lance_close (struct device *dev)
 	ll->rdp = LE_C0_STOP;
 
 	free_irq (dev->irq, (void *) dev);
-    
+	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -916,11 +939,13 @@ int sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 	volatile struct lance_regs *ll;
 
 	if (dev == NULL) {
-		dev = init_etherdev (0, sizeof (struct lance_private));
+		dev = init_etherdev (0, sizeof (struct lance_private) + 8);
 	} else {
-		dev->priv = kmalloc (sizeof (struct lance_private), GFP_KERNEL);
+		dev->priv = kmalloc (sizeof (struct lance_private) + 8,
+				     GFP_KERNEL);
 		if (dev->priv == NULL)
 			return -ENOMEM;
+		memset(dev->priv, 0, sizeof (struct lance_private) + 8);
 	}
 	if (sparc_lance_debug && version_printed++ == 0)
 		printk (version);
@@ -948,7 +973,6 @@ int sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 	/* Make certain the data structures used by the LANCE are aligned. */
 	dev->priv = (void *)(((int)dev->priv + 7) & ~7);
 	lp = (struct lance_private *) dev->priv;
-	memset ((char *)dev->priv, 0, sizeof (struct lance_private));
 
 	if (lebuffer){
 		prom_apply_sbus_ranges (lebuffer->my_bus,
@@ -1045,6 +1069,7 @@ no_link_test:
 		return ENODEV;
 	}
 
+	lp->dev = dev;
 	dev->open = &lance_open;
 	dev->stop = &lance_close;
 	dev->hard_start_xmit = &lance_start_xmit;
@@ -1055,6 +1080,11 @@ no_link_test:
 	dev->dma = 0;
 	ether_setup (dev);
 
+#ifdef MODULE
+	dev->ifindex = dev_new_index();
+	lp->next_module = root_lance_dev;
+	root_lance_dev = lp;
+#endif
 	return 0;
 }
 
@@ -1064,7 +1094,7 @@ find_ledma (struct linux_sbus_device *dev)
 {
 	struct Linux_SBus_DMA *p;
 
-	for (p = dma_chain; p; p = p->next)
+	for_each_dvma(p)
 		if (p->SBus_dev == dev)
 			return p;
 	return 0;
@@ -1113,9 +1143,27 @@ int sparc_lance_probe (struct device *dev)
 	return 0;
 }
 
-/*
- * Local variables:
- *  version-control: t
- *  kept-new-versions: 5
- * End:
- */
+#ifdef MODULE
+
+int
+init_module(void)
+{
+	root_lance_dev = NULL;
+	return sparc_lance_probe(NULL);
+}
+
+void
+cleanup_module(void)
+{
+	struct lance_private *lp;
+
+	while (root_lance_dev) {
+		lp = root_lance_dev->next_module;
+
+		unregister_netdev(root_lance_dev->dev);
+		kfree(root_lance_dev->dev);
+		root_lance_dev = lp;
+	}
+}
+
+#endif /* MODULE */

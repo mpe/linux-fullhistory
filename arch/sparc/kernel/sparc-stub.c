@@ -1,4 +1,4 @@
-/* $Id: sparc-stub.c,v 1.19 1996/09/30 02:21:48 davem Exp $
+/* $Id: sparc-stub.c,v 1.20 1997/01/06 06:52:31 davem Exp $
  * sparc-stub.c:  KGDB support for the Linux kernel.
  *
  * Modifications to run under Linux
@@ -97,6 +97,8 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/signal.h>
@@ -475,6 +477,7 @@ handle_exception (unsigned long *registers)
 	    "restore\n\t"
 	    "restore\n\t");
 
+	lock_kernel();
 	if (registers[PC] == (unsigned long)breakinst) {
 		/* Skip over breakpoint trap insn */
 		registers[PC] = registers[NPC];
@@ -646,6 +649,7 @@ handle_exception (unsigned long *registers)
  * some location may have changed something that is in the instruction cache.
  */
 			flush_cache_all();
+			unlock_kernel();
 			return;
 
 			/* kill the program */

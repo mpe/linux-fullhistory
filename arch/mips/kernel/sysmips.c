@@ -10,6 +10,8 @@
 #include <linux/errno.h>
 #include <linux/linkage.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/utsname.h>
@@ -54,44 +56,51 @@ sys_sysmips(int cmd, int arg1, int arg2, int arg3)
 	char	*name;
 	int	flags, len, retval = -EINVAL;
 
+	lock_kernel();
 	switch(cmd)
 	{
 	case SETNAME:
+		retval = -EPERM;
 		if (!suser())
-			return -EPERM;
+			goto out;
 		name = (char *) arg1;
 		len = get_max_hostname((unsigned long)name);
-		if (retval < 0)
-			return len;
+		retval = len;
+		if (len < 0)
+			goto out;
 		len = strnlen_user(name, retval);
+		retval = -EINVAL;
 		if (len == 0 || len > __NEW_UTS_LEN)
-			return -EINVAL;
+			goto out;
 		memcpy_fromfs(system_utsname.nodename, name, len);
 		system_utsname.nodename[len] = '\0';
-		return 0;
+		retval = 0;
+		goto out;
 	case MIPS_ATOMIC_SET:
 		p = (int *) arg1;
-		retval = verify_area(VERIFY_WRITE, p, sizeof(*p));
-		if(retval)
-			return -EINVAL;
+		retval = -EINVAL;
+		if(verify_area(VERIFY_WRITE, p, sizeof(*p)))
+			goto out;
 		save_flags(flags);
 		cli();
 		retval = *p;
 		*p = arg2;
 		restore_flags(flags);
-		return retval;
+		goto out;
 	case MIPS_FIXADE:
 		if (arg1)
 			current->tss.mflags |= MF_FIXADE;
 		else
 			current->tss.mflags |= MF_FIXADE;
 		retval = 0;
-		break;
+		goto out;
 	case FLUSH_CACHE:
 		sys_cacheflush(0, ~0, BCACHE);
-		break;
+		retval = 0;
+		goto out;
 	}
-
+out:
+	unlock_kernel();
 	return retval;
 }
 

@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.129 1996/12/30 00:31:07 davem Exp $
+/* $Id: entry.S,v 1.131 1997/01/12 09:06:55 davem Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -54,7 +54,6 @@ in_trap_handler:
 C_LABEL(trap_low):
 	rd	%wim, %l3
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	sethi	%hi(in_trap_handler), %l4
 	ld	[%lo(in_trap_handler) + %l4], %l5
@@ -246,7 +245,6 @@ floppy_overrun:
 floppy_dosoftint:
 	rd	%wim, %l3
 	SAVE_ALL
-	ENTER_IRQ
 
 	/* Set all IRQs off. */
 	or	%l0, PSR_PIL, %l4
@@ -257,10 +255,9 @@ floppy_dosoftint:
 
 	mov	11, %o0			! floppy irq level (unused anyway)
 	mov	%g0, %o1		! devid is not used in fast interrupts
-	call	C_LABEL(floppy_interrupt)
+	call	C_LABEL(sparc_floppy_irq)
 	 add	%sp, REGWIN_SZ, %o2	! struct pt_regs *regs
 
-	LEAVE_IRQ
 	RESTORE_ALL
 	
 #endif /* (CONFIG_BLK_DEV_FD) */
@@ -269,7 +266,6 @@ floppy_dosoftint:
 	.globl	bad_trap_handler
 bad_trap_handler:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
@@ -290,27 +286,6 @@ bad_trap_handler:
 	.globl	real_irq_entry
 real_irq_entry:
 	SAVE_ALL
-#ifdef __SMP__
-	cmp	%l7, 9
-	bne	1f
-	 nop
-
-	GET_PROCESSOR_MID(l4, l5)
-	set	C_LABEL(sun4m_interrupts), %l5
-	ld	[%l5], %l5
-	sethi	%hi(0x02000000), %l6
-	sll	%l4, 12, %l4
-	add	%l5, %l4, %l5
-	ld	[%l5], %l4
-	andcc	%l4, %l6, %g0
-	be	1f
-	 nop
-
-	b,a	linux_trap_ipi9_sun4m
-
-1:
-#endif
-	ENTER_IRQ
 
 #ifdef __SMP__
 	cmp	%l7, 13
@@ -335,14 +310,9 @@ real_irq_entry:
 
 #endif
 
-	/* start atomic operation with respect to software interrupts */
-	sethi	%hi(C_LABEL(intr_count)), %l6
-	ld	[%l6 + %lo(C_LABEL(intr_count))], %l5
 	or	%l0, PSR_PIL, %g2
-	add	%l5, 0x1, %l4
 	wr	%g2, 0x0, %psr
 	WRITE_PAUSE
-	st	%l4, [%l6 + %lo(C_LABEL(intr_count))]
 	wr	%g2, PSR_ET, %psr
 	WRITE_PAUSE
 	mov	%l7, %o0		! irq level
@@ -350,8 +320,7 @@ real_irq_entry:
 	 add	%sp, REGWIN_SZ, %o1	! pt_regs ptr
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
-	st	%l5, [%l6 + %lo(C_LABEL(intr_count))]
-	LEAVE_IRQ
+
 	RESTORE_ALL
 
 	/* This routine handles illegal instructions and privileged
@@ -361,7 +330,6 @@ real_irq_entry:
 	.globl	bad_instruction
 bad_instruction:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr		! re-enable traps
 	WRITE_PAUSE
@@ -378,7 +346,6 @@ bad_instruction:
 	.globl	priv_instruction
 priv_instruction:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
@@ -400,7 +367,6 @@ mna_handler:
 	 nop
 
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
@@ -413,7 +379,6 @@ mna_handler:
 
 mna_fromuser:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr		! re-enable traps
 	WRITE_PAUSE
@@ -429,7 +394,6 @@ mna_fromuser:
 	.globl	fpd_trap_handler
 fpd_trap_handler:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr		! re-enable traps
 	WRITE_PAUSE
@@ -469,7 +433,6 @@ fpe_trap_handler:
 
 2:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr		! re-enable traps
 	WRITE_PAUSE
@@ -487,7 +450,6 @@ fpe_trap_handler:
 	.globl	do_tag_overflow
 do_tag_overflow:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr		! re-enable traps
 	WRITE_PAUSE
@@ -505,7 +467,6 @@ do_tag_overflow:
 	.globl	do_watchpoint
 do_watchpoint:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr		! re-enable traps
 	WRITE_PAUSE
@@ -523,7 +484,6 @@ do_watchpoint:
 	.globl	do_reg_access
 do_reg_access:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr		! re-enable traps
 	WRITE_PAUSE
@@ -541,7 +501,6 @@ do_reg_access:
 	.globl	do_cp_disabled
 do_cp_disabled:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr		! re-enable traps
 	WRITE_PAUSE
@@ -559,7 +518,6 @@ do_cp_disabled:
 	.globl	do_bad_flush
 do_bad_flush:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr		! re-enable traps
 	WRITE_PAUSE
@@ -577,7 +535,6 @@ do_bad_flush:
 	.globl	do_cp_exception
 do_cp_exception:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr		! re-enable traps
 	WRITE_PAUSE
@@ -595,7 +552,6 @@ do_cp_exception:
 	.globl	do_hw_divzero
 do_hw_divzero:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr		! re-enable traps
 	WRITE_PAUSE
@@ -612,7 +568,6 @@ do_hw_divzero:
 	.globl	do_flush_windows
 do_flush_windows:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
@@ -683,7 +638,6 @@ setcc_trap_handler:
 	.globl	linux_trap_nmi_sun4c
 linux_trap_nmi_sun4c:
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	/* Ugh, we need to clear the IRQ line.  This is now
 	 * a very sun4c specific trap handler...
@@ -718,46 +672,9 @@ linux_trap_nmi_sun4c:
 	RESTORE_ALL
 
 #ifdef __SMP__
-
-	.align	4
-	.globl	linux_trap_ipi9_sun4m
-linux_trap_ipi9_sun4m:
-	sethi	%hi(0x02000000), %o2
-	GET_PROCESSOR_MID(o0, o1)
-	set	C_LABEL(sun4m_interrupts), %l5
-	ld	[%l5], %o5
-	sll	%o0, 12, %o0
-	add	%o5, %o0, %o5
-	st	%o2, [%o5 + 4]
-	WRITE_PAUSE
-
-	ld	[%o5], %g0
-	WRITE_PAUSE
-
-	/* IRQ's off else we deadlock. */
-	or	%l0, PSR_PIL, %l4
-	wr	%l4, 0x0, %psr
-	WRITE_PAUSE
-
-	wr	%l4, PSR_ET, %psr
-	WRITE_PAUSE
-
-	call	C_LABEL(smp_message_irq)
-	 nop
-
-	RESTORE_ALL_FASTIRQ
-
 	.align	4
 	.globl	linux_trap_ipi13_sun4m
 linux_trap_ipi13_sun4m:
-	/* NOTE: real_irq_entry saved state and grabbed klock already. */
-
-	/* start atomic operation with respect to software interrupts */
-	sethi	%hi(C_LABEL(intr_count)), %l4
-	ld	[%l4 + %lo(C_LABEL(intr_count))], %l5
-	add	%l5, 0x1, %l5
-	st	%l5, [%l4 + %lo(C_LABEL(intr_count))]
-
 	sethi	%hi(0x20000000), %o2
 	GET_PROCESSOR_MID(o0, o1)
 	set	C_LABEL(sun4m_interrupts), %l5
@@ -781,12 +698,6 @@ linux_trap_ipi13_sun4m:
 	call	C_LABEL(smp_reschedule_irq)
 	 nop
 
-	sethi	%hi(C_LABEL(intr_count)), %l4
-	ld	[%l4 + %lo(C_LABEL(intr_count))], %l5
-	sub	%l5, 0x1, %l5
-	st	%l5, [%l4 + %lo(C_LABEL(intr_count))]
-
-	LEAVE_IRQ
 	RESTORE_ALL
 
 	.align	4
@@ -829,7 +740,7 @@ linux_trap_ipi15_sun4m:
 	ld	[%l5], %g0
 	WRITE_PAUSE
 
-	RESTORE_ALL_FASTIRQ
+	RESTORE_ALL
 
 1:
 	sethi	%hi(0x80000000), %o2
@@ -855,7 +766,8 @@ linux_trap_ipi15_sun4m:
 	call	C_LABEL(smp_message_irq)
 	 nop
 
-	RESTORE_ALL_FASTIRQ
+	b	ret_trap_lockless_ipi
+	 clr	%l6
 
 #endif
 
@@ -1104,7 +1016,6 @@ C_LABEL(num_context_patch2):
 
 sun4c_fault_fromuser:
 	SAVE_ALL
-	ENTER_SYSCALL
 	
 	mov	%l7, %o1		! Decode the info from %l7
 	mov	%l7, %o2
@@ -1139,7 +1050,6 @@ C_LABEL(srmmu_fault):
 	or	%l6, %l7, %l7			! l7 = [addr,write,txtfault]
 
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	mov	%l7, %o1
 	mov	%l7, %o2
@@ -1355,6 +1265,20 @@ C_LABEL(ret_from_syscall):
 	b	C_LABEL(ret_sys_call)
 	 ld	[%sp + REGWIN_SZ + PT_I0], %o0
 
+#ifdef __SMP__
+	.globl	C_LABEL(ret_from_smpfork)
+C_LABEL(ret_from_smpfork):
+	mov	NO_PROC_ID, %o5
+	sethi	%hi(C_LABEL(klock_info)), %o4
+	or	%o4, %lo(C_LABEL(klock_info)), %o4
+	stb	%o5, [%o4 + 1]
+	stb	%g0, [%o4 + 0]
+	wr	%l0, PSR_ET, %psr
+	WRITE_PAUSE
+	b	C_LABEL(ret_sys_call)
+	 ld	[%sp + REGWIN_SZ + PT_I0], %o0
+#endif
+
 	/* Linux native and SunOS system calls enter here... */
 	.align	4
 	.globl	linux_sparc_syscall
@@ -1372,7 +1296,6 @@ linux_sparc_syscall:
 syscall_is_too_hard:
 	SAVE_ALL_HEAD
 	 rd	%wim, %l3
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr
 	mov	%i0, %o0
@@ -1462,7 +1385,6 @@ solaris_syscall:
 1:	
 	SAVE_ALL_HEAD
 	 rd	%wim, %l3
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr
 	nop
@@ -1535,7 +1457,6 @@ bsd_syscall:
 bsd_is_too_hard:
 	rd	%wim, %l3
 	SAVE_ALL
-	ENTER_SYSCALL
 
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
@@ -1703,7 +1624,6 @@ C_LABEL(udelay):
 breakpoint_trap:
 	rd	%wim,%l3
 	SAVE_ALL
-	ENTER_SYSCALL
 	wr 	%l0, PSR_ET, %psr
 	WRITE_PAUSE
 

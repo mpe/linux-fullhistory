@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.46 1996/12/18 06:43:24 tridge Exp $
+/*  $Id: init.c,v 1.47 1997/01/02 14:14:28 jj Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -266,28 +266,16 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 
 void free_initmem (void)
 {
-	extern int text_init_begin, text_init_end, data_init_begin, data_init_end;
-	unsigned long addr, addrend;
-	int savec, saved;
+	extern char __init_begin, __init_end;
+	unsigned long addr;
 	
-	addr = PAGE_ALIGN((unsigned long)(&text_init_begin));
-	addrend = ((unsigned long)(&text_init_end)) & PAGE_MASK;
-	for (savec = addrend - addr; addr < addrend; addr += PAGE_SIZE) {
+	addr = (unsigned long)(&__init_begin);
+	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
 		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
 		mem_map[MAP_NR(addr)].count = 1;
 		free_page(addr);
 	}
-	if (savec < 0) savec = 0;
-	addr = PAGE_ALIGN((unsigned long)(&data_init_begin));
-	addrend = ((unsigned long)(&data_init_end)) & PAGE_MASK;
-	for (saved = addrend - addr; addr < addrend; addr += PAGE_SIZE) {
-		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
-		mem_map[MAP_NR(addr)].count = 1;
-		free_page(addr);
-	}
-	if (saved < 0) saved = 0;
-	printk ("Freeing unused kernel memory: %dk code, %dk data\n",
-        	savec >> 10, saved >> 10);
+	printk ("Freeing unused kernel memory: %dk freed\n", (&__init_end - &__init_begin) >> 10);
 }
 
 void si_meminfo(struct sysinfo *val)

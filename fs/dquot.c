@@ -13,7 +13,7 @@
  * diskquota system. This implementation is not based on any BSD
  * kernel sourcecode.
  * 
- * Version: $Id: dquot.c,v 5.6 1995/11/15 20:30:27 mvw Exp mvw $
+ * Version: $Id: dquot.c,v 1.11 1997/01/06 06:53:02 davem Exp $
  * 
  * Author:  Marco van Wieringen <mvw@mcs.ow.nl> <mvw@tnix.net>
  * 
@@ -35,6 +35,8 @@
 #include <linux/tty.h>
 #include <linux/malloc.h>
 #include <linux/mount.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -662,7 +664,7 @@ static int get_stats(caddr_t addr)
 	dqstats.allocated_dquots = nr_dquots;
 	dqstats.free_dquots = nr_free_dquots;
 	return copy_to_user(addr, (caddr_t)&dqstats, sizeof(struct dqstats)) 
-			? -EFAULT : 0; 
+		? -EFAULT : 0; 
 }
 
 /*
@@ -1005,12 +1007,15 @@ asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 	int cmds = 0, type = 0, flags = 0;
 	struct inode *ino;
 	kdev_t dev;
+	int ret = -EINVAL;
 
+	lock_kernel();
 	cmds = cmd >> SUBCMDSHIFT;
 	type = cmd & SUBCMDMASK;
 
 	if ((u_int) type >= MAXQUOTAS)
-		return(-EINVAL);
+		goto out;
+	ret = -EPERM;
 	switch (cmds) {
 		case Q_SYNC:
 		case Q_GETSTATS:
@@ -1018,33 +1023,39 @@ asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 		case Q_GETQUOTA:
 			if (((type == USRQUOTA && current->uid != id) ||
 			     (type == GRPQUOTA && current->gid != id)) && !fsuser())
-				return(-EPERM);
+				goto out;
 			break;
 		default:
 			if (!fsuser())
-				return(-EPERM);
+				goto out;
 	}
 
+	ret = -EINVAL;
 	if (special == (char *)NULL && (cmds == Q_SYNC || cmds == Q_GETSTATS))
 		dev = 0;
 	else {
 		if (namei(special, &ino))
-			return(-EINVAL);
+			goto out;
 		dev = ino->i_rdev;
+		ret = -ENOTBLK;
 		if (!S_ISBLK(ino->i_mode)) {
 			iput(ino);
-			return(-ENOTBLK);
+			goto out;
 		}
 		iput(ino);
 	}
 
+	ret = -EINVAL;
 	switch (cmds) {
 		case Q_QUOTAON:
-			return(quota_on(dev, type, (char *) addr));
+			ret = quota_on(dev, type, (char *) addr);
+			goto out;
 		case Q_QUOTAOFF:
-			return(quota_off(dev, type));
+			ret = quota_off(dev, type);
+			goto out;
 		case Q_GETQUOTA:
-			return(get_quota(dev, id, type, (struct dqblk *) addr));
+			ret = get_quota(dev, id, type, (struct dqblk *) addr);
+			goto out;
 		case Q_SETQUOTA:
 			flags |= SET_QUOTA;
 			break;
@@ -1055,15 +1066,20 @@ asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 			flags |= SET_QLIMIT;
 			break;
 		case Q_SYNC:
-			return(sync_dquots(dev, type));
+			ret = sync_dquots(dev, type);
+			goto out;
 		case Q_GETSTATS:
-			return(get_stats(addr));
+			ret = get_stats(addr);
 		default:
-			return(-EINVAL);
+			goto out;
 	}
 
 	flags |= QUOTA_SYSCALL;
 	if (has_quota_enabled(dev, type))
-		return(set_dqblk(dev, id, type, flags, (struct dqblk *) addr));
-	return(-ESRCH);
+		ret = set_dqblk(dev, id, type, flags, (struct dqblk *) addr);
+	else
+		ret = -ESRCH;
+out:
+	unlock_kernel();
+	return ret;
 }

@@ -11,19 +11,31 @@
 #include <linux/personality.h>
 #include <linux/ptrace.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 asmlinkage int
 do_solaris_syscall (struct pt_regs *regs)
 {
+	int ret;
+
+	lock_kernel();
 	current->personality = PER_SVR4;
 	current->exec_domain = lookup_exec_domain(PER_SVR4);
 
 	if (current->exec_domain && current->exec_domain->handler){
 		current->exec_domain->handler (regs);
-		current->exec_domain->use_count = 0;
-		return regs->u_regs [UREG_I0];
+
+		/* What is going on here?  Why do we do this? */
+
+		/* XXX current->exec_domain->use_count = 0; XXX */
+
+		ret = regs->u_regs [UREG_I0];
+	} else {
+		printk ("No solaris handler\n");
+		send_sig (SIGSEGV, current, 1);
+		ret = 0;
 	}
-	printk ("No solaris handler\n");
-	send_sig (SIGSEGV, current, 1);
-	return 0;
+	unlock_kernel();
+	return ret;
 }

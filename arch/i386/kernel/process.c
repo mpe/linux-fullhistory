@@ -15,6 +15,8 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/stddef.h>
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
@@ -34,7 +36,11 @@
 #include <asm/io.h>
 #include <asm/ldt.h>
 
+#ifdef __SMP__
+asmlinkage void ret_from_smpfork(void) __asm__("ret_from_smpfork");
+#else
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
+#endif
 
 #ifdef CONFIG_APM
 extern int  apm_do_idle(void);
@@ -91,9 +97,11 @@ static void hard_idle(void)
 asmlinkage int sys_idle(void)
 {
         unsigned long start_idle = 0;
+	int ret = -EPERM;
 
+	lock_kernel();
 	if (current->pid != 0)
-		return -EPERM;
+		goto out;
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
 	for (;;) 
@@ -118,6 +126,10 @@ asmlinkage int sys_idle(void)
 			start_idle = 0;
 		schedule();
 	}
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 #else
@@ -129,15 +141,21 @@ asmlinkage int sys_idle(void)
  
 asmlinkage int sys_idle(void)
 {
+	int ret = -EPERM;
+
+	lock_kernel();
 	if(current->pid != 0)
-		return -EPERM;
+		goto out;
 #ifdef __SMP_PROF__
 	smp_spins_sys_idle[smp_processor_id()]+=
 	  smp_spins_syscall_cur[smp_processor_id()];
 #endif
 	current->counter= -100;
 	schedule();
-	return 0;
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 /*
@@ -150,9 +168,10 @@ int cpu_idle(void *unused)
 	{
 		if(cpu_data[smp_processor_id()].hlt_works_ok && !hlt_counter && !need_resched)
 			__asm("hlt");
-                if(0==(0x7fffffff & smp_process_available)) 
+                if(0==(read_smp_counter(&smp_process_available))) 
                 	continue;
-                while(0x80000000 & smp_process_available);
+                while(0x80000000 & smp_process_available)
+			;
 	        cli();
                 while(set_bit(31,&smp_process_available))
                 	while(test_bit(31,&smp_process_available))
@@ -163,7 +182,7 @@ int cpu_idle(void *unused)
                 	if(clear_bit(smp_processor_id(), &smp_invalidate_needed))
                 		local_flush_tlb();
                 }
-                if (0==(0x7fffffff & smp_process_available)){
+                if (0==(read_smp_counter(&smp_process_available))) {
                         clear_bit(31,&smp_process_available);
                         sti();
                         continue;
@@ -473,13 +492,18 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	p->tss.tr = _TSS(nr);
 	childregs = ((struct pt_regs *) (p->kernel_stack_page + PAGE_SIZE)) - 1;
 	p->tss.esp = (unsigned long) childregs;
+#ifdef __SMP__
+	p->tss.eip = (unsigned long) ret_from_smpfork;
+	p->tss.eflags = regs->eflags & 0xffffcdff;  /* iopl always 0 for a new process */
+#else
 	p->tss.eip = (unsigned long) ret_from_sys_call;
+	p->tss.eflags = regs->eflags & 0xffffcfff;  /* iopl always 0 for a new process */
+#endif
 	p->tss.ebx = (unsigned long) p;
 	*childregs = *regs;
 	childregs->eax = 0;
 	childregs->esp = esp;
 	p->tss.back_link = 0;
-	p->tss.eflags = regs->eflags & 0xffffcfff;	/* iopl is always 0 for a new process */
 	p->tss.ldt = _LDT(nr);
 	if (p->ldt) {
 		p->ldt = (struct desc_struct*) vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
@@ -568,19 +592,28 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 
 asmlinkage int sys_fork(struct pt_regs regs)
 {
-	return do_fork(SIGCHLD, regs.esp, &regs);
+	int ret;
+
+	lock_kernel();
+	ret = do_fork(SIGCHLD, regs.esp, &regs);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_clone(struct pt_regs regs)
 {
 	unsigned long clone_flags;
 	unsigned long newsp;
+	int ret;
 
+	lock_kernel();
 	clone_flags = regs.ebx;
 	newsp = regs.ecx;
 	if (!newsp)
 		newsp = regs.esp;
-	return do_fork(clone_flags, newsp, &regs);
+	ret = do_fork(clone_flags, newsp, &regs);
+	unlock_kernel();
+	return ret;
 }
 
 /*
@@ -591,10 +624,13 @@ asmlinkage int sys_execve(struct pt_regs regs)
 	int error;
 	char * filename;
 
+	lock_kernel();
 	error = getname((char *) regs.ebx, &filename);
 	if (error)
-		return error;
+		goto out;
 	error = do_execve(filename, (char **) regs.ecx, (char **) regs.edx, &regs);
 	putname(filename);
+out:
+	unlock_kernel();
 	return error;
 }

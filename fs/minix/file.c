@@ -38,7 +38,7 @@ static struct file_operations minix_file_operations = {
 	generic_file_read,	/* read */
 	minix_file_write,	/* write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */

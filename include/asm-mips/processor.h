@@ -193,6 +193,9 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 	regs->reg29 = sp;
 }
 
+/* Free all resources held by a thread. */
+extern void release_thread(struct task_struct *);
+
 #ifdef __KERNEL__
 
 /*

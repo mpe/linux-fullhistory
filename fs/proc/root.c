@@ -41,7 +41,7 @@ static struct file_operations proc_dir_operations = {
 	NULL,			/* read - bad */
 	NULL,			/* write - bad */
 	proc_readdir,		/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
@@ -82,7 +82,7 @@ static struct file_operations proc_root_operations = {
 	NULL,			/* read - bad */
 	NULL,			/* write - bad */
 	proc_root_readdir,	/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
@@ -255,7 +255,7 @@ static struct file_operations proc_openprom_operations = {
 #else
 	NULL,			/* readdir */
 #endif	
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
@@ -514,6 +514,10 @@ static struct proc_dir_entry proc_root_profile = {
 	PROC_PROFILE, 7, "profile",
 	S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
 };
+static struct proc_dir_entry proc_root_slab = {
+	PROC_SLABINFO, 8, "slabinfo",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
 
 void proc_root_init(void)
 {
@@ -576,6 +580,8 @@ void proc_root_init(void)
 	proc_register(&proc_root, &proc_openprom);
 #endif
 		   
+	proc_register(&proc_root, &proc_root_slab);
+
 	if (prof_shift) {
 		proc_register(&proc_root, &proc_root_profile);
 	}

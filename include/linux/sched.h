@@ -154,7 +154,7 @@ struct mm_struct {
 #define INIT_MM { \
 		1, \
 		swapper_pg_dir, \
-		0, \
+		-1, \
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \
@@ -166,6 +166,7 @@ struct signal_struct {
 	int count;
 	struct sigaction action[32];
 };
+
 
 #define INIT_SIGNALS { \
 		1, \
@@ -245,11 +246,10 @@ struct task_struct {
 	struct mm_struct *mm;
 /* signal handlers */
 	struct signal_struct *sig;
-#ifdef __SMP__
+/* SMP state */
 	int processor;
 	int last_processor;
 	int lock_depth;		/* Lock depth. We can context switch in and out of holding a syscall kernel lock... */	
-#endif	
 };
 
 /*
@@ -311,6 +311,7 @@ struct task_struct {
 /* files */	&init_files, \
 /* mm */	&init_mm, \
 /* signals */	&init_signals, \
+/* SMP */	0,0,0, \
 }
 
 extern struct   mm_struct init_mm;
@@ -376,11 +377,9 @@ extern void exit_mm(struct task_struct *);
 extern void exit_fs(struct task_struct *);
 extern void exit_files(struct task_struct *);
 extern void exit_sighand(struct task_struct *);
-extern void release_thread(struct task_struct *);
 
 extern int do_execve(char *, char **, char **, struct pt_regs *);
 extern int do_fork(unsigned long, unsigned long, struct pt_regs *);
-
 
 /* See if we have a valid user level fd.
  * If it makes sense, return the file structure it references.

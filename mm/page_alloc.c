@@ -5,6 +5,7 @@
  *  Swap reorganised 29.12.95, Stephen Tweedie
  */
 
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/head.h>
@@ -34,7 +35,13 @@ int nr_free_pages = 0;
  * of different sizes
  */
 
+#if CONFIG_AP1000
+/* the AP+ needs to allocate 8MB contiguous, aligned chunks of ram
+   for the ring buffers */
+#define NR_MEM_LISTS 12
+#else
 #define NR_MEM_LISTS 6
+#endif
 
 /* The start of this MUST match the start of "struct page" */
 struct free_area_struct {
@@ -239,7 +246,7 @@ void show_free_areas(void)
 			nr ++;
 		}
 		total += nr * ((PAGE_SIZE>>10) << order);
-		printk("%lu*%lukB ", nr, (PAGE_SIZE>>10) << order);
+		printk("%lu*%lukB ", nr, (unsigned long)((PAGE_SIZE>>10) << order));
 	}
 	restore_flags(flags);
 	printk("= %lukB)\n", total);

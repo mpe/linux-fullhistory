@@ -14,6 +14,8 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/stddef.h>
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
@@ -34,13 +36,20 @@ asmlinkage void ret_from_exception(void);
  */
 asmlinkage int sys_idle(void)
 {
+	int ret = -EPERM;
+
+	lock_kernel();
 	if (current->pid != 0)
-		return -EPERM;
+		goto out;
 
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
 	for (;;)
 		schedule();
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 void hard_reset_now(void)
@@ -86,20 +95,29 @@ void flush_thread(void)
 
 asmlinkage int m68k_fork(struct pt_regs *regs)
 {
-	return do_fork(SIGCHLD, rdusp(), regs);
+	int ret;
+
+	lock_kernel();
+	ret = do_fork(SIGCHLD, rdusp(), regs);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int m68k_clone(struct pt_regs *regs)
 {
 	unsigned long clone_flags;
 	unsigned long newsp;
+	int ret;
 
+	lock_kernel();
 	/* syscall2 puts clone_flags in d1 and usp in d2 */
 	clone_flags = regs->d1;
 	newsp = regs->d2;
 	if (!newsp)
 	  newsp  = rdusp();
-	return do_fork(clone_flags, newsp, regs);
+	ret = do_fork(clone_flags, newsp, regs);
+	unlock_kernel();
+	return ret;
 }
 
 void release_thread(struct task_struct *dead_task)
@@ -224,10 +242,13 @@ asmlinkage int sys_execve(char *name, char **argv, char **envp)
 	char * filename;
 	struct pt_regs *regs = (struct pt_regs *) &name;
 
+	lock_kernel();
 	error = getname(name, &filename);
 	if (error)
-		return error;
+		goto out;
 	error = do_execve(filename, argv, envp, regs);
 	putname(filename);
+out:
+	unlock_kernel();
 	return error;
 }

@@ -7,9 +7,6 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-#.S.s:
-#	$(CPP) -D__ASSEMBLY__ -traditional $< -o $*.s
-
 ifdef SMP
 .S.o:
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c $< -o $*.o
@@ -31,7 +28,7 @@ endif
 
 ifdef SMP
 
-O_OBJS += smp.o
+O_OBJS += smp.o trampoline.o
 
 head.o: head.S $(TOPDIR)/include/linux/tasks.h
 	$(CC) -D__ASSEMBLY__ -D__SMP__ -traditional -c $*.S -o $*.o
@@ -42,31 +39,5 @@ head.o: head.S $(TOPDIR)/include/linux/tasks.h
 	$(CC) -D__ASSEMBLY__ -traditional -c $*.S -o $*.o
 
 endif
-
-hexify:
-	$(HOSTCC) hexify.c -o hexify
-
-smp.c: trampoline.hex
-
-trampoline.hex: trampoline hexify
-	(dd if=trampoline bs=1 skip=32 | ./hexify >trampoline.hex )
-
-trampoline: trampoline.o trampoline32.o
-	$(LD86) -s -o $@ trampoline.o trampoline32.o
-
-trampoline.o: trampoline.s
-	$(AS86) -o $@ $<
-
-trampoline32.o: trampoline32.s
-	$(AS386) -o $@ $<
-
-trampoline.s: trampoline.S $(CONFIGURE) $(TOPDIR)/include/linux/config.h Makefile
-	$(CPP) -D__SMP__ -traditional $< -o $@
-
-trampoline32.s: trampoline32.S $(CONFIGURE) $(TOPDIR)/include/linux/config.h Makefile
-	$(CPP) -D__SMP__ -traditional $< -o $@
-
-clean:
-	rm -f trampoline hexify trampoline.hex
 
 include $(TOPDIR)/Rules.make

@@ -107,6 +107,9 @@ modules: $(ALL_MOBJS) dummy
 ifdef MOD_SUB_DIRS
 	set -e; for i in $(MOD_SUB_DIRS); do $(MAKE) -C $$i modules; done
 endif
+ifdef MOD_IN_SUB_DIRS
+	set -e; for i in $(MOD_IN_SUB_DIRS); do $(MAKE) -C $$i modules; done
+endif
 ifneq "$(strip $(MOD_LIST_NAME))" ""
 	rm -f $$TOPDIR/modules/$(MOD_LIST_NAME)
 ifdef MOD_SUB_DIRS
@@ -115,6 +118,9 @@ ifdef MOD_SUB_DIRS
 endif
 ifneq "$(strip $(ALL_MOBJS))" ""
 	echo $(ALL_MOBJS) >> $$TOPDIR/modules/$(MOD_LIST_NAME)
+endif
+ifneq "$(strip $(MOD_TO_LIST))" ""
+	echo $(MOD_TO_LIST) >> $$TOPDIR/modules/$(MOD_LIST_NAME)
 endif
 endif
 ifneq "$(strip $(ALL_MOBJS))" ""

@@ -10,6 +10,9 @@
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/ioport.h>
+#include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 /* Set EXTENT bits starting at BASE in BITMAP to value TURN_ON. */
 static void set_bitmap(unsigned long *bitmap, short base, short extent, int new_value)
@@ -50,15 +53,19 @@ static void set_bitmap(unsigned long *bitmap, short base, short extent, int new_
  */
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
 {
-	if (from + num <= from)
-		return -EINVAL;
-	if (from + num > IO_BITMAP_SIZE*32)
-		return -EINVAL;
-	if (!suser())
-		return -EPERM;
+	int ret = -EINVAL;
 
+	lock_kernel();
+	if ((from + num <= from) || (from + num > IO_BITMAP_SIZE*32))
+		goto out;
+	ret = -EPERM;
+	if (!suser())
+		goto out;
 	set_bitmap((unsigned long *)current->tss.io_bitmap, from, num, !turn_on);
-	return 0;
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 unsigned int *stack;
@@ -79,11 +86,17 @@ asmlinkage int sys_iopl(long ebx,long ecx,long edx,
 	     long eflags, long esp, long ss)
 {
 	unsigned int level = ebx;
+	int ret = -EINVAL;
 
+	lock_kernel();
 	if (level > 3)
-		return -EINVAL;
+		goto out;
+	ret = -EPERM;
 	if (!suser())
-		return -EPERM;
+		goto out;
 	*(&eflags) = (eflags & 0xffffcfff) | (level << 12);
-	return 0;
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }

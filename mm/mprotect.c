@@ -7,11 +7,13 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/shm.h>
 #include <linux/errno.h>
 #include <linux/mman.h>
 #include <linux/string.h>
-#include <linux/malloc.h>
+#include <linux/slab.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -99,7 +101,7 @@ static inline int mprotect_fixup_start(struct vm_area_struct * vma,
 {
 	struct vm_area_struct * n;
 
-	n = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	n = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 	if (!n)
 		return -ENOMEM;
 	*n = *vma;
@@ -122,7 +124,7 @@ static inline int mprotect_fixup_end(struct vm_area_struct * vma,
 {
 	struct vm_area_struct * n;
 
-	n = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	n = kmem_cache_alloc(vm_area_cachep, GFP_KERNEL);
 	if (!n)
 		return -ENOMEM;
 	*n = *vma;
@@ -145,12 +147,12 @@ static inline int mprotect_fixup_middle(struct vm_area_struct * vma,
 {
 	struct vm_area_struct * left, * right;
 
-	left = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	left = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 	if (!left)
 		return -ENOMEM;
-	right = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	right = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 	if (!right) {
-		kfree(left);
+		kmem_cache_free(vm_area_cachep, left);
 		return -ENOMEM;
 	}
 	*left = *vma;
@@ -204,21 +206,24 @@ asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 {
 	unsigned long nstart, end, tmp;
 	struct vm_area_struct * vma, * next;
-	int error;
+	int error = -EINVAL;
 
+	lock_kernel();
 	if (start & ~PAGE_MASK)
-		return -EINVAL;
+		goto out;
 	len = (len + ~PAGE_MASK) & PAGE_MASK;
 	end = start + len;
 	if (end < start)
-		return -EINVAL;
+		goto out;
 	if (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC))
-		return -EINVAL;
+		goto out;
+	error = 0;
 	if (end == start)
-		return 0;
+		goto out;
 	vma = find_vma(current->mm, start);
+	error = -EFAULT;
 	if (!vma || vma->vm_start > start)
-		return -EFAULT;
+		goto out;
 
 	for (nstart = start ; ; ) {
 		unsigned int newflags;
@@ -249,5 +254,7 @@ asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 		}
 	}
 	merge_segments(current->mm, start, end);
+out:
+	unlock_kernel();
 	return error;
 }

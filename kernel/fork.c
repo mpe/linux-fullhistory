@@ -15,10 +15,13 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/slab.h>
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
 #include <linux/malloc.h>
 #include <linux/smp.h>
+#include <linux/smp_lock.h>
+#include <linux/module.h>
 
 #include <asm/system.h>
 #include <asm/pgtable.h>
@@ -84,7 +87,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 	p = &mm->mmap;
 	flush_cache_mm(current->mm);
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
-		tmp = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+		tmp = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 		if (!tmp) {
 			exit_mmap(mm);
 			flush_tlb_mm(current->mm);
@@ -177,7 +180,7 @@ static inline int copy_files(unsigned long clone_flags, struct task_struct * tsk
 	tsk->files = newf;
 	if (!newf)
 		return -1;
-			
+
 	newf->count = 1;
 	newf->close_on_exec = oldf->close_on_exec;
 	newf->open_fds = oldf->open_fds;
@@ -221,10 +224,11 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	unsigned long new_stack;
 	struct task_struct *p;
 
-	p = (struct task_struct *) kmalloc(sizeof(*p), GFP_KERNEL);
+	lock_kernel();
+	p = alloc_task_struct();
 	if (!p)
 		goto bad_fork;
-	new_stack = alloc_kernel_stack();
+	new_stack = alloc_kernel_stack(p);
 	if (!new_stack)
 		goto bad_fork_free_p;
 	error = -EAGAIN;
@@ -234,10 +238,10 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 
 	*p = *current;
 
-	if (p->exec_domain && p->exec_domain->use_count)
-		(*p->exec_domain->use_count)++;
-	if (p->binfmt && p->binfmt->use_count)
-		(*p->binfmt->use_count)++;
+	if (p->exec_domain && p->exec_domain->module)
+		__MOD_INC_USE_COUNT(p->exec_domain->module);
+	if (p->binfmt && p->binfmt->module)
+		__MOD_INC_USE_COUNT(p->binfmt->module);
 
 	p->did_exec = 0;
 	p->swappable = 0;
@@ -263,8 +267,8 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->cutime = p->cstime = 0;
 #ifdef __SMP__
 	p->processor = NO_PROC_ID;
-	p->lock_depth = 1;
 #endif
+	p->lock_depth = 0;
 	p->start_time = jiffies;
 	task[nr] = p;
 	SET_LINKS(p);
@@ -289,9 +293,15 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->swappable = 1;
 	p->exit_signal = clone_flags & CSIGNAL;
 	p->counter = current->counter >> 1;
-	wake_up_process(p);			/* do this last, just in case */
+	if(p->pid) {
+		wake_up_process(p);		/* do this last, just in case */
+	} else {
+		p->state = TASK_RUNNING;
+		p->next_run = p->prev_run = p;
+	}
 	++total_forks;
-	return p->pid;
+	error = p->pid;
+	goto fork_out;
 
 bad_fork_cleanup_sighand:
 	exit_sighand(p);
@@ -300,17 +310,19 @@ bad_fork_cleanup_fs:
 bad_fork_cleanup_files:
 	exit_files(p);
 bad_fork_cleanup:
-	if (p->exec_domain && p->exec_domain->use_count)
-		(*p->exec_domain->use_count)--;
-	if (p->binfmt && p->binfmt->use_count)
-		(*p->binfmt->use_count)--;
+	if (p->exec_domain && p->exec_domain->module)
+		__MOD_DEC_USE_COUNT(p->exec_domain->module);
+	if (p->binfmt && p->binfmt->module)
+		__MOD_DEC_USE_COUNT(p->binfmt->module);
 	task[nr] = NULL;
 	REMOVE_LINKS(p);
 	nr_tasks--;
 bad_fork_free_stack:
 	free_kernel_stack(new_stack);
 bad_fork_free_p:
-	kfree(p);
+	free_task_struct(p);
 bad_fork:
+fork_out:
+	unlock_kernel();
 	return error;
 }

@@ -1,4 +1,4 @@
-/* $Id: wuf.S,v 1.29 1996/12/28 18:14:23 davem Exp $
+/* $Id: wuf.S,v 1.30 1997/01/06 06:52:44 davem Exp $
  * wuf.S: Window underflow trap handler for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller
@@ -180,8 +180,6 @@ fwin_user_stack_is_bolixed:
 	sll	%g5, %g3, %g5
 	st	%g5, [%curptr + THREAD_UMASK]		! one live user window still
 	st	%g0, [%curptr + THREAD_W_SAVED]		! no windows in the buffer
-
-	ENTER_SYSCALL
 
 	wr	%t_psr, PSR_ET, %psr			! enable traps
 	nop

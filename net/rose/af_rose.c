@@ -1409,7 +1409,7 @@ static struct proto_ops rose_proto_ops = {
 	rose_socketpair,
 	rose_accept,
 	rose_getname,
-	datagram_select,
+	datagram_poll,
 	rose_ioctl,
 	rose_listen,
 	rose_shutdown,

@@ -25,6 +25,8 @@
 #include <linux/timex.h>
 #include <linux/malloc.h>
 #include <linux/random.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -346,6 +348,8 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	struct irqaction * action = *(irq + irq_action);
 	int do_random = 0;
 
+	lock_kernel();
+	intr_count++;
 #ifdef __SMP__
 	if(smp_threads_ready && active_kernel_processor!=smp_processor_id())
 		panic("IRQ %d: active processor set wrongly(%d not %d).\n", irq, active_kernel_processor, smp_processor_id());
@@ -362,6 +366,8 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	}
 	if (do_random & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
+	intr_count--;
+	unlock_kernel();
 }
 
 /*
@@ -374,6 +380,8 @@ asmlinkage void do_fast_IRQ(int irq)
 	struct irqaction * action = *(irq + irq_action);
 	int do_random = 0;
 	
+	lock_kernel();
+	intr_count++;
 #ifdef __SMP__
 	/* IRQ 13 is allowed - that's a flush tlb */
 	if(smp_threads_ready && active_kernel_processor!=smp_processor_id() && irq!=13)
@@ -391,6 +399,8 @@ asmlinkage void do_fast_IRQ(int irq)
 	}
 	if (do_random & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
+	intr_count--;
+	unlock_kernel();
 }
 
 int setup_x86_irq(int irq, struct irqaction * new)

@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.26 1996/12/29 20:49:14 davem Exp $ */
+/* $Id: unistd.h,v 1.28 1997/01/26 07:12:06 davem Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -169,7 +169,7 @@
 #define __NR_getsockname        150 /* SunOS Specific                              */
 #define __NR_getmsg             151 /* SunOS Specific                              */
 #define __NR_putmsg             152 /* SunOS Specific                              */
-#define __NR_poll               153 /* SunOS Specific                              */
+#define __NR_poll               153 /* Common                                      */
 /* #define __NR_ni_syscall      154    ENOSYS under SunOS                          */
 #define __NR_nfssvc             155 /* SunOS Specific                              */
 #define __NR_getdirentries      156 /* SunOS Specific                              */
@@ -286,7 +286,7 @@ __asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
 		      : "=r" (__res)\
 		      : "0" (__NR_##name) \
 		      : "g1", "o0"); \
-if (__res >= 0) \
+if (__res < -255 || __res >= 0) \
     return (type) __res; \
 errno = -__res; \
 return -1; \
@@ -306,7 +306,7 @@ __asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)) \
 		      : "0" (__NR_##name),"1" ((long)(arg1)) \
 		      : "g1", "o0"); \
-if (__res >= 0) \
+if (__res < -255 || __res >= 0) \
 	return (type) __res; \
 errno = -__res; \
 return -1; \
@@ -327,7 +327,7 @@ __asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)) \
 		      : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)) \
 		      : "g1", "o0", "o1"); \
-if (__res >= 0) \
+if (__res < -255 || __res >= 0) \
 	return (type) __res; \
 errno = -__res; \
 return -1; \
@@ -351,7 +351,7 @@ __asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
 		      : "0" (__NR_##name), "1" ((long)(arg1)), "2" ((long)(arg2)), \
 		        "3" ((long)(arg3)) \
 		      : "g1", "o0", "o1", "o2"); \
-if (__res>=0) \
+if (__res < -255 || __res>=0) \
 	return (type) __res; \
 errno = -__res; \
 return -1; \
@@ -376,7 +376,7 @@ __asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
 		      : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)), \
 		        "3" ((long)(arg3)),"4" ((long)(arg4)) \
 		      : "g1", "o0", "o1", "o2", "o3"); \
-if (__res>=0) \
+if (__res < -255 || __res>=0) \
 	return (type) __res; \
 errno = -__res; \
 return -1; \
@@ -404,7 +404,7 @@ __asm__ __volatile__ ("or %%g0, %1, %%o0\n\t" \
 		        "r" ((long)(arg3)),"r" ((long)(arg4)),"r" ((long)(arg5)), \
 		        "i" (__NR_##name)  \
 		      : "g1", "o0", "o1", "o2", "o3", "o4"); \
-if (__res>=0) \
+if (__res < -255 || __res>=0) \
 	return (type) __res; \
 errno = -__res; \
 return -1; \

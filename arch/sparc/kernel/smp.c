@@ -9,6 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/tasks.h>
 #include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/interrupt.h>
 
 #include <asm/delay.h>
@@ -16,6 +17,7 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/oplib.h>
+#include <asm/atops.h>
 
 extern ctxd_t *srmmu_ctx_table_phys;
 extern int linux_num_cpus;
@@ -58,10 +60,8 @@ volatile int cpu_logical_map[NR_CPUS];
  * compared to the Alpha and the intel no?  Most Sparcs have 'swap'
  * instruction which is much better...
  */
-klock_t kernel_flag = KLOCK_CLEAR;
-volatile unsigned char active_kernel_processor = NO_PROC_ID;
-volatile unsigned long kernel_counter = 0;
-volatile unsigned long syscall_count = 0;
+struct klock_info klock_info = { KLOCK_CLEAR, 0, 0 };
+
 volatile unsigned long ipi_count;
 #ifdef __SMP_PROF__
 volatile unsigned long smp_spins[NR_CPUS]={0};
@@ -99,10 +99,10 @@ char *smp_info(void)
 	sprintf(smp_buf,
 "        CPU0\t\tCPU1\t\tCPU2\t\tCPU3\n"
 "State:  %s\t\t%s\t\t%s\t\t%s\n",
-(cpu_present_map & 1) ? ((active_kernel_processor == 0) ? "akp" : "online") : "offline",
-(cpu_present_map & 2) ? ((active_kernel_processor == 1) ? "akp" : "online") : "offline",
-(cpu_present_map & 4) ? ((active_kernel_processor == 2) ? "akp" : "online") : "offline",
-(cpu_present_map & 8) ? ((active_kernel_processor == 3) ? "akp" : "online") : "offline");
+(cpu_present_map & 1) ? ((klock_info.akp == 0) ? "akp" : "online") : "offline",
+(cpu_present_map & 2) ? ((klock_info.akp == 1) ? "akp" : "online") : "offline",
+(cpu_present_map & 4) ? ((klock_info.akp == 2) ? "akp" : "online") : "offline",
+(cpu_present_map & 8) ? ((klock_info.akp == 3) ? "akp" : "online") : "offline");
 	return smp_buf;
 }
 
@@ -150,31 +150,32 @@ void smp_callin(void)
 {
 	int cpuid = smp_processor_id();
 
-	sti();
 	local_flush_cache_all();
 	local_flush_tlb_all();
+	set_irq_udt(mid_xlate[boot_cpu_id]);
 	calibrate_delay();
 	smp_store_cpu_info(cpuid);
 	local_flush_cache_all();
 	local_flush_tlb_all();
-	cli();
 
 	/* Allow master to continue. */
 	swap((unsigned long *)&cpu_callin_map[cpuid], 1);
 	local_flush_cache_all();
 	local_flush_tlb_all();
-	while(!smp_commenced)
+
+	while(!task[cpuid] || current_set[cpuid] != task[cpuid])
 		barrier();
-	local_flush_cache_all();
-	local_flush_tlb_all();
 
 	/* Fix idle thread fields. */
 	__asm__ __volatile__("ld [%0], %%g6\n\t"
-			     : : "r" (&current_set[smp_processor_id()])
+			     : : "r" (&current_set[cpuid])
 			     : "memory" /* paranoid */);
 	current->mm->mmap->vm_page_prot = PAGE_SHARED;
 	current->mm->mmap->vm_start = PAGE_OFFSET;
 	current->mm->mmap->vm_end = init_task.mm->mmap->vm_end;
+	
+	while(!smp_commenced)
+		barrier();
 
 	local_flush_cache_all();
 	local_flush_tlb_all();
@@ -207,7 +208,6 @@ void smp_boot_cpus(void)
 	penguin_ctable.reg_size = 0;
 
 	sti();
-	cpu_present_map |= (1 << smp_processor_id());
 	cpu_present_map = 0;
 	for(i=0; i < linux_num_cpus; i++)
 		cpu_present_map |= (1<<i);
@@ -218,9 +218,9 @@ void smp_boot_cpus(void)
 	mid_xlate[boot_cpu_id] = (linux_cpus[boot_cpu_id].mid & ~8);
 	cpu_number_map[boot_cpu_id] = 0;
 	cpu_logical_map[0] = boot_cpu_id;
-	active_kernel_processor = boot_cpu_id;
+	klock_info.akp = klock_info.irq_udt = boot_cpu_id;
 	smp_store_cpu_info(boot_cpu_id);
-	set_irq_udt(0);
+	set_irq_udt(mid_xlate[boot_cpu_id]);
 	local_flush_cache_all();
 	if(linux_num_cpus == 1)
 		return;  /* Not an MP box. */
@@ -325,6 +325,8 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 * but is not critical.
 	 */
 	if(msg == MSG_RESCHEDULE) {
+		if(!smp_commenced)
+			return;
 		irq = 13;
 		if(smp_cpu_in_msg[p])
 			return;
@@ -338,7 +340,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 */
 	if(message_cpu != NO_PROC_ID && msg != MSG_STOP_CPU && msg != MSG_RESCHEDULE) {
 		printk("CPU #%d: Message pass %d but pass in progress by %d of %d\n",
-		      smp_processor_id(),msg,message_cpu, smp_msg_id);
+		       smp_processor_id(),msg,message_cpu, smp_msg_id);
 
 		/* I don't know how to gracefully die so that debugging
 		 * this doesn't completely eat up my filesystems...
@@ -402,6 +404,12 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 		 * until all processors disperse.  Else we have _big_ problems.
 		 */
 		return;
+	case 4:
+		/* For captures we hold smp_cpu_in_msg[] until all processors
+		 * released.  Else we have _big_ problems.
+		 */
+		message_cpu = NO_PROC_ID;
+		return;
 	}
 	smp_cpu_in_msg[p]--;
 	message_cpu = NO_PROC_ID;
@@ -445,7 +453,7 @@ void smp_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg2,
 #endif
 	if(smp_processors_ready) {
 		save_and_cli(flags);
-		if(me != active_kernel_processor)
+		if(me != klock_info.akp)
 			goto cross_call_not_master;
 
 		/* Init function glue. */
@@ -514,8 +522,9 @@ procs_time_out:
 	return;
 
 cross_call_not_master:
-	printk("Cross call initiated by non master cpu\n");
-	printk("akp=%x me=%08lx\n", active_kernel_processor, me);
+	printk("Cross call initiated by non master cpu from [%p]\n",
+	       __builtin_return_address(0));
+	printk("akp=%x me=%08lx\n", klock_info.akp, me);
 	restore_flags(flags);
 	panic("penguin cross call");
 }
@@ -569,64 +578,137 @@ void smp_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr)
 /* Reschedule call back. */
 void smp_reschedule_irq(void)
 {
-	if(smp_processor_id() != active_kernel_processor)
+	lock_kernel();
+	intr_count++;
+	if(smp_processor_id() != klock_info.akp) {
 		panic("SMP Reschedule on CPU #%d, but #%d is active.\n",
-		      smp_processor_id(), active_kernel_processor);
-
+		      smp_processor_id(), klock_info.akp);
+	}
 	need_resched=1;
+	intr_count--;
+	unlock_kernel();
 }
 
-/* XXX FIXME: this still doesn't work right... XXX */
+#undef DEBUG_CAPTURE
 
-/* #define DEBUG_CAPTURE */
-
-static volatile unsigned long release = 1;
-static volatile int capture_level = 0;
+static struct capture_struct {
+	int capture_level;
+	volatile unsigned long processors_in[NR_CPUS];
+	volatile unsigned long processors_out[NR_CPUS];
+} cap_info = { 0, };
 
 void smp_capture(void)
 {
 	unsigned long flags;
+	int me = smp_processor_id();
+	int cpu;
 
-	if(!smp_activated || !smp_commenced)
+	if(!smp_processors_ready)
 		return;
+
+	if (me != klock_info.akp)
+		panic("SMP Capture on CPU #%d, but #%d is active.\n",
+		      me, klock_info.akp);
+
 #ifdef DEBUG_CAPTURE
-	printk("C<%d>", smp_processor_id());
+	printk("C%d(%d)<", smp_processor_id(), cap_info.capture_level);
 #endif
 	save_and_cli(flags);
-	if(!capture_level) {
-		release = 0;
-		smp_message_pass(MSG_ALL_BUT_SELF, MSG_CAPTURE, 0, 1);
+
+	if (! cap_info.capture_level++) {
+		int timeout;
+
+		/* Initialize Capture Info. */
+		for (cpu = 0; cpu < smp_num_cpus; cpu++) {
+			cap_info.processors_in[cpu] = 0;
+			cap_info.processors_out[cpu] = 0;
+		}
+		cap_info.processors_in[me] = 1;
+		cap_info.processors_out[me] = 1;
+
+		smp_message_pass(MSG_ALL_BUT_SELF, MSG_CAPTURE, 0, 4);
+
+		timeout = CCALL_TIMEOUT;
+		for (cpu = 0; cpu < smp_num_cpus; cpu++) {
+			while (!cap_info.processors_in[cpu] && timeout-- > 0)
+				barrier();
+			if (!cap_info.processors_in[cpu])
+				goto procs_time_out;
+#ifdef DEBUG_CAPTURE
+			printk("%d", cpu);
+#endif
+		}
 	}
-	capture_level++;
+#ifdef DEBUG_CAPTURE
+	printk(">");
+#endif
+	restore_flags(flags);
+	return;
+
+procs_time_out:
+	printk("smp_capture (%d): Wheee, penguin drops off the bus\n",
+		smp_processor_id());
+	printk("smp_capture: map: %ld %ld %ld %ld\n",
+		cap_info.processors_in[0], cap_info.processors_in[1],
+		cap_info.processors_in[2], cap_info.processors_in[3]);
+	smp_cpu_in_msg[me]--;
+	message_cpu = NO_PROC_ID;
 	restore_flags(flags);
 }
 
 void smp_release(void)
 {
 	unsigned long flags;
-	int i;
+	int me = smp_processor_id();
+	int cpu;
 
-	if(!smp_activated || !smp_commenced)
+	if(!smp_processors_ready)
 		return;
 #ifdef DEBUG_CAPTURE
-	printk("R<%d>", smp_processor_id());
+	printk("R%d(%d)<", smp_processor_id(), cap_info.capture_level);
 #endif
+
+	if (me != klock_info.akp)
+		panic("SMP Release on CPU #%d, but #%d is active.\n",
+		      me, klock_info.akp);
+
 	save_and_cli(flags);
-	if(!(capture_level - 1)) {
-		release = 1;
-		for(i = 0; i < smp_num_cpus; i++)
-			while(cpu_callin_map[i])
+
+	if (! --cap_info.capture_level) {
+		int timeout;
+
+		for (cpu = 0; cpu < smp_num_cpus; cpu++)
+			cap_info.processors_in[cpu] = 0;
+
+		timeout = CCALL_TIMEOUT;
+		for (cpu = 0; cpu < smp_num_cpus; cpu++) {
+			while (!cap_info.processors_out[cpu] && timeout-- > 0)
 				barrier();
+			if (!cap_info.processors_out[cpu])
+				goto procs_time_out;
+#ifdef DEBUG_CAPTURE
+			printk("%d", cpu);
+#endif
+		}
+
+		/* See wait case 4 in smp_message_pass()... */
+		smp_cpu_in_msg[me]--;
 	}
-	capture_level -= 1;
+#ifdef DEBUG_CAPTURE
+	printk(">");
+#endif
+	restore_flags(flags);
+	return;
+
+procs_time_out:
+	printk("smp_release (%d): Wheee, penguin drops off the bus\n",
+		smp_processor_id());
+	printk("smp_release: map: %ld %ld %ld %ld\n",
+		cap_info.processors_out[0], cap_info.processors_out[1],
+		cap_info.processors_out[2], cap_info.processors_out[3]);
+	smp_cpu_in_msg[me]--;
 	restore_flags(flags);
 }
-
-/* Park a processor, we must watch for more IPI's to invalidate
- * our cache's and TLB's. And also note we can only wait for
- * "lock-less" IPI's and process those, as a result of such IPI's
- * being non-maskable traps being on is enough to receive them.
- */
 
 /* Message call back. */
 void smp_message_irq(void)
@@ -640,6 +722,14 @@ void smp_message_irq(void)
 		ccall_info.func(ccall_info.arg1, ccall_info.arg2, ccall_info.arg3,
 				ccall_info.arg4, ccall_info.arg5);
 		ccall_info.processors_out[i] = 1;
+		break;
+
+	case MSG_CAPTURE:
+		flush_user_windows();
+		cap_info.processors_in[i] = 1;
+		while (cap_info.processors_in[i])
+			barrier();
+		cap_info.processors_out[i] = 1;
 		break;
 
 		/*

@@ -12,13 +12,17 @@
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
 asmlinkage int sys_sysinfo(struct sysinfo *info)
 {
 	struct sysinfo val;
+	int err;
 
+	lock_kernel();
 	memset((char *)&val, 0, sizeof(struct sysinfo));
 
 	val.uptime = jiffies / HZ;
@@ -33,6 +37,9 @@ asmlinkage int sys_sysinfo(struct sysinfo *info)
 	si_swapinfo(&val);
 
 	if (copy_to_user(info, &val, sizeof(struct sysinfo)))
-		return -EFAULT;
-	return 0;
+		err = -EFAULT;
+	else
+		err = 0;
+	unlock_kernel();
+	return err;
 }

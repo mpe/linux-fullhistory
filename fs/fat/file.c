@@ -32,7 +32,7 @@ static struct file_operations fat_file_operations = {
 	fat_file_read,		/* read */
 	fat_file_write,		/* write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */
@@ -71,7 +71,7 @@ static struct file_operations fat_file_operations_1024 = {
 	fat_file_read,		/* read */
 	fat_file_write,		/* write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	fat_mmap,		/* mmap */
 	NULL,			/* no special open is needed */

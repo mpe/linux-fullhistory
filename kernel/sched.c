@@ -30,6 +30,7 @@
 #include <linux/resource.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -106,9 +107,6 @@ struct kernel_stat kstat = { 0 };
 
 static inline void add_to_runqueue(struct task_struct * p)
 {
-#ifdef __SMP__
-	int cpu=smp_processor_id();
-#endif	
 #if 1	/* sanity tests */
 	if (p->next_run || p->prev_run) {
 		printk("task already on run-queue\n");
@@ -123,19 +121,7 @@ static inline void add_to_runqueue(struct task_struct * p)
 	init_task.prev_run = p;
 #ifdef __SMP__
 	/* this is safe only if called with cli()*/
-	while(set_bit(31,&smp_process_available))
-	{
-		while(test_bit(31,&smp_process_available))
-		{
-			if(clear_bit(cpu,&smp_invalidate_needed))
-			{
-				local_flush_tlb();
-				set_bit(cpu,&cpu_callin_map[0]);
-			}
-		}
-	}
-	smp_process_available++;
-	clear_bit(31,&smp_process_available);
+	inc_smp_counter(&smp_process_available);
 	if ((0!=p->pid) && smp_threads_ready)
 	{
 		int i;
@@ -302,14 +288,12 @@ asmlinkage void schedule(void)
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
 
+	lock_kernel();
 	if (intr_count)
 		goto scheduling_in_interrupt;
 
-	if (bh_active & bh_mask) {
-		intr_count = 1;
+	if (bh_active & bh_mask)
 		do_bottom_half();
-		intr_count = 0;
-	}
 
 	run_task_queue(&tq_scheduler);
 
@@ -401,11 +385,13 @@ asmlinkage void schedule(void)
 		if (timeout)
 			del_timer(&timer);
 	}
-	return;
+	goto out;
 
 scheduling_in_interrupt:
 	printk("Aiee: scheduling in interrupt %p\n",
 		__builtin_return_address(0));
+out:
+	unlock_kernel();
 }
 
 #ifndef __alpha__
@@ -416,8 +402,10 @@ scheduling_in_interrupt:
  */
 asmlinkage int sys_pause(void)
 {
+	lock_kernel();
 	current->state = TASK_INTERRUPTIBLE;
 	schedule();
+	unlock_kernel();
 	return -ERESTARTNOHAND;
 }
 
@@ -1065,6 +1053,7 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 				utime = 0;
 				stime = ticks;
 			}
+
 			update_one_process(p, ticks, utime, stime);
 
 			if (p->priority < DEF_PRIORITY)
@@ -1082,14 +1071,17 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 			 * Idle processor found, do we have anything
 			 * we could run?
 			 */
-			if (!(0x7fffffff & smp_process_available))
+			if (!(read_smp_counter(&smp_process_available)))
 				continue;
 		}
 		/* Ok, we should reschedule, do the magic */
-		if (i==cpu)
+		cli();
+		if (i==cpu) {
 			need_resched = 1;
-		else
+		} else {
 			smp_message_pass(i, MSG_RESCHEDULE, 0L, 0);
+		}
+		sti();
 	}
 #endif
 }
@@ -1151,6 +1143,7 @@ asmlinkage unsigned int sys_alarm(unsigned int seconds)
 	struct itimerval it_new, it_old;
 	unsigned int oldalarm;
 
+	lock_kernel();
 	it_new.it_interval.tv_sec = it_new.it_interval.tv_usec = 0;
 	it_new.it_value.tv_sec = seconds;
 	it_new.it_value.tv_usec = 0;
@@ -1160,6 +1153,7 @@ asmlinkage unsigned int sys_alarm(unsigned int seconds)
 	/* And we'd better return too much than too little anyway */
 	if (it_old.it_value.tv_usec)
 		oldalarm++;
+	unlock_kernel();
 	return oldalarm;
 }
 
@@ -1169,32 +1163,62 @@ asmlinkage unsigned int sys_alarm(unsigned int seconds)
  */
 asmlinkage int sys_getpid(void)
 {
-	return current->pid;
+	int ret;
+
+	lock_kernel();
+	ret = current->pid;
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_getppid(void)
 {
-	return current->p_opptr->pid;
+	int ret;
+
+	lock_kernel();
+	ret = current->p_opptr->pid;
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_getuid(void)
 {
-	return current->uid;
+	int ret;
+
+	lock_kernel();
+	ret = current->uid;
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_geteuid(void)
 {
-	return current->euid;
+	int ret;
+
+	lock_kernel();
+	ret = current->euid;
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_getgid(void)
 {
-	return current->gid;
+	int ret;
+
+	lock_kernel();
+	ret = current->gid;
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_getegid(void)
 {
-	return current->egid;
+	int ret;
+
+	lock_kernel();
+	ret = current->egid;
+	unlock_kernel();
+	return ret;
 }
 
 /*
@@ -1206,14 +1230,17 @@ asmlinkage int sys_nice(int increment)
 {
 	unsigned long newprio;
 	int increase = 0;
+	int ret = -EPERM;
 
+	lock_kernel();
 	newprio = increment;
 	if (increment < 0) {
 		if (!suser())
-			return -EPERM;
+			goto out;
 		newprio = -increment;
 		increase = 1;
 	}
+	ret = 0;
 	if (newprio > 40)
 		newprio = 40;
 	/*
@@ -1233,7 +1260,9 @@ asmlinkage int sys_nice(int increment)
 	if (newprio > DEF_PRIORITY*2)
 		newprio = DEF_PRIORITY*2;
 	current->priority = newprio;
-	return 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 #endif
@@ -1305,86 +1334,124 @@ static int setscheduler(pid_t pid, int policy,
 asmlinkage int sys_sched_setscheduler(pid_t pid, int policy, 
 				      struct sched_param *param)
 {
-	return setscheduler(pid, policy, param);
+	int ret;
+
+	lock_kernel();
+	ret = setscheduler(pid, policy, param);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_sched_setparam(pid_t pid, struct sched_param *param)
 {
-	return setscheduler(pid, -1, param);
+	int ret;
+
+	lock_kernel();
+	ret = setscheduler(pid, -1, param);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_sched_getscheduler(pid_t pid)
 {
 	struct task_struct *p;
+	int ret = -EINVAL;
 
+	lock_kernel();
 	if (pid < 0)
-		return -EINVAL;
+		goto out;
 
 	p = find_process_by_pid(pid);
+	ret = -ESRCH;
 	if (!p)
-		return -ESRCH;
+		goto out;
 			
-	return p->policy;
+	ret = p->policy;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
 {
 	struct task_struct *p;
 	struct sched_param lp;
+	int ret = -EINVAL;
 
+	lock_kernel();
 	if (!param || pid < 0)
-		return -EINVAL;
+		goto out;
 
 	p = find_process_by_pid(pid);
+	ret = -ESRCH;
 	if (!p)
-		return -ESRCH;
+		goto out;
 
 	lp.sched_priority = p->rt_priority;
-	return copy_to_user(param, &lp, sizeof(struct sched_param)) ? -EFAULT : 0;
+	ret = copy_to_user(param, &lp, sizeof(struct sched_param)) ? -EFAULT : 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_sched_yield(void)
 {
+	lock_kernel();
 	cli();
 	move_last_runqueue(current);
 	sti();
+	unlock_kernel();
 	return 0;
 }
 
 asmlinkage int sys_sched_get_priority_max(int policy)
 {
-	switch (policy) {
-	      case SCHED_FIFO:
-	      case SCHED_RR:
-		return 99;
-	      case SCHED_OTHER:
-		return 0;
-	}
+	int ret = -EINVAL;
 
-	return -EINVAL;
+	lock_kernel();
+	switch (policy) {
+	case SCHED_FIFO:
+	case SCHED_RR:
+		ret = 99;
+		break;
+	case SCHED_OTHER:
+		ret = 0;
+		break;
+	}
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_sched_get_priority_min(int policy)
 {
-	switch (policy) {
-	      case SCHED_FIFO:
-	      case SCHED_RR:
-		return 1;
-	      case SCHED_OTHER:
-		return 0;
-	}
+	int ret = -EINVAL;
 
-	return -EINVAL;
+	lock_kernel();
+	switch (policy) {
+	case SCHED_FIFO:
+	case SCHED_RR:
+		ret = 1;
+		break;
+	case SCHED_OTHER:
+		ret = 0;
+	}
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 {
 	struct timespec t;
+	int ret;
 
+	lock_kernel();
 	t.tv_sec = 0;
-	t.tv_nsec = 0;   /* <-- Linus, please fill correct value in here */
-	return -ENOSYS;  /* and then delete this line. Thanks!           */
-	return copy_to_user(interval, &t, sizeof(struct timespec)) ? -EFAULT : 0;
+	t.tv_nsec = 0;            /* <-- Linus, please fill correct value in here */
+	ret = -ENOSYS; goto out;  /* and then delete this line. Thanks!           */
+	ret = copy_to_user(interval, &t, sizeof(struct timespec)) ? -EFAULT : 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 /*
@@ -1412,16 +1479,17 @@ static void jiffiestotimespec(unsigned long jiffies, struct timespec *value)
 
 asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 {
-	int error;
+	int error = -EFAULT;
 	struct timespec t;
 	unsigned long expire;
 
-	error = copy_from_user(&t, rqtp, sizeof(struct timespec));
-	if (error)
-		return -EFAULT;	
+	lock_kernel();
+	if(copy_from_user(&t, rqtp, sizeof(struct timespec)))
+		goto out;
 
+	error = -EINVAL;
 	if (t.tv_nsec >= 1000000000L || t.tv_nsec < 0 || t.tv_sec < 0)
-		return -EINVAL;
+		goto out;
 
 	if (t.tv_sec == 0 && t.tv_nsec <= 2000000L &&
 	    current->policy != SCHED_OTHER) {
@@ -1430,7 +1498,8 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 		 * high precision by a busy wait for all real-time processes.
 		 */
 		udelay((t.tv_nsec + 999) / 1000);
-		return 0;
+		error = 0;
+		goto out;
 	}
 
 	expire = timespectojiffies(&t) + (t.tv_sec || t.tv_nsec) + jiffies;
@@ -1438,17 +1507,20 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 	current->state = TASK_INTERRUPTIBLE;
 	schedule();
 
+	error = 0;
 	if (expire > jiffies) {
 		if (rmtp) {
 			jiffiestotimespec(expire - jiffies -
 					  (expire > jiffies + 1), &t);
+			error = -EFAULT;
 			if (copy_to_user(rmtp, &t, sizeof(struct timespec)))
-				return -EFAULT;	
+				goto out;
 		}
-		return -EINTR;
+		error = -EINTR;
 	}
-
-	return 0;
+out:
+	unlock_kernel();
+	return error;
 }
 
 static void show_task(int nr,struct task_struct * p)
@@ -1516,7 +1588,7 @@ void sched_init(void)
 	 *	process right in SMP mode.
 	 */
 	int cpu=smp_processor_id();
-#ifndef __SMP__	
+#ifndef __SMP__
 	current_set[cpu]=&init_task;
 #else
 	init_task.processor=cpu;

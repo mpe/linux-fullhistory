@@ -97,142 +97,43 @@ ENOSYS = 38
 	mov %dx,%ds; \
 	mov %dx,%es;
 
+#define RESTORE_ALL \
+	popl %ebx; \
+	popl %ecx; \
+	popl %edx; \
+	popl %esi; \
+	popl %edi; \
+	popl %ebp; \
+	popl %eax; \
+	pop %ds; \
+	pop %es; \
+	addl $4,%esp; \
+	iret
+
 #ifdef	__SMP__
+/* Get the processor ID multiplied by 4 */
+#define GET_PROCESSOR_OFFSET(reg) \
+	movl SYMBOL_NAME(apic_reg), reg; \
+	movl 32(reg), reg; \
+	shrl $22, reg; \
+	andl $0x3C, reg;
 
-#define GET_PROCESSOR_ID \
-	movl SYMBOL_NAME(apic_reg), %edx; \
-	movl 32(%edx), %eax;\
-	movl %eax,SYMBOL_NAME(apic_retval); \
-	shrl $24,%eax; \
-	andb $0x0F,%al;
-
-/*
- *	Get the processor ID multiplied by 4
- */
-
-#define GET_PROCESSOR_OFFSET(x) \
-	movl SYMBOL_NAME(apic_reg), x ; \
-	movl 32( x ), x ; \
-	shrl $22, x ; \
-	andl $0x3C, x ;
-
-/* macro LEAVE_KERNEL decrements kernel_counter and resets kernel_flag and
-   saves processor variables if zero */
-#define	LEAVE_KERNEL \
-	pushfl; \
-	cli; \
-	GET_PROCESSOR_ID \
-	btrl $ SMP_FROM_SYSCALL,SYMBOL_NAME(smp_proc_in_lock)(,%eax,4); \
-	decl SYMBOL_NAME(syscall_count); \
-	decl SYMBOL_NAME(kernel_counter); \
-	jnz 1f;	\
-	movb $(NO_PROC_ID), SYMBOL_NAME(active_kernel_processor); \
-	lock; \
-	btrl $0, SYMBOL_NAME(kernel_flag); \
-1:	popfl;
-
-/* macro ENTER_KERNEL waits for entering the kernel, increments
-   kernel_counter, and reloads the processor variables if necessary
-   uses : %eax, %edx (pushed and popped)
-
-   Note: We go to great pains to minimise the number of locked operations.
-   We want to spin without locking, and lock when we attempt an update.
-   The pentium has a MESI cache so the spin without lock will exit when
-   another CPU write invalidates our cache, and the lock is avoided when
-   possible so we don't play ping-pong games with the cache line.
-
-*/
-
-#ifndef __SMP_PROF__
-
-#define SMP_PROF_A
-#define SMP_PROF_B
+#define GET_CURRENT(reg) \
+	GET_PROCESSOR_OFFSET(reg) \
+	movl SYMBOL_NAME(current_set)(reg),reg
 
 #else
 
-#define SMP_PROF_A movl $0,SYMBOL_NAME(smp_spins_syscall_cur)(,%eax,4);
-#define SMP_PROF_B incl SYMBOL_NAME(smp_spins_syscall)(,%eax,4); \
-        incl SYMBOL_NAME(smp_spins_syscall_cur)(,%eax,4);
+#define GET_CURRENT(reg) \
+	movl SYMBOL_NAME(current_set),reg
+
 #endif
-
-#define	ENTER_KERNEL \
-	pushl %eax; \
-	pushl %edx; \
-	pushfl; \
-	cli; \
-	GET_PROCESSOR_ID \
-	btsl $ SMP_FROM_SYSCALL,SYMBOL_NAME(smp_proc_in_lock)(,%eax,4); \
-	SMP_PROF_A \
-1:	lock; \
-	btsl $0, SYMBOL_NAME(kernel_flag); \
-	jnc 3f; \
-	cmpb SYMBOL_NAME(active_kernel_processor), %al; \
-	je 4f; \
-2:	SMP_PROF_B \
-	btl %al, SYMBOL_NAME(smp_invalidate_needed); \
-	jnc 5f; \
-	lock; \
-	btrl %al, SYMBOL_NAME(smp_invalidate_needed); \
-	jnc 5f; \
-	movl %cr3,%edx; \
-	movl %edx,%cr3; \
-5:	btl $0, SYMBOL_NAME(kernel_flag); \
-	jc 2b; \
-	jmp 1b; \
-3:	movb %al, SYMBOL_NAME(active_kernel_processor); \
-4:	incl SYMBOL_NAME(kernel_counter); \
-	incl SYMBOL_NAME(syscall_count); \
-	popfl; \
-	popl %edx; \
-	popl %eax;
-
-
-#define RESTORE_ALL \
-	LEAVE_KERNEL \
-	popl %ebx; \
-	popl %ecx; \
-	popl %edx; \
-	popl %esi; \
-	popl %edi; \
-	popl %ebp; \
-	popl %eax; \
-	pop %ds; \
-	pop %es; \
-	addl $4,%esp; \
-	iret
-
-#define GET_CURRENT \
-	GET_PROCESSOR_OFFSET(%ebx) \
-	movl SYMBOL_NAME(current_set)(%ebx),%ebx
-
-#else
-
-#define GET_CURRENT \
-	movl SYMBOL_NAME(current_set),%ebx
-
-#define RESTORE_ALL \
-	popl %ebx; \
-	popl %ecx; \
-	popl %edx; \
-	popl %esi; \
-	popl %edi; \
-	popl %ebp; \
-	popl %eax; \
-	pop %ds; \
-	pop %es; \
-	addl $4,%esp; \
-	iret
-#endif
-
 
 ENTRY(lcall7)
 	pushfl			# We get a different stack layout with call gates,
 	pushl %eax		# which has to be cleaned up later..
 	SAVE_ALL
-	GET_CURRENT
-#ifdef __SMP__
-	ENTER_KERNEL
-#endif
+	GET_CURRENT(%ebx)
 	movl EIP(%esp),%eax	# due to call gates, this is eflags, not eip..
 	movl CS(%esp),%edx	# this is eip..
 	movl EFLAGS(%esp),%ecx	# and this is cs..
@@ -240,12 +141,7 @@ ENTRY(lcall7)
 	movl %edx,EIP(%esp)	# Now we move them to their "normal" places
 	movl %ecx,CS(%esp)	#
 	movl %esp,%eax
-#ifdef __SMP__
-	GET_PROCESSOR_OFFSET(%edx)	# Processor offset into edx
-	movl SYMBOL_NAME(current_set)(,%edx),%edx
-#else
-	movl SYMBOL_NAME(current_set),%edx
-#endif
+	GET_CURRENT(%edx)
 	pushl %eax
 	movl exec_domain(%edx),%edx	# Get the execution domain
 	movl 4(%edx),%edx	# Get the lcall7 handler for the domain
@@ -253,12 +149,23 @@ ENTRY(lcall7)
 	popl %eax
 	jmp ret_from_sys_call
 
+#ifdef __SMP__
+	ALIGN
+	.globl	ret_from_smpfork
+ret_from_smpfork:
+	GET_CURRENT(%ebx)
+	movl	$NO_PROC_ID, SYMBOL_NAME(active_kernel_processor)
+	lock
+	btrl	$0, SYMBOL_NAME(kernel_flag)
+	sti
+	jmp	9f
+#endif /* __SMP__ */
+
 	ALIGN
 handle_bottom_half:
-	incl SYMBOL_NAME(intr_count)
-	call SYMBOL_NAME(do_bottom_half)
-	decl SYMBOL_NAME(intr_count)
-	jmp 9f
+	pushl $9f
+	jmp SYMBOL_NAME(do_bottom_half)
+
 	ALIGN
 reschedule:
 	pushl $ret_from_sys_call
@@ -267,10 +174,7 @@ reschedule:
 ENTRY(system_call)
 	pushl %eax			# save orig_eax
 	SAVE_ALL
-	GET_CURRENT
-#ifdef __SMP__
-	ENTER_KERNEL
-#endif
+	GET_CURRENT(%ebx)
 	cmpl $(NR_syscalls),%eax
 	jae badsys
 	testb $0x20,flags(%ebx)		# PF_TRACESYS
@@ -280,9 +184,7 @@ ENTRY(system_call)
 	ALIGN
 	.globl ret_from_sys_call
 ret_from_sys_call:
-#ifdef __SMP__
-	GET_CURRENT
-#endif
+	GET_CURRENT(%ebx)
 	cmpl $0,SYMBOL_NAME(intr_count)
 	jne 1f
 9:	movl SYMBOL_NAME(bh_mask),%eax
@@ -358,10 +260,7 @@ error_code:
 	movl $(KERNEL_DS),%edx
 	mov %dx,%ds
 	mov %dx,%es
-	GET_CURRENT
-#ifdef __SMP__
-	ENTER_KERNEL
-#endif
+	GET_CURRENT(%ebx)
 	call *%ecx
 	addl $8,%esp
 	jmp ret_from_sys_call
@@ -374,10 +273,7 @@ ENTRY(coprocessor_error)
 ENTRY(device_not_available)
 	pushl $-1		# mark this as an int
 	SAVE_ALL
-	GET_CURRENT
-#ifdef __SMP__
-	ENTER_KERNEL
-#endif
+	GET_CURRENT(%ebx)
 	pushl $ret_from_sys_call
 	movl %cr0,%eax
 	testl $0x4,%eax			# EM (math emulation bit)

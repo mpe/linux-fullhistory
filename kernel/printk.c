@@ -21,6 +21,8 @@
 #include <linux/mm.h>
 #include <linux/tty.h>
 #include <linux/tty_driver.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -64,87 +66,103 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 	unsigned long i, j, count;
 	int do_clear = 0;
 	char c;
-	int error;
+	int error = -EPERM;
 
+	lock_kernel();
 	if ((type != 3) && !suser())
-		return -EPERM;
+		goto out;
+	error = 0;
 	switch (type) {
-		case 0:		/* Close log */
-			return 0;
-		case 1:		/* Open log */
-			return 0;
-		case 2:		/* Read from log */
-			if (!buf || len < 0)
-				return -EINVAL;
-			if (!len)
-				return 0;
-			error = verify_area(VERIFY_WRITE,buf,len);
-			if (error)
-				return error;
-			cli();
-			while (!log_size) {
-				if (current->signal & ~current->blocked) {
-					sti();
-					return -ERESTARTSYS;
-				}
-				interruptible_sleep_on(&log_wait);
-			}
-			i = 0;
-			while (log_size && i < len) {
-				c = *((char *) log_buf+log_start);
-				log_start++;
-				log_size--;
-				log_start &= LOG_BUF_LEN-1;
+	case 0:		/* Close log */
+		break;
+	case 1:		/* Open log */
+		break;
+	case 2:		/* Read from log */
+		error = -EINVAL;
+		if (!buf || len < 0)
+			goto out;
+		error = 0;
+		if (!len)
+			goto out;
+		error = verify_area(VERIFY_WRITE,buf,len);
+		if (error)
+			goto out;
+		cli();
+		error = -ERESTARTSYS;
+		while (!log_size) {
+			if (current->signal & ~current->blocked) {
 				sti();
-				put_user(c,buf);
-				buf++;
-				i++;
-				cli();
+				goto out;
 			}
+			interruptible_sleep_on(&log_wait);
+		}
+		i = 0;
+		while (log_size && i < len) {
+			c = *((char *) log_buf+log_start);
+			log_start++;
+			log_size--;
+			log_start &= LOG_BUF_LEN-1;
 			sti();
-			return i;
-		case 4:		/* Read/clear last kernel messages */
-			do_clear = 1; 
-			/* FALL THRU */
-		case 3:		/* Read last kernel messages */
-			if (!buf || len < 0)
-				return -EINVAL;
-			if (!len)
-				return 0;
-			error = verify_area(VERIFY_WRITE,buf,len);
-			if (error)
-				return error;
-			count = len;
-			if (count > LOG_BUF_LEN)
-				count = LOG_BUF_LEN;
-			if (count > logged_chars)
-				count = logged_chars;
-			j = log_start + log_size - count;
-			for (i = 0; i < count; i++) {
-				c = *((char *) log_buf+(j++ & (LOG_BUF_LEN-1)));
-				put_user(c, buf++);
-			}
-			if (do_clear)
-				logged_chars = 0;
-			return i;
-		case 5:		/* Clear ring buffer */
+			put_user(c,buf);
+			buf++;
+			i++;
+			cli();
+		}
+		sti();
+		error = i;
+		break;
+	case 4:		/* Read/clear last kernel messages */
+		do_clear = 1; 
+		/* FALL THRU */
+	case 3:		/* Read last kernel messages */
+		error = -EINVAL;
+		if (!buf || len < 0)
+			goto out;
+		error = 0;
+		if (!len)
+			goto out;
+		error = verify_area(VERIFY_WRITE,buf,len);
+		if (error)
+			goto out;
+		count = len;
+		if (count > LOG_BUF_LEN)
+			count = LOG_BUF_LEN;
+		if (count > logged_chars)
+			count = logged_chars;
+		j = log_start + log_size - count;
+		for (i = 0; i < count; i++) {
+			c = *((char *) log_buf+(j++ & (LOG_BUF_LEN-1)));
+			put_user(c, buf++);
+		}
+		if (do_clear)
 			logged_chars = 0;
-			return 0;
-		case 6:		/* Disable logging to console */
-			console_loglevel = MINIMUM_CONSOLE_LOGLEVEL;
-			return 0;
-		case 7:		/* Enable logging to console */
-			console_loglevel = DEFAULT_CONSOLE_LOGLEVEL;
-			return 0;
-		case 8:
-			if (len < 1 || len > 8)
-				return -EINVAL;
-			if (len < MINIMUM_CONSOLE_LOGLEVEL)
-				len = MINIMUM_CONSOLE_LOGLEVEL;
-			console_loglevel = len;
-			return 0;
+		error = i;
+		break;
+	case 5:		/* Clear ring buffer */
+		logged_chars = 0;
+		break;
+	case 6:		/* Disable logging to console */
+		console_loglevel = MINIMUM_CONSOLE_LOGLEVEL;
+		break;
+	case 7:		/* Enable logging to console */
+		console_loglevel = DEFAULT_CONSOLE_LOGLEVEL;
+		break;
+	case 8:
+		error = -EINVAL;
+		if (len < 1 || len > 8)
+			goto out;
+		if (len < MINIMUM_CONSOLE_LOGLEVEL)
+			len = MINIMUM_CONSOLE_LOGLEVEL;
+		console_loglevel = len;
+		error = 0;
+		break;
+	default:
+		error = -EINVAL;
+		break;
 	}
-	return -EINVAL;
+out:
+	unlock_kernel();
+	return error;
 }
 
 

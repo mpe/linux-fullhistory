@@ -176,12 +176,19 @@ vmlinux: $(CONFIGURATION) init/main.o init/version.o linuxsubdirs
 		$(ARCHIVES) \
 		$(FILESYSTEMS) \
 		$(DRIVERS) \
-		$(LIBS) -o vmlinux
+		$(LIBS) \
+		-o vmlinux
 	$(NM) vmlinux | grep -v '\(compiled\)\|\(\.o$$\)\|\( a \)\|\(\.\.ng$$\)' | sort > System.map
 
 symlinks:
 	rm -f include/asm
 	( cd include ; ln -sf asm-$(ARCH) asm)
+	@if [ ! -d modules ]; then \
+		mkdir modules; \
+	fi
+	@if [ ! -d include/linux/modules ]; then \
+		mkdir include/linux/modules; \
+	fi
 
 oldconfig: symlinks
 	$(CONFIG_SHELL) scripts/Configure -d arch/$(ARCH)/config.in
@@ -315,7 +322,7 @@ clean:	archclean
 	rm -f core `find . -type f -name 'core' -print`
 	rm -f vmlinux System.map
 	rm -f .tmp* drivers/sound/configure
-	rm -f modules/*
+	rm -f `find modules/ -type f -print`
 	rm -f submenu*
 
 mrproper: clean
@@ -331,7 +338,8 @@ mrproper: clean
 	rm -f .depend `find . -name .depend -print`
 	rm -f .hdepend scripts/mkdep
 	rm -f $(TOPDIR)/include/linux/modversions.h
-	rm -f $(TOPDIR)/include/linux/modules/*
+	rm -rf $(TOPDIR)/include/linux/modules
+	rm -rf modules
 
 
 distclean: mrproper

@@ -476,7 +476,7 @@ static struct file_operations romfs_file_operations = {
         generic_file_read,	/* read */
 	NULL,			/* write - bad */
 	NULL,			/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* open */
@@ -513,7 +513,7 @@ static struct file_operations romfs_dir_operations = {
         NULL,			/* read */
 	NULL,			/* write - bad */
 	romfs_readdir,		/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* open */

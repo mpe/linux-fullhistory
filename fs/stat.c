@@ -11,6 +11,8 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -112,11 +114,14 @@ asmlinkage int sys_stat(char * filename, struct __old_kernel_stat * statbuf)
 	struct inode * inode;
 	int error;
 
+	lock_kernel();
 	error = namei(filename,&inode);
 	if (error)
-		return error;
+		goto out;
 	error = cp_old_stat(inode,statbuf);
 	iput(inode);
+out:
+	unlock_kernel();
 	return error;
 }
 #endif
@@ -126,11 +131,14 @@ asmlinkage int sys_newstat(char * filename, struct stat * statbuf)
 	struct inode * inode;
 	int error;
 
+	lock_kernel();
 	error = namei(filename,&inode);
 	if (error)
-		return error;
+		goto out;
 	error = cp_new_stat(inode,statbuf);
 	iput(inode);
+out:
+	unlock_kernel();
 	return error;
 }
 
@@ -145,11 +153,14 @@ asmlinkage int sys_lstat(char * filename, struct __old_kernel_stat * statbuf)
 	struct inode * inode;
 	int error;
 
+	lock_kernel();
 	error = lnamei(filename,&inode);
 	if (error)
-		return error;
+		goto out;
 	error = cp_old_stat(inode,statbuf);
 	iput(inode);
+out:
+	unlock_kernel();
 	return error;
 }
 
@@ -160,11 +171,14 @@ asmlinkage int sys_newlstat(char * filename, struct stat * statbuf)
 	struct inode * inode;
 	int error;
 
+	lock_kernel();
 	error = lnamei(filename,&inode);
 	if (error)
-		return error;
+		goto out;
 	error = cp_new_stat(inode,statbuf);
 	iput(inode);
+out:
+	unlock_kernel();
 	return error;
 }
 
@@ -178,10 +192,15 @@ asmlinkage int sys_fstat(unsigned int fd, struct __old_kernel_stat * statbuf)
 {
 	struct file * f;
 	struct inode * inode;
+	int ret = -EBADF;
 
+	lock_kernel();
 	if (fd >= NR_OPEN || !(f=current->files->fd[fd]) || !(inode=f->f_inode))
-		return -EBADF;
-	return cp_old_stat(inode,statbuf);
+		goto out;
+	ret = cp_old_stat(inode,statbuf);
+out:
+	unlock_kernel();
+	return ret;
 }
 
 #endif
@@ -190,28 +209,38 @@ asmlinkage int sys_newfstat(unsigned int fd, struct stat * statbuf)
 {
 	struct file * f;
 	struct inode * inode;
+	int err = -EBADF;
 
+	lock_kernel();
 	if (fd >= NR_OPEN || !(f=current->files->fd[fd]) || !(inode=f->f_inode))
-		return -EBADF;
-	return cp_new_stat(inode,statbuf);
+		goto out;
+	err = cp_new_stat(inode,statbuf);
+out:
+	unlock_kernel();
+	return err;
 }
 
 asmlinkage int sys_readlink(const char * path, char * buf, int bufsiz)
 {
 	struct inode * inode;
-	int error;
+	int error = -EINVAL;
 
+	lock_kernel();
 	if (bufsiz <= 0)
-		return -EINVAL;
+		goto out;
 	error = verify_area(VERIFY_WRITE,buf,bufsiz);
 	if (error)
-		return error;
+		goto out;
 	error = lnamei(path,&inode);
 	if (error)
-		return error;
+		goto out;
+	error = -EINVAL;
 	if (!inode->i_op || !inode->i_op->readlink) {
 		iput(inode);
-		return -EINVAL;
+		goto out;
 	}
-	return inode->i_op->readlink(inode,buf,bufsiz);
+	error = inode->i_op->readlink(inode,buf,bufsiz);
+out:
+	unlock_kernel();
+	return error;
 }

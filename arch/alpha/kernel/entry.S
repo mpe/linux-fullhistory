@@ -199,6 +199,8 @@ entIF:
 .align 3
 .ent	kernel_clone
 kernel_clone:
+	.frame $30, 0, $26
+	.prologue 0
 	subq $30,6*8,$30
 	stq $31,0($30)
 	stq $26,8($30)
@@ -221,17 +223,19 @@ kernel_clone:
 .globl	__kernel_thread
 .ent	__kernel_thread
 __kernel_thread:
+	.frame $30, 4*8, $26
 	subq $30,4*8,$30
-	stq $9,0($30)
-	stq $10,8($30)
-	stq $26,16($30)
+	stq $10,16($30)
+	stq $9,8($30)
+	stq $26,0($30)
+	.prologue 0
 	bis $17,$17,$9		/* save fn */
 	bis $18,$18,$10		/* save arg */
 	bsr $26,kernel_clone
 	bne $20,1f		/* $20 is non-zero in child */
-	ldq $9,0($30)
-	ldq $10,8($30)
-	ldq $26,16($30)
+	ldq $26,0($30)
+	ldq $9,8($30)
+	ldq $10,16($30)
 	addq $30,4*8,$30
 	ret $31,($26),1
 /* this is in child: look out as we don't have any stack here.. */

@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.87 1996/12/30 06:16:21 davem Exp $
+/*  $Id: process.c,v 1.89 1997/01/06 06:52:23 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -23,6 +23,8 @@
 #include <linux/user.h>
 #include <linux/a.out.h>
 #include <linux/config.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/auxio.h>
 #include <asm/oplib.h>
@@ -47,8 +49,11 @@ extern void fpsave(unsigned long *, unsigned long *, void *, unsigned long *);
  */
 asmlinkage int sys_idle(void)
 {
+	int ret = -EPERM;
+
+	lock_kernel();
 	if (current->pid != 0)
-		return -EPERM;
+		goto out;
 
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
@@ -85,7 +90,10 @@ asmlinkage int sys_idle(void)
 		}
 		schedule();
 	}
-	return 0;
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 #else
@@ -95,13 +103,19 @@ asmlinkage int sys_idle(void)
  */
 asmlinkage int sys_idle(void)
 {
+	int ret = -EPERM;
+
+	lock_kernel();
 	if (current->pid != 0)
-		return -EPERM;
+		goto out;
 
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
 	schedule();
-	return 0;
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 /* This is being executed in task 0 'user space'. */
@@ -280,7 +294,6 @@ void show_thread(struct thread_struct *tss)
  */
 void exit_thread(void)
 {
-	kill_user_windows();
 #ifndef __SMP__
 	if(last_task_used_math == current) {
 #else
@@ -300,9 +313,7 @@ void exit_thread(void)
 
 void flush_thread(void)
 {
-	/* Make sure old user windows don't get in the way. */
-	kill_user_windows();
-
+	current->tss.w_saved = 0;
 	current->tss.sstk_info.cur_status = 0;
 	current->tss.sstk_info.the_stack = 0;
 
@@ -406,7 +417,11 @@ clone_stackframe(struct sparc_stackf *dst, struct sparc_stackf *src)
  *       allocate the task_struct and kernel stack in
  *       do_fork().
  */
+#ifdef __SMP__
+extern void ret_from_smpfork(void);
+#else
 extern void ret_from_syscall(void);
+#endif
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		struct task_struct *p, struct pt_regs *regs)
@@ -439,8 +454,13 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	copy_regwin(new_stack, (((struct reg_window *) regs) - 1));
 
 	p->tss.ksp = p->saved_kernel_stack = (unsigned long) new_stack;
+#ifdef __SMP__
+	p->tss.kpc = (((unsigned long) ret_from_smpfork) - 0x8);
+	p->tss.kpsr = current->tss.fork_kpsr | PSR_PIL;
+#else
 	p->tss.kpc = (((unsigned long) ret_from_syscall) - 0x8);
 	p->tss.kpsr = current->tss.fork_kpsr;
+#endif
 	p->tss.kwim = current->tss.fork_kwim;
 	p->tss.kregs = childregs;
 
@@ -548,11 +568,14 @@ asmlinkage int sparc_execve(struct pt_regs *regs)
 	if(regs->u_regs[UREG_G1] == 0)
 		base = 1;
 
+	lock_kernel();
 	error = getname((char *) regs->u_regs[base + UREG_I0], &filename);
 	if(error)
-		return error;
+		goto out;
 	error = do_execve(filename, (char **) regs->u_regs[base + UREG_I1],
 			  (char **) regs->u_regs[base + UREG_I2], regs);
 	putname(filename);
+out:
+	unlock_kernel();
 	return error;
 }

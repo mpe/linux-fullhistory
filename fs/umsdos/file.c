@@ -66,7 +66,7 @@ struct file_operations umsdos_file_operations = {
 	UMSDOS_file_read,	/* read */
 	UMSDOS_file_write,	/* write */
 	NULL,				/* readdir - bad */
-	NULL,				/* select - default */
+	NULL,				/* poll - default */
 	NULL,				/* ioctl - default */
 	generic_file_mmap,		/* mmap */
 	NULL,				/* no special open is needed */
@@ -100,7 +100,7 @@ struct file_operations umsdos_file_operations_no_bmap = {
 	UMSDOS_file_read,	/* read */
 	UMSDOS_file_write,	/* write */
 	NULL,				/* readdir - bad */
-	NULL,				/* select - default */
+	NULL,				/* poll - default */
 	NULL,				/* ioctl - default */
 	fat_mmap,			/* mmap */
 	NULL,				/* no special open is needed */

@@ -10,6 +10,8 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/termios.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/fcntl.h> /* for f_flags values */
 
 #include <asm/uaccess.h>
@@ -48,22 +50,24 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
 	unsigned int flag;
-	int on, error;
+	int on, error = -EBADF;
 
+	lock_kernel();
 	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
-		return -EBADF;
+		goto out;
+	error = 0;
 	switch (cmd) {
 		case FIOCLEX:
 			FD_SET(fd, &current->files->close_on_exec);
-			return 0;
+			break;
 
 		case FIONCLEX:
 			FD_CLR(fd, &current->files->close_on_exec);
-			return 0;
+			break;
 
 		case FIONBIO:
 			if ((error = get_user(on, (int *)arg)) != 0)
-				return error;
+				break;
 			flag = O_NONBLOCK;
 #ifdef __sparc__
 			/* SunOS compatability item. */
@@ -74,25 +78,27 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 				filp->f_flags |= flag;
 			else
 				filp->f_flags &= ~flag;
-			return 0;
+			break;
 
 		case FIOASYNC: /* O_SYNC is not yet implemented,
 				  but it's here for completeness. */
 			if ((error = get_user(on, (int *)arg)) != 0)
-				return error;
+				break;
 			if (on)
 				filp->f_flags |= O_SYNC;
 			else
 				filp->f_flags &= ~O_SYNC;
-			return 0;
+			break;
 
 		default:
 			if (filp->f_inode && S_ISREG(filp->f_inode->i_mode))
-				return file_ioctl(filp, cmd, arg);
-
-			if (filp->f_op && filp->f_op->ioctl)
-				return filp->f_op->ioctl(filp->f_inode, filp, cmd, arg);
-
-			return -ENOTTY;
+				error = file_ioctl(filp, cmd, arg);
+			else if (filp->f_op && filp->f_op->ioctl)
+				error = filp->f_op->ioctl(filp->f_inode, filp, cmd, arg);
+			else
+				error = -ENOTTY;
 	}
+out:
+	unlock_kernel();
+	return error;
 }

@@ -3,7 +3,7 @@
  *	     Copyright (C) 1993, 1994, 1995 Eric Youngdale
  *
  *  adapted from:
- *	sd.c Copyright (C) 1992 Drew Eckhardt 
+ *	sd.c Copyright (C) 1992 Drew Eckhardt
  *	Linux scsi disk driver by
  *		Drew Eckhardt <drew@colorado.edu>
  *
@@ -54,7 +54,7 @@ static int sr_attach(Scsi_Device *);
 static int sr_detect(Scsi_Device *);
 static void sr_detach(Scsi_Device *);
 
-struct Scsi_Device_Template sr_template = {NULL, "cdrom", "sr", NULL, TYPE_ROM, 
+struct Scsi_Device_Template sr_template = {NULL, "cdrom", "sr", NULL, TYPE_ROM,
                                            SCSI_CDROM_MAJOR, 0, 0, 0, 1,
                                            sr_detect, sr_init,
                                            sr_finish, sr_attach, sr_detach};
@@ -74,9 +74,10 @@ static void sr_release(struct cdrom_device_info *cdi)
 {
 	sync_dev(cdi->dev);
 	scsi_CDs[MINOR(cdi->dev)].device->access_count--;
-	if (scsi_CDs[MINOR(cdi->dev)].device->host->hostt->usage_count)
-	    (*scsi_CDs[MINOR(cdi->dev)].device->host->hostt->usage_count)--;
-	if(sr_template.usage_count) (*sr_template.usage_count)--;
+	if (scsi_CDs[MINOR(cdi->dev)].device->host->hostt->module)
+		__MOD_DEC_USE_COUNT(scsi_CDs[MINOR(cdi->dev)].device->host->hostt->module);
+	if(sr_template.module)
+        	__MOD_DEC_USE_COUNT(sr_template.module);
 }
 
 static struct cdrom_device_ops sr_dops = {
@@ -116,21 +117,21 @@ int sr_media_change(struct cdrom_device_info *cdi, int slot){
                 /* no changer support */
                 return -EINVAL;
         }
-        
+
 	retval = scsi_ioctl(scsi_CDs[MINOR(cdi->dev)].device,
                             SCSI_IOCTL_TEST_UNIT_READY, 0);
-    
+
 	if(retval){
                 /* Unable to test, unit probably not ready.  This usually
 		 * means there is no disc in the drive.  Mark as changed,
 		 * and we will figure it out later once the drive is
 		 * available again.  */
-	
+
                 scsi_CDs[MINOR(cdi->dev)].device->changed = 1;
                 return 1; /* This will force a flush, if called from
                            * check_disk_change */
 	};
-    
+
 	retval = scsi_CDs[MINOR(cdi->dev)].device->changed;
         scsi_CDs[MINOR(cdi->dev)].device->changed = 0;
         /* If the disk changed, the capacity will now be different,
@@ -145,7 +146,7 @@ int sr_media_change(struct cdrom_device_info *cdi, int slot){
 }
 
 /*
- * rw_intr is the interrupt routine for the device driver.  It will be notified on the 
+ * rw_intr is the interrupt routine for the device driver.  It will be notified on the
  * end of a SCSI read / write, and will take on of several actions based on success or failure.
  */
 
@@ -155,7 +156,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 	int this_count = SCpnt->this_count;
 	int good_sectors = (result == 0 ? this_count : 0);
 	int block_sectors = 0;
-    
+
 #ifdef DEBUG
 	printk("sr.c done: %x %x\n",result, SCpnt->request.bh->b_data);
 #endif
@@ -203,24 +204,24 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 	    {
 		int offset;
 		offset = (SCpnt->request.sector % 4) << 9;
-		memcpy((char *)SCpnt->request.buffer, 
-		       (char *)SCpnt->buffer + offset, 
+		memcpy((char *)SCpnt->request.buffer,
+		       (char *)SCpnt->buffer + offset,
 		       good_sectors << 9);
 		/* Even though we are not using scatter-gather, we look
 		 * ahead and see if there is a linked request for the
 		 * other half of this buffer.  If there is, then satisfy
 		 * it. */
 		if((offset == 0) && good_sectors == 2 &&
-		   SCpnt->request.nr_sectors > good_sectors && 
+		   SCpnt->request.nr_sectors > good_sectors &&
 		   SCpnt->request.bh &&
 		   SCpnt->request.bh->b_reqnext &&
 		   SCpnt->request.bh->b_reqnext->b_size == 1024) {
-		    memcpy((char *)SCpnt->request.bh->b_reqnext->b_data, 
-			   (char *)SCpnt->buffer + 1024, 
+		    memcpy((char *)SCpnt->request.bh->b_reqnext->b_data,
+			   (char *)SCpnt->buffer + 1024,
 			   1024);
 		    good_sectors += 2;
 		};
-		
+
 		scsi_free(SCpnt->buffer, 2048);
 	    }
 	} else {
@@ -241,19 +242,19 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		    if(good_sectors > SCpnt->request.nr_sectors)
 		good_sectors -= 2;
 	};
-	
+
 #ifdef DEBUG
-		printk("(%x %x %x) ",SCpnt->request.bh, SCpnt->request.nr_sectors, 
+		printk("(%x %x %x) ",SCpnt->request.bh, SCpnt->request.nr_sectors,
 		       good_sectors);
 #endif
 		if (SCpnt->request.nr_sectors > this_count)
-	{	 
+	{
 			SCpnt->request.errors = 0;
 			if (!SCpnt->request.bh)
 			    panic("sr.c: linked page request (%lx %x)",
 		      SCpnt->request.sector, this_count);
 	}
-	
+
 	SCpnt = end_scsi_request(SCpnt, 1, good_sectors);  /* All done */
 	if (result == 0)
 	  {
@@ -261,10 +262,10 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 	    return;
 	  }
     }
-    
+
     if (good_sectors == 0) {
 	/* We only come through here if no sectors were read successfully. */
-    
+
     /* Free up any indirection buffers we allocated for DMA purposes. */
 	if (SCpnt->use_sg) {
 	struct scatterlist * sgpnt;
@@ -280,22 +281,22 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 	if (SCpnt->buffer != SCpnt->request.buffer)
 	    scsi_free(SCpnt->buffer, SCpnt->bufflen);
 	}
-    
+
     }
 
 	if (driver_byte(result) != 0) {
 		if ((SCpnt->sense_buffer[0] & 0x7f) == 0x70) {
 			if ((SCpnt->sense_buffer[2] & 0xf) == UNIT_ATTENTION) {
-				/* detected disc change.  set a bit and quietly refuse 
+				/* detected disc change.  set a bit and quietly refuse
 				 * further access.	*/
-		
+
 				scsi_CDs[DEVICE_NR(SCpnt->request.rq_dev)].device->changed = 1;
 				SCpnt = end_scsi_request(SCpnt, 0, this_count);
 				requeue_sr_request(SCpnt);
 				return;
 			}
 		}
-	    
+
 		if (SCpnt->sense_buffer[2] == ILLEGAL_REQUEST) {
 			printk("CD-ROM error: ");
 			print_sense("sr", SCpnt);
@@ -311,7 +312,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 				requeue_sr_request(SCpnt); /* Do next request */
 				return;
 			}
-	    
+
 		}
 
 		if (SCpnt->sense_buffer[2] == NOT_READY) {
@@ -324,7 +325,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		if (SCpnt->sense_buffer[2] == MEDIUM_ERROR) {
 		    printk("scsi%d: MEDIUM ERROR on "
 			   "channel %d, id %d, lun %d, CDB: ",
-			   SCpnt->host->host_no, (int) SCpnt->channel, 
+			   SCpnt->host->host_no, (int) SCpnt->channel,
 			   (int) SCpnt->target, (int) SCpnt->lun);
 		    print_command(SCpnt->cmnd);
 		    print_sense("sr", SCpnt);
@@ -336,7 +337,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		if (SCpnt->sense_buffer[2] == VOLUME_OVERFLOW) {
 		    printk("scsi%d: VOLUME OVERFLOW on "
 			   "channel %d, id %d, lun %d, CDB: ",
-			   SCpnt->host->host_no, (int) SCpnt->channel, 
+			   SCpnt->host->host_no, (int) SCpnt->channel,
 			   (int) SCpnt->target, (int) SCpnt->lun);
 		    print_command(SCpnt->cmnd);
 		    print_sense("sr", SCpnt);
@@ -345,18 +346,18 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		    return;
 		}
     }
-	
+
 	/* We only get this far if we have an error we have not recognized */
 	if(result) {
-	printk("SCSI CD error : host %d id %d lun %d return code = %03x\n", 
-	       scsi_CDs[DEVICE_NR(SCpnt->request.rq_dev)].device->host->host_no, 
+	printk("SCSI CD error : host %d id %d lun %d return code = %03x\n",
+	       scsi_CDs[DEVICE_NR(SCpnt->request.rq_dev)].device->host->host_no,
 	       scsi_CDs[DEVICE_NR(SCpnt->request.rq_dev)].device->id,
 	       scsi_CDs[DEVICE_NR(SCpnt->request.rq_dev)].device->lun,
 	       result);
-	    
+
 	if (status_byte(result) == CHECK_CONDITION)
 	    print_sense("sr", SCpnt);
-	
+
 	SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.current_nr_sectors);
 	requeue_sr_request(SCpnt);
     }
@@ -367,9 +368,10 @@ static int sr_open(struct cdrom_device_info *cdi, int purpose)
     check_disk_change(cdi->dev);
 
     scsi_CDs[MINOR(cdi->dev)].device->access_count++;
-    if (scsi_CDs[MINOR(cdi->dev)].device->host->hostt->usage_count)
-	(*scsi_CDs[MINOR(cdi->dev)].device->host->hostt->usage_count)++;
-    if(sr_template.usage_count) (*sr_template.usage_count)++;
+    if (scsi_CDs[MINOR(cdi->dev)].device->host->hostt->module)
+	__MOD_INC_USE_COUNT(scsi_CDs[MINOR(cdi->dev)].device->host->hostt->module);
+    if(sr_template.module)
+        __MOD_INC_USE_COUNT(sr_template.module);
 
     /* If this device did not have media in the drive at boot time, then
      * we would have been unable to get the sector size.  Check to see if
@@ -385,7 +387,7 @@ static int sr_open(struct cdrom_device_info *cdi, int purpose)
 /*
  * do_sr_request() is the request handler function for the sr driver.
  * Its function in life is to take block device requests, and
- * translate them to SCSI commands.  
+ * translate them to SCSI commands.
  */
 
 static void do_sr_request (void)
@@ -395,7 +397,7 @@ static void do_sr_request (void)
     Scsi_Device * SDev;
     unsigned long flags;
     int flag = 0;
-    
+
     while (1==1){
 	save_flags(flags);
 	cli();
@@ -403,11 +405,11 @@ static void do_sr_request (void)
 	    restore_flags(flags);
 	    return;
 	};
-	
+
 	INIT_SCSI_REQUEST;
- 
+
 	SDev = scsi_CDs[DEVICE_NR(CURRENT->rq_dev)].device;
-	
+
 	/*
 	 * I am not sure where the best place to do this is.  We need
 	 * to hook in a place where we are likely to come if in user
@@ -427,20 +429,20 @@ static void do_sr_request (void)
  	    }
  	    SDev->was_reset = 0;
 	}
-	
+
 	if (flag++ == 0)
 	    SCpnt = allocate_device(&CURRENT,
-				    scsi_CDs[DEVICE_NR(CURRENT->rq_dev)].device, 0); 
+				    scsi_CDs[DEVICE_NR(CURRENT->rq_dev)].device, 0);
 	else SCpnt = NULL;
 	restore_flags(flags);
-	
+
 	/* This is a performance enhancement.  We dig down into the request list and
 	 * try to find a queueable request (i.e. device not busy, and host able to
 	 * accept another command.  If we find one, then we queue it. This can
 	 * make a big difference on systems with more than one disk drive.  We want
 	 * to have the interrupts off when monkeying with the request list, because
 	 * otherwise the kernel might try to slip in a request in between somewhere. */
-	
+
 	if (!SCpnt && sr_template.nr_dev > 1){
 	    struct request *req1;
 	    req1 = NULL;
@@ -455,60 +457,60 @@ static void do_sr_request (void)
 		req = req->next;
 	    };
 	    if (SCpnt && req->rq_status == RQ_INACTIVE) {
-		if (req == CURRENT) 
+		if (req == CURRENT)
 		    CURRENT = CURRENT->next;
 		else
 		    req1->next = req->next;
 	    };
 	    restore_flags(flags);
 	};
-	
+
 	if (!SCpnt)
 	    return; /* Could not find anything to do */
-	
+
 	wake_up(&wait_for_request);
 
 	/* Queue command */
 	requeue_sr_request(SCpnt);
     };  /* While */
-}    
+}
 
 void requeue_sr_request (Scsi_Cmnd * SCpnt)
 {
 	unsigned int dev, block, realcount;
 	unsigned char cmd[10], *buffer, tries;
 	int this_count, start, end_rec;
-    
+
 	tries = 2;
-    
+
  repeat:
 	if(!SCpnt || SCpnt->request.rq_status == RQ_INACTIVE) {
 		do_sr_request();
 		return;
 	}
-    
+
 	dev =  MINOR(SCpnt->request.rq_dev);
-	block = SCpnt->request.sector;	
+	block = SCpnt->request.sector;
 	buffer = NULL;
 	this_count = 0;
-    
+
 	if (dev >= sr_template.nr_dev) {
 		/* printk("CD-ROM request error: invalid device.\n");			*/
 		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		tries = 2;
 		goto repeat;
 	}
-    
+
 	if (!scsi_CDs[dev].use) {
 		/* printk("CD-ROM request error: device marked not in use.\n");		*/
 		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		tries = 2;
 		goto repeat;
 	}
-    
+
 	if (scsi_CDs[dev].device->changed) {
-	/* 
-	 * quietly refuse to do anything to a changed disc 
+	/*
+	 * quietly refuse to do anything to a changed disc
 	 * until the changed bit has been reset
 	 */
 		/* printk("CD-ROM has been changed.  Prohibiting further I/O.\n");	*/
@@ -516,41 +518,41 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 		tries = 2;
 		goto repeat;
 	}
-	
+
 	switch (SCpnt->request.cmd)
     {
-    case WRITE: 		
+    case WRITE:
 	SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 	goto repeat;
 	break;
-    case READ : 
+    case READ :
 	cmd[0] = READ_6;
 	break;
-    default : 
+    default :
 	panic ("Unknown sr command %d\n", SCpnt->request.cmd);
     }
-	
+
 	cmd[1] = (SCpnt->lun << 5) & 0xe0;
-    
+
     /*
      * Now do the grungy work of figuring out which sectors we need, and
      * where in memory we are going to put them.
-     * 
+     *
      * The variables we need are:
-     * 
-     * this_count= number of 512 byte sectors being read 
+     *
+     * this_count= number of 512 byte sectors being read
      * block     = starting cdrom sector to read.
      * realcount = # of cdrom sectors to read
-     * 
+     *
      * The major difference between a scsi disk and a scsi cdrom
      * is that we will always use scatter-gather if we can, because we can
      * work around the fact that the buffer cache has a block size of 1024,
      * and we have 2048 byte sectors.  This code should work for buffers that
      * are any multiple of 512 bytes long.
      */
-    
+
 	SCpnt->use_sg = 0;
-    
+
 	if (SCpnt->host->sg_tablesize > 0 &&
 	    (!need_isa_buffer ||
 	 dma_free_sectors >= 10)) {
@@ -604,7 +606,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 								    if needed */
 		count++;
 	    };
-	    for(bh = SCpnt->request.bh; count < SCpnt->use_sg; 
+	    for(bh = SCpnt->request.bh; count < SCpnt->use_sg;
 		count++, bh = bh->b_reqnext) {
 		if (bh) { /* Need a placeholder at the end of the record? */
 		    sgpnt[count].address = bh->b_data;
@@ -637,7 +639,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 			printk("Warning: Running low on SCSI DMA buffers");
 			/* Try switching back to a non scatter-gather operation. */
 			while(--count >= 0){
-			    if(sgpnt[count].alt_address) 
+			    if(sgpnt[count].alt_address)
 				scsi_free(sgpnt[count].address, sgpnt[count].length);
 			};
 			SCpnt->use_sg = 0;
@@ -648,32 +650,32 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	    };  /* for loop to fill list */
 #ifdef DEBUG
 	    printk("SR: %d %d %d %d %d *** ",SCpnt->use_sg, SCpnt->request.sector,
-		   this_count, 
+		   this_count,
 		   SCpnt->request.current_nr_sectors,
 		   SCpnt->request.nr_sectors);
 	    for(count=0; count<SCpnt->use_sg; count++)
 		printk("SGlist: %d %x %x %x\n", count,
-		       sgpnt[count].address, 
-		       sgpnt[count].alt_address, 
+		       sgpnt[count].address,
+		       sgpnt[count].alt_address,
 		       sgpnt[count].length);
 #endif
 	};  /* Able to allocate scatter-gather list */
 	};
-	
+
 	if (SCpnt->use_sg == 0){
 	/* We cannot use scatter-gather.  Do this the old fashion way */
-	if (!SCpnt->request.bh)  	
+	if (!SCpnt->request.bh)
 	    this_count = SCpnt->request.nr_sectors;
 	else
 	    this_count = (SCpnt->request.bh->b_size >> 9);
-	
+
 	start = block % 4;
 	if (start)
-	    {				  
-	    this_count = ((this_count > 4 - start) ? 
+	    {
+	    this_count = ((this_count > 4 - start) ?
 			  (4 - start) : (this_count));
 	    buffer = (unsigned char *) scsi_malloc(2048);
-	    } 
+	    }
 	else if (this_count < 4)
 	    {
 	    buffer = (unsigned char *) scsi_malloc(2048);
@@ -687,24 +689,24 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 		buffer = (unsigned char *) scsi_malloc(this_count << 9);
 	    }
 	};
-    
+
 	if (scsi_CDs[dev].sector_size == 2048)
 	block = block >> 2; /* These are the sectors that the cdrom uses */
 	else
 	block = block & 0xfffffffc;
-    
+
 	realcount = (this_count + 3) / 4;
-    
+
 	if (scsi_CDs[dev].sector_size == 512) realcount = realcount << 2;
-    
-	if (((realcount > 0xff) || (block > 0x1fffff)) && scsi_CDs[dev].ten) 
+
+	if (((realcount > 0xff) || (block > 0x1fffff)) && scsi_CDs[dev].ten)
     {
 		if (realcount > 0xffff)
 	{
 			realcount = 0xffff;
 			this_count = realcount * (scsi_CDs[dev].sector_size >> 9);
 	}
-	
+
 		cmd[0] += READ_10 - READ_6 ;
 		cmd[2] = (unsigned char) (block >> 24) & 0xff;
 		cmd[3] = (unsigned char) (block >> 16) & 0xff;
@@ -721,16 +723,16 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	    realcount = 0xff;
 	    this_count = realcount * (scsi_CDs[dev].sector_size >> 9);
 	}
-	
+
 	cmd[1] |= (unsigned char) ((block >> 16) & 0x1f);
 	cmd[2] = (unsigned char) ((block >> 8) & 0xff);
 	cmd[3] = (unsigned char) block & 0xff;
 	cmd[4] = (unsigned char) realcount;
 	cmd[5] = 0;
-    }   
-    
+    }
+
 #ifdef DEBUG
-    { 
+    {
 	int i;
 	printk("ReadCD: %d %d %d %d\n",block, realcount, buffer, this_count);
 	printk("Use sg: %d\n", SCpnt->use_sg);
@@ -739,7 +741,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	printk("\n");
     };
 #endif
-    
+
     /* Some dumb host adapters can speed transfers by knowing the
      * minimum transfersize in advance.
      *
@@ -749,47 +751,47 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
      * assume that we can at least transfer the minimum of the buffer
      * size (1024) and the sector size between each connect / disconnect.
      */
-    
+
     SCpnt->transfersize = (scsi_CDs[dev].sector_size > 1024) ?
 	1024 : scsi_CDs[dev].sector_size;
-    
+
 	SCpnt->this_count = this_count;
-	scsi_do_cmd (SCpnt, (void *) cmd, buffer, 
-		 realcount * scsi_CDs[dev].sector_size, 
+	scsi_do_cmd (SCpnt, (void *) cmd, buffer,
+		 realcount * scsi_CDs[dev].sector_size,
 		 rw_intr, SR_TIMEOUT, MAX_RETRIES);
 }
 
 static int sr_detect(Scsi_Device * SDp){
-    
+
     if(SDp->type != TYPE_ROM && SDp->type != TYPE_WORM) return 0;
-    
-    printk("Detected scsi CD-ROM sr%d at scsi%d, channel %d, id %d, lun %d\n", 
+
+    printk("Detected scsi CD-ROM sr%d at scsi%d, channel %d, id %d, lun %d\n",
 	   sr_template.dev_noticed++,
-	   SDp->host->host_no, SDp->channel, SDp->id, SDp->lun); 
-    
+	   SDp->host->host_no, SDp->channel, SDp->id, SDp->lun);
+
     return 1;
 }
 
 static int sr_attach(Scsi_Device * SDp){
     Scsi_CD * cpnt;
     int i;
-    
+
     if(SDp->type != TYPE_ROM && SDp->type != TYPE_WORM) return 1;
-    
+
     if (sr_template.nr_dev >= sr_template.dev_max)
     {
 	SDp->attached--;
 	return 1;
     }
-    
-    for(cpnt = scsi_CDs, i=0; i<sr_template.dev_max; i++, cpnt++) 
+
+    for(cpnt = scsi_CDs, i=0; i<sr_template.dev_max; i++, cpnt++)
 	if(!cpnt->device) break;
-    
+
     if(i >= sr_template.dev_max) panic ("scsi_devices corrupt (sr)");
-    
+
     SDp->scsi_request_fn = do_sr_request;
     scsi_CDs[i].device = SDp;
-    
+
     scsi_CDs[i].cdi.ops        = &sr_dops;
     scsi_CDs[i].cdi.handle     = &scsi_CDs[i];
     scsi_CDs[i].cdi.dev        = MKDEV(MAJOR_NR,i);
@@ -797,7 +799,7 @@ static int sr_attach(Scsi_Device * SDp){
     scsi_CDs[i].cdi.speed      = 1;
     scsi_CDs[i].cdi.capacity   = 1;
     register_cdrom(&scsi_CDs[i].cdi, "sr");
-            
+
 #ifdef CONFIG_BLK_DEV_SR_VENDOR
     sr_vendor_init(i);
 #endif
@@ -812,10 +814,10 @@ static int sr_attach(Scsi_Device * SDp){
 static void sr_init_done (Scsi_Cmnd * SCpnt)
 {
     struct request * req;
-    
+
     req = &SCpnt->request;
     req->rq_status = RQ_SCSI_DONE; /* Busy, but indicate request done */
-    
+
     if (req->sem != NULL) {
 	up(req->sem);
     }
@@ -826,10 +828,10 @@ void get_sectorsize(int i){
     unsigned char *buffer;
     int the_result, retries;
     Scsi_Cmnd * SCpnt;
-    
+
     buffer = (unsigned char *) scsi_malloc(512);
     SCpnt = allocate_device(NULL, scsi_CDs[i].device, 1);
-    
+
     retries = 3;
     do {
 	cmd[0] = READ_CAPACITY;
@@ -837,7 +839,7 @@ void get_sectorsize(int i){
 	memset ((void *) &cmd[2], 0, 8);
 	SCpnt->request.rq_status = RQ_SCSI_BUSY;  /* Mark as really busy */
 	SCpnt->cmd_len = 0;
-	
+
 	memset(buffer, 0, 8);
 
 	/* Do the command and wait.. */
@@ -850,16 +852,16 @@ void get_sectorsize(int i){
 			 MAX_RETRIES);
 	    down(&sem);
 	}
-	
+
 	the_result = SCpnt->result;
 	retries--;
-	
+
     } while(the_result && retries);
-    
+
     SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
-    
-    wake_up(&SCpnt->device->device_wait); 
-    
+
+    wake_up(&SCpnt->device->device_wait);
+
     if (the_result) {
 	scsi_CDs[i].capacity = 0x1fffff;
 	scsi_CDs[i].sector_size = 2048;  /* A guess, just in case */
@@ -914,7 +916,7 @@ static int sr_init()
 	sr_registered++;
     }
 
-    
+
     if (scsi_CDs) return 0;
     sr_template.dev_max =
             sr_template.dev_noticed + SR_EXTRA_DEVS;
@@ -924,7 +926,7 @@ static int sr_init()
     sr_sizes = (int *) scsi_init_malloc(sr_template.dev_max * sizeof(int), GFP_ATOMIC);
     memset(sr_sizes, 0, sr_template.dev_max * sizeof(int));
 
-    sr_blocksizes = (int *) scsi_init_malloc(sr_template.dev_max * 
+    sr_blocksizes = (int *) scsi_init_malloc(sr_template.dev_max *
 					 sizeof(int), GFP_ATOMIC);
     for(i=0;i<sr_template.dev_max;i++) sr_blocksizes[i] = 2048;
     blksize_size[MAJOR_NR] = sr_blocksizes;
@@ -934,9 +936,9 @@ static int sr_init()
 void sr_finish()
 {
     int i;
-    
+
     blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-    blk_size[MAJOR_NR] = sr_sizes;	
+    blk_size[MAJOR_NR] = sr_sizes;
 
     for (i = 0; i < sr_template.nr_dev; ++i)
     {
@@ -957,8 +959,8 @@ void sr_finish()
 	scsi_CDs[i].remap = 1;
 	sr_sizes[i] = scsi_CDs[i].capacity >> (BLOCK_SIZE_BITS - 9);
     }
-    
-    
+
+
     /* If our host adapter is capable of scatter-gather, then we increase
      * the read-ahead to 16 blocks (32 sectors).  If not, we use
      * a two block (4 sector) read ahead. */
@@ -968,14 +970,14 @@ void sr_finish()
 	read_ahead[MAJOR_NR] = 4;  /* 4 sector read-ahead */
 
     return;
-}	
+}
 
 static void sr_detach(Scsi_Device * SDp)
 {
     Scsi_CD * cpnt;
     int i;
-    
-    for(cpnt = scsi_CDs, i=0; i<sr_template.dev_max; i++, cpnt++) 
+
+    for(cpnt = scsi_CDs, i=0; i<sr_template.dev_max; i++, cpnt++)
 	if(cpnt->device == SDp) {
 	    kdev_t devi = MKDEV(MAJOR_NR, i);
 
@@ -985,7 +987,7 @@ static void sr_detach(Scsi_Device * SDp)
 	     */
 	    invalidate_inodes(devi);
 	    invalidate_buffers(devi);
-	    
+
 	    /*
 	     * Reset things back to a sane state so that one can re-load a new
 	     * driver (perhaps the same one).
@@ -1006,29 +1008,29 @@ static void sr_detach(Scsi_Device * SDp)
 #ifdef MODULE
 
 int init_module(void) {
-        sr_template.usage_count = &__this_module.usecount;
+        sr_template.module = &__this_module;
         return scsi_register_module(MODULE_SCSI_DEV, &sr_template);
 }
 
-void cleanup_module( void) 
+void cleanup_module( void)
 {
     scsi_unregister_module(MODULE_SCSI_DEV, &sr_template);
     unregister_blkdev(MAJOR_NR, "sr");
     sr_registered--;
     if(scsi_CDs != NULL) {
 	scsi_init_free((char *) scsi_CDs,
-		       (sr_template.dev_noticed + SR_EXTRA_DEVS) 
+		       (sr_template.dev_noticed + SR_EXTRA_DEVS)
 		       * sizeof(Scsi_CD));
-	
+
 	scsi_init_free((char *) sr_sizes, sr_template.dev_max * sizeof(int));
 	scsi_init_free((char *) sr_blocksizes, sr_template.dev_max * sizeof(int));
     }
-    
+
     blksize_size[MAJOR_NR] = NULL;
     blk_dev[MAJOR_NR].request_fn = NULL;
-    blk_size[MAJOR_NR] = NULL;	
+    blk_size[MAJOR_NR] = NULL;
     read_ahead[MAJOR_NR] = 0;
-    
+
     sr_template.dev_max = 0;
 }
 #endif /* MODULE */

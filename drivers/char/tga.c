@@ -323,6 +323,11 @@ con_type_init(unsigned long kmem_start, const char **display_desc)
 	return kmem_start;
 }
 
+void
+con_type_init_finish(void)
+{
+}
+
 /*
  * NOTE: get_scrmem() and set_scrmem() are here only because
  * the VGA version of set_scrmem() has some direct VGA references.

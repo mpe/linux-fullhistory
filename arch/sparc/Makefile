@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.22 1996/12/18 06:17:39 tridge Exp $
+# $Id: Makefile,v 1.23 1997/01/02 14:14:17 jj Exp $
 # sparc/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -18,7 +18,8 @@ SHELL  =/bin/bash
 #CFLAGS := $(CFLAGS) -g -pipe
 CFLAGS := $(CFLAGS) -pipe
 
-LINKFLAGS = -N -Ttext 0xf0004000
+#LINKFLAGS = -N -Ttext 0xf0004000
+LINKFLAGS = -T arch/sparc/vmlinux.lds
 
 HEAD := arch/sparc/kernel/head.o
 
@@ -30,9 +31,6 @@ ARCHIVES := arch/sparc/kernel/kernel.o arch/sparc/mm/mm.o $(ARCHIVES)
 LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc/prom/promlib.a \
 	$(TOPDIR)/arch/sparc/lib/lib.a
 
-INITOBJ = $(TOPDIR)/arch/sparc/kernel/initobj.o
-FINITOBJ = $(TOPDIR)/arch/sparc/kernel/finitobj.o
-
 ifdef CONFIG_AP1000
 SUBDIRS := $(SUBDIRS) arch/sparc/ap1000 mpp
 ARCHIVES := $(TOPDIR)/arch/sparc/ap1000/ap1000lib.o $(TOPDIR)/mpp/mpplib.o $(ARCHIVES) 
@@ -41,6 +39,5 @@ CFLAGS := $(CFLAGS) -D__MPP__=1
 endif
 
 archclean:
-	rm -f $(TOPDIR)/arch/sparc/boot/boot
 
 archdep:

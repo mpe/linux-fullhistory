@@ -8,7 +8,7 @@
  *
  * Copyright (C) 1996  Eddie C. Dost  (ecd@skynet.be)
  *
- * $Id: ufs_super.c,v 1.21 1996/12/29 20:48:55 davem Exp $
+ * $Id: ufs_super.c,v 1.22 1997/01/16 14:17:41 davem Exp $
  *
  */
 

@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.6 1996/10/16 18:34:16 roque Exp $
+ *	$Id: udp.c,v 1.7 1997/01/26 07:14:58 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -602,7 +602,7 @@ struct proto udpv6_prot = {
 	NULL,
 	NULL,
 	NULL,
-	datagram_select,
+	datagram_poll,
 	udp_ioctl,
 	NULL,
 	NULL,

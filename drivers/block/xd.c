@@ -112,7 +112,7 @@ static struct file_operations xd_fops = {
 	block_read,		/* read - general block-dev read */
 	block_write,		/* write - general block-dev write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select */
+	NULL,			/* poll */
 	xd_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	xd_open,		/* open */

@@ -240,7 +240,7 @@ static struct file_operations umsdos_rdir_operations = {
 	UMSDOS_dir_read,	/* read */
 	NULL,				/* write - bad */
 	UMSDOS_rreaddir,	/* readdir */
-	NULL,				/* select - default */
+	NULL,				/* poll - default */
 	UMSDOS_ioctl_dir,	/* ioctl - default */
 	NULL,				/* mmap */
 	NULL,				/* no special open code */

@@ -314,7 +314,7 @@ static struct file_operations proc_mem_operations = {
 	mem_read,
 	mem_write,
 	NULL,		/* mem_readdir */
-	NULL,		/* mem_select */
+	NULL,		/* mem_poll */
 	NULL,		/* mem_ioctl */
 	mem_mmap,	/* mmap */
 	NULL,		/* no special open code */

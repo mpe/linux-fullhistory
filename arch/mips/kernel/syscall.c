@@ -9,6 +9,8 @@
  */
 #include <linux/linkage.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 #include <linux/mman.h>
 #include <linux/sched.h>
 #include <linux/unistd.h>
@@ -28,32 +30,43 @@ asmlinkage int sys_pipe(struct pt_regs *regs)
 	int fd[2];
 	int error;
 
+	lock_kernel();
 	error = do_pipe(fd);
 	if (error)
-		return error;
+		goto out;
 	regs->reg2 = fd[0];
 	regs->reg3 = fd[1];
-	return 0;
+out:
+	unlock_kernel();
+	return error;
 }
 
 asmlinkage unsigned long sys_mmap(unsigned long addr, size_t len, int prot,
                                   int flags, int fd, off_t offset)
 {
 	struct file * file = NULL;
+	int ret = -EBADF;
 
+	lock_kernel();
 	if (flags & MAP_RENAME) {
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-			return -EBADF;
+			goto out;
 	}
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 
-	return do_mmap(file, addr, len, prot, flags, offset);
+	ret = do_mmap(file, addr, len, prot, flags, offset);
+out:
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_idle(void)
 {
+	int ret = -EPERM;
+
+	lock_kernel();
 	if (current->pid != 0)
-		return -EPERM;
+		goto out;
 
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
@@ -67,23 +80,36 @@ asmlinkage int sys_idle(void)
 				".set\tmips0\n\t");
 		schedule();
 	}
+	ret = 0;
+out:
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_fork(struct pt_regs *regs)
 {
-	return do_fork(SIGCHLD, regs->reg29, regs);
+	int ret;
+
+	lock_kernel();
+	ret = do_fork(SIGCHLD, regs->reg29, regs);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage int sys_clone(struct pt_regs *regs)
 {
 	unsigned long clone_flags;
 	unsigned long newsp;
+	int ret;
 
+	lock_kernel();
 	clone_flags = regs->reg4;
 	newsp = regs->reg5;
 	if (!newsp)
 		newsp = regs->reg29;
-	return do_fork(clone_flags, newsp, regs);
+	ret = do_fork(clone_flags, newsp, regs);
+	unlock_kernel();
+	return ret;
 }
 
 /*
@@ -94,12 +120,15 @@ asmlinkage int sys_execve(struct pt_regs *regs)
 	int error;
 	char * filename;
 
+	lock_kernel();
 	error = getname((char *) regs->reg4, &filename);
 	if (error)
-		return error;
+		goto out;
 	error = do_execve(filename, (char **) regs->reg5,
 	                  (char **) regs->reg6, regs);
 	putname(filename);
+out:
+	unlock_kernel();
 	return error;
 }
 

@@ -49,7 +49,7 @@ static struct file_operations affs_file_operations = {
 	generic_file_read,	/* read */
 	affs_file_write,	/* write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	affs_open_file,		/* special open is needed */
@@ -83,7 +83,7 @@ static struct file_operations affs_file_operations_ofs = {
 	affs_file_read_ofs,	/* read */
 	affs_file_write_ofs,	/* write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	affs_open_file,		/* special open is needed */

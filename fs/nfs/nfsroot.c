@@ -172,7 +172,10 @@ static int root_dev_open(void)
 
 	last = &open_base;
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
-		if (dev->type < ARPHRD_SLIP &&
+		if (
+#if !CONFIG_AP1000
+		    dev->type < ARPHRD_SLIP &&
+#endif
 		    dev->family == AF_INET &&
 		    !(dev->flags & (IFF_LOOPBACK | IFF_POINTOPOINT)) &&
 		    (0 != strncmp(dev->name, "dummy", 5)) &&
@@ -1289,6 +1292,9 @@ static void root_nfs_addrs(char *addrs)
 		num++;
 	}
 	rarp_serv = server;
+#if CONFIG_AP1000
+	ap_nfs_hook(server.sin_addr.s_addr);
+#endif				
 }
 
 static int root_nfs_add_default_route(struct in_addr gw, struct device *dev)

@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_dir.c,v 1.7 1996/05/21 19:01:45 davem Exp $
+ * $Id: ufs_dir.c,v 1.8 1997/01/26 07:14:28 davem Exp $
  *
  */
 
@@ -143,7 +143,7 @@ static struct file_operations ufs_dir_operations = {
 	NULL,			/* read */
 	NULL,			/* write */
 	ufs_readdir,		/* readdir */
-	NULL,			/* select */
+	NULL,			/* poll */
 	NULL,			/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* open */

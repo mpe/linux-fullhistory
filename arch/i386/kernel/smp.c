@@ -21,6 +21,7 @@
  *		Erich Boleyn	:	MP v1.4 and additional changes.
  *	Matthias Sattler	:	Changes for 2.1 kernel map.
  *	Michel Lespinasse	:	Changes for 2.1 kernel map.
+ *	Michael Chastain	:	Change trampoline.S to gnu as.
  *
  */
 
@@ -34,6 +35,8 @@
 #include <linux/mc146818rtc.h>
 #include <asm/i82489.h>
 #include <linux/smp.h>
+#include <linux/smp_lock.h>
+#include <linux/interrupt.h>
 #include <asm/pgtable.h>
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
@@ -140,7 +143,7 @@ volatile unsigned long smp_idle_map=0;			/* Map for idle processors 				*/
 #endif
 
 volatile unsigned long  smp_proc_in_lock[NR_CPUS] = {0,};/* for computing process time */
-volatile unsigned long smp_process_available=0;
+volatile int smp_process_available=0;
 
 /*#define SMP_DEBUG*/
 
@@ -506,9 +509,8 @@ int smp_scan_config(unsigned long base, unsigned long length)
  *	Trampoline 80x86 program as an array.
  */
 
-static unsigned char trampoline_data[]={ 
-#include  "trampoline.hex"
-};
+extern unsigned char trampoline_data [];
+extern unsigned char trampoline_end  [];
 
 /*
  *	Currently trivial. Write the real->protected mode
@@ -518,7 +520,7 @@ static unsigned char trampoline_data[]={
  
 static void install_trampoline(unsigned char *mp)
 {
-	memcpy(mp,trampoline_data,sizeof(trampoline_data));
+	memcpy(mp, trampoline_data, trampoline_end - trampoline_data);
 }
 
 /*
@@ -634,19 +636,25 @@ void smp_callin(void)
 	 *	Until we are ready for SMP scheduling
 	 */
 	load_ldt(0);
-/*	printk("Testing faulting...\n");
-	*(long *)0=1;		 OOPS... */
 	local_flush_tlb();
 	
-	while(!smp_commenced);
-	
-	local_flush_tlb();
-	
+	while(!task[cpuid] || current_set[cpuid] != task[cpuid])
+		barrier();
+
 	if (cpu_number_map[cpuid] == -1)
 		while(1);
-	SMP_PRINTK(("Commenced..\n"));
+
 	local_flush_tlb();
 	load_TR(cpu_number_map[cpuid]);
+
+	while(!smp_commenced)
+		barrier();
+	
+	local_flush_tlb();
+	
+	SMP_PRINTK(("Commenced..\n"));
+	local_flush_tlb();
+	sti();
 }
 
 /*
@@ -1253,27 +1261,20 @@ void smp_flush_tlb(void)
 
 void smp_reschedule_irq(int cpl, struct pt_regs *regs)
 {
-/*#define DEBUGGING_SMP_RESCHED*/
-#ifdef DEBUGGING_SMP_RESCHED
-	static int ct=0;
-	if(ct==0)
-	{
-		printk("Beginning scheduling on CPU#%d\n",smp_processor_id());
-		udelay(1000000);
-		ct=1;
-	}
-#endif	
+	lock_kernel();
+	intr_count++;
 	if(smp_processor_id()!=active_kernel_processor)
 		panic("SMP Reschedule on CPU #%d, but #%d is active.\n",
 			smp_processor_id(), active_kernel_processor);
 
 	need_resched=1;
 
-	/*
-	 *	Clear the IPI
-	 */
+	/* Clear the IPI */
 	apic_read(APIC_SPIV);		/* Dummy read */
 	apic_write(APIC_EOI, 0);	/* Docs say use 0 for future compatibility */
+
+	intr_count--;
+	unlock_kernel();
 }	
 
 /*

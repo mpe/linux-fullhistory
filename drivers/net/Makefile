@@ -255,14 +255,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_DE620),y)
-L_OBJS += de620.o
-else
-  ifeq ($(CONFIG_DE620),m)
-  M_OBJS += de620.o
-  endif
-endif
-
 ifeq ($(CONFIG_AT1500),y)
 L_OBJS += lance.o
 endif
@@ -280,6 +272,10 @@ endif
 
 ifeq ($(CONFIG_SUNLANCE),y)
 L_OBJS += sunlance.o
+else
+  ifeq ($(CONFIG_SUNLANCE),m)
+  M_OBJS += sunlance.o
+  endif
 endif
 
 ifeq ($(CONFIG_HAPPYMEAL),y)

@@ -105,6 +105,8 @@
 #include <linux/errno.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -240,17 +242,20 @@ asmlinkage int sys_flock(unsigned int fd, unsigned int cmd)
 {
 	struct file_lock file_lock;
 	struct file *filp;
+	int err;
 
+	lock_kernel();
 	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
-		return (-EBADF);
-
-	if (!flock_make_lock(filp, &file_lock, cmd))
-		return (-EINVAL);
-	
-	if ((file_lock.fl_type != F_UNLCK) && !(filp->f_mode & 3))
-		return (-EBADF);
-
-	return (flock_lock_file(filp, &file_lock, (cmd & (LOCK_UN | LOCK_NB)) ? 0 : 1));
+		err = -EBADF;
+	else if (!flock_make_lock(filp, &file_lock, cmd))
+		err = -EINVAL;
+	else if ((file_lock.fl_type != F_UNLCK) && !(filp->f_mode & 3))
+		err = -EBADF;
+	else
+		err = flock_lock_file(filp, &file_lock,
+				      (cmd & (LOCK_UN | LOCK_NB)) ? 0 : 1);
+	unlock_kernel();
+	return err;
 }
 
 /* Report the first existing lock that would conflict with l.
@@ -342,11 +347,23 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		break;
 	case F_SHLCK:
 	case F_EXLCK:
+#ifdef __sparc__
+/* warn a bit for now, but don't overdo it */
+{
+	static int count = 0;
+	if (!count) {
+		count=1;
 		printk(KERN_WARNING
-		       "fcntl_setlk(): process %d (%s) requested broken flock() emulation\n",
+		       "fcntl_setlk() called by process %d (%s) with broken flock() emulation\n",
 		       current->pid, current->comm);
+	}
+}
+		if (!(filp->f_mode & 3))
+			return (-EBADF);
+		break;
+#endif
 	default:
-		return (-EINVAL);
+		return -EINVAL;
 	}
 	
 	return (posix_lock_file(filp, &file_lock, cmd == F_SETLKW));

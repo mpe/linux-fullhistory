@@ -22,6 +22,8 @@
 #include <linux/personality.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -274,11 +276,11 @@ __zero_fd_set((nr)-1, (unsigned long *) (fdp))
  */
 asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 {
-	int error;
+	int error = -EINVAL;
 	fd_set_buffer fds;
 	unsigned long timeout;
 
-	error = -EINVAL;
+	lock_kernel();
 	if (n < 0)
 		goto out;
 	if (n > NR_OPEN)
@@ -328,6 +330,7 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 	set_fd_set(n, outp, &fds.res_out);
 	set_fd_set(n, exp, &fds.res_ex);
 out:
+	unlock_kernel();
 	return error;
 }
 
@@ -373,27 +376,30 @@ static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait)
 
 asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, int timeout)
 {
-        int i, count, fdcount;
+        int i, count, fdcount, err = -EINVAL;
 	struct pollfd * fds, *fds1;
 	poll_table wait_table;
 	struct poll_table_entry *entry;
 
+	lock_kernel();
 	if (nfds > NR_OPEN)
-		return -EINVAL;
+		goto out;
 
+	err = -ENOMEM;
 	entry = (struct poll_table_entry *) __get_free_page(GFP_KERNEL);
 	if (!entry)
-		return -ENOMEM;
+		goto out;
 	fds = (struct pollfd *) kmalloc(nfds*sizeof(struct pollfd), GFP_KERNEL);
 	if (!fds) {
 		free_page((unsigned long) entry);
-		return -ENOMEM;
+		goto out;
 	}
 
+	err = -EFAULT;
 	if (copy_from_user(fds, ufds, nfds*sizeof(struct pollfd))) {
 		free_page((unsigned long)entry);
 		kfree(fds);
-		return -EFAULT;
+		goto out;
 	}
 
 	if (timeout < 0)
@@ -419,6 +425,10 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, int timeout)
 	}
 	kfree(fds1);
 	if (!fdcount && (current->signal & ~current->blocked))
-		fdcount = -EINTR;
-	return fdcount;
+		err = -EINTR;
+	else
+		err = fdcount;
+out:
+	unlock_kernel();
+	return err;
 }

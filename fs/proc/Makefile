@@ -10,6 +10,14 @@
 O_TARGET := proc.o
 O_OBJS   := inode.o root.o base.o mem.o link.o fd.o array.o kmsg.o net.o scsi.o
 OX_OBJS  := procfs_syms.o
-M_OBJS   := $(O_TARGET)
+M_OBJS   := 
+
+ifeq ($(CONFIG_SUN_OPENPROMFS),y)
+O_OBJS += openpromfs.o
+else
+  ifeq ($(CONFIG_SUN_OPENPROMFS),m)
+  M_OBJS += openpromfs.o
+  endif
+endif
 
 include $(TOPDIR)/Rules.make

@@ -34,7 +34,7 @@ static struct file_operations sysv_dir_operations = {
 	sysv_dir_read,		/* read */
 	NULL,			/* write - bad */
 	sysv_readdir,		/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */

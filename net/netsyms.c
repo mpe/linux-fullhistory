@@ -14,6 +14,7 @@
 #include <linux/netdevice.h>
 #include <linux/trdevice.h>
 #include <linux/ioport.h>
+#include <net/neighbour.h>
 
 #ifdef CONFIG_INET
 #include <linux/ip.h>
@@ -28,6 +29,7 @@
 #include <net/scm.h>
 #include <net/inet_common.h>
 #include <linux/net_alias.h>
+#include <linux/mroute.h>
 
 extern struct net_proto_family inet_family_ops;
 
@@ -100,6 +102,21 @@ EXPORT_SYMBOL(skb_copy_datagram);
 EXPORT_SYMBOL(skb_copy_datagram_iovec);
 EXPORT_SYMBOL(skb_realloc_headroom);
 EXPORT_SYMBOL(datagram_poll);
+EXPORT_SYMBOL(sock_init_data);
+EXPORT_SYMBOL(put_cmsg);
+
+EXPORT_SYMBOL(neigh_table_init);
+/* Declared in <net/neighbour.h> but not defined?
+   EXPORT_SYMBOL(neigh_table_destroy);
+   EXPORT_SYMBOL(neigh_table_run_bh);
+*/
+EXPORT_SYMBOL(neigh_alloc);
+EXPORT_SYMBOL(neigh_table_ins);
+EXPORT_SYMBOL(neigh_queue_ins);
+EXPORT_SYMBOL(neigh_unlink);
+EXPORT_SYMBOL(neigh_lookup);
+EXPORT_SYMBOL(ntbl_walk_table);
+EXPORT_SYMBOL(neigh_tbl_run_bh);
 
 /* Needed by smbfs.o */
 EXPORT_SYMBOL(__scm_destroy);
@@ -149,7 +166,6 @@ EXPORT_SYMBOL(inet_listen);
 EXPORT_SYMBOL(inet_shutdown);
 EXPORT_SYMBOL(inet_setsockopt);
 EXPORT_SYMBOL(inet_getsockopt);
-EXPORT_SYMBOL(inet_fcntl);
 EXPORT_SYMBOL(inet_sendmsg);
 EXPORT_SYMBOL(inet_recvmsg);
 EXPORT_SYMBOL(tcp_sock_array);
@@ -228,9 +244,15 @@ EXPORT_SYMBOL(register_trdev);
 EXPORT_SYMBOL(unregister_trdev);
 EXPORT_SYMBOL(init_trdev);
 #endif
-                          
+                  
 #ifdef CONFIG_NET_ALIAS
 #include <linux/net_alias.h>
+#endif
+
+/* Used by at least ipip.c.  */
+EXPORT_SYMBOL(ipv4_config);
+#ifdef CONFIG_IP_MROUTE
+EXPORT_SYMBOL(ip_mr_find_tunnel);
 #endif
 
 #endif  /* CONFIG_INET */
@@ -249,6 +271,7 @@ EXPORT_SYMBOL(unregister_net_alias_type);
 EXPORT_SYMBOL(register_netdev);
 EXPORT_SYMBOL(unregister_netdev);
 EXPORT_SYMBOL(ether_setup);
+EXPORT_SYMBOL(dev_new_index);
 EXPORT_SYMBOL(eth_type_trans);
 EXPORT_SYMBOL(eth_copy_and_sum);
 EXPORT_SYMBOL(alloc_skb);
@@ -264,10 +287,14 @@ EXPORT_SYMBOL(dev_remove_pack);
 EXPORT_SYMBOL(dev_get);
 EXPORT_SYMBOL(dev_ioctl);
 EXPORT_SYMBOL(dev_queue_xmit);
+#ifdef CONFIG_IP_ACCT
+EXPORT_SYMBOL(ip_acct_output);
+#endif
 EXPORT_SYMBOL(dev_base);
 EXPORT_SYMBOL(dev_close);
 EXPORT_SYMBOL(dev_mc_add);
 EXPORT_SYMBOL(arp_find);
+EXPORT_SYMBOL(arp_find_1);
 EXPORT_SYMBOL(n_tty_ioctl);
 EXPORT_SYMBOL(tty_register_ldisc);
 EXPORT_SYMBOL(kill_fasync);
