@@ -81,6 +81,7 @@ asmlinkage void page_fault(void);
 asmlinkage void coprocessor_error(void);
 asmlinkage void reserved(void);
 asmlinkage void alignment_check(void);
+asmlinkage void spurious_interrupt_bug(void);
 
 int kstack_depth_to_print = 24;
 
@@ -174,8 +175,8 @@ DO_ERROR( 9, SIGFPE,  "coprocessor segment overrun", coprocessor_segment_overrun
 DO_ERROR(10, SIGSEGV, "invalid TSS", invalid_TSS, current)
 DO_ERROR(11, SIGBUS,  "segment not present", segment_not_present, current)
 DO_ERROR(12, SIGBUS,  "stack segment", stack_segment, current)
-DO_ERROR(15, SIGSEGV, "reserved", reserved, current)
 DO_ERROR(17, SIGSEGV, "alignment check", alignment_check, current)
+DO_ERROR(18, SIGSEGV, "reserved", reserved, current)
 
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {
@@ -257,6 +258,12 @@ asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
 {
 	ignore_irq13 = 1;
 	math_error();
+}
+
+asmlinkage void do_spurious_interrupt_bug(struct pt_regs * regs,
+					  long error_code)
+{
+	printk("Ignoring P6 Local APIC Spurious Interrupt Bug...\n");
 }
 
 /*
@@ -344,7 +351,7 @@ void trap_init(void)
 	set_trap_gate(12,&stack_segment);
 	set_trap_gate(13,&general_protection);
 	set_trap_gate(14,&page_fault);
-	set_trap_gate(15,&reserved);
+	set_trap_gate(15,&spurious_interrupt_bug);
 	set_trap_gate(16,&coprocessor_error);
 	set_trap_gate(17,&alignment_check);
 	for (i=18;i<48;i++)

@@ -1,10 +1,11 @@
 /*
  *  linux/drivers/block/ide.h
  *
- *  Copyright (C) 1994, 1995  Linus Torvalds & authors
+ *  Copyright (C) 1994-1996  Linus Torvalds & authors
  */
 
 #include <linux/config.h>
+#include <asm/ide.h>
 
 /*
  * This is the multiple IDE interface driver, as evolved from hd.c.  
@@ -51,10 +52,6 @@ void cmd640_dump_regs (void);
 #endif
 #endif  /* CONFIG_BLK_DEV_CMD640 */
 
-#if defined(CONFIG_BLK_DEV_IDECD) || defined(CONFIG_BLK_DEV_IDETAPE)
-#define CONFIG_BLK_DEV_IDEATAPI 1
-#endif
-
 /*
  * IDE_DRIVE_CMD is used to implement many features of the hdparm utility
  */
@@ -80,12 +77,13 @@ typedef unsigned char	byte;	/* used everywhere */
 #undef REALLY_FAST_IO
 #endif
 
+#define HWIF(drive)		((ide_hwif_t *)((drive)->hwif))
+#define HWGROUP(drive)		((ide_hwgroup_t *)(HWIF(drive)->hwgroup))
+
 /*
  * Definitions for accessing IDE controller registers
  */
-
-#define HWIF(drive)		((ide_hwif_t *)((drive)->hwif))
-#define HWGROUP(drive)		((ide_hwgroup_t *)(HWIF(drive)->hwgroup))
+#define IDE_NR_PORTS		(10)
 
 #define IDE_DATA_OFFSET		(0)
 #define IDE_ERROR_OFFSET	(1)
@@ -95,21 +93,29 @@ typedef unsigned char	byte;	/* used everywhere */
 #define IDE_HCYL_OFFSET		(5)
 #define IDE_SELECT_OFFSET	(6)
 #define IDE_STATUS_OFFSET	(7)
+#define IDE_CONTROL_OFFSET	(8)
+#define IDE_IRQ_OFFSET		(9)
+
 #define IDE_FEATURE_OFFSET	IDE_ERROR_OFFSET
 #define IDE_COMMAND_OFFSET	IDE_STATUS_OFFSET
 
-#define IDE_DATA_REG		(HWIF(drive)->io_base+IDE_DATA_OFFSET)
-#define IDE_ERROR_REG		(HWIF(drive)->io_base+IDE_ERROR_OFFSET)
-#define IDE_NSECTOR_REG		(HWIF(drive)->io_base+IDE_NSECTOR_OFFSET)
-#define IDE_SECTOR_REG		(HWIF(drive)->io_base+IDE_SECTOR_OFFSET)
-#define IDE_LCYL_REG		(HWIF(drive)->io_base+IDE_LCYL_OFFSET)
-#define IDE_HCYL_REG		(HWIF(drive)->io_base+IDE_HCYL_OFFSET)
-#define IDE_SELECT_REG		(HWIF(drive)->io_base+IDE_SELECT_OFFSET)
-#define IDE_STATUS_REG		(HWIF(drive)->io_base+IDE_STATUS_OFFSET)
-#define IDE_CONTROL_REG		(HWIF(drive)->ctl_port)
+#define IDE_DATA_REG		(HWIF(drive)->io_ports[IDE_DATA_OFFSET])
+#define IDE_ERROR_REG		(HWIF(drive)->io_ports[IDE_ERROR_OFFSET])
+#define IDE_NSECTOR_REG		(HWIF(drive)->io_ports[IDE_NSECTOR_OFFSET])
+#define IDE_SECTOR_REG		(HWIF(drive)->io_ports[IDE_SECTOR_OFFSET])
+#define IDE_LCYL_REG		(HWIF(drive)->io_ports[IDE_LCYL_OFFSET])
+#define IDE_HCYL_REG		(HWIF(drive)->io_ports[IDE_HCYL_OFFSET])
+#define IDE_SELECT_REG		(HWIF(drive)->io_ports[IDE_SELECT_OFFSET])
+#define IDE_STATUS_REG		(HWIF(drive)->io_ports[IDE_STATUS_OFFSET])
+#define IDE_CONTROL_REG		(HWIF(drive)->io_ports[IDE_CONTROL_OFFSET])
+#define IDE_IRQ_REG		(HWIF(drive)->io_ports[IDE_IRQ_OFFSET])
+
 #define IDE_FEATURE_REG		IDE_ERROR_REG
 #define IDE_COMMAND_REG		IDE_STATUS_REG
 #define IDE_ALTSTATUS_REG	IDE_CONTROL_REG
+#define IDE_IREASON_REG		IDE_NSECTOR_REG
+#define IDE_BCOUNTL_REG		IDE_LCYL_REG
+#define IDE_BCOUNTH_REG		IDE_HCYL_REG
 
 #ifdef REALLY_FAST_IO
 #define OUT_BYTE(b,p)		outb((b),(p))
@@ -136,9 +142,6 @@ typedef unsigned char	byte;	/* used everywhere */
 #define PARTN_BITS	6	/* number of minor dev bits for partitions */
 #define PARTN_MASK	((1<<PARTN_BITS)-1)	/* a useful bit mask */
 #define MAX_DRIVES	2	/* per interface; 2 assumed by lots of code */
-#ifndef MAX_HWIFS
-#define MAX_HWIFS	4	/* an arbitrary, but realistic limit */
-#endif
 #define SECTOR_WORDS	(512 / 4)	/* number of 32bit words per sector */
 
 /*
@@ -160,140 +163,20 @@ typedef unsigned char	byte;	/* used everywhere */
 	if (hwif->selectproc)					\
 		hwif->selectproc(drive);			\
 	else							\
-		OUT_BYTE((drive)->select.all, hwif->io_base+IDE_SELECT_OFFSET); \
+		OUT_BYTE((drive)->select.all, hwif->io_ports[IDE_SELECT_OFFSET]); \
 }
 #else
-#define SELECT_DRIVE(hwif,drive)  OUT_BYTE((drive)->select.all, hwif->io_base+IDE_SELECT_OFFSET);
+#define SELECT_DRIVE(hwif,drive)  OUT_BYTE((drive)->select.all, hwif->io_ports[IDE_SELECT_OFFSET]);
 #endif	/* CONFIG_BLK_DEV_HT6560B || CONFIG_BLK_DEV_PROMISE */
 		
-#ifdef CONFIG_BLK_DEV_IDETAPE
-#include "ide-tape.h"
-#endif /* CONFIG_BLK_DEV_IDETAPE */
-
-#ifdef CONFIG_BLK_DEV_IDECD
-
-struct atapi_request_sense {
-	unsigned char error_code : 7;
-	unsigned char valid      : 1;
-	byte reserved1;
-	unsigned char sense_key  : 4;
-	unsigned char reserved2  : 1;
-	unsigned char ili        : 1;
-	unsigned char reserved3  : 2;
-	byte info[4];
-	byte sense_len;
-	byte command_info[4];
-	byte asc;
-	byte ascq;
-	byte fru;
-	byte sense_key_specific[3];
-};
-
-struct packet_command {
-	char *buffer;
-	int buflen;
-	int stat;
-	struct atapi_request_sense *sense_data;
-	unsigned char c[12];
-};
-
-
-/* Structure of a MSF cdrom address. */
-struct atapi_msf {
-	byte reserved;
-	byte minute;
-	byte second;
-	byte frame;
-};
-
-
-/* Space to hold the disk TOC. */
-
-#define MAX_TRACKS 99
-struct atapi_toc_header {
-	unsigned short toc_length;
-	byte first_track;
-	byte last_track;
-};
-
-struct atapi_toc_entry {
-	byte reserved1;
-	unsigned control : 4;
-	unsigned adr     : 4;
-	byte track;
-	byte reserved2;
-	union {
-		unsigned lba;
-		struct atapi_msf msf;
-	} addr;
-};
-
-struct atapi_toc {
-	int    last_session_lba;
-	int    xa_flag;
-	unsigned capacity;
-	struct atapi_toc_header hdr;
-	struct atapi_toc_entry  ent[MAX_TRACKS+1];
-	  /* One extra for the leadout. */
-};
-
-
-/* This structure is annoyingly close to, but not identical with,
-   the cdrom_subchnl structure from cdrom.h. */
-struct atapi_cdrom_subchnl 
-{
-	u_char  acdsc_reserved;
-	u_char  acdsc_audiostatus;
-	u_short acdsc_length;
-	u_char  acdsc_format;
-
-	u_char  acdsc_adr:	4;
-	u_char  acdsc_ctrl:	4;
-	u_char  acdsc_trk;
-	u_char  acdsc_ind;
-	union {
-		struct atapi_msf msf;
-		int	lba;
-	} acdsc_absaddr;
-	union {
-		struct atapi_msf msf;
-		int	lba;
-	} acdsc_reladdr;
-};
-
-
-/* Extra per-device info for cdrom drives. */
-struct cdrom_info {
-
-	/* Buffer for table of contents.  NULL if we haven't allocated
-	   a TOC buffer for this device yet. */
-
-	struct atapi_toc *toc;
-
-	/* Sector buffer.  If a read request wants only the first part
-	   of a cdrom block, we cache the rest of the block here,
-	   in the expectation that that data is going to be wanted soon.
-	   SECTOR_BUFFERED is the number of the first buffered sector,
-	   and NSECTORS_BUFFERED is the number of sectors in the buffer.
-	   Before the buffer is allocated, we should have
-	   SECTOR_BUFFER == NULL and NSECTORS_BUFFERED == 0. */
-
-	unsigned long sector_buffered;
-	unsigned long nsectors_buffered;
-	char *sector_buffer;
-
-	/* The result of the last successful request sense command
-	   on this device. */
-	struct atapi_request_sense sense_data;
-};
-
-#endif /* CONFIG_BLK_DEV_IDECD */
-
 /*
  * Now for the data we need to maintain per-drive:  ide_drive_t
  */
 
-typedef enum {ide_disk, ide_cdrom, ide_tape} ide_media_t;
+#define ide_disk	0x20
+#define ide_cdrom	0x5
+#define ide_tape	0x1
+#define ide_floppy	0x0
 
 typedef union {
 	unsigned all			: 8;	/* all of the bits together */
@@ -305,17 +188,6 @@ typedef union {
 		unsigned reserved	: 4;	/* unused */
 		} b;
 	} special_t;
-
-typedef union {
-	unsigned all			: 8;	/* all of the bits together */
-	struct {
-		unsigned head		: 4;	/* always zeros here */
-		unsigned unit		: 1;	/* drive select number, 0 or 1 */
-		unsigned bit5		: 1;	/* always 1 */
-		unsigned lba		: 1;	/* using LBA instead of CHS */
-		unsigned bit7		: 1;	/* always 1 */
-	} b;
-	} select_t;
 
 typedef struct ide_drive_s {
 	special_t	special;	/* special action flags */
@@ -332,10 +204,12 @@ typedef struct ide_drive_s {
 	unsigned nobios		: 1;	/* flag: do not probe bios for drive */
 	unsigned slow		: 1;	/* flag: slow data port */
 	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
+	unsigned revalidate	: 1;	/* request revalidation */
+	unsigned bswap		: 1;	/* flag: byte swap data */
 #if FAKE_FDISK_FOR_EZDRIVE
 	unsigned remap_0_to_1	: 1;	/* flag: partitioned with ezdrive */
 #endif /* FAKE_FDISK_FOR_EZDRIVE */
-	ide_media_t	media;		/* disk, cdrom, tape */
+	byte		media;		/* disk, cdrom, tape, floppy, ... */
 	select_t	select;		/* basic drive/head select reg value */
 	byte		ctl;		/* "normal" value for IDE_CONTROL_REG */
 	byte		ready_stat;	/* min status value for drive ready */
@@ -357,12 +231,8 @@ typedef struct ide_drive_s {
 	struct hd_driveid *id;		/* drive model identification info */
 	struct hd_struct  *part;	/* drive partition table */
 	char		name[4];	/* drive name, such as "hda" */
-#ifdef CONFIG_BLK_DEV_IDECD
-	struct cdrom_info cdrom_info;	/* for ide-cd.c */
-#endif /* CONFIG_BLK_DEV_IDECD */
-#ifdef CONFIG_BLK_DEV_IDETAPE
-	idetape_tape_t	tape;		/* for ide-tape.c */
-#endif /* CONFIG_BLK_DEV_IDETAPE */
+	void 		*driver;	/* (ide_driver_t *) */
+	void		*driver_data;	/* extra driver data */
 	} ide_drive_t;
 
 /*
@@ -416,8 +286,7 @@ typedef enum {	ide_unknown,	ide_generic,	ide_triton,
 typedef struct hwif_s {
 	struct hwif_s	*next;		/* for linked-list in ide_hwgroup_t */
 	void		*hwgroup;	/* actually (ide_hwgroup_t *) */
-	unsigned short	io_base;	/* base io port addr */
-	unsigned short	ctl_port;	/* usually io_base+0x206 */
+	ide_ioreg_t	io_ports[IDE_NR_PORTS];	/* task file registers */
 	ide_drive_t	drives[MAX_DRIVES];	/* drive info */
 	struct gendisk	*gd;		/* gendisk structure */
 	ide_tuneproc_t	*tuneproc;	/* routine to tune PIO mode for drives */
@@ -427,9 +296,9 @@ typedef struct hwif_s {
 	ide_dmaproc_t	*dmaproc;	/* dma read/write/abort routine */
 	unsigned long	*dmatable;	/* dma physical region descriptor table */
 	unsigned short	dma_base;	/* base addr for dma ports (triton) */
-	byte		irq;		/* our irq number */
+	int		irq;		/* our irq number */
 	byte		major;		/* our major number */
-	char 		name[5];	/* name of interface, eg. "ide0" */
+	char 		name[6];	/* name of interface, eg. "ide0" */
 	byte		index;		/* 0 for ide0; 1 for ide1; ... */
 	hwif_chipset_t	chipset;	/* sub-module for tuning.. */
 	unsigned	noprobe    : 1;	/* don't probe for this interface */
@@ -439,16 +308,10 @@ typedef struct hwif_s {
 #ifdef CONFIG_BLK_DEV_PROMISE
 	unsigned	is_promise2: 1;	/* 2nd i/f on promise DC4030 */
 #endif /* CONFIG_BLK_DEV_PROMISE */
+	unsigned	reset      : 1; /* reset after probe */
 #if (DISK_RECOVERY_TIME > 0)
 	unsigned long	last_time;	/* time when previous rq was done */
 #endif
-#ifdef CONFIG_BLK_DEV_IDECD
-	struct request request_sense_request;	/* from ide-cd.c */
-	struct packet_command request_sense_pc;	/* from ide-cd.c */
-#endif /* CONFIG_BLK_DEV_IDECD */
-#ifdef CONFIG_BLK_DEV_IDETAPE
-	ide_drive_t	*tape_drive;	/* Pointer to the tape on this interface */
-#endif /* CONFIG_BLK_DEV_IDETAPE */
 	} ide_hwif_t;
 
 /*
@@ -468,6 +331,55 @@ typedef struct hwgroup_s {
 	} ide_hwgroup_t;
 
 /*
+ * Subdrivers support.
+ */
+#define IDE_SUBDRIVER_VERSION	0
+
+typedef int	(ide_cleanup_proc)(ide_drive_t *);
+typedef void 	(ide_do_request_proc)(ide_drive_t *, struct request *, unsigned long);
+typedef void	(ide_end_request_proc)(byte, ide_hwgroup_t *);
+typedef int 	(ide_ioctl_proc)(ide_drive_t *, struct inode *, struct file *, unsigned int, unsigned long);
+typedef int	(ide_open_proc)(struct inode *, struct file *, ide_drive_t *);
+typedef void 	(ide_release_proc)(struct inode *, struct file *, ide_drive_t *);
+typedef int	(ide_check_media_change_proc)(ide_drive_t *);
+typedef void	(ide_pre_reset_proc)(ide_drive_t *);
+typedef unsigned long (ide_capacity_proc)(ide_drive_t *);
+typedef void	(ide_special_proc)(ide_drive_t *);
+
+typedef struct ide_driver_s {
+	byte				media;
+	unsigned busy			: 1;
+	unsigned supports_dma		: 1;
+	ide_cleanup_proc		*cleanup;
+	ide_do_request_proc		*do_request;
+	ide_end_request_proc		*end_request;
+	ide_ioctl_proc			*ioctl;
+	ide_open_proc			*open;
+	ide_release_proc		*release;
+	ide_check_media_change_proc	*media_change;
+	ide_pre_reset_proc		*pre_reset;
+	ide_capacity_proc		*capacity;
+	ide_special_proc		*special;
+	} ide_driver_t;
+
+#define DRIVER(drive)		((ide_driver_t *)((drive)->driver))
+
+/*
+ * IDE modules.
+ */
+#define IDE_CHIPSET_MODULE		0	/* not supported yet */
+#define IDE_PROBE_MODULE		1
+#define IDE_DRIVER_MODULE		2
+
+typedef int	(ide_module_init_proc)(void);
+
+typedef struct ide_module_s {
+	int				type;
+	ide_module_init_proc		*init;
+	struct ide_module_s		*next;
+} ide_module_t;
+
+/*
  * ide_hwifs[] is the master data structure used to keep track
  * of just about everything in ide.c.  Whenever possible, routines
  * should be using pointers to a drive (ide_drive_t *) or 
@@ -485,22 +397,17 @@ extern	ide_hwif_t	ide_hwifs[];		/* master data repository */
 #define IDE_DRIVER	/* "parameter" for blk.h */
 #include <linux/blk.h>
 
-#if (DISK_RECOVERY_TIME > 0)
-void ide_set_recovery_timer (ide_hwif_t *);
-#define SET_RECOVERY_TIMER(drive) ide_set_recovery_timer (drive)
-#else
-#define SET_RECOVERY_TIMER(drive)
-#endif
-
 /*
- * This is used for (nearly) all data transfers from the IDE interface
+ * This is used for (nearly) all data transfers from/to the IDE interface
  */
 void ide_input_data (ide_drive_t *drive, void *buffer, unsigned int wcount);
+void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount);
 
 /*
- * This is used for (nearly) all data transfers to the IDE interface
+ * This is used for (nearly) all ATAPI data transfers from/to the IDE interface
  */
-void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount);
+void atapi_input_bytes (ide_drive_t *drive, void *buffer, unsigned int bytecount);
+void atapi_output_bytes (ide_drive_t *drive, void *buffer, unsigned int bytecount);
 
 /*
  * This is used on exit from the driver, to designate the next irq handler
@@ -518,6 +425,12 @@ byte ide_dump_status (ide_drive_t *drive, const char *msg, byte stat);
  * The calling function must return afterwards, to restart the request.
  */
 void ide_error (ide_drive_t *drive, const char *msg, byte stat);
+
+/*
+ * Issue a simple drive command
+ * The drive must be selected beforehand.
+ */
+void ide_cmd(ide_drive_t *drive, byte cmd, byte nsect, ide_handler_t *handler);
 
 /*
  * ide_fixstring() cleans up and (optionally) byte-swaps a text string,
@@ -611,7 +524,7 @@ void ide_end_drive_cmd (ide_drive_t *drive, byte stat, byte err);
 
 /*
  * ide_system_bus_speed() returns what we think is the system VESA/PCI
- * bus speed (in Mhz).  This is used for calculating interface PIO timings.
+ * bus speed (in MHz).  This is used for calculating interface PIO timings.
  * The default is 40 for known PCI systems, 50 otherwise.
  * The "idebus=xx" parameter can be used to override this value.
  */
@@ -623,76 +536,61 @@ int ide_system_bus_speed (void);
  */
 void ide_multwrite (ide_drive_t *drive, unsigned int mcount);
 
+void ide_revalidate_drives (void);
+
+void ide_timer_expiry (unsigned long data);
+void ide_intr (int irq, void *dev_id, struct pt_regs *regs);
+void ide_geninit (struct gendisk *gd);
+void do_ide0_request (void);
+#if MAX_HWIFS > 1
+void do_ide1_request (void);
+#endif
+#if MAX_HWIFS > 2
+void do_ide2_request (void);
+#endif
+#if MAX_HWIFS > 3
+void do_ide3_request (void);
+#endif
+void ide_init_subdrivers (void);
+
+#ifndef _IDE_C
+extern struct file_operations ide_fops[];
+#endif
+
 #ifdef CONFIG_BLK_DEV_IDECD
-/*
- * These are routines in ide-cd.c invoked from ide.c
- */
-void ide_do_rw_cdrom (ide_drive_t *, unsigned long);
-int ide_cdrom_ioctl (ide_drive_t *, struct inode *, struct file *, unsigned int, unsigned long);
-int ide_cdrom_check_media_change (ide_drive_t *);
-int ide_cdrom_open (struct inode *, struct file *, ide_drive_t *);
-void ide_cdrom_release (struct inode *, struct file *, ide_drive_t *);
-void ide_cdrom_setup (ide_drive_t *);
+int ide_cdrom_init (void);
 #endif /* CONFIG_BLK_DEV_IDECD */
-
 #ifdef CONFIG_BLK_DEV_IDETAPE
-
-/*
- *	Functions in ide-tape.c which are invoked from ide.c:
- */
-
-/*
- *	idetape_identify_device is called during device probing stage to
- *	probe for an ide atapi tape drive and to initialize global variables
- *	in ide-tape.c which provide the link between the character device
- *	and the corresponding block device.
- *
- *	Returns 1 if an ide tape was detected and is supported.
- *	Returns 0 otherwise.
- */
- 
-int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id);
-
-/*
- *	idetape_setup is called a bit later than idetape_identify_device,
- *	during the search for disk partitions, to initialize various tape
- *	state variables in ide_drive_t *drive.
- */
- 
-void idetape_setup (ide_drive_t *drive);
-
-/*
- *	idetape_do_request is our request function. It is called by ide.c
- *	to process a new request.
- */
-
-void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned long block);
-
-/*
- *	idetape_end_request is used to finish servicing a request, and to
- *	insert a pending pipeline request into the main device queue.
- */
- 
-void idetape_end_request (byte uptodate, ide_hwgroup_t *hwgroup);
-
-/*
- *	Block device interface functions.
- */
-  
-int idetape_blkdev_ioctl (ide_drive_t *drive, struct inode *inode, struct file *file,
-			unsigned int cmd, unsigned long arg);
-int idetape_blkdev_open (struct inode *inode, struct file *filp, ide_drive_t *drive);
-void idetape_blkdev_release (struct inode *inode, struct file *filp, ide_drive_t *drive);
-
-/*
- *	idetape_register_chrdev initializes the character device interface to
- *	the ide tape drive.
- */
- 
-void idetape_register_chrdev (void);
-
+int idetape_init (void);
 #endif /* CONFIG_BLK_DEV_IDETAPE */
+#ifdef CONFIG_BLK_DEV_IDEFLOPPY
+int idefloppy_init (void);
+#endif /* CONFIG_BLK_DEV_IDEFLOPPY */
+#ifdef CONFIG_BLK_DEV_IDEDISK
+int idedisk_init (void);
+#endif /* CONFIG_BLK_DEV_IDEDISK */
+
+int ide_register_module (ide_module_t *module);
+void ide_unregister_module (ide_module_t *module);
+ide_drive_t *ide_scan_devices (byte media, ide_driver_t *driver, int n);
+int ide_register_subdriver (ide_drive_t *drive, ide_driver_t *driver, int version);
+int ide_unregister_subdriver (ide_drive_t *drive);
 
 #ifdef CONFIG_BLK_DEV_TRITON
 void ide_init_triton (byte, byte);
 #endif /* CONFIG_BLK_DEV_TRITON */
+
+#ifdef CONFIG_BLK_DEV_OPTI621
+void ide_init_opti621 (byte, byte);
+#endif /* CONFIG_BLK_DEV_OPTI621 */
+
+#ifdef CONFIG_BLK_DEV_IDE
+int ideprobe_init (void);
+#endif /* CONFIG_BLK_DEV_IDE */
+
+#ifdef CONFIG_BLK_DEV_PROMISE
+#include "promise.h"
+#define IS_PROMISE_DRIVE (HWIF(drive)->chipset == ide_promise)
+#else
+#define IS_PROMISE_DRIVE (0)	/* auto-NULLs out Promise code */
+#endif /* CONFIG_BLK_DEV_PROMISE */

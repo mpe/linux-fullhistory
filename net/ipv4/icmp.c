@@ -639,7 +639,8 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 	int hash;
 	struct inet_protocol *ipprot;
 	unsigned char *dp;	
-	
+	__u32 info = 0;
+
 	iph = (struct iphdr *) (icmph + 1);
 	
 	dp= ((unsigned char *)iph)+(iph->ihl<<2);
@@ -723,11 +724,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 					 */
 						new_mtu = 68;
 				}
-				/*
-				 * Ugly trick to pass MTU to protocol layer.
-				 * Really we should add argument "info" to error handler.
-				 */
-				iph->id = htons(new_mtu);
+				info = new_mtu;
 				break;
 			}
 #endif
@@ -777,7 +774,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 
 		if (iph->protocol == ipprot->protocol && ipprot->err_handler) 
 		{
-			ipprot->err_handler(icmph->type, icmph->code, dp,
+			ipprot->err_handler(icmph->type, icmph->code, dp, info,
 					    iph->daddr, iph->saddr, ipprot);
 		}
 

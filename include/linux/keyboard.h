@@ -352,8 +352,9 @@ extern unsigned short plain_map[NR_KEYS];
 #define K_DCIRCM	K(KT_DEAD,2)
 #define K_DTILDE	K(KT_DEAD,3)
 #define K_DDIERE	K(KT_DEAD,4)
+#define K_DCEDIL	K(KT_DEAD,5)
 
-#define NR_DEAD		5
+#define NR_DEAD		6
 
 #define K_DOWN		K(KT_CUR,0)
 #define K_LEFT		K(KT_CUR,1)

@@ -80,6 +80,7 @@ struct __sysctl_args {
 #define NET_NETROM      8
 #define NET_AX25        9
 #define NET_BRIDGE	10
+#define NET_IPV6	11
 
 /* /proc/sys/net/core */
 
@@ -97,7 +98,11 @@ struct __sysctl_args {
 #define NET_IPV4_ARP_CHECK_INTERVAL     5
 #define NET_IPV4_ARP_CONFIRM_INTERVAL   6
 #define NET_IPV4_ARP_CONFIRM_TIMEOUT	7
+#define NET_IPV4_TCP_VEGAS_CONG_AVOID   8
 
+/* /proc/sys/net/ipv6 */
+#define NET_IPV6_FORWARDING		1
+#define NET_IPV6_HOPLIMIT		2
 /* /proc/sys/net/ipx */
 
 /* /proc/sys/net/appletalk */

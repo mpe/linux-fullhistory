@@ -1,3 +1,21 @@
+Sun Oct 27 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c ncr53c8xx.h - revision 1.14b
+	Add the following config parameters:
+
+	- CONFIG_SCSI_NCR53C8XX_MAX_TAGS
+	  Max number of queued tagged commands.
+	  Allow from 2 to 12, default 4.
+
+	- CONFIG_SCSI_NCR53C8XX_SYNC
+	  Synchronous transfers frequency in MHz.
+	  Allow from 5 to 10, default 5, 0 means asynchronous.
+	  (And so remove CONFIG_SCSI_NCR53C8XX_FORCE_ASYNCHRONOUS)
+
+Sun Oct 20 16:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	ncr_scatter() rewritten.
+	remove "ncr dead" detection.
+ 
 Sun Oct 13 19:00 1996 Gerard Roudier (groudier@club-internet.fr)
 	* ncr53c8xx.c ncr53c8xx.h - revision 1.14a
 	Enabling some special features makes problems with some hardware.

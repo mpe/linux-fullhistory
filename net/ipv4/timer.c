@@ -50,7 +50,7 @@
 #include <net/sock.h>
 #include <net/arp.h>
 
-void delete_timer (struct sock *t)
+void net_delete_timer (struct sock *t)
 {
 	unsigned long flags;
 
@@ -63,9 +63,9 @@ void delete_timer (struct sock *t)
 	restore_flags (flags);
 }
 
-void reset_timer (struct sock *t, int timeout, unsigned long len)
+void net_reset_timer (struct sock *t, int timeout, unsigned long len)
 {
-	delete_timer (t);
+	net_delete_timer (t);
 	t->timeout = timeout;
 #if 1
   /* FIXME: ??? */
@@ -116,7 +116,7 @@ void net_timer (unsigned long data)
 		case TIME_DONE:
 			/* If the socket hasn't been closed off, re-try a bit later */
 			if (!sk->dead) {
-				reset_timer(sk, TIME_DONE, TCP_DONE_TIME);
+				net_reset_timer(sk, TIME_DONE, TCP_DONE_TIME);
 				break;
 			}
 
@@ -140,11 +140,11 @@ void net_timer (unsigned long data)
 		case TIME_CLOSE:
 			/* We've waited long enough, close the socket. */
 			sk->state = TCP_CLOSE;
-			delete_timer (sk);
+			net_delete_timer (sk);
 			if (!sk->dead)
 				sk->state_change(sk);
 			sk->shutdown = SHUTDOWN_MASK;
-			reset_timer (sk, TIME_DONE, TCP_DONE_TIME);
+			net_reset_timer (sk, TIME_DONE, TCP_DONE_TIME);
 			break;
 
 		default:

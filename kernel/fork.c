@@ -252,7 +252,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->it_real_incr = p->it_virt_incr = p->it_prof_incr = 0;
 	init_timer(&p->real_timer);
 	p->real_timer.data = (unsigned long) p;
-	p->leader = 0;		/* process leadership doesn't inherit */
+	p->leader = 0;		/* session leadership doesn't inherit */
 	p->tty_old_pgrp = 0;
 	p->utime = p->stime = 0;
 	p->cutime = p->cstime = 0;

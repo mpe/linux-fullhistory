@@ -321,42 +321,6 @@ void ip_send_check(struct iphdr *iph)
 }
 
 
-/*
- *	If a sender wishes the packet to remain unfreed
- *	we add it to his send queue. This arguably belongs
- *	in the TCP level since nobody else uses it. BUT
- *	remember IPng might change all the rules.
- */
-static inline void add_to_send_queue(struct sock * sk, struct sk_buff * skb)
-{
-	unsigned long flags;
-
-	/* The socket now has more outstanding blocks */
-	sk->packets_out++;
-
-	/* Protect the list for a moment */
-	save_flags(flags);
-	cli();
-
-	if (skb->link3 != NULL)
-	{
-		NETDEBUG(printk("ip.c: link3 != NULL\n"));
-		skb->link3 = NULL;
-	}
-	if (sk->send_head == NULL)
-	{
-		sk->send_tail = skb;
-		sk->send_head = skb;
-		sk->send_next = skb;
-	}
-	else
-	{
-		sk->send_tail->link3 = skb;
-		sk->send_tail = skb;
-	}
-	restore_flags(flags);
-}
-
 
 /*
  * Queues a packet to be sent, and starts the transmitter
@@ -397,13 +361,11 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 
 	switch (free) {
 		/* No reassigning numbers to fragments... */
-		default:
+		case 2:
 			free = 1;
 			break;
-		case 0:
-			add_to_send_queue(sk, skb);
-			/* fall through */
-		case 1:
+		default:
+			free = 1;
 			iph->id = htons(ip_id_count++);
 	}
 
@@ -732,7 +694,7 @@ int ip_build_xmit(struct sock *sk,
 	 
 		maxfraglen = ((dev->mtu-20) & ~7) + fragheaderlen;
         }
-	
+
 	/*
 	 *	Start at the end of the frame by handling the remainder.
 	 */

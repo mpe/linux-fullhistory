@@ -64,13 +64,6 @@
 struct sock *mroute_socket=NULL;
 #endif
 
-static inline unsigned long min(unsigned long a, unsigned long b)
-{
-	if (a < b) 
-		return(a);
-	return(b);
-}
-
 
 /*
  *	Raw_err does not currently get called by the icmp module - FIXME:
@@ -109,7 +102,7 @@ void raw_err (int type, int code, unsigned char *header, __u32 daddr,
 	return;
 }
 
-static inline void raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
+static inline int raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
 {
 	/* Charge it to the socket. */
 	
@@ -118,22 +111,10 @@ static inline void raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
 		ip_statistics.IpInDiscards++;
 		skb->sk=NULL;
 		kfree_skb(skb, FREE_READ);
-		return;
+		return 0;
 	}
 
 	ip_statistics.IpInDelivers++;
-}
-
-/*
- * This is the prot->rcv() function. It's called when we have
- * backlogged packets from core/sock.c if we couldn't receive it
- * when the packet arrived.
- */
-static int raw_rcv_redo(struct sk_buff *skb, struct device *dev, struct options *opt,
-	__u32 daddr, unsigned short len,
-	__u32 saddr, int redo, struct inet_protocol * protocol)
-{
-	raw_rcv_skb(skb->sk, skb);
 	return 0;
 }
 
@@ -376,14 +357,11 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 
 struct proto raw_prot = {
 	raw_close,
-	ip_build_header,
 	udp_connect,
 	NULL,
-	ip_queue_xmit,
 	NULL,
 	NULL,
 	NULL,
-	raw_rcv_redo,
 	datagram_select,
 #ifdef CONFIG_IP_MROUTE	
 	ipmr_ioctl,
@@ -392,14 +370,16 @@ struct proto raw_prot = {
 #endif		
 	raw_init,
 	NULL,
+	NULL,
 	ip_setsockopt,
 	ip_getsockopt,
 	raw_sendmsg,
 	raw_recvmsg,
 	NULL,		/* No special bind */
+	raw_rcv_skb,
 	128,
 	0,
 	"RAW",
 	0, 0,
-	{NULL,}
+	NULL
 };

@@ -566,7 +566,8 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  		else timeout = ip_masq_expire->tcp_timeout;
 
 		skb->csum = csum_partial((void *)(th + 1), size - sizeof(*th), 0);
- 		tcp_send_check(th,iph->saddr,iph->daddr,size,skb);
+		tcp_v4_check(th, size, iph->saddr, iph->daddr,
+			     skb->csum);
  	}
         ip_masq_set_expire(ms, timeout);
  	ip_send_check(iph);
@@ -896,10 +897,14 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 			struct tcphdr *th;
                         skb->csum = csum_partial((void *)(((struct tcphdr *)portptr) + 1),
                                                  len - sizeof(struct tcphdr), 0);
-                        tcp_send_check((struct tcphdr *)portptr,iph->saddr,iph->daddr,len,skb);
+			th = (struct tcphdr *) portptr;
+			th->check = 0;
 
+                        tcp_v4_check(th, len, iph->saddr, iph->daddr,
+				     skb->csum);
+			
 			/* Check if TCP FIN or RST */
-			th = (struct tcphdr *)portptr;
+			
 			if (th->fin)
 			{
 				ms->flags |= IP_MASQ_F_SAW_FIN_IN;

@@ -6,18 +6,18 @@
 #
 makedev () {
 	rm -f /dev/$1
-	echo mknod /dev/$1 b $2 $3
-	     mknod /dev/$1 b $2 $3
+	echo mknod /dev/$1 $2 $3 $4
+	     mknod /dev/$1 $2 $3 $4
 	chown root:disk /dev/$1
 	chmod 660 /dev/$1
 }
 
 makedevs () {
 	rm -f /dev/$1*
-	makedev $1 $2 $3
+	makedev $1 b $2 $3
 	for part in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
 	do
-		makedev $1$part $2 `expr $3 + $part`
+		makedev $1$part b $2 `expr $3 + $part`
 	done
 }
 
@@ -30,18 +30,8 @@ makedevs hdf 33 64
 makedevs hdg 34 0
 makedevs hdh 34 64
 
-# Create the ide-tape rewinding character device.
-
-rm -f /dev/ht0
-echo mknod /dev/ht0 c 37 0
-     mknod /dev/ht0 c 37 0
-chown root:disk /dev/ht0
-chmod 660 /dev/ht0
-
-# Create the ide-tape non rewinding character device.
-
-rm -f /dev/nht0
-echo mknod /dev/nht0 c 37 128
-     mknod /dev/nht0 c 37 128
-chown root:disk /dev/nht0
-chmod 660 /dev/nht0
+for tape in 0 1 2 3 4 5 6 7
+do
+	makedev ht$tape c 37 $tape
+	makedev nht$tape c 37 `expr $tape + 128`
+done

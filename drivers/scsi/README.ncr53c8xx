@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-13 October 1996
+28 October 1996
 ===============================================================================
 
 1.  Introduction
@@ -52,9 +52,7 @@ This short documentation only describes the features of the NCR53C8XX driver,
 configuration parameters and control commands available through the proc SCSI
 file system read / write operations.
 
-This driver has been tested OK with linux/i386  and is currently untested
-under linux/Alpha. If you intend to use this driver under linux/Alpha, just 
-try it first with read-only or mounted read-only devices.
+This driver has been tested OK with linux/i386 and Linux/Alpha.
 
 I am not a native speaker of English and there are probably lots of 
 mistakes in this README file. Any help will be welcome.
@@ -81,7 +79,7 @@ Chip   SDMS BIOS   Wide   Ultra SCSI   the driver      the driver
 815        Y         N        N            Y             Y
 825        Y         Y        N            Y             Y
 825A       Y         Y        N            Y             Not yet
-860        N         Y        N            Y             Y
+860        N         N        Y(1)         Y             Y
 875        Y         Y        Y(1)         Y             Y
 
 (1) Ultra SCSI extensions will be supported in a future release of the 
@@ -356,9 +354,16 @@ CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE    (default answer: n)
     Answer "y" if you are sure that all your SCSI devices that are able to 
     accept tagged commands will proceed safely.
 
-CONFIG_SCSI_NCR53C8XX_FORCE_ASYNCHRONOUS (default answer: n)
-    This option forces asynchronous transfer mode for all SCSI devices. 
- 
+CONFIG_SCSI_NCR53C8XX_MAX_TAGS         (default answer: 4)
+    This option allows you to specify the maximum number of tagged commands 
+    that can be queued to a device.
+
+CONFIG_SCSI_NCR53C8XX_SYNC            (default answer: 5)
+    This option allows you to specify the frequency in MHz the driver 
+    will use at boot time for synchronous data transfer negotiations.
+    This frequency can be changed later with the "setsync" control command.
+    0 means "asynchronous data transfers".
+
 CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO (default answer: n)
     Force synchronous negotiation for all SCSI-2 devices.
     Some SCSI-2 devices do not report this feature in byte 7 of inquiry 
@@ -377,9 +382,12 @@ To change other "defines", you must edit the header file.
 Do that only if you know what you are doing.
 
 SCSI_NCR_TRUST_BIOS_SETTING	(default: not defined)
-	If defined, the driver will preserve features bits in 
-	dmode/dcntl/ctest3/ctest4 io register.
-	Else, it will enable features according to chip and revision id.
+	If defined, the driver will preserve features bits from  
+	dmode/dcntl/ctest3/ctest4 io registers.
+
+SCSI_NCR_SPECIAL_FEATURES	(default: not defined)
+	If defined, the driver will enable some special features according  
+	to chip and revision id.
 
 SCSI_NCR_IOMAPPED		(default: not defined)
 	If defined, normal I/O is forced.
@@ -391,6 +399,11 @@ SCSI_NCR_MAX_TAGS		(default: 4)
 	Maximum number of simultaneous tagged commands to a device.
 	Can be changed by "settags <target> <maxtags>"
 
+SCSI_NCR_DEFAULT_SYNC           (default: 5)
+	Frequency in KHz the driver will use at boot time for synchronous 
+	negotiation. 0 means asynchronous.
+	Can be changed by "setsync <target> <period>"
+
 SCSI_NCR_DEFAULT_TAGS		(default: 4)
 	Default number of simultaneous tagged commands to a device.
 	< 1 means tagged command queuing disabled at start-up.
@@ -398,10 +411,6 @@ SCSI_NCR_DEFAULT_TAGS		(default: 4)
 SCSI_NCR_ALWAYS_SIMPLE_TAG	(default: defined)
 	Use SIMPLE TAG for read and write commands.
 	Can be changed by "setorder <ordered|simple|default>"
-
-SCSI_NCR_TAGGED_QUEUE_DISABLED	(default: defined)
-	If defined, tagged command queuing is disable at start-up.
-	Can be changed by "settags <target> <maxtags>"
 
 SCSI_NCR_NO_DISCONNECT		(default: not defined)
 	If defined, targets are not allowed to disconnect.
@@ -483,7 +492,7 @@ Prior to installing the driver, you must untar the distribution, as follow:
 
 	mkdir ncrB2L
 	cd ncrB2L
-	tar zxvf ncrBsd2Linux-1.14a-src.tar.gz
+	tar zxvf ncrBsd2Linux-1.14b-src.tar.gz
 
 
 12. Installation procedure for Linux version 1

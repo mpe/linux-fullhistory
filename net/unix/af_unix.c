@@ -676,31 +676,6 @@ static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int *uaddr_
 }
 
 /*
- *	Support routines for struct cmsghdr handling
- */
- 
-static struct cmsghdr *unix_copyrights(void *userp, int len)
-{
-	struct cmsghdr *cm;
-
-	if(len>256|| len <=0)
-		return NULL;
-	cm=kmalloc(len, GFP_KERNEL);
-	copy_from_user(cm, userp, len);
-	return cm;
-}
-
-/*
- *	Return a header block
- */
- 
-static void unix_returnrights(void *userp, int len, struct cmsghdr *cm)
-{
-	copy_to_user(userp, cm, len);
-	kfree(cm);
-}
-
-/*
  *	Copy file descriptors into system space.
  *	Return number copied or negative error code
  */
@@ -724,9 +699,6 @@ static int unix_fd_copy(struct sock *sk, struct cmsghdr *cmsg, struct file **fp)
 		int fd;
 		
 		fd = fdp[i];	
-#if 0
-		printk("testing  fd %d\n", fd);
-#endif
 		if (fd < 0 || fd >= NR_OPEN)
 			return -EBADF;
 		if (current->files->fd[fd]==NULL)
@@ -891,18 +863,18 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	 */
 	if(msg->msg_control) 
 	{
-		struct cmsghdr *cm=unix_copyrights(msg->msg_control, 
-						msg->msg_controllen);
+		struct cmsghdr *cm = msg->msg_control;
+
 		if(cm==NULL || msg->msg_controllen<sizeof(struct cmsghdr) ||
 		   cm->cmsg_type!=SCM_RIGHTS ||
 		   cm->cmsg_level!=SOL_SOCKET ||
 		   msg->msg_controllen!=cm->cmsg_len)
 		{
-			kfree(cm);
 		   	return -EINVAL;
 		}
-		fpnum=unix_fd_copy(sk,cm,fp);
-		kfree(cm);
+
+		fpnum = unix_fd_copy(sk, cm, fp);
+
 		if(fpnum<0) {
 			return fpnum;
 		}
@@ -1064,8 +1036,8 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 
 	if(msg->msg_control) 
 	{
-		cm=unix_copyrights(msg->msg_control, 
-			msg->msg_controllen);
+		cm=msg->msg_control;
+
 		if(msg->msg_controllen<sizeof(struct cmsghdr)
 #if 0 
 /*		investigate this further -- Stevens example doesn't seem to care */
@@ -1076,8 +1048,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 #endif
 		)
 		{
-			kfree(cm);
-/*			printk("recvmsg: Bad msg_control\n");*/
+			printk(KERN_DEBUG "unix_recvmsg: Bad msg_control\n");
 		   	return -EINVAL;
 		}
 	}
@@ -1106,9 +1077,9 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 					return copied;
 				if(noblock)
 					return -EAGAIN;
+				unix_data_wait(sk);
 				if(current->signal & ~current->blocked)
 					return -ERESTARTSYS;
-				unix_data_wait(sk);
 				down(&sk->protinfo.af_unix.readsem);
 				continue;
 			}
@@ -1149,8 +1120,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 	}
 out:
 	up(&sk->protinfo.af_unix.readsem);
-	if(cm)
-		unix_returnrights(msg->msg_control,msg->msg_controllen,cm);
+
 	return copied;
 }
 
@@ -1305,7 +1275,7 @@ static struct proc_dir_entry proc_net_unix = {
 
 void unix_proto_init(struct net_proto *pro)
 {
-	printk(KERN_INFO "NET3: Unix domain sockets 0.12 for Linux NET3.035.\n");
+	printk(KERN_INFO "NET3: Unix domain sockets 0.13 for Linux NET3.035.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_unix);

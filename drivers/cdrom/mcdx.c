@@ -64,6 +64,7 @@ static const char *mcdx_c_version
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <asm/io.h>
+#include <asm/uaccess.h>
 
 #include <linux/major.h>
 #define MAJOR_NR MITSUMI_X_CDROM_MAJOR

@@ -271,15 +271,11 @@ ENTRY(system_call)
 #ifdef __SMP__
 	ENTER_KERNEL
 #endif
-	movl $-ENOSYS,EAX(%esp)
 	cmpl $(NR_syscalls),%eax
-	jae ret_from_sys_call
-	movl SYMBOL_NAME(sys_call_table)(,%eax,4),%eax
-	testl %eax,%eax
-	je ret_from_sys_call
+	jae badsys
 	testb $0x20,flags(%ebx)		# PF_TRACESYS
 	jne tracesys
-	call *%eax
+	call SYMBOL_NAME(sys_call_table)(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
 	ALIGN
 	.globl ret_from_sys_call
@@ -326,6 +322,9 @@ tracesys:
 	call SYMBOL_NAME(sys_call_table)(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
 	call SYMBOL_NAME(syscall_trace)
+	jmp ret_from_sys_call
+badsys:
+	movl $-ENOSYS,EAX(%esp)
 	jmp ret_from_sys_call
 
 
@@ -450,6 +449,11 @@ ENTRY(alignment_check)
 
 ENTRY(page_fault)
 	pushl $ SYMBOL_NAME(do_page_fault)
+	jmp error_code
+
+ENTRY(spurious_interrupt_bug)
+	pushl $0
+	pushl $ SYMBOL_NAME(do_spurious_interrupt_bug)
 	jmp error_code
 
 .data
@@ -591,7 +595,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_bdflush)
 	.long SYMBOL_NAME(sys_sysfs)		/* 135 */
 	.long SYMBOL_NAME(sys_personality)
-	.long 0					/* for afs_syscall */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* for afs_syscall */
 	.long SYMBOL_NAME(sys_setfsuid)
 	.long SYMBOL_NAME(sys_setfsgid)
 	.long SYMBOL_NAME(sys_llseek)		/* 140 */
@@ -620,4 +624,6 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_mremap)
 	.long SYMBOL_NAME(sys_setresuid)
 	.long SYMBOL_NAME(sys_getresuid)
-	.space (NR_syscalls-165)*4
+	.rept NR_syscalls-165
+		.long SYMBOL_NAME(sys_ni_syscall)
+	.endr

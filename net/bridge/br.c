@@ -267,7 +267,7 @@ void root_selection(void)
 				  (((port_info[port_no].designated_cost
 				     + port_info[port_no].path_cost
 				     )
-				    ==
+				    <
 				    (port_info[root_port].designated_cost
 				     + port_info[root_port].path_cost
 				     )		  /* (4.6.8.3.1(2)) */

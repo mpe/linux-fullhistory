@@ -49,6 +49,9 @@
 #include <linux/ctype.h>
 
 extern unsigned char aux_device_present, kbd_read_mask;
+#ifdef __i386__
+	extern struct drive_info_struct drive_info;
+#endif
 
 #ifdef CONFIG_PCI
 #include <linux/bios32.h>
@@ -186,6 +189,10 @@ struct symbol_table symbol_table = {
 	X(blkdev_release),
 	X(gendisk_head),
 	X(resetup_one_dev),
+	X(unplug_device),
+#ifdef __i386__
+	X(drive_info),
+#endif
 
 #ifdef CONFIG_SERIAL	
 	/* Module creation of serial units */
@@ -219,6 +226,11 @@ struct symbol_table symbol_table = {
 	/* sysctl table registration */
 	X(register_sysctl_table),
 	X(unregister_sysctl_table),
+	X(sysctl_string),
+	X(sysctl_intvec),
+	X(proc_dostring),
+	X(proc_dointvec),
+	X(proc_dointvec_minmax),
 
 	/* interrupt handling */
 	X(request_irq),
@@ -285,6 +297,7 @@ struct symbol_table symbol_table = {
 	X(sys_call_table),
 	X(hard_reset_now),
 	X(_ctype),
+	X(secure_tcp_sequence_number),
 
 	/* Signal interfaces */
 	X(send_sig),
@@ -329,11 +342,6 @@ struct symbol_table symbol_table = {
 /* psaux mouse */
 	X(aux_device_present),
 	X(kbd_read_mask),
-
-#ifdef CONFIG_BLK_DEV_IDE_PCMCIA
-	X(ide_register),
-	X(ide_unregister),
-#endif
 
 #ifdef CONFIG_BLK_DEV_MD
 	X(disk_name),	/* for md.c */

@@ -15,9 +15,14 @@
 #ifdef	CONFIG_UNIX
 #include <net/af_unix.h>
 #endif
+
 #ifdef	CONFIG_INET
 #include <linux/inet.h>
+#ifdef	CONFIG_IPV6
+extern void inet6_proto_init(struct net_proto *pro);
 #endif
+#endif	/* INET */
+
 #if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
 #include <net/ipxcall.h>
 #include <net/p8022call.h>
@@ -67,6 +72,9 @@ struct net_proto protocols[] = {
 #endif  
 #ifdef	CONFIG_INET
   { "INET",	inet_proto_init	},			/* TCP/IP			*/
+#ifdef	CONFIG_IPV6
+  { "INET6",	inet6_proto_init},			/* IPv6	*/
+#endif
 #endif
 #ifdef  CONFIG_IPX
   { "IPX",	ipx_proto_init },			/* IPX				*/

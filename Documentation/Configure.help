@@ -1476,24 +1476,37 @@ CONFIG_SCSI_NCR53C8XX
   of PCI-SCSI controllers. This driver supports parity checking,
   tagged command queuing, fast scsi II transfer up to 10 MB/s with
   narrow scsi devices and 20 MB/s with wide scsi devices.
-  This driver has been tested OK with linux/i386 and is currently
-  untested under linux/Alpha. If you intend to use this driver under
-  linux/Alpha, just try it first with read-only or mounted read-only
-  devices.  Memory mapped io is currently not supported under
-  linux/Alpha. Please read drivers/scsi/README.ncr53c8xx for more
-  information. 
+  Linux/i386 and Linux/Alpha are supported by this driver.
+  Memory mapped io is currently untested under Linux/Alpha.
+  Please read drivers/scsi/README.ncr53c8xx for more information.
 
-force normal IO
+synchronous data transfers frequency
+CONFIG_SCSI_NCR53C8XX_SYNC
+  SCSI-2 specifications allow scsi devices to negotiate a synchronous 
+  transfer period of 25 nano-seconds or more.
+  The transfer period value is 4 times the agreed transfer period.
+  So, data can be transferred at a 10 MHz frequency, allowing 10 MB/second 
+  throughput with 8 bits scsi-2 devices and 20 MB/second with wide16 devices.
+  This frequency can be used safely with differential devices but may cause 
+  problems with singled-ended devices.
+  Specify 0 if you want to only use asynchronous data transfers.
+  Otherwise, specify a value between 5 and 10.
+  Commercial O/Ses generally use 5 Mhz frequency for synchronous transfers.
+  It is a reasonnable default value.
+  However, a flawless singled-ended scsi bus supports 10 MHz data transfers.
+  Regardless the value choosen in the Linux configuration, the synchronous 
+  period can be changed after boot-up through the /proc/scsi file system.
+  The generic command is:
+      echo "setsync #target period" >/proc/scsi/ncr53c8xx/0
+  Use a 25 ns period for 10 Mhz synchronous data transfers.
+
+use normal IO
 CONFIG_SCSI_NCR53C8XX_IOMAPPED
-  Under linux/Alpha only normal io is currently supported.
-  Under linux/i386, this option allows you to force the driver to use
-  normal IO.  Memory mapped IO has less latency than normal IO.
-  During the initialization phase, the driver first tries to use
-  memory mapped io.  If nothing seems wrong, it will use memory mapped
-  io.  If a flaw is detected, it will use normal io.  However, it's
-  possible that memory mapped does not work properly for you and the
-  driver has not detected the problem; then you would want to say Y
-  here.  The normal answer therefore is N.
+  Warning! Under linux/Alpha only normal io has been currently tested.
+  This option allows you to force the driver to use normal IO.
+  Memory mapped IO has less latency than normal IO and works for most 
+  Intel-based hardware.
+  The normal answer therefore is N.
 
 not allow targets to disconnect
 CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
@@ -1518,17 +1531,13 @@ CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
   The safe answer therefore is N.
   The normal answer therefore is Y.
 
-force asynchronous transfer mode
-CONFIG_SCSI_NCR53C8XX_FORCE_ASYNCHRONOUS
-  This option allows you to force asynchronous transfer mode for all
-  devices at linux startup. You can enable synchronous negotiation
-  with the "setsync" control command after boot-up, for example:
-     echo "setsync 2 25" >/proc/scsi/ncr53c8xx/0
-  asks the driver to set the period to 25 ns (10MB/sec) for target 2
-  of controller 0 (please read drivers/scsi/README.ncr53c8xx for more
-  information). The safe answer therefore is Y.  The normal answer
-  therefore is N.
- 
+maximum number of queued commands
+CONFIG_SCSI_NCR53C8XX_MAX_TAGS
+  This option allows you to specify the maximum number of commands that 
+  can be queud to a device, when tagged command queuing is possible.
+  The default value is 4. Minimum is 2, maximum is 12.
+  The normal answer therefore is the default one.
+
 force synchronous negotiation
 CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
   Some scsi-2 devices support synchronous negotiations but do not

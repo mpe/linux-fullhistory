@@ -159,6 +159,10 @@ typedef u32 u_int32;
 #define SCSI_NCR_MAX_SYNC   (10000)
 #endif
 
+#ifndef SCSI_NCR_DEFAULT_SYNC
+#define SCSI_NCR_DEFAULT_SYNC	SCSI_NCR_MAX_SYNC
+#endif
+
 /*
 **    The maximal bus with (in log2 byte)
 **    (0=8 bit, 1=16 bit)
@@ -1255,9 +1259,9 @@ struct ncb {
 	int    chip;			/* Chip number                       */
 	struct timer_list timer;	/* Timer link header                 */
 	int	ncr_cache;		/* Cache test variable               */
-	int	release_stage;		/* Synchronisation stage on release  */
 	Scsi_Cmnd *waiting_list;	/* Waiting list header for commands  */
 					/* that we can't put into the squeue */
+	u_char	release_stage;		/* Synchronisation stage on release  */
 
 	/*-----------------------------------------------
 	**	Added field to support differences
@@ -3883,9 +3887,10 @@ int ncr_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *))
 	**
 	**----------------------------------------------------
 	*/
-
+#ifdef SCSI_NCR_PROFILE
 	bzero (&cp->phys.header.stamp, sizeof (struct tstamp));
 	cp->phys.header.stamp.start = jiffies;
+#endif
 
 	/*----------------------------------------------------
 	**
@@ -5007,10 +5012,10 @@ void ncr_init (ncb_p np, char * msg, u_long code)
 
 	usrsync = 255;
 
-#ifndef SCSI_NCR_FORCE_ASYNCHRONOUS
+#if defined(SCSI_NCR_DEFAULT_SYNC) && SCSI_NCR_DEFAULT_SYNC != 0
 	if (SCSI_NCR_MAX_SYNC) {
 		u_long period;
-		period =1000000/SCSI_NCR_MAX_SYNC; /* ns = 10e6 / kHz */
+		period =1000000/SCSI_NCR_DEFAULT_SYNC; /* ns = 10e6 / kHz */
 		if (period <= 11 * np->ns_sync) {
 			if (period < 4 * np->ns_sync)
 				usrsync = np->ns_sync;
@@ -5461,6 +5466,7 @@ static void ncr_timeout (ncb_p np)
 			*/
 			OUTB (nc_istat, SIGP);
 		}
+#ifdef undef
 		if (np->latetime>10) {
 			/*
 			**	Although we tried to wake it up,
@@ -5481,6 +5487,7 @@ static void ncr_timeout (ncb_p np)
 #endif
 			np->heartbeat = thistime;
 		}
+#endif /* undef */
 
 		/*----------------------------------------------------
 		**
@@ -7238,31 +7245,39 @@ if(DEBUG_FLAGS & DEBUG_SCATTER)
 
 static	int	ncr_scatter(ccb_p cp, Scsi_Cmnd *cmd)
 {
-	struct dsb *phys = &cp->phys;
-	u_short	segment  = 0;
+	struct scr_tblmove *data;
+	int segment	= 0;
+	int use_sg	= (int) cmd->use_sg;
 
-	cp->data_len = 0;
-	bzero (&phys->data, sizeof (phys->data));
+	bzero (cp->phys.data, sizeof (cp->phys.data));
+	data		= cp->phys.data;
+	cp->data_len	= 0;
 
-	if (!cmd->use_sg) {
-	     phys->data[segment].addr = vtophys(cmd->request_buffer);
-	     phys->data[segment].size = cmd->request_bufflen;
-	     cp->data_len            += phys->data[segment].size;
-	     segment++;
-	     return segment;
+	if (!use_sg) {
+		if (cmd->request_bufflen) {
+			data[0].addr	= vtophys(cmd->request_buffer);
+			data[0].size	= cmd->request_bufflen;
+			cp->data_len	= data[0].size;
+			segment = 1;
+		}
+	}
+	else if (use_sg < MAX_SCATTER) {
+		struct scatterlist *scatter = (struct scatterlist *)cmd->buffer;
+
+		while (segment < use_sg) {
+			data[segment].addr = vtophys(scatter[segment].address);
+			data[segment].size = scatter[segment].length;
+			cp->data_len	   += data[segment].size;
+			++segment;
+		}
+	}
+	else {
+		return -1;
 	}
 
-	while (segment < cmd->use_sg && segment < MAX_SCATTER) {
-	     struct scatterlist *scatter = (struct scatterlist *)cmd->buffer;
-
-	     phys->data[segment].addr = vtophys(scatter[segment].address);
-	     phys->data[segment].size = scatter[segment].length;
-	     cp->data_len            += phys->data[segment].size;
-	     ++segment;
-	}
-
-	return segment < cmd->use_sg ? -1 : segment;
+	return segment;
 }
+
 #endif /* SCSI_NCR_SEGMENT_SIZE */
 
 /*==========================================================

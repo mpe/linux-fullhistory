@@ -48,14 +48,17 @@ if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
   dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
   if [ "$CONFIG_SCSI_NCR53C8XX" != "n" ]; then
     bool '  enable tagged command queueing' CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
-    bool '  force normal IO' CONFIG_SCSI_NCR53C8XX_IOMAPPED
-    bool '  not allow targets to disconnect' CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
-    bool '  force asynchronous transfer mode' CONFIG_SCSI_NCR53C8XX_FORCE_ASYNCHRONOUS
-    bool '  force synchronous negotiation' CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
+    bool '  use normal IO' CONFIG_SCSI_NCR53C8XX_IOMAPPED
+    int  '  maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 4
+    int  '  synchronous transfers frequency in MHz' CONFIG_SCSI_NCR53C8XX_SYNC 5
+    if [ "$CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE" != "y" ]; then
+      bool '  not allow targets to disconnect' CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
+    fi
   fi
   if [ "$CONFIG_SCSI_NCR53C8XX" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
     bool '  disable master parity checking' CONFIG_SCSI_NCR53C8XX_DISABLE_MPARITY_CHECK
     bool '  disable scsi parity checking' CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK
+    bool '  force synchronous negotiation' CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
   fi
 fi
 dep_tristate 'IOMEGA Parallel Port ZIP drive SCSI support' CONFIG_SCSI_PPA $CONFIG_SCSI

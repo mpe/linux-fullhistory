@@ -94,23 +94,21 @@ struct proc_dir_entry proc_scsi_dtc = {
 
 
 static struct override {
-   unsigned char *address;
+   unsigned int address;
    int irq;
 } overrides
 #ifdef OVERRIDE
 [] = OVERRIDE;
 #else
-[4] = {{NULL, IRQ_AUTO}, {NULL, IRQ_AUTO}, {NULL, IRQ_AUTO},
-     {NULL, IRQ_AUTO}};
+[4] = {{0, IRQ_AUTO}, {0, IRQ_AUTO}, {0, IRQ_AUTO}, {0, IRQ_AUTO}};
 #endif
 
 #define NO_OVERRIDES (sizeof(overrides) / sizeof(struct override))
 
 static struct base {
-   unsigned char *address;
+   unsigned int address;
    int noauto;
-} bases[] = {{(unsigned char *) 0xcc000, 0}, {(unsigned char *) 0xc8000, 0},
-{(unsigned char *) 0xdc000, 0}, {(unsigned char *) 0xd8000, 0}};
+} bases[] = {{0xcc000, 0}, {0xc8000, 0}, {0xdc000, 0}, {0xd8000, 0}};
 
 #define NO_BASES (sizeof (bases) / sizeof (struct base))
 
@@ -138,10 +136,10 @@ void dtc_setup(char *str, int *ints) {
       printk("dtc_setup: usage dtc=address,irq\n");
    else
       if (commandline_current < NO_OVERRIDES) {
-      overrides[commandline_current].address = (unsigned char *) ints[1];
+      overrides[commandline_current].address = ints[1];
       overrides[commandline_current].irq = ints[2];
       for (i = 0; i < NO_BASES; ++i)
-	 if (bases[i].address == (unsigned char *) ints[1]) {
+	 if (bases[i].address == ints[1]) {
 	 bases[i].noauto = 1;
 	 break;
       }
@@ -166,25 +164,26 @@ void dtc_setup(char *str, int *ints) {
 int dtc_detect(Scsi_Host_Template * tpnt) {
    static int current_override = 0, current_base = 0;
    struct Scsi_Host *instance;
-   unsigned char *base;
+   unsigned int base;
    int sig, count;
 
    tpnt->proc_dir = &proc_scsi_dtc;
    tpnt->proc_info = &dtc_proc_info;
 
    for (count = 0; current_override < NO_OVERRIDES; ++current_override) {
-      base = NULL;
+      base = 0;
 
       if (overrides[current_override].address)
 	 base = overrides[current_override].address;
       else
 	 for (; !base && (current_base < NO_BASES); ++current_base) {
 #if (DTCDEBUG & DTCDEBUG_INIT)
-	 printk("scsi : probing address %08x\n", (unsigned int) bases[current_base].address);
+	 printk("scsi : probing address %08x\n", bases[current_base].address);
 #endif
 	 for (sig = 0; sig < NO_SIGNATURES; ++sig)
-	    if (!bases[current_base].noauto && !memcmp
-	      (bases[current_base].address + signatures[sig].offset,
+	    if (!bases[current_base].noauto && 
+		check_signature(bases[current_base].address +
+				signatures[sig].offset,
 	      signatures[sig].string, strlen(signatures[sig].string))) {
 	    base = bases[current_base].address;
 #if (DTCDEBUG & DTCDEBUG_INIT)
@@ -195,14 +194,14 @@ int dtc_detect(Scsi_Host_Template * tpnt) {
       }
 
 #if defined(DTCDEBUG) && (DTCDEBUG & DTCDEBUG_INIT)
-      printk("scsi-dtc : base = %08x\n", (unsigned int) base);
+      printk("scsi-dtc : base = %08x\n", base);
 #endif
 
       if (!base)
 	 break;
 
       instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
-      instance->base = base;
+      instance->base = (void *)base;
 
       NCR5380_init(instance, 0);
 
@@ -282,6 +281,7 @@ int dtc_biosparam(Disk * disk, kdev_t dev, int * ip)
    return 0;
 }
 
+
 /****************************************************************
  * Function : int NCR5380_pread (struct Scsi_Host *instance, 
  *	unsigned char *dst, int len)
@@ -320,7 +320,7 @@ static inline int NCR5380_pread (struct Scsi_Host *instance,
       while (NCR5380_read(DTC_CONTROL_REG) & CSR_HOST_BUF_NOT_RDY)
 	 ++i;
       rtrc(3);
-      memcpy(d, (char *)(base + DTC_DATA_BUF), 128);
+      memcpy_fromio(d, base + DTC_DATA_BUF, 128);
       d += 128;
       len -= 128;
       rtrc(7);	/*** with int's on, it sometimes hangs after here.
@@ -370,7 +370,7 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance,
       while (NCR5380_read(DTC_CONTROL_REG) & CSR_HOST_BUF_NOT_RDY)
 	 ++i;
       rtrc(3);
-      memcpy((char *)(base + DTC_DATA_BUF), src, 128);
+      memcpy_toio(base + DTC_DATA_BUF, src, 128);
       src += 128;
       len -= 128;
    }

@@ -150,8 +150,8 @@ void udp_cache_zap(void)
  * to find the appropriate port.
  */
 
-void udp_err(int type, int code, unsigned char *header, __u32 daddr,
-	__u32 saddr, struct inet_protocol *protocol)
+void udp_err(int type, int code, unsigned char *header, __u32 info,
+	     __u32 daddr, __u32 saddr, struct inet_protocol *protocol)
 {
 	struct udphdr *uh;
 	struct sock *sk;
@@ -437,8 +437,8 @@ static int udp_sendto(struct sock *sk, const unsigned char *from, int len, int n
  *	Temporary
  */
  
-static int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock, 
-	int flags)
+int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock, 
+		int flags)
 {
 	if(msg->msg_iovlen==1)
 		return udp_sendto(sk,msg->msg_iov[0].iov_base,len, noblock, flags, msg->msg_name, msg->msg_namelen);
@@ -523,7 +523,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 
 
 /*
- * 	This should be easy, if there is something there we\
+ * 	This should be easy, if there is something there we
  * 	return it, otherwise we block.
  */
 
@@ -591,8 +591,9 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   	return(copied);
 }
 
-int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
+int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
+	struct sockaddr_in *usin = (struct sockaddr_in *) uaddr;
 	struct rtable *rt;
 	if (addr_len < sizeof(*usin)) 
 	  	return(-EINVAL);
@@ -632,7 +633,7 @@ static void udp_close(struct sock *sk, unsigned long timeout)
 	destroy_sock(sk);
 }
 
-static inline void udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
+static inline int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 {
 	/*
 	 *	Charge it to the socket, dropping if the queue is full.
@@ -647,9 +648,10 @@ static inline void udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 		ip_statistics.IpInDelivers--;
 		skb->sk = NULL;
 		kfree_skb(skb, FREE_WRITE);
-		return;
+		return 0;
 	}
 	udp_statistics.UdpInDatagrams++;
+	return 0;
 }
 
 
@@ -697,15 +699,6 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   	struct udphdr *uh;
 	unsigned short ulen;
 	int addr_type;
-
-	/*
-	 * If we're doing a "redo" (the socket was busy last time
-	 * around), we can just queue the packet now..
-	 */
-	if (redo) {
-		udp_queue_rcv_skb(skb->sk, skb);
-		return 0;
-	}
 
 	/*
 	 * First time through the loop.. Do all the setup stuff
@@ -843,26 +836,26 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 struct proto udp_prot = {
 	udp_close,
-	ip_build_header,
 	udp_connect,
 	NULL,
-	ip_queue_xmit,
 	NULL,
 	NULL,
 	NULL,
-	udp_rcv,
 	datagram_select,
 	udp_ioctl,
+	NULL,
 	NULL,
 	NULL,
 	ip_setsockopt,
 	ip_getsockopt,
 	udp_sendmsg,
 	udp_recvmsg,
-	NULL,		/* No special bind function */
+	NULL,			/* No special bind function */
+	udp_queue_rcv_skb,     
 	128,
 	0,
 	"UDP",
 	0, 0,
-	{NULL,}
+	NULL
 };
+

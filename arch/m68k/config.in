@@ -71,9 +71,12 @@ mainmenu_option next_comment
 comment 'Floppy, IDE, and other block devices'
 
 tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
-bool 'IDE harddisk support' CONFIG_BLK_DEV_IDE
-if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
-  bool '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD
+tristate 'Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support' CONFIG_BLK_DEV_IDE
+if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
+  dep_tristate '   Include IDE/ATA-2 DISK support' CONFIG_BLK_DEV_IDEDISK $CONFIG_BLK_DEV_IDE
+  dep_tristate '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD $CONFIG_BLK_DEV_IDE
+  dep_tristate '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE
+  dep_tristate '   Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE
 fi
 if [ "$CONFIG_AMIGA" = "y" ]; then
 tristate 'Amiga Zorro II ramdisk support' CONFIG_AMIGA_Z2RAM

@@ -82,7 +82,8 @@ static int netlink_select(struct inode *inode, struct file *file, int sel_type, 
  *	Write a message to the kernel side of a communication link
  */
  
-static int netlink_write(struct inode * inode, struct file * file, const char * buf, int count)
+static long netlink_write(struct inode * inode, struct file * file,
+			  const char * buf, unsigned long count)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
 	struct sk_buff *skb;
@@ -96,7 +97,8 @@ static int netlink_write(struct inode * inode, struct file * file, const char * 
  *	Read a message from the kernel side of the communication link
  */
 
-static int netlink_read(struct inode * inode, struct file * file, char * buf, int count)
+static long netlink_read(struct inode * inode, struct file * file, char * buf,
+			 unsigned long count)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
 	struct sk_buff *skb;
@@ -124,8 +126,8 @@ static int netlink_read(struct inode * inode, struct file * file, char * buf, in
 	return count;
 }
 
-static int netlink_lseek(struct inode * inode, struct file * file,
-		    off_t offset, int origin)
+static loff_t netlink_lseek(struct inode * inode, struct file * file,
+			    loff_t offset, int origin)
 {
 	return -ESPIPE;
 }

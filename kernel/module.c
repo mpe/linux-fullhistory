@@ -49,7 +49,7 @@
 #ifdef CONFIG_MODULES		/* a *big* #ifdef block... */
 
 static struct module kernel_module;
-static struct module *module_list = &kernel_module;
+struct module *module_list = &kernel_module;
 
 static int freeing_modules; /* true if some modules are marked for deletion */
 
@@ -117,6 +117,8 @@ sys_create_module(char *module_name, unsigned long size)
 	mp->addr = addr;
 	mp->state = MOD_UNINITIALIZED;
 	mp->cleanup = NULL;
+	mp->exceptinfo.start = NULL;
+	mp->exceptinfo.stop = NULL;
 
 	* (long *) addr = 0;	/* set use count to zero */
 	module_list = mp;	/* link it in */
@@ -173,7 +175,12 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 		mp->size * PAGE_SIZE - (codesize + sizeof (long)));
 	pr_debug("module init entry = 0x%08lx, cleanup entry = 0x%08lx\n",
 		(unsigned long) rt.init, (unsigned long) rt.cleanup);
+	if (rt.signature != MODULE_2_1_7_SIG){
+		printk ("Older insmod used with kernel 2.1.7 +\n");
+		return -EINVAL;
+	}
 	mp->cleanup = rt.cleanup;
+	mp->exceptinfo = rt.exceptinfo;
 
 	/* update kernel symbol table */
 	if (symtab) { /* symtab == NULL means no new entries to handle */

@@ -1035,7 +1035,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 		    shpnt->dma_channel = dma_chan;
 		    shpnt->irq = irq_level;
 		    HOSTDATA(shpnt)->bios_translation  = trans;
-		    if(trans == 2) 
+		    if(trans == BIOS_TRANSLATION_25563) 
 		      printk("aha1542.c: Using extended bios translation\n");
 		    HOSTDATA(shpnt)->aha1542_last_mbi_used  = (2*AHA1542_MAILBOXES - 1);
 		    HOSTDATA(shpnt)->aha1542_last_mbo_used  = (AHA1542_MAILBOXES - 1);
@@ -1308,8 +1308,8 @@ int aha1542_biosparam(Scsi_Disk * disk, kdev_t dev, int * ip)
   int size = disk->capacity;
 
   translation_algorithm = HOSTDATA(disk->device->host)->bios_translation;
-  /* Should this be > 1024, or >= 1024?  Enquiring minds want to know. */
-  if((size>>11) > 1024 && translation_algorithm == 2) {
+
+  if((size>>11) > 1024 && translation_algorithm == BIOS_TRANSLATION_25563) {
     /* Please verify that this is the same as what DOS returns */
     ip[0] = 255;
     ip[1] = 63;
@@ -1318,8 +1318,8 @@ int aha1542_biosparam(Scsi_Disk * disk, kdev_t dev, int * ip)
     ip[0] = 64;
     ip[1] = 32;
     ip[2] = size >> 11;
-  };
-/*  if (ip[2] >= 1024) ip[2] = 1024; */
+  }
+
   return 0;
 }
 

@@ -43,6 +43,11 @@
 #define NCR53C8XX_H
 
 /*
+**	Name and revision of the driver
+*/
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 1.14b"
+ 
+/*
 **	If SCSI_NCR_SPECIAL_FEATURES is defined,
 **	the driver enables or not the following features according to chip id 
 **	revision id:
@@ -143,12 +148,19 @@
 **	Avoid to change these constants, unless you know what you are doing.
 */
 
-#define SCSI_NCR_MAX_TAGS	(4)
-#define SCSI_NCR_ALWAYS_SIMPLE_TAG
-
-#ifdef CONFIG_SCSI_NCR53C8XX_IOMAPPED
-#define	SCSI_NCR_IOMAPPED
+#ifdef	CONFIG_SCSI_NCR53C8XX_MAX_TAGS
+#if	CONFIG_SCSI_NCR53C8XX_MAX_TAGS < 2
+#define SCSI_NCR_MAX_TAGS	(2)
+#elif	CONFIG_SCSI_NCR53C8XX_MAX_TAGS > 12
+#define SCSI_NCR_MAX_TAGS	(12)
+#else
+#define	SCSI_NCR_MAX_TAGS	CONFIG_SCSI_NCR53C8XX_MAX_TAGS
 #endif
+#else
+#define SCSI_NCR_MAX_TAGS	(4)
+#endif
+
+#define SCSI_NCR_ALWAYS_SIMPLE_TAG
 
 #ifdef CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
 #define SCSI_NCR_DEFAULT_TAGS	SCSI_NCR_MAX_TAGS
@@ -156,12 +168,31 @@
 #define SCSI_NCR_DEFAULT_TAGS	(0)
 #endif
 
-#ifdef CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
-#define SCSI_NCR_NO_DISCONNECT
+#ifdef CONFIG_SCSI_NCR53C8XX_IOMAPPED
+#define	SCSI_NCR_IOMAPPED
 #endif
 
-#ifdef CONFIG_SCSI_NCR53C8XX_FORCE_ASYNCHRONOUS
-#define SCSI_NCR_FORCE_ASYNCHRONOUS
+#ifdef	CONFIG_SCSI_NCR53C8XX_SYNC
+#if	CONFIG_SCSI_NCR53C8XX_SYNC == 0
+#define	SCSI_NCR_DEFAULT_SYNC	(0)
+#elif	CONFIG_SCSI_NCR53C8XX_SYNC < 5
+#define	SCSI_NCR_DEFAULT_SYNC	(5000)
+#elif	CONFIG_SCSI_NCR53C8XX_SYNC > 10
+#define	SCSI_NCR_DEFAULT_SYNC	(10000)
+#else
+#define	SCSI_NCR_DEFAULT_SYNC	(CONFIG_SCSI_NCR53C8XX_SYNC * 1000)
+#endif
+#else
+#define	SCSI_NCR_DEFAULT_SYNC	(10000)
+#endif
+
+#ifdef	CONFIG_SCSI_FORCE_ASYNCHRONOUS
+#undef	SCSI_NCR_DEFAULT_SYNC
+#define SCSI_NCR_DEFAULT_SYNC	(0)
+#endif
+
+#ifdef CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
+#define SCSI_NCR_NO_DISCONNECT
 #endif
 
 #ifdef CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
@@ -230,7 +261,7 @@ int ncr53c8xx_release(struct Scsi_Host *);
 
 #if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0)
 
-#define NCR53C8XX {NULL,NULL,NULL,NULL,"ncr53c8xx (rel 1.14a)", ncr53c8xx_detect,\
+#define NCR53C8XX {NULL,NULL,NULL,NULL,SCSI_NCR_DRIVER_NAME, ncr53c8xx_detect,\
     	ncr53c8xx_release, /* info */ NULL, /* command, deprecated */ NULL, 		\
 	ncr53c8xx_queue_command, ncr53c8xx_abort, ncr53c8xx_reset,	\
         NULL /* slave attach */, scsicam_bios_param, /* can queue */ SCSI_NCR_CAN_QUEUE,\
@@ -241,7 +272,7 @@ int ncr53c8xx_release(struct Scsi_Host *);
 #else
 
 
-#define NCR53C8XX {NULL, NULL, "ncr53c8xx (rel 1.14a)", ncr53c8xx_detect,\
+#define NCR53C8XX {NULL, NULL, SCSI_NCR_DRIVER_NAME, ncr53c8xx_detect,\
     	ncr53c8xx_release, /* info */ NULL, /* command, deprecated */ NULL, 		\
 	ncr53c8xx_queue_command, ncr53c8xx_abort, ncr53c8xx_reset,	\
         NULL /* slave attach */, scsicam_bios_param, /* can queue */ SCSI_NCR_CAN_QUEUE,\

@@ -11,7 +11,7 @@ O_TARGET := ipv4.o
 IPV4_OBJS := utils.o route.o proc.o timer.o protocol.o packet.o \
 	     ip_input.o ip_fragment.o ip_forward.o ip_options.o \
 	     ip_output.o ip_sockglue.o \
-	     tcp.o tcp_input.o tcp_output.o tcp_timer.o \
+	     tcp.o tcp_input.o tcp_output.o tcp_timer.o tcp_ipv4.o\
 	     raw.o udp.o arp.o icmp.o devinet.o af_inet.o igmp.o ip_fw.o \
 	     sysctl_net_ipv4.o
 

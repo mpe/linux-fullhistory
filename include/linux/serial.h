@@ -44,7 +44,19 @@ struct serial_struct {
 #define PORT_16550A	4
 #define PORT_CIRRUS     5
 #define PORT_16650	6
-#define PORT_MAX	6
+#define PORT_16650V2	7
+#define PORT_16750	8
+#define PORT_MAX	8
+
+struct serial_uart_config {
+	char	*name;
+	int	dfl_xmit_fifo_size;
+	int	flags;
+};
+
+#define UART_CLEAR_FIFO		0x01
+#define UART_USE_FIFO		0x02
+#define UART_STARTECH		0x04
 
 /*
  * Definitions for async_struct (and serial_struct) flags field
@@ -55,7 +67,7 @@ struct serial_struct {
 #define ASYNC_SAK	0x0004	/* Secure Attention Key (Orange book) */
 #define ASYNC_SPLIT_TERMIOS 0x0008 /* Separate termios for dialin/callout */
 
-#define ASYNC_SPD_MASK	0x0030
+#define ASYNC_SPD_MASK	0x1030
 #define ASYNC_SPD_HI	0x0010	/* Use 56000 instead of 38400 bps */
 
 #define ASYNC_SPD_VHI	0x0020  /* Use 115200 instead of 38400 bps */
@@ -67,8 +79,13 @@ struct serial_struct {
 #define ASYNC_PGRP_LOCKOUT    0x0200 /* Lock out cua opens based on pgrp */
 #define ASYNC_CALLOUT_NOHUP   0x0400 /* Don't do hangups for cua device */
 
-#define ASYNC_FLAGS	0x0FFF	/* Possible legal async flags */
-#define ASYNC_USR_MASK 0x0430	/* Legal flags that non-privileged
+#define ASYNC_HARDPPS_CD	0x0800	/* Call hardpps when CD goes high  */
+
+#define ASYNC_SPD_SHI	0x1000	/* Use 230400 instead of 38400 bps */
+#define ASYNC_SPD_WARP	0x1010	/* Use 460800 instead of 38400 bps */
+
+#define ASYNC_FLAGS	0x1FFF	/* Possible legal async flags */
+#define ASYNC_USR_MASK 0x1430	/* Legal flags that non-privileged
 				 * users can set or reset */
 
 /* Internal flags used only by kernel/chr_drv/serial.c */
@@ -80,6 +97,8 @@ struct serial_struct {
 #define ASYNC_CTS_FLOW		0x04000000 /* Do CTS flow control */
 #define ASYNC_CHECK_CD		0x02000000 /* i.e., CLOCAL */
 #define ASYNC_SHARE_IRQ		0x01000000 /* for multifunction cards */
+
+#define ASYNC_INTERNAL_FLAGS	0xFF000000 /* Internal flags */
 
 /*
  * Multiport serial configuration structure --- external structure
@@ -128,20 +147,37 @@ struct async_icount {
 	__u32	cts, dsr, rng, dcd;	
 };
 
+struct serial_state {
+	int	magic;
+	int	baud_base;
+	int	port;
+	int	irq;
+	int	flags;
+	int	hub6;
+	int	type;
+	int	line;
+	int	xmit_fifo_size;
+	int	custom_divisor;
+	int	count;
+	unsigned short	close_delay;
+	unsigned short	closing_wait; /* time to wait before closing */
+	struct async_icount	icount;	
+	struct termios		normal_termios;
+	struct termios		callout_termios;
+	struct async_struct *info;
+};
+
 struct async_struct {
 	int			magic;
-	int			baud_base;
 	int			port;
-	int			irq;
-	int			flags; 		/* defined in tty.h */
-	int			hub6;		/* HUB6 plus one */
-	int			type; 		/* UART type */
+	int			hub6;
+	int			flags;
+	int			xmit_fifo_size;
+	struct serial_state	*state;
 	struct tty_struct 	*tty;
 	int			read_status_mask;
 	int			ignore_status_mask;
 	int			timeout;
-	int			xmit_fifo_size;
-	int			custom_divisor;
 	int			x_char;	/* xon/xoff character */
 	int			close_delay;
 	unsigned short		closing_wait;
@@ -152,7 +188,6 @@ struct async_struct {
 	unsigned long		event;
 	unsigned long		last_active;
 	int			line;
-	int			count;	    /* # of fd on device */
 	int			blocked_open; /* # of blocked opens */
 	long			session; /* Session of opening process */
 	long			pgrp; /* pgrp of opening process */
@@ -162,17 +197,15 @@ struct async_struct {
 	int			xmit_cnt;
 	struct tq_struct	tqueue;
 	struct tq_struct	tqueue_hangup;
-	struct termios		normal_termios;
-	struct termios		callout_termios;
 	struct wait_queue	*open_wait;
 	struct wait_queue	*close_wait;
 	struct wait_queue	*delta_msr_wait;
-	struct async_icount	icount;	/* kernel counters for the 4 input interrupts */
 	struct async_struct	*next_port; /* For the linked list */
 	struct async_struct	*prev_port;
 };
 
 #define SERIAL_MAGIC 0x5301
+#define SSTATE_MAGIC 0x5302
 
 /*
  * The size of the serial xmit buffer is 1 page, or 4096 bytes

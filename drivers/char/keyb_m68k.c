@@ -508,8 +508,9 @@ static void do_self(unsigned char value, char up_flag)
 #define A_CFLEX  '^'
 #define A_TILDE  '~'
 #define A_DIAER  '"'
-static unsigned char ret_diacr[] =
-        {A_GRAVE, A_ACUTE, A_CFLEX, A_TILDE, A_DIAER };
+#define A_CEDIL  ','
+static unsigned char ret_diacr[NR_DEAD] =
+        {A_GRAVE, A_ACUTE, A_CFLEX, A_TILDE, A_DIAER, A_CEDIL };
 
 /* If a dead key pressed twice, output a character corresponding to it, */
 /* otherwise just remember the dead key.				*/

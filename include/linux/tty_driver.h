@@ -91,7 +91,16 @@
  *
  * 	This routine notifies the tty driver that it should hangup the
  * 	tty device.
+ *
+ * void (*wait_until_sent)(struct tty_struct *tty, int timeout);
  * 
+ * 	This routine waits until the device has written out all of the
+ * 	characters in its transmitter FIFO.
+ *
+ * void (*send_xchar)(struct tty_struct *tty, char ch);
+ *
+ * 	This routine is used to send a high-priority XON/XOFF
+ * 	character to the device.
  */
 
 #include <linux/fs.h>
@@ -139,6 +148,8 @@ struct tty_driver {
 	void (*hangup)(struct tty_struct *tty);
 	void (*flush_buffer)(struct tty_struct *tty);
 	void (*set_ldisc)(struct tty_struct *tty);
+	void (*wait_until_sent)(struct tty_struct *tty, int timeout);
+	void (*send_xchar)(struct tty_struct *tty, char ch);
 
 	/*
 	 * linked list pointers

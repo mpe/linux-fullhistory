@@ -12,11 +12,6 @@
  * Pretty much the same code will work for the OPTi "Viper" chipset.
  * Look for DMA support for this in linux kernel 2.1.xx, when it appears.
  *
- * DMA is currently supported only for hard disk drives (not cdroms).
- *
- * Support for cdroms will likely be added at a later date,
- * after broader experience has been obtained with hard disks.
- *
  * Up to four drives may be enabled for DMA, and the Triton chipset will
  * (hopefully) arbitrate the PCI bus among them.  Note that the i82371 chip
  * provides a single "line buffer" for the BM IDE function, so performance of
@@ -102,7 +97,6 @@
  *
  * And, yes, Intel Zappa boards really *do* use the Triton IDE ports.
  */
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/timer.h>
@@ -198,13 +192,8 @@ static int build_dmatable (ide_drive_t *drive)
 		 * is always composed of two adjacent physical 4kB pages rather
 		 * than two possibly non-adjacent physical 4kB pages.
 		 */
-		if (bh == NULL) {  /* paging and tape requests have (rq->bh == NULL) */
+		if (bh == NULL) {  /* paging requests have (rq->bh == NULL) */
 			addr = virt_to_bus (rq->buffer);
-#ifdef CONFIG_BLK_DEV_IDETAPE
-			if (drive->media == ide_tape)
-				size = drive->tape.pc->request_transfer;
-			else
-#endif /* CONFIG_BLK_DEV_IDETAPE */	
 			size = rq->nr_sectors << 9;
 		} else {
 			/* group sequential buffers into one large buffer */
@@ -317,10 +306,8 @@ static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	outl(virt_to_bus (HWIF(drive)->dmatable), dma_base + 4); /* PRD table */
 	outb(reading, dma_base);			/* specify r/w */
 	outb(inb(dma_base+2)|0x06, dma_base+2);		/* clear status bits */
-#ifdef CONFIG_BLK_DEV_IDEATAPI
 	if (drive->media != ide_disk)
 		return 0;
-#endif /* CONFIG_BLK_DEV_IDEATAPI */	
 	ide_set_handler(drive, &dma_intr, WAIT_CMD);	/* issue cmd to drive */
 	OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
 	outb(inb(dma_base)|1, dma_base);		/* begin DMA */
@@ -449,14 +436,14 @@ void ide_init_triton (byte bus, byte fn)
 #endif /* DISPLAY_TRITON_TIMINGS */
 		ide_hwif_t *hwif = &ide_hwifs[h];
 		unsigned short time;
-		if (hwif->io_base == 0x1f0) {
+		if (hwif->io_ports[IDE_DATA_OFFSET] == 0x1f0) {
 			time = timings & 0xffff;
 			if ((time & 0x8000) == 0)	/* interface enabled? */
 				continue;
 			hwif->chipset = ide_triton;
 			if (dma_enabled)
 				init_triton_dma(hwif, bmiba);
-		} else if (hwif->io_base == 0x170) {
+		} else if (hwif->io_ports[IDE_DATA_OFFSET] == 0x170) {
 			time = timings >> 16;
 			if ((time & 0x8000) == 0)	/* interface enabled? */
 				continue;
@@ -475,7 +462,7 @@ void ide_init_triton (byte bus, byte fn)
 		{
 			byte stime;
 			if (pcibios_read_config_byte(bus, fn, 0x44, &stime)) {
-				if (hwif->io_base == 0x1f0) {
+				if (hwif->io_ports[IDE_DATA_OFFSET] == 0x1f0) {
 					s_clks = ~stime >> 6;
 					r_clks = ~stime >> 4;
 				} else {

@@ -50,7 +50,11 @@ L_OBJS += hd.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDE),y)
-L_OBJS += ide.o
+L_OBJS += ide.o ide-probe.o
+else
+  ifeq ($(CONFIG_BLK_DEV_IDE),m)
+  M_OBJS += ide.o ide-probe.o
+  endif
 endif
 
 ifeq ($(CONFIG_BLK_DEV_RZ1000),y)
@@ -89,12 +93,40 @@ ifeq ($(CONFIG_BLK_DEV_PROMISE),y)
 L_OBJS += promise.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_OPTI621),y)
+L_OBJS += opti621.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_IDEDISK),y)
+L_OBJS += ide-disk.o
+else
+  ifeq ($(CONFIG_BLK_DEV_IDEDISK),m)
+  M_OBJS += ide-disk.o
+  endif
+endif
+
 ifeq ($(CONFIG_BLK_DEV_IDECD),y)
 L_OBJS += ide-cd.o
+else
+  ifeq ($(CONFIG_BLK_DEV_IDECD),m)
+  M_OBJS += ide-cd.o
+  endif
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDETAPE),y)
 L_OBJS += ide-tape.o
+else
+  ifeq ($(CONFIG_BLK_DEV_IDETAPE),m)
+  M_OBJS += ide-tape.o
+  endif
+endif
+
+ifeq ($(CONFIG_BLK_DEV_IDEFLOPPY),y)
+L_OBJS += ide-floppy.o
+else
+  ifeq ($(CONFIG_BLK_DEV_IDEFLOPPY),m)
+  M_OBJS += ide-floppy.o
+  endif
 endif
 
 ifeq ($(CONFIG_BLK_DEV_XD),y)

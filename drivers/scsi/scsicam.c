@@ -54,22 +54,28 @@ int scsicam_bios_param (Disk *disk, /* SCSI disk */
     if (!(bh = bread(MKDEV(MAJOR(dev), MINOR(dev)&~0xf), 0, 1024)))
 	return -1;
 
-#ifdef DEBUG
-	printk ("scsicam_bios_param : trying existing mapping\n");
-#endif
+    /* try to infer mapping from partition table */
     ret_code = partsize (bh, (unsigned long) size, (unsigned int *) ip + 2, 
 	(unsigned int *) ip + 0, (unsigned int *) ip + 1);
     brelse (bh);
 
     if (ret_code == -1) {
-#ifdef DEBUG
-	printk ("scsicam_bios_param : trying optimal mapping\n");
-#endif
+	/* pick some standard mapping with at most 1024 cylinders,
+	   and at most 62 sectors per track - this works up to
+	   7905 MB */
 	ret_code = setsize ((unsigned long) size, (unsigned int *) ip + 2, 
     	    (unsigned int *) ip + 0, (unsigned int *) ip + 1);
     }
 
-    return ret_code;
+    /* if something went wrong, then apparently we have to return
+       a geometry with more than 1024 cylinders */
+    if (ret_code || ip[0] > 255 || ip[1] > 63) {
+	 ip[0] = 64;
+	 ip[1] = 32;
+	 ip[2] = size / (ip[0] * ip[1]);
+    }
+
+    return 0;
 }
 
 /*

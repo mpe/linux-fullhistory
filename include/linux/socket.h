@@ -33,6 +33,44 @@ struct msghdr
 	int		msg_flags;	/* 4.4 BSD item we dont use      */
 };
 
+/*
+ *	POSIX 1003.1g - ancillary data object information
+ *	Ancillary data consits of a sequence of pairs of
+ *	(cmsghdr, cmsg_data[])
+ */
+
+struct cmsghdr {
+	size_t		cmsg_len;	/* data byte count, including hdr */
+        int		cmsg_level;	/* originating protocol */
+        int		cmsg_type;	/* protocol-specific type */
+	unsigned char	cmsg_data[0];
+};
+
+/*
+ *	Ancilliary data object information MACROS
+ *	Table 5-14 of POSIX 1003.1g
+ */
+
+#define CMSG_DATA(cmsg)		cmsg->cmsg_data
+#define CMSG_NXTHDR(mhdr, cmsg) cmsg_nxthdr(mhdr, cmsg)
+#define CMSG_FIRST(mhdr)	((struct cmsghdr *) (mhdr)->msg_control)
+
+extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
+					       struct cmsghdr *cmsg)
+{
+	void * ptr;
+
+	if (cmsg->cmsg_len < sizeof(struct cmsghdr))
+	{
+		return NULL;
+	}
+	ptr = ((unsigned char *) cmsg) +  cmsg->cmsg_len;
+	if (ptr >= mhdr->msg_control + mhdr->msg_controllen)
+		return NULL;
+
+	return ptr;
+}
+
 /* Control Messages */
 
 #define SCM_RIGHTS		1
@@ -90,6 +128,9 @@ struct msghdr
 
 /* Setsockoptions(2) level. Thanks to BSD these must match IPPROTO_xxx */
 #define SOL_IP		0
+#define SOL_IPV6	41
+#define SOL_ICMPV6	58
+#define SOL_RAW		255
 #define SOL_IPX		256
 #define SOL_AX25	257
 #define SOL_ATALK	258
@@ -132,6 +173,13 @@ struct msghdr
 
 #ifdef __KERNEL__
 extern void memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len);
+extern void memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, 
+				int offset, int len);
+extern unsigned int csum_partial_copy_fromiovecend(unsigned char *kdata, 
+						   struct iovec *iov, 
+						   int offset, 
+						   int len, int csum);
+
 extern int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode);
 extern void memcpy_toiovec(struct iovec *v, unsigned char *kdata, int len);
 extern int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen);

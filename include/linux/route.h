@@ -53,6 +53,12 @@ struct rtentry
 #define RTF_IRTT	0x0100		/* Initial round trip time	  */
 #define RTF_REJECT	0x0200		/* Reject route			  */
 
+#define RTF_ADDRCONF	0x0800		/* announced on link prefix	  */
+#define RTF_INVALID	0x1000
+#define RTF_DCACHE	0x2000
+#define RTF_DEFAULT	0x4000		/* Route is a default route	  */
+#define RTF_NEXTHOP	0x8000		/* Non gateway route with nexthop */
+
 /*
  *	This structure is passed from the kernel to user space by netlink
  *	routing/device announcements

@@ -46,6 +46,10 @@ extern ctl_table ether_table[], e802_table[];
 extern ctl_table bridge_table[];
 #endif
 
+#ifdef CONFIG_IPV6
+extern ctl_table ipv6_table[];
+#endif
+
 ctl_table net_table[] = {
 	{NET_CORE,   "core",      NULL, 0, 0555, core_table},      
         {NET_UNIX,   "unix",      NULL, 0, 0555, unix_table},
@@ -70,6 +74,9 @@ ctl_table net_table[] = {
 #endif
 #ifdef CONFIG_BRIDGE
         {NET_BRIDGE, "bridge",    NULL, 0, 0555, bridge_table},
+#endif
+#ifdef CONFIG_IPV6
+	{NET_IPV6, "ipv6", NULL, 0, 0555, ipv6_table},
 #endif
 	{0}
 };

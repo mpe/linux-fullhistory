@@ -192,6 +192,10 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 			return(0);
 
 		case SO_KEEPALIVE:
+			if (sk->protocol == IPPROTO_TCP)
+			{
+				tcp_set_keepalive(sk, valbool);
+			}
 			sk->keepopen = valbool;
 			return(0);
 
@@ -536,7 +540,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 void __release_sock(struct sock *sk)
 {
 #ifdef CONFIG_INET
-	if (!sk->prot || !sk->prot->rcv)
+	if (!sk->prot || !sk->backlog_rcv)
 		return;
 		
 	/* See if we have any packets built up. */
@@ -544,10 +548,7 @@ void __release_sock(struct sock *sk)
 	while (!skb_queue_empty(&sk->back_log)) {
 		struct sk_buff * skb = sk->back_log.next;
 		__skb_unlink(skb, &sk->back_log);
-		sk->prot->rcv(skb, skb->dev, (struct options*)skb->proto_priv,
-			      skb->saddr, skb->len, skb->daddr, 1,
-			      /* Only used for/by raw sockets. */
-			      (struct inet_protocol *)sk->pair); 
+		sk->backlog_rcv(sk, skb);
 	}
 	end_bh_atomic();
 #endif  

@@ -18,24 +18,33 @@
 #ifndef _TCP_H
 #define _TCP_H
 
+#include <linux/config.h>
 #include <linux/tcp.h>
 #include <net/checksum.h>
+
+
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+#define NETHDR_SIZE	sizeof(struct ipv6hdr)
+#else
+#define NETHDR_SIZE	sizeof(struct iphdr) + 40
+#endif
 
 /*
  * 40 is maximal IP options size
  * 4  is TCP option size (MSS)
  */
-#define MAX_SYN_SIZE	(sizeof(struct iphdr) + 40 + sizeof(struct tcphdr) + 4 + MAX_HEADER + 15)
-#define MAX_FIN_SIZE	(sizeof(struct iphdr) + 40 + sizeof(struct tcphdr) + MAX_HEADER + 15)
-#define MAX_ACK_SIZE	(sizeof(struct iphdr) + 40 + sizeof(struct tcphdr) + MAX_HEADER + 15)
-#define MAX_RESET_SIZE	(sizeof(struct iphdr) + 40 + sizeof(struct tcphdr) + MAX_HEADER + 15)
+
+#define MAX_SYN_SIZE	(NETHDR_SIZE + sizeof(struct tcphdr) + 4 + MAX_HEADER + 15)
+#define MAX_FIN_SIZE	(NETHDR_SIZE + sizeof(struct tcphdr) + MAX_HEADER + 15)
+#define MAX_ACK_SIZE	(NETHDR_SIZE + sizeof(struct tcphdr) + MAX_HEADER + 15)
+#define MAX_RESET_SIZE	(NETHDR_SIZE + sizeof(struct tcphdr) + MAX_HEADER + 15)
 
 #define MAX_WINDOW	32767		/* Never offer a window over 32767 without using
 					   window scaling (not yet supported). Some poor
 					   stacks do signed 16bit maths! */
 #define MIN_WINDOW	2048
 #define MAX_ACK_BACKLOG	2
-#define MAX_DUP_ACKS	2
+#define MAX_DELAY_ACK	2
 #define MIN_WRITE_SPACE	2048
 #define TCP_WINDOW_DIFF	2048
 
@@ -58,7 +67,8 @@
 #define TCP_TIMEOUT_LEN	(15*60*HZ) /* should be about 15 mins		*/
 #define TCP_TIMEWAIT_LEN (60*HZ) /* how long to wait to successfully 
 				  * close the socket, about 60 seconds	*/
-#define TCP_FIN_TIMEOUT (3*60*HZ) /* BSD style FIN_WAIT2 deadlock breaker */				  
+#define TCP_FIN_TIMEOUT (3*60*HZ) /* BSD style FIN_WAIT2 deadlock breaker */
+
 #define TCP_ACK_TIME	(3*HZ)	/* time to delay before sending an ACK	*/
 #define TCP_DONE_TIME	(5*HZ/2)/* maximum time to wait before actually
 				 * destroying a socket			*/
@@ -70,10 +80,13 @@
 #define TCP_PROBEWAIT_LEN (1*HZ)/* time to wait between probes when
 				 * I've got something to write and
 				 * there is no window			*/
-
+#define TCP_KEEPALIVE_TIME (180*60*HZ)	/* two hours */
+#define TCP_KEEPALIVE_PROBES	9	/* Max of 9 keepalive probes	*/
+#define TCP_KEEPALIVE_PERIOD (75*HZ)	/* period of keepalive check	*/
 #define TCP_NO_CHECK	0	/* turn to one if you want the default
 				 * to be no checksum			*/
 
+#define TCP_SYNACK_PERIOD	(HZ/2)
 
 /*
  *	TCP option
@@ -88,6 +101,115 @@
 #define TCPOPT_WINDOW		3	/* Window scaling */
 #define TCPOPT_TIMESTAMP	8	/* Better RTT estimations/PAWS */
 
+/*
+ *     TCP option lengths
+ */
+
+#define TCPOLEN_MSS            4
+#define TCPOLEN_WINDOW         3
+#define TCPOLEN_TIMESTAMP      10
+
+
+/*
+ *	TCP Vegas constants
+ */
+
+#define TCP_VEGAS_ALPHA		2	/*  v_cong_detect_top_nseg */
+#define TCP_VEGAS_BETA		4	/*  v_cong_detect_bot_nseg */
+#define TCP_VEGAS_GAMMA		1	/*  v_exp_inc_nseg	   */
+
+struct open_request;
+
+struct or_calltable {
+	void (*rtx_syn_ack)	(struct sock *sk, struct open_request *req);
+	void (*destructor)	(struct open_request *req);
+};
+
+struct open_request {
+	struct open_request	*dl_next;
+	struct open_request	*dl_prev;
+	__u32			rcv_isn;
+	__u32			snt_isn;
+	__u16			mss;
+	__u16			rmt_port;
+	unsigned long		expires;
+	int			retrans;
+	struct or_calltable	*class;
+	struct sock		*sk;
+};
+
+struct tcp_v4_open_req {
+	struct open_request	req;
+	__u32			loc_addr;
+	__u32			rmt_addr;
+	struct options		*opt;
+};
+
+#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
+struct tcp_v6_open_req {
+	struct open_request	req;
+	struct in6_addr		loc_addr;
+	struct in6_addr		rmt_addr;
+	struct ipv6_options	*opt;
+	struct device		*dev;
+};
+#endif
+
+/*
+ *	Pointers to address related TCP functions
+ *	(i.e. things that depend on the address family)
+ */
+
+struct tcp_func {
+	int			(*build_net_header)	(struct sock *sk, 
+							 struct sk_buff *skb);
+
+	void			(*queue_xmit)		(struct sock *sk, 
+							 struct device *dev,
+							 struct sk_buff *skb, 
+							 int free);
+
+	void			(*send_check)		(struct sock *sk,
+							 struct tcphdr *th,
+							 int len,
+							 struct sk_buff *skb);
+
+	int			(*rebuild_header)	(struct sock *sk,
+							 struct sk_buff *skb);
+
+	int			(*conn_request)		(struct sock *sk,
+							 struct sk_buff *skb,
+							 void *opt,
+							 __u32 isn);
+
+	struct sock *		(*syn_recv_sock)	(struct sock *sk,
+							 struct sk_buff *skb,
+							 struct open_request *req);
+	
+	__u32			(*init_sequence)	(struct sock *sk,
+							 struct sk_buff *skb);
+
+	struct sock *		(*get_sock)		(struct sk_buff *skb,
+							 struct tcphdr *th);
+
+	int			(*setsockopt)		(struct sock *sk, 
+							 int level, 
+							 int optname, 
+							 char *optval, 
+							 int optlen);
+
+	int			(*getsockopt)		(struct sock *sk, 
+							 int level, 
+							 int optname, 
+							 char *optval, 
+							 int *optlen);
+
+
+	void			(*addr2sockaddr)	(struct sock *sk,
+							 struct sockaddr *);
+
+	int sockaddr_len;
+};
 
 /*
  * The next routines deal with comparing 32 bit unsigned ints
@@ -111,40 +233,95 @@ extern __inline int between(__u32 seq1, __u32 seq2, __u32 seq3)
 	return (after(seq1+1, seq2) && before(seq1, seq3+1));
 }
 
-static __inline__ int min(unsigned int a, unsigned int b)
-{
-	if (a > b)
-		a = b;
-	return a;
-}
-
-static __inline__ int max(unsigned int a, unsigned int b)
-{
-	if (a < b)
-		a = b;
-	return a;
-}
 
 extern struct proto tcp_prot;
 extern struct tcp_mib tcp_statistics;
 
-extern void	tcp_err(int type, int code, unsigned char *header, __u32 daddr,
-			__u32, struct inet_protocol *protocol);
-extern void	tcp_shutdown (struct sock *sk, int how);
-extern int	tcp_rcv(struct sk_buff *skb, struct device *dev,
-			struct options *opt, __u32 daddr,
-			unsigned short len, __u32 saddr, int redo,
-			struct inet_protocol *protocol);
+extern void			tcp_v4_err(int type, int code,
+					   unsigned char *header, __u32 info,
+					   __u32 daddr, __u32 saddr,
+					   struct inet_protocol *protocol);
 
-extern int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg);
+extern void			tcp_shutdown (struct sock *sk, int how);
+
+extern int			tcp_v4_rcv(struct sk_buff *skb, 
+					   struct device *dev,
+					   struct options *opt, __u32 daddr,
+					   unsigned short len, __u32 saddr, 
+					   int redo,
+					   struct inet_protocol *protocol);
+
+extern int			tcp_do_sendmsg(struct sock *sk, 
+					       int iovlen, struct iovec *iov,
+					       int len, int nonblock, 
+					       int flags);
+
+extern int			tcp_ioctl(struct sock *sk, 
+					  int cmd, 
+					  unsigned long arg);
+
+extern int			tcp_rcv_state_process(struct sock *sk, 
+						      struct sk_buff *skb,
+						      struct tcphdr *th,
+						      void *opt, __u16 len);
+
+extern void			tcp_rcv_established(struct sock *sk, 
+						    struct sk_buff *skb,
+						    struct tcphdr *th, 
+						    __u16 len);
+
+extern void			tcp_close(struct sock *sk, 
+					  unsigned long timeout);
+extern struct sock *		tcp_accept(struct sock *sk, int flags);
+extern int			tcp_select(struct sock *sk, int sel_type, 
+					   select_table *wait);
+extern int			tcp_getsockopt(struct sock *sk, int level, 
+					       int optname, char *optval, 
+					       int *optlen);
+extern int			tcp_setsockopt(struct sock *sk, int level, 
+					       int optname, char *optval, 
+					       int optlen);
+extern void			tcp_set_keepalive(struct sock *sk, int val);
+extern int			tcp_recvmsg(struct sock *sk, 
+					    struct msghdr *msg,
+					    int len, int nonblock, 
+					    int flags, int *addr_len);
+
+extern int			tcp_parse_options(struct tcphdr *th);
+
+/*
+ *	TCP v4 functions exported for the inet6 API
+ */
+
+extern int		       	tcp_v4_rebuild_header(struct sock *sk, 
+						      struct sk_buff *skb);
+
+extern int		       	tcp_v4_build_header(struct sock *sk, 
+						    struct sk_buff *skb);
+
+extern void		       	tcp_v4_send_check(struct sock *sk, 
+						  struct tcphdr *th, int len, 
+						  struct sk_buff *skb);
+
+extern int			tcp_v4_conn_request(struct sock *sk,
+						    struct sk_buff *skb,
+						    void *ptr, __u32 isn);
+
+extern struct sock *		tcp_v4_syn_recv_sock(struct sock *sk,
+						     struct sk_buff *skb,
+						     struct open_request *req);
+
+extern int			tcp_v4_backlog_rcv(struct sock *sk,
+						   struct sk_buff *skb);
+extern int			tcp_v4_connect(struct sock *sk,
+					       struct sockaddr *uaddr,
+					       int addr_len);
+
 
 extern void tcp_read_wakeup(struct sock *);
 extern void tcp_write_xmit(struct sock *);
 extern void tcp_time_wait(struct sock *);
-extern void tcp_retransmit(struct sock *, int);
 extern void tcp_do_retransmit(struct sock *, int);
-extern void tcp_send_check(struct tcphdr *th, unsigned long saddr, 
-		unsigned long daddr, int len, struct sk_buff *skb);
 
 /* tcp_output.c */
 
@@ -152,16 +329,10 @@ extern void tcp_send_probe0(struct sock *);
 extern void tcp_send_partial(struct sock *);
 extern void tcp_write_wakeup(struct sock *);
 extern void tcp_send_fin(struct sock *sk);
-extern void tcp_send_synack(struct sock *, struct sock *, struct sk_buff *);
-extern void tcp_send_skb(struct sock *, struct sk_buff *);
+extern int  tcp_send_synack(struct sock *);
+extern int  tcp_send_skb(struct sock *, struct sk_buff *);
 extern void tcp_send_ack(struct sock *sk);
-extern void tcp_send_delayed_ack(struct sock *sk, int max_timeout, unsigned long timeout);
-extern void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
-	  struct proto *prot, struct options *opt, struct device *dev, int tos, int ttl);
-
-extern void tcp_enqueue_partial(struct sock *, struct sk_buff *);
-extern struct sk_buff * tcp_dequeue_partial(struct sock *);
-extern void tcp_shrink_skb(struct sock *,struct sk_buff *,u32);
+extern void tcp_send_delayed_ack(struct sock *sk, int max_timeout);
 
 /* tcp_input.c */
 extern void tcp_cache_zap(void);
@@ -170,44 +341,152 @@ extern void tcp_cache_zap(void);
 extern int tcp_chkaddr(struct sk_buff *);
 
 /* tcp_timer.c */
-#define     tcp_reset_msl_timer(x,y,z)	reset_timer(x,y,z)
+#define     tcp_reset_msl_timer(x,y,z)	net_reset_timer(x,y,z)
 extern void tcp_reset_xmit_timer(struct sock *, int, unsigned long);
-extern void tcp_delack_timer(unsigned long);
+extern void tcp_clear_xmit_timer(struct sock *, int);
+extern int  tcp_timer_is_set(struct sock *, int);
+extern void tcp_init_xmit_timers(struct sock *);
+extern void tcp_clear_xmit_timers(struct sock *);
+
 extern void tcp_retransmit_timer(unsigned long);
+extern void tcp_delack_timer(unsigned long);
+extern void tcp_probe_timer(unsigned long);
 
-static __inline__ int tcp_old_window(struct sock * sk)
-{
-	return sk->window - (sk->acked_seq - sk->lastwin_seq);
-}
-
-extern int tcp_new_window(struct sock *);
 
 /*
- * Return true if we should raise the window when we
- * have cleaned up the receive queue. We don't want to
- * do this normally, only if it makes sense to avoid
- * zero window probes..
- *
- * We do this only if we can raise the window noticeably.
+ *	TCP slow timer
  */
-static __inline__ int tcp_raise_window(struct sock * sk)
+extern struct timer_list	tcp_slow_timer;
+
+struct tcp_sl_timer {
+	atomic_t	count;
+	unsigned long	period;
+	unsigned long	last;
+	void (*handler)	(unsigned long);
+};
+
+#define TCP_SLT_SYNACK		0
+#define TCP_SLT_KEEPALIVE	1
+#define TCP_SLT_MAX		2
+
+extern struct tcp_sl_timer tcp_slt_array[TCP_SLT_MAX];
+ 
+/*
+ *      This function returns the amount that we can raise the
+ *      usable window based on the following constraints
+ *  
+ *	1. The window can never be shrunk once it is offered (RFC 793)
+ *	2. We limit memory per socket
+ */
+
+static __inline__ unsigned short tcp_raise_window(struct sock *sk)
 {
-	int new = tcp_new_window(sk);
-	return new && (new >= 2*tcp_old_window(sk));
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	long free_space = sock_rspace(sk);
+	long window;
+
+	if (free_space > 1024)
+		free_space &= ~0x3FF; 
+
+	if(sk->window_clamp)
+		free_space = min(sk->window_clamp, free_space);
+ 
+	/* 
+         * compute the actual window i.e. 
+         * old_window - received_bytes_on_that_win 
+	 */
+
+
+	window = tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup);
+
+
+	/*
+	 *	We need to send an ack right away if
+	 *	our rcv window is blocking the sender and 
+	 *	we have more free space to offer.
+	 */
+
+	if (window < (sk->mss << 1) && free_space > window)
+		return 1;
+
+	return 0;
 }
 
 static __inline__ unsigned short tcp_select_window(struct sock *sk)
 {
-	int window = tcp_new_window(sk);
-	int oldwin = tcp_old_window(sk);
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	long free_space = sock_rspace(sk);
+	long window;
+	
+	if (sk->window_clamp)
+		free_space = min(sk->window_clamp, free_space);
+	
 
-	/* Don't allow a shrinking window */
-	if (window > oldwin) {
-		sk->window = window;
-		sk->lastwin_seq = sk->acked_seq;
-		oldwin = window;
+	/*
+	 * compute the actual window i.e.
+	 * old_window - received_bytes_on_that_win
+	 */
+
+	window = tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup);
+
+	if ( window < 0 )
+	{
+		window = 0;
+		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
+		       tp->rcv_wnd, tp->rcv_nxt, tp->rcv_wup);
 	}
-	return oldwin;
+
+	/*
+	 * RFC 1122:
+	 * "the suggested [SWS] avoidance algoritm for the receiver is to keep
+	 *  RECV.NEXT + RCV.WIN fixed until:
+	 *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
+	 *
+	 * i.e. don't raise the right edge of the window until you can't raise
+	 * it MSS bytes
+	 */
+
+	/*
+	 * It would be a good idea if it didn't break header prediction.
+	 * and BSD made the header predition standard...
+	 * It expects the same value in the header i.e. th->window to be
+	 * constant [in fact it's a good idea but they could document it
+	 * couldn't they ?] [PR].
+	 */
+	
+	/*
+	 *  If the actual window is blocking the sender then try
+	 *  to raise it.
+	 */
+	
+	if (window < (sk->mss << 1))
+	{
+		long usable;
+
+		usable = free_space - window;
+
+		if (usable < 0)
+		{
+			/* shouldn't happen */
+			usable = 0;
+		}
+
+		tp->rcv_wnd += (min(usable, sk->mss) + 0x3FF) & ~0x3FF;
+	}
+
+#if 0
+	if (tp->rcv_wnd > free_space)
+	{
+		tp->rcv_wnd = free_space & ~0x3FF;
+	}
+#endif
+	if (tp->rcv_wnd < window)
+	{
+		tp->rcv_wnd = (window + 0x3FF) & ~0x3FF;
+	}
+
+	tp->rcv_wup = tp->rcv_nxt;
+	return tp->rcv_wnd;
 }
 
 /*
@@ -227,11 +506,13 @@ extern __inline const int tcp_connected(const int state)
 /*
  * Calculate(/check) TCP checksum
  */
-static __inline__ u16 tcp_check(struct tcphdr *th, int len,
-	unsigned long saddr, unsigned long daddr, unsigned long base)
+static __inline__ u16 tcp_v4_check(struct tcphdr *th, int len,
+				   unsigned long saddr, unsigned long daddr, 
+				   unsigned long base)
 {
 	return csum_tcpudp_magic(saddr,daddr,len,IPPROTO_TCP,base);
 }
+
 
 #undef STATE_TRACE
 
@@ -245,6 +526,7 @@ static char *statename[]={
 
 static __inline__ void tcp_set_state(struct sock *sk, int state)
 {
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	int oldstate = sk->state;
 
 	sk->state = state;
@@ -264,7 +546,7 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	case TCP_CLOSE:
 		tcp_cache_zap();
 		/* Should be about 2 rtt's */
-		reset_timer(sk, TIME_DONE, min(sk->rtt * 2, TCP_DONE_TIME));
+		net_reset_timer(sk, TIME_DONE, min(tp->srtt * 2, TCP_DONE_TIME));
 		/* fall through */
 	default:
 		if (oldstate==TCP_ESTABLISHED)
@@ -272,4 +554,79 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	}
 }
 
+extern __inline__ void tcp_synq_unlink(struct tcp_opt *tp, struct open_request *req)
+{
+	if (req->dl_next == req)
+	{
+		tp->syn_wait_queue = NULL;
+	}
+	else
+	{
+		req->dl_prev->dl_next = req->dl_next;
+		req->dl_next->dl_prev = req->dl_prev;
+		
+		if (tp->syn_wait_queue == req)
+		{
+			tp->syn_wait_queue = req->dl_next;
+		}
+	}
+
+	req->dl_prev = req->dl_next = NULL;
+}
+
+extern __inline__ void tcp_synq_queue(struct tcp_opt *tp, struct open_request *req)
+{
+	if (!tp->syn_wait_queue)
+	{
+		req->dl_next = req;
+		req->dl_prev = req;
+		tp->syn_wait_queue = req;
+	}
+	else
+	{
+		struct open_request *list = tp->syn_wait_queue;
+		
+		req->dl_next = list;
+		req->dl_prev = list->dl_prev;
+		list->dl_prev->dl_next = req;
+		list->dl_prev = req;
+	}
+
+}
+
+extern __inline__ void tcp_inc_slow_timer(int timer)
+{
+	struct tcp_sl_timer *slt = &tcp_slt_array[timer];
+	
+	if (slt->count == 0)
+	{
+		unsigned long now = jiffies;
+		unsigned long when;
+		unsigned long next;
+
+		slt->last = now;
+		
+		when = now + slt->period;
+		next = del_timer(&tcp_slow_timer);
+
+		if (next && ((long)(next - when) < 0))
+		{
+			when = next;
+		}
+		
+		tcp_slow_timer.expires = when;
+		add_timer(&tcp_slow_timer);
+	}
+
+	atomic_inc(&slt->count);
+}
+
+extern __inline__ void tcp_dec_slow_timer(int timer)
+{
+	struct tcp_sl_timer *slt = &tcp_slt_array[timer];
+
+	atomic_dec(&slt->count);
+}
+
 #endif	/* _TCP_H */
+

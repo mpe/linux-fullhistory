@@ -634,7 +634,7 @@ vortex_open(struct device *dev)
 	/* Switch to register set 7 for normal use. */
 	EL3WINDOW(7);
 
-	/* Set reciever mode: presumably accept b-case and phys addr only. */
+	/* Set receiver mode: presumably accept b-case and phys addr only. */
 	set_rx_mode(dev);
 	outw(StatsEnable, ioaddr + EL3_CMD); /* Turn on statistics. */
 

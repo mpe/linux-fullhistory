@@ -60,17 +60,6 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
-/*
- *	We really ought to have a single public _inline_ min function!
- */
-
-static unsigned long min(unsigned long a, unsigned long b)
-{
-	if (a < b) 
-		return(a);
-	return(b);
-}
-
 
 /*
  *	This should be the easiest of all, all we do is copy it into a buffer. 
@@ -480,23 +469,22 @@ int packet_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 struct proto packet_prot = 
 {
 	packet_close,
-	ip_build_header,	/* Not actually used */
 	NULL,
-	NULL,
-	ip_queue_xmit,		/* These two are not actually used */
+	NULL,			/* accept */
 	NULL,
 	NULL,
 	NULL,
-	NULL, 
 	datagram_select,
 	NULL,			/* No ioctl */
 	packet_init,
+	NULL,
 	NULL,
 	NULL,			/* No set/get socket options */
 	NULL,
 	packet_sendmsg,		/* Sendmsg */
 	packet_recvmsg,		/* Recvmsg */
 	packet_bind,		/* Bind */
+	NULL,			/* Backlog_rcv */
 	128,
 	0,
 	"PACKET",

@@ -66,8 +66,8 @@ static struct inet_protocol ipip_protocol =
 
 static struct inet_protocol tcp_protocol = 
 {
-	tcp_rcv,		/* TCP handler		*/
-	tcp_err,		/* TCP error control	*/  
+	tcp_v4_rcv,		/* TCP handler		*/
+	tcp_v4_err,		/* TCP error control	*/  
 #if defined(CONFIG_NET_IPIP) && defined(CONFIG_IP_FORWARD)
 	&ipip_protocol,
 #else  

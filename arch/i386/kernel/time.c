@@ -20,10 +20,13 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
+#include <linux/time.h>
+#include <linux/delay.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/delay.h>
 
 #include <linux/mc146818rtc.h>
 #include <linux/timex.h>
@@ -462,6 +465,21 @@ void time_init(void)
                                    needs more debugging. */
 	if (x86_capability & 16) {
 		do_gettimeoffset = do_fast_gettimeoffset;
+
+		if( strcmp( x86_vendor_id, "AuthenticAMD" ) == 0 ) {
+			if( x86 == 5 ) {
+				if( x86_model == 0 ) {
+					/* turn on cycle counters during power down */
+					__asm__ __volatile__ (" movl $0x83, %%ecx \n \
+								rdmsr \n \
+								orl $1,%%eax \n \
+								wrmsr \n " 
+                                                                : : : "ax", "cx", "dx" );
+					udelay(500);
+				}
+			}
+		}
+
 		/* read Pentium cycle counter */
 		__asm__(".byte 0x0f,0x31"
 			:"=a" (init_timer_cc.low),

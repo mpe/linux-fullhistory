@@ -431,9 +431,9 @@ static void setup_device_ptrs (void)
 	for (i = 0; i < MAX_HWIFS; i++) {
 		ide_hwif_t *hwif = &ide_hwifs[i];
 		if (hwif->chipset == ide_unknown || hwif->chipset == ide_generic) {
-			if (hwif->io_base == 0x1f0)
+			if (hwif->io_ports[IDE_DATA_OFFSET] == 0x1f0)
 				cmd_hwif0 = hwif;
-			else if (hwif->io_base == 0x170)
+			else if (hwif->io_ports[IDE_DATA_OFFSET] == 0x170)
 				cmd_hwif1 = hwif;
 		}
 	}
@@ -678,11 +678,10 @@ static void cmd640_tune_drive (ide_drive_t *drive, byte mode_wanted)
 	(void) ide_get_best_pio_mode (drive, mode_wanted, 5, &d);
 	cmd640_set_mode (index, d.pio_mode, d.cycle_time);
 
-	printk ("%s: selected cmd640 PIO mode%d (%dns) %s/IORDY%s",
+	printk ("%s: selected cmd640 PIO mode%d (%dns)%s",
 		drive->name,
 		d.pio_mode,
 		d.cycle_time,
-		d.use_iordy ? "w" : "wo",
 		d.overridden ? " (overriding vendor mode)" : "");
 	display_clocks(index);
 }

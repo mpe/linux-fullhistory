@@ -77,6 +77,17 @@ struct sk_buff
 	} mac;
   
 	struct iphdr	*ip_hdr;		/* For IPPROTO_RAW 				*/
+#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
+	struct ipv6hdr	*ipv6_hdr;
+	
+	/* 
+	 *	It would be inefficient to store the nexthop address in every
+	 *	skb. Instead we store a pointer to the respective neighbour
+	 *	cache entry. This might make ndisc cache management harder.
+	 */
+
+	struct neighbour *nexthop;
+#endif		
 	unsigned long 	len;			/* Length of actual data			*/
 	unsigned long	csum;			/* Checksum 					*/
 	__u32		saddr;			/* IP source address				*/
@@ -100,6 +111,7 @@ struct sk_buff
 #define PACKET_BROADCAST	1		/* To all					*/
 #define PACKET_MULTICAST	2		/* To group					*/
 #define PACKET_OTHERHOST	3		/* To someone else 				*/
+#define PACKET_NDISC		17		/* Outgoing NDISC packet			*/
 	unsigned short	users;			/* User count - see datagram.c,tcp.c 		*/
 	unsigned short	protocol;		/* Packet protocol from driver. 		*/
 	unsigned short	truesize;		/* Buffer size 					*/
@@ -112,6 +124,7 @@ struct sk_buff
 	unsigned char 	*end;			/* End pointer					*/
 	void 		(*destructor)(struct sk_buff *);	/* Destruct function		*/
 	__u16		redirport;		/* Redirect port				*/
+	__u16		inclone;		/* Inline clone	*/
 };
 
 #ifdef CONFIG_SKB_LARGE

@@ -62,11 +62,19 @@ void tty_wait_until_sent(struct tty_struct * tty, int timeout)
 #endif
 		current->state = TASK_INTERRUPTIBLE;
 		if (current->signal & ~current->blocked)
-			break;
+			goto stop_waiting;
 		if (!tty->driver.chars_in_buffer(tty))
 			break;
 		schedule();
 	} while (current->timeout);
+	if (tty->driver.wait_until_sent) {
+		if (current->timeout == -1)
+			timeout = 0;
+		else
+			timeout = current->timeout - jiffies;
+		tty->driver.wait_until_sent(tty, timeout);
+	}
+stop_waiting:
 	current->state = TASK_RUNNING;
 	remove_wait_queue(&tty->write_wait, &wait);
 }
@@ -169,8 +177,11 @@ static int set_termios(struct tty_struct * tty, unsigned long arg, int opt)
 	if ((opt & TERMIOS_FLUSH) && tty->ldisc.flush_buffer)
 		tty->ldisc.flush_buffer(tty);
 
-	if (opt & TERMIOS_WAIT)
+	if (opt & TERMIOS_WAIT) {
 		tty_wait_until_sent(tty, 0);
+		if (current->signal & ~current->blocked)
+			return -EINTR;
+	}
 
 	change_termios(tty, &tmp_termios);
 	return 0;
@@ -371,6 +382,24 @@ static int set_ltchars(struct tty_struct * tty, struct ltchars * ltchars)
 }
 #endif
 
+/*
+ * Send a high priority character to the tty.
+ */
+void send_prio_char(struct tty_struct *tty, char ch)
+{
+	int	was_stopped = tty->stopped;
+
+	if (tty->driver.send_xchar) {
+		tty->driver.send_xchar(tty, ch);
+		return;
+	}
+	if (was_stopped)
+		start_tty(tty);
+	tty->driver.write(tty, 0, &ch, 1);
+	if (was_stopped)
+		stop_tty(tty);
+}
+
 int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 		       unsigned int cmd, unsigned long arg)
 {
@@ -440,13 +469,11 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 				break;
 			case TCIOFF:
 				if (STOP_CHAR(tty) != __DISABLED_CHAR)
-					tty->driver.write(tty, 0,
-							  &STOP_CHAR(tty), 1);
+					send_prio_char(tty, STOP_CHAR(tty));
 				break;
 			case TCION:
 				if (START_CHAR(tty) != __DISABLED_CHAR)
-					tty->driver.write(tty, 0,
-							  &START_CHAR(tty), 1);
+					send_prio_char(tty, START_CHAR(tty));
 				break;
 			default:
 				return -EINVAL;
@@ -538,6 +565,8 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 			if (retval)
 				return retval;
 			tty_wait_until_sent(tty, 0);
+			if (current->signal & ~current->blocked)
+				return -EINTR;
 			if (!tty->driver.ioctl)
 				return 0;
 			tty->driver.ioctl(tty, file, cmd, arg);

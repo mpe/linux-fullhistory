@@ -66,7 +66,6 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 	const char *maj = hd->major_name;
 	char unit = (minor >> hd->minor_shift) + 'a';
 
-#ifdef CONFIG_BLK_DEV_IDE
 	/*
 	 * IDE devices use multiple major numbers, but the drives
 	 * are named as:  {hda,hdb}, {hdc,hdd}, {hde,hdf}, {hdg,hdh}..
@@ -82,7 +81,6 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 		case IDE0_MAJOR:
 			maj = "hd";
 	}
-#endif
 	part = minor & ((1 << hd->minor_shift) - 1);
 	if (part)
 		sprintf(buf, "%s%c%d", maj, unit, part);

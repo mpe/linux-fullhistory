@@ -176,4 +176,76 @@ static inline unsigned short ip_compute_csum(unsigned char * buff, int len) {
 	return sum;
 }
 
+#define _HAVE_ARCH_IPV6_CSUM
+static __inline__ unsigned short int csum_ipv6_magic(struct in6_addr *saddr,
+						     struct in6_addr *daddr,
+						     __u16 len,
+						     unsigned short proto,
+						     unsigned int sum) 
+{
+	unsigned long scratch;
+
+        __asm__("
+		.set	noreorder
+		.set	noat
+		addu	%0,%5		# proto (long in network byte order)
+		sltu	$1,%0,%5
+		addu	%0,$1
+
+		addu	%0,%6		# csum
+		sltu	$1,%0,%6
+		lw	%1,0(%2)	# four words source address
+		addu	%0,$1
+		addu	%0,%1
+		sltu	$1,%0,$1
+
+		lw	%1,4(%2)
+		addu	%0,$1
+		addu	%0,%1
+		sltu	$1,%0,$1
+
+		lw	%1,8(%2)
+		addu	%0,$1
+		addu	%0,%1
+		sltu	$1,%0,$1
+
+		lw	%1,12(%2)
+		addu	%0,$1
+		addu	%0,%1
+		sltu	$1,%0,$1
+
+		lw	%1,0(%3)
+		addu	%0,$1
+		addu	%0,%1
+		sltu	$1,%0,$1
+
+		lw	%1,4(%3)
+		addu	%0,$1
+		addu	%0,%1
+		sltu	$1,%0,$1
+
+		lw	%1,8(%3)
+		addu	%0,$1
+		addu	%0,%1
+		sltu	$1,%0,$1
+
+		lw	%1,12(%3)
+		addu	%0,$1
+		addu	%0,%1
+		sltu	$1,%0,$1
+		.set	noat
+		.set	noreorder
+                "
+                : "=r" (sum),
+		  "=r" (scratch)
+                : "r" (saddr),
+		  "r" (daddr),
+                  "0" (htonl((__u32) (len))),
+		  "r" (htonl(proto)),
+		  "r"(sum)
+		: "$1");
+
+	return csum_fold(sum);
+}
+
 #endif /* __ASM_MIPS_CHECKSUM_H */

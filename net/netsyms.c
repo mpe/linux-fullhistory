@@ -28,7 +28,15 @@
 #include <net/tcp.h>
 #include <net/icmp.h>
 #include <net/route.h>
+#include <net/inet_common.h>
 #include <linux/net_alias.h>
+
+#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
+#include <linux/in6.h>
+#include <net/ndisc.h>
+#include <net/transp_v6.h>
+#endif
+
 #endif
 
 #ifdef CONFIG_NETLINK
@@ -55,9 +63,6 @@ extern void destroy_EII_client(struct datalink_proto *);
 extern void destroy_8023_client(struct datalink_proto *);
 #endif
 
-#ifdef CONFIG_DLCI_MODULE
-extern int (*dlci_ioctl_hook)(unsigned int, void *);
-#endif
 
 static struct symbol_table net_syms = {
 #include <linux/symtab_begin.h>
@@ -89,14 +94,10 @@ static struct symbol_table net_syms = {
 
 #ifdef CONFIG_INET
 	/* Internet layer registration */
+	X(get_new_socknum),
 	X(inet_add_protocol),
 	X(inet_del_protocol),
 	X(rarp_ioctl_hook),
-
-#ifdef CONFIG_DLCI_MODULE
-        X(dlci_ioctl_hook),
-#endif
-
 	X(init_etherdev),
 	X(ip_rt_route),
 	X(icmp_send),
@@ -107,6 +108,79 @@ static struct symbol_table net_syms = {
 	X(ip_send_check),
 #ifdef CONFIG_IP_FORWARD
 	X(ip_forward),
+#endif
+
+#ifdef CONFIG_IPV6_MODULE
+	/* inet functions common to v4 and v6 */
+	X(inet_proto_ops),
+	X(inet_remove_sock),
+	X(inet_release),
+	X(inet_connect),
+	X(inet_accept),
+	X(inet_select),
+	X(inet_listen),
+	X(inet_shutdown),
+	X(inet_setsockopt),
+	X(inet_getsockopt),
+	X(inet_fcntl),
+	X(inet_sendmsg),
+	X(inet_recvmsg),
+	X(tcp_sock_array),
+	X(udp_sock_array),
+	X(destroy_sock),
+	X(ip_queue_xmit),
+	X(csum_partial),
+	X(ip_my_addr),
+	X(skb_copy),
+	X(dev_lockct),
+	X(ndisc_eth_hook),
+	X(memcpy_fromiovecend),
+	X(csum_partial_copy),
+	X(csum_partial_copy_fromiovecend),
+	X(__release_sock),
+	X(net_timer),
+	X(inet_put_sock),
+	/* UDP/TCP exported functions for TCPv6 */
+	X(udp_ioctl),
+	X(udp_connect),
+	X(udp_sendmsg),
+	X(tcp_cache_zap),
+	X(tcp_close),
+	X(tcp_accept),
+	X(tcp_write_wakeup),
+	X(tcp_read_wakeup),
+	X(tcp_select),
+	X(tcp_ioctl),
+	X(tcp_shutdown),
+	X(tcp_setsockopt),
+	X(tcp_getsockopt),
+	X(tcp_recvmsg),
+	X(tcp_send_synack),
+	X(sock_wfree),
+	X(sock_wmalloc),
+	X(tcp_reset_xmit_timer),
+	X(tcp_parse_options),
+	X(tcp_rcv_established),
+	X(tcp_init_xmit_timers),
+	X(tcp_clear_xmit_timers),
+	X(tcp_slt_array),
+	X(tcp_slow_timer),
+	X(tcp_statistics),
+	X(tcp_rcv_state_process),
+	X(tcp_do_sendmsg),
+	X(tcp_v4_build_header),
+	X(tcp_v4_rebuild_header),
+	X(tcp_v4_send_check),
+	X(tcp_v4_conn_request),
+	X(tcp_v4_syn_recv_sock),
+	X(tcp_v4_backlog_rcv),
+	X(tcp_v4_connect),
+	X(ip_chk_addr),
+	X(net_reset_timer),
+	X(net_delete_timer),
+	X(udp_prot),
+	X(tcp_prot),
+	X(ipv4_specific),
 #endif
 
 #if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \

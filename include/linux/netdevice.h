@@ -31,19 +31,23 @@
 /* for future expansion when we will have different priorities. */
 #define DEV_NUMBUFFS	3
 #define MAX_ADDR_LEN	7
-#ifndef CONFIG_AX25
-#ifndef CONFIG_TR
-#ifndef CONFIG_NET_IPIP
-#define MAX_HEADER	32		/* We really need about 18 worst case .. so 32 is aligned */
+
+#if !defined(CONFIG_AX25) && !defined(CONFIG_TR)
+#define LL_MAX_HEADER	32
 #else
-#define MAX_HEADER	80		/* We need to allow for having tunnel headers */
-#endif  /* IPIP */
+#if defined(CONFIG_AX25)
+#define LL_MAX_HEADER	96
 #else
-#define MAX_HEADER	48		/* Token Ring header needs 40 bytes ... 48 is aligned */ 
-#endif /* TR */
+#define LL_MAX_HEADER	48
+#endif
+#endif
+
+#if !defined(CONFIG_NET_IPIP) && \
+    !defined(CONFIG_IPV6) && !defined(CONFIG_IPV6_MODULE)
+#define MAX_HEADER LL_MAX_HEADER
 #else
-#define MAX_HEADER	96		/* AX.25 + NetROM */
-#endif /* AX25 */
+#define MAX_HEADER (LL_MAX_HEADER + 48)
+#endif
 
 #define IS_MYADDR	1		/* address is (one of) our own	*/
 #define IS_LOOPBACK	2		/* address is for LOOPBACK	*/
@@ -144,7 +148,13 @@ struct device
   unsigned char		  pad;				/* make dev_addr aligned to 8 bytes */
   unsigned char		  dev_addr[MAX_ADDR_LEN];	/* hw address	*/
   unsigned char		  addr_len;	/* hardware address length	*/
+#if 0
+  __u32			  pa_addr_arr[4];
+  __u16			  pa_prefix_len;
+#define pa_addr		  pa_addr_arr[3];
+#else
   unsigned long		  pa_addr;	/* protocol address		*/
+#endif
   unsigned long		  pa_brdaddr;	/* protocol broadcast addr	*/
   unsigned long		  pa_dstaddr;	/* protocol P-P other side addr	*/
   unsigned long		  pa_mask;	/* protocol netmask		*/

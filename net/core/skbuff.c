@@ -40,12 +40,13 @@
 #include <linux/interrupt.h>
 #include <linux/in.h>
 #include <linux/inet.h>
-#include <linux/netdevice.h>
 #include <linux/malloc.h>
+#include <linux/netdevice.h>
 #include <linux/string.h>
 #include <linux/skbuff.h>
 
 #include <net/ip.h>
+#include <net/ipv6.h>
 #include <net/protocol.h>
 #include <net/route.h>
 #include <net/tcp.h>
@@ -702,6 +703,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	skb->end=bptr+len;
 	skb->len=0;
 	skb->destructor=NULL;
+	skb->inclone = 0;
 	return skb;
 }
 
@@ -729,7 +731,8 @@ void kfree_skbmem(struct sk_buff *skb)
 			addr = skb;
 			__kfree_skbmem(skb->data_skb);
 		}
-		kfree(addr);
+		if (!skb->inclone)
+			kfree(addr);
 		atomic_dec(&net_skbcount);
 	}
 }
@@ -742,11 +745,21 @@ void kfree_skbmem(struct sk_buff *skb)
 struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 {
 	struct sk_buff *n;
-
+	int inbuff = 0;
+	
 	IS_SKB(skb);
-	n = kmalloc(sizeof(*n), priority);
-	if (!n)
-		return NULL;
+	if (skb_tailroom(skb) >= sizeof(struct sk_buff))
+	{
+		n = ((struct sk_buff *) skb->end) - 1;
+		skb->end -= sizeof(struct sk_buff);
+		inbuff = 1;
+	}
+	else
+	{
+		n = kmalloc(sizeof(*n), priority);
+		if (!n)
+			return NULL;
+	}
 	memcpy(n, skb, sizeof(*n));
 	n->count = 1;
 	if (skb->data_skb)
@@ -762,6 +775,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	n->tries = 0;
 	n->lock = 0;
 	n->users = 0;
+	n->inclone = inbuff;
 	return n;
 }
 
@@ -804,6 +818,10 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int priority)
 	n->h.raw=skb->h.raw+offset;
 	n->mac.raw=skb->mac.raw+offset;
 	n->ip_hdr=(struct iphdr *)(((char *)skb->ip_hdr)+offset);
+#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
+	n->ipv6_hdr=(struct ipv6hdr *)(((char *)skb->ipv6_hdr)+offset);
+	n->nexthop = skb->nexthop;
+#endif
 	n->saddr=skb->saddr;
 	n->daddr=skb->daddr;
 	n->raddr=skb->raddr;

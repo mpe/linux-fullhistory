@@ -32,7 +32,10 @@ enum {
   IPPROTO_UDP = 17,		/* User Datagram Protocol		*/
   IPPROTO_IDP = 22,		/* XNS IDP protocol			*/
 
-  IPPROTO_RAW = 255,		/* Raw IP packets			*/
+  IPPROTO_IPV6	 = 41,		/* IPv6-in-IPv4 tunnelling		*/
+  IPPROTO_ICMPV6 = 58,		/* ICMPv6				*/
+
+  IPPROTO_RAW	 = 255,		/* Raw IP packets			*/
   IPPROTO_MAX
 };
 
@@ -54,7 +57,7 @@ struct ip_mreq
 /* Structure describing an Internet (IP) socket address. */
 #define __SOCK_SIZE__	16		/* sizeof(struct sockaddr)	*/
 struct sockaddr_in {
-  short int		sin_family;	/* Address family		*/
+  unsigned short int	sin_family;	/* Address family		*/
   unsigned short int	sin_port;	/* Port number			*/
   struct in_addr	sin_addr;	/* Internet address		*/
 
@@ -125,24 +128,5 @@ struct sockaddr_in {
 #define MULTICAST(x)	(((x) & htonl(0xf0000000)) == htonl(0xe0000000))
 
 #endif
-
-/*
- *	IPv6 definitions as we start to include them. This is just
- *	a beginning -- don't get excited 8)
- */
- 
-struct in_addr6
-{
-	unsigned char s6_addr[16];
-};
-
-struct sockaddr_in6
-{
-	unsigned short sin6_family;
-	unsigned short sin6_port;
-	unsigned long sin6_flowinfo;
-	struct in_addr6 sin6_addr;
-};
-
 
 #endif	/* _LINUX_IN_H */

@@ -45,6 +45,7 @@
  *		Alan Cox	:	Cleaned up the backlog initialise.
  *		Craig Metz	:	SIOCGIFCONF fix if space for under
  *					1 device.
+ *		Molnar Ingo	:	skb->stamp hack for the Pentium
  *	    Thomas Bogendoerfer :	Return ENODEV for dev_open, if there
  *					is no device open function.
  *
@@ -118,14 +119,6 @@ static struct sk_buff_head backlog;
  
 static int backlog_size = 0;
 
-/*
- *	Return the lesser of the two values. 
- */
- 
-static __inline__ unsigned long min(unsigned long a, unsigned long b)
-{
-	return (a < b)? a : b;
-}
 
 
 /******************************************************************************************
@@ -418,6 +411,10 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 		/* copy outgoing packets to any sniffer packet handlers */
 		if (dev_nit) {
 			struct packet_type *ptype;
+#ifdef CONFIG_M586
+                        struct timeval dummy_tv;
+			do_gettimeofday( &dummy_tv );
+#endif
 			skb->stamp=xtime;
 			for (ptype = ptype_all; ptype!=NULL; ptype = ptype->next) 
 			{
@@ -489,7 +486,13 @@ void netif_rx(struct sk_buff *skb)
 	skb->sk = NULL;
 	skb->free = 1;
 	if(skb->stamp.tv_sec==0)
+	{
+#ifdef CONFIG_M586
+                        struct timeval dummy_tv;
+			do_gettimeofday( &dummy_tv );
+#endif
 		skb->stamp = xtime;
+	}
 
 	/*
 	 *	Check that we aren't overdoing things.
@@ -1074,7 +1077,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			goto rarok;
 	
 		case SIOCSIFADDR:	/* Set interface address (and family) */
-		
+
 			/*
 			 *	BSDism. SIOCSIFADDR family=AF_UNSPEC sets the
 			 *	physical address. We can cope with this now.
@@ -1107,7 +1110,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 
 #ifdef CONFIG_NET_ALIAS
 			  	if (net_alias_is(dev))
-			    	net_alias_dev_rehash(dev ,&ifr.ifr_addr);
+				    	net_alias_dev_rehash(dev ,&ifr.ifr_addr);
 #endif
 				dev->pa_addr = new_pa_addr;
 				dev->family = new_family;
@@ -1204,7 +1207,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				return -EINVAL;
 
 			if (dev->change_mtu)
-				ret = (*dev->change_mtu)(dev, ifr.ifr_mtu);
+				ret = dev->change_mtu(dev, ifr.ifr_mtu);
 			else
 			{
 				dev->mtu = ifr.ifr_mtu;

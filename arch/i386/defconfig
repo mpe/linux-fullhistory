@@ -39,8 +39,10 @@ CONFIG_BLK_DEV_IDE=y
 # Please see Documentation/ide.txt for help/info on IDE drives
 #
 # CONFIG_BLK_DEV_HD_IDE is not set
+CONFIG_BLK_DEV_IDEDISK=y
 CONFIG_BLK_DEV_IDECD=y
 # CONFIG_BLK_DEV_IDETAPE is not set
+# CONFIG_BLK_DEV_IDEFLOPPY is not set
 # CONFIG_BLK_DEV_IDE_PCMCIA is not set
 CONFIG_BLK_DEV_CMD640=y
 # CONFIG_BLK_DEV_CMD640_ENHANCED is not set

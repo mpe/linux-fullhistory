@@ -59,6 +59,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 {
 	struct sock **s_array;
 	struct sock *sp;
+	struct tcp_opt *tp;
 	int i;
 	int timer_active;
 	int timer_active1;
@@ -87,6 +88,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 	{
 	  	cli();
 		sp = s_array[i];
+
 		while(sp != NULL) 
 		{
 			pos += 128;
@@ -95,6 +97,9 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 				sp = sp->next;
 				continue;
 			}
+
+			tp = &(sp->tp_pinfo.af_tcp);
+
 			dest  = sp->daddr;
 			src   = sp->saddr;
 			destp = sp->dummy_th.dest;
@@ -122,13 +127,14 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 			sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
 				" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
 				i, src, srcp, dest, destp, sp->state, 
-				format==0?sp->write_seq-sp->rcv_ack_seq:sp->wmem_alloc, 
-				format==0?sp->acked_seq-sp->copied_seq:sp->rmem_alloc,
+				format==0?sp->write_seq-tp->snd_una:sp->wmem_alloc, 
+				format==0?tp->rcv_nxt-sp->copied_seq:sp->rmem_alloc,
 				timer_active, timer_expires-jiffies, (unsigned) sp->retransmits,
 				(sp->socket&&SOCK_INODE(sp->socket))?SOCK_INODE(sp->socket)->i_uid:0,
 				timer_active?sp->timeout:0,
 				sp->socket && SOCK_INODE(sp->socket) ?
 				SOCK_INODE(sp->socket)->i_ino : 0);
+
 			if (timer_active1) add_timer(&sp->retransmit_timer);
 			if (timer_active2) add_timer(&sp->timer);
 			len += sprintf(buffer+len, "%-127s\n", tmpbuf);

@@ -237,8 +237,6 @@ int el1_probe(struct device *dev)
 
 static int el1_probe1(struct device *dev, int ioaddr)
 {
-#ifndef MODULE
-
 	const char *mname;		/* Vendor name */
 	unsigned char station_addr[6];
 	int autoirq = 0;
@@ -343,8 +341,6 @@ static int el1_probe1(struct device *dev, int ioaddr)
 	 */
 
 	ether_setup(dev);
-
-#endif /* !MODULE */
 
 	return 0;
 }

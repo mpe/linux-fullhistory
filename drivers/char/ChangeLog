@@ -1,6 +1,41 @@
+Fri Nov  8 20:19:50 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* n_tty.c (n_tty_flush_buffer): Only call driver->unthrottle() if
+ 		the tty was previous throttled.
+		(n_tty_set_termios, write_chan): Add changes suggested by
+ 			Simon P. Allen to allow hardware cooking.
+
+	* tty_ioctl.c (set_termios): If we get a signal while waiting for
+		the tty to drain, return -EINTR.
+	
+	* serial.c (change_speed): Add support for CREAD, as required by
+	 	POSIX.
+
+Sat Nov  2 20:43:10 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* serial.c: Wholesale changes.  Added support for the Startech
+ 		16650 and 16650V2 chips.  (WARNING: the new startech
+ 		16650A may or may not work!)  Added support for the
+ 		TI16750 (not yet tested).  Split async_struct into a
+ 		transient part (async_struct) and a permanent part
+		(serial_state) which contains the configuration
+ 		information for the ports.  Added new driver routines
+ 		wait_until_sent() and send_xchar() to help with POSIX
+ 		compliance.  Added support for radio clocks which waggle
+		the carrier detect line (CONFIG_HARD_PPS).
+	
+	* tty_ioctl.c (tty_wait_until_sent): Added call to new driver
+		function tty->driver.wait_until_sent(), which returns when
+		the tty's device xmit buffers are drained.  Needed for
+		full POSIX compliance.
+
+		(send_prio_char): New function, called by the ioctl's
+		TCIOFF and TCION; uses the new driver call send_xchar(),
+		which will send the XON or XOFF character at high priority
+		(and even if tty output is stopped).
+
 Wed Jun  5 18:52:04 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 
-	* tty_io.c (do_tty_hangup): 
 	* pty.c (pty_close): When closing a pty, make sure packet mode is
 	 	cleared.
 

@@ -1459,7 +1459,8 @@ static int do_con_write(struct tty_struct * tty, int from_user,
                 ok = tc && (c >= 32 ||
                             (!utf && !(((disp_ctrl ? CTRL_ALWAYS
                                          : CTRL_ACTION) >> c) & 1)))
-                        && (c != 127 || disp_ctrl);
+                        && (c != 127 || disp_ctrl)
+			&& (c != 128+27);
 
 		if (vc_state == ESnormal && ok) {
 			/* Now try to find out how to display it */
@@ -1499,6 +1500,8 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 		 *  of an escape sequence.
 		 */
 		switch (c) {
+			case 0:
+				continue;
 			case 7:
 				if (bell_duration)
 					kd_mksound(bell_pitch, bell_duration);

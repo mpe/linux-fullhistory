@@ -101,6 +101,7 @@ struct hd_geometry {
 #define HDIO_SET_NOWERR		0x0325	/* change ignore-write-error flag */
 #define HDIO_SET_DMA		0x0326	/* change use-dma flag */
 #define HDIO_SET_PIO_MODE	0x0327	/* reconfig interface to new speed */
+#define HDIO_SCAN_HWIF		0x0328	/* register and (re)scan interface */
 
 /* structure returned by HDIO_GET_IDENTITY, as per ANSI ATA2 rev.2f spec */
 struct hd_driveid {
@@ -162,15 +163,15 @@ struct hd_driveid {
 #ifdef CONFIG_BLK_DEV_HD
 void hd_setup(char *, int *);
 #endif	/* CONFIG_BLK_DEV_HD */
+
 #ifdef CONFIG_BLK_DEV_IDE
 void ide_setup(char *);
+#endif	/* CONFIG_BLK_DEV_IDE */
 
-#ifdef CONFIG_BLK_DEV_IDE_PCMCIA
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
 int ide_register(int io_port, int ctl_port, int irq);
 void ide_unregister(unsigned int);
-#endif  /* CONFIG_BLK_DEV_IDE_PCMCIA */
-
-#endif	/* CONFIG_BLK_DEV_IDE */
+#endif /* CONFIG_BLK_DEV_IDE || CONFIG_BLK_DEV_IDE_MODULE */
 
 #endif  /* __KERNEL__ */
 

@@ -76,8 +76,9 @@ void n_tty_flush_buffer(struct tty_struct * tty)
 	if (!tty->link)
 		return;
 
-	if (tty->driver.unthrottle)
-		(tty->driver.unthrottle)(tty);
+	if (tty->driver.unthrottle &&
+	    clear_bit(TTY_THROTTLED, &tty->flags))
+		tty->driver.unthrottle(tty);
 	if (tty->link->packet) {
 		tty->ctrl_status |= TIOCPKT_FLUSHREAD;
 		wake_up_interruptible(&tty->link->read_wait);
@@ -629,6 +630,11 @@ static void n_tty_set_termios(struct tty_struct *tty, struct termios * old)
 		return;
 	
 	tty->icanon = (L_ICANON(tty) != 0);
+	if (tty->flags & (1<<TTY_HW_COOK_IN)) {
+		tty->raw = 1;
+		tty->real_raw = 1;
+		return;
+	}
 	if (I_ISTRIP(tty) || I_IUCLC(tty) || I_IGNCR(tty) ||
 	    I_ICRNL(tty) || I_INLCR(tty) || L_ICANON(tty) ||
 	    I_IXON(tty) || L_ISIG(tty) || L_ECHO(tty) ||
@@ -948,7 +954,7 @@ static int write_chan(struct tty_struct * tty, struct file * file,
 			retval = -EIO;
 			break;
 		}
-		if (O_OPOST(tty)) {
+		if (O_OPOST(tty) && !(tty->flags & (1<<TTY_HW_COOK_OUT))) {
 			while (nr > 0) {
 				get_user(c, b);
 				if (opost(c, tty) < 0)

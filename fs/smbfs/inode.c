@@ -126,7 +126,7 @@ smb_put_inode(struct inode *inode)
 	struct smb_inode_info *info = SMB_INOP(inode);
 
 	int opened        = finfo->opened;
-	int mtime         = finfo->mtime;
+	int mtime         = inode->i_mtime;
 	int file_id       = finfo->fileid;
 	int isdir         = S_ISDIR(inode->i_mode);
 	unsigned long ino = inode->i_ino;

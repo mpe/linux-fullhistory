@@ -838,6 +838,7 @@ asmlinkage void start_kernel(void)
 	check_bugs();
 
 	printk(linux_banner);
+	printk("POSIX conformance testing by UNIFIX\n");
 #ifdef __SMP__
 	smp_init();
 #endif

@@ -48,6 +48,26 @@ struct ip_mib
  	unsigned long	IpFragCreates;
 };
  
+struct ipv6_mib
+{
+	unsigned long	Ip6InReceives;
+ 	unsigned long	Ip6InHdrErrors;
+ 	unsigned long	Ip6InAddrErrors;
+ 	unsigned long	Ip6ForwDatagrams;
+ 	unsigned long	Ip6InUnknownProtos;
+ 	unsigned long	Ip6InDiscards;
+ 	unsigned long	Ip6InDelivers;
+ 	unsigned long	Ip6OutRequests;
+ 	unsigned long	Ip6OutDiscards;
+ 	unsigned long	Ip6OutNoRoutes;
+ 	unsigned long	Ip6ReasmTimeout;
+ 	unsigned long	Ip6ReasmReqds;
+ 	unsigned long	Ip6ReasmOKs;
+ 	unsigned long	Ip6ReasmFails;
+ 	unsigned long	Ip6FragOKs;
+ 	unsigned long	Ip6FragFails;
+ 	unsigned long	Ip6FragCreates;
+};
  
 struct icmp_mib
 {

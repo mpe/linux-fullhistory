@@ -107,7 +107,6 @@
 
 /* do print messages for unexpected interrupts */
 static int print_unex=1;
-#include <linux/utsname.h>
 #include <linux/module.h>
 
 /* the following is the mask of allowed drives. By default units 2 and
@@ -131,21 +130,6 @@ static int allowed_drive_mask = 0x33;
 
 #include <linux/fd.h>
 #include <linux/hdreg.h>
-
-#define OLDFDRAWCMD 0x020d /* send a raw command to the FDC */
-
-struct old_floppy_raw_cmd {
-  void *data;
-  long length;
-
-  unsigned char rate;
-  unsigned char flags;
-  unsigned char cmd_count;
-  unsigned char cmd[9];
-  unsigned char reply_count;
-  unsigned char reply[7];
-  int track;
-};
 
 #include <linux/errno.h>
 #include <linux/malloc.h>
@@ -2419,6 +2403,17 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 #endif
 }
 
+static inline int check_dma_crossing(char *start, 
+				     unsigned long length, char *message)
+{
+	if (CROSS_64KB(start, length)) {
+		printk("DMA xfer crosses 64KB boundary in %s %p-%p\n", 
+		       message, start, start+length);
+		return 1;
+	} else
+		return 0;
+}
+
 /*
  * Formulate a read/write request.
  * this routine decides where to load the data (directly to buffer, or to
@@ -2570,6 +2565,9 @@ static int make_raw_rw_request(void)
 					indirect, direct, sector_t);
 				return 0;
 			}
+			check_dma_crossing(raw_cmd->kernel_data, 
+					   raw_cmd->length, 
+					   "end of make_raw_request [1]");
 			return 2;
 		}
 	}
@@ -2615,6 +2613,8 @@ static int make_raw_rw_request(void)
 	raw_cmd->length = ((raw_cmd->length -1)|(ssize-1))+1;
 	raw_cmd->length <<= 9;
 #ifdef FLOPPY_SANITY_CHECK
+	check_dma_crossing(raw_cmd->kernel_data, raw_cmd->length, 
+			   "end of make_raw_request");
 	if ((raw_cmd->length < current_count_sectors << 9) ||
 	    (raw_cmd->kernel_data != CURRENT->buffer &&
 	     CT(COMMAND) == FD_WRITE &&
@@ -2850,13 +2850,11 @@ static inline int fd_copyin(void *param, void *address, int size)
 	return copy_from_user(address, param, size) ? -EFAULT : 0;
 }
 
-static inline int write_user_long(unsigned long useraddr, unsigned long value)
-{
-	return put_user(value, (unsigned long *)useraddr) ? -EFAULT : 0;
-}
+#define _COPYOUT(x) (copy_to_user((void *)param, &(x), sizeof(x)) ? -EFAULT : 0)
+#define _COPYIN(x) (copy_from_user(&(x), (void *)param, sizeof(x)) ? -EFAULT : 0)
 
-#define COPYOUT(x) ECALL(fd_copyout((void *)param, &(x), sizeof(x)))
-#define COPYIN(x) ECALL(fd_copyin((void *)param, &(x), sizeof(x)))
+#define COPYOUT(x) ECALL(_COPYOUT(x))
+#define COPYIN(x) ECALL(_COPYIN(x))
 
 static inline const char *drive_name(int type, int drive)
 {
@@ -2927,24 +2925,11 @@ static struct cont_t raw_cmd_cont={
 static inline int raw_cmd_copyout(int cmd, char *param,
 				  struct floppy_raw_cmd *ptr)
 {
-	struct old_floppy_raw_cmd old_raw_cmd;
 	int ret;
 
 	while(ptr) {
-		if (cmd == OLDFDRAWCMD) {
-			old_raw_cmd.flags = ptr->flags;
-			old_raw_cmd.data = ptr->data;
-			old_raw_cmd.length = ptr->length;
-			old_raw_cmd.rate = ptr->rate;
-			old_raw_cmd.reply_count = ptr->reply_count;
-			memcpy(old_raw_cmd.reply, ptr->reply, 7);
-			COPYOUT(old_raw_cmd);
-			param += sizeof(old_raw_cmd);
-		} else {
-			COPYOUT(*ptr);
-			param += sizeof(struct floppy_raw_cmd);
-		}
-
+		COPYOUT(*ptr);
+		param += sizeof(struct floppy_raw_cmd);
 		if ((ptr->flags & FD_RAW_READ) && ptr->buffer_length){
 			if (ptr->length>=0 && ptr->length<=ptr->buffer_length)
 				ECALL(fd_copyout(ptr->data, 
@@ -2981,7 +2966,6 @@ static inline int raw_cmd_copyin(int cmd, char *param,
 				 struct floppy_raw_cmd **rcmd)
 {
 	struct floppy_raw_cmd *ptr;
-	struct old_floppy_raw_cmd old_raw_cmd;
 	int ret;
 	int i;
 	
@@ -2992,37 +2976,20 @@ static inline int raw_cmd_copyin(int cmd, char *param,
 		if (!ptr)
 			return -ENOMEM;
 		*rcmd = ptr;
-		if (cmd == OLDFDRAWCMD){
-			COPYIN(old_raw_cmd);
-			ptr->flags = old_raw_cmd.flags;
-			ptr->data = old_raw_cmd.data;
-			ptr->length = old_raw_cmd.length;
-			ptr->rate = old_raw_cmd.rate;
-			ptr->cmd_count = old_raw_cmd.cmd_count;
-			ptr->track = old_raw_cmd.track;
-			ptr->phys_length = 0;
-			ptr->next = 0;
-			ptr->buffer_length = 0;
-			memcpy(ptr->cmd, old_raw_cmd.cmd, 9);
-			param += sizeof(struct old_floppy_raw_cmd);
-			if (ptr->cmd_count > 9)
-				return -EINVAL;
-		} else {
-			COPYIN(*ptr);
-			ptr->next = 0;
-			ptr->buffer_length = 0;
-			param += sizeof(struct floppy_raw_cmd);
-			if (ptr->cmd_count > 33)
-				/* the command may now also take up the space
-				 * initially intended for the reply & the
-				 * reply count. Needed for long 82078 commands
-				 * such as RESTORE, which takes ... 17 command
-				 * bytes. Murphy's law #137: When you reserve
-				 * 16 bytes for a structure, you'll one day
-				 * discover that you really need 17...
-				 */
-				return -EINVAL;
-		}
+		COPYIN(*ptr);
+		ptr->next = 0;
+		ptr->buffer_length = 0;
+		param += sizeof(struct floppy_raw_cmd);
+		if (ptr->cmd_count > 33)
+			/* the command may now also take up the space
+			 * initially intended for the reply & the
+			 * reply count. Needed for long 82078 commands
+			 * such as RESTORE, which takes ... 17 command
+			 * bytes. Murphy's law #137: When you reserve
+			 * 16 bytes for a structure, you'll one day
+			 * discover that you really need 17...
+			 */
+			return -EINVAL;
 
 		for (i=0; i< 16; i++)
 			ptr->reply[i] = 0;
@@ -3037,9 +3004,6 @@ static inline int raw_cmd_copyin(int cmd, char *param,
 				return -ENOMEM;
 			ptr->buffer_length = ptr->length;
 		}
-		if ( ptr->flags & FD_RAW_READ )
-		    ECALL( verify_area( VERIFY_WRITE, ptr->data, 
-					ptr->length ));
 		if (ptr->flags & FD_RAW_WRITE)
 			ECALL(fd_copyin(ptr->data, ptr->kernel_data, 
 					ptr->length));
@@ -3181,76 +3145,46 @@ static inline int set_geometry(unsigned int cmd, struct floppy_struct *g,
 }
 
 /* handle obsolete ioctl's */
-static struct translation_entry {
-    int newcmd;
-    int oldcmd;
-    int oldsize; /* size of 0x00xx-style ioctl. Reflects old structures, thus
-		  * use numeric values. NO SIZEOFS */
-} translation_table[]= {
-    {FDCLRPRM,		 0,  0},
-    {FDSETPRM,		 1, 28},
-    {FDDEFPRM,		 2, 28},
-    {FDGETPRM,		 3, 28},
-    {FDMSGON,		 4,  0},
-    {FDMSGOFF,		 5,  0},
-    {FDFMTBEG,		 6,  0},
-    {FDFMTTRK,		 7, 12},
-    {FDFMTEND,		 8,  0},
-    {FDSETEMSGTRESH,	10,  0},
-    {FDFLUSH,		11,  0},
-    {FDSETMAXERRS,	12, 20},
-    {OLDFDRAWCMD,      	30,  0},
-    {FDGETMAXERRS,	14, 20},
-    {FDGETDRVTYP,	16, 16},
-    {FDSETDRVPRM,	20, 88},
-    {FDGETDRVPRM,	21, 88},
-    {FDGETDRVSTAT,	22, 52},
-    {FDPOLLDRVSTAT,	23, 52},
-    {FDRESET,		24,  0},
-    {FDGETFDCSTAT,	25, 40},
-    {FDWERRORCLR,	27,  0},
-    {FDWERRORGET,	28, 24},
-    {FDRAWCMD,		 0,  0},
-    {FDEJECT,		 0,  0},
-    {FDTWADDLE,		40,  0} };
+int ioctl_table[]= {
+	FDCLRPRM,
+	FDSETPRM,
+	FDDEFPRM,
+	FDGETPRM,
+	FDMSGON,
+	FDMSGOFF,
+	FDFMTBEG,
+	FDFMTTRK,
+	FDFMTEND,
+	FDSETEMSGTRESH,
+	FDFLUSH,
+	FDSETMAXERRS,
+	FDGETMAXERRS,
+	FDGETDRVTYP,
+	FDSETDRVPRM,
+	FDGETDRVPRM,
+	FDGETDRVSTAT,
+	FDPOLLDRVSTAT,
+	FDRESET,
+	FDGETFDCSTAT,
+	FDWERRORCLR,
+	FDWERRORGET,
+	FDRAWCMD,
+	FDEJECT,
+	FDTWADDLE
+};
 
-static inline int normalize_0x02xx_ioctl(int *cmd, int *size)
+static inline int normalize_ioctl(int *cmd, int *size)
 {
 	int i;
 
-	for (i=0; i < ARRAY_SIZE(translation_table); i++) {
-		if ((*cmd & 0xffff) == (translation_table[i].newcmd & 0xffff)){
+	for (i=0; i < ARRAY_SIZE(ioctl_table); i++) {
+		if ((*cmd & 0xffff) == (ioctl_table[i] & 0xffff)){
 			*size = _IOC_SIZE(*cmd);
-			*cmd = translation_table[i].newcmd;
+			*cmd = ioctl_table[i];
 			if (*size > _IOC_SIZE(*cmd)) {
 				printk("ioctl not yet supported\n");
 				return -EFAULT;
 			}
-			return 0;
-		}
-	}
-	return -EINVAL;
-}
-
-static inline int xlate_0x00xx_ioctl(int *cmd, int *size)
-{
-	int i;
-	/* old ioctls' for kernels <= 1.3.33 */
-	/* When the next even release will come around, we'll start
-	 * warning against these.
-	 * When the next odd release will come around, we'll fail with
-	 * -EINVAL */
-	if(strcmp(system_utsname.version, "1.4.0") >= 0)
-		printk("obsolete floppy ioctl %x\n", *cmd);
-	if((system_utsname.version[0] == '1' &&
-	    strcmp(system_utsname.version, "1.5.0") >= 0) ||
-	   (system_utsname.version[0] >= '2' &&
-	    strcmp(system_utsname.version, "2.1.0") >= 0))
-		return -EINVAL;
-	for (i=0; i < ARRAY_SIZE(translation_table); i++) {
-		if (*cmd == translation_table[i].oldcmd) {
-			*size = translation_table[i].oldsize;
-			*cmd = translation_table[i].newcmd;
 			return 0;
 		}
 	}
@@ -3315,25 +3249,24 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		/* the following have been inspired by the corresponding
 		 * code for other block devices. */
 		struct floppy_struct *g;
-		struct hd_geometry *loc;
-
 		case HDIO_GETGEO:
-			loc = (struct hd_geometry *) param;
+		{
+			struct hd_geometry loc;
 			ECALL(get_floppy_geometry(drive, type, &g));
-			ECALL(verify_area(VERIFY_WRITE, loc, sizeof(*loc)));
-			put_user(g->head, &loc->heads);
-			put_user(g->sect, &loc->sectors);
-			put_user(g->track, &loc->cylinders);
-			put_user(0,&loc->start);
-			return 0;
+			loc.heads = g->head;
+			loc.sectors = g->sect;
+			loc.cylinders = g->track;
+			loc.start = 0;
+			return _COPYOUT(loc);
+		}
 		case BLKRASET:
 			if(!suser()) return -EACCES;
 			if(param > 0xff) return -EINVAL;
 			read_ahead[MAJOR(inode->i_rdev)] = param;
 			return 0;
                 case BLKRAGET:
-			return write_user_long(param, 
-					       read_ahead[MAJOR(inode->i_rdev)]);
+			return put_user(read_ahead[MAJOR(inode->i_rdev)],
+					(int *) param);
 		case BLKFLSBUF:
 			if(!suser()) return -EACCES;
 			fsync_dev(inode->i_rdev);
@@ -3342,16 +3275,14 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 
 		case BLKGETSIZE:
 			ECALL(get_floppy_geometry(drive, type, &g));
-			return write_user_long(param, g->size);
+			return put_user(g->size, (int *) param);
 		/* BLKRRPART is not defined as floppies don't have
 		 * partition tables */
 	}
 
 	/* convert the old style command into a new style command */
 	if ((cmd & 0xff00) == 0x0200) {
-		ECALL(normalize_0x02xx_ioctl(&cmd, &size));
-	} else if ((cmd & 0xff00) == 0x0000) {
-		ECALL(xlate_0x00xx_ioctl(&cmd, &size));
+		ECALL(normalize_ioctl(&cmd, &size));
 	} else
 		return -EINVAL;
 
@@ -3360,10 +3291,6 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 	     ((cmd & 0x40) && !IOCTL_ALLOWED))
 		return -EPERM;
 
-	/* verify writability of result, and fail early */
-	if (_IOC_DIR(cmd) & _IOC_READ)
-		ECALL(verify_area(VERIFY_WRITE,(void *) param, size));
-		
 	/* copyin */
 	CLEARSTRUCT(&inparam);
 	if (_IOC_DIR(cmd) & _IOC_WRITE)
@@ -3458,7 +3385,6 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			return 0;
 		OUT(FDWERRORGET,UDRWE);
 
-		case OLDFDRAWCMD:
 		case FDRAWCMD:
 			if (type)
 				return -EINVAL;

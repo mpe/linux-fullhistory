@@ -51,6 +51,8 @@
 #define UART_FCR6_T_TRIGGER_8	0x10 /* Mask for transmit trigger set at 8 */
 #define UART_FCR6_T_TRIGGER_24  0x20 /* Mask for transmit trigger set at 24 */
 #define UART_FCR6_T_TRIGGER_30	0x30 /* Mask for transmit trigger set at 30 */
+/* TI 16750 definitions */
+#define UART_FCR7_64BYTE	0x20 /* Go into 64 byte mode */
 
 /*
  * These are the definitions for the Line Control Register
@@ -98,6 +100,11 @@
 #define UART_IER_RLSI	0x04	/* Enable receiver line status interrupt */
 #define UART_IER_THRI	0x02	/* Enable Transmitter holding register int. */
 #define UART_IER_RDI	0x01	/* Enable receiver data interrupt */
+/*
+ * Sleep mode for ST16650 and TI16750.
+ * Note that for 16650, EFR-bit 4 must be selected as well.
+ */
+#define UART_IERX_SLEEP  0x10	/* Enable sleep mode */
 
 /*
  * These are the definitions for the Modem Control Register
@@ -128,7 +135,7 @@
 #define UART_EFR_CTS	0x80	/* CTS flow control */
 #define UART_EFR_RTS	0x40	/* RTS flow control */
 #define UART_EFR_SCD	0x20	/* Special character detect */
-#define UART_EFR_ENI	0x10	/* Enhanced Interrupt */
+#define UART_EFR_ECB	0x10	/* Enhanced control bit */
 /*
  * the low four bits control software flow control
  */

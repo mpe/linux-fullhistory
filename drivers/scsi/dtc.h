@@ -6,7 +6,7 @@
  *	drew@colorado.edu
  *      +1 (303) 440-4894
  *
- * DISTRIBUTION RELEASE 1. 
+ * DISTRIBUTION RELEASE 2. 
  *
  * For more information, please consult 
  *
@@ -28,7 +28,7 @@
 #ifndef DTC3280_H
 #define DTC3280_H
 
-#define DTC_PUBLIC_RELEASE 1
+#define DTC_PUBLIC_RELEASE 2
 
 /*#define DTCDEBUG 0x1*/
 #define DTCDEBUG_INIT	0x1
@@ -116,40 +116,40 @@ int dtc_proc_info (char *buffer, char **start, off_t offset,
 #ifndef HOSTS_C
 
 #define NCR5380_implementation_fields \
-    volatile unsigned char *base
+    volatile unsigned int base
 
 #define NCR5380_local_declare() \
-    volatile unsigned char *base
+    volatile unsigned int base
 
 #define NCR5380_setup(instance) \
-    base = (volatile unsigned char *) (instance)->base
+    base = (unsigned int)(instance)->base
 
 #define DTC_address(reg) (base + DTC_5380_OFFSET + reg)
 
 #define dbNCR5380_read(reg)                                              \
-    (rval=*(DTC_address(reg)), \
+    (rval=readb(DTC_address(reg)), \
      (((unsigned char) printk("DTC : read register %d at addr %08x is: %02x\n"\
     , (reg), (int)DTC_address(reg), rval)), rval ) )
 
 #define dbNCR5380_write(reg, value) do {                                  \
     printk("DTC : write %02x to register %d at address %08x\n",         \
             (value), (reg), (int)DTC_address(reg));     \
-    *(DTC_address(reg)) = (value);} while(0)
+    writeb(value, DTC_address(reg));} while(0)
 
 
 #if !(DTCDEBUG & DTCDEBUG_TRANSFER) 
-#define NCR5380_read(reg) (*(DTC_address(reg)))
-#define NCR5380_write(reg, value) (*(DTC_address(reg)) = (value))
+#define NCR5380_read(reg) (readb(DTC_address(reg)))
+#define NCR5380_write(reg, value) (writeb(value, DTC_address(reg)))
 #else
-#define NCR5380_read(reg) (*(DTC_address(reg)))
+#define NCR5380_read(reg) (readb(DTC_address(reg)))
 #define xNCR5380_read(reg)						\
     (((unsigned char) printk("DTC : read register %d at address %08x\n"\
-    , (reg), DTC_address(reg))), *(DTC_address(reg)))
+    , (reg), DTC_address(reg))), readb(DTC_address(reg)))
 
 #define NCR5380_write(reg, value) do {					\
     printk("DTC : write %02x to register %d at address %08x\n", 	\
 	    (value), (reg), (int)DTC_address(reg));	\
-    *(DTC_address(reg)) = (value);		} while(0)
+    writeb(value, DTC_address(reg));} while(0)
 #endif
 
 #define NCR5380_intr dtc_intr

@@ -69,6 +69,7 @@
 #define PPP_IPX		0x2b	/* IPX protocol */
 #define	PPP_VJC_COMP	0x2d	/* VJ compressed TCP */
 #define	PPP_VJC_UNCOMP	0x2f	/* VJ uncompressed TCP */
+#define PPP_IPV6	0x57	/* Internet Protocol Version 6 */
 #define PPP_COMP	0xfd	/* compressed packet */
 #define PPP_IPCP	0x8021	/* IP Control Protocol */
 #define PPP_IPXCP	0x802b	/* IPX Control Protocol */

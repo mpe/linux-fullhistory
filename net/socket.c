@@ -127,18 +127,19 @@ static int sockets_in_use  = 0;
  *	divide and look after the messy bits.
  */
 
-#define MAX_SOCK_ADDR	128		/* 108 for Unix domain - 16 for IP, 16 for IPX, about 80 for AX.25 */
+#define MAX_SOCK_ADDR	128		/* 108 for Unix domain - 
+					   16 for IP, 16 for IPX,
+					   24 for IPv6,
+					   about 80 for AX.25 */
  
 int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr)
 {
-	int err;
 	if(ulen<0||ulen>MAX_SOCK_ADDR)
 		return -EINVAL;
 	if(ulen==0)
 		return 0;
-	if((err=verify_area(VERIFY_READ,uaddr,ulen))<0)
-		return err;
-	copy_from_user(kaddr,uaddr,ulen);
+	if(copy_from_user(kaddr,uaddr,ulen))
+		return -EFAULT;
 	return 0;
 }
 
@@ -146,22 +147,19 @@ int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 {
 	int err;
 	int len;
-
 		
-	if((err=verify_area(VERIFY_WRITE,ulen,sizeof(*ulen)))<0)
+	if((err=get_user(len, ulen)))
 		return err;
-	get_user(len,ulen);
 	if(len>klen)
 		len=klen;
 	if(len<0 || len> MAX_SOCK_ADDR)
 		return -EINVAL;
 	if(len)
 	{
-		if((err=verify_area(VERIFY_WRITE,uaddr,len))<0)
-			return err;
-		copy_to_user(uaddr,kaddr,len);
+		if(copy_to_user(uaddr,kaddr,len))
+			return -EFAULT;
 	}
- 	put_user(len,ulen);
+ 	put_user(len, ulen);
  	return 0;
 }
 
@@ -1118,6 +1116,7 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned int flags)
 	char address[MAX_SOCK_ADDR];
 	struct iovec iov[UIO_MAXIOV];
 	struct msghdr msg_sys;
+	void * krn_msg_ctl = NULL;
 	int err;
 	int total_len;
 	
@@ -1145,8 +1144,26 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned int flags)
 	if (err < 0)
 		return err;
 	total_len=err;
+		
+	if (msg_sys.msg_control)
+	{
+		krn_msg_ctl = kmalloc(msg_sys.msg_controllen, GFP_KERNEL);
+		err = copy_from_user(krn_msg_ctl, msg_sys.msg_control,
+				     msg_sys.msg_controllen);
+		if (err)
+			return -EFAULT;
+		msg_sys.msg_control = krn_msg_ctl;
+	}
 
-	return sock->ops->sendmsg(sock, &msg_sys, total_len, (file->f_flags&O_NONBLOCK), flags);
+	err = sock->ops->sendmsg(sock, &msg_sys, total_len,
+				 (file->f_flags&O_NONBLOCK), flags);
+
+	if (msg_sys.msg_control)
+	{
+		kfree(krn_msg_ctl);
+	}
+
+	return err;
 }
 
 /*
@@ -1159,6 +1176,8 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	struct file *file;
 	struct iovec iov[UIO_MAXIOV];
 	struct msghdr msg_sys;
+	void *usr_msg_ctl = NULL;
+	void *krn_msg_ctl = NULL;
 	int err;
 	int total_len;
 	int len;
@@ -1179,7 +1198,9 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	err=verify_area(VERIFY_READ, msg,sizeof(struct msghdr));
 	if(err)
 		return err;
+
 	copy_from_user(&msg_sys,msg,sizeof(struct msghdr));
+
 	if(msg_sys.msg_iovlen>UIO_MAXIOV)
 		return -EINVAL;
 
@@ -1194,6 +1215,19 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 		return err;
 
 	total_len=err;
+
+	
+
+	if (msg_sys.msg_control)
+	{
+		usr_msg_ctl = msg_sys.msg_control;
+		krn_msg_ctl = kmalloc(msg_sys.msg_controllen, GFP_KERNEL);
+		err = copy_from_user(krn_msg_ctl, usr_msg_ctl,
+				     msg_sys.msg_controllen);
+		if (err)
+			return -EFAULT;
+		msg_sys.msg_control = krn_msg_ctl;
+	}
 	
 	if(sock->ops->recvmsg==NULL)
 		return -EOPNOTSUPP;
@@ -1206,6 +1240,13 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 		if (err)
 			return err;
 	}
+
+	if (msg_sys.msg_control)
+	{
+		copy_to_user(usr_msg_ctl, krn_msg_ctl, msg_sys.msg_controllen);
+		kfree(krn_msg_ctl);
+	}
+
 	return len;
 }
 

@@ -1192,20 +1192,19 @@ asmlinkage int sys_nice(int increment)
 
 #endif
 
-static struct task_struct *find_process_by_pid(pid_t pid) {
-	struct task_struct *p, *q;
+static struct task_struct *find_process_by_pid(pid_t pid)
+{
+	struct task_struct *p;
 
-	if (pid == 0)
-		p = current;
-	else {
-		p = 0;
-		for_each_task(q) {
-			if (q && q->pid == pid) {
-				p = q;
-				break;
-			}
+	p = current;
+	if (pid) {
+		for_each_task(p) {
+			if (p->pid == pid)
+				goto found;
 		}
+		p = NULL;
 	}
+found:
 	return p;
 }
 

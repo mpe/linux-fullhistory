@@ -6,6 +6,7 @@
  * Added bdflush entry and intvec min/max checking, 2/23/96, Tom Dyas.
  * Added hooks for /proc/sys/net (minor, minor patch), 96/4/1, Mike Shaver.
  * Added kernel/java-{interpreter,appletviewer}, 96/5/10, Mike Shaver.
+ * Dynamic registration fixes, Stephen Tweedie.
  */
 
 #include <linux/config.h>
@@ -203,7 +204,7 @@ int do_sysctl (int *name, int nlen,
 	do {
 		context = 0;
 		error = parse_table(name, nlen, oldval, oldlenp, 
-				    newval, newlen, root_table, &context);
+				    newval, newlen, tmp->ctl_table, &context);
 		if (context)
 			kfree(context);
 		if (error != -ENOTDIR)
@@ -401,9 +402,11 @@ void unregister_sysctl_table(struct ctl_table_header * table)
 /* Scan the sysctl entries in table and add them all into /proc */
 static void register_proc_table(ctl_table * table, struct proc_dir_entry *root)
 {
-	struct proc_dir_entry *de;
+	struct proc_dir_entry *de, *tmp;
+	int exists;
 	
 	for (; table->ctl_name; table++) {
+		exists = 0;
 		/* Can't do anything without a proc name. */
 		if (!table->procname)
 			continue;
@@ -432,12 +435,24 @@ static void register_proc_table(ctl_table * table, struct proc_dir_entry *root)
 		}
 		/* Otherwise it's a subdir */
 		else  {
-			de->ops = &proc_dir_inode_operations;
-			de->nlink++;
-			de->mode |= S_IFDIR;
+			/* First check to see if it already exists */
+			for (tmp = root->subdir; tmp; tmp = tmp->next) {
+				if (tmp->namelen == de->namelen &&
+				    !memcmp(tmp->name,de->name,de->namelen)) {
+					exists = 1;
+					kfree (de);
+					de = tmp;
+				}
+			}
+			if (!exists) {
+				de->ops = &proc_dir_inode_operations;
+				de->nlink++;
+				de->mode |= S_IFDIR;
+			}
 		}
 		table->de = de;
-		proc_register_dynamic(root, de);
+		if (!exists)
+			proc_register_dynamic(root, de);
 		if (de->mode & S_IFDIR )
 			register_proc_table(table->child, de);
 	}
@@ -456,8 +471,12 @@ static void unregister_proc_table(ctl_table * table, struct proc_dir_entry *root
 			}
 			unregister_proc_table(table->child, de);
 		}
-		proc_unregister(root, de->low_ino);
-		kfree(de);			
+		/* Don't unregister proc directories which still have
+		   entries... */
+		if (!((de->mode & S_IFDIR) && de->subdir)) {
+			proc_unregister(root, de->low_ino);
+			kfree(de);
+		}
 	}
 }
 

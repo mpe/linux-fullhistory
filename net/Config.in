@@ -8,7 +8,12 @@ bool 'Network aliasing'  CONFIG_NET_ALIAS
 bool 'TCP/IP networking' CONFIG_INET
 if [ "$CONFIG_INET" = "y" ]; then
   source net/ipv4/Config.in
+
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    tristate 'The IPv6 protocol' CONFIG_IPV6
+  fi
 fi
+
 comment ' '
 tristate 'The IPX protocol' CONFIG_IPX
 if [ "$CONFIG_IPX" != "n" ]; then

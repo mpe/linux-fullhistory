@@ -2,6 +2,8 @@
  * linux/arch/i386/mm/extable.c
  */
 
+#include <linux/config.h>
+#include <linux/module.h>
 #include <asm/uaccess.h>
 
 extern const struct exception_table_entry __start___ex_table[];
@@ -37,6 +39,9 @@ unsigned long
 search_exception_table(unsigned long addr)
 {
 	unsigned long ret;
+#ifdef CONFIG_MODULES
+	struct module *mp;
+#endif
 
 	/* Search the kernel's table first.  */
 	ret = search_one_table(__start___ex_table,
@@ -44,7 +49,15 @@ search_exception_table(unsigned long addr)
 	if (ret)
 		return ret;
 
-	/* FIXME -- search the module's tables here */
-
+#ifdef CONFIG_MODULES
+	for (mp = module_list; mp != NULL; mp = mp->next) {
+		if (mp->exceptinfo.start != NULL) {
+			ret = search_one_table(mp->exceptinfo.start,
+				mp->exceptinfo.stop-1, addr);
+			if (ret)
+				return ret;
+		}
+	}
+#endif
 	return 0;
 }

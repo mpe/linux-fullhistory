@@ -522,7 +522,7 @@ int probe_irq_off (unsigned long irqs)
 
 	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
 #ifdef DEBUG
-	printk("probe_irq_off: irqs=0x%04x irqmask=0x%04x\n", irqs, irqmask);
+	printk("probe_irq_off: irqs=0x%04lx irqmask=0x%04x\n", irqs, irqmask);
 #endif
 	irqs &= irqmask;
 	if (!irqs)

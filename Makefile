@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 7
+SUBLEVEL = 8
 
 ARCH = i386
 
@@ -313,7 +313,7 @@ clean:	archclean
 	rm -f core `find . -type f -name 'core' -print`
 	rm -f vmlinux System.map
 	rm -f .tmp* drivers/sound/configure
-	rm -fr modules/*
+	rm -f modules/*
 	rm -f submenu*
 
 mrproper: clean

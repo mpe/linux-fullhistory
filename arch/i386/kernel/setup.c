@@ -185,7 +185,7 @@ void setup_arch(char **cmdline_p,
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (LOADER_TYPE) {
-		initrd_start = INITRD_START + PAGE_OFFSET;
+		initrd_start = INITRD_START ? INITRD_START + PAGE_OFFSET : 0;
 		initrd_end = initrd_start+INITRD_SIZE;
 		if (initrd_end > memory_end) {
 			printk("initrd extends beyond end of memory "
