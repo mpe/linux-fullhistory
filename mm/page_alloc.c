@@ -25,6 +25,7 @@
 #include <asm/uaccess.h> /* for copy_to/from_user */
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
+#include <asm/spinlock.h>
 
 int nr_swap_pages = 0;
 int nr_free_pages = 0;
@@ -89,10 +90,6 @@ static inline void remove_mem_queue(struct page * entry)
  *
  * With the above two rules, you get a straight-line execution path
  * for the normal case, giving better asm-code.
- *
- * free_page() may sleep since the page being freed may be a buffer
- * page or present in the swap cache. It will not sleep, however,
- * for a freshly allocated page (get_free_page()).
  */
 
 /*
@@ -100,6 +97,8 @@ static inline void remove_mem_queue(struct page * entry)
  *
  * Hint: -mask = 1+~mask
  */
+static spinlock_t page_alloc_lock;
+
 static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 {
 	struct free_area_struct *area = free_area + order;
@@ -107,8 +106,7 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 	unsigned long mask = (~0UL) << order;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&page_alloc_lock, flags);
 
 #define list(x) (mem_map+(x))
 
@@ -127,7 +125,7 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 
 #undef list
 
-	restore_flags(flags);
+	spin_unlock_irqrestore(&page_alloc_lock, flags);
 }
 
 void __free_page(struct page *page)
@@ -173,7 +171,7 @@ do { struct free_area_struct * area = free_area+order; \
 				MARK_USED(map_nr, new_order, area); \
 				nr_free_pages -= 1 << order; \
 				EXPAND(ret, map_nr, order, new_order, area); \
-				restore_flags(flags); \
+				spin_unlock_irqrestore(&page_alloc_lock, flags); \
 				return ADDRESS(map_nr); \
 			} \
 			prev = ret; \
@@ -215,15 +213,14 @@ unsigned long __get_free_pages(int priority, unsigned long order, int dma)
 	reserved_pages = 5;
 	if (priority != GFP_NFS)
 		reserved_pages = min_free_pages;
-	save_flags(flags);
 repeat:
-	cli();
+	spin_lock_irqsave(&page_alloc_lock, flags);
 	if ((priority==GFP_ATOMIC) || nr_free_pages > reserved_pages) {
 		RMQUEUE(order, dma);
-		restore_flags(flags);
+		spin_unlock_irqrestore(&page_alloc_lock, flags);
 		return 0;
 	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&page_alloc_lock, flags);
 	if (priority != GFP_BUFFER && try_to_free_page(priority, dma, 1))
 		goto repeat;
 	return 0;
@@ -240,8 +237,7 @@ void show_free_areas(void)
  	unsigned long total = 0;
 
 	printk("Free pages:      %6dkB\n ( ",nr_free_pages<<(PAGE_SHIFT-10));
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&page_alloc_lock, flags);
  	for (order=0 ; order < NR_MEM_LISTS; order++) {
 		struct page * tmp;
 		unsigned long nr = 0;
@@ -251,7 +247,7 @@ void show_free_areas(void)
 		total += nr * ((PAGE_SIZE>>10) << order);
 		printk("%lu*%lukB ", nr, (unsigned long)((PAGE_SIZE>>10) << order));
 	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&page_alloc_lock, flags);
 	printk("= %lukB)\n", total);
 #ifdef SWAP_CACHE_INFO
 	show_swap_cache_info();

@@ -934,7 +934,7 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 		return 0;
 	}
 	/* Avoid timer-based retransmission conflicts. */
-	if (set_bit(0, (void *) &ndev->tbusy) != 0)
+	if (test_and_set_bit(0, (void *) &ndev->tbusy) != 0)
 		printk(KERN_WARNING
 		       "%s: Transmitter access conflict.\n",
 		       ndev->name);

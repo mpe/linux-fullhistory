@@ -2,42 +2,30 @@
 
 		Andy Walker <andy@lysaker.kvaerner.no>
 
-			    21 Sep 1996
+			    12 May 1997
 
 
 1. What's New?
 --------------
 
-1.1 Flock Emulation Warnings
-----------------------------
-Many people will have noticed the ugly messages that the file locking
-code started generating with the release of kernel version 1.3.95. The
-messages look something like this:
+1.1 Broken Flock Emulation
+--------------------------
 
-    fcntl_setlk() called by process XX with broken flock() emulation
+The old flock(2) emulation in the kernel was swapped for proper BSD
+compatible flock(2) support in the 1.3.x series of kernels. With the
+release of the 2.1.x kernel series, support for the old emulation has
+been totally removed, so that we don't need to carry this baggage
+forever.
 
-This is a warning for people using older C libraries that those libraries
-are still calling the pre 1.3.x flock() emulation routines, instead of
-the real flock() system call. The old routines are quite badly broken,
-especially with respect to parent-child lock sharing, and can give bad
-results if, for example, sendmail attempts to use them.
+This should not cause problems for anybody, since everybody using a
+2.1.x kernel should have updated their C library to a suitable version
+anyway (see the file "linux/Documentation/Changes".)
 
-Fixed versions of the C libraries have been on public release for many
-months. The latest versions at the time of writing are 5.3.12 (released)
-or 5.4.6 (testing) for ELF. There is also a 4.7.6 release for people
-using a.out systems.
+1.2 Allow Mixed Locks Again
+---------------------------
 
-With the release of Linux 2.0 Linus decided to be lenient on the
-stragglers and changed the warning message so that the kernel will only
-complain once and then shut up. That should make life more bearable even
-for people who, for some reason, don't want to upgrade their libraries.
-
-
-1.2 Disallow Mixed Locks
-------------------------
-
-1.2.1 Sendmail Problems
----------------------
+1.2.1 Typical Problems - Sendmail
+---------------------------------
 Because sendmail was unable to use the old flock() emulation, many sendmail
 installations use fcntl() instead of flock(). This is true of Slackware 3.0
 for example. This gave rise to some other subtle problems if sendmail was
@@ -50,23 +38,17 @@ to lock solid with deadlocked processes.
 
 1.2.2 The Solution
 ------------------
-I have chosen the rather cruel solution of disallowing mixed locking styles
-on a given file at a given time. Attempts to lock a file with flock() when
-fcntl() locks exist, or vice versa, return with an error status of EBUSY.
-This seemed to be the only way to avoid all possible deadlock conditions,
-as flock() locks do not strictly have one owner process and so can't be
-checked for deadlocking in the usual manner.
+The solution I have chosen, after much experimentation and discussion,
+is to make flock() and fcntl() locks oblivious to each other. Both can
+exists, and neither will have any effect on the other.
 
-The process that created a lock with flock() might have forked multiple
-children and exited. Previously the parent process would have been marked
-as the owner of the lock, but deadlocks could just have easily occurred in
-one or more of the children, which we would not have been able to identify
-and avoid.
+I wanted the two lock styles to be cooperative, but there were so many
+race and deadlock conditions that the current solution was the only
+practical one. It puts us in the same position as, for example, SunOS
+4.1.x and serveral other commercial Unices. The only OS's that support
+cooperative flock()/fcntl() are those that emulate flock() using
+fcntl(), with all the problems that implies.
 
-Some programs may break (again, groan). In particular the aforementioned
-sendmail may have problems running in 'newaliases' mode. It will no longer
-deadlock though. Recompile sendmail to use flock() and your troubles will
-be over.
 
 1.3 Mandatory Locking As A Mount Option
 ---------------------------------------

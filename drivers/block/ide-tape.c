@@ -1777,7 +1777,7 @@ static void idetape_pc_intr (ide_drive_t *drive)
 		return;
 	}
 #ifdef CONFIG_BLK_DEV_TRITON
-	if (clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
+	if (test_and_clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 		printk (KERN_ERR "ide-tape: The tape wants to issue more interrupts in DMA mode\n");
 		printk (KERN_ERR "ide-tape: DMA disabled, reverting to PIO\n");
 		HWIF(drive)->dmaproc(ide_dma_off, drive);
@@ -1916,7 +1916,7 @@ static void idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
 	bcount.all=pc->request_transfer;				/* Request to transfer the entire buffer at once */
 
 #ifdef CONFIG_BLK_DEV_TRITON
-	if (clear_bit (PC_DMA_ERROR, &pc->flags)) {
+	if (test_and_clear_bit (PC_DMA_ERROR, &pc->flags)) {
 		printk (KERN_WARNING "ide-tape: DMA disabled, reverting to PIO\n");
 		HWIF(drive)->dmaproc(ide_dma_off, drive);
 	}
@@ -2248,7 +2248,7 @@ static void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned
 	status.all = GET_STAT();
 	if (!drive->dsc_overlap && rq->cmd != IDETAPE_PC_RQ2)
 		set_bit (IDETAPE_IGNORE_DSC, &tape->flags);
-	if (!clear_bit (IDETAPE_IGNORE_DSC, &tape->flags) && !status.b.dsc) {
+	if (!test_and_clear_bit (IDETAPE_IGNORE_DSC, &tape->flags) && !status.b.dsc) {
 		if (postponed_rq == NULL) {
 			tape->dsc_polling_start = jiffies;
 			tape->dsc_polling_frequency = tape->best_dsc_rw_frequency;
@@ -2506,7 +2506,7 @@ static int idetape_add_chrdev_write_request (ide_drive_t *drive, int blocks)
 	if (!idetape_pipeline_active (tape) && tape->nr_stages >= (3 * tape->max_stages) / 4)
 		idetape_insert_pipeline_into_queue (drive);
 
-	if (clear_bit (IDETAPE_PIPELINE_ERROR, &tape->flags))		/* Return a deferred error */
+	if (test_and_clear_bit (IDETAPE_PIPELINE_ERROR, &tape->flags))		/* Return a deferred error */
 		return -EIO;
 	return blocks;
 }
@@ -3254,7 +3254,7 @@ static int idetape_chrdev_open (struct inode *inode, struct file *filp)
 		return -ENXIO;
 	tape = drive->driver_data;
 
-	if (set_bit (IDETAPE_BUSY, &tape->flags))
+	if (test_and_set_bit (IDETAPE_BUSY, &tape->flags))
 		return -EBUSY;
 	MOD_INC_USE_COUNT;
 	idetape_create_read_position_cmd (&pc);

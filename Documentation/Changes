@@ -29,7 +29,7 @@ English-language HTML version.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: April 24, 1997.
+Last updated: May 12, 1997.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Minimal Requirements
@@ -40,13 +40,13 @@ encountered a bug!
 
 - Kernel modules	 modutils-2.1.34
 - Gnu C 		 2.7.2.1
-- Binutils		 2.7.0.9
+- Binutils		 2.8.0.3
 - Linux C Library	 5.4.23
 - Dynamic Linker (ld.so) 1.8.5
 - Linux C++ Library	 2.7.2.1
 - Procps		 1.01
 - Mount                  2.6g
-- Net-tools              1.32-alpha
+- Net-tools              1.41
 - Loadlin                1.6a
 - Sh-utils               1.16
 - Autofs                 0.3.0
@@ -131,6 +131,9 @@ presence.
    To run bootpd, you'll need to issue the following command:   echo 1
 >/proc/sys/net/ipv4/ip_boot_agent
 
+   For support for new features like IPv6, upgrade to the latest
+net-tools.
+
 Mount and network file systems
 ==============================
 
@@ -179,8 +182,7 @@ How to know the version of the installed programs
 *************************************************
 
    There are some simple methods useful to know the version of the
-installed programs and libraries.  The SysVinit version display
-requires that you be logged in as root.
+installed programs and libraries.
 
 Binutils: ld -v
 Gnu C: gcc -v or gcc --version
@@ -190,6 +192,7 @@ Libc: ls -l /lib/libc.so.*
 Libc++: ls -l /usr/lib/libg++.so.*
 Modutils: insmod -V
 Mount: mount --version
+Net-tools:  hostname -V
 Procps: ps --version
 RPM:  rpm --version
 Sh-utils:  expr --v
@@ -200,12 +203,12 @@ Where to get the files
 Binutils
 ========
 
-The 2.7.0.9 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.7.0.9.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.7.0.9.bin.tar.gz
+The 2.8.0.3 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.8.0.3.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.8.0.3.bin.tar.gz
 Installation notes:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.7.0.9
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.7.0.9
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.8.0.3
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.8.0.3
 
 Gnu C
 =====
@@ -310,6 +313,13 @@ NFS
 The 0.4.21 release:
 ftp://ftp.mathematik.th-darmstadt.de/pub/linux/okir/linux-nfs-0.4.21.tar.gz
 ftp://linux.nrao.edu/pub/people/okir/linux-nfs-0.4.21.tar.gz
+
+Net-tools
+=========
+
+The 0.41 release:
+ftp://ftp.london.uk.eu.org/pub/ipv6/net-tools-1.41.tar.gz
+ftp://ftp.cs-ipv6.lancs.ac.uk/pub/Code/Linux/Net_Tools/net-tools-1.41.tar.gz
 
 Other Info
 ==========

@@ -261,8 +261,6 @@ extern int zeromap_page_range(unsigned long from, unsigned long size, pgprot_t p
 
 extern void vmtruncate(struct inode * inode, unsigned long offset);
 extern void handle_mm_fault(struct vm_area_struct *vma, unsigned long address, int write_access);
-extern void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma, unsigned long address, int write_access);
-extern void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma, unsigned long address, int write_access);
 
 extern unsigned long paging_init(unsigned long start_mem, unsigned long end_mem);
 extern void mem_init(unsigned long start_mem, unsigned long end_mem);

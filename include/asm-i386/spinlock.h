@@ -93,7 +93,7 @@ __asm__ __volatile__( \
 	"lock ; btrl $0,%0" \
 	:"=m" (__dummy_lock(lock)))
 
-#define spin_trylock(lock) (!set_bit(0,(lock)))
+#define spin_trylock(lock) (!test_and_set_bit(0,(lock)))
 
 #define spin_lock_irq(lock) \
 	do { __cli(); spin_lock(lock); } while (0)

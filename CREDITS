@@ -149,12 +149,8 @@ S: 91452 Wilhermsdorf
 S: Germany
 
 N: Bill Bogstad
-E: bogstad@cs.jhu.edu
-D: Wrote /proc/self patch
-S: Johns Hopkins University
-S: Computer Science Department
-S: Baltimore, Maryland 21218
-S: USA
+E: bogstad@pobox.com
+D: wrote /proc/self hack, minor samba & dosemu patches
 
 N: Axel Boldt
 E: boldt@math.ucsb.edu
@@ -468,7 +464,7 @@ S: Carnegie, Pennsylvania 15106-4304
 S: USA
 
 N: Philip Gladstone
-E: philipg@onsett.com
+E: philip@raptor.com
 D: Kernel / timekeeping stuff
 
 N: Michael A. Griffith

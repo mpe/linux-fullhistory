@@ -11,6 +11,9 @@
  * 
  * generic command parser provided by: 
  * Andreas Heilwagen <crashcar@informatik.uni-koblenz.de>
+ *
+ * generic_proc_info() support of xxxx_info() by:
+ * Michael A. Griffith <grif@acm.org>
  */
 
 /*
@@ -48,7 +51,9 @@ struct scsi_dir {
  * Used if the driver currently has no own support for /proc/scsi
  */
 int generic_proc_info(char *buffer, char **start, off_t offset, 
-		     int length, int inode, int inout)
+		     int length, int inode, int inout, 
+                     const char *(*info)(struct Scsi_Host *),
+                     struct Scsi_Host *sh)
 {
     int len, pos, begin;
 
@@ -56,8 +61,13 @@ int generic_proc_info(char *buffer, char **start, off_t offset,
 	return(-ENOSYS);  /* This is a no-op */
     
     begin = 0;
-    pos = len = sprintf(buffer, 
-			"The driver does not yet support the proc-fs\n");
+    if (info && sh) {
+          pos = len = sprintf(buffer, "%s\n", info(sh));
+    }
+    else {
+      pos = len = sprintf(buffer, 
+                          "The driver does not yet support the proc-fs\n");
+    }
     if(pos < offset) {
 	len = 0;
 	begin = pos;
@@ -91,7 +101,9 @@ extern int dispatch_scsi_info(int ino, char *buffer, char **start,
         if (ino == (hpnt->host_no + PROC_SCSI_FILE)) {
             if(hpnt->hostt->proc_info == NULL)
                 return generic_proc_info(buffer, start, offset, length, 
-                                         hpnt->host_no, func);
+                                         hpnt->host_no, func,
+                                         hpnt->hostt->info,
+                                         hpnt);
             else
                 return(hpnt->hostt->proc_info(buffer, start, offset, 
                                               length, hpnt->host_no, func));

@@ -487,7 +487,7 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 				add_timer (&auto_repeat_timer);
 			}
 		}
-		rep = set_bit(keycode, key_down);
+		rep = test_and_set_bit(keycode, key_down);
 	}
 
 	if(raw_mode)

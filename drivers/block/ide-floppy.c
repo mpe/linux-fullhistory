@@ -726,7 +726,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 		return;
 	}
 #ifdef CONFIG_BLK_DEV_TRITON
-	if (clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
+	if (test_and_clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 		printk (KERN_ERR "ide-floppy: The floppy wants to issue more interrupts in DMA mode\n");
 		printk (KERN_ERR "ide-floppy: DMA disabled, reverting to PIO\n");
 		HWIF(drive)->dmaproc(ide_dma_off, drive);
@@ -842,7 +842,7 @@ static void idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *pc)
 	bcount.all=pc->request_transfer;				/* Request to transfer the entire buffer at once */
 
 #ifdef CONFIG_BLK_DEV_TRITON
-	if (clear_bit (PC_DMA_ERROR, &pc->flags)) {
+	if (test_and_clear_bit (PC_DMA_ERROR, &pc->flags)) {
 		printk (KERN_WARNING "ide-floppy: DMA disabled, reverting to PIO\n");
 		HWIF(drive)->dmaproc(ide_dma_off, drive);
 	}
@@ -1182,7 +1182,7 @@ static int idefloppy_media_change (ide_drive_t *drive)
 {
 	idefloppy_floppy_t *floppy = drive->driver_data;
 	
-	return clear_bit (IDEFLOPPY_MEDIA_CHANGED, &floppy->flags);
+	return test_and_clear_bit (IDEFLOPPY_MEDIA_CHANGED, &floppy->flags);
 }
 
 /*

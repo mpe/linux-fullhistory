@@ -81,47 +81,27 @@ static inline int waking_non_zero(struct semaphore *sem)
  * "down_failed" is a special asm handler that calls the C
  * routine that actually waits. See arch/i386/lib/semaphore.S
  */
-extern inline void down(struct semaphore * sem)
+extern inline void do_down(struct semaphore * sem, void (*failed)(void))
 {
 	__asm__ __volatile__(
 		"# atomic down operation\n\t"
-		"movl $1f,%%eax\n\t"
 #ifdef __SMP__
 		"lock ; "
 #endif
 		"decl 0(%0)\n\t"
-		"js " SYMBOL_NAME_STR(__down_failed)
-		"\n1:"
+		"js 2f\n"
+		"1:\n"
+		".section .text.lock,\"ax\"\n"
+		"2:\tpushl $1b\n\t"
+		"jmp %1\n"
+		".previous"
 		:/* no outputs */
-		:"c" (sem)
-		:"ax","memory");
-}
-
-/*
- * This version waits in interruptible state so that the waiting
- * process can be killed.  The down_failed_interruptible routine
- * returns negative for signalled and zero for semaphore acquired.
- */
-extern inline int down_interruptible(struct semaphore * sem)
-{
-	int	ret;
-
-	__asm__ __volatile__(
-		"# atomic interruptible down operation\n\t"
-		"movl $1f,%0\n\t"
-#ifdef __SMP__
-		"lock ; "
-#endif
-		"decl 0(%1)\n\t"
-		"js " SYMBOL_NAME_STR(__down_failed_interruptible) "\n\t"
-		"xorl %0,%0"
-		"\n1:"
-		:"=a" (ret)
-		:"c" (sem)
+		:"c" (sem), "m" (*(unsigned long *)failed)
 		:"memory");
-
-	return ret;
 }
+
+#define down(sem) do_down((sem),__down_failed)
+#define down_interruptible(sem) do_down((sem),__down_failed_interruptible)
 
 /*
  * Note! This is subtle. We jump to wake people up only if
@@ -133,16 +113,19 @@ extern inline void up(struct semaphore * sem)
 {
 	__asm__ __volatile__(
 		"# atomic up operation\n\t"
-		"movl $1f,%%eax\n\t"
 #ifdef __SMP__
 		"lock ; "
 #endif
 		"incl 0(%0)\n\t"
-		"jle " SYMBOL_NAME_STR(__up_wakeup)
-		"\n1:"
+		"jle 2f\n"
+		"1:\n"
+		".section .text.lock,\"ax\"\n"
+		"2:\tpushl $1b\n\t"
+		"jmp %1\n"
+		".previous"
 		:/* no outputs */
-		:"c" (sem)
-		:"ax", "memory");
+		:"c" (sem), "m" (*(unsigned long *)__up_wakeup)
+		:"memory");
 }
 
 #endif

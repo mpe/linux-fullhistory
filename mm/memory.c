@@ -589,7 +589,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
  * change only once the write actually happens. This avoids a few races,
  * and potentially makes it more efficient.
  */
-void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
+static void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	unsigned long address, int write_access)
 {
 	pgd_t *page_dir;
@@ -785,7 +785,7 @@ static inline void do_swap_page(struct task_struct * tsk,
  * As this is called only for pages that do not currently exist, we
  * do not need to flush old virtual caches or the TLB.
  */
-void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
+static void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	unsigned long address, int write_access)
 {
 	pgd_t * pgd;

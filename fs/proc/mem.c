@@ -285,10 +285,10 @@ int mem_mmap(struct inode * inode, struct file * file,
 			return -ENOMEM;
 
 		if (!pte_present(*src_table))
-			do_no_page(tsk, src_vma, stmp, 1);
+			handle_mm_fault(src_vma, stmp, 1);
 
 		if ((vma->vm_flags & VM_WRITE) && !pte_write(*src_table))
-			do_wp_page(tsk, src_vma, stmp, 1);
+			handle_mm_fault(src_vma, stmp, 1);
 
 		set_pte(src_table, pte_mkdirty(*src_table));
 		set_pte(dest_table, *src_table);

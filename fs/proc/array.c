@@ -1019,7 +1019,7 @@ extern int get_cpuinfo(char *);
 extern int get_pci_list(char*);
 extern int get_md_status (char *);
 extern int get_rtc_status (char *);
-extern int get_locks_status (char *);
+extern int get_locks_status (char *, char **, off_t, int);
 extern int get_swaparea_info (char *);
 #ifdef __SMP_PROF__
 extern int get_smp_prof_list(char *);
@@ -1106,7 +1106,7 @@ static long get_root_array(char * page, int type, char **start,
 			return get_rtc_status(page);
 #endif
 		case PROC_LOCKS:
-			return get_locks_status(page);
+			return get_locks_status(page, start, offset, length);
 #ifdef CONFIG_ZORRO
 		case PROC_ZORRO:
 			return zorro_get_list(page);

@@ -108,7 +108,7 @@ l1:
 		lock->previous = (unsigned long) &&l1;
 }
 
-#define spin_trylock(lock) (!set_bit(0,(lock)))
+#define spin_trylock(lock) (!test_and_set_bit(0,(lock)))
 
 #define spin_lock_irq(lock) \
 	do { __cli(); spin_lock(lock); } while (0)

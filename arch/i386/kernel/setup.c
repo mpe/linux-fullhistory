@@ -247,7 +247,7 @@ static const char * i586model(unsigned int nr)
 static const char * i686model(unsigned int nr)
 {
 	static const char *model[] = {
-		"PPro A-step", "Pentium Pro"
+		"PPro A-step", "Pentium Pro", "2", "Pentium II"
 	};
 	if (nr < sizeof(model)/sizeof(char *))
 		return model[nr];
@@ -279,9 +279,10 @@ static const char * getmodel(int x86, int model)
 int get_cpuinfo(char * buffer)
 {
         int i, len = 0;
+	int sep_bug;
         static const char *x86_cap_flags[] = {
                 "fpu", "vme", "de", "pse", "tsc", "msr", "pae", "mce",
-                "cx8", "apic", "10", "11", "mtrr", "pge", "mca", "cmov",
+                "cx8", "apic", "10", "sep", "mtrr", "pge", "mca", "cmov",
                 "16", "17", "18", "19", "20", "21", "22", "mmx",
                 "24", "25", "26", "27", "28", "29", "30", "31"
         };
@@ -321,10 +322,16 @@ int get_cpuinfo(char * buffer)
                         else
                                 len += sprintf(buffer+len, 
                                                "stepping\t: unknown\n");
+
+			sep_bug = CD(have_cpuid) &&
+			          (CD(x86_capability) & 0x800) &&
+			          CD(x86_model) < 3 &&
+			          CD(x86_mask) < 3;
         
                         len += sprintf(buffer+len,
                                        "fdiv_bug\t: %s\n"
                                        "hlt_bug\t\t: %s\n"
+				       "sep_bug\t\t: %s\n"
                                        "fpu\t\t: %s\n"
                                        "fpu_exception\t: %s\n"
                                        "cpuid\t\t: %s\n"
@@ -332,6 +339,7 @@ int get_cpuinfo(char * buffer)
                                        "flags\t\t:",
                                        CD(fdiv_bug) ? "yes" : "no",
                                        CD(hlt_works_ok) ? "no" : "yes",
+				       sep_bug ? "yes" : "no",
                                        CD(hard_math) ? "yes" : "no",
                                        (CD(hard_math) && ignore_irq13)
                                          ? "yes" : "no",

@@ -216,7 +216,7 @@ void process_keycode (int keycode)
 #endif
 		}
 	} else
- 		rep = set_bit(keycode, key_down);
+ 		rep = test_and_set_bit(keycode, key_down);
 
 	if (raw_mode)
 	        return;

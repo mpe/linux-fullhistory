@@ -1,10 +1,10 @@
-The linux NCR53C8XX driver README file
+The Linux NCR53C8XX driver README file
 
 Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-6 April 1997
+9 May 1997
 ===============================================================================
 
 1.  Introduction
@@ -22,6 +22,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
       8.5  Set debug mode
       8.6  Clear profile counters
       8.7  Set flag (no_sync)
+      8.8  Debug error recovery
 9.  Configuration parameters
 10. Boot setup commands
       10.1 Syntax
@@ -203,7 +204,6 @@ General information:
   IO port address 0x6000, IRQ number 10
   Using memory mapped IO at virtual address 0x282c000
   Synchronous transfer period 25, max commands per lun 4
-
 Profiling information:
   num_trans    = 18014
   num_kbytes   = 671314
@@ -389,6 +389,57 @@ Available commands:
       will reset no_sync flag for target 4, so will allow it disconnections.
     - setflag all
       will allow disconnection for all devices on the SCSI bus.
+
+
+8.8 Debug error recovery
+
+    debug_error_recovery <error to trigger>
+
+    Available error type to trigger:
+        sge:     SCSI gross error
+        abort:   abort command from the middle-level driver
+        reset:   reset command from the middle-level driver
+        parity:  scsi parity detected in DATA IN phase
+        none:    restore driver normal behaviour
+
+    The code corresponding to this feature is normally not compiled.
+    Its purpose is driver testing only. In order to compile the code 
+    that allows to trigger error recovery you must define at compile time 
+    SCSI_NCR_DEBUG_ERROR_RECOVERY.
+    If you have compiled the driver with this option, nothing will happen 
+    as long as you donnot use the control command 'debug_error_recovery' 
+    with sge, abort, reset or parity as argument.
+    If you select an error type, it will be triggered by the driver every 
+    30 seconds.
+
+8.9 PCI configuration fix-up
+
+    pcifix <option bits>
+
+    Available option bits:
+        0x1:     Set PCI cache-line size register if not set.
+        0x2:     Set write and invalidate bit in PCI command register.
+
+    Use 'pcifix:3' in order to allow the driver to fix both PCI features.
+
+    These options only apply to new SYMBIOS chips 810A, 825A, 860 and 875 
+    and are only supported for Pentium and 486 class processors.
+    Recent SYMBIOS 53C8XX scsi processors are able to use PCI read multiple 
+    and PCI write and invalidate commands. These features require the 
+    cache line size register to be properly set in the PCI configuration 
+    space of the chips. On the other hand, chips will use PCI write and 
+    invalidate commands only if the corresponding bit is set to 1 in the 
+    PCI command register.
+
+    Not all PCI bioses set the PCI cache line register and the PCI write and 
+    invalidate bit in the PCI configuration space of 53C8XX chips.
+    Optimized PCI accesses may be broken for some PCI/memory controllers or 
+    make problems with some PCI boards.
+
+    This fix-up works flawlessly on my system.
+    (MB Triton HX / 53C875 / 53C810A)
+    I use these options at my own risks as you will do if you decide to 
+    use them too.
 
 9. Configuration parameters
 
@@ -736,9 +787,9 @@ Driver and common files:
 
 You must untar the distribution with the following command:
 
-	tar zxvf ncrBsd2Linux-1.18d-src.tar.gz
+	tar zxvf ncrBsd2Linux-2.1b-src.tar.gz
 
-The sub-directory ncr53c8xx-1.18d will be created. Change to this directory.
+The sub-directory ncr53c8xx-2.1b will be created. Change to this directory.
 
 
 12.2 Installation procedure

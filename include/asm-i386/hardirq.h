@@ -58,7 +58,6 @@ static inline int hardirq_trylock(int cpu)
 		return 0;
 	}
 	++local_irq_count[cpu];
-	__sti();
 	return 1;
 }
 

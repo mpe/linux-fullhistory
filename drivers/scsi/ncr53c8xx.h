@@ -45,36 +45,7 @@
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 1.18f"
- 
-/*
-**	If SCSI_NCR_SETUP_SPECIAL_FEATURES is defined,
-**	the driver enables or not the following features according to chip id 
-**	revision id:
-**	DMODE   0xce
-**		0x02	burst op-code fetch
-**		0x04	enable read multiple
-**		0x08	enable read line
-**		0xc0	burst length 16/8/2
-**	DCNTL   0xa0
-**		0x20	enable pre-fetch
-**		0x80	enable cache line size
-**	CTEST3  0x01
-**		0x01	set write and invalidate
-**	CTEST4  0x80
-**		0x80	burst disabled
-**	CTEST5  0x24	(825a and 875 only)
-**		0x04	burst 128
-**		0x80	large dma fifo
-**
-**	If SCSI_NCR_TRUST_BIOS_SETTING is defined, the driver will use the 
-**	initial value of corresponding bit fields, assuming they have been 
-**	set by the SDMS BIOS.
-**	When Linux is booted from another O/S, these assertion is false and 
-**	the driver will not be able to guess it. 
-*/
-
-/*********** LINUX SPECIFIC SECTION ******************/
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 2.1b"
 
 /*
 **	Check supported Linux versions
@@ -97,28 +68,6 @@
 #define LINUX_VERSION_CODE LinuxVersionCode(1,2,13)
 #endif
 
-#if !defined(VERSION)
-#define VERSION		((LINUX_VERSION_CODE >> 16) & 0xff)
-#define PATCHLEVEL	((LINUX_VERSION_CODE >> 8)  & 0xff)
-#define SUBLEVEL	((LINUX_VERSION_CODE >> 0)  & 0xff)
-#endif
-
-#if	VERSION == 0 || VERSION > 3
-#	error Only Linux version 1 and probable 2 or 3 supported.
-#endif
-
-#if	VERSION == 1 && PATCHLEVEL == 2
-#	if	SUBLEVEL != 13
-#		error Only sublevel 13 of Linux 1.2 is supported.
-#	endif
-#endif
-
-#if	VERSION == 1 && PATCHLEVEL == 3
-#	if	SUBLEVEL < 45
-#		error Only sublevels >=45 of Linux 1.3 are supported.
-#	endif
-#endif
-
 /*
 **	Normal IO or memory mapped IO.
 **
@@ -137,6 +86,20 @@
 
 #if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,72)
 #	define SCSI_NCR_SHARE_IRQ
+#endif
+
+/*
+**	If you want a driver as small as possible, donnot define the 
+**	following options.
+*/
+
+#define SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT
+#define SCSI_NCR_DEBUG_INFO_SUPPORT
+#ifdef	SCSI_NCR_PROC_INFO_SUPPORT
+#	define	SCSI_NCR_PROFILE_SUPPORT
+#	define	SCSI_NCR_USER_COMMAND_SUPPORT
+#	define	SCSI_NCR_USER_INFO_SUPPORT
+/* #	define	SCSI_NCR_DEBUG_ERROR_RECOVERY_SUPPORT */
 #endif
 
 /* ---------------------------------------------------------------------
@@ -205,14 +168,6 @@
 #define	SCSI_NCR_SETUP_DEFAULT_SYNC	(11)
 #else
 #define	SCSI_NCR_SETUP_DEFAULT_SYNC	(10)
-#endif
-
-/*
- * Default sync to 0 will force asynchronous at startup
- */
-#ifdef	CONFIG_SCSI_FORCE_ASYNCHRONOUS
-#undef	SCSI_NCR_SETUP_DEFAULT_SYNC
-#define SCSI_NCR_SETUP_DEFAULT_SYNC	(255)
 #endif
 
 /*
@@ -291,57 +246,6 @@
 #endif
 
 /*
-**	Initial setup.
-**	Can be overriden at startup by a command line.
-*/
-#define SCSI_NCR_DRIVER_SETUP			\
-{						\
-	SCSI_NCR_SETUP_MASTER_PARITY,		\
-	SCSI_NCR_SETUP_SCSI_PARITY,		\
-	SCSI_NCR_SETUP_DISCONNECTION,		\
-	SCSI_NCR_SETUP_SPECIAL_FEATURES,	\
-	SCSI_NCR_SETUP_ULTRA_SCSI,		\
-	SCSI_NCR_SETUP_FORCE_SYNC_NEGO,		\
-	0,					\
-	1,					\
-	SCSI_NCR_SETUP_DEFAULT_TAGS,		\
-	SCSI_NCR_SETUP_DEFAULT_SYNC,		\
-	0x00,					\
-	7,					\
-	SCSI_NCR_SETUP_LED_PIN,			\
-	1,					\
-	SCSI_NCR_SETUP_SETTLE_TIME,		\
-	SCSI_NCR_SETUP_DIFF_SUPPORT,		\
-	0					\
-}
-
-/*
-**	Boot fail safe setup.
-**	Override initial setup from boot command line:
-**	ncr53c8xx=safe:y
-*/
-#define SCSI_NCR_DRIVER_SAFE_SETUP		\
-{						\
-	0,					\
-	1,					\
-	0,					\
-	0,					\
-	0,					\
-	0,					\
-	0,					\
-	2,					\
-	0,					\
-	255,					\
-	0x00,					\
-	255,					\
-	0,					\
-	0,					\
-	10,					\
-	1,					\
-	1					\
-}
-
-/*
 **	Define Scsi_Host_Template parameters
 **
 **	Used by hosts.c and ncr53c8xx.c with module configuration.
@@ -397,6 +301,198 @@ int ncr53c8xx_release(struct Scsi_Host *);
 
 
 #ifndef HOSTS_C
+
+/*
+**	NCR53C8XX Device Ids
+*/
+
+#ifndef PCI_DEVICE_ID_NCR_53C810
+#define PCI_DEVICE_ID_NCR_53C810 1
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C810AP
+#define PCI_DEVICE_ID_NCR_53C810AP 5
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C815
+#define PCI_DEVICE_ID_NCR_53C815 4
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C820
+#define PCI_DEVICE_ID_NCR_53C820 2
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C825
+#define PCI_DEVICE_ID_NCR_53C825 3
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C860
+#define PCI_DEVICE_ID_NCR_53C860 6
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C875
+#define PCI_DEVICE_ID_NCR_53C875 0xf
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C875J
+#define PCI_DEVICE_ID_NCR_53C875J 0x8f
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C885
+#define PCI_DEVICE_ID_NCR_53C885 0xd
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C895
+#define PCI_DEVICE_ID_NCR_53C895 0xc
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C896
+#define PCI_DEVICE_ID_NCR_53C896 0xb
+#endif
+
+/*
+**   NCR53C8XX devices features table.
+*/
+typedef struct {
+	unsigned short	device_id;
+	unsigned short	revision_id;
+	char	*name;
+	unsigned char	burst_max;
+	unsigned char	offset_max;
+	unsigned char	nr_divisor;
+	unsigned int	features;
+#define _F_LED0		(1<<0)
+#define _F_WIDE		(1<<1)
+#define _F_ULTRA	(1<<2)
+#define _F_ULTRA2	(1<<3)
+#define _F_DBLR		(1<<4)
+#define _F_QUAD		(1<<5)
+#define _F_ERL		(1<<6)
+#define _F_CLSE		(1<<7)
+#define _F_WRIE		(1<<8)
+#define _F_ERMP		(1<<9)
+#define _F_BOF		(1<<10)
+#define _F_DFS		(1<<11)
+#define _F_PFEN		(1<<12)
+#define _F_LDSTR	(1<<13)
+#define _F_RAM		(1<<14)
+#define _F_CLK80	(1<<15)
+#define _F_CACHE_SET	(_F_ERL|_F_CLSE|_F_WRIE|_F_ERMP)
+#define _F_SCSI_SET	(_F_WIDE|_F_ULTRA|_F_ULTRA2|_F_DBLR|_F_QUAD|F_CLK80)
+#define _F_SPECIAL_SET	(_F_CACHE_SET|_F_BOF|_F_DFS|_F_LDSTR|_F_PFEN|_F_RAM)
+} ncr_chip;
+
+#define SCSI_NCR_CHIP_TABLE						\
+{									\
+ {PCI_DEVICE_ID_NCR_53C810, 0x0f, "810",  4,  8, 4,			\
+ _F_ERL}								\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C810, 0xff, "810a", 4,  8, 4,			\
+ _F_CACHE_SET|_F_LDSTR|_F_PFEN|_F_BOF}					\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C815, 0xff, "815",  4,  8, 4,			\
+ _F_ERL|_F_BOF}								\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C820, 0xff, "820",  4,  8, 4,			\
+ _F_WIDE|_F_ERL}							\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C825, 0x0f, "825",  4,  8, 4,			\
+ _F_WIDE|_F_ERL|_F_BOF}							\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C825, 0xff, "825a", 7,  8, 4,			\
+ _F_WIDE|_F_CACHE_SET|_F_BOF|_F_DFS|_F_LDSTR|_F_PFEN|_F_RAM}		\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C860, 0xff, "860",  4,  8, 5,			\
+ _F_WIDE|_F_ULTRA|_F_CLK80|_F_CACHE_SET|_F_BOF|_F_LDSTR|_F_PFEN|_F_RAM}	\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C875, 0x01, "875",  7, 16, 5,			\
+ _F_WIDE|_F_ULTRA|_F_CLK80|_F_CACHE_SET|_F_BOF|_F_DFS|_F_LDSTR|_F_PFEN|_F_RAM}	\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C875, 0xff, "875",  7, 16, 5,			\
+ _F_WIDE|_F_ULTRA|_F_DBLR|_F_CACHE_SET|_F_BOF|_F_DFS|_F_LDSTR|_F_PFEN|_F_RAM}	\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C875J, 0xff, "875J",  7, 16, 5,			\
+ _F_WIDE|_F_ULTRA|_F_DBLR|_F_CACHE_SET|_F_BOF|_F_DFS|_F_LDSTR|_F_PFEN|_F_RAM}	\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C885, 0xff, "885",  7, 16, 5,			\
+ _F_WIDE|_F_ULTRA|_F_DBLR|_F_CACHE_SET|_F_BOF|_F_DFS|_F_LDSTR|_F_PFEN|_F_RAM}	\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C895, 0xff, "895",  7, 31, 7,			\
+ _F_WIDE|_F_ULTRA|_F_ULTRA2|_F_QUAD|_F_CACHE_SET|_F_BOF|_F_DFS|_F_LDSTR|_F_PFEN|_F_RAM}	\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C896, 0xff, "896",  7, 31, 7,			\
+ _F_WIDE|_F_ULTRA|_F_ULTRA2|_F_QUAD|_F_CACHE_SET|_F_BOF|_F_DFS|_F_LDSTR|_F_PFEN|_F_RAM}	\
+}
+
+/*
+ * List of supported NCR chip ids
+ */
+#define SCSI_NCR_CHIP_IDS		\
+{					\
+	PCI_DEVICE_ID_NCR_53C810,	\
+	PCI_DEVICE_ID_NCR_53C815,	\
+	PCI_DEVICE_ID_NCR_53C820,	\
+	PCI_DEVICE_ID_NCR_53C825,	\
+	PCI_DEVICE_ID_NCR_53C860,	\
+	PCI_DEVICE_ID_NCR_53C875,	\
+	PCI_DEVICE_ID_NCR_53C875J,	\
+	PCI_DEVICE_ID_NCR_53C885,	\
+	PCI_DEVICE_ID_NCR_53C895,	\
+	PCI_DEVICE_ID_NCR_53C896	\
+}
+
+/*
+**	Initial setup.
+**	Can be overriden at startup by a command line.
+*/
+#define SCSI_NCR_DRIVER_SETUP			\
+{						\
+	SCSI_NCR_SETUP_MASTER_PARITY,		\
+	SCSI_NCR_SETUP_SCSI_PARITY,		\
+	SCSI_NCR_SETUP_DISCONNECTION,		\
+	SCSI_NCR_SETUP_SPECIAL_FEATURES,	\
+	SCSI_NCR_SETUP_ULTRA_SCSI,		\
+	SCSI_NCR_SETUP_FORCE_SYNC_NEGO,		\
+	0,					\
+	0,					\
+	1,					\
+	SCSI_NCR_SETUP_DEFAULT_TAGS,		\
+	SCSI_NCR_SETUP_DEFAULT_SYNC,		\
+	0x00,					\
+	7,					\
+	SCSI_NCR_SETUP_LED_PIN,			\
+	1,					\
+	SCSI_NCR_SETUP_SETTLE_TIME,		\
+	SCSI_NCR_SETUP_DIFF_SUPPORT,		\
+	0					\
+}
+
+/*
+**	Boot fail safe setup.
+**	Override initial setup from boot command line:
+**	ncr53c8xx=safe:y
+*/
+#define SCSI_NCR_DRIVER_SAFE_SETUP		\
+{						\
+	0,					\
+	1,					\
+	0,					\
+	0,					\
+	0,					\
+	0,					\
+	0,					\
+	0,					\
+	2,					\
+	0,					\
+	255,					\
+	0x00,					\
+	255,					\
+	0,					\
+	0,					\
+	10,					\
+	1,					\
+	1					\
+}
 
 /*
 **	Define the table of target capabilities by host and target
@@ -486,50 +582,6 @@ int ncr53c8xx_release(struct Scsi_Host *);
 #endif
 #endif
 
-/*
-**	NCR53C8XX Device Ids
-*/
-
-#ifndef PCI_DEVICE_ID_NCR_53C810
-#define PCI_DEVICE_ID_NCR_53C810 1
-#endif
-
-#ifndef PCI_DEVICE_ID_NCR_53C810AP
-#define PCI_DEVICE_ID_NCR_53C810AP 5
-#endif
-
-#ifndef PCI_DEVICE_ID_NCR_53C815
-#define PCI_DEVICE_ID_NCR_53C815 4
-#endif
-
-#ifndef PCI_DEVICE_ID_NCR_53C820
-#define PCI_DEVICE_ID_NCR_53C820 2
-#endif
-
-#ifndef PCI_DEVICE_ID_NCR_53C825
-#define PCI_DEVICE_ID_NCR_53C825 3
-#endif
-
-#ifndef PCI_DEVICE_ID_NCR_53C860
-#define PCI_DEVICE_ID_NCR_53C860 6
-#endif
-
-#ifndef PCI_DEVICE_ID_NCR_53C875
-#define PCI_DEVICE_ID_NCR_53C875 0xf
-#endif
-
-#ifndef PCI_DEVICE_ID_NCR_53C885
-#define PCI_DEVICE_ID_NCR_53C885 0xd
-#endif
-
-#ifndef PCI_DEVICE_ID_NCR_53C895
-#define PCI_DEVICE_ID_NCR_53C895 0xc
-#endif
-
-#ifndef PCI_DEVICE_ID_NCR_53C896
-#define PCI_DEVICE_ID_NCR_53C896 0xb
-#endif
-
 /**************** ORIGINAL CONTENT of ncrreg.h from FreeBSD ******************/
 
 /*-----------------------------------------------------------------
@@ -608,6 +660,7 @@ struct ncr_reg {
         #define   ILF1    0x80  /* sta: data in SIDL register msb[W]*/
         #define   ORF1    0x40  /* sta: data in SODR register msb[W]*/
         #define   OLF1    0x20  /* sta: data in SODL register msb[W]*/
+        #define   DM      0x04  /* sta: DIFFSENS mismatch (895/6 only) */
         #define   LDSC    0x02  /* sta: disconnect & reconnect      */
 
 /*10*/  u_int32    nc_dsa;	/* --> Base page                    */
@@ -680,6 +733,7 @@ struct ncr_reg {
 
 /*40*/  u_short   nc_sien;	/* -->: interrupt enable            */
 /*42*/  u_short   nc_sist;	/* <--: interrupt status            */
+        #define   SBMC    0x1000/* sta: SCSI Bus Mode Change (895/6 only) */
         #define   STO     0x0400/* sta: timeout (select)            */
         #define   GEN     0x0200/* sta: timeout (general)           */
         #define   HTH     0x0100/* sta: timeout (handshake)         */
@@ -713,10 +767,17 @@ struct ncr_reg {
 
 /*4f*/  u_char    nc_stest3;
 	#define   TE     0x80	/* c: tolerAnt enable */
+	#define   HSC    0x20	/* c: Halt SCSI Clock */
 	#define   CSF    0x02	/* c: clear scsi fifo */
 
 /*50*/  u_short   nc_sidl;	/* Lowlevel: latched from scsi data */
 /*52*/  u_char    nc_stest4;
+	#define   SMODE  0xc0	/* SCSI bus mode      (895/6 only) */
+	#define    SMODE_HVD 0x40	/* High Voltage Differential       */
+	#define    SMODE_SE  0x80	/* Single Ended                    */
+	#define    SMODE_LVD 0xc0	/* Low Voltage Differential        */
+	#define   LCKFRQ 0x20	/* Frequency Lock (895/6 only)     */
+
 /*53*/	u_char    nc_53_;
 /*54*/  u_short   nc_sodl;	/* Lowlevel: data out to scsi data  */
 /*56*/  u_short   nc_56_;
@@ -870,10 +931,18 @@ struct scr_tblsel {
 **	<< source_address >>
 **	<< destination_address >>
 **
+**	SCR_COPY   sets the NO FLUSH option by default.
+**	SCR_COPY_F does not set this option.
+**
+**	For chips which do not support this option,
+**	ncr_copy_and_bind() will remove this bit.
 **-----------------------------------------------------------
 */
 
-#define SCR_COPY(n) (0xc0000000 | (n))
+#define SCR_NO_FLUSH 0x01000000
+
+#define SCR_COPY(n) (0xc0000000 | SCR_NO_FLUSH | (n))
+#define SCR_COPY_F(n) (0xc0000000 | (n))
 
 /*-----------------------------------------------------------
 **
@@ -979,6 +1048,7 @@ struct scr_tblsel {
 **-----------------------------------------------------------
 */
 
+#define SCR_NO_OP        0x80000000
 #define SCR_JUMP        0x80080000
 #define SCR_JUMPR       0x80880000
 #define SCR_CALL        0x88080000

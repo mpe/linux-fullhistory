@@ -1394,7 +1394,7 @@ struct NCR53c7x0_hostdata {
 						/* commands running, maintained
 						   by Linux driver */
 
-    volatile struct NCR53c7x0_cmd *current;	/* currently connected 
+    volatile struct NCR53c7x0_cmd *curr;	/* currently connected 
 						   nexus, ONLY valid for
 						   NCR53c700/NCR53c700-66
 						 */

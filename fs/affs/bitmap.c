@@ -86,7 +86,7 @@ affs_free_block(struct super_block *sb, s32 block)
 			return;
 		}
 	}
-	if (set_bit(bit ^ BO_EXBITS,bm->bm_bh->b_data + 4))
+	if (test_and_set_bit(bit ^ BO_EXBITS,bm->bm_bh->b_data + 4))
 		affs_warning(sb,"affs_free_block","Trying to free block %d which is already free",
 				block);
 	else {
@@ -138,7 +138,7 @@ found:
 	zone->z_start = i;
 	w   = ~htonl(bm[i]);
 	fb  = find_first_zero_bit(&w,32);
-	if (fb > 31 || !clear_bit(fb ^ BO_EXBITS,&bm[i])) {
+	if (fb > 31 || !test_and_clear_bit(fb ^ BO_EXBITS,&bm[i])) {
 		unlock_super(sb);
 		affs_warning(sb,"balloc","Empty block disappeared somehow");
 		goto repeat;
@@ -153,7 +153,7 @@ found:
 			fb = find_next_zero_bit(&w,32,fb);
 			if (fb > 31)
 				break;
-			if (!clear_bit(fb ^ BO_EXBITS,&bm[i])) {
+			if (!test_and_clear_bit(fb ^ BO_EXBITS,&bm[i])) {
 				affs_warning(sb,"balloc","Empty block disappeared somehow");
 				break;
 			}

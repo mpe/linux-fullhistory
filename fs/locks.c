@@ -100,6 +100,9 @@
  *
  *  Some adaptations for NFS support.
  *  Olaf Kirch (okir@monad.swb.de), Dec 1996,
+ *
+ *  Fixed /proc/locks interface so that we can't overrun the buffer we are handed.
+ *  Andy Walker (andy@lysaker.kvaerner.no), May 12, 1997.
  */
 
 #include <linux/malloc.h>
@@ -132,7 +135,7 @@ static int posix_locks_deadlock(struct file_lock *caller,
 static struct file_lock *locks_alloc_lock(struct file_lock *fl);
 static void locks_insert_lock(struct file_lock **pos, struct file_lock *fl);
 static void locks_delete_lock(struct file_lock **thisfl_p, unsigned int wait);
-static char *lock_get_status(struct file_lock *fl, char *p, int id, char *pfx);
+static char *lock_get_status(struct file_lock *fl, int id, char *pfx);
 
 static void locks_insert_block(struct file_lock *blocker, struct file_lock *waiter);
 static void locks_delete_block(struct file_lock *blocker, struct file_lock *waiter);
@@ -227,6 +230,7 @@ void
 posix_block_lock(struct file_lock *blocker, struct file_lock *waiter)
 {
 	locks_insert_block(blocker, waiter);
+	return;
 }
 
 void
@@ -234,6 +238,7 @@ posix_unblock_lock(struct file_lock *waiter)
 {
 	if (waiter->fl_prevblock)
 		locks_delete_block(waiter->fl_prevblock, waiter);
+	return;
 }
 
 /* Wake up processes blocked waiting for blocker.
@@ -269,20 +274,20 @@ asmlinkage int sys_flock(unsigned int fd, unsigned int cmd)
 {
 	struct file_lock file_lock;
 	struct file *filp;
-	int err;
+	int error;
 
 	lock_kernel();
 	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
-		err = -EBADF;
+		error = -EBADF;
 	else if (!flock_make_lock(filp, &file_lock, cmd))
-		err = -EINVAL;
+		error = -EINVAL;
 	else if ((file_lock.fl_type != F_UNLCK) && !(filp->f_mode & 3))
-		err = -EBADF;
+		error = -EBADF;
 	else
-		err = flock_lock_file(filp, &file_lock,
-				      (cmd & (LOCK_UN | LOCK_NB)) ? 0 : 1);
+		error = flock_lock_file(filp, &file_lock,
+					(cmd & (LOCK_UN | LOCK_NB)) ? 0 : 1);
 	unlock_kernel();
-	return err;
+	return (error);
 }
 
 /* Report the first existing lock that would conflict with l.
@@ -298,7 +303,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
 		return (-EBADF);
 	if (copy_from_user(&flock, l, sizeof(flock)))
-		return -EFAULT; 	
+		return (-EFAULT);
 
 	if ((flock.l_type != F_RDLCK) && (flock.l_type != F_WRLCK))
 		return (-EINVAL);
@@ -308,9 +313,9 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 
 	if (filp->f_op->lock) {
 		error = filp->f_op->lock(filp->f_inode, filp,
-					F_GETLK, &file_lock);
+					 F_GETLK, &file_lock);
 		if (error < 0)
-			return error;
+			return (error);
 		fl = &file_lock;
 	} else {
 		fl = posix_test_lock(filp, &file_lock);
@@ -323,12 +328,12 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 			fl->fl_end - fl->fl_start + 1;
 		flock.l_whence = 0;
 		flock.l_type = fl->fl_type;
-		return copy_to_user(l, &flock, sizeof(flock)) ? -EFAULT : 0; 
+		return (copy_to_user(l, &flock, sizeof(flock)) ? -EFAULT : 0);
 	} else {
 		flock.l_type = F_UNLCK;
   	}
   
-	return copy_to_user(l, &flock, sizeof(flock)) ? -EFAULT : 0; 
+	return (copy_to_user(l, &flock, sizeof(flock)) ? -EFAULT : 0);
 }
 
 /* Apply the lock described by l to an open file descriptor.
@@ -366,7 +371,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	}
 
 	if (copy_from_user(&flock, l, sizeof(flock)))
-		return -EFAULT; 	
+		return (-EFAULT);
 	if (!posix_make_lock(filp, &file_lock, &flock))
 		return (-EINVAL);
 	
@@ -399,13 +404,13 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		break;
 #endif
 	default:
-		return -EINVAL;
+		return (-EINVAL);
 	}
 
 	if (filp->f_op->lock != NULL) {
 		error = filp->f_op->lock(filp->f_inode, filp, cmd, &file_lock);
 		if (error < 0)
-			return error;
+			return (error);
 	}
 
 	return (posix_lock_file(filp, &file_lock, cmd == F_SETLKW));
@@ -457,7 +462,7 @@ posix_test_lock(struct file *filp, struct file_lock *fl)
 			break;
 	}
 
-	return cfl;
+	return (cfl);
 }
 
 int locks_verify_locked(struct inode *inode)
@@ -1044,16 +1049,18 @@ static void locks_delete_lock(struct file_lock **thisfl_p, unsigned int wait)
 }
 
 
-static char *lock_get_status(struct file_lock *fl, char *p, int id, char *pfx)
+static char *lock_get_status(struct file_lock *fl, int id, char *pfx)
 {
+	static char temp[129];
+	char *p = temp;
 	struct inode *inode;
 
 	inode = fl->fl_file->f_inode;
 
 	p += sprintf(p, "%d:%s ", id, pfx);
 	if (fl->fl_flags & FL_POSIX) {
-		p += sprintf(p, "%s %s ",
-			     (fl->fl_flags & FL_ACCESS) ? "ACCESS" : "POSIX",
+		p += sprintf(p, "%6s %s ",
+			     (fl->fl_flags & FL_ACCESS) ? "ACCESS" : "POSIX ",
 			     (IS_MANDLOCK(inode) &&
 			      (inode->i_mode & (S_IXGRP | S_ISGID)) == S_ISGID) ?
 			     "MANDATORY" : "ADVISORY ");
@@ -1066,28 +1073,68 @@ static char *lock_get_status(struct file_lock *fl, char *p, int id, char *pfx)
 		     fl->fl_pid,
 		     kdevname(inode->i_dev), inode->i_ino, fl->fl_start,
 		     fl->fl_end);
-	p += sprintf(p, "%08lx %08lx %08lx %08lx %08lx\n",
-		     (long)fl, (long)fl->fl_prevlink, (long)fl->fl_nextlink,
-		     (long)fl->fl_next, (long)fl->fl_nextblock);
-	return (p);
+	sprintf(p, "%08lx %08lx %08lx %08lx %08lx\n",
+		(long)fl, (long)fl->fl_prevlink, (long)fl->fl_nextlink,
+		(long)fl->fl_next, (long)fl->fl_nextblock);
+	return (temp);
 }
 
-int get_locks_status(char *buf)
+static inline int copy_lock_status(char *p, char **q, off_t pos, int len,
+				   off_t offset, int length)
+{
+	int i;
+
+	i = pos - offset;
+	if (i > 0) {
+		if (i >= length) {
+			i = len + length - i;
+			memcpy(*q, p, i);
+			*q += i;
+			return (0);
+		}
+		if (i < len) {
+			p += len - i;
+		}
+		else
+			i = len;
+		memcpy(*q, p, i);
+		*q += i;
+	}
+	
+	return (1);
+}
+
+int get_locks_status(char *buffer, char **start, off_t offset, int length)
 {
 	struct file_lock *fl;
 	struct file_lock *bfl;
 	char *p;
+	char *q = buffer;
 	int i;
+	int len;
+	off_t pos = 0;
 
-	p = buf;
 	for (fl = file_lock_table, i = 1; fl != NULL; fl = fl->fl_nextlink, i++) {
-		p = lock_get_status(fl, p, i, "");
+		p = lock_get_status(fl, i, "");
+		len = strlen(p);
+		pos += len;
+		if (!copy_lock_status(p, &q, pos, len, offset, length))
+			goto done;
 		if ((bfl = fl->fl_nextblock) == NULL)
 			continue;
 		do {
-			p = lock_get_status(bfl, p, i, " ->");
+			p = lock_get_status(bfl, i, " ->");
+			len = strlen(p);
+			pos += len;
+			if (!copy_lock_status(p, &q, pos, len, offset, length))
+				goto done;
 		} while ((bfl = bfl->fl_nextblock) != fl);
 	}
-	return (p - buf);
+done:
+	if (q != buffer)
+		*start = buffer;
+	return (q - buffer);
 }
+
+
 

@@ -1250,10 +1250,13 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 void smp_flush_tlb(void)
 {
 	unsigned long flags;
+
+#if 0
 	if(smp_activated && smp_processor_id()!=active_kernel_processor) {
 		printk("CPU #%d:Attempted flush tlb IPI when not AKP(=%d)\n",smp_processor_id(),active_kernel_processor);
 		*(char *)0=0;
 	}
+#endif
 /*	printk("SMI-");*/
 
 	/*

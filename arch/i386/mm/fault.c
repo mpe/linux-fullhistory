@@ -49,7 +49,7 @@ good_area:
 	start &= PAGE_MASK;
 
 	for (;;) {
-		do_wp_page(current, vma, start, 1);
+		handle_mm_fault(vma, start, 1);
 		if (!size)
 			break;
 		size--;
@@ -86,10 +86,6 @@ bad_area:
  */
 asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 {
-	void (*handler)(struct task_struct *,
-			struct vm_area_struct *,
-			unsigned long,
-			int);
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
 	struct vm_area_struct * vma;
@@ -128,10 +124,8 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
  */
 good_area:
 	write = 0;
-	handler = do_no_page;
 	switch (error_code & 3) {
 		default:	/* 3: write, present */
-			handler = do_wp_page;
 #ifdef TEST_VERIFY_AREA
 			if (regs->cs == KERNEL_CS)
 				printk("WP fault at %08lx\n", regs->eip);
@@ -148,7 +142,7 @@ good_area:
 			if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 				goto bad_area;
 	}
-	handler(tsk, vma, address, write);
+	handle_mm_fault(vma, address, write);
 	up(&mm->mmap_sem);
 	/*
 	 * Did it hit the DOS screen memory VA from vm86 mode?

@@ -254,7 +254,6 @@ typedef unsigned int  u32;
 #include <linux/time.h>
 #include <linux/blk.h>
 #include <linux/init.h>
-#undef current
 
 #include "scsi.h"
 #include "hosts.h"
@@ -783,7 +782,7 @@ NCR53c7x0_driver_init (struct Scsi_Host *host) {
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	host->hostdata;
     int i, j;
-    u32 *current;
+    u32 *curr;
     for (i = 0; i < 16; ++i) {
 	hostdata->request_sense[i] = 0;
     	for (j = 0; j < 8; ++j) 
@@ -792,14 +791,14 @@ NCR53c7x0_driver_init (struct Scsi_Host *host) {
     }
     hostdata->issue_queue = NULL;
     hostdata->running_list = hostdata->finished_queue = 
-	hostdata->current = NULL;
-    for (i = 0, current = (u32 *) hostdata->schedule; 
-	i < host->can_queue; ++i, current += 2) {
-	current[0] = hostdata->NOP_insn;
-	current[1] = 0xdeadbeef;
+	hostdata->curr = NULL;
+    for (i = 0, curr = (u32 *) hostdata->schedule; 
+	i < host->can_queue; ++i, curr += 2) {
+	curr[0] = hostdata->NOP_insn;
+	curr[1] = 0xdeadbeef;
     }
-    current[0] = ((DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) << 24) | DBC_TCI_TRUE;
-    current[1] = (u32) virt_to_bus (hostdata->script) +
+    curr[0] = ((DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) << 24) | DBC_TCI_TRUE;
+    curr[1] = (u32) virt_to_bus (hostdata->script) +
 	hostdata->E_wait_reselect;
     hostdata->reconnect_dsa_head = 0;
     hostdata->addr_reconnect_dsa_head = (u32) 
@@ -2104,7 +2103,7 @@ abnormal_finished (struct NCR53c7x0_cmd *cmd, int result) {
     int left, found;
     volatile struct NCR53c7x0_cmd * linux_search;
     volatile struct NCR53c7x0_cmd * volatile *linux_prev;
-    volatile u32 *ncr_prev, *current, ncr_search;
+    volatile u32 *ncr_prev, *curr, ncr_search;
 
 #if 0
     printk ("scsi%d: abnormal finished\n", host->host_no);
@@ -2120,13 +2119,13 @@ abnormal_finished (struct NCR53c7x0_cmd *cmd, int result) {
      */
 
 
-    for (found = 0, left = host->can_queue, current = hostdata->schedule; 
-	left > 0; --left, current += 2)
+    for (found = 0, left = host->can_queue, curr = hostdata->schedule; 
+	left > 0; --left, curr += 2)
     {
-	if (issue_to_cmd (host, hostdata, (u32 *) current) == cmd) 
+	if (issue_to_cmd (host, hostdata, (u32 *) curr) == cmd) 
 	{
-	    current[0] = hostdata->NOP_insn;
-	    current[1] = 0xdeadbeef;
+	    curr[0] = hostdata->NOP_insn;
+	    curr[1] = 0xdeadbeef;
 	    ++found;
 	    break;
 	}
@@ -3964,7 +3963,7 @@ to_schedule_list (struct Scsi_Host *host, struct NCR53c7x0_hostdata *hostdata,
     Scsi_Cmnd *tmp = cmd->cmd;
     unsigned long flags;
     /* dsa start is negative, so subtraction is used */
-    volatile u32 *current;
+    volatile u32 *curr;
 
     int i;
     NCR53c7x0_local_setup(host);
@@ -3991,9 +3990,9 @@ to_schedule_list (struct Scsi_Host *host, struct NCR53c7x0_hostdata *hostdata,
 	return;
     }
 
-    for (i = host->can_queue, current = hostdata->schedule; 
-	i > 0  && current[0] != hostdata->NOP_insn;
-	--i, current += 2 /* JUMP instructions are two words */);
+    for (i = host->can_queue, curr = hostdata->schedule; 
+	i > 0  && curr[0] != hostdata->NOP_insn;
+	--i, curr += 2 /* JUMP instructions are two words */);
 
     if (i > 0) {
 	++hostdata->busy[tmp->target][tmp->lun];
@@ -4002,13 +4001,13 @@ to_schedule_list (struct Scsi_Host *host, struct NCR53c7x0_hostdata *hostdata,
 
 	/* Restore this instruction to a NOP once the command starts */
 	cmd->dsa [(hostdata->dsa_jump_dest - hostdata->dsa_start) / 
-	    sizeof(u32)] = (u32) virt_to_bus ((void *)current);
+	    sizeof(u32)] = (u32) virt_to_bus ((void *)curr);
 	/* Replace the current jump operand.  */
-	current[1] =
+	curr[1] =
 	    virt_to_bus ((void *) cmd->dsa) + hostdata->E_dsa_code_begin -
 	    hostdata->E_dsa_code_template;
 	/* Replace the NOP instruction with a JUMP */
-	current[0] = ((DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) << 24) |
+	curr[0] = ((DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) << 24) |
 	    DBC_TCI_TRUE;
     }  else {
 	printk ("scsi%d: no free slot\n", host->host_no);
@@ -4510,8 +4509,8 @@ restart:
 
 		    /*
 		     * NCR53c700 and NCR53c700-66 change the current SCSI
-		     * process, hostdata->current, in the Linux driver so
-		     * cmd = hostdata->current.
+		     * process, hostdata->curr, in the Linux driver so
+		     * cmd = hostdata->curr.
 		     *
 		     * With other chips, we must look through the commands
 		     * executing and find the command structure which 
@@ -4519,7 +4518,7 @@ restart:
 		     */
 
 		    if (hostdata->options & OPTION_700) {
-			cmd = (struct NCR53c7x0_cmd *) hostdata->current;
+			cmd = (struct NCR53c7x0_cmd *) hostdata->curr;
 		    } else {
 			dsa = bus_to_virt(NCR53c7x0_read32(DSA_REG));
 			for (cmd = (struct NCR53c7x0_cmd *) 
@@ -5872,7 +5871,7 @@ print_queues (struct Scsi_Host *host) {
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	host->hostdata;
     u32 *dsa, *next_dsa;
-    volatile u32 *current;
+    volatile u32 *curr;
     int left;
     Scsi_Cmnd *cmd, *next_cmd;
     unsigned long flags;
@@ -5914,11 +5913,11 @@ print_queues (struct Scsi_Host *host) {
      */
 
     printk ("scsi%d : schedule dsa array :\n", host->host_no);
-    for (left = host->can_queue, current = hostdata->schedule;
-	    left > 0; current += 2, --left)
-	if (current[0] != hostdata->NOP_insn) 
+    for (left = host->can_queue, curr = hostdata->schedule;
+	    left > 0; curr += 2, --left)
+	if (curr[0] != hostdata->NOP_insn) 
 /* FIXME : convert pointer to dsa_begin to pointer to dsa. */
-	    print_dsa (host, bus_to_virt (current[1] - 
+	    print_dsa (host, bus_to_virt (curr[1] - 
 		(hostdata->E_dsa_code_begin - 
 		hostdata->E_dsa_code_template)), "");
     printk ("scsi%d : end schedule dsa array\n", host->host_no);
@@ -6108,7 +6107,7 @@ return_outstanding_commands (struct Scsi_Host *host, int free, int issue) {
 	host->hostdata;
     struct NCR53c7x0_cmd *c;
     int i;
-    u32 *current;
+    u32 *curr;
     Scsi_Cmnd *list = NULL, *tmp;
     for (c = (struct NCR53c7x0_cmd *) hostdata->running_list; c; 
     	c = (struct NCR53c7x0_cmd *) c->next)  {
@@ -6129,12 +6128,12 @@ return_outstanding_commands (struct Scsi_Host *host, int free, int issue) {
     }
 
     if (free) { 
-	for (i = 0, current = (u32 *) hostdata->schedule; 
-	    i < host->can_queue; ++i, current += 2) {
-	    current[0] = hostdata->NOP_insn;
-	    current[1] = 0xdeadbeef;
+	for (i = 0, curr = (u32 *) hostdata->schedule; 
+	    i < host->can_queue; ++i, curr += 2) {
+	    curr[0] = hostdata->NOP_insn;
+	    curr[1] = 0xdeadbeef;
 	}
-	hostdata->current = NULL;
+	hostdata->curr = NULL;
     }
 
     if (issue) {

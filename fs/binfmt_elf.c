@@ -1159,7 +1159,8 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 		set_fs(fs);
 
 		len = current->mm->arg_end - current->mm->arg_start;
-		len = len >= ELF_PRARGSZ ? ELF_PRARGSZ : len;
+		if (len >= ELF_PRARGSZ)
+			len = ELF_PRARGSZ-1;
 		copy_from_user(&psinfo.pr_psargs,
 			      (const char *)current->mm->arg_start, len);
 		for(i = 0; i < len; i++)
