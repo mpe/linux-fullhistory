@@ -22,7 +22,7 @@ module.c-dir = kernel
 
 define make_link
 	-rm -f $1
-	ln -sf $(TOPDIR)/arch/i386/$($(notdir $1)-dir)/$(notdir $1) $1
+	ln -sf $(srctree)/arch/i386/$($(notdir $1)-dir)/$(notdir $1) $1
 endef
 
 $(USER_OBJS) : %.o: %.c

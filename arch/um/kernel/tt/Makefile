@@ -24,9 +24,7 @@ $(USER_OBJS) : %.o: %.c
 $(obj)/unmap.o: $(src)/unmap.c
 	$(CC) $(UNMAP_CFLAGS) -c -o $@ $<
 
-LIBC_DIR ?= /usr/lib
-
 $(obj)/unmap_fin.o : $(obj)/unmap.o
-	ld -r -o $(obj)/unmap_tmp.o  $< -lc -L$(LIBC_DIR)
-	objcopy $(obj)/unmap_tmp.o $@ -G switcheroo
+	$(LD) -r -o $(obj)/unmap_tmp.o $< $(shell $(CC) -print-file-name=libc.a)
+	$(OBJCOPY) $(obj)/unmap_tmp.o $@ -G switcheroo
 
