@@ -49,6 +49,7 @@ struct serial8250_config {
 #define UART_CAP_EFR	(1 << 9)	/* UART has EFR */
 #define UART_CAP_SLEEP	(1 << 10)	/* UART has IER sleep */
 #define UART_CAP_AFE	(1 << 11)	/* MCR-based hw flow control */
+#define UART_CAP_UUE	(1 << 12)	/* UART needs IER bit 6 set (Xscale) */
 
 #undef SERIAL_DEBUG_PCI
 

@@ -261,7 +261,7 @@ static const struct serial8250_config uart_config[] = {
 		.fifo_size	= 32,
 		.tx_loadsz	= 32,
 		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_10,
-		.flags		= UART_CAP_FIFO,
+		.flags		= UART_CAP_FIFO | UART_CAP_UUE,
 	},
 };
 
@@ -762,6 +762,7 @@ static void autoconfig_16550a(struct uart_8250_port *up)
 			 */
 			DEBUG_AUTOCONF("Xscale ");
 			up->port.type = PORT_XSCALE;
+			up->capabilities |= UART_CAP_UUE;
 			return;
 		}
 	} else {
@@ -1750,7 +1751,7 @@ serial8250_set_termios(struct uart_port *port, struct termios *termios,
 	up->ier &= ~UART_IER_MSI;
 	if (UART_ENABLE_MS(&up->port, termios->c_cflag))
 		up->ier |= UART_IER_MSI;
-	if (up->port.type == PORT_XSCALE)
+	if (up->capabilities & UART_CAP_UUE)
 		up->ier |= UART_IER_UUE | UART_IER_RTOIE;
 
 	serial_out(up, UART_IER, up->ier);
@@ -2119,7 +2120,7 @@ serial8250_console_write(struct console *co, const char *s, unsigned int count)
 	 */
 	ier = serial_in(up, UART_IER);
 
-	if (up->port.type == PORT_XSCALE)
+	if (up->capabilities & UART_CAP_UUE)
 		serial_out(up, UART_IER, UART_IER_UUE);
 	else
 		serial_out(up, UART_IER, 0);
