@@ -1122,9 +1122,6 @@ static struct it87_data *it87_update_device(struct device *dev)
 			    it87_read_value(client, IT87_REG_TEMP_LOW(i));
 		}
 
-		/* The 8705 does not have VID capability */
-		data->vid = 0x1f;
-
 		i = it87_read_value(client, IT87_REG_FAN_DIV);
 		data->fan_div[0] = i & 0x07;
 		data->fan_div[1] = (i >> 3) & 0x07;
