@@ -2453,6 +2453,9 @@ err_no_mem:
 	av7110->dvb_adapter->priv = av7110;
 	frontend_init(av7110);
 
+#if defined(CONFIG_INPUT_EVDEV) || defined(CONFIG_INPUT_EVDEV_MODULE)
+	av7110_ir_init();
+#endif
 	printk(KERN_INFO "dvb-ttpci: found av7110-%d.\n", av7110_num);
 	av7110->device_initialized = 1;
 	av7110_num++;
@@ -2640,18 +2643,6 @@ static int __init av7110_init(void)
 {
 	int retval;
 	retval = saa7146_register_extension(&av7110_extension);
-#if defined(CONFIG_INPUT_EVDEV) || defined(CONFIG_INPUT_EVDEV_MODULE)
-	if (retval)
-		goto failed_saa7146_register;
-
-	retval = av7110_ir_init();
-	if (retval)
-		goto failed_av7110_ir_init;
-	return 0;
-failed_av7110_ir_init:
-	saa7146_unregister_extension(&av7110_extension);
-failed_saa7146_register:
-#endif
 	return retval;
 }
 
