@@ -3698,7 +3698,7 @@ static void __exit ohci1394_cleanup (void)
 
 static int __init ohci1394_init(void)
 {
-	return pci_module_init(&ohci1394_pci_driver);
+	return pci_register_driver(&ohci1394_pci_driver);
 }
 
 module_init(ohci1394_init);
