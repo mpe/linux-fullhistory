@@ -1,131 +1,66 @@
-#
 # Makefile for the kernel cdrom device drivers.
 #
-# Note! Dependencies are done automagically by 'make dep', which also
-# removes any old dependencies. DON'T put your own dependencies here
-# unless it's something special (ie not a .c file).
-#
-# Note 2! The CFLAGS definition is now inherited from the
-# parent makefile.
-#
-
-#
-# Note : at this point, these files are compiled on all systems. 
-# In the future, some of these should be built conditionally.
-#
+# 30 Jan 1998, Michael Elizabeth Chastain, <mailto:mec@shout.net>
+# Rewritten to use lists instead of if-statements.
 
 
-L_TARGET := cdrom.a
-L_OBJS   :=
-M_OBJS   :=
-MOD_LIST_NAME := CDROM_MODULES
 
-ifeq ($(CONFIG_AZTCD),y)
-L_OBJS += aztcd.o
-else
-  ifeq ($(CONFIG_AZTCD),m)
-  M_OBJS += aztcd.o
-  endif
-endif #CONFIG_AZTCD
+# All of the (potential) objects that export symbols.
+# This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
-ifeq ($(CONFIG_CDU31A),y)
-L_OBJS += cdu31a.o
-else
-  ifeq ($(CONFIG_CDU31A),m)
-  M_OBJS += cdu31a.o
-  endif
-endif #CONFIG_CDU31A
+export-objs	:= cdrom.o
 
-ifeq ($(CONFIG_MCD),y)
-L_OBJS += mcd.o
-else
-  ifeq ($(CONFIG_MCD),m)
-  M_OBJS += mcd.o
-  endif
-endif #CONFIG_MCD
 
-ifeq ($(CONFIG_MCDX),y)
-L_OBJS += mcdx.o
-else
-  ifeq ($(CONFIG_MCDX),m)
-  M_OBJS += mcdx.o
-  endif
-endif #CONFIG_MCDX
 
-ifeq ($(CONFIG_SBPCD),y)
-L_OBJS += sbpcd.o
-else
-  ifeq ($(CONFIG_SBPCD),m)
-  M_OBJS += sbpcd.o
-  endif
-endif #CONFIG_SBPCD
+# Object file lists.
 
-ifeq ($(CONFIG_SBPCD2),y)
-L_OBJS += sbpcd2.o
-endif #CONFIG_SBPCD2
+obj-y		:=
+obj-m		:=
+obj-n		:=
+obj-		:=
 
-ifeq ($(CONFIG_SBPCD3),y)
-L_OBJS += sbpcd3.o
-endif #CONFIG_SBPCD3
 
-ifeq ($(CONFIG_SBPCD4),y)
-L_OBJS += sbpcd4.o
-endif #CONFIG_SBPCD4
 
-ifeq ($(CONFIG_CDU535),y)
-L_OBJS += sonycd535.o
-else
-  ifeq ($(CONFIG_CDU535),m)
-  M_OBJS += sonycd535.o
-  endif
-endif #CONFIG_CDU535
+# Each configuration option enables a list of files.
 
-ifeq ($(CONFIG_GSCD),y)
-L_OBJS += gscd.o
-else
-  ifeq ($(CONFIG_GSCD),m)
-  M_OBJS += gscd.o
-  endif
-endif #CONFIG_GSCD
+obj-$(CONFIG_BLK_DEV_IDECD)	+=              cdrom.o
+obj-$(CONFIG_BLK_DEV_SR)	+=              cdrom.o
 
-ifeq ($(CONFIG_CM206),y)
-L_OBJS += cm206.o
-else
-  ifeq ($(CONFIG_CM206),m)
-  M_OBJS += cm206.o
-  endif
-endif #CONFIG_CM206
+obj-$(CONFIG_AZTCD)		+= aztcd.o
+obj-$(CONFIG_CDU31A)		+= cdu31a.o     cdrom.o
+obj-$(CONFIG_CM206)		+= cm206.o      cdrom.o
+obj-$(CONFIG_GSCD)		+= gscd.o
+obj-$(CONFIG_ISP16_CDI)		+= isp16.o
+obj-$(CONFIG_MCD)		+= mcd.o        cdrom.o
+obj-$(CONFIG_MCDX)		+= mcdx.o       cdrom.o
+obj-$(CONFIG_OPTCD)		+= optcd.o
+obj-$(CONFIG_SBPCD)		+= sbpcd.o      cdrom.o
+obj-$(CONFIG_SBPCD2)		+= sbpcd2.o     cdrom.o
+obj-$(CONFIG_SBPCD3)		+= sbpcd3.o     cdrom.o
+obj-$(CONFIG_SBPCD4)		+= sbpcd4.o     cdrom.o
+obj-$(CONFIG_SJCD)		+= sjcd.o
+obj-$(CONFIG_CDU535)		+= sonycd535.o
 
-ifeq ($(CONFIG_OPTCD),y)
-L_OBJS += optcd.o
-else
-  ifeq ($(CONFIG_OPTCD),m)
-  M_OBJS += optcd.o
-  endif
-endif #CONFIG_OPTCD
 
-ifeq ($(CONFIG_SJCD),y)
-L_OBJS += sjcd.o
-else
-  ifeq ($(CONFIG_SJCD),m)
-  M_OBJS += sjcd.o
-  endif
-endif #CONFIG_SJCD
 
-ifeq ($(CONFIG_ISP16_CDI),y)
-L_OBJS += isp16.o
-else
-  ifeq ($(CONFIG_ISP16_CDI),m)
-  M_OBJS += isp16.o
-  endif
-endif #CONFIG_ISP16_CDI
+# Files that are both resident and modular: remove from modular.
 
-ifeq ($(CONFIG_CDROM),y)
-LX_OBJS += cdrom.o
-else
-  ifeq ($(CONFIG_CDROM),m)
-  MX_OBJS += cdrom.o
-  endif
-endif #CONFIG_CDROM for the Uniform CD-ROM driver
+obj-m		:= $(filter-out $(obj-y), $(obj-m))
+
+
+
+# Translate to Rules.make lists.
+
+L_TARGET	:= cdrom.a
+MOD_LIST_NAME	:= CDROM_MODULES
+
+L_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-y)))
+LX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-y)))
+M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
+MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
+
+
+
+# Hand off to Rules.make.
 
 include $(TOPDIR)/Rules.make

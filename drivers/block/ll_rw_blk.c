@@ -428,6 +428,8 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	     case FLOPPY_MAJOR:
 	     case IDE2_MAJOR:
 	     case IDE3_MAJOR:
+	     case IDE4_MAJOR:
+	     case IDE5_MAJOR:
 	     case ACSI_MAJOR:
 		/*
 		 * The scsi disk and cdrom drivers completely remove the request
@@ -716,9 +718,6 @@ __initfunc(int blk_dev_init(void))
 #ifdef CONFIG_BLK_DEV_LOOP
 	loop_init();
 #endif
-#ifdef CONFIG_CDROM		/* this must precede all CD-ROM drivers */
-	cdrom_init();
-#endif CONFIG_CDROM
 #ifdef CONFIG_ISP16_CDI
 	isp16_init();
 #endif CONFIG_ISP16_CDI

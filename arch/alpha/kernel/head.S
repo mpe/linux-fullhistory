@@ -8,6 +8,7 @@
  */
 
 #define __ASSEMBLY__
+#include <linux/config.h>
 #include <asm/system.h>
 
 #define halt call_pal PAL_halt
@@ -31,6 +32,27 @@ __start:
 	jsr	$26,start_kernel
 	halt
 	.end __start
+
+#ifdef __SMP__
+	.align 3
+	.globl	__start_cpu
+	.ent	__start_cpu
+	/* on entry here from SRM console, the HWPCB of this processor */
+	/* has been loaded, and $27 contains the task pointer */
+__start_cpu:
+	/* first order of business, load the GP */
+	br	$26,1f
+1:	ldgp	$29,0($26)
+	/* We need to get current loaded up with our first task...  */
+	lda	$8,0($27)
+	/* set FEN */
+	lda	$16,1($31)
+	call_pal PAL_wrfen
+	/* ... and then we can start the processor.  */
+	jsr	$26,start_secondary
+	halt
+	.end __start_cpu
+#endif /* __SMP__ */
 
 	.align 3
 	.globl	wrent

@@ -83,8 +83,8 @@ static inline void irq_exit(int cpu, unsigned int irq)
 
 #define SAVE_ALL \
 	"cld\n\t" \
-	"push %es\n\t" \
-	"push %ds\n\t" \
+	"pushl %es\n\t" \
+	"pushl %ds\n\t" \
 	"pushl %eax\n\t" \
 	"pushl %ebp\n\t" \
 	"pushl %edi\n\t" \
@@ -93,8 +93,8 @@ static inline void irq_exit(int cpu, unsigned int irq)
 	"pushl %ecx\n\t" \
 	"pushl %ebx\n\t" \
 	"movl $" STR(__KERNEL_DS) ",%edx\n\t" \
-	"mov %dx,%ds\n\t" \
-	"mov %dx,%es\n\t"
+	"movl %dx,%ds\n\t" \
+	"movl %dx,%es\n\t"
 
 #define IRQ_NAME2(nr) nr##_interrupt(void)
 #define IRQ_NAME(nr) IRQ_NAME2(IRQ##nr)

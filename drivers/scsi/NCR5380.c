@@ -491,11 +491,11 @@ static __inline__ void run_main(void) {
  */
 #ifndef USLEEP_SLEEP
 /* 20 ms (reasonable hard disk speed) */
-#define USLEEP_SLEEP 2
+#define USLEEP_SLEEP (20*HZ/1000)
 #endif
 /* 300 RPM (floppy speed) */
 #ifndef USLEEP_POLL
-#define USLEEP_POLL 20
+#define USLEEP_POLL (200*HZ/1000)
 #endif
 
 static struct Scsi_Host * expires_first = NULL;
@@ -644,7 +644,7 @@ __initfunc(static int NCR5380_probe_irq (struct Scsi_Host *instance, int possibl
 	    == 0)) 
 	    trying_irqs |= mask;
 
-    timeout = jiffies + 25;
+    timeout = jiffies + (250*HZ/1000);
     probe_irq = IRQ_NONE;
 
 /*
@@ -820,7 +820,7 @@ int NCR5380_proc_info (
 SPRINTF("PAS16 release=%d", PAS16_PUBLIC_RELEASE);
 #endif
 
-   SPRINTF("\nBase Addr: 0x%05X    ", (int)instance->base);
+   SPRINTF("\nBase Addr: 0x%05lX    ", (long)instance->base);
    SPRINTF("io_port: %04x      ", (int)instance->io_port);
    if (instance->irq == IRQ_NONE)
       SPRINTF("IRQ: None.\n");
@@ -1003,7 +1003,7 @@ __initfunc(static void NCR5380_init (struct Scsi_Host *instance, int flags)) {
 	case 5:
 	    printk("scsi%d: SCSI bus busy, waiting up to five seconds\n",
 		instance->host_no);
-	    timeout = jiffies + 500;
+	    timeout = jiffies + 5*HZ;
 	    while (jiffies < timeout && (NCR5380_read(STATUS_REG) & SR_BSY));
 	    break;
 	case 2:
@@ -1619,7 +1619,7 @@ static int NCR5380_select (struct Scsi_Host *instance, Scsi_Cmnd *cmd,
      * selection.
      */
 
-    timeout = jiffies + 25; 
+    timeout = jiffies + (250*HZ/1000); 
 
     /* 
      * XXX very interesting - we're seeing a bounce where the BSY we 

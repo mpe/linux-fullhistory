@@ -1,6 +1,7 @@
 #ifndef __ALPHA_T2__H__
 #define __ALPHA_T2__H__
 
+#include <linux/config.h>
 #include <linux/types.h>
 
 /*
@@ -18,40 +19,56 @@
 
 #define BYTE_ENABLE_SHIFT 5
 #define TRANSFER_LENGTH_SHIFT 3
-#define MEM_SP1_MASK 0x1fffffff  /* Mem sparse space 1 mask is 29 bits */
+#define MEM_R1_MASK 0x03ffffff  /* Mem sparse space region 1 mask is 26 bits */
 
+#ifdef CONFIG_ALPHA_SRM_SETUP
+/* if we are using the SRM PCI setup, we'll need to use variables instead */
+#define T2_DMA_WIN_BASE_DEFAULT    (1024*1024*1024)
+#define T2_DMA_WIN_SIZE_DEFAULT    (1024*1024*1024)
 
-#define T2_DMA_WIN_BASE	(1024UL*1024UL*1024UL)
+extern unsigned int T2_DMA_WIN_BASE;
+extern unsigned int T2_DMA_WIN_SIZE;
+
+#else /* SRM_SETUP */
+#define T2_DMA_WIN_BASE	(1024*1024*1024)
 #define T2_DMA_WIN_SIZE	(1024*1024*1024)
+#endif /* SRM_SETUP */
+
+/* GAMMA-SABLE is a SABLE with EV5-based CPUs */
+#ifdef CONFIG_ALPHA_GAMMA
+#  define GAMMA_BIAS		0x8000000000UL
+#else /* GAMMA */
+#  define GAMMA_BIAS		0x0000000000UL
+#endif /* GAMMA */
 
 /*
  * Memory spaces:
  */
-#define T2_CONF			        (IDENT_ADDR + 0x390000000UL)
-#define T2_IO				(IDENT_ADDR + 0x3a0000000UL)
-#define T2_SPARSE_MEM			(IDENT_ADDR + 0x200000000UL)
-#define T2_DENSE_MEM		        (IDENT_ADDR + 0x3c0000000UL)
+#define T2_CONF		        (IDENT_ADDR + GAMMA_BIAS + 0x390000000UL)
+#define T2_IO			(IDENT_ADDR + GAMMA_BIAS + 0x3a0000000UL)
+#define T2_SPARSE_MEM		(IDENT_ADDR + GAMMA_BIAS + 0x200000000UL)
+#define T2_DENSE_MEM	        (IDENT_ADDR + GAMMA_BIAS + 0x3c0000000UL)
 
-#define T2_IOCSR			(IDENT_ADDR + 0x38e000000UL)
-#define T2_CERR1			(IDENT_ADDR + 0x38e000020UL)
-#define T2_CERR2			(IDENT_ADDR + 0x38e000040UL)
-#define T2_CERR3			(IDENT_ADDR + 0x38e000060UL)
-#define T2_PERR1			(IDENT_ADDR + 0x38e000080UL)
-#define T2_PERR2			(IDENT_ADDR + 0x38e0000a0UL)
-#define T2_PSCR				(IDENT_ADDR + 0x38e0000c0UL)
-#define T2_HAE_1			(IDENT_ADDR + 0x38e0000e0UL)
-#define T2_HAE_2			(IDENT_ADDR + 0x38e000100UL)
-#define T2_HBASE			(IDENT_ADDR + 0x38e000120UL)
-#define T2_WBASE1			(IDENT_ADDR + 0x38e000140UL)
-#define T2_WMASK1			(IDENT_ADDR + 0x38e000160UL)
-#define T2_TBASE1			(IDENT_ADDR + 0x38e000180UL)
-#define T2_WBASE2			(IDENT_ADDR + 0x38e0001a0UL)
-#define T2_WMASK2			(IDENT_ADDR + 0x38e0001c0UL)
-#define T2_TBASE2			(IDENT_ADDR + 0x38e0001e0UL)
-#define T2_TLBBR			(IDENT_ADDR + 0x38e000200UL)
+#define T2_IOCSR		(IDENT_ADDR + GAMMA_BIAS + 0x38e000000UL)
+#define T2_CERR1		(IDENT_ADDR + GAMMA_BIAS + 0x38e000020UL)
+#define T2_CERR2		(IDENT_ADDR + GAMMA_BIAS + 0x38e000040UL)
+#define T2_CERR3		(IDENT_ADDR + GAMMA_BIAS + 0x38e000060UL)
+#define T2_PERR1		(IDENT_ADDR + GAMMA_BIAS + 0x38e000080UL)
+#define T2_PERR2		(IDENT_ADDR + GAMMA_BIAS + 0x38e0000a0UL)
+#define T2_PSCR			(IDENT_ADDR + GAMMA_BIAS + 0x38e0000c0UL)
+#define T2_HAE_1		(IDENT_ADDR + GAMMA_BIAS + 0x38e0000e0UL)
+#define T2_HAE_2		(IDENT_ADDR + GAMMA_BIAS + 0x38e000100UL)
+#define T2_HBASE		(IDENT_ADDR + GAMMA_BIAS + 0x38e000120UL)
+#define T2_WBASE1		(IDENT_ADDR + GAMMA_BIAS + 0x38e000140UL)
+#define T2_WMASK1		(IDENT_ADDR + GAMMA_BIAS + 0x38e000160UL)
+#define T2_TBASE1		(IDENT_ADDR + GAMMA_BIAS + 0x38e000180UL)
+#define T2_WBASE2		(IDENT_ADDR + GAMMA_BIAS + 0x38e0001a0UL)
+#define T2_WMASK2		(IDENT_ADDR + GAMMA_BIAS + 0x38e0001c0UL)
+#define T2_TBASE2		(IDENT_ADDR + GAMMA_BIAS + 0x38e0001e0UL)
+#define T2_TLBBR		(IDENT_ADDR + GAMMA_BIAS + 0x38e000200UL)
 
-#define T2_HAE_3			(IDENT_ADDR + 0x38e000240UL)
-#define T2_HAE_4			(IDENT_ADDR + 0x38e000260UL)
+#define T2_HAE_3		(IDENT_ADDR + GAMMA_BIAS + 0x38e000240UL)
+#define T2_HAE_4		(IDENT_ADDR + GAMMA_BIAS + 0x38e000260UL)
 
 #define HAE_ADDRESS	                T2_HAE_1
 
@@ -88,14 +105,14 @@
  *                                              
  *
  */
-#define CPU0_BASE               (IDENT_ADDR + 0x380000000L)
-#define CPU1_BASE               (IDENT_ADDR + 0x381000000L)
-#define CPU2_BASE               (IDENT_ADDR + 0x382000000L)
-#define CPU3_BASE               (IDENT_ADDR + 0x383000000L)
-#define MEM0_BASE               (IDENT_ADDR + 0x388000000L)
-#define MEM1_BASE               (IDENT_ADDR + 0x389000000L)
-#define MEM2_BASE               (IDENT_ADDR + 0x38a000000L)
-#define MEM3_BASE               (IDENT_ADDR + 0x38b000000L)
+#define CPU0_BASE               (IDENT_ADDR + GAMMA_BIAS + 0x380000000L)
+#define CPU1_BASE               (IDENT_ADDR + GAMMA_BIAS + 0x381000000L)
+#define CPU2_BASE               (IDENT_ADDR + GAMMA_BIAS + 0x382000000L)
+#define CPU3_BASE               (IDENT_ADDR + GAMMA_BIAS + 0x383000000L)
+#define MEM0_BASE               (IDENT_ADDR + GAMMA_BIAS + 0x388000000L)
+#define MEM1_BASE               (IDENT_ADDR + GAMMA_BIAS + 0x389000000L)
+#define MEM2_BASE               (IDENT_ADDR + GAMMA_BIAS + 0x38a000000L)
+#define MEM3_BASE               (IDENT_ADDR + GAMMA_BIAS + 0x38b000000L)
 
 #ifdef __KERNEL__
 
@@ -198,6 +215,133 @@ extern inline void __outl(unsigned int b, unsigned long addr)
  * HHH = 31:29 HAE_MEM CSR
  * 
  */
+#ifdef CONFIG_ALPHA_SRM_SETUP
+
+extern unsigned long t2_sm_base;
+
+extern inline unsigned long __readb(unsigned long addr)
+{
+	unsigned long result, shift, work;
+
+	if ((addr >= t2_sm_base) && (addr <= (t2_sm_base + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x00);
+	else
+	if ((addr >= 512*1024) && (addr < 1024*1024)) /* check HOLE */
+	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x00);
+	else
+	{
+#if 0
+	  printk("__readb: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return 0x0ffUL;
+	}
+	shift = (addr & 0x3) << 3;
+	result = *(vuip) work;
+	result >>= shift;
+	return 0x0ffUL & result;
+}
+
+extern inline unsigned long __readw(unsigned long addr)
+{
+	unsigned long result, shift, work;
+
+	if ((addr >= t2_sm_base) && (addr <= (t2_sm_base + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x08);
+	else
+	if ((addr >= 512*1024) && (addr < 1024*1024)) /* check HOLE */
+	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x08);
+	else
+	{
+#if 0
+	  printk("__readw: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return 0x0ffffUL;
+	}
+	shift = (addr & 0x3) << 3;
+	result = *(vuip) work;
+	result >>= shift;
+	return 0x0ffffUL & result;
+}
+
+/* on SABLE with T2, we must use SPARSE memory even for 32-bit access */
+extern inline unsigned long __readl(unsigned long addr)
+{
+	unsigned long result, work;
+
+	if ((addr >= t2_sm_base) && (addr <= (t2_sm_base + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x18);
+	else
+	if ((addr >= 512*1024) && (addr < 1024*1024)) /* check HOLE */
+	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x18);
+	else
+	{
+#if 0
+	  printk("__readl: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return 0x0ffffffffUL;
+	}
+	result = *(vuip) work;
+	return 0xffffffffUL & result;
+}
+
+extern inline void __writeb(unsigned char b, unsigned long addr)
+{
+	unsigned long work;
+
+	if ((addr >= t2_sm_base) && (addr <= (t2_sm_base + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x00);
+	else
+	if ((addr >= 512*1024) && (addr < 1024*1024)) /* check HOLE */
+	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x00);
+	else
+	{
+#if 0
+	  printk("__writeb: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return;
+	}
+	*(vuip) work = b * 0x01010101;
+}
+
+extern inline void __writew(unsigned short b, unsigned long addr)
+{
+	unsigned long work;
+
+	if ((addr >= t2_sm_base) && (addr <= (t2_sm_base + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x08);
+	else
+	if ((addr >= 512*1024) && (addr < 1024*1024)) /* check HOLE */
+	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x08);
+	else
+	{
+#if 0
+	  printk("__writew: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return;
+	}
+	*(vuip) work = b * 0x00010001;
+}
+
+/* on SABLE with T2, we must use SPARSE memory even for 32-bit access */
+extern inline void __writel(unsigned int b, unsigned long addr)
+{
+	unsigned long work;
+
+	if ((addr >= t2_sm_base) && (addr <= (t2_sm_base + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x18);
+	else
+	if ((addr >= 512*1024) && (addr < 1024*1024)) /* check HOLE */
+	  work = (((addr & MEM_R1_MASK) << 5) + T2_SPARSE_MEM + 0x18);
+	{
+#if 0
+	  printk("__writel: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return;
+	}
+	*(vuip) work = b;
+}
+
+#else /* SRM_SETUP */
 
 extern inline unsigned long __readb(unsigned long addr)
 {
@@ -205,7 +349,7 @@ extern inline unsigned long __readb(unsigned long addr)
 
 	shift = (addr & 0x3) * 8 ;
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
@@ -220,7 +364,7 @@ extern inline unsigned long __readw(unsigned long addr)
 
 	shift = (addr & 0x3) * 8;
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
@@ -235,7 +379,7 @@ extern inline unsigned long __readl(unsigned long addr)
 	unsigned long result, msb;
 
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
@@ -248,7 +392,7 @@ extern inline void __writeb(unsigned char b, unsigned long addr)
         unsigned long msb ; 
 
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
@@ -260,7 +404,7 @@ extern inline void __writew(unsigned short b, unsigned long addr)
         unsigned long msb ; 
 
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
@@ -273,12 +417,14 @@ extern inline void __writel(unsigned int b, unsigned long addr)
         unsigned long msb ; 
 
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
 	*(vuip) ((addr << 5) + T2_SPARSE_MEM + 0x18) = b;
 }
+
+#endif /* SRM_SETUP */
 
 #define inb(port) \
 (__builtin_constant_p((port))?__inb(port):_inb(port))

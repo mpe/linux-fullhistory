@@ -18,13 +18,14 @@
 #include <asm/hwrpb.h>
 #include <asm/ptrace.h>
 
-/* NOTE: Herein are back-to-back mb insns.  They are magic. 
-   A plausible explanation is that the i/o controler does not properly
-   handle the system transaction.  Another involves timing.  Ho hum.  */
+/*
+ * NOTE: Herein lie back-to-back mb instructions.  They are magic. 
+ * One plausible explanation is that the i/o controller does not properly
+ * handle the system transaction.  Another involves timing.  Ho hum.
+ */
 
 extern struct hwrpb_struct *hwrpb;
 extern asmlinkage void wrmces(unsigned long mces);
-extern int alpha_sys_type;
 
 /*
  * BIOS32-style PCI interface:
@@ -36,13 +37,16 @@ extern int alpha_sys_type;
 # define DBG(args)
 #endif
 
-#define vulp	volatile unsigned long *
 #define vuip	volatile unsigned int  *
 
 static volatile unsigned int apecs_mcheck_expected = 0;
 static volatile unsigned int apecs_mcheck_taken = 0;
-static unsigned long apecs_jd, apecs_jd1, apecs_jd2;
+static unsigned int apecs_jd, apecs_jd1, apecs_jd2;
 
+#ifdef CONFIG_ALPHA_SRM_SETUP
+unsigned int APECS_DMA_WIN_BASE = APECS_DMA_WIN_BASE_DEFAULT;
+unsigned int APECS_DMA_WIN_SIZE = APECS_DMA_WIN_SIZE_DEFAULT;
+#endif /* SRM_SETUP */
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -194,7 +198,7 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 		}
 
 		/* reset error status: */
-		*(vulp)APECS_IOC_DCSR = stat0;
+		*(vuip)APECS_IOC_DCSR = stat0;
 		mb();
 		wrmces(0x7);			/* reset machine check */
 		value = 0xffffffff;
@@ -269,7 +273,7 @@ static void conf_write(unsigned long addr, unsigned int value, unsigned char typ
 		}
 
 		/* reset error status: */
-		*(vulp)APECS_IOC_DCSR = stat0;
+		*(vuip)APECS_IOC_DCSR = stat0;
 		mb();
 		wrmces(0x7);			/* reset machine check */
 	}
@@ -424,6 +428,38 @@ unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
 	*(vuip)APECS_IOC_TB2R = 0;
 
 #else  /* CONFIG_ALPHA_XL */
+#ifdef CONFIG_ALPHA_SRM_SETUP
+	/* check window 1 for enabled and mapped to 0 */
+	if ((*(vuip)APECS_IOC_PB1R & (1U<<19)) && (*(vuip)APECS_IOC_TB1R == 0))
+	{
+	  APECS_DMA_WIN_BASE = *(vuip)APECS_IOC_PB1R & 0xfff00000U;
+	  APECS_DMA_WIN_SIZE = *(vuip)APECS_IOC_PM1R & 0xfff00000U;
+	  APECS_DMA_WIN_SIZE += 0x00100000U;
+#if 0
+	  printk("apecs_init: using Window 1 settings\n");
+	  printk("apecs_init: PB1R 0x%x PM1R 0x%x TB1R 0x%x\n",
+     		 *(vuip)APECS_IOC_PB1R,
+		 *(vuip)APECS_IOC_PM1R,
+		 *(vuip)APECS_IOC_TB1R);
+#endif
+     	}
+	else	/* check window 2 for enabled and mapped to 0 */
+	if ((*(vuip)APECS_IOC_PB2R & (1U<<19)) && (*(vuip)APECS_IOC_TB2R == 0))
+	{
+	  APECS_DMA_WIN_BASE = *(vuip)APECS_IOC_PB2R & 0xfff00000U;
+	  APECS_DMA_WIN_SIZE = *(vuip)APECS_IOC_PM2R & 0xfff00000U;
+	  APECS_DMA_WIN_SIZE += 0x00100000U;
+#if 0
+     	  printk("apecs_init: using Window 2 settings\n");
+	  printk("apecs_init: PB2R 0x%x PM2R 0x%x TB2R 0x%x\n",
+		 *(vuip)APECS_IOC_PB2R,
+		 *(vuip)APECS_IOC_PM2R,
+		 *(vuip)APECS_IOC_TB2R);
+#endif
+     	}
+	else /* we must use our defaults... */
+#endif /* SRM_SETUP */
+	{
 	/*
 	 * Set up the PCI->physical memory translation windows.
 	 * For now, window 2 is disabled.  In the future, we may
@@ -435,9 +471,11 @@ unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
 	*(vuip)APECS_IOC_PB1R  = 1U<<19 | (APECS_DMA_WIN_BASE & 0xfff00000U);
 	*(vuip)APECS_IOC_PM1R  = (APECS_DMA_WIN_SIZE - 1) & 0xfff00000U;
 	*(vuip)APECS_IOC_TB1R  = 0;
+	}
 #endif /* CONFIG_ALPHA_XL */
 
 #ifdef CONFIG_ALPHA_CABRIOLET
+#ifdef NO_LONGER_NEEDED_I_HOPE
 	/*
 	 * JAE: HACK!!! for now, hardwire if configured...
 	 * davidm: Older miniloader versions don't set the clock frequency
@@ -461,6 +499,7 @@ unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
 	      sum += *l;
 	    hwrpb->chksum = sum;
 	}
+#endif /* NO_LONGER_NEEDED_I_HOPE */
 #endif /* CONFIG_ALPHA_CABRIOLET */
 
        /*
@@ -483,15 +522,15 @@ unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
 
 int apecs_pci_clr_err(void)
 {
-	apecs_jd = *(vulp)APECS_IOC_DCSR;
+	apecs_jd = *(vuip)APECS_IOC_DCSR;
 	if (apecs_jd & 0xffe0L) {
-		apecs_jd1 = *(vulp)APECS_IOC_SEAR;
-		*(vulp)APECS_IOC_DCSR = apecs_jd | 0xffe1L;
-		apecs_jd = *(vulp)APECS_IOC_DCSR;
+		apecs_jd1 = *(vuip)APECS_IOC_SEAR;
+		*(vuip)APECS_IOC_DCSR = apecs_jd | 0xffe1L;
+		apecs_jd = *(vuip)APECS_IOC_DCSR;
 		mb();
 	}
-	*(vulp)APECS_IOC_TBIA = APECS_IOC_TBIA;
-	apecs_jd2 = *(vulp)APECS_IOC_TBIA;
+	*(vuip)APECS_IOC_TBIA = (unsigned int)APECS_IOC_TBIA;
+	apecs_jd2 = *(vuip)APECS_IOC_TBIA;
 	mb();
 	return 0;
 }

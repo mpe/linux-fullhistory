@@ -851,11 +851,13 @@ EXPORT_SYMBOL(md_map);
 EXPORT_SYMBOL(md_wakeup_thread);
 EXPORT_SYMBOL(md_do_sync);
 
+#ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_md = {
 	PROC_MD, 6, "mdstat",
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations,
 };
+#endif
 
 static void md_geninit (struct gendisk *gdisk)
 {
@@ -873,7 +875,9 @@ static void md_geninit (struct gendisk *gdisk)
   blksize_size[MD_MAJOR] = md_blocksizes;
   max_readahead[MD_MAJOR] = md_maxreadahead;
 
+#ifdef CONFIG_PROC_FS
   proc_register(&proc_root, &proc_md);
+#endif
 }
 
 int md_error (kdev_t mddev, kdev_t rdev)

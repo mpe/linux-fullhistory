@@ -197,10 +197,14 @@
  *                         inform me of where "Illegal mode for this track"
  *                         was never returned due to a comparison on data
  *                         types of limited range.
+ * 4.12  Mar 29, 1998  -- Fixed bug in CDROM_SELECT_SPEED so write speed is 
+ *                         now set ionly for CD-R and CD-RW drives.  I had 
+ *                         removed this support because it produced errors.
+ *                         It produced errors _only_ for non-writers. duh.
  *
  *************************************************************************/
 
-#define IDECD_VERSION "4.11"
+#define IDECD_VERSION "4.12"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -276,32 +280,34 @@ void cdrom_analyze_sense_data (ide_drive_t *drive,
 		char buf[80];
 
 		printk ("ATAPI device %s:\n", drive->name);
-
-		printk ("  Error code: 0x%02x\n", reqbuf->error_code);
+		if (reqbuf->error_code==0x70)
+			printk("  Error: ");
+		else if (reqbuf->error_code==0x71)
+			printk("  Deferred Error: ");
+		else
+			printk("  Unknown Error Type: ");
 
 		if ( reqbuf->sense_key < ARY_LEN (sense_key_texts))
 			s = sense_key_texts[reqbuf->sense_key];
 		else
-			s = "(bad sense key)";
+			s = "bad sense key!";
 
-		printk ("  Sense key: 0x%02x - %s\n", reqbuf->sense_key, s);
+		printk ("%s -- (Sense key=0x%02x)\n", s, reqbuf->sense_key);
 
 		if (reqbuf->asc == 0x40) {
 			sprintf (buf, "Diagnostic failure on component 0x%02x",
 				 reqbuf->ascq);
 			s = buf;
 		} else {
-			int lo, hi;
+			int lo=0, mid, hi=ARY_LEN (sense_data_texts);
 			unsigned short key = (reqbuf->asc << 8);
 			if ( ! (reqbuf->ascq >= 0x80 && reqbuf->ascq <= 0xdd) )
 				key |= reqbuf->ascq;
 
-			lo = 0;
-			hi = ARY_LEN (sense_data_texts);
 			s = NULL;
 
 			while (hi > lo) {
-				int mid = (lo + hi) / 2;
+				mid = (lo + hi) / 2;
 				if (sense_data_texts[mid].asc_ascq == key) {
 					s = sense_data_texts[mid].text;
 					break;
@@ -320,14 +326,30 @@ void cdrom_analyze_sense_data (ide_drive_t *drive,
 				s = "(reserved error code)";
 		}
 
-		printk ("  Additional sense data: 0x%02x, 0x%02x  - %s\n",
-			reqbuf->asc, reqbuf->ascq, s);
+		printk ("  %s -- (asc=0x%02x, ascq=0x%02x)\n",
+			s, reqbuf->asc, reqbuf->ascq);
 
 		if (failed_command != NULL) {
-			printk ("  Failed packet command: ");
+
+			int lo=0, mid, hi= ARY_LEN (packet_command_texts);
+			s = NULL;
+
+			while (hi > lo) {
+				mid = (lo + hi) / 2;
+				if (packet_command_texts[mid].packet_command == failed_command->c[0]) {
+					s = packet_command_texts[mid].text;
+					break;
+				}
+				else if (packet_command_texts[mid].packet_command > failed_command->c[0])
+					hi = mid;
+				else
+					lo = mid+1;
+			}
+
+			printk ("  The failed \"%s\" packet command was: \n\t\"", s);
 			for (i=0; i<sizeof (failed_command->c); i++)
 				printk ("%02x ", failed_command->c[i]);
-			printk ("\n");
+			printk ("\"\n");
 		}
 
 		if (reqbuf->sense_key == ILLEGAL_REQUEST &&
@@ -358,7 +380,7 @@ void cdrom_analyze_sense_data (ide_drive_t *drive,
 						reqbuf->asc == 0x3a)))
 		return;
 
-	printk ("%s: code: 0x%02x  key: 0x%02x  asc: 0x%02x  ascq: 0x%02x\n",
+	printk ("%s: error code: 0x%02x  sense_key: 0x%02x  asc: 0x%02x  ascq: 0x%02x\n",
 		drive->name,
 		reqbuf->error_code, reqbuf->sense_key,
 		reqbuf->asc, reqbuf->ascq);
@@ -1486,6 +1508,9 @@ cdrom_eject (ide_drive_t *drive, int ejectflag,
 {
 	struct packet_command pc;
 
+	if (CDROM_CONFIG_FLAGS (drive)->no_eject==1 && ejectflag==0)
+		return -EDRIVE_CANT_DO_THIS;
+
 	memset (&pc, 0, sizeof (pc));
 	pc.sense_data = reqbuf;
 
@@ -1747,16 +1772,7 @@ cdrom_mode_select (ide_drive_t *drive, int pageno, char *buf, int buflen,
 }
 
 
-/* Note that this takes speed in kbytes/second, so don't try requesting
-   silly speeds like 2 here. Common speeds include:
-     176 kbytes/second  --  1x
-     353 kbytes/second  --  2x
-     387 kbytes/second  --  2.2x
-     528 kbytes/second  --  3x
-     706 kbytes/second  --  4x
-     1400 kbytes/second --  8x
-     2800 kbytes/second --  16x
-   ATAPI drives are free to select the speed you request or any slower
+/* ATAPI cdrom drives are free to select the speed you request or any slower
    rate :-( Requesting too fast a speed will _not_ produce an error. */
 static int
 cdrom_select_speed (ide_drive_t *drive, int speed,
@@ -1766,7 +1782,7 @@ cdrom_select_speed (ide_drive_t *drive, int speed,
 	memset (&pc, 0, sizeof (pc));
 	pc.sense_data = reqbuf;
 
-	if (speed < 1)
+	if (speed == 0)
 	    speed = 0xffff; /* set to max */
 	else
 	    speed *= 177;   /* Nx to kbytes/s */
@@ -1776,10 +1792,13 @@ cdrom_select_speed (ide_drive_t *drive, int speed,
 	pc.c[2] = (speed >> 8) & 0xff;	
 	/* Read Drive speed in kbytes/second LSB */
 	pc.c[3] = speed & 0xff;
-	/* Write Drive speed in kbytes/second MSB */
-	//pc.c[4] = (speed >> 8) & 0xff;	
-	/* Write Drive speed in kbytes/second LSB */
-	//pc.c[5] = speed & 0xff;
+	if ( CDROM_CONFIG_FLAGS(drive)->cd_r ||
+                   CDROM_CONFIG_FLAGS(drive)->cd_rw ) {
+		/* Write Drive speed in kbytes/second MSB */
+		pc.c[4] = (speed >> 8) & 0xff;
+		/* Write Drive speed in kbytes/second LSB */
+		pc.c[5] = speed & 0xff;
+       }
 
 	return cdrom_queue_packet_command (drive, &pc);
 }
@@ -2485,7 +2504,7 @@ int ide_cdrom_select_speed (struct cdrom_device_info *cdi, int speed)
 	if (stat<0)
 		return stat;
 
-	/* Now that that is done, update the speed fields */
+	/* Now with that done, update the speed fields */
         do {    /* we seem to get stat=0x01,err=0x00 the first time (??) */
                 if (attempts-- <= 0)
                         return 0;
@@ -2802,6 +2821,8 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 
 	if (buf.cap.lock == 0)
 		CDROM_CONFIG_FLAGS (drive)->no_doorlock = 1;
+	if (buf.cap.eject)
+		CDROM_CONFIG_FLAGS (drive)->no_eject = 0;
 	if (buf.cap.cd_r_write)
 		CDROM_CONFIG_FLAGS (drive)->cd_r = 1;
 	if (buf.cap.cd_rw_write)
@@ -2903,6 +2924,7 @@ int ide_cdrom_setup (ide_drive_t *drive)
 	CDROM_CONFIG_FLAGS (drive)->is_changer = 0;
 	CDROM_CONFIG_FLAGS (drive)->cd_r = 0;
 	CDROM_CONFIG_FLAGS (drive)->cd_rw = 0;
+	CDROM_CONFIG_FLAGS (drive)->no_eject = 1;
 	CDROM_CONFIG_FLAGS (drive)->supp_disc_present = 0;
 
 #if ! STANDARD_ATAPI

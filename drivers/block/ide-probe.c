@@ -662,6 +662,12 @@ static int hwif_init (ide_hwif_t *hwif)
 #if MAX_HWIFS > 3
 	case IDE3_MAJOR: rfn = &do_ide3_request; break;
 #endif
+#if MAX_HWIFS > 4
+	case IDE4_MAJOR: rfn = &do_ide4_request; break;
+#endif
+#if MAX_HWIFS > 5
+	case IDE5_MAJOR: rfn = &do_ide5_request; break;
+#endif
 	default:
 		printk("%s: request_fn NOT DEFINED\n", hwif->name);
 		return (hwif->present = 0);

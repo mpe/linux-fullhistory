@@ -204,6 +204,121 @@ int last_console = 0;
 int want_console = -1;
 int kmsg_redirect = 0;
 
+#define CONFIG_SERIAL_ECHO
+#ifdef CONFIG_SERIAL_ECHO
+
+#include <linux/serial_reg.h>
+
+extern int serial_echo_init (int base);
+extern int serial_echo_print (const char *s);
+
+/*
+ * this defines the address for the port to which printk echoing is done
+ *  when CONFIG_SERIAL_ECHO is defined
+ */
+#define SERIAL_ECHO_PORT	0x3f8	/* COM1 */
+
+static int serial_echo_port = 0;
+
+#define serial_echo_outb(v,a) outb((v),(a)+serial_echo_port)
+#define serial_echo_inb(a)    inb((a)+serial_echo_port)
+
+#define BOTH_EMPTY (UART_LSR_TEMT | UART_LSR_THRE)
+
+/* Wait for transmitter & holding register to empty */
+#define WAIT_FOR_XMITR \
+ do { \
+       lsr = serial_echo_inb(UART_LSR); \
+ } while ((lsr & BOTH_EMPTY) != BOTH_EMPTY)
+
+/* These two functions abstract the actual communications with the
+ * debug port.	This is so we can change the underlying communications
+ * mechanism without modifying the rest of the code.
+ */
+int
+serial_echo_print(const char *s)
+{
+	int     lsr, ier;
+	int     i;
+
+	if (!serial_echo_port) return (0);
+
+	/*
+	 * First save the IER then disable the interrupts
+	 */
+	ier = serial_echo_inb(UART_IER);
+	serial_echo_outb(0x00, UART_IER);
+
+	/*
+	 * Now, do each character
+	 */
+	for (i = 0; *s; i++, s++) {
+		WAIT_FOR_XMITR;
+
+		/* Send the character out. */
+		serial_echo_outb(*s, UART_TX);
+
+		/* if a LF, also do CR... */
+		if (*s == 10) {
+			WAIT_FOR_XMITR;
+			serial_echo_outb(13, UART_TX);
+		}
+	}
+
+	/*
+	 * Finally, Wait for transmitter & holding register to empty
+	 *  and restore the IER
+	 */
+	do {
+		lsr = serial_echo_inb(UART_LSR);
+	} while ((lsr & BOTH_EMPTY) != BOTH_EMPTY);
+	serial_echo_outb(ier, UART_IER);
+
+	return (0);
+}
+
+
+int
+serial_echo_init(int base)
+{
+	int comstat, hi, lo;
+	
+	if (base != 0x2f8 && base != 0x3f8) {
+		serial_echo_port = 0;
+		return (0);
+	} else
+	  serial_echo_port = base;
+
+	/*
+	 * read the Divisor Latch
+	 */
+	comstat = serial_echo_inb(UART_LCR);
+	serial_echo_outb(comstat | UART_LCR_DLAB, UART_LCR);
+	hi = serial_echo_inb(UART_DLM);
+	lo = serial_echo_inb(UART_DLL);
+	serial_echo_outb(comstat, UART_LCR);
+
+	/*
+	 * now do hardwired init
+	 */
+	serial_echo_outb(0x03, UART_LCR); /* No parity, 8 data bits, 1 stop */
+	serial_echo_outb(0x83, UART_LCR); /* Access divisor latch */
+	serial_echo_outb(0x00, UART_DLM); /* 9600 baud */
+	serial_echo_outb(0x0c, UART_DLL);
+	serial_echo_outb(0x03, UART_LCR); /* Done with divisor */
+
+	/* Prior to disabling interrupts, read the LSR and RBR
+	 * registers
+	 */
+	comstat = serial_echo_inb(UART_LSR); /* COM? LSR */
+	comstat = serial_echo_inb(UART_RX);	/* COM? RBR */
+	serial_echo_outb(0x00, UART_IER); /* Disable all interrupts */
+
+	return(0);
+}
+
+#endif /* CONFIG_SERIAL_ECHO */
+
 int vc_cons_allocated(unsigned int i)
 {
 	return (i < MAX_NR_CONSOLES && vc_cons[i].d);
@@ -577,6 +692,37 @@ scrdown(int currcons, unsigned int t, unsigned int b, unsigned int nr)
 		memsetw(s, video_erase_char, video_size_row);
 	}
 	has_scrolled = 1;
+}
+
+/*
+ * Routine to reset the visible "screen" to the top of video memory.
+ * This is necessary when exiting from the kernel back to a console
+ * which expects only the top of video memory to be used for the visible
+ * screen (with scrolling down by moving the memory contents).
+ * The normal action of the LINUX console is to scroll using all of the
+ * video memory and diddling the hardware top-of-video register as needed.
+ */
+void
+scrreset(void)
+{
+	int currcons = fg_console;
+	unsigned short * d = (unsigned short *) video_mem_start;
+	unsigned short * s = (unsigned short *) origin;
+	unsigned int count;
+
+	count = (video_num_lines-1)*video_num_columns;
+	memcpyw(d, s, 2*count);
+	memsetw(d + count, video_erase_char,
+		2*video_num_columns);
+	scr_end -= origin-video_mem_start;
+	pos -= origin-video_mem_start;
+	origin = video_mem_start;
+
+	has_scrolled = 1;
+	has_wrapped = 1;
+
+	set_origin(currcons);
+	set_cursor(currcons);
 }
 
 static void lf(int currcons)
@@ -1866,6 +2012,10 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 		return;
 	}
 
+#ifdef CONFIG_SERIAL_ECHO
+        serial_echo_print(b);
+#endif /* CONFIG_SERIAL_ECHO */
+
 	while (count-- > 0) {
 		c = *(b++);
 		if (c == 10 || c == 13 || need_wrap) {
@@ -2116,6 +2266,10 @@ __initfunc(unsigned long con_init(unsigned long kmem_start))
 		default_font_height = video_font_height = ORIG_VIDEO_POINTS;
 		/* This may be suboptimal but is a safe bet - go with it */
 		video_scan_lines = video_font_height * video_num_lines;
+
+#ifdef CONFIG_SERIAL_ECHO
+		serial_echo_init(SERIAL_ECHO_PORT);
+#endif /* CONFIG_SERIAL_ECHO */
 
 		printk("Console: %ld point font, %ld scans\n",
 		       video_font_height, video_scan_lines);

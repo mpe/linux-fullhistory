@@ -208,6 +208,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 	int retval;
 
 	flush_cache_mm(current->mm);
+	down(&current->mm->mmap_sem);
 	pprev = &mm->mmap;
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
 		struct file *file;
@@ -257,6 +258,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 
 fail_nomem:
 	flush_tlb_mm(current->mm);
+	up(&current->mm->mmap_sem);
 	return retval;
 }
 
@@ -514,6 +516,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 		/* ?? should we just memset this ?? */
 		for(i = 0; i < smp_num_cpus; i++)
 			p->per_cpu_utime[i] = p->per_cpu_stime[i] = 0;
+		spin_lock_init(&p->sigmask_lock);
 	}
 #endif
 	p->lock_depth = 0;

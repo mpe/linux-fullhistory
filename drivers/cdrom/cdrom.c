@@ -76,6 +76,22 @@
 #define REVISION "Revision: 2.12"
 #define VERSION "Id: cdrom.c 2.12 1998/01/24 22:15:45 erik Exp"
 
+/* I use an error-log mask to give fine grain control over the type of
+   messages dumped to the system logs.  The available masks include: */
+#define CD_NOTHING      0x0
+#define CD_WARNING	0x1
+#define CD_REG_UNREG	0x2
+#define CD_DO_IOCTL	0x4
+#define CD_OPEN		0x8
+#define CD_CLOSE	0x10
+#define CD_COUNT_TRACKS 0x20
+
+/* Define this to remove _all_ the debugging messages */
+/* #define ERRLOGMASK CD_NOTHING */
+#define ERRLOGMASK (CD_WARNING)
+/* #define ERRLOGMASK (CD_WARNING|CD_OPEN|CD_COUNT_TRACKS|CD_CLOSE) */
+/* #define ERRLOGMASK (CD_WARNING|CD_REG_UNREG|CD_DO_IOCTL|CD_OPEN|CD_CLOSE|CD_COUNT_TRACKS) */
+
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -93,24 +109,7 @@
 #include <asm/uaccess.h>
 
 
-/* I use an error-log mask to give fine grain control over the type of
-   error messages dumped to the system logs.  The available masks include: */
-#define CD_WARNING	0x1
-#define CD_REG_UNREG	0x2
-#define CD_DO_IOCTL	0x4
-#define CD_OPEN		0x8
-#define CD_CLOSE	0x10
-#define CD_COUNT_TRACKS 0x20
-
-/* When VERBOSE_STATUS_INFO is not defined, the debugging printks don't 
-   get compiled in at all */
-#define VERBOSE_STATUS_INFO
-
-#define ERRLOGMASK (CD_WARNING) 
-/* #define ERRLOGMASK (CD_WARNING|CD_OPEN|CD_COUNT_TRACKS|CD_CLOSE) */
-/* #define ERRLOGMASK (CD_WARNING|CD_REG_UNREG|CD_DO_IOCTL|CD_OPEN|CD_CLOSE) */
-
-#ifdef VERBOSE_STATUS_INFO
+#if (ERRLOGMASK!=CD_NOTHING)
 #define cdinfo(type, fmt, args...) \
 	if (ERRLOGMASK & type) printk(KERN_INFO "cdrom: " fmt, ## args)
 #else
@@ -168,11 +167,6 @@ struct file_operations cdrom_fops =
 	NULL                            /* revalidate */
 };
 
-void cdrom_init(void) {
-	if (!topCdromPtr)
-	    printk(KERN_INFO "Uniform CD-ROM driver " REVISION "\n");
-}
-
 /* This macro makes sure we don't have to check on cdrom_device_ops
  * existence in the run-time routines below. Change_capability is a
  * hack to have the capability flags defined const, while we can still
@@ -205,6 +199,15 @@ int register_cdrom(struct cdrom_device_info *cdi)
 					/* default compatibility mode */
 	cdi->mc_flags = 0;
 	cdo->n_minors = 0;
+
+	{
+	    static char banner_printed = 0;
+	    if ( !banner_printed ) {
+		printk(KERN_INFO "Uniform CD-ROM driver " REVISION "\n");
+		banner_printed = 1;
+	    }
+	}
+
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" registered\n", cdi->name);
 	cdi->next = topCdromPtr; 	
 	topCdromPtr = cdi;
@@ -293,13 +296,14 @@ int open_for_data(struct cdrom_device_info * cdi)
 		ret = cdo->drive_status(cdi, CDSL_CURRENT);
 		cdinfo(CD_OPEN, "drive_status=%d\n", ret); 
 		if (ret == CDS_TRAY_OPEN) {
-			cdinfo(CD_WARNING, "tray is open...\n"); 
+			cdinfo(CD_OPEN, "the tray is open...\n"); 
 			/* can/may i close it? */
 			if (cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY &&
 			    cdi->options & CDO_AUTO_CLOSE) {
+				cdinfo(CD_OPEN, "trying to close the tray.\n"); 
 				ret=cdo->tray_move(cdi,0);
 				if (ret) {
-					cdinfo(CD_WARNING, "bummer. tried to close tray but failed.\n"); 
+					cdinfo(CD_OPEN, "bummer. tried to close the tray but failed.\n"); 
 					/* Ignore the error from the low
 					level driver.  We don't care why it
 					couldn't close the tray.  We only care 
@@ -309,36 +313,37 @@ int open_for_data(struct cdrom_device_info * cdi)
 					goto clean_up_and_return;
 				}
 			} else {
-				cdinfo(CD_WARNING, "this driver can't close the tray.\n"); 
+				cdinfo(CD_OPEN, "bummer. this driver can't close the tray.\n"); 
 				ret=-ENOMEDIUM;
 				goto clean_up_and_return;
 			}
 			/* Ok, the door should be closed now.. Check again */
 			ret = cdo->drive_status(cdi, CDSL_CURRENT);
-			cdinfo(CD_OPEN, "tried again. drive_status=%d\n", ret); 
 			if ((ret == CDS_NO_DISC) || (ret==CDS_TRAY_OPEN)) {
+				cdinfo(CD_OPEN, "bummer. the tray is still not closed.\n"); 
 				ret=-ENOMEDIUM;
 				goto clean_up_and_return;
 			}
+			cdinfo(CD_OPEN, "the tray is now closed.\n"); 
 		}
 		if (ret!=CDS_DISC_OK)
 			goto clean_up_and_return;
 	}
 	cdrom_count_tracks(cdi, &tracks);
 	if (tracks.error == CDS_NO_DISC) {
-		cdinfo(CD_OPEN, "bummer. no disc...\n");
+		cdinfo(CD_OPEN, "bummer. no disc.\n");
 		ret=-ENOMEDIUM;
 		goto clean_up_and_return;
 	}
 	/* CD-Players which don't use O_NONBLOCK, workman
 	 * for example, need bit CDO_CHECK_TYPE cleared! */
 	if (cdi->options & CDO_CHECK_TYPE && tracks.data==0) {
-		cdinfo(CD_OPEN, "bummer. wrong media type...\n"); 
+		cdinfo(CD_OPEN, "bummer. wrong media type.\n"); 
 		ret=-EMEDIUMTYPE;
 		goto clean_up_and_return;
 	}
 
-	cdinfo(CD_OPEN, "all seems well, opening the device...\n"); 
+	cdinfo(CD_OPEN, "all seems well, opening the device.\n"); 
 
 	/* all seems well, we can open the device */
 	ret = cdo->open(cdi, 0); /* open for data */
@@ -347,7 +352,7 @@ int open_for_data(struct cdrom_device_info * cdi)
 	   opening the device, but we don't want the device locked if 
 	   this somehow fails... */
 	if (ret) {
-		cdinfo(CD_OPEN, "open device failed...\n"); 
+		cdinfo(CD_OPEN, "open device failed.\n"); 
 		goto clean_up_and_return;
 	}
 	if (cdo->capability & ~cdi->mask & CDC_LOCK && 
@@ -364,11 +369,11 @@ int open_for_data(struct cdrom_device_info * cdi)
 	This ensures that the drive gets unlocked after a mount fails.  This 
 	is a goto to avoid adding bloating the driver with redundant code. */ 
 clean_up_and_return:
-	cdinfo(CD_WARNING, "failed to open the device.\n"); 
+	cdinfo(CD_WARNING, "open failed.\n"); 
 	if (cdo->capability & ~cdi->mask & CDC_LOCK && 
 		cdi->options & CDO_LOCK) {
 			cdo->lock_door(cdi, 0);
-			cdinfo(CD_WARNING, "door unlocked.\n");
+			cdinfo(CD_OPEN, "door unlocked.\n");
 	}
 	return ret;
 }
@@ -389,13 +394,14 @@ int check_for_audio_disc(struct cdrom_device_info * cdi,
 		ret = cdo->drive_status(cdi, CDSL_CURRENT);
 		cdinfo(CD_OPEN, "drive_status=%d\n", ret); 
 		if (ret == CDS_TRAY_OPEN) {
-			cdinfo(CD_WARNING, "tray is open...\n"); 
+			cdinfo(CD_OPEN, "the tray is open...\n"); 
 			/* can/may i close it? */
 			if (cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY &&
 			    cdi->options & CDO_AUTO_CLOSE) {
+				cdinfo(CD_OPEN, "trying to close the tray.\n"); 
 				ret=cdo->tray_move(cdi,0);
 				if (ret) {
-					cdinfo(CD_WARNING, "bummer. tried to close tray but failed.\n"); 
+					cdinfo(CD_OPEN, "bummer. tried to close tray but failed.\n"); 
 					/* Ignore the error from the low
 					level driver.  We don't care why it
 					couldn't close the tray.  We only care 
@@ -404,16 +410,20 @@ int check_for_audio_disc(struct cdrom_device_info * cdi,
 					return -ENOMEDIUM;
 				}
 			} else {
-				cdinfo(CD_WARNING, "this driver can't close the tray.\n"); 
+				cdinfo(CD_OPEN, "bummer. this driver can't close the tray.\n"); 
 				return -ENOMEDIUM;
 			}
 			/* Ok, the door should be closed now.. Check again */
 			ret = cdo->drive_status(cdi, CDSL_CURRENT);
-			cdinfo(CD_OPEN, "tried again. drive_status=%d\n", ret); 
-			if ((ret == CDS_NO_DISC) || (ret==CDS_TRAY_OPEN))
+			if ((ret == CDS_NO_DISC) || (ret==CDS_TRAY_OPEN)) {
+				cdinfo(CD_OPEN, "bummer. the tray is still not closed.\n"); 
 				return -ENOMEDIUM;
-			if (ret!=CDS_DISC_OK)
+			}	
+			if (ret!=CDS_DISC_OK) {
+				cdinfo(CD_OPEN, "bummer. disc isn't ready.\n"); 
 				return -EIO;
+			}	
+			cdinfo(CD_OPEN, "the tray is now closed.\n"); 
 		}	
 	}
 	cdrom_count_tracks(cdi, &tracks);
@@ -1031,7 +1041,6 @@ static void cdrom_sysctl_unregister(void)
 
 int init_module(void)
 {
-	cdrom_init();
 #ifdef CONFIG_SYSCTL
 	cdrom_sysctl_register();
 #endif /* CONFIG_SYSCTL */ 

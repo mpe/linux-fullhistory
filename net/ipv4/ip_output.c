@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.50 1998/03/20 09:12:08 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.51 1998/03/28 00:55:34 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -428,7 +428,6 @@ int ip_build_xmit(struct sock *sk,
 			return error;
 		}
 
-		skb->when=jiffies;
 		skb->priority = sk->priority;
 		skb->dst = dst_clone(&rt->u.dst);
 		skb_reserve(skb, hh_len);
@@ -573,7 +572,6 @@ int ip_build_xmit(struct sock *sk,
 		 *	Fill in the control structures
 		 */
 		 
-		skb->when = jiffies;
 		skb->priority = sk->priority;
 		skb->dst = dst_clone(&rt->u.dst);
 		skb_reserve(skb, hh_len);
@@ -765,7 +763,6 @@ void ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 		 *	Set up data on packet
 		 */
 
-		skb2->when = skb->when;
 		skb2->pkt_type = skb->pkt_type;
 		skb2->priority = skb->priority;
 		skb_reserve(skb2, (dev->hard_header_len+15)&~15);

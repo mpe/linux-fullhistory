@@ -632,12 +632,14 @@ asmlinkage int sys_shmdt (char *shmaddr)
 {
 	struct vm_area_struct *shmd, *shmdnext;
 
+	lock_kernel();
 	for (shmd = current->mm->mmap; shmd; shmd = shmdnext) {
 		shmdnext = shmd->vm_next;
 		if (shmd->vm_ops == &shm_vm_ops
 		    && shmd->vm_start - shmd->vm_offset == (ulong) shmaddr)
 			do_munmap(shmd->vm_start, shmd->vm_end - shmd->vm_start);
 	}
+	unlock_kernel();
 	return 0;
 }
 

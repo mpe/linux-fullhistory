@@ -1462,13 +1462,10 @@ __initfunc(void sock_init(void))
 	 
 	sk_init();
 
-#ifdef SLAB_SKB
 	/*
 	 *	Initialize skbuff SLAB cache 
 	 */
 	skb_init();
-#endif
-
 
 	/*
 	 *	Wan router layer. 

@@ -147,6 +147,9 @@ ncp_negotiate_size_and_options(struct ncp_server *server,
 	int size, int options, int *ret_size, int *ret_options) {
 	int result;
 
+	/* there is minimum */
+	if (size < 512) size = 512;
+
 	ncp_init_request(server);
 	ncp_add_word(server, htons(size));
 	ncp_add_byte(server, options);
@@ -157,7 +160,10 @@ ncp_negotiate_size_and_options(struct ncp_server *server,
 		return result;
 	}
 
-	*ret_size = min(ntohs(ncp_reply_word(server, 0)), size);
+	/* NCP over UDP returns 0 (!!!) */
+	result = ntohs(ncp_reply_word(server, 0));
+	if (result >= 512) size=min(result, size);
+	*ret_size = size;
 	*ret_options = ncp_reply_byte(server, 4);
 
 	ncp_unlock_server(server);

@@ -1,10 +1,10 @@
 	   BusLogic MultiMaster and FlashPoint SCSI Driver for Linux
 
-			 Version 2.0.11 for Linux 2.0
+			 Version 2.0.12 for Linux 2.0
 
 			      PRODUCTION RELEASE
 
-				31 January 1998
+				 29 March 1998
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -429,14 +429,18 @@ following options are available:
 QueueDepth:<integer>
 
   The "QueueDepth:" or QD:" option specifies the Queue Depth to use for all
-  Target Devices that support Tagged Queuing.  If no Queue Depth option is
-  provided, the Queue Depth will be determined automatically based on the
-  Host Adapter's Total Queue Depth and the number, type, speed, and
+  Target Devices that support Tagged Queuing, as well as the maximum Queue
+  Depth for devices that do not support Tagged Queuing.  If no Queue Depth
+  option is provided, the Queue Depth will be determined automatically based
+  on the Host Adapter's Total Queue Depth and the number, type, speed, and
   capabilities of the detected Target Devices.  For Host Adapters that
   require ISA Bounce Buffers, the Queue Depth is automatically set by default
-  to BusLogic_QueueDepthBounceBuffers to avoid excessive preallocation of DMA
-  Bounce Buffer memory.  Target Devices that do not support Tagged Queuing
-  always use a Queue Depth of BusLogic_UntaggedQueueDepth.
+  to BusLogic_TaggedQueueDepthBB or BusLogic_UntaggedQueueDepthBB to avoid
+  excessive preallocation of DMA Bounce Buffer memory.  Target Devices that
+  do not support Tagged Queuing always have their Queue Depth set to
+  BusLogic_UntaggedQueueDepth or BusLogic_UntaggedQueueDepthBB, unless a
+  lower Queue Depth option is provided.  A Queue Depth of 1 automatically
+  disables Tagged Queuing.
 
 QueueDepth:[<integer>,<integer>...]
 
@@ -587,7 +591,7 @@ To install the new BusLogic SCSI driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf BusLogic-2.0.11.tar.gz
+  tar -xvzf BusLogic-2.0.12.tar.gz
   mv README.* LICENSE.* BusLogic.[ch] FlashPoint.c linux/drivers/scsi
   patch -p < BusLogic.patch
   cd linux

@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.29 1998/03/18 07:52:11 davem Exp $
+ *	$Id: af_inet6.c,v 1.30 1998/03/25 00:23:05 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -79,7 +79,6 @@ static int inet6_create(struct socket *sock, int protocol)
 		if (protocol && protocol != IPPROTO_TCP) 
 			goto free_and_noproto;
 		protocol = IPPROTO_TCP;
-		sk->no_check = TCP_NO_CHECK;
 		prot = &tcpv6_prot;
 		sock->ops = &inet6_stream_ops;
 	} else if(sock->type == SOCK_DGRAM) {

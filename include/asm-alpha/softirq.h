@@ -1,10 +1,9 @@
 #ifndef _ALPHA_SOFTIRQ_H
 #define _ALPHA_SOFTIRQ_H
 
-/* The locking mechanism for base handlers, to prevent re-entrancy,
- * is entirely private to an implementation, it should not be
- * referenced at all outside of this file.
- */
+#include <asm/atomic.h>
+#include <asm/hardirq.h>
+
 extern unsigned int local_bh_count[NR_CPUS];
 
 #define get_active_bhs()	(bh_mask & bh_active)
@@ -42,10 +41,50 @@ extern inline void mark_bh(int nr)
 	set_bit(nr, &bh_active);
 }
 
+#ifdef __SMP__
+
 /*
- * start_bh_atomic/end_bh_atomic also nest
- * naturally by using a counter
+ * The locking mechanism for base handlers, to prevent re-entrancy,
+ * is entirely private to an implementation, it should not be
+ * referenced at all outside of this file.
  */
+extern atomic_t global_bh_lock;
+extern atomic_t global_bh_count;
+
+extern void synchronize_bh(void);
+
+static inline void start_bh_atomic(void)
+{
+	atomic_inc(&global_bh_lock);
+	synchronize_bh();
+}
+
+static inline void end_bh_atomic(void)
+{
+	atomic_dec(&global_bh_lock);
+}
+
+/* These are for the irq's testing the lock */
+static inline int softirq_trylock(int cpu)
+{
+	if (!test_and_set_bit(0,&global_bh_count)) {
+		if (atomic_read(&global_bh_lock) == 0) {
+			++local_bh_count[cpu];
+			return 1;
+		}
+		clear_bit(0,&global_bh_count);
+	}
+	return 0;
+}
+
+static inline void softirq_endlock(int cpu)
+{
+	local_bh_count[cpu]--;
+	clear_bit(0,&global_bh_count);
+}
+
+#else
+
 extern inline void start_bh_atomic(void)
 {
 	local_bh_count[smp_processor_id()]++;
@@ -58,19 +97,16 @@ extern inline void end_bh_atomic(void)
 	local_bh_count[smp_processor_id()]--;
 }
 
-#ifndef __SMP__
-
 /* These are for the irq's testing the lock */
 #define softirq_trylock(cpu) \
   (local_bh_count[cpu] ? 0 : (local_bh_count[cpu] = 1))
+
 #define softirq_endlock(cpu) \
   (local_bh_count[cpu] = 0)
 
-#else
+#define synchronize_bh()	do { } while (0)
 
-#error FIXME
-
-#endif /* __SMP__ */
+#endif	/* SMP */
 
 /*
  * These use a mask count to correctly handle

@@ -77,8 +77,18 @@
 #else /* CONFIG_ALPHA_XL */
 
 /* these are for normal APECS family machines, AVANTI/MUSTANG/EB64/PC64 */
+#ifdef CONFIG_ALPHA_SRM_SETUP
+/* if we are using the SRM PCI setup, we'll need to use variables instead */
+#define APECS_DMA_WIN_BASE_DEFAULT	(1024*1024*1024)
+#define APECS_DMA_WIN_SIZE_DEFAULT	(1024*1024*1024)
+
+extern unsigned int APECS_DMA_WIN_BASE;
+extern unsigned int APECS_DMA_WIN_SIZE;
+
+#else /* SRM_SETUP */
 #define APECS_DMA_WIN_BASE	(1024*1024*1024)
 #define APECS_DMA_WIN_SIZE	(1024*1024*1024)
+#endif /* SRM_SETUP */
 
 #endif /* CONFIG_ALPHA_XL */
 

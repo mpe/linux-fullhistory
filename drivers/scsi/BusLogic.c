@@ -26,8 +26,8 @@
 */
 
 
-#define BusLogic_DriverVersion		"2.0.11"
-#define BusLogic_DriverDate		"31 January 1998"
+#define BusLogic_DriverVersion		"2.0.12"
+#define BusLogic_DriverDate		"29 March 1998"
 
 
 #include <linux/version.h>
@@ -1020,6 +1020,38 @@ static int BusLogic_InitializeMultiMasterProbeInfo(BusLogic_HostAdapter_T
 	   : check_region(0x134, BusLogic_MultiMasterAddressCount) == 0))
 	BusLogic_AppendProbeAddressISA(0x134);
     }
+  /*
+    Iterate over the older non-compliant MultiMaster PCI Host Adapters,
+    noting the PCI bus location and assigned IRQ Channel.
+  */
+  Index = 0;
+  while (pcibios_find_device(PCI_VENDOR_ID_BUSLOGIC,
+			     PCI_DEVICE_ID_BUSLOGIC_MULTIMASTER_NC,
+			     Index++, &Bus, &DeviceFunction) == 0)
+    if (pcibios_read_config_dword(Bus, DeviceFunction,
+				  PCI_BASE_ADDRESS_0, &BaseAddress0) == 0 &&
+	pcibios_read_config_byte(Bus, DeviceFunction,
+				 PCI_INTERRUPT_LINE, &IRQ_Channel) == 0)
+      {
+	unsigned char Device = DeviceFunction >> 3;
+	IO_Address = BaseAddress0 & PCI_BASE_ADDRESS_IO_MASK;
+	if (IO_Address == 0 || IRQ_Channel == 0 || IRQ_Channel >= NR_IRQS)
+	  continue;
+	for (i = 0; i < BusLogic_ProbeInfoCount; i++)
+	  {
+	    BusLogic_ProbeInfo_T *ProbeInfo = &BusLogic_ProbeInfoList[i];
+	    if (ProbeInfo->IO_Address == IO_Address &&
+		ProbeInfo->HostAdapterType == BusLogic_MultiMaster)
+	      {
+		ProbeInfo->HostAdapterBusType = BusLogic_PCI_Bus;
+		ProbeInfo->PCI_Address = 0;
+		ProbeInfo->Bus = Bus;
+		ProbeInfo->Device = Device;
+		ProbeInfo->IRQ_Channel = IRQ_Channel;
+		break;
+	      }
+	  }
+      }
   return PCIMultiMasterCount;
 }
 
@@ -1976,6 +2008,12 @@ Common:
   if (HostAdapter->BounceBuffersRequired)
     HostAdapter->UntaggedQueueDepth = BusLogic_UntaggedQueueDepthBB;
   else HostAdapter->UntaggedQueueDepth = BusLogic_UntaggedQueueDepth;
+  if (HostAdapter->DriverOptions != NULL)
+    HostAdapter->CommonQueueDepth =
+      HostAdapter->DriverOptions->CommonQueueDepth;
+  if (HostAdapter->CommonQueueDepth > 0 &&
+      HostAdapter->CommonQueueDepth < HostAdapter->UntaggedQueueDepth)
+    HostAdapter->UntaggedQueueDepth = HostAdapter->CommonQueueDepth;
   /*
     Tagged Queuing is only allowed if Disconnect/Reconnect is permitted.
     Therefore, mask the Tagged Queuing Permitted Default bits with the
@@ -2682,17 +2720,26 @@ static void BusLogic_SelectQueueDepths(SCSI_Host_T *Host,
   for (TargetID = 0; TargetID < HostAdapter->MaxTargetDevices; TargetID++)
     if (HostAdapter->TargetFlags[TargetID].TargetExists)
       {
-	int QueueDepth = HostAdapter->UntaggedQueueDepth;
+	int QueueDepth = HostAdapter->QueueDepth[TargetID];
 	if (HostAdapter->TargetFlags[TargetID].TaggedQueuingSupported &&
 	    (HostAdapter->TaggedQueuingPermitted & (1 << TargetID)))
 	  {
-	    QueueDepth = HostAdapter->QueueDepth[TargetID];
 	    TaggedDeviceCount++;
 	    if (QueueDepth == 0) AutomaticTaggedDeviceCount++;
 	  }
-	else UntaggedDeviceCount++;
-	HostAdapter->QueueDepth[TargetID] = QueueDepth;
+	else
+	  {
+	    UntaggedDeviceCount++;
+	    if (QueueDepth == 0 ||
+		QueueDepth > HostAdapter->UntaggedQueueDepth)
+	      {
+		QueueDepth = HostAdapter->UntaggedQueueDepth;
+		HostAdapter->QueueDepth[TargetID] = QueueDepth;
+	      }
+	  }
 	AllocatedQueueDepth += QueueDepth;
+	if (QueueDepth == 1)
+	  HostAdapter->TaggedQueuingPermitted &= ~(1 << TargetID);
       }
   HostAdapter->TargetDeviceCount = TaggedDeviceCount + UntaggedDeviceCount;
   if (AutomaticTaggedDeviceCount > 0)
@@ -4567,14 +4614,18 @@ static boolean BusLogic_ParseKeyword(char **StringPointer, char *Keyword)
   QueueDepth:<integer>
 
     The "QueueDepth:" or QD:" option specifies the Queue Depth to use for all
-    Target Devices that support Tagged Queuing.  If no Queue Depth option is
-    provided, the Queue Depth will be determined automatically based on the
-    Host Adapter's Total Queue Depth and the number, type, speed, and
+    Target Devices that support Tagged Queuing, as well as the maximum Queue
+    Depth for devices that do not support Tagged Queuing.  If no Queue Depth
+    option is provided, the Queue Depth will be determined automatically based
+    on the Host Adapter's Total Queue Depth and the number, type, speed, and
     capabilities of the detected Target Devices.  For Host Adapters that
     require ISA Bounce Buffers, the Queue Depth is automatically set by default
-    to BusLogic_QueueDepthBounceBuffers to avoid excessive preallocation of DMA
-    Bounce Buffer memory.  Target Devices that do not support Tagged Queuing
-    always use a Queue Depth of BusLogic_UntaggedQueueDepth.
+    to BusLogic_TaggedQueueDepthBB or BusLogic_UntaggedQueueDepthBB to avoid
+    excessive preallocation of DMA Bounce Buffer memory.  Target Devices that
+    do not support Tagged Queuing always have their Queue Depth set to
+    BusLogic_UntaggedQueueDepth or BusLogic_UntaggedQueueDepthBB, unless a
+    lower Queue Depth option is provided.  A Queue Depth of 1 automatically
+    disables Tagged Queuing.
 
   QueueDepth:[<integer>,<integer>...]
 
@@ -4826,6 +4877,7 @@ static void BusLogic_ParseDriverOptions(char *OptionsString)
 				 NULL, QueueDepth);
 		  return;
 		}
+	      DriverOptions->CommonQueueDepth = QueueDepth;
 	      for (TargetID = 0;
 		   TargetID < BusLogic_MaxTargetDevices;
 		   TargetID++)

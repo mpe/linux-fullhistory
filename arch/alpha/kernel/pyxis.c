@@ -17,13 +17,12 @@
 #include <asm/ptrace.h>
 #include <asm/mmu_context.h>
 
-/* NOTE: Herein are back-to-back mb insns.  They are magic.
-   A plausible explanation is that the i/o controler does not properly
+/* NOTE: Herein are back-to-back mb instructions.  They are magic.
+   One plausible explanation is that the I/O controller does not properly
    handle the system transaction.  Another involves timing.  Ho hum.  */
 
 extern struct hwrpb_struct *hwrpb;
 extern asmlinkage void wrmces(unsigned long mces);
-extern int alpha_sys_type;
 
 /*
  * BIOS32-style PCI interface:
@@ -38,6 +37,7 @@ extern int alpha_sys_type;
 #define DEBUG_MCHECK
 #ifdef DEBUG_MCHECK
 # define DBG_MCK(args)	printk args
+#define DEBUG_MCHECK_DUMP
 #else
 # define DBG_MCK(args)
 #endif
@@ -49,6 +49,11 @@ static volatile unsigned int PYXIS_mcheck_expected = 0;
 static volatile unsigned int PYXIS_mcheck_taken = 0;
 static unsigned int PYXIS_jd;
 
+#ifdef CONFIG_ALPHA_SRM_SETUP
+unsigned int PYXIS_DMA_WIN_BASE = PYXIS_DMA_WIN_BASE_DEFAULT;
+unsigned int PYXIS_DMA_WIN_SIZE = PYXIS_DMA_WIN_SIZE_DEFAULT;
+unsigned long pyxis_sm_base_r1, pyxis_sm_base_r2, pyxis_sm_base_r3;
+#endif /* SRM_SETUP */
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -129,24 +134,23 @@ static int mk_conf_addr(unsigned char bus, unsigned char device_fn,
 static unsigned int conf_read(unsigned long addr, unsigned char type1)
 {
 	unsigned long flags;
-	unsigned int stat0, value;
+	unsigned int stat0, value, temp;
 	unsigned int pyxis_cfg = 0; /* to keep gcc quiet */
 
-	save_flags(flags);	/* avoid getting hit by machine check */
-	cli();
+	save_and_cli(flags);	/* avoid getting hit by machine check */
 
 	DBG(("conf_read(addr=0x%lx, type1=%d)\n", addr, type1));
 
 	/* reset status register to avoid losing errors: */
 	stat0 = *(vuip)PYXIS_ERR;
-	*(vuip)PYXIS_ERR = stat0;
-	mb();
+	*(vuip)PYXIS_ERR = stat0; mb();
+	temp = *(vuip)PYXIS_ERR;  /* re-read to force write */
 	DBG(("conf_read: PYXIS ERR was 0x%x\n", stat0));
 	/* if Type1 access, must set PYXIS CFG */
 	if (type1) {
 		pyxis_cfg = *(vuip)PYXIS_CFG;
-		*(vuip)PYXIS_CFG = pyxis_cfg | 1;
-		mb();
+		*(vuip)PYXIS_CFG = pyxis_cfg | 1; mb();
+		temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
 		DBG(("conf_read: TYPE1 access\n"));
 	}
 
@@ -166,36 +170,11 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 	}
 	PYXIS_mcheck_expected = 0;
 	mb();
-	/*
-	 * david.rusling@reo.mts.dec.com.  This code is needed for the
-	 * EB64+ as it does not generate a machine check (why I don't
-	 * know).  When we build kernels for one particular platform
-	 * then we can make this conditional on the type.
-	 */
-#if 0
-	draina();
-
-	/* now look for any errors */
-	stat0 = *(vuip)PYXIS_IOC_PYXIS_ERR;
-	DBG(("conf_read: PYXIS ERR after read 0x%x\n", stat0));
-	if (stat0 & 0x8280U) { /* is any error bit set? */
-		/* if not NDEV, print status */
-		if (!(stat0 & 0x0080)) {
-			printk("PYXIS.c:conf_read: got stat0=%x\n", stat0);
-		}
-
-		/* reset error status: */
-		*(vulp)PYXIS_IOC_PYXIS_ERR = stat0;
-		mb();
-		wrmces(0x7);			/* reset machine check */
-		value = 0xffffffff;
-	}
-#endif
 
 	/* if Type1 access, must reset IOC CFG so normal IO space ops work */
 	if (type1) {
-		*(vuip)PYXIS_CFG = pyxis_cfg & ~1;
-		mb();
+		*(vuip)PYXIS_CFG = pyxis_cfg & ~1; mb();
+		temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
 	}
 
 	DBG(("conf_read(): finished\n"));
@@ -209,22 +188,21 @@ static void conf_write(unsigned long addr, unsigned int value,
 		       unsigned char type1)
 {
 	unsigned long flags;
-	unsigned int stat0;
+	unsigned int stat0, temp;
 	unsigned int pyxis_cfg = 0; /* to keep gcc quiet */
 
-	save_flags(flags);	/* avoid getting hit by machine check */
-	cli();
+	save_and_cli(flags);	/* avoid getting hit by machine check */
 
 	/* reset status register to avoid losing errors: */
 	stat0 = *(vuip)PYXIS_ERR;
-	*(vuip)PYXIS_ERR = stat0;
-	mb();
+	*(vuip)PYXIS_ERR = stat0; mb();
+	temp = *(vuip)PYXIS_ERR;  /* re-read to force write */
 	DBG(("conf_write: PYXIS ERR was 0x%x\n", stat0));
 	/* if Type1 access, must set PYXIS CFG */
 	if (type1) {
 		pyxis_cfg = *(vuip)PYXIS_CFG;
-		*(vuip)PYXIS_CFG = pyxis_cfg | 1;
-		mb();
+		*(vuip)PYXIS_CFG = pyxis_cfg | 1; mb();
+		temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
 		DBG(("conf_read: TYPE1 access\n"));
 	}
 
@@ -235,13 +213,14 @@ static void conf_write(unsigned long addr, unsigned int value,
 	*(vuip)addr = value;
 	mb();
 	mb();  /* magic */
+	temp = *(vuip)PYXIS_ERR; /* do a PYXIS read to force the write */
 	PYXIS_mcheck_expected = 0;
 	mb();
 
 	/* if Type1 access, must reset IOC CFG so normal IO space ops work */
 	if (type1) {
-		*(vuip)PYXIS_CFG = pyxis_cfg & ~1;
-		mb();
+		*(vuip)PYXIS_CFG = pyxis_cfg & ~1; mb();
+		temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
 	}
 
 	DBG(("conf_write(): finished\n"));
@@ -367,19 +346,105 @@ unsigned long pyxis_init(unsigned long mem_start, unsigned long mem_end)
 {
 	unsigned int pyxis_err ;
 
+#if 0
+printk("pyxis_init: PYXIS_ERR_MASK 0x%x\n", *(vuip)PYXIS_ERR_MASK);
+printk("pyxis_init: PYXIS_ERR 0x%x\n", *(vuip)PYXIS_ERR);
+
+printk("pyxis_init: PYXIS_INT_REQ 0x%lx\n", *(vulp)PYXIS_INT_REQ);
+printk("pyxis_init: PYXIS_INT_MASK 0x%lx\n", *(vulp)PYXIS_INT_MASK);
+printk("pyxis_init: PYXIS_INT_ROUTE 0x%lx\n", *(vulp)PYXIS_INT_ROUTE);
+printk("pyxis_init: PYXIS_INT_HILO 0x%lx\n", *(vulp)PYXIS_INT_HILO);
+printk("pyxis_init: PYXIS_INT_CNFG 0x%x\n", *(vuip)PYXIS_INT_CNFG);
+printk("pyxis_init: PYXIS_RT_COUNT 0x%lx\n", *(vulp)PYXIS_RT_COUNT);
+#endif
+
 	/* 
-	 * Set up error reporting.
+	 * Set up error reporting. Make sure CPU_PE is OFF in the mask.
 	 */
+	pyxis_err = *(vuip)PYXIS_ERR_MASK;
+	pyxis_err &= ~4;   
+	*(vuip)PYXIS_ERR_MASK = pyxis_err; mb();
+	pyxis_err = *(vuip)PYXIS_ERR_MASK;  /* re-read to force write */
+
 	pyxis_err = *(vuip)PYXIS_ERR ;
 	pyxis_err |= 0x180;   /* master/target abort */
-	*(vuip)PYXIS_ERR = pyxis_err ;
-	mb() ;
-	pyxis_err = *(vuip)PYXIS_ERR ;
+	*(vuip)PYXIS_ERR = pyxis_err; mb();
+	pyxis_err = *(vuip)PYXIS_ERR;  /* re-read to force write */
 
-#ifdef CONFIG_ALPHA_RUFFIAN
-	printk("pyxis_init: Skipping window register rewrites --"
+#ifdef CONFIG_ALPHA_SRM_SETUP
+	/* check window 0 for enabled and mapped to 0 */
+	if (((*(vuip)PYXIS_W0_BASE & 3) == 1) &&
+	    (*(vuip)PYXIS_T0_BASE == 0) &&
+	    ((*(vuip)PYXIS_W0_MASK & 0xfff00000U) > 0x0ff00000U))
+	{
+	  PYXIS_DMA_WIN_BASE = *(vuip)PYXIS_W0_BASE & 0xfff00000U;
+	  PYXIS_DMA_WIN_SIZE = *(vuip)PYXIS_W0_MASK & 0xfff00000U;
+	  PYXIS_DMA_WIN_SIZE += 0x00100000U;
+#if 1
+	  printk("pyxis_init: using Window 0 settings\n");
+	  printk("pyxis_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
+		 *(vuip)PYXIS_W0_BASE,
+		 *(vuip)PYXIS_W0_MASK,
+		 *(vuip)PYXIS_T0_BASE);
+#endif
+	}
+	else  /* check window 1 for enabled and mapped to 0 */
+	if (((*(vuip)PYXIS_W1_BASE & 3) == 1) &&
+	    (*(vuip)PYXIS_T1_BASE == 0) &&
+	    ((*(vuip)PYXIS_W1_MASK & 0xfff00000U) > 0x0ff00000U))
+{
+	  PYXIS_DMA_WIN_BASE = *(vuip)PYXIS_W1_BASE & 0xfff00000U;
+	  PYXIS_DMA_WIN_SIZE = *(vuip)PYXIS_W1_MASK & 0xfff00000U;
+	  PYXIS_DMA_WIN_SIZE += 0x00100000U;
+#if 1
+	  printk("pyxis_init: using Window 1 settings\n");
+	  printk("pyxis_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
+		 *(vuip)PYXIS_W1_BASE,
+		 *(vuip)PYXIS_W1_MASK,
+		 *(vuip)PYXIS_T1_BASE);
+#endif
+	}
+	else  /* check window 2 for enabled and mapped to 0 */
+	if (((*(vuip)PYXIS_W2_BASE & 3) == 1) &&
+	    (*(vuip)PYXIS_T2_BASE == 0) &&
+	    ((*(vuip)PYXIS_W2_MASK & 0xfff00000U) > 0x0ff00000U))
+	{
+	  PYXIS_DMA_WIN_BASE = *(vuip)PYXIS_W2_BASE & 0xfff00000U;
+	  PYXIS_DMA_WIN_SIZE = *(vuip)PYXIS_W2_MASK & 0xfff00000U;
+	  PYXIS_DMA_WIN_SIZE += 0x00100000U;
+#if 1
+	  printk("pyxis_init: using Window 2 settings\n");
+	  printk("pyxis_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
+		 *(vuip)PYXIS_W2_BASE,
+		 *(vuip)PYXIS_W2_MASK,
+		 *(vuip)PYXIS_T2_BASE);
+#endif
+	}
+	else  /* check window 3 for enabled and mapped to 0 */
+	if (((*(vuip)PYXIS_W3_BASE & 3) == 1) &&
+	    (*(vuip)PYXIS_T3_BASE == 0) &&
+	    ((*(vuip)PYXIS_W3_MASK & 0xfff00000U) > 0x0ff00000U))
+	{
+	  PYXIS_DMA_WIN_BASE = *(vuip)PYXIS_W3_BASE & 0xfff00000U;
+	  PYXIS_DMA_WIN_SIZE = *(vuip)PYXIS_W3_MASK & 0xfff00000U;
+	  PYXIS_DMA_WIN_SIZE += 0x00100000U;
+#if 1
+	  printk("pyxis_init: using Window 3 settings\n");
+	  printk("pyxis_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
+		 *(vuip)PYXIS_W3_BASE,
+		 *(vuip)PYXIS_W3_MASK,
+		 *(vuip)PYXIS_T3_BASE);
+#endif
+	}
+	else  /* we must use our defaults which were pre-initialized... */
+#endif /* SRM_SETUP */
+	{
+#if defined(CONFIG_ALPHA_RUFFIAN)
+#if 1
+	printk("pyxis_init: skipping window register rewrites... "
 	       " trust DeskStation firmware!\n");
-#else
+#endif
+#else /* RUFFIAN */
 	/*
 	 * Set up the PCI->physical memory translation windows.
 	 * For now, windows 1,2 and 3 are disabled.  In the future, we may
@@ -395,7 +460,8 @@ unsigned long pyxis_init(unsigned long mem_start, unsigned long mem_end)
 	*(vuip)PYXIS_W2_BASE = 0x0 ;
 	*(vuip)PYXIS_W3_BASE = 0x0 ;
 	mb();
-#endif
+#endif /* RUFFIAN */
+	}
 
 	/*
 	 * check ASN in HWRPB for validity, report if bad
@@ -407,18 +473,21 @@ unsigned long pyxis_init(unsigned long mem_start, unsigned long mem_end)
 	}
 
 	/*
-	 * Finally, clear the PYXIS_CFG register, which gets used
+         * Next, clear the PYXIS_CFG register, which gets used
 	 *  for PCI Config Space accesses. That is the way
 	 *  we want to use it, and we do not want to depend on
 	 *  what ARC or SRM might have left behind...
 	 */
 	{
-		unsigned int pyxis_cfg;
+          unsigned int pyxis_cfg, temp;
 		pyxis_cfg = *(vuip)PYXIS_CFG; mb();
-#if 0
+	  if (pyxis_cfg != 0) {
+#if 1
 		printk("PYXIS_init: CFG was 0x%x\n", pyxis_cfg);
 #endif
 		*(vuip)PYXIS_CFG = 0; mb();
+	    temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
+	  }
 	}
  
 	{
@@ -428,10 +497,48 @@ unsigned long pyxis_init(unsigned long mem_start, unsigned long mem_end)
 		printk("PYXIS_init: HAE_MEM was 0x%x\n", pyxis_hae_mem);
 		printk("PYXIS_init: HAE_IO was 0x%x\n", pyxis_hae_io);
 #endif
-		*(vuip)PYXIS_HAE_MEM = 0; mb();
-		pyxis_hae_mem = *(vuip)PYXIS_HAE_MEM;
+#ifdef CONFIG_ALPHA_SRM_SETUP
+	  /*
+	   * sigh... For the SRM setup, unless we know apriori what the HAE
+	   * contents will be, we need to setup the arbitrary region bases
+	   * so we can test against the range of addresses and tailor the
+	   * region chosen for the SPARSE memory access.
+	   * 
+	   * see include/asm-alpha/pyxis.h for the SPARSE mem read/write
+	  */
+	  pyxis_sm_base_r1 = (pyxis_hae_mem      ) & 0xe0000000UL;/* region 1 */
+	  pyxis_sm_base_r2 = (pyxis_hae_mem << 16) & 0xf8000000UL;/* region 2 */
+	  pyxis_sm_base_r3 = (pyxis_hae_mem << 24) & 0xfc000000UL;/* region 3 */
+
+	  /*
+	    Set the HAE cache, so that setup_arch() code
+	    will use the SRM setting always. Our readb/writeb
+	    code in pyxis.h expects never to have to change
+	    the contents of the HAE.
+	   */
+	  hae.cache = pyxis_hae_mem;
+#else /* SRM_SETUP */
+          *(vuip)PYXIS_HAE_MEM = 0U; mb();
+	  pyxis_hae_mem = *(vuip)PYXIS_HAE_MEM;  /* re-read to force write */
 		*(vuip)PYXIS_HAE_IO = 0; mb();
-		pyxis_hae_io = *(vuip)PYXIS_HAE_IO;
+	  pyxis_hae_io = *(vuip)PYXIS_HAE_IO;  /* re-read to force write */
+#endif /* SRM_SETUP */
+        }
+
+	/*
+	 * Finally, check that the PYXIS_CTRL1 has IOA_BEN set for
+	 * enabling byte/word PCI bus space(s) access.
+	 */
+	{
+	  unsigned int ctrl1;
+	  ctrl1 = *(vuip) PYXIS_CTRL1;
+	  if (!(ctrl1 & 1)) {
+#if 1
+	    printk("PYXIS_init: enabling byte/word PCI space\n");
+#endif
+	    *(vuip) PYXIS_CTRL1 = ctrl1 | 1; mb();
+	    ctrl1 = *(vuip)PYXIS_CTRL1;  /* re-read to force write */
+	  }
 	}
 
 	return mem_start;
@@ -441,9 +548,8 @@ int pyxis_pci_clr_err(void)
 {
 	PYXIS_jd = *(vuip)PYXIS_ERR;
 	DBG(("PYXIS_pci_clr_err: PYXIS ERR after read 0x%x\n", PYXIS_jd));
-	*(vuip)PYXIS_ERR = 0x0180;
-	mb();
-	PYXIS_jd = *(vuip)PYXIS_ERR;
+	*(vuip)PYXIS_ERR = 0x0180; mb();
+	PYXIS_jd = *(vuip)PYXIS_ERR;  /* re-read to force write */
 	return 0;
 }
 
@@ -486,7 +592,7 @@ void pyxis_machine_check(unsigned long vector, unsigned long la_ptr,
 	 */
 	mb();
 	mb();  /* magic */
-	if (PYXIS_mcheck_expected/* && (mchk_sysdata->epic_dcsr && 0x0c00UL)*/) {
+	if (PYXIS_mcheck_expected) {
 		DBG(("PYXIS machine check expected\n"));
 		PYXIS_mcheck_expected = 0;
 		PYXIS_mcheck_taken = 1;
@@ -502,7 +608,8 @@ void pyxis_machine_check(unsigned long vector, unsigned long la_ptr,
 		printk("PYXIS machine check NOT expected\n") ;
 		DBG_MCK(("pyxis_machine_check: vector=0x%lx la_ptr=0x%lx\n",
 			 vector, la_ptr));
-		DBG_MCK(("\t\t pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
+		DBG_MCK(("\t\t pc=0x%lx size=0x%x procoffset=0x%x"
+			 " sysoffset 0x%x\n",
 			 regs->pc, mchk_header->size, mchk_header->proc_offset,
 			 mchk_header->sys_offset));
 		PYXIS_mcheck_expected = 0;

@@ -22,6 +22,7 @@
 #include <linux/delay.h>
 #include <linux/config.h>	/* CONFIG_ALPHA_LCA etc */
 #include <linux/ioport.h>
+#include <linux/mc146818rtc.h>
 
 #ifdef CONFIG_RTC
 #include <linux/timex.h>
@@ -34,10 +35,23 @@
 #include <asm/dma.h>
 #include <asm/io.h>
 
+extern void setup_smp(void);
+extern char *smp_info(void);
+
+#if 1
+# define DBG_SRM(args)         printk args
+#else
+# define DBG_SRM(args)
+#endif
+
 struct hae hae = {
 	0,
 	(unsigned long*) HAE_ADDRESS
 };
+
+#ifdef CONFIG_ALPHA_SRM_SETUP
+unsigned long srm_hae;
+#endif
 
 struct hwrpb_struct *hwrpb;
 
@@ -106,12 +120,13 @@ static void init_pit (void)
     outb(LATCH & 0xff, 0x40); /* LSB */
     outb(LATCH >> 8, 0x40); /* MSB */
     request_region(0x40, 0x20, "timer"); /* reserve pit */
-#else
-#ifndef CONFIG_ALPHA_RUFFIAN
+#else /* RTC */
+#if !defined(CONFIG_ALPHA_RUFFIAN)
+    /* Ruffian depends on the system timer established in MILO!! */
     outb(0x36, 0x43);	/* counter 0: system timer */
     outb(0x00, 0x40);
     outb(0x00, 0x40);
-#endif
+#endif /* RUFFIAN */
     request_region(0x70, 0x10, "timer"); /* reserve rtc */
 #endif /* RTC */
 
@@ -148,9 +163,21 @@ void setup_arch(char **cmdline_p,
 
 	init_pit();
 
+	if ((CMOS_READ(RTC_FREQ_SELECT) & 0x3f) != 0x26) {
+	  printk("setup_arch: setting RTC_FREQ to 1024/sec\n");
+	  CMOS_WRITE(0x26, RTC_FREQ_SELECT);
+	}
+
 	hwrpb = (struct hwrpb_struct*)(IDENT_ADDR + INIT_HWRPB->phys_addr);
 
+#if !defined(CONFIG_ALPHA_TSUNAMI)
+#ifdef CONFIG_ALPHA_SRM_SETUP
+	srm_hae = *hae.reg; /* save SRM setting for restoration */
+	DBG_SRM(("setup_arch: old HAE base: 0x%016lx\n", srm_hae));
+#endif /* SRM_SETUP */
 	set_hae(hae.cache);	/* sync HAE register w/hae_cache */
+#endif /* !TSUNAMI */
+
 	wrmces(0x7);		/* reset enable correctable error reports */
 
 	ROOT_DEV = to_kdev_t(0x0802);		/* sda2 */
@@ -185,12 +212,54 @@ void setup_arch(char **cmdline_p,
 	*memory_start_p = pyxis_init(*memory_start_p, *memory_end_p);
 #elif defined(CONFIG_ALPHA_T2)
 	*memory_start_p = t2_init(*memory_start_p, *memory_end_p);
+#elif defined(CONFIG_ALPHA_TSUNAMI)
+	*memory_start_p = tsunami_init(*memory_start_p, *memory_end_p);
+#elif defined(CONFIG_ALPHA_MCPCIA)
+	*memory_start_p = mcpcia_init(*memory_start_p, *memory_end_p);
+#endif
+
+#ifdef __SMP__
+	setup_smp();
 #endif
 }
 
 
 #define N(a) (sizeof(a)/sizeof(a[0]))
 
+/* A change was made to the HWRPB via an ECO and the following code tracks
+ * a part of the ECO.  The HWRPB version must be 5 or higher or the ECO
+ * was not implemented in the console firmware.  If its at rev 5 or greater
+ * we can get the platform ascii string name from the HWRPB.  Thats what this
+ * function does.  It checks the rev level and if the string is in the HWRPB
+ * it returns the addtess of the string ... a pointer to the platform name.
+ *
+ * Returns:
+ *      - Pointer to a ascii string if its in the HWRPB
+ *      - Pointer to a blank string if the data is not in the HWRPB.
+ */
+static char *
+platform_string(void)
+{
+	struct dsr_struct *dsr;
+	static char unk_system_string[] = "N/A";
+
+        /* Go to the console for the string pointer.
+         * If the rpb_vers is not 5 or greater the rpb
+	 * is old and does not have this data in it.
+	 */
+        if (hwrpb->revision < 5)
+		return (unk_system_string);
+	else {
+		/* The Dynamic System Recognition struct
+		 * has the system platform name starting
+		 * after the character count of the string.
+		 */
+		dsr =  ((struct dsr_struct *)
+			  ((char *)hwrpb + hwrpb->dsr_offset));
+		return ((char *)dsr + (dsr->sysname_off +
+						 sizeof(long)));
+        }
+}
 
 static void
 get_sysnames(long type, long variation,
@@ -222,6 +291,10 @@ get_sysnames(long type, long variation,
 	static char * eb66_names[] = {"EB66", "EB66+"};
 	static int eb66_indices[] = {0,0,1};
 
+	static char * rawhide_names[] = {"Dodge", "Wrangler", "Durango",
+					 "Tincup", "DaVinci"};
+	static int rawhide_indices[] = {0,0,0,1,1,2,2,3,3,4,4};
+
 	long member;
 
 	/* Restore real CABRIO and EB66+ family names, ie EB64+ and EB66 */
@@ -249,7 +322,9 @@ get_sysnames(long type, long variation,
 
 	member = (variation >> 10) & 0x3f; /* member ID is a bit-field */
 
-	switch (type) {
+	switch (type) { /* select by family */
+	default: /* default to variation "0" for now */
+		break;
 	case ST_DEC_EB164:
 		if (member < N(eb164_indices))
 			*variation_name = eb164_names[eb164_indices[member]];
@@ -266,7 +341,11 @@ get_sysnames(long type, long variation,
 		if (member < N(eb66_indices))
 			*variation_name = eb66_names[eb66_indices[member]];
 		break;
-	}
+	case ST_DEC_RAWHIDE:
+		if (member < N(rawhide_indices))
+		  *variation_name = rawhide_names[rawhide_indices[member]];
+		break;
+	} /* end family switch */
 }
 
 /*
@@ -315,7 +394,12 @@ int get_cpuinfo(char *buffer)
 		       "max. addr. space #\t: %ld\n"
 		       "BogoMIPS\t\t: %lu.%02lu\n"
 		       "kernel unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
-		       "user unaligned acc\t: %ld (pc=%lx,va=%lx)\n",
+		       "user unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
+		       "platform string\t: %s\n"
+#ifdef __SMP__
+		       "%s"
+#endif
+		       ,
 
 		       cpu_name, cpu->variation, cpu->revision,
 		       (char*)cpu->serial_no,
@@ -329,5 +413,10 @@ int get_cpuinfo(char *buffer)
 		       hwrpb->max_asn,
 		       loops_per_sec / 500000, (loops_per_sec / 5000) % 100,
 		       unaligned[0].count, unaligned[0].pc, unaligned[0].va,
-		       unaligned[1].count, unaligned[1].pc, unaligned[1].va);
+		       unaligned[1].count, unaligned[1].pc, unaligned[1].va,
+		       platform_string()
+#ifdef __SMP__
+		       , smp_info()
+#endif
+		       );
 }

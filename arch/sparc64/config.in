@@ -218,17 +218,6 @@ if [ "$CONFIG_NET" = "y" ]; then
 	endmenu
 fi
 
-# Conditionally compile in the Uniform CD-ROM driver
-if [ "$CONFIG_BLK_DEV_IDECD" = "y" -o "$CONFIG_BLK_DEV_SR" = "y" ]; then
-  define_bool CONFIG_CDROM y
-else
-  if [ "$CONFIG_BLK_DEV_IDECD" = "m" -o "$CONFIG_BLK_DEV_SR" = "m" ]; then
-    define_bool CONFIG_CDROM m
-  else
-    define_bool CONFIG_CDROM n
-  fi
-fi
-
 source fs/Config.in
 
 source fs/nls/Config.in

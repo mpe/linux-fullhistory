@@ -4,6 +4,7 @@
  * kernel entry-points
  */
 
+#include <linux/config.h>
 #include <asm/system.h>
 
 #define halt	.long PAL_halt
@@ -48,6 +49,8 @@
  * JRP - Save regs 16-18 in a special area of the stack, so that
  * the palcode-provided values are available to the signal handler.
  */
+#if defined(CONFIG_ALPHA_TSUNAMI)
+/* TSUNAMI has no HAE register to save/restore */
 #define SAVE_ALL			\
 	subq	$30,184,$30;		\
 	stq	$0,0($30);		\
@@ -55,6 +58,55 @@
 	stq	$2,16($30);		\
 	stq	$3,24($30);		\
 	stq	$4,32($30);		\
+	stq	$5,40($30);		\
+	stq	$6,48($30);		\
+	stq	$7,56($30);		\
+	stq	$8,64($30);		\
+	stq	$19,72($30);		\
+	stq	$20,80($30);		\
+	stq	$21,88($30);		\
+	stq	$22,96($30);		\
+	stq	$23,104($30);		\
+	stq	$24,112($30);		\
+	stq	$25,120($30);		\
+	stq	$26,128($30);		\
+	stq	$27,136($30);		\
+	stq	$28,144($30);		\
+	stq	$16,160($30);		\
+	stq	$17,168($30);		\
+	stq	$18,176($30)
+
+#define RESTORE_ALL			\
+	ldq	$0,0($30);		\
+	ldq	$1,8($30);		\
+	ldq	$2,16($30);		\
+	ldq	$3,24($30);		\
+	ldq	$4,32($30);		\
+	ldq	$5,40($30);		\
+	ldq	$6,48($30);		\
+	ldq	$7,56($30);		\
+	ldq	$8,64($30);		\
+	ldq	$19,72($30);		\
+	ldq	$20,80($30);		\
+	ldq	$21,88($30);		\
+	ldq	$22,96($30);		\
+	ldq	$23,104($30);		\
+	ldq	$24,112($30);		\
+	ldq	$25,120($30);		\
+	ldq	$26,128($30);		\
+	ldq	$27,136($30);		\
+	ldq	$28,144($30);		\
+	addq	$30,184,$30
+
+#else /* TSUNAMI */
+#define SAVE_ALL			\
+	subq	$30,184,$30;		\
+	stq	$0,0($30);		\
+	stq	$1,8($30);		\
+	stq	$2,16($30);		\
+	stq	$3,24($30);		\
+	stq	$4,32($30);		\
+	stq	$28,144($30);		\
 	lda	$2,hae;			\
 	stq	$5,40($30);		\
 	stq	$6,48($30);		\
@@ -70,7 +122,6 @@
 	stq	$25,120($30);		\
 	stq	$26,128($30);		\
 	stq	$27,136($30);		\
-	stq	$28,144($30);		\
 	stq	$2,152($30);		\
 	stq	$16,160($30);		\
 	stq	$17,168($30);		\
@@ -112,6 +163,8 @@
 	ldq	$27,136($30);		\
 	ldq	$28,144($30);		\
 	addq	$30,184,$30
+
+#endif /* TSUNAMI */
 
 .text
 .set noat
@@ -508,6 +561,8 @@ sys_clone:
 alpha_switch_to:
 	bsr $1,do_switch_stack
 	call_pal PAL_swpctx
+	lda $16,-2($31)
+	call_pal PAL_tbi
 	bsr $1,undo_switch_stack
 	ret $31,($26),1
 .end alpha_switch_to
@@ -680,6 +735,19 @@ signal_return:
 	lda	$30,SWITCH_STACK_SIZE($30)
 	br	$31,restore_all
 .end entSys
+
+#ifdef __SMP__
+        .globl  ret_from_smpfork
+.align 3
+.ent ret_from_smpfork
+ret_from_smpfork:
+	.set at
+	stq	$31,scheduler_lock	
+	mb	/* ?????????????????? */
+	br	ret_from_sys_call
+	.set noat
+.end ret_from_smpfork
+#endif /* __SMP__ */
 
 .align 3
 .ent reschedule

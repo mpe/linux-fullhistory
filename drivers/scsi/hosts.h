@@ -332,7 +332,7 @@ struct Scsi_Host
 
     /* These parameters should be set by the detect routine */
     unsigned char *base;
-    unsigned int  io_port;
+    unsigned long io_port;
     unsigned char n_io_port;
     unsigned char irq;
     unsigned char dma_channel;
@@ -374,7 +374,7 @@ struct Scsi_Host
     /*
      * We should ensure that this is aligned, both for better performance
      * and also because some compilers (m68k) don't automatically force
-     * alignment to a 4-byte boundary.
+     * alignment to a long boundary.
      */
     unsigned long hostdata[0]  /* Used for storage of host specific stuff */
         __attribute__ ((aligned (sizeof(unsigned long))));

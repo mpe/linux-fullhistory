@@ -6,11 +6,13 @@ mainmenu_name "Kernel configuration of Linux for Alpha machines"
 
 # clear all implied options (don't want default values for those):
 unset CONFIG_CROSSCOMPILE CONFIG_NATIVE
-unset CONFIG_ALPHA_EV4 CONFIG_ALPHA_EV5
+unset CONFIG_ALPHA_EV4 CONFIG_ALPHA_EV5 CONFIG_ALPHA_EV6
 unset CONFIG_PCI CONFIG_ALPHA_EISA
 unset CONFIG_ALPHA_LCA CONFIG_ALPHA_APECS CONFIG_ALPHA_CIA
 unset CONFIG_ALPHA_T2 CONFIG_ALPHA_PYXIS
+unset CONFIG_ALPHA_TSUNAMI CONFIG_ALPHA_MCPCIA
 unset CONFIG_ALPHA_NEED_ROUNDING_EMULATION
+unset CONFIG_ALPHA_SRM CONFIG_ALPHA_SRM_SETUP
 
 mainmenu_option next_comment
 comment 'Code maturity level options'
@@ -48,13 +50,16 @@ choice 'Alpha system type' \
 	 PC164		CONFIG_ALPHA_PC164		\
 	 LX164		CONFIG_ALPHA_LX164		\
 	 SX164		CONFIG_ALPHA_SX164		\
+	 DP264		CONFIG_ALPHA_DP264		\
 	 Jensen		CONFIG_ALPHA_JENSEN		\
 	 Noname		CONFIG_ALPHA_NONAME		\
+	 Takara		CONFIG_ALPHA_TAKARA		\
 	 Mikasa		CONFIG_ALPHA_MIKASA		\
 	 Noritake	CONFIG_ALPHA_NORITAKE		\
 	 Alcor		CONFIG_ALPHA_ALCOR		\
 	 Miata		CONFIG_ALPHA_MIATA		\
 	 Sable		CONFIG_ALPHA_SABLE		\
+	 Rawhide	CONFIG_ALPHA_RAWHIDE		\
 	 AlphaBook1	CONFIG_ALPHA_BOOK1		\
 	 Ruffian	CONFIG_ALPHA_RUFFIAN		\
 	 Platform2000	CONFIG_ALPHA_P2K" Cabriolet
@@ -78,7 +83,8 @@ then
 	define_bool CONFIG_ALPHA_APECS y
 fi
 if [ "$CONFIG_ALPHA_EB164" = "y" -o "$CONFIG_ALPHA_PC164" = "y" \
-	-o "$CONFIG_ALPHA_ALCOR" = "y" -o "$CONFIG_ALPHA_XLT" = "y" ]
+	-o "$CONFIG_ALPHA_ALCOR" = "y" -o "$CONFIG_ALPHA_XLT" = "y" \
+	-o "$CONFIG_ALPHA_TAKARA" = "y" ]
 then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV5 y
@@ -86,9 +92,7 @@ then
 fi
 if [ "$CONFIG_ALPHA_MIKASA" = "y" -o "$CONFIG_ALPHA_NORITAKE" = "y" ]
 then
-	choice 'CPU daughtercard' \
-		"Pinnacle	CONFIG_ALPHA_PINNACLE \
-		Primo		CONFIG_ALPHA_PRIMO" Primo
+	bool 'EV5 CPU daughtercard (model 5/xxx)?' CONFIG_ALPHA_PRIMO
 	if [ "$CONFIG_ALPHA_PRIMO" = "y" ]
 	then
 		define_bool CONFIG_ALPHA_EV5 y
@@ -102,7 +106,13 @@ fi
 if [ "$CONFIG_ALPHA_SABLE" = "y" ]
 then
 	define_bool CONFIG_PCI y
+	bool 'EV5 CPU(s) (model 5/xxx)?' CONFIG_ALPHA_GAMMA
+	if [ "$CONFIG_ALPHA_GAMMA" = "y" ]
+	then
+		define_bool CONFIG_ALPHA_EV5 y
+	else
 	define_bool CONFIG_ALPHA_EV4 y
+	fi
 	define_bool CONFIG_ALPHA_T2 y
 fi
 if [ "$CONFIG_ALPHA_MIATA" = "y" -o "$CONFIG_ALPHA_LX164" = "y" \
@@ -111,6 +121,18 @@ then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV5 y
 	define_bool CONFIG_ALPHA_PYXIS y
+fi
+if [ "$CONFIG_ALPHA_DP264" = "y" ]
+then
+	define_bool CONFIG_PCI y
+	define_bool CONFIG_ALPHA_EV6 y
+	define_bool CONFIG_ALPHA_TSUNAMI y
+fi
+if [ "$CONFIG_ALPHA_RAWHIDE" = "y" ]
+then
+	define_bool CONFIG_PCI y
+	define_bool CONFIG_ALPHA_EV5 y
+	define_bool CONFIG_ALPHA_MCPCIA y
 fi
 if [ "$CONFIG_ALPHA_JENSEN" = "y" ]
 then
@@ -127,12 +149,19 @@ if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
 	-o "$CONFIG_ALPHA_MIKASA" = "y" -o "$CONFIG_ALPHA_ALCOR" = "y" \
 	-o "$CONFIG_ALPHA_SABLE" = "y" -o "$CONFIG_ALPHA_MIATA" = "y" \
 	-o "$CONFIG_ALPHA_NORITAKE" = "y" -o "$CONFIG_ALPHA_PC164" = "y" \
-	-o "$CONFIG_ALPHA_LX164" = "y" -o "$CONFIG_ALPHA_SX164" = "y" ]
+	-o "$CONFIG_ALPHA_LX164" = "y" -o "$CONFIG_ALPHA_SX164" = "y" \
+	-o "$CONFIG_ALPHA_DP264" = "y" -o "$CONFIG_ALPHA_RAWHIDE" = "y" ]
 then
-	bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
+  bool 'Use SRM as bootloader' CONFIG_ALPHA_SRM
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    if [ "$CONFIG_ALPHA_SRM" = "y" ]; then
+      bool '  Use SRM PCI setup' CONFIG_ALPHA_SRM_SETUP
+    fi
+  fi
 fi
 if [ "$CONFIG_ALPHA_ALCOR" = "y" -o "$CONFIG_ALPHA_MIKASA" = "y" \
-	-o "$CONFIG_ALPHA_SABLE" = "y" -o "$CONFIG_ALPHA_NORITAKE" = "y" ]
+	-o "$CONFIG_ALPHA_SABLE" = "y" -o "$CONFIG_ALPHA_NORITAKE" = "y" \
+	-o "$CONFIG_ALPHA_RAWHIDE" = "y" ]
 then
 	define_bool CONFIG_ALPHA_EISA y
 fi
@@ -141,8 +170,13 @@ then
 	define_bool CONFIG_ALPHA_AVANTI y
 fi
 
+#bool 'Echo console messages on /dev/ttyS0 (COM1)' CONFIG_SERIAL_ECHO
+
 if [ "$CONFIG_PCI" = "y" ]; then
   bool 'TGA Console Support' CONFIG_TGA_CONSOLE
+#  if [ "$CONFIG_TGA_CONSOLE" = "y" ]; then
+#    bool 'VGA Console Support' CONFIG_VGA_CONSOLE
+#  fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     bool 'PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
   fi
@@ -215,17 +249,6 @@ if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
   source drivers/cdrom/Config.in
 fi
 endmenu
-
-# Conditionally compile in the Uniform CD-ROM driver
-if [ "$CONFIG_BLK_DEV_IDECD" = "y" -o "$CONFIG_BLK_DEV_SR" = "y" -o "$CONFIG_SBPCD" = "y" -o "$CONFIG_MCD" = "y" -o "$CONFIG_CM206" = "y" -o "$CONFIG_CDU31A" = "y" ]; then
-  define_bool CONFIG_CDROM y
-else
-  if [ "$CONFIG_BLK_DEV_IDECD" = "m" -o "$CONFIG_BLK_DEV_SR" = "m" -o "$CONFIG_SBPCD" = "m" -o "$CONFIG_MCD" = "m" -o "$CONFIG_CM206" = "m" -o "$CONFIG_CDU31A" = "m" ]; then
-    define_bool CONFIG_CDROM m
-  else
-    define_bool CONFIG_CDROM n
-  fi
-fi
 
 source fs/Config.in
 

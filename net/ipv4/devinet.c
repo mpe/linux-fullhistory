@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.19 1998/03/08 20:52:35 davem Exp $
+ *	Version: $Id: devinet.c,v 1.20 1998/03/27 07:02:44 davem Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -19,7 +19,7 @@
  *
  *	Changes:
  *	        Alexey Kuznetsov:	pa_* fields are replaced with ifaddr lists.
- 		Cyrus Durgin:		updated for kmod
+ *		Cyrus Durgin:		updated for kmod
  */
 
 #include <linux/config.h>

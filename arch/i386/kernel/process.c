@@ -375,12 +375,12 @@ void machine_restart(char * __unused)
 	   registers don't have to be reloaded after switching to real mode:
 	   the values are consistent for real mode operation already. */
 
-	__asm__ __volatile__ ("movw $0x0010,%%ax\n"
-				"\tmovw %%ax,%%ds\n"
-				"\tmovw %%ax,%%es\n"
-				"\tmovw %%ax,%%fs\n"
-				"\tmovw %%ax,%%gs\n"
-				"\tmovw %%ax,%%ss" : : : "eax");
+	__asm__ __volatile__ ("movl $0x0010,%%eax\n"
+				"\tmovl %%ax,%%ds\n"
+				"\tmovl %%ax,%%es\n"
+				"\tmovl %%ax,%%fs\n"
+				"\tmovl %%ax,%%gs\n"
+				"\tmovl %%ax,%%ss" : : : "eax");
 
 	/* Jump to the 16-bit code that we copied earlier.  It disables paging
 	   and the cache, switches to real mode, and jumps to the BIOS reset
@@ -428,7 +428,7 @@ void exit_thread(void)
 	if (last_task_used_math == current)
 		last_task_used_math = NULL;
 	/* forget local segments */
-	__asm__ __volatile__("mov %w0,%%fs ; mov %w0,%%gs ; lldt %w0"
+	__asm__ __volatile__("movl %w0,%%fs ; movl %w0,%%gs ; lldt %w0"
 		: /* no outputs */
 		: "r" (0));
 	current->tss.ldt = 0;
@@ -583,8 +583,8 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->regs.eax = regs->eax;
 	dump->regs.ds = regs->xds;
 	dump->regs.es = regs->xes;
-	__asm__("mov %%fs,%0":"=r" (dump->regs.fs));
-	__asm__("mov %%gs,%0":"=r" (dump->regs.gs));
+	__asm__("movl %%fs,%0":"=r" (dump->regs.fs));
+	__asm__("movl %%gs,%0":"=r" (dump->regs.gs));
 	dump->regs.orig_eax = regs->orig_eax;
 	dump->regs.eip = regs->eip;
 	dump->regs.cs = regs->xcs;

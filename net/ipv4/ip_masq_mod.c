@@ -2,10 +2,9 @@
  *		IP_MASQ_MOD masq modules support
  *
  *
- * Version:	@(#)ip_masq_mod.c  0.02      97/10/30
- *
  * Author:	Juan Jose Ciarlante, <jjciarla@raiz.uncu.edu.ar>
  *
+ * 	$Id: ip_masq_mod.c,v 1.4 1998/03/27 07:02:45 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -287,7 +286,6 @@ struct ip_masq_mod * ip_masq_mod_getbyname(const char *mmod_name)
 
 /*
  *	Module control entry
- *	no need to lock (already locked in ip_masq.c)
  */
 int ip_masq_mod_ctl(int optname, struct ip_fw_masqctl *mctl, int optlen)
 {

@@ -22,6 +22,7 @@
 #include <asm/keyboard.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 #include <asm/system.h>
 
 /* Some configuration switches are present in the include file... */
@@ -55,18 +56,17 @@ unsigned char pckbd_sysrq_xlate[128] =
 
 __initfunc(static int kbd_wait_for_input(void))
 {
-	int     n;
 	int     status, data;
 	unsigned long start = jiffies;
 
 	do {
                 status = inb(KBD_STATUS_REG);
+
                 /*
                  * Wait for input data to become available.  This bit will
                  * then be cleared by the following read of the DATA
                  * register.
                  */
-
                 if (!(status & KBD_STAT_OBF))
 			continue;
 
@@ -98,6 +98,8 @@ __initfunc(static void kbd_write(int address, int data))
 
 __initfunc(static char *initialize_kbd2(void))
 {
+	int status;
+
 	/* Flush any pending input. */
 
 	while (kbd_wait_for_input() != -1)
@@ -132,22 +134,37 @@ __initfunc(static char *initialize_kbd2(void))
 	 * then the assumption is that no keyboard is
 	 * plugged into the machine.
 	 * This defaults the keyboard to scan-code set 2.
+	 *
+	 * Set up to try again if the keyboard asks for RESEND.
 	 */
 
+        do {
 	kbd_write(KBD_DATA_REG, KBD_CMD_RESET);
-	if (kbd_wait_for_input() != KBD_REPLY_ACK)
+                status = kbd_wait_for_input();
+                if (status == KBD_REPLY_ACK)
+			break;
+                else if (status != KBD_REPLY_RESEND)
 		return "Keyboard reset failed, no ACK";
+        } while (1);
+
 	if (kbd_wait_for_input() != KBD_REPLY_POR)
 		return "Keyboard reset failed, no POR";
 
 	/*
 	 * Set keyboard controller mode. During this, the keyboard should be
 	 * in the disabled state.
+	 *
+	 * Set up to try again if the keyboard asks for RESEND.
 	 */
 
+	do {
 	kbd_write(KBD_DATA_REG, KBD_CMD_DISABLE);
-	if (kbd_wait_for_input() != KBD_REPLY_ACK)
+		status = kbd_wait_for_input();
+		if (status == KBD_REPLY_ACK)
+			break;
+		else if (status != KBD_REPLY_RESEND)
 		return "Disable keyboard: no ACK";
+	} while (1);
 
 	kbd_write(KBD_CNTL_REG, KBD_CCMD_WRITE_MODE);
 	kbd_write(KBD_DATA_REG, KBD_MODE_KBD_INT

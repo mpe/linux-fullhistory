@@ -3640,6 +3640,8 @@ static int idetape_cleanup (ide_drive_t *drive)
 	return 0;
 }
 
+#ifdef CONFIG_PROC_FS
+
 static int proc_idetape_read_name
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
@@ -3653,9 +3655,15 @@ static int proc_idetape_read_name
 }
 
 static ide_proc_entry_t idetape_proc[] = {
-	{ "name", proc_idetape_read_name, NULL },
-	{ NULL, NULL, NULL }
+	{ "name",	S_IFREG|S_IRUGO,	proc_idetape_read_name,	NULL },
+	{ NULL, 0, NULL, NULL }
 };
+
+#else
+
+#define	idetape_proc	NULL
+
+#endif
 
 /*
  *	IDE subdriver functions, registered with ide.c

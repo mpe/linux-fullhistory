@@ -81,8 +81,8 @@ ENOSYS = 38
 
 #define SAVE_ALL \
 	cld; \
-	push %es; \
-	push %ds; \
+	pushl %es; \
+	pushl %ds; \
 	pushl %eax; \
 	pushl %ebp; \
 	pushl %edi; \
@@ -91,8 +91,8 @@ ENOSYS = 38
 	pushl %ecx; \
 	pushl %ebx; \
 	movl $(__KERNEL_DS),%edx; \
-	mov %dx,%ds; \
-	mov %dx,%es;
+	movl %dx,%ds; \
+	movl %dx,%es;
 
 #define RESTORE_ALL \
 	popl %ebx; \
@@ -102,8 +102,8 @@ ENOSYS = 38
 	popl %edi; \
 	popl %ebp; \
 	popl %eax; \
-	pop %ds; \
-	pop %es; \
+	popl %ds; \
+	popl %es; \
 	addl $4,%esp; \
 	iret
 
@@ -231,7 +231,7 @@ ENTRY(divide_error)
 	pushl $ SYMBOL_NAME(do_divide_error)
 	ALIGN
 error_code:
-	push %ds
+	pushl %ds
 	pushl %eax
 	xorl %eax,%eax
 	pushl %ebp
@@ -241,17 +241,27 @@ error_code:
 	decl %eax			# eax = -1
 	pushl %ecx
 	pushl %ebx
+#if 1
 	xorl %ecx,%ecx			# zero ecx
 	cld
 	mov %es,%cx			# get the lower order bits of es
+#else
+	cld
+# Some older processors leave the top 16 bits of the 32 bit destination
+# register undefined, rather than zeroed in the following instruction.
+# This won't matter when restoring or loading a segment register from the
+# stack.  It may be a problem if any code reads the full 32 bit value.
+# dosemu? kernel?  Would somebody like to verify that this way is really OK?
+	movl %es,%cx
+#endif
 	xchgl %eax, ORIG_EAX(%esp)	# orig_eax (get the error code. )
 	movl %esp,%edx
 	xchgl %ecx, ES(%esp)		# get the address and save es.
 	pushl %eax			# push the error code
 	pushl %edx
 	movl $(__KERNEL_DS),%edx
-	mov %dx,%ds
-	mov %dx,%es
+	movl %dx,%ds
+	movl %dx,%es
 	GET_CURRENT(%ebx)
 	call *%ecx
 	addl $8,%esp

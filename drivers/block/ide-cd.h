@@ -63,17 +63,24 @@
    (Some other cdrom-specific codes are in cdrom.h.) */
 #define TEST_UNIT_READY         0x00
 #define REQUEST_SENSE           0x03
+#define INQUIRY                 0x12
 #define START_STOP              0x1b
 #define ALLOW_MEDIUM_REMOVAL    0x1e
-#define READ_CAPACITY		0x25
+#define READ_CAPACITY           0x25
 #define READ_10                 0x28
 #define SEEK			0x2b
-#define MODE_SENSE_10           0x5a
+#define READ_HEADER             0x44
+#define STOP_PLAY_SCAN		0x4e
 #define MODE_SELECT_10          0x55
-#define READ_CD                 0xbe
-#define SET_CD_SPEED            0xbb
+#define MODE_SENSE_10           0x5a
 #define LOAD_UNLOAD             0xa6
+#define READ_12                 0xa8
+#define READ_CD_MSF             0xb9
+#define SCAN			0xba
+#define SET_CD_SPEED            0xbb
+#define PLAY_CD                 0xbc
 #define MECHANISM_STATUS        0xbd
+#define READ_CD                 0xbe
 
 
 /* Page codes for mode sense/set */
@@ -85,7 +92,7 @@
 #define PAGE_ALL                0x3f
 
 
-/* ATAPI sense keys (mostly copied from scsi.h). */
+/* ATAPI sense keys (from table 140 of ATAPI 2.6) */
 
 #define NO_SENSE                0x00
 #define RECOVERED_ERROR         0x01
@@ -109,6 +116,7 @@ struct ide_cd_config_flags {
 	__u8 drq_interrupt    : 1; /* Device sends an interrupt when ready
 				      for a packet command. */
 	__u8 no_doorlock      : 1; /* Drive cannot lock the door. */
+	__u8 no_eject         : 1; /* Drive cannot eject the disc. */
 	__u8 nec260           : 1; /* Drive is a pre-1.2 NEC 260 drive. */
 	__u8 playmsf_as_bcd   : 1; /* PLAYMSF command takes BCD args. */
 	__u8 tocaddr_as_bcd   : 1; /* TOC addresses are in BCD. */
@@ -424,6 +432,39 @@ char *sense_key_texts[16] = {
 	"(reserved)",
 	"Miscompare",
 	"(reserved)",
+};
+
+
+/* From Table 37 of the ATAPI 2.6 draft standard. */
+struct {
+	unsigned short packet_command;
+	char *text;
+} packet_command_texts[] = {
+	{ TEST_UNIT_READY, "Test Unit Ready" },
+	{ REQUEST_SENSE, "Request Sense" },
+	{ INQUIRY, "Inquiry" },
+	{ START_STOP, "Start Stop Unit" },
+	{ ALLOW_MEDIUM_REMOVAL, "Prevent/Allow Medium Removal" },
+	{ READ_CAPACITY, "Read CD-ROM Capacity" },
+	{ READ_10, "Read(10)" },
+	{ SEEK, "Seek" },
+	{ SCMD_READ_TOC, "Read TOC" },
+	{ SCMD_READ_SUBCHANNEL, "Read Sub-Channel" },
+	{ READ_HEADER, "Read Header" },
+	{ STOP_PLAY_SCAN, "Stop Play/Scan" },
+	{ SCMD_PLAYAUDIO10, "Play Audio" },
+	{ SCMD_PLAYAUDIO_MSF, "Play Audio MSF" },
+	{ SCMD_PAUSE_RESUME, "Pause/Resume" },
+	{ MODE_SELECT_10, "Mode Select" },
+	{ MODE_SENSE_10, "Mode Sense" },
+	{ LOAD_UNLOAD, "Load/Unload CD" },
+	{ READ_12, "Read(12)" },
+	{ READ_CD_MSF, "Read CD MSF" },
+	{ SCAN, "Scan" },
+	{ SET_CD_SPEED, "Set CD Speed" },
+	{ PLAY_CD, "Play CD" },
+	{ MECHANISM_STATUS, "Mechanism Status" },
+	{ READ_CD, "Read CD" },
 };
 
 

@@ -260,7 +260,7 @@ struct ufs_superblock {
 			__u32	fs_qfmask[2];	/* ~usb_fmask */
 			__s32	fs_state;	/* file system state time stamp */
 		} fs_44;
-	} fs_u;
+	} fs_u  __attribute__ ((packed));
 	__s32	fs_postblformat;	/* format of positional layout tables */
 	__s32	fs_nrpos;		/* number of rotational positions */
 	__s32	fs_postbloff;		/* (__s16) rotation block list head */

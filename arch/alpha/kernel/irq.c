@@ -30,6 +30,10 @@
 #define vulp	volatile unsigned long *
 #define vuip	volatile unsigned int *
 
+extern void timer_interrupt(struct pt_regs * regs);
+extern void cserve_update_hw(unsigned long, unsigned long);
+extern void handle_ipi(struct pt_regs *);
+
 #define RTC_IRQ    8
 #ifdef CONFIG_RTC
 #define TIMER_IRQ  0        /* timer is the pit */
@@ -45,12 +49,15 @@
 #if defined(CONFIG_ALPHA_P2K)
   /* always mask out unused timer irq 0 and RTC irq 8 */
 # define PROBE_MASK (((1UL << NR_IRQS) - 1) & ~0x101UL)
-#elif defined(CONFIG_ALPHA_ALCOR)
+#elif defined(CONFIG_ALPHA_ALCOR) || defined(CONFIG_ALPHA_XLT)
   /* always mask out unused timer irq 0, "irqs" 20-30, and the EISA cascade: */
 # define PROBE_MASK (((1UL << NR_IRQS) - 1) & ~0xfff000000001UL)
 #elif defined(CONFIG_ALPHA_RUFFIAN)
   /* must leave timer irq 0 in the mask */
 # define PROBE_MASK ((1UL << NR_IRQS) - 1)
+#elif NR_IRQS == 64
+  /* always mask out unused timer irq 0: */
+# define PROBE_MASK (~1UL)
 #else
   /* always mask out unused timer irq 0: */
 # define PROBE_MASK (((1UL << NR_IRQS) - 1) & ~1UL)
@@ -119,7 +126,7 @@ sable_update_hw(unsigned long irq, unsigned long mask)
 {
 	/* The "irq" argument is really the mask bit number */
 	switch (irq) {
-	default: /* 16 ... 23 */
+	case 16 ... 23:
 		outb(mask >> 16, 0x53d);
 		break;
 	case 8 ... 15:
@@ -135,7 +142,7 @@ static inline void
 noritake_update_hw(unsigned long irq, unsigned long mask)
 {
 	switch (irq) {
-	default: /* 32 ... 47 */
+	case 32 ... 47:
 		outw(~(mask >> 32), 0x54c);
 		break;
 	case 16 ... 31:
@@ -155,7 +162,7 @@ static inline void
 miata_update_hw(unsigned long irq, unsigned long mask)
 {
 	switch (irq) {
-	default: /* 16 ... 47 */
+	case 16 ... 47:
 		/* Make CERTAIN none of the bogus ints get enabled... */
 		*(vulp)PYXIS_INT_MASK =
 			~((long)mask >> 16) & ~0x4000000000000e3bUL;
@@ -178,7 +185,7 @@ static inline void
 alcor_and_xlt_update_hw(unsigned long irq, unsigned long mask)
 {
 	switch (irq) {
-	default: /* 16 ... 47 */
+	case 16 ... 47:
 		/* On Alcor, at least, lines 20..30 are not connected and can
 		   generate spurrious interrupts if we turn them on while IRQ
 		   probing.  So explicitly mask them out. */
@@ -202,7 +209,7 @@ static inline void
 mikasa_update_hw(unsigned long irq, unsigned long mask)
 {
 	switch (irq) {
-	default: /* 16 ... 31 */
+	case 16 ... 31:
 		outw(~(mask >> 16), 0x536); /* note invert */
 		break;
 	case  8 ... 15:	/* ISA PIC2 */
@@ -214,7 +221,7 @@ mikasa_update_hw(unsigned long irq, unsigned long mask)
 	}
 }
 
-#ifdef CONFIG_ALPHA_RUFFIAN
+#if defined(CONFIG_ALPHA_RUFFIAN)
 static inline void
 ruffian_update_hw(unsigned long irq, unsigned long mask)
 {
@@ -223,8 +230,7 @@ ruffian_update_hw(unsigned long irq, unsigned long mask)
 		/* Note inverted sense of mask bits: */
 		/* Make CERTAIN none of the bogus ints get enabled... */
 		*(vulp)PYXIS_INT_MASK =
-			~((long)mask >> 16) & 0x00000000ffffffbfUL;
-		mb();
+		      ~((long)mask >> 16) & 0x00000000ffffffbfUL; mb();
 		/* ... and read it back to make sure it got written.  */
 		*(vulp)PYXIS_INT_MASK;
 		break;
@@ -236,20 +242,23 @@ ruffian_update_hw(unsigned long irq, unsigned long mask)
 		break;
 	}
 }
-#endif
+#endif /* RUFFIAN */
 
-#ifdef CONFIG_ALPHA_SX164
+#if defined(CONFIG_ALPHA_SX164)
 static inline void
 sx164_update_hw(unsigned long irq, unsigned long mask)
 {
 	switch (irq) {
 	case 16 ... 39:
-		/* Make CERTAIN none of the bogus ints get enabled */
+#if defined(CONFIG_ALPHA_SRM)
+		cserve_update_hw(irq, mask);
+#else
+		/* make CERTAIN none of the bogus ints get enabled */
 		*(vulp)PYXIS_INT_MASK =
-			~((long)mask >> 16) & ~0x000000000000003bUL;
-		mb();
+		    ~((long)mask >> 16) & ~0x000000000000003bUL; mb();
 		/* ... and read it back to make sure it got written.  */
 		*(vulp)PYXIS_INT_MASK;
+#endif /* SRM */
 		break;
 	case  8 ... 15: /* ISA PIC2 */
 		outb(mask >> 8, 0xA1);
@@ -258,24 +267,84 @@ sx164_update_hw(unsigned long irq, unsigned long mask)
 		outb(mask, 0x21);
 		break;
 	}
+
 }
-#endif
+#endif /* SX164 */
 
-/* Unlabeled mechanisms based on the number of irqs.  Someone should
-   probably document and name these.  */
-
+#if defined(CONFIG_ALPHA_DP264)
 static inline void
-update_hw_33(unsigned long irq, unsigned long mask)
+dp264_update_hw(unsigned long irq, unsigned long mask)
 {
 	switch (irq) {
-	default: /* 16 ... 32 */
-		outl(mask >> 16, 0x804);
+	case 16 ... 63:
+		/* make CERTAIN none of the bogus ints get enabled */
+		/* HACK ALERT! only CPU#0 is used currently */
+		*(vulp)TSUNAMI_CSR_DIM0 =
+		    ~(mask) & ~0x0000000000000000UL; mb();
+		/* ... and read it back to make sure it got written.  */
+		*(vulp)TSUNAMI_CSR_DIM0;
 		break;
-
 	case  8 ... 15:	/* ISA PIC2 */
 		outb(mask >> 8, 0xA1);
 		break;
 	case  0 ... 7:	/* ISA PIC1 */
+		outb(mask, 0x21);
+		break;
+	}
+}
+#endif /* DP264 */
+
+#if defined(CONFIG_ALPHA_RAWHIDE)
+static inline void
+rawhide_update_hw(unsigned long irq, unsigned long mask)
+{
+	switch (irq) {
+	case 16 ... 39: /* PCI bus 0 with EISA bridge */
+		*(vuip)MCPCIA_INT_MASK0(0) =
+		    (~((mask) >> 16) & 0x00ffffffU) | 0x00ff0000U; mb();
+		/* ... and read it back to make sure it got written.  */
+	  	*(vuip)MCPCIA_INT_MASK0(0);
+		break;
+	case 40 ... 63: /* PCI bus 1 with builtin NCR810 SCSI */
+		*(vuip)MCPCIA_INT_MASK0(1) =
+		    (~((mask) >> 40) & 0x00ffffffU) | 0x00fe0000U; mb();
+		/* ... and read it back to make sure it got written.  */
+	  	*(vuip)MCPCIA_INT_MASK0(1);
+		break;
+	case  8 ... 15:	/* ISA PIC2 */
+		outb(mask >> 8, 0xA1);
+		break;
+	case  0 ... 7:	/* ISA PIC1 */
+		outb(mask, 0x21);
+		break;
+	}
+}
+#endif /* RAWHIDE */
+
+/*
+ * HW update code for the following platforms:
+ *
+ *	CABRIOLET (AlphaPC64)
+ *	EB66P
+ *	EB164
+ *	PC164
+ *	LX164
+ */
+static inline void
+update_hw_35(unsigned long irq, unsigned long mask)
+{
+	switch (irq) {
+	case 16 ... 34:
+#if defined(CONFIG_ALPHA_SRM)
+		cserve_update_hw(irq, mask);
+#else /* SRM */
+		outl(irq_mask >> 16, 0x804);
+#endif /* SRM */
+		break;
+	case  8 ... 15:	/* ISA PIC2 */
+		outb(mask >> 8, 0xA1);
+		break;
+	case  0 ... 7: /* ISA PIC1 */
 		outb(mask, 0x21);
 		break;
 	}
@@ -285,7 +354,7 @@ static inline void
 update_hw_32(unsigned long irq, unsigned long mask)
 {
 	switch (irq) {
-	default: /* 24 ... 31 */
+	case 24 ... 31:
 		outb(mask >> 24, 0x27);
 		break;
 	case 16 ... 23:
@@ -297,58 +366,22 @@ update_hw_32(unsigned long irq, unsigned long mask)
 	case  0 ... 7:	/* ISA PIC1 */
 		outb(mask, 0x21);
 		break;
-	}
+}
 }
 
 static inline void
 update_hw_16(unsigned long irq, unsigned long mask)
 {
 	switch (irq) {
-	default: /* 8 ... 15, ISA PIC2 */
+	case 8 ... 15: /* ISA PIC2 */
 		outb(mask >> 8, 0xA1);
 		break;
 	case  0 ... 7: /* ISA PIC1 */
 		outb(mask, 0x21);
 		break;
-	}
+}
 }
 
-#if (defined(CONFIG_ALPHA_PC164) || defined(CONFIG_ALPHA_LX164)) \
-	&& defined(CONFIG_ALPHA_SRM)
-/*
- * On the pc164, we cannot take over the IRQs from the SRM, 
- * so we call down to do our dirty work.  Too bad the SRM
- * isn't consistent across platforms otherwise we could do
- * this always.
- */
-
-extern void cserve_ena(unsigned long);
-extern void cserve_dis(unsigned long);
-
-static inline void mask_irq(unsigned long irq)
-{
-	irq_mask |= (1UL << irq);
-	cserve_dis(irq - 16);
-}
-
-static inline void unmask_irq(unsigned long irq)
-{
-	irq_mask &= ~(1UL << irq);
-	cserve_ena(irq - 16);
-}
-
-/* Since we are calling down to PALcode, no need to diddle IPL.  */
-void disable_irq(unsigned int irq_nr)
-{
-	mask_irq(IRQ_TO_MASK(irq_nr));
-}
-
-void enable_irq(unsigned int irq_nr)
-{
-	unmask_irq(IRQ_TO_MASK(irq_nr));
-}
-
-#else
 /*
  * We manipulate the hardware ourselves.
  */
@@ -369,9 +402,18 @@ static void update_hw(unsigned long irq, unsigned long mask)
 	sx164_update_hw(irq, mask);
 #elif defined(CONFIG_ALPHA_RUFFIAN)
 	ruffian_update_hw(irq, mask);
-#elif NR_IRQS == 33
-	update_hw_33(irq, mask);
-#elif NR_IRQS == 32
+#elif defined(CONFIG_ALPHA_DP264)
+	dp264_update_hw(irq, mask);
+#elif defined(CONFIG_ALPHA_RAWHIDE)
+	rawhide_update_hw(irq, mask);
+#elif defined(CONFIG_ALPHA_CABRIOLET) || \
+      defined(CONFIG_ALPHA_EB66P)     || \
+      defined(CONFIG_ALPHA_EB164)     || \
+      defined(CONFIG_ALPHA_PC164)     || \
+      defined(CONFIG_ALPHA_LX164)
+	update_hw_35(irq, mask);
+#elif defined(CONFIG_ALPHA_EB66) || \
+      defined(CONFIG_ALPHA_EB64P)
 	update_hw_32(irq, mask);
 #elif NR_IRQS == 16
 	update_hw_16(irq, mask);
@@ -396,8 +438,7 @@ void disable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	mask_irq(IRQ_TO_MASK(irq_nr));
 	restore_flags(flags);
 }
@@ -406,12 +447,10 @@ void enable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	unmask_irq(IRQ_TO_MASK(irq_nr));
 	restore_flags(flags);
 }
-#endif /* (PC164 || LX164) && SRM */
 
 /*
  * Initial irq handlers.
@@ -423,13 +462,14 @@ int get_irq_list(char *buf)
 {
 	int i, len = 0;
 	struct irqaction * action;
+	int cpu = smp_processor_id();
 
 	for (i = 0; i < NR_IRQS; i++) {
 		action = irq_action[i];
 		if (!action) 
 			continue;
 		len += sprintf(buf+len, "%2d: %10u %c %s",
-			       i, kstat.irqs[0][i],
+			       i, kstat.irqs[cpu][i],
 			       (action->flags & SA_INTERRUPT) ? '+' : ' ',
 			       action->name);
 		for (action=action->next; action; action = action->next) {
@@ -463,16 +503,18 @@ static inline void ack_irq(int irq)
 #elif defined(CONFIG_ALPHA_RUFFIAN)
 	if (irq < 16) {
 		/* Ack PYXIS ISA interrupt.  */
-		*(vulp)PYXIS_INT_REQ = 1 << 7;
-		mb();
+		*(vulp)PYXIS_INT_REQ = 1L << 7; mb();
+		/* ... and read it back to make sure it got written.  */
+		*(vulp)PYXIS_INT_REQ;
 		if (irq > 7) {
 			outb(0x20, 0xa0);
 		}
 		outb(0x20, 0x20);
 	} else {
-		/* Ack PYXIS interrupt.  */
+		/* Ack PYXIS PCI interrupt.  */
 		*(vulp)PYXIS_INT_REQ = (1UL << (irq - 16));
-		mb();
+		/* ... and read it back to make sure it got written.  */
+		*(vulp)PYXIS_INT_REQ;
 	}
 #else
 	if (irq < 16) {
@@ -488,7 +530,7 @@ static inline void ack_irq(int irq)
 		/* on ALCOR/XLT, need to dismiss interrupt via GRU */
 		*(vuip)GRU_INT_CLEAR = 0x80000000; mb();
 		*(vuip)GRU_INT_CLEAR = 0x00000000; mb();
-#endif
+#endif /* ALCOR || XLT */
 	}
 #endif
 }
@@ -556,8 +598,7 @@ int request_irq(unsigned int irq,
 	action->next = NULL;
 	action->dev_id = dev_id;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	*p = action;
 
 	if (!shared)
@@ -585,8 +626,7 @@ void free_irq(unsigned int irq, void *dev_id)
 			continue;
 
 		/* Found it - now free it */
-		save_flags(flags);
-		cli();
+		save_and_cli(flags);
 		*p = action->next;
 		if (!irq[irq_action])
 			mask_irq(IRQ_TO_MASK(irq));
@@ -607,7 +647,277 @@ unsigned int local_irq_count[NR_CPUS];
 unsigned int local_bh_count[NR_CPUS];
 
 #ifdef __SMP__
-#error "Me no hablo Alpha SMP"
+/* Who has global_irq_lock. */
+unsigned char global_irq_holder = NO_PROC_ID;
+
+/* This protects IRQ's. */
+spinlock_t global_irq_lock = SPIN_LOCK_UNLOCKED;
+
+/* Global IRQ locking depth. */
+atomic_t global_irq_count = ATOMIC_INIT(0);
+
+/* This protects BH software state (masks, things like that). */
+atomic_t global_bh_lock = ATOMIC_INIT(0);
+atomic_t global_bh_count = ATOMIC_INIT(0);
+
+static unsigned long previous_irqholder = NO_PROC_ID;
+
+#undef INIT_STUCK
+#define INIT_STUCK 100000000
+
+#undef STUCK
+#define STUCK \
+if (!--stuck) {printk("wait_on_irq CPU#%d stuck at %08lx, waiting for %08lx (local=%d, global=%d)\n", cpu, where, previous_irqholder, local_count, atomic_read(&global_irq_count)); stuck = INIT_STUCK; }
+
+static inline void wait_on_irq(int cpu, unsigned long where)
+{
+	int stuck = INIT_STUCK;
+	int local_count = local_irq_count[cpu];
+
+	/* Are we the only one in an interrupt context? */
+	while (local_count != atomic_read(&global_irq_count)) {
+		/*
+		 * No such luck. Now we need to release the lock,
+		 * _and_ release our interrupt context, because
+		 * otherwise we'd have dead-locks and live-locks
+		 * and other fun things.
+		 */
+		atomic_sub(local_count, &global_irq_count);
+		spin_unlock(&global_irq_lock);
+
+		/*
+		 * Wait for everybody else to go away and release
+		 * their things before trying to get the lock again.
+		 */
+		for (;;) {
+			STUCK;
+			if (atomic_read(&global_irq_count))
+				continue;
+			if (global_irq_lock.lock)
+				continue;
+			if (spin_trylock(&global_irq_lock))
+				break;
+		}
+		atomic_add(local_count, &global_irq_count);
+	}
+}
+
+#undef INIT_STUCK
+#define INIT_STUCK 10000000
+
+#undef STUCK
+#define STUCK \
+if (!--stuck) {printk("get_irqlock stuck at %08lx, waiting for %08lx\n", where, previous_irqholder); stuck = INIT_STUCK;}
+
+static inline void get_irqlock(int cpu, unsigned long where)
+{
+	int stuck = INIT_STUCK;
+
+	if (!spin_trylock(&global_irq_lock)) {
+		/* do we already hold the lock? */
+		if ((unsigned char) cpu == global_irq_holder) {
+#if 0
+			printk("get_irqlock: already held at %08lx\n",
+			       previous_irqholder);
+#endif
+			return;
+		}
+		/* Uhhuh.. Somebody else got it. Wait.. */
+		do {
+			do {
+				STUCK;
+				barrier();
+			} while (global_irq_lock.lock);
+		} while (!spin_trylock(&global_irq_lock));
+	}
+	/*
+	 * Ok, we got the lock bit.
+	 * But that's actually just the easy part.. Now
+	 * we need to make sure that nobody else is running
+	 * in an interrupt context. 
+	 */
+	wait_on_irq(cpu, where);
+
+	/*
+	 * Finally.
+	 */
+	global_irq_holder = cpu;
+	previous_irqholder = where;
+}
+
+void __global_cli(void)
+{
+	int cpu = smp_processor_id();
+	unsigned long where;
+
+        __asm__("mov $26, %0" : "=r" (where));
+	__cli();
+
+	if (!local_irq_count[cpu])
+	  get_irqlock(smp_processor_id(), where);
+}
+
+void __global_sti(void)
+{
+        int cpu = smp_processor_id();
+
+        if (!local_irq_count[cpu])
+	  release_irqlock(smp_processor_id());
+
+	__sti();
+}
+
+#if 0
+unsigned long __global_save_flags(void)
+{
+	return global_irq_holder == (unsigned char) smp_processor_id();
+}
+#endif
+
+void __global_restore_flags(unsigned long flags)
+{
+	if (flags & 1) {
+		__global_cli();
+	} else {
+		/* release_irqlock() */
+		if (global_irq_holder == smp_processor_id()) {
+			global_irq_holder = NO_PROC_ID;
+			spin_unlock(&global_irq_lock);
+		}
+		if (!(flags & 2))
+			__sti();
+	}
+}
+
+#undef INIT_STUCK
+#define INIT_STUCK 200000000
+
+#undef STUCK
+#define STUCK \
+if (!--stuck) {printk("irq_enter stuck (irq=%d, cpu=%d, global=%d)\n",irq,cpu,global_irq_holder); stuck = INIT_STUCK;}
+
+#undef VERBOSE_IRQLOCK_DEBUGGING
+
+void irq_enter(int cpu, int irq)
+{
+#ifdef VERBOSE_IRQLOCK_DEBUGGING
+	extern void smp_show_backtrace_all_cpus(void);
+#endif
+	int stuck = INIT_STUCK;
+
+	hardirq_enter(cpu);
+	barrier();
+	while (global_irq_lock.lock) {
+		if ((unsigned char) cpu == global_irq_holder) {
+			int globl_locked = global_irq_lock.lock;
+			int globl_icount = atomic_read(&global_irq_count);
+			int local_count = local_irq_count[cpu];
+
+			/* It is very important that we load the state variables
+			 * before we do the first call to printk() as printk()
+			 * could end up changing them...
+			 */
+
+#if 0
+			printk("CPU[%d]: BAD! Local IRQ's enabled,"
+			       " global disabled interrupt\n", cpu);
+#endif
+			printk("CPU[%d]: where [%08lx] glocked[%d] gicnt[%d]"
+			       " licnt[%d]\n",
+			       cpu, previous_irqholder, globl_locked,
+			       globl_icount, local_count);
+#ifdef VERBOSE_IRQLOCK_DEBUGGING
+			printk("Performing backtrace on all cpus,"
+			       " write this down!\n");
+			smp_show_backtrace_all_cpus();
+#endif
+			break;
+		}
+		STUCK;
+		barrier();
+	}
+}
+
+void irq_exit(int cpu, int irq)
+{
+	hardirq_exit(cpu);
+	release_irqlock(cpu);
+}
+
+static void show(char * str)
+{
+#if 0
+	int i;
+        unsigned long *stack;
+#endif
+        int cpu = smp_processor_id();
+
+        printk("\n%s, CPU %d:\n", str, cpu);
+        printk("irq:  %d [%d %d]\n",
+	       atomic_read(&global_irq_count), local_irq_count[0],
+	       local_irq_count[1]);
+        printk("bh:   %d [%d %d]\n",
+	       atomic_read(&global_bh_count), local_bh_count[0],
+	       local_bh_count[1]);
+#if 0
+        stack = (unsigned long *) &str;
+        for (i = 40; i ; i--) {
+		unsigned long x = *++stack;
+                if (x > (unsigned long) &init_task_union &&
+		    x < (unsigned long) &vsprintf) {
+			printk("<[%08lx]> ", x);
+                }
+        }
+#endif
+}
+        
+#define MAXCOUNT 100000000
+
+static inline void wait_on_bh(void)
+{
+	int count = MAXCOUNT;
+        do {
+		if (!--count) {
+			show("wait_on_bh");
+                        count = ~0;
+                }
+                /* nothing .. wait for the other bh's to go away */
+        } while (atomic_read(&global_bh_count) != 0);
+}
+
+/*
+ * This is called when we want to synchronize with
+ * bottom half handlers. We need to wait until
+ * no other CPU is executing any bottom half handler.
+ *
+ * Don't wait if we're already running in an interrupt
+ * context or are inside a bh handler.
+ */
+void synchronize_bh(void)
+{
+	if (atomic_read(&global_bh_count)) {
+		int cpu = smp_processor_id();
+                if (!local_irq_count[cpu] && !local_bh_count[cpu]) {
+			wait_on_bh();
+		}
+        }
+}
+
+/* There has to be a better way. */
+void synchronize_irq(void)
+{
+	int cpu = smp_processor_id();
+	int local_count = local_irq_count[cpu];
+
+	if (local_count != atomic_read(&global_irq_count)) {
+		unsigned long flags;
+
+		/* An infamously unpopular approach. */
+		save_and_cli(flags);
+		restore_flags(flags);
+	}
+}
+
 #else
 #define irq_enter(cpu, irq)	(++local_irq_count[cpu])
 #define irq_exit(cpu, irq)	(--local_irq_count[cpu])
@@ -647,7 +957,7 @@ static inline void handle_irq(int irq, struct pt_regs * regs)
 	int cpu = smp_processor_id();
 
 	irq_enter(cpu, irq);
-	kstat.irqs[0][irq] += 1;
+	kstat.irqs[cpu][irq] += 1;
 	if (!action) {
 		unexpected_irq(irq, regs);
 	} else {
@@ -670,8 +980,9 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 	}
 
 	irq_enter(cpu, irq);
-	kstat.irqs[0][irq] += 1;
+	kstat.irqs[cpu][irq] += 1;
 	action = irq_action[irq];
+
 	/*
 	 * For normal interrupts, we mask it out, and then ACK it.
 	 * This way another (more timing-critical) interrupt can
@@ -691,6 +1002,10 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 			action = action->next;
 		} while (action);
 		unmask_irq(ack);
+	} else {
+#if 1
+		printk("device_interrupt: unexpected interrupt %d\n", irq);
+#endif
 	}
 	irq_exit(cpu, irq);
 }
@@ -711,6 +1026,8 @@ static inline void isa_device_interrupt(unsigned long vector,
 #	define IACK_SC	CIA_IACK_SC
 #elif defined(CONFIG_ALPHA_PYXIS)
 #	define IACK_SC	PYXIS_IACK_SC
+#elif defined(CONFIG_ALPHA_TSUNAMI)
+#	define IACK_SC	TSUNAMI_PCI0_IACK_SC
 #else
 	/*
 	 * This is bogus but necessary to get it to compile
@@ -729,7 +1046,7 @@ static inline void isa_device_interrupt(unsigned long vector,
 	 * interrupt that is pending.  The PALcode sets up the
 	 * interrupts vectors such that irq level L generates vector L.
 	 */
-	j = *(volatile int *) IACK_SC;
+	j = *(vuip) IACK_SC;
 	j &= 0xff;
 	if (j == 7) {
 		if (!(inb(0x20) & 0x80)) {
@@ -775,10 +1092,9 @@ alcor_and_xlt_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	unsigned int i;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 
-	/* read the interrupt summary register of the GRU */
+	/* Read the interrupt summary register of the GRU */
 	pld = (*(vuip)GRU_INT_REQ) & GRU_INT_REQ_BITS;
 
 #if 0
@@ -810,10 +1126,9 @@ cabriolet_and_eb66p_device_interrupt(unsigned long vector,
 	unsigned int i;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 
-	/* read the interrupt summary registers */
+	/* Read the interrupt summary registers */
 	pld = inb(0x804) | (inb(0x805) << 8) | (inb(0x806) << 16);
 
 #if 0
@@ -843,10 +1158,9 @@ mikasa_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	unsigned int i;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 
-	/* read the interrupt summary registers */
+	/* Read the interrupt summary registers */
 	pld = (((unsigned long) (~inw(0x534)) & 0x0000ffffUL) << 16) |
 		(((unsigned long) inb(0xa0))  <<  8) |
 		((unsigned long) inb(0x20));
@@ -878,10 +1192,9 @@ eb66_and_eb64p_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	unsigned int i;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 
-	/* read the interrupt summary registers */
+	/* Read the interrupt summary registers */
 	pld = inb(0x26) | (inb(0x27) << 8);
 	/*
 	 * Now, for every possible bit set, work through
@@ -909,30 +1222,34 @@ miata_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	unsigned int i;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 
-	/* read the interrupt summary register of PYXIS */
-	pld = (*(vulp)PYXIS_INT_REQ);
+	/* Read the interrupt summary register of PYXIS */
+	pld = *(vulp)PYXIS_INT_REQ;
 
 #if 0
 	printk("[0x%08lx/0x%08lx/0x%04x]", pld,
 	       *(vulp)PYXIS_INT_MASK, inb(0x20) | (inb(0xA0) << 8));
 #endif
 
-	/* For now, AND off any bits we are not interested in.  */
-#if defined(CONFIG_ALPHA_MIATA)
-	/* HALT (2), timer (6), ISA Bridge (7), 21142/3 (8),
-	   then all the PCI slots/INTXs (12-31).  */
+#ifdef CONFIG_ALPHA_MIATA
+	/*
+	 * For now, AND off any bits we are not interested in:
+	 *   HALT (2), timer (6), ISA Bridge (7), 21142/3 (8)
+	 * then all the PCI slots/INTXs (12-31).
+	 */
 	/* Maybe HALT should only be used for SRM console boots? */
 	pld &= 0x00000000fffff1c4UL;
 #endif
-#if defined(CONFIG_ALPHA_SX164)
-	/* HALT (2), timer (6), ISA Bridge (7),
-	   then all the PCI slots/INTXs (8-23).  */
-	/* HALT should only be used for SRM console boots.  */
+#ifdef CONFIG_ALPHA_SX164
+	/*
+	 * For now, AND off any bits we are not interested in:
+	 *  HALT (2), timer (6), ISA Bridge (7)
+	 * then all the PCI slots/INTXs (8-23)
+	 */
+	/* Maybe HALT should only be used for SRM console boots? */
 	pld &= 0x0000000000ffffc0UL;
-#endif
+#endif /* SX164 */
 
 	/*
 	 * Now for every possible bit set, work through them and call
@@ -962,10 +1279,9 @@ noritake_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	unsigned int i;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 
-	/* read the interrupt summary registers of NORITAKE */
+	/* Read the interrupt summary registers of NORITAKE */
 	pld = ((unsigned long) inw(0x54c) << 32) |
 		((unsigned long) inw(0x54a) << 16) |
 		((unsigned long) inb(0xa0)  <<  8) |
@@ -991,16 +1307,76 @@ noritake_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	restore_flags(flags);
 }
 
+#if defined(CONFIG_ALPHA_DP264)
+/* we have to conditionally compile this because of TSUNAMI_xxx symbols */
+static inline void dp264_device_interrupt(unsigned long vector,
+                                                  struct pt_regs * regs)
+{
+        unsigned long pld, tmp;
+        unsigned int i;
+        unsigned long flags;
+
+	__save_and_cli(flags);
+
+        /* Read the interrupt summary register of TSUNAMI */
+        pld = (*(vulp)TSUNAMI_CSR_DIR0);
+
+#if 0
+        printk("[0x%08lx/0x%08lx/0x%04x]", pld,
+	       *(vulp)TSUNAMI_CSR_DIM0,
+	       inb(0x20) | (inb(0xA0) << 8));
+#endif
+
+        /*
+         * Now for every possible bit set, work through them and call
+         * the appropriate interrupt handler.
+         */
+        while (pld) {
+                i = ffz(~pld);
+                pld &= pld - 1; /* clear least bit set */
+                if (i == 55) {
+                        isa_device_interrupt(vector, regs);
+		} else { /* if not timer int */
+                        device_interrupt(16 + i, 16 + i, regs);
+                }
+#if 0
+		*(vulp)TSUNAMI_CSR_DIR0 = 1UL << i; mb();
+		tmp = *(vulp)TSUNAMI_CSR_DIR0;
+#endif
+        }
+	__restore_flags(flags);
+}
+#endif /* DP264 */
+
+#if defined(CONFIG_ALPHA_RAWHIDE)
+/* we have to conditionally compile this because of MCPCIA_xxx symbols */
+static inline void rawhide_device_interrupt(unsigned long vector,
+                                                  struct pt_regs * regs)
+{
+#if 0
+        unsigned long pld;
+        unsigned int i;
+        unsigned long flags;
+
+	__save_and_cli(flags);
+
+	/* PLACEHOLDER, perhaps never used if we always do SRM */
+
+	__restore_flags(flags);
+#endif
+}
+#endif /* RAWHIDE */
+
 #if defined(CONFIG_ALPHA_RUFFIAN)
 static inline void
 ruffian_device_interrupt(unsigned long vector, struct pt_regs *regs)
+
 {
 	unsigned long pld;
 	unsigned int i;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+        save_and_cli(flags);
 
 	/* Read the interrupt summary register of PYXIS */
 	pld = *(vulp)PYXIS_INT_REQ;
@@ -1010,16 +1386,16 @@ ruffian_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	 * then all the PCI slots/INTXs (12-31) 
 	 * flash(5) :DWH:
 	 */
-	pld &= 0x00000000ffffff9fUL;
+        pld &= 0x00000000ffffff9fUL;/* was ffff7f */
 
 	/*
 	 * Now for every possible bit set, work through them and call
 	 * the appropriate interrupt handler.
 	 */
+
 	while (pld) {
 		i = ffz(~pld);
 		pld &= pld - 1; /* clear least bit set */
-
 		if (i == 7) {
 			/* Copy this bit from isa_device_interrupt cause
 			   we need to hook into int 0 for the timer.  I
@@ -1041,18 +1417,56 @@ ruffian_device_interrupt(unsigned long vector, struct pt_regs *regs)
 			} else {
 				device_interrupt(j, j, regs);
 			}
-		} else {
+                } else { /* if not timer int */
 			device_interrupt(16 + i, 16 + i, regs);
 		}
 
-		*(vulp)PYXIS_INT_REQ = 1UL << i;
-		mb();
-		*(vulp)PYXIS_INT_REQ;
+                *(vulp)PYXIS_INT_REQ = 1UL << i; mb();
+                *(vulp)PYXIS_INT_REQ; /* read to force the write */
 	}
-
 	restore_flags(flags);
 }
 #endif /* RUFFIAN */
+
+static inline void takara_device_interrupt(unsigned long vector,
+					   struct pt_regs * regs)
+{
+	unsigned long flags;
+	unsigned intstatus;
+
+	save_and_cli(flags);
+
+	/*
+	 * The PALcode will have passed us vectors 0x800 or 0x810,
+	 * which are fairly arbitrary values and serve only to tell
+	 * us whether an interrupt has come in on IRQ0 or IRQ1. If
+	 * it's IRQ1 it's a PCI interrupt; if it's IRQ0, it's
+	 * probably ISA, but PCI interrupts can come through IRQ0
+	 * as well if the interrupt controller isn't in accelerated
+	 * mode.
+	 *
+	 * OTOH, the accelerator thing doesn't seem to be working
+	 * overly well, so what we'll do instead is try directly
+	 * examining the Master Interrupt Register to see if it's a
+	 * PCI interrupt, and if _not_ then we'll pass it on to the
+	 * ISA handler.
+	 */
+
+	intstatus = inw(0x500) & 15;
+	if (intstatus) {
+		/*
+		 * This is a PCI interrupt. Check each bit and
+		 * despatch an interrupt if it's set.
+		 */
+		if (intstatus & 8) device_interrupt(16+3, 16+3, regs);
+		if (intstatus & 4) device_interrupt(16+2, 16+2, regs);
+		if (intstatus & 2) device_interrupt(16+1, 16+1, regs);
+		if (intstatus & 1) device_interrupt(16+0, 16+0, regs);
+	} else
+		isa_device_interrupt (vector, regs);
+
+	restore_flags(flags);
+}
 
 #endif /* CONFIG_PCI */
 
@@ -1085,9 +1499,11 @@ srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	int irq, ack;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	__save_and_cli(flags);
 
+#ifdef __SMP__
+if (smp_processor_id()) printk("srm_device_interrupt on other CPU\n");
+#endif
 
 	ack = irq = (vector - 0x800) >> 4;
 
@@ -1131,9 +1547,9 @@ srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 
 #ifdef CONFIG_ALPHA_NORITAKE
 	/*
-	 * I really hate to do this, but the NORITAKE SRM console reports
-	 *  PCI vectors *lower* than I expected from the bit numbering in
-	 *  the documentation.
+	 * I really hate to do this, too, but the NORITAKE SRM console also
+	 *  reports PCI vectors *lower* than I expected from the bit numbers
+	 *  in the documentation.
 	 * But I really don't want to change the fixup code for allocation
 	 *  of IRQs, nor the irq_mask maintenance stuff, both of which look
 	 *  nice and clean now.
@@ -1153,9 +1569,41 @@ srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 #endif
 #endif /* CONFIG_ALPHA_SABLE */
 
+#ifdef CONFIG_ALPHA_DP264
+        /*
+         * the DP264 SRM console reports PCI interrupts with a vector
+	 * 0x100 *higher* than one might expect, as PCI IRQ 0 (ie bit 0)
+	 * shows up as IRQ 16, etc, etc. We adjust it down by 16 to have
+	 * it line up with the actual bit numbers from the DIM registers,
+	 * which is how we manage the interrupts/mask. Sigh...
+         */
+        if (irq >= 32)
+                ack = irq = irq - 16;
+#endif /* DP264 */
+
+#ifdef CONFIG_ALPHA_RAWHIDE
+        /*
+         * the RAWHIDE SRM console reports PCI interrupts with a vector
+	 * 0x80 *higher* than one might expect, as PCI IRQ 0 (ie bit 0)
+	 * shows up as IRQ 24, etc, etc. We adjust it down by 8 to have
+	 * it line up with the actual bit numbers from the REQ registers,
+	 * which is how we manage the interrupts/mask. Sigh...
+	 *
+	 * also, PCI #1 interrupts are offset some more... :-(
+         */
+	if (irq == 52)
+	  ack = irq = 56; /* SCSI on PCI 1 is special */
+	else {
+	  if (irq >= 24) /* adjust all PCI interrupts down 8 */
+	    ack = irq = irq - 8;
+	  if (irq >= 48) /* adjust PCI bus 1 interrupts down another 8 */
+	    ack = irq = irq - 8;
+	}
+#endif /* RAWHIDE */
+
 	device_interrupt(irq, ack, regs);
 
-	restore_flags(flags);
+	__restore_flags(flags);
 }
 
 /*
@@ -1218,6 +1666,10 @@ extern void pyxis_machine_check(unsigned long vector, unsigned long la,
 				struct pt_regs * regs);
 extern void t2_machine_check(unsigned long vector, unsigned long la,
 			     struct pt_regs * regs);
+extern void tsunami_machine_check(unsigned long vector, unsigned long la,
+				  struct pt_regs * regs);
+extern void mcpcia_machine_check(unsigned long vector, unsigned long la,
+				 struct pt_regs * regs);
 
 static void 
 machine_check(unsigned long vector, unsigned long la, struct pt_regs *regs)
@@ -1232,6 +1684,10 @@ machine_check(unsigned long vector, unsigned long la, struct pt_regs *regs)
 	pyxis_machine_check(vector, la, regs);
 #elif defined(CONFIG_ALPHA_T2)
 	t2_machine_check(vector, la, regs);
+#elif defined(CONFIG_ALPHA_TSUNAMI)
+	tsunami_machine_check(vector, la, regs);
+#elif defined(CONFIG_ALPHA_MCPCIA)
+	mcpcia_machine_check(vector, la, regs);
 #else
 	printk("Machine check\n");
 #endif
@@ -1244,7 +1700,14 @@ do_entInt(unsigned long type, unsigned long vector, unsigned long la_ptr,
 {
 	switch (type) {
 	case 0:
+#ifdef __SMP__
+/*		irq_enter(smp_processor_id(), 0); ??????? */
+		handle_ipi(&regs);
+/*		irq_exit(smp_processor_id(), 0);  ??????? */
+		return;
+#else /* __SMP__ */
 		printk("Interprocessor interrupt? You must be kidding\n");
+#endif /* __SMP__ */
 		break;
 	case 1:
 		handle_irq(RTC_IRQ, &regs);
@@ -1253,23 +1716,38 @@ do_entInt(unsigned long type, unsigned long vector, unsigned long la_ptr,
 		machine_check(vector, la_ptr, &regs);
 		return;
 	case 3:
-#if defined(CONFIG_ALPHA_JENSEN) || defined(CONFIG_ALPHA_NONAME) || \
-    defined(CONFIG_ALPHA_P2K) || defined(CONFIG_ALPHA_SRM)
+#if defined(CONFIG_ALPHA_JENSEN) || \
+    defined(CONFIG_ALPHA_NONAME) || \
+    defined(CONFIG_ALPHA_P2K)    || \
+    defined(CONFIG_ALPHA_SRM)
 		srm_device_interrupt(vector, &regs);
-#elif defined(CONFIG_ALPHA_MIATA) || defined(CONFIG_ALPHA_SX164)
+#elif defined(CONFIG_ALPHA_MIATA) || \
+    defined(CONFIG_ALPHA_SX164)
 		miata_device_interrupt(vector, &regs);
 #elif defined(CONFIG_ALPHA_NORITAKE)
 		noritake_device_interrupt(vector, &regs);
-#elif defined(CONFIG_ALPHA_ALCOR) || defined(CONFIG_ALPHA_XLT)
+#elif defined(CONFIG_ALPHA_ALCOR) || \
+      defined(CONFIG_ALPHA_XLT)
 		alcor_and_xlt_device_interrupt(vector, &regs);
-#elif defined(CONFIG_ALPHA_RUFFIAN)
-		ruffian_device_interrupt(vector, &regs);
+#elif defined(CONFIG_ALPHA_CABRIOLET) || \
+      defined(CONFIG_ALPHA_EB66P)     || \
+      defined(CONFIG_ALPHA_EB164)     || \
+      defined(CONFIG_ALPHA_PC164)     || \
+      defined(CONFIG_ALPHA_LX164)
+		cabriolet_and_eb66p_device_interrupt(vector, &regs);
 #elif defined(CONFIG_ALPHA_MIKASA)
 		mikasa_device_interrupt(vector, &regs);
-#elif NR_IRQS == 33
-		cabriolet_and_eb66p_device_interrupt(vector, &regs);
-#elif NR_IRQS == 32
+#elif defined(CONFIG_ALPHA_EB66) || \
+      defined(CONFIG_ALPHA_EB64P)
 		eb66_and_eb64p_device_interrupt(vector, &regs);
+#elif defined(CONFIG_ALPHA_RUFFIAN)
+		ruffian_device_interrupt(vector, &regs);
+#elif defined(CONFIG_ALPHA_DP264)
+		dp264_device_interrupt(vector, &regs);
+#elif defined(CONFIG_ALPHA_RAWHIDE)
+		rawhide_device_interrupt(vector, &regs);
+#elif defined(CONFIG_ALPHA_TAKARA)
+		takara_device_interrupt(vector, &regs);
 #elif NR_IRQS == 16
 		isa_device_interrupt(vector, &regs);
 #endif
@@ -1293,22 +1771,21 @@ static inline void sable_init_IRQ(void)
 	outb(0x44, 0x535);		/* enable cascades in master */
 }
 
-#ifdef CONFIG_ALPHA_SX164
+#if defined(CONFIG_ALPHA_SX164)
 static inline void sx164_init_IRQ(void)
 {
+#if !defined(CONFIG_ALPHA_SRM)
 	/* note invert on MASK bits */
 	*(vulp)PYXIS_INT_MASK  = ~((long)irq_mask >> 16); mb();
-#if 0
-	*(vulp)PYXIS_INT_HILO  = 0x000000B2UL; mb(); /* ISA/NMI HI */
-	*(vulp)PYXIS_RT_COUNT  = 0UL; mb(); /* clear count */
-#endif
+        *(vulp)PYXIS_INT_MASK;
+#endif /* !SRM */
 	enable_irq(16 + 6);	/* enable timer */
 	enable_irq(16 + 7);	/* enable ISA PIC cascade */
 	enable_irq(2);		/* enable cascade */
 }
 #endif /* SX164 */
 
-#ifdef CONFIG_ALPHA_RUFFIAN
+#if defined(CONFIG_ALPHA_RUFFIAN)
 static inline void ruffian_init_IRQ(void)
 {
 	/* invert 6&7 for i82371 */
@@ -1343,19 +1820,19 @@ static inline void ruffian_init_IRQ(void)
 }
 #endif /* RUFFIAN */
 
-
 #ifdef CONFIG_ALPHA_MIATA
 static inline void miata_init_IRQ(void)
 {
 	/* note invert on MASK bits */
 	*(vulp)PYXIS_INT_MASK = ~((long)irq_mask >> 16); mb(); /* invert */
+#if 0
+	/* these break on MiataGL so we'll try not to do it at all */
 	*(vulp)PYXIS_INT_HILO = 0x000000B2UL; mb();	/* ISA/NMI HI */
 	*(vulp)PYXIS_RT_COUNT = 0UL; mb();		/* clear count */
-	*(vulp)PYXIS_INT_REQ  = 0x4000000000000000UL; mb(); /* clear upper timer */
-#if 0
-	*(vulp)PYXIS_INT_ROUTE = 0UL; mb();		/* all are level */
-	*(vulp)PYXIS_INT_CNFG  = 0UL; mb();		/* all clear */
 #endif
+	/* clear upper timer */
+	*(vulp)PYXIS_INT_REQ  = 0x4000000000000000UL; mb();
+
 	enable_irq(16 + 2);	/* enable HALT switch - SRM only? */
 	enable_irq(16 + 6);     /* enable timer */
 	enable_irq(16 + 7);     /* enable ISA PIC cascade */
@@ -1381,7 +1858,7 @@ static inline void alcor_and_xlt_init_IRQ(void)
 	enable_irq(16 + 31);		/* enable (E)ISA PIC cascade */
 	enable_irq(2);			/* enable cascade */
 }
-#endif
+#endif /* ALCOR || XLT */
 
 static inline void mikasa_init_IRQ(void)
 {
@@ -1389,9 +1866,56 @@ static inline void mikasa_init_IRQ(void)
 	enable_irq(2);			/* enable cascade */
 }
 
-static inline void init_IRQ_33(void)
+#if defined(CONFIG_ALPHA_DP264)
+static inline void dp264_init_IRQ(void)
 {
+	/* note invert on MASK bits */
+        *(vulp)TSUNAMI_CSR_DIM0 =
+	      ~(irq_mask) & ~0x0000000000000000UL; mb();
+        *(vulp)TSUNAMI_CSR_DIM0;
+        enable_irq(55);     /* enable CYPRESS interrupt controller (ISA) */
+	enable_irq(2);
+}
+#endif /* DP264 */
+
+#if defined(CONFIG_ALPHA_RAWHIDE)
+static inline void rawhide_init_IRQ(void)
+{
+	/* HACK ALERT! only PCI busses 0 and 1 are used currently,
+	   and routing is only to CPU #1*/
+
+	*(vuip)MCPCIA_INT_MASK0(0) =
+	    (~((irq_mask) >> 16) & 0x00ffffffU) | 0x00ff0000U; mb();
+	/* ... and read it back to make sure it got written.  */
+	*(vuip)MCPCIA_INT_MASK0(0);
+
+	*(vuip)MCPCIA_INT_MASK0(1) =
+	    (~((irq_mask) >> 40) & 0x00ffffffU) | 0x00fe0000U; mb();
+	/* ... and read it back to make sure it got written.  */
+	*(vuip)MCPCIA_INT_MASK0(1);
+	enable_irq(2);
+}
+#endif /* RAWHIDE */
+
+static inline void takara_init_IRQ(void)
+{
+	unsigned int ctlreg = inl(0x500);
+
+	ctlreg &= ~0x8000;     /* return to non-accelerated mode */
+	outw(ctlreg >> 16, 0x502);
+	outw(ctlreg & 0xFFFF, 0x500);
+	ctlreg = 0x05107c00;   /* enable the PCI interrupt register */
+	printk("Setting to 0x%08x\n", ctlreg);
+	outw(ctlreg >> 16, 0x502);
+	outw(ctlreg & 0xFFFF, 0x500);
+	enable_irq(2);
+}
+
+static inline void init_IRQ_35(void)
+{
+#if !defined(CONFIG_ALPHA_SRM)
 	outl(irq_mask >> 16, 0x804);
+#endif /* !SRM */
 	enable_irq(16 + 4);		/* enable SIO cascade */
 	enable_irq(2);			/* enable cascade */
 }
@@ -1413,13 +1937,20 @@ void __init
 init_IRQ(void)
 {
 	wrent(entInt, 0);
-	dma_outb(0, DMA1_RESET_REG);
-	dma_outb(0, DMA2_RESET_REG);
-#ifndef CONFIG_ALPHA_SX164
-	dma_outb(0, DMA1_CLR_MASK_REG);
-	/* We need to figure out why this fails on the SX164.  */
-	dma_outb(0, DMA2_CLR_MASK_REG);
-#endif
+
+/* FIXME FIXME FIXME FIXME FIXME */
+#if !defined(CONFIG_ALPHA_DP264)
+	/* we need to figure out why these fail on the DP264 */
+	outb(0, DMA1_RESET_REG);
+	outb(0, DMA2_RESET_REG);
+#endif /* !DP264 */
+/* FIXME FIXME FIXME FIXME FIXME */
+#if !defined(CONFIG_ALPHA_SX164) && !defined(CONFIG_ALPHA_DP264)
+	outb(0, DMA1_CLR_MASK_REG);
+	/* we need to figure out why this fails on the SX164 */
+	outb(0, DMA2_CLR_MASK_REG);
+#endif /* !SX164 && !DP264 */
+/* end FIXMEs */
 
 #if defined(CONFIG_ALPHA_SABLE)
 	sable_init_IRQ();
@@ -1431,17 +1962,21 @@ init_IRQ(void)
 	noritake_init_IRQ();
 #elif defined(CONFIG_ALPHA_ALCOR) || defined(CONFIG_ALPHA_XLT)
 	alcor_and_xlt_init_IRQ();
-#elif (defined(CONFIG_ALPHA_PC164) || defined(CONFIG_ALPHA_LX164)) \
-	&& defined(CONFIG_ALPHA_SRM)
-	/* Disable all the PCI interrupts?  Otherwise, everthing was
-	   done by SRM already.  */
 #elif defined(CONFIG_ALPHA_MIKASA)
 	mikasa_init_IRQ();
+#elif defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P) || \
+      defined(CONFIG_ALPHA_PC164)     || defined(CONFIG_ALPHA_LX164) || \
+      defined(CONFIG_ALPHA_EB164)
+	init_IRQ_35();
 #elif defined(CONFIG_ALPHA_RUFFIAN)
 	ruffian_init_IRQ();
-#elif NR_IRQS == 33
-	init_IRQ_33();
-#elif NR_IRQS == 32
+#elif defined(CONFIG_ALPHA_DP264)
+        dp264_init_IRQ();
+#elif defined(CONFIG_ALPHA_RAWHIDE)
+        rawhide_init_IRQ();
+#elif defined(CONFIG_ALPHA_TAKARA)
+        takara_init_IRQ();
+#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
 	init_IRQ_32();
 #elif NR_IRQS == 16
 	init_IRQ_16();

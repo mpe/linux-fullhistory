@@ -496,6 +496,25 @@ static void idedisk_pre_reset (ide_drive_t *drive)
 		drive->special.b.set_multmode = 1;
 }
 
+static int smart_enable(ide_drive_t *drive)
+{
+	return ide_wait_cmd(drive, WIN_SMART, 0, SMART_ENABLE, 0, NULL);
+}
+
+#ifdef CONFIG_PROC_FS
+
+static int get_smart_values(ide_drive_t *drive, byte *buf)
+{
+	(void) smart_enable(drive);
+	return ide_wait_cmd(drive, WIN_SMART, 0, SMART_READ_VALUES, 1, buf);
+}
+
+static int get_smart_thresholds(ide_drive_t *drive, byte *buf)
+{
+	(void) smart_enable(drive);
+	return ide_wait_cmd(drive, WIN_SMART, 0, SMART_READ_THRESHOLDS, 1, buf);
+}
+
 static int proc_idedisk_read_cache
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
@@ -508,23 +527,6 @@ static int proc_idedisk_read_cache
 	else
 		len = sprintf(out,"(none)\n");
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
-}
-
-static int smart_enable(ide_drive_t *drive)
-{
-	return ide_wait_cmd(drive, WIN_SMART, 0, SMART_ENABLE, 0, NULL);
-}
-
-static int get_smart_values(ide_drive_t *drive, byte *buf)
-{
-	(void) smart_enable(drive);
-	return ide_wait_cmd(drive, WIN_SMART, 0, SMART_READ_VALUES, 1, buf);
-}
-
-static int get_smart_thresholds(ide_drive_t *drive, byte *buf)
-{
-	(void) smart_enable(drive);
-	return ide_wait_cmd(drive, WIN_SMART, 0, SMART_READ_THRESHOLDS, 1, buf);
 }
 
 static int proc_idedisk_read_smart_thresholds
@@ -566,12 +568,18 @@ static int proc_idedisk_read_smart_values
 }
 
 static ide_proc_entry_t idedisk_proc[] = {
-	{ "cache", proc_idedisk_read_cache, NULL },
-	{ "geometry", proc_ide_read_geometry, NULL },
-	{ "smart_values", proc_idedisk_read_smart_values, NULL },
-	{ "smart_thresholds", proc_idedisk_read_smart_thresholds, NULL },
-	{ NULL, NULL, NULL }
+	{ "cache",		S_IFREG|S_IRUGO,	proc_idedisk_read_cache,		NULL },
+	{ "geometry",		S_IFREG|S_IRUGO,	proc_ide_read_geometry,			NULL },
+	{ "smart_values",	S_IFREG|S_IRUSR,	proc_idedisk_read_smart_values,		NULL },
+	{ "smart_thresholds",	S_IFREG|S_IRUSR,	proc_idedisk_read_smart_thresholds,	NULL },
+	{ NULL, 0, NULL, NULL }
 };
+
+#else
+
+#define	idedisk_proc	NULL
+
+#endif	/* CONFIG_PROC_FS */
 
 static int set_multcount(ide_drive_t *drive, int arg)
 {

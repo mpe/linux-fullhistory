@@ -39,12 +39,53 @@
  */
 struct el_common {
 	unsigned int	size;		/* size in bytes of logout area */
-	int		sbz1	: 31;	/* should be zero */
-	char		retry	:  1;	/* retry flag */
+	int		sbz1	: 30;	/* should be zero */
+	int		err2	:  1;	/* second error */
+	int		retry	:  1;	/* retry flag */
 	unsigned int	proc_offset;	/* processor-specific offset */
 	unsigned int	sys_offset;	/* system-specific offset */
 	unsigned long	code;		/* machine check code */
 };
+
+/* Machine Check Frame for uncorrectable errors (Large format)
+ *      --- This is used to log uncorrectable errors such as
+ *          double bit ECC errors.
+ *      --- These errors are detected by both processor and systems.
+ */
+struct el_common_EV5_uncorrectable_mcheck {
+        unsigned long   shadow[8];        /* Shadow reg. 8-14, 25           */
+        unsigned long   paltemp[24];      /* PAL TEMP REGS.                 */
+        unsigned long   exc_addr;         /* Address of excepting instruction*/
+        unsigned long   exc_sum;          /* Summary of arithmetic traps.   */
+        unsigned long   exc_mask;         /* Exception mask (from exc_sum). */
+        unsigned long   pal_base;         /* Base address for PALcode.      */
+        unsigned long   isr;              /* Interrupt Status Reg.          */
+        unsigned long   icsr;             /* CURRENT SETUP OF EV5 IBOX      */
+        unsigned long   ic_perr_stat;     /* I-CACHE Reg. <11> set Data parity
+                                                         <12> set TAG parity*/
+        unsigned long   dc_perr_stat;     /* D-CACHE error Reg. Bits set to 1:
+                                                     <2> Data error in bank 0
+                                                     <3> Data error in bank 1
+                                                     <4> Tag error in bank 0
+                                                     <5> Tag error in bank 1 */
+        unsigned long   va;               /* Effective VA of fault or miss. */
+        unsigned long   mm_stat;          /* Holds the reason for D-stream 
+                                             fault or D-cache parity errors */
+        unsigned long   sc_addr;          /* Address that was being accessed
+                                             when EV5 detected Secondary cache
+                                             failure.                 */
+        unsigned long   sc_stat;          /* Helps determine if the error was
+                                             TAG/Data parity(Secondary Cache)*/
+        unsigned long   bc_tag_addr;      /* Contents of EV5 BC_TAG_ADDR    */
+        unsigned long   ei_addr;          /* Physical address of any transfer
+                                             that is logged in EV5 EI_STAT */
+        unsigned long   fill_syndrome;    /* For correcting ECC errors.     */
+        unsigned long   ei_stat;          /* Helps identify reason of any 
+                                             processor uncorrectable error
+                                             at its external interface.     */
+        unsigned long   ld_lock;          /* Contents of EV5 LD_LOCK register*/
+};
+
 
 extern void wrent(void *, unsigned long);
 extern void wrkgp(unsigned long);
@@ -96,6 +137,7 @@ __asm__ __volatile__ ("call_pal %0" : : "i" (PAL_draina) : "memory")
 	r0; \
 })
 
+#ifdef THE_OLD_VERSION
 #define setipl(ipl) \
 do { \
 	register unsigned long __r16 __asm__("$16") = (ipl); \
@@ -117,6 +159,27 @@ do { \
 		:"$1", "$22", "$23", "$24", "$25", "memory"); \
 	__r0; \
 })
+#else
+#define setipl(ipl) \
+do { \
+	__asm__ __volatile__( \
+		"mov %0,$16; call_pal %1" \
+		: /* no output */ \
+		:"i,r" (ipl), "i,i" (PAL_swpipl) \
+		:"$0", "$1", "$16", "$22", "$23", "$24", "$25", "memory"); \
+} while (0)
+
+#define swpipl(ipl) \
+({ \
+	register unsigned long __r0 __asm__("$0"); \
+	__asm__ __volatile__( \
+		"mov %0,$16; call_pal %1" \
+		: /* no output (bound to the template) */ \
+		: "i,r" (ipl), "i,i" (PAL_swpipl) \
+		: "$0", "$1", "$16", "$22", "$23", "$24", "$25", "memory"); \
+	__r0; \
+})
+#endif
 
 #define __cli()			setipl(7)
 #define __sti()			setipl(0)
@@ -124,11 +187,36 @@ do { \
 #define __save_and_cli(flags)	do { (flags) = swpipl(7); } while (0)
 #define __restore_flags(flags)	setipl(flags)
 
+#ifdef __SMP__
+
+extern unsigned char global_irq_holder;
+
+#define save_flags(x) \
+do { \
+	(x) = ((global_irq_holder == (unsigned char) smp_processor_id()) \
+		? 1 \
+		: ((getipl() & 7) ? 2 : 0)); \
+} while (0)
+
+#define save_and_cli(flags)   do { save_flags(flags); cli(); } while(0)
+
+extern void __global_cli(void);
+extern void __global_sti(void);
+extern void __global_restore_flags(unsigned long flags);
+
+#define cli()                   __global_cli()
+#define sti()                   __global_sti()
+#define restore_flags(flags)    __global_restore_flags(flags)
+
+#else /* __SMP__ */
+
 #define cli()			setipl(7)
 #define sti()			setipl(0)
 #define save_flags(flags)	do { (flags) = getipl(); } while (0)
 #define save_and_cli(flags)	do { (flags) = swpipl(7); } while (0)
 #define restore_flags(flags)	setipl(flags)
+
+#endif /* __SMP__ */
 
 /*
  * TB routines..

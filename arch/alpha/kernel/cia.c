@@ -6,6 +6,7 @@
  *
  */
 #include <linux/kernel.h>
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
@@ -17,13 +18,14 @@
 #include <asm/ptrace.h>
 #include <asm/mmu_context.h>
 
-/* NOTE: Herein are back-to-back mb insns.  They are magic.
-   A plausible explanation is that the i/o controler does not properly
-   handle the system transaction.  Another involves timing.  Ho hum.  */
+/*
+ * NOTE: Herein lie back-to-back mb instructions.  They are magic. 
+ * One plausible explanation is that the i/o controller does not properly
+ * handle the system transaction.  Another involves timing.  Ho hum.
+ */
 
 extern struct hwrpb_struct *hwrpb;
 extern asmlinkage void wrmces(unsigned long mces);
-extern int alpha_sys_type;
 
 /*
  * Machine check reasons.  Defined according to PALcode sources
@@ -56,13 +58,17 @@ extern int alpha_sys_type;
 # define DBGC(args)
 #endif
 
-#define vulp	volatile unsigned long *
 #define vuip	volatile unsigned int  *
 
 static volatile unsigned int CIA_mcheck_expected = 0;
 static volatile unsigned int CIA_mcheck_taken = 0;
 static unsigned int CIA_jd;
 
+#ifdef CONFIG_ALPHA_SRM_SETUP
+unsigned int CIA_DMA_WIN_BASE = CIA_DMA_WIN_BASE_DEFAULT;
+unsigned int CIA_DMA_WIN_SIZE = CIA_DMA_WIN_SIZE_DEFAULT;
+unsigned long cia_sm_base_r1, cia_sm_base_r2, cia_sm_base_r3;
+#endif /* SRM_SETUP */
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -271,7 +277,7 @@ static void conf_write(unsigned long addr, unsigned int value,
 		}
 
 		/* reset error status: */
-		*(vulp)CIA_IOC_CIA_ERR = stat0;
+		*(vuip)CIA_IOC_CIA_ERR = stat0;
 		mb();
 		wrmces(0x7);			/* reset machine check */
 		value = 0xffffffff;
@@ -442,6 +448,18 @@ unsigned long cia_init(unsigned long mem_start, unsigned long mem_end)
 		printk("CIA_init: CIA_STAT was 0x%x\n", temp);
 		temp = *(vuip)CIA_IOC_MCR; mb();
 		printk("CIA_init: CIA_MCR was 0x%x\n", temp);
+		temp = *(vuip)CIA_IOC_CIA_CTRL; mb();
+		printk("CIA_init: CIA_CTRL was 0x%x\n", temp);
+		temp = *(vuip)CIA_IOC_ERR_MASK; mb();
+		printk("CIA_init: CIA_ERR_MASK was 0x%x\n", temp);
+		temp = *((vuip)CIA_IOC_PCI_W0_BASE); mb();
+		printk("CIA_init: W0_BASE was 0x%x\n", temp);
+		temp = *((vuip)CIA_IOC_PCI_W1_BASE); mb();
+		printk("CIA_init: W1_BASE was 0x%x\n", temp);
+		temp = *((vuip)CIA_IOC_PCI_W2_BASE); mb();
+		printk("CIA_init: W2_BASE was 0x%x\n", temp);
+		temp = *((vuip)CIA_IOC_PCI_W3_BASE); mb();
+		printk("CIA_init: W3_BASE was 0x%x\n", temp);
 	}
 #endif /* DEBUG_DUMP_REGS */
 
@@ -458,6 +476,70 @@ unsigned long cia_init(unsigned long mem_start, unsigned long mem_end)
 	*(vuip)CIA_IOC_CIA_CTRL = cia_tmp;
 	mb();
 
+#ifdef CONFIG_ALPHA_SRM_SETUP
+	/* check window 0 for enabled and mapped to 0 */
+	if (((*(vuip)CIA_IOC_PCI_W0_BASE & 3) == 1) &&
+	    (*(vuip)CIA_IOC_PCI_T0_BASE == 0))
+	{
+	  CIA_DMA_WIN_BASE = *(vuip)CIA_IOC_PCI_W0_BASE & 0xfff00000U;
+	  CIA_DMA_WIN_SIZE = *(vuip)CIA_IOC_PCI_W0_MASK & 0xfff00000U;
+	  CIA_DMA_WIN_SIZE += 0x00100000U;
+#if 1
+	  printk("cia_init: using Window 0 settings\n");
+	  printk("cia_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
+		 *(vuip)CIA_IOC_PCI_W0_BASE,
+		 *(vuip)CIA_IOC_PCI_W0_MASK,
+		 *(vuip)CIA_IOC_PCI_T0_BASE);
+#endif
+	}
+	else  /* check window 1 for enabled and mapped to 0 */
+	if (((*(vuip)CIA_IOC_PCI_W1_BASE & 3) == 1) &&
+	    (*(vuip)CIA_IOC_PCI_T1_BASE == 0))
+	{
+	  CIA_DMA_WIN_BASE = *(vuip)CIA_IOC_PCI_W1_BASE & 0xfff00000U;
+	  CIA_DMA_WIN_SIZE = *(vuip)CIA_IOC_PCI_W1_MASK & 0xfff00000U;
+	  CIA_DMA_WIN_SIZE += 0x00100000U;
+#if 1
+	  printk("cia_init: using Window 1 settings\n");
+	  printk("cia_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
+		 *(vuip)CIA_IOC_PCI_W1_BASE,
+		 *(vuip)CIA_IOC_PCI_W1_MASK,
+		 *(vuip)CIA_IOC_PCI_T1_BASE);
+#endif
+	}
+	else  /* check window 2 for enabled and mapped to 0 */
+	if (((*(vuip)CIA_IOC_PCI_W2_BASE & 3) == 1) &&
+	    (*(vuip)CIA_IOC_PCI_T2_BASE == 0))
+	{
+	  CIA_DMA_WIN_BASE = *(vuip)CIA_IOC_PCI_W2_BASE & 0xfff00000U;
+	  CIA_DMA_WIN_SIZE = *(vuip)CIA_IOC_PCI_W2_MASK & 0xfff00000U;
+	  CIA_DMA_WIN_SIZE += 0x00100000U;
+#if 1
+	  printk("cia_init: using Window 2 settings\n");
+	  printk("cia_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
+		 *(vuip)CIA_IOC_PCI_W2_BASE,
+		 *(vuip)CIA_IOC_PCI_W2_MASK,
+		 *(vuip)CIA_IOC_PCI_T2_BASE);
+#endif
+	}
+	else  /* check window 3 for enabled and mapped to 0 */
+	if (((*(vuip)CIA_IOC_PCI_W3_BASE & 3) == 1) &&
+	    (*(vuip)CIA_IOC_PCI_T3_BASE == 0))
+	{
+	  CIA_DMA_WIN_BASE = *(vuip)CIA_IOC_PCI_W3_BASE & 0xfff00000U;
+	  CIA_DMA_WIN_SIZE = *(vuip)CIA_IOC_PCI_W3_MASK & 0xfff00000U;
+	  CIA_DMA_WIN_SIZE += 0x00100000U;
+#if 1
+	  printk("cia_init: using Window 3 settings\n");
+	  printk("cia_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
+		 *(vuip)CIA_IOC_PCI_W3_BASE,
+		 *(vuip)CIA_IOC_PCI_W3_MASK,
+		 *(vuip)CIA_IOC_PCI_T3_BASE);
+#endif
+	}
+	else  /* we must use our defaults which were pre-initialized... */
+#endif /* SRM_SETUP */
+	{
 	/*
 	 * Set up the PCI->physical memory translation windows.
 	 * For now, windows 1,2 and 3 are disabled.  In the future, we may
@@ -472,6 +554,7 @@ unsigned long cia_init(unsigned long mem_start, unsigned long mem_end)
 	*(vuip)CIA_IOC_PCI_W1_BASE = 0x0;
 	*(vuip)CIA_IOC_PCI_W2_BASE = 0x0;
 	*(vuip)CIA_IOC_PCI_W3_BASE = 0x0;
+	}
 
 	/*
 	 * check ASN in HWRPB for validity, report if bad
@@ -483,28 +566,54 @@ unsigned long cia_init(unsigned long mem_start, unsigned long mem_end)
 	}
 
         /*
-         * Finally, clear the CIA_CFG register, which gets used
+         * Next, clear the CIA_CFG register, which gets used
          *  for PCI Config Space accesses. That is the way
          *  we want to use it, and we do not want to depend on
          *  what ARC or SRM might have left behind...
          */
         {
-#if 0
-		unsigned int cia_cfg = *(vuip)CIA_IOC_CFG; mb();
-		if (cia_cfg) printk("CIA_init: CFG was 0x%x\n", cia_cfg);
-#endif
-		*(vuip)CIA_IOC_CFG = 0; mb();
+          unsigned int cia_cfg = *((vuip)CIA_IOC_CFG); mb();
+          if (cia_cfg) {
+	      printk("CIA_init: CFG was 0x%x\n", cia_cfg);
+	      *((vuip)CIA_IOC_CFG) = 0; mb();
+	  }
         }
  
-#if 0
 	{
-		unsigned int temp;
-		temp = *(vuip)CIA_IOC_CIA_CTRL; mb();
-		printk("CIA_init: CIA_CTRL was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_ERR_MASK; mb();
-		printk("CIA_init: CIA_ERR_MASK was 0x%x\n", temp);
-	}
+          unsigned int cia_hae_mem = *((vuip)CIA_IOC_HAE_MEM);
+          unsigned int cia_hae_io = *((vuip)CIA_IOC_HAE_IO);
+#if 0
+	  printk("CIA_init: HAE_MEM was 0x%x\n", cia_hae_mem);
+	  printk("CIA_init: HAE_IO was 0x%x\n", cia_hae_io);
 #endif
+#ifdef CONFIG_ALPHA_SRM_SETUP
+	  /*
+	    sigh... For the SRM setup, unless we know apriori what the HAE
+	    contents will be, we need to setup the arbitrary region bases
+	    so we can test against the range of addresses and tailor the
+	    region chosen for the SPARSE memory access.
+
+	    see include/asm-alpha/cia.h for the SPARSE mem read/write
+	  */
+	  cia_sm_base_r1 = (cia_hae_mem      ) & 0xe0000000UL; /* region 1 */
+	  cia_sm_base_r2 = (cia_hae_mem << 16) & 0xf8000000UL; /* region 2 */
+	  cia_sm_base_r3 = (cia_hae_mem << 24) & 0xfc000000UL; /* region 3 */
+
+	  /*
+	    Set the HAE cache, so that setup_arch() code
+	    will use the SRM setting always. Our readb/writeb
+	    code in cia.h expects never to have to change
+	    the contents of the HAE.
+	   */
+	  hae.cache = cia_hae_mem;
+#else /* SRM_SETUP */
+	  *((vuip)CIA_IOC_HAE_MEM) = 0; mb();
+	  cia_hae_mem = *((vuip)CIA_IOC_HAE_MEM);
+	  *((vuip)CIA_IOC_HAE_IO) = 0; mb();
+	  cia_hae_io = *((vuip)CIA_IOC_HAE_IO);
+#endif /* SRM_SETUP */
+        }
+ 
 	return mem_start;
 }
 
@@ -512,7 +621,7 @@ int cia_pci_clr_err(void)
 {
 	CIA_jd = *(vuip)CIA_IOC_CIA_ERR;
 	DBGM(("CIA_pci_clr_err: CIA ERR after read 0x%x\n", CIA_jd));
-	*(vulp)CIA_IOC_CIA_ERR = 0x0180;
+	*(vuip)CIA_IOC_CIA_ERR = 0x0180;
 	mb();
 	return 0;
 }

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.119 1998/03/22 19:14:47 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.123 1998/03/28 00:55:30 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -601,8 +601,6 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		sk->mtu = 64;	/* Sanity limit */
 
 	mss = sk->mtu - sizeof(struct iphdr);
-	if (sk->opt)
-		mss -= sk->opt->optlen;
 
 	tp->write_seq = secure_tcp_sequence_number(sk->saddr, sk->daddr,
 						   sk->sport, usin->sin_port);
@@ -971,8 +969,6 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 	}
 
 	mss = (rt->u.dst.pmtu - sizeof(struct iphdr) - sizeof(struct tcphdr));
-	if (opt)
-		mss -= opt->optlen;
 
 	skb = tcp_make_synack(sk, &rt->u.dst, req, mss);
 	if (skb) {
@@ -1098,7 +1094,7 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 
 	req->rcv_wnd = 0;		/* So that tcp_send_synack() knows! */
 
-	req->rcv_isn = skb->seq;
+	req->rcv_isn = TCP_SKB_CB(skb)->seq;
  	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
 	tp.in_mss = 536;
 	tcp_parse_options(NULL, th, &tp, want_cookie);
@@ -1210,6 +1206,8 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newtp->snd_cwnd = 1;
 		newtp->rto = TCP_TIMEOUT_INIT;
 		newtp->packets_out = 0;
+		newtp->fackets_out = 0;
+		newtp->retrans_out = 0;
 		newtp->high_seq = 0;
 		newtp->snd_ssthresh = 0x7fffffff;
 		newtp->snd_cwnd_cnt = 0;
@@ -1317,8 +1315,6 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	if (mtu < 68)
 		mtu = 68;
 	snd_mss = mtu - sizeof(struct iphdr);
-	if (opt)
-		snd_mss -= opt->optlen;
 
 	newsk = tcp_create_openreq_child(sk, req, skb, snd_mss);
 	if (!newsk) 
@@ -1337,8 +1333,7 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	newsk->opt = req->af.v4_req.opt;
 	newsk->mtu = mtu;
 
-	/* Must use the af_specific ops here for the case of IPv6 mapped. */
-	newsk->prot->hash(newsk);
+	tcp_v4_hash(newsk);
 	add_to_prot_sklist(newsk);
 
 	return newsk;
@@ -1357,7 +1352,8 @@ static void tcp_v4_rst_req(struct sock *sk, struct sk_buff *skb)
 	if (!req)
 		return;
 	/* Sequence number check required by RFC793 */
-	if (before(skb->seq, req->snt_isn) || after(skb->seq, req->snt_isn+1))
+	if (before(TCP_SKB_CB(skb)->seq, req->snt_isn) ||
+	    after(TCP_SKB_CB(skb)->seq, req->snt_isn+1))
 		return;
 	tcp_synq_unlink(tp, req, prev);
 	req->class->destructor(req);
@@ -1509,9 +1505,10 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 	if(!ipsec_sk_policy(sk,skb))
 		goto discard_it;
 
-	skb->seq = ntohl(th->seq);
-	skb->end_seq = skb->seq + th->syn + th->fin + len - th->doff*4;
-	skb->ack_seq = ntohl(th->ack_seq);
+	TCP_SKB_CB(skb)->seq = ntohl(th->seq);
+	TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin +
+				    len - th->doff*4);
+	TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
 
 	skb->used = 0;
 

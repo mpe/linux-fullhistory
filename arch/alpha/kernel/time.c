@@ -82,6 +82,16 @@ void timer_interrupt(int irq, void *dev, struct pt_regs * regs)
 	__u32 now;
 	long nticks;
 
+#ifdef __SMP__
+	extern void smp_percpu_timer_interrupt(struct pt_regs *);
+	extern unsigned int boot_cpu_id;
+	/* when SMP, do this for *all* CPUs, 
+	   but only do the rest for the boot CPU */
+	smp_percpu_timer_interrupt(regs);
+	if (smp_processor_id() != boot_cpu_id)
+	  return;
+#endif
+
 	/*
 	 * Estimate how many ticks have passed since the last update.
 	 * Round the result, .5 to even.  When we loose ticks due to

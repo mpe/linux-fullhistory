@@ -295,6 +295,7 @@ EXPORT_SYMBOL(bh_mask_count);
 EXPORT_SYMBOL(bh_base);
 EXPORT_SYMBOL(add_timer);
 EXPORT_SYMBOL(del_timer);
+EXPORT_SYMBOL(mod_timer);
 EXPORT_SYMBOL(tq_timer);
 EXPORT_SYMBOL(tq_immediate);
 EXPORT_SYMBOL(tq_scheduler);

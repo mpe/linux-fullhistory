@@ -8,9 +8,9 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 .S.s:
-	$(CPP) -D__ASSEMBLY__ -traditional $< -o $*.s
+	$(CPP) -D__ASSEMBLY__ $(AFLAGS) -traditional    $< -o $*.s
 .S.o:
-	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
+	$(CC)  -D__ASSEMBLY__ $(AFLAGS) -traditional -c $< -o $*.o
 
 all: kernel.o head.o
 
@@ -35,19 +35,29 @@ endif
 ifdef CONFIG_ALPHA_T2
 O_OBJS   += t2.o
 endif
+ifdef CONFIG_ALPHA_TSUNAMI
+O_OBJS   += tsunami.o
+endif
+ifdef CONFIG_ALPHA_MCPCIA
+O_OBJS   += mcpcia.o
+endif
+
 ifneq ($(CONFIG_ALPHA_PC164)$(CONFIG_ALPHA_LX164),nn)
 O_OBJS   += smc37c93x.o
 endif
-ifdef CONFIG_ALPHA_SX164
+ifneq ($(CONFIG_ALPHA_SX164)$(CONFIG_ALPHA_MIATA)$(CONFIG_ALPHA_DP264),nnn)
 O_OBJS   += smc37c669.o
 endif
 
+ifdef SMP
+O_OBJS   += smp.o
+endif
 
 all: kernel.o head.o
 
 head.o: head.s
 
 head.s: head.S $(TOPDIR)/include/asm-alpha/system.h
-	$(CPP) -traditional -o $*.s $<
+	$(CPP) -traditional $(AFLAGS) -o $*.s $<
 
 include $(TOPDIR)/Rules.make

@@ -666,12 +666,12 @@ static u_char Tekram_sync[12] __initdata = {25,31,37,43,50,62,75,125,12,15,18,21
 typedef struct {
 	int	bus;
 	u_char	device_fn;
-	u_int	base;
-	u_int	base_2;
-	u_int	io_port;
+	u_long	base;
+	u_long	base_2;
+	u_long	io_port;
 	int	irq;
 /* port and reg fields to use INB, OUTB macros */
-	u_int	port;
+	u_long	port;
 	volatile struct	ncr_reg	*reg;
 } ncr_slot;
 
@@ -1834,7 +1834,7 @@ struct ncb {
 	/*
 	**	address of the ncr control registers in io space
 	*/
-	u_int		port;
+	u_long		port;
 
 	/*
 	**	irq level
@@ -4388,7 +4388,7 @@ static int ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	u_long flags = 0;
 	ncr_nvram *nvram = device->nvram;
 
-printf(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%x, io_port=0x%x, irq=%d\n",
+printf(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	device->chip.name, unit, device->chip.revision_id, device->slot.base,
 	device->slot.io_port, device->slot.irq);
 
@@ -9296,7 +9296,10 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	ushort vendor_id, device_id, command;
 	uchar cache_line_size, latency_timer;
 	uchar irq, revision;
-#if LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0)
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,90)
+	ulong base, base_2, io_port;
+	struct pci_dev *pdev;
+#elif LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0)
 	uint base, base_2, io_port; 
 #else
 	ulong base, base_2; 
@@ -9309,7 +9312,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	ncr_chip *chip;
 
 	printk(KERN_INFO "ncr53c8xx: at PCI bus %d, device %d, function %d\n",
-		bus, (int) (device_fn & 0xf8) >> 3, (int) device_fn & 7);
+		bus, PCI_SLOT(device_fn), PCI_FUNC(device_fn));
 	/*
 	 * Read info from the PCI config space.
 	 * pcibios_read_config_xxx() functions are assumed to be used for 
@@ -9323,6 +9326,13 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 					PCI_DEVICE_ID, &device_id);
 	(void) pcibios_read_config_word(bus, device_fn,
 					PCI_COMMAND, &command);
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,90)
+	pdev = pci_find_dev(bus, device_fn);
+	io_port = pdev->base_address[0];
+	base    = pdev->base_address[1];
+	base_2  = pdev->base_address[2];
+	irq     = pdev->irq;
+#else
 	(void) pcibios_read_config_dword(bus, device_fn,
 					PCI_BASE_ADDRESS_0, &io_port);	
 	(void) pcibios_read_config_dword(bus, device_fn,
@@ -9330,9 +9340,10 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	(void) pcibios_read_config_dword(bus, device_fn,
 					PCI_BASE_ADDRESS_2, &base_2);
 	(void) pcibios_read_config_byte(bus, device_fn,
-					PCI_CLASS_REVISION,&revision);	
-	(void) pcibios_read_config_byte(bus, device_fn,
 					PCI_INTERRUPT_LINE, &irq);
+#endif
+	(void) pcibios_read_config_byte(bus, device_fn,
+					PCI_CLASS_REVISION, &revision);	
 	(void) pcibios_read_config_byte(bus, device_fn,
 					PCI_CACHE_LINE_SIZE, &cache_line_size);
 	(void) pcibios_read_config_byte(bus, device_fn,
@@ -9448,7 +9459,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	/*
 	 * Try to fix up PCI config according to wished features.
 	 */
-#if defined(__i386__) && !defined(MODULE)
+#if defined(__i386) && !defined(MODULE)
 	if ((driver_setup.pci_fix_up & 1) &&
 	    (chip->features & FE_CLSE) && cache_line_size == 0) {
 #if LINUX_VERSION_CODE < LinuxVersionCode(2,1,75)

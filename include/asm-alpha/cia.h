@@ -74,11 +74,23 @@
 
 #define BYTE_ENABLE_SHIFT 5
 #define TRANSFER_LENGTH_SHIFT 3
-#define MEM_SP1_MASK 0x1fffffff  /* Mem sparse space 1 mask is 29 bits */
 
+#define MEM_R1_MASK 0x1fffffff  /* SPARSE Mem region 1 mask is 29 bits */
+#define MEM_R2_MASK 0x07ffffff  /* SPARSE Mem region 2 mask is 27 bits */
+#define MEM_R3_MASK 0x03ffffff  /* SPARSE Mem region 3 mask is 26 bits */
 
-#define CIA_DMA_WIN_BASE	(1024UL*1024UL*1024UL)
+#ifdef CONFIG_ALPHA_SRM_SETUP
+/* if we are using the SRM PCI setup, we'll need to use variables instead */
+#define CIA_DMA_WIN_BASE_DEFAULT    (1024*1024*1024)
+#define CIA_DMA_WIN_SIZE_DEFAULT    (1024*1024*1024)
+
+extern unsigned int CIA_DMA_WIN_BASE;
+extern unsigned int CIA_DMA_WIN_SIZE;
+
+#else /* SRM_SETUP */
+#define CIA_DMA_WIN_BASE            (1024*1024*1024)
 #define CIA_DMA_WIN_SIZE	(1024*1024*1024)
+#endif /* SRM_SETUP */
 
 /*
  * 21171-CA Control and Status Registers (p4-1)
@@ -86,6 +98,7 @@
 #define CIA_IOC_CIA_REV               (IDENT_ADDR + 0x8740000080UL)
 #define CIA_IOC_PCI_LAT               (IDENT_ADDR + 0x87400000C0UL)
 #define CIA_IOC_CIA_CTRL              (IDENT_ADDR + 0x8740000100UL)
+#define CIA_IOC_CIA_CNFG              (IDENT_ADDR + 0x8740000140UL)
 #define CIA_IOC_HAE_MEM               (IDENT_ADDR + 0x8740000400UL)
 #define CIA_IOC_HAE_IO                (IDENT_ADDR + 0x8740000440UL)
 #define CIA_IOC_CFG                   (IDENT_ADDR + 0x8740000480UL)
@@ -119,18 +132,25 @@
 #define CIA_IOC_PCI_ERR3              (IDENT_ADDR + 0x8740008880UL)
 
 /*
- * 2117A-CA PCI Address Translation Registers.   I've only defined
- * the first window fully as that's the only one that we're currently using.
- * The other window bases are needed to disable the windows.
+ * 2117A-CA PCI Address Translation Registers.
  */
 #define CIA_IOC_PCI_TBIA              (IDENT_ADDR + 0x8760000100UL)
+
 #define CIA_IOC_PCI_W0_BASE           (IDENT_ADDR + 0x8760000400UL)
 #define CIA_IOC_PCI_W0_MASK           (IDENT_ADDR + 0x8760000440UL)
 #define CIA_IOC_PCI_T0_BASE           (IDENT_ADDR + 0x8760000480UL)
 
 #define CIA_IOC_PCI_W1_BASE           (IDENT_ADDR + 0x8760000500UL)
+#define CIA_IOC_PCI_W1_MASK           (IDENT_ADDR + 0x8760000540UL)
+#define CIA_IOC_PCI_T1_BASE           (IDENT_ADDR + 0x8760000580UL)
+
 #define CIA_IOC_PCI_W2_BASE           (IDENT_ADDR + 0x8760000600UL)
+#define CIA_IOC_PCI_W2_MASK           (IDENT_ADDR + 0x8760000640UL)
+#define CIA_IOC_PCI_T2_BASE           (IDENT_ADDR + 0x8760000680UL)
+
 #define CIA_IOC_PCI_W3_BASE           (IDENT_ADDR + 0x8760000700UL)
+#define CIA_IOC_PCI_W3_MASK           (IDENT_ADDR + 0x8760000740UL)
+#define CIA_IOC_PCI_T3_BASE           (IDENT_ADDR + 0x8760000780UL)
 
 /*
  * 21171-CA System configuration registers (p4-3)
@@ -155,6 +175,8 @@
 #define CIA_CONF		        (IDENT_ADDR + 0x8700000000UL)
 #define CIA_IO				(IDENT_ADDR + 0x8580000000UL)
 #define CIA_SPARSE_MEM			(IDENT_ADDR + 0x8000000000UL)
+#define CIA_SPARSE_MEM_R2		(IDENT_ADDR + 0x8400000000UL)
+#define CIA_SPARSE_MEM_R3		(IDENT_ADDR + 0x8500000000UL)
 #define CIA_DENSE_MEM		        (IDENT_ADDR + 0x8600000000UL)
 
 /*
@@ -296,13 +318,125 @@ extern inline void __outl(unsigned int b, unsigned long addr)
  * 
  */
 
+#ifdef CONFIG_ALPHA_SRM_SETUP
+
+extern unsigned long cia_sm_base_r1, cia_sm_base_r2, cia_sm_base_r3;
+
+extern inline unsigned long __readb(unsigned long addr)
+{
+	unsigned long result, shift, work;
+
+	if ((addr >= cia_sm_base_r1) &&
+	    (addr <= (cia_sm_base_r1 + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + CIA_SPARSE_MEM + 0x00);
+	else
+	if ((addr >= cia_sm_base_r2) &&
+	    (addr <= (cia_sm_base_r2 + MEM_R2_MASK)))
+	  work = (((addr & MEM_R2_MASK) << 5) + CIA_SPARSE_MEM_R2 + 0x00);
+	else
+	if ((addr >= cia_sm_base_r3) &&
+	    (addr <= (cia_sm_base_r3 + MEM_R3_MASK)))
+	  work = (((addr & MEM_R3_MASK) << 5) + CIA_SPARSE_MEM_R3 + 0x00);
+	else
+	{
+#if 0
+	  printk("__readb: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return 0x0ffUL;
+	}
+	shift = (addr & 0x3) << 3;
+	result = *(vuip) work;
+	result >>= shift;
+	return 0x0ffUL & result;
+}
+
+extern inline unsigned long __readw(unsigned long addr)
+{
+	unsigned long result, shift, work;
+
+	if ((addr >= cia_sm_base_r1) &&
+	    (addr <= (cia_sm_base_r1 + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + CIA_SPARSE_MEM + 0x08);
+	else
+	if ((addr >= cia_sm_base_r2) &&
+	    (addr <= (cia_sm_base_r2 + MEM_R2_MASK)))
+	  work = (((addr & MEM_R2_MASK) << 5) + CIA_SPARSE_MEM_R2 + 0x08);
+	else
+	if ((addr >= cia_sm_base_r3) &&
+	    (addr <= (cia_sm_base_r3 + MEM_R3_MASK)))
+	  work = (((addr & MEM_R3_MASK) << 5) + CIA_SPARSE_MEM_R3 + 0x08);
+	else
+	{
+#if 0
+	  printk("__readw: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return 0x0ffffUL;
+	}
+	shift = (addr & 0x3) << 3;
+	result = *(vuip) work;
+	result >>= shift;
+	return 0x0ffffUL & result;
+}
+
+extern inline void __writeb(unsigned char b, unsigned long addr)
+{
+	unsigned long work;
+
+	if ((addr >= cia_sm_base_r1) &&
+	    (addr <= (cia_sm_base_r1 + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + CIA_SPARSE_MEM + 0x00);
+	else
+	if ((addr >= cia_sm_base_r2) &&
+	    (addr <= (cia_sm_base_r2 + MEM_R2_MASK)))
+	  work = (((addr & MEM_R2_MASK) << 5) + CIA_SPARSE_MEM_R2 + 0x00);
+	else
+	if ((addr >= cia_sm_base_r3) &&
+	    (addr <= (cia_sm_base_r3 + MEM_R3_MASK)))
+	  work = (((addr & MEM_R3_MASK) << 5) + CIA_SPARSE_MEM_R3 + 0x00);
+	else
+	{
+#if 0
+	  printk("__writeb: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return;
+	}
+	*(vuip) work = b * 0x01010101;
+}
+
+extern inline void __writew(unsigned short b, unsigned long addr)
+{
+	unsigned long work;
+
+	if ((addr >= cia_sm_base_r1) &&
+	    (addr <= (cia_sm_base_r1 + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + CIA_SPARSE_MEM + 0x00);
+	else
+	if ((addr >= cia_sm_base_r2) &&
+	    (addr <= (cia_sm_base_r2 + MEM_R2_MASK)))
+	  work = (((addr & MEM_R2_MASK) << 5) + CIA_SPARSE_MEM_R2 + 0x00);
+	else
+	if ((addr >= cia_sm_base_r3) &&
+	    (addr <= (cia_sm_base_r3 + MEM_R3_MASK)))
+	  work = (((addr & MEM_R3_MASK) << 5) + CIA_SPARSE_MEM_R3 + 0x00);
+	else
+	{
+#if 0
+	  printk("__writew: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return;
+	}
+	*(vuip) work = b * 0x00010001;
+}
+
+#else /* SRM_SETUP */
+
 extern inline unsigned long __readb(unsigned long addr)
 {
 	unsigned long result, shift, msb;
 
 	shift = (addr & 0x3) * 8 ;
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
@@ -317,7 +451,7 @@ extern inline unsigned long __readw(unsigned long addr)
 
 	shift = (addr & 0x3) * 8;
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
@@ -326,17 +460,12 @@ extern inline unsigned long __readw(unsigned long addr)
 	return 0xffffUL & result;
 }
 
-extern inline unsigned long __readl(unsigned long addr)
-{
-	return *(vuip) (addr + CIA_DENSE_MEM);
-}
-
 extern inline void __writeb(unsigned char b, unsigned long addr)
 {
         unsigned long msb ; 
 
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
@@ -348,11 +477,18 @@ extern inline void __writew(unsigned short b, unsigned long addr)
         unsigned long msb ; 
 
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
 	*(vuip) ((addr << 5) + CIA_SPARSE_MEM + 0x08) = b * 0x00010001;
+}
+
+#endif /* SRM_SETUP */
+
+extern inline unsigned long __readl(unsigned long addr)
+{
+	return *(vuip) (addr + CIA_DENSE_MEM);
 }
 
 extern inline void __writel(unsigned int b, unsigned long addr)

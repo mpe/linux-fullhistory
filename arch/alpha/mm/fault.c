@@ -14,13 +14,52 @@
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
 
+#ifdef __SMP__
+unsigned long last_asn[NR_CPUS] = { /* gag */
+  ASN_FIRST_VERSION +  (0 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION +  (1 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION +  (2 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION +  (3 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION +  (4 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION +  (5 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION +  (6 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION +  (7 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION +  (8 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION +  (9 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (10 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (11 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (12 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (13 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (14 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (15 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (16 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (17 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (18 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (19 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (20 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (21 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (22 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (23 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (24 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (25 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (26 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (27 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (28 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (29 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (30 << WIDTH_HARDWARE_ASN),
+  ASN_FIRST_VERSION + (31 << WIDTH_HARDWARE_ASN)
+};
+#else
 unsigned long asn_cache = ASN_FIRST_VERSION;
+#endif /* __SMP__ */
 
 #ifndef BROKEN_ASN
 /*
@@ -30,7 +69,8 @@ unsigned long asn_cache = ASN_FIRST_VERSION;
  */
 void get_new_asn_and_reload(struct task_struct *tsk, struct mm_struct *mm)
 {
-	get_new_mmu_context(tsk, mm, asn_cache);
+	mm->context = 0;
+	get_new_mmu_context(tsk, mm);
 	reload_context(tsk);
 }
 #endif
@@ -84,6 +124,7 @@ asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr,
 		}
 	}
 
+	lock_kernel();
 	down(&mm->mmap_sem);
 	vma = find_vma(mm, address);
 	if (!vma)
@@ -112,7 +153,7 @@ good_area:
 	}
 	handle_mm_fault(current, vma, address, cause > 0);
 	up(&mm->mmap_sem);
-	return;
+	goto out;
 
 /*
  * Something tried to access memory that isn't in our memory map..
@@ -123,16 +164,17 @@ bad_area:
 
 	if (user_mode(regs)) {
 		force_sig(SIGSEGV, current);
-		return;
+		goto out;
 	}
 
 	/* Are we prepared to handle this fault as an exception?  */
 	if ((fixup = search_exception_table(regs->pc)) != 0) {
 		unsigned long newpc;
 		newpc = fixup_exception(dpf_reg, fixup, regs->pc);
-		printk("%s: Exception at [<%lx>] (%lx)\n", current->comm, regs->pc, newpc);
+		printk("%s: Exception at [<%lx>] (%lx)\n",
+		       current->comm, regs->pc, newpc);
 		regs->pc = newpc;
-		return;
+		goto out;
 	}
 
 /*
@@ -143,4 +185,7 @@ bad_area:
 	       "virtual address %016lx\n", address);
 	die_if_kernel("Oops", regs, cause, (unsigned long*)regs - 16);
 	do_exit(SIGKILL);
+ out:
+	unlock_kernel();
 }
+

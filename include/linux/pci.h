@@ -93,8 +93,8 @@
 #define  PCI_BASE_ADDRESS_MEM_TYPE_1M	0x02	/* Below 1M */
 #define  PCI_BASE_ADDRESS_MEM_TYPE_64	0x04	/* 64 bit address */
 #define  PCI_BASE_ADDRESS_MEM_PREFETCH	0x08	/* prefetchable? */
-#define  PCI_BASE_ADDRESS_MEM_MASK	(~0x0f)
-#define  PCI_BASE_ADDRESS_IO_MASK	(~0x03)
+#define  PCI_BASE_ADDRESS_MEM_MASK	(~0x0fUL)
+#define  PCI_BASE_ADDRESS_IO_MASK	(~0x03UL)
 /* bit 1 is reserved if address_space = 1 */
 
 /* Header type 0 (normal devices) */
@@ -503,7 +503,7 @@
 
 #define PCI_VENDOR_ID_CONTAQ		0x1080
 #define PCI_DEVICE_ID_CONTAQ_82C599	0x0600
-/* ??? Alpha SX164 has reference to device nr 0xc693 as a CYPRESS bridge.  */
+#define PCI_DEVICE_ID_CONTAQ_82C693	0xC693
 
 #define PCI_VENDOR_ID_FOREX		0x1083
 
@@ -933,6 +933,9 @@
 #define PCI_SLOT(devfn)		(((devfn) >> 3) & 0x1f)
 #define PCI_FUNC(devfn)		((devfn) & 0x07)
 
+/* create an index into the pci_dev base_address[] array from an offset */
+#define PCI_BASE_INDEX(o) (((o)-PCI_BASE_ADDRESS_0)>>2)
+
 #ifdef __KERNEL__
 /*
  * There is one pci_dev structure for each slot-number/function-number
@@ -987,6 +990,7 @@ struct pci_bus {
 
 extern struct pci_bus	pci_root;	/* root bus */
 extern struct pci_dev	*pci_devices;	/* list of all devices */
+extern struct pci_dev   *pci_find_dev (unsigned char bus, unsigned char devfn);
 
 extern unsigned long pci_init (unsigned long mem_start, unsigned long mem_end);
 

@@ -25,7 +25,11 @@ extern struct hae {
 /*
  * Virtual -> physical identity mapping starts at this offset
  */
+#ifdef USE_48_BIT_KSEG
+#define IDENT_ADDR	(0xffff800000000000UL)
+#else
 #define IDENT_ADDR	(0xfffffc0000000000UL)
+#endif
 
 #ifdef __KERNEL__
 
@@ -38,11 +42,11 @@ extern struct hae {
  */
 extern inline void set_hae(unsigned long new_hae)
 {
-	unsigned long ipl;
-	ipl = swpipl(7);
+	unsigned long ipl = swpipl(7);
 	hae.cache = new_hae;
 	*hae.reg = new_hae;
 	mb();
+	new_hae = *hae.reg; /* read to make sure it was written */
 	setipl(ipl);
 }
 
@@ -84,6 +88,10 @@ extern void _sethae (unsigned long addr);	/* cached version */
 # include <asm/t2.h>		/* get chip-specific definitions */
 #elif defined(CONFIG_ALPHA_PYXIS)
 # include <asm/pyxis.h>		/* get chip-specific definitions */
+#elif defined(CONFIG_ALPHA_TSUNAMI)
+# include <asm/tsunami.h>	/* get chip-specific definitions */
+#elif defined(CONFIG_ALPHA_MCPCIA)
+# include <asm/mcpcia.h>	/* get chip-specific definitions */
 #else
 # include <asm/jensen.h>
 #endif

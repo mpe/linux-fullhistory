@@ -191,8 +191,7 @@ struct tcp_sack_block {
 	__u32	end_seq;
 };
 
-struct tcp_opt
-{
+struct tcp_opt {
 	int	tcp_header_len;	/* Bytes of tcp header to send		*/
 
 /*
@@ -229,7 +228,9 @@ struct tcp_opt
  	__u32	snd_cwnd;	/* Sending congestion window		*/
 	__u32	rto;		/* retransmit timeout			*/
 
-	__u32	packets_out;	/* Packets which are "in flight" */
+	__u32	packets_out;	/* Packets which are "in flight"	*/
+	__u32	fackets_out;	/* Non-retrans SACK'd packets		*/
+	__u32	retrans_out;	/* Fast-retransmitted packets out	*/
 	__u32	high_seq;	/* highest sequence number sent by onset of congestion */
 /*
  *	Slow start and congestion control (see also Nagle, and Karn & Partridge)

@@ -1094,14 +1094,14 @@ de4x5_hw_init(struct device *dev, u_long iobase))
     
     dev->base_addr = iobase;
     if (lp->bus == EISA) {
-	printk("%s: %s at 0x%04lx (EISA slot %ld)", 
+	printk("%s: %s at 0x%04lx (EISA slot %ld),\n", 
 	       dev->name, name, iobase, ((iobase>>12)&0x0f));
     } else {                                 /* PCI port address */
-	printk("%s: %s at 0x%04lx (PCI bus %d, device %d)", dev->name, name,
+	printk("%s: %s at 0x%04lx (PCI bus %d, device %d),\n", dev->name, name,
 	       iobase, lp->bus_num, lp->device);
     }
     
-    printk(", h/w address ");
+    printk("      h/w address ");
     status = get_hw_addr(dev);
     for (i = 0; i < ETH_ALEN - 1; i++) {     /* get the ethernet addr. */
 	printk("%2.2x:", dev->dev_addr[i]);
@@ -2092,9 +2092,7 @@ pci_probe(struct device *dev, u_long ioaddr))
 	 index++) {
 	dev_num = PCI_SLOT(dev_fn);
 	if ((pbus || dnum) && ((pbus != pb) || (dnum != dev_num))) continue;
-	for (pdev = pci_devices; pdev; pdev = pdev->next) {
-	    if ((pdev->bus->number==pb) && (pdev->devfn==dev_fn)) break;
-	}
+	pdev = pci_find_dev(pb, dev_fn);
 
 	vendor = pdev->vendor;
 	device = pdev->device << 8;
@@ -2193,9 +2191,7 @@ srom_search(int index))
 
 	if (lp->bus_num != pb) return;
 	dev_num = PCI_SLOT(dev_fn);
-	for (pdev = pci_devices; pdev; pdev = pdev->next) {
-	    if ((pdev->bus->number == pb) && (pdev->devfn == dev_fn)) break;
-	}
+	pdev = pci_find_dev(pb, dev_fn);
 
 	vendor = pdev->vendor;
 	device = pdev->device << 8;
@@ -5737,10 +5733,7 @@ count_adapters(void)
     for (i=0; 
 	 (pcibios_find_class(class, i, &pb, &dev_fn)!= PCIBIOS_DEVICE_NOT_FOUND);
 	 i++) {
-	for (pdev = pci_devices; pdev; pdev = pdev->next) {
-	    if ((pdev->bus->number==pb) && (pdev->devfn==dev_fn)) break;
-	}
-
+	pdev = pci_find_dev(pb, dev_fn);
 	vendor = pdev->vendor;
 	device = pdev->device << 8;
 	if (is_DC21040 || is_DC21041 || is_DC21140 || is_DC2114x) j++;

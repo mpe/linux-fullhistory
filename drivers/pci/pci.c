@@ -273,3 +273,13 @@ __initfunc(unsigned long pci_init (unsigned long mem_start, unsigned long mem_en
 
 	return mem_start;
 }
+
+struct pci_dev *pci_find_dev(unsigned char bus, unsigned char devfn)
+{
+	struct pci_dev *pdev;
+	for (pdev = pci_devices; pdev; pdev = pdev->next) {
+		if ((pdev->bus->number==bus) && (pdev->devfn==devfn)) break;
+
+	}
+	return pdev;
+}

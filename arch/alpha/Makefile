@@ -10,8 +10,40 @@
 
 NM := nm -B
 
+#LINKFLAGS = -static -T arch/alpha/vmlinux.lds
+#CFLAGS := $(CFLAGS) -pipe -mno-fp-regs -ffixed-8
+
+ifdef CONFIG_CROSSCOMPILE
+# enable this for linking under OSF/1:
+LINKFLAGS = -non_shared -T 0xfffffc0000310000 -N
+else
+ elf=$(shell if $(LD) --help | grep elf64alpha >/dev/null; then echo yes; fi)
+ ifeq ($(elf),yes)
+#   LINKFLAGS = -static -Ttext 0xfffffc0000310000 -N
 LINKFLAGS = -static -T arch/alpha/vmlinux.lds
-CFLAGS := $(CFLAGS) -pipe -mno-fp-regs -ffixed-8
+ else
+   LINKFLAGS = -static -T arch/alpha/vmlinux.lds -N
+ endif
+# GNU gcc/cc1/as can use pipes instead of temporary files
+CFLAGS := $(CFLAGS) -pipe
+endif
+
+CFLAGS := $(CFLAGS) -mno-fp-regs -ffixed-8 -Wno-uninitialized
+
+# determine if we can use the BWX instructions with GAS
+$(shell rm -f ./GAS_VER)
+$(shell $(AS) --version >& ./GAS_VER)
+OLD_GAS := $(shell if cat ./GAS_VER | grep 'version 2.7' > /dev/null; then echo yes; else echo no; fi)
+$(shell rm -f ./GAS_VER)
+
+ifneq ($(OLD_GAS),yes)
+ CFLAGS := $(CFLAGS) -Wa,-m21164a -DBWX_USABLE
+
+# if PYXIS, then enable use of BWIO space
+ ifeq ($(CONFIG_ALPHA_PYXIS),y)
+  CFLAGS := $(CFLAGS) -DBWIO_ENABLED
+ endif
+endif
 
 HEAD := arch/alpha/kernel/head.o
 
@@ -23,7 +55,7 @@ ifeq ($(CONFIG_MATHEMU),y)
   CORE_FILES := $(CORE_FILES) arch/alpha/math-emu/math-emu.o
 endif
 
-LIBS := arch/alpha/lib/lib.a $(LIBS) arch/alpha/lib/lib.a
+LIBS := $(TOPDIR)/arch/alpha/lib/lib.a $(LIBS) $(TOPDIR)/arch/alpha/lib/lib.a
 
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 

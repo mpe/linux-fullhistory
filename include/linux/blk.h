@@ -45,75 +45,33 @@ extern spinlock_t io_request_lock;
 #endif /* IDE_DRIVER */
 
 #define SUBSECTOR(block) (CURRENT->current_nr_sectors > 0)
-#ifdef CONFIG_CDROM
-extern int cdrom_init(void);
-#endif CONFIG_CDROM 
-#ifdef CONFIG_ISP16_CDI
+
+/*
+ * Initialization functions.
+ */
 extern int isp16_init(void);
-#endif CONFIG_ISP16_CDI
-#ifdef CONFIG_CDU31A
 extern int cdu31a_init(void);
-#endif CONFIG_CDU31A
-#ifdef CONFIG_ATARI_ACSI
 extern int acsi_init(void);
-#endif CONFIG_ATARI_ACSI
-#ifdef CONFIG_MCD
 extern int mcd_init(void);
-#endif CONFIG_MCD
-#ifdef CONFIG_MCDX
 extern int mcdx_init(void);
-#endif CONFIG_MCDX
-#ifdef CONFIG_SBPCD
 extern int sbpcd_init(void);
-#endif CONFIG_SBPCD
-#ifdef CONFIG_AZTCD
 extern int aztcd_init(void);
-#endif CONFIG_AZTCD
-#ifdef CONFIG_CDU535
 extern int sony535_init(void);
-#endif CONFIG_CDU535
-#ifdef CONFIG_GSCD
 extern int gscd_init(void);
-#endif CONFIG_GSCD
-#ifdef CONFIG_CM206
 extern int cm206_init(void);
-#endif CONFIG_CM206
-#ifdef CONFIG_OPTCD
 extern int optcd_init(void);
-#endif CONFIG_OPTCD
-#ifdef CONFIG_SJCD
 extern int sjcd_init(void);
-#endif CONFIG_SJCD
-#ifdef CONFIG_CDI_INIT
 extern int cdi_init(void);
-#endif CONFIG_CDI_INIT
-#ifdef CONFIG_BLK_DEV_HD
 extern int hd_init(void);
-#endif
-#ifdef CONFIG_BLK_DEV_IDE
 extern int ide_init(void);
-#endif
-#ifdef CONFIG_BLK_DEV_XD
 extern int xd_init(void);
-#endif
-#ifdef CONFIG_BLK_DEV_LOOP
 extern int loop_init(void);
-#endif
-#ifdef CONFIG_BLK_DEV_MD
 extern int md_init(void);
-#endif CONFIG_BLK_DEV_MD
-#ifdef CONFIG_APBLOCK
 extern int ap_init(void);
-#endif
-#ifdef CONFIG_DDV
 extern int ddv_init(void);
-#endif
-#ifdef CONFIG_AMIGA_Z2RAM
 extern int z2_init(void);
-#endif
-#ifdef CONFIG_MAC_FLOPPY
 extern int swim3_init(void);
-#endif
+extern int ps2esdi_init(void);
 
 extern void set_device_ro(kdev_t dev,int flag);
 void add_blkdev_randomness(int major);
@@ -134,9 +92,6 @@ extern int mount_initrd; /* zero if initrd should not be mounted */
 extern int initrd_below_start_ok; /* 1 if it is not an error if initrd_start < memory_start */
 void initrd_init(void);
 
-#endif
-#ifdef CONFIG_BLK_DEV_PS2
-extern int ps2esdi_init(void);
 #endif
 
 #define RO_IOCTLS(dev,where) \

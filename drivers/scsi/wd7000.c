@@ -513,7 +513,7 @@ typedef struct icbRevLvl {
 typedef struct icbUnsMask {	/* I'm totally guessing here */
     unchar op;
     volatile unchar mask[14];	/* mask bits                 */
-#ifdef 0
+#if 0
     unchar rsvd[12];		/* reserved                  */
 #endif
     volatile unchar vue;	/* vendor-unique error code  */

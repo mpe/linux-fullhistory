@@ -33,7 +33,7 @@
 #include <linux/nfs_fs.h>
 #endif
 
-#ifdef CONFIG_SYSCTL
+#if defined(CONFIG_SYSCTL) && defined(CONFIG_PROC_FS)
 
 /* External variables not in a header file. */
 extern int panic_timeout;
@@ -1031,7 +1031,7 @@ int do_struct (
 }
 
 
-#else /* CONFIG_SYSCTL */
+#else /* CONFIG_PROC_FS && CONFIG_SYSCTL */
 
 
 extern asmlinkage int sys_sysctl(struct __sysctl_args *args)
@@ -1087,7 +1087,7 @@ void unregister_sysctl_table(struct ctl_table_header * table)
 {
 }
 
-#endif /* CONFIG_SYSCTL */
+#endif /* CONFIG_PROC_FS && CONFIG_SYSCTL */
 
 
 

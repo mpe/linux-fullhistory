@@ -199,7 +199,7 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc)
 	      && (tmp & 0x4) != 0x4	/* not a LDT selector */	\
 	      && (tmp & 3) != 3)	/* not a RPL3 GDT selector */	\
 		  goto badframe;					\
-	  __asm__ __volatile__("mov %w0,%%" #seg : : "r"(tmp)); }
+	  __asm__ __volatile__("movl %w0,%%" #seg : : "r"(tmp)); }
 
 	GET_SEG(gs);
 	GET_SEG(fs);
@@ -337,9 +337,9 @@ setup_sigcontext(struct sigcontext *sc, struct _fpstate *fpstate,
 	unsigned int tmp;
 
 	tmp = 0;
-	__asm__("mov %%gs,%w0" : "=r"(tmp): "0"(tmp));
+	__asm__("movl %%gs,%w0" : "=r"(tmp): "0"(tmp));
 	__put_user(tmp, (unsigned int *)&sc->gs);
-	__asm__("mov %%fs,%w0" : "=r"(tmp): "0"(tmp));
+	__asm__("movl %%fs,%w0" : "=r"(tmp): "0"(tmp));
 	__put_user(tmp, (unsigned int *)&sc->fs);
 
 	__put_user(regs->xes, (unsigned int *)&sc->es);
@@ -427,7 +427,7 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 	regs->eip = (unsigned long) ka->sa.sa_handler;
 	{
 		unsigned long seg = __USER_DS;
-		__asm__("mov %w0,%%fs ; mov %w0,%%gs": "=r"(seg) : "0"(seg));
+		__asm__("movl %w0,%%fs ; movl %w0,%%gs": "=r"(seg) : "0"(seg));
 		set_fs(USER_DS);
 		regs->xds = seg;
 		regs->xes = seg;
@@ -492,7 +492,7 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	regs->eip = (unsigned long) ka->sa.sa_handler;
 	{
 		unsigned long seg = __USER_DS;
-		__asm__("mov %w0,%%fs ; mov %w0,%%gs": "=r"(seg) : "0"(seg));
+		__asm__("movl %w0,%%fs ; movl %w0,%%gs": "=r"(seg) : "0"(seg));
 		set_fs(USER_DS);
 		regs->xds = seg;
 		regs->xes = seg;

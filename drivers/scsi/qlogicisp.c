@@ -55,6 +55,8 @@
 
 #define DEFAULT_LOOP_COUNT	1000000
 
+#define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
+
 /* End Configuration section *************************************************/
 
 #include <linux/module.h>
@@ -606,7 +608,7 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 		}
 
 		if (check_region(host->io_port, 0xff)) {
-			printk("qlogicisp : i/o region 0x%04x-0x%04x already "
+			printk("qlogicisp : i/o region 0x%lx-0x%lx already "
 			       "in use\n",
 			       host->io_port, host->io_port + 0xff);
 			free_irq(host->irq, NULL);
@@ -658,7 +660,7 @@ const char *isp1020_info(struct Scsi_Host *host)
 
 	hostdata = (struct isp1020_hostdata *) host->hostdata;
 	sprintf(buf,
-		"QLogic ISP1020 SCSI on PCI bus %d device %d irq %d base 0x%x",
+		"QLogic ISP1020 SCSI on PCI bus %d device %d irq %d base 0x%lx",
 		hostdata->bus, (hostdata->device_fn & 0xf8) >> 3, host->irq,
 		host->io_port);
 
@@ -1166,10 +1168,13 @@ static int isp1020_reset_hardware(struct Scsi_Host *host)
 
 static int isp1020_init(struct Scsi_Host *sh)
 {
-	u_int io_base;
+	u_long io_base = 0;
 	struct isp1020_hostdata *hostdata;
 	u_char bus, device_fn, revision, irq;
 	u_short vendor_id, device_id, command;
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,90)
+	struct pci_dev *pdev;
+#endif
 
 	ENTER("isp1020_init");
 
@@ -1182,16 +1187,24 @@ static int isp1020_init(struct Scsi_Host *sh)
 					PCI_DEVICE_ID, &device_id)
             || pcibios_read_config_word(bus, device_fn,
 					PCI_COMMAND, &command)
+#if LINUX_VERSION_CODE < LinuxVersionCode(2,1,90)
             || pcibios_read_config_dword(bus, device_fn,
 					 PCI_BASE_ADDRESS_0, &io_base)
 	    || pcibios_read_config_byte(bus, device_fn,
-					PCI_CLASS_REVISION, &revision)
+					PCI_INTERRUPT_LINE, &irq)
+#endif
             || pcibios_read_config_byte(bus, device_fn,
-					PCI_INTERRUPT_LINE, &irq))
+					PCI_CLASS_REVISION, &revision))
 	{
 		printk("qlogicisp : error reading PCI configuration\n");
 		return 1;
 	}
+
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,90)
+	pdev = pci_find_dev(bus, device_fn);
+	io_base = pdev->base_address[0];
+	irq     = pdev->irq;
+#endif
 
 	if (vendor_id != PCI_VENDOR_ID_QLOGIC) {
 		printk("qlogicisp : 0x%04x is not QLogic vendor ID\n",

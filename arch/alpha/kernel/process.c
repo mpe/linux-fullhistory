@@ -66,9 +66,48 @@ asmlinkage int sys_sethae(unsigned long hae, unsigned long a1, unsigned long a2,
 	unsigned long a3, unsigned long a4, unsigned long a5,
 	struct pt_regs regs)
 {
+#if !defined(CONFIG_ALPHA_TSUNAMI)
 	(&regs)->hae = hae;
+#endif
 	return 0;
 }
+
+#ifdef __SMP__
+/* This is being executed in task 0 'user space'. */
+#define resched_needed() 1
+int cpu_idle(void *unused)
+{
+	extern volatile int smp_commenced;
+
+	current->priority = -100;
+	while (1) {
+		/*
+		 * tq_scheduler currently assumes we're running in a process
+		 * context (ie that we hold the kernel lock..)
+		 */
+		if (tq_scheduler) {
+			lock_kernel();
+			run_task_queue(&tq_scheduler);
+			unlock_kernel();
+		}
+		/* endless idle loop with no priority at all */
+		current->counter = -100;
+		if (!smp_commenced || resched_needed()) {
+			schedule();
+		}
+	}
+}
+
+asmlinkage int sys_idle(void)
+{
+        if(current->pid != 0)
+                return -EPERM;
+
+        cpu_idle(NULL);
+        return 0;
+}
+
+#else /* __SMP__ */
 
 asmlinkage int sys_idle(void)
 {
@@ -88,6 +127,12 @@ out:
 	unlock_kernel();
 	return ret;
 }
+#endif /* __SMP__ */
+
+#if defined(CONFIG_ALPHA_SRM_SETUP)
+extern void reset_for_srm(void);	
+extern unsigned long srm_hae;
+#endif
 
 static void finish_shutdown(void)
 {
@@ -96,8 +141,8 @@ static void finish_shutdown(void)
 	unsigned long flags;
 
 	/* i'm not sure if i really need to disable interrupts here */
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
+
  	/* reset periodic interrupt frequency */
         CMOS_WRITE(0x26, RTC_FREQ_SELECT);
 
@@ -131,6 +176,10 @@ void machine_restart(char * __unused)
 /*	flags |=  0x0000000000030000UL; *//* this is "warm bootstrap" */
 	cpup->flags = flags;					       
 	mb();						
+#if defined(CONFIG_ALPHA_SRM_SETUP)
+	reset_for_srm();
+	set_hae(srm_hae);
+#endif
 #endif /* SRM */                                        
 
 	finish_shutdown();
@@ -150,6 +199,10 @@ void machine_halt(void)
 	flags |=  0x0000000000040000UL; /* this is "remain halted" */
 	cpup->flags = flags;					       
 	mb();						
+#if defined(CONFIG_ALPHA_SRM_SETUP)
+	reset_for_srm();
+	set_hae(srm_hae);
+#endif
 
 	finish_shutdown();
 #endif /* SRM */                                        
@@ -228,6 +281,7 @@ int alpha_clone(unsigned long clone_flags, unsigned long usp,
 }
 
 extern void ret_from_sys_call(void);
+extern void ret_from_smpfork(void);
 /*
  * Copy an alpha thread..
  *
@@ -258,7 +312,11 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	stack = ((struct switch_stack *) regs) - 1;
 	childstack = ((struct switch_stack *) childregs) - 1;
 	*childstack = *stack;
+#ifdef __SMP__
+	childstack->r26 = (unsigned long) ret_from_smpfork;
+#else
 	childstack->r26 = (unsigned long) ret_from_sys_call;
+#endif
 	p->tss.usp = usp;
 	p->tss.ksp = (unsigned long) childstack;
 	p->tss.pal_flags = 1;	/* set FEN, clear everything else */

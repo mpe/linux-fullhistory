@@ -179,7 +179,7 @@ struct thread_struct {
 
 #define start_thread(regs, new_eip, new_esp) do {\
 	unsigned long seg = __USER_DS; \
-	__asm__("mov %w0,%%fs ; mov %w0,%%gs":"=r" (seg) :"0" (seg)); \
+	__asm__("movl %w0,%%fs ; movl %w0,%%gs":"=r" (seg) :"0" (seg)); \
 	set_fs(USER_DS); \
 	regs->xds = seg; \
 	regs->xes = seg; \

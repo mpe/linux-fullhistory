@@ -8,6 +8,7 @@
  *
  */
 #include <linux/kernel.h>
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
@@ -19,17 +20,14 @@
 #include <asm/ptrace.h>
 #include <asm/mmu_context.h>
 
-/* NOTE: Herein are back-to-back mb insns.  They are magic.
-   A plausable explanation is that the i/o controler does not properly
-   handle the system transaction.  Another involves timing.  Ho hum.  */
+/*
+ * NOTE: Herein lie back-to-back mb instructions.  They are magic. 
+ * One plausible explanation is that the i/o controller does not properly
+ * handle the system transaction.  Another involves timing.  Ho hum.
+ */
 
 extern struct hwrpb_struct *hwrpb;
 extern asmlinkage void wrmces(unsigned long mces);
-extern asmlinkage unsigned long whami(void);
-extern int alpha_sys_type;
-
-#define CPUID whami()
-
 
 /*
  * Machine check reasons.  Defined according to PALcode sources
@@ -62,10 +60,14 @@ extern int alpha_sys_type;
 #define vulp	volatile unsigned long *
 #define vuip	volatile unsigned int  *
 
-static volatile unsigned int T2_mcheck_expected = 0;
-static volatile unsigned int T2_mcheck_taken = 0;
-static unsigned long T2_jd;
+static volatile unsigned int T2_mcheck_expected[NR_CPUS];
+static volatile unsigned int T2_mcheck_taken[NR_CPUS];
 
+#ifdef CONFIG_ALPHA_SRM_SETUP
+unsigned int T2_DMA_WIN_BASE = T2_DMA_WIN_BASE_DEFAULT;
+unsigned int T2_DMA_WIN_SIZE = T2_DMA_WIN_SIZE_DEFAULT;
+unsigned long t2_sm_base;
+#endif /* SRM_SETUP */
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -145,8 +147,10 @@ static int mk_conf_addr(unsigned char bus, unsigned char device_fn,
 static unsigned int conf_read(unsigned long addr, unsigned char type1)
 {
 	unsigned long flags;
-	unsigned int stat0, value;
-	unsigned int t2_cfg = 0; /* to keep gcc quiet */
+	unsigned int stat0, value, cpu;
+	unsigned long t2_cfg = 0; /* to keep gcc quiet */
+
+	cpu = smp_processor_id();
 
 	save_flags(flags);	/* avoid getting hit by machine check */
 	cli();
@@ -155,43 +159,41 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 
 #if 0
 	/* reset status register to avoid losing errors: */
-	stat0 = *(vuip)T2_IOCSR;
-	*(vuip)T2_IOCSR = stat0;
+	stat0 = *(vulp)T2_IOCSR;
+	*(vulp)T2_IOCSR = stat0;
 	mb();
 	DBG(("conf_read: T2 IOCSR was 0x%x\n", stat0));
+#endif
 	/* if Type1 access, must set T2 CFG */
 	if (type1) {
-		t2_cfg = *(vuip)T2_IOC_CFG;
+		t2_cfg = *(vulp)T2_HAE_3 & ~0xc0000000UL;
+		*(vulp)T2_HAE_3 = 0x40000000UL | t2_cfg;
 		mb();
-		*(vuip)T2_IOC_CFG = t2_cfg | 1;
 		DBG(("conf_read: TYPE1 access\n"));
 	}
 	mb();
 	draina();
-#endif
 
-	T2_mcheck_expected = 1;
-	T2_mcheck_taken = 0;
+	T2_mcheck_expected[cpu] = 1;
+	T2_mcheck_taken[cpu] = 0;
 	mb();
 	/* access configuration space: */
 	value = *(vuip)addr;
 	mb();
 	mb();  /* magic */
-	if (T2_mcheck_taken) {
-		T2_mcheck_taken = 0;
+	if (T2_mcheck_taken[cpu]) {
+		T2_mcheck_taken[cpu] = 0;
 		value = 0xffffffffU;
 		mb();
 	}
-	T2_mcheck_expected = 0;
+	T2_mcheck_expected[cpu] = 0;
 	mb();
 
-#if 0
-	/* if Type1 access, must reset IOC CFG so normal IO space ops work */
+	/* if Type1 access, must reset T2 CFG so normal IO space ops work */
 	if (type1) {
-		*(vuip)T2_IOC_CFG = t2_cfg & ~1;
+		*(vulp)T2_HAE_3 = t2_cfg;
 		mb();
 	}
-#endif
 	DBG(("conf_read(): finished\n"));
 
 	restore_flags(flags);
@@ -203,44 +205,45 @@ static void conf_write(unsigned long addr, unsigned int value,
 		       unsigned char type1)
 {
 	unsigned long flags;
-	unsigned int stat0;
-	unsigned int t2_cfg = 0; /* to keep gcc quiet */
+	unsigned int stat0, cpu;
+	unsigned long t2_cfg = 0; /* to keep gcc quiet */
+
+	cpu = smp_processor_id();
 
 	save_flags(flags);	/* avoid getting hit by machine check */
 	cli();
 
 #if 0
 	/* reset status register to avoid losing errors: */
-	stat0 = *(vuip)T2_IOCSR;
-	*(vuip)T2_IOCSR = stat0;
+	stat0 = *(vulp)T2_IOCSR;
+	*(vulp)T2_IOCSR = stat0;
 	mb();
 	DBG(("conf_write: T2 ERR was 0x%x\n", stat0));
+#endif
 	/* if Type1 access, must set T2 CFG */
 	if (type1) {
-		t2_cfg = *(vuip)T2_IOC_CFG;
+		t2_cfg = *(vulp)T2_HAE_3 & ~0xc0000000UL;
+		*(vulp)T2_HAE_3 = t2_cfg | 0x40000000UL;
 		mb();
-		*(vuip)T2_IOC_CFG = t2_cfg | 1;
 		DBG(("conf_write: TYPE1 access\n"));
 	}
+	mb();
 	draina();
-#endif
 
-	T2_mcheck_expected = 1;
+	T2_mcheck_expected[cpu] = 1;
 	mb();
 	/* access configuration space: */
 	*(vuip)addr = value;
 	mb();
 	mb();  /* magic */
-	T2_mcheck_expected = 0;
+	T2_mcheck_expected[cpu] = 0;
 	mb();
 
-#if 0
-	/* if Type1 access, must reset IOC CFG so normal IO space ops work */
+	/* if Type1 access, must reset T2 CFG so normal IO space ops work */
 	if (type1) {
-		*(vuip)T2_IOC_CFG = t2_cfg & ~1;
+		*(vulp)T2_HAE_3 = t2_cfg;
 		mb();
 	}
-#endif
 	DBG(("conf_write(): finished\n"));
 	restore_flags(flags);
 }
@@ -362,17 +365,21 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char device_fn,
 
 unsigned long t2_init(unsigned long mem_start, unsigned long mem_end)
 {
-	unsigned int t2_err;
-	struct percpu_struct *cpu;
-	int i;
+	unsigned long t2_err;
+	unsigned int i;
+
+	for (i = 0; i < NR_CPUS; i++) {
+		T2_mcheck_expected[i] = 0;
+		T2_mcheck_taken[i] = 0;
+	}
 
 #if 0
 	/* 
 	 * Set up error reporting.
 	 */
-	t2_err = *(vuip)T2_IOCSR ;
+	t2_err = *(vulp)T2_IOCSR ;
 	t2_err |= (0x1 << 7) ;   /* master abort */
-	*(vuip)T2_IOC_T2_ERR = t2_err ;
+	*(vulp)T2_IOCSR = t2_err ;
 	mb() ;
 #endif
 
@@ -388,6 +395,42 @@ unsigned long t2_init(unsigned long mem_start, unsigned long mem_end)
 	       *(vulp)T2_TBASE2);
 #endif
 
+#ifdef CONFIG_ALPHA_SRM_SETUP
+	/* check window 1 for enabled and mapped to 0 */
+	if (((*(vulp)T2_WBASE1 & (3UL<<18)) == (2UL<<18)) &&
+	     (*(vulp)T2_TBASE1 == 0))
+	{
+	  T2_DMA_WIN_BASE = *(vulp)T2_WBASE1 & 0xfff00000UL;
+	  T2_DMA_WIN_SIZE = *(vulp)T2_WMASK1 & 0xfff00000UL;
+	  T2_DMA_WIN_SIZE += 0x00100000UL;
+/* DISABLE window 2!! ?? */
+#if 1
+	  printk("t2_init: using Window 1 settings\n");
+	  printk("t2_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
+		 *(vulp)T2_WBASE1,
+		 *(vulp)T2_WMASK1,
+		 *(vulp)T2_TBASE1);
+#endif
+	}
+	else	/* check window 2 for enabled and mapped to 0 */
+	if (((*(vulp)T2_WBASE2 & (3UL<<18)) == (2UL<<18)) &&
+	     (*(vulp)T2_TBASE2 == 0))
+	{
+	  T2_DMA_WIN_BASE = *(vulp)T2_WBASE2 & 0xfff00000UL;
+	  T2_DMA_WIN_SIZE = *(vulp)T2_WMASK2 & 0xfff00000UL;
+	  T2_DMA_WIN_SIZE += 0x00100000UL;
+/* DISABLE window 1!! ?? */
+#if 1
+	  printk("t2_init: using Window 2 settings\n");
+	  printk("t2_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
+		 *(vulp)T2_WBASE2,
+		 *(vulp)T2_WMASK2,
+		 *(vulp)T2_TBASE2);
+#endif
+	}
+	else /* we must use our defaults... */
+#endif /* SRM_SETUP */
+	{
 	/*
 	 * Set up the PCI->physical memory translation windows.
 	 * For now, window 2 is  disabled.  In the future, we may
@@ -396,13 +439,13 @@ unsigned long t2_init(unsigned long mem_start, unsigned long mem_end)
 	 */
 
 	/* WARNING!! must correspond to the DMA_WIN params!!! */
-	*(vuip)T2_WBASE1 = 0x400807ffU;
-	*(vuip)T2_WMASK1 = 0x3ff00000U;
-	*(vuip)T2_TBASE1 = 0;
+	*(vulp)T2_WBASE1 = 0x400807ffU;
+	*(vulp)T2_WMASK1 = 0x3ff00000U;
+	*(vulp)T2_TBASE1 = 0;
 
-	*(vuip)T2_WBASE2 = 0x0;
-
-	*(vuip)T2_HBASE = 0x0;
+	*(vulp)T2_WBASE2 = 0x0;
+	*(vulp)T2_HBASE = 0x0;
+	}
 
 	/*
 	 * check ASN in HWRPB for validity, report if bad
@@ -420,41 +463,43 @@ unsigned long t2_init(unsigned long mem_start, unsigned long mem_end)
 	 *  what ARC or SRM might have left behind...
 	 */
 	{
-#if 0
-		printk("T2_init: HAE1 was 0x%lx\n", *(vulp)T2_HAE_1);
-		printk("T2_init: HAE2 was 0x%lx\n", *(vulp)T2_HAE_2);
-		printk("T2_init: HAE3 was 0x%lx\n", *(vulp)T2_HAE_3);
-		printk("T2_init: HAE4 was 0x%lx\n", *(vulp)T2_HAE_4);
+	  unsigned long t2_hae_1 = *(vulp)T2_HAE_1;
+	  unsigned long t2_hae_2 = *(vulp)T2_HAE_2;
+	  unsigned long t2_hae_3 = *(vulp)T2_HAE_3;
+	  unsigned long t2_hae_4 = *(vulp)T2_HAE_4;
+#if 1
+          printk("T2_init: HAE1 was 0x%lx\n", t2_hae_1);
+          printk("T2_init: HAE2 was 0x%lx\n", t2_hae_2);
+          printk("T2_init: HAE3 was 0x%lx\n", t2_hae_3);
+          printk("T2_init: HAE4 was 0x%lx\n", t2_hae_4);
 #endif
+#ifdef CONFIG_ALPHA_SRM_SETUP
+	  /*
+	   * sigh... For the SRM setup, unless we know apriori what the HAE
+	   * contents will be, we need to setup the arbitrary region bases
+	   * so we can test against the range of addresses and tailor the
+	   * 	    region chosen for the SPARSE memory access.
+	   *
+	   * see include/asm-alpha/t2.h for the SPARSE mem read/write
+	  */
+	  t2_sm_base = (t2_hae_1 << 27) & 0xf8000000UL;
+	  /*
+	    Set the HAE cache, so that setup_arch() code
+	    will use the SRM setting always. Our readb/writeb
+	    code in .h expects never to have to change
+	    the contents of the HAE.
+	   */
+	  hae.cache = t2_hae_1;
+#else /* SRM_SETUP */
+	  *(vulp)T2_HAE_1 = 0; mb();
+	  *(vulp)T2_HAE_2 = 0; mb();
+	  *(vulp)T2_HAE_3 = 0; mb();
 #if 0
-		*(vuip)T2_HAE_1 = 0; mb();
-		*(vuip)T2_HAE_2 = 0; mb();
-		*(vuip)T2_HAE_3 = 0; mb();
-		*(vuip)T2_HAE_4 = 0; mb();
+	  *(vulp)T2_HAE_4 = 0; mb(); /* do not touch this */
 #endif
+#endif /* SRM_SETUP */
 	}
  
-#if 1
-	if (hwrpb->nr_processors > 1) {
-		printk("T2_init: nr_processors 0x%lx\n",
-		       hwrpb->nr_processors);
-		printk("T2_init: processor_size 0x%lx\n",
-		       hwrpb->processor_size);
-		printk("T2_init: processor_offset 0x%lx\n",
-		       hwrpb->processor_offset);
-
-		cpu = (struct percpu_struct *)
-			((char*)hwrpb + hwrpb->processor_offset);
-
-		for (i = 0; i < hwrpb->nr_processors; i++ ) {
-			printk("T2_init: CPU 0x%x: flags 0x%lx type 0x%lx\n",
-			       i, cpu->flags, cpu->type);
-			cpu = (struct percpu_struct *)
-				((char *)cpu + hwrpb->processor_size);
-		}
-	}
-#endif
-
 	return mem_start;
 }
 
@@ -469,17 +514,19 @@ static struct sable_cpu_csr *sable_cpu_regs[4] = {
 
 int t2_clear_errors(void)
 {
+	unsigned int cpu = smp_processor_id();
+
 	DBGMC(("???????? t2_clear_errors\n"));
 
-	sable_cpu_regs[CPUID]->sic &= ~SIC_SEIC;
+	sable_cpu_regs[cpu]->sic &= ~SIC_SEIC;
 
 	/* 
 	 * clear cpu errors
 	 */
-	sable_cpu_regs[CPUID]->bcce |= sable_cpu_regs[CPUID]->bcce;
-	sable_cpu_regs[CPUID]->cbe  |= sable_cpu_regs[CPUID]->cbe;
-	sable_cpu_regs[CPUID]->bcue |= sable_cpu_regs[CPUID]->bcue;
-	sable_cpu_regs[CPUID]->dter |= sable_cpu_regs[CPUID]->dter;
+	sable_cpu_regs[cpu]->bcce |= sable_cpu_regs[cpu]->bcce;
+	sable_cpu_regs[cpu]->cbe  |= sable_cpu_regs[cpu]->cbe;
+	sable_cpu_regs[cpu]->bcue |= sable_cpu_regs[cpu]->bcue;
+	sable_cpu_regs[cpu]->dter |= sable_cpu_regs[cpu]->dter;
 
 	*(vulp)T2_CERR1 |= *(vulp)T2_CERR1;
 	*(vulp)T2_PERR1 |= *(vulp)T2_PERR1;
@@ -499,6 +546,7 @@ void t2_machine_check(unsigned long vector, unsigned long la_ptr,
 	const char * reason;
 	char buf[128];
 	long i;
+	unsigned int cpu = smp_processor_id();
 
 	DBGMC(("t2_machine_check: vector=0x%lx la_ptr=0x%lx\n",
 	       vector, la_ptr));
@@ -516,7 +564,7 @@ void t2_machine_check(unsigned long vector, unsigned long la_ptr,
 	DBGMC(("         pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
 	       regs->pc, mchk_header->elfl_size, mchk_header->elfl_procoffset,
 	       mchk_header->elfl_sysoffset));
-	DBGMC(("t2_machine_check: expected %d\n", T2_mcheck_expected));
+	DBGMC(("t2_machine_check: expected %d\n", T2_mcheck_expected[cpu]));
 
 #ifdef DEBUG_DUMP
 	{
@@ -537,11 +585,11 @@ void t2_machine_check(unsigned long vector, unsigned long la_ptr,
 	 */
 	mb();
 	mb();  /* magic */
-	if (T2_mcheck_expected/* && (mchk_sysdata->epic_dcsr && 0x0c00UL)*/) {
+	if (T2_mcheck_expected[cpu]) {
 		DBGMC(("T2 machine check expected\n"));
-		T2_mcheck_taken = 1;
+		T2_mcheck_taken[cpu] = 1;
 		t2_clear_errors();
-		T2_mcheck_expected = 0;
+		T2_mcheck_expected[cpu] = 0;
 		mb();
 		mb();  /* magic */
 		wrmces(rdmces()|1);/* ??? */

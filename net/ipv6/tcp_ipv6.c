@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.68 1998/03/22 19:14:50 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.69 1998/03/28 00:55:36 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -770,7 +770,7 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 
 	req->rcv_wnd = 0;		/* So that tcp_send_synack() knows! */
 
-	req->rcv_isn = skb->seq;
+	req->rcv_isn = TCP_SKB_CB(skb)->seq;
 	req->snt_isn = isn;
 	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
 	tp.in_mss = 536;
@@ -1012,7 +1012,8 @@ static void tcp_v6_rst_req(struct sock *sk, struct sk_buff *skb)
 	if (!req)
 		return;
 	/* Sequence number check required by RFC793 */
-	if (before(skb->seq, req->snt_isn) || after(skb->seq, req->snt_isn+1))
+	if (before(TCP_SKB_CB(skb)->seq, req->snt_isn) ||
+	    after(TCP_SKB_CB(skb)->seq, req->snt_isn+1))
 		return;
 	tcp_synq_unlink(tp, req, prev);
 	req->class->destructor(req);
@@ -1078,9 +1079,10 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 			goto no_tcp_socket;
 		}
 
-		skb->seq = ntohl(th->seq);
-		skb->end_seq = skb->seq + th->syn + th->fin + len - th->doff*4;
-		skb->ack_seq = ntohl(th->ack_seq);
+		TCP_SKB_CB(skb)->seq = ntohl(th->seq);
+		TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin +
+					    len - th->doff*4);
+		TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
 		skb->used = 0;
 		if(sk->state == TCP_TIME_WAIT)
 			goto do_time_wait;

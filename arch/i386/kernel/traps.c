@@ -68,19 +68,19 @@ out: \
 
 #define get_seg_byte(seg,addr) ({ \
 register unsigned char __res; \
-__asm__("push %%fs;mov %%ax,%%fs;movb %%fs:%2,%%al;pop %%fs" \
+__asm__("pushl %%fs;movl %%ax,%%fs;movb %%fs:%2,%%al;popl %%fs" \
 	:"=a" (__res):"0" (seg),"m" (*(addr))); \
 __res;})
 
 #define get_seg_long(seg,addr) ({ \
 register unsigned long __res; \
-__asm__("push %%fs;mov %%ax,%%fs;movl %%fs:%2,%%eax;pop %%fs" \
+__asm__("pushl %%fs;movl %%ax,%%fs;movl %%fs:%2,%%eax;popl %%fs" \
 	:"=a" (__res):"0" (seg),"m" (*(addr))); \
 __res;})
 
 #define _fs() ({ \
 register unsigned short __res; \
-__asm__("mov %%fs,%%ax":"=a" (__res):); \
+__asm__("movl %%fs,%%ax":"=a" (__res):); \
 __res;})
 
 void page_exception(void);

@@ -37,10 +37,10 @@ startup_32:
 	cld
 	cli
 	movl $(__KERNEL_DS),%eax
-	mov %ax,%ds
-	mov %ax,%es
-	mov %ax,%fs
-	mov %ax,%gs
+	movl %ax,%ds
+	movl %ax,%es
+	movl %ax,%fs
+	movl %ax,%gs
 #ifdef __SMP__
 	orw %bx,%bx			# What state are we in BX=1 for SMP
 					# 0 for boot

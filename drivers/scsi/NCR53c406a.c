@@ -226,7 +226,8 @@ static void *addresses[] = {
 #endif USE_BIOS
 		       
 /* possible i/o port addresses */
-static unsigned short ports[] = { 0x230, 0x330 };
+static unsigned short ports[] =
+  { 0x230, 0x330, 0x280, 0x290, 0x330, 0x340, 0x300, 0x310, 0x348, 0x350 };
 #define PORT_COUNT (sizeof( ports ) / sizeof( unsigned short ))
 
 /* possible interrupt channels */

@@ -39,28 +39,33 @@
 #define BROKEN_ASN 1
 #endif
 
+#ifdef __SMP__
+#define WIDTH_THIS_PROCESSOR	5
+/*
+ * last_asn[processor]:
+ * 63                                            0
+ * +-------------+----------------+--------------+
+ * | asn version | this processor | hardware asn |
+ * +-------------+----------------+--------------+
+ */
+extern unsigned long last_asn[];
+#define asn_cache last_asn[p->processor]
+
+#else
+#define WIDTH_THIS_PROCESSOR	0
+/*
+ * asn_cache:
+ * 63                                            0
+ * +------------------------------+--------------+
+ * |         asn version          | hardware asn |
+ * +------------------------------+--------------+
+ */
 extern unsigned long asn_cache;
+#endif /* __SMP__ */
 
-#define ASN_VERSION_SHIFT 16
-#define ASN_VERSION_MASK ((~0UL) << ASN_VERSION_SHIFT)
-#define ASN_FIRST_VERSION (1UL << ASN_VERSION_SHIFT)
-
-extern inline void get_new_mmu_context(struct task_struct *p,
-	struct mm_struct *mm,
-	unsigned long asn)
-{
-	/* check if it's legal.. */
-	if ((asn & ~ASN_VERSION_MASK) > MAX_ASN) {
-		/* start a new version, invalidate all old asn's */
-		tbiap(); imb();
-		asn = (asn & ASN_VERSION_MASK) + ASN_FIRST_VERSION;
-		if (!asn)
-			asn = ASN_FIRST_VERSION;
-	}
-	asn_cache = asn + 1;
-	mm->context = asn;			/* full version + asn */
-	p->tss.asn = asn & ~ASN_VERSION_MASK;	/* just asn */
-}
+#define WIDTH_HARDWARE_ASN	7
+#define ASN_FIRST_VERSION (1UL << (WIDTH_THIS_PROCESSOR + WIDTH_HARDWARE_ASN))
+#define HARDWARE_ASN_MASK ((1UL << WIDTH_HARDWARE_ASN) - 1)
 
 /*
  * NOTE! The way this is set up, the high bits of the "asn_cache" (and
@@ -73,6 +78,23 @@ extern inline void get_new_mmu_context(struct task_struct *p,
  * force a new asn for any other processes the next time they want to
  * run.
  */
+extern inline void
+get_new_mmu_context(struct task_struct *p, struct mm_struct *mm)
+{
+	unsigned long asn = asn_cache;
+
+	if ((asn & HARDWARE_ASN_MASK) < MAX_ASN)
+		++asn;
+	else {
+		tbiap();
+		imb();
+		asn = (asn & ~HARDWARE_ASN_MASK) + ASN_FIRST_VERSION;
+	}
+	asn_cache = asn;
+	mm->context = asn;			/* full version + asn */
+	p->tss.asn = asn & HARDWARE_ASN_MASK;	/* just asn */
+}
+
 extern inline void get_mmu_context(struct task_struct *p)
 {
 #ifndef BROKEN_ASN
@@ -81,8 +103,8 @@ extern inline void get_mmu_context(struct task_struct *p)
 	if (mm) {
 		unsigned long asn = asn_cache;
 		/* Check if our ASN is of an older version and thus invalid */
-		if ((mm->context ^ asn) & ASN_VERSION_MASK)
-			get_new_mmu_context(p, mm, asn);
+		if ((mm->context ^ asn) & ~HARDWARE_ASN_MASK)
+			get_new_mmu_context(p, mm);
 	}
 #endif
 }
@@ -91,3 +113,4 @@ extern inline void get_mmu_context(struct task_struct *p)
 #define destroy_context(mm)	do { } while(0)
 
 #endif
+

@@ -1252,6 +1252,7 @@ typedef struct BusLogic_DriverOptions
   unsigned short TaggedQueuingPermittedMask;
   unsigned short BusSettleTime;
   BusLogic_LocalOptions_T LocalOptions;
+  unsigned char CommonQueueDepth;
   unsigned char QueueDepth[BusLogic_MaxTargetDevices];
   BusLogic_ErrorRecoveryStrategy_T
     ErrorRecoveryStrategy[BusLogic_MaxTargetDevices];
@@ -1412,6 +1413,7 @@ typedef struct BusLogic_HostAdapter
   unsigned short DriverQueueDepth;
   unsigned short HostAdapterQueueDepth;
   unsigned short UntaggedQueueDepth;
+  unsigned short CommonQueueDepth;
   unsigned short BusSettleTime;
   unsigned short SynchronousPermitted;
   unsigned short FastPermitted;

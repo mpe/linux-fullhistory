@@ -11,11 +11,13 @@
 #include <linux/string.h>
 #include <linux/version.h>
 #include <linux/mm.h>
+#include <linux/config.h>
 
 #include <asm/system.h>
 #include <asm/console.h>
 #include <asm/hwrpb.h>
 #include <asm/pgtable.h>
+#include <asm/io.h>
 
 #include <stdarg.h>
 
@@ -156,7 +158,8 @@ void pal_init(void)
 	printk("Ok (rev %lx)\n", rev);
 	/* remove the old virtual page-table mapping */
 	L1[1] = 0;
-	flush_tlb_all();
+
+	tbia(); /* do it directly in case we are SMP */
 }
 
 static inline long load(unsigned long dst,
@@ -189,30 +192,59 @@ extern char _end;
 
 void start_kernel(void)
 {
-	long i;
-	int nbytes;
-	char envval[256];
+	static long i;
+	static int nbytes;
+	/*
+	 * note that this crufty stuff with static and envval and envbuf
+	 * is because:
+	 *
+	 * 1. frequently, the stack is is short, and we don't want to overrun;
+	 * 2. frequently the stack is where we are going to copy the kernel to;
+	 * 3. a certain SRM console required the GET_ENV output to stack.
+	 */
+	static char envval[256];
+	char envbuf[256];
 
 	printk("Linux/AXP bootp loader for Linux " UTS_RELEASE "\n");
 	if (hwrpb.pagesize != 8192) {
-		printk("Expected 8kB pages, got %ldkB\n", hwrpb.pagesize >> 10);
+		printk("Expected 8kB pages, got %ldkB\n",
+		       hwrpb.pagesize >> 10);
 		return;
 	}
 	pal_init();
 
 	nbytes = dispatch(CCB_GET_ENV, ENV_BOOTED_OSFLAGS,
-			  envval, sizeof(envval));
-	if (nbytes < 0) {
+			  envbuf, sizeof(envbuf));
+	if (nbytes < 0 || nbytes >= sizeof(envbuf)) {
 		nbytes = 0;
 	}
-	envval[nbytes] = '\0';
-	strcpy((char*)ZERO_PAGE, envval);
-
-	printk("Loading the kernel ...\n");
+	envbuf[nbytes] = '\0';
+	memcpy(envval, envbuf, nbytes+1);
+	printk("Loading the kernel...'%s'\n", envval);
 
 	/* NOTE: *no* callbacks or printouts from here on out!!! */
 
+#if 1
+	/*
+	 * this is a hack, as some consoles seem to get virtual 20000000
+	 * (ie where the SRM console puts the kernel bootp image) memory
+	 * overlapping physical 310000 memory, which causes real problems
+	 * when attempting to copy the former to the latter... :-(
+	 *
+	 * so, we first move the kernel virtual-to-physical way above where
+	 * we physically want the kernel to end up, then copy it from there
+	 * to its final resting place... ;-}
+	 *
+	 * sigh...
+	 */
+
+        i = load(START_ADDR+(4*KERNEL_SIZE), KERNEL_ORIGIN, KERNEL_SIZE);
+        i = load(START_ADDR, START_ADDR+(4*KERNEL_SIZE), KERNEL_SIZE);
+#else
 	i = load(START_ADDR, KERNEL_ORIGIN, KERNEL_SIZE);
+#endif
+
+	strcpy((char*)ZERO_PAGE, envval);
 
 	runkernel();
 

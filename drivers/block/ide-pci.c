@@ -174,9 +174,13 @@ __initfunc(static ide_hwif_t *ide_match_hwif (unsigned int io_base, const char *
 	 * just in case there's another interface yet-to-be-scanned
 	 * which uses ports 1f0/170 (the ide0/ide1 defaults).
 	 */
-	for (h = 0; h < MAX_HWIFS; ++h) {
-		int hwifs[] = {2,3,1,0}; /* assign 3rd/4th before 1st/2nd */
-		hwif = &ide_hwifs[hwifs[h]];
+	for (h = 2; h < MAX_HWIFS; ++h) {
+		hwif = ide_hwifs + h;
+		if (hwif->chipset == ide_unknown)
+			return hwif;	/* pick an unused entry */
+	}
+	for (h = 0; h < 2; ++h) {
+		hwif = ide_hwifs + h;
 		if (hwif->chipset == ide_unknown)
 			return hwif;	/* pick an unused entry */
 	}
@@ -366,8 +370,10 @@ static inline void ide_scan_pci_device (unsigned int bus, unsigned int fn)
 		 * workaround Intel Advanced/ZP with bios <= 1.04;
 		 * these appear in some Dell Dimension XPS's 
 		 */
-		if (!hedt && IDE_PCI_DEVID_EQ(devid, DEVID_PIIXa))
+		if (!hedt && IDE_PCI_DEVID_EQ(devid, DEVID_PIIXa)) {
+			printk("ide: implementing workaround for PIIX detection\n");
 		        hedt = 0x80;
+		}
 
 		for (d = ide_pci_chipsets; d->devid.vid && !IDE_PCI_DEVID_EQ(d->devid, devid); ++d);
 		if (d->init_hwif == IDE_IGNORE)
@@ -382,7 +388,7 @@ static inline void ide_scan_pci_device (unsigned int bus, unsigned int fn)
 				printk("%s: IDE controller on PCI bus %d function %d\n", d->name, bus, fn);
 			ide_setup_pci_device(bus, fn, ccode, d);
 		}
-	} while (hedt == 0x80 && (++fn & 7));
+	} while ((hedt & 0x80) && (++fn & 7));
 }
 
 /*

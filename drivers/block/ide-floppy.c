@@ -1379,10 +1379,18 @@ static int idefloppy_cleanup (ide_drive_t *drive)
 	return 0;
 }
 
+#ifdef CONFIG_PROC_FS
+
 static ide_proc_entry_t idefloppy_proc[] = {
-	{ "geometry", proc_ide_read_geometry, NULL },
-	{ NULL, NULL, NULL }
+	{ "geometry",	S_IFREG|S_IRUGO,	proc_ide_read_geometry,	NULL },
+	{ NULL, 0, NULL, NULL }
 };
+
+#else
+
+#define	idefloppy_proc	NULL
+
+#endif	/* CONFIG_PROC_FS */
 
 /*
  *	IDE subdriver functions, registered with ide.c

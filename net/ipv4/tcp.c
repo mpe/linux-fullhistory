@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.104 1998/03/22 22:10:30 davem Exp $
+ * Version:	$Id: tcp.c,v 1.107 1998/03/28 00:55:28 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -506,13 +506,13 @@ static int tcp_readable(struct sock *sk)
 	/* Do until a push or until we are out of data. */
 	do {
 		/* Found a hole so stops here. */
-		if (before(counted, skb->seq))	/* should not happen */
+		if (before(counted, TCP_SKB_CB(skb)->seq))	/* should not happen */
 			break;
 
 		/* Length - header but start from where we are up to
 		 * avoid overlaps.
 		 */
-		sum = skb->len - (counted - skb->seq);
+		sum = skb->len - (counted - TCP_SKB_CB(skb)->seq);
 		if (skb->h.th->syn)
 			sum++;
 		if (sum > 0) {
@@ -788,7 +788,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 				 */
 				if (skb_tailroom(skb) > 0 &&
 				    (mss_now - copy) > 0 &&
-				    tp->snd_nxt < skb->end_seq) {
+				    tp->snd_nxt < TCP_SKB_CB(skb)->end_seq) {
 					int last_byte_was_odd = (copy % 4);
 
 					copy = mss_now - copy;
@@ -809,7 +809,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 							copy, skb->csum, &err);
 					}
 					tp->write_seq += copy;
-					skb->end_seq += copy;
+					TCP_SKB_CB(skb)->end_seq += copy;
 					from += copy;
 					copied += copy;
 					seglen -= copy;
@@ -839,7 +839,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 			if(copy > seglen)
 				copy = seglen;
 
-			tmp = MAX_HEADER + sk->prot->max_header + 15;
+			tmp = MAX_HEADER + sk->prot->max_header;
 			queue_it = 0;
 			if (copy < min(mss_now, tp->max_window >> 1) &&
 			    !(flags & MSG_OOB)) {
@@ -897,8 +897,8 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 			from += copy;
 			copied += copy;
 
-			skb->seq = tp->write_seq;
-			skb->end_seq = skb->seq + copy;
+			TCP_SKB_CB(skb)->seq = tp->write_seq;
+			TCP_SKB_CB(skb)->end_seq = TCP_SKB_CB(skb)->seq + copy;
 
 			/* This advances tp->write_seq for us. */
 			tcp_send_skb(sk, skb, queue_it);
@@ -1135,12 +1135,12 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 			/* Now that we have two receive queues this 
 			 * shouldn't happen.
 			 */
-			if (before(*seq, skb->seq)) {
+			if (before(*seq, TCP_SKB_CB(skb)->seq)) {
 				printk(KERN_INFO "recvmsg bug: copied %X seq %X\n",
-				       *seq, skb->seq);
+				       *seq, TCP_SKB_CB(skb)->seq);
 				break;
 			}
-			offset = *seq - skb->seq;
+			offset = *seq - TCP_SKB_CB(skb)->seq;
 			if (skb->h.th->syn)
 				offset--;
 			if (offset < skb->len)
@@ -1225,10 +1225,8 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		 *	a crash when cleanup_rbuf() gets called.
 		 */
 		err = memcpy_toiovec(msg->msg_iov, ((unsigned char *)skb->h.th) + skb->h.th->doff*4 + offset, used);
-		
 		if (err) {
 			/* Exception. Bailout! */
-			*seq -= err;
 			atomic_dec(&skb->users);
 			copied = -EFAULT;
 			break;
@@ -1625,8 +1623,16 @@ void tcp_set_keepalive(struct sock *sk, int val)
 		tcp_dec_slow_timer(TCP_SLT_KEEPALIVE);
 }
 
+extern void __skb_cb_too_small_for_tcp(int, int);
+
 __initfunc(void tcp_init(void))
 {
+	struct sk_buff *skb = NULL;
+
+	if(sizeof(struct tcp_skb_cb) > sizeof(skb->cb))
+		__skb_cb_too_small_for_tcp(sizeof(struct tcp_skb_cb),
+					   sizeof(skb->cb));
+
 	tcp_openreq_cachep = kmem_cache_create("tcp_open_request",
 						   sizeof(struct open_request),
 					       0, SLAB_HWCACHE_ALIGN,

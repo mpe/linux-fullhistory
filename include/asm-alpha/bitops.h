@@ -17,7 +17,7 @@
  * bit 0 is the LSB of addr; bit 64 is the LSB of (addr+1).
  */
 
-extern __inline__ void set_bit(unsigned long nr, void * addr)
+extern __inline__ void set_bit(unsigned long nr, volatile void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
@@ -38,7 +38,7 @@ extern __inline__ void set_bit(unsigned long nr, void * addr)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
 }
 
-extern __inline__ void clear_bit(unsigned long nr, void * addr)
+extern __inline__ void clear_bit(unsigned long nr, volatile void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
@@ -59,7 +59,7 @@ extern __inline__ void clear_bit(unsigned long nr, void * addr)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
 }
 
-extern __inline__ void change_bit(unsigned long nr, void * addr)
+extern __inline__ void change_bit(unsigned long nr, volatile void * addr)
 {
 	unsigned long temp;
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
@@ -76,7 +76,8 @@ extern __inline__ void change_bit(unsigned long nr, void * addr)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
 }
 
-extern __inline__ unsigned long test_and_set_bit(unsigned long nr, void * addr)
+extern __inline__ unsigned long test_and_set_bit(unsigned long nr,
+						 volatile void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
@@ -99,7 +100,8 @@ extern __inline__ unsigned long test_and_set_bit(unsigned long nr, void * addr)
 	return oldbit != 0;
 }
 
-extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, void * addr)
+extern __inline__ unsigned long test_and_clear_bit(unsigned long nr,
+						   volatile void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
@@ -122,7 +124,8 @@ extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, void * addr
 	return oldbit != 0;
 }
 
-extern __inline__ unsigned long test_and_change_bit(unsigned long nr, void * addr)
+extern __inline__ unsigned long test_and_change_bit(unsigned long nr,
+						    volatile void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
@@ -143,7 +146,7 @@ extern __inline__ unsigned long test_and_change_bit(unsigned long nr, void * add
 	return oldbit != 0;
 }
 
-extern __inline__ unsigned long test_bit(int nr, const void * addr)
+extern __inline__ unsigned long test_bit(int nr, volatile void * addr)
 {
 	return 1UL & (((const int *) addr)[nr >> 5] >> (nr & 31));
 }

@@ -6,6 +6,7 @@
  * bios code.
  */
 #include <linux/kernel.h>
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
@@ -43,6 +44,11 @@
 #define MCHK_K_SIO_SERR		0x204	/* all platforms so far */
 #define MCHK_K_SIO_IOCHK	0x206	/* all platforms so far */
 #define MCHK_K_DCSR		0x208	/* all but Noname */
+
+#ifdef CONFIG_ALPHA_SRM_SETUP
+unsigned int LCA_DMA_WIN_BASE = LCA_DMA_WIN_BASE_DEFAULT;
+unsigned int LCA_DMA_WIN_SIZE = LCA_DMA_WIN_SIZE_DEFAULT;
+#endif /* SRM_SETUP */
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -100,11 +106,11 @@ static int mk_conf_addr(unsigned char bus, unsigned char device_fn,
 			return -1;
 		}
 
-		*((vulp) LCA_IOC_CONF) = 0;
+		*(vulp)LCA_IOC_CONF = 0;
 		addr = (1 << (11 + device)) | (func << 8) | where;
 	} else {
 		/* type 1 configuration cycle: */
-		*((vulp) LCA_IOC_CONF) = 1;
+		*(vulp)LCA_IOC_CONF = 1;
 		addr = (bus << 16) | (device_fn << 8) | where;
 	}
 	*pci_addr = addr;
@@ -130,7 +136,7 @@ static unsigned int conf_read(unsigned long addr)
 	value = *(vuip)addr;
 	draina();
 
-	stat0 = *((unsigned long*)LCA_IOC_STAT0);
+	stat0 = *(vulp)LCA_IOC_STAT0;
 	if (stat0 & LCA_IOC_STAT0_ERR) {
 		code = ((stat0 >> LCA_IOC_STAT0_CODE_SHIFT)
 			& LCA_IOC_STAT0_CODE_MASK);
@@ -167,7 +173,7 @@ static void conf_write(unsigned long addr, unsigned int value)
 	*(vuip)addr = value;
 	draina();
 
-	stat0 = *((unsigned long*)LCA_IOC_STAT0);
+	stat0 = *(vulp)LCA_IOC_STAT0;
 	if (stat0 & LCA_IOC_STAT0_ERR) {
 		code = ((stat0 >> LCA_IOC_STAT0_CODE_SHIFT)
 			& LCA_IOC_STAT0_CODE_MASK);
@@ -287,6 +293,40 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char device_fn,
 
 unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 {
+#ifdef CONFIG_ALPHA_SRM_SETUP
+	/* check window 0 for enabled and mapped to 0 */
+	if ((*(vulp)LCA_IOC_W_BASE0 & (1UL<<33)) &&
+	    (*(vulp)LCA_IOC_T_BASE0 == 0))
+	{
+	  LCA_DMA_WIN_BASE = *(vulp)LCA_IOC_W_BASE0 & 0xffffffffUL;
+	  LCA_DMA_WIN_SIZE = *(vulp)LCA_IOC_W_MASK0 & 0xffffffffUL;
+	  LCA_DMA_WIN_SIZE += 1;
+#if 1
+	  printk("lca_init: using Window 0 settings\n");
+	  printk("lca_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
+		 *(vulp)LCA_IOC_W_BASE0,
+		 *(vulp)LCA_IOC_W_MASK0,
+		 *(vulp)LCA_IOC_T_BASE0);
+#endif
+	}
+	else	/* check window 2 for enabled and mapped to 0 */
+	if ((*(vulp)LCA_IOC_W_BASE1 & (1UL<<33)) &&
+	    (*(vulp)LCA_IOC_T_BASE1 == 0))
+	{
+	  LCA_DMA_WIN_BASE = *(vulp)LCA_IOC_W_BASE1 & 0xffffffffUL;
+	  LCA_DMA_WIN_SIZE = *(vulp)LCA_IOC_W_MASK1 & 0xffffffffUL;
+	  LCA_DMA_WIN_SIZE += 1;
+#if 1
+	  printk("lca_init: using Window 1 settings\n");
+	  printk("lca_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
+		 *(vulp)LCA_IOC_W_BASE1,
+		 *(vulp)LCA_IOC_W_MASK1,
+		 *(vulp)LCA_IOC_T_BASE1);
+#endif
+	}
+	else /* we must use our defaults... */
+#endif /* SRM_SETUP */
+	{
 	/*
 	 * Set up the PCI->physical memory translation windows.
 	 * For now, window 1 is disabled.  In the future, we may
@@ -294,9 +334,11 @@ unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 	 * goes at 1 GB and is 1 GB large.
 	 */
 	*(vulp)LCA_IOC_W_BASE1 = 0UL<<33;
+
 	*(vulp)LCA_IOC_W_BASE0 = 1UL<<33 | LCA_DMA_WIN_BASE;
 	*(vulp)LCA_IOC_W_MASK0 = LCA_DMA_WIN_SIZE - 1;
 	*(vulp)LCA_IOC_T_BASE0 = 0;
+	}
 
 	/*
 	 * Disable PCI parity for now.  The NCR53c810 chip has

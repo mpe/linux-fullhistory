@@ -299,7 +299,10 @@ static void exit_notify(void)
 	 *	as a result of our exiting, and if they have any stopped
 	 *	jobs, send them a SIGHUP and then a SIGCONT.  (POSIX 3.2.2.2)
 	 */
-	while ((p = current->p_cptr) != NULL) {
+
+	write_lock_irq(&tasklist_lock);
+	while (current->p_cptr != NULL) {
+		p = current->p_cptr;
 		current->p_cptr = p->p_osptr;
 		p->p_ysptr = NULL;
 		p->flags &= ~(PF_PTRACED|PF_TRACESYS);
@@ -318,13 +321,19 @@ static void exit_notify(void)
 		 * outside, so the child pgrp is now orphaned.
 		 */
 		if ((p->pgrp != current->pgrp) &&
-		    (p->session == current->session) &&
-		    is_orphaned_pgrp(p->pgrp) &&
-		    has_stopped_jobs(p->pgrp)) {
-			kill_pg(p->pgrp,SIGHUP,1);
-			kill_pg(p->pgrp,SIGCONT,1);
+		    (p->session == current->session)) {
+			int pgrp = p->pgrp;
+
+			write_unlock_irq(&tasklist_lock);
+			if (is_orphaned_pgrp(pgrp) && has_stopped_jobs(pgrp)) {
+				kill_pg(pgrp,SIGHUP,1);
+				kill_pg(pgrp,SIGCONT,1);
+			}
+			write_lock_irq(&tasklist_lock);
 		}
 	}
+	write_unlock_irq(&tasklist_lock);
+
 	if (current->leader)
 		disassociate_ctty(1);
 }

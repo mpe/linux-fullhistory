@@ -8,6 +8,7 @@
  * This hopefully works with any standard alpha page-size, as defined
  * in <asm/page.h> (currently 8192).
  */
+#include <linux/config.h>
 
 #include <asm/system.h>
 #include <asm/mmu_context.h>
@@ -29,6 +30,9 @@ static inline void reload_context(struct task_struct *task)
 {
 	__asm__ __volatile__(
 		"bis %0,%0,$16\n\t"
+#ifdef CONFIG_ALPHA_DP264
+		"zap $16,0xe0,$16\n\t"
+#endif /* DP264 */
 		"call_pal %1"
 		: /* no outputs */
 		: "r" (&task->tss), "i" (PAL_swpctx)
@@ -80,6 +84,7 @@ static inline void flush_tlb(void)
 	flush_tlb_current(current->mm);
 }
 
+#ifndef __SMP__
 /*
  * Flush everything (kernel mapping may also have
  * changed due to vmalloc/vfree)
@@ -128,6 +133,28 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 {
 	flush_tlb_mm(mm);
 }
+
+#else /* __SMP__ */
+
+/* ipi_msg_flush_tb is owned by the holder of the global kernel lock. */
+struct ipi_msg_flush_tb_struct {
+	volatile unsigned int flush_tb_mask;
+	union {
+		struct mm_struct *	flush_mm;
+		struct vm_area_struct *	flush_vma;
+	} p;
+	unsigned long flush_addr;
+  /*	unsigned long flush_end; */ /* not used by local_flush_tlb_range */
+};
+
+extern struct ipi_msg_flush_tb_struct ipi_msg_flush_tb;
+
+extern void flush_tlb_all(void);
+extern void flush_tlb_mm(struct mm_struct *);
+extern void flush_tlb_page(struct vm_area_struct *, unsigned long);
+extern void flush_tlb_range(struct mm_struct *, unsigned long, unsigned long);
+
+#endif /* __SMP__ */
 
 /* Certain architectures need to do special things when pte's
  * within a page table are directly modified.  Thus, the following

@@ -273,7 +273,6 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int gfp_mask)
 	n->csum = skb->csum;
 	n->list=NULL;
 	n->sk=NULL;
-	n->when=skb->when;
 	n->dev=skb->dev;
 	n->priority=skb->priority;
 	n->protocol=skb->protocol;
@@ -281,9 +280,6 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int gfp_mask)
 	n->h.raw=skb->h.raw+offset;
 	n->nh.raw=skb->nh.raw+offset;
 	n->mac.raw=skb->mac.raw+offset;
-	n->seq=skb->seq;
-	n->end_seq=skb->end_seq;
-	n->ack_seq=skb->ack_seq;
 	memcpy(n->cb, skb->cb, sizeof(skb->cb));
 	n->used=skb->used;
 	n->is_clone=0;
@@ -323,7 +319,6 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 	memcpy(n->data,skb->data,skb->len);
 	n->list=NULL;
 	n->sk=NULL;
-	n->when=skb->when;
 	n->priority=skb->priority;
 	n->protocol=skb->protocol;
 	n->dev=skb->dev;
@@ -332,9 +327,6 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 	n->nh.raw=skb->nh.raw+offset;
 	n->mac.raw=skb->mac.raw+offset;
 	memcpy(n->cb, skb->cb, sizeof(skb->cb));
-	n->seq=skb->seq;
- 	n->end_seq=skb->end_seq;
-	n->ack_seq=skb->ack_seq;
 	n->used=skb->used;
 	n->is_clone=0;
 	atomic_set(&n->users, 1);

@@ -231,10 +231,10 @@ extern unsigned long get_cmos_time(void);
 		"pushl %%fs\n\t" \
 		"pushl %%gs\n\t" \
 		"xorl %%edx, %%edx\n\t" \
-		"mov %%dx, %%ds\n\t" \
-		"mov %%dx, %%es\n\t" \
-		"mov %%dx, %%fs\n\t" \
-		"mov %%dx, %%gs\n\t"
+		"movl %%dx, %%ds\n\t" \
+		"movl %%dx, %%es\n\t" \
+		"movl %%dx, %%fs\n\t" \
+		"movl %%dx, %%gs\n\t"
 #	define APM_DO_RESTORE_SEGS	\
 		"popl %%gs\n\t" \
 		"popl %%fs\n\t" \

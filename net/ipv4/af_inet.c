@@ -5,7 +5,7 @@
  *
  *		AF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.66 1998/03/21 07:27:58 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.68 1998/03/27 07:02:42 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -352,7 +352,6 @@ static int inet_create(struct socket *sock, int protocol)
 		if (protocol && protocol != IPPROTO_TCP)
 			goto free_and_noproto;
 		protocol = IPPROTO_TCP;
-		sk->no_check = TCP_NO_CHECK;
 		if (ipv4_config.no_pmtu_disc)
 			sk->ip_pmtudisc = IP_PMTUDISC_DONT;
 		else
