@@ -15,8 +15,10 @@ typedef unsigned short __u16;
 typedef signed long __s32;
 typedef unsigned long __u32;
 
+#ifndef __STRICT_ANSI__
 typedef signed long long __s64;
 typedef unsigned long long __u64;
+#endif
 
 /*
  * These aren't exported outside the kernel to avoid name space clashes

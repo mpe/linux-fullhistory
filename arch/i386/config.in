@@ -31,9 +31,9 @@ comment 'Networking options'
 bool 'TCP/IP networking' CONFIG_INET y
 if [ "$CONFIG_INET" "=" "y" ]; then
 bool 'IP forwarding/gatewaying' CONFIG_IP_FORWARD n
-#bool 'IP multicasting (ALPHA)' CONFIG_IP_MULTICAST n
-#bool 'IP firewalling' CONFIG_IP_FIREWALL n
-#bool 'IP accounting' CONFIG_IP_ACCT n
+bool 'IP multicasting (ALPHA)' CONFIG_IP_MULTICAST n
+bool 'IP firewalling' CONFIG_IP_FIREWALL n
+bool 'IP accounting' CONFIG_IP_ACCT n
 comment '(it is safe to leave these untouched)'
 bool 'PC/TCP compatibility mode' CONFIG_INET_PCTCP n
 bool 'Reverse ARP' CONFIG_INET_RARP n
@@ -100,6 +100,7 @@ bool 'Dummy net driver support' CONFIG_DUMMY n
 bool 'SLIP (serial line) support' CONFIG_SLIP n
 if [ "$CONFIG_SLIP" = "y" ]; then
   bool ' CSLIP compressed headers' SL_COMPRESSED y
+  bool ' 16 channels instead of 4' SL_SLIP_LOTS n
 #  bool ' SLIP debugging on' SL_DUMP y
 fi
 bool 'PPP (point-to-point) support' CONFIG_PPP n
@@ -112,9 +113,6 @@ if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
 	bool 'SMC Ultra support' CONFIG_ULTRA n
 fi
 bool 'AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE n
-if [ "$CONFIG_LANCE" = "y" ]; then
-	bool '   with PCnet/PCI support' CONFIG_PCI y
-fi
 bool '3COM cards' CONFIG_NET_VENDOR_3COM y
 if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
 	bool '3c501 support' CONFIG_EL1 n

@@ -58,6 +58,7 @@ unsigned long high_memory = 0;
 
 extern unsigned long pg0[1024];		/* page table for 0-4MB for everybody */
 
+extern void scsi_mem_init(unsigned long);
 extern void sound_mem_init(void);
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
@@ -1197,7 +1198,6 @@ void mem_init(unsigned long start_low_mem,
 	unsigned long tmp;
 	extern int etext;
 
-	cli();
 	end_mem &= PAGE_MASK;
 	high_memory = end_mem;
 
@@ -1219,6 +1219,9 @@ void mem_init(unsigned long start_low_mem,
 		mem_map[MAP_NR(start_mem)] = 0;
 		start_mem += PAGE_SIZE;
 	}
+#ifdef CONFIG_SCSI
+	scsi_mem_init(high_memory);
+#endif
 #ifdef CONFIG_SOUND
 	sound_mem_init();
 #endif

@@ -275,30 +275,12 @@ static struct sk_buff *tcp_find_established(struct sock *s)
 
 static void tcp_close_pending (struct sock *sk, int timeout) 
 {
-	unsigned long flags;
-	struct sk_buff *p, *old_p;
+	struct sk_buff *skb;
 
-	save_flags(flags);
-	cli(); 
-	p=skb_peek(&sk->receive_queue);
-
-	if(p==NULL) 
-	{
-		restore_flags(flags);
-		return;
+	while ((skb = skb_dequeue(&sk->receive_queue)) != NULL) {
+		tcp_close(skb->sk, timeout);
+		kfree_skb(skb, FREE_READ);
 	}
-
-	do
-	{
-		tcp_close (p->sk, timeout);
-		skb_unlink (p);
-		old_p = p;
-		p=p->next;
-		kfree_skb(old_p, FREE_READ);
-	}
-	while(p!=skb_peek(&sk->receive_queue));
-
-	restore_flags(flags);
 	return;
 }
 
@@ -2355,8 +2337,8 @@ static void tcp_close(struct sock *sk, int timeout)
 		case TCP_LISTEN:
 			/* we need to drop any sockets which have been connected,
 			   but have not yet been accepted. */
-			tcp_close_pending(sk, timeout);
 			tcp_set_state(sk,TCP_CLOSE);
+			tcp_close_pending(sk, timeout);
 			release_sock(sk);
 			return;
 		case TCP_CLOSE:

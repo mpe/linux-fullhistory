@@ -30,6 +30,14 @@
 
 #include <asm/segment.h>
 
+#ifdef MODULE
+#include <linux/module.h>
+#include "../../tools/version.h"
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 void sysv_put_inode(struct inode *inode)
 {
 	if (inode->i_nlink)
@@ -348,6 +356,7 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 		panic("Coherent FS: bad super-block size");
 	if (64 != sizeof (struct sysv_inode))
 		panic("sysv fs: bad i-node size");
+	MOD_INC_USE_COUNT;
 	lock_super(sb);
 	set_blocksize(dev,BLOCK_SIZE);
 
@@ -390,6 +399,8 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	unlock_super(sb);
 	if (!silent)
 		printk("VFS: unable to read Xenix/SystemV/Coherent superblock on device %d/%d\n",MAJOR(dev),MINOR(dev));
+	failed:
+	MOD_DEC_USE_COUNT;
 	return NULL;
 
 	ok:
@@ -413,7 +424,7 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 				sb->s_dev = 0;
 				unlock_super(sb);
 				printk("SysV FS: cannot read superblock in 1024 byte mode\n");
-				return NULL;
+				goto failed;
 		}
 	} else {
 		/* Switch to another block size. Unfortunately, we have to
@@ -459,7 +470,7 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 				sb->s_dev = 0;
 				unlock_super(sb);
 				printk("SysV FS: cannot read superblock in 512 byte mode\n");
-				return NULL;
+				goto failed;
 		}
 	}
 	sb->sv_ninodes = (sb->sv_firstdatazone - sb->sv_firstinodezone) << sb->sv_inodes_per_block_bits;
@@ -475,8 +486,8 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	sb->s_mounted = iget(sb,SYSV_ROOT_INO);
 	unlock_super(sb);
 	if (!sb->s_mounted) {
-		sysv_put_super(sb);
 		printk("SysV FS: get root inode failed\n");
+		sysv_put_super(sb);
 		return NULL;
 	}
 	sb->s_dirt = 1;
@@ -513,6 +524,7 @@ void sysv_put_super(struct super_block *sb)
 		set_blocksize(sb->s_dev,BLOCK_SIZE);
 	sb->s_dev = 0;
 	unlock_super(sb);
+	MOD_DEC_USE_COUNT;
 }
 
 void sysv_statfs(struct super_block *sb, struct statfs *buf)
@@ -949,3 +961,39 @@ int sysv_sync_inode(struct inode * inode)
         return err;
 }
 
+#ifdef MODULE
+
+/* Every kernel module contains stuff like this. */
+
+char kernel_version[] = UTS_RELEASE;
+
+static struct file_system_type sysv_fs_type[3] = {
+	{sysv_read_super, "xenix", 1, NULL},
+	{sysv_read_super, "sysv", 1, NULL},
+	{sysv_read_super, "coherent", 1, NULL}
+};
+
+int init_module(void)
+{
+	int i;
+
+	for (i = 0; i < 3; i++)
+		register_filesystem(&sysv_fs_type[i]);
+
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	int i;
+
+	if (MOD_IN_USE) {
+		printk("SysV FS cannot be removed, currently in use\n");
+		return;
+	}
+
+	for (i = 0; i < 3; i++)
+		unregister_filesystem(&sysv_fs_type[i]);
+}
+
+#endif

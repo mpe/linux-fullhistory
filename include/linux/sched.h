@@ -16,6 +16,8 @@
  */
 extern int hard_math;
 extern int x86;
+extern char x86_vendor_id[13];
+extern fdiv_bug;		
 extern int ignore_irq13;
 extern int wp_works_ok;		/* doesn't work on a 386 */
 extern int hlt_works_ok;	/* problems on some 486Dx4's and old 386's */

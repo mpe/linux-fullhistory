@@ -6,9 +6,6 @@
 # unless its something special (ie not a .c file).
 #
 
-#AHA152X	= -DDEBUG -DAUTOCONF -DIRQ=11 -DSCSI_ID=7 -DRECONNECT=0 \
-#          -DPORTBASE=0x340 -DSKIP_BIOSTEST -DDONT_SNARF
-
 AHA152X	= -DDEBUG_AHA152X -DAUTOCONF
 
 ifeq (${CFLAGS},)

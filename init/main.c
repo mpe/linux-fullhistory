@@ -414,7 +414,7 @@ static void check_fpu(void)
 	static double x = 4195835.0;
 	static double y = 3145727.0;
 	unsigned short control_word;
-	int i;
+	extern int fdiv_bug;
 
 	if (!hard_math) {
 #ifndef CONFIG_MATH_EMULATION
@@ -458,9 +458,9 @@ static void check_fpu(void)
 		"fistpl %0\n\t"
 		"fwait\n\t"
 		"fninit"
-		: "=m" (*&i)
+		: "=m" (*&fdiv_bug)
 		: "m" (*&x), "m" (*&y));
-	if (!i) {
+	if (!fdiv_bug) {
 		printk("Ok, fpu using exception 16 error reporting.\n");
 		return;
 

@@ -1215,8 +1215,8 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 	    if (bus_type == 'V'				    /* 445 */
 		&& firmware_rev[0] <= '3'		    /* S */
 		&& bios != NULL) {			    /* BIOS enabled */
-#if 0
-		/* ??? Once LNZ's forbidden_addr stuff makes it into the higher
+#if 1
+		/* Now that LNZ's forbidden_addr stuff makes it into the higher
 		   level scsi code, we can use this instead. */
 		/* Avoid addresses which "mirror" the BIOS for DMA. */
 		shpnt->forbidden_addr = bios;

@@ -41,7 +41,7 @@ const unsigned char scsi_command_size[8] = { 6, 10, 10, 12, 12, 12, 10, 10 };
 static void scsi_done (Scsi_Cmnd *SCpnt);
 static int update_timeout (Scsi_Cmnd *, int);
 static void print_inquiry(unsigned char *data);
-static void scsi_times_out (Scsi_Cmnd * SCpnt);
+static void scsi_times_out (Scsi_Cmnd * SCpnt, int pid);
 
 static int time_start;
 static int time_elapsed;
@@ -525,7 +525,7 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 	command, that failing perform a kernel panic.
 */ 
 
-static void scsi_times_out (Scsi_Cmnd * SCpnt)
+static void scsi_times_out (Scsi_Cmnd * SCpnt, int pid)
 	{
 	
  	switch (SCpnt->internal_timeout & (IN_ABORT | IN_RESET))
@@ -537,7 +537,7 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt)
 #endif
 			}
 			
-			if (!scsi_abort	(SCpnt, DID_TIME_OUT))
+			if (!scsi_abort	(SCpnt, DID_TIME_OUT, pid))
 				return;				
 		case IN_ABORT:
 			printk("SCSI host %d abort() timed out - resetting\n",
@@ -837,8 +837,6 @@ static void scsi_request_sense (Scsi_Cmnd * SCpnt)
 	SCpnt->use_sg = 0;
 	SCpnt->cmd_len = COMMAND_SIZE(SCpnt->cmnd[0]);
 	internal_cmnd (SCpnt);
-	SCpnt->use_sg = SCpnt->old_use_sg;
-	SCpnt->cmd_len = SCpnt->old_cmd_len;
 	}
 
 
@@ -1085,6 +1083,13 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 #ifdef DEBUG
 	printk("In scsi_done(host = %d, result = %06x)\n", host->host_no, result);
 #endif
+
+	if(SCpnt->flags & WAS_SENSE)
+	{
+		SCpnt->use_sg = SCpnt->old_use_sg;
+		SCpnt->cmd_len = SCpnt->old_cmd_len;
+	}
+
 	switch (host_byte(result))	
 	{
 	case DID_OK:
@@ -1400,7 +1405,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 */
 
 
-int scsi_abort (Scsi_Cmnd * SCpnt, int why)
+int scsi_abort (Scsi_Cmnd * SCpnt, int why, int pid)
 	{
 	int oldto;
 	struct Scsi_Host * host = SCpnt->host;
@@ -1408,6 +1413,16 @@ int scsi_abort (Scsi_Cmnd * SCpnt, int why)
 	while(1)	
 		{
 		cli();
+
+		/*
+		 * Protect against races here.  If the command is done, or we are
+		 * on a different command forget it.
+		 */
+		if (SCpnt->request.dev == -1 || pid != SCpnt->pid) {
+		  sti();
+		  return 0;
+		}
+
 		if (SCpnt->internal_timeout & IN_ABORT) 
 			{
 			sti();
@@ -1436,6 +1451,8 @@ int scsi_abort (Scsi_Cmnd * SCpnt, int why)
 			       SCpnt->pid, SCpnt->host->host_no, (int) SCpnt->target, (int) 
 			       SCpnt->lun);
 			print_command (SCpnt->cmnd);
+			if (SCpnt->request.dev == -1 || pid != SCpnt->pid)
+			  return 0;
 			SCpnt->abort_reason = why;
 			switch(host->hostt->abort(SCpnt)) {
 			  /* We do not know how to abort.  Try waiting another
@@ -1473,6 +1490,7 @@ int scsi_abort (Scsi_Cmnd * SCpnt, int why)
 			     need to adjust timeout */
 			case SCSI_ABORT_NOT_RUNNING:
 			  SCpnt->internal_timeout &= ~IN_ABORT;
+			  update_timeout(SCpnt, 0);
 			  return 0;
 			case SCSI_ABORT_ERROR:
 			default:
@@ -1513,7 +1531,7 @@ int scsi_reset (Scsi_Cmnd * SCpnt)
 #if 0				  
 				    if (!(SCpnt1->flags & IS_RESETTING) && 
 				      !(SCpnt1->internal_timeout & IN_ABORT))
-				    scsi_abort(SCpnt1, DID_RESET);
+				    scsi_abort(SCpnt1, DID_RESET, SCpnt->pid);
 #endif
 				    SCpnt1->flags |= IS_RESETTING;
 				  }
@@ -1576,7 +1594,7 @@ static void scsi_main_timeout(void)
 		We must not enter update_timeout with a timeout condition still pending.
 	*/
 
-	int timed_out;
+	int timed_out, pid;
 	struct Scsi_Host * host;
 	Scsi_Cmnd * SCpnt = NULL;
 
@@ -1594,9 +1612,10 @@ static void scsi_main_timeout(void)
 		  for(SCpnt = host->host_queue; SCpnt; SCpnt = SCpnt->next)
 		    if (SCpnt->timeout == -1)
 		      {
-			sti();
 			SCpnt->timeout = 0;
-			scsi_times_out(SCpnt);
+			pid = SCpnt->pid;
+			sti();
+			scsi_times_out(SCpnt, SCpnt);
 			++timed_out; 
 			cli();
 		      }

@@ -252,10 +252,19 @@ struct Scsi_Host
 		unsigned char n_io_port;
 		unsigned char irq;
 		unsigned char dma_channel;
+
+		/*
+		  Set these if there are conflicts between memory
+		  in the < 1mb region and regions at 16mb multiples.
+		  The address must be on a page boundary.
+		*/
+		unsigned long forbidden_addr;
+		unsigned long forbidden_size;
+
 		/*
 		  The rest can be copied from the template, or specifically
 		  initialized, as required.
-		  */
+		*/
 		
 		int this_id;
 		int can_queue;
@@ -264,7 +273,7 @@ struct Scsi_Host
 		unsigned unchecked_isa_dma:1;
 		/*
 		   True if this host was loaded as a loadable module
-		   */
+		*/
 		unsigned loaded_as_module:1;
 		
 		int hostdata[0];  /* Used for storage of host specific stuff */

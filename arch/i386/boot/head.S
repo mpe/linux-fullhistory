@@ -95,8 +95,6 @@ startup_32:
  * apply at our cpl of 0 and the stack ought to be aligned already, and
  * we don't need to preserve eflags.
  */
-	movl %esp,%edi		# save stack pointer
-	andl $0xfffffffc,%esp	# align stack to avoid AC fault
 	movl $3,_x86
 	pushfl			# push EFLAGS
 	popl %eax		# get EFLAGS
@@ -121,26 +119,31 @@ startup_32:
 	je is486
 isnew:	pushl %ecx		# restore original EFLAGS
 	popfl
+	/* get processor type */
 	movl $1, %eax		# Use the CPUID instruction to 
 	.byte 0x0f, 0xa2	# check the processor type
 	andl $0xf00, %eax	# Set _x86 with the family
 	shrl $8, %eax		# returned.	
 	movl %eax, _x86
-	movl %edi,%esp		# restore esp
+	/* get vendor info */
+	xorl %eax, %eax			# call CPUID with 0 -> return vendor ID
+	.byte 0x0f, 0xa2		# CPUID
+	movl %ebx, _x86_vendor_id	# lo 4 chars
+	movl %edx, _x86_vendor_id+4	# next 4 chars
+	movl %ecx, _x86_vendor_id+8	# last 4 chars
+
 	movl %cr0,%eax		# 486+
 	andl $0x80000011,%eax	# Save PG,PE,ET
 	orl $0x50022,%eax	# set AM, WP, NE and MP
 	jmp 2f
 is486:	pushl %ecx		# restore original EFLAGS
 	popfl
-	movl %edi,%esp		# restore esp
 	movl %cr0,%eax		# 486
 	andl $0x80000011,%eax	# Save PG,PE,ET
 	orl $0x50022,%eax	# set AM, WP, NE and MP
 	jmp 2f
 is386:	pushl %ecx		# restore original EFLAGS
 	popfl
-	movl %edi,%esp		# restore esp
 	movl %cr0,%eax		# 386
 	andl $0x80000011,%eax	# Save PG,PE,ET
 	orl $2,%eax		# set MP

@@ -44,18 +44,6 @@ function readln () {
 }
 
 #
-# change updates the "config.new" file according to the answer
-#
-#	change define old new
-#
-function change () {
-	if [ "$2" != "$3" ]; then
-		sed "s/$1 $2$/$1 $3/" < $CONFIG_NEW > .tmpc
-		mv .tmpc $CONFIG_NEW
-	fi
-}
-
-#
 # comment does some pretty-printing
 #
 #	comment 'xxx'
@@ -73,17 +61,17 @@ function comment () {
 #
 function bool () {
 	ans=""
+	def=$(eval echo "\${$2:-$3}")
 	while [ "$ans" != "y" -a "$ans" != "n" ]; do
-		readln "$1 ($2) [$3] " "$3"
+		readln "$1 ($2) [$def] " "$def"
 	done
 	if [ "$ans" = "y" ]; then
-		echo "  $2 = $2" >>$CONFIG
+		echo "$2=y" >>$CONFIG
 		echo "#define $2 1" >>$CONFIG_H
 	else
 		echo "# $2 is not set" >>$CONFIG
 		echo "#undef  $2" >>$CONFIG_H
 	fi
-	change $2 $3 $ans
 	eval "$2=$ans"
 }
 
@@ -95,23 +83,22 @@ function bool () {
 function int () {
 	# Slimier hack to get bash to rescan a line.
 	ans="x"
+	def=$(eval echo "\${$2:-$3}")
 	while [ $[$ans+0] != "$ans" ]; do
-		readln "$1 ($2) [$3] " "$3"
+		readln "$1 ($2) [$def] " "$def"
 	done
-	echo "  $2 = $ans" >>$CONFIG
+	echo "$2=$ans" >>$CONFIG
 	echo "#define $2 ($ans)" >>$CONFIG_H
 	eval "$2=$ans"
 }
 
 CONFIG=.tmpconfig
 CONFIG_H=.tmpconfig.h
-CONFIG_NEW=config.new
-trap "rm -f $CONFIG $CONFIG_H $CONFIG_NEW ; exit 1" 1 2
+trap "rm -f $CONFIG $CONFIG_H ; exit 1" 1 2
 
 #
 # Make sure we start out with a clean slate.
 #
-cp config.in $CONFIG_NEW
 echo "#" > $CONFIG
 echo "# Automatically generated make config: don't edit" >> $CONFIG
 echo "#" >> $CONFIG
@@ -122,16 +109,24 @@ echo " */" >> $CONFIG_H
 
 DEFAULT=$1
 
+if [ -f ./.config ] ; then
+	. ./.config
+	sed -e 's/# \(.*\) is not.*/\1=n/' <./.config >/tmp/conf.$$
+	. /tmp/conf.$$
+	rm /tmp/conf.$$
+fi
 . ./config.in
 
 if [ "$CONFIG_SOUND" = "y" ] ; then
 	$MAKE -C drivers/sound config || exit 1
 fi
 
+rm -f .config.old
+if [ -f .config ]; then
+	mv .config .config.old
+fi
 mv .tmpconfig .config
 mv .tmpconfig.h include/linux/autoconf.h
-mv config.in config.old
-mv config.new config.in
 
 echo
 echo "The linux kernel is now hopefully configured for your setup."

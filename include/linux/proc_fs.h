@@ -12,6 +12,7 @@ enum root_directory_inos {
 	PROC_MEMINFO,
 	PROC_KMSG,
 	PROC_VERSION,
+	PROC_CPUINFO,
 	PROC_SELF,	/* will change inode # */
 	PROC_NET,
 #ifdef CONFIG_DEBUG_MALLOC

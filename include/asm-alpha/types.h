@@ -20,8 +20,10 @@ typedef unsigned int __u32;
  */
 #if ((~0UL) == 0xffffffff)
 
+#ifndef __STRICT_ANSI__
 typedef signed long long __s64;
 typedef unsigned long long __u64;
+#endif
 
 #else
 

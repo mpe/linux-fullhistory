@@ -70,6 +70,10 @@ unsigned long event = 0;
  */
 int hard_math = 0;		/* set by boot/head.S */
 int x86 = 0;			/* set by boot/head.S to 3 or 4 */
+int fdiv_bug = 0;		/* set if Pentium(TM) with FP bug */
+
+char x86_vendor_id[13] = "Unknown";
+
 int ignore_irq13 = 0;		/* set if exception 16 works */
 int wp_works_ok = 0;		/* set if paging hardware honours WP */ 
 int hlt_works_ok = 1;		/* set if the "hlt" instruction works */

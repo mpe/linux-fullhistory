@@ -219,6 +219,10 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			bh->b_req = 0;
 			return;
 		}
+	/* Uhhuh.. Nasty dead-lock possible here.. */
+	if (bh->b_lock)
+		return;
+	/* Maybe the above fixes it, and maybe it doesn't boot. Life is interesting */
 	lock_buffer(bh);
 	if ((rw == WRITE && !bh->b_dirt) || (rw == READ && bh->b_uptodate)) {
 		unlock_buffer(bh);

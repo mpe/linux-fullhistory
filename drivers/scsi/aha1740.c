@@ -197,6 +197,12 @@ void aha1740_intr_handle(int foo)
 		continue;
 	    }
 	    SCtmp = ecbptr->SCpnt;
+	    if (!SCtmp)
+	    {
+		printk("Aha1740 null SCtmp in interrupt (%x,%x,%x,%d)\n",
+			inb(G2STAT),adapstat,inb(G2INTST),number_serviced++);
+		continue;
+	    }
 	    if (SCtmp->host_scribble)
 		scsi_free(SCtmp->host_scribble, 512);
 	  /* Fetch the sense data, and tuck it away, in the required slot.  The

@@ -59,6 +59,7 @@ static struct proc_dir_entry root_dir[] = {
 	{ PROC_MEMINFO,		7, "meminfo" },
 	{ PROC_KMSG,		4, "kmsg" },
 	{ PROC_VERSION,		7, "version" },
+	{ PROC_CPUINFO,		7, "cpuinfo" },
 	{ PROC_SELF,		4, "self" },	/* will change inode # */
 	{ PROC_NET,		3, "net" },
 #ifdef CONFIG_DEBUG_MALLOC

@@ -510,7 +510,7 @@ typedef struct scsi_cmnd {
 	DID_ABORT is returned in the hostbyte.
 */
 
-extern int scsi_abort (Scsi_Cmnd *, int code);
+extern int scsi_abort (Scsi_Cmnd *, int code, int pid);
 
 extern void scsi_do_cmd (Scsi_Cmnd *, const void *cmnd ,
                   void *buffer, unsigned bufflen, void (*done)(struct scsi_cmnd *),
@@ -564,6 +564,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 		up(req->sem);
 	}
 	req->dev = -1;
+	wake_up(&wait_for_request);
 	wake_up(&SCpnt->device->device_wait);
 	return NULL;
 }

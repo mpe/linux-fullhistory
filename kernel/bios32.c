@@ -193,7 +193,7 @@ int pcibios_present(void)
 	return pcibios_entry ? 1 : 0;
 }
 
-int pcibios_find_class_code (unsigned long class_code, unsigned short index,
+int pcibios_find_class (unsigned long class_code, unsigned short index,
 	unsigned char *bus, unsigned char *device_fn)
 {
 	unsigned long bx;

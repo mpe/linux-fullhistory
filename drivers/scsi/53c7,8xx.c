@@ -276,16 +276,17 @@ static char scan_scsis_buf[512];
  */
 
 struct pci_chip {
-    short pci_device_id;
+    unsigned short pci_device_id;
     int chip;
     int max_revision;
     int min_revision;
 };
 
-static struct pci_chip pci_chip_ids[3] = { 
+static struct pci_chip pci_chip_ids[] = { 
     {PCI_DEVICE_ID_NCR_53C810, 810, 1, 1}, 
+    {PCI_DEVICE_ID_NCR_53C815, 815, 2, 3},
     {PCI_DEVICE_ID_NCR_53C820, 820, -1, -1},
-    {PCI_DEVICE_ID_NCR_53C825, 825, -1, -1},
+    {PCI_DEVICE_ID_NCR_53C825, 825, -1, -1}
 };
 
 #define NPCI_CHIP_IDS (sizeof (pci_chip_ids) / sizeof(pci_chip_ids[0]))
@@ -413,6 +414,7 @@ static int NCR53c7x0_init (struct Scsi_Host *host) {
     switch (hostdata->chip) {
     case 810:
     case 815:
+    case 820:
     case 825:
     	hostdata->dstat_sir_intr = NCR53c8x0_dstat_sir_intr;
     	hostdata->init_save_regs = NULL;

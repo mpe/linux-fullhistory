@@ -173,8 +173,10 @@ asmlinkage int printk(const char *fmt, ...)
 			log_buf[(log_start+log_size) & (LOG_BUF_LEN-1)] = *p;
 			if (log_size < LOG_BUF_LEN)
 				log_size++;
-			else
+			else {
 				log_start++;
+				log_start &= LOG_BUF_LEN-1;
+			}
 			logged_chars++;
 			if (*p == '\n')
 				break;

@@ -198,22 +198,23 @@ static inline unsigned long do_gettimeoffset(void)
 /*
  * This version of gettimeofday has near microsecond resolution.
  */
-static inline void do_gettimeofday(struct timeval *tv)
+void do_gettimeofday(struct timeval *tv)
 {
-#ifdef __i386__
+	unsigned long flags;
+
+	save_flags(flags);
 	cli();
+#ifdef __i386__
 	*tv = xtime;
 	tv->tv_usec += do_gettimeoffset();
 	if (tv->tv_usec >= 1000000) {
 		tv->tv_usec -= 1000000;
 		tv->tv_sec++;
 	}
-	sti();
 #else /* not __i386__ */
-	cli();
 	*tv = xtime;
-	sti();
 #endif /* not __i386__ */
+	restore_flags(flags);
 }
 
 asmlinkage int sys_gettimeofday(struct timeval *tv, struct timezone *tz)

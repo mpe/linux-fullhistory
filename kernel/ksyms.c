@@ -35,7 +35,10 @@
 #include <linux/netdevice.h>
 #endif
 #ifdef CONFIG_PCI
-#include <pci.h>
+#include <linux/pci.h>
+#endif
+#if defined(CONFIG_MSDOS_FS) && !defined(CONFIG_UMSDOS_FS)
+#include <linux/msdos_fs.h>
 #endif
 
 #include <asm/irq.h>
@@ -265,6 +268,30 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(chrdev_inode_operations),
 	X(blkdev_inode_operations),
 	X(read_ahead),
+	X(get_hash_table),
+	X(get_empty_inode),
+	X(insert_inode_hash),
+#if defined(CONFIG_MSDOS_FS) && !defined(CONFIG_UMSDOS_FS)
+	/* support for umsdos fs */
+	X(msdos_create),
+	X(msdos_file_read),
+	X(msdos_file_write),
+	X(msdos_lookup),
+	X(msdos_mkdir),
+	X(msdos_put_inode),
+	X(msdos_put_super),
+	X(msdos_read_inode),
+	X(msdos_read_super),
+	X(msdos_readdir),
+	X(msdos_rename),
+	X(msdos_rmdir),
+	X(msdos_smap),
+	X(msdos_statfs),
+	X(msdos_truncate),
+	X(msdos_unlink),
+	X(msdos_unlink_umsdos),
+	X(msdos_write_inode),
+#endif
 	/********************************************************
 	 * Do not add anything below this line,
 	 * as the stacked modules depend on this!

@@ -19,6 +19,14 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 
+#ifdef MODULE
+#include <linux/module.h>
+#include "../../tools/version.h"
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include "xiafs_mac.h"
 
 static u_long random_nr;
@@ -43,6 +51,7 @@ void xiafs_put_super(struct super_block *sb)
     for(i = 0 ; i < _XIAFS_ZMAP_SLOTS ; i++)
         brelse(sb->u.xiafs_sb.s_zmap_buf[i]);
     unlock_super(sb);
+    MOD_DEC_USE_COUNT;
 }
 
 static struct super_operations xiafs_sops = { 
@@ -63,6 +72,7 @@ struct super_block *xiafs_read_super(struct super_block *s, void *data,
     struct xiafs_super_block *sp;
     int i, z, dev;
 
+    MOD_INC_USE_COUNT;
     dev=s->s_dev;
     lock_super(s);
 
@@ -72,6 +82,7 @@ struct super_block *xiafs_read_super(struct super_block *s, void *data,
         s->s_dev=0;
 	unlock_super(s);
 	printk("XIA-FS: read super_block failed (%s %d)\n", WHERE_ERR);
+	MOD_DEC_USE_COUNT;
 	return NULL;
     }
     sp = (struct xiafs_super_block *) bh->b_data;
@@ -83,6 +94,7 @@ struct super_block *xiafs_read_super(struct super_block *s, void *data,
 	if (!silent)
 		printk("VFS: Can't find a xiafs filesystem on dev 0x%04x.\n",
 		   dev);
+	MOD_DEC_USE_COUNT;
 	return NULL;
     }
     s->s_blocksize = sp->s_zone_size;
@@ -93,7 +105,10 @@ struct super_block *xiafs_read_super(struct super_block *s, void *data,
       brelse(bh);
       set_blocksize(dev, s->s_blocksize);
       bh = bread (dev, 0,  s->s_blocksize);
-      if(!bh) return NULL;
+      if(!bh) {
+	MOD_DEC_USE_COUNT;
+	return NULL;
+      }
       sp = (struct xiafs_super_block *) (((char *)bh->b_data) + BLOCK_SIZE) ;
     };
     s->u.xiafs_sb.s_nzones = sp->s_nzones;
@@ -152,6 +167,7 @@ xiafs_read_super_fail:
     s->s_dev=0;
     unlock_super(s);
     printk("XIA-FS: read bitmaps failed (%s %d)\n", WHERE_ERR);
+    MOD_DEC_USE_COUNT;
     return NULL;
 }
 
@@ -500,3 +516,30 @@ int xiafs_sync_inode (struct inode *inode)
     brelse (bh);
     return err;
 }
+
+#ifdef MODULE
+
+/* Every kernel module contains stuff like this. */
+
+char kernel_version[] = UTS_RELEASE;
+
+static struct file_system_type xiafs_fs_type = {
+	xiafs_read_super, "xiafs", 1, NULL
+};
+
+int init_module(void)
+{
+	register_filesystem(&xiafs_fs_type);
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	if (MOD_IN_USE) {
+		printk("XIA-FS cannot be removed, currently in use\n");
+		return;
+	}
+	unregister_filesystem(&xiafs_fs_type);
+}
+
+#endif

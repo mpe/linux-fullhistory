@@ -36,6 +36,8 @@ FS_SUBDIRS := $(FS_SUBDIRS) nfs
 endif
 ifdef CONFIG_XIA_FS
 FS_SUBDIRS := $(FS_SUBDIRS) xiafs
+else
+MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) xiafs
 endif
 ifdef CONFIG_UMSDOS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) umsdos
@@ -44,6 +46,8 @@ MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) umsdos
 endif
 ifdef CONFIG_SYSV_FS
 FS_SUBDIRS := $(FS_SUBDIRS) sysv
+else
+MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) sysv
 endif
 ifdef CONFIG_HPFS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) hpfs
@@ -95,7 +99,8 @@ modules_fs:
 	set -e; for i in $(MODULE_FS_SUBDIRS); do \
 	  test ! -d $$i || \
 	    { $(MAKE) -C $$i; }; done
-
+	(cd ../modules; \
+	 for i in $(MODULE_FS_SUBDIRS); do ln -sf ../fs/$$i/$$i.o .; done)
 
 else
 

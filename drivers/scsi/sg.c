@@ -108,7 +108,9 @@ static int sg_open(struct inode * inode, struct file * filp)
     }
   if (!scsi_generics[dev].users && scsi_generics[dev].pending && scsi_generics[dev].complete)
    {
-    scsi_free(scsi_generics[dev].buff,scsi_generics[dev].buff_len);
+    if (scsi_generics[dev].buff != NULL)
+      scsi_free(scsi_generics[dev].buff,scsi_generics[dev].buff_len);
+    scsi_generics[dev].buff=NULL;
     scsi_generics[dev].pending=0;
    }
   if (!scsi_generics[dev].users)
@@ -188,6 +190,7 @@ static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
   else
    count=0;
   sg_free(device->buff,device->buff_len);
+  device->buff = NULL;
   device->pending=0;
   wake_up(&device->write_wait);
   return count;
@@ -266,6 +269,7 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
     device->pending=0;
     wake_up(&device->write_wait);
     sg_free(device->buff,device->buff_len);
+    device->buff = NULL;
     return -EWOULDBLOCK;
    } 
 #ifdef DEBUG
@@ -370,6 +374,7 @@ static void sg_attach(Scsi_Device * SDp)
    scsi_generics[i].generic_wait=NULL;
    scsi_generics[i].read_wait=NULL;
    scsi_generics[i].write_wait=NULL;
+   scsi_generics[i].buff=NULL;
    scsi_generics[i].exclude=0;
    scsi_generics[i].pending=0;
    scsi_generics[i].timeout=SG_DEFAULT_TIMEOUT;

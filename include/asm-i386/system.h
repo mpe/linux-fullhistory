@@ -18,8 +18,6 @@ __asm__ __volatile__ ("movl %%esp,%%eax\n\t" \
 	"mov %%ax,%%gs" \
 	: /* no outputs */ :"i" (USER_DS), "i" (USER_CS):"ax")
 
-#define sti() __asm__ __volatile__ ("sti": : :"memory")
-#define cli() __asm__ __volatile__ ("cli": : :"memory")
 #define nop() __asm__ __volatile__ ("nop")
 
 /*
@@ -43,6 +41,9 @@ extern inline int tas(char * m)
 	__asm__("xchgb %0,%1":"=q" (res),"=m" (*m):"0" (0x1));
 	return res;
 }
+
+#define sti() __asm__ __volatile__ ("sti": : :"memory")
+#define cli() __asm__ __volatile__ ("cli": : :"memory")
 
 #define save_flags(x) \
 __asm__ __volatile__("pushfl ; popl %0":"=r" (x): /* no input */ :"memory")

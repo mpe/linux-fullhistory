@@ -61,6 +61,7 @@
  *		Adam Caldwell	:	Missing return in SO_DONTROUTE/SO_DEBUG code
  *		Alan Cox	:	Split IP from generic code
  *		Alan Cox	:	New kfree_skbmem()
+ *		Alan Cox	:	Make SO_DEBUG superuser only.
  *
  * To Fix:
  *
@@ -133,6 +134,8 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 		  	return(-ENOPROTOOPT);
 
 		case SO_DEBUG:	
+			if(!suser())
+				return(-EPERM);
 			sk->debug=val?1:0;
 			return 0;
 		case SO_DONTROUTE:

@@ -13,6 +13,9 @@
  *                      bad '!' which forced address recalculation for
  *                      EVERY character on the current page.
  *                      <middelin@polyware.iaf.nl>
+ *
+ * Danny ter Haar    :	Some minor additions for cpuinfo
+ * <danny@ow.nl>
  */
 
 #include <linux/types.h>
@@ -174,6 +177,22 @@ static int get_version(char * buffer)
 
 	strcpy(buffer, linux_banner);
 	return strlen(buffer);
+}
+
+static int get_cpuinfo(char * buffer)
+{
+	return sprintf(buffer,"cpu      : %d86\n"
+			      "vid      : %s\n"
+			      "fdiv_bug : %s\n"
+			      "math     : %s\n"
+			      "hlt      : %s\n"
+			      "wp       : %s\n",
+			      x86, 
+			      x86_vendor_id,
+			      fdiv_bug ? "yes" : "no",
+			      hard_math ? "yes" : "no",
+			      hlt_works_ok ? "yes" : "no",
+			      wp_works_ok ? "yes" : "no");
 }
 
 static struct task_struct ** get_task(pid_t pid)
@@ -464,6 +483,7 @@ extern int get_filesystem_list(char *);
 extern int get_ksyms_list(char *);
 extern int get_irq_list(char *);
 extern int get_dma_list(char *);
+extern int get_cpuinfo(char *);
 
 static int get_root_array(char * page, int type)
 {
@@ -476,6 +496,9 @@ static int get_root_array(char * page, int type)
 
 		case PROC_MEMINFO:
 			return get_meminfo(page);
+
+		case PROC_CPUINFO:
+			return get_cpuinfo(page);
 
 		case PROC_VERSION:
 			return get_version(page);
@@ -505,6 +528,7 @@ static int get_root_array(char * page, int type)
 
 		case PROC_DMA:
 			return get_dma_list(page);
+
 	}
 	return -EBADF;
 }

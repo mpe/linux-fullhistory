@@ -371,6 +371,7 @@ void kfree_skb(struct sk_buff *skb, int rw)
 				skb->sk->wmem_alloc-=skb->mem_len;
 			if(!skb->sk->dead)
 				skb->sk->write_space(skb->sk);
+			kfree_skbmem(skb,skb->mem_len);
 		}
 	}
 	else

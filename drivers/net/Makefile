@@ -180,8 +180,7 @@ endif
 
 net.a: $(NETDRV_OBJS)
 	rm -f net.a
-	ar rc net.a $(NETDRV_OBJS)
-	ranlib net.a
+	ar rcs net.a $(NETDRV_OBJS)
 
 clean:
 	rm -f core *.o *.a *.s

@@ -1,5 +1,11 @@
-#ifndef _ELF_H
-#define _ELF_H
+#ifndef _LINUX_ELF_H
+#define _LINUX_ELF_H
+
+typedef unsigned long	Elf32_Addr;
+typedef unsigned short	Elf32_Half;
+typedef unsigned long	Elf32_Off;
+typedef long		Elf32_Sword;
+typedef unsigned long	Elf32_Word;
 
 /* These constants are for the segment types stored in the image headers */
 #define PT_NULL    0
@@ -76,12 +82,14 @@
 
 
 typedef struct dynamic{
-  int d_tag;
+  Elf32_Sword d_tag;
   union{
-    int d_val;
-    char * d_ptr;
+    Elf32_Sword	d_val;
+    Elf32_Addr	d_ptr;
   } d_un;
 } Elf32_Dyn;
+
+extern Elf32_Dyn _DYNAMIC [];
 
 /* The following are used with relocations */
 #define ELF32_R_SYM(x) ((x) >> 8)
@@ -101,53 +109,103 @@ typedef struct dynamic{
 #define R_386_NUM	11
 
 typedef struct elf32_rel {
-  unsigned int * offset;
-  int info;
+  Elf32_Addr	r_offset;
+  Elf32_Word	r_info;
 } Elf32_Rel;
 
 typedef struct elf32_rela{
-  unsigned int * offset;
-  int info;
-  int addend;
+  Elf32_Addr	r_offset;
+  Elf32_Word	r_info;
+  Elf32_Sword	r_addend;
 } Elf32_Rela;
 
 typedef struct elf32_sym{
-  int st_name;
-  unsigned int st_value;
-  int st_size;
-  unsigned char st_info;
-  unsigned char st_other;
-  short int st_shndx;
+  Elf32_Word	st_name;
+  Elf32_Addr	st_value;
+  Elf32_Word	st_size;
+  unsigned char	st_info;
+  unsigned char	st_other;
+  Elf32_Half	st_shndx;
 } Elf32_Sym;
 
+
+#define EI_NIDENT	16
+
 typedef struct elfhdr{
-  char	e_ident[16];
-  short int e_type;
-  short int e_machine;
-  int   e_version;
-  char *e_entry;  /* Entry point */
-  int   e_phoff;
-  int   e_shoff;
-  int   e_flags;
-  short int e_ehsize;
-  short int e_phentsize;
-  short int e_phnum;
-  short int e_shentsize;
-  short int e_shnum;
-  short int e_shstrndx;
+  unsigned char	e_ident[EI_NIDENT];
+  Elf32_Half	e_type;
+  Elf32_Half	e_machine;
+  Elf32_Word	e_version;
+  Elf32_Addr	e_entry;  /* Entry point */
+  Elf32_Off	e_phoff;
+  Elf32_Off	e_shoff;
+  Elf32_Word	e_flags;
+  Elf32_Half	e_ehsize;
+  Elf32_Half	e_phentsize;
+  Elf32_Half	e_phnum;
+  Elf32_Half	e_shentsize;
+  Elf32_Half	e_shnum;
+  Elf32_Half	e_shstrndx;
 } Elf32_Ehdr;
 
 typedef struct elf_phdr{
-  int p_type;
-  int p_offset;
-  int p_vaddr;
-  int p_paddr;
-  int p_filesz;
-  int p_memsz;
-  int p_flags;
-  int p_align;
+  Elf32_Word	p_type;
+  Elf32_Off	p_offset;
+  Elf32_Addr	p_vaddr;
+  Elf32_Addr	p_paddr;
+  Elf32_Word	p_filesz;
+  Elf32_Word	p_memsz;
+  Elf32_Word	p_flags;
+  Elf32_Word	p_align;
 } Elf32_Phdr;
+
+/* sh_type */
+#define SHT_NULL	0
+#define SHT_PROGBITS	1
+#define SHT_SYMTAB	2
+#define SHT_STRTAB	3
+#define SHT_RELA	4
+#define SHT_HASH	5
+#define SHT_DYNAMIC	6
+#define SHT_NOTE	7
+#define SHT_NOBITS	8
+#define SHT_REL		9
+#define SHT_SHLIB	10
+#define SHT_DYNSYM	11
+#define SHT_NUM		12
+#define SHT_LOPROC	0x70000000
+#define SHT_HIPROC	0x7fffffff
+#define SHT_LOUSER	0x80000000
+#define SHT_HIUSER	0xffffffff
+
+/* sh_flags */
+#define SHF_WRITE	0x1
+#define SHF_ALLOC	0x2
+#define SHF_EXECINSTR	0x4
+#define SHF_MASKPROC	0xf0000000
+
+/* special section indexes */
+#define SHN_UNDEF	0
+#define SHN_LORESERVE	0xff00
+#define SHN_LOPROC	0xff00
+#define SHN_HIPROC	0xff1f
+#define SHN_ABS		0xfff1
+#define SHN_COMMON	0xfff2
+#define SHN_HIRESERVE	0xffff
+ 
+typedef struct {
+  Elf32_Word	sh_name;
+  Elf32_Word	sh_type;
+  Elf32_Word	sh_flags;
+  Elf32_Addr	sh_addr;
+  Elf32_Off	sh_offset;
+  Elf32_Word	sh_size;
+  Elf32_Word	sh_link;
+  Elf32_Word	sh_info;
+  Elf32_Word	sh_addralign;
+  Elf32_Word	sh_entsize;
+} Elf32_Shdr;
 
 #define ELF_START_MMAP 0x80000000
 
-#endif
+#endif /* _LINUX_ELF_H */
