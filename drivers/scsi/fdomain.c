@@ -68,7 +68,7 @@
  revision 10h, October 17, 1991)
 
  Private communications, Drew Eckhardt (drew@cs.colorado.edu) and Eric
- Youngdale (eric@tantalus.nrl.navy.mil), 1992.
+ Youngdale (ericy@cais.com), 1992.
 
  Private communication, Tuong Le (Future Domain Engineering department),
  1994. (Disk geometry computations for Future Domain BIOS version 3.4, and
@@ -1394,9 +1394,8 @@ void print_info( Scsi_Cmnd *SCpnt )
 		 inb( port_base + Configuration2 ) );
 }
 
-int fdomain_16x0_abort( Scsi_Cmnd *SCpnt, int code )
+int fdomain_16x0_abort( Scsi_Cmnd *SCpnt)
 {
-
 #if EVERY_ACCESS || ERRORS_ONLY || DEBUG_ABORT
    printk( "Future Domain: Abort " );
 #endif
@@ -1407,11 +1406,7 @@ int fdomain_16x0_abort( Scsi_Cmnd *SCpnt, int code )
       printk( " (not in command)\n" );
 #endif
       sti();
-      return 0;
-   } else {
-#if EVERY_ACCESS || ERRORS_ONLY
-      printk( " code = %d\n", code );
-#endif
+      return SCSI_ABORT_NOT_RUNNING;
    }
 
 #if DEBUG_ABORT
@@ -1422,14 +1417,14 @@ int fdomain_16x0_abort( Scsi_Cmnd *SCpnt, int code )
 
    current_SC->SCp.phase |= aborted;
 
-   current_SC->result = code ? code : DID_ABORT;
+   current_SC->result = DID_ABORT << 16;
 
    sti();
    
    /* Aborts are not done well. . . */
-   my_done( code << 16 );
+   my_done( DID_ABORT << 16 );
 
-   return 0;
+   return SCSI_ABORT_SUCCESS;
 }
 
 int fdomain_16x0_reset( Scsi_Cmnd *SCpnt )
@@ -1458,10 +1453,7 @@ int fdomain_16x0_reset( Scsi_Cmnd *SCpnt )
       is probably hosed at this point.  We will, however, try to keep
       things going by informing the high-level code that we need help. */
 
-   if (SCpnt)
-	 SCpnt->flags |= NEEDS_JUMPSTART;
-   
-   return 0;
+   return SCSI_RESET_WAKEUP;
 }
 
 #ifdef CONFIG_BLK_DEV_SD

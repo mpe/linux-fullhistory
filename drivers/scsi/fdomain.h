@@ -27,7 +27,7 @@
 
 int        fdomain_16x0_detect( int );
 int        fdomain_16x0_command( Scsi_Cmnd * );
-int        fdomain_16x0_abort( Scsi_Cmnd *, int );
+int        fdomain_16x0_abort( Scsi_Cmnd *);
 const char *fdomain_16x0_info( void );
 int        fdomain_16x0_reset( Scsi_Cmnd * ); 
 int        fdomain_16x0_queue( Scsi_Cmnd *, void (*done)(Scsi_Cmnd *) );
@@ -47,5 +47,5 @@ int        fdomain_16x0_biosparam( int, int, int * );
 		        fdomain_16x0_reset,               \
 		        NULL,                             \
 		        fdomain_16x0_biosparam,           \
-		        1, 6, 64 /* SG_NONE */, 1 ,0, 0 }
+		        1, 6, 64 /* SG_NONE */, 1 ,0, 0, DISABLE_CLUSTERING}
 #endif

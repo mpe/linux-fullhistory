@@ -2,6 +2,7 @@
  *  linux/kernel/aha1542.c
  *
  *  Copyright (C) 1992  Tommy Thorn
+ *  Copyright (C) 1993, 1994 Eric Youngdale
  *
  *  Modified by Eric Youngdale
  *        Use request_irq and request_dma to help prevent unexpected conflicts
@@ -75,6 +76,7 @@ static struct Scsi_Host * aha_host[7] = {NULL,};  /* One for each IRQ level (9-1
 #define WAITnexttimeout 3000000
 
 static void setup_mailboxes(int base_io, struct Scsi_Host * shpnt);
+static int aha1542_restart(struct Scsi_Host * shost);
 
 #define aha1542_intr_reset(base)  outb(IRST, CONTROL(base))
 
@@ -215,7 +217,9 @@ static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
     /* Reset the adapter. I ought to make a hard reset, but it's not really nessesary */
     
     /*  DEB(printk("aha1542_test_port called \n")); */
-    
+
+    /* In case some other card was probing here, reset interrupts */
+    aha1542_intr_reset(bse);     /* reset interrupts, so they don't block */	
     outb(SRST|IRST/*|SCRST*/, CONTROL(bse));
 
     i = jiffies + 2;
@@ -259,7 +263,7 @@ static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
     outb(IRST, CONTROL(bse));
     
     debug = 11;
-    
+
     return debug;				/* 1 = ok */
   fail:
     return 0;					/* 0 = not ok */
@@ -281,7 +285,8 @@ static void aha1542_intr_handle(int foo)
     int number_serviced;
     struct Scsi_Host * shost;
     Scsi_Cmnd * SCtmp;
-    int irqno, * irqp;
+    int irqno, * irqp, flag;
+    int needs_restart;
     struct mailbox * mb;
     struct ccb  *ccb;
 
@@ -297,7 +302,7 @@ static void aha1542_intr_handle(int foo)
 
 #ifdef DEBUG
     {
-    int flag = inb(INTRFLAGS(shost->io_port));
+    flag = inb(INTRFLAGS(shost->io_port));
     printk("aha1542_intr_handle: ");
     if (!(flag&ANYINTR)) printk("no interrupt?");
     if (flag&MBIF) printk("MBIF ");
@@ -308,8 +313,24 @@ static void aha1542_intr_handle(int foo)
   };
 #endif
     number_serviced = 0;
+    needs_restart = 0;
 
     while(1==1){
+      flag = inb(INTRFLAGS(shost->io_port));
+
+      /* Check for unusual interrupts.  If any of these happen, we should
+	 probably do something special, but for now just printing a message
+	 is sufficient.  A SCSI reset detected is something that we really
+	 need to deal with in some way. */
+      if (flag & ~MBIF) {
+	if (flag&MBOA) printk("MBOF ");
+	if (flag&HACC) printk("HACC ");
+	if (flag&SCRD) {
+	  needs_restart = 1;
+	  printk("SCRD ");
+	}
+      }
+
       aha1542_intr_reset(shost->io_port);
 
       cli();
@@ -325,8 +346,11 @@ static void aha1542_intr_handle(int foo)
       if(mb[mbi].status == 0){
 	sti();
 	/* Hmm, no mail.  Must have read it the last time around */
-	if (number_serviced) return;
-	printk("aha1542.c: interrupt received, but no mail.\n");
+	if (!number_serviced && !needs_restart)
+	  printk("aha1542.c: interrupt received, but no mail.\n");
+	/* We detected a reset.  Restart all pending commands for
+	   devices that use the hard reset option */
+	if(needs_restart) aha1542_restart(shost);
 	return;
       };
 
@@ -354,6 +378,8 @@ static void aha1542_intr_handle(int foo)
 
       if (!SCtmp || !SCtmp->scsi_done) {
 	printk("aha1542_intr_handle: Unexpected interrupt\n");
+	printk("tarstat=%x, hastat=%x idlun=%x ccb#=%d \n", ccb[mbo].tarstat, 
+	       ccb[mbo].hastat, ccb[mbo].idlun, mbo);
 	return;
       }
       
@@ -883,39 +909,156 @@ int aha1542_detect(int hostnum)
     return count;
 }
 
+static int aha1542_restart(struct Scsi_Host * shost)
+{
+  int i;
+  int count = 0;
+#if 0
+  unchar ahacmd = CMD_START_SCSI;
+#endif
+
+  for(i=0; i< AHA1542_MAILBOXES; i++)
+   if(HOSTDATA(shost)->SCint[i] && 
+      !(HOSTDATA(shost)->SCint[i]->device->soft_reset))
+     {
+#if 0
+	HOSTDATA(shost)->mb[i].status = 1; /* Indicate ready to restart... */
+#endif
+	count++;
+     }     
+
+  printk("Potential to restart %d stalled commands...\n", count);
+#if 0
+  /* start scsi command */
+  if (count) aha1542_out(shost->io_port, &ahacmd, 1);
+#endif
+  return 0;
+}
+
 /* The abort command does not leave the device in a clean state where
    it is available to be used again.  Until this gets worked out, we will
    leave it commented out.  */
 
-int aha1542_abort(Scsi_Cmnd * SCpnt, int i)
+int aha1542_abort(Scsi_Cmnd * SCpnt)
 {
 #if 0
-    unchar ahacmd = CMD_START_SCSI;
-    int mbo;
+  int intval[3];
+  unchar ahacmd = CMD_START_SCSI;
+  struct mailbox * mb;
+  int mbi, mbo, i;
+
+  printk("In aha1542_abort: %x %x\n",
+	 inb(STATUS(SCpnt->host->io_port)),
+	 inb(INTRFLAGS(SCpnt->host->io_port)));
+
+  cli();
+  mb = HOSTDATA(SCpnt->host)->mb;
+  mbi = HOSTDATA(SCpnt->host)->aha1542_last_mbi_used + 1;
+  if (mbi >= 2*AHA1542_MAILBOXES) mbi = AHA1542_MAILBOXES;
+  
+  do{
+    if(mb[mbi].status != 0) break;
+    mbi++;
+    if (mbi >= 2*AHA1542_MAILBOXES) mbi = AHA1542_MAILBOXES;
+  } while (mbi != HOSTDATA(SCpnt->host)->aha1542_last_mbi_used);
+  sti();
+
+  if(mb[mbi].status) {
+    printk("Lost interrupt discovered on irq %d - attempting to recover\n", 
+	   SCpnt->host->irq);
+    intval[0] = SCpnt->host->irq;
+    aha1542_intr_handle((int) &intval[2]);
+    return 0;
+  }
+
+  /* OK, no lost interrupt.  Try looking to see how many pending commands
+     we think we have. */
+
+  for(i=0; i< AHA1542_MAILBOXES; i++)
+   if(HOSTDATA(SCpnt->host)->SCint[i])
+     {
+       if(HOSTDATA(SCpnt->host)->SCint[i] == SCpnt) {
+	 printk("Timed out command pending for %4.4x\n", SCpnt->request.dev);
+	 if (HOSTDATA(SCpnt->host)->mb[i].status) {
+	   printk("OGMB still full - restarting\n");
+	   aha1542_out(SCpnt->host->io_port, &ahacmd, 1);
+	 };
+       } else
+	 printk("Other pending command %4.4x\n", SCpnt->request.dev);
+     }
+
 #endif
+
     DEB(printk("aha1542_abort\n"));
 #if 0
     cli();
     for(mbo = 0; mbo < AHA1542_MAILBOXES; mbo++)
       if (SCpnt == HOSTDATA(SCpnt->host)->SCint[mbo]){
 	mb[mbo].status = 2;  /* Abort command */
-	aha1542_out(&ahacmd, 1);		/* start scsi command */
+	aha1542_out(SCpnt->host->io_port, &ahacmd, 1); /* start scsi command */
 	sti();
 	break;
       };
 #endif
-    return 0;
+    return SCSI_ABORT_SNOOZE;
 }
 
-/* We do not implement a reset function here, but the upper level code assumes
-   that it will get some kind of response for the command in SCpnt.  We must
-   oblige, or the command will hang the scsi system */
+/* We do not implement a reset function here, but the upper level code
+   assumes that it will get some kind of response for the command in
+   SCpnt.  We must oblige, or the command will hang the scsi system.
+   For a first go, we assume that the 1542 notifies us with all of the
+   pending commands (it does implement soft reset, after all). */
 
 int aha1542_reset(Scsi_Cmnd * SCpnt)
 {
+    unchar ahacmd = CMD_START_SCSI;
+    int i;
+
     DEB(printk("aha1542_reset called\n"));
-    if(SCpnt) SCpnt->flags |= NEEDS_JUMPSTART;
-    return 0;
+#if 0
+    /* This does a scsi reset for all devices on the bus */
+    outb(SCRST, CONTROL(SCpnt->host->io_port));
+#else
+    /* This does a selective reset of just the one device */
+    /* First locate the ccb for this command */
+    for(i=0; i< AHA1542_MAILBOXES; i++)
+      if(HOSTDATA(SCpnt->host)->SCint[i] == SCpnt)
+	{
+	  HOSTDATA(SCpnt->host)->ccb[i].op = 0x81;  /* BUS DEVICE RESET */
+	  /* Now tell the 1542 to flush all pending commands for this target */
+	  aha1542_out(SCpnt->host->io_port, &ahacmd, 1);
+
+	  /* Here is the tricky part.  What to do next.  Do we get an interrupt
+	     for the commands that we aborted with the specified target, or
+	     do we generate this on our own?  Try it without first and see
+	     what happens */
+	  printk("Sent BUS DEVICE RESET to target %d\n", SCpnt->target);
+
+	  /* If the first does not work, then try the second.  I think the
+	     first option is more likely to be correct. Free the command
+	     block for all commands running on this target... */
+#if 1
+	  for(i=0; i< AHA1542_MAILBOXES; i++)
+	    if(HOSTDATA(SCpnt->host)->SCint[i] &&
+	       HOSTDATA(SCpnt->host)->SCint[i]->target == SCpnt->target)
+	    {
+	      Scsi_Cmnd * SCtmp;
+	      SCtmp = HOSTDATA(SCpnt->host)->SCint[i];
+	      SCtmp->result = DID_RESET << 16;
+	      if (SCtmp->host_scribble) scsi_free(SCtmp->host_scribble, 512);
+	      printk("Sending DID_RESET for target %d\n", SCpnt->target);
+	      SCtmp->scsi_done(SCpnt);
+	      
+	      HOSTDATA(SCpnt->host)->SCint[i] = NULL;
+	    }
+	  return SCSI_RESET_SUCCESS;
+#else
+	  return SCSI_RESET_PENDING;
+#endif
+	}
+
+#endif
+    return SCSI_RESET_PENDING;
 }
 
 #ifdef CONFIG_BLK_DEV_SD

@@ -16,7 +16,7 @@ int seagate_st0x_detect(int);
 int seagate_st0x_command(Scsi_Cmnd *);
 int seagate_st0x_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 
-int seagate_st0x_abort(Scsi_Cmnd *, int);
+int seagate_st0x_abort(Scsi_Cmnd *);
 const char *seagate_st0x_info(void);
 int seagate_st0x_reset(Scsi_Cmnd *); 
 
@@ -34,7 +34,7 @@ int seagate_st0x_biosparam(int, int, int*);
 			 seagate_st0x_info, seagate_st0x_command,  	\
 			 seagate_st0x_queue_command, seagate_st0x_abort, \
 			 seagate_st0x_reset, NULL, seagate_st0x_biosparam, \
-			 1, 7, SG_ALL, 1, 0, 0}
+			 1, 7, SG_ALL, 1, 0, 0, DISABLE_CLUSTERING}
 #endif
 
 

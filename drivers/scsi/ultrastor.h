@@ -16,7 +16,7 @@
 int ultrastor_detect(int);
 const char *ultrastor_info(void);
 int ultrastor_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-int ultrastor_abort(Scsi_Cmnd *, int);
+int ultrastor_abort(Scsi_Cmnd *);
 int ultrastor_reset(Scsi_Cmnd *);
 int ultrastor_biosparam(int, int, int *);
 
@@ -31,7 +31,8 @@ int ultrastor_biosparam(int, int, int *);
     { "UltraStor 14F/24F/34F", ultrastor_detect, ultrastor_info, 0, \
       ultrastor_queuecommand, ultrastor_abort, ultrastor_reset, \
       0, ultrastor_biosparam, ULTRASTOR_MAX_CMDS, 0, \
-      ULTRASTOR_14F_MAX_SG, ULTRASTOR_MAX_CMDS_PER_LUN, 0, 1 }
+      ULTRASTOR_14F_MAX_SG, ULTRASTOR_MAX_CMDS_PER_LUN, 0, 1, \
+	ENABLE_CLUSTERING }
 
 
 #ifdef ULTRASTOR_PRIVATE

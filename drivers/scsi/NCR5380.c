@@ -2266,7 +2266,7 @@ static void NCR5380_dma_complete (NCR5380_instance *instance) {
 #endif /* def REAL_DMA */
 
 /*
- * Function : int NCR5380_abort (Scsi_Cmnd *cmd, int code)
+ * Function : int NCR5380_abort (Scsi_Cmnd *cmd)
  *
  * Purpose : abort a command
  *
@@ -2285,7 +2285,7 @@ static void NCR5380_dma_complete (NCR5380_instance *instance) {
 #ifndef NCR5380_abort
 static
 #endif
-int NCR5380_abort (Scsi_Cmnd *cmd, int code) {
+int NCR5380_abort (Scsi_Cmnd *cmd) {
     NCR5380_local_declare();
     struct Scsi_Host *instance = cmd->host;
     struct NCR5380_hostdata *hostdata = (struct NCR5380_hostdata *)
@@ -2313,14 +2313,14 @@ int NCR5380_abort (Scsi_Cmnd *cmd, int code) {
 	if (cmd == tmp) {
 	    (*prev) = (Scsi_Cmnd *) tmp->host_scribble;
 	    tmp->host_scribble = NULL;
-	    tmp->result = (code ? code : DID_ABORT) << 16;
+	    tmp->result = DID_ABORT << 16;
 	    sti();
 #if (NDEBUG & NDEBUG_ABORT)
     printk("scsi%d : abort removed command from issue queue.\n", 
 	instance->host_no);
 #endif
 	    tmp->done(tmp);
-	    return 0;
+	    return SCSI_ABORT_SUCCESS;
 	}
 
 /* 
@@ -2339,7 +2339,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd, int code) {
 #if (NDEBUG & NDEBUG_ABORT)
     printk("scsi%d : abort failed, command connected.\n", instance->host_no);
 #endif
-        return -1;
+        return SCSI_ABORT_NOT_RUNNING;
     }
 
 /*
@@ -2376,7 +2376,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd, int code) {
 #endif
   
             if (NCR5380_select (instance, cmd, (int) cmd->tag)) 
-		return 1;
+		return SCSI_ABORT_BUSY;
 
 #if (NDEBUG & NDEBUG_ABORT)
     printk("scsi%d : nexus restablished.\n", instance->host_no);
@@ -2397,10 +2397,10 @@ int NCR5380_abort (Scsi_Cmnd *cmd, int code) {
 		    if (cmd == tmp) {
 		    *prev = (Scsi_Cmnd *) tmp->host_scribble;
 		    tmp->host_scribble = NULL;
-		    tmp->result = (code ? code : DID_ABORT) << 16;
+		    tmp->result = DID_ABORT << 16;
 		    sti();
 		    tmp->done(tmp);
-		    return 0;
+		    return SCSI_ABORT_SUCCESS;
 		}
 	}
 
@@ -2417,7 +2417,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd, int code) {
     sti();
     printk("scsi%d : warning : SCSI command probably completed successfully\n"
            "         before abortion\n", instance->host_no); 
-    return 0;
+    return SCSI_ABORT_NOT_RUNNING;
 }
 
 

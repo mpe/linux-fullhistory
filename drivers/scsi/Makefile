@@ -11,6 +11,14 @@
 
 AHA152X	= -DDEBUG_AHA152X -DAUTOCONF
 
+ifeq (${CFLAGS},)
+CFLAGS = -D__KERNEL__=1 \
+	-Wall -Wstrict-prototypes -I. -I../../include \
+	-O2 -fomit-frame-pointer -m486
+
+include ../../.config
+endif
+
 SCSI_OBJS =
 SCSI_SRCS =
 
@@ -54,6 +62,11 @@ SCSI_OBJS := $(SCSI_OBJS) aha1740.o
 SCSI_SRCS := $(SCSI_SRCS) aha1740.c
 endif
 
+ifdef CONFIG_SCSI_BUSLOGIC
+SCSI_OBJS := $(SCSI_OBJS) buslogic.o
+SCSI_SRCS := $(SCSI_SRCS) buslogic.c
+endif
+
 ifdef CONFIG_SCSI_DEBUG
 SCSI_OBJS := $(SCSI_OBJS) scsi_debug.o
 SCSI_SRCS := $(SCSI_SRCS) scsi_debug.c
@@ -62,6 +75,11 @@ endif
 ifdef CONFIG_SCSI_FUTURE_DOMAIN
 SCSI_OBJS := $(SCSI_OBJS) fdomain.o
 SCSI_SRCS := $(SCSI_SRCS) fdomain.c
+endif
+
+ifdef CONFIG_SCSI_IN2000
+SCSI_OBJS := $(SCSI_OBJS) in2000.o
+SCSI_SRCS := $(SCSI_SRCS) in2000.c
 endif
 
 ifdef CONFIG_SCSI_GENERIC_NCR5380

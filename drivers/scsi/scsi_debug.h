@@ -23,5 +23,5 @@ int scsi_debug_reset(Scsi_Cmnd *);
 		scsi_debug_reset,				\
 		NULL,						\
 		scsi_debug_biosparam,				\
-		SCSI_DEBUG_MAILBOXES, 7, SG_ALL, 1, 0, 1}
+		SCSI_DEBUG_MAILBOXES, 7, SG_ALL, 1, 0, 1, ENABLE_CLUSTERING}
 #endif

@@ -6,7 +6,7 @@
  *  scatter/gather added by Scott Taylor (n217cg@tamuts.tamu.edu)
  *  24F and multiple command support by John F. Carr (jfc@athena.mit.edu)
  *    John's work modified by Caleb Epstein (cae@jpmorgan.com) and 
- *    Eric Youngdale (eric@tantalus.nrl.navy.mil).
+ *    Eric Youngdale (ericy@cais.com).
  *	Thanks to UltraStor for providing the necessary documentation
  */
 
@@ -796,7 +796,7 @@ int ultrastor_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 
  */
 
-int ultrastor_abort(Scsi_Cmnd *SCpnt, int code)
+int ultrastor_abort(Scsi_Cmnd *SCpnt)
 {
 #if ULTRASTOR_DEBUG & UD_ABORT
     char out[108];
@@ -807,7 +807,8 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt, int code)
     unsigned char old_aborted;
     void (*done)(Scsi_Cmnd *);
 
-    if(config.slot) return 0;  /* Do not attempt an abort for the 24f */
+    if(config.slot) 
+      return SCSI_ABORT_SNOOZE;  /* Do not attempt an abort for the 24f */
 
     mscp_index = ((struct mscp *)SCpnt->host_scribble) - config.mscp;
     if (mscp_index >= ULTRASTOR_MAX_CMDS)
@@ -851,16 +852,16 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt, int code)
 	cli();
 	ultrastor_interrupt(0);
 	restore_flags(flags);
-	return 0;
+	return SCSI_ABORT_SUCCESS;  /* FIXME - is this correct? -ERY */
       }
 #endif
 
-    old_aborted = xchgb(code ? code : DID_ABORT, &config.aborted[mscp_index]);
+    old_aborted = xchgb(DID_ABORT, &config.aborted[mscp_index]);
 
     /* aborted == 0xff is the signal that queuecommand has not yet sent
        the command.  It will notice the new abort flag and fail.  */
     if (old_aborted == 0xff)
-	return 0;
+	return SCSI_ABORT_SUCCESS;
 
     /* On 24F, send an abort MSCP request.  The adapter will interrupt
        and the interrupt handler will call done.  */
@@ -879,7 +880,7 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt, int code)
 	printk(out, ogm_status, ogm_addr, icm_status, icm_addr);
 #endif
 	restore_flags(flags);
-	return 0;
+	return SCSI_ABORT_PENDING;
       }
 
 #if ULTRASTOR_DEBUG & UD_ABORT
@@ -891,13 +892,18 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt, int code)
        still be using it.  Setting SCint = 0 causes the interrupt
        handler to ignore the command.  */
 
+    /* FIXME - devices that implement soft resets will still be running
+       the command after a bus reset.  We would probably rather leave
+       the command in the queue.  The upper level code will automatically
+       leave the command in the active state instead of requeueing it. ERY */
+
 #if ULTRASTOR_DEBUG & UD_ABORT
     if (config.mscp[mscp_index].SCint != SCpnt)
 	printk("abort: command mismatch, %x != %x\n",
 	       config.mscp[mscp_index].SCint, SCpnt);
 #endif
     if (config.mscp[mscp_index].SCint == 0)
-	return 1;
+	return SCSI_ABORT_NOT_RUNNING;
 
     if (config.mscp[mscp_index].SCint != SCpnt) panic("Bad abort");
     config.mscp[mscp_index].SCint = 0;
@@ -908,7 +914,7 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt, int code)
     done(SCpnt);
 
     /* Need to set a timeout here in case command never completes.  */
-    return 0;
+    return SCSI_ABORT_SUCCESS;
 
 }
 
@@ -920,10 +926,8 @@ int ultrastor_reset(Scsi_Cmnd * SCpnt)
     printk("US14F: reset: called\n");
 #endif
 
-    if(config.slot) {
-      if (SCpnt) SCpnt->flags |= NEEDS_JUMPSTART;
-      return 0;  /* Do not attempt a reset for the 24f */
-    };
+    if(config.slot)
+      return SCSI_RESET_SNOOZE;  /* Do not attempt a reset for the 24f */
 
     save_flags(flags);
     cli();
@@ -958,6 +962,9 @@ int ultrastor_reset(Scsi_Cmnd * SCpnt)
       }
 #endif
 
+    /* FIXME - if the device implements soft resets, then the command
+       will still be running.  ERY */
+
     memset((unsigned char *)config.aborted, 0, sizeof config.aborted);
 #if ULTRASTOR_MAX_CMDS == 1
     config.mscp_busy = 0;
@@ -966,7 +973,7 @@ int ultrastor_reset(Scsi_Cmnd * SCpnt)
 #endif
 
     restore_flags(flags);
-    return 0;
+    return SCSI_RESET_SUCCESS;
 
 }
 

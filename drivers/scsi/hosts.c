@@ -39,12 +39,20 @@
 #include "aha1740.h"
 #endif
 
+#ifdef CONFIG_SCSI_BUSLOGIC
+#include "buslogic.h"
+#endif
+
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
 #include "fdomain.h"
 #endif
 
 #ifdef CONFIG_SCSI_GENERIC_NCR5380
 #include "g_NCR5380.h"
+#endif
+
+#ifdef CONFIG_SCSI_IN2000
+#include "in2000.h"
 #endif
 
 #ifdef CONFIG_SCSI_PAS16
@@ -105,6 +113,10 @@ Scsi_Host_Template scsi_hosts[] =
 #ifdef CONFIG_SCSI_AHA152X
 	AHA152X,
 #endif
+/* Buslogic must come before aha1542.c */
+#ifdef CONFIG_SCSI_BUSLOGIC
+	BUSLOGIC,
+#endif
 #ifdef CONFIG_SCSI_AHA1542
 	AHA1542,
 #endif
@@ -113,6 +125,9 @@ Scsi_Host_Template scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
 	FDOMAIN_16X0,
+#endif
+#ifdef CONFIG_SCSI_IN2000
+	IN2000,
 #endif
 #ifdef CONFIG_SCSI_GENERIC_NCR5380
         GENERIC_NCR5380,
@@ -181,6 +196,7 @@ struct Scsi_Host * scsi_register(int i, int j){
 	retval->host_queue = NULL;	
 	retval->host_wait = NULL;	
 	retval->last_reset = 0;	
+	retval->irq = 0;
 	retval->hostt = &scsi_hosts[i];	
 	retval->next = NULL;
 #ifdef DEBUG

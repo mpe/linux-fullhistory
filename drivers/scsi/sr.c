@@ -1,5 +1,6 @@
 /*
- *      sr.c by David Giller
+ *      sr.c Copyright (C) 1992 David Giller
+ *	     Copyright (C) 1993, 1994 Eric Youngdale
  *
  *      adapted from:
  *	sd.c Copyright (C) 1992 Drew Eckhardt 
@@ -8,7 +9,7 @@
  *
  *	<drew@colorado.edu>
  *
- *       Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
+ *       Modified by Eric Youngdale ericy@cais.com to
  *       add scatter-gather, multiple outstanding request, and other
  *       enhancements.
  */

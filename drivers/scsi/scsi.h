@@ -276,6 +276,7 @@ typedef struct scsi_device {
 	unsigned tagged_supported:1; /* Supports SCSI-II tagged queing */
 	unsigned tagged_queue:1;   /*SCSI-II tagged queing enabled */
 	unsigned disconnect:1;     /* can disconnect */
+	unsigned soft_reset:1;		/* Uses soft reset option */
 	unsigned char current_tag; /* current tag */
 } Scsi_Device;
 /*
@@ -315,6 +316,63 @@ struct scatterlist {
 #define CONTIGUOUS_BUFFERS(X,Y) ((X->b_data+X->b_size) == Y->b_data)
 
 
+/*
+ * These are the return codes for the abort and reset functions.  The mid-level
+ * code uses these to decide what to do next.  Each of the low level abort
+ * and reset functions must correctly indicate what it has done.
+ */
+
+/* We did not do anything.  Wait
+   some more for this command to complete, and if this does not work, try
+   something more serious. */ 
+#define SCSI_ABORT_SNOOZE 0
+
+/* This means that we were able to abort the command.  We have already
+   called the mid-level done function, and do not expect an interrupt that will
+   lead to another call to the mid-level done function for this command */
+#define SCSI_ABORT_SUCCESS 1
+
+/* We called for an abort of this command, and we should get an interrupt 
+   when this succeeds.  Thus we should not restore the timer for this
+   command in the mid-level abort function. */
+#define SCSI_ABORT_PENDING 2
+
+/* Unable to abort - command is currently on the bus.  Grin and bear it. */
+#define SCSI_ABORT_BUSY 3
+
+/* The command is not active in the low level code. Command probably
+   finished. */
+#define SCSI_ABORT_NOT_RUNNING 4
+
+/* Something went wrong.  The low level driver will indicate the correct
+ error condition when it calls scsi_done, so the mid-level abort function
+ can simply wait until this comes through */
+#define SCSI_ABORT_ERROR 5
+
+/* We do not know how to reset the bus, or we do not want to.  Bummer.
+   Anyway, just wait a little more for the command in question, and hope that
+   it eventually finishes */
+#define SCSI_RESET_SNOOZE 0
+
+/* This means that we were able to reset the bus.  We have restarted all of
+   the commands that should be restarted, and we should be able to continue
+   on normally from here.  We do not expect any interrupts that will return
+   DID_RESET to any of the other commands in the host_queue. */
+#define SCSI_RESET_SUCCESS 1
+
+/* We called for an reset of this bus, and we should get an interrupt 
+   when this succeeds.  Each command should get it's own status
+   passed up to scsi_done, but this has not happened yet. */
+#define SCSI_RESET_PENDING 2
+
+/* We did a reset, but do not expect an interrupt to signal DID_RESET.
+   This tells the upper level code to request the sense info, and this
+   should keep the command alive. */
+#define SCSI_RESET_WAKEUP 3
+
+/* Something went wrong, and we do not know how to fix it. */
+#define SCSI_RESET_ERROR 4
+
 void *   scsi_malloc(unsigned int);
 int      scsi_free(void *, unsigned int);
 extern unsigned int dma_free_sectors;   /* How much room do we have left */
@@ -340,6 +398,7 @@ typedef struct scsi_pointer {
 
 typedef struct scsi_cmnd {
 	struct Scsi_Host * host;
+	Scsi_Device * device;
 	unsigned char target, lun,  index;
 	struct scsi_cmnd *next, *prev;	
 
@@ -355,6 +414,8 @@ typedef struct scsi_cmnd {
 				       sense info */
 	unsigned short use_sg;  /* Number of pieces of scatter-gather */
 	unsigned short sglist_len;  /* size of malloc'd scatter-gather list */
+	unsigned short abort_reason;  /* If the mid-level code requests an
+					 abort, this is the reason. */
 	unsigned bufflen;     /* Size of data buffer */
 	void *buffer;   /* Data buffer */
 

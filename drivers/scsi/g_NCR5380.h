@@ -33,7 +33,7 @@
 
 
 #ifndef ASM
-int generic_NCR5380_abort(Scsi_Cmnd *, int);
+int generic_NCR5380_abort(Scsi_Cmnd *);
 int generic_NCR5380_detect(int);
 const char *generic_NCR5380_info(void);
 int generic_NCR5380_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
@@ -59,7 +59,7 @@ int generic_NCR5380_reset(Scsi_Cmnd *);
 	generic_NCR5380_queue_command, generic_NCR5380_abort, 		\
 	generic_NCR5380_reset, NULL, 					\
 	NULL, /* can queue */ CAN_QUEUE, /* id */ 7, SG_ALL,		\
-	/* cmd per lun */ CMD_PER_LUN , 0, 0}
+	/* cmd per lun */ CMD_PER_LUN , 0, 0, DISABLE_CLUSTERING}
 
 #else
 #define NCR5380_implementation_fields \

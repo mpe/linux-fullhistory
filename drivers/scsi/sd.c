@@ -1,11 +1,12 @@
 /*
  *	sd.c Copyright (C) 1992 Drew Eckhardt 
+ *	     Copyright (C) 1993, 1994 Eric Youngdale
  *	Linux scsi disk driver by
  *		Drew Eckhardt 
  *
  *	<drew@colorado.edu>
  *
- *       Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
+ *       Modified by Eric Youngdale ericy@cais.com to
  *       add scatter-gather, multiple outstanding request, and other
  *       enhancements.
  */
@@ -40,7 +41,7 @@ static const char RCSid[] = "$Header:";
 #define SD_TIMEOUT 300
 #define SD_MOD_TIMEOUT 750
 
-#define CLUSTERABLE_DEVICE(SC) (SC->host->sg_tablesize < 64 && \
+#define CLUSTERABLE_DEVICE(SC) (SC->host->hostt->use_clustering && \
 			    scsi_devices[SC->index].type != TYPE_MOD)
 
 struct hd_struct * sd;

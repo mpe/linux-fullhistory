@@ -1546,14 +1546,11 @@ else {
 	return retcode (st0x_aborted);
 	}
 
-int seagate_st0x_abort (Scsi_Cmnd * SCpnt, int code)
+int seagate_st0x_abort (Scsi_Cmnd * SCpnt)
 	{
-	if (code)
-		st0x_aborted = code;
-	else
-		st0x_aborted = DID_ABORT;
-
-		return 0;
+	  st0x_aborted = DID_ABORT;
+	  
+	  return SCSI_ABORT_PENDING;
 	}
 
 /*
@@ -1590,8 +1587,7 @@ int seagate_st0x_reset (Scsi_Cmnd * SCpnt)
 #ifdef DEBUG
 	printk("SCSI bus reset.\n");
 #endif
-	if(SCpnt) SCpnt->flags |= NEEDS_JUMPSTART;
-	return 0;
+	return SCSI_RESET_PENDING;
 	}
 
 #ifdef CONFIG_BLK_DEV_SD

@@ -410,8 +410,8 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 
 		brelse (bh);
 		set_blocksize (dev, sb->s_blocksize);
-		logic_sb_block = sb_block / sb->s_blocksize;
-		offset = sb_block % sb->s_blocksize;
+		logic_sb_block = (sb_block*BLOCK_SIZE) / sb->s_blocksize;
+		offset = (sb_block*BLOCK_SIZE) % sb->s_blocksize;
 		bh = bread (dev, logic_sb_block, sb->s_blocksize);
 		if(!bh)
 			return NULL;

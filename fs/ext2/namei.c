@@ -630,8 +630,9 @@ repeat:
 		schedule();
 		goto repeat;
 	}
-	if ((dir->i_mode & S_ISVTX) && current->euid &&
-	    inode->i_uid != current->euid)
+        if ((dir->i_mode & S_ISVTX) && !suser() &&
+            current->euid != inode->i_uid &&
+            current->euid != dir->i_uid)
 		goto end_rmdir;
 	if (inode == dir)	/* we may not delete ".", but "../dir" is ok */
 		goto end_rmdir;

@@ -474,10 +474,10 @@ but it hasn't happened yet, and doing aborts brings the Adaptec to its
 knees.  I cannot (at this moment in time) think of any reason to reset the
 card once it's running.  So there. */
 
-int aha1740_abort(Scsi_Cmnd * SCpnt, int i)
+int aha1740_abort(Scsi_Cmnd * SCpnt)
 {
     DEB(printk("aha1740_abort called\n"));
-    return 0;
+    return SCSI_ABORT_SNOOZE;
 }
 
 /* We do not implement a reset function here, but the upper level code assumes
@@ -487,8 +487,7 @@ int aha1740_abort(Scsi_Cmnd * SCpnt, int i)
 int aha1740_reset(Scsi_Cmnd * SCpnt)
 {
     DEB(printk("aha1740_reset called\n"));
-    if (SCpnt) SCpnt->flags |= NEEDS_JUMPSTART;
-    return 0;
+    return SCSI_RESET_SNOOZE;
 }
 
 int aha1740_biosparam(int size, int dev, int* ip)

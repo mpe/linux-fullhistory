@@ -1185,18 +1185,17 @@ int wd7000_detect(int hostnum)
 /*
  *  I have absolutely NO idea how to do an abort with the WD7000...
  */
-int wd7000_abort(Scsi_Cmnd * SCpnt, int i)
+int wd7000_abort(Scsi_Cmnd * SCpnt)
 {
-#ifdef DEBUG
-    printk("wd7000_abort: Scsi_Cmnd = 0x%06x, code = %d ", (int) SCpnt, i);
-    printk("id %d lun %d cdb", SCpnt->target, SCpnt->lun);
-    {
-        int j;  unchar *cdbj = (unchar *) SCpnt->cmnd;
-	for (j=0; j < COMMAND_SIZE(*cdbj);  j++)  printk(" %02x", *(cdbj++));
-	printk(" result %08x\n", SCpnt->result);
+    Adapter *host = (Adapter *) SCpnt->host->hostdata;
+
+    if (inb(host->iobase+ASC_STAT) & INT_IM)  {
+        printk("wd7000_abort: lost interrupt\n");
+	wd7000_intr_handle(host->irq);
+	return SCSI_ABORT_SUCCESS;
     }
-#endif
-    return 0;
+
+    return SCSI_ABORT_SNOOZE;
 }
 
 
@@ -1205,21 +1204,7 @@ int wd7000_abort(Scsi_Cmnd * SCpnt, int i)
  */
 int wd7000_reset(Scsi_Cmnd * SCpnt)
 {
-#ifdef DEBUG
-    printk("wd7000_reset: Scsi_Cmnd = 0x%06x ", (int) SCpnt);
-    if (SCpnt)  {
-        printk("id %d lun %d cdb", SCpnt->target, SCpnt->lun);
-	{
-	    int j;  unchar *cdbj = (unchar *) SCpnt->cmnd;
-	    for (j=0; j < COMMAND_SIZE(*cdbj);  j++)
-	        printk(" %02x", *(cdbj++));
-	    printk(" result %08x", SCpnt->result);
-	}
-    }
-    printk("\n");
-#endif
-    if (SCpnt) SCpnt->flags |= NEEDS_JUMPSTART;
-    return 0;
+    return SCSI_RESET_SNOOZE;
 }
 
 

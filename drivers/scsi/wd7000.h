@@ -15,7 +15,7 @@
 int wd7000_detect(int);
 int wd7000_command(Scsi_Cmnd *);
 int wd7000_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-int wd7000_abort(Scsi_Cmnd *, int);
+int wd7000_abort(Scsi_Cmnd *);
 const char *wd7000_info(void);
 int wd7000_reset(Scsi_Cmnd *);
 int wd7000_biosparam(int, int, int*);
@@ -48,5 +48,5 @@ int wd7000_biosparam(int, int, int*);
 	wd7000_reset,			\
 	NULL,                           \
 	wd7000_biosparam,               \
-	WD7000_Q, 7, WD7000_SG, 1, 0, 1}
+	WD7000_Q, 7, WD7000_SG, 1, 0, 1, ENABLE_CLUSTERING}
 #endif

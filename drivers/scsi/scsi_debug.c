@@ -521,7 +521,7 @@ int scsi_debug_detect(int hostnum)
     return 1;
 }
 
-int scsi_debug_abort(Scsi_Cmnd * SCpnt,int i)
+int scsi_debug_abort(Scsi_Cmnd * SCpnt)
 {
     int j;
     void (*my_done)(Scsi_Cmnd *);

@@ -73,7 +73,7 @@ static const char reserved[] = "RESERVED";
 static const char vendor[] = "VENDOR SPECIFIC";
 
 static void print_opcode(int opcode) {
-  char **table = commands[ group(opcode) ];
+  const char **table = commands[ group(opcode) ];
   switch ((int) table) {
   case RESERVED_GROUP:
   	printk("%s(0x%02x) ", reserved, opcode); 
@@ -351,8 +351,8 @@ static struct error_info additional[] =
 static char *snstext[] = {
 	"None","Recovered Error","Not Ready","Medium Error","Hardware Error",
 	"Illegal Request","Unit Attention","Data Protect","Blank Check",
-	"Key=E","Key=F","Filemark","End-Of-Medium","Incorrect Block Length",
-	"14","15"};
+	"Key=9","Copy Aborted","Aborted Command","End-Of-Medium",
+	"Volume Overflow", "Miscompare", "Key=15"};
 #endif
 
 
@@ -394,9 +394,6 @@ void print_sense(char * devclass, Scsi_Cmnd * SCpnt)
 	  printk("%s error ", error);
 	  
 #if (CONSTANTS & CONST_SENSE)
-	  if (sense_buffer[2] & 0x80) printk( "FMK ");
-	  if (sense_buffer[2] & 0x40) printk( "EOM ");
-	  if (sense_buffer[2] & 0x20) printk( "ILI ");
 	  printk( "%s%x: sense key %s\n", devclass, dev, snstext[sense_buffer[2] & 0x0f]);
 #else
 	  printk("%s%x: sns = %2x %2x\n", devclass, dev, sense_buffer[0], sense_buffer[2]);
@@ -437,9 +434,12 @@ void print_sense(char * devclass, Scsi_Cmnd * SCpnt)
 	}
 	
       done:
+#if !(CONSTANTS & CONST_SENSE)
+	printk("Raw sense data:");
 	for (i = 0; i < s; ++i) 
 	  printk("0x%02x ", sense_buffer[i]);
-
+	printk("\n");
+#endif
 	return;
 }
 

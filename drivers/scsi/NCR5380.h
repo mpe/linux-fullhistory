@@ -249,7 +249,7 @@ static void NCR5380_print_options (struct Scsi_Host *instance);
 #ifndef NCR5380_abort
 static
 #endif
-int NCR5380_abort (Scsi_Cmnd *cmd, int code);
+int NCR5380_abort (Scsi_Cmnd *cmd);
 #ifndef NCR5380_reset
 static
 #endif

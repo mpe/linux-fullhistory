@@ -14,7 +14,7 @@ int        aha152x_detect(int);
 const char *aha152x_info(void);
 int        aha152x_command(Scsi_Cmnd *);
 int        aha152x_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-int        aha152x_abort(Scsi_Cmnd *, int);
+int        aha152x_abort(Scsi_Cmnd *);
 int        aha152x_reset(Scsi_Cmnd *);
 int        aha152x_biosparam(int, int, int*);
 
@@ -39,7 +39,8 @@ int        aha152x_biosparam(int, int, int*);
                         /* sg_tablesize */	SG_ALL,                     \
                         /* cmd_per_lun */	1,                          \
                         /* present */		0,                          \
-                        /* unchecked_isa_dma */	0 }
+                        /* unchecked_isa_dma */	0,			    \
+			/* use_clustering */	DISABLE_CLUSTERING }
 #endif
 
 

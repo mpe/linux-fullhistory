@@ -201,16 +201,13 @@ static int minix_file_write(struct inode * inode, struct file * filp, char * buf
 		printk("minix_file_write: mode = %07o\n",inode->i_mode);
 		return -EINVAL;
 	}
-/*
- * ok, append may not work when many processes are writing at the same time
- * but so what. That way leads to madness anyway.
- */
+	down(&inode->i_sem);
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
 	else
 		pos = filp->f_pos;
 	written = 0;
-	while (written<count) {
+	while (written < count) {
 		bh = minix_getblk(inode,pos/BLOCK_SIZE,1);
 		if (!bh) {
 			if (!written)
@@ -232,10 +229,6 @@ static int minix_file_write(struct inode * inode, struct file * filp, char * buf
 		}
 		p = (pos % BLOCK_SIZE) + bh->b_data;
 		pos += c;
-		if (pos > inode->i_size) {
-			inode->i_size = pos;
-			inode->i_dirt = 1;
-		}
 		written += c;
 		memcpy_fromfs(p,buf,c);
 		buf += c;
@@ -243,6 +236,9 @@ static int minix_file_write(struct inode * inode, struct file * filp, char * buf
 		mark_buffer_dirty(bh, 0);
 		brelse(bh);
 	}
+	if (pos > inode->i_size)
+		inode->i_size = pos;
+	up(&inode->i_sem);
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	filp->f_pos = pos;
 	inode->i_dirt = 1;

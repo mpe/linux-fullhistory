@@ -99,11 +99,10 @@ __asm__("cld\n"
 	"jne 1b\n\t"
 	"xorl %%eax,%%eax\n\t"
 	"jmp 3f\n"
-	"2:\tmovl $1,%%eax\n\t"
-	"jb 3f\n\t"
-	"negl %%eax\n"
+	"2:\tsbbl %%eax,%%eax\n\t"
+	"orb $1,%%eax\n"
 	"3:"
-	:"=a" (__res):"D" (cs),"S" (ct):"si","di");
+	:"=a" (__res):"S" (cs),"D" (ct):"si","di");
 return __res;
 }
 
@@ -120,11 +119,10 @@ __asm__("cld\n"
 	"jne 1b\n"
 	"2:\txorl %%eax,%%eax\n\t"
 	"jmp 4f\n"
-	"3:\tmovl $1,%%eax\n\t"
-	"jb 4f\n\t"
-	"negl %%eax\n"
+	"3:\tsbbl %%eax,%%eax\n\t"
+	"orb $1,%%al\n"
 	"4:"
-	:"=a" (__res):"D" (cs),"S" (ct),"c" (count):"si","di","cx");
+	:"=a" (__res):"S" (cs),"D" (ct),"c" (count):"si","di","cx");
 return __res;
 }
 
@@ -153,8 +151,7 @@ __asm__("cld\n\t"
 	"1:\tlodsb\n\t"
 	"cmpb %%ah,%%al\n\t"
 	"jne 2f\n\t"
-	"movl %%esi,%0\n\t"
-	"decl %0\n"
+	"leal -1(%%esi),%0\n"
 	"2:\ttestb %%al,%%al\n\t"
 	"jne 1b"
 	:"=d" (__res):"0" (0),"S" (s),"a" (c):"ax","si");
@@ -384,11 +381,10 @@ __asm__("cld\n\t"
 	"repe\n\t"
 	"cmpsb\n\t"
 	"je 1f\n\t"
-	"movl $1,%%eax\n\t"
-	"jb 1f\n\t"
-	"negl %%eax\n"
+	"sbbl %%eax,%%eax\n\t"
+	"orb $1,%%al\n"
 	"1:"
-	:"=a" (__res):"0" (0),"D" (cs),"S" (ct),"c" (count)
+	:"=a" (__res):"0" (0),"S" (cs),"D" (ct),"c" (count)
 	:"si","di","cx");
 return __res;
 }

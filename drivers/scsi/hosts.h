@@ -21,16 +21,11 @@
 */
 
 
-/* A jumpstart is often required when the reset() function is called -
-   many host adapters cannot do this cleanly, so they do nothing at all.
-   To get the command going again, these routines set this bit in the flags
-   so that a scsi_request_sense() is executed, and the command starts running
-   again */
-
-#define NEEDS_JUMPSTART 0x20
-
 #define SG_NONE 0
-#define SG_ALL 0xff
+#define SG_ALL 0x7fff
+
+#define DISABLE_CLUSTERING 0
+#define ENABLE_CLUSTERING 1
 
 /* The various choices mean:
    NONE: Self evident.  Host adapter is not capable of scatter-gather.
@@ -109,7 +104,11 @@ typedef struct
 	/*
 		Since the mid level driver handles time outs, etc, we want to 
 		be able to abort the current command.  Abort returns 0 if the 
-		abortion was successful.  If non-zero, the code passed to it 
+		abortion was successful.  The field SCpnt->abort reason
+		can be filled in with the appropriate reason why we wanted
+		the abort in the first place, and this will be used
+		in the mid-level code instead of the host_byte().
+		If non-zero, the code passed to it 
 		will be used as the return code, otherwise 
 		DID_ABORT  should be returned.
 
@@ -117,7 +116,7 @@ typedef struct
 		resetting the bus, etc.  if necessary. 
 	*/
 
-	int (* abort)(Scsi_Cmnd *, int);
+	int (* abort)(Scsi_Cmnd *);
 
 	/*
 		The reset function will reset the SCSI bus.  Any executing 
@@ -192,6 +191,15 @@ typedef struct
 	  true if this host adapter uses unchecked DMA onto an ISA bus.
 	*/
 	unsigned unchecked_isa_dma:1;
+	/*
+	  true if this host adapter can make good use of clustering.
+	  I originally thought that if the tablesize was large that it
+	  was a waste of CPU cycles to prepare a cluster list, but
+	  it works out that the Buslogic is faster if you use a smaller
+	  number of segments (i.e. use clustering).  I guess it is
+	  inefficient.
+	*/
+	unsigned use_clustering:1;
 	} Scsi_Host_Template;
 
 /*

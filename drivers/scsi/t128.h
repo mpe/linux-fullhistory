@@ -91,7 +91,7 @@
 #define T_DATA_REG_OFFSET	0x1e00	/* rw 512 bytes long */
 
 #ifndef ASM
-int t128_abort(Scsi_Cmnd *, int);
+int t128_abort(Scsi_Cmnd *);
 int t128_biosparam(int, int, int*);
 int t128_detect(int);
 const char *t128_info(void);
@@ -122,7 +122,7 @@ int t128_reset(Scsi_Cmnd *);
 	NULL, t128_queue_command, t128_abort, t128_reset, NULL, 	\
 	t128_biosparam, 						\
 	/* can queue */ CAN_QUEUE, /* id */ 7, SG_ALL,			\
-	/* cmd per lun */ CMD_PER_LUN , 0, 0}
+	/* cmd per lun */ CMD_PER_LUN , 0, 0, DISABLE_CLUSTERING}
 
 #else
 

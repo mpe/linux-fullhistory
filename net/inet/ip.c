@@ -1264,7 +1264,7 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
   			return;
 	}
 	
-	if(memcmp(skb->data,dev->broadcast, dev->addr_len))
+	if(!memcmp(skb->data,dev->broadcast, dev->addr_len))
 		return;
 	
 

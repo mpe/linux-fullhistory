@@ -89,6 +89,7 @@ extern unsigned long avenrun[];		/* Load averages */
 #include <linux/resource.h>
 #include <linux/vm86.h>
 #include <linux/math_emu.h>
+#include <linux/ptrace.h>
 
 #define TASK_RUNNING		0
 #define TASK_INTERRUPTIBLE	1
@@ -251,6 +252,7 @@ struct task_struct {
 	unsigned long flags;	/* per process flags, defined below */
 	int errno;
 	int debugreg[8];  /* Hardware debugging registers */
+	asmlinkage void (*lcall7)(struct pt_regs *);
 /* various fields */
 	struct task_struct *next_task, *prev_task;
 	struct sigaction sigaction[32];
@@ -324,6 +326,7 @@ struct task_struct {
 #define INIT_TASK \
 /* state etc */	{ 0,15,15,0,0,0,0, \
 /* debugregs */ { 0, },            \
+/* lcall 7 */	no_lcall7, \
 /* schedlink */	&init_task,&init_task, \
 /* signals */	{{ 0, },}, ident_map, ident_map, \
 /* stack */	0,(unsigned long) &init_kernel_stack, \
@@ -357,6 +360,9 @@ extern unsigned long itimer_ticks;
 extern unsigned long itimer_next;
 extern struct timeval xtime;
 extern int need_resched;
+
+extern unsigned long ident_map[33];
+extern asmlinkage void no_lcall7(struct pt_regs *);
 
 #define CURRENT_TIME (xtime.tv_sec)
 

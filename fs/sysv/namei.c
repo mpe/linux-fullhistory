@@ -447,8 +447,9 @@ int sysv_rmdir(struct inode * dir, const char * name, int len)
 	retval = -EPERM;
 	if (!(inode = iget(dir->i_sb, de->inode)))
 		goto end_rmdir;
-	if ((dir->i_mode & S_ISVTX) && current->euid &&
-	    inode->i_uid != current->euid)
+        if ((dir->i_mode & S_ISVTX) && !suser() &&
+            current->euid != inode->i_uid &&
+            current->euid != dir->i_uid)
 		goto end_rmdir;
 	if (inode->i_dev != dir->i_dev)
 		goto end_rmdir;

@@ -572,6 +572,8 @@ void flush_old_exec(struct linux_binprm * bprm)
 		last_task_used_math = NULL;
 	current->used_math = 0;
 	current->personality = 0;
+	current->lcall7 = no_lcall7;
+	current->signal_map = current->signal_invmap = ident_map;
 }
 
 /*
@@ -760,6 +762,25 @@ asmlinkage int sys_execve(struct pt_regs regs)
 	error = do_execve(filename, (char **) regs.ecx, (char **) regs.edx, &regs);
 	putname(filename);
 	return error;
+}
+
+/*
+ * signal mapping: this is the default identity mapping used for normal
+ * linux binaries (it's both the reverse and the normal map, of course)
+ */
+unsigned long ident_map[33] = {
+	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+	13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+	23, 24, 25, 26, 27, 28, 29, 30, 31, 32
+};
+
+/*
+ * default lcall7 handler.. The native linux stuff doesn't
+ * use it at all, so we just segfault on it.
+ */
+asmlinkage void no_lcall7(struct pt_regs * regs)
+{
+	send_sig(SIGSEGV, current, 1);
 }
 
 static void set_brk(unsigned long start, unsigned long end)

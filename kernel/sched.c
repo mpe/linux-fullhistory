@@ -87,16 +87,6 @@ extern void mem_use(void);
 extern int timer_interrupt(void);
 asmlinkage int system_call(void);
 
-/*
- * signal mapping: this is the default identity mapping used for normal
- * linux binaries (it's both the reverse and the normal map, of course)
- */
-static unsigned long ident_map[33] = {
-	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-	13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-	23, 24, 25, 26, 27, 28, 29, 30, 31, 32
-};
-
 static unsigned long init_kernel_stack[1024] = { STACK_MAGIC, };
 struct task_struct init_task = INIT_TASK;
 

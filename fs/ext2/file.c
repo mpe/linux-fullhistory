@@ -277,10 +277,6 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		}
 		p = (pos % sb->s_blocksize) + bh->b_data;
 		pos += c;
-		if (pos > inode->i_size) {
-			inode->i_size = pos;
-			inode->i_dirt = 1;
-		}
 		written += c;
 		memcpy_fromfs (p, buf, c);
 		buf += c;
@@ -288,6 +284,8 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		mark_buffer_dirty(bh, 0);
 		brelse (bh);
 	}
+	if (pos > inode->i_size)
+		inode->i_size = pos;
 	up(&inode->i_sem);
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	filp->f_pos = pos;

@@ -155,7 +155,7 @@ struct ecb {			/* Enhanced Control Block 6.1 */
 int aha1740_detect(int);
 int aha1740_command(Scsi_Cmnd *);
 int aha1740_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-int aha1740_abort(Scsi_Cmnd *, int);
+int aha1740_abort(Scsi_Cmnd *);
 const char *aha1740_info(void);
 int aha1740_reset(Scsi_Cmnd *);
 int aha1740_biosparam(int, int, int*);
@@ -174,7 +174,7 @@ int aha1740_biosparam(int, int, int*);
 		aha1740_reset,				\
 	        NULL,		                        \
 		aha1740_biosparam,                      \
-		AHA1740_ECBS, 7, AHA1740_SCATTER, 1, 0, 0}
+		AHA1740_ECBS, 7, AHA1740_SCATTER, 1, 0, 0, ENABLE_CLUSTERING}
 
 #endif
 

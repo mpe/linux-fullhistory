@@ -282,12 +282,10 @@ int kill_proc(int pid, int sig, int priv)
  * POSIX specifies that kill(-1,sig) is unspecified, but what we have
  * is probably wrong.  Should make it like BSD or SYSV.
  */
-asmlinkage int sys_kill(int pid, unsigned int sig)
+asmlinkage int sys_kill(int pid,int sig)
 {
 	int err, retval = 0, count = 0;
 
-	if (sig > 32)
-		return -EINVAL;
 	if (!pid)
 		return(kill_pg(current->pgrp,sig,0));
 	if (pid == -1) {

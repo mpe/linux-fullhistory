@@ -1,0 +1,645 @@
+Sun May 15 20:24:34 1994  Eric Youngdale  (eric@esp22)
+
+	Post-codefreeze thaw...
+
+	* buslogic.[c,h]: New driver from David Gentzel.
+
+	* hosts.h: Add use_clustering field to explicitly say whether
+	clustering should be used for devices attached to this host
+	adapter.  The buslogic board apparently supports large SG lists,
+	but it is apparently faster if sd.c condenses this into a smaller
+	list.
+
+	* sd.c: Use this field instead of heuristic.
+
+	* All host adapter include files: Add appropriate initializer for
+	use_clustering field.
+
+	* scsi.h: Add #defines for return codes for the abort and reset
+	functions.  There are now a specific set of return codes to fully
+	specify all of the possible things that the low-level adapter
+	could do.
+
+	* scsi.c: Act based upon return codes from abort/reset functions.
+
+	* All host adapter abort/reset functions: Return new return code.
+
+	* Add code in scsi.c to help debug timeouts.  Use #define
+	DEBUG_TIMEOUT to enable this.
+
+	* scsi.c: If the host->irq field is set, use
+	disable_irq/enable_irq before calling queuecommand if we
+	are not already in an interrupt.  Reduce races, and we
+	can be sloppier about cli/sti in the interrupt routines now
+	(reduce interrupt latency).
+
+	* constants.c: Fix some things to eliminate warnings.  Add some
+	sense descriptions that were omitted before.
+
+	* aha1542.c: Watch for SCRD from host adapter - if we see it, set
+	a flag.  Currently we only print out the number of pending
+	commands that might need to be restarted.
+
+	* aha1542.c (aha1542_abort): Look for lost interrupts, OGMB still
+	full, and attempt to recover.  Otherwise give up.
+
+	* aha1542.c (aha1542_reset): Try BUS DEVICE RESET, and then pass
+	DID_RESET back up to the upper level code for all commands running
+	on this target (even on different LUNs).
+
+Sat May  7 14:54:01 1994
+
+	* Linux 1.1.12 released.
+
+	* st.c, st.h: New version from Kai.  Supports boot time
+	specification of number of buffers.
+
+	* wd7000.[c,h]: Updated driver from John Boyd.  Now supports
+	more than one wd7000 board in machine at one time, among other things.
+
+Wed Apr 20 22:20:35 1994
+
+	* Linux 1.1.8 released.
+
+	* sd.c: Add a few type casts where scsi_malloc is called.
+
+Wed Apr 13 12:53:29 1994
+
+	* Linux 1.1.4 released.
+
+	* scsi.c: Clean up a few printks (use %p to print pointers).
+
+Wed Apr 13 11:33:02 1994
+
+	* Linux 1.1.3 released.
+
+	* fdomain.c: Update to version 5.16 (Handle different FIFO sizes
+	better).  
+
+Fri Apr  8 08:57:19 1994
+
+	* Linux 1.1.2 released.
+
+	* Throughout: SCSI portion of cluster diffs added.
+
+Tue Apr  5 07:41:50 1994
+
+	* Linux 1.1 development tree initiated.
+
+	* The linux 1.0 development tree is now effectively frozen except
+	for obvious bugfixes.
+
+******************************************************************
+******************************************************************
+******************************************************************
+******************************************************************
+
+Sun Apr 17 00:17:39 1994
+
+	* Linux 1.0, patchlevel 9 released.
+
+	* fdomain.c: Update to version 5.16 (Handle different FIFO sizes
+	better).  
+
+Thu Apr  7 08:36:20 1994
+
+	* Linux 1.0, patchlevel8 released.
+
+	* fdomain.c: Update to version 5.15 from 5.9.  Handles 3.4 bios.
+
+Sun Apr  3 14:43:03 1994
+
+	* Linux 1.0, patchlevel6 released.
+
+	* wd7000.c: Make stab at fixing race condition.
+
+Sat Mar 26 14:14:50 1994
+
+	* Linux 1.0, patchlevel5 released.
+
+	* aha152x.c, Makefile: Fix a few bugs (too much data message).
+	Add a few more bios signatures. (Patches from Juergen).
+
+	* aha1542.c: Fix race condition in aha1542_out.
+
+Mon Mar 21 16:36:20 1994
+
+	* Linux 1.0, patchlevel3 released.
+
+	* sd.c, st.c, sr.c, sg.c: Return -ENXIO, not -ENODEV if we attempt
+	to open a non-existant device.
+
+	* scsi.c: Add Chinon cdrom to blacklist.
+
+	* sr_ioctl.c: Check return status of verify_area.
+
+Sat Mar  6 16:06:19 1994
+
+	* Linux 1.0 released (technically a pre-release).
+
+	* scsi.c: Add IMS CDD521, Maxtor XT-8760S to blacklist.
+
+Tue Feb 15 10:58:20 1994
+
+        * pl15e released.
+
+        * aha1542.c: For 1542C, allow dynamic device scan with >1Gb turned
+	off.
+
+	* constants.c: Fix typo in definition of CONSTANTS.
+
+        * pl15d released.
+
+Fri Feb 11 10:10:16 1994
+
+        * pl15c released.
+
+	* scsi.c: Add Maxtor XT-3280 and Rodime RO3000S to blacklist.
+
+	* scsi.c: Allow tagged queueing for scsi 3 devices as well.
+	Some really old devices report a version number of 0.  Disallow
+	LUN != 0 for these.
+
+Thu Feb 10 09:48:57 1994
+
+        * pl15b released.
+
+Sun Feb  6 12:19:46 1994
+
+        * pl15a released.
+
+Fri Feb  4 09:02:17 1994
+
+        * scsi.c: Add Teac cdrom to blacklist.
+
+Thu Feb  3 14:16:43 1994
+
+	* pl15 released.
+
+Tue Feb  1 15:47:43 1994
+
+	* pl14w released.
+
+	* wd7000.c (wd_bases): Fix typo in last change.
+
+Mon Jan 24 17:37:23 1994  
+
+	* pl14u released.
+
+	* aha1542.c: Support 1542CF/extended bios.  Different from 1542C
+
+	* wd7000.c: Allow bios at 0xd8000 as well.
+
+	* ultrastor.c: Do not truncate cylinders to 1024.
+
+	* fdomain.c: Update to version 5.9 (add new bios signature).
+
+	* NCR5380.c: Update from Drew - should work a lot better now.
+
+Sat Jan  8 15:13:10 1994  
+
+	* pl14o released.
+
+	* sr_ioctl.c: Zero reserved field before trying to set audio volume.
+
+Wed Jan  5 13:21:10 1994  
+
+	* pl14m released.
+
+	* fdomain.c: Update to version 5.8.  No functional difference???
+
+Tue Jan  4 14:26:13 1994  
+
+	* pl14l released.
+
+	* ultrastor.c: Remove outl, inl functions (now provided elsewhere).
+
+Mon Jan  3 12:27:25 1994  
+
+	* pl14k released.
+
+	* aha152x.c: Remove insw and outsw functions.
+
+	* fdomain.c: Ditto.
+
+Wed Dec 29 09:47:20 1993  
+
+	* pl14i released.
+
+	* scsi.c: Support RECOVERED_ERROR for tape drives.
+
+	* st.c: Update of tape driver from Kai.
+
+Tue Dec 21 09:18:30 1993  
+
+	* pl14g released.
+
+	* aha1542.[c,h]: Support extended BIOS stuff.
+
+	* scsi.c: Clean up messages about disks, so they are displayed as
+	sda, sdb, etc instead of sd0, sd1, etc.
+
+	* sr.c:  Force reread of capacity if disk was changed.
+	Clear buffer before asking for capacity/sectorsize (some drives
+	do not report this properly).  Set needs_sector_size flag if
+	drive did not return sensible sector size.
+
+Mon Dec 13 12:13:47 1993  
+
+	* aha152x.c: Update to version .101 from Juergen.
+
+Mon Nov 29 03:03:00 1993  
+
+        * linux 0.99.14 released.
+
+	* All scsi stuff moved from kernel/blk_drv/scsi to drivers/scsi.
+
+	* Throughout: Grammatical corrections to various comments.
+
+	* Makefile: fix so that we do not need to compile things we are
+	not going to use.
+
+	* NCR5380.c, NCR5380.h, g_NCR5380.c, g_NCR5380.h, pas16.c,
+	pas16.h, t128.c, t128.h:  New files from Drew.
+
+	* aha152x.c, aha152x.h: New files from Juergen Fischer.
+
+	* aha1542.c: Support for more than one 1542 in the machine
+	at the same time.  Make functions static that do not need
+	visibility.
+
+	* aha1740.c: Set NEEDS_JUMPSTART flag in reset function, so we
+	know to restart the command.  Change prototype of aha1740_reset
+	to take a command pointer.
+
+	* constants.c: Clean up a few things.
+
+	* fdomain.c: Update to version 5.6.  Move snarf_region.  Allow
+	board to be set at different SCSI ids.  Remove support for
+	reselection (did not work well).  Set JUMPSTART flag in reset
+	code.
+
+	* hosts.c: Support new low-level adapters.  Allow for more than
+	one adapter of a given type.
+
+	* hosts.h: Allow for more than one adapter of a given type. 
+
+	* scsi.c:  Add scsi_device_types array, if NEEDS_JUMPSTART is set
+	after a low-level reset, start the command again.  Sort blacklist,
+	and add Maxtor MXT-1240S, XT-4170S, NEC CDROM 84, Seagate ST157N.
+
+	* scsi.h: Add constants for tagged queueing.
+
+	* Throughout: Use constants from major.h instead of hardcoded
+	numbers for major numbers.
+
+	* scsi_ioctl.c: Fix bug in buffer length in ioctl_command.  Use
+	verify_area in GET_IDLUN ioctl.  Add new ioctls for
+	TAGGED_QUEUE_ENABLE, DISABLE.  Only allow IOCTL_SEND_COMMAND by
+	superuser.
+
+	* sd.c: Only pay attention to UNIT_ATTENTION for removable disks.
+	Fix bug where sometimes portions of blocks would get lost
+	resulting in processes hanging.  Add messages when we spin up a
+	disk, and fix a bug in the timing.  Increase read-ahead for disks
+	that are on a scatter-gather capable host adapter.
+
+	* seagate.c: Fix so that some parameters can be set from the lilo
+	prompt.  Supply jumpstart flag if we are resetting and need the
+	command restarted.   Fix so that we return 1 if we detect a card
+	so that multiple card detection works correctly.  Add yet another
+	signature for FD cards (950).  Add another signature for ST0x.
+
+	* sg.c, sg.h: New files from Lawrence Foard for generic scsi
+	access.
+
+	* sr.c:  Add type casts for (void*) so that we can do pointer
+	arithmetic.  Works with GCC without this, but it is not strictly
+	correct.  Same bugfix as was in sd.c.  Increase read-ahead a la
+	disk driver.
+
+	* sr_ioctl.c: Use scsi_malloc buffer instead of buffer from stack
+	since we cannot guarantee that the stack is < 16Mb.
+
+	ultrastor.c: Update to support 24f properly (JFC's driver).
+
+	wd7000.c: Supply jumpstart flag for reset.  Do not round up
+	number of cylinders in biosparam function.
+
+Sat Sep  4 20:49:56 1993  
+
+    * 0.99pl13 released.
+
+    * Throughout:  Use check_region/snarf_region for all low-level
+    drivers.
+
+    * aha1542.c: Do hard reset instead of soft (some ethercard probes
+    screw us up).
+
+    * scsi.c: Add new flag ASKED_FOR_SENSE so that we can tell if we are
+    in a loop whereby the device returns null sense data.
+
+    * sd.c: Add code to spin up a drive if it is not already spinning.
+    Do this one at a time to make it easier on power supplies.
+
+    * sd_ioctl.c: Use sync_dev instead of fsync_dev in BLKFLSBUF ioctl.
+
+    * seagate.c: Switch around DATA/CONTROL lines.
+
+    * st.c: Change sense to unsigned.
+
+Thu Aug  5 11:59:18 1993  
+
+    * 0.99pl12 released.
+
+    * constants.c, constants.h: New files with ascii descriptions of
+    various conditions.
+
+    * Makefile: Do not try and count the number of low-level drivers,
+    just generate the list of .o files.
+
+    * aha1542.c: Replace 16 with sizeof(SCpnt->sense_buffer).  Add tests
+    for addresses > 16Mb, panic if we find one.
+
+    * aha1740.c: Ditto with sizeof().
+
+    * fdomain.c: Update to version 3.18.  Add new signature, register IRQ
+    with irqaction.  Use ID 7 for new board.  Be more intelligent about
+    obtaining the h/s/c numbers for biosparam.
+
+    * hosts.c: Do not depend upon Makefile generated count of the number
+    of low-level host adapters.
+
+    * scsi.c: Use array for scsi_command_size instead of a function.  Add
+    Texel cdrom and Maxtor XT-4380S to blacklist.  Allow compile time
+    option for no-multi lun scan.  Add semaphore for possible problems
+    with handshaking, assume device is faulty until we know it not to be
+    the case.  Add DEBUG_INIT symbol to dump info as we scan for devices.
+    Zero sense buffer so we can tell if we need to request it.  When
+    examining sense information, request sense if buffer is all zero.
+    If RESET, request sense information to see what to do next.
+
+    * scsi_debug.c: Change some constants to use symbols like INT_MAX.
+
+    * scsi_ioctl.c (kernel_scsi_ioctl): New function -for making ioctl
+    calls from kernel space.
+
+    * sd.c: Increase timeout to 300.  Use functions in constants.h to
+    display info.  Use scsi_malloc buffer for READ_CAPACITY, since
+    we cannot guarantee that a stack based buffer is < 16Mb.
+
+    * sd_ioctl.c: Add BLKFLSBUF ioctl.
+
+    * seagate.c: Add new compile time options for ARBITRATE,
+    SLOW_HANDSHAKE, and SLOW_RATE.  Update assembly loops for transferring
+    data.  Use kernel_scsi_ioctl to request mode page with geometry.
+
+    * sr.c: Use functions in constants.c to display messages.
+
+    * st.c: Support for variable block size.
+
+    * ultrastor.c: Do not use cache for tape drives.  Set
+    unchecked_isa_dma flag, even though this may not be needed (gets set
+    later).
+
+Sat Jul 17 18:32:44 1993  
+
+    * 0.99pl11 released.  C++ compilable.
+
+    * Throughout: Add type casts all over the place, and use "ip" instead
+    of "info" in the various biosparam functions.
+
+    * Makefile: Compile seagate.c with C++ compiler.
+
+    * aha1542.c: Always set ccb pointer as this gets trashed somehow on
+    some systems.  Add a few type casts.  Update biosparam function a little.
+
+    * aha1740.c: Add a few type casts.
+
+    * fdomain.c: Update to version 3.17 from 3.6.  Now works with
+    TMC-18C50.
+
+    * scsi.c: Minor changes here and there with datatypes.  Save use_sg
+    when requesting sense information so that this can properly be
+    restored if we retry the command.  Set aside dma buffers assuming each
+    block is 1 page, not 1Kb minix block.
+
+    * scsi_ioctl.c: Add a few type casts.  Other minor changes.
+
+    * sd.c:  Correctly  free all scsi_malloc'd memory if we run out of
+    dma_pool. Store blocksize information for each partition.
+
+    * seagate.c: Minor cleanups here and there.
+
+    * sr.c: Set up blocksize array for all discs.  Fix bug in freeing
+    buffers if we run out of dma pool.
+
+Thu Jun  2 17:58:11 1993  
+
+    * 0.99pl10 released.
+
+    * aha1542.c: Support for BT 445S (VL-bus board with no dma channel).
+
+    * fdomain.c: Upgrade to version 3.6. Preliminary support for TNC-18C50.
+
+    * scsi.c: First attempt to fix problem with old_use_sg.  Change
+    NOT_READY to a SUGGEST_ABORT.  Fix timeout race where time might
+    get decremented past zero.
+
+    * sd.c: Add block_fsync function to dispatch table.
+
+    * sr.c: Increase timeout to 500 from 250.  Add entry for sync in
+    dispatch table (supply NULL).  If we do not have a sectorsize,
+    try and get it in the sd_open function.  Add new function just to
+    obtain sectorsize.
+
+    * sr.h: Add needs_sector_size semaphore.
+
+    * st.c: Add NULL for fsync in dispatch table.
+
+    * wd7000.c: Allow another condition for power on that are normal
+    and do not require a panic.
+
+Thu Apr 22 23:10:11 1993  
+
+    * 0.99pl9 released.
+
+    * aha1542.c: Use (void) instead of () in setup_mailboxes.
+
+    * scsi.c: Initialize transfersize and underflow fields in SCmd to 0.
+    Do not panic for unsupported message bytes.
+
+    * scsi.h: Allocate 12 bytes instead of 10 for commands.  Add
+    transfersize and underflow fields.
+
+    * scsi_ioctl.c: Further bugfix to ioctl_probe.
+
+    * sd.c: Use long instead of int for last parameter in sd_ioctl.
+    Initialize transfersize and underflow fields.    
+
+    * sd_ioctl.c: Ditto for sd_ioctl(,,,,);
+
+    * seagate.c: New version from Drew.  Includes new signatures for FD
+    cards.  Support for 0ws jumper. Correctly initialize
+    scsi_hosts[hostnum].this_id.  Improved handing of
+    disconnect/reconnect, and support command linking.  Use
+    transfersize and underflow fields.  Support scatter-gather.
+
+    * sr.c, sr_ioctl.c: Use long instead of int for last parameter in sr_ioctl.
+    Use buffer and buflength in do_ioctl.  Patches from Chris Newbold for
+    scsi-2 audio commands.
+
+    * ultrastor.c: Comment out in_byte (compiler warning).
+
+    * wd7000.c: Change () to (void) in wd7000_enable_dma.
+
+Wed Mar 31 16:36:25 1993  
+
+    * 0.99pl8 released.
+
+    * aha1542.c: Handle mailboxes better for 1542C.
+        Do not truncate number of cylinders at 1024 for biosparam call.
+
+    * aha1740.c: Fix a few minor bugs for multiple devices.
+        Same as above for biosparam.
+
+    * scsi.c: Add lockable semaphore for removable devices that can have
+    media removal prevented.  Add another signature for flopticals.
+    (allocate_device): Fix race condition.  Allow more space in dma pool
+    for blocksizes of up to 4Kb.
+
+    * scsi.h: Define COMMAND_SIZE.  Define a SCSI specific version of
+    INIT_REQUEST that can run with interrupts off.
+
+    * scsi_ioctl.c: Make ioctl_probe function more idiot-proof.  If
+    a removable device says ILLEGAL REQUEST to a door-locking command,
+    clear lockable flag.  Add SCSI_IOCTL_GET_IDLUN ioctl.  Do not attempt
+    to lock door for devices that do not have lockable semaphore set.
+
+    * sd.c: Fix race condition for multiple disks.  Use INIT_SCSI_REQUEST
+    instead of INIT_REQUEST.  Allow sector sizes of 1024 and 256.  For
+    removable disks that are not ready, mark them as having a media change
+    (some drives do not report this later).
+
+    * seagate.c: Use volatile keyword for memory-mapped register pointers.
+
+    * sr.c: Fix race condition, a la sd.c.  Increase the number of retries
+    to 1.  Use INIT_SCSI_REQUEST.  Allow 512 byte sector sizes.  Do a
+    read_capacity when we init the device so we know the size and
+    sectorsize.
+
+    * st.c: If ioctl not found in st.c, try scsi_ioctl for others.
+
+    * ultrastor.c: Do not truncate number of cylinders at 1024 for
+    biosparam call.
+
+    * wd7000.c: Ditto.
+    Throughout: Use COMMAND_SIZE macro to determine length of scsi
+    command.
+
+
+
+Sat Mar 13 17:31:29 1993  
+
+    * 0.99pl7 released.
+
+    Throughout: Improve punctuation in some messages, and use new
+    verify_area syntax.
+
+    * aha1542.c: Handle unexpected interrupts better.
+
+    * scsi.c: Ditto.  Handle reset conditions a bit better, asking for
+    sense information and retrying if required.
+
+    * scsi_ioctl.c: Allow for 12 byte scsi commands.
+
+    * ultrastor.c: Update to use scatter-gather.
+
+Sat Feb 20 17:57:15 1993  
+
+    * 0.99pl6 released.
+
+    * fdomain.c: Update to version 3.5.  Handle spurious interrupts
+    better.
+
+    * sd.c: Use register_blkdev function.
+
+    * sr.c: Ditto.
+
+    * st.c: Use register_chrdev function.
+
+    * wd7000.c: Undo previous change.
+
+Sat Feb  6 11:20:43 1993  
+
+    * 0.99pl5 released.
+
+    * scsi.c: Fix bug in testing for UNIT_ATTENTION.
+
+    * wd7000.c: Check at more addresses for bios.  Fix bug in biosparam
+    (heads & sectors turned around).
+
+Wed Jan 20 18:13:59 1993  
+
+    * 0.99pl4 released.
+
+    * scsi.c: Ignore leading spaces when looking for blacklisted devices.
+
+    * seagate.c: Add a few new signatures for FD cards.  Another patch
+    with SCint to fix race condition.  Use recursion_depth to keep track
+    of how many times we have been recursively called, and do not start
+    another command unless we are on the outer level.  Fixes bug
+    with Syquest cartridge drives (used to crash kernel), because
+    they do not disconnect with large data transfers.
+
+Tue Jan 12 14:33:36 1993  
+
+    * 0.99pl3 released.
+
+    * fdomain.c: Update to version 3.3 (a few new signatures).
+
+    * scsi.c: Add CDU-541, Denon DRD-25X to blacklist.
+    (allocate_request, request_queueable): Init request.waiting to NULL if
+    non-buffer type of request.
+
+    * seagate.c:  Allow controller to be overridden with CONTROLLER symbol.
+    Set SCint=NULL when we are done, to remove race condition.
+
+    * st.c: Changes from Kai.
+
+Wed Dec 30 20:03:47 1992  
+
+    * 0.99pl2 released.
+
+    * scsi.c: Blacklist back in.  Remove Newbury drive as other bugfix
+    eliminates need for it here.
+
+    * sd.c: Return ENODEV instead of EACCES if no such device available.
+    (sd_init) Init blkdev_fops earlier so that sd_open is available sooner.
+
+    * sr.c: Same as above for sd.c.
+
+    * st.c: Return ENODEV instead of ENXIO if no device.  Init chrdev_fops
+    sooner, so that it is always there even if no tapes.
+
+    * seagate.c (controller_type): New variable to keep track of ST0x or
+    FD.  Modify signatures list to indicate controller type, and init
+    controller_type once we find a match.
+
+    * wd7000.c (wd7000_set_sync): Remove redundant function.
+
+Sun Dec 20 16:26:24 1992  
+
+    * 0.99pl1 released.
+
+    * scsi_ioctl.c: Bugfix - check dev->index, not dev->id against
+    NR_SCSI_DEVICES.
+
+    * sr_ioctl.c: Verify that device exists before allowing an ioctl.
+
+    * st.c: Patches from Kai - change timeout values, improve end of tape
+    handling.
+
+Sun Dec 13 18:15:23 1992  
+
+    * 0.99 kernel released.  Baseline for this ChangeLog.

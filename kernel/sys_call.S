@@ -78,6 +78,7 @@ flags		= 20
 errno		= 24
 dbgreg6		= 52
 dbgreg7		= 56
+lcall7		= 60
 
 ENOSYS = 38
 
@@ -141,8 +142,10 @@ _lcall7:
 	movl %edx,EIP(%esp)	# Now we move them to their "normal" places
 	movl %ecx,CS(%esp)	#
 	movl %esp,%eax
+	movl _current,%edx
 	pushl %eax
-	call _iABI_emulate
+	movl lcall7(%edx),%edx
+	call *%edx
 	popl %eax
 	jmp ret_from_sys_call
 

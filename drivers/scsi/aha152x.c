@@ -155,7 +155,7 @@
 
  Drew Eckhardt (drew@cs.colorado.edu)
 
- Eric Youngdale (eric@tantalus.nrl.navy.mil) 
+ Eric Youngdale (ericy@cais.com) 
 
  special thanks to Eric Youngdale for the free(!) supplying the
  documentation on the chip.
@@ -781,7 +781,7 @@ int aha152x_command( Scsi_Cmnd *SCpnt )
  *  Abort a queued command
  *  (commands that are on the bus can't be aborted easily)
  */
-int aha152x_abort( Scsi_Cmnd *SCpnt, int code )
+int aha152x_abort( Scsi_Cmnd *SCpnt)
 {
   Scsi_Cmnd *ptr, *prev;
 
@@ -809,16 +809,16 @@ int aha152x_abort( Scsi_Cmnd *SCpnt, int code )
       sti();
 
       ptr->host_scribble = NULL;
-      ptr->result = (code ? code : DID_ABORT ) << 16;
+      ptr->result = DID_ABORT << 16;
       ptr->done(ptr);
-      return 0;
+      return SCSI_ABORT_SUCCESS;
     }
 
   /* Fail abortion, if we're on the bus */
   if (current_SC)
     {
        sti();
-       return -1;
+       return SCSI_ABORT_BUSY;
     }
 
   /* look for command in disconnected queue */
@@ -852,7 +852,7 @@ int aha152x_abort( Scsi_Cmnd *SCpnt, int code )
       SETBITS(SCSISEQ, ENSELO | ENAUTOATNO );
 
       SETBITS( DMACNTRL0, INTEN );
-      abort_result=0;
+      abort_result=SCSI_ABORT_SUCCESS;
       sti();
 
       /* sleep until the abortion is complete */
@@ -864,7 +864,7 @@ int aha152x_abort( Scsi_Cmnd *SCpnt, int code )
 
   /* command wasn't found */
   sti();
-  return 0;
+  return SCSI_ABORT_NOT_RUNNING;
 }
 
 /*
@@ -922,6 +922,10 @@ int aha152x_reset(Scsi_Cmnd * __unused)
 
        show_queues();
 
+       /* FIXME - if the device implements soft resets, the command will still
+	  be running after the bus reset. In this case we should do nothing
+	  and let the command continue. -ERY */
+
        if(current_SC)
          {
            current_SC->host_scribble = NULL;
@@ -951,7 +955,7 @@ int aha152x_reset(Scsi_Cmnd * __unused)
        SETPORT( DMACNTRL0, INTEN );
     }
 
-  return 0;
+  return SCSI_RESET_SUCCESS;
 }
 
 /*
@@ -1246,7 +1250,7 @@ void aha152x_intr( int irqno )
 
                 if(current_SC->SCp.phase & aborted)
                   {
-                    abort_result=1;
+                    abort_result=SCSI_ABORT_ERROR;
                     wake_up( &abortion_complete );
                   }
 
@@ -1304,7 +1308,7 @@ void aha152x_intr( int irqno )
 #if defined(DEBUG_ABORT)
               printk("(ABORT) selection timeout, ");
 #endif
-              abort_result=1;
+              abort_result=SCSI_ABORT_ERROR;
               wake_up( &abortion_complete );
             }
 
@@ -1390,7 +1394,7 @@ void aha152x_intr( int irqno )
         if(message==ABORT)
           {
             /* revive abort(); abort() enables interrupts */
-            abort_result=0;
+            abort_result=SCSI_ABORT_SUCCESS;
             wake_up( &abortion_complete );
 
             current_SC->SCp.phase = (current_SC->SCp.phase & ~(P_MASK<<16));

@@ -1,5 +1,7 @@
 /*
  *	scsi.c Copyright (C) 1992 Drew Eckhardt 
+ *	       Copyright (C) 1993, 1994 Eric Youngdale
+ *
  *	generic mid-level SCSI driver by
  *		Drew Eckhardt 
  *
@@ -10,7 +12,7 @@
  *		Tommy Thorn <tthorn>
  *		Thomas Wuensche <tw@fgb1.fgb.mw.tu-muenchen.de>
  * 
- *       Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
+ *       Modified by Eric Youngdale ericy@cais.com to
  *       add scatter-gather, multiple outstanding request, and other
  *       enhancements.
  */
@@ -19,6 +21,7 @@
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/string.h>
+#include <asm/irq.h>
 
 #include "../block/blk.h"
 #include "scsi.h"
@@ -84,8 +87,8 @@ static unsigned char generic_sense[6] = {REQUEST_SENSE, 0,0,0, 255, 0};
 #define WAS_TIMEDOUT 	0x02
 #define WAS_SENSE	0x04
 #define IS_RESETTING	0x08
-#define ASKED_FOR_SENSE 0x10
-/* #define NEEDS_JUMPSTART 0x20  defined in hosts.h */
+#define IS_ABORTING	0x10
+#define ASKED_FOR_SENSE 0x20
 
 /*
  *	This is the number  of clock ticks we should wait before we time out 
@@ -96,6 +99,11 @@ static unsigned char generic_sense[6] = {REQUEST_SENSE, 0,0,0, 255, 0};
  *	ABORT_TIMEOUT and RESET_TIMEOUT are the timeouts for RESET and ABORT
  *	respectively.
  */
+
+#ifdef DEBUG_TIMEOUT
+static void scsi_dump_status(void);
+#endif
+
 
 #ifdef DEBUG
 	#define SCSI_TIMEOUT 500
@@ -350,6 +358,8 @@ static void scan_scsis (void)
 			  type = -1;
 		      }
 
+		    scsi_devices[NR_SCSI_DEVICES].soft_reset = 
+		      (scsi_result[7] & 1) && ((scsi_result[3] & 7) == 2);
 		    scsi_devices[NR_SCSI_DEVICES].random = 
 		      (type == TYPE_TAPE) ? 0 : 1;
 		    scsi_devices[NR_SCSI_DEVICES].type = type;
@@ -503,9 +513,13 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt)
  	switch (SCpnt->internal_timeout & (IN_ABORT | IN_RESET))
 		{
 		case NORMAL_TIMEOUT:
-			if (!in_scan)
-			      printk("SCSI host %d timed out - aborting command\n",
-				SCpnt->host->host_no);
+			if (!in_scan) {
+			  printk("SCSI host %d timed out - aborting command\n",
+				 SCpnt->host->host_no);
+#ifdef DEBUG_TIMEOUT
+			  scsi_dump_status();
+#endif
+			}
 			
 			if (!scsi_abort	(SCpnt, DID_TIME_OUT))
 				return;				
@@ -516,7 +530,13 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt)
 				return;
 		case IN_RESET:
 		case (IN_ABORT | IN_RESET):
-			panic("Unable to reset scsi host %d\n",SCpnt->host->host_no);
+		  /* This might be controversial, but if there is a bus hang,
+		     you might conceivably want the machine up and running
+		     esp if you have an ide disk. */
+			printk("Unable to reset scsi host %d - ",SCpnt->host->host_no);
+			printk("probably a SCSI bus hang.\n");
+			return;
+
 		default:
 			INTERNAL_ERROR;
 		}
@@ -739,11 +759,26 @@ update_timeout(SCpnt, SCpnt->timeout_per_command);
 
         if (host->hostt->can_queue)
 		{
+		  extern unsigned long intr_count;
 #ifdef DEBUG
 	printk("queuecommand : routine at %08x\n", 
 		host->hostt->queuecommand);
 #endif
+		  /* This locking tries to prevent all sorts of races between
+		     queuecommand and the interrupt code.  In effect,
+		     we are only allowed to be in queuecommand once at
+		     any given time, and we can only be in the interrupt
+		     handler and the queuecommand function at the same time
+		     when queuecommand is called while servicing the
+		     interrupt. */
+
+		if(!intr_count && SCpnt->host->irq)
+		  disable_irq(SCpnt->host->irq);
+
                 host->hostt->queuecommand (SCpnt, scsi_done);
+
+		if(!intr_count && SCpnt->host->irq)
+		  enable_irq(SCpnt->host->irq);
 		}
 	else
 		{
@@ -876,6 +911,7 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 	/* Start the timer ticking.  */
 
 	SCpnt->internal_timeout = 0;
+	SCpnt->abort_reason = 0;
 	internal_cmnd (SCpnt);
 
 #ifdef DEBUG
@@ -904,10 +940,12 @@ static void reset (Scsi_Cmnd * SCpnt)
 	printk("performing request sense\n");
 #endif
 	
+#if 0  /* FIXME - remove this when done */
 	if(SCpnt->flags & NEEDS_JUMPSTART) {
 	  SCpnt->flags &= ~NEEDS_JUMPSTART;
 	  scsi_request_sense (SCpnt);
 	};
+#endif
 }
 	
 	
@@ -997,6 +1035,18 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 	int result = SCpnt->result;
 	oldto = update_timeout(SCpnt, 0);
 
+#ifdef DEBUG_TIMEOUT
+	if(result) printk("Non-zero result in scsi_done %x %d:%d\n",
+			  result, SCpnt->target, SCpnt->lun);
+#endif
+
+	/* If we requested an abort, (and we got it) then fix up the return
+	   status to say why */
+	if(host_byte(result) == DID_ABORT && SCpnt->abort_reason)
+	  SCpnt->result = result = (result & 0xff00ffff) | 
+	    (SCpnt->abort_reason << 16);
+
+
 #define FINISHED 0
 #define MAYREDO  1
 #define REDO	 3
@@ -1008,13 +1058,6 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 	switch (host_byte(result))	
 	{
 	case DID_OK:
-		if (SCpnt->flags & IS_RESETTING)
-			{
-			SCpnt->flags &= ~IS_RESETTING;
-			status = REDO;
-			break;
-			}
-
 		if (status_byte(result) && (SCpnt->flags & WAS_SENSE))
 			/* Failed to obtain sense information */
 			{
@@ -1154,7 +1197,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 	printk("Host returned DID_TIME_OUT - ");
 #endif
 
-		if (SCpnt->flags & WAS_TIMEDOUT)	
+		if (SCpnt->flags & WAS_TIMEDOUT)
 			{
 #ifdef DEBUG
 	printk("Aborting\n");
@@ -1167,6 +1210,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 			printk ("Retrying.\n");
 #endif
 			SCpnt->flags  |= WAS_TIMEDOUT;
+			SCpnt->internal_timeout &= ~IN_ABORT;
 			status = REDO;
 			}
 		break;
@@ -1189,6 +1233,13 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 		exit = (DRIVER_INVALID | SUGGEST_ABORT);
 		break;	
         case DID_RESET:
+		if (SCpnt->flags & IS_RESETTING)
+			{
+			SCpnt->flags &= ~IS_RESETTING;
+			status = REDO;
+			break;
+			}
+
                 if(msg_byte(result) == GOOD &&
                       status_byte(result) == CHECK_CONDITION) {
 			switch (check_sense(SCpnt)) {
@@ -1305,7 +1356,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 
 int scsi_abort (Scsi_Cmnd * SCpnt, int why)
 	{
-	int temp, oldto;
+	int oldto;
 	struct Scsi_Host * host = SCpnt->host;
 	
 	while(1)	
@@ -1321,22 +1372,67 @@ int scsi_abort (Scsi_Cmnd * SCpnt, int why)
 			SCpnt->internal_timeout |= IN_ABORT;
 			oldto = update_timeout(SCpnt, ABORT_TIMEOUT);
 
-			
-			sti();
-			if (!host->host_busy || !host->hostt->abort(SCpnt, why))
-				temp =  0;
-			else
-				temp = 1;
-			
-			cli();
-			SCpnt->internal_timeout &= ~IN_ABORT;
-			update_timeout(SCpnt, oldto);
-			sti();
-			return temp;
+			if ((SCpnt->flags & IS_RESETTING) && 
+			    SCpnt->device->soft_reset) {
+			  /* OK, this command must have died when we did the
+			     reset.  The device itself must have lied. */
+			  printk("Stale command on %d:%d appears to have died when"
+				 " the bus was reset\n", SCpnt->target, SCpnt->lun);
 			}
-		}	
-	}
-
+			
+			sti();
+			if (!host->host_busy) {
+			  SCpnt->internal_timeout &= ~IN_ABORT;
+			  update_timeout(SCpnt, oldto);
+			  return 0;
+			}
+			SCpnt->abort_reason = why;
+			switch(host->hostt->abort(SCpnt)) {
+			  /* We do not know how to abort.  Try waiting another
+			     time increment and see if this helps. Set the
+			     WAS_TIMEDOUT flag set so we do not try this twice
+			     */
+			case SCSI_ABORT_BUSY: /* Tough call - returning 1 from
+						 this is too severe */
+			case SCSI_ABORT_SNOOZE:
+			  if(why == DID_TIME_OUT) {
+			    cli();
+			    SCpnt->internal_timeout &= ~IN_ABORT;
+			    if(SCpnt->flags & WAS_TIMEDOUT) {
+			      sti();
+			      return 1; /* Indicate we cannot handle this.
+					   We drop down into the reset handler
+					   and try again */
+			    } else {
+			      SCpnt->flags |= WAS_TIMEDOUT;
+			      oldto = SCpnt->timeout_per_command;
+			      update_timeout(SCpnt, oldto);
+			    }
+			    sti();
+			  }
+			  return 0;
+			case SCSI_ABORT_PENDING:
+			  if(why != DID_TIME_OUT) {
+			    cli();
+			    update_timeout(SCpnt, oldto);
+			    sti();
+			  }
+			  return 0;
+			case SCSI_ABORT_SUCCESS:
+			  /* We should have already aborted this one.  No
+			     need to adjust timeout */
+			case SCSI_ABORT_NOT_RUNNING:
+			  SCpnt->internal_timeout &= ~IN_ABORT;
+			  return 0;
+			case SCSI_ABORT_ERROR:
+			default:
+			  SCpnt->internal_timeout &= ~IN_ABORT;
+			  return 1;
+			}
+		      }
+	      }	
+      }
+     
 int scsi_reset (Scsi_Cmnd * SCpnt)
 	{
 	int temp, oldto;
@@ -1363,10 +1459,14 @@ int scsi_reset (Scsi_Cmnd * SCpnt)
 				sti();
 				SCpnt1 = host->host_queue;
 				while(SCpnt1) {
-				  if ((SCpnt1->request.dev > 0) &&
-				      !(SCpnt1->flags & IS_RESETTING) && 
+				  if (SCpnt1->request.dev > 0) {
+#if 0				  
+				    if (!(SCpnt1->flags & IS_RESETTING) && 
 				      !(SCpnt1->internal_timeout & IN_ABORT))
 				    scsi_abort(SCpnt1, DID_RESET);
+#endif
+				    SCpnt1->flags |= IS_RESETTING;
+				  }
 				  SCpnt1 = SCpnt1->next;
 				};
 
@@ -1381,11 +1481,35 @@ int scsi_reset (Scsi_Cmnd * SCpnt)
 				host->last_reset = jiffies;
 				host->host_busy--;
 				}
+
+			switch(temp) {
+			case SCSI_RESET_SUCCESS:
+			  cli();
+			  SCpnt->internal_timeout &= ~IN_RESET;
+			  update_timeout(SCpnt, oldto);
+			  sti();
+			  return 0;
+			case SCSI_RESET_PENDING:
+			  return 0;
+			case SCSI_RESET_WAKEUP:
+			  SCpnt->internal_timeout &= ~IN_RESET;
+			  scsi_request_sense (SCpnt);
+			  return 0;
+			case SCSI_RESET_SNOOZE:			  
+			  /* In this case, we set the timeout field to 0
+			     so that this command does not time out any more,
+			     and we return 1 so that we get a message on the
+			     screen. */
+			  cli();
+			  SCpnt->internal_timeout &= ~IN_RESET;
+			  update_timeout(SCpnt, 0);
+			  sti();
+			  /* If you snooze, you lose... */
+			case SCSI_RESET_ERROR:
+			default:
+			  return 1;
+			}
 	
-			cli();
-			SCpnt->internal_timeout &= ~IN_RESET;
-			update_timeout(SCpnt, oldto);
-			sti();
 			return temp;	
 			}
 		}
@@ -1405,6 +1529,7 @@ static void scsi_main_timeout(void)
 	do 	{	
 		cli();
 
+		update_timeout(NULL, 0);
 	/*
 		Find all timers such that they have 0 or negative (shouldn't happen)
 		time remaining on them.
@@ -1412,9 +1537,8 @@ static void scsi_main_timeout(void)
 			
 		timed_out = 0;
 		for(host = scsi_hostlist; host; host = host->next) {
-		  SCpnt = host->host_queue;
-		  while (SCpnt){
-		    if (SCpnt->timeout > 0 && SCpnt->timeout <= time_elapsed)
+		  for(SCpnt = host->host_queue; SCpnt; SCpnt = SCpnt->next)
+		    if (SCpnt->timeout == -1)
 		      {
 			sti();
 			SCpnt->timeout = 0;
@@ -1422,10 +1546,7 @@ static void scsi_main_timeout(void)
 			++timed_out; 
 			cli();
 		      }
-		  SCpnt =  SCpnt->next;
-		  };
 		};
-		update_timeout(NULL, 0);
 	      } while (timed_out);	
 	sti();
       }
@@ -1468,14 +1589,14 @@ static int update_timeout(Scsi_Cmnd * SCset, int timeout)
 
 	least = 0xffffffff;
 
-	for(host = scsi_hostlist; host; host = host->next) {
-	  SCpnt = host->host_queue;
-	  while (SCpnt){
-	    if (SCpnt->timeout > 0 && (SCpnt->timeout -= used) < least)
-	      least = SCpnt->timeout;
-	    SCpnt =  SCpnt->next;
-	  };
-	};
+	for(host = scsi_hostlist; host; host = host->next)
+	  for(SCpnt = host->host_queue; SCpnt; SCpnt = SCpnt->next)
+	    if (SCpnt->timeout > 0) {
+	      SCpnt->timeout -= used;
+	      if(SCpnt->timeout <= 0) SCpnt->timeout = -1;
+	      if(SCpnt->timeout > 0 && SCpnt->timeout < least)
+		least = SCpnt->timeout;
+	    };
 
 /*
 	If something is due to timeout again, then we will set the next timeout 
@@ -1617,6 +1738,7 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	  if(scsi_devices[i].type != -1){
 	    for(j=0;j<scsi_devices[i].host->hostt->cmd_per_lun;j++){
 	      SCpnt->host = scsi_devices[i].host;
+	      SCpnt->device = &scsi_devices[i];
 	      SCpnt->target = scsi_devices[i].id;
 	      SCpnt->lun = scsi_devices[i].lun;
 	      SCpnt->index = i;
@@ -1724,3 +1846,62 @@ static void print_inquiry(unsigned char *data)
 	else
 	  printk("\n");
 }
+
+#ifdef DEBUG_TIMEOUT
+static void 
+scsi_dump_status(void)
+{
+  int i, i1;
+  Scsi_Cmnd * SCpnt;
+  printk("Dump of scsi parameters:\n");
+  SCpnt = last_cmnd;
+  for(i=0; i<NR_SCSI_DEVICES; i++)
+    for(i1=0; i1<scsi_devices[i].host->hostt->cmd_per_lun;i1++)
+      {
+	/*  (0) 0:0:0 (802 123434 8 8 0) (3 3 2) (%d %d %d) %d %x      */
+	printk("(%d) %d:%d:%d (%4.4x %d %d %d %d) (%d %d %x) (%d %d %d) %x %x %d %x\n",
+	       i, SCpnt->host->host_no,
+	       SCpnt->target,
+	       SCpnt->lun,
+	       SCpnt->request.dev,
+	       SCpnt->request.sector,
+	       SCpnt->request.nr_sectors,
+	       SCpnt->request.current_nr_sectors,
+	       SCpnt->use_sg,
+	       SCpnt->retries,
+	       SCpnt->allowed,
+	       SCpnt->flags,
+	       SCpnt->timeout_per_command,
+	       SCpnt->timeout,
+	       SCpnt->internal_timeout,
+	       SCpnt->cmnd[0],
+	       SCpnt->sense_buffer[2],
+	       (SCpnt->request.waiting ? 
+		SCpnt->request.waiting->pid : 0),
+	       SCpnt->result);
+	SCpnt++;
+      };
+  printk("wait_for_request = %x\n", wait_for_request);
+  /* Now dump the request lists for each block device */
+  printk("Dump of pending block device requests\n");
+  for(i=0; i<MAX_BLKDEV; i++)
+    if(blk_dev[i].current_request)
+      {
+	struct request * req;
+	printk("%d: ", i);
+	req = blk_dev[i].current_request;
+	while(req) {
+	  printk("(%x %d %d %d %d %d) ",
+		 req->dev,
+		 req->cmd,
+		 req->sector,
+		 req->nr_sectors,
+		 req->current_nr_sectors,
+		 (req->waiting ? 
+		  req->waiting->pid : 0));
+	  req = req->next;
+	}
+	printk("\n");
+      }
+}
+#endif
