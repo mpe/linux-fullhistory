@@ -43,16 +43,17 @@
 #define VERSION "arcnet: COM20020 PCI support\n"
 
 #ifdef MODULE
-static struct net_device *cards[16];
+#define MAX_CARDS	16
+static struct net_device *cards[MAX_CARDS];
 static int numcards;
 #endif
 
 static void com20020pci_open_close(struct net_device *dev, bool open)
 {
-    if (open)
-	MOD_INC_USE_COUNT;
-    else
-	MOD_DEC_USE_COUNT;
+	if (open)
+		MOD_INC_USE_COUNT;
+	else
+		MOD_DEC_USE_COUNT;
 }
 
 /*
@@ -61,64 +62,61 @@ static void com20020pci_open_close(struct net_device *dev, bool open)
  */
 static int __init com20020pci_probe(char *name_template, int node, int backplane, int clock, int timeout)
 {
-    struct net_device *dev;
-    struct arcnet_local *lp;
-    struct pci_dev *pdev = NULL;
-    int ioaddr, gotone = 0, err;
+	struct net_device *dev;
+	struct arcnet_local *lp;
+	struct pci_dev *pdev = NULL;
+	int ioaddr, gotone = 0, err;
 
-    BUGLVL(D_NORMAL) printk(VERSION);
+	BUGLVL(D_NORMAL) printk(VERSION);
 
-    while ((pdev = pci_find_device(0x1571, 0xa004, pdev)))
-    {
-	if (pci_enable_device(pdev))
-	    continue;
-	dev = dev_alloc(name_template ? : "arc%d", &err);
-	if (!dev)
-	    return err;
-	lp = dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
-	if (!lp)
-	    return -ENOMEM;
-	memset(lp, 0, sizeof(struct arcnet_local));
-    
-	ioaddr = pdev->resource[2].start;
-	dev->base_addr = ioaddr;
-	dev->irq = pdev->irq;
-	dev->dev_addr[0] = node;
-	lp->backplane = backplane;
-	lp->clock = clock;
-	lp->timeout = timeout;
-	lp->hw.open_close_ll = com20020pci_open_close;
-	
-	BUGMSG(D_INIT, "PCI BIOS reports a device at %Xh, IRQ %d\n",
-	       ioaddr, dev->irq);
-	       
-	if (check_region(ioaddr, ARCNET_TOTAL_SIZE))
-	{
-	    BUGMSG(D_INIT, "IO region %xh-%xh already allocated.\n",
-		   ioaddr, ioaddr + ARCNET_TOTAL_SIZE - 1);
-	    continue;
-	}
+	while ((pdev = pci_find_device(0x1571, 0xa004, pdev))) {
+		if (pci_enable_device(pdev))
+			continue;
+		dev = dev_alloc(name_template ? : "arc%d", &err);
+		if (!dev)
+			return err;
+		lp = dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
+		if (!lp)
+			return -ENOMEM;
+		memset(lp, 0, sizeof(struct arcnet_local));
 
-	if (ASTATUS() == 0xFF)
-	{
-	    BUGMSG(D_NORMAL, "IO address %Xh was reported by PCI BIOS, "
-		    "but seems empty!\n", ioaddr);
-	    continue;
-	}
-	
-	if (com20020_check(dev))
-	    continue;
+		ioaddr = pdev->resource[2].start;
+		dev->base_addr = ioaddr;
+		dev->irq = pdev->irq;
+		dev->dev_addr[0] = node;
+		lp->backplane = backplane;
+		lp->clock = clock;
+		lp->timeout = timeout;
+		lp->hw.open_close_ll = com20020pci_open_close;
 
-	if (!com20020_found(dev, SA_SHIRQ))
-	{
+		BUGMSG(D_INIT, "PCI BIOS reports a device at %Xh, IRQ %d\n",
+		       ioaddr, dev->irq);
+
+		if (check_region(ioaddr, ARCNET_TOTAL_SIZE)) {
+			BUGMSG(D_INIT, "IO region %xh-%xh already allocated.\n",
+			       ioaddr, ioaddr + ARCNET_TOTAL_SIZE - 1);
+			continue;
+		}
+		if (ASTATUS() == 0xFF) {
+			BUGMSG(D_NORMAL, "IO address %Xh was reported by PCI BIOS, "
+			       "but seems empty!\n", ioaddr);
+			continue;
+		}
+		if (com20020_check(dev))
+			continue;
+
+		if (!com20020_found(dev, SA_SHIRQ)) {
 #ifdef MODULE
-	    cards[numcards++] = dev;
+			if(numcards==MAX_CARDS)
+				printk(KERN_WARNING "com20020pci: Too many cards. Ignoring.\n");
+			else
+				cards[numcards++] = dev;
 #endif
-	    gotone++;
+			gotone++;
+		}
 	}
-    }
-    
-    return gotone ? 0 : -ENODEV;
+
+	return gotone ? 0 : -ENODEV;
 }
 
 
@@ -140,27 +138,26 @@ MODULE_PARM(clock, "i");
 
 int init_module(void)
 {
-    return com20020pci_probe(device, node, backplane, clock & 7, timeout & 3);
+	return com20020pci_probe(device, node, backplane, clock & 7, timeout & 3);
 }
 
 void cleanup_module(void)
 {
-    struct net_device *dev;
-    int count;
-    
-    for (count = 0; count < numcards; count++)
-    {
-	dev = cards[count];
+	struct net_device *dev;
+	int count;
 
-	if (dev->start)
-	    dev->stop(dev);
+	for (count = 0; count < numcards; count++) {
+		dev = cards[count];
 
-	free_irq(dev->irq, dev);
-	release_region(dev->base_addr, ARCNET_TOTAL_SIZE);
-	unregister_netdev(dev);
-	kfree(dev->priv);
-	kfree(dev);
-    }
+		if (dev->start)
+			dev->stop(dev);
+
+		free_irq(dev->irq, dev);
+		release_region(dev->base_addr, ARCNET_TOTAL_SIZE);
+		unregister_netdev(dev);
+		kfree(dev->priv);
+		kfree(dev);
+	}
 }
 
 #else

@@ -23,8 +23,9 @@
  *
  * **********************
  */
+
 #include <linux/module.h>
-#include <linux/config.h>  /* for CONFIG_INET */
+#include <linux/config.h>	/* for CONFIG_INET */
 #include <linux/init.h>
 #include <linux/if_arp.h>
 #include <net/arp.h>
@@ -40,10 +41,11 @@ static void rx(struct net_device *dev, int bufnum,
 static int build_header(struct sk_buff *skb, unsigned short type,
 			uint8_t daddr);
 static int prepare_tx(struct net_device *dev, struct archdr *pkt, int length,
-		       int bufnum);
+		      int bufnum);
 
 
-struct ArcProto rawmode_proto = {
+struct ArcProto rawmode_proto =
+{
 	'r',
 	XMTU,
 	rx,
@@ -54,17 +56,17 @@ struct ArcProto rawmode_proto = {
 
 void arcnet_raw_init(void)
 {
-    int count;
-    
-    for (count = 0; count < 256; count++)
-	if (arc_proto_map[count] == arc_proto_default)
-	    arc_proto_map[count] = &rawmode_proto;
-    
-    /* for raw mode, we only set the bcast proto if there's no better one */
-    if (arc_bcast_proto == arc_proto_default)
-	arc_bcast_proto = &rawmode_proto;
-    
-    arc_proto_default = &rawmode_proto;
+	int count;
+
+	for (count = 0; count < 256; count++)
+		if (arc_proto_map[count] == arc_proto_default)
+			arc_proto_map[count] = &rawmode_proto;
+
+	/* for raw mode, we only set the bcast proto if there's no better one */
+	if (arc_bcast_proto == arc_proto_default)
+		arc_bcast_proto = &rawmode_proto;
+
+	arc_proto_default = &rawmode_proto;
 }
 
 
@@ -72,17 +74,17 @@ void arcnet_raw_init(void)
 
 int __init init_module(void)
 {
-    printk(VERSION);
-    arcnet_raw_init();
-    return 0;
+	printk(VERSION);
+	arcnet_raw_init();
+	return 0;
 }
 
 void cleanup_module(void)
 {
-    arcnet_unregister_proto(&rawmode_proto);
+	arcnet_unregister_proto(&rawmode_proto);
 }
 
-#endif /* MODULE */
+#endif				/* MODULE */
 
 
 
@@ -90,45 +92,43 @@ void cleanup_module(void)
 static void rx(struct net_device *dev, int bufnum,
 	       struct archdr *pkthdr, int length)
 {
-    struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-    struct sk_buff *skb;
-    struct archdr *pkt = pkthdr;
-    int ofs;
+	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
+	struct sk_buff *skb;
+	struct archdr *pkt = pkthdr;
+	int ofs;
 
-    BUGMSG(D_DURING, "it's a raw packet (length=%d)\n", length);
-    
-    if (length >= MinTU)
-	ofs = 512 - length;
-    else
-	ofs = 256 - length;
-    
-    skb = alloc_skb(length + ARC_HDR_SIZE, GFP_ATOMIC);
-    if (skb == NULL)
-    {
-	BUGMSG(D_NORMAL, "Memory squeeze, dropping packet.\n");
-	lp->stats.rx_dropped++;
-	return;
-    }
+	BUGMSG(D_DURING, "it's a raw packet (length=%d)\n", length);
 
-    skb_put(skb, length + ARC_HDR_SIZE);
-    skb->dev = dev;
-    
-    pkt = (struct archdr *)skb->data;
+	if (length >= MinTU)
+		ofs = 512 - length;
+	else
+		ofs = 256 - length;
 
-    skb->mac.raw = skb->data;
-    skb_pull(skb, ARC_HDR_SIZE);
-        
-    /* up to sizeof(pkt->soft) has already been copied from the card */
-    memcpy(pkt, pkthdr, sizeof(struct archdr));
-    if (length > sizeof(pkt->soft))
-	lp->hw.copy_from_card(dev, bufnum, ofs + sizeof(pkt->soft),
-			      pkt->soft.raw + sizeof(pkt->soft),
-			      length - sizeof(pkt->soft));
-    
-    BUGLVL(D_SKB) arcnet_dump_skb(dev, skb, "rx");
-    
-    skb->protocol = 0;
-    netif_rx(skb);
+	skb = alloc_skb(length + ARC_HDR_SIZE, GFP_ATOMIC);
+	if (skb == NULL) {
+		BUGMSG(D_NORMAL, "Memory squeeze, dropping packet.\n");
+		lp->stats.rx_dropped++;
+		return;
+	}
+	skb_put(skb, length + ARC_HDR_SIZE);
+	skb->dev = dev;
+
+	pkt = (struct archdr *) skb->data;
+
+	skb->mac.raw = skb->data;
+	skb_pull(skb, ARC_HDR_SIZE);
+
+	/* up to sizeof(pkt->soft) has already been copied from the card */
+	memcpy(pkt, pkthdr, sizeof(struct archdr));
+	if (length > sizeof(pkt->soft))
+		lp->hw.copy_from_card(dev, bufnum, ofs + sizeof(pkt->soft),
+				      pkt->soft.raw + sizeof(pkt->soft),
+				      length - sizeof(pkt->soft));
+
+	BUGLVL(D_SKB) arcnet_dump_skb(dev, skb, "rx");
+
+	skb->protocol = 0;
+	netif_rx(skb);
 }
 
 
@@ -139,75 +139,67 @@ static void rx(struct net_device *dev, int bufnum,
 static int build_header(struct sk_buff *skb, unsigned short type,
 			uint8_t daddr)
 {
-    struct net_device *dev = skb->dev;
-    int hdr_size = ARC_HDR_SIZE;
-    struct archdr *pkt = (struct archdr *)skb_push(skb, hdr_size);
-    
-    /*
-     * Set the source hardware address.
-     *
-     * This is pretty pointless for most purposes, but it can help in
-     * debugging.  ARCnet does not allow us to change the source address in
-     * the actual packet sent)
-     */
-    pkt->hard.source = *dev->dev_addr;
+	struct net_device *dev = skb->dev;
+	int hdr_size = ARC_HDR_SIZE;
+	struct archdr *pkt = (struct archdr *) skb_push(skb, hdr_size);
 
-    /* see linux/net/ethernet/eth.c to see where I got the following */
-    
-    if (dev->flags & (IFF_LOOPBACK|IFF_NOARP))
-    {
-	/* 
-	 * FIXME: fill in the last byte of the dest ipaddr here to better
-	 * comply with RFC1051 in "noarp" mode.
+	/*
+	 * Set the source hardware address.
+	 *
+	 * This is pretty pointless for most purposes, but it can help in
+	 * debugging.  ARCnet does not allow us to change the source address in
+	 * the actual packet sent)
 	 */
-	pkt->hard.dest = 0;
-	return hdr_size;
-    }
+	pkt->hard.source = *dev->dev_addr;
 
-    /* otherwise, just fill it in and go! */
-    pkt->hard.dest = daddr;
-    
-    return hdr_size; /* success */
+	/* see linux/net/ethernet/eth.c to see where I got the following */
+
+	if (dev->flags & (IFF_LOOPBACK | IFF_NOARP)) {
+		/* 
+		 * FIXME: fill in the last byte of the dest ipaddr here to better
+		 * comply with RFC1051 in "noarp" mode.
+		 */
+		pkt->hard.dest = 0;
+		return hdr_size;
+	}
+	/* otherwise, just fill it in and go! */
+	pkt->hard.dest = daddr;
+
+	return hdr_size;	/* success */
 }
 
 
 static int prepare_tx(struct net_device *dev, struct archdr *pkt, int length,
-		       int bufnum)
+		      int bufnum)
 {
-    struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-    struct arc_hardware *hard = &pkt->hard;
-    int ofs;
-    
-    BUGMSG(D_DURING, "prepare_tx: txbufs=%d/%d/%d\n",
-	   lp->next_tx, lp->cur_tx, bufnum);
-    
-    length -= ARC_HDR_SIZE; /* hard header is not included in packet length */
-    
-    if (length > XMTU)
-    {
-	/* should never happen! other people already check for this. */
-	BUGMSG(D_NORMAL, "Bug!  prepare_tx with size %d (> %d)\n", 
-	       length, XMTU);
-	length = XMTU;
-    }
+	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
+	struct arc_hardware *hard = &pkt->hard;
+	int ofs;
 
-    if (length > MinTU)
-    {
-	hard->offset[0] = 0;
-	hard->offset[1] = ofs = 512 - length;
-    }
-    else if (length > MTU)
-    {
-	hard->offset[0] = 0;
-	hard->offset[1] = ofs = 512 - length - 3;
-    }
-    else
-	hard->offset[0] = ofs = 256 - length;
-    
-    lp->hw.copy_to_card(dev, bufnum, 0, hard, ARC_HDR_SIZE);
-    lp->hw.copy_to_card(dev, bufnum, ofs, &pkt->soft, length);
-    
-    lp->lastload_dest = hard->dest;
-    
-    return 1; /* done */
+	BUGMSG(D_DURING, "prepare_tx: txbufs=%d/%d/%d\n",
+	       lp->next_tx, lp->cur_tx, bufnum);
+
+	length -= ARC_HDR_SIZE;	/* hard header is not included in packet length */
+
+	if (length > XMTU) {
+		/* should never happen! other people already check for this. */
+		BUGMSG(D_NORMAL, "Bug!  prepare_tx with size %d (> %d)\n",
+		       length, XMTU);
+		length = XMTU;
+	}
+	if (length > MinTU) {
+		hard->offset[0] = 0;
+		hard->offset[1] = ofs = 512 - length;
+	} else if (length > MTU) {
+		hard->offset[0] = 0;
+		hard->offset[1] = ofs = 512 - length - 3;
+	} else
+		hard->offset[0] = ofs = 256 - length;
+
+	lp->hw.copy_to_card(dev, bufnum, 0, hard, ARC_HDR_SIZE);
+	lp->hw.copy_to_card(dev, bufnum, ofs, &pkt->soft, length);
+
+	lp->lastload_dest = hard->dest;
+
+	return 1;		/* done */
 }

@@ -87,7 +87,7 @@
 #include <linux/rtnetlink.h>
 #include <net/br.h>
 #include <linux/proc_fs.h>
-#include <linux/br.h>
+#include <linux/delay.h>
 
 #ifndef min
 #define min(a, b) (((a) <= (b)) ? (a) : (b))

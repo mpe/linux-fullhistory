@@ -46,13 +46,13 @@ static char *clockrates[] =
  "156.25 Kb/s", "Reserved", "Reserved",
  "Reserved"};
 
-static void com20020_command  (struct net_device *dev, int command);
-static int  com20020_status   (struct net_device *dev);
-static void com20020_setmask  (struct net_device *dev, int mask);
-static int  com20020_reset    (struct net_device *dev, int really_reset);
+static void com20020_command(struct net_device *dev, int command);
+static int com20020_status(struct net_device *dev);
+static void com20020_setmask(struct net_device *dev, int mask);
+static int com20020_reset(struct net_device *dev, int really_reset);
 static void com20020_openclose(struct net_device *dev, bool open);
-static void com20020_copy_to_card  (struct net_device *dev, int bufnum,
-				    int offset, void *buf, int count);
+static void com20020_copy_to_card(struct net_device *dev, int bufnum,
+				  int offset, void *buf, int count);
 static void com20020_copy_from_card(struct net_device *dev, int bufnum,
 				    int offset, void *buf, int count);
 static void com20020_set_mc_list(struct net_device *dev);
@@ -61,83 +61,79 @@ static void com20020_set_mc_list(struct net_device *dev);
 static void com20020_copy_from_card(struct net_device *dev, int bufnum,
 				    int offset, void *buf, int count)
 {
-    int ioaddr = dev->base_addr, ofs = 512 * bufnum + offset;
+	int ioaddr = dev->base_addr, ofs = 512 * bufnum + offset;
 
-    /* set up the address register */
-    outb((ofs >> 8) | RDDATAflag | AUTOINCflag, _ADDR_HI);
-    outb(ofs & 0xff, _ADDR_LO);
-    
-    /* copy the data */
-    TIME("insb", count, insb(_MEMDATA, buf, count));
+	/* set up the address register */
+	outb((ofs >> 8) | RDDATAflag | AUTOINCflag, _ADDR_HI);
+	outb(ofs & 0xff, _ADDR_LO);
+
+	/* copy the data */
+	TIME("insb", count, insb(_MEMDATA, buf, count));
 }
 
 
 static void com20020_copy_to_card(struct net_device *dev, int bufnum,
 				  int offset, void *buf, int count)
 {
-    int ioaddr = dev->base_addr, ofs = 512 * bufnum + offset;
+	int ioaddr = dev->base_addr, ofs = 512 * bufnum + offset;
 
-    /* set up the address register */
-    outb((ofs >> 8) | AUTOINCflag, _ADDR_HI);
-    outb(ofs & 0xff, _ADDR_LO);
-    
-    /* copy the data */
-    TIME("outsb", count, outsb(_MEMDATA, buf, count));
+	/* set up the address register */
+	outb((ofs >> 8) | AUTOINCflag, _ADDR_HI);
+	outb(ofs & 0xff, _ADDR_LO);
+
+	/* copy the data */
+	TIME("outsb", count, outsb(_MEMDATA, buf, count));
 }
 
 
 /* Reset the card and check some basic stuff during the detection stage. */
 int __init com20020_check(struct net_device *dev)
 {
-    int ioaddr = dev->base_addr, status;
-    struct arcnet_local *lp = dev->priv;
-    
-    ARCRESET0;
-    mdelay(RESETtime);
-    
-    lp->setup = lp->clock << 1;
+	int ioaddr = dev->base_addr, status;
+	struct arcnet_local *lp = dev->priv;
 
-    REGSETUP;
-    SETCONF(lp->config);
-    outb(lp->setup, ioaddr + 7);
+	ARCRESET0;
+	mdelay(RESETtime);
 
-    lp->config = 0x21 | (lp->timeout << 3) | (lp->backplane << 2);
-    /* set node ID to 0x42 (but transmitter is disabled, so it's okay) */
-    SETCONF(lp->config);
-    outb(0x42, ioaddr + 7);
+	lp->setup = lp->clock << 1;
 
-    status = ASTATUS();
-    
-    if ((status & 0x99) != (NORXflag | TXFREEflag | RESETflag))
-    {
-	BUGMSG(D_NORMAL, "status invalid (%Xh).\n", status);
-	return -ENODEV;
-    }
-    
-    BUGMSG(D_INIT_REASONS, "status after reset: %X\n", status);
-    
-    /* Enable TX */
-    outb(0x39, _CONFIG);
-    outb(inb(ioaddr + 8), ioaddr + 7);
-    
-    ACOMMAND(CFLAGScmd | RESETclear | CONFIGclear);
-    
-    status = ASTATUS();
-    BUGMSG(D_INIT_REASONS, "status after reset acknowledged: %X\n",
-	   status);
-    
-    /* Read first location of memory */
-    outb(0 | RDDATAflag | AUTOINCflag, _ADDR_HI);
-    outb(0, _ADDR_LO);
-    
-    if ((status = inb(_MEMDATA)) != TESTvalue)
-    {
-	BUGMSG(D_NORMAL, "Signature byte not found (%02Xh != D1h).\n",
+	REGSETUP;
+	SETCONF(lp->config);
+	outb(lp->setup, ioaddr + 7);
+
+	lp->config = 0x21 | (lp->timeout << 3) | (lp->backplane << 2);
+	/* set node ID to 0x42 (but transmitter is disabled, so it's okay) */
+	SETCONF(lp->config);
+	outb(0x42, ioaddr + 7);
+
+	status = ASTATUS();
+
+	if ((status & 0x99) != (NORXflag | TXFREEflag | RESETflag)) {
+		BUGMSG(D_NORMAL, "status invalid (%Xh).\n", status);
+		return -ENODEV;
+	}
+	BUGMSG(D_INIT_REASONS, "status after reset: %X\n", status);
+
+	/* Enable TX */
+	outb(0x39, _CONFIG);
+	outb(inb(ioaddr + 8), ioaddr + 7);
+
+	ACOMMAND(CFLAGScmd | RESETclear | CONFIGclear);
+
+	status = ASTATUS();
+	BUGMSG(D_INIT_REASONS, "status after reset acknowledged: %X\n",
 	       status);
-	return -ENODEV;
-    }
-    
-    return 0;
+
+	/* Read first location of memory */
+	outb(0 | RDDATAflag | AUTOINCflag, _ADDR_HI);
+	outb(0, _ADDR_LO);
+
+	if ((status = inb(_MEMDATA)) != TESTvalue) {
+		BUGMSG(D_NORMAL, "Signature byte not found (%02Xh != D1h).\n",
+		       status);
+		return -ENODEV;
+	}
+	return 0;
 }
 
 /* Set up the struct net_device associated with this card.  Called after
@@ -145,76 +141,70 @@ int __init com20020_check(struct net_device *dev)
  */
 int __init com20020_found(struct net_device *dev, int shared)
 {
-    struct arcnet_local *lp;
-    int ioaddr = dev->base_addr;
+	struct arcnet_local *lp;
+	int ioaddr = dev->base_addr;
 
-    /* Initialize the rest of the device structure. */
+	/* Initialize the rest of the device structure. */
 
-    lp = (struct arcnet_local *)dev->priv;
+	lp = (struct arcnet_local *) dev->priv;
 
-    lp->hw.command        = com20020_command;
-    lp->hw.status         = com20020_status;
-    lp->hw.intmask        = com20020_setmask;
-    lp->hw.reset          = com20020_reset;
-    lp->hw.open_close     = com20020_openclose;
-    lp->hw.copy_to_card   = com20020_copy_to_card;
-    lp->hw.copy_from_card = com20020_copy_from_card;
+	lp->hw.command = com20020_command;
+	lp->hw.status = com20020_status;
+	lp->hw.intmask = com20020_setmask;
+	lp->hw.reset = com20020_reset;
+	lp->hw.open_close = com20020_openclose;
+	lp->hw.copy_to_card = com20020_copy_to_card;
+	lp->hw.copy_from_card = com20020_copy_from_card;
 
-    dev->set_multicast_list = com20020_set_mc_list;
+	dev->set_multicast_list = com20020_set_mc_list;
 
-    /* Fill in the fields of the device structure with generic
-     * values.
-     */
-    arcdev_setup(dev);
+	/* Fill in the fields of the device structure with generic
+	 * values.
+	 */
+	arcdev_setup(dev);
 
-    if (!dev->dev_addr[0])
-	dev->dev_addr[0] = inb(ioaddr + 8); /* FIXME: do this some other way! */
+	if (!dev->dev_addr[0])
+		dev->dev_addr[0] = inb(ioaddr + 8);	/* FIXME: do this some other way! */
 
-    lp->setup = lp->clock << 1;
+	lp->setup = lp->clock << 1;
 
-    REGSETUP;
-    SETCONF(lp->config);
-    outb(lp->setup, ioaddr + 7);
+	REGSETUP;
+	SETCONF(lp->config);
+	outb(lp->setup, ioaddr + 7);
 
-    lp->config = 0x20 | (lp->timeout << 3) | (lp->backplane << 2) | 1;
-    /* Default 0x38 + register: Node ID */
-    SETCONF(lp->config);
-    outb(dev->dev_addr[0], ioaddr + 7);
+	lp->config = 0x20 | (lp->timeout << 3) | (lp->backplane << 2) | 1;
+	/* Default 0x38 + register: Node ID */
+	SETCONF(lp->config);
+	outb(dev->dev_addr[0], ioaddr + 7);
 
-    /* reserve the irq */
-    if (request_irq(dev->irq, &arcnet_interrupt, shared,
-		    "arcnet (COM20020)", dev))
-    {
-	BUGMSG(D_NORMAL, "Can't get IRQ %d!\n", dev->irq);
-	return -ENODEV;
-    }
+	/* reserve the irq */
+	if (request_irq(dev->irq, &arcnet_interrupt, shared,
+			"arcnet (COM20020)", dev)) {
+		BUGMSG(D_NORMAL, "Can't get IRQ %d!\n", dev->irq);
+		return -ENODEV;
+	}
+	/* reserve the I/O region - guaranteed to work by check_region */
+	request_region(ioaddr, ARCNET_TOTAL_SIZE, "arcnet (COM20020)");
+	dev->base_addr = ioaddr;
 
-    /* reserve the I/O region - guaranteed to work by check_region */
-    request_region(ioaddr, ARCNET_TOTAL_SIZE, "arcnet (COM20020)");
-    dev->base_addr = ioaddr;
+	BUGMSG(D_NORMAL, "COM20020: station %02Xh found at %03lXh, IRQ %d.\n",
+	       dev->dev_addr[0], dev->base_addr, dev->irq);
 
-    BUGMSG(D_NORMAL, "COM20020: station %02Xh found at %03lXh, IRQ %d.\n",
-	   dev->dev_addr[0], dev->base_addr, dev->irq);
+	if (lp->backplane)
+		BUGMSG(D_NORMAL, "Using backplane mode.\n");
 
-    if (lp->backplane)
-	BUGMSG(D_NORMAL, "Using backplane mode.\n");
-
-    if (lp->timeout != 3)
-	BUGMSG(D_NORMAL, "Using extended timeout value of %d.\n", lp->timeout);
-    if (lp->setup)
-    {
-	BUGMSG(D_NORMAL, "Using CKP %d - data rate %s.\n",
-	       lp->setup >> 1, clockrates[lp->setup >> 1]);
-    }
-
-    if (!dev->init && register_netdev(dev))
-    {
-	free_irq(dev->irq, dev);
-	release_region(ioaddr, ARCNET_TOTAL_SIZE);
-	return -EIO;
-    }
-    
-    return 0;
+	if (lp->timeout != 3)
+		BUGMSG(D_NORMAL, "Using extended timeout value of %d.\n", lp->timeout);
+	if (lp->setup) {
+		BUGMSG(D_NORMAL, "Using CKP %d - data rate %s.\n",
+		       lp->setup >> 1, clockrates[lp->setup >> 1]);
+	}
+	if (!dev->init && register_netdev(dev)) {
+		free_irq(dev->irq, dev);
+		release_region(ioaddr, ARCNET_TOTAL_SIZE);
+		return -EIO;
+	}
+	return 0;
 }
 
 
@@ -228,80 +218,75 @@ int __init com20020_found(struct net_device *dev, int shared)
  */
 static int com20020_reset(struct net_device *dev, int really_reset)
 {
-    struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-    short ioaddr = dev->base_addr;
-    u_char inbyte;
-    
-    BUGMSG(D_INIT, "Resetting %s (status=%02Xh)\n",
-	   dev->name, ASTATUS());
+	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
+	short ioaddr = dev->base_addr;
+	u_char inbyte;
 
-    lp->config = TXENcfg | (lp->timeout << 3) | (lp->backplane << 2);
-    /* power-up defaults */
-    SETCONF(lp->config);
+	BUGMSG(D_INIT, "Resetting %s (status=%02Xh)\n",
+	       dev->name, ASTATUS());
 
-    if (really_reset)
-    {
-	/* reset the card */
-	ARCRESET;
-	mdelay(RESETtime * 2); /* COM20020 seems to be slower sometimes */
-    }
+	lp->config = TXENcfg | (lp->timeout << 3) | (lp->backplane << 2);
+	/* power-up defaults */
+	SETCONF(lp->config);
 
-    /* clear flags & end reset */
-    ACOMMAND(CFLAGScmd | RESETclear | CONFIGclear);
+	if (really_reset) {
+		/* reset the card */
+		ARCRESET;
+		mdelay(RESETtime * 2);	/* COM20020 seems to be slower sometimes */
+	}
+	/* clear flags & end reset */
+	ACOMMAND(CFLAGScmd | RESETclear | CONFIGclear);
 
-    /* verify that the ARCnet signature byte is present */
+	/* verify that the ARCnet signature byte is present */
 
-    com20020_copy_from_card(dev, 0, 0, &inbyte, 1);
-    if (inbyte != TESTvalue)
-    {
-	BUGMSG(D_NORMAL, "reset failed: TESTvalue not present.\n");
-	return 1;
-    }
+	com20020_copy_from_card(dev, 0, 0, &inbyte, 1);
+	if (inbyte != TESTvalue) {
+		BUGMSG(D_NORMAL, "reset failed: TESTvalue not present.\n");
+		return 1;
+	}
+	/* enable extended (512-byte) packets */
+	ACOMMAND(CONFIGcmd | EXTconf);
 
-    /* enable extended (512-byte) packets */
-    ACOMMAND(CONFIGcmd | EXTconf);
-    
-    /* done!  return success. */
-    return 0;
+	/* done!  return success. */
+	return 0;
 }
 
 
 static void com20020_setmask(struct net_device *dev, int mask)
 {
-    short ioaddr = dev->base_addr;
-    AINTMASK(mask);
+	short ioaddr = dev->base_addr;
+	AINTMASK(mask);
 }
 
 
 static void com20020_command(struct net_device *dev, int cmd)
 {
-    short ioaddr = dev->base_addr;
-    ACOMMAND(cmd);
+	short ioaddr = dev->base_addr;
+	ACOMMAND(cmd);
 }
 
 
 static int com20020_status(struct net_device *dev)
 {
-    short ioaddr = dev->base_addr;
-    return ASTATUS();
+	short ioaddr = dev->base_addr;
+	return ASTATUS();
 }
 
 
 static void com20020_openclose(struct net_device *dev, bool open)
 {
-    struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-    int ioaddr = dev->base_addr;
+	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
+	int ioaddr = dev->base_addr;
 
-    if (open)
-	MOD_INC_USE_COUNT;
-    else
-    {
-	/* disable transmitter */
-	lp->config &= ~TXENcfg;
-	SETCONF(lp->config);
-	MOD_DEC_USE_COUNT;
-    }
-    lp->hw.open_close_ll(dev, open);
+	if (open)
+		MOD_INC_USE_COUNT;
+	else {
+		/* disable transmitter */
+		lp->config &= ~TXENcfg;
+		SETCONF(lp->config);
+		MOD_DEC_USE_COUNT;
+	}
+	lp->hw.open_close_ll(dev, open);
 }
 
 
@@ -314,41 +299,39 @@ static void com20020_openclose(struct net_device *dev, bool open)
  */
 static void com20020_set_mc_list(struct net_device *dev)
 {
-    struct arcnet_local *lp = dev->priv;
-    int ioaddr = dev->base_addr;
+	struct arcnet_local *lp = dev->priv;
+	int ioaddr = dev->base_addr;
 
-    if ((dev->flags & IFF_PROMISC) && (dev->flags & IFF_UP))
-    {				/* Enable promiscuous mode */
-	if (!(lp->setup & PROMISCset))
-	    BUGMSG(D_NORMAL, "Setting promiscuous flag...\n");
-	REGSETUP;
-	SETCONF(lp->config);
-	lp->setup |= PROMISCset;
-	outb(lp->setup, _SETUP);
-    }
-    else
-	/* Disable promiscuous mode, use normal mode */
-    {
-	if ((lp->setup & PROMISCset))
-	    BUGMSG(D_NORMAL, "Resetting promiscuous flag...\n");
-	REGSETUP;
-	SETCONF(lp->config);
-	lp->setup &= ~PROMISCset;
-	outb(lp->setup, _SETUP);
-    }
+	if ((dev->flags & IFF_PROMISC) && (dev->flags & IFF_UP)) {	/* Enable promiscuous mode */
+		if (!(lp->setup & PROMISCset))
+			BUGMSG(D_NORMAL, "Setting promiscuous flag...\n");
+		REGSETUP;
+		SETCONF(lp->config);
+		lp->setup |= PROMISCset;
+		outb(lp->setup, _SETUP);
+	} else
+		/* Disable promiscuous mode, use normal mode */
+	{
+		if ((lp->setup & PROMISCset))
+			BUGMSG(D_NORMAL, "Resetting promiscuous flag...\n");
+		REGSETUP;
+		SETCONF(lp->config);
+		lp->setup &= ~PROMISCset;
+		outb(lp->setup, _SETUP);
+	}
 }
 
 
 /*
  * FIXME: put this somewhere!
  * 
-	if ((dstatus = inb(_DIAGSTAT)) & NEWNXTIDflag)
-	{
-	    REGNXTID;
-	    SETCONF(lp->config);
-	    BUGMSG(D_EXTRA, "New NextID detected: %X\n", inb(ioaddr + 7));
-	}
-*/
+ if ((dstatus = inb(_DIAGSTAT)) & NEWNXTIDflag)
+ {
+ REGNXTID;
+ SETCONF(lp->config);
+ BUGMSG(D_EXTRA, "New NextID detected: %X\n", inb(ioaddr + 7));
+ }
+ */
 
 
 #ifdef MODULE
@@ -358,8 +341,8 @@ EXPORT_SYMBOL(com20020_found);
 
 int init_module(void)
 {
-    BUGLVL(D_NORMAL) printk(VERSION);
-    return 0;
+	BUGLVL(D_NORMAL) printk(VERSION);
+	return 0;
 }
 
 void cleanup_module(void)

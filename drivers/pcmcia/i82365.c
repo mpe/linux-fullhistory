@@ -1615,7 +1615,7 @@ static void __init add_cb_bridge(int type, struct pci_dev *dev0)
 	    break;
 	}
 	request_mem_region(s->cb_phys, 0x1000, "i82365");
-	s->cap.cb_bus = dev->subordinate;
+	s->cap.cb_dev = dev;
 	add_socket(0, 0, type);
     }
     if (ns == 0) return;

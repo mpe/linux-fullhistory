@@ -43,13 +43,13 @@
 
 static int arcrimi_probe(struct net_device *dev);
 static int arcrimi_found(struct net_device *dev);
-static void arcrimi_command  (struct net_device *dev, int command);
-static int  arcrimi_status   (struct net_device *dev);
-static void arcrimi_setmask  (struct net_device *dev, int mask);
-static int  arcrimi_reset    (struct net_device *dev, int really_reset);
+static void arcrimi_command(struct net_device *dev, int command);
+static int arcrimi_status(struct net_device *dev);
+static void arcrimi_setmask(struct net_device *dev, int mask);
+static int arcrimi_reset(struct net_device *dev, int really_reset);
 static void arcrimi_openclose(struct net_device *dev, bool open);
-static void arcrimi_copy_to_card  (struct net_device *dev, int bufnum, int offset,
-				   void *buf, int count);
+static void arcrimi_copy_to_card(struct net_device *dev, int bufnum, int offset,
+				 void *buf, int count);
 static void arcrimi_copy_from_card(struct net_device *dev, int bufnum, int offset,
 				   void *buf, int count);
 
@@ -88,7 +88,7 @@ static int __init arcrimi_probe(struct net_device *dev)
 {
 	BUGLVL(D_NORMAL) printk(VERSION);
 	BUGLVL(D_NORMAL) printk("E-mail me if you actually test the RIM I driver, please!\n");
-    
+
 	BUGMSG(D_NORMAL, "Given: node %02Xh, shmem %lXh, irq %d\n",
 	       dev->dev_addr[0], dev->mem_start, dev->irq);
 
@@ -97,18 +97,15 @@ static int __init arcrimi_probe(struct net_device *dev)
 		       "must specify the shmem and irq!\n");
 		return -ENODEV;
 	}
-
 	if (check_mem_region(dev->mem_start, BUFFER_SIZE)) {
 		BUGMSG(D_NORMAL, "Card memory already allocated\n");
 		return -ENODEV;
 	}
-
 	if (dev->dev_addr[0] == 0) {
 		BUGMSG(D_NORMAL, "You need to specify your card's station "
 		       "ID!\n");
 		return -ENODEV;
 	}
-
 	return arcrimi_found(dev);
 }
 
@@ -123,9 +120,9 @@ static int __init arcrimi_found(struct net_device *dev)
 	u_long first_mirror, last_mirror, shmem;
 	int mirror_size;
 
-	/* reserve the irq */ {
-	if (request_irq(dev->irq, &arcnet_interrupt, 0, "arcnet (RIM I)", dev))
-		BUGMSG(D_NORMAL, "Can't get IRQ %d!\n", dev->irq);
+	/* reserve the irq */  {
+		if (request_irq(dev->irq, &arcnet_interrupt, 0, "arcnet (RIM I)", dev))
+			BUGMSG(D_NORMAL, "Can't get IRQ %d!\n", dev->irq);
 		return -ENODEV;
 	}
 
@@ -166,19 +163,18 @@ static int __init arcrimi_found(struct net_device *dev)
 		BUGMSG(D_NORMAL, "Can't allocate device data!\n");
 		goto err_free_irq;
 	}
-	lp->hw.command        = arcrimi_command;
-	lp->hw.status         = arcrimi_status;
-	lp->hw.intmask        = arcrimi_setmask;
-	lp->hw.reset          = arcrimi_reset;
-	lp->hw.open_close     = arcrimi_openclose;
-	lp->hw.copy_to_card   = arcrimi_copy_to_card;
+	lp->hw.command = arcrimi_command;
+	lp->hw.status = arcrimi_status;
+	lp->hw.intmask = arcrimi_setmask;
+	lp->hw.reset = arcrimi_reset;
+	lp->hw.open_close = arcrimi_openclose;
+	lp->hw.copy_to_card = arcrimi_copy_to_card;
 	lp->hw.copy_from_card = arcrimi_copy_from_card;
-	lp->mem_start         = ioremap(dev->mem_start, dev->mem_end - dev->mem_start + 1);
+	lp->mem_start = ioremap(dev->mem_start, dev->mem_end - dev->mem_start + 1);
 	if (!lp->mem_start) {
 		BUGMSG(D_NORMAL, "Can't remap device memory!\n");
 		goto err_free_dev_priv;
 	}
-
 	/* Fill in the fields of the device structure with generic
 	 * values.
 	 */
@@ -194,13 +190,13 @@ static int __init arcrimi_found(struct net_device *dev)
 	       "ShMem %lXh (%ld*%d bytes).\n",
 	       dev->dev_addr[0],
 	       dev->irq, dev->mem_start,
-	       (dev->mem_end - dev->mem_start + 1) / mirror_size, mirror_size);
+	 (dev->mem_end - dev->mem_start + 1) / mirror_size, mirror_size);
 
 	return 0;
 
-err_free_dev_priv:
+      err_free_dev_priv:
 	kfree(dev->priv);
-err_free_irq:
+      err_free_irq:
 	free_irq(dev->irq, dev);
 	return -EIO;
 }
@@ -222,10 +218,9 @@ static int arcrimi_reset(struct net_device *dev, int really_reset)
 	BUGMSG(D_INIT, "Resetting %s (status=%02Xh)\n", dev->name, ASTATUS());
 
 	if (really_reset) {
-		writeb(TESTvalue, ioaddr-0x800);	/* fake reset */
+		writeb(TESTvalue, ioaddr - 0x800);	/* fake reset */
 		return 0;
 	}
-
 	ACOMMAND(CFLAGScmd | RESETclear);	/* clear flags & end reset */
 	ACOMMAND(CFLAGScmd | CONFIGclear);
 
@@ -273,7 +268,7 @@ static void arcrimi_copy_to_card(struct net_device *dev, int bufnum, int offset,
 				 void *buf, int count)
 {
 	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
-	void *memaddr = lp->mem_start + 0x800 + bufnum*512 + offset;
+	void *memaddr = lp->mem_start + 0x800 + bufnum * 512 + offset;
 	TIME("memcpy_toio", count, memcpy_toio(memaddr, buf, count));
 }
 
@@ -282,7 +277,7 @@ static void arcrimi_copy_from_card(struct net_device *dev, int bufnum, int offse
 				   void *buf, int count)
 {
 	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
-	void *memaddr = lp->mem_start + 0x800 + bufnum*512 + offset;
+	void *memaddr = lp->mem_start + 0x800 + bufnum * 512 + offset;
 	TIME("memcpy_fromio", count, memcpy_fromio(buf, memaddr, count));
 }
 
@@ -306,7 +301,7 @@ int init_module(void)
 {
 	struct net_device *dev;
 	int err;
-    
+
 	dev = dev_alloc(device ? : "arc%d", &err);
 	if (!dev)
 		return err;
@@ -318,7 +313,7 @@ int init_module(void)
 	dev->irq = irq;
 	if (dev->irq == 2)
 		dev->irq = 9;
-    
+
 	if (arcrimi_probe(dev))
 		return -EIO;
 
@@ -360,17 +355,17 @@ static int __init arcrimi_setup(char *s)
 		return 1;
 	dev = alloc_bootmem(sizeof(struct net_device) + 10);
 	memset(dev, 0, sizeof(struct net_device) + 10);
-	dev->name = (char *)(dev+1);
+	dev->name = (char *) (dev + 1);
 	dev->init = arcrimi_probe;
 
 	switch (ints[0]) {
 	default:		/* ERROR */
 		printk("arcrimi: Too many arguments.\n");
-	case 3:			/* Node ID */
+	case 3:		/* Node ID */
 		dev->dev_addr[0] = ints[3];
-	case 2:			/* IRQ */
+	case 2:		/* IRQ */
 		dev->irq = ints[2];
-	case 1:			/* IO address */
+	case 1:		/* IO address */
 		dev->mem_start = ints[1];
 	}
 	if (*s)

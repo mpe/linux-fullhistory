@@ -17,6 +17,7 @@
 #include <linux/smp_lock.h>
 #include <linux/quotaops.h>
 #include <linux/pagemap.h>
+#include <linux/dcache.h>
 
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
@@ -549,83 +550,6 @@ static inline int may_create(struct inode *dir, struct dentry *child) {
 		return -EEXIST;
 	return permission(dir,MAY_WRITE | MAY_EXEC);
 }
-
-static inline struct dentry *get_parent(struct dentry *dentry)
-{
-	return dget(dentry->d_parent);
-}
-
-static inline void unlock_dir(struct dentry *dir)
-{
-	up(&dir->d_inode->i_sem);
-	dput(dir);
-}
-
-/*
- * We need to do a check-parent every time
- * after we have locked the parent - to verify
- * that the parent is still our parent and
- * that we are still hashed onto it..
- *
- * This is requied in case two processes race
- * on removing (or moving) the same entry: the
- * parent lock will serialize them, but the
- * other process will be too late..
- */
-#define check_parent(dir, dentry) \
-	((dir) == (dentry)->d_parent && !list_empty(&dentry->d_hash))
-
-/*
- * Locking the parent is needed to:
- *  - serialize directory operations
- *  - make sure the parent doesn't change from
- *    under us in the middle of an operation.
- *
- * NOTE! Right now we'd rather use a "struct inode"
- * for this, but as I expect things to move toward
- * using dentries instead for most things it is
- * probably better to start with the conceptually
- * better interface of relying on a path of dentries.
- */
-static inline struct dentry *lock_parent(struct dentry *dentry)
-{
-	struct dentry *dir = dget(dentry->d_parent);
-
-	down(&dir->d_inode->i_sem);
-	return dir;
-}
-
-/*
- * Whee.. Deadlock country. Happily there are only two VFS
- * operations that do this..
- */
-static inline void double_lock(struct dentry *d1, struct dentry *d2)
-{
-	struct semaphore *s1 = &d1->d_inode->i_sem;
-	struct semaphore *s2 = &d2->d_inode->i_sem;
-
-	if (s1 != s2) {
-		if ((unsigned long) s1 < (unsigned long) s2) {
-			struct semaphore *tmp = s2;
-			s2 = s1; s1 = tmp;
-		}
-		down(s1);
-	}
-	down(s2);
-}
-
-static inline void double_unlock(struct dentry *d1, struct dentry *d2)
-{
-	struct semaphore *s1 = &d1->d_inode->i_sem;
-	struct semaphore *s2 = &d2->d_inode->i_sem;
-
-	up(s1);
-	if (s1 != s2)
-		up(s2);
-	dput(d1);
-	dput(d2);
-}
-
 
 /* 
  * Special case: O_CREAT|O_EXCL implies O_NOFOLLOW for security

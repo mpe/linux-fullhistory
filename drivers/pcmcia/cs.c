@@ -46,6 +46,7 @@
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
 #include <linux/compile.h>
+#include <linux/pci.h>
 #include <asm/system.h>
 #include <asm/irq.h>
 
@@ -994,7 +995,7 @@ int pcmcia_get_configuration_info(client_handle_t handle,
 	config->Function = fn;
 	config->Vcc = s->socket.Vcc;
 	config->Vpp1 = config->Vpp2 = s->socket.Vpp;
-	config->Option = s->cap.cardbus;
+	config->Option = s->cap.cb_dev->subordinate->number;
 	if (s->cb_config) {
 	    config->Attributes = CONF_VALID_CLIENT;
 	    config->IntType = INT_CARDBUS;

@@ -996,6 +996,91 @@ extern int generic_buffer_fdatasync(struct inode *inode, unsigned long start_idx
 extern int inode_change_ok(struct inode *, struct iattr *);
 extern void inode_setattr(struct inode *, struct iattr *);
 
+/*
+ * Common dentry functions for inclusion in the VFS
+ * or in other stackable file systems.  Some of these
+ * functions were in linux/fs/ C (VFS) files.
+ *
+ */
+
+/*
+ * We need to do a check-parent every time
+ * after we have locked the parent - to verify
+ * that the parent is still our parent and
+ * that we are still hashed onto it..
+ *
+ * This is required in case two processes race
+ * on removing (or moving) the same entry: the
+ * parent lock will serialize them, but the
+ * other process will be too late..
+ */
+#define check_parent(dir, dentry) \
+	((dir) == (dentry)->d_parent && !list_empty(&dentry->d_hash))
+
+/*
+ * Locking the parent is needed to:
+ *  - serialize directory operations
+ *  - make sure the parent doesn't change from
+ *    under us in the middle of an operation.
+ *
+ * NOTE! Right now we'd rather use a "struct inode"
+ * for this, but as I expect things to move toward
+ * using dentries instead for most things it is
+ * probably better to start with the conceptually
+ * better interface of relying on a path of dentries.
+ */
+static inline struct dentry *lock_parent(struct dentry *dentry)
+{
+	struct dentry *dir = dget(dentry->d_parent);
+
+	down(&dir->d_inode->i_sem);
+	return dir;
+}
+
+static inline struct dentry *get_parent(struct dentry *dentry)
+{
+	return dget(dentry->d_parent);
+}
+
+static inline void unlock_dir(struct dentry *dir)
+{
+	up(&dir->d_inode->i_sem);
+	dput(dir);
+}
+
+/*
+ * Whee.. Deadlock country. Happily there are only two VFS
+ * operations that does this..
+ */
+static inline void double_lock(struct dentry *d1, struct dentry *d2)
+{
+	struct semaphore *s1 = &d1->d_inode->i_sem;
+	struct semaphore *s2 = &d2->d_inode->i_sem;
+
+	if (s1 != s2) {
+		if ((unsigned long) s1 < (unsigned long) s2) {
+			struct semaphore *tmp = s2;
+			s2 = s1; s1 = tmp;
+		}
+		down(s1);
+	}
+	down(s2);
+}
+
+static inline void double_unlock(struct dentry *d1, struct dentry *d2)
+{
+	struct semaphore *s1 = &d1->d_inode->i_sem;
+	struct semaphore *s2 = &d2->d_inode->i_sem;
+
+	up(s1);
+	if (s1 != s2)
+		up(s2);
+	dput(d1);
+	dput(d2);
+}
+
+
+
 #endif /* __KERNEL__ */
 
 #endif /* _LINUX_FS_H */

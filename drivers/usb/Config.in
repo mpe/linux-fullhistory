@@ -10,7 +10,7 @@ comment 'USB Controllers'
    dep_tristate '  UHCI (Intel PIIX4, VIA, and others) support' CONFIG_USB_UHCI \
 	$CONFIG_USB
 
-   dep_tristate '  OHCI-HCD (Compaq, iMacs, OPTi, SiS, and others) support' \
+   dep_tristate '  OHCI-HCD (Compaq, iMacs, OPTi, SiS, ALi, and others) support' \
 		CONFIG_USB_OHCI_HCD $CONFIG_USB
 
 comment 'Miscellaneous USB options'

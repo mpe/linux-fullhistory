@@ -1298,7 +1298,7 @@ out:
  * it in the page cache, and handles the special cases reasonably without
  * having a lot of duplicated code.
  */
-static struct page * filemap_nopage(struct vm_area_struct * area,
+struct page * filemap_nopage(struct vm_area_struct * area,
 	unsigned long address, int no_share)
 {
 	int error;
@@ -1595,7 +1595,7 @@ static inline int filemap_sync_pmd_range(pgd_t * pgd,
 	return error;
 }
 
-static int filemap_sync(struct vm_area_struct * vma, unsigned long address,
+int filemap_sync(struct vm_area_struct * vma, unsigned long address,
 	size_t size, unsigned int flags)
 {
 	pgd_t * dir;

@@ -36,3 +36,5 @@ struct pci_socket_ops {
 };
 
 extern struct pci_socket_ops yenta_operations;
+extern struct pci_socket_ops ricoh_operations;
+

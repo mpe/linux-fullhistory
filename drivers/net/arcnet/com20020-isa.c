@@ -42,7 +42,7 @@
 
 
 #define VERSION "arcnet: COM20020 ISA support (by David Woodhouse et al.)\n"
-   
+
 
 /*
  * We cannot (yet) probe for an IO mapped card, although we can check that
@@ -50,70 +50,60 @@
  */
 static int __init com20020isa_probe(struct net_device *dev)
 {
-    int ioaddr;
-    unsigned long airqmask;
+	int ioaddr;
+	unsigned long airqmask;
 
 #ifndef MODULE
-    arcnet_init();
+	arcnet_init();
 #endif
 
-    BUGLVL(D_NORMAL) printk(VERSION);
+	BUGLVL(D_NORMAL) printk(VERSION);
 
-    ioaddr = dev->base_addr;
-    if (!ioaddr)
-    {
-	BUGMSG(D_NORMAL, "No autoprobe (yet) for IO mapped cards; you "
-	       "must specify the base address!\n");
-	return -ENODEV;
-    }
-
-    if (check_region(ioaddr, ARCNET_TOTAL_SIZE))
-    {
-	BUGMSG(D_NORMAL, "IO region %xh-%xh already allocated.\n",
-	       ioaddr, ioaddr + ARCNET_TOTAL_SIZE - 1);
-	return -ENXIO;
-    }
-
-    if (ASTATUS() == 0xFF)
-    {
-	BUGMSG(D_NORMAL, "IO address %x empty\n", ioaddr);
-	return -ENODEV;
-    }
-
-    if (com20020_check(dev))
-	return -ENODEV;
-
-    if (!dev->irq)
-    {
-	/* if we do this, we're sure to get an IRQ since the
-	 * card has just reset and the NORXflag is on until
-	 * we tell it to start receiving.
-	 */
-	BUGMSG(D_INIT_REASONS, "intmask was %02Xh\n", inb(_INTMASK));
-	outb(0, _INTMASK);
-	airqmask = probe_irq_on();
-	outb(NORXflag, _INTMASK);
-	udelay(1);
-	outb(0, _INTMASK);
-	dev->irq = probe_irq_off(airqmask);
-
-	if (dev->irq <= 0)
-	{
-	    BUGMSG(D_INIT_REASONS, "Autoprobe IRQ failed first time\n");
-	    airqmask = probe_irq_on();
-	    outb(NORXflag, _INTMASK);
-	    udelay(5);
-	    outb(0, _INTMASK);
-	    dev->irq = probe_irq_off(airqmask);
-	    if (dev->irq <= 0)
-	    {
-		BUGMSG(D_NORMAL, "Autoprobe IRQ failed.\n");
+	ioaddr = dev->base_addr;
+	if (!ioaddr) {
+		BUGMSG(D_NORMAL, "No autoprobe (yet) for IO mapped cards; you "
+		       "must specify the base address!\n");
 		return -ENODEV;
-	    }
 	}
-    }
+	if (check_region(ioaddr, ARCNET_TOTAL_SIZE)) {
+		BUGMSG(D_NORMAL, "IO region %xh-%xh already allocated.\n",
+		       ioaddr, ioaddr + ARCNET_TOTAL_SIZE - 1);
+		return -ENXIO;
+	}
+	if (ASTATUS() == 0xFF) {
+		BUGMSG(D_NORMAL, "IO address %x empty\n", ioaddr);
+		return -ENODEV;
+	}
+	if (com20020_check(dev))
+		return -ENODEV;
 
-    return com20020_found(dev, 0);
+	if (!dev->irq) {
+		/* if we do this, we're sure to get an IRQ since the
+		 * card has just reset and the NORXflag is on until
+		 * we tell it to start receiving.
+		 */
+		BUGMSG(D_INIT_REASONS, "intmask was %02Xh\n", inb(_INTMASK));
+		outb(0, _INTMASK);
+		airqmask = probe_irq_on();
+		outb(NORXflag, _INTMASK);
+		udelay(1);
+		outb(0, _INTMASK);
+		dev->irq = probe_irq_off(airqmask);
+
+		if (dev->irq <= 0) {
+			BUGMSG(D_INIT_REASONS, "Autoprobe IRQ failed first time\n");
+			airqmask = probe_irq_on();
+			outb(NORXflag, _INTMASK);
+			udelay(5);
+			outb(0, _INTMASK);
+			dev->irq = probe_irq_off(airqmask);
+			if (dev->irq <= 0) {
+				BUGMSG(D_NORMAL, "Autoprobe IRQ failed.\n");
+				return -ENODEV;
+			}
+		}
+	}
+	return com20020_found(dev, 0);
 }
 
 
@@ -141,45 +131,45 @@ MODULE_PARM(clock, "i");
 
 static void com20020isa_open_close(struct net_device *dev, bool open)
 {
-    if (open)
-	MOD_INC_USE_COUNT;
-    else
-	MOD_DEC_USE_COUNT;
+	if (open)
+		MOD_INC_USE_COUNT;
+	else
+		MOD_DEC_USE_COUNT;
 }
 
 int init_module(void)
 {
-    struct net_device *dev;
-    struct arcnet_local *lp;
-    int err;
-    
-    dev = dev_alloc(device ? : "arc%d", &err);
-    if (!dev)
-	return err;
-    lp = dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
-    if (!lp)
-	return -ENOMEM;
-    memset(lp, 0, sizeof(struct arcnet_local));
+	struct net_device *dev;
+	struct arcnet_local *lp;
+	int err;
 
-    if (node && node != 0xff)
-	dev->dev_addr[0] = node;
+	dev = dev_alloc(device ? : "arc%d", &err);
+	if (!dev)
+		return err;
+	lp = dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
+	if (!lp)
+		return -ENOMEM;
+	memset(lp, 0, sizeof(struct arcnet_local));
 
-    lp->backplane = backplane;
-    lp->clock = clock & 7;
-    lp->timeout = timeout & 3;
-    lp->hw.open_close_ll = com20020isa_open_close;
+	if (node && node != 0xff)
+		dev->dev_addr[0] = node;
 
-    dev->base_addr = io;
-    dev->irq = irq;
+	lp->backplane = backplane;
+	lp->clock = clock & 7;
+	lp->timeout = timeout & 3;
+	lp->hw.open_close_ll = com20020isa_open_close;
 
-    if (dev->irq == 2)
-	dev->irq = 9;
-    
-    if (com20020isa_probe(dev))
-	return -EIO;
+	dev->base_addr = io;
+	dev->irq = irq;
 
-    my_dev = dev;
-    return 0;
+	if (dev->irq == 2)
+		dev->irq = 9;
+
+	if (com20020isa_probe(dev))
+		return -EIO;
+
+	my_dev = dev;
+	return 0;
 }
 
 void cleanup_module(void)
@@ -209,24 +199,24 @@ static int __init com20020isa_setup(char *s)
 		return 1;
 	dev = alloc_bootmem(sizeof(struct net_device) + sizeof(struct arcnet_local) + 10);
 	memset(dev, 0, sizeof(struct net_device) + sizeof(struct arcnet_local) + 10);
-	lp = dev->priv = (struct arcnet_local *)(dev+1);
-	dev->name = (char *)(lp+1);
+	lp = dev->priv = (struct arcnet_local *) (dev + 1);
+	dev->name = (char *) (lp + 1);
 	dev->init = com20020isa_probe;
 
 	switch (ints[0]) {
 	default:		/* ERROR */
 		printk("com90xx: Too many arguments.\n");
-	case 6:			/* Timeout */
+	case 6:		/* Timeout */
 		lp->timeout = ints[6];
-	case 5:			/* CKP value */
+	case 5:		/* CKP value */
 		lp->clock = ints[5];
-	case 4:			/* Backplane flag */
+	case 4:		/* Backplane flag */
 		lp->backplane = ints[4];
-	case 3:			/* Node ID */
+	case 3:		/* Node ID */
 		dev->dev_addr[0] = ints[3];
-	case 2:			/* IRQ */
+	case 2:		/* IRQ */
 		dev->irq = ints[2];
-	case 1:			/* IO address */
+	case 1:		/* IO address */
 		dev->base_addr = ints[1];
 	}
 	if (*s)

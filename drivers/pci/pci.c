@@ -672,7 +672,7 @@ struct pci_dev * __init pci_scan_slot(struct pci_dev *temp)
 			first_dev = dev;
 		}
 
-		DBG("PCI: %02x:%02x [%04x/%04x] %06x %02x\n", bus->number, dev->devfn, dev->vendor, dev->device, class, hdr_type);
+		DBG("PCI: %02x:%02x [%04x/%04x] %06x %02x\n", bus->number, dev->devfn, dev->vendor, dev->device, dev->class, hdr_type);
 
 		/*
 		 * Put it into the global PCI device chain. It's used to

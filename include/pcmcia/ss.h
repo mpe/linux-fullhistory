@@ -52,8 +52,7 @@ typedef struct socket_cap_t {
     u_int	irq_mask;
     u_int	map_size;
     u_char	pci_irq;
-    u_char	cardbus;
-    struct pci_bus *cb_bus;
+    struct pci_dev *cb_dev;
     struct bus_operations *bus;
 } socket_cap_t;
 

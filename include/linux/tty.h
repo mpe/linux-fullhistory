@@ -117,6 +117,9 @@ extern struct screen_info screen_info;
 
 #define VIDEO_TYPE_PMAC		0x60	/* PowerMacintosh frame buffer. */
 
+#define VIDEO_TYPE_SGI          0x70    /* Various SGI graphics hardware */
+#define VIDEO_TYPE_MIPS_G364	0x71    /* MIPS Magnum 4000 G364 video  */
+
 /*
  * This character is the same as _POSIX_VDISABLE: it cannot be used as
  * a c_cc[] character, but indicates that a particular special character

@@ -4,35 +4,6 @@
 #include <asm/io.h>
 #include "pci_socket.h"
 
-/*
- * Generate easy-to-use ways of reading a cardbus sockets
- * regular memory space ("cb_xxx"), configuration space
- * ("config_xxx") and compatibility space ("exca_xxxx")
- */
-
-#define cb_readb(sock,reg)		readb((sock)->base + (reg))
-#define cb_readw(sock,reg)		readw((sock)->base + (reg))
-#define cb_readl(sock,reg)		readl((sock)->base + (reg))
-#define cb_writeb(sock,reg,val)		writeb((val), (sock)->base + (reg))
-#define cb_writew(sock,reg,val)		writew((val), (sock)->base + (reg))
-#define cb_writel(sock,reg,val)		writel((val), (sock)->base + (reg))
-
-#define config_readb(sock,offset)	({ __u8 __val; pci_read_config_byte((sock)->dev, (offset), &__val); __val; })
-#define config_readw(sock,offset)	({ __u16 __val; pci_read_config_word((sock)->dev, (offset), &__val); __val; })
-#define config_readl(sock,offset)	({ __u32 __val; pci_read_config_dword((sock)->dev, (offset), &__val); __val; })
-
-#define config_writeb(sock,offset,val)	pci_write_config_byte((sock)->dev, (offset), (val))
-#define config_writew(sock,offset,val)	pci_write_config_word((sock)->dev, (offset), (val))
-#define config_writel(sock,offset,val)	pci_write_config_dword((sock)->dev, (offset), (val))
-
-#define exca_readb(sock,reg)		cb_readb((sock),(reg)+0x0800)
-#define exca_readw(sock,reg)		cb_readw((sock),(reg)+0x0800)
-#define exca_readl(sock,reg)		cb_readl((sock),(reg)+0x0800)
-
-#define exca_writeb(sock,reg,val)	cb_writeb((sock),(reg)+0x0800,(val))
-#define exca_writew(sock,reg,val)	cb_writew((sock),(reg)+0x0800,(val))
-#define exca_writel(sock,reg,val)	cb_writel((sock),(reg)+0x0800,(val))
-
 #define CB_SOCKET_EVENT		0x00
 #define    CB_CSTSEVENT		0x00000001	/* Card status event */
 #define    CB_CD1EVENT		0x00000002	/* Card detect 1 change event */
@@ -81,17 +52,20 @@
 #define    CB_CVSTEST		0x00004000	/* Card VS test */
 
 #define CB_SOCKET_CONTROL	0x10
-#define    CB_VPPCTRL		0		/* Shift for Vpp */
-#define    CB_VCCCTRL		4		/* Shift for Vcc */
-#define    CB_STOPCLK		0x00000080	/* CLKRUN can slow CB clock when idle */
-
-#define    CB_PWRBITS		0x7
-#define    CB_PWROFF		0x0
-#define    CB_PWR12V		0x1	/* Only valid for Vpp */
-#define    CB_PWR5V		0x2
-#define    CB_PWR3V		0x3
-#define    CB_PWRXV		0x4
-#define    CB_PWRYV		0x5
+#define  CB_SC_VPP_MASK		0x00000007
+#define   CB_SC_VPP_OFF		0x00000000
+#define   CB_SC_VPP_12V		0x00000001
+#define   CB_SC_VPP_5V		0x00000002
+#define   CB_SC_VPP_3V		0x00000003
+#define   CB_SC_VPP_XV		0x00000004
+#define   CB_SC_VPP_YV		0x00000005
+#define  CB_SC_VCC_MASK		0x00000070
+#define   CB_SC_VCC_OFF		0x00000000
+#define   CB_SC_VCC_5V		0x00000020
+#define   CB_SC_VCC_3V		0x00000030
+#define   CB_SC_VCC_XV		0x00000040
+#define   CB_SC_VCC_YV		0x00000050
+#define  CB_SC_CCLK_STOP	0x00000080
 
 #define CB_SOCKET_POWER		0x20
 #define    CB_SKTACCES		0x02000000	/* A PC card access has occurred (clear on read) */
@@ -115,6 +89,7 @@
 #define   CB_BRIDGE_PREFETCH0	0x00000100
 #define   CB_BRIDGE_PREFETCH1	0x00000200
 #define   CB_BRIDGE_POSTEN	0x00000400
+#define CB_LEGACY_MODE_BASE	0x44
 
 /*
  * ExCA area extensions in Yenta
