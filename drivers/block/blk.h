@@ -287,7 +287,8 @@ static void end_request(int uptodate)
 	if ((bh = req->bh) != NULL) {
 		req->bh = bh->b_reqnext;
 		bh->b_reqnext = NULL;
-		bh->b_uptodate = uptodate;
+		bh->b_uptodate = uptodate;		
+		if (!uptodate) bh->b_req = 0; /* So no "Weird" errors */
 		unlock_buffer(bh);
 		if ((bh = req->bh) != NULL) {
 			req->current_nr_sectors = bh->b_size >> 9;

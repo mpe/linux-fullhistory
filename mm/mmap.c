@@ -154,13 +154,15 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	else
 		error = anon_map(NULL, NULL, vma);
 	
-	if (!error)
-		return addr;
-
-	kfree(vma);
-	if (!current->errno)
-		current->errno = -error;
-	return -1;
+	if (error) {
+		kfree(vma);
+		if (!current->errno)
+			current->errno = -error;
+		return -1;
+	}
+	insert_vm_struct(current, vma);
+	merge_segments(current->mm->mmap);
+	return addr;
 }
 
 asmlinkage int sys_mmap(unsigned long *buffer)
@@ -336,7 +338,6 @@ int do_munmap(unsigned long addr, size_t len)
 int generic_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
 	extern struct vm_operations_struct file_mmap;
-	struct buffer_head * bh;
 
 	if (vma->vm_page_prot & PAGE_RW)	/* only PAGE_COW or read-only supported right now */
 		return -EINVAL;
@@ -346,54 +347,33 @@ int generic_mmap(struct inode * inode, struct file * file, struct vm_area_struct
 		return -EACCES;
 	if (!inode->i_op || !inode->i_op->bmap)
 		return -ENOEXEC;
-	if (!(bh = bread(inode->i_dev,bmap(inode,0),inode->i_sb->s_blocksize)))
-		return -EACCES;
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}
-	brelse(bh);
-
-	unmap_page_range(vma->vm_start, vma->vm_end - vma->vm_start);
 	vma->vm_inode = inode;
 	inode->i_count++;
 	vma->vm_ops = &file_mmap;
-	insert_vm_struct(current, vma);
-	merge_segments(current->mm->mmap);
-	
 	return 0;
 }
 
 /*
- * Insert vm structure into process list
- * This makes sure the list is sorted by start address, and
- * some some simple overlap checking.
- * JSGF
+ * Insert vm structure into process list sorted by address.
  */
 void insert_vm_struct(struct task_struct *t, struct vm_area_struct *vmp)
 {
-	struct vm_area_struct **nxtpp, *mpnt;
+	struct vm_area_struct **p, *mpnt;
 
-	nxtpp = &t->mm->mmap;
-	
-	for(mpnt = t->mm->mmap; mpnt != NULL; mpnt = mpnt->vm_next)
-	{
+	p = &t->mm->mmap;
+	while ((mpnt = *p) != NULL) {
 		if (mpnt->vm_start > vmp->vm_start)
 			break;
-		nxtpp = &mpnt->vm_next;
-
-		if ((vmp->vm_start >= mpnt->vm_start &&
-		     vmp->vm_start < mpnt->vm_end) ||
-		    (vmp->vm_end >= mpnt->vm_start &&
-		     vmp->vm_end < mpnt->vm_end))
-			printk("insert_vm_struct: ins area %lx-%lx in area %lx-%lx\n",
-			       vmp->vm_start, vmp->vm_end,
-			       mpnt->vm_start, vmp->vm_end);
+		if (mpnt->vm_end > vmp->vm_start)
+			printk("insert_vm_struct: overlapping memory areas\n");
+		p = &mpnt->vm_next;
 	}
-	
 	vmp->vm_next = mpnt;
-
-	*nxtpp = vmp;
+	*p = vmp;
 }
 
 /*
@@ -456,8 +436,5 @@ static int anon_map(struct inode *ino, struct file * file, struct vm_area_struct
 {
 	if (zeromap_page_range(vma->vm_start, vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -ENOMEM;
-
-	insert_vm_struct(current, vma);
-	merge_segments(current->mm->mmap);
 	return 0;
 }

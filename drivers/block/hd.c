@@ -16,6 +16,9 @@
  *  in the early extended-partition checks and added DM partitions
  *
  *  IDE IRQ-unmask & drive-id & multiple-mode code added by Mark Lord.
+ *
+ *  Support for E-IDE BIOS drive geometry translation added by Mark Lord.
+ *   -- hd.c no longer chokes on E-IDE drives with "more than 16 heads".
  */
 
 #define DEFAULT_MULT_COUNT  0	/* set to 0 to disable multiple mode at boot */
@@ -80,10 +83,12 @@ struct hd_i_struct {
 	unsigned int head,sect,cyl,wpcom,lzone,ctl;
 	};
 #ifdef HD_TYPE
-struct hd_i_struct hd_info[] = { HD_TYPE };
+static struct hd_i_struct hd_info[] = { HD_TYPE };
+struct hd_i_struct bios_info[] = { HD_TYPE };
 static int NR_HD = ((sizeof (hd_info))/(sizeof (struct hd_i_struct)));
 #else
-struct hd_i_struct hd_info[] = { {0,0,0,0,0,0},{0,0,0,0,0,0} };
+static struct hd_i_struct hd_info[] = { {0,0,0,0,0,0},{0,0,0,0,0,0} };
+struct hd_i_struct bios_info[] = { {0,0,0,0,0,0},{0,0,0,0,0,0} };
 static int NR_HD = 0;
 #endif
 
@@ -113,14 +118,14 @@ void hd_setup(char *str, int *ints)
 
 	if (ints[0] != 3)
 		return;
-	if (hd_info[0].head != 0)
+	if (bios_info[0].head != 0)
 		hdind=1;
-	hd_info[hdind].head = ints[2];
-	hd_info[hdind].sect = ints[3];
-	hd_info[hdind].cyl = ints[1];
-	hd_info[hdind].wpcom = 0;
-	hd_info[hdind].lzone = ints[1];
-	hd_info[hdind].ctl = (ints[2] > 8 ? 8 : 0);
+	bios_info[hdind].head  = hd_info[hdind].head = ints[2];
+	bios_info[hdind].sect  = hd_info[hdind].sect = ints[3];
+	bios_info[hdind].cyl   = hd_info[hdind].cyl = ints[1];
+	bios_info[hdind].wpcom = hd_info[hdind].wpcom = 0;
+	bios_info[hdind].lzone = hd_info[hdind].lzone = ints[1];
+	bios_info[hdind].ctl   = hd_info[hdind].ctl = (ints[2] > 8 ? 8 : 0);
 	NR_HD = hdind+1;
 }
 
@@ -270,7 +275,7 @@ static void dump_identity (unsigned int dev, unsigned short ib[])
 	printk ("\n Config={");
 	for (i=0; i<=15; i++) if (ib[0] & (1<<i)) printk (cfg_str[i]);
 	printk (" }\n");
-	printk (" Default c/h/s=%d/%d/%d, TrkSize=%d, SectSize=%d, ECCbytes=%d\n",
+	printk (" Default CHS=%d/%d/%d, TrkSize=%d, SectSize=%d, ECCbytes=%d\n",
 		ib[1],ib[3],ib[6],ib[4],ib[5], ib[22]);
 	dmpstr (" BuffType=",ib[20],BuffType,3);
 	ib[47] &= 0xFF;
@@ -280,7 +285,7 @@ static void dump_identity (unsigned int dev, unsigned short ib[])
 	dmpstr (", tPIO=",ib[51]>>8,SlowMedFast,2);
 	if (ib[49]&0x100 && (ib[53]&1))
 		dmpstr (", tDMA=",ib[52]>>8,SlowMedFast,2);
-	printk ("\n (%s): Current c/h/s=%d/%d/%d, TotSect=%d",
+	printk ("\n (%s): Current CHS=%d/%d/%d, TotSect=%d",
 		(((ib[53]&1)==0)?"maybe":"valid"),
 		ib[54],ib[55],ib[56],*(int *)&ib[57]);
 	if (ib[49]&0x200)
@@ -309,8 +314,21 @@ static void identify_intr(void)
 		printk ("  hd%c: ", dev+'a');
 		rawstring(NULL, (char *)&ib[27], 40);
 		max_mult[dev] = ib[47] & 0xff;
-		printk (" (%dMB IDE w/%dKB Cache, MaxMult=%d)\n",
-			ib[1]*ib[3]*ib[6] / 2048, ib[21]>>1, max_mult[dev]);
+		if (ib[53]&1 && ib[54] && ib[55] && ib[56]) {
+			/*
+			 * Extract the physical drive geometry for our use.
+			 * Note that we purposely do *not* update the bios_info.
+			 * This way, programs that use it (like fdisk) will 
+			 * still have the same logical view as the BIOS does,
+			 * which keeps the partition table from being screwed.
+			 */
+			hd_info[dev].cyl  = ib[54];
+			hd_info[dev].head = ib[55];
+			hd_info[dev].sect = ib[56];
+		}
+		printk (" (%dMB IDE w/%dKB Cache, MaxMult=%d, CHS=%d/%d/%d)\n",
+			ib[1]*ib[3]*ib[6] / 2048, ib[21]>>1, max_mult[dev],
+			hd_info[dev].cyl, hd_info[dev].head, hd_info[dev].sect);
 		insw(HD_DATA,(char *)ib,64); /* flush remaining 384 ID bytes */
 		insw(HD_DATA,(char *)ib,64);
 		insw(HD_DATA,(char *)ib,64);
@@ -449,10 +467,11 @@ static inline int wait_DRQ(void)
 static void read_intr(void)
 {
 	unsigned int dev = DEVICE_NR(CURRENT->dev);
-	int i, retries = 100000, msect, nsect;
+	int i, retries = 100000, msect = mult_count[dev], nsect;
 
 	if (unmask_intr[dev])
 		sti();			/* permit other IRQs during xfer */
+read_next:
 	do {
 		i = (unsigned) inb_p(HD_STATUS);
 		if (i & BUSY_STAT)
@@ -473,8 +492,6 @@ static void read_intr(void)
 	hd_request();
 	return;
 ok_to_read:
-	msect = mult_count[dev];
-read_next:
 	if (msect) {
 		if ((nsect = CURRENT->current_nr_sectors) > msect)
 			nsect = msect;
@@ -717,6 +734,11 @@ repeat:
 			goto repeat;
 		return;
 	}
+	if (hd_info[dev].head > 16) {
+		printk ("hd%c: cannot handle device with more than 16 heads - giving up\n", dev+'a');
+		end_request(0);
+		goto repeat;
+	}
 	if (CURRENT->cmd == READ) {
 		unsigned int cmd = mult_count[dev] > 1 ? WIN_MULTREAD : WIN_READ;
 		hd_out(dev,nsect,sec,head,cyl,cmd,&read_intr);
@@ -781,11 +803,11 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			err = verify_area(VERIFY_WRITE, loc, sizeof(*loc));
 			if (err)
 				return err;
-			put_fs_byte(hd_info[dev].head,
+			put_fs_byte(bios_info[dev].head,
 				(char *) &loc->heads);
-			put_fs_byte(hd_info[dev].sect,
+			put_fs_byte(bios_info[dev].sect,
 				(char *) &loc->sectors);
-			put_fs_word(hd_info[dev].cyl,
+			put_fs_word(bios_info[dev].cyl,
 				(short *) &loc->cylinders);
 			put_fs_long(hd[MINOR(inode->i_rdev)].start_sect,
 				(long *) &loc->start);
@@ -815,6 +837,8 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			return revalidate_hddisk(inode->i_rdev, 1);
 
 		case HDIO_SETUNMASKINTR:
+			if (!suser()) return -EACCES;
+			if (MINOR(inode->i_rdev) & 0x3F) return -EINVAL;
 			if (!arg)  return -EINVAL;
 			err = verify_area(VERIFY_READ, (long *) arg, sizeof(long));
 			if (err)
@@ -841,7 +865,9 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 		case HDIO_SETMULTCOUNT:
 		{
 			unsigned long flags;
+			if (!suser()) return -EACCES;
 			if (!arg)  return -EINVAL;
+			if (MINOR(inode->i_rdev) & 0x3F) return -EINVAL;
 			err = verify_area(VERIFY_READ, (long *) arg, sizeof(long));
 			if (err)
 				return err;
@@ -903,7 +929,7 @@ static struct gendisk hd_gendisk = {
 	hd,		/* hd struct */
 	hd_sizes,	/* block sizes */
 	0,		/* number */
-	(void *) hd_info,	/* internal */
+	(void *) bios_info,	/* internal */
 	NULL		/* next */
 };
 	
@@ -944,12 +970,12 @@ static void hd_geninit(void)
 
 	if (!NR_HD) {	   
 		for (drive=0 ; drive<2 ; drive++) {
-			hd_info[drive].cyl = *(unsigned short *) BIOS;
-			hd_info[drive].head = *(2+BIOS);
-			hd_info[drive].wpcom = *(unsigned short *) (5+BIOS);
-			hd_info[drive].ctl = *(8+BIOS);
-			hd_info[drive].lzone = *(unsigned short *) (12+BIOS);
-			hd_info[drive].sect = *(14+BIOS);
+			bios_info[drive].cyl   = hd_info[drive].cyl = *(unsigned short *) BIOS;
+			bios_info[drive].head  = hd_info[drive].head = *(2+BIOS);
+			bios_info[drive].wpcom = hd_info[drive].wpcom = *(unsigned short *) (5+BIOS);
+			bios_info[drive].ctl   = hd_info[drive].ctl = *(8+BIOS);
+			bios_info[drive].lzone = hd_info[drive].lzone = *(unsigned short *) (12+BIOS);
+			bios_info[drive].sect  = hd_info[drive].sect = *(14+BIOS);
 #ifdef does_not_work_for_everybody_with_scsi_but_helps_ibm_vp
 			if (hd_info[drive].cyl && NR_HD == drive)
 				NR_HD++;
@@ -988,19 +1014,23 @@ static void hd_geninit(void)
 	i = NR_HD;
 	while (i-- > 0) {
 		hd[i<<6].nr_sects = 0;
-		if (hd_info[i].head > 16) {
-			printk("hd.c: ST-506 interface disk with more than 16 heads detected,\n");
-			printk("  probably due to non-standard sector translation. Giving up.\n");
-			printk("  (disk %d: cyl=%d, sect=%d, head=%d)\n", i,
-				hd_info[i].cyl,
-				hd_info[i].sect,
-				hd_info[i].head);
-			if (i+1 == NR_HD)
-				NR_HD--;
-			continue;
+		if (bios_info[i].head > 16) {
+			/*
+			 * The newer E-IDE BIOSs handle drives larger than 1024
+			 * cylinders by increasing the number of logical heads
+			 * to keep the number of logical cylinders below the
+			 * sacred INT13 limit of 1024 (10 bits).  If that is
+			 * what's happening here, we'll find out and correct
+			 * it later when "identifying" the drive.
+			 */
+			printk("hd.c: IDE/ST-506 disk with more than 16 heads detected.\n");
+			printk("  (hd%c: cyl=%d, sect=%d, head=%d)\n", i+'a',
+				bios_info[i].cyl,
+				bios_info[i].sect,
+				bios_info[i].head);
 		}
-		hd[i<<6].nr_sects = hd_info[i].head*
-				hd_info[i].sect*hd_info[i].cyl;
+		hd[i<<6].nr_sects = bios_info[i].head *
+				bios_info[i].sect * bios_info[i].cyl;
 	}
 	if (NR_HD) {
 		if (irqaction(HD_IRQ,&hd_sigaction)) {
@@ -1043,7 +1073,7 @@ unsigned long hd_init(unsigned long mem_start, unsigned long mem_end)
 
 #define DEVICE_BUSY busy[target]
 #define USAGE access_count[target]
-#define CAPACITY (hd_info[target].head*hd_info[target].sect*hd_info[target].cyl)
+#define CAPACITY (bios_info[target].head*bios_info[target].sect*bios_info[target].cyl)
 /* We assume that the the bios parameters do not change, so the disk capacity
    will not change */
 #undef MAYBE_REINIT

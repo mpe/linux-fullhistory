@@ -25,11 +25,11 @@
 
 /* #define INITIALIZE_DEVICE */
 
-#include <linux/timer.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/fcntl.h>
 #include <linux/errno.h>
+#include <linux/timer.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>

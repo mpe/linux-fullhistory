@@ -254,6 +254,7 @@ struct Scsi_Host
 	};
 
 extern struct Scsi_Host * scsi_hostlist;
+extern struct Scsi_Device_Template * scsi_devicelist;
 
 extern Scsi_Host_Template * scsi_hosts;
 
@@ -278,3 +279,28 @@ extern void scsi_unregister(struct Scsi_Host * i);
 
 #define BLANK_HOST {"", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #endif
+
+struct Scsi_Device_Template
+{
+  struct Scsi_Device_Template * next;
+  char * name;
+  char * tag;
+  unsigned char scsi_type;
+  unsigned char major;
+  unsigned char nr_dev;  /* Number currently attached */
+  unsigned char dev_noticed; /* Number of devices detected. */
+  unsigned char dev_max; /* Current size of arrays */
+  unsigned blk:1;  /* 0 if character device */
+  int (*detect)(Scsi_Device *); /* Returns 1 if we can attach this device */
+  void (*init)(void);  /* Sizes arrays based upon number of devices detected */
+  void (*finish)(void);  /* Perform initialization after attachment */
+  void (*attach)(Scsi_Device *); /* Attach devices to arrays */
+  void (*detach)(Scsi_Device *);
+};
+
+extern struct Scsi_Device_Template sd_template;
+extern struct Scsi_Device_Template st_template;
+extern struct Scsi_Device_Template sr_template;
+extern struct Scsi_Device_Template sg_template;
+
+int scsi_register_device(struct Scsi_Device_Template * sdpnt);

@@ -77,10 +77,8 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(verify_area),
 	X(do_mmap),
 	X(do_munmap),
-	X(insert_vm_struct),
 	X(zeromap_page_range),
 	X(unmap_page_range),
-	X(merge_segments),
 
 	/* internal kernel memory management */
 	X(__get_free_pages),

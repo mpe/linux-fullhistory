@@ -538,6 +538,7 @@ void ext2_read_inode (struct inode * inode)
 	inode->u.ext2_i.i_dtime = raw_inode->i_dtime;
 	inode->i_blksize = inode->i_sb->s_blocksize;
 	inode->i_blocks = raw_inode->i_blocks;
+	inode->i_version = ++event;
 	inode->u.ext2_i.i_flags = raw_inode->i_flags;
 	inode->u.ext2_i.i_faddr = raw_inode->i_faddr;
 	inode->u.ext2_i.i_frag = raw_inode->i_frag;

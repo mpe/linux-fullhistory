@@ -414,6 +414,7 @@ extern int sysv_bmap(struct inode *,int);
 
 extern struct buffer_head * sysv_getblk(struct inode *, unsigned int, int, char* *);
 extern struct buffer_head * sysv_file_bread(struct inode *, int, int, char* *);
+extern int sysv_file_read(struct inode *, struct file *, char *, int);
 
 extern void sysv_truncate(struct inode *);
 extern void sysv_put_super(struct super_block *);
@@ -426,9 +427,7 @@ extern void sysv_put_inode(struct inode *);
 extern void sysv_statfs(struct super_block *, struct statfs *);
 extern int sysv_sync_inode(struct inode *);
 extern int sysv_sync_file(struct inode *, struct file *);
-#if 0
 extern int sysv_mmap(struct inode *, struct file *, unsigned long, size_t, int, unsigned long);
-#endif
 
 extern struct inode_operations sysv_file_inode_operations;
 extern struct inode_operations sysv_file_inode_operations_with_bmap;

@@ -55,9 +55,6 @@
  * $Log: generic_NCR5380.c,v $
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_SCSI_GENERIC_NCR5380)
-/* Standard option */
 #define AUTOPROBE_IRQ
 
 #include <asm/system.h>
@@ -175,5 +172,3 @@ const char * generic_NCR5380_info (void) {
 }
 
 #include "NCR5380.c"
-
-#endif /* defined(CONFIG_SCSI_GENERIC_NCR5380) */

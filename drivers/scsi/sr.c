@@ -29,11 +29,19 @@
 #include "scsi_ioctl.h"   /* For the door lock/unlock commands */
 #include "constants.h"
 
-#define MAX_RETRIES 1
-#define SR_TIMEOUT 500
+#define MAX_RETRIES 3
+#define SR_TIMEOUT 5000
 
-int NR_SR=0;
-int MAX_SR=0;
+static void sr_init(void);
+static void sr_finish(void);
+static void sr_attach(Scsi_Device *);
+static int sr_detect(Scsi_Device *);
+
+struct Scsi_Device_Template sr_template = {NULL, "cdrom", "sr", TYPE_ROM, 
+					     SCSI_CDROM_MAJOR, 0, 0, 0, 1,
+					     sr_detect, sr_init,
+					     sr_finish, sr_attach, NULL};
+
 Scsi_CD * scsi_CDs;
 static int * sr_sizes;
 
@@ -88,7 +96,7 @@ int check_cdrom_media_change(dev_t full_dev){
 
 	target =  MINOR(full_dev);
 
-	if (target >= NR_SR) {
+	if (target >= sr_template.nr_dev) {
 		printk("CD-ROM request error: invalid device.\n");
 		return 0;
 	};
@@ -265,7 +273,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 
 static int sr_open(struct inode * inode, struct file * filp)
 {
-	if(MINOR(inode->i_rdev) >= NR_SR || 
+	if(MINOR(inode->i_rdev) >= sr_template.nr_dev || 
 	   !scsi_CDs[MINOR(inode->i_rdev)].device) return -ENXIO;   /* No such device */
 
 	if (filp->f_mode & 2)  
@@ -305,7 +313,7 @@ static void do_sr_request (void)
       sti();
       return;
     };
-
+    
     INIT_SCSI_REQUEST;
 
     if (flag++ == 0)
@@ -321,7 +329,7 @@ static void do_sr_request (void)
    to have the interrupts off when monkeying with the request list, because
    otherwise the kernel might try and slip in a request inbetween somewhere. */
 
-    if (!SCpnt && NR_SR > 1){
+    if (!SCpnt && sr_template.nr_dev > 1){
       struct request *req1;
       req1 = NULL;
       cli();
@@ -371,7 +379,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	buffer = NULL;
 	this_count = 0;
 
-	if (dev >= NR_SR)
+	if (dev >= sr_template.nr_dev)
 		{
 		/* printk("CD-ROM request error: invalid device.\n");			*/
 		end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
@@ -596,45 +604,73 @@ are any multiple of 512 bytes long.  */
 		}
 	else
 		{
-		if (realcount > 0xff)
-		        {
-			realcount = 0xff;
-			this_count = realcount * (scsi_CDs[dev].sector_size >> 9);
-		        }
-	
-		cmd[1] |= (unsigned char) ((block >> 16) & 0x1f);
-		cmd[2] = (unsigned char) ((block >> 8) & 0xff);
-		cmd[3] = (unsigned char) block & 0xff;
-		cmd[4] = (unsigned char) realcount;
-		cmd[5] = 0;
+		  if (realcount > 0xff)
+		    {
+		      realcount = 0xff;
+		      this_count = realcount * (scsi_CDs[dev].sector_size >> 9);
+		    }
+		  
+		  cmd[1] |= (unsigned char) ((block >> 16) & 0x1f);
+		  cmd[2] = (unsigned char) ((block >> 8) & 0xff);
+		  cmd[3] = (unsigned char) block & 0xff;
+		  cmd[4] = (unsigned char) realcount;
+		  cmd[5] = 0;
 		}   
 
 #ifdef DEBUG
-{ 
-	int i;
-	printk("ReadCD: %d %d %d %d\n",block, realcount, buffer, this_count);
-	printk("Use sg: %d\n", SCpnt->use_sg);
-	printk("Dumping command: ");
-	for(i=0; i<12; i++) printk("%2.2x ", cmd[i]);
-	printk("\n");
-};
+	{ 
+	  int i;
+	  printk("ReadCD: %d %d %d %d\n",block, realcount, buffer, this_count);
+	  printk("Use sg: %d\n", SCpnt->use_sg);
+	  printk("Dumping command: ");
+	  for(i=0; i<12; i++) printk("%2.2x ", cmd[i]);
+	  printk("\n");
+	};
 #endif
-
+	
 	SCpnt->this_count = this_count;
 	scsi_do_cmd (SCpnt, (void *) cmd, buffer, 
 		     realcount * scsi_CDs[dev].sector_size, 
 		     rw_intr, SR_TIMEOUT, MAX_RETRIES);
 }
 
-void sr_init1(){
-  scsi_CDs = (Scsi_CD *) scsi_init_malloc(MAX_SR * sizeof(Scsi_CD));
-};
+static int sr_detect(Scsi_Device * SDp){
+  
+  /* We do not support attaching loadable devices yet. */
+  if(scsi_loadable_module_flag) return 0;
+  if(SDp->type != TYPE_ROM && SDp->type != TYPE_WORM) return 0;
 
-void sr_attach(Scsi_Device * SDp){
+  printk("Detected scsi CD-ROM sr%d at scsi%d, id %d, lun %d\n", 
+	 ++sr_template.dev_noticed,
+	 SDp->host->host_no , SDp->id, SDp->lun); 
+
+	 return 1;
+}
+
+static void sr_attach(Scsi_Device * SDp){
+  Scsi_CD * cpnt;
+  int i;
+  
+  /* We do not support attaching loadable devices yet. */
+  
+  if(scsi_loadable_module_flag) return;
+  if(SDp->type != TYPE_ROM && SDp->type != TYPE_WORM) return;
+  
+  if (sr_template.nr_dev >= sr_template.dev_max)
+    panic ("scsi_devices corrupt (sr)");
+  
+  for(cpnt = scsi_CDs, i=0; i<sr_template.dev_max; i++, cpnt++) 
+    if(!cpnt->device) break;
+  
+  if(i >= sr_template.dev_max) panic ("scsi_devices corrupt (sr)");
+  
   SDp->scsi_request_fn = do_sr_request;
-  scsi_CDs[NR_SR++].device = SDp;
-  if(NR_SR > MAX_SR) panic ("scsi_devices corrupt (sr)");
-};
+  scsi_CDs[i].device = SDp;
+  sr_template.nr_dev++;
+  if(sr_template.nr_dev > sr_template.dev_max)
+    panic ("scsi_devices corrupt (sr)");
+}
+     
 
 static void sr_init_done (Scsi_Cmnd * SCpnt)
 {
@@ -713,26 +749,41 @@ static void get_sectorsize(int i){
   };
 }
 
-unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
+static void sr_init()
 {
 	int i;
+	static int sr_registered = 0;
 
-	if (register_blkdev(MAJOR_NR,"sr",&sr_fops)) {
-		printk("Unable to get major %d for SCSI-CD\n",MAJOR_NR);
-		return memory_start;
+	if(sr_template.dev_noticed == 0) return;
+
+	if(!sr_registered) {
+	  if (register_blkdev(MAJOR_NR,"sr",&sr_fops)) {
+	    printk("Unable to get major %d for SCSI-CD\n",MAJOR_NR);
+	    return;
+	  }
 	}
-	if(MAX_SR == 0) return memory_start;
 
-	sr_sizes = (int *) memory_start;
-	memory_start += MAX_SR * sizeof(int);
-	memset(sr_sizes, 0, MAX_SR * sizeof(int));
+	/* We do not support attaching loadable devices yet. */
+	if(scsi_loadable_module_flag) return;
 
-	sr_blocksizes = (int *) memory_start;
-	memory_start += MAX_SR * sizeof(int);
-	for(i=0;i<MAX_SR;i++) sr_blocksizes[i] = 2048;
+	sr_template.dev_max = sr_template.dev_noticed;
+	scsi_CDs = (Scsi_CD *) scsi_init_malloc(sr_template.dev_max * sizeof(Scsi_CD));
+
+	sr_sizes = (int *) scsi_init_malloc(sr_template.dev_max * sizeof(int));
+	memset(sr_sizes, 0, sr_template.dev_max * sizeof(int));
+
+	sr_blocksizes = (int *) scsi_init_malloc(sr_template.dev_max * 
+						 sizeof(int));
+	for(i=0;i<sr_template.dev_max;i++) sr_blocksizes[i] = 2048;
 	blksize_size[MAJOR_NR] = sr_blocksizes;
 
-	for (i = 0; i < NR_SR; ++i)
+}
+
+void sr_finish()
+{
+  int i;
+
+	for (i = 0; i < sr_template.nr_dev; ++i)
 		{
 		  get_sectorsize(i);
 		  printk("Scd sectorsize = %d bytes\n", scsi_CDs[i].sector_size);
@@ -753,5 +804,5 @@ unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
 	else
 	  read_ahead[MAJOR_NR] = 4;  /* 4 sector read-ahead */
 
-	return memory_start;
+	return;
 }	

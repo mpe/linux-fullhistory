@@ -46,8 +46,6 @@ static const char RCSid[] = "$Header:";
 
 struct hd_struct * sd;
 
-int NR_SD=0;
-int MAX_SD=0;
 Scsi_Disk * rscsi_disks;
 static int * sd_sizes;
 static int * sd_blocksizes;
@@ -61,12 +59,22 @@ static sd_init_onedisk(int);
 
 static void requeue_sd_request (Scsi_Cmnd * SCpnt);
 
+static void sd_init(void);
+static void sd_finish(void);
+static void sd_attach(Scsi_Device *);
+static int sd_detect(Scsi_Device *);
+
+struct Scsi_Device_Template sd_template = {NULL, "disk", "sd", TYPE_DISK, 
+					     SCSI_DISK_MAJOR, 0, 0, 0, 1,
+					     sd_detect, sd_init,
+					     sd_finish, sd_attach, NULL};
+
 static int sd_open(struct inode * inode, struct file * filp)
 {
         int target;
 	target =  DEVICE_NR(MINOR(inode->i_rdev));
 
-	if(target >= NR_SD || !rscsi_disks[target].device)
+	if(target >= sd_template.dev_max || !rscsi_disks[target].device)
 	  return -ENXIO;   /* No such device */
 	
 /* Make sure that only one process can do a check_change_disk at one time.
@@ -135,9 +143,10 @@ static void sd_geninit (void)
 {
 	int i;
 
-	for (i = 0; i < NR_SD; ++i)
-		sd[i << 4].nr_sects = rscsi_disks[i].capacity;
-	sd_gendisk.nr_real = NR_SD;
+	for (i = 0; i < sd_template.dev_max; ++i)
+	  if(rscsi_disks[i].device) 
+	    sd[i << 4].nr_sects = rscsi_disks[i].capacity;
+	sd_gendisk.nr_real = sd_template.dev_max;
 }
 
 /*
@@ -358,7 +367,7 @@ static void do_sd_request (void)
    to have the interrupts off when monkeying with the request list, because
    otherwise the kernel might try and slip in a request inbetween somewhere. */
 
-    if (!SCpnt && NR_SD > 1){
+    if (!SCpnt && sd_template.nr_dev > 1){
       struct request *req1;
       req1 = NULL;
       cli();
@@ -410,7 +419,9 @@ repeat:
 	printk("Doing sd request, dev = %d, block = %d\n", dev, block);
 #endif
 
-	if (dev >= (NR_SD << 4) || block + SCpnt->request.nr_sectors > sd[dev].nr_sects)
+	if (dev >= (sd_template.dev_max << 4) || 
+	    !rscsi_disks[DEVICE_NR(dev)].device ||
+	    block + SCpnt->request.nr_sectors > sd[dev].nr_sects)
 		{
 		end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		goto repeat;
@@ -747,7 +758,8 @@ static int check_scsidisk_media_change(dev_t full_dev){
 
 	target =  DEVICE_NR(MINOR(full_dev));
 
-	if (target >= NR_SD) {
+	if (target >= sd_template.dev_max ||
+	    !rscsi_disks[target].device) {
 		printk("SCSI disk request error: invalid device.\n");
 		return 0;
 	};
@@ -957,11 +969,8 @@ static int sd_init_onedisk(int i)
 	    rscsi_disks[i].capacity = 0;
 	  } else {
 	    printk ("scsi : deleting disk entry.\n");
-	    for  (j=i;  j < NR_SD - 1;)
-	      rscsi_disks[j] = rscsi_disks[++j];
-	    --i;
-	    --NR_SD;
-	    scsi_free(buffer, 512);
+	    rscsi_disks[j].device = NULL;
+	    sd_template.nr_dev--;
 	    return i;
 	  };
 	}
@@ -983,35 +992,55 @@ static int sd_init_onedisk(int i)
 */
 
 
-unsigned long sd_init(unsigned long memory_start, unsigned long memory_end)
+static void sd_init()
 {
 	int i;
+	static int sd_registered = 0;
 
-	if (register_blkdev(MAJOR_NR,"sd",&sd_fops)) {
-		printk("Unable to get major %d for SCSI disk\n",MAJOR_NR);
-		return memory_start;
+	if (sd_template.dev_noticed == 0) return;
+
+	if(!sd_registered) {
+	  if (register_blkdev(MAJOR_NR,"sd",&sd_fops)) {
+	    printk("Unable to get major %d for SCSI disk\n",MAJOR_NR);
+	    return;
+	  }
+	  sd_registered++;
 	}
-	if (MAX_SD == 0) return memory_start;
 
-	sd_sizes = (int *) memory_start;
-	memory_start += (MAX_SD << 4) * sizeof(int);
-	memset(sd_sizes, 0, (MAX_SD << 4) * sizeof(int));
+	/* We do not support attaching loadable devices yet. */
+	if(scsi_loadable_module_flag) return;
 
-	sd_blocksizes = (int *) memory_start;
-	memory_start += (MAX_SD << 4) * sizeof(int);
-	for(i=0;i<(MAX_SD << 4);i++) sd_blocksizes[i] = 1024;
+	sd_template.dev_max = sd_template.dev_noticed;
+
+	rscsi_disks = (Scsi_Disk *) 
+	  scsi_init_malloc(sd_template.dev_max * sizeof(Scsi_Disk));
+
+	sd_sizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) * 
+					    sizeof(int));
+	memset(sd_sizes, 0, (sd_template.dev_max << 4) * sizeof(int));
+
+	sd_blocksizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) * 
+						 sizeof(int));
+	for(i=0;i<(sd_template.dev_max << 4);i++) sd_blocksizes[i] = 1024;
 	blksize_size[MAJOR_NR] = sd_blocksizes;
 
-	sd = (struct hd_struct *) memory_start;
-	memory_start += (MAX_SD << 4) * sizeof(struct hd_struct);
+	sd = (struct hd_struct *) scsi_init_malloc((sd_template.dev_max << 4) *
+						   sizeof(struct hd_struct));
 
-	sd_gendisk.max_nr = MAX_SD;
+
+	sd_gendisk.max_nr = sd_template.dev_max;
 	sd_gendisk.part = sd;
 	sd_gendisk.sizes = sd_sizes;
 	sd_gendisk.real_devices = (void *) rscsi_disks;
 
-	for (i = 0; i < NR_SD; ++i)
-	  i = sd_init_onedisk(i);
+}
+
+static void sd_finish()
+{
+        int i;
+
+	for (i = 0; i < sd_template.dev_max; ++i)
+	  if (rscsi_disks[i].device) i = sd_init_onedisk(i);
 
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 
@@ -1026,17 +1055,41 @@ unsigned long sd_init(unsigned long memory_start, unsigned long memory_end)
 	
 	sd_gendisk.next = gendisk_head;
 	gendisk_head = &sd_gendisk;
-	return memory_start;
+	return;
 }
 
-void sd_init1(){
-  rscsi_disks = (Scsi_Disk *) scsi_init_malloc(MAX_SD * sizeof(Scsi_Disk));
-};
+static int sd_detect(Scsi_Device * SDp){
+  /* We do not support attaching loadable devices yet. */
+  if(scsi_loadable_module_flag) return 0;
+  if(SDp->type != TYPE_DISK && SDp->type != TYPE_MOD) return 0;
 
-void sd_attach(Scsi_Device * SDp){
-  SDp->scsi_request_fn = do_sd_request;
-  rscsi_disks[NR_SD++].device = SDp;
-  if(NR_SD > MAX_SD) panic ("scsi_devices corrupt (sd)");
+  printk("Detected scsi disk sd%c at scsi%d, id %d, lun %d\n", 
+	 'a'+ (sd_template.dev_noticed++),
+	 SDp->host->host_no , SDp->id, SDp->lun); 
+
+	 return 1;
+
+}
+
+static void sd_attach(Scsi_Device * SDp){
+   Scsi_Disk * dpnt;
+   int i;
+
+   /* We do not support attaching loadable devices yet. */
+   if(scsi_loadable_module_flag) return;
+   if(SDp->type != TYPE_DISK && SDp->type != TYPE_MOD) return;
+
+   if(sd_template.nr_dev >= sd_template.dev_max) 
+     panic ("scsi_devices corrupt (sd)");
+
+   for(dpnt = rscsi_disks, i=0; i<sd_template.dev_max; i++, dpnt++) 
+     if(!dpnt->device) break;
+
+   if(i >= sd_template.dev_max) panic ("scsi_devices corrupt (sd)");
+
+   SDp->scsi_request_fn = do_sd_request;
+   rscsi_disks[i].device = SDp;
+   sd_template.nr_dev++;
 };
 
 #define DEVICE_BUSY rscsi_disks[target].device->busy

@@ -353,7 +353,7 @@ static inline int try_to_swap_out(unsigned long * table_ptr)
  *
  * (C) 1993 Kai Petzke, wpp@marie.physik.tu-berlin.de
  */
-#ifdef NEW_SWAP
+
 /*
  * These are the miminum and maximum number of pages to swap from one process,
  * before proceeding to the next:
@@ -367,181 +367,123 @@ static inline int try_to_swap_out(unsigned long * table_ptr)
  */
 #define SWAP_RATIO	128
 
-static int swap_out(unsigned int priority)
+static int swap_out_process(struct task_struct * p)
 {
-    static int swap_task;
-    int table;
-    int page;
-    long pg_table;
-    int loop;
-    int counter = NR_TASKS * 2 >> priority;
-    struct task_struct *p;
-
-    counter = NR_TASKS * 2 >> priority;
-    for(; counter >= 0; counter--, swap_task++) {
-	/*
-	 * Check that swap_task is suitable for swapping.  If not, look for
-	 * the next suitable process.
-	 */
-	loop = 0;
-	while(1) {
-	    if(swap_task >= NR_TASKS) {
-		swap_task = 1;
-		if(loop)
-		    /* all processes are unswappable or already swapped out */
-		    return 0;
-		loop = 1;
-	    }
-
-	    p = task[swap_task];
-	    if(p && p->mm->swappable && p->mm->rss)
-		break;
-
-	    swap_task++;
-	}
-
-	/*
-	 * Determine the number of pages to swap from this process.
-	 */
-	if(! p->mm->swap_cnt) {
-	    p->mm->dec_flt = (p->mm->dec_flt * 3) / 4 + p->mm->maj_flt - p->mm->old_maj_flt;
-	    p->mm->old_maj_flt = p->mm->maj_flt;
-
-	    if(p->mm->dec_flt >= SWAP_RATIO / SWAP_MIN) {
-		p->mm->dec_flt = SWAP_RATIO / SWAP_MIN;
-		p->mm->swap_cnt = SWAP_MIN;
-	    } else if(p->mm->dec_flt <= SWAP_RATIO / SWAP_MAX)
-		p->mm->swap_cnt = SWAP_MAX;
-	    else
-		p->mm->swap_cnt = SWAP_RATIO / p->mm->dec_flt;
-	}
+	unsigned long address;
+	unsigned long offset;
+	unsigned long *pgdir;
+	unsigned long pg_table;
 
 	/*
 	 * Go through process' page directory.
 	 */
-	for(table = p->mm->swap_table; table < 1024; table++) {
-	    pg_table = ((unsigned long *) p->tss.cr3)[table];
-	    if(pg_table >= high_memory)
-		    continue;
-	    if(mem_map[MAP_NR(pg_table)] & MAP_PAGE_RESERVED)
-		    continue;
-	    if(!(PAGE_PRESENT & pg_table)) {
-		    printk("swap_out: bad page-table at pg_dir[%d]: %08lx\n",
-			    table, pg_table);
-		    ((unsigned long *) p->tss.cr3)[table] = 0;
-		    continue;
-	    }
-	    pg_table &= 0xfffff000;
-
-	    /*
-	     * Go through this page table.
-	     */
-	    for(page = p->mm->swap_page; page < 1024; page++) {
-		switch(try_to_swap_out(page + (unsigned long *) pg_table)) {
-		    case 0:
-			break;
-
-		    case 1:
-			p->mm->rss--;
-			/* continue with the following page the next time */
-			p->mm->swap_table = table;
-			p->mm->swap_page  = page + 1;
-			if((--p->mm->swap_cnt) == 0)
-			    swap_task++;
-			return 1;
-
-		    default:
-			p->mm->rss--;
-			break;
+	address = p->mm->swap_address;
+	pgdir = (address >> PGDIR_SHIFT) + (unsigned long *) p->tss.cr3;
+	offset = address & ~PGDIR_MASK;
+	address &= PGDIR_MASK;
+	for ( ; address < TASK_SIZE ;
+	pgdir++, address = address + PGDIR_SIZE, offset = 0) {
+		pg_table = *pgdir;
+		if (pg_table >= high_memory)
+			continue;
+		if (mem_map[MAP_NR(pg_table)] & MAP_PAGE_RESERVED)
+			continue;
+		if (!(PAGE_PRESENT & pg_table)) {
+			printk("swap_out_process (%s): bad page-table at vm %08lx: %08lx\n",
+					p->comm, address + offset, pg_table);
+			*pgdir = 0;
+			continue;
 		}
-	    }
+		pg_table &= 0xfffff000;
 
-	    p->mm->swap_page = 0;
+		/*
+		 * Go through this page table.
+		 */
+		for( ; offset < ~PGDIR_MASK ; offset += PAGE_SIZE) {
+			switch(try_to_swap_out((unsigned long *) (pg_table + (offset >> 10)))) {
+				case 0:
+					break;
+
+				case 1:
+					p->mm->rss--;
+					/* continue with the following page the next time */
+					p->mm->swap_address = address + offset + PAGE_SIZE;
+					return 1;
+
+				default:
+					p->mm->rss--;
+					break;
+			}
+		}
 	}
-
 	/*
 	 * Finish work with this process, if we reached the end of the page
 	 * directory.  Mark restart from the beginning the next time.
 	 */
-	p->mm->swap_table = 0;
-    }
-    return 0;
+	p->mm->swap_address = 0;
+	return 0;
 }
 
-#else /* old swapping procedure */
-
-/*
- * Go through the page tables, searching for a user page that
- * we can swap out.
- * 
- * We now check that the process is swappable (normally only 'init'
- * is un-swappable), allowing high-priority processes which cannot be
- * swapped out (things like user-level device drivers (Not implemented)).
- */
 static int swap_out(unsigned int priority)
 {
-	static int swap_task = 1;
-	static int swap_table = 0;
-	static int swap_page = 0;
-	int counter = NR_TASKS*8;
-	int pg_table;
-	struct task_struct * p;
+	static int swap_task;
+	int loop;
+	int counter = NR_TASKS * 2 >> priority;
+	struct task_struct *p;
 
-	counter >>= priority;
-check_task:
-	if (counter-- < 0)
-		return 0;
-	if (swap_task >= NR_TASKS) {
-		swap_task = 1;
-		goto check_task;
+	counter = NR_TASKS * 2 >> priority;
+	for(; counter >= 0; counter--, swap_task++) {
+		/*
+		 * Check that swap_task is suitable for swapping.  If not, look for
+		 * the next suitable process.
+		 */
+		loop = 0;
+		while(1) {
+			if (swap_task >= NR_TASKS) {
+				swap_task = 1;
+				if (loop)
+					/* all processes are unswappable or already swapped out */
+					return 0;
+				loop = 1;
+			}
+
+			p = task[swap_task];
+			if (p && p->mm->swappable && p->mm->rss)
+				break;
+
+			swap_task++;
+		}
+
+		/*
+		 * Determine the number of pages to swap from this process.
+		 */
+		if (!p->mm->swap_cnt) {
+			p->mm->dec_flt = (p->mm->dec_flt * 3) / 4 + p->mm->maj_flt - p->mm->old_maj_flt;
+			p->mm->old_maj_flt = p->mm->maj_flt;
+
+			if (p->mm->dec_flt >= SWAP_RATIO / SWAP_MIN) {
+				p->mm->dec_flt = SWAP_RATIO / SWAP_MIN;
+				p->mm->swap_cnt = SWAP_MIN;
+			} else if (p->mm->dec_flt <= SWAP_RATIO / SWAP_MAX)
+				p->mm->swap_cnt = SWAP_MAX;
+			else
+				p->mm->swap_cnt = SWAP_RATIO / p->mm->dec_flt;
+		}
+		if (swap_out_process(p)) {
+			if ((--p->mm->swap_cnt) == 0)
+				swap_task++;
+			return 1;
+		}
 	}
-	p = task[swap_task];
-	if (!p || !p->mm->swappable) {
-		swap_task++;
-		goto check_task;
-	}
-check_dir:
-	if (swap_table >= PTRS_PER_PAGE) {
-		swap_table = 0;
-		swap_task++;
-		goto check_task;
-	}
-	pg_table = ((unsigned long *) p->tss.cr3)[swap_table];
-	if (pg_table >= high_memory || (mem_map[MAP_NR(pg_table)] & MAP_PAGE_RESERVED)) {
-		swap_table++;
-		goto check_dir;
-	}
-	if (!(PAGE_PRESENT & pg_table)) {
-		printk("bad page-table at pg_dir[%d]: %08x\n",
-			swap_table,pg_table);
-		((unsigned long *) p->tss.cr3)[swap_table] = 0;
-		swap_table++;
-		goto check_dir;
-	}
-	pg_table &= PAGE_MASK;
-check_table:
-	if (swap_page >= PTRS_PER_PAGE) {
-		swap_page = 0;
-		swap_table++;
-		goto check_dir;
-	}
-	switch (try_to_swap_out(swap_page + (unsigned long *) pg_table)) {
-		case 0: break;
-		case 1: p->mm->rss--; return 1;
-		default: p->mm->rss--;
-	}
-	swap_page++;
-	goto check_table;
+	return 0;
 }
-
-#endif
 
 static int try_to_free_page(int priority)
 {
 	int i=6;
 
 	while (i--) {
-	        if (priority != GFP_NOBUFFER && shrink_buffers(i))
+		if (priority != GFP_NOBUFFER && shrink_buffers(i))
 			return 1;
 		if (shm_swap(i))
 			return 1;
@@ -599,6 +541,21 @@ static inline void free_pages_ok(unsigned long addr, unsigned long order)
 	add_mem_queue(free_area_list+order, (struct mem_list *) addr);
 }
 
+static inline void check_free_buffers(unsigned long addr)
+{
+	struct buffer_head * bh;
+
+	bh = buffer_pages[MAP_NR(addr)];
+	if (bh) {
+		struct buffer_head *tmp = bh;
+		do {
+			if (tmp->b_list == BUF_SHARED && tmp->b_dev != 0xffff)
+				refile_buffer(tmp);
+			tmp = tmp->b_this_page;
+		} while (tmp != bh);
+	}
+}
+
 void free_pages(unsigned long addr, unsigned long order)
 {
 	if (addr < high_memory) {
@@ -613,17 +570,8 @@ void free_pages(unsigned long addr, unsigned long order)
 					delete_from_swap_cache(addr);
 				}
 				restore_flags(flag);
-				if(*map == 1) {
-				  int j;
-				  struct buffer_head * bh, *tmp;
-
-				  bh = buffer_pages[MAP_NR(addr)];
-				  if(bh)
-				    for(j = 0, tmp = bh; tmp && (!j || tmp != bh); 
-					tmp = tmp->b_this_page, j++)
-				      if(tmp->b_list == BUF_SHARED && tmp->b_dev != 0xffff)
-					refile_buffer(tmp);
-				}
+				if (*map == 1)
+					check_free_buffers(addr);
 			}
 			return;
 		}
@@ -689,7 +637,7 @@ repeat:
 		return 0;
 	}
 	restore_flags(flags);
-        if (priority != GFP_BUFFER && try_to_free_page(priority))
+	if (priority != GFP_BUFFER && try_to_free_page(priority))
 		goto repeat;
 	return 0;
 }

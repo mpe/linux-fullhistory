@@ -144,11 +144,8 @@ static int ext2_readdir (struct inode * inode, struct file * filp,
 				put_fs_long (de->inode, &dirent->d_ino);
 				put_fs_byte (0, de->name_len + dirent->d_name);
 				put_fs_word (de->name_len, &dirent->d_reclen);
-#ifndef DONT_USE_DCACHE
-				ext2_dcache_add (inode->i_dev, inode->i_ino,
-						 de->name, de->name_len,
+				dcache_add(inode, de->name, de->name_len,
 						 de->inode);
-#endif
 				i = de->name_len;
 				brelse (bh);
 				if (!IS_RDONLY(inode)) {

@@ -21,11 +21,19 @@
 
 #include "../block/blk.h"
 #include "scsi.h"
+#include "hosts.h"
 #include "scsi_ioctl.h"
 #include "sg.h"
 
-int NR_SG=0;
-int MAX_SG=0;
+static void sg_init(void);
+static void sg_attach(Scsi_Device *);
+static int sg_detect(Scsi_Device *);
+
+
+struct Scsi_Device_Template sg_template = {NULL, NULL, "sg", 0xff, 
+					     SCSI_GENERIC_MAJOR, 0, 0, 0, 0,
+					     sg_detect, sg_init,
+					     NULL, sg_attach, NULL};
 
 #ifdef SG_BIG_BUFF
 static char *big_buff;
@@ -55,7 +63,7 @@ static int sg_ioctl(struct inode * inode,struct file * file,
 	     unsigned int cmd_in, unsigned long arg)
  {
   int dev = MINOR(inode->i_rdev);
-  if ((dev<0) || (dev>=NR_SG))
+  if ((dev<0) || (dev>=sg_template.dev_max))
    return -ENXIO;
   switch(cmd_in)
    {
@@ -73,7 +81,7 @@ static int sg_open(struct inode * inode, struct file * filp)
  {
   int dev=MINOR(inode->i_rdev);
   int flags=filp->f_flags;
-  if (dev>=NR_SG)
+  if (dev>=sg_template.dev_max || !scsi_generics[dev].device)
    return -ENXIO;
   if (O_RDWR!=(flags & O_ACCMODE))
    return -EACCES;
@@ -295,45 +303,70 @@ static struct file_operations sg_fops = {
 };
 
 
-/* Driver initialization */
-unsigned long sg_init(unsigned long mem_start, unsigned long mem_end)
- {
-  if (register_chrdev(SCSI_GENERIC_MAJOR,"sg",&sg_fops)) 
-   {
-    printk("Unable to get major %d for generic SCSI device\n",
-	   SCSI_GENERIC_MAJOR);
-    return mem_start;
-   }
-  if (NR_SG == 0) return mem_start;
+static int sg_detect(Scsi_Device * SDp){
+  /* We do not support attaching loadable devices yet. */
+  if(scsi_loadable_module_flag) return 0;
 
+  ++sg_template.dev_noticed;
+  return 1;
+}
+
+/* Driver initialization */
+static void sg_init()
+ {
+   static int sg_registered = 0;
+   
+   if (sg_template.dev_noticed == 0) return;
+
+   if(!sg_registered) {
+     if (register_chrdev(SCSI_GENERIC_MAJOR,"sg",&sg_fops)) 
+       {
+	 printk("Unable to get major %d for generic SCSI device\n",
+		SCSI_GENERIC_MAJOR);
+	 return;
+       }
+     sg_registered++;
+   }
+
+   /* We do not support attaching loadable devices yet. */
+   if(scsi_loadable_module_flag) return;
 #ifdef DEBUG
   printk("sg: Init generic device.\n");
 #endif
 
 #ifdef SG_BIG_BUFF
-  big_buff= (char *) mem_start;
-  mem_start+=SG_BIG_BUFF;
+  big_buff= (char *) scsi_init_malloc(SG_BIG_BUFF);
 #endif
-  return mem_start;
+
+   scsi_generics = (struct scsi_generic *) 
+     scsi_init_malloc(sg_template.dev_noticed * sizeof(struct scsi_generic));
+
+   sg_template.dev_max = sg_template.dev_noticed;
  }
 
-void sg_init1()
+static void sg_attach(Scsi_Device * SDp)
  {
-  scsi_generics = (struct scsi_generic *) 
-    scsi_init_malloc(MAX_SG * sizeof(struct scsi_generic));
- };
+   struct scsi_generic * gpnt;
+   int i;
 
-void sg_attach(Scsi_Device * SDp)
- {
-  if(NR_SG >= MAX_SG) 
-   panic ("scsi_devices corrupt (sg)");
-  scsi_generics[NR_SG].device=SDp;
-  scsi_generics[NR_SG].users=0;
-  scsi_generics[NR_SG].generic_wait=NULL;
-  scsi_generics[NR_SG].read_wait=NULL;
-  scsi_generics[NR_SG].write_wait=NULL;
-  scsi_generics[NR_SG].exclude=0;
-  scsi_generics[NR_SG].pending=0;
-  scsi_generics[NR_SG].timeout=SG_DEFAULT_TIMEOUT;
-  NR_SG++;
+   /* We do not support attaching loadable devices yet. */
+   if(scsi_loadable_module_flag) return;
+
+   if(sg_template.nr_dev >= sg_template.dev_max) 
+     panic ("scsi_devices corrupt (sg)");
+
+   for(gpnt = scsi_generics, i=0; i<sg_template.dev_max; i++, gpnt++) 
+     if(!gpnt->device) break;
+
+   if(i >= sg_template.dev_max) panic ("scsi_devices corrupt (sg)");
+
+   scsi_generics[i].device=SDp;
+   scsi_generics[i].users=0;
+   scsi_generics[i].generic_wait=NULL;
+   scsi_generics[i].read_wait=NULL;
+   scsi_generics[i].write_wait=NULL;
+   scsi_generics[i].exclude=0;
+   scsi_generics[i].pending=0;
+   scsi_generics[i].timeout=SG_DEFAULT_TIMEOUT;
+   sg_template.nr_dev++;
  };

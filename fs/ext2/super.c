@@ -98,9 +98,6 @@ void ext2_put_super (struct super_block * sb)
 		sb->u.ext2_sb.s_es->s_state = sb->u.ext2_sb.s_mount_state;
 		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
 	}
-#ifndef DONT_USE_DCACHE
-	ext2_dcache_invalidate (sb->s_dev);
-#endif
 	sb->s_dev = 0;
 	for (i = 0; i < EXT2_MAX_GROUP_DESC; i++)
 		if (sb->u.ext2_sb.s_group_desc[i])

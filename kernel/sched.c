@@ -62,6 +62,7 @@ long time_adjust = 0;
 long time_adjust_step = 0;
 
 int need_resched = 0;
+unsigned long event = 0;
 
 /*
  * Tell us the machine setup..
@@ -278,7 +279,7 @@ void wake_up(struct wait_queue **q)
 			if ((p->state == TASK_UNINTERRUPTIBLE) ||
 			    (p->state == TASK_INTERRUPTIBLE)) {
 				p->state = TASK_RUNNING;
-				if (p->counter > current->counter)
+				if (p->counter > current->counter + 3)
 					need_resched = 1;
 			}
 		}
@@ -304,7 +305,7 @@ void wake_up_interruptible(struct wait_queue **q)
 		if ((p = tmp->task) != NULL) {
 			if (p->state == TASK_INTERRUPTIBLE) {
 				p->state = TASK_RUNNING;
-				if (p->counter > current->counter)
+				if (p->counter > current->counter + 3)
 					need_resched = 1;
 			}
 		}

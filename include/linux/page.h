@@ -3,7 +3,9 @@
 
 			/* PAGE_SHIFT determines the page size */
 #define PAGE_SHIFT			12
-#define PAGE_SIZE			((unsigned long)1<<PAGE_SHIFT)
+#define PGDIR_SHIFT			22
+#define PAGE_SIZE			(1UL << PAGE_SHIFT)
+#define PGDIR_SIZE			(1UL << PGDIR_SHIFT)
 
 #ifdef __KERNEL__
 
@@ -11,6 +13,8 @@
 #define BITS_PER_PTR			(8*sizeof(unsigned long))
 			/* to mask away the intra-page address bits */
 #define PAGE_MASK			(~(PAGE_SIZE-1))
+			/* to mask away the intra-page address bits */
+#define PGDIR_MASK			(~(PGDIR_SIZE-1))
 			/* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)		(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 			/* to align the pointer to a pointer address */

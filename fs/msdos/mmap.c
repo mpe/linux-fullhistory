@@ -94,12 +94,9 @@ int msdos_mmap(struct inode * inode, struct file * file, struct vm_area_struct *
 		inode->i_dirt = 1;
 	}
 
-	unmap_page_range(vma->vm_start, vma->vm_end - vma->vm_start);
 	vma->vm_inode = inode;
 	inode->i_count++;
 	vma->vm_ops = &msdos_file_mmap;
-	insert_vm_struct(current, vma);
-	merge_segments(current->mm->mmap);
 	return 0;
 }
 

@@ -45,6 +45,7 @@
 extern void buffer_init(void);
 extern unsigned long inode_init(unsigned long start, unsigned long end);
 extern unsigned long file_table_init(unsigned long start, unsigned long end);
+extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 
 #define MAJOR(a) (int)((unsigned short)(a) >> 8)
 #define MINOR(a) (int)((unsigned short)(a) & 0xFF)
@@ -468,6 +469,9 @@ extern int generic_mmap(struct inode *, struct file *, struct vm_area_struct *);
 
 extern int block_fsync(struct inode *, struct file *);
 extern int file_fsync(struct inode *, struct file *);
+
+extern void dcache_add(struct inode *, const char *, int, unsigned long);
+extern unsigned long dcache_lookup(struct inode *, const char *, int);
 
 extern inline struct inode * iget(struct super_block * sb,int nr)
 {

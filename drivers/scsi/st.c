@@ -28,6 +28,7 @@
 #define MAJOR_NR SCSI_TAPE_MAJOR
 #include "../block/blk.h"
 #include "scsi.h"
+#include "hosts.h"
 #include "scsi_ioctl.h"
 #include "st.h"
 #include "constants.h"
@@ -83,8 +84,15 @@ static int st_write_threshold = ST_WRITE_THRESHOLD;
 static int st_max_buffers = ST_MAX_BUFFERS;
 
 static Scsi_Tape * scsi_tapes;
-int NR_ST=0;
-int MAX_ST=0;
+
+static void st_init(void);
+static void st_attach(Scsi_Device *);
+static int st_detect(Scsi_Device *);
+
+struct Scsi_Device_Template st_template = {NULL, "tape", "st", TYPE_TAPE, 
+					     SCSI_TAPE_MAJOR, 0, 0, 0, 0,
+					     st_detect, st_init,
+					     NULL, st_attach, NULL};
 
 static int st_int_ioctl(struct inode * inode,struct file * file,
 	     unsigned int cmd_in, unsigned long arg);
@@ -146,7 +154,7 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
   int st_nbr, remainder;
   Scsi_Tape * STp;
 
-  if ((st_nbr = SCpnt->request.dev) < NR_ST && st_nbr >= 0) {
+  if ((st_nbr = SCpnt->request.dev) < st_template.nr_dev && st_nbr >= 0) {
     STp = &(scsi_tapes[st_nbr]);
     if ((STp->buffer)->writing &&
 	(SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
@@ -381,7 +389,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     Scsi_Tape * STp;
 
     dev = MINOR(inode->i_rdev) & 127;
-    if (dev >= NR_ST)
+    if (dev >= st_template.dev_max || !scsi_tapes[dev].device)
       return (-ENXIO);
     STp = &(scsi_tapes[dev]);
     if (STp->in_use) {
@@ -1677,34 +1685,70 @@ static struct file_operations st_fops = {
    NULL		    /* fsync */
 };
 
-void st_attach(Scsi_Device * SDp){
-  scsi_tapes[NR_ST++].device = SDp;
-  if(NR_ST > MAX_ST) panic ("scsi_devices corrupt (st)");
+static void st_attach(Scsi_Device * SDp){
+   Scsi_Tape * tpnt;
+   int i;
+
+   /* We do not support attaching loadable devices yet. */
+   if(scsi_loadable_module_flag) return;
+   if(SDp->type != TYPE_TAPE) return;
+
+   if(st_template.nr_dev >= st_template.dev_max) 
+     panic ("scsi_devices corrupt (st)");
+
+   for(tpnt = scsi_tapes, i=0; i<st_template.dev_max; i++, tpnt++) 
+     if(!tpnt->device) break;
+
+   if(i >= st_template.dev_max) panic ("scsi_devices corrupt (st)");
+
+   scsi_tapes[i].device = SDp;
+   st_template.nr_dev++;
 };
 
-void st_init1(){
-  scsi_tapes = (Scsi_Tape *) scsi_init_malloc(MAX_ST * sizeof(Scsi_Tape));
-};
+static int st_detect(Scsi_Device * SDp){
+  
+  /* We do not support attaching loadable devices yet. */
+  if(scsi_loadable_module_flag) return 0;
+  if(SDp->type != TYPE_TAPE) return 0;
+
+  printk("Detected scsi tape st%d at scsi%d, id %d, lun %d\n", 
+	 ++st_template.dev_noticed,
+	 SDp->host->host_no , SDp->id, SDp->lun); 
+  
+  return 1;
+}
 
 /* Driver initialization */
-unsigned long st_init(unsigned long mem_start, unsigned long mem_end)
+static void st_init()
 {
   int i;
   Scsi_Tape * STp;
   Scsi_Device * SDp;
+  static int st_registered = 0;
 
-  if (register_chrdev(MAJOR_NR,"st",&st_fops)) {
-    printk("Unable to get major %d for SCSI tapes\n",MAJOR_NR);
-    return mem_start;
+  if (st_template.dev_noticed == 0) return;
+
+  if(!st_registered) {
+    if (register_chrdev(MAJOR_NR,"st",&st_fops)) {
+      printk("Unable to get major %d for SCSI tapes\n",MAJOR_NR);
+      return;
+    }
+    st_registered++;
   }
-  if (NR_ST == 0) return mem_start;
+
+  /* We do not support attaching loadable devices yet. */
+  if(scsi_loadable_module_flag) return;
+
+  scsi_tapes = (Scsi_Tape *) scsi_init_malloc(st_template.dev_noticed * 
+					      sizeof(Scsi_Tape));
+  st_template.dev_max = st_template.dev_noticed;
 
 #ifdef DEBUG
   printk("st: Buffer size %d bytes, write threshold %d bytes.\n",
 	 st_buffer_size, st_write_threshold);
 #endif
 
-  for (i=0, SDp = scsi_devices; i < NR_ST; ++i) {
+  for (i=0, SDp = scsi_devices; i < st_template.dev_noticed; ++i) {
     STp = &(scsi_tapes[i]);
     STp->capacity = 0xfffff;
     STp->dirty = 0;
@@ -1721,8 +1765,7 @@ unsigned long st_init(unsigned long mem_start, unsigned long mem_end)
     STp->write_threshold = st_write_threshold;
     STp->drv_block = 0;
     STp->moves_after_eof = 1;
-    STp->mt_status = (struct mtget *) mem_start;
-    mem_start += sizeof(struct mtget);
+    STp->mt_status = (struct mtget *) scsi_init_malloc(sizeof(struct mtget));
     /* Initialize status */
     memset((void *) scsi_tapes[i].mt_status, 0, sizeof(struct mtget));
     for (; SDp; SDp = SDp->next)
@@ -1740,20 +1783,19 @@ unsigned long st_init(unsigned long mem_start, unsigned long mem_end)
   }
 
   /* Allocate the buffers */
-  st_nbr_buffers = NR_ST;
+  st_nbr_buffers = st_template.dev_noticed;
   if (st_nbr_buffers > st_max_buffers)
     st_nbr_buffers = st_max_buffers;
-  st_buffers = (ST_buffer **)mem_start;
-  mem_start += st_nbr_buffers * sizeof(ST_buffer *);
+  st_buffers = (ST_buffer **) scsi_init_malloc(st_nbr_buffers * 
+					       sizeof(ST_buffer *));
   for (i=0; i < st_nbr_buffers; i++) {
-    st_buffers[i] = (ST_buffer *) mem_start;
+    st_buffers[i] = (ST_buffer *) scsi_init_malloc(sizeof(ST_buffer) - 
+						   1 + st_buffer_size);
 #ifdef DEBUG
 /*    printk("st: Buffer address: %p\n", st_buffers[i]); */
 #endif
-    mem_start += sizeof(ST_buffer) - 1 + st_buffer_size;
     st_buffers[i]->in_use = 0;
     st_buffers[i]->writing = 0;
   }
-
-  return mem_start;
+  return;
 }

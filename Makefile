@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 36
+SUBLEVEL = 37
 
 all:	Version zImage
 
@@ -127,7 +127,7 @@ endif
 .c.s:
 	$(CC) $(CFLAGS) -S -o $*.s $<
 .s.o:
-	$(AS) -c -o $*.o $<
+	$(AS) -o $*.o $<
 .c.o:
 	$(CC) $(CFLAGS) -c -o $*.o $<
 

@@ -65,23 +65,28 @@
       offset &= 1023; \
       if(offset + cont_size >= 1024) { \
 	  bh = bread(DEV->i_dev, block++, ISOFS_BUFFER_SIZE(DEV)); \
-	  memcpy(buffer, bh->b_data + offset, 1024 - offset); \
-          brelse(bh); \
-	  offset1 = 1024 - offset; \
-	  offset = 0; \
+	  if(!bh) {printk("Unable to read continuation Rock Ridge record\n"); \
+		     kfree(buffer); \
+		     buffer = NULL; } else { \
+	    memcpy(buffer, bh->b_data + offset, 1024 - offset); \
+            brelse(bh); \
+	    offset1 = 1024 - offset; \
+	    offset = 0;} \
       }  \
     };     \
-    bh = bread(DEV->i_dev, block, ISOFS_BUFFER_SIZE(DEV)); \
-    if(bh){       \
-      memcpy(buffer + offset1, bh->b_data + offset, cont_size - offset1); \
-      brelse(bh); \
-      chr = (unsigned char *) buffer; \
-      len = cont_size; \
-      cont_extent = 0; \
-      cont_size = 0; \
-      cont_offset = 0; \
-      goto LABEL; \
-    };    \
+    if(buffer) { \
+      bh = bread(DEV->i_dev, block, ISOFS_BUFFER_SIZE(DEV)); \
+      if(bh){       \
+        memcpy(buffer + offset1, bh->b_data + offset, cont_size - offset1); \
+        brelse(bh); \
+        chr = (unsigned char *) buffer; \
+        len = cont_size; \
+        cont_extent = 0; \
+        cont_size = 0; \
+        cont_offset = 0; \
+        goto LABEL; \
+      };    \
+    } \
     printk("Unable to read rock-ridge attributes\n");    \
   }}
 

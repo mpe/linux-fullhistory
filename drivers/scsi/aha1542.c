@@ -18,6 +18,8 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 
+#include <linux/delay.h>
+
 #include <linux/sched.h>
 #include <asm/dma.h>
 
@@ -90,6 +92,20 @@ static int aha1542_restart(struct Scsi_Host * shost);
    }									\
  }
 
+/* Similar to WAIT, except we use the udelay call to regulate the
+   amount of time we wait.  */
+#define WAITd(port, mask, allof, noneof, timeout)			\
+ { register WAITbits;							\
+   register WAITtimeout = timeout;					\
+   while (1) {								\
+     WAITbits = inb(port) & (mask);					\
+     if ((WAITbits & (allof)) == (allof) && ((WAITbits & (noneof)) == 0)) \
+       break;                                                         	\
+     udelay(1000);							\
+     if (--WAITtimeout == 0) goto fail;					\
+   }									\
+ }
+
 static void aha1542_stat(void)
 {
 /*    int s = inb(STATUS), i = inb(INTRFLAGS);
@@ -142,6 +158,24 @@ static int aha1542_in(unsigned int base, unchar *cmdp, int len)
   fail:
     sti();
     printk("aha1542_in failed(%d): ", len+1); aha1542_stat();
+    return 1;
+}
+
+/* Similar to aha1542_in, except that we wait a very short period of time.
+   We use this if we know the board is alive and awake, but we are not sure
+   if the board will respond the the command we are about to send or not */
+static int aha1542_in1(unsigned int base, unchar *cmdp, int len)
+{
+    cli();
+    while (len--)
+      {
+	  WAITd(STATUS(base), DF, DF, 0, 100);
+	  *cmdp++ = inb(DATA(base));
+      }
+    sti();
+    return 0;
+  fail:
+    sti();
     return 1;
 }
 
@@ -718,8 +752,9 @@ static int aha1542_mbenable(int base)
 
   mbenable_cmd[0]=CMD_EXTBIOS;
   aha1542_out(base,mbenable_cmd,1);
-  aha1542_in(base,mbenable_result,2);
-  WAIT(INTRFLAGS(base),INTRMASK,HACC,0);
+  if(aha1542_in1(base,mbenable_result,2))
+    return retval;
+  WAITd(INTRFLAGS(base),INTRMASK,HACC,0,100);
   aha1542_intr_reset(base);
   
   if ((mbenable_result[0] & 0x08) || mbenable_result[1]) {
@@ -770,11 +805,11 @@ static int aha1542_query(int base_io, int * transl)
     return 1;
   };
 
-  /* 1542C returns 0x44, 1542CF returns 0x45 */
-  if (inquiry_result[0] == 0x44 || inquiry_result[0] == 0x45)
-    { /* Detect 1542C  */
-      *transl = aha1542_mbenable(base_io);
-    };
+  /* Always call this - boards that do not support extended bios translation
+     will ignore the command, and we will set the proper default */
+
+  *transl = aha1542_mbenable(base_io);
+
   return 0;
 }
 

@@ -260,6 +260,7 @@ extern const unsigned char scsi_command_size[8];
 typedef struct scsi_device {
         struct scsi_device * next; /* Used for linked list */
 	unsigned char id, lun;
+	int attached;          /* # of high level drivers attached to this */
 	int access_count;	/* Count of open channels/mounts */
 	struct wait_queue * device_wait;  /* Used to wait if device is busy */
 	struct Scsi_Host * host;
@@ -298,7 +299,6 @@ typedef struct scsi_device {
 	These are the SCSI devices available on the system.
 */
 
-extern int NR_SCSI_DEVICES;
 extern Scsi_Device * scsi_devices;
 /*
 	Initializes all SCSI devices.  This scans all scsi busses.
@@ -500,22 +500,6 @@ extern Scsi_Cmnd * request_queueable(struct request *, Scsi_Device *);
 extern int scsi_reset (Scsi_Cmnd *);
 
 extern int max_scsi_hosts;
-extern int MAX_SD, NR_SD, MAX_ST, NR_ST, MAX_SR, NR_SR, NR_SG, MAX_SG;
-extern unsigned long sd_init(unsigned long, unsigned long);
-extern void sd_init1(void);
-extern void sd_attach(Scsi_Device *);
-
-extern unsigned long sr_init(unsigned long, unsigned long);
-extern void sr_init1(void);
-extern void sr_attach(Scsi_Device *);
-
-extern unsigned long st_init(unsigned long, unsigned long);
-extern void st_init1(void);
-extern void st_attach(Scsi_Device *);
-
-extern unsigned long sg_init(unsigned long, unsigned long);
-extern void sg_init1(void);
-extern void sg_attach(Scsi_Device *);
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
 static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)

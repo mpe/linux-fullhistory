@@ -52,7 +52,7 @@ endif
 
 OBJS=	open.o read_write.o inode.o devices.o file_table.o buffer.o super.o \
 	block_dev.o stat.o exec.o pipe.o namei.o fcntl.o ioctl.o \
-	select.o fifo.o locks.o filesystems.o $(BINFMTS)
+	select.o fifo.o locks.o filesystems.o dcache.o $(BINFMTS)
 
 all: fs.o filesystems.a
 

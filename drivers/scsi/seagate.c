@@ -46,9 +46,7 @@
  *	transfer rate if handshaking isn't working correctly.
  */
 
-#include <linux/config.h>
 
-#if defined(CONFIG_SCSI_SEAGATE) || defined(CONFIG_SCSI_FD_8xx) 
 #include <asm/io.h>
 #include <asm/system.h>
 #include <linux/signal.h>
@@ -1697,5 +1695,3 @@ printk("scsi%d : heads = %d cylinders = %d sectors = %d total = %d formatted = %
     
   return result;
 }
-#endif	/* defined(CONFIG_SCSI_SEGATE) */
-

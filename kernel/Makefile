@@ -12,7 +12,7 @@
 .c.s:
 	$(CC) $(CFLAGS) -S $<
 .s.o:
-	$(AS) -c -o $*.o $<
+	$(AS) -o $*.o $<
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 

@@ -299,8 +299,8 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 	int old_ruid = current->uid;
 
 	if (ruid != (uid_t) -1) {
-		if ((current->euid==ruid) ||
-		    (old_ruid == ruid) || 
+		if ((old_ruid == ruid) || 
+		    (current->euid==ruid) ||
 		    suser())
 			current->uid = ruid;
 		else
@@ -309,6 +309,7 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 	if (euid != (uid_t) -1) {
 		if ((old_ruid == euid) ||
 		    (current->euid == euid) ||
+		    (current->suid == euid) ||
 		    suser())
 			current->euid = euid;
 		else {

@@ -420,6 +420,7 @@ asmlinkage void start_kernel(void)
 #endif
 	memory_start = inode_init(memory_start,memory_end);
 	memory_start = file_table_init(memory_start,memory_end);
+	memory_start = name_cache_init(memory_start,memory_end);
 	mem_init(low_memory_start,memory_start,memory_end);
 	buffer_init();
 	time_init();

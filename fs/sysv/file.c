@@ -32,7 +32,6 @@
 #include <linux/fs.h>
 #include <linux/sysv_fs.h>
 
-static int sysv_file_read(struct inode *, struct file *, char *, int);
 static int sysv_file_write(struct inode *, struct file *, char *, int);
 
 /*
@@ -46,7 +45,7 @@ static struct file_operations sysv_file_operations = {
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
-	NULL,			/* mmap */
+	sysv_mmap,		/* mmap */
 	NULL,			/* no special open is needed */
 	NULL,			/* release */
 	sysv_sync_file		/* fsync */
@@ -106,7 +105,7 @@ struct sysv_buffer {
 	char * bh_data;
 };
 
-static int sysv_file_read(struct inode * inode, struct file * filp, char * buf, int count)
+int sysv_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	struct super_block * sb = inode->i_sb;
 	int read,left,chars;

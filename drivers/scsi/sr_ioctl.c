@@ -96,7 +96,9 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	int result, target, err;
 
 	target = MINOR(dev);
-	if (target >= NR_SR) return -ENXIO;
+
+	if (target >= sr_template.nr_dev ||
+	    !scsi_CDs[target].device) return -ENXIO;
 
 	switch (cmd) 
 		{

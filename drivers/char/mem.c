@@ -93,8 +93,6 @@ static int mmap_mem(struct inode * inode, struct file * file, struct vm_area_str
 		return -EAGAIN;
 	vma->vm_inode = inode;
 	inode->i_count++;
-	insert_vm_struct(current, vma);
-	merge_segments(current->mm->mmap);
 	return 0;
 }
 
@@ -167,8 +165,6 @@ static int mmap_zero(struct inode * inode, struct file * file, struct vm_area_st
 		return -EINVAL;
 	if (zeromap_page_range(vma->vm_start, vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
-	insert_vm_struct(current, vma);
-	merge_segments(current->mm->mmap);
 	return 0;
 }
 

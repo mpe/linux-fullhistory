@@ -1,8 +1,6 @@
 #ifndef _LINUX_SCHED_H
 #define _LINUX_SCHED_H
 
-#define NEW_SWAP
-
 /*
  * define DEBUG if you want the wait-queues to have some extra
  * debugging code. It's not normally used, but might catch some
@@ -22,6 +20,7 @@ extern int ignore_irq13;
 extern int wp_works_ok;
 
 extern unsigned long intr_count;
+extern unsigned long event;
 
 #define start_bh_atomic() \
 __asm__ __volatile__("incl _intr_count")
@@ -222,13 +221,10 @@ struct mm_struct {
 	unsigned long rss;
 	unsigned long min_flt, maj_flt, cmin_flt, cmaj_flt;
 	int swappable:1;
-#ifdef NEW_SWAP
+	unsigned long swap_address;
 	unsigned long old_maj_flt;	/* old value of maj_flt */
 	unsigned long dec_flt;		/* page fault count of the last time */
 	unsigned long swap_cnt;		/* number of pages to swap on next pass */
-	short swap_table;		/* current page table */
-	short swap_page;		/* current page */
-#endif NEW_SWAP
 	struct vm_area_struct * mmap;
 };
 
@@ -240,7 +236,7 @@ struct mm_struct {
 		0, \
 /* ?_flt */	0, 0, 0, 0, \
 		0, \
-/* swap */	0, 0, 0, 0, 0, \
+/* swap */	0, 0, 0, 0, \
 		NULL }
 
 struct task_struct {

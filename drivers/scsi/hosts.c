@@ -161,6 +161,7 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
  */
 
 struct Scsi_Host * scsi_hostlist = NULL;
+struct Scsi_Device_Template * scsi_devicelist;
 
 int max_scsi_hosts = 0;
 static int next_host = 0;
@@ -223,6 +224,15 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 	return retval;
 }
 
+int
+scsi_register_device(struct Scsi_Device_Template * sdpnt)
+{
+  if(sdpnt->next) panic("Device already registered");
+  sdpnt->next = scsi_devicelist;
+  scsi_devicelist = sdpnt;
+  return 0;
+}
+
 unsigned int scsi_init()
 {
 	static int called = 0;
@@ -263,60 +273,20 @@ unsigned int scsi_init()
 	}
 	printk ("scsi : %d hosts.\n", count);
 	
+	/* Now attach the high level drivers */
+#ifdef CONFIG_BLK_DEV_SD
+	scsi_register_device(&sd_template);
+#endif
+#ifdef CONFIG_BLK_DEV_SR
+	scsi_register_device(&sr_template);
+#endif
+#ifdef CONFIG_CHR_DEV_ST
+	scsi_register_device(&st_template);
+#endif
+#ifdef CONFIG_CHR_DEV_SG
+	scsi_register_device(&sg_template);
+#endif
+
 	max_scsi_hosts = count;
 	return 0;
 }
-
-#ifndef CONFIG_BLK_DEV_SD
-unsigned long sd_init(unsigned long memory_start, unsigned long memory_end){
-  return memory_start;
-};
-void sd_init1(){
-  return;
-};
-void sd_attach(Scsi_Device * SDp){
-};
-int NR_SD=-1;
-int MAX_SD=0;
-#endif
-
-
-#ifndef CONFIG_BLK_DEV_SR
-unsigned long sr_init(unsigned long memory_start, unsigned long memory_end){
-  return memory_start;
-};
-void sr_init1(){
-  return;
-};
-void sr_attach(Scsi_Device * SDp){
-};
-int NR_SR=-1;
-int MAX_SR=0;
-#endif
-
-
-#ifndef CONFIG_CHR_DEV_ST
-unsigned long st_init(unsigned long memory_start, unsigned long memory_end){
-  return memory_start;
-};
-void st_init1(){
-  return;
-};
-void st_attach(Scsi_Device * SDp){
-};
-int NR_ST=-1;
-int MAX_ST=0;
-#endif
-
-#ifndef CONFIG_CHR_DEV_SG
-unsigned long sg_init(unsigned long memory_start, unsigned long memory_end){
-  return memory_start;
-};
-void sg_init1(){
-  return;
-};
-void sg_attach(Scsi_Device * SDp){
-};
-int NR_SG=-1;
-int MAX_SG=0;
-#endif
