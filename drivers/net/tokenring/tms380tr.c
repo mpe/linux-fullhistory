@@ -280,10 +280,8 @@ int tms380tr_open(struct net_device *dev)
 	tms380tr_enable_interrupts(dev);
 	tms380tr_open_adapter(dev);
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 0;
-
+	netif_start_queue(dev);
+	
 	/* Wait for interrupt from hardware. If interrupt does not come,
 	 * there will be a timeout from the timer.
 	 */
@@ -297,8 +295,6 @@ int tms380tr_open(struct net_device *dev)
 		tms380tr_disable_interrupts(dev);
 		return (-1);
 	}
-
-	dev->start = 1;
 
 	tp->StartTime = jiffies;
 
@@ -571,6 +567,20 @@ static void tms380tr_exec_cmd(struct net_device *dev, unsigned short Command)
 	return;
 }
 
+static void tms380tr_timeout(struct net_device *dev)
+{
+	/*
+	 * If we get here, some higher level has decided we are broken.
+	 * There should really be a "kick me" function call instead.
+	 *
+	 * Resetting the token ring adapter takes a long time so just
+	 * fake transmission time and go on trying. Our own timeout
+	 * routine is in tms380tr_timer_chk()
+	 */
+	dev->trans_start = jiffies;
+	netif_wake_queue(dev);
+}
+
 /*
  * Gets skb from system, queues it and checks if it can be sent
  */
@@ -578,38 +588,12 @@ static int tms380tr_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 
-	if(dev->tbusy)
-	{
-		/*
-		 * If we get here, some higher level has decided we are broken.
-		 * There should really be a "kick me" function call instead.
-		 *
-		 * Resetting the token ring adapter takes a long time so just
-		 * fake transmission time and go on trying. Our own timeout
-		 * routine is in tms380tr_timer_chk()
-		 */
-		dev->tbusy 	 = 0;
-		dev->trans_start = jiffies;
-		return (1);
-	}
-
 	/*
-	 * If some higher layer thinks we've missed an tx-done interrupt we
-	 * are passed NULL.
+	 * Block transmits from overlapping. 
 	 */
-	if(skb == NULL)
-		return (0);
-
-	/*
-	 * Block a timer-based transmit from overlapping. This could better be
-	 * done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
-	 */
-	if(test_and_set_bit(0, (void*)&dev->tbusy) != 0)
-	{
-		printk("%s: Transmitter access conflict.\n", dev->name);
-		return (1);
-	}
-
+	 
+	netif_stop_queue(dev);
+	
 	if(tp->QueueSkb == 0)
 		return (1);	/* Return with tbusy set: queue full */
 
@@ -617,8 +601,7 @@ static int tms380tr_send_packet(struct sk_buff *skb, struct net_device *dev)
 	skb_queue_tail(&tp->SendSkbQueue, skb);
 	tms380tr_hardware_send_packet(dev, tp);
 	if(tp->QueueSkb > 0)
-		dev->tbusy = 0;
-
+		netif_wake_queue(dev);
 	return (0);
 }
 
@@ -773,8 +756,6 @@ void tms380tr_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		return;
 	}
 
-	dev->interrupt = 1;
-
 	tp = (struct net_local *)dev->priv;
 
 	irq_type = SIFREADW(SIFSTS);
@@ -853,8 +834,6 @@ void tms380tr_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 		irq_type = SIFREADW(SIFSTS);
 	}
-
-	dev->interrupt = 0;
 
 	return;
 }
@@ -1148,9 +1127,8 @@ static void tms380tr_cmd_status_irq(struct net_device *dev)
 int tms380tr_close(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
+	
 	del_timer(&tp->timer);
 
 	/* Flush the Tx and disable Rx here. */
@@ -2081,10 +2059,9 @@ static void tms380tr_tx_status_irq(struct net_device *dev)
 		tpl->BusyFlag = 0;	/* "free" TPL */
 	}
 
-	dev->tbusy = 0;
+	netif_wake_queue(dev);
 	if(tp->QueueSkb < MAX_TX_QUEUE)
 		tms380tr_hardware_send_packet(dev, tp);
-
 	return;
 }
 
@@ -2367,6 +2344,8 @@ int tmsdev_init(struct net_device *dev)
 	dev->stop		= tms380tr_close;
 	dev->do_ioctl		= NULL; 
 	dev->hard_start_xmit	= tms380tr_send_packet;
+	dev->tx_timeout		= tms380tr_timeout;
+	dev->watchdog_timeo	= HZ;
 	dev->get_stats		= tms380tr_get_stats;
 	dev->set_multicast_list = &tms380tr_set_multicast_list;
 	dev->set_mac_address	= tms380tr_set_mac_address;

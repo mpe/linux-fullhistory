@@ -1403,5 +1403,7 @@ void cleanup_module(void)
 	usb_deregister(&usb_serial_driver);
 }
 
+#else
+__initcall(usb_serial_init);
 #endif
 

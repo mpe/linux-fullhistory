@@ -510,7 +510,7 @@ int sdla_activate(struct net_device *slave, struct net_device *master)
 
 	flp->dlci[i] = abs(flp->dlci[i]);
 
-	if (slave->start && (flp->config.station == FRAD_STATION_NODE))
+	if (test_bit(LINK_STATE_START, &slave->state) && (flp->config.station == FRAD_STATION_NODE))
 		sdla_cmd(slave, SDLA_ACTIVATE_DLCI, 0, 0, &flp->dlci[i], sizeof(short), NULL, NULL);
 
 	return(0);
@@ -532,7 +532,7 @@ int sdla_deactivate(struct net_device *slave, struct net_device *master)
 
 	flp->dlci[i] = -abs(flp->dlci[i]);
 
-	if (slave->start && (flp->config.station == FRAD_STATION_NODE))
+	if (test_bit(LINK_STATE_START, &slave->state) && (flp->config.station == FRAD_STATION_NODE))
 		sdla_cmd(slave, SDLA_DEACTIVATE_DLCI, 0, 0, &flp->dlci[i], sizeof(short), NULL, NULL);
 
 	return(0);
@@ -565,7 +565,7 @@ int sdla_assoc(struct net_device *slave, struct net_device *master)
 	flp->dlci[i] = -*(short *)(master->dev_addr);
 	master->mtu = slave->mtu;
 
-	if (slave->start) {
+	if (test_bit(LINK_STATE_START, &slave->state)) {
 		if (flp->config.station == FRAD_STATION_CPE)
 			sdla_reconfig(slave);
 		else
@@ -594,7 +594,7 @@ int sdla_deassoc(struct net_device *slave, struct net_device *master)
 
 	MOD_DEC_USE_COUNT;
 
-	if (slave->start) {
+	if (test_bit(LINK_STATE_START, &slave->state)) {
 		if (flp->config.station == FRAD_STATION_CPE)
 			sdla_reconfig(slave);
 		else
@@ -624,7 +624,7 @@ int sdla_dlci_conf(struct net_device *slave, struct net_device *master, int get)
 
 	ret = SDLA_RET_OK;
 	len = sizeof(struct dlci_conf);
-	if (slave->start) {
+	if (test_bit(LINK_STATE_START, &slave->state)) {
 		if (get)
 			ret = sdla_cmd(slave, SDLA_READ_DLCI_CONFIGURATION, abs(flp->dlci[i]), 0,  
 			            NULL, 0, &dlp->config, &len);
@@ -646,7 +646,7 @@ int sdla_dlci_conf(struct net_device *slave, struct net_device *master, int get)
 static int sdla_transmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct frad_local *flp;
-	int               ret, addr, accept;
+	int               ret, addr, accept, i;
 	short             size;
 	unsigned long     flags;
 	struct buf_entry  *pbuf;
@@ -655,90 +655,80 @@ static int sdla_transmit(struct sk_buff *skb, struct net_device *dev)
 	ret = 0;
 	accept = 1;
 
-	if (dev->tbusy) 
-		return(1);
+	netif_stop_queue(dev);
 
-	if (skb == NULL) 
-		return(0);
+	/*
+	 * stupid GateD insists on setting up the multicast router thru us
+	 * and we're ill equipped to handle a non Frame Relay packet at this
+	 * time!
+	 */
 
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
-		printk(KERN_WARNING "%s: transmitter access conflict.\n", dev->name);
-	else
+	accept = 1;
+	switch (dev->type)
 	{
-		/*
-		 * stupid GateD insists on setting up the multicast router thru us
-		 * and we're ill equipped to handle a non Frame Relay packet at this
-		 * time!
-		 */
-
-		accept = 1;
-		switch (dev->type)
+		case ARPHRD_FRAD:
+			if (skb->dev->type != ARPHRD_DLCI)
+			{
+				printk(KERN_WARNING "%s: Non DLCI device, type %i, tried to send on FRAD module.\n", dev->name, skb->dev->type);
+				accept = 0;
+			}
+			break;
+		default:
+			printk(KERN_WARNING "%s: unknown firmware type 0x%4.4X\n", dev->name, dev->type);
+			accept = 0;
+			break;
+	}
+	if (accept)
+	{
+		/* this is frame specific, but till there's a PPP module, it's the default */
+		switch (flp->type)
 		{
-			case ARPHRD_FRAD:
-				if (skb->dev->type != ARPHRD_DLCI)
+			case SDLA_S502A:
+			case SDLA_S502E:
+				ret = sdla_cmd(dev, SDLA_INFORMATION_WRITE, *(short *)(skb->dev->dev_addr), 0, skb->data, skb->len, NULL, NULL);
+				break;
+				case SDLA_S508:
+				size = sizeof(addr);
+				ret = sdla_cmd(dev, SDLA_INFORMATION_WRITE, *(short *)(skb->dev->dev_addr), 0, NULL, skb->len, &addr, &size);
+				if (ret == SDLA_RET_OK)
 				{
-					printk(KERN_WARNING "%s: Non DLCI device, type %i, tried to send on FRAD module.\n", dev->name, skb->dev->type);
-					accept = 0;
+					save_flags(flags); 
+					cli();
+					SDLA_WINDOW(dev, addr);
+					pbuf = (void *)(((int) dev->mem_start) + (addr & SDLA_ADDR_MASK));
+						sdla_write(dev, pbuf->buf_addr, skb->data, skb->len);
+						SDLA_WINDOW(dev, addr);
+					pbuf->opp_flag = 1;
+					restore_flags(flags);
 				}
+				break;
+		}
+		switch (ret)
+		{
+			case SDLA_RET_OK:
+				flp->stats.tx_packets++;
+				ret = DLCI_RET_OK;
+				break;
+
+			case SDLA_RET_CIR_OVERFLOW:
+			case SDLA_RET_BUF_OVERSIZE:
+			case SDLA_RET_NO_BUFS:
+				flp->stats.tx_dropped++;
+				ret = DLCI_RET_DROP;
 				break;
 
 			default:
-				printk(KERN_WARNING "%s: unknown firmware type 0x%4.4X\n", dev->name, dev->type);
-				accept = 0;
+				flp->stats.tx_errors++;
+				ret = DLCI_RET_ERR;
 				break;
 		}
-
-		if (accept)
-		{
-			/* this is frame specific, but till there's a PPP module, it's the default */
-			switch (flp->type)
-			{
-				case SDLA_S502A:
-				case SDLA_S502E:
-					ret = sdla_cmd(dev, SDLA_INFORMATION_WRITE, *(short *)(skb->dev->dev_addr), 0, skb->data, skb->len, NULL, NULL);
-					break;
-
-				case SDLA_S508:
-					size = sizeof(addr);
-					ret = sdla_cmd(dev, SDLA_INFORMATION_WRITE, *(short *)(skb->dev->dev_addr), 0, NULL, skb->len, &addr, &size);
-					if (ret == SDLA_RET_OK)
-					{
-						save_flags(flags); 
-						cli();
-						SDLA_WINDOW(dev, addr);
-						pbuf = (void *)(((int) dev->mem_start) + (addr & SDLA_ADDR_MASK));
-
-						sdla_write(dev, pbuf->buf_addr, skb->data, skb->len);
-
-						SDLA_WINDOW(dev, addr);
-						pbuf->opp_flag = 1;
-						restore_flags(flags);
-					}
-					break;
-			}
-
-			switch (ret)
-			{
-				case SDLA_RET_OK:
-					flp->stats.tx_packets++;
-					ret = DLCI_RET_OK;
-					break;
-
-				case SDLA_RET_CIR_OVERFLOW:
-				case SDLA_RET_BUF_OVERSIZE:
-				case SDLA_RET_NO_BUFS:
-					flp->stats.tx_dropped++;
-					ret = DLCI_RET_DROP;
-					break;
-
-				default:
-					flp->stats.tx_errors++;
-					ret = DLCI_RET_ERR;
-					break;
-			}
-		}
-		dev->tbusy = 0;
 	}
+	netif_wake_queue(dev);
+	for(i=0;i<CONFIG_DLCI_MAX;i++)
+	{
+		if(flp->master[i]!=NULL)
+			netif_wake_queue(flp->master[i]);
+	}		
 	return(ret);
 }
 
@@ -892,7 +882,6 @@ static void sdla_isr(int irq, void *dev_id, struct pt_regs * regs)
 		return;
 	}
 
-	dev->interrupt = 1;
 	byte = sdla_byte(dev, flp->type == SDLA_S508 ? SDLA_508_IRQ_INTERFACE : SDLA_502_IRQ_INTERFACE);
 	switch (byte)
 	{
@@ -925,7 +914,6 @@ static void sdla_isr(int irq, void *dev_id, struct pt_regs * regs)
 	/* this clears the byte, informing the Z80 we're done */
 	byte = 0;
 	sdla_write(dev, flp->type == SDLA_S508 ? SDLA_508_IRQ_INTERFACE : SDLA_502_IRQ_INTERFACE, &byte, sizeof(byte));
-	dev->interrupt = 0;
 }
 
 static void sdla_poll(unsigned long device)
@@ -992,9 +980,8 @@ static int sdla_close(struct net_device *dev)
 
 	sdla_cmd(dev, SDLA_DISABLE_COMMUNICATIONS, 0, 0, NULL, 0, NULL, NULL);
 
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
+	
 	MOD_DEC_USE_COUNT;
 
 	return(0);
@@ -1096,10 +1083,8 @@ static int sdla_open(struct net_device *dev)
 				sdla_cmd(dev, SDLA_SET_DLCI_CONFIGURATION, abs(flp->dlci[i]), 0, &dlp->config, sizeof(struct dlci_conf), NULL, NULL);
 		}
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
+	netif_start_queue(dev);
+	
 	MOD_INC_USE_COUNT;
 
 	return(0);
@@ -1119,7 +1104,7 @@ static int sdla_config(struct net_device *dev, struct frad_conf *conf, int get)
 
 	if (!get)
 	{
-		if (dev->start)
+		if (test_bit(LINK_STATE_START, &dev->state))
 			return(-EBUSY);
 
 		if(copy_from_user(&data.config, conf, sizeof(struct frad_conf)))
@@ -1182,7 +1167,7 @@ static int sdla_config(struct net_device *dev, struct frad_conf *conf, int get)
 	else
 	{
 		/* no sense reading if the CPU isn't started */
-		if (dev->start)
+		if (test_bit(LINK_STATE_START, &dev->state))
 		{
 			size = sizeof(data);
 			if (sdla_cmd(dev, SDLA_READ_DLCI_CONFIGURATION, 0, 0, NULL, 0, &data, &size) != SDLA_RET_OK)
@@ -1331,7 +1316,7 @@ int sdla_change_mtu(struct net_device *dev, int new_mtu)
 
 	flp = dev->priv;
 
-	if (dev->start)
+	if (test_bit(LINK_STATE_START, &dev->state))
 		return(-EBUSY);
 
 	/* for now, you can't change the MTU! */

@@ -615,11 +615,9 @@ static int irtty_change_speed_complete(struct irda_task *task)
 	ASSERT(self->netdev != NULL, return -1;);
 
 	/* Finished changing speed, so we are not busy any longer */
-	self->netdev->tbusy = 0;
-
 	/* Signal network layer so it can try to send the frame */
-	mark_bh(NET_BH);
-
+	netif_wake_queue(self->netdev);
+	
 	return 0;
 }
 
@@ -639,9 +637,8 @@ static int irtty_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	ASSERT(self != NULL, return 0;);
 
 	/* Lock transmit buffer */
-	if (irda_lock((void *) &dev->tbusy) == FALSE)
-		return -EBUSY;
-
+	netif_stop_queue(dev);
+	
 	/* Check if we need to change the speed */
 	if ((speed = irda_get_speed(skb)) != self->io.speed)
 		self->new_speed = speed;
@@ -727,10 +724,8 @@ static void irtty_write_wakeup(struct tty_struct *tty)
 					  NULL, (void *) self->new_speed);
 			self->new_speed = 0;
 		} else {
-			self->netdev->tbusy = 0; /* Unlock */
-		
 			/* Tell network layer that we want more frames */
-			mark_bh(NET_BH);
+			netif_wake_queue(self->netdev);
 		}
 	}
 }
@@ -899,10 +894,8 @@ static int irtty_net_open(struct net_device *dev)
 	IRDA_DEBUG(0, __FUNCTION__ "()\n");
 	
 	/* Ready to play! */
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
+	netif_start_queue(dev);
+	
 	/* Make sure we can receive more data */
 	irtty_stop_receiver(self, FALSE);
 
@@ -928,9 +921,8 @@ static int irtty_net_close(struct net_device *dev)
 	irtty_stop_receiver(self, TRUE);
 
 	/* Stop device */
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
+	
 	/* Stop and remove instance of IrLAP */
 	if (self->irlap)
 		irlap_close(self->irlap);

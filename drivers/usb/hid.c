@@ -754,7 +754,24 @@ static void hid_configure_usage(struct hid_device *device, struct hid_field *fie
 
 		case HID_UP_GENDESK:
 
+			if ((usage->hid & 0xf0) == 0x80) {	/* SystemControl */
+				switch (usage->hid & 0xf) {
+					case 0x1: usage->code = KEY_POWER;  break;
+					case 0x2: usage->code = KEY_SLEEP;  break;
+					case 0x3: usage->code = KEY_WAKEUP; break;
+					default: usage->code = KEY_UNKNOWN; break;
+				}
+				usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX;
+				break;
+			}
+
 			usage->code = usage->hid & 0xf;
+
+			if (field->report_size == 1) {
+				usage->code = BTN_MISC;
+				usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX;
+				break;
+			}
 
 			if (field->flags & HID_MAIN_ITEM_RELATIVE) {
 				usage->type = EV_REL; bit = input->relbit; max = REL_MAX;
@@ -816,18 +833,41 @@ static void hid_configure_usage(struct hid_device *device, struct hid_field *fie
 			}
 			break;
 
+		case HID_UP_HOTKEY:
+			
+			switch (usage->hid & HID_USAGE) {
+
+				case 0x0034: usage->code = KEY_PHONE;		break;
+				case 0x0036: usage->code = KEY_NOTEPAD;		break;
+				case 0x008a: usage->code = KEY_MAIL;		break;
+				case 0x0095: usage->code = KEY_CALENDAR;	break;
+				case 0x00b7: usage->code = KEY_PRINT;		break;
+				case 0x00b8: usage->code = KEY_HELP;		break;
+				case 0x00cd: usage->code = KEY_SOUND;		break;
+				case 0x00e2: usage->code = KEY_PROG1;		break;
+				case 0x00e9: usage->code = KEY_PROG2;		break;
+				case 0x00ea: usage->code = KEY_PROG3;		break;
+				case 0x018a: usage->code = KEY_WWW;		break;
+				case 0x0223: usage->code = KEY_FULLSCREEN;	break;
+				default:     usage->code = KEY_UNKNOWN;		break;
+
+			}
+		
+			usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX;
+			break;
+
 		default:
 		unknown:
-
-			if (field->flags & HID_MAIN_ITEM_RELATIVE) {
-				usage->code = REL_MISC;
-				usage->type = EV_REL; bit = input->relbit; max = REL_MAX;
-				break;
-			}
 
 			if (field->report_size == 1) {
 				usage->code = BTN_MISC;
 				usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX;
+				break;
+			}
+
+			if (field->flags & HID_MAIN_ITEM_RELATIVE) {
+				usage->code = REL_MISC;
+				usage->type = EV_REL; bit = input->relbit; max = REL_MAX;
 				break;
 			}
 
@@ -864,7 +904,7 @@ static void hid_configure_usage(struct hid_device *device, struct hid_field *fie
 	}
 }
 
-static void hid_process_event(struct input_dev *input, struct hid_usage *usage, __s32 value)
+static void hid_process_event(struct input_dev *input, int flags, struct hid_usage *usage, __s32 value)
 {
 	hid_dump_input(usage, value);
 
@@ -876,6 +916,9 @@ static void hid_process_event(struct input_dev *input, struct hid_usage *usage, 
 	}
 
 	input_event(input, usage->type, usage->code, value);
+
+	if ((flags & HID_MAIN_ITEM_RELATIVE) && (usage->type == EV_KEY))
+		input_event(input, usage->type, usage->code, 0);
 }
 
 /*
@@ -917,19 +960,19 @@ static void hid_input_field(struct hid_device *dev, struct hid_field *field, __u
 			} else {
 				if (value[n] == field->value[n]) continue;
 			}
-			hid_process_event(&dev->input, &field->usage[n], value[n]);
+			hid_process_event(&dev->input, field->flags, &field->usage[n], value[n]);
 
 		} else {
 
 			if (field->value[n] >= min && field->value[n] <= max			/* non-NULL value */
 				&& field->usage[field->value[n] - min].hid			/* nonzero usage */
 				&& search(value, field->value[n], count))
-					hid_process_event(&dev->input, &field->usage[field->value[n] - min], 0);
+					hid_process_event(&dev->input, field->flags, &field->usage[field->value[n] - min], 0);
 
 			if (value[n] >= min && value[n] <= max					/* non-NULL value */
 				&& field->usage[value[n] - min].hid				/* nonzero usage */
 				&& search(field->value, value[n], count))
-					hid_process_event(&dev->input, &field->usage[value[n] - min], 1);
+					hid_process_event(&dev->input, field->flags, &field->usage[value[n] - min], 1);
 		}
 	}
 
@@ -1340,3 +1383,5 @@ int hid_init(void)
 	usb_register(&hid_driver);
 	return 0;
 }
+
+__initcall(hid_init);

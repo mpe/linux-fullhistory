@@ -118,9 +118,16 @@ void keybdev_event(struct input_handle *handle, unsigned int type, unsigned int 
 static int keybdev_connect(struct input_handler *handler, struct input_dev *dev)
 {
 	struct input_handle *handle;
+	int i;
 
-	if (!test_bit(EV_KEY, dev->evbit) || !test_bit(KEY_A, dev->keybit) || !test_bit(KEY_Z, dev->keybit))
+	if (!test_bit(EV_KEY, dev->evbit))
 		return -1;
+
+	for (i = KEY_RESERVED; i < BTN_MISC; i++)
+		if (test_bit(i, dev->keybit)) break;
+
+	if (i == BTN_MISC)
+ 		return -1;
 
 	if (!(handle = kmalloc(sizeof(struct input_handle), GFP_KERNEL)))
 		return -1;

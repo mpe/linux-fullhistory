@@ -62,6 +62,10 @@
  *			       driver (almost)
  *			     - Other minor stuff
  *
+ *	v1.4 Feb 10, 2000    - Updated with more changes required after Dave's
+ *	                       network cleanup in 2.3.43pre7 (Tigran & myself)
+ *	                     - Minor stuff.
+ *
  *******************************************************************************/
 
 
@@ -102,7 +106,7 @@ static	int		bbuf = 0;
 static	u8		*TLanPadBuffer;
 static	char		TLanSignature[] = "TLAN";
 static	int		TLanVersionMajor = 1;
-static	int		TLanVersionMinor = 3;
+static	int		TLanVersionMinor = 4;
 
 
 static TLanAdapterEntry TLanAdapterList[] __initdata = {
@@ -361,7 +365,7 @@ static int __init tlan_probe(void)
 	u32		   io_base, index;
 	int 		   found;
 	
-	printk(KERN_INFO "ThunderLAN driver v%d.%d:\n", 
+	printk(KERN_INFO "ThunderLAN driver v%d.%d\n", 
 					TLanVersionMajor,
 					TLanVersionMinor);
 
@@ -461,7 +465,7 @@ module_exit(tlan_exit);
 	 *
 	 **************************************************************/
 
-int TLan_PciProbe(u8 *pci_dfn, u8 *pci_irq, u8 *pci_rev, u32 *pci_io_base, u32 *dl_ix )
+static int __init TLan_PciProbe(u8 *pci_dfn, u8 *pci_irq, u8 *pci_rev, u32 *pci_io_base, u32 *dl_ix )
 {
 	static int dl_index = 0;
 	static struct pci_dev * pdev = NULL;
@@ -626,7 +630,7 @@ static int TLan_Init( struct net_device *dev )
 	 *
 	 **************************************************************/
 
-int TLan_Open( struct net_device *dev )
+static int TLan_Open( struct net_device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	int		err;
@@ -642,7 +646,7 @@ int TLan_Open( struct net_device *dev )
 	}
 	
 	netif_start_queue(dev);
-
+	
 	/* NOTE: It might not be necessary to read the stats before a
 			 reset if you don't care what the values are.
 	*/
@@ -680,7 +684,7 @@ int TLan_Open( struct net_device *dev )
 	 *
 	 **************************************************************/
 
-int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
+static int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 	TLanList	*tail_list;
@@ -690,7 +694,10 @@ int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
 
 	if ( ! priv->phyOnline ) {
 		TLAN_DBG( TLAN_DEBUG_TX, "TRANSMIT:  %s PHY is not ready\n", dev->name );
-		dev_kfree_skb( skb );
+		if (in_irq())
+			dev_kfree_skb_irq(skb);
+		else
+			dev_kfree_skb(skb);
 		return 0;
 	}
 
@@ -748,7 +755,10 @@ int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
 	CIRC_INC( priv->txTail, TLAN_NUM_TX_LISTS );
 
 	if ( bbuf ) {
-		dev_kfree_skb( skb );
+		if (in_irq())
+			dev_kfree_skb_irq(skb);
+		else
+			dev_kfree_skb(skb);
 	}
 		
 	dev->trans_start = jiffies;
@@ -780,7 +790,7 @@ int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
 	 *
 	 **************************************************************/
 
-void TLan_HandleInterrupt(int irq, void *dev_id, struct pt_regs *regs)
+static void TLan_HandleInterrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	u32		ack;
 	struct net_device	*dev;
@@ -828,7 +838,7 @@ void TLan_HandleInterrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 *
 	 **************************************************************/
 
-int TLan_Close(struct net_device *dev)
+static int TLan_Close(struct net_device *dev)
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 
@@ -866,7 +876,7 @@ int TLan_Close(struct net_device *dev)
 	 *
 	 **************************************************************/
 
-struct net_device_stats *TLan_GetStats( struct net_device *dev )
+static struct net_device_stats *TLan_GetStats( struct net_device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	int i;
@@ -914,7 +924,7 @@ struct net_device_stats *TLan_GetStats( struct net_device *dev )
 	 *
 	 **************************************************************/
 
-void TLan_SetMulticastList( struct net_device *dev )
+static void TLan_SetMulticastList( struct net_device *dev )
 {	
 	struct dev_mc_list	*dmi = dev->mc_list;
 	u32			hash1 = 0;
@@ -1033,7 +1043,11 @@ u32 TLan_HandleTxEOF( struct net_device *dev, u16 host_int )
 	head_list = priv->txList + priv->txHead;
 
 	if ( ! bbuf ) {
-		dev_kfree_skb( (struct sk_buff *) head_list->buffer[9].address );
+		if (in_irq())
+			dev_kfree_skb_irq( (struct sk_buff *) head_list->buffer[9].address );
+		else
+			dev_kfree_skb( (struct sk_buff *) head_list->buffer[9].address );
+		
 		head_list->buffer[9].address = 0;
 	}
 
@@ -1046,7 +1060,9 @@ u32 TLan_HandleTxEOF( struct net_device *dev, u16 host_int )
 	priv->stats.tx_bytes += head_list->frameSize;
 
 	head_list->cStat = TLAN_CSTAT_UNUSED;
+	
 	netif_start_queue(dev);
+	
 	CIRC_INC( priv->txHead, TLAN_NUM_TX_LISTS );
 	if ( eoc ) {
 		TLAN_DBG( TLAN_DEBUG_TX, "TRANSMIT:  Handling TX EOC (Head=%d Tail=%d)\n", priv->txHead, priv->txTail );
@@ -2413,6 +2429,7 @@ int TLan_MiiReadReg( struct net_device *dev, u16 phy, u16 reg, u16 *val )
 	*val = tmp;
 
 	spin_unlock_irqrestore(&priv->lock, flags);
+
 	return err;
 
 } /* TLan_MiiReadReg */
@@ -2552,6 +2569,7 @@ void TLan_MiiWriteReg( struct net_device *dev, u16 phy, u16 reg, u16 val )
 		TLan_SetBit( TLAN_NET_SIO_MINTEN, sio );
 
 	spin_unlock_irqrestore(&priv->lock, flags);
+
 } /* TLan_MiiWriteReg */
 
 
@@ -2775,9 +2793,9 @@ int TLan_EeReadByte( struct net_device *dev, u8 ee_addr, u8 *data )
 		goto fail;
 	}
 	TLan_EeReceiveByte( dev->base_addr, data, TLAN_EEPROM_STOP );
-
 fail:
 	spin_unlock_irqrestore(&priv->lock, flags);
+
 	return ret;
 
 } /* TLan_EeReadByte */

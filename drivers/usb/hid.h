@@ -158,6 +158,7 @@ struct hid_item {
 #define HID_UP_KEYBOARD 	0x00070000
 #define HID_UP_LED 		0x00080000
 #define HID_UP_BUTTON 		0x00090000
+#define HID_UP_HOTKEY		0x000c0000
 #define HID_UP_DIGITIZER 	0x000d0000
 #define HID_UP_PID 		0x000f0000
 

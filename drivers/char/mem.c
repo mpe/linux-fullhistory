@@ -58,9 +58,6 @@ extern void mda_console_init(void);
 #if defined(CONFIG_ADB)
 extern void adbdev_init(void);
 #endif
-#ifdef CONFIG_USB
-extern void usb_init(void);
-#endif
 #ifdef CONFIG_PHONE
 extern void telephony_init(void);
 #endif
@@ -581,9 +578,6 @@ int __init chr_dev_init(void)
 		printk("unable to get major %d for memory devs\n", MEM_MAJOR);
 	rand_initialize();
 	raw_init();
-#ifdef CONFIG_USB
-	usb_init();
-#endif
 #ifdef CONFIG_I2C
 	i2c_init_all();
 #endif

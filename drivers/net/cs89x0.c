@@ -120,6 +120,7 @@ static int net_open(struct net_device *dev);
 static int	net_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void set_multicast_list(struct net_device *dev);
+static void net_timeout(struct net_device *dev);
 static void net_rx(struct net_device *dev);
 static int net_close(struct net_device *dev);
 static struct net_device_stats *net_get_stats(struct net_device *dev);
@@ -139,14 +140,8 @@ static int set_mac_address(struct net_device *dev, void *addr);
    If dev->base_addr == 2, allocate space for the device and return success
    (detachable devices only).
    */
-#ifdef HAVE_DEVLIST
-/* Support for a alternate probe manager, which will eliminate the
-   boilerplate below. */
-struct netdev_entry netcard_drv =
-{"netcard", cs89x0_probe1, NETCARD_IO_EXTENT, netcard_portlist};
-#else
-int __init 
-cs89x0_probe(struct net_device *dev)
+
+int __init cs89x0_probe(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -166,37 +161,31 @@ cs89x0_probe(struct net_device *dev)
 	printk("cs89x0: no cs8900 or cs8920 detected.  Be sure to disable PnP with SETUP\n");
 	return ENODEV;
 }
-#endif
 
-static int inline
-readreg(struct net_device *dev, int portno)
+extern int inline readreg(struct net_device *dev, int portno)
 {
 	outw(portno, dev->base_addr + ADD_PORT);
 	return inw(dev->base_addr + DATA_PORT);
 }
 
-static void inline
-writereg(struct net_device *dev, int portno, int value)
+extern  void inline writereg(struct net_device *dev, int portno, int value)
 {
 	outw(portno, dev->base_addr + ADD_PORT);
 	outw(value, dev->base_addr + DATA_PORT);
 }
 
 
-static int inline
-readword(struct net_device *dev, int portno)
+extern int inline readword(struct net_device *dev, int portno)
 {
 	return inw(dev->base_addr + portno);
 }
 
-static void inline
-writeword(struct net_device *dev, int portno, int value)
+extern void inline writeword(struct net_device *dev, int portno, int value)
 {
 	outw(value, dev->base_addr + portno);
 }
 
-static int __init 
-wait_eeprom_ready(struct net_device *dev)
+static int __init wait_eeprom_ready(struct net_device *dev)
 {
 	int timeout = jiffies;
 	/* check to see if the EEPROM is ready, a timeout is used -
@@ -208,8 +197,7 @@ wait_eeprom_ready(struct net_device *dev)
 	return 0;
 }
 
-static int __init 
-get_eeprom_data(struct net_device *dev, int off, int len, int *buffer)
+static int __init get_eeprom_data(struct net_device *dev, int off, int len, int *buffer)
 {
 	int i;
 
@@ -226,8 +214,7 @@ get_eeprom_data(struct net_device *dev, int off, int len, int *buffer)
         return 0;
 }
 
-static int  __init 
-get_eeprom_cksum(int off, int len, int *buffer)
+static int  __init  get_eeprom_cksum(int off, int len, int *buffer)
 {
 	int i, cksum;
 
@@ -378,10 +365,12 @@ static int __init cs89x0_probe1(struct net_device *dev, int ioaddr)
 
 	dev->open		= net_open;
 	dev->stop		= net_close;
-	dev->hard_start_xmit = net_send_packet;
-	dev->get_stats	= net_get_stats;
-	dev->set_multicast_list = &set_multicast_list;
-	dev->set_mac_address = &set_mac_address;
+	dev->tx_timeout		= net_timeout;
+	dev->watchdog_timeo	= HZ;
+	dev->hard_start_xmit 	= net_send_packet;
+	dev->get_stats		= net_get_stats;
+	dev->set_multicast_list = set_multicast_list;
+	dev->set_mac_address 	= set_mac_address;
 
 	/* Fill in the fields of the device structure with ethernet values. */
 	ether_setup(dev);
@@ -720,84 +709,68 @@ net_open(struct net_device *dev)
 	/* now that we've got our act together, enable everything */
 	writereg(dev, PP_BusCTL, ENABLE_IRQ
                  );
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
         MOD_INC_USE_COUNT;
+        netif_start_queue(dev);
 	return 0;
 }
 
-static int
-net_send_packet(struct sk_buff *skb, struct net_device *dev)
+static void net_timeout(struct net_device *dev)
 {
-	if (dev->tbusy) {
-		/* If we get here, some higher level has decided we are broken.
-		   There should really be a "kick me" function call instead. */
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 5)
-			return 1;
-		if (net_debug > 0) printk("%s: transmit timed out, %s?\n", dev->name,
-			   tx_done(dev) ? "IRQ conflict ?" : "network cable problem");
-		/* Try to restart the adaptor. */
-		dev->tbusy=0;
-		dev->trans_start = jiffies;
-	}
+	/* If we get here, some higher level has decided we are broken.
+	   There should really be a "kick me" function call instead. */
+	if (net_debug > 0) printk("%s: transmit timed out, %s?\n", dev->name,
+		   tx_done(dev) ? "IRQ conflict ?" : "network cable problem");
+	/* Try to restart the adaptor. */
+	netif_wake_queue(dev);
+}
 
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
-		printk("%s: Transmitter access conflict.\n", dev->name);
-	else {
-		struct net_local *lp = (struct net_local *)dev->priv;
-		short ioaddr = dev->base_addr;
-		unsigned long flags;
+static int net_send_packet(struct sk_buff *skb, struct net_device *dev)
+{
+	struct net_local *lp = (struct net_local *)dev->priv;
+	short ioaddr = dev->base_addr;
+	unsigned long flags;
 
-		if (net_debug > 3)printk("%s: sent %d byte packet of type %x\n", dev->name, skb->len, (skb->data[ETH_ALEN+ETH_ALEN] << 8) | skb->data[ETH_ALEN+ETH_ALEN+1]);
+	if (net_debug > 3)
+		printk("%s: sent %d byte packet of type %x\n", dev->name, skb->len, (skb->data[ETH_ALEN+ETH_ALEN] << 8) | skb->data[ETH_ALEN+ETH_ALEN+1]);
 
-		/* keep the upload from being interrupted, since we
-                   ask the chip to start transmitting before the
-                   whole packet has been completely uploaded. */
-		save_flags(flags);
-		cli();
+	/* keep the upload from being interrupted, since we
+                  ask the chip to start transmitting before the
+                  whole packet has been completely uploaded. */
 
-		/* initiate a transmit sequence */
-		outw(lp->send_cmd, ioaddr + TX_CMD_PORT);
-		outw(skb->len, ioaddr + TX_LEN_PORT);
+	save_flags(flags);
+	cli();
+	netif_stop_queue(dev);
+	
+	/* initiate a transmit sequence */
+	outw(lp->send_cmd, ioaddr + TX_CMD_PORT);
+	outw(skb->len, ioaddr + TX_LEN_PORT);
 
-		/* Test to see if the chip has allocated memory for the packet */
-		if ((readreg(dev, PP_BusST) & READY_FOR_TX_NOW) == 0) {
-			/* Gasp!  It hasn't.  But that shouldn't happen since
-			   we're waiting for TxOk, so return 1 and requeue this packet. */
-			restore_flags(flags);
-			return 1;
-		}
-
-		/* Write the contents of the packet */
-                outsw(ioaddr + TX_FRAME_PORT,skb->data,(skb->len+1) >>1);
-
+	/* Test to see if the chip has allocated memory for the packet */
+	if ((readreg(dev, PP_BusST) & READY_FOR_TX_NOW) == 0) {
+		/* Gasp!  It hasn't.  But that shouldn't happen since
+		   we're waiting for TxOk, so return 1 and requeue this packet. */
 		restore_flags(flags);
-		dev->trans_start = jiffies;
+		return 1;
 	}
-	dev_kfree_skb (skb);
+	/* Write the contents of the packet */
+        outsw(ioaddr + TX_FRAME_PORT,skb->data,(skb->len+1) >>1);
 
+	restore_flags(flags);
+	dev->trans_start = jiffies;
+	dev_kfree_skb (skb);
+	netif_wake_queue(dev);
+	
 	return 0;
 }
 
 /* The typical workload of the driver:
    Handle the network interface interrupts. */
+   
 static void net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct net_device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status;
-
-	if (dev == NULL) {
-		printk ("net_interrupt(): irq %d for unknown device.\n", irq);
-		return;
-	}
-	if (dev->interrupt)
-		printk("%s: Re-entering the interrupt handler.\n", dev->name);
-	dev->interrupt = 1;
 
 	ioaddr = dev->base_addr;
 	lp = (struct net_local *)dev->priv;
@@ -818,8 +791,7 @@ static void net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			break;
 		case ISQ_TRANSMITTER_EVENT:
 			lp->stats.tx_packets++;
-			dev->tbusy = 0;
-			mark_bh(NET_BH);	/* Inform upper layers. */
+			netif_wake_queue(dev);	/* Inform upper layers. */
 			if ((status & TX_OK) == 0) lp->stats.tx_errors++;
 			if (status & TX_LOST_CRS) lp->stats.tx_carrier_errors++;
 			if (status & TX_SQE_ERROR) lp->stats.tx_heartbeat_errors++;
@@ -833,8 +805,7 @@ static void net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
                                    That shouldn't happen since we only ever
                                    load one packet.  Shrug.  Do the right
                                    thing anyway. */
-				dev->tbusy = 0;
-				mark_bh(NET_BH);	/* Inform upper layers. */
+				netif_wake_queue(dev);	/* Inform upper layers. */
 			}
 			if (status & TX_UNDERRUN) {
 				if (net_debug > 0) printk("%s: transmit underrun\n", dev->name);
@@ -846,8 +817,7 @@ static void net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 				   avoids having to wait for the upper
 				   layers to timeout on us, in the
 				   event of a tx underrun */
-				dev->tbusy = 0;
-				mark_bh(NET_BH);	/* Inform upper layers. */
+				netif_wake_queue(dev);	/* Inform upper layers. */
                         }
 			break;
 		case ISQ_RX_MISS_EVENT:
@@ -858,8 +828,6 @@ static void net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			break;
 		}
 	}
-	dev->interrupt = 0;
-	return;
 }
 
 /* We have a good packet(s), get it/them out of the buffers. */
@@ -913,13 +881,12 @@ net_rx(struct net_device *dev)
 static int
 net_close(struct net_device *dev)
 {
-
+	netif_stop_queue(dev);
+	
 	writereg(dev, PP_RxCFG, 0);
 	writereg(dev, PP_TxCFG, 0);
 	writereg(dev, PP_BufCFG, 0);
 	writereg(dev, PP_BusCTL, 0);
-
-	dev->start = 0;
 
 	free_irq(dev->irq, dev);
 
@@ -974,7 +941,7 @@ static void set_multicast_list(struct net_device *dev)
 static int set_mac_address(struct net_device *dev, void *addr)
 {
 	int i;
-	if (dev->start)
+	if (test_bit(LINK_STATE_START, &dev->state))
 		return -EBUSY;
 	printk("%s: Setting MAC address to ", dev->name);
 	for (i = 0; i < 6; i++)

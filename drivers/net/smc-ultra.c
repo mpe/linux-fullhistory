@@ -403,8 +403,7 @@ ultra_close_card(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* CMDREG */
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	if (ei_debug > 1)
 		printk("%s: Shutting down ethercard.\n", dev->name);

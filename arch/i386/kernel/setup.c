@@ -1515,7 +1515,7 @@ unsigned long cpu_initialized = 0;
  * and IDT. We reload them nevertheless, this function acts as a
  * 'CPU state barrier', nothing should get across.
  */
-void cpu_init (void)
+void __init cpu_init (void)
 {
 	int nr = smp_processor_id();
 	struct tss_struct * t = &init_tss[nr];

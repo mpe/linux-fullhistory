@@ -833,11 +833,8 @@ static int tok_open(struct net_device *dev)
 	if (ti->open_status==IN_PROGRESS) sleep_on(&ti->wait_for_reset);
 
 	if (ti->open_status==SUCCESS) {
-		dev->tbusy=0;
-		dev->interrupt=0;
-		dev->start=1;
 		/* NEED to see smem size *AND* reset high 512 bytes if needed */
-
+		netif_start_queue(dev);
 		MOD_INC_USE_COUNT;
 
 		return 0;
@@ -850,6 +847,8 @@ static int tok_close(struct net_device *dev)
 
 	struct tok_info *ti=(struct tok_info *) dev->priv;
 
+	netif_stop_queue(dev);
+	
 	isa_writeb(DIR_CLOSE_ADAPTER,
 	       ti->srb + offsetof(struct srb_close_adapter, command));
 	isa_writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
@@ -862,7 +861,6 @@ static int tok_close(struct net_device *dev)
 		DPRINTK("close adapter failed: %02X\n",
 			(int)isa_readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)));
 
-        dev->start = 0;
 #ifdef PCMCIA
 	ti->sram = 0 ;
 #endif
@@ -886,7 +884,6 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	spin_lock(&(ti->lock));
 
       	/* Disable interrupts till processing is finished */
-	dev->interrupt=1;
 	isa_writeb((~INT_ENABLE), ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
 
 	/* Reset interrupt for ISA boards */
@@ -911,7 +908,6 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
        		{
 		          DPRINTK("PCMCIA card removed.\n");
 			  spin_unlock(&(ti->lock));
-        		  dev->interrupt = 0;
          		  return;
        		}
 
@@ -920,7 +916,6 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
     	        {
          		 DPRINTK("PCMCIA card removed.\n");
 			 spin_unlock(&(ti->lock));
-         		 dev->interrupt = 0;
          		 return;
       		 }
 #endif
@@ -941,7 +936,6 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 			isa_writeb((~ADAP_CHK_INT), ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
 			isa_writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET  + ISRP_EVEN);
-			dev->interrupt=0;
 
 		} else if (isa_readb(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN)
 				 & (TCR_INT | ERR_INT | ACCESS_INT)) {
@@ -951,7 +945,6 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 			isa_writeb(~(TCR_INT | ERR_INT | ACCESS_INT),
 			       ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
 			isa_writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET  + ISRP_EVEN);
-			dev->interrupt=0;
 
 		} else if (status
 			   & (SRB_RESP_INT | ASB_FREE_INT | ARB_CMD_INT | SSB_RESP_INT)) {
@@ -972,7 +965,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 							      dev_kfree_skb(ti->current_skb);
 							      ti->current_skb=NULL;
 						      }
-						      dev->tbusy=0;
+						      netif_wake_queue(dev);
 						      if (ti->readlog_pending) ibmtr_readlog(dev);
 					      }
 				      }
@@ -989,8 +982,9 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 							      dev_kfree_skb(ti->current_skb);
 							      ti->current_skb=NULL;
 						      }
-						      dev->tbusy=0;
-						      if (ti->readlog_pending) ibmtr_readlog(dev);
+						      netif_wake_queue(dev);
+						      if (ti->readlog_pending)
+						      		ibmtr_readlog(dev);
 					      }
 				      }
 				      break;
@@ -1115,7 +1109,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 							(int)isa_readb(ti->srb+offsetof(struct srb_read_log,
 												    token_errors)));
 					    }
-					dev->tbusy=0;
+					netif_wake_queue(dev);
 					break;
 
 				      default:
@@ -1183,7 +1177,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 						      DPRINTK("New ring status: %02X\n", ring_status);
 
 					      if (ring_status & LOG_OVERFLOW) {
-						      if (dev->tbusy)
+						      if (test_bit(LINK_STATE_XOFF, &dev->state))
                                                               ti->readlog_pending = 1;
 						      else
                                                               ibmtr_readlog(dev);
@@ -1235,7 +1229,6 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 		}	 /* SRB, ARB, ASB or SSB response */
 
-		dev->interrupt=0;
 		isa_writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
 		break;
 
@@ -1330,7 +1323,7 @@ static int tok_init_card(struct net_device *dev)
 	ti->do_tok_int=FIRST_INT;
 
 	/* Reset adapter */
-	dev->tbusy=1; /* nothing can be done before reset and open completed */
+	netif_stop_queue(dev);
 
 #ifdef ENABLE_PAGING
 	if(ti->page_mask)
@@ -1498,10 +1491,9 @@ static void tr_tx(struct net_device *dev)
 
 	isa_writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 	ti->tr_stats.tx_bytes+=ti->current_skb->len;
-	dev->tbusy=0;
 	dev_kfree_skb(ti->current_skb);
 	ti->current_skb=NULL;
-	mark_bh(NET_BH);
+	netif_wake_queue(dev);
 	if (ti->readlog_pending) ibmtr_readlog(dev);
 }
 
@@ -1661,38 +1653,22 @@ static void tr_rx(struct net_device *dev)
 static int tok_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct tok_info *ti;
+	unsigned long flags;
 	ti=(struct tok_info *) dev->priv;
 
-	if (dev->tbusy) {
-		int ticks_waited;
+	netif_stop_queue(dev);
+	
+	/* lock against other CPUs */
+	spin_lock_irqsave(&(ti->lock), flags);
 
-		ticks_waited=jiffies - dev->trans_start;
-		if (ticks_waited<TR_BUSY_INTERVAL) return 1;
-
-		DPRINTK("Arrg. Transmitter busy.\n");
-		dev->trans_start+=5; /* we fake the transmission start time... */
-		return 1;
-	}
-
-	if (test_and_set_bit(0,(void *)&dev->tbusy)!=0)
-		DPRINTK("Transmitter access conflict\n");
-	else {
-		int flags;
-
-		/* lock against other CPUs */
-		spin_lock_irqsave(&(ti->lock), flags);
-
-		/* Save skb; we'll need it when the adapter asks for the data */
-		ti->current_skb=skb;
-		isa_writeb(XMIT_UI_FRAME, ti->srb + offsetof(struct srb_xmit, command));
-		isa_writew(ti->exsap_station_id, ti->srb
-		       +offsetof(struct srb_xmit, station_id));
-		isa_writeb(CMD_IN_SRB, (ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD));
-		spin_unlock_irqrestore(&(ti->lock), flags);
-
-		dev->trans_start=jiffies;
-	}
-
+	/* Save skb; we'll need it when the adapter asks for the data */
+	ti->current_skb=skb;
+	isa_writeb(XMIT_UI_FRAME, ti->srb + offsetof(struct srb_xmit, command));
+	isa_writew(ti->exsap_station_id, ti->srb
+	       +offsetof(struct srb_xmit, station_id));
+	isa_writeb(CMD_IN_SRB, (ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD));
+	spin_unlock_irqrestore(&(ti->lock), flags);
+	dev->trans_start=jiffies;
 	return 0;
 }
 
@@ -1712,7 +1688,8 @@ void ibmtr_readlog(struct net_device *dev) {
 	 isa_writeb(DIR_READ_LOG, ti->srb);
 	 isa_writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
 	 isa_writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
-	 dev->tbusy=1; /* really srb busy... */
+	 
+	 netif_stop_queue(dev);
 }
 
 /* tok_get_stats():  Basically a scaffold routine which will return

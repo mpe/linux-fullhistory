@@ -122,7 +122,8 @@ static int hostess_open(struct net_device *d)
 	/*
 	 *	Go go go
 	 */
-	d->tbusy=0;
+
+	netif_start_queue(d);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -141,8 +142,8 @@ static int hostess_close(struct net_device *d)
 	/*
 	 *	Link layer down
 	 */
-	d->tbusy=1;
-	
+	netif_stop_queue(d);
+		
 	switch(dma)
 	{
 		case 0:

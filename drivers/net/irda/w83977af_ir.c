@@ -475,8 +475,8 @@ void w83977af_change_speed(struct w83977af_ir *self, __u32 speed)
 	outb(UFR_EN_FIFO, iobase+UFR); /* First we must enable FIFO */
 	outb(0xa7, iobase+UFR);
 
-	self->netdev->tbusy = 0;
-	
+	netif_wake_queue(self->netdev);
+		
 	/* Enable some interrupts so we can receive frames */
 	switch_bank(iobase, SET0);
 	if (speed > PIO_MAX_SPEED) {
@@ -511,9 +511,8 @@ int w83977af_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 		   (int) skb->len);
 	
 	/* Lock transmit buffer */
-	if (irda_lock((void *) &dev->tbusy) == FALSE)
-		return -EBUSY;
-
+	netif_stop_queue(dev);
+	
 	/* Check if we need to change the speed */
 	if ((speed = irda_get_speed(skb)) != self->io.speed)
 		self->new_speed = speed;
@@ -715,11 +714,9 @@ void w83977af_dma_xmit_complete(struct w83977af_ir *self)
 	}
 
 	/* Unlock tx_buff and request another frame */
-	self->netdev->tbusy = 0; /* Unlock */
-	
 	/* Tell the network layer, that we want more frames */
-	mark_bh(NET_BH);
-
+	netif_wake_queue(self->netdev);
+	
 	/* Restore set */
 	outb(set, iobase+SSR);
 }
@@ -991,12 +988,10 @@ static __u8 w83977af_sir_interrupt(struct w83977af_ir *self, int isr)
 			outb(AUDR_SFEND, iobase+AUDR);
 			outb(set, iobase+SSR); 
 
-			self->netdev->tbusy = 0; /* Unlock */
 			self->stats.tx_packets++;
 
-			/* Schedule network layer */
-		        mark_bh(NET_BH);	
-
+			/* Feed me more packets */
+			netif_wake_queue(self->netdev);
 			new_icr |= ICR_ETBREI;
 		}
 	}
@@ -1124,8 +1119,6 @@ static void w83977af_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 	self = (struct w83977af_ir *) dev->priv;
 
-	dev->interrupt = 1;
-
 	iobase = self->io.fir_base;
 
 	/* Save current bank */
@@ -1148,7 +1141,6 @@ static void w83977af_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	outb(icr, iobase+ICR);    /* Restore (new) interrupts */
 	outb(set, iobase+SSR);    /* Restore bank register */
 
-	self->netdev->interrupt = 0;
 }
 
 /*
@@ -1250,10 +1242,8 @@ static int w83977af_net_open(struct net_device *dev)
 	outb(set, iobase+SSR);
 
 	/* Ready to play! */
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
+	netif_start_queue(dev);
+	
 	/* 
 	 * Open new IrLAP layer instance, now that everything should be
 	 * initialized properly 
@@ -1288,9 +1278,8 @@ static int w83977af_net_close(struct net_device *dev)
 	iobase = self->io.fir_base;
 
 	/* Stop device */
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
+	
 	/* Stop and remove instance of IrLAP */
 	if (self->irlap)
 		irlap_close(self->irlap);

@@ -195,15 +195,15 @@ extern void iounmap(void *addr);
  */
 #define __ISA_IO_base ((char *)(PAGE_OFFSET))
 
-#define isa_readb(a) readb(__ISA_IO_base + (unsigned long)(a))
-#define isa_readw(a) readw(__ISA_IO_base + (unsigned long)(a))
-#define isa_readl(a) readl(__ISA_IO_base + (unsigned long)(a))
-#define isa_writeb(b,a) writeb(b,__ISA_IO_base + (unsigned long)(a))
-#define isa_writew(w,a) writew(w,__ISA_IO_base + (unsigned long)(a))
-#define isa_writel(l,a) writel(l,__ISA_IO_base + (unsigned long)(a))
-#define isa_memset_io(a,b,c)		memset_io(__ISA_IO_base + (unsigned long)(a),(b),(c))
-#define isa_memcpy_fromio(a,b,c)	memcpy_fromio((a),__ISA_IO_base + (unsigned long)(b),(c))
-#define isa_memcpy_toio(a,b,c)		memcpy_toio(__ISA_IO_base + (unsigned long)(a),(b),(c))
+#define isa_readb(a) readb(__ISA_IO_base + (a))
+#define isa_readw(a) readw(__ISA_IO_base + (a))
+#define isa_readl(a) readl(__ISA_IO_base + (a))
+#define isa_writeb(b,a) writeb(b,__ISA_IO_base + (a))
+#define isa_writew(w,a) writew(w,__ISA_IO_base + (a))
+#define isa_writel(l,a) writel(l,__ISA_IO_base + (a))
+#define isa_memset_io(a,b,c)		memset_io(__ISA_IO_base + (a),(b),(c))
+#define isa_memcpy_fromio(a,b,c)	memcpy_fromio((a),__ISA_IO_base + (b),(c))
+#define isa_memcpy_toio(a,b,c)		memcpy_toio(__ISA_IO_base + (a),(b),(c))
 
 
 /*
@@ -211,7 +211,7 @@ extern void iounmap(void *addr);
  */
 
 #define eth_io_copy_and_sum(a,b,c,d)		eth_copy_and_sum((a),__io_virt(b),(c),(d))
-#define isa_eth_io_copy_and_sum(a,b,c,d)	eth_copy_and_sum((a),__io_virt(__ISA_IO_base + (unsigned long)(b)),(c),(d))
+#define isa_eth_io_copy_and_sum(a,b,c,d)	eth_copy_and_sum((a),__io_virt(__ISA_IO_base + (b)),(c),(d))
 
 static inline int check_signature(unsigned long io_addr,
 	const unsigned char *signature, int length)

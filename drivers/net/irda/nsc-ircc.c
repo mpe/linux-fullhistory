@@ -1033,8 +1033,6 @@ static void nsc_ircc_change_speed(struct nsc_ircc_cb *self, __u32 speed)
 	switch_bank(iobase, BANK2);
 	outb(EXCR2_RFSIZ|EXCR2_TFSIZ, iobase+EXCR2);
 	
-	self->netdev->tbusy = 0;
-	
 	/* Enable some interrupts so we can receive frames */
 	switch_bank(iobase, BANK0); 
 	if (speed > 115200) {
@@ -1050,6 +1048,8 @@ static void nsc_ircc_change_speed(struct nsc_ircc_cb *self, __u32 speed)
     	
 	/* Restore BSR */
 	outb(bank, iobase+BSR);
+	netif_wake_queue(dev);
+	
 }
 
 /*
@@ -1072,10 +1072,8 @@ static int nsc_ircc_hard_xmit_sir(struct sk_buff *skb, struct net_device *dev)
 
 	iobase = self->io.fir_base;
 
-	/* Lock transmit buffer */
-	if (irda_lock((void *) &dev->tbusy) == FALSE)
-		return -EBUSY;
-	
+	netif_stop_queue(dev);
+		
 	/* Check if we need to change the speed */
 	if ((speed = irda_get_speed(skb)) != self->io.speed)
 		self->new_speed = speed;
@@ -1118,10 +1116,8 @@ static int nsc_ircc_hard_xmit_fir(struct sk_buff *skb, struct net_device *dev)
 	self = (struct nsc_ircc_cb *) dev->priv;
 	iobase = self->io.fir_base;
 
-	/* Lock transmit buffer */
-	if (irda_lock((void *) &dev->tbusy) == FALSE)
-		return -EBUSY;
-
+	netif_stop_queue(dev);
+	
 	/* Check if we need to change the speed */
 	if ((speed = irda_get_speed(skb)) != self->io.speed)
 		self->new_speed = speed;
@@ -1199,7 +1195,7 @@ static int nsc_ircc_hard_xmit_fir(struct sk_buff *skb, struct net_device *dev)
  out:
 	/* Not busy transmitting anymore if window is not full */
 	if (self->tx_fifo.free < MAX_TX_WINDOW)
-		dev->tbusy = 0;
+		netif_wake_queue(self->netdev);
 
 	/* Restore bank register */
 	outb(bank, iobase+BSR);
@@ -1347,10 +1343,8 @@ static int nsc_ircc_dma_xmit_complete(struct nsc_ircc_cb *self)
 	/* Make sure we have room for more frames */
 	if (self->tx_fifo.free < MAX_TX_WINDOW) {
 		/* Not busy transmitting anymore */
-		self->netdev->tbusy = 0;
-
 		/* Tell the network layer, that we can accept more frames */
-		mark_bh(NET_BH);
+		netif_wake_queue(self->netdev);
 	}
 
 	/* Restore bank */
@@ -1601,11 +1595,9 @@ static void nsc_ircc_sir_interrupt(struct nsc_ircc_cb *self, int eir)
 		if (self->tx_buff.len > 0)
 			self->ier = IER_TXLDL_IE;
 		else { 
-			self->netdev->tbusy = 0; /* Unlock */
-			self->stats.tx_packets++;
-			
-		        mark_bh(NET_BH);	
 
+			self->stats.tx_packets++;
+			netif_wakeup_queue(self->netdev);
 			self->ier = IER_TXEMP_IE;
 		}
 			
@@ -1731,7 +1723,6 @@ static void nsc_ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	self = (struct nsc_ircc_cb *) dev->priv;
 
 	spin_lock(&self->lock);	
-	dev->interrupt = 1;
 
 	iobase = self->io.fir_base;
 
@@ -1754,7 +1745,6 @@ static void nsc_ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	outb(self->ier, iobase+IER); /* Restore interrupts */
 	outb(bsr, iobase+BSR);       /* Restore bank register */
 
-	dev->interrupt = 0;
 	spin_unlock(&self->lock);
 }
 
@@ -1860,10 +1850,9 @@ static int nsc_ircc_net_open(struct net_device *dev)
 	outb(bank, iobase+BSR);
 
 	/* Ready to play! */
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
 
+	netif_start_queue(dev);
+	
 	/* 
 	 * Open new IrLAP layer instance, now that everything should be
 	 * initialized properly 
@@ -1895,9 +1884,8 @@ static int nsc_ircc_net_close(struct net_device *dev)
 	ASSERT(self != NULL, return 0;);
 
 	/* Stop device */
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
+	
 	/* Stop and remove instance of IrLAP */
 	if (self->irlap)
 		irlap_close(self->irlap);

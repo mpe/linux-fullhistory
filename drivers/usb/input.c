@@ -333,3 +333,5 @@ void cleanup_module(void)
 {
 }
 #endif
+
+__initcall(input_init);

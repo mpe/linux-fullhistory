@@ -244,43 +244,34 @@ static int dlci_transmit(struct sk_buff *skb, struct net_device *dev)
 	if (!skb || !dev)
 		return(0);
 
-	if (dev->tbusy)
-		return(1);
-
 	dlp = dev->priv;
 
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
-		printk(KERN_WARNING "%s: transmitter access conflict.\n", dev->name);
-	else
+	netif_stop_queue(dev);
+	
+	ret = dlp->slave->hard_start_xmit(skb, dlp->slave);
+	switch (ret)
 	{
-		ret = dlp->slave->hard_start_xmit(skb, dlp->slave);
-		switch (ret)
-		{
-			case DLCI_RET_OK:
-				dlp->stats.tx_packets++;
-				ret = 0;
-				break;
-
+		case DLCI_RET_OK:
+			dlp->stats.tx_packets++;
+			ret = 0;
+			break;
 			case DLCI_RET_ERR:
-				dlp->stats.tx_errors++;
-				ret = 0;
-				break;
-
+			dlp->stats.tx_errors++;
+			ret = 0;
+			break;
 			case DLCI_RET_DROP:
-				dlp->stats.tx_dropped++;
-				ret = 1;
-				break;
-		}
-
-		/* Alan Cox recommends always returning 0, and always freeing the packet */
-		/* experience suggest a slightly more conservative approach */
-
-		if (!ret)
-			dev_kfree_skb(skb);
-
-		dev->tbusy = 0;
+			dlp->stats.tx_dropped++;
+			ret = 1;
+			break;
 	}
+	/* Alan Cox recommends always returning 0, and always freeing the packet */
+	/* experience suggest a slightly more conservative approach */
 
+	if (!ret)
+	{
+		dev_kfree_skb(skb);
+		netif_wake_queue(dev);
+	}
 	return(ret);
 }
 
@@ -370,18 +361,15 @@ static int dlci_open(struct net_device *dev)
 	if (!*(short *)(dev->dev_addr))
 		return(-EINVAL);
 
-	if (!dlp->slave->start)
+	if (!test_bit(LINK_STATE_START, &dlp->slave->state))
 		return(-ENOTCONN);
-
-	dev->flags = 0;
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
 
 	flp = dlp->slave->priv;
 	err = (*flp->activate)(dlp->slave, dev);
 	if (err)
 		return(err);
+
+	netif_start_queue(dev);
 
 	return 0;
 }
@@ -392,13 +380,12 @@ static int dlci_close(struct net_device *dev)
 	struct frad_local	*flp;
 	int			err;
 
+	netif_stop_queue(dev);
+
 	dlp = dev->priv;
 
 	flp = dlp->slave->priv;
 	err = (*flp->deactivate)(dlp->slave, dev);
-
-	dev->start = 0;
-	dev->tbusy = 1;
 
 	return 0;
 }
@@ -508,7 +495,7 @@ int dlci_del(struct dlci_add *dlci)
 	if (!master)
 		return(-ENODEV);
 
-	if (master->start)
+	if (test_bit(LINK_STATE_START, &master->state))
 		return(-EBUSY);
 
 	dlp = master->priv;

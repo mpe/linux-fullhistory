@@ -460,8 +460,6 @@ static int dmfe_open(struct net_device *dev)
 	dmfe_init_dm910x(dev);
 
 	/* Active System Interface */
-	dev->tbusy = 0;		/* Can transmit packet */
-	dev->start = 1;		/* interface ready */
 	MOD_INC_USE_COUNT;
 
 	/* set and active a timer process */
@@ -470,6 +468,8 @@ static int dmfe_open(struct net_device *dev)
 	db->timer.data = (unsigned long) dev;
 	db->timer.function = &dmfe_timer;
 	add_timer(&db->timer);
+	
+	netif_wake_queue(dev);
 
 	return 0;
 }
@@ -543,24 +543,18 @@ static int dmfe_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct tx_desc *txptr;
 
 	DMFE_DBUG(0, "dmfe_start_xmit", 0);
-
-	if ((dev->tbusy == 1) && (db->tx_packet_cnt != 0))
-		return 1;
-	else
-		dev->tbusy = 0;
-
+ 
+	netif_stop_queue(dev);
+	
 	/* Too large packet check */
 	if (skb->len > MAX_PACKET_SIZE) {
-		printk(KERN_ERR "%s: oversized frame (%d bytes) received.\n", dev->name, (u16) skb->len);
+		printk(KERN_ERR "%s: oversized frame (%d bytes) for transmit.\n", dev->name, (u16) skb->len);
 		dev_kfree_skb(skb);
 		return 0;
 	}
 	/* No Tx resource check, it never happen nromally */
 	if (db->tx_packet_cnt >= TX_FREE_DESC_CNT) {
-		printk(KERN_WARNING "%s: No Tx resource, enter xmit() again \n", dev->name);
-		dev_kfree_skb(skb);
-		dev->tbusy = 1;
-		return -EBUSY;
+		return 1;
 	}
 
 	/* transmit this packet */
@@ -580,8 +574,8 @@ static int dmfe_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	outl(0x1, dev->base_addr + DCR1);
 
 	/* Tx resource check */
-	if (db->tx_packet_cnt >= TX_FREE_DESC_CNT)
-		dev->tbusy = 1;
+	if (db->tx_packet_cnt < TX_FREE_DESC_CNT)
+		netif_wake_queue(dev);
 
 	/* Set transmit time stamp */
 	dev->trans_start = jiffies;	/* saved the time stamp */
@@ -603,9 +597,7 @@ static int dmfe_stop(struct net_device *dev)
 
 	DMFE_DBUG(0, "dmfe_stop", 0);
 
-	/* disable system */
-	dev->start = 0;		/* interface disable */
-	dev->tbusy = 1;		/* can't transmit */
+	netif_stop_queue(dev);
 
 	/* Reset & stop DM910X board */
 	outl(DM910X_RESET, ioaddr + DCR0);
@@ -645,13 +637,8 @@ static void dmfe_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		DMFE_DBUG(1, "dmfe_interrupt() without device arg", 0);
 		return;
 	}
-	if (dev->interrupt) {
-		DMFE_DBUG(1, "dmfe_interrupt() re-entry ", 0);
-		return;
-	}
 
 	/* A real interrupt coming */
-	dev->interrupt = 1;	/* Lock interrupt */
 	db = (struct dmfe_board_info *) dev->priv;
 	ioaddr = dev->base_addr;
 
@@ -669,10 +656,9 @@ static void dmfe_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (db->cr5_data & 0x2000) {
 		/* A system bus error occurred */
 		DMFE_DBUG(1, "A system bus error occurred. CR5=", db->cr5_data);
-		dev->tbusy = 1;
+		netif_stop_queue(dev);
 		db->wait_reset = 1;		/* Need to RESET */
 		outl(0, ioaddr + DCR7);		/* disable all interrupt */
-		dev->interrupt = 0;		/* unlock interrupt */
 		return;
 	}
 	/* Free the transmitted descriptor */
@@ -690,10 +676,9 @@ static void dmfe_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 	db->tx_remove_ptr = (struct tx_desc *) txptr;
 
-	if (dev->tbusy && (db->tx_packet_cnt < TX_FREE_DESC_CNT)) {
-		dev->tbusy = 0;		/* free a resource */
-		mark_bh(NET_BH);	/* active bottom half */
-	}
+	if (db->tx_packet_cnt < TX_FREE_DESC_CNT)
+		netif_wake_queue(dev);
+
 	/* Received the coming packet */
 	if (db->rx_avail_cnt)
 		dmfe_rx_packet(dev, db);
@@ -708,7 +693,6 @@ static void dmfe_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		db->cr6_data |= 0x100;
 		update_cr6(db->cr6_data, db->ioaddr);
 	}
-	dev->interrupt = 0;	/* release interrupt lock */
 
 	/* Restore CR7 to enable interrupt mask */
 	
@@ -935,9 +919,8 @@ static void dmfe_dynamic_reset(struct net_device *dev)
 	db->in_reset_state = 1;
 
 	/* Disable upper layer interface */
-	dev->tbusy = 1;		/* transmit packet disable */
-	dev->start = 0;		/* interface not ready */
-
+	netif_stop_queue(dev);
+	
 	db->cr6_data &= ~(CR6_RXSC | CR6_TXSC);		/* Disable Tx/Rx */
 	update_cr6(db->cr6_data, dev->base_addr);
 
@@ -954,12 +937,11 @@ static void dmfe_dynamic_reset(struct net_device *dev)
 	/* Re-initilize DM910X board */
 	dmfe_init_dm910x(dev);
 
-	/* Restart upper layer interface */
-	dev->tbusy = 0;		/* Can transmit packet */
-	dev->start = 1;		/* interface ready */
-
 	/* Leave dynamic reser route */
 	db->in_reset_state = 0;
+
+	/* Restart upper layer interface */
+	netif_wake_queue(dev);
 }
 
 /*
@@ -1113,7 +1095,7 @@ static void send_filter_frame(struct net_device *dev, int mc_cnt)
 
 	/* prepare the setup frame */
 	db->tx_packet_cnt++;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 	txptr->tdes1 = 0x890000c0;
 	txptr->tdes0 = 0x80000000;
 	db->tx_insert_ptr = (struct tx_desc *) txptr->next_tx_desc;

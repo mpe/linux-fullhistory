@@ -413,9 +413,12 @@ static inline void handle_mouse_event(unsigned char scancode)
 #endif
 }
 
+static unsigned char kbd_exists = 1;
+
 static inline void handle_keyboard_event(unsigned char scancode)
 {
 #ifdef CONFIG_VT
+	kbd_exists = 1;
 	if (do_acknowledge(scancode))
 		handle_scancode(scancode, !(scancode & 0x80));
 #endif				
@@ -512,8 +515,10 @@ static int send_data(unsigned char data)
 
 void pckbd_leds(unsigned char leds)
 {
-	if (!send_data(KBD_CMD_SET_LEDS) || !send_data(leds))
-	    send_data(KBD_CMD_ENABLE);	/* re-enable kbd if any errors */
+	if (kbd_exists && (!send_data(KBD_CMD_SET_LEDS) || !send_data(leds))) {
+		send_data(KBD_CMD_ENABLE);	/* re-enable kbd if any errors */
+		kbd_exists = 0;
+	}
 }
 
 /*

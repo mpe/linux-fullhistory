@@ -297,7 +297,7 @@ static int elmc_open(struct net_device *dev)
 	alloc586(dev);
 	init586(dev);
 	startrecv586(dev);
-	netif_wake_queue(dev);
+	netif_start_queue(dev);
 	MOD_INC_USE_COUNT;
 	return 0;		/* most done by init */
 }

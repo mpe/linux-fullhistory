@@ -96,12 +96,13 @@ History:
  * have to pack all state info into the device struct!
  * ------------------------------------------------------------------------ */
 
-static char *MediaNames[Media_Count]=
-            {"10Base2", "10BaseT", "10Base5", "Unknown"};
+static char *MediaNames[Media_Count] = {
+	"10Base2", "10BaseT", "10Base5", "Unknown" };
 
-static unsigned char poly[] =
-       {1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0,
-        1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0};
+static unsigned char poly[] = { 
+	1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0,
+	1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0
+};
 
 /* ------------------------------------------------------------------------
  * private subfunctions
@@ -112,64 +113,70 @@ static unsigned char poly[] =
 #ifdef DEBUG
 static void dumpmem(struct net_device *dev, u32 start, u32 len)
 {
-  int z;
+	int z;
 
-  for (z = 0; z < len; z++)
-  {
-    if ((z & 15) == 0)
-      printk("%04x:", z);
-    printk(" %02x", readb(dev->mem_start + start + z));
-    if ((z & 15) == 15)
-      printk("\n");
-  }
+	for (z = 0; z < len; z++) {
+		if ((z & 15) == 0)
+			printk("%04x:", z);
+		printk(" %02x", readb(dev->mem_start + start + z));
+		if ((z & 15) == 15)
+			printk("\n");
+	}
 }
 
 /* print exact time - ditto */
 
 static void PrTime(void)
 {
-  struct timeval tv;
+	struct timeval tv;
 
-  do_gettimeofday(&tv);
-  printk("%9d:%06d: ", tv.tv_sec, tv.tv_usec);
+	do_gettimeofday(&tv);
+	printk("%9d:%06d: ", tv.tv_sec, tv.tv_usec);
 }
+
 #endif
 
 /* deduce resources out of POS registers */
 
 static void getaddrs(int slot, int junior, int *base, int *irq,
-                     skmca_medium *medium)
+		     skmca_medium * medium)
 {
-  u_char pos0, pos1, pos2;
-  
-  if (junior)
-  {
-    pos0 = mca_read_stored_pos(slot, 2);
-    *base = ((pos0 & 0x0e) << 13) + 0xc0000;
-    *irq = ((pos0 & 0x10) >> 4) + 10;
-    *medium = Media_Unknown;
-  }
-  else
-  {
-    /* reset POS 104 Bits 0+1 so the shared memory region goes to the
-       configured area between 640K and 1M.  Afterwards, enable the MC2.
-       I really don't know what rode SK to do this... */
-       
-    mca_write_pos(slot, 4, mca_read_stored_pos(slot, 4) & 0xfc);
-    mca_write_pos(slot, 2, mca_read_stored_pos(slot, 2) | 0x01);
-       
-    pos1 = mca_read_stored_pos(slot, 3);
-    pos2 = mca_read_stored_pos(slot, 4);
-    *base = ((pos1 & 0x07) << 14) + 0xc0000;
-    switch (pos2 & 0x0c)
-    {
-      case 0: *irq = 3; break;
-      case 4: *irq = 5; break;
-      case 8: *irq = 10; break;
-      case 12: *irq = 11; break;
-    }
-    *medium = (pos2 >> 6) & 3;
-  }
+	u_char pos0, pos1, pos2;
+
+	if (junior) {
+		pos0 = mca_read_stored_pos(slot, 2);
+		*base = ((pos0 & 0x0e) << 13) + 0xc0000;
+		*irq = ((pos0 & 0x10) >> 4) + 10;
+		*medium = Media_Unknown;
+	} else {
+		/* reset POS 104 Bits 0+1 so the shared memory region goes to the
+		   configured area between 640K and 1M.  Afterwards, enable the MC2.
+		   I really don't know what rode SK to do this... */
+
+		mca_write_pos(slot, 4,
+			      mca_read_stored_pos(slot, 4) & 0xfc);
+		mca_write_pos(slot, 2,
+			      mca_read_stored_pos(slot, 2) | 0x01);
+
+		pos1 = mca_read_stored_pos(slot, 3);
+		pos2 = mca_read_stored_pos(slot, 4);
+		*base = ((pos1 & 0x07) << 14) + 0xc0000;
+		switch (pos2 & 0x0c) {
+		case 0:
+			*irq = 3;
+			break;
+		case 4:
+			*irq = 5;
+			break;
+		case 8:
+			*irq = 10;
+			break;
+		case 12:
+			*irq = 11;
+			break;
+		}
+		*medium = (pos2 >> 6) & 3;
+	}
 }
 
 /* check for both cards:
@@ -179,157 +186,162 @@ static void getaddrs(int slot, int junior, int *base, int *irq,
 
 static int dofind(int *junior, int firstslot)
 {
-  int slot;
-  unsigned int id;
+	int slot;
+	unsigned int id;
 
-  for (slot = firstslot; slot < MCA_MAX_SLOT_NR; slot++)
-  {
-    id = mca_read_stored_pos(slot, 0)
-       + (((unsigned int) mca_read_stored_pos(slot, 1)) << 8);
-       
-    *junior = 0;
-    if (id == SKNET_MCA_ID)
-      return slot;
-    *junior = 1;
-    if (id == SKNET_JUNIOR_MCA_ID)
-      return slot;
-  }
-  return MCA_NOTFOUND;
+	for (slot = firstslot; slot < MCA_MAX_SLOT_NR; slot++) {
+		id = mca_read_stored_pos(slot, 0)
+		    + (((unsigned int) mca_read_stored_pos(slot, 1)) << 8);
+
+		*junior = 0;
+		if (id == SKNET_MCA_ID)
+			return slot;
+		*junior = 1;
+		if (id == SKNET_JUNIOR_MCA_ID)
+			return slot;
+	}
+	return MCA_NOTFOUND;
 }
 
 /* reset the whole board */
 
 static void ResetBoard(struct net_device *dev)
 {
-  skmca_priv *priv = (skmca_priv*) dev->priv;
+	skmca_priv *priv = (skmca_priv *) dev->priv;
 
-  writeb(CTRL_RESET_ON, priv->ctrladdr);
-  udelay(10);
-  writeb(CTRL_RESET_OFF, priv->ctrladdr);
+	writeb(CTRL_RESET_ON, priv->ctrladdr);
+	udelay(10);
+	writeb(CTRL_RESET_OFF, priv->ctrladdr);
 }
 
 /* set LANCE register - must be atomic */
 
 static void SetLANCE(struct net_device *dev, u16 addr, u16 value)
 {
-  skmca_priv *priv = (skmca_priv*) dev->priv;
-  unsigned long flags;
+	skmca_priv *priv = (skmca_priv *) dev->priv;
+	unsigned long flags;
 
-  /* disable interrupts */
+	/* disable interrupts */
 
-  save_flags(flags);
-  cli();
+	save_flags(flags);
+	cli();
 
-  /* wait until no transfer is pending */
-  
-  while ((readb(priv->ctrladdr) & STAT_IO_BUSY) == STAT_IO_BUSY);
+	/* wait until no transfer is pending */
 
-  /* transfer register address to RAP */
+	while ((readb(priv->ctrladdr) & STAT_IO_BUSY) == STAT_IO_BUSY);
 
-  writeb(CTRL_RESET_OFF | CTRL_RW_WRITE | CTRL_ADR_RAP, priv->ctrladdr);
-  writew(addr, priv->ioregaddr);
-  writeb(IOCMD_GO, priv->cmdaddr);
-  udelay(1);
-  while ((readb(priv->ctrladdr) & STAT_IO_BUSY) == STAT_IO_BUSY);
+	/* transfer register address to RAP */
 
-  /* transfer data to register */
+	writeb(CTRL_RESET_OFF | CTRL_RW_WRITE | CTRL_ADR_RAP,
+	       priv->ctrladdr);
+	writew(addr, priv->ioregaddr);
+	writeb(IOCMD_GO, priv->cmdaddr);
+	udelay(1);
+	while ((readb(priv->ctrladdr) & STAT_IO_BUSY) == STAT_IO_BUSY);
 
-  writeb(CTRL_RESET_OFF | CTRL_RW_WRITE | CTRL_ADR_DATA, priv->ctrladdr);
-  writew(value, priv->ioregaddr);
-  writeb(IOCMD_GO, priv->cmdaddr);
-  udelay(1);
-  while ((readb(priv->ctrladdr) & STAT_IO_BUSY) == STAT_IO_BUSY);
+	/* transfer data to register */
 
-  /* reenable interrupts */
+	writeb(CTRL_RESET_OFF | CTRL_RW_WRITE | CTRL_ADR_DATA,
+	       priv->ctrladdr);
+	writew(value, priv->ioregaddr);
+	writeb(IOCMD_GO, priv->cmdaddr);
+	udelay(1);
+	while ((readb(priv->ctrladdr) & STAT_IO_BUSY) == STAT_IO_BUSY);
 
-  restore_flags(flags);
+	/* reenable interrupts */
+
+	restore_flags(flags);
 }
 
 /* get LANCE register */
 
 static u16 GetLANCE(struct net_device *dev, u16 addr)
 {
-  skmca_priv *priv = (skmca_priv*) dev->priv;
-  unsigned long flags;
-  unsigned int res;
+	skmca_priv *priv = (skmca_priv *) dev->priv;
+	unsigned long flags;
+	unsigned int res;
 
-  /* disable interrupts */
+	/* disable interrupts */
 
-  save_flags(flags);
-  cli();
+	save_flags(flags);
+	cli();
 
-  /* wait until no transfer is pending */
+	/* wait until no transfer is pending */
 
-  while ((readb(priv->ctrladdr) & STAT_IO_BUSY) == STAT_IO_BUSY);
+	while ((readb(priv->ctrladdr) & STAT_IO_BUSY) == STAT_IO_BUSY);
 
-  /* transfer register address to RAP */
+	/* transfer register address to RAP */
 
-  writeb(CTRL_RESET_OFF | CTRL_RW_WRITE | CTRL_ADR_RAP, priv->ctrladdr);
-  writew(addr, priv->ioregaddr);
-  writeb(IOCMD_GO, priv->cmdaddr);
-  udelay(1);
-  while ((readb(priv->ctrladdr) & STAT_IO_BUSY) == STAT_IO_BUSY);
+	writeb(CTRL_RESET_OFF | CTRL_RW_WRITE | CTRL_ADR_RAP,
+	       priv->ctrladdr);
+	writew(addr, priv->ioregaddr);
+	writeb(IOCMD_GO, priv->cmdaddr);
+	udelay(1);
+	while ((readb(priv->ctrladdr) & STAT_IO_BUSY) == STAT_IO_BUSY);
 
-  /* transfer data from register */
+	/* transfer data from register */
 
-  writeb(CTRL_RESET_OFF | CTRL_RW_READ | CTRL_ADR_DATA, priv->ctrladdr);
-  writeb(IOCMD_GO, priv->cmdaddr);
-  udelay(1);
-  while ((readb(priv->ctrladdr) & STAT_IO_BUSY) == STAT_IO_BUSY);
-  res = readw(priv->ioregaddr);
+	writeb(CTRL_RESET_OFF | CTRL_RW_READ | CTRL_ADR_DATA,
+	       priv->ctrladdr);
+	writeb(IOCMD_GO, priv->cmdaddr);
+	udelay(1);
+	while ((readb(priv->ctrladdr) & STAT_IO_BUSY) == STAT_IO_BUSY);
+	res = readw(priv->ioregaddr);
 
-  /* reenable interrupts */
+	/* reenable interrupts */
 
-  restore_flags(flags);
+	restore_flags(flags);
 
-  return res;
+	return res;
 }
 
 /* build up descriptors in shared RAM */
 
 static void InitDscrs(struct net_device *dev)
 {
-  u32 bufaddr;
+	u32 bufaddr;
 
-  /* Set up Tx descriptors. The board has only 16K RAM so bits 16..23
-     are always 0. */
+	/* Set up Tx descriptors. The board has only 16K RAM so bits 16..23
+	   are always 0. */
 
-  bufaddr = RAM_DATABASE;
-  {
-    LANCE_TxDescr descr;
-    int z;
+	bufaddr = RAM_DATABASE;
+	{
+		LANCE_TxDescr descr;
+		int z;
 
-    for (z = 0; z < TXCOUNT; z++)
-    {
-      descr.LowAddr = bufaddr;
-      descr.Flags = 0;
-      descr.Len = 0xf000;
-      descr.Status = 0;
-      isa_memcpy_toio(dev->mem_start + RAM_TXBASE + (z * sizeof(LANCE_TxDescr)),
-                  &descr, sizeof(LANCE_TxDescr));
-      memset_io(dev->mem_start + bufaddr, 0, RAM_BUFSIZE);
-      bufaddr += RAM_BUFSIZE;
-    }
-  }
+		for (z = 0; z < TXCOUNT; z++) {
+			descr.LowAddr = bufaddr;
+			descr.Flags = 0;
+			descr.Len = 0xf000;
+			descr.Status = 0;
+			isa_memcpy_toio(dev->mem_start + RAM_TXBASE +
+					(z * sizeof(LANCE_TxDescr)),
+					&descr, sizeof(LANCE_TxDescr));
+			memset_io(dev->mem_start + bufaddr, 0,
+				  RAM_BUFSIZE);
+			bufaddr += RAM_BUFSIZE;
+		}
+	}
 
-  /* do the same for the Rx descriptors */
- 
-  {
-    LANCE_RxDescr descr;
-    int z;
+	/* do the same for the Rx descriptors */
 
-    for (z = 0; z < RXCOUNT; z++)
-    {
-      descr.LowAddr = bufaddr;
-      descr.Flags = RXDSCR_FLAGS_OWN;
-      descr.MaxLen = -RAM_BUFSIZE;
-      descr.Len = 0;
-      isa_memcpy_toio(dev->mem_start + RAM_RXBASE + (z * sizeof(LANCE_RxDescr)),
-                  &descr, sizeof(LANCE_RxDescr));
-      isa_memset_io(dev->mem_start + bufaddr, 0, RAM_BUFSIZE);
-      bufaddr += RAM_BUFSIZE;
-    }
-  }
+	{
+		LANCE_RxDescr descr;
+		int z;
+
+		for (z = 0; z < RXCOUNT; z++) {
+			descr.LowAddr = bufaddr;
+			descr.Flags = RXDSCR_FLAGS_OWN;
+			descr.MaxLen = -RAM_BUFSIZE;
+			descr.Len = 0;
+			isa_memcpy_toio(dev->mem_start + RAM_RXBASE +
+					(z * sizeof(LANCE_RxDescr)),
+					&descr, sizeof(LANCE_RxDescr));
+			isa_memset_io(dev->mem_start + bufaddr, 0,
+				      RAM_BUFSIZE);
+			bufaddr += RAM_BUFSIZE;
+		}
+	}
 }
 
 /* calculate the hash bit position for a given multicast address
@@ -337,136 +349,138 @@ static void InitDscrs(struct net_device *dev)
 
 static void UpdateCRC(unsigned char *CRC, int bit)
 {
-  int j;
+	int j;
 
-  /* shift CRC one bit */
+	/* shift CRC one bit */
 
-  memmove(CRC + 1, CRC, 32 * sizeof(unsigned char));
-  CRC[0] = 0;
+	memmove(CRC + 1, CRC, 32 * sizeof(unsigned char));
+	CRC[0] = 0;
 
-  /* if bit XOR controlbit = 1, set CRC = CRC XOR polynomial */
+	/* if bit XOR controlbit = 1, set CRC = CRC XOR polynomial */
 
-  if (bit ^ CRC[32])
-    for (j = 0; j < 32; j++)
-      CRC[j] ^= poly[j];
+	if (bit ^ CRC[32])
+		for (j = 0; j < 32; j++)
+			CRC[j] ^= poly[j];
 }
 
 static unsigned int GetHash(char *address)
 {
-  unsigned char CRC[33];
-  int i, byte, hashcode;
+	unsigned char CRC[33];
+	int i, byte, hashcode;
 
-  /* a multicast address has bit 0 in the first byte set */
+	/* a multicast address has bit 0 in the first byte set */
 
-  if ((address[0] & 1) == 0)
-    return -1;
+	if ((address[0] & 1) == 0)
+		return -1;
 
-  /* initialize CRC */
+	/* initialize CRC */
 
-  memset(CRC, 1, sizeof(CRC));
+	memset(CRC, 1, sizeof(CRC));
 
-  /* loop through address bits */
+	/* loop through address bits */
 
-  for (byte = 0; byte < 6; byte++)
-    for (i = 0; i < 8; i++)
-      UpdateCRC(CRC, (address[byte] >> i) & 1);
+	for (byte = 0; byte < 6; byte++)
+		for (i = 0; i < 8; i++)
+			UpdateCRC(CRC, (address[byte] >> i) & 1);
 
-  /* hashcode is the 6 least significant bits of the CRC */
+	/* hashcode is the 6 least significant bits of the CRC */
 
-  hashcode = 0;
-  for (i = 0; i < 6; i++)
-    hashcode = (hashcode << 1) + CRC[i];
-  return hashcode;
+	hashcode = 0;
+	for (i = 0; i < 6; i++)
+		hashcode = (hashcode << 1) + CRC[i];
+	return hashcode;
 }
 
 /* feed ready-built initialization block into LANCE */
 
 static void InitLANCE(struct net_device *dev)
 {
-  skmca_priv *priv = (skmca_priv*) dev->priv;
+	skmca_priv *priv = (skmca_priv *) dev->priv;
 
-  /* build up descriptors. */
+	/* build up descriptors. */
 
-  InitDscrs(dev);
+	InitDscrs(dev);
 
-  /* next RX descriptor to be read is the first one.  Since the LANCE
-     will start from the beginning after initialization, we have to 
-     reset out pointers too. */
+	/* next RX descriptor to be read is the first one.  Since the LANCE
+	   will start from the beginning after initialization, we have to 
+	   reset out pointers too. */
 
-  priv->nextrx = 0;
+	priv->nextrx = 0;
 
-  /* no TX descriptors active */
+	/* no TX descriptors active */
 
-  priv->nexttxput = priv->nexttxdone = priv->txbusy = 0;
+	priv->nexttxput = priv->nexttxdone = priv->txbusy = 0;
 
-  /* set up the LANCE bus control register - constant for SKnet boards */
+	/* set up the LANCE bus control register - constant for SKnet boards */
 
-  SetLANCE(dev, LANCE_CSR3, CSR3_BSWAP_OFF | CSR3_ALE_LOW | CSR3_BCON_HOLD);
+	SetLANCE(dev, LANCE_CSR3,
+		 CSR3_BSWAP_OFF | CSR3_ALE_LOW | CSR3_BCON_HOLD);
 
-  /* write address of initialization block into LANCE */
+	/* write address of initialization block into LANCE */
 
-  SetLANCE(dev, LANCE_CSR1, RAM_INITBASE & 0xffff);
-  SetLANCE(dev, LANCE_CSR2, (RAM_INITBASE >> 16) & 0xff);
+	SetLANCE(dev, LANCE_CSR1, RAM_INITBASE & 0xffff);
+	SetLANCE(dev, LANCE_CSR2, (RAM_INITBASE >> 16) & 0xff);
 
-  /* we don't get ready until the LANCE has read the init block */
+	/* we don't get ready until the LANCE has read the init block */
 
-  dev->tbusy = 1;
+	netif_stop_queue(dev);
+	
+	/* let LANCE read the initialization block.  LANCE is ready
+	   when we receive the corresponding interrupt. */
 
-  /* let LANCE read the initialization block.  LANCE is ready
-     when we receive the corresponding interrupt. */
-
-  SetLANCE(dev, LANCE_CSR0, CSR0_INEA | CSR0_INIT);
+	SetLANCE(dev, LANCE_CSR0, CSR0_INEA | CSR0_INIT);
 }
 
 /* stop the LANCE so we can reinitialize it */
 
 static void StopLANCE(struct net_device *dev)
 {
-  /* can't take frames any more */
+	/* can't take frames any more */
 
-  dev->tbusy = 1;
+	netif_stop_queue(dev);
+	
+	/* disable interrupts, stop it */
 
-  /* disable interrupts, stop it */
-
-  SetLANCE(dev, LANCE_CSR0, CSR0_STOP);
+	SetLANCE(dev, LANCE_CSR0, CSR0_STOP);
 }
 
 /* initialize card and LANCE for proper operation */
 
 static void InitBoard(struct net_device *dev)
 {
-  LANCE_InitBlock block;
+	LANCE_InitBlock block;
 
-  /* Lay out the shared RAM - first we create the init block for the LANCE.
-     We do not overwrite it later because we need it again when we switch
-     promiscous mode on/off. */
+	/* Lay out the shared RAM - first we create the init block for the LANCE.
+	   We do not overwrite it later because we need it again when we switch
+	   promiscous mode on/off. */
 
-  block.Mode = 0;
-  if (dev->flags & IFF_PROMISC)
-    block.Mode |= LANCE_INIT_PROM;
-  memcpy(block.PAdr, dev->dev_addr, 6);
-  memset(block.LAdrF, 0, sizeof(block.LAdrF));
-  block.RdrP = (RAM_RXBASE & 0xffffff) | (LRXCOUNT << 29);
-  block.TdrP = (RAM_TXBASE & 0xffffff) | (LTXCOUNT << 29);
+	block.Mode = 0;
+	if (dev->flags & IFF_PROMISC)
+		block.Mode |= LANCE_INIT_PROM;
+	memcpy(block.PAdr, dev->dev_addr, 6);
+	memset(block.LAdrF, 0, sizeof(block.LAdrF));
+	block.RdrP = (RAM_RXBASE & 0xffffff) | (LRXCOUNT << 29);
+	block.TdrP = (RAM_TXBASE & 0xffffff) | (LTXCOUNT << 29);
 
-  isa_memcpy_toio(dev->mem_start + RAM_INITBASE, &block, sizeof(block));
+	isa_memcpy_toio(dev->mem_start + RAM_INITBASE, &block,
+			sizeof(block));
 
-  /* initialize LANCE. Implicitly sets up other structures in RAM. */
+	/* initialize LANCE. Implicitly sets up other structures in RAM. */
 
-  InitLANCE(dev);
+	InitLANCE(dev);
 }
 
 /* deinitialize card and LANCE */
 
 static void DeinitBoard(struct net_device *dev)
 {
-  /* stop LANCE */
+	/* stop LANCE */
 
-  StopLANCE(dev);
+	StopLANCE(dev);
 
-  /* reset board */
+	/* reset board */
 
-  ResetBoard(dev);
+	ResetBoard(dev);
 }
 
 /* ------------------------------------------------------------------------
@@ -477,210 +491,201 @@ static void DeinitBoard(struct net_device *dev)
 
 static u16 irqstart_handler(struct net_device *dev, u16 oldcsr0)
 {
-  /* now we're ready to transmit */
+	/* now we're ready to transmit */
 
-  dev->tbusy = 0;
+	netif_wake_queue(dev);
+	
+	/* reset IDON bit, start LANCE */
 
-  /* reset IDON bit, start LANCE */
-
-  SetLANCE(dev, LANCE_CSR0, oldcsr0 | CSR0_IDON | CSR0_STRT);
-  return GetLANCE(dev, LANCE_CSR0);
+	SetLANCE(dev, LANCE_CSR0, oldcsr0 | CSR0_IDON | CSR0_STRT);
+	return GetLANCE(dev, LANCE_CSR0);
 }
 
 /* receive interrupt */
 
 static u16 irqrx_handler(struct net_device *dev, u16 oldcsr0)
 {
-  skmca_priv *priv = (skmca_priv*) dev->priv;
-  LANCE_RxDescr descr;
-  unsigned int descraddr;
+	skmca_priv *priv = (skmca_priv *) dev->priv;
+	LANCE_RxDescr descr;
+	unsigned int descraddr;
 
-  /* did we loose blocks due to a FIFO overrun ? */
+	/* did we loose blocks due to a FIFO overrun ? */
 
-  if (oldcsr0 & CSR0_MISS)
-    priv->stat.rx_fifo_errors++;
+	if (oldcsr0 & CSR0_MISS)
+		priv->stat.rx_fifo_errors++;
 
-  /* run through queue until we reach a descriptor we do not own */
+	/* run through queue until we reach a descriptor we do not own */
 
-  descraddr = RAM_RXBASE + (priv->nextrx * sizeof(LANCE_RxDescr));
-  while (1)
-  {
-    /* read descriptor */
-    isa_memcpy_fromio(&descr, dev->mem_start + descraddr, sizeof(LANCE_RxDescr));
- 
-    /* if we reach a descriptor we do not own, we're done */
-    if ((descr.Flags & RXDSCR_FLAGS_OWN) != 0)
-      break;
+	descraddr = RAM_RXBASE + (priv->nextrx * sizeof(LANCE_RxDescr));
+	while (1) {
+		/* read descriptor */
+		isa_memcpy_fromio(&descr, dev->mem_start + descraddr,
+				  sizeof(LANCE_RxDescr));
+
+		/* if we reach a descriptor we do not own, we're done */
+		if ((descr.Flags & RXDSCR_FLAGS_OWN) != 0)
+			break;
 
 #ifdef DEBUG
-    PrTime(); printk("Receive packet on descr %d len %d\n", priv->nextrx, descr.Len);
+		PrTime();
+		printk("Receive packet on descr %d len %d\n", priv->nextrx,
+		       descr.Len);
 #endif
 
-    /* erroneous packet ? */
-    if ((descr.Flags & RXDSCR_FLAGS_ERR) != 0)
-    {
-      priv->stat.rx_errors++;
-      if ((descr.Flags & RXDSCR_FLAGS_CRC) != 0)
-        priv->stat.rx_crc_errors++;
-      else if ((descr.Flags & RXDSCR_FLAGS_CRC) != 0)
-        priv->stat.rx_frame_errors++;
-      else if ((descr.Flags & RXDSCR_FLAGS_OFLO) != 0)
-        priv->stat.rx_fifo_errors++;
-    }
+		/* erroneous packet ? */
+		if ((descr.Flags & RXDSCR_FLAGS_ERR) != 0) {
+			priv->stat.rx_errors++;
+			if ((descr.Flags & RXDSCR_FLAGS_CRC) != 0)
+				priv->stat.rx_crc_errors++;
+			else if ((descr.Flags & RXDSCR_FLAGS_CRC) != 0)
+				priv->stat.rx_frame_errors++;
+			else if ((descr.Flags & RXDSCR_FLAGS_OFLO) != 0)
+				priv->stat.rx_fifo_errors++;
+		}
 
-    /* good packet ? */
-    else
-    {
-      struct sk_buff *skb;
+		/* good packet ? */
+		else {
+			struct sk_buff *skb;
 
-      skb = dev_alloc_skb(descr.Len + 2);
-      if (skb == NULL)
-        priv->stat.rx_dropped++;
-      else
-      {
-        isa_memcpy_fromio(skb_put(skb, descr.Len),
-                      dev->mem_start + descr.LowAddr, descr.Len);
-        skb->dev = dev;
-        skb->protocol = eth_type_trans(skb, dev);
-        skb->ip_summed = CHECKSUM_NONE;
-        priv->stat.rx_packets++;
-#if LINUX_VERSION_CODE >= 0x020119       /* byte counters for >= 2.1.25 */
-        priv->stat.rx_bytes += descr.Len;
+			skb = dev_alloc_skb(descr.Len + 2);
+			if (skb == NULL)
+				priv->stat.rx_dropped++;
+			else {
+				isa_memcpy_fromio(skb_put(skb, descr.Len),
+						  dev->mem_start +
+						  descr.LowAddr,
+						  descr.Len);
+				skb->dev = dev;
+				skb->protocol = eth_type_trans(skb, dev);
+				skb->ip_summed = CHECKSUM_NONE;
+				priv->stat.rx_packets++;
+#if LINUX_VERSION_CODE >= 0x020119	/* byte counters for >= 2.1.25 */
+				priv->stat.rx_bytes += descr.Len;
 #endif
-        netif_rx(skb);
-      }
-    }
+				netif_rx(skb);
+			}
+		}
 
-    /* give descriptor back to LANCE */
-    descr.Len = 0;
-    descr.Flags |= RXDSCR_FLAGS_OWN;
+		/* give descriptor back to LANCE */
+		descr.Len = 0;
+		descr.Flags |= RXDSCR_FLAGS_OWN;
 
-    /* update descriptor in shared RAM */
-    isa_memcpy_toio(dev->mem_start + descraddr, &descr, sizeof(LANCE_RxDescr));
+		/* update descriptor in shared RAM */
+		isa_memcpy_toio(dev->mem_start + descraddr, &descr,
+				sizeof(LANCE_RxDescr));
 
-    /* go to next descriptor */
-    priv->nextrx++; descraddr += sizeof(LANCE_RxDescr);
-    if (priv->nextrx >= RXCOUNT)
-    {
-      priv->nextrx = 0;
-      descraddr = RAM_RXBASE;
-    }
-  }
+		/* go to next descriptor */
+		priv->nextrx++;
+		descraddr += sizeof(LANCE_RxDescr);
+		if (priv->nextrx >= RXCOUNT) {
+			priv->nextrx = 0;
+			descraddr = RAM_RXBASE;
+		}
+	}
 
-  /* reset RINT bit */
+	/* reset RINT bit */
 
-  SetLANCE(dev, LANCE_CSR0, oldcsr0 | CSR0_RINT);
-  return GetLANCE(dev, LANCE_CSR0);
+	SetLANCE(dev, LANCE_CSR0, oldcsr0 | CSR0_RINT);
+	return GetLANCE(dev, LANCE_CSR0);
 }
 
 /* transmit interrupt */
 
 static u16 irqtx_handler(struct net_device *dev, u16 oldcsr0)
 {
-  skmca_priv *priv = (skmca_priv*) dev->priv;
-  LANCE_TxDescr descr;
-  unsigned int descraddr;
+	skmca_priv *priv = (skmca_priv *) dev->priv;
+	LANCE_TxDescr descr;
+	unsigned int descraddr;
 
-  /* check descriptors at most until no busy one is left */
+	/* check descriptors at most until no busy one is left */
 
-  descraddr = RAM_TXBASE + (priv->nexttxdone * sizeof(LANCE_TxDescr));
-  while (priv->txbusy > 0)
-  {
-    /* read descriptor */
-    isa_memcpy_fromio(&descr, dev->mem_start + descraddr, sizeof(LANCE_TxDescr));
+	descraddr =
+	    RAM_TXBASE + (priv->nexttxdone * sizeof(LANCE_TxDescr));
+	while (priv->txbusy > 0) {
+		/* read descriptor */
+		isa_memcpy_fromio(&descr, dev->mem_start + descraddr,
+				  sizeof(LANCE_TxDescr));
 
-    /* if the LANCE still owns this one, we've worked out all sent packets */
-    if ((descr.Flags & TXDSCR_FLAGS_OWN) != 0)
-      break;
+		/* if the LANCE still owns this one, we've worked out all sent packets */
+		if ((descr.Flags & TXDSCR_FLAGS_OWN) != 0)
+			break;
 
 #ifdef DEBUG
-    PrTime(); printk("Send packet done on descr %d\n", priv->nexttxdone);
+		PrTime();
+		printk("Send packet done on descr %d\n", priv->nexttxdone);
 #endif
 
-    /* update statistics */
-    if ((descr.Flags & TXDSCR_FLAGS_ERR) == 0)
-    {
-      priv->stat.tx_packets++;
-#if LINUX_VERSION_CODE >= 0x020119       /* byte counters for >= 2.1.25 */
-      priv->stat.tx_bytes++;
+		/* update statistics */
+		if ((descr.Flags & TXDSCR_FLAGS_ERR) == 0) {
+			priv->stat.tx_packets++;
+#if LINUX_VERSION_CODE >= 0x020119	/* byte counters for >= 2.1.25 */
+			priv->stat.tx_bytes++;
 #endif
-    }
-    else
-    {
-      priv->stat.tx_errors++;
-      if ((descr.Status & TXDSCR_STATUS_UFLO) != 0)
-      {
-        priv->stat.tx_fifo_errors++;
-        InitLANCE(dev);
-      }
-      else if ((descr.Status & TXDSCR_STATUS_LCOL) != 0)
-        priv->stat.tx_window_errors++;
-      else if ((descr.Status & TXDSCR_STATUS_LCAR) != 0)
-        priv->stat.tx_carrier_errors++;
-      else if ((descr.Status & TXDSCR_STATUS_RTRY) != 0)
-        priv->stat.tx_aborted_errors++;
-    }
+		} else {
+			priv->stat.tx_errors++;
+			if ((descr.Status & TXDSCR_STATUS_UFLO) != 0) {
+				priv->stat.tx_fifo_errors++;
+				InitLANCE(dev);
+			}
+				else
+			    if ((descr.Status & TXDSCR_STATUS_LCOL) !=
+				0) priv->stat.tx_window_errors++;
+			else if ((descr.Status & TXDSCR_STATUS_LCAR) != 0)
+				priv->stat.tx_carrier_errors++;
+			else if ((descr.Status & TXDSCR_STATUS_RTRY) != 0)
+				priv->stat.tx_aborted_errors++;
+		}
 
-    /* go to next descriptor */
-    priv->nexttxdone++;
-    descraddr += sizeof(LANCE_TxDescr);
-    if (priv->nexttxdone >= TXCOUNT)
-    {
-      priv->nexttxdone = 0;
-      descraddr = RAM_TXBASE;
-    }
-    priv->txbusy--;
-  }
+		/* go to next descriptor */
+		priv->nexttxdone++;
+		descraddr += sizeof(LANCE_TxDescr);
+		if (priv->nexttxdone >= TXCOUNT) {
+			priv->nexttxdone = 0;
+			descraddr = RAM_TXBASE;
+		}
+		priv->txbusy--;
+	}
 
-  /* reset TX interrupt bit */
+	/* reset TX interrupt bit */
 
-  SetLANCE(dev, LANCE_CSR0, oldcsr0 | CSR0_TINT);
-  oldcsr0 = GetLANCE(dev, LANCE_CSR0);
+	SetLANCE(dev, LANCE_CSR0, oldcsr0 | CSR0_TINT);
+	oldcsr0 = GetLANCE(dev, LANCE_CSR0);
 
-  /* at least one descriptor is freed.  Therefore we can accept
-     a new one */
+	/* at least one descriptor is freed.  Therefore we can accept
+	   a new one */
 
-  dev->tbusy = 0;
-
-  /* inform upper layers we're in business again */
-
-  mark_bh(NET_BH);
-
-  return oldcsr0;
+	netif_wake_queue(dev);
+	
+	return oldcsr0;
 }
 
 /* general interrupt entry */
 
 static void irq_handler(int irq, void *device, struct pt_regs *regs)
 {
-  struct net_device *dev = (struct net_device*) device;
-  u16 csr0val;
+	struct net_device *dev = (struct net_device *) device;
+	u16 csr0val;
 
-  /* read CSR0 to get interrupt cause */
+	/* read CSR0 to get interrupt cause */
 
-  csr0val = GetLANCE(dev, LANCE_CSR0);
+	csr0val = GetLANCE(dev, LANCE_CSR0);
 
-  /* in case we're not meant... */
+	/* in case we're not meant... */
 
-  if ((csr0val & CSR0_INTR) == 0)
-    return;
+	if ((csr0val & CSR0_INTR) == 0)
+		return;
 
-  dev->interrupt = 1;
+	/* loop through the interrupt bits until everything is clear */
 
-  /* loop through the interrupt bits until everything is clear */
-
-  do
-  {
-    if ((csr0val & CSR0_IDON) != 0)
-      csr0val = irqstart_handler(dev, csr0val);
-    if ((csr0val & CSR0_RINT) != 0)
-      csr0val = irqrx_handler(dev, csr0val);
-    if ((csr0val & CSR0_TINT) != 0)
-      csr0val = irqtx_handler(dev, csr0val);
-  }
-  while ((csr0val & CSR0_INTR) != 0);
-
-  dev->interrupt = 0;
+	do {
+		if ((csr0val & CSR0_IDON) != 0)
+			csr0val = irqstart_handler(dev, csr0val);
+		if ((csr0val & CSR0_RINT) != 0)
+			csr0val = irqrx_handler(dev, csr0val);
+		if ((csr0val & CSR0_TINT) != 0)
+			csr0val = irqtx_handler(dev, csr0val);
+	}
+	while ((csr0val & CSR0_INTR) != 0);
 }
 
 /* ------------------------------------------------------------------------
@@ -691,184 +696,177 @@ static void irq_handler(int irq, void *device, struct pt_regs *regs)
 
 static int skmca_getinfo(char *buf, int slot, void *d)
 {
-  int len = 0, i;
-  struct net_device *dev = (struct net_device*) d;
-  skmca_priv *priv;
-  
-  /* can't say anything about an uninitialized device... */
+	int len = 0, i;
+	struct net_device *dev = (struct net_device *) d;
+	skmca_priv *priv;
 
-  if (dev == NULL)
-    return len;
-  if (dev->priv == NULL)
-    return len;
-  priv = (skmca_priv*) dev->priv;
+	/* can't say anything about an uninitialized device... */
 
-  /* print info */
+	if (dev == NULL)
+		return len;
+	if (dev->priv == NULL)
+		return len;
+	priv = (skmca_priv *) dev->priv;
 
-  len += sprintf(buf + len, "IRQ: %d\n", priv->realirq);
-  len += sprintf(buf + len, "Memory: %#lx-%#lx\n", dev->mem_start,
-                 dev->mem_end - 1);
-  len += sprintf(buf + len, "Transceiver: %s\n", MediaNames[priv->medium]);
-  len += sprintf(buf + len, "Device: %s\n", dev->name);
-  len += sprintf(buf + len, "MAC address:");
-  for (i = 0; i < 6; i ++ )
-    len += sprintf( buf+len, " %02x", dev->dev_addr[i] );
-  buf[len++] = '\n';
-  buf[len] = 0;
+	/* print info */
 
-  return len;
+	len += sprintf(buf + len, "IRQ: %d\n", priv->realirq);
+	len += sprintf(buf + len, "Memory: %#lx-%#lx\n", dev->mem_start,
+		       dev->mem_end - 1);
+	len +=
+	    sprintf(buf + len, "Transceiver: %s\n",
+		    MediaNames[priv->medium]);
+	len += sprintf(buf + len, "Device: %s\n", dev->name);
+	len += sprintf(buf + len, "MAC address:");
+	for (i = 0; i < 6; i++)
+		len += sprintf(buf + len, " %02x", dev->dev_addr[i]);
+	buf[len++] = '\n';
+	buf[len] = 0;
+
+	return len;
 }
 
 /* open driver.  Means also initialization and start of LANCE */
 
 static int skmca_open(struct net_device *dev)
 {
-  int result;
-  skmca_priv *priv = (skmca_priv*) dev->priv;
+	int result;
+	skmca_priv *priv = (skmca_priv *) dev->priv;
 
-  /* register resources - only necessary for IRQ */
-  result = request_irq(priv->realirq, irq_handler, SA_SHIRQ | SA_SAMPLE_RANDOM,
-                       "sk_mca", dev);
-  if (result != 0)
-  {
-    printk("%s: failed to register irq %d\n", dev->name, dev->irq);
-    return result;
-  }
-  dev->irq = priv->realirq;
+	/* register resources - only necessary for IRQ */
+	result =
+	    request_irq(priv->realirq, irq_handler,
+			SA_SHIRQ | SA_SAMPLE_RANDOM, "sk_mca", dev);
+	if (result != 0) {
+		printk("%s: failed to register irq %d\n", dev->name,
+		       dev->irq);
+		return result;
+	}
+	dev->irq = priv->realirq;
 
-  /* set up the card and LANCE */
-  InitBoard(dev);
+	/* set up the card and LANCE */
+	InitBoard(dev);
 
 #ifdef MODULE
-  MOD_INC_USE_COUNT;
+	MOD_INC_USE_COUNT;
 #endif
 
-  return 0;
+	return 0;
 }
 
 /* close driver.  Shut down board and free allocated resources */
 
 static int skmca_close(struct net_device *dev)
 {
-  /* turn off board */
-  DeinitBoard(dev);
+	/* turn off board */
+	DeinitBoard(dev);
 
-  /* release resources */
-  if (dev->irq != 0)
-    free_irq(dev->irq, dev);
-  dev->irq = 0;
+	/* release resources */
+	if (dev->irq != 0)
+		free_irq(dev->irq, dev);
+	dev->irq = 0;
 
 #ifdef MODULE
-  MOD_DEC_USE_COUNT;
+	MOD_DEC_USE_COUNT;
 #endif
 
-  return 0;
+	return 0;
 }
 
 /* transmit a block. */
 
 static int skmca_tx(struct sk_buff *skb, struct net_device *dev)
 {
-  skmca_priv *priv = (skmca_priv*) dev->priv;
-  LANCE_TxDescr descr;
-  unsigned int address;
-  int tmplen, retval = 0;
-  unsigned long flags;
+	skmca_priv *priv = (skmca_priv *) dev->priv;
+	LANCE_TxDescr descr;
+	unsigned int address;
+	int tmplen, retval = 0;
+	unsigned long flags;
 
-  /* if we get called with a NULL descriptor, the Ethernet layer thinks 
-     our card is stuck an we should reset it.  We'll do this completely: */
+	netif_stop_queue(dev);
+	
+	/* is there space in the Tx queue ? If no, the upper layer gave us a
+	   packet in spite of us not being ready and is really in trouble.
+	   We'll do the dropping for him: */
+	if (priv->txbusy >= TXCOUNT) {
+		priv->stat.tx_dropped++;
+		retval = -EIO;
+		goto tx_done;
+	}
 
-  if (skb == NULL)
-  {
-    DeinitBoard(dev);
-    InitBoard(dev);
-    return 0; /* don't try to free the block here ;-) */
-  }
+	/* get TX descriptor */
+	address = RAM_TXBASE + (priv->nexttxput * sizeof(LANCE_TxDescr));
+	isa_memcpy_fromio(&descr, dev->mem_start + address,
+			  sizeof(LANCE_TxDescr));
 
-  /* is there space in the Tx queue ? If no, the upper layer gave us a
-     packet in spite of us not being ready and is really in trouble.
-     We'll do the dropping for him: */
-  if (priv->txbusy >= TXCOUNT)
-  {
-    priv->stat.tx_dropped++;
-    retval = -EIO;
-    goto tx_done;
-  }
+	/* enter packet length as 2s complement - assure minimum length */
+	tmplen = skb->len;
+	if (tmplen < 60)
+		tmplen = 60;
+	descr.Len = 65536 - tmplen;
 
-  /* get TX descriptor */
-  address = RAM_TXBASE + (priv->nexttxput * sizeof(LANCE_TxDescr));
-  isa_memcpy_fromio(&descr, dev->mem_start + address, sizeof(LANCE_TxDescr));
+	/* copy filler into RAM - in case we're filling up... 
+	   we're filling a bit more than necessary, but that doesn't harm
+	   since the buffer is far larger... */
+	if (tmplen > skb->len) {
+		char *fill = "NetBSD is a nice OS too! ";
+		unsigned int destoffs = 0, l = strlen(fill);
 
-  /* enter packet length as 2s complement - assure minimum length */
-  tmplen = skb->len;
-  if (tmplen < 60)
-    tmplen = 60;
-  descr.Len = 65536 - tmplen;
+		while (destoffs < tmplen) {
+			isa_memcpy_toio(dev->mem_start + descr.LowAddr +
+					destoffs, fill, l);
+			destoffs += l;
+		}
+	}
 
-  /* copy filler into RAM - in case we're filling up... 
-     we're filling a bit more than necessary, but that doesn't harm
-     since the buffer is far larger... */
-  if (tmplen > skb->len)
-  {
-    char *fill = "NetBSD is a nice OS too! ";
-    unsigned int destoffs = 0, l = strlen(fill);
+	/* do the real data copying */
+	isa_memcpy_toio(dev->mem_start + descr.LowAddr, skb->data,
+			skb->len);
 
-    while (destoffs < tmplen)
-    {
-      isa_memcpy_toio(dev->mem_start + descr.LowAddr + destoffs, fill, l);
-      destoffs += l;
-    }
-  }
-
-  /* do the real data copying */
-  isa_memcpy_toio(dev->mem_start + descr.LowAddr, skb->data, skb->len);
-
-  /* hand descriptor over to LANCE - this is the first and last chunk */
-  descr.Flags = TXDSCR_FLAGS_OWN | TXDSCR_FLAGS_STP | TXDSCR_FLAGS_ENP;
+	/* hand descriptor over to LANCE - this is the first and last chunk */
+	descr.Flags =
+	    TXDSCR_FLAGS_OWN | TXDSCR_FLAGS_STP | TXDSCR_FLAGS_ENP;
 
 #ifdef DEBUG
-  PrTime(); printk("Send packet on descr %d len %d\n", priv->nexttxput, skb->len);
+	PrTime();
+	printk("Send packet on descr %d len %d\n", priv->nexttxput,
+	       skb->len);
 #endif
 
-  /* one more descriptor busy */
-  save_flags(flags);
-  cli();
-  priv->nexttxput++;
-  if (priv->nexttxput >= TXCOUNT)
-    priv->nexttxput = 0;
-  priv->txbusy++;
-  dev->tbusy = (priv->txbusy >= TXCOUNT);
+	/* one more descriptor busy */
+	save_flags(flags);
+	cli();
+	priv->nexttxput++;
+	if (priv->nexttxput >= TXCOUNT)
+		priv->nexttxput = 0;
+	priv->txbusy++;
+	if (priv->txbusy < TXCOUNT)
+		netif_wake_queue(dev);
 
-  /* write descriptor back to RAM */
-  isa_memcpy_toio(dev->mem_start + address, &descr, sizeof(LANCE_TxDescr));
+	/* write descriptor back to RAM */
+	isa_memcpy_toio(dev->mem_start + address, &descr,
+			sizeof(LANCE_TxDescr));
 
-  /* if no descriptors were active, give the LANCE a hint to read it
-     immediately */
+	/* if no descriptors were active, give the LANCE a hint to read it
+	   immediately */
 
-  if (priv->txbusy == 0)
-    SetLANCE(dev, LANCE_CSR0, CSR0_INEA | CSR0_TDMD);
+	if (priv->txbusy == 0)
+		SetLANCE(dev, LANCE_CSR0, CSR0_INEA | CSR0_TDMD);
 
-  restore_flags(flags);
+	restore_flags(flags);
 
 tx_done:
-
-  /* When did that change exactly ? */
-
-#if LINUX_VERSION_CODE >= 0x020200
-  dev_kfree_skb(skb);
-#else
-  dev_kfree_skb(skb, FREE_WRITE);
-#endif
-  return retval;
+	/* When did that change exactly ? */
+	dev_kfree_skb(skb);
+	return retval;
 }
 
 /* return pointer to Ethernet statistics */
 
 static struct enet_statistics *skmca_stats(struct net_device *dev)
 {
-  skmca_priv *priv = (skmca_priv*) dev->priv;
-
-  return &(priv->stat);
+	skmca_priv *priv = (skmca_priv *) dev->priv;
+	return &(priv->stat);
 }
 
 /* we don't support runtime reconfiguration, since an MCA card can
@@ -876,7 +874,7 @@ static struct enet_statistics *skmca_stats(struct net_device *dev)
 
 static int skmca_config(struct net_device *dev, struct ifmap *map)
 {
-  return 0;
+	return 0;
 }
 
 /* switch receiver mode.  We use the LANCE's multicast filter to prefilter
@@ -884,39 +882,38 @@ static int skmca_config(struct net_device *dev, struct ifmap *map)
 
 static void skmca_set_multicast_list(struct net_device *dev)
 {
-  LANCE_InitBlock block;
+	LANCE_InitBlock block;
 
-  /* first stop the LANCE... */
-  StopLANCE(dev);
+	/* first stop the LANCE... */
+	StopLANCE(dev);
 
-  /* ...then modify the initialization block... */
-  isa_memcpy_fromio(&block, dev->mem_start + RAM_INITBASE, sizeof(block));
-  if (dev->flags & IFF_PROMISC)
-    block.Mode |= LANCE_INIT_PROM;
-  else
-    block.Mode &= ~LANCE_INIT_PROM;
+	/* ...then modify the initialization block... */
+	isa_memcpy_fromio(&block, dev->mem_start + RAM_INITBASE,
+			  sizeof(block));
+	if (dev->flags & IFF_PROMISC)
+		block.Mode |= LANCE_INIT_PROM;
+	else
+		block.Mode &= ~LANCE_INIT_PROM;
 
-  if (dev->flags & IFF_ALLMULTI)   /* get all multicasts */
-  {
-    memset(block.LAdrF, 8, 0xff);
-  }
-  else                             /* get selected/no multicasts */
-  {
-    struct dev_mc_list *mptr;
-    int code;
+	if (dev->flags & IFF_ALLMULTI) {	/* get all multicasts */
+		memset(block.LAdrF, 8, 0xff);
+	} else {		/* get selected/no multicasts */
 
-    memset(block.LAdrF, 8, 0x00);
-    for (mptr = dev->mc_list; mptr != NULL; mptr = mptr->next)
-    {
-      code = GetHash(mptr->dmi_addr);
-      block.LAdrF[(code >> 3) & 7] |= 1 << (code & 7);
-    }
-  }
+		struct dev_mc_list *mptr;
+		int code;
 
-  isa_memcpy_toio(dev->mem_start + RAM_INITBASE, &block, sizeof(block));
+		memset(block.LAdrF, 8, 0x00);
+		for (mptr = dev->mc_list; mptr != NULL; mptr = mptr->next) {
+			code = GetHash(mptr->dmi_addr);
+			block.LAdrF[(code >> 3) & 7] |= 1 << (code & 7);
+		}
+	}
 
-  /* ...then reinit LANCE with the correct flags */
-  InitLANCE(dev);
+	isa_memcpy_toio(dev->mem_start + RAM_INITBASE, &block,
+			sizeof(block));
+
+	/* ...then reinit LANCE with the correct flags */
+	InitLANCE(dev);
 }
 
 /* ------------------------------------------------------------------------
@@ -924,149 +921,143 @@ static void skmca_set_multicast_list(struct net_device *dev)
  * ------------------------------------------------------------------------ */
 
 #ifdef MODULE
-static int startslot; /* counts through slots when probing multiple devices */
+static int startslot;		/* counts through slots when probing multiple devices */
 #else
-#define startslot 0   /* otherwise a dummy, since there is only eth0 in-kern*/
+#define startslot 0		/* otherwise a dummy, since there is only eth0 in-kern */
 #endif
 
 int skmca_probe(struct net_device *dev)
 {
-  int force_detect = 0;
-  int junior, slot, i;
-  int base = 0, irq = 0;
-  skmca_priv *priv;
-  skmca_medium medium;
+	int force_detect = 0;
+	int junior, slot, i;
+	int base = 0, irq = 0;
+	skmca_priv *priv;
+	skmca_medium medium;
 
-  /* can't work without an MCA bus ;-) */
-  
-  if (MCA_bus == 0)
-    return ENODEV;
-    
-  /* start address of 1 --> forced detection */
-  
-  if (dev->mem_start == 1)
-    force_detect = 1;
+	/* can't work without an MCA bus ;-) */
 
-  /* search through slots */
-  
-  if (dev != NULL)
-  {
-    base = dev->mem_start;
-    irq = dev->irq;
-  }
-  slot = dofind(&junior, startslot);
+	if (MCA_bus == 0)
+		return ENODEV;
 
-  while (slot != -1)
-  {
-    /* deduce card addresses */
+	/* start address of 1 --> forced detection */
 
-    getaddrs(slot, junior, &base, &irq, &medium);
+	if (dev->mem_start == 1)
+		force_detect = 1;
+
+	/* search through slots */
+
+	if (dev != NULL) {
+		base = dev->mem_start;
+		irq = dev->irq;
+	}
+	slot = dofind(&junior, startslot);
+
+	while (slot != -1) {
+		/* deduce card addresses */
+
+		getaddrs(slot, junior, &base, &irq, &medium);
 
 #if LINUX_VERSION_CODE >= 0x020200
-    /* slot already in use ? */
+		/* slot already in use ? */
 
-    if (mca_is_adapter_used(slot))
-    {
-      slot = dofind(&junior, slot + 1);
-      continue;
-    }
+		if (mca_is_adapter_used(slot)) {
+			slot = dofind(&junior, slot + 1);
+			continue;
+		}
 #endif
 
-    /* were we looking for something different ? */
-    
-    if ((dev->irq != 0) || (dev->mem_start != 0))
-    {
-      if ((dev->irq != 0) && (dev->irq != irq))
-      {
-        slot = dofind(&junior, slot + 1);
-        continue;
-      }
-      if ((dev->mem_start != 0) && (dev->mem_start != base))
-      {
-        slot = dofind(&junior, slot + 1);
-        continue;
-      }
-    }
-  
-    /* found something that matches */
-    
-    break;
-  }
+		/* were we looking for something different ? */
 
-  /* nothing found ? */
-  
-  if (slot == -1)
-    return ((base != 0) || (irq != 0)) ? ENXIO : ENODEV;
-    
-  /* make procfs entries */
-    
-  if (junior)
-    mca_set_adapter_name(slot, "SKNET junior MC2 Ethernet Adapter");
-  else
-    mca_set_adapter_name(slot, "SKNET MC2+ Ethernet Adapter");
-  mca_set_adapter_procfn(slot, (MCA_ProcFn) skmca_getinfo, dev);
+		if ((dev->irq != 0) || (dev->mem_start != 0)) {
+			if ((dev->irq != 0) && (dev->irq != irq)) {
+				slot = dofind(&junior, slot + 1);
+				continue;
+			}
+			if ((dev->mem_start != 0)
+			    && (dev->mem_start != base)) {
+				slot = dofind(&junior, slot + 1);
+				continue;
+			}
+		}
+
+		/* found something that matches */
+
+		break;
+	}
+
+	/* nothing found ? */
+
+	if (slot == -1)
+		return ((base != 0) || (irq != 0)) ? ENXIO : ENODEV;
+
+	/* make procfs entries */
+
+	if (junior)
+		mca_set_adapter_name(slot,
+				     "SKNET junior MC2 Ethernet Adapter");
+	else
+		mca_set_adapter_name(slot, "SKNET MC2+ Ethernet Adapter");
+	mca_set_adapter_procfn(slot, (MCA_ProcFn) skmca_getinfo, dev);
 
 #if LINUX_VERSION_CODE >= 0x020200
-  mca_mark_as_used(slot);
+	mca_mark_as_used(slot);
 #endif
-  
-  /* announce success */
-  printk("%s: SKNet %s adapter found in slot %d\n", dev->name, 
-         junior ? "Junior MC2" : "MC2+", slot + 1);
 
-  /* allocate structure */
-  priv = dev->priv = (skmca_priv*) kmalloc(sizeof(skmca_priv), GFP_KERNEL);
-  priv->slot = slot;
-  priv->macbase = base + 0x3fc0;
-  priv->ioregaddr = base + 0x3ff0;
-  priv->ctrladdr = base + 0x3ff2;
-  priv->cmdaddr = base + 0x3ff3;
-  priv->realirq = irq;
-  priv->medium = medium;
-  memset(&(priv->stat), 0, sizeof(struct enet_statistics));
-  
-  /* set base + irq for this device (irq not allocated so far) */
-  dev->irq = 0;
-  dev->mem_start = base;
-  dev->mem_end = base + 0x4000;
- 
-  /* set methods */
-  dev->open = skmca_open;
-  dev->stop = skmca_close;
-  dev->set_config = skmca_config;
-  dev->hard_start_xmit = skmca_tx;
-  dev->do_ioctl = NULL;
-  dev->get_stats = skmca_stats;
-  dev->set_multicast_list = skmca_set_multicast_list;
-  dev->flags |= IFF_MULTICAST;
+	/* announce success */
+	printk("%s: SKNet %s adapter found in slot %d\n", dev->name,
+	       junior ? "Junior MC2" : "MC2+", slot + 1);
 
-  /* generic setup */
-  ether_setup(dev);
-  dev->interrupt = 0;
-  dev->tbusy = 0;
-  dev->start = 0;
- 
-  /* copy out MAC address */
-  for (i = 0; i < 6; i++)
-    dev->dev_addr[i] = readb(priv->macbase + (i << 1));
+	/* allocate structure */
+	priv = dev->priv =
+	    (skmca_priv *) kmalloc(sizeof(skmca_priv), GFP_KERNEL);
+	priv->slot = slot;
+	priv->macbase = base + 0x3fc0;
+	priv->ioregaddr = base + 0x3ff0;
+	priv->ctrladdr = base + 0x3ff2;
+	priv->cmdaddr = base + 0x3ff3;
+	priv->realirq = irq;
+	priv->medium = medium;
+	memset(&(priv->stat), 0, sizeof(struct enet_statistics));
 
-  /* print config */
-  printk("%s: IRQ %d, memory %#lx-%#lx, "
-         "MAC address %02x:%02x:%02x:%02x:%02x:%02x.\n",
-         dev->name, priv->realirq,  dev->mem_start, dev->mem_end - 1,
-         dev->dev_addr[0], dev->dev_addr[1], dev->dev_addr[2],
-         dev->dev_addr[3], dev->dev_addr[4], dev->dev_addr[5]);
-  printk("%s: %s medium\n", dev->name, MediaNames[priv->medium]);
+	/* set base + irq for this device (irq not allocated so far) */
+	dev->irq = 0;
+	dev->mem_start = base;
+	dev->mem_end = base + 0x4000;
 
-  /* reset board */
+	/* set methods */
+	dev->open = skmca_open;
+	dev->stop = skmca_close;
+	dev->set_config = skmca_config;
+	dev->hard_start_xmit = skmca_tx;
+	dev->do_ioctl = NULL;
+	dev->get_stats = skmca_stats;
+	dev->set_multicast_list = skmca_set_multicast_list;
+	dev->flags |= IFF_MULTICAST;
 
-  ResetBoard(dev);
+	/* generic setup */
+	ether_setup(dev);
+
+	/* copy out MAC address */
+	for (i = 0; i < 6; i++)
+		dev->dev_addr[i] = readb(priv->macbase + (i << 1));
+
+	/* print config */
+	printk("%s: IRQ %d, memory %#lx-%#lx, "
+	       "MAC address %02x:%02x:%02x:%02x:%02x:%02x.\n",
+	       dev->name, priv->realirq, dev->mem_start, dev->mem_end - 1,
+	       dev->dev_addr[0], dev->dev_addr[1], dev->dev_addr[2],
+	       dev->dev_addr[3], dev->dev_addr[4], dev->dev_addr[5]);
+	printk("%s: %s medium\n", dev->name, MediaNames[priv->medium]);
+
+	/* reset board */
+
+	ResetBoard(dev);
 
 #ifdef MODULE
-  startslot = slot + 1;
+	startslot = slot + 1;
 #endif
 
-  return 0;
+	return 0;
 }
 
 /* ------------------------------------------------------------------------
@@ -1079,61 +1070,58 @@ int skmca_probe(struct net_device *dev)
 
 static char NameSpace[8 * DEVMAX];
 static struct net_device moddevs[DEVMAX] =
-       {{NameSpace +  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
-        {NameSpace +  8, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
-        {NameSpace + 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
-        {NameSpace + 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
-        {NameSpace + 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe}};
+    { {NameSpace + 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
+{NameSpace + 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
+{NameSpace + 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
+{NameSpace + 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
+{NameSpace + 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe}
+};
 
-int irq=0;
-int io=0;
+int irq = 0;
+int io = 0;
 
 int init_module(void)
 {
-  int z, res;
+	int z, res;
 
-  startslot = 0;
-  for (z = 0; z < DEVMAX; z++)
-  {
-    strcpy(moddevs[z].name, "     ");
-    res = register_netdev(moddevs + z);
-    if (res != 0)
-      return (z > 0) ? 0 : -EIO;
-  }
+	startslot = 0;
+	for (z = 0; z < DEVMAX; z++) {
+		strcpy(moddevs[z].name, "     ");
+		res = register_netdev(moddevs + z);
+		if (res != 0)
+			return (z > 0) ? 0 : -EIO;
+	}
 
-  return 0;
+	return 0;
 }
 
 void cleanup_module(void)
 {
-  struct net_device *dev;
-  skmca_priv *priv;
-  int z;
+	struct net_device *dev;
+	skmca_priv *priv;
+	int z;
 
-  if (MOD_IN_USE)
-  {
-    printk("cannot unload, module in use\n");
-    return;
-  }
+	if (MOD_IN_USE) {
+		printk("cannot unload, module in use\n");
+		return;
+	}
 
-  for (z = 0; z < DEVMAX; z++)
-  {
-    dev = moddevs + z;
-    if (dev->priv != NULL)
-    {
-      priv = (skmca_priv*) dev->priv;
-      DeinitBoard(dev);
-      if (dev->irq != 0)
-        free_irq(dev->irq, dev);
-      dev->irq = 0;
-      unregister_netdev(dev);
+	for (z = 0; z < DEVMAX; z++) {
+		dev = moddevs + z;
+		if (dev->priv != NULL) {
+			priv = (skmca_priv *) dev->priv;
+			DeinitBoard(dev);
+			if (dev->irq != 0)
+				free_irq(dev->irq, dev);
+			dev->irq = 0;
+			unregister_netdev(dev);
 #if LINUX_VERSION_CODE >= 0x020200
-      mca_mark_as_unused(priv->slot);
+			mca_mark_as_unused(priv->slot);
 #endif
-      mca_set_adapter_procfn(priv->slot, NULL, NULL);
-      kfree_s(dev->priv, sizeof(skmca_priv));
-      dev->priv = NULL;
-    }
-  }
+			mca_set_adapter_procfn(priv->slot, NULL, NULL);
+			kfree_s(dev->priv, sizeof(skmca_priv));
+			dev->priv = NULL;
+		}
+	}
 }
-#endif /* MODULE */
+#endif				/* MODULE */

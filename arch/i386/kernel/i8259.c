@@ -311,7 +311,7 @@ spurious_8259A_irq:
 	}
 }
 
-void init_8259A(int auto_eoi)
+void __init init_8259A(int auto_eoi)
 {
 	unsigned long flags;
 

@@ -251,6 +251,7 @@ static char mca_irqmap[] = { 12, 9, 3, 4, 5, 10, 11, 15 };
 extern int express_probe(struct net_device *dev);
 static int eexp_open(struct net_device *dev);
 static int eexp_close(struct net_device *dev);
+static void eexp_timeout(struct net_device *dev);
 static struct net_device_stats *eexp_stats(struct net_device *dev);
 static int eexp_xmit(struct sk_buff *buf, struct net_device *dev);
 
@@ -437,8 +438,6 @@ static int eexp_open(struct net_device *dev)
 	request_region(ioaddr+0x4000, 16, "EtherExpress shadow");
 	request_region(ioaddr+0x8000, 16, "EtherExpress shadow");
 	request_region(ioaddr+0xc000, 16, "EtherExpress shadow");
-	dev->tbusy = 0;
-	dev->interrupt = 0;
 	
 	if (lp->width) {
 		printk("%s: forcing ASIC to 8-bit mode\n", dev->name);
@@ -446,8 +445,8 @@ static int eexp_open(struct net_device *dev)
 	}
 
 	eexp_hw_init586(dev);
-	dev->start = 1;
 	MOD_INC_USE_COUNT;
+	netif_start_queue(dev);
 #if NET_DEBUG > 6
 	printk(KERN_DEBUG "%s: leaving eexp_open()\n", dev->name);
 #endif
@@ -465,9 +464,8 @@ static int eexp_close(struct net_device *dev)
 
 	int irq = dev->irq;
 
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
+	
 	outb(SIRQ_dis|irqrmap[irq],ioaddr+SET_IRQ);
 	lp->started = 0;
 	scb_command(dev, SCB_CUsuspend|SCB_RUsuspend);
@@ -530,8 +528,7 @@ static void unstick_cu(struct net_device *dev)
 						outb(0,ioaddr+SIGNAL_CA);
 					}
 				}
-				dev->tbusy = 0;
-				mark_bh(NET_BH);
+				netif_wake_queue(dev);
 			}
 			else
 			{
@@ -546,13 +543,12 @@ static void unstick_cu(struct net_device *dev)
 				else
 				{
 					unsigned short txstatus = eexp_hw_lasttxstat(dev);
-					if (dev->tbusy && !txstatus)
+					if (test_bit(LINK_STATE_XOFF, &dev->state) && !txstatus)
 					{
 						printk(KERN_WARNING "%s: CU wedged, status %04x %04x, resetting...\n",
 						       dev->name,status,txstatus);
 						eexp_hw_init586(dev);
-						dev->tbusy = 0;
-						mark_bh(NET_BH);
+						netif_wake_queue(dev);
 					}
 					else
 					{
@@ -570,10 +566,45 @@ static void unstick_cu(struct net_device *dev)
 			printk(KERN_WARNING "%s: i82586 startup timed out, status %04x, resetting...\n",
 			       dev->name, status);
 			eexp_hw_init586(dev);
-			dev->tbusy = 0;
-			mark_bh(NET_BH);
+			netif_wake_queue(dev);
 		}
 	}
+}
+
+static void eexp_timeout(struct net_device *dev)
+{
+	struct net_local *lp = (struct net_local *)dev->priv;
+#ifdef CONFIG_SMP
+	unsigned long flags;
+#endif
+	int status;
+	
+	disable_irq(dev->irq);
+
+	/*
+	 *	Best would be to use synchronize_irq(); spin_lock() here
+	 *	lets make it work first..
+	 */
+	 
+#ifdef CONFIG_SMP
+	spin_lock_irqsave(&lp->lock, flags);
+#endif
+
+	status = scb_status(dev);
+	unstick_cu(dev);
+	printk(KERN_INFO "%s: transmit timed out, %s?", dev->name,
+	       (SCB_complete(status)?"lost interrupt":
+		"board on fire"));
+	lp->stats.tx_errors++;
+	lp->last_tx = jiffies;
+	if (!SCB_complete(status)) {
+		scb_command(dev, SCB_CUabort);
+		outb(0,dev->base_addr+SIGNAL_CA);
+	}
+	netif_wake_queue(dev);	
+#ifdef CONFIG_SMP
+	spin_unlock_irqrestore(&lp->lock, flags);
+#endif
 }
 
 /*
@@ -601,38 +632,7 @@ static int eexp_xmit(struct sk_buff *buf, struct net_device *dev)
 #ifdef CONFIG_SMP
 	spin_lock_irqsave(&lp->lock, flags);
 #endif
-
-	/* If dev->tbusy is set, all our tx buffers are full but the kernel
-	 * is calling us anyway.  Check that nothing bad is happening.
-	 */
-	if (dev->tbusy) {
-		int status = scb_status(dev);
-  		unstick_cu(dev);
-		if ((jiffies - lp->last_tx) < HZ)
-		{
-#ifdef CONFIG_SMP
-			spin_unlock_irqrestore(&lp->lock, flags);
-#endif
-
-			return 1;
-		}
-		printk(KERN_INFO "%s: transmit timed out, %s?", dev->name,
-		       (SCB_complete(status)?"lost interrupt":
-			"board on fire"));
-		lp->stats.tx_errors++;
-		dev->tbusy = 0;
-		lp->last_tx = jiffies;
-		if (!SCB_complete(status)) {
-			scb_command(dev, SCB_CUabort);
-			outb(0,dev->base_addr+SIGNAL_CA);
-		}
-	}
   
-	if (test_and_set_bit(0,(void *)&dev->tbusy))
-	{
-		lp->stats.tx_dropped++;
-	}
-	else
 	{
 		unsigned short length = (ETH_ZLEN < buf->len) ? buf->len :
 			ETH_ZLEN;
@@ -756,8 +756,6 @@ static void eexp_irq(int irq, void *dev_info, struct pt_regs *regs)
 	outb(SIRQ_dis|irqrmap[irq],ioaddr+SET_IRQ);
 
 	
-	dev->interrupt = 1;
-
 	status = scb_status(dev);
 
 #if NET_DEBUG > 4
@@ -825,7 +823,6 @@ static void eexp_irq(int irq, void *dev_info, struct pt_regs *regs)
 
 	outb(SIRQ_en|irqrmap[irq],ioaddr+SET_IRQ); 
 
-	dev->interrupt = 0;
 #if NET_DEBUG > 6 
 	printk("%s: leaving eexp_irq()\n", dev->name);
 #endif
@@ -1004,8 +1001,8 @@ static void eexp_hw_tx_pio(struct net_device *dev, unsigned short *buf,
 	else
 		lp->tx_head += TX_BUF_SIZE;
 	if (lp->tx_head != lp->tx_reap)
-		dev->tbusy = 0;
-
+		netif_wake_queue(dev);
+		
 	if (LOCKUP16 || lp->width) {
 		/* Restart the CU so that the packet can actually
 		   be transmitted. (Zoltan Szilagyi 10-12-96) */
@@ -1141,6 +1138,8 @@ static int __init eexp_hw_probe(struct net_device *dev, unsigned short ioaddr)
 	dev->hard_start_xmit = eexp_xmit;
 	dev->get_stats = eexp_stats;
 	dev->set_multicast_list = &eexp_set_multicast;
+	dev->tx_timeout = eexp_timeout;
+	dev->watchdog_timeo = 2*HZ;
 	ether_setup(dev);
 	return 0;
 }
@@ -1205,7 +1204,7 @@ static unsigned short eexp_hw_lasttxstat(struct net_device *dev)
 	unsigned short tx_block = lp->tx_reap;
 	unsigned short status;
 
-	if ((!dev->tbusy) && lp->tx_head==lp->tx_reap)
+	if (!test_bit(LINK_STATE_XOFF, &dev->state) && lp->tx_head==lp->tx_reap)
 		return 0x0000;
 
 	do
@@ -1254,8 +1253,7 @@ static unsigned short eexp_hw_lasttxstat(struct net_device *dev)
 			lp->tx_reap = tx_block = TX_BUF_START;
 		else
 			lp->tx_reap = tx_block += TX_BUF_SIZE;
-		dev->tbusy = 0;
-		mark_bh(NET_BH);
+		netif_wake_queue(dev);
 	}
 	while (lp->tx_reap != lp->tx_head);
 
@@ -1298,8 +1296,7 @@ static void eexp_hw_txrestart(struct net_device *dev)
 				{
 					printk(KERN_WARNING "%s: Failed to restart CU, resetting board...\n",dev->name);
 					eexp_hw_init586(dev);
-					dev->tbusy = 0;
-					mark_bh(NET_BH);
+					netif_wake_queue(dev);
 					return;
 				}
 			}

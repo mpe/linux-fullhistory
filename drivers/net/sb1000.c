@@ -1002,10 +1002,8 @@ sb1000_open(struct net_device *dev)
 			"(should be %x.%02x)\n", name, version[0], version[1],
 			FirmwareVersion[0], FirmwareVersion[1]);
 
-	dev->interrupt = 0;
-	dev->tbusy = 0;
-	dev->start = 1;
 
+	netif_start_queue(dev);
 	MOD_INC_USE_COUNT;
 	return 0;					/* Always succeed */
 }
@@ -1122,10 +1120,6 @@ static void sb1000_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			irq);
 		return;
 	}
-	if (dev->interrupt)
-		printk(KERN_ERR "%s: Re-entering the interrupt handler.\n",
-			dev->name);
-	dev->interrupt = 1;
 
 	ioaddr[0] = dev->base_addr;
 	/* rmem_end holds the second I/O address - fv */
@@ -1135,7 +1129,6 @@ static void sb1000_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	/* is it a good interrupt? */
 	st = inb(ioaddr[1] + 6);
 	if (!(st & 0x08 && st & 0x20)) {
-		dev->interrupt = 0;
 		return;
 	}
 
@@ -1167,7 +1160,6 @@ static void sb1000_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		lp->rx_error_count = 0;
 	}
 
-	dev->interrupt = 0;
 	return;
 }
 
@@ -1186,9 +1178,8 @@ static int sb1000_close(struct net_device *dev)
 	if (sb1000_debug > 2)
 		printk(KERN_DEBUG "%s: Shutting down sb1000.\n", dev->name);
 
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
+	
 	ioaddr[0] = dev->base_addr;
 	/* rmem_end holds the second I/O address - fv */
 	ioaddr[1] = dev->rmem_end;

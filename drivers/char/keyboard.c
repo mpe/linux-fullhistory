@@ -909,6 +909,7 @@ static void kbd_bh(unsigned long dummy)
 	}
 }
 
+EXPORT_SYMBOL(keyboard_tasklet);
 DECLARE_TASKLET_DISABLED(keyboard_tasklet, kbd_bh, 0);
 
 int __init kbd_init(void)

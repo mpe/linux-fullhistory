@@ -615,10 +615,7 @@ static int olympic_open(struct net_device *dev)
 
 #endif 	
 	
-	dev->start = 1;
-	dev->interrupt=0;
-	dev->tbusy=0;
-
+	netif_start_queue(dev);
 	MOD_INC_USE_COUNT ;
 	return 0;
 	
@@ -762,11 +759,6 @@ static void olympic_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	spin_lock(&olympic_priv->olympic_lock);
 
-	if (dev->interrupt) 
-		printk(KERN_WARNING "%s: Re-entering interrupt \n",dev->name) ; 
-
-	dev->interrupt = 1 ; 
-
 	if (sisr & (SISR_SRB_REPLY | SISR_TX1_EOF | SISR_RX_STATUS | SISR_ADAPTER_CHECK |  
 			SISR_ASB_FREE | SISR_ARB_CMD | SISR_TRB_REPLY | SISR_RX_NOBUF)) {  
 	
@@ -788,11 +780,7 @@ static void olympic_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			dev_kfree_skb(olympic_priv->tx_ring_skb[olympic_priv->tx_ring_last_status]);
 			olympic_priv->olympic_tx_ring[olympic_priv->tx_ring_last_status].buffer=0xdeadbeef;
 			olympic_priv->olympic_tx_status_ring[olympic_priv->tx_ring_last_status].status=0;
-
-			if(dev->tbusy) {
-				dev->tbusy=0;
-				mark_bh(NET_BH);
-			}
+			netif_wake_queue(dev);
 		} /* SISR_TX1_EOF */
 	
 		if (sisr & SISR_RX_STATUS) {
@@ -804,7 +792,6 @@ static void olympic_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			writel(readl(olympic_mmio+LAPWWO),olympic_mmio+LAPA);
 			adapter_check_area = (__u8 *)(olympic_mmio+LAPWWO) ; 
 			printk(KERN_WARNING "%s: Bytes %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",dev->name, readb(adapter_check_area+0), readb(adapter_check_area+1), readb(adapter_check_area+2), readb(adapter_check_area+3), readb(adapter_check_area+4), readb(adapter_check_area+5), readb(adapter_check_area+6), readb(adapter_check_area+7)) ; 
-			dev->interrupt = 0  ; 	
 			free_irq(dev->irq, dev) ; 
 	
 		} /* SISR_ADAPTER_CHECK */
@@ -837,8 +824,6 @@ static void olympic_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		printk(KERN_WARNING "%s: SISR_MASK: %x\n",dev->name, readl(olympic_mmio+SISR_MASK)) ;
 	} /* One if the interrupts we want */
 
-	dev->interrupt = 0 ;  
-
 	writel(SISR_MI,olympic_mmio+SISR_MASK_SUM);
 	
 	spin_unlock(&olympic_priv->olympic_lock) ; 
@@ -852,11 +837,8 @@ static int olympic_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	spin_lock_irqsave(&olympic_priv->olympic_lock, flags);
 
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		spin_unlock_irqrestore(&olympic_priv->olympic_lock,flags);
-		return 1;
-	}
-
+	netif_stop_queue(dev);
+	
 	if(olympic_priv->free_tx_ring_entries) {
 		olympic_priv->olympic_tx_ring[olympic_priv->tx_ring_free].buffer=virt_to_bus(skb->data);
 		olympic_priv->olympic_tx_ring[olympic_priv->tx_ring_free].status_length=skb->len | (0x80000000);
@@ -869,7 +851,7 @@ static int olympic_xmit(struct sk_buff *skb, struct net_device *dev)
 
 		writew((((readw(olympic_mmio+TXENQ_1)) & 0x8000) ^ 0x8000) | 1,olympic_mmio+TXENQ_1);
 
-		dev->tbusy=0;		
+		netif_wake_queue(dev);
 		spin_unlock_irqrestore(&olympic_priv->olympic_lock,flags);
 		return 0;
 	} else {
@@ -887,6 +869,8 @@ static int olympic_close(struct net_device *dev)
 	unsigned long flags;
 	int i;
 
+	netif_stop_queue(dev);
+	
 	writel(olympic_priv->srb,olympic_mmio+LAPA);
 	srb=olympic_priv->olympic_lap + (olympic_priv->srb & (~0xf800));
 	
@@ -936,7 +920,6 @@ static int olympic_close(struct net_device *dev)
 		printk("%x ",readb(srb+i));
 	printk("\n");
 #endif
-    	dev->start = 0;
 	free_irq(dev->irq,dev);
 
 	MOD_DEC_USE_COUNT ; 
@@ -1169,7 +1152,7 @@ static int olympic_set_mac_address (struct net_device *dev, void *addr)
 	struct sockaddr *saddr = addr ; 
 	struct olympic_private *olympic_priv = (struct olympic_private *)dev->priv ; 
 
-	if (dev->start) { 
+	if (test_bit(LINK_STATE_START, &dev->state)) { 
 		printk(KERN_WARNING "%s: Cannot set mac/laa address while card is open\n", dev->name) ; 
 		return -EIO ; 
 	}
@@ -1304,9 +1287,7 @@ static void olympic_arb_cmd(struct net_device *dev)
 			writel(readl(olympic_mmio+BCTL)|(3<<13),olympic_mmio+BCTL);
 			udelay(1);
 			writel(readl(olympic_mmio+BCTL)&~(3<<13),olympic_mmio+BCTL);
-			dev->tbusy = 1 ;
-			dev->interrupt = 1 ; 
-			dev->start = 0 ; 
+			netif_stop_queue(dev);
 			olympic_priv->srb = readw(olympic_priv->olympic_lap + LAPWWO) ; 
 			free_irq(dev->irq,dev);
 			

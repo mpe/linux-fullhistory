@@ -453,7 +453,7 @@ static void usb_hub_events(void)
 				// be shutdown by the hub, this hack enables them again.
 				// Works at least with mouse driver. 
 				if (!(portstatus & USB_PORT_STAT_ENABLE) && 
-				    (portstatus & USB_PORT_STAT_CONNECTION)) {
+				    (portstatus & USB_PORT_STAT_CONNECTION) && (dev->children[i])) {
 					err("already running port %i disabled by hub (EMI?), re-enabling...",
 						i + 1);
 					usb_hub_port_connect_change(dev, i);

@@ -902,7 +902,7 @@ static int mc32_open(struct net_device *dev)
 	mc32_rx_begin(dev);
 	mc32_tx_begin(dev);
 
-	netif_wake_queue(dev);	
+	netif_start_queue(dev);	
 	MOD_INC_USE_COUNT;
 
 	return 0;

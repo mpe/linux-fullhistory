@@ -131,7 +131,6 @@ static int smctr_get_upstream_neighbor_addr(struct net_device *dev);
 /* H */
 static int smctr_hardware_send_packet(struct net_device *dev,
         struct net_local *tp);
-
 /* I */
 static int smctr_init_acbs(struct net_device *dev);
 static int smctr_init_adapter(struct net_device *dev);
@@ -282,6 +281,7 @@ static char *smctr_malloc(struct net_device *dev, __u16 size);
 static int smctr_status_chg(struct net_device *dev);
 
 /* T */
+static void smctr_timeout(struct net_device *dev);
 static int smctr_trc_send_packet(struct net_device *dev, FCBlock *fcb,
         __u16 queue);
 static __u16 smctr_tx_complete(struct net_device *dev, __u16 queue);
@@ -730,9 +730,8 @@ static int smctr_close(struct net_device *dev)
         struct sk_buff *skb;
         int err;
 
-        dev->tbusy = 1;
-        dev->start = 0;
-
+	netif_stop_queue(dev);
+	
 #ifdef MODULE
         MOD_DEC_USE_COUNT;
 #endif
@@ -2030,12 +2029,8 @@ static void smctr_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                 return;
         }
 
-        dev->interrupt = 1;
-
         ioaddr = dev->base_addr;
         tp = (struct net_local *)dev->priv;
-
-        dev->interrupt = 0;
 
         if(tp->status == NOT_INITIALIZED)
                 return;
@@ -3749,6 +3744,8 @@ static int __init smctr_probe1(struct net_device *dev, int ioaddr)
         dev->open               = smctr_open;
         dev->stop               = smctr_close;
         dev->hard_start_xmit    = smctr_send_packet;
+        dev->tx_timeout		= smctr_timeout;
+        dev->watchdog_timeo	= HZ;
         dev->get_stats          = smctr_get_stats;
         dev->set_multicast_list = &smctr_set_multicast_list;
 
@@ -4723,6 +4720,20 @@ static int smctr_send_dat(struct net_device *dev)
         return (0);
 }
 
+static void smctr_timeout(struct net_device *dev)
+{
+	/*
+         * If we get here, some higher level has decided we are broken.
+         * There should really be a "kick me" function call instead.
+         *
+         * Resetting the token ring adapter takes a long time so just
+         * fake transmission time and go on trying. Our own timeout
+         * routine is in sktr_timer_chk()
+         */
+        dev->trans_start = jiffies;
+        netif_wake_queue(dev);
+}
+
 /*
  * Gets skb from system, queues it and checks if it can be sent
  */
@@ -4733,37 +4744,11 @@ static int smctr_send_packet(struct sk_buff *skb, struct net_device *dev)
         if(smctr_debug > 10)
                 printk("%s: smctr_send_packet\n", dev->name);
 
-        if(dev->tbusy)
-        {
-                /*
-                 * If we get here, some higher level has decided we are broken.
-                 * There should really be a "kick me" function call instead.
-                 *
-                 * Resetting the token ring adapter takes a long time so just
-                 * fake transmission time and go on trying. Our own timeout
-                 * routine is in sktr_timer_chk()
-                 */
-                dev->tbusy       = 0;
-                dev->trans_start = jiffies;
-                return (1);
-        }
-
         /*
-         * If some higher layer thinks we've missed an tx-done interrupt we
-         * are passed NULL.
+         * Block a transmit overlap
          */
-        if(skb == NULL)
-                return (0);
-
-        /*
-         * Block a timer-based transmit from overlapping. This could better be
-         * done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
-         */
-        if(test_and_set_bit(0, (void*)&dev->tbusy) != 0)
-        {
-                printk("%s: Transmitter access conflict.\n", dev->name);
-                return (1);
-        }
+         
+        netif_stop_queue(dev);
 
         if(tp->QueueSkb == 0)
                 return (1);     /* Return with tbusy set: queue full */
@@ -4772,8 +4757,8 @@ static int smctr_send_packet(struct sk_buff *skb, struct net_device *dev)
         skb_queue_tail(&tp->SendSkbQueue, skb);
         smctr_hardware_send_packet(dev, tp);
         if(tp->QueueSkb > 0)
-                dev->tbusy = 0;
-
+		netif_wake_queue(dev);
+		
         return (0);
 }
 
@@ -5749,7 +5734,7 @@ static int smctr_update_tx_chain(struct net_device *dev, FCBlock *fcb,
                 tp->num_tx_fcbs_used[queue]--;
                 fcb->frame_status = 0;
                 tp->tx_fcb_end[queue] = fcb->next_ptr;
-
+		netif_wake_queue(dev);
                 return (0);
         }
 }

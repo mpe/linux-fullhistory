@@ -275,6 +275,8 @@ toshoboe_hard_xmit (struct sk_buff *skb, struct net_device *dev)
   if ((speed = irda_get_speed(skb)) != self->io.speed)
 	  self->new_speed = speed;
 
+  netif_stop_queue(dev);
+  
   if (self->stopped) {
 	  dev_kfree_skb(skb);
     return 0;
@@ -318,17 +320,14 @@ toshoboe_hard_xmit (struct sk_buff *skb, struct net_device *dev)
 
   self->txpending++;
 
-  /*FIXME: ask about tbusy,media_busy stuff, for the moment */
-  /*tbusy means can't queue any more */
+  /*FIXME: ask about busy,media_busy stuff, for the moment */
+  /*busy means can't queue any more */
 #ifndef ONETASK
-  if (self->txpending == TX_SLOTS)
-    {
-#else
+  if (self->txpending != TX_SLOTS)
   {
-#endif
-    if (irda_lock ((void *) &dev->tbusy) == FALSE)
-      return -EBUSY;
+  	netif_wake_queue(dev);
   }
+#endif
 
   outb_p (0x80, OBOE_RST);
   outb_p (1, OBOE_REG_9);
@@ -379,10 +378,8 @@ toshoboe_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 	      self->new_speed = 0;
       }
-      self->netdev->tbusy = 0; /* Unlock */
-      
       /* Tell network layer that we want more frames */
-      mark_bh(NET_BH);
+      netif_wake_queue(self->netdev);
     }
 
   if (irqstat & OBOE_ISR_RXDONE)
@@ -529,10 +526,7 @@ toshoboe_net_open (struct net_device *dev)
   toshoboe_initptrs (self);
 
   /* Ready to play! */
-  dev->tbusy = 0;
-  dev->interrupt = 0;
-  dev->start = 1;
-  
+  netif_start_queue(dev);  
   /* 
    * Open new IrLAP layer instance, now that everything should be
    * initialized properly 
@@ -559,9 +553,8 @@ toshoboe_net_close (struct net_device *dev)
   self = (struct toshoboe_cb *) dev->priv;
 
   /* Stop device */
-  dev->tbusy = 1;
-  dev->start = 0;
-  
+  netif_stop_queue(dev);
+    
   /* Stop and remove instance of IrLAP */
   if (self->irlap)
 	  irlap_close(self->irlap);
@@ -926,11 +919,7 @@ toshoboe_wakeup (struct toshoboe_cb *self)
 
   toshoboe_initptrs (self);
 
-  dev->tbusy = 0;
-  dev->interrupt = 0;
-  dev->start = 1;
-  self->stopped = 0;
-
+  netif_wake_queue(self->netdev);
   restore_flags (flags);
   printk (KERN_WARNING "ToshOboe: waking up\n");
 

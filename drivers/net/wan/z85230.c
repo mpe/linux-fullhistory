@@ -637,6 +637,7 @@ EXPORT_SYMBOL(z8530_sync_open);
 int z8530_sync_close(struct net_device *dev, struct z8530_channel *c)
 {
 	u8 chk;
+	
 	c->irqs = &z8530_nop;
 	c->max = 0;
 	c->sync = 0;
@@ -753,6 +754,7 @@ int z8530_sync_dma_open(struct net_device *dev, struct z8530_channel *c)
 	c->irqs = &z8530_dma_sync;
 	z8530_rtsdtr(c,1);
 	write_zsreg(c, R3, c->regs[R3]|RxENABLE);
+	
 	return 0;
 }
 
@@ -898,6 +900,7 @@ int z8530_sync_txdma_open(struct net_device *dev, struct z8530_channel *c)
 	z8530_rtsdtr(c,1);
 	printk("Rx interrupts ON\n");	
 	write_zsreg(c, R3, c->regs[R3]|RxENABLE);
+	
 	return 0;
 }
 
@@ -907,6 +910,7 @@ int z8530_sync_txdma_close(struct net_device *dev, struct z8530_channel *c)
 {
 	unsigned long flags;
 	u8 chk;
+	
 	c->irqs = &z8530_nop;
 	c->max = 0;
 	c->sync = 0;
@@ -1102,7 +1106,7 @@ static void z8530_tx_begin(struct z8530_channel *c)
 	c->tx_next_skb=NULL;
 	c->tx_ptr=c->tx_next_ptr;
 	
-	mark_bh(NET_BH);
+	netif_wake_queue(c->netdevice);
 	if(c->tx_skb==NULL)
 	{
 		/* Idle on */
@@ -1184,7 +1188,7 @@ static void z8530_tx_done(struct z8530_channel *c)
 	struct sk_buff *skb;
 
 	spin_lock_irqsave(&z8530_buffer_lock, flags);
-	c->netdevice->tbusy=0;
+	netif_wake_queue(c->netdevice);
 	/* Actually this can happen.*/
 	if(c->tx_skb==NULL)
 	{
@@ -1379,9 +1383,10 @@ extern inline int spans_boundary(struct sk_buff *skb)
 int z8530_queue_xmit(struct z8530_channel *c, struct sk_buff *skb)
 {
 	unsigned long flags;
+	
+	netif_stop_queue(c->netdevice);
 	if(c->tx_next_skb)
 	{
-		skb->dev->tbusy=1;
 		return 1;
 	}
 	
@@ -1414,6 +1419,8 @@ int z8530_queue_xmit(struct z8530_channel *c, struct sk_buff *skb)
 	spin_lock_irqsave(&z8530_buffer_lock, flags);
 	z8530_tx_begin(c);
 	spin_unlock_irqrestore(&z8530_buffer_lock, flags);
+	
+	netif_wake_queue(c->netdevice);
 	return 0;
 }
 
