@@ -39,16 +39,6 @@ static inline unsigned long _page_hashfn(struct inode * inode, unsigned long off
 
 #define page_hash(inode,offset) page_hash_table[_page_hashfn(inode,offset)]
 
-static inline int page_age_update(struct page * page, int accessed)
-{
-	unsigned int age = page->age;
-	if (accessed)
-		age |= PAGE_AGE_VALUE << 1;
-	age >>= 1;
-	page->age = age;
-	return age > (PAGE_AGE_VALUE >> 1);
-}
-
 static inline struct page * find_page(struct inode * inode, unsigned long offset)
 {
 	struct page *page;
@@ -58,7 +48,7 @@ static inline struct page * find_page(struct inode * inode, unsigned long offset
 			continue;
 		if (page->offset != offset)
 			continue;
-		page->age = PAGE_AGE_VALUE | (page->age >> 1);
+		page->referenced = 1;
 		page->count++;
 		break;
 	}
@@ -84,6 +74,7 @@ static inline void add_page_to_hash_queue(struct inode * inode, struct page * pa
 	struct page **p = &page_hash(inode,page->offset);
 
 	page_cache_size++;
+	page->referenced = 1;
 	page->age = PAGE_AGE_VALUE;
 	page->prev_hash = NULL;
 	if ((page->next_hash = *p) != NULL)

@@ -81,13 +81,13 @@ nfs_rpc_call(struct nfs_server *server, int *start, int *end, int size)
 		if (result == -ETIMEDOUT) {
 			if (server->flags & NFS_MOUNT_SOFT) {
 				printk("NFS server %s not responding, "
-					"still trying.\n", server->hostname);
+					"timed out.\n", server->hostname);
 				result = -EIO;
 				break;
 			}
 			if (!major_timeout_seen) {
 				printk("NFS server %s not responding, "
-					"timed out.\n", server->hostname);
+					"still trying.\n", server->hostname);
 				major_timeout_seen = 1;
 			}
 			if ((timeout.init_timeout <<= 1) >= maxtimeo)

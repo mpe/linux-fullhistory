@@ -13,7 +13,7 @@
 #include <linux/shm.h>
 #include <linux/stat.h>
 
-#ifdef CONFIG_SYSVIPC
+#if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
 
 extern void sem_init (void), msg_init (void), shm_init (void);
 

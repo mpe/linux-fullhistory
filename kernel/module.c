@@ -228,6 +228,14 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 	memcpy_fromfs(&rt, routines, sizeof rt);
 	if ((mp = find_module(name)) == NULL)
 		return -ENOENT;
+	if (codesize & MOD_AUTOCLEAN) {
+		/*
+		 * set autoclean marker from codesize...
+		 * set useage count to "zero"
+		 */
+		codesize &= ~MOD_AUTOCLEAN;
+		GET_USE_COUNT(mp) = MOD_AUTOCLEAN;
+	}
 	if ((codesize + sizeof (long) + PAGE_SIZE - 1) / PAGE_SIZE > mp->size)
 		return -EINVAL;
 	memcpy_fromfs((char *)mp->addr + sizeof (long), code, codesize);
@@ -336,13 +344,26 @@ sys_delete_module(char *module_name)
 			return error;
 		if ((mp = find_module(name)) == NULL)
 			return -ENOENT;
-		if ((mp->ref != NULL) || (GET_USE_COUNT(mp) != 0))
+		if ((mp->ref != NULL) || ((GET_USE_COUNT(mp) & ~MOD_AUTOCLEAN) != 0))
 			return -EBUSY;
+		GET_USE_COUNT(mp) &= ~MOD_AUTOCLEAN;
 		if (mp->state == MOD_RUNNING)
 			(*mp->cleanup)();
 		mp->state = MOD_DELETED;
+		free_modules();
 	}
-	free_modules();
+	/* for automatic reaping */
+	else {
+		for (mp = module_list; mp != &kernel_module; mp = mp->next) {
+			if ((mp->ref == NULL) && (GET_USE_COUNT(mp) == MOD_AUTOCLEAN) &&
+			    (mp->state == MOD_RUNNING)) {
+				GET_USE_COUNT(mp) &= ~MOD_AUTOCLEAN;
+				(*mp->cleanup)();
+				mp->state = MOD_DELETED;
+				free_modules();
+			}
+		}
+	}
 	return 0;
 }
 
@@ -495,7 +516,7 @@ free_modules( void)
 		if (mp->state != MOD_DELETED) {
 			mpp = &mp->next;
 		} else {
-			if (GET_USE_COUNT(mp) != 0) {
+			if ((GET_USE_COUNT(mp) != 0) || (mp->ref != NULL)) {
 				freeing_modules = 1;
 				mpp = &mp->next;
 			} else {	/* delete it */
@@ -552,10 +573,8 @@ int get_module_list(char *buf)
 			*p++ = *q++;
 		if (mp->state == MOD_UNINITIALIZED)
 			q = "  (uninitialized)";
-		else if (mp->state == MOD_RUNNING) {
-			sprintf(size,"\t%ld",GET_USE_COUNT(mp));
-			q=size;
-		}
+		else if (mp->state == MOD_RUNNING)
+			q = "";
 		else if (mp->state == MOD_DELETED)
 			q = "  (deleted)";
 		else
@@ -574,6 +593,15 @@ int get_module_list(char *buf)
 					*p++ = ' ';
 			}
 			*p++ = ']';
+		}
+		if (mp->state == MOD_RUNNING) {
+			sprintf(size,"\t%ld%s",
+				GET_USE_COUNT(mp) & ~MOD_AUTOCLEAN,
+				((GET_USE_COUNT(mp) & MOD_AUTOCLEAN)?
+					" (autoclean)":""));
+			q = size;
+			while (*q)
+				*p++ = *q++;
 		}
 		*p++ = '\n';
 	}

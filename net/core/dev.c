@@ -41,6 +41,7 @@
  *		Rudi Cilibrasi	:	Pass the right thing to set_mac_address()
  *		Dave Miller	:	32bit quantity for the device lock to make it work out
  *					on a Sparc.
+ *		Bjorn Ekwall	:	Added KERNELD hack
  *
  */
 
@@ -72,6 +73,9 @@
 #include <linux/stat.h>
 #ifdef CONFIG_NET_ALIAS
 #include <linux/net_alias.h>
+#endif
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
 #endif
 
 /*
@@ -203,6 +207,13 @@ struct device *dev_get(const char *name)
 		if (strcmp(dev->name, name) == 0)
 			return(dev);
 	}
+#ifdef CONFIG_KERNELD
+	if (request_module(name) == 0)
+		for (dev = dev_base; dev != NULL; dev = dev->next) {
+			if (strcmp(dev->name, name) == 0)
+				return(dev);
+		}
+#endif
 	return(NULL);
 }
 

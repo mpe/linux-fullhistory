@@ -26,6 +26,9 @@
 /* maximum length of module name */
 #define MOD_MAX_NAME 64
 
+/* magic marker for modules inserted from kerneld, to be auto-reaped */
+#define MOD_AUTOCLEAN 0x40000000 /* big enough, but no sign problems... */
+
 /* maximum length of symbol name */
 #define SYM_MAX_NAME 60
 
@@ -90,7 +93,7 @@ extern int register_symtab(struct symbol_table *);
 extern long mod_use_count_;
 #define MOD_INC_USE_COUNT      mod_use_count_++
 #define MOD_DEC_USE_COUNT      mod_use_count_--
-#define MOD_IN_USE	       (mod_use_count_ != 0)
+#define MOD_IN_USE	       ((mod_use_count_ & ~MOD_AUTOCLEAN) != 0)
 
 #ifndef __NO_VERSION__
 #include <linux/version.h>

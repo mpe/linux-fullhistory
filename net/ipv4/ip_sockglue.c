@@ -462,7 +462,7 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 				if (opt->srr) 
 				{
 					unsigned  char * optptr = opt->__data+opt->srr-sizeof(struct  iphdr);
-					memmove(optptr+7, optptr+4, optptr[1]-7);
+					memmove(optptr+7, optptr+3, optptr[1]-7);
 					memcpy(optptr+3, &opt->faddr, 4);
 				}
 				if (opt->rr_needaddr) 

@@ -316,7 +316,7 @@ void decompress_kernel()
 	lines = SCREEN_INFO.orig_video_lines;
 	cols = SCREEN_INFO.orig_video_cols;
 
-	if (EXT_MEM_K < 1024) error("<2M of mem\n");
+	if (EXT_MEM_K < 1024) error("Less than 2MB of memory.\n");
 
 	output_data = (char *)0x100000;	/* Points to 1M */
 	makecrc();

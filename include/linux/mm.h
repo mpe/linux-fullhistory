@@ -111,7 +111,8 @@ typedef struct page {
 		 age:8,
 		 uptodate:1,
 		 error:1,
-		 unused:5,
+		 referenced:1,
+		 unused:4,
 		 reserved:1;
 	unsigned long offset;
 	struct inode *inode;
@@ -126,10 +127,6 @@ extern mem_map_t * mem_map;
 /*
  * Free area management
  */
-
-extern int nr_swap_pages;
-extern int nr_free_pages;
-extern int min_free_pages;
 
 #define NR_MEM_LISTS 6
 
@@ -197,15 +194,6 @@ extern void * vremap(unsigned long offset, unsigned long size);
 extern void vfree(void * addr);
 extern int vread(char *buf, char *addr, int count);
 
-/* swap.c */
-
-extern void swap_free(unsigned long);
-extern void swap_duplicate(unsigned long);
-extern void swap_in(struct task_struct *, struct vm_area_struct *, pte_t *, unsigned long id, int write_access);
-
-extern void si_swapinfo(struct sysinfo * val);
-extern void rw_swap_page(int rw, unsigned long nr, char * buf);
-
 /* mmap.c */
 extern unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off);
@@ -220,11 +208,6 @@ extern unsigned long get_unmapped_area(unsigned long, unsigned long);
 /* filemap.c */
 extern unsigned long page_unuse(unsigned long);
 extern int shrink_mmap(int, unsigned long);
-
-#define read_swap_page(nr,buf) \
-	rw_swap_page(READ,(nr),(buf))
-#define write_swap_page(nr,buf) \
-	rw_swap_page(WRITE,(nr),(buf))
 
 #define GFP_BUFFER	0x00
 #define GFP_ATOMIC	0x01
@@ -289,69 +272,6 @@ static inline struct vm_area_struct * find_vma_intersection (struct task_struct 
 	if (!vma || end_addr <= vma->vm_start)
 		return NULL;
 	return vma;
-}
-
-/*
- * vm_ops not present page codes for shared memory.
- *
- * Will go away eventually..
- */
-#define SHM_SWP_TYPE 0x40
-
-extern void shm_no_page (ulong *);
-
-/*
- * swap cache stuff (in swap.c)
- */
-#define SWAP_CACHE_INFO
-
-extern unsigned long * swap_cache;
-
-#ifdef SWAP_CACHE_INFO
-extern unsigned long swap_cache_add_total;
-extern unsigned long swap_cache_add_success;
-extern unsigned long swap_cache_del_total;
-extern unsigned long swap_cache_del_success;
-extern unsigned long swap_cache_find_total;
-extern unsigned long swap_cache_find_success;
-#endif
-
-extern inline unsigned long in_swap_cache(unsigned long addr)
-{
-	return swap_cache[MAP_NR(addr)]; 
-}
-
-extern inline long find_in_swap_cache (unsigned long addr)
-{
-	unsigned long entry;
-
-#ifdef SWAP_CACHE_INFO
-	swap_cache_find_total++;
-#endif
-	entry = xchg(swap_cache + MAP_NR(addr), 0);
-#ifdef SWAP_CACHE_INFO
-	if (entry)
-		swap_cache_find_success++;
-#endif	
-	return entry;
-}
-
-extern inline int delete_from_swap_cache(unsigned long addr)
-{
-	unsigned long entry;
-	
-#ifdef SWAP_CACHE_INFO
-	swap_cache_del_total++;
-#endif	
-	entry= xchg(swap_cache + MAP_NR(addr), 0);
-	if (entry)  {
-#ifdef SWAP_CACHE_INFO
-		swap_cache_del_success++;
-#endif
-		swap_free(entry);
-		return 1;
-	}
-	return 0;
 }
 
 #endif /* __KERNEL__ */

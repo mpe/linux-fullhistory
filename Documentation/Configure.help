@@ -30,8 +30,8 @@ CONFIG_MATH_EMULATION
   Linux can emulate a math coprocessor (used for floating point
   operations) if you don't have one. 486DX and Pentium processors have
   a math coprocessor built in, 486SX and 386 do not, unless you added
-  a 487DX or 387, respectively.  (The messages during boot time can
-  give you some hints here.) Everyone needs either a coprocessor or
+  a 487DX or 387, respectively.  (The messages during boot time can give
+  you some hints here ["man dmesg"]) Everyone needs either a coprocessor or
   this emulation. If you enable this emulation even though you have a
   coprocessor, the coprocessor will be used nevertheless. (This
   behavior can be changed with the kernel command line option
@@ -63,7 +63,12 @@ CONFIG_BLK_DEV_RAM
   write to it and do all the other things that normal block devices can do.
   It is usually used to load and store a copy of a minimal root file
   system off of a floppy into RAM during the initial install of Linux.
-  Most normal users won't need this functionality, and can thus say N here.
+  Note that the kernel command line option "ramdisk=XX" is now obsolete.
+  For details, read Documentation/ramdisk.txt. If you want to compile this 
+  as a module ( = code which can be inserted in and removed from the 
+  running kernel whenever you want), say M and read Documentation/modules.txt.
+  Most normal users won't need the RAM disk functionality, and can thus say 
+  N here.
 
 Normal (MFM/RLL) disk and IDE disk/cdrom support
 CONFIG_ST506   		           
@@ -90,7 +95,7 @@ CONFIG_BLK_DEV_HD
   As you might have guessed, there are now two drivers for IDE
   harddrives around: the old one and the new improved one. The old one
   is not any longer more reliable than the new one. The new driver can
-  also handle IDE/ATAPI CDROM drives (ATAPI = AT Attachment Packet
+  also handle IDE/ATAPI CDROM and tape drives (ATAPI = AT Attachment Packet
   Interface is a new protocol currently used for controlling CDROM and
   tape drives, similar to the SCSI protocol. Some newer CDROM drives
   such as NEC 260 and MITSUMI triple/quad speed drives use it, but
@@ -164,9 +169,10 @@ CONFIG_DECSTATION
 
 Generate code for R4x00
 CONFIG_R4X00
-#####
-##### Anyone have details? It's for the MIPS architecture.
-#####
+  If your computer uses the 64 bit R4X00 processor (as opposed to the
+  32 bit R3000), you need to say Y here, otherwise N. Note that these
+  processors are not compatible and the kernel can only work on the
+  processor type it was compiled for.
 
 Networking support
 CONFIG_NET
@@ -180,13 +186,23 @@ CONFIG_NET
 Network aliasing
 CONFIG_NET_ALIAS
   This is for setting several network addresses on the same low-level network
-  device driver. Typically used for services that act different based
-  on the address they listen (eg. Apache httpd) or for connecting to
+  device driver. Typically used for services that act differently based
+  on the address they listen on (e.g. Apache httpd) or for connecting to
   different logical networks through the same physical interface.
   This is the generic part, later when configuring network protocol
   options you will be asked for protocol-specific aliasing support.
-  See net/core/README.alias for more info.
-  If you need this features (for any protocol, like IP) say Y.  
+  See Documentation/networking/alias.txt for more info.
+  If you need this features (for any protocol, like IP) say Y; if unsure, 
+  say N.  
+
+Network firewalls
+CONFIG_FIREWALL
+  A firewall is a computer which protects a local network from the
+  rest of the World: all traffic to and from computers on the local
+  net is inspected by the firewall first. If you want to configure
+  your Linux box as a firewall for a local network, say Y here. If
+  your local network is TCP/IP based, you will have to say Y to "IP:
+  firewalling", below. Chances are that you don't want this, so say N.
 
 Sun floppy controller support
 CONFIG_BLK_DEV_SUNFD
@@ -195,7 +211,7 @@ CONFIG_BLK_DEV_SUNFD
 
 Alpha system type
 CONFIG_ALPHA_AVANTI
-  Find out what type of Alpha system you are running. If you can't
+  Find out what type of Alpha motherboard you have. If you can't
   find one of the given names, then try "Noname". For this question,
   it suffices to give a unique prefix of the option you want to
   choose. 
@@ -205,7 +221,7 @@ CONFIG_MAX_16M
   This is for some buggy motherboards which cannot properly deal with
   the memory above 16MB. If you have more than 16MB of RAM and
   experience weird problems, you might want to try Y, everyone else
-  says N. Note for machines with more that 64MB: in order for the
+  says N. Note for machines with more that 64MB of RAM: in order for the
   kernel to be able to use the memory above 64MB, pass the command
   line option "mem=XXXM" (where XXX is the memory size in
   megabytes) to your kernel. See the documentation of your boot loader
@@ -214,6 +230,12 @@ CONFIG_MAX_16M
   (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.
   You also need at least 512kB of RAM cache if you have more than 64MB
   of RAM.
+  Some other things to try when experiencing seemingly random, "weird"
+  problems: 1) passing the "no-hlt" option to the kernel 2) passing
+  the "no-387" option to the kernel 3) passing the "mem=4M" option to
+  the kernel (will disable all but the first 4M of RAM) 4) disabling
+  the cache from your BIOS settings 5) exchanging RAM chips 6)
+  exchanging the motherboard 7) committing suicide.
 
 Using SRM as bootloader
 CONFIG_ALPHA_SRM
@@ -244,9 +266,9 @@ CONFIG_PCI
   without this option). The PCI-HOWTO, available via ftp (user:
   anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO, contains
   valuable information about which PCI hardware works under Linux and
-  which doesn't.  If some of PCI devices don't work and you get a
-  warning during boot time, please follow the instructions at the top of
-  include/linux/pci.h. The buggy PCTech RZ 1000 IDE
+  which doesn't.  If some of your PCI devices don't work and you get a
+  warning during boot time ("man dmesg"), please follow the instructions 
+  at the top of include/linux/pci.h. The buggy PCTech RZ 1000 IDE
   harddrive controller which is used in some PCI systems is detected
   and correctly handled by this driver.
 
@@ -292,8 +314,8 @@ CONFIG_BINFMT_ELF
   (this does *not* mean that you will be able to run executables from
   different architectures or operating systems!) and makes building
   run-time libraries very easy. Many new executables are distributed
-  solely in ELF format. You definitely want to say Y here. Information
-  about ELF is on the WWW at http://sable.ox.ac.uk/~jo95004/elf.html
+  solely in ELF format. You definitely want to say Y here. Information about
+  ELF is on the WWW at http://www.sjc.ox.ac.uk/users/barlow/elf-howto.html
   (To browse the WWW, you need to have access to a machine on the
   Internet that has one of the programs lynx, netscape or Mosaic).  If
   you find that after upgrading to Linux kernel 1.3 and saying Y here,
@@ -320,22 +342,16 @@ CONFIG_KERNEL_ELF
   kernel in ELF by saying Y here and editing the variables CC
   and LD in the toplevel Makefile.
 
-Use 486-specific optimizations (does NOT work on i386)
-CONFIG_M486
-  If you have a 486 or better, as opposed to a 386, say Y here:
-  things will be slightly faster. However, it is not required: the
-  kernel will run on all CPUs without this option. If you are
-  not sure, say N; This option will make the kernel use some
-  instructions that are only available on 486+ machines.
-
-Use Pentium optimizations
-CONFIG_M586 
-  If you have a 586 or better, as opposed to a 486, or if you have a
-  486 and are very short on memory, say Y here.
-  Things will be slightly faster for a 586, and your kernel will be
-  smaller.  A kernel with this option enabled will still run on a 486,
-  although slightly slower.
-
+Processor type
+CONFIG_M386
+  This is the processor type of your CPU. It is used for optimizing
+  purposes. In order to compile a kernel that can run on all three CPU
+  types (albeit not optimally fast), you can specify "386" here.  If
+  you specify "486" or "Pentium", then the kernel will run on
+  both 486 and Pentium CPUs. In rare cases, it can make sense to
+  specify "Pentium" here even if running a 486: the kernel will be
+  smaller but slower.
+  
 Enable loadable module support
 CONFIG_MODULES
   Kernel modules are small pieces of compiled code which can be 
@@ -344,7 +360,7 @@ CONFIG_MODULES
   Documentation/modules.txt. Modules can be device drivers, file 
   systems, binary executable formats, and so on. If you think that 
   you may want to make use of modules with this kernel in the future, 
-  then say Y here.
+  then say Y here. If unsure, say Y.
 
 Set version information on all symbols for modules
 CONFIG_MODVERSIONS
@@ -360,6 +376,19 @@ CONFIG_MODVERSIONS
   say Y here, then you cannot say Y to the PPP driver, below; the only
   option is to compile it as a module (PPP is a protocol for sending
   internet traffic over telephone lines). Therefore, N is a safe bet.
+
+Kernel daemon support
+CONFIG_KERNELD
+  Normally when you have seleceted some drivers and/or filesystems
+  to be created as loadable modules, you also have the responsibility
+  to load the corresponding module (via insmod/modprobe) before you
+  use it.  If you select Y here, the kernel will take care of this
+  all by itself, together with a user level daemon; "kerneld".
+  Note that "kerneld" will also automatically unload all unused
+  modules, so you don't have to use "rmmod" either.
+  There are some other "kernel callouts" that will be available
+  later on, such as a user level "beeper" and a generic screen blanker.
+  The "kerneld" daemon is included in "modules-1.2.8" and later.
 
 TCP/IP networking
 CONFIG_INET
@@ -425,10 +454,10 @@ IP: firewalling
 CONFIG_IP_FIREWALL
   A firewall is a computer which protects a local network from the
   rest of the internet: all traffic to and from computers on the local
-  net is inspected by the firewall first. If you want to enlarge your
-  kernel by about 2kB and configure your Linux box as a firewall for a
-  local network, say Y here. You will need to read the FIREWALL-HOWTO,
-  available via ftp (user: anonymous) in
+  net is inspected by the firewall first. If you want to configure
+  your Linux box as a firewall for a local TCP/IP based network, say Y
+  here. This will enlarge your kernel by about 2kB. You will need to
+  read the FIREWALL-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also, you will have to use
   the ipfw tool from the net-tools package, available via ftp (user:
   anonymous) from
@@ -436,10 +465,10 @@ CONFIG_IP_FIREWALL
   preferably ipfwadm from ftp.xos.nl:/pub/linux/ipfwadm/. These
   programs allow selective blocking of internet traffic based on type,
   origin and destination.  You need to enable IP firewalling in order
-  to be able to use IP masquerading (i.e. IP traffic from one of the
-  local computers and destined for an outside host is changed by your
-  box so that it appears to come from you). Chances are that you don't
-  want this, so say N.
+  to be able to use IP masquerading (i.e. local computers can chat
+  with an outside host, but that outside host is made to think that it
+  is talking to the firewall box. Makes the local network completely
+  invisible). Chances are that you don't want this, so say N.
 
 IP: accounting
 CONFIG_IP_ACCT
@@ -460,7 +489,7 @@ CONFIG_IP_ACCT
 
 IP: tunneling
 CONFIG_NET_IPIP
-  Tunneling means to encapsulating data of one protocol type within
+  Tunneling means encapsulating data of one protocol type within
   another protocol and sending it over a channel that understands the
   encapsulating protocol. This particular tunneling driver implements
   encapsulation of IP within IP, which sounds kind of pointless, but
@@ -485,7 +514,7 @@ CONFIG_IP_MASQUERADE
   box acts as a firewall wants to send something to the outside, your
   box can "masquerade" as that host, i.e. it forwards the traffic to
   the intended destination, but makes it look like it came from the
-  firewall host itself. It works both ways: if the outside host
+  firewall box itself. It works both ways: if the outside host
   answers, the firewall will silently forward the traffic to the
   corresponding local computer. This way, the computers on your local
   net are completely invisible to the outside world, even though they
@@ -505,9 +534,19 @@ CONFIG_IP_MASQUERADE
 
 IP: aliasing support
 CONFIG_IP_ALIAS
-  You need this to enable IP layer network aliasing. This will also
-  enable ARP resolution for alias devices. If you don't need several
-  IP addresses per interface, answer N.
+  Sometimes it is useful to give several addresses to a single network
+  interface (= serial port or ethernet card). The most common case is
+  that you want to serve different WWW documents to the outside
+  according to which of your host names they used to connect to
+  you. This is explained in detail on the WWW at
+  http://www.thesphere.com/~dlp/TwoServers/ (to browse the WWW, you
+  need to have access to a machine on the Internet that has one of the
+  programs lynx, netscape or Mosaic). Another scenario would be that
+  there are two logical networks living on your local ethernet and you
+  want to access them both with the same ethernet card. The
+  configuration of these alias addresses is done with a special name
+  syntax explained in Documentation/networking/alias.txt. If you want
+  this, say Y. Most people don't need it and say N.
 
 IP: multicast routing(in progress)
 CONFIG_IP_MROUTE
@@ -526,13 +565,15 @@ CONFIG_INET_PCTCP
 
 Reverse ARP
 CONFIG_INET_RARP
-  Since you asked: if there are diskless machines on your network that
-  know their hardware ethernet address but don't know their IP
+  Since you asked: if there are diskless machines on your local network 
+  that know their hardware ethernet address but don't know their IP
   addresses upon startup, they send out a Reverse
   Address Resolution Protocol request to find out their own IP
   addresses. If you want your Linux box to be able to *answer* such
-  requests, say Y here; you'd use the program rarp ("man rarp"). If
-  you want to compile this as a module ( = code which can be inserted
+  requests, say Y here; you'd use the program rarp ("man rarp"). 
+  Superior solutions to the same problem are given by the 
+  protocols BOOTP and DHCP. If you want to compile RARP support 
+  as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want), say M
   here and read Documentation/modules.txt.  If you don't understand a
   word, say N and rest in peace.
@@ -557,10 +598,10 @@ Disable NAGLE algorithm (normally enabled)
 CONFIG_TCP_NAGLE_OFF
   The NAGLE algorithm works by requiring an acknowledgment before
   sending small IP frames (= packets).  This keeps tiny telnet and
-  rlogin packets from congesting Wide Area Networks.  Most people strongly
-  recommend to say N here, though, thereby leaving NAGLE enabled. Those
-  programs that benefit by disabling the facility should do it on a per
-  connection basis themselves anyway.
+  rlogin packets from congesting Wide Area Networks.  Most people
+  strongly recommend to say N here, thereby leaving NAGLE
+  enabled. Those programs that would benefit from disabling this
+  facility can do it on a per connection basis themselves.
 
 IP: Drop source routed frames
 CONFIG_IP_NOSR
@@ -581,8 +622,8 @@ CONFIG_SKB_LARGE
   This option can speed up network performance. It works by increasing
   the size of socket buffers, thereby reducing overhead but increasing
   memory usage. Say N if you have less than 16Mb of RAM, otherwise Y.
-  Note for machines with more that 64MB: in order for the kernel to be
-  able to use the memory above 64MB, pass the command line option
+  Note for machines with more that 64MB of RAM: in order for the kernel 
+  to be able to use the memory above 64MB, pass the command line option
   "mem=XXXM" (where XXX is the memory size in megabytes) to your
   kernel. See the documentation of your boot loader (lilo or loadlin)
   about how to pass options to the kernel. The lilo procedure is also
@@ -593,9 +634,10 @@ CONFIG_SKB_LARGE
 The IPX protocol
 CONFIG_IPX
   This is support for the Novell networking protocol, IPX. You need it
-  if you want to access Novell Netware servers by using ncpfs or from
-  within the Linux DOS emulator dosemu (read the DOSEMU-HOWTO,
-  available via ftp (user: anonymous) in
+  if you want to access Novell Netware servers by using the Linux
+  Novell client ncpfs (available via ftp (user: anonymous) from 
+  sunsite.unc.edu:/pub/Linux/system/Filesystem/) or from within the 
+  Linux DOS emulator dosemu (read the DOSEMU-HOWTO, available in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO). To turn your Linux box into
   a fully featured Netware file server and IPX router, say Y here and
   fetch lwared from
@@ -606,8 +648,6 @@ CONFIG_IPX
   the programs lynx, netscape or Mosaic). This driver would enlarge
   your kernel by about 5 kB. Unless you have Novell computers on your
   local network, say N.
-  BTW: Although it still doesn't work with this release of the kernel you 
-  can also find ncpfs (a free Novell client) on linux01.gwdg.de.
 
 Appletalk DDP
 CONFIG_ATALK
@@ -668,6 +708,14 @@ CONFIG_NETROM
   might want to get the very latest 1.3 kernel if you intend to use
   this.
 
+AX.25 over Ethernet
+CONFIG_BPQETHER
+  AX.25 is the protocol used for computer communication over amateur
+  radio. If you say Y here, you will be able to send and receive AX.25
+  traffic over ethernet (also called "BPQ AX.25"), which could be
+  useful if some other computer on your local network has a direct
+  amateur radio connection.
+
 Kernel/User network link driver(ALPHA)
 CONFIG_NETLINK
   This driver allows for two-way communication between certain parts
@@ -696,7 +744,8 @@ CONFIG_SCSI
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
   as a module ( = code which can be inserted in and removed from the
   running kernel whenever you want). If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
+  module, say M here and read Documentation/modules.txt and
+  Documentation/scsi.txt. 
 
 SCSI disk support
 CONFIG_BLK_DEV_SD
@@ -706,7 +755,7 @@ CONFIG_BLK_DEV_SD
   CDROMs. This driver is also available as a module ( = code which can
   be inserted in and removed from the running kernel whenever you
   want). If you want to compile it as a module, say M here and read
-  Documentation/modules.txt.
+  Documentation/modules.txt and Documentation/scsi.txt.
   
 SCSI tape support
 CONFIG_CHR_DEV_ST
@@ -716,7 +765,8 @@ CONFIG_CHR_DEV_ST
   the kernel source. This is NOT for SCSI CDROMs. This driver is also
   available as a module ( = code which can be inserted in and removed
   from the running kernel whenever you want). If you want to compile
-  it as a module, say M here and read Documentation/modules.txt.
+  it as a module, say M here and read Documentation/modules.txt and
+  Documentation/scsi.txt .
 
 SCSI CDROM support
 CONFIG_BLK_DEV_SR
@@ -726,7 +776,8 @@ CONFIG_BLK_DEV_SR
   ISO9660 filesystem later. This driver is also available as a module
   ( = code which can be inserted in and removed from the running
   kernel whenever you want). If you want to compile it as a module,
-  say M here and read Documentation/modules.txt.
+  say M here and read Documentation/modules.txt and
+  Documentation/scsi.txt .
 
 SCSI generic support
 CONFIG_CHR_DEV_SG
@@ -740,7 +791,7 @@ CONFIG_CHR_DEV_SG
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you want to compile this
   as a module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
-  Documentation/modules.txt.
+  Documentation/modules.txt and Documentation/scsi.txt.
 
 Probe all LUNs on each SCSI device
 CONFIG_SCSI_MULTI_LUN
@@ -771,7 +822,9 @@ Adaptec AHA1542 support
 CONFIG_SCSI_AHA1542
   This is support for an SCSI host adaptor. It is explained in section
   3.4 of the SCSI-HOWTO, available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  Note that Trantor was
+  recently purchased by Adaptec, and some former Trantor products are
+  being sold under the Adaptec name. If it doesn't work out of
   the box, you may have to change some settings in
   drivers/scsi/aha1542.h.  If you want to compile this as a module ( =
   code which can be inserted in and removed from the running kernel
@@ -996,9 +1049,9 @@ Dummy net driver support
 CONFIG_DUMMY
   This is essentially a loopback device (i.e. traffic you send to this
   device is immediately returned back to you) with a configurable IP
-  address different from the usual 127.0.0.1. Can be used to give you
-  more than one IP address or make your currently inactive SLIP
-  address seem like a real address. If you use SLIP or PPP, you might
+  address different from the usual 127.0.0.1. It is most commonly used
+  in order to make your currently inactive SLIP address seem like a
+  real address for local programs. If you use SLIP or PPP, you might
   want to enable it. Read about it in the Network Administrator's
   Guide, available via ftp (user: anonymous) from
   sunsite.unc.edu:/pub/Linux/docs/LDP. Since this thing comes often
@@ -1071,7 +1124,12 @@ CONFIG_PPP
   then you cannot compile the PPP driver into the kernel; you can only
   compile it as a module. If you want to compile it as a module, say M
   here and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If unsure, say N.
+  Documentation/networking/net-modules.txt. Note that, no matter what
+  you do, the BSD compression code (used to compress the IP packets
+  sent over the serial line; has to be supported at the other end as
+  well) can only be compiled as a module; it is called bsd_comp.o and
+  will show up in the directory modules once you have said "make
+  modules". If unsure, say N.
 
 16 channels instead of 4 
 CONFIG_PPP_LOTS
@@ -1083,7 +1141,7 @@ Z8530 SCC kiss emulation driver for AX.2
 CONFIG_SCC
   These cards are used to connect your Linux box to an amateur radio
   and communicate with other computers.  If you want to use this, read
-  drivers/char/README.scc and the HAM-HOWTO, available available via
+  Documentation/networking/z8530drv.txt and the HAM-HOWTO, available via
   ftp (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.
 
 PLIP (parallel port) support
@@ -1129,12 +1187,13 @@ CONFIG_EQUALIZER
 Sun LANCE Ethernet support
 CONFIG_SUN_LANCE
   This is support for lance ethernet cards on Sun workstations such as
-  the Sparcstation IPC (any Sparc with an 'le0' under SunOS basically).
+  the Sparcstation IPC (any Sparc with a network interface 'le0' under
+  SunOS basically).
 
 Sun Intel Ethernet support
 CONFIG_SUN_INTEL
   This is support for the intel ethernet cards on some Sun workstations
-  (all those with an ie0 interface under SunOS).
+  (all those with a network interface 'ie0' under SunOS).
 
 Do you want to be offered ALPHA test drivers
 CONFIG_NET_ALPHA
@@ -1426,8 +1485,8 @@ CONFIG_NI65
 Ottawa PI and PI/2 support
 CONFIG_PI
   This is a driver for the Ottawa Amateur Radio Club PI and PI2 cards,
-  which are commonly used to send internet traffic over radio. More
-  information about these cards is on the WWW at
+  which are commonly used to send internet traffic over amateur radio. 
+  More information about these cards is on the WWW at
   http://hydra.carleton.ca/info/pi2.html (To browse the WWW, you need
   to have access to a machine on the Internet that has one of the
   programs lynx, netscape or Mosaic). If you have one of these cards,
@@ -1439,10 +1498,10 @@ CONFIG_PI
 Gracilis PackeTwin support
 CONFIG_PT
   This card is similar to the PI card (mentioned above).  It is used mainly
-  by amateur radio operators for packet radio.  You should of already said Y
-  to "AX.25 support" as this card uses that protocol. 
-  Other than the code and the PT user documentation, there is no other
-  information on this card.
+  by amateur radio operators for packet radio.  You should have already 
+  said Y to "AX.25 support" as this card uses that protocol. 
+  More information about this driver can be found in the file 
+  drivers/net/README.pt. 
   NOTE: The card is capable of DMA and full duplex but neither of these have
   been coded in the driver as yet.
 
@@ -1738,7 +1797,7 @@ CONFIG_SBPCD
   This driver supports most of the drives which use the Panasonic or
   SoundBlaster interface.
   The Matsushita CR-521, CR-522, CR-523, CR-562, CR-563 drives (sometimes
-  labelled "Creative"), the CreativeLabs CD200, the Longshine LCS-7260,
+  labeled "Creative"), the CreativeLabs CD200, the Longshine LCS-7260,
   the "IBM External ISA CDROM" (in fact a CR-56x model), the TEAC CD-55A
   fall under this category. Some other "electrically compatible" drives
   (Vertos, Genoa, some Funai models) are currently not supported; for the
@@ -1795,6 +1854,16 @@ Sanyo H94A CDROM support
 CONFIG_SJCD
   If this is your CDROM drive, say Y here.
 
+Quota support
+CONFIG_QUOTA
+  If you say Y here, you will be able to set per user limits for disk
+  usage (also called diskquotas). Currently, it works only for the
+  ext2 filesystem; you need the software available via ftp (user:
+  anonymous) from
+  sunsite.unc.edu:/pub/Linux/systm/Admin/quota_acct.tar.gz in order to
+  use it. Obviously, this is only useful for multi user systems. If
+  unsure, say N.
+
 Standard (minix) fs support
 CONFIG_MINIX_FS
   Minix is a simple operating system used in many classes about
@@ -1806,7 +1875,7 @@ CONFIG_MINIX_FS
   built-in restrictions. This option will enlarge your kernel by about
   25 kB. Everyone should say Y or M so that they are able to read this
   common floppy format.  If you want to compile this as a module
-  however ( = code which can be inserted in and removed from the
+  ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
   Documentation/modules.txt. Note that the filesystem of your root
   partition cannot be compiled as a module.
@@ -1946,7 +2015,9 @@ CONFIG_ROOT_NFS
 
 ISO9660 cdrom filesystem support
 CONFIG_ISO9660_FS
-  If you have a CDROM and want to do more with it than just listen to
+  This is the standard filesystem used on CDROMs. It was previously known 
+  as "High Sierra Filesystem" and is called "hsfs" on other Unix systems. 
+  If you have a CDROM drive and want to do more with it than just listen to
   audio CDs and watch its LEDs, say Y (and read the CDROM-HOWTO,
   available via ftp (user: anonymous) from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO), thereby enlarging your
@@ -2171,24 +2242,20 @@ CONFIG_QIC02_DYNCONF
 
 QIC-117 tape support
 CONFIG_FTAPE
-  Most tape drives using the floppy disk controller will need
-  this. Colorado Jumbo, Conner Tape-Stor would be two models of this.
-  If you have a non-SCSI tape device like that, say Y. QIC-40 users
-  say Y too. And everyone read the Ftape-HOWTO, available via ftp
-  (user: anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. Tape
-  drives that attach to the parallel port, like the Colorado Tracker,
-  are not yet supported by Linux.  Note that saying Y here will not
-  insert the code into the kernel: instead, a module will be compiled
-  ( = code which can be inserted in and removed from the running
-  kernel whenever you want). Read Documentation/modules.txt to find
-  out how to use it.
+  This option is obsolete as of Linux v1.3.34. If you would like to
+  use a tape drive that uses the floppy disk controller, like QIC-40,
+  QIC-80, QIC-117, QIC-3010 (examples: Colorado Jumbo or Conner
+  Tape-Stor), you want to read the Ftape-HOWTO, available via ftp
+  (user: anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. Then
+  get the ftape distribution v2.04 or higher from
+  sunsite.unc.edu:/pub/Linux/kernel/tapes/. Tape drives that attach to
+  the parallel port, like the Colorado Tracker, are not yet supported
+  by Linux.
 
 number of ftape buffers
 NR_FTAPE_BUFFERS 3
-  The floppy tape drive needs some memory allocated in the kernel.
-  n buffers, each having 32 kB, will be allocated if you enter n
-  here. Consequently, your kernel size increases by n*32 kB. You
-  should accept the default unless you know what you're doing.
+  This option is obsolete since Linux v1.3.34. Upgrade your ftape
+  distribution to v2.04.
 
 Zilog serial support
 CONFIG_SUN_ZS
@@ -2197,21 +2264,20 @@ CONFIG_SUN_ZS
 
 Advanced Power Management
 CONFIG_APM
-  This driver provides APM support on machines with an APM-compliant 32-bit
-  BIOS.  Specifically, the time will be reset after a USER RESUME
-  operation, the /proc/apm device will provide battery status information,
-  and ioctls are provided to put the machine in STANDBY or SUSPEND mode.
-  This is most useful on laptops with a compliant BIOS.
+  APM is a BIOS standard for saving power using several different
+  techniques. This is mostly useful for battery powered laptops with
+  APM compliant BIOSes.  Specifically, the time will be reset after a
+  USER RESUME operation, the /proc/apm device will provide battery
+  status information, and ioctls are provided to put the machine in
+  STANDBY or SUSPEND mode.  This driver does not work for the TI 4000M
+  TravelMate and the ACER 486/DX4/75 because they don't follow the
+  standard. Say Y if you have a different laptop.
 
 Ignore USER SUSPEND
 CONFIG_APM_IGNORE_USER_SUSPEND
   This option will ignore USER SUSPEND requests.  On machines with a
-  compliant APM BIOS, this is never what you want to do.  However, this is
-  necessary on the NEC Versa M series, which generates these when resuming
-  from SYSTEM SUSPEND.  Enabling this on other laptops may cause the laptop
-  to generate a CRITICAL SUSPEND when an appropriate USER SUSPEND is
-  ignored -- this may prevent the APM driver from updating the system time
-  on a RESUME.
+  compliant APM BIOS, you want to say N.  However, on the NEC Versa M
+  series notebooks, it is necessary to say Y because of a BIOS bug.
 
 Enable APM features
 CONFIG_APM_DO_ENABLE
@@ -2226,6 +2292,17 @@ CONFIG_APM_DO_ENABLE
   APM support, or if it beeps continuously instead of suspending.  Turn
   this off if you have a NEC UltraLite Versa 33/C or a Toshiba T400CDT.
   This is off by default since most machines do fine without this feature.
+
+Watchdog Timer Support 
+CONFIG_WATCHDOG
+  If you enable this option and create a character special file
+  /dev/watchdog with major number 10 and minor number 130 using mknod
+  ("man mknod"), you will get a software watchdog, i.e.: subsequently
+  opening the file and failing to write to it for longer than 1 minute
+  will result in rebooting the machine. This could be useful for a
+  networked machine that needs to come back online as fast as possible
+  after a lock-up. For details, read Documentation/watchdog.txt in the
+  kernel source. If unsure, say N.
 
 Do CPU IDLE calls
 CONFIG_APM_CPU_IDLE
@@ -2330,4 +2407,9 @@ CONFIG_PROFILE_SHIFT
 # LocalWords:  pppd Zilog ZS soundcards SRM bootloader ez mainmenu rarp ipfwadm
 # LocalWords:  RTNETLINK mknod xos MTU lwared Macs mac netatalk macs cs Wolff
 # LocalWords:  dartmouth flowerpt MultiMaster FlashPoint tudelft etherexpress
-# LocalWords:  ICL EtherTeam ETH IDESCSI TXC
+# LocalWords:  ICL EtherTeam ETH IDESCSI TXC dmesg httpd hlt sjc barlow dlp mtu
+# LocalWords:  thesphere TwoServers BOOTP DHCP ncpfs BPQETHER BPQ chipsets MG
+# LocalWords:  bsd comp Sparcstation le SunOS ie Gracilis PackeTwin PT pt LU FX
+# LocalWords:  FX TEAC SoundBlaster CR CreativeLabs LCS mS
+# LocalWords:  Vertos Genoa Funai hsfs NCP NetWare tgz APM apm ioctls UltraLite
+# LocalWords:  TravelMate CDT LCD backlight VC

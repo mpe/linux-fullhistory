@@ -10,6 +10,7 @@ bool 'Enable loadable module support' CONFIG_MODULES
 if [ "$CONFIG_MODULES" = "y" ]; then
   MODULES=y
   bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
+  bool 'Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
 fi
 
 mainmenu_option next_comment
@@ -20,7 +21,7 @@ bool 'Networking support' CONFIG_NET
 bool 'Limit memory to low 16MB' CONFIG_MAX_16M
 bool 'PCI bios support' CONFIG_PCI
 if [ "$CONFIG_PCI" = "y" ]; then
-  bool '   PCI bridge optimisation (experimental)' CONFIG_PCI_OPTIMIZE
+  bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
 fi
 bool 'System V IPC' CONFIG_SYSVIPC
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF

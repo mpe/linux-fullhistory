@@ -5,9 +5,6 @@
  *  Development Sponsored by Killy Corp. NY NY
  *   
  *  Borrows code from st driver.
- *
- *  Version from 1.3.51 modified by Rick Richardson to fix problem in
- *  detecting whether its a send or a recieve style command (see sg_write)
  */
 #include <linux/module.h>
 
@@ -295,9 +292,6 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
     wake_up(&scsi_generics[dev].read_wait);
 }
 
-#define SG_SEND 0
-#define SG_REC  1
-
 static int sg_write(struct inode *inode,struct file *filp,const char *buf,int count)
 {
     int			  bsize,size,amt,i;
@@ -305,7 +299,7 @@ static int sg_write(struct inode *inode,struct file *filp,const char *buf,int co
     kdev_t		  devt = inode->i_rdev;
     int			  dev = MINOR(devt);
     struct scsi_generic   * device=&scsi_generics[dev];
-    int			  direction;
+    int			  input_size;
     unsigned char	  opcode;
     Scsi_Cmnd		* SCpnt;
     
@@ -342,33 +336,43 @@ static int sg_write(struct inode *inode,struct file *filp,const char *buf,int co
     device->complete=0;
     memcpy_fromfs(&device->header,buf,sizeof(struct sg_header));
 
-    /*
-     * fix input size, and see if we are sending data.
-     *
-     * Mod by Rick Richardson (rick@dgii.com):
-     * The original test to see if its a SEND/REC was:
-     *     if( device->header.pack_len > device->header.reply_len )
-     * I haven't a clue why the author thought this would work.  Instead,
-     * I've changed it to see if there is any additional data in this
-     * packet beyond the length of the SCSI command itself.
-     */
     device->header.pack_len=count;
     buf+=sizeof(struct sg_header);
-    size = COMMAND_SIZE(get_user(buf)) + sizeof(struct sg_header);
-    if( device->header.pack_len > size)
+
+    /*
+     * Now we need to grab the command itself from the user's buffer.
+     */
+    opcode = get_user(buf);
+    size=COMMAND_SIZE(opcode);
+    if (opcode >= 0xc0 && device->header.twelve_byte) size = 12;
+
+    /*
+     * Determine buffer size.
+     */
+    input_size = device->header.pack_len - size;
+    if( input_size > device->header.reply_len)
     {
-        bsize = device->header.pack_len;
-        direction = SG_SEND;
+        bsize = input_size;
     } else {
         bsize = device->header.reply_len;
-        direction = SG_REC;
     }
     
     /*
      * Don't include the command header itself in the size.
      */
     bsize-=sizeof(struct sg_header);
+    input_size-=sizeof(struct sg_header);
 
+    /*
+     * Verify that the user has actually passed enough bytes for this command.
+     */
+    if( input_size < 0 )
+    {
+	device->pending=0;
+        wake_up( &device->write_wait );
+	return -EIO;
+    }
+    
     /*
      * Allocate a buffer that is large enough to hold the data
      * that has been requested.  Round up to an even number of sectors,
@@ -409,37 +413,11 @@ static int sg_write(struct inode *inode,struct file *filp,const char *buf,int co
     printk("device allocated\n");
 #endif    
 
-    /*
-     * Now we need to grab the command itself from the user's buffer.
-     */
     SCpnt->request.rq_dev = devt;
     SCpnt->request.rq_status = RQ_ACTIVE;
     SCpnt->sense_buffer[0]=0;
-    opcode = get_user(buf);
-    size=COMMAND_SIZE(opcode);
-    if (opcode >= 0xc0 && device->header.twelve_byte) size = 12;
     SCpnt->cmd_len = size;
 
-    /*
-     * If we are writing data, subtract off the size
-     * of the command itself, to get the amount of actual data
-     * that we need to send to the device.
-     */
-    if( direction == SG_SEND )
-        amt -= size;
-    
-    /*
-     * Verify that the user has actually passed enough bytes for this command.
-     */
-    if( count < (sizeof(struct sg_header) + size) )
-    {
-	device->pending=0;
-        wake_up( &device->write_wait );
-        sg_free( device->buff, device->buff_len );
-	device->buff = NULL;
-	return -EIO;
-    }
-    
     /*
      * Now copy the SCSI command from the user's address space.
      */
@@ -451,7 +429,7 @@ static int sg_write(struct inode *inode,struct file *filp,const char *buf,int co
      * field also includes the length of the header and the command,
      * so we need to subtract these off.
      */
-    if( direction == SG_SEND )  memcpy_fromfs(device->buff,buf, amt);
+    if (input_size > 0) memcpy_fromfs(device->buff, buf, input_size);
     
     /*
      * Set the LUN field in the command structure.

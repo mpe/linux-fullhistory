@@ -19,7 +19,9 @@ static struct inode_hash_entry {
 
 static struct inode * first_inode;
 static struct wait_queue * inode_wait = NULL;
-static int nr_inodes = 0, nr_free_inodes = 0;
+/* Keep these next two contiguous in memory for sysctl.c */
+int nr_inodes = 0, nr_free_inodes = 0;
+int max_inodes = NR_INODE;
 
 static inline int const hashfn(kdev_t dev, unsigned int i)
 {
@@ -455,7 +457,7 @@ struct inode * get_empty_inode(void)
 	unsigned long badness = 1000;
 	int i;
 
-	if (nr_inodes < NR_INODE && nr_free_inodes < (nr_inodes >> 1))
+	if (nr_inodes < max_inodes && nr_free_inodes < (nr_inodes >> 1))
 		grow_inodes();
 repeat:
 	inode = first_inode;
@@ -471,7 +473,7 @@ repeat:
 		}
 	}
 	if (badness)
-		if (nr_inodes < NR_INODE) {
+		if (nr_inodes < max_inodes) {
 			if (grow_inodes() == 0)
 				goto repeat;
 		}

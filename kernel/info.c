@@ -13,6 +13,7 @@
 #include <linux/unistd.h>
 #include <linux/types.h>
 #include <linux/mm.h>
+#include <linux/swap.h>
 
 asmlinkage int sys_sysinfo(struct sysinfo *info)
 {

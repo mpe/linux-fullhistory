@@ -1,5 +1,5 @@
-#ifndef __LINUX_SMPLOCK_H
-#define __LINUX_SMPLOCK_H
+#ifndef __I386_SMPLOCK_H
+#define __I386_SMPLOCK_H
 
 #ifdef __SMP__
 

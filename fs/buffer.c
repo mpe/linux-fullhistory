@@ -26,6 +26,7 @@
 #include <linux/errno.h>
 #include <linux/malloc.h>
 #include <linux/pagemap.h>
+#include <linux/swap.h>
 #include <linux/swapctl.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
@@ -1216,10 +1217,10 @@ static int grow_buffers(int pri, int size)
 /* =========== Reduce the buffer memory ============= */
 
 /*
- * try_to_free() checks if all the buffers on this particular page
+ * try_to_free_buffer() checks if all the buffers on this particular page
  * are unused, and free's the page if so.
  */
-static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp,
+int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp,
 		       int priority)
 {
 	unsigned long page;
@@ -1286,9 +1287,9 @@ static inline void age_buffer(struct buffer_head *bh)
 	clear_bit(BH_Has_aged, &bh->b_state);
 
 	if (touched) 
-		touch_page((unsigned long) bh->b_data);
+		touch_page(mem_map + MAP_NR((unsigned long) bh->b_data));
 	else
-		age_page((unsigned long) bh->b_data);
+		age_page(mem_map + MAP_NR((unsigned long) bh->b_data));
 }
 
 /*
@@ -1352,19 +1353,6 @@ static int maybe_shrink_lav_buffers(int size)
  * that are in the 0 - limit address range, for DMA re-allocations.
  * We ignore that right now.
  */
-int shrink_buffers(unsigned int priority, unsigned long limit)
-{
-	if (priority < 2) {
-		sync_buffers(0,0);
-	}
-
-	if(priority == 2) wakeup_bdflush(1);
-
-	if(maybe_shrink_lav_buffers(0)) return 1;
-
-	/* No good candidate size - take any size we can find */
-        return shrink_specific_buffers(priority, 0);
-}
 
 static int shrink_specific_buffers(unsigned int priority, int size)
 {
@@ -1388,7 +1376,7 @@ static int shrink_specific_buffers(unsigned int priority, int size)
 			    !bh->b_this_page)
 				 continue;
 			if (!age_of((unsigned long) bh->b_data) &&
-			    try_to_free(bh, &bh, 6))
+			    try_to_free_buffer(bh, &bh, 6))
 				 return 1;
 			if(!bh) break;
 			/* Some interrupt must have used it after we
@@ -1436,7 +1424,7 @@ static int shrink_specific_buffers(unsigned int priority, int size)
 			if ((age_of((unsigned long) bh->b_data) >>
 			     (6-priority)) > 0)
 				continue;				
-			if (try_to_free(bh, &bh, 0))
+			if (try_to_free_buffer(bh, &bh, 0))
 				 return 1;
 			if(!bh) break;
 		}
@@ -1855,7 +1843,7 @@ int bdflush(void * unused)
 
 	current->session = 1;
 	current->pgrp = 1;
-	sprintf(current->comm, "kernel bdflush");
+	sprintf(current->comm, "kflushd");
 
 	/*
 	 *	As a kernel thread we want to tamper with system buffers

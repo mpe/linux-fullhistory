@@ -52,7 +52,7 @@ define_bool CONFIG_ALPHA_NEED_ROUNDING_EMULATION y
 bool 'Echo console messages on /dev/ttyS1' CONFIG_SERIAL_ECHO
 if [ "$CONFIG_PCI" = "y" ]; then
   bool 'TGA Console Support' CONFIG_TGA_CONSOLE
-  bool 'PCI bridge optimisation (experimental)' CONFIG_PCI_OPTIMIZE
+  bool 'PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
 fi
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC

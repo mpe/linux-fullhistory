@@ -21,6 +21,7 @@
 #include <linux/fs.h>
 #include <linux/locks.h>
 #include <linux/pagemap.h>
+#include <linux/swap.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -73,6 +74,7 @@ int shrink_mmap(int priority, unsigned long limit)
 {
 	static int clock = 0;
 	struct page * page;
+	struct buffer_head *tmp, *bh;
 
 	if (limit > high_memory)
 		limit = high_memory;
@@ -82,18 +84,40 @@ int shrink_mmap(int priority, unsigned long limit)
 	priority = (limit<<2) >> priority;
 	page = mem_map + clock;
 	while (priority-- > 0) {
-		if (page->inode) {
-			unsigned age = page->age;
-			/* if the page is shared, we juvenate it */
-			if (page->count != 1)
-				age |= PAGE_AGE_VALUE << 1;
-			page->age = age >> 1;
-			if (age < PAGE_AGE_VALUE) {
+		/* First of all, regenerate the page's referenced bit
+                   from any buffers in the page */
+		bh = buffer_pages[MAP_NR(page_address(page))];
+		if (bh) {
+			tmp = bh;
+			do {
+				if (buffer_touched(tmp)) {
+					clear_bit(BH_Touched, &tmp->b_state);
+					page->referenced = 1;
+				}
+				tmp = tmp->b_this_page;
+			} while (tmp != bh);
+		}
+
+		/* We can't throw away shared pages, but we do mark
+		   them as referenced.  This relies on the fact that
+		   no page is currently in both the page cache and the
+		   buffer cache; we'd have to modify the following
+		   test to allow for that case. */
+		if (page->count > 1)
+			page->referenced = 1;
+		else if (page->referenced)
+			page->referenced = 0;
+		else if (page->count) {
+			/* The page is an old, unshared page --- try
+                           to discard it. */
+			if (page->inode) {
 				remove_page_from_hash_queue(page);
 				remove_page_from_inode_queue(page);
 				free_page(page_address(page));
 				return 1;
 			}
+			if (bh && try_to_free_buffer(bh, &bh, 6))
+				return 1;
 		}
 		page++;
 		clock++;

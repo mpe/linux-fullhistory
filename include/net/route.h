@@ -185,6 +185,9 @@ extern __inline__ void ip_rt_put(struct rtable * rt)
 ;
 #endif
 
+#ifdef CONFIG_KERNELD
+extern struct rtable * ip_rt_route(__u32 daddr, int local);
+#else
 extern __inline__ struct rtable * ip_rt_route(__u32 daddr, int local)
 #ifndef MODULE
 {
@@ -207,6 +210,7 @@ extern __inline__ struct rtable * ip_rt_route(__u32 daddr, int local)
 }
 #else
 ;
+#endif
 #endif
 
 extern __inline__ struct rtable * ip_check_route(struct rtable ** rp,

@@ -207,7 +207,7 @@ static inline void unmask_irq(unsigned long irq)
 	} else {
 		cache_806 &= mask;
 		outb(cache_806, 0x806);
-#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB66P)
+#elif NR_IRQS == 32
 	} else if (irq < 24) {
 		cache_26 &= mask;
 		outb(cache_26, 0x26);

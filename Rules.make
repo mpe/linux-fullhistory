@@ -166,7 +166,7 @@ $(MX_OBJS): $(TOPDIR)/include/linux/modversions.h
 $(LX_OBJS) $(OX_OBJS): $(TOPDIR)/include/linux/modversions.h
 	$(CC) $(CFLAGS) -DMODVERSIONS -DEXPORT_SYMTAB -c $(@:.o=.c)
 
-dep fastdep: $(TOPDIR)/include/linux/modversions.h
+dep fastdep $(M_OBJS): $(TOPDIR)/include/linux/modversions.h
 
 endif
 endif

@@ -45,6 +45,7 @@
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
 #endif
+#include <linux/swap.h>
 
 #include <asm/segment.h>
 #include <asm/pgtable.h>

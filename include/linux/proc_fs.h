@@ -36,7 +36,8 @@ enum root_directory_inos {
 	PROC_IOPORTS,
 	PROC_APM,
 	PROC_PROFILE, /* whether enabled or not */
-	PROC_CMDLINE
+	PROC_CMDLINE,
+	PROC_SYS
 };
 
 enum pid_directory_inos {
@@ -123,6 +124,11 @@ enum scsi_directory_inos {
 	PROC_SCSI_LAST = (PROC_SCSI_FILE + 16) /* won't ever see more than */
 };                                             /* 16 HBAs in one machine   */
 
+/* Finally, the dynamically allocatable proc entries are reserved: */
+
+#define PROC_DYNAMIC_FIRST 4096
+#define PROC_NDYNAMIC      4096
+
 #define PROC_SUPER_MAGIC 0x9fa0
 
 /*
@@ -153,11 +159,13 @@ struct proc_dir_entry {
 	int (*get_info)(char *, char **, off_t, int, int);
 	void (*fill_inode)(struct inode *);
 	struct proc_dir_entry *next, *parent, *subdir;
+	void *data;
 };
 
 extern struct proc_dir_entry proc_root;
 extern struct proc_dir_entry proc_net;
 extern struct proc_dir_entry proc_scsi;
+extern struct proc_dir_entry proc_sys;
 extern struct proc_dir_entry proc_pid;
 extern struct proc_dir_entry proc_pid_fd;
 
@@ -168,6 +176,8 @@ extern void proc_base_init(void);
 extern void proc_net_init(void);
 
 extern int proc_register(struct proc_dir_entry *, struct proc_dir_entry *);
+extern int proc_register_dynamic(struct proc_dir_entry *, 
+				 struct proc_dir_entry *);
 extern int proc_unregister(struct proc_dir_entry *, int);
 
 static inline int proc_net_register(struct proc_dir_entry * x)
@@ -229,10 +239,12 @@ extern int proc_match(int, const char *, struct proc_dir_entry *);
 extern int proc_readdir(struct inode *, struct file *, void *, filldir_t);
 extern int proc_lookup(struct inode *, const char *, int, struct inode **);
 
+extern struct inode_operations proc_dir_inode_operations;
 extern struct inode_operations proc_net_inode_operations;
 extern struct inode_operations proc_netdir_inode_operations;
 extern struct inode_operations proc_scsi_inode_operations;
 extern struct inode_operations proc_mem_inode_operations;
+extern struct inode_operations proc_sys_inode_operations;
 extern struct inode_operations proc_array_inode_operations;
 extern struct inode_operations proc_arraylong_inode_operations;
 extern struct inode_operations proc_kcore_inode_operations;

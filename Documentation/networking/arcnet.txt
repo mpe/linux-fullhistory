@@ -1,6 +1,6 @@
 
 ----------------------------------------------------------------------------
-NOTE:  See also README.arcnet-hardware in this directory for jumper-setting
+NOTE:  See also arcnet-hardware.txt in this directory for jumper-setting
 and cabling information if you're like many of us and didn't happen to get a
 manual with your ARCnet card.
 ----------------------------------------------------------------------------
@@ -144,6 +144,9 @@ line.  For example:
 	insmod arcnet.o io=0x300 irqnum=2 shmem=0xd0000
 You can also add a num=1, num=2 etc for additional arcnet cards that will
 use arc1, arc2 etc for their device names (instead of the default, arc0).
+
+** NEWS FLASH!  Starting with 2.30 ALPHA, the ARCnet driver can autoprobe
+   even as a module.  So "insmod arcnet.o" by itself should work.
 	
 
 Using the Driver

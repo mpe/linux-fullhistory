@@ -1,7 +1,10 @@
 
 -----------------------------------------------------------------------------
-This file is a supplement to README.arcnet.  Please read that for general
-driver configuration help.
+1) This file is a supplement to arcnet.txt.  Please read that for general
+   driver configuration help.
+-----------------------------------------------------------------------------
+2) This file is no longer Linux-specific.  It should probably be moved out of
+   the kernel sources.  Ideas?
 -----------------------------------------------------------------------------
 
 Because so many people (myself included) seem to have obtained ARCnet cards
@@ -17,18 +20,19 @@ INTRODUCTION TO ARCNET
 ARCnet is a network type which works in a way similar to popular "ethernet"
 networks but which is also different in some very important ways.
 
-First of all, you can get ARCnet cards in two speeds: 2.5Mbps (slower than
-ethernet) and 100Mbps (faster than ethernet).  The two hardware types, as
-far as I'm aware, are not compatible and so you cannot wire a 100Mbps card
-to a 2.5Mbps card, and so on.  From what I hear, my driver does work with
-100Mbps cards, but I haven't been able to verify this myself, since I only
-have the 2.5Mbps variety.
+First of all, you can get ARCnet cards in at least two speeds: 2.5Mbps
+(slower than ethernet) and 100Mbps (faster than normal ethernet).  In fact,
+there are others as well, but these are less common.  The different hardware
+types, as far as I'm aware, are not compatible and so you cannot wire a
+100Mbps card to a 2.5Mbps card, and so on.  From what I hear, my driver does
+work with 100Mbps cards, but I haven't been able to verify this myself,
+since I only have the 2.5Mbps variety.
 
 You also cannot connect an ARCnet card to any kind of ethernet card and
 expect it to work.  
 
 There are two "types" of ARCnet - STAR topology and BUS topology.  This
-refers to how the cards are meant to be wired together.  According to all
+refers to how the cards are meant to be wired together.  According to most
 available documentation, you can only connect STAR cards to STAR cards and
 BUS cards to BUS cards.  That makes sense, right?  Well, it's not quite
 true; see below under "Cabling."
@@ -36,7 +40,7 @@ true; see below under "Cabling."
 Once you get past these little stumbling blocks, ARCnet is actually quite a
 well-designed standard.  It uses something called "modified token passing"
 which makes it completely incompatible with so-called "Token Ring" cards,
-but which makes transfers much more reliable than with ethernet.  In fact,
+but which makes transfers much more reliable than ethernet does.  In fact,
 ARCnet will guarantee that a packet arrives safely at the destination, and
 even if it can't possibly be delivered properly (ie. because of a cable
 break, or because the destination computer does not exist) it will at least
@@ -49,7 +53,7 @@ completely different programming interface, leading to a lot of different,
 sometimes very similar, ethernet drivers.  Of course, always using the same
 programming interface also means that when high-performance hardware
 facilities like PCI busmastering DMA appear, it's hard to take advantage of
-them.
+them.  Let's not go into that.
 
 One thing that makes ARCnet cards difficult to program for, however, is the
 limit on their packet sizes; standard ARCnet can only send packets that are
@@ -62,134 +66,176 @@ although they are generally kept down to the ethernet-style 1500 bytes.
 
 CABLING ARCNET NETWORKS
 -----------------------
- - Information in this section is from several contributors, including:
- 	Stephen A. Wood <saw@hallc1.cebaf.gov>
+
+This section was rewritten by 
+        Vojtech Pavlik     <Vojtech.Pavlik@st.mff.cuni.cz>
+using information from several people, including:
+        Avery Pennraun     <apenwarr@foxnet.net>
+ 	Stephen A. Wood    <saw@hallc1.cebaf.gov>
  	John Paul Morrison <jmorriso@bogomips.ee.ubc.ca>
- 	Joachim Koenig <jojo@repas.de>
- 	Vojtech Pavlik <vpav4328@Diana.troja.mff.cuni.cz>
+ 	Joachim Koenig     <jojo@repas.de>
+and Avery touched it up a bit, at Vojtech's request.
 
- - I, Avery Pennarun, tried to arrange it into something that makes sense
-   when all put together.  All mistakes, then, are most likely my fault.
-   Bug me about them, and they will probably get fixed.
+ARCnet (the classic 2.5 Mbps version) can be connected by two different
+types of cabling: coax and twisted pair.  The other ARCnet-type networks
+(100 Mbps TCNS and 320 kbps - 32 Mbps ARCnet Plus) use different types of
+cabling (Type1, Fiber, C1, C4, C5).
 
-Ideally, according to documentation, ARCnet networks should be connected
-with 93 Ohm cables with 93 Ohm resistors as terminators.  I use TV cable and
-no resistors to connect two STAR cards.  Blah.  Your mileage may vary.
+For a coax network, you "should" use 93 Ohm RG-62 cable.  But other cables
+also work fine, because ARCnet is a very stable network. I personally use 75
+Ohm TV antenna cable.
 
-Here's some more specific information about cables, sent in by Joachim
-Koenig (slight touchups by me):
+Cards for coax cabling are shipped in two different variants: for BUS and
+STAR network topologies.  They are mostly the same.  The only difference
+lies in the hybrid chip installed.  BUS cards use high impedance output,
+while STAR use low impedance.  Low impedance card (STAR) is electrically
+equal to a high impedance one with a terminator installed.
 
-	The following cables are valid for ARCnet:
-		RG-62  93 Ohm  up to 610 m
-		RG-59/U 75 Ohm up to 457 m
-		RG-11/U 75 Ohm up to 533 m
-		IBM Typ 1 150 Ohm up to 200 m
-		IBM Typ 3 100 Ohm up to 100 m
-		
-So you can see that while 93 Ohms is ideal, you can still go half a
-kilometer with 75 Ohm TV cable.  A rule of thumb might be handy here, to
-help you remember:
-	Basically any coax cable, up to a ridiculously large distance.
+Usually, the ARCnet networks are built up from STAR cards and hubs.  There
+are two types of hubs - active and passive.  Passive hubs are small boxes
+with four BNC connectors containing four 47 Ohm resistors:
 
-The above applies to all known ARCnet cards.  Specific to STAR cards,
-though, Stephen A. Wood has some information:
+   |         | wires
+   R         + junction
+-R-+-R-      R 47 Ohm resistors
+   R
+   |
 
-	When I bought my two cards at a garage sale, they came with little
-	box with four BNC connectors on the outside.  The shields of the
-	four connectors are all grounded together, and the center conductors
-	were connected by the following resistor network.
+The shielding is connected together.  Active hubs are much more complicated;
+they are powered and contain electronics to amplify the signal and send it
+to other segments of the net.  They usually have eight connectors.  Active
+hubs come in two variants - dumb and smart.  The dumb variant just
+amplifies, but the smart one decodes to digital and encodes back all packets
+coming through.  This is much better if you have several hubs in the net,
+since many dumb active hubs may worsen the signal quality.
 
-	              |
-	              |
-        	      R
-	              |
-	         ---R-+-R---
-	              | 
-	              R
-	              |
-	              |
+And now to the cabling.  What you can connect together:
 
-	Where R is 47 Ohms.  A little math shows that if you terminate three
-	of the outputs with 90 ohms (A cable or a terminator), the remaining
-	input sees 90 Ohms.  Therefore this box is impedance matched to 90
-	Ohm cable.  So this box can be used to connect 2 to 4 nodes
-	together.
+1. A card to a card.  This is the simplest way of creating a 2-computer
+   network.
 
-If you really use your imagination, you can see how the above diagram kind
-of looks like a "star."  John Paul Morrison makes a few notes about the
-above:
+2. A card to a passive hub.  Remember that all unused connectors on the hub
+   must be properly terminated with 93 Ohm (or something else if you don't
+   have the right ones) terminators.
+   	(Avery's note: oops, I didn't know that.  Mine (TV cable) works
+	anyway, though.)
 
-	The "little box with four BNC connectors on the outside" is an
-	Arcnet passive hub. They're worth about $5 (just so you don't get
-	ripped off).
+3. A card to an active hub.  Here is no need to terminate the unused
+   connectors except some kind of aesthetic feeling.  But, there may not be
+   more than eleven active hubs between any two computers.  That of course
+   doesn't limit the number of active hubs on the network.
+   
+4. An active hub to another.
 
-	I don't have specs at my fingertips. Basically, don't use too many
-	passive hubs (or none at all, apparently passive hubs are A Bad
-	Thing.  On the other hand, they're a really cheap way to do things.)
+5. An active hub to passive hub.
 
-	Arcnet active hubs are available; they are analogous to Ethernet
-	twisted pair hubs. You can plug either a single station or a passive
-	hub into each port on the active hub. If you plug in a passive hub,
-	that lets you connect three more stations.
-	
-According to Vojtech Pavlik, there shouldn't be more than one passive hub
-between two "active ends", an active end being an active hub or an ARCnet
-card.  That makes sense to me.
-	
-As for BUS cards, they're even easier (for more than two cards, anyway; you
-can't get much simpler than direct-connecting two STAR cards with a TV
-cable).  They work just like Thinnet ethernet; it looks like this:
+Remember, that you can not connect two passive hubs together.  The power loss
+implied by such connection is too high for the net to operate reliably.
 
-	R------+------+------+------R
-	       |      |      |
-	       NODE   NODE   NODE
+An example of a typical ARCnet network:
 
-Where R is the terminator as usual, and '+' represents a T connector.
+           R                     S - STAR type card              
+    S------H--------A-------S    R - Terminator
+           |        |            H - Hub                         
+           |        |            A - Active hub                  
+           |   S----H----S                                       
+           S        |                                            
+                    |                                            
+                    S                                            
+                                                                          
+The BUS topology is very similar to the one used by Ethernet.  The only
+difference is in cable and terminators: they should be 93 Ohm.  Ethernet
+uses 50 Ohm impedance. You use T connectors to put the computers on a single
+line of cable, the bus. You have to put terminators at both ends of the
+cable. A typical BUS ARCnet network looks like:
 
-Okay, then, what if you have a combination of BUS cards and STAR cards?  You
-probably can't do ANY combination you want, but Vojtech Pavlik explains what
-works for him (WARNING: I, Avery, haven't tried anything this weird myself):
+    RT----T------T------T------T------TR
+     B    B      B      B      B      B
 
-	All that I need is to terminate each end with a STAR card. I think I
-	can even connect the cards like this:
+  B - BUS type card
+  R - Terminator
+  T - T connector
 
-	STAR------+-----+-----STAR
-	         BUS   BUS
+But that is not all! The two types can be connected together.  According to
+the official documentation the only way of conecting them is using an active
+hub:
 
-	Where "-" stands for coax, "+" for T connector, "STAR" for star-type
-	arcnet card and BUS for bus-type arcnet cards. I think there will be
-	no terminators necessary.
+         A------T------T------TR
+         |      B      B      B
+     S---H---S
+         |
+         S
 
-He also explains (I paraphrase slightly here):
+The official docs also state that you can use STAR cards at the ends of
+BUS network in place of a BUS card and a terminator:
 
-	R-+----------STAR
-	 BUS
- 
-	In this case, I have to terminate the end with the bus card
-	using a terminator. ("R" - terminator, "+" - T connector "-" - coax,
-	everything other is probably clear)
-	
-	[...]
- 
-	And _MAYBE_ you can do even more complicated and insane combinations 
-	when just thinking of the STAR card as a BUS one with an inside 
-	installed terminator. (STAR cards are NOT bus ones with terminator, 
-	but I believe that they electrically act like them). 
+     S------T------T------S
+            B      B
 
-And finally, he gives a shortcut for BUS users that are low on supplies:
+But, according to my own experiments, you can simply hang a BUS type card
+anywhere in middle of a cable in a STAR topology network.  And more - you
+can use the bus card in place of any star card if you use a terminator. Then
+you can build very complicated networks fulfilling all your needs!  An
+example:
 
-	When you have really short cables (about four meters in total) and have lack
-	of terminators or T's you can leave one of the terminators out .... or put
-	it in the middle like this:
- 
-	BUS-----T-----BUS
-        	R
- 
-	It's ugly, but it works.
-	
-I don't pretend to understand what's happening there, but then again, I
-don't have BUS cards either.
+                                  S
+                                  |
+           RT------T-------T------H------S
+            B      B       B      |
+                                  |       R
+    S------A------T-------T-------A-------H------TR                    
+           |      B       B       |       |      B                         
+           |   S                 BT       |                                 
+           |   |                  |  S----A-----S
+    S------H---A----S             |       | 
+           |   |      S------T----H---S   |
+           S   S             B    R       S  
+                                                               
+A basicaly different cabling scheme is used with Twisted Pair cabling. Each
+of the TP cards has two RJ (phone-cord style) connectors.  The cards are
+then daisy-chained together using a cable connecting every two neighboring
+cards.  The ends are terminated with RJ 93 Ohm terminators which plug into
+the empty connectors of cards on the ends of the chain.  An example:
 
+          ___________   ___________
+      _R_|_         _|_|_         _|_R_  
+     |     |       |     |       |     |      
+     |Card |       |Card |       |Card |     
+     |_____|       |_____|       |_____|          
+
+
+There are also hubs for the TP topology.  There is nothing difficult
+involved in using them; you just connect a TP chain to a hub on any end or
+even at both.  This way you can create almost any network configuration. 
+The maximum of 11 hubs between any two computers on the net applies here as
+well.  An example:
+
+    RP-------P--------P--------H-----P------P-----PR
+                               |
+      RP-----H--------P--------H-----P------PR
+             |                 |
+             PR                PR
+
+    R - RJ Terminator
+    P - TP Card
+    H - TP Hub
+
+Like any network, ARCnet has a limited cable length.  These are the maximum
+cable lengths between two active ends (an active end being an active hub or
+a STAR card).
+
+		RG-62       93 Ohm up to 650 m
+		RG-59/U     75 Ohm up to 457 m
+		RG-11/U     75 Ohm up to 533 m
+		IBM Type 1 150 Ohm up to 200 m
+		IBM Type 3 100 Ohm up to 100 m
+
+The maximum length of all cables connected to a passive hub is limited to 65
+meters for RG-62 cabling; less for others.  You can see that using passive
+hubs in a large network is a bad idea. The maximum length of a single "BUS
+Trunk" is about 300 meters for RG-62. The maximum distance between the two
+most distant points of the net is limited to 3000 meters. The maximum length
+of a TP cable between two cards/hubs is 650 meters.
 
 
 SETTING THE JUMPERS
@@ -208,10 +254,33 @@ All ARCnet cards should have a total of four or five different settings:
 	- Avery's favourite: 0x300.
 
   - the IRQ: on  8-bit cards, it might be 2 (9), 3, 4, 5, or 7.
-             on 16-bit cards, it might be 2 (9), 3, 4, 5, 7, or 10-15.  Make
-    sure this is different from any other card on your system.  Note that
-    IRQ2 is the same as IRQ9, as far as Linux is concerned.
-	- Avery's favourite: IRQ2 (actually IRQ9).
+             on 16-bit cards, it might be 2 (9), 3, 4, 5, 7, or 10-15.
+             
+    Make sure this is different from any other card on your system.  Note
+    that IRQ2 is the same as IRQ9, as far as Linux is concerned.  You can
+    "cat /proc/interrupts" for a somewhat complete list of which ones are in
+    use at any given time.  Here is a list of common usages from Vojtech
+    Pavlik <vpav4328@diana.troja.mff.cuni.cz>:
+    	("Not on bus" means there is no way for a card to generate this
+	interrupt)
+	IRQ  0 - Timer 0 (Not on bus)
+	IRQ  1 - Keyboard (Not on bus)
+	IRQ  2 - IRQ Controller 2 (Not on bus, nor does interrupt the CPU)
+	IRQ  3 - COM2
+	IRQ  4 - COM1
+	IRQ  5 - FREE (LPT2 if you have it; sometimes COM3)
+	IRQ  6 - Floppy disk controller
+	IRQ  7 - FREE (LPT1 if you don't use the polling driver or PLIP) 
+	IRQ  8 - Realtime Clock Interrupt (Not on bus)
+	IRQ  9 - FREE (VGA vertical sync interrupt if enabled)
+	IRQ 10 - FREE
+	IRQ 11 - FREE
+	IRQ 12 - FREE
+	IRQ 13 - Numeric Coprocessor (Not on bus)
+	IRQ 14 - Fixed Disk Controller
+	IRQ 15 - FREE (Fixed Disk Controller 2 if you have it) 
+
+	- Avery's favourite: IRQ2 (actually IRQ9).  Watch that VGA, though.
 
   - the memory address:  Unlike most cards, ARCnets use "shared memory" for
     copying buffers around.  Make SURE it doesn't conflict with any other
@@ -230,28 +299,54 @@ All ARCnet cards should have a total of four or five different settings:
     address from 0 to 255.  Unlike ethernet, you can set this address
     yourself with a jumper or switch (or on some cards, with special
     software).  Since it's only 8 bits, you can only have 254 ARCnet cards
-    on a network.  DON'T use 0 or 255, since these are reserved. (although
+    on a network.  DON'T use 0 or 255, since these are reserved (although
     neat stuff will probably happen if you DO use them).  By the way, if you
     haven't already guessed, don't set this the same as any other ARCnet on
     your network!
 	- Avery's favourite:  3 and 4.  Not that it matters.
-	
+
   - There may be ETS1 and ETS2 settings.  These may or may not make a
-    difference on your card, but are used to change the delays used when
-    powering up a computer on the network.  This is only necessary when
-    wiring VERY long range ARCnet networks, on the order of 4km or so; in
-    any case, the only real requirement here is that all cards on the
-    network with ETS1 and ETS2 jumpers have them in the same position.
+    difference on your card (many manuals call them "reserved"), but are
+    used to change the delays used when powering up a computer on the
+    network.  This is only necessary when wiring VERY long range ARCnet
+    networks, on the order of 4km or so; in any case, the only real
+    requirement here is that all cards on the network with ETS1 and ETS2
+    jumpers have them in the same position.  Chris Hindy <chrish@io.org>
+    sent in a chart with actual values for this:
+	ET1	ET2	Response Time	Reconfiguration Time
+	---	---	-------------	--------------------
+	open	open	74.7us		840us
+	open	closed	283.4us		1680us
+	closed	open	561.8us		1680us
+	closed	closed	1118.6us	1680us
+    
+    Make sure you set ETS1 and ETS2 to the SAME VALUE for all cards on your
+    network.
+    
+Also, on many cards (not mine, though) there are red and green LED's. 
+Vojtech Pavlik <vpav4328@diana.troja.mff.cuni.cz> tells me this is what they
+mean:
+	GREEN           RED             Status
+	-----		---		------
+	OFF             OFF             Power off
+	OFF             Short flashes   Cabling problems (broken cable or not
+					  terminated)
+	OFF (short)     ON              Card init
+	ON              ON              Normal state - everything OK, nothing
+					  happens
+	ON              Long flashes    Data transfer
+	ON              OFF             Never happens (maybe when wrong ID)
 
 
-Here's the all the jumper information I could obtain for individual card
-types.  The format of this list has changed somewhat; I finally got around
-to unduplicating some of the information and making a few other changes, but
-didn't get very far yet.  If you notice any problems with the info, it's now
-officially my fault :(
+The following is all the specific information people have sent me about
+their own particular ARCnet cards.  It is officially a mess, and contains
+huge amounts of duplicated information.  I have no time to fix it.  If you
+want to, PLEASE DO!  Just send me a 'diff -u' of all your changes.
 
 The model # is listed right above specifics for that card, so you should be
 able to use your text viewer's "search" function to find the entry you want. 
+If you don't KNOW what kind of card you have, try looking through the
+various diagrams to see if you can tell.
 
 If your model isn't listed and/or has different settings, PLEASE PLEASE
 tell me.  I had to figure mine out without the manual, and it WASN'T FUN!
@@ -261,24 +356,32 @@ model that is, please e-mail me to say so.
 
 Cards Listed in this file (in this order, mostly):
 
-	Manufacturer	Model #		Bits
-	------------	-------		----
-	SMC		PC100		8
-	SMC		PC110		8
-	SMC		PC120		8
-	SMC		PC130		8
-	SMC		PC270E		8
-	SMC		PC500		16
-	SMC		PC500Longboard	16
-	SMC		PC550Longboard	16
-	SMC		PC600		16
-	SMC?		LCS-8830-T	16?
-	Puredata	PDI507		8
-	CNet Tech	CN120-Series	8
-	CNet Tech	CN160-Series	16
-	No Name		--		8/16
-	No Name		Taiwan R.O.C(?)	8
-	Tiara		Tiara Lancard(?)
+	Manufacturer	Model #			Bits
+	------------	-------			----
+	SMC		PC100			8
+	SMC		PC110			8
+	SMC		PC120			8
+	SMC		PC130			8
+	SMC		PC270E			8
+	SMC		PC500			16
+	SMC		PC500Longboard		16
+	SMC		PC550Longboard		16
+	SMC		PC600			16
+	SMC		PC710			8
+	SMC?		LCS-8830-T		16?
+	Puredata	PDI507			8
+	CNet Tech	CN120-Series		8
+	CNet Tech	CN160-Series		16
+	Lantech?	UM9065L chipset		8
+	Acer		5210-003		8
+	Datapoint?	LAN-ARC-8		8
+	Topware		TA-ARC/10		8
+	Thomas-Conrad	500-6242-0097 REV A	8
+	Waterloo?	(C)1985 Waterloo Micro. 8
+	No Name		--			8/16
+	No Name		Taiwan R.O.C?		8
+	No Name		Model 9058		8
+	Tiara		Tiara Lancard?		8
 	
 
 ** SMC = Standard Microsystems Corp.
@@ -289,7 +392,7 @@ Unclassified Stuff
 ------------------
   - Please send any other information you can find.
   
-  - And some unknowns (other info is welcome!):
+  - And some other stuff (more info is welcome!):
      From: root@ultraworld.xs4all.nl (Timo Hilbrink)
      To: apenwarr@foxnet.net (Avery Pennarun)
      Date: Wed, 26 Oct 1994 02:10:32 +0000 (GMT)
@@ -602,7 +705,7 @@ board activity:
 *****************************************************************************
 
 ** Standard Microsystems Corp (SMC) **
-PC500/PC550 Long Board (16-bit cards)
+PC500/PC550 Longboard (16-bit cards)
 -------------------------------------
   - from Juergen Seifert <seifert@htwm.de>
 
@@ -613,10 +716,15 @@ STANDARD MICROSYSTEMS CORPORATION (SMC) ARCNET-PC500/PC550 Long Board
 Note: There is another Version of the PC500 called Short Version, which 
       is different in hard- and software! The most important differences
       are:
-      - The long board has no Shared memory
+      - The long board has no Shared memory.
       - On the long board the selection of the interrupt is done by binary
         coded switch, on the short board directly by jumper.
-
+        
+[Avery's note: pay special attention to that: the long board HAS NO SHARED
+MEMORY.  This means the current Linux-ARCnet driver can't use these cards. 
+I have obtained a PC500Longboard and will be doing some experiments on it in
+the future, but don't hold your breath.  Thanks again to Juergen Seifert for
+his advice about this!]
 
 This description has been written by Juergen Seifert <seifert@htwm.de>
 using information from the following Original SMC Manual 
@@ -823,6 +931,48 @@ board activity:
 
 *****************************************************************************
 
+** SMC **
+PC710 (8-bit card)
+------------------
+  - from J.S. van Oosten <jvoosten@compiler.tdcnet.nl>
+  
+Note: this data is gathered by experimenting and looking at info of other
+cards. However, I'm sure I got 99% of the settings right.
+
+The SMC710 card resembles the PC270 card, but is much more basic (i.e. no
+LEDs, RJ11 jacks, etc.) and 8 bit. Here's a little drawing:
+
+    _______________________________________   
+   | +---------+  +---------+              |____
+   | |   S2    |  |   S1    |              |
+   | +---------+  +---------+              |
+   |                                       |
+   |  +===+    __                          |
+   |  | R |   |  | X-tal                 ###___
+   |  | O |   |__|                      ####__'|
+   |  | M |    ||                        ###
+   |  +===+                                |
+   |                                       |
+   |   .. JP1   +----------+               |
+   |   ..       | big chip |               |   
+   |   ..       |  90C63   |               |
+   |   ..       |          |               |
+   |   ..       +----------+               |
+    -------                     -----------
+           |||||||||||||||||||||
+
+The row of jumpers at JP1 actually consists of 8 jumpers, (sometimes
+labelled) the same as on the PC270, from top to bottom: EXT2, EXT1, ROM,
+IRQ7, IRQ5, IRQ4, IRQ3, IRQ2 (gee, wonder what they would do? :-) )
+
+S1 and S2 perform the same function as on the PC270, only their numbers
+are swapped (S1 is the nodeaddress, S2 sets IO- and RAM-address).
+
+I know it works when connected to a PC110 type ARCnet board.
+
+	
+*****************************************************************************
+
 ** Possibly SMC **
 LCS-8830-T (16-bit card)
 ------------------------
@@ -936,27 +1086,17 @@ Switches        Ram           Rom
 PDI507 (8-bit card)
 --------------------
   - from Mark Rejhon <mdrejhon@magi.com> (slight modifications by Avery)
+  - Avery's note: I think PDI508 cards (but definitely NOT PDI508Plus cards)
+    are mostly the same as this.  PDI508Plus cards appear to be mainly
+    software-configured.
 
 Jumpers:
-
 	There is a jumper array at the bottom of the card, near the edge
         connector.  This array is labelled J1.  They control the IRQs and
         something else.  Put only one jumper on the IRQ pins.
 
-	IRQ2    - Use IRQ 2 (same as IRQ 9 as far as software is concerned)
-	IRQ3	- Use IRQ 3 (used by COM2 or COM4 serial port if either exists)
-	IRQ4	- Use IRQ 4 (used by COM1 or COM3 serial port if either exists)
-	IRQ5	- Use IRQ 5 (used by LPT2 parallel port if one exists)
-	IRQ6	- Use IRQ 6 (used by Floppy Disk Controller if one exists)
-	IRQ7	- Use IRQ 7 (used by LPT1 parallel port if one exists)
-
-[Avery's note:  This "unknown" set of two jumpers appears to be on all
-ARCnet cards by SMC as well.  Putting jumpers on them seems to affect the
-status register, but only for the two "reserved" bits, ETS1 and ETS2.  Any
-further information is welcome.]
-
-	ET1	- What is this?  (Not tested, no jumper put on it)
-	ET2	- What is this?  (Not tested, no jumper put on it)
+	ETS1, ETS2 are for timing on very long distance networks.  See the
+	more general information near the top of this file.
 
 	There is a J2 jumper on two pins.  A jumper should be put on them,
         since it was already there when I got the card.  I don't know what
@@ -973,9 +1113,32 @@ further information is welcome.]
 	 o | o   o |             in this direction ------->
 	   `-------'
 
-	There is also a J4 jumper on two pins.  A jumper should be put on
-        them, since it was already there when I got the card.  I don't know
-        what this jumper is for though.
+Carl de Billy <CARL@carainfo.com> explains J3 and J4:
+
+	J3 Diagram:
+
+           .-------.
+         o | o   o |
+           :-------:    TWIST Technology
+         o | o   o |
+           `-------'
+           .-------.
+           | o   o | o
+           :-------:    COAX Technology
+           | o   o | o
+           `-------'
+
+  - If using coax cable in a bus topology the J4 jumper must be removed;
+    place it on one pin.
+
+  - If using bus topology with twisted pair wiring move the J3 
+    jumpers so they connect the middle pin and the pins closest to the RJ11
+    Connectors.  Also the J4 jumper must be removed; place it on one pin of
+    J4 jumper for storage.
+
+  - If using  star topology with twisted pair wiring move the J3 
+    jumpers so they connect the middle pin and the pins closest to the RJ11
+    connectors.
 
 
 DIP Switches:
@@ -1467,6 +1630,724 @@ parameters. These two jumpers are normally left open.
 
 *****************************************************************************
 
+** Lantech **
+8-bit card, unknown model
+-------------------------
+  - from Vlad Lungu <vlungu@ugal.ro> - his e-mail address seemed broken at
+    the time I tried to reach him.  Sorry Vlad, if you didn't get my reply.
+
+   ________________________________________________________________
+   |   1         8                                                 |
+   |   ___________                                               __|
+   |   |   SW1    |                                         LED |__|
+   |   |__________|                                                |
+   |                                                            ___|
+   |                _____________________                       |S | 8
+   |                |                   |                       |W |
+   |                |                   |                       |2 |
+   |                |                   |                       |__| 1
+   |                |      UM9065L      |     |o|  JP4         ____|____
+   |                |                   |     |o|              |  CN    |
+   |                |                   |                      |________|
+   |                |                   |                          |
+   |                |___________________|                          |
+   |                                                               |
+   |                                                               |
+   |      _____________                                            |
+   |      |            |                                           |
+   |      |    PROM    |        |ooooo|  JP6                       |
+   |      |____________|        |ooooo|                            |
+   |_____________                                             _   _|
+                |____________________________________________| |__|
+
+
+UM9065L : Arcnet Controller
+
+SW 1    : Shared Memory Address and I/O Base
+
+        ON=0
+
+        12345|Memory Address
+        -----|--------------
+        00001|  D4000
+        00010|  CC000
+        00110|  D0000
+        01110|  D1000
+        01101|  D9000
+        10010|  CC800
+        10011|  DC800
+        11110|  D1800
+
+It seems that the bits are considered in reverse order.  Also, you must
+observe that some of those addresses are unusual and I didn't probe them; I
+used a memory dump in DOS to identify them.  For the 00000 configuration and
+some others that I didn't write here the card seems to conflict with the
+video card (an S3 GENDAC). I leave the full decoding of those addresses to
+you.
+
+        678| I/O Address
+        ---|------------
+        000|    260
+        001|    failed probe
+        010|    2E0
+        011|    380
+        100|    290
+        101|    350
+        110|    failed probe
+        111|    3E0
+
+SW 2  : Node ID (binary coded)
+
+JP 4  : Boot PROM enable   CLOSE - enabled
+                           OPEN  - disabled
+
+JP 6  : IRQ set (ONLY ONE jumper on 1-5 for IRQ 2-6)
+
+
+*****************************************************************************
+
+** Acer **
+8-bit card, Model 5210-003
+--------------------------
+  - from Vojtech Pavlik <vpav4328@diana.troja.mff.cuni.cz> using portions of
+    the existing arcnet-hardware file.
+
+This is a 90C26 based card.  Its configuration seems similar to 
+the SMC PC100, but has some additional jumpers I don't know.
+
+               __
+              |  |
+   ___________|__|_________________________
+  |         |      |                       |
+  |         | BNC  |                       |
+  |         |______|                    ___|
+  |  _____________________             |___  
+  | |                     |                |
+  | | Hybrid IC           |                |
+  | |                     |       o|o J1   |
+  | |_____________________|       8|8      |
+  |                               8|8 J5   |
+  |                               o|o      |
+  |                               8|8      |
+  |__                             8|8      |
+ (|__| LED                        o|o      |
+  |                               8|8      |
+  |                               8|8 J15  |
+  |                                        |
+  |                    _____               |
+  |                   |     |   _____      |
+  |                   |     |  |     |  ___|
+  |                   |     |  |     | |    
+  |  _____            | ROM |  | UFS | |    
+  | |     |           |     |  |     | |   
+  | |     |     ___   |     |  |     | |   
+  | |     |    |   |  |__.__|  |__.__| |   
+  | | NCR |    |XTL|   _____    _____  |   
+  | |     |    |___|  |     |  |     | |   
+  | |90C26|           |     |  |     | |   
+  | |     |           | RAM |  | UFS | |   
+  | |     | J17 o|o   |     |  |     | |   
+  | |     | J16 o|o   |     |  |     | |   
+  | |__.__|           |__.__|  |__.__| |   
+  |  ___                               |   
+  | |   |8                             |   
+  | |SW2|                              |   
+  | |   |                              |   
+  | |___|1                             |   
+  |  ___                               |   
+  | |   |10           J18 o|o          |   
+  | |   |                 o|o          |   
+  | |SW1|                 o|o          |   
+  | |   |             J21 o|o          |   
+  | |___|1                             |   
+  |                                    |   
+  |____________________________________|   
+
+
+Legend:
+
+90C26       ARCNET Chip
+XTL         20 MHz Crystal
+SW1 1-6     Base I/O Address Select
+    7-10    Memory Address Select
+SW2 1-8     Node ID Select (ID0-ID7)
+J1-J5       IRQ Select
+J6-J21      Unknown (Probably extra timeouts & ROM enable ...)
+LED1        Activity LED 
+BNC         Coax connector (STAR arcnet)
+RAM         2k of SRAM
+ROM         Boot ROM socket
+UFS         Unidentified Flying Sockets
+
+
+Setting the Node ID
+-------------------
+
+The eight switches in SW2 are used to set the node ID. Each node attached
+to the network must have an unique node ID which must not be 0.
+Switch 1 (ID0) serves as the least significant bit (LSB).
+
+Setting one of the switches to OFF means "1", ON means "0".
+
+The node ID is the sum of the values of all switches set to "1"
+These values are:
+
+   Switch | Value
+   -------|-------
+     1    |   1
+     2    |   2
+     3    |   4
+     4    |   8
+     5    |  16
+     6    |  32
+     7    |  64
+     8    | 128
+
+Don't set this to 0 or 255; these values are reserved.
+
+
+Setting the I/O Base Address
+----------------------------
+
+The switches 1 to 6 of switch block SW1 are used to select one
+of 32 possible I/O Base addresses using the followig tables
+   
+          | Hex
+   Switch | Value
+   -------|-------
+     1    | 200  
+     2    | 100  
+     3    |  80  
+     4    |  40  
+     5    |  20  
+     6    |  10 
+
+The I/O address is sum of all switches set to "1". Remember that
+the I/O address space bellow 0x200 is RESERVED for mainboard, so
+switch 1 should be ALWAYS SET TO OFF. 
+
+
+Setting the Base Memory (RAM) buffer Address
+--------------------------------------------
+
+The memory buffer (RAM) requires 2K. The base of this buffer can be
+located in any of sixteen positions. However, the addresses below
+A0000 are likely to cause system hang because there's main RAM.
+
+Jumpers 7-10 of switch block SW1 select the Memory Base address.
+
+   Switch          | Hex RAM
+    7   8   9  10  | Address
+   ----------------|---------
+   OFF OFF OFF OFF |  F0000 (conflicts with main BIOS)
+   OFF OFF OFF ON  |  E0000 
+   OFF OFF ON  OFF |  D0000
+   OFF OFF ON  ON  |  C0000 (conflicts with video BIOS)
+   OFF ON  OFF OFF |  B0000 (conflicts with mono video)
+   OFF ON  OFF ON  |  A0000 (conflicts with graphics)
+
+
+Setting the Interrupt Line
+--------------------------
+
+Jumpers 1-5 of the jumper block J1 controll the IRQ level. ON means 
+shorted, OFF means open.
+
+    Jumper              |  IRQ
+    1   2   3   4   5   |
+   ----------------------------
+    ON  OFF OFF OFF OFF |  7
+    OFF ON  OFF OFF OFF |  5
+    OFF OFF ON  OFF OFF |  4
+    OFF OFF OFF ON  OFF |  3
+    OFF OFF OFF OFF ON  |  2
+
+
+Unknown jumpers & sockets
+-------------------------
+
+I know nothing about these. I just guess that J16&J17 are timeout
+jumpers and maybe one of J18-J21 selects ROM. Also J6-J10 and
+J11-J15 are connecting IRQ2-7 to some pins on the UFSs. I can't
+guess the purpose.
+
+
+*****************************************************************************
+
+** Datapoint? **
+LAN-ARC-8, an 8-bit card
+------------------------
+  - from Vojtech Pavlik <vpav4328@diana.troja.mff.cuni.cz>
+
+This is another SMC 90C65 based arcnet card. I couldn't identify the
+manufacturer, but it might be DataPoint, becsuse the card has the
+original arcNet logo in its upper right corner.
+
+          _______________________________________________________
+         |                         _________                     |
+         |                        |   SW2   | ON      arcNet     |
+         |                        |_________| OFF             ___|
+         |  _____________         1 ______  8                |   | 8  
+         | |             | SW1     | XTAL | ____________     | S |    
+         | > RAM (2k)    |         |______||            |    | W |    
+         | |_____________|                 |      H     |    | 3 |    
+         |                        _________|_____ y     |    |___| 1  
+         |  _________            |         |     |b     |        |    
+         | |_________|           |         |     |r     |        |    
+         |                       |     SMC |     |i     |        |    
+         |                       |    90C65|     |d     |        |      
+         |  _________            |         |     |      |        |
+         | |   SW1   | ON        |         |     |I     |        |
+         | |_________| OFF       |_________|_____/C     |   _____|
+         |  1       8                      |            |  |     |___
+         |  ______________                 |            |  | BNC |___|
+         | |              |                |____________|  |_____|
+         | > EPROM SOCKET |              _____________           |
+         | |______________|             |_____________|          |
+         |                                         ______________|
+         |                                        | 
+         |________________________________________|
+
+Legend:
+
+90C65       ARCNET Chip 
+SW1 1-5:    Base Memory Address Select
+    6-8:    Base I/O Address Select
+SW2 1-8:    Node ID Select
+SW3 1-5:    IRQ Select   
+    6-7:    Extra Timeout
+    8  :    Rom Enable   
+BNC         Coax connector
+XTAL        20MHz Crystal
+
+
+Setting the Node ID
+-------------------
+
+The eight switches in SW3 are used to set the node ID. Each node attached
+to the network must have an unique node ID which must not be 0.
+Switch 1 serves as the least significant bit (LSB).
+
+Setting one of the switches to Off means "1", On means "0".
+
+The node ID is the sum of the values of all switches set to "1"  
+These values are:
+
+   Switch | Value
+   -------|-------
+     1    |   1
+     2    |   2
+     3    |   4
+     4    |   8
+     5    |  16
+     6    |  32
+     7    |  64
+     8    | 128
+
+
+Setting the I/O Base Address
+----------------------------
+
+The last three switches in switch block SW1 are used to select one
+of eight possible I/O Base addresses using the followig table
+
+
+   Switch      | Hex I/O
+    6   7   8  | Address
+   ------------|--------
+   ON  ON  ON  |  260
+   OFF ON  ON  |  290
+   ON  OFF ON  |  2E0  (Manufacturer's default)
+   OFF OFF ON  |  2F0
+   ON  ON  OFF |  300
+   OFF ON  OFF |  350
+   ON  OFF OFF |  380
+   OFF OFF OFF |  3E0
+
+
+Setting the Base Memory (RAM) buffer Address
+--------------------------------------------
+
+The memory buffer (RAM) requires 2K. The base of this buffer can be 
+located in any of eight positions. The address of the Boot Prom is
+memory base + 0x2000.
+Jumpers 3-5 of switch block SW1 select the Memory Base address.
+
+   Switch              | Hex RAM | Hex ROM
+    1   2   3   4   5  | Address | Address *)
+   --------------------|---------|-----------
+   ON  ON  ON  ON  ON  |  C0000  |  C2000
+   ON  ON  OFF ON  ON  |  C4000  |  C6000
+   ON  ON  ON  OFF ON  |  CC000  |  CE000
+   ON  ON  OFF OFF ON  |  D0000  |  D2000  (Manufacturerr's default)
+   ON  ON  ON  ON  OFF |  D4000  |  D6000
+   ON  ON  OFF ON  OFF |  D8000  |  DA000
+   ON  ON  ON  OFF OFF |  DC000  |  DE000
+   ON  ON  OFF OFF OFF |  E0000  |  E2000
+  
+*) To enable the Boot ROM set the switch 8 of switch block SW3 to position ON.
+
+The switches 1 and 2 probably add 0x0800 and 0x1000 to RAM base address.
+
+
+Setting the Interrupt Line
+--------------------------
+
+Switches 1-5 of the switch block SW3 control the IRQ level.
+
+    Jumper              |  IRQ
+    1   2   3   4   5   |
+   ----------------------------
+    ON  OFF OFF OFF OFF |  3
+    OFF ON  OFF OFF OFF |  4
+    OFF OFF ON  OFF OFF |  5
+    OFF OFF OFF ON  OFF |  7
+    OFF OFF OFF OFF ON  |  2
+
+
+Setting the Timeout Parameters
+------------------------------
+
+The switches 6-7 of the switch block SW3 are used to determine the timeout
+parameters.  These two switches are normally left in the OFF position.
+
+
+*****************************************************************************
+
+** Topware **
+8-bit card, TA-ARC/10
+-------------------------
+  - from Vojtech Pavlik <vpav4328@diana.troja.mff.cuni.cz>
+
+This is another very similar 90C65 card. Most of the switches and jumpers
+are the same as on other clones.
+
+ _____________________________________________________________________
+|  ___________   |                         |            ______        |
+| |SW2 NODE ID|  |                         |           | XTAL |       |
+| |___________|  |  Hybrid IC              |           |______|       |
+|  ___________   |                         |                        __|    
+| |SW1 MEM+I/O|  |_________________________|                   LED1|__|)   
+| |___________|           1 2                                         |     
+|                     J3 |o|o| TIMEOUT                          ______|    
+|     ______________     |o|o|                                 |      |    
+|    |              |  ___________________                     | RJ   |    
+|    > EPROM SOCKET | |                   \                    |------|     
+|J2  |______________| |                    |                   |      |    
+||o|                  |                    |                   |______|
+||o| ROM ENABLE       |        SMC         |    _________             |
+|     _____________   |       90C65        |   |_________|       _____|    
+|    |             |  |                    |                    |     |___ 
+|    > RAM (2k)    |  |                    |                    | BNC |___|
+|    |_____________|  |                    |                    |_____|    
+|                     |____________________|                          |    
+| ________ IRQ 2 3 4 5 7                  ___________                 |
+||________|   |o|o|o|o|o|                |___________|                |
+|________   J1|o|o|o|o|o|                               ______________|
+         |                                             |
+         |_____________________________________________|
+
+Legend:
+
+90C65       ARCNET Chip
+XTAL        20 MHz Crystal
+SW1 1-5     Base Memory Address Select
+    6-8     Base I/O Address Select
+SW2 1-8     Node ID Select (ID0-ID7)
+J1          IRQ Select
+J2          Rom Enable
+J3          Extra Timeout
+LED1        Activity LED 
+BNC         Coax connector (BUS arcnet)
+RJ          Twisted Pair Connector (daisychain)
+
+
+Setting the Node ID
+-------------------
+
+The eight switches in SW2 are used to set the node ID. Each node attached to
+the network must have an unique node ID which must not be 0.  Switch 1 (ID0)
+serves as the least significant bit (LSB).
+
+Setting one of the switches to Off means "1", On means "0".
+
+The node ID is the sum of the values of all switches set to "1"
+These values are:
+
+   Switch | Label | Value
+   -------|-------|-------
+     1    | ID0   |   1
+     2    | ID1   |   2
+     3    | ID2   |   4
+     4    | ID3   |   8
+     5    | ID4   |  16
+     6    | ID5   |  32
+     7    | ID6   |  64
+     8    | ID7   | 128
+
+Setting the I/O Base Address
+----------------------------
+
+The last three switches in switch block SW1 are used to select one
+of eight possible I/O Base addresses using the following table:
+
+
+   Switch      | Hex I/O
+    6   7   8  | Address
+   ------------|--------
+   ON  ON  ON  |  260  (Manufacturer's default)
+   OFF ON  ON  |  290
+   ON  OFF ON  |  2E0                         
+   OFF OFF ON  |  2F0
+   ON  ON  OFF |  300
+   OFF ON  OFF |  350
+   ON  OFF OFF |  380
+   OFF OFF OFF |  3E0
+
+
+Setting the Base Memory (RAM) buffer Address
+--------------------------------------------
+
+The memory buffer (RAM) requires 2K. The base of this buffer can be
+located in any of eight positions. The address of the Boot Prom is
+memory base + 0x2000.
+Jumpers 3-5 of switch block SW1 select the Memory Base address.
+
+   Switch              | Hex RAM | Hex ROM
+    1   2   3   4   5  | Address | Address *)
+   --------------------|---------|-----------
+   ON  ON  ON  ON  ON  |  C0000  |  C2000
+   ON  ON  OFF ON  ON  |  C4000  |  C6000  (Manufacturer's default) 
+   ON  ON  ON  OFF ON  |  CC000  |  CE000
+   ON  ON  OFF OFF ON  |  D0000  |  D2000  
+   ON  ON  ON  ON  OFF |  D4000  |  D6000
+   ON  ON  OFF ON  OFF |  D8000  |  DA000
+   ON  ON  ON  OFF OFF |  DC000  |  DE000
+   ON  ON  OFF OFF OFF |  E0000  |  E2000
+
+*) To enable the Boot ROM short the jumper J2.
+
+The jumpers 1 and 2 probably add 0x0800 and 0x1000 to RAM address.
+
+
+Setting the Interrupt Line
+--------------------------
+
+Jumpers 1-5 of the jumper block J1 control the IRQ level.  ON means
+shorted, OFF means open.
+
+    Jumper              |  IRQ
+    1   2   3   4   5   |
+   ----------------------------
+    ON  OFF OFF OFF OFF |  2
+    OFF ON  OFF OFF OFF |  3
+    OFF OFF ON  OFF OFF |  4
+    OFF OFF OFF ON  OFF |  5
+    OFF OFF OFF OFF ON  |  7
+
+
+Setting the Timeout Parameters
+------------------------------
+
+The jumpers J3 are used to set the timeout parameters. These two 
+jumpers are normally left open.
+
+  
+*****************************************************************************
+
+** Thomas-Conrad **
+Model #500-6242-0097 REV A (8-bit card)
+---------------------------------------
+  - from Lars Karlsson <100617.3473@compuserve.com>
+
+     ________________________________________________________
+   |          ________   ________                           |_____
+   |         |........| |........|                            |
+   |         |________| |________|                         ___|
+   |            SW 3       SW 1                           |   |
+   |         Base I/O   Base Addr.                Station |   |
+   |                                              address |   |
+   |    ______                                    switch  |   |
+   |   |      |                                           |   |
+   |   |      |                                           |___|    
+   |   |      |                                 ______        |___._
+   |   |______|                                |______|         ____| BNC
+   |                                            Jumper-        _____| Connector
+   |   Main chip                                block  _    __|   '  
+   |                                                  | |  |    RJ Connector
+   |                                                  |_|  |    with 110 Ohm
+   |                                                       |__  Terminator
+   |    ___________                                         __|
+   |   |...........|                                       |    RJ-jack
+   |   |...........|    _____                              |    (unused)
+   |   |___________|   |_____|                             |__
+   |  Boot PROM socket IRQ-jumpers                            |_  Diagnostic
+   |________                                       __          _| LED (red)
+            | | | | | | | | | | | | | | | | | | | |  |        |
+            | | | | | | | | | | | | | | | | | | | |  |________|
+                                                              |
+                                                              |
+
+And here are the settings for some of the switches and jumpers on the cards.
+
+
+          I/O
+
+         1 2 3 4 5 6 7 8
+
+2E0----- 0 0 0 1 0 0 0 1
+2F0----- 0 0 0 1 0 0 0 0
+300----- 0 0 0 0 1 1 1 1
+350----- 0 0 0 0 1 1 1 0
+
+"0" in the above example means switch is off "1" means that it is on.
+
+
+    ShMem address.
+
+      1 2 3 4 5 6 7 8
+
+CX00--0 0 1 1 | |   |
+DX00--0 0 1 0       |
+X000--------- 1 1   |
+X400--------- 1 0   |
+X800--------- 0 1   |
+XC00--------- 0 0   
+ENHANCED----------- 1
+COMPATIBLE--------- 0
+
+
+       IRQ
+
+
+   3 4 5 7 2
+   . . . . .
+   . . . . .
+
+
+There is a DIP-switch with 8 switches, used to set the shared memory address
+to be used. The first 6 switches set the address, the 7th doesn't have any
+function, and the 8th switch is used to select "compatible" or "enhanced".
+When I got my two cards, one of them had this switch set to "enhanced". That
+card didn't work at all, it wasn't even recognized by the driver. The other
+card had this switch set to "compatible" and it behaved absolutely normal. I
+guess that the switch on one of the cards, must have been changed accidently
+when the card was taken out of it's former host. The question remains
+unanswered, what is the purpose of the "enhanced" position?
+
+[Avery's note: "enhanced" probably either disables shared memory (use IO
+ports instead) or disables IO ports (use memory addresses instead).  This
+varies by the type of card involved.  I fail to see how either of these
+enhance anything.  Send me more detailed information about this mode, or
+just use "compatible" mode instead.]
+
+
+*****************************************************************************
+
+** Waterloo Microsystems Inc. ?? **
+8-bit card (C) 1985
+-------------------
+  - from Robert Michael Best <rmb117@cs.usask.ca>
+
+[Avery's note: these don't work with my driver for some reason.  These cards
+SEEM to have settings similar to the PDI508Plus, which is
+software-configured and doesn't work with my driver either.  The "Waterloo
+chip" is a boot PROM, probably designed specifically for the University of
+Waterloo.  If you have any further information about this card, please
+e-mail me.]
+
+The probe has not been able to detect the card on any of the J2 settings,
+and I tried them again with the "Waterloo" chip removed.
+ 
+ _____________________________________________________________________
+| \/  \/              ___  __ __                                      |
+| C4  C4     |^|     | M ||  ^  ||^|                                  |
+| --  --     |_|     | 5 ||     || | C3                               |
+| \/  \/      C10    |___||     ||_|                                  | 
+| C4  C4             _  _ |     |                 ??                  | 
+| --  --            | \/ ||     |                                     | 
+|                   |    ||     |                                     | 
+|                   |    ||  C1 |                                     | 
+|                   |    ||     |  \/                            _____|    
+|                   | C6 ||     |  C9                           |     |___ 
+|                   |    ||     |  --                           | BNC |___| 
+|                   |    ||     |          >C7|                 |_____|
+|                   |    ||     |                                     |
+| __ __             |____||_____|       1 2 3     6                   |
+||  ^  |     >C4|                      |o|o|o|o|o|o| J2    >C4|       |
+||     |                               |o|o|o|o|o|o|                  |
+|| C2  |     >C4|                                          >C4|       |
+||     |                                   >C8|                       |
+||     |       2 3 4 5 6 7  IRQ                            >C4|       |
+||_____|      |o|o|o|o|o|o| J3                                        |
+|_______      |o|o|o|o|o|o|                            _______________|
+        |                                             |
+        |_____________________________________________|
+
+C1 -- "COM9026
+       SMC 8638"
+      In a chip socket.
+
+C2 -- "@Copyright
+       Waterloo Microsystems Inc.
+       1985"
+      In a chip Socket with info printed on a label covering a round window
+      showing the circuit inside. (The window indicates it is an EPROM chip.)
+
+C3 -- "COM9032
+       SMC 8643"
+      In a chip socket.
+
+C4 -- "74LS"
+      9 total no sockets.
+
+M5 -- "50006-136
+       20.000000 MHZ
+       MTQ-T1-S3
+       0 M-TRON 86-40"
+      Metallic case with 4 pins, no socket.
+
+C6 -- "MOSTEK@TC8643
+       MK6116N-20
+       MALAYSIA"
+      No socket.
+
+C7 -- No stamp or label but in a 20 pin chip socket.
+
+C8 -- "PAL10L8CN
+       8623"
+      In a 20 pin socket.
+
+C9 -- "PAl16R4A-2CN
+       8641"
+      In a 20 pin socket.
+
+C10 -- "M8640
+          NMC
+        9306N"
+       In an 8 pin socket.
+
+?? -- Some components on a smaller board and attached with 20 pins all 
+      along the side closest to the BNC connector.  The are coated in a dark 
+      resin.
+
+On the board there are two jumper banks labeled J2 and J3. The 
+manufacturer didn't put a J1 on the board. The two boards I have both 
+came with a jumper box for each bank.
+
+J2 -- Numbered 1 2 3 4 5 6. 
+      4 and 5 are not stamped due to solder points.
+       
+J3 -- IRQ 2 3 4 5 6 7
+
+The board itself has a maple leaf stamped just above the irq jumpers 
+and "-2 46-86" beside C2. Between C1 and C6 "ASS 'Y 300163" and "@1986 
+CORMAN CUSTOM ELECTRONICS CORP." stamped just below the BNC connector.
+Below that "MADE IN CANADA"
+
+  
+*****************************************************************************
+
 ** No Name **
 8-bit cards, 16-bit cards
 -------------------------
@@ -1477,7 +2358,7 @@ NONAME 8-BIT ARCNET
 
 I have named this ARCnet card "NONAME", since there is no name of any
 manufactor on the Installation manual nor on the shipping box. The only
-hint to the existence of a manufactor at all is written into cupper,
+hint to the existence of a manufacturer at all is written in copper,
 it is "Made in Taiwan"
 
 This description has been written by Juergen Seifert <seifert@htwm.de>
@@ -1851,10 +2732,6 @@ I have named this ARCnet card "NONAME", since I got only the card with
 no manual at all and the only text identifying the manufacturer is 
 "MADE IN TAIWAN R.O.C" printed on the card.
 
-This description was written by Vojtech Pavlik 
-(vpav4328@diana.troja.mff.cuni.cz) using parts of the ARCNET-jumpers 
-README file from Linux kernel 1.2.2. 
-
           ____________________________________________________________
          |                 1 2 3 4 5 6 7 8                            |
          | |o|o| JP1       o|o|o|o|o|o|o|o| ON                        |
@@ -1902,7 +2779,7 @@ Setting the Node ID
 -------------------
 
 The eight switches in SW2 are used to set the node ID. Each node attached
-to the network must have an unique node ID which must be diffrent from 0.
+to the network must have an unique node ID which must not be 0.
 Switch 1 (ID0) serves as the least significant bit (LSB).
 
 Setting one of the switches to Off means "1", On means "0".
@@ -2007,6 +2884,157 @@ parameters. These two jumpers are normally left in the OFF position.
 
 
 *****************************************************************************
+
+** No Name **
+(Generic Model 9058)
+--------------------
+  - from Andrew J. Kroll <ag784@freenet.buffalo.edu>
+  - Sorry this sat in my to-do box for so long, Andrew! (yikes - over a
+    year!)
+                                                                      _____
+                                                                     |    <
+                                                                     | .---'
+    ________________________________________________________________ | |
+   |                           |     SW2     |                      |  |
+   |   ___________             |_____________|                      |  |
+   |  |           |              1 2 3 4 5 6                     ___|  |
+   |  >  6116 RAM |         _________                         8 |   |  |
+   |  |___________|        |20MHzXtal|                        7 |   |  |
+   |                       |_________|       __________       6 | S |  |
+   |    74LS373                             |          |-     5 | W |  |
+   |   _________                            |      E   |-     4 |   |  |
+   |   >_______|              ______________|..... P   |-     3 | 3 |  |
+   |                         |              |    : O   |-     2 |   |  |
+   |                         |              |    : X   |-     1 |___|  |
+   |   ________________      |              |    : Y   |-           |  |
+   |  |      SW1       |     |      SL90C65 |    :     |-           |  |
+   |  |________________|     |              |    : B   |-           |  |
+   |    1 2 3 4 5 6 7 8      |              |    : O   |-           |  |
+   |                         |_________o____|..../ A   |-    _______|  |
+   |    ____________________                |      R   |-   |       |------,   
+   |   |                    |               |      D   |-   |  BNC  |   #  |
+   |   > 2764 PROM SOCKET   |               |__________|-   |_______|------'
+   |   |____________________|              _________                |  |
+   |                                       >________| <- 74LS245    |  |
+   |                                                                |  |
+   |___                                               ______________|  |
+       |H H H H H H H H H H H H H H H H H H H H H H H|               | |
+       |U_U_U_U_U_U_U_U_U_U_U_U_U_U_U_U_U_U_U_U_U_U_U|               | |
+                                                                      \|
+Legend:
+
+SL90C65 	ARCNET Controller / Transceiver /Logic
+SW1	1-5:	IRQ Select
+	  6:	ET1
+	  7:	ET2
+	  8:	ROM ENABLE 
+SW2	1-3:    Memory Buffer/PROM Address
+	3-6:	I/O Address Map
+SW3	1-8:	Node ID Select
+BNC		BNC RG62/U Connection 
+		*I* have had success using RG59B/U with *NO* terminators!
+		What gives?!
+
+SW1: Timeouts, Interrupt and ROM
+---------------------------------
+
+To select a hardware interrupt level set one (only one!) of the dip switches
+up (on) SW1...(switches 1-5)
+IRQ3, IRQ4, IRQ5, IRQ7, IRQ2. The Manufacturer's default is IRQ2.
+
+The switches on SW1 labeled EXT1 (switch 6) and EXT2 (switch 7)
+are used to determine the timeout parameters. These two dip switches
+are normally left off (down).
+
+   To enable the 8K Boot PROM position SW1 switch 8 on (UP) labeled ROM.
+   The default is jumper ROM not installed.
+
+
+Setting the I/O Base Address
+----------------------------
+
+The last three switches in switch group SW2 are used to select one
+of eight possible I/O Base addresses using the following table
+
+
+   Switch | Hex I/O
+   4 5 6  | Address
+   -------|--------
+   0 0 0  |  260
+   0 0 1  |  290
+   0 1 0  |  2E0  (Manufacturer's default)
+   0 1 1  |  2F0
+   1 0 0  |  300
+   1 0 1  |  350
+   1 1 0  |  380
+   1 1 1  |  3E0
+
+
+Setting the Base Memory Address (RAM & ROM)
+-------------------------------------------
+
+The memory buffer requires 2K of a 16K block of RAM. The base of this
+16K block can be located in any of eight positions.
+Switches 1-3 of switch group SW2 select the Base of the 16K block.
+(0 = DOWN, 1 = UP)
+I could, however, only verify two settings...
+
+   Switch| Hex RAM | Hex ROM
+   1 2 3 | Address | Address
+   ------|---------|-----------
+   0 0 0 |  E0000  |  E2000
+   0 0 1 |  D0000  |  D2000  (Manufacturer's default)
+   0 1 0 |  ?????  |  ?????
+   0 1 1 |  ?????  |  ?????  
+   1 0 0 |  ?????  |  ?????
+   1 0 1 |  ?????  |  ?????
+   1 1 0 |  ?????  |  ?????
+   1 1 1 |  ?????  |  ?????
+
+
+Setting the Node ID
+-------------------
+
+The eight switches in group SW3 are used to set the node ID.
+Each node attached to the network must have an unique node ID which
+must be diffrent from 0.
+Switch 1 serves as the least significant bit (LSB).
+switches in the DOWN position are OFF (0) and in the UP position are ON (1)
+
+The node ID is the sum of the values of all switches set to "1"  
+These values are:
+    Switch | Value
+    -------|-------
+      1    |   1
+      2    |   2
+      3    |   4
+      4    |   8
+      5    |  16
+      6    |  32
+      7    |  64
+      8    | 128
+
+Some Examples:
+
+    Switch#     |   Hex   | Decimal 
+8 7 6 5 4 3 2 1 | Node ID | Node ID
+----------------|---------|---------
+0 0 0 0 0 0 0 0 |    not allowed  <-.
+0 0 0 0 0 0 0 1 |    1    |    1    | 
+0 0 0 0 0 0 1 0 |    2    |    2    |
+0 0 0 0 0 0 1 1 |    3    |    3    |
+    . . .       |         |         |
+0 1 0 1 0 1 0 1 |   55    |   85    |
+    . . .       |         |         + Don't use 0 or 255!
+1 0 1 0 1 0 1 0 |   AA    |  170    |
+    . . .       |         |         |
+1 1 1 1 1 1 0 1 |   FD    |  253    |
+1 1 1 1 1 1 1 0 |   FE    |  254    |
+1 1 1 1 1 1 1 1 |   FF    |  255  <-'
+  
+
+*****************************************************************************
+
 ** Tiara **
 (model unknown)
 -------------------------

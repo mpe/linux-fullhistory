@@ -16,6 +16,7 @@
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
 #endif
+#include <asm/bitops.h>
 
 /*
  * Offset of the first process in the /proc root directory..
@@ -24,6 +25,8 @@
 
 static int proc_root_readdir(struct inode *, struct file *, void *, filldir_t);
 static int proc_root_lookup(struct inode *,const char *,int,struct inode **);
+
+static unsigned char proc_alloc_map[PROC_NDYNAMIC / 8] = {0};
 
 /*
  * These are the generic /proc directory operations. They
@@ -49,7 +52,7 @@ static struct file_operations proc_dir_operations = {
 /*
  * proc directories can do almost nothing..
  */
-static struct inode_operations proc_dir_inode_operations = {
+struct inode_operations proc_dir_inode_operations = {
 	&proc_dir_operations,	/* default net directory file-ops */
 	NULL,			/* create */
 	proc_lookup,		/* lookup */
@@ -139,6 +142,15 @@ struct proc_dir_entry proc_scsi = {
 	NULL, &proc_root, NULL
 };
 
+struct proc_dir_entry proc_sys_root = {
+	PROC_SYS, 3, "sys",			/* inode, name */
+	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,	/* mode, nlink, uid, gid */
+	0, &proc_dir_inode_operations,		/* size, ops */
+	NULL, NULL,				/* get_info, fill_inode */
+	NULL,					/* next */
+	NULL, NULL				/* parent, subdir */
+};
+
 int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
 {
 	dp->next = dir->subdir;
@@ -159,12 +171,40 @@ int proc_unregister(struct proc_dir_entry * dir, int ino)
 			dp->next = NULL;
 			if (S_ISDIR(dp->mode))
 				dir->nlink--;
+			if (ino >= PROC_DYNAMIC_FIRST &&
+			    ino < PROC_DYNAMIC_FIRST+PROC_NDYNAMIC)
+				clear_bit(ino-PROC_DYNAMIC_FIRST, 
+					  (void *) proc_alloc_map);
 			return 0;
 		}
 		p = &dp->next;
 	}
 	return -EINVAL;
 }	
+
+static int make_inode_number(void)
+{
+	int i = find_first_zero_bit((void *) proc_alloc_map, PROC_NDYNAMIC);
+	if (i<0 || i>=PROC_NDYNAMIC) 
+		return -1;
+	set_bit(i, (void *) proc_alloc_map);
+	return PROC_DYNAMIC_FIRST + i;
+}
+
+int proc_register_dynamic(struct proc_dir_entry * dir,
+			  struct proc_dir_entry * dp)
+{
+	int i = make_inode_number();
+	if (i < 0)
+		return -EAGAIN;
+	dp->low_ino = i;
+	dp->next = dir->subdir;
+	dp->parent = dir;
+	dir->subdir = dp;
+	if (S_ISDIR(dp->mode))
+		dir->nlink++;
+	return 0;
+}
 
 /*
  * /proc/self:
@@ -261,6 +301,8 @@ void proc_root_init(void)
 #ifdef CONFIG_SCSI
 	proc_register(&proc_root, &proc_scsi);
 #endif
+
+	proc_register(&proc_root, &proc_sys_root);
 
 #ifdef CONFIG_DEBUG_MALLOC
 	proc_register(&proc_root, &(struct proc_dir_entry) {

@@ -9,6 +9,8 @@
  *                                   - umount systemcall
  *
  * GK 2/5/95  -  Changed to support mounting the root fs via NFS
+ *
+ *  Added kerneld support: Jacques Gelinas and Bjorn Ekwall
  */
 
 #include <stdarg.h>
@@ -28,11 +30,14 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>
- 
-extern struct file_operations * get_blkfops(unsigned int);
-extern struct file_operations * get_chrfops(unsigned int);
 
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
+ 
 extern void wait_for_keypress(void);
+extern struct file_operations * get_blkfops(unsigned int major);
+extern void blkdev_release (struct inode *);
 
 extern int root_mountflags;
 
@@ -278,11 +283,15 @@ struct file_system_type *get_fs_type(const char *name)
 	
 	if (!name)
 		return fs;
-	while (fs) {
-		if (!strcmp(name,fs->name))
-			break;
-		fs = fs->next;
+	for (fs = file_systems; fs && strcmp(fs->name, name); fs = fs->next)
+		;
+#ifdef CONFIG_KERNELD
+	if (!fs && (request_module(name) == 0)) {
+		for (fs = file_systems; fs && strcmp(fs->name, name); fs = fs->next)
+			;
 	}
+#endif
+
 	return fs;
 }
 
@@ -525,7 +534,6 @@ asmlinkage int sys_umount(char * name)
 	kdev_t dev;
 	int retval;
 	struct inode dummy_inode;
-	struct file_operations * fops;
 
 	if (!suser())
 		return -EPERM;
@@ -557,9 +565,7 @@ asmlinkage int sys_umount(char * name)
 		return -ENXIO;
 	}
 	if (!(retval = do_umount(dev)) && dev != ROOT_DEV) {
-		fops = get_blkfops(MAJOR(dev));
-		if (fops && fops->release)
-			fops->release(inode,NULL);
+		blkdev_release (inode);
 		if (MAJOR(dev) == UNNAMED_MAJOR)
 			put_unnamed_dev(dev);
 	}

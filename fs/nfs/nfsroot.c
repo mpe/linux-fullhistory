@@ -675,7 +675,7 @@ static struct file nfs_file;		/* File descriptor containing socket */
 static struct inode nfs_inode;		/* Inode containing socket */
 static int *rpc_packet = NULL;		/* RPC packet */
 
-extern asmlinkage int sys_socketcall(int call, unsigned long *args);
+extern asmlinkage int sys_socket(int family, int type, int protocol);
 
 
 /*
@@ -684,10 +684,9 @@ extern asmlinkage int sys_socketcall(int call, unsigned long *args);
 static int root_nfs_open(void)
 {
 	struct file *filp;
-	unsigned long opt[] = { AF_INET, SOCK_DGRAM, IPPROTO_UDP };
 
 	/* Open the socket */
-	if ((nfs_data.fd = sys_socketcall(SYS_SOCKET, opt)) < 0) {
+	if ((nfs_data.fd = sys_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
 		printk(KERN_ERR "NFS: Cannot open UDP socket\n");
 		return -1;
 	}

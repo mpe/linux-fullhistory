@@ -12,6 +12,7 @@
 #include <linux/shm.h>
 #include <linux/stat.h>
 #include <linux/malloc.h>
+#include <linux/swap.h>
 
 #include <asm/segment.h>
 #include <asm/pgtable.h>

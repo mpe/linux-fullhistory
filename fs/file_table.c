@@ -16,6 +16,7 @@
  */
 struct file * first_file = NULL;
 int nr_files = 0;
+int max_files = NR_FILE;
 
 /*
  * Insert a new file structure at the head of the list of available ones.
@@ -116,7 +117,7 @@ struct file * get_empty_filp(void)
 				f->f_version = ++event;
 				return f;
 			}
-	} while (nr_files < NR_FILE && grow_files());
+	} while (nr_files < max_files && grow_files());
 
 	return NULL;
 }

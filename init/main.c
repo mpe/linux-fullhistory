@@ -44,6 +44,7 @@ extern int console_loglevel;
 
 static int init(void *);
 extern int bdflush(void *);
+extern int kswapd(void *);
 
 extern void init_IRQ(void);
 extern void init_modules(void);
@@ -51,6 +52,7 @@ extern long console_init(long, long);
 extern long kmalloc_init(long,long);
 extern void sock_init(void);
 extern long pci_init(long, long);
+extern void sysctl_init(void);
 
 extern void swap_setup(char *str, int *ints);
 extern void buff_setup(char *str, int *ints);
@@ -108,7 +110,7 @@ static void load_ramdisk(char *str, int *ints);
 static void prompt_ramdisk(char *str, int *ints);
 #endif CONFIG_BLK_DEV_RAM
 
-#ifdef CONFIG_SYSVIPC
+#if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
 extern void ipc_init(void);
 #endif
 
@@ -626,7 +628,7 @@ asmlinkage void start_kernel(void)
 	mem_init(memory_start,memory_end);
 	buffer_init();
 	sock_init();
-#ifdef CONFIG_SYSVIPC
+#if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
 	ipc_init();
 #endif
 #ifdef CONFIG_APM
@@ -640,6 +642,7 @@ asmlinkage void start_kernel(void)
 #ifdef __SMP__
 	smp_init();
 #endif
+	sysctl_init();
 	/* 
 	 *	We count on the initial thread going ok 
 	 *	Like idlers init is an unlocked kernel thread, which will
@@ -693,6 +696,8 @@ static int init(void * unused)
 
 	/* Launch bdflush from here, instead of the old syscall way. */
 	kernel_thread(bdflush, NULL, 0);
+	/* Start the background pageout daemon. */
+	kernel_thread(kswapd, NULL, 0);
 
 	setup();
 

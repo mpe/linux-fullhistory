@@ -4,8 +4,11 @@
  * (C) 1993 Matthias Urlichs -- collected common code and tables.
  * 
  *  Copyright (C) 1991, 1992  Linus Torvalds
+ *
+ *  Added kerneld support: Jacques Gelinas and Bjorn Ekwall
  */
 
+#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/major.h>
 #include <linux/string.h>
@@ -14,6 +17,9 @@
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/errno.h>
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 struct device_struct {
 	const char * name;
@@ -47,19 +53,53 @@ int get_device_list(char * page)
 	}
 	return len;
 }
+/*
+	Return the function table of a device.
+	Load the driver if needed.
+*/
+static struct file_operations * get_fops(
+	unsigned int major,
+	unsigned int maxdev,
+	const char *mangle,		/* String to use to build the module name */
+	struct device_struct tb[])
+{
+	struct file_operations *ret = NULL;
+	if (major < maxdev){
+#ifdef CONFIG_KERNELD
+		/*
+		 * I do get request for device 0. I have no idea why. It happen
+		 * at shutdown time for one. Without the following test, the
+		 * kernel will happily trigger a request_module() which will
+		 * trigger kerneld and modprobe for nothing (since there
+		 * is no device with major number == 0. And furthermore
+		 * it locks the reboot process :-(
+		 *
+		 * Jacques Gelinas (jacques@solucorp.qc.ca)
+		 */
+		if (!tb[major].fops && major != 0) {
+			char name[20];
+			sprintf(name, mangle, major);
+			request_module(name);
+		}
+#endif
+		ret = tb[major].fops;
+	}
+	return ret;
+}
 
+
+/*
+	Return the function table of a device.
+	Load the driver if needed.
+*/
 struct file_operations * get_blkfops(unsigned int major)
 {
-	if (major >= MAX_BLKDEV)
-		return NULL;
-	return blkdevs[major].fops;
+	return get_fops (major,MAX_BLKDEV,"block-major-%d",blkdevs);
 }
 
 struct file_operations * get_chrfops(unsigned int major)
 {
-	if (major >= MAX_CHRDEV)
-		return NULL;
-	return chrdevs[major].fops;
+	return get_fops (major,MAX_CHRDEV,"char-major-%d",chrdevs);
 }
 
 int register_chrdev(unsigned int major, const char * name, struct file_operations *fops)
@@ -170,16 +210,23 @@ int check_disk_change(kdev_t dev)
  */
 int blkdev_open(struct inode * inode, struct file * filp)
 {
-	int i;
-
-	i = MAJOR(inode->i_rdev);
-	if (i >= MAX_BLKDEV || !blkdevs[i].fops)
-		return -ENODEV;
-	filp->f_op = blkdevs[i].fops;
-	if (filp->f_op->open)
-		return filp->f_op->open(inode,filp);
-	return 0;
+	int ret = -ENODEV;
+	filp->f_op = get_blkfops(MAJOR(inode->i_rdev));
+	if (filp->f_op != NULL){
+		ret = 0;
+		if (filp->f_op->open != NULL)
+			ret = filp->f_op->open(inode,filp);
+	}	
+	return ret;
 }	
+
+void blkdev_release(struct inode * inode)
+{
+	struct file_operations *fops = get_blkfops(MAJOR(inode->i_rdev));
+	if (fops && fops->release)
+		fops->release(inode,NULL);
+}
+
 
 /*
  * Dummy default file-operations: the only thing this does
@@ -223,15 +270,14 @@ struct inode_operations blkdev_inode_operations = {
  */
 int chrdev_open(struct inode * inode, struct file * filp)
 {
-	int i;
-
-	i = MAJOR(inode->i_rdev);
-	if (i >= MAX_CHRDEV || !chrdevs[i].fops)
-		return -ENODEV;
-	filp->f_op = chrdevs[i].fops;
-	if (filp->f_op->open)
-		return filp->f_op->open(inode,filp);
-	return 0;
+	int ret = -ENODEV;
+	filp->f_op = get_chrfops(MAJOR(inode->i_rdev));
+	if (filp->f_op != NULL){
+		ret = 0;
+		if (filp->f_op->open != NULL)
+			ret = filp->f_op->open(inode,filp);
+	}
+	return ret;
 }
 
 /*

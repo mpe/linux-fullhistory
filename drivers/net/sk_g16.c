@@ -1753,8 +1753,6 @@ static void set_multicast_list(struct device *dev)
     }
 } /* End of set_multicast_list() */
 
-#endif     
-
 
 
 /*-

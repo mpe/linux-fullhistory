@@ -204,6 +204,8 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	int brd=IS_MYADDR;
 	struct options * opt = NULL;
 	int is_frag=0;
+	__u32 daddr;
+
 #ifdef CONFIG_FIREWALL
 	int err;
 #endif	
@@ -326,10 +328,10 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	and don't go via ip_chk_addr. Note: brd is set to IS_MYADDR at
 	 *	function entry.
 	 */
-
+	daddr = iph->daddr;
 	if ( iph->daddr == skb->dev->pa_addr || (brd = ip_chk_addr(iph->daddr)) != 0)
 	{
-	        if (opt && opt->srr) 
+		if (opt && opt->srr) 
 	        {
 			int srrspace, srrptr;
 			__u32 nexthop;
@@ -368,6 +370,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 					kfree_skb(skb, FREE_WRITE);
 					return -EINVAL;
 				}
+				memcpy(&daddr, &optptr[srrptr-1], 4);
 			}
 			if (srrptr <= srrspace) 
 			{
@@ -485,7 +488,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 					else
 						break;	/* One pending raw socket left */
 					if(skb1)
-						raw_rcv(raw_sk, skb1, dev, iph->saddr,iph->daddr);
+						raw_rcv(raw_sk, skb1, dev, iph->saddr,daddr);
 					raw_sk=sknext;
 				}
 				while(raw_sk!=NULL);
@@ -540,7 +543,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			*	check the protocol handler's return values here...
 			*/
 
-			ipprot->handler(skb2, dev, opt, iph->daddr,
+			ipprot->handler(skb2, dev, opt, daddr,
 				(ntohs(iph->tot_len) - (iph->ihl * 4)),
 				iph->saddr, 0, ipprot);
 		}
@@ -577,7 +580,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #endif		
 
 		if(raw_sk!=NULL)	/* Shift to last raw user */
-			raw_rcv(raw_sk, skb, dev, iph->saddr, iph->daddr);
+			raw_rcv(raw_sk, skb, dev, iph->saddr, daddr);
 		else if (!flag)		/* Free and report errors */
 		{
 			if (brd != IS_BROADCAST && brd!=IS_MULTICAST)

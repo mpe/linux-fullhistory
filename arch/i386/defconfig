@@ -7,6 +7,7 @@
 #
 CONFIG_MODULES=y
 # CONFIG_MODVERSIONS is not set
+# CONFIG_KERNELD is not set
 
 #
 # General setup

@@ -81,9 +81,7 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 
 	*check = 'n';
 	*conversion = 'b';
-	/* Please leave dotsOK as 1, and contact Albert Cahalan if */
-	/* it causes any problems for you. <albert@ccs.neu.edu>    */
-	*dotsOK =1;  /* see note above, and report problems */
+	*dotsOK = 0;
 	*uid = current->uid;
 	*gid = current->gid;
 	*umask = current->fs->umask;
@@ -107,6 +105,12 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 			else if (!strcmp(value,"text")) *conversion = 't';
 			else if (!strcmp(value,"auto")) *conversion = 'a';
 			else return 0;
+		}
+		else if (!strcmp(this_char,"dots")) {
+		  *dotsOK = 1;
+		}
+		else if (!strcmp(this_char,"nodots")) {
+		  *dotsOK = 0;
 		}
 		else if (!strcmp(this_char,"dotsOK") && value) {
 			if (!strcmp(value,"yes")) *dotsOK = 1;

@@ -658,7 +658,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_writev)
 	.long SYMBOL_NAME(sys_getsid)
 	.long SYMBOL_NAME(sys_fdatasync)
-	.long 0
+	.long SYMBOL_NAME(sys_sysctl)
 	.long SYMBOL_NAME(sys_mlock)		/* 150 */
 	.long SYMBOL_NAME(sys_munlock)
 	.long SYMBOL_NAME(sys_mlockall)

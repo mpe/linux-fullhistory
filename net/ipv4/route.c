@@ -39,6 +39,7 @@
  *					routing caches and better behaviour.
  *		
  *		Olaf Erb	:	irtt wasnt being copied right.
+ *		Bjorn Ekwall	:	Added KERNELD hack for autodialling
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -69,6 +70,9 @@
 #include <net/sock.h>
 #include <net/icmp.h>
 #include <net/netlink.h>
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 /*
  * Forwarding Information Base definitions.
@@ -1561,7 +1565,12 @@ void ip_rt_put(struct rtable * rt)
 		ATOMIC_DECR(&rt->rt_refcnt);
 }
 
-struct rtable * ip_rt_route(__u32 daddr, int local)
+#ifdef CONFIG_KERNELD
+static struct rtable * real_ip_rt_route
+#else
+struct rtable * ip_rt_route
+#endif
+	(__u32 daddr, int local)
 {
 	struct rtable * rth;
 
@@ -1580,6 +1589,27 @@ struct rtable * ip_rt_route(__u32 daddr, int local)
 	}
 	return ip_rt_slow_route (daddr, local);
 }
+
+#ifdef CONFIG_KERNELD
+struct rtable * ip_rt_route(__u32 daddr, int local)
+{
+	struct rtable *rt;
+	char wanted_route[20];
+	long ipaddr = ntohl(daddr);
+
+	if ((rt = real_ip_rt_route(daddr, local)) == NULL) {
+		sprintf(wanted_route, "%d.%d.%d.%d",
+			(int)(ipaddr >> 24) & 0xff, (int)(ipaddr >> 16) & 0xff,
+			(int)(ipaddr >> 8) & 0xff, (int)ipaddr & 0xff);
+		/* Not good while forwarding a packet... see ipc/msg.c */
+		kerneld_route(wanted_route); /* perhaps a ppp-connection? */
+		/* Try again */
+		rt = real_ip_rt_route(daddr, local);
+	}
+
+	return rt;
+}
+#endif
 
 
 /*

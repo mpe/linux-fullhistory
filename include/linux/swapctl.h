@@ -28,10 +28,19 @@ typedef struct swap_control_v5
 	int 	sc_nr_pages_to_free;
 	enum RCL_POLICY	sc_policy;
 } swap_control_v5;
-
 typedef struct swap_control_v5 swap_control_t;
-
 extern swap_control_t swap_control;
+
+typedef struct kswapd_control_v1
+{
+	int	maxpages;
+	int	pages_buff;
+	int	pages_shm;
+	int	pages_mmap;
+	int	pages_swap;
+} kswapd_control_v1;
+typedef kswapd_control_v1 kswapd_control_t;
+extern kswapd_control_t kswapd_ctl;
 
 #define SC_VERSION	1
 #define SC_MAX_VERSION	1
@@ -79,24 +88,20 @@ static inline int AGE_CLUSTER_SIZE(int resources)
 		return n;
 }
 
-static inline void touch_page(unsigned long addr)
+static inline void touch_page(struct page *page)
 {
-	unsigned char age = mem_map[MAP_NR(addr)].age;
-	if (age < (MAX_PAGE_AGE - PAGE_ADVANCE))
-		age += PAGE_ADVANCE;
+	if (page->age < (MAX_PAGE_AGE - PAGE_ADVANCE))
+		page->age += PAGE_ADVANCE;
 	else
-		age = MAX_PAGE_AGE;
-	mem_map[MAP_NR(addr)].age = age;
+		page->age = MAX_PAGE_AGE;
 }
 
-static inline void age_page(unsigned long addr)
+static inline void age_page(struct page *page)
 {
-	unsigned char age = mem_map[MAP_NR(addr)].age;
-	if (age > PAGE_DECLINE)
-		age -= PAGE_DECLINE;
+	if (page->age > PAGE_DECLINE)
+		page->age -= PAGE_DECLINE;
 	else
-		age = 0;
-	mem_map[MAP_NR(addr)].age = age;
+		page->age = 0;
 }
 
 static inline int age_of(unsigned long addr)

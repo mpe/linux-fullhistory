@@ -258,11 +258,13 @@ int register_netdev(struct device *dev)
 				}
 		}
 
+		sti();	/* device probes assume interrupts enabled */
 		if (dev->init(dev) != 0) {
 		    if (i < MAX_ETH_CARDS) ethdev_index[i] = NULL;
 			restore_flags(flags);
 			return -EIO;
 		}
+		cli();
 
 		/* Add device to end of chain */
 		if (dev_base) {
@@ -345,6 +347,9 @@ void unregister_netdev(struct device *dev)
 			break;
 		}
 	}
+
+	restore_flags(flags);
+
 	/* You can i.e use a interfaces in a route though it is not up.
 	   We call close_dev (which is changed: it will down a device even if
 	   dev->flags==0 (but it will not call dev->stop if IFF_UP
@@ -353,8 +358,6 @@ void unregister_netdev(struct device *dev)
 	   dev_mc_discard(dev), ....
 	*/
 	dev_close(dev);
-
-	restore_flags(flags);
 }
 
 

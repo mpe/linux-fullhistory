@@ -36,26 +36,28 @@ __ntohl(unsigned long int x)
 {
 	unsigned long int res, t1, t2;
 
-	__asm__
-	    ("bis	%3,%3,%0	# %0 is result; %0=aabbccdd
-	      extlh	%0,5,%1		# %1 = dd000000
-	      zap	%0,0xfd,%2	# %2 = 0000cc00
-	      sll	%2,5,%2		# %2 = 00198000
-	      s8addl	%2,%1,%1	# %1 = ddcc0000
-	      zap	%0,0xfb,%2	# %2 = 00bb0000
-	      srl	%2,8,%2		# %2 = 0000bb00
-	      extbl	%0,3,%0		# %0 = 000000aa
-	      or	%1,%0,%0	# %0 = ddcc00aa
-	      or	%2,%0,%0	# %0 = ddccbbaa"
-	     : "r="(res), "r="(t1), "r="(t2) : "r"(x));
+	__asm__(
+	"# bswap input: %0 (aabbccdd)
+	# output: %0, used %1 %2
+	extlh	%0,5,%1		# %1 = dd000000
+	zap	%0,0xfd,%2	# %2 = 0000cc00
+	sll	%2,5,%2		# %2 = 00198000
+	s8addq	%2,%1,%1	# %1 = ddcc0000
+	zap	%0,0xfb,%2	# %2 = 00bb0000
+	srl	%2,8,%2		# %2 = 0000bb00
+	extbl	%0,3,%0		# %0 = 000000aa
+	or	%1,%0,%0	# %0 = ddcc00aa
+	or	%2,%0,%0	# %0 = ddccbbaa"
+	: "r="(res), "r="(t1), "r="(t2)
+	: "0" (x & 0xffffffffUL));
 	return res;
 }
 
 #define __constant_ntohl(x) \
-((unsigned int)((((unsigned int)(x) & 0x000000ffU) << 24) | \
-		(((unsigned int)(x) & 0x0000ff00U) <<  8) | \
-		(((unsigned int)(x) & 0x00ff0000U) >>  8) | \
-		(((unsigned int)(x) & 0xff000000U) >> 24)))
+   ((unsigned long int)((((x) & 0x000000ffUL) << 24) | \
+			(((x) & 0x0000ff00UL) <<  8) | \
+			(((x) & 0x00ff0000UL) >>  8) | \
+			(((x) & 0xff000000UL) >> 24)))
 
 extern __inline__ unsigned short int
 __ntohs(unsigned short int x)

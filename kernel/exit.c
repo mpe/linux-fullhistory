@@ -18,6 +18,7 @@
 
 #include <asm/segment.h>
 extern void sem_exit (void);
+extern void kerneld_exit(void);
 
 int getrusage(struct task_struct *, int, struct rusage *);
 
@@ -511,6 +512,7 @@ fake_volatile:
 	current->flags |= PF_EXITING;
 	del_timer(&current->real_timer);
 	sem_exit();
+	kerneld_exit();
 	exit_mm();
 	__exit_files(current);
 	__exit_fs(current);

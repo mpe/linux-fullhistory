@@ -15,6 +15,7 @@
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
+#include <linux/swap.h>
 #include <linux/smp.h>
 
 #include <asm/system.h>

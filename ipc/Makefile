@@ -10,6 +10,10 @@
 O_TARGET := ipc.o
 O_OBJS   := util.o
 
+ifdef CONFIG_KERNELD
+CONFIG_SYSVIPC=1
+endif
+
 ifdef CONFIG_SYSVIPC
 O_OBJS += msg.o sem.o shm.o
 endif

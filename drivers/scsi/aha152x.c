@@ -20,9 +20,14 @@
  * General Public License for more details.
  *
  *
- * $Id: aha152x.c,v 1.12 1995/12/16 12:26:07 fischer Exp fischer $
+ * $Id: aha152x.c,v 1.13 1996/01/09 02:15:53 fischer Exp $
  *
  * $Log: aha152x.c,v $
+ * Revision 1.13  1996/01/09  02:15:53  fischer
+ * - some cleanups
+ * - moved request_irq behind controller initialization
+ *   (to avoid spurious interrupts)
+ *
  * Revision 1.12  1995/12/16  12:26:07  fischer
  * - barrier()'s added
  * - configurable RESET delay added
@@ -299,6 +304,8 @@ struct proc_dir_entry proc_scsi_aha152x = {
 
 extern long loops_per_sec;
 
+#define DELAY_DEFAULT 100
+
 /* some additional "phases" for getphase() */
 #define P_BUSFREE  1
 #define P_PARITY   2
@@ -322,7 +329,6 @@ enum {
 /* set by aha152x_setup according to the command line */
 static int  setup_count=0;
 static struct aha152x_setup {
-  char *conf;
   int io_port;
   int irq;
   int scsiid;
@@ -333,6 +339,7 @@ static struct aha152x_setup {
 #ifdef DEBUG_AHA152X
   int debug;
 #endif
+  char *conf;
 } setup[2];
 
 static struct Scsi_Host *aha152x_host[IRQS];
@@ -566,7 +573,7 @@ void aha152x_setup(char *str, int *ints)
   setup[setup_count].reconnect   = ints[0] >= 4 ? ints[4] : 1;
   setup[setup_count].parity      = ints[0] >= 5 ? ints[5] : 1;
   setup[setup_count].synchronous = ints[0] >= 6 ? ints[6] : 0 /* FIXME: 1 */;
-  setup[setup_count].delay       = ints[0] >= 7 ? ints[7] : 100;
+  setup[setup_count].delay       = ints[0] >= 7 ? ints[7] : DELAY_DEFAULT;
 #ifdef DEBUG_AHA152X
   setup[setup_count].debug       = ints[0] >= 8 ? ints[8] : DEBUG_DEFAULT;
   if(ints[0]>8)
@@ -745,7 +752,10 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
                   setup[setup_count].reconnect   = conf.cf_tardisc;
                   setup[setup_count].parity      = !conf.cf_parity;
                   setup[setup_count].synchronous = 0 /* FIXME: conf.cf_syncneg */;
+                  setup[setup_count].delay       = DELAY_DEFAULT;
+#ifdef DEBUG_AHA152X
                   setup[setup_count].debug       = DEBUG_DEFAULT;
+#endif
                   setup_count++;
                 }
 	}
@@ -775,7 +785,9 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       HOSTDATA(shpnt)->parity            = setup[i].parity;
       HOSTDATA(shpnt)->synchronous       = setup[i].synchronous;
       HOSTDATA(shpnt)->delay             = setup[i].delay;
+#ifdef DEBUG_AHA152X
       HOSTDATA(shpnt)->debug             = setup[i].debug;
+#endif
 
       HOSTDATA(shpnt)->aborting          = 0;
       HOSTDATA(shpnt)->abortion_complete = 0;
@@ -787,29 +799,6 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       for(j=0; j<8; j++)
         HOSTDATA(shpnt)->syncrate[j] = 0;
  
-      ok = request_irq(setup[i].irq, aha152x_intr, SA_INTERRUPT, "aha152x");
-  
-  if(ok<0)
-    {
-      if(ok == -EINVAL)
-	{
-              printk("aha152x%d: bad IRQ %d.\n", i, setup[i].irq);
-	   printk("         Contact author.\n");
-	}
-      else
-            if(ok == -EBUSY)
-              printk("aha152x%d: IRQ %d already in use. Configure another.\n",
-        	     i, setup[i].irq);
-	else
-	  {
-                printk("\naha152x%d: Unexpected error code on"
-        	       " requesting IRQ %d.\n", i, setup[i].irq);
-	    printk("         Contact author.\n");
-	  }
-          printk("aha152x: driver needs an IRQ.\n");
-          continue;
-    }
-
       SETPORT(SCSIID, setup[i].scsiid << 4);
       shpnt->this_id=setup[i].scsiid;
   
@@ -842,6 +831,29 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
   SETPORT(SIMODE1, 0);
 
       SETBITS(DMACNTRL0, INTEN);
+
+      ok = request_irq(setup[i].irq, aha152x_intr, SA_INTERRUPT, "aha152x");
+      
+      if(ok<0)
+        {
+          if(ok == -EINVAL)
+            {
+              printk("aha152x%d: bad IRQ %d.\n", i, setup[i].irq);
+              printk("          Contact author.\n");
+            }
+          else
+            if(ok == -EBUSY)
+              printk("aha152x%d: IRQ %d already in use. Configure another.\n",
+        	     i, setup[i].irq);
+            else
+              {
+                printk("\naha152x%d: Unexpected error code on"
+        	       " requesting IRQ %d.\n", i, setup[i].irq);
+                printk("          Contact author.\n");
+              }
+          printk("aha152x: driver needs an IRQ.\n");
+          continue;
+        }
     }
   
   return (setup_count>0);

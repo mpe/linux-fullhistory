@@ -29,7 +29,7 @@ bool 'Networking support' CONFIG_NET y
 #bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
 bool 'PCI bios support' CONFIG_PCI y
 if [ "$CONFIG_PCI" = "y" ]; then
-  bool '   PCI bridge optimisation (experimental)' CONFIG_PCI_OPTIMIZE n
+  bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE n
   if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
     bool '   PCI Triton IDE Bus Master DMA support' CONFIG_BLK_DEV_TRITON y
   fi

@@ -40,6 +40,7 @@
 #include <linux/random.h>
 #include <linux/mount.h>
 #include <linux/pagemap.h>
+#include <linux/sysctl.h>
 
 extern unsigned char aux_device_present, kbd_read_mask;
 
@@ -102,7 +103,9 @@ extern void __remqu (void);
 #if defined(CONFIG_PROC_FS)
 #include <linux/proc_fs.h>
 #endif
-
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 #include <asm/irq.h>
 #ifdef __SMP__
 #include <linux/smp.h>
@@ -178,6 +181,9 @@ struct symbol_table symbol_table = {
 	/* stackable module support */
 	X(rename_module_symbol),
 	X(register_symtab),
+#ifdef CONFIG_KERNELD
+	X(kerneld_send),
+#endif
 	X(get_options),
 
 	/* system info variables */
@@ -306,6 +312,10 @@ struct symbol_table symbol_table = {
 	X(lookup_exec_domain),
 	X(register_exec_domain),
 	X(unregister_exec_domain),
+
+	/* sysctl table registration */
+	X(register_sysctl_table),
+	X(unregister_sysctl_table),
 
 	/* interrupt handling */
 	X(request_irq),

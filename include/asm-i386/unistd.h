@@ -154,6 +154,7 @@
 #define __NR_writev		146
 #define __NR_getsid		147
 #define __NR_fdatasync		148
+#define __NR__sysctl		149
 
 #define __NR_mlock		150
 #define __NR_munlock		151

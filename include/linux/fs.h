@@ -23,15 +23,21 @@
  * Some programs (notably those using select()) may have to be 
  * recompiled to take full advantage of the new limits..
  */
+
+/* Fixed constants first: */
 #undef NR_OPEN
 #define NR_OPEN 256
 
-#define NR_INODE 2048	/* this should be bigger than NR_FILE */
-#define NR_FILE 1024	/* this can well be larger on a larger system */
-#define NR_SUPER 32
+#define NR_SUPER 64
 #define NR_IHASH 131
 #define BLOCK_SIZE 1024
 #define BLOCK_SIZE_BITS 10
+
+/* And dynamically-tunable limits and defaults: */
+extern int max_inodes, nr_inodes;
+extern int max_files, nr_files;
+#define NR_INODE 2048	/* this should be bigger than NR_FILE */
+#define NR_FILE 1024	/* this can well be larger on a larger system */
 
 #define MAY_EXEC 1
 #define MAY_WRITE 2
@@ -483,10 +489,10 @@ extern struct file *first_file;
 extern int nr_files;
 extern struct super_block super_blocks[NR_SUPER];
 
-extern int shrink_buffers(unsigned int priority, unsigned long limit);
 extern void refile_buffer(struct buffer_head * buf);
 extern void set_writetime(struct buffer_head * buf, int flag);
 extern void refill_freelist(int size);
+extern int try_to_free_buffer(struct buffer_head*, struct buffer_head**, int);
 
 extern struct buffer_head ** buffer_pages;
 extern int nr_buffers;

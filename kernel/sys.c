@@ -18,6 +18,7 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
+#include <linux/swap.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>

@@ -216,10 +216,10 @@ static unsigned short udp_check(struct udphdr *uh, int len, unsigned long saddr,
 struct udpfakehdr 
 {
 	struct udphdr uh;
-	int daddr;
-	int other;
+	__u32 daddr;
+	__u32 other;
 	const char *from;
-	int wcheck;
+	__u32 wcheck;
 };
 
 /*

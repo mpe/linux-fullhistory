@@ -44,6 +44,9 @@
 #include <asm/pgtable.h>
 
 #include <linux/config.h>
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 asmlinkage int sys_exit(int exit_code);
 asmlinkage int sys_brk(unsigned long);
@@ -616,6 +619,7 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	int i;
 	int retval;
 	int sh_bang = 0;
+	int try;
 #ifdef __alpha__
 	int loader = 0;
 #endif
@@ -781,18 +785,29 @@ restart_interp:
 	}
 
 	bprm.sh_bang = sh_bang;
-	for (fmt = formats ; fmt ; fmt = fmt->next) {
-		int (*fn)(struct linux_binprm *, struct pt_regs *) = fmt->load_binary;
-		if (!fn)
-			break;
-		retval = fn(&bprm, regs);
-		if (retval >= 0) {
-			iput(bprm.inode);
-			current->did_exec = 1;
-			return retval;
+	for (try=0; try<2; try++) {
+		for (fmt = formats ; fmt ; fmt = fmt->next) {
+			int (*fn)(struct linux_binprm *, struct pt_regs *) = fmt->load_binary;
+			if (!fn)
+				break;
+			retval = fn(&bprm, regs);
+			if (retval >= 0) {
+				iput(bprm.inode);
+				current->did_exec = 1;
+				return retval;
+			}
+			if (retval != -ENOEXEC)
+				break;
 		}
-		if (retval != -ENOEXEC)
+		if (retval != -ENOEXEC) {
 			break;
+#ifdef CONFIG_KERNELD
+		}else{
+			char modname[20];
+			sprintf(modname, "binfmt-%hd", *(short*)(&bprm.buf));
+			request_module(modname);
+#endif
+		}
 	}
 exec_error2:
 	iput(bprm.inode);

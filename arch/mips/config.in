@@ -44,7 +44,7 @@ bool 'Generate little endian code' CONFIG_CPU_LITTLE_ENDIAN
 bool 'Networking support' CONFIG_NET
 #bool 'PCI bios support' CONFIG_PCI
 #if [ "$CONFIG_PCI" = "y" ]; then
-#  bool '   PCI bridge optimisation (experimental)' CONFIG_PCI_OPTIMIZE
+#  bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
 #fi
 bool 'System V IPC' CONFIG_SYSVIPC
 
