@@ -670,7 +670,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	case KDSIGACCEPT:
 	{
 		extern int spawnpid, spawnsig;
-		if (!perm)
+		if (!perm || !capable(CAP_KILL))
 		  return -EPERM;
 		if (arg < 1 || arg > _NSIG || arg == SIGKILL)
 		  return -EINVAL;

@@ -690,9 +690,6 @@ static char * __init initialize_kbd(void)
 
 void __init pckbd_init_hw(void)
 {
-	/* Get the keyboard controller registers (incomplete decode) */
-	request_region(0x60, 16, "keyboard");
-
 	/* Flush any pending input. */
 	kbd_clear_input();
 

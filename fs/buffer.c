@@ -1270,6 +1270,7 @@ int block_flushpage(struct inode *inode, struct page *page, unsigned long offset
 				mark_buffer_clean(bh);
 				clear_bit(BH_Uptodate, &bh->b_state);
 				clear_bit(BH_Mapped, &bh->b_state);
+				clear_bit(BH_Req, &bh->b_state);
 				bh->b_blocknr = 0;
 				atomic_dec(&bh->b_count);
 			}

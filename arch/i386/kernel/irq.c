@@ -1099,9 +1099,7 @@ __initfunc(void init_IRQ(void))
 
 	/* IPI vector for APIC spurious interrupts */
 	set_intr_gate(SPURIOUS_APIC_VECTOR, spurious_interrupt);
-#endif	
-	request_region(0x20,0x20,"pic1");
-	request_region(0xa0,0x20,"pic2");
+#endif
 
 	/*
 	 * Set the clock to 100 Hz, we already have a valid

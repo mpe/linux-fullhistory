@@ -249,12 +249,30 @@ visws_get_board_type_and_rev(void)
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
        char saved_command_line[COMMAND_LINE_SIZE];
 
+struct resource standard_resources[] = {
+	{ "dma1", 0x00, 0x1f },
+	{ "pic1", 0x20, 0x3f },
+	{ "timer", 0x40, 0x5f },
+	{ "keyboard", 0x60, 0x6f },
+	{ "dma page reg", 0x80, 0x8f },
+	{ "pic2", 0xa0, 0xbf },
+	{ "dma2", 0xc0, 0xdf },
+	{ "fpu", 0xf0, 0xff }
+};
+
+/* For demonstration purposes only.. */
+#define keyboard_resources (standard_resources+3)
+struct resource kbd_status_resource = { "status", 0x60, 0x60 };
+
+#define STANDARD_RESOURCES (sizeof(standard_resources)/sizeof(struct resource))
+
 __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	unsigned long memory_start, memory_end;
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
+	int i;
 
 #ifdef CONFIG_VISWS
 	visws_get_board_type_and_rev();
@@ -368,11 +386,9 @@ __initfunc(void setup_arch(char **cmdline_p,
 #endif
 
 	/* request I/O space for devices used on all i[345]86 PCs */
-	request_region(0x00,0x20,"dma1");
-	request_region(0x40,0x20,"timer");
-	request_region(0x80,0x10,"dma page reg");
-	request_region(0xc0,0x20,"dma2");
-	request_region(0xf0,0x10,"fpu");
+	for (i = 0; i < STANDARD_RESOURCES; i++)
+		request_resource(&pci_io_resource, standard_resources+i);
+	request_resource(keyboard_resources, &kbd_status_resource);
 
 #ifdef CONFIG_VT
 #if defined(CONFIG_VGA_CONSOLE)

@@ -661,7 +661,9 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 			else
 				p->swap_map[page] = SWAP_MAP_BAD;
 		}
-		nr_good_pages = swap_header->info.last_page - i;
+		nr_good_pages = swap_header->info.last_page -
+				swap_header->info.nr_badpages -
+				1 /* header page */;
 		lock_map_size = (p->max + 7) / 8;
 		if (error) 
 			goto bad_swap;

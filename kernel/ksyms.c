@@ -308,11 +308,11 @@ EXPORT_SYMBOL(enable_hlt);
 #endif
 
 /* resource handling */
-EXPORT_SYMBOL(check_resource);
 EXPORT_SYMBOL(request_resource);
 EXPORT_SYMBOL(release_resource);
-EXPORT_SYMBOL(occupy_resource);
-EXPORT_SYMBOL(vacate_resource);
+EXPORT_SYMBOL(__request_region);
+EXPORT_SYMBOL(__check_region);
+EXPORT_SYMBOL(__release_region);
 
 /* process management */
 EXPORT_SYMBOL(__wake_up);
