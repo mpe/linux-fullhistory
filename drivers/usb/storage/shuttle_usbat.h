@@ -1,9 +1,9 @@
 /* Driver for SCM Microsystems USB-ATAPI cable
  * Header File
  *
- * $Id: shuttle_usbat.h,v 1.2 2000/08/03 00:03:39 groovyjava Exp $
+ * $Id: shuttle_usbat.h,v 1.4 2000/08/25 00:13:51 mdharm Exp $
  *
- * Current development and maintainance by:
+ * Current development and maintenance by:
  *   (c) 2000 Robert Baruch (autophile@dol.net)
  *
  * See scm.c for more explanation
@@ -74,5 +74,6 @@ extern int usbat_write_user_io(struct us_data *us,
 /* HP 8200e stuff */
 
 extern int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us);
+extern int init_8200e(struct us_data *us);
 
 #endif

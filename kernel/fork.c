@@ -661,7 +661,13 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	 * Let it rip!
 	 */
 	retval = p->pid;
+	p->tgid = retval;
+	INIT_LIST_HEAD(&p->thread_group);
 	write_lock_irq(&tasklist_lock);
+	if (clone_flags & CLONE_THREAD) {
+		p->tgid = current->tgid;
+		list_add(&p->thread_group, &current->thread_group);
+	}
 	SET_LINKS(p);
 	hash_pid(p);
 	nr_threads++;

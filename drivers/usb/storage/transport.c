@@ -1,8 +1,8 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: transport.c,v 1.12 2000/08/08 15:22:38 gowdy Exp $
+ * $Id: transport.c,v 1.18 2000/08/25 00:13:51 mdharm Exp $
  *
- * Current development and maintainance by:
+ * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
  * Developed with the assistance of:
@@ -59,43 +59,7 @@
 /* Calculate the length of the data transfer (not the command) for any
  * given SCSI command
  */
-static unsigned int us_transfer_length(Scsi_Cmnd *srb, struct us_data *us)
-{
-	int i;
-	unsigned int total = 0;
-	struct scatterlist *sg;
-
-	/* support those devices which need the length calculated
-	 * differently 
-	 */
-	if (srb->cmnd[0] == INQUIRY) {
-		srb->cmnd[4] = 36;
-	}
-
-	if ((srb->cmnd[0] == INQUIRY) || (srb->cmnd[0] == MODE_SENSE))
-		return srb->cmnd[4];
-
-	if (srb->cmnd[0] == TEST_UNIT_READY)
-		return 0;
-
-	/* Are we going to scatter gather? */
-	if (srb->use_sg) {
-		/* Add up the sizes of all the scatter-gather segments */
-		sg = (struct scatterlist *) srb->request_buffer;
-		for (i = 0; i < srb->use_sg; i++)
-			total += sg[i].length;
-
-		return total;
-	}
-	else
-		/* Just return the length of the buffer */
-		return srb->request_bufflen;
-}
-
-/* Calculate the length of the data transfer (not the command) for any
- * given SCSI command
- */
-static unsigned int us_transfer_length_new(Scsi_Cmnd *srb, struct us_data *us)
+static unsigned int us_transfer_length(Scsi_Cmnd *srb)
 {
       	int i;
 	int doDefault = 0;
@@ -245,10 +209,6 @@ static unsigned int us_transfer_length_new(Scsi_Cmnd *srb, struct us_data *us)
 	   WRITE_SAME 41
 	*/
 
-	/* Not sure this is right as an INQUIRY can contain nonstandard info */
-	if (srb->cmnd[0] == INQUIRY)
-		srb->cmnd[4] = 36;
-	   
 	if (srb->sc_data_direction == SCSI_DATA_WRITE) {
      		doDefault = 1;
 	}
@@ -611,6 +571,16 @@ static void us_transfer(Scsi_Cmnd *srb, struct us_data* us)
 	int i;
 	int result = -1;
 	struct scatterlist *sg;
+	unsigned int total_transferred = 0;
+	unsigned int transfer_amount;
+
+	/* calculate how much we want to transfer */
+	transfer_amount = us_transfer_length(srb);
+
+	/* was someone foolish enough to request more data than available
+	 * buffer space? */
+	if (transfer_amount > srb->request_bufflen)
+		transfer_amount = srb->request_bufflen;
 
 	/* are we scatter-gathering? */
 	if (srb->use_sg) {
@@ -620,8 +590,19 @@ static void us_transfer(Scsi_Cmnd *srb, struct us_data* us)
 		 */
 		sg = (struct scatterlist *) srb->request_buffer;
 		for (i = 0; i < srb->use_sg; i++) {
-			result = us_transfer_partial(us, sg[i].address, 
-						     sg[i].length);
+
+			/* transfer the lesser of the next buffer or the
+			 * remaining data */
+			if (transfer_amount - total_transferred >= 
+					sg[i].length) {
+				result = us_transfer_partial(us, sg[i].address, 
+						sg[i].length);
+				total_transferred += sg[i].length;
+			} else
+				result = us_transfer_partial(us, sg[i].address,
+						transfer_amount - total_transferred);
+
+			/* if we get an error, end the loop here */
 			if (result)
 				break;
 		}
@@ -629,7 +610,7 @@ static void us_transfer(Scsi_Cmnd *srb, struct us_data* us)
 	else
 		/* no scatter-gather, just make the request */
 		result = us_transfer_partial(us, srb->request_buffer, 
-					     srb->request_bufflen);
+					     transfer_amount);
 
 	/* return the result in the data structure itself */
 	srb->result = result;
@@ -874,7 +855,7 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 
 	/* DATA STAGE */
 	/* transfer the data payload for this command, if one exists*/
-	if (us_transfer_length(srb, us)) {
+	if (us_transfer_length(srb)) {
 		us_transfer(srb, us);
 		US_DEBUGP("CBI data stage result is 0x%x\n", srb->result);
 
@@ -975,7 +956,7 @@ int usb_stor_CB_transport(Scsi_Cmnd *srb, struct us_data *us)
 
 	/* DATA STAGE */
 	/* transfer the data payload for this command, if one exists*/
-	if (us_transfer_length(srb, us)) {
+	if (us_transfer_length(srb)) {
 		us_transfer(srb, us);
 		US_DEBUGP("CB data stage result is 0x%x\n", srb->result);
 
@@ -1039,10 +1020,12 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	
 	/* set up the command wrapper */
 	bcb.Signature = cpu_to_le32(US_BULK_CB_SIGN);
-	bcb.DataTransferLength = cpu_to_le32(us_transfer_length(srb, us));
+	bcb.DataTransferLength = cpu_to_le32(us_transfer_length(srb));
 	bcb.Flags = srb->sc_data_direction == SCSI_DATA_READ ? 1 << 7 : 0;
 	bcb.Tag = srb->serial_number;
 	bcb.Lun = srb->cmnd[1] >> 5;
+	if (us->flags & US_FL_SCM_MULT_TARG)
+		bcb.Lun |= srb->target << 4;
 	bcb.Length = srb->cmd_len;
 	
 	/* construct the pipe handle */
@@ -1053,8 +1036,9 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	memcpy(bcb.CDB, srb->cmnd, bcb.Length);
 	
 	/* send it to out endpoint */
-	US_DEBUGP("Bulk command S 0x%x T 0x%x LUN %d L %d F %d CL %d\n",
-		  le32_to_cpu(bcb.Signature), bcb.Tag, bcb.Lun, 
+	US_DEBUGP("Bulk command S 0x%x T 0x%x Trg %d LUN %d L %d F %d CL %d\n",
+		  le32_to_cpu(bcb.Signature), bcb.Tag,
+		  (bcb.Lun >> 4), (bcb.Lun & 0xFF), 
 		  bcb.DataTransferLength, bcb.Flags, bcb.Length);
 	result = usb_stor_bulk_msg(us, &bcb, pipe, US_BULK_CB_WRAP_LEN, 
 				   &partial);

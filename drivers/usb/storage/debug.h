@@ -1,9 +1,9 @@
 /* Driver for USB Mass Storage compliant devices
  * Debugging Functions Header File
  *
- * $Id: debug.h,v 1.3 2000/07/19 19:34:48 groovyjava Exp $
+ * $Id: debug.h,v 1.4 2000/08/25 00:13:51 mdharm Exp $
  *
- * Current development and maintainance by:
+ * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
  * Initial work by:

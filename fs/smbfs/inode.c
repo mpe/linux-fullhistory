@@ -445,7 +445,7 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	memset(mnt, 0, sizeof(struct smb_mount_data_kernel));
 	strncpy(mnt->codepage.local_name, CONFIG_NLS_DEFAULT,
 		SMB_NLS_MAXNAMELEN);
-	strncpy(mnt->codepage.local_name, CONFIG_SMB_NLS_REMOTE,
+	strncpy(mnt->codepage.remote_name, CONFIG_SMB_NLS_REMOTE,
 		SMB_NLS_MAXNAMELEN);
 
 	if (ver == SMB_MOUNT_OLDVERSION) {

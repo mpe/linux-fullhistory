@@ -496,6 +496,27 @@ static inline void flush_old_files(struct files_struct * files)
 	write_unlock(&files->file_lock);
 }
 
+/*
+ * An execve() will automatically "de-thread" the process.
+ * Note: we don't have to hold the tasklist_lock to test
+ * whether we migth need to do this. If we're not part of
+ * a thread group, there is no way we can become one
+ * dynamically. And if we are, we only need to protect the
+ * unlink - even if we race with the last other thread exit,
+ * at worst the list_del_init() might end up being a no-op.
+ */
+static inline void de_thread(struct task_struct *tsk)
+{
+	if (!list_empty(&tsk->thread_group)) {
+		write_lock_irq(&tasklist_lock);
+		list_del_init(&tsk->thread_group);
+		write_unlock_irq(&tasklist_lock);
+	}
+
+	/* Minor oddity: this might stay the same. */
+	tsk->tgid = tsk->pid;
+}
+
 int flush_old_exec(struct linux_binprm * bprm)
 {
 	char * name;
@@ -533,6 +554,8 @@ int flush_old_exec(struct linux_binprm * bprm)
 	current->comm[i] = '\0';
 
 	flush_thread();
+
+	de_thread(current);
 
 	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid || 
 	    permission(bprm->file->f_dentry->d_inode,MAY_READ))

@@ -179,7 +179,7 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 			if (!(current->notifier)(current->notifier_data)) {
 				current->sigpending = 0;
 				return 0;
-		        }
+			}
 		}
 	}
 
@@ -287,6 +287,18 @@ static int rm_sig_from_queue(int sig, struct task_struct *t)
 }
 
 /*
+ * Bad permissions for sending the signal
+ */
+int bad_signal(int sig, struct siginfo *info, struct task_struct *t)
+{
+	return (!info || ((unsigned long)info != 1 && SI_FROMUSER(info)))
+	    && ((sig != SIGCONT) || (current->session != t->session))
+	    && (current->euid ^ t->suid) && (current->euid ^ t->uid)
+	    && (current->uid ^ t->suid) && (current->uid ^ t->uid)
+	    && !capable(CAP_KILL);
+}
+
+/*
  * Determine whether a signal should be posted or not.
  *
  * Signals with SIG_IGN can be ignored, except for the
@@ -327,37 +339,13 @@ static int ignored_signal(int sig, struct task_struct *t)
 	return 1;
 }
 
-int
-send_sig_info(int sig, struct siginfo *info, struct task_struct *t)
+/*
+ * Handle TASK_STOPPED.
+ * Also, return true for the unblockable signals that we
+ * should deliver to all threads..
+ */
+static void handle_stop_signal(int sig, struct task_struct *t)
 {
-	unsigned long flags;
-	int ret;
-	struct signal_queue *q = 0;
-
-
-#if DEBUG_SIG
-printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
-#endif
-
-	ret = -EINVAL;
-	if (sig < 0 || sig > _NSIG)
-		goto out_nolock;
-	/* The somewhat baroque permissions check... */
-	ret = -EPERM;
-	if ((!info || ((unsigned long)info != 1 && SI_FROMUSER(info)))
-	    && ((sig != SIGCONT) || (current->session != t->session))
-	    && (current->euid ^ t->suid) && (current->euid ^ t->uid)
-	    && (current->uid ^ t->suid) && (current->uid ^ t->uid)
-	    && !capable(CAP_KILL))
-		goto out_nolock;
-
-	/* The null signal is a permissions and process existance probe.
-	   No signal is actually delivered.  Same goes for zombies. */
-	ret = 0;
-	if (!sig || !t->sig)
-		goto out_nolock;
-
-	spin_lock_irqsave(&t->sigmask_lock, flags);
 	switch (sig) {
 	case SIGKILL: case SIGCONT:
 		/* Wake up the process if stopped.  */
@@ -376,19 +364,12 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 			recalc_sigpending(t);
 		break;
 	}
+	return 0;
+}
 
-	/* Optimize away the signal, if it's a signal that can be
-	   handled immediately (ie non-blocked and untraced) and
-	   that is ignored (either explicitly or by default).  */
-
-	if (ignored_signal(sig, t))
-		goto out;
-
-	/* Support queueing exactly one non-rt signal, so that we
-	   can get more detailed information about the cause of
-	   the signal. */
-	if (sig < SIGRTMIN && sigismember(&t->signal, sig))
-		goto out;
+static int deliver_signal(int sig, struct siginfo *info, struct task_struct *t)
+{
+	struct signal_queue * q = NULL;
 
 	/* Real-time signals must be queued if sent by sigqueue, or
 	   some other real-time mechanism.  It is implementation
@@ -399,8 +380,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 	   pass on the info struct.  */
 
 	if (atomic_read(&nr_queued_signals) < max_queued_signals) {
-		q = (struct signal_queue *)
-			kmem_cache_alloc(signal_queue_cachep, GFP_ATOMIC);
+		q = kmem_cache_alloc(signal_queue_cachep, GFP_ATOMIC);
 	}
 
 	if (q) {
@@ -433,8 +413,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 		 * Queue overflow, abort.  We may abort if the signal was rt
 		 * and sent by user using something other than kill().
 		 */
-		ret = -EAGAIN;
-		goto out;
+		return -EAGAIN;
 	}
 
 	sigaddset(&t->signal, sig);
@@ -459,12 +438,118 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 		spin_unlock(&runqueue_lock);
 #endif /* CONFIG_SMP */
 	}
+	return 0;
+}
 
+
+/*
+ * Send a thread-group-wide signal.
+ *
+ * Rule: SIGSTOP and SIGKILL get delivered to _everybody_.
+ *
+ * Others get delivered to the thread that doesn't have them
+ * blocked (just one such thread).
+ *
+ * If all threads have it blocked, it gets delievered to the
+ * thread group leader.
+ */
+static int send_tg_sig_info(int sig, struct siginfo *info, struct task_struct *p)
+{
+	int retval = 0;
+	struct task_struct *tsk;
+
+	if (sig < 0 || sig > _NSIG)
+		return -EINVAL;
+
+	if (bad_signal(sig, info, p))
+		return -EPERM;
+
+	if (!sig)
+		return 0;
+
+	tsk = p;
+	do {
+		unsigned long flags;
+		tsk = next_thread(tsk);
+
+		/* Zombie? Ignore */
+		if (!tsk->sig)
+			continue;
+
+		spin_lock_irqsave(&tsk->sigmask_lock, flags);
+		handle_stop_signal(sig, tsk);
+
+		/* Is the signal ignored by this thread? */
+		if (ignored_signal(sig, tsk))
+			goto next;
+
+		/* Have we already delivered this non-queued signal? */
+		if (sig < SIGRTMIN && sigismember(&tsk->signal, sig))
+			goto next;
+
+		/* Not blocked? Go, girl, go! */
+		if (tsk == p || !sigismember(&tsk->blocked, sig)) {
+			retval = deliver_signal(sig, info, tsk);
+
+			/* Signals other than SIGKILL and SIGSTOP have "once" semantics */
+			if (sig != SIGKILL && sig != SIGSTOP)
+				tsk = p;
+		}
+next:
+		spin_unlock_irqrestore(&tsk->sigmask_lock, flags);
+		if ((tsk->state & TASK_INTERRUPTIBLE) && signal_pending(tsk))
+			wake_up_process(tsk);
+	} while (tsk != p);
+	return retval;
+}
+
+
+int
+send_sig_info(int sig, struct siginfo *info, struct task_struct *t)
+{
+	unsigned long flags;
+	int ret;
+
+
+#if DEBUG_SIG
+printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
+#endif
+
+	ret = -EINVAL;
+	if (sig < 0 || sig > _NSIG)
+		goto out_nolock;
+	/* The somewhat baroque permissions check... */
+	ret = -EPERM;
+	if (bad_signal(sig, info, t))
+		goto out_nolock;
+
+	/* The null signal is a permissions and process existance probe.
+	   No signal is actually delivered.  Same goes for zombies. */
+	ret = 0;
+	if (!sig || !t->sig)
+		goto out_nolock;
+
+	spin_lock_irqsave(&t->sigmask_lock, flags);
+	handle_stop_signal(sig, t);
+
+	/* Optimize away the signal, if it's a signal that can be
+	   handled immediately (ie non-blocked and untraced) and
+	   that is ignored (either explicitly or by default).  */
+
+	if (ignored_signal(sig, t))
+		goto out;
+
+	/* Support queueing exactly one non-rt signal, so that we
+	   can get more detailed information about the cause of
+	   the signal. */
+	if (sig < SIGRTMIN && sigismember(&t->signal, sig))
+		goto out;
+
+	ret = deliver_signal(sig, info, t);
 out:
 	spin_unlock_irqrestore(&t->sigmask_lock, flags);
-        if ((t->state & TASK_INTERRUPTIBLE) && signal_pending(t))
-                wake_up_process(t);
-
+	if ((t->state & TASK_INTERRUPTIBLE) && signal_pending(t))
+		wake_up_process(t);
 out_nolock:
 #if DEBUG_SIG
 printk(" %d -> %d\n", signal_pending(t), ret);
@@ -509,22 +594,17 @@ kill_pg_info(int sig, struct siginfo *info, pid_t pgrp)
 	int retval = -EINVAL;
 	if (pgrp > 0) {
 		struct task_struct *p;
-		int found = 0;
 
 		retval = -ESRCH;
 		read_lock(&tasklist_lock);
 		for_each_task(p) {
 			if (p->pgrp == pgrp) {
 				int err = send_sig_info(sig, info, p);
-				if (err != 0)
+				if (retval)
 					retval = err;
-				else
-					found++;
 			}
 		}
 		read_unlock(&tasklist_lock);
-		if (found)
-			retval = 0;
 	}
 	return retval;
 }
@@ -541,22 +621,17 @@ kill_sl_info(int sig, struct siginfo *info, pid_t sess)
 	int retval = -EINVAL;
 	if (sess > 0) {
 		struct task_struct *p;
-		int found = 0;
 
 		retval = -ESRCH;
 		read_lock(&tasklist_lock);
 		for_each_task(p) {
 			if (p->leader && p->session == sess) {
 				int err = send_sig_info(sig, info, p);
-				if (err)
+				if (retval)
 					retval = err;
-				else
-					found++;
 			}
 		}
 		read_unlock(&tasklist_lock);
-		if (found)
-			retval = 0;
 	}
 	return retval;
 }
@@ -576,6 +651,33 @@ kill_proc_info(int sig, struct siginfo *info, pid_t pid)
 	return error;
 }
 
+
+/*
+ * Send a signal to a thread group..
+ *
+ * If the pid is the thread group ID, we consider this
+ * a "thread group" signal. Otherwise it degenerates into
+ * a thread-specific signal.
+ */
+static int kill_tg_info(int sig, struct siginfo *info, pid_t pid)
+{
+	int error;
+	struct task_struct *p;
+
+	read_lock(&tasklist_lock);
+	p = find_task_by_pid(pid);
+	error = -ESRCH;
+	if (p) {
+		/* Is it the leader? Otherwise it degenerates into a per-thread thing */
+		if (p->tgid == pid)
+			error = send_tg_sig_info(sig, info, p);
+		else
+			error = send_sig_info(sig, info, p);
+	}
+	read_unlock(&tasklist_lock);
+	return error;
+}
+
 /*
  * kill_something_info() interprets pid in interesting ways just like kill(2).
  *
@@ -583,8 +685,7 @@ kill_proc_info(int sig, struct siginfo *info, pid_t pid)
  * is probably wrong.  Should make it like BSD or SYSV.
  */
 
-int
-kill_something_info(int sig, struct siginfo *info, int pid)
+static int kill_something_info(int sig, struct siginfo *info, int pid)
 {
 	if (!pid) {
 		return kill_pg_info(sig, info, current->pgrp);
@@ -606,7 +707,7 @@ kill_something_info(int sig, struct siginfo *info, int pid)
 	} else if (pid < 0) {
 		return kill_pg_info(sig, info, -pid);
 	} else {
-		return kill_proc_info(sig, info, pid);
+		return kill_tg_info(sig, info, pid);
 	}
 }
 
@@ -645,11 +746,24 @@ kill_proc(pid_t pid, int sig, int priv)
 }
 
 /*
+ * Joy. Or not. Pthread wants us to wake up every thread
+ * in our parent group.
+ */
+static void wake_up_parent(struct task_struct *parent)
+{
+	struct task_struct *tsk = parent;
+
+	do {
+		wake_up_interruptible(&tsk->wait_chldexit);
+		tsk = next_thread(tsk);
+	} while (tsk != parent);
+}
+
+/*
  * Let a parent know about a status change of a child.
  */
 
-void
-notify_parent(struct task_struct *tsk, int sig)
+void do_notify_parent(struct task_struct *tsk, int sig)
 {
 	struct siginfo info;
 	int why, status;
@@ -693,7 +807,23 @@ notify_parent(struct task_struct *tsk, int sig)
 	info.si_status = status;
 
 	send_sig_info(sig, &info, tsk->p_pptr);
-	wake_up_interruptible(&tsk->p_pptr->wait_chldexit);
+	wake_up_parent(tsk->p_pptr);
+}
+
+
+/*
+ * We need the tasklist lock because it's the only
+ * thing that protects out "parent" pointer.
+ *
+ * exit.c calls "do_notify_parent()" directly, because
+ * it already has the tasklist lock.
+ */
+void
+notify_parent(struct task_struct *tsk, int sig)
+{
+	read_lock(&tasklist_lock);
+	do_notify_parent(tsk, sig);
+	read_unlock(&tasklist_lock);
 }
 
 EXPORT_SYMBOL(dequeue_signal);

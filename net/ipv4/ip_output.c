@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.83 2000/03/25 01:52:08 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.84 2000/08/25 02:15:47 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -327,6 +327,7 @@ static inline int ip_queue_xmit2(struct sk_buff *skb)
 			kfree_skb(skb);
 			return -EHOSTUNREACH;
 		}
+		rt = (struct rtable *)skb->dst;
 	}
 #endif
 

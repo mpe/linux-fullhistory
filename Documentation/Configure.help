@@ -2329,7 +2329,7 @@ CONFIG_AGP_VIA
 AMD Irongate support
 CONFIG_AGP_AMD
   This option gives you AGP support for the GLX component of the
-  XFree86 4.x on Intel AMD Irongate chipset.
+  XFree86 4.x on AMD Irongate chipset.
 
   For the moment, you should probably say N, unless you want to test
   the GLX component for XFree86 3.3.6, which can be downloaded from

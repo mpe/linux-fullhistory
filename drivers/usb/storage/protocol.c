@@ -1,8 +1,8 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: protocol.c,v 1.4 2000/08/01 22:01:19 mdharm Exp $
+ * $Id: protocol.c,v 1.5 2000/08/25 00:13:51 mdharm Exp $
  *
- * Current development and maintainance by:
+ * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
  * Developed with the assistance of:

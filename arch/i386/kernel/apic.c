@@ -671,14 +671,7 @@ inline void smp_local_timer_interrupt(struct pt_regs * regs)
 		}
 
 #ifdef CONFIG_SMP
-		/*
-		 * update_process_times() expects us to have done irq_enter().
-		 * Besides, if we don't timer interrupts ignore the global
-		 * interrupt lock, which is the WrongThing (tm) to do.
-		 */
-		irq_enter(cpu, 0);
 		update_process_times(user);
-		irq_exit(cpu, 0);
 #endif
 	}
 
@@ -706,17 +699,26 @@ unsigned int apic_timer_irqs [NR_CPUS] = { 0, };
 
 void smp_apic_timer_interrupt(struct pt_regs * regs)
 {
+	int cpu = smp_processor_id();
+
 	/*
 	 * the NMI deadlock-detector uses this.
 	 */
-	apic_timer_irqs[smp_processor_id()]++;
+	apic_timer_irqs[cpu]++;
 
 	/*
 	 * NOTE! We'd better ACK the irq immediately,
 	 * because timer handling can be slow.
 	 */
 	ack_APIC_irq();
+	/*
+	 * update_process_times() expects us to have done irq_enter().
+	 * Besides, if we don't timer interrupts ignore the global
+	 * interrupt lock, which is the WrongThing (tm) to do.
+	 */
+	irq_enter(cpu, 0);
 	smp_local_timer_interrupt(regs);
+	irq_exit(cpu, 0);
 }
 
 /*

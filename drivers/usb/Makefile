@@ -79,7 +79,7 @@ endif
 
 ifeq ($(CONFIG_USB_STORAGE),y)
 	SUB_DIRS += storage
-	obj-y += storage/usb-storage.o
+	obj-y += storage/storage.o
 else
 	ifeq ($(CONFIG_USB_STORAGE),m)
 		MOD_IN_SUB_DIRS += storage

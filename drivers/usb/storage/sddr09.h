@@ -1,7 +1,9 @@
 /* Driver for SanDisk SDDR-09 SmartMedia reader
  * Header File
  *
- * Current development and maintainance by:
+ * $Id: sddr09.h,v 1.5 2000/08/25 00:13:51 mdharm Exp $
+ *
+ * Current development and maintenance by:
  *   (c) 2000 Robert Baruch (autophile@dol.net)
  *
  * See sddr09.c for more explanation
@@ -29,10 +31,14 @@
 extern int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us);
 
 struct sddr09_card_info {
-	unsigned long		capacity; /* Size of card in bytes */
-	int			pagesize;  /* Size of page in bytes */
-	int			*lba_to_pba; /* logical to physical map */
-	int			*pba_to_lba; /* physical to logical map */
+	unsigned long	capacity;	/* Size of card in bytes */
+	int		pagesize;	/* Size of page in bytes */
+	int		pageshift;	/* log2 of pagesize */
+	int		blocksize;	/* Size of block in pages */
+	int		blockshift;	/* log2 of blocksize */
+	int		blockmask;	/* 2^blockshift - 1 */
+	int		*lba_to_pba;	/* logical to physical map */
+	int		*pba_to_lba;	/* physical to logical map */
 };
 
 #endif

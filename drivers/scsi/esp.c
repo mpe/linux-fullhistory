@@ -1,4 +1,4 @@
-/* $Id: esp.c,v 1.94 2000/03/30 02:09:10 davem Exp $
+/* $Id: esp.c,v 1.95 2000/08/23 22:32:37 davem Exp $
  * esp.c:  EnhancedScsiProcessor Sun SCSI driver code.
  *
  * Copyright (C) 1995, 1998 David S. Miller (davem@caip.rutgers.edu)
@@ -32,13 +32,16 @@
 #include <asm/sbus.h>
 #include <asm/dma.h>
 #include <asm/system.h>
-#include <asm/machines.h>
 #include <asm/ptrace.h>
 #include <asm/pgtable.h>
 #include <asm/oplib.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+
+#ifndef __sparc_v9__
+#include <asm/machines.h>
 #include <asm/idprom.h>
+#endif
 
 #include <linux/module.h>
 
@@ -1634,6 +1637,7 @@ do_sync_known:
 		 */
 		int cdrom_hwbug_wkaround = 0;
 
+#ifndef __sparc_v9__
 		/* Never allow disconnects or synchronous transfers on
 		 * SparcStation1 and SparcStation1+.  Allowing those
 		 * to be enabled seems to lockup the machine completely.
@@ -1654,6 +1658,7 @@ do_sync_known:
 			esp->snip = 0;
 			goto do_sync_known;
 		}
+#endif /* !(__sparc_v9__) */
 
 		/* We've talked to this guy before,
 		 * but never negotiated.  Let's try,

@@ -855,7 +855,7 @@ int sock_create(int family, int type, int protocol, struct socket **res)
 
 	net_family_read_lock();
 	if (net_families[family] == NULL) {
-		i = -EINVAL;
+		i = -EAFNOSUPPORT;
 		goto out;
 	}
 
@@ -1710,10 +1710,9 @@ void __init sock_init(void)
 	 *	Initialize the protocols module. 
 	 */
 
-	proto_init();
-
 	register_filesystem(&sock_fs_type);
 	sock_mnt = kern_mount(&sock_fs_type);
+	proto_init();
 
 	/*
 	 *	The netlink device handler may be needed early.

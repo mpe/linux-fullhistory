@@ -724,7 +724,7 @@ asmlinkage unsigned long sys_alarm(unsigned int seconds)
 asmlinkage long sys_getpid(void)
 {
 	/* This is SMP safe - current->pid doesn't change */
-	return current->pid;
+	return current->tgid;
 }
 
 /*

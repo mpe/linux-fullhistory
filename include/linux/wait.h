@@ -4,8 +4,9 @@
 #define WNOHANG		0x00000001
 #define WUNTRACED	0x00000002
 
-#define __WALL		0x40000000
-#define __WCLONE	0x80000000
+#define __WNOTHREAD	0x20000000	/* Don't wait on children of other threads in this group */
+#define __WALL		0x40000000	/* Wait on all children, regardless of type */
+#define __WCLONE	0x80000000	/* Wait only on non-SIGCHLD children */
 
 #ifdef __KERNEL__
 
@@ -184,7 +185,7 @@ extern inline void __add_wait_queue_tail(wait_queue_head_t *head,
 	if (!head->task_list.next || !head->task_list.prev)
 		WQ_BUG();
 #endif
-	list_add(&new->task_list, head->task_list.prev);
+	list_add_tail(&new->task_list, &head->task_list);
 }
 
 extern inline void __remove_wait_queue(wait_queue_head_t *head,

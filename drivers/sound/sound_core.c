@@ -456,7 +456,11 @@ static int soundcore_open(struct inode *, struct file *);
 
 static struct file_operations soundcore_fops=
 {
-	owner:	THIS_MODULE,
+/*	owner:	THIS_MODULE,  * this is a bug: if we have an owner, the kernel 
+                               generates a MOD_INC_USE_COUNT - thus
+			        the module cannot be unloaded since the device
+			        is never released here ! - solution: owner
+ 				has to be NULL. Patch by Peter Wahl <Peter.Wahl@epost.de> */
 	open:	soundcore_open,
 };
 

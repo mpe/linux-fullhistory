@@ -1,47 +1,44 @@
 #
 # Makefile for the USB Mass Storage device drivers.
 #
+# 15 Aug 2000, Christoph Hellwig <hch@caldera.de>
+# Rewritten to use lists instead of if-statements.
+#
 
-O_TARGET	:= usb-storage.o
-M_OBJS		:= usb-storage.o
-O_OBJS		:= scsiglue.o protocol.o transport.o usb.o 
-MOD_LIST_NAME	:= USB_STORAGE_MODULES
+O_TARGET	:= storage.o
+EXTRA_CFLAGS	:= -I../../scsi/
 
-CFLAGS_scsiglue.o:= -I../../scsi/
-CFLAGS_protocol.o:= -I../../scsi/
-CFLAGS_transport.o:= -I../../scsi/
-CFLAGS_debug.o:= -I../../scsi/
-CFLAGS_usb.o:= -I../../scsi/
-CFLAGS_shuttle_usbat.o:= -I../../scsi/
-CFLAGS_sddr09.o:= -I../../scsi/
-CFLAGS_dpcm.o:= -I../../scsi/
+list-multi	:= usb-storage.o
 
-ifeq ($(CONFIG_USB_STORAGE_DEBUG),y)
-	O_OBJS += debug.o
-endif
+obj-$(CONFIG_USB_STORAGE)			+= usb-storage.o
 
-ifeq ($(CONFIG_USB_STORAGE_HP8200e),y)
-	O_OBJS += shuttle_usbat.o
-endif
+usb-storage-obj-$(CONFIG_USB_STORAGE_DEBUG)	+= debug.o
+usb-storage-obj-$(CONFIG_USB_STORAGE_HP8200e)	+= shuttle_usbat.o
+usb-storage-obj-$(CONFIG_USB_STORAGE_SDDR09)	+= sddr09.o
+usb-storage-obj-$(CONFIG_USB_STORAGE_FREECOM)	+= freecom.o
+usb-storage-obj-$(CONFIG_USB_STORAGE_SHUTTLE_SMARTMEDIA)   += shuttle_sm.o
+usb-storage-obj-$(CONFIG_USB_STORAGE_SHUTTLE_COMPACTFLASH) += shuttle_cf.o
+usb-storage-obj-$(CONFIG_USB_STORAGE_DPCM)	+= dpcm.o
 
-ifeq ($(CONFIG_USB_STORAGE_SDDR09),y)
-	O_OBJS += sddr09.o
-endif
+usb-storage-objs :=	scsiglue.o protocol.o transport.o usb.o \
+			$(usb-storage-obj-y)
 
-ifeq ($(CONFIG_USB_STORAGE_FREECOM),y)
-	O_OBJS += freecom.o
-endif
+# Extract lists of the multi-part drivers.
+# The 'int-*' lists are the intermediate files used to build the multi's.
+multi-y		:= $(filter $(list-multi), $(obj-y))
+multi-m		:= $(filter $(list-multi), $(obj-m))
+int-y		:= $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
+int-m		:= $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
 
-ifeq ($(CONFIG_USB_STORAGE_SHUTTLE_SMARTMEDIA),y)
-	O_OBJS += shuttle_sm.o
-endif
+# Take multi-part drivers out of obj-y and put components in.
+obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
 
-ifeq ($(CONFIG_USB_STORAGE_SHUTTLE_COMPACTFLASH),y)
-	O_OBJS += shuttle_cf.o
-endif
+# Translate to Rules.make lists.
+O_OBJS		:= $(obj-y)
+M_OBJS		:= $(obj-m)
+MI_OBJS		:= $(int-m)
 
-ifeq ($(CONFIG_USB_STORAGE_DPCM),y)
-	O_OBJS += dpcm.o
-endif
- 
 include $(TOPDIR)/Rules.make
+
+usb-storage.o: $(usb-storage-objs)
+	$(LD) -r -o $@ $(usb-storage-objs)

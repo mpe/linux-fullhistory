@@ -546,7 +546,7 @@ unsigned char mca_read_pos(int slot, int reg)
 		outb_p(0x7f, MCA_MOTHERBOARD_SETUP_REG);
 
 		byte = inb_p(MCA_POS_REG(reg));
-		outp_b(0xff, MCA_MOTHERBOARD_SETUP_REG);
+		outb_p(0xff, MCA_MOTHERBOARD_SETUP_REG);
 	} else if(slot < MCA_MAX_SLOT_NR) {
 
 		/* Make sure motherboard setup is off */

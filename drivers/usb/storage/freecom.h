@@ -1,15 +1,15 @@
-/* Driver for Microtech DPCM-USB CompactFlash/SmartMedia reader
+/* Driver for Freecom USB/IDE adaptor
  *
- * $Id: dpcm.h,v 1.2 2000/08/25 00:13:51 mdharm Exp $
+ * $Id: freecom.h,v 1.3 2000/08/25 00:13:51 mdharm Exp $
  *
- * DPCM driver v0.1:
+ * Freecom v0.1:
  *
  * First release
  *
  * Current development and maintenance by:
- *   (c) 2000 Brian Webb (webbb@earthlink.net)
+ *   (c) 2000 David Brown <usb-storage@davidb.org>
  *
- * See dpcm.c for more explanation
+ * See freecom.c for more explanation
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -26,9 +26,10 @@
  * 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef _MICROTECH_DPCM_USB_H
-#define _MICROTECH_DPCM_USB_H
+#ifndef _FREECOM_USB_H
+#define _FREECOM_USB_H
 
-extern int dpcm_transport(Scsi_Cmnd *srb, struct us_data *us);
+extern int freecom_transport(Scsi_Cmnd *srb, struct us_data *us);
+extern int usb_stor_freecom_reset(struct us_data *us);
 
 #endif

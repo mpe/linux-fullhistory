@@ -62,7 +62,6 @@ extern inline unsigned long _page_hashfn(struct address_space * mapping, unsigne
 #define s(x) ((x)+((x)>>PAGE_HASH_BITS))
 	return s(i+index) & (PAGE_HASH_SIZE-1);
 #undef i
-#undef o
 #undef s
 }
 

@@ -1,10 +1,12 @@
 /* Driver for SanDisk SDDR-09 SmartMedia reader
  *
+ * $Id: sddr09.c,v 1.10 2000/08/25 00:13:51 mdharm Exp $
+ *
  * SDDR09 driver v0.1:
  *
  * First release
  *
- * Current development and maintainance by:
+ * Current development and maintenance by:
  *   (c) 2000 Robert Baruch (autophile@dol.net)
  *
  * The SanDisk SDDR-09 SmartMedia reader uses the Shuttle EUSB-01 chip.
@@ -316,9 +318,9 @@ int sddr09_read_data(struct us_data *us,
 
 	// Figure out the initial LBA and page
 
-	pba = (address/info->pagesize)>>4;
+	pba = address >> (info->pageshift + info->blockshift);
 	lba = info->pba_to_lba[pba];
-	page = (address/info->pagesize)&0x0F;
+	page = (address >> info->pageshift) & info->blockmask;
 
 	// This could be made much more efficient by checking for
 	// contiguous LBA's. Another exercise left to the student.
@@ -329,15 +331,16 @@ int sddr09_read_data(struct us_data *us,
 
 		// Read as many sectors as possible in this block
 
-		pages = 0x10-page;
+		pages = info->blocksize - page;
 		if (pages > sectors)
 			pages = sectors;
 
-		US_DEBUGP("Read %01X pages, from PBA %04X"
-			" (LBA %04X) page %01X\n",
+		US_DEBUGP("Read %02X pages, from PBA %04X"
+			" (LBA %04X) page %02X\n",
 			pages, pba, lba, page);
 
-		address = ((pba<<4)+page)*info->pagesize;
+		address = ( (pba << info->blockshift) + page ) << 
+			info->pageshift;
 
 		// Unlike in the documentation, the address is in
 		// words of 2 bytes.
@@ -370,7 +373,7 @@ int sddr09_read_data(struct us_data *us,
 
 		result = sddr09_bulk_transport(us,
 			SCSI_DATA_READ, ptr,
-			pages*info->pagesize, 0);
+			pages<<info->pageshift, 0);
 
 		if (result != USB_STOR_TRANSPORT_GOOD) {
 			if (use_sg)
@@ -381,7 +384,7 @@ int sddr09_read_data(struct us_data *us,
 		page = 0;
 		lba++;
 		sectors -= pages;
-		ptr += pages*info->pagesize;
+		ptr += (pages << info->pageshift);
 	}
 
 	if (use_sg) {
@@ -435,7 +438,7 @@ int sddr09_read_control(struct us_data *us,
 
 	result = sddr09_bulk_transport(us,
 		SCSI_DATA_READ, content,
-		blocks*0x40, use_sg);
+		blocks<<6, use_sg); // 0x40 bytes per block
 
 	US_DEBUGP("Result for bulk read in read_control %d\n",
 		result);
@@ -525,7 +528,7 @@ int sddr09_reset(struct us_data *us) {
 }
 
 unsigned long sddr09_get_capacity(struct us_data *us,
-		unsigned int *pagesize) {
+		unsigned int *pagesize, unsigned int *blocksize) {
 
 	unsigned char manufacturerID;
 	unsigned char deviceID;
@@ -547,6 +550,7 @@ unsigned long sddr09_get_capacity(struct us_data *us,
 	US_DEBUGP("Manuf  ID = %02X\n", manufacturerID);
 
 	*pagesize = 512;
+	*blocksize = 16;
 
 	switch (deviceID) {
 
@@ -556,8 +560,8 @@ unsigned long sddr09_get_capacity(struct us_data *us,
 		*pagesize = 256;
 		return 0x00100000;
 
-	case 0x5d: // 2MB
-	case 0xea: 
+	case 0xea: // 2MB
+	case 0x5d: // 5d is a ROM card with pagesize 512.
 	case 0x64:
 		if (deviceID!=0x5D)
 			*pagesize = 256;
@@ -574,9 +578,11 @@ unsigned long sddr09_get_capacity(struct us_data *us,
 		return 0x00800000;
 
 	case 0x73: // 16MB
+		*blocksize = 32;
 		return 0x01000000;
 
 	case 0x75: // 32MB
+		*blocksize = 32;
 		return 0x02000000;
 
 	default: // unknown
@@ -587,7 +593,7 @@ unsigned long sddr09_get_capacity(struct us_data *us,
 
 int sddr09_read_map(struct us_data *us) {
 
-	unsigned char *control;
+	struct scatterlist *sg;
 	struct sddr09_card_info *info = (struct sddr09_card_info *)(us->extra);
 	int numblocks;
 	int i;
@@ -599,25 +605,60 @@ int sddr09_read_map(struct us_data *us) {
 		1, 0, 0, 1, 0, 1, 1, 0
 	};
 	int result;
+	int alloc_len;
+	int alloc_blocks;
 
 	if (!info->capacity)
 		return -1;
 
-	/* read 64 (2^6) bytes for every block (8192 (2^13) bytes)
-		 of capacity:
-	   64*(capacity/8192) = capacity*(2^6)*(2^-13) =
-	   capacity*2^(6-13) = capacity*(2^-7)
-	 */
+	// read 64 (1<<6) bytes for every block 
+	// ( 1 << ( blockshift + pageshift ) bytes)
+	//	 of capacity:
+	// (1<<6)*capacity/(1<<(b+p)) =
+	// ((1<<6)*capacity)>>(b+p) =
+	// capacity>>(b+p-6)
 
-	control = kmalloc(info->capacity>>7, GFP_KERNEL);
+	alloc_len = info->capacity >> 
+		(info->blockshift + info->pageshift - 6);
 
+	// Allocate a number of scatterlist structures according to
+	// the number of 128k blocks in the alloc_len. Adding 128k-1
+	// and then dividing by 128k gives the correct number of blocks.
+	// 128k = 1<<17
 
-	numblocks = info->capacity>>13;
+	alloc_blocks = (alloc_len + (1<<17) - 1) >> 17;
+	sg = kmalloc(alloc_blocks*sizeof(struct scatterlist),
+		GFP_KERNEL);
+	if (sg == NULL)
+		return 0;
+
+	for (i=0; i<alloc_blocks; i++) {
+		if (i<alloc_blocks-1) {
+			sg[i].address = kmalloc( (1<<17), GFP_KERNEL );
+			sg[i].length = (1<<17);
+		} else {
+			sg[i].address = kmalloc(alloc_len, GFP_KERNEL);
+			sg[i].length = alloc_len;
+		}
+		alloc_len -= sg[i].length;
+	}
+	for (i=0; i<alloc_blocks; i++)
+		if (sg[i].address == NULL) {
+			for (i=0; i<alloc_blocks; i++)
+				if (sg[i].address != NULL)
+					kfree(sg[i].address);
+			kfree(sg);
+			return 0;
+		}
+
+	numblocks = info->capacity >> (info->blockshift + info->pageshift);
 
 	if ( (result = sddr09_read_control(us, 0, numblocks,
-			control, 0)) !=
+			(unsigned char *)sg, alloc_blocks)) !=
 			USB_STOR_TRANSPORT_GOOD) {
-		kfree(control);
+		for (i=0; i<alloc_blocks; i++)
+			kfree(sg[i].address);
+		kfree(sg);
 		return -1;
 	}
 
@@ -629,11 +670,28 @@ int sddr09_read_map(struct us_data *us) {
 		kfree(info->pba_to_lba);
 	info->lba_to_pba = kmalloc(numblocks*sizeof(int), GFP_KERNEL);
 	info->pba_to_lba = kmalloc(numblocks*sizeof(int), GFP_KERNEL);
+
+	if (info->lba_to_pba == NULL || info->pba_to_lba == NULL) {
+		if (info->lba_to_pba != NULL)
+			kfree(info->lba_to_pba);
+		if (info->pba_to_lba != NULL)
+			kfree(info->pba_to_lba);
+		info->lba_to_pba = NULL;
+		info->pba_to_lba = NULL;
+		for (i=0; i<alloc_blocks; i++)
+			kfree(sg[i].address);
+		kfree(sg);
+		return 0;
+	}
+
 	memset(info->lba_to_pba, 0, numblocks*sizeof(int));
 	memset(info->pba_to_lba, 0, numblocks*sizeof(int));
 
+	// Each block is 64 bytes of control data, so block i is located in
+	// scatterlist block i*64/128k = i*(2^6)*(2^-17) = i*(2^-11)
+
 	for (i=0; i<numblocks; i++) {
-		ptr = control+64*i;
+		ptr = sg[i>>11].address+(i<<6);
 		if (ptr[0]!=0xFF || ptr[1]!=0xFF || ptr[2]!=0xFF ||
 		    ptr[3]!=0xFF || ptr[4]!=0xFF || ptr[5]!=0xFF)
 			continue;
@@ -655,20 +713,30 @@ int sddr09_read_map(struct us_data *us) {
 
 		lba = (lba&0x07FF)>>1;
 
+			/* Every 1024 physical blocks, the LBA numbers
+			 * go back to zero, but are within a higher
+			 * block of LBA's. In other words, in blocks
+			 * 1024-2047 you will find LBA 0-1023 which are
+			 * really LBA 1024-2047.
+			 */
+
+		lba += (i&~0x3FF);
+
 		if (lba>=numblocks) {
 			US_DEBUGP("Bad LBA %04X for block %04X\n", lba, i);
 			continue;
 		}
 
-		if (i<0x10)
-			US_DEBUGP("LBA %04X <-> PBA %04X\n",
-				lba, i);
+		if (lba<0x10)
+			US_DEBUGP("LBA %04X <-> PBA %04X\n", lba, i);
 
 		info->pba_to_lba[i] = lba;
 		info->lba_to_pba[lba] = i;
 	}
 
-	kfree(control);
+	for (i=0; i<alloc_blocks; i++)
+		kfree(sg[i].address);
+	kfree(sg);
 	return 0;
 }
 
@@ -686,6 +754,9 @@ static int init_sddr09(struct us_data *us) {
 	unsigned char tur[12] = {
 		0x03, 0x20, 0, 0, 0x0e, 0, 0, 0, 0, 0, 0, 0
 	};
+
+	// What the hey is all this for? Doesn't seem to
+	// affect the device, so we won't do device inits.
 
 	if ( (result = sddr09_send_control(us, command, data, 2)) !=
 			USB_STOR_TRANSPORT_GOOD)
@@ -741,11 +812,7 @@ int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us)
 	int i;
 	char string[64];
 	unsigned char inquiry_response[36] = {
-		0x00, 0x80, 0x00, 0x02, 0x1F, 0x00, 0x00, 0x00,
-		'S', 'a', 'n', 'D', 'i', 's', 'k', ' ',
-		'I', 'm', 'a', 'g', 'e', 'M', 'a', 't',
-		'e', ' ', 'S', 'D', 'D', 'R', '0', '9',
-		' ', ' ', ' ', ' '
+		0x00, 0x80, 0x00, 0x02, 0x1F, 0x00, 0x00, 0x00
 	};
 	unsigned char mode_page_01[12] = {
 		0x01, 0x0a, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -758,17 +825,11 @@ int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us)
 	unsigned short pages;
 	struct sddr09_card_info *info = (struct sddr09_card_info *)(us->extra);
 
-/*
-	if (us->flags & US_FL_NEED_INIT) {
-		US_DEBUGP("SDDR-09: initializing\n");
-		init_sddr09(us);
-		us->flags &= ~US_FL_NEED_INIT;
-	}
-*/
-
 	if (!us->extra) {
 		us->extra = kmalloc(
 			sizeof(struct sddr09_card_info), GFP_KERNEL);
+		if (!us->extra)
+			return USB_STOR_TRANSPORT_ERROR;
 		memset(us->extra, 0, sizeof(struct sddr09_card_info));
 		us->extra_destructor = sddr09_card_info_destructor;
 	}
@@ -779,14 +840,29 @@ int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us)
 	   respond to INQUIRY commands */
 
 	if (srb->cmnd[0] == INQUIRY) {
-		memcpy(ptr, inquiry_response, 36);
+		memset(inquiry_response+8, 0, 28);
+		fill_inquiry_response(us, inquiry_response, 36);
 		return USB_STOR_TRANSPORT_GOOD;
 	}
 
 	if (srb->cmnd[0] == READ_CAPACITY) {
 
-		capacity = sddr09_get_capacity(us, &info->pagesize);
+		capacity = sddr09_get_capacity(us, &info->pagesize,
+			&info->blocksize);
+
+		if (!capacity)
+			return USB_STOR_TRANSPORT_FAILED;
+
 		info->capacity = capacity;
+		for (info->pageshift=1; 
+			(info->pagesize>>info->pageshift);
+			info->pageshift++);
+		info->pageshift--;
+		for (info->blockshift=1; 
+			(info->blocksize>>info->blockshift);
+			info->blockshift++);
+		info->blockshift--;
+		info->blockmask = (1<<info->blockshift)-1;
 
 		// Last page in the card
 
@@ -836,12 +912,14 @@ int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us)
 
 		// convert page to block and page-within-block
 
-		lba = page>>4;
-		page = page&0x0F;
+		lba = page >> info->blockshift;
+		page = page & info->blockmask;
 
 		// locate physical block corresponding to logical block
 
-		if (lba>=(info->capacity>>13)) {
+		if (lba >=
+			(info->capacity >> 
+				(info->pageshift + info->blockshift) ) ) {
 
 			// FIXME: sense buffer?
 
@@ -866,8 +944,8 @@ int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us)
 			pba, lba, page, pages);
 
 		return sddr09_read_data(us,
-			((pba<<4)+page)*info->pagesize, pages,
-			ptr, srb->use_sg);
+			( (pba << info->blockshift) + page) << info->pageshift,
+			pages, ptr, srb->use_sg);
 	}
 
 	// Pass TEST_UNIT_READY and REQUEST_SENSE through

@@ -1,8 +1,8 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: usb.c,v 1.23 2000/08/08 20:46:45 mdharm Exp $
+ * $Id: usb.c,v 1.33 2000/08/25 00:13:51 mdharm Exp $
  *
- * Current development and maintainance by:
+ * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
  * Developed with the assistance of:
@@ -43,7 +43,6 @@
  * 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <linux/config.h>
 #include "usb.h"
 #include "scsiglue.h"
 #include "transport.h"
@@ -58,12 +57,16 @@
 #ifdef CONFIG_USB_STORAGE_DPCM
 #include "dpcm.h"
 #endif
+#ifdef CONFIG_USB_STORAGE_FREECOM
+#include "freecom.h"
+#endif
 
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/malloc.h>
+#include <linux/config.h>
 
 /* Some informational data */
 MODULE_AUTHOR("Matthew Dharm <mdharm-usb@one-eyed-alien.net>");
@@ -213,8 +216,20 @@ static int usb_stor_control_thread(void * __us)
 			/* reject if target != 0 or if LUN is higher than
 			 * the maximum known LUN
 			 */
-			if (us->srb->target || (us->srb->lun > us->max_lun)) {
-				US_DEBUGP("Bad device number (%d/%d)\n",
+			if (us->srb->target && 
+					!(us->flags & US_FL_SCM_MULT_TARG)) {
+				US_DEBUGP("Bad target number (%d/%d)\n",
+					  us->srb->target, us->srb->lun);
+				us->srb->result = DID_BAD_TARGET << 16;
+
+				set_current_state(TASK_INTERRUPTIBLE);
+				us->srb->scsi_done(us->srb);
+				us->srb = NULL;
+				break;
+			}
+
+			if (us->srb->lun > us->max_lun) {
+				US_DEBUGP("Bad LUN (%d/%d)\n",
 					  us->srb->target, us->srb->lun);
 				us->srb->result = DID_BAD_TARGET << 16;
 
@@ -314,6 +329,19 @@ static int usb_stor_control_thread(void * __us)
  * are free to use as many characters as you like.
  */
 
+int euscsi_init(struct us_data *us)
+{
+	unsigned char bar = 0x1;
+	int result;
+
+	US_DEBUGP("Attempting to init eUSCSI bridge...\n");
+	result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev, 0),
+			0x0C, USB_RECIP_INTERFACE | USB_TYPE_VENDOR,
+			0x01, 0x0, &bar, 0x1, 5*HZ);
+	US_DEBUGP("-- result is %d\n", result);
+	US_DEBUGP("-- bar afterwards is %d\n", bar);
+}
+
 static struct us_unusual_dev us_unusual_dev_list[] = {
 
 	{ 0x03f0, 0x0107, 0x0200, 0x0200, 
@@ -339,14 +367,60 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 	{ 0x04e6, 0x0002, 0x0100, 0x0100, 
 		"Shuttle",
 		"eUSCSI Bridge",
-		US_SC_SCSI, US_PR_BULK, NULL, 
-		0 }, 
+		US_SC_SCSI, US_PR_BULK, euscsi_init, 
+		US_FL_SCM_MULT_TARG }, 
 
-	{ 0x04e6, 0x0006, 0x0100, 0x0100, 
+#ifdef CONFIG_USB_STORAGE_SDDR09
+	{ 0x04e6, 0x0003, 0x0000, 0x9999, 
+		"Sandisk",
+		"ImageMate SDDR09",
+		US_SC_SCSI, US_PR_EUSB_SDDR09, NULL,
+		US_FL_SINGLE_LUN | US_FL_START_STOP },
+#endif
+
+#ifdef CONFIG_USB_STORAGE_DPCM
+ 	{ 0x0436, 0x0005, 0x0100, 0x0100,
+		"Microtech",
+		"CameraMate (DPCM_USB)",
+ 		US_SC_SCSI, US_PR_DPCM_USB, NULL,
+		US_FL_START_STOP },
+#endif
+
+	{ 0x04e6, 0x0006, 0x0100, 0x0200, 
 		"Shuttle",
 		"eUSB MMC Adapter",
 		US_SC_SCSI, US_PR_CB, NULL, 
 		US_FL_SINGLE_LUN}, 
+
+	{ 0x04e6, 0x0009, 0x0200, 0x0200, 
+		"Shuttle",
+		"ATA/ATAPI Bridge",
+		US_SC_8020, US_PR_CB, NULL, 
+		US_FL_SINGLE_LUN},
+
+	{ 0x04e6, 0x000A, 0x0200, 0x0200, 
+		"Shuttle",
+		"Compact Flash Reader",
+		US_SC_8020, US_PR_CB, NULL, 
+		US_FL_SINGLE_LUN},
+
+	{ 0x04e6, 0x000B, 0x0100, 0x0100, 
+		"Shuttle",
+		"eUSCSI Bridge",
+		US_SC_SCSI, US_PR_BULK, euscsi_init, 
+		US_FL_SCM_MULT_TARG }, 
+
+	{ 0x04e6, 0x000C, 0x0100, 0x0100, 
+		"Shuttle",
+		"eUSCSI Bridge",
+		US_SC_SCSI, US_PR_BULK, euscsi_init, 
+		US_FL_SCM_MULT_TARG }, 
+
+	{ 0x04e6, 0x0101, 0x0200, 0x0200, 
+		"Shuttle",
+		"CD-RW Device",
+		US_SC_8020, US_PR_CB, NULL, 
+		US_FL_SINGLE_LUN},
 
 	{ 0x054c, 0x0010, 0x0210, 0x0210, 
 		"Sony",
@@ -371,6 +445,24 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 		"Flashbuster-U",
 		US_SC_UFI,  US_PR_CBI, NULL,
 		US_FL_SINGLE_LUN},
+
+	{ 0x059f, 0xa601, 0x0200, 0x0200, 
+		"LaCie",
+		"USB Hard Disk",
+		US_SC_RBC, US_PR_CB, NULL,
+		0 }, 
+
+	{ 0x05ab, 0x0031, 0x0100, 0x0100, 
+		"In-System",
+		"USB/IDE Bridge",
+		US_SC_8070, US_PR_BULK, NULL,
+		0 }, 
+
+	{ 0x0693, 0x0005, 0x0100, 0x0100,
+		"Hagiwara",
+		"Flashgate",
+		US_SC_SCSI, US_PR_BULK, NULL,
+		0 }, 
 
 	{ 0x0693, 0x0002, 0x0100, 0x0100, 
 		"Hagiwara",
@@ -401,14 +493,21 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 	{ 0x07af, 0x0004, 0x0100, 0x0100, 
 		"Microtech",
 		"USB-SCSI-DB25",
-		US_SC_SCSI, US_PR_BULK, NULL,
-		0 }, 
+		US_SC_SCSI, US_PR_BULK, euscsi_init,
+		US_FL_SCM_MULT_TARG }, 
 
-	{ 0x059f, 0xa601, 0x0200, 0x0200, 
-		"LaCie",
-		"USB Hard Disk",
-		US_SC_RBC, US_PR_CB, NULL,
-		0 }, 
+#ifdef CONFIG_USB_STORAGE_FREECOM
+        { 0x07ab, 0xfc01, 0x0921, 0x0921,
+                "Freecom",
+                "USB-IDE",
+                US_SC_8070, US_PR_FREECOM, NULL, US_FL_SINGLE_LUN },
+#endif
+
+	{ 0x07af, 0x0005, 0x0100, 0x0100, 
+		"Microtech",
+		"USB-SCSI-HD50",
+		US_SC_SCSI, US_PR_BULK, euscsi_init,
+		US_FL_SCM_MULT_TARG }, 
 
 #ifdef CONFIG_USB_STORAGE_DPCM
  	{ 0x07af, 0x0006, 0x0100, 0x0100,
@@ -417,25 +516,6 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
  		US_SC_SCSI, US_PR_DPCM_USB, NULL,
 		US_FL_START_STOP },
 #endif
-
-	{ 0x07af, 0x0005, 0x0100, 0x0100, 
-		"Microtech",
-		"USB-SCSI-HD50",
-		US_SC_SCSI, US_PR_BULK, NULL,
-		0 }, 
-
-	{ 0x05ab, 0x0031, 0x0100, 0x0100, 
-		"In-System",
-		"USB/IDE Bridge",
-		US_SC_8070, US_PR_BULK, NULL,
-		0 }, 
-
-	{ 0x0693, 0x0005, 0x0100, 0x0100,
-		"Hagiwara",
-		"Flashgate",
-		US_SC_SCSI, US_PR_BULK, NULL,
-		0 }, 
-
 	{ 0 }
 };
 
@@ -615,15 +695,10 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 
 	/* set the interface -- STALL is an acceptable response here */
 #ifdef CONFIG_USB_STORAGE_SDDR09
-	if (protocol != US_PR_EUSB_SDDR09)
-		result = usb_set_interface(dev, 
-			altsetting->bInterfaceNumber, 0);
-	else
+	if (protocol == US_PR_EUSB_SDDR09)
 		result = usb_set_configuration(dev, 1);
-#else
-	result = usb_set_interface(dev, altsetting->bInterfaceNumber, 0);
-#endif
-	US_DEBUGP("Result from usb_set_interface is %d\n", result);
+
+	US_DEBUGP("Result from usb_set_configuration is %d\n", result);
 	if (result == -EPIPE) {
 		US_DEBUGP("-- clearing stall on control interface\n");
 		usb_clear_halt(dev, usb_sndctrlpipe(dev, 0));
@@ -632,6 +707,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		US_DEBUGP("-- Unknown error.  Rejecting device\n");
 		return NULL;
 	}
+#endif
 
 	/* Do some basic sanity checks, and bail if we find a problem */
 	if (!ep_in || !ep_out || (protocol == US_PR_CBI && !ep_int)) {
@@ -702,7 +778,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
                 /* Re-Initialize the device if it needs it */
 
 		if (unusual_dev && unusual_dev->initFunction)
-			(*unusual_dev->initFunction)(ss);
+			(unusual_dev->initFunction)(ss);
 
 	} else { 
 		/* New device -- allocate memory and initialize */
@@ -828,6 +904,15 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			ss->max_lun = 1;
 			break;
 #endif
+
+#ifdef CONFIG_USB_STORAGE_FREECOM
+                case US_PR_FREECOM:
+                        ss->transport_name = "Freecom";
+                        ss->transport = freecom_transport;
+                        ss->transport_reset = usb_stor_freecom_reset;
+                        ss->max_lun = 0;
+                        break;
+#endif
 			
 		default:
 			ss->transport_name = "Unknown";
@@ -909,7 +994,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		/* Just before we start our control thread, initialize
 		 * the device if it needs initialization */
 		if (unusual_dev && unusual_dev->initFunction)
-			(*unusual_dev->initFunction)(ss);
+			(unusual_dev->initFunction)(ss);
 		
 		/* start up our control thread */
 		ss->pid = kernel_thread(usb_stor_control_thread, ss,

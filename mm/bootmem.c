@@ -205,7 +205,7 @@ found:
 			bdata->last_pos = start+areasize-1;
 			bdata->last_offset = remaining_size;
 		}
- 		bdata->last_offset &= ~PAGE_MASK;
+		bdata->last_offset &= ~PAGE_MASK;
 	} else {
 		bdata->last_pos = start + areasize - 1;
 		bdata->last_offset = size & ~PAGE_MASK;

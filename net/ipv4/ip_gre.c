@@ -632,6 +632,9 @@ int ipgre_rcv(struct sk_buff *skb, unsigned short len)
 #ifdef CONFIG_NETFILTER
 		nf_conntrack_put(skb->nfct);
 		skb->nfct = NULL;
+#ifdef CONFIG_NETFILTER_DEBUG
+		skb->nf_debug = 0;
+#endif
 #endif
 		ipgre_ecn_decapsulate(iph, skb);
 		netif_rx(skb);
@@ -858,6 +861,9 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 #ifdef CONFIG_NETFILTER
 	nf_conntrack_put(skb->nfct);
 	skb->nfct = NULL;
+#ifdef CONFIG_NETFILTER_DEBUG
+	skb->nf_debug = 0;
+#endif
 #endif
 
 	IPTUNNEL_XMIT();

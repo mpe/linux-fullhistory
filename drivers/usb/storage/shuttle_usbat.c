@@ -1,6 +1,6 @@
 /* Driver for SCM Microsystems USB-ATAPI cable
  *
- * $Id: shuttle_usbat.c,v 1.2 2000/08/03 00:03:39 groovyjava Exp $
+ * $Id: shuttle_usbat.c,v 1.4 2000/08/25 00:13:51 mdharm Exp $
  *
  * SCM driver v0.2:
  *
@@ -14,7 +14,7 @@
  *
  * First release - hp8200e.
  *
- * Current development and maintainance by:
+ * Current development and maintenance by:
  *   (c) 2000 Robert Baruch (autophile@dol.net)
  *
  * Many originally ATAPI devices were slightly modified to meet the USB
@@ -734,7 +734,7 @@ static int hp_8200e_select_and_test_registers(struct us_data *us) {
 	return result;
 }
 
-static int init_8200e(struct us_data *us) {
+int init_8200e(struct us_data *us) {
 
 	int result;
 	unsigned char status;
@@ -895,11 +895,11 @@ int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us)
 	  "XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* C0-DF */
 	  "XDXXXXXXXXXXXXXX" "XXW00HXXXXXXXXXX"; /* E0-FF */
 
-	if (us->flags & US_FL_NEED_INIT) {
+/*	if (us->flags & US_FL_NEED_INIT) {
 		US_DEBUGP("8200e: initializing\n");
 		init_8200e(us);
 		us->flags &= ~US_FL_NEED_INIT;
-	}
+	} */
 
 	len = srb->request_bufflen;
 

@@ -455,17 +455,35 @@ signed long schedule_timeout(signed long timeout)
 static inline void __schedule_tail(struct task_struct *prev)
 {
 #ifdef CONFIG_SMP
-	if ((prev->state == TASK_RUNNING) &&
-			(prev != idle_task(smp_processor_id()))) {
-		unsigned long flags;
+	unsigned long flags;
 
-		spin_lock_irqsave(&runqueue_lock, flags);
-		prev->has_cpu = 0;
-		reschedule_idle(prev, flags); // spin_unlocks runqueue
-	} else {
-		wmb();
-		prev->has_cpu = 0;
-	}
+	/*
+	 * fast path falls through. We have to take the runqueue lock
+	 * unconditionally to make sure that the test of prev->state
+	 * and setting has_cpu is atomic wrt. interrupts. It's not
+	 * a big problem in the common case because we recently took
+	 * the runqueue lock so it's likely to be in this processor's
+	 * cache.
+	 */
+	spin_lock_irqsave(&runqueue_lock, flags);
+	prev->has_cpu = 0;
+	if (prev->state == TASK_RUNNING)
+		goto running_again;
+out_unlock:
+	spin_unlock_irqrestore(&runqueue_lock, flags);
+	return;
+
+	/*
+	 * Slow path - we 'push' the previous process and
+	 * reschedule_idle() will attempt to find a new
+	 * processor for it. (but it might preempt the
+	 * current process as well.)
+	 */
+running_again:
+	if (prev == idle_task(smp_processor_id()))
+		goto out_unlock;
+	reschedule_idle(prev, flags); // spin_unlocks runqueue
+	return;
 #endif /* CONFIG_SMP */
 }
 

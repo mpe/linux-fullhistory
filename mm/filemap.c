@@ -895,7 +895,7 @@ static void generic_file_readahead(int reada_ok,
  * page only.
  */
 	if (PageLocked(page)) {
-		if (!filp->f_ralen || index >= raend || index + filp->f_ralen < raend) {
+		if (!filp->f_ralen || index >= raend || index + filp->f_rawin < raend) {
 			raend = index;
 			if (raend < end_index)
 				max_ahead = filp->f_ramax;
@@ -1072,6 +1072,7 @@ found_page:
 
 		if (!Page_Uptodate(page))
 			goto page_not_up_to_date;
+		generic_file_readahead(reada_ok, filp, inode, page);
 page_ok:
 		/*
 		 * Ok, we have the page, and it's up-to-date, so

@@ -1,9 +1,9 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI Connecting Glue Header File
  *
- * $Id: scsiglue.h,v 1.3 2000/07/25 23:04:47 mdharm Exp $
+ * $Id: scsiglue.h,v 1.4 2000/08/25 00:13:51 mdharm Exp $
  *
- * Current development and maintainance by:
+ * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
  * This driver is based on the 'USB Mass Storage Class' document. This

@@ -246,7 +246,8 @@ static ssize_t nvram_read(struct file * file,
 
 	spin_unlock_irq (&rtc_lock);
 
-	copy_to_user_ret (buf, contents, tmp - contents, -EFAULT);
+	if (copy_to_user (buf, contents, tmp - contents))
+		return -EFAULT;
 
 	*ppos = i;
 
@@ -264,10 +265,9 @@ static ssize_t nvram_write(struct file * file,
 	unsigned i = *ppos;
 	char * tmp;
 
-	/* could comebody please help me indent this better? */
-	copy_from_user_ret (contents, buf, (NVRAM_BYTES - i) < count ?
-						(NVRAM_BYTES - i) : count,
-				-EFAULT);
+	if (copy_from_user (contents, buf, (NVRAM_BYTES - i) < count ?
+						(NVRAM_BYTES - i) : count))
+		return -EFAULT;
 
 	spin_lock_irq (&rtc_lock);
 

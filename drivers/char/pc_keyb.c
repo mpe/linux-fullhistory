@@ -62,6 +62,7 @@ static void kbd_write_command_w(int data);
 static void kbd_write_output_w(int data);
 #ifdef CONFIG_PSMOUSE
 static void aux_write_ack(int val);
+static void __aux_write_ack(int val);
 #endif
 
 spinlock_t kbd_controller_lock = SPIN_LOCK_UNLOCKED;
@@ -404,7 +405,7 @@ static inline void handle_mouse_event(unsigned char scancode)
 	}
 	else if(scancode == AUX_RECONNECT){
 		queue->head = queue->tail = 0;  /* Flush input queue */
-		aux_write_ack(AUX_ENABLE_DEV);  /* ping the mouse :) */
+		__aux_write_ack(AUX_ENABLE_DEV);  /* ping the mouse :) */
 		return;
 	}
 
@@ -822,11 +823,8 @@ static void aux_write_dev(int val)
 /*
  * Send a byte to the mouse & handle returned ack
  */
-static void aux_write_ack(int val)
+static void __aux_write_ack(int val)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&kbd_controller_lock, flags);
 	kb_wait();
 	kbd_write_command(KBD_CCMD_WRITE_MOUSE);
 	kb_wait();
@@ -834,6 +832,14 @@ static void aux_write_ack(int val)
 	/* we expect an ACK in response. */
 	mouse_reply_expected++;
 	kb_wait();
+}
+
+static void aux_write_ack(int val)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&kbd_controller_lock, flags);
+	__aux_write_ack(val);
 	spin_unlock_irqrestore(&kbd_controller_lock, flags);
 }
 

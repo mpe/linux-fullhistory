@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.42 2000/08/02 06:03:59 davem Exp $
+ *	$Id: sit.c,v 1.43 2000/08/25 02:15:47 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -401,6 +401,9 @@ int ipip6_rcv(struct sk_buff *skb, unsigned short len)
 #ifdef CONFIG_NETFILTER
 		nf_conntrack_put(skb->nfct);
 		skb->nfct = NULL;
+#ifdef CONFIG_NETFILTER_DEBUG
+		skb->nf_debug = 0;
+#endif
 #endif
 		ipip6_ecn_decapsulate(iph, skb);
 		netif_rx(skb);
@@ -567,6 +570,9 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 #ifdef CONFIG_NETFILTER
 	nf_conntrack_put(skb->nfct);
 	skb->nfct = NULL;
+#ifdef CONFIG_NETFILTER_DEBUG
+	skb->nf_debug = 0;
+#endif
 #endif
 
 	IPTUNNEL_XMIT();

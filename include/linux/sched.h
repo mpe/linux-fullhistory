@@ -38,6 +38,7 @@ extern unsigned long event;
 #define CLONE_PTRACE	0x00002000	/* set if we want to let tracing continue on the child too */
 #define CLONE_VFORK	0x00004000	/* set if the parent wants the child to wake it up on mm_release */
 #define CLONE_PARENT	0x00008000	/* set if we want to have the same parent as the cloner */
+#define CLONE_THREAD	0x00010000	/* set if we want to clone the "thread group" */
 
 /*
  * These are the constant used to fake the fixed-point load-average
@@ -311,6 +312,7 @@ struct task_struct {
 	pid_t pgrp;
 	pid_t tty_old_pgrp;
 	pid_t session;
+	pid_t tgid;
 	/* boolean value for session group leader */
 	int leader;
 	/* 
@@ -319,6 +321,7 @@ struct task_struct {
 	 * p->p_pptr->pid)
 	 */
 	struct task_struct *p_opptr, *p_pptr, *p_cptr, *p_ysptr, *p_osptr;
+	struct list_head thread_group;
 
 	/* PID hash table linkage. */
 	struct task_struct *pidhash_next;
@@ -435,6 +438,7 @@ struct task_struct {
     prev_task:		&tsk,						\
     p_opptr:		&tsk,						\
     p_pptr:		&tsk,						\
+    thread_group:	LIST_HEAD_INIT(tsk.thread_group),		\
     wait_chldexit:	__WAIT_QUEUE_HEAD_INITIALIZER(tsk.wait_chldexit),\
     real_timer:		{						\
 	function:		it_real_fn				\
@@ -556,8 +560,8 @@ extern int force_sig_info(int, struct siginfo *, struct task_struct *);
 extern int kill_pg_info(int, struct siginfo *, pid_t);
 extern int kill_sl_info(int, struct siginfo *, pid_t);
 extern int kill_proc_info(int, struct siginfo *, pid_t);
-extern int kill_something_info(int, struct siginfo *, int);
 extern void notify_parent(struct task_struct *, int);
+extern void do_notify_parent(struct task_struct *, int);
 extern void force_sig(int, struct task_struct *);
 extern int send_sig(int, struct task_struct *, int);
 extern int kill_pg(pid_t, int, int);
@@ -798,6 +802,8 @@ do {									\
 #define for_each_task(p) \
 	for (p = &init_task ; (p = p->next_task) != &init_task ; )
 
+#define next_thread(p) \
+	list_entry((p)->thread_group.next, struct task_struct, thread_group)
 
 static inline void del_from_runqueue(struct task_struct * p)
 {
@@ -818,6 +824,7 @@ static inline void unhash_process(struct task_struct *p)
 	nr_threads--;
 	unhash_pid(p);
 	REMOVE_LINKS(p);
+	list_del(&p->thread_group);
 	write_unlock_irq(&tasklist_lock);
 }
 

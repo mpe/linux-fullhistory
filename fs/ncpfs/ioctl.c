@@ -16,6 +16,7 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/highuid.h>
+#include <linux/vmalloc.h>
 
 #include <linux/ncp_fs.h>
 
@@ -25,6 +26,8 @@
 #define NCP_OBJECT_NAME_MAX_LEN	4096
 /* maximum limit for ncp_privatedata_ioctl */
 #define NCP_PRIVATE_DATA_MAX_LEN 8192
+/* maximum negotiable packet size */
+#define NCP_PACKET_SIZE_INTERNAL 65536
 
 int ncp_ioctl(struct inode *inode, struct file *filp,
 	      unsigned int cmd, unsigned long arg)
@@ -50,11 +53,11 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		  NCP_PACKET_SIZE - sizeof(struct ncp_request_header))) {
 			return -EINVAL;
 		}
-		bouncebuffer = kmalloc(NCP_PACKET_SIZE, GFP_NFS);
+		bouncebuffer = vmalloc(NCP_PACKET_SIZE_INTERNAL);
 		if (!bouncebuffer)
 			return -ENOMEM;
 		if (copy_from_user(bouncebuffer, request.data, request.size)) {
-			kfree(bouncebuffer);
+			vfree(bouncebuffer);
 			return -EFAULT;
 		}
 		ncp_lock_server(server);
@@ -67,7 +70,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		memcpy(server->packet, bouncebuffer, request.size);
 
 		result = ncp_request2(server, request.function, 
-			bouncebuffer, NCP_PACKET_SIZE);
+			bouncebuffer, NCP_PACKET_SIZE_INTERNAL);
 		if (result < 0)
 			result = -EIO;
 		else
@@ -78,7 +81,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		if (result >= 0)
 			if (copy_to_user(request.data, bouncebuffer, result))
 				result = -EFAULT;
-		kfree(bouncebuffer);
+		vfree(bouncebuffer);
 		return result;
 
 	case NCP_IOC_CONN_LOGGED_IN:

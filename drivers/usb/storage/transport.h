@@ -1,9 +1,9 @@
 /* Driver for USB Mass Storage compliant devices
  * Transport Functions Header File
  *
- * $Id: transport.h,v 1.8 2000/08/08 01:23:55 webbb Exp $
+ * $Id: transport.h,v 1.11 2000/08/25 00:13:51 mdharm Exp $
  *
- * Current development and maintainance by:
+ * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
  * This driver is based on the 'USB Mass Storage Class' document. This
@@ -41,8 +41,8 @@
 #ifndef _TRANSPORT_H_
 #define _TRANSPORT_H_
 
-#include <linux/config.h>
 #include <linux/blk.h>
+#include <linux/config.h>
 #include "usb.h"
 #include "scsi.h"
 
@@ -59,6 +59,10 @@
 						SDDR-09 */
 #endif
 #define US_PR_DPCM_USB  0xf0		/* Combination CB/SDDR09 */
+
+#ifdef CONFIG_USB_STORAGE_FREECOM
+#define US_PR_FREECOM   0xf1            /* Freecom */
+#endif
 
 /*
  * Bulk only data structures

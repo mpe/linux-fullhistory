@@ -144,17 +144,29 @@ static inline int has_stopped_jobs(int pgrp)
 	return retval;
 }
 
+/*
+ * When we die, we re-parent all our children.
+ * Try to give them to another thread in our process
+ * group, and if no such member exists, give it to
+ * the global child reaper process (ie "init")
+ */
 static inline void forget_original_parent(struct task_struct * father)
 {
-	struct task_struct * p;
+	struct task_struct * p, *reaper;
 
 	read_lock(&tasklist_lock);
+
+	/* Next in our thread group */
+	reaper = next_thread(father);
+	if (reaper == father)
+		reaper = child_reaper;
+
 	for_each_task(p) {
 		if (p->p_opptr == father) {
 			/* We dont want people slaying init */
 			p->exit_signal = SIGCHLD;
 			p->self_exec_id++;
-			p->p_opptr = child_reaper; /* init */
+			p->p_opptr = reaper;
 			if (p->pdeath_signal) send_sig(p->pdeath_signal, p, 0);
 		}
 	}
@@ -378,7 +390,6 @@ static void exit_notify(void)
 	    && !capable(CAP_KILL))
 		current->exit_signal = SIGCHLD;
 
-	notify_parent(current, current->exit_signal);
 
 	/*
 	 * This loop does two things:
@@ -390,6 +401,7 @@ static void exit_notify(void)
 	 */
 
 	write_lock_irq(&tasklist_lock);
+	do_notify_parent(current, current->exit_signal);
 	while (current->p_cptr != NULL) {
 		p = current->p_cptr;
 		current->p_cptr = p->p_osptr;
@@ -402,7 +414,7 @@ static void exit_notify(void)
 			p->p_osptr->p_ysptr = p;
 		p->p_pptr->p_cptr = p;
 		if (p->state == TASK_ZOMBIE)
-			notify_parent(p, p->exit_signal);
+			do_notify_parent(p, p->exit_signal);
 		/*
 		 * process group orphan check
 		 * Case ii: Our child is in a different pgrp
@@ -483,9 +495,9 @@ asmlinkage long sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struc
 {
 	int flag, retval;
 	DECLARE_WAITQUEUE(wait, current);
-	struct task_struct *p;
+	struct task_struct *tsk;
 
-	if (options & ~(WNOHANG|WUNTRACED|__WCLONE|__WALL))
+	if (options & ~(WNOHANG|WUNTRACED|__WNOTHREAD|__WCLONE|__WALL))
 		return -EINVAL;
 
 	add_wait_queue(&current->wait_chldexit,&wait);
@@ -493,27 +505,30 @@ repeat:
 	flag = 0;
 	current->state = TASK_INTERRUPTIBLE;
 	read_lock(&tasklist_lock);
- 	for (p = current->p_cptr ; p ; p = p->p_osptr) {
-		if (pid>0) {
-			if (p->pid != pid)
+	tsk = current;
+	do {
+		struct task_struct *p;
+	 	for (p = tsk->p_cptr ; p ; p = p->p_osptr) {
+			if (pid>0) {
+				if (p->pid != pid)
+					continue;
+			} else if (!pid) {
+				if (p->pgrp != current->pgrp)
+					continue;
+			} else if (pid != -1) {
+				if (p->pgrp != -pid)
+					continue;
+			}
+			/* Wait for all children (clone and not) if __WALL is set;
+			 * otherwise, wait for clone children *only* if __WCLONE is
+			 * set; otherwise, wait for non-clone children *only*.  (Note:
+			 * A "clone" child here is one that reports to its parent
+			 * using a signal other than SIGCHLD.) */
+			if (((p->exit_signal != SIGCHLD) ^ ((options & __WCLONE) != 0))
+			    && !(options & __WALL))
 				continue;
-		} else if (!pid) {
-			if (p->pgrp != current->pgrp)
-				continue;
-		} else if (pid != -1) {
-			if (p->pgrp != -pid)
-				continue;
-		}
-		/* Wait for all children (clone and not) if __WALL is set;
-		 * otherwise, wait for clone children *only* if __WCLONE is
-		 * set; otherwise, wait for non-clone children *only*.  (Note:
-		 * A "clone" child here is one that reports to its parent
-		 * using a signal other than SIGCHLD.) */
-		if (((p->exit_signal != SIGCHLD) ^ ((options & __WCLONE) != 0))
-		    && !(options & __WALL))
-			continue;
-		flag = 1;
-		switch (p->state) {
+			flag = 1;
+			switch (p->state) {
 			case TASK_STOPPED:
 				if (!p->exit_code)
 					continue;
@@ -543,15 +558,19 @@ repeat:
 					REMOVE_LINKS(p);
 					p->p_pptr = p->p_opptr;
 					SET_LINKS(p);
+					do_notify_parent(p, SIGCHLD);
 					write_unlock_irq(&tasklist_lock);
-					notify_parent(p, SIGCHLD);
 				} else
 					release(p);
 				goto end_wait4;
 			default:
 				continue;
+			}
 		}
-	}
+		if (options & __WNOTHREAD)
+			break;
+		tsk = next_thread(tsk);
+	} while (tsk != current);
 	read_unlock(&tasklist_lock);
 	if (flag) {
 		retval = 0;

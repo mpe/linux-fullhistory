@@ -1,12 +1,12 @@
 /* Driver for Microtech DPCM-USB CompactFlash/SmartMedia reader
  *
- * $Id: dpcm.c,v 1.1 2000/08/08 01:26:12 webbb Exp $
+ * $Id: dpcm.c,v 1.3 2000/08/25 00:13:51 mdharm Exp $
  *
  * DPCM driver v0.1:
  *
  * First release
  *
- * Current development and maintainance by:
+ * Current development and maintenance by:
  *   (c) 2000 Brian Webb (webbb@earthlink.net)
  *
  * This device contains both a CompactFlash card reader, which
@@ -36,7 +36,6 @@
 #include "debug.h"
 #include "dpcm.h"
 #include "sddr09.h"
-
 
 /*
  * Transport for the Microtech DPCM-USB
