@@ -46,6 +46,9 @@
  */
 /* Changes for 1.1.43+ kernels made 8/25/94, code added to check for
  * new BIOS version, derived by jshiffle@netcom.com. (WDE)
+ *
+ * 1/7/95 Fix from Peter Lu (swift@world.std.com) for datalen vs. dataptr
+ * logic, much more stable under load.
  */
 
 #include <linux/kernel.h>
@@ -195,10 +198,9 @@ static void in2000_fifo_out(void)	/* uses FIFOCNTR */
 #endif
     } while((in2000_datalen > 0) && ((infcnt = (inb(INFCNT)) & 0xfe) >= 0x20) );
     /* If scatter-gather, go on to next segment */
-    if( !in2000_datalen && in2000_current_segment < in2000_nsegment)
+    if( !in2000_datalen && ++in2000_current_segment < in2000_nsegment)
       {
       in2000_scatter++;
-      in2000_current_segment++;
       in2000_datalen = in2000_scatter->length;
       in2000_dataptr = (unsigned short*)in2000_scatter->address;
       }
@@ -253,10 +255,9 @@ DEB(printk("FIr:%d %02x %08x %08x\n", in2000_datalen,fic,count2,(unsigned int)in
 DEB(printk("FIer:%d %02x %08x\n", in2000_datalen,fic,(unsigned int )in2000_dataptr));
 /*    while ( count-- )
     	inw(INFIFO);*/	/* Throw away some extra stuff */
-    if( !in2000_datalen && in2000_current_segment < in2000_nsegment)
+    if( !in2000_datalen && ++in2000_current_segment < in2000_nsegment)
       {
       in2000_scatter++;
-      in2000_current_segment++;
       in2000_datalen = in2000_scatter->length;
       in2000_dataptr = (unsigned short*)in2000_scatter->address;
       }
@@ -288,13 +289,16 @@ static void in2000_intr_handle(int foo)
 		scsistatus,cmdphase,scsibyte));
 
 	/* Why do we assume that we need to send more data here??? ERY */
-   	if ( in2000_datalen && in2000_dataptr )	/* data xfer pending */
+   	if ( in2000_datalen )	/* data xfer pending */
    	    {
-   	    if ( in2000_datawrite )
+   	    if ( in2000_dataptr == NULL )
+		printk("int2000: dataptr=NULL datalen=%d\n",
+			in2000_datalen);
+	    else if ( in2000_datawrite )
 		in2000_fifo_out();
 	    else
 		in2000_fifo_in();
-   	    } else ficmsk = 0;
+   	    } 
 	if ( (auxstatus & 0x8c) == 0x80 )
 	    {	/* There is a WD Chip interrupt & register read good */
 	    outb(2,ININTR);	/* Disable fifo interrupts */
@@ -630,7 +634,7 @@ int in2000_detect(Scsi_Host_Template * tpnt)
     shpnt->io_port = base;
     shpnt->n_io_port = 12;
     shpnt->irq = irq_level;
-    register_iomem(base, 12,"in2000");  /* Prevent other drivers from using this space */
+    request_region(base, 12,"in2000");  /* Prevent other drivers from using this space */
     return 1;
 }
 

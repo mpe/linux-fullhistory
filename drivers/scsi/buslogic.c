@@ -1336,7 +1336,7 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 	    }
 #endif
 
-	    register_iomem(bases[indx], 4,"buslogic");
+	    request_region(bases[indx], 4,"buslogic");
 	    /* Register the IO ports that we use */
 	    count++;
 	    continue;

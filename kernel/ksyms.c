@@ -247,7 +247,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(kfree_skb),
 	X(dev_kfree_skb),
 	X(snarf_region),
-	X(register_iomem),
+	X(request_region),
 	X(release_region),
 	X(netif_rx),
 	X(dev_rint),

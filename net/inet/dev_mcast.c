@@ -109,7 +109,7 @@ void dev_mc_delete(struct device *dev, void *addr, int alen, int all)
 		if(memcmp((*dmi)->dmi_addr,addr,(*dmi)->dmi_addrlen)==0 && alen==(*dmi)->dmi_addrlen)
 		{
 			struct dev_mc_list *tmp= *dmi;
-			if((*dmi)->dmi_users-- && !all)
+			if(--(*dmi)->dmi_users && !all)
 				return;
 			*dmi=(*dmi)->next;
 			dev->mc_count--;

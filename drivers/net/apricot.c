@@ -44,7 +44,7 @@ static char *version = "apricot.c:v0.2 05/12/94\n";
 
 #ifndef HAVE_PORTRESERVE
 #define check_region(addr, size)	0
-#define register_iomem(addr, size,name)	do ; while(0)
+#define request_region(addr, size,name)	do ; while(0)
 #endif
 
 #ifndef HAVE_ALLOC_SKB
@@ -714,7 +714,7 @@ int apricot_probe(struct device *dev)
     if(memcmp(eth_addr,"\x00\x00\x49",3)!= 0)
     	return ENODEV;
 
-    register_iomem(ioaddr, APRICOT_TOTAL_SIZE,"apricot");
+    request_region(ioaddr, APRICOT_TOTAL_SIZE,"apricot");
 
     dev->base_addr = ioaddr;
     ether_setup(dev);

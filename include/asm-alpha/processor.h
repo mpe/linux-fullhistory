@@ -24,7 +24,7 @@ extern int EISA_bus;
 struct thread_struct {
 	unsigned long ksp;
 	unsigned long usp;
-	unsigned long cr3;	/* ptbr */
+	unsigned long ptbr;
 	unsigned int pcc;
 	unsigned int asn;
 	unsigned long unique;

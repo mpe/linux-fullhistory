@@ -23,6 +23,8 @@ nfs.o: $(OBJS)
 dep:
 	$(CPP) -M *.c > .depend
 
+modules: nfs.o
+
 #
 # include a dependency file if one exists
 #

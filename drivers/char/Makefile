@@ -75,7 +75,7 @@ endif
 
 MODULES := lp.o
 
-all: char.a modules
+all: char.a
 
 char.a: $(OBJS)
 	$(AR) rcs char.a $(OBJS)
@@ -83,8 +83,7 @@ char.a: $(OBJS)
 
 ifdef MODULES
 
-modules:
-	$(MAKE) CFLAGS="$(CFLAGS) -DMODULE" $(MODULES)
+modules: $(MODULES)
 	(cd ../../modules;for i in $(MODULES); do ln -sf ../drivers/char/$$i .; done)
 
 else

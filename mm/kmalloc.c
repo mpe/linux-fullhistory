@@ -137,8 +137,8 @@ for (order = 0;BLOCKSIZE(order);order++)
         AREASIZE(order)) 
         {
         printk ("Cannot use %d bytes out of %d in order = %d block mallocs\n",
-                NBLOCKS (order) * BLOCKSIZE(order) + 
-                        sizeof (struct page_descriptor),
+                (int) (NBLOCKS (order) * BLOCKSIZE(order) + 
+                        sizeof (struct page_descriptor)),
                 (int) AREASIZE(order),
                 BLOCKSIZE (order));
         panic ("This only happens if someone messes with kmalloc");
@@ -185,7 +185,7 @@ void * kmalloc (size_t size, int priority)
 order = get_order (size);
 if (order < 0)
     {
-    printk ("kmalloc of too large a block (%d bytes).\n",size);
+    printk ("kmalloc of too large a block (%d bytes).\n",(int) size);
     return (NULL);
     }
 
@@ -288,7 +288,7 @@ printk ("Hey. This is very funny. I tried %d times to allocate a whole\n"
         "the author of this kmalloc: wolff@dutecai.et.tudelft.nl.\n"
         "(Executive summary: This can't happen)\n", 
                 MAX_GET_FREE_PAGE_TRIES,
-                size);
+                (int) size);
 return NULL;
 }
 

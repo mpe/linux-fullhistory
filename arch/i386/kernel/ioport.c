@@ -11,14 +11,18 @@
 #include <linux/types.h>
 #include <linux/ioport.h>
 
-static unsigned long ioport_registrar[IO_BITMAP_SIZE] = {0, /* ... */};
-#define IOPORTNAMES_NUM 32
-#define IOPORTNAMES_LEN 26
-struct { int from;
-	 int num;	
-	 int flags;
-	 char name[IOPORTNAMES_LEN];
-	} ioportnames[IOPORTNAMES_NUM];
+#define IOTABLE_SIZE 32
+#define STR(x) #x
+
+typedef struct resource_entry_t {
+	u_long from, num;
+	const char *name;
+	struct resource_entry_t *next;
+} resource_entry_t;
+
+static resource_entry_t iolist = { 0, 0, "", NULL };
+
+static resource_entry_t iotable[IOTABLE_SIZE];
 
 #define _IODEBUG
 
@@ -84,52 +88,20 @@ asmlinkage void set_bitmap(unsigned long *bitmap, short base, short extent, int 
 	}
 }
 
-/* Check for set bits in BITMAP starting at BASE, going to EXTENT. */
-asmlinkage int check_bitmap(unsigned long *bitmap, short base, short extent)
-{
-	int mask;
-	unsigned long *bitmap_base = bitmap + (base >> 5);
-	unsigned short low_index = base & 0x1f;
-	int length = low_index + extent;
-
-	if (low_index != 0) {
-		mask = (~0 << low_index);
-		if (length < 32)
-				mask &= ~(~0 << length);
-		if (*bitmap_base++ & mask)
-			return 1;
-		length -= 32;
-	}
-	while (length >= 32) {
-		if (*bitmap_base++ != 0)
-			return 1;
-		length -= 32;
-	}
-
-	if (length > 0) {
-		mask = ~(~0 << length);
-		if (*bitmap_base++ & mask)
-			return 1;
-	}
-	return 0;
-}
-
 /*
  * This generates the report for /proc/ioports
  */
 int get_ioport_list(char *buf)
-{       int i=0,len=0;
-	while(i<IOPORTNAMES_LEN && len<4000)
-	{	if(ioportnames[i].flags)
-			len+=sprintf(buf+len,"%04x-%04x : %s\n",
-				ioportnames[i].from,
-				ioportnames[i].from+ioportnames[i].num-1,
-				ioportnames[i].name);
-		i++;
-	}
-        if(len>=4000) 
-		len+=sprintf(buf+len,"4k-Limit reached!\n");
-        return len;
+{
+	resource_entry_t *p;
+	int len = 0;
+
+	for (p = iolist.next; (p) && (len < 4000); p = p->next)
+		len += sprintf(buf+len, "%04lx-%04lx : %s\n",
+			   p->from, p->from+p->num-1, p->name);
+	if (p)
+		len += sprintf(buf+len, "4K limit reached!\n");
+	return len;
 }
 
 /*
@@ -179,37 +151,54 @@ asmlinkage int sys_iopl(long ebx,long ecx,long edx,
 }
 
 /*
- * This is the 'old' snarfing worker function
+ * The workhorse function: find where to put a new entry
  */
-void do_snarf_region(unsigned int from, unsigned int num)
+static resource_entry_t *find_gap(resource_entry_t *root,
+				  u_long from, u_long num)
 {
-        if (from > IO_BITMAP_SIZE*32)
-                return;
-        if (from + num > IO_BITMAP_SIZE*32)
-                num = IO_BITMAP_SIZE*32 - from;
-        set_bitmap(ioport_registrar, from, num, 1);
-        return;
+	unsigned long flags;
+	resource_entry_t *p;
+	
+	if (from > from+num-1)
+		return NULL;
+	save_flags(flags);
+	cli();
+	for (p = root; ; p = p->next) {
+		if ((p != root) && (p->from+p->num-1 >= from)) {
+			p = NULL;
+			break;
+		}
+		if ((p->next == NULL) || (p->next->from > from+num-1))
+			break;
+	}
+	restore_flags(flags);
+	return p;
 }
 
 /*
  * Call this from the device driver to register the ioport region.
  */
-void register_iomem(unsigned int from, unsigned int num, char *name)
-{	
-	int i=0;
-	while(ioportnames[i].flags && i<IOPORTNAMES_NUM)
-	 i++;
-	if(i==IOPORTNAMES_NUM)
-		printk("warning:ioportname-table is full");
-	else
-	{	
-	 	strncpy(ioportnames[i].name,name,IOPORTNAMES_LEN);
-		ioportnames[i].name[IOPORTNAMES_LEN-1]=(char)0;
-		ioportnames[i].from=from;
-		ioportnames[i].num=num;
-		ioportnames[i].flags=1;
+void request_region(unsigned int from, unsigned int num, const char *name)
+{
+	resource_entry_t *p;
+	int i;
+
+	for (i = 0; i < IOTABLE_SIZE; i++)
+		if (iotable[i].num == 0)
+			break;
+	if (i == IOTABLE_SIZE)
+		printk("warning: ioport table is full\n");
+	else {
+		p = find_gap(&iolist, from, num);
+		if (p == NULL)
+			return;
+		iotable[i].name = name;
+		iotable[i].from = from;
+		iotable[i].num = num;
+		iotable[i].next = p->next;
+		p->next = &iotable[i];
+		return;
 	}
-	do_snarf_region(from,num);
 }
 
 /*
@@ -217,33 +206,27 @@ void register_iomem(unsigned int from, unsigned int num, char *name)
  * It can be removed when all driver call the new function.
  */
 void snarf_region(unsigned int from, unsigned int num)
-{	register_iomem(from,num,"No name given.");
-}
-
-/*
- * The worker for releasing
- */
-void do_release_region(unsigned int from, unsigned int num)
 {
-        if (from > IO_BITMAP_SIZE*32)
-                return;
-        if (from + num > IO_BITMAP_SIZE*32)
-                num = IO_BITMAP_SIZE*32 - from;
-        set_bitmap(ioport_registrar, from, num, 0);
-        return;
+	request_region(from,num,"No name given.");
 }
 
 /* 
  * Call this when the device driver is unloaded
  */
 void release_region(unsigned int from, unsigned int num)
-{	int i=0;
-	while(i<IOPORTNAMES_NUM)
-	{	if(ioportnames[i].from==from && ioportnames[i].num==num)
-			ioportnames[i].flags=0;	
-		i++;
+{
+	resource_entry_t *p, *q;
+
+	for (p = &iolist; ; p = q) {
+		q = p->next;
+		if (q == NULL)
+			break;
+		if ((q->from == from) && (q->num == num)) {
+			q->num = 0;
+			p->next = q->next;
+			return;
+		}
 	}
-	do_release_region(from,num);
 }
 
 /*
@@ -251,11 +234,7 @@ void release_region(unsigned int from, unsigned int num)
  */
 int check_region(unsigned int from, unsigned int num)
 {
-	if (from > IO_BITMAP_SIZE*32)
-		return 0;
-	if (from + num > IO_BITMAP_SIZE*32)
-		num = IO_BITMAP_SIZE*32 - from;
-	return check_bitmap(ioport_registrar, from, num);
+	return (find_gap(&iolist, from, num) == NULL) ? -EBUSY : 0;
 }
 
 /* Called from init/main.c to reserve IO ports. */
@@ -264,5 +243,5 @@ void reserve_setup(char *str, int *ints)
 	int i;
 
 	for (i = 1; i < ints[0]; i += 2)
-		register_iomem(ints[i], ints[i+1],"reserved");
+		request_region(ints[i], ints[i+1], "reserved");
 }

@@ -117,9 +117,11 @@ asmlinkage unsigned long sys_signal(int signum, void (*handler)(int))
 		return -EINVAL;
 	if (signum==SIGKILL || signum==SIGSTOP)
 		return -EINVAL;
-	err = verify_area(VERIFY_READ, handler, 1);
-	if (err)
-		return err;
+	if (handler != SIG_DFL && handler != SIG_IGN) {
+		err = verify_area(VERIFY_READ, handler, 1);
+		if (err)
+			return err;
+	}
 	tmp.sa_handler = handler;
 	tmp.sa_mask = 0;
 	tmp.sa_flags = SA_ONESHOT | SA_NOMASK;
@@ -151,9 +153,11 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 			new_sa.sa_mask |= _S(signum);
 			new_sa.sa_mask &= _BLOCKABLE;
 		}
-		err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
-		if (err)
-			return err;
+		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
+			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
+			if (err)
+				return err;
+		}
 	}
 	if (oldaction) {
 		int err = verify_area(VERIFY_WRITE, oldaction, sizeof(*oldaction));

@@ -365,7 +365,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 		printk(" %2.2x", dev->dev_addr[i] = inb(ioaddr + i));
 
 	dev->base_addr = ioaddr;
-	register_iomem(ioaddr, LANCE_TOTAL_SIZE,"lance");
+	request_region(ioaddr, LANCE_TOTAL_SIZE,"lance");
 
 	/* Make certain the data structures used by the LANCE are aligned. */
 	dev->priv = (void *)(((int)dev->priv + 7) & ~7);

@@ -478,6 +478,10 @@ N: Kai M"akisara
 E: Kai.Makisara@vtt.fi
 D: SCSI Tape Driver
 
+N: Peter MacDonald
+D: SLS distribution
+D: Initial implementation of VC's, pty's and select()
+
 N: James B. MacLean
 E: jmaclean@fox.nstn.ns.ca
 D: Coordinator of DOSEMU releases

@@ -125,7 +125,7 @@ int hp_probe1(struct device *dev, int ioaddr)
 		dev = init_etherdev(0, sizeof(struct ei_device), 0);
 
 	/* Grab the region so we can find another board if something fails. */
-	register_iomem(ioaddr, HP_IO_EXTENT,"hp");
+	request_region(ioaddr, HP_IO_EXTENT,"hp");
 
 	printk("%s: %s (ID %02x) at %#3x,", dev->name, name, board_id, ioaddr);
 

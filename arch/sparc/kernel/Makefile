@@ -18,7 +18,7 @@
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
 
-OBJS  = entry.o traps.o
+OBJS  = entry.o traps.o irq.o process.o
 
 all: kernel.o head.o
 

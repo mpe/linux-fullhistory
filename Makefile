@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 77
+SUBLEVEL = 78
 
 ARCH = i386
 
@@ -193,7 +193,7 @@ net: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=net
 
 modules: dummy
-	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i modules; done
+	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i CFLAGS="$(CFLAGS) -DMODULE" modules; done
 	
 
 clean:	archclean

@@ -352,7 +352,7 @@ int ewrk3_probe(struct device *dev)
       if (!check_region(base_addr, EWRK3_IOP_INC)) {
 	if (((mem_chkd >> ((base_addr - EWRK3_IO_BASE)/ EWRK3_IOP_INC))&0x01)==1) {
 	  if (DevicePresent(base_addr) == 0) {      /* Is EWRK3 really here? */
-	    register_iomem(base_addr, EWRK3_IOP_INC,"ewrk3"); /* Register I/O region */
+	    request_region(base_addr, EWRK3_IOP_INC,"ewrk3"); /* Register I/O region */
 	    status = ewrk3_hw_init(dev, base_addr);
 	  } else {
 	    printk("ewrk3_probe(): No device found\n");
@@ -1344,7 +1344,7 @@ static struct device *isa_probe(struct device *dev)
 ** Device found. Mark its (I/O) location for future reference. Only 24
 ** EtherWORKS devices can exist between 0x100 and 0x3e0.
 */
-	  register_iomem(iobase, EWRK3_IOP_INC,"ewrk3");
+	  request_region(iobase, EWRK3_IOP_INC,"ewrk3");
 	  if (num_ewrk3s > 0) {        /* only gets here in autoprobe */
 	    dev = alloc_device(dev, iobase);
 	  } else {
@@ -1387,7 +1387,7 @@ static struct device *eisa_probe(struct device *dev)
 ** EtherWORKS devices can exist in EISA space....
 */
 	mem_chkd |= (0x01 << (i + 24));
-	register_iomem(iobase, EWRK3_IOP_INC,"ewrk3");
+	request_region(iobase, EWRK3_IOP_INC,"ewrk3");
 	if (num_ewrk3s > 0) {        /* only gets here in autoprobe */
 	  dev = alloc_device(dev, iobase);
 	} else {

@@ -30,7 +30,7 @@ int ultrastor_biosparam(Disk *, int, int *);
 
 
 #define ULTRASTOR_14F { NULL, NULL, /* Ptr for modules*/ \
-			  NULL,			 	\
+			  "UltraStor 14F/24F/34F", 	\
 			  ultrastor_detect, 		\
 			  NULL,	/* Release */		\
 			  ultrastor_info, 		\

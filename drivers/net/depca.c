@@ -480,7 +480,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	}
 
 #ifdef HAVE_PORTRESERVE
-	register_iomem(ioaddr, DEPCA_TOTAL_SIZE,"depca");
+	request_region(ioaddr, DEPCA_TOTAL_SIZE,"depca");
 #endif
 
 	/*

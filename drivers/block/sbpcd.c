@@ -4228,7 +4228,7 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
   blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
   read_ahead[MAJOR_NR] = SBP_BUFFER_FRAMES * (CD_FRAMESIZE / 512);
   
-  register_iomem(CDo_command,4,"sbpcd");
+  request_region(CDo_command,4,"sbpcd");
 
   for (j=0;j<NR_SBPCD;j++)
     {

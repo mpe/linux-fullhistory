@@ -147,7 +147,7 @@ int e21_probe1(struct device *dev, int ioaddr)
 		return ENODEV;
 
 	/* Grab the region so we can find a different board if IRQ select fails. */
-	register_iomem(ioaddr, E21_IO_EXTENT,"e2100");
+	request_region(ioaddr, E21_IO_EXTENT,"e2100");
 
 	/* Read the station address PROM.  */
 	for (i = 0; i < 6; i++)

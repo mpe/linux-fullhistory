@@ -251,7 +251,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 
 		brelse(bh);
 	      }
-	if(iso_blknum == 100) {
+	if(iso_blknum == vol_desc_start + 100) {
 		if (!silent)
 			printk("Unable to identify CD-ROM format.\n");
 		s->s_dev = 0;

@@ -40,6 +40,8 @@ dep:
 proto:
 	cproto -e -DMAKING_PROTO *.c >fpu_proto.h
 
+modules:
+
 dummy:
 
 #

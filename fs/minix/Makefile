@@ -7,10 +7,6 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-ifndef CONFIG_MINIX_FS
-CFLAGS := $(CFLAGS) -DMODULE
-endif
-
 .c.s:
 	$(CC) $(CFLAGS) -S $<
 .c.o:
@@ -26,6 +22,8 @@ minix.o: $(OBJS)
 
 dep:
 	$(CPP) -M *.c > .depend
+
+modules: minix.o
 
 #
 # include a dependency file if one exists

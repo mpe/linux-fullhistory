@@ -5,7 +5,7 @@
  * minix fs inode data in memory
  */
 struct minix_inode_info {
-	u16 i_data[16];
+	__u16 i_data[16];
 };
 
 #endif

@@ -32,13 +32,13 @@
  * Note the 8-bit gid and atime and ctime.
  */
 struct minix_inode {
-	u16 i_mode;
-	u16 i_uid;
-	u32 i_size;
-	u32 i_time;
-	u8  i_gid;
-	u8  i_nlinks;
-	u16 i_zone[9];
+	__u16 i_mode;
+	__u16 i_uid;
+	__u32 i_size;
+	__u32 i_time;
+	__u8  i_gid;
+	__u8  i_nlinks;
+	__u16 i_zone[9];
 };
 
 /*
@@ -48,34 +48,34 @@ struct minix_inode {
  * now 16-bit. The inode is now 64 bytes instead of 32.
  */
 struct new_minix_inode {
-	u16 i_mode;
-	u16 i_nlinks;
-	u16 i_uid;
-	u16 i_gid;
-	u32 i_size;
-	u32 i_atime;
-	u32 i_mtime;
-	u32 i_ctime;
-	u32 i_zone[10];
+	__u16 i_mode;
+	__u16 i_nlinks;
+	__u16 i_uid;
+	__u16 i_gid;
+	__u32 i_size;
+	__u32 i_atime;
+	__u32 i_mtime;
+	__u32 i_ctime;
+	__u32 i_zone[10];
 };
 
 /*
  * minix super-block data on disk
  */
 struct minix_super_block {
-	u16 s_ninodes;
-	u16 s_nzones;
-	u16 s_imap_blocks;
-	u16 s_zmap_blocks;
-	u16 s_firstdatazone;
-	u16 s_log_zone_size;
-	u32 s_max_size;
-	u16 s_magic;
-	u16 s_state;
+	__u16 s_ninodes;
+	__u16 s_nzones;
+	__u16 s_imap_blocks;
+	__u16 s_zmap_blocks;
+	__u16 s_firstdatazone;
+	__u16 s_log_zone_size;
+	__u32 s_max_size;
+	__u16 s_magic;
+	__u16 s_state;
 };
 
 struct minix_dir_entry {
-	u16 inode;
+	__u16 inode;
 	char name[0];
 };
 

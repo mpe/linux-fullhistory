@@ -363,7 +363,7 @@ int eexp_probe1(struct device *dev, short ioaddr)
 	}
 
 	/* We've committed to using the board, and can start filling in *dev. */
-	register_iomem(ioaddr, 16,"eexpress");
+	request_region(ioaddr, 16,"eexpress");
 	dev->base_addr = ioaddr;
 
 	for (i = 0; i < 6; i++) {

@@ -1053,7 +1053,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 			    aha1542_command(0, cmd, buffer, 512);
 		    }
 #endif    
-		    register_iomem(bases[indx], 4,"aha1542");  /* Register the IO ports that we use */
+		    request_region(bases[indx], 4,"aha1542");  /* Register the IO ports that we use */
 		    count++;
 		    continue;
 	    unregister:

@@ -247,7 +247,7 @@ static int netcard_probe1(struct device *dev, int ioaddr)
 #endif	/* jumpered DMA */
 
 	/* Grab the region so we can find another board if autoIRQ fails. */
-	register_iomem(ioaddr, NETCARD_IO_EXTENT,"skeleton");
+	request_region(ioaddr, NETCARD_IO_EXTENT,"skeleton");
 
 	/* Initialize the device structure. */
 	if (dev->priv == NULL)

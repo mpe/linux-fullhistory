@@ -41,6 +41,8 @@ endif
 
 ifdef CONFIG_NFS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) nfs
+else
+MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) nfs
 endif
 
 ifdef CONFIG_XIA_FS
@@ -93,8 +95,10 @@ filesystems.a: dummy
 	  test ! -d $$i || \
 	    { $(MAKE) -C $$i; $(AR) rcs filesystems.a $$i/$$i.o; }; done
 
-modules:
-	set -e; for i in $(MODULE_FS_SUBDIRS); do $(MAKE) -C $$i modules; done
+modules: $(MODULE_OBJS)
+	for i in $(MODULE_FS_SUBDIRS); do $(MAKE) -C $$i modules; done
+	cd ../modules;for i in $(MODULE_OBJS); do ln -sf ../fs/$$i .; done
+	cd ../modules;for i in $(MODULE_FS_SUBDIRS); do ln -sf ../fs/$$i/$$i.o .; done
 
 depend dep:
 	$(CPP) -M *.c > .depend

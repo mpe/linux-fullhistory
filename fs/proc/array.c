@@ -19,6 +19,9 @@
  *
  * Alessandro Rubini :  profile extension.
  *                      <rubini@ipvvis.unipv.it>
+ *
+ * Jeff Tranter      :  added BogoMips field to cpuinfo
+ *                      <Jeff_Tranter@Mitel.COM>
  */
 
 #include <linux/types.h>
@@ -34,6 +37,7 @@
 #include <linux/proc_fs.h>
 #include <linux/ioport.h>
 #include <linux/config.h>
+#include <linux/delay.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -262,6 +266,7 @@ static int get_version(char * buffer)
 
 static int get_cpuinfo(char * buffer)
 {
+#ifdef __i386__
 	char *model[2][9]={{"DX","SX","DX/2","4","SX/2","6",
 				"7","DX/4"},
 			{"Pentium 60/66","Pentium 90/100","3",
@@ -284,7 +289,8 @@ static int get_cpuinfo(char * buffer)
 			      "TS Counters\t: %s\n"
 			      "Pentium MSR\t: %s\n"
 			      "Mach. Ch. Exep.\t: %s\n"
-			      "CMPXCHGB8B\t: %s\n",
+			      "CMPXCHGB8B\t: %s\n"
+		              "BogoMips\t: %lu.%02lu\n",
 			      x86+'0', 
 			      x86_model ? model[x86-4][x86_model-1] : "Unknown",
 			      x86_mask ? mask : "Unknown",
@@ -300,8 +306,12 @@ static int get_cpuinfo(char * buffer)
 			      x86_capability & 16 ? "yes" : "no",
 			      x86_capability & 32 ? "yes" : "no",
 			      x86_capability & 128 ? "yes" : "no",
-			      x86_capability & 256 ? "yes" : "no"
+			      x86_capability & 256 ? "yes" : "no",
+		              loops_per_sec/500000, (loops_per_sec/5000) % 100
 			      );
+#else
+	return 0;
+#endif
 }
 
 static struct task_struct ** get_task(pid_t pid)
@@ -388,6 +398,7 @@ static int get_arg(int pid, char * buffer)
 
 static unsigned long get_wchan(struct task_struct *p)
 {
+#ifdef __i386__
 	unsigned long ebp, eip;
 	unsigned long stack_page;
 	int count = 0;
@@ -407,6 +418,7 @@ static unsigned long get_wchan(struct task_struct *p)
 			return eip;
 		ebp = *(unsigned long *) ebp;
 	} while (count++ < 16);
+#endif
 	return 0;
 }
 
@@ -438,7 +450,7 @@ static int get_stat(int pid, char * buffer)
 	}
 	wchan = get_wchan(*p);
 	for(i=0; i<32; ++i) {
-		switch((int) (*p)->sigaction[i].sa_handler) {
+		switch((unsigned long) (*p)->sigaction[i].sa_handler) {
 		case 1: sigignore |= bit; break;
 		case 0: break;
 		default: sigcatch |= bit;

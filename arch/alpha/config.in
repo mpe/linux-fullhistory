@@ -14,7 +14,7 @@ bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
 
 if [ "$CONFIG_NET" = "y" ]; then
 comment 'Networking options'
-bool 'TCP/IP networking' CONFIG_INET y
+bool 'TCP/IP networking' CONFIG_INET n
 if [ "$CONFIG_INET" "=" "y" ]; then
 bool 'IP forwarding/gatewaying' CONFIG_IP_FORWARD n
 bool 'IP multicasting (ALPHA)' CONFIG_IP_MULTICAST n
@@ -32,7 +32,7 @@ fi
 
 comment 'SCSI support'
 
-bool 'SCSI support?' CONFIG_SCSI y
+bool 'SCSI support?' CONFIG_SCSI n
 
 if [ "$CONFIG_SCSI" = "n" ]; then
 
@@ -109,7 +109,7 @@ if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
 	fi
 	bool '3c509/3c579 support' CONFIG_EL3 y
 fi
-bool 'Other ISA cards' CONFIG_NET_ISA y
+bool 'Other ISA cards' CONFIG_NET_ISA n
 if [ "$CONFIG_NET_ISA" = "y" ]; then
 	bool 'Cabletron E21xx support' CONFIG_E2100 n
 	bool 'DEPCA support' CONFIG_DEPCA y

@@ -81,6 +81,7 @@ static char *version =
 #include <linux/string.h>
 #include <linux/ioport.h>
 #include <linux/errno.h>
+#include <linux/config.h>
 
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -229,7 +230,7 @@ el1_probe1(struct device *dev, int ioaddr)
 	return ENODEV;
 
     /* Grab the region so we can find the another board if autoIRQ fails. */
-    register_iomem(ioaddr, EL1_IO_EXTENT,"3c501");
+    request_region(ioaddr, EL1_IO_EXTENT,"3c501");
 
     if (dev == NULL)
 	dev = init_etherdev(0, sizeof(struct net_local), 0);

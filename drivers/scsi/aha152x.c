@@ -722,7 +722,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
          can_disconnect ? "enabled" : "disabled",
          can_doparity ? "enabled" : "disabled");
 
-  register_iomem(port_base, TEST-SCSISEQ,"aha152x");        /* Register */
+  request_region(port_base, TEST-SCSISEQ,"aha152x");        /* Register */
   
   /* not expecting any interrupts */
   SETPORT(SIMODE0, 0);

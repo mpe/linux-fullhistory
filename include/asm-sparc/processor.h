@@ -25,16 +25,25 @@ extern int EISA_bus;
  */
 #define IO_BITMAP_SIZE	32
 
+/* The first five entries here MUST be the first four. This allows me to
+ * do %lo(offset) loads and stores in entry.S. See TRAP_WIN_CLEAN to see
+ * why.
+ */
+
 struct thread_struct {
+	unsigned long uwindows;       /* how many user windows are in the set */
+	unsigned long wim;            /* user's window invalid mask */
+	unsigned long w_saved;        /* how many windows saved in reg_window[] */
 	unsigned long ksp;          /* kernel stack pointer */
 	unsigned long usp;          /* user's sp, throw reg windows here */
+	unsigned long psr;          /* save for condition codes */
+	unsigned long reg_window[16*24];
 	unsigned long cr3;          /* why changed from ptbr? */
 	unsigned int pcc;
 	unsigned int asn;
 	unsigned long unique;
 	unsigned long flags;
 	unsigned long res1, res2;
-	unsigned long psr;          /* save for condition codes */
 	unsigned long pc;           /* program counter */
 	unsigned long npc;          /* next program counter */
 
@@ -44,9 +53,7 @@ struct thread_struct {
  * in nwindows.
  */
 	unsigned long globl_regs[8];  /* global regs need to be saved too */
-	unsigned long reg_window[16*24];
 	unsigned long yreg;
-	unsigned long uwindows;       /* how many user windows are in the set */
 	unsigned long float_regs[64]; /* V8 and below have 32, V9 has 64 */
 };
 
@@ -77,12 +84,29 @@ struct thread_struct {
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }, \
-	0, 0, \
+	0, 0, 0, 0, \
         { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }, \
 }
+
+/* The thread_frame is what needs to be set up in certain circumstances
+ * upon entry to a trap. It is also loaded sometimes during a window
+ * spill if things don't go right (bad user stack pointer). In reality
+ * it is not per-process per se, it just sits in the kernel stack while
+ * the current process is in a handler then it is basically forgotten
+ * about.
+ */
+
+struct thread_frame {
+  unsigned int thr_psr;
+  unsigned int thr_pc;
+  unsigned int thr_npc;
+  unsigned int thr_y;
+  unsigned int thr_globals[8];
+  unsigned int thr_outs[8];
+};
 
 /*
  * These are the "cli()" and "sti()" for software interrupts

@@ -334,7 +334,6 @@ static struct super_block * detected_coherent (struct super_block *sb, struct bu
 	sb->sv_sb_flc_blocks = &sbd->s_free[0];
 	sb->sv_sb_total_free_blocks = &sbd->s_tfree;
 	sb->sv_sb_time = &sbd->s_time;
-	sb->sv_sb_state = &sbd->s_state;
 	sb->sv_block_base = 0;
 	sb->sv_firstinodezone = 2;
 	sb->sv_firstdatazone = sbd->s_isize;

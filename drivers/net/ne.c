@@ -259,7 +259,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
 
     dev->base_addr = ioaddr;
 
-    register_iomem(ioaddr, NE_IO_EXTENT,"ne2000");
+    request_region(ioaddr, NE_IO_EXTENT,"ne2000");
 
     for(i = 0; i < ETHER_ADDR_LEN; i++)
 	dev->dev_addr[i] = SA_prom[i];

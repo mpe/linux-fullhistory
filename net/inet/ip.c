@@ -128,12 +128,6 @@ struct ip_mib ip_statistics={1,64,};	/* Forwarding=Yes, Default TTL=64 */
 struct ip_mib ip_statistics={0,64,};	/* Forwarding=No, Default TTL=64 */
 #endif
 
-#ifdef CONFIG_IP_MULTICAST
-
-struct ip_mc_list *ip_mc_head=NULL;
-
-#endif
-
 /*
  *	Handle the issuing of an ioctl() request
  *	for the ip device. This is scheduled to
@@ -2020,26 +2014,34 @@ int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length)
 	struct ip_mc_list *im;
 	unsigned long flags;
 	int len=0;
+	struct device *dev;
 	
-	
-	len=sprintf(buffer,"Device    : Multicast\n");  
+	len=sprintf(buffer,"Device    : Count\tGroup    Users Timer\n");  
 	save_flags(flags);
 	cli();
 	
-	im=ip_mc_head;
-	
-	while(im!=NULL)
+	for(dev = dev_base; dev; dev = dev->next)
 	{
-		len+=sprintf(buffer+len,"%-10s: %08lX\n", im->interface->name, im->multiaddr);
-		pos=begin+len;
-		if(pos<offset)
-		{
-			len=0;
-			begin=pos;
-		}
-		if(pos>offset+length)
-			break;
-		im=im->next;
+                if((dev->flags&IFF_UP)&&(dev->flags&IFF_MULTICAST))
+                {
+                        len+=sprintf(buffer+len,"%-10s: %5d\n",
+					dev->name, dev->mc_count);
+                        for(im = dev->ip_mc_list; im; im = im->next)
+                        {
+                                len+=sprintf(buffer+len,
+					"\t\t\t%08lX %5d %d:%08lX\n",
+                                        im->multiaddr, im->users,
+					im->tm_running, im->timer.expires);
+                                pos=begin+len;
+                                if(pos<offset)
+                                {
+                                        len=0;
+                                        begin=pos;
+                                }
+                                if(pos>offset+length)
+                                        break;
+                        }
+                }
 	}
 	restore_flags(flags);
 	*start=buffer+(offset-begin);

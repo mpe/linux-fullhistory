@@ -7,7 +7,7 @@
 #include <asm/system.h>
 
 #define halt	.long PAL_halt
-#define rti	.long RAL_rti
+#define rti	.long PAL_rti
 
 .text
 	.set noat

@@ -471,7 +471,7 @@ int aha1740_detect(Scsi_Host_Template * tpnt)
         printk("Unable to allocate IRQ for adaptec controller.\n");
         return 0;
     }
-    register_iomem(base, 0x5c,"aha1740");  /* Reserve the space that we need to use */
+    request_region(base, 0x5c,"aha1740");  /* Reserve the space that we need to use */
     return 1;
 }
 

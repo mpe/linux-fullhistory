@@ -33,6 +33,7 @@
 #include <linux/genhd.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/ioport.h>
 
 #define REALLY_SLOW_IO
 #include <asm/system.h>
@@ -1023,6 +1024,9 @@ static void hd_geninit(void)
 		if (request_irq(HD_IRQ, hd_interrupt, SA_INTERRUPT, "hd")) {
 			printk("hd: unable to get IRQ%d for the harddisk driver\n",HD_IRQ);
 			NR_HD = 0;
+		} else {
+			request_region(HD_DATA, 8, "hd");
+			request_region(HD_CMD, 1, "hd(cmd)");
 		}
 	}
 	hd_gendisk.nr_real = NR_HD;

@@ -178,7 +178,7 @@ int hpp_probe1(struct device *dev, int ioaddr)
 	}
 
 	/* Grab the region so we can find another board if something fails. */
-	register_iomem(ioaddr, HP_IO_EXTENT,"hp-plus");
+	request_region(ioaddr, HP_IO_EXTENT,"hp-plus");
 
 	/* Read the IRQ line. */
 	outw(HW_Page, ioaddr + HP_PAGING);

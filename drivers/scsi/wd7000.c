@@ -1162,7 +1162,7 @@ int wd7000_detect(Scsi_Host_Template * tpnt)
                 printk("using IO %xh IRQ %d DMA %d.\n",
 		       host->iobase, host->irq, host->dma);
 
-		register_iomem(host->iobase, 4,"wd7000"); /* Register our ports */
+		request_region(host->iobase, 4,"wd7000"); /* Register our ports */
 		/*
 		 *  For boards before rev 6.0, scatter/gather isn't supported.
 		 */

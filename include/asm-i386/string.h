@@ -122,7 +122,7 @@ __asm__ __volatile__(
 return __res;
 }
 
-extern inline char * strchr(const char * s,char c)
+extern inline char * strchr(const char * s, int c)
 {
 register char * __res;
 __asm__ __volatile__(
@@ -140,7 +140,7 @@ __asm__ __volatile__(
 return __res;
 }
 
-extern inline char * strrchr(const char * s,char c)
+extern inline char * strrchr(const char * s, int c)
 {
 register char * __res;
 __asm__ __volatile__(
@@ -392,7 +392,7 @@ __asm__("cld\n\t" \
 		case 0: COMMON(""); return to;
 		case 1: COMMON("\n\tmovsb"); return to;
 		case 2: COMMON("\n\tmovsw"); return to;
-		case 3: COMMON("\n\tmovsw\n\tstosb"); return to;
+		case 3: COMMON("\n\tmovsw\n\tmovsb"); return to;
 	}
 #undef COMMON
 }
@@ -442,7 +442,7 @@ __asm__ __volatile__(
 return __res;
 }
 
-extern inline void * memchr(const void * cs,char c,size_t count)
+extern inline void * memchr(const void * cs,int c,size_t count)
 {
 register void * __res;
 if (!count)
@@ -459,7 +459,7 @@ __asm__ __volatile__(
 return __res;
 }
 
-extern inline void * __memset_generic(void * s,char c,size_t count)
+extern inline void * __memset_generic(void * s, char c,size_t count)
 {
 __asm__ __volatile__(
 	"cld\n\t"
@@ -533,7 +533,7 @@ __asm__("cld\n\t" \
 /*
  * find the first occurrence of byte 'c', or 1 past the area if none
  */
-extern inline void * memscan(void * addr, unsigned char c, size_t size)
+extern inline void * memscan(void * addr, int c, size_t size)
 {
 	if (!size)
 		return addr;

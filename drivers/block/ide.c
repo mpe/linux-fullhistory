@@ -1885,8 +1885,8 @@ static void probe_for_drives (byte hwif)
 		(void) probe_irq_off(probe_irq_on()); /* clear dangling irqs */
 #endif	/* PROBE_FOR_IRQS */
 		if (devs[0].present || devs[1].present) {
-			register_iomem(IDE_PORT(HD_DATA,HWIF),8,"ide");
-			register_iomem(IDE_PORT(HD_CMD,HWIF),1,"ide");
+			request_region(IDE_PORT(HD_DATA,HWIF),8,"ide");
+			request_region(IDE_PORT(HD_CMD,HWIF),1,"ide");
 		}
 		restore_flags(flags);
 	}

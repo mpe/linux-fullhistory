@@ -54,7 +54,7 @@
 
 #ifndef HAVE_PORTRESERVE
 #define check_region(ioaddr, size)              0
-#define register_iomem(ioaddr, size,name);             do ; while (0)
+#define request_region(ioaddr, size,name);             do ; while (0)
 #endif
 
 #ifndef NET_DEBUG
@@ -243,7 +243,7 @@ static int ni65_probe1(struct device *dev,int ioaddr)
   irq2dev_map[dev->irq] = dev;
 
   /* Grab the region so we can find another board if autoIRQ fails. */
-        register_iomem(ioaddr,NI65_TOTAL_SIZE,"ni65");
+        request_region(ioaddr,NI65_TOTAL_SIZE,"ni65");
 
   p = dev->priv = (void *) kmalloc(sizeof(struct priv),GFP_KERNEL);
   memset((char *) dev->priv,0,sizeof(struct priv));

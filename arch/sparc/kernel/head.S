@@ -488,20 +488,6 @@ _msgbufmapped:
         .word   1
 
 
-/* The following two things point to window management tables. The first
-   one is used to quickly look up how many user windows there are from
-   trap-land. The second is used in a trap handler to determine if a rett
-   instruction will land us smack inside the invalid window that possibly
-   the trap was called to fix-up.
-*/
-
-          .data
-          .skip   32                      ! alignment byte & negative indices
-lnx_uw:       .skip   32                      ! u_char uwtab[-31..31];
-lnx_winmask:  .skip   32                      ! u_char wmask[0..31];
-
-        .text
-	
 
 /* Cool, here we go. Pick up the romvec pointer in %o0 and stash it in
    %g7 and at _prom_vector_p. And also quickly check whether we are on
@@ -567,18 +553,18 @@ found_v2:
 not_v2:
 
 /* Get the machine type via the mysterious romvec node operations.
-   Here we can find out whether we are on a sun4 sun4c, sun4m, or
-   a sun4m. The "nodes" are set up as a bunch of n-ary trees which
-   you can traverse to get information about devices and such. The
-   information acquisition happens via the node-ops which are defined
-   in the linux_openprom.h header file. Of particular interest is the
-   'nextnode(int node)' function as it does the smart thing when
-   presented with a value of '0', it gives you the first node in the
-   tree. These node integers probably offset into some internal prom
-   pointer table the openboot has. It's completely undocumented, so
-   I'm not about to go sifting through the prom address space, but may
-   do so if I get suspicious enough. :-)
-*/
+ * Here we can find out whether we are on a sun4 sun4c, sun4m, or
+ * a sun4m. The "nodes" are set up as a bunch of n-ary trees which
+ * you can traverse to get information about devices and such. The
+ * information acquisition happens via the node-ops which are defined
+ * in the linux_openprom.h header file. Of particular interest is the
+ * 'nextnode(int node)' function as it does the smart thing when
+ * presented with a value of '0', it gives you the first node in the
+ * tree. These node integers probably offset into some internal prom
+ * pointer table the openboot has. It's completely undocumented, so
+ * I'm not about to go sifting through the prom address space, but may
+ * do so if I get suspicious enough. :-)
+ */
 
 		or	%g0, %g7, %l1
 		add	%l1, 0x1c, %l1		
@@ -648,10 +634,10 @@ is_sun4c:					! OK, this is a sun4c, yippie
 
 
 /* That was easy, now lets try to print some message on the screen.
-   We don't have to worry about bad address translations when the prom
-   addresses our pointers because our pointers are at 0x0-kern_size
-   as the prom expects.
-*/
+ * We don't have to worry about bad address translations when the prom
+ * addresses our pointers because our pointers are at 0x0-kern_size
+ * as the prom expects.
+ */
 
 		set	boot_msg, %o0	
 		ld	[prom_printf], %o1
@@ -703,11 +689,11 @@ rest_of_boot:
  */
 
 /* Uh, oh, interrupt time. This crap is real confusing. What I want to do is
-   clear all interrupts, map the interrupt enable register which in effect
-   enables non-maskable interrupts (or NMI's). Actuall we take no interrupts
-   until we frob with the %tbr (trap base register) which the prom has set 
-   to all its routines which allows some sanity during bootup.
-*/
+ * clear all interrupts, map the interrupt enable register which in effect
+ * enables non-maskable interrupts (or NMI's). Actuall we take no interrupts
+ * until we frob with the %tbr (trap base register) which the prom has set 
+ * to all its routines which allows some sanity during bootup.
+ */
 
 #if 0 /* paranoid, need to fix this routine now */
 		sethi	%hi(IE_reg_addr), %l0
@@ -722,8 +708,8 @@ rest_of_boot:
 #endif /* paranoid, see above */
 	
 /* Aieee, now set PC and nPC, enable traps, give ourselves a stack and it's
-   show-time!
-*/
+ * show-time!
+ */
 
 		set	1f, %g1
 		jmp	%g1
@@ -779,9 +765,9 @@ rest_of_boot:
 
 
 /*
-   Maybe the prom zero's out our BSS section, maybe it doesn't. I certainly 
-   don't know, do you?
-*/
+ * Maybe the prom zero's out our BSS section, maybe it doesn't. I certainly 
+ * don't know, do you?
+ */
 
 		set	_edata, %o0
 		set	_end, %o1
@@ -831,6 +817,9 @@ rest_of_boot:
 		add	%g3, 0x1, %g3
 		sethi	%hi(_nwindows), %g4
 		st	%g3, [%g4 + %lo(_nwindows)]	! store final value
+		sub	%g3, 0x1, %g3
+		sethi	%hi(_nwindowsm1), %g4
+		st	%g3, [%g4 + %lo(_nwindowsm1)]
 
 
 /* Here we go */
@@ -893,10 +882,10 @@ halt_me:
 	.align 4
 
 /*
-   Fill up the prom vector, note in particular the kind first element,
-   no joke. I don't need all of them in here as the entire prom vector
-   gets initialized in c-code so all routines can use it.
-*/
+ * Fill up the prom vector, note in particular the kind first element,
+ * no joke. I don't need all of them in here as the entire prom vector
+ * gets initialized in c-code so all routines can use it.
+ */
 
 			.globl _prom_vector_p
 
@@ -913,24 +902,34 @@ prom_nodefuncs:		.skip 4			! Magical Node functions
 prom_printf:		.skip 4			! minimal printf()
 
 /* The prom_abort pointer MUST be mapped in all contexts, because if you
-   don't then if a user process is running when you press the abort key
-   sequence, all sorts of bad things can happen
-*/
+ * don't then if a user process is running when you press the abort key
+ * sequence, all sorts of bad things can happen
+ */
 
 prom_abort:		.skip 4		! "L1-A" magic cookie
 					! must be mapped in ALL contexts
 
 /* prom_sync is a place where the kernel should place a pointer to a kernel
-   function that when called will sync all pending information to the drives
-   and then promptly return. If the kernel gets aborted with 'L1-A' one can
-   give the 'sync' command to the boot prompt and this magic cookie gets
-   executed. Nice feature eh?
-*/
+ * function that when called will sync all pending information to the drives
+ * and then promptly return. If the kernel gets aborted with 'L1-A' one can
+ * give the 'sync' command to the boot prompt and this magic cookie gets
+ * executed. Nice feature eh?
+ */
 
 prom_sync:		.skip 4			! hook in prom for "sync" func
 
 	.align 4
 
+/* We calculate the following at boot time, window fills/spills and trap entry
+ * code uses these to keep track of the register windows.
+ */
+
+	.globl _nwindows
+	.globl _nwindowsm1
+_nwindows:	.skip 4
+_nwindowsm1:	.skip 4
+
+	.align 4
 /* Boot time priviledged register values, plus magic %o2 value */
 
 	.globl _boot_wim

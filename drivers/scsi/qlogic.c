@@ -527,7 +527,7 @@ struct	Scsi_Host	*hreg;	/* registered host structure */
 		host->can_queue = 1;
 	sti();
 #endif
-	register_iomem( qbase , 0x10 ,"qlogic");
+	request_region( qbase , 0x10 ,"qlogic");
 
 	hreg = scsi_register( host , 0 );	/* no host data */
 	hreg->io_port = qbase;

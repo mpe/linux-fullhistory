@@ -147,7 +147,7 @@ int ultra_probe1(struct device *dev, int ioaddr)
 
 
 	/* OK, were are certain this is going to work.  Setup the device. */
-	register_iomem(ioaddr, 32,"smc-ultra");
+	request_region(ioaddr, 32,"smc-ultra");
 
 	/* The 8390 isn't at the base address, so fake the offset */
 	dev->base_addr = ioaddr+ULTRA_NIC_OFFSET;

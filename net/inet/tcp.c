@@ -640,7 +640,7 @@ static void retransmit_timer(unsigned long data)
 			 * this reset_timer() call is a hack, this is not
 			 * how KEEPOPEN is supposed to work.
 			 */
-			reset_timer (sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
+			reset_xmit_timer (sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
 
 			/* Send something to keep the connection open. */
 			if (sk->prot->write_wakeup)

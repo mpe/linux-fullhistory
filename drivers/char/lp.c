@@ -494,7 +494,6 @@ long lp_init(long kmem_start)
 	int offset = 0;
 	unsigned int testvalue = 0;
 	int count = 0;
-	char buf[5];
 
 	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
 		printk("unable to get major %d for line printer\n", LP_MAJOR);
@@ -513,8 +512,7 @@ long lp_init(long kmem_start)
 			LP_F(offset) |= LP_EXIST;
 			lp_reset(offset);
 			printk("lp%d at 0x%04x, ", offset,LP_B(offset));
-			sprintf(buf,"lp%d",offset);
-			register_iomem(LP_B(offset), 3,buf);
+			request_region(LP_B(offset), 3, "lp");
 			if (LP_IRQ(offset))
 				printk("using IRQ%d\n", LP_IRQ(offset));
 			else
@@ -536,7 +534,6 @@ int init_module(void)
 	int offset = 0;
 	unsigned int testvalue = 0;
 	int count = 0;
-	char buf[5];
 
 	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
 		printk("unable to get major %d for line printer\n", LP_MAJOR);
@@ -553,8 +550,7 @@ int init_module(void)
 			LP_F(offset) |= LP_EXIST;
 			lp_reset(offset);
 			printk("lp%d at 0x%04x, ", offset,LP_B(offset));
-			sprintf(buf,"lp%d",offset);
-			register_iomem(LP_B(offset),3,buf);
+			request_region(LP_B(offset),3,"lp");
 			if (LP_IRQ(offset))
 				printk("using IRQ%d\n", LP_IRQ(offset));
 			else

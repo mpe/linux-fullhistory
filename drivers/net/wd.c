@@ -235,7 +235,7 @@ int wd_probe1(struct device *dev, int ioaddr)
 	}
 
 	/* OK, were are certain this is going to work.  Setup the device. */
-	register_iomem(ioaddr, WD_IO_EXTENT,"wd");
+	request_region(ioaddr, WD_IO_EXTENT,"wd");
 	ethdev_init(dev);
 
 	ei_status.name = model_name;

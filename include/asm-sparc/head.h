@@ -43,5 +43,19 @@
 #define TRAP_ENTRY_INTERRUPT_NMI(t_type, jmp_to) \
         mov t_type, %l3; b jmp_to; mov %psr, %l0; nop;
 
+/* Trap entry code in entry.S needs the offsets into task_struct
+ * to get at the thread_struct goodies during window craziness.
+ *
+ * NOTE: We need to keep these values under 0x3ff in order to do
+ *       efficient load/stores in the window fill/spill handlers.
+ *       See TRAP_WIN_CLEAN in entry.S for details.
+ */
+
+#define THREAD_UWINDOWS 0x3a8
+#define THREAD_WIM 0x3ac
+#define THREAD_W_SAVED 0x3b0
+#define THREAD_KSP 0x3b4
+#define THREAD_USP 0x3b8
+#define THREAD_REG_WINDOW 0x3c0
 
 #endif __SPARC_HEAD_H

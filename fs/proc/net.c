@@ -170,6 +170,7 @@ static int proc_lookupnet(struct inode * dir,const char * name, int len,
 			return -ENOENT;
 		return 0;
 	}
+	iput(dir);
 	return -ENOENT;
 }
 

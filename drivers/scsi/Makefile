@@ -189,6 +189,7 @@ dep:
 
 endif
 
+modules:
 
 #
 # include a dependency file if one exists

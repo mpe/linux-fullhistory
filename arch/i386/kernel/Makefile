@@ -34,6 +34,8 @@ kernel.o: $(OBJS)
 dep:
 	$(CPP) -M *.c > .depend
 
+modules:
+
 dummy:
 
 #

@@ -207,7 +207,7 @@ int at1700_probe1(struct device *dev, short ioaddr)
 
 	/* Grab the region so that we can find another board if the IRQ request
 	   fails. */
-	register_iomem(ioaddr, AT1700_IO_EXTENT,"at1700");
+	request_region(ioaddr, AT1700_IO_EXTENT,"at1700");
 
 	printk("%s: AT1700 found at %#3x, IRQ %d, address ", dev->name,
 		   ioaddr, irq);

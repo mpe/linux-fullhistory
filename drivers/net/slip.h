@@ -71,6 +71,11 @@ struct slip {
   unsigned long         rx_dropped;     /* No memory for skb            */
   unsigned long         tx_dropped;     /* When MTU change              */
   unsigned long         rx_over_errors; /* Frame bigger then SLIP buf.  */
+#ifdef SL_INCLUDE_CSLIP
+  unsigned long		tx_compressed;
+  unsigned long		rx_compressed;
+  unsigned long		tx_misses;
+#endif
   /* Detailed SLIP statistics. */
 
   int			mtu;		/* Our mtu (to spot changes!)   */

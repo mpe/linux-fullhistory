@@ -1479,7 +1479,7 @@ static int set_serial_info(struct async_struct * info,
 		info->hub6 = new_serial.hub6;
 	}
 	if(info->type != PORT_UNKNOWN)
-		register_iomem(info->port,8,"serial(set)");
+		request_region(info->port,8,"serial(set)");
 
 	
 check_and_exit:
@@ -2353,7 +2353,7 @@ static void autoconfig(struct async_struct * info)
 		if ((status1 != 0xa5) || (status2 != 0x5a))
 			info->type = PORT_8250;
 	}
-	register_iomem(info->port,8,"serial(auto)");
+	request_region(info->port,8,"serial(auto)");
 
 	/*
 	 * Reset the UART.

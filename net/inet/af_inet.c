@@ -738,6 +738,10 @@ static int inet_release(struct socket *sock, struct socket *peer)
 
 	/* Start closing the connection.  This may take a while. */
 
+#ifdef CONFIG_IP_MULTICAST
+	/* Applications forget to leave groups before exiting */
+	ip_mc_drop_socket(sk);
+#endif
 	/*
 	 * If linger is set, we don't return until the close
 	 * is complete.  Other wise we return immediately. The

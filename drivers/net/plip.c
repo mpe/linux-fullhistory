@@ -225,7 +225,7 @@ plip_init(struct device *dev)
 	}
     }
 
-    register_iomem(PAR_DATA(dev), 3,"plip");
+    request_region(PAR_DATA(dev), 3,"plip");
 
     /* Fill in the generic fields of the device structure. */
     ether_setup(dev);

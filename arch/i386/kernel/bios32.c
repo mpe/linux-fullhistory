@@ -451,7 +451,7 @@ int revision_decode(unsigned char bus,unsigned char dev_fn)
 	unsigned char   	revision;
        		pcibios_read_config_byte(
 			bus, dev_fn, (unsigned char) PCI_CLASS_REVISION, &revision);
-		return revision;
+		return (int) revision;
 }
 
 
@@ -484,7 +484,8 @@ int device_decode(unsigned char bus,unsigned char dev_fn,unsigned short vendor)
 			bus, dev_fn, (unsigned char) PCI_DEVICE_ID, &device);
 		for (i=0;i<PCI_DEVICE_NUM;i++) 
 			if ((device==pci_device[i].device_id) 
-			 && (vendor==pci_device[i].vendor_id)) break;
+			 && (vendor==pci_device[i].vendor_id)) return i;
+		printk("Device id=%x ",device);
 		return i;
 }
 
@@ -503,6 +504,7 @@ int vendor_decode(unsigned char bus,unsigned char dev_fn)
 			bus, dev_fn, (unsigned char) PCI_VENDOR_ID, &vendor);
 		for (i=0;i<PCI_VENDOR_NUM;i++) 
 			if (vendor==pci_vendor[i].vendor_id) return i;
+		printk("Vendor id=%x ",vendor);
 		return i;
 }
 
