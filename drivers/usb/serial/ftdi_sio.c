@@ -1187,7 +1187,7 @@ check_and_exit:
  * ***************************************************************************
  */
 
-ssize_t show_latency_timer(struct device *dev, char *buf)
+static ssize_t show_latency_timer(struct device *dev, char *buf)
 {
 	struct usb_serial_port *port = to_usb_serial_port(dev);
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
@@ -1214,7 +1214,8 @@ ssize_t show_latency_timer(struct device *dev, char *buf)
 }
 
 /* Write a new value of the latency timer, in units of milliseconds. */
-ssize_t store_latency_timer(struct device *dev, const char *valbuf, size_t count)
+static ssize_t store_latency_timer(struct device *dev, const char *valbuf,
+				   size_t count)
 {
 	struct usb_serial_port *port = to_usb_serial_port(dev);
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
@@ -1244,7 +1245,8 @@ ssize_t store_latency_timer(struct device *dev, const char *valbuf, size_t count
 
 /* Write an event character directly to the FTDI register.  The ASCII
    value is in the low 8 bits, with the enable bit in the 9th bit. */
-ssize_t store_event_char(struct device *dev, const char *valbuf, size_t count)
+static ssize_t store_event_char(struct device *dev, const char *valbuf,
+				size_t count)
 {
 	struct usb_serial_port *port = to_usb_serial_port(dev);
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
@@ -1275,7 +1277,7 @@ ssize_t store_event_char(struct device *dev, const char *valbuf, size_t count)
 static DEVICE_ATTR(latency_timer, S_IWUGO | S_IRUGO, show_latency_timer, store_latency_timer);
 static DEVICE_ATTR(event_char, S_IWUGO, NULL, store_event_char);
 
-void create_sysfs_attrs(struct usb_serial *serial)
+static void create_sysfs_attrs(struct usb_serial *serial)
 {	
 	struct ftdi_private *priv;
 	struct usb_device *udev;
@@ -1292,7 +1294,7 @@ void create_sysfs_attrs(struct usb_serial *serial)
 	}
 }
 
-void remove_sysfs_attrs(struct usb_serial *serial)
+static void remove_sysfs_attrs(struct usb_serial *serial)
 {
 	struct ftdi_private *priv;
 	struct usb_device *udev;
