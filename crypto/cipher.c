@@ -38,7 +38,38 @@ static inline void xor_128(u8 *a, const u8 *b)
 	((u32 *)a)[2] ^= ((u32 *)b)[2];
 	((u32 *)a)[3] ^= ((u32 *)b)[3];
 }
+ 
+static inline void *prepare_src(struct scatter_walk *walk, int bsize,
+				void *tmp, int in_place)
+{
+	void *src = walk->data;
 
+	if (unlikely(scatterwalk_across_pages(walk, bsize)))
+		src = tmp;
+	scatterwalk_copychunks(src, walk, bsize, 0);
+	return src;
+}
+
+static inline void *prepare_dst(struct scatter_walk *walk, int bsize,
+				void *tmp, int in_place)
+{
+	void *dst = walk->data;
+
+	if (unlikely(scatterwalk_across_pages(walk, bsize)) || in_place)
+		dst = tmp;
+	return dst;
+}
+
+static inline void complete_src(struct scatter_walk *walk, int bsize,
+				void *src, int in_place)
+{
+}
+
+static inline void complete_dst(struct scatter_walk *walk, int bsize,
+				void *dst, int in_place)
+{
+	scatterwalk_copychunks(dst, walk, bsize, 1);
+}
 
 /* 
  * Generic encrypt/decrypt wrapper for ciphers, handles operations across
@@ -76,24 +107,17 @@ static int crypt(struct crypto_tfm *tfm,
 
 		in_place = scatterwalk_samebuf(&walk_in, &walk_out);
 
-		src_p = walk_in.data;
-		if (unlikely(scatterwalk_across_pages(&walk_in, bsize)))
-			src_p = tmp_src;
-
-		dst_p = walk_out.data;
-		if (unlikely(scatterwalk_across_pages(&walk_out, bsize)) ||
-		    in_place)
-			dst_p = tmp_dst;
+		src_p = prepare_src(&walk_in, bsize, tmp_src, in_place);
+		dst_p = prepare_dst(&walk_out, bsize, tmp_dst, in_place);
 
 		nbytes -= bsize;
 
-		scatterwalk_copychunks(src_p, &walk_in, bsize, 0);
-
 		prfn(tfm, dst_p, src_p, crfn, enc, info);
 
+		complete_src(&walk_in, bsize, src_p, in_place);
 		scatterwalk_done(&walk_in, 0, nbytes);
 
-		scatterwalk_copychunks(dst_p, &walk_out, bsize, 1);
+		complete_dst(&walk_out, bsize, dst_p, in_place);
 		scatterwalk_done(&walk_out, 1, nbytes);
 
 		if (!nbytes)
