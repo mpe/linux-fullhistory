@@ -4,7 +4,7 @@
 mainmenu_option next_comment
 comment 'character devices'
 
-bool 'Cyclades async mux support' CONFIG_CYCLADES
+tristate 'Cyclades async mux support' CONFIG_CYCLADES
 bool 'Stallion multiport serial support' CONFIG_STALDRV
 if [ "$CONFIG_STALDRV" = "y" ]; then
   tristate '  Stallion EasyIO or EC8/32 support' CONFIG_STALLION

@@ -6,8 +6,6 @@
 #ifndef _ASMI386_IOCTL_H
 #define _ASMI386_IOCTL_H
 
-#include <asm/page.h>		/* for PAGE_SIZE */
-
 /* ioctl command encoding: 32 bits total, command in lower 16 bits,
  * size of the parameter structure in the lower 14 bits of the
  * upper 16 bits.
@@ -17,38 +15,6 @@
  * The highest 2 bits are reserved for indicating the ``access mode''.
  * NOTE: This limits the max parameter size to 16kB -1 !
  */
-
-#define IOC_VOID	0x00000000	/* param in size field */
-#define IOC_IN		0x40000000	/* user --> kernel */
-#define IOC_OUT		0x80000000	/* kernel --> user */
-#define IOC_INOUT	(IOC_IN | IOC_OUT)	/* both */
-#define IOCSIZE_MASK	0x3fff0000	/* size (max 16k-1 bytes) */
-#define IOCSIZE_SHIFT	16		/* how to get the size */
-#define IOCSIZE_MAX	((PAGE_SIZE-1)&(IOCSIZE_MASK >> IOCSIZE_SHIFT))
-#define IOCCMD_MASK	0x0000ffff	/* command code */
-#define IOCCMD_SHIFT	0
-#define IOCPARM_MASK IOCCMD_MASK
-#define IOCPARM_SHIFT IOCCMD_SHIFT
-
-#define IOC_SIZE(cmd)	(((cmd) & IOCSIZE_MASK) >> IOCSIZE_SHIFT)
-#define IOCBASECMD(cmd)	((cmd) & ~IOCPARM_MASK)
-#define IOCGROUP(cmd)	(((cmd) >> 8) & 0xFF)
-
-/* _IO(magic, subcode); size field is zero and the 
- * subcode determines the command.
- */
-#define _IO(c,d)	(IOC_VOID | ((c)<<8) | (d)) /* param encoded */
-
-/* _IOXX(magic, subcode, arg_t); where arg_t is the type of the
- * (last) argument field in the ioctl call, if present.
- */
-#define _IOW(c,d,t)	(IOC_IN | ((sizeof(t)<<16) & IOCSIZE_MASK) | \
-				  ((c)<<8) | (d))
-#define _IOR(c,d,t)	(IOC_OUT | ((sizeof(t)<<16) & IOCSIZE_MASK) | \
-				   ((c)<<8) | (d))
-/* WR rather than RW to avoid conflict with stdio.h */
-#define _IOWR(c,d,t)	(IOC_INOUT | ((sizeof(t)<<16) & IOCSIZE_MASK) | \
-				     ((c)<<8) | (d))
 
 /*
  * The following is for compatibility across the various Linux
@@ -80,10 +46,30 @@
 #define _IOC_READ	1U
 #define _IOC_WRITE	2U
 
+#define _IOC(dir,type,nr,size) \
+	(((dir)  << _IOC_DIRSHIFT) | \
+	 ((type) << _IOC_TYPESHIFT) | \
+	 ((nr)   << _IOC_NRSHIFT) | \
+	 ((size) << _IOC_SIZESHIFT))
+
+/* used to create numbers */
+#define _IO(type,nr)		_IOC(_IOC_NONE,(type),(nr),0)
+#define _IOR(type,nr,size)	_IOC(_IOC_READ,(type),(nr),sizeof(size))
+#define _IOW(type,nr,size)	_IOC(_IOC_WRITE,(type),(nr),sizeof(size))
+#define _IOWR(type,nr,size)	_IOC(_IOC_READ|_IOC_WRITE,(type),(nr),sizeof(size))
+
 /* used to decode ioctl numbers.. */
 #define _IOC_DIR(nr)		(((nr) >> _IOC_DIRSHIFT) & _IOC_DIRMASK)
 #define _IOC_TYPE(nr)		(((nr) >> _IOC_TYPESHIFT) & _IOC_TYPEMASK)
 #define _IOC_NR(nr)		(((nr) >> _IOC_NRSHIFT) & _IOC_NRMASK)
 #define _IOC_SIZE(nr)		(((nr) >> _IOC_SIZESHIFT) & _IOC_SIZEMASK)
+
+/* ...and for the drivers/sound files... */
+
+#define IOC_IN		(_IOC_WRITE << _IOC_DIRSHIFT)
+#define IOC_OUT		(_IOC_READ << _IOC_DIRSHIFT)
+#define IOC_INOUT	((_IOC_WRITE|_IOC_READ) << _IOC_DIRSHIFT)
+#define IOCSIZE_MASK	(_IOC_SIZEMASK << _IOC_SIZESHIFT)
+#define IOCSIZE_SHIFT	(_IOC_SIZESHIFT)
 
 #endif /* _ASMI386_IOCTL_H */

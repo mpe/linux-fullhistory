@@ -449,6 +449,7 @@ extern void proc_print_scsidevice(Scsi_Device *, char *, int *, int);
 extern void print_command(unsigned char *);
 extern void print_sense(const char *, Scsi_Cmnd *);
 
+extern void scsi_mark_host_bus_reset(struct Scsi_Host *Host);
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
 #include "hosts.h"

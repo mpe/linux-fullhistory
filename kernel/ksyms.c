@@ -266,6 +266,8 @@ struct symbol_table symbol_table = {
 	X(tty_wait_until_sent),
 	X(tty_check_change),
 	X(tty_hung_up_p),
+	X(do_SAK),
+	X(console_print),
 
 	/* filesystem registration */
 	X(register_filesystem),

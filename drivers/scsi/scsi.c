@@ -796,6 +796,7 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt, int pid)
 	 */
 	printk("Unable to reset scsi host %d - ", SCpnt->host->host_no);
 	printk("probably a SCSI bus hang.\n");
+	SCpnt->internal_timeout &= ~IN_RESET;
         scsi_reset (SCpnt, TRUE);
 	return;
 	
@@ -1834,6 +1835,26 @@ int scsi_abort (Scsi_Cmnd * SCpnt, int why, int pid)
     }
 }
 
+
+/* Mark a single SCSI Device as having been reset. */
+
+static inline void scsi_mark_device_reset(Scsi_Device *Device)
+{
+  Device->was_reset = 1;
+  Device->expecting_cc_ua = 1;
+}
+
+
+/* Mark all SCSI Devices on a specific Host as having been reset. */
+
+void scsi_mark_host_bus_reset(struct Scsi_Host *Host)
+{
+  Scsi_Cmnd *SCpnt;
+  for(SCpnt = Host->host_queue; SCpnt; SCpnt = SCpnt->next)
+    scsi_mark_device_reset(SCpnt->device);
+}
+
+
 int scsi_reset (Scsi_Cmnd * SCpnt, int bus_reset_flag)
 {
     int temp, oldto;
@@ -1934,28 +1955,21 @@ int scsi_reset (Scsi_Cmnd * SCpnt, int bus_reset_flag)
 #ifdef DEBUG
 	    printk("scsi reset function returned %d\n", temp);
 #endif
- 
-            if( temp & SCSI_RESET_BUS_RESET )
-            {
-                /*
-                 * The low level driver did a bus reset, so we should
-                 * go through and mark all of the devices on that bus
-                 * as having been reset.
-                 */
-                SCpnt1 = host->host_queue;
-                while(SCpnt1) {
-                    SCpnt1->device->was_reset = 1;
-                    SCpnt1->device->expecting_cc_ua = 1;
-                    SCpnt1 = SCpnt1->next;
-                }
-            }
             
             /*
              * Now figure out what we need to do, based upon
              * what the low level driver said that it did.
+	     * If the result is SCSI_RESET_SUCCESS, SCSI_RESET_PENDING,
+	     * or SCSI_RESET_WAKEUP, then the low level driver did a
+	     * bus device reset or bus reset, so we should go through
+	     * and mark one or all of the devices on that bus
+	     * as having been reset.
              */
             switch(temp & SCSI_RESET_ACTION) {
 	    case SCSI_RESET_SUCCESS:
+	        if (temp & SCSI_RESET_BUS_RESET)
+		  scsi_mark_host_bus_reset(host);
+		else scsi_mark_device_reset(SCpnt->device);
 		save_flags(flags);
 		cli();
 		SCpnt->internal_timeout &= ~IN_RESET;
@@ -1963,12 +1977,18 @@ int scsi_reset (Scsi_Cmnd * SCpnt, int bus_reset_flag)
 		restore_flags(flags);
 		return 0;
 	    case SCSI_RESET_PENDING:
+	        if (temp & SCSI_RESET_BUS_RESET)
+		  scsi_mark_host_bus_reset(host);
+		else scsi_mark_device_reset(SCpnt->device);
 		return 0;
 	    case SCSI_RESET_PUNT:
                 SCpnt->internal_timeout &= ~IN_RESET;
                 scsi_request_sense (SCpnt);
                 return 0;
 	    case SCSI_RESET_WAKEUP:
+	        if (temp & SCSI_RESET_BUS_RESET)
+		  scsi_mark_host_bus_reset(host);
+		else scsi_mark_device_reset(SCpnt->device);
 		SCpnt->internal_timeout &= ~IN_RESET;
 		scsi_request_sense (SCpnt);
                 /*

@@ -10,7 +10,7 @@
  *		be here without 3C505 technical reference provided by
  *		3Com.
  *
- * Version:	@(#)3c505.c	0.8.1	26-Jun-95
+ * Version:	@(#)3c505.c	0.8.3	12-Nov-95
  *
  * Authors:	Linux 3c505 device driver by
  *			Craig Southeren, <craigs@ineluki.apana.org.au>
@@ -103,7 +103,7 @@ static int elp_debug = 0;
  *  3 = messages when interrupts received
  */
 
-#define	ELP_VERSION	"0.8.1"
+#define	ELP_VERSION	"0.8.3"
 
 /*****************************************************************
  *
@@ -473,8 +473,12 @@ static void
 adapter_hard_reset (struct device * dev)
 {
 	int timeout;
+	long flags;
 
 	CHECK_NULL(dev);
+
+	save_flags(flags);
+	sti();
 
 	if (elp_debug > 0)
 		printk("%s: Resetting the adapter, please wait (approx 20 s)\n",
@@ -507,6 +511,7 @@ adapter_hard_reset (struct device * dev)
 	for (timeout = jiffies + (100 * 15); jiffies <= timeout; ) 
 		if (GET_ASF(dev->base_addr) != ASF_PCB_END)
 			break;
+	restore_flags(flags);
 }
 
 /******************************************************
@@ -1272,6 +1277,7 @@ elp_sense (struct device * dev)
 	int timeout;
 	int addr=dev->base_addr;
 	const char *name=dev->name;
+	long flags;
 
 	byte orig_HCR=inb_control(addr),
 		orig_HSR=inb_status(addr);
@@ -1286,6 +1292,10 @@ elp_sense (struct device * dev)
 		return -1; /* It can't be 3c505 if HCR.DIR != HSR.DIR */
 	}
 
+	/* Enable interrupts - we need timers! */
+	save_flags(flags);
+	sti();
+
 	/* Wait for a while; the adapter may still be booting up */
 	if (elp_debug > 0)
 		printk(stilllooking_msg);
@@ -1299,6 +1309,7 @@ elp_sense (struct device * dev)
 		timeout = jiffies+30;
 		while (jiffies < timeout)
 			;
+		restore_flags(flags);
 		if (inb_status(addr) & DIR) {
 			outb_control(orig_HCR,addr);
 			if (elp_debug > 0)
@@ -1311,6 +1322,7 @@ elp_sense (struct device * dev)
 		timeout = jiffies+300;
 		while (jiffies < timeout)
 			;
+		restore_flags(flags);
 		if (!(inb_status(addr) & DIR)) {
 			outb_control(orig_HCR,addr);
 			if (elp_debug > 0)
@@ -1462,8 +1474,8 @@ static struct device dev_3c505 = {
 	0, 0,
 	0, 0, 0, NULL, elplus_probe };
 
-static int io = 0x300;
-static int irq = 0;
+int io = 0x300;
+int irq = 0;
 
 int init_module(void)
 {

@@ -1133,6 +1133,12 @@ static int sd_init_onedisk(int i)
 	
 	rscsi_disks[i].sector_size = (buffer[4] << 24) |
 	    (buffer[5] << 16) | (buffer[6] << 8) | buffer[7];
+
+	if (rscsi_disks[i].sector_size == 0) {
+	  rscsi_disks[i].sector_size = 512;
+	  printk("sd%c : sector size 0 reported, assuming 512.\n", 'a' + i);
+	}
+ 
 	
 	if (rscsi_disks[i].sector_size != 512 &&
 	    rscsi_disks[i].sector_size != 1024 &&

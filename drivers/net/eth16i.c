@@ -1170,7 +1170,6 @@ static void eth16i_select_regbank(unsigned char banknbr, short ioaddr)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_eth16i = {
 	devicename,

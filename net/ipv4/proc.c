@@ -111,8 +111,8 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 			}
 			len += sprintf(buffer+len, "%2d: %08lX:%04X %08lX:%04X %02X %08lX:%08lX %02X:%08lX %08X %d %d\n",
 				i, src, srcp, dest, destp, sp->state, 
-				format==0?sp->write_seq-sp->rcv_ack_seq:sp->rmem_alloc, 
-				format==0?sp->acked_seq-sp->copied_seq:sp->wmem_alloc,
+				format==0?sp->write_seq-sp->rcv_ack_seq:sp->wmem_alloc, 
+				format==0?sp->acked_seq-sp->copied_seq:sp->rmem_alloc,
 				timer_active, timer_expires-jiffies, (unsigned) sp->retransmits,
 				(sp->socket&&SOCK_INODE(sp->socket))?SOCK_INODE(sp->socket)->i_uid:0,
 				timer_active?sp->timeout:0);

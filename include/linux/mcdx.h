@@ -1,7 +1,7 @@
 /*
  * Definitions for the Mitsumi CDROM interface
- * Copyright (C) 1995 Heiko Schlittermann
- * VERSION: 1.0a
+ * Copyright (C) 1995 Heiko Schlittermann <heiko@lotte.sax.de>
+ * VERSION: 1.3
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -92,10 +92,16 @@
 #define INIT 		0
 #define MALLOC 		0
 #define IOCTL 		0
+#define PLAYTRK     0
+#define SUBCHNL     0
+#define TOCHDR      0
+#define MS          0
+#define PLAYMSF     0
+#define READTOC     0
 #define OPENCLOSE 	0
 #define HW		    0
 #define TALK		0
-#define IRQ 		0
+#define IRQ 		1
 #define TRANSFER 	0
 #define REQUEST	 	0
 #else
@@ -173,8 +179,7 @@
 #define MCDX_E		1			/* unspec error */
 #define MCDX_EOM	2			/* end of media */
 
-#if 0
 #ifndef I_WAS_HERE
-#error Please edit this file first.
-#endif
+#warning You have not edited mcdx.h
+#warning Perhaps irq and i/o settings are wrong.
 #endif

@@ -9,7 +9,6 @@
 
 #define __ASSEMBLY__
 #include <asm/system.h>
-#include <linux/fd.h>
 
 #define halt .long PAL_halt
 

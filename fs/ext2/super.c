@@ -157,9 +157,9 @@ static int parse_options (char * options, unsigned long * sb_block,
 				clear_opt (*mount_options, CHECK_NORMAL);
 				clear_opt (*mount_options, CHECK_STRICT);
 			}
-			else if (strcmp (value, "normal"))
+			else if (!strcmp (value, "normal"))
 				set_opt (*mount_options, CHECK_NORMAL);
-			else if (strcmp (value, "strict")) {
+			else if (!strcmp (value, "strict")) {
 				set_opt (*mount_options, CHECK_NORMAL);
 				set_opt (*mount_options, CHECK_STRICT);
 			}

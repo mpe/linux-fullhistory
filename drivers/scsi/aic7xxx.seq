@@ -25,13 +25,14 @@
 # optimizations provided by Justin T. Gibbs (gibbs@FreeBSD.org)
 ##-M#########################################################################
 
-VERSION AIC7XXX_SEQ_VER "$Id: aic7xxx.seq,v 2.1 1995/08/30 07:47:07 deang Exp $"
+VERSION AIC7XXX_SEQ_VER "$Id: aic7xxx.seq,v 2.3 1995/11/10 10:51:22 deang Exp $"
 
 SCBMASK		= 0xff
 
 SCSISEQ		= 0x00
 ENRSELI		= 0x10
 SXFRCTL0	= 0x01
+ULTRAEN		= 0x20
 SXFRCTL1	= 0x02
 SCSISIGI	= 0x03
 SCSISIGO	= 0x03
@@ -229,7 +230,6 @@ ACTIVE_B	= 0x55
 SAVED_TCL	= 0x56				# Temporary storage for the 
 						# target/channel/lun of a
 						# reconnecting target
-
 # After starting the selection hardware, we return to the "poll_for_work"
 # loop so that we can check for reconnecting targets as well as for our
 # selection to complete just in case the reselection wins bus arbitration.
@@ -444,6 +444,7 @@ ITloop:
 
 	and	A,0xe0,SCSISIGI			# CDI|IOI|MSGI
 
+	mov	A		call scsisig
 	cmp	ALLZEROS,A	je p_dataout
 	cmp	A,0x40		je p_datain
 	cmp	A,0x80		je p_command
@@ -454,7 +455,6 @@ ITloop:
 	mvi	INTSTAT,BAD_PHASE		# unknown - signal driver
 
 p_dataout:
-	mvi	0		call scsisig	# !CDO|!IOO|!MSGO
 	mvi	DMAPARAMS,0x7d			# WIDEODD|SCSIEN|SDMAEN|HDMAEN|
 						#   DIRECTION|FIFORESET
 	jmp	data_phase_init
@@ -469,8 +469,7 @@ data_phase_reinit:
 # Reads should not use WIDEODD since it may make the last byte for a SG segment
 # go to the next segment.
 p_datain:
-	mvi	0x40		call scsisig	# !CDO|IOO|!MSGO
-	mvi	DMAPARAMS,0x39			# SCSIEN|SDMAEN|HDMAEN|
+	mvi	DMAPARAMS,0x79			# WIDEODD|SCSIEN|SDMAEN|HDMAEN|
 						#   !DIRECTION|FIFORESET
 data_phase_init:
 	call	assert
@@ -574,7 +573,6 @@ data_phase_finish:
 #  so we can copy those three bytes directly into HCNT.
 #
 p_command:
-	mvi	0x80		call scsisig	# CDO|!IOO|!MSGO
 	call	assert
 
 # Load HADDR and HCNT.  We can do this in one bcopy since they are neighbors
@@ -592,7 +590,6 @@ p_command:
 #  and store it into the SCB.
 #
 p_status:
-	mvi	0xc0		call scsisig	# CDO|IOO|!MSGO
 
 	mvi	SCBARRAY+14	call inb_first
 	jmp	mesgin_done
@@ -601,7 +598,6 @@ p_status:
 #  took us into this phase anyway, build a no-op message and send it.
 #
 p_mesgout:
-	mvi	0xa0		call scsisig	# CDO|!IOO|MSGO
 	mvi	0x8		call mk_mesg	# build NOP message
 
 	clr     STCNT+2
@@ -661,7 +657,8 @@ p_mesgout5:
 
 	and	A,0xe0,SCSISIGI			# CDI|IOI|MSGI
 	cmp	A,0xa0		jne p_mesgout6
-	mvi	0x10		call scsisig	# ATNO - re-assert ATN
+	or	SINDEX,0x10,SIGSTATE		# turn on ATNO
+	call	scsisig				# ATNO - re-assert ATN
 
 	jmp	ITloop
 
@@ -679,7 +676,6 @@ p_mesgout6:
 #  to a data I/O phase.
 #
 p_mesgin:
-	mvi	0xe0		call scsisig	# CDO|IOO|MSGO
 	mvi	A		call inb_first	# read the 1st message byte
 	mvi	REJBYTE,A			# save it for the driver
 
@@ -742,11 +738,12 @@ status_ok:
 	mov	A,FUNCTION1
 	test	SCBARRAY+1,0x88 jz clear_a
 	xor	ACTIVE_B,A
-	jmp	complete
+	jmp	immediate
 
 clear_a:
 	xor	ACTIVE_A,A
 
+immediate:
 	test    SCBARRAY+11,0xff jnz complete  # Immediate message complete
 # Pause the sequencer until the driver gets around to handling the command
 # complete.  This is so that any action that might require carefull timing
@@ -1011,7 +1008,8 @@ dma4:
 #  actually off first lest we get an ILLSADDR.
 #
 dma5:
-	clr	DFCNTRL				# disable DMA
+	and	DFCNTRL, 0x40, SINDEX		# disable DMA, but maintain
+						# WIDEODD
 dma6:
 	test	DFCNTRL,0x38	jnz dma6	# SCSIENACK|SDMAENACK|HDMAENACK
 
@@ -1044,7 +1042,7 @@ initialize_for_target:
 #
 	clr	SIGSTATE 
 
-	mvi	SXFRCTL0,0x8a			# DFON|SPIOEN|CLRCHN
+	or	SXFRCTL0,0x8a			# DFON|SPIOEN|CLRCHN
 
 #  Make sure that the system knows we have not been through a DATA
 #  phase.
@@ -1205,7 +1203,8 @@ sdtr_to_rate_loop:
 	jmp	sdtr_to_rate_loop
 sdtr_to_rate_done:
 	shr	RETURN_1,0x2
-	add	RETURN_1,0x18	ret
-
+	add	RETURN_1,0x18
+	test	SXFRCTL0,ULTRAEN jz return
+	shr	RETURN_1,0x1
 return:
 	ret

@@ -223,6 +223,8 @@ static char rcsid[] =
  *
  */
 
+#include <linux/module.h>
+
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -404,7 +406,6 @@ static int startup (struct cyclades_port *);
 static void cy_throttle(struct tty_struct *);
 static void cy_unthrottle(struct tty_struct *);
 static void config_setup(struct cyclades_port *);
-extern void console_print(const char *);
 #ifdef CYCLOM_SHOW_STATUS
 static void show_status(int);
 #endif
@@ -465,7 +466,6 @@ void CP1(int data) { (data<10)?  CP(data+'0'): CP(data+'A'-10); }/* CP1 */
 void CP2(int data) { CP1((data>>4) & 0x0f); CP1( data & 0x0f); }/* CP2 */
 void CP4(int data) { CP2((data>>8) & 0xff); CP2(data & 0xff); }/* CP4 */
 void CP8(long data) { CP4((data>>16) & 0xffff); CP4(data & 0xffff); }/* CP8 */
-
 
 /* This routine waits up to 1000 micro-seconds for the previous
    command to the Cirrus chip to complete and then issues the
@@ -583,6 +583,7 @@ cy_sched_event(struct cyclades_port *info, int event)
 } /* cy_sched_event */
 
 
+static int probe_ready;
 
 /*
  * This interrupt routine is used
@@ -593,6 +594,9 @@ cy_probe(int irq, struct pt_regs *regs)
 {
   int save_xir, save_car;
   int index = 0;	/* probing interrupts is only for ISA */
+
+    if (!probe_ready)
+        return;
 
     cy_irq_triggered = irq;
     cy_triggered |= 1 << irq;
@@ -1107,6 +1111,7 @@ get_auto_irq(unsigned char *address)
 	base_addr[CyCAR<<index] = 0;
 	write_cy_cmd(base_addr,CyCHAN_CTL|CyENB_XMTR,index);
 	base_addr[CySRER<<index] |= CyTxMpty;
+	probe_ready = 1;
     sti();
     
     timeout = jiffies+2;
@@ -1114,6 +1119,7 @@ get_auto_irq(unsigned char *address)
 	if (cy_irq_triggered)
 	    break;
     }
+    probe_ready = 0;
     return(cy_irq_triggered);
 } /* get_auto_irq */
 
@@ -1131,6 +1137,8 @@ do_auto_irq(unsigned char *address)
 
     /* Turn on interrupts (they may be off) */
     save_flags(flags); sti();
+
+	probe_ready = 0;
 
         cy_wild_int_mask = check_wild_interrupts();
 
@@ -2286,6 +2294,7 @@ static void
 cy_close(struct tty_struct * tty, struct file * filp)
 {
   struct cyclades_port * info = (struct cyclades_port *)tty->driver_data;
+  unsigned long flags;
 
 /* CP('C'); */
 #ifdef SERIAL_DEBUG_OTHER
@@ -2300,6 +2309,14 @@ cy_close(struct tty_struct * tty, struct file * filp)
     printk("cy_close ttyC%d, count = %d\n", info->line, info->count);
 #endif
 
+    save_flags(flags); cli();
+
+    /* If the TTY is being hung up, nothing to do */
+    if (tty_hung_up_p(filp)) {
+	restore_flags(flags);
+	return;
+    }
+	
     if ((tty->count == 1) && (info->count != 1)) {
 	/*
 	 * Uh, oh.  tty->count is 1, which means that the tty
@@ -2313,7 +2330,7 @@ cy_close(struct tty_struct * tty, struct file * filp)
 	info->count = 1;
     }
 #ifdef SERIAL_DEBUG_COUNT
-    printk("cyc: %d: decrementing count to %d\n", __LINE__, info->count - 1);
+    printk("cyc: %d(%d): decrementing count to %d\n", __LINE__, current->pid, info->count - 1);
 #endif
     if (--info->count < 0) {
 #ifdef SERIAL_DEBUG_COUNT
@@ -2322,7 +2339,11 @@ cy_close(struct tty_struct * tty, struct file * filp)
 	info->count = 0;
     }
     if (info->count)
+    {
+        MOD_DEC_USE_COUNT;
+	restore_flags(flags);
 	return;
+    }
     info->flags |= ASYNC_CLOSING;
     /*
      * Save the termios structure, since this port may have
@@ -2341,14 +2362,6 @@ cy_close(struct tty_struct * tty, struct file * filp)
 	tty->ldisc.flush_buffer(tty);
     info->event = 0;
     info->tty = 0;
-    if (tty->ldisc.num != ldiscs[N_TTY].num) {
-	if (tty->ldisc.close)
-	    (tty->ldisc.close)(tty);
-	tty->ldisc = ldiscs[N_TTY];
-	tty->termios->c_line = N_TTY;
-	if (tty->ldisc.open)
-	    (tty->ldisc.open)(tty);
-    }
     if (info->blocked_open) {
 	if (info->close_delay) {
 	    current->state = TASK_INTERRUPTIBLE;
@@ -2365,6 +2378,8 @@ cy_close(struct tty_struct * tty, struct file * filp)
     printk("cy_close done\n");
 #endif
 
+    MOD_DEC_USE_COUNT;
+    restore_flags(flags);
     return;
 } /* cy_close */
 
@@ -2384,14 +2399,12 @@ cy_hangup(struct tty_struct *tty)
 	return;
     
     shutdown(info);
-#if 0
     info->event = 0;
     info->count = 0;
 #ifdef SERIAL_DEBUG_COUNT
-    printk("cyc: %d: setting count to 0\n", __LINE__);
+    printk("cyc: %d(%d): setting count to 0\n", __LINE__, current->pid);
 #endif
     info->tty = 0;
-#endif
     info->flags &= ~(ASYNC_NORMAL_ACTIVE|ASYNC_CALLOUT_ACTIVE);
     wake_up_interruptible(&info->open_wait);
 } /* cy_hangup */
@@ -2477,7 +2490,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 #endif
     info->count--;
 #ifdef SERIAL_DEBUG_COUNT
-    printk("cyc: %d: decrementing count to %d\n", __LINE__, info->count);
+    printk("cyc: %d(%d): decrementing count to %d\n", __LINE__, current->pid, info->count);
 #endif
     info->blocked_open++;
 
@@ -2537,7 +2550,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
     if (!tty_hung_up_p(filp)){
 	info->count++;
 #ifdef SERIAL_DEBUG_COUNT
-    printk("cyc: %d: incrementing count to %d\n", __LINE__, info->count);
+    printk("cyc: %d(%d): incrementing count to %d\n", __LINE__, current->pid, info->count);
 #endif
     }
     info->blocked_open--;
@@ -2581,7 +2594,7 @@ cy_open(struct tty_struct *tty, struct file * filp)
 #endif
     info->count++;
 #ifdef SERIAL_DEBUG_COUNT
-    printk("cyc: %d: incrementing count to %d\n", __LINE__, info->count);
+    printk("cyc: %d(%d): incrementing count to %d\n", __LINE__, current->pid, info->count);
 #endif
     tty->driver_data = info;
     info->tty = tty;
@@ -2622,6 +2635,7 @@ cy_open(struct tty_struct *tty, struct file * filp)
 #ifdef SERIAL_DEBUG_OPEN
     printk("cy_open done\n");/**/
 #endif
+    MOD_INC_USE_COUNT;
     return 0;
 } /* cy_open */
 
@@ -2736,7 +2750,6 @@ cy_init(void)
   struct cyclades_card *cinfo;
   int			board,port,i;
 
-scrn[1] = '\0';
     show_version();
 
     /* Initialize the tty_driver structure */
@@ -2876,6 +2889,33 @@ scrn[1] = '\0';
     return 0;
     
 } /* cy_init */
+
+#ifdef MODULE
+int
+init_module(void)
+{
+   return(cy_init());
+}
+
+void
+cleanup_module(void)
+{
+    int i;
+
+
+    if (tty_unregister_driver(&cy_callout_driver))
+	    printk("Couldn't unregister Cyclom callout driver\n");
+    if (tty_unregister_driver(&cy_serial_driver))
+	    printk("Couldn't unregister Cyclom serial driver\n");
+
+    for (i = 0; i < NR_CARDS; i++) {
+        if (cy_card[i].base_addr != 0)
+	{
+	    free_irq(cy_card[i].irq);
+	}
+    }
+}
+#endif
 
 /*
  * ---------------------------------------------------------------------

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 40
+SUBLEVEL = 41
 
 ARCH = i386
 
@@ -323,5 +323,5 @@ include Rules.make
 
 .hdepend: dummy
 	rm -f $@
-	$(AWK) -f scripts/depend.awk `find $(HPATH) -name \*.h -print` > .$@
+	$(AWK) -f scripts/depend.awk `find $(HPATH) -name \*.h ! -name modversions.h -print` > .$@
 	mv .$@ $@

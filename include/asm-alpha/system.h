@@ -100,37 +100,39 @@ __old_ipl; })
 /*
  * Give prototypes to shut up gcc.
  */
-extern inline unsigned long xchg_u32 (volatile int * m, unsigned long new_val);
-extern inline unsigned long xchg_u64 (volatile long * m, unsigned long new_val);
+extern inline unsigned long xchg_u32 (volatile int * m, unsigned long val);
+extern inline unsigned long xchg_u64 (volatile long * m, unsigned long val);
 
-extern inline unsigned long xchg_u32(volatile int * m, unsigned long new_val)
+extern inline unsigned long xchg_u32(volatile int * m, unsigned long val)
 {
-	unsigned long old_val;
+	unsigned long dummy, dummy2;
 
-	__asm__ __volatile__("\n1:\t"
-			     "ldl_l %0,%2\n\t"
-			     "bis %3,%3,$25\n\t"
-			     "stl_c $25,%1\n\t"
-			     "beq $25,1b\n"
-			     : "=r"(old_val), "=m"(*m)
-			     : "m"(*m), "r"(new_val)
-			     : "$25");
-	return old_val;
+	__asm__ __volatile__(
+		"\n1:\t"
+		"ldl_l %0,0(%1)\n\t"
+		"bis %2,%2,%3\n\t"
+		"stl_c %3,0(%1)\n\t"
+		"beq %3,1b\n"
+		: "=r" (val), "=r" (m), "=r" (dummy), "=r" (dummy2)
+		: "1" (m), "2" (val)
+		: "memory");
+	return val;
 }
 
-extern inline unsigned long xchg_u64(volatile long * m, unsigned long new_val)
+extern inline unsigned long xchg_u64(volatile long * m, unsigned long val)
 {
-	unsigned long old_val;
+	unsigned long dummy, dummy2;
 
-	__asm__ __volatile__("\n1:\t"
-			     "ldq_l %0,%2\n\t"
-			     "bis %3,%3,$25\n\t"
-			     "stq_c $25,%1\n\t"
-			     "beq $25,1b\n"
-			     : "=r"(old_val), "=m"(*m)
-			     : "m"(*m), "r"(new_val)
-			     : "$25");
-	return old_val;
+	__asm__ __volatile__(
+		"\n1:\t"
+		"ldq_l %0,0(%1)\n\t"
+		"bis %2,%2,%3\n\t"
+		"stq_c %3,0(%1)\n\t"
+		"beq %3,1b\n"
+		: "=r" (val), "=r" (m), "=r" (dummy), "=r" (dummy2)
+		: "1" (m), "2" (val)
+		: "memory");
+	return val;
 }
 
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))

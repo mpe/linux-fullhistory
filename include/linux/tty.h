@@ -328,6 +328,7 @@ extern int  pty_open(struct tty_struct * tty, struct file * filp);
 
 extern int con_open(struct tty_struct * tty, struct file * filp);
 extern void update_screen(int new_console);
+extern void console_print(const char *);
 
 /* vt.c */
 

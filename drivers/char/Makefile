@@ -20,8 +20,12 @@ L_OBJS   := tty_io.o n_tty.o console.o keyboard.o serial.o \
 	tty_ioctl.o pty.o vt.o mem.o vc_screen.o random.o \
 	defkeymap.o consolemap.o selection.o
 
-ifdef CONFIG_CYCLADES
+ifeq ($(CONFIG_CYCLADES),y)
 L_OBJS += cyclades.o
+else
+  ifeq ($(CONFIG_CYCLADES),m)
+  M_OBJS += cyclades.o
+  endif
 endif
 
 ifeq ($(CONFIG_STALLION),y)

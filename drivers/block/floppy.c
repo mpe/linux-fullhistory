@@ -3015,7 +3015,7 @@ static inline void clear_write_error(int drive)
 	CLEARSTRUCT(UDRWE);
 }
 
-static inline int set_geometry(int cmd, struct floppy_struct *g,
+static inline int set_geometry(unsigned int cmd, struct floppy_struct *g,
 			       int drive, int type, int device)
 {
 	int cnt;
@@ -3114,14 +3114,14 @@ static inline int normalize_0x02xx_ioctl(int *cmd, int *size)
 {
 	int i, orig_size, ocmd;
 
-	orig_size = IOC_SIZE(*cmd);
+	orig_size = _IOC_SIZE(*cmd);
 	ocmd = *cmd;
 	for (i=0; i < ARRAY_SIZE(translation_table); i++) {
 		if ((*cmd & 0xff3f) == (translation_table[i].newcmd & 0xff3f)){
 			*cmd = translation_table[i].newcmd;
-			if (!orig_size && IOC_SIZE(*cmd)) {
-				/* kernels 1.3.34 to 1.3.37 : */
-				*size = IOC_SIZE(*cmd); 
+			if (!orig_size && _IOC_SIZE(*cmd)) {
+				/* kernels 1.3.34 to 1.3.39 : */
+				*size = _IOC_SIZE(*cmd); 
 				DPRINT1("warning: obsolete ioctl 0x%x\n",ocmd);
 				DPRINT("please recompile your program\n");
 				/* these ioctls only existed
@@ -3132,7 +3132,7 @@ static inline int normalize_0x02xx_ioctl(int *cmd, int *size)
 				 */
 			} else {
 				*size = orig_size;
-				if (*size > IOC_SIZE(*cmd)) {
+				if (*size > _IOC_SIZE(*cmd)) {
 					printk("ioctl not yet supported\n");
 					return -EFAULT;
 				}
@@ -3261,7 +3261,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 
 		case FDGETDRVTYP:
 			outparam = drive_name(type,drive);
-			SUPBOUND(size,strlen(outparam));
+			SUPBOUND(size,strlen(outparam)+1);
 			break;
 
 		IN(FDSETDRVPRM, UDP, dp);

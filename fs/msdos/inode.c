@@ -81,7 +81,7 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 
 	*check = 'n';
 	*conversion = 'b';
-	*dotsOK =1;
+	*dotsOK =0;
 	*uid = current->uid;
 	*gid = current->gid;
 	*umask = current->fs->umask;

@@ -110,8 +110,7 @@ struct mcd_Toc {
 	struct msf	diskTime;
 };
 
-#if 0
 #ifndef I_WAS_HERE
-#error Please edit this file first.
-#endif
+#warning You have not edited mcd.h
+#warning Perhaps irq and i/o settings are wrong.
 #endif
