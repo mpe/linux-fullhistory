@@ -12,13 +12,14 @@ extern unsigned long bh_mask;
 extern struct bh_struct bh_base[32];
 
 /* Who gets which entry in bh_base.  Things which will occur most often
-   should come first. */
+   should come first - in which case NET should be up the top with SERIAL/TQUEUE! */
+   
 enum {
 	TIMER_BH = 0,
 	CONSOLE_BH,
+	TQUEUE_BH,
 	SERIAL_BH,
-	TTY_BH,
-	INET_BH,
+	NET_BH,
 	KEYBOARD_BH
 };
 

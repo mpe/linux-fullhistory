@@ -1,92 +1,37 @@
+This is snapshot 014
 
-This is snapshot 010
+This fixes the following from the 1.1.12 release (see the relevant files
+for the credits to authors).
 
-Notes:
-ARP
-	As of snapshot 006, ARP should compile and work correctly
-	for any protocol that has the right build_header support.
-
-AX25	
-	This is an ALPHA release. It will not be a standard part
-	of the real release module. Please read the copyrights on
-	the AX.25 code carefully. When AX.25 is finished it will
-	be part of a seperatly available amateur radio add on. Also
-	please rememeber this is ALPHA code. It works well for a lot
-	of people but I know for a fact it is currently buggy.
-
-IPX
-	The IPX module in here is fairly complete, and certainly
-	usable for things. The IPX user code isn't yet very useful
-	(nobody has written a RIP/SAP daemon!).
-
-NetROM
-	I'm slowly doing bits of this code, but its not even fit
-	to include here.
-
-
-Status:
-
-Done:
-	Replaced ARP with Florian la Roche's ARP.
-	Replaced/improved sk_buff handlers (again from Florian)
-	Removed surplus DDI code.
-	Reformatted most modules.
-	Fixed ICMP handling bugs (ICMP error to ICMP error).
-	Fixed fragmentation bugs (both memory and mtu).
-	Moved some includes.
-	Drivers now build correctly with no IP layer.
-	Merged Linus 1.0.1 diffs and my patches 1-3.
-	Further fixups on clean driver build.
-	Loopback driver now lives where it belongs.
-	UDP verified against specification (passes).
-	IP verified against specification (two errors: Incorrect forwarding and
-		no mandatory option handling).
-	ARP verified against specification (passes: recommendation that ARP
-		rejects MAC broadcast/multicast addresses - this needs
-		driver changes doing).
-	All surplus skb->sk assignment and skb->mem_len skb->mem_addr removed.
-	eth.h became linux/etherdevice.h.
-	alloc_skb nows adds the sizeof(struct sk_buff) itself.
-	Now relative to Linux 1.0.4.
-	All IP wakeups are now callbacks.
-	IPX and AX.25 callbacks now use wake_up_interruptible correctly.
-	ICMP,IP and UDP collect snmp statistics.
-	Removed the 4K limit from the /proc/net/* files.
-	Routing bugs.
-	Cleaned up skb duplication.
-	IPX /proc from Mark Evans.
-	Driver packet ordering now enforced.
-	AX.25 unused SSID bits now set.
-
-In Progress:
-	Module by module validation against specifications.
-	TCP delayed ACK	 [RFC1122 requires this].
-	Byte-order fixes.
-	Core code restructure to enable a working non IP build
-	Trying to fix /proc to do >4K correctly, as well as dynamic addition
- 		of /proc/ and /proc/net/ objects (for module protocol layers).
-	Adding the extra NET2E driver ioctl() support.
-	SNMP MIB statistic capture - finish TCP and add device layer when 
-		Donald is ready.
-	Donald Beckers latest driver mods.
-	Adding the ICMP_TIMESTAMP support patch.
-	Routing bugs.
-	Packet level time stamping.
-	Merging in support for the I^2IT 'TICK' time synchronisation chip.
-	Crynwyr compliant PLIP driver.
-
-To Do:
-	Merge in sk_buff data handling module.
-	Socket family/protocol seperation.
-	Additional BSD options (SO_LOWAT etc).
-	IP option handling, especially on ip forwards.
-	AX.25 /proc support.
-	SNMP /proc support.
-	TCP MSS/Window and route metrics in the routing table.
-	TCP mtu discovery support.
-	NetROM.
-	TCP closing side state machine bug fixes.
-	NetBEUI (Lan Manager) [ie IEE802.3/IEE802.2/NetBIOS].
-	Make drivers record type and addressing category(Multicast/Broadcast..)
-	Speed it up.
-	Unix domain cleanup/rewrite.
+o	RARP compiles in properly
+o	Using new Tytso TTY drivers
+o	IP forwarding is configurable
+o	PC/TCP support
+o	AX.25 builds fine without SLIP driver (just PI)
+o	MTU recognized in routing table (but only by TCP currently)
+o	AX.25 PI driver merged into AX.25 code and kernel stubs
+o	UNIX /proc trap hopefully fixed
+o	DDI removed totally ready to use the PCMICA people's stuff
+o	Unix domain lock/unlock now static (needlessly visible before)
+o	Split net/inet/sock.c into generic and IP components
+o	NFS client works correctly with 8K NFS
+o	Non IP builds work correctly
+o	Renamed inet_bh etc to net_bh to reflect true nature
+o	TCP handling of poor routes much improved
+o	TCP connect timing fixed
+o	Incredibly unlikely SLIP memory leak removed
+o	Loopback maintains IFF_LOOPBACK flag
+o	Johnathon Naylor(G4KLX) AX.25 changes
+o	Out of sync bug in lance driver fixed.
+o	First cut at ethernet loadable modules
+o	PCMICA people have ifmap stuff. Will extend this to other drivers.
+o	New de600.c
+o	Clean up of IP layer - sorted a lot of redundant and duplicated code
+	out.
+o	Removed all the old non working debugging junk from the kernel.
+o	Removed all the devices the kernel used to use as a legacy from
+	FvK's days writing the linux networking.
+o	Greg Page's latest and greatest IPX fixes (including 802.2). Now
+	I've got the stuff to write a free Netware client too and some
+	volunteers to do it.
+o	Fixed the 1.1.12 ARP fragment bug.

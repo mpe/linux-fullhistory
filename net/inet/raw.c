@@ -23,6 +23,7 @@
  *		Alan Cox	:	Fixed error return for broadcasts
  *		Alan Cox	:	Removed wake_up calls
  *		Alan Cox	:	Use ttl/tos
+ *		Alan Cox	:	Cleaned up old debugging
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -44,9 +45,6 @@
 #include <linux/netdevice.h>
 #include "ip.h"
 #include "protocol.h"
-#if 0
-#include "tcp.h"
-#endif
 #include <linux/skbuff.h>
 #include "sock.h"
 #include "icmp.h"
@@ -68,9 +66,6 @@ raw_err (int err, unsigned char *header, unsigned long daddr,
 {
   struct sock *sk;
    
-  DPRINTF((DBG_RAW, "raw_err(err=%d, hdr=%X, daddr=%X, saddr=%X, protocl=%X)\n",
-		err, header, daddr, saddr, protocol));
-
   if (protocol == NULL) return;
   sk = (struct sock *) protocol->data;
   if (sk == NULL) return;
@@ -98,10 +93,6 @@ raw_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	int redo, struct inet_protocol *protocol)
 {
   struct sock *sk;
-
-  DPRINTF((DBG_RAW, "raw_rcv(skb=%X, dev=%X, opt=%X, daddr=%X,\n"
-	   "         len=%d, saddr=%X, redo=%d, protocol=%X)\n",
-	   skb, dev, opt, daddr, len, saddr, redo, protocol));
 
   if (skb == NULL)
   	return(0);
@@ -155,22 +146,12 @@ static int raw_sendto(struct sock *sk, unsigned char *from,
 	int tmp;
 	int err;
 
-	DPRINTF((DBG_RAW, "raw_sendto(sk=%X, from=%X, len=%d, noblock=%d, flags=%X,\n"
-		"            usin=%X, addr_len = %d)\n", sk, from, len, noblock,
-		flags, usin, addr_len));
-
 	/*
 	 *	Check the flags. Only MSG_DONTROUTE is permitted.
 	 */
 	 
 	if (flags&MSG_DONTROUTE)
 		return(-EINVAL);
-	if (len < 0) 
-		return(-EINVAL);
-
-	err=verify_area(VERIFY_READ,from,len);
-	if(err)
-		return err;
 	/*
 	 *	Get and verify the address. 
 	 */
@@ -222,7 +203,6 @@ static int raw_sendto(struct sock *sk, unsigned char *from,
 		{
 			int tmp;
 
-			DPRINTF((DBG_RAW, "raw_sendto: write buffer full?\n"));
 			if (noblock) 
 				return(-EAGAIN);
 			tmp = sk->wmem_alloc;
@@ -248,7 +228,6 @@ static int raw_sendto(struct sock *sk, unsigned char *from,
 			       sk->protocol, sk->opt, skb->mem_len, sk->ip_tos,sk->ip_ttl);
 	if (tmp < 0) 
 	{
-		DPRINTF((DBG_RAW, "raw_sendto: error building ip header.\n"));
 		kfree_skb(skb,FREE_WRITE);
 		release_sock(sk);
 		return(tmp);
@@ -293,11 +272,7 @@ static void raw_close(struct sock *sk, int timeout)
 	sk->inuse = 1;
 	sk->state = TCP_CLOSE;
 
-	DPRINTF((DBG_RAW, "raw_close: deleting protocol %d\n",
-	   ((struct inet_protocol *)sk->pair)->protocol));
-
-	if (inet_del_protocol((struct inet_protocol *)sk->pair) < 0)
-		DPRINTF((DBG_RAW, "raw_close: del_protocol failed.\n"));
+	inet_del_protocol((struct inet_protocol *)sk->pair);
 	kfree_s((void *)sk->pair, sizeof (struct inet_protocol));
 	sk->pair = NULL;
 	release_sock(sk);
@@ -323,8 +298,6 @@ raw_init(struct sock *sk)
   /* We need to remember this somewhere. */
   sk->pair = (struct sock *)p;
 
-  DPRINTF((DBG_RAW, "raw init added protocol %d\n", sk->protocol));
-
   return(0);
 }
 
@@ -341,10 +314,6 @@ raw_recvfrom(struct sock *sk, unsigned char *to, int len,
   int copied=0;
   struct sk_buff *skb;
   int err;
-
-  DPRINTF((DBG_RAW, "raw_recvfrom (sk=%X, to=%X, len=%d, noblock=%d, flags=%X,\n"
-	   "              sin=%X, addr_len=%X)\n",
-		sk, to, len, noblock, flags, sin, addr_len));
 
   if (len == 0) return(0);
   if (len < 0) return(-EINVAL);

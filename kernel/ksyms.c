@@ -14,6 +14,10 @@
 #include <linux/ptrace.h>
 #include <linux/sys.h>
 #include <linux/utsname.h>
+#include <linux/interrupt.h>
+#ifdef CONFIG_INET
+#include <linux/netdevice.h>
+#endif
   
 extern void *sys_call_table;
 
@@ -37,6 +41,18 @@ extern int do_signal(unsigned long oldmask, struct pt_regs * regs);
 extern int (*ibcs_invmapsig)(int);
 
 extern void (* iABI_hook)(struct pt_regs * regs);
+#endif
+#ifdef CONFIG_INET
+extern int register_netdev(struct device *);
+extern void unregister_netdev(struct device *);
+extern void ether_setup(struct device *);
+extern struct sk_buff *alloc_skb(unsigned int,int);
+extern void kfree_skb(struct sk_buff *, int);
+extern void snarf_region(unsigned int, unsigned int);
+extern void netif_rx(struct sk_buff *);
+extern int dev_rint(unsigned char *, long, int, struct device *);
+extern void dev_tint(struct device *);
+extern struct device *irq2dev_map[];
 #endif
 
 struct {
@@ -81,6 +97,8 @@ struct {
 	/* interrupt handling */
 	X(request_irq),
 	X(free_irq),
+	X(bh_active),
+	X(bh_mask),
 
 	/* process management */
 	X(wake_up),
@@ -131,6 +149,20 @@ struct {
 
 	/* Miscellaneous access points */
 	X(si_meminfo),
+#endif
+
+#ifdef CONFIG_INET
+	/* support for loadable net drivers */
+	X(register_netdev),
+	X(unregister_netdev),
+	X(ether_setup),
+	X(alloc_skb),
+	X(kfree_skb),
+	X(snarf_region),
+	X(netif_rx),
+	X(dev_rint),
+	X(dev_tint),
+	X(irq2dev_map),
 #endif
 };
 

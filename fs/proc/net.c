@@ -52,6 +52,16 @@ extern int rt_get_info(char *, char **, off_t, int);
 extern int ipx_get_info(char *, char **, off_t, int);
 extern int ipx_rt_get_info(char *, char **, off_t, int);
 #endif /* CONFIG_IPX */
+#ifdef CONFIG_AX25
+extern int ax25_get_info(char *, char **, off_t, int);
+extern int ax25_rt_get_info(char *, char **, off_t, int);
+#ifdef CONFIG_NETROM
+extern int nr_get_info(char *, char **, off_t, int);
+extern int nr_nodes_get_info(char *, char **, off_t, int);
+extern int nr_neigh_get_info(char *, char **, off_t, int);
+#endif /* CONFIG_NETROM */
+#endif /* CONFIG_AX25 */
+
 
 static struct file_operations proc_net_operations = {
 	NULL,			/* lseek - default */
@@ -97,15 +107,24 @@ static struct proc_dir_entry net_dir[] = {
 	{ 131,3,"dev" },
 	{ 132,3,"raw" },
 	{ 133,3,"tcp" },
-	{ 134,3,"udp" },
+	{ 134,3,"udp" }
 #ifdef CONFIG_INET_RARP
-	{ 135,4,"rarp"}
+	,{ 135,4,"rarp"}
 #endif
 #endif	/* CONFIG_INET */
 #ifdef CONFIG_IPX
 	,{ 136,9,"ipx_route" },
 	{ 137,3,"ipx" }
 #endif /* CONFIG_IPX */
+#ifdef CONFIG_AX25
+	,{ 138,10,"ax25_route" },
+	{ 139,4,"ax25" }
+#ifdef CONFIG_NETROM
+	,{ 140,8,"nr_nodes" },
+	{ 141,8,"nr_neigh" },
+	{ 142,2,"nr" }
+#endif /* CONFIG_NETROM */
+#endif /* CONFIG_AX25 */
 };
 
 #define NR_NET_DIRENTRY ((sizeof (net_dir))/(sizeof (net_dir[0])))
@@ -216,9 +235,11 @@ static int proc_readnet(struct inode * inode, struct file * file,
 			case 134:
 				length = udp_get_info(page,&start,file->f_pos,thistime);
 				break;
+#ifdef CONFIG_INET_RARP				
 			case 135:
 				length = rarp_get_info(page,&start,file->f_pos,thistime);
 				break;
+#endif /* CONFIG_INET_RARP */				
 #endif /* CONFIG_INET */
 #ifdef CONFIG_IPX
 			case 136:
@@ -228,6 +249,26 @@ static int proc_readnet(struct inode * inode, struct file * file,
 				length = ipx_get_info(page,&start,file->f_pos,thistime);
 				break;
 #endif /* CONFIG_IPX */
+#ifdef CONFIG_AX25
+			case 138:
+				length = ax25_rt_get_info(page,&start,file->f_pos,thistime);
+				break;
+			case 139:
+				length = ax25_get_info(page,&start,file->f_pos,thistime);
+				break;
+#ifdef CONFIG_NETROM
+			case 140:
+				length = nr_nodes_get_info(page,&start,file->f_pos,thistime);
+				break;
+			case 141:
+				length = nr_neigh_get_info(page,&start,file->f_pos,thistime);
+				break;
+			case 142:
+				length = nr_get_info(page,&start,file->f_pos,thistime);
+				break;
+#endif /* CONFIG_NETROM */
+#endif /* CONFIG_AX25 */
+
 			default:
 				free_page((unsigned long) page);
 				return -EBADF;

@@ -11,6 +11,7 @@
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  * Fixes:
  *		Alan Cox	:	Reformatted. Added ip_rt_local()
+ *		Alan Cox	:	Support for TCP parameters.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -42,7 +43,7 @@ struct rtable
 
 extern void		ip_rt_flush(struct device *dev);
 extern void		ip_rt_add(short flags, unsigned long addr, unsigned long mask,
-			       unsigned long gw, struct device *dev);
+			       unsigned long gw, struct device *dev, unsigned short);
 extern struct rtable	*ip_rt_route(unsigned long daddr, struct options *opt, unsigned long *src_addr);
 extern struct rtable 	*ip_rt_local(unsigned long daddr, struct options *opt, unsigned long *src_addr);
 extern int		rt_get_info(char * buffer, char **start, off_t offset, int length);

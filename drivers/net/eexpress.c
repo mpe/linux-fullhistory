@@ -545,7 +545,7 @@ eexp_interrupt(int reg_ptr)
 			lp->stats.tx_packets++;
 			lp->stats.collisions += tx_status & 0xf;
 			dev->tbusy = 0;
-			mark_bh(INET_BH);	/* Inform upper layers. */
+			mark_bh(NET_BH);	/* Inform upper layers. */
 		} else {
 			lp->stats.tx_errors++;
 			if (tx_status & 0x0600)  lp->stats.tx_carrier_errors++;

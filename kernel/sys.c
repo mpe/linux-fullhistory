@@ -490,7 +490,7 @@ asmlinkage int sys_setsid(void)
 		return -EPERM;
 	current->leader = 1;
 	current->session = current->pgrp = current->pid;
-	current->tty = -1;
+	current->tty = NULL;
 	return current->pgrp;
 }
 

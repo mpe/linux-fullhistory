@@ -316,6 +316,8 @@ struct sysv_dir_entry {
 #define SYSV_DIRSIZE	sizeof(struct sysv_dir_entry)	/* size of every directory entry */
 
 
+#ifdef __KERNEL__
+
 /* Operations */
 /* ========== */
 
@@ -432,6 +434,8 @@ extern struct inode_operations sysv_file_inode_operations;
 extern struct inode_operations sysv_file_inode_operations_with_bmap;
 extern struct inode_operations sysv_dir_inode_operations;
 extern struct inode_operations sysv_symlink_inode_operations;
+
+#endif /* __KERNEL__ */
 
 #endif
 

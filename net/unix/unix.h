@@ -66,4 +66,4 @@ extern struct unix_proto_data unix_datas[NSOCKETS];
 #endif	/* _LINUX_UN_H */
 
 
-extern void	unix_proto_init(struct ddi_proto *pro);
+extern void	unix_proto_init(struct net_proto *pro);

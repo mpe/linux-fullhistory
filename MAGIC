@@ -1,0 +1,42 @@
+This file is a registry of magic numbers which are in use.  When you
+add a magic number to a structure, you should also add it to this
+file, since it is best if the magic numbers used by various structures
+are unique.
+
+It is a *very* good idea to protect kernel data structures with magic
+numbers.  This allows you to check at run time whether (a) a structure
+has been clobbered, or (b) you've passed the wrong structure to a
+routine.  This last is especially useful --- particlarly when you are
+passing pointers to structures via a void * pointer.  The tty code,
+for example, does this frequently to pass driver-specific and line
+discipline-specific structures back and forth.
+
+The way to use magic numbers is to declare then at the beginning of
+the structure, like so:
+
+struct tty_ldisc {
+	int	magic;
+	...
+};
+
+Please follow this discpline when you are adding future enhancements
+to the kernel!  It has saved me countless hours of debugging,
+especially in the screw cases where an array has been overrun and
+structures following the array have been overwritten.  Using this
+discpline, these cases get detected quickly and safely.
+
+					Theodore Ts'o
+					31-Mar-94
+
+Magic Name          Number  Structure            File
+===========================================================================
+FASYNC_MAGIC        0x4601  struct fasync_struct include/linux/fs.h
+PTY_MAGIC           0x5001  struct pty_struct    drivers/char/pty.c
+PPP_MAGIC           0x5002  struct ppp_struct    include/linux/ppp.h
+TTY_MAGIC           0x5401  struct tty_struct    include/linux/tty.h
+TTY_DRIVER_MAGIC    0x5402  struct tty_driver    include/linux/tty_driver.h
+TTY_LDISC_MAGIC     0x5403  struct tty_ldisc     include/linux/tty_ldisc.h
+SERIAL_MAGIC        0x5301  struct async_struct  include/linux/serial.h
+SLIP_MAGIC          0x5302  struct slip          drivers/net/slip.h
+
+

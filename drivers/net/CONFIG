@@ -26,10 +26,10 @@
 #  CONFIG_PLIP		The Crynwr-protocol PL/IP driver
 #	INITIALTIMEOUTFACTOR	Timing parameters.
 #	MAXTIMEOUTFACTOR
-#  D_LINK		The D-Link DE-600 Portable Ethernet Adaptor.
-#	  D_LINK_IO	The D-Link I/O address (0x378 == typical)
-#	  D_LINK_IRQ	The D-Link IRQ number to use (IRQ7 == typical)
-#	  D_LINK_DEBUG	Enable or disable D-Link debugging
+#  DE600		The D-Link DE-600 Portable Ethernet Adaptor.
+#	  DE600_IO	The DE600 I/O-port address (0x378 == default)
+#	  DE600_IRQ	The DE600 IRQ number to use (IRQ7 == default)
+#	  DE600_DEBUG	Enable or disable DE600 debugging (default off)
 #  DEPCA		The DIGITAL series of AT Ethernet Cards (DE100, DE200)
 #	  DEPCA_IRQ	Set the desired IRQ (=0, for autoprobe)
 #	  DEPCA_DEBUG	Set the desired debug level
@@ -54,6 +54,3 @@ NE_OPTS		=
 HP_OPTS		=
 PLIP_OPTS	=
 DEPCA_OPTS	= -DDEPCA_IRQ=0 -DDEPCA_DEBUG=1
-
-# The following are the only parameters that must be set in this file.
-DL_OPTS		= -DD_LINK_IO=0x378 -DD_LINK_IRQ=7 -UD_LINK_DEBUG

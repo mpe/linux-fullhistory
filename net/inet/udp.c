@@ -37,6 +37,7 @@
  *		Alan Cox	:	SNMP Mibs
  *		Alan Cox	:	MSG_DONTROUTE, and 0.0.0.0 support.
  *		Matt Dillon	:	UDP length checks.
+ *		Alan Cox	:	Smarter af_inet used properly.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -79,20 +80,6 @@ struct udp_mib		udp_statistics;
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
-static void print_udp(struct udphdr *uh)
-{
-	if (inet_debug != DBG_UDP) 
-		return;
-
-	if (uh == NULL) 
-	{
-		printk("(NULL)\n");
-		return;
-	}
-	printk("UDP: source = %d, dest = %d\n", ntohs(uh->source), ntohs(uh->dest));
-	printk("     len = %d, check = %d\n", ntohs(uh->len), ntohs(uh->check));
-}
-
 
 /*
  * This routine is called by the ICMP module when it gets some
@@ -119,9 +106,6 @@ void udp_err(int err, unsigned char *header, unsigned long daddr,
 	 */  
 	th = (struct udphdr *)header;  
    
-	DPRINTF((DBG_UDP,"UDP: err(err=%d, header=%X, daddr=%X, saddr=%X, protocl=%X)\n\
-		sport=%d,dport=%d", err, header, daddr, saddr, protocol, (int)th->source,(int)th->dest));
-
 	sk = get_sock(&udp_prot, th->source, daddr, th->dest, saddr);
 
 	if (sk == NULL) 
@@ -134,8 +118,6 @@ void udp_err(int err, unsigned char *header, unsigned long daddr,
 		return;
 	}
 
-	sk->err = icmp_err_convert[err & 0xff].errno;
-
 	/*
 	 *	It's only fatal if we have connected to them. I'm not happy
 	 *	with this code. Some BSD comparisons need doing.
@@ -143,7 +125,8 @@ void udp_err(int err, unsigned char *header, unsigned long daddr,
 	 
 	if (icmp_err_convert[err & 0xff].fatal && sk->state == TCP_ESTABLISHED) 
 	{
-		sk->err=ECONNREFUSED;
+		sk->err = icmp_err_convert[err & 0xff].errno;
+/*		sk->err=ECONNREFUSED;*/
  	}
 	
 	sk->error_report(sk);
@@ -153,11 +136,6 @@ void udp_err(int err, unsigned char *header, unsigned long daddr,
 static unsigned short udp_check(struct udphdr *uh, int len, unsigned long saddr, unsigned long daddr)
 {
 	unsigned long sum;
-
-	DPRINTF((DBG_UDP, "UDP: check(uh=%X, len = %d, saddr = %X, daddr = %X)\n",
-	   						uh, len, saddr, daddr));
-
-	print_udp(uh);
 
 	__asm__(  "\t addl %%ecx,%%ebx\n"
 		  "\t adcl %%edx,%%ebx\n"
@@ -260,16 +238,7 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	unsigned char *buff;
 	unsigned long saddr;
 	int size, tmp;
-	int err;
   
-	DPRINTF((DBG_UDP, "UDP: send(dst=%s:%d buff=%X len=%d)\n",
-		in_ntoa(sin->sin_addr.s_addr), ntohs(sin->sin_port),
-		from, len));
-
-	err=verify_area(VERIFY_READ, from, len);
-	if(err)
-	  	return(err);
-
 	/* 
 	 *	Allocate an sk_buff copy of the packet.
 	 */
@@ -279,7 +248,7 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 
 
 	if (skb == NULL) 
-		return(-ENOMEM);
+		return(-ENOBUFS);
 
 	skb->sk       = NULL;	/* to avoid changing sk->saddr */
 	skb->free     = 1;
@@ -292,8 +261,6 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	buff = skb->data;
 	saddr = 0;
 	dev = NULL;
-	DPRINTF((DBG_UDP, "UDP: >> IP_Header: %X -> %X dev=%X prot=%X len=%d\n",
-			saddr, sin->sin_addr.s_addr, dev, IPPROTO_UDP, skb->mem_len));
 	tmp = sk->prot->build_header(skb, saddr, sin->sin_addr.s_addr,
 			&dev, IPPROTO_UDP, sk->opt, skb->mem_len,sk->ip_tos,sk->ip_ttl);
 	skb->sk=sk;	/* So memory is freed correctly */
@@ -310,8 +277,6 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
   	
 	buff += tmp;
 	saddr = skb->saddr; /*dev->pa_addr;*/
-	DPRINTF((DBG_UDP, "UDP: >> MAC+IP len=%d\n", tmp));
-
 	skb->len = tmp + sizeof(struct udphdr) + len;	/* len + UDP + IP + MAC */
 	skb->dev = dev;
 	
@@ -355,18 +320,11 @@ static int udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock
 	int tmp;
 	int err;
 
-	DPRINTF((DBG_UDP, "UDP: sendto(len=%d, flags=%X)\n", len, flags));
-
 	/* 
 	 *	Check the flags. We support no flags for UDP sending
 	 */
 	if (flags&~MSG_DONTROUTE) 
 	  	return(-EINVAL);
-	if (len < 0) 
- 	 	return(-EINVAL);
- 	if (len == 0) 
-  		return(0);
-
 	/*
 	 *	Get and verify the address. 
 	 */
@@ -434,27 +392,6 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 	int err;
 	switch(cmd) 
 	{
-		case DDIOCSDBG:
-		{
-			int val;
-
-			if (!suser()) return(-EPERM);
-			err=verify_area(VERIFY_READ, (void *)arg, sizeof(int));
-			if(err)
-				return err;
-			val = get_fs_long((int *)arg);
-			switch(val) {
-				case 0:
-					inet_debug = 0;
-					break;
-				case 1:
-					inet_debug = DBG_UDP;
-					break;
-				default:
-					return(-EINVAL);
-			}
-		}
-		break;
 		case TIOCOUTQ:
 		{
 			unsigned long amount;
@@ -513,26 +450,6 @@ int udp_recvfrom(struct sock *sk, unsigned char *to, int len,
   	struct sk_buff *skb;
   	int er;
 
-
-  	/*
-  	 * This will pick up errors that occured while the program
-  	 * was doing something else.
-  	 */
-  
-  	if (sk->err) 
-  	{
-		int err;
-	
-		err = -sk->err;
-		sk->err = 0;
-		return(err);
-  	}
-
-  	if (len == 0) 
-  		return(0);
-  	if (len < 0) 
-  		return(-EINVAL);
-
 	/*
 	 *	Check any passed addresses
 	 */
@@ -552,14 +469,6 @@ int udp_recvfrom(struct sock *sk, unsigned char *to, int len,
   			return(er);
   	}
   	
-  	/*
-  	 *	Check the buffer we were given
-  	 */
-  	 
-  	er=verify_area(VERIFY_WRITE,to,len);
-	if(er)
-		return er;
-	
 	/*
 	 *	From here the generic datagram does a lot of the work. Come
 	 *	the finished NET3, it will do _ALL_ the work!
@@ -672,7 +581,6 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	if (ulen > len || len < sizeof(*uh) || ulen < sizeof(*uh)) 
 	{
 		printk("UDP: short packet: %d/%d\n", ulen, len);
-		DPRINTF((DBG_UDP, "UDP: short packet %d/%d\n", ulen, len));
 		udp_statistics.UdpInErrors++;
 		kfree_skb(skb, FREE_WRITE);
 		return(0);
@@ -699,7 +607,6 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	if (uh->check && udp_check(uh, len, saddr, daddr)) 
 	{
 		printk("UDP: bad checksum.\n");
-		DPRINTF((DBG_UDP, "UDP: bad checksum\n"));
 		udp_statistics.UdpInErrors++;
 		kfree_skb(skb, FREE_WRITE);
 		return(0);
@@ -733,13 +640,6 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	}
 	sk->rmem_alloc += skb->mem_len;
   	udp_statistics.UdpInDatagrams++;
-  	
-	/*
-	 *	At this point we should print the thing out. 
-	 */
-
-	DPRINTF((DBG_UDP, "<< \n"));
-	print_udp(uh);
 
 	/*
 	 *	Now add it to the data chain and wake things up. 

@@ -42,7 +42,6 @@
 #include <linux/sockios.h>
 #include <linux/net.h>
 #include <linux/fs.h>
-#include <linux/ddi.h>
 #include <linux/malloc.h>
 
 #include <asm/system.h>
@@ -53,8 +52,6 @@
 #include "unix.h"
 
 struct unix_proto_data unix_datas[NSOCKETS];
-static int unix_debug = 0;
-
 
 static int unix_proto_create(struct socket *sock, int protocol);
 static int unix_proto_dup(struct socket *newsock, struct socket *oldsock);
@@ -95,26 +92,6 @@ static int unix_proto_getsockopt(struct socket *sock, int level, int optname,
 				  char *optval, int *optlen);
 
 
-static void
-dprintf(int level, char *fmt, ...)
-{
-  va_list args;
-  char *buff;
-  extern int vsprintf(char * buf, const char * fmt, va_list args);
-
-  if (level != unix_debug) return;
-
-  buff = (char *) kmalloc(256, GFP_KERNEL);
-  if (buff != NULL) {
-	va_start(args, fmt);
-	vsprintf(buff, fmt, args);
-	va_end(args);
-	printk(buff);
-	kfree(buff);
-  }
-}
-
-
 static inline int
 min(int a, int b)
 {
@@ -123,25 +100,6 @@ min(int a, int b)
 }
 
 
-void
-sockaddr_un_printk(struct sockaddr_un *sockun, int sockaddr_len)
-{
-  char buf[sizeof(sockun->sun_path) + 1];
-
-  if (unix_debug == 0) return;
-
-  sockaddr_len -= UN_PATH_OFFSET;
-  if (sockun->sun_family != AF_UNIX)
-	printk("UNIX: Badd addr family %d>\n", sockun->sun_family);
-    else if (sockaddr_len <= 0 || sockaddr_len >= sizeof(buf))
-	printk("UNIX: Bad addr len %d>\n", sockaddr_len);
-    else {
-	memcpy(buf, sockun->sun_path, sockaddr_len);
-	buf[sockaddr_len] = '\0';
-	printk("\"%s\"[%lu]\n", buf, sockaddr_len + UN_PATH_OFFSET);
-  }
-}
-  
 
 /* Support routines doing anti page fault locking 
  * FvK & Matt Dillon (borrowed From NET2E3)
@@ -152,7 +110,7 @@ sockaddr_un_printk(struct sockaddr_un *sockun, int sockaddr_len)
  * wait queue because it is allowed to 'go away' outside of our control,
  * whereas unix_proto_data structures stick around.
  */
-void unix_lock(struct unix_proto_data *upd)
+static void unix_lock(struct unix_proto_data *upd)
 {
 	while (upd->lock_flag)
 		sleep_on(&upd->wait);
@@ -160,7 +118,7 @@ void unix_lock(struct unix_proto_data *upd)
 }
 
 
-void unix_unlock(struct unix_proto_data *upd)
+static void unix_unlock(struct unix_proto_data *upd)
 {
 	upd->lock_flag = 0;
 	wake_up(&upd->wait);
@@ -276,11 +234,9 @@ static inline void
 unix_data_ref(struct unix_proto_data *upd)
 {
   if (!upd) {
-    dprintf(1, "UNIX: data_ref: upd = NULL\n");
     return;
   }
   ++upd->refcnt;
-  dprintf(1, "UNIX: data_ref: refing data 0x%x(%d)\n", upd, upd->refcnt);
 }
 
 
@@ -288,11 +244,9 @@ static void
 unix_data_deref(struct unix_proto_data *upd)
 {
   if (!upd) {
-    dprintf(1, "UNIX: data_deref: upd = NULL\n");
     return;
   }
   if (upd->refcnt == 1) {
-	dprintf(1, "UNIX: data_deref: releasing data 0x%x\n", upd);
 	if (upd->buf) {
 		free_page((unsigned long)upd->buf);
 		upd->buf = NULL;
@@ -312,9 +266,7 @@ unix_proto_create(struct socket *sock, int protocol)
 {
   struct unix_proto_data *upd;
 
-  dprintf(1, "UNIX: create: socket 0x%x, proto %d\n", sock, protocol);
   if (protocol != 0) {
-	dprintf(1, "UNIX: create: protocol != 0\n");
 	return(-EINVAL);
   }
   if (!(upd = unix_data_alloc())) {
@@ -330,7 +282,6 @@ unix_proto_create(struct socket *sock, int protocol)
   upd->socket = sock;
   UN_DATA(sock) = upd;
   upd->refcnt = 1;	/* Now its complete - bgm */
-  dprintf(1, "UNIX: create: allocated data 0x%x\n", upd);
   return(0);
 }
 
@@ -349,14 +300,12 @@ unix_proto_release(struct socket *sock, struct socket *peer)
 {
   struct unix_proto_data *upd = UN_DATA(sock);
 
-  dprintf(1, "UNIX: release: socket 0x%x, unix_data 0x%x\n", sock, upd);
   if (!upd) return(0);
   if (upd->socket != sock) {
 	printk("UNIX: release: socket link mismatch!\n");
 	return(-EINVAL);
   }
   if (upd->inode) {
-	dprintf(1, "UNIX: release: releasing inode 0x%x\n", upd->inode);
 	iput(upd->inode);
 	upd->inode = NULL;
   }
@@ -387,10 +336,8 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
   int i;
   int er;
 
-  dprintf(1, "UNIX: bind: socket 0x%x, len=%d\n", sock, sockaddr_len);
   if (sockaddr_len <= UN_PATH_OFFSET ||
       sockaddr_len > sizeof(struct sockaddr_un)) {
-	dprintf(1, "UNIX: bind: bad length %d\n", sockaddr_len);
 	return(-EINVAL);
   }
   if (upd->sockaddr_len || upd->inode) {
@@ -403,8 +350,6 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
   memcpy_fromfs(&upd->sockaddr_un, umyaddr, sockaddr_len);
   upd->sockaddr_un.sun_path[sockaddr_len-UN_PATH_OFFSET] = '\0';
   if (upd->sockaddr_un.sun_family != AF_UNIX) {
-	dprintf(1, "UNIX: bind: family is %d, not AF_UNIX(%d)\n",
-	       			upd->sockaddr_un.sun_family, AF_UNIX);
 	return(-EINVAL);
   }
 
@@ -421,9 +366,6 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
   }
   upd->sockaddr_len = sockaddr_len;	/* now its legal */
 
-  dprintf(1, "UNIX: bind: bound socket address: ");
-  sockaddr_un_printk(&upd->sockaddr_un, upd->sockaddr_len);
-  dprintf(1, "to inode 0x%x\n", upd->inode);
   return(0);
 }
 
@@ -445,11 +387,8 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
   int i;
   int er;
 
-  dprintf(1, "UNIX: connect: socket 0x%x, servlen=%d\n", sock, sockaddr_len);
-
   if (sockaddr_len <= UN_PATH_OFFSET ||
       sockaddr_len > sizeof(struct sockaddr_un)) {
-	dprintf(1, "UNIX: connect: bad length %d\n", sockaddr_len);
 	return(-EINVAL);
   }
   if (sock->state == SS_CONNECTING) return(-EINPROGRESS);
@@ -461,8 +400,6 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
   memcpy_fromfs(&sockun, uservaddr, sockaddr_len);
   sockun.sun_path[sockaddr_len-UN_PATH_OFFSET] = '\0';
   if (sockun.sun_family != AF_UNIX) {
-	dprintf(1, "UNIX: connect: family is %d, not AF_UNIX(%d)\n",
-	       					sockun.sun_family, AF_UNIX);
 	return(-EINVAL);
   }
 
@@ -479,18 +416,15 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
   i = open_namei(fname, 0, S_IFSOCK, &inode, NULL);
   set_fs(old_fs);
   if (i < 0) {
-	dprintf(1, "UNIX: connect: can't open socket %s\n", fname);
 	return(i);
   }
+	  
   serv_upd = unix_data_lookup(&sockun, sockaddr_len, inode);
   iput(inode);
   if (!serv_upd) {
-	dprintf(1, "UNIX: connect: can't locate peer %s at inode 0x%x\n",
-								fname, inode);
 	return(-EINVAL);
   }
   if ((i = sock_awaitconn(sock, serv_upd->socket)) < 0) {
-	dprintf(1, "UNIX: connect: can't await connection\n");
 	return(i);
   }
   if (sock->conn) {
@@ -526,9 +460,6 @@ unix_proto_accept(struct socket *sock, struct socket *newsock, int flags)
 {
   struct socket *clientsock;
 
-  dprintf(1, "UNIX: accept: socket 0x%x accepted via socket 0x%x\n",
-							sock, newsock);
-
   /*
    * If there aren't any sockets awaiting connection,
    * then wait for one, unless nonblocking.
@@ -537,7 +468,6 @@ unix_proto_accept(struct socket *sock, struct socket *newsock, int flags)
 	if (flags & O_NONBLOCK) return(-EAGAIN);
 	interruptible_sleep_on(sock->wait);
 	if (current->signal & ~current->blocked) {
-		dprintf(1, "UNIX: accept: sleep was interrupted\n");
 		return(-ERESTARTSYS);
 	}
   }
@@ -570,10 +500,8 @@ unix_proto_getname(struct socket *sock, struct sockaddr *usockaddr,
   int len;
   int er;
 
-  dprintf(1, "UNIX: getname: socket 0x%x for %s\n", sock, peer?"peer":"self");
   if (peer) {
 	if (sock->state != SS_CONNECTED) {
-		dprintf(1, "UNIX: getname: socket not connected\n");
 		return(-EINVAL);
 	}
 	upd = UN_DATA(sock->conn);
@@ -608,14 +536,11 @@ unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblock)
   upd = UN_DATA(sock);
   while(!(avail = UN_BUF_AVAIL(upd))) {
 	if (sock->state != SS_CONNECTED) {
-		dprintf(1, "UNIX: read: socket not connected\n");
 		return((sock->state == SS_DISCONNECTING) ? 0 : -EINVAL);
 	}
-	dprintf(1, "UNIX: read: no data available...\n");
 	if (nonblock) return(-EAGAIN);
 	interruptible_sleep_on(sock->wait);
 	if (current->signal & ~current->blocked) {
-		dprintf(1, "UNIX: read: interrupted\n");
 		return(-ERESTARTSYS);
 	}
   }
@@ -637,8 +562,6 @@ unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblock)
 
 	if ((cando = todo) > avail) cando = avail;
 	if (cando >(part = BUF_SIZE - upd->bp_tail)) cando = part;
-	dprintf(1, "UNIX: read: avail=%d, todo=%d, cando=%d\n",
-	       					avail, todo, cando);
 	if((er=verify_area(VERIFY_WRITE,ubuf,cando))<0)
 	{
 		unix_unlock(upd);
@@ -671,7 +594,6 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 
   if ((todo = size) <= 0) return(0);
   if (sock->state != SS_CONNECTED) {
-	dprintf(1, "UNIX: write: socket not connected\n");
 	if (sock->state == SS_DISCONNECTING) {
 		send_sig(SIGPIPE, current, 1);
 		return(-EPIPE);
@@ -681,15 +603,12 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
   pupd = UN_DATA(sock)->peerupd;	/* safer than sock->conn */
 
   while(!(space = UN_BUF_SPACE(pupd))) {
-	dprintf(1, "UNIX: write: no space left...\n");
 	if (nonblock) return(-EAGAIN);
 	interruptible_sleep_on(sock->wait);
 	if (current->signal & ~current->blocked) {
-		dprintf(1, "UNIX: write: interrupted\n");
 		return(-ERESTARTSYS);
 	}
 	if (sock->state == SS_DISCONNECTING) {
-		dprintf(1, "UNIX: write: disconnected(SIGPIPE)\n");
 		send_sig(SIGPIPE, current, 1);
 		return(-EPIPE);
 	}
@@ -722,8 +641,6 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 	}
 	if ((cando = todo) > space) cando = space;
 	if (cando >(part = BUF_SIZE - pupd->bp_head)) cando = part;
-	dprintf(1, "UNIX: write: space=%d, todo=%d, cando=%d\n",
-	       					space, todo, cando);
 	er=verify_area(VERIFY_READ, ubuf, cando);
 	if(er)
 	{
@@ -751,25 +668,19 @@ unix_proto_select(struct socket *sock, int sel_type, select_table * wait)
   /* Handle server sockets specially. */
   if (sock->flags & SO_ACCEPTCON) {
 	if (sel_type == SEL_IN) {
-		dprintf(1, "UNIX: select: %sconnections pending\n",
-		       				sock->iconn ? "" : "no ");
 		if (sock->iconn) return(1);
 		select_wait(sock->wait, wait);
 		return(sock->iconn ? 1 : 0);
 	}
-	dprintf(1, "UNIX: select: nothing else for server socket\n");
 	select_wait(sock->wait, wait);
 	return(0);
   }
 
   if (sel_type == SEL_IN) {
 	upd = UN_DATA(sock);
-	dprintf(1, "UNIX: select: there is%s data available\n",
-	       					UN_BUF_AVAIL(upd) ? "" : " no");
 	if (UN_BUF_AVAIL(upd))	/* even if disconnected */
 			return(1);
 	else if (sock->state != SS_CONNECTED) {
-		dprintf(1, "UNIX: select: socket not connected(read EOF)\n");
 		return(1);
 	}
 	select_wait(sock->wait,wait);
@@ -777,19 +688,15 @@ unix_proto_select(struct socket *sock, int sel_type, select_table * wait)
   }
   if (sel_type == SEL_OUT) {
 	if (sock->state != SS_CONNECTED) {
-		dprintf(1, "UNIX: select: socket not connected(write EOF)\n");
 		return(1);
 	}
 	peerupd = UN_DATA(sock->conn);
-	dprintf(1, "UNIX: select: there is%s space available\n",
-	       				UN_BUF_SPACE(peerupd) ? "" : " no");
 	if (UN_BUF_SPACE(peerupd) > 0) return(1);
 	select_wait(sock->wait,wait);
 	return(0);
   }
 
   /* SEL_EX */
-  dprintf(1, "UNIX: select: there are no exceptions here?!\n");
   return(0);
 }
 
@@ -831,74 +738,6 @@ unix_proto_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 }
 
 
-static int
-unix_open(struct inode * inode, struct file * file)
-{
-  int minor;
-
-  dprintf(1, "UNIX: open\n");
-  minor = MINOR(inode->i_rdev);
-  if (minor != 0) return(-ENODEV);
-
-  return(0);
-}
-
-
-static void
-unix_close(struct inode * inode, struct file * file)
-{
-  dprintf(1, "UNIX: close\n");
-}
-
-
-static int
-unix_ioctl(struct inode *inode, struct file *file,
-	 unsigned int cmd, unsigned long arg)
-{
-  int minor, ret;
-  int er;
-
-  dprintf(1, "UNIX: ioctl(0x%X, 0x%X)\n", cmd, arg);
-  minor = MINOR(inode->i_rdev);
-  if (minor != 0) return(-ENODEV);
-
-  ret = -EINVAL;
-  switch(cmd) {
-	case DDIOCSDBG:
-		er=verify_area(VERIFY_READ,(void *)arg, sizeof(int));
-		if(er)
-			return er;
-		unix_debug = get_fs_long((int *)arg);
-		if (unix_debug != 0 && unix_debug != 1) {
-			unix_debug = 0;
-			return(-EINVAL);
-		}
-		return(0);
-	case SIOCSIFLINK:
-		printk("UNIX: cannot link streams!\n");
-		break;
-	default:
-		break;
-  }
-  return(ret);
-}
-
-
-
-
-static struct file_operations unix_fops = {
-  NULL,		/* LSEEK	*/
-  NULL,		/* READ		*/
-  NULL,		/* WRITE	*/
-  NULL,		/* READDIR	*/
-  NULL,		/* SELECT	*/
-  unix_ioctl,	/* IOCTL	*/
-  NULL,		/* MMAP		*/
-  unix_open,	/* OPEN		*/
-  unix_close	/* CLOSE	*/
-};
-
-
 static struct proto_ops unix_proto_ops = {
   AF_UNIX,
   unix_proto_create,
@@ -926,16 +765,9 @@ static struct proto_ops unix_proto_ops = {
 
 
 void
-unix_proto_init(struct ddi_proto *pro)
+unix_proto_init(struct net_proto *pro)
 {
   struct unix_proto_data *upd;
-
-  dprintf(1, "%s: init: initializing...\n", pro->name);
-  if (register_chrdev(AF_UNIX_MAJOR, "af_unix", &unix_fops) < 0) {
-	printk("%s: cannot register major device %d!\n",
-						pro->name, AF_UNIX_MAJOR);
-	return;
-  }
 
   /* Tell SOCKET that we are alive... */
   (void) sock_register(unix_proto_ops.family, &unix_proto_ops);

@@ -9,6 +9,7 @@
 #include <linux/vt.h>
 
 extern struct vt_struct {
+	int vc_num;				/* The console number */
 	unsigned char	vc_mode;		/* KD_TEXT, ... */
 	unsigned char	vc_kbdraw;
 	unsigned char	vc_kbde0;
@@ -16,6 +17,7 @@ extern struct vt_struct {
 	struct vt_mode	vt_mode;
 	int		vt_pid;
 	int		vt_newvt;
+	struct wait_queue *paste_wait;
 } vt_cons[NR_CONSOLES];
 
 void kd_mksound(unsigned int count, unsigned int ticks);

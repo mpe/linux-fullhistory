@@ -25,7 +25,6 @@
  *		2 of the License, or (at your option) any later version.
  */
 #include <linux/config.h>
-#include <linux/ddi.h>
 #include <linux/netdevice.h>
 
 #define LOOPBACK			/* always present, right?	*/
@@ -56,7 +55,7 @@ extern int e2100_probe(struct device *);
 
 /* Detachable devices ("pocket adaptors" and special PCMCIA drivers). */
 extern int atp_init(struct device *);
-extern int d_link_init(struct device *);
+extern int de600_probe(struct device *);
 
 static int
 ethif_probe(struct device *dev)
@@ -115,20 +114,15 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_E2100		/* Cabletron E21xx series. */
 	&& e2100_probe(dev)
 #endif
+#ifdef CONFIG_DE600
+	&& de600_probe(dev)
+#endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
     }
     return 0;
 }
 
-
-/* This remains seperate because it requires the addr and IRQ to be set. */
-#if defined(D_LINK) || defined(CONFIG_DE600)
-static struct device d_link_dev = {
-    "dl0", 0, 0, 0, 0, D_LINK_IO, D_LINK_IRQ, 0, 0, 0, NEXT_DEV, d_link_init };
-#   undef NEXT_DEV
-#   define NEXT_DEV	(&d_link_dev)
-#endif
 
 /* Run-time ATtachable (Pocket) devices have a different (not "eth#") name. */
 #ifdef CONFIG_ATP		/* AT-LAN-TEC (RealTek) pocket adaptor. */

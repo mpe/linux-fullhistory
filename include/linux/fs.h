@@ -49,6 +49,7 @@ extern unsigned long file_table_init(unsigned long start, unsigned long end);
 #define MAJOR(a) (int)((unsigned short)(a) >> 8)
 #define MINOR(a) (int)((unsigned short)(a) & 0xFF)
 #define MKDEV(a,b) ((int)((((a) & 0xff) << 8) | ((b) & 0xff)))
+#define NODEV MKDEV(0,0)
 
 #ifndef NULL
 #define NULL ((void *) 0)
@@ -211,14 +212,15 @@ struct inode {
 
 struct file {
 	mode_t f_mode;
-	dev_t f_rdev;			/* needed for /dev/tty */
 	off_t f_pos;
 	unsigned short f_flags;
 	unsigned short f_count;
 	off_t f_reada;
 	struct file *f_next, *f_prev;
+	int f_owner;		/* pid or -pgrp where SIGIO should be sent */
 	struct inode * f_inode;
 	struct file_operations * f_op;
+	void *private_data;	/* needed for tty driver, and maybe others */
 };
 
 struct file_lock {
@@ -231,6 +233,14 @@ struct file_lock {
 	off_t fl_start;
 	off_t fl_end;
 };
+
+struct fasync_struct {
+	int    magic;
+	struct fasync_struct	*fa_next; /* singly linked list */
+	struct file 		*fa_file;
+};
+
+#define FASYNC_MAGIC 0x4601
 
 #include <linux/minix_fs_sb.h>
 #include <linux/ext_fs_sb.h>
@@ -281,6 +291,7 @@ struct file_operations {
 	int (*open) (struct inode *, struct file *);
 	void (*release) (struct inode *, struct file *);
 	int (*fsync) (struct inode *, struct file *);
+	int (*fasync) (struct inode *, struct file *, int);
 };
 
 struct inode_operations {
@@ -326,6 +337,8 @@ extern int unregister_filesystem(struct file_system_type *);
 
 asmlinkage int sys_open(const char *, int, int);
 asmlinkage int sys_close(unsigned int);		/* yes, it's really unsigned */
+
+extern void kill_fasync(struct fasync_struct *fa, int sig);
 
 extern int getname(const char * filename, char **result);
 extern void putname(char * name);

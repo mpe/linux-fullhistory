@@ -44,14 +44,15 @@ struct rtentry {
 	struct ifnet	*rt_ifp;
 	short		rt_metric;	/* +1 for binary compatibility!	*/
 	char		*rt_dev;	/* forcing the device at add	*/
+	unsigned long	rt_mtu;		/* per route MTU/Window */
 };
 
 
-#define	RTF_UP		0x0001		/* route useable		*/
-#define	RTF_GATEWAY	0x0002		/* destination is a gateway	*/
-#define	RTF_HOST	0x0004		/* host entry (net otherwise)	*/
-#define RTF_REINSTATE	0x0008		/* re-instate route after tmout	*/
-#define	RTF_DYNAMIC	0x0010		/* created dyn. (by redirect)	*/
-#define	RTF_MODIFIED	0x0020		/* modified dyn. (by redirect)	*/
-
+#define	RTF_UP		0x0001		/* route useable		  */
+#define	RTF_GATEWAY	0x0002		/* destination is a gateway	  */
+#define	RTF_HOST	0x0004		/* host entry (net otherwise)	  */
+#define RTF_REINSTATE	0x0008		/* re-instate route after tmout	  */
+#define	RTF_DYNAMIC	0x0010		/* created dyn. (by redirect)	  */
+#define	RTF_MODIFIED	0x0020		/* modified dyn. (by redirect)	  */
+#define RTF_MTU		0x0040		/* specific MSS for this route	  */
 #endif	/* _LINUX_ROUTE_H */

@@ -421,12 +421,22 @@ void kfree_skb(struct sk_buff *skb, int rw)
 			else
 				skb->sk->wmem_alloc-=skb->mem_len;
 			if(!skb->sk->dead)
-				wake_up_interruptible(skb->sk->sleep);
+				skb->sk->write_space(skb->sk);
+#ifdef CONFIG_SLAVE_BALANCING				
+			if(skb->in_dev_queue && skb->dev!=NULL)
+				skb->dev->pkt_queue--;
+#endif
 			kfree_skbmem(skb->mem_addr,skb->mem_len);
 		}
 	} 
 	else 
+	{
+#ifdef CONFIG_SLAVE_BALANCING				
+		if(skb->in_dev_queue && skb->dev!=NULL)
+			skb->dev->pkt_queue--;
+#endif
 		kfree_skbmem(skb->mem_addr, skb->mem_len);
+	}
 }
 
 /*
@@ -457,6 +467,9 @@ void kfree_skb(struct sk_buff *skb, int rw)
  	skb->truesize = size;
  	skb->mem_len = size;
  	skb->mem_addr = skb;
+#ifdef CONFIG_SLAVE_BALANCING 	
+ 	skb->in_dev_queue = 0;
+#endif 	
  	skb->fraglist = NULL;
 	skb->prev = skb->next = NULL;
 	skb->link3 = NULL;
@@ -477,8 +490,19 @@ void kfree_skb(struct sk_buff *skb, int rw)
 
 void kfree_skbmem(void *mem,unsigned size)
 {
-#if CONFIG_SKB_CHECK
+#ifdef CONFIG_SLAVE_BALANCING
 	struct sk_buff *x = mem;
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	if(x->in_dev_queue && x->dev!=NULL)
+		x->dev->pkt_queue--;
+	restore_flags(flags);
+#endif	
+#if CONFIG_SKB_CHECK
+#ifndef CONFIG_SLAVE_BALANCING
+	struct sk_buff *x = mem;
+#endif	
 	IS_SKB(x);
 	if(x->magic_debug_cookie == SK_GOOD_SKB)
 	{

@@ -42,49 +42,19 @@
 #ifndef _LINUX_INET_H
 #define _LINUX_INET_H
 
-
-#include <linux/ddi.h>
-
-
-#undef	INET_DEBUG
-#ifdef	INET_DEBUG
-#  define	DPRINTF(x)	dprintf x 
-#else
-#   define	DPRINTF(x)	do ; while (0)
+#ifdef __i386__
+#define NET16(x)	((((x) >> 8) & 0x00FF) | (((x) << 8) & 0xFF00))
 #endif
-
-/* Debug levels. One per module. */
-#define DBG_OFF		0			/* no debugging		*/
-#define DBG_INET	1			/* sock.c		*/
-#define DBG_RT		2			/* route.c		*/
-#define DBG_DEV		3			/* dev.c		*/
-#define DBG_ETH		4			/* eth.c		*/
-#define DBG_PROTO	5			/* protocol.c		*/
-#define DBG_TMR		6			/* timer.c		*/
-#define DBG_PKT		7			/* packet.c		*/
-#define DBG_RAW		8			/* raw.c		*/
-
-#define DBG_LOOPB	10			/* loopback.c		*/
-#define DBG_SLIP	11			/* slip.c		*/
-
-#define DBG_ARP		20			/* arp.c		*/
-#define DBG_IP		21			/* ip.c			*/
-#define DBG_ICMP	22			/* icmp.c		*/
-#define DBG_TCP		23			/* tcp.c		*/
-#define DBG_UDP		24			/* udp.c		*/
+#ifdef __mc680x0__
+#define NET16(x)	(x)
+#endif
 
 #ifdef __KERNEL__
 
-extern int		inet_debug;
 
-
-extern void		inet_proto_init(struct ddi_proto *pro);
+extern void		inet_proto_init(struct net_proto *pro);
 extern char		*in_ntoa(unsigned long in);
 extern unsigned long	in_aton(char *str);
-
-extern void		dprintf(int level, char *fmt, ...);
-
-extern int		dbg_ioctl(void *arg, int level);
 
 #endif
 #endif	/* _LINUX_INET_H */

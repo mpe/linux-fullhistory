@@ -50,10 +50,11 @@
  *		Alan Cox	:	BSD address rule semantics. Also see
  *					UDP as there is a nasty checksum issue
  *					if you do things the wrong way.
+ *		Alan Cox	:	Always defrag, moved IP_FORWARD to the config.in file
  *
  * To Fix:
  *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
- *		and time stamp but that's about all.
+ *		and time stamp but that's about all. Use the route mtu field here too
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -83,7 +84,6 @@
 #include "arp.h"
 #include "icmp.h"
 
-#define CONFIG_IP_FORWARD
 #define CONFIG_IP_DEFRAG
 
 extern int last_retran;
@@ -97,67 +97,6 @@ extern void sort_send(struct sock *sk);
  
 struct ip_mib ip_statistics={1,64,};	/* Forwarding=Yes, Default TTL=64 */
  
-/* 
- *	Print an IP packet for debugging purposes.
- *
- *	This function is exported for the IP
- *	upper layers to use also.
- */
- 
-void ip_print(const struct iphdr *ip)
-{
-	unsigned char buff[32];
-	unsigned char *ptr;
-	int addr;
-	int len;
-	int i;
-
-	/* Are we debugging IP frames */
-	
-  	if (inet_debug != DBG_IP) 
-  		return;
-
-	/* Dump the IP header. */
-	printk("IP: ihl=%d, version=%d, tos=%d, tot_len=%d\n",
-		ip->ihl, ip->version, ip->tos, ntohs(ip->tot_len));
-	printk("    id=%X, ttl=%d, prot=%d, check=%X\n",
-		ip->id, ip->ttl, ip->protocol, ip->check);
-	printk("    frag_off=%d\n", ip->frag_off);
-	printk("    soucre=%s ", in_ntoa(ip->saddr));
-	printk("dest=%s\n", in_ntoa(ip->daddr));
-	printk("    ----\n");
-
-	/* Dump the data. */
-	ptr = (unsigned char *)(ip + 1);
-	addr = 0;
-	len = ntohs(ip->tot_len) - (4 * ip->ihl);
-
-	while (len > 0) 
-	{
-		printk("    %04X: ", addr);
-		for(i = 0; i < 16; i++) 
-		{
-			if (len > 0) 
-			{
-				printk("%02X ", (*ptr & 0xFF));
-				buff[i] = *ptr++;
-				if (buff[i] < 32 || buff[i] > 126) 
-					buff[i] = '.';
-			} 
-			else 
-			{
-				printk("   ");
-				buff[i] = ' ';
-			}
-			addr++;
-			len--;
-		};
-		buff[i] = '\0';
-		printk("  \"%s\"\n", buff);
-  	}
-  	printk("    ----\n\n");
-}
-
 /*
  *	Handle the issuing of an ioctl() request 
  *	for the ip device. This is scheduled to
@@ -168,8 +107,6 @@ int ip_ioctl(struct sock *sk, int cmd, unsigned long arg)
 {
   	switch(cmd) 
   	{
-		case DDIOCSDBG:
-			return(dbg_ioctl((void *) arg, DBG_IP));
 		default:
 			return(-EINVAL);
   	}
@@ -190,12 +127,6 @@ loose_route(struct iphdr *iph, struct options *opt)
 }
 
 
-static void
-print_ipprot(struct inet_protocol *ipprot)
-{
-  DPRINTF((DBG_IP, "handler = %X, protocol = %d, copy=%d \n",
-	   ipprot->handler, ipprot->protocol, ipprot->copy));
-}
 
 
 /* This routine will check to see if we have lost a gateway. */
@@ -272,10 +203,6 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
   	if (saddr == 0) 
   		saddr = ip_my_addr();
  	
-	DPRINTF((DBG_IP, "ip_build_header (skb=%X, saddr=%X, daddr=%X, *dev=%X,\n"
-		   "                 type=%d, opt=%X, len = %d)\n",
-		   skb, saddr, daddr, *dev, type, opt, len));
-	   
 	buff = skb->data;
 
 	/* 
@@ -303,7 +230,6 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 			saddr = src;/*rt->rt_dev->pa_addr;*/
 		raddr = rt->rt_gateway;
 
-		DPRINTF((DBG_IP, "ip_build_header: saddr set to %s\n", in_ntoa(saddr)));
 		opt = &optmem;
 	} 
 	else 
@@ -754,8 +680,7 @@ static void ip_expire(unsigned long arg)
    	struct ipq *qp;
  
    	qp = (struct ipq *)arg;
-   	DPRINTF((DBG_IP, "IP: queue_expire: fragment queue 0x%X timed out!\n", qp));
- 
+
    	/*
    	 *	Send an ICMP "Fragment Reassembly Timeout" message. 
    	 */
@@ -1063,7 +988,6 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
  		i = prev->end - offset;
  		offset += i;	/* ptr into datagram */
  		ptr += i;	/* ptr into fragment data */
- 		DPRINTF((DBG_IP, "IP: defrag: fixed low overlap %d bytes\n", i));
    	}	
  
    	/*
@@ -1088,8 +1012,6 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
  		 */
  		if (next->len <= 0) 
  		{
- 			DPRINTF((DBG_IP, "IP: defrag: removing frag 0x%X (len %d)\n",
- 							next, next->len));
  			if (next->prev != NULL) 
  				next->prev->next = next->next;
  		  	else 
@@ -1101,7 +1023,6 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
 			kfree_skb(next->skb,FREE_READ); 			
  			kfree_s(next, sizeof(struct ipfrag));
  		}
- 		DPRINTF((DBG_IP, "IP: defrag: fixed high overlap %d bytes\n", i));
    	}
  
    	/* 
@@ -1188,22 +1109,12 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
    	mtu = (dev->mtu - hlen);		/* Size of data space */
    	ptr = (raw + hlen);			/* Where to start from */
  	
-   	DPRINTF((DBG_IP, "IP: Fragmentation Desired\n"));
-   	DPRINTF((DBG_IP, "    DEV=%s, MTU=%d, LEN=%d SRC=%s",
- 		dev->name, dev->mtu, left, in_ntoa(iph->saddr)));
-   	DPRINTF((DBG_IP, " DST=%s\n", in_ntoa(iph->daddr)));
- 
    	/*
    	 *	Check for any "DF" flag. [DF means do not fragment]
    	 */
    	 
    	if (ntohs(iph->frag_off) & IP_DF) 
    	{
- 		DPRINTF((DBG_IP, "IP: Fragmentation Desired, but DF set !\n"));
- 		DPRINTF((DBG_IP, "    DEV=%s, MTU=%d, LEN=%d SRC=%s",
- 			dev->name, dev->mtu, left, in_ntoa(iph->saddr)));
- 		DPRINTF((DBG_IP, " DST=%s\n", in_ntoa(iph->daddr)));
- 
  		ip_statistics.IpFragFails++;
  		icmp_send(skb,ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, dev); 
  		return;
@@ -1255,9 +1166,6 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
 			len/=8;
 			len*=8;
 		}
- 		DPRINTF((DBG_IP,"IP: frag: creating fragment of %d bytes (%d total)\n",
- 							len, len + hlen));
- 
  		/*
  		 *	Allocate buffer. 
  		 */
@@ -1277,7 +1185,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
  		skb2->free = skb->free;
  		skb2->len = len + hlen;
  		skb2->h.raw=(char *) skb2->data;
- 
+ 		skb2->raddr = skb->raddr;	/* For rebuild_header */
 		/*
 		 *	Charge the memory for the fragment to any owner
 		 *	it might posess
@@ -1345,13 +1253,19 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	/*
 	 * Only forward packets that were fired at us when we are in promiscuous
 	 * mode. In standard mode we rely on the driver to filter for us.
+	 *
+	 * This is a mess. When the drivers class packets on the upcall this
+	 * will tidy up!
 	 */
    
 	if(dev->flags&IFF_PROMISC)
 	{
-  		if(memcmp((char *)&skb[1],dev->dev_addr,dev->addr_len))
+  		if(memcmp(skb->data,dev->dev_addr,dev->addr_len))
   			return;
 	}
+	
+	if(memcmp(skb->data,dev->broadcast, dev->addr_len))
+		return;
 	
 
   
@@ -1370,10 +1284,6 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	iph->ttl--;
 	if (iph->ttl <= 0) 
 	{
-		DPRINTF((DBG_IP, "\nIP: *** datagram expired: TTL=0 (ignored) ***\n"));
-		DPRINTF((DBG_IP, "    SRC = %s   ", in_ntoa(iph->saddr)));
-		DPRINTF((DBG_IP, "    DST = %s (ignored)\n", in_ntoa(iph->daddr)));
-	
 		/* Tell the sender its packet died... */
 		icmp_send(skb, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, dev);
 		return;
@@ -1395,8 +1305,6 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	rt = ip_rt_route(iph->daddr, NULL, NULL);
 	if (rt == NULL) 
 	{
-		DPRINTF((DBG_IP, "\nIP: *** routing (phase I) failed ***\n"));
-
 		/*
 		 *	Tell the sender its packet cannot be delivered. Again
 		 *	ICMP is screened later.
@@ -1425,8 +1333,6 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 		rt = ip_rt_route(raddr, NULL, NULL);
 		if (rt == NULL) 
 		{
-			DPRINTF((DBG_IP, "\nIP: *** routing (phase II) failed ***\n"));
-
 			/* 
 			 *	Tell the sender its packet cannot be delivered... 
 			 */
@@ -1459,10 +1365,6 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	 * We now allocate a new buffer, and copy the datagram into it.
 	 * If the indicated interface is up and running, kick it.
 	 */
-
-	DPRINTF((DBG_IP, "\nIP: *** fwd %s -> ", in_ntoa(iph->saddr)));
-	DPRINTF((DBG_IP, "%s (via %s), LEN=%d\n",
-			in_ntoa(raddr), dev2->name, skb->len));
 
 	if (dev2->flags & IFF_UP) 
 	{
@@ -1548,8 +1450,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 	ip_statistics.IpInReceives++;
 	
-	DPRINTF((DBG_IP, "<<\n"));
-	
 	/*
 	 *	Tag the ip header of this packet so we can find it
 	 */
@@ -1568,9 +1468,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   	if (skb->len<sizeof(struct iphdr) || iph->ihl<5 || iph->version != 4 || ip_fast_csum((unsigned char *)iph, iph->ihl) !=0) 
   	{
   		ip_statistics.IpInHdrErrors++;
-		DPRINTF((DBG_IP, "\nIP: *** datagram error ***\n"));
-		DPRINTF((DBG_IP, "    SRC = %s   ", in_ntoa(iph->saddr)));
-		DPRINTF((DBG_IP, "    DST = %s (ignored)\n", in_ntoa(iph->daddr)));
 		kfree_skb(skb, FREE_WRITE);
 		return(0);
 	}
@@ -1589,7 +1486,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	   
 	if (iph->ihl != 5) 
 	{  	/* Fast path for the typical optionless IP packet. */
-      		ip_print(iph);		/* Bogus, only for debugging. */
       		memset((char *) &opt, 0, sizeof(opt));
       		if (do_options(iph, &opt) != 0)
 	  		return 0;
@@ -1628,7 +1524,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #ifdef CONFIG_IP_FORWARD
 		ip_forward(skb, dev, is_frag);
 #else
-		printk("Machine %x tried to use us as a forwarder to %x but we have forwarding disabled!\n",
+		printk("Machine %lx tried to use us as a forwarder to %lx but we have forwarding disabled!\n",
 			iph->saddr,iph->daddr);
 		ip_statistics.IpInAddrErrors++;
 #endif			
@@ -1647,20 +1543,11 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
   	if(is_frag)
   	{
-#ifdef CONFIG_IP_DEFRAG
 		/* Defragment. Obtain the complete packet if there is one */
 		skb=ip_defrag(iph,skb,dev);
         	if(skb==NULL)
         		return 0;
 	        iph=skb->h.iph;
-#else
-		printk("\nIP: *** datagram fragmentation not yet implemented ***\n");
-		printk("    SRC = %s   ", in_ntoa(iph->saddr));
-		printk("    DST = %s (ignored)\n", in_ntoa(iph->daddr));
-		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, dev);
-		kfree_skb(skb, FREE_WRITE);
-		return(0);
-#endif
 	}
 
 	/*
@@ -1681,9 +1568,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
        		if (ipprot->protocol != iph->protocol) 
        			continue;
-		DPRINTF((DBG_IP, "Using protocol = %X:\n", ipprot));
-		print_ipprot(ipprot);
-
        /*
 	* 	See if we need to make a copy of it.  This will
 	* 	only be set if more than one protocol wants it. 
@@ -1786,8 +1670,6 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
   	skb->dev = dev;
   	skb->when = jiffies;
   
-	DPRINTF((DBG_IP, ">>\n"));
-
 	/*
 	 *	Find the IP header and set the length. This is bad
 	 *	but once we get the skb data handling code in the
@@ -1825,7 +1707,6 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	/*
 	 *	Print the frame when debugging
 	 */
-	ip_print(iph);
 
 	/*
 	 *	More debugging. You cannot queue a packet already on a list

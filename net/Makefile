@@ -21,7 +21,7 @@ SUBOBJS     := $(foreach f,$(SUBDIRS),$f/$f.o)
 .c.s:
 	$(CC) $(CFLAGS) -S $<
 
-OBJS	=  Space.o ddi.o socket.o
+OBJS	=  socket.o protocols.o
 
 all:		subdirs net.o
 

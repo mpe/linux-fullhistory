@@ -83,8 +83,15 @@ asmlinkage int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		case F_GETFL:
 			return filp->f_flags;
 		case F_SETFL:
-			filp->f_flags &= ~(O_APPEND | O_NONBLOCK);
-			filp->f_flags |= arg & (O_APPEND | O_NONBLOCK);
+			if ((arg & FASYNC) && !(filp->f_flags & FASYNC) &&
+			    filp->f_op->fasync)
+				filp->f_op->fasync(filp->f_inode, filp, 1);
+			if (!(arg & FASYNC) && (filp->f_flags & FASYNC) &&
+			    filp->f_op->fasync)
+				filp->f_op->fasync(filp->f_inode, filp, 0);
+			filp->f_flags &= ~(O_APPEND | O_NONBLOCK | FASYNC);
+			filp->f_flags |= arg & (O_APPEND | O_NONBLOCK |
+						FASYNC);
 			return 0;
 		case F_GETLK:
 			return fcntl_getlk(fd, (struct flock *) arg);
@@ -92,6 +99,20 @@ asmlinkage int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			return fcntl_setlk(fd, cmd, (struct flock *) arg);
 		case F_SETLKW:
 			return fcntl_setlk(fd, cmd, (struct flock *) arg);
+		case F_GETOWN:
+			/*
+			 * XXX If f_owner is a process group, the
+			 * negative return value will get converted
+			 * into an error.  Oops.  If we keep the the
+			 * current syscall conventions, the only way
+			 * to fix this will be in libc.
+			 */
+			return filp->f_owner;
+		case F_SETOWN:
+			filp->f_owner = arg; /* XXX security implications? */
+			if (S_ISSOCK (filp->f_inode->i_mode))
+				sock_fcntl (filp, F_SETOWN, arg);
+			return 0;
 		default:
 			/* sockets need a few special fcntls. */
 			if (S_ISSOCK (filp->f_inode->i_mode))
@@ -99,5 +120,21 @@ asmlinkage int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			     return (sock_fcntl (filp, cmd, arg));
 			  }
 			return -EINVAL;
+	}
+}
+
+void kill_fasync(struct fasync_struct *fa, int sig)
+{
+	while (fa) {
+		if (fa->magic != FASYNC_MAGIC) {
+			printk("kill_fasync: bad magic number in "
+			       "fasync_struct!\n");
+			return;
+		}
+		if (fa->fa_file->f_owner > 0)
+			kill_proc(fa->fa_file->f_owner, sig, 1);
+		else
+			kill_pg(-fa->fa_file->f_owner, sig, 1);
+		fa = fa->fa_next;
 	}
 }

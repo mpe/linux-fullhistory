@@ -24,6 +24,7 @@
 #include <linux/segment.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
+#include <linux/tqueue.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -39,6 +40,8 @@
 long tick = 1000000 / HZ;               /* timer interrupt period */
 volatile struct timeval xtime;		/* The current time */
 int tickadj = 500/HZ;			/* microsecs */
+
+DECLARE_TASK_QUEUE(tq_timer);
 
 /*
  * phase-lock loop variables
@@ -548,6 +551,11 @@ static void timer_bh(void * unused)
 	}
 }
 
+void tqueue_bh(void * unused)
+{
+	run_task_queue(&tq_timer);
+}
+
 /*
  * The int argument is really a (struct pt_regs *), in case the
  * interrupt wants to know from where it was called. The timer
@@ -667,6 +675,8 @@ static void do_timer(struct pt_regs * regs)
 			mark_bh(TIMER_BH);
 		}
 	}
+	if (tq_timer != &tq_last)
+		mark_bh(TQUEUE_BH);
 	sti();
 }
 
@@ -776,6 +786,7 @@ void sched_init(void)
 	struct desc_struct * p;
 
 	bh_base[TIMER_BH].routine = timer_bh;
+	bh_base[TQUEUE_BH].routine = tqueue_bh;
 	if (sizeof(struct sigaction) != 16)
 		panic("Struct sigaction MUST be 16 bytes");
 	set_tss_desc(gdt+FIRST_TSS_ENTRY,&init_task.tss);

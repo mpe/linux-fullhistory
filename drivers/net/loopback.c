@@ -11,6 +11,8 @@
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Donald Becker, <becker@super.org>
  *
+ *		Alan Cox	:	Fixed oddments for NET3.014
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -44,7 +46,6 @@ loopback_xmit(struct sk_buff *skb, struct device *dev)
   struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
   int done;
 
-  DPRINTF((DBG_LOOPB, "loopback_xmit(dev=%X, skb=%X)\n", dev, skb));
   if (skb == NULL || dev == NULL) return(0);
 
   cli();
@@ -90,6 +91,12 @@ get_stats(struct device *dev)
     return (struct enet_statistics *)dev->priv;
 }
 
+static int loopback_open(struct device *dev)
+{
+	dev->flags|=IFF_LOOPBACK;
+	return 0;
+}
+
 /* Initialize the rest of the LOOPBACK device. */
 int
 loopback_init(struct device *dev)
@@ -107,6 +114,7 @@ loopback_init(struct device *dev)
   dev->type		= ARPHRD_ETHER;		/* 0x0001		*/
   dev->type_trans	= eth_type_trans;
   dev->rebuild_header	= eth_rebuild_header;
+  dev->open		= loopback_open;
 #else
   dev->hard_header_length = 0;
   dev->addr_len		= 0;
@@ -119,10 +127,12 @@ loopback_init(struct device *dev)
   /* New-style flags. */
   dev->flags		= IFF_LOOPBACK;
   dev->family		= AF_INET;
+#ifdef CONFIG_INET    
   dev->pa_addr		= in_aton("127.0.0.1");
   dev->pa_brdaddr	= in_aton("127.255.255.255");
   dev->pa_mask		= in_aton("255.0.0.0");
   dev->pa_alen		= sizeof(unsigned long);
+#endif  
   dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
   memset(dev->priv, 0, sizeof(struct enet_statistics));
   dev->get_stats = get_stats;

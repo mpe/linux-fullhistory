@@ -31,6 +31,10 @@ static char *version = "3c509.c:pl15k 3/5/94 becker@super.org\n";
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#ifdef MODULE
+#include <linux/module.h>
+#include "../../tools/version.h"
+#endif
 
 
 
@@ -312,6 +316,9 @@ el3_open(struct device *dev)
 		printk("%s: Opened 3c509  IRQ %d  status %4.4x.\n",
 			   dev->name, dev->irq, inw(ioaddr + EL3_STATUS));
 
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
 	return 0;					/* Always succeed */
 }
 
@@ -436,7 +443,7 @@ el3_interrupt(int reg_ptr)
 			/* There's room in the FIFO for a full-sized packet. */
 			outw(0x6808, ioaddr + EL3_CMD); /* Ack IRQ */
 			dev->tbusy = 0;
-			mark_bh(INET_BH);
+			mark_bh(NET_BH);
 		}
 		if (status & 0x80)				/* Statistics full. */
 			update_stats(ioaddr, dev);
@@ -645,6 +652,9 @@ el3_close(struct device *dev)
 	irq2dev_map[dev->irq] = 0;
 
 	update_stats(ioaddr, dev);
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
 	return 0;
 }
 
@@ -656,3 +666,29 @@ el3_close(struct device *dev)
  *  tab-width: 4
  * End:
  */
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_3c509 = {
+	"" /*"3c509"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el3_probe };
+
+int
+init_module(void)
+{
+	if (register_netdev(&dev_3c509) != 0)
+		return -EIO;
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("3c509: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_3c509);
+		kfree_s(dev_3c509.priv,sizeof(struct el3_private));
+		dev_3c509.priv=NULL;
+	}
+}
+#endif /* MODULE */

@@ -7,6 +7,69 @@
  * Public License (GPL)
  */
 
+#ifndef _LINUX_SERIAL_H
+#define _LINUX_SERIAL_H
+
+struct serial_struct {
+	int	type;
+	int	line;
+	int	port;
+	int	irq;
+	int	flags;
+	int	xmit_fifo_size;
+	int	custom_divisor;
+	int	baud_base;
+	unsigned short	close_delay;
+	char	reserved_char[2];
+	int	hub6;
+	int	reserved[5];
+};
+
+/*
+ * These are the supported serial types.
+ */
+#define PORT_UNKNOWN	0
+#define PORT_8250	1
+#define PORT_16450	2
+#define PORT_16550	3
+#define PORT_16550A	4
+#define PORT_MAX	4
+
+/*
+ * Definitions for async_struct (and serial_struct) flags field
+ */
+#define ASYNC_HUP_NOTIFY 0x0001 /* Notify getty on hangups and closes 
+				   on the callout port */
+#define ASYNC_FOURPORT  0x0002	/* Set OU1, OUT2 per AST Fourport settings */
+#define ASYNC_SAK	0x0004	/* Secure Attention Key (Orange book) */
+#define ASYNC_SPLIT_TERMIOS 0x0008 /* Separate termios for dialin/callout */
+
+#define ASYNC_SPD_MASK	0x0030
+#define ASYNC_SPD_HI	0x0010	/* Use 56000 instead of 38400 bps */
+
+#define ASYNC_SPD_VHI	0x0020  /* Use 115200 instead of 38400 bps */
+#define ASYNC_SPD_CUST	0x0030  /* Use user-specified divisor */
+
+#define ASYNC_SKIP_TEST	0x0040 /* Skip UART test during autoconfiguration */
+#define ASYNC_AUTO_IRQ  0x0080 /* Do automatic IRQ during autoconfiguration */
+#define ASYNC_SESSION_LOCKOUT 0x0100 /* Lock out cua opens based on session */
+#define ASYNC_PGRP_LOCKOUT    0x0200 /* Lock out cua opens based on pgrp */
+#define ASYNC_CALLOUT_NOHUP   0x0400 /* Don't do hangups for cua device */
+
+#define ASYNC_FLAGS	0x0FFF	/* Possible legal async flags */
+#define ASYNC_USR_MASK 0x0430	/* Legal flags that non-privileged
+				 * users can set or reset */
+
+/* Internal flags used only by kernel/chr_drv/serial.c */
+#define ASYNC_INITIALIZED	0x80000000 /* Serial port was initialized */
+#define ASYNC_CALLOUT_ACTIVE	0x40000000 /* Call out device is active */
+#define ASYNC_NORMAL_ACTIVE	0x20000000 /* Normal device is active */
+#define ASYNC_BOOT_AUTOCONF	0x10000000 /* Autoconfigure port on bootup */
+#define ASYNC_CLOSING		0x08000000 /* Serial port is closing */
+#define ASYNC_CTS_FLOW		0x04000000 /* Do CTS flow control */
+#define ASYNC_CHECK_CD		0x02000000 /* i.e., CLOCAL */
+
+#ifdef __KERNEL__
 /*
  * This is our internal structure for each serial port's state.
  * 
@@ -15,10 +78,9 @@
  *
  * For definitions of the flags field, see tty.h
  */
-#ifndef _LINUX_SERIAL_H
-#define _LINUX_SERIAL_H
 
 struct async_struct {
+	int			magic;
 	int			baud_base;
 	int			port;
 	int			irq;
@@ -27,135 +89,47 @@ struct async_struct {
 	int			type; 		/* UART type */
 	struct tty_struct 	*tty;
 	int			read_status_mask;
+	int			ignore_status_mask;
 	int			timeout;
 	int			xmit_fifo_size;
 	int			custom_divisor;
 	int			x_char;	/* xon/xoff characater */
 	int			close_delay;
 	int			IER; 	/* Interrupt Enable Register */
+	int			MCR; 	/* Modem control register */
+	int			MCR_noint; /* MCR with interrupts off */
 	int			event;
 	int			line;
 	int			count;	    /* # of fd on device */
 	int			blocked_open; /* # of blocked opens */
 	long			session; /* Session of opening process */
 	long			pgrp; /* pgrp of opening process */
+	unsigned char 		*xmit_buf;
+	int			xmit_head;
+	int			xmit_tail;
+	int			xmit_cnt;
+	struct tq_struct	tqueue;
 	struct termios		normal_termios;
 	struct termios		callout_termios;
 	struct wait_queue	*open_wait;
 	struct wait_queue	*close_wait;
-	struct wait_queue	*xmit_wait;
 	struct async_struct	*next_port; /* For the linked list */
 	struct async_struct	*prev_port;
 };
+
+#define SERIAL_MAGIC 0x5301
+
+/*
+ * The size of the serial xmit buffer is 1 page, or 4096 bytes
+ */
+#define SERIAL_XMIT_SIZE 4096
 
 /*
  * Events are used to schedule things to happen at timer-interrupt
  * time, instead of at rs interrupt time.
  */
-#define RS_EVENT_READ_PROCESS	0
-#define RS_EVENT_WRITE_WAKEUP	1
-#define RS_EVENT_HANGUP		2
-#define RS_EVENT_BREAK		3
-#define RS_EVENT_OPEN_WAKEUP	4
+#define RS_EVENT_WRITE_WAKEUP	0
+#define RS_EVENT_HANGUP		1
 
-/*
- * These are the UART port assignments, expressed as offsets from the base
- * register.  These assignments should hold for any serial port based on
- * a 8250, 16450, or 16550(A).
- */
-#define UART_RX		0	/* In:  Receive buffer (DLAB=0) */
-#define UART_TX		0	/* Out: Transmit buffer (DLAB=0) */
-#define UART_DLL	0	/* Out: Devisor Latch Low (DLAB=1) */
-#define UART_DLM	1	/* Out: Devisor Latch High (DLAB=1) */
-#define UART_IER	1	/* Out: Interrupt Enable Register */
-#define UART_IIR	2	/* In:  Interrupt ID Register */
-#define UART_FCR	2	/* Out: FIFO Control Register */
-#define UART_LCR	3	/* Out: Line Control Register */
-#define UART_MCR	4	/* Out: Modem Control Register */
-#define UART_LSR	5	/* In:  Line Status Register */
-#define UART_MSR	6	/* In:  Modem Status Register */
-#define UART_SCR	7	/* I/O: Scratch Register */
-
-/*
- * These are the definitions for the FIFO Control Register
- */
-#define UART_FCR_ENABLE_FIFO	0x01 /* Enable the FIFO */
-#define UART_FCR_CLEAR_RCVR	0x02 /* Clear the RCVR FIFO */
-#define UART_FCR_CLEAR_XMIT	0x04 /* Clear the XMIT FIFO */
-#define UART_FCR_DMA_SELECT	0x08 /* For DMA applications */
-#define UART_FCR_TRIGGER_MASK	0xC0 /* Mask for the FIFO trigger range */
-#define UART_FCR_TRIGGER_1	0x00 /* Mask for trigger set at 1 */
-#define UART_FCR_TRIGGER_4	0x40 /* Mask for trigger set at 4 */
-#define UART_FCR_TRIGGER_8	0x80 /* Mask for trigger set at 8 */
-#define UART_FCR_TRIGGER_14	0xC0 /* Mask for trigger set at 14 */
-
-/*
- * These are the definitions for the Line Control Register
- * 
- * Note: if the word length is 5 bits (UART_LCR_WLEN5), then setting 
- * UART_LCR_STOP will select 1.5 stop bits, not 2 stop bits.
- */
-#define UART_LCR_DLAB	0x80	/* Devisor latch access bit */
-#define UART_LCR_SBC	0x40	/* Set break control */
-#define UART_LCR_SPAR	0x20	/* Stick parity (?) */
-#define UART_LCR_EPAR	0x10	/* Even paraity select */
-#define UART_LCR_PARITY	0x08	/* Parity Enable */
-#define UART_LCR_STOP	0x04	/* Stop bits: 0=1 stop bit, 1= 2 stop bits */
-#define UART_LCR_WLEN5  0x00	/* Wordlength: 5 bits */
-#define UART_LCR_WLEN6  0x01	/* Wordlength: 6 bits */
-#define UART_LCR_WLEN7  0x02	/* Wordlength: 7 bits */
-#define UART_LCR_WLEN8  0x03	/* Wordlength: 8 bits */
-
-/*
- * These are the definitions for the Line Status Register
- */
-#define UART_LSR_TEMT	0x40	/* Transmitter empty */
-#define UART_LSR_THRE	0x20	/* Transmit-hold-register empty */
-#define UART_LSR_BI	0x10	/* Break interrupt indicator */
-#define UART_LSR_FE	0x08	/* Frame error indicator */
-#define UART_LSR_PE	0x04	/* Parity error indicator */
-#define UART_LSR_OE	0x02	/* Overrun error indicator */
-#define UART_LSR_DR	0x01	/* Receiver data ready */
-
-/*
- * These are the definitions for the Interrupt Indentification Register
- */
-#define UART_IIR_NO_INT	0x01	/* No interrupts pending */
-#define UART_IIR_ID	0x06	/* Mask for the interrupt ID */
-
-#define UART_IIR_MSI	0x00	/* Modem status interrupt */
-#define UART_IIR_THRI	0x02	/* Transmitter holding register empty */
-#define UART_IIR_RDI	0x04	/* Receiver data interrupt */
-#define UART_IIR_RLSI	0x06	/* Receiver line status interrupt */
-
-/*
- * These are the definitions for the Interrupt Enable Register
- */
-#define UART_IER_MSI	0x08	/* Enable Modem status interrupt */
-#define UART_IER_RLSI	0x04	/* Enable receiver line status interrupt */
-#define UART_IER_THRI	0x02	/* Enable Transmitter holding register int. */
-#define UART_IER_RDI	0x01	/* Enable receiver data interrupt */
-
-/*
- * These are the definitions for the Modem Control Register
- */
-#define UART_MCR_LOOP	0x10	/* Enable loopback test mode */
-#define UART_MCR_OUT2	0x08	/* Out2 complement */
-#define UART_MCR_OUT1	0x04	/* Out1 complement */
-#define UART_MCR_RTS	0x02	/* RTS complement */
-#define UART_MCR_DTR	0x01	/* DTR complement */
-
-/*
- * These are the definitions for the Modem Status Register
- */
-#define UART_MSR_DCD	0x80	/* Data Carrier Detect */
-#define UART_MSR_RI	0x40	/* Ring Indicator */
-#define UART_MSR_DSR	0x20	/* Data Set Ready */
-#define UART_MSR_CTS	0x10	/* Clear to Send */
-#define UART_MSR_DDCD	0x08	/* Delta DCD */
-#define UART_MSR_TERI	0x04	/* Trailing edge ring indicator */
-#define UART_MSR_DDSR	0x02	/* Delta DSR */
-#define UART_MSR_DCTS	0x01	/* Delta CTS */
-#define UART_MSR_ANY_DELTA 0x0F	/* Any of the delta bits! */
-
+#endif /* __KERNEL__ */
 #endif /* _LINUX_SERIAL_H */

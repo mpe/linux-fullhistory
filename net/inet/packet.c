@@ -193,8 +193,7 @@ static int packet_sendto(struct sock *sk, unsigned char *from, int len,
 	 
 	if (skb == NULL) 
 	{
-		DPRINTF((DBG_PKT, "packet_sendto: write buffer full?\n"));
-		return(-ENOMEM);
+		return(-ENOBUFS);
 	}
 	
 	/*

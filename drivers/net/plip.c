@@ -282,7 +282,7 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
     if (skb->free)
 	kfree_skb (skb, FREE_WRITE);
     dev->tbusy = 0;
-    mark_bh (INET_BH);
+    mark_bh (NET_BH);
     return 0/*ret_val*/;
 }
 

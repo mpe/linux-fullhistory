@@ -57,6 +57,8 @@
 #define SIOCGIFENCAP	0x8925		/* get/set slip encapsulation   */
 #define SIOCSIFENCAP	0x8926		
 #define SIOCGIFHWADDR	0x8927		/* Get hardware address		*/
+#define SIOCGIFSLAVE	0x8929		/* Driver slaving support	*/
+#define SIOCSIFSLAVE	0x8930
 
 /* Routing table calls (oldrtent - don't use) */
 #define SIOCADDRTOLD	0x8940		/* add routing table entry	*/
@@ -71,6 +73,11 @@
 #define SIOCDRARP	0x8960		/* delete RARP table entry	*/
 #define SIOCGRARP	0x8961		/* get RARP table entry		*/
 #define SIOCSRARP	0x8962		/* set RARP table entry		*/
+
+/* Driver configuration calls */
+
+#define SIOCGIFMAP	0x8970		/* Get device parameters	*/
+#define SIOCSIFMAP	0x8971		/* Set device parameters	*/
 
 /* Device private ioctl calls */
 

@@ -11,6 +11,8 @@
  *		Anonymous	:	NOTSOCK/BADF cleanup. Error fix in
  *					shutdown()
  *		Alan Cox	:	verify_area() fixes
+ *		Alan Cox	: 	Removed DDI
+ *		Jonathan Kamens	:	SOCK_DGRAM reconnect bug
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -37,19 +39,11 @@
 #include <linux/socket.h>
 #include <linux/fcntl.h>
 #include <linux/net.h>
-#include <linux/ddi.h>
+#include <linux/interrupt.h>
+#include <linux/netdevice.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
-
-#undef SOCK_DEBUG
-
-#ifdef SOCK_DEBUG
-#include <stdarg.h>
-#define DPRINTF(x) dprintf x
-#else
-#define DPRINTF(x) /**/
-#endif
 
 static int sock_lseek(struct inode *inode, struct file *file, off_t offset,
 		      int whence);
@@ -80,26 +74,8 @@ static struct file_operations socket_file_ops = {
 static struct socket sockets[NSOCKETS];
 static struct wait_queue *socket_wait_free = NULL;
 static struct proto_ops *pops[NPROTO];
-static int net_debug = 0;
 
 #define last_socket	(sockets + NSOCKETS - 1)
-
-#ifdef SOCK_DEBUG
-/* Module debugging. */
-static void
-dprintf(int level, char *fmt, ...)
-{
-  char buff[1024];
-  va_list args;
-  extern int vsprintf(char * buf, const char * fmt, va_list args);
-
-  if (level == 0) return;
-  va_start(args, fmt);
-  vsprintf(buff, fmt, args);
-  va_end(args);
-  printk(buff);
-}
-#endif
 
 /* Obtains the first available file descriptor and sets it up for use. */
 static int
@@ -207,21 +183,15 @@ sock_alloc(int wait)
 			SOCK_INODE(sock)->i_socket = sock;
 
 			sock->wait = &SOCK_INODE(sock)->i_wait;
-			DPRINTF((net_debug,
-				"NET: sock_alloc: sk 0x%x, ino 0x%x\n",
-				       			sock, SOCK_INODE(sock)));
 			return(sock);
 		}
 	}
 	sti();
 	if (!wait) return(NULL);
-	DPRINTF((net_debug, "NET: sock_alloc: no free sockets, sleeping...\n"));
 	interruptible_sleep_on(&socket_wait_free);
 	if (current->signal & ~current->blocked) {
-		DPRINTF((net_debug, "NET: sock_alloc: sleep was interrupted\n"));
 		return(NULL);
 	}
-	DPRINTF((net_debug, "NET: sock_alloc: wakeup... trying again...\n"));
   }
 }
 
@@ -241,8 +211,6 @@ sock_release(struct socket *sock)
   struct inode *inode;
   struct socket *peersock, *nextsock;
 
-  DPRINTF((net_debug, "NET: sock_release: socket 0x%x, inode 0x%x\n",
-						sock, SOCK_INODE(sock)));
   if ((oldstate = sock->state) != SS_UNCONNECTED)
 			sock->state = SS_DISCONNECTING;
 
@@ -271,7 +239,6 @@ sock_release(struct socket *sock)
 static int
 sock_lseek(struct inode *inode, struct file *file, off_t offset, int whence)
 {
-  DPRINTF((net_debug, "NET: sock_lseek: huh?\n"));
   return(-ESPIPE);
 }
 
@@ -281,7 +248,6 @@ sock_read(struct inode *inode, struct file *file, char *ubuf, int size)
 {
   struct socket *sock;
 
-  DPRINTF((net_debug, "NET: sock_read: buf=0x%x, size=%d\n", ubuf, size));
   if (!(sock = socki_lookup(inode))) {
 	printk("NET: sock_read: can't find socket for inode!\n");
 	return(-EBADF);
@@ -296,7 +262,6 @@ sock_write(struct inode *inode, struct file *file, char *ubuf, int size)
 {
   struct socket *sock;
 
-  DPRINTF((net_debug, "NET: sock_write: buf=0x%x, size=%d\n", ubuf, size));
   if (!(sock = socki_lookup(inode))) {
 	printk("NET: sock_write: can't find socket for inode!\n");
 	return(-EBADF);
@@ -310,7 +275,6 @@ static int
 sock_readdir(struct inode *inode, struct file *file, struct dirent *dirent,
 	     int count)
 {
-  DPRINTF((net_debug, "NET: sock_readdir: huh?\n"));
   return(-EBADF);
 }
 
@@ -321,8 +285,6 @@ sock_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 {
   struct socket *sock;
 
-  DPRINTF((net_debug, "NET: sock_ioctl: inode=0x%x cmd=0x%x arg=%d\n",
-							inode, cmd, arg));
   if (!(sock = socki_lookup(inode))) {
 	printk("NET: sock_ioctl: can't find socket for inode!\n");
 	return(-EBADF);
@@ -336,9 +298,6 @@ sock_select(struct inode *inode, struct file *file, int sel_type, select_table *
 {
   struct socket *sock;
 
-  DPRINTF((net_debug, "NET: sock_select: inode = 0x%x, kind = %s\n", inode,
-       (sel_type == SEL_IN) ? "in" :
-       (sel_type == SEL_OUT) ? "out" : "ex"));
   if (!(sock = socki_lookup(inode))) {
 	printk("NET: sock_select: can't find socket for inode!\n");
 	return(0);
@@ -356,9 +315,6 @@ sock_close(struct inode *inode, struct file *file)
 {
   struct socket *sock;
 
-  DPRINTF((net_debug, "NET: sock_close: inode=0x%x (cnt=%d)\n",
-						inode, inode->i_count));
-
   /* It's possible the inode is NULL if we're closing an unfinished socket. */
   if (!inode) return;
   if (!(sock = socki_lookup(inode))) {
@@ -374,12 +330,7 @@ sock_awaitconn(struct socket *mysock, struct socket *servsock)
 {
   struct socket *last;
 
-  DPRINTF((net_debug,
-	"NET: sock_awaitconn: trying to connect socket 0x%x to 0x%x\n",
-							mysock, servsock));
   if (!(servsock->flags & SO_ACCEPTCON)) {
-	DPRINTF((net_debug,
-		"NET: sock_awaitconn: server not accepting connections\n"));
 	return(-EINVAL);
   }
 
@@ -439,18 +390,13 @@ sock_socket(int family, int type, int protocol)
   struct socket *sock;
   struct proto_ops *ops;
 
-  DPRINTF((net_debug,
-	"NET: sock_socket: family = %d, type = %d, protocol = %d\n",
-						family, type, protocol));
-
   /* Locate the correct protocol family. */
   for (i = 0; i < NPROTO; ++i) {
 	if (pops[i] == NULL) continue;
 	if (pops[i]->family == family) break;
   }
   if (i == NPROTO) {
-	DPRINTF((net_debug, "NET: sock_socket: family not found\n"));
-	return(-EINVAL);
+  	return -EINVAL;
   }
   ops = pops[i];
 
@@ -495,10 +441,6 @@ sock_socketpair(int family, int type, int protocol, unsigned long usockvec[2])
   int fd1, fd2, i;
   struct socket *sock1, *sock2;
   int er;
-
-  DPRINTF((net_debug,
-	"NET: sock_socketpair: family = %d, type = %d, protocol = %d\n",
-							family, type, protocol));
 
   /*
    * Obtain the first socket and check if the underlying protocol
@@ -547,12 +489,10 @@ sock_bind(int fd, struct sockaddr *umyaddr, int addrlen)
   struct socket *sock;
   int i;
 
-  DPRINTF((net_debug, "NET: sock_bind: fd = %d\n", fd));
   if (fd < 0 || fd >= NR_OPEN || current->files->fd[fd] == NULL)
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
   if ((i = sock->ops->bind(sock, umyaddr, addrlen)) < 0) {
-	DPRINTF((net_debug, "NET: sock_bind: bind failed\n"));
 	return(i);
   }
   return(0);
@@ -569,12 +509,10 @@ sock_listen(int fd, int backlog)
 {
   struct socket *sock;
 
-  DPRINTF((net_debug, "NET: sock_listen: fd = %d\n", fd));
   if (fd < 0 || fd >= NR_OPEN || current->files->fd[fd] == NULL)
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
   if (sock->state != SS_UNCONNECTED) {
-	DPRINTF((net_debug, "NET: sock_listen: socket isn't unconnected\n"));
 	return(-EINVAL);
   }
   if (sock->ops && sock->ops->listen) sock->ops->listen(sock, backlog);
@@ -595,18 +533,14 @@ sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
   struct socket *sock, *newsock;
   int i;
 
-  DPRINTF((net_debug, "NET: sock_accept: fd = %d\n", fd));
   if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
   
   if (!(sock = sockfd_lookup(fd, &file))) return(-ENOTSOCK);
   if (sock->state != SS_UNCONNECTED) {
-	DPRINTF((net_debug, "NET: sock_accept: socket isn't unconnected\n"));
 	return(-EINVAL);
   }
   if (!(sock->flags & SO_ACCEPTCON)) {
-	DPRINTF((net_debug,
-		"NET: sock_accept: socket not accepting connections!\n"));
 	return(-EINVAL);
   }
 
@@ -632,9 +566,6 @@ sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
 	return(-EINVAL);
   }
 
-  DPRINTF((net_debug, "NET: sock_accept: connected socket 0x%x via 0x%x\n",
-							sock, newsock));
-
   if (upeer_sockaddr)
 	newsock->ops->getname(newsock, upeer_sockaddr, upeer_addrlen, 1);
 
@@ -650,7 +581,6 @@ sock_connect(int fd, struct sockaddr *uservaddr, int addrlen)
   struct file *file;
   int i;
 
-  DPRINTF((net_debug, "NET: sock_connect: fd = %d\n", fd));
   if (fd < 0 || fd >= NR_OPEN || (file=current->files->fd[fd]) == NULL)
 								return(-EBADF);
   
@@ -661,19 +591,24 @@ sock_connect(int fd, struct sockaddr *uservaddr, int addrlen)
 		break;
 	case SS_CONNECTED:
 		/* Socket is already connected */
+		if(sock->type == SOCK_DGRAM) /* Hack for now - move this all into the protocol */
+			break;
 		return -EISCONN;
 	case SS_CONNECTING:
 		/* Not yet connected... we will check this. */
+		
+		/*
+		 *	FIXME:  for all protocols what happens if you start
+		 *	an async connect fork and both children connect. Clean
+		 *	this up in the protocols!
+		 */
 		return(sock->ops->connect(sock, uservaddr,
 					  addrlen, file->f_flags));
 	default:
-		DPRINTF((net_debug,
-			"NET: sock_connect: socket not unconnected\n"));
 		return(-EINVAL);
   }
   i = sock->ops->connect(sock, uservaddr, addrlen, file->f_flags);
   if (i < 0) {
-	DPRINTF((net_debug, "NET: sock_connect: connect failed\n"));
 	return(i);
   }
   return(0);
@@ -685,7 +620,6 @@ sock_getsockname(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
 {
   struct socket *sock;
 
-  DPRINTF((net_debug, "NET: sock_getsockname: fd = %d\n", fd));
   if (fd < 0 || fd >= NR_OPEN || current->files->fd[fd] == NULL)
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
@@ -698,7 +632,6 @@ sock_getpeername(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
 {
   struct socket *sock;
 
-  DPRINTF((net_debug, "NET: sock_getpeername: fd = %d\n", fd));
   if (fd < 0 || fd >= NR_OPEN || current->files->fd[fd] == NULL)
 			return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
@@ -711,10 +644,6 @@ sock_send(int fd, void * buff, int len, unsigned flags)
 {
   struct socket *sock;
   struct file *file;
-
-  DPRINTF((net_debug,
-	"NET: sock_send(fd = %d, buff = %X, len = %d, flags = %X)\n",
-       							fd, buff, len, flags));
 
   if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
@@ -731,10 +660,6 @@ sock_sendto(int fd, void * buff, int len, unsigned flags,
   struct socket *sock;
   struct file *file;
 
-  DPRINTF((net_debug,
-	"NET: sock_sendto(fd = %d, buff = %X, len = %d, flags = %X,"
-	 " addr=%X, alen = %d\n", fd, buff, len, flags, addr, addr_len));
-
   if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
@@ -749,10 +674,6 @@ sock_recv(int fd, void * buff, int len, unsigned flags)
 {
   struct socket *sock;
   struct file *file;
-
-  DPRINTF((net_debug,
-	"NET: sock_recv(fd = %d, buff = %X, len = %d, flags = %X)\n",
-							fd, buff, len, flags));
 
   if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
@@ -769,10 +690,6 @@ sock_recvfrom(int fd, void * buff, int len, unsigned flags,
   struct socket *sock;
   struct file *file;
 
-  DPRINTF((net_debug,
-	"NET: sock_recvfrom(fd = %d, buff = %X, len = %d, flags = %X,"
-	" addr=%X, alen=%X\n", fd, buff, len, flags, addr, addr_len));
-
   if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
@@ -788,11 +705,6 @@ sock_setsockopt(int fd, int level, int optname, char *optval, int optlen)
   struct socket *sock;
   struct file *file;
 	
-  DPRINTF((net_debug, "NET: sock_setsockopt(fd=%d, level=%d, optname=%d,\n",
-							fd, level, optname));
-  DPRINTF((net_debug, "                     optval = %X, optlen = %d)\n",
-							optval, optlen));
-
   if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
@@ -806,11 +718,6 @@ sock_getsockopt(int fd, int level, int optname, char *optval, int *optlen)
 {
   struct socket *sock;
   struct file *file;
-
-  DPRINTF((net_debug, "NET: sock_getsockopt(fd=%d, level=%d, optname=%d,\n",
-						fd, level, optname));
-  DPRINTF((net_debug, "                     optval = %X, optlen = %X)\n",
-						optval, optlen));
 
   if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
@@ -826,8 +733,6 @@ sock_shutdown(int fd, int how)
 {
   struct socket *sock;
   struct file *file;
-
-  DPRINTF((net_debug, "NET: sock_shutdown(fd = %d, how = %d)\n", fd, how));
 
   if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 								return(-EBADF);
@@ -981,74 +886,6 @@ sys_socketcall(int call, unsigned long *args)
   }
 }
 
-
-static int
-net_ioctl(unsigned int cmd, unsigned long arg)
-{
-  int er;
-  switch(cmd) {
-	case DDIOCSDBG:
-		er=verify_area(VERIFY_READ, (void *)arg, sizeof(long));
-		if(er)
-			return er;
-		net_debug = get_fs_long((long *)arg);
-		if (net_debug != 0 && net_debug != 1) {
-			net_debug = 0;
-			return(-EINVAL);
-		}
-		return(0);
-	default:
-		return(-EINVAL);
-  }
-  /*NOTREACHED*/
-  return(0);
-}
-
-
-/*
- * Handle the IOCTL system call for the NET devices.  This basically
- * means I/O control for the SOCKET layer (future expansions could be
- * a variable number of socket table entries, et al), and for the more
- * general protocols like ARP.  The latter currently lives in the INET
- * module, so we have to get ugly a tiny little bit.  Later... -FvK
- */
-static int
-net_fioctl(struct inode *inode, struct file *file,
-	   unsigned int cmd, unsigned long arg)
-{
-  extern int arp_ioctl(unsigned int, void *);
-
-  /* Dispatch on the minor device. */
-  switch(MINOR(inode->i_rdev)) {
-	case 0:		/* NET (SOCKET) */
-		DPRINTF((net_debug, "NET: SOCKET level I/O control request.\n"));
-		return(net_ioctl(cmd, arg));
-#ifdef CONFIG_INET
-	case 1:		/* ARP */
-		DPRINTF((net_debug, "NET: ARP level I/O control request.\n"));
-		return(arp_ioctl(cmd, (void *) arg));
-#endif
-	default:
-		return(-ENODEV);
-  }
-  /*NOTREACHED*/
-  return(-EINVAL);
-}
-
-
-static struct file_operations net_fops = {
-  NULL,		/* LSEEK	*/
-  NULL,		/* READ		*/
-  NULL,		/* WRITE	*/
-  NULL,		/* READDIR	*/
-  NULL,		/* SELECT	*/
-  net_fioctl,	/* IOCTL	*/
-  NULL,		/* MMAP		*/
-  NULL,		/* OPEN		*/
-  NULL		/* CLOSE	*/
-};
-
-
 /*
  * This function is called by a protocol handler that wants to
  * advertise its address family, and have it linked into the
@@ -1065,12 +902,25 @@ sock_register(int family, struct proto_ops *ops)
 	pops[i] = ops;
 	pops[i]->family = family;
 	sti();
-	DPRINTF((net_debug, "NET: Installed protocol %d in slot %d (0x%X)\n",
-						family, i, (long)ops));
 	return(i);
   }
   sti();
   return(-ENOMEM);
+}
+
+void proto_init(void)
+{
+	extern struct net_proto protocols[];	/* Network protocols */
+	struct net_proto *pro;
+
+	/* Kick all configured protocols. */
+	pro = protocols;
+	while (pro->name != NULL) 
+	{
+		(*pro->init_func)(pro);
+		pro++;
+	}
+	/* We're all done... */
 }
 
 
@@ -1079,24 +929,19 @@ sock_init(void)
 {
   struct socket *sock;
   int i;
-
-  /* Set up our SOCKET VFS major device. */
-  if (register_chrdev(SOCKET_MAJOR, "socket", &net_fops) < 0) {
-	printk("NET: cannot register major device %d!\n", SOCKET_MAJOR);
-	return;
-  }
-
   /* Release all sockets. */
   for (sock = sockets; sock <= last_socket; ++sock) sock->state = SS_FREE;
 
   /* Initialize all address (protocol) families. */
   for (i = 0; i < NPROTO; ++i) pops[i] = NULL;
 
-  /* Initialize the DDI module. */
-  ddi_init();
+  /* Initialize the protocols module. */
+  proto_init();
 
-  /* Initialize the ARP module. */
-#if 0
-  arp_init();
-#endif
+  /* Initialize the DEV module. */
+  dev_init();
+  
+  /* And the bottom half handler */
+  bh_base[NET_BH].routine= net_bh;
+  
 }

@@ -49,13 +49,13 @@
 #define TCP_TIMEOUT_LEN	(15*60*HZ) /* should be about 15 mins		*/
 #define TCP_TIMEWAIT_LEN (60*HZ) /* how long to wait to sucessfully 
 				  * close the socket, about 60 seconds	*/
-#define TCP_ACK_TIME	3000	/* time to delay before sending an ACK	*/
+#define TCP_ACK_TIME	(3*HZ)	/* time to delay before sending an ACK	*/
 #define TCP_DONE_TIME	250	/* maximum time to wait before actually
 				 * destroying a socket			*/
 #define TCP_WRITE_TIME	3000	/* initial time to wait for an ACK,
 			         * after last transmit			*/
-#define TCP_CONNECT_TIME 2000	/* time to retransmit first SYN		*/
-#define TCP_SYN_RETRIES	5	/* number of times to retry openning a
+#define TCP_TIMEOUT_INIT (3*HZ)	/* RFC 1122 initial timeout value	*/
+#define TCP_SYN_RETRIES	5	/* number of times to retry opening a
 				 * connection 				*/
 #define TCP_PROBEWAIT_LEN 100	/* time to wait between probes when
 				 * I've got something to write and

@@ -16,7 +16,7 @@
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-OBJS  = tty_io.o console.o keyboard.o serial.o \
+OBJS  = tty_io.o n_tty.o console.o keyboard.o serial.o \
 	tty_ioctl.o pty.o vt.o mem.o \
 	defkeymap.o
 

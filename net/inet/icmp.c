@@ -19,11 +19,10 @@
  *		Alan Cox	:	Protocol violations
  *		Alan Cox	:	SNMP Statistics		
  *		Alan Cox	:	Routing errors
+ *		Alan Cox	:	Changes for newer routing code
+ *		Alan Cox	:	Removed old debugging junk
  *
  * 
- *	FIXME:
- *		When 1.0.6 is out merge in the NET channel diffs for TIMESTAMP
- *
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -82,21 +81,6 @@ struct icmp_err icmp_err_convert[] = {
 };
 
 
-/* 
- *	Display the contents of an ICMP header. 
- */
- 
-static void print_icmp(struct icmphdr *icmph)
-{
-  	if (inet_debug != DBG_ICMP) 
-  		return;
-
-  	printk("ICMP: type = %d, code = %d, checksum = %X\n",
-			icmph->type, icmph->code, icmph->checksum);
-  	printk("      gateway = %s\n", in_ntoa(icmph->un.gateway));
-}
-
-
 /*
  *	Send an ICMP message in response to a situation
  *
@@ -111,9 +95,6 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 	struct icmphdr *icmph;
 	int len;
 	struct device *ndev=NULL;	/* Make this =dev to force replies on the same interface */
-
-	DPRINTF((DBG_ICMP, "icmp_send(skb_in = %X, type = %d, code = %d, dev=%X)\n",
-	   					skb_in, type, code, dev));
 
 	/*
 	 *	Find the original IP header.
@@ -223,9 +204,6 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 	icmph->checksum = ip_compute_csum((unsigned char *)icmph,
                          sizeof(struct icmphdr) + sizeof(struct iphdr) + 8);
 
-	DPRINTF((DBG_ICMP, ">>\n"));
-	print_icmp(icmph);
-
 	/*
 	 *	Send it and free it once sent.
 	 */
@@ -250,20 +228,14 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb)
 	switch(icmph->code & 7) 
 	{
 		case ICMP_NET_UNREACH:
-			DPRINTF((DBG_ICMP, "ICMP: %s: network unreachable.\n",
-								in_ntoa(iph->daddr)));
 			break;
 		case ICMP_HOST_UNREACH:
-			DPRINTF((DBG_ICMP, "ICMP: %s: host unreachable.\n",
-							in_ntoa(iph->daddr)));
 			break;
 		case ICMP_PROT_UNREACH:
 			printk("ICMP: %s:%d: protocol unreachable.\n",
 				in_ntoa(iph->daddr), ntohs(iph->protocol));
 			break;
 		case ICMP_PORT_UNREACH:
-			DPRINTF((DBG_ICMP, "ICMP: %s:%d: port unreachable.\n",
-				in_ntoa(iph->daddr), -1 /* FIXME: ntohs(iph->port) */));
 			break;
 		case ICMP_FRAG_NEEDED:
 			printk("ICMP: %s: fragmentation needed and DF set.\n",
@@ -273,8 +245,6 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb)
 			printk("ICMP: %s: Source Route Failed.\n", in_ntoa(iph->daddr));
 			break;
 		default:
-			DPRINTF((DBG_ICMP, "ICMP: Unreachable: CODE=%d from %s\n",
-			    		(icmph->code & 7), in_ntoa(iph->daddr)));
 			break;
 	}
 
@@ -338,7 +308,7 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb,
 			 */
 #ifdef not_a_good_idea
 			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_GATEWAY),
-				ip, 0, icmph->un.gateway, dev);
+				ip, 0, icmph->un.gateway, dev,0);
 			break;
 #endif
 		case ICMP_REDIR_HOST:
@@ -354,16 +324,14 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb,
 				break;
 			printk("redirect from %08lx\n", source);
 			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_HOST | RTF_GATEWAY),
-				ip, 0, icmph->un.gateway, dev);
+				ip, 0, icmph->un.gateway, dev,0);
 			break;
 		case ICMP_REDIR_NETTOS:
 		case ICMP_REDIR_HOSTTOS:
 			printk("ICMP: cannot handle TOS redirects yet!\n");
 			break;
 		default:
-			DPRINTF((DBG_ICMP, "ICMP: Unreach: CODE=%d\n",
-						(icmph->code & 7)));
-		break;
+			break;
   	}
   	
   	/*
@@ -620,8 +588,6 @@ int icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	 
 	if (ip_chk_addr(daddr) == IS_BROADCAST) 
 	{
-		DPRINTF((DBG_ICMP, "ICMP: Discarded broadcast from %s\n",
-							in_ntoa(saddr)));
 		icmp_statistics.IcmpInErrors++;
 		kfree_skb(skb1, FREE_READ);
 		return(0);
@@ -646,7 +612,6 @@ int icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 		kfree_skb(skb1, FREE_READ);
 		return(0);
 	}
-	print_icmp(icmph);
 
 	/*
 	 *	Parse the ICMP message 
@@ -708,9 +673,6 @@ int icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 			return(0);
 		default:
 			icmp_statistics.IcmpInErrors++;
-			DPRINTF((DBG_ICMP,
-				"ICMP: Unsupported ICMP from %s, type = 0x%X\n",
-							in_ntoa(saddr), icmph->type));
 			kfree_skb(skb1, FREE_READ);
 			return(0);
  	}
@@ -729,8 +691,6 @@ int icmp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 {
   	switch(cmd) 
   	{
-		case DDIOCSDBG:
-			return(dbg_ioctl((void *) arg, DBG_ICMP));
 		default:
 			return(-EINVAL);
   	}

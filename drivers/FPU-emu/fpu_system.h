@@ -30,6 +30,10 @@
 #define FPU_EIP			(FPU_info->___eip)
 #define FPU_ORIG_EIP		(FPU_info->___orig_eip)
 
+#define LDT_BASE_ADDR(s)	((current->ldt[(s) >> 3].b & 0xff000000)     \
+				 | ((current->ldt[(s) >> 3].b & 0xff) << 16) \
+				 | (current->ldt[(s) >> 3].a >> 16))
+
 #define FPU_lookahead           (I387.soft.lookahead)
 #define FPU_entry_eip           (I387.soft.entry_eip)
 

@@ -481,14 +481,10 @@ asmlinkage int sys_close(unsigned int fd)
  */
 asmlinkage int sys_vhangup(void)
 {
-	struct tty_struct *tty;
-
 	if (!suser())
 		return -EPERM;
-	/* See if there is a controlling tty. */
-	if (current->tty < 0)
-		return 0;
-	tty = TTY_TABLE(MINOR(current->tty));
-	tty_vhangup(tty);
+	/* If there is a controlling tty, hang it up */
+	if (current->tty)
+		tty_vhangup(current->tty);
 	return 0;
 }

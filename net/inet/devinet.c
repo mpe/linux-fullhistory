@@ -75,8 +75,6 @@ int ip_addr_match(unsigned long me, unsigned long him)
 {
 	int i;
 	unsigned long mask=0xFFFFFFFF;
-	DPRINTF((DBG_DEV, "ip_addr_match(%s, ", in_ntoa(me)));
-	DPRINTF((DBG_DEV, "%s)\n", in_ntoa(him)));
 
 	/*
 	 *	Simple case
@@ -196,7 +194,7 @@ int ip_chk_addr(unsigned long addr)
  *
  *	Because the loopback address (127.0.0.1) is already recognized
  *	automatically, we can use the loopback interface's address as
- *	our "primary" interface.  This is the addressed used by IP et
+ *	our "primary" interface.  This is the address used by IP et
  *	al when it doesn't know which address to use (i.e. it does not
  *	yet know from or to which interface to go...).
  */

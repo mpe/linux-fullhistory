@@ -22,6 +22,8 @@
 #include "vt_kern.h"
 #include "diacr.h"
 
+extern struct tty_driver console_driver;
+
 /*
  * Console (vt and kd) routines, as defined by USL SVR4 manual, and by
  * experimentation and study of X386 SYSV handling.
@@ -119,11 +121,12 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	int console, i;
 	unsigned char ucval;
 	struct kbd_struct * kbd;
+	struct vt_struct *vt = tty->driver_data;
 
-	console = tty->line - 1;
+	console = vt->vc_num;
 
 	if (console < 0 || console >= NR_CONSOLES)
-		return -EINVAL;
+		return -ENOIOCTLCMD;
 
 	kbd = kbd_table + console;
 	switch (cmd) {
@@ -234,7 +237,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		  default:
 			return -EINVAL;
 		}
-		flush_input(tty);
+		if (tty->ldisc.flush_buffer)
+			tty->ldisc.flush_buffer(tty);
 		return 0;
 
 	case KDGKBMODE:
@@ -304,6 +308,13 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return -EINVAL;
 		if (KVAL(v) > max_vals[KTYP(v)])
 			return -EINVAL;
+		/*
+		 * Only the Superuser can set or unset the Secure
+		 * Attention Key.
+		 */
+		if (((key_map[s][i] == K_SAK) || (v == K_SAK)) &&
+		    !suser())
+			return -EPERM;
 		key_map[s][i] = v;
 		return 0;
 	}
@@ -473,8 +484,9 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return i;
 		put_fs_word(fg_console + 1, &vtstat->v_active);
 		state = 1;	/* /dev/tty0 is always open */
-		for (i = 1, mask = 2; i <= NR_CONSOLES; ++i, mask <<= 1)
-			if (tty_table[i] && tty_table[i]->count > 0)
+		for (i = 0, mask = 2; i < NR_CONSOLES; ++i, mask <<= 1)
+			if (console_driver.table[i] &&
+			    console_driver.table[i]->count > 0)
 				state |= mask;
 		put_fs_word(state, &vtstat->v_state);
 		return 0;
@@ -487,10 +499,12 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(long));
 		if (i)
 			return i;
-		for (i = 1; i <= NR_CONSOLES; ++i)
-			if (!tty_table[i] || tty_table[i]->count == 0)
+		for (i = 0; i < NR_CONSOLES; ++i)
+			if (!console_driver.table[i] ||
+			    console_driver.table[i]->count == 0)
 				break;
-		put_fs_long(i <= NR_CONSOLES ? i : -1, (unsigned long *)arg);
+		put_fs_long(i < NR_CONSOLES ? (i+1) : -1,
+			    (unsigned long *)arg);
 		return 0;
 
 	/*
@@ -586,6 +600,6 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		/* con_get_trans() defined in console.c */
 
 	default:
-		return -EINVAL;
+		return -ENOIOCTLCMD;
 	}
 }

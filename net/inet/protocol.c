@@ -88,10 +88,8 @@ inet_get_protocol(unsigned char prot)
   unsigned char hash;
   struct inet_protocol *p;
 
-  DPRINTF((DBG_PROTO, "get_protocol (%d)\n ", prot));
   hash = prot & (MAX_INET_PROTOS - 1);
   for (p = inet_protos[hash] ; p != NULL; p=p->next) {
-	DPRINTF((DBG_PROTO, "trying protocol %d\n", p->protocol));
 	if (p->protocol == prot) return((struct inet_protocol *) p);
   }
   return(NULL);

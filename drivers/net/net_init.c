@@ -14,6 +14,8 @@
 	It's primary advantage is that it's able to allocate low-memory buffers.
 	A secondary advantage is that the dangerous NE*000 netcards can reserve
 	their I/O port region before the SCSI probes start.
+
+	register_netdev()/unregister_netdev() by Bjorn Ekwall <bj0rn@blox.se>
 */
 
 #include <linux/config.h>
@@ -60,7 +62,9 @@ unsigned long net_dev_init (unsigned long mem_start, unsigned long mem_end)
 #if defined(CONFIG_LANCE)			/* Note this is _not_ CONFIG_AT1500. */
 	mem_start = lance_init(mem_start, mem_end);
 #endif
-
+#if defined(CONFIG_PI)
+	mem_start = pi_init(mem_start, mem_end);
+#endif	
 	return mem_start;
 }
 
@@ -161,6 +165,73 @@ void ether_setup(struct device *dev)
 	dev->pa_alen	= sizeof(unsigned long);
 }
 
+int register_netdev(struct device *dev)
+{
+	struct device *d = dev_base;
+	unsigned long flags;
+	
+	save_flags(flags);
+	cli();
+
+	if (dev && dev->init) 
+	{
+		if (dev->init(dev) != 0)
+		{
+			restore_flags(flags);
+			return -EIO;
+		}
+		
+		if (dev->name  &&  dev->name[0] == '\0')
+			sprintf(dev->name, "eth%d", next_ethdev_number++);
+
+		/* Add device to end of chain */
+		if (dev_base) 
+		{
+			while (d->next)
+				d = d->next;
+			d->next = dev;
+		}
+		else
+			dev_base = dev;
+		dev->next = NULL;
+	}
+	restore_flags(flags);
+	return 0;
+}
+
+void unregister_netdev(struct device *dev)
+{
+	struct device *d = dev_base;
+	unsigned long flags;
+	
+	save_flags(flags);
+	cli();
+
+	printk("unregister_netdev: device ");
+	if (dev) {
+		if (dev->start)
+			printk("'%s' busy", dev->name);
+		else {
+			if (dev_base == dev)
+				dev_base = dev->next;
+			else {
+				while (d && (d->next != dev))
+					d = d->next;
+
+				if (d && (d->next == dev)) {
+					d->next = dev->next;
+					printk("'%s' unlinked", dev->name);
+				}
+				else
+					printk("'%s' not found", dev->name);
+			}
+		}
+	}
+	else
+		printk("was NULL");
+	printk("\n");
+	restore_flags(flags);
+}
 
 
 /*

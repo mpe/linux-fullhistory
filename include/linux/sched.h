@@ -284,7 +284,7 @@ struct task_struct {
 	unsigned long v86flags, v86mask, v86mode;
 /* file system info */
 	int link_count;
-	int tty;		/* -1 if no tty, so it must be signed */
+	struct tty_struct *tty; /* NULL if no tty */
 	struct inode * executable;
 	struct shm_desc *shm;
 	struct sem_undo *semun;
@@ -337,7 +337,7 @@ struct task_struct {
 /* math */	0, \
 /* comm */	"swapper", \
 /* vm86_info */	NULL, 0, 0, 0, 0, \
-/* fs info */	0,-1,NULL, \
+/* fs info */	0,NULL,NULL, \
 /* ipc */	NULL, NULL, \
 /* ldt */	NULL, \
 /* tss */	INIT_TSS, \

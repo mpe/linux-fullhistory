@@ -373,7 +373,7 @@ static void ei_tx_intr(struct device *dev)
 		if (status & ENTSR_OWC) ei_local->stat.tx_window_errors++;
 	}
     
-    mark_bh (INET_BH);
+    mark_bh (NET_BH);
 }
 
 /* We have a good packet(s), get it/them out of the buffers. */
@@ -476,7 +476,7 @@ static void ei_receive(struct device *dev)
 		outb(next_frame-1, e8390_base+EN0_BOUNDARY);
     }
     /* If any worth-while packets have been received, dev_rint()
-       has done a mark_bh(INET_BH) for us and will work on them
+       has done a mark_bh(NET_BH) for us and will work on them
        when we get to the bottom-half routine. */
 
 	/* Record the maximum Rx packet queue. */

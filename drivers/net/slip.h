@@ -27,6 +27,7 @@
 
 
 struct slip {
+  int			magic;
   /* Bitmapped flag fields. */
   char			inuse;		/* are we allocated?		*/
   char			sending;	/* "channel busy" indicator	*/
@@ -48,6 +49,8 @@ struct slip {
   unsigned char		*rhead;		/* RECV buffer pointer (head)	*/
   unsigned char		*rend;		/* RECV buffer pointer (end)	*/
   int			rcount;		/* SLIP receive counter		*/
+  unsigned char		*xhead;		/* XMIT buffer pointer (head)	*/
+  unsigned char		*xtail;		/* XMIT buffer pointer (tail)	*/
 
   /* SLIP interface statistics. */
   unsigned long		rpacket;	/* inbound frame counter	*/
@@ -62,6 +65,7 @@ struct slip {
 #define SLF_ERROR	4
 #define SLF_COMP	16
 #define SLF_EXPN	32
+#define SLF_XMIT_BUSY	64
   unsigned char		mode;		/* SLIP mode			*/
 #define SL_MODE_SLIP	0
 #define SL_MODE_CSLIP	1
@@ -72,12 +76,12 @@ struct slip {
   int			xdata,xbits;	/* 6 bit slip controls 		*/
 };
 
+#define SLIP_MAGIC 0x5302
 
 extern int	slip_init(struct device *dev);
 extern int	slip_esc(unsigned char *s, unsigned char *d, int len);
 extern int	slip_esc6(unsigned char *s, unsigned char *d, int len);
-extern void	slip_unesc(struct slip *sl, unsigned char *s, int count, int error);
-extern void 	slip_unesc6(struct slip *sl, unsigned char *s, int count, int error);
-
+extern void	slip_unesc(struct slip *sl, unsigned char s);
+extern void 	slip_unesc6(struct slip *sl, unsigned char s);
 
 #endif	/* _LINUX_SLIP.H */

@@ -12,6 +12,7 @@
  *		Corey Minyard <wf-rch!minyard@relay.EU.net>
  *		Donald J. Becker, <becker@super.org>
  *		Alan Cox, <A.Cox@swansea.ac.uk>
+ *		Bjorn Ekwall. <bj0rn@blox.se>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -53,7 +54,7 @@ struct device
    */
   char			  *name;
 
-  /* I/O specific fields.  */
+  /* I/O specific fields - FIXME: Merge these and struct ifmap into one */
   unsigned long		  rmem_end;		/* shmem "recv" end	*/
   unsigned long		  rmem_start;		/* shmem "recv" start	*/
   unsigned long		  mem_end;		/* sahared mem end	*/
@@ -105,6 +106,12 @@ struct device
   unsigned long		  pa_dstaddr;	/* protocol P-P other side addr	*/
   unsigned long		  pa_mask;	/* protocol netmask		*/
   unsigned short	  pa_alen;	/* protocol address length	*/
+  
+  /* For load balancing driver pair support */
+  
+  unsigned long		   pkt_queue;	/* Packets queued */
+  struct device		  *slave;	/* Slave device */
+  
 
   /* Pointer to the interface buffers. */
   struct sk_buff_head	  buffs[DEV_NUMBUFFS];
@@ -132,6 +139,9 @@ struct device
   int			  (*set_mac_address)(struct device *dev, void *addr);
 #define HAVE_PRIVATE_IOCTL
   int			  (*do_ioctl)(struct device *dev, struct ifreq *ifr);
+#define HAVE_SET_CONFIG
+  int			  (*set_config)(struct device *dev, struct ifmap *map);
+  
 };
 
 
@@ -175,8 +185,8 @@ extern void		netif_rx(struct sk_buff *skb);
 extern int		dev_rint(unsigned char *buff, long len, int flags,
 				 struct device * dev);
 extern void		dev_transmit(void);
-extern int		in_inet_bh(void);
-extern void		inet_bh(void *tmp);
+extern int		in_net_bh(void);
+extern void		net_bh(void *tmp);
 extern void		dev_tint(struct device *dev);
 extern int		dev_get_info(char *buffer, char **start, off_t offset, int length);
 extern int		dev_ioctl(unsigned int cmd, void *);
@@ -186,6 +196,9 @@ extern void		dev_init(void);
 /* This function lives elsewhere (drivers/net/net_init.c but is related) */
 
 extern void		ether_setup(struct device *dev);
+/* Support for loadable net-drivers */
+extern int		register_netdev(struct device *dev);
+extern void		unregister_netdev(struct device *dev);
 
 #endif /* __KERNEL__ */
 

@@ -330,7 +330,7 @@ net_interrupt(int reg_ptr)
 		if (status /*& TX_INTR*/) {
 			lp->stats.tx_packets++;
 			dev->tbusy = 0;
-			mark_bh(INET_BH);	/* Inform upper layers. */
+			mark_bh(NET_BH);	/* Inform upper layers. */
 		}
 		if (status /*& COUNTERS_INTR*/) {
 			/* Increment the appropriate 'localstats' field. */
@@ -387,7 +387,7 @@ net_rx(struct device *dev)
 	} while (--boguscount);
 
 	/* If any worth-while packets have been received, dev_rint()
-	   has done a mark_bh(INET_BH) for us and will work on them
+	   has done a mark_bh(NET_BH) for us and will work on them
 	   when we get to the bottom-half routine. */
 	return;
 }

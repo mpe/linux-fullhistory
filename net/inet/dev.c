@@ -14,6 +14,7 @@
  *	Additional Authors:
  *		Florian la Roche <rzsfl@rz.uni-sb.de>
  *		Alan Cox <gw4pts@gw4pts.ampr.org>
+ *		David Hinds <dhinds@allegro.stanford.edu>
  *
  *	Cleaned up and recommented by Alan Cox 2nd April 1994. I hope to have
  *	the rest as well commented in the end.
@@ -136,7 +137,7 @@ void dev_add_pack(struct packet_type *pt)
 	}
   
   /*
-   *	NIT taps must go at the end or inet_bh will leak!
+   *	NIT taps must go at the end or net_bh will leak!
    */
    
 	if (pt->type == htons(ETH_P_ALL))
@@ -289,7 +290,9 @@ int dev_close(struct device *dev)
 		/*
 		 *	Delete the route to the device.
 		 */
+#ifdef CONFIG_INET		 
 		ip_rt_flush(dev);
+#endif		
 		/*
 		 *	Blank the IP addresses
 		 */
@@ -324,14 +327,19 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 				/* at the front or the back of the	*/
 				/* queue.				*/
 
-	DPRINTF((DBG_DEV, "dev_queue_xmit(skb=%X, dev=%X, pri = %d)\n",
-							skb, dev, pri));
-
 	if (dev == NULL) 
 	{
 		printk("dev.c: dev_queue_xmit: dev = NULL\n");
 		return;
 	}
+#ifdef CONFIG_SLAVE_BALANCING
+	save_flags(flags);
+	cli();
+	if(dev->slave!=NULL && dev->slave->pkt_queue < dev->pkt_queue &&
+				(dev->slave->flags & IFF_UP))
+		dev=dev->slave;
+	restore_flags(flags);
+#endif		
  
 	IS_SKB(skb);
     
@@ -370,8 +378,8 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	}
 
 	/*
-	 *	If the address has not been resolved called the device header rebuilder.
-	 *	This can cover all protocols and technically no just ARP either.
+	 *	If the address has not been resolved. Call the device header rebuilder.
+	 *	This can cover all protocols and technically not just ARP either.
 	 */
 	 
 	if (!skb->arp && dev->rebuild_header(skb->data, dev, skb->raddr, skb)) {
@@ -381,12 +389,21 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	save_flags(flags);
 	cli();	
 	if (!where) {
+#ifdef CONFIG_SLAVE_BALANCING	
+		skb->in_dev_queue=1;
+#endif		
 		skb_queue_tail(dev->buffs + pri,skb);
 		skb = skb_dequeue(dev->buffs + pri);
+#ifdef CONFIG_SLAVE_BALANCING		
+		skb->in_dev_queue=0;
+#endif		
 	}
 	restore_flags(flags);
 
 	if (dev->hard_start_xmit(skb, dev) == 0) {
+#ifdef CONFIG_SLAVE_BALANCING	
+		dev->pkt_queue--;
+#endif
 		return;
 	}
 
@@ -394,6 +411,10 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	 *	Transmission failed, put skb back into a list. 
 	 */
 	cli();
+#ifdef CONFIG_SLAVE_BALANCING
+	skb->in_dev_queue=1;
+	dev->pkt_queue++;
+#endif		
 	skb_queue_head(dev->buffs + pri,skb);
 	restore_flags(flags);
 }
@@ -447,7 +468,7 @@ void netif_rx(struct sk_buff *skb)
 	 *	hardware interrupt returns.
 	 */
 
-	mark_bh(INET_BH);
+	mark_bh(NET_BH);
 	return;
 }
 
@@ -573,7 +594,7 @@ void dev_transmit(void)
  
 volatile char in_bh = 0;	/* Non-rentrant remember */
 
-int in_inet_bh()	/* Used by timer.c */
+int in_net_bh()	/* Used by timer.c */
 {
 	return(in_bh==0?0:1);
 }
@@ -583,10 +604,10 @@ int in_inet_bh()	/* Used by timer.c */
  *	on and hardware can interrupt and queue to the receive queue a we
  *	run with no problems.
  *	This is run as a bottom half after an interrupt handler that does
- *	mark_bh(INET_BH);
+ *	mark_bh(NET_BH);
  */
  
-void inet_bh(void *tmp)
+void net_bh(void *tmp)
 {
 	struct sk_buff *skb;
 	struct packet_type *ptype;
@@ -724,7 +745,6 @@ void inet_bh(void *tmp)
 	 
 		if (!flag) 
 		{
-			DPRINTF((DBG_DEV,"INET: unknown packet type 0x%04X (ignored)\n", type));
 			kfree_skb(skb, FREE_WRITE);
 		}
 
@@ -995,10 +1015,21 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 		case SIOCSIFFLAGS:	/* Set interface flags */
 			{
 				int old_flags = dev->flags;
+#ifdef CONFIG_SLAVE_BALANCING				
+				if(dev->flags&IFF_SLAVE)
+					return -EBUSY;
+#endif					
 				dev->flags = ifr.ifr_flags & (
 					IFF_UP | IFF_BROADCAST | IFF_DEBUG | IFF_LOOPBACK |
 					IFF_POINTOPOINT | IFF_NOTRAILERS | IFF_RUNNING |
-					IFF_NOARP | IFF_PROMISC | IFF_ALLMULTI);
+					IFF_NOARP | IFF_PROMISC | IFF_ALLMULTI | IFF_SLAVE | IFF_MASTER);
+#ifdef CONFIG_SLAVE_BALANCING				
+				if(!(dev->flags&IFF_MASTER) && dev->slave)
+				{
+					dev->slave->flags&=~IFF_SLAVE;
+					dev->slave=NULL;
+				}
+#endif				
 				
 				/*
 				 *	Has promiscuous mode been turned off
@@ -1053,7 +1084,12 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			dev->pa_addr = (*(struct sockaddr_in *)
 				 &ifr.ifr_addr).sin_addr.s_addr;
 			dev->family = ifr.ifr_addr.sa_family;
+			
+#ifdef CONFIG_INET	
+			/* This is naughty. When net-032e comes out It wants moving into the net032
+			   code not the kernel. Till then it can sit here (SIGH) */		
 			dev->pa_mask = ip_get_mask(dev->pa_addr);
+#endif			
 			dev->pa_brdaddr = dev->pa_addr | ~dev->pa_mask;
 			ret = 0;
 			break;
@@ -1179,7 +1215,83 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				return -EINVAL;
 			ret=dev->set_mac_address(dev,ifr.ifr_hwaddr.sa_data);
 			break;
+		
+		case SIOCDEVPRIVATE:
+			if(dev->do_ioctl==NULL)
+				return -EOPNOTSUPP;
+			return dev->do_ioctl(dev, &ifr);
 			
+		case SIOCGIFMAP:
+			ifr.ifr_map.mem_start=dev->mem_start;
+			ifr.ifr_map.mem_end=dev->mem_end;
+			ifr.ifr_map.base_addr=dev->base_addr;
+			ifr.ifr_map.irq=dev->irq;
+			ifr.ifr_map.dma=dev->dma;
+			ifr.ifr_map.port=dev->if_port;
+			memcpy_tofs(arg,&ifr,sizeof(struct ifreq));
+			ret=0;
+			break;
+			
+		case SIOCSIFMAP:
+			if(dev->set_config==NULL)
+				return -EOPNOTSUPP;
+			return dev->set_config(dev,&ifr.ifr_map);
+			
+		case SIOCGIFSLAVE:
+#ifdef CONFIG_SLAVE_BALANCING		
+			if(dev->slave==NULL)
+				return -ENOENT;
+			strncpy(ifr.ifr_name,dev->name,sizeof(ifr.ifr_name));
+			memcpy_tofs(arg,&ifr,sizeof(struct ifreq));
+			ret=0;
+#else
+			return -ENOENT;
+#endif			
+			break;
+#ifdef CONFIG_SLAVE_BALANCING			
+		case SIOCSIFSLAVE:
+		{
+		
+		/*
+		 *	Fun game. Get the device up and the flags right without
+		 *	letting some scummy user confuse us.
+		 */
+			unsigned long flags;
+			struct device *slave=dev_get(ifr.ifr_slave);
+			save_flags(flags);
+			if(slave==NULL)
+			{
+				return -ENODEV;
+			}
+			cli();
+			if(slave->flags&(IFF_UP|IFF_RUNNING)!=(IFF_UP|IFF_RUNNING))
+			{
+				restore_flags(flags);
+				return -EINVAL;
+			}
+			if(dev->flags&IFF_SLAVE)
+			{
+				restore_flags(flags);
+				return -EINVAL;
+			}
+			if(dev->slave!=NULL)
+			{
+				restore_flags(flags);
+				return -EBUSY;
+			}
+			if(slave->flags&IFF_SLAVE)
+			{
+				restore_flags(flags);
+				return -EBUSY;
+			}
+			dev->slave=slave;
+			slave->flags|=IFF_SLAVE;
+			dev->flags|=IFF_MASTER;
+			restore_flags(flags);
+			ret=0;
+		}
+		break;
+#endif			
 		/*
 		 *	Unknown ioctl
 		 */
@@ -1224,6 +1336,8 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCGIFHWADDR:
 		case SIOCSIFHWADDR:
 		case OLD_SIOCGIFHWADDR:
+		case SIOCGIFSLAVE:
+		case SIOCGIFMAP:
 			return dev_ifsioc(arg, cmd);
 
 		/*
@@ -1238,6 +1352,9 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCSIFMETRIC:
 		case SIOCSIFMTU:
 		case SIOCSIFMEM:
+		case SIOCSIFMAP:
+		case SIOCSIFSLAVE:
+		case SIOCDEVPRIVATE:
 			if (!suser())
 				return -EPERM;
 			return dev_ifsioc(arg, cmd);

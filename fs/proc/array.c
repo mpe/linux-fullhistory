@@ -306,9 +306,8 @@ static int get_stat(int pid, char * buffer)
 		default: sigcatch |= bit;
 		} bit <<= 1;
 	}
-	tty_pgrp = (*p)->tty;
-	if (tty_pgrp > 0 && tty_table[tty_pgrp])
-		tty_pgrp = tty_table[tty_pgrp]->pgrp;
+	if ((*p)->tty)
+		tty_pgrp = (*p)->tty->pgrp;
 	else
 		tty_pgrp = -1;
 	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
@@ -320,7 +319,7 @@ static int get_stat(int pid, char * buffer)
 		(*p)->p_pptr->pid,
 		(*p)->pgrp,
 		(*p)->session,
-		(*p)->tty,
+	        (*p)->tty ? (*p)->tty->device : 0,
 		tty_pgrp,
 		(*p)->flags,
 		(*p)->mm->min_flt,

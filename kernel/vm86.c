@@ -250,7 +250,7 @@ __asm__ __volatile__( \
 __asm__ __volatile__( \
 	"movb %%fs:0(%1,%0),%b2\n\t" \
 	"incw %w0" \
-	: "=r" (ptr), "=r" (base), "=r" (__res) \
+	: "=r" (ptr), "=r" (base), "=q" (__res) \
 	: "0" (ptr), "1" (base), "2" (0)); \
 __res; })
 
@@ -261,7 +261,7 @@ __asm__ __volatile__( \
 	"incw %w0\n\t" \
 	"movb %%fs:0(%1,%0),%h2\n\t" \
 	"incw %w0" \
-	: "=r" (ptr), "=r" (base), "=r" (__res) \
+	: "=r" (ptr), "=r" (base), "=q" (__res) \
 	: "0" (ptr), "1" (base), "2" (0)); \
 __res; })
 
@@ -278,7 +278,7 @@ __asm__ __volatile__( \
 	"movb %%fs:0(%1,%0),%h2\n\t" \
 	"incw %w0\n\t" \
 	"rorl $16,%2" \
-	: "=r" (ptr), "=r" (base), "=r" (__res) \
+	: "=r" (ptr), "=r" (base), "=q" (__res) \
 	: "0" (ptr), "1" (base)); \
 __res; })
 

@@ -84,6 +84,7 @@ extern char *func_table[NR_FUNC];
 #define K_BOOT		K(KT_SPEC,12)
 #define K_CAPSON	K(KT_SPEC,13)
 #define K_COMPOSE       K(KT_SPEC,14)
+#define K_SAK		K(KT_SPEC,15)
 
 #define K_P0		K(KT_PAD,0)
 #define K_P1		K(KT_PAD,1)

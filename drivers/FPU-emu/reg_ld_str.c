@@ -1170,7 +1170,7 @@ char *fldenv(fpu_addr_modes addr_modes)
   unsigned char tag;
   int i;
 
-  if ( addr_modes.vm86
+  if ( addr_modes.mode16
       || (addr_modes.override.operand_size == OP_SIZE_PREFIX) )
     {
       RE_ENTRANT_CHECK_OFF;
@@ -1188,6 +1188,11 @@ char *fldenv(fpu_addr_modes addr_modes)
 	{
 	  ip_offset += (cs_selector & 0xf000) << 4;
 	  data_operand_offset += (operand_selector & 0xf000) << 4;
+	}
+      else if ( addr_modes.p286 )
+	{
+	  ip_offset += LDT_BASE_ADDR(cs_selector);
+	  data_operand_offset += LDT_BASE_ADDR(operand_selector);
 	}
     }
   else
@@ -1317,7 +1322,7 @@ char *fstenv(fpu_addr_modes addr_modes)
 {
   char *d = (char *)FPU_data_address;
 
-  if ( addr_modes.vm86
+  if ( addr_modes.mode16
       || (addr_modes.override.operand_size == OP_SIZE_PREFIX) )
     {
       RE_ENTRANT_CHECK_OFF;

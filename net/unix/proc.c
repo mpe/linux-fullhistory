@@ -17,6 +17,8 @@
  *
  * Fixes:
  *		Dmitry Gorodchanin	:	/proc locking fix
+ *		Mathijs Maassen		:	unbound /proc fix.
+ *		Alan Cox		:	Fix sock=NULL race
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -28,7 +30,6 @@
 #include <linux/string.h>
 #include <linux/socket.h>
 #include <linux/net.h>
-#include <linux/ddi.h>
 #include <linux/un.h>
 #include <linux/param.h>
 #include "unix.h"
@@ -41,19 +42,30 @@ int unix_get_info(char *buffer, char **start, off_t offset, int length)
   	off_t begin=0;
   	int len=0;
   	int i;
-
+  	unsigned long flags;
+	socket_state s_state;
+	short s_type;
+	long s_flags;
+	
   	len += sprintf(buffer, "Num RefCount Protocol Flags    Type St Path\n");
 
   	for(i = 0; i < NSOCKETS; i++) 
   	{
-		if (unix_datas[i].refcnt>0) 
+  		save_flags(flags);
+  		cli();
+		if (unix_datas[i].refcnt>0 && unix_datas[i].socket!=NULL)
 		{
+			/* sprintf is slow... lock only for the variable reads */
+			s_type=unix_datas[i].socket->type;
+			s_flags=unix_datas[i].socket->flags;
+			s_state=unix_datas[i].socket->state;
+			restore_flags(flags);
 			len += sprintf(buffer+len, "%2d: %08X %08X %08lX %04X %02X", i,
 				unix_datas[i].refcnt,
 				unix_datas[i].protocol,
-				unix_datas[i].socket->flags,
-				unix_datas[i].socket->type,
-				unix_datas[i].socket->state
+				s_flags,
+				s_type,
+				s_state
 			);
 
 			/* If socket is bound to a filename, we'll print it. */
@@ -65,7 +77,6 @@ int unix_get_info(char *buffer, char **start, off_t offset, int length)
 			else 
 			{ /* just add a newline */
 				buffer[len++]='\n';
-				buffer[len++]='\0';
 			}
 			
 			pos=begin+len;
@@ -77,6 +88,8 @@ int unix_get_info(char *buffer, char **start, off_t offset, int length)
 			if(pos>offset+length)
 				break;
 		}
+		else
+			restore_flags(flags);
 	}
 	
 	*start=buffer+(offset-begin);

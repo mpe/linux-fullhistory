@@ -6,10 +6,18 @@
  */
 
 #include <linux/termios.h>
+#include <linux/tqueue.h>
+#include <linux/tty_driver.h>
+#include <linux/tty_ldisc.h>
 
 #include <asm/system.h>
 
+/*
+ * Note: don't mess with NR_PTYS until you understand the tty minor 
+ * number allocation game...
+ */
 #define NR_CONSOLES	8
+#define NR_PTYS		64
 #define NR_LDISCS	16
 
 /*
@@ -54,96 +62,31 @@ extern struct screen_info screen_info;
 #define __DISABLED_CHAR '\0'
 
 /*
- * See comment for the tty_struct structure before changing
- * TTY_BUF_SIZE.  Actually, there should be different sized tty_queue
- * structures for different purposes.  1024 bytes for the transmit
- * queue is way overkill.  TYT, 9/14/92
+ * This is the flip buffer used for the tty driver.  The buffer is
+ * located in the tty structure, and is used as a high speed interface
+ * between the tty driver and the tty line discpline.
  */
-#define TTY_BUF_SIZE 1024	/* Must be a power of 2 */
+#define TTY_FLIPBUF_SIZE 512
 
-struct tty_queue {
-	unsigned long head;
-	unsigned long tail;
-	struct wait_queue * proc_list;
-	unsigned char buf[TTY_BUF_SIZE];
-};
-
-struct serial_struct {
-	int	type;
-	int	line;
-	int	port;
-	int	irq;
-	int	flags;
-	int	xmit_fifo_size;
-	int	custom_divisor;
-	int	baud_base;
-	unsigned short	close_delay;
-	char	reserved_char[2];
-	int	hub6;
-	int	reserved[5];
+struct tty_flip_buffer {
+	struct tq_struct tqueue;
+	unsigned char	char_buf[2*TTY_FLIPBUF_SIZE];
+	char		flag_buf[2*TTY_FLIPBUF_SIZE];
+	char		*char_buf_ptr;
+	unsigned char	*flag_buf_ptr;
+	int		count;
+	int		buf_num;
 };
 
 /*
- * These are the supported serial types.
+ * When a break, frame error, or parity error happens, these codes are
+ * stuffed into the flags buffer.
  */
-#define PORT_UNKNOWN	0
-#define PORT_8250	1
-#define PORT_16450	2
-#define PORT_16550	3
-#define PORT_16550A	4
-#define PORT_MAX	4
-
-/*
- * Definitions for async_struct (and serial_struct) flags field
- */
-#define ASYNC_HUP_NOTIFY 0x0001 /* Notify getty on hangups and closes 
-				   on the callout port */
-#define ASYNC_FOURPORT  0x0002	/* Set OU1, OUT2 per AST Fourport settings */
-#define ASYNC_SAK	0x0004	/* Secure Attention Key (Orange book) */
-#define ASYNC_SPLIT_TERMIOS 0x0008 /* Separate termios for dialin/callout */
-
-#define ASYNC_SPD_MASK	0x0030
-#define ASYNC_SPD_HI	0x0010	/* Use 56000 instead of 38400 bps */
-#define ASYNC_SPD_VHI	0x0020  /* Use 115200 instead of 38400 bps */
-#define ASYNC_SPD_CUST	0x0030  /* Use user-specified divisor */
-
-#define ASYNC_SKIP_TEST	0x0040 /* Skip UART test during autoconfiguration */
-#define ASYNC_AUTO_IRQ  0x0080 /* Do automatic IRQ during autoconfiguration */
-#define ASYNC_SESSION_LOCKOUT 0x0100 /* Lock out cua opens based on session */
-#define ASYNC_PGRP_LOCKOUT    0x0200 /* Lock out cua opens based on pgrp */
-#define ASYNC_CALLOUT_NOHUP   0x0400 /* Don't do hangups for cua device */
-
-#define ASYNC_FLAGS	0x0FFF	/* Possible legal async flags */
-#define ASYNC_USR_MASK 0x0430	/* Legal flags that non-privileged
-				 * users can set or reset */
-
-/* Internal flags used only by kernel/chr_drv/serial.c */
-#define ASYNC_INITIALIZED	0x80000000 /* Serial port was initialized */
-#define ASYNC_CALLOUT_ACTIVE	0x40000000 /* Call out device is active */
-#define ASYNC_NORMAL_ACTIVE	0x20000000 /* Normal device is active */
-#define ASYNC_BOOT_AUTOCONF	0x10000000 /* Autoconfigure port on bootup */
-#define ASYNC_CLOSING		0x08000000 /* Serial port is closing */
-
-#define IS_A_CONSOLE(min)	(((min) & 0xC0) == 0x00)
-#define IS_A_SERIAL(min)	(((min) & 0xC0) == 0x40)
-#define IS_A_PTY(min)		((min) & 0x80)
-#define IS_A_PTY_MASTER(min)	(((min) & 0xC0) == 0x80)
-#define IS_A_PTY_SLAVE(min)	(((min) & 0xC0) == 0xC0)
-#define PTY_OTHER(min)		((min) ^ 0x40)
-
-#define SL_TO_DEV(line)		((line) | 0x40)
-#define DEV_TO_SL(min)		((min) & 0x3F)
-
-#define INC(a) ((a) = ((a)+1) & (TTY_BUF_SIZE-1))
-#define DEC(a) ((a) = ((a)-1) & (TTY_BUF_SIZE-1))
-#define EMPTY(a) ((a)->head == (a)->tail)
-#define LEFT(a) (((a)->tail-(a)->head-1)&(TTY_BUF_SIZE-1))
-#define LAST(a) ((a)->buf[(TTY_BUF_SIZE-1)&((a)->head-1)])
-#define FULL(a) (!LEFT(a))
-#define CHARS(a) (((a)->head-(a)->tail)&(TTY_BUF_SIZE-1))
-
-extern void put_tty_queue(unsigned char c, struct tty_queue * queue);
-extern int get_tty_queue(struct tty_queue * queue);
+#define TTY_NORMAL	0
+#define TTY_BREAK	1
+#define TTY_FRAME	2
+#define TTY_PARITY	3
+#define TTY_OVERRUN	4
 
 #define INTR_CHAR(tty) ((tty)->termios->c_cc[VINTR])
 #define QUIT_CHAR(tty) ((tty)->termios->c_cc[VQUIT])
@@ -240,99 +183,52 @@ extern int get_tty_queue(struct tty_queue * queue);
  * 						- TYT, 9/14/92
  */
 struct tty_struct {
-	struct termios *termios;
+	int	magic;
+	struct tty_driver driver;
+	struct tty_ldisc ldisc;
+	struct termios *termios, *termios_locked;
 	int pgrp;
 	int session;
-	unsigned char stopped:1, hw_stopped:1, packet:1, lnext:1;
-	unsigned char char_error:3;
-	unsigned char erasing:1;
-	unsigned char ctrl_status;
-	short line;
-	int disc;
+	dev_t	device;
 	int flags;
 	int count;
-	unsigned int column;
 	struct winsize winsize;
-	int  (*open)(struct tty_struct * tty, struct file * filp);
-	void (*close)(struct tty_struct * tty, struct file * filp);
-	void (*write)(struct tty_struct * tty);
-	int  (*ioctl)(struct tty_struct *tty, struct file * file,
-		    unsigned int cmd, unsigned long arg);
-	void (*throttle)(struct tty_struct * tty, int status);
-	void (*set_termios)(struct tty_struct *tty, struct termios * old);
-	void (*stop)(struct tty_struct *tty);
-	void (*start)(struct tty_struct *tty);
-	void (*hangup)(struct tty_struct *tty);
+	unsigned char stopped:1, hw_stopped:1, packet:1;
+	unsigned char ctrl_status;
+
 	struct tty_struct *link;
-	unsigned char *write_data_ptr;
-	int write_data_cnt;
-	void (*write_data_callback)(void * data);
-	void * write_data_arg;
-	int readq_flags[TTY_BUF_SIZE/32];
-	int secondary_flags[TTY_BUF_SIZE/32];
+	struct fasync_struct *fasync;
+	struct tty_flip_buffer flip;
+	int max_flip_cnt;
+	struct wait_queue *write_wait;
+	struct wait_queue *read_wait;
+	void *disc_data;
+	void *driver_data;
+
+#define N_TTY_BUF_SIZE 4096
+	
+	/*
+	 * The following is data for the N_TTY line discpline.  For
+	 * historical reasons, this is included in the tty structure.
+	 */
+	unsigned int column;
+	unsigned char lnext:1, erasing:1, raw:1, real_raw:1, icanon:1;
+	unsigned short minimum_to_wake;
+	unsigned overrun_time;
+	int num_overrun;
+	int process_char_map[256/32];
+	char *read_buf;
+	int read_head;
+	int read_tail;
+	int read_cnt;
+	int read_flags[N_TTY_BUF_SIZE/32];
 	int canon_data;
 	unsigned long canon_head;
 	unsigned int canon_column;
-	struct tty_queue read_q;
-	struct tty_queue write_q;
-	struct tty_queue secondary;
-	void *disc_data;
 };
 
-struct tty_ldisc {
-	int	flags;
-	/*
-	 * The following routines are called from above.
-	 */
-	int	(*open)(struct tty_struct *);
-	void	(*close)(struct tty_struct *);
-	int	(*read)(struct tty_struct * tty, struct file * file,
-			unsigned char * buf, unsigned int nr);
-	int	(*write)(struct tty_struct * tty, struct file * file,
-			 unsigned char * buf, unsigned int nr);	
-	int	(*ioctl)(struct tty_struct * tty, struct file * file,
-			 unsigned int cmd, unsigned long arg);
-	int	(*select)(struct tty_struct * tty, struct inode * inode,
-			  struct file * file, int sel_type,
-			  struct select_table_struct *wait);
-	/*
-	 * The following routines are called from below.
-	 */
-	void	(*handler)(struct tty_struct *);
-};
-
-#define LDISC_FLAG_DEFINED	0x00000001
-
-/*
- * These are the different types of thottle status which can be sent
- * to the low-level tty driver.  The tty_io.c layer is responsible for
- * notifying the low-level tty driver of the following conditions:
- * secondary queue full, secondary queue available, and read queue
- * available.  The low-level driver must send the read queue full
- * command to itself, if it is interested in that condition.
- *
- * Note that the low-level tty driver may elect to ignore one or both
- * of these conditions; normally, however, it will use ^S/^Q or some
- * sort of hardware flow control to regulate the input to try to avoid
- * overflow.  While the low-level driver is responsible for all
- * receiving flow control, note that the ^S/^Q handling (but not
- * hardware flow control) is handled by the upper layer, in
- * copy_to_cooked.  
- */
-#define TTY_THROTTLE_SQ_FULL	1
-#define TTY_THROTTLE_SQ_AVAIL	2
-#define TTY_THROTTLE_RQ_FULL	3
-#define TTY_THROTTLE_RQ_AVAIL	4
-
-/*
- * This defines the low- and high-watermarks for the various conditions.
- * Again, the low-level driver is free to ignore any of these, and has
- * to implement RQ_THREHOLD_LW for itself if it wants it.
- */
-#define SQ_THRESHOLD_LW	16
-#define SQ_THRESHOLD_HW 768
-#define RQ_THRESHOLD_LW 16
-#define RQ_THRESHOLD_HW 768
+/* tty magic number */
+#define TTY_MAGIC		0x5401
 
 /*
  * These bits are used in the flags field of the tty structure.
@@ -342,47 +238,24 @@ struct tty_ldisc {
  * tty->write.  Thus, you must use the inline functions set_bit() and
  * clear_bit() to make things atomic.
  */
-#define TTY_WRITE_BUSY 0
-#define TTY_READ_BUSY 1
-#define TTY_SQ_THROTTLED 2
-#define TTY_RQ_THROTTLED 3
-#define TTY_IO_ERROR 4
-#define TTY_SLAVE_CLOSED 5
-#define TTY_EXCLUSIVE 6
-
-/*
- * When a break, frame error, or parity error happens, these codes are
- * stuffed into the read queue, and the relevant bit in readq_flag bit
- * array is set.
- */
-#define TTY_BREAK	1
-#define TTY_FRAME	2
-#define TTY_PARITY	3
-#define TTY_OVERRUN	4
+#define TTY_THROTTLED 0
+#define TTY_IO_ERROR 1
+#define TTY_SLAVE_CLOSED 2
+#define TTY_EXCLUSIVE 3
+#define TTY_DEBUG 4
+#define TTY_DO_WRITE_WAKEUP 5
 
 #define TTY_WRITE_FLUSH(tty) tty_write_flush((tty))
-#define TTY_READ_FLUSH(tty) tty_read_flush((tty))
 
 extern void tty_write_flush(struct tty_struct *);
-extern void tty_read_flush(struct tty_struct *);
 
-/* Number of chars that must be available in a write queue before
-   the queue is awakened. */
-#define WAKEUP_CHARS (3*TTY_BUF_SIZE/4)
-
-extern struct tty_struct *tty_table[];
-extern struct termios *tty_termios[];
-extern struct termios *termios_locked[];
-extern int tty_check_write[];
+extern struct termios tty_std_termios;
 extern struct tty_struct * redirect;
 extern struct tty_ldisc ldiscs[];
 extern int fg_console;
 extern unsigned long video_num_columns;
 extern unsigned long video_num_lines;
 extern struct wait_queue * keypress_wait;
-
-#define TTY_TABLE_IDX(nr)	((nr) ? (nr) : (fg_console+1))
-#define TTY_TABLE(nr) 		(tty_table[TTY_TABLE_IDX(nr)])
 
 /*	intr=^C		quit=^|		erase=del	kill=^U
 	eof=^D		vtime=\0	vmin=\1		sxtc=\0
@@ -395,21 +268,22 @@ extern struct wait_queue * keypress_wait;
 extern long rs_init(long);
 extern long lp_init(long);
 extern long con_init(long);
+extern long pty_init(long);
 extern long tty_init(long);
 
-extern void flush_input(struct tty_struct * tty);
-extern void flush_output(struct tty_struct * tty);
+extern int tty_paranoia_check(struct tty_struct *tty, dev_t device,
+			      const char *routine);
+extern char *_tty_name(struct tty_struct *tty, char *buf);
+extern char *tty_name(struct tty_struct *tty);
 extern void wait_until_sent(struct tty_struct * tty, int timeout);
-extern int check_change(struct tty_struct * tty, int channel);
+extern int tty_check_change(struct tty_struct * tty);
 extern void stop_tty(struct tty_struct * tty);
 extern void start_tty(struct tty_struct * tty);
 extern int tty_register_ldisc(int disc, struct tty_ldisc *new_ldisc);
+extern int tty_register_driver(struct tty_driver *driver);
 extern int tty_read_raw_data(struct tty_struct *tty, unsigned char *bufp,
 			     int buflen);
-extern int tty_write_data(struct tty_struct *tty, char *bufp, int buflen,
-			  void (*callback)(void * data), void * callarg);
 
-extern int tty_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 extern int is_orphaned_pgrp(int pgrp);
 extern int is_ignored(int sig);
 extern int tty_signal(int sig, struct tty_struct *tty);
@@ -420,10 +294,12 @@ extern int tty_hung_up_p(struct file * filp);
 extern void do_SAK(struct tty_struct *tty);
 extern void disassociate_ctty(int priv);
 
-/* tty write functions */
+/* n_tty.c */
+extern struct tty_ldisc tty_ldisc_N_TTY;
 
-extern void rs_write(struct tty_struct * tty);
-extern void con_write(struct tty_struct * tty);
+/* tty_ioctl.c */
+extern int n_tty_ioctl(struct tty_struct * tty, struct file * file,
+		       unsigned int cmd, unsigned long arg);
 
 /* serial.c */
 

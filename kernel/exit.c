@@ -52,6 +52,11 @@ int send_sig(unsigned long sig,struct task_struct * p,int priv)
 		return -EPERM;
 	if (!sig)
 		return 0;
+	/*
+	 * Forget it if the process is already zombie'd.
+	 */
+	if (p->state == TASK_ZOMBIE)
+		return 0;
 	if ((sig == SIGKILL) || (sig == SIGCONT)) {
 		if (p->state == TASK_STOPPED)
 			p->state = TASK_RUNNING;

@@ -327,7 +327,7 @@ el_interrupt(int reg_ptr)
 		   " gp=%03x rp=%03x.\n", dev->name, txsr, axsr,
 		   inw(ioaddr + EL1_DATAPTR), inw(ioaddr + EL1_RXPTR));
 	    dev->tbusy = 0;
-	    mark_bh(INET_BH);
+	    mark_bh(NET_BH);
 	} else if (txsr & TX_16COLLISIONS) {
 	    if (el_debug)
 		printk("%s: Transmit failed 16 times, ethernet jammed?\n",
@@ -349,7 +349,7 @@ el_interrupt(int reg_ptr)
 		printk(" Tx succeeded %s\n",
 		       (txsr & TX_RDY) ? "." : "but tx is busy!");
 	    dev->tbusy = 0;
-	    mark_bh(INET_BH);
+	    mark_bh(NET_BH);
 	}
     } else {
 	int rxsr = inb(RX_STATUS);

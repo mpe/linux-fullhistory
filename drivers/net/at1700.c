@@ -448,7 +448,7 @@ net_interrupt(int reg_ptr)
 				lp->tx_queue_len = 0;
 				dev->trans_start = jiffies;
 				dev->tbusy = 0;
-				mark_bh(INET_BH);	/* Inform upper layers. */
+				mark_bh(NET_BH);	/* Inform upper layers. */
 			} else {
 				lp->tx_started = 0;
 				/* Turn on Tx interrupts off. */
@@ -529,7 +529,7 @@ net_rx(struct device *dev)
 	}
 
 	/* If any worth-while packets have been received, dev_rint()
-	   has done a mark_bh(INET_BH) for us and will work on them
+	   has done a mark_bh(NET_BH) for us and will work on them
 	   when we get to the bottom-half routine. */
 	{
 		int i;

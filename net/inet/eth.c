@@ -23,6 +23,8 @@
  *		Florian		: Removed many unnecessary functions, code cleanup
  *				  and changes for new arp and skbuff.
  *		Alan Cox	: Redid header building to reflect new format.
+ *		Alan Cox	: ARP only when compiled with CONFIG_INET
+ *		Greg Page	: 802.2 and SNAP stuff
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -147,8 +149,11 @@ int eth_rebuild_header(void *buff, struct device *dev, unsigned long dst,
 	/*
 	 *	Try and get ARP to resolve the header.
 	 */
-	 
+#ifdef CONFIG_INET	 
 	return arp_find(eth->h_dest, dst, dev, dev->pa_addr, skb)? 1 : 0;
+#else
+	return 0;	
+#endif	
 }
 
 
@@ -161,10 +166,17 @@ int eth_rebuild_header(void *buff, struct device *dev, unsigned long dst,
 unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 {
 	struct ethhdr *eth = (struct ethhdr *) skb->data;
+	char *rawp;
 
-	if (ntohs(eth->h_proto) < 1536)
+	if (ntohs(eth->h_proto) >= 1536)
+		return eth->h_proto;
+		
+	rawp = (unsigned char *)(eth + 1);
+	
+	if (*(unsigned short *)rawp == 0xFFFF)
 		return htons(ETH_P_802_3);
-
-	return eth->h_proto;
+	if (*(unsigned short *)rawp == 0xAAAA)
+		return htons(ETH_P_SNAP);
+		
+	return htons(ETH_P_802_2);
 }
-

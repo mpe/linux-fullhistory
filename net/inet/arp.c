@@ -722,7 +722,17 @@ int arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 {
 	struct arp_table *entry;
 	unsigned long hash;
-
+/* SHOULD BE FIXED NOW */	
+	if(paddr==0)
+	{
+		printk("ADDRESS BOTCH 0\n");
+		if(skb)
+		{
+			printk("skb(saddr=%lx, daddr=%lx, raddr=%lx)\n",
+				skb->saddr,skb->daddr,skb->raddr);
+		}
+	}	
+/* ------------- */
 	switch (ip_chk_addr(paddr))
 	{
 		case IS_MYADDR:
@@ -1075,8 +1085,6 @@ int arp_ioctl(unsigned int cmd, void *arg)
 
 	switch(cmd)
 	{
-		case DDIOCSDBG:
-			return dbg_ioctl(arg, DBG_ARP);
 		case SIOCDARP:
 			if (!suser())
 				return -EPERM;

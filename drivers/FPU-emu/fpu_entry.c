@@ -173,13 +173,20 @@ asmlinkage void math_emulate(long arg)
   SETUP_DATA_AREA(arg);
 
   addr_modes.vm86 = (FPU_EFLAGS & 0x00020000) != 0;
+  addr_modes.p286 = (!addr_modes.vm86
+		     && current->ldt
+		     && (current->ldt[FPU_CS >> 3].b & 0xf000) == 0xf000
+		     && (current->ldt[FPU_CS >> 3].b & (1 << 22)) == 0);
+  addr_modes.mode16 = addr_modes.vm86 | addr_modes.p286;
 
   if ( addr_modes.vm86 )
     FPU_EIP += FPU_CS << 4;
+  else if ( addr_modes.p286 )
+    FPU_EIP += LDT_BASE_ADDR(FPU_CS);
 
   FPU_ORIG_EIP = FPU_EIP;
 
-  if ( !addr_modes.vm86 )
+  if ( !addr_modes.mode16 )
     {
       /* user code space? */
       if (FPU_CS == KERNEL_CS)
@@ -283,6 +290,8 @@ do_another_FPU_instruction:
 
 	  if ( addr_modes.vm86 )
 	    FPU_EIP -= FPU_CS << 4;
+	  else if ( addr_modes.p286 )
+	    FPU_EIP -= LDT_BASE_ADDR(FPU_CS);
 
 	  RE_ENTRANT_CHECK_OFF;
 	  current->tss.trap_no = 16;
@@ -552,6 +561,8 @@ FPU_fwait_done:
 
   if ( addr_modes.vm86 )
     FPU_EIP -= FPU_CS << 4;
+  else if ( addr_modes.p286 )
+    FPU_EIP -= LDT_BASE_ADDR(FPU_CS);
 
   RE_ENTRANT_CHECK_OFF;
 }

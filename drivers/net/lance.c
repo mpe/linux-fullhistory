@@ -196,6 +196,7 @@ struct lance_private {
     int dma;
     struct enet_statistics stats;
     char old_lance;
+    char lock;
     int pad0, pad1;		/* Used for alignment */
 };
 
@@ -434,6 +435,7 @@ lance_init_ring(struct device *dev)
     struct lance_private *lp = (struct lance_private *)dev->priv;
     int i;
 
+    lp->lock = 0;
     lp->cur_rx = lp->cur_tx = 0;
     lp->dirty_rx = lp->dirty_tx = 0;
 
@@ -515,8 +517,17 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 
     /* Block a timer-based transmit from overlapping.  This could better be
        done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-    if (set_bit(0, (void*)&dev->tbusy) != 0)
+    if (set_bit(0, (void*)&dev->tbusy) != 0) {
 	printk("%s: Transmitter access conflict.\n", dev->name);
+	return 1;
+    }
+
+    if (set_bit(0, (void*)&lp->lock) != 0) {
+        if (lance_debug > 2)
+	    printk("%s: tx queue lock!.\n", dev->name);
+	/* don't clear dev->tbusy flag. */
+        return 1;
+    }
 
     /* Fill in a Tx ring entry */
 
@@ -549,8 +560,9 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
     } else {
     	/* We can't free the packet yet, so we inform the memory management
 	   code that we are still using it. */
-    	if(skb->free==0)
-    		skb_kept_by_device(skb);
+
+        skb_kept_by_device(skb);
+
 	lp->tx_ring[entry].base = (int)(skb->data) | 0x83000000;
     }
     lp->cur_tx++;
@@ -561,8 +573,11 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 
     dev->trans_start = jiffies;
 
+    cli();
+    lp->lock = 0;
     if (lp->tx_ring[(entry+1) & TX_RING_MOD_MASK].base == 0)
 	dev->tbusy=0;
+    sti();
 
     return 0;
 }
@@ -635,10 +650,8 @@ lance_interrupt(int reg_ptr)
 	    if (databuff >= (void*)(&lp->tx_bounce_buffs[TX_RING_SIZE])
 		|| databuff < (void*)(lp->tx_bounce_buffs)) {
 		struct sk_buff *skb = ((struct sk_buff *)databuff) - 1;
-		if (skb->free)
-		    kfree_skb(skb, FREE_WRITE);
-		else
-		    skb_device_release(skb,FREE_WRITE);
+		skb_device_release(skb,FREE_WRITE);
+
 		/* Warning: skb may well vanish at the point you call
 		   device_release! */
 	    }
@@ -656,7 +669,7 @@ lance_interrupt(int reg_ptr)
 	if (dev->tbusy  &&  dirty_tx > lp->cur_tx - TX_RING_SIZE + 2) {
 	    /* The ring is no longer full, clear tbusy. */
 	    dev->tbusy = 0;
-	    mark_bh(INET_BH);
+	    mark_bh(NET_BH);
 	}
 
 	lp->dirty_tx = dirty_tx;
@@ -685,6 +698,7 @@ lance_rx(struct device *dev)
 {
     struct lance_private *lp = (struct lance_private *)dev->priv;
     int entry = lp->cur_rx & RX_RING_MOD_MASK;
+    int i;
 	
     /* If we own the next entry, it's a new packet. Send it up. */
     while (lp->rx_ring[entry].base >= 0) {
@@ -701,6 +715,7 @@ lance_rx(struct device *dev)
 	    if (status & 0x10) lp->stats.rx_over_errors++;
 	    if (status & 0x08) lp->stats.rx_crc_errors++;
 	    if (status & 0x04) lp->stats.rx_fifo_errors++;
+	    lp->rx_ring[entry].base &= 0x03ffffff;
 	} else {
 	    /* Malloc up new buffer, compatible with net-2e. */
 	    short pkt_len = lp->rx_ring[entry].msg_length;
@@ -709,7 +724,15 @@ lance_rx(struct device *dev)
 	    skb = alloc_skb(pkt_len, GFP_ATOMIC);
 	    if (skb == NULL) {
 		printk("%s: Memory squeeze, deferring packet.\n", dev->name);
-		lp->stats.rx_dropped++;	/* Really, deferred. */
+		for (i=0; i < RX_RING_SIZE; i++)
+		  if (lp->rx_ring[(entry+i) & RX_RING_MOD_MASK].base < 0)
+		    break;
+
+		if (i > RX_RING_SIZE -2) {
+		  lp->stats.rx_dropped++;
+		  lp->rx_ring[entry].base |= 0x80000000;
+		  lp->cur_rx++;
+		}
 		break;
 	    }
 	    skb->len = pkt_len;

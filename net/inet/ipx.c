@@ -22,6 +22,10 @@
  *     			Adding a route will overwrite any existing route to the same
  *			network.
  *	Revision 0.24:	Supports new /proc with no 4K limit
+ *	Revision 0.25:	Add ephemeral sockets, passive local network 
+ *			identification, support for local net 0 and
+ *			multiple datalinks
+ *			
  *
  */
  
@@ -46,6 +50,7 @@
 #include <linux/fcntl.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
+#include "p8022.h"
 
 #ifdef CONFIG_IPX
 /***********************************************************************************************************************\
@@ -184,7 +189,40 @@ int ipx_get_info(char *buffer, char **start, off_t offset, int length)
 \*******************************************************************************************************************/
 
 
+static struct datalink_proto	*p8022_datalink = NULL;
+static struct datalink_proto	*pEII_datalink = NULL;
+static struct datalink_proto	*p8023_datalink = NULL;
+static struct datalink_proto	*pSNAP_datalink = NULL;
+
 static ipx_route *ipx_router_list=NULL;
+static ipx_route *ipx_localnet_list=NULL;
+
+static ipx_route *
+ipxrtr_get_local_net(struct device *dev, unsigned short datalink)
+{
+	ipx_route *r;
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	r=ipx_localnet_list;
+	while(r!=NULL)
+	{
+		if((r->dev==dev) && (r->dlink_type == datalink))
+		{
+			restore_flags(flags);
+			return r;
+		}
+		r=r->next;
+	}
+	restore_flags(flags);
+	return NULL;
+}
+	
+static ipx_route *
+ipxrtr_get_default_net(void)
+{
+	return ipx_localnet_list;
+}
 
 static ipx_route *ipxrtr_get_dev(long net)
 {
@@ -206,10 +244,55 @@ static ipx_route *ipxrtr_get_dev(long net)
 	return NULL;
 }
 
+static void ipxrtr_add_localnet(ipx_route *newnet)
+{
+	ipx_route *r;
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+
+	newnet->nextlocal = NULL;
+	if (ipx_localnet_list == NULL) {
+		ipx_localnet_list = newnet;
+		restore_flags(flags);
+		return;
+	}
+
+	r=ipx_localnet_list;
+	while(r->nextlocal!=NULL)
+		r=r->nextlocal;
+
+	r->nextlocal = newnet;
+	
+	restore_flags(flags);
+	return;
+}
+
 static int ipxrtr_create(struct ipx_route_def *r)
 {
 	ipx_route *rt=ipxrtr_get_dev(r->ipx_network);
 	struct device *dev;
+	unsigned short	dlink_type;
+	struct datalink_proto *datalink = NULL;
+
+	if (r->ipx_flags & IPX_RT_BLUEBOOK) {
+		dlink_type = htons(ETH_P_IPX);
+		datalink = pEII_datalink;
+	} else if (r->ipx_flags & IPX_RT_8022) {
+		dlink_type = htons(ETH_P_802_2);
+		datalink = p8022_datalink;
+	} else if (r->ipx_flags & IPX_RT_SNAP) {
+		dlink_type = htons(ETH_P_SNAP);
+		datalink = pSNAP_datalink;
+	} else {
+		dlink_type = htons(ETH_P_802_3);
+		datalink = p8023_datalink;
+	}
+
+	if (datalink == NULL) {
+		printk("IPX: Unsupported datalink protocol.\n");
+		return -EPROTONOSUPPORT;
+	}
 
 	if(r->ipx_router_network!=0)
 	{
@@ -230,7 +313,9 @@ static int ipxrtr_create(struct ipx_route_def *r)
 		rt->net=r->ipx_network;
 		rt->router_net=r->ipx_router_network;
 		memcpy(rt->router_node,r->ipx_router_node,sizeof(rt->router_node));
-		rt->flags=(rt1->flags&IPX_RT_BLUEBOOK)|IPX_RT_ROUTED;
+		rt->flags=IPX_RT_ROUTED;
+		rt->dlink_type = dlink_type;
+		rt->datalink = datalink;
 		rt->dev=rt1->dev;
 		return 0;
 	}
@@ -243,21 +328,44 @@ static int ipxrtr_create(struct ipx_route_def *r)
 		return -EINVAL;
 	if(dev->addr_len<2)
 		return -EINVAL;
+	if (ipxrtr_get_local_net(dev, dlink_type) != NULL)
+		return -EEXIST;
 	/* Ok now create */
-	if (rt==NULL)
-	{
-		rt=(ipx_route *)kmalloc(sizeof(ipx_route),GFP_ATOMIC);	/* Because we are brave and don't lock the table! */
-		if(rt==NULL)
-			return -EAGAIN;
-		rt->next=ipx_router_list;
-		ipx_router_list=rt;
-	}
+	rt=(ipx_route *)kmalloc(sizeof(ipx_route),GFP_ATOMIC);	/* Because we are brave and don't lock the table! */
+	if(rt==NULL)
+		return -EAGAIN;
+	rt->next=ipx_router_list;
+	ipx_router_list=rt;
 	rt->router_net=0;
 	memset(rt->router_node,0,sizeof(rt->router_node));
 	rt->dev=dev;
 	rt->net=r->ipx_network;
-	rt->flags=r->ipx_flags&IPX_RT_BLUEBOOK;
+	rt->flags=0;
+	rt->dlink_type = dlink_type;
+	rt->datalink = datalink;
+	ipxrtr_add_localnet(rt);
 	return 0;
+}
+
+
+static int ipxrtr_delete_localnet(ipx_route *d)
+{
+	ipx_route *r=ipx_localnet_list;
+	if(r==d)
+	{
+		ipx_localnet_list=r->next;
+		return 0;
+	}
+	while(r->next!=NULL)
+	{
+		if(r->nextlocal==d)
+		{
+			r->nextlocal=d->nextlocal;
+			return 0;
+		}
+		r=r->nextlocal;
+	}
+	return -ENOENT;
 }
 
 static int ipxrtr_delete(long net)
@@ -266,6 +374,7 @@ static int ipxrtr_delete(long net)
 	if(r->net==net)
 	{
 		ipx_router_list=r->next;
+		kfree_s(r,sizeof(ipx_route));
 		return 0;
 	}
 	while(r->next!=NULL)
@@ -274,6 +383,9 @@ static int ipxrtr_delete(long net)
 		{
 			ipx_route *d=r->next;
 			r->next=d->next;
+			if (d->router_net == 0) {
+				ipxrtr_delete_localnet(d);
+			}
 			kfree_s(d,sizeof(ipx_route));
 			return 0;
 		}
@@ -479,8 +591,6 @@ static int ipx_create(struct socket *sock, int protocol)
 			kfree_s((void *)sk,sizeof(*sk));
 			return(-ESOCKTNOSUPPORT);
 	}
-	sk->stamp.tv_sec=0;
-	sk->rmem_alloc=0;
 	sk->dead=0;
 	sk->next=NULL;
 	sk->broadcast=0;
@@ -489,7 +599,7 @@ static int ipx_create(struct socket *sock, int protocol)
 	sk->wmem_alloc=0;
 	sk->rmem_alloc=0;
 	sk->inuse=0;
-	sk->dead=0;
+	sk->shutdown=0;
 	sk->prot=NULL;	/* So we use default free mechanisms */
 	sk->broadcast=0;
 	sk->err=0;
@@ -497,13 +607,11 @@ static int ipx_create(struct socket *sock, int protocol)
 	skb_queue_head_init(&sk->write_queue);
 	sk->send_head=NULL;
 	skb_queue_head_init(&sk->back_log);
-	sk->mtu=512;
 	sk->state=TCP_CLOSE;
 	sk->socket=sock;
 	sk->type=sock->type;
 	sk->ipx_type=0;		/* General user level IPX */
 	sk->debug=0;
-	sk->localroute=0;
 	
 	memset(&sk->ipx_dest_addr,'\0',sizeof(sk->ipx_dest_addr));
 	memset(&sk->ipx_source_addr,'\0',sizeof(sk->ipx_source_addr));
@@ -542,12 +650,30 @@ static int ipx_release(struct socket *sock, struct socket *peer)
 	return(0);
 }
 		
+static unsigned short first_free_socketnum(void)
+{
+	static unsigned short	socketNum = 0x4000;
+	unsigned short	startNum, foundNum = 0;
+
+	startNum = socketNum;
+	do {
+		if (ipx_find_socket(htons(socketNum)) == NULL) {
+			foundNum = socketNum;
+		}
+		socketNum++;
+		if (socketNum > 0x7ffc) socketNum = 0x4000;
+	}	while (!foundNum && (socketNum != startNum));
+
+	return	htons(foundNum);
+}
+	
 static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 {
 	ipx_socket *sk;
 	int err;
 	struct sockaddr_ipx addr;
 	struct ipx_route *rt;
+	unsigned char	*nodestart;
 	
 	sk=(ipx_socket *)sock->data;
 	if(sk==NULL)
@@ -555,7 +681,7 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 		printk("IPX:bind:sock->data=NULL\n");
 		return 0;
 	}
-
+	
 	if(sk->zapped==0)
 		return(-EIO);
 		
@@ -566,6 +692,11 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 		return -EINVAL;
 	memcpy_fromfs(&addr,uaddr,addr_len);
 	
+	if (addr.sipx_port == 0) {
+		addr.sipx_port = first_free_socketnum();
+		if (addr.sipx_port == 0) return -EINVAL;
+	}
+		
 	if(ntohs(addr.sipx_port)<0x4000 && !suser())
 		return(-EPERM);	/* protect IPX system stuff like routing/sap */
 	
@@ -577,20 +708,32 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 		if(sk->debug)
 			printk("IPX: bind failed because port %X in use.\n",
 				(int)addr.sipx_port);
-		return(-EADDRINUSE);	   
+		return -EADDRINUSE;	   
 	}
+
 	sk->ipx_source_addr.sock=addr.sipx_port;
-	memcpy(sk->ipx_source_addr.node,addr.sipx_node,sizeof(sk->ipx_source_addr.node));
-	sk->ipx_source_addr.net=addr.sipx_network;
-	if((rt=ipxrtr_get_dev(sk->ipx_source_addr.net))==NULL)
+
+	if (addr.sipx_network == 0L) {
+		rt = ipxrtr_get_default_net();
+	} else {
+		rt = ipxrtr_get_dev(addr.sipx_network);
+	}
+
+	if(rt == NULL)
 	{
 		if(sk->debug)
 			printk("IPX: bind failed (no device for net %lX)\n",
 				sk->ipx_source_addr.net);
-		return(-EADDRNOTAVAIL);
+		return -EADDRNOTAVAIL;
 	}
+
+	sk->ipx_source_addr.net=rt->net;
+
+	/* IPX addresses zero pad physical addresses less than 6 */
 	memset(sk->ipx_source_addr.node,'\0',6);
-	memcpy(sk->ipx_source_addr.node,rt->dev->dev_addr,rt->dev->addr_len);
+	nodestart = sk->ipx_source_addr.node + (6 - rt->dev->addr_len);
+	memcpy(nodestart,rt->dev->dev_addr,rt->dev->addr_len);
+
 	ipx_insert_socket(sk);
 	sk->zapped=0;
 	if(sk->debug)
@@ -621,8 +764,6 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 		return err;
 	memcpy_fromfs(&addr,uaddr,sizeof(addr));
 	
-	if(ntohs(addr.sipx_port)<0x4000 && !suser())
-		return -EPERM;
 	if(sk->ipx_source_addr.net==0)	/* Must bind first - no autobinding in this */
 		return -EINVAL;
 		
@@ -691,18 +832,16 @@ static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
 	return(0);
 }
 
-
 int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	/* NULL here for pt means the packet was looped back */
 	ipx_socket *sock;
-	unsigned char *buff;
 	ipx_packet *ipx;
 	ipx_route *rt;
+	ipx_route *ln;
+	unsigned char IPXaddr[6];
 	
-	buff=skb->data;
-	buff+=dev->hard_header_len;
-	ipx=(ipx_packet *)buff;
+	ipx=(ipx_packet *)skb->h.raw;
 	
 	if(ipx->ipx_checksum!=IPX_NO_CHECKSUM)
 	{
@@ -714,7 +853,7 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 	
 	/* Too small */
-	if(htons(ipx->ipx_pktsize)<sizeof(ipx_packet)+dev->hard_header_len)
+	if(htons(ipx->ipx_pktsize)<sizeof(ipx_packet))
 	{
 		kfree_skb(skb,FREE_READ);
 		return(0);
@@ -727,9 +866,20 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		return(0);
 	}
 	
+	/* Determine what local ipx endpoint this is */
+	ln = ipxrtr_get_local_net(dev, pt->type);
+	if (ln == NULL) 
+	{
+		kfree_skb(skb,FREE_READ);
+		return(0);
+	}
+
+	memset(IPXaddr, '\0', 6);
+	memcpy(IPXaddr+(6 - dev->addr_len), dev->dev_addr, dev->addr_len);
+
 	/* Not us/broadcast */
-	if(memcmp(dev->dev_addr,ipx->ipx_dest.node,dev->addr_len)!=0
-	     && memcmp(ipx_broadcast_node,ipx->ipx_dest.node,dev->addr_len)!=0)
+	if(memcmp(IPXaddr,ipx->ipx_dest.node,6)!=0
+	     && memcmp(ipx_broadcast_node,ipx->ipx_dest.node,6)!=0)
 	{
 		/**********************************************************************************************
 		
@@ -739,6 +889,8 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			
 		***********************************************************************************************/
 		
+		int incoming_size;
+		int outgoing_size;
 		struct sk_buff *skb2;
 		int free_it=0;
 		
@@ -749,6 +901,7 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			return(0);
 		}
 
+		ipx->ipx_tctrl++;
 		/* Don't forward if we don't have a route. We ought to go off and start hunting out routes but
 		   if someone needs this _THEY_ can add it */		
 		rt=ipxrtr_get_dev(ipx->ipx_dest.net);
@@ -757,11 +910,16 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			kfree_skb(skb,FREE_READ);
 			return(0);
 		}
-		if(rt->dev->hard_header_len!=dev->hard_header_len)
+
+		/* Check for differences in outgoing and incoming packet size */
+		incoming_size = skb->len - ntohs(ipx->ipx_pktsize);
+		outgoing_size = rt->datalink->header_length + rt->dev->hard_header_len;
+		if(incoming_size != outgoing_size)
 		{
 			/* A different header length causes a copy. Awkward to avoid with the current
 			   sk_buff stuff. */
-			skb2=alloc_skb(skb->len,GFP_ATOMIC);
+			skb2=alloc_skb(ntohs(ipx->ipx_pktsize) + outgoing_size,
+					GFP_ATOMIC);
 			if(skb2==NULL)
 			{
 				kfree_skb(skb,FREE_READ);
@@ -769,29 +927,30 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			}
 			free_it=1;
 			skb2->free=1;
-			skb2->len=skb->len;
-			memcpy((char *)(skb2+1),(char *)(skb+1),skb->len);
-			buff=(char *)(skb2+1);
-			ipx=(ipx_packet *)(buff+dev->hard_header_len);
+			skb2->len=ntohs(ipx->ipx_pktsize) + outgoing_size;
+			skb2->mem_addr = skb2;
+			skb2->arp = 1;
+			skb2->sk = NULL;
+
+			/* Need to copy with appropriate offsets */
+			memcpy((char *)(skb2+1)+outgoing_size,
+				(char *)(skb+1)+incoming_size,
+				ntohs(ipx->ipx_pktsize));
 		}
 		else
 		{
 			skb2=skb;
-			buff=(char *)(skb+1);
 		}
+
 		/* Now operate on the buffer */
 		/* Increase hop count */
-		ipx->ipx_tctrl++;
-		/* If the route is a gateway then forward to it */
 		
-		dev->hard_header(buff, dev, 
-			(rt->flags&IPX_RT_BLUEBOOK)?ntohs(ETH_P_IPX):ntohs(skb2->len),
-			(rt->flags&IPX_RT_ROUTED)?rt->router_node:ipx->ipx_dest.node,
-			NULL,	/* Our source */
-			skb2->len,
-			skb2);
-			
-		dev_queue_xmit(skb2,dev,SOPRI_NORMAL);
+		skb2->dev = rt->dev;
+		rt->datalink->datalink_header(rt->datalink, skb2, 
+			(rt->flags&IPX_RT_ROUTED)?rt->router_node
+						:ipx->ipx_dest.node);
+
+		dev_queue_xmit(skb2,rt->dev,SOPRI_NORMAL);
 
 		if(free_it)
 			kfree_skb(skb,FREE_READ);
@@ -800,13 +959,22 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	/************ End of router: Now sanity check stuff for us ***************/
 	
 	/* Ok its for us ! */
-	
+	if (ln->net == 0L) {
+		printk("IPX: Registering local net %lx\n", ipx->ipx_dest.net);
+		ln->net = ipx->ipx_dest.net;
+	}
+
 	sock=ipx_find_socket(ipx->ipx_dest.sock);
 	if(sock==NULL)	/* But not one of our sockets */
 	{
 		kfree_skb(skb,FREE_READ);
 		return(0);
 	}
+
+	/* Check to see if this socket needs its network number */
+	ln = ipxrtr_get_default_net();
+	if (sock->ipx_source_addr.net == 0L)
+		sock->ipx_source_addr.net = ln->net;
 	
 	if(sock->rmem_alloc>=sock->rcvbuf)
 	{
@@ -815,14 +983,13 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 	
 	sock->rmem_alloc+=skb->mem_len;
+	skb->sk = sock;
+
 	skb_queue_tail(&sock->receive_queue,skb);
 	if(!sock->dead)
 		sock->data_ready(sock,skb->len);
 	return(0);
 }
-
-
-
 
 static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	unsigned flags, struct sockaddr *usip, int addr_len)
@@ -836,8 +1003,12 @@ static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	struct ipx_packet *ipx;
 	int size;
 	ipx_route *rt;
+	struct datalink_proto *dl = NULL;
+	unsigned char IPXaddr[6];
+	int self_addressing = 0;
+	int broadcast = 0;
 
-	if(flags&~MSG_DONTROUTE)
+	if(flags)
 		return -EINVAL;
 	if(len<0)
 		return -EINVAL;
@@ -869,8 +1040,13 @@ static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	
 	if(sk->debug)
 		printk("IPX: sendto: Addresses built.\n");
-	if(!sk->broadcast && memcmp(&sipx.sipx_node,&ipx_broadcast_node,6)==0)
-		return -ENETUNREACH;
+
+	if(memcmp(&sipx.sipx_node,&ipx_broadcast_node,6)==0) {
+		if (!sk->broadcast)
+			return -ENETUNREACH;
+		broadcast = 1;
+	}
+
 	/* Build a packet */
 	
 	if(sk->debug)
@@ -882,57 +1058,70 @@ static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	size=sizeof(ipx_packet)+len;	/* For mac headers */
 
 	/* Find out where this has to go */
-	rt=ipxrtr_get_dev(sipx.sipx_network);
-	/* No suitable route - no gateways when not routing */
-	if(rt==NULL || ((flags&IPX_RT_ROUTED)&& ((flags&MSG_DONTROUTE)||sk->localroute)))
+	if (sipx.sipx_network == 0L) {
+		rt = ipxrtr_get_default_net();
+		if (rt != NULL)
+			sipx.sipx_network = rt->net;
+	} else
+		rt=ipxrtr_get_dev(sipx.sipx_network);
+
+	if(rt==NULL)
 	{
 		return -ENETUNREACH;
 	}
 	
 	dev=rt->dev;
+	dl = rt->datalink;
 	
-	size+=dev->hard_header_len;
-		
+	size += dev->hard_header_len;
+	size += dl->header_length;
+
 	if(sk->debug)
-		printk("IPX: sendto: allocating buffer (%d)\n",size-sizeof(struct sk_buff));
+		printk("IPX: sendto: allocating buffer (%d)\n",size);
 	
-	if(size+sk->wmem_alloc>sk->sndbuf)
+	if(size+sk->wmem_alloc>sk->sndbuf) {
 		return -EAGAIN;
+	}
 		
 	skb=alloc_skb(size,GFP_KERNEL);
 	if(skb==NULL)
 		return -ENOMEM;
-	if(skb->mem_len+sk->wmem_alloc>sk->sndbuf)
-	{
-		kfree_skb(skb,FREE_WRITE);
-		return -EAGAIN;
-	}
-
-	sk->wmem_alloc+=skb->mem_len;
+		
+	skb->mem_addr=skb;
 	skb->sk=sk;
 	skb->free=1;
 	skb->arp=1;
-	skb->len=size-sizeof(struct sk_buff);
+	skb->len=size;
+
+	sk->wmem_alloc+=skb->mem_len;
 
 	if(sk->debug)
 		printk("Building MAC header.\n");		
 	skb->dev=rt->dev;
 	
-	dev->hard_header(skb->data,skb->dev,
-		(rt->flags&IPX_RT_BLUEBOOK)?ETH_P_IPX:ETH_P_802_3),
-		(rt->flags&IPX_RT_ROUTED)?rt->router_node:sipx.sipx_node,
-		NULL,
-		len+sizeof(ipx_packet),
-		skb);
+	/* Build Data Link header */
+	dl->datalink_header(dl, skb, 
+		(rt->flags&IPX_RT_ROUTED)?rt->router_node:sipx.sipx_node);
+
+	/* See if we are sending to ourself */
+	memset(IPXaddr, '\0', 6);
+	memcpy(IPXaddr+(6 - skb->dev->addr_len), skb->dev->dev_addr, 
+			skb->dev->addr_len);
+
+	self_addressing = !memcmp(IPXaddr, 
+				(rt->flags&IPX_RT_ROUTED)?rt->router_node
+				:sipx.sipx_node,
+				6);
 
 	/* Now the IPX */
 	if(sk->debug)
 		printk("Building IPX Header.\n");
-	ipx=(ipx_packet *)skb->data+skb->dev->hard_header_len;
+	ipx=(ipx_packet *)skb->h.raw;
 	ipx->ipx_checksum=0xFFFF;
 	ipx->ipx_pktsize=htons(len+sizeof(ipx_packet));
 	ipx->ipx_tctrl=0;
-	ipx->ipx_type=sk->ipx_type;
+	ipx->ipx_type=sipx.sipx_type;
+
 	memcpy(&ipx->ipx_source,&sk->ipx_source_addr,sizeof(ipx->ipx_source));
 	ipx->ipx_dest.net=sipx.sipx_network;
 	memcpy(ipx->ipx_dest.node,sipx.sipx_node,sizeof(ipx->ipx_dest.node));
@@ -943,11 +1132,35 @@ static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	memcpy_fromfs((char *)(ipx+1),ubuf,len);
 	if(sk->debug)
 		printk("IPX: Transmitting buffer\n");
-	if(dev->flags&IFF_LOOPBACK)
+	if((dev->flags&IFF_LOOPBACK) || self_addressing) {
+		struct packet_type	pt;
+
 		/* loop back */
-		ipx_rcv(skb,dev,NULL);
-	else
+		pt.type = rt->dlink_type;
+		sk->wmem_alloc-=skb->mem_len;
+		skb->sk = NULL;
+		ipx_rcv(skb,dev,&pt);
+	} else {
+		if (broadcast) {
+			struct packet_type	pt;
+			struct sk_buff		*skb2;
+
+			/* loop back */
+			pt.type = rt->dlink_type;
+			
+			skb2=alloc_skb(skb->len, GFP_ATOMIC);
+			skb2->mem_addr=skb2;
+			skb2->free=1;
+			skb2->arp=1;
+			skb2->len=skb->len;
+			skb2->sk = NULL;
+			skb2->h.raw = skb2->data + rt->datalink->header_length
+				+ dev->hard_header_len;
+			memcpy(skb2->data, skb->data, skb->len);
+			ipx_rcv(skb2,dev,&pt);
+		}
 		dev_queue_xmit(skb,dev,SOPRI_NORMAL);
+	}
 	return len;
 }
 
@@ -956,21 +1169,17 @@ static int ipx_send(struct socket *sock, void *ubuf, int size, int noblock, unsi
 	return ipx_sendto(sock,ubuf,size,noblock,flags,NULL,0);
 }
 
-static int ipx_write(struct socket *sock, char *ubuf, int size, int noblock)
-{
-	return ipx_send(sock,ubuf,size,noblock,0);
-}
-
 static int ipx_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 		   unsigned flags, struct sockaddr *sip, int *addr_len)
 {
 	ipx_socket *sk=(ipx_socket *)sock->data;
 	struct sockaddr_ipx *sipx=(struct sockaddr_ipx *)sip;
+	struct ipx_packet	*ipx = NULL;
 	/* FILL ME IN */
 	int copied = 0;
 	struct sk_buff *skb;
 	int er;
-
+	
 	if(sk->err)
 	{
 		er= -sk->err;
@@ -1001,23 +1210,32 @@ static int ipx_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	skb=skb_recv_datagram(sk,flags,noblock,&er);
 	if(skb==NULL)
 		return er;
-	copied=(size<skb->len)?size:skb->len;
+
+	ipx = (ipx_packet *)(skb->h.raw);
+	copied=ntohs(ipx->ipx_pktsize) - sizeof(ipx_packet);
 	skb_copy_datagram(skb,sizeof(struct ipx_packet),ubuf,copied);
-	sk->stamp=skb->stamp;
 	
 	if(sipx)
 	{
 		struct sockaddr_ipx addr;
 		
 		addr.sipx_family=AF_IPX;
-		addr.sipx_port=((ipx_packet*)skb->h.raw)->ipx_source.sock;
-		memcpy(addr.sipx_node,((ipx_packet*)skb->h.raw)->ipx_source.node,sizeof(addr.sipx_node));
-		addr.sipx_network=((ipx_packet*)skb->h.raw)->ipx_source.net;
+		addr.sipx_port=ipx->ipx_source.sock;
+		memcpy(addr.sipx_node,ipx->ipx_source.node,sizeof(addr.sipx_node));
+		addr.sipx_network=ipx->ipx_source.net;
+		addr.sipx_type = ipx->ipx_type;
 		memcpy_tofs(sipx,&addr,sizeof(*sipx));
 	}
 	skb_free_datagram(skb);
 	return(copied);
 }		
+
+
+static int ipx_write(struct socket *sock, char *ubuf, int size, int noblock)
+{
+	return ipx_send(sock,ubuf,size,noblock,0);
+}
+
 
 static int ipx_recv(struct socket *sock, void *ubuf, int size , int noblock,
 	unsigned flags)
@@ -1110,16 +1328,26 @@ static struct packet_type ipx_dix_packet_type =
 };
  
 
-void ipx_proto_init(struct ddi_proto *pro)
+extern struct datalink_proto	*make_EII_client(void);
+extern struct datalink_proto	*make_8023_client(void);
+
+void ipx_proto_init(struct net_proto *pro)
 {
+	unsigned char	val = 0xE0;
 	(void) sock_register(ipx_proto_ops.family, &ipx_proto_ops);
+
+	pEII_datalink = make_EII_client();
 	ipx_dix_packet_type.type=htons(ETH_P_IPX);
 	dev_add_pack(&ipx_dix_packet_type);
+
+	p8023_datalink = make_8023_client();
 	ipx_8023_packet_type.type=htons(ETH_P_802_3);
 	dev_add_pack(&ipx_8023_packet_type);
 	
-	printk("Swansea University Computer Society IPX 0.24 BETA for NET3 ALPHA.008\n");
+	if ((p8022_datalink = register_8022_client(val, ipx_rcv)) == NULL)
+		printk("IPX: Unable to register with 802.2\n");
+	
+	printk("Swansea University Computer Society IPX 0.25 BETA for NET3 014\n");
 	
 }
-
 #endif

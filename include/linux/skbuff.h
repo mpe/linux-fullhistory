@@ -70,6 +70,9 @@ struct sk_buff {
 				arp;
   unsigned char			tries,lock,localroute;
   unsigned short		users;		/* User count - see datagram.c (and soon seqpacket.c/stream.c) */
+#ifdef CONFIG_SLAVE_BALANCING
+  unsigned short		in_dev_queue;
+#endif  
   unsigned long			padding[0];
   unsigned char			data[0];
 };

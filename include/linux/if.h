@@ -31,11 +31,12 @@
 #define	IFF_NOTRAILERS	0x20		/* avoid use of trailers	*/
 #define	IFF_RUNNING	0x40		/* resources allocated		*/
 #define	IFF_NOARP	0x80		/* no ARP protocol		*/
-
-/* These are not yet used: */
 #define	IFF_PROMISC	0x100		/* recve all packets		*/
+/* These are not yet used: */
 #define	IFF_ALLMULTI	0x200		/* recve all multicast packets	*/
 
+#define IFF_MASTER	0x400		/* master of a load balancer 	*/
+#define IFF_SLAVE	0x800		/* slave of a load balancer	*/
 
 /*
  * The ifaddr structure contains information about one address
@@ -55,6 +56,26 @@ struct ifaddr {
 };
 #define	ifa_broadaddr	ifa_ifu.ifu_broadaddr	/* broadcast address	*/
 #define	ifa_dstaddr	ifa_ifu.ifu_dstaddr	/* other end of link	*/
+
+/*
+ *	Device mapping structure. I'd just gone off and designed a 
+ *	beautiful scheme using only loadable modules with arguments
+ *	for driver options and along come the PCMICA people 8)
+ *
+ *	Ah well. The get() side of this is good for WDSETUP, and it'll
+ *	be handy for debugging things. The set side is fine for now and
+ *	being very small might be worth keeping for clean configuration.
+ */
+
+struct ifmap {
+	unsigned long mem_start;
+	unsigned long mem_end;
+	unsigned short base_addr; 
+	unsigned char irq;
+	unsigned char dma;
+	unsigned char port;
+	/* 3 bytes spare */
+};
 
 /*
  * Interface request structure used for socket
@@ -80,6 +101,8 @@ struct ifreq {
 		short	ifru_flags;
 		int	ifru_metric;
 		int	ifru_mtu;
+		struct  ifmap ifru_map;
+		char	ifru_slave[IFNAMSIZ];	/* Just fits the size */
 		caddr_t	ifru_data;
 	} ifr_ifru;
 };
@@ -94,6 +117,8 @@ struct ifreq {
 #define	ifr_flags	ifr_ifru.ifru_flags	/* flags		*/
 #define	ifr_metric	ifr_ifru.ifru_metric	/* metric		*/
 #define	ifr_mtu		ifr_ifru.ifru_mtu	/* mtu			*/
+#define ifr_map		ifr_ifru.ifru_map	/* device map		*/
+#define ifr_slave	ifr_ifru.ifru_slave	/* slave device		*/
 #define	ifr_data	ifr_ifru.ifru_data	/* for use by interface	*/
 
 /*

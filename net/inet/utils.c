@@ -12,6 +12,7 @@
  *
  * Fixes:
  *		Alan Cox	:	verify_area check.
+ *		Alan Cox	:	removed old debugging.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -88,80 +89,3 @@ unsigned long in_aton(char *str)
 	return(htonl(l));
 }
 
-
-/*
- *	Debugging print out
- */
- 
-void dprintf(int level, char *fmt, ...)
-{
-	va_list args;
-	char *buff;
-	extern int vsprintf(char * buf, const char * fmt, va_list args);
-
-	if (level != inet_debug) 
-		return;
-
-	buff = (char *) kmalloc(256, GFP_ATOMIC);
-	if (buff != NULL) 
-	{
-		va_start(args, fmt);
-		vsprintf(buff, fmt, args);
-		va_end(args);
-		printk(buff);
-		kfree(buff);
-  	}
-  	else
-		printk("Debugging output lost: No free memory.\n");  	
-}
-
-/*
- *	Debugging ioctl() requests
- */
- 
-int dbg_ioctl(void *arg, int level)
-{
-	int val;
-	int err;
-  
-	if (!suser()) 
-		return(-EPERM);
-	err=verify_area(VERIFY_READ, (void *)arg, sizeof(int));
-	if(err)
-  		return err;
-	val = get_fs_long((int *)arg);
-	switch(val) 
-	{
-		case 0:	/* OFF */
-			inet_debug = DBG_OFF;
-			break;
-		case 1:	/* ON, INET */
-			inet_debug = level;
-			break;
-
-		case DBG_RT:		/* modules */
-		case DBG_DEV:
-		case DBG_ETH:
-		case DBG_PROTO:
-		case DBG_TMR:
-		case DBG_PKT:
-		case DBG_RAW:
-	
-		case DBG_LOOPB:		/* drivers */
-		case DBG_SLIP:
-	
-		case DBG_ARP:		/* protocols */
-		case DBG_IP:
-		case DBG_ICMP:
-		case DBG_TCP:
-		case DBG_UDP:
-	
-			inet_debug = val;
-			break;
-	
-		default:
-			return(-EINVAL);
-	}
-	
-	return(0);
-}

@@ -103,9 +103,9 @@ typedef void (*FUNC)(void);
 typedef struct fpu_reg FPU_REG;
 typedef struct { unsigned char address_size, operand_size, segment; }
         overrides;
-/* This structure is 32 bits: */
+/* This structure is 48 bits: */
 typedef struct { overrides override;
-		 unsigned char vm86; } fpu_addr_modes;
+		 unsigned char mode16, vm86, p286; } fpu_addr_modes;
 
 #define	st(x)	( regs[((top+x) &7 )] )
 

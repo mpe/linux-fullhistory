@@ -8,10 +8,11 @@
  *	Which is available from ftp.novell.com
  */
 
-#ifndef _IPX_H
-#define _IPX_H
+#ifndef _NET_INET_IPX_H_
+#define _NET_INET_IPX_H_
 
-#include <linux/ddi.h>
+#include <linux/ipx.h>
+#include "datalink.h"
 
 typedef struct
 {
@@ -46,10 +47,15 @@ typedef struct ipx_route
 	unsigned char router_node[6];
 	unsigned long router_net;
 	unsigned short flags;
-	struct device *dev;
 #define IPX_RT_ROUTED	1		/* This isn't a direct route. Send via this if to node router_node */
-#define IPX_RT_BLUEBOOK	2		/* Use DIX 8137 frames not IEE802.3 */
+#define IPX_RT_BLUEBOOK	2		
+#define IPX_RT_8022	4		
+#define IPX_RT_SNAP	8		
+	unsigned short dlink_type;
+	struct device *dev;
+	struct datalink_proto *datalink;
 	struct ipx_route *next;
+	struct ipx_route *nextlocal;
 } ipx_route;
 
 

@@ -558,7 +558,7 @@ net_interrupt(int reg_ptr)
 				} else
 					lp->tx_unit_busy = 0;
 				dev->tbusy = 0;
-				mark_bh(INET_BH);	/* Inform upper layers. */
+				mark_bh(NET_BH);	/* Inform upper layers. */
 			}
 			num_tx_since_rx++;
 		} else if (num_tx_since_rx > 8

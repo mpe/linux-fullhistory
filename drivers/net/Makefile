@@ -6,16 +6,17 @@
 # This will go away in some future future: hidden configuration files
 # are difficult for users to deal with.
 include CONFIG
+include MODULES
 
 NETDRV_OBJS := net.a(Space.o) net.a(auto_irq.o) net.a(net_init.o) net.a(loopback.o)
 CFLAGS := $(CFLAGS) -I../../net/inet
 CPP := $(CPP) -I../../net/inet
 
 # The point of the makefile...
-all: net.a
+all: net.a modules
 
 Space.o: Space.c ../../include/linux/autoconf.h
-	$(CC) $(CFLAGS) $(OPTS) $(DL_OPTS) -c $< -o $@
+	$(CC) $(CFLAGS) $(OPTS) -c $< -o $@
 
 net_init.o: ../../include/linux/autoconf.h
 
@@ -74,11 +75,8 @@ slip.o:	slip.c CONFIG
 endif
 
 ifdef CONFIG_DE600
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(d_link.o)
-d_link.o: d_link.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(DL_OPTS) -c $<
+NETDRV_OBJS := $(NETDRV_OBJS) net.a(de600.o)
 endif
-
 ifdef CONFIG_AT1500
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(lance.o)
 endif
@@ -129,8 +127,11 @@ ifdef CONFIG_8390
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(8390.o)
 endif
 
-ifdef CONFIG_IP_DEFRAG
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(ip-frag.o)
+ifdef CONFIG_PI
+NETDRV_OBJS := $(NETDRV_OBJS) net.a(pi2.o)
+CONFIG_PI = CONFIG_PI
+pi2.o:  pi2.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PI_OPTS) -c $<
 endif
 
 net.a: $(NETDRV_OBJS)
@@ -144,6 +145,18 @@ dep:
 
 tar:
 
+ifdef MODULES
+
+modules:
+	echo $(MODULES) > ../../modules/NET_MODULES
+	$(MAKE) CFLAGS="$(CFLAGS) -DMODULE" $(MODULES)
+	(cd ../../modules;for i in $(MODULES); do ln -sf ../drivers/net/$$i .; done)
+
+else
+
+modules:
+
+endif
 
 # include a dependency file if one exists
 

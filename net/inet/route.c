@@ -20,6 +20,7 @@
  *		Linus Torvalds	:	Rewrote bits to be sensible
  *		Alan Cox	:	Added BSD route gw semantics
  *		Alan Cox	:	Super /proc >4K 
+ *		Alan Cox	:	MTU in route table
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -60,26 +61,6 @@ static struct rtable *rt_base = NULL;
 static struct rtable *rt_loopback = NULL;
 
 /*
- *	Dump the contents of a routing table entry. 
- */
- 
-static void rt_print(struct rtable *rt)
-{
-
-	if (rt == NULL || inet_debug != DBG_RT) 
-	  	return;
-
-	printk("RT: %06lx NXT=%06lx FLAGS=0x%02x\n",
-		(long) rt, (long) rt->rt_next, rt->rt_flags);
-	printk("    TARGET=%s ", in_ntoa(rt->rt_dst));
-	printk("GW=%s ", in_ntoa(rt->rt_gateway));
-	printk("    DEV=%s USE=%ld REF=%d\n",
-		(rt->rt_dev == NULL) ? "NONE" : rt->rt_dev->name,
-		rt->rt_use, rt->rt_refcnt);
-}
-
-
-/*
  *	Remove a routing table entry.
  */
 
@@ -88,7 +69,6 @@ static void rt_del(unsigned long dst)
 	struct rtable *r, **rp;
 	unsigned long flags;
 
-	DPRINTF((DBG_RT, "RT: flushing for dst %s\n", in_ntoa(dst)));
 	rp = &rt_base;
 	
 	/*
@@ -130,7 +110,6 @@ void ip_rt_flush(struct device *dev)
 	struct rtable **rp;
 	unsigned long flags;
 
-	DPRINTF((DBG_RT, "RT: flushing for dev 0x%08lx (%s)\n", (long)dev, dev->name));
 	rp = &rt_base;
 	cli();
 	save_flags(flags);
@@ -216,7 +195,7 @@ static inline struct device * get_gw_dev(unsigned long gw)
  */
  
 void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
-	unsigned long gw, struct device *dev)
+	unsigned long gw, struct device *dev, unsigned short mtu)
 {
 	struct rtable *r, *rt;
 	struct rtable **rp;
@@ -280,7 +259,6 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	rt = (struct rtable *) kmalloc(sizeof(struct rtable), GFP_ATOMIC);
 	if (rt == NULL) 
 	{
-		DPRINTF((DBG_RT, "RT: no memory for new route!\n"));
 		return;
 	}
 	memset(rt, 0, sizeof(struct rtable));
@@ -290,7 +268,11 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	rt->rt_gateway = gw;
 	rt->rt_mask = mask;
 	rt->rt_mtu = dev->mtu;
-	rt_print(rt);
+
+	/* Are the MSS/Window valid ? */
+
+	if(rt->rt_flags & RTF_MTU)
+		rt->rt_mtu = mtu;
 
 	/*
 	 *	What we have to do is loop though this until we have
@@ -467,7 +449,7 @@ static int rt_new(struct rtentry *r)
 	 *	Add the route
 	 */
 	 
-	ip_rt_add(flags, daddr, mask, gw, dev);
+	ip_rt_add(flags, daddr, mask, gw, dev, r->rt_mtu);
 	return 0;
 }
 
@@ -499,7 +481,7 @@ int rt_get_info(char *buffer, char **start, off_t offset, int length)
 	int size;
 
 	len += sprintf(buffer,
-		 "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\n");
+		 "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\n");
 	pos=len;
   
 	/*
@@ -508,10 +490,10 @@ int rt_get_info(char *buffer, char **start, off_t offset, int length)
 	 
 	for (r = rt_base; r != NULL; r = r->rt_next) 
 	{
-        	size = sprintf(buffer+len, "%s\t%08lX\t%08lX\t%02X\t%d\t%lu\t%d\t%08lX\n",
+        	size = sprintf(buffer+len, "%s\t%08lX\t%08lX\t%02X\t%d\t%lu\t%d\t%08lX\t%d\n",
 			r->rt_dev->name, r->rt_dst, r->rt_gateway,
 			r->rt_flags, r->rt_refcnt, r->rt_use, r->rt_metric,
-			r->rt_mask);
+			r->rt_mask, (int)r->rt_mtu);
 		len+=size;
 		pos+=size;
 		if(pos<offset)
@@ -644,9 +626,6 @@ int ip_rt_ioctl(unsigned int cmd, void *arg)
 
 	switch(cmd) 
 	{
-		case DDIOCSDBG:		/* Control debugging */
-			return dbg_ioctl(arg, DBG_RT);
-	
 		case SIOCADDRTOLD:	/* Old style add route */
 		case SIOCDELRTOLD:	/* Old style delete route */
 			if (!suser())
