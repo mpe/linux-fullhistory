@@ -614,13 +614,8 @@ new_range:
 			if (numa_domain != nid)
 				continue;
 
-			if (mem_start < end_paddr &&
-			    (mem_start+mem_size) > start_paddr) {
-				/* should be no overlaps ! */
-				dbg("free_bootmem %lx %lx\n", mem_start, mem_size);
-				free_bootmem_node(NODE_DATA(nid), mem_start,
-						  mem_size);
-			}
+			dbg("free_bootmem %lx %lx\n", mem_start, mem_size);
+			free_bootmem_node(NODE_DATA(nid), mem_start, mem_size);
 
 			if (--ranges)		/* process all ranges in cell */
 				goto new_range;
