@@ -188,7 +188,7 @@ sizeof(nop_cmd) = 8;
 #define NI52_ADDR2 0x01
 
 static int     ni52_probe1(struct device *dev,int ioaddr);
-static void    ni52_interrupt(int irq,struct pt_regs *reg_ptr);
+static void    ni52_interrupt(int irq,void *dev_id,struct pt_regs *reg_ptr);
 static int     ni52_open(struct device *dev);
 static int     ni52_close(struct device *dev);
 static int     ni52_send_packet(struct sk_buff *,struct device *);
@@ -235,7 +235,7 @@ struct priv
  */
 static int ni52_close(struct device *dev)
 {
-  free_irq(dev->irq);
+  free_irq(dev->irq, NULL);
   irq2dev_map[dev->irq] = NULL;
 
   ni_reset586(); /* the hard way to stop the receiver */
@@ -259,7 +259,7 @@ static int ni52_open(struct device *dev)
   startrecv586(dev);
   ni_enaint();
 
-  if(request_irq(dev->irq, &ni52_interrupt,0,"ni5210")) 
+  if(request_irq(dev->irq, &ni52_interrupt,0,"ni5210",NULL)) 
   {
     ni_reset586();
     return -EAGAIN;
@@ -810,7 +810,7 @@ static void *alloc_rfa(struct device *dev,void *ptr)
  * Interrupt Handler ...
  */
 
-static void ni52_interrupt(int irq,struct pt_regs *reg_ptr)
+static void ni52_interrupt(int irq,void *dev_id,struct pt_regs *reg_ptr)
 {
   struct device *dev = (struct device *) irq2dev_map[irq];
   unsigned short stat;

@@ -17,6 +17,7 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
+#include <linux/malloc.h>
 #include <linux/random.h>
 
 #include <asm/system.h>
@@ -116,27 +117,27 @@ void enable_irq(unsigned int irq_nr)
 /*
  * Initial irq handlers.
  */
-struct irqaction {
-	void (*handler)(int, struct pt_regs *);
-	unsigned long flags;
-	unsigned long mask;
-	const char *name;
-};
-
-static struct irqaction irq_action[NR_IRQS];
+static struct irqaction *irq_action[NR_IRQS];
 
 int get_irq_list(char *buf)
 {
 	int i, len = 0;
-	struct irqaction * action = irq_action;
+	struct irqaction * action;
 
-	for (i = 0 ; i < NR_IRQS ; i++, action++) {
-		if (!action->handler)
-			continue;
-		len += sprintf(buf+len, "%2d: %8d %c %s\n",
+	for (i = 0 ; i < NR_IRQS ; i++) {
+	        action = *(i + irq_action);
+		if (!action) 
+		        continue;
+		len += sprintf(buf+len, "%2d: %8d %c %s",
 			i, kstat.interrupts[i],
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
 			action->name);
+		for (action=action->next; action; action = action->next) {
+			len += sprintf(buf+len, ",%s %s",
+				(action->flags & SA_INTERRUPT) ? " +" : "",
+				action->name);
+		}
+		len += sprintf(buf+len, "\n");
 	}
 	return len;
 }
@@ -218,10 +219,13 @@ static inline void unmask_irq(unsigned long irq)
 	}
 }
 
-int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
-	unsigned long irqflags, const char * devname)
+int request_irq(unsigned int irq, 
+		void (*handler)(int, void *, struct pt_regs *),
+		unsigned long irqflags, 
+		const char * devname,
+		void *dev_id)
 {
-	struct irqaction * action;
+	struct irqaction *action, *tmp = NULL;
 	unsigned long flags;
 
 	if (irq >= NR_IRQS)
@@ -229,28 +233,53 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 	/* don't accept requests for irq #0 */
 	if (!irq)
 		return -EINVAL;
-	action = irq + irq_action;
-	if (action->handler)
-		return -EBUSY;
 	if (!handler)
-		return -EINVAL;
+	    return -EINVAL;
+	action = *(irq + irq_action);
+	if (action) {
+	    if ((action->flags & SA_SHIRQ) && (irqflags & SA_SHIRQ)) {
+		for (tmp = action; tmp->next; tmp = tmp->next);
+	    } else {
+		return -EBUSY;
+	    }
+	    if ((action->flags & SA_INTERRUPT) ^ (irqflags & SA_INTERRUPT)) {
+	      printk("Attempt to mix fast and slow interrupts on IRQ%d denied\n", irq);
+	      return -EBUSY;
+	    }   
+	}
 	save_flags(flags);
 	cli();
+	action = (struct irqaction *)kmalloc(sizeof(struct irqaction), GFP_KERNEL);
+	if (!action) { 
+	    restore_flags(flags);
+	    return -ENOMEM;
+	}
+	
 	action->handler = handler;
 	action->flags = irqflags;
 	action->mask = 0;
 	action->name = devname;
-	enable_irq(irq);
-	if (irq >= 8 && irq < 16) {
+	action->next = NULL;
+	action->dev_id = dev_id;
+
+	if (tmp) {
+	    tmp->next = action;
+	} else {
+	    *(irq + irq_action) = action;
+	    enable_irq(irq);
+	    if (irq >= 8 && irq < 16) {
 		enable_irq(2);	/* ensure cascade is enabled too */
+	    }
 	}
+
 	restore_flags(flags);
 	return 0;
 }
 
-void free_irq(unsigned int irq)
+void free_irq(unsigned int irq, void *dev_id)
 {
-	struct irqaction * action = irq + irq_action;
+	struct irqaction * action = *(irq + irq_action);
+	struct irqaction * tmp = NULL;
 	unsigned long flags;
 
 	if (irq >= NR_IRQS) {
@@ -261,13 +290,32 @@ void free_irq(unsigned int irq)
 		printk("Trying to free free IRQ%d\n", irq);
 		return;
 	}
+	if (dev_id) {
+	    for (; action; action = action->next) {
+	        if (action->dev_id == dev_id) break;
+		tmp = action;
+	    }
+	    if (!action) {
+		printk("Trying to free free shared IRQ%d\n",irq);
+		return;
+	    }
+	} else if (action->flags & SA_SHIRQ) {
+	    printk("Trying to free shared IRQ%d with NULL device ID\n", irq);
+	    return;
+	}
 	save_flags(flags);
 	cli();
-	mask_irq(irq);
-	action->handler = NULL;
-	action->flags = 0;
-	action->mask = 0;
-	action->name = NULL;
+	if (action && tmp) {
+	    tmp->next = action->next;
+	} else {
+	    *(irq + irq_action) = action->next;
+	}
+	kfree_s(action, sizeof(struct irqaction));
+
+	if (!(*(irq + irq_action))) {
+	    mask_irq(irq);
+	}
+
 	restore_flags(flags);
 }
 
@@ -277,16 +325,20 @@ static inline void handle_nmi(struct pt_regs * regs)
 	printk("61=%02x, 461=%02x\n", inb(0x61), inb(0x461));
 }
 
-static void unexpected_irq(int irq, struct pt_regs * regs)
+static void unexpected_irq(int irq, void *dev_id, struct pt_regs * regs)
 {
+	struct irqaction *action;
 	int i;
 
 	printk("IO device interrupt, irq = %d\n", irq);
 	printk("PC = %016lx PS=%04lx\n", regs->pc, regs->ps);
 	printk("Expecting: ");
 	for (i = 0; i < 16; i++)
-		if (irq_action[i].handler)
-			printk("[%s:%d] ", irq_action[i].name, i);
+	        if ((action = *(i + irq_action)))
+		        while (action->handler) {
+			        printk("[%s:%d] ", action->name, i);
+				action = action->next;
+			}
 	printk("\n");
 #if defined(CONFIG_ALPHA_JENSEN)
 	printk("64=%02x, 60=%02x, 3fa=%02x 2fa=%02x\n",
@@ -298,16 +350,19 @@ static void unexpected_irq(int irq, struct pt_regs * regs)
 #endif
 }
 
-static inline void handle_irq(int irq, struct pt_regs * regs)
+static inline void handle_irq(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct irqaction * action = irq + irq_action;
+	struct irqaction * action = *(irq + irq_action);
 
 	kstat.interrupts[irq]++;
-	if (!action->handler) {
-		unexpected_irq(irq, regs);
-		return;
+	if (!action) {
+	    unexpected_irq(irq, action->dev_id, regs);
+	    return;
 	}
-	action->handler(irq, regs);
+	while (action) {
+	    action->handler(irq, action->dev_id, regs);
+	    action = action->next;
+	}
 }
 
 static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
@@ -320,12 +375,15 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 	}
 
 	kstat.interrupts[irq]++;
-	action = irq_action + irq;
+	action = *(irq_action + irq);
 	if (action->flags & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
 	/* quick interrupts get executed with no extra overhead */
 	if (action->flags & SA_INTERRUPT) {
-		action->handler(irq, regs);
+	        while (action) {
+		        action->handler(irq, action->dev_id, regs);
+		        action = action->next;
+	        }
 		ack_irq(ack);
 		return;
 	}
@@ -340,9 +398,12 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 	 */
 	mask_irq(ack);
 	ack_irq(ack);
-	if (!action->handler)
+	if (!action)
 		return;
-	action->handler(irq, regs);
+	while (action) {
+	    action->handler(irq, action->dev_id, regs);
+	    action = action->next;
+	}
 	unmask_irq(ack);
 }
 
@@ -356,6 +417,8 @@ static inline void isa_device_interrupt(unsigned long vector,
 #	define IACK_SC	APECS_IACK_SC
 #elif defined(CONFIG_ALPHA_LCA)
 #	define IACK_SC	LCA_IACK_SC
+#elif defined(CONFIG_ALPHA_ALCOR)
+#	define IACK_SC	ALCOR_IACK_SC
 #else
     	/*
 	 * This is bogus but necessary to get it to compile
@@ -367,6 +430,7 @@ static inline void isa_device_interrupt(unsigned long vector,
 #endif
 	int j;
 
+#if 1
 	/*
 	 * Generate a PCI interrupt acknowledge cycle.  The PIC will
 	 * respond with the interrupt vector of the highest priority
@@ -383,7 +447,7 @@ static inline void isa_device_interrupt(unsigned long vector,
 	    }
 	}
 	device_interrupt(j, j, regs);
-#if 0
+#else
 	unsigned long pic;
 
 	/*
@@ -423,6 +487,10 @@ static inline void cabriolet_and_eb66p_device_interrupt(unsigned long vector,
 
 	/* read the interrupt summary registers */
 	pld = inb(0x804) | (inb(0x805) << 8) | (inb(0x806) << 16);
+
+#if 0
+	printk("[0x%04X/0x%04X]", pld, inb(0x20) | (inb(0xA0) << 8));
+#endif
 
 	/*
 	 * Now for every possible bit set, work through them and call
@@ -495,6 +563,11 @@ static inline void eb66_and_eb64p_device_interrupt(unsigned long vector,
 static inline void srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 	int irq, ack;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+
 
 	ack = irq = (vector - 0x800) >> 4;
 
@@ -517,6 +590,8 @@ static inline void srm_device_interrupt(unsigned long vector, struct pt_regs * r
 #endif /* CONFIG_ALPHA_JENSEN */
 
 	device_interrupt(irq, ack, regs);
+
+	restore_flags(flags) ;
 }
 
 #if NR_IRQS > 64
@@ -528,12 +603,14 @@ static inline void srm_device_interrupt(unsigned long vector, struct pt_regs * r
  */
 unsigned long probe_irq_on(void)
 {
+	struct irqaction * action;
 	unsigned long irqs = 0, irqmask;
 	unsigned long delay;
 	unsigned int i;
 
 	for (i = NR_IRQS - 1; i > 0; i--) {
-		if (!irq_action[i].handler) {
+	        action = *(i + irq_action);
+		if (!action->handler) {
 			enable_irq(i);
 			irqs |= (1 << i);
 		}
@@ -598,6 +675,10 @@ static void machine_check(unsigned long vector, unsigned long la, struct pt_regs
 	extern void apecs_machine_check(unsigned long vector, unsigned long la,
 					struct pt_regs * regs);
 	apecs_machine_check(vector, la, regs);
+#elif defined(CONFIG_ALPHA_ALCOR)
+	extern void alcor_machine_check(unsigned long vector, unsigned long la,
+					struct pt_regs * regs);
+	alcor_machine_check(vector, la, regs);
 #else
 	printk("Machine check\n");
 #endif

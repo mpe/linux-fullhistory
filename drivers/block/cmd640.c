@@ -482,6 +482,7 @@ static struct readahead_black_list {
 	const char* 	name;
 	int		mode;	
 } drives_ra[] = {
+        { "QUANTUM LIGHTNING 540A", 0 },
         { "ST3655A",	0 },
         { "SAMSUNG",	0 },	/* Be conservative */
  	{ NULL, 0 }

@@ -326,7 +326,7 @@ static int eth16i_open(struct device *dev);
 static int eth16i_close(struct device *dev);
 static int eth16i_tx(struct sk_buff *skb, struct device *dev);
 static void eth16i_rx(struct device *dev);
-static void eth16i_interrupt(int irq, struct pt_regs *regs);
+static void eth16i_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void eth16i_multicast(struct device *dev, int num_addrs, void *addrs); 
 static void eth16i_select_regbank(unsigned char regbank, short ioaddr);
 static void eth16i_initialize(struct device *dev);
@@ -423,7 +423,7 @@ static int eth16i_probe1(struct device *dev, short ioaddr)
   dev->irq = irq;
 
   /* Try to obtain interrupt vector */
-  if(request_irq(dev->irq, &eth16i_interrupt, 0, "eth16i")) {
+  if(request_irq(dev->irq, &eth16i_interrupt, 0, "eth16i", NULL)) {
     printk("%s: %s at %#3x, but is unusable due 
            conflict on IRQ %d.\n", dev->name, cardname, ioaddr, irq);
     return EAGAIN;
@@ -1086,7 +1086,7 @@ static void eth16i_rx(struct device *dev)
   return;
 }
 
-static void eth16i_interrupt(int irq, struct pt_regs *regs)
+static void eth16i_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
   struct device *dev = (struct device *)(irq2dev_map[irq]);
   struct eth16i_local *lp;
@@ -1204,7 +1204,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	unregister_netdev( &dev_eth16i );
-	free_irq( dev_eth16i.irq );
+	free_irq( dev_eth16i.irq, NULL );
 	irq2dev_map[ dev_eth16i.irq ] = NULL;
 	release_region( dev_eth16i.base_addr, ETH16I_IO_EXTENT );
 }

@@ -253,7 +253,7 @@ int wd_probe1(struct device *dev, int ioaddr)
 
 	/* Snarf the interrupt now.  There's no point in waiting since we cannot
 	   share and the board will usually be enabled. */
-	if (request_irq(dev->irq, ei_interrupt, 0, model_name)) {
+	if (request_irq(dev->irq, ei_interrupt, 0, model_name, NULL)) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		return EAGAIN;
 	}
@@ -261,7 +261,7 @@ int wd_probe1(struct device *dev, int ioaddr)
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {	
 		printk (" unable to get memory for dev->priv.\n");
-		free_irq(dev->irq);
+		free_irq(dev->irq, NULL);
 		return -ENOMEM;
 	}
 
@@ -493,7 +493,7 @@ cleanup_module(void)
 			int ioaddr = dev->base_addr - WD_NIC_OFFSET;
 			kfree(dev->priv);
 			dev->priv = NULL;
-			free_irq(dev->irq);
+			free_irq(dev->irq, NULL);
 			irq2dev_map[dev->irq] = NULL;
 			release_region(ioaddr, WD_IO_EXTENT);
 			unregister_netdev(dev);

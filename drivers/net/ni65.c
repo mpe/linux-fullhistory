@@ -116,7 +116,7 @@
 #define writedatareg(val) {outw(val,PORT+L_DATAREG);inw(PORT+L_DATAREG);}
 
 static int  ni65_probe1(struct device **dev,int);
-static void ni65_interrupt(int irq, struct pt_regs *regs);
+static void ni65_interrupt(int irq, void * dev_id, struct pt_regs *regs);
 static void ni65_recv_intr(struct device *dev,int);
 static void ni65_xmit_intr(struct device *dev,int);
 static int  ni65_open(struct device *dev);
@@ -249,7 +249,7 @@ static int ni65_probe1(struct device **dev1,int ioaddr)
            "ni6510", dev->base_addr, dev->irq,dev->dma);
 
   {        
-    int irqval = request_irq(dev->irq, &ni65_interrupt,0,"ni6510");
+    int irqval = request_irq(dev->irq, &ni65_interrupt,0,"ni6510",NULL);
     if (irqval) {
       printk ("%s: unable to get IRQ %d (irqval=%d).\n", 
                 dev->name,dev->irq, irqval);
@@ -258,7 +258,7 @@ static int ni65_probe1(struct device **dev1,int ioaddr)
     if(request_dma(dev->dma, "ni6510") != 0)
     {
       printk("%s: Can't request dma-channel %d\n",dev->name,(int) dev->dma);
-      free_irq(dev->irq);
+      free_irq(dev->irq,NULL);
       return -EAGAIN;
     }
   }
@@ -367,7 +367,7 @@ static int ni65_am7990_reinit(struct device *dev)
      printk(KERN_ERR "%s: can't RESET ni6510 card: %04x\n",dev->name,(int) inw(PORT+L_DATAREG));
      disable_dma(dev->dma);
      free_dma(dev->dma);
-     free_irq(dev->irq);
+     free_irq(dev->irq, NULL);
      return 0;
    }
 
@@ -439,7 +439,7 @@ static int ni65_am7990_reinit(struct device *dev)
       printk(KERN_ERR "%s: can't init am7990/lance, status: %04x\n",dev->name,(int) inw(PORT+L_DATAREG));
       disable_dma(dev->dma);
       free_dma(dev->dma);
-      free_irq(dev->irq);
+      free_irq(dev->irq, NULL);
       return 0; /* false */
     } 
 
@@ -451,7 +451,7 @@ static int ni65_am7990_reinit(struct device *dev)
 /* 
  * interrupt handler  
  */
-static void ni65_interrupt(int irq, struct pt_regs * regs)
+static void ni65_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 {
   int csr0;
   struct device *dev = (struct device *) irq2dev_map[irq];

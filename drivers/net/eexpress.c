@@ -286,7 +286,7 @@ extern int express_probe(struct device *dev);	/* Called from Space.c */
 static int	eexp_probe1(struct device *dev, short ioaddr);
 static int	eexp_open(struct device *dev);
 static int	eexp_send_packet(struct sk_buff *skb, struct device *dev);
-static void	eexp_interrupt(int irq, struct pt_regs *regs);
+static void	eexp_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void eexp_rx(struct device *dev);
 static int	eexp_close(struct device *dev);
 static struct enet_statistics *eexp_get_stats(struct device *dev);
@@ -429,7 +429,7 @@ eexp_open(struct device *dev)
 	if (irq2dev_map[dev->irq] != 0
 		/* This is always true, but avoid the false IRQ. */
 		|| (irq2dev_map[dev->irq] = dev) == 0
-		|| request_irq(dev->irq, &eexp_interrupt, 0, "EExpress")) {
+		|| request_irq(dev->irq, &eexp_interrupt, 0, "EExpress", NULL)) {
 		return -EAGAIN;
 	}
 
@@ -513,7 +513,7 @@ eexp_send_packet(struct sk_buff *skb, struct device *dev)
 /*	The typical workload of the driver:
 	Handle the network interface interrupts. */
 static void
-eexp_interrupt(int irq, struct pt_regs *regs)
+eexp_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct net_local *lp;
@@ -648,7 +648,7 @@ eexp_close(struct device *dev)
 	/* Disable the physical interrupt line. */
 	outb(0, ioaddr + SET_IRQ);
 
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 
 	irq2dev_map[dev->irq] = 0;
 

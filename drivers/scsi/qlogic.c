@@ -446,7 +446,7 @@ rtrc(0)
 #if QL_USE_IRQ
 /*----------------------------------------------------------------*/
 /* interrupt handler */
-static void		    ql_ihandl(int irq, struct pt_regs * regs)
+static void	       ql_ihandl(int irq, void *dev_id, struct pt_regs * regs)
 {
 Scsi_Cmnd	   *icmd;
 	REG0;
@@ -609,7 +609,7 @@ host->proc_dir =  &proc_scsi_qlogic;
 	else
 		printk( "Ql: Using preset IRQ %d\n", qlirq );
 
-	if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, 0, "qlogic"))
+	if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, 0, "qlogic", NULL))
 		host->can_queue = 1;
 #endif
 	request_region( qbase , 0x10 ,"qlogic");

@@ -450,7 +450,7 @@ mpu401_input_loop (struct mpu_config *devc)
 }
 
 void
-mpuintr (int irq, struct pt_regs *dummy)
+mpuintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
   struct mpu_config *devc;
   int             dev;

@@ -322,7 +322,7 @@ static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 #define HD(board) ((struct hostdata *) &sh[board]->hostdata)
 #define BN(board) (HD(board)->board_name)
 
-static void eata2x_interrupt_handler(int, struct pt_regs *);
+static void eata2x_interrupt_handler(int, void *, struct pt_regs *);
 static int do_trace = FALSE;
 
 static inline unchar wait_on_busy(ushort iobase) {
@@ -448,7 +448,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 
    /* Board detected, allocate its IRQ if not already done */
    if ((irq >= MAX_IRQ) || ((irqlist[irq] == NO_IRQ) && request_irq
-       (irq, eata2x_interrupt_handler, SA_INTERRUPT, driver_name))) {
+       (irq, eata2x_interrupt_handler, SA_INTERRUPT, driver_name, NULL))) {
       printk("%s: unable to allocate IRQ %u, detaching.\n", name, irq);
       return FALSE;
       }
@@ -456,7 +456,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    if (subversion == ISA && request_dma(dma_channel, driver_name)) {
       printk("%s: unable to allocate DMA channel %u, detaching.\n",
 	     name, dma_channel);
-      free_irq(irq);
+      free_irq(irq, NULL);
       return FALSE;
       }
 
@@ -481,7 +481,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    if (sh[j] == NULL) {
       printk("%s: unable to register host, detaching.\n", name);
 
-      if (irqlist[irq] == NO_IRQ) free_irq(irq);
+      if (irqlist[irq] == NO_IRQ) free_irq(irq, NULL);
 
       if (subversion == ISA) free_dma(dma_channel);
 
@@ -884,7 +884,7 @@ int eata2x_reset (Scsi_Cmnd *SCarg) {
       }
 }
 
-static void eata2x_interrupt_handler(int irq, struct pt_regs * regs) {
+static void eata2x_interrupt_handler(int irq, void *dev_id, struct pt_regs * regs) {
    Scsi_Cmnd *SCpnt;
    unsigned int i, j, k, flags, status, tstatus, loops, total_loops = 0;
    struct mssp *spp;

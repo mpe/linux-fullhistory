@@ -1335,12 +1335,17 @@ cleanup_module(void)
 	{
 		for (i = 0; i < slip_maxdev; i++)  
 		{
-			if (slip_ctrls[i]->dev.start)
-			/* VSV = if dev->start==0, then device
-			unregistred while close proc. */ 
+			if (slip_ctrls[i])
 			{
-				unregister_netdev(&(slip_ctrls[i]->dev));
+				/*
+				 * VSV = if dev->start==0, then device
+				 * unregistred while close proc.
+				 */ 
+				if (slip_ctrls[i]->dev.start)
+					unregister_netdev(&(slip_ctrls[i]->dev));
+
 				kfree(slip_ctrls[i]);
+				slip_ctrls[i] = NULL;
 			}
 		}
 		kfree(slip_ctrls);

@@ -177,7 +177,7 @@ int e21_probe1(struct device *dev, int ioaddr)
 	if (dev->irq < 2) {
 		int irqlist[] = {15,11,10,12,5,9,3,4}, i;
 		for (i = 0; i < 8; i++)
-			if (request_irq (irqlist[i], NULL, 0, "bogus") != -EBUSY) {
+			if (request_irq (irqlist[i], NULL, 0, "bogus", NULL) != -EBUSY) {
 				dev->irq = irqlist[i];
 				break;
 			}
@@ -253,7 +253,7 @@ e21_open(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
 
-	if (request_irq(dev->irq, ei_interrupt, 0, "e2100")) {
+	if (request_irq(dev->irq, ei_interrupt, 0, "e2100", NULL)) {
 		return EBUSY;
 	}
 	irq2dev_map[dev->irq] = dev;
@@ -352,7 +352,7 @@ e21_close(struct device *dev)
 	if (ei_debug > 1)
 		printk("%s: Shutting down ethercard.\n", dev->name);
 
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 	dev->irq = ei_status.saved_irq;
 
 	/* Shut off the interrupt line and secondary interface. */

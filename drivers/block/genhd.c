@@ -8,7 +8,7 @@
  *  Thanks to Branko Lankester, lankeste@fwi.uva.nl, who found a bug
  *  in the early extended-partition checks and added DM partitions
  *
- *  Support for DiskManager v6.0x added by Mark Lord (mlord@bnr.ca)
+ *  Support for DiskManager v6.0x added by Mark Lord,
  *  with information provided by OnTrack.  This now works for linux fdisk
  *  and LILO, as well as loadlin and bootln.  Note that disks other than
  *  /dev/hda *must* have a "DOS" type 0x51 partition in the first slot (hda1).
@@ -54,37 +54,49 @@ extern int blk_dev_init(void);
 extern int scsi_dev_init(void);
 extern int net_dev_init(void);
 
-static void print_minor_name (struct gendisk *hd, int minor)
+/*
+ * disk_name() is used by genhd.c and md.c.
+ * It formats the devicename of the indicated disk
+ * into the supplied buffer, and returns a pointer
+ * to that same buffer (for convenience).
+ */
+char *disk_name (struct gendisk *hd, int minor, char *buf)
 {
-	unsigned int unit = minor >> hd->minor_shift;
-	unsigned int part = minor & ((1 << hd->minor_shift) - 1);
+	unsigned int part;
+	const char *maj = hd->major_name;
+	char unit = (minor >> hd->minor_shift) + 'a';
 
 #ifdef CONFIG_BLK_DEV_IDE
 	/*
 	 * IDE devices use multiple major numbers, but the drives
 	 * are named as:  {hda,hdb}, {hdc,hdd}, {hde,hdf}, {hdg,hdh}..
-	 * This requires some creative handling here to find the
-	 * correct name to use, with some help from ide.c
+	 * This requires special handling here.
 	 */
-	if (!strcmp(hd->major_name,"ide")) {
-		char name[16];		/* more than large enough */
-		strcpy(name, hd->real_devices); /* courtesy ide.c */
-		name[strlen(name)-1] += unit;
-		printk(" %s", name);
-	} else
+	switch (hd->major) {
+		case IDE3_MAJOR:
+			unit += 2;
+		case IDE2_MAJOR:
+			unit += 2;
+		case IDE1_MAJOR:
+			unit += 2;
+		case IDE0_MAJOR:
+			maj = "hd";
+	}
 #endif
-		printk(" %s%c", hd->major_name, 'a' + unit);
+	part = minor & ((1 << hd->minor_shift) - 1);
 	if (part)
-		printk("%d", part);
+		sprintf(buf, "%s%c%d", maj, unit, part);
 	else
-		printk(":");
+		sprintf(buf, "%s%c", maj, unit);
+	return buf;
 }
 
 static void add_partition (struct gendisk *hd, int minor, int start, int size)
 {
+	char buf[8];
 	hd->part[minor].start_sect = start;
 	hd->part[minor].nr_sects   = size;
-	print_minor_name(hd, minor);
+	printk(" %s", disk_name(hd, minor, buf));
 }
 
 static inline int is_extended_partition(struct partition *p)
@@ -482,6 +494,7 @@ static void check_partition(struct gendisk *hd, kdev_t dev)
 {
 	static int first_time = 1;
 	unsigned long first_sector;
+	char buf[8];
 
 	if (first_time)
 		printk("Partition check:\n");
@@ -497,8 +510,7 @@ static void check_partition(struct gendisk *hd, kdev_t dev)
 		return;
 	}
 
-	printk(" ");
-	print_minor_name(hd, MINOR(dev));
+	printk(" %s:", disk_name(hd, MINOR(dev), buf));
 #ifdef CONFIG_MSDOS_PARTITION
 	if (msdos_partition(hd, dev, first_sector))
 		return;

@@ -50,6 +50,11 @@
 #define ETH_P_AARP	0x80F3		/* Appletalk AARP		*/
 #define ETH_P_IPX	0x8137		/* IPX over DIX			*/
 #define ETH_P_IPV6	0x86DD		/* IPv6 over bluebook		*/
+
+/*
+ *	Non DIX types. Won't clash for 1500 types.
+ */
+ 
 #define ETH_P_802_3	0x0001		/* Dummy type for 802.3 frames  */
 #define ETH_P_AX25	0x0002		/* Dummy protocol id for AX.25  */
 #define ETH_P_ALL	0x0003		/* Every packet (be careful!!!) */
@@ -58,6 +63,7 @@
 #define ETH_P_DDCMP     0x0006          /* DEC DDCMP: Internal only     */
 #define ETH_P_WAN_PPP   0x0007          /* Dummy type for WAN PPP frames*/
 #define ETH_P_PPP_MP    0x0008          /* Dummy type for PPP MP frames */
+#define ETH_P_LOCALTALK 0x0009		/* Localtalk pseudeo type 	*/
 
 /* This is an Ethernet frame header. */
 struct ethhdr {

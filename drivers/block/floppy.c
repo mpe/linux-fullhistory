@@ -1586,7 +1586,7 @@ static struct tq_struct floppy_tq =
 { 0, 0, (void *) (void *) unexpected_floppy_interrupt, 0 };
 
 /* interrupt handler */
-static void floppy_interrupt(int irq, struct pt_regs * regs)
+static void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	void (*handler)(void) = DEVICE_INTR;
 
@@ -2085,6 +2085,7 @@ static void request_done(int uptodate)
 		DPRINT("request list destroyed in floppy request done\n");
 		return;
 	}
+
 	if (uptodate){
 		/* maintain values for invalidation on geometry
 		 * change */

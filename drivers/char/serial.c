@@ -351,7 +351,7 @@ static void rs_start(struct tty_struct *tty)
  * This is the serial driver's interrupt routine while we are probing
  * for submarines.
  */
-static void rs_probe(int irq, struct pt_regs * regs)
+static void rs_probe(int irq, void *dev_id, struct pt_regs * regs)
 {
 	rs_irq_triggered = irq;
 	rs_triggered |= 1 << irq;
@@ -514,7 +514,7 @@ static _INLINE_ void check_modem_status(struct async_struct *info)
 /*
  * This is the serial driver's generic interrupt routine
  */
-static void rs_interrupt(int irq, struct pt_regs * regs)
+static void rs_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	int status;
 	struct async_struct * info;
@@ -580,7 +580,7 @@ static void rs_interrupt(int irq, struct pt_regs * regs)
 /*
  * This is the serial driver's interrupt routine for a single port
  */
-static void rs_interrupt_single(int irq, struct pt_regs * regs)
+static void rs_interrupt_single(int irq, void *dev_id, struct pt_regs * regs)
 {
 	int status;
 	int pass_counter = 0;
@@ -629,7 +629,7 @@ static void rs_interrupt_single(int irq, struct pt_regs * regs)
 /*
  * This is the serial driver's for multiport boards
  */
-static void rs_interrupt_multi(int irq, struct pt_regs * regs)
+static void rs_interrupt_multi(int irq, void *dev_id, struct pt_regs * regs)
 {
 	int status;
 	struct async_struct * info;
@@ -794,11 +794,11 @@ static void rs_timer(void)
 					info = info->next_port;
 				} while (info);
 				if (rs_multiport[i].port1)
-					rs_interrupt_multi(i, NULL);
+					rs_interrupt_multi(i, NULL, NULL);
 				else
-					rs_interrupt(i, NULL);
+					rs_interrupt(i, NULL, NULL);
 			} else
-				rs_interrupt_single(i, NULL);
+				rs_interrupt_single(i, NULL, NULL);
 			sti();
 		}
 	}
@@ -808,7 +808,7 @@ static void rs_timer(void)
 
 	if (IRQ_ports[0]) {
 		cli();
-		rs_interrupt(0, NULL);
+		rs_interrupt(0, NULL, NULL);
 		sti();
 
 		timer_table[RS_TIMER].expires = jiffies + IRQ_timeout[0] - 2;
@@ -836,7 +836,7 @@ static int grab_all_interrupts(int dontgrab)
 	int			i, mask;
 	
 	for (i = 0, mask = 1; i < 16; i++, mask <<= 1) {
-		if (!(mask & dontgrab) && !request_irq(i, rs_probe, SA_INTERRUPT, "serial probe")) {
+		if (!(mask & dontgrab) && !request_irq(i, rs_probe, SA_INTERRUPT, "serial probe", NULL)) {
 			irq_lines |= mask;
 		}
 	}
@@ -852,7 +852,7 @@ static void free_all_interrupts(int irq_lines)
 	
 	for (i = 0; i < 16; i++) {
 		if (irq_lines & (1 << i))
-			free_irq(i);
+			free_irq(i, NULL);
 	}
 }
 
@@ -886,7 +886,7 @@ static int startup(struct async_struct * info)
 	unsigned short ICP;
 	unsigned long flags;
 	int	retval;
-	void (*handler)(int, struct pt_regs *);
+	void (*handler)(int, void *, struct pt_regs *);
 	unsigned long page;
 
 	page = get_free_page(GFP_KERNEL);
@@ -954,7 +954,7 @@ static int startup(struct async_struct * info)
 	if (info->irq && (!IRQ_ports[info->irq] ||
 			  !IRQ_ports[info->irq]->next_port)) {
 		if (IRQ_ports[info->irq]) {
-			free_irq(info->irq);
+			free_irq(info->irq, NULL);
 			if (rs_multiport[info->irq].port1)
 				handler = rs_interrupt_multi;
 			else
@@ -962,7 +962,7 @@ static int startup(struct async_struct * info)
 		} else 
 			handler = rs_interrupt_single;
 
-		retval = request_irq(info->irq, handler, SA_INTERRUPT, "serial");
+		retval = request_irq(info->irq, handler, SA_INTERRUPT, "serial", NULL);
 		if (retval) {
 			restore_flags(flags);
 			if (suser()) {
@@ -1089,14 +1089,14 @@ static void shutdown(struct async_struct * info)
 	if (info->irq && (!IRQ_ports[info->irq] ||
 			  !IRQ_ports[info->irq]->next_port)) {
 		if (IRQ_ports[info->irq]) {
-			free_irq(info->irq);
-			retval = request_irq(info->irq, rs_interrupt_single, SA_INTERRUPT, "serial");
+			free_irq(info->irq, NULL);
+			retval = request_irq(info->irq, rs_interrupt_single, SA_INTERRUPT, "serial", NULL);
 			
 			if (retval)
 				printk("serial shutdown: request_irq: error %d"
 				       "  Couldn't reacquire IRQ.\n", retval);
 		} else
-			free_irq(info->irq);
+			free_irq(info->irq, NULL);
 	}
 
 	if (info->xmit_buf) {
@@ -1792,7 +1792,7 @@ static int set_multiport_struct(struct async_struct * info,
 	struct rs_multiport_struct *multi;
 	int	was_multi, now_multi;
 	int	retval;
-	void (*handler)(int, struct pt_regs *);
+	void (*handler)(int, void *, struct pt_regs *);
 
 	if (!suser())
 		return -EPERM;
@@ -1846,14 +1846,14 @@ static int set_multiport_struct(struct async_struct * info,
 	
 	if (IRQ_ports[info->irq]->next_port &&
 	    (was_multi != now_multi)) {
-		free_irq(info->irq);
+		free_irq(info->irq, NULL);
 		if (now_multi)
 			handler = rs_interrupt_multi;
 		else
 			handler = rs_interrupt;
 
 		retval = request_irq(info->irq, handler, SA_INTERRUPT,
-				     "serial");
+				     "serial", NULL);
 		if (retval) {
 			printk("Couldn't reallocate serial interrupt "
 			       "driver!!\n");

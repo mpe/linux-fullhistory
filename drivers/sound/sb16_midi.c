@@ -108,7 +108,7 @@ sb16midiintr (int unit)
 }
 
 void
-sbmidiintr (int irq, struct pt_regs *dummy)
+sbmidiintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
   if (input_avail ())
     sb16midi_input_loop ();

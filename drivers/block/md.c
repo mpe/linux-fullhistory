@@ -28,6 +28,7 @@
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
 #include <linux/blkdev.h>
+#include <linux/genhd.h>
 #include <errno.h>
 
 #define MAJOR_NR MD_MAJOR
@@ -94,8 +95,6 @@ char *partition_name (kdev_t dev)
   static char name[10];		/* This should be long
 				   enough for a device name ! */
   struct gendisk *hd=find_gendisk (dev);
-  char base_name;
-  int minor=MINOR(dev);
 
   if (!hd)
   {
@@ -104,12 +103,7 @@ char *partition_name (kdev_t dev)
     return (name);
   }
 
-  base_name = (hd->major == IDE1_MAJOR) ? 'c' : 'a';
-  sprintf(name, "%s%c%d",
-	  hd->major_name,
-	  base_name + (minor >> hd->minor_shift),
-	  minor & ((1 << hd->minor_shift) - 1));
-  return (name);
+  return disk_name (hd, MINOR(dev), name);  /* routine in genhd.c */
 }
 
 

@@ -411,9 +411,10 @@ struct sound_timer_operations {
 #endif
 
 #ifdef CONFIG_MSS
-#	ifndef PSEUDO_MSS
+	/* always define full MSS even for DEC Alphas, just in case... */
 		{SNDCARD_MSS, {MSS_BASE, MSS_IRQ, MSS_DMA, -1}, SND_DEFAULT_ENABLE},
-#	else
+#	ifdef __alpha__
+	/* MSS without IRQ/DMA config registers (for DEC Alphas) */
 		{SNDCARD_PSEUDO_MSS, {MSS_BASE, MSS_IRQ, MSS_DMA, -1}, SND_DEFAULT_ENABLE},
 #	endif
 #	ifdef MSS2_BASE

@@ -237,7 +237,7 @@ static int vortex_open(struct device *dev);
 static void vortex_timer(unsigned long arg);
 static int vortex_start_xmit(struct sk_buff *skb, struct device *dev);
 static int vortex_rx(struct device *dev);
-static void vortex_interrupt(int irq, struct pt_regs *regs);
+static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int vortex_close(struct device *dev);
 static void update_stats(int addr, struct device *dev);
 static struct enet_statistics *vortex_get_stats(struct device *dev);
@@ -550,7 +550,7 @@ vortex_open(struct device *dev)
 	if (dev->irq == 0  ||  irq2dev_map[dev->irq] != NULL)
 		return -EAGAIN;
 	irq2dev_map[dev->irq] = dev;
-	if (request_irq(dev->irq, &vortex_interrupt, 0, vp->product_name)) {
+	if (request_irq(dev->irq, &vortex_interrupt, 0, vp->product_name, NULL)) {
 		irq2dev_map[dev->irq] = NULL;
 		return -EAGAIN;
 	}
@@ -736,7 +736,7 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 
 /* The interrupt handler does all of the Rx thread work and cleans up
    after the Tx thread. */
-static void vortex_interrupt(int irq, struct pt_regs *regs)
+static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 #ifdef USE_SHARED_IRQ
 	struct device *dev = (struct device *)(irq == 0 ? regs : irq2dev_map[irq]);
@@ -774,7 +774,7 @@ static void vortex_interrupt(int irq, struct pt_regs *regs)
 		if (donedidthis++ > 1) {
 			printk("%s: Bogus interrupt, bailing. Status %4.4x, start=%d.\n",
 				   dev->name, status, dev->start);
-			free_irq(dev->irq);
+			free_irq(dev->irq, NULL);
 		}
 	}
 
@@ -955,7 +955,7 @@ vortex_close(struct device *dev)
 #ifdef USE_SHARED_IRQ
 	free_shared_irq(dev->irq, dev);
 #else
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 	/* Mmmm, we should diable all interrupt sources here. */
 	irq2dev_map[dev->irq] = 0;
 #endif

@@ -98,6 +98,7 @@ struct sigstack {
  * the changes in signal handling. LBT 010493.
  * SA_INTERRUPT is a no-op, but left due to historical reasons. Use the
  * SA_RESTART flag to get restarting signals (which were the default long ago)
+ * SA_SHIRQ flag is for shared interrupt support on PCI and EISA.
  */
 #define SA_NOCLDSTOP	SV_IGNCHILD
 #define SA_STACK	SV_SSTACK
@@ -105,6 +106,7 @@ struct sigstack {
 #define SA_INTERRUPT	SV_INTR
 #define SA_NOMASK	0x10
 #define SA_ONESHOT	0x20
+#define SA_SHIRQ	0x40
 
 #define SIG_BLOCK          0x00	/* for blocking signals */
 #define SIG_UNBLOCK        0x40	/* for unblocking signals */

@@ -77,7 +77,7 @@ static const char	*version	= "wavelan.c:v7 95/4/8\n";
 static int		wavelan_probe1(device *, unsigned short);
 static int		wavelan_open(device *);
 static int		wavelan_send_packet(struct sk_buff *, device *);
-static void		wavelan_interrupt(int, struct pt_regs *);
+static void		wavelan_interrupt(int, void *, struct pt_regs *);
 static int		wavelan_close(device *);
 static en_stats		*wavelan_get_stats(device *);
 static void		wavelan_set_multicast_list(device *);
@@ -1240,7 +1240,7 @@ wavelan_open(device *dev)
 		||
 		(irq2dev_map[dev->irq] = dev) == (device *)0
 		||
-		request_irq(dev->irq, &wavelan_interrupt, 0, "WaveLAN") != 0
+		request_irq(dev->irq, &wavelan_interrupt, 0, "WaveLAN", NULL) != 0
 	)
 	{
 		irq2dev_map[dev->irq] = (device *)0;
@@ -1259,7 +1259,7 @@ wavelan_open(device *dev)
 
 	if (r == -1)
 	{
-		free_irq(dev->irq);
+		free_irq(dev->irq, NULL);
 		irq2dev_map[dev->irq] = (device *)0;
 		if (wavelan_debug > 0)
 			printk("%s: <-wavelan_open(): -EAGAIN(2)\n", dev->name);
@@ -1856,7 +1856,7 @@ wavelan_watchdog(unsigned long a)
 
 static
 void
-wavelan_interrupt(int irq, struct pt_regs *regs)
+wavelan_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	device		*dev;
 	unsigned short	ioaddr;
@@ -1984,7 +1984,7 @@ wavelan_close(device *dev)
 
 	wavelan_ints_off(dev);
 
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 	irq2dev_map[dev->irq] = (device *)0;
 
 	/*

@@ -33,9 +33,19 @@
  * /dev/hd.. ) for the drives connected to the EIDE interface. (I get my
  * filesystem  corrupted with -u1, but under heavy disk load only :-)
  *
- * This chipset is now forced to use the "serialize" feature,
+ * This card is now forced to use the "serialize" feature,
  * and irq-unmasking is disallowed.  If io_32bit is enabled,
  * it must be done for BOTH drives on each interface.
+ *
+ * This code was written for the DTC2278E, but might work with any of these:
+ *
+ * DTC2278S has only a single IDE interface.
+ * DTC2278D has two IDE interfaces and is otherwise identical to the S version.
+ * DTC2278E has onboard BIOS, while the others do not.
+ *
+ * There may be a fourth controller type. The S and D versions use the
+ * Winbond chip, and I think the E version does also.
+ *
  */
 
 static void sub22 (char b, char c)

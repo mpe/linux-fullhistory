@@ -99,7 +99,7 @@ void hprint(const char *str)
 #ifdef MODULE
 int eata_pio_release(struct Scsi_Host *sh)
 {
-    if (sh->irq && reg_IRQ[sh->irq] == 1) free_irq(sh->irq);
+    if (sh->irq && reg_IRQ[sh->irq] == 1) free_irq(sh->irq, NULL);
     else reg_IRQ[sh->irq]--;
     if (SD(sh)->channel == 0) {
 	if (sh->io_port && sh->n_io_port)
@@ -124,7 +124,7 @@ void IncStat(Scsi_Pointer *SCp, uint Increment)
     }
 }
 
-void eata_pio_int_handler(int irq, struct pt_regs * regs)
+void eata_pio_int_handler(int irq, void *dev_id, struct pt_regs * regs)
 {
     uint eata_stat = 0xfffff;
     Scsi_Cmnd *cmd;
@@ -707,7 +707,7 @@ int register_pio_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
     
     if (!reg_IRQ[gc->IRQ]) {    /* Interrupt already registered ? */
 	if (!request_irq(gc->IRQ, eata_pio_int_handler, SA_INTERRUPT, 
-			 "EATA-PIO")){
+			 "EATA-PIO", NULL)){
 	    reg_IRQ[gc->IRQ]++;
 	    if (!gc->IRQ_TR)
 		reg_IRQL[gc->IRQ] = TRUE;   /* IRQ is edge triggered */
@@ -989,7 +989,7 @@ int eata_pio_detect(Scsi_Host_Template * tpnt)
     
     for (i = 0; i <= MAXIRQ; i++)
 	if (reg_IRQ[i])
-	    request_irq(i, eata_pio_int_handler, SA_INTERRUPT, "EATA-PIO");
+	    request_irq(i, eata_pio_int_handler, SA_INTERRUPT, "EATA-PIO", NULL);
     
     HBA_ptr = first_HBA;
   

@@ -135,7 +135,7 @@ static void hardware_init(struct device *dev);
 static void write_packet(short ioaddr, int length, unsigned char *packet, int mode);
 static void trigger_send(short ioaddr, int length);
 static int	net_send_packet(struct sk_buff *skb, struct device *dev);
-static void net_interrupt(int irq, struct pt_regs *regs);
+static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void net_rx(struct device *dev);
 static void read_block(short ioaddr, int length, unsigned char *buffer, int data_mode);
 static int net_close(struct device *dev);
@@ -328,7 +328,7 @@ static int net_open(struct device *dev)
 	   port or interrupt may be shared. */
 	if (irq2dev_map[dev->irq] != 0
 		|| (irq2dev_map[dev->irq] = dev) == 0
-		|| request_irq(dev->irq, &net_interrupt, 0, "ATP")) {
+		|| request_irq(dev->irq, &net_interrupt, 0, "ATP", NULL)) {
 		return -EAGAIN;
 	}
 
@@ -484,7 +484,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 /* The typical workload of the driver:
    Handle the network interface interrupts. */
 static void
-net_interrupt(int irq, struct pt_regs * regs)
+net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct net_local *lp;
@@ -736,7 +736,7 @@ net_close(struct device *dev)
 
 	/* Free the IRQ line. */
 	outb(0x00, ioaddr + PAR_CONTROL);
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 	irq2dev_map[dev->irq] = 0;
 
 	/* Leave the hardware in a reset state. */

@@ -1797,7 +1797,7 @@ static void qic02_tape_times_out(void)
  * When we are finished, set flags to indicate end, disable timer.
  * NOTE: This *must* be fast! 
  */
-static void qic02_tape_interrupt(int irq, struct pt_regs *regs)
+static void qic02_tape_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	int stat, r, i;
 
@@ -2812,7 +2812,7 @@ static inline unsigned long const align_buffer(unsigned long a, unsigned size)
 
 static void qic02_release_resources(void)
 {
-	free_irq(QIC02_TAPE_IRQ);
+	free_irq(QIC02_TAPE_IRQ, NULL);
 	free_dma(QIC02_TAPE_DMA);
 	status_zombie = YES;
 } /* qic02_release_resources */
@@ -2835,7 +2835,7 @@ static int qic02_get_resources(void)
 	 */
 
 	/* get IRQ */
-	if (request_irq(QIC02_TAPE_IRQ, qic02_tape_interrupt, SA_INTERRUPT, "QIC-02")) {
+	if (request_irq(QIC02_TAPE_IRQ, qic02_tape_interrupt, SA_INTERRUPT, "QIC-02", NULL)) {
 		printk(TPQIC02_NAME ": can't allocate IRQ%d for QIC-02 tape\n",
 			QIC02_TAPE_IRQ);
 		status_zombie = YES;
@@ -2846,7 +2846,7 @@ static int qic02_get_resources(void)
 	if (request_dma(QIC02_TAPE_DMA,"QIC-02")) {
 		printk(TPQIC02_NAME ": can't allocate DMA%d for QIC-02 tape\n",
 			QIC02_TAPE_DMA);
-		free_irq(QIC02_TAPE_IRQ);
+		free_irq(QIC02_TAPE_IRQ, NULL);
 		status_zombie = YES;
 		return -1;
 	}
@@ -2931,7 +2931,7 @@ int qic02_tape_init(void)
 	if (register_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME, &qic02_tape_fops)) {
 		printk(TPQIC02_NAME ": Unable to get chrdev major %d\n", QIC02_TAPE_MAJOR);
 #ifndef CONFIG_QIC02_DYNCONF
-		free_irq(QIC02_TAPE_IRQ);
+		free_irq(QIC02_TAPE_IRQ, NULL);
 		free_dma(QIC02_TAPE_DMA);
 #endif
 		return -ENODEV;
@@ -2947,7 +2947,7 @@ int qic02_tape_init(void)
 		/* No drive detected, so vanish */
 		tpqputs(TPQD_ALWAYS, "No drive detected -- driver going on vacation...");
 		status_dead = YES;
-		free_irq(QIC02_TAPE_IRQ);
+		free_irq(QIC02_TAPE_IRQ, NULL);
 		free_dma(QIC02_TAPE_DMA);
 		unregister_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME);
 		return -ENODEV;

@@ -66,4 +66,12 @@ struct gendisk {
 
 extern struct gendisk *gendisk_head;	/* linked list of disks */
 
+/*
+ * disk_name() is used by genhd.c and md.c.
+ * It formats the devicename of the indicated disk
+ * into the supplied buffer, and returns a pointer
+ * to that same buffer (for convenience).
+ */
+char *disk_name (struct gendisk *hd, int minor, char *buf);
+
 #endif

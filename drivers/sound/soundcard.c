@@ -481,11 +481,11 @@ tenmicrosec (int *osp)
 }
 
 int
-snd_set_irq_handler (int interrupt_level, void (*hndlr) (int, struct pt_regs *), char *name, int *osp)
+snd_set_irq_handler (int interrupt_level, void (*hndlr) (int, void *, struct pt_regs *), char *name, int *osp)
 {
   int             retcode;
 
-  retcode = request_irq (interrupt_level, hndlr, 0 /* SA_INTERRUPT */ , name);
+  retcode = request_irq (interrupt_level, hndlr, 0 /* SA_INTERRUPT */ , name, NULL);
   if (retcode < 0)
     {
       printk ("Sound: IRQ%d already in use\n", interrupt_level);
@@ -500,7 +500,7 @@ void
 snd_release_irq (int vect)
 {
   irqs &= ~(1ul << vect);
-  free_irq (vect);
+  free_irq (vect, NULL);
 }
 
 int

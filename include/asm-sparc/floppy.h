@@ -250,7 +250,7 @@ static inline void sun_fd_enable_dma(void)
 }
 
 /* Our low-level entry point in arch/sparc/kernel/entry.S */
-extern void floppy_hardint(int irq, struct pt_regs *regs);
+extern void floppy_hardint(int irq, void *dev_id, struct pt_regs *regs);
 
 static int sun_fd_request_irq(void)
 {
@@ -259,7 +259,7 @@ static int sun_fd_request_irq(void)
 
 	if(!once) {
 		once = 1;
-		error = request_fast_irq(FLOPPY_IRQ, floppy_hardint, SA_INTERRUPT, "floppy");
+		error = request_fast_irq(FLOPPY_IRQ, floppy_hardint, SA_INTERRUPT, "floppy", NULL);
 		return ((error == 0) ? 0 : -1);
 	} else return 0;
 }

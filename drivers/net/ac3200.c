@@ -164,7 +164,7 @@ static int ac_probe1(int ioaddr, struct device *dev)
 	else if (dev->irq == 2)
 		dev->irq = 9;
 
-	if (request_irq(dev->irq, ei_interrupt, 0, "ac3200")) {
+	if (request_irq(dev->irq, ei_interrupt, 0, "ac3200", NULL)) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		return EAGAIN;
 	}
@@ -172,7 +172,7 @@ static int ac_probe1(int ioaddr, struct device *dev)
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk (" unable to allocate memory for dev->priv.\n");
-		free_irq(dev->irq);
+		free_irq(dev->irq, NULL);
 		return -ENOMEM;
 	}
 
@@ -227,7 +227,7 @@ static int ac_open(struct device *dev)
 	/* Someday we may enable the IRQ and shared memory here. */
 	int ioaddr = dev->base_addr;
 
-	if (request_irq(dev->irq, ei_interrupt, 0, "ac3200"))
+	if (request_irq(dev->irq, ei_interrupt, 0, "ac3200", NULL))
 		return -EAGAIN;
 #endif
 
@@ -302,7 +302,7 @@ static int ac_close_card(struct device *dev)
 #ifdef notyet
 	/* We should someday disable shared memory and interrupts. */
 	outb(0x00, ioaddr + 6);	/* Disable interrupts. */
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 	irq2dev_map[dev->irq] = 0;
 #endif
 
@@ -366,7 +366,7 @@ cleanup_module(void)
 			kfree(dev->priv);
 			dev->priv = NULL;
 			/* Someday free_irq + irq2dev may be in ac_close_card() */
-			free_irq(dev->irq);
+			free_irq(dev->irq, NULL);
 			irq2dev_map[dev->irq] = NULL;
 			release_region(dev->base_addr, AC_IO_EXTENT);
 			unregister_netdev(dev);

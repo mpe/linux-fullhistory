@@ -1162,7 +1162,7 @@ static boolean BusLogic_AcquireResources(BusLogic_HostAdapter_T *HostAdapter,
   if (BusLogic_IRQ_UsageCount[HostAdapter->IRQ_Channel - 9]++ == 0)
     {
       if (request_irq(HostAdapter->IRQ_Channel, BusLogic_InterruptHandler,
-		      SA_INTERRUPT, HostAdapter->InterruptLabel) < 0)
+		      SA_INTERRUPT, HostAdapter->InterruptLabel, NULL) < 0)
 	{
 	  BusLogic_IRQ_UsageCount[HostAdapter->IRQ_Channel - 9]--;
 	  printk("scsi%d: UNABLE TO ACQUIRE IRQ CHANNEL %d - DETACHING\n",
@@ -1236,7 +1236,7 @@ static void BusLogic_ReleaseResources(BusLogic_HostAdapter_T *HostAdapter)
   */
   if (HostAdapter->IRQ_ChannelAcquired)
     if (--BusLogic_IRQ_UsageCount[HostAdapter->IRQ_Channel - 9] == 0)
-      free_irq(HostAdapter->IRQ_Channel);
+      free_irq(HostAdapter->IRQ_Channel, NULL);
   /*
     Release exclusive access to the DMA Channel.
   */

@@ -1385,7 +1385,7 @@ static int ipx_get_info(char *buffer, char **start, off_t offset,
 #ifdef CONFIG_IPX_INTERN
 			len += sprintf(buffer+len,
 				       "%08lX:%02X%02X%02X%02X%02X%02X:%04X  ", 
-				       htonl(s->ipx_intrfc->if_netnum),
+				 htonl(s->protinfo.af_ipx.intrfc->if_netnum),
 				       s->protinfo.af_ipx.node[0],
 				       s->protinfo.af_ipx.node[1], 
 				       s->protinfo.af_ipx.node[2], 

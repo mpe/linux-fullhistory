@@ -180,7 +180,7 @@ ess_read (unsigned char reg)
 }
 
 void
-sbintr (int irq, struct pt_regs *dummy)
+sbintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
   int             status;
 

@@ -135,7 +135,7 @@ extern int eepro_probe(struct device *dev);
 static int	eepro_probe1(struct device *dev, short ioaddr);
 static int	eepro_open(struct device *dev);
 static int	eepro_send_packet(struct sk_buff *skb, struct device *dev);
-static void	eepro_interrupt(int irq, struct pt_regs *regs);
+static void	eepro_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void 	eepro_rx(struct device *dev);
 static void 	eepro_transmit_interrupt(struct device *dev);
 static int	eepro_close(struct device *dev);
@@ -376,7 +376,7 @@ int eepro_probe1(struct device *dev, short ioaddr)
 			if (dev->irq > 2) {
 				printk(", IRQ %d, %s.\n", dev->irq,
 						ifmap[dev->if_port]);
-				if (request_irq(dev->irq, &eepro_interrupt, 0, "eepro")) {
+				if (request_irq(dev->irq, &eepro_interrupt, 0, "eepro", NULL)) {
 					printk("%s: unable to get IRQ %d.\n", dev->name, dev->irq);
 					return -EAGAIN;
 				}
@@ -462,14 +462,14 @@ static int	eepro_grab_irq(struct device *dev)
 
 		outb(BANK0_SELECT, ioaddr); /* Switch back to Bank 0 */
 
-		if (request_irq (*irqp, NULL, 0, "bogus") != EBUSY) {
+		if (request_irq (*irqp, NULL, 0, "bogus", NULL) != EBUSY) {
 			/* Twinkle the interrupt, and check if it's seen */
 			autoirq_setup(0);
 
 			outb(DIAGNOSE_CMD, ioaddr); /* RESET the 82595 */
 				
 			if (*irqp == autoirq_report(2) &&  /* It's a good IRQ line */
-				(request_irq(dev->irq = *irqp, &eepro_interrupt, 0, "eepro") == 0)) 
+				(request_irq(dev->irq = *irqp, &eepro_interrupt, 0, "eepro", NULL) == 0)) 
 					break;
 
 			/* clear all interrupts */
@@ -661,7 +661,7 @@ eepro_send_packet(struct sk_buff *skb, struct device *dev)
 /*	The typical workload of the driver:
 	Handle the network interface interrupts. */
 static void
-eepro_interrupt(int irq, struct pt_regs * regs)
+eepro_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	int ioaddr, status, boguscount = 0;
@@ -744,7 +744,7 @@ eepro_close(struct device *dev)
 	outb(RESET_CMD, ioaddr); 
 
 	/* release the interrupt */
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 
 	irq2dev_map[dev->irq] = 0;
 

@@ -233,7 +233,7 @@ ultra_open(struct device *dev)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
 
-	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name))
+	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name, NULL))
 		return -EAGAIN;
 
 	outb(ULTRA_MEMENB, ioaddr);	/* Enable memory, 16 bit mode. */
@@ -330,7 +330,7 @@ ultra_close_card(struct device *dev)
 		printk("%s: Shutting down ethercard.\n", dev->name);
 
 	outb(0x00, ioaddr + 6);		/* Disable interrupts. */
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 	irq2dev_map[dev->irq] = 0;
 
 	NS8390_init(dev, 0);

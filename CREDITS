@@ -348,8 +348,8 @@ N: Nigel Gamble
 E: nigel@nrg.org
 E: nigel@sgi.com
 D: Interrupt-driven printer driver
-S: 765 N Rengstorff Ave, Apartment 7
-S: Mountain View, California 94043-2420
+S: 120 Alley Way
+S: Mountain View, California 94040
 S: USA
 
 N: Jacques Gelinas
@@ -610,7 +610,7 @@ S: D53424 Remagen
 S: Germany
 
 N: Mark Lord
-E: mlord@bnr.ca
+E: mlord@pobox.com
 D: Author of IDE driver (ide.c), hd.c support
 D: Triton Bus Master IDE driver
 D: Hard Disk Parameter (hdparm) utility
@@ -1039,6 +1039,14 @@ D: dosemu, networking, samba
 S: 3 Ballow Crescent
 S: MacGregor A.C.T
 S: 2615 Australia
+
+N: Winfried Trümper
+E: truemper@MI.Uni-Koeln.DE
+D: German HOWTO, Enhanced German HOWTO, Crash-Kurs Linux (German)
+D: 1- or 5-days tutorials on Linux twice a year (free of charge)
+D: Linux-Workshop Köln (aka LUUG cologne, germany)
+S: Tacitusstr. 6
+S: D-50968 Köln
 
 N: Theodore Ts'o
 E: tytso@mit.edu

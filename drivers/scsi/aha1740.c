@@ -174,7 +174,7 @@ int aha1740_test_port(void)
 }
 
 /* A "high" level interrupt handler */
-void aha1740_intr_handle(int irq, struct pt_regs * regs)
+void aha1740_intr_handle(int irq, void *dev_id, struct pt_regs * regs)
 {
     void (*my_done)(Scsi_Cmnd *);
     int errstatus, adapstat;
@@ -472,7 +472,7 @@ int aha1740_detect(Scsi_Host_Template * tpnt)
 
     DEB(printk("aha1740_detect: enable interrupt channel %d\n", irq_level));
 
-    if (request_irq(irq_level,aha1740_intr_handle, 0, "aha1740"))
+    if (request_irq(irq_level,aha1740_intr_handle, 0, "aha1740", NULL))
     {
 	printk("Unable to allocate IRQ for adaptec controller.\n");
 	return 0;

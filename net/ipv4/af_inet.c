@@ -863,7 +863,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 				/*
 				 *	Allow only if both are setting reuse.
 				 */
-				if(sk2->reuse && sk->reuse)
+				if(sk2->reuse && sk->reuse && sk2->state!=TCP_LISTEN)
 					continue;
 				sti();
 				return(-EADDRINUSE);

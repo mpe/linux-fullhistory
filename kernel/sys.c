@@ -420,7 +420,7 @@ asmlinkage int sys_setfsgid(gid_t gid)
 	return old_fsgid;
 }
 
-asmlinkage int sys_times(struct tms * tbuf)
+asmlinkage long sys_times(struct tms * tbuf)
 {
 	if (tbuf) {
 		int error = verify_area(VERIFY_WRITE,tbuf,sizeof *tbuf);

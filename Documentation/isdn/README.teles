@@ -27,7 +27,7 @@ Oct 11 16:53:31 jedi kernel: Teles module installed
 
 Remember, that according to the new strategy for accessing Low-level-drivers
 from within isdn4linux you should also define a driver-id while doing
-insmod: Simply append id=<SomeString> to the insmod-commandline. This
+insmod: Simply append teles_id=<SomeString> to the insmod-commandline. This
 string MUST NOT start with a digit or a small 'x'!
 
 At this point you can run a 'cat /dev/isdnctrl0' and view debugging 

@@ -1050,6 +1050,15 @@ checkcard(int cardnr)
                                readhscx_0(card->membase, 1, HSCX_VSTR) & 0xf);
                 }
         } else {
+                switch (card->iobase) {
+                        case 0x180:
+                        case 0x280:
+                        case 0x380:
+                                printk(KERN_INFO "teles: port 0x%x specified, assuming 0x%x\n",
+                                       card->iobase, (card->iobase | 0xc00));
+                                card->iobase |= 0xc00;
+                                break;
+                }
                 if (check_region(card->iobase, 8)) {
                         printk(KERN_WARNING
                                "teles: ports %x-%x already in use\n",

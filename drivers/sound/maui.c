@@ -134,7 +134,7 @@ maui_write (unsigned char data)
 }
 
 void
-mauiintr (int irq, struct pt_regs *dummy)
+mauiintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
   irq_ok = 1;
 }

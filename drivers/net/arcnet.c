@@ -590,7 +590,7 @@ static void arcnetAS_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
 		char *data,int length,int daddr,int exceptA);
 static int arcnet_go_tx(struct device *dev,int enable_irq);
 
-static void arcnet_interrupt(int irq,struct pt_regs *regs);
+static void arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs);
 static void arcnet_inthandler(struct device *dev);
 
 static void arcnet_rx(struct device *dev,int recbuf);
@@ -1023,7 +1023,7 @@ int arcnet_found(struct device *dev,int port,int airq, u_long shmem)
 	dev->base_addr=port;
 
 	/* reserve the irq */
-	irqval = request_irq(airq,&arcnet_interrupt,0,"arcnet");
+	irqval = request_irq(airq,&arcnet_interrupt,0,"arcnet",NULL);
 	if (irqval)
 	{
 		BUGMSG(D_NORMAL,"unable to get IRQ %d (irqval=%d).\n",
@@ -1820,7 +1820,7 @@ arcnet_go_tx(struct device *dev,int enable_irq)
  * as well.
  */
 static void
-arcnet_interrupt(int irq,struct pt_regs *regs)
+arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	int ioaddr;
@@ -3252,7 +3252,7 @@ cleanup_module(void)
 
 	if (thiscard.irq)
 	{
-		free_irq(thiscard.irq);
+		free_irq(thiscard.irq,NULL);
 		/* very important! */
 		irq2dev_map[thiscard.irq] = NULL;
 	}

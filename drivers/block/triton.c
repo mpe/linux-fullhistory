@@ -85,7 +85,10 @@
  *	- like most Conner models, this drive proves that even a fast interface
  *	  cannot improve slow media.  Both DMA and PIO peak around 3.5MB/sec.
  *
- * If you have any drive models to add, email your results to:  mlord@bnr.ca
+ *   Maxtor 71260AT (1204Meg w/256kB buffer), DMA mword0/sword2, PIO mode3.
+ *	- works with DMA, giving 3-4MB/sec performance, about the same as mode3.
+ *
+ * If you have any drive models to add, email your results to:  mlord@pobox.com
  * Keep an eye on /var/adm/messages for "DMA disabled" messages.
  *
  * Some people have reported trouble with Intel Zappa motherboards.
@@ -118,6 +121,7 @@
  * known to work fine with this interface under Linux.
  */
 const char *good_dma_drives[] = {"Micropolis 2112A",
+				 "Maxtor 71260 AT",
 				 "CONNER CTMA 4000"};
 
 /*

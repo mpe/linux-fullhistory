@@ -69,7 +69,7 @@ static void wdt_ctr_load(int ctr, int val)
  *	Kernel methods.
  */
  
-static void wdt_interrupt(int irq, struct pt_regs *regs)
+static void wdt_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	/*
 	 *	Read the status register see what is up and
@@ -234,7 +234,7 @@ static struct mouse temp_mouse=
 int init_module(void)
 {
 	printk("WDT501-P module at %X(Interrupt %d)\n", io,irq);
-	if(request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p"))
+	if(request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p", NULL))
 	{
 		printk("IRQ %d is not free.\n", irq);
 		return -EIO;
@@ -254,7 +254,7 @@ void cleanup_module(void)
 	mouse_deregister(&temp_mouse);
 #endif	
 	release_region(io,8);
-	free_irq(irq);
+	free_irq(irq, NULL);
 }
 
 #else
@@ -262,7 +262,7 @@ void cleanup_module(void)
 int wdt_init(void)
 {
 	printk("WDT500/501-P driver at %X(Interrupt %d)\n", io,irq);
-	if(request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p"))
+	if(request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p", NULL))
 	{
 		printk("IRQ %d is not free.\n", irq);
 		return -EIO;

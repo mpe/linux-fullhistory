@@ -18,6 +18,7 @@
  *						socket.
  *		Alan Cox		:	Added firewall hooks.
  *		Alan Cox		:	Supports new ARPHRD_LOOPBACK
+ *		Christer Weinigel	: 	Routing and /proc fixes.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -62,7 +63,7 @@
 
 #ifdef CONFIG_ATALK
 
-#define APPLETALK_DEBUG
+#undef APPLETALK_DEBUG
 
 
 #ifdef APPLETALK_DEBUG
@@ -247,9 +248,13 @@ int atalk_get_info(char *buffer, char **start, off_t offset, int length, int dum
 	{
 		len += sprintf (buffer+len,"%02X   ", s->type);
 		len += sprintf (buffer+len,"%04X:%02X:%02X  ",
-			s->protinfo.af_at.src_net,s->protinfo.af_at.src_node,s->protinfo.af_at.src_port);
+			ntohs(s->protinfo.af_at.src_net),
+			s->protinfo.af_at.src_node,
+			s->protinfo.af_at.src_port);
 		len += sprintf (buffer+len,"%04X:%02X:%02X  ",
-			s->protinfo.af_at.dest_net,s->protinfo.af_at.dest_node,s->protinfo.af_at.dest_port);
+			ntohs(s->protinfo.af_at.dest_net),
+			s->protinfo.af_at.dest_node,
+			s->protinfo.af_at.dest_port);
 		len += sprintf (buffer+len,"%08lX:%08lX ", s->wmem_alloc, s->rmem_alloc);
 		len += sprintf (buffer+len,"%02X %d\n", s->state, SOCK_INODE(s->socket)->i_uid);
 		
@@ -715,10 +720,16 @@ int atif_ioctl(int cmd, void *arg)
 				return -EPERM;
 			if(sa->sat_family!=AF_APPLETALK)
 				return -EINVAL;
-			if(dev->type!=ARPHRD_ETHER&&dev->type!=ARPHRD_LOOPBACK)
+			if(dev->type!=ARPHRD_ETHER&&dev->type!=ARPHRD_LOOPBACK
+				&&dev->type!=ARPHRD_LOCALTLK)
 				return -EPROTONOSUPPORT;
 			nr=(struct netrange *)&sa->sat_zero[0];
-			if(nr->nr_phase!=2)
+			/*
+			 *	Phase 1 is fine on localtalk but we don't
+			 *	do Ethertalk phase 1. Anyone wanting to add
+			 *	it go ahead.
+			 */
+			if(dev->type==ARPHRD_ETHER && nr->nr_phase!=2)
 				return -EPROTONOSUPPORT;
 			if(sa->sat_addr.s_node==ATADDR_BCAST || sa->sat_addr.s_node == 254)
 				return -EINVAL;
@@ -882,13 +893,13 @@ int atalk_rt_get_info(char *buffer, char **start, off_t offset, int length, int 
 	if(atrtr_default.dev)
 	{
 		rt=&atrtr_default;
-		len += sprintf (buffer+len,"Default     %5d:%-3d  %-4d  %s\n",
+		len += sprintf (buffer+len,"Default     %04X:%02X  %-4d  %s\n",
 			ntohs(rt->gateway.s_net), rt->gateway.s_node, rt->flags,
 			rt->dev->name);
 	}
 	for (rt = atalk_router_list; rt != NULL; rt = rt->next)
 	{
-		len += sprintf (buffer+len,"%04X:%02X     %5d:%-3d  %-4d  %s\n",
+		len += sprintf (buffer+len,"%04X:%02X     %04X:%02X  %-4d  %s\n",
 			ntohs(rt->target.s_net),rt->target.s_node,
 			ntohs(rt->gateway.s_net), rt->gateway.s_node, rt->flags,
 			rt->dev->name);
@@ -1360,7 +1371,7 @@ static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
  *	extracted.
  */
  
-int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	atalk_socket *sock;
 	struct ddpehdr *ddp=(void *)skb->h.raw;
@@ -1470,6 +1481,17 @@ int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		}
 		ddp->deh_hops++;
 
+		/*
+		 *      Route goes through another gateway, so
+		 *      set the target to the gateway instead.
+		 */
+ 
+		if(rt->flags&RTF_GATEWAY)
+		{
+			ta.s_net = rt->gateway.s_net;
+			ta.s_node = rt->gateway.s_node;
+		}
+
                 /* Fix up skb->len field */
                 skb_trim(skb,min(origlen, rt->dev->hard_header_len + 
 			ddp_dl->header_length + ddp->deh_len));
@@ -1478,6 +1500,9 @@ int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		/*
 		 *	Send the buffer onwards
 		 */
+		 
+		skb->arp = 1;	/* Resolved */
+		
 		if(aarp_send_ddp(rt->dev, skb, &ta, NULL)==-1)
 			kfree_skb(skb, FREE_READ);
 		return 0;
@@ -1510,6 +1535,69 @@ int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		kfree_skb(skb, FREE_WRITE);
 	}
 	return(0);
+}
+
+/*
+ *	Receive a localtalk frame. We make some demands on the caller here.
+ *	Caller must provide enough headroom on the packet to pull the short
+ *	header and append a long one.
+ */
+
+ 
+static int ltalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+{
+	struct ddpehdr *ddp;
+	struct at_addr *ap;
+	/*
+	 *	Expand any short form frames.
+	 */
+	 
+	if(skb->mac.raw[2]==1)
+	{
+		/*
+		 *	Find our address.
+		 */
+		 
+		ap=atalk_find_dev_addr(dev);
+		if(ap==NULL || skb->len<sizeof(struct ddpshdr))
+		{
+			kfree_skb(skb, FREE_READ);
+			return 0;
+		}
+	
+		/*
+		 *	The push leaves us with a ddephdr not an shdr, and
+		 *	handily the port bytes in the right place preset.
+		 */
+	 
+		skb_push(skb, sizeof(*ddp)-4);
+		ddp=(struct ddpehdr *)skb->data;
+	
+		/*
+		 *	Now fill in the long header.
+		 */
+	 
+	 	/*
+	 	 *	These two first. The mac overlays the new source/dest
+	 	 *	network information so we MUST copy these before
+	 	 *	we write the network numbers !
+	 	 */
+	 	 
+		ddp->deh_dnode=skb->mac.raw[0];	/* From physical header */
+		ddp->deh_snode=skb->mac.raw[1];	/* From physical header */
+		
+		ddp->deh_dnet=ap->s_net;	/* Network number */
+		ddp->deh_snet=ap->s_net;	
+		ddp->deh_sum=0;			/* No checksum */
+		/*
+		 *	Not sure about this bit...
+		 */
+		ddp->deh_len=skb->len;
+		ddp->deh_hops=15;		/* Non routable, so force a drop 
+						   if we slip up later */
+		*((__u16 *)ddp)=htons(*((__u16 *)ddp));		/* Mend the byte order */
+	}
+	return atalk_rcv(skb,dev,pt);
 }
 
 static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nonblock, int flags)
@@ -1875,6 +1963,15 @@ static struct notifier_block ddp_notifier={
 	0
 };
 
+struct packet_type ltalk_packet_type=
+{
+	0,
+	NULL,
+	ltalk_rcv,
+	NULL,
+	NULL
+};
+
 /* Called by proto.c on kernel start up */
 
 void atalk_proto_init(struct net_proto *pro)
@@ -1883,6 +1980,10 @@ void atalk_proto_init(struct net_proto *pro)
 	(void) sock_register(atalk_proto_ops.family, &atalk_proto_ops);
 	if ((ddp_dl = register_snap_client(ddp_snap_id, atalk_rcv)) == NULL)
 		printk("Unable to register DDP with SNAP.\n");
+	
+	ltalk_packet_type.type=htons(ETH_P_LOCALTALK);	
+	dev_add_pack(&ltalk_packet_type);
+	
 	register_netdevice_notifier(&ddp_notifier);
 	aarp_proto_init();
 
@@ -1905,6 +2006,6 @@ void atalk_proto_init(struct net_proto *pro)
 		atalk_if_get_info
 	});
 
-	printk("Appletalk 0.14 for Linux NET3.032\n");
+	printk("Appletalk 0.16 for Linux NET3.033\n");
 }
 #endif

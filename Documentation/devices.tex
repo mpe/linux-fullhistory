@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@storm.net$>$}
-\date{Last revised: February 17, 1996}
+\date{Last revised: February 24, 1996}
 \maketitle
 %
 \noindent
@@ -88,6 +88,7 @@ an unreasonable effort.
 \major{ 5}{}{char }{Alternate TTY devices}
 \major{ 6}{}{char }{Parallel printer devices}
 \major{ 7}{}{char }{Virtual console access devices}
+\major{  }{}{block}{Loopback devices}
 \major{ 8}{}{block}{SCSI disk devices}
 \major{ 9}{}{char }{SCSI tape devices}
 \major{  }{}{block}{Metadisk (RAID) devices}
@@ -147,8 +148,9 @@ an unreasonable effort.
 \major{37}{}{char }{IDE tape}
 \major{  }{}{block}{Zorro II ramdisk}
 \major{38}{}{char }{Myricom PCI Myrinet board}
-\major{39}{--40}{}{Unallocated}
-\major{41}{}{char}{Yet Another Micro Monitor}
+\major{39}{}{char }{ML-16P experimental I/O board}
+\major{40}{}{}{Unallocated}
+\major{41}{}{char }{Yet Another Micro Monitor}
 \major{42}{}{}{Demo/sample use}
 \major{43}{}{char }{isdn4linux virtual modem}
 \major{44}{}{char }{isdn4linux virtual modem -- alternate devices}
@@ -349,6 +351,17 @@ Not all computers have the {\hex 0x3bc} parallel port, hence the
 
 \noindent
 NOTE: These devices permit both read and write access.
+
+\major{  }{}{block}{Loopback devices}
+	\minor{0}{/dev/loop0}{First loopback device}
+	\minor{1}{/dev/loop1}{Second loopback device}
+	\minordots
+\end{devicelist}
+
+\noindent
+The loopback devices are used to mount filesystems not associated with
+block devices.  The binding to the loopback devices is usually handled
+by mount(1).
 
 \begin{devicelist}
 \major{ 8}{}{block}{SCSI disk devices}
@@ -870,7 +883,28 @@ packet I/O''.  The board is also accessible as a regular {\file eth}
 networking device.
 
 \begin{devicelist}
-\major{39}{--40}{}{Unallocated}
+\major{39}{}{char }{ML-16P experimental I/O board}
+	\minor{0}{/dev/ml16pa-a0}{First card, first analog channel}
+	\minor{1}{/dev/ml16pa-a1}{First card, second analog channel}
+	\minordots
+	\minor{15}{/dev/ml16pa-a15}{First card, 16th analog channel}
+	\minor{16}{/dev/ml16pa-d}{First card, digital lines}
+	\minor{17}{/dev/ml16pa-c0}{First card, first counter/timer}
+	\minor{18}{/dev/ml16pa-c1}{First card, second counter/timer}
+	\minor{19}{/dev/ml16pa-c2}{First card, third counter/timer}
+	\minor{32}{/dev/ml16pb-a0}{Second card, first analog channel}
+	\minor{33}{/dev/ml16pb-a1}{Second card, second analog channel}
+	\minordots
+	\minor{47}{/dev/ml16pb-a15}{Second card, 16th analog channel}
+	\minor{48}{/dev/ml16pb-d}{Second card, digital lines}
+	\minor{49}{/dev/ml16pb-c0}{Second card, first counter/timer}
+	\minor{50}{/dev/ml16pb-c1}{Second card, second counter/timer}
+	\minor{51}{/dev/ml16pb-c2}{Second card, third counter/timer}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{40}{}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

@@ -293,7 +293,7 @@ static const unsigned short ultrastor_ports_14f[] = {
 };
 #endif
 
-static void ultrastor_interrupt(int, struct pt_regs *);
+static void ultrastor_interrupt(int, void *, struct pt_regs *);
 static inline void build_sg_list(struct mscp *, Scsi_Cmnd *SCpnt);
 
 
@@ -507,7 +507,7 @@ static int ultrastor_14f_detect(Scsi_Host_Template * tpnt)
     config.mscp_free = ~0;
 #endif
 
-    if (request_irq(config.interrupt, ultrastor_interrupt, 0, "Ultrastor")) {
+    if (request_irq(config.interrupt, ultrastor_interrupt, 0, "Ultrastor", NULL)) {
 	printk("Unable to allocate IRQ%u for UltraStor controller.\n",
 	       config.interrupt);
 	return FALSE;
@@ -515,7 +515,7 @@ static int ultrastor_14f_detect(Scsi_Host_Template * tpnt)
     if (config.dma_channel && request_dma(config.dma_channel,"Ultrastor")) {
 	printk("Unable to allocate DMA channel %u for UltraStor controller.\n",
 	       config.dma_channel);
-	free_irq(config.interrupt);
+	free_irq(config.interrupt, NULL);
 	return FALSE;
     }
     tpnt->sg_tablesize = ULTRASTOR_14F_MAX_SG;
@@ -577,7 +577,7 @@ static int ultrastor_24f_detect(Scsi_Host_Template * tpnt)
 	  printk("U24F: invalid IRQ\n");
 	  return FALSE;
 	}
-      if (request_irq(config.interrupt, ultrastor_interrupt, 0, "Ultrastor"))
+      if (request_irq(config.interrupt, ultrastor_interrupt, 0, "Ultrastor", NULL))
 	{
 	  printk("Unable to allocate IRQ%u for UltraStor controller.\n",
 		 config.interrupt);
@@ -1025,7 +1025,7 @@ int ultrastor_biosparam(Disk * disk, kdev_t dev, int * dkinfo)
     return 0;
 }
 
-static void ultrastor_interrupt(int irq, struct pt_regs *regs)
+static void ultrastor_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
     unsigned int status;
 #if ULTRASTOR_MAX_CMDS > 1

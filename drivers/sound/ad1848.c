@@ -39,9 +39,6 @@
  */
 #include <linux/config.h>
 
-
-#define DEB(x)
-#define DEB1(x)
 #include "sound_config.h"
 
 #if defined(CONFIG_AD1848)
@@ -600,7 +597,7 @@ ad1848_close (int dev)
   unsigned long   flags;
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
 
-  DEB (printk ("ad1848_close(void)\n"));
+  DDB (printk ("ad1848_close(void)\n"));
 
   save_flags (flags);
   cli ();
@@ -1528,11 +1525,13 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
       if (!share_dma)
 	{
 	  if (sound_alloc_dma (dma_playback, "Sound System"))
-	    printk ("ad1848.c: Can't allocate DMA%d\n", dma_playback);
+	    printk ("ad1848.c: Can't allocate DMA%d for playback\n",
+		    dma_playback);
 
-	  if (dma_capture != dma_playback)
+	  if (dma_capture != dma_playback && dma_capture != -1)
 	    if (sound_alloc_dma (dma_capture, "Sound System (capture)"))
-	      printk ("ad1848.c: Can't allocate DMA%d\n", dma_capture);
+	      printk ("ad1848.c: Can't allocate DMA%d for capture\n",
+		      dma_capture);
 	}
 
       /*
@@ -1588,7 +1587,7 @@ ad1848_unload (int io_base, int irq, int dma_playback, int dma_capture, int shar
 }
 
 void
-ad1848_interrupt (int irq, struct pt_regs *dummy)
+ad1848_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
 {
   unsigned char   status;
   ad1848_info    *devc;

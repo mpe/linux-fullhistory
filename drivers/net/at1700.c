@@ -117,7 +117,7 @@ static int at1700_probe1(struct device *dev, short ioaddr);
 static int read_eeprom(int ioaddr, int location);
 static int net_open(struct device *dev);
 static int	net_send_packet(struct sk_buff *skb, struct device *dev);
-static void net_interrupt(int irq, struct pt_regs *regs);
+static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void net_rx(struct device *dev);
 static int net_close(struct device *dev);
 static struct enet_statistics *net_get_stats(struct device *dev);
@@ -192,7 +192,7 @@ int at1700_probe1(struct device *dev, short ioaddr)
 				 | (read_eeprom(ioaddr, 0)>>14)];
 
 	/* Snarf the interrupt vector now. */
-	if (request_irq(irq, &net_interrupt, 0, "at1700")) {
+	if (request_irq(irq, &net_interrupt, 0, "at1700", NULL)) {
 		printk ("AT1700 found at %#3x, but it's unusable due to a conflict on"
 				"IRQ %d.\n", ioaddr, irq);
 		return EAGAIN;
@@ -440,7 +440,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 /* The typical workload of the driver:
    Handle the network interface interrupts. */
 static void
-net_interrupt(int irq, struct pt_regs *regs)
+net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct net_local *lp;
@@ -660,7 +660,7 @@ cleanup_module(void)
 	dev_at1700.priv = NULL;
 
 	/* If we don't do this, we can't re-insmod it later. */
-	free_irq(dev_at1700.irq);
+	free_irq(dev_at1700.irq, NULL);
 	irq2dev_map[dev_at1700.irq] = NULL;
 	release_region(dev_at1700.base_addr, AT1700_IO_EXTENT);
 }

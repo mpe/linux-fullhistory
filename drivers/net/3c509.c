@@ -102,7 +102,7 @@ static ushort id_read_eeprom(int index);
 static ushort read_eeprom(short ioaddr, int index);
 static int el3_open(struct device *dev);
 static int el3_start_xmit(struct sk_buff *skb, struct device *dev);
-static void el3_interrupt(int irq, struct pt_regs *regs);
+static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void update_stats(int addr, struct device *dev);
 static struct enet_statistics *el3_get_stats(struct device *dev);
 static int el3_rx(struct device *dev);
@@ -312,7 +312,7 @@ el3_open(struct device *dev)
 	outw(RxReset, ioaddr + EL3_CMD);
 	outw(SetReadZero | 0x00, ioaddr + EL3_CMD);
 
-	if (request_irq(dev->irq, &el3_interrupt, 0, "3c509")) {
+	if (request_irq(dev->irq, &el3_interrupt, 0, "3c509", NULL)) {
 		return -EAGAIN;
 	}
 
@@ -464,7 +464,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 
 /* The EL3 interrupt handler. */
 static void
-el3_interrupt(int irq, struct pt_regs *regs)
+el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	int ioaddr, status;
@@ -680,7 +680,7 @@ el3_close(struct device *dev)
 		outw(inw(ioaddr + WN4_MEDIA) & ~MEDIA_TP, ioaddr + WN4_MEDIA);
 	}
 
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 	/* Switching back to window 0 disables the IRQ. */
 	EL3WINDOW(0);
 	/* But we explicitly zero the IRQ line select anyway. */

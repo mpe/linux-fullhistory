@@ -432,6 +432,47 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	unsigned long flags;
 	
 	/*
+	 *	Check for localtalk first
+	 */
+	 
+	if(dev->type==ARPHRD_LOCALTLK)
+	{
+		struct at_addr *at=atalk_find_dev_addr(dev);
+		int ft=2;
+		
+		/*
+		 *	Compressable ?
+		 */
+		 
+		if(at->s_net==sa->s_net)
+		{
+			skb_pull(skb,sizeof(struct ddpehdr)-4);
+			/*
+			 *	The uper two remaining bytes are the port 
+			 *	numbers	we just happen to need. Now put the 
+			 *	length in the lower two.
+			 */
+			*((__u16 *)skb->data)=htons(skb->len);
+			ft=1;
+		}
+		/*
+		 *	Nice and easy. No AARP type protocols occur here
+		 *	so we can just shovel it out with a 3 byte LLAP header
+		 */
+		 
+		skb_push(skb,3);
+		skb->data[0]=sa->s_node;
+		skb->data[1]=at->s_node;
+		skb->data[2]=ft;
+		 
+		if(skb->sk==NULL)
+			dev_queue_xmit(skb, skb->dev, SOPRI_NORMAL);
+		else
+			dev_queue_xmit(skb, skb->dev, skb->sk->priority);
+		return 1;
+	}	
+	 
+	/*
 	 *	Non ELAP we cannot do.
 	 */
 

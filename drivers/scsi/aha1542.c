@@ -353,7 +353,7 @@ static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
 }
 
 /* A "high" level interrupt handler */
-static void aha1542_intr_handle(int irq, struct pt_regs *regs)
+static void aha1542_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
 {
     void (*my_done)(Scsi_Cmnd *) = NULL;
     int errstatus, mbi, mbo, mbistatus;
@@ -1000,7 +1000,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 		    DEB(printk("aha1542_detect: enable interrupt channel %d\n", irq_level));
 		    save_flags(flags);
 		    cli();
-		    if (request_irq(irq_level,aha1542_intr_handle, 0, "aha1542")) {
+		    if (request_irq(irq_level,aha1542_intr_handle, 0, "aha1542", NULL)) {
 			    printk("Unable to allocate IRQ for adaptec controller.\n");
 			    goto unregister;
 		    }
@@ -1008,7 +1008,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 		    if (dma_chan != 0xFF) {
 			    if (request_dma(dma_chan,"aha1542")) {
 				    printk("Unable to allocate DMA channel for Adaptec.\n");
-				    free_irq(irq_level);
+				    free_irq(irq_level, NULL);
 				    goto unregister;
 			    }
 			    

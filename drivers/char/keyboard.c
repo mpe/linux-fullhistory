@@ -337,7 +337,7 @@ int getkeycode(unsigned int scancode)
 	    e0_keys[scancode - 128];
 }
 
-static void keyboard_interrupt(int irq, struct pt_regs *regs)
+static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	unsigned char scancode, keycode;
 	static unsigned int prev_scancode = 0;   /* remember E0, E1 */
@@ -1183,7 +1183,7 @@ int kbd_init(void)
 	ttytab = console_driver.table;
 
 	bh_base[KEYBOARD_BH].routine = kbd_bh;
-	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard");
+	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard", NULL);
 	request_region(0x60,16,"kbd");
 #ifdef INIT_KBD
 	initialize_kbd();

@@ -628,7 +628,7 @@ mcd_transfer(void)
  */
 
 static void
-mcd_interrupt(int irq, struct pt_regs * regs)
+mcd_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	int st;
 
@@ -1234,7 +1234,7 @@ int mcd_init(void)
 
 	/* don't get the IRQ until we know for sure the drive is there */
 
-	if (request_irq(mcd_irq, mcd_interrupt, SA_INTERRUPT, "Mitsumi CD"))
+	if (request_irq(mcd_irq, mcd_interrupt, SA_INTERRUPT, "Mitsumi CD", NULL))
 	{
 		printk("Unable to get IRQ%d for Mitsumi CD-ROM\n", mcd_irq);
                 return -EIO;
@@ -1617,7 +1617,7 @@ void cleanup_module(void)
        return;    
      }
   release_region(mcd_port,4);
-  free_irq(mcd_irq);
+  free_irq(mcd_irq, NULL);
   printk("mcd module released.\n");
 }
 #endif MODULE

@@ -94,9 +94,9 @@ struct ddpehdr
 struct ddpshdr
 {
 	/* FIXME for bigendians */
-	__u8	dsh_sport;
-	__u8	dsh_dport;
 	__u16	dsh_len:10, dsh_pad:6;
+	__u8	dsh_dport;
+	__u8	dsh_sport;
 	/* And netatalk apps expect to stick the type in themselves */
 };
 

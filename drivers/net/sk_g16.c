@@ -63,7 +63,6 @@ static const char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
-#include <linux/ioport.h>
 #include <linux/string.h> 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -487,7 +486,7 @@ static int   SK_probe(struct device *dev, short ioaddr);
 
 static int   SK_open(struct device *dev);
 static int   SK_send_packet(struct sk_buff *skb, struct device *dev);
-static void  SK_interrupt(int irq, struct pt_regs * regs);
+static void  SK_interrupt(int irq, void *dev_id, struct pt_regs * regs);
 static void  SK_rxintr(struct device *dev);
 static void  SK_txintr(struct device *dev);
 static int   SK_close(struct device *dev);
@@ -886,7 +885,7 @@ static int SK_open(struct device *dev)
 
 	do
 	{
-	  irqval = request_irq(irqtab[i], &SK_interrupt, 0, "sk_g16");
+	  irqval = request_irq(irqtab[i], &SK_interrupt, 0, "sk_g16", NULL);
 	  i++;
 	} while (irqval && irqtab[i]);
 
@@ -903,7 +902,7 @@ static int SK_open(struct device *dev)
     }
     else if (dev->irq == 2) /* IRQ2 is always IRQ9 */
     {
-	if (request_irq(9, &SK_interrupt, 0, "sk_g16"))
+	if (request_irq(9, &SK_interrupt, 0, "sk_g16", NULL))
 	{
 	    printk("%s: unable to get IRQ 9\n", dev->name);
 	    return -EAGAIN;
@@ -924,7 +923,7 @@ static int SK_open(struct device *dev)
 
 	/* check if IRQ free and valid. Then install Interrupt handler */
 
-	if (request_irq(dev->irq, &SK_interrupt, 0, "sk_g16"))
+	if (request_irq(dev->irq, &SK_interrupt, 0, "sk_g16", NULL))
 	{
 	    printk("%s: unable to get selected IRQ\n", dev->name);
 	    return -EAGAIN;
@@ -1299,7 +1298,7 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
  * Description    : SK_G16 interrupt handler which checks for LANCE
  *                  Errors, handles transmit and receive interrupts
  *
- * Parameters     : I : int irq, struct pt_regs * regs -
+ * Parameters     : I : int irq, void *dev_id, struct pt_regs * regs -
  * Return Value   : None
  * Errors         : None
  * Globals        : None
@@ -1308,7 +1307,7 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
  *     YY/MM/DD  uid  Description
 -*/
 
-static void SK_interrupt(int irq, struct pt_regs * regs)
+static void SK_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
     int csr0;
     struct device *dev = (struct device *) irq2dev_map[irq];
@@ -1665,7 +1664,7 @@ static int SK_close(struct device *dev)
 
     SK_write_reg(CSR0, CSR0_STOP); /* STOP the LANCE */
 
-    free_irq(dev->irq);            /* Free IRQ */
+    free_irq(dev->irq, NULL);      /* Free IRQ */
     irq2dev_map[dev->irq] = 0;     /* Mark IRQ as unused */
 
     return 0; /* always succeed */

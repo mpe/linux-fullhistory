@@ -922,10 +922,10 @@ dump_tk_script(struct kconfig *scfg)
 	    {
 	      if(cfg->tok == tok_dep_tristate)
 		{
-		  printf("\tif {$%s == 2 } then {\n"
+		  printf("\tif {$%s == 0 } then {\n"
 		  	 "\t\twrite_variable $cfg $autocfg %s $notset $notmod\n"
 		  	 "\t} else {\n"
-		  	 "\t\twrite_variable $cfg $autocfg %s $%s %s\n"
+		  	 "\t\twrite_variable $cfg $autocfg %s $%s $%s\n"
 		  	 "\t}\n",
 		  	 cfg->depend.str,
 			 cfg->optionname,

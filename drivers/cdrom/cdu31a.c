@@ -521,7 +521,7 @@ write_cmd(unsigned char cmd)
 }
 
 static void
-cdu31a_interrupt(int irq, struct pt_regs *regs)
+cdu31a_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
    unsigned char val;
 
@@ -3085,7 +3085,7 @@ cdu31a_init(void)
       
       if (cdu31a_irq > 0)
       {
-	 if (request_irq(cdu31a_irq, cdu31a_interrupt, SA_INTERRUPT, "cdu31a"))
+	 if (request_irq(cdu31a_irq, cdu31a_interrupt, SA_INTERRUPT, "cdu31a", NULL))
 	 {
 	    printk("Unable to grab IRQ%d for the CDU31A driver\n", cdu31a_irq);
 	    cdu31a_irq = 0;

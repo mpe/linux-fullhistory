@@ -238,7 +238,7 @@ static void scc_txint(register struct scc_channel *scc);
 static void scc_exint(register struct scc_channel *scc);
 static void scc_rxint(register struct scc_channel *scc);
 static void scc_spint(register struct scc_channel *scc);
-static void scc_isr(int irq, struct pt_regs *regs);
+static void scc_isr(int irq, void *dev_id, struct pt_regs *regs);
 static void scc_tx_timer(unsigned long);
 static void scc_rx_timer(unsigned long);
 static void scc_init_timer(struct scc_channel *scc);
@@ -732,7 +732,7 @@ scc_isr_dispatch(register struct scc_channel *scc, register int vector)
  */
 
 static void
-scc_isr(int irq, struct pt_regs *regs)
+scc_isr(int irq, void *dev_id, struct pt_regs *regs)
 {
 	register unsigned char vector;	
 	register struct scc_channel *scc;
@@ -2128,7 +2128,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 			
 			if (!Ivec[hwcfg.irq].used && hwcfg.irq)
 			{
-				if (request_irq(hwcfg.irq, scc_isr, SA_INTERRUPT, "AX.25 SCC"))
+				if (request_irq(hwcfg.irq, scc_isr, SA_INTERRUPT, "AX.25 SCC", NULL))
 					printk("z8530drv: Warning --- could not get IRQ %d\n", hwcfg.irq);
 				else
 					Ivec[hwcfg.irq].used = 1;
@@ -2784,7 +2784,7 @@ void cleanup_module(void)
 	}
 	
 	for (k=0; k < 16 ; k++)
-		if (Ivec[k].used) free_irq(k);
+		if (Ivec[k].used) free_irq(k, NULL);
 		
 	restore_flags(flags);
 }

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.28  Feb 11, 1996
+ *  linux/drivers/block/ide.c	Version 5.30  Feb 27, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -45,16 +45,16 @@
  *  | Early work on error handling by Mika Liljeberg (liljeber@cs.Helsinki.FI).
  *  |
  *  | IRQ-unmask, drive-id, multiple-mode, support for ">16 heads",
- *  | and general streamlining by Mark Lord (mlord@bnr.ca).
+ *  | and general streamlining by Mark Lord (mlord@pobox.com).
  *
  *  October, 1994 -- Complete line-by-line overhaul for linux 1.1.x, by:
  *
- *	Mark Lord	(mlord@bnr.ca)			(IDE Perf.Pkg)
+ *	Mark Lord	(mlord@pobox.com)		(IDE Perf.Pkg)
  *	Delman Lee	(delman@mipg.upenn.edu)		("Mr. atdisk2")
  *	Petri Mattila	(ptjmatti@kruuna.helsinki.fi)	(EIDE stuff)
  *	Scott Snyder	(snyder@fnald0.fnal.gov)	(ATAPI IDE cd-rom)
  *
- *  Maintained by Mark Lord (mlord@bnr.ca):  ide.c, ide.h, triton.c, hd.c, ..
+ *  Maintained by Mark Lord (mlord@pobox.com):  ide.c, ide.h, triton.c, hd.c, ..
  *
  *  This was a rewrite of just about everything from hd.c, though some original
  *  code is still sprinkled about.  Think of it as a major evolution, with
@@ -205,6 +205,9 @@
  *			force io_32bit to be the same on drive pairs of dtc2278
  *			improved IDE tape error handling, and tape DMA support
  *			bugfix in ide_do_drive_cmd() for cdroms + serialize
+ * Version 5.29		fixed non-IDE check for too many physical heads
+ *			don't use LBA if capacity is smaller than CHS
+ * Version 5.30		remove real_devices kludge, formerly used by genhd.c
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -470,19 +473,19 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 static unsigned long current_capacity (ide_drive_t  *drive)
 {
 	struct hd_driveid *id = drive->id;
-	unsigned long capacity;
+	unsigned long capacity = drive->cyl * drive->head * drive->sect;
 
 	if (!drive->present)
 		return 0;
 	if (drive->media != ide_disk)
 		return 0x7fffffff;	/* cdrom or tape */
+	drive->select.b.lba = 0;
 	/* Determine capacity, and use LBA if the drive properly supports it */
 	if (id != NULL && (id->capability & 2) && lba_capacity_is_ok(id)) {
-		drive->select.b.lba = 1;
-		capacity = id->lba_capacity;
-	} else {
-		drive->select.b.lba = 0;
-		capacity = drive->cyl * drive->head * drive->sect;
+		if (id->lba_capacity >= capacity) {
+			capacity = id->lba_capacity;
+			drive->select.b.lba = 1;
+		}
 	}
 	return (capacity - drive->sect0);
 }
@@ -511,13 +514,6 @@ static void ide_geninit (struct gendisk *gd)
 			drive->part[0].start_sect = -1; /* skip partition check */
 		}
 	}
-	/*
-	 * The partition check in genhd.c needs this string to identify
-	 * our minor devices by name for display purposes.
-	 * Note that doing this will prevent us from working correctly
-	 * if ever called a second time for this major (never happens).
-	 */
-	gd->real_devices = hwif->drives[0].name;  /* name of first drive */
 }
 
 /*
@@ -619,6 +615,7 @@ static void reset_pollfunc (ide_drive_t *drive)
 		if ((tmp = GET_ERR()) == 1)
 			printk("success\n");
 		else {
+#if FANCY_STATUS_DUMPS
 			printk("master: ");
 			switch (tmp & 0x7f) {
 				case 1: printk("passed");
@@ -636,6 +633,9 @@ static void reset_pollfunc (ide_drive_t *drive)
 			if (tmp & 0x80)
 				printk("; slave: failed");
 			printk("\n");
+#else
+			printk("failed\n");
+#endif /* FANCY_STATUS_DUMPS */
 		}
 	}
 	hwgroup->poll_timeout = 0;	/* done polling */
@@ -1154,8 +1154,9 @@ next:
 		} else
 			drive->mult_req = 0;
 	} else if (s->all) {
+		int special = s->all;
 		s->all = 0;
-		printk("%s: bad special flag: 0x%02x\n", drive->name, s->all);
+		printk("%s: bad special flag: 0x%02x\n", drive->name, special);
 	}
 }
 
@@ -1461,20 +1462,26 @@ static void do_ide0_request (void)	/* invoked with cli() */
 	do_hwgroup_request (ide_hwifs[0].hwgroup);
 }
 
+#if MAX_HWIFS > 1
 static void do_ide1_request (void)	/* invoked with cli() */
 {
 	do_hwgroup_request (ide_hwifs[1].hwgroup);
 }
+#endif
 
+#if MAX_HWIFS > 2
 static void do_ide2_request (void)	/* invoked with cli() */
 {
 	do_hwgroup_request (ide_hwifs[2].hwgroup);
 }
+#endif
 
+#if MAX_HWIFS > 3
 static void do_ide3_request (void)	/* invoked with cli() */
 {
 	do_hwgroup_request (ide_hwifs[3].hwgroup);
 }
+#endif
 
 static void timer_expiry (unsigned long data)
 {
@@ -1561,7 +1568,7 @@ static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 /*
  * entry point for all interrupts, caller does cli() for us
  */
-static void ide_intr (int irq, struct pt_regs *regs)
+static void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 {
 	ide_hwgroup_t  *hwgroup = irq_to_hwgroup[irq];
 	ide_handler_t  *handler;
@@ -2103,10 +2110,10 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	ide_fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);
 	ide_fixstring (id->serial_no, sizeof(id->serial_no), bswap);
 
+#ifdef CONFIG_BLK_DEV_IDEATAPI
 	/*
 	 * Check for an ATAPI device
 	 */
-
 	if (cmd == WIN_PIDENTIFY) {
 		byte type = (id->config >> 8) & 0x1f;
 		printk("%s: %s, ATAPI ", drive->name, id->model);
@@ -2153,6 +2160,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		printk("- not supported by this kernel\n");
 		return;
 	}
+#endif /* CONFIG_BLK_DEV_IDEATAPI */
 
 	/* check for removeable disks (eg. SYQUEST), ignore 'WD' drives */
 	if (id->config & (1<<7)) {	/* removeable disk ? */
@@ -2392,24 +2400,16 @@ static inline byte probe_for_drive (ide_drive_t *drive)
 #endif	/* CONFIG_BLK_DEV_IDECD */
 		else {
 			drive->present = 0;	/* nuke it */
-			return 1;		/* drive was found */
-		}
-	}
-	if (drive->media == ide_disk && !drive->select.b.lba) {
-		if (!drive->head || drive->head > 16) {
-			printk("%s: INVALID GEOMETRY: %d PHYSICAL HEADS?\n",
-			 drive->name, drive->head);
-			drive->present = 0;
 		}
 	}
 	return 1;	/* drive was found */
 }
 
 /*
- *  This routine only knows how to look for drive units 0 and 1
- *  on an interface, so any setting of MAX_DRIVES > 2 won't work here.
+ * This routine only knows how to look for drive units 0 and 1
+ * on an interface, so any setting of MAX_DRIVES > 2 won't work here.
  */
-static void probe_for_drives (ide_hwif_t *hwif)
+static void probe_hwif (ide_hwif_t *hwif)
 {
 	unsigned int unit;
 
@@ -2429,25 +2429,25 @@ static void probe_for_drives (ide_hwif_t *hwif)
 		unsigned long flags;
 		save_flags(flags);
 
-#if (MAX_DRIVES > 2)
-		printk("%s: probing for first 2 of %d possible drives\n", hwif->name, MAX_DRIVES);
-#endif
 		sti();	/* needed for jiffies and irq probing */
 		/*
 		 * Second drive should only exist if first drive was found,
-		 * but a lot of cdrom drives seem to be configured as slave-only
+		 * but a lot of cdrom drives are configured as single slaves.
 		 */
-		for (unit = 0; unit < 2; ++unit) { /* note the hardcoded '2' */
-			ide_drive_t *drive = &hwif->drives[unit];
-			(void) probe_for_drive (drive);
-		}
 		for (unit = 0; unit < MAX_DRIVES; ++unit) {
 			ide_drive_t *drive = &hwif->drives[unit];
-			if (drive->present) {
+			(void) probe_for_drive (drive);
+			if (drive->present && drive->media == ide_disk) {
+				if ((!drive->head || drive->head > 16) && !drive->select.b.lba) {
+					printk("%s: INVALID GEOMETRY: %d PHYSICAL HEADS?\n",
+					 drive->name, drive->head);
+					drive->present = 0;
+				}
+			}
+			if (drive->present && !hwif->present) {
 				hwif->present = 1;
 				request_region(hwif->io_base,  8, hwif->name);
 				request_region(hwif->ctl_port, 1, hwif->name);
-				break;
 			}
 		}
 		restore_flags(flags);
@@ -2883,7 +2883,7 @@ static int init_irq (ide_hwif_t *hwif)
 	 * Grab the irq if we don't already have it from a previous hwif
 	 */
 	if (hwgroup == NULL)  {
-		if (request_irq(irq, ide_intr, SA_INTERRUPT|SA_SAMPLE_RANDOM, hwif->name)) {
+		if (request_irq(irq, ide_intr, SA_INTERRUPT|SA_SAMPLE_RANDOM, hwif->name, NULL)) {
 			restore_flags(flags);
 			printk(" -- FAILED!");
 			return 1;
@@ -2893,7 +2893,7 @@ static int init_irq (ide_hwif_t *hwif)
 	 * Check for serialization with ide1.
 	 * This code depends on us having already taken care of ide1.
 	 */
-	if (hwif->serialized && hwif->name[3] == '0' && ide_hwifs[1].present)
+	if (hwif->serialized && hwif->index == 0 && ide_hwifs[1].present)
 		hwgroup = ide_hwifs[1].hwgroup;
 	/*
 	 * If this is the first interface in a group,
@@ -3025,7 +3025,7 @@ int ide_init (void)
 		if (!hwif->noprobe) {
 			if (hwif->io_base == HD_DATA)
 				probe_cmos_for_drives (hwif);
-			probe_for_drives (hwif);
+			probe_hwif (hwif);
 		}
 		if (hwif->present) {
 			if (!hwif->irq) {
@@ -3055,9 +3055,15 @@ int ide_init (void)
 		hwif->present = 0; /* we set it back to 1 if all is ok below */
 		switch (hwif->major) {
 			case IDE0_MAJOR: rfn = &do_ide0_request; break;
+#if MAX_HWIFS > 1
 			case IDE1_MAJOR: rfn = &do_ide1_request; break;
+#endif
+#if MAX_HWIFS > 2
 			case IDE2_MAJOR: rfn = &do_ide2_request; break;
+#endif
+#if MAX_HWIFS > 3
 			case IDE3_MAJOR: rfn = &do_ide3_request; break;
+#endif
 			default:
 				printk("%s: request_fn NOT DEFINED\n", hwif->name);
 				continue;

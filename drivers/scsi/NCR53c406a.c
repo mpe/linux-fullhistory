@@ -169,7 +169,7 @@ enum Phase {
 };
 
 /* Static function prototypes */
-static  void NCR53c406a_intr(int, struct pt_regs *);
+static  void NCR53c406a_intr(int, void *, struct pt_regs *);
 static  void internal_done(Scsi_Cmnd *);
 static  void wait_intr(void);
 static  void chip_init(void);
@@ -537,7 +537,7 @@ NCR53c406a_detect(Scsi_Host_Template * tpnt){
     request_region(port_base, 0x10, "NCR53c406a");
     
     if(irq_level > 0) {
-        if(request_irq(irq_level, NCR53c406a_intr, 0, "NCR53c406a")){
+        if(request_irq(irq_level, NCR53c406a_intr, 0, "NCR53c406a", NULL)){
             printk("NCR53c406a: unable to allocate IRQ %d\n", irq_level);
             return 0;
         }
@@ -664,7 +664,7 @@ static void wait_intr() {
         return;
     }
     
-    NCR53c406a_intr(0, NULL);
+    NCR53c406a_intr(0, NULL, NULL);
 }
 
 int NCR53c406a_command(Scsi_Cmnd *SCpnt){
@@ -763,7 +763,7 @@ NCR53c406a_biosparm(Scsi_Disk *disk, kdev_t dev, int* info_array){
   }
      
      static void
-NCR53c406a_intr(int unused, struct pt_regs *regs){
+NCR53c406a_intr(int unused, void *dev_id, struct pt_regs *regs){
     DEB(unsigned char fifo_size;)
     DEB(unsigned char seq_reg;)
     unsigned char status, int_reg;

@@ -837,7 +837,7 @@ gus_initialize (void)
 
   gus_select_voice (0);		/* This disables writes to IRQ/DMA reg */
 
-  gusintr (0, NULL);		/* Serve pending interrupts */
+  gusintr (0, NULL, NULL);      /* Serve pending interrupts */
   restore_flags (flags);
 }
 

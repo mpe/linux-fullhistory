@@ -301,7 +301,7 @@ get_board_type (struct sscape_info *devc)
 }
 
 void
-sscapeintr (int irq, struct pt_regs *dummy)
+sscapeintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
   unsigned char   bits, tmp;
   static int      debug = 0;
@@ -323,7 +323,7 @@ sscapeintr (int irq, struct pt_regs *dummy)
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   if (bits & 0x01)
     {
-      mpuintr (irq, NULL);
+      mpuintr (irq, NULL, NULL);
       if (debug++ > 10)		/* Temporary debugging hack */
 	{
 	  sscape_write (devc, GA_INTENA_REG, 0x00);	/* Disable all interrupts */

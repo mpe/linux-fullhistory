@@ -275,7 +275,7 @@ static int NCR5380_probe_irq (struct Scsi_Host *instance, int possible);
 #endif
 static void NCR5380_init (struct Scsi_Host *instance, int flags);
 static void NCR5380_information_transfer (struct Scsi_Host *instance);
-static void NCR5380_intr (int irq, struct pt_regs * regs);
+static void NCR5380_intr (int irq, void *dev_id, struct pt_regs * regs);
 static void NCR5380_main (void);
 static void NCR5380_print_options (struct Scsi_Host *instance);
 static void NCR5380_print_phase (struct Scsi_Host *instance);

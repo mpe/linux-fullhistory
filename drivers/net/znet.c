@@ -182,7 +182,7 @@ struct netidblk {
 int znet_probe(struct device *dev);
 static int	znet_open(struct device *dev);
 static int	znet_send_packet(struct sk_buff *skb, struct device *dev);
-static void	znet_interrupt(int irq, struct pt_regs *regs);
+static void	znet_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void	znet_rx(struct device *dev);
 static int	znet_close(struct device *dev);
 static struct enet_statistics *net_get_stats(struct device *dev);
@@ -246,7 +246,7 @@ int znet_probe(struct device *dev)
 	zn.tx_dma = netinfo->dma2;
 
 	/* These should never fail.  You can't add devices to a sealed box! */
-	if (request_irq(dev->irq, &znet_interrupt, 0, "ZNet")
+	if (request_irq(dev->irq, &znet_interrupt, 0, "ZNet", NULL)
 		|| request_dma(zn.rx_dma,"ZNet rx")
 		|| request_dma(zn.tx_dma,"ZNet tx")) {
 		printk(KERN_WARNING "%s: Not opened -- resource busy?!?\n", dev->name);
@@ -402,7 +402,7 @@ static int znet_send_packet(struct sk_buff *skb, struct device *dev)
 }
 
 /* The ZNET interrupt handler. */
-static void	znet_interrupt(int irq, struct pt_regs * regs)
+static void	znet_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct device *dev = irq2dev_map[irq];
 	int ioaddr;
@@ -603,7 +603,7 @@ static int znet_close(struct device *dev)
 	disable_dma(zn.rx_dma);
 	disable_dma(zn.tx_dma);
 
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 
 	if (znet_debug > 1)
 		printk(KERN_DEBUG "%s: Shutting down ethercard.\n", dev->name);

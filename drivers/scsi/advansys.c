@@ -2551,7 +2551,7 @@ int		asc_dbglvl = 0;
 #ifdef LINUX_1_3
 STATIC int			asc_proc_copy(off_t, off_t, char *, int , char *, int);
 #endif /* LINUX_1_3 */
-STATIC void 		advansys_interrupt(int, struct pt_regs *);
+STATIC void 		advansys_interrupt(int, void *, struct pt_regs *);
 STATIC void 		advansys_command_done(Scsi_Cmnd *);
 STATIC int 			asc_execute_scsi_cmnd(Scsi_Cmnd *);
 STATIC void 		asc_isr_callback(ASC_DVC_VAR *, ASC_QDONE_INFO *);
@@ -3107,7 +3107,7 @@ advansys_detect(Scsi_Host_Template *tpnt)
 			/* Register IRQ Number. */
 			ASC_DBG1(2, "advansys_detect: request_irq() %d\n", shp->irq);
 			if ((ret = request_irq(shp->irq, advansys_interrupt,
-								SA_INTERRUPT, "advansys")) != 0) {
+								SA_INTERRUPT, "advansys", NULL)) != 0) {
 				ASC_DBG1(0, "advansys_detect: request_irq() failed %d\n", ret);
 				release_region(shp->io_port, shp->n_io_port);
 				if (shp->dma_channel != NO_ISA_DMA) {
@@ -3130,7 +3130,7 @@ advansys_detect(Scsi_Host_Template *tpnt)
 				if (shp->dma_channel != NO_ISA_DMA) {
 					free_dma(shp->dma_channel);
 				}
-				free_irq(shp->irq);
+				free_irq(shp->irq, NULL);
 				scsi_unregister(shp);
 				asc_board_count--;
 				continue;
@@ -3152,7 +3152,7 @@ int
 advansys_release(struct Scsi_Host *shp)
 {
 	ASC_DBG(1, "advansys_release: begin\n");
-	free_irq(shp->irq);
+	free_irq(shp->irq, NULL);
 	if (shp->dma_channel != NO_ISA_DMA) {
 		ASC_DBG(1, "advansys_release: free_dma()\n");
 		free_dma(shp->dma_channel);
@@ -3577,7 +3577,7 @@ asc_proc_copy(off_t advoffset, off_t offset, char *curbuf, int leftlen,
  * First-level interrupt handler.
  */
 STATIC void
-advansys_interrupt(int irq, struct pt_regs *regs)
+advansys_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	int			i;
 	int			flags;

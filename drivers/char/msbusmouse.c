@@ -48,7 +48,7 @@
 
 static struct mouse_status mouse;
 
-static void ms_mouse_interrupt(int irq, struct pt_regs * regs)
+static void ms_mouse_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
         char dx, dy;
 	unsigned char buttons;
@@ -97,7 +97,7 @@ static void release_mouse(struct inode * inode, struct file * file)
 		return;
 	MS_MSE_INT_OFF();
 	mouse.ready = 0; 
-	free_irq(MOUSE_IRQ);
+	free_irq(MOUSE_IRQ, NULL);
 	MOD_DEC_USE_COUNT;
 }
 
@@ -107,7 +107,7 @@ static int open_mouse(struct inode * inode, struct file * file)
 		return -EINVAL;
 	if (mouse.active++)
 		return 0;
-	if (request_irq(MOUSE_IRQ, ms_mouse_interrupt, 0, "MS Busmouse")) {
+	if (request_irq(MOUSE_IRQ, ms_mouse_interrupt, 0, "MS Busmouse", NULL)) {
 		mouse.active--;
 		return -EBUSY;
 	}

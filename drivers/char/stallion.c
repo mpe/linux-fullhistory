@@ -489,7 +489,7 @@ static void	stl_disableintrs(stlport_t *portp);
 static void	stl_sendbreak(stlport_t *portp, long len);
 static int	stl_waitcarrier(stlport_t *portp, struct file *filp);
 static void	stl_delay(int len);
-static void	stl_intr(int irq, struct pt_regs *regs);
+static void	stl_intr(int irq, void *dev_id, struct pt_regs *regs);
 static void	stl_offintr(void *private);
 static void	*stl_memalloc(int len);
 
@@ -594,7 +594,7 @@ void cleanup_module()
 	}
 
 	for (i = 0; (i < stl_numintrs); i++)
-		free_irq(stl_gotintrs[i]);
+		free_irq(stl_gotintrs[i], NULL);
 
 	restore_flags(flags);
 }
@@ -1747,7 +1747,7 @@ static inline void stl_mdmisr(stlpanel_t *panelp, int ioaddr)
  *	io region.
  */
 
-static void stl_intr(int irq, struct pt_regs *regs)
+static void stl_intr(int irq, void *dev_id, struct pt_regs *regs)
 {
 	stlbrd_t	*brdp;
 	stlpanel_t	*panelp;
@@ -2364,7 +2364,7 @@ static int stl_mapirq(int irq)
 			break;
 	}
 	if (i >= stl_numintrs) {
-		if (request_irq(irq, stl_intr, SA_INTERRUPT, stl_drvname) != 0) {
+		if (request_irq(irq, stl_intr, SA_INTERRUPT, stl_drvname, NULL) != 0) {
 			printk("STALLION: failed to register interrupt routine for irq=%d\n", irq);
 			rc = -ENODEV;
 		} else {

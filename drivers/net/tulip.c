@@ -155,7 +155,7 @@ static int tulip_open(struct device *dev);
 static void tulip_init_ring(struct device *dev);
 static int tulip_start_xmit(struct sk_buff *skb, struct device *dev);
 static int tulip_rx(struct device *dev);
-static void tulip_interrupt(int irq, struct pt_regs *regs);
+static void tulip_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int tulip_close(struct device *dev);
 static struct enet_statistics *tulip_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev);
@@ -283,7 +283,7 @@ tulip_open(struct device *dev)
 	if (irq2dev_map[dev->irq] != NULL
 		|| (irq2dev_map[dev->irq] = dev) == NULL
 		|| dev->irq == 0
-		|| request_irq(dev->irq, &tulip_interrupt, 0, "DEC 21040 Tulip")) {
+		|| request_irq(dev->irq, &tulip_interrupt, 0, "DEC 21040 Tulip", NULL)) {
 		return -EAGAIN;
 	}
 
@@ -444,7 +444,7 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 
 /* The interrupt handler does all of the Rx thread work and cleans up
    after the Tx thread. */
-static void tulip_interrupt(int irq, struct pt_regs *regs)
+static void tulip_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct tulip_private *lp;
@@ -562,7 +562,7 @@ static void tulip_interrupt(int irq, struct pt_regs *regs)
 		if (dev->start == 0  &&  --stopit < 0) {
 			printk("%s: Emergency stop, looping startup interrupt.\n",
 				   dev->name);
-			free_irq(irq);
+			free_irq(irq, NULL);
 		}
 	}
 
@@ -651,7 +651,7 @@ tulip_close(struct device *dev)
 
 	tp->stats.rx_missed_errors += inl(ioaddr + CSR8) & 0xffff;
 
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 	irq2dev_map[dev->irq] = 0;
 
 	MOD_DEC_USE_COUNT;

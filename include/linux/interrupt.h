@@ -5,6 +5,16 @@
 #include <linux/kernel.h>
 #include <asm/bitops.h>
 
+struct irqaction {
+	void (*handler)(int, void *, struct pt_regs *);
+	unsigned long flags;
+	unsigned long mask;
+	const char *name;
+	void *dev_id;
+	struct irqaction *next;
+};
+
+
 struct bh_struct {
 	void (*routine)(void *);
 	void *data;

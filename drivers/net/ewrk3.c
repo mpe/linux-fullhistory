@@ -130,11 +130,12 @@
                           Added verify_area() calls in depca_ioctl() from
                           suggestion by <heiko@colossus.escape.de>.
 			  Add new multicasting code.
+      0.41    20-Jan-96   Fix IRQ set up problem reported by <???>.
 
     =========================================================================
 */
 
-static const char *version = "ewrk3.c:v0.40 95/12/27 davies@wanton.lkg.dec.com\n";
+static const char *version = "ewrk3.c:v0.41 96/1/20 davies@wanton.lkg.dec.com\n";
 
 #include <linux/module.h>
 
@@ -205,7 +206,7 @@ static int ewrk3_debug = 1;
 #define CRC_POLYNOMIAL_BE 0x04c11db7UL   /* Ethernet CRC, big endian */
 #define CRC_POLYNOMIAL_LE 0xedb88320UL   /* Ethernet CRC, little endian */
 
-#define QUEUE_PKT_TIMEOUT (100)          /* Jiffies */
+#define QUEUE_PKT_TIMEOUT (1*HZ)         /* Jiffies */
 
 /*
 ** EtherWORKS 3 shared memory window sizes
@@ -286,7 +287,7 @@ struct ewrk3_private {
 */
 static int    ewrk3_open(struct device *dev);
 static int    ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev);
-static void   ewrk3_interrupt(int irq, struct pt_regs *regs);
+static void   ewrk3_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int    ewrk3_close(struct device *dev);
 static struct enet_statistics *ewrk3_get_stats(struct device *dev);
 static void   set_multicast_list(struct device *dev);
@@ -389,7 +390,7 @@ ewrk3_hw_init(struct device *dev, u_long iobase)
   nicsr = inb(EWRK3_CSR);
 
   icr = inb(EWRK3_ICR);
-  icr |= 0xf0;
+  icr &= 0x70;
   outb(icr, EWRK3_ICR);                           /* Disable all the IRQs */
 
   if (nicsr == CSR_TXD|CSR_RXD) {
@@ -624,7 +625,7 @@ ewrk3_open(struct device *dev)
   if (!lp->hard_strapped) {
     irq2dev_map[dev->irq] = dev;                   /* For latched interrupts */
 
-    if (request_irq(dev->irq, (void *)ewrk3_interrupt, 0, "ewrk3")) {
+    if (request_irq(dev->irq, (void *)ewrk3_interrupt, 0, "ewrk3", NULL)) {
       printk("ewrk3_open(): Requested IRQ%d is busy\n",dev->irq);
       status = -EAGAIN;
     } else {
@@ -812,7 +813,7 @@ ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev)
 	    for (i=0; i<skb->len; i++) {
 	      outb(*p++, EWRK3_DATA);
 	    }
-	    outb(page, EWRK3_TQ);                     /* Start sending pkt */
+	    outb(page, EWRK3_TQ);                      /* Start sending pkt */
 	  } else {
 	    writeb((char)(TCR_QMODE|TCR_PAD|TCR_IFC), (char *)buf);/* ctrl byte*/
 	    buf+=1;
@@ -821,20 +822,20 @@ ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev)
 	    if (lp->txc) {
 	      writeb((char)(((skb->len >> 8) & 0xff) | XCT), (char *)buf);
 	      buf+=1;
-	      writeb(0x04, (char *)buf);                 /* index byte */
+	      writeb(0x04, (char *)buf);               /* index byte */
 	      buf+=1;
-	      writeb(0x00, (char *)(buf + skb->len));    /* Write the XCT flag */
+	      writeb(0x00, (char *)(buf + skb->len));  /* Write the XCT flag */
 	      memcpy_toio(buf, skb->data, PRELOAD);/* Write PRELOAD bytes*/
-	      outb(page, EWRK3_TQ);                   /* Start sending pkt */
+	      outb(page, EWRK3_TQ);                    /* Start sending pkt */
 	      memcpy_toio(buf+PRELOAD, skb->data+PRELOAD, skb->len-PRELOAD);
-	      writeb(0xff, (char *)(buf + skb->len));    /* Write the XCT flag */
+	      writeb(0xff, (char *)(buf + skb->len));  /* Write the XCT flag */
 	    } else {
 	      writeb((char)((skb->len >> 8) & 0xff), (char *)buf);
 	      buf+=1;
-	      writeb(0x04, (char *)buf);                 /* index byte */
+	      writeb(0x04, (char *)buf);               /* index byte */
 	      buf+=1;
 	      memcpy_toio((char *)buf, skb->data, skb->len);/* Write data bytes */
-	      outb(page, EWRK3_TQ);                   /* Start sending pkt */
+	      outb(page, EWRK3_TQ);                    /* Start sending pkt */
 	    }
 	  }
 
@@ -869,7 +870,7 @@ ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev)
 ** The EWRK3 interrupt handler. 
 */
 static void
-ewrk3_interrupt(int irq, struct pt_regs * regs)
+ewrk3_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
     struct device *dev = (struct device *)(irq2dev_map[irq]);
     struct ewrk3_private *lp;
@@ -1144,7 +1145,7 @@ ewrk3_close(struct device *dev)
   while (inb(EWRK3_RQ));
 
   if (!lp->hard_strapped) {
-    free_irq(dev->irq);
+    free_irq(dev->irq, NULL);
     
     irq2dev_map[dev->irq] = 0;
   }
@@ -1910,8 +1911,6 @@ init_module(void)
 void
 cleanup_module(void)
 {
-  release_region(thisEthwrk.base_addr, EWRK3_TOTAL_SIZE);
-
   if (thisEthwrk.priv) {
     kfree(thisEthwrk.priv);
     thisEthwrk.priv = NULL;
@@ -1919,6 +1918,7 @@ cleanup_module(void)
   thisEthwrk.irq = 0;
 
   unregister_netdev(&thisEthwrk);
+  release_region(thisEthwrk.base_addr, EWRK3_TOTAL_SIZE);
 }
 #endif /* MODULE */
 

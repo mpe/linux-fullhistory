@@ -616,7 +616,7 @@ static void NCR5380_all_init (void) {
 
 
 static int probe_irq;
-static void probe_intr (int irq, struct pt_regs * regs) {
+static void probe_intr (int irq, void *dev_id, struct pt_regs * regs) {
     probe_irq = irq;
 };
 
@@ -629,7 +629,7 @@ static int NCR5380_probe_irq (struct Scsi_Host *instance, int possible) {
     NCR5380_setup(instance);
 
     for (trying_irqs = i = 0, mask = 1; i < 16; ++i, mask <<= 1) 
-	if ((mask & possible) &&  (request_irq(i, &probe_intr, SA_INTERRUPT, "NCR-probe") 
+	if ((mask & possible) &&  (request_irq(i, &probe_intr, SA_INTERRUPT, "NCR-probe", NULL) 
 	    == 0)) 
 	    trying_irqs |= mask;
 
@@ -660,7 +660,7 @@ static int NCR5380_probe_irq (struct Scsi_Host *instance, int possible) {
 
     for (i = 0, mask = 1; i < 16; ++i, mask <<= 1)
 	if (trying_irqs & mask) 
-	    free_irq(i);
+	    free_irq(i, NULL);
 
     return probe_irq;
 }
@@ -1123,7 +1123,7 @@ static void NCR5380_main (void) {
  *
  */
 
-static void NCR5380_intr (int irq, struct pt_regs * regs) {
+static void NCR5380_intr (int irq, void *dev_id, struct pt_regs * regs) {
     NCR5380_local_declare(); 
     struct Scsi_Host *instance;
     int done;

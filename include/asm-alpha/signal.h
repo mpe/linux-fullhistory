@@ -53,6 +53,7 @@ typedef unsigned long sigset_t;		/* at least 32 bits */
  * the changes in signal handling. LBT 010493.
  * SA_INTERRUPT is a no-op, but left due to historical reasons. Use the
  * SA_RESTART flag to get restarting signals (which were the default long ago)
+ * SA_SHIRQ flag is for shared interrupt support on PCI and EISA.
  */
 #define SA_NOCLDSTOP	0x00000004
 
@@ -61,6 +62,7 @@ typedef unsigned long sigset_t;		/* at least 32 bits */
 #define SA_INTERRUPT	0x20000000
 #define SA_NOMASK	0x00000008
 #define SA_ONESHOT	0x00000010
+#define SA_SHIRQ	0x00000020
 
 #ifdef __KERNEL__
 /*

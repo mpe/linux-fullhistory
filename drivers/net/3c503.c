@@ -26,6 +26,7 @@
 
     Paul Gortmaker	: add support for the 2nd 8kB of RAM on 16 bit cards.
     Paul Gortmaker	: multiple card support for module users.
+    rjohnson@analogic.com : Fix up PIO interface for efficient operation.
 
 */
 
@@ -47,7 +48,7 @@ static const char *version =
 
 #include "8390.h"
 #include "3c503.h"
-
+#define WRD_COUNT 4 
 
 int el2_probe(struct device *dev);
 int el2_pio_probe(struct device *dev);
@@ -193,7 +194,6 @@ el2_probe1(struct device *dev, int ioaddr)
 	printk(version);
 
     dev->base_addr = ioaddr;
-
     /* Allocate dev->priv and fill in 8390 specific dev fields. */
     if (ethdev_init(dev)) {
 	printk ("3c503: unable to allocate memory for dev->priv.\n");
@@ -251,7 +251,7 @@ el2_probe1(struct device *dev, int ioaddr)
 		writel(test_val, mem_base + i);
 		if (readl(mem_base) != 0xba5eba5e
 		    || readl(mem_base + i) != test_val) {
-		    printk("3c503.c: memory failure or memory address conflict.\n");
+		    printk("3c503: memory failure or memory address conflict.\n");
 		    dev->mem_start = 0;
 		    ei_status.name = "3c503-PIO";
 		    break;
@@ -319,9 +319,12 @@ el2_probe1(struct device *dev, int ioaddr)
 		dev->mem_start, dev->mem_end-1);
 
     else
+    {
+	ei_status.tx_start_page = EL2_MB1_START_PG;
+	ei_status.rx_start_page = EL2_MB1_START_PG + TX_PAGES;
 	printk("\n%s: %s, %dkB RAM, using programmed I/O (REJUMPER for SHARED MEMORY).\n",
 	       dev->name, ei_status.name, (wordlength+1)<<3);
-
+    }
     return 0;
 }
 
@@ -335,13 +338,13 @@ el2_open(struct device *dev)
 
 	outb(EGACFR_NORM, E33G_GACFR);	/* Enable RAM and interrupts. */
 	do {
-	    if (request_irq (*irqp, NULL, 0, "bogus") != -EBUSY) {
+	    if (request_irq (*irqp, NULL, 0, "bogus", NULL) != -EBUSY) {
 		/* Twinkle the interrupt, and check if it's seen. */
 		autoirq_setup(0);
 		outb_p(0x04 << ((*irqp == 9) ? 2 : *irqp), E33G_IDCFR);
 		outb_p(0x00, E33G_IDCFR);
 		if (*irqp == autoirq_report(0)	 /* It's a good IRQ line! */
-		    && request_irq (dev->irq = *irqp, &ei_interrupt, 0, ei_status.name) == 0)
+		    && request_irq (dev->irq = *irqp, &ei_interrupt, 0, ei_status.name, NULL) == 0)
 		    break;
 	    }
 	} while (*++irqp);
@@ -350,7 +353,7 @@ el2_open(struct device *dev)
 	    return -EAGAIN;
 	}
     } else {
-	if (request_irq(dev->irq, &ei_interrupt, 0, ei_status.name)) {
+	if (request_irq(dev->irq, &ei_interrupt, 0, ei_status.name, NULL)) {
 	    return -EAGAIN;
 	}
     }
@@ -364,7 +367,7 @@ el2_open(struct device *dev)
 static int
 el2_close(struct device *dev)
 {
-    free_irq(dev->irq);
+    free_irq(dev->irq, NULL);
     dev->irq = ei_status.saved_irq;
     irq2dev_map[dev->irq] = NULL;
     outb(EGACFR_IRQOFF, E33G_GACFR);	/* disable interrupts. */
@@ -416,20 +419,23 @@ el2_init_card(struct device *dev)
 
     /* Set the interrupt line. */
     outb_p((0x04 << (dev->irq == 9 ? 2 : dev->irq)), E33G_IDCFR);
-    outb_p(8, E33G_DRQCNT);		/* Set burst size to 8 */
+    outb_p((WRD_COUNT << 1), E33G_DRQCNT);	/* Set burst size to 8 */
     outb_p(0x20, E33G_DMAAH);	/* Put a valid addr in the GA DMA */
     outb_p(0x00, E33G_DMAAL);
     return;			/* We always succeed */
 }
 
-/* Either use the shared memory (if enabled on the board) or put the packet
-   out through the ASIC FIFO.  The latter is probably much slower. */
+/*
+ * Either use the shared memory (if enabled on the board) or put the packet
+ * out through the ASIC FIFO.
+ */
 static void
 el2_block_output(struct device *dev, int count,
 		 const unsigned char *buf, const start_page)
 {
-    int i;				/* Buffer index */
-    int boguscount = 0;		/* timeout counter */
+    unsigned short int *wrd;
+    int boguscount;		/* timeout counter */
+    unsigned shor tmp_rev;	/* temporary for reversed values */
 
     if (ei_status.word16)      /* Tx packets go into bank 0 on EL2/16 card */
 	outb(EGACFR_RSEL|EGACFR_TCM, E33G_GACFR);
@@ -443,29 +449,55 @@ el2_block_output(struct device *dev, int count,
 	outb(EGACFR_NORM, E33G_GACFR);	/* Back to bank1 in case on bank0 */
 	return;
     }
-    /* No shared memory, put the packet out the slow way. */
-    /* Set up then start the internal memory transfer to Tx Start Page */
-    outb(0x00, E33G_DMAAL);
-    outb_p(start_page, E33G_DMAAH);
+
+/*
+ *  No shared memory, put the packet out the other way.
+ *  Set up then start the internal memory transfer to Tx Start Page
+ */
+
+    tmp_rev = htons((unsigned short)start_page);
+    outb(tmp_rev&0xFF, E33G_DMAAH);
+    outb(tmp_rev>>8, E33G_DMAAL);
+
     outb_p((ei_status.interface_num ? ECNTRL_AUI : ECNTRL_THIN ) | ECNTRL_OUTPUT
 	   | ECNTRL_START, E33G_CNTRL);
 
-    /* This is the byte copy loop: it should probably be tuned for
-       speed once everything is working.  I think it is possible
-       to output 8 bytes between each check of the status bit. */
-    for(i = 0; i < count; i++) {
-	if (i % 8 == 0)
-	    while ((inb(E33G_STATUS) & ESTAT_DPRDY) == 0)
-		if (++boguscount > (i<<3) + 32) {
-		    printk("%s: FIFO blocked in el2_block_output (at %d of %d, bc=%d).\n",
-			   dev->name, i, count, boguscount);
-		    outb(EGACFR_NORM, E33G_GACFR);	/* To MB1 for EL2/16 */
-		    return;
-		}
-	outb(buf[i], E33G_FIFOH);
+/*
+ *  Here I am going to write data to the FIFO as quickly as possible.
+ *  Note that E33G_FIFOH is defined incorrectly. It is really
+ *  E33G_FIFOL, the lowest port address for both the byte and
+ *  word write. Variable 'count' is NOT checked. Caller must supply a
+ *  valid count. Note that I may write a harmless extra byte to the
+ *  8390 if the byte-count was not even.
+ */
+    wrd = (unsigned short int *) buf;
+    count  = (count + 1) >> 1;
+    for(;;) 
+    {
+        boguscount = 0x1000;
+        while ((inb(E33G_STATUS) & ESTAT_DPRDY) == 0)
+        {
+            if(!boguscount--)
+            {
+                printk("%s: FIFO blocked in el2_block_output.\n", dev->name);
+                el2_reset_8390(dev);
+                goto blocked;
+            }
+        }
+        if(count > WRD_COUNT)
+        {
+            outsw(E33G_FIFOH, wrd, WRD_COUNT);
+            wrd   += WRD_COUNT;
+            count -= WRD_COUNT;
+        }
+        else
+        {
+            outsw(E33G_FIFOH, wrd, count);
+            break;
+        }
     }
+    blocked:;
     outb_p(ei_status.interface_num==0 ? ECNTRL_THIN : ECNTRL_AUI, E33G_CNTRL);
-    outb(EGACFR_NORM, E33G_GACFR);	/* Back to bank1 in case on bank0 */
     return;
 }
 
@@ -473,48 +505,50 @@ el2_block_output(struct device *dev, int count,
 static void
 el2_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
-    unsigned int i;
+    int boguscount;
     unsigned long hdr_start = dev->mem_start + ((ring_page - EL2_MB1_START_PG)<<8);
-    unsigned long fifo_watchdog;
+    unsigned short tmp_rev;
 
     if (dev->mem_start) {       /* Use the shared memory. */
-#ifdef notdef
-	/* Officially this is what we are doing, but the readl() is faster */
 	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
-#else
-	((unsigned int*)hdr)[0] = readl(hdr_start);
-#endif
 	return;
     }
 
-    /* No shared memory, use programmed I/O. Ugh. */
-    outb(0, E33G_DMAAL);
-    outb_p(ring_page & 0xff, E33G_DMAAH);
+/*
+ *  No shared memory, use programmed I/O.
+ */
+
+    tmp_rev = htons((unsigned short)ring_page);
+    outb(tmp_rev&0xFF, E33G_DMAAH);
+    outb(tmp_rev>>8, E33G_DMAAL);
+
     outb_p((ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI) | ECNTRL_INPUT
 	   | ECNTRL_START, E33G_CNTRL);
-
-    /* Header is < 8 bytes, so only check the FIFO at the beginning. */
-    fifo_watchdog = jiffies;
-    while ((inb(E33G_STATUS) & ESTAT_DPRDY) == 0) {
-	if (jiffies - fifo_watchdog > 2*HZ/100) {
-		printk("%s: FIFO blocked in el2_get_8390_hdr.\n", dev->name);
-		break;
-	}
+    boguscount = 0x1000;
+    while ((inb(E33G_STATUS) & ESTAT_DPRDY) == 0)
+    {
+        if(!boguscount--)
+        {
+            printk("%s: FIFO blocked in el2_get_8390_hdr.\n", dev->name);
+            memset(hdr, 0x00, sizeof(struct e8390_pkt_hdr));
+            el2_reset_8390(dev);
+            goto blocked;
+        }
     }
-
-    for(i = 0; i < sizeof(struct e8390_pkt_hdr); i++)
-	((char *)(hdr))[i] = inb_p(E33G_FIFOH);
-
+    insw(E33G_FIFOH, hdr, (sizeof(struct e8390_pkt_hdr))>> 1);
+    blocked:;
     outb_p(ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI, E33G_CNTRL);
 }
 
-/* Returns the new ring pointer. */
+
 static void
 el2_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
     int boguscount = 0;
+    unsigned short int *buf;
+    unsigned short tmp_rev;
+
     int end_of_ring = dev->rmem_end;
-    unsigned int i;
 
     /* Maybe enable shared memory just be to be safe... nahh.*/
     if (dev->mem_start) {	/* Use the shared memory. */
@@ -531,32 +565,61 @@ el2_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_off
 	}
 	return;
     }
-    /* No shared memory, use programmed I/O. */
-    outb(ring_offset & 0xff, E33G_DMAAL);
-    outb_p((ring_offset >> 8) & 0xff, E33G_DMAAH);
+
+/*
+ *  No shared memory, use programmed I/O.
+ */
+    tmp_rev = htons((unsigned short) ring_offset);
+    outb(tmp_rev&0xFF, E33G_DMAAL);
+    outb(tmp_rev>>8, E33G_DMAAH);
+
     outb_p((ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI) | ECNTRL_INPUT
 	   | ECNTRL_START, E33G_CNTRL);
 
-    /* This is the byte copy loop: it should probably be tuned for
-       speed once everything is working. */
-    for(i = 0; i < count; i++) {
-	if (i % 8 == 0)
-	    while ((inb(E33G_STATUS) & ESTAT_DPRDY) == 0)
-		if (++boguscount > (i<<3) + 32) {
-		    printk("%s: FIFO blocked in el2_block_input() (at %d of %d, bc=%d).\n",
-			   dev->name, i, count, boguscount);
-		    boguscount = 0;
-		    break;
-		}
-	(skb->data)[i] = inb_p(E33G_FIFOH);
-    }
-    outb_p(ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI, E33G_CNTRL);
-}
+/*
+ *  Here I also try to get data as fast as possible. I am betting that I
+ *  can read one extra byte without clobering anything in the kernel because
+ *  this would only occur on an odd byte-count and allocation of skb->data
+ *  is word-aligned. Variable 'count' is NOT checked. Caller must check
+ *  for a valid count. 
+ *  [This is currently quite safe.... but if one day the 3c503 explodes
+ *   you know where to come looking ;)]
+ */
 
-
+    buf =  (unsigned short int *) skb->data;
+    count =  (count + 1) >> 1;
+    for(;;) 
+    {
+        boguscount = 0x1000;
+        while ((inb(E33G_STATUS) & ESTAT_DPRDY) == 0)
+        {
+            if(!boguscount--)
+            {
+                printk("%s: FIFO blocked in el2_block_input.\n", dev->name);
+                el2_reset_8390(dev);
+                goto blocked;
+            }
+        }
+        if(count > WRD_COUNT)
+        { 
+            insw(E33G_FIFOH, buf, WRD_COUNT);
+            buf   += WRD_COUNT;
+            count -= WRD_COUNT;
+        }
+        else
+        {
+            insw(E33G_FIFOH, buf, count);
+            break;
+        }
+    }
+    blocked:;
+    outb_p(ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI, E33G_CNTRL);
+    return;
+}
 #ifdef MODULE
 #define MAX_EL2_CARDS	4	/* Max number of EL2 cards per module */
-#define NAMELEN		8	/* # of chars for storing dev->name */
+#define NAMELEN 	8	/* #of chars for storing dev->name */
+
 static char namelist[NAMELEN * MAX_EL2_CARDS] = { 0, };
 static struct device dev_el2[MAX_EL2_CARDS] = {
 	{
@@ -596,7 +659,6 @@ init_module(void)
 		}
 		found++;
 	}
-
 	return 0;
 }
 

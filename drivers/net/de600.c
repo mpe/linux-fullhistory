@@ -247,7 +247,7 @@ static struct netstats *get_stats(struct device *dev);
 static int	de600_start_xmit(struct sk_buff *skb, struct device *dev);
 
 /* Dispatch from interrupts. */
-static void	de600_interrupt(int irq, struct pt_regs *regs);
+static void	de600_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int	de600_tx_intr(struct device *dev, int irq_status);
 static void	de600_rx_intr(struct device *dev);
 
@@ -336,7 +336,7 @@ de600_read_byte(unsigned char type, struct device *dev) { /* dev used by macros 
 static int
 de600_open(struct device *dev)
 {
-	if (request_irq(DE600_IRQ, de600_interrupt, 0, "de600")) {
+	if (request_irq(DE600_IRQ, de600_interrupt, 0, "de600", NULL)) {
 		printk ("%s: unable to get IRQ %d\n", dev->name, DE600_IRQ);
 		return 1;
 	}
@@ -365,7 +365,7 @@ de600_close(struct device *dev)
 	select_prn();
 
 	if (dev->start) {
-		free_irq(DE600_IRQ);
+		free_irq(DE600_IRQ, NULL);
 		irq2dev_map[DE600_IRQ] = NULL;
 		dev->start = 0;
 		MOD_DEC_USE_COUNT;
@@ -488,7 +488,7 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
  * Handle the network interface interrupts.
  */
 static void
-de600_interrupt(int irq, struct pt_regs * regs)
+de600_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct device	*dev = irq2dev_map[irq];
 	byte		irq_status;

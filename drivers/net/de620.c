@@ -210,7 +210,7 @@ static void	de620_set_multicast_list(struct device *);
 static int	de620_start_xmit(struct sk_buff *, struct device *);
 
 /* Dispatch from interrupts. */
-static void	de620_interrupt(int, struct pt_regs *);
+static void	de620_interrupt(int, void *, struct pt_regs *);
 static int	de620_rx_intr(struct device *);
 
 /* Initialization */
@@ -432,7 +432,7 @@ de620_get_register(struct device *dev, byte reg)
 static int
 de620_open(struct device *dev)
 {
-	if (request_irq(dev->irq, de620_interrupt, 0, "de620")) {
+	if (request_irq(dev->irq, de620_interrupt, 0, "de620", NULL)) {
 		printk ("%s: unable to get IRQ %d\n", dev->name, dev->irq);
 		return 1;
 	}
@@ -457,7 +457,7 @@ de620_close(struct device *dev)
 	/* disable recv */
 	de620_set_register(dev, W_TCR, RXOFF);
 
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 	irq2dev_map[dev->irq] = NULL;
 
 	dev->start = 0;
@@ -598,7 +598,7 @@ de620_start_xmit(struct sk_buff *skb, struct device *dev)
  *
  */
 static void
-de620_interrupt(int irq_in, struct pt_regs *regs)
+de620_interrupt(int irq_in, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = irq2dev_map[irq_in];
 	byte irq_status;

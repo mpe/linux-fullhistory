@@ -280,7 +280,7 @@ extern int el16_probe(struct device *dev);	/* Called from Space.c */
 static int	el16_probe1(struct device *dev, int ioaddr);
 static int	el16_open(struct device *dev);
 static int	el16_send_packet(struct sk_buff *skb, struct device *dev);
-static void	el16_interrupt(int irq, struct pt_regs *regs);
+static void	el16_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void el16_rx(struct device *dev);
 static int	el16_close(struct device *dev);
 static struct enet_statistics *el16_get_stats(struct device *dev);
@@ -361,7 +361,7 @@ int el16_probe1(struct device *dev, int ioaddr)
 
 	irq = inb(ioaddr + IRQ_CONFIG) & 0x0f;
 
-	irqval = request_irq(irq, &el16_interrupt, 0, "3c507");
+	irqval = request_irq(irq, &el16_interrupt, 0, "3c507", NULL);
 	if (irqval) {
 		printk ("unable to get IRQ %d (irqval=%d).\n", irq, irqval);
 		return EAGAIN;
@@ -513,7 +513,7 @@ el16_send_packet(struct sk_buff *skb, struct device *dev)
 /*	The typical workload of the driver:
 	Handle the network interface interrupts. */
 static void
-el16_interrupt(int irq, struct pt_regs *regs)
+el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct net_local *lp;
@@ -907,7 +907,7 @@ cleanup_module(void)
 	dev_3c507.priv = NULL;
 
 	/* If we don't do this, we can't re-insmod it later. */
-	free_irq(dev_3c507.irq);
+	free_irq(dev_3c507.irq, NULL);
 	release_region(dev_3c507.base_addr, EL16_IO_EXTENT);
 }
 #endif /* MODULE */

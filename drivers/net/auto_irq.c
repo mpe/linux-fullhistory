@@ -50,7 +50,7 @@ static volatile unsigned long irq_bitmap;	/* The irqs we actually found. */
 static unsigned long irq_handled;		/* The irq lines we have a handler on. */
 static volatile int irq_number;			/* The latest irq number we actually found. */
 
-static void autoirq_probe(int irq, struct pt_regs * regs)
+static void autoirq_probe(int irq, void *dev_id, struct pt_regs * regs)
 {
 	irq_number = irq;
 	set_bit(irq, (void *)&irq_bitmap);	/* irq_bitmap |= 1 << irq; */
@@ -67,7 +67,7 @@ int autoirq_setup(int waittime)
 	irq_handled = 0;
 	for (i = 0; i < 16; i++) {
 		if (test_bit(i, &irqs_busy) == 0
-			&& request_irq(i, autoirq_probe, SA_INTERRUPT, "irq probe") == 0)
+			&& request_irq(i, autoirq_probe, SA_INTERRUPT, "irq probe", NULL) == 0)
 			set_bit(i, (void *)&irq_handled);	/* irq_handled |= 1 << i;*/
 	}
 	/* Update our USED lists. */
@@ -85,7 +85,7 @@ int autoirq_setup(int waittime)
 #ifdef notdef
 			printk(" Spurious interrupt on IRQ %d\n", i);
 #endif
-			free_irq(i);
+			free_irq(i, NULL);
 		}
 	}
 	return irq_handled;
@@ -106,7 +106,7 @@ int autoirq_report(int waittime)
 	/* Retract the irq handlers that we installed. */
 	for (i = 0; i < 16; i++) {
 		if (test_bit(i, (void *)&irq_handled))
-			free_irq(i);
+			free_irq(i, NULL);
 	}
 	return irq_number;
 }

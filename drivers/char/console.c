@@ -2001,7 +2001,7 @@ unsigned long con_init(unsigned long kmem_start)
 	console_driver.num = MAX_NR_CONSOLES;
 	console_driver.type = TTY_DRIVER_TYPE_CONSOLE;
 	console_driver.init_termios = tty_std_termios;
-	console_driver.flags = TTY_DRIVER_REAL_RAW;
+	console_driver.flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_RESET_TERMIOS;
 	console_driver.refcount = &console_refcount;
 	console_driver.table = console_table;
 	console_driver.termios = console_termios;

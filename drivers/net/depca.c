@@ -381,7 +381,7 @@ struct depca_private {
 */
 static int    depca_open(struct device *dev);
 static int    depca_start_xmit(struct sk_buff *skb, struct device *dev);
-static void   depca_interrupt(int irq, struct pt_regs * regs);
+static void   depca_interrupt(int irq, void *dev_id, struct pt_regs * regs);
 static int    depca_close(struct device *dev);
 static int    depca_ioctl(struct device *dev, struct ifreq *rq, int cmd);
 static struct enet_statistics *depca_get_stats(struct device *dev);
@@ -704,7 +704,7 @@ depca_open(struct device *dev)
 
   depca_dbg_open(dev);
 
-  if (request_irq(dev->irq, &depca_interrupt, 0, lp->adapter_name)) {
+  if (request_irq(dev->irq, &depca_interrupt, 0, lp->adapter_name, NULL)) {
     printk("depca_open(): Requested IRQ%d is busy\n",dev->irq);
     status = -EAGAIN;
   } else {
@@ -836,7 +836,7 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
 ** The DEPCA interrupt handler. 
 */
 static void
-depca_interrupt(int irq, struct pt_regs * regs)
+depca_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
   struct device *dev = (struct device *)(irq2dev_map[irq]);
   struct depca_private *lp;
@@ -1059,7 +1059,7 @@ depca_close(struct device *dev)
   /*
   ** Free the associated irq
   */
-  free_irq(dev->irq);
+  free_irq(dev->irq, NULL);
   irq2dev_map[dev->irq] = NULL;
 
   MOD_DEC_USE_COUNT;

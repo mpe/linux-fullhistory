@@ -5,7 +5,7 @@
  */
 
 /*
- *  Principal Author/Maintainer:  mlord@bnr.ca (Mark Lord)
+ *  Principal Author/Maintainer:  mlord@pobox.com (Mark Lord)
  *
  *  This file provides support for disabling the buggy read-ahead
  *  mode of the RZ1000 IDE chipset, commonly used on Intel motherboards.

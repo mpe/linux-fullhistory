@@ -278,7 +278,7 @@ DEB(printk("FIer:%d %02x %08x\n", in2000_datalen,fic,(unsigned int )in2000_datap
 	ficmsk = 0;}
 }
 
-static void in2000_intr_handle(int irq, struct pt_regs *regs)
+static void in2000_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
 {
     int result=0;
     unsigned int count,auxstatus,scsistatus,cmdphase,scsibyte;
@@ -632,7 +632,7 @@ int in2000_detect(Scsi_Host_Template * tpnt)
 		"\n",base, irq_level);
 
     outb(2,ININTR);	/* Shut off the FIFO first, so it won't ask for data.*/
-    if (request_irq(irq_level,in2000_intr_handle, 0, "in2000"))
+    if (request_irq(irq_level,in2000_intr_handle, 0, "in2000", NULL))
     {
 	printk("in2000_detect: Unable to allocate IRQ.\n");
 	return 0;

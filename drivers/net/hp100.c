@@ -196,7 +196,7 @@ static struct enet_statistics *hp100_get_stats( struct device *dev );
 static void hp100_update_stats( struct device *dev );
 static void hp100_clear_stats( int ioaddr );
 static void hp100_set_multicast_list( struct device *dev);
-static void hp100_interrupt( int irq, struct pt_regs *regs );
+static void hp100_interrupt( int irq, void *dev_id, struct pt_regs *regs );
 
 static void hp100_start_interface( struct device *dev );
 static void hp100_stop_interface( struct device *dev );
@@ -488,7 +488,7 @@ static int hp100_open( struct device *dev )
   int ioaddr = dev -> base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev -> priv;
 
-  if ( request_irq( dev -> irq, hp100_interrupt, SA_INTERRUPT, lp -> id -> name ) )
+  if ( request_irq( dev -> irq, hp100_interrupt, SA_INTERRUPT, lp -> id -> name, NULL ) )
     {
       printk( "%s: unable to get IRQ %d\n", dev -> name, dev -> irq );
       return -EAGAIN;
@@ -561,7 +561,7 @@ static int hp100_close( struct device *dev )
   dev -> tbusy = 1;
   dev -> start = 0;
 
-  free_irq( dev -> irq );
+  free_irq( dev -> irq, NULL );
   irq2dev_map[ dev -> irq ] = NULL;
   MOD_DEC_USE_COUNT;
   return 0;
@@ -890,7 +890,7 @@ static void hp100_set_multicast_list( struct device *dev)
  *  hardware interrupt handling
  */
 
-static void hp100_interrupt( int irq, struct pt_regs *regs )
+static void hp100_interrupt( int irq, void *dev_id, struct pt_regs *regs )
 {
   struct device *dev = (struct device *)irq2dev_map[ irq ];
   struct hp100_private *lp;

@@ -16,6 +16,7 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
+#include <linux/malloc.h>
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>
@@ -143,62 +144,79 @@ enable_irq(unsigned int irq_nr)
 /*
  * Initial irq handlers.
  */
-struct irqaction {
-	void (*handler)(int, struct pt_regs *);
-	unsigned long flags;
-	unsigned long mask;
-	const char *name;
-};
+static struct irqaction timer_irq = { NULL, 0, 0, NULL, NULL, NULL};
+static struct irqaction cascade_irq = { NULL, 0, 0, NULL, NULL, NULL};
+static struct irqaction math_irq = { NULL, 0, 0, NULL, NULL, NULL};
 
-static struct irqaction irq_action[16] = {
-  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL }
+static struct irqaction *irq_action[16] = {
+	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL,
+	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL
 };
-
 
 int
 get_irq_list(char *buf)
 {
 	int i, len = 0;
-	struct irqaction * action = irq_action;
+	struct irqaction * action;
 
-	for (i = 0 ; i < 16 ; i++, action++) {
-		if (!action->handler)
-			continue;
-		len += sprintf(buf+len, "%2d: %8d %c %s\n",
-			       i, kstat.interrupts[i],
-			       (action->flags & SA_INTERRUPT) ? '+' : ' ',
-			       action->name);
+	for (i = 0 ; i < 16 ; i++) {
+	        action = *(i + irq_action);
+		if (!action) 
+		        continue;
+		len += sprintf(buf+len, "%2d: %8d %c %s",
+			i, kstat.interrupts[i],
+			(action->flags & SA_INTERRUPT) ? '+' : ' ',
+			action->name);
+		for (action=action->next; action; action = action->next) {
+			len += sprintf(buf+len, ",%s %s",
+				(action->flags & SA_INTERRUPT) ? " +" : "",
+				action->name);
+		}
+		len += sprintf(buf+len, "\n");
 	}
 	return len;
 }
 
 void
-free_irq(unsigned int irq)
+free_irq(unsigned int irq, void *dev_id)
 {
-        struct irqaction * action = irq + irq_action;
+	struct irqaction * action = *(irq + irq_action);
+	struct irqaction * tmp = NULL;
         unsigned long flags;
 
         if (irq > 14) {  /* 14 irq levels on the sparc */
                 printk("Trying to free bogus IRQ %d\n", irq);
                 return;
         }
-        if (!action->handler) {
-                printk("Trying to free free IRQ%d\n", irq);
-                return;
-        }
+	if (!action->handler) {
+		printk("Trying to free free IRQ%d\n",irq);
+		return;
+	}
+	if (dev_id) {
+	    for (; action; action = action->next) {
+	        if (action->dev_id == dev_id) break;
+		tmp = action;
+	    }
+	    if (!action) {
+		printk("Trying to free free shared IRQ%d\n",irq);
+		return;
+	    }
+	} else if (action->flags & SA_SHIRQ) {
+	    printk("Trying to free shared IRQ%d with NULL device ID\n", irq);
+	    return;
+	}
         save_flags(flags); cli();
-        disable_irq(irq);
-        action->handler = NULL;
-        action->flags = 0;
-        action->mask = 0;
-        action->name = NULL;
+	if (action && tmp) {
+	    tmp->next = action->next;
+	} else {
+	    *(irq + irq_action) = action->next;
+	}
+	kfree_s(action, sizeof(struct irqaction));
+
+	if (!(*(irq + irq_action))) {
+	    disable_irq(irq);
+	}
+
         restore_flags(flags);
 }
 
@@ -206,15 +224,16 @@ void
 unexpected_irq(int irq, struct pt_regs * regs)
 {
         int i;
+	struct irqaction * action = *(irq + irq_action);
 
         printk("IO device interrupt, irq = %d\n", irq);
         printk("PC = %08lx NPC = %08lx FP=%08lx\n", regs->pc, 
 		    regs->npc, regs->u_regs[14]);
         printk("Expecting: ");
         for (i = 0; i < 16; i++)
-                if (irq_action[i].handler)
-                        prom_printf("[%s:%d:0x%x] ", irq_action[i].name, (int) i,
-			       (unsigned int) irq_action[i].handler);
+                if (action->handler)
+                        prom_printf("[%s:%d:0x%x] ", action->name, (int) i,
+			       (unsigned int) action->handler);
         printk("AIEEE\n");
 	panic("bogus interrupt received");
 }
@@ -222,13 +241,16 @@ unexpected_irq(int irq, struct pt_regs * regs)
 void
 handler_irq(int irq, struct pt_regs * regs)
 {
-	struct irqaction * action = irq_action + irq;
+	struct irqaction * action = *(irq + irq_action);
 
 	kstat.interrupts[irq]++;
-	if (!action->handler)
-		unexpected_irq(irq, regs);
-	else
-		action->handler(irq, regs);
+	while (action) {
+	    if (!action->handler)
+	        unexpected_irq(irq, action->dev_id, regs);
+	    else
+		action->handler(irq, action->dev_id, regs);
+	    action = action->next;
+	}
 }
 
 /*
@@ -241,10 +263,13 @@ handler_irq(int irq, struct pt_regs * regs)
 asmlinkage void
 do_IRQ(int irq, struct pt_regs * regs)
 {
-	struct irqaction *action = irq + irq_action;
+	struct irqaction * action = *(irq + irq_action);
 
 	kstat.interrupts[irq]++;
-	action->handler(irq, regs);
+	while (action) {
+	    action->handler(irq, action->dev_id, regs);
+	    action = action->next;
+	}
 	return;
 }
 
@@ -263,20 +288,37 @@ do_fast_IRQ(int irq)
 
 int
 request_fast_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
-		 unsigned long irqflags, const char *devname)
+		 unsigned long irqflags, const char *devname, void *dev_id)
+)
 {
-	struct irqaction *action;
+	struct irqaction * action, *tmp = NULL;
 	unsigned long flags;
 
 	if(irq > 14)
 		return -EINVAL;
-	action = irq + irq_action;
-	if(action->handler)
+	if (!handler)
+	    return -EINVAL;
+	action = *(irq + irq_action);
+	if (action) {
+	    if ((action->flags & SA_SHIRQ) && (irqflags & SA_SHIRQ)) {
+		for (tmp = action; tmp->next; tmp = tmp->next);
+	    } else {
 		return -EBUSY;
-	if(!handler)
-		return -EINVAL;
+	    }
+	    if ((action->flags & SA_INTERRUPT) ^ (irqflags & SA_INTERRUPT)) {
+	      printk("Attempt to mix fast and slow interrupts on IRQ%d denied\n", irq);
+	      return -EBUSY;
+	    }   
+	}
 
 	save_flags(flags); cli();
+
+	action = (struct irqaction *)kmalloc(sizeof(struct irqaction), GFP_KERNEL);
+
+	if (!action) { 
+	    restore_flags(flags);
+	    return -ENOMEM;
+	}
 
 	/* Dork with trap table if we get this far. */
 	sparc_ttable[SP_TRAP_IRQ1+(irq-1)].inst_one =
@@ -290,6 +332,13 @@ request_fast_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 	action->flags = irqflags;
 	action->mask = 0;
 	action->name = devname;
+	action->dev_id = dev_id;
+
+	if (tmp) {
+	    tmp->next = action;
+	} else {
+	    *(irq + irq_action) = action;
+	}
 
 	restore_flags(flags);
 	return 0;
@@ -299,25 +348,48 @@ extern void probe_clock(void);
 		
 int
 request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
-	    unsigned long irqflags, const char * devname)
+	    unsigned long irqflags, const char * devname, void *dev_id)
 {
-	struct irqaction *action;
+	struct irqaction * action, *tmp = NULL;
 	unsigned long flags;
 
 	if(irq > 14)
 		return -EINVAL;
 
-	action = irq + irq_action;
-	if(action->handler)
+	if (!handler)
+	    return -EINVAL;
+	action = *(irq + irq_action);
+	if (action) {
+	    if ((action->flags & SA_SHIRQ) && (irqflags & SA_SHIRQ)) {
+		for (tmp = action; tmp->next; tmp = tmp->next);
+	    } else {
 		return -EBUSY;
-	if(!handler)
-		return -EINVAL;
-
+	    }
+	    if ((action->flags & SA_INTERRUPT) ^ (irqflags & SA_INTERRUPT)) {
+	      printk("Attempt to mix fast and slow interrupts on IRQ%d denied\n", irq);
+	      return -EBUSY;
+	    }   
+	}
 	save_flags(flags); cli();
+	action = (struct irqaction *)kmalloc(sizeof(struct irqaction), GFP_KERNEL);
+
+	if (!action) { 
+	    restore_flags(flags);
+	    return -ENOMEM;
+	}
+
 	action->handler = handler;
 	action->flags = irqflags;
 	action->mask = 0;
 	action->name = devname;
+	action->next = NULL;
+	action->dev_id = dev_id;
+
+	if (tmp) {
+	    tmp->next = action;
+	} else {
+	    *(irq + irq_action) = action;
+	}
 	enable_irq(irq);
 	if(irq == 10)
 		probe_clock();

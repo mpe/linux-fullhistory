@@ -93,7 +93,6 @@ static const char *version =
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
-#include <linux/ioport.h>
 #include <linux/errno.h>
 #include <linux/config.h>	/* for CONFIG_IP_MULTICAST */
 
@@ -120,7 +119,7 @@ int el1_probe(struct device *dev);
 static int  el1_probe1(struct device *dev, int ioaddr);
 static int  el_open(struct device *dev);
 static int  el_start_xmit(struct sk_buff *skb, struct device *dev);
-static void el_interrupt(int irq, struct pt_regs *regs);
+static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void el_receive(struct device *dev);
 static void el_reset(struct device *dev);
 static int  el1_close(struct device *dev);
@@ -361,7 +360,7 @@ static int el_open(struct device *dev)
 	if (el_debug > 2)
 		printk("%s: Doing el_open()...", dev->name);
 
-	if (request_irq(dev->irq, &el_interrupt, 0, "3c501")) 
+	if (request_irq(dev->irq, &el_interrupt, 0, "3c501", NULL)) 
 		return -EAGAIN;
 
 	irq2dev_map[dev->irq] = dev;
@@ -489,7 +488,7 @@ load_it_again_sam:
  *	Handle the ether interface interrupts. 
  */
 
-static void el_interrupt(int irq, struct pt_regs *regs)
+static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct net_local *lp;
@@ -765,7 +764,7 @@ static int el1_close(struct device *dev)
 	 *	Free and disable the IRQ. 
 	 */
 
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 	outb(AX_RESET, AX_CMD);		/* Reset the chip */
 	irq2dev_map[dev->irq] = 0;
 

@@ -339,7 +339,7 @@ static int               Write_SCSI_Data_port;
 static int               FIFO_Size = 0x2000; /* 8k FIFO for
 						pre-tmc18c30 chips */
 
-extern void              fdomain_16x0_intr( int irq, struct pt_regs * regs );
+extern void              fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs );
 
 static void *addresses[] = {
    (void *)0xc8000,
@@ -981,7 +981,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
       /* Register the IRQ with the kernel */
 
       retcode = request_irq( interrupt_level,
-			     fdomain_16x0_intr, SA_INTERRUPT, "fdomain" );
+			     fdomain_16x0_intr, SA_INTERRUPT, "fdomain", NULL);
 
       if (retcode < 0) {
 	 if (retcode == -EINVAL) {
@@ -1211,7 +1211,7 @@ void my_done( int error )
 #endif
 }
 
-void fdomain_16x0_intr( int irq, struct pt_regs * regs )
+void fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs )
 {
    int      status;
    int      done = 0;

@@ -113,8 +113,7 @@ print_buttons( WINDOW *dialog, int height, int width, int okval, int cancelval)
  */
 int
 dialog_checklist (const char *title, const char *prompt, int height, int width,
-	int list_height, int item_no, const char * const * items, int flag,
-	int separate_output)
+	int list_height, int item_no, const char * const * items, int flag)
 {
     int i, x, y, cur_x, cur_y, box_x, box_y;
     int key = 0, button = 0, choice = 0, scroll = 0, max_choice, *status;

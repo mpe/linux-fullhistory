@@ -55,7 +55,7 @@ S: Status
 	Odd Fixes:	It has a maintainer but they don't have time to do
 			much other than throw the odd patch in. See below..
 	Orphan:		No current maintainer [but maybe you could take the 
-			role as you write your new driver].
+			role as you write your new code].
 	Obsolete:	Ex code. Something tagged obsolete generally means
 			its been replaced by a better system and you should
 			be using that.
@@ -82,6 +82,12 @@ IPX NETWORK LAYER
 P:	Alan Cox [for the moment]
 M:	net-patches@lxorguk.ukuu.org.uk
 L:	linux-ipx@vger.rutgers.edu [will change]
+S:	Maintained
+
+ISDN SUBSYSTEM
+P:	Fritz Elfert
+M:	fritz@wuemaus.franken.de
+L:	isdn4linux@hub-wue.franken.de
 S:	Maintained
 
 NETROM NETWORK LAYER

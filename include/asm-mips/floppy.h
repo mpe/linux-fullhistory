@@ -33,8 +33,8 @@
 #define fd_cacheflush(addr, size)	feature->fd_cacheflush((void *)addr, size)
 #define fd_request_irq()        request_irq(FLOPPY_IRQ, floppy_interrupt, \
 					    SA_INTERRUPT|SA_SAMPLE_RANDOM, \
-				            "floppy")
-#define fd_free_irq()           free_irq(FLOPPY_IRQ);
+				            "floppy", NULL)
+#define fd_free_irq()           free_irq(FLOPPY_IRQ, NULL);
 
 #define MAX_BUFFER_SECTORS 24
 #define virtual_dma_init()                                              \

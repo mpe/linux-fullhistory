@@ -33,6 +33,7 @@ choice 'Alpha system type' \
 	 EB66		CONFIG_ALPHA_EB66		\
 	 EB66+		CONFIG_ALPHA_EB66P		\
 	 EB64+		CONFIG_ALPHA_EB64P		\
+	 EB164		CONFIG_ALPHA_EB164		\
 	 Jensen		CONFIG_ALPHA_JENSEN		\
 	 Noname		CONFIG_ALPHA_NONAME		\
 	 Platform2000	CONFIG_ALPHA_P2K" Cabriolet
@@ -48,6 +49,12 @@ then
 	bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_APECS y
+fi
+if [ "$CONFIG_ALPHA_EB164" = "y" ]
+then
+	define_bool CONFIG_PCI y
+	define_bool CONFIG_ALPHA_EV5 y
+	define_bool CONFIG_ALPHA_ALCOR y
 fi
 # This needs to be defined for all EV4 and EV45 CPUs:
 define_bool CONFIG_ALPHA_NEED_ROUNDING_EMULATION y

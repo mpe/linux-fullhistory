@@ -313,7 +313,7 @@ disable_interrupts(void)
 }
 
 static void
-cdu535_interrupt(int irq, struct pt_regs *regs)
+cdu535_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	disable_interrupts();
 	if (cdu535_irq_wait != NULL)
@@ -1566,7 +1566,7 @@ sony535_init(void)
 #endif
 			if (sony535_irq_used > 0) {
 			    if (request_irq(sony535_irq_used, cdu535_interrupt,
-								SA_INTERRUPT, CDU535_HANDLE)) {
+								SA_INTERRUPT, CDU535_HANDLE, NULL)) {
 					printk("Unable to grab IRQ%d for the " CDU535_MESSAGE_NAME
 							" driver; polling instead.\n", sony535_irq_used);
 					sony535_irq_used = 0;

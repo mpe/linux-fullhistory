@@ -150,13 +150,13 @@ int hp_probe1(struct device *dev, int ioaddr)
 		int *irqp = wordmode ? irq_16list : irq_8list;
 		do {
 			int irq = *irqp;
-			if (request_irq (irq, NULL, 0, "bogus") != -EBUSY) {
+			if (request_irq (irq, NULL, 0, "bogus", NULL) != -EBUSY) {
 				autoirq_setup(0);
 				/* Twinkle the interrupt, and check if it's seen. */
 				outb_p(irqmap[irq] | HP_RUN, ioaddr + HP_CONFIGURE);
 				outb_p( 0x00 | HP_RUN, ioaddr + HP_CONFIGURE);
 				if (irq == autoirq_report(0)		 /* It's a good IRQ line! */
-					&& request_irq (irq, &ei_interrupt, 0, "hp") == 0) {
+					&& request_irq (irq, &ei_interrupt, 0, "hp", NULL) == 0) {
 					printk(" selecting IRQ %d.\n", irq);
 					dev->irq = *irqp;
 					break;
@@ -170,7 +170,7 @@ int hp_probe1(struct device *dev, int ioaddr)
 	} else {
 		if (dev->irq == 2)
 			dev->irq = 9;
-		if (request_irq(dev->irq, ei_interrupt, 0, "hp")) {
+		if (request_irq(dev->irq, ei_interrupt, 0, "hp", NULL)) {
 			printk (" unable to get IRQ %d.\n", dev->irq);
 			return EBUSY;
 		}
@@ -179,7 +179,7 @@ int hp_probe1(struct device *dev, int ioaddr)
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk (" unable to get memory for dev->priv.\n");
-		free_irq(dev->irq);
+		free_irq(dev->irq, NULL);
 		return -ENOMEM;
 	}
 
@@ -431,7 +431,7 @@ cleanup_module(void)
 			int ioaddr = dev->base_addr - NIC_OFFSET;
 			kfree(dev->priv);
 			dev->priv = NULL;
-			free_irq(dev->irq);
+			free_irq(dev->irq, NULL);
 			irq2dev_map[dev->irq] = NULL;
 			release_region(ioaddr, HP_IO_EXTENT);
 			unregister_netdev(dev);

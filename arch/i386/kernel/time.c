@@ -245,7 +245,7 @@ static long last_rtc_update = 0;
  * timer_interrupt() needs to keep up the real-time clock,
  * as well as call the "do_timer()" routine every clocktick
  */
-static inline void timer_interrupt(int irq, struct pt_regs * regs)
+static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	do_timer(regs);
 
@@ -274,13 +274,13 @@ static inline void timer_interrupt(int irq, struct pt_regs * regs)
  * cycle counter value at the time of the timer interrupt, so that
  * we later on can estimate the time of day more exactly.
  */
-static void pentium_timer_interrupt(int irq, struct pt_regs * regs)
+static void pentium_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	/* read Pentium cycle counter */
 	__asm__(".byte 0x0f,0x31"
 		:"=a" (((unsigned long *) &last_timer_cc)[0]),
 		 "=d" (((unsigned long *) &last_timer_cc)[1]));
-	timer_interrupt(irq, regs);
+	timer_interrupt(irq, NULL, regs);
 }
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
@@ -355,7 +355,7 @@ unsigned long get_cmos_time(void)
 
 void time_init(void)
 {
-	void (*irq_handler)(int, struct pt_regs *);
+	void (*irq_handler)(int, void *, struct pt_regs *);
 	xtime.tv_sec = get_cmos_time();
 	xtime.tv_usec = 0;
 
@@ -374,6 +374,6 @@ void time_init(void)
 			 "=d" (((unsigned long *) &init_timer_cc)[1]));
 	}
 #endif
-	if (request_irq(TIMER_IRQ, irq_handler, 0, "timer") != 0)
+	if (request_irq(TIMER_IRQ, irq_handler, 0, "timer", NULL) != 0)
 		panic("Could not allocate timer IRQ!");
 }

@@ -267,8 +267,8 @@ static struct dev_info device_list[] =
 {"TEXEL","CD-ROM","1.06", BLIST_BORKEN},
 {"INSITE","Floptical   F*8I","*", BLIST_KEY},
 {"INSITE","I325VM","*", BLIST_KEY},
-{"PIONEER","CD-ROMDRM-602X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
-{"PIONEER","CD-ROMDRM-604X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
+{"PIONEER","CD-ROM DRM-602X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
+{"PIONEER","CD-ROM DRM-604X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 /*
  * Must be at end of list...
  */
@@ -2288,8 +2288,12 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
     struct Scsi_Host * host = NULL;
     
     for(j=0;j<SDpnt->host->cmd_per_lun;j++){
-	SCpnt = (Scsi_Cmnd *) scsi_init_malloc(sizeof(Scsi_Cmnd), GFP_ATOMIC);
-	SCpnt->host = SDpnt->host;
+	host = SDpnt->host;
+	SCpnt = (Scsi_Cmnd *)
+		scsi_init_malloc(sizeof(Scsi_Cmnd),
+				 GFP_ATOMIC |
+				 (host->unchecked_isa_dma ? GFP_DMA : 0));
+	SCpnt->host = host;
 	SCpnt->device = SDpnt;
 	SCpnt->target = SDpnt->id;
 	SCpnt->lun = SDpnt->lun;
@@ -2302,7 +2306,6 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
 	SCpnt->underflow = 0;
 	SCpnt->transfersize = 0;
 	SCpnt->host_scribble = NULL;
-	host = SDpnt->host;
 	if(host->host_queue)
 	    host->host_queue->prev = SCpnt;
 	SCpnt->next = host->host_queue;
@@ -2859,7 +2862,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 		     * It should do the right thing for most correctly 
 		     * written host adapters. 
 		     */
-		    if (shpnt->irq) free_irq(shpnt->irq);
+		    if (shpnt->irq) free_irq(shpnt->irq, NULL);
 		    if (shpnt->dma_channel != 0xff) free_dma(shpnt->dma_channel);
 		    if (shpnt->io_port && shpnt->n_io_port)
 			release_region(shpnt->io_port, shpnt->n_io_port);

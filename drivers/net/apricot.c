@@ -183,7 +183,7 @@ char init_setup[] = {
 
 static int i596_open(struct device *dev);
 static int i596_start_xmit(struct sk_buff *skb, struct device *dev);
-static void i596_interrupt(int irq, struct pt_regs *regs);
+static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int i596_close(struct device *dev);
 static struct enet_statistics *i596_get_stats(struct device *dev);
 static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd);
@@ -537,7 +537,7 @@ i596_open(struct device *dev)
     if (i596_debug > 1)
 	printk("%s: i596_open() irq %d.\n", dev->name, dev->irq);
 
-    if (request_irq(dev->irq, &i596_interrupt, 0, "apricot"))
+    if (request_irq(dev->irq, &i596_interrupt, 0, "apricot", NULL))
 	return -EAGAIN;
 
     irq2dev_map[dev->irq] = dev;
@@ -549,7 +549,7 @@ i596_open(struct device *dev)
 
     if (i < 4)
     {
-        free_irq(dev->irq);
+        free_irq(dev->irq, NULL);
         irq2dev_map[dev->irq] = 0;
         return -EAGAIN;
     }
@@ -743,7 +743,7 @@ int apricot_probe(struct device *dev)
 }
 
 static void
-i596_interrupt(int irq, struct pt_regs *regs)
+i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
     struct device *dev = (struct device *)(irq2dev_map[irq]);
     struct i596_private *lp;
@@ -934,7 +934,7 @@ i596_close(struct device *dev)
 		   dev->name, lp->scb.status, lp->scb.command);
 	    break;
     	}
-    free_irq(dev->irq);
+    free_irq(dev->irq, NULL);
     irq2dev_map[dev->irq] = 0;
     remove_rx_bufs(dev);
     MOD_DEC_USE_COUNT;

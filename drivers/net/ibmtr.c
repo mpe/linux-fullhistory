@@ -134,7 +134,7 @@ int tok_probe(struct device *dev);
 unsigned char get_sram_size(struct tok_info *adapt_info);
 
 static void tok_init_card(unsigned long dev_addr);
-static void tok_interrupt(int irq, struct pt_regs *regs);
+static void tok_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
 static void initial_tok_int(struct device *dev);
 
@@ -481,7 +481,7 @@ int tok_probe(struct device *dev)
   DPRINTK("Using %dK shared RAM\n",ti->mapped_ram_size/2);
 #endif
 
-  if (request_irq (dev->irq = irq, &tok_interrupt,0,"IBM TR") != 0) {
+  if (request_irq (dev->irq = irq, &tok_interrupt,0,"IBM TR", NULL) != 0) {
     DPRINTK("Could not grab irq %d.  Halting Token Ring driver.\n",irq);
     badti = ti;    /*  keep track of unused tok_info */
     return ENODEV;
@@ -590,7 +590,7 @@ static int tok_close(struct device *dev) {
 	return 0;
 }
 
-static void tok_interrupt (int irq, struct pt_regs *regs)
+static void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 {
 
 	unsigned char status;
@@ -1315,7 +1315,7 @@ cleanup_module(void)
 	unregister_netdev(&dev_ibmtr);
 
 	/* If we don't do this, we can't re-insmod it later. */
-	free_irq(dev_ibmtr.irq);
+	free_irq(dev_ibmtr.irq, NULL);
 	irq2dev_map[dev_ibmtr.irq] = NULL;
 	release_region(dev_ibmtr.base_addr, TR_IO_EXTENT);
 }

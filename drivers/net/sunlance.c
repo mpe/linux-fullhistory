@@ -459,7 +459,7 @@ lance_tx (struct device *dev)
 }
 
 static void
-lance_interrupt (int irq, struct pt_regs *regs)
+lance_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 {
     struct device *dev = (struct device *) (irq2dev_map [irq]);
     struct lance_private *lp;
@@ -517,7 +517,7 @@ lance_open (struct device *dev)
     ll->rap = LE_CSR0;
     ll->rdp = LE_C0_STOP;
 
-    if (request_irq (dev->irq, &lance_interrupt, 0, "LANCE")){
+    if (request_irq (dev->irq, &lance_interrupt, 0, "LANCE", NULL)){
 	printk ("Lance: Can't get irq %d\n", dev->irq);
 	return -EAGAIN;
     }
@@ -569,7 +569,7 @@ lance_close (struct device *dev)
     ll->rap = LE_CSR0;
     ll->rdp = LE_C0_STOP;
 
-    free_irq (dev->irq);
+    free_irq (dev->irq, NULL);
     irq2dev_map [dev->irq] = NULL;
     
     return 0;

@@ -221,7 +221,7 @@ uch send_receive_polled(int command)
    as there seems so reason for this to happen.
 */
 
-static void cm206_interrupt(int sig, struct pt_regs * regs) /* you rang? */
+static void cm206_interrupt(int sig, void *dev_id, struct pt_regs * regs) /* you rang? */
 {
   volatile ush fool;
     cd->intr_ds = inw(r_data_status); /* resets data_ready, data_error,
@@ -1052,7 +1052,7 @@ void cleanup(int level)
       return;
     }
   case 3: 
-    free_irq(cm206_irq);
+    free_irq(cm206_irq, NULL);
   case 2: 
   case 1: 
     kfree(cd);
@@ -1156,7 +1156,7 @@ int cm206_init(void)
   else printk(" single");
   printk(" speed drive");
   if (e & dcf_motorized_tray) printk(", motorized tray");
-  if (request_irq(cm206_irq, cm206_interrupt, 0, "cm206")) {
+  if (request_irq(cm206_irq, cm206_interrupt, 0, "cm206", NULL)) {
     printk("\nUnable to reserve IRQ---aborted\n");
     cleanup(2);
     return -EIO;

@@ -168,10 +168,10 @@ static void xd_geninit (struct gendisk *ignored)
 		for (i = 0; i < xd_drives; i++)
 			printk("xd_geninit: drive %d geometry - heads = %d, cylinders = %d, sectors = %d\n",i,xd_info[i].heads,xd_info[i].cylinders,xd_info[i].sectors);
 
-		if (!request_irq(xd_irq,xd_interrupt_handler, 0, "XT harddisk")) {
+		if (!request_irq(xd_irq,xd_interrupt_handler, 0, "XT harddisk", NULL)) {
 			if (request_dma(xd_dma,"xd")) {
 				printk("xd_geninit: unable to get DMA%d\n",xd_dma);
-				free_irq(xd_irq);
+				free_irq(xd_irq, NULL);
 			}
 		}
 		else
@@ -391,7 +391,7 @@ static void xd_recalibrate (u_char drive)
 }
 
 /* xd_interrupt_handler: interrupt service routine */
-static void xd_interrupt_handler(int irq, struct pt_regs * regs)
+static void xd_interrupt_handler(int irq, void *dev_id, struct pt_regs * regs)
 {
 	if (inb(XD_STATUS) & STAT_INTERRUPT) {							/* check if it was our device */
 #ifdef DEBUG_OTHER

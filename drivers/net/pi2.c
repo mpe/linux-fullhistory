@@ -149,7 +149,7 @@ static struct device pi0b = { "pi0b", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, pi0_prepr
 static int pi_probe(struct device *dev, int card_type);
 static int pi_open(struct device *dev);
 static int pi_send_packet(struct sk_buff *skb, struct device *dev);
-static void pi_interrupt(int reg_ptr, struct pt_regs *regs);
+static void pi_interrupt(int reg_ptr, void *dev_id, struct pt_regs *regs);
 static int pi_close(struct device *dev);
 static int pi_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
 static struct enet_statistics *pi_get_stats(struct device *dev);
@@ -1398,7 +1398,7 @@ static int pi_probe(struct device *dev, int card_type)
 		   now.  There is no point in waiting since no other device can use
 		   the interrupt, and this marks the 'irqaction' as busy. */
 	{
-	    int irqval = request_irq(dev->irq, &pi_interrupt,0, "pi2");
+	    int irqval = request_irq(dev->irq, &pi_interrupt,0, "pi2", NULL);
 	    if (irqval) {
 		printk("PI: unable to get IRQ %d (irqval=%d).\n",
 		       dev->irq, irqval);
@@ -1461,7 +1461,7 @@ static int pi_open(struct device *dev)
     if (dev->base_addr & 2) {	/* if A channel */
 	if (first_time) {
 	    if (request_dma(dev->dma,"pi2")) {
-		free_irq(dev->irq);
+		free_irq(dev->irq, NULL);
 		return -EAGAIN;
 	    }
 	    irq2dev_map[dev->irq] = dev;
@@ -1509,7 +1509,7 @@ static int pi_send_packet(struct sk_buff *skb, struct device *dev)
 
 /* The typical workload of the driver:
    Handle the network interface interrupts. */
-static void pi_interrupt(int reg_ptr, struct pt_regs *regs)
+static void pi_interrupt(int reg_ptr, void *dev_id, struct pt_regs *regs)
 {
 /*    int irq = -(((struct pt_regs *) reg_ptr)->orig_eax + 2);*/
     struct pi_local *lp;

@@ -1,6 +1,6 @@
 README.ide -- Information regarding ide.c and ide-cd.c (IDE driver in 1.3.xx)
 ================================================================================
-Supported by:  mlord@bnr.ca           -- disks, interfaces, probing
+Supported by:  mlord@pobox.com        -- disks, interfaces, probing
                snyder@fnald0.fnal.gov -- cdroms, ATAPI, audio
 
    +-----------------------------------------------------------------+
@@ -58,31 +58,13 @@ NEW!	- Bus-Master DMA support for Intel PCI Triton chipset IDE interfaces
 NEW!    - ide-cd.c now supports door locking and auto-loading.
 		- Also preliminary support for multisession
 		  and direct reads of audio data.
-NEW!	- the hdparm-2.6 package can be used to set PIO modes for some chipsets.
+NEW!	- the hdparm-2.7 package can be used to set PIO modes for some chipsets.
 
 For work in progress, see the comments in ide.c, ide-cd.c, and triton.c.
 
 Note that there is now a group actively working on support for the Promise
 caching IDE cards, such as the DC4030VL, and early results are encouraging.
 Look for this support to be added to the kernel soon.
-
-
-***  IMPORTANT NOTICES (for kernel versions prior to 1.3.22)
-***  =================
-***  "CMD" EIDE Interfaces will not (by default) work *reliably* when drives
-***  are attached to the second interface.  This is due to a flaw in the
-***  hardware.  To "fix" this, supply the special kernel "command line"
-***  parameter to LILO or LOADLIN:    ide1=serialize
-***
-***  "CMD 640B" EIDE Interfaces will not work *reliably* when "hdparm -u1"
-***  (interrupt unmasking) is used.  This is due to a flaw in the hardware,
-***  and is only a problem when "hdparm -u1" is used after booting.
-***
-***  "RZ1000" EIDE Interfaces will also not work *reliably* when "hdparm -u1"
-***  (interrupt unmasking) is used.  This is due to a flaw in the hardware,
-***  and is only a problem when "hdparm -u1" is used after booting.
-***
-***  Failure to abide by these restrictions can cause severe data corruption!
 
 
 ***  IMPORTANT NOTICES (for kernel versions after 1.3.21)
@@ -216,7 +198,7 @@ and still allows newer hardware to run on the 2nd/3rd/4th IDE ports
 under control of ide.c.   To have ide.c also "take over" the primary
 IDE port in this situation, use the "command line" parameter:  ide0=0x1f0
 
-mlord@bnr.ca
+mlord@pobox.com
 snyder@fnald0.fnal.gov
 ================================================================================
 
@@ -448,7 +430,7 @@ The new WD1.6GB models are also cheap screamers.
 
 For really high end systems, go for fast/wide 7200rpm SCSI.  But it'll cost ya!
 
-mlord@bnr.ca
+mlord@pobox.com
 
 ================================================================================
 EIDE card compatibility reports:

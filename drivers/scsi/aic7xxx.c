@@ -1680,7 +1680,7 @@ aic7xxx_reset_channel(struct aic7xxx_host *p, char channel,
  *         be disabled all through this function unless we say otherwise.
  *-F*************************************************************************/
 static void
-aic7xxx_isr(int irq, struct pt_regs * regs)
+aic7xxx_isr(int irq, void *dev_id, struct pt_regs * regs)
 {
   int base, intstat;
   struct aic7xxx_host *p;
@@ -3462,7 +3462,7 @@ aic7xxx_register(Scsi_Host_Template *template,
     /*
      * Register IRQ with the kernel.
      */
-    if (request_irq(config->irq, aic7xxx_isr, SA_INTERRUPT, "aic7xxx"))
+    if (request_irq(config->irq, aic7xxx_isr, SA_INTERRUPT, "aic7xxx", NULL))
     {
       printk("aic7xxx: Couldn't register IRQ %d, ignoring.\n", config->irq);
       aic7xxx_boards[config->irq] = NULL;

@@ -902,7 +902,7 @@ int rt_cache_get_info(char *buffer, char **start, off_t offset, int length, int 
 
 	if (offset<128)
 	{
-		sprintf(buffer,"%-127s\n","Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tSource\t\tMTU\tWindow\tIRTT\tHH\tARP\n");
+		sprintf(buffer,"%-127s\n","Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tSource\t\tMTU\tWindow\tIRTT\tHH\tARP");
 		len = 128;
   	}
 	

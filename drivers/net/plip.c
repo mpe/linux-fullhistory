@@ -139,7 +139,7 @@ static void plip_kick_bh(struct device *dev);
 static void plip_bh(struct device *dev);
 
 /* Interrupt handler */
-static void plip_interrupt(int irq, struct pt_regs *regs);
+static void plip_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
 /* Functions for DEV methods */
 static int plip_rebuild_header(void *buff, struct device *dev,
@@ -800,7 +800,7 @@ plip_error(struct device *dev, struct net_local *nl,
 
 /* Handle the parallel port interrupts. */
 static void
-plip_interrupt(int irq, struct pt_regs * regs)
+plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct device *dev = (struct device *) irq2dev_map[irq];
 	struct net_local *nl = (struct net_local *)dev->priv;
@@ -940,7 +940,7 @@ plip_open(struct device *dev)
 		return -EAGAIN;
 	}
 	cli();
-	if (request_irq(dev->irq , plip_interrupt, 0, dev->name) != 0) {
+	if (request_irq(dev->irq , plip_interrupt, 0, dev->name, NULL) != 0) {
 		sti();
 		printk("%s: couldn't get IRQ %d.\n", dev->name, dev->irq);
 		return -EAGAIN;
@@ -983,7 +983,7 @@ plip_close(struct device *dev)
 	dev->tbusy = 1;
 	dev->start = 0;
 	cli();
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 	irq2dev_map[dev->irq] = NULL;
 	nl->is_deferred = 0;
 	nl->connection = PLIP_CN_NONE;

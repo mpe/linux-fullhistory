@@ -66,16 +66,17 @@ CONFIG_BLK_DEV_FD
   
 RAM disk support
 CONFIG_BLK_DEV_RAM
-  Enabling this option will allow you to use a portion of your RAM memory 
-  as a block device, so that you can make filesystems on it, read and
-  write to it and do all the other things that normal block devices can do.
-  It is usually used to load and store a copy of a minimal root file
-  system off of a floppy into RAM during the initial install of Linux.
-  Note that the kernel command line option "ramdisk=XX" is now obsolete.
-  For details, read Documentation/ramdisk.txt. If you want to compile this 
-  as a module ( = code which can be inserted in and removed from the 
-  running kernel whenever you want), say M and read Documentation/modules.txt.
-  Most normal users won't need the RAM disk functionality, and can thus say 
+  Enabling this option will allow you to use a portion of your RAM
+  memory as a block device, so that you can make filesystems on it,
+  read and write to it and do all the other things that normal block
+  devices (such as harddrives) can do.  It is usually used to load and
+  store a copy of a minimal root file system off of a floppy into RAM
+  during the initial install of Linux.  Note that the kernel command
+  line option "ramdisk=XX" is now obsolete.  For details, read
+  Documentation/ramdisk.txt. If you want to compile this as a module (
+  = code which can be inserted in and removed from the running kernel
+  whenever you want), say M and read Documentation/modules.txt.  Most
+  normal users won't need the RAM disk functionality, and can thus say
   N here.
 
 Loop device support
@@ -85,61 +86,69 @@ CONFIG_BLK_DEV_LOOP
   burning the CD, or want to use floppy images without first writing
   them to floppy.
   This option also allows one to mount a filesystem with encryption.
+  To use these features, you will need the program losetup, available
+  via ftp (user: anonymous) from sunsite.unc.edu in the package 
+  lo.X.Y.tar.gz.
+  Note that this loop device has nothing to do with the loopback
+  device used for network connections from the machine to itself.
   Most users will answer N here.
 
 Enhanced IDE/MFM/RLL disk/cdrom/tape support
 CONFIG_BLK_DEV_IDE 
   This will use the full-featured IDE driver to control up to four IDE
-  interfaces, for a combination of up to eight IDE disk/cdrom/tape drives.
-  Useful information about large (>540MB) IDE disks, soundcard IDE ports,
-  and other topics, is all contained in drivers/block/README.ide.
-  If you have one or more IDE drives, say Y here.
-  If your system has no IDE drives, or if memory requirements are really tight,
-  you could say N here, and select the Old harddisk driver instead to save
-  about 13kB of memory in the kernel.  
-  To fine-tune IDE drive/interface parameters for improved performance,
+  interfaces, for a combination of up to eight IDE disk/cdrom/tape
+  drives.  Useful information about large (>540MB) IDE disks,
+  soundcard IDE ports, and other topics, is all contained in
+  drivers/block/README.ide.  If you have one or more IDE drives, say Y
+  here.  If your system has no IDE drives, or if memory requirements
+  are really tight, you could say N here, and select the Old harddisk
+  driver instead to save about 13kB of memory in the kernel.  To
+  fine-tune IDE drive/interface parameters for improved performance,
   look for the hdparm package at
   sunsite.unc.edu:/pub/Linux/kernel/patches/diskdrives/
 
 Old harddisk (MFM/RLL/IDE) driver
 CONFIG_BLK_DEV_HD_ONLY
   There are two drivers for MFM/RLL/IDE disks.  Most people use the
-  newer enhanced driver, but the old one is still around for two reasons.
-  Some older systems have strange timing problems and seem to work only
-  with the old driver (which itself does not work with some newer systems).
-  The other reason is that the old driver is smaller, since it lacks the
-  enhanced functionality of the new one.  This makes it a good choice
-  for systems with very tight memory restrictions, or for systems with
-  only older MFM/RLL/ESDI drives.  Choosing the old driver can save 13kB
-  or so of kernel memory.  If you are unsure, then just choose the
-  Enhanced IDE/MFM/RLL driver instead of this one.
+  newer enhanced driver, but the old one is still around for two
+  reasons.  Some older systems have strange timing problems and seem
+  to work only with the old driver (which itself does not work with
+  some newer systems).  The other reason is that the old driver is
+  smaller, since it lacks the enhanced functionality of the new one.
+  This makes it a good choice for systems with very tight memory
+  restrictions, or for systems with only older MFM/RLL/ESDI drives.
+  Choosing the old driver can save 13kB or so of kernel memory.  If
+  you are unsure, then just choose the Enhanced IDE/MFM/RLL driver
+  instead of this one.
 
 Use old disk-only driver on primary interface
 CONFIG_BLK_DEV_HD_IDE
-  There are two drivers for MFM/RLL/IDE disks.  Most people use just the
-  new enhanced driver by itself.  This option installs the old harddisk
-  driver to control the primary IDE/disk interface in the system,
-  leaving the new enhanced IDE driver take care of only the 2nd/3rd/4th
-  IDE interfaces.  Choosing this option may be useful for older systems
-  which have MFM/RLL/ESDI controller+drives at the primary port address
-  (0x1f0), along with IDE drives at the secondary/3rd/4th port addresses.
-  Normally, just say N here.
+  There are two drivers for MFM/RLL/IDE disks.  Most people use just
+  the new enhanced driver by itself.  This option installs the old
+  harddisk driver to control the primary IDE/disk interface in the
+  system, leaving the new enhanced IDE driver take care of only the
+  2nd/3rd/4th IDE interfaces.  Choosing this option may be useful for
+  older systems which have MFM/RLL/ESDI controller+drives at the
+  primary port address (0x1f0), along with IDE drives at the
+  secondary/3rd/4th port addresses.  Normally, just say N here; you
+  will then use the new driver for all 4 interfaces.
   
 Include IDE/ATAPI CDROM support
 CONFIG_BLK_DEV_IDECD
-  If you have a CDROM drive using the ATAPI protocol, say Y.
-  ATAPI is a new protocol used by IDE CDROM and TAPE drives,
-  similar to the SCSI protocol.  Most new CDROM drives use ATAPI,
-  including the NEC-260, Mitsumi FX400, Sony 55E, and just about 
-  all non-SCSI double(2X), quad(4X), and six(6X) speed drives.
-  At boot time, the TAPE drive will be identified along with other IDE devices,
-  as "hdb" or "hdc", or something similar.
-  If this is your only CDROM drive, you can say N to all other CDROM options,
-  but be sure to say Y to the ISO9660 filesystem.  Read the CDROM-HOWTO,
-  available via ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.
-  Note that older versions of lilo (the linux boot loader) cannot properly
-  deal with IDE/ATAPI CDROMs, so install lilo-16 or higher, available
-  from sunsite.unc.edu:/pub/Linux/system/Linux-boot/lilo.
+  If you have a CDROM drive using the ATAPI protocol, say Y.  ATAPI is
+  a new protocol used by IDE CDROM and TAPE drives, similar to the
+  SCSI protocol.  Most new CDROM drives use ATAPI, including the
+  NEC-260, Mitsumi FX400, Sony 55E, and just about all non-SCSI
+  double(2X), quad(4X), and six(6X) speed drives.  At boot time, the
+  TAPE drive will be identified along with other IDE devices, as "hdb"
+  or "hdc", or something similar.
+  If this is your only CDROM drive, you can say N to all other CDROM
+  options, but be sure to say Y to the ISO9660 filesystem.  Read the
+  CDROM-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  Note that older versions of
+  lilo (the linux boot loader) cannot properly deal with IDE/ATAPI
+  CDROMs, so install lilo-16 or higher, available from
+  sunsite.unc.edu:/pub/Linux/system/Linux-boot/lilo.
 
 Include IDE/ATAPI TAPE support
 CONFIG_BLK_DEV_IDETAPE
@@ -188,34 +197,34 @@ CONFIG_IDE_CHIPSETS
   chipsets.  Most of these also require special kernel boot parameters
   to actually turn on the support at runtime.
 
-DTC-2278 chipset support
+DTC-2278 support
 CONFIG_BLK_DEV_DTC2278
   This driver is enabled at runtime using the "ide0=dtc2278" kernel
   boot parameter.  It enables support for the secondary IDE interface
   of the DTC-2278 card, and permits faster I/O speeds to be set as
   well.  See the README.ide and dtc2278.c files for more info.
 
-Holtek HT6560B chipset support
+Holtek HT6560B support
 CONFIG_BLK_DEV_HT6560B
   This driver is enabled at runtime using the "ide0=ht6560b" kernel
   boot parameter.  It enables support for the secondary IDE interface
   of the Holtek card, and permits faster I/O speeds to be set as well.
   See the README.ide and ht6560b.c files for more info.
 
-QDI QD6580 chipset support
+QDI QD6580 support
 CONFIG_BLK_DEV_QD6580
   This driver is enabled at runtime using the "ide0=qd6580" kernel
   boot parameter.  It permits faster I/O speeds to be set.
   See the README.ide and qd6580.c files for more info.
 
-UMC 8672 chipset support
+UMC 8672 support
 CONFIG_BLK_DEV_UMC8672
   This driver is enabled at runtime using the "ide0=umc8672" kernel
   boot parameter.  It enables support for the secondary IDE interface
   of the UMC-8672, and permits faster I/O speeds to be set as well.
   See the README.ide and umc8672.c files for more info.
 
-ALI M1439/M1445 chipset support
+ALI M1439/M1445 support
 CONFIG_BLK_DEV_ALI14XX
   This driver is enabled at runtime using the "ide0=ali14xx" kernel
   boot parameter.  It enables support for the secondary IDE interface
@@ -548,7 +557,7 @@ CONFIG_CPU_LITTLE_ENDIAN
   If your compiler is mipsel-linux-gcc or mipsel-linuxelf-gcc (as
   opposed to mips-linux-gcc or mips-linuxelf-gcc), say Y here,
   otherwise N. Most MIPS machines use little-endian code, but it might
-  be necessary to run older Mips sytems, such as the Sony News and
+  be necessary to run older Mips systems, such as the Sony News and
   MIPS RC3xxx in big endian mode.
 
 Enable loadable module support
@@ -650,6 +659,7 @@ CONFIG_IP_MULTICAST
   drivers/net/README.multicast. For most people, it's safe to say N.
 
 IP: optimize as router not host
+CONFIG_IP_ROUTER
   Some Linux network drivers use a technique called copy and checksum
   to optimize host performance. For a machine which is forwarding most
   packets to another host this is however a loss. This parameter turns
@@ -848,12 +858,12 @@ CONFIG_IPX
   sunsite.unc.edu:/pub/Linux/docs/HOWTO). In order to do the former,
   you'll also have to say Y to "NCP filesystem support", below. To
   turn your Linux box into a fully featured Netware file server and
-  IPX router, say Y here and fetch lwared from
-  sunsite.unc.edu:/pub/Linux/system/Network/daemons/. For more
-  information, read the IPX-HOWTO in
-  sunsite.unc.edu:/pub/Linux/docs/howto. The IPX driver would enlarge
-  your kernel by about 5 kB. Unless you want to integrate your Linux
-  box with a local Novell network, say N.
+  IPX router, say Y here and fetch either lwared from
+  sunsite.unc.edu:/pub/Linux/system/Network/daemons/ or mars_nwe from
+  linux01.gwdg.de:/pub/ncpfs. For more information, read the IPX-HOWTO
+  in sunsite.unc.edu:/pub/Linux/docs/howto. The IPX driver would
+  enlarge your kernel by about 5 kB. Unless you want to integrate your
+  Linux box with a local Novell network, say N.
 
 Full internal IPX network
 CONFIG_IPX_INTERN
@@ -1759,14 +1769,9 @@ NI5210 support
 CONFIG_NI52
   If you have a network (ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want). If you want to compile it as a
-  module, say M here and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
+  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
+  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
 NI6510 support
 CONFIG_NI65
@@ -2261,27 +2266,28 @@ CONFIG_FAT_FS
 msdos fs support
 CONFIG_MSDOS_FS
   This allows you to mount MSDOS partitions of your harddrive (unless
-  they are compressed; the only way to access compressed MSDOS
-  partitions under Linux is with the DOS emulator DOSEMU, described in
-  the DOSEMU-HOWTO, available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you intend to use dosemu
-  with a non-compressed MSDOS partition, say Y here) and MSDOS
-  floppies. This means that file access becomes transparent, i.e. the
-  MSDOS files look and behave just like all other Unix files.  Another
-  way to read and write MSDOS floppies from within Linux (but not
-  transparently) is with the mtools ("man mtools") program suite,
+  they are compressed; to access compressed MSDOS partitions under
+  Linux, you can either use the DOS emulator DOSEMU, described in the
+  DOSEMU-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO, or try dmsdosfs in
+  sunsite.unc.edu:/pub/Linux/system/Filesystems/dosfs. If you intend
+  to use dosemu with a non-compressed MSDOS partition, say Y here) and
+  MSDOS floppies. This means that file access becomes transparent,
+  i.e. the MSDOS files look and behave just like all other Unix files.
+  Another way to read and write MSDOS floppies from within Linux (but
+  not transparently) is with the mtools ("man mtools") program suite,
   which doesn't require the msdos filesystem support.  If you want to
   use umsdos, the Unix-like filesystem on top of DOS, which allows you
   to run Linux from within a DOS partition without repartitioning,
-  you'll have to say Y or M here. If your have Windows'95 or Windows NT 
-  installed on your MSDOS partitions, you should use the VFAT 
-  filesystem instead, or you will not be able to see the long filenames 
-  generated by Windows'95 / Windows NT. This option will enlarge your 
-  kernel by about 7 kB. If unsure, say Y.  If you want to compile this 
-  as a module however ( = code which can be inserted in and removed from 
-  the running kernel whenever you want), say M here and read 
-  Documentation/modules.txt. Note that the filesystem of your root 
-  partition cannot be a module.
+  you'll have to say Y or M here. If your have Windows'95 or Windows
+  NT installed on your MSDOS partitions, you should use the VFAT
+  filesystem instead, or you will not be able to see the long
+  filenames generated by Windows'95 / Windows NT. This option will
+  enlarge your kernel by about 7 kB. If unsure, say Y.  If you want to
+  compile this as a module however ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt. Note that the filesystem of your
+  root partition cannot be a module.
 
 vfat fs support
 CONFIG_VFAT_FS
@@ -2320,9 +2326,9 @@ CONFIG_PROC_FS
   This is a virtual filesystem providing information about the status
   of the system. "Virtual" means that it doesn't take any space on
   your harddisk: the files are created on the fly when you access
-  them. Also, you cannot read the files with less or more: you need to
-  use cat. The filesystem is explained in the Kernel Hacker's Guide,
-  available via ftp (user: anonymous) in
+  them. Also, you cannot read the files with less: you need to use
+  more or cat. The filesystem is explained in the Kernel Hacker's
+  Guide, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/LDP and also on the proc(8) manpage
   ("man 8 proc").  This option will enlarge your kernel by about 18
   kB. It's totally cool; for example, "cat /proc/interrupts" gives
@@ -2445,12 +2451,12 @@ CONFIG_NCP_FS
   used by NetWare clients to talk to file servers. It is to IPX what
   nfs is to tcp/ip, if that helps. Enabling this option allows you to
   mount NetWare file server volumes and to access them just like any
-  other Unix directory. To actually mount the filesystem, you need a
-  special mount program, as described in the IPX-HOWTO on
-  sunsite.unc.edu:/pub/Linux/docs/howto.  If you want to compile this
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want), say M here and read
-  Documentation/modules.txt.
+  other Unix directory. For details, please read the file
+  Documentation/filesystems/ncpfs.txt in the kernel source and the
+  IPX-HOWTO on sunsite.unc.edu:/pub/Linux/docs/howto.  If you want to
+  compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt.
 
 Standard/generic serial support
 CONFIG_SERIAL
@@ -2492,7 +2498,8 @@ CONFIG_STALLION n
   running kernel whenever you want), say M here and read
   Documentation/modules.txt.
 
-CONFIG_ISTALLION n
+Stallion EC8/64, ONboard, Brumby support
+CONFIG_ISTALLION
   If you have an EasyConnection 8/64, ONboard, Brumby or Stallion
   serial multiport card, say Y here. Make sure to read
   drivers/char/README.stallion. To compile it as a module ( = code
@@ -2585,20 +2592,6 @@ CONFIG_ATIXL_BUSMOUSE
   plugging in a COM port (9 or 25 pins) which is supported
   automatically.
 
-Selection (cut and paste for virtual consoles)
-CONFIG_SELECTION
-  This allows you to use your mouse for moving text on a Linux console
-  or even between several virtual consoles. Read about it with "man
-  selection". You also need it to run gpm ("general purpose mouse")
-  which is a superset of selection. This is explained in the
-  Busmouse-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO, although selection works fine
-  with serial mice, too. Most people say Y unless they run mainly the
-  X Window System, which has its own cut-and-paste mechanism. Enabling
-  this option enlarges your kernel by about 1 kB. Newer kernels
-  contain this code by default and don't have this config option
-  anymore. 
-
 QIC-02 tape support
 CONFIG_QIC02_TAPE
   If you have a non-SCSI tape drive like that, say Y.
@@ -2652,45 +2645,58 @@ CONFIG_APM_IGNORE_USER_SUSPEND
 Enable APM features
 CONFIG_APM_DO_ENABLE
   Enable APM features at boot time.  From page 36 of the APM BIOS
-  specification: "When disabled, the APM BIOS does not automatically power
-  manage devices, enter the Standby State, enter the Suspend State, or take
-  power saving steps in response to CPU Idle calls."  This driver will make
-  CPU Idle calls when Linux is idle (unless this feature is turned off --
-  see below).  This should always save battery power, but more complicated
-  APM features will be dependent on your BIOS implementation.  You may need
-  to turn this option off if your computer hangs at boot time when using
-  APM support, or if it beeps continuously instead of suspending.  Turn
-  this off if you have a NEC UltraLite Versa 33/C or a Toshiba T400CDT.
-  This is off by default since most machines do fine without this feature.
+  specification: "When disabled, the APM BIOS does not automatically
+  power manage devices, enter the Standby State, enter the Suspend
+  State, or take power saving steps in response to CPU Idle calls."
+  This driver will make CPU Idle calls when Linux is idle (unless this
+  feature is turned off -- see below).  This should always save
+  battery power, but more complicated APM features will be dependent
+  on your BIOS implementation.  You may need to turn this option off
+  if your computer hangs at boot time when using APM support, or if it
+  beeps continuously instead of suspending.  Turn this off if you have
+  a NEC UltraLite Versa 33/C or a Toshiba T400CDT.  This is off by
+  default since most machines do fine without this feature.
 
 Watchdog Timer Support 
 CONFIG_WATCHDOG
   If you enable this option and create a character special file
   /dev/watchdog with major number 10 and minor number 130 using mknod
-  ("man mknod"), you will get a software watchdog, i.e.: subsequently
-  opening the file and failing to write to it for longer than 1 minute
-  will result in rebooting the machine. This could be useful for a
+  ("man mknod"), you will get a watchdog, i.e.: subsequently opening
+  the file and failing to write to it for longer than 1 minute will
+  result in rebooting the machine. This could be useful for a
   networked machine that needs to come back online as fast as possible
-  after a lock-up. For details, read Documentation/watchdog.txt in the
-  kernel source. If unsure, say N.
+  after a lock-up. There's a watchdog implementation entirely in
+  software (which sometimes fail to reboot the machine) and a driver
+  for hardware watchdog boards, which are more robust and can also
+  keep track of the temperature inside your computer. For details,
+  read Documentation/watchdog.txt in the kernel source. If unsure, say
+  N.
 
 Disable watchdog shutdown on close
 CONFIG_WATCHDOG_NOWAYOUT
   The default watchdog behaviour is to stop the timer if the process
-  managing it closes the file. Its always remotely possible that this
-  process might get killed. In NOWAYOUT mode you cannot stop the watchdog
-  once its begun.
+  managing it closes the file /dev/watchdog. It's always remotely
+  possible that this process might get killed. If you enable this
+  option, the watchdog cannot be stopped once it has been started.
 
 WDT Watchdog timer
 CONFIG_WDT
-  Drivers for the WDT watchdog timer cards. These are hardware timer boards
-  that physically pull the power on and off to recover crashed machines.
-  Brutal but _very_ effective.
+  If you have a WDT500P or WDT501P watchdog board, say Y here,
+  otherwise N. It is not possible to probe for this board, which means
+  that you have to set the IO port and IRQ it uses in the kernel
+  source at the top of drivers/char/wdt.c. If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
 
 WDT501 features
 CONFIG_WDT_501
-  Enable the onboard thermometer and voltage monitors on the extended (501)
-  card.
+  Saying Y here and creating a character special file /dev/temperature
+  with major number 10 and minor number 131 ("man mknod") will give
+  you a thermometer inside your computer: reading from
+  /dev/temperature yields one byte, the temperature in degrees
+  Fahrenheit. This works only if you have a WDT501P watchdog board
+  installed.
 
 Fan Tachometer
 CONFIG_WDT_501_FAN
@@ -2698,26 +2704,27 @@ CONFIG_WDT_501_FAN
   tachometer actually set up.
 
 Software Watchdog
-CONFIG_SOFT_WATDHDOG
-  A software monitoring watchdog. This will fail to reboot your system from
-  some situations that the hardware watchdog will recover from. Equally its
-  a lot cheaper to install.
+CONFIG_SOFT_WATCHDOG
+  A software monitoring watchdog. This will fail to reboot your system
+  from some situations that the hardware watchdog will recover
+  from. Equally it's a lot cheaper to install.
 
 Do CPU IDLE calls
 CONFIG_APM_CPU_IDLE
-  Enable calls to APM CPU Idle/CPU Busy inside the kernel's idle loop.  On
-  some machines, this can activate improved power savings, such as a slowed
-  CPU clock rate, when the machine is idle.  These idle call is made after
-  the idle loop has run for some length of time (e.g., 333 mS).  On some
-  machines, this will cause a hang at boot time or whenever the CPU becomes
-  idle.  (On machines with more than one CPU, this option does nothing.)
+  Enable calls to APM CPU Idle/CPU Busy inside the kernel's idle loop.
+  On some machines, this can activate improved power savings, such as
+  a slowed CPU clock rate, when the machine is idle.  These idle call
+  is made after the idle loop has run for some length of time (e.g.,
+  333 mS).  On some machines, this will cause a hang at boot time or
+  whenever the CPU becomes idle.  (On machines with more than one CPU,
+  this option does nothing.)
 
 Black display
 CONFIG_APM_DISPLAY_BLANK
-  Enable console blanking using the APM.  Some laptops can use this to turn
-  off the LCD backlight when the VC screen blanker blanks the screen.  Note
-  that this is only used by the VC screen blanker, and won't turn off the
-  backlight when using X11.
+  Enable console blanking using the APM.  Some laptops can use this to
+  turn off the LCD backlight when the VC screen blanker blanks the
+  screen.  Note that this is only used by the VC screen blanker, and
+  won't turn off the backlight when using X11.
 
 Sound card support
 CONFIG_SOUND
@@ -2762,48 +2769,50 @@ CONFIG_PROFILE_SHIFT
 
 ISDN subsystem
 CONFIG_ISDN
-  This allows you to use an ISDN-card for networking connections and as
-  dialin/out device. The isdn-tty's have a builtin AT-compatible modem
-  emulator. Network devices support autodial, channel-bundling, callback
-  and caller-authentication without having a daemon running. A reduced T.70
-  protocol is supported with tty's suitable for german BTX. Currently Cards
-  by Teles and compatibles and ICN are supported. On D-Channel, the protocols
-  EDSS1 and 1TR6 are supported. See Documentation/isdn/README for more
-  information.
+  This allows you to use an ISDN-card for networking connections and
+  as dialin/out device. The isdn-tty's have a built in AT-compatible
+  modem emulator. Network devices support autodial, channel-bundling,
+  callback and caller-authentication without having a daemon
+  running. A reduced T.70 protocol is supported with tty's suitable
+  for German BTX. Currently Cards by Teles and compatibles and ICN are
+  supported. On D-Channel, the protocols EDSS1 and 1TR6 are
+  supported. See Documentation/isdn/README for more information.
 
 Support synchronous PPP
 CONFIG_ISDN_PPP
-  This enables synchronous PPP via ISDN. This protocol is used by Cisco
-  or Sun for example. You will need a special version of pppd (called ipppd)
-  for using this feature. See Documentation/isdn/README.syncppp for more
-  information.
+  This enables synchronous PPP via ISDN. This protocol is used by
+  Cisco or Sun for example. You will need a special version of pppd
+  (called ipppd) for using this feature. See
+  Documentation/isdn/README.syncppp for more information.
 
-Sypport generic MP (RFC 1717)
+Support generic MP (RFC 1717)
 CONFIG_ISDN_MPP
-  With synchronous PPP enabled, it is possible to increase throughput by
-  bundling several ISDN-connections, using this protocol. See
+  With synchronous PPP enabled, it is possible to increase throughput
+  by bundling several ISDN-connections, using this protocol. See
   Documentation/isdn/README.syncppp for more information.
 
 Use VJ-compression with synchronous PPP
 CONFIG_ISDN_PPP_VJ
-  This enables Van Jacobson headercompression for synchronous PPP.
+  This enables Van Jacobson header compression for synchronous PPP.
 
 ICN B1 and B2 support
 CONFIG_ISDN_DRV_ICN
-  This enables support for two kinds of ISDN-cards made by a german company
-  called ICN. 1B is the standard version for a single ISDN line with two
-  B-channels, 2B supports two ISDN lines. For running this card, additional
-  firmware is necessary, which has to be downloaded into the card using
-  a utility which is distributed separately.
-  See Documentation/isdn/README and README.icn for more information.
+  This enables support for two kinds of ISDN-cards made by a German
+  company called ICN. 1B is the standard version for a single ISDN
+  line with two B-channels, 2B supports two ISDN lines. For running
+  this card, additional firmware is necessary, which has to be
+  downloaded into the card using a utility which is distributed
+  separately.  See Documentation/isdn/README and README.icn for more
+  information.
 
 Teles, NICCY1016PC, Creatix support
 CONFIG_ISDN_DRV_TELES
-  This enables support for the Teles ISDN-cards S0-16.0, S0-16.3, S0-8 and
-  many compatibles. By default, the driver is configured to support
-  a 16.0-type using EDSS1-protocol. See Documentation/isdn/README
-  on how to configure it using 16.3, a different D-channel protocol, or
-  non-standard irq/port/shmem settings.
+  This enables support for the Teles ISDN-cards S0-16.0, S0-16.3, S0-8
+  and many compatibles. By default, the driver is configured to
+  support a 16.0-type using EDSS1-protocol. See
+  Documentation/isdn/README on how to configure it using 16.3, a
+  different D-channel protocol, or non-standard irq/port/shmem
+  settings.
 
 # need an empty line after last entry, for sed script in Configure.
 
@@ -2862,6 +2871,8 @@ CONFIG_ISDN_DRV_TELES
 # LocalWords:  wdt hdb hdc bugfix SiS vlb Acculogic CSA DTC dtc Holtek ht QDI
 # LocalWords:  QD qd UMC umc ALI ali lena fnet fr homepage azstarnet axplinux
 # LocalWords:  Avanti XL AlphaStations Jensen DECpc AXPpci UDB Cabriolet MCA RC
-# LocalWords:  AlphaPC uwaterloo cpbeaure mca AOUT OUTput PPro sipx gwdg
+# LocalWords:  AlphaPC uwaterloo cpbeaure mca AOUT OUTput PPro sipx gwdg lo nwe
 # LocalWords:  Keepalive linefill RELCOM keepalive analogue CDR conf CDI INIT
-# LocalWords:  OPTi isp irq noisp VFAT vfat NTFS
+# LocalWords:  OPTi isp irq noisp VFAT vfat NTFS losetup dmsdosfs dosfs ISDN MP
+# LocalWords:  NOWAYOUT behaviour dialin isdn callback BTX Teles ICN EDSS Cisco
+# LocalWords:  ipppd syncppp RFC MPP VJ downloaded icn NICCY Creatix shmem

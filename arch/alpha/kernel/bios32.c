@@ -76,7 +76,6 @@ int pcibios_present(void)
  */
 #define PCI_MODIFY		1
 
-
 extern struct hwrpb_struct *hwrpb;
 
 
@@ -656,7 +655,7 @@ static inline void sio_fixup(void)
 	/*
 	 * Go through all devices, fixing up irqs as we see fit:
 	 */
-	level_bits = 0;
+	level_bits = inb(0x4d0) | (inb(0x4d1) << 8);
 	for (dev = pci_devices; dev; dev = dev->next) {
 		dev->irq = 0;
 		if (dev->bus->number != 0) {
@@ -678,6 +677,7 @@ static inline void sio_fixup(void)
 		if (pirq < 0) {
 			continue;
 		}
+
 		/*
 		 * if its a VGA, enable its BIOS ROM at C0000
 		 */

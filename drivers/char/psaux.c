@@ -208,7 +208,7 @@ static inline int queue_empty(void)
  * is waiting in the keyboard/aux controller.
  */
 
-static void aux_interrupt(int cpl, struct pt_regs * regs)
+static void aux_interrupt(int cpl, void *dev_id, struct pt_regs * regs)
 {
 	int head = queue->head;
 	int maxhead = (queue->tail-1) & (AUX_BUF_SIZE-1);
@@ -234,7 +234,7 @@ static void aux_interrupt(int cpl, struct pt_regs * regs)
  */
 
 #ifdef CONFIG_82C710_MOUSE
-static void qp_interrupt(int cpl, struct pt_regs * regs)
+static void qp_interrupt(int cpl, void *dev_id, struct pt_regs * regs)
 {
 	int head = queue->head;
 	int maxhead = (queue->tail-1) & (AUX_BUF_SIZE-1);
@@ -262,7 +262,7 @@ static void release_aux(struct inode * inode, struct file * file)
 	poll_aux_status();
 	outb_p(AUX_DISABLE,AUX_COMMAND);      	/* Disable Aux device */
 	poll_aux_status();
-	free_irq(AUX_IRQ);
+	free_irq(AUX_IRQ, NULL);
 	MOD_DEC_USE_COUNT;
 }
 
@@ -280,7 +280,7 @@ static void release_qp(struct inode * inode, struct file * file)
 	outb_p(status & ~(QP_ENABLE|QP_INTS_ON), qp_status);
 	if (!poll_qp_status())
 		printk("Warning: Mouse device busy in release_qp()\n");
-	free_irq(QP_IRQ);
+	free_irq(QP_IRQ, NULL);
 	MOD_DEC_USE_COUNT;
 }
 #endif
@@ -311,7 +311,7 @@ static int open_aux(struct inode * inode, struct file * file)
 		return -EBUSY;
 	}
 	queue->head = queue->tail = 0;		/* Flush input queue */
-	if (request_irq(AUX_IRQ, aux_interrupt, 0, "PS/2 Mouse")) {
+	if (request_irq(AUX_IRQ, aux_interrupt, 0, "PS/2 Mouse", NULL)) {
 		aux_count--;
 		return -EBUSY;
 	}
@@ -341,7 +341,7 @@ static int open_qp(struct inode * inode, struct file * file)
 	if (qp_count++)
 		return 0;
 
-	if (request_irq(QP_IRQ, qp_interrupt, 0, "PS/2 Mouse")) {
+	if (request_irq(QP_IRQ, qp_interrupt, 0, "PS/2 Mouse", NULL)) {
 		qp_count--;
 		return -EBUSY;
 	}
@@ -361,7 +361,7 @@ static int open_qp(struct inode * inode, struct file * file)
 		qp_count--;
 		status &= ~(QP_ENABLE|QP_INTS_ON);
 		outb_p(status, qp_status);
-		free_irq(QP_IRQ);
+		free_irq(QP_IRQ, NULL);
 		return -EBUSY;
 	}
 

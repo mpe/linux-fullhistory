@@ -381,7 +381,7 @@ struct aha152x_hostdata {
 #endif
 };
 
-void aha152x_intr(int irq, struct pt_regs *);
+void aha152x_intr(int irq, void *dev_id, struct pt_regs *);
 void aha152x_done(struct Scsi_Host *shpnt, int error);
 void aha152x_setup(char *str, int *ints);
 int aha152x_checksetup(struct aha152x_setup *setup);
@@ -835,7 +835,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 
       SETBITS(DMACNTRL0, INTEN);
 
-      ok = request_irq(setup[i].irq, aha152x_intr, SA_INTERRUPT, "aha152x");
+      ok = request_irq(setup[i].irq, aha152x_intr, SA_INTERRUPT, "aha152x", NULL);
       
       if(ok<0)
         {
@@ -1307,7 +1307,7 @@ void aha152x_done(struct Scsi_Host *shpnt, int error)
 /*
  * Interrupts handler (main routine of the driver)
  */
-void aha152x_intr(int irqno, struct pt_regs * regs)
+void aha152x_intr(int irqno, void *dev_id, struct pt_regs * regs)
 {
   struct Scsi_Host *shpnt = aha152x_host[irqno-IRQ_MIN];
   unsigned int flags;

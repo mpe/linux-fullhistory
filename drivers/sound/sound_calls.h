@@ -83,7 +83,7 @@ void tenmicrosec(int *osp);
 void request_sound_timer (int count);
 void sound_stop_timer(void);
 int snd_ioctl_return(int *addr, int value);
-int snd_set_irq_handler (int interrupt_level, void(*hndlr)(int, struct pt_regs *), char *name, int *osp);
+int snd_set_irq_handler (int interrupt_level, void(*hndlr)(int, void *, struct pt_regs *), char *name, int *osp);
 void snd_release_irq(int vect);
 void sound_dma_malloc(int dev);
 void sound_dma_free(int dev);
@@ -118,7 +118,7 @@ void sb16midiintr (int unit);
 long attach_sb16midi(long mem_start, struct address_info * hw_config);
 int probe_sb16midi(struct address_info *hw_config);
 void sb_midi_interrupt(int dummy);
-void sbmidiintr(int irq, struct pt_regs * dummy);
+void sbmidiintr(int irq, void *dev_id, struct pt_regs * dummy);
 
 /*	From sb_midi.c	*/
 void sb_midi_init(int model);
@@ -164,7 +164,7 @@ void pas_midi_interrupt(void);
 long attach_gus_card(long mem_start, struct address_info * hw_config);
 int probe_gus(struct address_info *hw_config);
 int gus_set_midi_irq(int num);
-void gusintr(int irq, struct pt_regs * dummy);
+void gusintr(int irq, void *dev_id, struct pt_regs * dummy);
 long attach_gus_db16(long mem_start, struct address_info * hw_config);
 int probe_gus_db16(struct address_info *hw_config);
 
@@ -187,7 +187,7 @@ void gus_midi_interrupt(int dummy);
 /*	From mpu401.c */
 long attach_mpu401(long mem_start, struct address_info * hw_config);
 int probe_mpu401(struct address_info *hw_config);
-void mpuintr(int irq, struct pt_regs * dummy);
+void mpuintr(int irq, void *dev_id, struct pt_regs * dummy);
 
 /*	From uart6850.c */
 long attach_uart6850(long mem_start, struct address_info * hw_config);
@@ -220,7 +220,7 @@ int ad1848_detect (int io_base, int *flags, int *osp);
 #define AD_F_CS4231	0x0001	/* Returned if a CS4232 (or compatible) detected */
 #define AD_F_CS4248	0x0001	/* Returned if a CS4248 (or compatible) detected */
 
-void     ad1848_interrupt (int irq, struct pt_regs * dummy);
+void     ad1848_interrupt (int irq, void *dev_id, struct pt_regs * dummy);
 long attach_ms_sound(long mem_start, struct address_info * hw_config);
 int probe_ms_sound(struct address_info *hw_config);
 long attach_pnp_ad1848(long mem_start, struct address_info * hw_config);

@@ -52,12 +52,12 @@ extern void wrmces (unsigned long);
 
 #define halt() __asm__ __volatile__ ("call_pal %0" : : "i" (PAL_halt) : "memory")
 
-extern void alpha_switch_to(unsigned long pctxp);
-
 #define switch_to(p) do { \
 	current_set[0] = p; \
 	alpha_switch_to((unsigned long) &(p)->tss - 0xfffffc0000000000); \
 } while (0)
+
+extern void alpha_switch_to(unsigned long pctxp);
 
 extern void imb(void);
 

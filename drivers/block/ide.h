@@ -126,7 +126,9 @@ typedef unsigned char	byte;	/* used everywhere */
 #define PARTN_BITS	6	/* number of minor dev bits for partitions */
 #define PARTN_MASK	((1<<PARTN_BITS)-1)	/* a useful bit mask */
 #define MAX_DRIVES	2	/* per interface; 2 assumed by lots of code */
+#ifndef MAX_HWIFS
 #define MAX_HWIFS	4	/* an arbitrary, but realistic limit */
+#endif
 #define SECTOR_WORDS	(512 / 4)	/* number of 32bit words per sector */
 
 /*

@@ -24,6 +24,7 @@
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/timex.h>
+#include <linux/malloc.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -72,37 +73,34 @@ void enable_irq(unsigned int irq_nr)
 /*
  * Irq handlers.
  */
-struct irqaction {
-	void (*handler)(int, struct pt_regs *);
-	unsigned long flags;
-	unsigned long mask;
-	const char *name;
-	int notified;
-};
+static struct irqaction timer_irq = { NULL, 0, 0, NULL, NULL, NULL};
+static struct irqaction cascade_irq = { NULL, 0, 0, NULL, NULL, NULL};
+static struct irqaction math_irq = { NULL, 0, 0, NULL, NULL, NULL};
 
-static struct irqaction irq_action[16] = {
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL }
+static struct irqaction *irq_action[16] = {
+	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL,
+	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL
 };
 
 int get_irq_list(char *buf)
 {
 	int i, len = 0;
-	struct irqaction * action = irq_action;
+	struct irqaction * action;
 
-	for (i = 0 ; i < 16 ; i++, action++) {
-		if (!action->handler)
-			continue;
-		len += sprintf(buf+len, "%2d: %8d %c %s\n",
+	for (i = 0 ; i < 16 ; i++) {
+	        action = *(i + irq_action);
+		if (!action) 
+		        continue;
+		len += sprintf(buf+len, "%2d: %8d %c %s",
 			i, kstat.interrupts[i],
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
 			action->name);
+		for (action=action->next; action; action = action->next) {
+			len += sprintf(buf+len, ",%s %s",
+				(action->flags & SA_INTERRUPT) ? " +" : "",
+				action->name);
+		}
+		len += sprintf(buf+len, "\n");
 	}
 	return len;
 }
@@ -110,7 +108,7 @@ int get_irq_list(char *buf)
 asmlinkage void handle_IRQ(struct pt_regs *regs)
 {
 	int irq, s;
-	struct irqaction *action;
+	struct irqaction * action;
 	intr_count++;
 	/* Figure out IRQ#, etc. */
 	outb(0x0C, 0x20);  /* Poll interrupt controller */
@@ -134,14 +132,17 @@ asmlinkage void handle_IRQ(struct pt_regs *regs)
 		outb(cache_21 | (1<<irq), 0x21);
 		outb(0x20, 0x20);
 	}
-	action = irq + irq_action;
+	action = *(irq + irq_action);
 	kstat.interrupts[irq]++;
-	if (action->handler)
-	{
-		action->handler(irq, regs);
-	} else
-	{
+	while (action) {
+	    if (action->handler)
+	    {
+		action->handler(irq, action->dev_id, regs);
+	    } else
+	    {
 		_printk("Bogus interrupt #%d\n", irq);
+	    }
+	    action = action->next;
 	}
 	if (_disable_interrupts() && !action->notified)
 	{
@@ -202,10 +203,13 @@ void check_irq(void )
 
 #define SA_PROBE SA_ONESHOT
 
-int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
-	unsigned long irqflags, const char * devname)
+int request_irq(unsigned int irq, 
+		void (*handler)(int, void *, struct pt_regs *),
+		unsigned long irqflags, 
+		const char * devname,
+		void *dev_id)
 {
-	struct irqaction * action;
+	struct irqaction * action, *tmp = NULL;
 	unsigned long flags;
 
 #if 0
@@ -214,41 +218,73 @@ cnpause();
 #endif
 	if (irq > 15)
 		return -EINVAL;
-	action = irq + irq_action;
-	if (action->handler)
-		return -EBUSY;
 	if (!handler)
-		return -EINVAL;
+	    return -EINVAL;
+	action = *(irq + irq_action);
+	if (action) {
+	    if ((action->flags & SA_SHIRQ) && (irqflags & SA_SHIRQ)) {
+		for (tmp = action; tmp->next; tmp = tmp->next);
+	    } else {
+		return -EBUSY;
+	    }
+	    if ((action->flags & SA_INTERRUPT) ^ (irqflags & SA_INTERRUPT)) {
+	      printk("Attempt to mix fast and slow interrupts on IRQ%d denied\n", irq);
+	      return -EBUSY;
+	    }   
+	}
 	save_flags(flags);
 	cli();
+	if (irq == 2)
+	    action = &cascade_irq;
+	else if (irq == 13)
+	  action = &math_irq;
+	else if (irq == TIMER_IRQ)
+	  action = &timer_irq;
+	else
+	  action = (struct irqaction *)kmalloc(sizeof(struct irqaction), GFP_KERNEL);
+
+	if (!action) { 
+	    restore_flags(flags);
+	    return -ENOMEM;
+	}
+
 	action->handler = handler;
 	action->flags = irqflags;
 	action->mask = 0;
 	action->name = devname;
+	action->next = NULL;
+	action->dev_id = dev_id;
+
+	if (tmp) {
+	    tmp->next = action;
+	} else {
+	    *(irq + irq_action) = action;
 #if 0	
-	if (!(action->flags & SA_PROBE)) { /* SA_ONESHOT is used by probing */
+	    if (!(action->flags & SA_PROBE)) { /* SA_ONESHOT is used by probing */
 		if (action->flags & SA_INTERRUPT)
-			set_intr_gate(0x20+irq,fast_interrupt[irq]);
+		  set_intr_gate(0x20+irq,fast_interrupt[irq]);
 		else
-			set_intr_gate(0x20+irq,interrupt[irq]);
-	}
+		  set_intr_gate(0x20+irq,interrupt[irq]);
+	    }
 #endif	
-	if (irq < 8) {
+	    if (irq < 8) {
 		cache_21 &= ~(1<<irq);
 		outb(cache_21,0x21);
-	} else {
+	    } else {
 		cache_21 &= ~(1<<2);
 		cache_A1 &= ~(1<<(irq-8));
 		outb(cache_21,0x21);
 		outb(cache_A1,0xA1);
+	    }
 	}
 	restore_flags(flags);
 	return 0;
 }
 		
-void free_irq(unsigned int irq)
+void free_irq(unsigned int irq, void *dev_id)
 {
-	struct irqaction * action = irq + irq_action;
+	struct irqaction * action = *(irq + irq_action);
+	struct irqaction * tmp = NULL;
 	unsigned long flags;
 
 	if (irq > 15) {
@@ -259,26 +295,49 @@ void free_irq(unsigned int irq)
 		printk("Trying to free free IRQ%d\n",irq);
 		return;
 	}
+	if (dev_id) {
+	    for (; action; action = action->next) {
+	        if (action->dev_id == dev_id) break;
+		tmp = action;
+	    }
+	    if (!action) {
+		printk("Trying to free free shared IRQ%d\n",irq);
+		return;
+	    }
+	} else if (action->flags & SA_SHIRQ) {
+	    printk("Trying to free shared IRQ%d with NULL device ID\n", irq);
+	    return;
+	}
 	save_flags(flags);
 	cli();
-	if (irq < 8) {
+	if (action && tmp) {
+	    tmp->next = action->next;
+	} else {
+	    *(irq + irq_action) = action->next;
+	}
+
+	if ((irq == 2) || (irq == 13) | (irq == TIMER_IRQ))
+	  memset(action, 0, sizeof(struct irqaction));
+	else 
+	  kfree_s(action, sizeof(struct irqaction));
+	
+	if (!(*(irq + irq_action))) {
+	    if (irq < 8) {
 		cache_21 |= 1 << irq;
 		outb(cache_21,0x21);
-	} else {
+	    } else {
 		cache_A1 |= 1 << (irq-8);
 		outb(cache_A1,0xA1);
-	}
+	    }
 #if 0	
-	set_intr_gate(0x20+irq,bad_interrupt[irq]);
+	    set_intr_gate(0x20+irq,bad_interrupt[irq]);
 #endif	
-	action->handler = NULL;
-	action->flags = 0;
-	action->mask = 0;
-	action->name = NULL;
+	}
+
 	restore_flags(flags);
 }
 
-static void no_action(int cpl, struct pt_regs * regs) { }
+static void no_action(int cpl, void *dev_id, struct pt_regs * regs) { }
 
 unsigned /*int*/ long probe_irq_on (void)
 {
@@ -287,7 +346,7 @@ unsigned /*int*/ long probe_irq_on (void)
 
 	/* first, snaffle up any unassigned irqs */
 	for (i = 15; i > 0; i--) {
-		if (!request_irq(i, no_action, SA_PROBE, "probe")) {
+		if (!request_irq(i, no_action, SA_PROBE, "probe", NULL)) {
 			enable_irq(i);
 			irqs |= (1 << i);
 		}
@@ -301,7 +360,7 @@ unsigned /*int*/ long probe_irq_on (void)
 	for (i = 15; i > 0; i--) {
 		if (irqs & (1 << i) & irqmask) {
 			irqs ^= (1 << i);
-			free_irq(i);
+			free_irq(i, NULL);
 		}
 	}
 #ifdef DEBUG
@@ -317,7 +376,7 @@ int probe_irq_off (unsigned /*int*/ long irqs)
 	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
 	for (i = 15; i > 0; i--) {
 		if (irqs & (1 << i)) {
-			free_irq(i);
+			free_irq(i, NULL);
 		}
 	}
 #ifdef DEBUG
@@ -347,7 +406,7 @@ void init_IRQ(void)
 	outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
 	outb(LATCH >> 8 , 0x40);	/* MSB */
-	if (request_irq(2, no_action, SA_INTERRUPT, "cascade"))
+	if (request_irq(2, no_action, SA_INTERRUPT, "cascade", NULL))
 		printk("Unable to get IRQ2 for cascade\n");
 	request_region(0x20,0x20,"pic1");
 	request_region(0xa0,0x20,"pic2");

@@ -114,7 +114,7 @@ void eata_scsi_done (Scsi_Cmnd * scmd)
     return;
 }   
 
-void eata_fake_int_handler(s32 irq, struct pt_regs * regs)
+void eata_fake_int_handler(s32 irq, void *dev_id, struct pt_regs * regs)
 {
     fake_int_result = inb((ulong)fake_int_base + HA_RSTATUS);
     fake_int_happened = TRUE;
@@ -129,7 +129,7 @@ void eata_fake_int_handler(s32 irq, struct pt_regs * regs)
 int eata_release(struct Scsi_Host *sh)
 {
     uint i;
-    if (sh->irq && reg_IRQ[sh->irq] == 1) free_irq(sh->irq);
+    if (sh->irq && reg_IRQ[sh->irq] == 1) free_irq(sh->irq, NULL);
     else reg_IRQ[sh->irq]--;
     
     scsi_init_free((void *)status, 512);
@@ -150,7 +150,7 @@ int eata_release(struct Scsi_Host *sh)
 #endif
 
 
-void eata_int_handler(int irq, struct pt_regs * regs)
+void eata_int_handler(int irq, void *dev_id, struct pt_regs * regs)
 {
     uint i, result = 0;
     uint hba_stat, scsi_stat, eata_stat;
@@ -867,7 +867,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
     
     if (reg_IRQ[gc->IRQ] == FALSE) {	/* Interrupt already registered ? */
 	if (!request_irq(gc->IRQ, (void *) eata_fake_int_handler, SA_INTERRUPT,
-			 "eata_dma")){
+			 "eata_dma", NULL)){
 	    reg_IRQ[gc->IRQ]++;
 	    if (!gc->IRQ_TR)
 		reg_IRQL[gc->IRQ] = TRUE;   /* IRQ is edge triggered */
@@ -892,7 +892,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
 		   dma_channel, base);
 	    reg_IRQ[gc->IRQ]--;
 	    if (reg_IRQ[gc->IRQ] == 0)
-		free_irq(gc->IRQ);
+		free_irq(gc->IRQ, NULL);
 	    if (gc->IRQ_TR == FALSE)
 		reg_IRQL[gc->IRQ] = FALSE; 
 	    return (FALSE);
@@ -919,7 +919,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
 		free_dma(dma_channel);
 	    reg_IRQ[gc->IRQ]--;
 	    if (reg_IRQ[gc->IRQ] == 0)
-		free_irq(gc->IRQ);
+		free_irq(gc->IRQ, NULL);
 	    if (gc->IRQ_TR == FALSE)
 		reg_IRQL[gc->IRQ] = FALSE; 
 	    return (FALSE);
@@ -956,7 +956,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
 	
 	reg_IRQ[gc->IRQ]--;
 	if (reg_IRQ[gc->IRQ] == 0)
-	    free_irq(gc->IRQ);
+	    free_irq(gc->IRQ, NULL);
 	if (gc->IRQ_TR == FALSE)
 	    reg_IRQL[gc->IRQ] = FALSE; 
 	return (FALSE);
@@ -1306,8 +1306,8 @@ int eata_detect(Scsi_Host_Template * tpnt)
     
     for (i = 0; i <= MAXIRQ; i++) { /* Now that we know what we have, we     */
 	if (reg_IRQ[i]){            /* exchange the interrupt handler which  */
-	    free_irq(i);            /* we used for probing with the real one */
-	    request_irq(i, (void *)(eata_int_handler), SA_INTERRUPT, "eata_dma");
+	    free_irq(i, NULL);      /* we used for probing with the real one */
+	    request_irq(i, (void *)(eata_int_handler), SA_INTERRUPT, "eata_dma", NULL);
 	}
     }
     HBA_ptr = first_HBA;

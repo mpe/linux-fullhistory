@@ -120,7 +120,7 @@ static unsigned char pt_dmacfg = 0;
 static int pt_probe(struct device *dev);
 static int pt_open(struct device *dev);
 static int pt_send_packet(struct sk_buff *skb, struct device *dev);
-static void pt_interrupt(int irq, struct pt_regs *regs);
+static void pt_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int pt_close(struct device *dev);
 static int pt_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
 static struct enet_statistics *pt_get_stats(struct device *dev);
@@ -868,7 +868,7 @@ static int pt_probe(struct device *dev)
          * the interrupt, and this marks the 'irqaction' as busy.
          */
         {
-            int irqval = request_irq(dev->irq, &pt_interrupt,0, "pt");
+            int irqval = request_irq(dev->irq, &pt_interrupt,0, "pt", NULL);
             if (irqval) {
                 printk("PT: ERROR: Unable to get IRQ %d (irqval = %d).\n",
                     dev->irq, irqval);
@@ -932,7 +932,7 @@ static int pt_open(struct device *dev)
         {
             if (request_dma(dev->dma, "pt"))
             {
-                free_irq(dev->irq);
+                free_irq(dev->irq, NULL);
                 return -EAGAIN;
             }
         }
@@ -1480,7 +1480,7 @@ static void pt_tmrisr(struct pt_local *lp)
  * This routine is called by the kernel when there is an interrupt for the
  * PT.
  */
-static void pt_interrupt(int irq, struct pt_regs *regs)
+static void pt_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
     /* It's a tad dodgy here, but we assume pt0a until proven otherwise */
     struct device *dev = &pt0a;

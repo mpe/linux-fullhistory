@@ -100,7 +100,7 @@ extern int netcard_probe(struct device *dev);
 static int netcard_probe1(struct device *dev, int ioaddr);
 static int net_open(struct device *dev);
 static int	net_send_packet(struct sk_buff *skb, struct device *dev);
-static void net_interrupt(int irq, struct pt_regs *regs);
+static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void net_rx(struct device *dev);
 static int net_close(struct device *dev);
 static struct enet_statistics *net_get_stats(struct device *dev);
@@ -220,7 +220,7 @@ static int netcard_probe1(struct device *dev, int ioaddr)
 		dev->irq = 9;
 
 	{
-		int irqval = request_irq(dev->irq, &net_interrupt, 0, cardname);
+		int irqval = request_irq(dev->irq, &net_interrupt, 0, cardname, NULL);
 		if (irqval) {
 			printk("%s: unable to get IRQ %d (irqval=%d).\n",
 				   dev->name, dev->irq, irqval);
@@ -313,7 +313,7 @@ net_open(struct device *dev)
 	 * This is used if the interrupt line can turned off (shared).
 	 * See 3c503.c for an example of selecting the IRQ at config-time.
 	 */
-	if (request_irq(dev->irq, &net_interrupt, 0, cardname)) {
+	if (request_irq(dev->irq, &net_interrupt, 0, cardname, NULL)) {
 		return -EAGAIN;
 	}
 	/*
@@ -321,7 +321,7 @@ net_open(struct device *dev)
 	 * and clean up on failure.
 	 */
 	if (request_dma(dev->dma, cardname)) {
-		free_irq(dev->irq);
+		free_irq(dev->irq, NULL);
 		return -EAGAIN;
 	}
 	irq2dev_map[dev->irq] = dev;
@@ -397,7 +397,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
  *   Handle the network interface interrupts.
  */
 static void
-net_interrupt(int irq, struct pt_regs * regs)
+net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct net_local *lp;
@@ -505,7 +505,7 @@ net_close(struct device *dev)
 	/* If not IRQ or DMA jumpered, free up the line. */
 	outw(0x00, ioaddr+0);	/* Release the physical interrupt line. */
 
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 	free_dma(dev->dma);
 
 	irq2dev_map[dev->irq] = 0;
@@ -615,7 +615,7 @@ cleanup_module(void)
 	 * allocate them in net_probe1().
 	 */
 	/*
-	   free_irq(this_device.irq);
+	   free_irq(this_device.irq, NULL);
 	   free_dma(this_device.dma);
 	*/
 	release_region(this_device.base_addr, NETCARD_IO_EXTENT);

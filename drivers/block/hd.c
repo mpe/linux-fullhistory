@@ -16,7 +16,7 @@
  *  in the early extended-partition checks and added DM partitions
  *
  *  IRQ-unmask, drive-id, multiple-mode, support for ">16 heads",
- *  and general streamlining by mlord@bnr.ca (Mark Lord).
+ *  and general streamlining by Mark Lord.
  */
 
 #define DEFAULT_MULT_COUNT  0	/* set to 0 to disable multiple mode at boot */
@@ -930,7 +930,7 @@ static struct gendisk hd_gendisk = {
 	NULL		/* next */
 };
 	
-static void hd_interrupt(int irq, struct pt_regs *regs)
+static void hd_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	void (*handler)(void) = DEVICE_INTR;
 
@@ -1020,7 +1020,7 @@ static void hd_geninit(struct gendisk *ignored)
 		special_op[i] = 1;
 	}
 	if (NR_HD) {
-		if (request_irq(HD_IRQ, hd_interrupt, SA_INTERRUPT, "hd")) {
+		if (request_irq(HD_IRQ, hd_interrupt, SA_INTERRUPT, "hd", NULL)) {
 			printk("hd: unable to get IRQ%d for the harddisk driver\n",HD_IRQ);
 			NR_HD = 0;
 		} else {

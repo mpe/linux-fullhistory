@@ -69,7 +69,7 @@ static struct mouse_status {
 	struct fasync_struct *fasync;
 } mouse;
 
-void mouse_interrupt(int irq, struct pt_regs * regs)
+void mouse_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	char dx, dy, buttons;
 
@@ -110,7 +110,7 @@ static void release_mouse(struct inode * inode, struct file * file)
 		return;
 	ATIXL_MSE_INT_OFF(); /* Interrupts are really shut down here */
 	mouse.ready = 0;
-	free_irq(ATIXL_MOUSE_IRQ);
+	free_irq(ATIXL_MOUSE_IRQ, NULL);
 	MOD_DEC_USE_COUNT;
 }
 
@@ -120,7 +120,7 @@ static int open_mouse(struct inode * inode, struct file * file)
 		return -EINVAL;
 	if (mouse.active++)
 		return 0;
-	if (request_irq(ATIXL_MOUSE_IRQ, mouse_interrupt, 0, "ATIXL mouse")) {
+	if (request_irq(ATIXL_MOUSE_IRQ, mouse_interrupt, 0, "ATIXL mouse", NULL)) {
 		mouse.active--;
 		return -EBUSY;
 	}

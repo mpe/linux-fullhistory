@@ -635,7 +635,7 @@ receive_packet (struct device * dev, int len)
  ******************************************************/
 
 static void
-elp_interrupt (int irq, struct pt_regs *reg_ptr)
+elp_interrupt (int irq, void *dev_id, struct pt_regs *reg_ptr)
 {
 	int len;
 	int dlen;
@@ -859,7 +859,7 @@ elp_open (struct device *dev)
 	/*
 	 * install our interrupt service routine
 	 */
-	if (request_irq(dev->irq, &elp_interrupt, 0, "3c505")) {
+	if (request_irq(dev->irq, &elp_interrupt, 0, "3c505", NULL)) {
 		irq2dev_map[dev->irq] = NULL;
 		return -EAGAIN;
 	}
@@ -1150,7 +1150,7 @@ elp_close (struct device *dev)
 	/*
 	 * release the IRQ
 	 */
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 
 	/*
 	 * and we no longer have to map irq to dev either

@@ -203,7 +203,7 @@ static const Signature signatures[] = {
  */
 
 static int hostno = -1;
-static void seagate_reconnect_intr(int, struct pt_regs *);
+static void seagate_reconnect_intr(int, void *, struct pt_regs *);
 
 #ifdef FAST
 static int fast = 1;
@@ -358,7 +358,7 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 		instance = scsi_register(tpnt, 0);
 		hostno = instance->host_no;
 		if (request_irq((int) irq, seagate_reconnect_intr, SA_INTERRUPT,
-		   (controller_type == SEAGATE) ? "seagate" : "tmc-8xx")) {
+		   (controller_type == SEAGATE) ? "seagate" : "tmc-8xx", NULL)) {
 			printk("scsi%d : unable to allocate IRQ%d\n",
 				hostno, (int) irq);
 			return 0;
@@ -493,7 +493,7 @@ static int should_reconnect = 0;
  * asserting SEL.
  */
 
-static void seagate_reconnect_intr(int irq, struct pt_regs * regs)
+static void seagate_reconnect_intr(int irq, void *dev_id, struct pt_regs *regs)
 	{
 	int temp;
 	Scsi_Cmnd * SCtmp;

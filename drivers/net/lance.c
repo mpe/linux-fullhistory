@@ -254,7 +254,7 @@ static int lance_open(struct device *dev);
 static void lance_init_ring(struct device *dev);
 static int lance_start_xmit(struct sk_buff *skb, struct device *dev);
 static int lance_rx(struct device *dev);
-static void lance_interrupt(int irq, struct pt_regs *regs);
+static void lance_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int lance_close(struct device *dev);
 static struct enet_statistics *lance_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev);
@@ -564,7 +564,7 @@ lance_open(struct device *dev)
 	int i;
 
 	if (dev->irq == 0 ||
-		request_irq(dev->irq, &lance_interrupt, 0, lp->name)) {
+		request_irq(dev->irq, &lance_interrupt, 0, lp->name, NULL)) {
 		return -EAGAIN;
 	}
 
@@ -826,7 +826,7 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 
 /* The LANCE interrupt handler. */
 static void
-lance_interrupt(int irq, struct pt_regs * regs)
+lance_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct lance_private *lp;
@@ -1056,7 +1056,7 @@ lance_close(struct device *dev)
 	if (dev->dma != 4)
 		disable_dma(dev->dma);
 
-	free_irq(dev->irq);
+	free_irq(dev->irq, NULL);
 
 	irq2dev_map[dev->irq] = 0;
 

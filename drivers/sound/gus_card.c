@@ -35,7 +35,7 @@
 
 #include "gus_hw.h"
 
-void            gusintr (int irq, struct pt_regs *dummy);
+void            gusintr (int irq, void *dev_id, struct pt_regs *dummy);
 
 int             gus_base, gus_irq, gus_dma;
 extern int      gus_wave_volume;
@@ -171,7 +171,7 @@ unload_gus (struct address_info *hw_config)
 }
 
 void
-gusintr (int irq, struct pt_regs *dummy)
+gusintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
   unsigned char   src;
   extern int      gus_timer_enabled;
@@ -180,7 +180,7 @@ gusintr (int irq, struct pt_regs *dummy)
 
 #ifdef CONFIG_GUSMAX
   if (have_gus_max)
-    ad1848_interrupt (irq, NULL);
+    ad1848_interrupt (irq, NULL, NULL);
 #endif
 
   while (1)

@@ -808,7 +808,7 @@ static void wd7000_scsi_done(Scsi_Cmnd * SCpnt)
 
 #define wd7000_intr_ack(host)  outb(0,host->iobase+ASC_INTR_ACK)
 
-void wd7000_intr_handle(int irq, struct pt_regs * regs)
+void wd7000_intr_handle(int irq, void *dev_id, struct pt_regs * regs)
 {
     register int flag, icmb, errstatus, icmb_status;
     register int host_error, scsi_error;
@@ -1048,13 +1048,13 @@ int wd7000_init( Adapter *host )
     }
     WAIT(host->iobase+ASC_STAT, ASC_STATMASK, ASC_INIT, 0);
 
-    if (request_irq(host->irq, wd7000_intr_handle, SA_INTERRUPT, "wd7000")) {
+    if (request_irq(host->irq, wd7000_intr_handle, SA_INTERRUPT, "wd7000", NULL)) {
 	printk("wd7000_init: can't get IRQ %d.\n", host->irq);
 	return 0;
     }
     if (request_dma(host->dma,"wd7000"))  {
 	printk("wd7000_init: can't get DMA channel %d.\n", host->dma);
-	free_irq(host->irq);
+	free_irq(host->irq, NULL);
 	return 0;
     }
     wd7000_enable_dma(host);
@@ -1062,7 +1062,7 @@ int wd7000_init( Adapter *host )
 
     if (!wd7000_diagnostics(host,ICB_DIAG_FULL))  {
 	free_dma(host->dma);
-	free_irq(host->irq);
+	free_irq(host->irq, NULL);
 	return 0;
     }
 
@@ -1197,7 +1197,7 @@ int wd7000_abort(Scsi_Cmnd * SCpnt)
 
     if (inb(host->iobase+ASC_STAT) & INT_IM)  {
 	printk("wd7000_abort: lost interrupt\n");
-	wd7000_intr_handle(host->irq, NULL);
+	wd7000_intr_handle(host->irq, NULL, NULL);
 	return SCSI_ABORT_SUCCESS;
     }
 

@@ -277,7 +277,7 @@ static int disable (struct Scsi_Host *host);
 static int NCR53c8xx_run_tests (struct Scsi_Host *host);
 static int NCR53c8xx_script_len;
 static int NCR53c8xx_dsa_len;
-static void NCR53c7x0_intr(int irq, struct pt_regs * regs);
+static void NCR53c7x0_intr(int irq, void *dev_id, struct pt_regs * regs);
 static int ncr_halt (struct Scsi_Host *host);
 static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd 
     *cmd);
@@ -1114,7 +1114,7 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 	search->irq == host->irq && search != host); search=search->next);
 
     if (!search) {
-	if (request_irq(host->irq, NCR53c7x0_intr, SA_INTERRUPT, "53c7,8xx")) {
+	if (request_irq(host->irq, NCR53c7x0_intr, SA_INTERRUPT, "53c7,8xx", NULL)) {
 	    printk("scsi%d : IRQ%d not free, detaching\n"
 	           "         You have either a configuration problem, or a\n"
                    "         broken BIOS.  You may wish to manually assign\n"
@@ -4321,7 +4321,7 @@ intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 }
 
 /*
- * Function : static void NCR53c7x0_intr (int irq, struct pt_regs * regs)
+ * Function : static void NCR53c7x0_intr (int irq, void *dev_id, struct pt_regs * regs)
  *
  * Purpose : handle NCR53c7x0 interrupts for all NCR devices sharing
  *	the same IRQ line.  
@@ -4332,7 +4332,7 @@ intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
  */
 
 static void 
-NCR53c7x0_intr (int irq, struct pt_regs * regs) {
+NCR53c7x0_intr (int irq, void *dev_id, struct pt_regs * regs) {
     NCR53c7x0_local_declare();
     struct Scsi_Host *host;			/* Host we are looking at */
     unsigned char istat; 			/* Values of interrupt regs */
@@ -5457,7 +5457,7 @@ NCR53c7xx_abort (Scsi_Cmnd *cmd) {
 	    (hostdata->chip / 100 == 8 ? ISTAT_800_INTF : 0))) {
 	printk ("scsi%d : dropped interrupt for command %ld\n", host->host_no,
 	    cmd->pid);
-	NCR53c7x0_intr (host->irq, NULL);
+	NCR53c7x0_intr (host->irq, NULL, NULL);
 	return SCSI_ABORT_BUSY;
     }
 	
@@ -6351,7 +6351,7 @@ NCR53c7x0_release(struct Scsi_Host *host) {
 		if (tmp->hostt == the_template && tmp->irq == host->irq)
 		    ++irq_count;
 	    if (irq_count == 1)
-		free_irq(host->irq);
+		free_irq(host->irq, NULL);
 	}
     if (host->dma_channel != DMA_NONE)
 	free_dma(host->dma_channel);

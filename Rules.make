@@ -101,7 +101,7 @@ endif
 #
 ALL_MOBJS = $(MX_OBJS) $(M_OBJS)
 ifneq "$(strip $(ALL_MOBJS))" ""
-PDWN=$(shell /bin/sh $(TOPDIR)/scripts/pathdown.sh)
+PDWN=$(shell $(CONFIG_SHELL) $(TOPDIR)/scripts/pathdown.sh)
 endif
 modules: $(ALL_MOBJS) dummy
 ifdef MOD_SUB_DIRS

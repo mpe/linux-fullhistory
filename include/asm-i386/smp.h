@@ -173,18 +173,20 @@ extern struct cpuinfo_x86 cpu_data[NR_CPUS];
  *	Private routines/data
  */
  
+extern int smp_found_config;
 extern void smp_scan_config(unsigned long, unsigned long);
 extern unsigned long smp_alloc_memory(unsigned long mem_base);
 extern unsigned char *apic_reg;
 extern unsigned char *kernel_stacks[NR_CPUS];
 extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;
+extern volatile int cpu_number_map[NR_CPUS];
 extern volatile unsigned long smp_invalidate_needed;
 extern void smp_invalidate(void);
 extern volatile unsigned long kernel_flag, kernel_counter;
 extern volatile unsigned char active_kernel_processor;
-extern void smp_message_irq(int cpl, struct pt_regs *regs);
-extern void smp_reschedule_irq(int cpl, struct pt_regs *regs);
+extern void smp_message_irq(int cpl, void *dev_id, struct pt_regs *regs);
+extern void smp_reschedule_irq(int cpl, void *dev_id, struct pt_regs *regs);
 extern unsigned long ipi_count;
 extern void smp_invalidate_rcv(void);		/* Process an NMI */
 extern volatile unsigned long kernel_counter;

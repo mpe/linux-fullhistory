@@ -604,7 +604,7 @@ static int probe_ready;
  * while we are probing for submarines.
  */
 static void
-cy_probe(int irq, struct pt_regs *regs)
+cy_probe(int irq, void *dev_id, struct pt_regs *regs)
 {
   int save_xir, save_car;
   int index = 0;	/* probing interrupts is only for ISA */
@@ -637,7 +637,7 @@ cy_probe(int irq, struct pt_regs *regs)
    received, out buffer empty, modem change, etc.
  */
 static void
-cy_interrupt(int irq, struct pt_regs *regs)
+cy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
   struct tty_struct *tty;
   int status;
@@ -1037,7 +1037,7 @@ grab_all_interrupts(int dontgrab)
     
     for (i = 0, mask = 1; i < 16; i++, mask <<= 1) {
 	if (!(mask & dontgrab)
-	&& !request_irq(i, cy_probe, SA_INTERRUPT, "serial probe")) {
+	&& !request_irq(i, cy_probe, SA_INTERRUPT, "serial probe", NULL)) {
 	    irq_lines |= mask;
 	}
     }
@@ -1054,7 +1054,7 @@ free_all_interrupts(int irq_lines)
     
     for (i = 0; i < 16; i++) {
 	if (irq_lines & (1 << i))
-	    free_irq(i);
+	    free_irq(i,NULL);
     }
 } /* free_all_interrupts */
 
@@ -2927,7 +2927,7 @@ cleanup_module(void)
     for (i = 0; i < NR_CARDS; i++) {
         if (cy_card[i].base_addr != 0)
 	{
-	    free_irq(cy_card[i].irq);
+	    free_irq(cy_card[i].irq,NULL);
 	}
     }
 }
@@ -2985,7 +2985,7 @@ cy_detect_isa()
 		}
 
 		/* allocate IRQ */
-		if(request_irq(cy_isa_irq,cy_interrupt,SA_INTERRUPT,"cyclades"))
+		if(request_irq(cy_isa_irq,cy_interrupt,SA_INTERRUPT,"cyclades",NULL))
 		{
 			printk("Cyclom-Y/ISA found at 0x%x but could not allocate interrupt IRQ#%d.\n",
 				(unsigned int) cy_isa_address,cy_isa_irq);
@@ -3082,7 +3082,7 @@ cy_detect_pci()
 		}
 
 		/* allocate IRQ */
-		if(request_irq(cy_pci_irq,cy_interrupt,SA_INTERRUPT,"cyclades"))
+		if(request_irq(cy_pci_irq,cy_interrupt,SA_INTERRUPT,"cyclades",NULL))
 		{
 			printk("Cyclom-Y/PCI found at 0x%x but could not allocate interrupt IRQ%d.\n",
 				(unsigned int) cy_pci_address,cy_pci_irq);

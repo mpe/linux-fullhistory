@@ -28,7 +28,8 @@
  *		Alan Cox	: MAC layer pointers/new format.
  *		Paul Gortmaker	: eth_copy_and_sum shouldn't csum padding.
  *		Alan Cox	: Protect against forwarding explosions with
- *				  older network drivers and IFF_ALLMULTI
+ *				  older network drivers and IFF_ALLMULTI.
+ *	Christer Weinigel	: Better rebuild header message.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -147,7 +148,7 @@ int eth_rebuild_header(void *buff, struct device *dev, unsigned long dst,
 	 
 	if(eth->h_proto != htons(ETH_P_IP)) 
 	{
-		printk("eth_rebuild_header: Don't know how to resolve type %d addresses?\n",(int)eth->h_proto);
+		printk(KERN_DEBUG "%s: unable to resolve type %X addresses.\n",dev->name,(int)eth->h_proto);
 		memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
 		return 0;
 	}

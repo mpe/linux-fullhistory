@@ -402,9 +402,9 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 					 *	are needed for AMPRnet AX.25 paths.
 					 */
 					else if (old_mtu > 216)
-						old_mtu = 216;
+						new_mtu = 216;
 					else if (old_mtu > 128)
-						old_mtu = 128;
+						new_mtu = 128;
 					else
 					/*
 					 *	Despair..

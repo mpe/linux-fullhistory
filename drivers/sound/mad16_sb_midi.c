@@ -90,7 +90,7 @@ mad16_sb_dsp_command (unsigned char val)
 }
 
 void
-mad16_sbintr (int irq, struct pt_regs *dummy)
+mad16_sbintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
   int             status;
 

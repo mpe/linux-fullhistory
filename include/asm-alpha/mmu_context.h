@@ -32,7 +32,7 @@
  * work correctly and can thus not be used (explaining the lack of PAL-code
  * support).
  */
-#ifdef CONFIG_EV5
+#ifdef CONFIG_ALPHA_EV5
 #define MAX_ASN 127
 #else
 #define MAX_ASN 63
@@ -55,26 +55,28 @@
  */
 extern inline void get_mmu_context(struct task_struct *p)
 {
-#ifdef CONFIG_EV5
+#ifdef CONFIG_ALPHA_EV5
 	static unsigned long asn_cache = ASN_FIRST_VERSION;
 	struct mm_struct * mm = p->mm;
-	unsigned long asn = mm->context;
 
-	/* Check if our ASN is of an older version and thus invalid */
-	if ((asn_cache ^ asn) & ASN_VERSION_MASK) {
-		/* get a new asn of the current version */
-		asn = asn_cache++;
-		/* check if it's legal.. */
-		if ((asn & ~ASN_VERSION_MASK) > MAX_ASN) {
-			/* start a new version, invalidate all old asn's */
-			tbiap(); imb();
-			asn_cache = (asn_cache & ASN_VERSION_MASK) + ASN_FIRST_VERSION;
-			if (!asn_cache)
-				asn_cache = ASN_FIRST_VERSION;
+	if (mm) {
+		unsigned long asn = mm->context;
+		/* Check if our ASN is of an older version and thus invalid */
+		if ((asn_cache ^ asn) & ASN_VERSION_MASK) {
+			/* get a new asn of the current version */
 			asn = asn_cache++;
+			/* check if it's legal.. */
+			if ((asn & ~ASN_VERSION_MASK) > MAX_ASN) {
+				/* start a new version, invalidate all old asn's */
+				tbiap(); imb();
+				asn_cache = (asn_cache & ASN_VERSION_MASK) + ASN_FIRST_VERSION;
+				if (!asn_cache)
+					asn_cache = ASN_FIRST_VERSION;
+				asn = asn_cache++;
+			}
+			mm->context = asn;			/* full version + asn */
+			p->tss.asn = asn & ~ASN_VERSION_MASK;	/* just asn */
 		}
-		mm->context = asn;			/* full version + asn */
-		p->tss.asn = asn & ~ASN_VERSION_MASK;	/* just asn */
 	}
 #endif
 }

@@ -396,7 +396,7 @@ struct de4x5_private {
 */
 static int     de4x5_open(struct device *dev);
 static int     de4x5_queue_pkt(struct sk_buff *skb, struct device *dev);
-static void    de4x5_interrupt(int irq, struct pt_regs *regs);
+static void    de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int     de4x5_close(struct device *dev);
 static struct  enet_statistics *de4x5_get_stats(struct device *dev);
 static void    set_multicast_list(struct device *dev);
@@ -761,7 +761,7 @@ de4x5_open(struct device *dev)
     dce_ms_delay(10);
   }
 
-  if (request_irq(dev->irq, (void *)de4x5_interrupt, 0, lp->adapter_name)) {
+  if (request_irq(dev->irq, (void *)de4x5_interrupt, SA_SHIRQ, lp->adapter_name, dev)) {
     printk("de4x5_open(): Requested IRQ%d is busy\n",dev->irq);
     status = -EAGAIN;
   } else {
@@ -1065,9 +1065,9 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
 ** interrupt is asserted and this routine entered.
 */
 static void
-de4x5_interrupt(int irq, struct pt_regs *regs)
+de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-    struct device *dev = (struct device *)(irq2dev_map[irq]);
+    struct device *dev = (struct device *)dev_id;
     struct de4x5_private *lp;
     s32 imr, omr, sts;
     u_long iobase;
@@ -1332,7 +1332,7 @@ de4x5_close(struct device *dev)
   /*
   ** Free the associated irq
   */
-  free_irq(dev->irq);
+  free_irq(dev->irq, dev);
   irq2dev_map[dev->irq] = 0;
 
   MOD_DEC_USE_COUNT;

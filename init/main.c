@@ -568,18 +568,25 @@ static void smp_init(void)
 	 *	Create the slave init tasks as sharing pid 0.
 	 */
 
-	for(i=1;i<smp_num_cpus;i++)
+	for (i=0; i<NR_CPUS; i++)
 	{
 		/*
-		 *	We use kernel_thread for the idlers which are
-		 *	unlocked tasks running in kernel space.
+		 *	This should only do anything if the mapping
+		 *	corresponds to a live CPU which is not the boot CPU.
 		 */
-		kernel_thread(cpu_idle, NULL, CLONE_PID);
-		/*
-		 *	Assume linear processor numbering
-		 */
-		current_set[i]=task[i];
-		current_set[i]->processor=i;
+		if (cpu_number_map[i] > 0)
+		{
+			/*
+			 *	We use kernel_thread for the idlers which are
+			 *	unlocked tasks running in kernel space.
+			 */
+			kernel_thread(cpu_idle, NULL, CLONE_PID);
+			/*
+			 *	Don't assume linear processor numbering
+			 */
+			current_set[i]=task[cpu_number_map[i]];
+			current_set[i]->processor=i;
+		}
 	}
 }		
 

@@ -191,7 +191,7 @@ void mcdx_setup(char *, int *);
 	structure fops. */
 
 /* ???  exported by the mcdx_sigaction struct */
-static void mcdx_intr(int, struct pt_regs*);
+static void mcdx_intr(int, void *, struct pt_regs*);
 
 /* exported by file_ops */
 static int mcdx_open(struct inode*, struct file*);
@@ -835,7 +835,7 @@ static void mcdx_delay(struct s_drive_stuff *stuff, long jifs)
 }
 
 static void 
-mcdx_intr(int irq, struct pt_regs* regs)
+mcdx_intr(int irq, void *dev_id, struct pt_regs* regs)
 {
     struct s_drive_stuff *stuffp;
 	unsigned char x;
@@ -1002,7 +1002,7 @@ void cleanup_module(void)
 		stuffp = mcdx_stuffp[i];
 		if (!stuffp) continue;
 		release_region((unsigned long) stuffp->wreg_data, MCDX_IO_SIZE);
-		free_irq(stuffp->irq);
+		free_irq(stuffp->irq, NULL);
 		if (stuffp->toc) {
 			TRACE((MALLOC, "cleanup_module() free toc @ %p\n", stuffp->toc));
 			kfree(stuffp->toc);
@@ -1170,7 +1170,7 @@ int mcdx_init(void)
 
 		TRACE((INIT, "init() subscribe irq and i/o\n"));
 		mcdx_irq_map[stuffp->irq] = stuffp;
-		if (request_irq(stuffp->irq, mcdx_intr, SA_INTERRUPT, DEVICE_NAME)) {
+		if (request_irq(stuffp->irq, mcdx_intr, SA_INTERRUPT, DEVICE_NAME, NULL)) {
             WARN(("%s=0x%3p,%d: Init failed. Can't get irq (%d).\n",
                     MCDX,
                     stuffp->wreg_data, stuffp->irq, stuffp->irq));

@@ -53,10 +53,6 @@ SWAP_DEV = 0
 ! ld86 requires an entry symbol. This may as well be the usual one.
 .globl	_main
 _main:
-	nop
-	jmp	over_magic
-	.byte	0xF0
-over_magic:
 #if 0 /* hook for debugger, harmless unless BIOS is fussy (old HP) */
 	int	3
 #endif

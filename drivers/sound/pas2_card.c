@@ -84,7 +84,7 @@ pas2_msg (char *foo)
 /******************* Begin of the Interrupt Handler ********************/
 
 void
-pasintr (int irq, struct pt_regs *dummy)
+pasintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
   int             status;
 

@@ -294,6 +294,8 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 		if (blk_size[major][MINOR(bh->b_dev)] < (sector + count)>>1) {
 			bh->b_state = 0;
 			printk("attempt to access beyond end of device\n");
+			printk("%s: rw=%d, want=%d, limit=%d\n", kdevname(bh->b_dev),
+			 rw, (sector + count)>>1, blk_size[major][MINOR(bh->b_dev)]);
 			return;
 		}
 	/* Uhhuh.. Nasty dead-lock possible here.. */
