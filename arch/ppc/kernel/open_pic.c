@@ -261,12 +261,15 @@ void __init openpic_init(int main_pic)
 			    	while(np) {
 					int j, pri;
 					pri = strcmp(np->name, "programmer-switch") ? 2 : 7;
-					for (j=0;j<np->n_intrs;j++)
+					for (j=0;j<np->n_intrs;j++) {
 						openpic_initirq(	np->intrs[j].line,
 									pri,
 									np->intrs[j].line,
-									np->intrs[j].sense,
+									0,
 									np->intrs[j].sense);
+						if (np->intrs[j].sense)
+							irq_desc[np->intrs[j].line].status =  IRQ_LEVEL;
+					}
 					np = np->next;
 				}
 			}

@@ -42,7 +42,7 @@ znetboot: vmlinux.coff vmlinux.elf zImage
 	cp vmlinux.coff $(TFTPIMAGE)
 	cp vmlinux.elf $(TFTPIMAGE).elf
 
-znetboot.initrd: vmlinux.coff.initrd
+znetboot.initrd: vmlinux.coff.initrd vmlinux.elf.initrd
 	cp vmlinux.coff.initrd $(TFTPIMAGE)
 	cp vmlinux.elf.initrd $(TFTPIMAGE).elf
 
@@ -81,7 +81,7 @@ vmlinux.coff: coffboot hack-coff
 	ln -sf vmlinux.coff zImage
 
 vmlinux.coff.initrd: coffboot.initrd hack-coff
-	$(OBJCOPY) $(OBJCOPY_ARGS) coffboot $@
+	$(OBJCOPY) $(OBJCOPY_ARGS) coffboot.initrd $@
 	./hack-coff $@
 
 vmlinux.elf: $(CHRPOBJS) no_initrd.o mknote

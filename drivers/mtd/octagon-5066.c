@@ -1,4 +1,4 @@
-// $Id: octagon-5066.c,v 1.9 2000/07/03 10:01:38 dwmw2 Exp $
+// $Id: octagon-5066.c,v 1.10 2000/07/13 14:04:23 dwmw2 Exp $
 /* ######################################################################
 
    Octagon 5066 MTD Driver. 
@@ -56,8 +56,8 @@ static inline void oct5066_page(struct map_info *map, unsigned long ofs)
 {
 	__u8 byte = map->map_priv_1 | (ofs >> WINDOW_SHIFT);
 	
-	if (page_n_dev != byte);
-	__oct5066_page(map, byte);
+	if (page_n_dev != byte)
+		__oct5066_page(map, byte);
 }
 
 

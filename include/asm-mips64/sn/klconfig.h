@@ -11,8 +11,6 @@
 #ifndef	_ASM_SN_KLCONFIG_H
 #define	_ASM_SN_KLCONFIG_H
 
-#include <linux/config.h>
-
 /*
  * The KLCONFIG structures store info about the various BOARDs found
  * during Hardware Discovery. In addition, it stores info about the
@@ -29,6 +27,7 @@
  *      that offsets of existing fields do not change.
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <asm/sn/types.h>
 #if defined(CONFIG_SGI_IP27)
@@ -37,29 +36,25 @@
 // XXX Stolen from <sys/SN/router.h>:
 #define MAX_ROUTER_PORTS (6)    /* Max. number of ports on a router */
 #include <asm/sn/sn0/sn0_fru.h>
-#include <asm/sn/agent.h>
 //#include <sys/graph.h>
+//#include <sys/xtalk/xbow.h>
+#elif defined(CONFIG_SGI_IP35)
+#include <asm/sn/sn1/addrs.h>
+#include <sys/sn/router.h>
+#include <sys/graph.h>
+#include <asm/xtalk/xbow.h>
+#endif /* !CONFIG_SGI_IP27 && !CONFIG_SGI_IP35 */
+#if defined(CONFIG_SGI_IP27) || defined(CONFIG_SGI_IP35)
+#include <asm/sn/agent.h>
 #include <asm/arc/types.h>
 #include <asm/arc/hinv.h>
-//#include <sys/xtalk/xbow.h>
-#if defined(CONFIG_SGI_IO)
+#if defined(CONFIG_SGI_IO) || defined(CONFIG_SGI_IP35)
 // The hack file has to be before vector and after sn0_fru....
 #include <asm/hack.h>
 #include <asm/sn/vector.h>
 #include <asm/xtalk/xtalk.h>
-#endif  /* CONFIG_SGI_IO */
-#elif defined(CONFIG_SGI_IP35)
-#include <asm/hack.h>
-#include <asm/sn/sn1/addrs.h>
-#include <asm/sn/vector.h>
-#include <sys/sn/router.h>
-#include <asm/sn/agent.h>
-#include <sys/graph.h>
-#include <asm/arc/types.h>
-#include <asm/arc/hinv.h>
-#include <asm/xtalk/xbow.h>
-#include <asm/xtalk/xtalk.h>
-#endif  /* !CONFIG_SGI_IP27 && !CONFIG_SGI_IP35 */
+#endif /* CONFIG_SGI_IO || CONFIG_SGI_IP35 */
+#endif /* CONFIG_SGI_IP27 || CONFIG_SGI_IP35 */
 
 #define KLCFGINFO_MAGIC	0xbeedbabe
 

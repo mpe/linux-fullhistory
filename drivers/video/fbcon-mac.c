@@ -100,8 +100,8 @@ void fbcon_mac_bmove(struct display *p, int sy, int sx, int dy, int dx,
          err_buf[cnt] = 0x700 | err_str[cnt];
        fbcon_mac_putcs(p->conp, p, err_buf, len, 0, 0);
        /* pause for the user */
-       for(cnt = 0; cnt < 50000; cnt++)
-		udelay(100);
+       printk( "ERROR: shift algorithm...\n" );
+       mdelay(5000);
        return;
      }
    }
@@ -318,12 +318,25 @@ void fbcon_mac_revc(struct display *p, int xx, int yy)
    }
 }
 
+static inline void plot_helper(u8 *dest, u8 bit, int bw)
+{
+    switch (bw) {
+    case PIXEL_BLACK_MAC:
+      fb_writeb( fb_readb(dest) | bit, dest );
+      break;
+    case PIXEL_WHITE_MAC:
+      fb_writeb( fb_readb(dest) & (~bit), dest );
+      break;
+    case PIXEL_INVERT_MAC:
+      fb_writeb( fb_readb(dest) ^ bit, dest );
+      break;
+    default:
+      printk( "ERROR: Unknown pixel value in plot_pixel_mac\n");
+    }
+}
+
 /*
  * plot_pixel_mac
- *
- * bw == 0 = black
- *       1 = white
- *       2 = invert
  */
 static void plot_pixel_mac(struct display *p, int bw, int pixel_x, int pixel_y)
 {
@@ -333,10 +346,8 @@ static void plot_pixel_mac(struct display *p, int bw, int pixel_x, int pixel_y)
 
   /* There *are* 68k Macs that support more than 832x624, you know :-) */
   if (pixel_x < 0 || pixel_y < 0 || pixel_x >= p->var.xres || pixel_y >= p->var.yres) {
-    int cnt;
     printk ("ERROR: pixel_x == %d, pixel_y == %d", pixel_x, pixel_y);
-    for(cnt = 0; cnt < 100000; cnt++)
-        udelay(100);
+    mdelay(1000);
     return;
   }
 
@@ -344,90 +355,36 @@ static void plot_pixel_mac(struct display *p, int bw, int pixel_x, int pixel_y)
   case 1:
     dest = (u8 *) ((pixel_x >> 3) + p->screen_base + pixel_y * p->next_line);
     bit = 0x80 >> (pixel_x & 7);
-    switch (bw) {
-    case PIXEL_BLACK_MAC:
-      *dest |= bit;
-      break;
-    case PIXEL_WHITE_MAC:
-      *dest &= ~bit;
-      break;
-    case PIXEL_INVERT_MAC:
-      *dest ^= bit;
-      break;
-    default:
-      printk( "ERROR: Unknown pixel value in plot_pixel_mac\n");
-    }
+    plot_helper(dest, bit, bw);
     break;
 
   case 2:
     dest = (u8 *) ((pixel_x >> 2) + p->screen_base + pixel_y * p->next_line);
     bit = 0xC0 >> ((pixel_x & 3) << 1);
-    switch (bw) {
-    case PIXEL_BLACK_MAC:
-      *dest |= bit;
-      break;
-    case PIXEL_WHITE_MAC:
-      *dest &= ~bit;
-      break;
-    case PIXEL_INVERT_MAC:
-      *dest ^= bit;
-      break;
-    default:
-      printk( "ERROR: Unknown pixel value in plot_pixel_mac\n");
-    }
+    plot_helper(dest, bit, bw);
     break;
 
   case 4:
-    dest = (u8 *) ((pixel_x / 2) + p->screen_base + pixel_y * p->next_line);
+    dest = (u8 *) ((pixel_x >> 1) + p->screen_base + pixel_y * p->next_line);
     bit = 0xF0 >> ((pixel_x & 1) << 2);
-    switch (bw) {
-    case PIXEL_BLACK_MAC:
-      *dest |= bit;
-      break;
-    case PIXEL_WHITE_MAC:
-      *dest &= ~bit;
-      break;
-    case PIXEL_INVERT_MAC:
-      *dest ^= bit;
-      break;
-    default:
-      printk( "ERROR: Unknown pixel value in plot_pixel_mac\n");
-    }
+    plot_helper(dest, bit, bw);
     break;
 
   case 8:
     dest = (u8 *) (pixel_x + p->screen_base + pixel_y * p->next_line);
     bit = 0xFF;
-    switch (bw) {
-    case PIXEL_BLACK_MAC:
-      *dest |= bit;
-      break;
-    case PIXEL_WHITE_MAC:
-      *dest &= ~bit;
-      break;
-    case PIXEL_INVERT_MAC:
-      *dest ^= bit;
-      break;
-    default:
-      printk( "ERROR: Unknown pixel value in plot_pixel_mac\n");
-    }
+    plot_helper(dest, bit, bw);
     break;
 
+/* FIXME: You can't access framebuffer directly like this! */
   case 16:
     dest16 = (u16 *) ((pixel_x *2) + p->screen_base + pixel_y * p->next_line);
     pix16 = 0xFFFF;
     switch (bw) {
-    case PIXEL_BLACK_MAC:
-      *dest16 = ~pix16;
-      break;
-    case PIXEL_WHITE_MAC:
-      *dest16 = pix16;
-      break;
-    case PIXEL_INVERT_MAC:
-      *dest16 ^= pix16;
-      break;
-    default:
-      printk( "ERROR: Unknown pixel value in plot_pixel_mac\n");
+    case PIXEL_BLACK_MAC:  *dest16 = ~pix16; break;
+    case PIXEL_WHITE_MAC:  *dest16 = pix16;  break;
+    case PIXEL_INVERT_MAC: *dest16 ^= pix16; break;
+    default: printk( "ERROR: Unknown pixel value in plot_pixel_mac\n");
     }
     break;
 
@@ -435,17 +392,10 @@ static void plot_pixel_mac(struct display *p, int bw, int pixel_x, int pixel_y)
     dest32 = (u32 *) ((pixel_x *4) + p->screen_base + pixel_y * p->next_line);
     pix32 = 0xFFFFFFFF;
     switch (bw) {
-    case PIXEL_BLACK_MAC:
-      *dest32 = ~pix32;
-      break;
-    case PIXEL_WHITE_MAC:
-      *dest32 = pix32;
-      break;
-    case PIXEL_INVERT_MAC:
-      *dest32 ^= pix32;
-      break;
-    default:
-      printk( "ERROR: Unknown pixel value in plot_pixel_mac\n");
+    case PIXEL_BLACK_MAC:  *dest32 = ~pix32; break;
+    case PIXEL_WHITE_MAC:  *dest32 = pix32;  break;
+    case PIXEL_INVERT_MAC: *dest32 ^= pix32; break;
+    default: printk( "ERROR: Unknown pixel value in plot_pixel_mac\n");
     }
     break;
   }
@@ -497,7 +447,7 @@ static int get_pixel_mac(struct display *p, int pixel_x, int pixel_y)
      */
 
 struct display_switch fbcon_mac = {
-    fbcon_mac_setup, fbcon_mac_bmove, fbcon_mac_clear, fbcon_mac_putc,
+    fbcon_mac_setup, fbcon_redraw_bmove, fbcon_redraw_clear, fbcon_mac_putc,
     fbcon_mac_putcs, fbcon_mac_revc, NULL, NULL, NULL, FONTWIDTHRANGE(1,8)
 };
 

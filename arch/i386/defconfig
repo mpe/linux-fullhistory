@@ -12,6 +12,13 @@ CONFIG_UID16=y
 # CONFIG_EXPERIMENTAL is not set
 
 #
+# Loadable module support
+#
+CONFIG_MODULES=y
+# CONFIG_MODVERSIONS is not set
+# CONFIG_KMOD is not set
+
+#
 # Processor type and features
 #
 # CONFIG_M386 is not set
@@ -46,13 +53,6 @@ CONFIG_NOHIGHMEM=y
 # CONFIG_MTRR is not set
 CONFIG_SMP=y
 CONFIG_HAVE_DEC_LOCK=y
-
-#
-# Loadable module support
-#
-CONFIG_MODULES=y
-# CONFIG_MODVERSIONS is not set
-# CONFIG_KMOD is not set
 
 #
 # General setup

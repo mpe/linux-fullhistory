@@ -931,6 +931,9 @@ MMU_init(void)
 	/* How about ppc_md.md_find_end_of_memory instead of these
 	 * ifdefs?  -- Dan.
 	 */
+#ifdef CONFIG_BOOTX_TEXT
+extern boot_infos_t *disp_bi;
+#endif
 void __init MMU_init(void)
 {
 	if ( ppc_md.progress ) ppc_md.progress("MMU:enter", 0x111);
@@ -1050,6 +1053,11 @@ void __init MMU_init(void)
 #endif
 #endif /* CONFIG_8xx */
 	if ( ppc_md.progress ) ppc_md.progress("MMU:exit", 0x211);
+#ifdef CONFIG_BOOTX_TEXT
+	/* Must be done last, or ppc_md.progress will die */
+	if (_machine == _MACH_Pmac)
+		map_bootx_text();
+#endif
 }
 #endif /* CONFIG_4xx */
 

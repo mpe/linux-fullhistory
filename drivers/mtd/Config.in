@@ -1,5 +1,5 @@
 
-# $Id: Config.in,v 1.18 2000/07/12 13:43:24 dwmw2 Exp $
+# $Id: Config.in,v 1.20 2000/07/13 12:40:46 scote1 Exp $
 
 mainmenu_option next_comment
 comment 'Memory Technology Devices (MTD)'
@@ -25,10 +25,15 @@ if [ "$CONFIG_MTD" != "n" ]; then
       bool '    PMC551 256M DRAM Bugfix' CONFIG_MTD_PMC551_BUGFIX
    fi
    dep_tristate '  Debugging RAM test driver' CONFIG_MTD_MTDRAM $CONFIG_MTD
+   if [ "$CONFIG_MTD_MTDRAM" != "n" ]; then
+      int 'Device size in kB' CONFIG_MTDRAM_TOTAL_SIZE 4096
+      int 'Size of the erase sectors in kB' CONFIG_MTDRAM_ERASE_SIZE 128
+   fi
 
 comment 'MTD drivers for mapped chips'
    dep_tristate '  Common Flash Interface (CFI) support' CONFIG_MTD_CFI $CONFIG_MTD
    dep_tristate '    CFI support for Intel/Sharp Extended Command Set chips' CONFIG_MTD_CFI_INTELEXT $CONFIG_MTD_CFI
+   dep_tristate '    CFI support for AMD/Fujitsu Standard Command Set chips' CONFIG_MTD_CFI_AMDSTD $CONFIG_MTD_CFI
 
 # These will later become config-options
 define_bool CONFIG_MTD_JEDEC n
@@ -45,6 +50,7 @@ comment 'Drivers for chip mappings'
    dep_tristate '  Flash chip mapping on Mixcom piggyback card' CONFIG_MTD_MIXMEM $CONFIG_MTD_JEDEC
    dep_tristate '  Flash chip mapping on Nora' CONFIG_MTD_NORA $CONFIG_MTD_CFI
    dep_tristate '  Flash chip mapping on Octagon 5066 SBC' CONFIG_MTD_OCTAGON $CONFIG_MTD_JEDEC
+   dep_tristate '  Flash chip mapping on Photron PNC-2000' CONFIG_MTD_PNC2000 $CONFIG_MTD_CFI
    dep_tristate '  Flash chip mapping on RPXLite PPC board' CONFIG_MTD_RPXLITE $CONFIG_MTD_CFI
    dep_tristate '  Flash chip mapping on Tempustech VMAX SBC301' CONFIG_MTD_VMAX $CONFIG_MTD_JEDEC
 

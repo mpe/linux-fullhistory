@@ -118,10 +118,16 @@ static struct device_node *allnodes = 0;
 
 #ifdef CONFIG_BOOTX_TEXT
 
+#define NO_SCROLL
+
 static void clearscreen(void);
 static void flushscreen(void);
 
+#ifndef NO_SCROLL
 static void scrollscreen(void);
+#endif
+
+static void prepare_disp_BAT(void);
 
 static void draw_byte(unsigned char c, long locX, long locY);
 static void draw_byte_32(unsigned char *bits, unsigned long *base, int rb);
@@ -133,6 +139,9 @@ static long				g_loc_X = 0;
 static long				g_loc_Y = 0;
 static long				g_max_loc_X = 0;
 static long				g_max_loc_Y = 0;
+
+unsigned long disp_BATL = 0;
+unsigned long disp_BATU = 0;
 
 #define cmapsz	(16*256)
 
@@ -473,9 +482,10 @@ bootx_init(unsigned long r4, unsigned long phys)
 	}
 		
 #ifdef CONFIG_BOOTX_TEXT
+	prepare_disp_BAT();
 	prom_drawstring(RELOC("booting...\n"));
 	flushscreen();
-	RELOC(bootx_text_mapped) = 0;
+	RELOC(bootx_text_mapped) = 1;
 #endif
 }
 
@@ -748,11 +758,15 @@ prom_init(int r3, int r4, prom_entry pp)
 
 #ifdef CONFIG_BOOTX_TEXT
 	if (!chrp && RELOC(disp_bi)) {
+		RELOC(prom_stdout) = 0; /* stop OF output */
 		clearscreen();
+		prepare_disp_BAT();
 		prom_welcome(PTRRELOC(RELOC(disp_bi)), phys);
 		prom_drawstring(RELOC("booting...\n"));
+		RELOC(bootx_text_mapped) = 1;
+	} else {
+		RELOC(bootx_text_mapped) = 0;
 	}
-	RELOC(bootx_text_mapped) = 0;
 #endif
 
 	prom_print(RELOC("returning from prom_init\n"));
@@ -820,6 +834,45 @@ prom_welcome(boot_infos_t* bi, unsigned long phys)
 	}
 	prom_drawstring(RELOC("\n\n"));
 }
+
+/* Calc BAT values for mapping the display and store them
+ * in disp_BATH and disp_BATL. Those values are then used
+ * from head.S to map the display during identify_machine()
+ * and MMU_Init()
+ * 
+ * For now, the display is mapped in place (1:1). This should
+ * be changed if the display physical address overlaps
+ * KERNELBASE, which is fortunately not the case on any machine
+ * I know of. This mapping is temporary and will disappear as
+ * soon as the setup done by MMU_Init() is applied
+ * 
+ * For now, we align the BAT and then map 8Mb on 601 and 16Mb
+ * on other PPCs. This may cause trouble if the framebuffer
+ * is really badly aligned, but I didn't encounter this case
+ * yet.
+ */
+__init
+static void
+prepare_disp_BAT(void)
+{
+	unsigned long offset = reloc_offset();
+	boot_infos_t* bi = PTRRELOC(RELOC(disp_bi));
+	unsigned long addr = (unsigned long)bi->dispDeviceBase;
+	
+	if ((_get_PVR() >> 16) != 1) {
+		/* 603, 604, G3, G4, ... */
+		addr &= 0xFF000000UL;
+		RELOC(disp_BATU) = addr | (BL_16M<<2) | 2;
+		RELOC(disp_BATL) = addr | (_PAGE_NO_CACHE | _PAGE_GUARDED | BPP_RW);		
+	} else {
+		/* 601 */
+		addr &= 0xFF800000UL;
+		RELOC(disp_BATU) = addr | (_PAGE_NO_CACHE | PP_RWXX) | 4;
+		RELOC(disp_BATL) = addr | BL_8M | 0x40;
+	}
+	bi->logicalDisplayBase = bi->dispDeviceBase;
+}
+
 #endif
 
 static int prom_set_color(ihandle ih, int i, int r, int g, int b)
@@ -1133,14 +1186,14 @@ finish_device_tree(void)
 	/* All newworld machines now use the interrupt tree */
 	struct device_node *np = allnodes;
 
-	while(np) {
+	while(np && (_machine == _MACH_Pmac)) {
 		if (get_property(np, "interrupt-parent", 0)) {
 			pmac_newworld = 1;
 			break;
 		}
 		np = np->allnext;
 	}
-	if (boot_infos == 0 && pmac_newworld)
+	if ((_machine == _MACH_chrp) || (boot_infos == 0 && pmac_newworld))
 		use_of_interrupt_tree = 1;
 
 	mem = finish_node(allnodes, mem, NULL, 0, 0);
@@ -1746,8 +1799,17 @@ find_pci_device_OFnode(unsigned char bus, unsigned char dev_fn)
 	int l;
 	
 	for (np = allnodes; np != 0; np = np->allnext) {
-		if (np->parent == NULL || np->parent->type == NULL
-		    || strcmp(np->parent->type, "pci") != 0)
+		int in_macio = 0;
+		struct device_node* parent = np->parent;
+		while(parent) {
+			char *pname = (char *)get_property(parent, "name", &l);
+			if (pname && strcmp(pname, "mac-io") == 0) {
+				in_macio = 1;
+				break;
+			}
+			parent = parent->parent;
+		}
+		if (in_macio)
 			continue;
 		reg = (unsigned int *) get_property(np, "reg", &l);
 		if (reg == 0 || l < sizeof(struct reg_property))
@@ -2014,11 +2076,14 @@ __init
 void
 map_bootx_text(void)
 {
+	unsigned long base, offset, size;
 	if (disp_bi == 0)
 		return;
-	disp_bi->logicalDisplayBase =
-		ioremap((unsigned long) disp_bi->dispDeviceBase,
-			disp_bi->dispDeviceRowBytes * disp_bi->dispDeviceRect[3]);
+	base = ((unsigned long) disp_bi->dispDeviceBase) & 0xFFFFF000UL;
+	offset = ((unsigned long) disp_bi->dispDeviceBase) - base;
+	size = disp_bi->dispDeviceRowBytes * disp_bi->dispDeviceRect[3] + offset
+		+ disp_bi->dispDeviceRect[0];
+	disp_bi->logicalDisplayBase = ioremap(base, size) + offset;
 	bootx_text_mapped = 1;
 }
 
@@ -2084,6 +2149,7 @@ flushscreen(void)
 	}
 }
 
+#ifndef NO_SCROLL
 __pmac
 static void
 scrollscreen(void)
@@ -2113,6 +2179,7 @@ scrollscreen(void)
 		dst += (bi->dispDeviceRowBytes >> 2);
 	}
 }
+#endif /* ndef NO_SCROLL */
 
 __pmac
 void
@@ -2148,7 +2215,7 @@ prom_drawchar(char c)
 		RELOC(g_loc_Y)++;
 		cline = 1;
 	}
-#if 0
+#ifndef NO_SCROLL
 	while (RELOC(g_loc_Y) >= RELOC(g_max_loc_Y)) {
 		scrollscreen();
 		RELOC(g_loc_Y)--;

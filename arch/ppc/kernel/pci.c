@@ -4,11 +4,14 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/config.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/openpic.h>
+#include <linux/capability.h>
+#include <linux/sched.h>
 #include <linux/errno.h>
 
 #include <asm/processor.h>
@@ -19,6 +22,7 @@
 #include <asm/byteorder.h>
 #include <asm/irq.h>
 #include <asm/gg2.h>
+#include <asm/uaccess.h>
 
 #include "pci.h"
 
@@ -184,3 +188,146 @@ int pcibios_enable_device(struct pci_dev *dev)
 	}
 	return 0;
 }
+
+/*
+ * Those syscalls are derived from the Alpha versions, they
+ * allow userland apps to retreive the per-device iobase and
+ * mem-base. They also provide wrapper for userland to do
+ * config space accesses.
+ * The "host_number" returns the number of the Uni-N sub bridge
+ */
+
+asmlinkage int
+sys_pciconfig_read(unsigned long bus, unsigned long dfn,
+		   unsigned long off, unsigned long len,
+		   unsigned char *buf)
+{
+	unsigned char ubyte;
+	unsigned short ushort;
+	unsigned int uint;
+	long err = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+	if (!pcibios_present())
+		return -ENOSYS;
+	
+	switch (len) {
+	case 1:
+		err = pcibios_read_config_byte(bus, dfn, off, &ubyte);
+		put_user(ubyte, buf);
+		break;
+	case 2:
+		err = pcibios_read_config_word(bus, dfn, off, &ushort);
+		put_user(ushort, (unsigned short *)buf);
+		break;
+	case 4:
+		err = pcibios_read_config_dword(bus, dfn, off, &uint);
+		put_user(uint, (unsigned int *)buf);
+		break;
+	default:
+		err = -EINVAL;
+		break;
+	}
+	return err;
+}
+
+asmlinkage int
+sys_pciconfig_write(unsigned long bus, unsigned long dfn,
+		    unsigned long off, unsigned long len,
+		    unsigned char *buf)
+{
+	unsigned char ubyte;
+	unsigned short ushort;
+	unsigned int uint;
+	long err = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+	if (!pcibios_present())
+		return -ENOSYS;
+
+	switch (len) {
+	case 1:
+		err = get_user(ubyte, buf);
+		if (err)
+			break;
+		err = pcibios_write_config_byte(bus, dfn, off, ubyte);
+		if (err != PCIBIOS_SUCCESSFUL) {
+			err = -EFAULT;
+		}
+		break;
+	case 2:
+		err = get_user(ushort, (unsigned short *)buf);
+		if (err)
+			break;
+		err = pcibios_write_config_word(bus, dfn, off, ushort);
+		if (err != PCIBIOS_SUCCESSFUL) {
+			err = -EFAULT;
+		}
+		break;
+	case 4:
+		err = get_user(uint, (unsigned int *)buf);
+		if (err)
+			break;
+		err = pcibios_write_config_dword(bus, dfn, off, uint);
+		if (err != PCIBIOS_SUCCESSFUL) {
+			err = -EFAULT;
+		}
+		break;
+	default:
+		err = -EINVAL;
+		break;
+	}
+	return err;
+}
+
+void *
+pci_dev_io_base(unsigned char bus, unsigned char devfn)
+{
+	/* Defaults to old way */
+	if (!ppc_md.pci_dev_io_base)
+		return pci_io_base(bus);
+	return ppc_md.pci_dev_io_base(bus, devfn);
+}
+
+void *
+pci_dev_mem_base(unsigned char bus, unsigned char devfn)
+{
+	/* Default memory base is 0 (1:1 mapping) */
+	if (!ppc_md.pci_dev_mem_base)
+		return 0;
+	return ppc_md.pci_dev_mem_base(bus, devfn);
+}
+
+/* Returns the root-bridge number (Uni-N number) of a device */
+int
+pci_dev_root_bridge(unsigned char bus, unsigned char devfn)
+{
+	/* Defaults to 0 */
+	if (!ppc_md.pci_dev_root_bridge)
+		return 0;
+	return ppc_md.pci_dev_root_bridge(bus, devfn);
+}
+
+/* Provide information on locations of various I/O regions in physical
+ * memory.  Do this on a per-card basis so that we choose the right
+ * root bridge.
+ * Note that the returned IO or memory base is a physical address
+ */
+
+asmlinkage long
+sys_pciconfig_iobase(long which, unsigned long bus, unsigned long devfn)
+{
+	switch (which) {
+	case IOBASE_BRIDGE_NUMBER:
+		return (long)pci_dev_root_bridge(bus, devfn);
+	case IOBASE_MEMORY:
+		return (long)pci_dev_mem_base(bus, devfn);
+	case IOBASE_IO:
+		return (long)pci_dev_io_base(bus, devfn);
+	}
+
+	return -EOPNOTSUPP;
+}
+

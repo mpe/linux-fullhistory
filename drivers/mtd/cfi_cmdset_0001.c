@@ -4,7 +4,7 @@
  *
  * (C) 2000 Red Hat. GPL'd
  *
- * $Id: cfi_cmdset_0001.c,v 1.20 2000/07/04 07:36:43 dwmw2 Exp $
+ * $Id: cfi_cmdset_0001.c,v 1.21 2000/07/13 10:36:14 dwmw2 Exp $
  */
 
 #include <linux/module.h>
@@ -455,13 +455,9 @@ static inline int do_write_1_by_16_oneword(struct map_info *map, struct flchip *
 		chip->word_write_time--;
 		if (!chip->word_write_time)
 			chip->word_write_time++;
-		else
-			printk("decreasing word_write_time to %d µs\n", chip->word_write_time);
 	}
-	if (z > 100) {
+	if (z > 1) 
 		chip->word_write_time++;
-		printk("increasing word_write_time to %d µs\n", chip->word_write_time);
-	}
 
 	/* Done and happy. */
 	chip->state = FL_STATUS;

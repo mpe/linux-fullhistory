@@ -74,8 +74,7 @@ volatile unsigned char *chrp_int_ack_special;
 
 irq_desc_t irq_desc[NR_IRQS];
 int ppc_spurious_interrupts = 0;
-unsigned int local_bh_count[NR_CPUS];
-unsigned int local_irq_count[NR_CPUS];
+irq_cpustat_t irq_stat [NR_CPUS];
 struct irqaction *ppc_irq_action[NR_IRQS];
 unsigned int ppc_cached_irq_mask[NR_MASK_WORDS];
 unsigned int ppc_lost_interrupts[NR_MASK_WORDS];
@@ -248,6 +247,7 @@ int get_irq_list(char *buf)
 			len += sprintf(buf+len, " %s ", irq_desc[i].handler->typename );
 		else
 			len += sprintf(buf+len, "  None      ");
+		len += sprintf(buf+len, "%s", (irq_desc[i].status & IRQ_LEVEL) ? "Level " : "Edge  ");
 		len += sprintf(buf+len, "    %s",action->name);
 		for (action=action->next; action; action = action->next) {
 			len += sprintf(buf+len, ", %s", action->name);
@@ -368,12 +368,12 @@ static void show(char * str)
 	printk("\n%s, CPU %d:\n", str, cpu);
 	printk("irq:  %d [%d %d]\n",
 	       atomic_read(&global_irq_count),
-	       local_irq_count[0],
-	       local_irq_count[1]);
+	       local_irq_count(0),
+	       local_irq_count(1));
 	printk("bh:   %d [%d %d]\n",
 	       atomic_read(&global_bh_count),
-	       local_bh_count[0],
-	       local_bh_count[1]);
+	       local_bh_count(0),
+	       local_bh_count(1));
 	stack = (unsigned long *) &str;
 	for (i = 40; i ; i--) {
 		unsigned long x = *++stack;
@@ -408,7 +408,7 @@ static inline void wait_on_irq(int cpu)
 		 * already executing in one..
 		 */
 		if (!atomic_read(&global_irq_count)) {
-			if (local_bh_count[cpu]
+			if (local_bh_count(cpu)
 			    || !atomic_read(&global_bh_count))
 				break;
 		}
@@ -430,7 +430,7 @@ static inline void wait_on_irq(int cpu)
 				continue;
 			if (global_irq_lock)
 				continue;
-			if (!local_bh_count[cpu]
+			if (!local_bh_count(cpu)
 			    && atomic_read(&global_bh_count))
 				continue;
 			if (!test_and_set_bit(0,&global_irq_lock))
@@ -521,7 +521,7 @@ void __global_cli(void)
 	if (flags & (1 << 15)) {
 		int cpu = smp_processor_id();
 		__cli();
-		if (!local_irq_count[cpu])
+		if (!local_irq_count(cpu))
 			get_irqlock(cpu);
 	}
 }
@@ -530,7 +530,7 @@ void __global_sti(void)
 {
 	int cpu = smp_processor_id();
 
-	if (!local_irq_count[cpu])
+	if (!local_irq_count(cpu))
 		release_irqlock(cpu);
 	__sti();
 }
@@ -554,7 +554,7 @@ unsigned long __global_save_flags(void)
 	retval = 2 + local_enabled;
 
 	/* check for global flags if we're not in an interrupt */
-	if (!local_irq_count[smp_processor_id()]) {
+	if (!local_irq_count(smp_processor_id())) {
 		if (local_enabled)
 			retval = 1;
 		if (global_irq_holder == (unsigned char) smp_processor_id())

@@ -7,9 +7,7 @@ comment 'Joysticks'
 
 tristate 'Joystick support' CONFIG_JOYSTICK
 if [ "$CONFIG_JOYSTICK" != "n" ]; then
-  
-   define_tristate CONFIG_USB $CONFIG_JOYSTICK
-   define_tristate CONFIG_INPUT_JOYDEV $CONFIG_JOYSTICK
+     define_tristate CONFIG_INPUT_JOYDEV $CONFIG_JOYSTICK
   
    comment 'Game port support'
       dep_tristate '  ns558 gameports' CONFIG_INPUT_NS558 $CONFIG_JOYSTICK

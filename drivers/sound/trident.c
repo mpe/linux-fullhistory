@@ -1587,7 +1587,7 @@ static int trident_mmap(struct file *file, struct vm_area_struct *vma)
 		goto out;
 	dmabuf->mapped = 1;
 	ret = 0;
-out;
+out:
 	unlock_kernel();
 	return ret;
 }

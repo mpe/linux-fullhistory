@@ -171,6 +171,9 @@ __after_prom_start:
 #ifndef CONFIG_POWER4
 	/* POWER4 doesn't have BATs */
 	bl	initial_bats
+#if !defined(CONFIG_APUS) && defined(CONFIG_BOOTX_TEXT)
+	bl	setup_disp_bat
+#endif
 #else /* CONFIG_POWER4 */
 /*
  * Load up the SDR1 and segment register values now
@@ -1603,23 +1606,37 @@ initial_bats:
 	mtspr	DBAT0U,r11		/* bit in upper BAT register */
 	mtspr	IBAT0L,r8
 	mtspr	IBAT0U,r11
-#if 0 /* Useful debug code, please leave in for now so I don't have to
-       * look at docs when I need to setup a BAT ...
-       */
-setup_screen_bat:
-	li	r3,0
-	mtspr	DBAT1U,r3
-	lis	r3,0xfa00
-	CLR_TOP32(r3)
-	lis	r4,0xfa00
-	CLR_TOP32(r4)
-	ori	r4,r4,0x2a
-	mtspr	DBAT1L,r4
-	ori	r3,r3,(BL_16M<<2)|0x2	/* set up BAT registers for 604 */
-	mtspr	DBAT1U,r3
-#endif
 	isync
 	blr
+
+#if !defined(CONFIG_APUS) && defined(CONFIG_BOOTX_TEXT)
+setup_disp_bat:
+	/*
+	 * setup the display bat prepared for us in prom.c
+	 */
+	mflr	r8
+	bl	reloc_offset
+	mtlr	r8
+	lis	r8, disp_BATL@h
+	ori	r8, r8, disp_BATL@l
+	add	r8, r3, r8
+	lwz	r8, 0(r8)
+	lis	r11, disp_BATU@h
+	ori	r11, r11, disp_BATU@l
+	add	r11, r3, r11
+	lwz	r11, 0(r11)
+	mtspr	IBAT3L,r8
+	mtspr	IBAT3U,r11
+	mfspr	r9,PVR
+	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
+	cmpi	0,r9,1
+	beq	1f
+	mtspr	DBAT3L,r8
+	mtspr	DBAT3U,r11
+1:		
+	blr
+
+#endif /* !defined(CONFIG_APUS) && defined(CONFIG_BOOTX_TEXT) */
 #endif /* CONFIG_POWER4 */
 
 #ifdef CONFIG_8260

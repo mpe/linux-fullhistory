@@ -175,6 +175,7 @@ ifeq ($(CONFIG_SDLA),y)
 else
   ifeq ($(CONFIG_SDLA),m)
   M_OBJS += sdla.o
+  endif
 endif
 
 ifeq ($(CONFIG_VENDOR_SANGOMA),y)
@@ -192,8 +193,6 @@ ifeq ($(CONFIG_VENDOR_SANGOMA),y)
   ifeq ($(CONFIG_WANPIPE_PPP),y)
     L_OBJS += sdla_ppp.o
   endif
-endif
-
 endif
 
 ifeq ($(CONFIG_VENDOR_SANGOMA),m)

@@ -89,4 +89,7 @@ extern void prom_drawstring(const char *c);
 extern void prom_drawhex(unsigned long v);
 extern void prom_drawchar(char c);
 
+extern void map_bootx_text(void);
+
+
 #endif /* _PPC_PROM_H */

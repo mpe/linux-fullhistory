@@ -4,24 +4,38 @@
 #include <linux/config.h>
 #include <asm/smp.h>
 
-extern unsigned int local_irq_count[NR_CPUS];
+typedef struct {
+	unsigned int __local_irq_count;
+	unsigned int __local_bh_count;
+	atomic_t __nmi_counter;
+	unsigned int __pad[5];
+} ____cacheline_aligned irq_cpustat_t;
+
+extern irq_cpustat_t irq_stat [NR_CPUS];
+
+/*
+ * Simple wrappers reducing source bloat
+ */
+#define local_irq_count(cpu) (irq_stat[(cpu)].__local_irq_count)
+#define local_bh_count(cpu) (irq_stat[(cpu)].__local_bh_count)
+#define nmi_counter(cpu) (irq_stat[(cpu)].__nmi_counter)
 
 /*
  * Are we in an interrupt context? Either doing bottom half
  * or hardware interrupt processing?
  */
 #define in_interrupt() ({ int __cpu = smp_processor_id(); \
-	(local_irq_count[__cpu] + local_bh_count[__cpu] != 0); })
+	(local_irq_count(__cpu) + local_bh_count(__cpu) != 0); })
 
-#define in_irq() (local_irq_count[smp_processor_id()] != 0)
+#define in_irq() (local_irq_count(smp_processor_id()) != 0)
 
 #ifndef CONFIG_SMP
 
-#define hardirq_trylock(cpu)	(local_irq_count[cpu] == 0)
+#define hardirq_trylock(cpu)	(local_irq_count(cpu) == 0)
 #define hardirq_endlock(cpu)	do { } while (0)
 
-#define hardirq_enter(cpu)	(local_irq_count[cpu]++)
-#define hardirq_exit(cpu)	(local_irq_count[cpu]--)
+#define hardirq_enter(cpu)	(local_irq_count(cpu)++)
+#define hardirq_exit(cpu)	(local_irq_count(cpu)--)
 
 #define synchronize_irq()	do { } while (0)
 
@@ -46,7 +60,7 @@ static inline void hardirq_enter(int cpu)
 {
 	unsigned int loops = 10000000;
 	
-	++local_irq_count[cpu];
+	++local_irq_count(cpu);
 	atomic_inc(&global_irq_count);
 	while (test_bit(0,&global_irq_lock)) {
 		if (smp_processor_id() == global_irq_holder) {
@@ -68,7 +82,7 @@ static inline void hardirq_enter(int cpu)
 static inline void hardirq_exit(int cpu)
 {
 	atomic_dec(&global_irq_count);
-	--local_irq_count[cpu];
+	--local_irq_count(cpu);
 }
 
 static inline int hardirq_trylock(int cpu)

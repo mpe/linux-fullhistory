@@ -73,40 +73,14 @@
  * finished otherwise it sets the 'lp->tx_full' flag.
  *
  * The MBX has a control register external to the MPC8xx that has some
- * control of the Ethernet interface.  Control Register 1 has the
- * following format:
- *	bit 0 - Set to enable Ethernet transceiver
- *	bit 1 - Set to enable Ethernet internal loopback
- *	bit 2 - Set to auto select AUI or TP port
- *	bit 3 - if bit 2 is 0, set to select TP port
- *	bit 4 - Set to disable full duplex (loopback)
- *	bit 5 - Set to disable XCVR collision test
- *	bit 6, 7 - Used for RS-232 control.
+ * control of the Ethernet interface.  Information is in the manual for
+ * your board.
  *
- * EPPC-Bug sets this register to 0x98 for normal Ethernet operation,
- * so we should not have to touch it.
+ * The RPX boards have an external control/status register.  Consult the
+ * programming documents for details unique to your board.
  *
- * The following I/O is used by the MBX implementation of the MPC8xx to
- * the MC68160 transceiver.  It DOES NOT exactly follow the cookbook
- * example from the MPC860 manual.
- *	Port A, 15 - SCC1 Ethernet Rx
- *	Port A, 14 - SCC1 Ethernet Tx
- *	Port A, 6 (CLK2) - SCC1 Ethernet Tx Clk
- *	Port A, 4 (CLK4) - SCC1 Ethernet Rx Clk
- *	Port C, 15 - SCC1 Ethernet Tx Enable
- *	Port C, 11 - SCC1 Ethernet Collision
- *	Port C, 10 - SCC1 Ethernet Rx Enable
- *
- * The RPX-Lite (that I had :-), was the MPC850SAR.  It has a control
- * register to enable Ethernet functions in the 68160, and the Ethernet
- * was controlled by SCC2.  So, the pin I/O was like this:
- *	Port A, 13 - SCC2 Ethernet Rx
- *	Port A, 12 - SCC2 Ethernet Tx
- *	Port A,  6 (CLK2) - Ethernet Tx Clk
- *	Port A,  4 (CLK4) - Ethernet Rx Clk
- *	Port B, 18 (RTS2) - Ethernet Tx Enable
- *	Port C,  8 (CD2) - Ethernet Rx Enable
- *	Port C,  9 (CTS2) - SCC Ethernet Collision
+ * For the TQM8xx(L) modules, there is no control register interface.
+ * All functions are directly controlled using I/O pins.  See commproc.h.
  */
 
 /* The transmitter timeout
@@ -119,12 +93,21 @@
  * We don't need to allocate pages for the transmitter.  We just use
  * the skbuffer directly.
  */
+#ifdef CONFIG_ENET_BIG_BUFFERS
+#define CPM_ENET_RX_PAGES	32
+#define CPM_ENET_RX_FRSIZE	2048
+#define CPM_ENET_RX_FRPPG	(PAGE_SIZE / CPM_ENET_RX_FRSIZE)
+#define RX_RING_SIZE		(CPM_ENET_RX_FRPPG * CPM_ENET_RX_PAGES)
+#define TX_RING_SIZE		64	/* Must be power of two */
+#define TX_RING_MOD_MASK	63	/*   for this to work */
+#else
 #define CPM_ENET_RX_PAGES	4
 #define CPM_ENET_RX_FRSIZE	2048
 #define CPM_ENET_RX_FRPPG	(PAGE_SIZE / CPM_ENET_RX_FRSIZE)
 #define RX_RING_SIZE		(CPM_ENET_RX_FRPPG * CPM_ENET_RX_PAGES)
 #define TX_RING_SIZE		8	/* Must be power of two */
 #define TX_RING_MOD_MASK	7	/*   for this to work */
+#endif
 
 /* The CPM stores dest/src/type, data, and checksum for receive packets.
  */
@@ -896,9 +879,14 @@ int __init scc_enet_init(void)
 	/* It is now OK to enable the Ethernet transmitter.
 	 * Unfortunately, there are board implementation differences here.
 	 */
-#ifdef CONFIG_MBX
+#if (defined(CONFIG_MBX) || defined(CONFIG_TQM860) || defined(CONFIG_TQM860L) || defined(CONFIG_FPS850))
 	immap->im_ioport.iop_pcpar |= PC_ENET_TENA;
 	immap->im_ioport.iop_pcdir &= ~PC_ENET_TENA;
+#endif
+
+#if (defined(CONFIG_TQM8xxL) && !defined(CONFIG_FPS850))
+	cp->cp_pbpar |= PB_ENET_TENA;
+	cp->cp_pbdir |= PB_ENET_TENA;
 #endif
 
 #if defined(CONFIG_RPXLITE) || defined(CONFIG_RPXCLASSIC)
@@ -927,6 +915,7 @@ int __init scc_enet_init(void)
 	immap->im_ioport.iop_pcso &= ~PC_BSE_LOOPBACK;
 	immap->im_ioport.iop_pcdat &= ~PC_BSE_LOOPBACK;
 #endif
+
 
 	dev->base_addr = (unsigned long)ep;
 	dev->priv = cep;

@@ -45,7 +45,7 @@
 #include <asm/8xx_immap.h>
 #include <asm/machdep.h>
 
-#include "time.h"
+#include <asm/time.h>
 #include "ppc8xx_pic.h"
 
 static int m8xx_set_rtc_time(unsigned long time);

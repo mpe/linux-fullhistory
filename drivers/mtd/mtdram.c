@@ -1,6 +1,6 @@
 /* 
  * mtdram - a test mtd device
- * $Id: mtdram.c,v 1.13 2000/07/03 10:01:38 dwmw2 Exp $
+ * $Id: mtdram.c,v 1.15 2000/07/13 12:40:46 scote1 Exp $
  * Author: Alexander Larsson <alex@cendio.se> 
  *
  * Copyright (c) 1999 Alexander Larsson <alex@cendio.se>
@@ -17,8 +17,8 @@
 #include <linux/mtd/mtd.h>
 
 
-#define MTDRAM_TOTAL_SIZE 1024*1024*8
-#define MTDRAM_ERASE_SIZE 4*1024
+#define MTDRAM_TOTAL_SIZE (CONFIG_MTDRAM_TOTAL_SIZE * 1024)
+#define MTDRAM_ERASE_SIZE (CONFIG_MTDRAM_ERASE_SIZE * 1024)
 
 
 // We could store these in the mtd structure, but we only support 1 device..

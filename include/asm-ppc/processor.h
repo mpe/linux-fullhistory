@@ -10,7 +10,6 @@
 #include <linux/config.h>
 
 #include <asm/ptrace.h>
-#include <asm/residual.h>
 #include <asm/types.h>
 
 /* Machine State Register (MSR) Fields */
@@ -505,6 +504,8 @@
 #define _MACH_oak	0x00000800	/* IBM "Oak" 403 eval. board */
 #define _MACH_walnut	0x00001000	/* IBM "Walnut" 405GP eval. board */
 #define _MACH_8260	0x00002000	/* Generic 8260 */
+#define _MACH_tqm860	0x00004000	/* TQM860/L */
+#define _MACH_tqm8xxL	0x00008000	/* TQM8xxL */
 
 
 /* see residual.h for these */

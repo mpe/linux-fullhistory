@@ -30,6 +30,7 @@
 #include <video/fbcon-cfb16.h>
 #include <video/fbcon-cfb24.h>
 #include <video/fbcon-cfb32.h>
+#include <video/fbcon-mac.h>
 
 #define dac_reg	(0x3c8)
 #define dac_val	(0x3c9)
@@ -220,8 +221,13 @@ static void vesafb_set_disp(int con)
 		break;
 #endif
 	default:
+#ifdef FBCON_HAS_MAC
+		sw = &fbcon_mac;
+		break;
+#else
 		sw = &fbcon_dummy;
 		return;
+#endif
 	}
 	memcpy(&vesafb_sw, sw, sizeof(*sw));
 	display->dispsw = &vesafb_sw;

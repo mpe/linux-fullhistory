@@ -201,6 +201,10 @@
 #define __NR_stat64		195
 #define __NR_lstat64		196
 #define __NR_fstat64		197
+#define __NR_sys_pciconfig_read		198
+#define __NR_sys_pciconfig_write	199
+#define __NR_sys_pciconfig_iobase	200
+#define __NR_multiplexer		201
 
 #define __NR(n)	#n
 

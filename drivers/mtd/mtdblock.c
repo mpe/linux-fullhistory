@@ -1,7 +1,7 @@
 /* 
  * Direct MTD block device access
  *
- * $Id: mtdblock.c,v 1.16 2000/06/23 09:34:58 dwmw2 Exp $
+ * $Id: mtdblock.c,v 1.17 2000/07/13 14:25:54 dwmw2 Exp $
  */
 
 #ifdef MTDBLOCK_DEBUG

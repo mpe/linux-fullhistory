@@ -3,7 +3,7 @@
 /* Probe routines common to all DoC devices */
 /* (c) 1999 Machine Vision Holdings, Inc.   */
 /* Author: David Woodhouse <dwmw2@mvhi.com> */
-/* $Id: docprobe.c,v 1.8 2000/06/26 20:40:53 dwmw2 Exp $ */
+/* $Id: docprobe.c,v 1.10 2000/07/13 14:23:20 dwmw2 Exp $ */
 
 
 
@@ -206,7 +206,7 @@ static void DoC_Probe(unsigned long physadr)
 		case DOC_ChipID_DocMil:
 			name="Millennium";
 #ifdef CONFIG_MTD_DOC2001
-			initroutine = &DocMil_init;
+			initroutine = &DoCMil_init;
 #elif CONFIG_MODULES
 			initroutinedynamic=1;
 			initroutine = (void *)get_module_symbol(NULL, "DoCMil_init");
@@ -252,7 +252,7 @@ int __init init_doc(void)
 	
 	printk(KERN_NOTICE "M-Systems DiskOnChip driver. (C) 1999 Machine Vision Holdings, Inc.\n");
 #ifdef PRERELEASE
-	printk(KERN_INFO "$Id: docprobe.c,v 1.8 2000/06/26 20:40:53 dwmw2 Exp $\n");
+	printk(KERN_INFO "$Id: docprobe.c,v 1.10 2000/07/13 14:23:20 dwmw2 Exp $\n");
 #endif
 	
 	for (i=0; doc_locations[i]; i++) {

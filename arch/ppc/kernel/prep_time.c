@@ -27,7 +27,7 @@
 #include <asm/prep_nvram.h>
 #include <asm/mk48t59.h>
 
-#include "time.h"
+#include <asm/time.h>
 
 /*
  * The motorola uses the m48t18 rtc (includes DS1643) whose registers

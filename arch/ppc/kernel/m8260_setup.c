@@ -44,7 +44,7 @@
 #include <asm/immap_8260.h>
 #include <asm/machdep.h>
 
-#include "time.h"
+#include <asm/time.h>
 #include "ppc8260_pic.h"
 
 static int m8260_set_rtc_time(unsigned long time);

@@ -32,6 +32,14 @@
 #include <asm/rpxclassic.h>
 #endif
 
+#if (defined(CONFIG_TQM860) || defined(CONFIG_TQM860L))
+#include <asm/tqm860.h>
+#endif
+
+#ifdef CONFIG_TQM8xxL
+#include <asm/tqm8xxL.h>
+#endif
+
 /* I need this to get pt_regs.......
 */
 #include <asm/ptrace.h>

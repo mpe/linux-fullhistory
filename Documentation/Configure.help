@@ -15126,16 +15126,10 @@ CONFIG_6xx
   There are four types of PowerPC chips supported. The more common
   types (601, 603, 604, 740, 750), the Motorola embedded versions
   (821, 823, 850, 855, 860), the IBM embedded versions (403 and
-  405) and the high end 64 bit Power processors (Power 3, Power 4). 
-  Unless you are building a kernel for one of the embedded 
-  processor systems, or a 64 bit IBM RS/6000, choose 6xx.
-
-CONFIG_PPC64BRIDGE
-  Currently there is not a 64 bit PowerPC Linux kernel. As a result
-  if you choose the CONFIG_POWER3 or CONFIG_POWER4 options you 
-  must choose this option as well. This enables gcc to emit
-  both 32 and 64 bit instructions as well as cause your kernel
-  to be built as a 32 bit kernel.
+  405) and the high end 64 bit Power processors (Power 3, Power 4).
+  Unless you are building a kernel for one of the embedded
+  processor systems, or a 64 bit IBM RS/6000, choose 6xx.  Note that
+  the kernel runs in 32-bit mode even on 64-bit chips.
 
 Machine Type
 CONFIG_PMAC

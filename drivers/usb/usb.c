@@ -58,8 +58,6 @@ static struct usb_driver *usb_minors[16];
 
 int usb_register(struct usb_driver *new_driver)
 {
-	struct list_head *tmp;
-
 	if (new_driver->fops != NULL) {
 		if (usb_minors[new_driver->minor/16]) {
 			 err("error registering %s driver", new_driver->name);
@@ -75,13 +73,22 @@ int usb_register(struct usb_driver *new_driver)
 	/* Add it to the list of known drivers */
 	list_add(&new_driver->driver_list, &usb_driver_list);
 
-	/*
-	 * We go through all existing devices, and see if any of them would
-	 * be acceptable to the new driver.. This is done using a depth-first
-	 * search for devices without a registered driver already, then 
-	 * running 'probe' with each of the drivers registered on every one 
-	 * of these.
-	 */
+	usb_scan_devices();
+
+	return 0;
+}
+
+/*
+ * We go through all existing devices, and see if any of them would
+ * be acceptable to the new driver.. This is done using a depth-first
+ * search for devices without a registered driver already, then 
+ * running 'probe' with each of the drivers registered on every one 
+ * of these.
+ */
+void usb_scan_devices(void)
+{
+	struct list_head *tmp;
+
 	tmp = usb_bus_list.next;
 	while (tmp != &usb_bus_list) {
 		struct usb_bus *bus = list_entry(tmp,struct usb_bus, bus_list);
@@ -89,7 +96,6 @@ int usb_register(struct usb_driver *new_driver)
 		tmp = tmp->next;
 		usb_check_support(bus->root_hub);
 	}
-	return 0;
 }
 
 /*
@@ -1772,6 +1778,7 @@ EXPORT_SYMBOL(usb_ifnum_to_if);
 
 EXPORT_SYMBOL(usb_register);
 EXPORT_SYMBOL(usb_deregister);
+EXPORT_SYMBOL(usb_scan_devices);
 EXPORT_SYMBOL(usb_alloc_bus);
 EXPORT_SYMBOL(usb_free_bus);
 EXPORT_SYMBOL(usb_register_bus);

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.20 2000/07/04 08:58:10 dwmw2 Exp $
+# $Id: Makefile,v 1.21 2000/07/13 10:42:55 dwmw2 Exp $
 
 # Uncomment this to enable the DBG macro (see mtd.h)
 #CFLAGS+= -DZDBG
@@ -65,6 +65,14 @@ ifeq ($(CONFIG_MTD_CFI_INTELEXT),y)
 else
   ifeq ($(CONFIG_MTD_CFI_INTELEXT),m)
     MX_OBJS += cfi_cmdset_0001.o
+  endif
+endif
+
+ifeq ($(CONFIG_MTD_CFI_AMDSTD),y)
+  OX_OBJS += cfi_cmdset_0002.o
+else
+  ifeq ($(CONFIG_MTD_CFI_AMDSTD),m)
+    MX_OBJS += cfi_cmdset_0002.o
   endif
 endif
 
@@ -149,6 +157,14 @@ ifeq ($(CONFIG_MTD_MTDRAM),y)
 else
   ifeq ($(CONFIG_MTD_MTDRAM),m)
     M_OBJS += mtdram.o
+  endif
+endif
+
+ifeq ($(CONFIG_MTD_PNC2000),y)
+  O_OBJS += pnc2000.o
+else
+  ifeq ($(CONFIG_MTD_PNC2000),m)
+    M_OBJS += pnc2000.o
   endif
 endif
 

@@ -1,6 +1,7 @@
 /*
  *  Reset a Cobalt Qube.
  */
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <asm/io.h>

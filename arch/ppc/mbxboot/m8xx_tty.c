@@ -21,6 +21,17 @@
 #define CSR1_COMEN	(u_char)0x02
 #endif
 
+#ifdef TQM_SMC2_CONSOLE
+#define PROFF_CONS	PROFF_SMC2
+#define CPM_CR_CH_CONS	CPM_CR_CH_SMC2
+#define SMC_INDEX	1
+static volatile iop8xx_t *iopp = (iop8xx_t *)&(((immap_t *)IMAP_ADDR)->im_ioport);
+#else
+#define PROFF_CONS	PROFF_SMC1
+#define CPM_CR_CH_CONS	CPM_CR_CH_SMC1
+#define SMC_INDEX	0
+#endif
+
 static cpm8xx_t	*cpmp = (cpm8xx_t *)&(((immap_t *)IMAP_ADDR)->im_cpm);
 
 void
@@ -33,8 +44,8 @@ serial_init(bd_t *bd)
 	uint	dpaddr, memaddr;
 
 	cp = cpmp;
-	sp = (smc_t*)&(cp->cp_smc[0]);
-	up = (smc_uart_t *)&cp->cp_dparam[PROFF_SMC1];
+	sp = (smc_t*)&(cp->cp_smc[SMC_INDEX]);
+	up = (smc_uart_t *)&cp->cp_dparam[PROFF_CONS];
 
 	/* Disable transmitter/receiver.
 	*/
@@ -42,18 +53,26 @@ serial_init(bd_t *bd)
 
 #ifndef CONFIG_MBX
 	{
-	/* Initialize SMC1 and use it for the console port.
+	/* Initialize SMCx and use it for the console port.
 	 */
 
 	/* Enable SDMA.
 	*/
 	((immap_t *)IMAP_ADDR)->im_siu_conf.sc_sdcr = 1;
 
+#ifdef TQM_SMC2_CONSOLE
+	/* Use Port A for SMC2 instead of other functions.
+	*/
+	iopp->iop_papar |=  0x00c0;
+	iopp->iop_padir &= ~0x00c0;
+	iopp->iop_paodr &= ~0x00c0;
+#else
 	/* Use Port B for SMCs instead of other functions.
 	*/
 	cp->cp_pbpar |= 0x00000cc0;
 	cp->cp_pbdir &= ~0x00000cc0;
 	cp->cp_pbodr &= ~0x00000cc0;
+#endif
 
 	/* Allocate space for two buffer descriptors in the DP ram.
 	 * For now, this address seems OK, but it may have to
@@ -61,8 +80,7 @@ serial_init(bd_t *bd)
 	 */
 	dpaddr = 0x0800;
 
-	/* Grab a few bytes from the top of memory.  EPPC-Bug isn't
-	 * running any more, so we can do this.
+	/* Grab a few bytes from the top of memory for SMC FIFOs.
 	 */
 	memaddr = (bd->bi_memsize - 32) & ~15;
 
@@ -95,9 +113,14 @@ serial_init(bd_t *bd)
 
 	/* Set up the baud rate generator.
 	 * See 8xx_io/commproc.c for details.
+	 * This wires BRG1 to SMC1 and BRG2 to SMC2;
 	 */
 	cp->cp_simode = 0x10000000;
+#ifdef TQM_SMC2_CONSOLE
+	cp->cp_brgc2 =
+#else
 	cp->cp_brgc1 =
+#endif
 		((((bd->bi_intfreq * 1000000)/16) / bd->bi_baudrate) << 1) | CPM_BRG_EN;
 
 #else /* CONFIG_MBX */
@@ -167,14 +190,14 @@ serial_init(bd_t *bd)
 	}
 	else {
 #endif /* ndef CONFIG_MBX */
-		/* SMC1 is used as console port.
+		/* SMCx is used as console port.
 		*/
 		tbdf = (cbd_t *)&cp->cp_dpmem[up->smc_tbase];
 		rbdf = (cbd_t *)&cp->cp_dpmem[up->smc_rbase];
 
 		/* Issue a stop transmit, and wait for it.
 		*/
-		cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SMC1,
+		cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_CONS,
 					CPM_CR_STOP_TX) | CPM_CR_FLG;
 		while (cp->cp_cpcr & CPM_CR_FLG);
 	}
@@ -191,7 +214,7 @@ serial_init(bd_t *bd)
 
 	/* Initialize Tx/Rx parameters.
 	*/
-	cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SMC1, CPM_CR_INIT_TRX) | CPM_CR_FLG;
+	cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_CONS, CPM_CR_INIT_TRX) | CPM_CR_FLG;
 	while (cp->cp_cpcr & CPM_CR_FLG);
 
 	/* Enable transmitter/receiver.
@@ -206,7 +229,7 @@ serial_putchar(const char c)
 	volatile char		*buf;
 	volatile smc_uart_t	*up;
 
-	up = (smc_uart_t *)&cpmp->cp_dparam[PROFF_SMC1];
+	up = (smc_uart_t *)&cpmp->cp_dparam[PROFF_CONS];
 	tbdf = (cbd_t *)&cpmp->cp_dpmem[up->smc_tbase];
 
 	/* Wait for last character to go.
@@ -227,7 +250,7 @@ serial_getc()
 	volatile smc_uart_t	*up;
 	char			c;
 
-	up = (smc_uart_t *)&cpmp->cp_dparam[PROFF_SMC1];
+	up = (smc_uart_t *)&cpmp->cp_dparam[PROFF_CONS];
 	rbdf = (cbd_t *)&cpmp->cp_dpmem[up->smc_rbase];
 
 	/* Wait for character to show up.
@@ -246,7 +269,7 @@ serial_tstc()
 	volatile cbd_t		*rbdf;
 	volatile smc_uart_t	*up;
 
-	up = (smc_uart_t *)&cpmp->cp_dparam[PROFF_SMC1];
+	up = (smc_uart_t *)&cpmp->cp_dparam[PROFF_CONS];
 	rbdf = (cbd_t *)&cpmp->cp_dpmem[up->smc_rbase];
 
 	return(!(rbdf->cbd_sc & BD_SC_EMPTY));

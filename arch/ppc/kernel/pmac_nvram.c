@@ -19,20 +19,8 @@
 
 #undef DEBUG
 
-/*
- * Read and write the non-volatile RAM on PowerMacs and CHRP machines.
- */
-static int nvram_naddrs;
-static volatile unsigned char *nvram_addr;
-static volatile unsigned char *nvram_data;
-static int nvram_mult, is_core_99;
-static char* nvram_image;
-static int core99_bank = 0;
-
-extern int pmac_newworld;
- 
 #define NVRAM_SIZE		0x2000	/* 8kB of non-volatile RAM */
- 
+
 #define CORE99_SIGNATURE	0x5a
 #define CORE99_ADLER_START	0x14
 
@@ -60,7 +48,28 @@ struct core99_header {
   u32			reserved[2];
 };
 
+/*
+ * Read and write the non-volatile RAM on PowerMacs and CHRP machines.
+ */
+static int nvram_naddrs;
+static volatile unsigned char *nvram_addr;
+static volatile unsigned char *nvram_data;
+static int nvram_mult, is_core_99;
+static int core99_bank = 0;
 static int nvram_partitions[3];
+
+/* FIXME: kmalloc fails to allocate the image now that I had to move it
+ *        before time_init(). For now, I allocate a static buffer here
+ *        but it's a waste of space on all but core99 machines
+ */
+#if 0
+static char* nvram_image;
+#else
+__pmac static char nvram_image[NVRAM_SIZE];
+#endif
+
+extern int pmac_newworld;
+
 
 static u8
 chrp_checksum(struct chrp_header* hdr)
@@ -189,6 +198,7 @@ lookup_partitions(void)
 		hdr = (struct chrp_header *)buffer;
 	
 		offset = 0;
+		buffer[16] = 0;
 		do {
 			for (i=0;i<16;i++)
 				buffer[i] = nvram_read_byte(offset+i);
@@ -234,11 +244,13 @@ void pmac_nvram_init(void)
 			printk(KERN_ERR "nvram: no address\n");
 			return;
 		}
+#if 0
 		nvram_image = kmalloc(NVRAM_SIZE, GFP_KERNEL);
 		if (!nvram_image) {
 			printk(KERN_ERR "nvram: can't allocate image\n");
 			return;
 		}
+#endif
 		nvram_data = ioremap(dp->addrs[0].address, NVRAM_SIZE*2);
 #ifdef DEBUG
 		printk("nvram: Checking bank 0...\n");
@@ -267,6 +279,7 @@ void pmac_nvram_init(void)
 		printk(KERN_ERR "Don't know how to access NVRAM with %d addresses\n",
 		       nvram_naddrs);
 	}
+	lookup_partitions();
 }
 
 void

@@ -74,6 +74,11 @@ struct machdep_calls {
 		unsigned char dev_fn, unsigned char offset, unsigned int val);
 	void (*pcibios_fixup)(void);
 	void (*pcibios_fixup_bus)(struct pci_bus *);
+
+	void* (*pci_dev_io_base)(unsigned char bus, unsigned char devfn);
+	void* (*pci_dev_mem_base)(unsigned char bus, unsigned char devfn);
+	int (*pci_dev_root_bridge)(unsigned char bus, unsigned char devfn);
+
 	/* this is for modules, since _machine can be a define -- Cort */
 	int ppc_machine;
 };

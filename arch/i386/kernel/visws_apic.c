@@ -91,6 +91,8 @@ static void disable_cobalt_irq(unsigned int irq);
 static void startup_cobalt_irq(unsigned int irq);
 #define shutdown_cobalt_irq disable_cobalt_irq
 
+static spinlock_t irq_controller_lock = SPIN_LOCK_UNLOCKED;
+
 static struct hw_interrupt_type cobalt_irq_type = {
 	"Cobalt-APIC",
 	startup_cobalt_irq,

@@ -1205,6 +1205,17 @@ _GLOBAL(sys_call_table)
 	.long sys_ni_syscall		/* streams2 */
 	.long sys_vfork
 	.long sys_getrlimit	/* 190 */
-	.rept NR_syscalls-190
+	.long sys_ni_syscall		/* 191 */	/* Unused */
+	.long sys_ni_syscall		/* 192 - reserved - mmap2 */
+	.long sys_ni_syscall		/* 193 - reserved - truncate64 */
+	.long sys_ni_syscall		/* 194 - reserved - ftruncate64 */
+	.long sys_ni_syscall		/* 195 - reserved - stat64 */
+	.long sys_ni_syscall		/* 196 - reserved - lstat64 */
+	.long sys_ni_syscall		/* 197 - reserved - fstat64 */
+	.long sys_pciconfig_read	/* 198 */
+	.long sys_pciconfig_write 	/* 199 */
+	.long sys_pciconfig_iobase 	/* 200 */
+	.long sys_ni_syscall		/* 201 - reserved - MacOnLinux - new */
+	.rept NR_syscalls-201
 		.long sys_ni_syscall
 	.endr

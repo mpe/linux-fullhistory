@@ -274,3 +274,13 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 	error = error ? -EFAULT : 0;
 	return error;
 }
+
+#ifndef CONFIG_PCI
+/*
+ * Those are normally defined in arch/ppc/kernel/pci.c. But when CONFIG_PCI is
+ * not defined, this file is not linked at all, so here are the "empty" versions
+ */
+asmlinkage int sys_pciconfig_read() { return -ENOSYS; }
+asmlinkage int sys_pciconfig_write() { return -ENOSYS; }
+asmlinkage long sys_pciconfig_iobase() { return -ENOSYS; }
+#endif

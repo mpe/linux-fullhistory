@@ -61,14 +61,32 @@ static void pmac_openpic_unmask_irq(unsigned int irq_nr)
 	openpic_enable_irq(irq_nr);
 }
 
+static void pmac_openpic_ack_irq(unsigned int irq_nr)
+{
+	if ((irq_desc[irq_nr].status & IRQ_LEVEL) == 0)
+		openpic_eoi(smp_processor_id());
+	openpic_disable_irq(irq_nr);
+}
+
+static void pmac_openpic_end_irq(unsigned int irq_nr)
+{
+	if ((irq_desc[irq_nr].status & IRQ_LEVEL) != 0)
+		openpic_eoi(smp_processor_id());
+	openpic_enable_irq(irq_nr);
+}
+
 struct hw_interrupt_type pmac_open_pic = {
 	" OpenPIC  ",
 	NULL,
 	NULL,
 	pmac_openpic_unmask_irq,
 	pmac_openpic_mask_irq,
-	pmac_openpic_mask_irq,
-	0
+	/* Theorically, the mask&ack should be NULL for OpenPIC. However, doing
+	 * so shows tons of bogus interrupts coming in.
+	 */
+	pmac_openpic_ack_irq,
+	pmac_openpic_end_irq,
+	NULL
 };
 
 static void __pmac pmac_mask_and_ack_irq(unsigned int irq_nr)
@@ -141,7 +159,8 @@ struct hw_interrupt_type pmac_pic = {
         pmac_unmask_irq,
         pmac_mask_irq,
         pmac_mask_and_ack_irq,
-        0
+        pmac_unmask_irq,
+        NULL
 };
 
 struct hw_interrupt_type gatwick_pic = {
@@ -151,7 +170,8 @@ struct hw_interrupt_type gatwick_pic = {
 	pmac_unmask_irq,
 	pmac_mask_irq,
 	pmac_mask_and_ack_irq,
-	0
+	pmac_unmask_irq,
+	NULL
 };
 
 static void gatwick_action(int cpl, void *dev_id, struct pt_regs *regs)
@@ -199,17 +219,13 @@ pmac_get_irq(struct pt_regs *regs)
         }
 #endif /* CONFIG_SMP */
 
-	/* Yeah, I know, this could be a separate get_irq function */
-	if (has_openpic)
-	{
+	if (has_openpic) {
 		irq = openpic_irq(smp_processor_id());
 		if (irq == OPENPIC_VEC_SPURIOUS)
 			/* We get those when doing polled ADB requests,
 			 * using -2 is a temp hack to disable the printk
 			 */
 			irq = -2; /*-1; */
-		else
-			openpic_eoi(smp_processor_id());
 	}
 	else
 	{

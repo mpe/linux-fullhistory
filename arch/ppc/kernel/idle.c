@@ -304,3 +304,4 @@ void power_save(void)
 		return;
 	}
 }
+

@@ -551,6 +551,7 @@ extern struct usb_interface *usb_ifnum_to_if(struct usb_device *dev, unsigned if
 
 extern int usb_register(struct usb_driver *);
 extern void usb_deregister(struct usb_driver *);
+extern void usb_scan_devices(void);
 
 /* used these for multi-interface device registration */
 extern void usb_driver_claim_interface(struct usb_driver *driver, struct usb_interface *iface, void* priv);

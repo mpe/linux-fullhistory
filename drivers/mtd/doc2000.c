@@ -2,7 +2,7 @@
 /* Linux driver for Disk-On-Chip 2000       */
 /* (c) 1999 Machine Vision Holdings, Inc.   */
 /* Author: David Woodhouse <dwmw2@mvhi.com> */
-/* $Id: doc2000.c,v 1.23 2000/07/03 10:01:38 dwmw2 Exp $ */
+/* $Id: doc2000.c,v 1.24 2000/07/13 10:03:31 dwmw2 Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -36,7 +36,7 @@ static struct mtd_info *doc2klist = NULL;
 
 /* DOC_WaitReady: Wait for RDY line to be asserted by the flash chip */
 
-int _DoC_WaitReady (unsigned long docptr)
+static int _DoC_WaitReady (unsigned long docptr)
 {
 	//long c=-1;
 	short c=-1;
@@ -148,7 +148,7 @@ static inline int DoC_SelectFloor(unsigned long docptr, int floor)
   
 /* DoC_IdentChip: Identify a given NAND chip given {floor,chip} */
 
-int DoC_IdentChip(struct DiskOnChip *doc, int floor, int chip)
+static int DoC_IdentChip(struct DiskOnChip *doc, int floor, int chip)
 {
 	int mfr, id, chipshift=0;
 	char *mfrname=NULL, *idname=NULL;
@@ -302,7 +302,7 @@ int DoC_IdentChip(struct DiskOnChip *doc, int floor, int chip)
 
 /* DoC_ScanChips: Find all NAND chips present in a DiskOnChip, and identify them */
 
-void DoC_ScanChips(struct DiskOnChip *this)
+static void DoC_ScanChips(struct DiskOnChip *this)
 {
 	int floor, chip;
 	int numchips[MAX_FLOORS];

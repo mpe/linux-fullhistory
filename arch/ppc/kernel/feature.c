@@ -2,6 +2,7 @@
  *  arch/ppc/kernel/feature.c
  *
  *  Copyright (C) 1996 Paul Mackerras (paulus@cs.anu.edu.au)
+ *                     Ben. Herrenschmidt (bh40@calva.net)
  *
  *  This program is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU General Public License
@@ -30,7 +31,7 @@
 #undef DEBUG_FEATURE
 
 #define MAX_FEATURE_CONTROLLERS		2
-#define MAX_FEATURE_OFFSET		0x50
+#define MAX_FEATURE_OFFSET		0x100
 #define FREG(c,r)			(&(((c)->reg)[(r)>>2]))
 
 typedef struct feature_bit {
@@ -70,6 +71,7 @@ static fbit feature_bits_ohare_pbook[] = {
 	{0x38,0,0},			/* FEATURE_IDE2_reset */
 	{0x38,0,0},			/* FEATURE_Mediabay_IDE_switch */
 	{0x38,0,0},			/* FEATURE_Mediabay_content */
+	{0x38,0,0},			/* FEATURE_Airport_reset */
 };
 
 /* Those bits are from a PowerBook. It's possible that desktop machines
@@ -102,6 +104,7 @@ static fbit feature_bits_heathrow[] = {
 	{0x38,0,0},			/* FEATURE_IDE2_reset */
 	{0x38,0,0},			/* FEATURE_Mediabay_IDE_switch */
 	{0x38,0,0},			/* FEATURE_Mediabay_content */
+	{0x38,0,0},			/* FEATURE_Airport_reset */
 };
 
 /*
@@ -135,6 +138,7 @@ static fbit feature_bits_paddington[] = {
 	{0x38,0,0},			/* FEATURE_IDE2_reset */
 	{0x38,0,0},			/* FEATURE_Mediabay_IDE_switch */
 	{0x38,0,0},			/* FEATURE_Mediabay_content */
+	{0x38,0,0},			/* FEATURE_Airport_reset */
 };
 
 /* Those bits are for Core99 machines (iBook,G4,iMacSL/DV,Pismo,...).
@@ -166,6 +170,7 @@ static fbit feature_bits_keylargo[] = {
 	{0x3c,1,0x40000000},		/* FEATURE_IDE2_reset */
 	{0x34,0,0x00001000},		/* FEATURE_Mediabay_IDE_switch */
 	{0x34,0,0x00000100},		/* FEATURE_Mediabay_content */
+	{0x40,1,0x08000000},		/* FEATURE_Airport_reset */
 };
 
 /* definition of a feature controller object */
@@ -177,22 +182,33 @@ struct feature_controller {
 };
 
 /* static functions */
-static void
+static struct feature_controller*
 feature_add_controller(struct device_node *controller_device, fbit* bits);
 
 static struct feature_controller*
 feature_lookup_controller(struct device_node *device);
 
-/* static varialbles */
+static void heathrow_prepare_for_sleep(struct feature_controller* ctrler);
+static void heathrow_wakeup(struct feature_controller* ctrler);
+static void core99_prepare_for_sleep(struct feature_controller* ctrler);
+static void core99_wake_up(struct feature_controller* ctrler);
+
+/* static variables */
 static struct feature_controller	controllers[MAX_FEATURE_CONTROLLERS];
 static int				controller_count = 0;
 
+/* Core99 stuffs */
+static volatile u32*			uninorth_base = NULL;
+static volatile u32*			keylargo_base = NULL;
+static int				uninorth_rev;
+static int				keylargo_rev;
 
 void
 feature_init(void)
 {
 	struct device_node *np;
-
+	u32 *rev;
+	
 	if (_machine != _MACH_Pmac)
 		return;
 
@@ -202,7 +218,14 @@ feature_init(void)
 		 * plus some gpio's which could eventually be handled here.
 		 */
 		if (device_is_compatible(np, "Keylargo")) {
-			feature_add_controller(np, feature_bits_keylargo);
+			struct feature_controller* ctrler =
+				feature_add_controller(np, feature_bits_keylargo);
+			if (ctrler) {
+				keylargo_base = ctrler->reg;
+				rev = (u32 *)get_property(ctrler->device, "revision-id", NULL);
+				if (rev)
+					keylargo_rev = *rev;
+			}
 		} else if (device_is_compatible(np, "paddington")) {
 			feature_add_controller(np, feature_bits_paddington);
 		} else {
@@ -222,6 +245,18 @@ feature_init(void)
 		}
 	}
 
+	/* Handle core99 Uni-N */
+	np = find_devices("uni-n");
+	if (np && np->n_addrs > 0) {
+		uninorth_base = ioremap(np->addrs[0].address, 0x1000);
+		rev = (u32 *)get_property(np, "device-rev", NULL);
+		if (rev)
+			uninorth_rev = *rev;
+	}
+	if (uninorth_base && keylargo_base)
+		printk("Uni-N revision: %d, KeyLargo revision: %d\n",
+			uninorth_rev, keylargo_rev);
+
 	if (controller_count)
 		printk(KERN_INFO "Registered %d feature controller(s)\n", controller_count);
 
@@ -236,7 +271,7 @@ feature_init(void)
 #endif
 }
 
-static void
+static struct feature_controller*
 feature_add_controller(struct device_node *controller_device, fbit* bits)
 {
 	struct feature_controller*	controller;
@@ -244,7 +279,7 @@ feature_add_controller(struct device_node *controller_device, fbit* bits)
 	if (controller_count >= MAX_FEATURE_CONTROLLERS) {
 		printk(KERN_INFO "Feature controller %s skipped(MAX:%d)\n",
 			controller_device->full_name, MAX_FEATURE_CONTROLLERS);
-		return;
+		return NULL;
 	}
 	controller = &controllers[controller_count];
 
@@ -253,7 +288,7 @@ feature_add_controller(struct device_node *controller_device, fbit* bits)
 	if (controller_device->n_addrs == 0) {
 		printk(KERN_ERR "No addresses for %s\n",
 			controller_device->full_name);
-		return;
+		return NULL;
 	}
 
 	controller->reg		= (volatile u32 *)ioremap(
@@ -262,12 +297,14 @@ feature_add_controller(struct device_node *controller_device, fbit* bits)
 	if (bits == NULL) {
 		printk(KERN_INFO "Twiddling the magic ohare bits\n");
 		out_le32(FREG(controller,OHARE_FEATURE_REG), STARMAX_FEATURES);
-		return;
+		return NULL;
 	}
 
 	spin_lock_init(&controller->lock);
 
 	controller_count++;
+
+	return controller;
 }
 
 static struct feature_controller*
@@ -387,5 +424,120 @@ feature_test(struct device_node* device, enum system_feature f)
 	 */
 	value = (in_le32(FREG(controller, bit->reg)) & bit->mask);
 	return bit->polarity ? (value == 0) : (value == bit->mask);
+}
+
+/*
+ * Core99 functions
+ * 
+ * Note: We currently assume there is _one_ UniN chip and _one_ KeyLargo
+ *       chip, which is the case on all Core99 machines so far
+ */
+
+/* Only one GMAC is assumed */
+void
+feature_set_gmac_power(struct device_node* device, int power)
+{
+	if (!uninorth_base)
+		return;
+	if (power)
+		out_le32(uninorth_base + 0x20/4,
+			in_le32(uninorth_base + 0x20/4) | 0x02000000);
+	else
+		out_le32(uninorth_base + 0x20/4,
+			in_le32(uninorth_base + 0x20/4) & ~0x02000000);
+	udelay(20);
+}
+
+/* Pass the node of the correct controller, please */
+void
+feature_set_usb_power(struct device_node* device, int power)
+{
+}
+
+/* Not yet implemented */
+void 
+feature_set_firewire_power(struct device_node* device, int power)
+{
+}
+
+void
+feature_prepare_for_sleep(void)
+{
+	/* We assume gatwick is second */
+	struct feature_controller* ctrler = &controllers[0];
+
+	if (!ctrler)
+		return;
+	if (controller_count > 1 &&
+		device_is_compatible(ctrler->device, "gatwick"))
+		ctrler = &controllers[1];
+
+	if (ctrler->bits == feature_bits_heathrow ||
+		ctrler->bits == feature_bits_paddington) {
+		heathrow_prepare_for_sleep(ctrler);
+		return;
+	}
+	if (ctrler->bits == feature_bits_keylargo) {
+		core99_prepare_for_sleep(ctrler);
+		return;
+	}
+}
+
+
+void
+feature_wake_up(void)
+{
+	struct feature_controller* ctrler = &controllers[0];
+
+	if (!ctrler)
+		return;
+	if (controller_count > 1 &&
+		device_is_compatible(ctrler->device, "gatwick"))
+		ctrler = &controllers[1];
+	
+	if (ctrler->bits == feature_bits_heathrow ||
+		ctrler->bits == feature_bits_paddington) {
+		heathrow_wakeup(ctrler);
+		return;
+	}
+	if (ctrler->bits == feature_bits_keylargo) {
+		core99_wake_up(ctrler);
+		return;
+	}
+}
+
+static u32 save_fcr0;
+//static u32 save_fcr1;
+//static u32 save_fcr2;
+static u32 save_mbcr;
+
+static void
+heathrow_prepare_for_sleep(struct feature_controller* ctrler)
+{
+	save_mbcr = in_le32(FREG(ctrler, 0x34));
+	save_fcr0 = in_le32(FREG(ctrler, 0x38));
+
+	out_le32(FREG(ctrler, 0x38), save_fcr0 & ~HRW_IOBUS_ENABLE);
+}
+
+static void
+heathrow_wakeup(struct feature_controller* ctrler)
+{
+	out_le32(FREG(ctrler, 0x38), save_fcr0);
+	out_le32(FREG(ctrler, 0x34), save_mbcr);
+
+	out_le32(FREG(ctrler, 0x38), save_fcr0 | HRW_IOBUS_ENABLE);
+}
+
+static void
+core99_prepare_for_sleep(struct feature_controller* ctrler)
+{
+	/* Not yet implemented */
+}
+
+static void
+core99_wake_up(struct feature_controller* ctrler)
+{
+	/* Not yet implemented */
 }
 

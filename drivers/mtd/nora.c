@@ -1,5 +1,5 @@
 /*
- * $Id: nora.c,v 1.11 2000/07/04 16:42:50 dwmw2 Exp $
+ * $Id: nora.c,v 1.12 2000/07/13 10:32:33 dwmw2 Exp $
  *
  * This is so simple I love it.
  */
@@ -125,7 +125,7 @@ static struct mtd_info nora_mtds[4] = {  /* boot, kernel, ramdisk, fs */
 	{
 		type: MTD_NORFLASH,
 		flags: MTD_CAP_NORFLASH,
-		size: 0x1a0000,
+		size: 0x0a0000,
 		erasesize: 0x20000,
 		name: "NORA kernel",
 		module: THIS_MODULE,
@@ -140,9 +140,9 @@ static struct mtd_info nora_mtds[4] = {  /* boot, kernel, ramdisk, fs */
 	{
 		type: MTD_NORFLASH,
 		flags: MTD_CAP_NORFLASH,
-		size: 0xe00000,
+		size: 0xf00000,
 		erasesize: 0x20000,
-		name: "NORA ramdisk",
+		name: "NORA root filesystem",
 		module: THIS_MODULE,
 		erase: nora_mtd_erase,
 		read: nora_mtd_read,
@@ -150,14 +150,14 @@ static struct mtd_info nora_mtds[4] = {  /* boot, kernel, ramdisk, fs */
 		suspend: nora_mtd_suspend,
 		resume: nora_mtd_resume,
 		sync: nora_mtd_sync,
-		priv: (void *)0x200000
+		priv: (void *)0x100000
 	},
 	{
 		type: MTD_NORFLASH,
 		flags: MTD_CAP_NORFLASH,
 		size: 0x1000000,
 		erasesize: 0x20000,
-		name: "NORA filesystem",
+		name: "NORA main filesystem",
 		module: THIS_MODULE,
 		erase: nora_mtd_erase,
 		read: nora_mtd_read,

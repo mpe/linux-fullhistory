@@ -75,9 +75,6 @@ extern void gemini_init(unsigned long r3,
                       unsigned long r6,
                       unsigned long r7);
 
-#ifdef CONFIG_BOOTX_TEXT
-extern void map_bootx_text(void);
-#endif
 #ifdef CONFIG_XMON
 extern void xmon_map_scc(void);
 #endif
@@ -110,6 +107,14 @@ unsigned long SYSRQ_KEY;
 struct machdep_calls ppc_md;
 
 /*
+ * These are used in binfmt_elf.c to put aux entries on the stack
+ * for each elf executable being started.
+ */
+int dcache_bsize;
+int icache_bsize;
+int ucache_bsize;
+
+/*
  * Perhaps we can put the pmac screen_info[] here
  * on pmac as well so we don't need the ifdef's.
  * Until we get multiple-console support in here
@@ -129,14 +134,6 @@ struct screen_info screen_info = {
 	1,			/* orig-video-isVGA */
 	16			/* orig-video-points */
 };
-
-/*
- * These are used in binfmt_elf.c to put aux entries on the stack
- * for each elf executable being started.
- */
-int dcache_bsize;
-int icache_bsize;
-int ucache_bsize;
 
 /*
  * I really need to add multiple-console support... -- Cort
@@ -286,7 +283,7 @@ int get_cpuinfo(char *buffer)
 		case 0x000C:
 			len += sprintf(len+buffer, "7400 (G4");
 #ifdef CONFIG_ALTIVEC
-			len += sprintf(len+buffer, ", altivec enabled");
+			len += sprintf(len+buffer, ", altivec supported");
 #endif /* CONFIG_ALTIVEC */
 			len += sprintf(len+buffer, ")\n");
 			break;
@@ -686,14 +683,9 @@ void __init setup_arch(char **cmdline_p)
 	extern char *klimit;
 	extern void do_init_bootmem(void);
 
-#ifdef CONFIG_BOOTX_TEXT
-	map_bootx_text();
-#endif
-
 #ifdef CONFIG_ALL_PPC
 	feature_init();
 #endif
-
 #ifdef CONFIG_XMON
 	xmon_map_scc();
 	if (strstr(cmd_line, "xmon"))

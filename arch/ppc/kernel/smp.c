@@ -39,7 +39,7 @@
 #include <asm/smp.h>
 #include <asm/gemini.h>
 
-#include "time.h"
+#include <asm/time.h>
 #include "open_pic.h"
 int smp_threads_ready = 0;
 volatile int smp_commenced = 0;

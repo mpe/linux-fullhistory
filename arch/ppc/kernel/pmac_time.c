@@ -26,7 +26,8 @@
 #include <asm/pgtable.h>
 #include <asm/machdep.h>
 
-#include "time.h"
+#include <asm/time.h>
+#include <asm/nvram.h>
 
 extern rwlock_t xtime_lock;
 
@@ -54,8 +55,30 @@ extern rwlock_t xtime_lock;
 /* Bits in IFR and IER */
 #define T1_INT		0x40		/* Timer 1 interrupt */
 
-__pmac
+extern struct timezone sys_tz;
 
+__init
+void pmac_time_init(void)
+{
+#ifdef CONFIG_NVRAM
+	s32 delta = 0;
+	int dst;
+	
+	delta = ((s32)pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 0x9)) << 16;
+	delta |= ((s32)pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 0xa)) << 8;
+	delta |= pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 0xb);
+	if (delta & 0x00800000UL)
+		delta |= 0xFF000000UL;
+	dst = ((pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 0x8) & 0x80) != 0);
+	printk("GMT Delta read from XPRAM: %d minutes, DST: %s\n", delta/60,
+		dst ? "on" : "off");
+	sys_tz.tz_minuteswest = -delta/60;
+	/* I _suppose_ this is 0:off, 1:on */
+	sys_tz.tz_dsttime = dst;
+#endif
+}
+
+__pmac
 unsigned long pmac_get_rtc_time(void)
 {
 #ifdef CONFIG_ADB
@@ -95,7 +118,34 @@ unsigned long pmac_get_rtc_time(void)
 
 int pmac_set_rtc_time(unsigned long nowtime)
 {
-	return 0;
+	struct adb_request req;
+
+	nowtime += RTC_OFFSET - sys_tz.tz_minuteswest * 60;
+
+	switch (sys_ctrler) {
+	case SYS_CTRLER_CUDA:
+		if (cuda_request(&req, NULL, 6, CUDA_PACKET, CUDA_SET_TIME,
+				 nowtime >> 24, nowtime >> 16, nowtime >> 8, nowtime) < 0)
+			return 0;
+		while (!req.complete)
+			cuda_poll();
+//		if (req.reply_len != 7)
+			printk(KERN_ERR "pmac_set_rtc_time: got %d byte reply\n",
+			       req.reply_len);
+		return 1;
+	case SYS_CTRLER_PMU:
+		if (pmu_request(&req, NULL, 5, PMU_SET_RTC,
+				nowtime >> 24, nowtime >> 16, nowtime >> 8, nowtime) < 0)
+			return 0;
+		while (!req.complete)
+			pmu_poll();
+		if (req.reply_len != 5)
+			printk(KERN_ERR "pmac_set_rtc_time: got %d byte reply\n",
+			       req.reply_len);
+		return 1;
+	default:
+		return 0;
+	}
 }
 
 /*

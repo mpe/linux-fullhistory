@@ -26,7 +26,7 @@
 #include <asm/nvram.h>
 #include <asm/prom.h>
 #include <asm/init.h>
-#include "time.h"
+#include <asm/time.h>
 
 static int nvram_as1 = NVRAM_AS1;
 static int nvram_as0 = NVRAM_AS0;

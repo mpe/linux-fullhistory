@@ -5,6 +5,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h> 
 #include <linux/mm.h>
+#include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/time.h>
 #include <asm/uaccess.h>

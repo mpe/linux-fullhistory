@@ -84,8 +84,10 @@ static void insert_bpts(void);
 static struct bpt *at_breakpoint(unsigned pc);
 static void bpt_cmds(void);
 static void cacheflush(void);
+#if 0 /* Makes compile with -Wall */
 static char *pretty_print_addr(unsigned long addr);
 static char *lookup_name(unsigned long addr);
+#endif
 static void csum(void);
 
 extern int print_insn_big_powerpc(FILE *, unsigned long, unsigned);
@@ -1493,6 +1495,7 @@ char *str;
 	lineptr = str;
 }
 
+#if 0 /* Makes compile with -Wall */
 static char *pretty_print_addr(unsigned long addr)
 {
 	printf("%08x", addr);
@@ -1500,14 +1503,15 @@ static char *pretty_print_addr(unsigned long addr)
 		printf(" %s", lookup_name(addr) );
 	return NULL;
 }
+#endif
 
+#if 0 /* Makes compile with -Wall */
 static char *lookup_name(unsigned long addr)
 {
 	extern char *sysmap;
 	extern unsigned long sysmap_size;
 	char *c = sysmap;
 	unsigned long cmp;
-
 	if ( !sysmap || !sysmap_size )
 		return NULL;
 return NULL;	
@@ -1525,4 +1529,4 @@ return NULL;
 	return last;
 #endif	
 }
-
+#endif

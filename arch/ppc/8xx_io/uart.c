@@ -41,8 +41,10 @@
 #include <asm/8xx_immap.h>
 #include <asm/mpc8xx.h>
 #include "commproc.h"
- 
+
 #ifdef CONFIG_KGDB
+extern void breakpoint(void);
+extern void set_debug_traps(void);
 extern int  kgdb_output_string (const char* s, unsigned int count);
 #endif
 
@@ -56,10 +58,17 @@ extern int  kgdb_output_string (const char* s, unsigned int count);
 #endif
 #endif
 
+#if 0
+/* SCC2 for console
+*/
+#undef CONFIG_SERIAL_CONSOLE_PORT
+#define CONFIG_SERIAL_CONSOLE_PORT	2
+#endif
+
 #define TX_WAKEUP	ASYNC_SHARE_IRQ
 
 static char *serial_name = "CPM UART driver";
-static char *serial_version = "0.02";
+static char *serial_version = "0.03";
 
 static DECLARE_TASK_QUEUE(tq_serial);
 
@@ -89,54 +98,33 @@ static int serial_console_setup(struct console *co, char *options);
  * needs.  For example, the port address is the CPM parameter ram
  * offset for the SCC or SMC.  The maximum number of ports is 4 SCCs and
  * 2 SMCs.  The "hub6" field is used to indicate the channel number, with
- * 0 and 1 indicating the SMCs and 2, 3, 4, and 5 are the SCCs.
- * Since these ports are so versatile, I don't yet have a strategy for
- * their management.  For example, SCC1 is used for Ethernet.  Right
- * now, just don't put them in the table.  Of course, right now I just
- * want the SMC to work as a uart :-)..
+ * a flag indicating SCC or SMC, and the number is used as an index into
+ * the CPM parameter area for this device.
  * The "type" field is currently set to 0, for PORT_UNKNOWN.  It is
  * not currently used.  I should probably use it to indicate the port
- * type of CMS or SCC.
+ * type of SMC or SCC.
  * The SMCs do not support any modem control signals.
  */
 #define smc_scc_num	hub6
-
-#ifdef CONFIG_8xxSMC2
-/* SMC2 is sometimes used for low performance TDM interfaces.  Define
- * this as 1 if you want SMC2 as a serial port UART managed by this driver.
- * Define this as 0 if you wish to use SMC2 for something else.
- */
-#define USE_SMC2 1
-#else
-#define USE_SMC2 0
-#endif
-
-/* Define SCC to ttySx mapping.
-*/
-#define SCC_NUM_BASE	(USE_SMC2 + 1)	/* SCC base tty "number" */
-
-/* Define which SCC is the first one to use for a serial port.  These
- * are 0-based numbers, i.e. this assumes the first SCC (SCC1) is used
- * for Ethernet, and the first available SCC for serial UART is SCC2.
- * NOTE:  IF YOU CHANGE THIS, you have to change the PROFF_xxx and
- * interrupt vectors in the table below to match.
- */
-#define SCC_IDX_BASE	1	/* table index */
+#define NUM_IS_SCC	((int)0x00010000)
+#define PORT_NUM(P)	((P) & 0x0000ffff)
 
 /* Processors other than the 860 only get SMCs configured by default.
  * Either they don't have SCCs or they are allocated somewhere else.
  * Of course, there are now 860s without some SCCs, so we will need to
  * address that someday.
+ * The Embedded Planet Multimedia I/O cards use TDM interfaces to the
+ * stereo codec parts, and we use SMC2 to help support that.
  */
 static struct serial_state rs_table[] = {
 	/* UART CLK   PORT          IRQ      FLAGS  NUM   */
 	{ 0,     0, PROFF_SMC1, CPMVEC_SMC1,   0,    0 },    /* SMC1 ttyS0 */
-#if USE_SMC2
+#ifdef CONFIG_8xxSMC2
 	{ 0,     0, PROFF_SMC2, CPMVEC_SMC2,   0,    1 },    /* SMC2 ttyS1 */
 #endif
 #ifdef CONFIG_8xxSCC
-	{ 0,     0, PROFF_SCC2, CPMVEC_SCC2,   0, SCC_NUM_BASE},    /* SCC2 ttyS2 */
-	{ 0,     0, PROFF_SCC3, CPMVEC_SCC3,   0, SCC_NUM_BASE + 1},    /* SCC3 ttyS3 */
+	{ 0,     0, PROFF_SCC2, CPMVEC_SCC2,   0,    (NUM_IS_SCC | 1) },    /* SCC2 ttyS2 */
+	{ 0,     0, PROFF_SCC3, CPMVEC_SCC3,   0,    (NUM_IS_SCC | 2) },    /* SCC3 ttyS3 */
 #endif
 };
 
@@ -245,13 +233,14 @@ static void rs_8xx_stop(struct tty_struct *tty)
 		return;
 	
 	save_flags(flags); cli();
-	if ((idx = info->state->smc_scc_num) < SCC_NUM_BASE) {
-		smcp = &cpmp->cp_smc[idx];
-		smcp->smc_smcm &= ~SMCM_TX;
+	idx = PORT_NUM(info->state->smc_scc_num);
+	if (info->state->smc_scc_num & NUM_IS_SCC) {
+		sccp = &cpmp->cp_scc[idx];
+		sccp->scc_sccm &= ~UART_SCCM_TX;
 	}
 	else {
-		sccp = &cpmp->cp_scc[idx - SCC_IDX_BASE];
-		sccp->scc_sccm &= ~UART_SCCM_TX;
+		smcp = &cpmp->cp_smc[idx];
+		smcp->smc_smcm &= ~SMCM_TX;
 	}
 	restore_flags(flags);
 }
@@ -267,14 +256,15 @@ static void rs_8xx_start(struct tty_struct *tty)
 	if (serial_paranoia_check(info, tty->device, "rs_stop"))
 		return;
 	
+	idx = PORT_NUM(info->state->smc_scc_num);
 	save_flags(flags); cli();
-	if ((idx = info->state->smc_scc_num) < SCC_NUM_BASE) {
-		smcp = &cpmp->cp_smc[idx];
-		smcp->smc_smcm |= SMCM_TX;
+	if (info->state->smc_scc_num & NUM_IS_SCC) {
+		sccp = &cpmp->cp_scc[idx];
+		sccp->scc_sccm |= UART_SCCM_TX;
 	}
 	else {
-		sccp = &cpmp->cp_scc[idx - SCC_IDX_BASE];
-		sccp->scc_sccm |= UART_SCCM_TX;
+		smcp = &cpmp->cp_smc[idx];
+		smcp->smc_smcm |= SMCM_TX;
 	}
 	restore_flags(flags);
 }
@@ -372,7 +362,7 @@ static _INLINE_ void receive_chars(ser_info_t *info)
 			icount->rx++;
 
 #ifdef SERIAL_DEBUG_INTR
-			printk("DR%02x:%02x...", ch, *status);
+			printk("DR%02x:%02x...", ch, status);
 #endif
 			*tty->flip.flag_buf_ptr = 0;
 			if (status & (BD_SC_BR | BD_SC_FR |
@@ -452,10 +442,28 @@ static _INLINE_ void receive_chars(ser_info_t *info)
 	queue_task(&tty->flip.tqueue, &tq_timer);
 }
 
+static _INLINE_ void receive_break(ser_info_t *info)
+{
+	struct tty_struct *tty = info->tty;
+
+	info->state->icount.brk++;
+	/* Check to see if there is room in the tty buffer for
+	 * the break.  If not, we exit now, losing the break.  FIXME
+	 */
+	if ((tty->flip.count + 1) >= TTY_FLIPBUF_SIZE)
+		return;
+	*(tty->flip.flag_buf_ptr++) = TTY_BREAK;
+	*(tty->flip.char_buf_ptr++) = 0;
+	tty->flip.count++;
+
+	queue_task(&tty->flip.tqueue, &tq_timer);
+}
+
 static _INLINE_ void transmit_chars(ser_info_t *info)
 {
 	
-	if (info->flags & TX_WAKEUP) {
+	if ((info->flags & TX_WAKEUP) ||
+	    (info->tty->flags & (1 << TTY_DO_WRITE_WAKEUP))) {
 		rs_sched_event(info, RS_EVENT_WRITE_WAKEUP);
 	}
 
@@ -549,23 +557,26 @@ static void rs_8xx_interrupt(void *dev_id)
 	
 	info = (ser_info_t *)dev_id;
 
-	if ((idx = info->state->smc_scc_num) < SCC_NUM_BASE) {
-		smcp = &cpmp->cp_smc[idx];
-		events = smcp->smc_smce;
-		if (events & SMCM_RX)
-			receive_chars(info);
-		if (events & SMCM_TX)
-			transmit_chars(info);
-		smcp->smc_smce = events;
-	}
-	else {
-		sccp = &cpmp->cp_scc[idx - SCC_IDX_BASE];
+	idx = PORT_NUM(info->state->smc_scc_num);
+	if (info->state->smc_scc_num & NUM_IS_SCC) {
+		sccp = &cpmp->cp_scc[idx];
 		events = sccp->scc_scce;
 		if (events & SCCM_RX)
 			receive_chars(info);
 		if (events & SCCM_TX)
 			transmit_chars(info);
 		sccp->scc_scce = events;
+	}
+	else {
+		smcp = &cpmp->cp_smc[idx];
+		events = smcp->smc_smce;
+		if (events & SMCM_BRKE)
+			receive_break(info);
+		if (events & SMCM_RX)
+			receive_chars(info);
+		if (events & SMCM_TX)
+			transmit_chars(info);
+		smcp->smc_smce = events;
 	}
 	
 #ifdef SERIAL_DEBUG_INTR
@@ -691,7 +702,16 @@ static int startup(ser_info_t *info)
 	 */
 	change_speed(info);
 	
-	if ((idx = info->state->smc_scc_num) < SCC_NUM_BASE) {
+	idx = PORT_NUM(info->state->smc_scc_num);
+	if (info->state->smc_scc_num & NUM_IS_SCC) {
+		sccp = &cpmp->cp_scc[idx];
+		scup = (scc_uart_t *)&cpmp->cp_dparam[state->port];
+		scup->scc_genscc.scc_mrblr = RX_BUF_SIZE;
+		scup->scc_maxidl = RX_BUF_SIZE;
+		sccp->scc_sccm |= (UART_SCCM_TX | UART_SCCM_RX);
+		sccp->scc_gsmrl |= (SCC_GSMRL_ENR | SCC_GSMRL_ENT);
+	}
+	else {
 		smcp = &cpmp->cp_smc[idx];
 
 		/* Enable interrupts and I/O.
@@ -708,21 +728,9 @@ static int startup(ser_info_t *info)
 		 * are coming.
 		 */
 		up = (smc_uart_t *)&cpmp->cp_dparam[state->port];
-
 		up->smc_mrblr = RX_BUF_SIZE;
 		up->smc_maxidl = RX_BUF_SIZE;
-
 		up->smc_brkcr = 1;	/* number of break chars */
-	}
-	else {
-		sccp = &cpmp->cp_scc[idx - SCC_IDX_BASE];
-		scup = (scc_uart_t *)&cpmp->cp_dparam[state->port];
-
-		scup->scc_genscc.scc_mrblr = RX_BUF_SIZE;
-		scup->scc_maxidl = RX_BUF_SIZE;
-
-		sccp->scc_sccm |= (UART_SCCM_TX | UART_SCCM_RX);
-		sccp->scc_gsmrl |= (SCC_GSMRL_ENR | SCC_GSMRL_ENT);
 	}
 
 	info->flags |= ASYNC_INITIALIZED;
@@ -758,7 +766,19 @@ static void shutdown(ser_info_t * info)
 	
 	save_flags(flags); cli(); /* Disable interrupts */
 
-	if ((idx = info->state->smc_scc_num) < SCC_NUM_BASE) {
+	idx = PORT_NUM(state->smc_scc_num);
+	if (state->smc_scc_num & NUM_IS_SCC) {
+		sccp = &cpmp->cp_scc[idx];
+		sccp->scc_gsmrl &= ~(SCC_GSMRL_ENR | SCC_GSMRL_ENT);
+#ifdef CONFIG_SERIAL_CONSOLE
+		/* We can't disable the transmitter if this is the
+		 * system console.
+		 */
+		if ((state - rs_table) != CONFIG_SERIAL_CONSOLE_PORT)
+#endif
+			sccp->scc_sccm &= ~(UART_SCCM_TX | UART_SCCM_RX);
+	}
+	else {
 		smcp = &cpmp->cp_smc[idx];
 
 		/* Disable interrupts and I/O.
@@ -768,14 +788,9 @@ static void shutdown(ser_info_t * info)
 		/* We can't disable the transmitter if this is the
 		 * system console.
 		 */
-		if (idx != CONFIG_SERIAL_CONSOLE_PORT)
+		if ((state - rs_table) != CONFIG_SERIAL_CONSOLE_PORT)
 #endif
 			smcp->smc_smcmr &= ~(SMCMR_REN | SMCMR_TEN);
-	}
-	else {
-		sccp = &cpmp->cp_scc[idx - SCC_IDX_BASE];
-		sccp->scc_sccm &= ~(UART_SCCM_TX | UART_SCCM_RX);
-		sccp->scc_gsmrl &= ~(SCC_GSMRL_ENR | SCC_GSMRL_ENT);
 	}
 	
 	if (info->tty)
@@ -795,12 +810,15 @@ static void change_speed(ser_info_t *info)
 	unsigned cflag, cval, scval, prev_mode;
 	int	i, bits, sbits, idx;
 	unsigned long	flags;
+	struct serial_state *state;
 	volatile smc_t	*smcp;
 	volatile scc_t	*sccp;
 
 	if (!info->tty || !info->tty->termios)
 		return;
 	cflag = info->tty->termios->c_cflag;
+
+	state = info->state;
 
 	/* Character length programmed into the mode register is the
 	 * sum of: 1 start bit, number of data bits, 0 or 1 parity bit,
@@ -903,7 +921,12 @@ static void change_speed(ser_info_t *info)
 	 * stops bits (there is always at least one).
 	 */
 	bits++;
-	if ((idx = info->state->smc_scc_num) < SCC_NUM_BASE) {
+	idx = PORT_NUM(state->smc_scc_num);
+	if (state->smc_scc_num & NUM_IS_SCC) {
+		sccp = &cpmp->cp_scc[idx];
+		sccp->scc_pmsr = (sbits << 12) | scval;
+	}
+	else {
 		smcp = &cpmp->cp_smc[idx];
 
 		/* Set the mode register.  We want to keep a copy of the
@@ -914,12 +937,8 @@ static void change_speed(ser_info_t *info)
 		smcp->smc_smcmr = smcr_mk_clen(bits) | cval |  SMCMR_SM_UART;
 		smcp->smc_smcmr |= (prev_mode & (SMCMR_REN | SMCMR_TEN));
 	}
-	else {
-		sccp = &cpmp->cp_scc[idx - SCC_IDX_BASE];
-		sccp->scc_pmsr = (sbits << 12) | scval;
-	}
 
-	m8xx_cpm_setbrg(info->state->smc_scc_num, baud_rate);
+	m8xx_cpm_setbrg((state - rs_table), baud_rate);
 
 	restore_flags(flags);
 }
@@ -961,9 +980,9 @@ static int rs_8xx_write(struct tty_struct * tty, int from_user,
 	volatile cbd_t *bdp;
 
 #ifdef CONFIG_KGDB
-	/* Try to let stub handle output. Returns true if it did. */ 
-	if (kgdb_output_string(buf, count))
-		return ret;
+        /* Try to let stub handle output. Returns true if it did. */ 
+        if (kgdb_output_string(buf, count))
+            return ret;
 #endif
 
 	if (serial_paranoia_check(info, tty->device, "rs_write"))
@@ -986,8 +1005,7 @@ static int rs_8xx_write(struct tty_struct * tty, int from_user,
 		}
 
 		if (from_user) {
-			c -= copy_from_user(__va(bdp->cbd_bufaddr), buf, c);
-			if (!c) {
+			if (copy_from_user(__va(bdp->cbd_bufaddr), buf, c)) {
 				if (!ret)
 					ret = -EFAULT;
 				break;
@@ -1271,30 +1289,31 @@ static int set_modem_info(ser_info_t *info, unsigned int cmd,
  * command.  We take advantage of the begin/end functions to make this
  * happen.
  */
+static ushort	smc_chan_map[] = {
+	CPM_CR_CH_SMC1,
+	CPM_CR_CH_SMC2
+};
+
+static ushort	scc_chan_map[] = {
+	CPM_CR_CH_SCC1,
+	CPM_CR_CH_SCC2,
+	CPM_CR_CH_SCC3,
+	CPM_CR_CH_SCC4
+};
+
 static void begin_break(ser_info_t *info)
 {
 	volatile cpm8xx_t *cp;
 	ushort	chan;
-	ushort	num;
+	int	idx;
 
 	cp = cpmp;
 
-	if ((num = info->state->smc_scc_num) < SCC_NUM_BASE) {
-		if (num == 0)
-			chan = CPM_CR_CH_SMC1;
-		else
-			chan = CPM_CR_CH_SMC2;
-	}
-	else {
-		num -= SCC_NUM_BASE;
-		switch (num) {
-		case 0: chan = CPM_CR_CH_SCC1; break;
-		case 1: chan = CPM_CR_CH_SCC2; break;
-		case 2: chan = CPM_CR_CH_SCC3; break;
-		case 3: chan = CPM_CR_CH_SCC4; break;
-		default: return;
-		}
-	}
+	idx = PORT_NUM(info->state->smc_scc_num);
+	if (info->state->smc_scc_num & NUM_IS_SCC)
+		chan = scc_chan_map[idx];
+	else
+		chan = smc_chan_map[idx];
 	cp->cp_cpcr = mk_cr_cmd(chan, CPM_CR_STOP_TX) | CPM_CR_FLG;
 	while (cp->cp_cpcr & CPM_CR_FLG);
 }
@@ -1303,26 +1322,15 @@ static void end_break(ser_info_t *info)
 {
 	volatile cpm8xx_t *cp;
 	ushort	chan;
-	ushort	num;
+	int	idx;
 
 	cp = cpmp;
 
-	if ((num = info->state->smc_scc_num) < SCC_NUM_BASE) {
-		if (num == 0)
-			chan = CPM_CR_CH_SMC1;
-		else
-			chan = CPM_CR_CH_SMC2;
-	}
-	else {
-		num -= SCC_NUM_BASE;
-		switch (num) {
-		case 0: chan = CPM_CR_CH_SCC1; break;
-		case 1: chan = CPM_CR_CH_SCC2; break;
-		case 2: chan = CPM_CR_CH_SCC3; break;
-		case 3: chan = CPM_CR_CH_SCC4; break;
-		default: return;
-		}
-	}
+	idx = PORT_NUM(info->state->smc_scc_num);
+	if (info->state->smc_scc_num & NUM_IS_SCC)
+		chan = scc_chan_map[idx];
+	else
+		chan = smc_chan_map[idx];
 	cp->cp_cpcr = mk_cr_cmd(chan, CPM_CR_RESTART_TX) | CPM_CR_FLG;
 	while (cp->cp_cpcr & CPM_CR_FLG);
 }
@@ -1623,15 +1631,16 @@ static void rs_8xx_close(struct tty_struct *tty, struct file * filp)
 	 */
 	info->read_status_mask &= ~BD_SC_EMPTY;
 	if (info->flags & ASYNC_INITIALIZED) {
-		if ((idx = info->state->smc_scc_num) < SCC_NUM_BASE) {
+		idx = PORT_NUM(info->state->smc_scc_num);
+		if (info->state->smc_scc_num & NUM_IS_SCC) {
+			sccp = &cpmp->cp_scc[idx];
+			sccp->scc_sccm &= ~UART_SCCM_RX;
+			sccp->scc_gsmrl &= ~SCC_GSMRL_ENR;
+		}
+		else {
 			smcp = &cpmp->cp_smc[idx];
 			smcp->smc_smcm &= ~SMCM_RX;
 			smcp->smc_smcmr &= ~SMCMR_REN;
-		}
-		else {
-			sccp = &cpmp->cp_scc[idx - SCC_IDX_BASE];
-			sccp->scc_sccm &= ~UART_SCCM_RX;
-			sccp->scc_gsmrl &= ~SCC_GSMRL_ENR;
 		}
 		/*
 		 * Before we drop DTR, make sure the UART transmitter
@@ -1713,7 +1722,18 @@ static void rs_8xx_wait_until_sent(struct tty_struct *tty, int timeout)
 			break;
 		if (timeout && ((orig_jiffies + timeout) < jiffies))
 			break;
+
+		/* The 'tx_cur' is really the next buffer to send.  We
+		 * have to back up to the previous BD and wait for it
+		 * to go.  This isn't perfect, because all this indicates
+		 * is the buffer is available.  There are still characters
+		 * in the CPM FIFO.
+		 */
 		bdp = info->tx_cur;
+		if (bdp == info->tx_bd_base)
+			bdp += (TX_NUM_FIFO-1);
+		else
+			bdp--;
 	} while (bdp->cbd_sc & BD_SC_READY);
 	current->state = TASK_RUNNING;
 #ifdef SERIAL_DEBUG_RS_WAIT_UNTIL_SENT
@@ -1803,7 +1823,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	 */
 	if ((filp->f_flags & O_NONBLOCK) ||
 	    (tty->flags & (1 << TTY_IO_ERROR)) ||
-	    (info->state->smc_scc_num < SCC_NUM_BASE)) {
+	    !(info->state->smc_scc_num & NUM_IS_SCC)) {
 		if (info->flags & ASYNC_CALLOUT_ACTIVE)
 			return -EBUSY;
 		info->flags |= ASYNC_NORMAL_ACTIVE;
@@ -1981,8 +2001,8 @@ static int inline line_info(char *buf, struct serial_state *state)
 
 	ret = sprintf(buf, "%d: uart:%s port:%X irq:%d",
 		      state->line,
-		      (state->smc_scc_num < SCC_NUM_BASE) ? "SMC" : "SCC",
-		      state->port, state->irq);
+		      (state->smc_scc_num & NUM_IS_SCC) ? "SCC" : "SMC",
+		      (unsigned int)(state->port), state->irq);
 
 	if (!state->port || (state->type == PORT_UNKNOWN)) {
 		ret += sprintf(buf+ret, "\n");
@@ -2070,7 +2090,7 @@ int rs_8xx_read_proc(char *page, char **start, off_t off, int count,
 done:
 	if (off >= len+begin)
 		return 0;
-	*start = page + (off-begin);
+	*start = page + (begin-off);
 	return ((count < begin+len-off) ? count : begin+len-off);
 }
 
@@ -2229,7 +2249,7 @@ putDebugChar(char ch)
 
 /*
  * Receive character from the serial port.  This only works well
- * before the port is initialize for real use.
+ * before the port is initialized for real use.
  */
 static int my_console_wait_key(int idx, int xmon, char *obuf)
 {
@@ -2350,7 +2370,7 @@ void kgdb_map_scc(void)
 	/* To avoid data cache CPM DMA coherency problems, allocate a
 	 * buffer in the CPM DPRAM.  This will work until the CPM and
 	 * serial ports are initialized.  At that time a memory buffer
-	 * will be allcoated.
+	 * will be allocated.
 	 * The port is already initialized from the boot procedure, all
 	 * we do here is give it a different buffer and make it a FIFO.
 	 */
@@ -2382,7 +2402,7 @@ void kgdb_map_scc(void)
 
 static kdev_t serial_console_device(struct console *c)
 {
-	return MKDEV(TTYAUX_MAJOR, 64 + c->index);
+	return MKDEV(TTY_MAJOR, 64 + c->index);
 }
 
 
@@ -2411,12 +2431,9 @@ long __init console_8xx_init(long kmem_start, long kmem_end)
 
 #endif
 
-/* This will be used for all boards when the MBX board information
- * is modified to include a default baud rate.
- */
-#ifndef CONFIG_MBX
+/* Index in baud rate table of the default console baud rate.
+*/
 static	int	baud_idx;
-#endif
 
 /*
  * The serial driver boot-time initialization code!
@@ -2425,7 +2442,7 @@ int __init rs_8xx_init(void)
 {
 	struct serial_state * state;
 	ser_info_t	*info;
-	uint		mem_addr, dp_addr;
+	uint		mem_addr, dp_addr, iobits;
 	int		i, j, idx;
 	ushort		chan;
 	volatile	cbd_t		*bdp;
@@ -2442,7 +2459,6 @@ int __init rs_8xx_init(void)
 
 	/* Initialize the tty_driver structure */
 	
-	/*memset(&serial_driver, 0, sizeof(struct tty_driver));*/
 	__clear_user(&serial_driver,sizeof(struct tty_driver));
 	serial_driver.magic = TTY_DRIVER_MAGIC;
 	serial_driver.driver_name = "serial";
@@ -2454,11 +2470,7 @@ int __init rs_8xx_init(void)
 	serial_driver.subtype = SERIAL_TYPE_NORMAL;
 	serial_driver.init_termios = tty_std_termios;
 	serial_driver.init_termios.c_cflag =
-#ifndef CONFIG_MBX
 		baud_idx | CS8 | CREAD | HUPCL | CLOCAL;
-#else
-		B9600 | CS8 | CREAD | HUPCL | CLOCAL;
-#endif
 	serial_driver.flags = TTY_DRIVER_REAL_RAW;
 	serial_driver.refcount = &serial_refcount;
 	serial_driver.table = serial_table;
@@ -2502,29 +2514,16 @@ int __init rs_8xx_init(void)
 	cp = cpmp;	/* Get pointer to Communication Processor */
 	immap = (immap_t *)IMAP_ADDR;	/* and to internal registers */
 
-	/* Configure SMCs Tx/Rx instead of port B parallel I/O.
-	*/
-#if USE_SMC2
-	cp->cp_pbpar |= 0x00000cc0;
-	cp->cp_pbdir &= ~0x00000cc0;
-	cp->cp_pbodr &= ~0x00000cc0;
-#else
-	/* This will only enable SMC1 if you want SMC2 for something else.
-	*/
-	cp->cp_pbpar |= 0x000000c0;
-	cp->cp_pbdir &= ~0x000000c0;
-	cp->cp_pbodr &= ~0x000000c0;
-#endif
 
-	/* Configure SCC2 and SCC3 instead of port A parallel I/O.
+	/* Configure SCC2, SCC3, and SCC4 instead of port A parallel I/O.
 	 */
-#if defined(CONFIG_MPC860) || defined(CONFIG_MPC860T)
+#ifdef CONFIG_8xxSCC
 #ifndef CONFIG_MBX
 	/* The "standard" configuration through the 860.
 	*/
-	immap->im_ioport.iop_papar |= 0x003c;
-	immap->im_ioport.iop_padir &= ~0x003c;
-	immap->im_ioport.iop_paodr &= ~0x003c;
+	immap->im_ioport.iop_papar |= 0x00fc;
+	immap->im_ioport.iop_padir &= ~0x00fc;
+	immap->im_ioport.iop_paodr &= ~0x00fc;
 #else
 	/* On the MBX, SCC3 is through Port D.
 	*/
@@ -2547,11 +2546,21 @@ int __init rs_8xx_init(void)
 	 */
 	cp->cp_sicr &= ~0x00ffff00;
 	cp->cp_sicr |= 0x001b1200;
-#endif
 
-	/* Wire BRG1 to SMC1 and BRG2 to SMC2.
+#ifdef CONFIG_PP04
+	/* Frequentis PP04 forced to RS-232 until we know better.
+	 * Port C 12 and 13 low enables RS-232 on SCC3 and SCC4.
+	 */
+	immap->im_ioport.iop_pcdir |= 0x000c;
+	immap->im_ioport.iop_pcpar &= ~0x000c;
+	immap->im_ioport.iop_pcdat &= ~0x000c;
+
+	/* This enables the TX driver.
 	*/
-	cp->cp_simode = 0x10000000;
+	cp->cp_pbpar &= ~0x6000;
+	cp->cp_pbdat &= ~0x6000;
+#endif
+#endif
 
 	for (i = 0, state = rs_table; i < NR_PORTS; i++,state++) {
 		state->magic = SSTATE_MAGIC;
@@ -2568,8 +2577,8 @@ int __init rs_8xx_init(void)
 		state->icount.frame = state->icount.parity = 0;
 		state->icount.overrun = state->icount.brk = 0;
 		printk(KERN_INFO "ttyS%02d at 0x%04x is a %s\n",
-		       i, state->port,
-		       (state->smc_scc_num < SCC_NUM_BASE) ? "SMC" : "SCC");
+		       i, (unsigned int)(state->port),
+		       (state->smc_scc_num & NUM_IS_SCC) ? "SCC" : "SMC");
 #ifdef CONFIG_SERIAL_CONSOLE
 		/* If we just printed the message on the console port, and
 		 * we are about to initialize it for general use, we have
@@ -2581,7 +2590,6 @@ int __init rs_8xx_init(void)
 #endif
 		info = kmalloc(sizeof(ser_info_t), GFP_KERNEL);
 		if (info) {
-			/*memset(info, 0, sizeof(ser_info_t));*/
 			__clear_user(info,sizeof(ser_info_t));
 			init_waitqueue_head(&info->open_wait);
 			init_waitqueue_head(&info->close_wait);
@@ -2621,15 +2629,16 @@ int __init rs_8xx_init(void)
 			bdp->cbd_bufaddr = __pa(mem_addr);
 			bdp->cbd_sc = BD_SC_WRAP | BD_SC_EMPTY | BD_SC_INTRPT;
 
-			if ((idx = state->smc_scc_num) < SCC_NUM_BASE) {
+			idx = PORT_NUM(info->state->smc_scc_num);
+			if (info->state->smc_scc_num & NUM_IS_SCC) {
+				scp = &cp->cp_scc[idx];
+				sup = (scc_uart_t *)&cp->cp_dparam[state->port];
+				sup->scc_genscc.scc_rbase = dp_addr;
+			}
+			else {
 				sp = &cp->cp_smc[idx];
 				up = (smc_uart_t *)&cp->cp_dparam[state->port];
 				up->smc_rbase = dp_addr;
-			}
-			else {
-				scp = &cp->cp_scc[idx - SCC_IDX_BASE];
-				sup = (scc_uart_t *)&cp->cp_dparam[state->port];
-				sup->scc_genscc.scc_rbase = dp_addr;
 			}
 
 			dp_addr = m8xx_cpm_dpalloc(sizeof(cbd_t) * TX_NUM_FIFO);
@@ -2654,46 +2663,7 @@ int __init rs_8xx_init(void)
 			bdp->cbd_bufaddr = __pa(mem_addr);
 			bdp->cbd_sc = (BD_SC_WRAP | BD_SC_INTRPT);
 
-			if (idx < SCC_NUM_BASE) {
-				up->smc_tbase = dp_addr;
-
-				/* Set up the uart parameters in the
-				 * parameter ram.
-				 */
-				up->smc_rfcr = SMC_EB;
-				up->smc_tfcr = SMC_EB;
-
-				/* Set this to 1 for now, so we get single
-				 * character interrupts.  Using idle charater
-				 * time requires some additional tuning.
-				 */
-				up->smc_mrblr = RX_BUF_SIZE;
-				up->smc_maxidl = RX_BUF_SIZE;
-				up->smc_brkcr = 1;
-
-				/* Send the CPM an initialize command.
-				*/
-				if (state->smc_scc_num == 0)
-					chan = CPM_CR_CH_SMC1;
-				else
-					chan = CPM_CR_CH_SMC2;
-
-				cp->cp_cpcr = mk_cr_cmd(chan,
-						CPM_CR_INIT_TRX) | CPM_CR_FLG;
-				while (cp->cp_cpcr & CPM_CR_FLG);
-
-				/* Set UART mode, 8 bit, no parity, one stop.
-				 * Enable receive and transmit.
-				 */
-				sp->smc_smcmr = smcr_mk_clen(9) | SMCMR_SM_UART;
-
-				/* Disable all interrupts and clear all pending
-				 * events.
-				 */
-				sp->smc_smcm = 0;
-				sp->smc_smce = 0xff;
-			}
-			else {
+			if (info->state->smc_scc_num & NUM_IS_SCC) {
 				sup->scc_genscc.scc_tbase = dp_addr;
 
 				/* Set up the uart parameters in the
@@ -2702,8 +2672,12 @@ int __init rs_8xx_init(void)
 				sup->scc_genscc.scc_rfcr = SMC_EB;
 				sup->scc_genscc.scc_tfcr = SMC_EB;
 
-				sup->scc_genscc.scc_mrblr = RX_BUF_SIZE;
-				sup->scc_maxidl = RX_BUF_SIZE;
+				/* Set this to 1 for now, so we get single
+				 * character interrupts.  Using idle charater
+				 * time requires some additional tuning.
+				 */
+				sup->scc_genscc.scc_mrblr = 1;
+				sup->scc_maxidl = 0;
 				sup->scc_brkcr = 1;
 				sup->scc_parec = 0;
 				sup->scc_frmec = 0;
@@ -2724,10 +2698,7 @@ int __init rs_8xx_init(void)
 
 				/* Send the CPM an initialize command.
 				*/
-				if (state->smc_scc_num == 2)
-					chan = CPM_CR_CH_SCC2;
-				else
-					chan = CPM_CR_CH_SCC3;
+				chan = scc_chan_map[idx];
 
 				cp->cp_cpcr = mk_cr_cmd(chan,
 						CPM_CR_INIT_TRX) | CPM_CR_FLG;
@@ -2747,6 +2718,91 @@ int __init rs_8xx_init(void)
 				scp->scc_scce = 0xffff;
 				scp->scc_dsr = 0x7e7e;
 				scp->scc_pmsr = 0x3000;
+
+				/* If the port is the console, enable Rx and Tx.
+				*/
+#ifdef CONFIG_SERIAL_CONSOLE
+				if (i == CONFIG_SERIAL_CONSOLE_PORT)
+					scp->scc_gsmrl |= (SCC_GSMRL_ENR | SCC_GSMRL_ENT);
+#endif
+			}
+			else {
+				/* Configure SMCs Tx/Rx instead of port B
+				 * parallel I/O.  On 823/850 these are on
+				 * port A for SMC2.
+				 */
+#ifndef CONFIG_8xx_ALTSMC2
+				iobits = 0xc0 << (idx * 4);
+				cp->cp_pbpar |= iobits;
+				cp->cp_pbdir &= ~iobits;
+				cp->cp_pbodr &= ~iobits;
+#else
+				if (idx == 0) {
+					/* SMC1 on Port B, like all 8xx.
+					*/
+					iobits = 0xc0;
+					cp->cp_pbpar |= iobits;
+					cp->cp_pbdir &= ~iobits;
+					cp->cp_pbodr &= ~iobits;
+				}
+				else {
+					/* SMC2 is on Port A.
+					*/
+					iobits = 0x300;
+					immap->im_ioport.iop_papar |= iobits;
+					immap->im_ioport.iop_padir &= ~iobits;
+					immap->im_ioport.iop_paodr &= ~iobits;
+				}
+#endif
+
+				/* Connect the baud rate generator to the
+				 * SMC based upon index in rs_table.  Also
+				 * make sure it is connected to NMSI.
+				 */
+				cp->cp_simode &= ~(0xffff << (idx * 16));
+				cp->cp_simode |= (i << ((idx * 16) + 12));
+
+				up->smc_tbase = dp_addr;
+
+				/* Set up the uart parameters in the
+				 * parameter ram.
+				 */
+				up->smc_rfcr = SMC_EB;
+				up->smc_tfcr = SMC_EB;
+
+				/* Set this to 1 for now, so we get single
+				 * character interrupts.  Using idle charater
+				 * time requires some additional tuning.
+				 */
+				up->smc_mrblr = 1;
+				up->smc_maxidl = 0;
+				up->smc_brkcr = 1;
+
+				/* Send the CPM an initialize command.
+				*/
+				chan = smc_chan_map[idx];
+
+				cp->cp_cpcr = mk_cr_cmd(chan,
+						CPM_CR_INIT_TRX) | CPM_CR_FLG;
+				while (cp->cp_cpcr & CPM_CR_FLG);
+
+				/* Set UART mode, 8 bit, no parity, one stop.
+				 * Enable receive and transmit.
+				 */
+				sp->smc_smcmr = smcr_mk_clen(9) | SMCMR_SM_UART;
+
+				/* Disable all interrupts and clear all pending
+				 * events.
+				 */
+				sp->smc_smcm = 0;
+				sp->smc_smce = 0xff;
+
+				/* If the port is the console, enable Rx and Tx.
+				*/
+#ifdef CONFIG_SERIAL_CONSOLE
+				if (i == CONFIG_SERIAL_CONSOLE_PORT)
+					sp->smc_smcmr |= SMCMR_REN | SMCMR_TEN;
+#endif
 			}
 
 			/* Install interrupt handler.
@@ -2755,19 +2811,8 @@ int __init rs_8xx_init(void)
 
 			/* Set up the baud rate generator.
 			*/
-#ifndef CONFIG_MBX
-			m8xx_cpm_setbrg(state->smc_scc_num,
-							baud_table[baud_idx]);
-#else
-			m8xx_cpm_setbrg(state->smc_scc_num, 9600);
-#endif
+			m8xx_cpm_setbrg(i, baud_table[baud_idx]);
 
-			/* If the port is the console, enable Rx and Tx.
-			*/
-#ifdef CONFIG_SERIAL_CONSOLE
-			if (i == CONFIG_SERIAL_CONSOLE_PORT)
-				sp->smc_smcmr |= SMCMR_REN | SMCMR_TEN;
-#endif
 		}
 	}
 
@@ -2780,13 +2825,14 @@ int __init rs_8xx_init(void)
 static int __init serial_console_setup(struct console *co, char *options)
 {
 	struct		serial_state *ser;
-	uint		mem_addr, dp_addr, bidx;
+	uint		mem_addr, dp_addr, bidx, idx;
+	ushort		chan;
 	volatile	cbd_t		*bdp;
 	volatile	cpm8xx_t	*cp;
 	volatile	smc_t		*sp;
+	volatile	scc_t		*scp;
 	volatile	smc_uart_t	*up;
-
-#ifndef CONFIG_MBX
+	volatile	scc_uart_t	*sup;
 	bd_t				*bd;
 
 	bd = (bd_t *)__res;
@@ -2797,40 +2843,41 @@ static int __init serial_console_setup(struct console *co, char *options)
 
 	co->cflag = CREAD|CLOCAL|bidx|CS8;
 	baud_idx = bidx;
-#else
-	co->cflag = CREAD|CLOCAL|B9600|CS8;
-#endif
 
 	ser = rs_table + co->index;
 
 	cp = cpmp;	/* Get pointer to Communication Processor */
 
-	/* Right now, assume we are using SMCs.
-	*/
-	sp = &cp->cp_smc[ser->smc_scc_num];
+	idx = PORT_NUM(ser->smc_scc_num);
+	if (ser->smc_scc_num & NUM_IS_SCC) {
+		scp = &cp->cp_scc[idx];
+		sup = (scc_uart_t *)&cp->cp_dparam[ser->port];
+	}
+	else {
+		sp = &cp->cp_smc[idx];
+		up = (smc_uart_t *)&cpmp->cp_dparam[ser->port];
+	}
+
 	/* When we get here, the CPM has been reset, so we need
 	 * to configure the port.
 	 * We need to allocate a transmit and receive buffer descriptor
 	 * from dual port ram, and a character buffer area from host mem.
 	 */
-	up = (smc_uart_t *)&cp->cp_dparam[ser->port];
-	cp->cp_pbpar = 0x00c0;	/* Enable SMC1 instead of Port B I/O */
 
 	/* Allocate space for two buffer descriptors in the DP ram.
 	*/
 	dp_addr = m8xx_cpm_dpalloc(sizeof(cbd_t) * 2);
 
-	/* Allocate space for an input FIFO, plus a few bytes for output.
-	 * Allocate bytes to maintain word alignment.
-	 */
-	mem_addr = m8xx_cpm_hostalloc(RX_BUF_SIZE + 4);
+	/* Allocate space for two 2 byte FIFOs in the host memory.
+	*/
+	mem_addr = m8xx_cpm_hostalloc(8);
 
 	/* Set the physical address of the host memory buffers in
 	 * the buffer descriptors.
 	 */
 	bdp = (cbd_t *)&cp->cp_dpmem[dp_addr];
 	bdp->cbd_bufaddr = __pa(mem_addr);
-	(bdp+1)->cbd_bufaddr = __pa(mem_addr+RX_BUF_SIZE);
+	(bdp+1)->cbd_bufaddr = __pa(mem_addr+4);
 
 	/* For the receive, set empty and wrap.
 	 * For transmit, set wrap.
@@ -2840,39 +2887,98 @@ static int __init serial_console_setup(struct console *co, char *options)
 
 	/* Set up the uart parameters in the parameter ram.
 	*/
-	up->smc_rbase = dp_addr;	/* Base of receive buffer desc. */
-	up->smc_tbase = dp_addr+sizeof(cbd_t);	/* Base of xmt buffer desc. */
-	up->smc_rfcr = SMC_EB;
-	up->smc_tfcr = SMC_EB;
+	if (ser->smc_scc_num & NUM_IS_SCC) {
 
-	up->smc_mrblr = RX_BUF_SIZE;		/* receive buffer length */
-	up->smc_maxidl = RX_BUF_SIZE;
+		sup->scc_genscc.scc_rbase = dp_addr;
+		sup->scc_genscc.scc_tbase = dp_addr + sizeof(cbd_t);
 
-	/* Send the CPM an initialize command.
-	*/
-	cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SMC1, CPM_CR_INIT_TRX) | CPM_CR_FLG;
-	/*
-	 * delay for a bit - this is necessary on my board!
-	 *  -- Cort
-	 */
-	printk("");
-	while (cp->cp_cpcr & CPM_CR_FLG);
-	/* Set UART mode, 8 bit, no parity, one stop.
-	 * Enable receive and transmit.
-	 */
-	sp->smc_smcmr = smcr_mk_clen(9) |  SMCMR_SM_UART;
+		/* Set up the uart parameters in the
+		 * parameter ram.
+		 */
+		sup->scc_genscc.scc_rfcr = SMC_EB;
+		sup->scc_genscc.scc_tfcr = SMC_EB;
+
+		/* Set this to 1 for now, so we get single
+		 * character interrupts.  Using idle charater
+		 * time requires some additional tuning.
+		 */
+		sup->scc_genscc.scc_mrblr = 1;
+		sup->scc_maxidl = 0;
+		sup->scc_brkcr = 1;
+		sup->scc_parec = 0;
+		sup->scc_frmec = 0;
+		sup->scc_nosec = 0;
+		sup->scc_brkec = 0;
+		sup->scc_uaddr1 = 0;
+		sup->scc_uaddr2 = 0;
+		sup->scc_toseq = 0;
+		sup->scc_char1 = 0x8000;
+		sup->scc_char2 = 0x8000;
+		sup->scc_char3 = 0x8000;
+		sup->scc_char4 = 0x8000;
+		sup->scc_char5 = 0x8000;
+		sup->scc_char6 = 0x8000;
+		sup->scc_char7 = 0x8000;
+		sup->scc_char8 = 0x8000;
+		sup->scc_rccm = 0xc0ff;
+
+		/* Send the CPM an initialize command.
+		*/
+		chan = scc_chan_map[idx];
+
+		cp->cp_cpcr = mk_cr_cmd(chan, CPM_CR_INIT_TRX) | CPM_CR_FLG;
+		while (cp->cp_cpcr & CPM_CR_FLG);
+
+		/* Set UART mode, 8 bit, no parity, one stop.
+		 * Enable receive and transmit.
+		 */
+		scp->scc_gsmrh = 0;
+		scp->scc_gsmrl = 
+			(SCC_GSMRL_MODE_UART | SCC_GSMRL_TDCR_16 | SCC_GSMRL_RDCR_16);
+
+		/* Disable all interrupts and clear all pending
+		 * events.
+		 */
+		scp->scc_sccm = 0;
+		scp->scc_scce = 0xffff;
+		scp->scc_dsr = 0x7e7e;
+		scp->scc_pmsr = 0x3000;
+
+		scp->scc_gsmrl |= (SCC_GSMRL_ENR | SCC_GSMRL_ENT);
+
+	}
+	else {
+		up->smc_rbase = dp_addr;	/* Base of receive buffer desc. */
+		up->smc_tbase = dp_addr+sizeof(cbd_t);	/* Base of xmt buffer desc. */
+		up->smc_rfcr = SMC_EB;
+		up->smc_tfcr = SMC_EB;
+
+		/* Set this to 1 for now, so we get single character interrupts.
+		*/
+		up->smc_mrblr = 1;		/* receive buffer length */
+		up->smc_maxidl = 0;		/* wait forever for next char */
+
+		/* Send the CPM an initialize command.
+		*/
+		chan = smc_chan_map[idx];
+		cp->cp_cpcr = mk_cr_cmd(chan, CPM_CR_INIT_TRX) | CPM_CR_FLG;
+		printk("");
+		while (cp->cp_cpcr & CPM_CR_FLG);
+
+		/* Set UART mode, 8 bit, no parity, one stop.
+		 * Enable receive and transmit.
+		 */
+		sp->smc_smcmr = smcr_mk_clen(9) |  SMCMR_SM_UART;
+
+		/* And finally, enable Rx and Tx.
+		*/
+		sp->smc_smcmr |= SMCMR_REN | SMCMR_TEN;
+	}
 
 	/* Set up the baud rate generator.
 	*/
-#ifndef CONFIG_MBX
-	m8xx_cpm_setbrg(ser->smc_scc_num, bd->bi_baudrate);
-#else
-	m8xx_cpm_setbrg(ser->smc_scc_num, 9600);
-#endif
-
-	/* And finally, enable Rx and Tx.
-	*/
-	sp->smc_smcmr |= SMCMR_REN | SMCMR_TEN;
+	m8xx_cpm_setbrg((ser - rs_table), bd->bi_baudrate);
 
 	return 0;
 }
+

@@ -99,7 +99,8 @@ endif
 ifeq ($(CONFIG_ALL_PPC),y)
   O_OBJS += pmac_pic.o pmac_setup.o pmac_time.o feature.o pmac_pci.o prom.o \
 	chrp_setup.o chrp_time.o chrp_pci.o open_pic.o indirect_pci.o \
-	prep_pci.o i8259.o prep_nvram.o prep_time.o residual.o
+	prep_pci.o i8259.o prep_nvram.o prep_time.o residual.o \
+	pmac_backlight.o
   OX_OBJS += prep_setup.o
 endif
 ifeq ($(CONFIG_GEMINI),y)

@@ -436,10 +436,7 @@ signed long schedule_timeout(signed long timeout)
 
 	add_timer(&timer);
 	schedule();
-	del_timer(&timer);
-	/* RED-PEN. Timer may be running now on another cpu.
-	 * Pray that process will not exit enough fastly.
-	 */
+	del_timer_sync(&timer);
 
 	timeout = expire - jiffies;
 

@@ -62,17 +62,18 @@
 #include <asm/dma.h>
 #include <asm/bootx.h>
 
-#include "time.h"
+#include <asm/time.h>
 #include "local_irq.h"
 #include "pmac_pic.h"
 
 #undef SHOW_GATWICK_IRQS
 
-unsigned long pmac_get_rtc_time(void);
-int pmac_set_rtc_time(unsigned long nowtime);
-void pmac_read_rtc_time(void);
-void pmac_calibrate_decr(void);
-void pmac_setup_pci_ptrs(void);
+extern void pmac_time_init(void);
+extern unsigned long pmac_get_rtc_time(void);
+extern int pmac_set_rtc_time(unsigned long nowtime);
+extern void pmac_read_rtc_time(void);
+extern void pmac_calibrate_decr(void);
+extern void pmac_setup_pci_ptrs(void);
 
 extern int mackbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int mackbd_getkeycode(unsigned int scancode);
@@ -91,12 +92,19 @@ extern int pckbd_translate(unsigned char scancode, unsigned char *keycode,
 extern char pckbd_unexpected_up(unsigned char keycode);
 extern void pckbd_leds(unsigned char leds);
 extern void pckbd_init_hw(void);
+extern void pmac_nvram_update(void);
+
+extern void *pmac_pci_dev_io_base(unsigned char bus, unsigned char devfn);
+extern void *pmac_pci_dev_mem_base(unsigned char bus, unsigned char devfn);
+extern int pmac_pci_dev_root_bridge(unsigned char bus, unsigned char devfn);
 
 unsigned char drive_info;
 
 int ppc_override_l2cr = 0;
 int ppc_override_l2cr_value;
 int has_l2cache = 0;
+
+static int current_root_goodness = -1;
 
 extern char saved_command_line[];
 
@@ -300,7 +308,9 @@ pmac_setup_arch(void)
 #ifdef CONFIG_ADB_PMU
 	find_via_pmu();
 #endif	
-
+#ifdef CONFIG_NVRAM
+	pmac_nvram_init();
+#endif
 #ifdef CONFIG_DUMMY_CONSOLE
 	conswitchp = &dummy_con;
 #endif
@@ -364,27 +374,25 @@ static void __init
 init_uninorth(void)
 {
 	/* 
-	 * Turns on the gmac clock so that it responds to PCI cycles
-	 * later, the driver may want to turn it off again to save
-	 * power when interface is down
+	 * Turns OFF the gmac clock. The gmac driver will turn
+	 * it back ON when the interface is enabled. This save
+	 * power on portables.
+	 * 
+	 * Note: We could also try to turn OFF the PHY. Since this
+	 * has to be done by both the gmac driver and this code,
+	 * I'll probably end-up moving some of this out of the
+	 * modular gmac driver into a non-modular stub containing
+	 * some basic PHY management and power management stuffs
 	 */
-	struct device_node* uni_n = find_devices("uni-n");
 	struct device_node* gmac = find_devices("ethernet");
-	unsigned long* addr;
-	
-	if (!uni_n || uni_n->n_addrs < 1)
-		return;
-	addr = ioremap(uni_n->addrs[0].address, 0x300);
 
 	while(gmac) {
 		if (device_is_compatible(gmac, "gmac"))
 			break;
 		gmac = gmac->next;
 	}
-	if (gmac) {
-		*(addr + 8) |= 2;
-		eieio();
-	}
+	if (gmac)
+		feature_set_gmac_power(gmac, 0);
 }
 
 extern char *bootpath;
@@ -402,9 +410,6 @@ pmac_init2(void)
 #ifdef CONFIG_ADB_PMU
 	via_pmu_start();
 #endif
-#ifdef CONFIG_NVRAM  
-	pmac_nvram_init();
-#endif	
 #ifdef CONFIG_PMAC_PBOOK
 	media_bay_init();
 #endif	
@@ -476,13 +481,14 @@ void __init find_boot_device(void)
 
 /* can't be __init - can be called whenever a disk is first accessed */
 __pmac
-void note_bootable_part(kdev_t dev, int part)
+void note_bootable_part(kdev_t dev, int part, int goodness)
 {
 	static int found_boot = 0;
 	char *p;
 
 	/* Do nothing if the root has been set already. */
-	if (ROOT_DEV != to_kdev_t(DEFAULT_ROOT_DEVICE))
+	if ((goodness < current_root_goodness) &&
+		(ROOT_DEV != to_kdev_t(DEFAULT_ROOT_DEVICE)))
 		return;
 	p = strstr(saved_command_line, "root=");
 	if (p != NULL && (p == saved_command_line || p[-1] == ' '))
@@ -495,7 +501,7 @@ void note_bootable_part(kdev_t dev, int part)
 	if (boot_dev == 0 || dev == boot_dev) {
 		ROOT_DEV = MKDEV(MAJOR(dev), MINOR(dev) + part);
 		boot_dev = NODEV;
-		printk(" (root on %d)", part);
+		current_root_goodness = goodness;
 	}
 }
 
@@ -666,10 +672,14 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.power_off      = pmac_power_off;
 	ppc_md.halt           = pmac_halt;
 
-	ppc_md.time_init      = NULL;
+	ppc_md.time_init      = pmac_time_init;
 	ppc_md.set_rtc_time   = pmac_set_rtc_time;
 	ppc_md.get_rtc_time   = pmac_get_rtc_time;
 	ppc_md.calibrate_decr = pmac_calibrate_decr;
+
+	ppc_md.pci_dev_io_base          = pmac_pci_dev_io_base;
+	ppc_md.pci_dev_mem_base         = pmac_pci_dev_mem_base;
+	ppc_md.pci_dev_root_bridge      = pmac_pci_dev_root_bridge;
 
 #if defined(CONFIG_VT) && defined(CONFIG_ADB_KEYBOARD)
 	ppc_md.kbd_setkeycode    = mackbd_setkeycode;

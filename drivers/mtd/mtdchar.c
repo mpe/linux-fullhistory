@@ -12,7 +12,6 @@
 #include <linux/module.h>
 #include <linux/mtd/mtd.h>
 #include <linux/malloc.h>
-#include <linux/smp_lock.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,0)
 static loff_t mtd_lseek (struct file *file, loff_t offset, int orig)
@@ -91,12 +90,10 @@ static release_t mtd_close(struct inode *inode,
 
 	mtd = (struct mtd_info *)file->private_data;
 	
-	lock_kernel();
 	if (mtd->sync)
 		mtd->sync(mtd);
 	
 	put_mtd_device(mtd);
-	unlock_kernel();
 
 	release_return(0);
 } /* mtd_close */

@@ -13,8 +13,16 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     fi
   fi
   bool '860T FEC Ethernet' CONFIG_FEC_ENET
-  bool 'Use SMC2 for UART' CONFIG_8xxSMC2
-  bool 'Enable SCC2 and SCC3 for UART' CONFIG_8xxSCC
+  bool 'Use Big CPM Ethernet Buffers' CONFIG_ENET_BIG_BUFFERS
+fi
+bool 'Use SMC2 for UART' CONFIG_8xxSMC2
+if [ "$CONFIG_8xxSMC2" = "y" ]; then
+  bool 'Use Alternate SMC2 I/O (823/850)' CONFIG_8xx_ALTSMC2
+fi
+bool 'Enable SCC2 and SCC3 for UART' CONFIG_8xxSCC
+
+if [ "$CONFIG_TQM860" = "y" -o "$CONFIG_TQM860L" = "y" -o "$CONFIG_TQM8xxL" = "y" ]; then
+  bool 'Use SMC2 for Console' TQM_SMC2_CONSOLE
 fi
 
 # This doesn't really belong here, but it is convenient to ask

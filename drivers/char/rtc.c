@@ -65,7 +65,6 @@
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
 #include <linux/spinlock.h>
-#include <linux/smp_lock.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -507,19 +506,24 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
  *	up things on a close.
  */
 
+/* We use rtc_lock to protect against concurrent opens. So the BKL is not
+ * needed here. Or anywhere else in this driver. */
 static int rtc_open(struct inode *inode, struct file *file)
 {
-	/* If someday somebody decides to remove the kernel_lock on open and
-	 * close and ioctl this is gonna get open to races */
+	spin_lock_irq (&rtc_lock);
+
 	if(rtc_status & RTC_IS_OPEN)
-		return -EBUSY;
+		goto out_busy;
 
 	rtc_status |= RTC_IS_OPEN;
 
-	spin_lock_irq (&rtc_lock);
 	rtc_irq_data = 0;
 	spin_unlock_irq (&rtc_lock);
 	return 0;
+
+out_busy:
+	spin_unlock_irq (&rtc_lock);
+	return -EBUSY;
 }
 
 static int rtc_fasync (int fd, struct file *filp, int on)
@@ -538,7 +542,6 @@ static int rtc_release(struct inode *inode, struct file *file)
 
 	unsigned char tmp;
 
-	lock_kernel();
 	spin_lock_irq(&rtc_lock);
 	tmp = CMOS_READ(RTC_CONTROL);
 	tmp &=  ~RTC_PIE;
@@ -556,16 +559,15 @@ static int rtc_release(struct inode *inode, struct file *file)
 	if (file->f_flags & FASYNC) {
 		rtc_fasync (-1, file, 0);
 	}
-
-#else
-	lock_kernel();
 #endif
 
 	spin_lock_irq (&rtc_lock);
 	rtc_irq_data = 0;
 	spin_unlock_irq (&rtc_lock);
-	rtc_status = rtc_status & ~RTC_IS_OPEN;
-	unlock_kernel();
+
+	/* No need for locking -- nobody else can do anything until this rmw is
+	 * committed, and no timer is running. */
+	rtc_status &= ~RTC_IS_OPEN;
 	return 0;
 }
 

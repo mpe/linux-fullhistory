@@ -35,10 +35,11 @@
 #include <asm/dma.h>
 #include <asm/machdep.h>
 #include <asm/hw_irq.h>
+#include <asm/nvram.h>
 #ifdef CONFIG_SMP
 #include <asm/smplock.h>
 #endif /* CONFIG_SMP */
-#include "time.h"
+#include <asm/time.h>
 
 /* Tell string.h we don't want memcpy etc. as cpp defines */
 #define EXPORT_SYMTAB_STROPS
@@ -76,8 +77,7 @@ EXPORT_SYMBOL(do_lost_interrupts);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(disable_irq_nosync);
-EXPORT_SYMBOL(local_irq_count);
-EXPORT_SYMBOL(local_bh_count);
+EXPORT_SYMBOL(irq_stat);
 #ifdef CONFIG_SMP
 EXPORT_SYMBOL(kernel_flag);
 #endif /* CONFIG_SMP */
@@ -95,6 +95,10 @@ EXPORT_SYMBOL(DMA_MODE_WRITE);
 EXPORT_SYMBOL(_prep_type);
 EXPORT_SYMBOL(ucSystemType);
 #endif
+#endif
+#ifdef CONFIG_PCI
+EXPORT_SYMBOL(pci_dev_io_base);
+EXPORT_SYMBOL(pci_dev_mem_base);
 #endif
 
 #if !__INLINE_BITOPS
@@ -234,6 +238,9 @@ EXPORT_SYMBOL(pci_device_loc);
 EXPORT_SYMBOL(feature_set);
 EXPORT_SYMBOL(feature_clear);
 EXPORT_SYMBOL(feature_test);
+EXPORT_SYMBOL(feature_set_gmac_power);
+EXPORT_SYMBOL(feature_set_usb_power);
+EXPORT_SYMBOL(feature_set_firewire_power);
 #endif /* defined(CONFIG_ALL_PPC) */
 #if defined(CONFIG_SCSI) && defined(CONFIG_ALL_PPC)
 EXPORT_SYMBOL(note_scsi_host);
@@ -242,7 +249,13 @@ EXPORT_SYMBOL(kd_mksound);
 #ifdef CONFIG_NVRAM
 EXPORT_SYMBOL(nvram_read_byte);
 EXPORT_SYMBOL(nvram_write_byte);
+EXPORT_SYMBOL(pmac_xpram_read);
+EXPORT_SYMBOL(pmac_xpram_write);
 #endif /* CONFIG_NVRAM */
+#ifdef CONFIG_PPC_RTC
+EXPORT_SYMBOL(mktime);
+EXPORT_SYMBOL(to_tm);
+#endif
 
 EXPORT_SYMBOL_NOVERS(__ashrdi3);
 EXPORT_SYMBOL_NOVERS(__ashldi3);

@@ -1124,6 +1124,15 @@ static void fbcon_redraw(struct vc_data *conp, struct display *p,
     }
 }
 
+void fbcon_redraw_clear(struct vc_data *conp, struct display *p, int sy, int sx,
+		     int height, int width)
+{
+    int x, y;
+    for (y=0; y<height; y++)
+	for (x=0; x<width; x++)
+	    fbcon_putc(conp, ' ', sy+y, sx+x);
+}
+
 /* This cannot be used together with ypan or ywrap */
 void fbcon_redraw_bmove(struct display *p, int sy, int sx, int dy, int dx, int h, int w)
 {
@@ -2422,5 +2431,6 @@ struct display_switch fbcon_dummy = {
 
 EXPORT_SYMBOL(fb_display);
 EXPORT_SYMBOL(fbcon_redraw_bmove);
+EXPORT_SYMBOL(fbcon_redraw_clear);
 EXPORT_SYMBOL(fbcon_dummy);
 EXPORT_SYMBOL(fb_con);

@@ -26,12 +26,14 @@ define_bool CONFIG_PPC y
 choice 'Processor Type'	\
 	"6xx/7xx/7400		CONFIG_6xx	\
 	 4xx			CONFIG_4xx	\
-	 POWER3/POWER4(64-Bit)	CONFIG_PPC64BRIDGE	\
+	 POWER3               	CONFIG_POWER3	\
+	 POWER4        	        CONFIG_POWER4	\
 	 8260			CONFIG_8260	\
 	 8xx			CONFIG_8xx"	6xx
 
-if [ "$CONFIG_PPC64BRIDGE" = "y" ]; then
-  bool 'Power 4 support'	CONFIG_POWER4
+if [ "$CONFIG_POWER3" = "y" -o "$CONFIG_POWER4" = "y" ]; then
+  define_bool CONFIG_PPC64BRIDGE y
+  define_bool CONFIG_ALL_PPC y
 fi
  
 if [ "$CONFIG_8260" = "y" ]; then
@@ -52,6 +54,9 @@ if [ "$CONFIG_8xx" = "y" ]; then
 	"RPX-Lite	CONFIG_RPXLITE		\
 	 RPX-Classic	CONFIG_RPXCLASSIC	\
 	 BSE-IP		CONFIG_BSEIP		\
+	 TQM8xxL	CONFIG_TQM8xxL		\
+	 TQM860L	CONFIG_TQM860L		\
+	 TQM860		CONFIG_TQM860		\
 	 MBX		CONFIG_MBX		\
 	 WinCept	CONFIG_WINCEPT"		RPX-Lite
 fi
@@ -63,12 +68,12 @@ if [ "$CONFIG_6xx" = "y" ]; then
 	 APUS		CONFIG_APUS"		PowerMac/PReP/MTX/CHRP
 fi
 
-if [ "$CONFIG_PPC64BRIDGE" = "y" ]; then
-  define_bool CONFIG_ALL_PPC y
-fi
-
 if [ "$CONFIG_8xx" = "y" -o "$CONFIG_8260" = "y" ]; then
   define_bool CONFIG_ALL_PPC n
+fi
+
+if [ "$CONFIG_TQM8xxL" = "y" ]; then
+  bool 'FPS850 Mainboard' CONFIG_FPS850
 fi
 
 bool 'Symmetric multi-processing support' CONFIG_SMP
@@ -149,6 +154,7 @@ if [ "$CONFIG_4xx" != "y" -a "$CONFIG_8xx" != "y" ]; then
      bool 'Support for ADB keyboard' CONFIG_ADB_KEYBOARD 
      bool 'Support for ADB mouse' CONFIG_ADBMOUSE
   fi
+  tristate 'Support for /dev/rtc' CONFIG_PPC_RTC
   bool 'Support for Open Firmware device tree in /proc' CONFIG_PROC_DEVICETREE
   bool 'Support for early boot text console (BootX only)' CONFIG_BOOTX_TEXT
   bool 'Support for Motorola Hot Swap' CONFIG_MOTOROLA_HOTSWAP

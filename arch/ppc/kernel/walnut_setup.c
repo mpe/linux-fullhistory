@@ -28,7 +28,7 @@
 
 #include "local_irq.h"
 #include "ppc4xx_pic.h"
-#include "time.h"
+#include <asm/time.h>
 #include "walnut_setup.h"
 
 

@@ -44,7 +44,7 @@
 #include <asm/8xx_immap.h>
 #include <asm/machdep.h>
 
-#include "time.h"
+#include <asm/time.h>
 
 void smp_local_timer_interrupt(struct pt_regs *);
 
@@ -70,7 +70,9 @@ unsigned long last_tb;
 int timer_interrupt(struct pt_regs * regs)
 {
 	int dval, d;
+#if 0
 	unsigned long flags;
+#endif
 	unsigned long cpu = smp_processor_id();
 	
 	hardirq_enter(cpu);
@@ -120,6 +122,13 @@ int timer_interrupt(struct pt_regs * regs)
 	if ( !smp_processor_id() )
 	{
 		do_timer(regs);
+#if 0
+	/* -- BenH -- I'm removing this for now since it can cause various
+	 *            troubles with local-time RTCs. Now that we have a
+	 *            /dev/rtc that uses ppc_md.set_rtc_time() on mac, it
+	 *            should be possible to program the RTC from userland
+	 *            in all cases.
+	 */
 		/*
 		 * update the rtc when needed
 		 */
@@ -135,6 +144,7 @@ int timer_interrupt(struct pt_regs * regs)
 				last_rtc_update = xtime.tv_sec;
 		}
 		read_unlock_irqrestore(&xtime_lock, flags);
+#endif			
 	}
 #ifdef CONFIG_SMP
 	smp_local_timer_interrupt(regs);

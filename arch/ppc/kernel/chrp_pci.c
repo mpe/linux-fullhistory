@@ -288,7 +288,9 @@ void __init
 chrp_pcibios_fixup(void)
 {
 	struct pci_dev *dev;
+#ifdef CONFIG_POWER4
 	int i;
+#endif
 	int *brp;
 	struct device_node *np;
 	extern struct pci_ops generic_pci_ops;

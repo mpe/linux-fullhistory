@@ -2,7 +2,7 @@
 /* Linux driver for NAND Flash Translation Layer      */
 /* (c) 1999 Machine Vision Holdings, Inc.             */
 /* Author: David Woodhouse <dwmw2@infradead.org>      */
-/* $Id: nftl.c,v 1.35 2000/07/06 14:35:01 dwmw2 Exp $ */
+/* $Id: nftl.c,v 1.36 2000/07/13 14:14:20 dwmw2 Exp $ */
 
 /*
   The contents of this file are distributed under the GNU Public
@@ -1293,7 +1293,7 @@ int __init init_nftl(void)
 
 	printk(KERN_NOTICE "M-Systems NAND Flash Translation Layer driver. (C) 1999 MVHI\n");
 #ifdef PRERELEASE 
-	printk(KERN_INFO"$Id: nftl.c,v 1.35 2000/07/06 14:35:01 dwmw2 Exp $\n");
+	printk(KERN_INFO"$Id: nftl.c,v 1.36 2000/07/13 14:14:20 dwmw2 Exp $\n");
 #endif
 
 	if (register_blkdev(NFTL_MAJOR, "nftl", &nftl_fops)){

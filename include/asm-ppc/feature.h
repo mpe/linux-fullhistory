@@ -45,6 +45,7 @@ enum system_feature {
 	FEATURE_IDE2_reset,
 	FEATURE_Mediabay_IDE_switch,	/* MB IDE bus switch */
 	FEATURE_Mediabay_content,	/* MB content indicator enable */
+	FEATURE_Airport_reset,		/* Is it actually a reset ? */
 	FEATURE_last,
 };
 
@@ -69,5 +70,21 @@ extern int	feature_clear(struct device_node* device, enum system_feature f);
 /* Initialize feature stuff */
 extern void	feature_init(void);
 
+
+/*
+ * Additional functions related to Core99 machines
+ */
+extern void	feature_set_gmac_power(struct device_node* device, int power);
+
+extern void	feature_set_usb_power(struct device_node* device, int power);
+
+extern void 	feature_set_firewire_power(struct device_node* device, int power);
+
+/*
+ * Sleep related functions. At term, they should be high-priority notifiers
+ */
+extern void	feature_prepare_for_sleep(void);
+
+extern void	feature_wake_up(void);
 
 #endif /* __ASM_PPC_FEATURE_H */

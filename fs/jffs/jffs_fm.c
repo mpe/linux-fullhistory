@@ -10,14 +10,13 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * $Id: jffs_fm.c,v 1.6 2000/06/30 14:13:03 dwmw2 Exp $
+ * $Id: jffs_fm.c,v 1.8 2000/07/13 13:15:33 scote1 Exp $
  *
  * Ported to Linux 2.3.x and MTD:
  * Copyright (C) 2000  Alexander Larsson (alex@cendio.se), Cendio Systems AB
  *
  */
 #define __NO_VERSION__
-#include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/blkdev.h>
 #include <linux/jffs.h>
@@ -68,7 +67,7 @@ jffs_build_begin(struct jffs_control *c, kdev_t dev)
 
 	fmc->used_size = 0;
 	fmc->dirty_size = 0;
-	fmc->sector_size = 65536;
+	fmc->sector_size = mtd->erasesize;
 	fmc->max_chunk_size = fmc->sector_size >> 1;
 	fmc->min_free_size = (fmc->sector_size << 1) - fmc->max_chunk_size;
 	fmc->mtd = mtd;
@@ -614,13 +613,16 @@ jffs_flash_erasable_size(struct mtd_info *mtd, __u32 offset, __u32 size)
         ssize = mtd->erasesize;
 
 	if (offset % ssize) {
+		printk(KERN_WARNING "jffs_flash_erasable_size() given non-aligned offset %lx (erasesize %lx)\n", offset, ssize);
 		/* The offset is not sector size aligned.  */
 		return -1;
 	}
 	else if (offset > mtd->size) {
+		printk(KERN_WARNING "jffs_flash_erasable_size given offset off the end of device (%lx > %lx)\n", offset, mtd->size);
 		return -2;
 	}
 	else if (offset + size > mtd->size) {
+		printk(KERN_WARNING "jffs_flash_erasable_size() given length which runs off the end of device (ofs %lx + len %lx = %lx, > %lx)\n", offset,size, offset+size, mtd->size);
 		return -3;
 	}
 

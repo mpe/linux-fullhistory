@@ -5,8 +5,8 @@
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
- *  Rewritten by Cort Dougan (cort@cs.nmt.edu) for PReP
- *    Copyright (C) 1996 Cort Dougan <cort@cs.nmt.edu>
+ *  Rewritten by Cort Dougan (cort@fsmlabs.com) for PReP
+ *    Copyright (C) 1996 Cort Dougan <cort@fsmlabs.com>
  *  Adapted for Power Macintosh by Paul Mackerras.
  *  Low-level exception handlers and MMU support
  *  rewritten by Paul Mackerras.
@@ -83,7 +83,9 @@ _GLOBAL(DoSyscall)
 #endif /* SHOW_SYSCALLS */
 	cmpi	0,r0,0x7777	/* Special case for 'sys_sigreturn' */
 	beq-	10f
-	lwz	r10,TASK_PTRACE(r2)
+	cmpi    0,r0,0x6666     /* Special case for 'sys_rt_sigreturn' */
+	beq-    16f
+	lwz	r10,TASK_FLAGS(r2)
 	andi.	r10,r10,PT_TRACESYS
 	bne-	50f
 	cmpli	0,r0,NR_syscalls
@@ -129,6 +131,12 @@ ret_from_syscall_1:
 /* sys_sigreturn */
 10:	addi	r3,r1,STACK_FRAME_OVERHEAD
 	bl	sys_sigreturn
+	cmpi    0,r3,0          /* Check for restarted system call */
+	bge     ret_from_except
+	b       20b
+/* sys_rt_sigreturn */
+16:	addi    r3,r1,STACK_FRAME_OVERHEAD
+	bl      sys_rt_sigreturn
 	cmpi	0,r3,0		/* Check for restarted system call */
 	bge	ret_from_except
 	b	20b

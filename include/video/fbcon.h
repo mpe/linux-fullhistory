@@ -229,6 +229,7 @@ extern int set_all_vcs(int fbidx, struct fb_ops *fb,
 #endif
 
 
+extern void fbcon_redraw_clear(struct vc_data *, struct display *, int, int, int, int);
 extern void fbcon_redraw_bmove(struct display *, int, int, int, int, int, int);
 
 

@@ -34,6 +34,7 @@ struct uninorth_data {
 	struct device_node*	node;
 	volatile unsigned int*	cfg_addr;
 	volatile unsigned int*	cfg_data;
+	void*			iobase;
 };
 
 static struct uninorth_data uninorth_bridges[3];
@@ -54,6 +55,7 @@ static void add_bridges(struct device_node *dev);
 #define BANDIT_MAGIC	0x50
 #define BANDIT_COHERENT	0x40
 
+/* Obsolete, should be replaced by pmac_pci_dev_io_base() (below) */
 __pmac
 void *pci_io_base(unsigned int bus)
 {
@@ -83,6 +85,72 @@ int pci_device_loc(struct device_node *dev, unsigned char *bus_ptr,
 	return 0;
 }
 
+/* This routines figures out on which root bridge a given PCI device
+ * is attached.
+ */
+__pmac
+int
+pmac_pci_dev_root_bridge(unsigned char bus, unsigned char dev_fn)
+{
+	struct device_node *node, *bridge_node;
+	int bridge = uninorth_default;
+
+	if (uninorth_count == 0)
+		return 0;
+	if (bus == 0 && PCI_SLOT(dev_fn) < 11)
+		return 0;
+	
+	/* We look for the OF device corresponding to this bus/devfn pair. If we
+	 * don't find it, we default to the external PCI */
+	bridge_node = NULL;
+	node = find_pci_device_OFnode(bus, dev_fn & 0xf8);
+	if (node) {
+	    /* note: we don't stop on the first occurence since we need to go
+             * up to the root bridge */
+	    do {
+		if (node->type && !strcmp(node->type, "pci") 
+			&& device_is_compatible(node, "uni-north"))
+			bridge_node = node;
+		node=node->parent;
+	    } while (node);
+	}
+	if (bridge_node) {
+	    int i;
+	    for (i=0;i<uninorth_count;i++)
+		if (uninorth_bridges[i].node == bridge_node) {
+		    bridge = i;
+		    break;
+		}
+	}
+
+	if (bridge == -1) {
+		printk(KERN_WARNING "pmac_pci: no default bridge !\n");
+		return 0;
+	}
+
+	return bridge;	
+}
+
+__pmac
+void *
+pmac_pci_dev_io_base(unsigned char bus, unsigned char devfn)
+{
+	int bridge;
+	if (uninorth_count == 0)
+		return pci_io_base(bus);
+	bridge = pmac_pci_dev_root_bridge(bus, devfn);
+	if (bridge == -1)
+		return pci_io_base(bus);
+	return uninorth_bridges[bridge].iobase;
+}
+
+__pmac
+void *
+pmac_pci_dev_mem_base(unsigned char bus, unsigned char devfn)
+{
+	return 0;
+}
+
 /* This function only works for bus 0, uni-N uses a different mecanism for
  * other busses (see below)
  */
@@ -98,48 +166,20 @@ int pci_device_loc(struct device_node *dev, unsigned char *bus_ptr,
 	|(((unsigned long)(off)) & 0xFCUL) \
 	|1UL)
 	
-/* We should really use RTAS here, unfortunately, it's not available with BootX.
- * (one more reason for writing a beautiful OF booter). I'll do the RTAS stuff
- * later, once I have something that works enough with BootX.
- */
 __pmac static
 unsigned int
 uni_north_access_data(unsigned char bus, unsigned char dev_fn,
 				unsigned char offset)
 {
-	struct device_node *node, *bridge_node;
-	int bridge = uninorth_default;
+	int bridge;
 	unsigned int caddr;
 
-	if (bus == 0) {
-		if (PCI_SLOT(dev_fn) < 11) {
-			return 0;
-		}
-		/* We look for the OF device corresponding to this bus/devfn pair. If we
-		 * don't find it, we default to the external PCI */
-		bridge_node = NULL;
-		node = find_pci_device_OFnode(bus, dev_fn & 0xf8);
-		if (node) {
-                    /* note: we don't stop on the first occurence since we need to go
-                     * up to the root bridge */
-		    do {
-			if (!strcmp(node->type, "pci"))
-				bridge_node = node;
-			node=node->parent;
-		    } while (node);
-		}
-		if (bridge_node) {
-		    int i;
-		    for (i=0;i<uninorth_count;i++)
-			if (uninorth_bridges[i].node == bridge_node) {
-			    bridge = i;
-			    break;
-			}
-		}
+	bridge = pmac_pci_dev_root_bridge(bus, dev_fn);
+	if (bus == 0)
 		caddr = UNI_N_CFA0(dev_fn, offset);
-	} else
+	else
 		caddr = UNI_N_CFA1(bus, dev_fn, offset);
-
+	
 	if (bridge == -1) {
 		printk(KERN_WARNING "pmac_pci: no default bridge !\n");
 		return 0;
@@ -609,6 +649,7 @@ static void __init add_bridges(struct device_node *dev)
 			uninorth_bridges[i].cfg_addr = ioremap(addr->address + 0x800000, 0x1000);
 			uninorth_bridges[i].cfg_data = ioremap(addr->address + 0xc00000, 0x1000);
 			uninorth_bridges[i].node = dev;
+			uninorth_bridges[i].iobase = (void *)addr->address;
 			/* XXX This is the bridge with the PCI expansion bus. This is also the
 			 * address of the bus that will receive type 1 config accesses and io
 			 * accesses. Appears to be correct for iMac DV and G4 Sawtooth too.

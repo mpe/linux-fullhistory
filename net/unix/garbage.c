@@ -177,7 +177,7 @@ void unix_gc(void)
 	 *	Avoid a recursive GC.
 	 */
 
-	if(!down_trylock(&unix_gc_sem))
+	if (down_trylock(&unix_gc_sem))
 		return;
 
 	read_lock(&unix_table_lock);

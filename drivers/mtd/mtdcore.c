@@ -1,5 +1,5 @@
 /*
- * $Id: mtdcore.c,v 1.8 2000/06/27 13:40:05 dwmw2 Exp $
+ * $Id: mtdcore.c,v 1.13 2000/07/13 14:27:37 dwmw2 Exp $
  *
  * Core registration and callback routines for MTD 
  * drivers and users.
@@ -44,8 +44,17 @@ extern int init_doc1000(void);
 #ifdef CONFIG_MTD_DOCPROBE
 extern int init_doc(void);
 #endif
+#ifdef CONFIG_MTD_PHYSMAP
+extern int init_physmap(void);
+#endif
+#ifdef CONFIG_MTD_RPXLITE
+extern int init_rpxlite(void);
+#endif
 #ifdef CONFIG_MTD_OCTAGON
 extern int init_octagon5066(void);
+#endif
+#ifdef CONFIG_MTD_PNC2000
+extern int init_pnc2000(void);
 #endif
 #ifdef CONFIG_MTD_VMAX
 extern int init_vmax301(void);
@@ -76,11 +85,18 @@ extern int init_mtdchar(void);
 
 
 static DECLARE_MUTEX(mtd_table_mutex);
-
 static struct mtd_info *mtd_table[MAX_MTD_DEVICES];
-
 static struct mtd_notifier *mtd_notifiers = NULL;
 
+/**
+ *	add_mtd_device - register an MTD device 
+ *	@mtd: pointer to new MTD device info structure
+ *
+ *	Add a device to the list of MTD devices present in the system, and
+ *	notify each currently active MTD 'user' of its arrival. Returns
+ *	zero on success or 1 on failure, which currently will only happen
+ *	if the number of present devices exceeds MAX_MTD_DEVICES (i.e. 16)
+ */
 
 int add_mtd_device(struct mtd_info *mtd)
 {
@@ -109,6 +125,15 @@ int add_mtd_device(struct mtd_info *mtd)
 	return 1;
 }
 
+/**
+ *	del_mtd_device - unregister an MTD device 
+ *	@mtd: pointer to MTD device info structure
+ *
+ *	Remove a device from the list of MTD devices present in the system,
+ *	and notify each currently active MTD 'user' of its departure.
+ *	Returns zero on success or 1 on failure, which currently will happen
+ *	if the requested device does not appear to be present in the list.
+ */
 
 int del_mtd_device (struct mtd_info *mtd)
 {
@@ -137,7 +162,14 @@ int del_mtd_device (struct mtd_info *mtd)
 	return 1;
 }
 
-
+/**
+ *	register_mtd_user - register a 'user' of MTD devices.
+ *	@new: pointer to notifier info structure
+ *
+ *	Registers a pair of callbacks function to be called upon addition
+ *	or removal of MTD devices. Causes the 'add' callback to be immediately
+ *	invoked for each MTD device currently present in the system.
+ */
 
 void register_mtd_user (struct mtd_notifier *new)
 {
@@ -157,7 +189,15 @@ void register_mtd_user (struct mtd_notifier *new)
 	up(&mtd_table_mutex);
 }
 
-
+/**
+ *	register_mtd_user - unregister a 'user' of MTD devices.
+ *	@new: pointer to notifier info structure
+ *
+ *	Removes a callback function pair from the list of 'users' to be
+ *	notified upon addition or removal of MTD devices. Causes the 
+ *	'remove' callback to be immediately invoked for each MTD device
+ *	currently present in the system.
+ */
 
 int unregister_mtd_user (struct mtd_notifier *old)
 {
@@ -187,13 +227,17 @@ int unregister_mtd_user (struct mtd_notifier *old)
 }
 
 
-/* get_mtd_device(): 
- * Prepare to use an MTD device referenced either by number or address.
+/**
+ *	__get_mtd_device - obtain a validated handle for an MTD device
+ *	@mtd: last known address of the required MTD device
+ *	@num: internal device number of the required MTD device
  *
- * If <num> == -1, search the table for an MTD device located at <mtd>.
- * If <mtd> == NULL, return the MTD device with number <num>.
- * If both are set, return the MTD device with number <num> _only_ if it
- *     is located at <mtd>.
+ *	Given a number and NULL address, return the num'th entry in the device 
+ *	table, if any.	Given an address and num == -1, search the device table
+ *	for a device with that address and return if it's still present. Given
+ *	both, return the num'th driver only if its address matches. Return NULL
+ *	if not. get_mtd_device() increases the use count, but
+ *	__get_mtd_device() doesn't - you should generally use get_mtd_device().
  */
 	
 struct mtd_info *__get_mtd_device(struct mtd_info *mtd, int num)
@@ -224,12 +268,45 @@ EXPORT_SYMBOL(register_mtd_user);
 EXPORT_SYMBOL(unregister_mtd_user);
 
 /*====================================================================*/
-/* /proc/mtd support */
+/* Power management code */
+
+#ifdef CONFIG_PM
+
+#include <linux/pm.h>
+
+static struct pm_dev *mtd_pm_dev = NULL;
+
+static int mtd_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data)
+{
+	int ret = 0, i;
+
+	if (down_trylock(&mtd_table_mutex))
+		return -EAGAIN;
+	if (rqst == PM_SUSPEND) {
+		for (i = 0; ret == 0 && i < MAX_MTD_DEVICES; i++) {
+			if (mtd_table[i] && mtd_table[i]->suspend)
+				ret = mtd_table[i]->suspend(mtd_table[i]);
+		}
+	} else i = MAX_MTD_DEVICES-1;
+
+	if (rqst == PM_RESUME || ret) {
+		for ( ; i >= 0; i--) {
+			if (mtd_table[i] && mtd_table[i]->resume)
+				mtd_table[i]->resume(mtd_table[i]);
+		}
+	}
+	up(&mtd_table_mutex);
+	return ret;
+}
+#endif
+
+/*====================================================================*/
+/* Support for /proc/mtd */
 
 #ifdef CONFIG_PROC_FS
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,0)
-struct proc_dir_entry *proc_mtd;
+static struct proc_dir_entry *proc_mtd;
 #endif
 
 static inline int mtd_proc_info (char *buf, int i)
@@ -292,10 +369,10 @@ struct proc_dir_entry mtd_proc_entry = {
     };
 #endif
 
-#endif
+#endif /* CONFIG_PROC_FS */
 
 /*====================================================================*/
-
+/* Init code */
 
 #if LINUX_VERSION_CODE < 0x20300
 
@@ -315,8 +392,17 @@ static inline  void init_others(void)
 		     * Theoretically all other DiskOnChip
 		     * devices too. */
 #endif
+#ifdef CONFIG_MTD_PHYSMAP
+	init_physmap();
+#endif
+#ifdef CONFIG_MTD_RPXLITE
+	init_rpxlite();
+#endif
 #ifdef CONFIG_MTD_OCTAGON
 	init_octagon5066();
+#endif
+#ifdef CONFIG_MTD_PNC2000
+	init_pnc2000();
 #endif
 #ifdef CONFIG_MTD_VMAX
 	init_vmax301();
@@ -374,13 +460,21 @@ mod_init_t init_mtd(void)
 #if LINUX_VERSION_CODE < 0x20300
 	init_others();
 #endif
-
+#ifdef CONFIG_PM
+	mtd_pm_dev = pm_register(PM_UNKNOWN_DEV, 0, mtd_pm_callback);
+#endif
 	return 0;
 }
 
 mod_exit_t cleanup_mtd(void)
 {
 	unregister_chrdev(MTD_CHAR_MAJOR, "mtd");
+#ifdef CONFIG_PM
+	if (mtd_pm_dev) {
+		pm_unregister(mtd_pm_dev);
+		mtd_pm_dev = NULL;
+	}
+#endif
 #ifdef CONFIG_PROC_FS
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,0)
         if (proc_mtd)

@@ -30,7 +30,7 @@
 #include <asm/m48t35.h>
 #include <asm/gemini.h>
 
-#include "time.h"
+#include <asm/time.h>
 #include "local_irq.h"
 #include "open_pic.h"
 
