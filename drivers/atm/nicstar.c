@@ -21,6 +21,18 @@
  ******************************************************************************/
 
 
+/**** IMPORTANT INFORMATION ***************************************************
+ *
+ * There are currently three types of spinlocks:
+ *
+ * 1 - Per card interrupt spinlock (to protect structures and such)
+ * 2 - Per SCQ scq spinlock
+ * 3 - Per card resource spinlock (to access registers, etc.)
+ *
+ * These must NEVER be grabbed in reverse order.
+ *
+ ******************************************************************************/
+
 /* Header files ***************************************************************/
 
 #include <linux/module.h>
@@ -114,6 +126,85 @@
 #ifndef ATM_SKB
 #define ATM_SKB(s) (&(s)->atm)
 #endif
+
+   /* Spinlock debugging stuff */
+#ifdef NS_DEBUG_SPINLOCKS /* See nicstar.h */
+#define ns_grab_int_lock(card,flags) \
+ do { \
+    unsigned long nsdsf, nsdsf2; \
+    local_irq_save(flags); \
+    save_flags(nsdsf); cli();\
+    if (nsdsf & (1<<9)) printk ("nicstar.c: ints %sabled -> enabled.\n", \
+                                (flags)&(1<<9)?"en":"dis"); \
+    if (spin_is_locked(&(card)->int_lock) && \
+        (card)->cpu_int == smp_processor_id()) { \
+       printk("nicstar.c: line %d (cpu %d) int_lock already locked at line %d (cpu %d)\n", \
+              __LINE__, smp_processor_id(), (card)->has_int_lock, \
+              (card)->cpu_int); \
+       printk("nicstar.c: ints were %sabled.\n", ((flags)&(1<<9)?"en":"dis")); \
+    } \
+    if (spin_is_locked(&(card)->res_lock) && \
+        (card)->cpu_res == smp_processor_id()) { \
+       printk("nicstar.c: line %d (cpu %d) res_lock locked at line %d (cpu %d)(trying int)\n", \
+              __LINE__, smp_processor_id(), (card)->has_res_lock, \
+              (card)->cpu_res); \
+       printk("nicstar.c: ints were %sabled.\n", ((flags)&(1<<9)?"en":"dis")); \
+    } \
+    spin_lock_irq(&(card)->int_lock); \
+    (card)->has_int_lock = __LINE__; \
+    (card)->cpu_int = smp_processor_id(); \
+    restore_flags(nsdsf); } while (0)
+#define ns_grab_res_lock(card,flags) \
+ do { \
+    unsigned long nsdsf, nsdsf2; \
+    local_irq_save(flags); \
+    save_flags(nsdsf); cli();\
+    if (nsdsf & (1<<9)) printk ("nicstar.c: ints %sabled -> enabled.\n", \
+                                (flags)&(1<<9)?"en":"dis"); \
+    if (spin_is_locked(&(card)->res_lock) && \
+        (card)->cpu_res == smp_processor_id()) { \
+       printk("nicstar.c: line %d (cpu %d) res_lock already locked at line %d (cpu %d)\n", \
+              __LINE__, smp_processor_id(), (card)->has_res_lock, \
+              (card)->cpu_res); \
+       printk("nicstar.c: ints were %sabled.\n", ((flags)&(1<<9)?"en":"dis")); \
+    } \
+    spin_lock_irq(&(card)->res_lock); \
+    (card)->has_res_lock = __LINE__; \
+    (card)->cpu_res = smp_processor_id(); \
+    restore_flags(nsdsf); } while (0)
+#define ns_grab_scq_lock(card,scq,flags) \
+ do { \
+    unsigned long nsdsf, nsdsf2; \
+    local_irq_save(flags); \
+    save_flags(nsdsf); cli();\
+    if (nsdsf & (1<<9)) printk ("nicstar.c: ints %sabled -> enabled.\n", \
+                                (flags)&(1<<9)?"en":"dis"); \
+    if (spin_is_locked(&(scq)->lock) && \
+        (scq)->cpu_lock == smp_processor_id()) { \
+       printk("nicstar.c: line %d (cpu %d) this scq_lock already locked at line %d (cpu %d)\n", \
+              __LINE__, smp_processor_id(), (scq)->has_lock, \
+              (scq)->cpu_lock); \
+       printk("nicstar.c: ints were %sabled.\n", ((flags)&(1<<9)?"en":"dis")); \
+    } \
+    if (spin_is_locked(&(card)->res_lock) && \
+        (card)->cpu_res == smp_processor_id()) { \
+       printk("nicstar.c: line %d (cpu %d) res_lock locked at line %d (cpu %d)(trying scq)\n", \
+              __LINE__, smp_processor_id(), (card)->has_res_lock, \
+              (card)->cpu_res); \
+       printk("nicstar.c: ints were %sabled.\n", ((flags)&(1<<9)?"en":"dis")); \
+    } \
+    spin_lock_irq(&(scq)->lock); \
+    (scq)->has_lock = __LINE__; \
+    (scq)->cpu_lock = smp_processor_id(); \
+    restore_flags(nsdsf); } while (0)
+#else /* !NS_DEBUG_SPINLOCKS */
+#define ns_grab_int_lock(card,flags) \
+        spin_lock_irqsave(&(card)->int_lock,(flags))
+#define ns_grab_res_lock(card,flags) \
+        spin_lock_irqsave(&(card)->res_lock,(flags))
+#define ns_grab_scq_lock(card,scq,flags) \
+        spin_lock_irqsave(&(scq)->lock,flags)
+#endif /* NS_DEBUG_SPINLOCKS */
 
 
 /* Version definition *********************************************************/
@@ -406,12 +497,12 @@ static u32 ns_read_sram(ns_dev *card, u32 sram_address)
    sram_address <<= 2;
    sram_address &= 0x0007FFFC;	/* address must be dword aligned */
    sram_address |= 0x50000000;	/* SRAM read command */
-   save_flags(flags); cli();
+   ns_grab_res_lock(card, flags);
    while (CMD_BUSY(card));
    writel(sram_address, card->membase + CMD);
    while (CMD_BUSY(card));
    data = readl(card->membase + DR0);
-   restore_flags(flags);
+   spin_unlock_irqrestore(&card->res_lock, flags);
    return data;
 }
 
@@ -424,7 +515,7 @@ static void ns_write_sram(ns_dev *card, u32 sram_address, u32 *value, int count)
    count--;	/* count range now is 0..3 instead of 1..4 */
    c = count;
    c <<= 2;	/* to use increments of 4 */
-   save_flags(flags); cli();
+   ns_grab_res_lock(card, flags);
    while (CMD_BUSY(card));
    for (i = 0; i <= c; i += 4)
       writel(*(value++), card->membase + i);
@@ -434,14 +525,14 @@ static void ns_write_sram(ns_dev *card, u32 sram_address, u32 *value, int count)
    sram_address &= 0x0007FFFC;
    sram_address |= (0x40000000 | count);
    writel(sram_address, card->membase + CMD);
-   restore_flags(flags);
+   spin_unlock_irqrestore(&card->res_lock, flags);
 }
 
 
 static int ns_init_card(int i, struct pci_dev *pcidev)
 {
    int j;
-   struct ns_dev *card=NULL;
+   struct ns_dev *card = NULL;
    unsigned short pci_command;
    unsigned char pci_latency;
    unsigned error;
@@ -468,6 +559,8 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
       return error;
    }
    cards[i] = card;
+   spin_lock_init(&card->int_lock);
+   spin_lock_init(&card->res_lock);
       
    card->index = i;
    card->atmdev = NULL;
@@ -853,9 +946,6 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
       card->iovpool.count++;
    }
 
-
-   card->in_handler = 0;
-   card->in_poll = 0;
    card->intcnt = 0;
 
    /* Configure NICStAR */
@@ -1025,6 +1115,7 @@ static scq_info *get_scq(int size, u32 scd)
    scq->tbd_count = 0;
    init_waitqueue_head(&scq->scqfull_waitq);
    scq->full = 0;
+   spin_lock_init(&scq->lock);
 
    for (i = 0; i < scq->num_entries; i++)
       scq->skb[i] = NULL;
@@ -1161,7 +1252,7 @@ static void push_rxbufs(ns_dev *card, u32 type, u32 handle1, u32 addr1,
             card->lbfqc += 2;
       }
 
-      save_flags(flags); cli();
+      ns_grab_res_lock(card, flags);
 
       while (CMD_BUSY(card));
       writel(addr2, card->membase + DR3);
@@ -1170,7 +1261,7 @@ static void push_rxbufs(ns_dev *card, u32 type, u32 handle1, u32 addr1,
       writel(handle1, card->membase + DR0);
       writel(NS_CMD_WRITE_FREEBUFQ | (u32) type, card->membase + CMD);
  
-      restore_flags(flags);
+      spin_unlock_irqrestore(&card->res_lock, flags);
 
       XPRINTK("nicstar%d: Pushing %s buffers at 0x%x and 0x%x.\n", card->index,
               (type == BUF_SM ? "small" : "large"), addr1, addr2);
@@ -1193,6 +1284,7 @@ static void ns_irq_handler(int irq, void *dev_id, struct pt_regs *regs)
    u32 stat_r;
    ns_dev *card;
    struct atm_dev *dev;
+   unsigned long flags;
 
    card = (ns_dev *) dev_id;
    dev = card->atmdev;
@@ -1200,19 +1292,7 @@ static void ns_irq_handler(int irq, void *dev_id, struct pt_regs *regs)
 
    PRINTK("nicstar%d: NICStAR generated an interrupt\n", card->index);
 
-   if (card->in_handler)
-   {
-      printk("nicstar%d: Re-entering ns_irq_handler()???\n", card->index);
-      return;
-   }
-   card->in_handler = 1;
-   if (card->in_poll)
-   {
-      card->in_handler = 0;
-      printk("nicstar%d: Called irq handler while in ns_poll()!?\n",
-             card->index);
-      return;
-   }
+   ns_grab_int_lock(card, flags);
    
    stat_r = readl(card->membase + STAT);
 
@@ -1377,7 +1457,7 @@ static void ns_irq_handler(int irq, void *dev_id, struct pt_regs *regs)
       process_rsq(card);
    }
    
-   card->in_handler = 0;
+   spin_unlock_irqrestore(&card->int_lock, flags);
    PRINTK("nicstar%d: end of interrupt service\n", card->index);
 }
 
@@ -1595,10 +1675,10 @@ static void ns_close(struct atm_vcc *vcc)
       unsigned long flags;
       
       addr = NS_RCT + (vcc->vpi << card->vcibits | vcc->vci) * NS_RCT_ENTRY_SIZE;
-      save_flags(flags); cli();
+      ns_grab_res_lock(card, flags);
       while(CMD_BUSY(card));
       writel(NS_CMD_CLOSE_CONNECTION | addr << 2, card->membase + CMD);
-      restore_flags(flags);
+      spin_unlock_irqrestore(&card->res_lock, flags);
       
       vc->rx = 0;
       if (vc->rx_iov != NULL)
@@ -1617,9 +1697,9 @@ static void ns_close(struct atm_vcc *vcc)
 	                       ATM_SKB(iovb)->iovcnt);
          ATM_SKB(iovb)->iovcnt = 0;
          ATM_SKB(iovb)->vcc = NULL;
-         save_flags(flags); cli();
+         ns_grab_int_lock(card, flags);
          recycle_iov_buf(card, iovb);
-         restore_flags(flags);
+         spin_unlock_irqrestore(&card->int_lock, flags);
          vc->rx_iov = NULL;
       }
    }
@@ -1639,7 +1719,7 @@ static void ns_close(struct atm_vcc *vcc)
 
       for (;;)
       {
-         save_flags(flags); cli();
+         ns_grab_scq_lock(card, scq, flags);
          scqep = scq->next;
          if (scqep == scq->base)
             scqep = scq->last;
@@ -1647,7 +1727,7 @@ static void ns_close(struct atm_vcc *vcc)
             scqep--;
          if (scqep == scq->tail)
          {
-            restore_flags(flags);
+            spin_unlock_irqrestore(&scq->lock, flags);
             break;
          }
          /* If the last entry is not a TSR, place one in the SCQ in order to
@@ -1675,8 +1755,8 @@ static void ns_close(struct atm_vcc *vcc)
             data = (u32) virt_to_bus(scq->next);
             ns_write_sram(card, scq->scd, &data, 1);
          }
+         spin_unlock_irqrestore(&scq->lock, flags);
          schedule();
-         restore_flags(flags);
       }
 
       /* Free all TST entries */
@@ -1884,19 +1964,22 @@ static int push_scqe(ns_dev *card, vc_map *vc, scq_info *scq, ns_scqe *tbd,
    u32 data;
    int index;
    
-   if (scq->tail == scq->next)
+   ns_grab_scq_lock(card, scq, flags);
+   while (scq->tail == scq->next)
    {
       if (in_interrupt()) {
+         spin_unlock_irqrestore(&scq->lock, flags);
          printk("nicstar%d: Error pushing TBD.\n", card->index);
          return 1;
       }
 
-      save_flags(flags); cli();
       scq->full = 1;
+      spin_unlock_irqrestore(&scq->lock, flags);
       interruptible_sleep_on_timeout(&scq->scqfull_waitq, SCQFULL_TIMEOUT);
-      restore_flags(flags);
+      ns_grab_scq_lock(card, scq, flags);
 
       if (scq->full) {
+         spin_unlock_irqrestore(&scq->lock, flags);
          printk("nicstar%d: Timeout pushing TBD.\n", card->index);
          return 1;
       }
@@ -1926,19 +2009,23 @@ static int push_scqe(ns_dev *card, vc_map *vc, scq_info *scq, ns_scqe *tbd,
 
    if (vc->tbd_count >= MAX_TBD_PER_VC || scq->tbd_count >= MAX_TBD_PER_SCQ)
    {
-      if (scq->tail == scq->next)
+      int has_run = 0;
+
+      while (scq->tail == scq->next)
       {
          if (in_interrupt()) {
             data = (u32) virt_to_bus(scq->next);
             ns_write_sram(card, scq->scd, &data, 1);
+            spin_unlock_irqrestore(&scq->lock, flags);
             printk("nicstar%d: Error pushing TSR.\n", card->index);
             return 0;
          }
 
-         save_flags(flags); cli();
          scq->full = 1;
+         if (has_run++) break;
+         spin_unlock_irqrestore(&scq->lock, flags);
          interruptible_sleep_on_timeout(&scq->scqfull_waitq, SCQFULL_TIMEOUT);
-         restore_flags(flags);
+         ns_grab_scq_lock(card, scq, flags);
       }
 
       if (!scq->full)
@@ -1970,9 +2057,10 @@ static int push_scqe(ns_dev *card, vc_map *vc, scq_info *scq, ns_scqe *tbd,
       else
          PRINTK("nicstar%d: Timeout pushing TSR.\n", card->index);
    }
-   
    data = (u32) virt_to_bus(scq->next);
    ns_write_sram(card, scq->scd, &data, 1);
+   
+   spin_unlock_irqrestore(&scq->lock, flags);
    
    return 0;
 }
@@ -2064,6 +2152,7 @@ static void drain_scq(ns_dev *card, scq_info *scq, int pos)
    struct atm_vcc *vcc;
    struct sk_buff *skb;
    int i;
+   unsigned long flags;
    
    XPRINTK("nicstar%d: drain_scq() called, scq at 0x%x, pos %d.\n",
            card->index, (u32) scq, pos);
@@ -2073,6 +2162,7 @@ static void drain_scq(ns_dev *card, scq_info *scq, int pos)
       return;
    }
 
+   ns_grab_scq_lock(card, scq, flags);
    i = (int) (scq->tail - scq->base);
    if (++i == scq->num_entries)
       i = 0;
@@ -2084,16 +2174,18 @@ static void drain_scq(ns_dev *card, scq_info *scq, int pos)
       if (skb != NULL)
       {
          vcc = ATM_SKB(skb)->vcc;
-	 if (vcc->pop != NULL)
+	 if (vcc->pop != NULL) {
 	    vcc->pop(vcc, skb);
-	 else
-	    dev_kfree_skb_any(skb);
+	 } else {
+	    dev_kfree_skb_irq(skb);
+         }
 	 scq->skb[i] = NULL;
       }
       if (++i == scq->num_entries)
          i = 0;
    }
    scq->tail = scq->base + pos;
+   spin_unlock_irqrestore(&scq->lock, flags);
 }
 
 
@@ -2890,10 +2982,10 @@ static int ns_ioctl(struct atm_dev *dev, unsigned int cmd, void *arg)
 	       {
                   struct sk_buff *hb;
 
-                  save_flags(flags); cli();
+                  ns_grab_int_lock(card, flags);
 		  hb = skb_dequeue(&card->hbpool.queue);
 		  card->hbpool.count--;
-		  restore_flags(flags);
+                  spin_unlock_irqrestore(&card->int_lock, flags);
                   if (hb == NULL)
 		     printk("nicstar%d: huge buffer count inconsistent.\n",
 		            card->index);
@@ -2908,10 +3000,10 @@ static int ns_ioctl(struct atm_dev *dev, unsigned int cmd, void *arg)
                   hb = alloc_skb(NS_HBUFSIZE, GFP_KERNEL);
                   if (hb == NULL)
                      return -ENOMEM;
-                  save_flags(flags); cli();
+                  ns_grab_int_lock(card, flags);
                   skb_queue_tail(&card->hbpool.queue, hb);
                   card->hbpool.count++;
-		  restore_flags(flags);
+                  spin_unlock_irqrestore(&card->int_lock, flags);
                }
 	       break;
 
@@ -2920,10 +3012,10 @@ static int ns_ioctl(struct atm_dev *dev, unsigned int cmd, void *arg)
 	       {
 	          struct sk_buff *iovb;
 
-                  save_flags(flags); cli();
+                  ns_grab_int_lock(card, flags);
 		  iovb = skb_dequeue(&card->iovpool.queue);
 		  card->iovpool.count--;
-		  restore_flags(flags);
+                  spin_unlock_irqrestore(&card->int_lock, flags);
                   if (iovb == NULL)
 		     printk("nicstar%d: iovec buffer count inconsistent.\n",
 		            card->index);
@@ -2938,10 +3030,10 @@ static int ns_ioctl(struct atm_dev *dev, unsigned int cmd, void *arg)
                   iovb = alloc_skb(NS_IOVBUFSIZE, GFP_KERNEL);
                   if (iovb == NULL)
                      return -ENOMEM;
-                  save_flags(flags); cli();
+                  ns_grab_int_lock(card, flags);
                   skb_queue_tail(&card->iovpool.queue, iovb);
                   card->iovpool.count++;
-		  restore_flags(flags);
+                  spin_unlock_irqrestore(&card->int_lock, flags);
 	       }
 	       break;
 
@@ -2986,22 +3078,11 @@ static void ns_poll(unsigned long arg)
    for (i = 0; i < num_cards; i++)
    {
       card = cards[i];
-      save_flags(flags); cli();
-      if (card->in_poll)
-      {
-         printk("nicstar: Re-entering ns_poll()???\n");
-         restore_flags(flags);
+      if (spin_is_locked(&card->int_lock)) {
+      /* Probably it isn't worth spinning */
          continue;
       }
-      card->in_poll = 1;
-      if (card->in_handler)
-      {
-         card->in_poll = 0;
-         printk("nicstar%d: ns_poll called while in interrupt handler!?\n",
-                card->index);
-         restore_flags(flags);
-         continue;
-      }
+      ns_grab_int_lock(card, flags);
 
       stat_w = 0;
       stat_r = readl(card->membase + STAT);
@@ -3014,8 +3095,7 @@ static void ns_poll(unsigned long arg)
       process_rsq(card);
 
       writel(stat_w, card->membase + STAT);
-      card->in_poll = 0;
-      restore_flags(flags);
+      spin_unlock_irqrestore(&card->int_lock, flags);
    }
    mod_timer(&ns_timer, jiffies + NS_POLL_PERIOD);
    PRINTK("nicstar: Leaving ns_poll().\n");
@@ -3069,12 +3149,12 @@ static void ns_phy_put(struct atm_dev *dev, unsigned char value,
    unsigned long flags;
 
    card = dev->dev_data;
-   save_flags(flags); cli();
+   ns_grab_res_lock(card, flags);
    while(CMD_BUSY(card));
    writel((unsigned long) value, card->membase + DR0);
    writel(NS_CMD_WRITE_UTILITY | 0x00000200 | (addr & 0x000000FF),
           card->membase + CMD);
-   restore_flags(flags);
+   spin_unlock_irqrestore(&card->res_lock, flags);
 }
 
 
@@ -3086,12 +3166,12 @@ static unsigned char ns_phy_get(struct atm_dev *dev, unsigned long addr)
    unsigned long data;
 
    card = dev->dev_data;
-   save_flags(flags); cli();
+   ns_grab_res_lock(card, flags);
    while(CMD_BUSY(card));
    writel(NS_CMD_READ_UTILITY | 0x00000200 | (addr & 0x000000FF),
           card->membase + CMD);
    while(CMD_BUSY(card));
    data = readl(card->membase + DR0) & 0x000000FF;
-   restore_flags(flags);
+   spin_unlock_irqrestore(&card->res_lock, flags);
    return (unsigned char) data;
 }

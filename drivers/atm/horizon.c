@@ -603,7 +603,8 @@ static int make_rate (const hrz_dev * dev, u32 c, rounding r,
   
   // note: rounding the rate down means rounding 'p' up
   
-  const unsigned long br = test_bit (ultra, &dev->flags) ? BR_ULT : BR_HRZ;
+  const unsigned long br = test_bit (ultra, (hrz_flags *) &dev->flags) ?
+    BR_ULT : BR_HRZ;
   
   u32 div = CR_MIND;
   u32 pre;

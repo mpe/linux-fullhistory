@@ -33,7 +33,7 @@ spinlock_t dcache_lock = SPIN_LOCK_UNLOCKED;
 /* Right now the dcache depends on the kernel lock */
 #define check_lock()	if (!kernel_locked()) BUG()
 
-kmem_cache_t *dentry_cache; 
+static kmem_cache_t *dentry_cache; 
 
 /*
  * This is the single most critical data structure when it comes
@@ -67,6 +67,7 @@ static inline void d_free(struct dentry *dentry)
 	if (dname_external(dentry)) 
 		kfree(dentry->d_name.name);
 	kmem_cache_free(dentry_cache, dentry); 
+	dentry_stat.nr_dentry--;
 }
 
 /*
@@ -117,58 +118,54 @@ static inline void dentry_iput(struct dentry * dentry)
  * they too may now get deleted.
  *
  * no dcache lock, please.
- *
- * Note: dput() itself is inlined and uses __dput() for slow path (after
- * decrementing the ->d_count on the argument and finding it zero).
  */
 
-void __dput(struct dentry *dentry)
+void dput(struct dentry *dentry)
 {
-	struct dentry * parent;
+	if (!dentry)
+		return;
+
 repeat:
-	spin_lock(&dcache_lock);
-	if (atomic_read(&dentry->d_count))
-		goto out;
+	if (!atomic_dec_and_lock(&dentry->d_count, &dcache_lock))
+		return;
+
+	/* dput on a free dentry? */
+	if (!list_empty(&dentry->d_lru))
+		BUG();
 	/*
 	 * AV: ->d_delete() is _NOT_ allowed to block now.
 	 */
 	if (dentry->d_op && dentry->d_op->d_delete) {
-		if (dentry->d_op->d_delete(dentry)) {
-			list_del(&dentry->d_hash);
-			goto kill_it;
-		}
+		if (dentry->d_op->d_delete(dentry))
+			goto unhash_it;
 	}
+	/* Unreachable? Get rid of it */
 	if (list_empty(&dentry->d_hash))
 		goto kill_it;
-	if (!list_empty(&dentry->d_lru)) {
-		dentry_stat.nr_unused--;
-		list_del(&dentry->d_lru);
-	}
 	list_add(&dentry->d_lru, &dentry_unused);
 	dentry_stat.nr_unused++;
 	/*
 	 * Update the timestamp
 	 */
 	dentry->d_reftime = jiffies;
-
-out:
 	spin_unlock(&dcache_lock);
 	return;
-kill_it:
-	if (!list_empty(&dentry->d_lru)) {
-		dentry_stat.nr_unused--;
-		list_del(&dentry->d_lru);
-	}
-	list_del(&dentry->d_child);
-	/* drops the lock, at that point nobody can reach this dentry */
-	dentry_iput(dentry);
-	parent = dentry->d_parent;
-	d_free(dentry);
-	if (dentry == parent)
-		return;
-	dentry = parent;
-	if (atomic_dec_and_test(&dentry->d_count))
+
+unhash_it:
+	list_del(&dentry->d_hash);
+
+kill_it: {
+		struct dentry *parent;
+		list_del(&dentry->d_child);
+		/* drops the lock, at that point nobody can reach this dentry */
+		dentry_iput(dentry);
+		parent = dentry->d_parent;
+		d_free(dentry);
+		if (dentry == parent)
+			return;
+		dentry = parent;
 		goto repeat;
+	}
 }
 
 /**
@@ -329,11 +326,14 @@ void prune_dcache(int count)
 		list_del(tmp);
 		INIT_LIST_HEAD(tmp);
 		dentry = list_entry(tmp, struct dentry, d_lru);
-		if (!atomic_read(&dentry->d_count)) {
-			prune_one_dentry(dentry);
-			if (!--count)
-				break;
-		}
+
+		/* Unused dentry with a count? */
+		if (atomic_read(&dentry->d_count))
+			BUG();
+
+		prune_one_dentry(dentry);
+		if (!--count)
+			break;
 	}
 	spin_unlock(&dcache_lock);
 }
@@ -539,7 +539,7 @@ int shrink_dcache_memory(int priority, unsigned int gfp_mask)
 {
 	int count = 0;
 	if (priority)
-		count = dentry_stat.nr_unused / priority;
+		count = dentry_stat.nr_unused >> (priority >> 2);
 	prune_dcache(count);
 	/* FIXME: kmem_cache_shrink here should tell us
 	   the number of pages freed, and it should
@@ -608,6 +608,7 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 	} else
 		INIT_LIST_HEAD(&dentry->d_child);
 
+	dentry_stat.nr_dentry++;
 	return dentry;
 }
 
@@ -705,7 +706,12 @@ struct dentry * d_lookup(struct dentry * parent, struct qstr * name)
 			if (memcmp(dentry->d_name.name, str, len))
 				continue;
 		}
-		dget(dentry);
+		atomic_inc(&dentry->d_count);
+		if (atomic_read(&dentry->d_count) == 1) {
+			dentry_stat.nr_unused--;
+			list_del(&dentry->d_lru);
+			INIT_LIST_HEAD(&dentry->d_lru);		/* make "list_empty()" work */
+		}
 		spin_unlock(&dcache_lock);
 		return dentry;
 	}

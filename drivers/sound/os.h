@@ -4,11 +4,9 @@
 #define MANUAL_PNP
 #undef  DO_TIMINGS
 
-#ifdef MODULE
-#define __NO_VERSION__
 #include <linux/module.h>
 #include <linux/version.h>
-#endif
+
 #if LINUX_VERSION_CODE > 131328
 #define LINUX21X
 #endif

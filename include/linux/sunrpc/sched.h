@@ -43,7 +43,7 @@ struct rpc_task {
 	struct rpc_task *	tk_prev_task;	/* global list of tasks */
 	struct rpc_clnt *	tk_client;	/* RPC client */
 	struct rpc_rqst *	tk_rqstp;	/* RPC request */
-	int			tk_status;	/* result of last operation */
+	volatile int		tk_status;	/* result of last operation */
 	struct rpc_wait_queue *	tk_rpcwait;	/* RPC wait queue we're on */
 
 	/*
@@ -56,10 +56,12 @@ struct rpc_task {
 				tk_suid_retry;
 
 	/*
+	 * timeout_fn   to be executed by timer bottom half
 	 * callback	to be executed after waking up
 	 * action	next procedure for async tasks
 	 * exit		exit async task and report to caller
 	 */
+	void			(*tk_timeout_fn)(struct rpc_task *);
 	void			(*tk_callback)(struct rpc_task *);
 	void			(*tk_action)(struct rpc_task *);
 	void			(*tk_exit)(struct rpc_task *);
@@ -76,9 +78,10 @@ struct rpc_task {
 	unsigned long		tk_timeout;	/* timeout for rpc_sleep() */
 	unsigned short		tk_flags;	/* misc flags */
 	unsigned short		tk_lock;	/* Task lock counter */
-	unsigned int		tk_wakeup   : 1,/* Task waiting to wake up */
-				tk_sleeping : 1,/* Task is truly asleep */
-				tk_active   : 1;/* Task has been activated */
+	unsigned char		tk_active   : 1,/* Task has been activated */
+				tk_wakeup   : 1;/* Task waiting to wake up */
+	volatile unsigned char	tk_running  : 1,/* Task is running */
+				tk_sleeping : 1;/* Task is truly asleep */
 #ifdef RPC_DEBUG
 	unsigned short		tk_pid;		/* debugging aid */
 #endif
@@ -91,29 +94,26 @@ typedef void			(*rpc_action)(struct rpc_task *);
 /*
  * RPC task flags
  */
-#define RPC_TASK_RUNNING	0x0001		/* is running */
-#define RPC_TASK_ASYNC		0x0002		/* is an async task */
-#define RPC_TASK_CALLBACK	0x0004		/* invoke callback */
-#define RPC_TASK_SWAPPER	0x0008		/* is swapping in/out */
-#define RPC_TASK_SETUID		0x0010		/* is setuid process */
-#define RPC_TASK_CHILD		0x0020		/* is child of other task */
-#define RPC_CALL_REALUID	0x0040		/* try using real uid */
-#define RPC_CALL_MAJORSEEN	0x0080		/* major timeout seen */
-#define RPC_TASK_ROOTCREDS	0x0100		/* force root creds */
-#define RPC_TASK_DYNAMIC	0x0200		/* task was kmalloc'ed */
-#define RPC_TASK_KILLED		0x0400		/* task was killed */
-#define RPC_TASK_NFSWRITE	0x1000		/* an NFS writeback */
+#define RPC_TASK_ASYNC		0x0001		/* is an async task */
+#define RPC_TASK_SWAPPER	0x0002		/* is swapping in/out */
+#define RPC_TASK_SETUID		0x0004		/* is setuid process */
+#define RPC_TASK_CHILD		0x0008		/* is child of other task */
+#define RPC_CALL_REALUID	0x0010		/* try using real uid */
+#define RPC_CALL_MAJORSEEN	0x0020		/* major timeout seen */
+#define RPC_TASK_ROOTCREDS	0x0040		/* force root creds */
+#define RPC_TASK_DYNAMIC	0x0080		/* task was kmalloc'ed */
+#define RPC_TASK_KILLED		0x0100		/* task was killed */
 
-#define RPC_IS_RUNNING(t)	((t)->tk_flags & RPC_TASK_RUNNING)
 #define RPC_IS_ASYNC(t)		((t)->tk_flags & RPC_TASK_ASYNC)
 #define RPC_IS_SETUID(t)	((t)->tk_flags & RPC_TASK_SETUID)
 #define RPC_IS_CHILD(t)		((t)->tk_flags & RPC_TASK_CHILD)
 #define RPC_IS_SWAPPER(t)	((t)->tk_flags & RPC_TASK_SWAPPER)
-#define RPC_DO_CALLBACK(t)	((t)->tk_flags & RPC_TASK_CALLBACK)
 #define RPC_DO_ROOTOVERRIDE(t)	((t)->tk_flags & RPC_TASK_ROOTCREDS)
 #define RPC_ASSASSINATED(t)	((t)->tk_flags & RPC_TASK_KILLED)
+#define RPC_IS_RUNNING(t)	((t)->tk_running)
 #define RPC_IS_SLEEPING(t)	((t)->tk_sleeping)
 #define RPC_IS_ACTIVATED(t)	((t)->tk_active)
+#define RPC_DO_CALLBACK(t)	((t)->tk_callback != NULL)
 
 /*
  * RPC synchronization objects
@@ -154,7 +154,7 @@ void		rpc_wake_up_task(struct rpc_task *);
 void		rpc_wake_up(struct rpc_wait_queue *);
 struct rpc_task *rpc_wake_up_next(struct rpc_wait_queue *);
 void		rpc_wake_up_status(struct rpc_wait_queue *, int);
-int		rpc_lock_task(struct rpc_task *);
+int		__rpc_lock_task(struct rpc_task *);
 void		rpc_unlock_task(struct rpc_task *);
 void		rpc_delay(struct rpc_task *, unsigned long);
 void *		rpc_allocate(unsigned int flags, unsigned int);

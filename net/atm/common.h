@@ -26,7 +26,6 @@ int atm_getsockopt(struct socket *sock,int level,int optname,char *optval,
 
 int atm_connect_vcc(struct atm_vcc *vcc,int itf,short vpi,int vci);
 void atm_release_vcc_sk(struct sock *sk,int free_sk);
-int atm_change_qos(struct atm_vcc *vcc,struct atm_qos *qos);
 void atm_shutdown_dev(struct atm_dev *dev);
 
 int atm_proc_init(void);

@@ -2599,9 +2599,7 @@ fore200e_detect(void)
 
     printk(FORE200E "FORE Systems 200E-series driver - version " FORE200E_VERSION "\n");
 
-#if 0 /* XXX uncomment this to forbid module unloading */
     MOD_INC_USE_COUNT;
-#endif
 
     /* for each configured bus interface */
     for (link = 0, bus = fore200e_bus; bus->model_name; bus++) {
@@ -2628,10 +2626,8 @@ fore200e_detect(void)
 	}
     }
 
-#if 0 /* XXX uncomment this to forbid module unloading */
     if (link <= 0)
 	MOD_DEC_USE_COUNT;
-#endif
 
     return link;
 }

@@ -25,7 +25,7 @@ ifeq ($(CONFIG_NET_SCH_ATM),y)
 NEED_IPCOM = ipcommon.o
 endif
 
-O_OBJS += $(NEED_IPCOM)
+OX_OBJS += $(NEED_IPCOM)
 
 ifeq ($(CONFIG_PROC_FS),y)
 OX_OBJS += proc.o

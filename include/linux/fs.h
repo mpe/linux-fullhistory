@@ -883,8 +883,9 @@ extern struct file *filp_open(const char *, int, int);
 extern struct file * dentry_open(struct dentry *, struct vfsmount *, int);
 extern int filp_close(struct file *, fl_owner_t id);
 extern char * getname(const char *);
-#define __getname()	((char *) __get_free_page(GFP_KERNEL))
-#define putname(name)	free_page((unsigned long)(name))
+
+#define __getname()	kmem_cache_alloc(names_cachep, SLAB_KERNEL)
+#define putname(name)	kmem_cache_free(names_cachep, (void *)(name))
 
 enum {BDEV_FILE, BDEV_SWAP, BDEV_FS, BDEV_RAW};
 extern int register_blkdev(unsigned int, const char *, struct block_device_operations *);

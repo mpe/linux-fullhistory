@@ -484,7 +484,6 @@ call_encode(struct rpc_task *task)
 	req->rq_rvec[0].iov_len  = bufsiz;
 	req->rq_rlen		 = bufsiz;
 	req->rq_rnr		 = 1;
-	req->rq_damaged		 = 0;
 
 	/* Zero buffer so we have automatic zero-padding of opaque & string */
 	memset(task->tk_buffer, 0, bufsiz);
@@ -603,10 +602,7 @@ call_status(struct rpc_task *task)
 		rpc_sleep_on(&xprt->sending, task, NULL, NULL);
 	case -ENOMEM:
 	case -EAGAIN:
-		if (req->rq_damaged)
-			task->tk_action = call_encode;
-		else
-			task->tk_action = call_transmit;
+		task->tk_action = call_transmit;
 		clnt->cl_stats->rpcretrans++;
 		break;
 	default:
@@ -664,10 +660,7 @@ call_timeout(struct rpc_task *task)
 minor_timeout:
 	if (!req)
 		task->tk_action = call_reserve;
-	else if (req->rq_damaged) {
-		task->tk_action = call_encode;
-		clnt->cl_stats->rpcretrans++;
-	} else if (!clnt->cl_port) {
+	else if (!clnt->cl_port) {
 		task->tk_action = call_bind;
 		clnt->cl_stats->rpcretrans++;
 	} else if (clnt->cl_xprt->stream && !clnt->cl_xprt->connected) {

@@ -86,7 +86,8 @@ fw_in(unsigned int hooknum,
 	int ret = FW_BLOCK;
 	u_int16_t redirpt;
 
-	(*pskb)->nfcache |= NFC_UNKNOWN;
+	/* Assume worse case: any hook could change packet */
+	(*pskb)->nfcache |= NFC_UNKNOWN | NFC_ALTERED;
 	(*pskb)->ip_summed = CHECKSUM_NONE;
 
 	switch (hooknum) {

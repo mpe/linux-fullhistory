@@ -799,5 +799,5 @@ void __init filescache_init(void)
 					 SLAB_HWCACHE_ALIGN,
 					 NULL, NULL);
 	if (!files_cachep) 
-		panic("Cannot create files cache"); 
+		panic("Cannot create files cache");
 }

@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.38 2000/05/03 06:37:07 davem Exp $
+ *	$Id: sit.c,v 1.39 2000/07/07 01:55:20 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -29,6 +29,7 @@
 #include <linux/icmp.h>
 #include <asm/uaccess.h>
 #include <linux/init.h>
+#include <linux/netfilter_ipv4.h>
 
 #include <net/sock.h>
 #include <net/snmp.h>
@@ -404,6 +405,12 @@ int ipip6_rcv(struct sk_buff *skb, unsigned short len)
 	return 0;
 }
 
+/* Need this wrapper because NF_HOOK takes the function address */
+static inline int do_ip_send(struct sk_buff *skb)
+{
+	return ip_send(skb);
+}
+
 /*
  *	This function assumes it is being called from dev_queue_xmit()
  *	and that skb is filled properly by that function.
@@ -559,7 +566,8 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	stats->tx_bytes += skb->len;
 	stats->tx_packets++;
-	ip_send(skb);
+	NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
+		do_ip_send);
 
 	tunnel->recursion--;
 	return 0;

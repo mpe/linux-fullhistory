@@ -104,7 +104,7 @@ static int svc_addr(char *buf,struct sockaddr_atmsvc *addr)
 		strcpy(buf,addr->sas_addr.pub);
 		len = strlen(addr->sas_addr.pub);
 		buf += len;
-		if (*addr->sas_addr.pub) {
+		if (*addr->sas_addr.prv) {
 			*buf++ = '+';
 			len++;
 		}
@@ -233,9 +233,10 @@ static void svc_info(struct atm_vcc *vcc,char *buf)
 	int i;
 
 	if (!vcc->dev)
-		sprintf(buf,sizeof(void *) == 4 ? "N/A@%p%6s" : "N/A@%p%2s",
+		sprintf(buf,sizeof(void *) == 4 ? "N/A@%p%10s" : "N/A@%p%2s",
 		    vcc,"");
-	else sprintf(buf,"%3d %3d %5d ",vcc->dev->number,vcc->vpi,vcc->vci);
+	else sprintf(buf,"%3d %3d %5d         ",vcc->dev->number,vcc->vpi,
+		    vcc->vci);
 	here = strchr(buf,0);
 	here += sprintf(here,"%-10s ",vcc_state(vcc));
 	here += sprintf(here,"%s%s",vcc->remote.sas_addr.pub,
@@ -376,7 +377,7 @@ static int atm_svc_info(loff_t pos,char *buf)
 	int left;
 
 	if (!pos)
-		return sprintf(buf,"Itf VPI VCI   State      Remote\n");
+		return sprintf(buf,"Itf VPI VCI           State      Remote\n");
 	left = pos-1;
 	for (dev = atm_devs; dev; dev = dev->next)
 		for (vcc = dev->vccs; vcc; vcc = vcc->next)

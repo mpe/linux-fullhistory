@@ -1627,7 +1627,6 @@ int atp870u_detect(Scsi_Host_Template * tpnt)
 	struct Scsi_Host *shpnt = NULL;
 	int tmpcnt = 0;
 	int count = 0;
-	int result;
 
 	static unsigned short devid[8] = {
 		0x8002, 0x8010, 0x8020, 0x8030, 0x8040, 0x8050, 0x8060, 0

@@ -660,6 +660,7 @@ static void apm_power_off(void)
 #endif
 }
 
+#ifdef CONFIG_APM_DO_ENABLE
 static int apm_enable_power_management(int enable)
 {
 	u32	eax;
@@ -675,6 +676,7 @@ static int apm_enable_power_management(int enable)
 		apm_bios_info.flags |= APM_BIOS_DISABLED;
 	return APM_SUCCESS;
 }
+#endif
 
 static int apm_get_power_status(u_short *status, u_short *bat, u_short *life)
 {

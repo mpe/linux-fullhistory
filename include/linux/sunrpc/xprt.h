@@ -96,7 +96,7 @@ struct rpc_rqst {
 	struct rpc_task *	rq_task;	/* RPC task data */
 	__u32			rq_xid;		/* request XID */
 	struct rpc_rqst *	rq_next;	/* free list */
-	unsigned char		rq_damaged;	/* reply being received */
+	volatile unsigned char	rq_received : 1;/* receive completed */
 
 	/*
 	 * For authentication (e.g. auth_des)
@@ -138,9 +138,9 @@ struct rpc_xprt {
 	struct rpc_wait_queue	reconn;		/* waiting for reconnect */
 	struct rpc_rqst *	free;		/* free slots */
 	struct rpc_rqst		slot[RPC_MAXREQS];
-	unsigned int		connected  : 1,	/* TCP: connected */
-				write_space: 1,	/* TCP: can send */
-				shutdown   : 1,	/* being shut down */
+	volatile unsigned char	connected  : 1,	/* TCP: connected */
+				write_space: 1;	/* TCP: can send */
+	unsigned char		shutdown   : 1,	/* being shut down */
 				nocong	   : 1,	/* no congestion control */
 				stream     : 1,	/* TCP */
 				tcp_more   : 1,	/* more record fragments */

@@ -363,8 +363,9 @@ struct corkscrew_isapnp_adapters_struct corkscrew_isapnp_adapters[] = {
 int corkscrew_isapnp_phys_addr[3] = {
 	0, 0, 0
 };
-#endif
+
 static int nopnp = 0;
+#endif
 
 static int corkscrew_scan(struct net_device *dev);
 static struct net_device *corkscrew_found_device(struct net_device *dev,
@@ -439,9 +440,11 @@ int tc515_probe(struct net_device *dev)
 static int corkscrew_scan(struct net_device *dev)
 {
 	int cards_found = 0;
-	short i;
 	static int ioaddr;
+#ifdef __ISAPNP__
+	short i;
 	static int pnp_cards = 0;
+#endif
 
 #ifdef __ISAPNP__
 	if(nopnp == 1)

@@ -1674,7 +1674,7 @@ static int __check_consistency (mddev_t *mddev, int row)
 	tmp->b_data = (char *)page_address(tmp->b_page);
 	if (!tmp->b_data)
 		goto out;
-	md_clear_page((unsigned long)tmp->b_data);
+	md_clear_page(tmp->b_data);
 	memset(bh, 0, MD_SB_DISKS * sizeof(struct buffer_head *));
 	for (i = 0; i < conf->raid_disks; i++) {
 		dev = conf->disks[i].dev;

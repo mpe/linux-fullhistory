@@ -123,7 +123,8 @@ mangle_packet(struct sk_buff **pskb,
 
 	if (newlen > (*pskb)->len + skb_tailroom(*pskb)) {
 		struct sk_buff *newskb;
-		newskb = skb_copy_expand(*pskb, skb_headroom(*pskb), newlen,
+		newskb = skb_copy_expand(*pskb, skb_headroom(*pskb),
+					 newlen - (*pskb)->len,
 					 GFP_ATOMIC);
 		if (!newskb) {
 			DEBUGP("ftp: oom\n");

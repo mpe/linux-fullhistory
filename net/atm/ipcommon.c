@@ -3,6 +3,7 @@
 /* Written 1996-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
+#include <linux/module.h>
 #include <linux/string.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
@@ -31,7 +32,11 @@ const unsigned char llc_oui[] = {
 
 
 /*
- * skb_migrate moves the list at FROM to TO, emptying FROM in the process.
+ * skb_migrate appends the list at "from" to "to", emptying "from" in the
+ * process. skb_migrate is atomic with respect to all other skb operations on
+ * "from" and "to". Note that it locks both lists at the same time, so beware
+ * of potential deadlocks.
+ *
  * This function should live in skbuff.c or skbuff.h.
  */
 
@@ -40,18 +45,26 @@ void skb_migrate(struct sk_buff_head *from,struct sk_buff_head *to)
 {
 	struct sk_buff *skb;
 	unsigned long flags;
+	struct sk_buff *skb_from = (struct sk_buff *) from;
+	struct sk_buff *skb_to = (struct sk_buff *) to;
+	struct sk_buff *prev;
 
 	spin_lock_irqsave(&from->lock,flags);
-	*to = *from;
-	from->prev = (struct sk_buff *) from;
-	from->next = (struct sk_buff *) from;
+	spin_lock(&to->lock);
+	prev = from->prev;
+	from->next->prev = to->prev;
+	prev->next = skb_to;
+	to->prev->next = from->next;
+	to->prev = from->prev;
+	for (skb = from->next; skb != skb_to; skb = skb->next)
+		skb->list = to;
+	to->qlen += from->qlen;
+	spin_unlock(&to->lock);
+	from->prev = skb_from;
+	from->next = skb_from;
 	from->qlen = 0;
 	spin_unlock_irqrestore(&from->lock,flags);
-	spin_lock_init(&to->lock);
-	for (skb = ((struct sk_buff *) to)->next;
-	    skb != (struct sk_buff *) from; skb = skb->next) skb->list = to;
-	if (to->next == (struct sk_buff *) from)
-		to->next = (struct sk_buff *) to;
-	to->next->prev = (struct sk_buff *) to;
-	to->prev->next = (struct sk_buff *) to;
 }
+
+
+EXPORT_SYMBOL(skb_migrate);

@@ -191,6 +191,7 @@ byte piix_proc = 0;
 
 extern char *ide_xfer_verbose (byte xfer_rate);
 
+#if defined(CONFIG_BLK_DEV_IDEDMA) && defined(CONFIG_PIIX_TUNING)
 /*
  *
  */
@@ -221,6 +222,7 @@ static byte piix_dma_2_pio (byte xfer_rate) {
 			return 0;
 	}
 }
+#endif /* defined(CONFIG_BLK_DEV_IDEDMA) && (CONFIG_PIIX_TUNING) */
 
 /*
  *  Based on settings done by AMI BIOS

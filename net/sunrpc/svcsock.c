@@ -250,7 +250,8 @@ static int
 svc_sendto(struct svc_rqst *rqstp, struct iovec *iov, int nr)
 {
 	mm_segment_t	oldfs;
-	struct socket	*sock = rqstp->rq_sock->sk_sock;
+	struct svc_sock	*svsk = rqstp->rq_sock;
+	struct socket	*sock = svsk->sk_sock;
 	struct msghdr	msg;
 	int		i, buflen, len;
 
@@ -342,13 +343,16 @@ svc_udp_data_ready(struct sock *sk, int count)
 	struct svc_sock	*svsk = (struct svc_sock *)(sk->user_data);
 
 	if (!svsk)
-		return;
+		goto out;
 	dprintk("svc: socket %p(inet %p), count=%d, busy=%d\n",
 		svsk, sk, count, svsk->sk_busy);
 	spin_lock_bh(&svsk->sk_lock);
 	svsk->sk_data = 1;
 	svc_sock_enqueue(svsk);
 	spin_unlock_bh(&svsk->sk_lock);
+ out:
+	if (sk->sleep && waitqueue_active(sk->sleep))
+		wake_up_interruptible(sk->sleep);
 }
 
 /*
@@ -459,16 +463,19 @@ svc_tcp_state_change1(struct sock *sk)
 
 	if  (sk->state != TCP_ESTABLISHED) {
 		/* Aborted connection, SYN_RECV or whatever... */
-		return;
+		goto out;
 	}
 	if (!(svsk = (struct svc_sock *) sk->user_data)) {
 		printk("svc: socket %p: no user data\n", sk);
-		return;
+		goto out;
 	}
 	spin_lock_bh(&svsk->sk_lock);
 	svsk->sk_conn++;
 	svc_sock_enqueue(svsk);
 	spin_unlock_bh(&svsk->sk_lock);
+ out:
+	if (sk->sleep && waitqueue_active(sk->sleep))
+		wake_up_interruptible_all(sk->sleep);
 }
 
 /*
@@ -484,12 +491,15 @@ svc_tcp_state_change2(struct sock *sk)
 
 	if (!(svsk = (struct svc_sock *) sk->user_data)) {
 		printk("svc: socket %p: no user data\n", sk);
-		return;
+		goto out;
 	}
 	spin_lock_bh(&svsk->sk_lock);
 	svsk->sk_close = 1;
 	svc_sock_enqueue(svsk);
 	spin_unlock_bh(&svsk->sk_lock);
+ out:
+	if (sk->sleep && waitqueue_active(sk->sleep))
+		wake_up_interruptible_all(sk->sleep);
 }
 
 static void
@@ -497,20 +507,17 @@ svc_tcp_data_ready(struct sock *sk, int count)
 {
 	struct svc_sock *	svsk;
 
-	/* Disconnect signalled through data_ready?!? */
-	if (sk->state != TCP_ESTABLISHED) {
-		svc_tcp_state_change2(sk);
-		return;
-	}
-
 	dprintk("svc: socket %p TCP data ready (svsk %p)\n",
 			sk, sk->user_data);
 	if (!(svsk = (struct svc_sock *)(sk->user_data)))
-		return;
+		goto out;
 	spin_lock_bh(&svsk->sk_lock);
 	svsk->sk_data++;
 	svc_sock_enqueue(svsk);
 	spin_unlock_bh(&svsk->sk_lock);
+ out:
+	if (sk->sleep && waitqueue_active(sk->sleep))
+		wake_up_interruptible(sk->sleep);
 }
 
 /*

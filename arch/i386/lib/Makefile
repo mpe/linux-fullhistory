@@ -13,4 +13,8 @@ ifdef CONFIG_X86_USE_3DNOW
 L_OBJS += mmx.o
 endif
 
+ifdef CONFIG_HAVE_DEC_LOCK
+L_OBJS += dec_and_lock.o
+endif
+
 include $(TOPDIR)/Rules.make

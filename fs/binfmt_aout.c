@@ -321,21 +321,33 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 #endif
 
 	if (N_MAGIC(ex) == OMAGIC) {
+		unsigned long text_addr, map_size;
 		loff_t pos;
+
+		text_addr = N_TXTADDR(ex);
+
 #if defined(__alpha__) || defined(__sparc__)
 		pos = fd_offset;
-		do_brk(N_TXTADDR(ex) & PAGE_MASK,
-			ex.a_text+ex.a_data + PAGE_SIZE - 1);
-		bprm->file->f_op->read(bprm->file, (char *) N_TXTADDR(ex),
-			  ex.a_text+ex.a_data, &pos);
+		map_size = ex.a_text+ex.a_data + PAGE_SIZE - 1;
 #else
 		pos = 32;
-		do_brk(0, ex.a_text+ex.a_data);
-		bprm->file->f_op->read(bprm->file, (char *) 0,
-			ex.a_text+ex.a_data, &pos);
+		map_size = ex.a_text+ex.a_data;
 #endif
-		flush_icache_range((unsigned long) 0,
-				   (unsigned long) ex.a_text+ex.a_data);
+
+		error = do_brk(text_addr & PAGE_MASK, map_size);
+		if (error != (text_addr & PAGE_MASK)) {
+			send_sig(SIGKILL, current, 0);
+			return error;
+		}
+
+		error = bprm->file->f_op->read(bprm->file, (char *)text_addr,
+			  ex.a_text+ex.a_data, &pos);
+		if (error < 0) {
+			send_sig(SIGKILL, current, 0);
+			return error;
+		}
+			 
+		flush_icache_range(text_addr, text_addr+ex.a_text+ex.a_data);
 	} else {
 		static unsigned long error_time, error_time2;
 		if ((ex.a_text & 0xfff || ex.a_data & 0xfff) &&

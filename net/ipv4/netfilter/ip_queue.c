@@ -6,6 +6,8 @@
  *
  * 2000-03-27: Simplified code (thanks to Andi Kleen for clues). (JM)
  * 2000-05-20: Fixed notifier problems (following Miguel Freitas' report). (JM)
+ * 2000-06-19: Fixed so nfmark is copied to metadata (reported by Sebastian 
+ *             Zander). (JM)
  *
  */
 #include <linux/module.h>
@@ -391,6 +393,7 @@ static struct sk_buff *netlink_build_message(ipq_queue_element_t *e, int *errp)
 	pm->data_len = data_len;
 	pm->timestamp_sec = e->skb->stamp.tv_sec;
 	pm->timestamp_usec = e->skb->stamp.tv_usec;
+	pm->mark = e->skb->nfmark;
 	pm->hook = e->info->hook;
 	if (e->info->indev) strcpy(pm->indev_name, e->info->indev->name);
 	else pm->indev_name[0] = '\0';

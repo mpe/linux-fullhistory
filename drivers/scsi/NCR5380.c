@@ -2245,7 +2245,9 @@ static int NCR5380_transfer_dma(struct Scsi_Host *instance,
 	register unsigned char p = *phase;
 	register unsigned char *d = *data;
 	unsigned char tmp;
+#if defined(PSEUDO_DMA) && !defined(UNSAFE)
 	unsigned long flags;
+#endif
 	int foo;
 #if defined(REAL_DMA_POLL)
 	int cnt, toPIO;

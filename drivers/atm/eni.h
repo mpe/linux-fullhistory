@@ -47,7 +47,6 @@ struct eni_tx {
 	int reserved;			/* reserved peak cell rate */
 	int shaping;			/* shaped peak cell rate */
 	struct sk_buff_head backlog;	/* queue of waiting TX buffers */
-	atomic_t backlog_len;		/* length of backlog in bytes */
 };
 
 struct eni_vcc {

@@ -332,23 +332,33 @@ lec_send_packet(struct sk_buff *skb, struct net_device *dev)
                         lec_h->h_dest[0], lec_h->h_dest[1], lec_h->h_dest[2],
                         lec_h->h_dest[3], lec_h->h_dest[4], lec_h->h_dest[5]);
                 ATM_SKB(skb2)->vcc = send_vcc;
-                atomic_add(skb2->truesize, &send_vcc->tx_inuse);
                 ATM_SKB(skb2)->iovcnt = 0;
                 ATM_SKB(skb2)->atm_options = send_vcc->atm_options;
                 DPRINTK("%s:sending to vpi:%d vci:%d\n", dev->name,
                         send_vcc->vpi, send_vcc->vci);       
-                priv->stats.tx_packets++;
-                priv->stats.tx_bytes += skb2->len;
-                send_vcc->send(send_vcc, skb2);
+                if (atm_may_send(send_vcc, skb2->len)) {
+                        atomic_add(skb2->truesize, &send_vcc->tx_inuse);
+                        priv->stats.tx_packets++;
+                        priv->stats.tx_bytes += skb2->len;
+                        send_vcc->send(send_vcc, skb2);
+                } else {
+                        priv->stats.tx_dropped++;
+                        dev_kfree_skb(skb2);
+		}
         }
 
         ATM_SKB(skb)->vcc = send_vcc;
-        atomic_add(skb->truesize, &send_vcc->tx_inuse);
         ATM_SKB(skb)->iovcnt = 0;
         ATM_SKB(skb)->atm_options = send_vcc->atm_options;
-        priv->stats.tx_packets++;
-        priv->stats.tx_bytes += skb->len;
-        send_vcc->send(send_vcc, skb);
+        if (atm_may_send(send_vcc, skb->len)) {
+                atomic_add(skb->truesize, &send_vcc->tx_inuse);
+                priv->stats.tx_packets++;
+                priv->stats.tx_bytes += skb->len;
+                send_vcc->send(send_vcc, skb);
+        } else {
+                priv->stats.tx_dropped++;
+                dev_kfree_skb(skb);
+	}
 
 #if 0
         /* Should we wait for card's device driver to notify us? */

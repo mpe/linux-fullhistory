@@ -496,7 +496,7 @@ static int alloc_array_sb (mddev_t * mddev)
 	mddev->sb = (mdp_super_t *) __get_free_page (GFP_KERNEL);
 	if (!mddev->sb)
 		return -ENOMEM;
-	md_clear_page((unsigned long)mddev->sb);
+	md_clear_page(mddev->sb);
 	return 0;
 }
 
@@ -510,7 +510,7 @@ static int alloc_disk_sb (mdk_rdev_t * rdev)
 		printk (OUT_OF_MEM);
 		return -EINVAL;
 	}
-	md_clear_page((unsigned long)rdev->sb);
+	md_clear_page(rdev->sb);
 
 	return 0;
 }

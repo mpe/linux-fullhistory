@@ -274,14 +274,14 @@ static void clip_neigh_error(struct neighbour *neigh,struct sk_buff *skb)
 
 
 static struct neigh_ops clip_neigh_ops = {
-	AF_INET,		/* family */
-	clip_neigh_destroy,	/* destructor */
-	clip_neigh_solicit,	/* solicit */
-	clip_neigh_error,	/* error_report */
-	dev_queue_xmit,		/* output */
-	dev_queue_xmit,		/* connected_output */
-	dev_queue_xmit,		/* hh_output */
-	dev_queue_xmit		/* queue_xmit */
+	family:			AF_INET,
+	destructor:		clip_neigh_destroy,
+	solicit:		clip_neigh_solicit,
+	error_report:		clip_neigh_error,
+	output:			dev_queue_xmit,
+	connected_output:	dev_queue_xmit,
+	hh_output:		dev_queue_xmit,
+	queue_xmit:		dev_queue_xmit,
 };
 
 
@@ -384,6 +384,7 @@ static int clip_start_xmit(struct sk_buff *skb,struct net_device *dev)
 	if (!skb->dst) {
 		printk(KERN_ERR "clip_start_xmit: skb->dst == NULL\n");
 		dev_kfree_skb(skb);
+		clip_priv->stats.tx_dropped++;
 		return 0;
 	}
 	if (!skb->dst->neighbour) {
@@ -395,8 +396,10 @@ static int clip_start_xmit(struct sk_buff *skb,struct net_device *dev)
 			return 0;
 		}
 #endif
-printk("clip_start_xmit: NO NEIGHBOUR !\n");
-return 0;
+		printk(KERN_ERR "clip_start_xmit: NO NEIGHBOUR !\n");
+		dev_kfree_skb(skb);
+		clip_priv->stats.tx_dropped++;
+		return 0;
 	}
 	entry = NEIGH2ENTRY(skb->dst->neighbour);
 	if (!entry->vccs) {
@@ -440,7 +443,6 @@ return 0;
 		entry->vccs->xoff = 0;
 		return 0;
 	}
-	if (old) return 0;
 	spin_lock_irqsave(&clip_priv->xoff_lock,flags);
 	netif_stop_queue(dev); /* XOFF -> throttle immediately */
 	barrier();
@@ -482,6 +484,7 @@ int clip_mkip(struct atm_vcc *vcc,int timeout)
 	clip_vcc->old_pop = vcc->pop;
 	vcc->push = clip_push;
 	vcc->pop = clip_pop;
+	skb_queue_head_init(&copy);
 	skb_migrate(&vcc->recvq,&copy);
 	/* re-process everything received between connection setup and MKIP */
 	while ((skb = skb_dequeue(&copy)))
@@ -622,7 +625,7 @@ static int clip_device_event(struct notifier_block *this,unsigned long event,
 			DPRINTK("clip_device_event NETDEV_UP\n");
 			(void) to_atmarpd(act_up,PRIV(dev)->number,0);
 			break;
-		case NETDEV_DOWN:
+		case NETDEV_GOING_DOWN:
 			DPRINTK("clip_device_event NETDEV_DOWN\n");
 			(void) to_atmarpd(act_down,PRIV(dev)->number,0);
 			break;
@@ -633,6 +636,7 @@ static int clip_device_event(struct notifier_block *this,unsigned long event,
 			break;
 		case NETDEV_REBOOT:
 		case NETDEV_REGISTER:
+		case NETDEV_DOWN:
 			DPRINTK("clip_device_event %ld\n",event);
 			/* ignore */
 			break;

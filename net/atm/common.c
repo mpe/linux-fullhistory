@@ -105,6 +105,7 @@ int atm_create(struct socket *sock,int protocol,int family)
 	vcc->callback = NULL;
 	memset(&vcc->local,0,sizeof(struct sockaddr_atmsvc));
 	memset(&vcc->remote,0,sizeof(struct sockaddr_atmsvc));
+	vcc->qos.txtp.max_sdu = 1 << 16; /* for meta VCs */
 	atomic_set(&vcc->tx_inuse,0);
 	atomic_set(&vcc->rx_inuse,0);
 	vcc->push = NULL;
@@ -116,6 +117,7 @@ int atm_create(struct socket *sock,int protocol,int family)
 	init_waitqueue_head(&vcc->sleep);
 	skb_queue_head_init(&vcc->recvq);
 	skb_queue_head_init(&vcc->listenq);
+	sk->sleep = &vcc->sleep;
 	sock->sk = sk;
 	return 0;
 }
@@ -409,6 +411,7 @@ int atm_sendmsg(struct socket *sock,struct msghdr *m,int total_len,
 		return vcc->reply;
 	if (!test_bit(ATM_VF_READY,&vcc->flags)) return -EPIPE;
 	if (!size) return 0;
+	if (size < 0 || size > vcc->qos.txtp.max_sdu) return -EMSGSIZE;
 	/* verify_area is done by net/socket.c */
 	eff = (size+3) & ~3; /* align to word boundary */
 	add_wait_queue(&vcc->sleep,&wait);
@@ -750,8 +753,10 @@ int atm_ioctl(struct socket *sock,unsigned int cmd,unsigned long arg)
 }
 
 
-int atm_change_qos(struct atm_vcc *vcc,struct atm_qos *qos)
+static int atm_change_qos(struct atm_vcc *vcc,struct atm_qos *qos)
 {
+	int error;
+
 	/*
 	 * Don't let the QoS change the already connected AAL type nor the
 	 * traffic class.
@@ -760,6 +765,9 @@ int atm_change_qos(struct atm_vcc *vcc,struct atm_qos *qos)
 	    qos->rxtp.traffic_class != vcc->qos.rxtp.traffic_class ||
 	    qos->txtp.traffic_class != vcc->qos.txtp.traffic_class)
 		return -EINVAL;
+	error = adjust_tp(&qos->txtp,qos->aal);
+	if (!error) error = adjust_tp(&qos->rxtp,qos->aal);
+	if (error) return error;
 	if (!vcc->dev->ops->change_qos) return -EOPNOTSUPP;
 	if (vcc->family == AF_ATMPVC)
 		return vcc->dev->ops->change_qos(vcc,qos,ATM_MF_SET);

@@ -41,23 +41,25 @@ static int route_mirror(struct sk_buff *skb)
         struct iphdr *iph = skb->nh.iph;
 	struct rtable *rt;
 
-	if (ip_route_output(&rt, iph->daddr, iph->saddr,
+	/* Backwards */
+	if (ip_route_output(&rt, iph->saddr, iph->daddr,
 			    RT_TOS(iph->tos) | RTO_CONN,
 			    0)) {
-		return -EINVAL;
+		return 0;
 	}
-	/* check if the interface we are living by is the same as the one we arrived on */
 
+	/* check if the interface we are leaving by is the same as the
+           one we arrived on */
 	if (skb->rx_dev == rt->u.dst.dev) {
 		/* Drop old route. */
 		dst_release(skb->dst);
 		skb->dst = &rt->u.dst;
-		return 0;
+		return 1;
 	}
-	else  return -EINVAL;
+	return 0;
 }
 
-static int
+static void
 ip_rewrite(struct sk_buff *skb)
 {
 	struct iphdr *iph = skb->nh.iph;
@@ -69,10 +71,27 @@ ip_rewrite(struct sk_buff *skb)
 	/* Rewrite IP header */
 	iph->daddr = odaddr;
 	iph->saddr = osaddr;
-
-	return 0;
 }
 
+/* Stolen from ip_finish_output2 */
+static void ip_direct_send(struct sk_buff *skb)
+{
+	struct dst_entry *dst = skb->dst;
+	struct hh_cache *hh = dst->hh;
+
+	if (hh) {
+		read_lock_bh(&hh->hh_lock);
+  		memcpy(skb->data - 16, hh->hh_data, 16);
+		read_unlock_bh(&hh->hh_lock);
+	        skb_push(skb, hh->hh_len);
+		hh->hh_output(skb);
+	} else if (dst->neighbour)
+		dst->neighbour->output(skb);
+	else {
+		printk(KERN_DEBUG "khm in MIRROR\n");
+		kfree(skb);
+	}
+}
 
 static unsigned int ipt_mirror_target(struct sk_buff **pskb,
 				      unsigned int hooknum,
@@ -82,8 +101,12 @@ static unsigned int ipt_mirror_target(struct sk_buff **pskb,
 				      void *userinfo)
 {
 	if ((*pskb)->dst != NULL) {
-		if (!ip_rewrite(*pskb) && !route_mirror(*pskb)) {
-			ip_send(*pskb);
+		if (route_mirror(*pskb)) {
+			ip_rewrite(*pskb);
+			/* Don't let conntrack code see this packet:
+                           it will think we are starting a new
+                           connection! --RR */
+			ip_direct_send(*pskb);
 			return NF_STOLEN;
 		}
 	}

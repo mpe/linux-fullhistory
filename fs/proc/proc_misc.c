@@ -508,18 +508,6 @@ static int swaps_read_proc(char *page, char **start, off_t off,
 	return len;
 }
 
-static int slabinfo_read_proc(char *page, char **start, off_t off,
-				 int count, int *eof, void *data)
-{
-	int len = get_slabinfo(page);
-	if (len <= off+count) *eof = 1;
-	*start = page + off;
-	len -= off;
-	if (len>count) len = count;
-	if (len<0) len = 0;
-	return len;
-}
-
 static int memory_read_proc(char *page, char **start, off_t off,
 				 int count, int *eof, void *data)
 {
@@ -671,4 +659,12 @@ void __init proc_misc_init(void)
 			entry->proc_fops = &ppc_htab_operations;
 	}
 #endif
+	{
+		struct proc_dir_entry *res = create_proc_entry("slabinfo",
+						S_IWUSR | S_IRUGO, NULL);
+		if (res) {
+			res->read_proc = slabinfo_read_proc;
+			res->write_proc = slabinfo_write_proc;
+		}
+	}
 }

@@ -467,7 +467,7 @@ helper_cmp(const struct ip_nat_helper *helper,
 static unsigned int opposite_hook[NF_IP_NUMHOOKS]
 = { [NF_IP_PRE_ROUTING] = NF_IP_POST_ROUTING,
     [NF_IP_POST_ROUTING] = NF_IP_PRE_ROUTING,
-    [NF_IP_LOCAL_OUT] = NF_IP_PRE_ROUTING
+    [NF_IP_LOCAL_OUT] = NF_IP_POST_ROUTING
 };
 
 unsigned int
@@ -663,8 +663,10 @@ void place_in_hashes(struct ip_conntrack *conntrack,
 static void
 manip_pkt(u_int16_t proto, struct iphdr *iph, size_t len,
 	  const struct ip_conntrack_manip *manip,
-	  enum ip_nat_manip_type maniptype)
+	  enum ip_nat_manip_type maniptype,
+	  __u32 *nfcache)
 {
+	*nfcache |= NFC_ALTERED;
 	find_nat_proto(proto)->manip_pkt(iph, len, manip, maniptype);
 
 	if (maniptype == IP_NAT_MANIP_SRC) {
@@ -718,7 +720,8 @@ do_bindings(struct ip_conntrack *ct,
 				  (*pskb)->nh.iph,
 				  (*pskb)->len,
 				  &info->manips[i].manip,
-				  info->manips[i].maniptype);
+				  info->manips[i].maniptype,
+				  &(*pskb)->nfcache);
 		}
 	}
 	helper = info->helper;
@@ -754,7 +757,7 @@ icmp_reply_translation(struct sk_buff *skb,
 	   (even though a "host unreachable" coming from the host
 	   itself is a bit wierd).
 
-	   More explanation: some people use NAT for anonomizing.
+	   More explanation: some people use NAT for anonymizing.
 	   Also, CERT recommends dropping all packets from private IP
 	   addresses (although ICMP errors from internal links with
 	   such addresses are not too uncommon, as Alan Cox points
@@ -782,11 +785,11 @@ icmp_reply_translation(struct sk_buff *skb,
 			manip_pkt(inner->protocol, inner,
 				  skb->len - ((void *)inner - (void *)iph),
 				  &info->manips[i].manip,
-				  !info->manips[i].maniptype);
+				  !info->manips[i].maniptype,
+				  &skb->nfcache);
 		/* Outer packet needs to have IP header NATed like
                    it's a reply. */
-		} else if (info->manips[i].direction == dir
-			 && info->manips[i].hooknum == hooknum) {
+		} else if (info->manips[i].hooknum == hooknum) {
 			/* Use mapping to map outer packet: 0 give no
                            per-proto mapping */
 			DEBUGP("icmp_reply: outer %s -> %u.%u.%u.%u\n",
@@ -795,7 +798,8 @@ icmp_reply_translation(struct sk_buff *skb,
 			       IP_PARTS(info->manips[i].manip.ip));
 			manip_pkt(0, iph, skb->len,
 				  &info->manips[i].manip,
-				  info->manips[i].maniptype);
+				  info->manips[i].maniptype,
+				  &skb->nfcache);
 		}
 	}
 	READ_UNLOCK(&ip_nat_lock);

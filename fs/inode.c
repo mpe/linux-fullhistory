@@ -26,7 +26,7 @@
 
 /* inode dynamic allocation 1999, Andrea Arcangeli <andrea@suse.de> */
 
-#define INODE_PARANOIA 1
+/* #define INODE_PARANOIA 1 */
 /* #define INODE_DEBUG 1 */
 
 /*
@@ -327,6 +327,7 @@ static void dispose_list(struct list_head * head)
 			truncate_inode_pages(&inode->i_data, 0);
 		clear_inode(inode);
 		destroy_inode(inode);
+		inodes_stat.nr_inodes--;
 	}
 }
 
@@ -548,6 +549,7 @@ struct inode * get_empty_inode(void)
 	if (inode)
 	{
 		spin_lock(&inode_lock);
+		inodes_stat.nr_inodes++;
 		list_add(&inode->i_list, &inode_in_use);
 		inode->i_sb = NULL;
 		inode->i_dev = 0;
@@ -579,6 +581,7 @@ static struct inode * get_new_inode(struct super_block *sb, unsigned long ino, s
 		/* We released the lock, so.. */
 		old = find_inode(sb, ino, head, find_actor, opaque);
 		if (!old) {
+			inodes_stat.nr_inodes++;
 			list_add(&inode->i_list, &inode_in_use);
 			list_add(&inode->i_hash, head);
 			inode->i_sb = sb;
@@ -752,78 +755,55 @@ void iput(struct inode *inode)
 {
 	if (inode) {
 		struct super_operations *op = NULL;
-		int destroy = 0;
 
 		if (inode->i_sb && inode->i_sb->s_op)
 			op = inode->i_sb->s_op;
 		if (op && op->put_inode)
 			op->put_inode(inode);
 
-		spin_lock(&inode_lock);
-		if (atomic_dec_and_test(&inode->i_count)) {
-			if (!inode->i_nlink) {
-				list_del(&inode->i_hash);
-				INIT_LIST_HEAD(&inode->i_hash);
+		if (!atomic_dec_and_lock(&inode->i_count, &inode_lock))
+			return;
+
+		if (!inode->i_nlink) {
+			list_del(&inode->i_hash);
+			INIT_LIST_HEAD(&inode->i_hash);
+			list_del(&inode->i_list);
+			INIT_LIST_HEAD(&inode->i_list);
+			inode->i_state|=I_FREEING;
+			spin_unlock(&inode_lock);
+
+			if (inode->i_data.nrpages)
+				truncate_inode_pages(&inode->i_data, 0);
+
+			if (op && op->delete_inode) {
+				void (*delete)(struct inode *) = op->delete_inode;
+				/* s_op->delete_inode internally recalls clear_inode() */
+				delete(inode);
+			} else
+				clear_inode(inode);
+			if (inode->i_state != I_CLEAR)
+				BUG();
+		} else {
+			if (!list_empty(&inode->i_hash)) {
+				if (!(inode->i_state & I_DIRTY)) {
+					list_del(&inode->i_list);
+					list_add(&inode->i_list,
+						 &inode_unused);
+				}
+				inodes_stat.nr_unused++;
+				spin_unlock(&inode_lock);
+				return;
+			} else {
+				/* magic nfs path */
 				list_del(&inode->i_list);
 				INIT_LIST_HEAD(&inode->i_list);
 				inode->i_state|=I_FREEING;
 				spin_unlock(&inode_lock);
-
-				if (inode->i_data.nrpages)
-					truncate_inode_pages(&inode->i_data, 0);
-
-				destroy = 1;
-				if (op && op->delete_inode) {
-					void (*delete)(struct inode *) = op->delete_inode;
-					/* s_op->delete_inode internally recalls clear_inode() */
-					delete(inode);
-				} else
-					clear_inode(inode);
-				if (inode->i_state != I_CLEAR)
-					BUG();
-
-				spin_lock(&inode_lock);
-			} else {
-				if (!list_empty(&inode->i_hash)) {
-					if (!(inode->i_state & I_DIRTY)) {
-						list_del(&inode->i_list);
-						list_add(&inode->i_list,
-							 &inode_unused);
-					}
-					inodes_stat.nr_unused++;
-				} else {
-					/* magic nfs path */
-					list_del(&inode->i_list);
-					INIT_LIST_HEAD(&inode->i_list);
-					inode->i_state|=I_FREEING;
-					spin_unlock(&inode_lock);
-					clear_inode(inode);
-					destroy = 1;
-					spin_lock(&inode_lock);
-				}
+				clear_inode(inode);
 			}
-#ifdef INODE_PARANOIA
-if (inode->i_flock)
-printk(KERN_ERR "iput: inode %s/%ld still has locks!\n",
-kdevname(inode->i_dev), inode->i_ino);
-if (!list_empty(&inode->i_dentry))
-printk(KERN_ERR "iput: device %s inode %ld still has aliases!\n",
-kdevname(inode->i_dev), inode->i_ino);
-if (atomic_read(&inode->i_count))
-printk(KERN_ERR "iput: device %s inode %ld count changed, count=%d\n",
-kdevname(inode->i_dev), inode->i_ino, atomic_read(&inode->i_count));
-if (atomic_read(&inode->i_sem.count) != 1)
-printk(KERN_ERR "iput: Aieee, semaphore in use inode %s/%ld, count=%d\n",
-kdevname(inode->i_dev), inode->i_ino, atomic_read(&inode->i_sem.count));
-#endif
 		}
-		if ((unsigned)atomic_read(&inode->i_count) > (1U<<31)) {
-			printk(KERN_ERR "iput: inode %s/%ld count wrapped\n",
-				kdevname(inode->i_dev), inode->i_ino);
-		}
-		spin_unlock(&inode_lock);
-		if (destroy)
-			destroy_inode(inode);
+		inodes_stat.nr_inodes--;
+		destroy_inode(inode);
 	}
 }
 

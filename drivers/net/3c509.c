@@ -187,7 +187,7 @@ u16 el3_isapnp_phys_addr[8][3] = {
 	{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}
 };
 #endif /* CONFIG_ISAPNP */
-#if defined(__ISAPNP__) || defined(MODULE)
+#ifdef __ISAPNP__
 static int nopnp = 0;
 #endif
 
@@ -984,7 +984,9 @@ MODULE_PARM(debug,"i");
 MODULE_PARM(irq,"1-8i");
 MODULE_PARM(xcvr,"1-8i");
 MODULE_PARM(max_interrupt_work, "i");
+#ifdef __ISAPNP__
 MODULE_PARM(nopnp, "i");
+#endif
 
 int
 init_module(void)

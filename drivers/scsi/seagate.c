@@ -498,7 +498,7 @@ int __init seagate_st0x_detect (Scsi_Host_Template * tpnt)
   {
     int clock;
     ULOOP( 1*1000*1000 ) {
-      volatile int x = STATUS;
+      STATUS;
       if (TIMEOUT) break;
     }
   }

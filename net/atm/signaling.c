@@ -158,9 +158,9 @@ static int sigd_send(struct atm_vcc *vcc,struct sk_buff *skb)
 }
 
 
-void sigd_enq(struct atm_vcc *vcc,enum atmsvc_msg_type type,
+void sigd_enq2(struct atm_vcc *vcc,enum atmsvc_msg_type type,
     struct atm_vcc *listen_vcc,const struct sockaddr_atmpvc *pvc,
-    const struct sockaddr_atmsvc *svc)
+    const struct sockaddr_atmsvc *svc,const struct atm_qos *qos,int reply)
 {
 	struct sk_buff *skb;
 	struct atmsvc_msg *msg;
@@ -173,18 +173,23 @@ void sigd_enq(struct atm_vcc *vcc,enum atmsvc_msg_type type,
 	msg->type = type;
 	*(struct atm_vcc **) &msg->vcc = vcc;
 	*(struct atm_vcc **) &msg->listen_vcc = listen_vcc;
-	msg->reply = 0; /* other ISP applications may use this field */
-	if (vcc) {
-		msg->qos = vcc->qos;
-		msg->sap = vcc->sap;
-	}
-	if (!svc) msg->svc.sas_family = 0;
-	else msg->svc = *svc;
+	msg->reply = reply;
+	if (qos) msg->qos = *qos;
+	if (vcc) msg->sap = vcc->sap;
+	if (svc) msg->svc = *svc;
 	if (vcc) msg->local = vcc->local;
-	if (!pvc) memset(&msg->pvc,0,sizeof(msg->pvc));
-	else msg->pvc = *pvc;
+	if (pvc) msg->pvc = *pvc;
 	sigd_put_skb(skb);
 	if (vcc) set_bit(ATM_VF_REGIS,&vcc->flags);
+}
+
+
+void sigd_enq(struct atm_vcc *vcc,enum atmsvc_msg_type type,
+    struct atm_vcc *listen_vcc,const struct sockaddr_atmpvc *pvc,
+    const struct sockaddr_atmsvc *svc)
+{
+	sigd_enq2(vcc,type,listen_vcc,pvc,svc,vcc ? &vcc->qos : NULL,0);
+	/* other ISP applications may use "reply" */
 }
 
 

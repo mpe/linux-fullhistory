@@ -373,16 +373,16 @@ static inline u32 rd_mem (const amb_dev * dev, size_t addr) {
 static inline void dump_registers (const amb_dev * dev) {
 #ifdef DEBUG_AMBASSADOR
   if (debug & DBG_REGS) {
-    u32 * i;
+    size_t i;
     PRINTD (DBG_REGS, "reading PLX control: ");
-    for (i = (u32 *) 0x00; i < (u32 *) 0x30; ++i)
-      rd_mem (dev, (size_t)i);
+    for (i = 0x00; i < 0x30; i += sizeof(u32))
+      rd_mem (dev, i);
     PRINTD (DBG_REGS, "reading mailboxes: ");
-    for (i = (u32 *) 0x40; i < (u32 *) 0x60; ++i)
-      rd_mem (dev, (size_t)i);
+    for (i = 0x40; i < 0x60; i += sizeof(u32))
+      rd_mem (dev, i);
     PRINTD (DBG_REGS, "reading doorb irqev irqen reset:");
-    for (i = (u32 *) 0x60; i < (u32 *) 0x70; ++i)
-      rd_mem (dev, (size_t)i);
+    for (i = 0x60; i < 0x70; i += sizeof(u32))
+      rd_mem (dev, i);
   }
 #else
   (void) dev;

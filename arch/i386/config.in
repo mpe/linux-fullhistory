@@ -34,6 +34,7 @@ choice 'Processor family' \
 # Define implied options from the CPU selection here
 #
 if [ "$CONFIG_M386" = "y" ]; then
+   define_bool CONFIG_X86_CMPXCHG n
    define_int  CONFIG_X86_L1_CACHE_BYTES 16
 else
    define_bool CONFIG_X86_WP_WORKS_OK y
@@ -138,6 +139,9 @@ if [ "$CONFIG_SMP" != "y" ]; then
        define_bool CONFIG_X86_IO_APIC y
        define_bool CONFIG_X86_LOCAL_APIC y
     fi
+fi
+if [ "$CONFIG_SMP" = "y" -a "$CONFIG_X86_CMPXCHG" = "y" ]; then
+    define_bool CONFIG_HAVE_DEC_LOCK y
 fi
 endmenu
 

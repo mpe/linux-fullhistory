@@ -60,8 +60,7 @@ ip_nat_fn(unsigned int hooknum,
 	IP_NF_ASSERT(!((*pskb)->nh.iph->frag_off
 		       & __constant_htons(IP_MF|IP_OFFSET)));
 
-	/* FIXME: One day, fill in properly. --RR */
-	(*pskb)->nfcache |= NFC_UNKNOWN | NFC_ALTERED;
+	(*pskb)->nfcache |= NFC_UNKNOWN;
 
 	/* If we had a hardware checksum before, it's now invalid */
 	if ((*pskb)->pkt_type != PACKET_LOOPBACK)

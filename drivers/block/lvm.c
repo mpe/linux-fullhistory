@@ -165,6 +165,8 @@ static char *lvm_short_version = "version 0.8final  (15/02/2000)";
 #include <linux/kerneld.h>
 #endif
 
+#define LOCAL_END_REQUEST
+
 #include <linux/blk.h>
 #include <linux/blkpg.h>
 

@@ -181,8 +181,9 @@ static int help(const struct iphdr *iph, size_t len,
 		   connection tracking, not packet filtering.
 		   However, it is neccessary for accurate tracking in
 		   this case. */
-		DEBUGP("conntrack_ftp: partial `%.*s'\n",
-		       (int)datalen, data);
+		if (net_ratelimit())
+			printk("conntrack_ftp: partial %u+%u\n",
+			       ntohl(tcph->seq), datalen);
 		return NF_DROP;
 
 	case 0: /* no match */

@@ -198,8 +198,8 @@ extern void d_rehash(struct dentry *);
  
 static __inline__ void d_add(struct dentry * entry, struct inode * inode)
 {
-	d_rehash(entry);
 	d_instantiate(entry, inode);
+	d_rehash(entry);
 }
 
 /* used for rename() and baskets */
@@ -227,6 +227,8 @@ extern char * __d_path(struct dentry *, struct vfsmount *, struct dentry *,
  
 static __inline__ struct dentry * dget(struct dentry *dentry)
 {
+	if (!atomic_read(&dentry->d_count))
+		BUG();
 	if (dentry)
 		atomic_inc(&dentry->d_count);
 	return dentry;
@@ -244,12 +246,7 @@ static __inline__ int d_unhashed(struct dentry *dentry)
 	return list_empty(&dentry->d_hash);
 }
 
-extern void __dput(struct dentry *);
-static __inline__ void dput(struct dentry *dentry)
-{
-	if (dentry && atomic_dec_and_test(&dentry->d_count))
-		__dput(dentry);
-}
+extern void dput(struct dentry *);
 
 static __inline__ int d_mountpoint(struct dentry *dentry)
 {

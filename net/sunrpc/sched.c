@@ -97,6 +97,41 @@ static __inline__ void rpc_unlock_swapbuf(void)
 }
 
 /*
+ * Disable the timer for a given RPC task. Should be called with
+ * rpc_queue_lock and bh_disabled in order to avoid races within
+ * rpc_run_timer().
+ */
+static inline void
+__rpc_disable_timer(struct rpc_task *task)
+{
+	dprintk("RPC: %4d disabling timer\n", task->tk_pid);
+	task->tk_timeout_fn = NULL;
+	task->tk_timeout = 0;
+}
+
+/*
+ * Run a timeout function.
+ * We use the callback in order to allow __rpc_wake_up_task()
+ * and friends to disable the timer synchronously on SMP systems
+ * without calling del_timer_sync(). The latter could cause a
+ * deadlock if called while we're holding spinlocks...
+ */
+static void
+rpc_run_timer(struct rpc_task *task)
+{
+	void (*callback)(struct rpc_task *);
+
+	spin_lock_bh(&rpc_queue_lock);
+	callback = task->tk_timeout_fn;
+	task->tk_timeout_fn = NULL;
+	spin_unlock_bh(&rpc_queue_lock);
+	if (callback) {
+		dprintk("RPC: %4d running timer\n", task->tk_pid);
+		callback(task);
+	}
+}
+
+/*
  * Set up a timer for the current task.
  */
 static inline void
@@ -108,17 +143,11 @@ __rpc_add_timer(struct rpc_task *task, rpc_action timer)
 	dprintk("RPC: %4d setting alarm for %lu ms\n",
 			task->tk_pid, task->tk_timeout * 1000 / HZ);
 
-	if (timer_pending(&task->tk_timer)) {
-		printk(KERN_ERR "RPC: Bug! Overwriting active timer\n");
-		del_timer(&task->tk_timer);
-	}
-	if (!timer)
-		timer = __rpc_default_timer;
-	init_timer(&task->tk_timer);
-	task->tk_timer.expires  = jiffies + task->tk_timeout;
-	task->tk_timer.data     = (unsigned long) task;
-	task->tk_timer.function = (void (*)(unsigned long)) timer;
-	add_timer(&task->tk_timer);
+	if (timer)
+		task->tk_timeout_fn = timer;
+	else
+		task->tk_timeout_fn = __rpc_default_timer;
+	mod_timer(&task->tk_timer, jiffies + task->tk_timeout);
 }
 
 /*
@@ -133,15 +162,16 @@ void rpc_add_timer(struct rpc_task *task, rpc_action timer)
 }
 
 /*
- * Delete any timer for the current task.
+ * Delete any timer for the current task. Because we use del_timer_sync(),
+ * this function should never be called while holding rpc_queue_lock.
  */
 static inline void
-__rpc_del_timer(struct rpc_task *task)
+rpc_delete_timer(struct rpc_task *task)
 {
-	dprintk("RPC: %4d deleting timer\n", task->tk_pid);
-	if (timer_pending(&task->tk_timer))
-		del_timer(&task->tk_timer);
-	task->tk_timeout = 0;
+	if (timer_pending(&task->tk_timer)) {
+		dprintk("RPC: %4d deleting timer\n", task->tk_pid);
+		del_timer_sync(&task->tk_timer);
+	}
 }
 
 /*
@@ -223,11 +253,11 @@ rpc_remove_wait_queue(struct rpc_task *task)
 static inline void
 rpc_make_runnable(struct rpc_task *task)
 {
-	if (task->tk_timeout) {
+	if (task->tk_timeout_fn) {
 		printk(KERN_ERR "RPC: task w/ running timer in rpc_make_runnable!!\n");
 		return;
 	}
-	task->tk_flags |= RPC_TASK_RUNNING;
+	task->tk_running = 1;
 	if (RPC_IS_ASYNC(task)) {
 		if (RPC_IS_SLEEPING(task)) {
 			int status;
@@ -238,10 +268,12 @@ rpc_make_runnable(struct rpc_task *task)
 			} else
 				task->tk_sleeping = 0;
 		}
-		wake_up(&rpciod_idle);
+		if (waitqueue_active(&rpciod_idle))
+			wake_up(&rpciod_idle);
 	} else {
 		task->tk_sleeping = 0;
-		wake_up(&task->tk_wait);
+		if (waitqueue_active(&task->tk_wait))
+			wake_up(&task->tk_wait);
 	}
 }
 
@@ -267,7 +299,8 @@ void rpciod_wake_up(void)
 {
 	if(rpciod_pid==0)
 		printk(KERN_ERR "rpciod: wot no daemon?\n");
-	wake_up(&rpciod_idle);
+	if (waitqueue_active(&rpciod_idle))
+		wake_up(&rpciod_idle);
 }
 
 /*
@@ -301,12 +334,14 @@ __rpc_sleep_on(struct rpc_wait_queue *q, struct rpc_task *task,
 		printk(KERN_WARNING "RPC: failed to add task to queue: error: %d!\n", status);
 		task->tk_status = status;
 	} else {
-		task->tk_flags &= ~RPC_TASK_RUNNING;
+		task->tk_running = 0;
+		if (task->tk_callback) {
+			printk(KERN_ERR "RPC: %4d overwrites an active callback\n", task->tk_pid);
+			BUG();
+		}
 		task->tk_callback = action;
 		__rpc_add_timer(task, timer);
 	}
-
-	return;
 }
 
 void
@@ -330,20 +365,17 @@ rpc_sleep_locked(struct rpc_wait_queue *q, struct rpc_task *task,
 	 */
 	spin_lock_bh(&rpc_queue_lock);
 	__rpc_sleep_on(q, task, action, timer);
-	rpc_lock_task(task);
+	__rpc_lock_task(task);
 	spin_unlock_bh(&rpc_queue_lock);
 }
 
 /*
  * Wake up a single task -- must be invoked with spin lock held.
- *
- * It would probably suffice to cli/sti the del_timer and remove_wait_queue
- * operations individually.
  */
 static void
-__rpc_wake_up(struct rpc_task *task)
+__rpc_wake_up_task(struct rpc_task *task)
 {
-	dprintk("RPC: %4d __rpc_wake_up (now %ld inh %d)\n",
+	dprintk("RPC: %4d __rpc_wake_up_task (now %ld inh %d)\n",
 					task->tk_pid, jiffies, rpc_inhibit);
 
 #ifdef RPC_DEBUG
@@ -362,7 +394,7 @@ __rpc_wake_up(struct rpc_task *task)
 	if (RPC_IS_RUNNING(task))
 		return;
 
-	__rpc_del_timer(task);
+	__rpc_disable_timer(task);
 
 	/* If the task has been locked, then set tk_wakeup so that
 	 * rpc_unlock_task() wakes us up... */
@@ -374,10 +406,9 @@ __rpc_wake_up(struct rpc_task *task)
 
 	if (task->tk_rpcwait != &schedq)
 		__rpc_remove_wait_queue(task);
-	task->tk_flags |= RPC_TASK_CALLBACK;
 	rpc_make_runnable(task);
 
-	dprintk("RPC:      __rpc_wake_up done\n");
+	dprintk("RPC:      __rpc_wake_up_task done\n");
 }
 
 /*
@@ -388,7 +419,6 @@ __rpc_default_timer(struct rpc_task *task)
 {
 	dprintk("RPC: %d timeout (default timer)\n", task->tk_pid);
 	task->tk_status = -ETIMEDOUT;
-	task->tk_timeout = 0;
 	rpc_wake_up_task(task);
 }
 
@@ -401,7 +431,7 @@ rpc_wake_up_task(struct rpc_task *task)
 	if (RPC_IS_RUNNING(task))
 		return;
 	spin_lock_bh(&rpc_queue_lock);
-	__rpc_wake_up(task);
+	__rpc_wake_up_task(task);
 	spin_unlock_bh(&rpc_queue_lock);
 }
 
@@ -416,7 +446,7 @@ rpc_wake_up_next(struct rpc_wait_queue *queue)
 	dprintk("RPC:      wake_up_next(%p \"%s\")\n", queue, rpc_qname(queue));
 	spin_lock_bh(&rpc_queue_lock);
 	if ((task = queue->task) != 0)
-		__rpc_wake_up(task);
+		__rpc_wake_up_task(task);
 	spin_unlock_bh(&rpc_queue_lock);
 
 	return task;
@@ -430,7 +460,7 @@ rpc_wake_up(struct rpc_wait_queue *queue)
 {
 	spin_lock_bh(&rpc_queue_lock);
 	while (queue->task)
-		__rpc_wake_up(queue->task);
+		__rpc_wake_up_task(queue->task);
 	spin_unlock_bh(&rpc_queue_lock);
 }
 
@@ -445,7 +475,7 @@ rpc_wake_up_status(struct rpc_wait_queue *queue, int status)
 	spin_lock_bh(&rpc_queue_lock);
 	while ((task = queue->task) != NULL) {
 		task->tk_status = status;
-		__rpc_wake_up(task);
+		__rpc_wake_up_task(task);
 	}
 	spin_unlock_bh(&rpc_queue_lock);
 }
@@ -458,7 +488,7 @@ rpc_wake_up_status(struct rpc_wait_queue *queue, int status)
  * rpc_queue_lock held.
  */
 int
-rpc_lock_task(struct rpc_task *task)
+__rpc_lock_task(struct rpc_task *task)
 {
 	if (!RPC_IS_RUNNING(task))
 		return ++task->tk_lock;
@@ -470,7 +500,7 @@ rpc_unlock_task(struct rpc_task *task)
 {
 	spin_lock_bh(&rpc_queue_lock);
 	if (task->tk_lock && !--task->tk_lock && task->tk_wakeup)
-		__rpc_wake_up(task);
+		__rpc_wake_up_task(task);
 	spin_unlock_bh(&rpc_queue_lock);
 }
 
@@ -517,7 +547,6 @@ __rpc_execute(struct rpc_task *task)
 			/* Define a callback save pointer */
 			void (*save_callback)(struct rpc_task *);
 	
-			task->tk_flags &= ~RPC_TASK_CALLBACK;
 			/* 
 			 * If a callback exists, save it, reset it,
 			 * call it.
@@ -525,11 +554,9 @@ __rpc_execute(struct rpc_task *task)
 			 * another callback set within the callback handler
 			 * - Dave
 			 */
-			if (task->tk_callback) {
-				save_callback=task->tk_callback;
-				task->tk_callback=NULL;
-				save_callback(task);
-			}
+			save_callback=task->tk_callback;
+			task->tk_callback=NULL;
+			save_callback(task);
 		}
 
 		/*
@@ -538,6 +565,10 @@ __rpc_execute(struct rpc_task *task)
 		 * by someone else.
 		 */
 		if (RPC_IS_RUNNING(task)) {
+			/*
+			 * Garbage collection of pending timers...
+			 */
+			rpc_delete_timer(task);
 			if (!task->tk_action)
 				break;
 			task->tk_action(task);
@@ -639,7 +670,7 @@ rpc_execute(struct rpc_task *task)
 	}
 
 	task->tk_active = 1;
-	task->tk_flags |= RPC_TASK_RUNNING;
+	task->tk_running = 1;
 	return __rpc_execute(task);
  out_release:
 	rpc_release_task(task);
@@ -758,6 +789,8 @@ rpc_init_task(struct rpc_task *task, struct rpc_clnt *clnt,
 {
 	memset(task, 0, sizeof(*task));
 	init_timer(&task->tk_timer);
+	task->tk_timer.data     = (unsigned long) task;
+	task->tk_timer.function = (void (*)(unsigned long)) rpc_run_timer;
 	task->tk_client = clnt;
 	task->tk_flags  = flags;
 	task->tk_exit   = callback;
@@ -864,8 +897,8 @@ rpc_release_task(struct rpc_task *task)
 	/* Protect the execution below. */
 	spin_lock_bh(&rpc_queue_lock);
 
-	/* Delete any running timer */
-	__rpc_del_timer(task);
+	/* Disable timer to prevent zombie wakeup */
+	__rpc_disable_timer(task);
 
 	/* Remove from any wait queue we're still on */
 	__rpc_remove_wait_queue(task);
@@ -873,6 +906,9 @@ rpc_release_task(struct rpc_task *task)
 	task->tk_active = 0;
 
 	spin_unlock_bh(&rpc_queue_lock);
+
+	/* Synchronously delete any running timer */
+	rpc_delete_timer(task);
 
 	/* Release resources */
 	if (task->tk_rqstp)
@@ -921,7 +957,7 @@ rpc_child_exit(struct rpc_task *child)
 	spin_lock_bh(&rpc_queue_lock);
 	if ((parent = rpc_find_parent(child)) != NULL) {
 		parent->tk_status = child->tk_status;
-		__rpc_wake_up(parent);
+		__rpc_wake_up_task(parent);
 	}
 	spin_unlock_bh(&rpc_queue_lock);
 }

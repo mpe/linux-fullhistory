@@ -27,6 +27,7 @@
 #include <linux/in6.h>
 #include <linux/inetdevice.h>
 #include <linux/igmp.h>
+#include <linux/netfilter_ipv4.h>
 
 #include <net/sock.h>
 #include <net/ip.h>
@@ -616,6 +617,12 @@ drop_nolock:
 	return(0);
 }
 
+/* Need this wrapper because NF_HOOK takes the function address */
+static inline int do_ip_send(struct sk_buff *skb)
+{
+	return ip_send(skb);
+}
+
 static int ipgre_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = (struct ip_tunnel*)dev->priv;
@@ -829,7 +836,8 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	stats->tx_bytes += skb->len;
 	stats->tx_packets++;
-	ip_send(skb);
+	NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
+		do_ip_send);
 	tunnel->recursion--;
 	return 0;
 

@@ -551,7 +551,6 @@ static int raid1_make_request (request_queue_t *q, mddev_t *mddev, int rw,
 	int disks = MD_SB_DISKS;
 	int i, sum_bhs = 0, sectors;
 	struct mirror_info *mirror;
-	DECLARE_WAITQUEUE(wait, current);
 
 	if (!buffer_locked(bh))
 		BUG();

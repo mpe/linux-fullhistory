@@ -77,8 +77,7 @@ static void svc_disconnect(struct atm_vcc *vcc)
 	   as_indicate has been answered */
 	while ((skb = skb_dequeue(&vcc->listenq))) {
 		DPRINTK("LISTEN REL\n");
-		sigd_enq(NULL,as_reject,vcc,NULL,NULL); /* @@@ should include
-							       the reason */
+		sigd_enq2(NULL,as_reject,vcc,NULL,NULL,&vcc->qos,0);
 		dev_kfree_skb(skb);
 	}
 	clear_bit(ATM_VF_REGIS,&vcc->flags);
@@ -310,8 +309,8 @@ static int svc_accept(struct socket *sock,struct socket *newsock,int flags)
 		dev_kfree_skb(skb);
 		old_vcc->backlog_quota++;
 		if (error) {
-			sigd_enq(NULL,as_reject,old_vcc,NULL,NULL);
-				/* @@@ should include the reason */
+			sigd_enq2(NULL,as_reject,old_vcc,NULL,NULL,
+			    &old_vcc->qos,error);
 			return error == -EAGAIN ? -EBUSY : error;
 		}
 		/* wait should be short, so we ignore the non-blocking flag */
@@ -348,13 +347,9 @@ static int svc_getname(struct socket *sock,struct sockaddr *sockaddr,
 int svc_change_qos(struct atm_vcc *vcc,struct atm_qos *qos)
 {
 	DECLARE_WAITQUEUE(wait,current);
-	struct atm_qos save_qos;
 
 	vcc->reply = WAITING;
-	save_qos = vcc->qos; /* @@@ really gross hack ... */
-	vcc->qos = *qos;
-	sigd_enq(vcc,as_modify,NULL,NULL,&vcc->local);
-	vcc->qos = save_qos;
+	sigd_enq2(vcc,as_modify,NULL,NULL,&vcc->local,qos,0);
 	add_wait_queue(&vcc->sleep,&wait);
 	while (vcc->reply == WAITING && !test_bit(ATM_VF_RELEASED,&vcc->flags)
 	    && sigd) {

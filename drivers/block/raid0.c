@@ -120,7 +120,7 @@ static int create_strip_zones (mddev_t *mddev)
 
 static int raid0_run (mddev_t *mddev)
 {
-	int cur=0, i=0, size, zone0_size, nb_zone;
+	unsigned long cur=0, i=0, size, zone0_size, nb_zone;
 	raid0_conf_t *conf;
 
 	MOD_INC_USE_COUNT;
@@ -142,11 +142,11 @@ static int raid0_run (mddev_t *mddev)
 	printk("raid0 : conf->smallest->size is %d blocks.\n", conf->smallest->size);
 	nb_zone = md_size[mdidx(mddev)]/conf->smallest->size +
 			(md_size[mdidx(mddev)] % conf->smallest->size ? 1 : 0);
-	printk("raid0 : nb_zone is %d.\n", nb_zone);
+	printk("raid0 : nb_zone is %ld.\n", nb_zone);
 	conf->nr_zones = nb_zone;
 
-	printk("raid0 : Allocating %d bytes for hash.\n",
-				sizeof(struct raid0_hash)*nb_zone);
+	printk("raid0 : Allocating %ld bytes for hash.\n",
+				nb_zone*sizeof(struct raid0_hash));
 
 	conf->hash_table = vmalloc (sizeof (struct raid0_hash)*nb_zone);
 	if (!conf->hash_table)

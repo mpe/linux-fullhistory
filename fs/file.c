@@ -24,11 +24,9 @@ struct file ** alloc_fd_array(int num)
 	struct file **new_fds;
 	int size = num * sizeof(struct file *);
 
-	if (size < PAGE_SIZE)
+	if (size <= PAGE_SIZE)
 		new_fds = (struct file **) kmalloc(size, GFP_KERNEL);
-	else if (size == PAGE_SIZE)
-		new_fds = (struct file **) __get_free_page(GFP_KERNEL);
-	else
+	else 
 		new_fds = (struct file **) vmalloc(size);
 	return new_fds;
 }
@@ -44,10 +42,8 @@ void free_fd_array(struct file **array, int num)
 
 	if (num <= NR_OPEN_DEFAULT) /* Don't free the embedded fd array! */
 		return;
-	else if (size < PAGE_SIZE)
+	else if (size <= PAGE_SIZE)
 		kfree(array);
-	else if (size == PAGE_SIZE)
-		free_page((unsigned long) array);
 	else
 		vfree(array);
 }
@@ -137,10 +133,8 @@ fd_set * alloc_fdset(int num)
 	fd_set *new_fdset;
 	int size = num / 8;
 
-	if (size < PAGE_SIZE)
+	if (size <= PAGE_SIZE)
 		new_fdset = (fd_set *) kmalloc(size, GFP_KERNEL);
-	else if (size == PAGE_SIZE)
-		new_fdset = (fd_set *) __get_free_page(GFP_KERNEL);
 	else
 		new_fdset = (fd_set *) vmalloc(size);
 	return new_fdset;
@@ -157,10 +151,8 @@ void free_fdset(fd_set *array, int num)
 	
 	if (num <= __FD_SETSIZE) /* Don't free an embedded fdset */
 		return;
-	else if (size < PAGE_SIZE)
+	else if (size <= PAGE_SIZE)
 		kfree(array);
-	else if (size == PAGE_SIZE)
-		free_page((unsigned long) array);
 	else
 		vfree(array);
 }

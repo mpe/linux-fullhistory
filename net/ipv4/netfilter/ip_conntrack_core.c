@@ -303,6 +303,7 @@ icmp_error_track(struct sk_buff *skb,
 	struct ip_conntrack_tuple_hash *h;
 
 	IP_NF_ASSERT(iph->protocol == IPPROTO_ICMP);
+	IP_NF_ASSERT(skb->nfct == NULL);
 
 	iph = skb->nh.iph;
 	hdr = (struct icmphdr *)((u_int32_t *)iph + iph->ihl);
@@ -350,10 +351,27 @@ icmp_error_track(struct sk_buff *skb,
 		DEBUGP("icmp_error_track: Can't invert tuple\n");
 		return NULL;
 	}
+
+	*ctinfo = IP_CT_RELATED;
+
 	h = ip_conntrack_find_get(&innertuple, NULL);
 	if (!h) {
-		DEBUGP("icmp_error_track: no match\n");
-		return NULL;
+		/* Locally generated ICMPs will match inverted if they
+		   haven't been SNAT'ed yet */
+		/* FIXME: NAT code has to handle half-done double NAT --RR */
+		if (hooknum == NF_IP_LOCAL_OUT)
+			h = ip_conntrack_find_get(&origtuple, NULL);
+
+		if (!h) {
+			DEBUGP("icmp_error_track: no match\n");
+			return NULL;
+		}
+		/* Reverse direction from that found */
+		if (DIRECTION(h) != IP_CT_DIR_REPLY)
+			*ctinfo += IP_CT_IS_REPLY;
+	} else {
+		if (DIRECTION(h) == IP_CT_DIR_REPLY)
+			*ctinfo += IP_CT_IS_REPLY;
 	}
 
 	/* REJECT target does this commonly, so allow locally
@@ -364,10 +382,6 @@ icmp_error_track(struct sk_buff *skb,
 		ip_conntrack_put(h->ctrack);
 		return NULL;
 	}
-
-	*ctinfo = IP_CT_RELATED;
-	if (DIRECTION(h) == IP_CT_DIR_REPLY)
-		*ctinfo += IP_CT_IS_REPLY;
 
 	/* Update skb to refer to this connection */
 	skb->nfct = &h->ctrack->infos[*ctinfo];
@@ -816,7 +830,9 @@ ip_ct_gather_frags(struct sk_buff *skb)
 	unsigned int olddebug = skb->nf_debug;
 #endif
 	if (sk) sock_hold(sk);
+	local_bh_disable(); 
 	skb = ip_defrag(skb);
+	local_bh_enable(); 
 	if (!skb) {
 		if (sk) sock_put(sk);
 		return skb;

@@ -239,7 +239,7 @@ void atm_mpoa_disp_qos(char *page, int *len)
 	while (qos != NULL) {
 		ip = (unsigned char *)&qos->ipaddr;
 		sprintf(ipaddr, "%u.%u.%u.%u", NIPQUAD(ip));
-		*len += sprintf(page + *len, "%%u.%u.%u.%u\n     %-7d %-7d %-7d %-7d %-7d\n     %-7d %-7d %-7d %-7d %-7d\n",
+		*len += sprintf(page + *len, "%u.%u.%u.%u\n     %-7d %-7d %-7d %-7d %-7d\n     %-7d %-7d %-7d %-7d %-7d\n",
 				NIPQUAD(ipaddr),
 				qos->qos.txtp.max_pcr, qos->qos.txtp.pcr, qos->qos.txtp.min_pcr, qos->qos.txtp.max_cdv, qos->qos.txtp.max_sdu,
 				qos->qos.rxtp.max_pcr, qos->qos.rxtp.pcr, qos->qos.rxtp.min_pcr, qos->qos.rxtp.max_cdv, qos->qos.rxtp.max_sdu);

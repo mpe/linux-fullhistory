@@ -17,6 +17,14 @@
 extern struct atm_vcc *sigd; /* needed in svc_release */
 
 
+/*
+ * sigd_enq is a wrapper for sigd_enq2, covering the more common cases, and
+ * avoiding huge lists of null values.
+ */
+
+void sigd_enq2(struct atm_vcc *vcc,enum atmsvc_msg_type type,
+    struct atm_vcc *listen_vcc,const struct sockaddr_atmpvc *pvc,
+    const struct sockaddr_atmsvc *svc,const struct atm_qos *qos,int reply);
 void sigd_enq(struct atm_vcc *vcc,enum atmsvc_msg_type type,
     struct atm_vcc *listen_vcc,const struct sockaddr_atmpvc *pvc,
     const struct sockaddr_atmsvc *svc);

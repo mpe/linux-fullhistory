@@ -127,8 +127,8 @@ int masq_device_event(struct notifier_block *this,
 {
 	struct net_device *dev = ptr;
 
-	if (event == NETDEV_DOWN) {
-		/* Device was downed.  Search entire table for
+	if (event == NETDEV_DOWN || event == NETDEV_CHANGEADDR) {
+		/* Device was downed/changed (diald)  Search entire table for
 		   conntracks which were associated with that device,
 		   and forget them. */
 		IP_NF_ASSERT(dev->ifindex != 0);

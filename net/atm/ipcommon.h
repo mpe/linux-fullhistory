@@ -16,8 +16,8 @@
 extern struct net_device *clip_devs;
 
 /*
- * Moves all skbs from "from" to "to". The operation is atomic for "from", but
- * not for "to". "to" may only be accessed after skb_migrate finishes.
+ * Appends all skbs from "from" to "to". The operation is atomic with respect
+ * to all other skb operations on "from" or "to".
  */
 
 void skb_migrate(struct sk_buff_head *from,struct sk_buff_head *to);
