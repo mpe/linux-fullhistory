@@ -175,7 +175,7 @@ static int ves1x93_set_symbolrate (struct ves1x93_state* state, u32 srate)
 {
 	u32 BDR;
 	u32 ratio;
-	u8  ADCONF, FCONF, FNR;
+	u8  ADCONF, FCONF, FNR, AGCR;
 	u32 BDRI;
 	u32 tmp;
 	u32 FIN;
@@ -243,10 +243,16 @@ static int ves1x93_set_symbolrate (struct ves1x93_state* state, u32 srate)
 	ves1x93_writereg (state, 0x20, ADCONF);
 	ves1x93_writereg (state, 0x21, FCONF);
 
+	AGCR = state->init_1x93_tab[0x05];
+	if (state->config->invert_pwm)
+		AGCR |= 0x20;
+
 	if (srate < 6000000)
-		ves1x93_writereg (state, 0x05, state->init_1x93_tab[0x05] | 0x80);
+		AGCR |= 0x80;
 	else
-		ves1x93_writereg (state, 0x05, state->init_1x93_tab[0x05] & 0x7f);
+		AGCR &= ~0x80;
+
+	ves1x93_writereg (state, 0x05, AGCR);
 
 	/* ves1993 hates this, will lose lock */
 	if (state->demod_type != DEMOD_VES1993)
