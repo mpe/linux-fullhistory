@@ -155,7 +155,7 @@ struct ibm_struct {
 	int experimental;
 };
 
-struct proc_dir_entry *proc_dir = NULL;
+static struct proc_dir_entry *proc_dir = NULL;
 
 #define onoff(status,bit) ((status) & (1 << (bit)) ? "on" : "off")
 #define enabled(status,bit) ((status) & (1 << (bit)) ? "enabled" : "disabled")
@@ -856,7 +856,7 @@ static int beep_write(struct ibm_struct *ibm, char *buf)
 	return 0;
 }	
 		
-struct ibm_struct ibms[] = {
+static struct ibm_struct ibms[] = {
 	{
 		.name	= "driver",
 		.init	= driver_init,
