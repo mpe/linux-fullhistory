@@ -4,7 +4,6 @@
 #
 
 O_TARGET := acorn-net.o
-MOD_LIST_NAME := ACORN_NET_MODULES
 
 obj-y	:=
 obj-m	:=

@@ -6,6 +6,7 @@
 #define flush_cache_range(mm,start,end)		do { } while (0)
 #define flush_cache_page(vma,vmaddr)		do { } while (0)
 #define flush_page_to_ram(page)			do { } while (0)
+#define flush_dcache_page(page)			do { } while (0)
 #define flush_icache_page(vma,page)		do { } while (0)
 #define flush_icache_range(start,end)		do { } while (0)
 
@@ -58,7 +59,7 @@ memc_update_addr(struct mm_struct *mm, pte_t pte, unsigned long vaddr)
 extern __inline__ void
 memc_clear(struct mm_struct *mm, struct page *page)
 {
-	cpu_memc_update_entry(mm->pgd, page_address(page), 0);
+	cpu_memc_update_entry(mm->pgd, (unsigned long) page_address(page), 0);
 
 	if (mm == current->active_mm)
 		processor._set_pgd(mm->pgd);

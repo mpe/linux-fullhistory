@@ -25,7 +25,7 @@ extern inline unsigned int nr_free_highpages(void) { return 0; }
 #define replace_with_highmem(page) page
 
 static __inline__ unsigned long kmap(struct page * page) {
-	return page_address(page);
+	return (unsigned long) page_address(page);
 }
 
 #define kunmap(page) do { } while (0)

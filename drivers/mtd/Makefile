@@ -43,7 +43,6 @@ O_TARGET	:= mtdlink.o
 SUB_DIRS	:=
 ALL_SUB_DIRS 	:=
 MOD_SUB_DIRS	:=
-MOD_LIST_NAME	:= MTD_MODULES
 
 export-objs	:=	mtdcore.o doc2000.o doc2001.o cfi_probe.o cfi_cmdset_0001.o cfi_cmdset_0002.o
 list-multi	:=

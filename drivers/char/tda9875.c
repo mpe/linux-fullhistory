@@ -5,7 +5,7 @@
  * This driver will not complain if used with any 
  * other i2c device with the same address.
  *
- * Copyright (c) 2000 Guillamue Delvit based on Gerd Knorr source and
+ * Copyright (c) 2000 Guillaume Delvit based on Gerd Knorr source and
  * Eric Sandeen 
  * This code is placed under the terms of the GNU General Public License
  * Based on tda9855.c by Steve VanDeBogart (vandebo@uclink.berkeley.edu)
@@ -121,7 +121,7 @@ static struct i2c_client client_template;
 
 /* Begin code */
 
-static int tda9875_write(struct i2c_client *client, int subaddr, int val)
+static int tda9875_write(struct i2c_client *client, int subaddr, unsigned char val)
 {
 	unsigned char buffer[2];
 	dprintk("In tda9875_write\n");
@@ -153,12 +153,19 @@ static int tda9875_read(struct i2c_client *client)
 static void tda9875_set(struct i2c_client *client)
 {
 	struct tda9875 *tda = client->data;
-	
+	unsigned char a;
+
 	dprintk(KERN_DEBUG "tda9875_set(%04x,%04x,%04x,%04x)\n",tda->lvol,tda->rvol,tda->bass,tda->treble);
-	tda9875_write(client, TDA9875_MVL, tda->lvol / 600 - 84);
-	tda9875_write(client, TDA9875_MVR, tda->rvol / 600 -84);
-	tda9875_write(client, TDA9875_MBA, tda->bass / 2340 -12);
-	tda9875_write(client, TDA9875_MTR, tda->treble / 2621 -12);
+
+
+	a = tda->lvol & 0xff;
+	tda9875_write(client, TDA9875_MVL, a);
+	a =tda->rvol & 0xff;
+	tda9875_write(client, TDA9875_MVR, a);
+	a =tda->bass & 0xff;
+	tda9875_write(client, TDA9875_MBA, a);
+	a =tda->treble  & 0xff;
+	tda9875_write(client, TDA9875_MTR, a);
 }
 
 static void do_tda9875_init(struct i2c_client *client)
@@ -198,10 +205,10 @@ static void do_tda9875_init(struct i2c_client *client)
 	
 	tda9875_write(client, TDA9875_MUT, 0xcc );   /* General mute  */
         
-	t->mode=AUDIO_MUTE;
-	t->lvol=t->rvol =51000;  	/* 0dB */
-	t->bass=30420; 		/* 0dB */
-	t->treble=34073;  		/* 0dB */
+	t->mode=AUDIO_UNMUTE;
+	t->lvol=t->rvol =0;  	/* 0dB */
+	t->bass=0; 		        /* 0dB */
+	t->treble=0;  		/* 0dB */
 	tda9875_set(client);
 
 }
@@ -280,15 +287,15 @@ static int tda9875_command(struct i2c_client *client,
 			VIDEO_AUDIO_TREBLE;
 
 		/* min is -84 max is 24 */
-		left = (t->lvol+85)*600;
-		right = (t->rvol+85)*600;
+		left = (t->lvol+84)*606;
+		right = (t->rvol+84)*606;
 		va->volume=MAX(left,right);
 		va->balance=(32768*MIN(left,right))/
 			(va->volume ? va->volume : 1);
 		va->balance=(left<right)?
 			(65535-va->balance) : va->balance;
-		va->bass = (t->bass+13)*2340;     /* min -12 max +15 */
-		va->treble = (t->treble+13)*2621;/* min -12 max +12 */
+		va->bass = (t->bass+12)*2427;    /* min -12 max +15 */
+		va->treble = (t->treble+12)*2730;/* min -12 max +12 */
 
 		va->mode |= VIDEO_SOUND_MONO;
 
@@ -306,11 +313,36 @@ static int tda9875_command(struct i2c_client *client,
 			va->volume) / 32768;
 		right = (MIN(va->balance,32768) *
 			 va->volume) / 32768;
-		t->lvol = left/600-84;
-		t->rvol = right/600-84;
-		t->bass = va->bass/2340-12;
-		t->treble = va->treble/2621-12;
-		tda9875_set(client);
+		t->lvol = ((left/606)-84) & 0xff;
+		if (t->lvol > 24)
+		 t->lvol = 24;
+		if (t->lvol < -84)
+		 t->lvol = -84 & 0xff;
+
+		t->rvol = ((right/606)-84) & 0xff;
+		if (t->rvol > 24)
+		 t->rvol = 24;
+		if (t->rvol < -84)
+		 t->rvol = -84 & 0xff;
+
+		t->bass = ((va->bass/2400)-12) & 0xff;
+		if (t->bass > 15)
+		 t->bass = 15;
+		if (t->bass < -12)
+		 t->bass = -12 & 0xff;
+		
+		t->treble = ((va->treble/2700)-12) & 0xff;
+		if (t->treble > 12)
+		 t->treble = 12;
+		if (t->treble < -12)
+		 t->treble = -12 & 0xff;
+
+
+
+//printk("tda9875 bal:%04x vol:%04x bass:%04x treble:%04x\n",va->balance,va->volume,va->bass,va->treble);
+		
+
+                tda9875_set(client);
 
 		break;
 

@@ -142,7 +142,7 @@ int umsdos_emd_dir_readentry (struct dentry *demd, loff_t *pos, struct umsdos_di
 	recsize = umsdos_evalrecsize(p->name_len);
 	if (offs + recsize > PAGE_CACHE_SIZE) {
 		struct page *page2;
-		int part = ((char*)page_address(page)+PAGE_CACHE_SIZE)-p->spare;
+		int part = (page_address(page) + PAGE_CACHE_SIZE) - p->spare;
 		page2 = read_cache_page(mapping, 1+(*pos>>PAGE_CACHE_SHIFT),
 				(filler_t*)mapping->a_ops->readpage, NULL);
 		if (IS_ERR(page2)) {
@@ -236,7 +236,7 @@ int umsdos_writeentry (struct dentry *parent, struct umsdos_info *info,
 	page = grab_cache_page(mapping, info->f_pos>>PAGE_CACHE_SHIFT);
 	if (!page)
 		goto out_dput;
-	p = (struct umsdos_dirent*)((char*)page_address(page)+offs);
+	p = (struct umsdos_dirent *) (page_address(page) + offs);
 	if (offs + info->recsize > PAGE_CACHE_SIZE) {
 		ret = mapping->a_ops->prepare_write(NULL,page,offs,
 					PAGE_CACHE_SIZE);
@@ -261,8 +261,8 @@ int umsdos_writeentry (struct dentry *parent, struct umsdos_info *info,
 		p->rdev = cpu_to_le16(entry->rdev);
 		p->mode = cpu_to_le16(entry->mode);
 		memcpy(p->name,entry->name,
-			((char*)page_address(page)+PAGE_CACHE_SIZE)-p->spare);
-		memcpy((char*)page_address(page2),
+			(page_address(page) + PAGE_CACHE_SIZE) - p->spare);
+		memcpy(page_address(page2),
 				entry->spare+PAGE_CACHE_SIZE-offs,
 				offs+info->recsize-PAGE_CACHE_SIZE);
 		ret = mapping->a_ops->commit_write(NULL,page2,0,

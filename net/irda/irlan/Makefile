@@ -7,7 +7,6 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-MOD_LIST_NAME := IRDA_MODULES
 O_TARGET := irlan.o
 O_OBJS	 := irlan_common.o irlan_eth.o irlan_event.o irlan_client.o irlan_provider.o irlan_filter.o irlan_provider_event.o irlan_client_event.o
 M_OBJS   := $(O_TARGET)

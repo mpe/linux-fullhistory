@@ -1208,11 +1208,6 @@ static struct fb_videomode __devinitdata cyber2000fb_default_mode = {
 	vmode:		FB_VMODE_NONINTERLACED
 };
 
-int __init cyber2000fb_setup(char *options)
-{
-	return 0;
-}
-
 static char igs_regs[] __devinitdata = {
 					0x12, 0x00,	0x13, 0x00,
 					0x16, 0x00,

@@ -1,64 +1,10 @@
-/* $Id: hscx.c,v 1.18 2000/02/26 00:35:13 keil Exp $
-
+/* $Id: hscx.c,v 1.19 2000/06/26 08:59:13 keil Exp $
+ *
  * hscx.c   HSCX specific routines
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
- *
- * $Log: hscx.c,v $
- * Revision 1.18  2000/02/26 00:35:13  keil
- * Fix skb freeing in interrupt context
- *
- * Revision 1.17  1999/07/01 08:11:41  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.16  1998/11/15 23:54:48  keil
- * changes from 2.0
- *
- * Revision 1.15  1998/08/20 13:50:42  keil
- * More support for hybrid modem (not working yet)
- *
- * Revision 1.14  1998/08/13 23:36:33  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 1.13  1998/06/26 22:03:28  keil
- * send flags between hdlc frames
- *
- * Revision 1.12  1998/06/09 18:26:01  keil
- * PH_DEACTIVATE B-channel every time signaled to higher layer
- *
- * Revision 1.11  1998/05/25 14:10:07  keil
- * HiSax 3.0
- * X.75 and leased are working again.
- *
- * Revision 1.10  1998/05/25 12:57:59  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 1.9  1998/04/15 16:45:33  keil
- * new init code
- *
- * Revision 1.8  1998/03/19 13:16:24  keil
- * fix the correct release of the hscx
- *
- * Revision 1.7  1998/02/12 23:07:36  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 1.6  1998/02/02 13:41:12  keil
- * new init
- *
- * Revision 1.5  1997/11/06 17:09:34  keil
- * New 2.1 init code
- *
- * Revision 1.4  1997/10/29 19:01:06  keil
- * changes for 2.1
- *
- * Revision 1.3  1997/07/27 21:38:34  keil
- * new B-channel interface
- *
- * Revision 1.2  1997/06/26 11:16:17  keil
- * first version
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 

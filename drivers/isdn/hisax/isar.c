@@ -1,45 +1,10 @@
-/* $Id: isar.c,v 1.11 2000/04/09 19:02:44 keil Exp $
-
+/* $Id: isar.c,v 1.15 2000/06/26 08:59:13 keil Exp $
+ *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
- *
- * $Log: isar.c,v $
- * Revision 1.11  2000/04/09 19:02:44  keil
- * retry pump modulation settings if it fails
- *
- * Revision 1.10  2000/02/26 00:35:13  keil
- * Fix skb freeing in interrupt context
- *
- * Revision 1.9  2000/01/20 19:47:45  keil
- * Add Fax Class 1 support
- *
- * Revision 1.8  1999/12/19 13:00:56  keil
- * Fix races in setting a new mode
- *
- * Revision 1.7  1999/10/14 20:25:29  keil
- * add a statistic for error monitoring
- *
- * Revision 1.6  1999/08/31 11:20:20  paul
- * various spelling corrections (new checksums may be needed, Karsten!)
- *
- * Revision 1.5  1999/08/25 16:59:55  keil
- * Make ISAR V32bis modem running
- * Make LL->HL interface open for additional commands
- *
- * Revision 1.4  1999/08/05 20:43:18  keil
- * ISAR analog modem support
- *
- * Revision 1.3  1999/07/01 08:11:45  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.2  1998/11/15 23:54:53  keil
- * changes from 2.0
- *
- * Revision 1.1  1998/08/13 23:33:47  keil
- * First version, only init
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 

@@ -1197,9 +1197,3 @@ int __init sa1100fb_init(void)
 
 	return 0;
 }
-
-int __init sa1100fb_setup(char *options)
-{
-	return 0;
-}
-

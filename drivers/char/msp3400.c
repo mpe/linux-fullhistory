@@ -1168,7 +1168,8 @@ static int msp_attach(struct i2c_adapter *adap, int addr,
 
 	if (simple == -1) {
 		/* default mode */
-		msp->simple = (((rev2>>8)&0xff) == 0) ? 0 : 1;
+		/* msp->simple = (((rev2>>8)&0xff) == 0) ? 0 : 1; */
+		msp->simple = ((rev1&0xff)+'@' > 'C');
 	} else {
 		/* use insmod option */
 		msp->simple = simple;

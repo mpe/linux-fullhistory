@@ -585,7 +585,6 @@ asmlinkage void __init start_kernel(void)
 	 *	make syscalls (and thus be locked).
 	 */
 	smp_init();
-	kmem_cpucache_init();
 	kernel_thread(init, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	unlock_kernel();
 	current->need_resched = 1;

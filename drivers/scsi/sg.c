@@ -1467,9 +1467,9 @@ static int sg_build_dir(Sg_request * srp, Sg_fd * sfp, int dxfer_len)
     }
     schp->mapped = 1;
     kp = schp->kiobp;
-    prev_addr = page_address(kp->maplist[0]);
+    prev_addr = (unsigned long) page_address(kp->maplist[0]);
     for (k = 1, split = 0; k < kp->nr_pages; ++k, prev_addr = addr) {
-	addr = page_address(kp->maplist[k]);
+	addr = (unsigned long) page_address(kp->maplist[k]);
 	if ((prev_addr + PAGE_SIZE) != addr) {
 	    split = k;
 	    break;
@@ -1477,7 +1477,7 @@ static int sg_build_dir(Sg_request * srp, Sg_fd * sfp, int dxfer_len)
     }
     if (! split) {
 	schp->k_use_sg = 0;
-	schp->buffer = (void *)(page_address(kp->maplist[0]) + kp->offset);
+	schp->buffer = page_address(kp->maplist[0]) + kp->offset;
 	schp->bufflen = dxfer_len;
 	schp->buffer_mem_src = SG_USER_MEM;
 	schp->b_malloc_len = dxfer_len;
@@ -1497,7 +1497,7 @@ static int sg_build_dir(Sg_request * srp, Sg_fd * sfp, int dxfer_len)
 	offset = (0 == k) ? kp->offset : 0;
 	num = (rem_sz > (PAGE_SIZE - offset)) ? (PAGE_SIZE - offset) :
 						rem_sz;
-	sclp->address = (void *)(page_address(kp->maplist[k]) + offset);
+	sclp->address = page_address(kp->maplist[k]) + offset;
 	sclp->length = num;
 	mem_src_arr[k] = SG_USER_MEM;
 	rem_sz -= num;

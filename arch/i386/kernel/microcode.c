@@ -1,13 +1,14 @@
 /*
- *	CPU Microcode Update interface for Linux
+ *	Intel CPU Microcode Update driver for Linux
  *
  *	Copyright (C) 2000 Tigran Aivazian
  *
  *	This driver allows to upgrade microcode on Intel processors
- *	belonging to P6 family - PentiumPro, Pentium II, Pentium III etc.
+ *	belonging to P6 family - PentiumPro, Pentium II, 
+ *	Pentium III, Xeon etc.
  *
  *	Reference: Section 8.10 of Volume III, Intel Pentium III Manual, 
- *	Order Number 243192 or download from:
+ *	Order Number 243192 or free download from:
  *		
  *	http://developer.intel.com/design/pentiumii/manuals/243192.htm
  *
@@ -18,28 +19,31 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	1.0	16 February 2000, Tigran Aivazian <tigran@sco.com>
+ *	1.0	16 Feb 2000, Tigran Aivazian <tigran@sco.com>
  *		Initial release.
- *	1.01	18 February 2000, Tigran Aivazian <tigran@sco.com>
+ *	1.01	18 Feb 2000, Tigran Aivazian <tigran@sco.com>
  *		Added read() support + cleanups.
- *	1.02	21 February 2000, Tigran Aivazian <tigran@sco.com>
+ *	1.02	21 Feb 2000, Tigran Aivazian <tigran@sco.com>
  *		Added 'device trimming' support. open(O_WRONLY) zeroes
  *		and frees the saved copy of applied microcode.
- *	1.03	29 February 2000, Tigran Aivazian <tigran@sco.com>
+ *	1.03	29 Feb 2000, Tigran Aivazian <tigran@sco.com>
  *		Made to use devfs (/dev/cpu/microcode) + cleanups.
- *	1.04	06 June 2000, Simon Trimmer <simon@veritas.com>
+ *	1.04	06 Jun 2000, Simon Trimmer <simon@veritas.com>
  *		Added misc device support (now uses both devfs and misc).
  *		Added MICROCODE_IOCFREE ioctl to clear memory.
- *	1.05	09 June 2000, Simon Trimmer <simon@veritas.com>
+ *	1.05	09 Jun 2000, Simon Trimmer <simon@veritas.com>
  *		Messages for error cases (non intel & no suitable microcode).
+ *	1.06	03 Aug 2000, Tigran Aivazian <tigran@veritas.com>
+ *		Removed ->release(). Removed exclusive open and status bitmap.
+ *		Added microcode_rwsem to serialize read()/write()/ioctl().
+ *		Removed global kernel lock usage.
  */
 
 #include <linux/init.h>
-#include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/module.h>
+#include <linux/malloc.h>
 #include <linux/vmalloc.h>
-#include <linux/smp_lock.h>
 #include <linux/miscdevice.h>
 #include <linux/devfs_fs_kernel.h>
 
@@ -47,7 +51,7 @@
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 
-#define MICROCODE_VERSION 	"1.05"
+#define MICROCODE_VERSION 	"1.06"
 
 MODULE_DESCRIPTION("Intel CPU (P6) microcode update driver");
 MODULE_AUTHOR("Tigran Aivazian <tigran@veritas.com>");
@@ -55,28 +59,20 @@ EXPORT_NO_SYMBOLS;
 
 /* VFS interface */
 static int microcode_open(struct inode *, struct file *);
-static int microcode_release(struct inode *, struct file *);
 static ssize_t microcode_read(struct file *, char *, size_t, loff_t *);
 static ssize_t microcode_write(struct file *, const char *, size_t, loff_t *);
 static int microcode_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
-
-/* internal helpers to do the work */
 static int do_microcode_update(void);
 static void do_update_one(void *);
 
-/*
- *  Bits in microcode_status. (31 bits of room for future expansion)
- */
-#define MICROCODE_IS_OPEN	0	/* set if device is in use */
+/* read()/write()/ioctl() are serialized on this */
+DECLARE_RWSEM(microcode_rwsem);
 
-static unsigned long microcode_status;
-
-/* the actual array of microcode blocks, each 2048 bytes */
-static struct microcode *microcode;
-static unsigned int microcode_num;
-static char *mc_applied; /* holds an array of applied microcode blocks */
-static unsigned int mc_fsize;
+static struct microcode *microcode; /* array of 2048byte microcode blocks */
+static unsigned int microcode_num;  /* number of chunks in microcode */
+static char *mc_applied;            /* array of applied microcode blocks */
+static unsigned int mc_fsize;       /* file size of /dev/cpu/microcode */
 
 static struct file_operations microcode_fops = {
 	owner:		THIS_MODULE,
@@ -84,7 +80,6 @@ static struct file_operations microcode_fops = {
 	write:		microcode_write,
 	ioctl:		microcode_ioctl,
 	open:		microcode_open,
-	release:	microcode_release,
 };
 
 static struct miscdevice microcode_dev = {
@@ -112,8 +107,7 @@ static int __init microcode_init(void)
 		printk(KERN_ERR "microcode: failed to devfs_register()\n");
 		return -EINVAL;
 	}
-	printk(KERN_INFO "P6 Microcode Update Driver v%s registered\n", 
-			MICROCODE_VERSION);
+	printk(KERN_INFO "P6 Microcode Update Driver v%s\n", MICROCODE_VERSION);
 	return 0;
 }
 
@@ -130,29 +124,12 @@ static void __exit microcode_exit(void)
 module_init(microcode_init);
 module_exit(microcode_exit);
 
+static int microcode_open(struct inode *unused1, struct file *unused2)
+{
+	return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
+}
+
 /*
- * We enforce only one user at a time here with open/close.
- */
-static int microcode_open(struct inode *inode, struct file *file)
-{
-	if (!capable(CAP_SYS_RAWIO))
-		return -EPERM;
-
-	/* one at a time, please */
-	if (test_and_set_bit(MICROCODE_IS_OPEN, &microcode_status))
-		return -EBUSY;
-
-	return 0;
-}
-
-/* our specific f_op->release() method needs no locking */
-static int microcode_release(struct inode *inode, struct file *file)
-{
-	clear_bit(MICROCODE_IS_OPEN, &microcode_status);
-	return 0;
-}
-
-/* a pointer to 'struct update_req' is passed to the IPI handler = do_update_one()
  * update_req[cpu].err is set to 1 if update failed on 'cpu', 0 otherwise
  * if err==0, microcode[update_req[cpu].slot] points to applied block of microcode
  */
@@ -166,9 +143,11 @@ static int do_microcode_update(void)
 	int i, error = 0, err;
 	struct microcode *m;
 
-	if (smp_call_function(do_update_one, (void *)update_req, 1, 1) != 0)
-		panic("do_microcode_update(): timed out waiting for other CPUs\n");
-	do_update_one((void *)update_req);
+	if (smp_call_function(do_update_one, NULL, 1, 1) != 0) {
+		printk(KERN_ERR "microcode: IPI timeout, giving up\n");
+		return -EIO;
+	}
+	do_update_one(NULL);
 
 	for (i=0; i<smp_num_cpus; i++) {
 		err = update_req[i].err;
@@ -181,18 +160,18 @@ static int do_microcode_update(void)
 	return error;
 }
 
-static void do_update_one(void *arg)
+static void do_update_one(void *unused)
 {
 	int cpu_num = smp_processor_id();
 	struct cpuinfo_x86 *c = cpu_data + cpu_num;
-	struct update_req *req = (struct update_req *)arg + cpu_num;
+	struct update_req *req = update_req + cpu_num;
 	unsigned int pf = 0, val[2], rev, sig;
 	int i,found=0;
 
-	req->err = 1; /* be pessimistic */
+	req->err = 1; /* assume the worst */
 
 	if (c->x86_vendor != X86_VENDOR_INTEL || c->x86 < 6){
-		printk(KERN_ERR "microcode: CPU%d not an Intel P6\n", cpu_num );
+		printk(KERN_ERR "microcode: CPU%d not an Intel P6\n", cpu_num);
 		return;
 	}
 
@@ -242,18 +221,23 @@ static void do_update_one(void *arg)
 		}
 
 	if(!found)
-		printk(KERN_ERR "microcode: found no data for CPU%d (sig=%x, pflags=%d)\n", cpu_num, sig, pf);
+		printk(KERN_ERR "microcode: CPU%d no microcode found! (sig=%x, pflags=%d)\n",
+				cpu_num, sig, pf);
 }
 
 static ssize_t microcode_read(struct file *file, char *buf, size_t len, loff_t *ppos)
 {
 	if (*ppos >= mc_fsize)
 		return 0;
+	down_read(&microcode_rwsem);
 	if (*ppos + len > mc_fsize)
 		len = mc_fsize - *ppos;
-	if (copy_to_user(buf, mc_applied + *ppos, len))
+	if (copy_to_user(buf, mc_applied + *ppos, len)) {
+		up_read(&microcode_rwsem);
 		return -EFAULT;
+	}
 	*ppos += len;
+	up_read(&microcode_rwsem);
 	return len;
 }
 
@@ -266,27 +250,29 @@ static ssize_t microcode_write(struct file *file, const char *buf, size_t len, l
 			sizeof(struct microcode));
 		return -EINVAL;
 	}
+	down_write(&microcode_rwsem);
 	if (!mc_applied) {
 		mc_applied = kmalloc(smp_num_cpus*sizeof(struct microcode),
 				GFP_KERNEL);
 		if (!mc_applied) {
 			printk(KERN_ERR "microcode: out of memory for saved microcode\n");
+			up_write(&microcode_rwsem);
 			return -ENOMEM;
 		}
-		memset(mc_applied, 0, mc_fsize);
 	}
 	
-	lock_kernel();
 	microcode_num = len/sizeof(struct microcode);
 	microcode = vmalloc(len);
 	if (!microcode) {
 		ret = -ENOMEM;
 		goto out_unlock;
 	}
+
 	if (copy_from_user(microcode, buf, len)) {
 		ret = -EFAULT;
 		goto out_fsize;
 	}
+
 	if(do_microcode_update()) {
 		ret = -EIO;
 		goto out_fsize;
@@ -298,7 +284,7 @@ out_fsize:
 	devfs_set_file_size(devfs_handle, mc_fsize);
 	vfree(microcode);
 out_unlock:
-	unlock_kernel();
+	up_write(&microcode_rwsem);
 	return ret;
 }
 
@@ -307,23 +293,22 @@ static int microcode_ioctl(struct inode *inode, struct file *file,
 {
 	switch(cmd) {
 		case MICROCODE_IOCFREE:
+			down_write(&microcode_rwsem);
 			if (mc_applied) {
 				devfs_set_file_size(devfs_handle, 0);
-				memset(mc_applied, 0, mc_fsize);
 				kfree(mc_applied);
 				mc_applied = NULL;
-				printk(KERN_WARNING 
-					"microcode: freed %d bytes\n", mc_fsize);
+				printk(KERN_INFO "microcode: freed %d bytes\n", mc_fsize);
 				mc_fsize = 0;
+				up_write(&microcode_rwsem);
 				return 0;
 			}
+			up_write(&microcode_rwsem);
 			return -ENODATA;
 
 		default:
-			printk(KERN_ERR "microcode: unknown ioctl cmd=%d\n",
-					cmd);
+			printk(KERN_ERR "microcode: unknown ioctl cmd=%d\n", cmd);
 			return -EINVAL;
 	}
-	/* NOT REACHED */
 	return -EINVAL;
 }

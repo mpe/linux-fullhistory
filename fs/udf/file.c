@@ -60,6 +60,7 @@ static int udf_adinicb_readpage(struct file *file, struct page * page)
 	bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize);
 	memcpy(kaddr, bh->b_data + udf_ext0_offset(inode), inode->i_size);
 	brelse(bh);
+	flush_dcache_page(page);
 	SetPageUptodate(page);
 	kunmap(page);
 	UnlockPage(page);
@@ -100,7 +101,7 @@ static int udf_adinicb_commit_write(struct file *file, struct page *page, unsign
 
 	struct buffer_head *bh;
 	int block;
-	char *kaddr = (char*)page_address(page);
+	char *kaddr = page_address(page);
 
 	block = udf_get_lb_pblock(inode->i_sb, UDF_I_LOCATION(inode), 0);
 	bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize);

@@ -391,8 +391,8 @@ static int
 romfs_readpage(struct file *file, struct page * page)
 {
 	struct inode *inode = (struct inode*)page->mapping->host;
-	unsigned long buf;
 	unsigned long offset, avail, readlen;
+	void *buf;
 	int result = -EIO;
 
 	lock_kernel();
@@ -404,22 +404,23 @@ romfs_readpage(struct file *file, struct page * page)
 	if (offset < inode->i_size) {
 		avail = inode->i_size-offset;
 		readlen = min(avail, PAGE_SIZE);
-		if (romfs_copyfrom(inode, (void *)buf, inode->u.romfs_i.i_dataoffset+offset, readlen) == readlen) {
+		if (romfs_copyfrom(inode, buf, inode->u.romfs_i.i_dataoffset+offset, readlen) == readlen) {
 			if (readlen < PAGE_SIZE) {
-				memset((void *)(buf+readlen),0,PAGE_SIZE-readlen);
+				memset(buf + readlen,0,PAGE_SIZE-readlen);
 			}
 			SetPageUptodate(page);
 			result = 0;
 		}
 	}
 	if (result) {
-		memset((void *)buf, 0, PAGE_SIZE);
+		memset(buf, 0, PAGE_SIZE);
 		SetPageError(page);
 	}
+	flush_dcache_page(page);
 
 	UnlockPage(page);
 
-	free_page(buf);
+	__free_page(page);
 	unlock_kernel();
 
 	return result;

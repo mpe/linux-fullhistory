@@ -14,7 +14,6 @@ ALL_SUB_DIRS := $(SUB_DIRS) char
 
 L_OBJS   := 
 L_TARGET := sgi.a
-MOD_LIST_NAME := SGI_MODULES
 
 # Character and Audio devices for SGI machines.
 #

@@ -2,8 +2,6 @@
 # Makefile for native language support
 #
 
-MOD_LIST_NAME := NLS_MODULES
-
 obj-y	:=	nls_base.o
 obj-m	:=
 obj-n	:=

@@ -47,7 +47,7 @@
 #define flush_icache_page(vma,pg)					\
 	do {								\
 		if ((vma)->vm_flags & PROT_EXEC)			\
-			cpu_flush_icache_page(page_address(pg));	\
+			cpu_flush_icache_page((unsigned long) page_address(pg));	\
 	} while (0)
 
 /*
@@ -64,8 +64,11 @@
  */
 static __inline__ void flush_page_to_ram(struct page *page)
 {
-	cpu_flush_ram_page(page_address(page));
+	cpu_flush_ram_page((unsigned long) page_address(page));
 }
+
+/* You guys might need to do something here. -DaveM */
+#define flush_dcache_page(page)			do { } while (0)
 
 /*
  * TLB flushing:

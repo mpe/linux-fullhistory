@@ -934,7 +934,7 @@ static int unswap_by_read(unsigned short *map, unsigned long max,
 			   get a clean page and read the swap into it. */
 			page_map = read_swap_cache(entry);
 			if (page_map) {
-				page = page_address(page_map);
+				page = (unsigned long) page_address(page_map);
 				read_lock(&tasklist_lock);
 				for_each_task(p)
 					unswap_process(p->mm, entry, page

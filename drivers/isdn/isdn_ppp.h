@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.h,v 1.14 1999/08/22 20:26:10 calle Exp $
+/* $Id: isdn_ppp.h,v 1.16 2000/05/18 23:14:18 keil Exp $
 
  * header for Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -17,61 +17,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- * $Log: isdn_ppp.h,v $
- * Revision 1.14  1999/08/22 20:26:10  calle
- * backported changes from kernel 2.3.14:
- * - several #include "config.h" gone, others come.
- * - "struct device" changed to "struct net_device" in 2.3.14, added a
- *   define in isdn_compat.h for older kernel versions.
- *
- * Revision 1.13  1998/03/22 18:50:50  hipp
- * Added BSD Compression for syncPPP .. UNTESTED at the moment
- *
- * Revision 1.12  1998/01/31 22:07:48  keil
- * changes for newer kernels
- *
- * Revision 1.11  1997/10/01 09:20:44  fritz
- * Removed old compatibility stuff for 2.0.X kernels.
- * From now on, this code is for 2.1.X ONLY!
- * Old stuff is still in the separate branch.
- *
- * Revision 1.10  1997/06/17 13:06:00  hipp
- * Applied Eric's underflow-patches (slightly modified)
- * more compression changes (but disabled at the moment)
- * changed one copy_to_user() to run with enabled IRQs
- * a few MP changes
- * changed 'proto' handling in the isdn_ppp receive code
- *
- * Revision 1.9  1997/02/11 18:32:59  fritz
- * Bugfix in isdn_ppp_free_mpqueue().
- *
- * Revision 1.8  1997/02/10 10:11:33  fritz
- * More changes for Kernel 2.1.X compatibility.
- *
- * Revision 1.7  1997/02/03 23:18:57  fritz
- * Removed isdn_ppp_free_sqqueue prototype
- *         and ippp_table (both static in isdn_ppp.c).
- *
- * Revision 1.6  1996/09/23 01:58:11  fritz
- * Fix: With syncPPP encapsulation, discard LCP packets
- *      when calculating hangup timeout.
- *
- * Revision 1.5  1996/09/07 12:51:34  hipp
- * *** empty log message ***
- *
- * Revision 1.4  1996/05/06 11:34:56  hipp
- * fixed a few bugs
- *
- * Revision 1.3  1996/04/30 09:33:10  fritz
- * Removed compatibility-macros.
- *
- * Revision 1.2  1996/04/20 16:35:11  fritz
- * Changed isdn_ppp_receive to use sk_buff as parameter.
- * Added definition of isdn_ppp_dial_slave and ippp_table.
- *
- * Revision 1.1  1996/01/10 21:39:10  fritz
- * Initial revision
  *
  */
 

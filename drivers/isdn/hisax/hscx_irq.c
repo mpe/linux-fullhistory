@@ -1,53 +1,12 @@
-/* $Id: hscx_irq.c,v 1.14 2000/02/26 00:35:13 keil Exp $
-
+/* $Id: hscx_irq.c,v 1.15 2000/06/26 08:59:13 keil Exp $
+ *
  * hscx_irq.c     low level b-channel stuff for Siemens HSCX
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *
  * This is an include file for fast inline IRQ stuff
  *
- * $Log: hscx_irq.c,v $
- * Revision 1.14  2000/02/26 00:35:13  keil
- * Fix skb freeing in interrupt context
- *
- * Revision 1.13  1999/10/14 20:25:28  keil
- * add a statistic for error monitoring
- *
- * Revision 1.12  1999/07/01 08:11:42  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.11  1998/11/15 23:54:49  keil
- * changes from 2.0
- *
- * Revision 1.10  1998/08/13 23:36:35  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 1.9  1998/06/24 14:44:51  keil
- * Fix recovery of TX IRQ loss
- *
- * Revision 1.8  1998/04/10 10:35:22  paul
- * fixed (silly?) warnings from egcs on Alpha.
- *
- * Revision 1.7  1998/02/12 23:07:37  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 1.6  1997/10/29 19:01:07  keil
- * changes for 2.1
- *
- * Revision 1.5  1997/10/01 09:21:35  fritz
- * Removed old compatibility stuff for 2.0.X kernels.
- * From now on, this code is for 2.1.X ONLY!
- * Old stuff is still in the separate branch.
- *
- * Revision 1.4  1997/08/15 17:48:02  keil
- * cosmetic
- *
- * Revision 1.3  1997/07/27 21:38:36  keil
- * new B-channel interface
- *
- * Revision 1.2  1997/06/26 11:16:19  keil
- * first version
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 

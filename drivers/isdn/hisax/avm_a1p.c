@@ -1,4 +1,4 @@
-/* $Id: avm_a1p.c,v 2.5 1999/09/01 08:26:34 calle Exp $
+/* $Id: avm_a1p.c,v 2.6 2000/06/26 08:59:12 keil Exp $
  *
  * avm_a1p.c    low level stuff for the following AVM cards:
  *              A1 PCMCIA
@@ -7,29 +7,7 @@
  *
  * Author       Carsten Paeth (calle@calle.in-berlin.de)
  *
- * $Log: avm_a1p.c,v $
- * Revision 2.5  1999/09/01 08:26:34  calle
- * Patch from Daniel Beichl <dani@ecomag.net> to make A1 PCMCIA work again.
- *
- * Revision 2.4  1999/07/12 21:04:55  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 2.3  1998/11/15 23:54:22  keil
- * changes from 2.0
- *
- * Revision 2.2  1998/08/13 23:36:13  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 2.1  1998/07/15 15:01:23  calle
- * Support for AVM passive PCMCIA cards:
- *    A1 PCMCIA, FRITZ!Card PCMCIA and FRITZ!Card PCMCIA 2.0
- *
- * Revision 1.1.2.1  1998/07/15 14:43:26  calle
- * Support for AVM passive PCMCIA cards:
- *    A1 PCMCIA, FRITZ!Card PCMCIA and FRITZ!Card PCMCIA 2.0
- *
- *
+ *  This file is (c) under GNU PUBLIC LICENSE
  */
 #define __NO_VERSION__
 #include "hisax.h"
@@ -74,7 +52,7 @@
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
 
-static const char *avm_revision = "$Revision: 2.5 $";
+static const char *avm_revision = "$Revision: 2.6 $";
 
 static inline u_char
 ReadISAC(struct IsdnCardState *cs, u_char offset)

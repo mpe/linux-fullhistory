@@ -192,7 +192,7 @@ static int lo_send(struct loop_device *lo, char *data, int len, loff_t pos,
 			goto fail;
 		if (aops->prepare_write(file, page, offset, offset+size))
 			goto unlock;
-		kaddr = (char*)page_address(page);
+		kaddr = page_address(page);
 		if ((lo->transfer)(lo, WRITE, kaddr+offset, data, size, IV))
 			goto write_fail;
 		if (aops->commit_write(file, page, offset, offset+size))

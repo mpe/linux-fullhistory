@@ -10,8 +10,6 @@ ALL_SUB_DIRS    := $(SUB_DIRS)
 O_TARGET := matrox.o
 O_OBJS   :=
 M_OBJS   :=
-# This is a nice idea but needs depmod altering
-# MOD_LIST_NAME := VIDEO_MODULES
 
 # All of the (potential) objects that export symbols.
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.

@@ -1,5 +1,5 @@
-/* $Id: l3dss1.c,v 2.24 2000/03/19 15:26:35 kai Exp $
-
+/* $Id: l3dss1.c,v 2.29 2000/06/26 08:59:14 keil Exp $
+ *
  * EURO/DSS1 D-channel protocol
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
@@ -12,94 +12,6 @@
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
  *
- * $Log: l3dss1.c,v $
- * Revision 2.24  2000/03/19 15:26:35  kai
- * changed keypad to use specified bearer, instead of always a-law
- *
- * Revision 2.23  2000/02/26 01:38:14  keil
- * Fixes for V.110 encoding LLC from Jens Jakobsen
- *
- * Revision 2.22  2000/01/20 19:44:20  keil
- * Fixed uninitialiesed location
- * Fixed redirecting number IE in Setup
- * Changes from certification
- * option for disabling use of KEYPAD protocol
- *
- * Revision 2.21  1999/12/19 20:25:17  keil
- * fixed LLC for outgoing analog calls
- * IE Signal is valid on older local switches
- *
- * Revision 2.20  1999/10/11 22:16:27  keil
- * Suspend/Resume is possible without explicit ID too
- *
- * Revision 2.19  1999/08/25 16:55:23  keil
- * Fix for test case TC10011
- *
- * Revision 2.18  1999/08/11 20:54:39  keil
- * High layer compatibility is valid in SETUP
- *
- * Revision 2.17  1999/07/25 16:18:25  keil
- * Fix Suspend/Resume
- *
- * Revision 2.16  1999/07/21 14:46:23  keil
- * changes from EICON certification
- *
- * Revision 2.14  1999/07/09 08:30:08  keil
- * cosmetics
- *
- * Revision 2.13  1999/07/01 08:11:58  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 2.12  1998/11/15 23:55:10  keil
- * changes from 2.0
- *
- * Revision 2.11  1998/08/13 23:36:51  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 2.10  1998/05/25 14:10:20  keil
- * HiSax 3.0
- * X.75 and leased are working again.
- *
- * Revision 2.9  1998/05/25 12:58:17  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 2.8  1998/03/19 13:18:47  keil
- * Start of a CAPI like interface for supplementary Service
- * first service: SUSPEND
- *
- * Revision 2.7  1998/02/12 23:08:01  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 2.6  1998/02/03 23:26:35  keil
- * V110 extensions from Thomas Pfeiffer
- *
- * Revision 2.5  1998/02/02 13:34:28  keil
- * Support australian Microlink net and german AOCD
- *
- * Revision 2.4  1997/11/06 17:12:25  keil
- * KERN_NOTICE --> KERN_INFO
- *
- * Revision 2.3  1997/10/29 19:03:01  keil
- * changes for 2.1
- *
- * Revision 2.2  1997/08/07 17:44:36  keil
- * Fix RESTART
- *
- * Revision 2.1  1997/08/03 14:36:33  keil
- * Implement RESTART procedure
- *
- * Revision 2.0  1997/07/27 21:15:43  keil
- * New Callref based layer3
- *
- * Revision 1.17  1997/06/26 11:11:46  keil
- * SET_SKBFREE now on creation of a SKB
- *
- * Revision 1.15  1997/04/17 11:50:48  keil
- * pa->loc was undefined, if it was not send by the exchange
- *
- * Old log removed /KKe
- *
  */
 
 #define __NO_VERSION__
@@ -110,7 +22,7 @@
 #include <linux/config.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 2.24 $";
+const char *dss1_revision = "$Revision: 2.29 $";
 
 #define EXT_BEARER_CAPS 1
 

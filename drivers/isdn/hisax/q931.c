@@ -1,8 +1,10 @@
-/* $Id: q931.c,v 1.8 2000/03/21 23:53:22 kai Exp $
-
+/* $Id: q931.c,v 1.10 2000/06/26 08:59:14 keil Exp $
+ *
  * q931.c       code to decode ITU Q.931 call control messages
  *
  * Author       Jan den Ouden
+ *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  * Changelog
  *
@@ -11,33 +13,6 @@
  * Beat Doebeli         cause texts, display information element
  *
  * Karsten Keil         cause texts, display information element for 1TR6
- *
- *
- * $Log: q931.c,v $
- * Revision 1.8  2000/03/21 23:53:22  kai
- * fix backwards compatibility
- *
- * Revision 1.7  1998/11/15 23:55:17  keil
- * changes from 2.0
- *
- * Revision 1.6  1997/07/27 21:09:44  keil
- * move functions to isdnl3.c
- *
- * Revision 1.5  1997/04/06 22:56:43  keil
- * Some cosmetic changes
- *
- * Revision 1.4  1997/02/09 00:29:11  keil
- * new interface handling, one interface per card
- *
- * Revision 1.3  1997/01/21 22:24:59  keil
- * cleanups
- *
- * Revision 1.2  1996/10/27 22:12:45  keil
- * reporting unknown level 3 protocol ids
- *
- * Revision 1.1  1996/10/13 20:04:56  keil
- * Initial revision
- *
  *
  */
 

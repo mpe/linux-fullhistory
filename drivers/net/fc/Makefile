@@ -10,7 +10,6 @@ L_TARGET := fc.a
 L_OBJS   := 
 M_OBJS   := 
 MX_OBJS  := 
-MOD_LIST_NAME := FC_MODULES
 FC_SRCS = $(wildcard $(L_OBJS:%.o=%.c))
 
 ifeq ($(CONFIG_IPHASE5526),y)

@@ -6,11 +6,10 @@
 #
 
 O_TARGET := scsidrv.o
-MOD_LIST_NAME := SCSI_MODULES
 
 SUB_DIRS	:=
 MOD_SUB_DIRS	:=
-MOD_IN_SUBDIRS	:=
+MOD_IN_SUB_DIRS	:=
 ALL_SUB_DIRS	:= $(SUB_DIRS) pcmcia
 
 ifeq ($(CONFIG_PCMCIA),y)

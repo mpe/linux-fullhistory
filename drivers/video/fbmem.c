@@ -57,13 +57,11 @@ extern int cyberfb_setup(char*);
 extern int pm2fb_init(void);
 extern int pm2fb_setup(char*);
 extern int cyber2000fb_init(void);
-extern int cyber2000fb_setup(char*);
 extern int retz3fb_init(void);
 extern int retz3fb_setup(char*);
 extern int clgenfb_init(void);
 extern int clgenfb_setup(char*);
 extern int hitfb_init(void);
-extern int hitfb_setup(char*);
 extern int vfb_init(void);
 extern int vfb_setup(char*);
 extern int offb_init(void);
@@ -91,7 +89,6 @@ extern int hgafb_setup(char*);
 extern int matroxfb_init(void);
 extern int matroxfb_setup(char*);
 extern int hpfb_init(void);
-extern int hpfb_setup(char*);
 extern int sbusfb_init(void);
 extern int sbusfb_setup(char*);
 extern int control_init(void);
@@ -103,7 +100,6 @@ extern int valkyriefb_setup(char*);
 extern int chips_init(void);
 extern int g364fb_init(void);
 extern int sa1100fb_init(void);
-extern int sa1100fb_setup(char*);
 extern int fm2fb_init(void);
 extern int fm2fb_setup(char*);
 extern int q40fb_init(void);
@@ -146,7 +142,7 @@ static struct {
 	{ "cyber", cyberfb_init, cyberfb_setup },
 #endif
 #ifdef CONFIG_FB_CYBER2000
-	{ "cyber2000", cyber2000fb_init, cyber2000fb_setup },
+	{ "cyber2000", cyber2000fb_init, NULL },
 #endif
 #ifdef CONFIG_FB_PM2
 	{ "pm2fb", pm2fb_init, pm2fb_setup },
@@ -232,7 +228,7 @@ static struct {
 	{ "hga", hgafb_init, hgafb_setup },
 #endif 
 #ifdef CONFIG_FB_IGA
-        { "igafb", igafb_init, igafb_setup },
+	{ "igafb", igafb_init, igafb_setup },
 #endif
 #ifdef CONFIG_APOLLO
 	{ "apollo", dnfb_init, NULL },
@@ -244,19 +240,19 @@ static struct {
 	{ "tga", tgafb_init, tgafb_setup },
 #endif
 #ifdef CONFIG_FB_HP300
-	{ "hpfb", hpfb_init, hpfb_setup },
+	{ "hpfb", hpfb_init, NULL },
 #endif 
 #ifdef CONFIG_FB_G364
 	{ "g364", g364fb_init, NULL },
 #endif
 #ifdef CONFIG_FB_SA1100
-	{ "sa1100", sa1100fb_init, sa1100fb_setup },
+	{ "sa1100", sa1100fb_init, NULL },
 #endif
 #ifdef CONFIG_FB_SUN3
-       { "sun3", sun3fb_init, sun3fb_setup },
+	{ "sun3", sun3fb_init, sun3fb_setup },
 #endif
 #ifdef CONFIG_FB_HIT
-       { "hitfb", hitfb_init, hitfb_setup },
+	{ "hitfb", hitfb_init, NULL },
 #endif
 
 	/*
@@ -604,7 +600,7 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	pgprot_val(vma->vm_page_prot) &= ~(PTE_CACHEABLE | PTE_BUFFERABLE);
 #endif
 #elif defined(__sh__)
-        pgprot_val(vma->vm_page_prot) &= ~_PAGE_CACHABLE;
+	pgprot_val(vma->vm_page_prot) &= ~_PAGE_CACHABLE;
 #else
 #warning What do we have to do here??
 #endif

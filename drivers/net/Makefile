@@ -21,7 +21,6 @@ ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan sk98lin \
 		arcnet skfp tulip appletalk
 
 O_TARGET := net.o
-MOD_LIST_NAME := NET_MODULES
 
 # All of the (potential) objects that export symbols.
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.

@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.44 2000/07/10 20:57:35 davem Exp $
+/* $Id: ultra.S,v 1.46 2000/08/05 13:30:33 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997, 2000 David S. Miller (davem@redhat.com)
@@ -205,6 +205,30 @@ iflush2:sub		%o1, 0x20, %g3
 	stxa		%g0, [%o1 + %o2] ASI_IC_TAG
 	flush		%g6
 	ba,a,pt		%xcc, 3b
+
+	.align		64
+	.globl		__flush_dcache_page
+__flush_dcache_page:
+	sub		%o0, %g4, %o0
+	clr		%o1
+	srlx		%o0, 11, %o0
+	sethi		%hi(1 << 14), %o2
+1:	ldxa		[%o1] ASI_DCACHE_TAG, %o3
+	andn		%o3, 0x3, %o3
+	cmp		%o0, %o3
+	bne,pt		%xcc, 2f
+	 nop
+	stxa		%g0, [%o1] ASI_DCACHE_TAG
+	membar		#Sync
+2:	add		%o1, (1 << 5), %o1
+	cmp		%o1, %o2
+	bne,pt		%xcc, 1b
+	 nop
+	/* The I-cache does not snoop local stores so we
+	 * better flush that too.
+	 */
+	ba,pt		%xcc, __flush_icache_page
+	 sllx		%o0, 11, %o0
 
 	.align		32
 __prefill_dtlb:

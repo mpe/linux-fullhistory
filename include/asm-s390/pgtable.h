@@ -32,6 +32,7 @@ extern pgd_t swapper_pg_dir[] __attribute__ ((aligned (4096)));
 #define flush_cache_range(mm, start, end)       do { } while (0)
 #define flush_cache_page(vma, vmaddr)           do { } while (0)
 #define flush_page_to_ram(page)                 do { } while (0)
+#define flush_dcache_page(page)			do { } while (0)
 #define flush_icache_range(start, end)          do { } while (0)
 #define flush_icache_page(vma,pg)               do { } while (0)
 
@@ -335,8 +336,7 @@ extern inline pte_t pte_mkyoung(pte_t pte)      { pte_val(pte) |= _PAGE_ACCESSED
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & PAGE_MASK) | pgprot_val(newprot); return pte; }
 
-#define page_address(page) \
-({ if (!(page)->virtual) BUG(); (page)->virtual; })
+#define page_address(page)  ((page)->virtual)
 #define pte_page(x) (mem_map+pte_pagenr(x))
 
 #define pmd_page(pmd) \

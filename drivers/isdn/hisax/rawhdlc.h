@@ -1,8 +1,10 @@
-/* $Id: rawhdlc.h,v 1.2 1998/02/09 10:53:53 keil Exp $
-
+/* $Id: rawhdlc.h,v 1.3 2000/06/26 08:59:14 keil Exp $
+ *
  * rawhdlc.h     support routines for cards that don't support HDLC
  *
  * Author     Brent Baccala <baccala@FreeSoft.org>
+ *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 

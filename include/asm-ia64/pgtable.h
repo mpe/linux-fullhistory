@@ -166,7 +166,7 @@
  * Given a pointer to an mem_map[] entry, return the kernel virtual
  * address corresponding to that page.
  */
-#define page_address(page)	(PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT))
+#define page_address(page)	((void *) (PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT)))
 
 /*
  * Given a PTE, return the index of the mem_map[] entry corresponding
@@ -185,6 +185,7 @@
 #define flush_cache_range(mm, start, end)	do { } while (0)
 #define flush_cache_page(vma, vmaddr)		do { } while (0)
 #define flush_page_to_ram(page)			do { } while (0)
+#define flush_dcache_page(page)			do { } while (0)
 #define flush_icache_range(start, end)		do { } while (0)
 
 extern void ia64_flush_icache_page (unsigned long addr);
@@ -192,7 +193,7 @@ extern void ia64_flush_icache_page (unsigned long addr);
 #define flush_icache_page(vma,pg)				\
 do {								\
 	if ((vma)->vm_flags & PROT_EXEC)			\
-		ia64_flush_icache_page(page_address(pg));	\
+		ia64_flush_icache_page((unsigned long) page_address(pg));	\
 } while (0)
 
 /*

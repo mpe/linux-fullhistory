@@ -1,5 +1,5 @@
-/* $Id: l3_1tr6.c,v 2.10 2000/01/20 19:42:01 keil Exp $
-
+/* $Id: l3_1tr6.c,v 2.11 2000/06/26 08:59:14 keil Exp $
+ *
  *  German 1TR6 D-channel protocol
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
@@ -7,51 +7,6 @@
  *		This file is (c) under GNU PUBLIC LICENSE
  *		For changes and modifications please read
  *		../../../Documentation/isdn/HiSax.cert
- *
- *
- * $Log: l3_1tr6.c,v $
- * Revision 2.10  2000/01/20 19:42:01  keil
- * Fixed uninitialiesed location
- *
- * Revision 2.9  1999/07/01 08:11:55  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 2.8  1998/11/15 23:55:08  keil
- * changes from 2.0
- *
- * Revision 2.7  1998/08/13 23:36:45  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 2.6  1998/05/25 14:10:18  keil
- * HiSax 3.0
- * X.75 and leased are working again.
- *
- * Revision 2.5  1998/05/25 12:58:14  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 2.4  1998/02/12 23:07:57  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 2.3  1997/11/06 17:12:24  keil
- * KERN_NOTICE --> KERN_INFO
- *
- * Revision 2.2  1997/10/29 19:03:00  keil
- * changes for 2.1
- *
- * Revision 2.1  1997/08/03 15:28:09  keil
- * release L3 empty processes
- *
- * Revision 2.0  1997/07/27 21:15:45  keil
- * New Callref based layer3
- *
- * Revision 1.12  1997/06/26 11:11:45  keil
- * SET_SKBFREE now on creation of a SKB
- *
- * Revision 1.11  1997/04/06 22:54:18  keil
- * Using SKB's
- *
- * Old Log removed /KKe
  *
  */
 
@@ -62,7 +17,7 @@
 #include <linux/ctype.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *l3_1tr6_revision = "$Revision: 2.10 $";
+const char *l3_1tr6_revision = "$Revision: 2.11 $";
 
 #define MsgHead(ptr, cref, mty, dis) \
 	*ptr++ = dis; \

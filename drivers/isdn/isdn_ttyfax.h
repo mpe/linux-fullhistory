@@ -1,4 +1,5 @@
-/* $Id: isdn_ttyfax.h,v 1.1 1999/07/31 12:59:51 armin Exp $
+/* $Id: isdn_ttyfax.h,v 1.2 2000/05/11 22:29:21 kai Exp $
+
  * header for Linux ISDN subsystem, tty_fax related functions (linklevel).
  *
  * Copyright 1999   by Armin Schindler (mac@melware.de)
@@ -18,11 +19,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- * $Log: isdn_ttyfax.h,v $
- * Revision 1.1  1999/07/31 12:59:51  armin
- * Added tty fax capabilities.
- *
  *
  */
 

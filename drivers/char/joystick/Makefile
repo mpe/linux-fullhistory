@@ -14,7 +14,6 @@ ALL_SUB_DIRS	:= $(SUB_DIRS)
 O_TARGET	:= js.o
 M_OBJS		:=
 O_OBJS		:=
-#MOD_LIST_NAME	:= INPUT_MODULES
 
 # Objects that export symbols.
 

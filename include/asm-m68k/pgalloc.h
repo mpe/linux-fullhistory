@@ -277,7 +277,7 @@ extern inline void flush_cache_page(struct vm_area_struct *vma,
 }
 
 /* Push the page at kernel virtual address and clear the icache */
-#define flush_page_to_ram(page) __flush_page_to_ram(page_address(page))
+#define flush_page_to_ram(page) __flush_page_to_ram((unsigned long) page_address(page))
 extern inline void __flush_page_to_ram(unsigned long address)
 {
 	if (CPU_IS_040_OR_060) {
@@ -296,6 +296,8 @@ extern inline void __flush_page_to_ram(unsigned long address)
 				     : "di" (FLUSH_I));
 	}
 }
+
+#define flush_dcache_page(page)			do { } while (0)
 
 /* Push n pages at kernel virtual address and clear the icache */
 extern inline void flush_icache_range (unsigned long address,

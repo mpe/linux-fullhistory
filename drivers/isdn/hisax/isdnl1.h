@@ -1,34 +1,8 @@
-/* $Id: isdnl1.h,v 2.8 1998/11/15 23:54:59 keil Exp $
-
- * $Log: isdnl1.h,v $
- * Revision 2.8  1998/11/15 23:54:59  keil
- * changes from 2.0
+/* $Id: isdnl1.h,v 2.9 2000/06/26 08:59:13 keil Exp $
  *
- * Revision 2.7  1998/09/30 22:21:55  keil
- * cosmetics
+ * Layer 1 defines
  *
- * Revision 2.6  1998/05/25 12:58:06  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 2.5  1998/02/02 13:36:58  keil
- * more debug
- *
- * Revision 2.4  1997/11/08 21:35:49  keil
- * new l1 init
- *
- * Revision 2.3  1997/10/29 19:07:53  keil
- * changes for 2.1
- *
- * Revision 2.2  1997/07/30 17:11:09  keil
- * L1deactivated exported
- *
- * Revision 2.1  1997/07/27 21:43:58  keil
- * new l1 interface
- *
- * Revision 2.0  1997/06/26 11:02:55  keil
- * New Layer and card interface
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 

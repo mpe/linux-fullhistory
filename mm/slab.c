@@ -43,16 +43,13 @@
  * of the entries in the array are given back into the global cache.
  * This reduces the number of spinlock operations.
  *
- * The c_cpuarray can be changed with a smp_call_function call,
- * it may not be read with enabled local interrupts.
+ * The c_cpuarray may not be read with enabled local interrupts.
  *
  * SMP synchronization:
  *  constructors and destructors are called without any locking.
  *  Several members in kmem_cache_t and slab_t never change, they
  *	are accessed without any locking.
  *  The per-cpu arrays are never accessed from the wrong cpu, no locking.
- *      smp_call_function() is used if one cpu must flush the arrays from
- *	other cpus.
  *  The non-constant members are protected with a per-cache irq spinlock.
  *
  * Further notes from the original documentation:
@@ -372,7 +369,6 @@ static kmem_cache_t *clock_searchp = &cache_cache;
  */
 static int g_cpucache_up;
 
-static void drain_cache (void *__cachep);
 static void enable_cpucache (kmem_cache_t *cachep);
 static void enable_all_cpucaches (void);
 #endif
@@ -463,13 +459,16 @@ void __init kmem_cache_sizes_init(void)
 	} while (sizes->cs_size);
 }
 
-void __init kmem_cpucache_init(void)
+int __init kmem_cpucache_init(void)
 {
 #ifdef CONFIG_SMP
 	g_cpucache_up = 1;
 	enable_all_cpucaches();
 #endif
+	return 0;
 }
+
+__initcall(kmem_cpucache_init);
 
 /* Interface to system's page allocator. No need to hold the cache-lock.
  */
@@ -838,17 +837,50 @@ static int is_chained_kmem_cache(kmem_cache_t * cachep)
 	return ret;
 }
 
+#ifdef CONFIG_SMP
+static DECLARE_MUTEX(cache_drain_sem);
+static kmem_cache_t *cache_to_drain = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(cache_drain_wait);
+unsigned long slab_cache_drain_mask;
+
+static void drain_cpu_caches(kmem_cache_t *cachep)
+{
+	DECLARE_WAITQUEUE(wait, current);
+	unsigned long cpu_mask = 0;
+	int i;
+
+	for (i = 0; i < smp_num_cpus; i++)
+		cpu_mask |= (1UL << cpu_logical_map(i));
+
+	down(&cache_drain_sem);
+
+	cache_to_drain = cachep;
+	slab_cache_drain_mask = cpu_mask;
+
+	slab_drain_local_cache();
+
+	add_wait_queue(&cache_drain_wait, &wait);
+	current->state = TASK_UNINTERRUPTIBLE;
+	while (slab_cache_drain_mask != 0UL)
+		schedule();
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&cache_drain_wait, &wait);
+
+	cache_to_drain = NULL;
+
+	up(&cache_drain_sem);
+}
+#else
+#define drain_cpu_caches(cachep)	do { } while (0)
+#endif
+
 static int __kmem_cache_shrink(kmem_cache_t *cachep)
 {
 	slab_t *slabp;
 	int ret;
 
-#ifdef CONFIG_SMP
-	smp_call_function(drain_cache, cachep, 1, 1);
-	local_irq_disable();
-	drain_cache(cachep);
-	local_irq_enable();
-#endif
+	drain_cpu_caches(cachep);
+
 	spin_lock_irq(&cachep->spinlock);
 
 	/* If the cache is growing, stop shrinking. */
@@ -1554,36 +1586,67 @@ kmem_cache_t * kmem_find_general_cachep (size_t size, int gfpflags)
 }
 
 #ifdef CONFIG_SMP
-/*
- * called with local interrupts disabled
- */
-static void drain_cache (void* __cachep)
-{
-	kmem_cache_t *cachep = __cachep;
-	cpucache_t *cc = cc_data(cachep);
-
-	if (cc && cc->avail) {
-		free_block(cachep, cc_entry(cc), cc->avail);
-		cc->avail = 0;
-	}
-}
 
 typedef struct ccupdate_struct_s
 {
-	kmem_cache_t* cachep;
-	cpucache_t* new[NR_CPUS];
+	kmem_cache_t *cachep;
+	cpucache_t *new[NR_CPUS];
 } ccupdate_struct_t;
 
-/*
- * called with local interrupts disabled
- */
-static void ccupdate_callback (void* __new)
-{
-	ccupdate_struct_t* new = __new;
-	cpucache_t *old = cc_data(new->cachep);
+static ccupdate_struct_t *ccupdate_state = NULL;
 
-	cc_data(new->cachep) = new->new[smp_processor_id()];
-	new->new[smp_processor_id()] = old;
+/* Called from per-cpu timer interrupt. */
+void slab_drain_local_cache(void)
+{
+	local_irq_disable();
+	if (ccupdate_state != NULL) {
+		ccupdate_struct_t *new = ccupdate_state;
+		cpucache_t *old = cc_data(new->cachep);
+
+		cc_data(new->cachep) = new->new[smp_processor_id()];
+		new->new[smp_processor_id()] = old;
+	} else {
+		kmem_cache_t *cachep = cache_to_drain;
+		cpucache_t *cc = cc_data(cachep);
+
+		if (cc && cc->avail) {
+			free_block(cachep, cc_entry(cc), cc->avail);
+			cc->avail = 0;
+		}
+	}
+	local_irq_enable();
+
+	clear_bit(smp_processor_id(), &slab_cache_drain_mask);
+	if (slab_cache_drain_mask == 0)
+		wake_up(&cache_drain_wait);
+}
+
+static void do_ccupdate(ccupdate_struct_t *data)
+{
+	DECLARE_WAITQUEUE(wait, current);
+	unsigned long cpu_mask = 0;
+	int i;
+
+	for (i = 0; i < smp_num_cpus; i++)
+		cpu_mask |= (1UL << cpu_logical_map(i));
+
+	down(&cache_drain_sem);
+
+	ccupdate_state = data;
+	slab_cache_drain_mask = cpu_mask;
+
+	slab_drain_local_cache();
+
+	add_wait_queue(&cache_drain_wait, &wait);
+	current->state = TASK_UNINTERRUPTIBLE;
+	while (slab_cache_drain_mask != 0UL)
+		schedule();
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&cache_drain_wait, &wait);
+
+	ccupdate_state = NULL;
+
+	up(&cache_drain_sem);
 }
 
 /* called with cache_chain_sem acquired.  */
@@ -1624,10 +1687,7 @@ static int kmem_tune_cpucache (kmem_cache_t* cachep, int limit, int batchcount)
 	cachep->batchcount = batchcount;
 	spin_unlock_irq(&cachep->spinlock);
 
-	smp_call_function(ccupdate_callback,&new,1,1);
-	local_irq_disable();
-	ccupdate_callback(&new);
-	local_irq_enable();
+	do_ccupdate(&new);
 
 	for (i = 0; i < smp_num_cpus; i++) {
 		cpucache_t* ccold = new.new[cpu_logical_map(i)];

@@ -1,49 +1,12 @@
-/* $Id: sportster.c,v 1.12 1999/12/23 15:09:32 keil Exp $
-
+/* $Id: sportster.c,v 1.13 2000/06/26 08:59:14 keil Exp $
+ *
  * sportster.c     low level stuff for USR Sportster internal TA
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
  * Thanks to Christian "naddy" Weisgerber (3Com, US Robotics) for documentation
  *
- * $Log: sportster.c,v $
- * Revision 1.12  1999/12/23 15:09:32  keil
- * change email
- *
- * Revision 1.11  1999/12/19 13:09:42  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 1.10  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 1.9  1999/07/12 21:05:29  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 1.8  1999/07/01 08:12:10  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.7  1998/11/15 23:55:22  keil
- * changes from 2.0
- *
- * Revision 1.6  1998/04/15 16:44:35  keil
- * new init code
- *
- * Revision 1.5  1998/02/02 13:29:46  keil
- * fast io
- *
- * Revision 1.4  1997/11/08 21:35:52  keil
- * new l1 init
- *
- * Revision 1.3  1997/11/06 17:09:29  keil
- * New 2.1 init code
- *
- * Revision 1.2  1997/10/29 18:51:18  keil
- * New files
- *
- * Revision 1.1.2.1  1997/10/17 22:10:58  keil
- * new files on 2.0
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 #define __NO_VERSION__
@@ -53,7 +16,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *sportster_revision = "$Revision: 1.12 $";
+const char *sportster_revision = "$Revision: 1.13 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

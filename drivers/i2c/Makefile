@@ -2,7 +2,6 @@
 # Makefile for the kernel i2c bus driver.
 #
 
-MOD_LIST_NAME := I2C_MODULES
 O_TARGET := i2c.o
 
 export-objs	:= i2c-core.o i2c-algo-bit.o i2c-algo-pcf.o

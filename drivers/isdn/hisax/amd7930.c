@@ -1,24 +1,8 @@
-/* $Id: amd7930.c,v 1.3 1999/07/12 21:04:52 keil Exp $
+/* $Id: amd7930.c,v 1.4 2000/06/26 08:59:12 keil Exp $
  *
  * HiSax ISDN driver - chip specific routines for AMD 7930
  *
  * Author       Brent Baccala (baccala@FreeSoft.org)
- *
- *
- *
- * $Log: amd7930.c,v $
- * Revision 1.3  1999/07/12 21:04:52  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 1.2  1998/02/12 23:07:10  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 1.1  1998/02/03 23:20:51  keil
- * New files for SPARC isdn support
- *
- * Revision 1.1  1998/01/08 04:17:12  baccala
- * ISDN comes to the Sparc.  Key points:
  *
  *    - Existing ISDN HiSax driver provides all the smarts
  *    - it compiles, runs, talks to an isolated phone switch, connects
@@ -30,6 +14,7 @@
  *
  * The code is unreliable enough to be consider alpha
  *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  * Advanced Micro Devices' Am79C30A is an ISDN/audio chip used in the
  * SparcStation 1+.  The chip provides microphone and speaker interfaces
@@ -109,7 +94,7 @@
 #include "rawhdlc.h"
 #include <linux/interrupt.h>
 
-static const char *amd7930_revision = "$Revision: 1.3 $";
+static const char *amd7930_revision = "$Revision: 1.4 $";
 
 #define RCV_BUFSIZE	1024	/* Size of raw receive buffer in bytes */
 #define RCV_BUFBLKS	4	/* Number of blocks to divide buffer into

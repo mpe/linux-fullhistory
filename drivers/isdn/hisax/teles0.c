@@ -1,5 +1,5 @@
-/* $Id: teles0.c,v 2.11 1999/12/23 15:09:32 keil Exp $
-
+/* $Id: teles0.c,v 2.12 2000/06/26 08:59:14 keil Exp $
+ *
  * teles0.c     low level stuff for Teles Memory IO isdn cards
  *              based on the teles driver from Jan den Ouden
  *
@@ -9,51 +9,7 @@
  *              Fritz Elfert
  *              Beat Doebeli
  *
- * $Log: teles0.c,v $
- * Revision 2.11  1999/12/23 15:09:32  keil
- * change email
- *
- * Revision 2.10  1999/11/14 23:37:03  keil
- * new ISA memory mapped IO
- *
- * Revision 2.9  1999/07/12 21:05:31  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 2.8  1998/04/15 16:44:28  keil
- * new init code
- *
- * Revision 2.7  1998/03/07 22:57:08  tsbogend
- * made HiSax working on Linux/Alpha
- *
- * Revision 2.6  1998/02/03 23:27:47  keil
- * IRQ 9
- *
- * Revision 2.5  1998/02/02 13:29:47  keil
- * fast io
- *
- * Revision 2.4  1997/11/08 21:35:54  keil
- * new l1 init
- *
- * Revision 2.3  1997/11/06 17:09:31  keil
- * New 2.1 init code
- *
- * Revision 2.2  1997/10/29 18:55:57  keil
- * changes for 2.1.60 (irq2dev_map)
- *
- * Revision 2.1  1997/07/27 21:47:10  keil
- * new interface structures
- *
- * Revision 2.0  1997/06/26 11:02:43  keil
- * New Layer and card interface
- *
- * Revision 1.8  1997/04/13 19:54:04  keil
- * Change in IRQ check delay for SMP
- *
- * Revision 1.7  1997/04/06 22:54:04  keil
- * Using SKB's
- *
- * removed old log info /KKe
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 #define __NO_VERSION__
@@ -64,7 +20,7 @@
 
 extern const char *CardType[];
 
-const char *teles0_revision = "$Revision: 2.11 $";
+const char *teles0_revision = "$Revision: 2.12 $";
 
 #define TELES_IOMEM_SIZE	0x400
 #define byteout(addr,val) outb(val,addr)

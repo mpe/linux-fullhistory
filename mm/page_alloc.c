@@ -326,7 +326,7 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 	page = alloc_pages(gfp_mask, order);
 	if (!page)
 		return 0;
-	return page_address(page);
+	return (unsigned long) page_address(page);
 }
 
 unsigned long get_zeroed_page(int gfp_mask)
@@ -335,9 +335,9 @@ unsigned long get_zeroed_page(int gfp_mask)
 
 	page = alloc_pages(gfp_mask, 0);
 	if (page) {
-		unsigned long address = page_address(page);
-		clear_page((void *)address);
-		return address;
+		void *address = page_address(page);
+		clear_page(address);
+		return (unsigned long) address;
 	}
 	return 0;
 }
@@ -639,7 +639,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 			struct page *page = mem_map + offset + i;
 			page->zone = zone;
 			if (j != ZONE_HIGHMEM) {
-				page->virtual = (unsigned long)(__va(zone_start_paddr));
+				page->virtual = __va(zone_start_paddr);
 				zone_start_paddr += PAGE_SIZE;
 			}
 		}

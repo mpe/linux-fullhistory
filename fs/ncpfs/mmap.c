@@ -89,6 +89,7 @@ static struct page* ncp_file_mmap_nopage(struct vm_area_struct *area,
 	if (already_read < PAGE_SIZE)
 		memset((char*)(pg_addr + already_read), 0, 
 		       PAGE_SIZE - already_read);
+	flush_dcache_page(page);
 	kunmap(page);
 	return page;
 }

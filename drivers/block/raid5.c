@@ -257,7 +257,7 @@ static int grow_raid5_buffers(struct stripe_head *sh, int num, int b_size, int p
 		memset(bh, 0, sizeof (struct buffer_head));
 		init_waitqueue_head(&bh->b_wait);
 		page = alloc_page(priority);
-		bh->b_data = (char *) page_address(page);
+		bh->b_data = page_address(page);
 		if (!bh->b_data) {
 			kfree(bh);
 			return 1;
@@ -1671,7 +1671,7 @@ static int __check_consistency (mddev_t *mddev, int row)
 	tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
 	tmp->b_size = 4096;
 	tmp->b_page = alloc_page(GFP_KERNEL);
-	tmp->b_data = (char *)page_address(tmp->b_page);
+	tmp->b_data = page_address(tmp->b_page);
 	if (!tmp->b_data)
 		goto out;
 	md_clear_page(tmp->b_data);

@@ -5,7 +5,6 @@
 O_TARGET	:= usb-serial.o
 M_OBJS		:=
 O_OBJS		:=
-MOD_LIST_NAME	:= USB_SERIAL_MODULES
 
 # Object file lists.
 

@@ -192,7 +192,7 @@ extern pte_t * __bad_pagetable(void);
 ({									\
 	pte_t __pte;							\
 									\
-	pte_val(__pte) = __pa((void *)page) + pgprot_val(pgprot);	\
+	pte_val(__pte) = __pa((page) + pgprot_val(pgprot);		\
 	__pte;								\
 })
 #define mk_pte(page, pgprot) __mk_pte(page_address(page), (pgprot))
@@ -246,7 +246,7 @@ extern inline void pgd_set(pgd_t * pgdp, pmd_t * pmdp)
 #define pgd_clear(pgdp)		({ pgd_val(*pgdp) = 0; })
 
 /* Permanent address of a page. */
-#define page_address(page)	({ if (!(page)->virtual) BUG(); (page)->virtual; })
+#define page_address(page)	((page)->virtual)
 #define __page_address(page)	(PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT))
 #define pte_page(pte)		(mem_map+pte_pagenr(pte))
 

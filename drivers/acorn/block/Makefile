@@ -10,7 +10,6 @@
 #
 
 L_TARGET	:= acorn-block.a
-MOD_LIST_NAME	:= ACORN_BLOCK_MODULES
 
 obj-y		:=
 obj-m		:=

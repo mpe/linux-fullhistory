@@ -1,5 +1,5 @@
-/* $Id: hfc_sx.h,v 1.1 1999/11/18 00:09:18 werner Exp $
-
+/* $Id: hfc_sx.h,v 1.2 2000/06/26 08:59:13 keil Exp $
+ *
  *  specific defines for CCD's HFC 2BDS0 S+,SP chips
  *
  * Author     Werner Cornelius (werner@isdn4linux.de)      
@@ -19,14 +19,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- * $Log: hfc_sx.h,v $
- * Revision 1.1  1999/11/18 00:09:18  werner
- *
- * Initial release of files for HFC-S+ and HFC-SP cards with 32K-RAM.
- * Audio and Echo are supported.
- *
- *
  *
  */
 

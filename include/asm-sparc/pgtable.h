@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.97 2000/07/07 07:33:11 anton Exp $ */
+/* $Id: pgtable.h,v 1.99 2000/08/05 13:30:34 davem Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -307,7 +307,7 @@ BTFIXUPDEF_CALL_CONST(pte_t, pte_mkyoung, pte_t)
 #define page_pte(page)			page_pte_prot(page, __pgprot(0))
 
 /* Permanent address of a page. */
-#define page_address(page) ({ if (!(page)->virtual) BUG(); (page)->virtual; })
+#define page_address(page)  ((page)->virtual)
 #define pte_page(x) (mem_map+pte_pagenr(x))
 
 /*

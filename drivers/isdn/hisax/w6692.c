@@ -1,28 +1,11 @@
-/* $Id: w6692.c,v 1.4 2000/03/16 23:24:11 werner Exp $
-
+/* $Id: w6692.c,v 1.7 2000/06/26 08:59:15 keil Exp $
+ *
  * w6692.c   Winbond W6692 specific routines
  *
  * Author       Petr Novak <petr.novak@i.cz>
  *              (based on HiSax driver by Karsten Keil)
  *
  *              This file is (c) under GNU PUBLIC LICENSE
- *
- * $Log: w6692.c,v $
- * Revision 1.4  2000/03/16 23:24:11  werner
- *
- * Fixed an additional location
- *
- * Revision 1.3  2000/03/16 22:41:36  werner
- *
- * Tried to fix second B-channel problem (still not tested)
- *
- * Revision 1.2  2000/02/26 00:35:13  keil
- * Fix skb freeing in interrupt context
- *
- * Revision 1.1  1999/09/04 06:28:58  keil
- * first revision
- *
- *
  *
  */
 

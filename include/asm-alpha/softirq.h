@@ -1,7 +1,6 @@
 #ifndef _ALPHA_SOFTIRQ_H
 #define _ALPHA_SOFTIRQ_H
 
-#include <linux/config.h>
 #include <linux/stddef.h>
 #include <asm/atomic.h>
 #include <asm/hardirq.h>

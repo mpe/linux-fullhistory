@@ -9,7 +9,6 @@ MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS)
 
 O_TARGET := pcmcia_net.o
-MOD_LIST_NAME := PCMCIA_NET_MODULES
 
 obj-y		:=
 obj-m		:=

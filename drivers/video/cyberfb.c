@@ -1066,7 +1066,7 @@ int __init cyberfb_init(void)
 	    CyberRegs_phys = CyberMem_phys + 0x00c00000;
 	    if (!request_mem_region(CyberRegs_phys, 0x10000, "S3 Trio64"))
 		continue;
-	    if (!request_mem_region(CyberMem_phys, 0x4000000, "RAM")) {
+	    if (!request_mem_region(CyberMem_phys, 0x400000, "RAM")) {
 		release_mem_region(CyberRegs_phys, 0x10000);
 		continue;
 	    }
@@ -1110,7 +1110,8 @@ int __init cyberfb_init(void)
 
 	    if (register_framebuffer(&fb_info) < 0) {
 		    DPRINTK("EXIT - register_framebuffer failed\n");
-		    release_mem_region(board_addr, board_size);
+		    release_mem_region(CyberMem_phys, 0x400000);
+		    release_mem_region(CyberRegs_phys, 0x10000);
 		    return -EINVAL;
 	    }
 

@@ -144,7 +144,7 @@ static struct video_template video_tmpl = { irq_handler };
  */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
-#define page_address(x)	(x)
+#define page_address(x)	((void *) (x))
 #endif
 
 /* Given PGD from the address space's page table, return the kernel
@@ -161,9 +161,10 @@ static inline unsigned long uvirt_to_kva(pgd_t *pgd, unsigned long adr)
                 if (!pmd_none(*pmd)) {
                         ptep = pte_offset(pmd, adr);
                         pte = *ptep;
-                        if(pte_present(pte))
-				ret = (page_address(pte_page(pte))|
-				       (adr&(PAGE_SIZE-1)));
+                        if(pte_present(pte)) {
+				ret = (unsigned long) page_address(pte_page(pte));
+				ret |= (adr & (PAGE_SIZE - 1));
+			}
                 }
         }
         MDEBUG(printk("uv2kva(%lx-->%lx)", adr, ret));

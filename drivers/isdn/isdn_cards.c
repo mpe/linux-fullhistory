@@ -1,4 +1,4 @@
-/* $Id: isdn_cards.c,v 1.10 1999/07/20 06:41:28 calle Exp $
+/* $Id: isdn_cards.c,v 1.11 2000/05/11 22:29:20 kai Exp $
 
  * Linux ISDN subsystem, initialization for non-modularized drivers.
  *
@@ -17,38 +17,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- * $Log: isdn_cards.c,v $
- * Revision 1.10  1999/07/20 06:41:28  calle
- * Bugfix: After the redesign of the AVM B1 driver, the driver didn't even
- *         compile, if not selected as modules.
- *
- * Revision 1.9  1999/04/12 12:33:11  fritz
- * Changes from 2.0 tree.
- *
- * Revision 1.8  1999/03/29 11:13:23  armin
- * Added eicon driver init.
- *
- * Revision 1.7  1998/02/20 17:24:28  fritz
- * Added ACT2000 init.
- *
- * Revision 1.6  1997/04/23 18:56:03  fritz
- * Old Teles driver removed, Changed doc and scripts accordingly.
- *
- * Revision 1.5  1997/03/30 17:10:36  calle
- * added support for AVM-B1-PCI card.
- *
- * Revision 1.4  1997/03/04 21:59:44  calle
- * Added AVM-B1-CAPI2.0 driver
- *
- * Revision 1.3  1997/02/03 23:31:14  fritz
- * Reformatted according CodingStyle
- *
- * Revision 1.2  1996/10/13 19:52:17  keil
- * HiSax support
- *
- * Revision 1.1  1996/04/20 16:04:36  fritz
- * Initial revision
  *
  */
 
@@ -75,9 +43,6 @@ extern void kcapi_init(void);
 extern void capi_init(void);
 extern void capidrv_init(void);
 #endif
-
-extern int act2000_init(void);
-
 
 void
 isdn_cards_init(void)

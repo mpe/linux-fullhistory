@@ -15,8 +15,7 @@ O_OBJS    = open.o read_write.o devices.o file_table.o buffer.o \
 		dcache.o inode.o attr.o bad_inode.o file.o iobuf.o \
 		$(BINFMTS) $(FILESYSTEMS)
 
-MOD_LIST_NAME := FS_MODULES
-ALL_SUB_DIRS = coda minix ext2 fat msdos vfat proc isofs nfs umsdos ntfs \
+ALL_SUB_DIRS := coda minix ext2 fat msdos vfat proc isofs nfs umsdos ntfs \
 		hpfs sysv smbfs ncpfs ufs efs affs romfs autofs hfs lockd \
 		nfsd nls devpts devfs adfs partitions qnx4 udf bfs cramfs \
 		openpromfs autofs4 ramfs jffs

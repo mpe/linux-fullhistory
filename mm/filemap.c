@@ -2515,8 +2515,9 @@ generic_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 		status = mapping->a_ops->prepare_write(file, page, offset, offset+bytes);
 		if (status)
 			goto unlock;
-		kaddr = (char*)page_address(page);
+		kaddr = page_address(page);
 		status = copy_from_user(kaddr+offset, buf, bytes);
+		flush_dcache_page(page);
 		if (status)
 			goto fail_write;
 		status = mapping->a_ops->commit_write(file, page, offset, offset+bytes);

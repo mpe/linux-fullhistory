@@ -8,7 +8,6 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := netfilter.o
-MOD_LIST_NAME := IPV6_MODULES
 M_OBJS :=
 
 IP6_NF_CONNTRACK_OBJ:=ip6_conntrack_core.o ip6_conntrack_proto_generic.o ip6_conntrack_proto_tcp.o ip6_conntrack_proto_udp.o ip6_conntrack_proto_icmp.o

@@ -21,7 +21,7 @@
 #ifndef _BTTV_H_
 #define _BTTV_H_
 
-#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,37)
+#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,38)
 
 #ifndef PCI_GET_DRIVER_DATA
 # define PCI_GET_DRIVER_DATA(pdev)         ((pdev)->driver_data)

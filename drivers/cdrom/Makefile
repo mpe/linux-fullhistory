@@ -53,7 +53,6 @@ obj-m		:= $(filter-out $(obj-y), $(obj-m))
 # Translate to Rules.make lists.
 
 L_TARGET	:= cdrom.a
-MOD_LIST_NAME	:= CDROM_MODULES
 
 L_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-y)))
 LX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-y)))

@@ -171,6 +171,8 @@ endif
 # When MOD_LIST_NAME is set, make will try to add $(MOD_SUB_DIRS).o to
 # modules/MOD_LIST_NAME.  We don't have hamradio.o and Linus
 # sort of insisted on making hamradio/ a subdirectory of drivers/net/.
+# #FIXME# MOD_LIST_NAME doesn't exist any more -- does this comment
+# #FIXME# still mean anything?
 
 ifeq ($(CONFIG_HAMRADIO),y)
   SUB_DIRS += net/hamradio

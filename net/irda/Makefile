@@ -19,8 +19,6 @@ O_OBJS	 := iriap.o iriap_event.o irlmp.o irlmp_event.o irlmp_frame.o \
 	    discovery.o parameters.o
 OX_OBJS := irmod.o
 
-MOD_LIST_NAME := IRDA_MODULES
-
 ifeq ($(CONFIG_IRDA),m)
 M_OBJS   := $(O_TARGET)
 endif

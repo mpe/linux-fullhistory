@@ -21,6 +21,8 @@
 /* These operations are unnecessary on the SpitFire since D-CACHE is write-through. */
 #define flush_icache_range(start, end)		do { } while (0)
 #define flush_page_to_ram(page)			do { } while (0)
+extern void __flush_dcache_page(void *addr);
+#define flush_dcache_page(page)	__flush_dcache_page((page)->virtual)
 
 extern void __flush_dcache_range(unsigned long start, unsigned long end);
 

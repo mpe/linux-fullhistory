@@ -1,5 +1,5 @@
-/* $Id: elsa.c,v 2.20 1999/12/19 13:09:42 keil Exp $
-
+/* $Id: elsa.c,v 2.23 2000/06/26 08:59:12 keil Exp $
+ *
  * elsa.c     low level stuff for Elsa isdn cards
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
@@ -12,80 +12,6 @@
  *
  *              Klaus Lichtenwalder (Klaus.Lichtenwalder@WebForum.DE)
  *              for ELSA PCMCIA support
- *
- * $Log: elsa.c,v $
- * Revision 2.20  1999/12/19 13:09:42  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 2.19  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 2.18  1999/08/25 16:50:54  keil
- * Fix bugs which cause 2.3.14 hangs (waitqueue init)
- *
- * Revision 2.17  1999/08/11 20:57:40  keil
- * bugfix IPAC version 1.1
- * new PCI codefix
- *
- * Revision 2.16  1999/08/10 16:01:51  calle
- * struct pci_dev changed in 2.3.13. Made the necessary changes.
- *
- * Revision 2.15  1999/08/09 19:25:21  keil
- * Support (alpha version) for the '98 model of ELSA Microlink ISDN/MC
- * by Christer Weinigel, Cendio Systems AB <wingel@cendio.se>
- * Add support for IPAC 1.2
- *
- * Revision 2.14  1999/07/12 21:05:07  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 2.13  1999/07/01 08:11:31  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 2.12  1998/11/15 23:54:35  keil
- * changes from 2.0
- *
- * Revision 2.11  1998/08/20 13:50:34  keil
- * More support for hybrid modem (not working yet)
- *
- * Revision 2.10  1998/08/13 23:36:22  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 2.9  1998/05/25 12:57:48  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 2.8  1998/04/15 16:41:42  keil
- * QS3000 PCI support
- * new init code
- * new PCI init (2.1.94)
- *
- * Revision 2.7  1998/03/07 22:56:58  tsbogend
- * made HiSax working on Linux/Alpha
- *
- * Revision 2.6  1998/02/02 13:29:40  keil
- * fast io
- *
- * Revision 2.5  1998/01/31 21:41:45  keil
- * changes for newer 2.1 kernels
- *
- * Revision 2.4  1997/11/08 21:35:46  keil
- * new l1 init
- *
- * Revision 2.3  1997/11/06 17:15:09  keil
- * New 2.1 init; PCMCIA wrapper changes
- *
- * Revision 2.2  1997/10/29 18:57:09  keil
- * changes for 2.1.60, arcofi support
- *
- * Revision 2.1  1997/07/27 21:47:08  keil
- * new interface structures
- *
- * Revision 2.0  1997/06/26 11:02:40  keil
- * New Layer and card interface
- *
- * old changes removed KKe
  *
  */
 

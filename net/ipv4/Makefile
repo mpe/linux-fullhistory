@@ -16,7 +16,6 @@ IPV4_OBJS := utils.o route.o inetpeer.o proc.o protocol.o \
 	     sysctl_net_ipv4.o fib_frontend.o fib_semantics.o fib_hash.o
 IPV4X_OBJS :=
 
-MOD_LIST_NAME := IPV4_MODULES
 M_OBJS :=
 
 ifeq ($(CONFIG_IP_MULTIPLE_TABLES),y)

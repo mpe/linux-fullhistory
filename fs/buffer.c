@@ -1149,7 +1149,7 @@ void set_bh_page (struct buffer_head *bh, struct page *page, unsigned long offse
 		 */
 		bh->b_data = (char *)(0 + offset);
 	else
-		bh->b_data = (char *)(page_address(page) + offset);
+		bh->b_data = page_address(page) + offset;
 }
 
 /*
@@ -1475,6 +1475,8 @@ static int __block_prepare_write(struct inode *inode, struct page *page,
 					memset(kaddr+to, 0, block_end-to);
 				if (block_start < from)
 					memset(kaddr+block_start, 0, from-block_start);
+				if (block_end > to || block_start < from)
+					flush_dcache_page(page);
 				continue;
 			}
 		}
@@ -1578,6 +1580,7 @@ int block_read_full_page(struct page *page, get_block_t *get_block)
 				if (!kaddr)
 					kaddr = kmap(page);
 				memset((char *)(kaddr + i*blocksize), 0, blocksize);
+				flush_dcache_page(page);
 				set_bit(BH_Uptodate, &bh->b_state);
 				continue;
 			}
@@ -1642,8 +1645,9 @@ int cont_prepare_write(struct page *page, unsigned offset, unsigned to, get_bloc
 						PAGE_CACHE_SIZE, get_block);
 		if (status)
 			goto out_unmap;
-		kaddr = (char*)page_address(new_page);
+		kaddr = page_address(new_page);
 		memset(kaddr+zerofrom, 0, PAGE_CACHE_SIZE-zerofrom);
+		flush_dcache_page(new_page);
 		__block_commit_write(inode, new_page, zerofrom, PAGE_CACHE_SIZE);
 		kunmap(new_page);
 		UnlockPage(new_page);
@@ -1670,9 +1674,10 @@ int cont_prepare_write(struct page *page, unsigned offset, unsigned to, get_bloc
 	status = __block_prepare_write(inode, page, zerofrom, to, get_block);
 	if (status)
 		goto out1;
-	kaddr = (char*)page_address(page);
+	kaddr = page_address(page);
 	if (zerofrom < offset) {
 		memset(kaddr+zerofrom, 0, offset-zerofrom);
+		flush_dcache_page(page);
 		__block_commit_write(inode, page, zerofrom, offset);
 	}
 	return 0;
@@ -1733,7 +1738,8 @@ int block_write_full_page(struct page *page, get_block_t *get_block)
 	/* Sigh... will have to work, then... */
 	err = __block_prepare_write(inode, page, 0, offset, get_block);
 	if (!err) {
-		memset((char *)page_address(page)+offset, 0, PAGE_CACHE_SIZE-offset);
+		memset(page_address(page) + offset, 0, PAGE_CACHE_SIZE - offset);
+		flush_dcache_page(page);
 		__block_commit_write(inode,page,0,offset);
 done:
 		kunmap(page);
@@ -2035,7 +2041,7 @@ int block_symlink(struct inode *inode, const char *symname, int len)
 	err = mapping->a_ops->prepare_write(NULL, page, 0, len-1);
 	if (err)
 		goto fail_map;
-	kaddr = (char*)page_address(page);
+	kaddr = page_address(page);
 	memcpy(kaddr, symname, len-1);
 	mapping->a_ops->commit_write(NULL, page, 0, len-1);
 	/*

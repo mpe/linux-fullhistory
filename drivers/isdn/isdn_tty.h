@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.h,v 1.19 2000/02/16 14:59:33 paul Exp $
+/* $Id: isdn_tty.h,v 1.22 2000/06/21 09:54:29 keil Exp $
 
  * header for Linux ISDN subsystem, tty related functions (linklevel).
  *
@@ -18,89 +18,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- * $Log: isdn_tty.h,v $
- * Revision 1.19  2000/02/16 14:59:33  paul
- * translated ISDN_MODEM_ANZREG to ISDN_MODEM_NUMREG for english speakers;
- * used defines for result codes;
- * fixed RING ... RUNG problem (no empty lines in between).
- *
- * Revision 1.18  2000/01/20 19:55:33  keil
- * Add FAX Class 1 support
- *
- * Revision 1.17  1999/09/21 19:00:35  armin
- * Extended FCON message with added CPN
- * can now be activated with Bit 1 of Reg 23.
- *
- * Revision 1.16  1999/08/22 20:26:10  calle
- * backported changes from kernel 2.3.14:
- * - several #include "config.h" gone, others come.
- * - "struct device" changed to "struct net_device" in 2.3.14, added a
- *   define in isdn_compat.h for older kernel versions.
- *
- * Revision 1.15  1999/07/31 12:59:48  armin
- * Added tty fax capabilities.
- *
- * Revision 1.14  1999/07/11 17:14:15  armin
- * Added new layer 2 and 3 protocols for Fax and DSP functions.
- * Moved "Add CPN to RING message" to new register S23,
- * "Display message" is now correct on register S13 bit 7.
- * New audio command AT+VDD implemented (deactivate DTMF decoder and
- * activate possible existing hardware/DSP decoder).
- * Moved some tty defines to .h file.
- * Made whitespace possible in AT command line.
- * Some AT-emulator output bugfixes.
- * First Fax G3 implementations.
- *
- * Revision 1.13  1999/04/12 12:33:46  fritz
- * Changes from 2.0 tree.
- *
- * Revision 1.12  1999/03/02 12:04:51  armin
- * -added ISDN_STAT_ADDCH to increase supported channels after
- *  register_isdn().
- * -ttyI now goes on-hook on ATZ when B-Ch is connected.
- * -added timer-function for register S7 (Wait for Carrier).
- * -analog modem (ISDN_PROTO_L2_MODEM) implementations.
- * -on L2_MODEM a string will be appended to the CONNECT-Message,
- *  which is provided by the HL-Driver in parm.num in ISDN_STAT_BCONN.
- * -variable "dialing" used for ATA also, for interrupting call
- *  establishment and register S7.
- *
- * Revision 1.11  1998/03/19 13:18:27  keil
- * Start of a CAPI like interface for supplementary Service
- * first service: SUSPEND
- *
- * Revision 1.10  1997/03/02 14:29:26  fritz
- * More ttyI related cleanup.
- *
- * Revision 1.9  1997/02/28 02:32:49  fritz
- * Cleanup: Moved some tty related stuff from isdn_common.c
- *          to isdn_tty.c
- * Bugfix:  Bisync protocol did not behave like documented.
- *
- * Revision 1.8  1997/02/10 20:12:50  fritz
- * Changed interface for reporting incoming calls.
- *
- * Revision 1.7  1997/02/03 23:06:10  fritz
- * Reformatted according CodingStyle
- *
- * Revision 1.6  1997/01/14 01:35:19  fritz
- * Changed prototype of isdn_tty_modem_hup.
- *
- * Revision 1.5  1996/05/17 03:52:31  fritz
- * Changed DLE handling for audio receive.
- *
- * Revision 1.4  1996/05/11 21:52:34  fritz
- * Changed queue management to use sk_buffs.
- *
- * Revision 1.3  1996/05/07 09:16:34  fritz
- * Changed isdn_try_read parameter.
- *
- * Revision 1.2  1996/04/30 21:05:27  fritz
- * Test commit
- *
- * Revision 1.1  1996/01/10 21:39:22  fritz
- * Initial revision
  *
  */
 

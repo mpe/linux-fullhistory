@@ -623,7 +623,7 @@ jffs_lookup_end:
 static int
 jffs_readpage(struct file *file, struct page *page)
 {
-	unsigned long buf;
+	void *buf;
 	unsigned long read_len;
 	int result = -EIO;
 	struct inode *inode = (struct inode*)page->mapping->host;
@@ -643,10 +643,10 @@ jffs_readpage(struct file *file, struct page *page)
 	offset = page->index << PAGE_CACHE_SHIFT;
 	if (offset < inode->i_size) {
 		read_len = jffs_min(inode->i_size - offset, PAGE_SIZE);
-		r = jffs_read_data(f, (char *)buf, offset, read_len);
+		r = jffs_read_data(f, buf, offset, read_len);
 		if (r == read_len) {
 			if (read_len < PAGE_SIZE) {
-				memset((void *)(buf + read_len), 0,
+				memset(buf + read_len, 0,
 				       PAGE_SIZE - read_len);
 			}
 			SetPageUptodate(page);
@@ -659,9 +659,10 @@ jffs_readpage(struct file *file, struct page *page)
 		});
 	}
 	if (result) {
-		memset((void *)buf, 0, PAGE_SIZE);
+		memset(buf, 0, PAGE_SIZE);
 	        SetPageError(page);
 	}
+	flush_dcache_page(page);
 
 	UnlockPage(page);
 	

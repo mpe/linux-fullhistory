@@ -328,12 +328,13 @@ static int cramfs_readpage(struct file *file, struct page * page)
 		if (compr_len == 0)
 			; /* hole */
 		else
-			bytes_filled = cramfs_uncompress_block((void *) page_address(page),
+			bytes_filled = cramfs_uncompress_block(page_address(page),
 				 PAGE_CACHE_SIZE,
 				 cramfs_read(sb, start_offset, compr_len),
 				 compr_len);
 	}
-	memset((void *) (page_address(page) + bytes_filled), 0, PAGE_CACHE_SIZE - bytes_filled);
+	memset(page_address(page) + bytes_filled, 0, PAGE_CACHE_SIZE - bytes_filled);
+	flush_dcache_page(page);
 	SetPageUptodate(page);
 	UnlockPage(page);
 	return 0;

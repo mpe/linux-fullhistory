@@ -230,7 +230,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, inode->u.umsdos_i.i_patched)
 	ret=mapping->a_ops->prepare_write(NULL,page,offs,offs+UMSDOS_REC_SIZE);
 	if (ret)
 		goto out_unlock;
-	entry = (struct umsdos_dirent*)((char*)page_address(page)+offs);
+	entry = (struct umsdos_dirent *) (page_address(page) + offs);
 	if (attr->ia_valid & ATTR_UID)
 		entry->uid = cpu_to_le16(attr->ia_uid);
 	if (attr->ia_valid & ATTR_GID)

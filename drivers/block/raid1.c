@@ -274,7 +274,7 @@ static int raid1_grow_buffers (raid1_conf_t *conf, int cnt)
 		}
 		memset(r1_bh, 0, sizeof(*r1_bh));
 		r1_bh->bh_req.b_page = page;
-		r1_bh->bh_req.b_data = (char *) page_address(page);
+		r1_bh->bh_req.b_data = page_address(page);
 		r1_bh->next_r1 = conf->freebuf;
 		conf->freebuf = r1_bh;
 		i++;
@@ -1428,7 +1428,7 @@ static int raid1_sync_request (mddev_t *mddev, unsigned long block_nr)
 		BUG();
 	if (!bh->b_data)
 		BUG();
-	if (bh->b_data != (char *) page_address(bh->b_page))
+	if (bh->b_data != page_address(bh->b_page))
 		BUG();
 	bh->b_end_io = end_sync_read;
 	bh->b_private = r1_bh;

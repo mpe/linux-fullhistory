@@ -1,5 +1,5 @@
-/* $Id: isac.c,v 1.25 2000/02/26 00:35:13 keil Exp $
-
+/* $Id: isac.c,v 1.26 2000/06/26 08:59:13 keil Exp $
+ *
  * isac.c   ISAC specific routines
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
@@ -7,85 +7,6 @@
  *		This file is (c) under GNU PUBLIC LICENSE
  *		For changes and modifications please read
  *		../../../Documentation/isdn/HiSax.cert
- *
- * $Log: isac.c,v $
- * Revision 1.25  2000/02/26 00:35:13  keil
- * Fix skb freeing in interrupt context
- *
- * Revision 1.24  1999/10/14 20:25:28  keil
- * add a statistic for error monitoring
- *
- * Revision 1.23  1999/08/25 16:50:52  keil
- * Fix bugs which cause 2.3.14 hangs (waitqueue init)
- *
- * Revision 1.22  1999/08/09 19:04:40  keil
- * Fix race condition - Thanks to Christer Weinigel
- *
- * Revision 1.21  1999/07/12 21:05:17  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 1.20  1999/07/09 08:23:06  keil
- * Fix ISAC lost TX IRQ handling
- *
- * Revision 1.19  1999/07/01 08:11:43  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.18  1998/11/15 23:54:51  keil
- * changes from 2.0
- *
- * Revision 1.17  1998/08/13 23:36:37  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 1.16  1998/05/25 12:58:01  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 1.15  1998/04/15 16:45:32  keil
- * new init code
- *
- * Revision 1.14  1998/04/10 10:35:26  paul
- * fixed (silly?) warnings from egcs on Alpha.
- *
- * Revision 1.13  1998/03/07 22:57:01  tsbogend
- * made HiSax working on Linux/Alpha
- *
- * Revision 1.12  1998/02/12 23:07:40  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 1.11  1998/02/09 10:54:49  keil
- * fixes for leased mode
- *
- * Revision 1.10  1998/02/02 13:37:37  keil
- * new init
- *
- * Revision 1.9  1997/11/06 17:09:07  keil
- * New 2.1 init code
- *
- * Revision 1.8  1997/10/29 19:00:03  keil
- * new layer1,changes for 2.1
- *
- * Revision 1.7  1997/10/01 09:21:37  fritz
- * Removed old compatibility stuff for 2.0.X kernels.
- * From now on, this code is for 2.1.X ONLY!
- * Old stuff is still in the separate branch.
- *
- * Revision 1.6  1997/08/15 17:47:08  keil
- * avoid oops because a uninitialised timer
- *
- * Revision 1.5  1997/08/07 17:48:49  keil
- * fix wrong parenthesis
- *
- * Revision 1.4  1997/07/30 17:11:59  keil
- * fixed Timer3
- *
- * Revision 1.3  1997/07/27 21:37:40  keil
- * T3 implemented; supervisor l1timer; B-channel TEST_LOOP
- *
- * Revision 1.2  1997/06/26 11:16:15  keil
- * first version
- *
- *
  */
 
 #define __NO_VERSION__

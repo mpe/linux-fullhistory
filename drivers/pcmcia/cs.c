@@ -975,8 +975,10 @@ int pcmcia_deregister_client(client_handle_t handle)
 	client = &s->clients;
 	while ((*client) && ((*client) != handle))
 	    client = &(*client)->next;
-	if (*client == NULL)
+	if (*client == NULL) {
+	    spin_unlock_irqrestore(&s->lock, flags);
 	    return CS_BAD_HANDLE;
+	}
 	*client = handle->next;
 	handle->client_magic = 0;
 	kfree(handle);

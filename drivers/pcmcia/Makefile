@@ -12,8 +12,6 @@ SUB_DIRS     :=
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS)
 
-MOD_LIST_NAME := PCMCIA_MODULES
-
 ifeq ($(CONFIG_PCMCIA),y)
   O_OBJS   := cistpl.o rsrc_mgr.o bulkmem.o
   OX_OBJS  := ds.o cs.o

@@ -8,8 +8,6 @@ SUB_DIRS     :=
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS)
 
-MOD_LIST_NAME := PCMCIA_SCSI_MODULES
-
 obj-y		:=
 obj-m		:=
 obj-n		:=

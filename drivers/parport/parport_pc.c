@@ -2111,7 +2111,7 @@ struct parport *__devinit parport_pc_probe_port (unsigned long int base,
 #undef printmode
 	printk("]\n");
 	if (probedirq != PARPORT_IRQ_NONE) 
-		printk("%s: irq %d detected\n", p->name, probedirq);
+		printk(KERN_INFO "%s: irq %d detected\n", p->name, probedirq);
 	parport_proc_register(p);
 
 	request_region (p->base, 3, p->name);

@@ -1,27 +1,12 @@
-/* $Id: saphir.c,v 1.5 1999/12/19 13:09:42 keil Exp $
-
+/* $Id: saphir.c,v 1.7 2000/06/26 08:59:14 keil Exp $
+ *
  * saphir.c low level stuff for HST Saphir 1
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *
  * Thanks to    HST High Soft Tech GmbH
  *
- *
- * $Log: saphir.c,v $
- * Revision 1.5  1999/12/19 13:09:42  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 1.4  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 1.3  1999/07/12 21:05:26  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 1.2  1999/07/01 08:07:55  keil
- * Initial version
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 
@@ -33,7 +18,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-static char *saphir_rev = "$Revision: 1.5 $";
+static char *saphir_rev = "$Revision: 1.7 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

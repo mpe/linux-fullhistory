@@ -823,8 +823,8 @@ static int sgivwfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
   int err;
 
   if (!fb_display[con].cmap.len) {	/* no colormap allocated? */
-    if ((err = fb_alloc_cmap(&fb_display[con].cmap,
-			     1<<fb_display[con].var.bits_per_pixel, 0)))
+    int size = fb_display[con].var.bits_per_pixel == 16 ? 32 : 256;
+    if ((err = fb_alloc_cmap(&fb_display[con].cmap, size, 0)))
       return err;
   }
   if (con == currcon)			/* current console? */

@@ -2,14 +2,8 @@
  * linux/drivers/ide/ide-geometry.c
  */
 #include <linux/config.h>
-
-#if defined(CONFIG_IDE) && !defined(CONFIG_BLK_DEV_HD_ONLY)
 #include <linux/ide.h>
-
 #include <asm/io.h>
-
-extern ide_drive_t * get_info_ptr(kdev_t);
-extern unsigned long current_capacity (ide_drive_t *);
 
 /*
  * We query CMOS about hard disks : it could be that we have a SCSI/ESDI/etc
@@ -42,7 +36,7 @@ extern unsigned long current_capacity (ide_drive_t *);
  * The code below is bad. One of the problems is that drives 1 and 2
  * may be SCSI disks (even when IDE disks are present), so that
  * the geometry we read here from BIOS is attributed to the wrong disks.
- * Consequently, also the "drive->present = 1" below is a mistake.
+ * Consequently, also the former "drive->present = 1" below was a mistake.
  *
  * Eventually the entire routine below should be removed.
  */
@@ -74,7 +68,8 @@ void probe_cmos_for_drives (ide_hwif_t *hwif)
 				drive->sect  = drive->bios_sect = sect;
 				drive->ctl   = *(BIOS+8);
 			} else {
-				printk("hd%d: C/H/S=%d/%d/%d from BIOS ignored\n", unit, cyl, head, sect);
+				printk("hd%d: C/H/S=%d/%d/%d from BIOS ignored\n",
+				       unit, cyl, head, sect);
 			}
 		}
 
@@ -83,6 +78,11 @@ void probe_cmos_for_drives (ide_hwif_t *hwif)
 #endif
 }
 
+
+#ifdef CONFIG_BLK_DEV_IDE
+
+extern ide_drive_t * get_info_ptr(kdev_t);
+extern unsigned long current_capacity (ide_drive_t *);
 
 /*
  * If heads is nonzero: find a translation with this many heads and S=63.
@@ -211,4 +211,4 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, int ptheads, const char *msg)
 		       drive->bios_cyl, drive->bios_head, drive->bios_sect);
 	return ret;
 }
-#endif /* (CONFIG_IDE) && !(CONFIG_BLK_DEV_HD_ONLY) */
+#endif /* CONFIG_BLK_DEV_IDE */

@@ -1,5 +1,5 @@
-/* $Id: isdnl3.c,v 2.11 2000/04/12 16:41:01 kai Exp $
-
+/* $Id: isdnl3.c,v 2.14 2000/06/26 08:59:13 keil Exp $
+ *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
@@ -10,69 +10,13 @@
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
  *
- * $Log: isdnl3.c,v $
- * Revision 2.11  2000/04/12 16:41:01  kai
- * fix max iframe size
- * fix bug in multicasting DL_RELEASE_IND
- *
- * Revision 2.10  1999/07/21 14:46:19  keil
- * changes from EICON certification
- *
- * Revision 2.9  1999/07/01 08:11:53  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 2.8  1998/11/15 23:55:04  keil
- * changes from 2.0
- *
- * Revision 2.7  1998/05/25 14:10:15  keil
- * HiSax 3.0
- * X.75 and leased are working again.
- *
- * Revision 2.6  1998/05/25 12:58:11  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 2.5  1998/02/12 23:07:52  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 2.4  1997/11/06 17:09:25  keil
- * New 2.1 init code
- *
- * Revision 2.3  1997/10/29 19:07:53  keil
- * changes for 2.1
- *
- * Revision 2.2  1997/10/01 09:21:41  fritz
- * Removed old compatibility stuff for 2.0.X kernels.
- * From now on, this code is for 2.1.X ONLY!
- * Old stuff is still in the separate branch.
- *
- * Revision 2.1  1997/08/03 14:36:32  keil
- * Implement RESTART procedure
- *
- * Revision 2.0  1997/07/27 21:15:42  keil
- * New Callref based layer3
- *
- * Revision 1.11  1997/06/26 11:11:44  keil
- * SET_SKBFREE now on creation of a SKB
- *
- * Revision 1.10  1997/04/06 22:54:16  keil
- * Using SKB's
- *
- * Revision 1.9  1997/03/25 23:11:25  keil
- * US NI-1 protocol
- *
- * Revision 1.8  1997/03/21 18:53:44  keil
- * Report no protocol error to syslog too
- *
- * Remove old logs /KKe
- *
  */
 #define __NO_VERSION__
 #include "hisax.h"
 #include "isdnl3.h"
 #include <linux/config.h>
 
-const char *l3_revision = "$Revision: 2.11 $";
+const char *l3_revision = "$Revision: 2.14 $";
 
 static
 struct Fsm l3fsm =

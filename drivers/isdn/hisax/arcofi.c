@@ -1,43 +1,10 @@
-/* $Id: arcofi.c,v 1.10 1999/12/23 15:09:32 keil Exp $
-
+/* $Id: arcofi.c,v 1.11 2000/06/26 08:59:12 keil Exp $
+ *
  * arcofi.c   Ansteuerung ARCOFI 2165
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *
- *
- *
- * $Log: arcofi.c,v $
- * Revision 1.10  1999/12/23 15:09:32  keil
- * change email
- *
- * Revision 1.9  1999/12/19 13:09:41  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 1.8  1999/08/25 16:50:51  keil
- * Fix bugs which cause 2.3.14 hangs (waitqueue init)
- *
- * Revision 1.7  1999/07/01 08:11:17  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.6  1998/09/30 22:21:56  keil
- * cosmetics
- *
- * Revision 1.5  1998/09/27 12:52:57  keil
- * cosmetics
- *
- * Revision 1.4  1998/08/20 13:50:24  keil
- * More support for hybrid modem (not working yet)
- *
- * Revision 1.3  1998/05/25 12:57:38  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 1.2  1998/04/15 16:47:16  keil
- * new interface
- *
- * Revision 1.1  1997/10/29 18:51:20  keil
- * New files
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
  

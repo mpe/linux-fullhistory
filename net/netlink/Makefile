@@ -8,7 +8,6 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := netlink.o
-MOD_LIST_NAME := NET_MISC_MODULES
 
 O_OBJS  := 
 OX_OBJS := af_netlink.o

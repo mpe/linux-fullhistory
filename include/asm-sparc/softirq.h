@@ -7,7 +7,6 @@
 #ifndef __SPARC_SOFTIRQ_H
 #define __SPARC_SOFTIRQ_H
 
-#include <linux/config.h>
 #include <linux/threads.h>	/* For NR_CPUS */
 
 #include <asm/atomic.h>

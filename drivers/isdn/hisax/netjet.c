@@ -1,70 +1,12 @@
-/* $Id: netjet.c,v 1.18 2000/02/26 00:35:13 keil Exp $
-
+/* $Id: netjet.c,v 1.20 2000/06/26 08:59:14 keil Exp $
+ *
  * netjet.c     low level stuff for Traverse Technologie NETJet ISDN cards
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *
  * Thanks to Traverse Technologie Australia for documents and informations
  *
- * $Log: netjet.c,v $
- * Revision 1.18  2000/02/26 00:35:13  keil
- * Fix skb freeing in interrupt context
- *
- * Revision 1.17  1999/12/19 13:09:42  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 1.16  1999/10/14 20:25:29  keil
- * add a statistic for error monitoring
- *
- * Revision 1.15  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 1.14  1999/08/31 11:20:25  paul
- * various spelling corrections (new checksums may be needed, Karsten!)
- *
- * Revision 1.13  1999/08/11 21:01:31  keil
- * new PCI codefix
- *
- * Revision 1.12  1999/08/10 16:02:00  calle
- * struct pci_dev changed in 2.3.13. Made the necessary changes.
- *
- * Revision 1.11  1999/08/07 17:32:00  keil
- * Asymetric buffers for improved ping times.  Interframe spacing
- * fix for NJ<->NJ thoughput.  Matt Henderson - www.traverse.com.au
- *
- *
- * Revision 1.10  1999/07/12 21:05:22  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 1.9  1999/07/01 08:12:05  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.8  1998/11/15 23:55:14  keil
- * changes from 2.0
- *
- * Revision 1.7  1998/09/30 22:24:48  keil
- * Fix missing line in setstack*
- *
- * Revision 1.6  1998/08/13 23:36:54  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 1.5  1998/05/25 12:58:21  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 1.4  1998/04/15 16:42:35  keil
- * new init code
- * new PCI init (2.1.94)
- *
- * Revision 1.3  1998/02/12 23:08:05  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 1.2  1998/02/02 13:32:06  keil
- * New
- *
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 

@@ -540,23 +540,14 @@ got_block:
 	 * Do block preallocation now if required.
 	 */
 #ifdef EXT2_PREALLOCATE
-	if (prealloc_block) {
+	/* Writer: ->i_prealloc* */
+	if (prealloc_count && !*prealloc_count) {
 		int	prealloc_goal;
 		unsigned long next_block = tmp + 1;
 
 		prealloc_goal = es->s_prealloc_blocks ?
 			es->s_prealloc_blocks : EXT2_DEFAULT_PREALLOC_BLOCKS;
 
-		/* Writer: ->i_prealloc* */
-		/*
-		 * Can't happen right now, will need handling if we go for
-		 * per-group spinlocks. Handling == skipping preallocation if
-		 * condition below will be true. For now there is no legitimate
-		 * way it could happen, thus the BUG().
-		 */
-		if (*prealloc_count)
-			BUG();
-		*prealloc_count = 0;
 		*prealloc_block = next_block;
 		/* Writer: end */
 		for (k = 1;

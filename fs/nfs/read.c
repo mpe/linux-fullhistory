@@ -134,6 +134,7 @@ nfs_readpage_sync(struct file *file, struct page *page)
 	} while (count);
 
 	memset(buffer, 0, count);
+	flush_dcache_page(page);
 	SetPageUptodate(page);
 	if (PageError(page))
 		ClearPageError(page);
@@ -446,6 +447,7 @@ nfs_readpage_result(struct rpc_task *task)
 			count -= PAGE_CACHE_SIZE;
 		} else
 			SetPageError(page);
+		flush_dcache_page(page);
 		kunmap(page);
 		UnlockPage(page);
 

@@ -38,7 +38,7 @@ smb_fsync(struct file *file, struct dentry * dentry, int datasync)
 static int
 smb_readpage_sync(struct dentry *dentry, struct page *page)
 {
-	char *buffer = (char *) page_address(page);
+	char *buffer = page_address(page);
 	unsigned long offset = page->index << PAGE_CACHE_SHIFT;
 	int rsize = smb_get_rsize(server_from_dentry(dentry));
 	int count = PAGE_SIZE;
@@ -72,6 +72,7 @@ smb_readpage_sync(struct dentry *dentry, struct page *page)
 	} while (count);
 
 	memset(buffer, 0, count);
+	flush_dcache_page(page);
 	SetPageUptodate(page);
 	result = 0;
 
@@ -89,7 +90,7 @@ smb_readpage(struct file *file, struct page *page)
 	int		error;
 	struct dentry  *dentry = file->f_dentry;
 
-	DEBUG1("readpage %08lx\n", page_address(page));
+	DEBUG1("readpage %p\n", page_address(page));
 
 	get_page(page);
 	error = smb_readpage_sync(dentry, page);
@@ -106,7 +107,7 @@ smb_writepage_sync(struct dentry *dentry, struct page *page,
 		   unsigned long offset, unsigned int count)
 {
 	struct inode *inode = dentry->d_inode;
-	u8 *buffer = (u8 *) page_address(page) + offset;
+	u8 *buffer = page_address(page) + offset;
 	int wsize = smb_get_wsize(server_from_dentry(dentry));
 	int result, written = 0;
 

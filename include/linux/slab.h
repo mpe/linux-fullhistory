@@ -45,7 +45,6 @@ typedef struct kmem_cache_s kmem_cache_t;
 /* prototypes */
 extern void kmem_cache_init(void);
 extern void kmem_cache_sizes_init(void);
-extern void kmem_cpucache_init(void);
 
 extern kmem_cache_t *kmem_find_general_cachep(size_t, int gfpflags);
 extern kmem_cache_t *kmem_cache_create(const char *, size_t, size_t, unsigned long,
@@ -73,6 +72,14 @@ extern kmem_cache_t	*files_cachep;
 extern kmem_cache_t	*filp_cachep;
 extern kmem_cache_t	*dquot_cachep;
 extern kmem_cache_t	*bh_cachep;
+
+#ifdef CONFIG_SMP
+extern unsigned long slab_cache_drain_mask;
+extern void slab_drain_local_cache(void);
+#else
+#define slab_cache_drain_mask 0
+#define slab_drain_local_cache()	do { } while (0)
+#endif
 
 #endif	/* __KERNEL__ */
 

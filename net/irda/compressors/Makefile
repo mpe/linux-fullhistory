@@ -9,7 +9,6 @@
 
 O_TARGET :=
 O_OBJS	 := 
-MOD_LIST_NAME := IRDA_MODULES
 M_OBJS   := 
 
 ifeq ($(CONFIG_IRDA_DEFLATE),y)

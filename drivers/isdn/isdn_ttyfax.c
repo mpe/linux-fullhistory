@@ -1,4 +1,5 @@
-/* $Id: isdn_ttyfax.c,v 1.6 2000/01/26 00:41:13 keil Exp $
+/* $Id: isdn_ttyfax.c,v 1.7 2000/05/11 22:29:21 kai Exp $
+
  * Linux ISDN subsystem, tty_fax AT-command emulator (linklevel).
  *
  * Copyright 1999    by Armin Schindler (mac@melware.de)
@@ -19,30 +20,6 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Log: isdn_ttyfax.c,v $
- * Revision 1.6  2000/01/26 00:41:13  keil
- * add "00" as dummy msn in isdn_get_free_channel call
- *
- * Revision 1.5  2000/01/20 19:55:33  keil
- * Add FAX Class 1 support
- *
- * Revision 1.4  1999/09/21 19:00:35  armin
- * Extended FCON message with added CPN
- * can now be activated with Bit 1 of Reg 23.
- *
- * Revision 1.3  1999/08/22 20:26:12  calle
- * backported changes from kernel 2.3.14:
- * - several #include "config.h" gone, others come.
- * - "struct device" changed to "struct net_device" in 2.3.14, added a
- *   define in isdn_compat.h for older kernel versions.
- *
- * Revision 1.2  1999/08/05 10:36:10  armin
- * Bugfix: kernel oops on getting revision.
- *
- * Revision 1.1  1999/07/31 12:59:50  armin
- * Added tty fax capabilities.
- *
- *
  */
 
 #undef ISDN_TTY_FAX_STAT_DEBUG
@@ -56,7 +33,7 @@
 #include "isdn_ttyfax.h"
 
 
-static char *isdn_tty_fax_revision = "$Revision: 1.6 $";
+static char *isdn_tty_fax_revision = "$Revision: 1.7 $";
 
 #define PARSE_ERROR1 { isdn_tty_fax_modem_result(1, info); return 1; }
 

@@ -557,7 +557,8 @@ static void net_tx_timeout (struct net_device *dev)
 	/* ToDo: We should try to restart the adaptor... */
 	outw (0xffff, ioaddr + 24);
 	outw (0xffff, ioaddr + TX_STATUS);
-	outw (0xe85a, ioaddr + CONFIG_0);
+	outb (0x5a, ioaddr + CONFIG_0);
+	outb (0xe8, ioaddr + CONFIG_1);
 	outw (0x8182, ioaddr + TX_INTR);
 	outb (0x00, ioaddr + TX_START);
 	outb (0x03, ioaddr + COL16CNTL);

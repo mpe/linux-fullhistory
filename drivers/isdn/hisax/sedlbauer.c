@@ -1,5 +1,5 @@
-/* $Id: sedlbauer.c,v 1.20 2000/01/20 19:47:45 keil Exp $
-
+/* $Id: sedlbauer.c,v 1.23 2000/06/26 08:59:14 keil Exp $
+ *
  * sedlbauer.c  low level stuff for Sedlbauer cards
  *              includes support for the Sedlbauer speed star (speed star II),
  *              support for the Sedlbauer speed fax+,
@@ -16,71 +16,7 @@
  *            Sedlbauer AG for informations
  *            Edgar Toernig
  *
- * $Log: sedlbauer.c,v $
- * Revision 1.20  2000/01/20 19:47:45  keil
- * Add Fax Class 1 support
- *
- * Revision 1.19  1999/12/19 13:09:42  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 1.18  1999/11/13 21:25:03  keil
- * Support for Speedfax+ PCI
- *
- * Revision 1.17  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 1.16  1999/08/29 18:23:01  niemann
- * Fixed typo in errormsg
- *
- * Revision 1.15  1999/08/25 17:00:00  keil
- * Make ISAR V32bis modem running
- * Make LL->HL interface open for additional commands
- *
- * Revision 1.14  1999/08/11 20:59:22  keil
- * new PCI codefix
- * fix IRQ problem while unload
- *
- * Revision 1.13  1999/08/10 16:02:08  calle
- * struct pci_dev changed in 2.3.13. Made the necessary changes.
- *
- * Revision 1.12  1999/08/05 20:43:22  keil
- * ISAR analog modem support
- *
- * Revision 1.11  1999/07/12 21:05:27  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 1.10  1999/07/01 08:12:09  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.9  1998/11/15 23:55:20  keil
- * changes from 2.0
- *
- * Revision 1.8  1998/08/13 23:34:51  keil
- * starting speedfax+ (ISAR) support
- *
- * Revision 1.7  1998/04/15 16:44:33  keil
- * new init code
- *
- * Revision 1.6  1998/02/09 18:46:06  keil
- * Support for Sedlbauer PCMCIA (Marcus Niemann)
- *
- * Revision 1.5  1998/02/02 13:29:45  keil
- * fast io
- *
- * Revision 1.4  1997/11/08 21:35:52  keil
- * new l1 init
- *
- * Revision 1.3  1997/11/06 17:09:28  keil
- * New 2.1 init code
- *
- * Revision 1.2  1997/10/29 18:55:52  keil
- * changes for 2.1.60 (irq2dev_map)
- *
- * Revision 1.1  1997/09/11 17:32:04  keil
- * new
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 

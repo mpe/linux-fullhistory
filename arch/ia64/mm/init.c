@@ -249,7 +249,7 @@ put_gate_page (struct page *page, unsigned long address)
 	pte_t *pte;
 
 	if (!PageReserved(page))
-		printk("put_gate_page: gate page at 0x%lx not in reserved memory\n",
+		printk("put_gate_page: gate page at 0x%p not in reserved memory\n",
 		       page_address(page));
 
 	pgd = pgd_offset_k(address);		/* note: this is NOT pgd_offset()! */

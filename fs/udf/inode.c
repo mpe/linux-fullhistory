@@ -188,6 +188,7 @@ void udf_expand_file_adinicb(struct inode * inode, int newsize, int * err)
 			PAGE_CACHE_SIZE - UDF_I_LENALLOC(inode));
 		memcpy((char *)kaddr, bh->b_data + udf_file_entry_alloc_offset(inode),
 			UDF_I_LENALLOC(inode));
+		flush_dcache_page(page);
 		SetPageUptodate(page);
 		kunmap(page);
 	}

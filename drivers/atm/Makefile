@@ -6,7 +6,6 @@
 O_TARGET := atm.o
 O_OBJS	 := atmdev_init.o
 M_OBJS	 :=
-MOD_LIST_NAME := ATM_MODULES
 
 include ../../.config
 

@@ -21,7 +21,6 @@ ALL_SUB_DIRS := $(SUB_DIRS)
 O_TARGET := idedriver.o
 O_OBJS   := ide-geometry.o
 M_OBJS   :=
-MOD_LIST_NAME := IDE_MODULES
 OX_OBJS :=
 MX_OBJS :=
 

@@ -9,7 +9,6 @@ MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS)
 
 O_TARGET := pcmcia_char.o
-MOD_LIST_NAME := PCMCIA_CHAR_MODULES
 
 obj-y		:=
 obj-m		:=

@@ -83,7 +83,7 @@ struct page * replace_with_highmem(struct page * page)
 	}
 
 	vaddr = kmap(highpage);
-	copy_page((void *)vaddr, (void *)page_address(page));
+	copy_page((void *)vaddr, page_address(page));
 	kunmap(highpage);
 
 	if (page->mapping)
@@ -137,7 +137,7 @@ static void flush_all_zero_pkmaps(void)
 			BUG();
 		pte_clear(pkmap_page_table+i);
 		page = pte_page(pte);
-		page->virtual = 0;
+		page->virtual = NULL;
 	}
 	flush_tlb_all();
 }
@@ -176,17 +176,17 @@ start:
 
 			/* Somebody else might have mapped it while we slept */
 			if (page->virtual)
-				return page->virtual;
+				return (unsigned long) page->virtual;
 
 			/* Re-start */
 			goto start;
 		}
 	}
 	vaddr = PKMAP_ADDR(last_pkmap_nr);
-	set_pte(pkmap_page_table + last_pkmap_nr, mk_pte(page, kmap_prot));
+	set_pte(&(pkmap_page_table[last_pkmap_nr]), mk_pte(page, kmap_prot));
 
 	pkmap_count[last_pkmap_nr] = 1;
-	page->virtual = vaddr;
+	page->virtual = (void *) vaddr;
 
 	return vaddr;
 }
@@ -202,7 +202,7 @@ unsigned long kmap_high(struct page *page)
 	 * We cannot call this from interrupts, as it may block
 	 */
 	spin_lock(&kmap_lock);
-	vaddr = page->virtual;
+	vaddr = (unsigned long) page->virtual;
 	if (!vaddr)
 		vaddr = map_new_virtual(page);
 	pkmap_count[PKMAP_NR(vaddr)]++;
@@ -218,7 +218,7 @@ void kunmap_high(struct page *page)
 	unsigned long nr;
 
 	spin_lock(&kmap_lock);
-	vaddr = page->virtual;
+	vaddr = (unsigned long) page->virtual;
 	if (!vaddr)
 		BUG();
 	nr = PKMAP_NR(vaddr);

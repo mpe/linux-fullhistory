@@ -1,18 +1,10 @@
-/* $Id: w6692.h,v 1.1 1999/09/04 06:28:58 keil Exp $
-
+/* $Id: w6692.h,v 1.2 2000/06/26 08:59:15 keil Exp $
+ *
  * w6692.h   Winbond W6692 specific defines
  *
  * Author       Petr Novak <petr.novak@i.cz>
  *
- *
- * $Log: w6692.h,v $
- * Revision 1.1  1999/09/04 06:28:58  keil
- * first revision
- *
- *
- * Revision 1.0  1999/08/28 21:58:00 pnovak
- * first version
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 

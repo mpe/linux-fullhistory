@@ -1,21 +1,10 @@
-/* $Id: cert.c,v 2.2 1999/08/07 17:35:05 keil Exp $
-
+/* $Id: cert.c,v 2.3 2000/06/26 08:59:12 keil Exp $
+ *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
  *		This file is (c) under GNU PUBLIC LICENSE
  *		For changes and modifications please read
  *		../../../Documentation/isdn/HiSax.cert
- *
- * $Log: cert.c,v $
- * Revision 2.2  1999/08/07 17:35:05  keil
- * approval for Eicon Technology Diva 2.01 PCI
- *
- * Revision 2.1  1998/11/15 23:51:15  keil
- * certification stuff
- *
- * Revision 1.2.2.1  1998/11/03 21:46:37  keil
- * first version
- *
  *
  */
  

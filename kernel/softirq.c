@@ -9,6 +9,7 @@
  * Rewritten. Old one was good in 2.2, but in 2.3 it was immoral. --ANK (990903)
  */
 
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/kernel_stat.h>
 #include <linux/interrupt.h>

@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.27 2000/02/26 00:35:12 keil Exp $
+/* $Id: hfc_pci.c,v 1.30 2000/06/26 08:59:13 keil Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -22,101 +22,6 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Log: hfc_pci.c,v $
- * Revision 1.27  2000/02/26 00:35:12  keil
- * Fix skb freeing in interrupt context
- *
- * Revision 1.26  2000/02/09 20:22:55  werner
- *
- * Updated PCI-ID table
- *
- * Revision 1.25  1999/12/19 13:09:42  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 1.24  1999/11/17 23:59:55  werner
- *
- * removed unneeded data
- *
- * Revision 1.23  1999/11/07 17:01:55  keil
- * fix for 2.3 pci structs
- *
- * Revision 1.22  1999/10/10 20:14:27  werner
- *
- * Correct B2-chan usage in conjuntion with echo mode. First implementation of NT-leased line mode.
- *
- * Revision 1.21  1999/10/02 17:47:49  werner
- *
- * Changed init order, added correction for page alignment with shared mem
- *
- * Revision 1.20  1999/09/07 06:18:55  werner
- *
- * Added io parameter for HFC-PCI based cards. Needed only with multiple cards
- * when initialisation/selection order needs to be set.
- *
- * Revision 1.19  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 1.18  1999/08/29 17:05:44  werner
- * corrected tx_lo line setup. Datasheet is not correct.
- *
- * Revision 1.17  1999/08/28 21:04:27  werner
- * Implemented full audio support (transparent mode)
- *
- * Revision 1.16  1999/08/25 17:01:27  keil
- * Use new LL->HL auxcmd call
- *
- * Revision 1.15  1999/08/22 20:27:05  calle
- * backported changes from kernel 2.3.14:
- * - several #include "config.h" gone, others come.
- * - "struct device" changed to "struct net_device" in 2.3.14, added a
- *   define in isdn_compat.h for older kernel versions.
- *
- * Revision 1.14  1999/08/12 18:59:45  werner
- * Added further manufacturer and device ids to PCI list
- *
- * Revision 1.13  1999/08/11 21:01:28  keil
- * new PCI codefix
- *
- * Revision 1.12  1999/08/10 16:01:58  calle
- * struct pci_dev changed in 2.3.13. Made the necessary changes.
- *
- * Revision 1.11  1999/08/09 19:13:32  werner
- * moved constant pci ids to pci id table
- *
- * Revision 1.10  1999/08/08 10:17:34  werner
- * added new PCI vendor and card ids for Manufacturer 0x1043
- *
- * Revision 1.9  1999/08/07 21:09:10  werner
- * Fixed another memcpy problem in fifo handling.
- * Thanks for debugging aid by Olaf Kordwittenborg.
- *
- * Revision 1.8  1999/07/23 14:25:15  werner
- * Some smaller bug fixes and prepared support for GCI/IOM bus
- *
- * Revision 1.7  1999/07/14 21:24:20  werner
- * fixed memcpy problem when using E-channel feature
- *
- * Revision 1.6  1999/07/13 21:08:08  werner
- * added echo channel logging feature.
- *
- * Revision 1.5  1999/07/12 21:05:10  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 1.4  1999/07/04 21:51:39  werner
- * Changes to solve problems with irq sharing and smp machines
- * Thanks to Karsten Keil and Alex Holden for giving aid with
- * testing and debugging
- *
- * Revision 1.3  1999/07/01 09:43:19  keil
- * removed additional schedules in timeouts
- *
- * Revision 1.2  1999/07/01 08:07:51  keil
- * Initial version
- *
- *
- *
  */
 
 #include <linux/config.h>
@@ -129,7 +34,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.27 $";
+static const char *hfcpci_revision = "$Revision: 1.30 $";
 
 /* table entry in the PCI devices list */
 typedef struct {

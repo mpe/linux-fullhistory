@@ -1,10 +1,11 @@
-/* $Id: rawhdlc.c,v 1.4 1999/12/23 15:09:32 keil Exp $
-
+/* $Id: rawhdlc.c,v 1.5 2000/06/26 08:59:14 keil Exp $
+ *
  * rawhdlc.c     support routines for cards that don't support HDLC
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *            Brent Baccala <baccala@FreeSoft.org>
  *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  * Some passive ISDN cards, such as the Traverse NETJet and the AMD 7930,
  * don't perform HDLC encapsulation over the B channel.  Drivers for

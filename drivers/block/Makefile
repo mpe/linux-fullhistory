@@ -13,8 +13,6 @@ MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS) paride
 
 O_TARGET := block.o
-MOD_LIST_NAME	:= BLOCK_MODULES
-
 
 export-objs	:= ll_rw_blk.o blkpg.o loop.o DAC960.o md.o xor.o
 list-multi	:= lvm-mod.o

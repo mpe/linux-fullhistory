@@ -1,35 +1,26 @@
-/* $Id: isdn_concap.c,v 1.7 2000/03/21 23:53:22 kai Exp $
+/* $Id: isdn_concap.c,v 1.8 2000/05/11 22:29:20 kai Exp $
  
- * Stuff to support the concap_proto by isdn4linux. isdn4linux - specific
+ * Linux ISDN subsystem, protocol encapsulation
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
+/* Stuff to support the concap_proto by isdn4linux. isdn4linux - specific
  * stuff goes here. Stuff that depends only on the concap protocol goes to
  * another -- protocol specific -- source file.
- *
- * $Log: isdn_concap.c,v $
- * Revision 1.7  2000/03/21 23:53:22  kai
- * fix backwards compatibility
- *
- * Revision 1.6  1999/08/22 20:26:01  calle
- * backported changes from kernel 2.3.14:
- * - several #include "config.h" gone, others come.
- * - "struct device" changed to "struct net_device" in 2.3.14, added a
- *   define in isdn_compat.h for older kernel versions.
- *
- * Revision 1.5  1998/10/30 18:44:48  he
- * pass return value from isdn_net_dial_req for dialmode change
- *
- * Revision 1.4  1998/10/30 17:55:24  he
- * dialmode for x25iface and multulink ppp
- *
- * Revision 1.3  1998/05/26 22:39:22  he
- * sync'ed with 2.1.102 where appropriate (CAPABILITY changes)
- * concap typo
- * cleared dev.tbusy in isdn_net BCONN status callback
- *
- * Revision 1.2  1998/01/31 22:49:21  keil
- * correct comments
- *
- * Revision 1.1  1998/01/31 22:27:57  keil
- * New files from Henner Eisen for X.25 support
  *
  */
 

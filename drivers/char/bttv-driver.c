@@ -132,8 +132,10 @@ static inline unsigned long uvirt_to_kva(pgd_t *pgd, unsigned long adr)
                 if (!pmd_none(*pmd)) {
                         ptep = pte_offset(pmd, adr);
                         pte = *ptep;
-                        if(pte_present(pte))
-                                ret = (page_address(pte_page(pte))|(adr&(PAGE_SIZE-1)));
+                        if(pte_present(pte)) {
+				ret = (unsigned long) page_address(pte_page(pte));
+                                ret |= (adr & (PAGE_SIZE - 1));
+			}
                 }
         }
         MDEBUG(printk("uv2kva(%lx-->%lx)", adr, ret));
@@ -1157,7 +1159,7 @@ static int  make_vrisctab_kiobuf(struct bttv *btv, unsigned int *ro,
 
 	offset   = iobuf->offset;
 	page     = 0;
-	pageaddr = virt_to_bus((void*)page_address(iobuf->maplist[page]));
+	pageaddr = virt_to_bus(page_address(iobuf->maplist[page]));
 	for (line=0; line < (height<<(1^inter)); line++)
 	{
 	        if (inter) 
@@ -1178,13 +1180,13 @@ static int  make_vrisctab_kiobuf(struct bttv *btv, unsigned int *ro,
 			todo -= bl;
 			offset = 0;
 			page++;
-			pageaddr = virt_to_bus((void*)page_address(iobuf->maplist[page]));
+			pageaddr = virt_to_bus(page_address(iobuf->maplist[page]));
 			while (todo>PAGE_SIZE)
 			{
 			        *((*rp)++)=cpu_to_le32(BT848_RISC_WRITE|PAGE_SIZE);
 				*((*rp)++)=cpu_to_le32(pageaddr);
 				page++;
-				pageaddr = virt_to_bus((void*)page_address(iobuf->maplist[page]));
+				pageaddr = virt_to_bus(page_address(iobuf->maplist[page]));
 			}
 			*((*rp)++)=cpu_to_le32(BT848_RISC_WRITE|BT848_RISC_EOL|todo);
 			*((*rp)++)=cpu_to_le32(pageaddr);
@@ -2112,7 +2114,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		       iobuf->locked);
 		printk("bttv%d: hack: pages (bus addr):",btv->nr);
 		for (i = 0; i < iobuf->nr_pages; i++) {
-			printk(" %lx", virt_to_bus((void*)page_address(iobuf->maplist[i])));
+			printk(" %lx", virt_to_bus(page_address(iobuf->maplist[i])));
 		}
 		printk("\n");
 
@@ -3032,7 +3034,7 @@ static void __devinit bttv_remove(struct pci_dev *pci_dev)
         struct bttv *btv = PCI_GET_DRIVER_DATA(pci_dev);
 
         /* unregister i2c_bus */
-	if (btv->i2c_ok)
+	if (0 == btv->i2c_ok)
 		i2c_bit_del_bus(&btv->i2c_adap);
 
         /* turn off all capturing, DMA and IRQs */

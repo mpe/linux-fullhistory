@@ -960,13 +960,20 @@ static ed_t * ep_add_ed (struct usb_device * usb_dev, unsigned int pipe, int int
 	ed = ed_ret = &(usb_to_ohci (usb_dev)->ed[(usb_pipeendpoint (pipe) << 1) | 
 			(usb_pipecontrol (pipe)? 0: usb_pipeout (pipe))]);
 
-	if((ed->state & ED_DEL) || (ed->state & ED_URB_DEL)) 
-		return NULL; /* pending delete request */
+	if ((ed->state & ED_DEL) || (ed->state & ED_URB_DEL)) {
+		/* pending delete request */
+		spin_unlock (&usb_ed_lock);
+		return NULL;
+	}
 	
 	if (ed->state == ED_NEW) {
 		ed->hwINFO = cpu_to_le32 (OHCI_ED_SKIP); /* skip ed */
   		OHCI_ALLOC (td, sizeof (*td)); /* dummy td; end of td list for ed */
-  		if(!td) return NULL; /* out of memory */
+  		if (!td) {
+			/* out of memory */
+			spin_unlock (&usb_ed_lock);
+			return NULL;
+		}
 		ed->hwTailP = cpu_to_le32 (virt_to_bus (td));
 		ed->hwHeadP = ed->hwTailP;	
 		ed->state = ED_UNLINK;

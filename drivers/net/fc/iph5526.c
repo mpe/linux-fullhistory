@@ -3952,8 +3952,10 @@ u_long flags;
 
 	/* Get an used OX_ID. We could have pending commands.
 	 */
-	if (get_scsi_oxid(fi))
+	if (get_scsi_oxid(fi)) {
+		spin_unlock_irqrestore(&fi->fc_lock, flags);
 		return 1;
+	}
 	fi->q.free_scsi_oxid[fi->g.scsi_oxid] = OXID_INUSE;	
 
 	/* Maintain a handler so that we can associate the done() function

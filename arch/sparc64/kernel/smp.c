@@ -817,14 +817,14 @@ static inline unsigned long find_flush_base(unsigned long size)
 
 	size = PAGE_ALIGN(size);
 	found = size;
-	base = page_address(p);
+	base = (unsigned long) page_address(p);
 	while(found != 0) {
 		/* Failure. */
 		if(p >= (mem_map + max_mapnr))
 			return 0UL;
 		if(PageReserved(p)) {
 			found = size;
-			base = page_address(p);
+			base = (unsigned long) page_address(p);
 		} else {
 			found -= PAGE_SIZE;
 		}

@@ -92,11 +92,11 @@ endif
 
 ifeq ($(CONFIG_DMASOUND),y)
   SUB_DIRS += dmasound
-  MOD_SUB_DIRS += dmasound
+  MOD_IN_SUB_DIRS += dmasound
   obj-y += dmasound/dmasound.o
 else
   ifeq ($(CONFIG_DMASOUND),m)
-    MOD_SUB_DIRS += dmasound
+    MOD_IN_SUB_DIRS += dmasound
   endif
 endif
 
@@ -148,7 +148,6 @@ obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
 # Translate to Rules.make lists.
 
 O_TARGET	:= sounddrivers.o
-MOD_LIST_NAME	:= SOUND_MODULES
 
 O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
 OX_OBJS		:= $(filter     $(export-objs), $(obj-y))

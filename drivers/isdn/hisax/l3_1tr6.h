@@ -1,16 +1,8 @@
-/* $Id: l3_1tr6.h,v 2.1 1998/08/13 23:36:48 keil Exp $
+/* $Id: l3_1tr6.h,v 2.2 2000/06/26 08:59:14 keil Exp $
  *
  *  German 1TR6 D-channel protocol defines
  *
- * $Log: l3_1tr6.h,v $
- * Revision 2.1  1998/08/13 23:36:48  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 2.0  1997/07/27 21:15:47  keil
- * New Callref based layer3
- *
- * Revision 1.1  1996/10/13 20:03:48  keil
- * Initial revision
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 #ifndef l3_1tr6

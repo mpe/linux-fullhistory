@@ -1,4 +1,4 @@
-/* $Id: isdn_audio.h,v 1.8 1999/07/11 17:14:07 armin Exp $
+/* $Id: isdn_audio.h,v 1.9 2000/05/11 22:29:20 kai Exp $
 
  * Linux ISDN subsystem, audio conversion and compression (linklevel).
  *
@@ -17,39 +17,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- * $Log: isdn_audio.h,v $
- * Revision 1.8  1999/07/11 17:14:07  armin
- * Added new layer 2 and 3 protocols for Fax and DSP functions.
- * Moved "Add CPN to RING message" to new register S23,
- * "Display message" is now correct on register S13 bit 7.
- * New audio command AT+VDD implemented (deactivate DTMF decoder and
- * activate possible existing hardware/DSP decoder).
- * Moved some tty defines to .h file.
- * Made whitespace possible in AT command line.
- * Some AT-emulator output bugfixes.
- * First Fax G3 implementations.
- *
- * Revision 1.7  1999/04/12 12:33:11  fritz
- * Changes from 2.0 tree.
- *
- * Revision 1.6  1998/07/26 18:48:44  armin
- * Added silence detection in voice receive mode.
- *
- * Revision 1.5  1997/02/03 22:45:21  fritz
- * Reformatted according CodingStyle
- *
- * Revision 1.4  1996/06/06 14:43:32  fritz
- * Changed to support DTMF decoding on audio playback also.
- *
- * Revision 1.3  1996/06/05 02:24:09  fritz
- * Added DTMF decoder for audio mode.
- *
- * Revision 1.2  1996/05/10 08:48:32  fritz
- * Corrected adpcm bugs.
- *
- * Revision 1.1  1996/04/30 09:29:06  fritz
- * Taken under CVS control.
  *
  */
 

@@ -14,7 +14,6 @@ ALL_SUB_DIRS := $(SUB_DIRS)
 O_TARGET := hamradio.o
 O_OBJS   := 
 M_OBJS   :=
-MOD_LIST_NAME := HAM_MODULES
 
 # Need these to keep track of whether the hdlc module should
 # really go in the kernel or a module.

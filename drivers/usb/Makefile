@@ -14,7 +14,6 @@ ALL_SUB_DIRS	:= $(SUB_DIRS) serial storage
 O_TARGET	:= usbdrv.o
 M_OBJS		:=
 O_OBJS		:=
-MOD_LIST_NAME	:= USB_MODULES
 
 # Objects that export symbols.
 

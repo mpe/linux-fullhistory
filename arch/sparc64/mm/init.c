@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.152 2000/05/09 17:40:14 davem Exp $
+/*  $Id: init.c,v 1.153 2000/07/27 01:05:15 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -746,7 +746,7 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset, unsigned long color)
 		pte_t *pte;
 
 		set_page_count((page + 1), 1);
-		paddr = page_address(page);
+		paddr = (unsigned long) page_address(page);
 		memset((char *)paddr, 0, (PAGE_SIZE << 1));
 
 		if (!color) {

@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.54 2000/02/09 11:15:03 davem Exp $
+/* $Id: rtrap.S,v 1.55 2000/08/05 10:48:40 davem Exp $
  * rtrap.S: Return from Sparc trap low-level code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

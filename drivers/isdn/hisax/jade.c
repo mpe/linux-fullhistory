@@ -1,16 +1,10 @@
-/* $Id: jade.c,v 1.3 2000/02/26 00:35:13 keil Exp $
+/* $Id: jade.c,v 1.4 2000/06/26 08:59:14 keil Exp $
  *
  * jade.c   JADE stuff (derived from original hscx.c)
  *
  * Author   Roland Klabunde (R.Klabunde@Berkom.de)
  *
- * $Log: jade.c,v $
- * Revision 1.3  2000/02/26 00:35:13  keil
- * Fix skb freeing in interrupt context
- *
- * Revision 1.2  1999/07/01 08:07:57  keil
- * Initial version
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 

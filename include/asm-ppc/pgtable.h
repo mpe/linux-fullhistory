@@ -69,7 +69,9 @@ extern inline void flush_tlb_pgtables(struct mm_struct *mm,
 
 extern void flush_icache_range(unsigned long, unsigned long);
 extern void __flush_page_to_ram(unsigned long page_va);
-#define flush_page_to_ram(page)	__flush_page_to_ram(page_address(page))
+#define flush_page_to_ram(page)	__flush_page_to_ram((unsigned long) page_address(page))
+
+#define flush_dcache_page(page)			do { } while (0)
 
 extern unsigned long va_to_phys(unsigned long address);
 extern pte_t *va_to_pte(unsigned long address);
@@ -311,7 +313,7 @@ extern pte_t * __bad_pagetable(void);
 /*
  * Permanent address of a page.
  */
-#define page_address(page)  ({ if (!(page)->virtual) BUG(); (page)->virtual; })
+#define page_address(page)  ((page)->virtual)
 #define pages_to_mb(x)		((x) >> (20-PAGE_SHIFT))
 #define pte_page(x)		(mem_map+pte_pagenr(x))
 

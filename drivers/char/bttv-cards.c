@@ -73,11 +73,9 @@ static struct CARD {
 	{ 0x1123153b, BTTV_TERRATVRADIO,  "Terratec TV/Radio+" },
 	{ 0x1200bd11, BTTV_PINNACLERAVE,  "Pinnacle PCTV Rave" },
 	{ 0x13eb0070, BTTV_HAUPPAUGE878,  "Hauppauge WinTV" },
-#if 0 /* probably wrong */
-	{ 0x14610002, BTTV_AVERMEDIA98,   "Avermedia TVCapture 98" },
-#endif
 	{ 0x18501851, BTTV_CHRONOS_VS2,   "Chronos Video Shuttle II" },
 	{ 0x18521852, BTTV_TYPHOON_TVIEW, "Typhoon TView TV/FM Tuner" },
+	{ 0x217d6606, BTTV_WINFAST2000,   "Leadtek WinFast TV 2000" },
 	{ 0x263610b4, BTTV_STB2,          "STB TV PCI FM, P/N 6000704" },
 	{ 0x3000144f, BTTV_MAGICTVIEW063, "TView 99 (CPH063)" },
 	{ 0x300014ff, BTTV_MAGICTVIEW061, "TView 99 (CPH061)" },
@@ -85,7 +83,10 @@ static struct CARD {
 	{ 0x300214ff, BTTV_PHOEBE_TVMAS,  "Phoebe TV Master" },
 	{ 0x400a15b0, BTTV_ZOLTRIX_GENIE, "Zoltrix Genie TV" },
 	{ 0x402010fc, 0 /* no tvcards entry yet */, "I-O Data Co. GV-BCV3/PCI" },
+#if 0 /* probably wrong */
+	{ 0x14610002, BTTV_AVERMEDIA98,   "Avermedia TVCapture 98" },
 	{ 0x6606217d, BTTV_WINFAST2000,   "Leadtek WinFast TV 2000" },
+#endif
 	{ 0, -1, NULL }
 };
 
@@ -116,7 +117,7 @@ struct tvcard bttv_tvcards[] =
 	  1,1,1,1,0,0,0,1,  PLL_NONE, -1 },
 	{ "AVerMedia TVPhone",
           3, 1, 0, 3,15, { 2, 3, 1, 1}, {12, 4,11,11, 0},0,
-	  1,1,1,1,0,0,0,1,  PLL_NONE, -1 },
+	  1,1,1,1,0,0,0,1,  PLL_28, -1 },
         { "MATRIX-Vision MV-Delta",
           5, 1, -1, 3, 0, { 2, 3, 1, 0, 0},{0 }, 0,
 	  1,1,1,1,0,0,0,1,  PLL_NONE, -1 },
@@ -218,7 +219,7 @@ struct tvcard bttv_tvcards[] =
 	  1,1,1,1,0,0,0,1,  PLL_NONE, -1 },
 	{ "Leadtek WinFast 2000",
 	  3, 1, 0, 2, 0xfff000, { 2, 3, 1, 1,0},
-	  { 0x621000,0x620100,0x621100,0x620000,0xE210000,0x620000},0,
+	  { 0x621000,0x6ddf07,0x621100,0x620000,0xE210000,0x620000},0,
 	  1,1,1,1,1,0,0,1,  PLL_28,   -1 },
 	{ "Chronos Video Shuttle II",
 	  3, 3, 0, 2, 0x1800, { 2, 3, 1, 1}, { 0, 0, 0x1000, 0x1000, 0x0800},0,
@@ -266,7 +267,7 @@ struct tvcard bttv_tvcards[] =
 	  0,0,0,0,0,0,0,0,  PLL_28, 5 },
 	{ "Terratec TV/Radio+", /* Radio ?? */
 	  3, 1, 0, 2, 0x1f0000, { 2, 3, 1, 1},
-	  { 0xe2ffff, 0, 0, 0, 0xe0ffff, 0xe2ffff },0,
+	  { 0xe2ffff, 0xebffff, 0, 0, 0xe0ffff, 0xe2ffff },0,
 	  0,0,0,0,0,0,0,0,  PLL_35,  1 },
 
 	/* 0x30 */

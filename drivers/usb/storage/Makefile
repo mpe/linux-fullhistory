@@ -5,7 +5,6 @@
 O_TARGET	:= usb-storage.o
 M_OBJS		:= usb-storage.o
 O_OBJS		:= scsiglue.o protocol.o transport.o usb.o 
-MOD_LIST_NAME	:= USB_STORAGE_MODULES
 
 CFLAGS_scsiglue.o:= -I../../scsi/
 CFLAGS_protocol.o:= -I../../scsi/

@@ -1,52 +1,10 @@
-/* $Id: hfc_2bs0.c,v 1.13 2000/02/26 00:35:12 keil Exp $
-
+/* $Id: hfc_2bs0.c,v 1.14 2000/06/26 08:59:13 keil Exp $
+ *
  *  specific routines for CCD's HFC 2BS0
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
- *
- * $Log: hfc_2bs0.c,v $
- * Revision 1.13  2000/02/26 00:35:12  keil
- * Fix skb freeing in interrupt context
- *
- * Revision 1.12  1999/12/19 14:17:12  keil
- * fix compiler warning
- *
- * Revision 1.11  1999/11/21 12:41:18  werner
- *
- * Implemented full audio support
- *
- * Revision 1.10  1999/10/14 20:25:28  keil
- * add a statistic for error monitoring
- *
- * Revision 1.9  1999/07/01 08:11:36  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.8  1998/11/15 23:54:43  keil
- * changes from 2.0
- *
- * Revision 1.7  1998/09/30 22:24:46  keil
- * Fix missing line in setstack*
- *
- * Revision 1.6  1998/08/13 23:36:28  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 1.5  1998/05/25 12:57:54  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 1.4  1998/02/12 23:07:29  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 1.3  1997/11/06 17:13:35  keil
- * New 2.1 init code
- *
- * Revision 1.2  1997/10/29 19:04:47  keil
- * changes for 2.1
- *
- * Revision 1.1  1997/09/11 17:31:33  keil
- * Common part for HFC 2BS0 based cards
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 

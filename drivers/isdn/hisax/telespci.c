@@ -1,44 +1,11 @@
-/* $Id: telespci.c,v 2.11 1999/12/23 15:09:32 keil Exp $
-
+/* $Id: telespci.c,v 2.13 2000/06/26 08:59:15 keil Exp $
+ *
  * telespci.c     low level stuff for Teles PCI isdn cards
  *
  * Author       Ton van Rosmalen 
  *              Karsten Keil (keil@isdn4linux.de)
  *
- *
- * $Log: telespci.c,v $
- * Revision 2.11  1999/12/23 15:09:32  keil
- * change email
- *
- * Revision 2.10  1999/11/15 14:20:05  keil
- * 64Bit compatibility
- *
- * Revision 2.9  1999/08/11 21:01:34  keil
- * new PCI codefix
- *
- * Revision 2.8  1999/08/10 16:02:10  calle
- * struct pci_dev changed in 2.3.13. Made the necessary changes.
- *
- * Revision 2.7  1999/07/12 21:05:34  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 2.6  1999/07/01 08:12:15  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 2.5  1998/11/15 23:55:28  keil
- * changes from 2.0
- *
- * Revision 2.4  1998/10/05 09:38:08  keil
- * Fix register addressing
- *
- * Revision 2.3  1998/05/25 12:58:26  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 2.1  1998/04/15 16:38:23  keil
- * Add S0Box and Teles PCI support
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 #define __NO_VERSION__
@@ -50,7 +17,7 @@
 #include <linux/pci.h>
 
 extern const char *CardType[];
-const char *telespci_revision = "$Revision: 2.11 $";
+const char *telespci_revision = "$Revision: 2.13 $";
 
 #define ZORAN_PO_RQ_PEN	0x02000000
 #define ZORAN_PO_WR	0x00800000

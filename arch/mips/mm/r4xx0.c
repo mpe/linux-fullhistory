@@ -1963,7 +1963,7 @@ out:
  */
 static void r4k_flush_page_to_ram_s16d16i16(struct page * page)
 {
-	unsigned long addr = page_address(page) & PAGE_MASK;
+	unsigned long addr = (unsigned long) page_address(page) & PAGE_MASK;
 
 	if ((addr >= KSEG0 && addr < KSEG1) || (addr >= KSEG2)) {
 #ifdef DEBUG_CACHE
@@ -1975,7 +1975,7 @@ static void r4k_flush_page_to_ram_s16d16i16(struct page * page)
 
 static void r4k_flush_page_to_ram_s32d16i16(struct page * page)
 {
-	unsigned long addr = page_address(page) & PAGE_MASK;
+	unsigned long addr = (unsigned long) page_address(page) & PAGE_MASK;
 
 	if ((addr >= KSEG0 && addr < KSEG1) || (addr >= KSEG2)) {
 #ifdef DEBUG_CACHE
@@ -1987,7 +1987,7 @@ static void r4k_flush_page_to_ram_s32d16i16(struct page * page)
 
 static void r4k_flush_page_to_ram_s64d16i16(struct page * page)
 {
-	unsigned long addr = page_address(page) & PAGE_MASK;
+	unsigned long addr = (unsigned long) page_address(page) & PAGE_MASK;
 
 	if ((addr >= KSEG0 && addr < KSEG1) || (addr >= KSEG2)) {
 #ifdef DEBUG_CACHE
@@ -1999,7 +1999,7 @@ static void r4k_flush_page_to_ram_s64d16i16(struct page * page)
 
 static void r4k_flush_page_to_ram_s128d16i16(struct page * page)
 {
-	unsigned long addr = page_address(page) & PAGE_MASK;
+	unsigned long addr = (unsigned long) page_address(page) & PAGE_MASK;
 
 	if ((addr >= KSEG0 && addr < KSEG1) || (addr >= KSEG2)) {
 #ifdef DEBUG_CACHE
@@ -2011,7 +2011,7 @@ static void r4k_flush_page_to_ram_s128d16i16(struct page * page)
 
 static void r4k_flush_page_to_ram_s32d32i32(struct page * page)
 {
-	unsigned long addr = page_address(page) & PAGE_MASK;
+	unsigned long addr = (unsigned long) page_address(page) & PAGE_MASK;
 
 	if ((addr >= KSEG0 && addr < KSEG1) || (addr >= KSEG2)) {
 #ifdef DEBUG_CACHE
@@ -2023,7 +2023,7 @@ static void r4k_flush_page_to_ram_s32d32i32(struct page * page)
 
 static void r4k_flush_page_to_ram_s64d32i32(struct page * page)
 {
-	unsigned long addr = page_address(page) & PAGE_MASK;
+	unsigned long addr = (unsigned long) page_address(page) & PAGE_MASK;
 
 	if ((addr >= KSEG0 && addr < KSEG1) || (addr >= KSEG2)) {
 #ifdef DEBUG_CACHE
@@ -2035,7 +2035,7 @@ static void r4k_flush_page_to_ram_s64d32i32(struct page * page)
 
 static void r4k_flush_page_to_ram_s128d32i32(struct page * page)
 {
-	unsigned long addr = page_address(page) & PAGE_MASK;
+	unsigned long addr = (unsigned long) page_address(page) & PAGE_MASK;
 
 	if ((addr >= KSEG0 && addr < KSEG1) || (addr >= KSEG2)) {
 #ifdef DEBUG_CACHE
@@ -2047,7 +2047,7 @@ static void r4k_flush_page_to_ram_s128d32i32(struct page * page)
 
 static void r4k_flush_page_to_ram_d16i16(struct page * page)
 {
-	unsigned long addr = page_address(page) & PAGE_MASK;
+	unsigned long addr = (unsigned long) page_address(page) & PAGE_MASK;
 
 	if ((addr >= KSEG0 && addr < KSEG1) || (addr >= KSEG2)) {
 		unsigned long flags;
@@ -2063,7 +2063,7 @@ static void r4k_flush_page_to_ram_d16i16(struct page * page)
 
 static void r4k_flush_page_to_ram_d32i32(struct page * page)
 {
-	unsigned long addr = page_address(page) & PAGE_MASK;
+	unsigned long addr = (unsigned long) page_address(page) & PAGE_MASK;
 
 	if ((addr >= KSEG0 && addr < KSEG1) || (addr >= KSEG2)) {
 		unsigned long flags;

@@ -151,7 +151,7 @@ typedef struct page {
 	wait_queue_head_t wait;
 	struct page **pprev_hash;
 	struct buffer_head * buffers;
-	unsigned long virtual; /* nonzero if kmapped */
+	void *virtual; /* non-NULL if kmapped */
 	struct zone_struct *zone;
 } mem_map_t;
 

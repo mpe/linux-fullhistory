@@ -1753,6 +1753,8 @@ EXPORT_SYMBOL(ipt_unregister_table);
 EXPORT_SYMBOL(ipt_register_match);
 EXPORT_SYMBOL(ipt_unregister_match);
 EXPORT_SYMBOL(ipt_do_table);
+EXPORT_SYMBOL(ipt_register_target);
+EXPORT_SYMBOL(ipt_unregister_target);
 
 module_init(init);
 module_exit(fini);

@@ -3,7 +3,6 @@
 #
 
 L_TARGET	:= acorn-scsi.a
-MOD_LIST_NAME	:= ACORN_SCSI_MODULES
 
 obj-y		:=
 obj-m		:=

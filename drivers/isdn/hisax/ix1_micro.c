@@ -1,5 +1,5 @@
-/* $Id: ix1_micro.c,v 2.8 1999/07/12 21:05:19 keil Exp $
-
+/* $Id: ix1_micro.c,v 2.9 2000/06/26 08:59:13 keil Exp $
+ *
  * ix1_micro.c  low level stuff for ITK ix1-micro Rev.2 isdn cards
  *              derived from the original file teles3.c from Karsten Keil
  *
@@ -9,45 +9,6 @@
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
  *              Beat Doebeli
- *
- * $Log: ix1_micro.c,v $
- * Revision 2.8  1999/07/12 21:05:19  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 2.7  1998/04/15 16:44:31  keil
- * new init code
- *
- * Revision 2.6  1998/02/11 17:28:09  keil
- * Niccy PnP/PCI support
- *
- * Revision 2.5  1998/02/02 13:29:42  keil
- * fast io
- *
- * Revision 2.4  1997/11/08 21:35:50  keil
- * new l1 init
- *
- * Revision 2.3  1997/11/06 17:09:35  keil
- * New 2.1 init code
- *
- * Revision 2.2  1997/10/29 18:55:51  keil
- * changes for 2.1.60 (irq2dev_map)
- *
- * Revision 2.1  1997/07/27 21:47:09  keil
- * new interface structures
- *
- * Revision 2.0  1997/06/26 11:02:50  keil
- * New Layer and card interface
- *
- * Revision 1.3  1997/04/13 19:54:02  keil
- * Change in IRQ check delay for SMP
- *
- * Revision 1.2  1997/04/06 22:54:21  keil
- * Using SKB's
- *
- * Revision 1.1  1997/01/27 15:43:10  keil
- * first version
- *
  *
  */
 
@@ -88,7 +49,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *ix1_revision = "$Revision: 2.8 $";
+const char *ix1_revision = "$Revision: 2.9 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

@@ -68,7 +68,6 @@ unsigned long hit_videobase, hit_videosize;
 static struct fb_var_screeninfo default_var;
 
 int hitfb_init(void);
-int hitfb_setup(char*);
 
 static void hitfb_set_par(struct hitfb_par *par, const struct fb_info *info);
 static void hitfb_encode_var(struct fb_var_screeninfo *var, 
@@ -335,12 +334,6 @@ int __init hitfb_init(void)
 void hitfb_cleanup(struct fb_info *info)
 {
     unregister_framebuffer(info);
-}
-
-
-int __init hitfb_setup(char *options)
-{
-    return 0;
 }
 
 

@@ -10,7 +10,6 @@ ifeq ($(CONFIG_SKFP),y)
               smtparse.o  hwt.o      drvfbi.o   ess.o
 else
   ifeq ($(CONFIG_SKFP),m)
-    MOD_LIST_NAME := SKFP_MODULES
     M_OBJS := skfp.o
     O_TARGET := skfp.o
     O_OBJS =  skfddi.o    hwmtm.o    fplustm.o  smt.o      cfm.o     \

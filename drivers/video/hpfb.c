@@ -399,8 +399,3 @@ int __init hpfb_init(void)
 
 	return 0;
 }
-
-int __init hpfb_setup(char *options)
-{
-	return 0;
-}

@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.65 2000/07/07 04:25:17 davem Exp $
+/*  $Id: signal32.c,v 1.66 2000/07/27 01:05:15 davem Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -750,7 +750,7 @@ static inline void new_setup_frame32(struct k_sigaction *ka, struct pt_regs *reg
 			goto sigsegv;
 
 		if(pte_present(*ptep)) {
-			unsigned long page = page_address(pte_page(*ptep));
+			unsigned long page = (unsigned long) page_address(pte_page(*ptep));
 
 			__asm__ __volatile__("
 			membar	#StoreStore
@@ -1175,7 +1175,7 @@ static inline void setup_rt_frame32(struct k_sigaction *ka, struct pt_regs *regs
 			goto sigsegv;
 
 		if(pte_present(*ptep)) {
-			unsigned long page = page_address(pte_page(*ptep));
+			unsigned long page = (unsigned long) page_address(pte_page(*ptep));
 
 			__asm__ __volatile__("
 			membar	#StoreStore

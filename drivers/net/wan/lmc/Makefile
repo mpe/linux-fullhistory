@@ -9,7 +9,6 @@ ifeq ($(CONFIG_LANMEDIA),y)
     O_OBJS = lmc_debug.o lmc_media.o lmc_main.o lmc_proto.o
 else
   ifeq ($(CONFIG_LANMEDIA),m)
-    MOD_LIST_NAME := NET_MODULES
     M_OBJS := lmc.o
     O_TARGET := lmc.o
     O_OBJS = lmc_debug.o lmc_media.o lmc_main.o lmc_proto.o

@@ -10,7 +10,6 @@ ifeq ($(CONFIG_SK98LIN),y)
              skxmac2.o skcsum.o
 else
   ifeq ($(CONFIG_SK98LIN),m)
-    MOD_LIST_NAME := SK98LIN_MODULES
     M_OBJS := sk98lin.o
     O_TARGET := sk98lin.o
     O_OBJS = skge.o skaddr.o skgehwt.o skgeinit.o skgepnmi.o skgesirq.o \

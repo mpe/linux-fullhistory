@@ -111,7 +111,8 @@ int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
 	{
 		struct user_struct *user = current->user;
 		current->user = INIT_USER;
-		atomic_inc(&current->user->__count);
+		atomic_inc(&INIT_USER->__count);
+		atomic_inc(&INIT_USER->processes);
 		atomic_dec(&user->processes);
 		free_uid(user);
 	}

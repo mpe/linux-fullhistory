@@ -1,4 +1,10 @@
-/* isdnl2.h */
+/* $Id: isdnl2.h,v 1.3 2000/06/26 08:59:13 keil Exp $
+ *
+ * Layer 2 defines
+ *
+ * This file is (c) under GNU PUBLIC LICENSE
+ *
+ */
 
 #define RR     0x01
 #define RNR    0x05

@@ -61,7 +61,7 @@ extern inline unsigned long kmap(struct page *page)
 	if (in_interrupt())
 		BUG();
 	if (page < highmem_start_page)
-		return page_address(page);
+		return (unsigned long) page_address(page);
 	return kmap_high(page);
 }
 
@@ -86,7 +86,7 @@ extern inline unsigned long kmap_atomic(struct page *page, enum km_type type)
 	unsigned long vaddr;
 
 	if (page < highmem_start_page)
-		return page_address(page);
+		return (unsigned long) page_address(page);
 
 	idx = type + KM_TYPE_NR*smp_processor_id();
 	vaddr = __fix_to_virt(FIX_KMAP_BEGIN + idx);

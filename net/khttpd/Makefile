@@ -8,7 +8,6 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := khttpd.o
-MOD_LIST_NAME := NET_MODULES
 
 M_OBJS := $(O_TARGET)
 O_OBJS := 	main.o accept.o datasending.o logging.o misc.o rfc.o rfc_time.o security.o \

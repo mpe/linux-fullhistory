@@ -1,5 +1,5 @@
-/* $Id: isdnl2.c,v 2.22 2000/04/12 20:28:37 keil Exp $
-
+/* $Id: isdnl2.c,v 2.23 2000/06/26 08:59:13 keil Exp $
+ *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
@@ -10,87 +10,12 @@
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
  *
- * $Log: isdnl2.c,v $
- * Revision 2.22  2000/04/12 20:28:37  keil
- * a I frame may be contain zero information bytes
- *
- * Revision 2.21  2000/04/12 16:41:01  kai
- * fix max iframe size
- * fix bug in multicasting DL_RELEASE_IND
- *
- * Revision 2.20  1999/08/25 16:52:04  keil
- * Make gcc on AXP happy
- *
- * Revision 2.19  1999/08/05 20:40:26  keil
- * Fix interlayer communication
- *
- * Revision 2.18  1999/07/21 14:46:16  keil
- * changes from EICON certification
- *
- * Revision 2.17  1999/07/01 08:11:50  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 2.16  1998/11/15 23:55:01  keil
- * changes from 2.0
- *
- * Revision 2.15  1998/08/13 23:36:42  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 2.14  1998/06/19 15:19:18  keil
- * fix LAPB tx_cnt for none I-frames
- *
- * Revision 2.13  1998/06/18 23:17:20  keil
- * LAPB bugfix
- *
- * Revision 2.12  1998/05/25 14:10:12  keil
- * HiSax 3.0
- * X.75 and leased are working again.
- *
- * Revision 2.11  1998/05/25 12:58:08  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 2.9  1998/04/10 10:35:30  paul
- * fixed (silly?) warnings from egcs on Alpha.
- *
- * Revision 2.8  1998/03/07 22:57:04  tsbogend
- * made HiSax working on Linux/Alpha
- *
- * Revision 2.7  1998/02/12 23:07:47  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 2.6  1998/02/02 13:36:15  keil
- * bugfix X.75 win calculation
- *
- * Revision 2.5  1997/11/06 17:09:22  keil
- * New 2.1 init code
- *
- * Revision 2.4  1997/10/29 19:02:01  keil
- * new LL interface
- *
- * Revision 2.3  1997/10/01 09:21:39  fritz
- * Removed old compatibility stuff for 2.0.X kernels.
- * From now on, this code is for 2.1.X ONLY!
- * Old stuff is still in the separate branch.
- *
- * Revision 2.2  1997/07/31 11:49:05  keil
- * Error handling for no TEI assign
- *
- * Revision 2.1  1997/07/27 21:34:38  keil
- * cosmetics
- *
- * Revision 2.0  1997/06/26 11:07:29  keil
- * New q.921 and X.75 Layer2
- *
- *
- *  Old log removed KKe
- *
  */
 #define __NO_VERSION__
 #include "hisax.h"
 #include "isdnl2.h"
 
-const char *l2_revision = "$Revision: 2.22 $";
+const char *l2_revision = "$Revision: 2.23 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 

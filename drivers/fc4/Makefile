@@ -5,7 +5,6 @@
 
 L_TARGET := fc4.a
 M_OBJS   :=
-MOD_LIST_NAME := FC4_MODULES
 
 ifeq ($(CONFIG_FC4),y)
   FC4 = fc.o

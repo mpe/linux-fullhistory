@@ -1,48 +1,12 @@
-/* $Id: fsm.c,v 1.11 1999/12/23 15:09:32 keil Exp $
-
+/* $Id: fsm.c,v 1.13 2000/06/26 08:59:12 keil Exp $
+ *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
  *
- * $Log: fsm.c,v $
- * Revision 1.11  1999/12/23 15:09:32  keil
- * change email
- *
- * Revision 1.10  1998/11/15 23:54:39  keil
- * changes from 2.0
- *
- * Revision 1.9  1998/03/26 07:10:02  paul
- * The jumpmatrix table in struct Fsm was an array of "int". This is not
- * large enough for pointers to functions on Linux/Alpha (instant crash
- * on "insmod hisax). Now there is a typedef for the pointer to function.
- * This also prevents warnings about "incompatible pointer types".
- *
- * Revision 1.8  1998/03/07 22:56:59  tsbogend
- * made HiSax working on Linux/Alpha
- *
- * Revision 1.7  1997/11/06 17:09:13  keil
- * New 2.1 init code
- *
- * Revision 1.6  1997/07/27 21:42:25  keil
- * proof Fsm routines
- *
- * Revision 1.5  1997/06/26 11:10:05  keil
- * Restart timer function added
- *
- * Revision 1.4  1997/04/06 22:56:42  keil
- * Some cosmetic changes
- *
- * Revision 1.3  1997/02/16 01:04:08  fritz
- * Bugfix: Changed timer handling caused hang with 2.1.X
- *
- * Revision 1.2  1997/01/09 20:57:27  keil
- * cleanup & FSM_TIMER_DEBUG
- *
- * Revision 1.1  1996/10/13 20:04:52  keil
- * Initial revision
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 #define __NO_VERSION__

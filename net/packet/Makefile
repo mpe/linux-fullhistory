@@ -8,7 +8,6 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := packet.o
-MOD_LIST_NAME := NET_MISC_MODULES
 
 O_OBJS :=
 M_OBJS :=

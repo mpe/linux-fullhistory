@@ -6,7 +6,6 @@
 #ifndef __SPARC64_SOFTIRQ_H
 #define __SPARC64_SOFTIRQ_H
 
-#include <linux/config.h>
 #include <asm/atomic.h>
 #include <asm/hardirq.h>
 #include <asm/system.h>		/* for membar() */
