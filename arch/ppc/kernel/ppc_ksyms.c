@@ -60,7 +60,6 @@ EXPORT_SYMBOL(do_signal);
 EXPORT_SYMBOL(syscall_trace);
 EXPORT_SYMBOL(transfer_to_handler);
 EXPORT_SYMBOL(do_IRQ);
-EXPORT_SYMBOL(init_task_union);
 EXPORT_SYMBOL(MachineCheckException);
 EXPORT_SYMBOL(AlignmentException);
 EXPORT_SYMBOL(ProgramCheckException);

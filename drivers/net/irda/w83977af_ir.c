@@ -10,16 +10,16 @@
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
- *     Copyright (c) 1998 Corel Computer Corp.
+ *     Copyright (c) 1998-1999 Rebel.com
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
  *     published by the Free Software Foundation; either version 2 of 
  *     the License, or (at your option) any later version.
  *  
- *     Neither Paul VanderSpek nor Corel Computer Corp. admit liability
- *     nor provide warranty for any of this software. This material is 
- *     provided "AS-IS" and at no charge.
+ *     Neither Paul VanderSpek nor Rebel.com admit liability nor provide
+ *     warranty for any of this software. This material is provided "AS-IS"
+ *     and at no charge.
  *     
  *     If you find bugs in this file, its very likely that the same bug
  *     will also be in pc87108.c since the implementations is quite

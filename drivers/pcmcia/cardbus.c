@@ -2,7 +2,7 @@
   
     Cardbus device configuration
     
-    cardbus.c 1.59 1999/09/15 15:32:19
+    cardbus.c 1.61 1999/10/20 22:36:57
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -325,9 +325,9 @@ int cb_alloc(socket_info_t *s)
 	pci_readl(bus, i, PCI_CLASS_REVISION, &c[i].dev.class);
 	c[i].dev.class >>= 8;
 	c[i].dev.hdr_type = hdr;
-#ifdef CONFIG_PROC_FS	
+#ifdef CONFIG_PROC_FS
 	pci_proc_attach_device(&c[i].dev);
-#endif	
+#endif
     }
     
     return CS_SUCCESS;
@@ -344,9 +344,9 @@ void cb_free(socket_info_t *s)
 	    if (*p == &c[0].dev) break;
 	for (q = *p; q; q = q->next) {
 	    if (q->bus != (*p)->bus) break;
-#ifdef CONFIG_PROC_FS	    
+#ifdef CONFIG_PROC_FS
 	    pci_proc_detach_device(q);
-#endif	    
+#endif
 	}
 	if (*p) *p = q;
 	s->cap.cb_bus->devices = NULL;
@@ -496,7 +496,8 @@ int cb_config(socket_info_t *s)
 	    s->irq.AssignedIRQ = irq;
 	}
     }
-    c[0].dev.irq = irq;
+    for (i = 0; i < fn; i++)
+	c[i].dev.irq = irq;
     
     return CS_SUCCESS;
 

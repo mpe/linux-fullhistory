@@ -396,6 +396,12 @@ M:	mikulas@artax.karlin.mff.cuni.cz
 W:	http://artax.karlin.mff.cuni.cz/~mikulas/vyplody/hpfs/index-e.cgi
 S:	Maintained
 
+i386 BOOT CODE
+P:	Riley H. Williams
+M:	rhw@memalpha.cx
+L:	Linux-Kernel@vger.rutgers.edu
+S:	Maintained
+
 IBM MCA SCSI SUBSYSTEM DRIVER
 P:	Michael Lang
 M:	langa2@kph.uni-mainz.de
@@ -502,8 +508,9 @@ S:	Maintained
 
 LINUX FOR POWER MACINTOSH
 P:	Paul Mackerras
-M:	paulus@cs.anu.edu.au
-L:	linux-pmac@samba.anu.edu.au
+M:	paulus@linuxcare.com
+W:	http://www.linuxppc.org/
+L:	linuxppc-dev@lists.linuxppc.org
 S:	Maintained
 
 M68K
@@ -687,6 +694,7 @@ PCMCIA SUBSYSTEM
 P:	David Hinds
 M:	dhinds@zen.stanford.edu
 L:	linux-kernel@vger.rutgers.edu
+W:	http://pcmcia.sourceforge.org
 S:	Maintained
 
 PCNET32 NETWORK DRIVER

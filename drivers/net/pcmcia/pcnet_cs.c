@@ -11,7 +11,7 @@
 
     Copyright (C) 1999 David A. Hinds -- dhinds@hyper.stanford.edu
 
-    pcnet_cs.c 1.99 1999/09/15 15:33:09
+    pcnet_cs.c 1.101 1999/10/21 00:56:19
     
     The network driver code is based on Donald Becker's NE2000 code:
 
@@ -72,7 +72,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"pcnet_cs.c 1.99 1999/09/15 15:33:09 (David Hinds)";
+"pcnet_cs.c 1.101 1999/10/21 00:56:19 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -477,7 +477,8 @@ static hw_info_t *get_prom(dev_link_t *link)
 {
     struct net_device *dev = link->priv;
     unsigned char prom[32];
-    int i, j, ioaddr;
+    ioaddr_t ioaddr;
+    int i, j;
 
     /* This is lifted straight from drivers/net/ne.c */
     struct {
@@ -851,7 +852,7 @@ static int pcnet_event(event_t event, int priority,
 
 static void set_misc_reg(struct net_device *dev)
 {
-    int nic_base = dev->base_addr;
+    ioaddr_t nic_base = dev->base_addr;
     pcnet_dev_t *info = (pcnet_dev_t *)dev;
     u_char tmp;
     
@@ -889,7 +890,7 @@ static int pcnet_open(struct net_device *dev)
 	int i;
 	for (i = 0; i < 20; i++) {
 	    if ((inb(dev->base_addr+0x1c) & 0x01) == 0) break;
-	    current->state = TASK_INTERRUPTIBLE;
+	    __set_current_state(TASK_UNINTERRUPTIBLE);
 	    schedule_timeout(HZ/10);
 	}
     }
@@ -941,7 +942,7 @@ static int pcnet_close(struct net_device *dev)
 
 static void pcnet_reset_8390(struct net_device *dev)
 {
-    int nic_base = dev->base_addr;
+    ioaddr_t nic_base = dev->base_addr;
     int i;
 
     ei_status.txing = ei_status.dmaing = 0;
@@ -996,7 +997,7 @@ static void ei_watchdog(u_long arg)
 {
     pcnet_dev_t *info = (pcnet_dev_t *)(arg);
     struct net_device *dev = &info->dev;
-    int nic_base = dev->base_addr;
+    ioaddr_t nic_base = dev->base_addr;
 
     if (dev->start == 0) goto reschedule;
 
@@ -1027,7 +1028,7 @@ static void dma_get_8390_hdr(struct net_device *dev,
 			     struct e8390_pkt_hdr *hdr,
 			     int ring_page)
 {
-    int nic_base = dev->base_addr;
+    ioaddr_t nic_base = dev->base_addr;
 
     if (ei_status.dmaing) {
 	printk(KERN_NOTICE "%s: DMAing conflict in dma_block_input."
@@ -1059,7 +1060,7 @@ static void dma_get_8390_hdr(struct net_device *dev,
 static void dma_block_input(struct net_device *dev, int count,
 			    struct sk_buff *skb, int ring_offset)
 {
-    int nic_base = dev->base_addr;
+    ioaddr_t nic_base = dev->base_addr;
     int xfer_count = count;
     char *buf = skb->data;
 
@@ -1116,7 +1117,7 @@ static void dma_block_output(struct net_device *dev, int count,
 			     const unsigned char *buf,
 			     const int start_page)
 {
-    int nic_base = dev->base_addr;
+    ioaddr_t nic_base = dev->base_addr;
     pcnet_dev_t *info = (pcnet_dev_t *)dev;
 #ifdef PCMCIA_DEBUG
     int retries = 0;

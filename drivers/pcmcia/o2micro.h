@@ -1,5 +1,5 @@
 /*
- * o2micro.h 1.10 1999/09/03 16:43:35
+ * o2micro.h 1.12 1999/10/16 01:43:24
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -45,17 +45,38 @@
 #ifndef PCI_DEVICE_ID_O2_6836
 #define PCI_DEVICE_ID_O2_6836		0x6836
 #endif
+#ifndef PCI_DEVICE_ID_O2_6812
+#define PCI_DEVICE_ID_O2_6812		0x6872
+#endif
+
+/* Additional PCI configuration registers */
+
+#define O2_MUX_CONTROL		0x90	/* 32 bit */
+#define  O2_MUX_RING_OUT	0x0000000f
+#define  O2_MUX_SKTB_ACTV	0x000000f0
+#define  O2_MUX_SCTA_ACTV_ENA	0x00000100
+#define  O2_MUX_SCTB_ACTV_ENA	0x00000200
+#define  O2_MUX_SER_IRQ_ROUTE	0x0000e000
+#define  O2_MUX_SER_PCI		0x00010000
+
+#define  O2_MUX_SKTA_TURBO	0x000c0000	/* for 6833, 6860 */
+#define  O2_MUX_SKTB_TURBO	0x00300000
+#define  O2_MUX_AUX_VCC_3V	0x00400000
+#define  O2_MUX_PCI_VCC_5V	0x00800000
+#define  O2_MUX_PME_MUX		0x0f000000
+
+/* Additional ExCA registers */
 
 #define O2_MODE_A		0x38
-#define O2_MODE_A_2		0x26	/* For 6833B, 6860C */
+#define O2_MODE_A_2		0x26	/* for 6833B, 6860C */
 #define  O2_MODE_A_CD_PULSE	0x04
 #define  O2_MODE_A_SUSP_EDGE	0x08
 #define  O2_MODE_A_HOST_SUSP	0x10
-#define  O2_MODE_A_PWRCHIP	0x60
+#define  O2_MODE_A_PWR_MASK	0x60
 #define  O2_MODE_A_QUIET	0x80
 
 #define O2_MODE_B		0x39
-#define O2_MODE_B_2		0x2e	/* For 6833B, 6860C */
+#define O2_MODE_B_2		0x2e	/* for 6833B, 6860C */
 #define  O2_MODE_B_IDENT	0x03
 #define  O2_MODE_B_ID_BSTEP	0x00
 #define  O2_MODE_B_ID_CSTEP	0x01
@@ -70,12 +91,16 @@
 #define  O2_MODE_C_DREQ_WP	0x02
 #define  O2_MODE_C_DREQ_BVD2	0x03
 #define  O2_MODE_C_ZVIDEO	0x08
+#define  O2_MODE_C_IREQ_SEL	0x30
+#define  O2_MODE_C_MGMT_SEL	0xc0
 
 #define O2_MODE_D		0x3b
 #define  O2_MODE_D_IRQ_MODE	0x03
+#define  O2_MODE_D_PCI_CLKRUN	0x04
+#define  O2_MODE_D_CB_CLKRUN	0x08
 #define  O2_MODE_D_SKT_ACTV	0x20
 #define  O2_MODE_D_PCI_FIFO	0x40	/* for OZ6729, OZ6730 */
-#define  O2_MODE_D_W97_IRQ	0x40	/* for OZ6832 */
+#define  O2_MODE_D_W97_IRQ	0x40
 #define  O2_MODE_D_ISA_IRQ	0x80
 
 #define O2_MHPG_DMA		0x3c

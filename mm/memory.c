@@ -742,7 +742,7 @@ struct page * put_dirty_page(struct task_struct * tsk, struct page *page,
 		__free_page(page);
 		return 0;
 	}
-	flush_page_to_ram(pte_page(page));
+	flush_page_to_ram(page);
 	set_pte(pte, pte_mkwrite(page_pte_prot(page, PAGE_COPY)));
 /* no need for flush_tlb */
 	return page;

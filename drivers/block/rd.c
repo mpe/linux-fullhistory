@@ -704,8 +704,9 @@ void __init initrd_load(void)
 
 #define OF(args)  args
 
+#ifndef memzero
 #define memzero(s, n)     memset ((s), 0, (n))
-
+#endif
 
 typedef unsigned char  uch;
 typedef unsigned short ush;

@@ -30,9 +30,7 @@
 #ifndef _LINUX_CS_TYPES_H
 #define _LINUX_CS_TYPES_H
 
-#ifdef __linux__
 #include <linux/types.h>
-#endif
 
 typedef u_short	socket_t;
 typedef u_short	ioaddr_t;

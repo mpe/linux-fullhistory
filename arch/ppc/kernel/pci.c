@@ -146,3 +146,25 @@ int pcibios_assign_resource(struct pci_dev *pdev, int resource)
 {
 	return 0;
 }
+
+/* the next two are stolen from the alpha port... */
+void __init
+pcibios_update_resource(struct pci_dev *dev, struct resource *root,
+			struct resource *res, int resource)
+{
+        unsigned long where, size;
+        u32 reg;
+
+        where = PCI_BASE_ADDRESS_0 + (resource * 4);
+        size = res->end - res->start;
+        pci_read_config_dword(dev, where, &reg);
+        reg = (reg & size) | (((u32)(res->start - root->start)) & ~size);
+        pci_write_config_dword(dev, where, reg);
+}
+
+void __init
+pcibios_update_irq(struct pci_dev *dev, int irq)
+{
+	pci_write_config_byte(dev, PCI_INTERRUPT_LINE, irq);
+	/* XXX FIXME - update OF device tree node interrupt property */
+}

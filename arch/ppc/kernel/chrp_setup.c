@@ -36,6 +36,7 @@
 #include <linux/version.h>
 #include <linux/adb.h>
 #include <linux/module.h>
+#include <linux/delay.h>
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -226,7 +227,7 @@ static void __init sio_init(void)
 
 
 void __init
-chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
+chrp_setup_arch(void)
 {
 	extern char cmd_line[];
 	struct device_node *device;
@@ -277,7 +278,7 @@ chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
 #ifdef CONFIG_DUMMY_CONSOLE
 	conswitchp = &dummy_con;
 #endif
-	*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
+	pmac_find_bridges();
 
 	/* Get the event scan rate for the rtas so we know how
 	 * often it expects a heartbeat. -- Cort
@@ -362,10 +363,7 @@ int chrp_get_irq( struct pt_regs *regs )
 			irq = *chrp_int_ack_special;
 		else
 			irq = i8259_irq( smp_processor_id() );
-                /*
-                 * Acknowledge as soon as possible to allow i8259
-                 * interrupt nesting                         */
-                openpic_eoi( smp_processor_id() );
+		openpic_eoi( smp_processor_id() );
         }
         if (irq == OPENPIC_VEC_SPURIOUS)
                 /*
@@ -373,6 +371,11 @@ int chrp_get_irq( struct pt_regs *regs )
                  * acknowledged
                  */
 		irq = -1;
+	/*
+	 * I would like to openpic_eoi here but there seem to be timing problems
+	 * between the openpic ack and the openpic eoi.
+	 *   -- Cort
+	 */
 	return irq;
 }
 
@@ -381,88 +384,14 @@ void chrp_post_irq(int irq)
 	/*
 	 * If it's an i8259 irq then we've already done the
 	 * openpic irq.  So we just check to make sure the controller
-	 * is an openpic and if it is then eoi -- Cort
+	 * is an openpic and if it is then eoi
+	 *
+	 * We do it this way since our irq_desc[irq].ctl can change
+	 * with RTL and no longer be open_pic -- Cort
 	 */
-	if ( irq_desc[irq].ctl == &open_pic )
+	if ( irq >= open_pic.irq_offset)
 		openpic_eoi( smp_processor_id() );
 }
-
-#if 0
-void
-chrp_do_IRQ(struct pt_regs *regs,
-	    int            cpu,
-            int            isfake)
-{
-        int irq;
-        unsigned long bits = 0;
-        int openpic_eoi_done = 0;
-
-#ifdef __SMP__
-        {
-                unsigned int loops = 1000000;
-                while (test_bit(0, &global_irq_lock)) {
-                        if (smp_processor_id() == global_irq_holder) {
-                                printk("uh oh, interrupt while we hold global irq lock!\n");
-#ifdef CONFIG_XMON
-                                xmon(0);
-#endif
-                                break;
-                        }
-                        if (loops-- == 0) {
-                                printk("do_IRQ waiting for irq lock (holder=%d)\n", global_irq_holder);
-#ifdef CONFIG_XMON
-                                xmon(0);
-#endif
-                        }
-                }
-        }
-#endif /* __SMP__ */
-
-        irq = openpic_irq(0);
-        if (irq == IRQ_8259_CASCADE)
-        {
-                /*
-                 * This magic address generates a PCI IACK cycle.
-                 *
-                 * This should go in the above mask/ack code soon. -- Cort
-                 */
-		if ( chrp_int_ack_special )
-			irq = *chrp_int_ack_special;
-		else
-			irq = i8259_irq(0);
-                /*
-                 * Acknowledge as soon as possible to allow i8259
-                 * interrupt nesting                         */
-                openpic_eoi(0);
-                openpic_eoi_done = 1;
-        }
-        if (irq == OPENPIC_VEC_SPURIOUS)
-        {
-                /*
-                 * Spurious interrupts should never be
-                 * acknowledged
-                 */
-                ppc_spurious_interrupts++;
-                openpic_eoi_done = 1;
-		goto out;
-        }
-        bits = 1UL << irq;
-
-        if (irq < 0)
-        {
-                printk(KERN_DEBUG "Bogus interrupt %d from PC = %lx\n",
-                       irq, regs->nip);
-                ppc_spurious_interrupts++;
-        }
-	else
-        {
-		ppc_irq_dispatch_handler( regs, irq );
-	}
-out:
-        if (!openpic_eoi_done)
-                openpic_eoi(0);
-}
-#endif
 
 void __init chrp_init_IRQ(void)
 {

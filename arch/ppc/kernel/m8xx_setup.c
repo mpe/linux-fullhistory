@@ -33,6 +33,7 @@
 #include <linux/blk.h>
 #include <linux/ioport.h>
 #include <linux/ide.h>
+#include <linux/bootmem.h>
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -83,13 +84,12 @@ void __init adbdev_init(void)
 }
 
 void __init
-m8xx_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
+m8xx_setup_arch(void)
 {
 	int	cpm_page;
 	extern char cmd_line[];
 	
-	cpm_page = *memory_start_p;
-	*memory_start_p += PAGE_SIZE;
+	cpm_page = (int) alloc_bootmem_pages(PAGE_SIZE);
 	
 	printk("Boot arguments: %s\n", cmd_line);
 
@@ -108,6 +108,9 @@ m8xx_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
 	rd_doload = 1;
 	rd_image_start = 0;
 #endif
+#if 0	/* XXX this may need to be updated for the new bootmem stuff,
+	   or possibly just deleted (see set_phys_avail() in init.c).
+	   - paulus. */
 	/* initrd_start and size are setup by boot/head.S and kernel/head.S */
 	if ( initrd_start )
 	{
@@ -119,6 +122,7 @@ m8xx_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
 			initrd_start = 0;
 		}
 	}
+#endif
 #endif
 }
 

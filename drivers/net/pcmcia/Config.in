@@ -3,13 +3,34 @@
 #
 
 mainmenu_option next_comment
-comment 'PCMCIA network devices'
+comment 'PCMCIA network device support'
 
-dep_tristate 'PCMCIA ethernet cards (NE2000 compatibles: DE-650, ...)' CONFIG_PCMCIA_PCNET $CONFIG_PCMCIA
-dep_tristate '3Com 3c589 PCMCIA card' CONFIG_PCMCIA_3C589 $CONFIG_PCMCIA
-dep_tristate 'Aviator/Raytheon 2.4MHz wireless' CONFIG_PCMCIA_RAYCS $CONFIG_PCMCIA
+bool 'PCMCIA network device support' CONFIG_NET_PCMCIA
+if [ "$CONFIG_NET_PCMCIA" = "y" ]; then
+   dep_tristate '  3Com 3c589 PCMCIA support' CONFIG_PCMCIA_3C589 $CONFIG_PCMCIA
+   dep_tristate '  3Com 3c574 PCMCIA support' CONFIG_PCMCIA_3C574 $CONFIG_PCMCIA
+   dep_tristate '  Fujitsu FMV-J18x PCMCIA support' CONFIG_PCMCIA_FMVJ18X $CONFIG_PCMCIA
+   dep_tristate '  NE2000 compatible PCMCIA support' CONFIG_PCMCIA_PCNET $CONFIG_PCMCIA
+   dep_tristate '  New Media PCMCIA support' CONFIG_PCMCIA_NMCLAN $CONFIG_PCMCIA
+   dep_tristate '  SMC 91Cxx PCMCIA support' CONFIG_PCMCIA_SMC91C92 $CONFIG_PCMCIA
+   dep_tristate '  Xircom 16-bit PCMCIA support' CONFIG_PCMCIA_XIRC2PS $CONFIG_PCMCIA
 
-if [ "$CONFIG_PCMCIA_3C589" = "y" -o "$CONFIG_PCMCIA_RAYCS" = "y" -o "$CONFIG_PCMCIA_PCNET" = "y" ]; then
+   # if [ "$CONFIG_CARDBUS" = "y" ]; then
+      # dep_tristate '  3Com 3c575 CardBus support' CONFIG_PCMCIA_3C575 $CONFIG_PCMCIA
+      # dep_tristate '  DEC Tulip CardBus support' CONFIG_PCMCIA_TULIP $CONFIG_PCMCIA
+      # dep_tristate '  SMC EPIC CardBus support' CONFIG_PCMCIA_EPIC100 $CONFIG_PCMCIA
+   # fi
+
+   dep_tristate '  Aviator/Raytheon 2.4MHz wireless support' CONFIG_PCMCIA_RAYCS $CONFIG_PCMCIA
+   dep_tristate '  Xircom Netwave AirSurfer wireless support' CONFIG_PCMCIA_NETWAVE $CONFIG_PCMCIA
+   dep_tristate '  AT&T/Lucent Wavelan wireless support' CONFIG_PCMCIA_WAVELAN $CONFIG_PCMCIA
+fi
+
+if [ "$CONFIG_PCMCIA_3C589" = "y" -o "$CONFIG_PCMCIA_3C574" = "y" -o \
+     "$CONFIG_PCMCIA_FMVJ18X" = "y" -o "$CONFIG_PCMCIA_PCNET" = "y" -o \
+     "$CONFIG_PCMCIA_NMCLAN" = "y" -o "$CONFIG_PCMCIA_SMC91C92" = "y" -o \
+     "$CONFIG_PCMCIA_XIRC2PS" = "y" -o "$CONFIG_PCMCIA_RAYCS" = "y" -o \
+     "$CONFIG_PCMCIA_NETWAVE" = "y" -o "$CONFIG_PCMCIA_WAVELAN" = "y" ]; then
    define_bool CONFIG_PCMCIA_NETCARD y
 fi
 

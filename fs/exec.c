@@ -246,7 +246,7 @@ int copy_strings(int argc,char ** argv, struct linux_binprm *bprm)
 					memset(kaddr+offset+len, 0, PAGE_SIZE-offset-len);
 			}
 			err = copy_from_user(kaddr + offset, str, bytes_to_copy);
-			flush_page_to_ram(kaddr);
+			flush_page_to_ram(page);
 			kunmap((unsigned long)kaddr, KM_WRITE);
 
 			if (err)

@@ -12,8 +12,7 @@ struct pt_regs;
 struct pci_bus;	
 
 struct machdep_calls {
-	void		(*setup_arch)(unsigned long * memory_start_p,
-				unsigned long * memory_end_p);
+	void		(*setup_arch)(void);
 	/* Optional, may be NULL. */
 	int		(*setup_residual)(char *buffer);
 	/* Optional, may be NULL. */

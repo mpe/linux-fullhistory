@@ -37,7 +37,9 @@ static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned lo
 		if (pte_none(page))
 			continue;
 		if (pte_present(page)) {
-			__free_page(mem_map+pte_pagenr(page));
+			unsigned long map_nr = pte_pagenr(page);
+			if (map_nr < max_mapnr)
+				__free_page(mem_map + map_nr);
 			continue;
 		}
 		printk("Whee.. Swapped out page in kernel page table\n");

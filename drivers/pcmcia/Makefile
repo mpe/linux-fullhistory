@@ -15,20 +15,34 @@ ALL_SUB_DIRS := $(SUB_DIRS)
 MOD_LIST_NAME := PCMCIA_MODULES
 
 ifeq ($(CONFIG_PCMCIA),y)
-  O_OBJS   := i82365.o tcic.o cistpl.o rsrc_mgr.o bulkmem.o
+  O_OBJS   := cistpl.o rsrc_mgr.o bulkmem.o
   OX_OBJS  := ds.o cs.o
   O_TARGET := pcmcia.o
+  ifeq ($(CONFIG_I82365),y)
+    O_OBJS += i82365.o
+  endif
+  ifeq ($(CONFIG_TCIC),y)
+    O_OBJS += tcic.o
+  endif
   ifeq ($(CONFIG_CARDBUS),y)
     O_OBJS += cardbus.o
+    OX_OBJS += cb_enabler.o
   endif
 else
   ifeq ($(CONFIG_PCMCIA),m)
-     M_OBJS   := i82365.o tcic.o pcmcia_core.o 
+     M_OBJS   := pcmcia_core.o 
      MX_OBJS  := ds.o
      MIX_OBJS  := cs.o
      CORE_OBJS := cistpl.o rsrc_mgr.o bulkmem.o cs.o
+    ifeq ($(CONFIG_I82365),y)
+      M_OBJS += i82365.o
+    endif
+    ifeq ($(CONFIG_TCIC),y)
+      M_OBJS += tcic.o
+    endif
      ifeq ($(CONFIG_CARDBUS),y)
 	CORE_OBJS += cardbus.o
+	MX_OBJS += cb_enabler.o
      endif
   endif
 endif

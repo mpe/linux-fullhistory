@@ -97,27 +97,38 @@ pte_t __bad_page(void)
 
 void show_mem(void)
 {
-	extern void show_net_buffers(void);
-	int i,free = 0,total = 0,reserved = 0;
-	int shared = 0;
+	int free = 0, total = 0, reserved = 0;
+	int shared = 0, cached = 0;
+	struct page *page, *end;
 
 	printk("Mem-info:\n");
 	show_free_areas();
 	printk("Free swap:       %6dkB\n",nr_swap_pages<<(PAGE_SHIFT-10));
-	i = MAP_NR(high_memory);
-	while (i-- > 0) {
+	for (page = mem_map, end = mem_map + max_mapnr;
+	     page < end; page++) {
+		if (PageSkip(page)) {
+			if (page->next_hash < page)
+				break;
+			page = page->next_hash;
+		}
 		total++;
-		if (PageReserved(mem_map+i))
+		if (PageReserved(page))
 			reserved++;
-		else if (!atomic_read(&mem_map[i].count))
+		else if (PageSwapCache(page))
+			cached++;
+		else if (!atomic_read(&page->count))
 			free++;
 		else
-			shared += atomic_read(&mem_map[i].count) - 1;
+			shared += atomic_read(&page->count) - 1;
 	}
-	printk("%d pages of RAM\n",total);
-	printk("%d free pages\n",free);
-	printk("%d reserved pages\n",reserved);
-	printk("%d pages shared\n",shared);
+	printk("%d pages of RAM\n", total);
+	printk("%d free pages\n", free);
+	printk("%d reserved pages\n", reserved);
+	printk("%d pages shared\n", shared);
+	printk("%d pages swap cached\n", cached);
+#ifndef CONFIG_NO_PGT_CACHE
+	printk("%ld page tables cached\n", pgtable_cache_size);
+#endif
 	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();

@@ -59,7 +59,7 @@ extern inline void memclear_highpage_flush(struct page *page, unsigned int offse
 		BUG();
 	kaddr = kmap(page, KM_WRITE);
 	memset((void *)(kaddr + offset), 0, size);
-	flush_page_to_ram(kaddr);
+	flush_page_to_ram(page);
 	kunmap(kaddr, KM_WRITE);
 }
 

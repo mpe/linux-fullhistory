@@ -60,7 +60,7 @@ running, the suggested command should tell you.
 - NFS                    2.2beta40               ; showmount --version
 - Bash                   1.14.7                  ; bash -version
 - Ncpfs                  2.2.0                   ; ncpmount -v
-- Pcmcia-cs              3.0.7                   ; cardmgr -V
+- Pcmcia-cs              3.1.2                   ; cardmgr -V
 - PPP                    2.3.9                   ; pppd --version
 - Util-linux             2.9i                    ; chsh -v
 
@@ -684,8 +684,8 @@ ftp://ftp.samba.org/pub/samba/samba-2.0.0.tar.gz
 Pcmcia-cs
 =========
 
-The 3.0.7 release:
-ftp://hyper.stanford.edu/pub/pcmcia/pcmcia-cs.3.0.7.tar.gz
+The 3.1.2 release:
+ftp://sourceforge.org/pcmcia/pcmcia-cs-3.1.2.tar.gz
 
 Setserial
 =========

@@ -238,7 +238,7 @@ pmac_mksound(unsigned int hz, unsigned int ticks)
 static volatile u32 *sysctrl_regs;
 
 void __init
-pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p)
+pmac_setup_arch(void)
 {
 	struct device_node *cpu;
 	int *fp;
@@ -269,7 +269,7 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p)
 	__ioremap(0xffc00000, 0x400000, pgprot_val(PAGE_READONLY));
 	ohare_init();
 
-	*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
+	pmac_find_bridges();
 	init_p2pbridge();
 
 	/* Checks "l2cr-value" property in the registry */

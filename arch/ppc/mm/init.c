@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.193 1999/10/11 18:50:35 geert Exp $
+ *  $Id: init.c,v 1.195 1999/10/15 16:39:39 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -35,6 +35,7 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/openpic.h>
+#include <linux/bootmem.h>
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>		/* for initrd_* */
 #endif
@@ -59,6 +60,9 @@ int prom_trashed;
 atomic_t next_mmu_context;
 unsigned long *end_of_DRAM;
 int mem_init_done;
+int init_bootmem_done;
+int boot_mapsize;
+unsigned long totalram_pages = 0;
 extern pgd_t swapper_pg_dir[];
 extern char _start[], _end[];
 extern char etext[], _stext[];
@@ -108,9 +112,9 @@ struct mem_pieces {
 };
 struct mem_pieces phys_mem;
 struct mem_pieces phys_avail;
-struct mem_pieces prom_mem;
 
 static void remove_mem_piece(struct mem_pieces *, unsigned, unsigned, int);
+static void set_phys_avail(void);
 void *find_mem_piece(unsigned, unsigned);
 static void print_mem_pieces(struct mem_pieces *);
 #if defined(CONFIG_PREP) || defined(CONFIG_APUS) || defined(CONFIG_ALL_PPC)
@@ -202,7 +206,7 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 			pte = (pte_t *) MMU_get_page();
 		else if ((pte = (pte_t *) get_zero_page_fast()) == NULL)
 			if ((pte = (pte_t *) __get_free_page(GFP_KERNEL)))
-				clear_page((unsigned long)pte);
+				clear_page(pte);
                 if (pte) {
                         pmd_val(*pmd) = (unsigned long)pte;
                         return pte + offset;
@@ -246,20 +250,20 @@ int do_check_pgt_cache(int low, int high)
  * ZERO_PAGE is a special page that is used for zero-initialized
  * data and COW.
  */
-unsigned long empty_bad_page_table;
+pte_t *empty_bad_page_table;
 
 pte_t * __bad_pagetable(void)
 {
-	__clear_user((void *)empty_bad_page_table, PAGE_SIZE);
-	return (pte_t *) empty_bad_page_table;
+	clear_page(empty_bad_page_table);
+	return empty_bad_page_table;
 }
 
-unsigned long empty_bad_page;
+void *empty_bad_page;
 
 pte_t __bad_page(void)
 {
-	__clear_user((void *)empty_bad_page, PAGE_SIZE);
-	return pte_mkdirty(mk_pte(empty_bad_page, PAGE_SHARED));
+	clear_page(empty_bad_page);
+	return pte_mkdirty(mk_pte_phys(__pa(empty_bad_page), PAGE_SHARED));
 }
 
 void show_mem(void)
@@ -346,7 +350,7 @@ void si_meminfo(struct sysinfo *val)
 	val->totalram = 0;
 	val->sharedram = 0;
 	val->freeram = nr_free_pages << PAGE_SHIFT;
-	val->bufferram = atomic_read(&buffermem);
+	val->bufferram = atomic_read(&buffermem_pages);
 	while (i-- > 0)  {
 		if (PageReserved(mem_map+i))
 			continue;
@@ -591,6 +595,37 @@ mmu_context_overflow(void)
 #endif /* CONFIG_8xx */
 
 /*
+ * Set phys_avail to phys_mem less the kernel text/data/bss.
+ */
+static void __init set_phys_avail(void)
+{
+	unsigned long kstart, ksize;
+
+	/* we can't call the prom any more at this stage, so
+	   all of memory is available (after klimit) */
+	phys_avail = phys_mem;
+
+	/*
+	 * phys_avail records memory we can use.
+	 * Make sure the kernel text/data/bss is not in it.
+	 */
+	kstart = __pa(_stext);	/* should be 0 */
+	ksize = PAGE_ALIGN(klimit - _stext);
+	remove_mem_piece(&phys_avail, kstart, ksize, 0);
+	remove_mem_piece(&phys_avail, 0, 0x4000, 0);
+
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (initrd_start) {
+		/*
+		 * Remove the initialized ramdisk from the available memory.
+		 */
+		remove_mem_piece(&phys_avail, __pa(initrd_start),
+				 initrd_end - initrd_start, 1);
+	}
+#endif /* CONFIG_BLK_DEV_INITRD */
+}
+
+/*
  * Scan a region for a piece of a given size with the required alignment.
  */
 void __init *find_mem_piece(unsigned size, unsigned align)
@@ -682,7 +717,7 @@ static void __init print_mem_pieces(struct mem_pieces *mp)
 	printk("\n");
 }
 
-#if defined(CONFIG_PREP) || defined(CONFIG_APUS) || defined(CONFIG_PPC_ALL)
+#if defined(CONFIG_PREP) || defined(CONFIG_APUS) || defined(CONFIG_ALL_PPC)
 /*
  * Add some memory to an array of pieces
  */
@@ -834,8 +869,8 @@ static void __init mapin_ram(void)
 {
 	int i;
 	unsigned long v, p, s, f;
-#ifndef CONFIG_8xx
 
+#ifndef CONFIG_8xx
 	if (!__map_without_bats) {
 		unsigned long tot, mem_base, bl, done;
 		unsigned long max_size = (256<<20);
@@ -870,24 +905,7 @@ static void __init mapin_ram(void)
 			       RAM_PAGE);
 		}
 	}
-	v = KERNELBASE;
-	for (i = 0; i < phys_mem.n_regions; ++i) {
-		p = phys_mem.regions[i].address;
-		for (s = 0; s < phys_mem.regions[i].size; s += PAGE_SIZE) {
-			f = _PAGE_PRESENT | _PAGE_ACCESSED;
-			if ((char *) v < _stext || (char *) v >= etext)
-				f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
-			else
-				/* On the powerpc, no user access
-				   forces R/W kernel access */
-				f |= _PAGE_USER;
-			map_page(v, p, f);
-			v += PAGE_SIZE;
-			p += PAGE_SIZE;
-		}
-	}
-
-#else	/* CONFIG_8xx */
+#endif /* CONFIG_8xx */
 
 	for (i = 0; i < phys_mem.n_regions; ++i) {
 		v = (ulong)__va(phys_mem.regions[i].address);
@@ -897,37 +915,35 @@ static void __init mapin_ram(void)
                          * don't get ASID compares on kernel space.
                          */
 			f = _PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_SHARED;
-
-                        /* I don't really need the rest of this code, but
-                         * I grabbed it because I think the line:
-                         *      f |= _PAGE_USER
-                         * is incorrect.  It needs to be set to bits we
-                         * don't define to cause a kernel read-only.  On
-                         * the MPC8xx, the PAGE_DIRTY takes care of that
-                         * for us (along with the RW software state).
-                         */
 			if ((char *) v < _stext || (char *) v >= etext)
 				f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
+#ifndef CONFIG_8xx
+			else
+				/* On the powerpc (not 8xx), no user access
+				   forces R/W kernel access */
+				f |= _PAGE_USER;
+#endif /* CONFIG_8xx */
 			map_page(v, p, f);
 			v += PAGE_SIZE;
 			p += PAGE_SIZE;
 		}
-	}	    
-#endif /* CONFIG_8xx */
+	}
 }
 
-/* This can get called from ioremap, so don't make it an __init, OK? */
+/* In fact this is only called until mem_init is done. */
 static void __init *MMU_get_page(void)
 {
 	void *p;
 
 	if (mem_init_done) {
 		p = (void *) __get_free_page(GFP_KERNEL);
-		if (p == 0)
-			panic("couldn't get a page in MMU_get_page");
+	} else if (init_bootmem_done) {
+		p = alloc_bootmem_pages(PAGE_SIZE);
 	} else {
 		p = find_mem_piece(PAGE_SIZE, PAGE_SIZE);
 	}
+	if (p == 0)
+		panic("couldn't get a page in MMU_get_page");
 	__clear_user(p, PAGE_SIZE);
 	return p;
 }
@@ -1107,6 +1123,51 @@ void __init MMU_init(void)
 }
 
 /*
+ * Initialize the bootmem system and give it all the memory we
+ * have available.
+ */
+void __init do_init_bootmem(void)
+{
+	unsigned long start, size;
+	int i;
+
+	/*
+	 * Find an area to use for the bootmem bitmap.
+	 * We look for the first area which is at least
+	 * 128kB in length (128kB is enough for a bitmap
+	 * for 4GB of memory, using 4kB pages), plus 1 page
+	 * (in case the address isn't page-aligned).
+	 */
+	start = 0;
+	size = 0;
+	for (i = 0; i < phys_avail.n_regions; ++i) {
+		unsigned long a = phys_avail.regions[i].address;
+		unsigned long s = phys_avail.regions[i].size;
+		if (s <= size)
+			continue;
+		start = a;
+		size = s;
+		if (s >= 33 * PAGE_SIZE)
+			break;
+	}
+	start = PAGE_ALIGN(start);
+
+	boot_mapsize = init_bootmem(start >> PAGE_SHIFT,
+				    __pa(end_of_DRAM) >> PAGE_SHIFT);
+
+	/* remove the bootmem bitmap from the available memory */
+	remove_mem_piece(&phys_avail, start, start + boot_mapsize, 1);
+
+	/* add everything in phys_avail into the bootmem map */
+	for (i = 0; i < phys_avail.n_regions; ++i)
+		free_bootmem(phys_avail.regions[i].address,
+			     phys_avail.regions[i].size);
+
+	init_bootmem_done = 1;
+}
+
+#if 0
+/*
  * Find some memory for setup_arch to return.
  * We use the largest chunk of available memory as the area
  * that setup_arch returns, making sure that there are at
@@ -1144,97 +1205,56 @@ unsigned long __init find_available_memory(void)
 	avail_start = (unsigned long) __va(a);
 	return avail_start;
 }
+#endif /* 0 */
 
 /*
  * paging_init() sets up the page tables - in fact we've already done this.
  */
-unsigned long __init paging_init(unsigned long start_mem, unsigned long end_mem)
+void __init paging_init(void)
 {
-	extern unsigned long free_area_init(unsigned long, unsigned long);
 	/*
 	 * Grab some memory for bad_page and bad_pagetable to use.
 	 */
-	empty_bad_page = PAGE_ALIGN(start_mem);
-	empty_bad_page_table = empty_bad_page + PAGE_SIZE;
-	start_mem = empty_bad_page + 2 * PAGE_SIZE;
+	empty_bad_page = alloc_bootmem_pages(PAGE_SIZE);
+	empty_bad_page_table = alloc_bootmem_pages(PAGE_SIZE);
 
-	/* note: free_area_init uses its second argument
-	   to size the mem_map array. */
-	start_mem = free_area_init(start_mem, end_mem);
-	return start_mem;
+	free_area_init(max_low_pfn);
 }
 
-void __init mem_init(unsigned long start_mem, unsigned long end_mem)
+void __init mem_init(void)
 {
 	unsigned long addr;
-	int i;
-	unsigned long a, lim;
 	int codepages = 0;
 	int datapages = 0;
 	int initpages = 0;
 	extern unsigned int rtas_data, rtas_size;
 
-	end_mem &= PAGE_MASK;
-	high_memory = (void *) end_mem;
-	max_mapnr = MAP_NR(high_memory);
-
-	/* mark usable pages in the mem_map[] */
-	start_mem = PAGE_ALIGN(start_mem);
-
+	max_mapnr = max_low_pfn;
+	high_memory = (void *) __va(max_low_pfn * PAGE_SIZE);
 	num_physpages = max_mapnr;	/* RAM is assumed contiguous */
-	remove_mem_piece(&phys_avail, __pa(avail_start),
-			 start_mem - avail_start, 1);
 
-	for (i = 0; i < phys_avail.n_regions; ++i) {
-		a = (unsigned long) __va(phys_avail.regions[i].address);
-		lim = (a + phys_avail.regions[i].size) & PAGE_MASK;
-		a = PAGE_ALIGN(a);
-		for (; a < lim; a += PAGE_SIZE)
-			clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags);
-	}
+	totalram_pages += free_all_bootmem();
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* if we are booted from BootX with an initial ramdisk,
 	   make sure the ramdisk pages aren't reserved. */
 	if (initrd_start) {
-		for (a = initrd_start; a < initrd_end; a += PAGE_SIZE)
-			clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags);
+		for (addr = initrd_start; addr < initrd_end; addr += PAGE_SIZE)
+			clear_bit(PG_reserved, &mem_map[MAP_NR(addr)].flags);
 	}
 #endif /* CONFIG_BLK_DEV_INITRD */
 	
-	/* free the prom's memory - no-op on prep */
-	for (i = 0; i < prom_mem.n_regions; ++i) {
-		a = (unsigned long) __va(prom_mem.regions[i].address);
-		lim = (a + prom_mem.regions[i].size) & PAGE_MASK;
-		a = PAGE_ALIGN(a);
-		for (; a < lim; a += PAGE_SIZE)
-			clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags);
-	}
-
-	prom_trashed = 1;
-	
-	for (addr = PAGE_OFFSET; addr < end_mem; addr += PAGE_SIZE) {
-		if (PageReserved(mem_map + MAP_NR(addr))) {
-			if (addr < (ulong) etext)
-				codepages++;
-			else if (addr >= (unsigned long)&__init_begin
-				 && addr < (unsigned long)&__init_end)
-                                initpages++;
-                        else if (addr < (ulong) start_mem)
-				datapages++;
+	for (addr = PAGE_OFFSET; addr < (unsigned long)end_of_DRAM;
+	     addr += PAGE_SIZE) {
+		if (!PageReserved(mem_map + MAP_NR(addr)))
 			continue;
-		}
-		set_page_count(mem_map + MAP_NR(addr), 1);
-#ifdef CONFIG_BLK_DEV_INITRD
-		if (!initrd_start ||
-		    addr < (initrd_start & PAGE_MASK) || addr >= initrd_end)
-#endif /* CONFIG_BLK_DEV_INITRD */
-#ifndef CONFIG_8xx
-			if ( !rtas_data ||
-			     addr < (rtas_data & PAGE_MASK) ||
-			     addr >= (rtas_data+rtas_size))
-#endif /* CONFIG_8xx */
-				free_page(addr);
+		if (addr < (ulong) etext)
+			codepages++;
+		else if (addr >= (unsigned long)&__init_begin
+			 && addr < (unsigned long)&__init_end)
+			initpages++;
+		else if (addr < (ulong) klimit)
+			datapages++;
 	}
 
         printk("Memory: %luk available (%dk kernel code, %dk data, %dk init) [%08x,%08lx]\n",
@@ -1242,7 +1262,7 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 	       codepages << (PAGE_SHIFT-10),
 	       datapages << (PAGE_SHIFT-10), 
 	       initpages << (PAGE_SHIFT-10),
-	       PAGE_OFFSET, end_mem);
+	       PAGE_OFFSET, (unsigned long) end_of_DRAM);
 	mem_init_done = 1;
 }
 
@@ -1258,11 +1278,9 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 unsigned long __init *pmac_find_end_of_memory(void)
 {
 	unsigned long a, total;
-	unsigned long kstart, ksize;
-	int i;
 	
 	/* max amount of RAM we allow -- Cort */
-#define RAM_LIMIT (256<<20)
+#define RAM_LIMIT (768<<20)
 
 	memory_node = find_devices("memory");
 	if (memory_node == NULL) {
@@ -1310,32 +1328,8 @@ unsigned long __init *pmac_find_end_of_memory(void)
 		phys_mem.n_regions = 1;
 	}
 
-	if (boot_infos == 0) {
-		/* record which bits the prom is using */
-		get_mem_prop("available", &phys_avail);
-		prom_mem = phys_mem;
-		for (i = 0; i < phys_avail.n_regions; ++i)
-			remove_mem_piece(&prom_mem,
-					 phys_avail.regions[i].address,
-					 phys_avail.regions[i].size, 0);
-	} else {
-		/* booted from BootX - it's all available (after klimit) */
-		phys_avail = phys_mem;
-		prom_mem.n_regions = 0;
-	}
+	set_phys_avail();
 
-	/*
-	 * phys_avail records memory we can use now.
-	 * prom_mem records memory allocated by the prom that we
-	 * don't want to use now, but we'll reclaim later.
-	 * Make sure the kernel text/data/bss is in neither.
-	 */
-	kstart = __pa(_stext);	/* should be 0 */
-	ksize = PAGE_ALIGN(klimit - _stext);
-	remove_mem_piece(&phys_avail, kstart, ksize, 0);
-	remove_mem_piece(&prom_mem, kstart, ksize, 0);
-	remove_mem_piece(&phys_avail, 0, 0x4000, 0);
-	remove_mem_piece(&prom_mem, 0, 0x4000, 0);
 #undef RAM_LIMIT
 	return __va(total);
 }
@@ -1350,7 +1344,6 @@ unsigned long __init *pmac_find_end_of_memory(void)
  */
 unsigned long __init *prep_find_end_of_memory(void)
 {
-	unsigned long kstart, ksize;
 	unsigned long total;
 	total = res->TotalMemory;
 
@@ -1365,11 +1358,7 @@ unsigned long __init *prep_find_end_of_memory(void)
 		printk("Ramsize default to be %ldM\n", total>>20);
 	}
 	append_mem_piece(&phys_mem, 0, total);
-	phys_avail = phys_mem;
-	kstart = __pa(_stext);	/* should be 0 */
-	ksize = PAGE_ALIGN(klimit - _stext);
-	remove_mem_piece(&phys_avail, kstart, ksize, 0);
-	remove_mem_piece(&phys_avail, 0, 0x4000, 0);
+	set_phys_avail();
 
 	return (__va(total));
 }
@@ -1379,7 +1368,7 @@ unsigned long __init *prep_find_end_of_memory(void)
 #if defined(CONFIG_GEMINI)
 unsigned long __init *gemini_find_end_of_memory(void)
 {
-	unsigned long total, kstart, ksize, *ret;
+	unsigned long total, *ret;
 	unsigned char reg;
 
 	reg = readb(GEMINI_MEMCFG);
@@ -1391,10 +1380,7 @@ unsigned long __init *gemini_find_end_of_memory(void)
 	phys_mem.n_regions = 1;
 	
 	ret = __va(phys_mem.regions[0].size);
-	phys_avail = phys_mem;
-	kstart = __pa(_stext);
-	ksize = PAGE_ALIGN( _end - _stext );
-	remove_mem_piece( &phys_avail, kstart, ksize, 0 );
+	set_phys_avail();
 	return ret;
 }
 #endif /* defined(CONFIG_GEMINI) || defined(CONFIG_ALL_PPC) */
@@ -1430,15 +1416,8 @@ unsigned long __init *apus_find_end_of_memory(void)
 	}
 
 	/* Now register the memory block. */
-	{
-		unsigned long kstart, ksize;
-
-		append_mem_piece(&phys_mem, memory[0].addr, memory[0].size);
-		phys_avail = phys_mem;
-		kstart = __pa(_stext);
-		ksize = PAGE_ALIGN(klimit - _stext);
-		remove_mem_piece(&phys_avail, kstart, ksize, 0);
-	}
+	append_mem_piece(&phys_mem, memory[0].addr, memory[0].size);
+	set_phys_avail();
 
 	/* Remove the memory chunks that are controlled by special
            Phase5 hardware. */
@@ -1587,7 +1566,6 @@ static void __init hash_init(void)
  */
 unsigned long __init *m8xx_find_end_of_memory(void)
 {
-	unsigned long kstart, ksize;
 	bd_t	*binfo;
 	unsigned long *ret;
 	extern unsigned char __res[];
@@ -1601,11 +1579,7 @@ unsigned long __init *m8xx_find_end_of_memory(void)
 	ret = __va(phys_mem.regions[0].address+
 		   phys_mem.regions[0].size);
 
-	phys_avail = phys_mem;
-
-	kstart = __pa(_stext);	/* should be 0 */
-	ksize = PAGE_ALIGN(_end - _stext);
-	remove_mem_piece(&phys_avail, kstart, ksize, 0);
+	set_phys_avail();
 	return ret;
 }
 #endif /* ndef CONFIG_8xx */

@@ -1,5 +1,8 @@
-
-// def file for Rockwell RWA010 chip set, as installed in Corel NetWinder
+/*
+ * linux/drivers/sound/waveartist.h
+ *
+ * def file for Rockwell RWA010 chip set, as installed in Rebel.com NetWinder
+ */
 
 //registers
 #define CMDR	0
@@ -33,7 +36,8 @@
 
 //commands
 
-#define	WACMD_SYSTEMID	0
+#define	WACMD_SYSTEMID		0x00
+#define WACMD_GETREV		0x00
 #define	WACMD_INPUTFORMAT	0x10	//0-8S, 1-16S, 2-8U
 #define	WACMD_INPUTCHANNELS	0x11	//1-Mono, 2-Stereo
 #define	WACMD_INPUTSPEED	0x12	//sampling rate
@@ -56,8 +60,11 @@
 #define	WACMD_OUTPUTRESUME	0x28	//resume ADC
 #define	WACMD_OUTPUTPIO		0x29	//PIO ADC
 
+#define	WACMD_GET_LEVEL		0x30
+#define	WACMD_SET_LEVEL		0x31
+#define	WACMD_SET_MIXER		0x32
+#define	WACMD_RST_MIXER		0x33
+#define	WACMD_SET_MONO		0x34
 
-
-
-int             wa_sendcmd(unsigned int cmd);
-int             wa_writecmd(unsigned int cmd, unsigned int arg);
+int wa_sendcmd(unsigned int cmd);
+int wa_writecmd(unsigned int cmd, unsigned int arg);

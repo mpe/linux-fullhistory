@@ -225,7 +225,7 @@ pmac_get_irq(struct pt_regs *regs)
 			xmon(regs);
 #endif
 		smp_message_recv();
-		return -1;
+		return -2;	/* ignore, already handled */
         }
 
         {
@@ -374,7 +374,7 @@ pmac_pic_init(void)
 		}
 		
 		/* get addresses of second controller */
-		irqctrler = (irqctrler->next) ? irqctrler->next : NULL;
+		irqctrler = irqctrler->next;
 		if (irqctrler && irqctrler->n_addrs > 0) {
 			addr = (unsigned long) 
 				ioremap(irqctrler->addrs[0].address, 0x40);
@@ -382,6 +382,11 @@ pmac_pic_init(void)
 				pmac_irq_hw[i] = (volatile struct pmac_irq_hw*)
 					(addr + (4 - i) * 0x10);
 		}
+	} else {
+		/* older powermacs have a GC (grand central) or ohare at
+		   f3000000, with interrupt control registers at f3000020. */
+		addr = (unsigned long) ioremap(0xf3000000, 0x40);
+		pmac_irq_hw[0] = (volatile struct pmac_irq_hw *) (addr + 0x20);
 	}
 
 	/* disable all interrupts in all controllers */

@@ -2,7 +2,7 @@
 
     Cardbus device enabler
 
-    cb_enabler.c 1.23 1999/09/15 15:32:19
+    cb_enabler.c 1.24 1999/10/20 00:19:09
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -58,7 +58,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"cb_enabler.c 1.23 1999/09/15 15:32:19 (David Hinds)";
+"cb_enabler.c 1.24 1999/10/20 00:19:09 (David Hinds)";
 #else
 #define DEBUG(n, args...) do { } while (0)
 #endif
@@ -371,6 +371,9 @@ void unregister_driver(struct driver_operations *ops)
 }
 
 /*====================================================================*/
+
+EXPORT_SYMBOL(register_driver);
+EXPORT_SYMBOL(unregister_driver);
 
 static int __init init_cb_enabler(void)
 {

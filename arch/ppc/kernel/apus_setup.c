@@ -255,8 +255,7 @@ struct pci_bus * __init pci_scan_peer_bridge(int bus)
 
 /*********************************************************** SETUP */
 /* From arch/m68k/kernel/setup.c. */
-void __init apus_setup_arch(unsigned long * memory_start_p,
-				unsigned long * memory_end_p)
+void __init apus_setup_arch(void)
 {
 #ifdef CONFIG_APUS
 	extern char cmd_line[];

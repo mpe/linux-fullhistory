@@ -295,7 +295,7 @@ decompress_kernel(ulg output_start, ulg free_mem_ptr_p, ulg free_mem_ptr_end_p,
 	makecrc();
 	puts("Uncompressing Linux...");
 	gunzip();
-	puts("done.\nNow booting the kernel\n");
+	puts(" done, booting the kernel.\n");
 	return output_ptr;
 }
 #else

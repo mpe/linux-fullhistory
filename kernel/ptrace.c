@@ -52,12 +52,12 @@ repeat:
 	if (write) {
 		maddr = kmap(page, KM_WRITE);
 		memcpy((char *)maddr + (addr & ~PAGE_MASK), buf, len);
-		flush_page_to_ram(maddr);
+		flush_page_to_ram(page);
 		kunmap(maddr, KM_WRITE);
 	} else {
 		maddr = kmap(page, KM_READ);
 		memcpy(buf, (char *)maddr + (addr & ~PAGE_MASK), len);
-		flush_page_to_ram(maddr);
+		flush_page_to_ram(page);
 		kunmap(maddr, KM_READ);
 	}
 	return len;

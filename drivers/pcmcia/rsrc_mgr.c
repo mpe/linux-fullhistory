@@ -2,7 +2,7 @@
 
     Resource management routines
 
-    rsrc_mgr.c 1.71 1999/09/15 15:32:19
+    rsrc_mgr.c 1.73 1999/10/19 00:54:04
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -98,124 +98,15 @@ static irq_info_t irq_table[NR_IRQS] = { { 0, 0, 0 }, /* etc */ };
 
 #endif
 
-static spinlock_t rsrc_lock = SPIN_LOCK_UNLOCKED;
-
 /*======================================================================
 
     Linux resource management extensions
     
 ======================================================================*/
 
-typedef struct resource_entry_t {
-    u_long			base, num;
-    char			*name;
-    struct resource_entry_t	*next;
-} resource_entry_t;
+static spinlock_t rsrc_lock = SPIN_LOCK_UNLOCKED;
 
-/* Ordered linked lists of allocated IO and memory blocks */
-static resource_entry_t io_list = { 0, 0, NULL, NULL };
-
-static resource_entry_t *find_gap(resource_entry_t *root,
-				  resource_entry_t *entry)
-{
-    resource_entry_t *p;
-    
-    if (entry->base > entry->base+entry->num-1)
-	return NULL;
-    for (p = root; ; p = p->next) {
-	if ((p != root) && (p->base+p->num-1 >= entry->base)) {
-	    p = NULL;
-	    break;
-	}
-	if ((p->next == NULL) ||
-	    (p->next->base > entry->base+entry->num-1))
-	    break;
-    }
-    return p;
-}
-
-static int register_my_resource(resource_entry_t *list,
-				u_long base, u_long num, char *name)
-{
-    u_long flags;
-    resource_entry_t *p, *entry;
-
-    entry = kmalloc(sizeof(resource_entry_t), GFP_ATOMIC);
-    entry->base = base;
-    entry->num = num;
-    entry->name = name;
-
-    spin_lock_irqsave(&rsrc_lock, flags);
-    p = find_gap(list, entry);
-    if (p == NULL) {
-	spin_unlock_irqrestore(&rsrc_lock, flags);
-	kfree(entry);
-	return -EBUSY;
-    }
-    entry->next = p->next;
-    p->next = entry;
-    spin_unlock_irqrestore(&rsrc_lock, flags);
-    return 0;
-}
-
-static void release_my_resource(resource_entry_t *list,
-				u_long base, u_long num)
-{
-    u_long flags;
-    resource_entry_t *p, *q;
-
-    spin_lock_irqsave(&rsrc_lock, flags);
-    for (p = list; ; p = q) {
-	q = p->next;
-	if (q == NULL) break;
-	if ((q->base == base) && (q->num == num)) {
-	    p->next = q->next;
-	    kfree(q);
-	    spin_unlock_irqrestore(&rsrc_lock, flags);
-	    return;
-	}
-    }
-    spin_unlock_irqrestore(&rsrc_lock, flags);
-    return;
-}
-
-static int check_my_resource(resource_entry_t *list,
-			     u_long base, u_long num)
-{
-    if (register_my_resource(list, base, num, NULL) != 0)
-	return -EBUSY;
-    release_my_resource(list, base, num);
-    return 0;
-}
-
-int check_io_region(u_long base, u_long num)
-{
-    return check_my_resource(&io_list, base, num);
-}
-void request_io_region(u_long base, u_long num, char *name)
-{
-    register_my_resource(&io_list, base, num, name);
-}
-void release_io_region(u_long base, u_long num)
-{
-    release_my_resource(&io_list, base, num);
-}
-#ifdef CONFIG_PROC_FS
-int proc_read_io(char *buf, char **start, off_t pos,
-		 int count, int *eof, void *data)
-{
-    resource_entry_t *r;
-    u_long flags;
-    char *p = buf;
-    
-    spin_lock_irqsave(&rsrc_lock, flags);
-    for (r = io_list.next; r; r = r->next)
-	p += sprintf(p, "%04lx-%04lx : %s\n", r->base,
-		     r->base+r->num-1, r->name);
-    spin_unlock_irqrestore(&rsrc_lock, flags);
-    return (p - buf);
-}
-#endif
+#define check_io_region(b,n) (0)
 
 /*======================================================================
 
@@ -773,7 +664,6 @@ int adjust_resource_info(client_handle_t handle, adjust_t *adj)
 void release_resource_db(void)
 {
     resource_map_t *p, *q;
-    resource_entry_t *u, *v;
     
     for (p = mem_db.next; p != &mem_db; p = q) {
 	q = p->next;
@@ -782,9 +672,5 @@ void release_resource_db(void)
     for (p = io_db.next; p != &io_db; p = q) {
 	q = p->next;
 	kfree(p);
-    }
-    for (u = io_list.next; u; u = v) {
-	v = u->next;
-	kfree(u);
     }
 }

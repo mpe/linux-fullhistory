@@ -134,7 +134,7 @@ extern int root_mountflags;
 extern char cmd_line[];
 
 
-void __init gemini_setup_arch(unsigned long *memstart, unsigned long *memend)
+void __init gemini_setup_arch(void)
 {
 	unsigned int cpu;
 	extern char cmd_line[];

@@ -117,8 +117,8 @@ csum_tcpudp_nofold(unsigned long saddr, unsigned long daddr, unsigned short len,
 	adcs	%0, %0, %4
 	adcs	%0, %0, %5
 	adc	%0, %0, #0"
-	: "=r"(sum)
-	: "r" (sum), "r" (daddr), "r" (saddr), "r" (ntohs(len) << 16), "Ir" (proto*256)
+	: "=&r"(sum)
+	: "r" (sum), "r" (daddr), "r" (saddr), "r" (ntohs(len) << 16), "Ir" (proto << 8)
 	: "cc");
 	return sum;
 }	

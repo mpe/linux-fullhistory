@@ -143,21 +143,6 @@ int unregister_pccard_driver(dev_info_t *dev_info);
 #define register_pcmcia_driver register_pccard_driver
 #define unregister_pcmcia_driver unregister_pccard_driver
 
-#ifdef __BEOS__
-#define DS_MODULE_NAME "bus_managers/pcmcia_ds/v1"
-typedef struct ds_module_info {
-    bus_manager_info binfo;
-    int (*_register_pccard_driver)(dev_info_t *,
-				   dev_link_t *(*)(void),
-				   void (*)(dev_link_t *));
-    int (*_unregister_pccard_driver)(dev_info_t *);
-    struct driver_info_t **root_driver;
-    int *sockets;
-    struct socket_info_t **socket_table;
-    sem_id *list_sem;
-} ds_module_info;
-#endif /* __BEOS__ */
-
 #endif /* __KERNEL__ */
 
 #endif /* _LINUX_DS_H */

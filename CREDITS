@@ -860,7 +860,7 @@ S: Germany
 
 N: David Hinds
 E: dhinds@zen.stanford.edu
-W: http://hyper.stanford.edu/~dhinds
+W: http://tao.stanford.edu/~dhinds
 D: PCMCIA and CardBus stuff, PCMCIA-HOWTO, PCMCIA client drivers
 S: 2019 W. Middlefield Rd #1
 S: Mountain View, CA  94043
@@ -1323,11 +1323,11 @@ S: 198 00 Praha 9
 S: Czech Republic
 
 N: Paul Mackerras
-E: paulus@cs.anu.edu.au
+E: paulus@linuxcare.com
 D: Linux port for PCI Power Macintosh
-S: Dept. of Computer Science
-S: Australian National University
-S: Canberra  ACT  0200
+S: Linuxcare, Inc.
+S: 24 Marcus Clarke Street
+S: Canberra ACT 2601
 S: Australia
 
 N: Pat Mackinlay

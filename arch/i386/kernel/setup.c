@@ -402,7 +402,11 @@ void __init add_memory_region(unsigned long start,
 } /* add_memory_region */
 
 
-#define LOWMEMSIZE()	((*(unsigned short *)__va(0x413)) * 1024)
+/*
+ * Do NOT EVER look at the BIOS memory size location.
+ * It does not work on many machines.
+ */
+#define LOWMEMSIZE()	(0x9f000)
 
 void __init setup_memory_region(void)
 {

@@ -50,7 +50,10 @@ static struct inode_operations swapper_inode_operations = {
 	NULL				/* revalidate */
 };
 
-struct inode swapper_inode = { i_op: &swapper_inode_operations };
+struct inode swapper_inode = {
+	i_op: &swapper_inode_operations,
+	i_pages: {&swapper_inode.i_pages,&swapper_inode.i_pages}
+};
 
 #ifdef SWAP_CACHE_INFO
 unsigned long swap_cache_add_total = 0;

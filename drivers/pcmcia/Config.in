@@ -2,13 +2,15 @@
 # PCMCIA bus subsystem configuration
 #
 mainmenu_option next_comment
-comment 'PCMCIA/Cardbus support'
+comment 'PCMCIA/CardBus support'
 
-tristate 'PCMCIA/Cardbus support' CONFIG_PCMCIA
+tristate 'PCMCIA/CardBus support' CONFIG_PCMCIA
 if [ "$CONFIG_PCMCIA" != "n" ]; then
    if [ "$CONFIG_PCI" != "n" ]; then
       bool '  CardBus support' CONFIG_CARDBUS
    fi
+   bool '  i82365/Yenta compatible bridge support' CONFIG_I82365
+   bool '  Databook TCIC host bridge support' CONFIG_TCIC
 fi
 
 endmenu

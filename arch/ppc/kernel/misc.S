@@ -235,9 +235,9 @@ _GLOBAL(flush_dcache_range)
  * snoop from the data cache.
  * This is a no-op on the 601 which has a unified cache.
  *
- *	void flush_page_to_ram(void *page)
+ *	void __flush_page_to_ram(void *page)
  */
-_GLOBAL(flush_page_to_ram)
+_GLOBAL(__flush_page_to_ram)
 	mfspr	r5,PVR
 	rlwinm	r5,r5,16,16,31
 	cmpi	0,r5,1

@@ -246,18 +246,18 @@ static int __init acpi_map_tables(void)
 	struct acpi_table *rsdt;
 	u32 *rsdt_entry;
 	int rsdt_entry_count;
-	u8 *i;
+	unsigned long i;
 
 	// search BIOS memory for RSDP
 	for (i = ACPI_BIOS_ROM_BASE; i < ACPI_BIOS_ROM_END; i += 16) {
-		rsdp = (struct acpi_rsdp *) i;
-		if (readl(rsdp->signature) == ACPI_RSDP1_SIG
-		    && readl(rsdp->signature + 1) == ACPI_RSDP2_SIG) {
+		rsdp = (struct acpi_rsdp *) phys_to_virt(i);
+		if (rsdp->signature[0] == ACPI_RSDP1_SIG &&
+		    rsdp->signature[1] == ACPI_RSDP2_SIG) {
 			char oem[7];
 			int j;
 
 			// strip trailing space and print OEM identifier
-			memcpy_fromio(oem, rsdp->oem, 6);
+			memcpy(oem, rsdp->oem, 6);
 			oem[6] = '\0';
 			for (j = 5;
 			     j > 0 && (oem[j] == '\0' || oem[j] == ' ');
@@ -275,7 +275,7 @@ static int __init acpi_map_tables(void)
 		return -ENODEV;
 	}
 	// fetch RSDT from RSDP
-	rsdt = acpi_map_table(readl(&rsdp->rsdt));
+	rsdt = acpi_map_table(rsdp->rsdt);
 	if (!rsdt || rsdt->signature != ACPI_RSDT_SIG) {
 		printk(KERN_ERR "ACPI: no RSDT found\n");
 		acpi_unmap_table(rsdt);

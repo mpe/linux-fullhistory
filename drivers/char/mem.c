@@ -158,6 +158,9 @@ static inline unsigned long pgprot_noncached(unsigned long prot)
 		prot = (prot & _CACHEMASK040) | _PAGE_NOCACHE_S;
 #elif defined(__mips__)
 	prot = (prot & ~_CACHE_MASK) | _CACHE_UNCACHED;
+#elif defined(__arm__) && defined(CONFIG_CPU_32)
+	/* Turn off caching for all I/O areas */
+	prot &= ~(L_PTE_CACHEABLE | L_PTE_BUFFERABLE);
 #endif
 
 	return prot;

@@ -288,7 +288,6 @@ icside_build_dmatable(ide_drive_t *drive, int reading)
 static int
 icside_config_drive(ide_drive_t *drive, int mode)
 {
-	ide_hwif_t *hwif = HWIF(drive);
 	int speed, err;
 
 	if (mode == 2) {

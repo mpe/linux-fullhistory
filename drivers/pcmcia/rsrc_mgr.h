@@ -30,10 +30,4 @@
 #ifndef _RSRC_MGR_H
 #define _RSRC_MGR_H
 
-#ifdef __BEOS__
-int check_resource(int type, u_long base, u_long num);
-int register_resource(int type, u_long base, u_long num);
-int release_resource(int type, u_long base, u_long num);
-#endif
-
 #endif	/* _RSRC_MGR_H */

@@ -5,7 +5,7 @@
  *
  * Maintainer unknown.
  *
- * Drive tuning added from Corel Computer's kernel sources
+ * Drive tuning added from Rebel.com's kernel sources
  *  -- Russell King (15/11/98) linux@arm.linux.org.uk
  */
 

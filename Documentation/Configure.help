@@ -1832,20 +1832,41 @@ CONFIG_ISAPNP
 
   If unsure, say Y.
 
-PCMCIA/Cardbus support
+PCMCIA/CardBus support
 CONFIG_PCMCIA
-  Say Y here if you want to attach PCMCIA's (PC-cards) to your Linux
-  computer. These are credit-card size devices such as network cards,
-  modems or hard drives popular with laptops.
+  Include kernel support for PCMCIA and CardBus devices.  Because
+  PCMCIA support requires additional components that are not part of
+  the kernel (i.e., the pcmcia-cs package), building PCMCIA into the
+  kernel is generally not recommended unless you have a specific
+  need.  If unsure, say N.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  When compiled this way, there will be modules called pcmcia_core.o
+  and ds.o.  If you want to compile it as a module, say M here and
+  read Documentation/modules.txt.
 
   You will also need David Hinds' pcmcia-cs package (see the file
-  Documentation/Changes for location).
+  Documentation/Changes for location).  For more information, see the
+  PCMCIA-HOWTO.
 
 CardBus support
 CONFIG_CARDBUS
-  CardBus is a bus mastering architecture for PC-cards (it allows
-  PC-cards to talk to the rest of the stuff inside your computer). If
-  unsure, say Y.
+  There are two types of PCMCIA devices: 16-bit PC Cards, and higher
+  performance 32-bit CardBus devices.  Use this option to include
+  support for CardBus devices.  If unsure, say Y.
+
+i82365/Yenta compatible bridge support
+CONFIG_I82365
+  Include support for PCMCIA and CardBus host bridges that are
+  register compatible with the Intel i82365 and/or the Yenta
+  specification: this includes virtually all modern PCMCIA bridges.
+  If unsure, say Y.
+
+Databook TCIC host bridge support
+CONFIG_TCIC
+  Include support for the Databook TCIC family of PCMCIA host bridges.
+  These are only found on a handful of old systems.  If unsure, say N.
 
 System V IPC
 CONFIG_SYSVIPC
@@ -5478,21 +5499,15 @@ CONFIG_X25_ASY
   say M here and read Documentation/modules.txt. The module will be
   called x25_asy.o. If unsure, say N.
 
-PCMCIA ethernet cards (NE2000 compatibles: DE-650, ...)
-CONFIG_PCMCIA_PCNET
-  Say Y here if you intend to attach an NE2000 compatible PCMCIA
-  (PC-card) Ethernet networking card to your computer.
+PCMCIA network device support
+CONFIG_NET_PCMCIA
+  Say Y if you would like to include support for any PCMCIA network
+  adapters.  If unsure, say N.
 
-  This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called pcnet_cs.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt. If unsure,
-  say N.
-
-3Com 3c589 PCMCIA card
+3Com 3c589 PCMCIA support
 CONFIG_PCMCIA_3C589
-  Say Y here if you intend to attach a 3Com 3c589 PCMCIA
-  (PC-card) Ethernet networking card to your computer.
+  Say Y here if you intend to attach a 3Com 3c589 or compatible PCMCIA
+  (PC-card) Ethernet card to your computer.
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -5500,7 +5515,73 @@ CONFIG_PCMCIA_3C589
   module, say M here and read Documentation/modules.txt. If unsure,
   say N.
 
-Aviator/Raytheon 2.4MHz wireless
+3Com 3c574 PCMCIA support
+CONFIG_PCMCIA_3C574
+  Say Y here if you intend to attach a 3Com 3c574 or compatible PCMCIA
+  (PC-card) Fast Ethernet card to your computer.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called 3c574_cs.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. If unsure,
+  say N.
+
+Fujitsu FMV-J18x PCMCIA support
+CONFIG_PCMCIA_FMVJ18X
+  Say Y here if you intend to attach a Fujitsu FMV-J18x or compatible
+  PCMCIA (PC-card) Ethernet card to your computer.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called fmvj18x_cs.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. If unsure,
+  say N.
+
+NE2000 compatible PCMCIA support
+CONFIG_PCMCIA_PCNET
+  Say Y here if you intend to attach an NE2000 compatible PCMCIA
+  (PC-card) Ethernet or Fast Ethernet card to your computer.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called pcnet_cs.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. If unsure,
+  say N.
+
+New Media PCMCIA support
+CONFIG_PCMCIA_NMCLAN
+  Say Y here if you intend to attach a New Media Ethernet or LiveWire
+  PCMCIA (PC-card) Ethernet card to your computer.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called nmclan_cs.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. If unsure,
+  say N.
+
+SMC 91Cxx PCMCIA support
+CONFIG_PCMCIA_SMC91C92
+  Say Y here if you intend to attach an SMC 91Cxx compatible PCMCIA
+  (PC-card) Ethernet or Fast Ethernet card to your computer.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called smc91c92_cs.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. If unsure,
+  say N.
+
+Xircom 16-bit PCMCIA support
+CONFIG_PCMCIA_XIRC2PS
+  Say Y here if you intend to attach a Xircom 16-bit PCMCIA
+  (PC-card) Ethernet or Fast Ethernet card to your computer.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called xirc2ps_cs.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. If unsure,
+  say N.
+
+Aviator/Raytheon 2.4MHz wireless support
 CONFIG_PCMCIA_RAYCS
   Say Y here if you intend to attach an Aviator/Raytheon PCMCIA
   (PC-card) wireless Ethernet networking card to your computer.
@@ -5508,6 +5589,29 @@ CONFIG_PCMCIA_RAYCS
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called ray_cs.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. If unsure,
+  say N.
+
+Xircom Netwave AirSurfer wireless support
+CONFIG_PCMCIA_NETWAVE
+  Say Y here if you intend to attach a Xircom Netwave AirSurfer PCMCIA
+  (PC-card) wireless Ethernet networking card to your computer.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called netwave_cs.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. If unsure,
+  say N.
+
+AT&T/Lucent Wavelan wireless support
+CONFIG_PCMCIA_WAVELAN
+  Say Y here if you intend to attach an AT&T/Lucent Wavelan PCMCIA
+  (PC-card) wireless Ethernet networking card to your computer.  This
+  driver is for the non-IEEE-802.11 Wavelan cards.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called wavelan_cs.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt. If unsure,
   say N.
 

@@ -17,6 +17,7 @@
 #include <linux/delay.h>
 #include <linux/string.h>
 #include <linux/init.h>
+#include <linux/bootmem.h>
 
 #include <asm/init.h>
 #include <asm/io.h>
@@ -30,7 +31,7 @@
 struct bridge_data **bridges, *bridge_list;
 static int max_bus;
 
-static void add_bridges(struct device_node *dev, unsigned long *mem_ptr);
+static void add_bridges(struct device_node *dev);
 
 /*
  * Magic constants for enabling cache coherency in the bandit/PSX bridge.
@@ -362,24 +363,22 @@ static void __init init_bandit(struct bridge_data *bp)
 	       bp->io_base);
 }
 
-unsigned long __init pmac_find_bridges(unsigned long mem_start, unsigned long mem_end)
+void __init pmac_find_bridges(void)
 {
 	int bus;
 	struct bridge_data *bridge;
 
 	bridge_list = 0;
 	max_bus = 0;
-	add_bridges(find_devices("bandit"), &mem_start);
-	add_bridges(find_devices("chaos"), &mem_start);
-	add_bridges(find_devices("pci"), &mem_start);
-	bridges = (struct bridge_data **) mem_start;
-	mem_start += (max_bus + 1) * sizeof(struct bridge_data *);
+	add_bridges(find_devices("bandit"));
+	add_bridges(find_devices("chaos"));
+	add_bridges(find_devices("pci"));
+	bridges = (struct bridge_data **)
+		alloc_bootmem((max_bus + 1) * sizeof(struct bridge_data *));
 	memset(bridges, 0, (max_bus + 1) * sizeof(struct bridge_data *));
 	for (bridge = bridge_list; bridge != NULL; bridge = bridge->next)
 		for (bus = bridge->bus_number; bus <= bridge->max_bus; ++bus)
 			bridges[bus] = bridge;
-
-	return mem_start;
 }
 
 /*
@@ -387,7 +386,7 @@ unsigned long __init pmac_find_bridges(unsigned long mem_start, unsigned long me
  * "pci" (a MPC106) and no bandit or chaos bridges, and contrariwise,
  * if we have one or more bandit or chaos bridges, we don't have a MPC106.
  */
-static void __init add_bridges(struct device_node *dev, unsigned long *mem_ptr)
+static void __init add_bridges(struct device_node *dev)
 {
 	int *bus_range;
 	int len;
@@ -413,8 +412,7 @@ static void __init add_bridges(struct device_node *dev, unsigned long *mem_ptr)
 			printk(KERN_INFO "PCI buses %d..%d", bus_range[0],
 			       bus_range[1]);
 		printk(" controlled by %s at %x\n", dev->name, addr->address);
-		bp = (struct bridge_data *) *mem_ptr;
-		*mem_ptr += sizeof(struct bridge_data);
+		bp = (struct bridge_data *) alloc_bootmem(sizeof(*bp));
 		if (strcmp(dev->name, "pci") != 0) {
 			bp->cfg_addr = (volatile unsigned int *)
 				ioremap(addr->address + 0x800000, 0x1000);

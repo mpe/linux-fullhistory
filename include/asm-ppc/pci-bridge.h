@@ -1,7 +1,7 @@
 #ifndef _ASM_PCI_BRIDGE_H
 #define _ASM_PCI_BRIDGE_H
 
-unsigned long pmac_find_bridges(unsigned long, unsigned long);
+void pmac_find_bridges(void);
 
 /*
  * pci_io_base returns the memory address at which you can access

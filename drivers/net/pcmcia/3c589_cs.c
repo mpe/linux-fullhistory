@@ -4,7 +4,7 @@
     
     Copyright (C) 1999 David A. Hinds -- dhinds@hyper.stanford.edu
 
-    3c589_cs.c 1.134 1999/09/15 15:33:09
+    3c589_cs.c 1.135 1999/10/07 20:14:54
 
     The network driver code is based on Donald Becker's 3c589 code:
     
@@ -115,7 +115,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"3c589_cs.c 1.134 1999/09/15 15:33:09 (David Hinds)";
+"3c589_cs.c 1.135 1999/10/07 20:14:54 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -142,14 +142,14 @@ static void tc589_release(u_long arg);
 static int tc589_event(event_t event, int priority,
 		       event_callback_args_t *args);
 
-static ushort read_eeprom(short ioaddr, int index);
+static u_short read_eeprom(ioaddr_t ioaddr, int index);
 static void tc589_reset(struct net_device *dev);
 static void media_check(u_long arg);
 static int el3_config(struct net_device *dev, struct ifmap *map);
 static int el3_open(struct net_device *dev);
 static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void update_stats(int addr, struct net_device *dev);
+static void update_stats(ioaddr_t addr, struct net_device *dev);
 static struct net_device_stats *el3_get_stats(struct net_device *dev);
 static int el3_rx(struct net_device *dev);
 static int el3_close(struct net_device *dev);
@@ -355,14 +355,14 @@ static void tc589_config(dev_link_t *link)
     struct net_device *dev;
     tuple_t tuple;
     cisparse_t parse;
-    u_short buf[32];
+    u_short buf[32], *phys_addr;
     int last_fn, last_ret, i, j, multi = 0;
-    short ioaddr, *phys_addr;
+    ioaddr_t ioaddr;
     char *ram_split[] = {"5:3", "3:1", "1:1", "3:5"};
     
     handle = link->handle;
     dev = link->priv;
-    phys_addr = (short *)dev->dev_addr;
+    phys_addr = (u_short *)dev->dev_addr;
 
     DEBUG(0, "3c589_config(0x%p)\n", link);
 
@@ -571,7 +571,7 @@ static void wait_for_completion(struct net_device *dev, int cmd)
   Read a word from the EEPROM using the regular EEPROM access register.
   Assume that we are in register window zero.
 */
-static ushort read_eeprom(short ioaddr, int index)
+static u_short read_eeprom(ioaddr_t ioaddr, int index)
 {
     int i;
     outw(EEPROM_READ + index, ioaddr + 10);
@@ -589,7 +589,7 @@ static ushort read_eeprom(short ioaddr, int index)
 static void tc589_set_xcvr(struct net_device *dev, int if_port)
 {
     struct el3_private *lp = (struct el3_private *)dev->priv;
-    ushort ioaddr = dev->base_addr;
+    ioaddr_t ioaddr = dev->base_addr;
     
     EL3WINDOW(0);
     switch (if_port) {
@@ -611,7 +611,7 @@ static void tc589_set_xcvr(struct net_device *dev, int if_port)
 
 static void dump_status(struct net_device *dev)
 {
-    int ioaddr = dev->base_addr;
+    ioaddr_t ioaddr = dev->base_addr;
     EL3WINDOW(1);
     printk(KERN_INFO "  irq status %04x, rx status %04x, tx status "
 	   "%02x  tx free %04x\n", inw(ioaddr+EL3_STATUS),
@@ -627,7 +627,7 @@ static void dump_status(struct net_device *dev)
 /* Reset and restore all of the 3c589 registers. */
 static void tc589_reset(struct net_device *dev)
 {
-    ushort ioaddr = dev->base_addr;
+    ioaddr_t ioaddr = dev->base_addr;
     int i;
     
     EL3WINDOW(0);
@@ -709,7 +709,7 @@ static int el3_open(struct net_device *dev)
 static void el3_tx_timeout(struct net_device *dev)
 {
     struct el3_private *lp = (struct el3_private *)dev->priv;
-    int ioaddr = dev->base_addr;
+    ioaddr_t ioaddr = dev->base_addr;
     
     printk(KERN_NOTICE "%s: Transmit timed out!\n", dev->name);
     dump_status(dev);
@@ -724,7 +724,7 @@ static void el3_tx_timeout(struct net_device *dev)
 static void pop_tx_status(struct net_device *dev)
 {
     struct el3_private *lp = (struct el3_private *)dev->priv;
-    int ioaddr = dev->base_addr;
+    ioaddr_t ioaddr = dev->base_addr;
     int i;
     
     /* Clear the Tx status stack. */
@@ -747,7 +747,7 @@ static void pop_tx_status(struct net_device *dev)
 static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     struct el3_private *lp = (struct el3_private *)dev->priv;
-    int ioaddr = dev->base_addr;
+    ioaddr_t ioaddr = dev->base_addr;
 
     /* Transmitter timeout, serious problems. */
     if (dev->tbusy) {
@@ -791,7 +791,7 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
     struct net_device *dev = (struct net_device *)dev_id;
     struct el3_private *lp;
-    int ioaddr, status;
+    ioaddr_t ioaddr, status;
     int i = 0;
     
     if ((dev == NULL) || !dev->start)
@@ -885,7 +885,7 @@ static void media_check(u_long arg)
 {
     struct net_device *dev = (struct net_device *)(arg);
     struct el3_private *lp = (struct el3_private *)dev->priv;
-    int ioaddr = dev->base_addr;
+    ioaddr_t ioaddr = dev->base_addr;
     u_short media, errs;
     u_long flags;
 
@@ -984,7 +984,7 @@ static struct net_device_stats *el3_get_stats(struct net_device *dev)
   operation, and it's simpler for the rest of the driver to assume that
   window 1 is always valid rather than use a special window-state variable.
 */
-static void update_stats(int ioaddr, struct net_device *dev)
+static void update_stats(ioaddr_t ioaddr, struct net_device *dev)
 {
     struct el3_private *lp = (struct el3_private *)dev->priv;
     
@@ -1013,7 +1013,7 @@ static void update_stats(int ioaddr, struct net_device *dev)
 static int el3_rx(struct net_device *dev)
 {
     struct el3_private *lp = (struct el3_private *)dev->priv;
-    int ioaddr = dev->base_addr;
+    ioaddr_t ioaddr = dev->base_addr;
     int worklimit = 32;
     short rx_status;
     
@@ -1073,7 +1073,7 @@ static int el3_rx(struct net_device *dev)
  */
 static void set_multicast_list(struct net_device *dev)
 {
-    short ioaddr = dev->base_addr;
+    ioaddr_t ioaddr = dev->base_addr;
     dev_link_t *link;
     for (link = dev_list; link; link = link->next)
 	if (link->priv == dev) break;
@@ -1099,7 +1099,7 @@ static void set_multicast_list(struct net_device *dev)
 
 static int el3_close(struct net_device *dev)
 {
-    int ioaddr = dev->base_addr;
+    ioaddr_t ioaddr = dev->base_addr;
     dev_link_t *link;
 
     for (link = dev_list; link; link = link->next)

@@ -127,7 +127,7 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 {
 	unsigned int status;
 	struct uhci_td *tmp;
-	int count = 1000, bytesreceived = 0;
+	int count = 1000, actlength, explength;
 
 	if (rval)
 		*rval = 0;
@@ -145,26 +145,28 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 	do {
 		status = uhci_status_bits(tmp->status);
 
-		if (status) {
-			if (debug) {
-				/* Must reset the toggle on first error */
-    				if (uhci_debug)
-					printk(KERN_DEBUG "Set toggle from %x rval %ld\n",
-						(unsigned int)tmp, rval ? *rval : 0);
-
-				usb_settoggle(dev->usb, uhci_endpoint(tmp->info),
-					uhci_packetout(tmp->info) ^ 1,
-					uhci_toggle(tmp->info));
-				break;
-			}
-		}
+		if (status)
+			break;
 
 		/* The length field is only valid if the TD was completed */
-		if (!status)
 		if (!(tmp->status & TD_CTRL_ACTIVE) && uhci_packetin(tmp->info)) {
-			bytesreceived += uhci_actual_length(tmp->status);
+			explength = uhci_expected_length(tmp->info);
+			actlength = uhci_actual_length(tmp->status);
 			if (rval)
-				*rval += uhci_actual_length(tmp->status);
+				*rval += actlength;
+			if (explength != actlength) {
+				/* Reset the data toggle on error. */
+				if (debug || uhci_debug)
+					printk(KERN_DEBUG "Set toggle from %p rval %ld%c for status=%x to %d, exp=%d, act=%d\n",
+						tmp, rval ? *rval : 0,
+						rval ? '*' : '/', tmp->status,
+						uhci_toggle(tmp->info) ^ 1,
+						explength, actlength);
+				usb_settoggle(dev->usb, uhci_endpoint(tmp->info),
+					uhci_packetout(tmp->info),
+					uhci_toggle(tmp->info) ^ 1);
+				break;	// Short packet
+			}
 		}
 
 		if ((tmp->link & UHCI_PTR_TERM) ||
@@ -194,12 +196,10 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 		    tmp->pipetype == PIPE_CONTROL)
 			return USB_ST_NOERROR;
 
-#if 0
 		/* We got to an error, but the controller hasn't finished */
-		/*  with it, yet */
+		/*  with it yet. */
 		if (tmp->status & TD_CTRL_ACTIVE)
 			return USB_ST_NOCHANGE;
-#endif
 
 		/* If this wasn't the last TD and SPD is set, ACTIVE */
 		/*  is not and NAK isn't then we received a short */
@@ -1147,6 +1147,9 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devre
 	__u32 nextlink;
 	unsigned long bytesrequested = len;
 	unsigned long bytesread = 0;
+#ifdef DUMP_RAW
+	unsigned char *orig_data = (unsigned char *) data;
+#endif
 
 	first = td = uhci_td_alloc(dev);
 	if (!td)
@@ -1268,6 +1271,23 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devre
 		printk(KERN_DEBUG "Failed cmd - %02X %02X %02X %02X %02X %02X %02X %02X\n",
 		       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
 	}
+
+#ifdef DUMP_RAW
+	if (!ret && usb_pipein(pipe)) {	/* good Input control msg */
+		int i;
+
+		printk (KERN_CRIT "ctrl msg [%02x %02x %04x %04x %04x] on pipe %x returned:\n",
+			cmd->requesttype, cmd->request,
+			cmd->value, cmd->index, cmd->length, pipe);
+		for (i = 0; i < bytesrequested; ) {
+			printk(" %02x", orig_data[i]);
+			if (++i % 16 == 0)
+				printk("\n");
+		}
+		if (i % 16 != 0)
+			printk("\n");
+	}
+#endif
 
 	return ret;
 }
@@ -1750,9 +1770,9 @@ int uhci_callback(struct uhci *uhci, struct uhci_td *td, int status, unsigned lo
 
 		list_add(&td->irq_list, &uhci->interrupt_list);
 
-		usb_dotoggle(usb_dev, usb_pipeendpoint(td->info), usb_pipeout(td->info) ^ 1);
+		usb_dotoggle(usb_dev, uhci_endpoint(td->info), uhci_packetout(td->info));
 		td->info &= ~(1 << TD_TOKEN_TOGGLE);	/* clear data toggle */
-		td->info |= usb_gettoggle(usb_dev, usb_pipeendpoint(td->info),
+		td->info |= usb_gettoggle(usb_dev, uhci_endpoint(td->info),
 			uhci_packetout(td->info)) << TD_TOKEN_TOGGLE; /* toggle between data0 and data1 */
 		td->status = (td->status & 0x2F000000) | TD_CTRL_ACTIVE | TD_CTRL_IOC;
 		/* The HC only removes it when it completed */
@@ -1764,7 +1784,7 @@ int uhci_callback(struct uhci *uhci, struct uhci_td *td, int status, unsigned lo
 
 		/* marked for removal */
 		td->flags &= ~UHCI_TD_REMOVE;
-		usb_dotoggle(usb_dev, usb_pipeendpoint(td->info), uhci_packetout(td->info));
+		usb_dotoggle(usb_dev, uhci_endpoint(td->info), uhci_packetout(td->info));
 		uhci_remove_qh(td->qh->skel, td->qh);
 		uhci_qh_free(td->qh);
 		if (td->pipetype == PIPE_INTERRUPT)
@@ -1792,7 +1812,7 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 		/*  TD's completed successfully */
 		status = uhci_td_result(td->dev, td, &rval, 0);
 
-		if ((status == USB_ST_NOERROR) && (td->status & TD_CTRL_ACTIVE))
+		if (status == USB_ST_NOCHANGE)
 			continue;
 
 		/* remove from IRQ list */
@@ -1925,7 +1945,8 @@ static void start_hc(struct uhci *uhci)
 	}
 
 	/* Turn on all interrupts */
-	outw(USBINTR_TIMEOUT | USBINTR_RESUME | USBINTR_IOC | USBINTR_SP, io_addr + USBINTR);
+	outw(USBINTR_TIMEOUT | USBINTR_RESUME | USBINTR_IOC | USBINTR_SP,
+		io_addr + USBINTR);
 
 	/* Start at frame 0 */
 	outw(0, io_addr + USBFRNUM);

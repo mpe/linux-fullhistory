@@ -722,7 +722,7 @@ void usb_show_device(struct usb_device *);
 void usb_show_string(struct usb_device *dev, char *id, int index);
 
 #ifdef USB_DEBUG
-#define PRINTD(format, args...) printk("usb: " format "\n" , ## args);
+#define PRINTD(format, args...) printk(KERN_DEBUG "usb: " format "\n" , ## args);
 #else /* NOT DEBUGGING */
 #define PRINTD(fmt, arg...) do {} while (0)
 #endif /* USB_DEBUG */

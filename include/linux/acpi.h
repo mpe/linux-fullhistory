@@ -28,8 +28,8 @@
 #define ACPI_MINOR_DEV 167
 
 /* RSDP location */
-#define ACPI_BIOS_ROM_BASE ((__u8*) 0xe0000)
-#define ACPI_BIOS_ROM_END  ((__u8*) 0x100000)
+#define ACPI_BIOS_ROM_BASE (0x0e0000)
+#define ACPI_BIOS_ROM_END  (0x100000)
 
 /* Table signatures */
 #define ACPI_RSDP1_SIG 0x20445352 /* 'RSD ' */

@@ -210,7 +210,7 @@ no_l2:
 }
 
 void __init
-prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
+prep_setup_arch()
 {
 	extern char cmd_line[];
 	unsigned char reg;

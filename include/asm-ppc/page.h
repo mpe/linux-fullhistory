@@ -76,7 +76,7 @@ typedef unsigned long pgprot_t;
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
-extern void clear_page(unsigned long page);
+extern void clear_page(void *page);
 #define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
 
 /* map phys->virtual and virtual->phys for RAM pages */

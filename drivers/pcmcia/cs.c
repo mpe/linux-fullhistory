@@ -2,7 +2,7 @@
 
     PCMCIA Card Services -- core services
 
-    cs.c 1.228 1999/09/15 15:32:19
+    cs.c 1.232 1999/10/20 22:17:24
     
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -70,7 +70,7 @@ static int handle_apm_event(apm_event_t event);
 int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 static const char *version =
-"cs.c 1.228 1999/09/15 15:32:19 (David Hinds)";
+"cs.c 1.232 1999/10/20 22:17:24 (David Hinds)";
 #endif
 
 static const char *release = "Linux PCMCIA Card Services " CS_RELEASE;
@@ -353,41 +353,40 @@ void unregister_ss_entry(ss_entry_t ss_entry)
     socket_info_t *s = NULL;
     client_t *client;
 
+#ifdef CONFIG_PROC_FS
+    for (i = 0; i < sockets; i++) {
+	s = socket_table[i];
+	if (s->ss_entry != ss_entry) continue;
+	if (proc_pccard) {
+	    char name[3];
+	    sprintf(name, "%02d", i);
+#ifdef PCMCIA_DEBUG
+	    remove_proc_entry("clients", s->proc);
+#endif
+	}
+    }
+#endif
+
     for (;;) {
 	for (i = 0; i < sockets; i++) {
 	    s = socket_table[i];
 	    if (s->ss_entry == ss_entry) break;
 	}
-	if (i == sockets) {
+	if (i == sockets)
 	    break;
-	} else {
-#ifdef CONFIG_PROC_FS
-	    if (proc_pccard) {
-		char name[3];
-		sprintf(name, "%02d", i);
-#ifdef PCMCIA_DEBUG
-		remove_proc_entry("clients", s->proc);
-#endif
-		remove_proc_entry(name, proc_pccard);
-	    }
-#endif
-	    while (s->clients) {
-		client = s->clients;
-		s->clients = s->clients->next;
-		kfree(client);
-	    }
-	    init_socket(s);
-	    release_cis_mem(s);
-#ifdef CONFIG_CARDBUS
-	    cb_release_cis_mem(s);
-#endif
-	    s->ss_entry = NULL;
-	    kfree(s);
-	    socket_table[i] = NULL;
-	    for (j = i; j < sockets-1; j++)
-		socket_table[j] = socket_table[j+1];
-	    sockets--;
+	shutdown_socket(i);
+	release_cis_mem(s);
+	while (s->clients) {
+	    client = s->clients;
+	    s->clients = s->clients->next;
+	    kfree(client);
 	}
+	s->ss_entry = NULL;
+	kfree(s);
+	socket_table[i] = NULL;
+	for (j = i; j < sockets-1; j++)
+	    socket_table[j] = socket_table[j+1];
+	sockets--;
     }
     
 } /* unregister_ss_entry */
@@ -1808,7 +1807,7 @@ static int request_window(client_handle_t *handle, win_req_t *req)
 {
     socket_info_t *s;
     window_t *win;
-    int w;
+    int w, align;
     
     if (CHECK_HANDLE(*handle))
 	return CS_BAD_HANDLE;
@@ -1835,9 +1834,10 @@ static int request_window(client_handle_t *handle, win_req_t *req)
     win->sock = s;
     win->base = req->Base;
     win->size = req->Size;
+    align = ((s->cap.features & SS_CAP_MEM_ALIGN) ||
+	     (req->Attributes & WIN_STRICT_ALIGN));
     if (find_mem_region(&win->base, win->size, (*handle)->dev_info,
-			((s->cap.features & SS_CAP_MEM_ALIGN) ?
-			 req->Size : s->cap.map_size),
+			(align ? req->Size : s->cap.map_size),
 			(req->Attributes & WIN_MAP_BELOW_1MB) ||
 			!(s->cap.features & SS_CAP_PAGE_REGS)))
 	return CS_IN_USE;

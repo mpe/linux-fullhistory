@@ -5,6 +5,7 @@
 
 #ifndef __ASSEMBLY__
 #include <linux/mm.h>
+#include <linux/threads.h>
 #include <asm/processor.h>		/* For TASK_SIZE */
 #include <asm/mmu.h>
 #include <asm/page.h>
@@ -50,7 +51,8 @@ extern inline void flush_hash_page(unsigned context, unsigned long va)
 #define flush_cache_page(vma, p)	do { } while (0)
 
 extern void flush_icache_range(unsigned long, unsigned long);
-extern void flush_page_to_ram(unsigned long);
+extern void __flush_page_to_ram(unsigned long page_va);
+#define flush_page_to_ram(page)	__flush_page_to_ram(page_address(page))
 
 extern unsigned long va_to_phys(unsigned long address);
 extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);
@@ -109,6 +111,16 @@ extern unsigned long ioremap_bot, ioremap_base;
 #define PTRS_PER_PGD	1024
 #define USER_PTRS_PER_PGD	(TASK_SIZE / PGDIR_SIZE)
 
+#define USER_PGD_PTRS (PAGE_OFFSET >> PGDIR_SHIFT)
+#define KERNEL_PGD_PTRS (PTRS_PER_PGD-USER_PGD_PTRS)
+
+#define pte_ERROR(e) \
+	printk("%s:%d: bad pte %08lx.\n", __FILE__, __LINE__, pte_val(e))
+#define pmd_ERROR(e) \
+	printk("%s:%d: bad pmd %08lx.\n", __FILE__, __LINE__, pmd_val(e))
+#define pgd_ERROR(e) \
+	printk("%s:%d: bad pgd %08lx.\n", __FILE__, __LINE__, pgd_val(e))
+
 /*
  * Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 64MB value just means that there will be a 64MB "hole" after the
@@ -126,7 +138,7 @@ extern unsigned long ioremap_bot, ioremap_base;
  * system.  This really does become a problem for machines with good amounts
  * of RAM.  -- Cort
  */
-#define VMALLOC_OFFSET (0x4000000) /* 64M */
+#define VMALLOC_OFFSET (0x1000000) /* 16M */
 #define VMALLOC_START ((((long)high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1)))
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
 #define VMALLOC_END	ioremap_bot
@@ -216,6 +228,14 @@ extern unsigned long ioremap_bot, ioremap_base;
 #define __S110	PAGE_SHARED
 #define __S111	PAGE_SHARED
 
+#ifndef __ASSEMBLY__
+/*
+ * ZERO_PAGE is a global shared page that is always zero: used
+ * for zero-mapped memory areas etc..
+ */
+extern unsigned long empty_zero_page[1024];
+#define ZERO_PAGE(vaddr) (mem_map + MAP_NR(empty_zero_page))
+
 /*
  * BAD_PAGETABLE is used when we need a bogus page-table, while
  * BAD_PAGE is used for a bogus page.
@@ -223,15 +243,12 @@ extern unsigned long ioremap_bot, ioremap_base;
  * ZERO_PAGE is a global shared page that is always zero: used
  * for zero-mapped memory areas etc..
  */
-#ifndef __ASSEMBLY__
 extern pte_t __bad_page(void);
 extern pte_t * __bad_pagetable(void);
 
-extern unsigned long empty_zero_page[1024];
-#endif __ASSEMBLY__
 #define BAD_PAGETABLE	__bad_pagetable()
 #define BAD_PAGE	__bad_page()
-#define ZERO_PAGE(vaddr)	((unsigned long) empty_zero_page)
+#endif /* __ASSEMBLY__ */
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR	(8*sizeof(unsigned long))
@@ -243,17 +260,24 @@ extern unsigned long empty_zero_page[1024];
 /* 64-bit machines, beware!  SRB. */
 #define SIZEOF_PTR_LOG2	2
 
+#define pte_none(pte)		(!pte_val(pte))
+#define pte_present(pte)	(pte_val(pte) & _PAGE_PRESENT)
+#define pte_clear(ptep)		do { pte_val(*(ptep)) = 0; } while (0)
+#define pte_pagenr(x)		((unsigned long)((pte_val(x) >> PAGE_SHIFT)))
+
+#define pmd_none(pmd)		(!pmd_val(pmd))
+#define	pmd_bad(pmd)		((pmd_val(pmd) & ~PAGE_MASK) != 0)
+#define	pmd_present(pmd)	((pmd_val(pmd) & PAGE_MASK) != 0)
+#define	pmd_clear(pmdp)		do { pmd_val(*(pmdp)) = 0; } while (0)
+
+/*
+ * Permanent address of a page.
+ */
+#define page_address(page) (PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT))
+#define pages_to_mb(x)		((x) >> (20-PAGE_SHIFT))
+#define pte_page(x)		(mem_map+pte_pagenr(x))
+
 #ifndef __ASSEMBLY__
-extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
-extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
-extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
-
-extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
-extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~PAGE_MASK) != 0; }
-extern inline int pmd_present(pmd_t pmd)	{ return (pmd_val(pmd) & PAGE_MASK) != 0; }
-extern inline void pmd_clear(pmd_t * pmdp)	{ pmd_val(*pmdp) = 0; }
-
-
 /*
  * The "pgd_xxx()" functions here are trivial for a folded two-level
  * setup: the pgd is never bad, and a pmd always exists (as it's folded
@@ -262,7 +286,10 @@ extern inline void pmd_clear(pmd_t * pmdp)	{ pmd_val(*pmdp) = 0; }
 extern inline int pgd_none(pgd_t pgd)		{ return 0; }
 extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
 extern inline int pgd_present(pgd_t pgd)	{ return 1; }
-extern inline void pgd_clear(pgd_t * pgdp)	{ }
+#define pgd_clear(xp)	do { pgd_val(*(xp)) = 0; } while (0)
+
+#define pgd_page(pgd) \
+	((unsigned long) __va(pgd_val(pgd) & PAGE_MASK))
 
 /*
  * The following only work if pte_present() is true.
@@ -313,43 +340,37 @@ extern inline pte_t pte_mkyoung(pte_t pte) {
  * within a page table are directly modified.  Thus, the following
  * hook is made available.
  */
-#if 1
 #define set_pte(pteptr, pteval)	((*(pteptr)) = (pteval))
-#else
-extern inline void set_pte(pte_t *pteptr, pte_t pteval)
-{
-	unsigned long val = pte_val(pteval);
-	extern void xmon(void *);
-
-	if ((val & _PAGE_PRESENT) && ((val < 0x111000 || (val & 0x800)
-	    || ((val & _PAGE_HWWRITE) && (~val & (_PAGE_RW|_PAGE_DIRTY)))) {
-		printk("bad pte val %lx ptr=%p\n", val, pteptr);
-		xmon(0);
-	}
-	*pteptr = pteval;
-}
-#endif
 
 /*
  * Conversion functions: convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
 
-static inline pte_t mk_pte_phys(unsigned long page, pgprot_t pgprot)
-{ pte_t pte; pte_val(pte) = (page) | pgprot_val(pgprot); return pte; }
+extern inline pte_t mk_pte_phys(unsigned long physpage, pgprot_t pgprot)
+{
+	pte_t pte;
+	pte_val(pte) = physpage | pgprot_val(pgprot);
+	return pte;
+}
 
-extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
-{ pte_t pte; pte_val(pte) = __pa(page) | pgprot_val(pgprot); return pte; }
+extern inline pte_t mk_pte(struct page *page, pgprot_t pgprot)
+{
+	pte_t pte;
+	pte_val(pte) = ((page - mem_map) << PAGE_SHIFT) | pgprot_val(pgprot);
+	return pte;
+}
 
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
-{ pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
+{
+	pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot);
+	return pte;
+}
 
-extern inline unsigned long pte_page(pte_t pte)
-{ return (unsigned long) __va(pte_val(pte) & PAGE_MASK); }
+#define page_pte_prot(page,prot) mk_pte(page, prot)
+#define page_pte(page)	page_pte_prot(page, __pgprot(0))
 
-extern inline unsigned long pmd_page(pmd_t pmd)
-{ return pmd_val(pmd); }
-
+#define pmd_page(pmd)	(pmd_val(pmd))
 
 /* to find an entry in a kernel page-table-directory */
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)
@@ -418,7 +439,7 @@ extern unsigned long get_zero_page_fast(void);
 
 extern __inline__ pgd_t *get_pgd_slow(void)
 {
-	pgd_t *ret/* = (pgd_t *)__get_free_page(GFP_KERNEL)*/, *init;
+	pgd_t *ret, *init;
 
 	if ( (ret = (pgd_t *)get_zero_page_fast()) == NULL )
 	{
@@ -427,7 +448,6 @@ extern __inline__ pgd_t *get_pgd_slow(void)
 	}
 	if (ret) {
 		init = pgd_offset(&init_mm, 0);
-		/*memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));*/
 		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
 			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 	}
@@ -612,9 +632,9 @@ extern void flush_hash_segments(unsigned low_vsid, unsigned high_vsid);
 extern void flush_hash_page(unsigned context, unsigned long va);
 
 
-#define SWP_TYPE(entry) (((entry) >> 1) & 0x7f)
-#define SWP_OFFSET(entry) ((entry) >> 8)
-#define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 8))
+#define SWP_TYPE(entry) (((pte_val(entry)) >> 1) & 0x7f)
+#define SWP_OFFSET(entry) ((pte_val(entry)) >> 8)
+#define SWP_ENTRY(type,offset) __pte(((type) << 1) | ((offset) << 8))
 
 #define module_map      vmalloc
 #define module_unmap    vfree

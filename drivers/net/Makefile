@@ -27,10 +27,10 @@ CONFIG_82596_MODULE :=
 
 ifeq ($(CONFIG_PCMCIA),y)
   SUB_DIRS += pcmcia
-  MOD_SUB_DIRS += pcmcia
+  MOD_IN_SUB_DIRS += pcmcia
 else
   ifeq ($(CONFIG_PCMCIA),m)
-    MOD_SUB_DIRS += pcmcia
+    MOD_IN_SUB_DIRS += pcmcia
   endif
 endif
 
@@ -825,14 +825,6 @@ CONFIG_8390_BUILTIN = y
 else
   ifeq ($(CONFIG_ARIADNE2),m)
   M_OBJS += ariadne2.o
-  CONFIG_8390_MODULE = y
-  endif
-endif
-
-ifeq ($(CONFIG_PCMCIA_PCNET),y)
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_PCMCIA_PCNET),m)
   CONFIG_8390_MODULE = y
   endif
 endif

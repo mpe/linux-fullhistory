@@ -296,15 +296,19 @@ asmlinkage void do_IRQ(struct pt_regs *regs, int isfake)
 	irq = ppc_md.get_irq( regs );
 	if ( irq < 0 )
 	{
-                printk(KERN_DEBUG "Bogus interrupt %d from PC = %lx\n",
-                       irq, regs->nip);
-                ppc_spurious_interrupts++;
-		return;
+		/* -2 means ignore, already handled */
+		if (irq != -2) {
+			printk(KERN_DEBUG "Bogus interrupt %d from PC = %lx\n",
+			       irq, regs->nip);
+			ppc_spurious_interrupts++;
+		}
+		goto out;
 	}
 	ppc_irq_dispatch_handler( regs, irq );
 	if ( ppc_md.post_irq )
 		ppc_md.post_irq( irq );
-	
+
+ out:	
         hardirq_exit( cpu );
 }
 
