@@ -671,7 +671,7 @@ static struct dvb_frontend_ops nxt2002_ops = {
 		.name = "Nextwave nxt2002 VSB/QAM frontend",
 		.type = FE_ATSC,
 		.frequency_min =  54000000,
-		.frequency_max = 806000000,
+		.frequency_max = 860000000,
                 /* stepsize is just a guess */
 		.frequency_stepsize = 166666,
 		.caps = FE_CAN_FEC_1_2 | FE_CAN_FEC_2_3 | FE_CAN_FEC_3_4 |
