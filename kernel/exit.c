@@ -266,9 +266,12 @@ static inline void __exit_mm(struct task_struct * tsk)
 	struct mm_struct * mm = tsk->mm;
 
 	if (mm) {
+		atomic_inc(&init_mm.mm_count);
 		mm_release();
-		atomic_inc(&mm->mm_count);
+		if (mm != tsk->active_mm) BUG();
 		tsk->mm = NULL;
+		tsk->active_mm = &init_mm;
+		switch_mm(mm, &init_mm);
 		mmput(mm);
 	}
 }
