@@ -225,13 +225,6 @@ source "arch/arm/mach-versatile/Kconfig"
 config ARCH_ACORN
 	bool
 
-source "arch/arm/common/Kconfig"
-
-config FORCE_MAX_ZONEORDER
-	int
-	depends on SA1111
-	default "9"
-
 source arch/arm/mm/Kconfig
 
 #  bool 'Use XScale PMU as timer source' CONFIG_XSCALE_PMU_TIMER
@@ -239,6 +232,60 @@ config XSCALE_PMU
 	bool
 	depends on CPU_XSCALE && !XSCALE_PMU_TIMER
 	default y
+
+endmenu
+
+source "arch/arm/common/Kconfig"
+
+config FORCE_MAX_ZONEORDER
+	int
+	depends on SA1111
+	default "9"
+
+menu "Bus support"
+
+config ARM_AMBA
+	bool
+
+config ISA
+	bool
+	depends on FOOTBRIDGE_HOST || ARCH_SHARK || ARCH_CLPS7500 || ARCH_EBSA110 || ARCH_CDB89712 || ARCH_EDB7211 || ARCH_SA1100 || ARCH_MX1ADS
+	default y
+	help
+	  Find out whether you have ISA slots on your motherboard.  ISA is the
+	  name of a bus system, i.e. the way the CPU talks to the other stuff
+	  inside your box.  Other bus systems are PCI, EISA, MicroChannel
+	  (MCA) or VESA.  ISA is an older system, now being displaced by PCI;
+	  newer boards don't support it.  If you have ISA, say Y, otherwise N.
+
+config ISA_DMA
+	bool
+	depends on FOOTBRIDGE_HOST || ARCH_SHARK
+	default y
+
+config PCI
+	bool "PCI support" if ARCH_INTEGRATOR_AP
+	default y if ARCH_SHARK || FOOTBRIDGE_HOST || ARCH_IOP3XX || ARCH_IXP4XX || ARCH_IXP2000
+	help
+	  Find out whether you have a PCI motherboard. PCI is the name of a
+	  bus system, i.e. the way the CPU talks to the other stuff inside
+	  your box. Other bus systems are ISA, EISA, MicroChannel (MCA) or
+	  VESA. If you have PCI, say Y, otherwise N.
+
+	  The PCI-HOWTO, available from
+	  <http://www.tldp.org/docs.html#howto>, contains valuable
+	  information about which PCI hardware does work under Linux and which
+	  doesn't.
+
+# Select the host bridge type
+config PCI_HOST_VIA82C505
+	bool
+	depends on PCI && ARCH_SHARK
+	default y
+
+source "drivers/pci/Kconfig"
+
+source "drivers/pcmcia/Kconfig"
 
 endmenu
 
@@ -281,46 +328,6 @@ config DISCONTIGMEM
 	  for architectures which are either NUMA (Non-Uniform Memory Access)
 	  or have huge holes in the physical address space for other reasons.
 	  See <file:Documentation/vm/numa> for more.
-
-# Now handle the bus types
-config PCI
-	bool "PCI support" if ARCH_INTEGRATOR_AP
-	default y if ARCH_SHARK || FOOTBRIDGE_HOST || ARCH_IOP3XX || ARCH_IXP4XX || ARCH_IXP2000
-	help
-	  Find out whether you have a PCI motherboard. PCI is the name of a
-	  bus system, i.e. the way the CPU talks to the other stuff inside
-	  your box. Other bus systems are ISA, EISA, MicroChannel (MCA) or
-	  VESA. If you have PCI, say Y, otherwise N.
-
-	  The PCI-HOWTO, available from
-	  <http://www.tldp.org/docs.html#howto>, contains valuable
-	  information about which PCI hardware does work under Linux and which
-	  doesn't.
-
-# Select the host bridge type
-config PCI_HOST_VIA82C505
-	bool
-	depends on PCI && ARCH_SHARK
-	default y
-
-config ARM_AMBA
-	bool
-
-config ISA
-	bool
-	depends on FOOTBRIDGE_HOST || ARCH_SHARK || ARCH_CLPS7500 || ARCH_EBSA110 || ARCH_CDB89712 || ARCH_EDB7211 || ARCH_SA1100 || ARCH_MX1ADS
-	default y
-	help
-	  Find out whether you have ISA slots on your motherboard.  ISA is the
-	  name of a bus system, i.e. the way the CPU talks to the other stuff
-	  inside your box.  Other bus systems are PCI, EISA, MicroChannel
-	  (MCA) or VESA.  ISA is an older system, now being displaced by PCI;
-	  newer boards don't support it.  If you have ISA, say Y, otherwise N.
-
-config ISA_DMA
-	bool
-	depends on FOOTBRIDGE_HOST || ARCH_SHARK
-	default y
 
 config FIQ
 	bool
@@ -415,10 +422,6 @@ config CPU_FREQ_INTEGRATOR
 	  If in doubt, say Y.
 
 endif
-
-source "drivers/pci/Kconfig"
-
-source "drivers/pcmcia/Kconfig"
 
 comment "At least one math emulation must be selected"
 
