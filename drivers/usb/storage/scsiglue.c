@@ -345,6 +345,7 @@ static int proc_info (struct Scsi_Host *hostptr, char *buffer, char **start, off
 {
 	struct us_data *us;
 	char *pos = buffer;
+	const char *string;
 
 	/* if someone is sending us data, just throw it away */
 	if (inout)
@@ -357,21 +358,24 @@ static int proc_info (struct Scsi_Host *hostptr, char *buffer, char **start, off
 
 	/* print product, vendor, and serial number strings */
 	if (us->pusb_dev->manufacturer)
-		SPRINTF("       Vendor: %s\n", us->pusb_dev->manufacturer);
+		string = us->pusb_dev->manufacturer;
 	else if (us->unusual_dev->vendorName)
-		SPRINTF("       Vendor: %s\n", us->unusual_dev->vendorName);
+		string = us->unusual_dev->vendorName;
 	else
-		SPRINTF("       Vendor: Unknown\n");
+		string = "Unknown";
+	SPRINTF("       Vendor: %s\n", string);
 	if (us->pusb_dev->product)
-		SPRINTF("      Product: %s\n", us->pusb_dev->product);
+		string = us->pusb_dev->product;
 	else if (us->unusual_dev->productName)
-		SPRINTF("      Product: %s\n", us->unusual_dev->productName);
+		string = us->unusual_dev->productName;
 	else
-		SPRINTF("      Product: Unknown\n");
+		string = "Unknown";
+	SPRINTF("      Product: %s\n", string);
 	if (us->pusb_dev->serial)
-		SPRINTF("Serial Number: %s\n", us->pusb_dev->serial);
+		string = us->pusb_dev->serial;
 	else
-		SPRINTF("Serial Number: None\n");
+		string = "None";
+	SPRINTF("Serial Number: %s\n", string);
 
 	/* show the protocol and transport */
 	SPRINTF("     Protocol: %s\n", us->protocol_name);
