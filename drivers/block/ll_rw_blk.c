@@ -84,16 +84,19 @@ int * hardsect_size[MAX_BLKDEV] = { NULL, NULL, };
 /*
  * remove the plug and let it rip..
  */
-static void unplug_device(void * data)
+void unplug_device(void * data)
 {
 	struct blk_dev_struct * dev = (struct blk_dev_struct *) data;
 	unsigned long flags;
 
 	save_flags(flags);
 	cli();
-	dev->current_request = dev->plug.next;
-	dev->plug.next = NULL;
-	(dev->request_fn)();
+	if (dev->current_request == &dev->plug) {
+		dev->current_request = dev->plug.next;
+		dev->plug.next = NULL;
+		if (dev->current_request)
+			(dev->request_fn)();
+	}
 	restore_flags(flags);
 }
 

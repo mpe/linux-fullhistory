@@ -200,11 +200,12 @@
 			  Both above from a suggestion by 
 			  <pchen@woodruffs121.residence.gatech.edu>.
 			  Add new multicasting code.
+      0.421   22-Apr-96	  Fix alloc_device() bug <jari@markkus2.fimr.fi>
 
     =========================================================================
 */
 
-static const char *version = "depca.c:v0.42 95/12/27 davies@wanton.lkg.dec.com\n";
+static const char *version = "depca.c:v0.421 96/4/22 davies@wanton.lkg.dec.com\n";
 
 #include <linux/module.h>
 
@@ -1336,7 +1337,7 @@ static struct device *alloc_device(struct device *dev, u_long iobase)
 	** and initialize it (name, I/O address, next device (NULL) and
 	** initialisation probe routine).
 	*/
-	dev->name = (char *)(dev + sizeof(struct device));
+	dev->name = (char *)(dev + 1);
 	if (num_eth > 9999) {
 	  sprintf(dev->name,"eth????");    /* New device name */
 	} else {
@@ -1375,7 +1376,7 @@ static struct device *alloc_device(struct device *dev, u_long iobase)
 	    ** and initialize it (name, I/O address, next device (NULL) and
 	    ** initialisation probe routine).
 	    */
-	    tmp->name = (char *)(tmp + sizeof(struct device));
+	    tmp->name = (char *)(tmp + 1);
 	    if (num_eth > 9999) {
 	      sprintf(tmp->name,"eth????");       /* New device name */
 	    } else {

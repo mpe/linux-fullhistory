@@ -20,6 +20,8 @@
 #include <linux/errno.h>
 #include <linux/major.h>
 
+#include <asm/segment.h>
+
 #ifdef DES_AVAILABLE
 #include "des.h"
 #endif

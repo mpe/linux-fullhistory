@@ -5,6 +5,10 @@
 
 #include <asm/system.h>
 
+/* We don't use IO slowdowns on the alpha, but.. */
+#define __SLOW_DOWN_IO	do { } while (0)
+#define SLOW_DOWN_IO	do { } while (0)
+
 /*
  * The hae (hardware address extension) register is used to
  * access high IO addresses. To avoid doing an external cycle
@@ -134,25 +138,12 @@ extern void		_writel(unsigned int b, unsigned long addr);
 #ifndef inl_p
 # define inl_p		inl
 #endif
+
 #ifndef outb_p
 # define outb_p		outb
 #endif
 #ifndef outw_p
 # define outw_p		outw
-#endif
-#ifndef outl_p
-# define outl_p		outl
-#endif
-
-#ifndef inw_p
-# define inw_p		inw
-#endif
-#ifndef outw_p
-# define outw_p		outw
-#endif
-
-#ifndef inl_p
-# define inl_p		inl
 #endif
 #ifndef outl_p
 # define outl_p		outl

@@ -96,7 +96,7 @@ extern unsigned long dvma_init(struct linux_sbus *, unsigned long);
 #define DMA_RST_ENET     DMA_RST_SCSI      /* Reset the ENET controller */
 #define DMA_ST_WRITE     0x00000100        /* write from device to memory */
 #define DMA_ENABLE       0x00000200        /* Fire up DMA, handle requests */
-#define DMA_PEND_READ    0x00000400        /* DMA_VERS1/0/PLUS Pendind Read */
+#define DMA_PEND_READ    0x00000400        /* DMA_VERS1/0/PLUS Pending Read */
 #define DMA_DSBL_RD_DRN  0x00001000        /* No EC drain on slave reads */
 #define DMA_BCNT_ENAB    0x00002000        /* If on, use the byte counter */
 #define DMA_TERM_CNTR    0x00004000        /* Terminal counter */

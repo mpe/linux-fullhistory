@@ -67,7 +67,7 @@ extern __inline__ unsigned long get_tbr(void)
 /* First, hardware traps. */
 #define SP_TRAP_TFLT    0x1          /* Text fault */
 #define SP_TRAP_II      0x2          /* Illegal Instruction */
-#define SP_TRAP_PI      0x3          /* Priviledged Instruction */
+#define SP_TRAP_PI      0x3          /* Privileged Instruction */
 #define SP_TRAP_FPD     0x4          /* Floating Point Disabled */
 #define SP_TRAP_WOVF    0x5          /* Window Overflow */
 #define SP_TRAP_WUNF    0x6          /* Window Underflow */

@@ -546,40 +546,20 @@ void add_timer(struct timer_list * timer)
 
 int del_timer(struct timer_list * timer)
 {
-	unsigned long flags;
-#if SLOW_BUT_DEBUGGING_TIMERS
-	struct timer_list * p;
-
-	p = &timer_head;
-	save_flags(flags);
-	cli();
-	while ((p = p->next) != &timer_head) {
-		if (p == timer) {
-			timer->next->prev = timer->prev;
-			timer->prev->next = timer->next;
-			timer->next = timer->prev = NULL;
-			restore_flags(flags);
-			return 1;
-		}
-	}
-	if (timer->next || timer->prev)
-		printk("del_timer() called from %p with timer not initialized\n",
-			__builtin_return_address(0));
-	restore_flags(flags);
-	return 0;
-#else
-	struct timer_list * next;
 	int ret = 0;
-	save_flags(flags);
-	cli();
-	if ((next = timer->next) != NULL) {
-		(next->prev = timer->prev)->next = next;
-		timer->next = timer->prev = NULL;
-		ret = 1;
+	if (timer->next) {
+		unsigned long flags;
+		struct timer_list * next;
+		save_flags(flags);
+		cli();
+		if ((next = timer->next) != NULL) {
+			(next->prev = timer->prev)->next = next;
+			timer->next = timer->prev = NULL;
+			ret = 1;
+		}
+		restore_flags(flags);
 	}
-	restore_flags(flags);
 	return ret;
-#endif
 }
 
 static inline void run_timer_list(void)

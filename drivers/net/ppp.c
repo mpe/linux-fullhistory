@@ -2613,7 +2613,7 @@ ppp_tty_select (struct tty_struct *tty, struct inode *inode,
  */
 	case SEL_EX:
 		/* Is this a pty link and the remote disconnected? */
-		if (tty->flags & (1 << TTY_SLAVE_CLOSED))
+		if (tty->flags & (1 << TTY_OTHER_CLOSED))
 			break;
 
 		/* Is this a local link and the modem disconnected? */

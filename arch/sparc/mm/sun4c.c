@@ -495,7 +495,7 @@ static inline void sun4c_demap_one(struct sun4c_mmu_ring *crp, unsigned char ctx
 }
 
 /* Using this method to free up mmu entries eliminates a lot of
- * potention races since we have a kernel that incurs tlb
+ * potential races since we have a kernel that incurs tlb
  * replacement faults.  There may be performance penalties.
  */
 static inline struct sun4c_mmu_entry *sun4c_user_strategy(void)
@@ -580,8 +580,8 @@ static void sun4c_update_mmu_cache(struct vm_area_struct *vma, unsigned long add
 /* READ THIS:  If you put any diagnostic printing code in any of the kernel
  *             fault handling code you will lose badly.  This is the most
  *             delicate piece of code in the entire kernel, atomicity of
- *             kernel tlb replacement must be guarenteed.  This is why we
- *             have seperate user and kernel allocation rings to alleviate
+ *             kernel tlb replacement must be guaranteed.  This is why we
+ *             have separate user and kernel allocation rings to alleviate
  *             as many bad interactions as possible.
  *
  * XXX Someday make this into a fast in-window trap handler to avoid
@@ -1035,7 +1035,7 @@ static void sun4c_flush_cache_page(struct vm_area_struct *vma, unsigned long pag
 	int octx;
 	struct mm_struct *mm = vma->vm_mm;
 
-	/* Sun4c has no seperate I/D caches so cannot optimize for non
+	/* Sun4c has no separate I/D caches so cannot optimize for non
 	 * text page flushes.
 	 */
 #ifndef __SMP__

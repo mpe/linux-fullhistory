@@ -45,7 +45,7 @@ extern unsigned int viking_rev, swift_rev, cypress_rev;
 extern unsigned int hwbug_bitmask;
 
 /* First the module type values. To find out which you have, just load
- * the mmu control register from ASI_M_MMUREG alternate adress space and
+ * the mmu control register from ASI_M_MMUREG alternate address space and
  * shift the value right 28 bits.
  */
 /* IMPL field means the company which produced the chip. */

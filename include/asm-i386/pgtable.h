@@ -40,7 +40,7 @@
  */
 
 #define __flush_tlb() \
-__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
+do { unsigned long tmpreg; __asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3":"=r" (tmpreg) : :"memory"); } while (0)
 
 #ifdef CONFIG_M386
 #define __flush_tlb_one(addr) flush_tlb()
@@ -290,7 +290,7 @@ extern pte_t * __bad_pagetable(void);
 do { \
 	(tsk)->tss.cr3 = (unsigned long) (pgdir); \
 	if ((tsk) == current) \
-		__asm__ __volatile__("movl %0,%%cr3": :"a" (pgdir)); \
+		__asm__ __volatile__("movl %0,%%cr3": :"r" (pgdir)); \
 } while (0)
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }

@@ -140,7 +140,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
  *	all the local structures required by a serial tty driver.
  */
 static char	*stl_drvname = "Stallion Multiport Serial Driver";
-static char	*stl_drvversion = "1.1.1";
+static char	*stl_drvversion = "1.1.3";
 static char	*stl_serialname = "ttyE";
 static char	*stl_calloutname = "cue";
 
@@ -3065,20 +3065,15 @@ static int stl_getbrdstruct(unsigned long arg)
 
 static int stl_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg)
 {
-	stlbrd_t	*brdp;
-	int		brdnr, rc;
+	int	brdnr, rc;
 
 #if DEBUG
 	printk("stl_memioctl(ip=%x,fp=%x,cmd=%x,arg=%x)\n", (int) ip, (int) fp, cmd, (int) arg);
 #endif
 
 	brdnr = MINOR(ip->i_rdev);
-	if (brdnr >= stl_nrbrds)
+	if (brdnr >= STL_MAXBRDS)
 		return(-ENODEV);
-	brdp = stl_brds[brdnr];
-	if (brdp == (stlbrd_t *) NULL)
-		return(-ENODEV);
-
 	rc = 0;
 
 	switch (cmd) {

@@ -2,8 +2,8 @@
 Stallion Multiport Serial Drivers
 ---------------------------------
 
-Version: 1.0.8
-Date:    25MAR96
+Version: 1.1.3
+Date:    23APR96
 Author:  Greg Ungerer (gerg@stallion.oz.au)
 
 
@@ -26,9 +26,9 @@ These boards cannot be used without this.
 The following ftp sites (and their mirrors) definitely have the stallion
 driver utility package: ftp.stallion.com, tsx-11.mit.edu, sunsite.unc.edu.
 
-ftp.stallion.com:/drivers/ata5/Linux/stallion-1.1.0.tar.gz
-tsx-11.mit.edu:/pub/linux/BETA/serial/stallion/stallion-1.1.0.tar.gz
-sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-1.1.0.tar.gz
+ftp.stallion.com:/drivers/ata5/Linux/stallion-1.1.2.tar.gz
+tsx-11.mit.edu:/pub/linux/BETA/serial/stallion/stallion-1.1.2.tar.gz
+sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-1.1.2.tar.gz
 
 If you are using the EasyIO or EasyConnection 8/32 boards then you don't
 need this package. Although it does have a handy script to create the
@@ -128,48 +128,10 @@ ISA and the Stallion boards can be programmed to use memory addresses up to
 ONboard/E can be programmed for memory addresses up to 4Gb (the EISA bus
 addressing limit).
 
-The istallion intelligent driver does offer support for these higher memory
-addresses with a couple of limitations. The higher memory support can only
-be used in the loadable module form of the driver, since the kernel memory
-management routines it relies on can not be run from the drivers static
-kernel init routine.
+The higher than 1Mb memory addresses are fully supported by this driver.
+Just enter the address as you normally would for a lower than 1Mb address
+(in the drivers board configuration structure).
 
-By default, support for these higher memory addresses is not compiled into
-the driver. This is because it relies on kernel functions that are not
-normally exported as part of the Linux loadable module system.
-
-To add the appropriate symbols into the kernel export code you need to:
-
-1. cd /usr/src/linux/kernel
-   (assuming your Linux kernel code is in /usr/src/linux)
-2. vi ksyms.c
-   - find the line that reads
-        X(vfree),
-   - after this line insert the following line
-        X(remap_page_range),
-   - save and exit
-3. cd ..
-4. build a new kernel (usually just make)
-
-This will export the "remap_page_range" function for loadable modules
-which is required for the higher memory support code.
-
-Finally you need to enable the code in the istallion driver. To do this
-edit the istallion.c file and search for the symbol STLI_HIMEMORY. It is
-near the top of the file in a line that looks like:
-
-#define	STLI_HIMEMORY	0
-
-Change the "0" to a "1". This enables the high memory support code in
-the driver. You will then need to rebuild the module or rebuild the
-kernel to incorporate the change. You will also need to modify
-the board resource configuration information to use a higher memory
-address.
-
-Once these changes are in place the driver will work as it did before.
-Note that the physical memory address range is software programmed on the
-EasyConnection 8/64-EI and ONboards, but must be set via DIP switches on
-the original Stallion boards.
 
 
 2.3 TROUBLE SHOOTING
@@ -304,7 +266,7 @@ ranges is the best option. Typically the 2Gb range is convenient for them,
 and gets them well out of the way.
 
 The ports of the EasyIO-8M board do not have DCD or DTR signals. So these
-ports cannot be used as real modem devices. Generally when using these
+ports cannot be used as real modem devices. Generally, when using these
 ports you should only use the cueX devices.
 
 The driver utility package contains a couple of very useful programs. One 

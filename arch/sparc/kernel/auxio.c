@@ -31,7 +31,7 @@ auxio_probe(void)
 	/* Map the register both read and write */
 	auxio_register = (unsigned char *) sparc_alloc_io(auxregs[0].phys_addr, 0,
 							  auxregs[0].reg_size,
-							  "auxilliaryIO",
+							  "auxiliaryIO",
 							  auxregs[0].which_io, 0x0);
 	/* Fix the address on sun4m and sun4c. */
 	if((((unsigned long) auxregs[0].phys_addr) & 3) == 3 ||

@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 1996 Universidade de Lisboa
  * 
- * Writen by Pedro Roque Marques (roque@di.fc.ul.pt)
+ * Written by Pedro Roque Marques (roque@di.fc.ul.pt)
  *
  * This software may be used and distributed according to the terms of 
  * the GNU Public License, incorporated herein by reference.
@@ -24,7 +24,7 @@
 struct pcbit_chan {
 	unsigned short id;
 	unsigned short callref;                   /* Call Reference */
-	unsigned char  proto;                     /* layer2protol  */
+	unsigned char  proto;                     /* layer2protocol  */
 	unsigned char  queued;                    /* unacked data messages */
 	unsigned char  layer2link;                /* used in TData */
 	unsigned char  snum;                      /* used in TData */

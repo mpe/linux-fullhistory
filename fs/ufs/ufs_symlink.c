@@ -13,6 +13,8 @@
 #include <linux/fs.h>
 #include <linux/sched.h>
 
+#include <asm/segment.h>
+
 static int
 ufs_readlink(struct inode * inode, char * buffer, int buflen)
 {
@@ -39,7 +41,7 @@ ufs_readlink(struct inode * inode, char * buffer, int buflen)
 	        if (inode->i_sb->u.ufs_sb.s_flags &(UFS_DEBUG|UFS_DEBUG_LINKS)) {
 	                printk("ufs_readlink: bmap got %lu for ino %lu\n",
 	                       block, inode->i_ino);
-} 
+		} 
 	        bh = bread(inode->i_dev, block, BLOCK_SIZE);
 		if (!bh) {
 			iput (inode);

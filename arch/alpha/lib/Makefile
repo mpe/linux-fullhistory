@@ -8,6 +8,9 @@ OBJS  = __divqu.o __remqu.o __divlu.o __remlu.o memset.o memcpy.o io.o \
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)
 
+memset.o: memset.S
+	$(CC) -c -o memset.o memset.S
+
 __divqu.o: divide.S
 	$(CC) -DDIV -c -o __divqu.o divide.S
 

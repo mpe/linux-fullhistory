@@ -112,6 +112,18 @@ char * strchr(const char * s, int c)
 }
 #endif
 
+#ifndef __HAVE_ARCH_STRRCHR
+char * strrchr(const char * s, int c)
+{
+       const char *p = s + strlen(s);
+       do {
+           if (*p == (char)c)
+               return (char *)p;
+       } while (--p >= s);
+       return NULL;
+}
+#endif
+
 #ifndef __HAVE_ARCH_STRLEN
 size_t strlen(const char * s)
 {

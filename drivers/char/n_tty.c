@@ -826,7 +826,7 @@ do_it_again:
 			tty->minimum_to_wake = (minimum - (b - buf));
 		
 		if (!input_available_p(tty, 0)) {
-			if (tty->flags & (1 << TTY_SLAVE_CLOSED)) {
+			if (tty->flags & (1 << TTY_OTHER_CLOSED)) {
 				retval = -EIO;
 				break;
 			}
@@ -985,7 +985,7 @@ static int normal_select(struct tty_struct * tty, struct inode * inode,
 		case SEL_EX:
 			if (tty->packet && tty->link->ctrl_status)
 				return 1;
-			if (tty->flags & (1 << TTY_SLAVE_CLOSED))
+			if (tty->flags & (1 << TTY_OTHER_CLOSED))
 				return 1;
 			if (tty_hung_up_p(file))
 				return 1;

@@ -8,7 +8,7 @@
 #define SRMMU_L1_KBASE_OFFSET ((KERNBASE>>24)<<2)  /* Used in boot remapping. */
 #define INTS_ENAB        0x01           /* entry.S uses this. */
 
-#define NCPUS            4              /* Architectual limit of sun4m. */
+#define NCPUS            4              /* Architectural limit of sun4m. */
 
 #define SUN4_PROM_VECTOR 0xFFE81000     /* To safely die on a SUN4 */
 #define SUN4_PRINTF      0x84           /* Offset into SUN4_PROM_VECTOR */
@@ -82,7 +82,7 @@
 
 /* NMI's (Non Maskable Interrupts) are special, you can't keep them
  * from coming in, and basically if you get one, the shows over. ;(
- * On the sun4c they are usually asyncronous memory errors, on the
+ * On the sun4c they are usually asynchronous memory errors, on the
  * the sun4m they could be either due to mem errors or a software
  * initiated interrupt from the prom/kern on an SMP box saying "I
  * command you to do CPU tricks, read your mailbox for more info."

@@ -65,7 +65,7 @@ tsetup_7win_patch6:	and	%g2, 0x7f, %g2
 	 * T == Window entered when trap occurred
 	 * S == Window we will need to save if (1<<T) == %wim
 	 *
-	 * Before execution gets here, it must be guarenteed that
+	 * Before execution gets here, it must be guaranteed that
 	 * %l0 contains trap time %psr, %l1 and %l2 contain the
 	 * trap pc and npc, and %l3 contains the trap time %wim.
 	 */
@@ -181,7 +181,7 @@ tsetup_patch3:	and	%g2, 0xff, %g2			! patched on 7win Sparcs
 		 mov	%t_kstack, %sp			! and onto kernel stack
 
 trap_setup_user_spill:
-		/* A spill occured from either kernel or user mode
+		/* A spill occurred from either kernel or user mode
 		 * and there exist some user windows to deal with.
 		 * A mask of the currently valid user windows
 		 * is in %g1 upon entry to here.
@@ -200,7 +200,7 @@ tsetup_patch6:	and	%g2, 0xff, %g2		! patched on 7win Sparcs
 	wr	%g2, 0x0, %wim
 	WRITE_PAUSE
 
-	/* Call MMU-architecture dependant stack checking
+	/* Call MMU-architecture dependent stack checking
 	 * routine.
 	 */
 	.globl	C_LABEL(tsetup_mmu_patchme)

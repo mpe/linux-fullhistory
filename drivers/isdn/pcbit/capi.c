@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 1996 Universidade de Lisboa
  * 
- * Writen by Pedro Roque Marques (roque@di.fc.ul.pt)
+ * Written by Pedro Roque Marques (roque@di.fc.ul.pt)
  *
  * This software may be used and distributed according to the terms of 
  * the GNU Public License, incorporated herein by reference.
@@ -90,12 +90,12 @@ int capi_conn_req(const char * calledPN, struct sk_buff **skb)
         *((ushort*) skb_put(*skb, 2)) = AppInfoMask; 
 
 
-        /* Bearer Capbility - Mandatory*/
+        /* Bearer Capability - Mandatory*/
         *(skb_put(*skb, 1)) = 2;        /* BC0.Length                        */
         *(skb_put(*skb, 1)) = 0x88;     /* BC0.Octect3 - Digital Information */
         *(skb_put(*skb, 1)) = 0x90;     /* BC0.Octect4 -                     */
 
-        /* Bearer Capbility - Optional*/
+        /* Bearer Capability - Optional*/
         *(skb_put(*skb, 1)) = 0;        /* BC1.Length = 0                    */
 
         *(skb_put(*skb, 1)) = 1;        /* ChannelID.Length = 1              */
@@ -414,7 +414,7 @@ int capi_decode_conn_ind(struct pcbit_chan * chan,
         skb_pull(skb, CIlen + 1);
 
         /* Calling Party Number */
-        /* An "aditional service" as far as Portugal Telecom is concerned */
+        /* An "additional service" as far as Portugal Telecom is concerned */
 
         len = skb->data[0];
 
@@ -504,7 +504,7 @@ int capi_decode_conn_conf(struct pcbit_chan * chan, struct sk_buff *skb,
         skb_pull(skb, 1);
 
         /* FIX ME */
-        /* This is actualy a firmware bug */
+        /* This is actually a firmware bug */
         if (!*complete)
         {
                 printk(KERN_DEBUG "complete=%02x\n", *complete);

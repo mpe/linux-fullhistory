@@ -25,7 +25,7 @@
  *
  * We try to make everything a power of two if possible to
  * speed up the bit blit.  Doing multiplies, divides, and
- * remainer routines end up calling software library routines
+ * remainder routines end up calling software library routines
  * since not all Sparcs have the hardware to do it.
  *
  * TODO:
@@ -38,7 +38,7 @@
  */
 
 
-/* Define thie one if you are debugging something in X, it will not disable the console output */
+/* Define this one if you are debugging something in X, it will not disable the console output */
 /* #define DEBUGGING_X */
 /* See also: sparc/keyboard.c: CODING_NEW_DRIVER */
 
@@ -87,7 +87,7 @@ extern int serial_console;
 
 /* Based upon what the PROM tells us, we can figure out where
  * the console is currently located.  The situation can be either
- * of the following two scenerios:
+ * of the following two scenarios:
  *
  * 1) Console i/o is done over the serial line, ttya or ttyb
  * 2) Console output on frame buffer (video card) and input
@@ -115,7 +115,7 @@ static int skip_bytes;		/* number of bytes we skip for the y margin */
 static int x_margin, y_margin;	/* the x and y margins */
 static int bytes_per_row;	/* bytes used by one screen line (of 16 scan lines)  */
 
-/* Functions used by the SPARC dependant console code
+/* Functions used by the SPARC dependent console code
  * to perform the restore_palette function.
  */
 static void (*restore_palette)(void);
@@ -142,10 +142,10 @@ void set_palette (void);
 /* First for MONO displays. */
 #define SCREEN_WIDTH     1152     /* Screen width in pixels  */
 #define SCREEN_HEIGHT    900      /* Screen height in pixels */
-#define CHARS_PER_LINE   144      /* Make this imperical for speed */
+#define CHARS_PER_LINE   144      /* Make this empirical for speed */
 #define NICE_Y_MARGIN    18       /* We skip 18 y-pixels at top/bottom */
 #define NICE_X_MARGIN    8        /* We skip 64 x-pixels at left/right */
-#define FBUF_TOP_SKIP    2592     /* Imperical, (CHARS_PER_LINE * NICE_Y_MARGIN) */
+#define FBUF_TOP_SKIP    2592     /* Empirical, (CHARS_PER_LINE * NICE_Y_MARGIN) */
 #define CHAR_HEIGHT      16
 #define ONE_ROW          2304     /* CHARS_PER_LINE * CHAR_HEIGHT */
 
@@ -220,7 +220,7 @@ hide_cursor(void)
 /* The idea is the following:
  * we only use the colors in the range 0..15, and we only
  * setup the palette on that range, so we better keep the
- * pixel inverion using those colors, that's why we have
+ * pixel inversion using those colors, that's why we have
  * those constants below.
  */
 inline static void
@@ -1076,7 +1076,7 @@ cg3_loadcmap (void *fbinfo, int index, int count)
 		bt->color_map = *i++;
 }
 
-/* The cg3 is pressumed to emulate a cg4, I guess older programs will want that */
+/* The cg3 is presumed to emulate a cg4, I guess older programs will want that */
 /* addresses above 0x4000000 are for cg3, below that it's cg4 emulation          */
 static int
 cg3_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma, long base, void *xx)
@@ -1428,7 +1428,7 @@ sparc_console_probe(void)
 	return 0; /* success */
 }
 
-/* video init code, called from withing the SBUS bus scanner at
+/* video init code, called from within the SBUS bus scanner at
  * boot time.
  */
 void

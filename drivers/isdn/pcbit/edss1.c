@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 1996 Universidade de Lisboa
  * 
- * Writen by Pedro Roque Marques (roque@di.fc.ul.pt)
+ * Written by Pedro Roque Marques (roque@di.fc.ul.pt)
  *
  * This software may be used and distributed according to the terms of 
  * the GNU Public License, incorporated herein by reference.
@@ -105,7 +105,7 @@ struct CauseValue {
   {0x1b,"Destination out of order"},
   {0x1c,"Invalid number format (address incomplete)"},
   {0x1d,"Facility rejected"},
-  {0x1e,"Response to Status enuiry"},
+  {0x1e,"Response to Status enquiry"},
   {0x1f,"Normal, unspecified"},
   {0x22,"No circuit/channel available"},
   {0x26,"Network out of order"},
@@ -121,7 +121,7 @@ struct CauseValue {
   {0x32,"Requested facility not subscribed"},
   {0x35,"Outgoing calls barred within CUG"},
   {0x37,"Incoming calls barred within CUG"},
-  {0x39,"Bearer capability not auhorized"},
+  {0x39,"Bearer capability not authorized"},
   {0x3a,"Bearer capability not presently available"},
   {0x3e,"Inconsistency in designated outgoing access information and subscriber class"},
   {0x3f,"Service or option not available, unspecified"},
@@ -166,10 +166,10 @@ static struct isdn_event_desc {
   {EV_USR_RELEASE_REQ,   "CC->L3: Release Request"},
 
   {EV_NET_SETUP,        "NET->TE: setup "},
-  {EV_NET_CALL_PROC,    "NET->TE: call proceding"},
-  {EV_NET_SETUP_ACK,    "NET->TE: setup acknowlegde (more info needed)"},
+  {EV_NET_CALL_PROC,    "NET->TE: call proceeding"},
+  {EV_NET_SETUP_ACK,    "NET->TE: setup acknowledge (more info needed)"},
   {EV_NET_CONN,         "NET->TE: connect"},
-  {EV_NET_CONN_ACK,     "NET->TE: connect aknowlegde"},
+  {EV_NET_CONN_ACK,     "NET->TE: connect acknowledge"},
   {EV_NET_DISC,         "NET->TE: disconnect indication"},
   {EV_NET_RELEASE,      "NET->TE: release"},
   {EV_NET_RELEASE_COMP, "NET->TE: release complete"},
@@ -217,7 +217,7 @@ static struct fsm_entry fsm_table[] = {
   {ST_CALL_PROC, ST_NULL, EV_NET_DISC, cb_disc_1},
   {ST_CALL_PROC, ST_DISC_REQ, EV_USR_RELEASE_REQ, cb_disc_2},
 
-  /* Incomming */
+  /* Incoming */
   {ST_NULL, ST_CALL_PRES, EV_NET_SETUP, NULL},
 
   {ST_CALL_PRES, ST_INCM_PROC, EV_USR_PROCED_REQ, cb_in_1},
@@ -270,7 +270,7 @@ static void pcbit_fsm_timer(unsigned long data)
         dev = chan2dev(chan);
 
         if (dev == NULL) {
-                printk(KERN_WARNING "pcbit: timer for unkown device\n");
+                printk(KERN_WARNING "pcbit: timer for unknown device\n");
                 return;
         }
 

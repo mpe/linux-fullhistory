@@ -143,7 +143,7 @@ extern inline volatile int read_smp_counter(volatile int *ctr)
 #define MSG_CAPTURE            0x0004       /* Park a processor. */
 #define MSG_CROSS_CALL         0x0005       /* run func on cpus */
 
-/* Imperical PROM processor mailbox constants.  If the per-cpu mailbox
+/* Empirical PROM processor mailbox constants.  If the per-cpu mailbox
  * contains something other than one of these then the ipi is from
  * Linux's active_kernel_processor.  This facility exists so that
  * the boot monitor can capture all the other cpus when one catches

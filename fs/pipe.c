@@ -423,6 +423,7 @@ int do_pipe(int *fd)
 			break;
 	if (j < 2) {
 		iput(inode);
+		iput(inode);
 		if (j)
 			f[0]->f_count--;
 		return -ENFILE;
@@ -434,6 +435,7 @@ int do_pipe(int *fd)
 			j++;
 		}
 	if (j<2) {
+		iput(inode);
 		iput(inode);
 		f[0]->f_count--;
 		f[1]->f_count--;

@@ -234,7 +234,7 @@ fwin_user_finish_up:
 	 * check routines in wof.S, these routines are free to use
 	 * any of the local registers they want to as this window
 	 * does not belong to anyone at this point, however the
-	 * outs and ins are still verbotten as they are part of
+	 * outs and ins are still verboten as they are part of
 	 * 'someone elses' window possibly.
 	 */
 
@@ -345,7 +345,7 @@ C_LABEL(srmmu_fwin_stackchk):
 	be	fwin_user_finish_up
 	 nop
 
-	/* Did I ever tell you about my window labotomy?
+	/* Did I ever tell you about my window lobotomy?
 	 * anyways... fwin_user_stack_is_bolixed expects
 	 * to be in window 'W' so make it happy or else
 	 * we watchdog badly.

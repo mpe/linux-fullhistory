@@ -2784,7 +2784,7 @@ cy_init(void)
     cy_serial_driver.magic = TTY_DRIVER_MAGIC;
     cy_serial_driver.name = "ttyC";
     cy_serial_driver.major = CYCLADES_MAJOR;
-    cy_serial_driver.minor_start = 32;
+    cy_serial_driver.minor_start = 0;
     cy_serial_driver.num = NR_PORTS;
     cy_serial_driver.type = TTY_DRIVER_TYPE_SERIAL;
     cy_serial_driver.subtype = SERIAL_TYPE_NORMAL;

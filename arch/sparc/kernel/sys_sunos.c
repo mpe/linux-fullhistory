@@ -1,5 +1,5 @@
 /* $Id: sys_sunos.c,v 1.37 1996/04/19 16:52:38 miguel Exp $
- * sys_sunos.c: SunOS specific syscall compatability support.
+ * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -193,7 +193,7 @@ asmlinkage unsigned long sunos_sbrk(int increment)
 }
 
 /* XXX Completely undocumented, and completely magic...
- * XXX I belive it is to increase the size of the stack by
+ * XXX I believe it is to increase the size of the stack by
  * XXX argument 'increment' and return the new end of stack
  * XXX area.  Wheee...
  */
@@ -262,7 +262,7 @@ asmlinkage void sunos_madvise(unsigned long address, unsigned long len,
  * low-bit is one  == Page is currently residing in core
  * All other bits are undefined within the character so there...
  * Also, if you try to get stats on an area outside of the user vm area
- * *or* the passed base address is not aligned on a page boundry you
+ * *or* the passed base address is not aligned on a page boundary you
  * get an error.
  */
 asmlinkage int sunos_mincore(unsigned long addr, unsigned long len, char *array)
@@ -301,7 +301,7 @@ asmlinkage int sunos_mincore(unsigned long addr, unsigned long len, char *array)
 }
 
 /* This just wants the soft limit (ie. rlim_cur element) of the RLIMIT_NOFILE
- * resource limit and is for backwards compatability with older sunos
+ * resource limit and is for backwards compatibility with older sunos
  * revs.
  */
 asmlinkage long sunos_getdtablesize(void)
@@ -413,7 +413,7 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 	return cnt - buf.count;
 }
 
-/* Old sunos getdirentries, severely broken compatability stuff here. */
+/* Old sunos getdirentries, severely broken compatibility stuff here. */
 struct sunos_direntry {
     unsigned long  d_ino;
     unsigned short d_reclen;
@@ -701,7 +701,7 @@ asmlinkage int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 		return error;
 	/* Ok, here comes the fun part: Linux's nfs mount needs a
 	 * socket connection to the server, but SunOS mount does not
-	 * requiere this, so we use the information on the destination
+	 * require this, so we use the information on the destination
 	 * address to create a socket and bind it to a reserved
 	 * port on this system
 	 */

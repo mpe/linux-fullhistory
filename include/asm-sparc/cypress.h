@@ -24,7 +24,7 @@
  * BM: Boot Mode -- 0 = not in boot mode, 1 = in boot mode
  * C: Cacheable -- Indicates whether accesses are cacheable while
  *    the MMU is off.  0=no 1=yes
- * MR: MemoryReflection -- Indicates whether the bus attacted to the
+ * MR: MemoryReflection -- Indicates whether the bus attached to the
  *     MBus supports memory reflection. 0=no 1=yes (605 only)
  * CM: CacheMode -- Indicates whether the cache is operating in write
  *     through or copy-back mode. 0=write-through 1=copy-back

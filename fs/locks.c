@@ -68,6 +68,9 @@
  *  see if system call should be rejected. Ref. HP-UX/SunOS/Solaris Reference
  *  Manual, Section 2.
  *  Andy Walker (andy@lysaker.kvaerner.no), April 09, 1996.
+ *
+ *  Tidied up block list handling.
+ *  Andy Walker (andy@lysaker.kvaerner.no), April 24, 1996.
  */
 
 #include <linux/malloc.h>
@@ -105,10 +108,10 @@ static void locks_delete_lock(struct file_lock **fl, unsigned int wait);
 static struct file_lock *file_lock_table = NULL;
 
 /* Free lock not inserted in any queue */
-static inline void locks_free_lock(struct file_lock **fl)
+static inline void locks_free_lock(struct file_lock *fl)
 {
-	kfree(*fl);
-	*fl = NULL;		       /* Just in case */
+	kfree(fl);
+	return;
 }
 
 /* Add lock fl to the blocked list pointed to by block.
@@ -125,34 +128,33 @@ static inline void locks_free_lock(struct file_lock **fl)
  * so they are inlined now. -- Dmitry Gorodchanin 02/09/96.
  */
 
-static inline void locks_insert_block(struct file_lock **block, 
+static inline void locks_insert_block(struct file_lock *bfl, 
 				      struct file_lock *fl)
 {
-	struct file_lock *bfl;
-
-	while ((bfl = *block) != NULL) {
-		block = &bfl->fl_block;
+	while (bfl->fl_block != NULL) {
+		bfl = bfl->fl_block;
 	}
 
-	*block = fl;
+	bfl->fl_block = fl;
 	fl->fl_block = NULL;
 	
 	return;
 }
 
-static inline void locks_delete_block(struct file_lock **block,
+static inline void locks_delete_block(struct file_lock *bfl,
 				      struct file_lock *fl)
 {
-	struct file_lock *bfl;
+	struct file_lock *tfl;
 	
-	while ((bfl = *block) != NULL) {
-		if (bfl == fl) {
-			*block = fl->fl_block;
+	while ((tfl = bfl->fl_block) != NULL) {
+		if (tfl == fl) {
+			bfl->fl_block = fl->fl_block;
 			fl->fl_block = NULL;
 			return;
 		}
-		block = &bfl->fl_block;
+		bfl = tfl;
 	}
+	return;
 }
 
 /* flock() system call entry point. Apply a FLOCK style lock to
@@ -271,6 +273,9 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		break;
 	case F_SHLCK :
 	case F_EXLCK :
+		printk(KERN_WARNING
+		       "fcntl_setlk() called by process %d with broken flock() emulation\n",
+		       current->pid);
 		if (!(filp->f_mode & 3))
 			return (-EBADF);
 		break;
@@ -612,10 +617,10 @@ static int flock_lock_file(struct file *filp, struct file_lock *caller,
 				 * instead of locks_delete_lock()
 				 * 	Dmitry Gorodchanin 09/02/96.
 				 */
-				locks_free_lock(&new_fl);
+				locks_free_lock(new_fl);
 				return (-ERESTARTSYS);
 			}
-			locks_insert_block(&fl->fl_block, new_fl);
+			locks_insert_block(fl, new_fl);
 			interruptible_sleep_on(&new_fl->fl_wait);
 			wake_up(&new_fl->fl_wait);
 			if (current->signal & ~current->blocked) {
@@ -626,14 +631,14 @@ static int flock_lock_file(struct file *filp, struct file_lock *caller,
 				 * 	Dmitry Gorodchanin 09/02/96.
 				 */
 
-				locks_delete_block(&fl->fl_block, new_fl);
-				locks_free_lock(&new_fl);
+				locks_delete_block(fl, new_fl);
+				locks_free_lock(new_fl);
 				return (-ERESTARTSYS);
 			}
 			goto repeat;
 		}
 		
-		locks_free_lock(&new_fl);
+		locks_free_lock(new_fl);
 		return (-EAGAIN);
 	}
 	locks_insert_lock(&filp->f_inode->i_flock, new_fl);
@@ -874,9 +879,8 @@ static void locks_delete_lock(struct file_lock **fl_p, unsigned int wait)
 
 	if (pfl != NULL)
 		pfl->fl_nextlink = nfl;
-	else {
+	else
 		file_lock_table = nfl;
-	}
 	
 	while ((nfl = fl->fl_block) != NULL) {
 		fl->fl_block = nfl->fl_block;

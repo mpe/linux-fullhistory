@@ -93,7 +93,7 @@ static int FDC2=-1;
 #define N_FDC    1
 #define N_DRIVE  8
 
-/* No 64k boundry crossing problems on the Sparc. */
+/* No 64k boundary crossing problems on the Sparc. */
 #define CROSS_64KB(a,s) (0)
 
 /* Routines unique to each controller type on a Sun. */

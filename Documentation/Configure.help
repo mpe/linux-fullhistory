@@ -16,7 +16,7 @@
 # does, only the first occurrence will be used by Configure. The lines
 # in a help text should be indented two positions. Lines starting with
 # `#' are ignored. To be nice to menuconfig, limit your lines to 70
-# chars. Use emacs' kfill.el to edit this file or you lose.
+# characters. Use emacs' kfill.el to edit this file or you lose.
 #
 # If you add a help text to this file, please try to be as gentle as
 # possible. Don't use unexplained acronyms and generally write for the
@@ -24,7 +24,7 @@
 # installed Linux and is now recompiling the kernel for the first
 # time. Tell them what to do if they're unsure. Technical information
 # should go in a README in the Documentation directory. Mention all 
-# the relevant READMEs in the help text.
+# the relevant READMEs and HOWTOs in the help text.
 #
 # All this was shamelessly stolen from several different sources. Many
 # thanks to all the contributors.  Feel free to use these help texts
@@ -557,7 +557,9 @@ CONFIG_BINFMT_ELF
   newer 1.3 kernel or one of the stable 1.2 versions. If you want to
   compile this as a module ( = code which can be inserted in and
   removed from the running kernel whenever you want), say M here and
-  read Documentation/modules.txt.
+  read Documentation/modules.txt. Saying M or N here is dangerous
+  because some crucial programs on your system might be in ELF
+  format. 
 
 Compile kernel as ELF - if your GCC is ELF-GCC
 CONFIG_KERNEL_ELF
@@ -585,7 +587,8 @@ CONFIG_BINFMT_AOUT
   this older executable format. If you don't know what to answer at
   this point then answer Y. You may answer M for module support and
   later load the module when you find a program which needs a.out
-  format.
+  format. Saying M or N here is dangerous, because some crucial
+  programs on your system might be in A.OUT format.
 
 Processor type
 CONFIG_M386
@@ -655,9 +658,12 @@ CONFIG_KERNELD
   by itself, together with the user level daemon "kerneld".  Note that
   "kerneld" will also automatically unload all unused modules, so you
   don't have to use "rmmod" either.
-  There are some other "kernel callouts" that will be available
-  later on, such as a user level "beeper" and a generic screen blanker.
-  The "kerneld" daemon is included in "modules-1.2.8" and later.
+  kerneld will also provide support for different user-level beeper
+  and screen blanker programs later on.
+  The "kerneld" daemon is included in the package "modules-1.2.8" and
+  later. You will probably want to read the kerneld mini-HOWTO,
+  available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If unsure, say Y.
 
 ARP daemon support
 CONFIG_ARPD
@@ -1048,10 +1054,20 @@ CONFIG_BPQETHER
 
 Bridging (test)
 CONFIG_BRIDGE
-  Enables bridge mode support in the box. This allows you to use a Linux
-  box (suitably configured) as an ethernet bridge including 802.1 spanning
-  tree support. This is in test. There are a small batch of changes before
-  final release but it should work nicely.
+  If you enable this, your Linux box will be able to act as an
+  ethernet bridge, which means that the different ethernet segments it
+  is connected to will appear as one ethernet to the
+  participants. Several such bridges can work together to create even
+  larger networks of ethernets using a cool spanning tree
+  algorithm. Note that if your box acts as a bridge, it probably
+  contains several ethernet devices, but the kernel is not able to
+  recognize more than one at boot time without help; for details read
+  the Multiple-Ethernet-mini-HOWTO, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. The
+  Bridging code is still in test. If unsure, say N.
+###
+### How to use?
+###
 
 Kernel/User network link driver(ALPHA)
 CONFIG_NETLINK
@@ -1213,19 +1229,29 @@ CONFIG_SCSI_AIC7XXX
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC
   This is support for BusLogic MultiMaster SCSI Host Adaptors.
-  Consult the documentation in drivers/scsi/README.BusLogic for more
-  information.  BusLogic FlashPoint SCSI Host Adapters are not
-  supported by this driver.  If this driver does not work correctly
-  without modification, please consult the author.  This driver may
-  also be built as a module, but only a single instance may be loaded.
-  You might also want to read the SCSI-HOWTO, available via anonymous
-  ftp from sunsite.unc.edu:/pub/Linux/docs/HOWTO.
- 
+  Consult the SCSI-HOWTO, available via anonymous ftp from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO and the file
+  drivers/scsi/README.BusLogic for more information. BusLogic
+  FlashPoint SCSI Host Adapters are not supported by this driver, but
+  BusLogic has initiated an upgrade program which allows you to get a
+  better adaptor for few $$. Read about it in
+  drivers/scsi/README.FlashPoint.  If this driver does not work
+  correctly without modification, please contact the author.  You can
+  build this driver also as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), but only a
+  single instance may be loaded. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
 DTC3180/3280 SCSI support
 CONFIG_SCSI_DTC3280
-  This is support for DTC 3180/3280 SCSI Host Adaptors.  It does not
-  use IRQ's.  It does not support parity on the SCSI bus.
- 
+  This is support for DTC 3180/3280 SCSI Host Adaptors.  Please read
+  the SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO and the file
+  drivers/scsi/README.dtc3x80.  This driver is also available as a
+  module (= code which can be inserted in and removed from the running
+  kernel whenever you want). If you want to compile it as a module,
+  say M here and read Documentation/modules.txt.
+
 EATA-DMA (DPT, NEC, ATT, Olivetti for ISA, EISA, PCI) support
 CONFIG_SCSI_EATA_DMA
   This is support for the EATA-DMA protocol compliant SCSI Host Adaptors
@@ -1328,6 +1354,12 @@ CONFIG_SCSI_NCR53C7xx_FAST
   adaptor. Some systems have problems with that speed, so it's safest
   to say N here.
  
+allow DISCONNECT
+CONFIG_SCSI_NCR53C7xx_DISCONNECT
+###
+### Dunno
+###
+
 Always IN2000 SCSI support (test release)
 CONFIG_SCSI_IN2000
   Believe it or not, there is a SCSI host adaptor of that name. It is
@@ -1588,6 +1620,14 @@ CONFIG_STRIP
   think you might get a Metricom radio in the future, there is no harm in
   saying yes to STRIP now, except that it makes the kernel a bit bigger.
 
+WIC (Radio IP bridge)
+CONFIG_WIC
+  Don't know what this is; has something to do with the parallel
+  port. Say N and that's that. But if you want to compile it as a
+  module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt. :-)
+
 Z8530 SCC kiss emulation driver for AX.2
 CONFIG_SCC
   These cards are used to connect your Linux box to an amateur radio
@@ -1813,12 +1853,12 @@ CONFIG_EL2
 3c505 support
 CONFIG_ELPLUS
   Information about this network (ethernet) card can be found in
-  drivers/net/README.3c505. If you have a card of this type, say Y and
-  read the Ethernet-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want), say M here and read
-  Documentation/modules.txt as well as
+  Documentation/networking/3c505.txt. If you have a card of this type,
+  say Y and read the Ethernet-HOWTO, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to
+  compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. If you plan to use more
   than one network card under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
@@ -2199,19 +2239,18 @@ CONFIG_DE4X5
 DECchip Tulip (dc21x4x) PCI support
 CONFIG_DEC_ELCP
   This driver is developed for the SMC EtherPower series ethernet
-  cards and also works with the DECchip 21040/21041/21140
-  (Tulip series) based other cards.  If you have a network card of
-  this type, say Y and read the Ethernet-HOWTO, available via ftp
-  (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. More
-  specific information is contained in
-  Documentation/networking/tulip.txt. This driver is also available
-  as a module ( = code which can be inserted in and removed from
-  the running kernel whenever you want).  If you want to compile
+  cards and also works with cards based on the DECchip
+  21040/21041/21140 (Tulip series) chips. (If your card is NOT SMC
+  EtherPower 10/100 PCI (smc9332dst), you can also try the driver from
+  "DE425, DE434, DE435 support", above.) However, most people with a
+  network card of this type will say Y here. Do read the
+  Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. More specific information is
+  contained in Documentation/networking/tulip.txt. This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want).  If you want to compile
   it as a module, say M here and read Documentation/modules.txt as
   well as Documentation/networking/net-modules.txt.
-  ******************************************************************
-      If your card is NOT SMC EtherPower 10/100 PCI (smc9332dst),
-      you can try the de4x5.c driver.
 
 Digi Intl. RightSwitch support
 CONFIG_DGRS
@@ -2478,14 +2517,13 @@ CONFIG_ISP16_CDI
   N.B. options are case sensitive. 
   Read Documentation/cdrom/isp16 for details. 
 
-
 Quota support
 CONFIG_QUOTA
   If you say Y here, you will be able to set per user limits for disk
   usage (also called diskquotas). Currently, it works only for the
   ext2 filesystem; you need the software available via ftp (user:
-  anonymous) from
-  sunsite.unc.edu:/pub/Linux/system/Admin/quota_acct.tar.gz in order to
+  anonymous) in
+  ftp.funet.fi:/pub/Linux/People/Linux/subsystems/quota/ in order to
   use it. Probably this is only useful for multi user systems. If
   unsure, say N.
 
@@ -3023,7 +3061,7 @@ CONFIG_APM_CPU_IDLE
   the CPU becomes idle.  (On machines with more than one CPU, this option
   does nothing.)
 
-Black display
+Enable console blanking using APM
 CONFIG_APM_DISPLAY_BLANK
   Enable console blanking using the APM.  Some laptops can use this to
   turn off the LCD backlight when the VC screen blanker blanks the
@@ -3089,16 +3127,17 @@ CONFIG_SOFT_WATCHDOG
 Enhanced Real Time Clock Support
 CONFIG_RTC
   If you enable this option and create a character special file
-  /dev/rtc with major number 10 and minor number 135 using mknod
-  ("man mknod"), you will get access to the real time clock built
-  into your computer. It can be used to generate signals from as
-  low as 1Hz up to 8192Hz, and can also be used as a 24 hour alarm.
-  It reports status information via the file /proc/rtc and its 
-  behaviour is set by various ioctls on /dev/rtc. People running
-  SMP versions of Linux should enable this option to read and set
-  the RTC clock in a SMP compatible fashion. If you think you
-  have a use for such a device (such as periodic data sampling), then 
-  say Y here, and go read the file Documentation/rtc.txt for details.
+  /dev/rtc with major number 10 and minor number 135 using mknod ("man
+  mknod"), you will get access to the real time clock built into your
+  computer. Every PC has such a clock built in. It can be used to
+  generate signals from as low as 1Hz up to 8192Hz, and can also be
+  used as a 24 hour alarm.  It reports status information via the file
+  /proc/rtc and its behaviour is set by various ioctls on
+  /dev/rtc. People running SMP (= multiprocessor) versions of Linux
+  should enable this option to read and set the RTC clock in a SMP
+  compatible fashion. If you think you have a use for such a device
+  (such as periodic data sampling), then say Y here, and go read the
+  file Documentation/rtc.txt for details.
 
 Sound card support
 CONFIG_SOUND
@@ -3148,7 +3187,7 @@ CONFIG_ISDN
   modem emulator. Network devices support autodial, channel-bundling,
   callback and caller-authentication without having a daemon
   running. A reduced T.70 protocol is supported with tty's suitable
-  for German BTX. Currently Cards by Teles and compatibles and ICN are
+  for German BTX. Currently cards by Teles and compatibles and ICN are
   supported. On D-Channel, the protocols EDSS1 and 1TR6 are
   supported. See Documentation/isdn/README for more information.
 
@@ -3212,7 +3251,7 @@ CONFIG_AP1000
 # LocalWords:  unc edu docs emu README kB BLK DEV FD Thinkpad fd MFM RLL IDE gz
 # LocalWords:  cdrom harddisk diskless netboot nfs xzvf ATAPI MB harddrives ide
 # LocalWords:  HD harddisks CDROMs IDECD NEC MITSUMI filesystem XT XD PCI bios
-# LocalWords:  ISA EISA Microchannel VESA BIOSes IPC SYSVIPC ipc Ctrl
+# LocalWords:  ISA EISA Microchannel VESA BIOSes IPC SYSVIPC ipc Ctrl dmesg hlt
 # LocalWords:  BINFMT Linkable http ac uk jo html GCC Sparc AVANTI CABRIOLET EB
 # LocalWords:  netscape gcc LD CC toplevel MODVERSIONS insmod rmmod modprobe IP
 # LocalWords:  genksyms INET loopback gatewaying ethernet internet PPP ARP Arp
@@ -3249,12 +3288,12 @@ CONFIG_AP1000
 # LocalWords:  pppd Zilog ZS soundcards SRM bootloader ez mainmenu rarp ipfwadm
 # LocalWords:  RTNETLINK mknod xos MTU lwared Macs mac netatalk macs cs Wolff
 # LocalWords:  dartmouth flowerpt MultiMaster FlashPoint tudelft etherexpress
-# LocalWords:  ICL EtherTeam ETH IDESCSI TXC SmartRAID SmartCache
+# LocalWords:  ICL EtherTeam ETH IDESCSI TXC SmartRAID SmartCache httpd sjc dlp
 # LocalWords:  thesphere TwoServers BOOTP DHCP ncpfs BPQETHER BPQ chipsets MG
 # LocalWords:  bsd comp Sparcstation le SunOS ie Gracilis PackeTwin PT pt LU FX
 # LocalWords:  FX TEAC SoundBlaster CR CreativeLabs LCS mS ramdisk IDETAPE cmd
 # LocalWords:  Vertos Genoa Funai hsfs NCP NetWare tgz APM apm ioctls UltraLite
-# LocalWords:  TravelMate CDT LCD backlight VC RPC Mips DECStation AXP
+# LocalWords:  TravelMate CDT LCD backlight VC RPC Mips DECStation AXP barlow
 # LocalWords:  PMAX MILO Alphas Multia Tseng linuxelf endian mipsel mips drv HT
 # LocalWords:  KERNELD kerneld callouts AdvanSys advansys diskquotas Admin WDT
 # LocalWords:  wdt hdb hdc bugfix SiS vlb Acculogic CSA DTC dtc Holtek ht QDI
@@ -3270,4 +3309,6 @@ CONFIG_AP1000
 # LocalWords:  FC DC dc PPA IOMEGA's ppa RNFS FMV Fujitsu ARPD arpd loran layes
 # LocalWords:  FRAD indiana framerelay DLCI DCLIs Sangoma SDLA mrouted sync sec
 # LocalWords:  Starmode Metricom MosquitoNet mosquitonet kbit nfsroot Digiboard
-# LocalWords:  DIGI Xe Xeve digiboard UMISC touchscreens
+# LocalWords:  DIGI Xe Xeve digiboard UMISC touchscreens mtu ethernets HBAs MEX
+# LocalWords:  Shifflett netcom js jshiffle WIC DECchip ELCP EtherPower dst RTC
+# LocalWords:  rtc SMP

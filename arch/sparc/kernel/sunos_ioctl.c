@@ -53,7 +53,7 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 		}
 	}
 
-	/* Binary compatability is good American knowhow fuckin' up. */
+	/* Binary compatibility is good American knowhow fuckin' up. */
 	if(cmd == TIOCNOTTY)
 		return sys_setsid();
 

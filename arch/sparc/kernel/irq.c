@@ -150,7 +150,7 @@ void free_irq(unsigned int irq, void *dev_id)
 	}
 	if (action->flags & SA_STATIC_ALLOC)
 	{
-	    /* This interrupt is marked as specially allocted
+	    /* This interrupt is marked as specially allocated
 	     * so it is a bad idea to free it.
 	     */
 	    printk("Attempt to free statically allocated IRQ%d (%s)\n",

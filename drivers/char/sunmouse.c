@@ -7,7 +7,7 @@
  * Johan Myreen.
  *
  * Dec/19/95 Added SunOS mouse ioctls - miguel.
- * Jan/5/96  Added VUID support, sigio supprot - miguel.
+ * Jan/5/96  Added VUID support, sigio support - miguel.
  * Mar/5/96  Added proper mouse stream support - miguel.
  */
 
@@ -200,7 +200,7 @@ sun_mouse_inbyte(unsigned char byte, unsigned char status)
 		printk("DY2<%d>", mvalue);
 #endif
 		sunmouse.delta_y += mvalue;
-		sunmouse.byte = 69;  /* Some rediculious value */
+		sunmouse.byte = 69;  /* Some ridiculous value */
 		break;
 	case 69:
 		/* Until we get the (0x80 -> 0x87) value we aren't

@@ -15,7 +15,7 @@
 
 /* Dave Redman (djhr@tadpole.co.uk)
  * changed these to function pointers.. it saves cycles and will allow
- * the irq dependancies to be split into different files at a later date
+ * the irq dependencies to be split into different files at a later date
  * sun4c_irq.c, sun4m_irq.c etc so we could reduce the kernel size.
  */
 extern void (*disable_irq)(unsigned int);

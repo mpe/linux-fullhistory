@@ -51,7 +51,7 @@
  *  31   30 29  28  27  26  25 24-15  14-7   6  5-3   2-0
  *
  * ME: Multiple Errors have occurred
- * CE: Cache consistancy Error
+ * CE: Cache consistency Error
  * PEW: Parity Error during a Write operation
  * PEE: Parity Error involving the External cache
  * ASE: ASynchronous Error

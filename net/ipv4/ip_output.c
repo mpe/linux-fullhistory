@@ -642,9 +642,10 @@ int ip_build_xmit(struct sock *sk,
 	 *	choice RAW frames within 20 bytes of maximum size(rare) to the long path
 	 */
 
-	length += sizeof(struct iphdr);
-	if (!sk->ip_hdrincl && opt) 
-		length += opt->optlen;
+	if (!sk->ip_hdrincl) {
+		length += sizeof(struct iphdr);
+		if(opt) length += opt->optlen;
+	}
 
 	if(length <= dev->mtu && !MULTICAST(daddr) && daddr!=0xFFFFFFFF && daddr!=dev->pa_brdaddr)
 	{	
@@ -708,7 +709,7 @@ int ip_build_xmit(struct sock *sk,
 			getfrag(frag,saddr,((char *)iph)+iph->ihl*4,0, length-iph->ihl*4);
 		}
 		else
-			getfrag(frag,saddr,(void *)iph,0,length-20);
+			getfrag(frag,saddr,(void *)iph,0,length);
 		dev_unlock_list();
 #ifdef CONFIG_FIREWALL
 		if(call_out_firewall(PF_INET, skb->dev, iph)< FW_ACCEPT)

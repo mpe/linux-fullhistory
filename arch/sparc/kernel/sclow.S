@@ -1,5 +1,5 @@
 /* sclow.S: Low level special syscall handling.
- *          Basically these are cases where we can completly
+ *          Basically these are cases where we can completely
  *          handle the system call without saving any state
  *          because we know that the process will not sleep.
  *

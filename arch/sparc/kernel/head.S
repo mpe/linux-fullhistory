@@ -582,7 +582,7 @@ srmmu_remap:
 
 		/* Calculate to KERNBASE entry.
 		 *
-		 * XXX Should not use imperical constant, but Gas gets an  XXX
+		 * XXX Should not use empirical constant, but Gas gets an  XXX
 		 * XXX upset stomach with the bitshift I would have to use XXX
 		 */
 		add	%o1, 0x3c0, %o3		
@@ -629,7 +629,7 @@ srmmu_nviking:
 		sll	%g1, 0x8, %g1			! make phys addr for l1 tbl
 
 		lda	[%g1] ASI_M_BYPASS, %g2		! get level1 entry for 0x0
-		add	%g1, 0x3c0, %g3			! XXX AWAY WITH IMPERICALS
+		add	%g1, 0x3c0, %g3			! XXX AWAY WITH EMPIRICALS
 		sta	%g2, [%g3] ASI_M_BYPASS		! place at KERNBASE entry
 		b	go_to_highmem
 		 nop					! wheee....
@@ -812,7 +812,7 @@ sun4m_init:
  * be sitting in the fault status/address registers.  Read them all to
  * clear them so we don't get magic faults later on.
  */
-/* This sucks, aparently this makes Vikings call prom panic, will fix later */
+/* This sucks, apparently this makes Vikings call prom panic, will fix later */
 
 		rd	%psr, %o1
 		srl	%o1, 28, %o1		! Get a type of the CPU

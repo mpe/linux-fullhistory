@@ -686,8 +686,11 @@ new_page:
 		 */
 read_page:
 		error = inode->i_op->readpage(inode, page);
-		if (!error)
-			goto found_page;
+		if (!error) {
+			if (!PageError(page))
+				goto found_page;
+			error = -EIO;
+		}
 		free_page(addr);
 		break;
 	}

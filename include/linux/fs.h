@@ -224,6 +224,7 @@ static inline int buffer_protected(struct buffer_head * bh)
 #include <linux/nfs_fs_i.h>
 #include <linux/xia_fs_i.h>
 #include <linux/sysv_fs_i.h>
+#include <linux/affs_fs_i.h>
 #include <linux/ufs_fs_i.h>
 
 /*
@@ -312,6 +313,7 @@ struct inode {
 		struct nfs_inode_info nfs_i;
 		struct xiafs_inode_info xiafs_i;
 		struct sysv_inode_info sysv_i;
+		struct affs_inode_info affs_i;
 		struct ufs_inode_info ufs_i;
 		struct socket socket_i;
 		void * generic_ip;
@@ -402,6 +404,7 @@ extern int fasync_helper(struct inode *, struct file *, int, struct fasync_struc
 #include <linux/nfs_fs_sb.h>
 #include <linux/xia_fs_sb.h>
 #include <linux/sysv_fs_sb.h>
+#include <linux/affs_fs_sb.h>
 #include <linux/ufs_fs_sb.h>
 
 struct super_block {
@@ -430,6 +433,7 @@ struct super_block {
 		struct nfs_sb_info nfs_sb;
 		struct xiafs_sb_info xiafs_sb;
 		struct sysv_sb_info sysv_sb;
+		struct affs_sb_info affs_sb;
 		struct ufs_sb_info ufs_sb;
 		void *generic_sbp;
 	} u;

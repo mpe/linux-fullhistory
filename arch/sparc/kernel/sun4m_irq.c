@@ -1,7 +1,7 @@
 /*  sun4m_irq.c
  *  arch/sparc/kernel/sun4m_irq.c:
  *
- *  djhr: Hacked out of irq.c into a CPU dependant version.
+ *  djhr: Hacked out of irq.c into a CPU dependent version.
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  *  Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -307,7 +307,7 @@ void sun4m_init_IRQ(void)
     
 	if (linux_num_cpus > 1) {
 		/* system wide interrupts go to cpu 0, this should always
-		 * be safe because it is guarenteed to be fitted or OBP doesn't
+		 * be safe because it is guaranteed to be fitted or OBP doesn't
 		 * come up
 		 *
 		 * Not sure, but writing here on SLAVIO systems may puke

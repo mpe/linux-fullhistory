@@ -293,7 +293,7 @@ l3s12(struct PStack *st, byte pr, void *arg)
 
         if (bcfound) {
                 if (st->pa->info != 7) {
-                        printk(KERN_WARNING "non-dgital call: %s -> %s\n",
+                        printk(KERN_WARNING "non-digital call: %s -> %s\n",
                                st->pa->calling,
                                st->pa->called);
                 }

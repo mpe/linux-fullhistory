@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 1996 Universidade de Lisboa
  * 
- * Writen by Pedro Roque Marques (roque@di.fc.ul.pt)
+ * Written by Pedro Roque Marques (roque@di.fc.ul.pt)
  *
  * This software may be used and distributed according to the terms of 
  * the GNU Public License, incorporated herein by reference.
@@ -19,11 +19,11 @@
 #define ST_NULL      0
 #define ST_CALL_INIT 1    /* Call initiated */
 #define ST_OVER_SEND 2    /* Overlap sending - Requests More Info 4 call */
-#define ST_CALL_PROC 3    /* Call Procceding */
+#define ST_CALL_PROC 3    /* Call Proceeding */
 #define ST_CALL_DELV 4
 #define ST_CALL_PRES 6    /* Call Present - Received CONN.IND */
 #define ST_CALL_RECV 7    /* Alerting sent */
-#define ST_CONN_REQ  8    /* Answered - wainting 4 CONN.CONF */
+#define ST_CONN_REQ  8    /* Answered - waiting 4 CONN.CONF */
 #define ST_INCM_PROC 9
 #define ST_ACTIVE    10
 #define ST_DISC_REQ  11

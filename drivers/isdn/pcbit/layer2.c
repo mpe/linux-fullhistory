@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 1996 Universidade de Lisboa
  * 
- * Writen by Pedro Roque Marques (roque@di.fc.ul.pt)
+ * Written by Pedro Roque Marques (roque@di.fc.ul.pt)
  *
  * This software may be used and distributed according to the terms of 
  * the GNU Public License, incorporated herein by reference.
@@ -288,7 +288,7 @@ static void pcbit_transmit(struct pcbit_dev * dev)
 			frame->copied += cp_len;
 		}
 
-		/* bookeeping */
+		/* bookkeeping */
 		dev->free -= flen;
 		pcbit_tx_update(dev, flen);
 
@@ -461,18 +461,18 @@ static void pcbit_receive(struct pcbit_dev * dev)
                         return;
                 }
 
-                /* miminum frame read */
+                /* minimum frame read */
 
 		frame->skb = dev_alloc_skb(frame->hdr_len + frame->dt_len + 
 					   ((frame->hdr_len + 15) & ~15));
 
 		if (!frame->skb) {
-			printk(KERN_DEBUG "pcbit_receive: out of memmory\n");
+			printk(KERN_DEBUG "pcbit_receive: out of memory\n");
 			kfree(frame);
 			return;
 		}
 
-                /* 16 byte aligment for IP */		       
+                /* 16 byte alignment for IP */		       
 		if (frame->dt_len)
                         skb_reserve(frame->skb, (frame->hdr_len + 15) & ~15);
 
@@ -485,7 +485,7 @@ static void pcbit_receive(struct pcbit_dev * dev)
                 if (!(frame = dev->read_frame)) {                
                         printk("Type 1 frame and no frame queued\n");
 #if 1
-			/* usualy after an error: toss frame */
+			/* usually after an error: toss frame */
 			dev->readptr += tt;
 			if (dev->readptr > dev->sh_mem + BANK2 + BANKLEN)
 				dev->readptr -= BANKLEN;
@@ -533,7 +533,7 @@ static void pcbit_receive(struct pcbit_dev * dev)
 /*
  *  The board sends 0 sized frames
  *  They are TDATA_CONFs that get messed up somehow
- *  gotta send a fake acknowledment to the upper layer somehow
+ *  gotta send a fake acknowledgment to the upper layer somehow
  */
 
 static __inline__ void pcbit_fake_conf(struct pcbit_dev *dev, struct pcbit_chan * chan)

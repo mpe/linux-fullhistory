@@ -36,7 +36,7 @@
  * SP: SnooP Enable -- 0 = bus snooping off, 1 = bus snooping on
  *
  * This enables snooping on the GNU/Viking bus.  This must be on
- * for the hardware cache consistancy mechanisms of the GNU/Viking
+ * for the hardware cache consistency mechanisms of the GNU/Viking
  * to work at all.  On non-mxcc GNU/Viking modules the split I/D
  * caches will snoop regardless of whether they are enabled, this
  * takes care of the case where the I or D or both caches are turned

@@ -23,6 +23,10 @@
  *  Added request_module("scsi_hostadapter") for kerneld:
  *  (Put an "alias scsi_hostadapter your_hostadapter" in /etc/conf.modules)
  *  Bjorn Ekwall  <bj0rn@blox.se>
+ *
+ *  Major improvements to the timeout, abort, and reset processing,
+ *  as well as performance modifications for large queue depths by
+ *  Leonard N. Zubkoff <lnz@dandelion.com>
  */
 
 /*
@@ -2122,12 +2126,12 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
                  */
                 if( temp & SCSI_RESET_BUS_RESET )
                 {
-                    SCpnt1 = host->host_queue;
-                    while(SCpnt1) {
-                        if( SCpnt->request.rq_status != RQ_INACTIVE
-                           && SCpnt1 != SCpnt)
-                            scsi_request_sense (SCpnt);
-                        SCpnt1 = SCpnt1->next;
+		    SCpnt1 = host->host_queue;
+		    while(SCpnt1) {
+			if (SCpnt1->request.rq_status != RQ_INACTIVE
+			    && SCpnt1 != SCpnt)
+			    scsi_request_sense (SCpnt1);
+			SCpnt1 = SCpnt1->next;
                     }
                 }
 		return 0;

@@ -78,12 +78,10 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 		return;
 	wake_up_interruptible(&tty->link->read_wait);
 	wake_up_interruptible(&tty->link->write_wait);
+	set_bit(TTY_OTHER_CLOSED, &tty->link->flags);
 	if (tty->driver.subtype == PTY_TYPE_MASTER) {
 		tty_hangup(tty->link);
-		set_bit(TTY_SLAVE_CLOSED, &tty->flags);
-	} else {
-		start_tty(tty);
-		set_bit(TTY_SLAVE_CLOSED, &tty->link->flags);
+		set_bit(TTY_OTHER_CLOSED, &tty->flags);
 	}
 }
 
@@ -183,6 +181,8 @@ static void pty_flush_buffer(struct tty_struct *tty)
 
 int pty_open(struct tty_struct *tty, struct file * filp)
 {
+	struct wait_queue wait = { current, NULL };
+	int	retval;
 	int	line;
 	struct	pty_struct *pty;
 	
@@ -204,18 +204,36 @@ int pty_open(struct tty_struct *tty, struct file * filp)
 			free_page(page);
 	}
 
-	if (tty->driver.subtype == PTY_TYPE_SLAVE)
-		clear_bit(TTY_SLAVE_CLOSED, &tty->link->flags);
+	clear_bit(TTY_OTHER_CLOSED, &tty->link->flags);
 	wake_up_interruptible(&pty->open_wait);
 	set_bit(TTY_THROTTLED, &tty->flags);
 	if (filp->f_flags & O_NDELAY)
 		return 0;
-	while (test_bit(TTY_SLAVE_CLOSED, &tty->link->flags) &&
-	       !(current->signal & ~current->blocked))
-		interruptible_sleep_on(&pty->open_wait);
-	if (!tty->link->count)
-		return -ERESTARTSYS;
-	return 0;
+	/*
+	 * If we're opening the master pty, just return.  If we're
+	 * trying to open the slave pty, then we have to wait for the
+	 * master pty to open.
+	 */
+	if (tty->driver.subtype == PTY_TYPE_MASTER)
+		return 0;
+	add_wait_queue(&pty->open_wait, &wait);
+	retval = 0;
+	while (1) {
+		if (current->signal & ~current->blocked) {
+			retval = -ERESTARTSYS;
+			break;
+		}
+		/*
+		 * Block until the master is open...
+		 */
+		if (tty->link->count &&
+		    !test_bit(TTY_OTHER_CLOSED, &tty->flags))
+			break;
+		schedule();
+	}
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&pty->open_wait, &wait);
+	return retval;
 }
 
 int pty_init(void)

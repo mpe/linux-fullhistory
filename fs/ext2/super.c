@@ -651,7 +651,7 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 	/*
 	 * Allow the "check" option to be passed as a remount option.
 	 */
-	set_opt (new_mount_opt, CHECK_NORMAL);
+	new_mount_opt = EXT2_MOUNT_CHECK_NORMAL;
 	if (!parse_options (data, &tmp, &resuid, &resgid,
 			    &new_mount_opt))
 		return -EINVAL;

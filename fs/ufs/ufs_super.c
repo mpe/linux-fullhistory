@@ -16,6 +16,8 @@
 #include <linux/module.h>
 #include <linux/locks.h>
 
+#include <asm/segment.h>
+
 struct super_block * ufs_read_super(struct super_block * sb, void * data, int silent);
 void ufs_put_super (struct super_block * sb);
 void ufs_statfs(struct super_block * sb, struct statfs * buf, int bufsize);

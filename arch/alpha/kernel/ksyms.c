@@ -27,6 +27,7 @@ extern void __remqu (void);
 static struct symbol_table arch_symbol_table = {
 #include <linux/symtab_begin.h>
 	/* platform dependent support */
+
 	X(_inb),
 	X(_inw),
 	X(_inl),
@@ -47,6 +48,10 @@ static struct symbol_table arch_symbol_table = {
 	X(__remlu),
 	X(__divqu),
 	X(__remqu),
+	X(insl),
+	X(insw),
+	X(outsl),
+	X(outsw),
 	X(strcat),
 	X(strcmp),
 	X(strcpy),

@@ -42,7 +42,7 @@ scan_words:
 	sethi	%hi(LO_MAGIC),%g3
 	or	%g3,%lo(LO_MAGIC),%o2
 next_word:
-	ld	[%o0],%g2		! no dependancies
+	ld	[%o0],%g2		! no dependencies
 next_word_preloaded:
 	sub	%g2,%o2,%g2		! lots of locks here
 	andcc	%g2,%o3,%g0		! and I dont like it...

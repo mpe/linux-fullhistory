@@ -49,6 +49,7 @@ extern struct sec_size * blk_sec[MAX_BLKDEV];
 extern struct blk_dev_struct blk_dev[MAX_BLKDEV];
 extern struct wait_queue * wait_for_request;
 extern void resetup_one_dev(struct gendisk *dev, int drive);
+extern void unplug_device(void * data);
 
 /* md needs this function to remap requests */
 extern int md_map (int minor, kdev_t *rdev, unsigned long *rsector, unsigned long size);

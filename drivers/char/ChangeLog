@@ -1,3 +1,18 @@
+Tue Apr 23 22:56:07 1996    <tytso@rsts-11.mit.edu>
+
+	* tty_io.c (init_dev): Change return code when user attempts to
+		open master pty which is already open from EAGAIN to EIO,
+		to match with BSD expectations.  EIO is more correct
+		anyway, since EAGAIN implies that retrying will be
+		successful --- which it might be.... Eventually!!
+
+	* pty.c (pty_open, pty_close): Fix wait loop so that we don't
+		busy loop while waiting for the master side to open.
+		Fix tty opening/closing logic.  TTY_SLAVE_CLOSED was
+		renamed to TTY_OTHER_CLOSED, so that the name is more
+		descriptive.  Also fixed code so that the tty flag
+		actually works correctly now....
+
 Mon Apr  1 10:22:01 1996    <tytso@rsts-11.mit.edu>
 
 	* serial.c (rs_close): Cleaned up modularization changes.

@@ -1,7 +1,7 @@
 /*  sun4c_irq.c
  *  arch/sparc/kernel/sun4c_irq.c:
  *
- *  djhr: Hacked out of irq.c into a CPU dependant version.
+ *  djhr: Hacked out of irq.c into a CPU dependent version.
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  *  Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)

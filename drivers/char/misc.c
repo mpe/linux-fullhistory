@@ -188,7 +188,7 @@ int misc_init(void)
 #ifdef CONFIG_PROC_FS
 	proc_register_dynamic(&proc_root, &(struct proc_dir_entry) {
 		0, 4, "misc",
-		S_IRUGO, 1, 0, 0,
+		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, NULL /* ops -- default to array */,
 		&proc_misc_read /* get_info */,
 	});	

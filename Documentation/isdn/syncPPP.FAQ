@@ -2,16 +2,16 @@ simple isdn4linux PPP FAQ .. to be continued .. not 'debugged'
 
 Q: pppd,ipppd, syncPPP , asyncPPP .. what is that ?
   what should I use?
-A: The pppd is for asynchronous PPP .. asynchron means
+A: The pppd is for asynchronous PPP .. asynchronous means
 here, the framing is character based. (e.g when
 using ttyI* or tty* devices)
 
 The ipppd handles PPP packets coming in HDLC
 frames (bit based protocol) ... The PPP driver
-in isdn4linux pushs all IP packets direct
+in isdn4linux pushes all IP packets direct
 to the network layer and all PPP protocol
 frames to the /dev/ippp* device. 
-So, the ipppd is a simple externel network
+So, the ipppd is a simple external network
 protocol handler.
 
 If you login into a remote machine using the
@@ -23,7 +23,7 @@ frames ... you probably connect to a
 syncPPP machine .. use the network device part
 of isdn4linux with the 'syncppp' encapsulation
 and make sure, that the ipppd is running and 
-conneted to at least one /dev/ippp*. Check the 
+connected to at least one /dev/ippp*. Check the 
 isdn4linux manual on how to configure a network device.
 
 Q: when I start the ipppd .. I only get the
@@ -42,7 +42,7 @@ A: Maybe you have compiled the ipppd with another
 Q: when I list the netdevices with ifconfig I see, that
    my ISDN interface has a HWaddr and IRQ=0 and Base 
    address = 0 
-A: The device is a fake ethernetdevice .. ignore IRQ and baseaddr
+A: The device is a fake ethernet device .. ignore IRQ and baseaddr
    You need the HWaddr only for ethernet encapsulation.
    
 

@@ -390,7 +390,7 @@ ad1848_mixer_set (ad1848_info * devc, int dev, int value)
   if (mix_devices[dev][RIGHT_CHN].nbits == 0)	/* Mono control */
     right = left;
 
-  retvol = left | (left << 8);
+  retvol = left | (right << 8);
 
   /* Scale volumes */
   left = mix_cvt[left];

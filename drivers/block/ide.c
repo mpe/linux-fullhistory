@@ -225,6 +225,8 @@
  *			fix cli() problem in try_to_identify()
  * Version 5.36		fixes to optional PCMCIA support
  * Version 5.37		don't use DMA when "noautotune" is specified
+ * Version 5.37a (go)	fix shared irq probing (was broken in kernel 1.3.72)
+ *			call unplug_device() from ide_do_drive_cmd()
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -1737,6 +1739,7 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 	rq->rq_dev = MKDEV(major,(drive->select.b.unit)<<PARTN_BITS);
 	if (action == ide_wait)
 		rq->sem = &sem;
+	unplug_device(bdev);
 
 	save_flags(flags);
 	cli();
@@ -1762,10 +1765,8 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 		rq->next = cur_rq->next;
 		cur_rq->next = rq;
 	}
-	if (action == ide_wait  && rq->rq_status != RQ_INACTIVE) {
-		run_task_queue(&tq_disk);
+	if (action == ide_wait  && rq->rq_status != RQ_INACTIVE)
 		down(&sem);	/* wait for it to be serviced */
-	}
 	restore_flags(flags);
 	return rq->errors ? -EIO : 0;	/* return -EIO if errors */
 }
@@ -2504,6 +2505,56 @@ static inline byte probe_for_drive (ide_drive_t *drive)
 }
 
 /*
+ * We query CMOS about hard disks : it could be that we have a SCSI/ESDI/etc
+ * controller that is BIOS compatible with ST-506, and thus showing up in our
+ * BIOS table, but not register compatible, and therefore not present in CMOS.
+ *
+ * Furthermore, we will assume that our ST-506 drives <if any> are the primary
+ * drives in the system -- the ones reflected as drive 1 or 2.  The first
+ * drive is stored in the high nibble of CMOS byte 0x12, the second in the low
+ * nibble.  This will be either a 4 bit drive type or 0xf indicating use byte
+ * 0x19 for an 8 bit type, drive 1, 0x1a for drive 2 in CMOS.  A non-zero value
+ * means we have an AT controller hard disk for that drive.
+ *
+ * Of course, there is no guarantee that either drive is actually on the
+ * "primary" IDE interface, but we don't bother trying to sort that out here.
+ * If a drive is not actually on the primary interface, then these parameters
+ * will be ignored.  This results in the user having to supply the logical
+ * drive geometry as a boot parameter for each drive not on the primary i/f.
+ *
+ * The only "perfect" way to handle this would be to modify the setup.[cS] code
+ * to do BIOS calls Int13h/Fn08h and Int13h/Fn48h to get all of the drive info
+ * for us during initialization.  I have the necessary docs -- any takers?  -ml
+ */
+static void probe_cmos_for_drives (ide_hwif_t *hwif)
+{
+#ifdef __i386__
+	extern struct drive_info_struct drive_info;
+	byte cmos_disks, *BIOS = (byte *) &drive_info;
+	int unit;
+
+#ifdef CONFIG_BLK_DEV_PROMISE
+	if (hwif->is_promise2)
+		return;
+#endif /* CONFIG_BLK_DEV_PROMISE */
+	outb_p(0x12,0x70);		/* specify CMOS address 0x12 */
+	cmos_disks = inb_p(0x71);	/* read the data from 0x12 */
+	/* Extract drive geometry from CMOS+BIOS if not already setup */
+	for (unit = 0; unit < MAX_DRIVES; ++unit) {
+		ide_drive_t *drive = &hwif->drives[unit];
+		if ((cmos_disks & (0xf0 >> (unit*4))) && !drive->present) {
+			drive->cyl   = drive->bios_cyl  = *(unsigned short *)BIOS;
+			drive->head  = drive->bios_head = *(BIOS+2);
+			drive->sect  = drive->bios_sect = *(BIOS+14);
+			drive->ctl   = *(BIOS+8);
+			drive->present = 1;
+		}
+		BIOS += 16;
+	}
+#endif
+}
+
+/*
  * This routine only knows how to look for drive units 0 and 1
  * on an interface, so any setting of MAX_DRIVES > 2 won't work here.
  */
@@ -2511,6 +2562,10 @@ static void probe_hwif (ide_hwif_t *hwif)
 {
 	unsigned int unit;
 
+	if (hwif->noprobe)
+		return;
+	if (hwif->io_base == HD_DATA)
+		probe_cmos_for_drives (hwif);
 #if CONFIG_BLK_DEV_PROMISE
 	if (!hwif->is_promise2 &&
 	   (check_region(hwif->io_base,8) || check_region(hwif->ctl_port,1))) {
@@ -2924,56 +2979,6 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 	return 1;
 }
 
-/*
- * We query CMOS about hard disks : it could be that we have a SCSI/ESDI/etc
- * controller that is BIOS compatible with ST-506, and thus showing up in our
- * BIOS table, but not register compatible, and therefore not present in CMOS.
- *
- * Furthermore, we will assume that our ST-506 drives <if any> are the primary
- * drives in the system -- the ones reflected as drive 1 or 2.  The first
- * drive is stored in the high nibble of CMOS byte 0x12, the second in the low
- * nibble.  This will be either a 4 bit drive type or 0xf indicating use byte
- * 0x19 for an 8 bit type, drive 1, 0x1a for drive 2 in CMOS.  A non-zero value
- * means we have an AT controller hard disk for that drive.
- *
- * Of course, there is no guarantee that either drive is actually on the
- * "primary" IDE interface, but we don't bother trying to sort that out here.
- * If a drive is not actually on the primary interface, then these parameters
- * will be ignored.  This results in the user having to supply the logical
- * drive geometry as a boot parameter for each drive not on the primary i/f.
- *
- * The only "perfect" way to handle this would be to modify the setup.[cS] code
- * to do BIOS calls Int13h/Fn08h and Int13h/Fn48h to get all of the drive info
- * for us during initialization.  I have the necessary docs -- any takers?  -ml
- */
-
-static void probe_cmos_for_drives (ide_hwif_t *hwif)
-{
-#ifdef __i386__
-	extern struct drive_info_struct drive_info;
-	byte cmos_disks, *BIOS = (byte *) &drive_info;
-	int unit;
-
-#ifdef CONFIG_BLK_DEV_PROMISE
-	if (hwif->is_promise2)
-		return;
-#endif /* CONFIG_BLK_DEV_PROMISE */
-	outb_p(0x12,0x70);		/* specify CMOS address 0x12 */
-	cmos_disks = inb_p(0x71);	/* read the data from 0x12 */
-	/* Extract drive geometry from CMOS+BIOS if not already setup */
-	for (unit = 0; unit < MAX_DRIVES; ++unit) {
-		ide_drive_t *drive = &hwif->drives[unit];
-		if ((cmos_disks & (0xf0 >> (unit*4))) && !drive->present) {
-			drive->cyl   = drive->bios_cyl  = *(unsigned short *)BIOS;
-			drive->head  = drive->bios_head = *(BIOS+2);
-			drive->sect  = drive->bios_sect = *(BIOS+14);
-			drive->ctl   = *(BIOS+8);
-			drive->present = 1;
-		}
-		BIOS += 16;
-	}
-#endif
-}
 
 /*
  * This routine sets up the irq for an ide interface, and creates a new
@@ -3153,15 +3158,8 @@ static int hwif_init (int h)
 	ide_hwif_t *hwif = &ide_hwifs[h];
 	void (*rfn)(void);
 	
-	if (hwif->noprobe)
+	if (!hwif->present)
 		return 0;
-	else {
-		if (hwif->io_base == HD_DATA)
-			probe_cmos_for_drives (hwif);
-		probe_hwif (hwif);
-		if (!hwif->present)
-			return 0;
-	}
 	if (!hwif->irq) {
 		if (!(hwif->irq = default_irqs[h])) {
 			printk("%s: DISABLED, NO IRQ\n", hwif->name);
@@ -3222,6 +3220,8 @@ int ide_init (void)
 	 * Probe for drives in the usual way.. CMOS/BIOS, then poke at ports
 	 */
 	for (index = 0; index < MAX_HWIFS; ++index)
+		probe_hwif (&ide_hwifs[index]);
+	for (index = 0; index < MAX_HWIFS; ++index)
 		hwif_init (index);
 
 #ifdef CONFIG_BLK_DEV_IDETAPE
@@ -3250,6 +3250,7 @@ int ide_register(int io_base, int ctl_port, int irq)
 			hwif->ctl_port = ctl_port;
 			hwif->irq = irq;
 			hwif->noprobe = 0;
+			probe_hwif(hwif);
 			if (!hwif_init(index))
 				break;
 			for (i = 0; i < hwif->gd->nr_real; i++)

@@ -818,7 +818,7 @@ static int init_dev(kdev_t device, struct tty_struct **ret_tty)
 	ltp_loc = &driver->termios_locked[idx];
 
 repeat:
-	retval = -EAGAIN;
+	retval = -EIO;
 	if (driver->type == TTY_DRIVER_TYPE_PTY &&
 	    driver->subtype == PTY_TYPE_MASTER &&
 	    *tty_loc && (*tty_loc)->count)

@@ -78,7 +78,7 @@ dvma_init(struct linux_sbus *sbus, unsigned long memory_start)
 					dma->SBus_dev->reg_addrs[0].which_io, 0x0);
 
 		dma->node = dma->SBus_dev->prom_node;
-		dma->running=0;      /* No tranfers going on as of yet */
+		dma->running=0;      /* No transfers going on as of yet */
 		dma->allocated=0;    /* No one has allocated us yet */
 		switch((dma->regs->cond_reg)&DMA_DEVICE_ID) {
 		case DMA_VERS0:

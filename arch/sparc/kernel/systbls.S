@@ -1,5 +1,5 @@
 /* $Id: systbls.S,v 1.38 1996/04/20 08:43:26 davem Exp $
- * systbls.S: System call entry point tables for OS compatability.
+ * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

@@ -5,12 +5,12 @@
 The PCBIT is a Euro ISDN adapter manufactured in Portugal by Octal and
 developed in cooperation with Portugal Telecom and Inesc.
 The driver interfaces with the standard kernel isdn facilities
-originaly developed by Fritz Elfert in the isdn4linux project.
+originally developed by Fritz Elfert in the isdn4linux project.
 
 The common versions of the pcbit board require a firmware that is 
 distributed (and copyrighted) by the manufacturer. To load this
-firmware you need "pcbitctl" availiable on the standard isdn4k-utils
-package or in the pcbit package availiable in:
+firmware you need "pcbitctl" available on the standard isdn4k-utils
+package or in the pcbit package available in:
 
 ftp://ftp.di.fc.ul.pt/pub/systems/Linux/isdn
 

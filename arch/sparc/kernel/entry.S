@@ -413,7 +413,7 @@ rie_checkbh:
 	LEAVE_IRQ
 	RESTORE_ALL
 
-	/* This routine handles illegal isntructions and privileged
+	/* This routine handles illegal instructions and privileged
 	 * instruction attempts from user code.
 	 */
 	.align	4
@@ -728,7 +728,7 @@ linux_trap_nmi_sun4c:
 	ENTER_SYSCALL
 
 	/* Ugh, we need to clear the IRQ line.  This is now
-	 * a very sun4c specific trap hanler...
+	 * a very sun4c specific trap handler...
 	 */
 	sethi	%hi(C_LABEL(interrupt_enable)), %l5
 	ld	[%l5 + %lo(C_LABEL(interrupt_enable))], %l5
@@ -847,7 +847,7 @@ linux_trap_ipi15_sun4m:
 	be	1f
 	 nop
 
-	/* Asyncronous fault, why you little ?!#&%@... */
+	/* Asynchronous fault, why you little ?!#&%@... */
 	sethi	%hi(0x80000000), %o2
 	st	%o2, [%l5 + 0xc]
 	WRITE_PAUSE

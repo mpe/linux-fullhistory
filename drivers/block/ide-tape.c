@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.c	Version 1.3 - ALPHA	Feb   9, 1996
+ * linux/drivers/block/ide-tape.c	Version 1.5 - ALPHA	Apr  12, 1996
  *
  * Copyright (C) 1995, 1996 Gadi Oxman <tgud@tochnapc2.technion.ac.il>
  *
@@ -181,6 +181,9 @@
  *                        block device interface. For more info, read the
  *                        comments in triton.c.
  * Ver 1.4   Mar 13 96   Fixed serialize support.
+ * Ver 1.5   Apr 12 96   Fixed shared interface operation, broken in 1.3.85.
+ *                       Fixed pipelined read mode inefficiency.
+ *                       Fixed nasty null dereferencing bug.
  *
  * We are currently in an *alpha* stage. The driver is not complete and not
  * much tested. I would strongly suggest to:
@@ -1244,7 +1247,8 @@ void idetape_setup (ide_drive_t *drive)
 	tape->request_status=0;
 	tape->chrdev_direction=idetape_direction_none;
 	tape->reset_issued=0;
-
+	tape->pc=&(tape->pc_stack [0]);
+	
 #if IDETAPE_PIPELINE
 	tape->max_number_of_stages=IDETAPE_MIN_PIPELINE_STAGES;
 	printk ("ide-tape: Operating in pipelined (fast and tricky) operation mode.\n");
@@ -3154,7 +3158,6 @@ void idetape_wait_for_request (struct request *rq)
 	}
 #endif /* IDETAPE_DEBUG_BUGS */
 
-	run_task_queue(&tq_disk);
 	rq->sem=&sem;
 	down (&sem);
 }
@@ -3213,7 +3216,7 @@ int idetape_add_chrdev_read_request (ide_drive_t *drive,int blocks,char *buffer)
 	rq.sector = tape->block_address;
 	rq.nr_sectors = rq.current_nr_sectors = blocks;
 
-	if (tape->current_number_of_stages < 0.5*tape->max_number_of_stages) {
+	if (tape->active_data_request != NULL || tape->current_number_of_stages <= 0.25*tape->max_number_of_stages) {
 		new_stage=idetape_kmalloc_stage (drive);
 		while (new_stage != NULL) {
 			new_stage->rq=rq;

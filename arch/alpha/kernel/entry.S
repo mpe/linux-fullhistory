@@ -428,13 +428,13 @@ entUnaUser:
 .globl	sys_fork
 .ent	sys_fork
 sys_fork:
-	br $1,do_switch_stack
+	bsr $1,do_switch_stack
 	bis $31,SIGCHLD,$16
 	bis $31,$31,$17
 	bis $30,$30,$18
 	lda $27,alpha_clone
 	jsr $26,($27),alpha_clone
-	br $1,undo_switch_stack
+	bsr $1,undo_switch_stack
 	ret $31,($26),1
 .end	sys_fork
 
@@ -442,12 +442,12 @@ sys_fork:
 .globl	sys_clone
 .ent	sys_clone
 sys_clone:
-	br $1,do_switch_stack
+	bsr $1,do_switch_stack
 	/* arg1 and arg2 come from the user */
 	bis $30,$30,$18
 	lda $27,alpha_clone
 	jsr $26,($27),alpha_clone
-	br $1,undo_switch_stack
+	bsr $1,undo_switch_stack
 	ret $31,($26),1
 .end	sys_clone
 
@@ -455,9 +455,9 @@ sys_clone:
 .globl  alpha_switch_to
 .ent    alpha_switch_to
 alpha_switch_to:
-	br $1,do_switch_stack
+	bsr $1,do_switch_stack
 	call_pal PAL_swpctx
-	br $1,undo_switch_stack
+	bsr $1,undo_switch_stack
 	ret $31,($26),1
 .end alpha_switch_to
 
@@ -477,6 +477,13 @@ entSys:
 	stq	$17,32($30)
 	stq	$18,40($30)
 	SAVE_ALL
+	/* FIXME: optimize */
+	lda	$1,current_set
+	ldq	$2,0($1)
+	ldq	$3,TASK_FLAGS($2)
+	and     $3,PF_PTRACED,$3
+	bne     $3,strace
+	/* end of strace */	
 	lda	$1,NR_SYSCALLS($31)
 	lda	$2,sys_call_table
 	lda	$27,do_entSys
@@ -523,6 +530,68 @@ ret_from_reschedule:
 restore_all:
 	RESTORE_ALL
 	rti
+	
+	
+/* PTRACE syscall handler */	
+.align 3
+strace:
+	/* set up signal stack, call syscall_trace */
+	bsr	$1,do_switch_stack
+	lda     $27,syscall_trace
+	jsr     $26,($27),syscall_trace
+	bsr	$1,undo_switch_stack
+
+	/* get the system call number and the argments back.. */
+	ldq     $0,0($30)
+	ldq     $16,SP_OFF+24($30)
+	ldq     $17,SP_OFF+32($30)
+	ldq     $18,SP_OFF+40($30)
+	ldq     $19,72($30)
+	ldq     $20,80($30)
+	ldq     $21,88($30)
+
+	/* get the system call pointer.. */
+	lda	$1,NR_SYSCALLS($31)
+	lda	$2,sys_call_table
+	lda	$27,do_entSys
+	cmpult	$0,$1,$1
+	s8addq	$0,$2,$2
+	beq	$1,1f
+	ldq	$27,0($2)
+1:	jsr	$26,($27),do_entSys
+
+	/* check return.. */
+	blt	$0,strace_error	/* the call failed */
+	stq	$31,72($30)		/* a3=0 => no error */
+strace_success:
+	stq	$0,0($30)		/* save return value */
+
+	bsr	$1,do_switch_stack
+	lda     $27,syscall_trace
+	jsr     $26,($27),syscall_trace
+	bsr	$1,undo_switch_stack
+	br	$31,ret_from_sys_call
+
+	.align  3
+strace_error:
+	ldq	$9,0($30)	/* old syscall nr (zero if success) */
+	beq	$9,strace_success
+	ldq	$10,72($30)	/* .. and this a3 */
+
+	subq	$31,$0,$0	/* with error in v0 */
+	addq	$31,1,$1	/* set a3 for errno return */
+	stq	$0,0($30)
+	stq	$1,72($30)	/* a3 for return */
+
+	bsr	$1,do_switch_stack
+	lda     $27,syscall_trace
+	jsr     $26,($27),syscall_trace
+	bsr	$1,undo_switch_stack
+
+	bis	$31,$31,$26	/* tell "ret_from_sys_call" that we can restart */
+	bis	$9,$9,$19	/*  .. old syscall nr */
+	bis	$10,$10,$20	/*  .. old a3 */
+	br	$31,ret_from_sys_call
 
 	.align 3
 handle_bottom_half:

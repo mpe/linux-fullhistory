@@ -86,7 +86,7 @@ int prom_probe_memory (void)
 	sp_banks[i].base_addr = 0xdeadbeef;
 	sp_banks[i].num_bytes = 0;
 
-	/* Now mask all bank sizes on a page boundry, it is all we can
+	/* Now mask all bank sizes on a page boundary, it is all we can
 	 * use anyways.
 	 */
 	for(i=0; sp_banks[i].num_bytes != 0; i++)

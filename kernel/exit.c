@@ -433,18 +433,19 @@ static inline void exit_mm(void)
 	struct mm_struct * mm = current->mm;
 
 	/* Set us up to use the kernel mm state */
-	flush_cache_mm(mm);
-	flush_tlb_mm(mm);
-	init_mm.count++;
-	current->mm = &init_mm;
-	current->swappable = 0;
-	SET_PAGE_DIR(current, swapper_pg_dir);
+	if (mm != &init_mm) {
+		flush_cache_mm(mm);
+		flush_tlb_mm(mm);
+		current->mm = &init_mm;
+		current->swappable = 0;
+		SET_PAGE_DIR(current, swapper_pg_dir);
 
-	/* free the old state - not used any more */
-	if (!--mm->count) {
-		exit_mmap(mm);
-		free_page_tables(mm);
-		kfree(mm);
+		/* free the old state - not used any more */
+		if (!--mm->count) {
+			exit_mmap(mm);
+			free_page_tables(mm);
+			kfree(mm);
+		}
 	}
 }
 

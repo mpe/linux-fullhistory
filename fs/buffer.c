@@ -721,17 +721,11 @@ repeat0:
 	
 	/* Too bad, that was not enough. Try a little harder to grow some. */
 	
-	if (nr_free_pages > min_free_pages + 5) {
-		if (grow_buffers(GFP_BUFFER, size)) {
-	                needed -= PAGE_SIZE;
-			goto repeat0;
-		};
+	if (grow_buffers(GFP_ATOMIC, size)) {
+                needed -= PAGE_SIZE;
+		goto repeat0;
 	}
-	
-	/* and repeat until we find something good */
-	if (!grow_buffers(GFP_ATOMIC, size))
-		wakeup_bdflush(1);
-	needed -= PAGE_SIZE;
+	wakeup_bdflush(1);
 	goto repeat0;
 }
 

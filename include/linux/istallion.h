@@ -108,6 +108,7 @@ typedef struct stlibrd {
 	int		hostoffset;
 	int		slaveoffset;
 	int		bitsize;
+	int		enabval;
 	int		panels[STL_MAXPANELS];
 	int		panelids[STL_MAXPANELS];
 	void		(*init)(struct stlibrd *brdp);

@@ -11,7 +11,7 @@
   Copyright 1992 - 1996 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Sun Apr 21 22:03:50 1996 by root@kai.makisara.fi
+  Last modified: Wed Apr 24 09:53:23 1996 by root@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
 
@@ -1230,9 +1230,28 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 		  (STp->buffer)->buffer_bytes = bytes - transfer;
 		}
 		else {
-		  printk(KERN_NOTICE "st%d: Incorrect block size.\n", dev);
 		  SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
-		  return (-EIO);
+		  if (transfer == blks) {  /* We did not get anything, signal error */
+		    printk(KERN_NOTICE "st%d: Incorrect block size.\n", dev);
+		    if (STp->drv_block >= 0)
+		      STp->drv_block += blks - transfer + 1;
+		    st_int_ioctl(inode, filp, MTBSR, 1);
+		    return (-EIO);
+		  }
+		  /* We have some data, deliver it */
+		  (STp->buffer)->buffer_bytes = (blks - transfer) * STp->block_size;
+#if DEBUG
+		  if (debugging)
+		    printk(ST_DEB_MSG "st%d: ILI but enough data received %d %d.\n",
+			   dev, count - total, (STp->buffer)->buffer_bytes);
+#endif
+		  if (count - total > (STp->buffer)->buffer_bytes)
+		    count = total + (STp->buffer)->buffer_bytes;
+		  if (STp->drv_block >= 0)
+		    STp->drv_block += 1;
+		  if (st_int_ioctl(inode, filp, MTBSR, 1))
+		    return (-EIO);
+		  SCpnt = NULL;
 		}
 	      }
 	      else if (SCpnt->sense_buffer[2] & 0x40) {

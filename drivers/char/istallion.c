@@ -125,24 +125,6 @@ static stlconf_t	stli_brdconf[] = {
 static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
 
 /*
- *	Code support is offered for boards to use the above 1Mb memory
- *	ranges for those boards which support this (supported on the ONboard
- *	and ECP-EI hardware). The following switch should be enabled. The only
- *	catch is that the kernel functions required to do this are not
- *	normally exported symbols, so you will have to do some extra work
- *	for this to be used in the loadable module form of the driver.
- *	Unfortunately this doesn't work either if you linked the driver into
- *	the kernel, since the memory management code is not set up early
- *	enough (before our initialization routine is run).
- */
-#define	STLI_HIMEMORY	0
-
-#if STLI_HIMEMORY
-#include <asm/page.h>
-#include <asm/pgtable.h>
-#endif
-
-/*
  *	There is some experimental EISA board detection code in this driver.
  *	By default it is disabled, but for those that want to try it out,
  *	then set the define below to be 1.
@@ -175,7 +157,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  *	all the local structures required by a serial tty driver.
  */
 static char	*stli_drvname = "Stallion Intelligent Multiport Serial Driver";
-static char	*stli_drvversion = "1.1.1";
+static char	*stli_drvversion = "1.1.3";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 
@@ -310,19 +292,14 @@ static char	*stli_brdnames[] = {
  *	the 1Gb, 2Gb and 3Gb areas as well...
  */
 static unsigned long	stli_eisamemprobeaddrs[] = {
-	0xc0000, 0xd0000, 0xe0000, 0xf0000,
+	0xc0000,    0xd0000,    0xe0000,    0xf0000,
 	0x80000000, 0x80010000, 0x80020000, 0x80030000,
 	0x40000000, 0x40010000, 0x40020000, 0x40030000,
 	0xc0000000, 0xc0010000, 0xc0020000, 0xc0030000,
 	0xff000000, 0xff010000, 0xff020000, 0xff030000,
 };
 
-#if STLI_HIMEMORY
 static int	stli_eisamempsize = sizeof(stli_eisamemprobeaddrs) / sizeof(unsigned long);
-#else
-static int	stli_eisamempsize = 4;
-#endif
-
 int		stli_eisaprobe = STLI_EISAPROBE;
 
 /*****************************************************************************/
@@ -407,11 +384,8 @@ int		stli_eisaprobe = STLI_EISAPROBE;
 #define	ONB_ATADDRMASK	0xff0000
 #define	ONB_ATADDRSHFT	16
 
-#if STLI_HIMEMORY
-#define	ONB_HIMEMENAB	0x02
-#else
-#define	ONB_HIMEMENAB	0
-#endif
+#define	ONB_MEMENABLO	0
+#define	ONB_MEMENABHI	0x02
 
 /*
  *	Important defines for the EISA class of ONboard board.
@@ -627,10 +601,6 @@ static void	stli_stalreset(stlibrd_t *brdp);
 
 static stliport_t *stli_getport(int brdnr, int panelnr, int portnr);
 
-#if STLI_HIMEMORY
-static void *stli_mapbrdmem(unsigned long physaddr, unsigned int size);
-#endif
-
 /*****************************************************************************/
 
 /*
@@ -750,10 +720,8 @@ void cleanup_module()
 			}
 		}
 
-#if STLI_HIMEMORY
-		if (((unsigned long) brdp->membase) >= 0x100000)
+		if (brdp->memaddr >= 0x100000)
 			vfree(brdp->membase);
-#endif
 		if ((brdp->brdtype == BRD_ECP) || (brdp->brdtype == BRD_ECPE) || (brdp->brdtype == BRD_ECPMC))
 			release_region(brdp->iobase, ECP_IOSIZE);
 		else
@@ -3083,7 +3051,7 @@ static void stli_onbenable(stlibrd_t *brdp)
 #if DEBUG
 	printk("stli_onbenable(brdp=%x)\n", (int) brdp);
 #endif
-	outb((ONB_ATENABLE | ONB_HIMEMENAB), (brdp->iobase + ONB_ATCONFR));
+	outb((brdp->enabval | ONB_ATENABLE), (brdp->iobase + ONB_ATCONFR));
 }
 
 /*****************************************************************************/
@@ -3093,7 +3061,7 @@ static void stli_onbdisable(stlibrd_t *brdp)
 #if DEBUG
 	printk("stli_onbdisable(brdp=%x)\n", (int) brdp);
 #endif
-	outb(ONB_ATDISABLE, (brdp->iobase + ONB_ATCONFR));
+	outb((brdp->enabval | ONB_ATDISABLE), (brdp->iobase + ONB_ATCONFR));
 }
 
 /*****************************************************************************/
@@ -3346,40 +3314,6 @@ static void stli_stalreset(stlibrd_t *brdp)
 
 /*****************************************************************************/
 
-#if STLI_HIMEMORY
- 
-#define	PAGE_IOMEM	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | _PAGE_ACCESSED | _PAGE_PCD)
-
-/*
- *	To support shared memory addresses outside of the lower 1 Mb region
- *	we will need to pull some tricks with memory management to map the
- *	higher range into kernel virtual address space... Radical stuff...
- */
-
-static void *stli_mapbrdmem(unsigned long physaddr, unsigned int size)
-{
-	void	*virtaddr;
-	int	rc;
-
-#if DEBUG
-	printk("stli_mapbrdmem(physaddr=%x,size=%x)\n", (int) physaddr, size);
-#endif
-
-	if ((virtaddr = vmalloc(size)) == (char *) NULL) {
-		printk("STALLION: failed to allocate virtual address space, size=%x\n", size);
-		return((void *) NULL);
-	}
-	if ((rc = remap_page_range((TASK_SIZE + ((unsigned long) virtaddr)), physaddr, size, PAGE_IOMEM))) {
-		printk("STALLION: failed to map physical address=%x, errno=%d\n", (int) physaddr, rc);
-		return((void *) NULL);
-	}
-	return(virtaddr);
-}
-
-#endif
-
-/*****************************************************************************/
-
 /*
  *	Try to find an ECP board and initialize it. This handles only ECP
  *	board types.
@@ -3459,13 +3393,11 @@ static int stli_initecp(stlibrd_t *brdp)
  */
 	EBRDINIT(brdp);
 
-#if STLI_HIMEMORY
 	if (brdp->memaddr > 0x100000) {
-		brdp->membase = stli_mapbrdmem(brdp->memaddr, brdp->memsize);
+		brdp->membase = vremap(brdp->memaddr, brdp->memsize);
 		if (brdp->membase == (void *) NULL)
 			return(-ENOMEM);
 	}
-#endif
 
 /*
  *	Now that all specific code is set up, enable the shared memory and
@@ -3558,6 +3490,10 @@ static int stli_initonb(stlibrd_t *brdp)
 		brdp->getmemptr = stli_onbgetmemptr;
 		brdp->intr = stli_ecpintr;
 		brdp->reset = stli_onbreset;
+		if (brdp->memaddr > 0x100000)
+			brdp->enabval = ONB_MEMENABHI;
+		else
+			brdp->enabval = ONB_MEMENABLO;
 		break;
 
 	case BRD_ONBOARDE:
@@ -3613,13 +3549,11 @@ static int stli_initonb(stlibrd_t *brdp)
  */
 	EBRDINIT(brdp);
 
-#if STLI_HIMEMORY
 	if (brdp->memaddr > 0x100000) {
-		brdp->membase = stli_mapbrdmem(brdp->memaddr, brdp->memsize);
+		brdp->membase = vremap(brdp->memaddr, brdp->memsize);
 		if (brdp->membase == (void *) NULL)
 			return(-ENOMEM);
 	}
-#endif
 
 /*
  *	Now that all specific code is set up, enable the shared memory and
@@ -3880,13 +3814,11 @@ static int stli_eisamemprobe(stlibrd_t *brdp)
 	for (i = 0; (i < stli_eisamempsize); i++) {
 		brdp->memaddr = stli_eisamemprobeaddrs[i];
 		brdp->membase = (void *) brdp->memaddr;
-#if STLI_HIMEMORY
 		if (brdp->memaddr > 0x100000) {
-			brdp->membase = stli_mapbrdmem(brdp->memaddr, brdp->memsize);
+			brdp->membase = vremap(brdp->memaddr, brdp->memsize);
 			if (brdp->membase == (void *) NULL)
 				continue;
 		}
-#endif
 		if (brdp->brdtype == BRD_ECPE) {
 			ecpsigp = (cdkecpsig_t *) stli_ecpeigetmemptr(brdp, CDK_SIGADDR, __LINE__);
 			memcpy(&ecpsig, ecpsigp, sizeof(cdkecpsig_t));
@@ -3899,10 +3831,8 @@ static int stli_eisamemprobe(stlibrd_t *brdp)
 					(onbsig.magic2 == ONB_MAGIC2) && (onbsig.magic3 == ONB_MAGIC3))
 				foundit = 1;
 		}
-#if STLI_HIMEMORY
 		if (brdp->memaddr >= 0x100000)
 			vfree(brdp->membase);
-#endif
 		if (foundit)
 			break;
 	}
@@ -4292,8 +4222,12 @@ static int stli_getportstats(stliport_t *portp, comstats_t *cp)
 	if (brdp == (stlibrd_t *) NULL)
 		return(-ENODEV);
 
-	if ((rc = stli_cmdwait(brdp, portp, A_GETSTATS, &stli_cdkstats, sizeof(asystats_t), 1)) < 0)
-		return(rc);
+	if (brdp->state & BST_STARTED) {
+		if ((rc = stli_cmdwait(brdp, portp, A_GETSTATS, &stli_cdkstats, sizeof(asystats_t), 1)) < 0)
+			return(rc);
+	} else {
+		memset(&stli_cdkstats, 0, sizeof(asystats_t));
+	}
 
 	memset(&stli_comstats, 0, sizeof(comstats_t));
 	stli_comstats.brd = portp->brdnr;
@@ -4364,8 +4298,10 @@ static int stli_clrportstats(stliport_t *portp, comstats_t *cp)
 	if (brdp == (stlibrd_t *) NULL)
 		return(-ENODEV);
 
-	if ((rc = stli_cmdwait(brdp, portp, A_CLEARSTATS, 0, 0, 0)) < 0)
-		return(rc);
+	if (brdp->state & BST_STARTED) {
+		if ((rc = stli_cmdwait(brdp, portp, A_CLEARSTATS, 0, 0, 0)) < 0)
+			return(rc);
+	}
 
 	memset(&stli_comstats, 0, sizeof(comstats_t));
 	stli_comstats.brd = portp->brdnr;
@@ -4426,22 +4362,63 @@ static int stli_getbrdstruct(unsigned long arg)
 static int stli_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg)
 {
 	stlibrd_t	*brdp;
-	int		brdnr, rc;
+	int		brdnr, rc, done;
 
 #if DEBUG
 	printk("stli_memioctl(ip=%x,fp=%x,cmd=%x,arg=%x)\n", (int) ip, (int) fp, cmd, (int) arg);
 #endif
 
+/*
+ *	First up handle the board independent ioctls.
+ */
+	done = 0;
+	rc = 0;
+
+	switch (cmd) {
+	case COM_GETPORTSTATS:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(comstats_t))) == 0)
+			rc = stli_getportstats((stliport_t *) NULL, (comstats_t *) arg);
+		done++;
+		break;
+	case COM_CLRPORTSTATS:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(comstats_t))) == 0)
+			rc = stli_clrportstats((stliport_t *) NULL, (comstats_t *) arg);
+		done++;
+		break;
+	case COM_GETBRDSTATS:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(combrd_t))) == 0)
+			rc = stli_getbrdstats((combrd_t *) arg);
+		done++;
+		break;
+	case COM_READPORT:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(stliport_t))) == 0)
+			rc = stli_getportstruct(arg);
+		done++;
+		break;
+	case COM_READBOARD:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(stlibrd_t))) == 0)
+			rc = stli_getbrdstruct(arg);
+		done++;
+		break;
+	default:
+		break;
+	}
+
+	if (done)
+		return(rc);
+
+/*
+ *	Now handle the board specific ioctls. These all depend on the
+ *	minor number of the device they were called from.
+ */
 	brdnr = MINOR(ip->i_rdev);
-	if (brdnr >= stli_nrbrds)
+	if (brdnr >= STL_MAXBRDS)
 		return(-ENODEV);
 	brdp = stli_brds[brdnr];
 	if (brdp == (stlibrd_t *) NULL)
 		return(-ENODEV);
 	if (brdp->state == 0)
 		return(-ENODEV);
-
-	rc = 0;
 
 	switch (cmd) {
 	case STL_BINTR:
@@ -4460,26 +4437,6 @@ static int stli_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, un
 			if (brdp->reenable != NULL)
 				(* brdp->reenable)(brdp);
 		}
-		break;
-	case COM_GETPORTSTATS:
-		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(comstats_t))) == 0)
-			rc = stli_getportstats((stliport_t *) NULL, (comstats_t *) arg);
-		break;
-	case COM_CLRPORTSTATS:
-		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(comstats_t))) == 0)
-			rc = stli_clrportstats((stliport_t *) NULL, (comstats_t *) arg);
-		break;
-	case COM_GETBRDSTATS:
-		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(combrd_t))) == 0)
-			rc = stli_getbrdstats((combrd_t *) arg);
-		break;
-	case COM_READPORT:
-		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(stliport_t))) == 0)
-			rc = stli_getportstruct(arg);
-		break;
-	case COM_READBOARD:
-		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(stlibrd_t))) == 0)
-			rc = stli_getbrdstruct(arg);
 		break;
 	default:
 		rc = -ENOIOCTLCMD;

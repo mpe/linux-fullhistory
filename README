@@ -139,14 +139,10 @@ CONFIGURING the kernel:
 
 COMPILING the kernel:
 
- - make sure you have gcc-2.5.8 or newer available.  It seems older gcc
+ - make sure you have gcc-2.6.3 or newer available.  It seems older gcc
    versions can have problems compiling newer versions of linux.  If you
    upgrade your compiler, remember to get the new binutils package too
-   (for as/ld/nm and company). Do not use gcc-2.6.0; it has a few serious
-   bugs.  Some problems have been reported occasionally with 2.6.3 as well,
-   so use that version at your own risk.  Specifying "-fno-strength-reduce" 
-   in the CFLAGS of the main Makefile may help to work around a known
-   bug in gcc.
+   (for as/ld/nm and company).
 
  - do a "make zImage" to create a compressed kernel image.  If you want
    to make a bootdisk (without root filesystem or lilo), insert a floppy

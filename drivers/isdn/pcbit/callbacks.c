@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 1996 Universidade de Lisboa
  * 
- * Writen by Pedro Roque Marques (roque@di.fc.ul.pt)
+ * Written by Pedro Roque Marques (roque@di.fc.ul.pt)
  *
  * This software may be used and distributed according to the terms of 
  * the GNU Public License, incorporated herein by reference.
@@ -125,8 +125,8 @@ void cb_out_2(struct pcbit_dev * dev, struct pcbit_chan* chan,
 
 
 /*
- * Disconnect received (actualy RELEASE COMPLETE) 
- * This means we where not hable to establish connection with remote
+ * Disconnect received (actually RELEASE COMPLETE) 
+ * This means we were not able to establish connection with remote
  * Inform the big boss above
  */
 void cb_out_3(struct pcbit_dev * dev, struct pcbit_chan* chan,
@@ -142,7 +142,7 @@ void cb_out_3(struct pcbit_dev * dev, struct pcbit_chan* chan,
 
 
 /*
- * Incomming call received
+ * Incoming call received
  * inform user
  */
 
@@ -195,7 +195,7 @@ void cb_in_1(struct pcbit_dev * dev, struct pcbit_chan* chan,
 }
 
 /*
- * user has replyed
+ * user has replied
  * open the channel
  * send CONNECT message CONNECT_ACTIVE_REQ in CAPI
  */
@@ -278,7 +278,7 @@ void cb_disc_1(struct pcbit_dev * dev, struct pcbit_chan* chan,
 
         
 /*
- *  User HANGUP on active/call proceding state
+ *  User HANGUP on active/call proceeding state
  *  send disc.req
  */
 void cb_disc_2(struct pcbit_dev * dev, struct pcbit_chan* chan, 
@@ -344,7 +344,7 @@ void cb_selp_1(struct pcbit_dev * dev, struct pcbit_chan* chan,
 }
 
 /*
- *  Inform User that the B-channel is availiable
+ *  Inform User that the B-channel is available
  */
 void cb_open(struct pcbit_dev * dev, struct pcbit_chan* chan, 
 	     struct callb_data *data) 

@@ -246,7 +246,7 @@ struct Sparc_ESP {
 
 /* The status register can be masked with ESP_STAT_PMASK and compared
  * with the following values to determine the current phase the ESP
- * (at least thinks it) is in.  For our pusposes we also add our own
+ * (at least thinks it) is in.  For our purposes we also add our own
  * software 'done' bit for our phase management engine.
  */
 #define ESP_DOP   (0)                                       /* Data Out  */

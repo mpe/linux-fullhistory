@@ -261,7 +261,7 @@ struct tty_struct {
  */
 #define TTY_THROTTLED 0
 #define TTY_IO_ERROR 1
-#define TTY_SLAVE_CLOSED 2
+#define TTY_OTHER_CLOSED 2
 #define TTY_EXCLUSIVE 3
 #define TTY_DEBUG 4
 #define TTY_DO_WRITE_WAKEUP 5

@@ -410,6 +410,13 @@ N: Philip Gladstone
 E: philipg@onsett.com
 D: Kernel / timekeeping stuff
 
+N: Dmitry S. Gorodchanin
+E: begemot@bgm.rosprint.net
+D: RISCom/8 driver, misc kernel fixes.
+S: 6/1 M.Koneva bl, apt #125 
+S: Poltava 314023
+S: Ukraine
+
 N: Grant Guenther
 E: grant@torque.net
 D: Iomega PPA / ZIP driver
@@ -555,7 +562,7 @@ S: RG6 2NU
 S: United Kingdom
 
 N: Michael K. Johnson
-E: johnsonm@sunsite.unc.edu
+E: johnsonm@redhat.com
 D: The Linux Documentation Project
 D: Kernel Hackers' Guide
 D: Procps
@@ -1365,10 +1372,3 @@ D: Miscellaneous kernel fixes
 S: 3078 Sulphur Spring Court
 S: San Jose, California 95148
 S: USA
-
-N: Dmitry S. Gorodchanin
-E: begemot@bgm.rosprint.net
-D: RISCom/8 driver, misc kernel fixes.
-S: 6/1 M.Koneva bl, apt #125 
-S: Poltava 314023
-S: Ukraine

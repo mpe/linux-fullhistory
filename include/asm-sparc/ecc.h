@@ -101,7 +101,7 @@
  *  31-18  17  16    15-8    7-4   3    2    1 0
  *
  * C2E: A C2 graphics error occurred. 0=no 1=yes (SS10 only)
- * MULT: Multiple errors occurres ;-O 0=no 1=prom_panic(yes)
+ * MULT: Multiple errors occurred ;-O 0=no 1=prom_panic(yes)
  * SYNDROME: Controller is mentally unstable.
  * DWORD:
  * UNC: Uncorrectable error.  0=no 1=yes

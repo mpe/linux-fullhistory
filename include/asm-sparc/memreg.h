@@ -16,7 +16,7 @@
 #define SUN4C_SYNC_SIZE      0x0002  /* bad access size? whuz this? */
 #define SUN4C_SYNC_PARITY    0x0008  /* bad ram chips caused a parity error */
 #define SUN4C_SYNC_SBUS      0x0010  /* the SBUS had some problems... */
-#define SUN4C_SYNC_NOMEM     0x0020  /* translation to non-existant ram */
+#define SUN4C_SYNC_NOMEM     0x0020  /* translation to non-existent ram */
 #define SUN4C_SYNC_PROT      0x0040  /* access violated pte protections */
 #define SUN4C_SYNC_NPRESENT  0x0080  /* pte said that page was not present */
 #define SUN4C_SYNC_BADWRITE  0x8000  /* while writing something went bogus */

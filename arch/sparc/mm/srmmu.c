@@ -483,7 +483,7 @@ void srmmu_mapioaddr(unsigned long physaddr, unsigned long virt_addr, int bus_ty
 	ptep = srmmu_pte_offset(pmdp, virt_addr);
 	tmp = (physaddr >> 4) | SRMMU_ET_PTE;
 
-	/* I need to test whether this is consistant over all
+	/* I need to test whether this is consistent over all
 	 * sun4m's.  The bus_type represents the upper 4 bits of
 	 * 36-bit physical address on the I/O space lines...
 	 */
@@ -614,7 +614,7 @@ static void tsunami_flush_page_for_dma(unsigned long page)
 
 /* TLB flushes seem to upset the tsunami sometimes, I can't figure out
  * what the hell is going on.  All I see is a tlb flush (page or whole,
- * there is no consistant pattern) and then total local variable corruption
+ * there is no consistent pattern) and then total local variable corruption
  * in the procedure who called us after return.  Usually triggerable
  * by "cool" programs like crashme and bonnie.  I played around a bit
  * and adding a bunch of forced nops seems to make the problems all
@@ -1695,7 +1695,7 @@ static void srmmu_map_kernel(unsigned long start, unsigned long end)
 		start += PAGE_SIZE;
 		tmp = (srmmu_hwprobe(start) & SRMMU_PTE_PMASK) << 4;
 
-		/* Never a cross bank boundry, thank you. */
+		/* Never a cross bank boundary, thank you. */
 		if(tmp != last_page + PAGE_SIZE)
 			break;
 		last_page = tmp;
@@ -2114,7 +2114,7 @@ void poke_swift(void)
 	mreg |= (SWIFT_IE | SWIFT_DE); /* I & D caches on */
 
 	/* The Swift branch folding logic is completely broken.  At
-	 * trap time, if things are just right, if can mistakedly
+	 * trap time, if things are just right, if can mistakenly
 	 * think that a trap is coming from kernel mode when in fact
 	 * it is coming from user mode (it mis-executes the branch in
 	 * the trap code).  So you see things like crashme completely
