@@ -1978,7 +1978,7 @@ void exit_mmap(struct mm_struct *mm)
 	vma = mm->mmap;
 	mm->mmap = mm->mmap_cache = NULL;
 	mm->mm_rb = RB_ROOT;
-	mm->rss = 0;
+	set_mm_counter(mm, rss, 0);
 	mm->total_vm = 0;
 	mm->locked_vm = 0;
 

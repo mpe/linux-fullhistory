@@ -309,9 +309,9 @@ copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		pte = pte_mkclean(pte);
 	pte = pte_mkold(pte);
 	get_page(page);
-	dst_mm->rss++;
+	inc_mm_counter(dst_mm, rss);
 	if (PageAnon(page))
-		dst_mm->anon_rss++;
+		inc_mm_counter(dst_mm, anon_rss);
 	set_pte_at(dst_mm, addr, dst_pte, pte);
 	page_dup_rmap(page);
 }
@@ -475,7 +475,7 @@ static void zap_pte_range(struct mmu_gather *tlb, pmd_t *pmd,
 			if (pte_dirty(ptent))
 				set_page_dirty(page);
 			if (PageAnon(page))
-				tlb->mm->anon_rss--;
+				dec_mm_counter(tlb->mm, anon_rss);
 			else if (pte_young(ptent))
 				mark_page_accessed(page);
 			tlb->freed++;
@@ -1219,9 +1219,9 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 	page_table = pte_offset_map(pmd, address);
 	if (likely(pte_same(*page_table, pte))) {
 		if (PageAnon(old_page))
-			mm->anon_rss--;
+			dec_mm_counter(mm, anon_rss);
 		if (PageReserved(old_page))
-			++mm->rss;
+			inc_mm_counter(mm, rss);
 		else
 			page_remove_rmap(old_page);
 		flush_cache_page(vma, address, pfn);
@@ -1627,7 +1627,7 @@ static int do_swap_page(struct mm_struct * mm,
 	if (vm_swap_full())
 		remove_exclusive_swap_page(page);
 
-	mm->rss++;
+	inc_mm_counter(mm, rss);
 	pte = mk_pte(page, vma->vm_page_prot);
 	if (write_access && can_share_swap_page(page)) {
 		pte = maybe_mkwrite(pte_mkdirty(pte), vma);
@@ -1691,7 +1691,7 @@ do_anonymous_page(struct mm_struct *mm, struct vm_area_struct *vma,
 			spin_unlock(&mm->page_table_lock);
 			goto out;
 		}
-		mm->rss++;
+		inc_mm_counter(mm, rss);
 		entry = maybe_mkwrite(pte_mkdirty(mk_pte(page,
 							 vma->vm_page_prot)),
 				      vma);
@@ -1807,7 +1807,7 @@ retry:
 	/* Only go through if we didn't race with anybody else... */
 	if (pte_none(*page_table)) {
 		if (!PageReserved(new_page))
-			++mm->rss;
+			inc_mm_counter(mm, rss);
 
 		flush_icache_page(vma, new_page);
 		entry = mk_pte(new_page, vma->vm_page_prot);
@@ -2112,8 +2112,10 @@ EXPORT_SYMBOL(vmalloc_to_pfn);
 void update_mem_hiwater(struct task_struct *tsk)
 {
 	if (tsk->mm) {
-		if (tsk->mm->hiwater_rss < tsk->mm->rss)
-			tsk->mm->hiwater_rss = tsk->mm->rss;
+		unsigned long rss = get_mm_counter(tsk->mm, rss);
+
+		if (tsk->mm->hiwater_rss < rss)
+			tsk->mm->hiwater_rss = rss;
 		if (tsk->mm->hiwater_vm < tsk->mm->total_vm)
 			tsk->mm->hiwater_vm = tsk->mm->total_vm;
 	}

@@ -257,7 +257,7 @@ static int page_referenced_one(struct page *page,
 	pte_t *pte;
 	int referenced = 0;
 
-	if (!mm->rss)
+	if (!get_mm_counter(mm, rss))
 		goto out;
 	address = vma_address(page, vma);
 	if (address == -EFAULT)
@@ -436,7 +436,7 @@ void page_add_anon_rmap(struct page *page,
 	BUG_ON(PageReserved(page));
 	BUG_ON(!anon_vma);
 
-	vma->vm_mm->anon_rss++;
+	inc_mm_counter(vma->vm_mm, anon_rss);
 
 	anon_vma = (void *) anon_vma + PAGE_MAPPING_ANON;
 	index = (address - vma->vm_start) >> PAGE_SHIFT;
@@ -509,7 +509,7 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma)
 	pte_t pteval;
 	int ret = SWAP_AGAIN;
 
-	if (!mm->rss)
+	if (!get_mm_counter(mm, rss))
 		goto out;
 	address = vma_address(page, vma);
 	if (address == -EFAULT)
@@ -595,10 +595,10 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma)
 		}
 		set_pte_at(mm, address, pte, swp_entry_to_pte(entry));
 		BUG_ON(pte_file(*pte));
-		mm->anon_rss--;
+		dec_mm_counter(mm, anon_rss);
 	}
 
-	mm->rss--;
+	inc_mm_counter(mm, rss);
 	page_remove_rmap(page);
 	page_cache_release(page);
 
@@ -703,7 +703,7 @@ static void try_to_unmap_cluster(unsigned long cursor,
 
 		page_remove_rmap(page);
 		page_cache_release(page);
-		mm->rss--;
+		dec_mm_counter(mm, rss);
 		(*mapcount)--;
 	}
 
@@ -802,7 +802,7 @@ static int try_to_unmap_file(struct page *page)
 			if (vma->vm_flags & (VM_LOCKED|VM_RESERVED))
 				continue;
 			cursor = (unsigned long) vma->vm_private_data;
-			while (vma->vm_mm->rss &&
+			while (get_mm_counter(vma->vm_mm, rss) &&
 				cursor < max_nl_cursor &&
 				cursor < vma->vm_end - vma->vm_start) {
 				try_to_unmap_cluster(cursor, &mapcount, vma);
