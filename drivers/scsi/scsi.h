@@ -398,6 +398,11 @@ extern int  scsi_partsize(struct buffer_head *bh, unsigned long capacity,
                     unsigned int *secs);
 
 /*
+ * Prototypes for functions in scsi_merge.c
+ */
+extern void recount_segments(Scsi_Cmnd * SCpnt);
+
+/*
  * Prototypes for functions in scsi_lib.c
  */
 extern void initialize_merge_fn(Scsi_Device * SDpnt);
@@ -421,8 +426,6 @@ extern void scsi_wait_cmd(Scsi_Cmnd *, const void *cmnd,
 			  void *buffer, unsigned bufflen,
 			  void (*done) (struct scsi_cmnd *),
 			  int timeout, int retries);
-
-extern void scsi_request_fn(request_queue_t * q);
 
 extern Scsi_Cmnd *scsi_allocate_device(Scsi_Device *, int);
 
@@ -627,6 +630,14 @@ struct scsi_cmnd {
 	unsigned flags;
 
 	/*
+	 * Used to indicate that a command which has timed out also
+	 * completed normally.  Typically the completion function will
+	 * do nothing but set this flag in this instance because the
+	 * timeout handler is already running.
+	 */
+	unsigned done_late:1;
+
+	/*
 	 * These two flags are used to track commands that are in the
 	 * mid-level queue.  The idea is that a command can be there for
 	 * one of two reasons - either the host is busy or the device is
@@ -635,11 +646,6 @@ struct scsi_cmnd {
 	 */
 	unsigned host_wait:1;
 	unsigned device_wait:1;
-
-	/* These variables are for the cdrom only. Once we have variable size 
-	 * buffers in the buffer cache, they will go away. */
-	int this_count;
-	/* End of special cdrom variables */
 
 	/* Low-level done function - can be used by low-level driver to point
 	 *        to completion function.  Not used by mid/upper level code. */

@@ -53,10 +53,7 @@ static inline void set_hae(unsigned long new_hae)
  */
 static inline unsigned long virt_to_phys(volatile void * address)
 {
-	/* Conditionalize this on the CPU?  This here is 40 bits,
-	   whereas EV4 only supports 34.  But KSEG is farther out
-	   so it shouldn't _really_ matter.  */
-	return 0xffffffffffUL & (unsigned long) address;
+	return (unsigned long)address - IDENT_ADDR;
 }
 
 static inline void * phys_to_virt(unsigned long address)
@@ -265,6 +262,11 @@ static inline void * ioremap(unsigned long offset, unsigned long size)
 static inline void iounmap(void *addr)
 {
 }
+
+static inline void * ioremap_nocache(unsigned long offset, unsigned long size)
+{
+	return ioremap(offset, size);
+} 
 
 /* Indirect back to the macros provided.  */
 

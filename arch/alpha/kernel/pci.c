@@ -58,6 +58,17 @@ quirk_isa_bridge(struct pci_dev *dev)
 }
 
 static void __init
+quirk_ali_ide_ports(struct pci_dev *dev)
+{
+	if (dev->resource[0].end == 0xffff)
+		dev->resource[0].end = dev->resource[0].start + 7;
+	if (dev->resource[2].end == 0xffff)
+		dev->resource[2].end = dev->resource[2].start + 7;
+	if (dev->resource[3].end == 0xffff)
+		dev->resource[3].end = dev->resource[3].start + 7;
+}
+
+static void __init
 quirk_vga_enable_rom(struct pci_dev *dev)
 {
 	/* If it's a VGA, enable its BIOS ROM at C0000.
@@ -82,6 +93,8 @@ struct pci_fixup pcibios_fixups[] __initdata = {
 	  quirk_eisa_bridge },
 	{ PCI_FIXUP_HEADER, PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82378,
 	  quirk_isa_bridge },
+	{ PCI_FIXUP_HEADER, PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M5229,
+	  quirk_ali_ide_ports },
 	{ PCI_FIXUP_FINAL, PCI_ANY_ID, PCI_ANY_ID, quirk_vga_enable_rom },
 	{ 0 }
 };
@@ -131,13 +144,7 @@ pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 		/* Align to multiple of size of minimum base.  */
 		alignto = MAX(0x1000, size);
 		start = ALIGN(start, alignto);
-		if (size > 7 * 16*MB) {
-			printk(KERN_WARNING "PCI: dev %s "
-			       "requests %ld bytes of contiguous "
-			       "address space---don't use sparse "
-			       "memory accesses on this device!\n",
-			       dev->name, size);
-		} else {
+		if (size <= 7 * 16*MB) {
 			if (((start / (16*MB)) & 0x7) == 0) {
 				start &= ~(128*MB - 1);
 				start += 16*MB;

@@ -177,6 +177,6 @@ struct inode_operations ext2_file_inode_operations = {
 	block_read_full_page,	/* readpage */
 	block_write_full_page,	/* writepage */
 	ext2_truncate,		/* truncate */
-	ext2_permission,	/* permission */
+	NULL,			/* permission */
 	NULL,			/* revalidate */
 };

@@ -29,23 +29,32 @@ ifeq ($(have_mcpu),y)
   # the host compiler might have on by default.  Given that EV4 and EV5
   # have the same instruction set, prefer EV5 because an EV5 schedule is
   # more likely to keep an EV4 processor busy than vice-versa.
+  mcpu_done := 
   ifeq ($(CONFIG_ALPHA_GENERIC),y)
     CFLAGS := $(CFLAGS) -mcpu=ev5
+    mcpu_done := y
   endif
-  ifeq ($(CONFIG_ALPHA_EV4),y)
-    CFLAGS := $(CFLAGS) -mcpu=ev4
-  endif
-  ifeq ($(CONFIG_ALPHA_PYXIS),y)
+  ifeq ($(mcpu_done)$(CONFIG_ALPHA_PYXIS),y)
     CFLAGS := $(CFLAGS) -mcpu=ev56
+    mcpu_done := y
   endif
-  ifeq ($(CONFIG_ALPHA_POLARIS),y)
+  ifeq ($(mcpu_done)$(CONFIG_ALPHA_POLARIS),y)
     ifeq ($(have_mcpu_pca56),y)
       CFLAGS := $(CFLAGS) -mcpu=pca56
     else
       CFLAGS := $(CFLAGS) -mcpu=ev56
     endif
+    mcpu_done := y
   endif
-  ifeq ($(CONFIG_ALPHA_EV6),y)
+  ifeq ($(mcpu_done)$(CONFIG_ALPHA_NAUTILUS)$(have_mcpu_ev67),yy)
+    CFLAGS := $(CFLAGS) -mcpu=ev67
+    mcpu_done := y
+  endif
+  ifeq ($(mcpu_done)$(CONFIG_ALPHA_EV4),y)
+    CFLAGS := $(CFLAGS) -mcpu=ev4
+    mcpu_done := y
+  endif
+  ifeq ($(mcpu_done)$(CONFIG_ALPHA_EV6),y)
     ifeq ($(have_mcpu_ev6),y)
       CFLAGS := $(CFLAGS) -mcpu=ev6
     else
@@ -55,6 +64,7 @@ ifeq ($(have_mcpu),y)
         CFLAGS := $(CFLAGS) -mcpu=ev56
       endif
     endif
+    mcpu_done := y
   endif
 endif
 

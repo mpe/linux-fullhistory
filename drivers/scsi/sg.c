@@ -981,8 +981,10 @@ static int sg_init()
 
     SCSI_LOG_TIMEOUT(3, printk("sg_init\n"));
     sg_dev_arr = (Sg_device *)
-        scsi_init_malloc((sg_template.dev_noticed + SG_EXTRA_DEVS)
-                         * sizeof(Sg_device), GFP_ATOMIC);
+	kmalloc((sg_template.dev_noticed + SG_EXTRA_DEVS)
+		* sizeof(Sg_device), GFP_ATOMIC);
+    memset(sg_dev_arr, 0, (sg_template.dev_noticed + SG_EXTRA_DEVS)
+		* sizeof(Sg_device));
     if (NULL == sg_dev_arr) {
         printk("sg_init: no space for sg_dev_arr\n");
         return 1;
@@ -1085,9 +1087,7 @@ void cleanup_module( void)
     if(sg_dev_arr != NULL) {
 /* Really worrying situation of writes still pending and get here */
 /* Strategy: shorten timeout on release + wait on detach ... */
-        scsi_init_free((char *) sg_dev_arr,
-                       (sg_template.dev_noticed + SG_EXTRA_DEVS)
-                       * sizeof(Sg_device));
+	kfree((char *) sg_dev_arr);
         sg_dev_arr = NULL;
     }
     sg_template.dev_max = 0;

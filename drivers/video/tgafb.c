@@ -937,7 +937,7 @@ static int tgafb_blank(int blank, struct fb_info_gen *info)
 static void tgafb_set_disp(const void *fb_par, struct display *disp,
 	struct fb_info_gen *info)
 {
-    disp->screen_base = ioremap(fb_info.tga_fb_base, 0);
+    disp->screen_base = fb_info.tga_fb_base;
     switch (fb_info.tga_type) {
 #ifdef FBCON_HAS_CFB8
 	case 0: /* 8-plane */
@@ -1034,14 +1034,16 @@ int __init tgafb_init(void)
     pdev = pci_find_device(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TGA, NULL);
     if (!pdev)
 	return -ENXIO;
-    fb_info.tga_mem_base = pdev->resource[0].start;
+    fb_info.tga_mem_base = ioremap(pdev->resource[0].start, 0);
+
 #ifdef DEBUG
     printk(KERN_DEBUG "tgafb_init: mem_base 0x%x\n", fb_info.tga_mem_base);
 #endif /* DEBUG */
 
-    fb_info.tga_type = (readl((unsigned long)fb_info.tga_mem_base) >> 12) & 0x0f;
-    fb_info.tga_regs_base = ((unsigned long)fb_info.tga_mem_base + TGA_REGS_OFFSET);
-    fb_info.tga_fb_base = ((unsigned long)fb_info.tga_mem_base + fb_offset_presets[fb_info.tga_type]);
+    fb_info.tga_type = (readl(fb_info.tga_mem_base) >> 12) & 0x0f;
+    fb_info.tga_regs_base = fb_info.tga_mem_base + TGA_REGS_OFFSET;
+    fb_info.tga_fb_base = (fb_info.tga_mem_base
+			   + fb_offset_presets[fb_info.tga_type]);
 
     /* XXX Why the fuck is it called modename if it identifies the board? */
     strcpy (fb_info.gen.info.modename,"DEC 21030 TGA "); 

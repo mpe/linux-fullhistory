@@ -57,9 +57,7 @@ else
 		  bool '      AEC6210 Tuning support (EXPERIMENTAL)' CONFIG_BLK_DEV_AEC6210_TUNING
 	       fi
 	    if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
-	       if [ "$CONFIG_X86" = "y" ]; then
-		  bool '    ALI M15x3 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_ALI15X3
-	       fi
+	       bool '    ALI M15x3 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_ALI15X3
 	       bool '    CMD646 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_CMD646
 	       bool '    CY82C693 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_CY82C693
 	    fi

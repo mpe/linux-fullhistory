@@ -1139,12 +1139,18 @@ Scsi_Cmnd *scsi_allocate_device(Scsi_Device * device, int wait)
 					 * to complete */
 	atomic_inc(&SCpnt->host->host_active);
 
+	SCpnt->buffer  = NULL;
+	SCpnt->bufflen = 0;
+	SCpnt->request_buffer = NULL;
+	SCpnt->request_bufflen = 0;
+
 	SCpnt->use_sg = 0;	/* Reset the scatter-gather flag */
 	SCpnt->old_use_sg = 0;
 	SCpnt->transfersize = 0;	/* No default transfer size */
 	SCpnt->cmd_len = 0;
 
 	SCpnt->underflow = 0;	/* Do not flag underflow conditions */
+	SCpnt->resid = 0;
 	SCpnt->state = SCSI_STATE_INITIALIZING;
 	SCpnt->owner = SCSI_OWNER_HIGHLEVEL;
 
@@ -1344,7 +1350,7 @@ int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt)
  *              need be held upon entry.   The old queueing code the lock was
  *              assumed to be held upon entry.
  *
- * Returns:     Pointer to command descriptor.
+ * Returns:     Nothing.
  *
  * Notes:       Prior to the new queue code, this function was not SMP-safe.
  *              Also, this function is now only used for queueing requests
@@ -1482,6 +1488,7 @@ void scsi_done(Scsi_Cmnd * SCpnt)
 	 * etc, etc.
 	 */
 	if (!tstatus) {
+		SCpnt->done_late = 1;
 		return;
 	}
 	/* Set the serial numbers back to zero */

@@ -338,6 +338,7 @@ irongate_init_arch(void)
 {
 	struct pci_controler *hose;
 
+	IRONGATE0->stat_cmd = IRONGATE0->stat_cmd & ~0x100;
 	irongate_pci_clr_err();
 	irongate_register_dump(__FUNCTION__);
 

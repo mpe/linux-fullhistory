@@ -46,11 +46,33 @@
 
 #define SCSI_PA(address) virt_to_bus(address)
 
-#define BAD_DMA(msg, address, length) \
-  { \
-    printk(KERN_CRIT "%s address %p length %d\n", msg, address, length); \
-    panic("Buffer at physical address > 16Mb used for aha1542"); \
-  }
+static void BAD_DMA(void * address, unsigned int length)
+{
+  printk(KERN_CRIT "buf vaddress %p paddress 0x%lx length %d\n", 
+	 address, 
+	 SCSI_PA(address),
+	 length);
+  panic("Buffer at physical address > 16Mb used for aha1542");
+}
+
+static void BAD_SG_DMA(Scsi_Cmnd * SCpnt, 
+		       struct scatterlist * sgpnt, 
+		       int nseg, 
+		       int badseg)
+{
+  printk(KERN_CRIT "sgpnt[%d:%d] addr %p/0x%lx alt %p/0x%lx length %d\n", 
+	 badseg, nseg,
+	 sgpnt[badseg].address, 
+	 SCSI_PA(sgpnt[badseg].address),
+	 sgpnt[badseg].alt_address, 
+	 sgpnt[badseg].alt_address ? SCSI_PA(sgpnt[badseg].alt_address) : 0,
+	 sgpnt[badseg].length);
+
+  /*
+   * Not safe to continue.
+   */
+  panic("Buffer at physical address > 16Mb used for aha1542");
+}
 
 #include<linux/stat.h>
 
@@ -655,7 +677,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	};
 	any2scsi(cptr[i].dataptr, SCSI_PA(sgpnt[i].address));
 	if(SCSI_PA(sgpnt[i].address+sgpnt[i].length-1) > ISA_DMA_THRESHOLD)
-	  BAD_DMA("sgpnt", sgpnt[i].address, sgpnt[i].length);
+	  BAD_SG_DMA(SCpnt, sgpnt, SCpnt->use_sg, i);
 	any2scsi(cptr[i].datalen, sgpnt[i].length);
       };
       any2scsi(ccb[mbo].datalen, SCpnt->use_sg * sizeof(struct chain));
@@ -670,7 +692,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       SCpnt->host_scribble = NULL;
       any2scsi(ccb[mbo].datalen, bufflen);
       if(buff && SCSI_PA(buff+bufflen-1) > ISA_DMA_THRESHOLD)
-        BAD_DMA("buff", buff, bufflen);
+	BAD_DMA(buff, bufflen);
       any2scsi(ccb[mbo].dataptr, SCSI_PA(buff));
     };
     ccb[mbo].idlun = (target&7)<<5 | direction | (lun & 7); /*SCSI Target Id*/

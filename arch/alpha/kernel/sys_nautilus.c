@@ -88,13 +88,28 @@ nautilus_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 void
 nautilus_kill_arch(int mode)
 {
-	u8 tmp;
+	switch (mode) {
+	case LINUX_REBOOT_CMD_RESTART:
+		{
+			u8 t8;
+			pcibios_read_config_byte(0, 0x38, 0x43, &t8);
+			pcibios_write_config_byte(0, 0x38, 0x43, t8 | 0x80);
+			outb(1, 0x92);
+			outb(0, 0x92);
+			/* NOTREACHED */
+		}
+		break;
 
-	if (mode == LINUX_REBOOT_CMD_RESTART) {
-		pcibios_read_config_byte(0, 0x38, 0x43, &tmp);
-		pcibios_write_config_byte(0, 0x38, 0x43, tmp | 0x80);
-		outb(1, 0x92);
-		outb(0, 0x92);
+	case LINUX_REBOOT_CMD_POWER_OFF:
+		{
+			u32 pmuport;
+			pcibios_read_config_dword(0, 0x88, 0x10, &pmuport);
+			pmuport &= 0xfffe;
+			outl(0xffff, pmuport); /* clear pending events */
+			outw(0x2000, pmuport+4); /* power off */
+			/* NOTREACHED */
+		}
+		break;
 	}
 }
 
@@ -435,8 +450,8 @@ nautilus_machine_check(unsigned long vector, unsigned long la_ptr,
 	   Add to that the two levels of severity - correctable or not.  */
 
 	if (vector == SCB_Q_SYSMCHK
-	    && ((IRONGATE0->dramms & 0x3FF) == 0x300)) {
-		unsigned long nmi_ctl, temp;
+	    && ((IRONGATE0->dramms & 0x300) == 0x300)) {
+		unsigned long nmi_ctl;
 
 		/* Clear ALI NMI */
 		nmi_ctl = inb(0x61);
@@ -445,15 +460,15 @@ nautilus_machine_check(unsigned long vector, unsigned long la_ptr,
 		nmi_ctl &= ~0x0c;
 		outb(nmi_ctl, 0x61);
 
-		temp = IRONGATE0->stat_cmd;
-		IRONGATE0->stat_cmd = temp; /* write again clears error bits */
+		/* Write again clears error bits.  */
+		IRONGATE0->stat_cmd = IRONGATE0->stat_cmd & ~0x100;
 		mb();
-		temp = IRONGATE0->stat_cmd;  /* re-read to force write */
+		IRONGATE0->stat_cmd;
 
-		temp = IRONGATE0->dramms;
-		IRONGATE0->dramms = temp; /* write again clears error bits */
+		/* Write again clears error bits.  */
+		IRONGATE0->dramms = IRONGATE0->dramms;
 		mb();
-		temp = IRONGATE0->dramms;  /* re-read to force write */
+		IRONGATE0->dramms;
 
 		draina();
 		wrmces(0x7);

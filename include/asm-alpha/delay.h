@@ -9,16 +9,19 @@
  * Delay routines, using a pre-computed "loops_per_second" value.
  */
 
+/* We can make the delay loop inline, but we have to be very careful wrt
+   scheduling for ev6 machines, so that we keep a consistent number of
+   iterations for all invocations.  */
+
 extern __inline__ void
 __delay(unsigned long loops)
 {
-	register unsigned long r0 __asm__("$0") = loops;
-#ifdef MODULE
-	__asm__ __volatile__("lda $28,___delay; jsr $28,($28),0"
-			     : "=r"(r0) : "r"(r0) : "$28");
-#else
-	__asm__ __volatile__("bsr $28,___delay" : "=r"(r0) : "r"(r0) : "$28");
-#endif
+	__asm__ __volatile__(
+		".align 4\n"
+		"1:	subq %0,1,%0\n"
+		"	bge %0,1b\n"
+		"	nop"
+		: "=r" (loops) : "0"(loops));
 }
 
 /*

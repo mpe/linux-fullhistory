@@ -55,7 +55,7 @@ int get_resource_list(struct resource *root, char *buf, int size)
 	int retval;
 
 	fmt = "        %08lx-%08lx : %s\n";
-	if (root == &ioport_resource)
+	if (root->end < 0x10000)
 		fmt = "        %04lx-%04lx : %s\n";
 	read_lock(&resource_lock);
 	retval = do_resource_list(root->child, fmt, 8, buf, buf + size) - buf;

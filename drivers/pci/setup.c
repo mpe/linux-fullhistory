@@ -34,10 +34,15 @@ pci_claim_resource(struct pci_dev *dev, int resource)
 	int err;
 
 	err = -EINVAL;
-	if (root != NULL)
+	if (root != NULL) {
 		err = request_resource(root, res);
-	if (err) {
-		printk(KERN_ERR "PCI: Address space collision on region %d "
+		if (err) {
+			printk(KERN_ERR "PCI: Address space collision on "
+			       "region %d of device %s [%lx:%lx]\n",
+			       resource, dev->name, res->start, res->end);
+		}
+	} else {
+		printk(KERN_ERR "PCI: No parent found for region %d "
 		       "of device %s\n", resource, dev->name);
 	}
 
@@ -72,14 +77,14 @@ pdev_assign_unassigned_resources(struct pci_dev *dev, u32 min_io, u32 min_mem)
 			continue;
 
 		/* Determine the root we allocate from.  */
+		res->end -= res->start;
+		res->start = 0;
 		root = pci_find_parent_resource(dev, res);
 		if (root == NULL)
 			continue;
 
 		min = (res->flags & IORESOURCE_IO ? min_io : min_mem);
-		min += root->start;
-		size = res->end - res->start + 1;
-
+		size = res->end + 1;
 		DBGC(("  for root[%lx:%lx] min[%lx] size[%lx]\n",
 		      root->start, root->end, min, size));
 

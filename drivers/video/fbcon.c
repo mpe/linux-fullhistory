@@ -683,7 +683,7 @@ static void fbcon_setup(int con, int init, int logo)
 	}
 	if (save) {
     	    q = (unsigned short *)(conp->vc_origin + conp->vc_size_row * old_rows);
-	    memcpy(q, save, logo_lines * nr_cols * 2);
+	    scr_memcpyw(q, save, logo_lines * nr_cols * 2);
 	    conp->vc_y += logo_lines;
     	    conp->vc_pos += logo_lines * conp->vc_size_row;
     	    kfree(save);

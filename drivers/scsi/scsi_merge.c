@@ -156,7 +156,7 @@ __inline static int __count_segments(struct request *req,
 			 * the DMA threshold boundary.  
 			 */
 			if (dma_host &&
-			    virt_to_phys(bh->b_data - 1) == ISA_DMA_THRESHOLD) {
+			    virt_to_phys(bh->b_data) - 1 == ISA_DMA_THRESHOLD) {
 				ret++;
 			} else if (CONTIGUOUS_BUFFERS(bh, bh->b_reqnext)) {
 				/*
@@ -170,6 +170,43 @@ __inline static int __count_segments(struct request *req,
 		}
 	}
 	return ret;
+}
+
+/*
+ * Function:    recount_segments()
+ *
+ * Purpose:     Recount the number of scatter-gather segments for this request.
+ *
+ * Arguments:   req     - request that needs recounting.
+ *
+ * Returns:     Count of the number of SG segments for the request.
+ *
+ * Lock status: Irrelevant.
+ *
+ * Notes:	This is only used when we have partially completed requests
+ *		and the bit that is leftover is of an indeterminate size.
+ *		This can come up if you get a MEDIUM_ERROR, for example,
+ *		as we will have "completed" all of the sectors up to and
+ *		including the bad sector, and the leftover bit is what
+ *		we have to do now.  This tends to be a rare occurence, so
+ *		we aren't busting our butts to instantiate separate versions
+ *		of this function for the 4 different flag values.  We
+ *		probably should, however.
+ */
+void
+recount_segments(Scsi_Cmnd * SCpnt)
+{
+	struct request *req;
+	struct Scsi_Host *SHpnt;
+	Scsi_Device * SDpnt;
+
+	req   = &SCpnt->request;
+	SHpnt = SCpnt->host;
+	SDpnt = SCpnt->device;
+
+	req->nr_segments = __count_segments(req, 
+					    CLUSTERABLE_DEVICE(SHpnt, SDpnt),
+					    SHpnt->unchecked_isa_dma);
 }
 
 /*
@@ -236,7 +273,7 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 			 * the DMA threshold boundary.  
 			 */
 			if (dma_host &&
-			    virt_to_phys(req->bhtail->b_data - 1) == ISA_DMA_THRESHOLD) {
+			    virt_to_phys(req->bhtail->b_data) - 1 == ISA_DMA_THRESHOLD) {
 				goto new_segment;
 			}
 			if (CONTIGUOUS_BUFFERS(req->bhtail, bh)) {
@@ -256,7 +293,7 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 			 * the DMA threshold boundary. 
 			 */
 			if (dma_host &&
-			    virt_to_phys(bh->b_data - 1) == ISA_DMA_THRESHOLD) {
+			    virt_to_phys(bh->b_data) - 1 == ISA_DMA_THRESHOLD) {
 				goto new_segment;
 			}
 			if (CONTIGUOUS_BUFFERS(bh, req->bh)) {
@@ -380,7 +417,7 @@ __inline static int __scsi_merge_requests_fn(request_queue_t * q,
 		 * the DMA threshold boundary.  
 		 */
 		if (dma_host &&
-		    virt_to_phys(req->bhtail->b_data - 1) == ISA_DMA_THRESHOLD) {
+		    virt_to_phys(req->bhtail->b_data) - 1 == ISA_DMA_THRESHOLD) {
 			goto dont_combine;
 		}
 		if (CONTIGUOUS_BUFFERS(req->bhtail, next->bh)) {
@@ -573,7 +610,7 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 	     bh; bh = bh->b_reqnext) {
 		if (use_clustering && bhprev != NULL) {
 			if (dma_host &&
-			    virt_to_phys(bhprev->b_data - 1) == ISA_DMA_THRESHOLD) {
+			    virt_to_phys(bhprev->b_data) - 1 == ISA_DMA_THRESHOLD) {
 				/* Nothing - fall through */
 			} else if (CONTIGUOUS_BUFFERS(bhprev, bh)) {
 				/*
@@ -612,7 +649,23 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 	for (i = 0; i < count; i++) {
 		SCpnt->request_bufflen += sgpnt[i].length;
 		if (virt_to_phys(sgpnt[i].address) + sgpnt[i].length - 1 >
-		    ISA_DMA_THRESHOLD && !sgpnt[count].alt_address) {
+		    ISA_DMA_THRESHOLD) {
+			if( scsi_dma_free_sectors <= 10 ) {
+				/*
+				 * If the DMA pool is nearly empty, then
+				 * let's stop here.  Don't make this request
+				 * any larger.  This is kind of a safety valve
+				 * that we use - we could get screwed later on
+				 * if we run out completely.
+				 */
+				SCpnt->request_bufflen -= sgpnt[i].length;
+				SCpnt->use_sg = i;
+				if (i == 0) {
+					panic("DMA pool exhausted");
+				}
+				break;
+			}
+
 			sgpnt[i].alt_address = sgpnt[i].address;
 			sgpnt[i].address =
 			    (char *) scsi_malloc(sgpnt[i].length);

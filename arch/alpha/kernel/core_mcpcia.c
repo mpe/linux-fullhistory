@@ -306,7 +306,7 @@ mcpcia_probe_hose(int h)
 	mb();
 	draina();
 	wrmces(7);
-	mcheck_expected(cpu) = 1;
+	mcheck_expected(cpu) = 2;	/* indicates probing */
 	mcheck_taken(cpu) = 0;
 	mcheck_extra(cpu) = mid;
 	mb();
@@ -415,7 +415,7 @@ mcpcia_startup_hose(struct pci_controler *hose)
 
 #if 0
 	tmp = *(vuip)MCPCIA_INT_CTL(mid);
-	printk("mcpcia_init_arch: INT_CTL was 0x%x\n", tmp);
+	printk("mcpcia_startup_hose: INT_CTL was 0x%x\n", tmp);
 	*(vuip)MCPCIA_INT_CTL(mid) = 1U;
 	mb();
 	tmp = *(vuip)MCPCIA_INT_CTL(mid);
@@ -548,30 +548,37 @@ mcpcia_machine_check(unsigned long vector, unsigned long la_ptr,
 	struct el_common *mchk_header;
 	struct el_MCPCIA_uncorrected_frame_mcheck *mchk_logout;
 	unsigned int cpu = smp_processor_id();
+	int expected;
 
 	mchk_header = (struct el_common *)la_ptr;
 	mchk_logout = (struct el_MCPCIA_uncorrected_frame_mcheck *)la_ptr;
+	expected = mcheck_expected(cpu);
 
 	mb();
 	mb();  /* magic */
 	draina();
-	if (mcheck_expected(cpu)) {
-		mcpcia_pci_clr_err(mcheck_extra(cpu));
-	} else {
+
+	switch (expected) {
+	case 0:
 		/* FIXME: how do we figure out which hose the
 		   error was on?  */	
 		struct pci_controler *hose;
 		for (hose = hose_head; hose; hose = hose->next)
 			mcpcia_pci_clr_err(hose2mid(hose->index));
+		break;
+	case 1:
+		mcpcia_pci_clr_err(mcheck_extra(cpu));
+		break;
+	default:
+		/* Otherwise, we're being called from mcpcia_probe_hose
+		   and there's no hose clear an error from.  */
+		break;
 	}
+
 	wrmces(0x7);
 	mb();
 
-	if (mcheck_expected(cpu)) {
-		process_mcheck_info(vector, la_ptr, regs, "MCPCIA", 1);
-	} else {
-		process_mcheck_info(vector, la_ptr, regs, "MCPCIA", 0);
-		if (vector != 0x620 && vector != 0x630)
-			mcpcia_print_uncorrectable(mchk_logout);
-	}
+	process_mcheck_info(vector, la_ptr, regs, "MCPCIA", expected != 0);
+	if (!expected && vector != 0x620 && vector != 0x630)
+		mcpcia_print_uncorrectable(mchk_logout);
 }

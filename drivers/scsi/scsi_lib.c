@@ -109,6 +109,7 @@ int scsi_insert_special_cmd(Scsi_Cmnd * SCpnt, int at_head)
 			for (req = q->current_request; req; req = req->next) {
 				if (req->next == NULL) {
 					req->next = &SCpnt->request;
+					break;
 				}
 			}
 		}
@@ -383,6 +384,16 @@ void scsi_io_completion(Scsi_Cmnd * SCpnt, int good_sectors,
 			scsi_free(SCpnt->buffer, SCpnt->bufflen);
 		}
 	}
+
+	/*
+	 * Zero these out.  They now point to freed memory, and it is
+	 * dangerous to hang onto the pointers.
+	 */
+	SCpnt->buffer  = NULL;
+	SCpnt->bufflen = 0;
+	SCpnt->request_buffer = NULL;
+	SCpnt->request_bufflen = 0;
+
 	/*
 	 * Next deal with any sectors which we were able to correctly
 	 * handle.
@@ -630,9 +641,14 @@ void scsi_request_fn(request_queue_t * q)
 		/*
 		 * Find the actual device driver associated with this command.
 		 * The SPECIAL requests are things like character device or
-		 * ioctls, which did not originate from ll_rw_blk.
+		 * ioctls, which did not originate from ll_rw_blk.  Note that
+		 * the special field is also used to indicate the SCpnt for
+		 * the remainder of a partially fulfilled request that can 
+		 * come up when there is a medium error.  We have to treat
+		 * these two cases differently.  We differentiate by looking
+		 * at request.cmd, as this tells us the real story.
 		 */
-		if (req->special != NULL) {
+		if (req->cmd == SPECIAL) {
 			STpnt = NULL;
 			SCpnt = (Scsi_Cmnd *) req->special;
 		} else {
@@ -643,7 +659,20 @@ void scsi_request_fn(request_queue_t * q)
 			/*
 			 * Now try and find a command block that we can use.
 			 */
-			SCpnt = scsi_allocate_device(SDpnt, FALSE);
+			if( req->special != NULL ) {
+				SCpnt = (Scsi_Cmnd *) req->special;
+				/*
+				 * We need to recount the number of
+				 * scatter-gather segments here - the
+				 * normal case code assumes this to be
+				 * correct, as it would be a performance
+				 * lose to always recount.  Handling
+				 * errors is always unusual, of course.
+				 */
+				recount_segments(SCpnt);
+			} else {
+				SCpnt = scsi_allocate_device(SDpnt, FALSE);
+			}
 			/*
 			 * If so, we are ready to do something.  Bump the count
 			 * while the queue is locked and then break out of the loop.
@@ -689,8 +718,9 @@ void scsi_request_fn(request_queue_t * q)
 		 * in this queue are for the same device.
 		 */
 		q->current_request = req->next;
+		SCpnt->request.next = NULL;
 
-		if (req->special == NULL) {
+		if (req != &SCpnt->request) {
 			memcpy(&SCpnt->request, req, sizeof(struct request));
 
 			/*
@@ -702,13 +732,15 @@ void scsi_request_fn(request_queue_t * q)
 			wake_up(&wait_for_request);
 		}
 		/*
-		 * Now it is finally safe to release the lock.  We are not going
-		 * to noodle the request list until this request has been queued
-		 * and we loop back to queue another.
+		 * Now it is finally safe to release the lock.  We are
+		 * not going to noodle the request list until this
+		 * request has been queued and we loop back to queue
+		 * another.  
 		 */
+		req = NULL;
 		spin_unlock_irq(&io_request_lock);
 
-		if (req->special == NULL) {
+		if (SCpnt->request.cmd != SPECIAL) {
 			/*
 			 * This will do a couple of things:
 			 *  1) Fill in the actual SCSI command.

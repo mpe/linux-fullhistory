@@ -134,13 +134,13 @@ struct agp_bridge_data {
 #endif
 };
 
-#define OUTREG32(mmap, addr, val)   *(volatile u32 *)(mmap + (addr)) = (val)
-#define OUTREG16(mmap, addr, val)   *(volatile u16 *)(mmap + (addr)) = (val)
-#define OUTREG8 (mmap, addr, val)   *(volatile u8 *) (mmap + (addr)) = (val)
+#define OUTREG32(mmap, addr, val)   __raw_writel((val), (mmap)+(addr))
+#define OUTREG16(mmap, addr, val)   __raw_writew((val), (mmap)+(addr))
+#define OUTREG8 (mmap, addr, val)   __raw_writeb((val), (mmap)+(addr))
 
-#define INREG32(mmap, addr)         *(volatile u32 *)(mmap + (addr))
-#define INREG16(mmap, addr)         *(volatile u16 *)(mmap + (addr))
-#define INREG8 (mmap, addr)         *(volatile u8 *) (mmap + (addr))
+#define INREG32(mmap, addr)         __raw_readl((mmap)+(addr))
+#define INREG16(mmap, addr)         __raw_readw((mmap)+(addr))
+#define INREG8 (mmap, addr)         __raw_readb((mmap)+(addr))
 
 #define CACHE_FLUSH	agp_bridge.cache_flush
 #define A_SIZE_8(x)	((aper_size_info_8 *) x)

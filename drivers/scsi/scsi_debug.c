@@ -208,6 +208,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 	sgcount = 0;
 	sgpnt = NULL;
 
+#ifdef CONFIG_SMP
         /*
          * The io_request_lock *must* be held at this point.
          */
@@ -215,6 +216,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
         {
                 printk("Warning - io_request_lock is not held in queuecommand\n");
         }
+#endif
 
 	/*
 	 * If we are being notified of the mid-level reposessing a command due to timeout,

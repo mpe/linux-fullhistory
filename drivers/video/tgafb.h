@@ -168,7 +168,7 @@ struct tgafb_info {
 
     /* Device dependent information */
     int tga_type;					/* TGA type: {8plane, 24plane, 24plusZ} */
-    unsigned int tga_mem_base;
+    unsigned long tga_mem_base;
     unsigned long tga_fb_base;
     unsigned long tga_regs_base;
     struct fb_var_screeninfo default_var;		/* default video mode */

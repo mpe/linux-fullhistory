@@ -245,6 +245,7 @@ static inline RTYPE NAME(TYPE0 arg0, TYPE1 arg1)		\
 	return __r0;						\
 }
 
+__CALL_PAL_W1(cflush, unsigned long);
 __CALL_PAL_R0(rdmces, unsigned long);
 __CALL_PAL_R0(rdps, unsigned long);
 __CALL_PAL_R0(rdusp, unsigned long);

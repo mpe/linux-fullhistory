@@ -412,6 +412,15 @@ static inline void handle_mouse_event(unsigned char scancode)
 #endif
 }
 
+static inline void handle_keyboard_event(unsigned char scancode)
+{
+#ifdef CONFIG_VT
+	if (do_acknowledge(scancode))
+		handle_scancode(scancode, !(scancode & 0x80));
+#endif				
+	mark_bh(KEYBOARD_BH);
+}	
+
 /*
  * This reads the keyboard status port, and does the
  * appropriate action.
@@ -428,20 +437,18 @@ static unsigned char handle_kbd_event(void)
 		unsigned char scancode;
 
 		scancode = kbd_read_input();
-		if (status & KBD_STAT_MOUSE_OBF) {
-			handle_mouse_event(scancode);
-		} else {
-#ifdef CONFIG_VT
-			if (do_acknowledge(scancode))
-				handle_scancode(scancode, !(scancode & 0x80));
-#endif				
-			mark_bh(KEYBOARD_BH);
+
+		/* Ignore error bytes */
+		if (!(status & (KBD_STAT_GTO | KBD_STAT_PERR))) {
+			if (status & KBD_STAT_MOUSE_OBF)
+				handle_mouse_event(scancode);
+			else
+				handle_keyboard_event(scancode);
 		}
 
 		status = kbd_read_status();
 		
-		if(!work--)
-		{
+		if (!--work) {
 			printk(KERN_ERR "pc_keyb: controller jammed (0x%02X).\n",
 				status);
 			break;

@@ -62,6 +62,26 @@ static void flush_cache(void);
 
 static struct agp_bridge_data agp_bridge;
 static int agp_try_unsupported __initdata = 0;
+
+
+static inline void flush_cache(void)
+{
+#if defined(__i386__)
+	asm volatile ("wbinvd":::"memory");
+#elif defined(__alpha__)
+	/* ??? I wonder if we'll really need to flush caches, or if the
+	   core logic can manage to keep the system coherent.  The ARM
+	   speaks only of using `cflush' to get things in memory in
+	   preparation for power failure.
+
+	   If we do need to call `cflush', we'll need a target page,
+	   as we can only flush one page at a time.  */
+	mb();
+#else
+#error "Please define flush_cache."
+#endif
+}
+
 #ifdef __SMP__
 static atomic_t cpus_waiting;
 
@@ -86,12 +106,6 @@ static void smp_flush_cache(void)
 #else				/* __SMP__ */
 #define global_cache_flush flush_cache
 #endif				/* __SMP__ */
-
-static void flush_cache(void)
-{
-	asm volatile ("wbinvd":::"memory");
-}
-
 
 int agp_backend_acquire(void)
 {
@@ -1356,6 +1370,7 @@ static int amd_irongate_fetch_size(void)
 static int amd_irongate_configure(void)
 {
 	aper_size_info_32 *current_size;
+	unsigned long addr;
 	u32 temp;
 	u16 enable_reg;
 
@@ -1389,8 +1404,16 @@ static int amd_irongate_configure(void)
 
 	/* Get the address for the gart region */
 	pci_read_config_dword(agp_bridge.dev, AMD_APBASE, &temp);
-	temp = (temp & PCI_BASE_ADDRESS_MEM_MASK);
-	agp_bridge.gart_bus_addr = temp;
+	addr = (temp & PCI_BASE_ADDRESS_MEM_MASK);
+#ifdef __alpha__
+	/* ??? Presumably what is wanted is the bus address as seen
+	   from the CPU side, since it appears that this value is
+	   exported to userland via an ioctl.  The terminology below
+	   is confused, mixing `physical address' with `bus address',
+	   as x86 folk are wont to do.  */
+	addr = virt_to_phys(ioremap(addr, 0));
+#endif
+	agp_bridge.gart_bus_addr = addr;
 	return 0;
 }
 
@@ -1894,13 +1917,10 @@ static struct agp_max_table maxes_table[9] =
 
 static int agp_find_max(void)
 {
-	int memory;
-	float t;
-	int index;
-	int result;
+	long memory, t, index, result;
 
-	memory = virt_to_phys(high_memory) / 0x100000;
-	index = 0;
+	memory = virt_to_phys(high_memory) >> 20;
+	index = 1;
 
 	while ((memory > maxes_table[index].mem) &&
 	       (index < 8)) {
@@ -1914,8 +1934,8 @@ static int agp_find_max(void)
 	    (t * (maxes_table[index].agp - maxes_table[index - 1].agp));
 
 	printk(KERN_INFO "agpgart: Maximum main memory to use "
-	       "for agp memory: %dM\n", result);
-	result = (result * 0x100000) / 4096;
+	       "for agp memory: %ldM\n", result);
+	result = result << (20 - PAGE_SHIFT);
 	return result;
 }
 
