@@ -5,12 +5,12 @@
  */
 
 #include <errno.h>
-#include <fcntl.h>
 #include <sys/types.h>
 #include <utime.h>
 
 #include <sys/vfs.h>
 
+#include <linux/fcntl.h>
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/sched.h>
@@ -101,6 +101,10 @@ int sys_ftruncate(unsigned int fd, unsigned int length)
 	return 0;
 }
 
+/* If times==NULL, set access and modification to current time,
+ * must be owner or have write permission.
+ * Else, update from *times, must be owner or super user.
+ */
 int sys_utime(char * filename, struct utimbuf * times)
 {
 	struct inode * inode;
@@ -109,15 +113,20 @@ int sys_utime(char * filename, struct utimbuf * times)
 	if (!(inode=namei(filename)))
 		return -ENOENT;
 	if (times) {
-		if (current->euid != inode->i_uid &&
+		if ((current->euid != inode->i_uid) && !suser()) {
+			iput(inode);
+			return -EPERM;
+		}
+		actime = get_fs_long((unsigned long *) &times->actime);
+		modtime = get_fs_long((unsigned long *) &times->modtime);
+	} else {
+		if ((current->euid != inode->i_uid) &&
 		    !permission(inode,MAY_WRITE)) {
 			iput(inode);
 			return -EACCES;
 		}
-		actime = get_fs_long((unsigned long *) &times->actime);
-		modtime = get_fs_long((unsigned long *) &times->modtime);
-	} else
 		actime = modtime = CURRENT_TIME;
+	}
 	inode->i_atime = actime;
 	inode->i_mtime = modtime;
 	inode->i_dirt = 1;

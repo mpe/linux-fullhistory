@@ -7,20 +7,12 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-AS	=as
-AR	=ar
-LD	=ld
-CC	=gcc -nostdinc -I../include -Wall # -DSOCK_DEBUG
-CPP	=cpp -nostdinc -I../include
-
 .c.o:
-	$(CC) $(CFLAGS) \
-	-c -o $*.o $<
+	$(CC) $(CFLAGS) -c $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.s:
-	$(CC) $(CFLAGS) \
-	-S -o $*.s $<
+	$(CC) $(CFLAGS) -S $<
 
 OBJS	=  socket.o unix.o
 
@@ -33,20 +25,25 @@ clean:
 
 dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
-	(for i in *.c;do $(CPP) -M $$i;done) >> tmp_make
+	for i in *.c;do $(CPP) -M $$i;done >> tmp_make
 	cp tmp_make Makefile
 
 ### Dependencies:
-socket.o : socket.c ../include/signal.h ../include/sys/types.h ../include/errno.h \
-  ../include/linux/sched.h ../include/linux/head.h ../include/linux/fs.h ../include/sys/dirent.h \
-  ../include/limits.h ../include/sys/vfs.h ../include/linux/mm.h ../include/linux/kernel.h \
-  ../include/sys/param.h ../include/sys/time.h ../include/time.h ../include/sys/resource.h \
-  ../include/linux/stat.h ../include/asm/system.h ../include/asm/segment.h ../include/sys/socket.h \
-  ../include/fcntl.h ../include/termios.h kern_sock.h socketcall.h 
-unix.o : unix.c ../include/signal.h ../include/sys/types.h ../include/errno.h \
-  ../include/linux/string.h ../include/linux/sched.h ../include/linux/head.h ../include/linux/fs.h \
-  ../include/sys/dirent.h ../include/limits.h ../include/sys/vfs.h ../include/linux/mm.h \
-  ../include/linux/kernel.h ../include/sys/param.h ../include/sys/time.h ../include/time.h \
-  ../include/sys/resource.h ../include/linux/stat.h ../include/asm/system.h ../include/asm/segment.h \
-  ../include/sys/socket.h ../include/sys/un.h ../include/fcntl.h ../include/termios.h \
-  kern_sock.h 
+socket.o : socket.c /usr/src/linux/include/signal.h /usr/src/linux/include/sys/types.h \
+  /usr/src/linux/include/stddef.h /usr/src/linux/include/errno.h /usr/src/linux/include/linux/sched.h \
+  /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h /usr/src/linux/include/sys/dirent.h \
+  /usr/src/linux/include/limits.h /usr/src/linux/include/sys/vfs.h /usr/src/linux/include/linux/mm.h \
+  /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/sys/param.h /usr/src/linux/include/sys/time.h \
+  /usr/src/linux/include/time.h /usr/src/linux/include/sys/resource.h /usr/src/linux/include/linux/stat.h \
+  /usr/src/linux/include/asm/system.h /usr/src/linux/include/asm/segment.h /usr/src/linux/include/sys/socket.h \
+  /usr/src/linux/include/linux/fcntl.h /usr/src/linux/include/termios.h kern_sock.h \
+  socketcall.h 
+unix.o : unix.c /usr/src/linux/include/signal.h /usr/src/linux/include/sys/types.h \
+  /usr/src/linux/include/stddef.h /usr/src/linux/include/errno.h /usr/src/linux/include/linux/string.h \
+  /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h \
+  /usr/src/linux/include/sys/dirent.h /usr/src/linux/include/limits.h /usr/src/linux/include/sys/vfs.h \
+  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/sys/param.h \
+  /usr/src/linux/include/sys/time.h /usr/src/linux/include/time.h /usr/src/linux/include/sys/resource.h \
+  /usr/src/linux/include/linux/stat.h /usr/src/linux/include/asm/system.h /usr/src/linux/include/asm/segment.h \
+  /usr/src/linux/include/sys/socket.h /usr/src/linux/include/sys/un.h /usr/src/linux/include/linux/fcntl.h \
+  /usr/src/linux/include/termios.h kern_sock.h 

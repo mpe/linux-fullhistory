@@ -125,7 +125,7 @@ static int check_in(select_table * wait, struct inode * inode)
 		else
 			add_wait(&tty->secondary->proc_list, wait);
 	else if (inode->i_pipe)
-		if (!PIPE_EMPTY(*inode) || inode->i_count < 2)
+		if (!PIPE_EMPTY(*inode) || !PIPE_WRITERS(*inode))
 			return 1;
 		else
 			add_wait(&inode->i_wait, wait);
@@ -169,7 +169,7 @@ static int check_ex(select_table * wait, struct inode * inode)
 		else
 			return 0;
 	else if (inode->i_pipe)
-		if (inode->i_count < 2)
+		if (!PIPE_READERS(*inode) || !PIPE_WRITERS(*inode))
 			return 1;
 		else
 			add_wait(&inode->i_wait,wait);

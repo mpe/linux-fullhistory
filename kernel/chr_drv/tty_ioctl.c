@@ -33,11 +33,15 @@ static void flush(struct tty_queue * queue)
 
 void flush_input(struct tty_struct * tty)
 {
-	flush(tty->read_q);
-	flush(tty->secondary);
-	tty->secondary->data = 0;
-	wake_up(&tty->read_q->proc_list);
-	if (tty = tty->link) {
+	if (tty->read_q) {
+		flush(tty->read_q);
+		wake_up(&tty->read_q->proc_list);
+	}
+	if (tty->secondary) {
+		flush(tty->secondary);
+		tty->secondary->data = 0;
+	}
+	if ((tty = tty->link) && tty->write_q) {
 		flush(tty->write_q);
 		wake_up(&tty->write_q->proc_list);
 	}
@@ -45,13 +49,19 @@ void flush_input(struct tty_struct * tty)
 
 void flush_output(struct tty_struct * tty)
 {
-	flush(tty->write_q);
-	wake_up(&tty->write_q->proc_list);
+	if (tty->write_q) {
+		flush(tty->write_q);
+		wake_up(&tty->write_q->proc_list);
+	}
 	if (tty = tty->link) {
-		flush(tty->read_q);
-		flush(tty->secondary);
-		tty->secondary->data = 0;
-		wake_up(&tty->read_q->proc_list);
+		if (tty->read_q) {
+			flush(tty->read_q);
+			wake_up(&tty->read_q->proc_list);
+		}
+		if (tty->secondary) {
+			flush(tty->secondary);
+			tty->secondary->data = 0;
+		}
 	}
 }
 

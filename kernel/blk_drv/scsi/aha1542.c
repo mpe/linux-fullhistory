@@ -10,6 +10,7 @@
 #include <linux/string.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <sys/types.h>
 #include "scsi.h"
 #include "hosts.h"
 

@@ -10,6 +10,7 @@
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
+#include <linux/ext_fs.h>
 #include <linux/kernel.h>
 #include <linux/stat.h>
 #include <asm/system.h>
@@ -34,6 +35,7 @@ int ROOT_DEV = 0;
 
 static struct file_system_type file_systems[] = {
 	{minix_read_super,"minix"},
+	{ext_read_super,"ext"},
 	{NULL,NULL}
 };
 
@@ -174,6 +176,8 @@ int sys_umount(char * dev_name)
 	sb->s_covered = NULL;
 	iput(sb->s_mounted);
 	sb->s_mounted = NULL;
+	if (sb->s_op && sb->s_op->write_super && sb->s_dirt)
+		sb->s_op->write_super (sb);
         put_super(dev);
         sync_dev(dev);
 	return 0;

@@ -19,12 +19,12 @@
 
 #include <signal.h>
 #include <errno.h>
-#include <linux/string.h>
-#include <linux/stat.h>
 #include <sys/ptrace.h>
 #include <a.out.h>
-#include <fcntl.h>
 
+#include <linux/string.h>
+#include <linux/stat.h>
+#include <linux/fcntl.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -275,7 +275,7 @@ static int count(char ** argv)
 static unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		unsigned long p, int from_kmem)
 {
-	char *tmp, *pag;
+	char *tmp, *pag = NULL;
 	int len, offset = 0;
 	unsigned long old_fs, new_fs;
 

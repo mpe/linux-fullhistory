@@ -66,34 +66,11 @@ struct serial_struct {
 #define FULL(a) (!LEFT(a))
 #define CHARS(a) (((a)->head-(a)->tail)&(TTY_BUF_SIZE-1))
 
-static inline void PUTCH(char c, struct tty_queue * queue)
-{
-	int head;
-	unsigned long flags;
+extern void put_tty_queue(char c, struct tty_queue * queue);
+extern int get_tty_queue(struct tty_queue * queue);
 
-	__asm__("pushfl ; popl %0 ; cli":"=r" (flags));
-	head = (queue->head + 1) & (TTY_BUF_SIZE-1);
-	if (head != queue->tail) {
-		queue->buf[queue->head] = c;
-		queue->head = head;
-	}
-	__asm__("pushl %0 ; popfl"::"r" (flags));
-}
-
-static inline int GETCH(struct tty_queue * queue)
-{
-	int result = -1;
-	unsigned long flags;
-
-	__asm__("pushfl ; popl %0 ; cli":"=r" (flags));
-	if (queue->tail != queue->head) {
-		result = 0xff & queue->buf[queue->tail];
-		queue->tail = (queue->tail + 1) & (TTY_BUF_SIZE-1);
-	}
-	__asm__("pushl %0 ; popfl"::"r" (flags));
-	return result;
-}
-	
+#define PUTCH(c,queue) put_tty_queue((c),(queue))
+#define GETCH(queue) get_tty_queue(queue)
 #define INTR_CHAR(tty) ((tty)->termios.c_cc[VINTR])
 #define QUIT_CHAR(tty) ((tty)->termios.c_cc[VQUIT])
 #define ERASE_CHAR(tty) ((tty)->termios.c_cc[VERASE])
@@ -138,7 +115,7 @@ struct tty_struct {
 	int pgrp;
 	int session;
 	int stopped;
-	int busy;
+	int flags;
 	int count;
 	struct winsize winsize;
 	void (*write)(struct tty_struct * tty);
@@ -151,36 +128,17 @@ struct tty_struct {
 /*
  * so that interrupts won't be able to mess up the
  * queues, copy_to_cooked must be atomic with repect
- * to itself, as must tty->write.
+ * to itself, as must tty->write. These are the flag bits.
  */
 #define TTY_WRITE_BUSY 1
 #define TTY_READ_BUSY 2
+#define TTY_CR_PENDING 4
 
-#define TTY_WRITE_FLUSH(tty) \
-do { \
-	cli(); \
-	if (!EMPTY((tty)->write_q) && !(TTY_WRITE_BUSY & (tty)->busy)) { \
-		(tty)->busy |= TTY_WRITE_BUSY; \
-		sti(); \
-		(tty)->write((tty)); \
-		cli(); \
-		(tty)->busy &= ~TTY_WRITE_BUSY; \
-	} \
-	sti(); \
-} while (0)
+#define TTY_WRITE_FLUSH(tty) tty_write_flush((tty))
+#define TTY_READ_FLUSH(tty) tty_read_flush((tty))
 
-#define TTY_READ_FLUSH(tty) \
-do { \
-	cli(); \
-	if (!EMPTY((tty)->read_q) && !(TTY_READ_BUSY & (tty)->busy)) { \
-		(tty)->busy |= TTY_READ_BUSY; \
-		sti(); \
-		copy_to_cooked((tty)); \
-		cli(); \
-		(tty)->busy &= ~TTY_READ_BUSY; \
-	} \
-	sti(); \
-} while (0)
+extern void tty_write_flush(struct tty_struct *);
+extern void tty_read_flush(struct tty_struct *);
 
 extern struct tty_struct tty_table[];
 extern struct serial_struct serial_table[];

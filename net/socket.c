@@ -6,7 +6,7 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <sys/socket.h>
-#include <fcntl.h>
+#include <linux/fcntl.h>
 #include <termios.h>
 #include "kern_sock.h"
 #include "socketcall.h"
@@ -587,7 +587,7 @@ sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
 		interruptible_sleep_on(sock->wait);
 		if (current->signal & ~current->blocked) {
 			PRINTK("sys_accept: sleep was interrupted\n");
-			return -EINTR;
+			return -ERESTARTSYS;
 		}
 	}
 

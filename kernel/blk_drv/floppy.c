@@ -785,7 +785,7 @@ repeat:
 		if (current_drive != (format_req.device & 3))
 			current_track = NO_TRACK;
 		current_drive = format_req.device & 3;
-		if (format_req.track < 0 || format_req.track >= floppy->track ||
+		if (((unsigned) format_req.track) >= floppy->track ||
 		    (format_req.head & 0xfffe) || probing) {
 			request_done(0);
 			goto repeat;

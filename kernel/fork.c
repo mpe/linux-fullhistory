@@ -15,10 +15,9 @@
 
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/mm.h>
 #include <asm/segment.h>
 #include <asm/system.h>
-
-extern void write_verify(unsigned long address);
 
 long last_pid=0;
 

@@ -1,4 +1,4 @@
-#ifndef _FD_H_
+#ifndef _FD_H
 #define _FD_H
 
 #define FDCLRPRM 0 /* clear user-defined parameters */

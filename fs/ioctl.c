@@ -4,9 +4,9 @@
  *  (C) 1991  Linus Torvalds
  */
 
-#include <linux/string.h>
 #include <errno.h>
 
+#include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/sched.h>
 

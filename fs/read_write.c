@@ -36,7 +36,7 @@ int sys_readdir(unsigned int fd, struct dirent * dirent, unsigned int count)
 int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 {
 	struct file * file;
-	int tmp;
+	int tmp = -1;
 
 	if (fd >= NR_OPEN || !(file=current->filp[fd]) || !(file->f_inode))
 		return -EBADF;
@@ -80,7 +80,6 @@ int sys_read(unsigned int fd,char * buf,unsigned int count)
 	verify_area(buf,count);
 	if (file->f_op && file->f_op->read)
 		return file->f_op->read(inode,file,buf,count);
-	printk("(Read)inode->i_mode=%06o\n\r",inode->i_mode);
 	return -EINVAL;
 }
 
@@ -97,6 +96,5 @@ int sys_write(unsigned int fd,char * buf,unsigned int count)
 		return 0;
 	if (file->f_op && file->f_op->write)
 		return file->f_op->write(inode,file,buf,count);
-	printk("(Write)inode->i_mode=%06o\n\r",inode->i_mode);
 	return -EINVAL;
 }

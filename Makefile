@@ -42,15 +42,10 @@ KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
 MATH_EMULATION = -DKERNEL_MATH_EMULATION
 
 #
-# uncomment this line if you are using gcc-1.40
-#
-#GCC_OPT = -fcombine-regs -fstrength-reduce
-
-#
 # standard CFLAGS
 #
 
-CFLAGS =-Wall -O6 -fomit-frame-pointer $(GCC_OPT)
+CFLAGS =-Wall -O6 -fomit-frame-pointer
 
 #
 # if you want the ram-disk device, define this to be the
@@ -64,33 +59,37 @@ LD86	=ld86 -0
 
 AS	=as
 LD	=ld
-#LDFLAGS	=-s -x -M
-LDFLAGS	= -M
-CC	=gcc $(RAMDISK)
-MAKE	=make CFLAGS="$(CFLAGS)"
-CPP	=cpp -nostdinc -Iinclude
+HOSTCC	=gcc -static
+CC	=gcc -nostdinc -I$(KERNELHDRS)
+MAKE	=make
+CPP	=$(CC) -E
+AR	=ar
 
 ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o
-FILESYSTEMS	=fs/minix/minix.o
+FILESYSTEMS	=fs/minix/minix.o fs/ext/ext.o
 DRIVERS		=kernel/blk_drv/blk_drv.a kernel/chr_drv/chr_drv.a \
 		 kernel/blk_drv/scsi/scsi.a
 MATH		=kernel/math/math.a
 LIBS		=lib/lib.a
+SUBDIRS		=kernel mm fs net lib
+
+KERNELHDRS	=/usr/src/linux/include
 
 .c.s:
-	$(CC) $(CFLAGS) \
-	-nostdinc -Iinclude -S -o $*.s $<
+	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -c -o $*.o $<
 .c.o:
-	$(CC) $(CFLAGS) \
-	-nostdinc -Iinclude -c -o $*.o $<
+	$(CC) $(CFLAGS) -c -o $*.o $<
 
 all:	Version Image
 
+subdirs: dummy
+	for i in $(SUBDIRS); do (cd $$i; $(MAKE)); done
+
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.96b.pl2-`cat .version`\" > include/linux/config_rel.h
+	@echo \#define UTS_RELEASE \"0.96c-`cat .version`\" > include/linux/config_rel.h
 	@echo \#define UTS_VERSION \"`date +%D`\" > include/linux/config_ver.h
 	touch include/linux/config.h
 
@@ -105,50 +104,19 @@ disk: Image
 	dd bs=8192 if=Image of=/dev/PS0
 
 tools/build: tools/build.c
-	$(CC) -static $(CFLAGS) \
+	$(HOSTCC) $(CFLAGS) \
 	-o tools/build tools/build.c
 
 boot/head.o: boot/head.s
 
-tools/system:	boot/head.o init/main.o \
-		$(ARCHIVES) $(FILESYSTEMS) $(DRIVERS) $(MATH) $(LIBS)
-	$(LD) $(LDFLAGS) boot/head.o init/main.o \
-	$(ARCHIVES) \
-	$(FILESYSTEMS) \
-	$(DRIVERS) \
-	$(MATH) \
-	$(LIBS) \
-	-o tools/system > System.map
-
-kernel/math/math.a: dummy
-	(cd kernel/math; $(MAKE) MATH_EMULATION="$(MATH_EMULATION)")
-
-kernel/blk_drv/blk_drv.a: dummy
-	(cd kernel/blk_drv; $(MAKE))
-
-kernel/blk_drv/scsi/scsi.a: dummy
-	(cd kernel/blk_drv/scsi; $(MAKE))
-
-kernel/chr_drv/chr_drv.a: dummy
-	(cd kernel/chr_drv; $(MAKE) KEYBOARD="$(KEYBOARD)")
-
-kernel/kernel.o: dummy
-	(cd kernel; $(MAKE))
-
-mm/mm.o: dummy
-	(cd mm; $(MAKE))
-
-fs/fs.o: dummy
-	(cd fs; $(MAKE))
-
-net/net.o: dummy
-	(cd net; $(MAKE))
-
-fs/minix/minix.o: dummy
-	(cd fs/minix; $(MAKE))
-
-lib/lib.a: dummy
-	(cd lib; $(MAKE))
+tools/system:	boot/head.o init/main.o subdirs
+	$(LD) $(LDFLAGS) -M boot/head.o init/main.o \
+		$(ARCHIVES) \
+		$(FILESYSTEMS) \
+		$(DRIVERS) \
+		$(MATH) \
+		$(LIBS) \
+		-o tools/system > System.map
 
 boot/setup: boot/setup.s
 	$(AS86) -o boot/setup.o boot/setup.s
@@ -168,33 +136,28 @@ clean:
 	rm -f Image System.map tmp_make core boot/bootsect boot/setup \
 		boot/bootsect.s boot/setup.s init/main.s
 	rm -f init/*.o tools/system tools/build boot/*.o
-	(cd mm;make clean)
-	(cd fs;make clean)
-	(cd kernel;make clean)
-	(cd lib;make clean)
-	(cd net;make clean)
+	for i in $(SUBDIRS); do (cd $$i; $(MAKE) clean); done
 
 backup: clean
-	(cd .. ; tar cf - linux | compress - > backup.Z)
+	cd .. ; tar cf - linux | compress - > backup.Z
 	sync
 
-dep:
+depend dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
-	(for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done) >> tmp_make
+	for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done >> tmp_make
 	cp tmp_make Makefile
-	(cd fs; make dep)
-	(cd kernel; make dep)
-	(cd mm; make dep)
-	(cd net;make dep)
-	(cd lib; make dep)
+	for i in $(SUBDIRS); do (cd $$i; $(MAKE) dep); done
 
 dummy:
 
 ### Dependencies:
-init/main.o : init/main.c include/stddef.h include/stdarg.h include/fcntl.h include/sys/types.h \
-  include/time.h include/asm/system.h include/asm/io.h include/linux/config.h \
-  include/linux/config_rel.h include/linux/config_ver.h include/linux/config.dist.h \
-  include/linux/sched.h include/linux/head.h include/linux/fs.h include/sys/dirent.h \
-  include/limits.h include/sys/vfs.h include/linux/mm.h include/linux/kernel.h \
-  include/signal.h include/sys/param.h include/sys/time.h include/sys/resource.h \
-  include/linux/tty.h include/termios.h include/linux/unistd.h 
+init/main.o : init/main.c /usr/src/linux/include/stddef.h /usr/src/linux/include/stdarg.h \
+  /usr/src/linux/include/time.h /usr/src/linux/include/sys/types.h /usr/src/linux/include/asm/system.h \
+  /usr/src/linux/include/asm/io.h /usr/src/linux/include/linux/fcntl.h /usr/src/linux/include/linux/config.h \
+  /usr/src/linux/include/linux/config_rel.h /usr/src/linux/include/linux/config_ver.h \
+  /usr/src/linux/include/linux/config.dist.h /usr/src/linux/include/linux/sched.h \
+  /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h /usr/src/linux/include/sys/dirent.h \
+  /usr/src/linux/include/limits.h /usr/src/linux/include/sys/vfs.h /usr/src/linux/include/linux/mm.h \
+  /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/signal.h /usr/src/linux/include/sys/param.h \
+  /usr/src/linux/include/sys/time.h /usr/src/linux/include/sys/resource.h /usr/src/linux/include/linux/tty.h \
+  /usr/src/linux/include/termios.h /usr/src/linux/include/linux/unistd.h 

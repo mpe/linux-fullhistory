@@ -7,10 +7,10 @@
 #include <signal.h>
 #include <errno.h>
 #include <termios.h>
-#include <fcntl.h>
 
 #include <asm/segment.h>
 
+#include <linux/fcntl.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 
@@ -21,7 +21,7 @@ static int pipe_read(struct inode * inode, struct file * filp, char * buf, int c
 	if (!(filp->f_flags & O_NONBLOCK))
 		while (!PIPE_SIZE(*inode)) {
 			wake_up(& PIPE_WRITE_WAIT(*inode));
-			if (inode->i_count != 2) /* are there any writers? */
+			if (!PIPE_WRITERS(*inode)) /* are there any writers? */
 				return 0;
 			if (current->signal & ~current->blocked)
 				return -ERESTARTSYS;
@@ -33,13 +33,12 @@ static int pipe_read(struct inode * inode, struct file * filp, char * buf, int c
 			chars = count;
 		if (chars > size)
 			chars = size;
-		count -= chars;
+		memcpy_tofs(buf, (char *)inode->i_size+PIPE_TAIL(*inode), chars );
 		read += chars;
-		size = PIPE_TAIL(*inode);
 		PIPE_TAIL(*inode) += chars;
 		PIPE_TAIL(*inode) &= (PAGE_SIZE-1);
-		while (chars-->0)
-			put_fs_byte(((char *)inode->i_size)[size++],buf++);
+		count -= chars;
+		buf += chars;
 	}
 	wake_up(& PIPE_WRITE_WAIT(*inode));
 	return read?read:-EAGAIN;
@@ -49,35 +48,44 @@ static int pipe_write(struct inode * inode, struct file * filp, char * buf, int 
 {
 	int chars, size, written = 0;
 
-	if (inode->i_count != 2) { /* no readers */
+	if (!PIPE_READERS(*inode)) { /* no readers */
 		send_sig(SIGPIPE,current,0);
-		return -EINTR;
+		return -EPIPE;
 	}
+/* if count < PAGE_SIZE, we have to make it atomic */
+	if (count < PAGE_SIZE)
+		size = PAGE_SIZE-count;
+	else
+		size = PAGE_SIZE-1;
 	while (count>0) {
-		while (!(size=(PAGE_SIZE-1)-PIPE_SIZE(*inode))) {
-			wake_up(& PIPE_READ_WAIT(*inode));
-			if (inode->i_count != 2) { /* no readers */
+		while (PIPE_SIZE(*inode) >= size) {
+			if (!PIPE_READERS(*inode)) { /* no readers */
 				send_sig(SIGPIPE,current,0);
-				return written?written:-EINTR;
+				return written?written:-EPIPE;
 			}
 			if (current->signal & ~current->blocked)
-				return written?written:-EINTR;
-			interruptible_sleep_on(&PIPE_WRITE_WAIT(*inode));
+				return written?written:-ERESTARTSYS;
+			if (filp->f_flags & O_NONBLOCK)
+				return -EAGAIN;
+			else
+				interruptible_sleep_on(&PIPE_WRITE_WAIT(*inode));
 		}
-		chars = PAGE_SIZE-PIPE_HEAD(*inode);
-		if (chars > count)
-			chars = count;
-		if (chars > size)
-			chars = size;
-		count -= chars;
-		written += chars;
-		size = PIPE_HEAD(*inode);
-		PIPE_HEAD(*inode) += chars;
-		PIPE_HEAD(*inode) &= (PAGE_SIZE-1);
-		while (chars-->0)
-			((char *)inode->i_size)[size++]=get_fs_byte(buf++);
+		while (count>0 && (size = (PAGE_SIZE-1)-PIPE_SIZE(*inode))) {
+			chars = PAGE_SIZE-PIPE_HEAD(*inode);
+			if (chars > count)
+				chars = count;
+			if (chars > size)
+				chars = size;
+			memcpy_fromfs((char *)inode->i_size+PIPE_HEAD(*inode), buf, chars );
+			written += chars;
+			PIPE_HEAD(*inode) += chars;
+			PIPE_HEAD(*inode) &= (PAGE_SIZE-1);
+			count -= chars;
+			buf += chars;
+		}
+		wake_up(& PIPE_READ_WAIT(*inode));
+		size = PAGE_SIZE-1;
 	}
-	wake_up(& PIPE_READ_WAIT(*inode));
 	return written;
 }
 
@@ -110,18 +118,34 @@ static int pipe_ioctl(struct inode *pino, struct file * filp,
 }
 
 /*
- * Ok, these two routines should keep track of readers/writers,
- * but it's currently done with the inode->i_count checking.
+ * Ok, these three routines NOW keep track of readers/writers,
+ * Linus previously did it with inode->i_count checking.
  */
 static void pipe_read_release(struct inode * inode, struct file * filp)
 {
+	PIPE_READERS(*inode)--;
+	wake_up(&PIPE_WRITE_WAIT(*inode));
 }
 
 static void pipe_write_release(struct inode * inode, struct file * filp)
 {
+	PIPE_WRITERS(*inode)--;
+	wake_up(&PIPE_READ_WAIT(*inode));
 }
 
-static struct file_operations read_pipe_fops = {
+static void pipe_rdwr_release(struct inode * inode, struct file * filp)
+{
+	PIPE_READERS(*inode)--;
+	PIPE_WRITERS(*inode)--;
+	wake_up(&PIPE_READ_WAIT(*inode));
+	wake_up(&PIPE_WRITE_WAIT(*inode));
+}
+
+/*
+ * The three file_operations structs are not static because they
+ * are also used in linux/fs/fifo.c to do operations on fifo's.
+ */
+struct file_operations read_pipe_fops = {
 	pipe_lseek,
 	pipe_read,
 	bad_pipe_rw,
@@ -132,7 +156,7 @@ static struct file_operations read_pipe_fops = {
 	pipe_read_release
 };
 
-static struct file_operations write_pipe_fops = {
+struct file_operations write_pipe_fops = {
 	pipe_lseek,
 	bad_pipe_rw,
 	pipe_write,
@@ -141,6 +165,17 @@ static struct file_operations write_pipe_fops = {
 	pipe_ioctl,
 	NULL,		/* no special open code */
 	pipe_write_release
+};
+
+struct file_operations rdwr_pipe_fops = {
+	pipe_lseek,
+	pipe_read,
+	pipe_write,
+	pipe_readdir,
+	NULL,		/* pipe_select */
+	pipe_ioctl,
+	NULL,		/* no special open code */
+	pipe_rdwr_release
 };
 
 int sys_pipe(unsigned long * fildes)

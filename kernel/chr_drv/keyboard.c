@@ -10,6 +10,7 @@
 #include <linux/sched.h>
 #include <linux/ctype.h>
 #include <linux/tty.h>
+#include <linux/mm.h>
 #include <asm/io.h>
 #include <asm/system.h>
 
@@ -40,7 +41,6 @@ unsigned char lfnlmode = 0;
 
 extern void do_keyboard_interrupt(void);
 extern void ctrl_alt_del(void);
-extern void show_mem(void), show_state(void);
 extern void change_console(unsigned int new_console);
 extern struct tty_queue *table_list[];
 
@@ -679,7 +679,7 @@ static unsigned char alt_map[] = {
           0,    0,    0,    0,    0,    0,    0,    0,
           0,    0,    0,    0,    0,    0,    0,    0,
           0,    0,    0,    0,    0,    0,    0,    0,
-          0,    0,    0,    0,    0,    0,  '|',    0,
+          0,    0,    0,    0,    0,    0,  '\\',    0,
           0,    0,    0,    0,    0,    0,    0,    0,
           0 };
 
@@ -874,7 +874,7 @@ unsigned int handle_diacr(unsigned int ch)
 }
 		
 
-#if defined KBD_FR
+#if defined KBD_FR || defined KBD_US
 static unsigned char num_table[] = "789-456+1230.";
 #else
 static unsigned char num_table[] = "789-456+1230,";

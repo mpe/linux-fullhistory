@@ -58,6 +58,14 @@ static void sync_buffers(int dev)
 
 int sys_sync(void)
 {
+	int i;
+
+	for (i=0 ; i<NR_SUPER ; i++)
+		if (super_block[i].s_dev
+		    && super_block[i].s_op 
+		    && super_block[i].s_op->write_super 
+		    && super_block[i].s_dirt)
+			super_block[i].s_op->write_super(&super_block[i]);
 	sync_inodes();		/* write out inodes into buffers */
 	sync_buffers(0);
 	return 0;
@@ -65,6 +73,11 @@ int sys_sync(void)
 
 int sync_dev(int dev)
 {
+	struct super_block * sb;
+
+	if (sb = get_super (dev))
+		if (sb->s_op && sb->s_op->write_super && sb->s_dirt)
+			sb->s_op->write_super (sb);
 	sync_buffers(dev);
 	sync_inodes();
 	sync_buffers(dev);

@@ -28,7 +28,7 @@ int need_resched = 0;
 #define _S(nr) (1<<((nr)-1))
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
-void show_task(int nr,struct task_struct * p)
+static void show_task(int nr,struct task_struct * p)
 {
 	int i,j = 4096-sizeof(struct task_struct);
 

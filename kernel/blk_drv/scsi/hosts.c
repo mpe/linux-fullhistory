@@ -30,6 +30,7 @@
 #include "hosts.h"
 
 #ifdef CONFIG_SCSI_AHA1542
+#include <sys/types.h>
 #include "aha1542.h"
 #endif
 

@@ -41,6 +41,7 @@ static struct super_operations minix_sops = {
 	minix_write_inode,
 	minix_put_inode,
 	minix_put_super,
+	NULL,
 	minix_statfs
 };
 
@@ -243,6 +244,13 @@ void minix_read_inode(struct inode * inode)
 		inode->i_op = &minix_chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
 		inode->i_op = &minix_blkdev_inode_operations;
+	else if (S_ISFIFO(inode->i_mode)) {
+		inode->i_op = &minix_fifo_inode_operations;
+		inode->i_size = 0;
+		inode->i_pipe = 1;
+		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
+		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
+	}
 }
 
 void minix_write_inode(struct inode * inode)

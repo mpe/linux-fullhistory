@@ -9,69 +9,72 @@
 # parent makefile.
 #
 
-AR	=ar
-AS	=as
-LD	=ld
-LDFLAGS	=-s -x
-CC	=gcc -nostdinc -I../../include
-CPP	=cpp -nostdinc -I../../include
-
 .c.s:
-	$(CC) $(CFLAGS) \
-	-S -o $*.s $<
+	$(CC) $(CFLAGS) $(RAMDISK) -S $<
 .s.o:
 	$(AS) -c -o $*.o $<
 .c.o:
-	$(CC) $(CFLAGS) \
-	-c -o $*.o $<
+	$(CC) $(CFLAGS) $(RAMDISK) -c $<
+
+SUBDIRS	= scsi
 
 OBJS = hd.o ll_rw_blk.o floppy.o ramdisk.o
 
-all: blk_drv.a
+all: blk_drv.a subdirs
 
 blk_drv.a: $(OBJS)
 	rm -f blk_drv.a
 	$(AR) rcs blk_drv.a $(OBJS)
 	sync
 
+subdirs: dummy
+	for i in $(SUBDIRS); do (cd $$i; $(MAKE)); done
+
 clean:
 	rm -f core *.o *.a tmp_make
 	for i in *.c;do rm -f `basename $$i .c`.s;done
-	(cd scsi; make clean)
+	cd scsi; $(MAKE) clean
 
 dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
-	(for i in *.c;do echo -n `echo $$i | sed 's,\.c,\.s,'`" "; \
-		$(CPP) -M $$i;done) >> tmp_make
+	for i in *.c;do $(CPP) -M $$i;done >> tmp_make
 	cp tmp_make Makefile
 
+dummy:
+
 ### Dependencies:
-floppy.s floppy.o : floppy.c ../../include/linux/sched.h ../../include/linux/head.h ../../include/linux/fs.h \
-  ../../include/sys/types.h ../../include/sys/dirent.h ../../include/limits.h \
-  ../../include/sys/vfs.h ../../include/linux/mm.h ../../include/linux/kernel.h \
-  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
-  ../../include/sys/resource.h ../../include/linux/timer.h ../../include/linux/fdreg.h \
-  ../../include/linux/fd.h ../../include/asm/system.h ../../include/asm/io.h ../../include/asm/segment.h \
-  ../../include/errno.h blk.h 
-hd.s hd.o : hd.c ../../include/errno.h ../../include/linux/config.h ../../include/linux/config_rel.h \
-  ../../include/linux/config_ver.h ../../include/linux/config.dist.h ../../include/linux/sched.h \
-  ../../include/linux/head.h ../../include/linux/fs.h ../../include/sys/types.h \
-  ../../include/sys/dirent.h ../../include/limits.h ../../include/sys/vfs.h ../../include/linux/mm.h \
-  ../../include/linux/kernel.h ../../include/signal.h ../../include/sys/param.h \
-  ../../include/sys/time.h ../../include/time.h ../../include/sys/resource.h ../../include/linux/timer.h \
-  ../../include/linux/hdreg.h ../../include/asm/system.h ../../include/asm/io.h \
-  ../../include/asm/segment.h blk.h 
-ll_rw_blk.s ll_rw_blk.o : ll_rw_blk.c ../../include/errno.h ../../include/linux/sched.h \
-  ../../include/linux/head.h ../../include/linux/fs.h ../../include/sys/types.h \
-  ../../include/sys/dirent.h ../../include/limits.h ../../include/sys/vfs.h ../../include/linux/mm.h \
-  ../../include/linux/kernel.h ../../include/signal.h ../../include/sys/param.h \
-  ../../include/sys/time.h ../../include/time.h ../../include/sys/resource.h ../../include/asm/system.h \
+floppy.o : floppy.c /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h \
+  /usr/src/linux/include/linux/fs.h /usr/src/linux/include/sys/types.h /usr/src/linux/include/stddef.h \
+  /usr/src/linux/include/sys/dirent.h /usr/src/linux/include/limits.h /usr/src/linux/include/sys/vfs.h \
+  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/signal.h \
+  /usr/src/linux/include/sys/param.h /usr/src/linux/include/sys/time.h /usr/src/linux/include/time.h \
+  /usr/src/linux/include/sys/resource.h /usr/src/linux/include/linux/timer.h /usr/src/linux/include/linux/fdreg.h \
+  /usr/src/linux/include/linux/fd.h /usr/src/linux/include/asm/system.h /usr/src/linux/include/asm/io.h \
+  /usr/src/linux/include/asm/segment.h /usr/src/linux/include/errno.h blk.h 
+hd.o : hd.c /usr/src/linux/include/errno.h /usr/src/linux/include/linux/config.h \
+  /usr/src/linux/include/linux/config_rel.h /usr/src/linux/include/linux/config_ver.h \
+  /usr/src/linux/include/linux/config.dist.h /usr/src/linux/include/linux/sched.h \
+  /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h /usr/src/linux/include/sys/types.h \
+  /usr/src/linux/include/stddef.h /usr/src/linux/include/sys/dirent.h /usr/src/linux/include/limits.h \
+  /usr/src/linux/include/sys/vfs.h /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h \
+  /usr/src/linux/include/signal.h /usr/src/linux/include/sys/param.h /usr/src/linux/include/sys/time.h \
+  /usr/src/linux/include/time.h /usr/src/linux/include/sys/resource.h /usr/src/linux/include/linux/timer.h \
+  /usr/src/linux/include/linux/hdreg.h /usr/src/linux/include/asm/system.h /usr/src/linux/include/asm/io.h \
+  /usr/src/linux/include/asm/segment.h blk.h 
+ll_rw_blk.o : ll_rw_blk.c /usr/src/linux/include/errno.h /usr/src/linux/include/linux/sched.h \
+  /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h /usr/src/linux/include/sys/types.h \
+  /usr/src/linux/include/stddef.h /usr/src/linux/include/sys/dirent.h /usr/src/linux/include/limits.h \
+  /usr/src/linux/include/sys/vfs.h /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h \
+  /usr/src/linux/include/signal.h /usr/src/linux/include/sys/param.h /usr/src/linux/include/sys/time.h \
+  /usr/src/linux/include/time.h /usr/src/linux/include/sys/resource.h /usr/src/linux/include/asm/system.h \
   blk.h 
-ramdisk.s ramdisk.o : ramdisk.c ../../include/linux/string.h ../../include/linux/config.h \
-  ../../include/linux/config_rel.h ../../include/linux/config_ver.h ../../include/linux/config.dist.h \
-  ../../include/linux/sched.h ../../include/linux/head.h ../../include/linux/fs.h \
-  ../../include/sys/types.h ../../include/sys/dirent.h ../../include/limits.h \
-  ../../include/sys/vfs.h ../../include/linux/mm.h ../../include/linux/kernel.h \
-  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
-  ../../include/sys/resource.h ../../include/linux/minix_fs.h ../../include/asm/system.h \
-  ../../include/asm/segment.h ../../include/asm/memory.h blk.h 
+ramdisk.o : ramdisk.c /usr/src/linux/include/linux/string.h /usr/src/linux/include/sys/types.h \
+  /usr/src/linux/include/stddef.h /usr/src/linux/include/linux/config.h /usr/src/linux/include/linux/config_rel.h \
+  /usr/src/linux/include/linux/config_ver.h /usr/src/linux/include/linux/config.dist.h \
+  /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h \
+  /usr/src/linux/include/sys/dirent.h /usr/src/linux/include/limits.h /usr/src/linux/include/sys/vfs.h \
+  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/signal.h \
+  /usr/src/linux/include/sys/param.h /usr/src/linux/include/sys/time.h /usr/src/linux/include/time.h \
+  /usr/src/linux/include/sys/resource.h /usr/src/linux/include/linux/minix_fs.h \
+  /usr/src/linux/include/asm/system.h /usr/src/linux/include/asm/segment.h /usr/src/linux/include/asm/memory.h \
+  blk.h 

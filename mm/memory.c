@@ -189,8 +189,7 @@ int copy_page_tables(unsigned long from,unsigned long to,long size)
  * a more complete version of free_page_tables which performs with page
  * granularity.
  */
-int
-unmap_page_range(unsigned long from, unsigned long size)
+int unmap_page_range(unsigned long from, unsigned long size)
 {
 	unsigned long page, page_dir;
 	unsigned long *page_table, *dir;
@@ -256,8 +255,7 @@ unmap_page_range(unsigned long from, unsigned long size)
  * write/copy:	yes/copy	copy/copy
  * exec:	yes		yes
  */
-int
-remap_page_range(unsigned long from, unsigned long to, unsigned long size,
+int remap_page_range(unsigned long from, unsigned long to, unsigned long size,
 		 int permiss)
 {
 	unsigned long *page_table, *dir;
@@ -489,7 +487,7 @@ void write_verify(unsigned long address)
 	return;
 }
 
-void get_empty_page(unsigned long address)
+static void get_empty_page(unsigned long address)
 {
 	unsigned long tmp;
 

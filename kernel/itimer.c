@@ -7,6 +7,7 @@
 /* These are all the functions necessary to implement itimers */
 
 #include <linux/sched.h>
+#include <linux/string.h>
 #include <asm/segment.h>
 
 #include <signal.h>

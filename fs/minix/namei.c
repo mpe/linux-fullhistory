@@ -9,9 +9,9 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/stat.h>
+#include <linux/fcntl.h>
 #include <asm/segment.h>
 
-#include <fcntl.h>
 #include <errno.h>
 #include <const.h>
 
@@ -266,6 +266,13 @@ int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rd
 		inode->i_op = &minix_chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
 		inode->i_op = &minix_blkdev_inode_operations;
+	else if (S_ISFIFO(inode->i_mode)) {
+		inode->i_op = &minix_fifo_inode_operations;
+		inode->i_size = 0;
+		inode->i_pipe = 1;
+		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
+		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
+	}
 	if (S_ISBLK(mode) || S_ISCHR(mode))
 		inode->i_rdev = rdev;
 	inode->i_mtime = inode->i_atime = CURRENT_TIME;

@@ -60,6 +60,8 @@ void buffer_init(long buffer_end);
 #define PIPE_WRITE_WAIT(inode) ((inode).i_wait2)
 #define PIPE_HEAD(inode) ((inode).i_data[0])
 #define PIPE_TAIL(inode) ((inode).i_data[1])
+#define PIPE_READERS(inode) ((inode).i_data[2])
+#define PIPE_WRITERS(inode) ((inode).i_data[3])
 #define PIPE_SIZE(inode) ((PIPE_HEAD(inode)-PIPE_TAIL(inode))&(PAGE_SIZE-1))
 #define PIPE_EMPTY(inode) (PIPE_HEAD(inode)==PIPE_TAIL(inode))
 #define PIPE_FULL(inode) (PIPE_SIZE(inode)==(PAGE_SIZE-1))
@@ -192,6 +194,7 @@ struct super_operations {
 	void (*write_inode) (struct inode *inode);
 	void (*put_inode) (struct inode *inode);
 	void (*put_super)(struct super_block *sb);
+	void (*write_super) (struct super_block *sb);
 	void (*statfs) (struct super_block *sb, struct statfs *buf);
 };
 
@@ -212,6 +215,7 @@ extern struct buffer_head * start_buffer;
 extern int nr_buffers;
 
 extern void check_disk_change(int dev);
+extern void invalidate_inodes(int dev);
 extern int floppy_change(struct buffer_head * first_block);
 extern int ticks_to_floppy_on(unsigned int dev);
 extern void floppy_on(unsigned int dev);
@@ -242,6 +246,7 @@ extern void bread_page(unsigned long addr,int dev,int b[4]);
 extern struct buffer_head * breada(int dev,int block,...);
 extern int sync_dev(int dev);
 extern struct super_block * get_super(int dev);
+extern void put_super(int dev);
 extern int ROOT_DEV;
 
 extern void mount_root(void);

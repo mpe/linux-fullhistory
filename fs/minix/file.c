@@ -7,13 +7,13 @@
  */
 
 #include <errno.h>
-#include <fcntl.h>
 
 #include <sys/dirent.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
 
+#include <linux/fcntl.h>
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/kernel.h>

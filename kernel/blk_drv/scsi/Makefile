@@ -8,22 +8,12 @@
 
 #DEBUG = -DDEBUG=0xffffffff -DDEBUG_NO_CMD
 
-AR	=ar
-AS	=as
-LD	=ld
-LDFLAGS	=-s -x
-CC	=cc
-
-CPP	=cc -E -nostdinc -I../../../include
-
 .c.s:
-	$(CC) -nostdinc $(CFLAGS) $(DEBUG) \
-	-S -o $*.s $<
+	$(CC) $(CFLAGS) $(DEBUG) -S $<
 .s.o:
 	$(AS) -c -o $*.o $<
 .c.o:
-	$(CC) -nostdinc -I../../../include $(CFLAGS) $(DEBUG) \
-	-c -o $*.o $<
+	$(CC) $(CFLAGS) $(DEBUG) -c $<
 
 LOWLEVELCSRC = aha1542.c seagate.c ultrastor.c 
 LOWLEVELHSRC = aha1542.c seagate.h ultrastor.h
@@ -36,14 +26,14 @@ OBJS =	scsi.o hosts.o scsi_ioctl.o sd.o sd_ioctl.o st.o st_ioctl.o \
 
 all: scsi.a
 
-config.out : config.in ../../../include/linux/config.h
+config.out : config.in $(KERNELHDRS)/linux/config.h
 	rm -f  foo.c
 	ln -s config.in foo.c	
 	$(CPP) foo.c | grep '\.o' > config.out 
 	rm foo.c
 
-figure : hosts.h ../../../include/linux/config.h hosts.c config.out
-	$(CC) -I../../../include -DFIGURE_MAX_SCSI_HOSTS hosts.c -o figure
+figure : hosts.h $(KERNELHDRS)/linux/config.h hosts.c config.out
+	$(HOSTCC) -I$(KERNELHDRS) -DFIGURE_MAX_SCSI_HOSTS hosts.c -o figure
 
 max_hosts.h : figure
 	(echo "#ifndef _MAX_HOSTS_H"; \
@@ -70,12 +60,11 @@ seagate.s seagate.o : seagate.c ../../../include/linux/config.h \
   ../../../include/sys/param.h ../../../include/sys/time.h \
   ../../../include/time.h ../../../include/sys/resource.h \
   ../../../include/linux/string.h seagate.h scsi.h hosts.h max_hosts.h 
-	cc -nostdinc -I../../../include -Wall -c seagate.c $(DEBUG) 
+	$(CC) -Wall -c seagate.c $(DEBUG) 
 
 dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
-	(for i in *.c ;do echo -n `echo $$i | sed 's,\.c,\.s,'`" "; \
-		$(CPP) -M $$i;done) >> tmp_make
+	for i in *.c ;do $(CPP) -M $$i;done >> tmp_make
 	cp tmp_make Makefile
 
 ### Dependencies:

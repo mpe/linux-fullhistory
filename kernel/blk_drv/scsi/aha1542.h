@@ -16,8 +16,6 @@
  *
  */
 
-typedef unsigned char unchar;
-
 /* I/O Port interface 4.2 */
 /* READ */
 #define STATUS base

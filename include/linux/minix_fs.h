@@ -86,6 +86,7 @@ extern struct inode_operations minix_dir_inode_operations;
 extern struct inode_operations minix_symlink_inode_operations;
 extern struct inode_operations minix_chrdev_inode_operations;
 extern struct inode_operations minix_blkdev_inode_operations;
+extern struct inode_operations minix_fifo_inode_operations;
 
 extern struct file_operations minix_file_operations;
 extern struct file_operations minix_dir_operations;

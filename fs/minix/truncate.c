@@ -4,13 +4,13 @@
  *  (C) 1991  Linus Torvalds
  */
 
+#include <errno.h>
+
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/tty.h>
 #include <linux/stat.h>
-
-#include <errno.h>
-#include <fcntl.h>
+#include <linux/fcntl.h>
 
 /*
  * Truncate has the most races in the whole filesystem: coding it is

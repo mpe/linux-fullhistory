@@ -241,10 +241,10 @@ static struct file_operations mem_fops = {
 	NULL		/* no special release code */
 };
 
-long chr_dev_init(long kmem_start)
+long chr_dev_init(long mem_start, long mem_end)
 {
 	chrdev_fops[1] = &mem_fops;
-	kmem_start = tty_init(kmem_start);
-	kmem_start = lp_init(kmem_start);
-	return kmem_start;
+	mem_start = tty_init(mem_start);
+	mem_start = lp_init(mem_start);
+	return mem_start;
 }

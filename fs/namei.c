@@ -8,14 +8,15 @@
  * Some corrections by tytso.
  */
 
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <asm/segment.h>
-
-#include <linux/string.h>
-#include <fcntl.h>
 #include <errno.h>
 #include <const.h>
+
+#include <asm/segment.h>
+
+#include <linux/sched.h>
+#include <linux/kernel.h>
+#include <linux/string.h>
+#include <linux/fcntl.h>
 #include <linux/stat.h>
 
 struct inode * _namei(const char * filename, struct inode * base,
@@ -277,7 +278,7 @@ int do_mknod(const char * filename, int mode, int dev)
 
 int sys_mknod(const char * filename, int mode, int dev)
 {
-	if (suser())
+	if (S_ISFIFO(mode) || suser())
 		return do_mknod(filename,mode,dev);
 	return -EPERM;
 }

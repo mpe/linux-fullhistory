@@ -14,6 +14,8 @@
 
 #include "blk.h"
 
+extern long rd_init(long mem_start, int length);
+
 /*
  * The request-struct contains all necessary data
  * to load a nr of sectors into memory
@@ -241,7 +243,7 @@ void ll_rw_block(int rw, struct buffer_head * bh)
 	make_request(major,rw,bh);
 }
 
-void blk_dev_init(void)
+long blk_dev_init(long mem_start, long mem_end)
 {
 	int i;
 
@@ -249,6 +251,10 @@ void blk_dev_init(void)
 		request[i].dev = -1;
 		request[i].next = NULL;
 	}
+#ifdef RAMDISK
+	mem_start += rd_init(mem_start, RAMDISK*1024);
+#endif
+	return mem_start;
 }
 
 void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)

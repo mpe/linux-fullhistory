@@ -92,7 +92,8 @@ static unsigned short	video_port_val;		/* Video register value port	*/
 static int can_do_color = 0;
 
 static struct {
-	unsigned short	vc_video_erase_char;	/* Current attributes & space */
+	unsigned short	vc_video_erase_char;	/* Background erase character */
+	unsigned char	vc_attr;		/* Current attributes */
 	unsigned char	vc_def_color;		/* Default colors */
 	unsigned char	vc_color;		/* Foreground & background */
 	unsigned char	vc_s_color;		/* Saved foreground & background */
@@ -160,7 +161,7 @@ static int console_blanked = 0;
 #define npar		(vc_cons[currcons].vc_npar)
 #define par		(vc_cons[currcons].vc_par)
 #define ques		(vc_cons[currcons].vc_ques)
-#define attr		(vc_cons[currcons].vc_video_erase_char >> 8)
+#define attr		(vc_cons[currcons].vc_attr)
 #define saved_x		(vc_cons[currcons].vc_saved_x)
 #define saved_y		(vc_cons[currcons].vc_saved_y)
 #define translate	(vc_cons[currcons].vc_translate)
@@ -201,7 +202,6 @@ static int console_blanked = 0;
 #define kbdmode		(vc_cons[currcons].vc_kbdmode)
 #define tab_stop	(vc_cons[currcons].vc_tab_stop)
 #define kbdraw		(vt_cons[currcons].vc_kbdraw)
-#define kbde0		(vt_cons[currcons].vc_kbde0)
 #define kbdleds		(vt_cons[currcons].vc_kbdleds)
 #define vtmode		(vt_cons[currcons].vt_mode)
 
@@ -288,6 +288,7 @@ static void gotoxy(int currcons, int new_x, int new_y)
 		else
 			y = new_y;
 	pos = origin + y*video_size_row + (x<<1);
+	need_wrap = 0;
 }
 
 static void set_origin(int currcons)
@@ -385,6 +386,7 @@ static void lf(int currcons)
 		return;
 	} else 
 		scrup(currcons,top,bottom);
+	need_wrap = 0;
 }
 
 static void ri(int currcons)
@@ -395,20 +397,31 @@ static void ri(int currcons)
 		return;
 	} else
 		scrdown(currcons,top,bottom);
+	need_wrap = 0;
 }
 
 static inline void cr(int currcons)
 {
 	pos -= x<<1;
-	x=0;
+	need_wrap = x = 0;
 }
 
-static void del(int currcons)
+static inline void bs(int currcons)
+{
+	if (x) {
+		pos -= 2;
+		x--;
+		need_wrap = 0;
+	}
+}
+
+static inline void del(int currcons)
 {
 	if (x) {
 		pos -= 2;
 		x--;
 		*(unsigned short *)pos = video_erase_char;
+		need_wrap = 0;
 	}
 }
 
@@ -439,6 +452,7 @@ static void csi_J(int currcons, int vpar)
 		::"c" (count),
 		"D" (start),"a" (video_erase_char)
 		:"cx","di");
+	need_wrap = 0;
 }
 
 static void csi_K(int currcons, int vpar)
@@ -468,6 +482,7 @@ static void csi_K(int currcons, int vpar)
 		::"c" (count),
 		"D" (start),"a" (video_erase_char)
 		:"cx","di");
+	need_wrap = 0;
 }
 
 /*
@@ -475,27 +490,38 @@ static void csi_K(int currcons, int vpar)
  */
 static void update_attr(int currcons)
 {
-	unsigned char a = color;
-
+	attr = color;
 	if (can_do_color) {
 		if (underline)
-			a = (a & 0xf8) | ulcolor;
+			attr = (attr & 0xf0) | ulcolor;
 		else if (intensity == 0)
-			a = (a & 0xf0) | halfcolor;
+			attr = (attr & 0xf0) | halfcolor;
 	}
 	if (reverse ^ decscnm)
-		a = (a & 0x88) | (((a >> 4) | (a << 4)) & 0x77);
+		attr = (attr & 0x88) | (((attr >> 4) | (attr << 4)) & 0x77);
 	if (blink)
-		a |= 0x80;
+		attr ^= 0x80;
 	if (intensity == 2)
-		a |= 0x08;
+		attr ^= 0x08;
 	if (!can_do_color) {
 		if (underline)
-			a = (a & 0xf8) | 0x01;
+			attr = (attr & 0xf8) | 0x01;
 		else if (intensity == 0)
-			a = (a & 0xf0) | 0x08;
+			attr = (attr & 0xf0) | 0x08;
 	}
-	video_erase_char = (a << 8) | ' ';
+	if (decscnm)
+		video_erase_char = ((color & 0x88) | (((color >> 4) |
+			(color << 4)) & 0x77) << 8) | ' ';
+	else
+		video_erase_char = (color << 8) | ' ';
+}
+
+static void default_attr(int currcons) {
+	intensity = 1;
+	underline = 0;
+	reverse = 0;
+	blink = 0;
+	color = def_color;
 }
 
 static void csi_m(int currcons)
@@ -505,11 +531,7 @@ static void csi_m(int currcons)
 	for (i=0;i<=npar;i++)
 		switch (par[i]) {
 			case 0:	/* all attributes off */
-				intensity = 1;
-				underline = 0;
-				reverse = 0;
-				blink = 0;
-				color = def_color;
+				default_attr(currcons);
 				break;
 			case 1:
 				intensity = 2;
@@ -630,10 +652,10 @@ static void invert_screen(int currcons) {
 
 	if (can_do_color)
 		for (p = (unsigned char *)origin+1; p < (unsigned char *)scr_end; p+=2)
-			*p = (*p & 0x88) | ((*p & 0x70) >> 4) | ((*p & 0x07) << 4);
+			*p = (*p & 0x88) | (((*p >> 4) | (*p << 4)) & 0x77);
 	else
 		for (p = (unsigned char *)origin+1; p < (unsigned char *)scr_end; p+=2)
-			*p = *p ^ (*p & 0x07 == 1 ? 0x70 : 0x77);
+			*p ^= *p & 0x07 == 1 ? 0x70 : 0x77;
 }
 
 static void set_mode(int currcons, int on_off)
@@ -698,7 +720,9 @@ static void setterm_command(int currcons)
 			}
 			break;
 		case 8:	/* store colors as defaults */
-			def_color = color;
+			def_color = attr;
+			default_attr(currcons);
+			update_attr(currcons);
 			break;
 		case 9:	/* set blanking interval */
 			blankinterval = ((par[1] < 60) ? par[1] : 60) * 60 * HZ;
@@ -718,11 +742,13 @@ static void insert_char(int currcons)
 		old = tmp;
 		p++;
 	}
+	need_wrap = 0;
 }
 
 static void insert_line(int currcons)
 {
 	scrdown(currcons,y,bottom);
+	need_wrap = 0;
 }
 
 static void delete_char(int currcons)
@@ -735,11 +761,13 @@ static void delete_char(int currcons)
 		p++;
 	}
 	*p = video_erase_char;
+	need_wrap = 0;
 }
 
 static void delete_line(int currcons)
 {
 	scrup(currcons,y,bottom);
+	need_wrap = 0;
 }
 
 static void csi_at(int currcons, unsigned int nr)
@@ -787,7 +815,6 @@ static void save_cur(int currcons)
 	saved_x		= x;
 	saved_y		= y;
 	s_intensity	= intensity;
-	s_blink		= blink;
 	s_underline	= underline;
 	s_blink		= blink;
 	s_reverse	= reverse;
@@ -799,11 +826,8 @@ static void save_cur(int currcons)
 
 static void restore_cur(int currcons)
 {
-	x		= saved_x;
-	y		= saved_y;
-	pos		= origin + y*video_size_row + (x<<1);
+	gotoxy(currcons,saved_x,saved_y);
 	intensity	= s_intensity;
-	blink		= s_blink;
 	underline	= s_underline;
 	blink		= s_blink;
 	reverse		= s_reverse;
@@ -813,6 +837,7 @@ static void restore_cur(int currcons)
 	G1_charset	= saved_G1;
 	translate	= charset ? G1_charset : G0_charset;
 	update_attr(currcons);
+	need_wrap = 0;
 }
 
 enum { ESnormal, ESesc, ESsquare, ESgetpars, ESgotpars, ESfunckey, 
@@ -820,24 +845,14 @@ enum { ESnormal, ESesc, ESsquare, ESgetpars, ESgotpars, ESfunckey,
 
 static void reset_terminal(int currcons, int do_clear)
 {
-	vtmode		= KD_TEXT;
 	top		= 0;
 	bottom		= video_num_lines;
-	/* Default colors. */
-	def_color	= 0x07;	/* light gray */
-	ulcolor		= 0x0f;	/* bold white */
-	halfcolor	= 0x08;	/* dark gray */
-	color		= def_color;
 	state		= ESnormal;
 	ques		= 0;
 	translate	= NORM_TRANS;
 	G0_charset	= NORM_TRANS;
 	G1_charset	= GRAF_TRANS;
 	charset		= 0;
-	kbdleds		= 2;
-	kbdmode		= 0;
-	kbdraw		= 0;
-	kbde0		= 0;
 	need_wrap	= 0;
 
 	decscnm		= 0;
@@ -845,15 +860,25 @@ static void reset_terminal(int currcons, int do_clear)
 	decawm		= 1;
 	deccm		= 1;
 	decim		= 0;
-	SET(decarm,krepeat,1);
-	SET(decckm,ckmode,0);
-	SET(kbdapplic,kapplic,0);
-	SET(lnm,lfnlmode,0);
 
-	intensity	= 1;
-	underline	= 0;
-	blink		= 0;
-	reverse		= 0;
+	if (currcons == fg_console) {
+		krepeat		= 1;
+		ckmode		= 0;
+		kapplic		= 0;
+		lfnlmode	= 0;
+		kleds		= 2;
+		kmode		= 0;
+		set_leds();
+	} else {
+		decarm		= 1;
+		decckm		= 0;
+		kbdapplic	= 0;
+		lnm		= 0;
+		kbdleds		= 2;
+		kbdmode		= 0;
+	}
+
+	default_attr(currcons);
 	update_attr(currcons);
 
 	tab_stop[0]	= 0x01010100;
@@ -865,9 +890,8 @@ static void reset_terminal(int currcons, int do_clear)
 	if (do_clear) {
 		gotoxy(currcons,0,0);
 		csi_J(currcons,2);
+		save_cur(currcons);
 	}
-
-	save_cur(currcons);
 }
 
 void con_write(struct tty_struct * tty)
@@ -886,22 +910,20 @@ void con_write(struct tty_struct * tty)
 			if (need_wrap) {
 				cr(currcons);
 				lf(currcons);
-				need_wrap = 0;
 			}
 			if (decim)
 				insert_char(currcons);
 			c = translate[c];
 			*(char *) pos = c;
 			*(char *) (pos+1) = attr;
-			if (x == video_num_columns - 1) {
+			if (x == video_num_columns - 1)
 				need_wrap = decawm;
-				continue;
+			else {
+				x++;
+				pos+=2;
 			}
-			x++;
-			pos+=2;
 			continue;
 		}
-		need_wrap = 0;
 
 		/*
 		 *  Control characters can be used in the _middle_
@@ -912,10 +934,7 @@ void con_write(struct tty_struct * tty)
 				sysbeep();
 				break;
 			case 8:
-				if (x) {
-					x--;
-					pos -= 2;
-				}
+				bs(currcons);
 				break;
 			case 9:
 				pos -= (x << 1);
@@ -1301,14 +1320,21 @@ long con_init(long kmem_start)
 		pos = origin = video_mem_start = base;
 		scr_end = video_mem_end = (base += screen_size);
 		vc_scrbuf[currcons] = (unsigned short *) origin;
+		vtmode		= KD_TEXT;
+		kbdraw		= 0;
+		def_color	= 0x07;   /* white */
+		ulcolor		= 0x0f;   /* bold white */
+		halfcolor	= 0x08;   /* grey */
 		reset_terminal(currcons, currcons);
 	}
 	currcons = fg_console = 0;
 
 	video_mem_start = video_mem_base;
 	video_mem_end = video_mem_term;
-	origin	= video_mem_start;
+	origin = video_mem_start;
 	scr_end	= video_mem_start + video_num_lines * video_size_row;
+	gotoxy(currcons,0,0);
+	save_cur(currcons);
 	gotoxy(currcons,orig_x,orig_y);
 	update_screen(fg_console);
 
@@ -1325,7 +1351,6 @@ void kbdsave(int new_console)
 	int currcons = fg_console;
 	kbdmode = kmode;
 	kbdraw = kraw;
-	kbde0 = ke0;
 	kbdleds = kleds;
 	kbdapplic = kapplic;
 	decckm = ckmode;
@@ -1334,7 +1359,6 @@ void kbdsave(int new_console)
 	currcons = new_console;
 	kmode = (kmode & 0x3F) | (kbdmode & 0xC0);
 	kraw = kbdraw;
-	ke0 = kbde0;
 	kleds = kbdleds;
 	kapplic = kbdapplic;
 	ckmode = decckm;

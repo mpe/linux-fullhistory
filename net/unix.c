@@ -8,7 +8,7 @@
 #include <asm/segment.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <fcntl.h>
+#include <linux/fcntl.h>
 #include <termios.h>
 #include "kern_sock.h"
 
@@ -466,11 +466,11 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 	while (!(space = UN_BUF_SPACE(pupd))) {
 		PRINTK("unix_proto_write: no space left...\n");
 		if (nonblock)
-			return 0;
+			return -EAGAIN;
 		interruptible_sleep_on(sock->wait);
 		if (current->signal & ~current->blocked) {
 			PRINTK("unix_proto_write: interrupted\n");
-			return -EINTR;
+			return -ERESTARTSYS;
 		}
 		if (sock->state == SS_DISCONNECTING) {
 			PRINTK("unix_proto_write: disconnected (SIGPIPE)\n");

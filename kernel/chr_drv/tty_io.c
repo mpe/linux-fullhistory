@@ -13,7 +13,8 @@
 
 #include <errno.h>
 #include <signal.h>
-#include <fcntl.h>
+
+#include <linux/fcntl.h>
 
 #define ALRMMASK (1<<(SIGALRM-1))
 
@@ -58,6 +59,64 @@ struct tty_struct * redirect = NULL;
  * you can implement virtual consoles.
  */
 struct tty_queue * table_list[] = { NULL, NULL };
+
+void put_tty_queue(char c, struct tty_queue * queue)
+{
+	int head;
+	unsigned long flags;
+
+	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	head = (queue->head + 1) & (TTY_BUF_SIZE-1);
+	if (head != queue->tail) {
+		queue->buf[queue->head] = c;
+		queue->head = head;
+	}
+	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+}
+
+int get_tty_queue(struct tty_queue * queue)
+{
+	int result = -1;
+	unsigned long flags;
+
+	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	if (queue->tail != queue->head) {
+		result = 0xff & queue->buf[queue->tail];
+		queue->tail = (queue->tail + 1) & (TTY_BUF_SIZE-1);
+	}
+	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	return result;
+}
+
+void tty_write_flush(struct tty_struct * tty)
+{
+	unsigned long flags;
+
+	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	if (!EMPTY(tty->write_q) && !(TTY_WRITE_BUSY & tty->flags)) {
+		tty->flags |= TTY_WRITE_BUSY;
+		__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+		tty->write(tty);
+		cli();
+		tty->flags &= ~TTY_WRITE_BUSY;
+	}
+	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+}
+
+void tty_read_flush(struct tty_struct * tty)
+{
+	unsigned long flags;
+
+	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	if (!EMPTY(tty->read_q) && !(TTY_READ_BUSY & tty->flags)) {
+		tty->flags |= TTY_READ_BUSY;
+		__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+		copy_to_cooked(tty);
+		cli();
+		tty->flags &= ~TTY_READ_BUSY;
+	}
+	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+}
 
 void change_console(unsigned int new_console)
 {
@@ -336,7 +395,6 @@ static int read_chan(unsigned int channel, struct file * file, char * buf, int n
 
 static int write_chan(unsigned int channel, struct file * file, char * buf, int nr)
 {
-	static cr_flag=0;
 	struct tty_struct * tty;
 	char c, *b=buf;
 
@@ -376,8 +434,8 @@ static int write_chan(unsigned int channel, struct file * file, char * buf, int 
 					c='\n';
 				else if (c=='\n' && O_NLRET(tty))
 					c='\r';
-				if (c=='\n' && !cr_flag && O_NLCR(tty)) {
-					cr_flag = 1;
+				if (c=='\n' && !(tty->flags & TTY_CR_PENDING) && O_NLCR(tty)) {
+					tty->flags |= TTY_CR_PENDING;
 					PUTCH(13,tty->write_q);
 					continue;
 				}
@@ -385,7 +443,7 @@ static int write_chan(unsigned int channel, struct file * file, char * buf, int 
 					c=toupper(c);
 			}
 			b++; nr--;
-			cr_flag = 0;
+			tty->flags &= ~TTY_CR_PENDING;
 			PUTCH(c,tty->write_q);
 		}
 		if (nr>0)
@@ -568,7 +626,7 @@ long tty_init(long kmem_start)
 			-1,		/* initial pgrp */
 			0,			/* initial session */
 			0,			/* initial stopped */
-			0,			/* initial busy */
+			0,			/* initial flags */
 			0,			/* initial count */
 			{video_num_lines,video_num_columns,0,0},
 			con_write,

@@ -26,7 +26,10 @@ static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)
 	tmp.st_uid = inode->i_uid;
 	tmp.st_gid = inode->i_gid;
 	tmp.st_rdev = inode->i_rdev;
-	tmp.st_size = inode->i_size;
+	if( S_ISFIFO(inode->i_mode) )
+		tmp.st_size = 0;
+	else
+		tmp.st_size = inode->i_size;
 	tmp.st_atime = inode->i_atime;
 	tmp.st_mtime = inode->i_mtime;
 	tmp.st_ctime = inode->i_ctime;
@@ -36,6 +39,7 @@ static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)
 static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
 {
 	struct new_stat tmp = {0, };
+	unsigned int blocks, indirect;
 
 	verify_area(statbuf,sizeof (*statbuf));
 	tmp.st_dev = inode->i_dev;
@@ -45,10 +49,34 @@ static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
 	tmp.st_uid = inode->i_uid;
 	tmp.st_gid = inode->i_gid;
 	tmp.st_rdev = inode->i_rdev;
-	tmp.st_size = inode->i_size;
+	if( S_ISFIFO(inode->i_mode) )
+		tmp.st_size = 0;
+	else
+		tmp.st_size = inode->i_size;
 	tmp.st_atime = inode->i_atime;
 	tmp.st_mtime = inode->i_mtime;
 	tmp.st_ctime = inode->i_ctime;
+/*
+ * Right now we fake the st_blocks numbers: we'll eventually have to
+ * add st_blocks to the inode, and let the vfs routines keep track of
+ * it all. This algorithm doesn't guarantee correct block numbers, but
+ * at least it tries to come up with a plausible answer...
+ *
+ * In fact, the minix fs doesn't use these numbers (it uses 7 and 512
+ * instead of 10 and 256), but who cares... It's not that exact anyway.
+ */
+	blocks = (tmp.st_size + 1023) / 1024;
+	if (blocks > 10) {
+		indirect = (blocks - 11)/256+1;
+		if (blocks > 10+256) {
+			indirect += (blocks - 267)/(256*256)+1;
+			if (blocks > 10+256+256*256)
+				indirect++;
+		}
+		blocks += indirect;
+	}
+	tmp.st_blksize = 1024;
+	tmp.st_blocks = blocks;
 	memcpy_tofs(statbuf,&tmp,sizeof(tmp));
 }
 

@@ -5,12 +5,11 @@
  */
 
 #include <errno.h>
-#include <fcntl.h>
-
-#include <linux/stat.h>
 
 #include <asm/segment.h>
 
+#include <linux/stat.h>
+#include <linux/fcntl.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

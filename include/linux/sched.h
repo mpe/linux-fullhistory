@@ -60,10 +60,8 @@
 
 #define MAX_SHARED_LIBS 6
 
-extern int copy_page_tables(unsigned long from, unsigned long to, long size);
-extern int free_page_tables(unsigned long from, unsigned long size);
-
 extern void sched_init(void);
+extern void show_state(void);
 extern void schedule(void);
 extern void trap_init(void);
 extern void panic(const char * str);
