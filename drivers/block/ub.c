@@ -496,6 +496,11 @@ static void ub_id_put(int id)
  */
 static void ub_cleanup(struct ub_dev *sc)
 {
+	request_queue_t *q;
+
+	/* I don't think queue can be NULL. But... Stolen from sx8.c */
+	if ((q = sc->disk->queue) != NULL)
+		blk_cleanup_queue(q);
 
 	/*
 	 * If we zero disk->private_data BEFORE put_disk, we have to check
@@ -2056,7 +2061,6 @@ static void ub_disconnect(struct usb_interface *intf)
 {
 	struct ub_dev *sc = usb_get_intfdata(intf);
 	struct gendisk *disk = sc->disk;
-	request_queue_t *q = disk->queue;
 	unsigned long flags;
 
 	/*
@@ -2099,13 +2103,8 @@ static void ub_disconnect(struct usb_interface *intf)
 	 */
 	if (disk->flags & GENHD_FL_UP)
 		del_gendisk(disk);
-	if (q)
-		blk_cleanup_queue(q);
 
 	/*
-	 * We really expect blk_cleanup_queue() to wait, so no amount
-	 * of paranoya is too much.
-	 *
 	 * Taking a lock on a structure which is about to be freed
 	 * is very nonsensual. Here it is largely a way to do a debug freeze,
 	 * and a bracket which shows where the nonsensual code segment ends.
