@@ -179,7 +179,9 @@ or earlier, you will probably get a weird error on shutdown in which
 your computer shuts down fine but "INIT: error reading initrequest" or
 words to that effect scroll across your screen hundreds of times.  To
 fix, upgrade to
-ftp://ftp.cistron.nl/pub/people/miquels/debian/sysvinit-2.62.tar.gz.
+
+ftp://sunsite.unc.edu/pub/Linux/system/Daemons/init/sysvinit-2.64.tar.gz or
+ftp://tsx-11.mit.edu /pub/linux/sources/sbin/sysvinit-2.64.tar.gz
 
    If you're trying to run NCSA httpd, you have to set pre-spawning of
 daemons to zero, as it incorrectly assumes SunOS behavior.  I recommend

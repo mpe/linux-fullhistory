@@ -92,11 +92,13 @@ static int do_select(int n, fd_set *in, fd_set *out, fd_set *ex,
 	int i,j;
 	int max = -1;
 
-	for (j = 0 ; j < __FDSET_INTS ; j++) {
+	j = 0;
+	for (;;) {
 		i = j * __NFDBITS;
 		if (i >= n)
 			break;
 		set = in->fds_bits[j] | out->fds_bits[j] | ex->fds_bits[j];
+		j++;
 		for ( ; set ; i++,set >>= 1) {
 			if (i >= n)
 				goto end_check;
@@ -113,9 +115,6 @@ end_check:
 	n = max + 1;
 	if(!(entry = (struct select_table_entry*) __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
-	FD_ZERO(res_in);
-	FD_ZERO(res_out);
-	FD_ZERO(res_ex);
 	count = 0;
 	wait_table.nr = 0;
 	wait_table.entry = entry;
@@ -153,51 +152,79 @@ repeat:
 /*
  * We do a VERIFY_WRITE here even though we are only reading this time:
  * we'll write to it eventually..
+ *
+ * Use "int" accesses to let user-mode fd_set's be int-aligned.
  */
-static int __get_fd_set(int nr, unsigned int * fs_pointer, fd_set * fdset)
+static int __get_fd_set(unsigned long nr, int * fs_pointer, int * fdset)
 {
-	int error, i;
-	unsigned int * tmp;
-
-	FD_ZERO(fdset);
-	if (!fs_pointer)
-		return 0;
-	error = verify_area(VERIFY_WRITE,fs_pointer,sizeof(fd_set));
-	if (error)
+	/* round up nr to nearest "int" */
+	nr = (nr + 8*sizeof(int)-1) / (8*sizeof(int));
+	if (fs_pointer) {
+		int error = verify_area(VERIFY_WRITE,fs_pointer,nr*sizeof(int));
+		if (!error) {
+			while (nr) {
+				*fdset = get_user(fs_pointer);
+				nr--;
+				fs_pointer++;
+				fdset++;
+			}
+		}
 		return error;
-	tmp = fdset->fds_bits;
-	for (i = __FDSET_INTS; i > 0; i--) {
-		if (nr <= 0)
-			break;
-		*tmp = get_user(fs_pointer);
-		tmp++;
-		fs_pointer++;
-		nr -= 8 * sizeof(unsigned int);
+	}
+	while (nr) {
+		*fdset = 0;
+		nr--;
+		fdset++;
 	}
 	return 0;
 }
 
-static void __set_fd_set(int nr, unsigned int * fs_pointer, unsigned int * fdset)
+static void __set_fd_set(long nr, int * fs_pointer, int * fdset)
 {
-	int i;
-
 	if (!fs_pointer)
 		return;
-	for (i = __FDSET_INTS; i > 0; i--) {
-		if (nr <= 0)
-			break;
+	while (nr >= 0) {
 		put_user(*fdset, fs_pointer);
+		nr -= 8 * sizeof(int);
 		fdset++;
 		fs_pointer++;
-		nr -= 8 * sizeof(unsigned int);
 	}
 }
 
+/* We can do long accesses here, kernel fdsets are always long-aligned */
+static inline void __zero_fd_set(long nr, unsigned long * fdset)
+{
+	while (nr >= 0) {
+		*fdset = 0;
+		nr -= 8 * sizeof(unsigned long);
+		fdset++;
+	}
+}		
+
+/*
+ * Due to kernel stack usage, we use a _limited_ fd_set type here, and once
+ * we really start supporting >256 file descriptors we'll probably have to
+ * allocate the kernel fd_set copies dynamically.. (The kernel select routines
+ * are careful to touch only the defined low bits of any fd_set pointer, this
+ * is important for performance too).
+ *
+ * Note a few subtleties: we use "long" for the dummy, not int, and we do a
+ * subtract by 1 on the nr of file descriptors. The former is better for
+ * machines with long > int, and the latter allows us to test the bit count
+ * against "zero or positive", which can mostly be just a sign bit test..
+ */
+typedef struct {
+	unsigned long dummy[NR_OPEN/(8*(sizeof(unsigned long)))];
+} limited_fd_set;
+
 #define get_fd_set(nr,fsp,fdp) \
-__get_fd_set(nr, (unsigned int *) (fsp), fdp)
+__get_fd_set(nr, (int *) (fsp), (int *) (fdp))
 
 #define set_fd_set(nr,fsp,fdp) \
-__set_fd_set(nr, (unsigned int *) (fsp), (unsigned int *) (fdp))
+__set_fd_set((nr)-1, (int *) (fsp), (int *) (fdp))
+
+#define zero_fd_set(nr,fdp) \
+__zero_fd_set((nr)-1, (unsigned long *) (fdp))
 
 /*
  * We can actually return ERESTARTSYS instead of EINTR, but I'd
@@ -209,31 +236,41 @@ __set_fd_set(nr, (unsigned int *) (fsp), (unsigned int *) (fdp))
  */
 asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 {
-	int i;
-	fd_set res_in, in;
-	fd_set res_out, out;
-	fd_set res_ex, ex;
+	int error;
+	limited_fd_set res_in, in;
+	limited_fd_set res_out, out;
+	limited_fd_set res_ex, ex;
 	unsigned long timeout;
 
+	error = -EINVAL;
 	if (n < 0)
-		return -EINVAL;
+		goto out;
 	if (n > NR_OPEN)
 		n = NR_OPEN;
-	if ((i = get_fd_set(n, inp, &in)) ||
-	    (i = get_fd_set(n, outp, &out)) ||
-	    (i = get_fd_set(n, exp, &ex))) return i;
+	if ((error = get_fd_set(n, inp, &in)) ||
+	    (error = get_fd_set(n, outp, &out)) ||
+	    (error = get_fd_set(n, exp, &ex))) goto out;
 	timeout = ~0UL;
 	if (tvp) {
-		i = verify_area(VERIFY_WRITE, tvp, sizeof(*tvp));
-		if (i)
-			return i;
+		error = verify_area(VERIFY_WRITE, tvp, sizeof(*tvp));
+		if (error)
+			goto out;
 		timeout = ROUND_UP(get_user(&tvp->tv_usec),(1000000/HZ));
 		timeout += get_user(&tvp->tv_sec) * (unsigned long) HZ;
 		if (timeout)
 			timeout += jiffies + 1;
 	}
+	zero_fd_set(n, &res_in);
+	zero_fd_set(n, &res_out);
+	zero_fd_set(n, &res_ex);
 	current->timeout = timeout;
-	i = do_select(n, &in, &out, &ex, &res_in, &res_out, &res_ex);
+	error = do_select(n,
+		(fd_set *) &in,
+		(fd_set *) &out,
+		(fd_set *) &ex,
+		(fd_set *) &res_in,
+		(fd_set *) &res_out,
+		(fd_set *) &res_ex);
 	timeout = current->timeout - jiffies - 1;
 	current->timeout = 0;
 	if ((long) timeout < 0)
@@ -244,12 +281,17 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 		timeout *= (1000000/HZ);
 		put_user(timeout, &tvp->tv_usec);
 	}
-	if (i < 0)
-		return i;
-	if (!i && (current->signal & ~current->blocked))
-		return -ERESTARTNOHAND;
+	if (error < 0)
+		goto out;
+	if (!error) {
+		error = -ERESTARTNOHAND;
+		if (current->signal & ~current->blocked)
+			goto out;
+		error = 0;
+	}
 	set_fd_set(n, inp, &res_in);
 	set_fd_set(n, outp, &res_out);
 	set_fd_set(n, exp, &res_ex);
-	return i;
+out:
+	return error;
 }

@@ -106,9 +106,9 @@
 #define	ENOANO		100	/* No anode */
 #define	EBADRQC		101	/* Invalid request code */
 #define	EBADSLT		102	/* Invalid slot */
-#if 0
-#define	EDEADLOCK	103	/* File locking deadlock error */
-#endif
+
+#define	EDEADLOCK	EDEADLK
+
 #define	EBFONT		104	/* Bad font file format */
 #define	ENONET		105	/* Machine is not on the network */
 #define	ENOLINK		106	/* Link has been severed */

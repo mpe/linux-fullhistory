@@ -414,45 +414,58 @@ struct inode_operations pipe_inode_operations = {
 int do_pipe(int *fd)
 {
 	struct inode * inode;
-	struct file *f[2];
+	struct file *f1, *f2;
+	int error;
 	int i,j;
+
+	error = ENFILE;
+	f1 = get_empty_filp();
+	if (!f1)
+		goto no_files;
+
+	f2 = get_empty_filp();
+	if (!f2)
+		goto close_f1;
 
 	inode = get_pipe_inode();
 	if (!inode)
-		return -ENFILE;
+		goto close_f12;
 
-	for(j=0 ; j<2 ; j++)
-		if (!(f[j] = get_empty_filp()))
-			break;
-	if (j < 2) {
-		iput(inode);
-		iput(inode);
-		if (j)
-			f[0]->f_count--;
-		return -ENFILE;
-	}
-	j=0;
-	for(i=0;j<2 && i<NR_OPEN && i<current->rlim[RLIMIT_NOFILE].rlim_cur;i++)
-		if (!current->files->fd[i]) {
-			current->files->fd[ fd[j]=i ] = f[j];
-			j++;
-		}
-	if (j<2) {
-		iput(inode);
-		iput(inode);
-		f[0]->f_count--;
-		f[1]->f_count--;
-		if (j)
-			current->files->fd[fd[0]] = NULL;
-		return -EMFILE;
-	}
-	f[0]->f_inode = f[1]->f_inode = inode;
-	f[0]->f_pos = f[1]->f_pos = 0;
-	f[0]->f_flags = O_RDONLY;
-	f[0]->f_op = &read_pipe_fops;
-	f[0]->f_mode = 1;		/* read */
-	f[1]->f_flags = O_WRONLY;
-	f[1]->f_op = &write_pipe_fops;
-	f[1]->f_mode = 2;		/* write */
+	error = get_unused_fd();
+	if (error < 0)
+		goto close_f12_inode;
+	i = error;
+
+	error = get_unused_fd();
+	if (error < 0)
+		goto close_f12_inode_i;
+	j = error;
+
+	f1->f_inode = f2->f_inode = inode;
+	/* read file */
+	f1->f_pos = f2->f_pos = 0;
+	f1->f_flags = O_RDONLY;
+	f1->f_op = &read_pipe_fops;
+	f1->f_mode = 1;
+	/* write file */
+	f2->f_flags = O_WRONLY;
+	f2->f_op = &write_pipe_fops;
+	f2->f_mode = 2;
+	current->files->fd[i] = f1;
+	current->files->fd[j] = f2;
+	fd[0] = i;
+	fd[1] = j;
 	return 0;
+
+close_f12_inode_i:
+	put_unused_fd(i);
+close_f12_inode:
+	inode->i_count--;
+	iput(inode);
+close_f12:
+	f2->f_count--;
+close_f1:
+	f1->f_count--;
+no_files:
+	return error;	
 }

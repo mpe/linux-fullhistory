@@ -114,41 +114,34 @@ int unregister_binfmt(struct linux_binfmt * fmt)
 
 int open_inode(struct inode * inode, int mode)
 {
-	int error, fd;
-	struct file *f, **fpp;
+	int fd;
 
 	if (!inode->i_op || !inode->i_op->default_file_ops)
 		return -EINVAL;
-	f = get_empty_filp();
-	if (!f)
-		return -ENFILE;
-	fd = 0;
-	fpp = current->files->fd;
-	for (;;) {
-		if (!*fpp)
-			break;
-		if (++fd >= NR_OPEN) {
-			f->f_count--;
-			return -EMFILE;
+	fd = get_unused_fd();
+	if (fd >= 0) {
+		struct file * f = get_empty_filp();
+		if (!f) {
+			put_unused_fd(fd);
+			return -ENFILE;
 		}
-		fpp++;
-	}
-	*fpp = f;
-	f->f_flags = mode;
-	f->f_mode = (mode+1) & O_ACCMODE;
-	f->f_inode = inode;
-	f->f_pos = 0;
-	f->f_reada = 0;
-	f->f_op = inode->i_op->default_file_ops;
-	if (f->f_op->open) {
-		error = f->f_op->open(inode,f);
-		if (error) {
-			*fpp = NULL;
-			f->f_count--;
-			return error;
+		f->f_flags = mode;
+		f->f_mode = (mode+1) & O_ACCMODE;
+		f->f_inode = inode;
+		f->f_pos = 0;
+		f->f_reada = 0;
+		f->f_op = inode->i_op->default_file_ops;
+		if (f->f_op->open) {
+			int error = f->f_op->open(inode,f);
+			if (error) {
+				f->f_count--;
+				put_unused_fd(fd);
+				return error;
+			}
 		}
+		current->files->fd[fd] = f;
+		inode->i_count++;
 	}
-	inode->i_count++;
 	return fd;
 }
 
@@ -399,9 +392,44 @@ static void exec_mmap(void)
 }
 
 /*
- * This function flushes out all traces of the currently running executable so
- * that a new one can be started
+ * These functions flushes out all traces of the currently running executable
+ * so that a new one can be started
  */
+
+static inline void flush_old_signals(struct signal_struct *sig)
+{
+	int i;
+	struct sigaction * sa = sig->action;
+
+	for (i=32 ; i != 0 ; i--) {
+		sa->sa_mask = 0;
+		sa->sa_flags = 0;
+		if (sa->sa_handler != SIG_IGN)
+			sa->sa_handler = NULL;
+		sa++;
+	}
+}
+
+static inline void flush_old_files(struct files_struct * files)
+{
+	unsigned long j;
+
+	j = 0;
+	for (;;) {
+		unsigned long set, i;
+
+		i = j * __NFDBITS;
+		if (i >= NR_OPEN)
+			break;
+		set = files->close_on_exec.fds_bits[j];
+		files->close_on_exec.fds_bits[j] = 0;
+		j++;
+		for ( ; set ; i++,set >>= 1) {
+			if (set & 1)
+				sys_close(i);
+		}
+	}
+}
 
 void flush_old_exec(struct linux_binprm * bprm)
 {
@@ -429,16 +457,9 @@ void flush_old_exec(struct linux_binprm * bprm)
 	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid || 
 	    permission(bprm->inode,MAY_READ))
 		current->dumpable = 0;
-	for (i=0 ; i<32 ; i++) {
-		current->sig->action[i].sa_mask = 0;
-		current->sig->action[i].sa_flags = 0;
-		if (current->sig->action[i].sa_handler != SIG_IGN)
-			current->sig->action[i].sa_handler = NULL;
-	}
-	for (i=0 ; i<NR_OPEN ; i++)
-		if (FD_ISSET(i,&current->files->close_on_exec))
-			sys_close(i);
-	FD_ZERO(&current->files->close_on_exec);
+
+	flush_old_signals(current->sig);
+	flush_old_files(current->files);
 }
 
 /* 

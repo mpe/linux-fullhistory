@@ -172,36 +172,31 @@ int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 static int get_fd(struct inode *inode)
 {
 	int fd;
-	struct file *file;
 
 	/*
 	 *	Find a file descriptor suitable for return to the user. 
 	 */
 
-	file = get_empty_filp();
-	if (!file) 
-		return(-1);
+	fd = get_unused_fd();
+	if (fd >= 0) {
+		struct file *file = get_empty_filp();
 
-	for (fd = 0; fd < NR_OPEN; ++fd)
-		if (!current->files->fd[fd]) 
-			break;
-	if (fd == NR_OPEN) 
-	{
-		file->f_count = 0;
-		return(-1);
-	}
+		if (!file) {
+			put_unused_fd(fd);
+			return -ENFILE;
+		}
 
-	FD_CLR(fd, &current->files->close_on_exec);
 		current->files->fd[fd] = file;
-	file->f_op = &socket_file_ops;
-	file->f_mode = 3;
-	file->f_flags = O_RDWR;
-	file->f_count = 1;
-	file->f_inode = inode;
-	if (inode) 
-		inode->i_count++;
-	file->f_pos = 0;
-	return(fd);
+		file->f_op = &socket_file_ops;
+		file->f_mode = 3;
+		file->f_flags = O_RDWR;
+		file->f_count = 1;
+		file->f_inode = inode;
+		if (inode) 
+			inode->i_count++;
+		file->f_pos = 0;
+	}
+	return fd;
 }
 
 

@@ -28,9 +28,12 @@
  *		Eric Schenk	: 	Skip fast retransmit on small windows.
  *		Eric schenk	:	Fixes to retransmission code to
  *				:	avoid extra retransmission.
+ *		Theodore Ts'o	:	Do secure TCP sequence numbers.
  */
 
 #include <linux/config.h>
+#include <linux/types.h>
+#include <linux/random.h>
 #include <net/tcp.h>
 
 /*
@@ -208,7 +211,17 @@ static void bad_tcp_sequence(struct sock *sk, struct tcphdr *th, u32 end_seq,
 	 * 	from the far end, but sometimes it means the far end lost
 	 *	an ACK we sent, so we better send an ACK.
 	 */
-	tcp_send_ack(sk);
+	/*
+	 *	BEWARE! Unconditional answering by ack to out-of-window ack
+	 *	can result in infinite exchange of empty acks.
+	 *	This check cures bug, found by Michiel Boland, but
+	 *	not another possible cases.
+	 *	If we are in TCP_TIME_WAIT, we have already received
+	 *	FIN, so that our peer need not window update. If our
+	 *	ACK were lost, peer would retransmit his FIN anyway. --ANK
+	 */
+	if (sk->state != TCP_TIME_WAIT || ntohl(th->seq) != end_seq)
+		tcp_send_ack(sk);
 }
 
 /*
@@ -1722,6 +1735,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	struct tcphdr *th;
 	struct sock *sk;
 	int syn_ok=0;
+	__u32 seq;
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	int r;
 #endif
@@ -1859,10 +1873,12 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			}
 		
 			/*	
-			 *	Guess we need to make a new socket up 
+			 *	Guess we need to make a new socket up
 			 */
-		
-			tcp_conn_request(sk, skb, daddr, saddr, opt, dev, tcp_init_seq());
+			seq = secure_tcp_sequence_number(saddr, daddr,
+							 skb->h.th->dest,
+							 skb->h.th->source);
+			tcp_conn_request(sk, skb, daddr, saddr, opt, dev, seq);
 		
 			/*
 			 *	Now we have several options: In theory there is nothing else

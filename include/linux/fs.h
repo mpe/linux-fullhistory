@@ -623,6 +623,8 @@ extern struct inode * get_empty_inode(void);
 extern void insert_inode_hash(struct inode *);
 extern void clear_inode(struct inode *);
 extern struct inode * get_pipe_inode(void);
+extern int get_unused_fd(void);
+extern void put_unused_fd(int);
 extern struct file * get_empty_filp(void);
 extern int close_fp(struct file *filp);
 extern struct buffer_head * get_hash_table(kdev_t dev, int block, int size);

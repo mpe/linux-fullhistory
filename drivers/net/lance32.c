@@ -789,8 +789,8 @@ static struct enet_statistics *
 lance32_get_stats(struct device *dev)
 {
 	struct lance32_private *lp = (struct lance32_private *)dev->priv;
-	short ioaddr = dev->base_addr;
-	short saved_addr;
+	int ioaddr = dev->base_addr;
+	unsigned short saved_addr;
 	unsigned long flags;
 
 	save_flags(flags);
@@ -809,7 +809,7 @@ lance32_get_stats(struct device *dev)
 
 static void lance32_set_multicast_list(struct device *dev)
 {
-	short ioaddr = dev->base_addr;
+	int ioaddr = dev->base_addr;
 	struct lance32_private *lp = (struct lance32_private *)dev->priv;    
 
 	if (dev->flags&IFF_PROMISC) {

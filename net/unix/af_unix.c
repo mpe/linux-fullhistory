@@ -710,10 +710,9 @@ static int unix_fd_copy(struct sock *sk, struct cmsghdr *cmsg, struct file **fp)
 	int num=cmsg->cmsg_len-sizeof(struct cmsghdr);
 	int i;
 	int *fdp=(int *)cmsg->cmsg_data;
-	num/=4;	/* Odd bytes are forgotten in BSD not errored */
-	
 
-	if(num>=UNIX_MAX_FD)
+	num /= sizeof(int);	/* Odd bytes are forgotten in BSD not errored */
+	if (num >= UNIX_MAX_FD)
 		return -EINVAL;
 	
 	/*
@@ -728,9 +727,9 @@ static int unix_fd_copy(struct sock *sk, struct cmsghdr *cmsg, struct file **fp)
 #if 0
 		printk("testing  fd %d\n", fd);
 #endif
-		if(fd < 0|| fd >=NR_OPEN)
+		if (fd < 0 || fd >= NR_OPEN)
 			return -EBADF;
-		if(current->files->fd[fd]==NULL)
+		if (current->files->fd[fd]==NULL)
 			return -EBADF;
 	}
 	
@@ -759,30 +758,6 @@ static void unix_fd_free(struct sock *sk, struct file **fp, int num)
 	}
 }
 
-/*
- *	Count the free descriptors available to a process. 
- *	Interpretation issue: Is the limit the highest descriptor (buggy
- *	allowing passed fd's higher up to cause a limit to be exceeded) -
- *	but how the old code did it - or like this...
- */
-
-static int unix_files_free(void)
-{
-	int i;
-	int n=0;
-	for (i=0;i<NR_OPEN;i++)
-	{
-		if(current->files->fd[i])
-			n++;
-	}
-	
-	i=NR_OPEN;
-	if(i>current->rlim[RLIMIT_NOFILE].rlim_cur)
-		i=current->rlim[RLIMIT_NOFILE].rlim_cur;
-	if(n>=i)
-		return 0;
-	return i-n;
-}
 
 /*
  *	Perform the AF_UNIX file descriptor pass out functionality. This
@@ -795,50 +770,39 @@ static void unix_detach_fds(struct sk_buff *skb, struct cmsghdr *cmsg)
 	/* count of space in parent for fds */
 	int cmnum;
 	struct file **fp;
-	struct file **ufp;
-	int *cmfptr=NULL;	/* =NULL To keep gcc happy */
-	/* number of fds actually passed */
+	int *cmfptr;
 	int fdnum;
-	int ffree;
-	int ufn=0;
 
-	if(cmsg==NULL)
-		cmnum=0;
-	else
+	cmfptr = NULL;
+	cmnum = 0;
+	if (cmsg)
 	{
-		cmnum=cmsg->cmsg_len-sizeof(struct cmsghdr);
-		cmnum/=sizeof(int);
-		cmfptr=(int *)&cmsg->cmsg_data;
+		cmnum = (cmsg->cmsg_len-sizeof(struct cmsghdr)) / sizeof(int);
+		cmfptr = (int *)&cmsg->cmsg_data;
 	}
 	
-	memcpy(&fdnum,skb->h.filp,sizeof(int));
-	fp=(struct file **)(skb->h.filp+sizeof(int));
-	if(cmnum>fdnum)
-		cmnum=fdnum;
-	ffree=unix_files_free();
-	if(cmnum>ffree)
-		cmnum=ffree;
-	ufp=&current->files->fd[0];
-	
+	fdnum = *(int *)skb->h.filp;
+	fp = (struct file **)(skb->h.filp+sizeof(long));
+
+	if (cmnum > fdnum)
+		cmnum = fdnum;
+
 	/*
 	 *	Copy those that fit
 	 */
-	for(i=0;i<cmnum;i++)
+	for (i = 0 ; i < cmnum ; i++)
 	{
-		/*
-		 *	Insert the fd
-		 */
-		while(ufp[ufn]!=NULL)
-			ufn++;
-		ufp[ufn]=fp[i];
-		*cmfptr++=ufn;
-		FD_CLR(ufn,&current->files->close_on_exec);
+		int new_fd = get_unused_fd();
+		if (new_fd < 0)
+			break;
+		current->files->fd[new_fd]=fp[i];
+		*cmfptr++ = new_fd;
 		unix_notinflight(fp[i]);
 	}
 	/*
 	 *	Dump those that don't
 	 */
-	for(;i<fdnum;i++)
+	for( ; i < fdnum ; i++)
 	{
 		close_fp(fp[i]);
 		unix_notinflight(fp[i]);
@@ -861,12 +825,12 @@ static void unix_destruct_fds(struct sk_buff *skb)
 static void unix_attach_fds(int fpnum,struct file **fp,struct sk_buff *skb)
 {
 
-	skb->h.filp=kmalloc(sizeof(int)+fpnum*sizeof(struct file *), 
+	skb->h.filp = kmalloc(sizeof(long)+fpnum*sizeof(struct file *), 
 							GFP_KERNEL);
 	/* number of descriptors starts block */
-	memcpy(skb->h.filp,&fpnum,sizeof(int));
+	*(int *)skb->h.filp = fpnum;
 	/* actual  descriptors */
-	memcpy(skb->h.filp+sizeof(int),fp,fpnum*sizeof(struct file *));
+	memcpy(skb->h.filp+sizeof(long),fp,fpnum*sizeof(struct file *));
 	skb->destructor = unix_destruct_fds;
 }
 

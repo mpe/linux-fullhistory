@@ -3,6 +3,7 @@
  *
  *  Copyright (C) 1995 by Paal-Kr. Engstad and Volker Lendecke
  *
+ *  28/06/96 - Fixed long file name support (smb_proc_readdir_long) by Yuri Per
  */
 
 #include <linux/config.h>
@@ -1152,6 +1153,7 @@ smb_proc_readdir_long(struct smb_server *server, struct inode *dir, int fpos,
         int info_level = 1;
 
 	char *p;
+	char *lastname;
 	int i;
 	int first, total_count;
         struct smb_dirent *current_entry;
@@ -1171,9 +1173,15 @@ smb_proc_readdir_long(struct smb_server *server, struct inode *dir, int fpos,
         int ff_dir_handle=0;
         int loop_count = 0;
 
-	int dirlen = strlen(SMB_FINFO(dir)->path);
-	char mask[dirlen + 5];
+	int dirlen = strlen(SMB_FINFO(dir)->path) + 3;
+	char *mask;
 
+	mask = smb_kmalloc(dirlen, GFP_KERNEL);
+	if (mask == NULL)
+	{
+		printk("smb_proc_readdir_long: Memory allocation failed\n");
+		return -ENOMEM;
+	}
 	strcpy(mask, SMB_FINFO(dir)->path);
 	strcat(mask, "\\*");
 
@@ -1297,22 +1305,37 @@ smb_proc_readdir_long(struct smb_server *server, struct inode *dir, int fpos,
                 p = resp_data;
 
                 /* we might need the lastname for continuations */
+		lastname = "";
                 if (ff_lastname > 0)
                 {
                         switch(info_level)
                         {
                         case 260:
-                                ff_resume_key =0;
-                                strcpy(mask,p+ff_lastname+94);
+				lastname = p + ff_lastname + 94;
+				ff_resume_key = 0;
                                 break;
                         case 1:
-                                strcpy(mask,p + ff_lastname + 1);
+				lastname = p + ff_lastname + 1;
                                 ff_resume_key = 0;
                                 break;
                         }
                 }
-                else
-                        strcpy(mask,"");
+  
+		/* Increase size of mask, if it is too small */
+		i = strlen(lastname) + 1;
+		if (i > dirlen)
+		{
+			smb_kfree_s(mask,  0);
+			dirlen = i;
+			mask = smb_kmalloc(dirlen, GFP_KERNEL);
+			if (mask == NULL)
+			{
+				printk("smb_proc_readdir_long: Memory allocation failed\n");
+				result = -ENOMEM;
+				break;
+			}
+			strcpy(mask, lastname);
+		}
   
 		/* Now we are ready to parse smb directory entries. */
 		
@@ -1355,6 +1378,9 @@ smb_proc_readdir_long(struct smb_server *server, struct inode *dir, int fpos,
         }
 
  finished:
+ 	if (mask != NULL)
+		smb_kfree_s(mask,  0);
+
         if (resp_data != NULL) {
                 smb_kfree_s(resp_data,  0);
                 resp_data = NULL;

@@ -162,6 +162,11 @@ CONFIG_DE4X5=y
 # CONFIG_ARCNET is not set
 
 #
+# ISDN subsystem
+#
+# CONFIG_ISDN is not set
+
+#
 # CD-ROM drivers (not for SCSI or IDE/ATAPI drives)
 #
 # CONFIG_CD_NO_IDESCSI is not set

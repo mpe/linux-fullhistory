@@ -202,6 +202,7 @@
  *					improvement.
  *	Stefan Magdalinski	:	adjusted tcp_readable() to fix FIONREAD
  *	Willy Konynenberg	:	Transparent proxying support.
+ *		Theodore Ts'o	:	Do secure TCP sequence numbers.
  *					
  * To Fix:
  *		Fast path the code. Two things here - fix the window calculation
@@ -427,6 +428,7 @@
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
+#include <linux/random.h>
 
 #include <net/icmp.h>
 #include <net/tcp.h>
@@ -1886,6 +1888,36 @@ no_listen:
 	goto out;
 }
 
+/*
+ * Check that a TCP address is unique, don't allow multiple
+ * connects to/from the same address
+ */
+static int tcp_unique_address(u32 saddr, u16 snum, u32 daddr, u16 dnum)
+{
+	int retval = 1;
+	struct sock * sk;
+
+	/* Make sure we are allowed to connect here. */
+	cli();
+	for (sk = tcp_prot.sock_array[snum & (SOCK_ARRAY_SIZE -1)];
+			sk != NULL; sk = sk->next)
+	{
+		/* hash collision? */
+		if (sk->num != snum)
+			continue;
+		if (sk->saddr != saddr)
+			continue;
+		if (sk->daddr != daddr)
+			continue;
+		if (sk->dummy_th.dest != dnum)
+			continue;
+		retval = 0;
+		break;
+	}
+	sti();
+	return retval;
+}
+
 
 /*
  *	This will initiate an outgoing connection.
@@ -1921,7 +1953,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
   	 *	connect() to INADDR_ANY means loopback (BSD'ism).
   	 */
 
-  	if(usin->sin_addr.s_addr==INADDR_ANY)
+  	if (usin->sin_addr.s_addr==INADDR_ANY)
 		usin->sin_addr.s_addr=ip_my_addr();
 
 	/*
@@ -1931,26 +1963,25 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	if ((atype=ip_chk_addr(usin->sin_addr.s_addr)) == IS_BROADCAST || atype==IS_MULTICAST)
 		return -ENETUNREACH;
 
+	if (!tcp_unique_address(sk->saddr, sk->num, usin->sin_addr.s_addr, usin->sin_port))
+		return -EADDRNOTAVAIL;
+
 	lock_sock(sk);
 	sk->daddr = usin->sin_addr.s_addr;
-	sk->write_seq = tcp_init_seq();
-	sk->window_seq = sk->write_seq;
-	sk->rcv_ack_seq = sk->write_seq -1;
+
 	sk->rcv_ack_cnt = 1;
 	sk->err = 0;
 	sk->dummy_th.dest = usin->sin_port;
-	release_sock(sk);
 
 	buff = sock_wmalloc(sk,MAX_SYN_SIZE,0, GFP_KERNEL);
 	if (buff == NULL)
 	{
+		release_sock(sk);
 		return(-ENOMEM);
 	}
-	lock_sock(sk);
 	buff->sk = sk;
 	buff->free = 0;
 	buff->localroute = sk->localroute;
-
 
 	/*
 	 *	Put in the IP header and routing stuff.
@@ -1967,6 +1998,15 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	if ((rt = sk->ip_route_cache) != NULL && !sk->saddr)
 		sk->saddr = rt->rt_src;
 	sk->rcv_saddr = sk->saddr;
+
+	/*
+	 * Set up our outgoing TCP sequence number
+	 */
+	sk->write_seq = secure_tcp_sequence_number(sk->saddr, sk->daddr,
+						   sk->dummy_th.source,
+						   usin->sin_port);
+	sk->window_seq = sk->write_seq;
+	sk->rcv_ack_seq = sk->write_seq -1;
 
 	t1 = (struct tcphdr *) skb_put(buff,sizeof(struct tcphdr));
 

@@ -108,19 +108,17 @@ extern void trap_init(void);
 
 asmlinkage void schedule(void);
 
-/* ??? */
+/* Open file table structure */
 struct files_struct {
-	/* ??? */
 	int count;
-	/* bit mask to close fds on exec */
 	fd_set close_on_exec;
-	/* do we have at most NR_OPEN available fds? I assume fd i maps into
- 	 * each open file */	
+	fd_set open_fds;
 	struct file * fd[NR_OPEN];
 };
 
 #define INIT_FILES { \
 	1, \
+	{ { 0, } }, \
 	{ { 0, } }, \
 	{ NULL, } \
 }

@@ -27,22 +27,22 @@
  * use the ones here. 
  */
 #undef __NFDBITS
-#define __NFDBITS	(8 * sizeof(unsigned int))
+#define __NFDBITS	(8 * sizeof(unsigned long))
 
 #undef __FD_SETSIZE
 #define __FD_SETSIZE	1024
 
-#undef __FDSET_INTS
-#define __FDSET_INTS	(__FD_SETSIZE/__NFDBITS)
+#undef __FDSET_LONGS
+#define __FDSET_LONGS	(__FD_SETSIZE/__NFDBITS)
 
 #undef __FDELT
 #define	__FDELT(d)	((d) / __NFDBITS)
 
 #undef __FDMASK
-#define	__FDMASK(d)	(1 << ((d) % __NFDBITS))
+#define	__FDMASK(d)	(1UL << ((d) % __NFDBITS))
 
 typedef struct {
-	unsigned int fds_bits [__FDSET_INTS];
+	unsigned long fds_bits [__FDSET_LONGS];
 } __kernel_fd_set;
 
 #include <asm/posix_types.h>

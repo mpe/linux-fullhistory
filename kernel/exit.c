@@ -393,6 +393,26 @@ static inline void forget_original_parent(struct task_struct * father)
 	}
 }
 
+static inline void close_files(struct files_struct * files)
+{
+	int i, j;
+
+	j = 0;
+	for (;;) {
+		unsigned long set = files->open_fds.fds_bits[j];
+		i = j * __NFDBITS;
+		j++;
+		if (i >= NR_OPEN)
+			break;
+		while (set) {
+			if (set & 1)
+				close_fp(files->fd[i]);
+			i++;
+			set >>= 1;
+		}
+	}
+}
+
 static inline void __exit_files(struct task_struct *tsk)
 {
 	struct files_struct * files = tsk->files;
@@ -400,14 +420,7 @@ static inline void __exit_files(struct task_struct *tsk)
 	if (files) {
 		tsk->files = NULL;
 		if (!--files->count) {
-			int i;
-			for (i=0 ; i<NR_OPEN ; i++) {
-				struct file * filp = files->fd[i];
-				if (!filp)
-					continue;
-				files->fd[i] = NULL;
-				close_fp(filp);
-			}
+			close_files(files);
 			kfree(files);
 		}
 	}

@@ -13,23 +13,24 @@
 #include <linux/fcntl.h>
 #include <linux/string.h>
 
+#include <asm/bitops.h>
+
 extern int sock_fcntl (struct file *, unsigned int cmd, unsigned long arg);
 
 static inline int dupfd(unsigned int fd, unsigned int arg)
 {
-	if (fd >= NR_OPEN || !current->files->fd[fd])
+	struct files_struct * files = current->files;
+
+	if (fd >= NR_OPEN || !files->fd[fd])
 		return -EBADF;
 	if (arg >= NR_OPEN)
 		return -EINVAL;
-	while (arg < NR_OPEN)
-		if (current->files->fd[arg])
-			arg++;
-		else
-			break;
-	if (arg >= NR_OPEN)
+	arg = find_next_zero_bit(&files->open_fds, NR_OPEN, arg);
+	if (arg >= current->rlim[RLIMIT_NOFILE].rlim_cur)
 		return -EMFILE;
-	FD_CLR(arg, &current->files->close_on_exec);
-	(current->files->fd[arg] = current->files->fd[fd])->f_count++;
+	FD_SET(arg, &files->open_fds);
+	FD_CLR(arg, &files->close_on_exec);
+	(files->fd[arg] = files->fd[fd])->f_count++;
 	return arg;
 }
 
