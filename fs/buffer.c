@@ -45,6 +45,8 @@ extern int check_cdu31a_media_change(int, int);
 extern int check_mcd_media_change(int, int);
 #endif
 
+static int grow_buffers(int pri, int size);
+
 static struct buffer_head * hash_table[NR_HASH];
 static struct buffer_head * free_list = NULL;
 static struct buffer_head * unused_list = NULL;
@@ -456,8 +458,8 @@ repeat:
 	}
 	grow_size -= size;
 	if (nr_free_pages > min_free_pages && grow_size <= 0) {
-		grow_buffers(size);
-		grow_size = PAGE_SIZE;
+		if (grow_buffers(GFP_BUFFER, size))
+			grow_size = PAGE_SIZE;
 	}
 	buffers = nr_buffers;
 	bh = NULL;
@@ -482,13 +484,14 @@ repeat:
 	}
 
 	if (!bh && nr_free_pages > 5) {
-		grow_buffers(size);
-		goto repeat;
+		if (grow_buffers(GFP_BUFFER, size))
+			goto repeat;
 	}
 	
 /* and repeat until we find something good */
 	if (!bh) {
-		sleep_on(&buffer_wait);
+		if (!grow_buffers(GFP_ATOMIC, size))
+			sleep_on(&buffer_wait);
 		goto repeat;
 	}
 	wait_on_buffer(bh);
@@ -861,21 +864,21 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
  * Try to increase the number of buffers available: the size argument
  * is used to determine what kind of buffers we want.
  */
-void grow_buffers(int size)
+static int grow_buffers(int pri, int size)
 {
 	unsigned long page;
 	struct buffer_head *bh, *tmp;
 
 	if ((size & 511) || (size > PAGE_SIZE)) {
 		printk("VFS: grow_buffers: size = %d\n",size);
-		return;
+		return 0;
 	}
-	if(!(page = __get_free_page(GFP_BUFFER)))
-		return;
+	if(!(page = __get_free_page(pri)))
+		return 0;
 	bh = create_buffers(page, size);
 	if (!bh) {
 		free_page(page);
-		return;
+		return 0;
 	}
 	tmp = bh;
 	while (1) {
@@ -897,7 +900,7 @@ void grow_buffers(int size)
 	}
 	tmp->b_this_page = bh;
 	buffermem += PAGE_SIZE;
-	return;
+	return 1;
 }
 
 /*
@@ -989,7 +992,7 @@ void buffer_init(void)
 	for (i = 0 ; i < NR_HASH ; i++)
 		hash_table[i] = NULL;
 	free_list = 0;
-	grow_buffers(BLOCK_SIZE);
+	grow_buffers(GFP_KERNEL, BLOCK_SIZE);
 	if (!free_list)
 		panic("VFS: Unable to initialize buffer free list!");
 	return;

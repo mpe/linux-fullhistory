@@ -760,8 +760,13 @@ start_up:
 /* ok, that's it */
 	old_de->inode = 0;
 	new_de->inode = old_inode->i_ino;
+	old_dir->i_ctime = old_dir->i_mtime = CURRENT_TIME;
+	old_dir->i_dirt = 1;
+	new_dir->i_ctime = new_dir->i_mtime = CURRENT_TIME;
+	new_dir->i_dirt = 1;
 	if (new_inode) {
 		new_inode->i_nlink--;
+		new_inode->i_ctime = CURRENT_TIME;
 		new_inode->i_dirt = 1;
 	}
 	old_bh->b_dirt = 1;

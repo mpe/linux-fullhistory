@@ -10,6 +10,10 @@
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *
+ * Fixes:
+ *		Alan Cox	: Turned on udp checksums. I don't want to
+ *				  chase 'memory corruption' bugs that aren't!
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -21,13 +25,12 @@
 #include <linux/udp.h>
 
 
-#define UDP_NO_CHECK	1
+#define UDP_NO_CHECK	0
 
 
 extern struct proto udp_prot;
 
 
-extern int	udp_select(struct sock *sk, int sel_type, select_table *wait);
 extern void	udp_err(int err, unsigned char *header, unsigned long daddr,
 			unsigned long saddr, struct inet_protocol *protocol);
 extern int	udp_recvfrom(struct sock *sk, unsigned char *to,

@@ -54,6 +54,12 @@
  * 13 -
  * 14 - sound card (?)
  * 15 -
+ * 16 - 
+ * 17 - 
+ * 18 - 
+ * 19 - 
+ * 20 - 
+ * 21 - /dev/sg
  */
 
 #define UNNAMED_MAJOR 0
@@ -130,6 +136,11 @@ extern unsigned long file_table_init(unsigned long start, unsigned long end);
 /* These are a few other constants  only used by scsi  devices */
 
 #define SCSI_IOCTL_GET_IDLUN 0x5382
+
+/* Used to turn on and off tagged queueing for scsi devices */
+
+#define SCSI_IOCTL_TAGGED_ENABLE 0x5383
+#define SCSI_IOCTL_TAGGED_DISABLE 0x5384
 
 
 #define BMAP_IOCTL 1	/* obsolete - kept for compatibility */
@@ -339,7 +350,10 @@ extern struct inode_operations chrdev_inode_operations;
 
 extern void init_fifo(struct inode * inode);
 
-extern struct file_operations connecting_pipe_fops;
+extern struct file_operations connecting_fifo_fops;
+extern struct file_operations read_fifo_fops;
+extern struct file_operations write_fifo_fops;
+extern struct file_operations rdwr_fifo_fops;
 extern struct file_operations read_pipe_fops;
 extern struct file_operations write_pipe_fops;
 extern struct file_operations rdwr_pipe_fops;
@@ -354,7 +368,6 @@ extern struct file *first_file;
 extern int nr_files;
 extern struct super_block super_blocks[NR_SUPER];
 
-extern void grow_buffers(int size);
 extern int shrink_buffers(unsigned int priority);
 
 extern int nr_buffers;

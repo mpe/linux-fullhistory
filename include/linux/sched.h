@@ -83,7 +83,7 @@ extern unsigned long avenrun[];		/* Load averages */
 extern void sched_init(void);
 extern void show_state(void);
 extern void trap_init(void);
-extern void panic(const char * fmt, ...)
+extern volatile void panic(const char * fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
 
 asmlinkage void schedule(void);
@@ -147,6 +147,7 @@ struct tss_struct {
 	unsigned short	trace, bitmap;
 	unsigned long	io_bitmap[IO_BITMAP_SIZE+1];
 	unsigned long	tr;
+	unsigned long	cr2;
 	union i387_union i387;
 };
 
@@ -159,6 +160,7 @@ struct task_struct {
 	unsigned long blocked;	/* bitmap of masked signals */
 	unsigned long flags;	/* per process flags, defined below */
 	int errno;
+	int debugreg[8];  /* Hardware debugging registers */
 /* various fields */
 	struct task_struct *next_task, *prev_task;
 	struct sigaction sigaction[32];
@@ -220,6 +222,7 @@ struct task_struct {
 	short swap_table;		/* current page table */
 	short swap_page;		/* current page */
 #endif NEW_SWAP
+	struct vm_area_struct *stk_vma;
 };
 
 /*
@@ -243,6 +246,7 @@ struct task_struct {
  */
 #define INIT_TASK \
 /* state etc */	{ 0,15,15,0,0,0,0, \
+/* debugregs */ { 0, },            \
 /* schedlink */	&init_task,&init_task, \
 /* signals */	{{ 0, },}, \
 /* stack */	0,0, \
@@ -275,7 +279,7 @@ struct task_struct {
 	 _LDT(0),0, \
 	 0, 0x8000, \
 /* ioperm */ 	{~0, }, \
-	 _TSS(0), \
+	 _TSS(0), 0, \
 /* 387 state */	{ { 0, }, } \
 	} \
 }
@@ -285,8 +289,7 @@ extern struct task_struct *task[NR_TASKS];
 extern struct task_struct *last_task_used_math;
 extern struct task_struct *current;
 extern unsigned long volatile jiffies;
-extern unsigned long startup_time;
-extern int jiffies_offset;
+extern struct timeval xtime;
 extern int need_resched;
 
 extern int hard_math;
@@ -294,7 +297,7 @@ extern int x86;
 extern int ignore_irq13;
 extern int wp_works_ok;
 
-#define CURRENT_TIME (startup_time+(jiffies+jiffies_offset)/HZ)
+#define CURRENT_TIME (xtime.tv_sec)
 
 extern void sleep_on(struct wait_queue ** p);
 extern void interruptible_sleep_on(struct wait_queue ** p);
@@ -398,7 +401,7 @@ extern inline void add_wait_queue(struct wait_queue ** p, struct wait_queue * wa
 		unsigned long pc;
 		__asm__ __volatile__("call 1f\n"
 			"1:\tpopl %0":"=r" (pc));
-		printk("add_wait_queue (%08x): wait->next = %08x\n",pc,wait->next);
+		printk("add_wait_queue (%08x): wait->next = %08x\n",pc,(unsigned long) wait->next);
 	}
 #endif
 	save_flags(flags);
@@ -445,7 +448,7 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 #ifdef DEBUG
 	if (!ok) {
 		printk("removed wait_queue not on list.\n");
-		printk("list = %08x, queue = %08x\n",p,wait);
+		printk("list = %08x, queue = %08x\n",(unsigned long) p, (unsigned long) wait);
 		__asm__("call 1f\n1:\tpopl %0":"=r" (ok));
 		printk("eip = %08x\n",ok);
 	}
@@ -526,5 +529,14 @@ static inline unsigned long get_limit(unsigned long segment)
  * something other than this.
  */
 extern struct desc_struct default_ldt;
+
+/* This special macro can be used to load a debugging register */
+
+#define loaddebug(register) \
+		__asm__("movl %0,%%edx\n\t" \
+			"movl %%edx,%%db" #register "\n\t" \
+			: /* no output */ \
+			:"m" (current->debugreg[register]) \
+			:"dx");
 
 #endif

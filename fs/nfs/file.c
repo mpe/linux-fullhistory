@@ -16,9 +16,11 @@
 #include <linux/stat.h>
 #include <linux/mm.h>
 #include <linux/nfs_fs.h>
+#include <linux/malloc.h>
 
 static int nfs_file_read(struct inode *, struct file *, char *, int);
 static int nfs_file_write(struct inode *, struct file *, char *, int);
+static int nfs_fsync(struct inode *, struct file *);
 extern int nfs_mmap(struct inode * inode, struct file * file,
 	      unsigned long addr, size_t len, int prot, unsigned long off);
 
@@ -32,7 +34,7 @@ static struct file_operations nfs_file_operations = {
 	nfs_mmap,		/* mmap */
 	NULL,			/* no special open is needed */
 	NULL,			/* release */
-	NULL			/* fsync */
+	nfs_fsync,		/* fsync */
 };
 
 struct inode_operations nfs_file_inode_operations = {
@@ -51,6 +53,11 @@ struct inode_operations nfs_file_inode_operations = {
 	NULL,			/* bmap */
 	NULL			/* truncate */
 };
+
+static int nfs_fsync(struct inode *inode, struct file *file)
+{
+	return 0;
+}
 
 static int nfs_file_read(struct inode *inode, struct file *file, char *buf,
 			 int count)

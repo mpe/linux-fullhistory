@@ -430,7 +430,8 @@ sock_socket(int family, int type, int protocol)
    * protocol later.
    */
   if ((type != SOCK_STREAM && type != SOCK_DGRAM &&
-       type != SOCK_SEQPACKET && type != SOCK_RAW) || protocol < 0)
+       type != SOCK_SEQPACKET && type != SOCK_RAW &&
+       type != SOCK_PACKET) || protocol < 0)
 							return(-EINVAL);
 
   /*

@@ -16,21 +16,16 @@
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-SUBDIRS	= chr_drv blk_drv FPU-emu
-
 OBJS  = sched.o sys_call.o traps.o irq.o dma.o fork.o \
 	panic.o printk.o vsprintf.o sys.o exit.o \
 	signal.o mktime.o ptrace.o ioport.o itimer.o \
-	info.o ldt.o
+	info.o ldt.o time.o
 
-all: kernel.o kernelsubdirs
+all: kernel.o
 
 kernel.o: $(OBJS)
 	$(LD) -r -o kernel.o $(OBJS)
 	sync
-
-kernelsubdirs: dummy
-	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
 
 sys_call.s: sys_call.S
 
@@ -41,11 +36,9 @@ sched.o: sched.c
 
 clean:
 	rm -f core *.o *.a *.s
-	for i in $(SUBDIRS); do (cd $$i && $(MAKE) clean); done
 
 dep:
 	$(CPP) -M *.c > .depend
-	for i in $(SUBDIRS); do (cd $$i && $(MAKE) dep) || exit; done
 
 dummy:
 

@@ -32,7 +32,7 @@
 #define IS_MYADDR	1		/* address is (one of) our own	*/
 #define IS_LOOPBACK	2		/* address is for LOOPBACK	*/
 #define IS_BROADCAST	3		/* address is a valid broadcast	*/
-
+#define IS_INVBCAST	4		/* Wrong netmask bcast not for us */
 
 /*
  * The DEVICE structure.
@@ -132,6 +132,9 @@ struct device {
   int			  (*rebuild_header)(void *eth, struct device *dev);
   unsigned short	  (*type_trans) (struct sk_buff *skb,
 					 struct device *dev);
+#define HAVE_MULTICAST			 
+  void			  (*set_multicast_list)(struct device *dev,
+  					 int num_addrs, void *addrs);
 };
 
 
@@ -175,6 +178,7 @@ extern void		netif_rx(struct sk_buff *skb);
 extern int		dev_rint(unsigned char *buff, long len, int flags,
 				 struct device * dev);
 extern void		dev_transmit(void);
+extern int		in_inet_bh(void);
 extern void		inet_bh(void *tmp);
 extern void		dev_tint(struct device *dev);
 extern int		dev_get_info(char *buffer);

@@ -45,6 +45,7 @@ struct vm_operations_struct {
 		       struct vm_area_struct * area, unsigned long address);
 	void (*wppage)(struct vm_area_struct * area, unsigned long address);
 	int (*share)(struct vm_area_struct * from, struct vm_area_struct * to, unsigned long address);
+	int (*unmap)(struct vm_area_struct *area, unsigned long, size_t);
 };
 
 extern unsigned long __bad_page(void);
@@ -84,8 +85,6 @@ extern inline unsigned long get_free_page(int priority)
 	return page;
 }
 
-/* mmap.c */
-
 /* memory.c */
 
 extern void free_page(unsigned long addr);
@@ -111,6 +110,11 @@ extern void show_mem(void);
 extern void oom(struct task_struct * task);
 extern void si_meminfo(struct sysinfo * val);
 
+/* vmalloc.c */
+
+extern void * vmalloc(unsigned long size);
+extern void vfree(void * addr);
+
 /* swap.c */
 
 extern void swap_free(unsigned long page_nr);
@@ -122,6 +126,13 @@ extern void rw_swap_page(int rw, unsigned long nr, char * buf);
 /* mmap.c */
 extern int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off);
+typedef int (*map_mergep_fnp)(const struct vm_area_struct *,
+			      const struct vm_area_struct *, void *);
+extern void merge_segments(struct vm_area_struct *, map_mergep_fnp, void *);
+extern void insert_vm_struct(struct task_struct *, struct vm_area_struct *);
+extern int ignoff_mergep(const struct vm_area_struct *,
+			 const struct vm_area_struct *, void *);
+extern int do_munmap(unsigned long, size_t);
 
 #define read_swap_page(nr,buf) \
 	rw_swap_page(READ,(nr),(buf))

@@ -11,6 +11,25 @@
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Donald Becker, <becker@super.org>
  *
+ * Fixes:
+ *		Alan Cox	:	Commented a couple of minor bits of surplus code
+ *		Alan Cox	:	Undefining IP_FORWARD doesn't include the code
+ *					(just stops a compiler warning).
+ *		Alan Cox	:	Frames with >=MAX_ROUTE record routes, strict routes or loose routes
+ *					are junked rather than corrupting things.
+ *		Alan Cox	:	Frames to bad broadcast subnets are dumped
+ *					We used to process them non broadcast and
+ *					boy could that cause havoc.
+ *		Alan Cox	:	ip_forward sets the free flag on the 
+ *					new frame it queues. Still crap because
+ *					it copies the frame but at least it 
+ *					doesn't eat memory too.
+ *		Alan Cox	:	Generic queue code and memory fixes.
+ *
+ * To Fix:
+ *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
+ *		and time stamp but that's about all.
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -38,7 +57,7 @@
 #include "arp.h"
 #include "icmp.h"
 
-#define CONFIG_IP_FORWARD
+#undef CONFIG_IP_FORWARD
 
 extern int last_retran;
 extern void sort_send(struct sock *sk);
@@ -182,19 +201,24 @@ ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long daddr,
   static int count = 0;
   int tmp;
 
-  if (saddr == 0) saddr = my_addr();
+  if (saddr == 0) 
+  	saddr = my_addr();
+  	
   DPRINTF((DBG_IP, "ip_build_header (skb=%X, saddr=%X, daddr=%X, *dev=%X,\n"
 	   "                 type=%d, opt=%X, len = %d)\n",
 	   skb, saddr, daddr, *dev, type, opt, len));
+	   
   buff = (unsigned char *)(skb + 1);
 
   /* See if we need to look up the device. */
   if (*dev == NULL) {
 	rt = rt_route(daddr, &optmem);
-	if (rt == NULL) return(-ENETUNREACH);
+	if (rt == NULL) 
+		return(-ENETUNREACH);
 
 	*dev = rt->rt_dev;
-	if (daddr != 0x0100007F) saddr = rt->rt_dev->pa_addr;
+	if (daddr != 0x0100007FL) 
+		saddr = rt->rt_dev->pa_addr;
 	raddr = rt->rt_gateway;
 
 	DPRINTF((DBG_IP, "ip_build_header: saddr set to %s\n", in_ntoa(saddr)));
@@ -204,7 +228,8 @@ ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long daddr,
 	rt = rt_route(daddr, &optmem);
 	raddr = (rt == NULL) ? 0 : rt->rt_gateway;
   }
-  if (raddr == 0) raddr = daddr;
+  if (raddr == 0)
+  	raddr = daddr;
 
   /* Now build the MAC header. */
   tmp = ip_send(skb, raddr, len, *dev, saddr);
@@ -298,6 +323,8 @@ do_options(struct iphdr *iph, struct options *opt)
 		buff++;
 		buff++;
 		for (i = 0; i < opt->loose_route.route_size; i++) {
+			if(i>=MAX_ROUTE)
+				return(1);
 			opt->loose_route.route[i] = *(unsigned long *)buff;
 			buff += 4;
 		}
@@ -313,6 +340,8 @@ do_options(struct iphdr *iph, struct options *opt)
 		buff++;
 		buff++;
 		for (i = 0; i < opt->strict_route.route_size; i++) {
+			if(i>=MAX_ROUTE)
+				return(1);
 			opt->strict_route.route[i] = *(unsigned long *)buff;
 			buff += 4;
 		}
@@ -328,6 +357,8 @@ do_options(struct iphdr *iph, struct options *opt)
 		buff++;
 		buff++;
 		for (i = 0; i < opt->record_route.route_size; i++) {
+			if(i>=MAX_ROUTE)
+				return 1;
 			opt->record_route.route[i] = *(unsigned long *)buff;
 			buff += 4;
 		}
@@ -455,9 +486,7 @@ ip_compute_csum(unsigned char * buff, int len)
 int
 ip_csum(struct iphdr *iph)
 {
-  if (iph->check == 0  || ip_fast_csum((unsigned char *)iph, iph->ihl) == 0)
-      return(0);
-  return(1);
+  return (ip_fast_csum((unsigned char *)iph, iph->ihl) != 0);
 }
 
 /* Generate a checksym for an outgoing IP datagram. */
@@ -468,6 +497,7 @@ ip_send_check(struct iphdr *iph)
    iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
 }
 
+#ifdef CONFIG_IP_FORWARD
 
 /* Forward an IP datagram to its next destination. */
 static void
@@ -543,15 +573,15 @@ ip_forward(struct sk_buff *skb, struct device *dev)
 			in_ntoa(raddr), dev2->name, skb->len));
 
   if (dev2->flags & IFF_UP) {
-	skb2 = (struct sk_buff *) kmalloc(sizeof(struct sk_buff) +
+	skb2 = (struct sk_buff *) alloc_skb(sizeof(struct sk_buff) +
 		       dev2->hard_header_len + skb->len, GFP_ATOMIC);
 	if (skb2 == NULL) {
 		printk("\nIP: No memory available for IP forward\n");
 		return;
 	}
 	ptr = (unsigned char *)(skb2 + 1);
-	skb2->lock = 0;
 	skb2->sk = NULL;
+	skb2->free = 1;
 	skb2->len = skb->len + dev2->hard_header_len;
 	skb2->mem_addr = skb2;
 	skb2->mem_len = sizeof(struct sk_buff) + skb2->len;
@@ -570,6 +600,8 @@ ip_forward(struct sk_buff *skb, struct device *dev)
 }
 
 
+#endif
+
 /* This function receives all incoming IP datagrams. */
 int
 ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
@@ -586,8 +618,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   DPRINTF((DBG_IP, "<<\n"));
 
   /* Is the datagram acceptable? */
-  if (iph->version != 4
-      || (iph->check != 0 && ip_fast_csum((unsigned char *)iph, iph->ihl) !=0)) {
+  if (iph->version != 4 || ip_fast_csum((unsigned char *)iph, iph->ihl) !=0) {
 	DPRINTF((DBG_IP, "\nIP: *** datagram error ***\n"));
 	DPRINTF((DBG_IP, "    SRC = %s   ", in_ntoa(iph->saddr)));
 	DPRINTF((DBG_IP, "    DST = %s (ignored)\n", in_ntoa(iph->daddr)));
@@ -609,13 +640,25 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #ifdef CONFIG_IP_FORWARD
 	ip_forward(skb, dev);
 #endif
+	printk("Machine %x tried to use us as a forwarder to %x but we have forwarding disabled!\n",
+			iph->saddr,iph->daddr);
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_WRITE);
 	return(0);
   }
 
+  if(brd==IS_INVBCAST)
+  {
+/*	printk("Invalid broadcast address from %x [target %x] (Probably they have a wrong netmask)\n",
+		iph->saddr,iph->daddr);*/
+  	skb->sk=NULL;
+  	kfree_skb(skb,FREE_WRITE);
+  	return(0);
+  }
+  
   /*
-   * Reassemble IP fragments. */
+   * Reassemble IP fragments. 
+   */
 
   if ((iph->frag_off & 0x0020) || (ntohs(iph->frag_off) & 0x1fff)) {
 #ifdef CONFIG_IP_DEFRAG
@@ -646,19 +689,20 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
        /*
 	* See if we need to make a copy of it.  This will
-	* only be set if more than one protpocol wants it. 
+	* only be set if more than one protocol wants it. 
 	* and then not for the last one.
 	*/
        if (ipprot->copy) {
-		skb2 = (struct sk_buff *) kmalloc (skb->mem_len, GFP_ATOMIC);
-		if (skb2 == NULL) continue;
+		skb2 = alloc_skb(skb->mem_len, GFP_ATOMIC);
+		if (skb2 == NULL) 
+			continue;
 		memcpy(skb2, skb, skb->mem_len);
 		skb2->mem_addr = skb2;
-		skb2->lock = 0;
 		skb2->h.raw = (unsigned char *)(
 				(unsigned long)skb2 +
 				(unsigned long) skb->h.raw -
 				(unsigned long)skb);
+		skb2->free=1;
 	} else {
 		skb2 = skb;
 	}
@@ -711,10 +755,11 @@ ip_queue_xmit(struct sock *sk, struct device *dev,
 	printk("IP: ip_queue_xmit dev = NULL\n");
 	return;
   }
+  IS_SKB(skb);
   skb->free = free;
   skb->dev = dev;
   skb->when = jiffies;
-
+  
   DPRINTF((DBG_IP, ">>\n"));
   ptr = (unsigned char *)(skb + 1);
   ptr += dev->hard_header_len;
@@ -754,7 +799,8 @@ ip_queue_xmit(struct sock *sk, struct device *dev,
   if (dev->flags & IFF_UP) {
 	if (sk != NULL) {
 		dev->queue_xmit(skb, dev, sk->priority);
-	} else {
+	} 
+	else {
 		dev->queue_xmit(skb, dev, SOPRI_NORMAL);
 	}
   } else {
@@ -777,29 +823,36 @@ ip_retransmit(struct sock *sk, int all)
 	/* I know this can't happen but as it does.. */
 	if(dev==NULL)
 	{
-		printk("ip_forward: NULL device bug!\n");
+		printk("ip_retransmit: NULL device bug!\n");
 		goto oops;
 	}
 
+	IS_SKB(skb);
+	
 	/*
 	 * The rebuild_header function sees if the ARP is done.
 	 * If not it sends a new ARP request, and if so it builds
 	 * the header.
 	 */
+        cli();	/* We might get interrupted by an arp reply here and fill
+		   the frame in twice. Because of the technique used this
+		   would be a little sad */
 	if (!skb->arp) {
 		if (dev->rebuild_header((struct enet_header *)(skb+1),dev)) {
+			sti();	/* Failed to rebuild - next */
 			if (!all) break;
 			skb = (struct sk_buff *)skb->link3;
 			continue;
 		}
 	}
 	skb->arp = 1;
+	sti();
 	skb->when = jiffies;
 
 	/* If the interface is (still) up and running, kick it. */
 	if (dev->flags & IFF_UP) {
 		if (sk) dev->queue_xmit(skb, dev, sk->priority);
-		  else dev->queue_xmit(skb, dev, SOPRI_NORMAL );
+	/*	  else dev->queue_xmit(skb, dev, SOPRI_NORMAL ); CANNOT HAVE SK=NULL HERE */
 	}
 
 oops:	sk->retransmits++;
@@ -812,7 +865,7 @@ oops:	sk->retransmits++;
   }
 
   /*
-   * Double the RTT time every time we retransmit. 
+   * Increase the RTT time every time we retransmit. 
    * This will cause exponential back off on how hard we try to
    * get through again.  Once we get through, the rtt will settle
    * back down reasonably quickly.
@@ -829,8 +882,22 @@ int backoff(int n)
 	 * 1, 2, 4, 8, 16, 25, 36, 49, 64, 81, 100 ...
 	 */
 
+	if(n<0)
+	{
+		printk("Backoff < 0!\n");
+		return 16;	/* Make up a value */
+	}
+	
 	if(n <= 4)
 		return 1 << n;	/* Binary exponential back off */
 	else
-		return n * n;	/* Quadratic back off */
+	{
+		if(n<255)
+			return n * n;	/* Quadratic back off */
+		else
+		{
+			printk("Overloaded backoff!\n");
+			return 255*255;
+		}
+	}
 }

@@ -23,7 +23,7 @@
 #include <linux/stat.h>
 #include <linux/locks.h>
 
-#define	NBUF	16
+#define	NBUF	32
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
@@ -261,8 +261,7 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		bh->b_dirt = 1;
 		brelse (bh);
 	}
-	inode->i_mtime = CURRENT_TIME;
-	inode->i_ctime = CURRENT_TIME;
+	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	filp->f_pos = pos;
 	inode->i_dirt = 1;
 	return written;

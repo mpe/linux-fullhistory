@@ -32,6 +32,7 @@
 #include <linux/net.h>
 #include <linux/fs.h>
 #include <linux/ddi.h>
+#include <linux/malloc.h>
 #include <stdarg.h>
 #include "unix.h"
 
@@ -578,7 +579,7 @@ unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblock)
 	if (avail <= 0) {
 		printk("UNIX: read: AVAIL IS NEGATIVE!!!\n");
 		send_sig(SIGKILL, current, 1);
-		return(-EINTR);
+		return(-EPIPE);
 	}
 
 	if ((cando = todo) > avail) cando = avail;
@@ -613,7 +614,7 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 	dprintf(1, "UNIX: write: socket not connected\n");
 	if (sock->state == SS_DISCONNECTING) {
 		send_sig(SIGPIPE, current, 1);
-		return(-EINTR);
+		return(-EPIPE);
 	}
 	return(-EINVAL);
   }
@@ -630,7 +631,7 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 	if (sock->state == SS_DISCONNECTING) {
 		dprintf(1, "UNIX: write: disconnected(SIGPIPE)\n");
 		send_sig(SIGPIPE, current, 1);
-		return(-EINTR);
+		return(-EPIPE);
 	}
   }
 
@@ -644,7 +645,7 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 	if (space <= 0) {
 		printk("UNIX: write: SPACE IS NEGATIVE!!!\n");
 		send_sig(SIGKILL, current, 1);
-		return(-EINTR);
+		return(-EPIPE);
 	}
 
 	/*
@@ -653,7 +654,7 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 	 */
 	if (sock->state == SS_DISCONNECTING) {
 		send_sig(SIGPIPE, current, 1);
-		return(-EINTR);
+		return(-EPIPE);
 	}
 	if ((cando = todo) > space) cando = space;
 	if (cando >(part = BUF_SIZE - pupd->bp_head)) cando = part;

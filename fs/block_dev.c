@@ -73,7 +73,7 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 	return written;
 }
 
-#define NBUF 16
+#define NBUF 32
 
 int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 {

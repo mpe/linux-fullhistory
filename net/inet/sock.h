@@ -12,6 +12,16 @@
  *		Corey Minyard <wf-rch!minyard@relay.EU.net>
  *		Florian La Roche <flla@stud.uni-sb.de>
  *
+ * Fixes:
+ *		Alan Cox	:	Volatiles in skbuff pointers. See
+ *					skbuff comments. May be overdone,
+ *					better to prove they can be removed
+ *					than the reverse.
+ *		Alan Cox	:	Added a zapped field for tcp to note
+ *					a socket is reset and must stay shut up
+ *		Alan Cox	:	New fields for options
+ *	Pauline Middelink	:	identd support
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -63,7 +73,9 @@ struct sock {
 				destroy,
 				ack_timed,
 				no_check,
-				exp_growth;
+				exp_growth,
+				zapped,	/* In ipx means not linked */
+				broadcast;
   int				proc;
   struct sock			*next;
   struct sock			*pair;
@@ -98,11 +110,18 @@ struct sock {
   volatile unsigned char	ack_backlog;
   unsigned char			max_ack_backlog;
   unsigned char			priority;
+  unsigned char			debug;
+  unsigned short		rcvbuf;
+  unsigned short		sndbuf;
+  unsigned short		type;	/* IPX type field */
   struct tcphdr			dummy_th;
 
   /* This part is used for the timeout functions (timer.c). */
   int				timeout;	/* What are we waiting for? */
   struct timer_list		timer;
+
+  /* identd */
+  struct socket			*socket;
 };
 
 struct proto {
@@ -168,8 +187,8 @@ struct proto {
 #define TIME_DONE	5	/* used to absorb those last few packets */
 #define SOCK_DESTROY_TIME 1000	/* about 10 seconds			*/
 
+#define PROT_SOCK	1024	/* Sockets 0-1023 can't be bound too unless you are superuser */
 
-#define PROT_SOCK	1024
 #define SHUTDOWN_MASK	3
 #define RCV_SHUTDOWN	1
 #define SEND_SHUTDOWN	2

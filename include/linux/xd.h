@@ -68,7 +68,6 @@
 #define XD_RETRIES	4	/* maximum 4 retries */
 
 #undef DEBUG			/* define for debugging output */
-#undef XD_OVERRIDE		/* define to override auto-detection */
 
 #ifdef DEBUG
 	#define DEBUG_STARTUP	/* debug driver initialisation */
@@ -76,7 +75,7 @@
 	#define DEBUG_READWRITE	/* debug each read/write command */
 	#define DEBUG_OTHER	/* debug misc. interrupt/DMA stuff */
 	#define DEBUG_COMMAND	/* debug each controller command */
-#endif DEBUG
+#endif /* DEBUG */
 
 /* this structure defines the XT drives and their types */
 typedef struct {
@@ -105,7 +104,8 @@ typedef struct {
 	char *name;
 } XD_SIGNATURE;
 
-u_long xd_init(u_long mem_start,u_long mem_end);
+u_long xd_init (u_long mem_start,u_long mem_end);
+void xd_setup (char *command,int *integers);
 static u_char xd_detect (u_char *controller,u_char **address);
 static u_char xd_initdrives (void (*init_drive)(u_char drive));
 static void xd_geninit (void);
@@ -125,17 +125,13 @@ static inline u_char xd_waitport (u_short port,u_char flags,u_char mask,u_long t
 static u_int xd_command (u_char *command,u_char mode,u_char *indata,u_char *outdata,u_char *sense,u_long timeout);
 
 /* card specific setup and geometry gathering code */
-#ifndef XD_OVERRIDE
-static void xd_dtc5150x_init_controller (u_char *address);
-static void xd_dtc5150x_init_drive (u_char drive);
-static void xd_wd1004a27x_init_controller (u_char *address);
-static void xd_wd1004a27x_init_drive (u_char drive);
-static void xd_seagate11_init_controller (u_char *address);
-static void xd_seagate11_init_drive (u_char drive);
+static void xd_dtc_init_controller (u_char *address);
+static void xd_dtc_init_drive (u_char drive);
+static void xd_wd_init_controller (u_char *address);
+static void xd_wd_init_drive (u_char drive);
+static void xd_seagate_init_controller (u_char *address);
+static void xd_seagate_init_drive (u_char drive);
 static void xd_setparam (u_char command,u_char drive,u_char heads,u_short cylinders,u_short rwrite,u_short wprecomp,u_char ecc);
-#endif XD_OVERRIDE
-
-static void xd_override_init_controller (u_char *address);
 static void xd_override_init_drive (u_char drive);
 
-#endif _LINUX_XD_H
+#endif /* _LINUX_XD_H */

@@ -19,6 +19,7 @@
 #include <linux/unistd.h>
 #include <linux/segment.h>
 #include <linux/ptrace.h>
+#include <linux/malloc.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -35,36 +36,33 @@ long last_pid=0;
 
 static int find_empty_process(void)
 {
-	int i, task_nr, tasks_free;
+	int free_task;
+	int i, tasks_free;
 	int this_user_tasks;
 
 repeat:
 	if ((++last_pid) & 0xffff8000)
 		last_pid=1;
 	this_user_tasks = 0;
-	for(i=0 ; i < NR_TASKS ; i++) {
-		if (!task[i])
+	tasks_free = 0;
+	free_task = -EAGAIN;
+	i = NR_TASKS;
+	while (--i > 0) {
+		if (!task[i]) {
+			free_task = i;
+			tasks_free++;
 			continue;
+		}
 		if (task[i]->uid == current->uid)
 			this_user_tasks++;
 		if (task[i]->pid == last_pid || task[i]->pgrp == last_pid)
 			goto repeat;
 	}
-	if (this_user_tasks > MAX_TASKS_PER_USER && current->uid)
-		return -EAGAIN;
-
-/* Only the super-user can fill the last MIN_TASKS_LEFT_FOR_ROOT slots */
-
-	tasks_free = 0; task_nr = 0;
-	for (i=NR_TASKS-1; i > 0; i--) {
-		if (!task[i]) {
-			tasks_free++;
-			task_nr = i;
-		}
-	} 
-	if (tasks_free <= MIN_TASKS_LEFT_FOR_ROOT && current->uid)
-		return -EAGAIN;
-	return task_nr;
+	if (tasks_free <= MIN_TASKS_LEFT_FOR_ROOT ||
+	    this_user_tasks > MAX_TASKS_PER_USER)
+		if (current->uid)
+			return -EAGAIN;
+	return free_task;
 }
 
 static struct file * copy_fd(struct file * old_file)
@@ -94,6 +92,7 @@ int dup_mmap(struct task_struct * tsk)
 	struct vm_area_struct * mpnt, **p, *tmp;
 
 	tsk->mmap = NULL;
+	tsk->stk_vma = NULL;
 	p = &tsk->mmap;
 	for (mpnt = current->mmap ; mpnt ; mpnt = mpnt->vm_next) {
 		tmp = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
@@ -106,6 +105,8 @@ int dup_mmap(struct task_struct * tsk)
 			tmp->vm_inode->i_count++;
 		*p = tmp;
 		p = &tmp->vm_next;
+		if (current->stk_vma == mpnt)
+			tsk->stk_vma = tmp;
 	}
 	return 0;
 }

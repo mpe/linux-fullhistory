@@ -13,6 +13,7 @@
 #include <linux/fcntl.h>
 #include <linux/string.h>
 #include <linux/kernel.h>
+#include <linux/malloc.h>
 #include <linux/mm.h>
 
 #include <asm/segment.h>	/* for fs functions */

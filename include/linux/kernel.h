@@ -7,7 +7,6 @@
 
 #ifdef __KERNEL__
 
-#include <linux/config.h>
 #include <linux/linkage.h>
 
 #define INT_MAX		((int)(~0U>>1))
@@ -20,6 +19,15 @@
 
 int verify_area(int type, void * addr, unsigned long count);
 
+#define	KERN_EMERG	"<0>"	/* system is unusable			*/
+#define	KERN_ALERT	"<1>"	/* action must be taken immediately	*/
+#define	KERN_CRIT	"<2>"	/* critical conditions			*/
+#define	KERN_ERR	"<3>"	/* error conditions			*/
+#define	KERN_WARNING	"<4>"	/* warning conditions			*/
+#define	KERN_NOTICE	"<5>"	/* normal but significant condition	*/
+#define	KERN_INFO	"<6>"	/* informational			*/
+#define	KERN_DEBUG	"<7>"	/* debug-level messages			*/
+
 extern void math_error(void);
 volatile void panic(const char * fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
@@ -29,31 +37,6 @@ int sprintf(char * buf, const char * fmt, ...);
 
 asmlinkage int printk(const char * fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
-
-#ifdef CONFIG_DEBUG_MALLOC
-#define kmalloc(a,b) deb_kmalloc(__FILE__,__LINE__, a,b)
-#define kfree_s(a,b) deb_kfree_s(__FILE__,__LINE__,a,b)
-
-void *deb_kmalloc(const char *deb_file, unsigned short deb_line,unsigned int size, int priority);
-void deb_kfree_s (const char *deb_file, unsigned short deb_line,void * obj, int size);
-void deb_kcheck_s(const char *deb_file, unsigned short deb_line,void * obj, int size);
-
-#define kfree(a) deb_kfree_s(__FILE__,__LINE__, a,0)
-#define kcheck(a) deb_kcheck_s(__FILE__,__LINE__, a,0)
-#define kcheck_s(a,b) deb_kcheck_s(__FILE__,__LINE__, a,b)
-
-#else /* !debug */
-
-void * kmalloc(unsigned int size, int priority);
-void kfree_s(void * obj, int size);
-
-#define kcheck_s(a,b) 0
-
-#define kfree(x) kfree_s((x), 0)
-#define kcheck(x) kcheck_s((x), 0)
-
-#endif
-
 
 /*
  * This is defined as a macro, but at some point this might become a

@@ -18,6 +18,7 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/mm.h>
+#include <linux/malloc.h>
 
 static int isofs_readdir(struct inode *, struct file *, struct dirent *, int);
 
@@ -63,6 +64,8 @@ struct lookup_cache cache = {0,};
 static int isofs_readdir(struct inode * inode, struct file * filp,
 	struct dirent * dirent, int count)
 {
+	unsigned long bufsize = ISOFS_BUFFER_SIZE(inode);
+	unsigned char bufbits = ISOFS_BUFFER_BITS(inode);
 	unsigned int block,offset,i, j;
 	char c = 0;
 	int inode_number;
@@ -76,49 +79,56 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
 	
-	offset = filp->f_pos & (ISOFS_BUFFER_SIZE(inode) - 1);
-	block = isofs_bmap(inode,(filp->f_pos)>>ISOFS_BUFFER_BITS(inode));
-	if (!block || !(bh = bread(inode->i_dev,block,ISOFS_BUFFER_SIZE(inode))))
+	offset = filp->f_pos & (bufsize - 1);
+	block = isofs_bmap(inode,filp->f_pos>>bufbits);
+	if (!block || !(bh = bread(inode->i_dev,block,bufsize)))
 		return 0;
 	
 	while (filp->f_pos < inode->i_size) {
 #ifdef DEBUG
-		printk("Block, offset: %x %x %x\n",block, offset, filp->f_pos);
+		printk("Block, offset: %x %x %x\n",
+		       block, offset, filp->f_pos);
 #endif
-		de = (struct iso_directory_record *) (offset + bh->b_data);
-		inode_number = (block << ISOFS_BUFFER_BITS(inode))+(offset & (ISOFS_BUFFER_SIZE(inode) - 1));
+		de = (struct iso_directory_record *) (bh->b_data + offset);
+		inode_number = (block << bufbits) + (offset & (bufsize - 1));
 		
-		/* If the length byte is zero, we should move on to the next CDROM sector.
-		   If we are at the end of the directory, we kick out of the while loop. */
+		/* If the length byte is zero, we should move on to the next
+		   CDROM sector.  If we are at the end of the directory, we
+		   kick out of the while loop. */
 		
-		if (*((char*) de) == 0)  {
+		if (*((unsigned char *) de) == 0)  {
 			brelse(bh);
 			offset = 0;
-			filp->f_pos =(filp->f_pos & ~(ISOFS_BLOCK_SIZE - 1))+ISOFS_BLOCK_SIZE;
-			block = isofs_bmap(inode,(filp->f_pos)>>ISOFS_BUFFER_BITS(inode));
-			if (!block || !(bh = bread(inode->i_dev,block,ISOFS_BUFFER_SIZE(inode))))
+			filp->f_pos = ((filp->f_pos & ~(ISOFS_BLOCK_SIZE - 1))
+				       + ISOFS_BLOCK_SIZE);
+			block = isofs_bmap(inode,(filp->f_pos)>>bufbits);
+			if (!block
+			    || !(bh = bread(inode->i_dev,block,bufsize)))
 				return 0;
 			continue;
 		}
 
-		/* Make sure that the entire directory record is in the current bh block.
-		   If not, we malloc a buffer, and put the two halves together, so that
-		   we can cleanly read the block */
-		
-		old_offset = offset;
-		offset += *((unsigned char*) de);
-		filp->f_pos += *((unsigned char*) de);
+		/* Make sure that the entire directory record is in the
+		   current bh block.
+		   If not, we malloc a buffer, and put the two halves together,
+		   so that we can cleanly read the block */
 
-		if (offset >=  ISOFS_BUFFER_SIZE(inode)) {
+		old_offset = offset;
+		offset += *((unsigned char *) de);
+		filp->f_pos += *((unsigned char *) de);
+
+		if (offset >=  bufsize) {
 			cpnt = kmalloc(1 << ISOFS_BLOCK_BITS, GFP_KERNEL);
-			memcpy(cpnt, bh->b_data, ISOFS_BUFFER_SIZE(inode));
-			de = (struct iso_directory_record *) (old_offset + cpnt);
+			memcpy(cpnt, bh->b_data, bufsize);
+			de = (struct iso_directory_record *)
+				((char *)cpnt + old_offset);
 			brelse(bh);
-			offset = filp->f_pos & (ISOFS_BUFFER_SIZE(inode) - 1);
-			block = isofs_bmap(inode,(filp->f_pos)>> ISOFS_BUFFER_BITS(inode));
-			if (!block || !(bh = bread(inode->i_dev,block,ISOFS_BUFFER_SIZE(inode))))
+			offset = filp->f_pos & (bufsize - 1);
+			block = isofs_bmap(inode,(filp->f_pos)>> bufbits);
+			if (!block
+			    || !(bh = bread(inode->i_dev,block,bufsize)))
 				return 0;
-			memcpy(cpnt+ISOFS_BUFFER_SIZE(inode), bh->b_data, ISOFS_BUFFER_SIZE(inode));
+			memcpy((char *)cpnt+bufsize, bh->b_data, bufsize);
 		}
 		
 		/* Handle the case of the '.' directory */
@@ -138,7 +148,8 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 			put_fs_byte('.',dirent->d_name+1);
 			i = 2;
 			dpnt = "..";
-			if((inode->i_sb->u.isofs_sb.s_firstdatazone << ISOFS_BUFFER_BITS(inode)) != inode->i_ino)
+			if((inode->i_sb->u.isofs_sb.s_firstdatazone
+			    << bufbits) != inode->i_ino)
 				inode_number = inode->u.isofs_i.i_backlink;
 			else
 				inode_number = inode->i_ino;

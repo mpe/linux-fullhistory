@@ -178,6 +178,7 @@ static void set_inode_dtime (struct inode * inode,
 			(((inode->i_ino - 1) %
 			EXT2_INODES_PER_GROUP(inode->i_sb)) %
 			EXT2_INODES_PER_BLOCK(inode->i_sb));
+	raw_inode->i_links_count = 0;
 	raw_inode->i_dtime = CURRENT_TIME;
 	bh->b_dirt = 1;
 	brelse (bh);
@@ -258,8 +259,8 @@ void ext2_free_inode (struct inode * inode)
 	es->s_free_inodes_count++;
 	sb->u.ext2_sb.s_sbh->b_dirt = 1;
 	sb->s_dirt = 1;
-	unlock_super (sb);
 	clear_inode (inode);
+	unlock_super (sb);
 }
 
 /*

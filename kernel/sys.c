@@ -4,11 +4,11 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/tty.h>
 #include <linux/kernel.h>
-#include <linux/config.h>
 #include <linux/times.h>
 #include <linux/utsname.h>
 #include <linux/param.h>
@@ -17,6 +17,7 @@
 #include <linux/string.h>
 #include <linux/ptrace.h>
 #include <linux/stat.h>
+#include <linux/mman.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -25,12 +26,6 @@
  * this indicates wether you can reboot with ctrl-alt-del: the default is yes
  */
 static int C_A_D = 1;
-
-/* 
- * The timezone where the local system is located.  Used as a default by some
- * programs who obtain this value by using gettimeofday.
- */
-struct timezone sys_tz = { 0, 0};
 
 extern int session_of_pgrp(int pgrp);
 extern void adjust_clock(void);
@@ -328,20 +323,6 @@ asmlinkage int sys_old_syscall(void)
 	return -ENOSYS;
 }
 
-asmlinkage int sys_time(long * tloc)
-{
-	int i, error;
-
-	i = CURRENT_TIME;
-	if (tloc) {
-		error = verify_area(VERIFY_WRITE, tloc, 4);
-		if (error)
-			return error;
-		put_fs_long(i,(unsigned long *)tloc);
-	}
-	return i;
-}
-
 /*
  * Unprivileged users may change the real user id to the effective uid
  * or vice versa.  (BSD-style)
@@ -403,15 +384,6 @@ asmlinkage int sys_setuid(uid_t uid)
 	return(0);
 }
 
-asmlinkage int sys_stime(long * tptr)
-{
-	if (!suser())
-		return -EPERM;
-	startup_time = get_fs_long((unsigned long *)tptr) - jiffies/HZ;
-	jiffies_offset = 0;
-	return 0;
-}
-
 asmlinkage int sys_times(struct tms * tbuf)
 {
 	if (tbuf) {
@@ -436,12 +408,15 @@ asmlinkage int sys_brk(unsigned long brk)
 		return current->brk;
 	newbrk = PAGE_ALIGN(brk);
 	oldbrk = PAGE_ALIGN(current->brk);
+	if (oldbrk == newbrk)
+		return current->brk = brk;
+
 	/*
 	 * Always allow shrinking brk
 	 */
 	if (brk <= current->brk) {
 		current->brk = brk;
-		unmap_page_range(newbrk, oldbrk-newbrk);
+		do_munmap(newbrk, oldbrk-newbrk);
 		return brk;
 	}
 	/*
@@ -474,7 +449,9 @@ asmlinkage int sys_brk(unsigned long brk)
 	 * Ok, we have probably got enough memory - let it rip.
 	 */
 	current->brk = brk;
-	zeromap_page_range(oldbrk, newbrk-oldbrk, PAGE_COPY);
+	do_mmap(NULL, oldbrk, newbrk-oldbrk,
+		PROT_READ|PROT_WRITE|PROT_EXEC,
+		MAP_FIXED|MAP_PRIVATE, 0);
 	return brk;
 }
 
@@ -766,126 +743,6 @@ asmlinkage int sys_getrusage(int who, struct rusage *ru)
 	if (who != RUSAGE_SELF && who != RUSAGE_CHILDREN)
 		return -EINVAL;
 	return getrusage(current, who, ru);
-}
-
-#define LATCH ((1193180 + HZ/2)/HZ)
-
-/*
- * This version of gettimeofday has near microsecond resolution.
- * It was inspired by Steve McCanne's microtime-i386 for BSD.  -- jrs
- */
-static inline void do_gettimeofday(struct timeval *tv)
-{
-	unsigned long nowtime;
-	long count;
-
-#ifdef __i386__
-	cli();
-	/* timer count may underflow right here */
-	outb_p(0x00, 0x43);	/* latch the count ASAP */
-	nowtime = jiffies;	/* must be saved inside cli/sti */
-	count = inb_p(0x40);	/* read the latched count */
-	count |= inb_p(0x40) << 8;
-	/* we know probability of underflow is always MUCH less than 1% */
-	if (count < (LATCH - LATCH/100))
-		sti();
-	else {
-		/* check for pending timer interrupt */
-		outb_p(0x0a, 0x20);
-		if (inb(0x20) & 1)
-			nowtime++;
-		sti();
-	}
-	nowtime += jiffies_offset;
-	tv->tv_sec = startup_time + CT_TO_SECS(nowtime);
-	/* the correction term is always in the range [0, 1) clocktick */
-	tv->tv_usec = CT_TO_USECS(nowtime)
-		+ ((LATCH - 1) - count)*(1000000/HZ)/LATCH;
-#else /* not __i386__ */
-	nowtime = jiffies + jiffes_offset;
-	tv->tv_sec = startup_time + CT_TO_SECS(nowtime);
-	tv->tv_usec = CT_TO_USECS(nowtime);
-#endif /* not __i386__ */
-}
-
-asmlinkage int sys_gettimeofday(struct timeval *tv, struct timezone *tz)
-{
-	int error;
-
-	if (tv) {
-		struct timeval ktv;
-		error = verify_area(VERIFY_WRITE, tv, sizeof *tv);
-		if (error)
-			return error;
-		do_gettimeofday(&ktv);
-		put_fs_long(ktv.tv_sec, (unsigned long *) &tv->tv_sec);
-		put_fs_long(ktv.tv_usec, (unsigned long *) &tv->tv_usec);
-	}
-	if (tz) {
-		error = verify_area(VERIFY_WRITE, tz, sizeof *tz);
-		if (error)
-			return error;
-		put_fs_long(sys_tz.tz_minuteswest, (unsigned long *) tz);
-		put_fs_long(sys_tz.tz_dsttime, ((unsigned long *) tz)+1);
-	}
-	return 0;
-}
-
-/*
- * The first time we set the timezone, we will warp the clock so that
- * it is ticking GMT time instead of local time.  Presumably, 
- * if someone is setting the timezone then we are running in an
- * environment where the programs understand about timezones.
- * This should be done at boot time in the /etc/rc script, as
- * soon as possible, so that the clock can be set right.  Otherwise,
- * various programs will get confused when the clock gets warped.
- */
-asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
-{
-	static int	firsttime = 1;
-
-	if (!suser())
-		return -EPERM;
-	if (tz) {
-		sys_tz.tz_minuteswest = get_fs_long((unsigned long *) tz);
-		sys_tz.tz_dsttime = get_fs_long(((unsigned long *) tz)+1);
-		if (firsttime) {
-			firsttime = 0;
-			if (!tv)
-				adjust_clock();
-		}
-	}
-	if (tv) {
-		int sec, usec;
-
-		sec = get_fs_long((unsigned long *)tv);
-		usec = get_fs_long(((unsigned long *)tv)+1);
-	
-		startup_time = sec - jiffies/HZ;
-		jiffies_offset = usec * HZ / 1000000 - jiffies%HZ;
-	}
-	return 0;
-}
-
-/*
- * Adjust the time obtained from the CMOS to be GMT time instead of
- * local time.
- * 
- * This is ugly, but preferable to the alternatives.  Otherwise we
- * would either need to write a program to do it in /etc/rc (and risk
- * confusion if the program gets run more than once; it would also be 
- * hard to make the program warp the clock precisely n hours)  or
- * compile in the timezone information into the kernel.  Bad, bad....
- *
- * XXX Currently does not adjust for daylight savings time.  May not
- * need to do anything, depending on how smart (dumb?) the BIOS
- * is.  Blast it all.... the best thing to do not depend on the CMOS
- * clock at all, but get the time via NTP or timed if you're on a 
- * network....				- TYT, 1/1/92
- */
-void adjust_clock(void)
-{
-	startup_time += sys_tz.tz_minuteswest*60;
 }
 
 asmlinkage int sys_umask(int mask)

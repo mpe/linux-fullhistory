@@ -17,9 +17,11 @@
 #include <linux/errno.h>
 #include <linux/mman.h>
 #include <linux/string.h>
+#include <linux/malloc.h>
+#include <linux/nfs_fs.h>
+
 #include <asm/segment.h>
 #include <asm/system.h>
-#include <linux/nfs_fs.h>
 
 extern int share_page(struct vm_area_struct * area, struct task_struct * tsk,
 	struct inode * inode, unsigned long address, unsigned long error_code,
@@ -41,6 +43,7 @@ struct vm_operations_struct nfs_file_mmap = {
 	nfs_file_mmap_nopage,	/* nopage */
 	NULL,			/* wppage */
 	file_mmap_share,	/* share */
+	NULL,			/* unmap */
 };
 
 
@@ -75,8 +78,8 @@ int nfs_mmap(struct inode * inode, struct file * file,
 	inode->i_count++;
 	mpnt->vm_offset = off;
 	mpnt->vm_ops = &nfs_file_mmap;
-	mpnt->vm_next = current->mmap;
-	current->mmap = mpnt;
+	insert_vm_struct(current, mpnt);
+	merge_segments(current->mmap, NULL, NULL);
 	return 0;
 }
 

@@ -8,19 +8,16 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 .c.o:
-	$(CC) $(CFLAGS) \
-	-c -o $*.o $<
+	$(CC) $(CFLAGS) -c -o $*.o $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.s:
-	$(CC) $(CFLAGS) \
-	-S -o $*.s $<
+	$(CC) $(CFLAGS) -S -o $*.s $<
 
 
-OBJS	= Space.o sock.o utils.o route.o proc.o timer.o protocol.o loopback.o \
-	  eth.o packet.o arp.o dev.o 8390.o wd.o ne.o el2.o hp.o plip.o \
-	  slip.o slhc.o d_link.o auto_irq.o ip.o raw.o icmp.o tcp.o udp.o\
-	  lance.o 3c509.o #ip-frag.o
+OBJS	= sock.o utils.o route.o proc.o timer.o protocol.o loopback.o \
+	  eth.o packet.o arp.o dev.o ip.o raw.o icmp.o tcp.o udp.o \
+	  datagram.o skbuff.o
 
 ifdef CONFIG_INET
 
@@ -33,44 +30,6 @@ inet.o:
 		echo | $(AS) -o inet.o
 
 endif
-
-CARDS :=
-include	CONFIG
-
-
-Space.o:	Space.c CONFIG /usr/include/linux/autoconf.h
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(OPTS) $(CARDS) $(DL_OPTS) \
-							-c $< -o $@
-
-8390.o:		8390.c CONFIG
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(CARDS) -c $< -o $@
-
-wd.o:		wd.c CONFIG
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(WD_OPTS) -c $< -o $@
-
-el2.o:		el2.c CONFIG el2reg.h
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(EL2_OPTS) -c $< -o $@
-
-ne.o:		ne.c CONFIG
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(NE_OPTS) -c $< -o $@
-
-hp.o:		hp.c CONFIG
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(HP_OPTS) -c $< -o $@
-
-plip.o:		plip.c CONFIG
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(PLIP_OPTS) -c $< -o $@
-
-slip.o:		slip.c CONFIG
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(SLIP_OPTS) -c $< -o $@
-
-d_link.o:	d_link.c CONFIG
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(DL_OPTS) -c $< -o $@
-
-lance.o:	lance.c CONFIG
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(AT_OPTS) -c $< -o $@
-
-3c509.o:	3c509.c CONFIG
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(EL3_OPTS) -c $< -o $@
 
 subdirs:	dummy
 		for i in $(SUBDIRS); do (cd $$i; $(MAKE)); done

@@ -22,7 +22,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
 	 *  POSIX.1 says that O_NONBLOCK means return with the FIFO
 	 *  opened, even when there is no process writing the FIFO.
 	 */
-		filp->f_op = &connecting_pipe_fops;
+		filp->f_op = &connecting_fifo_fops;
 		if (!PIPE_READERS(*inode)++)
 			wake_up(&PIPE_WRITE_WAIT(*inode));
 		if (!(filp->f_flags & O_NONBLOCK) && !PIPE_WRITERS(*inode)) {
@@ -40,7 +40,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
 		while (PIPE_WR_OPENERS(*inode))
 			interruptible_sleep_on(&PIPE_READ_WAIT(*inode));
 		if (PIPE_WRITERS(*inode))
-			filp->f_op = &read_pipe_fops;
+			filp->f_op = &read_fifo_fops;
 		if (retval && !--PIPE_READERS(*inode))
 			wake_up(&PIPE_WRITE_WAIT(*inode));
 		break;
@@ -55,7 +55,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
 			retval = -ENXIO;
 			break;
 		}
-		filp->f_op = &write_pipe_fops;
+		filp->f_op = &write_fifo_fops;
 		if (!PIPE_WRITERS(*inode)++)
 			wake_up(&PIPE_READ_WAIT(*inode));
 		if (!PIPE_READERS(*inode)) {
@@ -83,7 +83,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
 	 *  This implementation will NEVER block on a O_RDWR open, since
 	 *  the process can at least talk to itself.
 	 */
-		filp->f_op = &rdwr_pipe_fops;
+		filp->f_op = &rdwr_fifo_fops;
 		if (!PIPE_READERS(*inode)++)
 			wake_up(&PIPE_WRITE_WAIT(*inode));
 		while (PIPE_WR_OPENERS(*inode))

@@ -14,6 +14,7 @@
 #include <linux/resource.h>
 #include <linux/mm.h>
 #include <linux/tty.h>
+#include <linux/malloc.h>
 
 #include <asm/segment.h>
 extern void shm_exit (void);

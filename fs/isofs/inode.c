@@ -13,6 +13,7 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/locks.h>
+#include <linux/malloc.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -316,32 +317,33 @@ int isofs_bmap(struct inode * inode,int block)
 
 void isofs_read_inode(struct inode * inode)
 {
+	unsigned long bufsize = ISOFS_BUFFER_SIZE(inode);
 	struct buffer_head * bh;
+	struct iso_directory_record * raw_inode;
 	unsigned char *pnt = NULL;
 	void *cpnt = NULL;
-	struct iso_directory_record * raw_inode;
 	int high_sierra;
 	int block;
 	int i;
 
 	block = inode->i_ino >> ISOFS_BUFFER_BITS(inode);
-	if (!(bh=bread(inode->i_dev,block, ISOFS_BUFFER_SIZE(inode))))
+	if (!(bh=bread(inode->i_dev,block, bufsize)))
 		panic("unable to read i-node block");
 	
-	pnt = ((unsigned char *) bh->b_data) + (inode->i_ino & (ISOFS_BUFFER_SIZE(inode) - 1));
-	
+	pnt = ((unsigned char *) bh->b_data
+	       + (inode->i_ino & (bufsize - 1)));
 	raw_inode = ((struct iso_directory_record *) pnt);
 	high_sierra = inode->i_sb->u.isofs_sb.s_high_sierra;
 
-
-	if ((inode->i_ino & (ISOFS_BUFFER_SIZE(inode) - 1)) + *pnt > ISOFS_BUFFER_SIZE(inode)){
+	if ((inode->i_ino & (bufsize - 1)) + *pnt > bufsize){
 		cpnt = kmalloc(1 << ISOFS_BLOCK_BITS, GFP_KERNEL);
-		memcpy(cpnt, bh->b_data, ISOFS_BUFFER_SIZE(inode));
+		memcpy(cpnt, bh->b_data, bufsize);
 		brelse(bh);
-		if (!(bh = bread(inode->i_dev,++block, ISOFS_BUFFER_SIZE(inode))))
+		if (!(bh = bread(inode->i_dev,++block, bufsize)))
 			panic("unable to read i-node block");
-		memcpy(cpnt+ISOFS_BUFFER_SIZE(inode), bh->b_data, ISOFS_BUFFER_SIZE(inode));
-		pnt = ((unsigned char *) cpnt) + (inode->i_ino & (ISOFS_BUFFER_SIZE(inode) - 1));
+		memcpy((char *)cpnt + bufsize, bh->b_data, bufsize);
+		pnt = ((unsigned char *) cpnt
+		       + (inode->i_ino & (bufsize - 1)));
 		raw_inode = ((struct iso_directory_record *) pnt);
 	};
 
@@ -494,7 +496,10 @@ void isofs_read_inode(struct inode * inode)
    to change the inode numbers and eliminate this function.
 */
 
-int isofs_lookup_grandparent(struct inode * parent, int extent) {
+int isofs_lookup_grandparent(struct inode * parent, int extent)
+{
+	unsigned long bufsize = ISOFS_BUFFER_SIZE(parent);
+	unsigned char bufbits = ISOFS_BUFFER_BITS(parent);
 	unsigned int block,offset;
 	int parent_dir, inode_number;
 	int old_offset;
@@ -504,105 +509,110 @@ int isofs_lookup_grandparent(struct inode * parent, int extent) {
 	struct iso_directory_record * de;
 	
 	offset = 0;
-	block = extent << (ISOFS_BLOCK_BITS - ISOFS_BUFFER_BITS(parent));
-	if (!(bh = bread(parent->i_dev, block, ISOFS_BUFFER_SIZE(parent))))  return 0;
+	block = extent << (ISOFS_BLOCK_BITS - bufbits);
+	if (!(bh = bread(parent->i_dev, block, bufsize)))  return -1;
 	
 	while (1 == 1) {
-		de = (struct iso_directory_record *) (offset + bh->b_data);
+		de = (struct iso_directory_record *) (bh->b_data + offset);
+		if (*((unsigned char *) de) == 0) 
+		{
+			brelse(bh);
+			return -1;
+		}
 		
-		if (*((char*) de) == 0) 
-			{
-				brelse(bh);
-				return -1;
-			}
-		
-		offset += *((unsigned char*) de);
-		
-		if (offset >=  ISOFS_BUFFER_SIZE(parent)) 
-			{
-				printk(".. Directory not in first block of directory.\n");
-				brelse(bh);
-				return -1;
-			}
+		offset += *((unsigned char *) de);
+
+		if (offset >= bufsize) 
+		{
+			printk(".. Directory not in first block"
+			       " of directory.\n");
+			brelse(bh);
+			return -1;
+		}
 		
 		if (de->name_len[0] == 1 && de->name[0] == 1) 
-			{
-				parent_dir = find_rock_ridge_relocation(de, parent);
-				brelse(bh);
-				break;
-			};
+		{
+			parent_dir = find_rock_ridge_relocation(de, parent);
+			brelse(bh);
+			break;
+		}
 	}
 #ifdef DEBUG
 	printk("Parent dir:%x\n",parent_dir);
 #endif
 	/* Now we know the extent where the parent dir starts on.  We have no
-	   idea how long it is, so we just start reading until we either find it
-	   or we find some kind of unreasonable circumstance. */
+	   idea how long it is, so we just start reading until we either find
+	   it or we find some kind of unreasonable circumstance. */
 	
 	result = -1;
-	
-	offset = 0;
-	block = parent_dir << (ISOFS_BLOCK_BITS - ISOFS_BUFFER_BITS(parent));
-	if (!block || !(bh = bread(parent->i_dev,block, ISOFS_BUFFER_SIZE(parent))))
-		return 0;
-	
-	while (1==1) {
-		de = (struct iso_directory_record *) (offset + bh->b_data);
-		inode_number = (block << ISOFS_BUFFER_BITS(parent))+(offset & (ISOFS_BUFFER_SIZE(parent) - 1));
-		
-		/* If the length byte is zero, we should move on to the next CDROM sector.
-		   If we are at the end of the directory, we kick out of the while loop. */
-		
-		if (*((char*) de) == 0) 
-			{
-				brelse(bh);
-				offset = 0;
-				block++;
-				if(block & 1) return -1;
-				if (!block || !(bh = bread(parent->i_dev,block, ISOFS_BUFFER_SIZE(parent))))
-					return -1;
-				continue;
-			}
-		
-		/* Make sure that the entire directory record is in the current bh block.
-		   If not, we malloc a buffer, and put the two halves together, so that
-		   we can cleanly read the block */
-		
-		old_offset = offset;
-		offset += *((unsigned char*) de);
 
-		if (offset >=  ISOFS_BUFFER_SIZE(parent)) 
-			{
-				cpnt = kmalloc(1<<ISOFS_BLOCK_BITS,GFP_KERNEL);
-				memcpy(cpnt, bh->b_data, ISOFS_BUFFER_SIZE(parent));
-				de = (struct iso_directory_record *) (old_offset + cpnt);
-				brelse(bh);
-				offset -= ISOFS_BUFFER_SIZE(parent);
-				block++;
-				if((block & 1) == 0) return -1;
-				if (!(bh = bread(parent->i_dev,block, ISOFS_BUFFER_SIZE(parent))))
-					return -1;
-				memcpy(cpnt+ISOFS_BUFFER_SIZE(parent), bh->b_data, ISOFS_BUFFER_SIZE(parent));
-			}
+	offset = 0;
+	block = parent_dir << (ISOFS_BLOCK_BITS - bufbits);
+	if (!block || !(bh = bread(parent->i_dev,block, bufsize)))
+		return -1;
+	
+	for(;;)
+	{
+		de = (struct iso_directory_record *) (bh->b_data + offset);
+		inode_number = (block << bufbits)+(offset & (bufsize - 1));
+		
+		/* If the length byte is zero, we should move on to the next
+		   CDROM sector.  If we are at the end of the directory, we
+		   kick out of the while loop. */
+		
+		if (*((unsigned char *) de) == 0) 
+		{
+			brelse(bh);
+			offset = 0;
+			block++;
+			if(block & 1) return -1;
+			if (!block
+			    || !(bh = bread(parent->i_dev,block, bufsize)))
+				return -1;
+			continue;
+		}
+		
+		/* Make sure that the entire directory record is in the current
+		   bh block.  If not, we malloc a buffer, and put the two
+		   halves together, so that we can cleanly read the block.  */
+
+		old_offset = offset;
+		offset += *((unsigned char *) de);
+
+		if (offset >= bufsize)
+		{
+			cpnt = kmalloc(1<<ISOFS_BLOCK_BITS,GFP_KERNEL);
+			memcpy(cpnt, bh->b_data, bufsize);
+			de = (struct iso_directory_record *)
+				((char *)cpnt + old_offset);
+			brelse(bh);
+			offset -= bufsize;
+			block++;
+			if((block & 1) == 0) return -1;
+			if (!(bh = bread(parent->i_dev,block,bufsize)))
+				return -1;
+			memcpy((char *)cpnt+bufsize, bh->b_data, bufsize);
+		}
 		
 		if (find_rock_ridge_relocation(de, parent) == extent){
 			result = inode_number;
 			goto out;
-		};
+		}
 		
 		if (cpnt) {
 			kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
 			cpnt = NULL;
-		};
+		}
 	}
-	/* We go here for any condition we cannot handle.  We also drop through
-	   to here at the end of the directory. */
-	
+
+	/* We go here for any condition we cannot handle.
+	   We also drop through to here at the end of the directory. */
+
  out:
 	if (cpnt) {
 	        kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
 		cpnt = NULL;
-	};
+	}
 	brelse(bh);
 #ifdef DEBUG
 	printk("Resultant Inode %d\n",result);

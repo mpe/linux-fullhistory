@@ -61,11 +61,13 @@ struct user{
 				   the top of the stack is always found in the
 				   esp register.  */
   long int signal;     		/* Signal that caused the core dump. */
-  char * u_comm;		/* User command that was responsible */
+  int reserved;			/* No longer used */
   struct pt_regs * u_ar0;	/* Used by gdb to help find the values for */
 				/* the registers. */
   struct user_i387_struct* u_fpstate;	/* Math Co-processor pointer. */
   unsigned long magic;		/* To uniquely identify a core file */
+  char u_comm[32];		/* User command that was responsible */
+  int u_debugreg[8];
 };
 #define NBPG 4096
 #define UPAGES 1

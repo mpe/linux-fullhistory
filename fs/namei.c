@@ -75,10 +75,7 @@ int permission(struct inode * inode,int mask)
 {
 	int mode = inode->i_mode;
 
-/* special case: not even root can read/write a deleted file */
-	if (inode->i_dev && !inode->i_nlink)
-		return 0;
-	else if (inode->i_op && inode->i_op->permission)
+	if (inode->i_op && inode->i_op->permission)
 		return inode->i_op->permission(inode, mask);
 	else if (current->euid == inode->i_uid)
 		mode >>= 6;
@@ -426,8 +423,17 @@ asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
 	int error;
 	char * tmp;
 
-	if (S_ISDIR(mode)  || (!S_ISFIFO(mode) && !suser()))
+	if (S_ISDIR(mode) || (!S_ISFIFO(mode) && !suser()))
 		return -EPERM;
+	switch (mode & S_IFMT) {
+	case 0:
+		mode |= S_IFREG;
+		break;
+	case S_IFREG: case S_IFCHR: case S_IFBLK: case S_IFIFO:
+		break;
+	default:
+		return -EINVAL;
+	}
 	error = getname(filename,&tmp);
 	if (!error) {
 		error = do_mknod(tmp,mode,dev);

@@ -132,12 +132,20 @@ static int ext2_readdir (struct inode * inode, struct file * filp,
 #endif
 				i = de->name_len;
 				brelse (bh);
+				if (!IS_RDONLY(inode)) {
+					inode->i_atime = CURRENT_TIME;
+					inode->i_dirt = 1;
+				}
 				return i;
 			}
 			de = (struct ext2_dir_entry *) ((char *) de +
 							de->rec_len);
 		}
 		brelse (bh);
+	}
+	if (!IS_RDONLY(inode)) {
+		inode->i_atime = CURRENT_TIME;
+		inode->i_dirt = 1;
 	}
 	return 0;
 }

@@ -30,6 +30,32 @@
 
 #define TIMER_IRQ 0
 
+#include <linux/timex.h>
+
+/*
+ * kernel variables
+ */
+long tick = 1000000 / HZ;               /* timer interrupt period */
+volatile struct timeval xtime;		/* The current time */
+int tickadj = 500/HZ;			/* microsecs */
+
+/*
+ * phase-lock loop variables
+ */
+int time_status = TIME_BAD;     /* clock synchronization status */
+long time_offset = 0;           /* time adjustment (us) */
+long time_constant = 0;         /* pll time constant */
+long time_tolerance = MAXFREQ;  /* frequency tolerance (ppm) */
+long time_precision = 1; 	/* clock precision (us) */
+long time_maxerror = 0x70000000;/* maximum error */
+long time_esterror = 0x70000000;/* estimated error */
+long time_phase = 0;            /* phase offset (scaled us) */
+long time_freq = 0;             /* frequency offset (scaled ppm) */
+long time_adj = 0;              /* tick adjust (scaled 1 / HZ) */
+long time_reftime = 0;          /* time at last adjustment (s) */
+
+long time_adjust = 0;
+
 int need_resched = 0;
 
 /*
@@ -38,15 +64,13 @@ int need_resched = 0;
 int hard_math = 0;		/* set by boot/head.S */
 int x86 = 0;			/* set by boot/head.S to 3 or 4 */
 int ignore_irq13 = 0;		/* set if exception 16 works */
-int wp_works_ok = 0;		/* not used currently */
+int wp_works_ok = 0;		/* set if paging hardware honours WP */ 
 
 extern int _setitimer(int, struct itimerval *, struct itimerval *);
 unsigned long * prof_buffer = NULL;
 unsigned long prof_len = 0;
 
 #define _S(nr) (1<<((nr)-1))
-
-#define LATCH ((1193180 + HZ/2)/HZ)
 
 extern void mem_use(void);
 
@@ -57,12 +81,6 @@ static unsigned long init_kernel_stack[1024];
 struct task_struct init_task = INIT_TASK;
 
 unsigned long volatile jiffies=0;
-unsigned long startup_time=0;
-int jiffies_offset = 0;		/* # clock ticks to add to get "true
-				   time".  Should always be less than
-				   1 second's worth.  For time fanatics
-				   who like to syncronize their machines
-				   to WWV :-) */
 
 struct task_struct *current = &init_task;
 struct task_struct *last_task_used_math = NULL;
@@ -75,6 +93,47 @@ struct {
 	long * a;
 	short b;
 	} stack_start = { & user_stack [PAGE_SIZE>>2] , KERNEL_DS };
+
+/*
+ * int 0x80 entry points.. Moved away from the header file, as
+ * iBCS2 may also want to use the '<linux/sys.h>' headers..
+ */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+fn_ptr sys_call_table[] = { sys_setup, sys_exit, sys_fork, sys_read,
+sys_write, sys_open, sys_close, sys_waitpid, sys_creat, sys_link,
+sys_unlink, sys_execve, sys_chdir, sys_time, sys_mknod, sys_chmod,
+sys_chown, sys_break, sys_stat, sys_lseek, sys_getpid, sys_mount,
+sys_umount, sys_setuid, sys_getuid, sys_stime, sys_ptrace, sys_alarm,
+sys_fstat, sys_pause, sys_utime, sys_stty, sys_gtty, sys_access,
+sys_nice, sys_ftime, sys_sync, sys_kill, sys_rename, sys_mkdir,
+sys_rmdir, sys_dup, sys_pipe, sys_times, sys_prof, sys_brk, sys_setgid,
+sys_getgid, sys_signal, sys_geteuid, sys_getegid, sys_acct, sys_phys,
+sys_lock, sys_ioctl, sys_fcntl, sys_mpx, sys_setpgid, sys_ulimit,
+sys_olduname, sys_umask, sys_chroot, sys_ustat, sys_dup2, sys_getppid,
+sys_getpgrp, sys_setsid, sys_sigaction, sys_sgetmask, sys_ssetmask,
+sys_setreuid,sys_setregid, sys_sigsuspend, sys_sigpending,
+sys_sethostname, sys_setrlimit, sys_getrlimit, sys_getrusage,
+sys_gettimeofday, sys_settimeofday, sys_getgroups, sys_setgroups,
+sys_select, sys_symlink, sys_lstat, sys_readlink, sys_uselib,
+sys_swapon, sys_reboot, sys_readdir, sys_mmap, sys_munmap, sys_truncate,
+sys_ftruncate, sys_fchmod, sys_fchown, sys_getpriority, sys_setpriority,
+sys_profil, sys_statfs, sys_fstatfs, sys_ioperm, sys_socketcall,
+sys_syslog, sys_setitimer, sys_getitimer, sys_newstat, sys_newlstat,
+sys_newfstat, sys_uname, sys_iopl, sys_vhangup, sys_idle, sys_vm86,
+sys_wait4, sys_swapoff, sys_sysinfo, sys_ipc, sys_fsync, sys_sigreturn,
+sys_clone, sys_setdomainname, sys_newuname, sys_modify_ldt,
+sys_adjtimex};
+
+/* So we don't have to do any more manual updating.... */
+int NR_syscalls = sizeof(sys_call_table)/sizeof(fn_ptr);
+
+#ifdef __cplusplus
+}
+#endif
+
 /*
  *  'math_state_restore()' saves the current math information in the
  * old math state array, and gets the new ones from the current task
@@ -102,6 +161,18 @@ asmlinkage void math_state_restore(void)
 	}
 	timer_active &= ~(1<<COPRO_TIMER);
 }
+
+#ifndef CONFIG_MATH_EMULATION
+
+asmlinkage void math_emulate(long arg)
+{
+  printk("math-emulation not enabled and no coprocessor found.\n");
+  printk("killing %s.\n",current->comm);
+  send_sig(SIGFPE,current,1);
+  schedule();
+}
+
+#endif /* CONFIG_MATH_EMULATION */
 
 /*
  *  'schedule()' is the scheduler function. It's a very simple and nice
@@ -167,6 +238,14 @@ confuse_gcc2:
 			p->counter = (p->counter >> 1) + p->priority;
 	}
 	switch_to(next);
+	/* Now maybe reload the debug registers */
+	if(current->debugreg[7]){
+		loaddebug(0);
+		loaddebug(1);
+		loaddebug(2);
+		loaddebug(3);
+		loaddebug(6);
+	};
 }
 
 asmlinkage int sys_pause(void)
@@ -355,6 +434,73 @@ static inline void calc_load(void)
 }
 
 /*
+ * this routine handles the overflow of the microsecond field
+ *
+ * The tricky bits of code to handle the accurate clock support
+ * were provided by Dave Mills (Mills@UDEL.EDU) of NTP fame.
+ * They were originally developed for SUN and DEC kernels.
+ * All the kudos should go to Dave for this stuff.
+ *
+ * These were ported to Linux by Philip Gladstone.
+ */
+static void second_overflow(void)
+{
+        long ltemp;
+	/* last time the cmos clock got updated */
+	static long last_rtc_update=0;
+	extern int set_rtc_mmss(unsigned long);
+
+	/* Bump the maxerror field */
+        time_maxerror = (0x70000000-time_maxerror < time_tolerance) ?
+	  0x70000000 : (time_maxerror + time_tolerance);
+
+	/* Run the PLL */
+        if (time_offset < 0) {
+                ltemp = (-(time_offset+1) >> (SHIFT_KG + time_constant)) + 1;
+                time_adj = ltemp << (SHIFT_SCALE - SHIFT_HZ - SHIFT_UPDATE);
+		time_offset += (time_adj * HZ) >> (SHIFT_SCALE - SHIFT_UPDATE);
+		time_adj = - time_adj;
+        } else if (time_offset > 0) {
+                ltemp = ((time_offset-1) >> (SHIFT_KG + time_constant)) + 1;
+                time_adj = ltemp << (SHIFT_SCALE - SHIFT_HZ - SHIFT_UPDATE);
+		time_offset -= (time_adj * HZ) >> (SHIFT_SCALE - SHIFT_UPDATE);
+        } else {
+		time_adj = 0;
+	}
+
+        time_adj += (time_freq >> (SHIFT_KF + SHIFT_HZ - SHIFT_SCALE))
+            + FINETUNE;
+
+	/* Handle the leap second stuff */
+	switch (time_status) {
+		case TIME_INS:
+		/* ugly divide should be replaced */
+		if (xtime.tv_sec % 86400 == 0) {
+			xtime.tv_sec--; /* !! */
+			time_status = TIME_OOP;
+			printk("Clock: inserting leap second 23:59:60 GMT\n");
+		}
+		break;
+
+		case TIME_DEL:
+		/* ugly divide should be replaced */
+		if (xtime.tv_sec % 86400 == 86399) {
+			xtime.tv_sec++;
+			time_status = TIME_OK;
+			printk("Clock: deleting leap second 23:59:59 GMT\n");
+		}
+		break;
+
+		case TIME_OOP:
+		time_status = TIME_OK;
+		break;
+	}
+	if (xtime.tv_sec > last_rtc_update + 660)
+	  if (set_rtc_mmss(xtime.tv_sec) == 0)
+	    last_rtc_update = xtime.tv_sec;
+}
+
+/*
  * The int argument is really a (struct pt_regs *), in case the
  * interrupt wants to know from where it was called. The timer
  * irq uses this to decide if it should update the user or system
@@ -365,6 +511,57 @@ static void do_timer(struct pt_regs * regs)
 	unsigned long mask;
 	struct timer_struct *tp = timer_table+0;
 	struct task_struct * task_p;
+
+        long ltemp;
+
+        /* Advance the phase, once it gets to one microsecond, then
+         * advance the tick more.
+         */
+        time_phase += time_adj;
+        if (time_phase < -FINEUSEC) {
+                ltemp = -time_phase >> SHIFT_SCALE;
+                time_phase += ltemp << SHIFT_SCALE;
+                xtime.tv_usec += tick - ltemp;
+        }
+        else if (time_phase > FINEUSEC) {
+                ltemp = time_phase >> SHIFT_SCALE;
+                time_phase -= ltemp << SHIFT_SCALE;
+                xtime.tv_usec += tick + ltemp;
+        } else
+                xtime.tv_usec += tick;
+
+	if (time_adjust)
+	{
+	    /* We are doing an adjtime thing. 
+	     */
+
+	    /* Limit the amount of the step for *next* tick to be
+	     * in the range -tickadj .. +tickadj
+	     */
+	     if (time_adjust > tickadj)
+	       ltemp = tickadj;
+	     else if (time_adjust < -tickadj)
+	       ltemp = -tickadj;
+	     else
+	       ltemp = time_adjust;
+	     
+	    /* Reduce the amount of time left by this step */
+	    time_adjust -= ltemp;
+
+	    /* Modify the value of the tick for next time.
+	     * Note that a positive delta means we want the clock
+	     * to run fast. This means that the tick should be bigger
+	     */
+	    tick = 1000000/HZ + ltemp;
+	}
+	else
+	    tick = 1000000/HZ;
+
+	if (xtime.tv_usec >= 1000000) {
+	    xtime.tv_usec -= 1000000;
+	    xtime.tv_sec++;
+	    second_overflow();
+	}
 
 	jiffies++;
 	calc_load();

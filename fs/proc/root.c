@@ -64,6 +64,7 @@ static struct proc_dir_entry root_dir[] = {
 #ifdef CONFIG_DEBUG_MALLOC
 	{13,6,"malloc" },
 #endif
+	{14,5,"kcore" },
 };
 
 #define NR_ROOT_DIRENTRY ((sizeof (root_dir))/(sizeof (root_dir[0])))

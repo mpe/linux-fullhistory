@@ -1,3 +1,6 @@
+/*
+ * linux/fs/binfmt_elf.c
+ */
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -6,21 +9,44 @@
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/binfmts.h>
-#include <asm/segment.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
+#include <linux/malloc.h>
+
+#include <asm/segment.h>
 
 asmlinkage int sys_exit(int exit_code);
 asmlinkage int sys_close(unsigned fd);
 asmlinkage int sys_open(const char *, int, int);
+asmlinkage int sys_brk(unsigned long);
+
+#include <linux/elf.h>
+
+/* We need to explicitly zero any fractional pages
+   after the data section (i.e. bss).  This would
+   contain the junk from the file that should not
+   be in memory */
+
+static void padzero(int elf_bss){
+  unsigned int fpnt, nbyte;
+  
+  if(elf_bss & 0xfff) {
+    
+    nbyte = (PAGE_SIZE - (elf_bss & 0xfff)) & 0xfff;
+    if(nbyte){
+      verify_area(VERIFY_WRITE, (void *) elf_bss, nbyte);
+      
+      fpnt = elf_bss;
+      while(fpnt & 0xfff) put_fs_byte(0, fpnt++);
+    };
+  };
+}
 
 /*
  * These are the functions used to load ELF style executables and shared
  * libraries.  There is no binary dependent code anywhere else.
  */
-
-#include <linux/elf.h>
 
 int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
@@ -106,7 +132,9 @@ int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			
 			retval = read_exec(bprm->inode,elf_ppnt->p_offset,elf_interpreter,
 					   elf_ppnt->p_filesz);
+#if 0
 			printk("Using ELF interpreter %s\n", elf_interpreter);
+#endif
 			if(retval >= 0)
 				retval = namei(elf_interpreter, &interpreter_inode);
 			if(retval >= 0)
@@ -198,15 +226,21 @@ int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			set_fs(old_fs);
 			
 			if (N_MAGIC(ex) == OMAGIC) {
-				retval = read_exec(interpreter_inode, 32, (char *) 0, 
-						   ex.a_text+ex.a_data);
+			  do_mmap(NULL, 0, ex.a_text+ex.a_data,
+				  PROT_READ|PROT_WRITE|PROT_EXEC,
+				  MAP_FIXED|MAP_PRIVATE, 0);
+			  retval = read_exec(interpreter_inode, 32, (char *) 0, 
+					     ex.a_text+ex.a_data);
 				iput(interpreter_inode);
 			} else if (N_MAGIC(ex) == ZMAGIC || N_MAGIC(ex) == QMAGIC) {
-				retval = read_exec(interpreter_inode,
-						   N_TXTOFF(ex) ,
-						   (char *) N_TXTADDR(ex),
-						   ex.a_text+ex.a_data);
-				iput(interpreter_inode);
+			  do_mmap(NULL, 0, ex.a_text+ex.a_data,
+				  PROT_READ|PROT_WRITE|PROT_EXEC,
+				  MAP_FIXED|MAP_PRIVATE, 0);
+			  retval = read_exec(interpreter_inode,
+					     N_TXTOFF(ex) ,
+					     (char *) N_TXTADDR(ex),
+					     ex.a_text+ex.a_data);
+			  iput(interpreter_inode);
 			} else
 				retval = -1;
 			
@@ -214,8 +248,11 @@ int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			set_fs(get_ds());
 			
 			if(retval >= 0)
-				zeromap_page_range((ex.a_text + ex.a_data + 0xfff) & 
-						   0xfffff000, ex.a_bss, PAGE_COPY);
+			  do_mmap(NULL, (ex.a_text + ex.a_data + 0xfff) & 
+				  0xfffff000, ex.a_bss,
+				  PROT_READ|PROT_WRITE|PROT_EXEC,
+				  MAP_FIXED|MAP_PRIVATE, 0);
+
 			kfree(elf_interpreter);
 			
 			if(retval < 0) { 
@@ -275,19 +312,44 @@ int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	current->start_brk = current->brk = elf_brk;
 	current->end_code = end_code;
 	current->start_code = start_code;
+	current->end_data = end_data;
 	current->start_stack = bprm->p;
 	current->suid = current->euid = bprm->e_uid;
 	current->sgid = current->egid = bprm->e_gid;
-	zeromap_page_range((elf_bss + 0xfff) & 0xfffff000, elf_brk - elf_bss,
-			   PAGE_COPY);
+
+	/* Calling sys_brk effectively mmaps the pages that we need for the bss and break
+	   sections */
+	current->brk = (elf_bss + 0xfff) & 0xfffff000;
+	sys_brk((elf_brk + 0xfff) & 0xfffff000);
+
+	padzero(elf_bss);
+
 	regs->eip = elf_entry;		/* eip, magic happens :-) */
 	regs->esp = bprm->p;			/* stack pointer */
+	{
+		struct vm_area_struct *mpnt;
+
+		mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
+		
+		mpnt->vm_task = current;
+		mpnt->vm_start = bprm->p & PAGE_MASK;
+		mpnt->vm_end = TASK_SIZE;
+		mpnt->vm_page_prot = PAGE_PRIVATE|PAGE_DIRTY;
+		mpnt->vm_share = NULL;
+		mpnt->vm_inode = NULL;
+		mpnt->vm_offset = 0;
+		mpnt->vm_ops = NULL;
+		insert_vm_struct(current, mpnt);
+		current->stk_vma = mpnt;
+	}
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);
-	
 	return 0;
 }
 
+
+/* This is really simpleminded and specialized - we are loading an a.out library that is given
+   an ELF header */
 
 int load_elf_library(int fd){
         struct file * file;
@@ -295,14 +357,16 @@ int load_elf_library(int fd){
 	struct elf_phdr *elf_phdata  =  NULL;
 	struct  inode * inode;
 	unsigned int len;
+	int elf_bss;
 	int old_fs, retval;
 	unsigned int bss;
 	int error;
-	int i,j;
+	int i,j, k;
 	
 	len = 0;
 	file = current->filp[fd];
 	inode = file->f_inode;
+	elf_bss = 0;
 	
 	set_fs(KERNEL_DS);
 	if (file->f_op->read(inode, file, (char *) &elf_ex, sizeof(elf_ex)) != sizeof(elf_ex)) {
@@ -355,16 +419,24 @@ int load_elf_library(int fd){
 			PROT_READ | PROT_WRITE | PROT_EXEC,
 			MAP_FIXED | MAP_PRIVATE,
 			elf_phdata->p_offset & 0xfffff000);
+
+	k = elf_phdata->p_vaddr + elf_phdata->p_filesz;
+	if(k > elf_bss) elf_bss = k;
 	
 	sys_close(fd);
 	if (error != elf_phdata->p_vaddr & 0xfffff000) {
 	        kfree(elf_phdata);
 		return error;
 	}
+
+	padzero(elf_bss);
+
 	len = (elf_phdata->p_filesz + elf_phdata->p_vaddr+ 0xfff) & 0xfffff000;
 	bss = elf_phdata->p_memsz + elf_phdata->p_vaddr;
 	if (bss > len)
-		zeromap_page_range(len, bss-len, PAGE_COPY);
+	  do_mmap(NULL, len, bss-len,
+		  PROT_READ|PROT_WRITE|PROT_EXEC,
+		  MAP_FIXED|MAP_PRIVATE, 0);
 	kfree(elf_phdata);
 	return 0;
 }

@@ -4,10 +4,12 @@
  */
 
 #include <linux/errno.h>
-#include <asm/segment.h>
 #include <linux/sched.h>
 #include <linux/msg.h>
 #include <linux/stat.h>
+#include <linux/malloc.h>
+
+#include <asm/segment.h>
 
 extern int ipcperms (struct ipc_perm *ipcp, short msgflg);
 

@@ -10,11 +10,36 @@
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *
+ * Fixes:
+ *		Alan Cox	:	verify_area() calls
+ *		Alan Cox	: 	stopped close while in use off icmp
+ *					messages. Not a fix but a botch that
+ *					for udp at least is 'valid'.
+ *		Alan Cox	:	Fixed icmp handling properly
+ *		Alan Cox	: 	Correct error for oversized datagrams
+ *		Alan Cox	:	Tidied select() semantics. 
+ *		Alan Cox	:	udp_err() fixed properly, also now 
+ *					select and read wake correctly on errors
+ *		Alan Cox	:	udp_send verify_area moved to avoid mem leak
+ *		Alan Cox	:	UDP can count its memory
+ *		Alan Cox	:	send to an uknown connection causes
+ *					an ECONNREFUSED off the icmp, but
+ *					does NOT close.
+ *		Alan Cox	:	Switched to new sk_buff handlers. No more backlog!
+ *		Alan Cox	:	Using generic datagram code. Even smaller and the PEEK
+ *					bug no longer crashes it.
+ *		Fred Van Kempen	: 	Net2e support for sk->broadcast.
+ *
+ * To Do:
+ *		Verify all the error codes from UDP operations match the
+ *		BSD behaviour, since thats effectively the formal spec.
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  */
+ 
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <linux/types.h>
@@ -55,37 +80,14 @@ print_udp(struct udphdr *uh)
 }
 
 
-int
-udp_select(struct sock *sk, int sel_type, select_table *wait)
-{
-  select_wait(sk->sleep, wait);
-  switch(sel_type) {
-	case SEL_IN:
-		if (sk->rqueue != NULL) {
-			return(1);
-		}
-		return(0);
-
-	case SEL_OUT:
-		if (sk->prot->wspace(sk) >= MIN_WRITE_SPACE) {
-			return(1);
-		}
-		return(0);
-	
-	case SEL_EX:
-		if (sk->err) return(1); /* can this ever happen? */
-		return(0);
-  }
-  return(0);
-}
-
-
 /*
  * This routine is called by the ICMP module when it gets some
  * sort of error condition.  If err < 0 then the socket should
  * be closed and the error returned to the user.  If err > 0
  * it's just the icmp type << 8 | icmp code.  
- * header points to the first 8 bytes of the tcp header.  We need
+ * Header points to the ip header of the error packet. We move
+ * on past this. Then (as it used to claim before adjustment)
+ * header points to the first 8 bytes of the udp header.  We need
  * to find the appropriate port.
  */
 void
@@ -94,17 +96,30 @@ udp_err(int err, unsigned char *header, unsigned long daddr,
 {
   struct udphdr *th;
   struct sock *sk;
+  struct iphdr *ip=(struct iphdr *)header;
+  
+  header += 4*ip->ihl;
+  
+  th = (struct udphdr *)header;  
    
-  DPRINTF((DBG_UDP,
-	"UDP: err(err=%d, header=%X, daddr=%X, saddr=%X, protocl=%X)\n",
-					err, header, daddr, saddr, protocol));
+  DPRINTF((DBG_UDP,"UDP: err(err=%d, header=%X, daddr=%X, saddr=%X, protocl=%X)\n\
+sport=%d,dport=%d", err, header, daddr, saddr, protocol, (int)th->source,(int)th->dest));
 
-  th = (struct udphdr *)header;
-  sk = get_sock(&udp_prot, th->dest, saddr, th->source, daddr);
+  sk = get_sock(&udp_prot, th->source, daddr, th->dest, saddr);
 
-  if (sk == NULL) return;
-  if (err & 0xff00 ==(ICMP_SOURCE_QUENCH << 8)) {
-	if (sk->cong_window > 1) sk->cong_window = sk->cong_window/2;
+  if (sk == NULL) 
+  	return;	/* No socket for error */
+  	
+  if (err < 0)		/* As per the calling spec */
+  {
+  	sk->err = -err;
+  	wake_up(sk->sleep);	/* User process wakes to see error */
+  	return;
+  }
+  
+  if (err & 0xff00 ==(ICMP_SOURCE_QUENCH << 8)) {	/* Slow down! */
+	if (sk->cong_window > 1) 
+		sk->cong_window = sk->cong_window/2;
 	return;
   }
 
@@ -112,8 +127,9 @@ udp_err(int err, unsigned char *header, unsigned long daddr,
 
   /* It's only fatal if we have connected to them. */
   if (icmp_err_convert[err & 0xff].fatal && sk->state == TCP_ESTABLISHED) {
-	sk->prot->close(sk, 0);
+	sk->err=ECONNREFUSED;
   }
+  wake_up(sk->sleep);
 }
 
 
@@ -187,8 +203,10 @@ udp_send_check(struct udphdr *uh, unsigned long saddr,
 	       unsigned long daddr, int len, struct sock *sk)
 {
   uh->check = 0;
-  if (sk && sk->no_check) return;
+  if (sk && sk->no_check) 
+  	return;
   uh->check = udp_check(uh, len, saddr, daddr);
+  if (uh->check == 0) uh->check = 0xffff;
 }
 
 
@@ -208,15 +226,18 @@ udp_send(struct sock *sk, struct sockaddr_in *sin,
 		in_ntoa(sin->sin_addr.s_addr), ntohs(sin->sin_port),
 		from, len));
 
+  err=verify_area(VERIFY_READ, from, len);
+  if(err)
+  	return(err);
+
   /* Allocate a copy of the packet. */
   size = sizeof(struct sk_buff) + sk->prot->max_header + len;
   skb = (struct sk_buff *) sk->prot->wmalloc(sk, size, 0, GFP_KERNEL);
   if (skb == NULL) return(-ENOMEM);
 
-  skb->lock     = 0;
   skb->mem_addr = skb;
   skb->mem_len  = size;
-  skb->sk       = NULL;
+  skb->sk       = NULL;	/* to avoid changing sk->saddr */
   skb->free     = 1;
   skb->arp      = 0;
 
@@ -228,6 +249,8 @@ udp_send(struct sock *sk, struct sockaddr_in *sin,
 			saddr, sin->sin_addr.s_addr, dev, IPPROTO_UDP, skb->mem_len));
   tmp = sk->prot->build_header(skb, saddr, sin->sin_addr.s_addr,
 			       &dev, IPPROTO_UDP, sk->opt, skb->mem_len);
+  skb->sk=sk;	/* So memory is freed correctly */
+			    
   if (tmp < 0 ) {
 	sk->prot->wfree(sk, skb->mem_addr, skb->mem_len);
 	return(tmp);
@@ -247,7 +270,7 @@ udp_send(struct sock *sk, struct sockaddr_in *sin,
   if (len > dev->mtu) {
 	printk("UDP: send: length %d > mtu %d (ignored)\n", len, dev->mtu);
 	sk->prot->wfree(sk, skb->mem_addr, skb->mem_len);
-	return(-EINVAL);
+	return(-EMSGSIZE);
   }
 
   /* Fill in the UDP header. */
@@ -258,9 +281,6 @@ udp_send(struct sock *sk, struct sockaddr_in *sin,
   buff = (unsigned char *) (uh + 1);
 
   /* Copy the user data. */
-  err=verify_area(VERIFY_READ, from, len);
-  if(err)
-  	return(err);
   memcpy_fromfs(buff, from, len);
 
   /* Set up the UDP checksum. */
@@ -284,9 +304,12 @@ udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock,
   DPRINTF((DBG_UDP, "UDP: sendto(len=%d, flags=%X)\n", len, flags));
 
   /* Check the flags. */
-  if (flags) return(-EINVAL);
-  if (len < 0) return(-EINVAL);
-  if (len == 0) return(0);
+  if (flags) 
+  	return(-EINVAL);
+  if (len < 0) 
+  	return(-EINVAL);
+  if (len == 0) 
+  	return(0);
 
   /* Get and verify the address. */
   if (usin) {
@@ -295,14 +318,19 @@ udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock,
 	if(err)
 		return err;
 	memcpy_fromfs(&sin, usin, sizeof(sin));
-	if (sin.sin_family && sin.sin_family != AF_INET) return(-EINVAL);
-	if (sin.sin_port == 0) return(-EINVAL);
+	if (sin.sin_family && sin.sin_family != AF_INET) 
+		return(-EINVAL);
+	if (sin.sin_port == 0) 
+		return(-EINVAL);
   } else {
 	if (sk->state != TCP_ESTABLISHED) return(-EINVAL);
 	sin.sin_family = AF_INET;
 	sin.sin_port = sk->dummy_th.dest;
 	sin.sin_addr.s_addr = sk->daddr;
   }
+  
+  if(!sk->broadcast && chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
+    	return -ENETUNREACH;		/* Must turn broadcast on first */
   sk->inuse = 1;
 
   /* Send the packet. */
@@ -353,7 +381,7 @@ udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			unsigned long amount;
 
 			if (sk->state == TCP_LISTEN) return(-EINVAL);
-			amount = sk->prot->wspace(sk)/2;
+			amount = sk->prot->wspace(sk)/*/2*/;
 			err=verify_area(VERIFY_WRITE,(void *)arg,
 					sizeof(unsigned long));
 			if(err)
@@ -363,9 +391,6 @@ udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 		}
 
 	case TIOCINQ:
-#if 0	/* FIXME: */
-	case FIONREAD:
-#endif
 		{
 			struct sk_buff *skb;
 			unsigned long amount;
@@ -409,8 +434,6 @@ udp_recvfrom(struct sock *sk, unsigned char *to, int len,
   struct sk_buff *skb;
   int er;
 
-  if (len == 0) return(0);
-  if (len < 0) return(-EINVAL);
 
   /*
    * This will pick up errors that occured while the program
@@ -423,6 +446,12 @@ udp_recvfrom(struct sock *sk, unsigned char *to, int len,
 	sk->err = 0;
 	return(err);
   }
+
+  if (len == 0) 
+  	return(0);
+  if (len < 0) 
+  	return(-EINVAL);
+
   if (addr_len) {
 	er=verify_area(VERIFY_WRITE, addr_len, sizeof(*addr_len));
 	if(er)
@@ -438,42 +467,11 @@ udp_recvfrom(struct sock *sk, unsigned char *to, int len,
   er=verify_area(VERIFY_WRITE,to,len);
   if(er)
   	return er;
-  sk->inuse = 1;
-  while(sk->rqueue == NULL) {
-	if (sk->shutdown & RCV_SHUTDOWN) {
-		return(0);
-	}
-
-	if (noblock) {
-		release_sock(sk);
-		return(-EAGAIN);
-	}
-	release_sock(sk);
-	cli();
-	if (sk->rqueue == NULL) {
-		interruptible_sleep_on(sk->sleep);
-		if (current->signal & ~current->blocked) {
-			return(-ERESTARTSYS);
-		}
-	}
-	sk->inuse = 1;
-	sti();
-  }
-  skb = sk->rqueue;
-
-  if (!(flags & MSG_PEEK)) {
-	if (skb->next == skb) {
-		sk->rqueue = NULL;
-	} else {
-		sk->rqueue =(struct sk_buff *)sk->rqueue ->next;
-		skb->prev->next = skb->next;
-		skb->next->prev = skb->prev;
-	}
-  }
+  skb=skb_recv_datagram(sk,flags,noblock,&er);
+  if(skb==NULL)
+  	return er;
   copied = min(len, skb->len);
-  /* This was checked in the wrong place
-  verify_area(VERIFY_WRITE, to, copied);
-  */
+  /* FIXME : should use udp header size info value */
   memcpy_tofs(to, skb->h.raw + sizeof(struct udphdr), copied);
 
   /* Copy the address. */
@@ -483,16 +481,10 @@ udp_recvfrom(struct sock *sk, unsigned char *to, int len,
 	addr.sin_family = AF_INET;
 	addr.sin_port = skb->h.uh->source;
 	addr.sin_addr.s_addr = skb->daddr;
-	/* Also in the wrong place, jumping out here will lose
-	   a packet for good and leave the socket in use
-	   now tested above
-	verify_area(VERIFY_WRITE, sin, sizeof(*sin));*/
 	memcpy_tofs(sin, &addr, sizeof(*sin));
   }
 
-  if (!(flags & MSG_PEEK)) {
-	kfree_skb(skb, FREE_READ);
-  }
+  kfree_skb(skb, FREE_READ);
   release_sock(sk);
   return(copied);
 }
@@ -512,14 +504,20 @@ udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
   struct sockaddr_in sin;
   int er;
   
-  if (addr_len < sizeof(sin)) return(-EINVAL);
+  if (addr_len < sizeof(sin)) 
+  	return(-EINVAL);
 
   er=verify_area(VERIFY_READ, usin, sizeof(sin));
   if(er)
   	return er;
 
   memcpy_fromfs(&sin, usin, sizeof(sin));
-  if (sin.sin_family && sin.sin_family != AF_INET) return(-EAFNOSUPPORT);
+  if (sin.sin_family && sin.sin_family != AF_INET) 
+  	return(-EAFNOSUPPORT);
+
+  if(!sk->broadcast && chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
+    	return -ENETUNREACH;		/* Must turn broadcast on first */
+  	
   sk->daddr = sin.sin_addr.s_addr;
   sk->dummy_th.dest = sin.sin_port;
   sk->state = TCP_ESTABLISHED;
@@ -550,8 +548,9 @@ udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   sk = get_sock(&udp_prot, uh->dest, saddr, uh->source, daddr);
   if (sk == NULL) {
 	if (chk_addr(daddr) == IS_MYADDR) 
+	{
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, dev);
-
+	}
 	/*
 	 * Hmm.  We got an UDP broadcast to a port to which we
 	 * don't wanna listen.  The only thing we can do now is
@@ -578,28 +577,10 @@ udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	skb->daddr = saddr;
 	skb->saddr = daddr;
 
-	/* Now deal with the in use. */
-	cli();
-	if (sk->inuse) {
-		if (sk->back_log == NULL) {
-			sk->back_log = skb;
-			skb->next = skb;
-			skb->prev = skb;
-		} else {
-			skb->next = sk->back_log;
-			skb->prev = sk->back_log->prev;
-			skb->prev->next = skb;
-			skb->next->prev = skb;
-		}
-		sti();
-		return(0);
-	}
-	sk->inuse = 1;
-	sti();
   }
 
   /* Charge it to the socket. */
-  if (sk->rmem_alloc + skb->mem_len >= SK_RMEM_MAX) {
+  if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) {
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_WRITE);
 	release_sock(sk);
@@ -612,16 +593,9 @@ udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   print_udp(uh);
 
   /* Now add it to the data chain and wake things up. */
-  if (sk->rqueue == NULL) {
-	sk->rqueue = skb;
-	skb->next = skb;
-	skb->prev = skb;
-  } else {
-	skb->next = sk->rqueue;
-	skb->prev = sk->rqueue->prev;
-	skb->prev->next = skb;
-	skb->next->prev = skb;
-  }
+  
+  skb_queue_tail(&sk->rqueue,skb);
+
   skb->len = len - sizeof(*uh);
 
   if (!sk->dead) wake_up(sk->sleep);
@@ -651,7 +625,7 @@ struct proto udp_prot = {
   NULL,
   NULL,
   udp_rcv,
-  udp_select,
+  datagram_select,
   udp_ioctl,
   NULL,
   NULL,

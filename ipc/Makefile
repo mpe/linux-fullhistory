@@ -7,8 +7,6 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-
-SUBDIRS = 
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 .s.o:
@@ -17,24 +15,21 @@ SUBDIRS =
 	$(CC) $(CFLAGS) -S $<
 
 OBJS	=  util.o 
+SRCS	=  util.c
 
 ifdef CONFIG_SYSVIPC
 OBJS	:= $(OBJS) msg.o sem.o shm.o 
+SRCS	:= $(SRCS) msg.c sem.c shm.c
 endif
 
 ipc.o: $(OBJS) 
 	$(LD) -r -o ipc.o $(OBJS) 
 
-subdirs: dummy
-	for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
-
 clean:
 	rm -f core *.o *.a *.s
-	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE) clean) || exit; done
 
 dep:
-	$(CPP) -M *.c > .depend
-	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE) dep) || exit; done
+	$(CPP) -M $(SRCS) > .depend
 
 dummy:
 

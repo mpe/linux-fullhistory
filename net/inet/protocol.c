@@ -10,6 +10,12 @@
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *
+ * Fixes:
+ *		Alan Cox	: Ahah! udp icmp errors don't work because
+ *				  udp_err is never called!
+ *		Alan Cox	: Added new fields for init and ready for
+ *				  proper fragmentation (_NO_ 4K limits!)
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -36,31 +42,37 @@
 
 static struct inet_protocol tcp_protocol = {
   tcp_rcv,		/* TCP handler		*/
+  NULL,			/* No fragment handler (and won't be for a long time) */
   tcp_err,		/* TCP error control	*/
   NULL,			/* next			*/
   IPPROTO_TCP,		/* protocol ID		*/
   0,			/* copy			*/
-  NULL			/* data			*/
+  NULL,			/* data			*/
+  "TCP"			/* name			*/
 };
 
 
 static struct inet_protocol udp_protocol = {
   udp_rcv,		/* UDP handler		*/
-  NULL,			/* UDP error control	*/
+  NULL,			/* Will be UDP fraglist handler */
+  udp_err,		/* UDP error control	*/
   &tcp_protocol,	/* next			*/
   IPPROTO_UDP,		/* protocol ID		*/
   0,			/* copy			*/
-  NULL			/* data			*/
+  NULL,			/* data			*/
+  "UDP"			/* name			*/
 };
 
 
 static struct inet_protocol icmp_protocol = {
   icmp_rcv,		/* ICMP handler		*/
+  NULL,			/* ICMP never fragments anyway */
   NULL,			/* ICMP error control	*/
   &udp_protocol,	/* next			*/
   IPPROTO_ICMP,		/* protocol ID		*/
   0,			/* copy			*/
-  NULL			/* data			*/
+  NULL,			/* data			*/
+  "ICMP"		/* name			*/
 };
 
 

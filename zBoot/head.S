@@ -18,7 +18,7 @@
 startup_32:
 	cld
 	cli
-	movl $KERNEL_DS,%eax
+	movl $(KERNEL_DS),%eax
 	mov %ax,%ds
 	mov %ax,%es
 	mov %ax,%fs
@@ -50,4 +50,4 @@ startup_32:
  * Do the decompression, and jump to the new kernel..
  */
 	call _decompress_kernel
-	ljmp $KERNEL_CS, $0x100000
+	ljmp $(KERNEL_CS), $0x100000

@@ -11,6 +11,7 @@
 #include <linux/ipc.h> 
 #include <linux/shm.h>
 #include <linux/stat.h>
+#include <linux/malloc.h>
 
 extern int ipcperms (struct ipc_perm *ipcp, short semflg);
 extern unsigned int get_swap_page(void);
@@ -596,7 +597,7 @@ void shm_no_page (unsigned long *ptent)
 	}
 
 	if (!(shp->shm_pages[idx] & PAGE_PRESENT)) {
-		if(!(page = __get_free_page(GFP_KERNEL))) {
+		if(!(page = get_free_page(GFP_KERNEL))) {
 			oom(current);
 			*ptent = BAD_PAGE | PAGE_ACCESSED | 7;
 			return;

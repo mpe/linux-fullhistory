@@ -41,7 +41,7 @@
 				 * 90 minutes to time out.
 				 */
 
-#define TCP_TIMEOUT_LEN	720000	/* should be about 2 hrs		*/
+#define TCP_TIMEOUT_LEN	5000	/* should be about 5 mins		*/
 #define TCP_TIMEWAIT_LEN 1000	/* how long to wait to sucessfully 
 				 * close the socket, about 60 seconds	*/
 #define TCP_ACK_TIME	3000	/* time to delay before sending an ACK	*/
@@ -60,6 +60,14 @@
 				 * to be no checksum			*/
 
 #define TCP_WRITE_QUEUE_MAGIC 0xa5f23477
+
+/*
+ *	TCP option
+ */
+ 
+#define TCPOPT_NOP		1
+#define TCPOPT_EOL		0
+#define TCPOPT_MSS		2
 
 /*
  * The next routines deal with comparing 32 bit unsigned ints

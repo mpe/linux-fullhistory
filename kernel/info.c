@@ -25,7 +25,7 @@ asmlinkage int sys_sysinfo(struct sysinfo *info)
 		return error;
 	memset((char *)&val, 0, sizeof(struct sysinfo));
 
-	val.uptime = (jiffies + jiffies_offset) / HZ;
+	val.uptime = jiffies / HZ;
 
 	val.loads[0] = avenrun[0] << (SI_LOAD_SHIFT - FSHIFT);
 	val.loads[1] = avenrun[1] << (SI_LOAD_SHIFT - FSHIFT);

@@ -85,6 +85,10 @@ isonum_733 (char * p)
 	return (isonum_731 (p));
 }
 
+/* We have to convert from a MM/DD/YY format to the unix ctime format.  We have to
+   take into account leap years and all of that good stuff.  Unfortunately, the kernel
+   does not have the information on hand to take into account daylight savings time,
+   so there will be cases (roughly half the time) where the dates are off by one hour. */
 int iso_date(char * p, int flag)
 {
 	int year, month, day, hour ,minute, second, tz;
@@ -105,7 +109,7 @@ int iso_date(char * p, int flag)
 		int monlen[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
 		days = year * 365;
 		if (year > 2)
-			days += (year+2) / 4;
+			days += (year+1) / 4;
 		for (i = 1; i < month; i++)
 			days += monlen[i-1];
 		if (((year+2) % 4) == 0 && month > 2)

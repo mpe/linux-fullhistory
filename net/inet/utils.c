@@ -10,6 +10,10 @@
  *
  * Author:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *
+ * Fixes:
+ *		Alan Cox	:	verify_area check.
+ *
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -100,9 +104,12 @@ int
 dbg_ioctl(void *arg, int level)
 {
   int val;
-
+  int err;
+  
   if (!suser()) return(-EPERM);
-  verify_area(VERIFY_WRITE, (void *)arg, sizeof(int));
+  err=verify_area(VERIFY_READ, (void *)arg, sizeof(int));
+  if(err)
+  	return err;
   val = get_fs_long((int *)arg);
   switch(val) {
 	case 0:	/* OFF */

@@ -5,19 +5,6 @@
 #define set_leds() mark_bh(KEYBOARD_BH)
 
 /*
- * "dead" keys - prefix key values that are valid only for the next
- * character code (sticky shift, E0/E1 special scancodes, diacriticals)
- */
-extern unsigned long kbd_dead_keys;
-extern unsigned long kbd_prev_dead_keys;
-
-/*
- * these are the hardcoded dead key flags
- */
-#define KGD_E0		0
-#define KGD_E1		1
-
-/*
  * kbd->xxx contains the VC-local things (flag settings etc..)
  * The low 3 local flags are hardcoded to be the led setting..
  */
@@ -42,30 +29,15 @@ extern struct kbd_struct kbd_table[];
 #define VC_CRLF		8	/* 0 - enter sends CR, 1 - enter sends CRLF */
 #define VC_META		9	/* 0 - meta, 1 - meta=prefix with ESC */
 #define VC_PAUSE	10	/* pause key pressed */
+#define VC_MEDIUMRAW	11	/* medium raw (keycode) mode */
+#define VC_SHIFTLOCK	12	/* shift lock mode */
+#define VC_ALTGRLOCK	13	/* altgr lock mode */
+#define VC_CTRLLOCK	14	/* control lock mode */
+#define VC_ALTLOCK	15	/* alt lock mode */
 
 #define LED_MASK	7
 
 extern unsigned long kbd_init(unsigned long);
-
-extern inline int kbd_dead(int flag)
-{
-	return kbd_prev_dead_keys & (1 << flag);
-}
-
-extern inline void set_kbd_dead(int flag)
-{
-	kbd_dead_keys |= 1 << flag;
-}
-
-extern inline void clr_kbd_dead(int flag)
-{
-	kbd_dead_keys &= ~(1 << flag);
-}
-
-extern inline void chg_kbd_dead(int flag)
-{
-	kbd_dead_keys ^= 1 << flag;
-}
 
 extern inline int vc_kbd_flag(struct kbd_struct * kbd, int flag)
 {
@@ -93,7 +65,7 @@ extern const int NR_TYPES;
 extern const int max_vals[];
 extern unsigned short key_map[NR_KEYMAPS][NR_KEYS];
 
-#define NR_FUNC 32
+#define NR_FUNC 35
 #define FUNC_BUFSIZE 512
 extern char func_buf[FUNC_BUFSIZE];
 extern char *func_table[NR_FUNC];
@@ -108,6 +80,7 @@ extern char *func_table[NR_FUNC];
 #define KT_SHIFT	7
 #define KT_META		8
 #define KT_ASCII	9
+#define KT_LOCK		10
 
 #define K(t,v)		(((t)<<8)|(v))
 #define KTYP(x)		((x) >> 8)
@@ -139,6 +112,9 @@ extern char *func_table[NR_FUNC];
 #define K_SELECT	K(KT_FN,23)
 #define K_PGUP		K(KT_FN,24)
 #define K_PGDN		K(KT_FN,25)
+#define K_MACRO         K(KT_FN,26)
+#define K_HELP          K(KT_FN,27)
+#define K_DO            K(KT_FN,28)
 
 #define K_HOLE		K(KT_SPEC,0)
 #define K_ENTER		K(KT_SPEC,1)
@@ -154,6 +130,7 @@ extern char *func_table[NR_FUNC];
 #define K_SCROLLBACK	K(KT_SPEC,11)
 #define K_BOOT		K(KT_SPEC,12)
 #define K_CAPSON	K(KT_SPEC,13)
+#define K_DEADNEXT      K(KT_SPEC,14)
 
 #define K_P0		K(KT_PAD,0)
 #define K_P1		K(KT_PAD,1)
@@ -172,6 +149,7 @@ extern char *func_table[NR_FUNC];
 #define K_PENTER	K(KT_PAD,14)	/* key-pad enter		   */
 #define K_PCOMMA	K(KT_PAD,15)	/* key-pad comma: kludge...	   */
 #define K_PDOT		K(KT_PAD,16)	/* key-pad dot (period): kludge... */
+#define K_PPLUSMINUS    K(KT_PAD,17)    /* key-pad plus/minus              */
 
 #define K_DGRAVE	K(KT_DEAD,0)
 #define K_DACUTE	K(KT_DEAD,1)
@@ -194,7 +172,7 @@ extern char *func_table[NR_FUNC];
 #define K_ALT		K(KT_SHIFT,KG_ALT)
 #define K_ALTGR		K(KT_SHIFT,KG_ALTGR)
 
-#define NR_SHIFT	16
+#define NR_SHIFT	4
 
 #define K_CAPSSHIFT	K(KT_SHIFT,NR_SHIFT)
 
@@ -208,5 +186,10 @@ extern char *func_table[NR_FUNC];
 #define K_ASC7		K(KT_ASCII,7)
 #define K_ASC8		K(KT_ASCII,8)
 #define K_ASC9		K(KT_ASCII,9)
+
+#define K_SHIFTLOCK	K(KT_LOCK,0)
+#define K_CTRLLOCK	K(KT_LOCK,2)
+#define K_ALTLOCK	K(KT_LOCK,3)
+#define K_ALTGRLOCK	K(KT_LOCK,1)
 
 #endif

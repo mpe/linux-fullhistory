@@ -118,6 +118,11 @@ void proc_read_inode(struct inode * inode)
 				inode->i_nlink = 2;
 				inode->i_op = &proc_net_inode_operations;
 				break;
+			case 14:
+				inode->i_mode = S_IFREG | S_IRUSR;
+				inode->i_op = &proc_array_inode_operations;
+				inode->i_size = high_memory + PAGE_SIZE;
+				break;
 			default:
 				inode->i_mode = S_IFREG | S_IRUGO;
 				inode->i_op = &proc_array_inode_operations;
@@ -155,6 +160,7 @@ void proc_read_inode(struct inode * inode)
 		case 10:
 		case 11:
 		case 12:
+		case 15:
 			inode->i_mode = S_IFREG | S_IRUGO;
 			inode->i_op = &proc_array_inode_operations;
 			return;

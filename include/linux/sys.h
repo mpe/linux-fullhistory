@@ -1,5 +1,5 @@
 /*
- * Why isn't this a .c file?  Enquiring minds....
+ * system call entry points
  */
 
 #define sys_clone sys_fork
@@ -132,6 +132,7 @@ extern int sys_setdomainname();
 extern int sys_olduname();
 extern int sys_old_syscall();
 extern int sys_modify_ldt();
+extern int sys_adjtimex();
 
 /*
  * These are system calls that will be removed at some time
@@ -148,33 +149,7 @@ extern int sys_modify_ldt();
 
 typedef int (*fn_ptr)();
 
-fn_ptr sys_call_table[] = { sys_setup, sys_exit, sys_fork, sys_read,
-sys_write, sys_open, sys_close, sys_waitpid, sys_creat, sys_link,
-sys_unlink, sys_execve, sys_chdir, sys_time, sys_mknod, sys_chmod,
-sys_chown, sys_break, sys_stat, sys_lseek, sys_getpid, sys_mount,
-sys_umount, sys_setuid, sys_getuid, sys_stime, sys_ptrace, sys_alarm,
-sys_fstat, sys_pause, sys_utime, sys_stty, sys_gtty, sys_access,
-sys_nice, sys_ftime, sys_sync, sys_kill, sys_rename, sys_mkdir,
-sys_rmdir, sys_dup, sys_pipe, sys_times, sys_prof, sys_brk, sys_setgid,
-sys_getgid, sys_signal, sys_geteuid, sys_getegid, sys_acct, sys_phys,
-sys_lock, sys_ioctl, sys_fcntl, sys_mpx, sys_setpgid, sys_ulimit,
-sys_olduname, sys_umask, sys_chroot, sys_ustat, sys_dup2, sys_getppid,
-sys_getpgrp, sys_setsid, sys_sigaction, sys_sgetmask, sys_ssetmask,
-sys_setreuid,sys_setregid, sys_sigsuspend, sys_sigpending,
-sys_sethostname, sys_setrlimit, sys_getrlimit, sys_getrusage,
-sys_gettimeofday, sys_settimeofday, sys_getgroups, sys_setgroups,
-sys_select, sys_symlink, sys_lstat, sys_readlink, sys_uselib,
-sys_swapon, sys_reboot, sys_readdir, sys_mmap, sys_munmap, sys_truncate,
-sys_ftruncate, sys_fchmod, sys_fchown, sys_getpriority, sys_setpriority,
-sys_profil, sys_statfs, sys_fstatfs, sys_ioperm, sys_socketcall,
-sys_syslog, sys_setitimer, sys_getitimer, sys_newstat, sys_newlstat,
-sys_newfstat, sys_uname, sys_iopl, sys_vhangup, sys_idle, sys_vm86,
-sys_wait4, sys_swapoff, sys_sysinfo, sys_ipc, sys_fsync, sys_sigreturn,
-sys_clone, sys_setdomainname, sys_newuname, sys_modify_ldt};
-
 #ifdef __cplusplus
 }
 #endif
 
-/* So we don't have to do any more manual updating.... */
-int NR_syscalls = sizeof(sys_call_table)/sizeof(fn_ptr);

@@ -13,6 +13,15 @@
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
  *		Fred Baumgarten, <dc6iq@insu1.etec.uni-karlsruhe.de>
  *
+ * Fixes:
+ *		Alan Cox	:	UDP sockets show the rxqueue/txqueue
+ *					using hint flag for the netinfo.
+ *	Pauline Middelink	:	Pidentd support
+ *
+ * To Do:
+ *		Put the creating userid in the proc/net/... files. This will
+ *		allow us to write an RFC931 daemon for Linux
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -44,7 +53,7 @@
  *  happens, get__netinfo returns only part of the available infos.
  */
 static int
-get__netinfo(struct proto *pro, char *buffer)
+get__netinfo(struct proto *pro, char *buffer, int format)
 {
   struct sock **s_array;
   struct sock *sp;
@@ -55,7 +64,7 @@ get__netinfo(struct proto *pro, char *buffer)
   unsigned short destp, srcp;
 
   s_array = pro->sock_array;
-  pos+=sprintf(pos, "sl  local_address rem_address   st tx_queue rx_queue tr tm->when\n");
+  pos+=sprintf(pos, "sl  local_address rem_address   st tx_queue rx_queue tr tm->when uid\n");
   for(i = 0; i < SOCK_ARRAY_SIZE; i++) {
 	sp = s_array[i];
 	while(sp != NULL) {
@@ -71,10 +80,12 @@ get__netinfo(struct proto *pro, char *buffer)
 		timer_active = del_timer(&sp->timer);
 		if (!timer_active)
 			sp->timer.expires = 0;
-		pos+=sprintf(pos, "%2d: %08X:%04X %08X:%04X %02X %08X:%08X %02X:%08X %02X\n",
+		pos+=sprintf(pos, "%2d: %08X:%04X %08X:%04X %02X %08X:%08X %02X:%08X %08X %d\n",
 			i, src, srcp, dest, destp, sp->state, 
-			sp->send_seq-sp->rcv_ack_seq, sp->acked_seq-sp->copied_seq,
-			timer_active, sp->timer.expires, sp->retransmits);
+			format==0?sp->send_seq-sp->rcv_ack_seq:sp->rmem_alloc, 
+			format==0?sp->acked_seq-sp->copied_seq:sp->wmem_alloc,
+			timer_active, sp->timer.expires, sp->retransmits,
+			SOCK_INODE(sp->socket)->i_uid);
 		if (timer_active)
 			add_timer(&sp->timer);
 
@@ -99,17 +110,17 @@ get__netinfo(struct proto *pro, char *buffer)
 
 int tcp_get_info(char *buffer)
 {
-  return get__netinfo(&tcp_prot, buffer);
+  return get__netinfo(&tcp_prot, buffer,0);
 }
 
 
 int udp_get_info(char *buffer)
 {
-  return get__netinfo(&udp_prot, buffer);
+  return get__netinfo(&udp_prot, buffer,1);
 }
 
 
 int raw_get_info(char *buffer)
 {
-  return get__netinfo(&raw_prot, buffer);
+  return get__netinfo(&raw_prot, buffer,1);
 }

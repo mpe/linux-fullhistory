@@ -8,9 +8,11 @@
 #include <linux/mm.h>
 #include <linux/errno.h>
 #include <linux/ptrace.h>
+#include <linux/user.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
+#include <linux/debugreg.h>
 
 /*
  * does not yet catch signals sent when the child dies.
@@ -219,6 +221,10 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
+	struct user * dummy;
+	int i;
+
+	dummy = NULL;
 
 	if (request == PTRACE_TRACEME) {
 		/* are we already being traced? */
@@ -278,17 +284,29 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			unsigned long tmp;
 			int res;
 
-			addr = addr >> 2; /* temporary hack. */
-			if (addr < 0 || addr >= 17)
+			if ((addr & 3) || addr < 0 || 
+			    addr > sizeof(struct user) - 3)
 				return -EIO;
+
 			res = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
 			if (res)
 				return res;
-			tmp = get_stack_long(child, sizeof(long)*addr - MAGICNUMBER);
-			if (addr == DS || addr == ES ||
-			    addr == FS || addr == GS ||
-			    addr == CS || addr == SS)
-				tmp &= 0xffff;
+			tmp = 0;  /* Default return condition */
+			if(addr < 17*sizeof(long)) {
+			  addr = addr >> 2; /* temporary hack. */
+
+			  tmp = get_stack_long(child, sizeof(long)*addr - MAGICNUMBER);
+			  if (addr == DS || addr == ES ||
+			      addr == FS || addr == GS ||
+			      addr == CS || addr == SS)
+			    tmp &= 0xffff;
+			};
+			if(addr >= (long) &dummy->u_debugreg[0] &&
+			   addr <= (long) &dummy->u_debugreg[7]){
+				addr -= (long) &dummy->u_debugreg[0];
+				addr = addr >> 2;
+				tmp = child->debugreg[addr];
+			};
 			put_fs_long(tmp,(unsigned long *) data);
 			return 0;
 		}
@@ -299,9 +317,12 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			return write_long(child,addr,data);
 
 		case PTRACE_POKEUSR: /* write the word at location addr in the USER area */
-			addr = addr >> 2; /* temproary hack. */
-			if (addr < 0 || addr >= 17)
+			if ((addr & 3) || addr < 0 || 
+			    addr > sizeof(struct user) - 3)
 				return -EIO;
+
+			addr = addr >> 2; /* temproary hack. */
+
 			if (addr == ORIG_EAX)
 				return -EIO;
 			if (addr == DS || addr == ES ||
@@ -315,9 +336,41 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				data &= FLAG_MASK;
 				data |= get_stack_long(child, EFL*sizeof(long)-MAGICNUMBER)  & ~FLAG_MASK;
 			}
-			if (put_stack_long(child, sizeof(long)*addr-MAGICNUMBER, data))
+		  /* Do not allow the user to set the debug register for kernel
+		     address space */
+		  if(addr < 17){
+			  if (put_stack_long(child, sizeof(long)*addr-MAGICNUMBER, data))
 				return -EIO;
 			return 0;
+			};
+
+		  /* We need to be very careful here.  We implicitly
+		     want to modify a portion of the task_struct, and we
+		     have to be selective about what portions we allow someone
+		     to modify. */
+
+		  addr = addr << 2;  /* Convert back again */
+		  if(addr >= (long) &dummy->u_debugreg[0] &&
+		     addr <= (long) &dummy->u_debugreg[7]){
+
+			  if(addr == (long) &dummy->u_debugreg[4]) return -EIO;
+			  if(addr == (long) &dummy->u_debugreg[5]) return -EIO;
+			  if(addr < (long) &dummy->u_debugreg[4] &&
+			     ((unsigned long) data) >= 0xbffffffd) return -EIO;
+			  
+			  if(addr == (long) &dummy->u_debugreg[7]) {
+				  data &= ~DR_CONTROL_RESERVED;
+				  for(i=0; i<4; i++)
+					  if ((0x5f54 >> ((data >> (16 + 4*i)) & 0xf)) & 1)
+						  return -EIO;
+			  };
+
+			  addr -= (long) &dummy->u_debugreg;
+			  addr = addr >> 2;
+			  child->debugreg[addr] = data;
+			  return 0;
+		  };
+		  return -EIO;
 
 		case PTRACE_SYSCALL: /* continue and stop at next (return from) syscall */
 		case PTRACE_CONT: { /* restart after signal. */

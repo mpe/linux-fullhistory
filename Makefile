@@ -1,3 +1,6 @@
+VERSION = 0.99
+PATCHLEVEL = 13
+ALPHA = k
 
 all:	Version zImage
 
@@ -41,7 +44,8 @@ ROOT_DEV = CURRENT
 # The number is the same as you would ordinarily press at bootup.
 #
 
-SVGA_MODE=	-DSVGA_MODE=3
+# SVGA_MODE=	-DSVGA_MODE=3
+SVGA_MODE=	-DSVGA_MODE=NORMAL_VGA
 
 # Special options.
 #OPTS	= -pro
@@ -50,7 +54,7 @@ SVGA_MODE=	-DSVGA_MODE=3
 # standard CFLAGS
 #
 
-CFLAGS = -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer # -x c++
+CFLAGS = -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer -pipe # -x c++
 
 ifdef CONFIG_M486
 CFLAGS := $(CFLAGS) -m486
@@ -77,14 +81,26 @@ STRIP	=strip
 
 ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o ipc/ipc.o
 FILESYSTEMS	=fs/filesystems.a
-DRIVERS		=kernel/blk_drv/blk_drv.a kernel/chr_drv/chr_drv.a \
-		 kernel/blk_drv/scsi/scsi.a kernel/chr_drv/sound/sound.a \
+DRIVERS		=drivers/block/block.a \
+		 drivers/char/char.a \
+		 drivers/net/net.a \
 		 ibcs/ibcs.o
-MATH		=kernel/FPU-emu/math.a
 LIBS		=lib/lib.a
-SUBDIRS		=kernel mm fs net ipc ibcs lib
+SUBDIRS		=kernel drivers mm fs net ipc ibcs lib
 
 KERNELHDRS	=/usr/src/linux/include
+
+ifdef CONFIG_SCSI
+DRIVERS := $(DRIVERS) drivers/scsi/scsi.a
+endif
+
+ifdef CONFIG_SOUND
+DRIVERS := $(DRIVERS) drivers/sound/sound.a
+endif
+
+ifdef CONFIG_MATH_EMULATION
+DRIVERS := $(DRIVERS) drivers/FPU-emu/math.a
+endif
 
 .c.s:
 	$(CC) $(CFLAGS) -S -o $*.s $<
@@ -102,7 +118,7 @@ config:
 	$(MAKE) soundconf
 
 soundconf:
-	cd kernel/chr_drv/sound;$(MAKE) config
+	cd drivers/sound;$(MAKE) config
 
 linuxsubdirs: dummy
 	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
@@ -111,7 +127,7 @@ tools/./version.h: tools/version.h
 
 tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.13\" > tools/version.h
+	@echo \#define UTS_RELEASE \"$(VERSION).$(PATCHLEVEL)$(ALPHA)\" > tools/version.h
 	@echo \#define UTS_VERSION \"\#`cat .version` `date`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
@@ -137,7 +153,6 @@ tools/system:	boot/head.o init/main.o tools/version.o linuxsubdirs
 		$(ARCHIVES) \
 		$(FILESYSTEMS) \
 		$(DRIVERS) \
-		$(MATH) \
 		$(LIBS) \
 		-o tools/system > System.map
 
@@ -176,7 +191,6 @@ tools/zSystem:	boot/head.o init/main.o tools/version.o linuxsubdirs
 		$(ARCHIVES) \
 		$(FILESYSTEMS) \
 		$(DRIVERS) \
-		$(MATH) \
 		$(LIBS) \
 		-o tools/zSystem > zSystem.map
 
@@ -192,17 +206,23 @@ mm: dummy
 kernel: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=kernel
 
+drivers: dummy
+	$(MAKE) linuxsubdirs SUBDIRS=drivers
+
 clean:
-	rm -f zImage zSystem.map tools/zSystem
-	rm -f Image System.map core boot/bootsect boot/setup \
+	rm -f core `find . -name '*.[oas]' -print`
+	rm -f zImage zSystem.map tools/zSystem tools/system
+	rm -f Image System.map boot/bootsect boot/setup \
 		boot/bootsect.s boot/setup.s boot/head.s init/main.s
-	rm -f init/*.o tools/system tools/build boot/*.o tools/*.o
+	rm -f init/*.o tools/build boot/*.o tools/*.o
 	for i in zBoot $(SUBDIRS); do (cd $$i && $(MAKE) clean); done
 
 mrproper: clean
 	rm -f include/linux/autoconf.h tools/version.h
 	rm -f .version .config* config.old
 	rm -f .depend `find . -name .depend -print`
+
+distclean: mrproper
 
 backup: mrproper
 	cd .. && tar cf - linux | gzip -9 > backup.gz

@@ -1,7 +1,7 @@
 /*
  *  linux/fs/nfs/sock.c
  *
- *  Copyright (C) 1992  Rick Sladkey
+ *  Copyright (C) 1992, 1993  Rick Sladkey
  *
  *  low-level nfs remote procedure call interface
  */
@@ -18,6 +18,8 @@
 
 
 extern struct socket *socki_lookup(struct inode *inode);
+
+#define _S(nr) (1<<((nr)-1))
 
 /*
  * We violate some modularity principles here by poking around
@@ -48,6 +50,7 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 	char *server_name;
 	int n;
 	int addrlen;
+	unsigned long old_mask;
 
 	xid = start[0];
 	len = ((char *) end) - ((char *) start);
@@ -55,15 +58,26 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 	inode = file->f_inode;
 	select = file->f_op->select;
 	sock = socki_lookup(inode);
+	if (!sock) {
+		printk("nfs_rpc_call: socki_lookup failed\n");
+		return -EBADF;
+	}
 	init_timeout = server->timeo;
 	max_timeout = NFS_MAX_RPC_TIMEOUT*HZ/10;
 	retrans = server->retrans;
 	major_timeout_seen = 0;
 	server_name = server->hostname;
-	if (!sock) {
-		printk("nfs_rpc_call: socki_lookup failed\n");
-		return -EBADF;
-	}
+	old_mask = current->blocked;
+	current->blocked |= ~(_S(SIGKILL)
+#if 0
+		| _S(SIGSTOP)
+#endif
+		| ((server->flags & NFS_MOUNT_INTR)
+		? ((current->sigaction[SIGINT - 1].sa_handler == SIG_DFL
+			? _S(SIGINT) : 0)
+		| (current->sigaction[SIGQUIT - 1].sa_handler == SIG_DFL
+			? _S(SIGQUIT) : 0))
+		: 0));
 	fs = get_fs();
 	set_fs(get_ds());
 	for (n = 0, timeout = init_timeout; ; n++, timeout <<= 1) {
@@ -85,11 +99,6 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 			remove_wait_queue(entry.wait_address, &entry.wait);
 			current->state = TASK_RUNNING;
 			if (current->signal & ~current->blocked) {
-#if 0
-				/* doesn't work yet */
-				if (!(server->flags & NFS_MOUNT_INTR))
-					goto re_select;
-#endif
 				current->timeout = 0;
 				result = -ERESTARTSYS;
 				break;
@@ -124,10 +133,10 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 			NULL, &addrlen);
 		if (result < 0) {
 			if (result == -EAGAIN) {
-				goto re_select;
 #if 0
 				printk("nfs_rpc_call: bad select ready\n");
 #endif
+				goto re_select;
 			}
 			if (result != -ERESTARTSYS) {
 				printk("nfs_rpc_call: recv error = %d\n",
@@ -144,6 +153,7 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 		printk("nfs_rpc_call: XID mismatch\n");
 #endif
 	}
+	current->blocked = old_mask;
 	set_fs(fs);
 	return result;
 }

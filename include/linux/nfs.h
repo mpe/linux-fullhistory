@@ -72,6 +72,7 @@ enum nfs_stat {
 	NFSERR_NODEV = 19,
 	NFSERR_NOTDIR = 20,
 	NFSERR_ISDIR = 21,
+	NFSERR_INVAL = 22,	/* that Sun forgot */
 	NFSERR_FBIG = 27,
 	NFSERR_NOSPC = 28,
 	NFSERR_ROFS = 30,

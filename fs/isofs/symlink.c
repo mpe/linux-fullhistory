@@ -16,6 +16,7 @@
 #include <linux/fs.h>
 #include <linux/iso_fs.h>
 #include <linux/stat.h>
+#include <linux/malloc.h>
 
 static int isofs_readlink(struct inode *, char *, int);
 static int isofs_follow_link(struct inode *, struct inode *, int, int, struct inode **);

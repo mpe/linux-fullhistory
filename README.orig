@@ -1,0 +1,255 @@
+
+	Linux kernel release 0.99 patchlevel 13
+
+[ Just to show everybody that I have no personal integrity at all, this
+release is dedicated to Martin Mueller and Sebastian Hetze just because
+they wrote the German Linux Anwenderhandbuch.  The fact that they sent
+me some of the money they made on selling it has nothing at all to do
+with the dedication.  Oh, no.  That would be crass.  ]
+
+These are the release notes for linux version 0.99.13.  Read them
+carefully, as they tell you what's new, explain how to install the
+kernel, and what to do if something goes wrong. 
+
+NOTE! There has been some indication that gcc versions older than 2.4.5
+result in bad kernels being built: 2.3.3 will fail even to build the
+kernel, and I have at least one report of trouble with a 2.4.3-built
+kernel that went away when the kernel was recompiled with 2.4.5. 
+
+CHANGES since 0.99 patchlevel 11 and earlier:
+
+ - The memory manager cleanup has continued, and seems to be mostly
+   ready, as proven by the ease of adding mmap() over NFS with the new
+   routines.  So yes, the pl12 kernel will demand-load your binaries
+   over NFS, sharing code and clean data, as well as running shared
+   libraries over NFS.  Memory management by Eric and me, while the NFS
+   mmap code was written by Jon Tombs,
+
+ - ** IMPORTANT **: The keyboard driver has been enhanced even further,
+   and almost everything is completely re-mappable.  This means that
+   there is a new version of 'loadkeys' and 'dumpkeys' that you must use
+   with this kernel or you'll have problems.  The default keyboard is
+   still the US mapping, but if you want to create your own mappings
+   you'll have to load them with the new binaries.  Get the 'kbd.tar.gz'
+   archive from the same place you get the kernel. 
+
+   The new keymappings allow things like function key string changes,
+   remapping of the control keys, and freedom to remap any of the normal
+   keyboard functions: including special features like rebooting,
+   console switching etc.  The keyboard remapping code has been done
+   mostly by Risto Kankkunen (Risto.Kankkunen@Helsinki.FI). 
+
+ - updated network drivers by Donald Becker
+
+ - updated serial drivers - tytso@Athena.mit.edu
+
+ - updated 387 emulation (Bill Metzenthen).  The updated emulator code
+   has more exact trigonometric functions and improved exception
+   handling.  It now behaves very much like a real 486, with only small
+   changes (greater accuracy, slightly different denormal NaN handling
+   etc - hard to detect the differences even if you are looking for
+   them). 
+
+ - network timer fixes by Florian La Roche (much cleaned up net/inet/timer.c
+   and some bad race-conditions fixed).
+
+ - Scsi code updates by Eric Youngdale and others
+
+ - Sony CDU-31A CDROM driver by Corey Minyard added to the standard
+   kernel distribution. 
+
+ - The Mitsumi CDROM driver is now part of the standard kernel.  Driver
+   by Martin Harriss with patches by stud11@cc4.kuleuven.ac.be (yes, he
+   probably has a real name, but no, I haven't found it) and Jon Tombs. 
+
+ - various other minor patches (preliminary ldt support etc)
+
+NOTABLE changes since patchlevel 10 or earlier:
+
+ - The memory manager has been cleaned up substantially, and mmap()
+   works for MAP_PRIVATE.  MAP_SHARED is still not supported for
+   anything else than /dev/mem, but even so it actually is usable for a
+   lot of applications.  The shared library routines have been rewritten
+   to use mmap() instead of the old hardcoded behaviour. 
+
+ - The kernel is now compiled with C++ instead of plain C.  Very few
+   actual C++ features are used, but even so C++ allows for more
+   type-checking and type-safe linkage. 
+
+ - The filesystem routines have been cleaned up for multiple block
+   sizes.  None of the filesystems use it yet, but people are working on
+   it. 
+
+ - named pipes and normal pipes should hopefully have the right select()
+   semantics in the presense/absense of writers. 
+
+ - QIC-02 tape driver by Hennus Bergman
+
+ - selection patches in the default kernel
+
+ - fixed a bug in the pty code which led to busy waiting in some
+   circumstances instead of sleeping. 
+
+ - Compressed SLIP support (Charles Hedrick). See net/inet/CONFIG
+
+ - the 'clear_bit()' function was changed to return the previous setting
+   of the bit instead of the old "error-code".  This makes use of the
+   bit operations more logical. 
+
+ - udelay() function for short delays (busy-waiting) added.  Used
+   currently only by the QIC driver. 
+
+ - fork() and sheduler changes to make task switches happen only from
+   kernel mode to kernel mode.  Cleaner and more portable than the old
+   code which counted on being able to task-switch directly into user
+   mode. 
+
+ - debugging malloc code.
+
+INSTALLING the kernel:
+
+ - if you install by patching, you need a *clean* 0.99.11 source tree,
+   which presumably exists in /usr/src/linux.  If so, to get the kernel
+   patched, just do a
+
+		cd /usr/src
+		patch -p0 < linux-0.99.patch12
+
+   and you should be ok.  You may want to remove the backup files (xxx~
+   or xxx.orig), and make sure that there are no failed patches (xxx# or
+   xxx.rej).
+
+ - If you install the full sources, do a
+
+		cd /usr/src
+		tar xvf linux-0.99.12.tar
+
+   to get it all put in place.
+
+ - make sure your /usr/include/linux and /usr/include/asm directories
+   are just symlinks to the kernel sources:
+
+		cd /usr/include
+		rm -rf linux
+		rm -rf asm
+		ln -s /usr/src/linux/include/linux .
+		ln -s /usr/src/linux/include/asm .
+
+ - make sure you have no stale .o files and dependencies lying around:
+
+		cd /usr/src/linux
+		make mrproper
+
+   You should now have the sources correctly installed.
+
+CONFIGURING the kernel:
+
+ - do a "make config" to configure the basic kernel.  "make config"
+   needs bash to work: it will search for bash in $BASH, /bin/bash and
+   /bin/sh (in that order), so hopefully one of those is correct. 
+
+	NOTES on "make config":
+	- compiling the kernel with "-m486" for a number of 486-specific
+	  will result in a kernel that still works on a 386: it may be
+	  slightly larger and possibly slower by an insignificant amount,
+	  but it should not hurt performance. 
+	- A kernel with math-emulation compiled in will still use the
+	  coprocessor if one is present: the math emulation will just
+	  never get used in that case.  The kernel will be slighly larger,
+	  but will work on different machines regardless of whether they
+	  have a math coprocessor or not. 
+	- the "kernel hacking" configuration details usually result in a
+	  bigger or slower kernel (or both), and can even make the kernel
+	  less stable by configuring some routines to actively try to
+	  break bad code to find kernel problems (kmalloc()).  Thus you
+	  should probably answer 'n' to the questions for a "production"
+	  kernel. 
+
+ - edit net/inet/CONFIG to configure the networking parts of the kernel. 
+   The comments should hopefully clarify it all. 
+
+ - Check the top Makefile for further site-dependent configuration
+   (default SVGA mode etc). 
+
+ - Finally, do a "make dep" to set up all the dependencies correctly. 
+
+COMPILING the kernel:
+
+ - make sure you have gcc-2.4.5 or newer available with g++.  It seems
+   older gcc versions can have problems compiling linux 0.99.10 and
+   newer versions.  If you upgrade, remember to get the new binutils
+   package too (for as/ld/nm and company)
+
+ - do a "make zImage" to create a compressed kernel image.  If you want
+   to make a bootdisk (without root filesystem or lilo), insert a floppy
+   in your A: drive, and do a "make zdisk".  It is also possible to do
+   "make zlilo" if you have lilo installed to suit the kernel makefiles,
+   but you may want to check your particular lilo setup first. 
+
+ - keep a backup kernel handy in case something goes wrong. 
+
+ - reboot with the new kernel and enjoy. 
+
+IF SOMETHING GOES WRONG:
+
+ - if you have problems that seem to be due to kernel bugs, please mail
+   them to me (Linus.Torvalds@Helsinki.FI), and possibly to any other
+   relevant mailing-list or to the newsgroup.  The mailing-lists are
+   useful especially for SCSI and NETworking problems, as I can't test
+   either of those personally anyway. 
+
+ - In all bug-reports, *please* tell what kernel you are talking about,
+   how to duplicate the problem, and what your setup is (use your common
+   sense).  If the problem is new, tell me so, and if the problem is
+   old, please try to tell me when you first noticed it.
+
+ - if the bug results in a message like
+
+	unable to handle kernel paging request at address C0000010
+	Oops: 0002
+	EIP:   0010:xxxxxxxx
+	eax: xxxxxxxx   ebx: xxxxxxxx   ecx: xxxxxxxx   edx: xxxxxxxx
+	esi: xxxxxxxx   edi: xxxxxxxx   ebp: xxxxxxxx
+	ds: xxxx  es: xxxx  fs: xxxx  gs: xxxx
+	Pid: xx, process nr: xx
+	xx xx xx xx xx xx xx xx xx xx
+
+   or similar kernel debugging information on your screen or in your
+   system log, please duplicate it *exactly*.  The dump may look
+   incomprehensible to you, but it does contain information that may
+   help debugging the problem.  The text above the dump is also
+   important: it tells something about why the kernel dumped code (in
+   the above example it's due to a bad kernel pointer)
+
+ - in debugging dumps like the above, it helps enourmously if you can
+   look up what the EIP value means.  The hex value as such doesn't help
+   me or anybody else very much: it will depend on your particular
+   kernel setup.  What you should do is take the hex value from the EIP
+   line (ignore the "0010:"), and look it up in the kernel namelist to
+   see which kernel function contains the offending address.
+
+   To find out the kernel function name, you'll need to find the system
+   binary associated with the kernel that exhibited the symptom.  In the
+   case of compressed kernels, this will be 'linux/tools/zSystem', while
+   uncompressed kernels use the file 'tools/system'.  To extract the
+   namelist and match it against the EIP from the kernel crash, do:
+
+		nm tools/zSystem | sort | less
+
+   This will give you a list of kernel addresses sorted in ascending
+   order, from which it is simple to find the function that contains the
+   offending address.  Note that the address given by the kernel
+   debugging messages will not necessarily match exactly with the
+   function addresses (in fact, that is very unlikely), so you can't
+   just 'grep' the list: the list will, however, give you the starting
+   point of each kernel function, so by looking for the function that
+   has a starting address lower than the one you are searching for but
+   is followed by a function with a higher address you will find the one
+   you want.  In fact, it may be a good idea to include a bit of
+   "context" in your problem report, giving a few lines around the
+   interesting one. 
+
+   If you for some reason cannot do the above (you have a pre-compiled
+   kernel image or similar), telling me as much about your setup as
+   possible will help. 
+

@@ -10,6 +10,13 @@
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Mark Evans, <evansmp@uhura.aston.ac.uk>
+ * 
+ * Fixes:
+ *		Mr Linux	: Arp problems
+ *		Alan Cox	: Generic queue tidyup (very tiny here)
+ *		Alan Cox	: eth_header ntohs should be htons
+ *		Alan Cox	: eth_rebuild_header missing an htons and
+ *				  minor other things.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -97,12 +104,12 @@ eth_header(unsigned char *buff, struct device *dev, unsigned short type,
 
   /* Fill in the basic Ethernet MAC header. */
   eth = (struct ethhdr *) buff;
-  eth->h_proto = ntohs(type);
-  memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
+  eth->h_proto = htons(type);
 
   /* We don't ARP for the LOOPBACK device... */
   if (dev->flags & IFF_LOOPBACK) {
 	DPRINTF((DBG_DEV, "ETH: No header for loopback\n"));
+	memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
 	memset(eth->h_dest, 0, dev->addr_len);
 	return(dev->hard_header_len);
   }
@@ -110,14 +117,27 @@ eth_header(unsigned char *buff, struct device *dev, unsigned short type,
   /* Check if we can use the MAC BROADCAST address. */
   if (chk_addr(daddr) == IS_BROADCAST) {
 	DPRINTF((DBG_DEV, "ETH: Using MAC Broadcast\n"));
+	memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
 	memcpy(eth->h_dest, dev->broadcast, dev->addr_len);
 	return(dev->hard_header_len);
   }
-
+  cli();
+  memcpy(eth->h_source, &saddr, 4);
   /* No. Ask ARP to resolve the Ethernet address. */
-  if (arp_find(eth->h_dest, daddr, dev, saddr)) {
+  if (arp_find(eth->h_dest, daddr, dev, saddr)) 
+  {
+        sti();
+        if(type!=ETH_P_IP)
+        	printk("Erk: protocol %X got into an arp request state!\n",type);
 	return(-dev->hard_header_len);
-  } else return(dev->hard_header_len);
+  } 
+  else
+  {
+  	memcpy(eth->h_source,dev->dev_addr,dev->addr_len);	/* This was missing causing chaos if the
+  								   header built correctly! */
+  	sti();
+  	return(dev->hard_header_len);
+  }
 }
 
 
@@ -134,16 +154,8 @@ eth_rebuild_header(void *buff, struct device *dev)
   dst = *(unsigned long *) eth->h_dest;
   DPRINTF((DBG_DEV, "ETH: RebuildHeader: SRC=%s ", in_ntoa(src)));
   DPRINTF((DBG_DEV, "DST=%s\n", in_ntoa(dst)));
-/*  Kludge to check IP address before sending an ARP request 
-     to fix invalid IP addresses on ARP calls.  jacob@mayhem 9/5/93  */
-  if (src != dev->pa_addr) {
-   /*	
-     printk("Got bad arp_find request in eth_rebuild_header: %s\n", in_ntoa(src));
-     printk("Replacing with correct source IP address: %s\n", in_ntoa(dev->pa_addr));
-   */
-    src = dev->pa_addr;
-  }
-  if (arp_find(eth->h_dest, dst, dev, src)) return(1);
+  if(eth->h_proto!=htons(ETH_P_ARP))	/* This ntohs kind of helps a bit! */
+	  if (arp_find(eth->h_dest, dst, dev, src)) return(1);
   memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
   return(0);
 }
@@ -167,5 +179,8 @@ eth_type_trans(struct sk_buff *skb, struct device *dev)
   struct ethhdr *eth;
 
   eth = (struct ethhdr *) (skb + 1);
+
+  if(ntohs(eth->h_proto)<1536)
+  	return(htons(ETH_P_802_3));
   return(eth->h_proto);
 }

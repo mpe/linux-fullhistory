@@ -10,6 +10,7 @@
 #include <linux/sem.h>
 #include <linux/ipc.h>
 #include <linux/stat.h>
+#include <linux/malloc.h>
 
 extern int ipcperms (struct ipc_perm *ipcp, short semflg);
 static int newary (key_t, int, int);

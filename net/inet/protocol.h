@@ -13,7 +13,12 @@
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
+ *
+ *	Changes:
+ *		Alan Cox	:	Added a name field and a frag handler
+ *					field for later.
  */
+ 
 #ifndef _PROTOCOL_H
 #define _PROTOCOL_H
 
@@ -27,6 +32,10 @@ struct inet_protocol {
 				   struct options *opt, unsigned long daddr,
 				   unsigned short len, unsigned long saddr,
 				   int redo, struct inet_protocol *protocol);
+  int			(*frag_handler)(struct sk_buff *skb, struct device *dev,
+				   struct options *opt, unsigned long daddr,
+				   unsigned short len, unsigned long saddr,
+				   int redo, struct inet_protocol *protocol);
   void			(*err_handler)(int err, unsigned char *buff,
 				       unsigned long daddr,
 				       unsigned long saddr,
@@ -35,6 +44,7 @@ struct inet_protocol {
   unsigned char		protocol;
   unsigned char		copy:1;
   void			*data;
+  char 			*name;
 };
 
 

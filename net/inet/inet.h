@@ -58,7 +58,7 @@
 #define NET16(x)	((((x) >> 8) & 0x00FF) | (((x) << 8) & 0xFF00))
 
 
-#undef	INET_DEBUG
+#define	INET_DEBUG
 #ifdef	INET_DEBUG
 #  define	DPRINTF(x)	dprintf x 
 #else

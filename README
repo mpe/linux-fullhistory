@@ -165,8 +165,8 @@ CONFIGURING the kernel:
 	  should probably answer 'n' to the questions for a "production"
 	  kernel. 
 
- - edit net/inet/CONFIG to configure the networking parts of the kernel. 
-   The comments should hopefully clarify it all. 
+ - edit drivers/net/CONFIG to configure the networking parts of the
+   kernel.  The comments should hopefully clarify it all. 
 
  - Check the top Makefile for further site-dependent configuration
    (default SVGA mode etc). 

@@ -101,8 +101,14 @@ struct ifaddr {
  * remainder may be interface specific.
  */
 struct ifreq {
+#define IFHWADDRLEN	6
 #define	IFNAMSIZ	16
-	char	ifr_name[IFNAMSIZ];		/* if name, e.g. "en0" */
+	union
+	{
+		char	ifrn_name[IFNAMSIZ];		/* if name, e.g. "en0" */
+		char	ifrn_hwaddr[IFHWADDRLEN];
+	} ifr_ifrn;
+	
 	union {
 		struct	sockaddr ifru_addr;
 		struct	sockaddr ifru_dstaddr;
@@ -114,6 +120,9 @@ struct ifreq {
 		caddr_t	ifru_data;
 	} ifr_ifru;
 };
+
+#define ifr_name	ifr_ifrn.ifrn_name	/* interface name 	*/
+#define ifr_hwaddr	ifr_ifrn.ifrn_hwaddr	/* interface hardware   */
 #define	ifr_addr	ifr_ifru.ifru_addr	/* address		*/
 #define	ifr_dstaddr	ifr_ifru.ifru_dstaddr	/* other end of p-p lnk	*/
 #define	ifr_broadaddr	ifr_ifru.ifru_broadaddr	/* broadcast address	*/

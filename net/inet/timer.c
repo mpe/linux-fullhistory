@@ -13,6 +13,18 @@
  *		Fred Baumgarten, <dc6iq@insu1.etec.uni-karlsruhe.de>
  *		Florian La Roche, <flla@stud.uni-sb.de>
  *
+ * Fixes:
+ *		Alan Cox	:	To avoid destroying a wait queue as we use it
+ *					we defer destruction until the destroy timer goes
+ *					off.
+ *		Alan Cox	:	Destroy socket doesnt write a status value to the
+ *					socket buffer _AFTER_ freeing it! Also sock ensures
+ *					the socket will get removed BEFORE this is called
+ *					otherwise if the timer TIME_DESTROY occurs inside
+ *					of inet_bh() with this socket being handled it goes
+ *					BOOM! Have to stop timer going off if inet_bh is
+ *					active or the destroy causes crashes.
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -81,7 +93,7 @@ net_timer (unsigned long data)
   int why = sk->timeout;
   /* timeout is overwritten by 'delete_timer' and 'reset_timer' */
 
-  if (sk->inuse) {
+  if (sk->inuse || in_inet_bh()) {
     sk->timer.expires = 10;
     add_timer(&sk->timer);
     return;
@@ -113,9 +125,16 @@ net_timer (unsigned long data)
 	/* We've waited for a while for all the memory associated with
 	 * the socket to be freed.  We need to print an error message.
 	 */
-	DPRINTF ((DBG_TMR, "possible memory leak.  sk = %X\n", sk));
-	destroy_sock (sk);
-	sk->inuse = 0;
+	if(sk->wmem_alloc!=0 || sk->rmem_alloc!=0)
+	{
+		DPRINTF ((DBG_TMR, "possible memory leak.  sk = %X\n", sk));
+		sk->wmem_alloc++;	/* So it DOESNT go away */
+		destroy_sock (sk);
+		sk->wmem_alloc--;	/* Might now have hit 0 - fall through and do it again if so */
+		sk->inuse = 0;	/* This will be ok, the destroy won't totally work */
+	}
+	if(sk->wmem_alloc==0 && sk->rmem_alloc==0)
+		destroy_sock(sk);	/* Socket gone, DONT update sk->inuse! */
 	break;
     case TIME_CLOSE:
 	/* We've waited long enough, close the socket. */

@@ -13,6 +13,7 @@
 #include <linux/nfs_fs.h>
 #include <linux/stat.h>
 #include <linux/mm.h>
+#include <linux/malloc.h>
 
 static int nfs_readlink(struct inode *, char *, int);
 static int nfs_follow_link(struct inode *, struct inode *, int, int,

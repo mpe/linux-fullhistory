@@ -118,6 +118,7 @@ asmlinkage void do_int3(struct pt_regs * regs, long error_code)
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
 	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
+	printk("You probably have a hardware problem with your RAM chips\n");
 }
 
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)
@@ -125,6 +126,15 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 	if (current->flags & PF_PTRACED)
 		current->blocked &= ~(1 << (SIGTRAP-1));
 	send_sig(SIGTRAP, current, 1);
+	if((regs->cs & 3) == 0) {
+	  /* If this is a kernel mode trap, then reset db7 and allow us to continue */
+	  __asm__("movl $0,%%edx\n\t" \
+		  "movl %%edx,%%db7\n\t" \
+		  : /* no output */ \
+		  : /* no input */ :"dx");
+
+	  return;
+	};
 	die_if_kernel("debug",regs,error_code);
 }
 

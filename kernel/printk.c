@@ -27,12 +27,14 @@ static char buf[1024];
 extern int vsprintf(char * buf, const char * fmt, va_list args);
 extern void console_print(const char *);
 
+#define DEFAULT_LOGLEVEL 7 /* anything more serious than KERN_DEBUG */
+
 static void (*console_print_proc)(const char *) = 0;
 static char log_buf[LOG_BUF_LEN];
 static unsigned long log_start = 0;
 static unsigned long logged_chars = 0;
+static int console_loglevel = DEFAULT_LOGLEVEL;
 unsigned long log_size = 0;
-int log_to_console = 1;
 struct wait_queue * log_wait = NULL;
 
 /*
@@ -46,6 +48,7 @@ struct wait_queue * log_wait = NULL;
  * 	5 -- Clear ring buffer.
  * 	6 -- Disable printk's to console
  * 	7 -- Enable printk's to console
+ *	8 -- Set level of messages printed to console
  */
 asmlinkage int sys_syslog(int type, char * buf, int len)
 {
@@ -114,35 +117,69 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 			logged_chars = 0;
 			return 0;
 		case 6:		/* Disable logging to console */
-			log_to_console = 0;
+			console_loglevel = 1; /* only panic messages shown */
 			return 0;
 		case 7:		/* Enable logging to console */
-			log_to_console = 1;
+			console_loglevel = DEFAULT_LOGLEVEL;
+			return 0;
+		case 8:
+			if (len < 0 || len > 8)
+				return -EINVAL;
+			console_loglevel = len;
 			return 0;
 	}
 	return -EINVAL;
 }
-			
+
 
 asmlinkage int printk(const char *fmt, ...)
 {
 	va_list args;
-	int i,j;
+	int i;
+	char *msg, *p, *buf_end;
+	static char msg_level = -1;
 
 	va_start(args, fmt);
-	i=vsprintf(buf,fmt,args);
+	i = vsprintf(buf + 3, fmt, args); /* hopefully i < sizeof(buf)-4 */
+	buf_end = buf + 3 + i;
 	va_end(args);
-	for (j = 0; j < i ; j++) {
-		log_buf[(log_start+log_size) & (LOG_BUF_LEN-1)] = buf[j];
-		if (log_size < LOG_BUF_LEN)
-			log_size++;
-		else
-			log_start++;
-		logged_chars++;
+	for (p = buf + 3; p < buf_end; p++) {
+		msg = p;
+		if (msg_level < 0) {
+			if (
+				p[0] != '<' ||
+				p[1] < '0' || 
+				p[1] > '7' ||
+				p[2] != '>'
+			) {
+				p -= 3;
+				p[0] = '<';
+				p[1] = DEFAULT_LOGLEVEL - 1 + '0';
+				p[2] = '>';
+			} else
+				msg += 3;
+			msg_level = p[1] - '0';
+		}
+		for (; p < buf_end; p++) {
+			log_buf[(log_start+log_size) & (LOG_BUF_LEN-1)] = *p;
+			if (log_size < LOG_BUF_LEN)
+				log_size++;
+			else
+				log_start++;
+			logged_chars++;
+			if (*p == '\n')
+				break;
+		}
+		if (msg_level < console_loglevel && console_print_proc) {
+			char tmp = p[1];
+			p[1] = '\0';
+			(*console_print_proc)(msg);
+			p[1] = tmp;
+		}
+		if (*p == '\n')
+			msg_level = -1;
 	}
 	wake_up_interruptible(&log_wait);
-	if (log_to_console && console_print_proc)
-		(*console_print_proc)(buf);
 	return i;
 }
 
@@ -150,25 +187,33 @@ asmlinkage int printk(const char *fmt, ...)
  * The console driver calls this routine during kernel initialization
  * to register the console printing procedure with printk() and to
  * print any messages that were printed by the kernel before the
- * console priver was initialized.
+ * console driver was initialized.
  */
 void register_console(void (*proc)(const char *))
 {
 	int	i,j;
 	int	p = log_start;
 	char	buf[16];
+	char	msg_level = -1;
+	char	*q;
 
 	console_print_proc = proc;
 
 	for (i=0,j=0; i < log_size; i++) {
 		buf[j++] = log_buf[p];
 		p++; p &= LOG_BUF_LEN-1;
-		if (j < sizeof(buf)-1)
+		if (buf[j-1] != '\n' && i < log_size - 1 && j < sizeof(buf)-1)
 			continue;
 		buf[j] = 0;
-		(*proc)(buf);
+		q = buf;
+		if (msg_level < 0) {
+			msg_level = buf[1] - '0';
+			q = buf + 3;
+		}
+		if (msg_level < console_loglevel)
+			(*proc)(q);
+		if (buf[j-1] == '\n')
+			msg_level = -1;
 		j = 0;
 	}
-	buf[j] = 0;
-	(*proc)(buf);
 }

@@ -146,6 +146,32 @@ static int pipe_select(struct inode * inode, struct file * filp, int sel_type, s
 }
 
 /*
+ * Arggh. Why does SunOS have to have different select() behaviour
+ * for pipes and fifos? Hate-Hate-Hate. See difference in SEL_IN..
+ */
+static int fifo_select(struct inode * inode, struct file * filp, int sel_type, select_table * wait)
+{
+	switch (sel_type) {
+		case SEL_IN:
+			if (!PIPE_EMPTY(*inode))
+				return 1;
+			select_wait(&PIPE_READ_WAIT(*inode), wait);
+			return 0;
+		case SEL_OUT:
+			if (!PIPE_FULL(*inode) || !PIPE_READERS(*inode))
+				return 1;
+			select_wait(&PIPE_WRITE_WAIT(*inode), wait);
+			return 0;
+		case SEL_EX:
+			if (!PIPE_READERS(*inode) || !PIPE_WRITERS(*inode))
+				return 1;
+			select_wait(&inode->i_wait,wait);
+			return 0;
+	}
+	return 0;
+}
+
+/*
  * The 'connect_xxx()' functions are needed for named pipes when
  * the open() code hasn't guaranteed a connection (O_NONBLOCK),
  * and we need to act differently until we do get a writer..
@@ -162,7 +188,7 @@ static int connect_read(struct inode * inode, struct file * filp, char * buf, in
 			return -ERESTARTSYS;
 		interruptible_sleep_on(& PIPE_READ_WAIT(*inode));
 	}
-	filp->f_op = &read_pipe_fops;
+	filp->f_op = &read_fifo_fops;
 	return pipe_read(inode,filp,buf,count);
 }
 
@@ -171,7 +197,7 @@ static int connect_select(struct inode * inode, struct file * filp, int sel_type
 	switch (sel_type) {
 		case SEL_IN:
 			if (!PIPE_EMPTY(*inode)) {
-				filp->f_op = &read_pipe_fops;
+				filp->f_op = &read_fifo_fops;
 				return 1;
 			}
 			select_wait(&PIPE_READ_WAIT(*inode), wait);
@@ -218,7 +244,7 @@ static void pipe_rdwr_release(struct inode * inode, struct file * filp)
  * The file_operations structs are not static because they
  * are also used in linux/fs/fifo.c to do operations on fifo's.
  */
-struct file_operations connecting_pipe_fops = {
+struct file_operations connecting_fifo_fops = {
 	pipe_lseek,
 	connect_read,
 	bad_pipe_rw,
@@ -228,6 +254,45 @@ struct file_operations connecting_pipe_fops = {
 	NULL,		/* no mmap on pipes.. surprise */
 	NULL,		/* no special open code */
 	pipe_read_release,
+	NULL
+};
+
+struct file_operations read_fifo_fops = {
+	pipe_lseek,
+	pipe_read,
+	bad_pipe_rw,
+	pipe_readdir,
+	fifo_select,
+	pipe_ioctl,
+	NULL,		/* no mmap on pipes.. surprise */
+	NULL,		/* no special open code */
+	pipe_read_release,
+	NULL
+};
+
+struct file_operations write_fifo_fops = {
+	pipe_lseek,
+	bad_pipe_rw,
+	pipe_write,
+	pipe_readdir,
+	fifo_select,
+	pipe_ioctl,
+	NULL,		/* mmap */
+	NULL,		/* no special open code */
+	pipe_write_release,
+	NULL
+};
+
+struct file_operations rdwr_fifo_fops = {
+	pipe_lseek,
+	pipe_read,
+	pipe_write,
+	pipe_readdir,
+	fifo_select,
+	pipe_ioctl,
+	NULL,		/* mmap */
+	NULL,		/* no special open code */
+	pipe_rdwr_release,
 	NULL
 };
 

@@ -935,6 +935,7 @@ start_up:
 		goto end_rename;
 	if (new_inode) {
 		new_inode->i_nlink--;
+		new_inode->i_ctime = CURRENT_TIME;
 		new_inode->i_dirt = 1;
 	}
 	old_dir->i_ctime = old_dir->i_mtime = CURRENT_TIME;

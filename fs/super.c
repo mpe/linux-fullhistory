@@ -485,7 +485,7 @@ void mount_root(void)
 	memset(super_blocks, 0, sizeof(super_blocks));
 	fcntl_init_locks();
 	if (MAJOR(ROOT_DEV) == 2) {
-		printk("VFS: Insert root floppy and press ENTER");
+		printk("VFS: Insert root floppy and press ENTER\n");
 		wait_for_keypress();
 	}
 	for (fs_type = file_systems; fs_type->read_super; fs_type++) {

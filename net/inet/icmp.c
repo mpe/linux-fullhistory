@@ -11,6 +11,10 @@
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Mark Evans, <evansmp@uhura.aston.ac.uk>
  *
+ * Fixes:	
+ *		Alan Cox	:	Generic queue usage.
+ *
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -42,19 +46,19 @@
 
 /* An array of errno for error messages from dest unreach. */
 struct icmp_err icmp_err_convert[] = {
-  { ENETUNREACH,	1 },
-  { EHOSTUNREACH,	1 },
-  { ENOPROTOOPT,	1 },
-  { ECONNREFUSED,	1 },
-  { EOPNOTSUPP,		0 },
-  { EOPNOTSUPP,		0 },
-  { ENETUNREACH,	1 },
-  { EHOSTDOWN,		1 },
-  { ENONET,		1 },
-  { ENETUNREACH,	1 },
-  { EHOSTUNREACH,	1 },
-  { EOPNOTSUPP,		0 },
-  { EOPNOTSUPP,		0 }
+  { ENETUNREACH,	1 },	/*	ICMP_NET_UNREACH	*/
+  { EHOSTUNREACH,	1 },	/*	ICMP_HOST_UNREACH	*/
+  { ENOPROTOOPT,	1 },	/*	ICMP_PROT_UNREACH	*/
+  { ECONNREFUSED,	1 },	/*	ICMP_PORT_UNREACH	*/
+  { EOPNOTSUPP,		0 },	/*	ICMP_FRAG_NEEDED	*/
+  { EOPNOTSUPP,		0 },	/*	ICMP_SR_FAILED		*/
+  { ENETUNREACH,	1 },	/* 	ICMP_NET_UNKNOWN	*/
+  { EHOSTDOWN,		1 },	/*	ICMP_HOST_UNKNOWN	*/
+  { ENONET,		1 },	/*	ICMP_HOST_ISOLATED	*/
+  { ENETUNREACH,	1 },	/*	ICMP_NET_ANO		*/
+  { EHOSTUNREACH,	1 },	/*	ICMP_HOST_ANO		*/
+  { EOPNOTSUPP,		0 },	/*	ICMP_NET_UNR_TOS	*/
+  { EOPNOTSUPP,		0 }	/*	ICMP_HOST_UNR_TOS	*/
 };
 
 
@@ -88,10 +92,10 @@ icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 	sizeof(struct iphdr) + sizeof(struct icmphdr) +
 	sizeof(struct iphdr) + 8;	/* amount of header to return */
 	   
-  skb = (struct sk_buff *) kmalloc(len, GFP_ATOMIC);
-  if (skb == NULL) return;
+  skb = (struct sk_buff *) alloc_skb(len, GFP_ATOMIC);
+  if (skb == NULL) 
+  	return;
 
-  skb->lock = 0;
   skb->sk = NULL;
   skb->mem_addr = skb;
   skb->mem_len = len;
@@ -237,23 +241,23 @@ icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
   int size, offset;
 
   size = sizeof(struct sk_buff) + dev->hard_header_len + 64 + len;
-  skb2 = (struct sk_buff *) kmalloc(size, GFP_ATOMIC);
+  skb2 = alloc_skb(size, GFP_ATOMIC);
   if (skb2 == NULL) {
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_READ);
 	return;
   }
   skb2->sk = NULL;
-  skb2->lock = 0;
   skb2->mem_addr = skb2;
   skb2->mem_len = size;
+  skb2->free = 1;
 
   /* Build Layer 2-3 headers for message back to source */
   offset = ip_build_header(skb2, daddr, saddr, &dev,
 			 	IPPROTO_ICMP, opt, len);
   if (offset < 0) {
 	printk("ICMP: Could not build IP Header for ICMP ECHO Response\n");
-	kfree_s(skb2->mem_addr, skb2->mem_len);
+	kfree_skb(skb2,FREE_WRITE);
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_READ);
 	return;
@@ -268,10 +272,7 @@ icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
   icmphr->type = ICMP_ECHOREPLY;
   icmphr->code = 0;
   icmphr->checksum = 0;
-
-  if (icmph->checksum) {	/* Calculate Checksum */
-	icmphr->checksum = ip_compute_csum((unsigned char *)icmphr, len);
-  }
+  icmphr->checksum = ip_compute_csum((unsigned char *)icmphr, len);
 
   /* Ship it out - free it when done */
   ip_queue_xmit((struct sock *)NULL, dev, skb2, 1);
@@ -304,23 +305,23 @@ icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
   int size, offset;
 
   size = sizeof(struct sk_buff) + dev->hard_header_len + 64 + len;
-  skb2 = (struct sk_buff *) kmalloc(size, GFP_ATOMIC);
+  skb2 = alloc_skb(size, GFP_ATOMIC);
   if (skb2 == NULL) {
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_READ);
 	return;
   }
   skb2->sk = NULL;
-  skb2->lock = 0;
   skb2->mem_addr = skb2;
   skb2->mem_len = size;
+  skb2->free = 1;
 
   /* Build Layer 2-3 headers for message back to source */
   offset = ip_build_header(skb2, daddr, saddr, &dev,
 			 	IPPROTO_ICMP, opt, len);
   if (offset < 0) {
 	printk("ICMP: Could not build IP Header for ICMP ADDRESS Response\n");
-	kfree_s(skb2->mem_addr, skb2->mem_len);
+	kfree_skb(skb2,FREE_WRITE);
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_READ);
 	return;
@@ -338,9 +339,7 @@ icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
   icmphr->un.echo.sequence = icmph->un.echo.sequence;
   memcpy((char *) (icmphr + 1), (char *) &dev->pa_mask, sizeof(dev->pa_mask));
 
-  if (icmph->checksum) {	/* Calculate Checksum */
-	icmphr->checksum = ip_compute_csum((unsigned char *)icmphr, len);
-  }
+  icmphr->checksum = ip_compute_csum((unsigned char *)icmphr, len);
 
   /* Ship it out - free it when done */
   ip_queue_xmit((struct sock *)NULL, dev, skb2, 1);
@@ -372,14 +371,12 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
   icmph = (struct icmphdr *) buff;
 
   /* Validate the packet first */
-  if (icmph->checksum) {	/* Checksums Enabled? */
-	if (ip_compute_csum((unsigned char *) icmph, len)) {
-		/* Failed checksum! */
-		printk("ICMP: failed checksum from %s!\n", in_ntoa(saddr));
-		skb1->sk = NULL;
-		kfree_skb(skb1, FREE_READ);
-		return(0);
-	}
+  if (ip_compute_csum((unsigned char *) icmph, len)) {
+	/* Failed checksum! */
+	printk("ICMP: failed checksum from %s!\n", in_ntoa(saddr));
+	skb1->sk = NULL;
+	kfree_skb(skb1, FREE_READ);
+	return(0);
   }
   print_icmp(icmph);
 

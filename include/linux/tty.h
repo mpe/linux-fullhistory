@@ -214,7 +214,7 @@ struct tty_struct {
 	struct termios *termios;
 	int pgrp;
 	int session;
-	unsigned char stopped:1, status_changed:1, packet:1, lnext:1;
+	unsigned char stopped:1, packet:1, lnext:1;
 	unsigned char char_error:2;
 	unsigned char ctrl_status;
 	short line;
@@ -241,6 +241,7 @@ struct tty_struct {
 	struct tty_queue read_q;
 	struct tty_queue write_q;
 	struct tty_queue secondary;
+	struct wait_queue * except_q;
 };
 
 struct tty_ldisc {

@@ -62,7 +62,8 @@ static struct proc_dir_entry base_dir[] = {
 	{ 9,7,"environ" },
 	{ 10,7,"cmdline" },
 	{ 11,4,"stat" },
-	{ 12,5,"statm" }
+	{ 12,5,"statm" },
+	{ 15,4,"maps" }
 };
 
 #define NR_BASE_DIRENTRY ((sizeof (base_dir))/(sizeof (base_dir[0])))

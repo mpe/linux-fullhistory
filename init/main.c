@@ -9,7 +9,6 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-#include <linux/mktime.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/config.h>
@@ -75,12 +74,17 @@ extern long chr_dev_init(long,long);
 extern void floppy_init(void);
 extern void sock_init(void);
 extern long rd_init(long mem_start, int length);
-extern long kernel_mktime(struct mktime * time);
 extern unsigned long simple_strtoul(const char *,char **,unsigned int);
 
 extern void hd_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
 extern void eth_setup(char *str, int *ints);
+extern void xd_setup(char *str, int *ints);
+extern void st0x_setup(char *str, int *ints);
+extern void tmc8xx_setup(char *str, int *ints);
+extern void t128_setup(char *str, int *ints);
+extern void generic_NCR5380_setup(char *str, int *intr);
+extern void aha152x_setup(char *str, int *ints);
 
 #ifdef CONFIG_SYSVIPC
 extern void ipc_init(void);
@@ -108,59 +112,24 @@ extern unsigned long scsi_dev_init(unsigned long, unsigned long);
 #define MAX_INIT_ENVS 8
 #define COMMAND_LINE ((char *) (PARAM+2048))
 
-/*
- * Yeah, yeah, it's ugly, but I cannot find how to do this correctly
- * and this seems to work. I anybody has more info on the real-time
- * clock I'd be interested. Most of this was trial and error, and some
- * bios-listing reading. Urghh.
- */
-
-#define CMOS_READ(addr) ({ \
-outb_p(addr,0x70); \
-inb_p(0x71); \
-})
-
-#define BCD_TO_BIN(val) ((val)=((val)&15) + ((val)>>4)*10)
-
-static void time_init(void)
-{
-	struct mktime time;
-	int i;
-
-	for (i = 0 ; i < 1000000 ; i++)
-		if (!(CMOS_READ(10) & 0x80))
-			break;
-	do {
-		time.sec = CMOS_READ(0);
-		time.min = CMOS_READ(2);
-		time.hour = CMOS_READ(4);
-		time.day = CMOS_READ(7);
-		time.mon = CMOS_READ(8);
-		time.year = CMOS_READ(9);
-	} while (time.sec != CMOS_READ(0));
-	BCD_TO_BIN(time.sec);
-	BCD_TO_BIN(time.min);
-	BCD_TO_BIN(time.hour);
-	BCD_TO_BIN(time.day);
-	BCD_TO_BIN(time.mon);
-	BCD_TO_BIN(time.year);
-	time.mon--;
-	startup_time = kernel_mktime(&time);
-}
+extern void time_init(void);
 
 static unsigned long memory_start = 0;	/* After mem_init, stores the */
 					/* amount of free user memory */
 static unsigned long memory_end = 0;
 static unsigned long low_memory_start = 0;
 
+static char term[21];
+int rows, cols;
+
 static char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
-static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=console", NULL, };
+static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", term, NULL, };
 
 static char * argv_rc[] = { "/bin/sh", NULL };
-static char * envp_rc[] = { "HOME=/", "TERM=console", NULL };
+static char * envp_rc[] = { "HOME=/", term, NULL };
 
 static char * argv[] = { "-/bin/sh",NULL };
-static char * envp[] = { "HOME=/usr/root", "TERM=console", NULL };
+static char * envp[] = { "HOME=/usr/root", term, NULL };
 
 struct drive_info_struct { char dummy[32]; } drive_info;
 struct screen_info screen_info;
@@ -200,6 +169,22 @@ struct {
 #endif
 #ifdef CONFIG_BUSMOUSE
 	{ "bmouse=", bmouse_setup },
+#endif
+#ifdef CONFIG_SCSI_SEAGATE
+	{ "st0x=", st0x_setup },
+	{ "tmc8xx=", tmc8xx_setup },
+#endif
+#ifdef CONFIG_SCSI_T128
+	{ "t128=", t128_setup },
+#endif
+#ifdef CONFIG_SCSI_GENERIC_NCR5380
+	{ "ncr5380=", generic_NCR5380_setup },
+#endif
+#ifdef CONFIG_SCSI_AHA152X
+        { "aha152x=", aha152x_setup},
+#endif
+#ifdef CONFIG_BLK_DEV_XD
+	{ "xd=", xd_setup },
 #endif
 	{ 0, 0 }
 };
@@ -262,8 +247,8 @@ static void calibrate_delay(void)
 static void parse_options(char *line)
 {
 	char *next;
-	char *devnames[] = { "hda", "hdb", "sda", "sdb", "sdc", "sdd", "sde", "fd", NULL };
-	int devnums[]    = { 0x300, 0x340, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0};
+	char *devnames[] = { "hda", "hdb", "sda", "sdb", "sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
+	int devnums[]    = { 0x300, 0x340, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0xC00, 0xC40, 0};
 	int args, envs;
 
 	if (!*line)
@@ -374,6 +359,8 @@ asmlinkage void start_kernel(void)
 #endif
 	memory_start = chr_dev_init(memory_start,memory_end);
 	memory_start = blk_dev_init(memory_start,memory_end);
+	sti();
+	calibrate_delay();
 #ifdef CONFIG_SCSI
 	memory_start = scsi_dev_init(memory_start,memory_end);
 #endif
@@ -388,7 +375,7 @@ asmlinkage void start_kernel(void)
 	ipc_init();
 #endif
 	sti();
-	calibrate_delay();
+	
 	/*
 	 * check if exception 16 works correctly.. This is truly evil
 	 * code: it disables the high 8 interrupts to make sure that
@@ -422,6 +409,10 @@ asmlinkage void start_kernel(void)
 		for (;;) ;
 	}
 #endif
+
+	system_utsname.machine[1] = '0' + x86;
+	printk(linux_banner);
+
 	move_to_user_mode();
 	if (!fork())		/* we count on this going ok */
 		init();
@@ -454,12 +445,10 @@ void init(void)
 	int pid,i;
 
 	setup((void *) &drive_info);
+	sprintf(term, "TERM=con%dx%d", ORIG_VIDEO_COLS, ORIG_VIDEO_LINES);
 	(void) open("/dev/tty1",O_RDWR,0);
 	(void) dup(0);
 	(void) dup(0);
-
-	system_utsname.machine[1] = '0' + x86;
-	printf(linux_banner);
 
 	execve("/etc/init",argv_init,envp_init);
 	execve("/bin/init",argv_init,envp_init);
