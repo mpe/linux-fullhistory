@@ -140,6 +140,7 @@ static int __devinit snd_ymfpci_create_gameport(ymfpci_t *chip, int dev,
 	gameport_set_phys(gp, "pci%s/gameport0", pci_name(chip->pci));
 	gp->dev.parent = &chip->pci->dev;
 	gp->io = io_port;
+	gp->port_data = r;
 
 	if (chip->pci->device >= 0x0010) /* YMF 744/754 */
 		pci_write_config_word(chip->pci, PCIR_DSXG_JOYBASE, io_port);
