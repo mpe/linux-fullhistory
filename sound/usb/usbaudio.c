@@ -1141,7 +1141,7 @@ static int init_usb_pitch(struct usb_device *dev, int iface,
 		data[0] = 1;
 		if ((err = snd_usb_ctl_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR,
 					   USB_TYPE_CLASS|USB_RECIP_ENDPOINT|USB_DIR_OUT,
-					   PITCH_CONTROL << 8, ep, data, 1, HZ)) < 0) {
+					   PITCH_CONTROL << 8, ep, data, 1, 1000)) < 0) {
 			snd_printk(KERN_ERR "%d:%d:%d: cannot set enable PITCH\n",
 				   dev->devnum, iface, ep);
 			return err;
@@ -1167,14 +1167,14 @@ static int init_usb_sample_rate(struct usb_device *dev, int iface,
 		data[2] = rate >> 16;
 		if ((err = snd_usb_ctl_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR,
 					   USB_TYPE_CLASS|USB_RECIP_ENDPOINT|USB_DIR_OUT,
-					   SAMPLING_FREQ_CONTROL << 8, ep, data, 3, HZ)) < 0) {
+					   SAMPLING_FREQ_CONTROL << 8, ep, data, 3, 1000)) < 0) {
 			snd_printk(KERN_ERR "%d:%d:%d: cannot set freq %d to ep 0x%x\n",
 				   dev->devnum, iface, fmt->altsetting, rate, ep);
 			return err;
 		}
 		if ((err = snd_usb_ctl_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR,
 					   USB_TYPE_CLASS|USB_RECIP_ENDPOINT|USB_DIR_IN,
-					   SAMPLING_FREQ_CONTROL << 8, ep, data, 3, HZ)) < 0) {
+					   SAMPLING_FREQ_CONTROL << 8, ep, data, 3, 1000)) < 0) {
 			snd_printk(KERN_WARNING "%d:%d:%d: cannot get freq at ep 0x%x\n",
 				   dev->devnum, iface, fmt->altsetting, ep);
 			return 0; /* some devices don't support reading */
@@ -2944,7 +2944,7 @@ static int snd_usb_extigy_boot_quirk(struct usb_device *dev, struct usb_interfac
 		snd_printdd("sending Extigy boot sequence...\n");
 		/* Send message to force it to reconnect with full interface. */
 		err = snd_usb_ctl_msg(dev, usb_sndctrlpipe(dev,0),
-				      0x10, 0x43, 0x0001, 0x000a, NULL, 0, HZ);
+				      0x10, 0x43, 0x0001, 0x000a, NULL, 0, 1000);
 		if (err < 0) snd_printdd("error sending boot message: %d\n", err);
 		err = usb_get_descriptor(dev, USB_DT_DEVICE, 0,
 				&dev->descriptor, sizeof(dev->descriptor));
