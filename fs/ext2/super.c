@@ -277,6 +277,10 @@ static void ext2_setup_super (struct super_block * sb,
 	         es->s_mnt_count >= (unsigned short) es->s_max_mnt_count)
 		printk ("EXT2-fs warning: maximal mount count reached, "
 			"running e2fsck is recommended\n");
+	else if (es->s_checkinterval &&
+		(es->s_lastcheck + es->s_checkinterval <= CURRENT_TIME))
+		printk ("EXT2-fs warning: checktime reached, "
+			"running e2fsck is recommended\n");
 	if (!(sb->s_flags & MS_RDONLY)) {
 		es->s_state &= ~EXT2_VALID_FS;
 		if (!es->s_max_mnt_count)

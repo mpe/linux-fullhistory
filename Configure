@@ -158,7 +158,7 @@ function int () {
 	eval "$2=$ans"
 }
 
-CONFIG=.config~
+CONFIG=.tmpconfig
 CONFIG_H=include/linux/autoconf.h
 trap "rm -f $CONFIG $CONFIG_H config.new ; exit 1" 1 2
 

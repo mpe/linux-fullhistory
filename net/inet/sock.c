@@ -497,7 +497,7 @@ static int inet_setsockopt(struct socket *sock, int level, int optname,
 static int inet_getsockopt(struct socket *sock, int level, int optname,
 		    char *optval, int *optlen)
 {
-  	struct sock *sk = sock->data;  	
+  	struct sock *sk = (struct sock *) sock->data;  	
   	if (level == SOL_SOCKET) 
   		return sock_getsockopt(sk,level,optname,optval,optlen);
   	if(sk->prot->getsockopt==NULL)  	

@@ -1,6 +1,6 @@
 VERSION = 0.99
 PATCHLEVEL = 15
-ALPHA = f
+ALPHA = g
 
 all:	Version zImage
 
@@ -116,10 +116,10 @@ Version: dummy
 
 config:
 	$(CONFIG_SHELL) Configure $(OPTS) < config.in
-	@if grep -s '^CONFIG_SOUND' .config~ ; then \
+	@if grep -s '^CONFIG_SOUND' .tmpconfig ; then \
 		$(MAKE) -C drivers/sound config; \
 		else : ; fi
-	mv .config~ .config
+	mv .tmpconfig .config
 
 linuxsubdirs: dummy
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
@@ -229,7 +229,7 @@ clean:
 	rm -f zImage zSystem.map tools/zSystem tools/system
 	rm -f Image System.map boot/bootsect boot/setup
 	rm -f zBoot/zSystem zBoot/xtract zBoot/piggyback
-	rm -f drivers/sound/configure
+	rm -f .tmp* drivers/sound/configure
 	rm -f init/*.o tools/build boot/*.o tools/*.o
 
 mrproper: clean
@@ -246,11 +246,11 @@ backup: mrproper
 
 depend dep:
 	touch tools/version.h
-	for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done > .depend~
-	for i in tools/*.c;do echo -n "tools/";$(CPP) -M $$i;done >> .depend~
+	for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done > .tmpdepend
+	for i in tools/*.c;do echo -n "tools/";$(CPP) -M $$i;done >> .tmpdepend
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
 	rm -f tools/version.h
-	mv .depend~ .depend
+	mv .tmpdepend .depend
 
 ifdef CONFIGURATION
 ..$(CONFIGURATION):

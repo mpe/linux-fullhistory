@@ -969,49 +969,53 @@ dev_ioctl(unsigned int cmd, void *arg)
   int ret;
 
   switch(cmd) {
-	  case IP_SET_DEV:
-	      	  printk("Your network configuration program needs upgrading.\n");
-		  return -EINVAL;
+	case IP_SET_DEV:
+		printk("Your network configuration program needs upgrading.\n");
+		return -EINVAL;
+
 	case SIOCGIFCONF:
 		(void) dev_ifconf((char *) arg);
-		ret = 0;
-		break;
+		return 0;
+
 	case SIOCGIFFLAGS:
-	case SIOCSIFFLAGS:
 	case SIOCGIFADDR:
-	case SIOCSIFADDR:
 	case SIOCGIFDSTADDR:
-	case SIOCSIFDSTADDR:
 	case SIOCGIFBRDADDR:
-	case SIOCSIFBRDADDR:
 	case SIOCGIFNETMASK:
-	case SIOCSIFNETMASK:
 	case SIOCGIFMETRIC:
-	case SIOCSIFMETRIC:
 	case SIOCGIFMTU:
-	case SIOCSIFMTU:
 	case SIOCGIFMEM:
-	case SIOCSIFMEM:
 	case SIOCGIFHWADDR:
-		if (!suser()) return(-EPERM);
-		ret = dev_ifsioc(arg, cmd);
-		break;
+		return dev_ifsioc(arg, cmd);
+
+	case SIOCSIFFLAGS:
+	case SIOCSIFADDR:
+	case SIOCSIFDSTADDR:
+	case SIOCSIFBRDADDR:
+	case SIOCSIFNETMASK:
+	case SIOCSIFMETRIC:
+	case SIOCSIFMTU:
+	case SIOCSIFMEM:
+		if (!suser())
+			return -EPERM;
+		return dev_ifsioc(arg, cmd);
+
 	case SIOCSIFLINK:
-		if (!suser()) return(-EPERM);
+		if (!suser())
+			return -EPERM;
 		memcpy_fromfs(&iflink, arg, sizeof(iflink));
 		dev = ddi_map(iflink.id);
-		if (dev == NULL) return(-EINVAL);
+		if (dev == NULL)
+			return -EINVAL;
 
 		/* Now allocate an interface and connect it. */
 		printk("AF_INET: DDI \"%s\" linked to stream \"%s\"\n",
 						dev->name, iflink.stream);
-		ret = 0;
-		break;
-	default:
-		ret = -EINVAL;
-  }
+		return 0;
 
-  return(ret);
+	default:
+		return -EINVAL;
+  }
 }
 
 

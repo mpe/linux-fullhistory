@@ -84,17 +84,21 @@ void emu_printall()
 
   RE_ENTRANT_CHECK_OFF;
   /* No need to verify_area(), we have previously fetched these bytes. */
-  printk("At %p: ", (void *) address);
+  printk("At %p:", (void *) address);
 #define MAX_PRINTED_BYTES 20
   for ( i = 0; i < MAX_PRINTED_BYTES; i++ )
     {
       byte1 = get_fs_byte((unsigned char *) address);
-      if ( (byte1 & 0xf8) == 0xd8 ) break;
-      printk("[%02x]", byte1);
+      if ( (byte1 & 0xf8) == 0xd8 )
+	{
+	  printk(" %02x", byte1);
+	  break;
+	}
+      printk(" [%02x]", byte1);
       address++;
     }
-  if ( i == MAX_PRINTED_BYTES ) printk("[more..]");
-  printk("%02x ", byte1);
+  if ( i == MAX_PRINTED_BYTES ) printk(" [more..]");
+  printk("\n");
   FPU_modrm = get_fs_byte(1 + (unsigned char *) address);
   partial_status = status_word();
 

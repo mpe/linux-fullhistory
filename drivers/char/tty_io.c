@@ -259,8 +259,10 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 	flush_input(tty);
 	flush_output(tty);
 	wake_up_interruptible(&tty->secondary.proc_list);
-	if (tty->session > 0)
+	if (tty->session > 0) {
 		kill_sl(tty->session,SIGHUP,1);
+		kill_sl(tty->session,SIGCONT,1);
+	}
 	tty->session = 0;
 	tty->pgrp = -1;
  	for_each_task(p) {
@@ -297,7 +299,7 @@ int tty_hung_up_p(struct file * filp)
  * it wants to dissassociate itself from its controlling tty.
  *
  * It performs the following functions:
- * 	(1)  Sends a SIGHUP to the foreground process group
+ * 	(1)  Sends a SIGHUP and SIGCONT to the foreground process group
  * 	(2)  Clears the tty from being controlling the session
  * 	(3)  Clears the controlling tty for all processes in the
  * 		session group.
@@ -310,8 +312,10 @@ void disassociate_ctty(int priv)
 	if (current->tty >= 0) {
 		tty = tty_table[current->tty];
 		if (tty) {
-			if (tty->pgrp > 0)
+			if (tty->pgrp > 0) {
 				kill_pg(tty->pgrp, SIGHUP, priv);
+				kill_pg(tty->pgrp, SIGCONT, priv);
+			}
 			tty->session = 0;
 			tty->pgrp = -1;
 		} else

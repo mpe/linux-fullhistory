@@ -144,6 +144,7 @@ static int valid_prefix(unsigned char *Byte, unsigned char **fpu_eip,
 asmlinkage void math_emulate(long arg)
 {
   unsigned char  FPU_modrm, byte1;
+  unsigned short code;
   fpu_addr_modes addr_modes;
   int unmasked;
 
@@ -250,7 +251,7 @@ do_another_FPU_instruction:
 	 but a real 80486 uses the following instructions:
 	 fninit, fnstenv, fnsave, fnstsw, fnstenv, fnclex.
        */
-      unsigned short code = (FPU_modrm << 8) | byte1;
+      code = (FPU_modrm << 8) | byte1;
       if ( ! ( (((code & 0xf803) == 0xe003) ||    /* fnclex, fninit, fnstsw */
 		(((code & 0x3003) == 0x3001) &&   /* fnsave, fnstcw, fnstenv,
 						     fnstsw */

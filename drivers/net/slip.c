@@ -232,6 +232,13 @@ static void sl_changedmtu(struct slip *sl)
 	
 	sl->mtu=dev->mtu;
 	l=(dev->mtu *2);
+/*
+ * allow for arrival of larger UDP packets, even if we say not to
+ * also fixes a bug in which SunOS sends 512-byte packets even with
+ * an MSS of 128
+ */
+	if (l < (576 * 2))
+	  l = 576 * 2;
 	
 	DPRINTF((DBG_SLIP,"SLIP: mtu changed!\n"));
 	
@@ -655,6 +662,14 @@ sl_open(struct device *dev)
    * rmem_start	Start of RECV frame buffer
    */
   l = (dev->mtu * 2);
+/*
+ * allow for arrival of larger UDP packets, even if we say not to
+ * also fixes a bug in which SunOS sends 512-byte packets even with
+ * an MSS of 128
+ */
+  if (l < (576 * 2))
+    l = 576 * 2;
+
   p = (unsigned char *) kmalloc(l + 4, GFP_KERNEL);
   if (p == NULL) {
 	DPRINTF((DBG_SLIP, "SLIP: no memory for SLIP XMIT buffer!\n"));

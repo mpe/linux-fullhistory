@@ -262,6 +262,7 @@ struct ext2_inode {
  * Maximal mount counts between two filesystem checks
  */
 #define EXT2_DFL_MAX_MNT_COUNT		20	/* Allow 20 mounts */
+#define EXT2_DFL_CHECKINTERVAL		0	/* Don't use interval check */
 
 /*
  * Behaviour when detecting errors
@@ -294,7 +295,9 @@ struct ext2_super_block {
 	unsigned short s_state;		/* File system state */
 	unsigned short s_errors;	/* Behaviour when detecting errors */
 	unsigned short s_pad;
-	unsigned long  s_reserved[240];	/* Padding to the end of the block */
+	unsigned long  s_lastcheck;	/* time of last check */
+	unsigned long  s_checkinterval;	/* max. time between checks */
+	unsigned long  s_reserved[238];	/* Padding to the end of the block */
 };
 
 /*

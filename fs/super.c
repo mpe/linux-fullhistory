@@ -380,7 +380,7 @@ static int do_remount(const char *dir,int flags,char *data)
 	return retval;
 }
 
-static int copy_mount_options (char * data, unsigned long *where)
+static int copy_mount_options (const void * data, unsigned long *where)
 {
 	int i;
 	unsigned long page;

@@ -60,6 +60,7 @@
  *		Charles Hedrick :	TCP fixes
  *		Toomas Tamm	:	TCP window fixes
  *		Alan Cox	:	Small URG fix to rlogin ^C ack fight
+ *		Linus		:	Rewrote URG handling completely
  *
  *
  * To Fix:
@@ -350,8 +351,8 @@ tcp_readable(struct sock *sk)
 	if (amount && skb->h.th->psh) break;
 	skb =(struct sk_buff *)skb->next;		/* Move along */
   } while(skb != sk->rqueue);
-  if (sk->urg_data &&
-      (sk->urg_seq - sk->copied_seq) < (counted - sk->copied_seq))
+  if (amount && !sk->urginline && sk->urg_data &&
+      (sk->urg_seq - sk->copied_seq) <= (counted - sk->copied_seq))
 	amount--;		/* don't count urg data */
   restore_flags(flags);
   DPRINTF((DBG_TCP, "tcp readable returning %d bytes\n", amount));
@@ -442,7 +443,7 @@ tcp_select(struct sock *sk, int sel_type, select_table *wait)
 		return(0);
 	case SEL_EX:
 		select_wait(sk->sleep,wait);
-		if (sk->err) {
+		if (sk->err || sk->urg_data) {
 			release_sock(sk);
 			return(1);
 		}
@@ -486,17 +487,11 @@ tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 		}
 	case SIOCATMARK:
 		{
-			int answ = 0;
+			int answ = sk->urg_data && sk->urg_seq == sk->copied_seq+1;
 
-			/*
-			 * Try to figure out if we need to read
-			 * some urgent data.
-			 */
-			if (sk->urg_data && sk->copied_seq+1 == sk->urg_seq)
-				answ = 1;
-			err=verify_area(VERIFY_WRITE,(void *) arg,
+			err = verify_area(VERIFY_WRITE,(void *) arg,
 						  sizeof(unsigned long));
-			if(err)
+			if (err)
 				return err;
 			put_fs_long(answ,(int *) arg);
 			return(0);
@@ -1250,7 +1245,9 @@ tcp_read_urg(struct sock * sk, int nonblock,
 	struct wait_queue wait = { current, NULL };
 
 	while (len > 0) {
-		if (sk->urg_data && sk->urg_data != URG_READ) {
+		if (sk->urginline || !sk->urg_data || sk->urg_data == URG_READ)
+			return -EINVAL;
+		if (sk->urg_data & URG_VALID) {
 			char c = sk->urg_data;
 			if (!(flags & MSG_PEEK))
 				sk->urg_data = URG_READ;
@@ -1285,8 +1282,8 @@ tcp_read_urg(struct sock * sk, int nonblock,
 
 		current->state = TASK_INTERRUPTIBLE;
 		add_wait_queue(sk->sleep, &wait);
-		if ((!sk->urg_data || sk->urg_data == URG_READ) &&
-		    sk->err == 0 && !(sk->shutdown & RCV_SHUTDOWN))
+		if ((sk->urg_data & URG_NOTYET) && sk->err == 0 &&
+		    !(sk->shutdown & RCV_SHUTDOWN))
 			schedule();
 		remove_wait_queue(sk->sleep, &wait);
 		current->state = TASK_RUNNING;
@@ -1302,7 +1299,9 @@ tcp_read(struct sock *sk, unsigned char *to,
 {
   int copied = 0; /* will be used to say how much has been copied. */
   struct sk_buff *skb;
+  unsigned long peek_seq;
   unsigned long offset;
+  unsigned long *seq;
   int err;
 
   if (len == 0)
@@ -1310,11 +1309,11 @@ tcp_read(struct sock *sk, unsigned char *to,
 
   if (len < 0)
 	return -EINVAL;
-    
+
   err=verify_area(VERIFY_WRITE,to,len);
-  if(err)
+  if (err)
   	return err;
-  	
+
   /* This error should be checked. */
   if (sk->state == TCP_LISTEN)
 	return -ENOTCONN;
@@ -1327,6 +1326,11 @@ tcp_read(struct sock *sk, unsigned char *to,
   sk->inuse = 1;
   skb=skb_peek(&sk->rqueue);
 
+  peek_seq = sk->copied_seq;
+  seq = &sk->copied_seq;
+  if (flags & MSG_PEEK)
+	seq = &peek_seq;
+
   DPRINTF((DBG_TCP, "tcp_read(sk=%X, to=%X, len=%d, nonblock=%d, flags=%X)\n",
 						sk, to, len, nonblock, flags));
 
@@ -1334,7 +1338,7 @@ tcp_read(struct sock *sk, unsigned char *to,
 	/* skb->used just checks to see if we've gone all the way around. */
 	
 	/* While no data, or first data indicates some is missing, or data is used */
-	while(skb == NULL || skb->used || before(sk->copied_seq+1, skb->h.th->seq)) {
+	while(skb == NULL || skb->used || before(1+*seq, skb->h.th->seq)) {
 		DPRINTF((DBG_TCP, "skb = %X:\n", skb));
 		cleanup_rbuf(sk);
 		if (sk->err) 
@@ -1413,7 +1417,7 @@ tcp_read(struct sock *sk, unsigned char *to,
 		}
 
 		skb = skb_peek(&sk->rqueue);
-		if (skb == NULL || before(sk->copied_seq+1, skb->h.th->seq)) {
+		if (skb == NULL || before(1+*seq, skb->h.th->seq)) {
 		        if(sk->debug)
 		        	printk("Read wait sleep\n");
 			interruptible_sleep_on(sk->sleep);
@@ -1439,30 +1443,18 @@ tcp_read(struct sock *sk, unsigned char *to,
 	}
 
 	/*
-	 * are we at urgent data?
+	 * are we at urgent data? Stop if we have read anything.
 	 */
-	if (sk->urg_data && sk->copied_seq+1 == sk->urg_seq) {
-		if (sk->urg_data == URG_READ) {
-			if (copied || (flags & MSG_PEEK)) {
-				release_sock(sk);
-				return copied;
-			}
-			sk->urg_data = 0;
-			sk->copied_seq++;
-		} else {
-			release_sock(sk);
-			if (copied) 
-				return copied;
-			send_sig(SIGURG, current, 0);
-			return -EINTR;
-		}
+	if (copied && sk->urg_data && sk->urg_seq == 1+*seq) {
+		release_sock(sk);
+		return copied;
 	}
 
 	/*
 	 * Copy anything from the current block that needs
 	 * to go into the user buffer.
 	 */
-	 offset = sk->copied_seq+1 - skb->h.th->seq;
+	 offset = *seq - skb->h.th->seq + 1;
   
 	 if (skb->h.th->syn) offset--;
 
@@ -1473,18 +1465,28 @@ tcp_read(struct sock *sk, unsigned char *to,
 		if (len < used)
 			used = len;
 		/* do we have urgent data here? */
-		if (sk->urg_data && sk->urg_seq - (sk->copied_seq+1) < used)
-			used = sk->urg_seq - (sk->copied_seq+1);
+		if (sk->urg_data) {
+			unsigned long urg_offset = sk->urg_seq - (1 + *seq);
+			if (urg_offset < used) {
+				if (!urg_offset) {
+					if (!(flags & MSG_PEEK))
+						sk->urg_data = 0;
+					if (!sk->urginline) {
+						++*seq;
+						offset++;
+						used--;
+					}
+				} else
+					used = offset;
+			}
+		}
 		/* Copy it */
 		memcpy_tofs(to,((unsigned char *)skb->h.th) +
 			    skb->h.th->doff*4 + offset, used);
 		copied += used;
 		len -= used;
 		to += used;
-		
-		/* If we were reading the data is 'eaten' */
-		if (!(flags & MSG_PEEK)) 
-			sk->copied_seq += used;
+		*seq += used;
 	      
 		/*
 		 * Mark this data used if we are really reading it, and we
@@ -1495,7 +1497,8 @@ tcp_read(struct sock *sk, unsigned char *to,
 	} 
 	else 
 	{	/* already used this data, must be a retransmit */
-		skb->used = 1;
+		if (!(flags & MSG_PEEK))
+			skb->used = 1;
 	}
 	/* Move along a packet */
 	skb =(struct sk_buff *)skb->next;
@@ -2717,8 +2720,16 @@ tcp_data(struct sk_buff *skb, struct sock *sk,
   /* Now figure out if we can ack anything. */
   if ((!dup_dumped && (skb1 == NULL || skb1->acked)) || before(th->seq, sk->acked_seq+1)) {
       if (before(th->seq, sk->acked_seq+1)) {
-		if (after(th->ack_seq, sk->acked_seq))
-					sk->acked_seq = th->ack_seq;
+		int newwindow;
+
+		if (after(th->ack_seq, sk->acked_seq)) {
+			newwindow = sk->window -
+				       (th->ack_seq - sk->acked_seq);
+			if (newwindow < 0)
+				newwindow = 0;	
+			sk->window = newwindow;
+			sk->acked_seq = th->ack_seq;
+		}
 		skb->acked = 1;
 
 		/* When we ack the fin, we turn on the RCV_SHUTDOWN flag. */
@@ -2733,16 +2744,12 @@ tcp_data(struct sk_buff *skb, struct sock *sk,
 			if (before(skb2->h.th->seq, sk->acked_seq+1)) {
 				if (after(skb2->h.th->ack_seq, sk->acked_seq))
 				{
-					long old_acked_seq = sk->acked_seq;
+					newwindow = sk->window -
+					 (skb2->h.th->ack_seq - sk->acked_seq);
+					if (newwindow < 0)
+						newwindow = 0;	
+					sk->window = newwindow;
 					sk->acked_seq = skb2->h.th->ack_seq;
-					if((int)(sk->acked_seq - old_acked_seq) >0)
-					{
-						int new_window=sk->window-sk->acked_seq+
-							old_acked_seq;
-						if(new_window<0)
-							new_window=0;
-						sk->window = new_window;
-					}
 				}
 				skb2->acked = 1;
 
@@ -2845,54 +2852,56 @@ tcp_data(struct sk_buff *skb, struct sock *sk,
 }
 
 
-static int
-tcp_urg(struct sock *sk, struct tcphdr *th, unsigned long saddr, unsigned long len)
+static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
 {
-	unsigned long ptr;
-	extern int kill_pg(int pg, int sig, int priv);
-	extern int kill_proc(int pid, int sig, int priv);
-	
-	if (!sk->dead) 
-		sk->data_ready(sk,0);
-    
-	if (sk->urginline) {
-		th->urg = 0;
-		th->psh = 1;
-		return 0;
-	}
+	unsigned long ptr = ntohs(th->urg_ptr);
 
-	ptr = ntohs(th->urg_ptr);
 	if (ptr)
 		ptr--;
+	ptr += th->seq;
 
-	/* is the urgent data in this packet at all? */
-	if (th->doff*4 + ptr >= len)
-		return 0;
+	/* ignore urgent data that we've already seen and read */
+	if (after(sk->copied_seq+1, ptr))
+		return;
 
-	/* have we already seen and read this? */
-	if (after(sk->copied_seq+1, th->seq+ptr))
-		return 0;
+	/* do we already have a newer (or duplicate) urgent pointer? */
+	if (sk->urg_data && !after(ptr, sk->urg_seq))
+		return;
 
-	/* is this a duplicate? */
-	if (sk->urg_data && sk->urg_seq == th->seq+ptr)
-		return 0;
-
-	/*
-	 * We signal the user only for the first urgent data: if urgent
-	 * data already exists, no signal is sent
-	 */
-	if (!sk->urg_data || sk->urg_data == URG_READ) {
-		if (sk->proc != 0) {
-			if (sk->proc > 0) {
-				kill_proc(sk->proc, SIGURG, 1);
-			} else {
-				kill_pg(-sk->proc, SIGURG, 1);
-			}
+	/* tell the world about our new urgent pointer */
+	if (sk->proc != 0) {
+		if (sk->proc > 0) {
+			kill_proc(sk->proc, SIGURG, 1);
+		} else {
+			kill_pg(-sk->proc, SIGURG, 1);
 		}
 	}
+	sk->urg_data = URG_NOTYET;
+	sk->urg_seq = ptr;
+}
 
-	sk->urg_data = 0x100 | *(ptr + th->doff*4 + (unsigned char *) th);
-	sk->urg_seq = th->seq + ptr;
+static inline int tcp_urg(struct sock *sk, struct tcphdr *th,
+	unsigned long saddr, unsigned long len)
+{
+	unsigned long ptr;
+
+	/* check if we get a new urgent pointer */
+	if (th->urg)
+		tcp_check_urg(sk,th);
+
+	/* do we wait for any urgent data? */
+	if (sk->urg_data != URG_NOTYET)
+		return 0;
+
+	/* is the urgent pointer pointing into this packet? */
+	ptr = sk->urg_seq - th->seq + th->doff*4;
+	if (ptr >= len)
+		return 0;
+
+	/* ok, got the correct packet, update info */
+	sk->urg_data = URG_VALID | *(ptr + (unsigned char *) th);
+	if (!sk->dead)
+		wake_up_interruptible(sk->sleep);
 	return 0;
 }
 
@@ -3389,12 +3398,11 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: not in seq\n");
 				return(0);
 			}
 		}
-		if (th->urg) {
-			if (tcp_urg(sk, th, saddr, len)) {
-				kfree_skb(skb, FREE_READ);
-				release_sock(sk);
-				return(0);
-			}
+
+		if (tcp_urg(sk, th, saddr, len)) {
+			kfree_skb(skb, FREE_READ);
+			release_sock(sk);
+			return(0);
 		}
 
 		if (tcp_data(skb, sk, saddr, len)) {
