@@ -1104,7 +1104,7 @@ int imm_queuecommand(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 }
 
 /*
- * Aimmrently the the disk->capacity attribute is off by 1 sector 
+ * Apparently the the disk->capacity attribute is off by 1 sector 
  * for all disk drives.  We add the one here, but it should really
  * be done in sd.c.  Even if it gets fixed there, this will still
  * work.
@@ -1118,8 +1118,6 @@ int imm_biosparam(Disk * disk, kdev_t dev, int ip[])
 	ip[0] = 0xff;
 	ip[1] = 0x3f;
 	ip[2] = (disk->capacity + 1) / (ip[0] * ip[1]);
-	if (ip[2] > 1023)
-	    ip[2] = 1023;
     }
     return 0;
 }

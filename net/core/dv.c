@@ -26,7 +26,6 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/errno.h>
-#include <linux/config.h>
 #include <linux/init.h>
 #include <net/dst.h>
 #include <net/arp.h>

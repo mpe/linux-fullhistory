@@ -1,76 +1,23 @@
 #
-# Makefile for the linux kernel.
+# Makefile for the kernel SPARC audio drivers.
 #
-# Note! Dependencies are done automagically by 'make dep', which also
-# removes any old dependencies. DON'T put your own dependencies here
-# unless it's something special (ie not a .c file).
-#
-# Note 2! The CFLAGS definitions are now in the main makefile...
-
-#
-# sbus audio drivers
+# 7 October 2000, Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
+# Rewritten to use lists instead of if-statements.
 #
 
 O_TARGET := sparcaudio.o
-O_OBJS   :=
-M_OBJS   :=
-M :=
-MM :=
 
-ifeq ($(CONFIG_SPARCAUDIO),y)
-M=y
-else
-  ifeq ($(CONFIG_SPARCAUDIO),m)
-  MM=y
-  endif
-endif
+export-objs	:= audio.o amd7930.o dbri.o
 
-ifeq ($(CONFIG_SPARCAUDIO_AMD7930),y)
-M=y
-OX_OBJS += amd7930.o
-else
-  ifeq ($(CONFIG_SPARCAUDIO_AMD7930),m)
-  MM=y
-  MX_OBJS += amd7930.o
-  endif
-endif
+obj-$(CONFIG_SPARCAUDIO)		+= audio.o
+obj-$(CONFIG_SPARCAUDIO_AMD7930)	+= amd7930.o
+obj-$(CONFIG_SPARCAUDIO_CS4231)		+= cs4231.o
+obj-$(CONFIG_SPARCAUDIO_DBRI)		+= dbri.o
+obj-$(CONFIG_SPARCAUDIO_DUMMY)		+= dmy.o
 
-ifeq ($(CONFIG_SPARCAUDIO_CS4231),y)
-M=y
-O_OBJS += cs4231.o
-else
-  ifeq ($(CONFIG_SPARCAUDIO_CS4231),m)
-  MM=y
-  M_OBJS += cs4231.o
-  endif
-endif
-
-ifeq ($(CONFIG_SPARCAUDIO_DBRI),y)
-M=y
-OX_OBJS += dbri.o
-else
-  ifeq ($(CONFIG_SPARCAUDIO_DBRI),m)
-  MM=y
-  MX_OBJS += dbri.o
-  endif
-endif
-
-ifeq ($(CONFIG_SPARCAUDIO_DUMMY),y)
-M=y
-O_OBJS += dmy.o
-else
-  ifeq ($(CONFIG_SPARCAUDIO_DUMMY),m)
-  MM=y
-  M_OBJS += dmy.o
-  endif
-endif
-
-ifdef M
-OX_OBJS += audio.o
-else
-  ifdef MM
-  MX_OBJS += audio.o
-  endif
-endif
+O_OBJS		:= $(filter-out	$(export-objs), $(obj-y))
+OX_OBJS		:= $(filter	$(export-objs), $(obj-y))
+M_OBJS		:= $(sort $(filter-out	$(export-objs), $(obj-m)))
+MX_OBJS		:= $(sort $(filter	$(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make

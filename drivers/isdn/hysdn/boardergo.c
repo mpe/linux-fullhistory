@@ -459,7 +459,7 @@ ergo_inithardware(hysdn_card * card)
 	request_region(card->iobase + PCI9050_USER_IO, 1, "HYSDN");
 	ergo_stopcard(card);	/* disable interrupts */
 	if (request_irq(card->irq, ergo_interrupt, SA_SHIRQ, "HYSDN", card)) {
-		ergo_releasehardware(card);	/* return the aquired hardware */
+		ergo_releasehardware(card); /* return the acquired hardware */
 		return (-1);
 	}
 	/* success, now setup the function pointers */

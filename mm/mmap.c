@@ -317,12 +317,12 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 	 */
 	flags = vma->vm_flags;
 	addr = vma->vm_start; /* can addr have changed?? */
-	vmlist_modify_lock(mm);
+	spin_lock(&mm->page_table_lock);
 	insert_vm_struct(mm, vma);
 	if (correct_wcount)
 		atomic_inc(&file->f_dentry->d_inode->i_writecount);
 	merge_segments(mm, vma->vm_start, vma->vm_end);
-	vmlist_modify_unlock(mm);
+	spin_unlock(&mm->page_table_lock);
 	
 	mm->total_vm += len >> PAGE_SHIFT;
 	if (flags & VM_LOCKED) {
@@ -534,11 +534,11 @@ static struct vm_area_struct * unmap_fixup(struct mm_struct *mm,
 	/* Work out to one of the ends. */
 	if (end == area->vm_end) {
 		area->vm_end = addr;
-		vmlist_modify_lock(mm);
+		spin_lock(&mm->page_table_lock);
 	} else if (addr == area->vm_start) {
 		area->vm_pgoff += (end - area->vm_start) >> PAGE_SHIFT;
 		area->vm_start = end;
-		vmlist_modify_lock(mm);
+		spin_lock(&mm->page_table_lock);
 	} else {
 	/* Unmapping a hole: area->vm_start < addr <= end < area->vm_end */
 		/* Add end mapping -- leave beginning for below */
@@ -560,12 +560,12 @@ static struct vm_area_struct * unmap_fixup(struct mm_struct *mm,
 		if (mpnt->vm_ops && mpnt->vm_ops->open)
 			mpnt->vm_ops->open(mpnt);
 		area->vm_end = addr;	/* Truncate area */
-		vmlist_modify_lock(mm);
+		spin_lock(&mm->page_table_lock);
 		insert_vm_struct(mm, mpnt);
 	}
 
 	insert_vm_struct(mm, area);
-	vmlist_modify_unlock(mm);
+	spin_unlock(&mm->page_table_lock);
 	return extra;
 }
 
@@ -670,7 +670,7 @@ int do_munmap(struct mm_struct *mm, unsigned long addr, size_t len)
 
 	npp = (prev ? &prev->vm_next : &mm->mmap);
 	free = NULL;
-	vmlist_modify_lock(mm);
+	spin_lock(&mm->page_table_lock);
 	for ( ; mpnt && mpnt->vm_start < addr+len; mpnt = *npp) {
 		*npp = mpnt->vm_next;
 		mpnt->vm_next = free;
@@ -679,7 +679,7 @@ int do_munmap(struct mm_struct *mm, unsigned long addr, size_t len)
 			avl_remove(mpnt, &mm->mmap_avl);
 	}
 	mm->mmap_cache = NULL;	/* Kill the cache. */
-	vmlist_modify_unlock(mm);
+	spin_unlock(&mm->page_table_lock);
 
 	/* Ok - we have the memory areas we should free on the 'free' list,
 	 * so release them, and unmap the page range..
@@ -811,10 +811,10 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	flags = vma->vm_flags;
 	addr = vma->vm_start;
 
-	vmlist_modify_lock(mm);
+	spin_lock(&mm->page_table_lock);
 	insert_vm_struct(mm, vma);
 	merge_segments(mm, vma->vm_start, vma->vm_end);
-	vmlist_modify_unlock(mm);
+	spin_unlock(&mm->page_table_lock);
 	
 	mm->total_vm += len >> PAGE_SHIFT;
 	if (flags & VM_LOCKED) {
@@ -840,10 +840,10 @@ void exit_mmap(struct mm_struct * mm)
 	struct vm_area_struct * mpnt;
 
 	release_segments(mm);
-	vmlist_modify_lock(mm);
+	spin_lock(&mm->page_table_lock);
 	mpnt = mm->mmap;
 	mm->mmap = mm->mmap_avl = mm->mmap_cache = NULL;
-	vmlist_modify_unlock(mm);
+	spin_unlock(&mm->page_table_lock);
 	mm->rss = 0;
 	mm->total_vm = 0;
 	mm->locked_vm = 0;
@@ -985,9 +985,9 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 		if (mpnt->vm_ops && mpnt->vm_ops->close) {
 			mpnt->vm_pgoff += (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
 			mpnt->vm_start = mpnt->vm_end;
-			vmlist_modify_unlock(mm);
+			spin_unlock(&mm->page_table_lock);
 			mpnt->vm_ops->close(mpnt);
-			vmlist_modify_lock(mm);
+			spin_lock(&mm->page_table_lock);
 		}
 		mm->map_count--;
 		remove_shared_vm_struct(mpnt);

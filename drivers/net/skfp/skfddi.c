@@ -1110,7 +1110,7 @@ struct net_device_stats *skfp_ctl_get_stats(struct net_device *dev)
  *   dev - pointer to device information
  *
  * Functional Description:
- *   This function aquires the driver lock and only calls
+ *   This function acquires the driver lock and only calls
  *   skfp_ctl_set_multicast_list_wo_lock then.
  *   This routine follows a fairly simple algorithm for setting the
  *   adapter filters and CAM:

@@ -2016,7 +2016,6 @@ static struct console ambauart_cons =
 #endif
 	device:		ambauart_console_device,
 	wait_key:	ambauart_console_wait_key,
-	unblank:	NULL,
 	setup:		ambauart_console_setup,
 	flags:		CON_PRINTBUFFER,
 	index:		-1,

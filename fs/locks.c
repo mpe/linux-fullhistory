@@ -164,7 +164,7 @@ static inline void locks_free_lock(struct file_lock *fl)
 	if (!list_empty(&fl->fl_block))
 		panic("Attempting to free lock with active block list");
 
-	if (!list_empty(&fl->fl_link) || !list_empty(&fl->fl_list))
+	if (!list_empty(&fl->fl_link))
 		panic("Attempting to free lock on active lock list");
 
 	kmem_cache_free(filelock_cache, fl);
@@ -174,7 +174,6 @@ void locks_init_lock(struct file_lock *fl)
 {
 	INIT_LIST_HEAD(&fl->fl_link);
 	INIT_LIST_HEAD(&fl->fl_block);
-	INIT_LIST_HEAD(&fl->fl_list);
 	init_waitqueue_head(&fl->fl_wait);
 	fl->fl_next = NULL;
 	fl->fl_fasync = NULL;
@@ -403,8 +402,8 @@ locks_same_owner(struct file_lock *fl1, struct file_lock *fl2)
  */
 static void locks_delete_block(struct file_lock *waiter)
 {
-	list_del(&waiter->fl_list);
-	INIT_LIST_HEAD(&waiter->fl_list);
+	list_del(&waiter->fl_block);
+	INIT_LIST_HEAD(&waiter->fl_block);
 	list_del(&waiter->fl_link);
 	INIT_LIST_HEAD(&waiter->fl_link);
 	waiter->fl_next = NULL;
@@ -418,13 +417,13 @@ static void locks_delete_block(struct file_lock *waiter)
 static void locks_insert_block(struct file_lock *blocker, 
 			       struct file_lock *waiter)
 {
-	if (!list_empty(&waiter->fl_list)) {
+	if (!list_empty(&waiter->fl_block)) {
 		printk(KERN_ERR "locks_insert_block: removing duplicated lock "
 			"(pid=%d %Ld-%Ld type=%d)\n", waiter->fl_pid,
 			waiter->fl_start, waiter->fl_end, waiter->fl_type);
 		locks_delete_block(waiter);
 	}
-	list_add_tail(&waiter->fl_list, &blocker->fl_block);
+	list_add_tail(&waiter->fl_block, &blocker->fl_block);
 	waiter->fl_next = blocker;
 	list_add(&waiter->fl_link, &blocked_list);
 }
@@ -436,7 +435,7 @@ static void locks_insert_block(struct file_lock *blocker,
 static void locks_wake_up_blocks(struct file_lock *blocker, unsigned int wait)
 {
 	while (!list_empty(&blocker->fl_block)) {
-		struct file_lock *waiter = list_entry(blocker->fl_block.next, struct file_lock, fl_list);
+		struct file_lock *waiter = list_entry(blocker->fl_block.next, struct file_lock, fl_block);
 		/* N.B. Is it possible for the notify function to block?? */
 		if (waiter->fl_notify)
 			waiter->fl_notify(waiter);
@@ -644,7 +643,6 @@ static int posix_locks_deadlock(struct file_lock *caller_fl,
 	caller_pid = caller_fl->fl_pid;
 	blocked_owner = block_fl->fl_owner;
 	blocked_pid = block_fl->fl_pid;
-	tmp = blocked_list.next;
 
 next_task:
 	if (caller_owner == blocked_owner && caller_pid == blocked_pid)
@@ -1708,7 +1706,7 @@ void
 posix_unblock_lock(struct file_lock *waiter)
 {
 	acquire_fl_sem();
-	if (!list_empty(&waiter->fl_list)) {
+	if (!list_empty(&waiter->fl_block)) {
 		locks_delete_block(waiter);
 		wake_up(&waiter->fl_wait);
 	}
@@ -1815,7 +1813,7 @@ int get_locks_status(char *buffer, char **start, off_t offset, int length)
 
 		list_for_each(btmp, &fl->fl_block) {
 			struct file_lock *bfl = list_entry(btmp,
-					struct file_lock, fl_list);
+					struct file_lock, fl_block);
 			lock_get_status(q, bfl, i, " ->");
 			move_lock_status(&q, &pos, offset);
 

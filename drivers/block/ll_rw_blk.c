@@ -328,7 +328,7 @@ static int ll_merge_requests_fn(request_queue_t *q, struct request *req,
  * on the list.
  *
  * This is called with interrupts off and no requests on the queue.
- * (and with the request spinlock aquired)
+ * (and with the request spinlock acquired)
  */
 static void generic_plug_device(request_queue_t *q, kdev_t dev)
 {
@@ -570,7 +570,7 @@ inline void drive_stat_acct (kdev_t dev, int rw,
 
 /*
  * add-request adds a request to the linked list.
- * It disables interrupts (aquires the request spinlock) so that it can muck
+ * It disables interrupts (acquires the request spinlock) so that it can muck
  * with the request-lists in peace. Thus it should be called with no spinlocks
  * held.
  *
@@ -624,7 +624,7 @@ void inline blkdev_release_request(struct request *req)
 }
 
 /*
- * Has to be called with the request spinlock aquired
+ * Has to be called with the request spinlock acquired
  */
 static void attempt_merge(request_queue_t * q,
 			  struct request *req,

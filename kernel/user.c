@@ -76,7 +76,7 @@ static inline struct user_struct *uid_hash_find(uid_t uid, struct user_struct **
 
 /*
  * For SMP, we need to re-test the user struct counter
- * after having aquired the spinlock. This allows us to do
+ * after having acquired the spinlock. This allows us to do
  * the common case (not freeing anything) without having
  * any locking.
  */

@@ -4,8 +4,6 @@
  * Application processor startup code, moved from smp.c to better support kernel profile
  */
 
-#include <linux/config.h>
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/init.h>

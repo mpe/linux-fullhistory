@@ -43,6 +43,7 @@ struct rpc_cred {
  * Client authentication handle
  */
 #define RPC_CREDCACHE_NR	8
+#define RPC_CREDCACHE_MASK	(RPC_CREDCACHE_NR - 1)
 struct rpc_auth {
 	struct rpc_cred *	au_credcache[RPC_CREDCACHE_NR];
 	unsigned long		au_expire;	/* cache expiry interval */

@@ -795,17 +795,12 @@ static int __init con3215_consetup(struct console *co, char *options)
  *  The console structure for the 3215 console
  */
 static struct console con3215 = {
-	"tty3215",
-	con3215_write,
-	NULL,
-	con3215_device,
-	NULL,
-	con3215_unblank,
-	con3215_consetup,
-	CON_PRINTBUFFER,
-	0,
-	0,
-	NULL
+	name:		"tty3215",
+	write:		con3215_write,
+	device:		con3215_device,
+	unblank:	con3215_unblank,
+	setup:		con3215_consetup,
+	flags:		CON_PRINTBUFFER,
 };
 
 #endif

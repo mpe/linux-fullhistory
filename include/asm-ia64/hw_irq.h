@@ -6,8 +6,6 @@
  * Copyright (C) 2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
-#include <linux/config.h>
-
 #include <linux/types.h>
 
 #include <asm/ptrace.h>

@@ -449,17 +449,13 @@ static int __init srm_console_setup(struct console *co, char *options)
 }
 
 static struct console srmcons = {
-        "srm0",
-        srm_console_write,
-        NULL,
-        srm_console_device,
-        srm_console_wait_key,
-        NULL,
-	srm_console_setup,
-        CON_PRINTBUFFER | CON_ENABLED, /* fake it out */
-        -1,
-        0,
-        NULL
+	name:		"srm0",
+	write:		srm_console_write,
+	device:		srm_console_device,
+	wait_key:	srm_console_wait_key,
+	setup:		srm_console_setup,
+	flags:		CON_PRINTBUFFER | CON_ENABLED, /* fake it out */
+	index:		-1,
 };
 
 #else

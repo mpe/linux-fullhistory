@@ -50,7 +50,7 @@
 #include <linux/usb.h>
 
 
-static const char *version = __FILE__ ": v0.4.13 2000/10/09 (C) 1999-2000 Petko Manolov (petkan@dce.bg)";
+static const char *version = __FILE__ ": v0.4.13 2000/10/13 (C) 1999-2000 Petko Manolov (petkan@dce.bg)";
 
 
 #define	PEGASUS_USE_INTR
@@ -478,6 +478,7 @@ static void set_ethernet_addr( pegasus_t *pegasus )
 	__u8	node_id[6];
 
 	get_node_id(pegasus, node_id);
+	set_registers( pegasus, EthID, sizeof(node_id), node_id );
 	memcpy( pegasus->net->dev_addr, node_id, sizeof(node_id) );
 }
 
@@ -631,7 +632,7 @@ static void write_bulk_callback( struct urb *urb )
 	netif_wake_queue( pegasus->net );
 }
 
-
+#ifdef	PEGASUS_USE_INTR
 static void intr_callback( struct urb *urb )
 {
 	pegasus_t *pegasus = urb->context;
@@ -662,7 +663,7 @@ static void intr_callback( struct urb *urb )
 			info("intr status %d", urb->status);
 	}
 }
-
+#endif
 
 static void pegasus_tx_timeout( struct net_device *net )
 {
@@ -904,7 +905,12 @@ static void * pegasus_probe( struct usb_device *dev, unsigned int ifnum )
 	init_MUTEX( &pegasus-> ctrl_sem );
 	init_waitqueue_head( &pegasus->ctrl_wait );
 
-	net = init_etherdev(0, 0);
+	net = init_etherdev( NULL, 0 );
+	if ( !net ) {
+		kfree( pegasus );
+		return	NULL;
+	}
+	
 	pegasus->usb = dev;
 	pegasus->net = net;
 	net->priv = pegasus;
@@ -920,9 +926,6 @@ static void * pegasus_probe( struct usb_device *dev, unsigned int ifnum )
 	net->get_stats = pegasus_netdev_stats;
 	net->mtu = PEGASUS_MTU;
 
-	set_ethernet_addr( pegasus );
-	register_netdev( net );
-
 	pegasus->features = usb_dev_id[dev_indx].private;
 	if ( reset_mac(pegasus) ) {
 		err("can't reset MAC");
@@ -932,17 +935,18 @@ static void * pegasus_probe( struct usb_device *dev, unsigned int ifnum )
 		return NULL;
 	}
 
+	set_ethernet_addr( pegasus );
+	
 	if ( pegasus->features & PEGASUS_II ) {
 		info( "setup Pegasus II specific registers" );
 		setup_pegasus_II( pegasus );
 	}
-
+	
 	pegasus->phy = mii_phy_probe( pegasus );
 	if ( !pegasus->phy ) {
 		warn( "can't locate MII phy, using default" );
 		pegasus->phy = 1;
 	}
-
 
 	info( "%s: %s", net->name, usb_dev_id[dev_indx].name );
 

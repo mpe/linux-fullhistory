@@ -117,6 +117,7 @@ struct wacom_features {
 struct wacom {
 	signed char data[10];
 	struct input_dev dev;
+	struct usb_device *usbdev;
 	struct urb irq;
 	struct wacom_features *features;
 	int tool;
@@ -239,6 +240,7 @@ static int wacom_open(struct input_dev *dev)
 	if (wacom->open++)
 		return 0;
 
+	wacom->irq.dev = wacom->usbdev;
 	if (usb_submit_urb(&wacom->irq))
 		return -EIO;
 
@@ -293,6 +295,7 @@ static void *wacom_probe(struct usb_device *dev, unsigned int ifnum)
 	wacom->dev.idvendor = dev->descriptor.idVendor;
 	wacom->dev.idproduct = dev->descriptor.idProduct;
 	wacom->dev.idversion = dev->descriptor.bcdDevice;
+	wacom->usbdev = dev;
 
 	FILL_INT_URB(&wacom->irq, dev, usb_rcvintpipe(dev, endpoint->bEndpointAddress),
 		     wacom->data, wacom->features->pktlen, wacom->features->irq, wacom, endpoint->bInterval);

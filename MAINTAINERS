@@ -295,9 +295,9 @@ S:	Supported
 
 DAMA SLAVE for AX.25
 P:	Joerg Reuter
-M:	jreuter@poboxes.com
-W:	http://poboxes.com/jreuter/
-W:	http://qsl.net/dl1bke/
+M:	jreuter@yaina.de
+W:	http://yaina.de/jreuter/
+W:	http://www.qsl.net/dl1bke/
 L:	linux-hams@vger.kernel.org
 S:	Maintained
 
@@ -423,8 +423,8 @@ S:	Maintained
 
 FILE LOCKING (flock() and fcntl()/lockf())
 P:	Matthew Wilcox
-M:	willy@thepuffingroup.com
-L:	linux-kernel@vger.kernel.org
+M:	matthew@wil.cx
+L:	linux-fsdevel@vger.kernel.org
 S:	Maintained
 
 FPU EMULATOR
@@ -1151,7 +1151,7 @@ S:	Maintained
 TLAN NETWORK DRIVER
 P:	Torben Mathiasen
 M:	torben.mathiasen@compaq.com
-M:	tmm@image.dk
+M:	torben@kernel.dk
 L:	tlan@vuser.vu.union.edu
 L:	linux-net@vger.kernel.org
 W:	http://tlan.kernel.dk
@@ -1386,9 +1386,9 @@ S:	Maintained for 2.2 only
 
 Z8530 DRIVER FOR AX.25
 P:	Joerg Reuter
-M:	jreuter@poboxes.com
-W:	http://poboxes.com/jreuter/
-W:	http://qsl.net/dl1bke/
+M:	jreuter@yaina.de
+W:	http://yaina.de/jreuter/
+W:	http://www.qsl.net/dl1bke/
 L:	linux-hams@vger.kernel.org
 S:	Maintained
 

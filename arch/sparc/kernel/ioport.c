@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.39 2000/06/20 01:10:00 anton Exp $
+/* $Id: ioport.c,v 1.40 2000/10/10 09:44:46 anton Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -244,6 +244,7 @@ static void _sparc_free_io(struct resource *res)
 	unsigned long plen;
 
 	plen = res->end - res->start + 1;
+	plen = (plen + PAGE_SIZE-1) & PAGE_MASK;
 	while (plen != 0) {
 		plen -= PAGE_SIZE;
 		(*_sparc_unmapioaddr)(res->start + plen);
@@ -323,7 +324,7 @@ void sbus_free_consistent(struct sbus_dev *sdev, long n, void *p, u32 ba)
 		return;
 	}
 
-	if (((unsigned long)p & (PAGE_MASK-1)) != 0) {
+	if (((unsigned long)p & (PAGE_SIZE-1)) != 0) {
 		printk("sbus_free_consistent: unaligned va %p\n", p);
 		return;
 	}
@@ -496,7 +497,7 @@ void *pci_alloc_consistent(struct pci_dev *pdev, size_t len, dma_addr_t *pba)
 
 	if ((res = kmalloc(sizeof(struct resource), GFP_KERNEL)) == NULL) {
 		free_pages(va, order);
-		printk("sbus_alloc_consistent: no core\n");
+		printk("pci_alloc_consistent: no core\n");
 		return NULL;
 	}
 	memset((char*)res, 0, sizeof(struct resource));
@@ -546,18 +547,18 @@ void pci_free_consistent(struct pci_dev *pdev, size_t n, void *p, dma_addr_t ba)
 
 	if ((res = _sparc_find_resource(&_sparc_dvma,
 	    (unsigned long)p)) == NULL) {
-		printk("sbus_free_consistent: cannot free %p\n", p);
+		printk("pci_free_consistent: cannot free %p\n", p);
 		return;
 	}
 
-	if (((unsigned long)p & (PAGE_MASK-1)) != 0) {
-		printk("sbus_free_consistent: unaligned va %p\n", p);
+	if (((unsigned long)p & (PAGE_SIZE-1)) != 0) {
+		printk("pci_free_consistent: unaligned va %p\n", p);
 		return;
 	}
 
 	n = (n + PAGE_SIZE-1) & PAGE_MASK;
 	if ((res->end-res->start)+1 != n) {
-		printk("sbus_free_consistent: region 0x%lx asked 0x%lx\n",
+		printk("pci_free_consistent: region 0x%lx asked 0x%lx\n",
 		    (long)((res->end-res->start)+1), (long)n);
 		return;
 	}

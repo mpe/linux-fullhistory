@@ -4,7 +4,7 @@
 #
 # 19971130 	Moved the amateur radio related network drivers from 
 #		drivers/net/ to drivers/hamradio for easier maintainance.
-#               Joerg Reuter DL1BKE <jreuter@poboxes.com>
+#               Joerg Reuter DL1BKE <jreuter@yaina.de>
 #
 # 20000806	Rewritten to use lists instead of if-statements.
 #		Christoph Hellwig <hch@caldera.de>

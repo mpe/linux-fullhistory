@@ -626,7 +626,7 @@ static void yenta_config_init(pci_socket_t *socket)
 			PCI_COMMAND_WAIT);
 
 	/* MAGIC NUMBERS! Fixme */
-	config_writeb(socket, PCI_CACHE_LINE_SIZE, 32);
+	config_writeb(socket, PCI_CACHE_LINE_SIZE, L1_CACHE_BYTES / 4);
 	config_writeb(socket, PCI_LATENCY_TIMER, 168);
 	config_writeb(socket, PCI_SEC_LATENCY_TIMER, 176);
 	config_writeb(socket, PCI_PRIMARY_BUS, dev->bus->number);

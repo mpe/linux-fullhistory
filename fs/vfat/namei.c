@@ -618,12 +618,11 @@ static int vfat_create_shortname(struct inode *dir, struct nls_table *nls,
 					sz = len;
 					ext_start = NULL;
 				}
-				break;
+				goto stop0;
 			}
 		}
-		if (charbuf[chi] == '.')
-			break;
 	}
+stop0:;	
 	if (ext_start == name - 1) {
 		sz = len;
 		ext_start = NULL;
@@ -640,10 +639,12 @@ static int vfat_create_shortname(struct inode *dir, struct nls_table *nls,
 			if (chl == 0)
 				break;
 			for (chi = 0; chi < chl; chi++)
-				if (!strchr(skip_chars, charbuf[chi]))
-					break;
+				if (!strchr(skip_chars, charbuf[chi])) {
+					goto stop1;
+				}
 			name_start++;
 		}
+stop1:;		
 		if (name_start != ext_start) {
 			sz = ext_start - name;
 			ext_start++;

@@ -253,7 +253,7 @@ struct rw_semaphore *down_write_failed(struct rw_semaphore *sem)
 	while (atomic_read(&sem->count) < 0) {
 		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
 		if (atomic_read(&sem->count) >= 0)
-			break;	/* we must attempt to aquire or bias the lock */
+			break;	/* we must attempt to acquire or bias the lock */
 		schedule();
 	}
 

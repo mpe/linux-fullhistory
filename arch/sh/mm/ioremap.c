@@ -17,6 +17,9 @@ static inline void remap_area_pte(pte_t * pte, unsigned long address, unsigned l
 	unsigned long phys_addr, unsigned long flags)
 {
 	unsigned long end;
+	pgprot_t pgprot = __pgprot(_PAGE_PRESENT | _PAGE_RW |
+				   _PAGE_DIRTY | _PAGE_ACCESSED |
+				   _PAGE_HW_SHARED | _PAGE_FLAGS_HARD | flags);
 
 	address &= ~PMD_MASK;
 	end = address + size;
@@ -25,8 +28,7 @@ static inline void remap_area_pte(pte_t * pte, unsigned long address, unsigned l
 	do {
 		if (!pte_none(*pte))
 			printk("remap_area_pte: page already exists\n");
-		set_pte(pte, mk_pte_phys(phys_addr, __pgprot(_PAGE_PRESENT | _PAGE_RW | 
-					_PAGE_DIRTY | _PAGE_ACCESSED | flags)));
+		set_pte(pte, mk_pte_phys(phys_addr, pgprot));
 		address += PAGE_SIZE;
 		phys_addr += PAGE_SIZE;
 		pte++;
@@ -55,22 +57,21 @@ static inline int remap_area_pmd(pmd_t * pmd, unsigned long address, unsigned lo
 }
 
 static int remap_area_pages(unsigned long address, unsigned long phys_addr,
-				 unsigned long size, unsigned long flags)
+	unsigned long size, unsigned long flags)
 {
 	pgd_t * dir;
 	unsigned long end = address + size;
 
 	phys_addr -= address;
-	dir = pgd_offset(&init_mm, address);
+	dir = pgd_offset_k(address);
 	flush_cache_all();
 	while (address < end) {
 		pmd_t *pmd = pmd_alloc_kernel(dir, address);
 		if (!pmd)
 			return -ENOMEM;
 		if (remap_area_pmd(pmd, address, end - address,
-					 phys_addr + address, flags))
+					phys_addr + address, flags))
 			return -ENOMEM;
-		set_pgdir(address, *dir);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}

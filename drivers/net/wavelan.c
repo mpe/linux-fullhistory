@@ -3680,8 +3680,8 @@ static void wavelan_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #endif
 
 	/* Prevent reentrancy. We need to do that because we may have
-	 * multiple interrupt handler running concurently.
-	 * It is safe because wv_splhi() disable interrupts before aquiring
+	 * multiple interrupt handler running concurrently.
+	 * It is safe because wv_splhi() disables interrupts before acquiring
 	 * the spinlock. */
 	spin_lock(&lp->spinlock);
 

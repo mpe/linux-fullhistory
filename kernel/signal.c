@@ -458,7 +458,7 @@ static int send_signal(int sig, struct siginfo *info, struct sigpending *signals
  * NOTE! we rely on the previous spin_lock to
  * lock interrupts for us! We can only be called with
  * "sigmask_lock" held, and the local interrupt must
- * have been disabled when that got aquired!
+ * have been disabled when that got acquired!
  *
  * No need to set need_resched since signal event passing
  * goes through ->blocked

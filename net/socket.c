@@ -1490,7 +1490,7 @@ out:
 /*
  *	Perform a file control on a socket file descriptor.
  *
- *	Doesn't aquire a fd lock, because no network fcntl
+ *	Doesn't acquire a fd lock, because no network fcntl
  *	function sleeps currently.
  */
 

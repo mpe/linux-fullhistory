@@ -517,8 +517,7 @@ typedef struct files_struct *fl_owner_t;
 struct file_lock {
 	struct file_lock *fl_next;	/* singly linked list for this inode  */
 	struct list_head fl_link;	/* doubly linked list of all locks */
-	struct list_head fl_block; /* circular list of blocked processes */
-	struct list_head fl_list;	/* block list member */
+	struct list_head fl_block;	/* circular list of blocked processes */
 	fl_owner_t fl_owner;
 	unsigned int fl_pid;
 	wait_queue_head_t fl_wait;

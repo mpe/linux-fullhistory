@@ -125,8 +125,7 @@ void *hpfs_map_sector(struct super_block *s, unsigned secno, struct buffer_head 
 	kdev_t dev = s->s_dev;
 	struct buffer_head *bh;
 
-					/* vvvv - workaround for the breada bug */
-	if (!ahead || secno + ahead + (read_ahead[MAJOR(dev)] >> 9) >= s->s_hpfs_fs_size)
+	if (!ahead || secno + ahead >= s->s_hpfs_fs_size)
 		*bhp = bh = bread(dev, secno, 512);
 	else *bhp = bh = breada(dev, secno, 512, 0, (ahead + 1) << 9);
 	if (bh != NULL)
@@ -174,8 +173,7 @@ void *hpfs_map_4sectors(struct super_block *s, unsigned secno, struct quad_buffe
 		goto bail;
 	}
 
-					/* vvvv - workaround for the breada bug */
-	if (!ahead || secno + 4 + ahead + (read_ahead[MAJOR(dev)] >> 9) > s->s_hpfs_fs_size)
+	if (!ahead || secno + 4 + ahead > s->s_hpfs_fs_size)
 		qbh->bh[0] = bh = bread(dev, secno, 512);
 	else qbh->bh[0] = bh = breada(dev, secno, 512, 0, (ahead + 4) << 9);
 	if (!bh)

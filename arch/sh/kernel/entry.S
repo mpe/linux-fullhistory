@@ -149,52 +149,55 @@ SYSCALL_NR =  (16*4+6*4)
 
 	.align	2
 tlb_miss_load:
-	mov.l	2f, $r0
-	mov.l	@$r0, $r6
-	mov	$r15, $r4
-	mov.l	1f, $r0
-	jmp	@$r0
+	bra	call_dpf
 	 mov	#0, $r5
 
 	.align	2
 tlb_miss_store:
-	mov.l	2f, $r0
-	mov.l	@$r0, $r6
-	mov	$r15, $r4
-	mov.l	1f, $r0
-	jmp	@$r0
+	bra	call_dpf
 	 mov	#1, $r5
 
 	.align	2
 initial_page_write:
-	mov.l	2f, $r0
-	mov.l	@$r0, $r6
-	mov	$r15, $r4
-	mov.l	1f, $r0
-	jmp	@$r0
+	bra	call_dpf
 	 mov	#1, $r5
 
 	.align	2
 tlb_protection_violation_load:
-	mov.l	2f, $r0
-	mov.l	@$r0, $r6
-	mov	$r15, $r4
-	mov.l	1f, $r0
-	jmp	@$r0
+	bra	call_dpf
 	 mov	#0, $r5
 
 	.align	2
 tlb_protection_violation_store:
-	mov.l	2f, $r0
-	mov.l	@$r0, $r6
-	mov	$r15, $r4
-	mov.l	1f, $r0
-	jmp	@$r0
+	bra	call_dpf
 	 mov	#1, $r5
 
+call_dpf:
+	mov.l	1f, $r0
+	mov	$r5, $r8
+	mov.l	@$r0, $r6
+	mov	$r6, $r9
+	mov.l	2f, $r0
+	sts	$pr, $r10
+	jsr	@$r0
+	 mov	$r15, $r4
+	!
+	tst	#0xff, $r0
+	bf/s	0f
+	 lds	$r10, $pr
+	rts
+	 nop
+0:	STI()
+	mov.l	3f, $r0
+	mov	$r9, $r6
+	mov	$r8, $r5
+	jmp	@$r0
+	 mov	$r15, $r4
+
 	.align 2
-1:	.long	SYMBOL_NAME(__do_page_fault)
-2:	.long	MMU_TEA
+1:	.long	MMU_TEA
+2:	.long	SYMBOL_NAME(__do_page_fault)
+3:	.long	SYMBOL_NAME(do_page_fault)
 
 #if defined(CONFIG_DEBUG_KERNEL_WITH_GDB_STUB) || defined(CONFIG_SH_STANDARD_BIOS)
 	.align	2

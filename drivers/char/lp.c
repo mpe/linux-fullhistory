@@ -603,17 +603,10 @@ static kdev_t lp_console_device (struct console *c)
 }
 
 static struct console lpcons = {
-	"lp",
-	lp_console_write,
-	NULL,
-	lp_console_device,
-	NULL,
-	NULL,
-	NULL,
-	CON_PRINTBUFFER,
-	0,
-	0,
-	NULL
+	name:		"lp",
+	write:		lp_console_write,
+	device:		lp_console_device,
+	flags:		CON_PRINTBUFFER,
 };
 
 #endif /* console on line printer */

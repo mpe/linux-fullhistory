@@ -3,6 +3,7 @@
 
 #include <asm/processor.h>
 #include <linux/threads.h>
+#include <linux/slab.h>
 
 #define pgd_quicklist (current_cpu_data.pgd_quick)
 #define pmd_quicklist ((unsigned long *)0)
@@ -17,18 +18,18 @@
  * if any.
  */
 
-extern __inline__ pgd_t *get_pgd_slow(void)
+static __inline__ pgd_t *get_pgd_slow(void)
 {
-	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL);
+	unsigned int pgd_size = (USER_PTRS_PER_PGD * sizeof(pgd_t));
+	pgd_t *ret = (pgd_t *)kmalloc(pgd_size, GFP_KERNEL);
 
-	if (ret) {
-		memset(ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
-		memcpy(ret + USER_PTRS_PER_PGD, swapper_pg_dir + USER_PTRS_PER_PGD, (PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
-	}
+	if (ret)
+		memset(ret, 0, pgd_size);
+
 	return ret;
 }
 
-extern __inline__ pgd_t *get_pgd_fast(void)
+static __inline__ pgd_t *get_pgd_fast(void)
 {
 	unsigned long *ret;
 
@@ -41,22 +42,22 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 	return (pgd_t *)ret;
 }
 
-extern __inline__ void free_pgd_fast(pgd_t *pgd)
+static __inline__ void free_pgd_fast(pgd_t *pgd)
 {
 	*(unsigned long *)pgd = (unsigned long) pgd_quicklist;
 	pgd_quicklist = (unsigned long *) pgd;
 	pgtable_cache_size++;
 }
 
-extern __inline__ void free_pgd_slow(pgd_t *pgd)
+static __inline__ void free_pgd_slow(pgd_t *pgd)
 {
-	free_page((unsigned long)pgd);
+	kfree(pgd);
 }
 
 extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted);
 extern pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long address_preadjusted);
 
-extern __inline__ pte_t *get_pte_fast(void)
+static __inline__ pte_t *get_pte_fast(void)
 {
 	unsigned long *ret;
 
@@ -68,14 +69,14 @@ extern __inline__ pte_t *get_pte_fast(void)
 	return (pte_t *)ret;
 }
 
-extern __inline__ void free_pte_fast(pte_t *pte)
+static __inline__ void free_pte_fast(pte_t *pte)
 {
 	*(unsigned long *)pte = (unsigned long) pte_quicklist;
 	pte_quicklist = (unsigned long *) pte;
 	pgtable_cache_size++;
 }
 
-extern __inline__ void free_pte_slow(pte_t *pte)
+static __inline__ void free_pte_slow(pte_t *pte)
 {
 	free_page((unsigned long)pte);
 }
@@ -85,7 +86,7 @@ extern __inline__ void free_pte_slow(pte_t *pte)
 #define pgd_free(pgd)	   free_pgd_slow(pgd)
 #define pgd_alloc()	     get_pgd_fast()
 
-extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
+static __inline__ pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 {
 	if (!pmd)
 		BUG();
@@ -105,7 +106,7 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 	return (pte_t *) pmd_page(*pmd) + address;
 }
 
-extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
+static __inline__ pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 {
 	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
 
@@ -132,7 +133,7 @@ fix:
  * allocating and freeing a pmd is trivial: the 1-entry pmd is
  * inside the pgd, so has no extra memory associated with it.
  */
-extern inline void pmd_free(pmd_t * pmd)
+static __inline__ void pmd_free(pmd_t * pmd)
 {
 }
 
@@ -140,22 +141,6 @@ extern inline void pmd_free(pmd_t * pmd)
 #define pmd_alloc_kernel	pmd_alloc
 
 extern int do_check_pgt_cache(int, int);
-
-extern inline void set_pgdir(unsigned long address, pgd_t entry)
-{
-	struct task_struct * p;
-	pgd_t *pgd;
-
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		if (!p->mm)
-			continue;
-		*pgd_offset(p->mm,address) = entry;
-	}
-	read_unlock(&tasklist_lock);
-	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-		pgd[address >> PGDIR_SHIFT] = entry;
-}
 
 /*
  * TLB flushing:
@@ -174,8 +159,9 @@ extern void flush_tlb_mm(struct mm_struct *mm);
 extern void flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			    unsigned long end);
 extern void flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
-extern inline void flush_tlb_pgtables(struct mm_struct *mm,
-				      unsigned long start, unsigned long end)
+
+static __inline__ void flush_tlb_pgtables(struct mm_struct *mm,
+					  unsigned long start, unsigned long end)
 {
 }
 

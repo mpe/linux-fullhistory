@@ -1009,8 +1009,10 @@ static int usbin_start(struct usb_audiodev *as)
 		}
 		spin_lock_irqsave(&as->lock, flags);
 	}
-	if (u->dma.count >= u->dma.dmasize && !u->dma.mapped)
+	if (u->dma.count >= u->dma.dmasize && !u->dma.mapped) {
+		spin_unlock_irqrestore(&as->lock, flags);
 		return 0;
+	}
 	u->flags |= FLG_RUNNING;
 	if (!(u->flags & FLG_URB0RUNNING)) {
 		urb = &u->durb[0].urb;
@@ -1372,8 +1374,10 @@ static int usbout_start(struct usb_audiodev *as)
 		}
 		spin_lock_irqsave(&as->lock, flags);
 	}
-	if (u->dma.count <= 0 && !u->dma.mapped)
+	if (u->dma.count <= 0 && !u->dma.mapped) {
+		spin_unlock_irqrestore(&as->lock, flags);
 		return 0;
+	}
        	u->flags |= FLG_RUNNING;
 	if (!(u->flags & FLG_URB0RUNNING)) {
 		urb = &u->durb[0].urb;
@@ -2772,6 +2776,14 @@ static void usb_audio_parsestreaming(struct usb_audio_state *s, unsigned char *b
 	init_waitqueue_head(&as->usbin.dma.wait);
 	init_waitqueue_head(&as->usbout.dma.wait);
 	spin_lock_init(&as->lock);
+	spin_lock_init(&as->usbin.durb[0].urb.lock);
+	spin_lock_init(&as->usbin.durb[1].urb.lock);
+	spin_lock_init(&as->usbin.surb[0].urb.lock);
+	spin_lock_init(&as->usbin.surb[1].urb.lock);
+	spin_lock_init(&as->usbout.durb[0].urb.lock);
+	spin_lock_init(&as->usbout.durb[1].urb.lock);
+	spin_lock_init(&as->usbout.surb[0].urb.lock);
+	spin_lock_init(&as->usbout.surb[1].urb.lock);
 	as->state = s;
 	as->usbin.interface = asifin;
 	as->usbout.interface = asifout;

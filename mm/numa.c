@@ -11,10 +11,10 @@
 
 int numnodes = 1;	/* Initialized for UMA platforms */
 
-#ifndef CONFIG_DISCONTIGMEM
-
 static bootmem_data_t contig_bootmem_data;
 pg_data_t contig_page_data = { bdata: &contig_bootmem_data };
+
+#ifndef CONFIG_DISCONTIGMEM
 
 /*
  * This is meant to be invoked by platforms whose physical memory starts
@@ -25,7 +25,7 @@ void __init free_area_init_node(int nid, pg_data_t *pgdat, struct page *pmap,
 	unsigned long *zones_size, unsigned long zone_start_paddr, 
 	unsigned long *zholes_size)
 {
-	free_area_init_core(0, NODE_DATA(0), &mem_map, zones_size, 
+	free_area_init_core(0, &contig_page_data, &mem_map, zones_size, 
 				zone_start_paddr, zholes_size, pmap);
 }
 
@@ -33,7 +33,11 @@ void __init free_area_init_node(int nid, pg_data_t *pgdat, struct page *pmap,
 
 struct page * alloc_pages_node(int nid, int gfp_mask, unsigned long order)
 {
+#ifdef CONFIG_NUMA
 	return __alloc_pages(NODE_DATA(nid)->node_zonelists + gfp_mask, order);
+#else
+	return alloc_pages(gfp_mask, order);
+#endif
 }
 
 #ifdef CONFIG_DISCONTIGMEM
@@ -42,13 +46,12 @@ struct page * alloc_pages_node(int nid, int gfp_mask, unsigned long order)
 
 static spinlock_t node_lock = SPIN_LOCK_UNLOCKED;
 
-void show_free_areas_node(int nid)
+void show_free_areas_node(pg_data_t *pgdat)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&node_lock, flags);
-	printk("Memory information for node %d:\n", nid);
-	show_free_areas_core(nid);
+	show_free_areas_core(pgdat);
 	spin_unlock_irqrestore(&node_lock, flags);
 }
 
@@ -79,6 +82,12 @@ void __init free_area_init_node(int nid, pg_data_t *pgdat, struct page *pmap,
 	memset(pgdat->valid_addr_bitmap, 0, size);
 }
 
+static struct page * alloc_pages_pgdat(pg_data_t *pgdat, int gfp_mask,
+	unsigned long order)
+{
+	return __alloc_pages(pgdat->node_zonelists + gfp_mask, order);
+}
+
 /*
  * This can be refined. Currently, tries to do round robin, instead
  * should do concentratic circle search, starting from current node.
@@ -86,33 +95,34 @@ void __init free_area_init_node(int nid, pg_data_t *pgdat, struct page *pmap,
 struct page * alloc_pages(int gfp_mask, unsigned long order)
 {
 	struct page *ret = 0;
-	int startnode, tnode;
+	pg_data_t *start, *temp;
 #ifndef CONFIG_NUMA
 	unsigned long flags;
-	static int nextnid = 0;
+	static pg_data_t *next = 0;
 #endif
 
 	if (order >= MAX_ORDER)
 		return NULL;
 #ifdef CONFIG_NUMA
-	tnode = numa_node_id();
+	temp = NODE_DATA(numa_node_id());
 #else
 	spin_lock_irqsave(&node_lock, flags);
-	tnode = nextnid;
-	nextnid++;
-	if (nextnid == numnodes)
-		nextnid = 0;
+	if (!next) next = pgdat_list;
+	temp = next;
+	next = next->node_next;
 	spin_unlock_irqrestore(&node_lock, flags);
 #endif
-	startnode = tnode;
-	while (tnode < numnodes) {
-		if ((ret = alloc_pages_node(tnode++, gfp_mask, order)))
+	start = temp;
+	while (temp) {
+		if ((ret = alloc_pages_pgdat(temp, gfp_mask, order)))
 			return(ret);
+		temp = temp->node_next;
 	}
-	tnode = 0;
-	while (tnode != startnode) {
-		if ((ret = alloc_pages_node(tnode++, gfp_mask, order)))
+	temp = pgdat_list;
+	while (temp != start) {
+		if ((ret = alloc_pages_pgdat(temp, gfp_mask, order)))
 			return(ret);
+		temp = temp->node_next;
 	}
 	return(0);
 }

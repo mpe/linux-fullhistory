@@ -287,7 +287,9 @@ static void prom_cons_write(struct console *con, const char *str, unsigned count
 }
 
 static struct console prom_console = {
-	"PROM", prom_cons_write, 0, 0, 0, 0, 0, CON_PRINTBUFFER, 0, 0, 0
+	name:		"PROM",
+	write:		prom_cons_write,
+	flags:		CON_PRINTBUFFER,
 };
 #endif
 

@@ -2596,17 +2596,13 @@ sab82532_console_setup(struct console *con, char *options)
 }
 
 static struct console sab82532_console = {
-	"ttyS",
-	sab82532_console_write,
-	NULL,
-	sab82532_console_device,
-	sab82532_console_wait_key,
-	NULL,
-	sab82532_console_setup,
-	CON_PRINTBUFFER,
-	-1,
-	0,
-	NULL
+	name:		"ttyS",
+	write:		sab82532_console_write,
+	device:		sab82532_console_device,
+	wait_key:	sab82532_console_wait_key,
+	setup:		sab82532_console_setup,
+	flags:		CON_PRINTBUFFER,
+	index:		-1,
 };
 
 int __init sab82532_console_init(void)

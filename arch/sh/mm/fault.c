@@ -231,8 +231,11 @@ do_sigbus:
 		goto no_context;
 }
 
-static int __do_page_fault1(struct pt_regs *regs, unsigned long writeaccess,
-			    unsigned long address)
+/*
+ * Called with interrupt disabled.
+ */
+asmlinkage int __do_page_fault(struct pt_regs *regs, unsigned long writeaccess,
+			       unsigned long address)
 {
 	pgd_t *dir;
 	pmd_t *pmd;
@@ -240,8 +243,6 @@ static int __do_page_fault1(struct pt_regs *regs, unsigned long writeaccess,
 	pte_t entry;
 
 	if (address >= VMALLOC_START && address < VMALLOC_END)
-		/* We can change the implementation of P3 area pte entries.
-		   set_pgdir and such. */
 		dir = pgd_offset_k(address);
 	else
 		dir = pgd_offset(current->mm, address);
@@ -273,23 +274,6 @@ static int __do_page_fault1(struct pt_regs *regs, unsigned long writeaccess,
 	set_pte(pte, entry);
 	update_mmu_cache(NULL, address, entry);
 	return 0;
-}
-
-/*
- * Called with interrupt disabled.
- */
-asmlinkage void __do_page_fault(struct pt_regs *regs, unsigned long writeaccess,
-				unsigned long address)
-{
-	/*
-	 * XXX: Could you please implement this (calling __do_page_fault1)
-	 * in assembler language in entry.S?
-	 */
-	if (__do_page_fault1(regs, writeaccess, address)  == 0)
-		/* Done. */
-		return;
-	sti();
-	do_page_fault(regs, writeaccess, address);
 }
 
 void update_mmu_cache(struct vm_area_struct * vma,

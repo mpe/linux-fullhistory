@@ -159,17 +159,9 @@ int mac_SCC_reset_done = 0;
 static int scc_port = -1;
 
 static struct console mac_console_driver = {
-	"debug",
-	NULL,			/* write */
-	NULL,			/* read */
-	NULL,			/* device */
-	NULL,			/* wait_key */
-	NULL,			/* unblank */
-	NULL,			/* setup */
-	CON_PRINTBUFFER,
-	-1,
-	0,
-	NULL
+	name:		"debug",
+	flags:		CON_PRINTBUFFER,
+	index:		-1,
 };
 
 /*

@@ -562,6 +562,7 @@ static int mdc800_device_open (struct inode* inode, struct file *file)
 	mdc800->camera_request_ready=0;
 
 	retval=0;
+	mdc800->irq_urb->dev = mdc800->dev;
 	if (usb_submit_urb (mdc800->irq_urb))
 	{
 		err ("request USB irq fails (submit_retval=%i urb_status=%i).",retval, mdc800->irq_urb->status);
@@ -640,6 +641,7 @@ static ssize_t mdc800_device_read (struct file *file, char *buf, size_t len, lof
 				mdc800->out_ptr=0;
 
 				/* Download -> Request new bytes */
+				mdc800->download_urb->dev = mdc800->dev;
 				if (usb_submit_urb (mdc800->download_urb))
 				{
 					err ("Can't submit download urb (status=%i)",mdc800->download_urb->status);
@@ -738,6 +740,7 @@ static ssize_t mdc800_device_write (struct file *file, const char *buf, size_t l
 
 			mdc800->state=WORKING;
 			memcpy (mdc800->write_urb->transfer_buffer, mdc800->in,8);
+			mdc800->write_urb->dev = mdc800->dev;
 			if (usb_submit_urb (mdc800->write_urb))
 			{
 				err ("submitting write urb fails (status=%i)", mdc800->write_urb->status);

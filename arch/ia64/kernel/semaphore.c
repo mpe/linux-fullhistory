@@ -7,9 +7,9 @@
 
 /*
  * Semaphores are implemented using a two-way counter: The "count"
- * variable is decremented for each process that tries to aquire the
+ * variable is decremented for each process that tries to acquire the
  * semaphore, while the "sleepers" variable is a count of such
- * aquires.
+ * acquires.
  *
  * Notably, the inline "up()" and "down()" functions can efficiently
  * test if they need to do any extra work (up needs to do something
@@ -188,7 +188,7 @@ down_read_failed_biased (struct rw_semaphore *sem)
 }
 
 /*
- * This gets called if we failed to aquire the lock and we are not
+ * This gets called if we failed to acquire the lock and we are not
  * biased to acquire the lock.  We undo the decrement that was
  * done earlier, go to sleep, and then attempt to re-acquire the
  * lock afterwards.
@@ -279,7 +279,7 @@ down_write_failed (struct rw_semaphore *sem)
 	while (sem->count < 0) {
 		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
 		if (sem->count >= 0)
-			break;	/* we must attempt to aquire or bias the lock */
+			break;	/* we must attempt to acquire or bias the lock */
 		schedule();
 	}
 

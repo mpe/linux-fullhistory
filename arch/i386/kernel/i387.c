@@ -36,19 +36,6 @@
  * FPU lazy state save handling.
  */
 
-void save_fpu( struct task_struct *tsk )
-{
-	if ( HAVE_FXSR ) {
-		asm volatile( "fxsave %0 ; fwait"
-			      : "=m" (tsk->thread.i387.fxsave) );
-	} else {
-		asm volatile( "fnsave %0 ; fwait"
-			      : "=m" (tsk->thread.i387.fsave) );
-	}
-	tsk->flags &= ~PF_USEDFPU;
-	stts();
-}
-
 void save_init_fpu( struct task_struct *tsk )
 {
 	if ( HAVE_FXSR ) {

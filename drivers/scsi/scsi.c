@@ -2155,8 +2155,11 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	       (scsi_memory_upper_value - scsi_init_memory_start) / 1024);
 #endif
 
-	/* Remove it from the linked list and /proc */
-	if (tpnt->present) {
+	/*
+	 * Remove it from the linked list and /proc if all
+	 * hosts were successfully removed (ie preset == 0)
+	 */
+	if (!tpnt->present) {
 		Scsi_Host_Template **SHTp = &scsi_hosts;
 		Scsi_Host_Template *SHT;
 

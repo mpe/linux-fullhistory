@@ -20,8 +20,8 @@
 /*
  * Semaphores are implemented using a two-way counter:
  * The "count" variable is decremented for each process
- * that tries to aquire the semaphore, while the "sleeping"
- * variable is a count of such aquires.
+ * that tries to acquire the semaphore, while the "sleeping"
+ * variable is a count of such acquires.
  *
  * Notably, the inline "up()" and "down()" functions can
  * efficiently test if they need to do any extra work (up
@@ -373,7 +373,7 @@ struct rw_semaphore *down_write_failed(struct rw_semaphore *sem)
 	while (atomic_read(&sem->count) < 0) {
 		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
 		if (atomic_read(&sem->count) >= 0)
-			break;	/* we must attempt to aquire or bias the lock */
+			break;	/* we must attempt to acquire or bias the lock */
 		schedule();
 	}
 

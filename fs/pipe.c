@@ -284,7 +284,7 @@ pipe_poll(struct file *filp, poll_table *wait)
 
 	poll_wait(filp, PIPE_WAIT(*inode), wait);
 
-	/* Reading only -- no need for aquiring the semaphore.  */
+	/* Reading only -- no need for acquiring the semaphore.  */
 	mask = POLLIN | POLLRDNORM;
 	if (PIPE_EMPTY(*inode))
 		mask = POLLOUT | POLLWRNORM;

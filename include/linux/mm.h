@@ -380,7 +380,7 @@ extern void FASTCALL(free_pages(unsigned long addr, unsigned long order));
 #define free_page(addr) free_pages((addr),0)
 
 extern void show_free_areas(void);
-extern void show_free_areas_node(int nid);
+extern void show_free_areas_node(pg_data_t *pgdat);
 
 extern void clear_page_tables(struct mm_struct *, unsigned long, int);
 
@@ -526,11 +526,6 @@ extern struct vm_area_struct *find_extend_vma(struct mm_struct *mm, unsigned lon
 				buffer_mem.min_percent * num_physpages)
 #define pgcache_under_min()	(atomic_read(&page_cache_size) * 100 < \
 				page_cache.min_percent * num_physpages)
-
-#define vmlist_access_lock(mm)		spin_lock(&mm->page_table_lock)
-#define vmlist_access_unlock(mm)	spin_unlock(&mm->page_table_lock)
-#define vmlist_modify_lock(mm)		vmlist_access_lock(mm)
-#define vmlist_modify_unlock(mm)	vmlist_access_unlock(mm)
 
 #endif /* __KERNEL__ */
 

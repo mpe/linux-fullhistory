@@ -166,17 +166,13 @@ static int __init sh_console_setup(struct console *co, char *options)
 }
 
 static struct console sh_console = {
-	"bios",
-	sh_console_write,
-	NULL,
-	sh_console_device,
-	sh_console_wait_key,
-	NULL,
-	sh_console_setup,
-	CON_PRINTBUFFER,
-	-1,
-	0,
-	NULL
+	name:		"bios",
+	write:		sh_console_write,
+	device:		sh_console_device,
+	wait_key:	sh_console_wait_key,
+	setup:		sh_console_setup,
+	flags:		CON_PRINTBUFFER,
+	index:		-1,
 };
 
 void sh_console_init(void)

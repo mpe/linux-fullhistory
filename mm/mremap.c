@@ -141,10 +141,10 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 				get_file(new_vma->vm_file);
 			if (new_vma->vm_ops && new_vma->vm_ops->open)
 				new_vma->vm_ops->open(new_vma);
-			vmlist_modify_lock(current->mm);
+			spin_lock(&current->mm->page_table_lock);
 			insert_vm_struct(current->mm, new_vma);
 			merge_segments(current->mm, new_vma->vm_start, new_vma->vm_end);
-			vmlist_modify_unlock(current->mm);
+			spin_unlock(&current->mm->page_table_lock);
 			do_munmap(current->mm, addr, old_len);
 			current->mm->total_vm += new_len >> PAGE_SHIFT;
 			if (new_vma->vm_flags & VM_LOCKED) {
@@ -258,9 +258,9 @@ unsigned long do_mremap(unsigned long addr,
 		/* can we just expand the current mapping? */
 		if (max_addr - addr >= new_len) {
 			int pages = (new_len - old_len) >> PAGE_SHIFT;
-			vmlist_modify_lock(vma->vm_mm);
+			spin_lock(&vma->vm_mm->page_table_lock);
 			vma->vm_end = addr + new_len;
-			vmlist_modify_unlock(vma->vm_mm);
+			spin_unlock(&vma->vm_mm->page_table_lock);
 			current->mm->total_vm += pages;
 			if (vma->vm_flags & VM_LOCKED) {
 				current->mm->locked_vm += pages;

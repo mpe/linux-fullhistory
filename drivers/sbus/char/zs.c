@@ -2830,17 +2830,13 @@ static int __init zs_console_setup(struct console *con, char *options)
 }
 
 static struct console zs_console = {
-	"ttyS",
-	zs_console_write,
-	NULL,
-	zs_console_device,
-	zs_console_wait_key,
-	NULL,
-	zs_console_setup,
-	CON_PRINTBUFFER,
-	-1,
-	0,
-	NULL
+	name:		"ttyS",
+	write:		zs_console_write,
+	device:		zs_console_device,
+	wait_key:	zs_console_wait_key,
+	setup:		zs_console_setup,
+	flags:		CON_PRINTBUFFER,
+	index:		-1,
 };
 
 static int __init zs_console_init(void)

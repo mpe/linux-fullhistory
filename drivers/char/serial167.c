@@ -2858,17 +2858,13 @@ static int __init serial167_console_setup(struct console *co, char *options)
 
 
 static struct console sercons = {
-	"ttyS",
-	serial167_console_write,
-	NULL,
-	serial167_console_device,
-	serial167_console_wait_key,
-	NULL,
-	serial167_console_setup,
-	CON_PRINTBUFFER,
-	-1,
-	0,
-	NULL
+	name:		"ttyS",
+	write:		serial167_console_write,
+	device:		serial167_console_device,
+	wait_key:	serial167_console_wait_key,
+	setup:		serial167_console_setup,
+	flags:		CON_PRINTBUFFER,
+	index:		-1,
 };
 
 

@@ -62,6 +62,7 @@ int atari_partition (struct gendisk *hd, kdev_t dev,
       /* if there's no valid primary partition, assume that no Atari
 	 format partition table (there's no reliable magic or the like
 	 :-() */
+      brelse(bh);
       return 0;
   }
 

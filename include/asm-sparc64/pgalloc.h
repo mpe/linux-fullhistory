@@ -304,7 +304,4 @@ extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 
 extern int do_check_pgt_cache(int, int);
 
-/* Nothing to do on sparc64 :) */
-#define set_pgdir(address, entry)	do { } while(0)
-
 #endif /* _SPARC64_PGALLOC_H */

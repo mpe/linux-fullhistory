@@ -85,7 +85,7 @@ struct cpuinfo_x86 {
 #define X86_FEATURE_CMOV	0x00008000	/* CMOV instruction (FCMOVCC and FCOMI too if FPU present) */
 #define X86_FEATURE_PAT		0x00010000	/* Page Attribute Table */
 #define X86_FEATURE_PSE36	0x00020000	/* 36-bit PSEs */
-#define X86_FEATURE_18		0x00040000
+#define X86_FEATURE_PN		0x00040000
 #define X86_FEATURE_19		0x00080000
 #define X86_FEATURE_20		0x00100000
 #define X86_FEATURE_21		0x00200000

@@ -315,12 +315,12 @@ static void unuse_process(struct mm_struct * mm,
 	 */
 	if (!mm)
 		return;
-	vmlist_access_lock(mm);
+	spin_lock(&mm->page_table_lock);
 	for (vma = mm->mmap; vma; vma = vma->vm_next) {
 		pgd_t * pgd = pgd_offset(mm, vma->vm_start);
 		unuse_vma(vma, pgd, entry, page);
 	}
-	vmlist_access_unlock(mm);
+	spin_unlock(&mm->page_table_lock);
 	return;
 }
 

@@ -134,6 +134,8 @@
  *			     - Incresed tx_timeout beacuse of auto-neg.
  *			     - Adjusted timers for forced speeds.
  *
+ *	v1.12 Oct 12, 2000   - Minor fixes (memleak, init, etc.)
+ *
  *******************************************************************************/
 
                                                                                 
@@ -153,14 +155,14 @@ typedef u32 (TLanIntVectorFunc)( struct net_device *, u16 );
 
 
 /* For removing EISA devices */
-static	struct net_device	*TLan_Eisa_Devices = NULL;
+static	struct net_device	*TLan_Eisa_Devices;
 
-static	int		TLanDevicesInstalled = 0;
+static	int		TLanDevicesInstalled;
 
 /* Force speed, duplex and aui settings */
-static	int		aui = 0;
-static	int		duplex = 0; 
-static	int		speed = 0;
+static	int		aui;
+static	int		duplex; 
+static	int		speed;
 
 MODULE_AUTHOR("Maintainer: Torben Mathiasen <torben.mathiasen@compaq.com>");
 MODULE_DESCRIPTION("Driver for TI ThunderLAN based ethernet PCI adapters");
@@ -174,14 +176,14 @@ EXPORT_NO_SYMBOLS;
 #undef MONITOR
 
 /* Turn on debugging. See linux/Documentation/networking/tlan.txt for details */
-static  int		debug = 0;
+static  int		debug;
 
-static	int		bbuf = 0;
+static	int		bbuf;
 static	u8		*TLanPadBuffer;
 static	char		TLanSignature[] = "TLAN";
-static const char *tlan_banner = "ThunderLAN driver v1.11\n";
-static int tlan_have_pci = 0;
-static int tlan_have_eisa = 0;
+static const char *tlan_banner = "ThunderLAN driver v1.12\n";
+static int tlan_have_pci;
+static int tlan_have_eisa;
 
 const char *media[] = {
 	"10BaseT-HD ", "10BaseT-FD ","100baseTx-HD ", 
@@ -244,7 +246,7 @@ static struct pci_device_id tlan_pci_tbl[] __devinitdata = {
 };
 MODULE_DEVICE_TABLE(pci, tlan_pci_tbl);		
 
-static int	TLan_EisaProbe( void );
+static void	TLan_EisaProbe( void );
 static void	TLan_Eisa_Cleanup( void );
 static int      TLan_Init( struct net_device * );
 static int	TLan_Open( struct net_device *dev );
@@ -371,7 +373,7 @@ TLan_SetTimer( struct net_device *dev, u32 ticks, u32 type )
 	 **************************************************************/
 
 
-static void __exit tlan_remove_one( struct pci_dev *pdev)
+static void __devexit tlan_remove_one( struct pci_dev *pdev)
 {
 	struct net_device *dev = pdev->driver_data;
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
@@ -397,7 +399,6 @@ static struct pci_driver tlan_driver = {
 
 static int __init tlan_probe(void)
 {
-	int		rc;
 	static int	pad_allocated = 0;
 	
 	printk(KERN_INFO "%s", tlan_banner);
@@ -417,10 +418,10 @@ static int __init tlan_probe(void)
 	
 	/* Use new style PCI probing. Now the kernel will
 	   do most of this for us */
-	rc = pci_module_init(&tlan_driver);
+	pci_module_init(&tlan_driver);
 
 	TLAN_DBG(TLAN_DEBUG_PROBE, "Starting EISA Probe....\n");
-	rc = TLan_EisaProbe();
+	TLan_EisaProbe();
 		
 	printk(KERN_INFO "TLAN: %d device%s installed, PCI: %d  EISA: %d\n", 
 		 TLanDevicesInstalled, TLanDevicesInstalled == 1 ? "" : "s",
@@ -459,7 +460,7 @@ static int __devinit tlan_init_one( struct pci_dev *pdev,
 	 *
 	 **************************************************************/
 
-static int __init TLan_probe1(struct pci_dev *pdev, 
+static int __devinit TLan_probe1(struct pci_dev *pdev, 
 				long ioaddr, int irq, int rev, const struct pci_device_id *ent )
 {
 
@@ -475,8 +476,6 @@ static int __init TLan_probe1(struct pci_dev *pdev,
 	}
 	
 	priv = dev->priv;
-	memset(priv, 0, sizeof(TLanPrivateInfo));
-	
 		
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
@@ -485,8 +484,11 @@ static int __init TLan_probe1(struct pci_dev *pdev,
 	/* Is this a PCI device? */
 	if (pdev) {
 		priv->adapter = &board_info[ent->driver_data];
-		if (pci_enable_device(pdev))
+		if (pci_enable_device(pdev)) {
+			unregister_netdev(dev);
+			kfree(dev);
 			return -1;
+		}
 		pci_read_config_byte ( pdev, PCI_REVISION_ID, &pci_rev);
 		priv->adapterRev = pci_rev; 
 		pci_set_master(pdev);
@@ -618,7 +620,7 @@ module_exit(tlan_exit);
 	 *
 	 *************************************************************/
 
-static int __init TLan_EisaProbe (void) 
+static void  __init TLan_EisaProbe (void) 
 {
 	long 	ioaddr;
 	int 	rc = -ENODEV;
@@ -627,7 +629,7 @@ static int __init TLan_EisaProbe (void)
 
 	if (!EISA_bus) {	
 		TLAN_DBG(TLAN_DEBUG_PROBE, "No EISA bus present\n");
-		return 0;
+		return;
 	}
 	
 	/* Loop through all slots of the EISA bus */
@@ -696,8 +698,6 @@ static int __init TLan_EisaProbe (void)
 			continue;
 		
 	}
-
-	return rc;
 
 } /* TLan_EisaProbe */
 
@@ -822,7 +822,7 @@ static int TLan_Open( struct net_device *dev )
 	if ( err ) {
 		printk(KERN_ERR "TLAN:  Cannot open %s because IRQ %d is already in use.\n", dev->name, dev->irq );
 		MOD_DEC_USE_COUNT;
-		return -EAGAIN;
+		return err;
 	}
 	
 	init_timer(&priv->timer);
@@ -899,7 +899,6 @@ static int TLan_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 static void TLan_tx_timeout(struct net_device *dev)
 {
-	//TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 	
 	TLAN_DBG( TLAN_DEBUG_GNRL, "%s: Transmit timed out.\n", dev->name);
 	
@@ -908,7 +907,7 @@ static void TLan_tx_timeout(struct net_device *dev)
 	TLan_ReadAndClearStats( dev, TLAN_IGNORE );
 	TLan_ResetAdapter( dev );
 	dev->trans_start = jiffies;
-	netif_start_queue( dev );	
+	netif_wake_queue( dev );	
 
 }
 	
@@ -2640,9 +2639,8 @@ void TLan_PhyFinishAutoNeg( struct net_device *dev )
         *
         * ******************************************************************/
 
-void TLan_PhyMonitor( struct net_device *data )
+void TLan_PhyMonitor( struct net_device *dev )
 {
-	struct net_device *dev = (struct net_device *)data;
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 	u16     phy;
 	u16     phy_status;

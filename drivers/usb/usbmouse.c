@@ -43,6 +43,7 @@ struct usb_mouse {
 	char name[128];
 	struct input_dev dev;
 	struct urb irq;
+	struct usb_device *my_usb_device;	// for resubmitting my urb
 	int open;
 };
 
@@ -72,6 +73,7 @@ static int usb_mouse_open(struct input_dev *dev)
 	if (mouse->open++)
 		return 0;
 
+	mouse->irq.dev = mouse->my_usb_device;
 	if (usb_submit_urb(&mouse->irq))
 		return -EIO;
 
@@ -148,6 +150,7 @@ static void *usb_mouse_probe(struct usb_device *dev, unsigned int ifnum)
 
 	kfree(buf);
 
+	mouse->my_usb_device = dev;
 	FILL_INT_URB(&mouse->irq, dev, pipe, mouse->data, maxp > 8 ? 8 : maxp,
 		usb_mouse_irq, mouse, endpoint->bInterval);
 

@@ -49,17 +49,13 @@ static kdev_t prom_console_device(struct console *c)
 
 static struct console sercons =
 {
-    "ttyS",
-    prom_console_write,
-    NULL,
-    prom_console_device,
-    prom_console_wait_key,
-    NULL,
-    prom_console_setup,
-    CON_PRINTBUFFER,
-    -1,
-    0,
-    NULL
+    name:	"ttyS",
+    write:	prom_console_write,
+    device:	prom_console_device,
+    wait_key:	prom_console_wait_key,
+    setup:	prom_console_setup,
+    flags:	CON_PRINTBUFFER,
+    index:	-1,
 };
 
 /*

@@ -2147,17 +2147,13 @@ static kdev_t vt_console_device(struct console *c)
 }
 
 struct console vt_console_driver = {
-	"tty",
-	vt_console_print,
-	NULL,
-	vt_console_device,
-	keyboard_wait_for_keypress,
-	unblank_screen,
-	NULL,
-	CON_PRINTBUFFER,
-	-1,
-	0,
-	NULL
+	name:		"tty",
+	write:		vt_console_print,
+	device:		vt_console_device,
+	wait_key:	keyboard_wait_for_keypress,
+	unblank:	unblank_screen,
+	flags:		CON_PRINTBUFFER,
+	index:		-1,
 };
 #endif
 

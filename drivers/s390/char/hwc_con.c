@@ -35,17 +35,10 @@ kdev_t hwc_console_device (struct console *);
 struct console hwc_console =
 {
 
-	hwc_console_name,
-	hwc_console_write,
-	NULL,
-	hwc_console_device,
-	NULL,
-	NULL,
-	NULL,
-	CON_PRINTBUFFER,
-	0,
-	0,
-	NULL
+	name:		hwc_console_name,
+	write:		hwc_console_write,
+	device:		hwc_console_device,
+	flags:		CON_PRINTBUFFER,
 };
 
 void 

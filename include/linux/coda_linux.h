@@ -40,8 +40,6 @@ int coda_release(struct inode *i, struct file *f);
 int coda_permission(struct inode *inode, int mask);
 int coda_revalidate_inode(struct dentry *);
 int coda_notify_change(struct dentry *, struct iattr *);
-int coda_pioctl(struct inode * inode, struct file * filp, 
-                unsigned int cmd, unsigned long arg);
 
 /* global variables */
 extern int coda_debug;

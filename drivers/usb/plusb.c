@@ -245,6 +245,7 @@ static void plusb_int_complete(urb_t *purb)
 			return;
 		}
 		
+		s->bulkurb->dev = s->usbdev;
 		ret=usb_submit_urb(s->bulkurb);
 		if(ret && ret!=-EBUSY) {
 			err("plusb_int_complete: usb_submit_urb failed");

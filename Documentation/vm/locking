@@ -4,7 +4,7 @@ The intent of this file is to have an uptodate, running commentary
 from different people about how locking and synchronization is done 
 in the Linux vm code.
 
-vmlist_access_lock/vmlist_modify_lock
+page_table_lock
 --------------------------------------
 
 Page stealers pick processes out of the process pool and scan for 
@@ -12,10 +12,10 @@ the best process to steal pages from. To guarantee the existence
 of the victim mm, a mm_count inc and a mmdrop are done in swap_out().
 Page stealers hold kernel_lock to protect against a bunch of races.
 The vma list of the victim mm is also scanned by the stealer, 
-and the vmlist_lock is used to preserve list sanity against the
+and the page_table_lock is used to preserve list sanity against the
 process adding/deleting to the list. This also guarantees existence
 of the vma. Vma existence is not guaranteed once try_to_swap_out() 
-drops the vmlist lock. To guarantee the existence of the underlying 
+drops the page_table_lock. To guarantee the existence of the underlying 
 file structure, a get_file is done before the swapout() method is 
 invoked. The page passed into swapout() is guaranteed not to be reused
 for a different purpose because the page reference count due to being
@@ -32,19 +32,19 @@ you must hold mmap_sem to guard against clones doing mmap/munmap/faults,
 (ie all vm system calls and faults), and from ptrace, swapin due to 
 swap deletion etc.
 2. To modify the vmlist (add/delete or change fields in an element), 
-you must also hold vmlist_modify_lock, to guard against page stealers 
+you must also hold page_table_lock, to guard against page stealers 
 scanning the list.
 3. To scan the vmlist (find_vma()), you must either 
         a. grab mmap_sem, which should be done by all cases except 
 	   page stealer.
 or
-        b. grab vmlist_access_lock, only done by page stealer.
-4. While holding the vmlist_modify_lock, you must be able to guarantee
+        b. grab page_table_lock, only done by page stealer.
+4. While holding the page_table_lock, you must be able to guarantee
 that no code path will lead to page stealing. A better guarantee is
 to claim non sleepability, which ensures that you are not sleeping
 for a lock, whose holder might in turn be doing page stealing.
-5. You must be able to guarantee that while holding vmlist_modify_lock
-or vmlist_access_lock of mm A, you will not try to get either lock
+5. You must be able to guarantee that while holding page_table_lock
+or page_table_lock of mm A, you will not try to get either lock
 for mm B.
 
 The caveats are:
@@ -52,7 +52,7 @@ The caveats are:
 The update of mmap_cache is racy (page stealer can race with other code
 that invokes find_vma with mmap_sem held), but that is okay, since it 
 is a hint. This can be fixed, if desired, by having find_vma grab the
-vmlist lock.
+page_table_lock.
 
 
 Code that add/delete elements from the vmlist chain are
@@ -72,23 +72,16 @@ in some cases it is not really needed. Eg, vm_start is modified by
 expand_stack(), it is hard to come up with a destructive scenario without 
 having the vmlist protection in this case.
 
-The vmlist lock nests with the inode i_shared_lock and the kmem cache
+The page_table_lock nests with the inode i_shared_lock and the kmem cache
 c_spinlock spinlocks. This is okay, since code that holds i_shared_lock 
 never asks for memory, and the kmem code asks for pages after dropping
-c_spinlock. The vmlist lock also nests with pagecache_lock and 
+c_spinlock. The page_table_lock also nests with pagecache_lock and 
 pagemap_lru_lock spinlocks, and no code asks for memory with these locks
 held.
 
-The vmlist lock is grabbed while holding the kernel_lock spinning monitor.
+The page_table_lock is grabbed while holding the kernel_lock spinning monitor.
 
-The vmlist lock can be a sleeping or spin lock. In either case, care
-must be taken that it is not held on entry to the driver methods, since
-those methods might sleep or ask for memory, causing deadlocks.
-
-The current implementation of the vmlist lock uses the page_table_lock,
-which is also the spinlock that page stealers use to protect changes to
-the victim process' ptes. Thus we have a reduction in the total number
-of locks. 
+The page_table_lock is a spin lock.
 
 swap_list_lock/swap_device_lock
 -------------------------------

@@ -51,6 +51,10 @@
  *  Forward port AMD Duron errata T13 from 2.2.17pre
  *  Dave Jones <davej@suse.de>, August 2000
  *
+ *  Forward port lots of fixes/improvements from 2.2.18pre
+ *  Cyrix III, Pentium IV support.
+ *  Dave Jones <davej@suse.de>, October 2000
+ *
  */
 
 /*
@@ -136,6 +140,8 @@ extern int rd_image_start;	/* starting block # of image */
 extern int root_mountflags;
 extern char _text, _etext, _edata, _end;
 extern unsigned long cpu_khz;
+
+static int disable_x86_serial_nr __initdata = 1;
 
 /*
  * This is set up by the setup-routine at boot-time
@@ -844,12 +850,6 @@ static int __init get_model_name(struct cpuinfo_x86 *c)
 {
 	unsigned int n, dummy, *v;
 
-	/* 
-	 * Actually we must have cpuid or we could never have
-	 * figured out that this was AMD/Cyrix/Transmeta
-	 * from the vendor info :-).
-	 */
-
 	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
 	if (n < 0x80000004)
 		return 0;
@@ -862,29 +862,45 @@ static int __init get_model_name(struct cpuinfo_x86 *c)
 	return 1;
 }
 
+
+static void __init display_cacheinfo(struct cpuinfo_x86 *c)
+{
+	unsigned int n, dummy, ecx, edx;
+
+	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
+
+	if (n >= 0x80000005) {
+		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
+		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK (%d bytes/line)\n",
+			edx>>24, ecx>>24, edx&0xFF);
+		c->x86_cache_size=(ecx>>24)+(edx>>24);	
+	}
+
+	if (n < 0x80000006)	/* Cyrix just has large L1. */
+		return;
+
+	cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
+	c->x86_cache_size = ecx >>16;
+
+	/* AMD errata T13 (order #21922) */
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
+		boot_cpu_data.x86 == 6 && boot_cpu_data.x86_model == 3 &&
+		boot_cpu_data.x86_mask == 0)
+	{
+		c->x86_cache_size = 64;
+	}
+	printk("CPU: L2 Cache: %dK\n", ecx>>16);
+}
+
+
 static int __init amd_model(struct cpuinfo_x86 *c)
 {
 	u32 l, h;
 	unsigned long flags;
-	unsigned int n, dummy, ecx, edx;
 	int mbytes = max_mapnr >> (20-PAGE_SHIFT);
 
 	int r=get_model_name(c);
 
-	/*
-	 * Set MTRR capability flag if appropriate
-	 */
-	if(boot_cpu_data.x86 == 5) {
-		if((boot_cpu_data.x86_model == 13) ||
-		   (boot_cpu_data.x86_model == 9) ||
-		   ((boot_cpu_data.x86_model == 8) && 
-		    (boot_cpu_data.x86_mask >= 8)))
-			c->x86_capability |= X86_FEATURE_MTRR;
-	}
-
-	/*
-	 * Now do the cache operations. 
-	 */
 	switch(c->x86)
 	{
 		case 5:
@@ -923,6 +939,7 @@ static int __init amd_model(struct cpuinfo_x86 *c)
 				
 				if(mbytes>4092)
 					mbytes=4092;
+
 				rdmsr(0xC0000082, l, h);
 				if((l&0xFFFF0000)==0)
 				{
@@ -935,35 +952,23 @@ static int __init amd_model(struct cpuinfo_x86 *c)
 					printk(KERN_INFO "Enabling new style K6 write allocation for %d Mb\n",
 						mbytes);
 				}
+
+				/*  Set MTRR capability flag if appropriate */
+				if((boot_cpu_data.x86_model == 13) ||
+				   (boot_cpu_data.x86_model == 9) ||
+				   ((boot_cpu_data.x86_model == 8) && 
+				    (boot_cpu_data.x86_mask >= 8)))
+					c->x86_capability |= X86_FEATURE_MTRR;
 				break;
 			}
+
 			break;
+
 		case 6:	/* An Athlon/Duron. We can trust the BIOS probably */
 			break;		
 	}
 
-	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
-	if (n >= 0x80000005) {
-		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
-		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK (%d bytes/line)\n",
-			edx>>24, ecx>>24, edx&0xFF);
-		c->x86_cache_size=(ecx>>24)+(edx>>24);	
-	}
-
-	/* AMD errata T13 (order #21922) */
-	if (boot_cpu_data.x86 == 6 && boot_cpu_data.x86_model == 3 &&
-		boot_cpu_data.x86_mask == 0)
-	{
-		c->x86_cache_size = 64;
-		printk("CPU: L2 Cache: 64K\n");
-	} else {
-		if (n >= 0x80000006) {
-			cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
-			printk("CPU: L2 Cache: %dK\n", ecx>>16);
-			c->x86_cache_size=(ecx>>16);
-		}
-	}
-
+	display_cacheinfo(c);
 	return r;
 }
 			
@@ -1097,9 +1102,8 @@ static void __init cyrix_model(struct cpuinfo_x86 *c)
 		   bug to do with 'hlt'. I've not seen any boards using VSA2
 		   and X doesn't seem to support it either so who cares 8).
 		   VSA1 we work around however.
-                   
 		*/
-		
+
 		printk(KERN_INFO "Working around Cyrix MediaGX virtual DMA bugs.\n");
 		isa_dma_bridge_buggy = 2;
 #endif		
@@ -1183,79 +1187,104 @@ static void __init centaur_model(struct cpuinfo_x86 *c)
 	u32  lo,hi,newlo;
 	u32  aa,bb,cc,dd;
 
-	switch(c->x86_model) {
-	case 4:
-		name="C6";
-		fcr_set=ECX8|DSMC|EDCTLB|EMMX|ERETSTK;
-		fcr_clr=DPDC;
-		printk("Disabling bugged TSC.\n");
-		c->x86_capability &= ~X86_FEATURE_TSC;
-		break;
-	case 8:
-		switch(c->x86_mask) {
-		default:
-			name="2";
+	switch (c->x86) {
+
+		case 5:
+			switch(c->x86_model) {
+			case 4:
+				name="C6";
+				fcr_set=ECX8|DSMC|EDCTLB|EMMX|ERETSTK;
+				fcr_clr=DPDC;
+				printk("Disabling bugged TSC.\n");
+				c->x86_capability &= ~X86_FEATURE_TSC;
+				break;
+			case 8:
+				switch(c->x86_mask) {
+				default:
+					name="2";
+					break;
+				case 7 ... 9:
+					name="2A";
+					break;
+				case 10 ... 15:
+					name="2B";
+					break;
+				}
+				fcr_set=ECX8|DSMC|DTLOCK|EMMX|EBRPRED|ERETSTK|E2MMX|EAMD3D;
+				fcr_clr=DPDC;
+				break;
+			case 9:
+				name="3";
+				fcr_set=ECX8|DSMC|DTLOCK|EMMX|EBRPRED|ERETSTK|E2MMX|EAMD3D;
+				fcr_clr=DPDC;
+				break;
+			case 10:
+				name="4";
+				/* no info on the WC4 yet */
+				break;
+			default:
+				name="??";
+			}
+
+			/* get FCR  */
+			rdmsr(0x107, lo, hi);
+
+			newlo=(lo|fcr_set) & (~fcr_clr);
+
+			if (newlo!=lo) {
+				printk("Centaur FCR was 0x%X now 0x%X\n", lo, newlo );
+				wrmsr(0x107, newlo, hi );
+			} else {
+				printk("Centaur FCR is 0x%X\n",lo);
+			}
+			/* Emulate MTRRs using Centaur's MCR. */
+			c->x86_capability |= X86_FEATURE_MTRR;
+			/* Report CX8 */
+			c->x86_capability |= X86_FEATURE_CX8;
+			/* Set 3DNow! on Winchip 2 and above. */
+			if (c->x86_model >=8)
+				c->x86_capability |= X86_FEATURE_AMD3D;
+			/* See if we can find out some more. */
+			cpuid(0x80000000,&aa,&bb,&cc,&dd);
+			if (aa>=0x80000005) { /* Yes, we can. */
+				cpuid(0x80000005,&aa,&bb,&cc,&dd);
+				/* Add L1 data and code cache sizes. */
+				c->x86_cache_size = (cc>>24)+(dd>>24);
+			}
+			sprintf( c->x86_model_id, "WinChip %s", name );
 			break;
-		case 7 ... 9:
-			name="2A";
+
+		case 6:
+			switch (c->x86_model) {
+				case 6:	/* Cyrix III */
+					rdmsr (0x1107, lo, hi);
+					lo |= (1<<1 | 1<<7);	/* Report CX8 & enable PGE */
+					wrmsr (0x1107, lo, hi);
+
+					c->x86_capability |= X86_FEATURE_CX8;
+					rdmsr (0x80000001, lo, hi);
+					if (hi & (1<<31))
+						c->x86_capability |= X86_FEATURE_AMD3D;
+
+					get_model_name(c);
+					display_cacheinfo(c);
+					break;
+			}
 			break;
-		case 10 ... 15:
-			name="2B";
-			break;
-		}
-		fcr_set=ECX8|DSMC|DTLOCK|EMMX|EBRPRED|ERETSTK|E2MMX|EAMD3D;
-		fcr_clr=DPDC;
-		break;
-	case 9:
-		name="3";
-		fcr_set=ECX8|DSMC|DTLOCK|EMMX|EBRPRED|ERETSTK|E2MMX|EAMD3D;
-		fcr_clr=DPDC;
-		break;
-	case 10:
-		name="4";
-		/* no info on the WC4 yet */
-		break;
-	default:
-		name="??";
 	}
 
-	/* get FCR  */
-	rdmsr(0x107, lo, hi);
-
-	newlo=(lo|fcr_set) & (~fcr_clr);
-
-	if (newlo!=lo) {
-		printk("Centaur FCR was 0x%X now 0x%X\n", lo, newlo );
-		wrmsr(0x107, newlo, hi );
-	} else {
-		printk("Centaur FCR is 0x%X\n",lo);
-	}
-
-	/* Emulate MTRRs using Centaur's MCR. */
-	c->x86_capability |= X86_FEATURE_MTRR;
-	/* Report CX8 */
-	c->x86_capability |= X86_FEATURE_CX8;
-	/* Set 3DNow! on Winchip 2 and above. */
-	if (c->x86_model >=8)
-		c->x86_capability |= X86_FEATURE_AMD3D;
-	/* See if we can find out some more. */
-	cpuid(0x80000000,&aa,&bb,&cc,&dd);
-	if (aa>=0x80000005) { /* Yes, we can. */
-		cpuid(0x80000005,&aa,&bb,&cc,&dd);
-		/* Add L1 data and code cache sizes. */
-		c->x86_cache_size = (cc>>24)+(dd>>24);
-	}
-	sprintf( c->x86_model_id, "WinChip %s", name );
 }
+
 
 static void __init transmeta_model(struct cpuinfo_x86 *c)
 {
-	unsigned int cap_mask, uk, max, dummy, n, ecx, edx;
+	unsigned int cap_mask, uk, max, dummy;
 	unsigned int cms_rev1, cms_rev2;
 	unsigned int cpu_rev, cpu_freq, cpu_flags;
 	char cpu_info[65];
 
 	get_model_name(c);	/* Same as AMD/Cyrix */
+	display_cacheinfo(c);
 
 	/* Print CMS and CPU revision */
 	cpuid(0x80860000, &max, &dummy, &dummy, &dummy);
@@ -1309,22 +1338,6 @@ static void __init transmeta_model(struct cpuinfo_x86 *c)
 	wrmsr(0x80860004, ~0, uk);
 	cpuid(0x00000001, &dummy, &dummy, &dummy, &c->x86_capability);
 	wrmsr(0x80860004, cap_mask, uk);
-
-
-	/* L1/L2 cache */
-	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
-
-	if (n >= 0x80000005) {
-		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
-		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
-			ecx>>24, edx>>24);
-		c->x86_cache_size=(ecx>>24)+(edx>>24);	
-	}
-	if (n >= 0x80000006) {
-		cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
-		printk("CPU: L2 Cache: %dK\n", ecx>>16);
-		c->x86_cache_size=(ecx>>16);
-	}
 }
 
 
@@ -1407,7 +1420,7 @@ static struct cpu_model_info cpu_models[] __initdata = {
  *	to have CPUID. (Thanks to Herbert Oppmann)
  */
  
-static int deep_magic_nexgen_probe(void)
+static int __init deep_magic_nexgen_probe(void)
 {
 	int ret;
 	
@@ -1424,9 +1437,9 @@ static int deep_magic_nexgen_probe(void)
 	return  ret;
 }
 
-static void squash_the_stupid_serial_number(struct cpuinfo_x86 *c)
+static void __init squash_the_stupid_serial_number(struct cpuinfo_x86 *c)
 {
-	if(c->x86_capability&(1<<18)) {
+	if(c->x86_capability&(X86_FEATURE_PN) && disable_x86_serial_nr) {
 		/* Disable processor serial number */
 		unsigned long lo,hi;
 		rdmsr(0x119,lo,hi);
@@ -1436,10 +1449,20 @@ static void squash_the_stupid_serial_number(struct cpuinfo_x86 *c)
 	}
 }
 
+
+int __init x86_serial_nr_setup(char *s)
+{
+	disable_x86_serial_nr = 0;
+	return 1;
+}
+__setup("serialnumber", x86_serial_nr_setup);
+
+
 void __init identify_cpu(struct cpuinfo_x86 *c)
 {
 	int i=0;
 	char *p = NULL;
+	extern void mcheck_init(void);
 
 	c->loops_per_sec = loops_per_sec;
 	c->x86_cache_size = -1;
@@ -1476,9 +1499,10 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 			return;
 
 		case X86_VENDOR_INTEL:
-			
+
 			squash_the_stupid_serial_number(c);
-			
+			mcheck_init();
+
 			if (c->cpuid_level > 1) {
 				/* supports eax=2  call */
 				int edx, dummy;
@@ -1522,6 +1546,13 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 				}
 			}
 
+			/* Pentium IV. */
+			if (c->x86 == 15) {
+				c->x86 = 6;
+				get_model_name(c);
+				goto name_decoded;
+			}
+
 			/* Names for the Pentium II/Celeron processors 
 			   detectable only by also checking the cache size.
 			   Dixon is NOT a Celeron. */
@@ -1555,7 +1586,7 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 			squash_the_stupid_serial_number(c);
 			return;
 	}
-	
+
 	/* may be changed in the switch so needs to be after */
 	
 	if(c->x86_vendor == X86_VENDOR_NEXGEN)

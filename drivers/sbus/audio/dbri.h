@@ -1,4 +1,4 @@
-/* $Id: dbri.h,v 1.12 1999/09/21 14:37:34 davem Exp $
+/* $Id: dbri.h,v 1.13 2000/10/13 00:34:24 uzi Exp $
  * drivers/sbus/audio/cs4231.h
  *
  * Copyright (C) 1997 Rudolf Koenig (rfkoenig@immd4.informatik.uni-erlangen.de)
@@ -18,7 +18,12 @@
 #define REG9	0x24UL		/* Interrupt Queue Pointer */
 
 #define DBRI_NO_CMDS	64
-#define DBRI_NO_INTS	2
+#define DBRI_NO_INTS	1	/* Note: the value of this define was
+				 * originally 2.  The ringbuffer to store
+				 * interrupts in dma is currently broken.
+				 * This is a temporary fix until the ringbuffer
+				 * is fixed.
+				 */
 #define DBRI_INT_BLK	64
 #define DBRI_NO_DESCS	64
 

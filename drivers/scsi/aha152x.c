@@ -1346,7 +1346,7 @@ int aha152x_release(struct Scsi_Host *shpnt)
 
 /*
  * setup controller to generate interrupts depending
- * on current state (lock has to be aquired)
+ * on current state (lock has to be acquired)
  *
  */ 
 static int setup_expected_interrupts(struct Scsi_Host *shpnt)

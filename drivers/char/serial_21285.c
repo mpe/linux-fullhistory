@@ -490,17 +490,13 @@ static int __init rs285_console_setup(struct console *co, char *options)
 
 static struct console rs285_cons =
 {
-	SERIAL_21285_NAME,
-	rs285_console_write,
-	NULL,
-	rs285_console_device,
-	rs285_console_wait_key,
-	NULL,
-	rs285_console_setup,
-	CON_PRINTBUFFER,
-	-1,
-	0,
-	NULL
+	name:		SERIAL_21285_NAME,
+	write:		rs285_console_write,
+	device:		rs285_console_device,
+	wait_key:	rs285_console_wait_key,
+	setup:		rs285_console_setup,
+	flags:		CON_PRINTBUFFER,
+	index:		-1,
 };
 
 void __init rs285_console_init(void)

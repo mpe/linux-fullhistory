@@ -41,7 +41,7 @@
  *      get the semaphore and if this process wants to reduce some
  *      semaphore value we simply wake it up without doing the
  *      operation. So it has to try to get it later. Thus e.g. the
- *      running process may reaquire the semaphore during the current
+ *      running process may reacquire the semaphore during the current
  *      time slice. If it only waits for zero or increases the semaphore,
  *      we do the operation in advance and wake it up.
  *   2) It did not wake up all zero waiting processes. We try to do

@@ -7749,7 +7749,7 @@ aic785x_cable_detect(struct aic7xxx_host *p, int *int_50,
  * Description:
  *   Detect the cables that are present on the 2940-UWPro cards
  *
- * NOTE: This functions assumes the SEEPROM will have already been aquired
+ * NOTE: This function assumes the SEEPROM will have already been acquired
  *       prior to invocation of this function.
  *-F*************************************************************************/
 static void
@@ -7795,7 +7795,7 @@ aic2940_uwpro_wide_cable_detect(struct aic7xxx_host *p, int *int_68,
  * Description:
  *   Detect the cables that are present on aic787x class controller chips
  *
- * NOTE: This functions assumes the SEEPROM will have already been aquired
+ * NOTE: This function assumes the SEEPROM will have already been acquired
  *       prior to invocation of this function.
  *-F*************************************************************************/
 static void
@@ -7842,7 +7842,7 @@ aic787x_cable_detect(struct aic7xxx_host *p, int *int_50, int *int_68,
  * Description:
  *   Detect the termination settings present on ultra2 class controllers
  *
- * NOTE: This functions assumes the SEEPROM will have already been aquired
+ * NOTE: This function assumes the SEEPROM will have already been acquired
  *       prior to invocation of this function.
  *-F*************************************************************************/
 static void

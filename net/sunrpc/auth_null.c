@@ -54,6 +54,7 @@ nul_create_cred(int flags)
 		return NULL;
 	cred->cr_count = 0;
 	cred->cr_flags = RPCAUTH_CRED_UPTODATE;
+	cred->cr_uid = current->uid;
 
 	return cred;
 }

@@ -172,7 +172,7 @@ drop_pte:
 		pte_clear(page_table);
 		mm->rss--;
 		flush_tlb_page(vma, address);
-		vmlist_access_unlock(mm);
+		spin_unlock(&mm->page_table_lock);
 		error = swapout(page, file);
 		UnlockPage(page);
 		if (file) fput(file);
@@ -205,7 +205,7 @@ drop_pte:
 	mm->rss--;
 	set_pte(page_table, swp_entry_to_pte(entry));
 	flush_tlb_page(vma, address);
-	vmlist_access_unlock(mm);
+	spin_unlock(&mm->page_table_lock);
 
 	/* OK, do a physical asynchronous write to swap.  */
 	rw_swap_page(WRITE, page, 0);
@@ -341,7 +341,7 @@ static int swap_out_mm(struct mm_struct * mm, int gfp_mask)
 	 * Find the proper vm-area after freezing the vma chain 
 	 * and ptes.
 	 */
-	vmlist_access_lock(mm);
+	spin_lock(&mm->page_table_lock);
 	vma = find_vma(mm, address);
 	if (vma) {
 		if (address < vma->vm_start)
@@ -364,7 +364,7 @@ static int swap_out_mm(struct mm_struct * mm, int gfp_mask)
 	mm->swap_cnt = 0;
 
 out_unlock:
-	vmlist_access_unlock(mm);
+	spin_unlock(&mm->page_table_lock);
 
 	/* We didn't find anything for the process */
 	return 0;

@@ -6,6 +6,8 @@
 // 00/03/29 cfleck Added code to save INIT handoff state in pt_regs format, switch to temp kstack,
 //		   switch modes, jump to C INIT handler
 //
+#include <linux/config.h>
+
 #include <asm/pgtable.h>
 #include <asm/processor.h>
 #include <asm/mca_asm.h>

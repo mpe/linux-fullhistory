@@ -1553,17 +1553,13 @@ static int __init dz_console_setup(struct console *co, char *options)
 }
 
 static struct console dz_sercons = {
-	"ttyS",
-	dz_console_print,
-	NULL,
-	dz_console_device,
-	dz_console_wait_key,
-	NULL,
-	dz_console_setup,
-	CON_CONSDEV | CON_PRINTBUFFER,
-	CONSOLE_LINE,
-	0,
-	NULL
+	name:		"ttyS",
+	write:		dz_console_print,
+	device:		dz_console_device,
+	wait_key:	dz_console_wait_key,
+	setup:		dz_console_setup,
+	flags:		CON_CONSDEV | CON_PRINTBUFFER,
+	index:		CONSOLE_LINE,
 };
 
 void __init dz_serial_console_init(void)

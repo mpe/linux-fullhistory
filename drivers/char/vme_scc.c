@@ -1111,17 +1111,13 @@ static int __init scc_console_setup(struct console *co, char *options)
 
 
 static struct console sercons = {
-	"ttyS",
-	scc_console_write,
-	NULL,
-	scc_console_device,
-	scc_console_wait_key,
-	NULL,
-	scc_console_setup,
-	CON_PRINTBUFFER,
-	-1,
-	0,
-	NULL
+	name:		"ttyS",
+	write:		scc_console_write,
+	device:		scc_console_device,
+	wait_key:	scc_console_wait_key,
+	setup:		scc_console_setup,
+	flags:		CON_PRINTBUFFER,
+	index:		-1,
 };
 
 

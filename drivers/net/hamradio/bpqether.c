@@ -652,7 +652,7 @@ static void __exit bpq_cleanup_driver(void)
 		unregister_netdev(&bpq->axdev);
 }
 
-MODULE_AUTHOR("Joerg Reuter DL1BKE <jreuter@poboxes.com>");
+MODULE_AUTHOR("Joerg Reuter DL1BKE <jreuter@yaina.de>");
 MODULE_DESCRIPTION("Transmit and receive AX.25 packets over Ethernet");
 module_init(bpq_init_driver);
 module_exit(bpq_cleanup_driver);

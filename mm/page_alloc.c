@@ -17,13 +17,6 @@
 #include <linux/pagemap.h>
 #include <linux/bootmem.h>
 
-/* Use NUMNODES instead of numnodes for better code inside kernel APIs */
-#ifndef CONFIG_DISCONTIGMEM
-#define NUMNODES 1
-#else
-#define NUMNODES numnodes
-#endif
-
 int nr_swap_pages;
 int nr_active_pages;
 int nr_inactive_dirty_pages;
@@ -588,12 +581,14 @@ unsigned int nr_free_pages (void)
 {
 	unsigned int sum;
 	zone_t *zone;
-	int i;
+	pg_data_t *pgdat = pgdat_list;
 
 	sum = 0;
-	for (i = 0; i < NUMNODES; i++)
-		for (zone = NODE_DATA(i)->node_zones; zone < NODE_DATA(i)->node_zones + MAX_NR_ZONES; zone++)
+	while (pgdat) {
+		for (zone = pgdat->node_zones; zone < pgdat->node_zones + MAX_NR_ZONES; zone++)
 			sum += zone->free_pages;
+		pgdat = pgdat->node_next;
+	}
 	return sum;
 }
 
@@ -604,12 +599,14 @@ unsigned int nr_inactive_clean_pages (void)
 {
 	unsigned int sum;
 	zone_t *zone;
-	int i;
+	pg_data_t *pgdat = pgdat_list;
 
 	sum = 0;
-	for (i = 0; i < NUMNODES; i++)
-		for (zone = NODE_DATA(i)->node_zones; zone < NODE_DATA(i)->node_zones + MAX_NR_ZONES; zone++)
+	while (pgdat) {
+		for (zone = pgdat->node_zones; zone < pgdat->node_zones + MAX_NR_ZONES; zone++)
 			sum += zone->inactive_clean_pages;
+		pgdat = pgdat->node_next;
+	}
 	return sum;
 }
 
@@ -644,11 +641,13 @@ unsigned int nr_free_buffer_pages (void)
 #if CONFIG_HIGHMEM
 unsigned int nr_free_highpages (void)
 {
-	int i;
+	pg_data_t *pgdat = pgdat_list;
 	unsigned int pages = 0;
 
-	for (i = 0; i < NUMNODES; i++)
-		pages += NODE_DATA(i)->node_zones[ZONE_HIGHMEM].free_pages;
+	while (pgdat) {
+		pages += pgdat->node_zones[ZONE_HIGHMEM].free_pages;
+		pgdat = pgdat->node_next;
+	}
 	return pages;
 }
 #endif
@@ -658,7 +657,7 @@ unsigned int nr_free_highpages (void)
  * We also calculate the percentage fragmentation. We do this by counting the
  * memory on each free list with the exception of the first item on the list.
  */
-void show_free_areas_core(int nid)
+void show_free_areas_core(pg_data_t *pgdat)
 {
  	unsigned long order;
 	unsigned type;
@@ -678,7 +677,7 @@ void show_free_areas_core(int nid)
 
 	for (type = 0; type < MAX_NR_ZONES; type++) {
 		struct list_head *head, *curr;
-		zone_t *zone = NODE_DATA(nid)->node_zones + type;
+		zone_t *zone = pgdat->node_zones + type;
  		unsigned long nr, total, flags;
 
 		total = 0;
@@ -710,7 +709,7 @@ void show_free_areas_core(int nid)
 
 void show_free_areas(void)
 {
-	show_free_areas_core(0);
+	show_free_areas_core(pgdat_list);
 }
 
 /*
@@ -907,7 +906,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 
 void __init free_area_init(unsigned long *zones_size)
 {
-	free_area_init_core(0, NODE_DATA(0), &mem_map, zones_size, 0, 0, 0);
+	free_area_init_core(0, &contig_page_data, &mem_map, zones_size, 0, 0, 0);
 }
 
 static int __init setup_mem_frac(char *str)

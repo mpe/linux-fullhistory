@@ -74,17 +74,10 @@ static unsigned char bin2bcd (unsigned char b);
 
 static int q40_wait_key(struct console *co){return 0;}
 static struct console q40_console_driver = {
-	"debug",
-	NULL,			/* write */
-	NULL,			/* read */
-	NULL,			/* device */
-	q40_wait_key,		/* wait_key */
-	NULL,			/* unblank */
-	NULL,			/* setup */
-	CON_PRINTBUFFER,
-	-1,
-	0,
-	NULL
+	name:		"debug",
+	wait_key:	q40_wait_key,
+	flags:		CON_PRINTBUFFER,
+	index:		-1,
 };
 
 

@@ -130,9 +130,9 @@
 
    vy 73,
    Joerg Reuter	ampr-net: dl1bke@db0pra.ampr.org
-		AX-25   : DL1BKE @ DB0ACH.#NRW.DEU.EU
-		Internet: jreuter@poboxes.com
-		www     : http://poboxes.com/jreuter/
+		AX-25   : DL1BKE @ DB0ABH.#BAY.DEU.EU
+		Internet: jreuter@yaina.de
+		www     : http://yaina.de/jreuter
 */
 
 /* ----------------------------------------------------------------------- */
@@ -2226,8 +2226,8 @@ static void __exit scc_cleanup_driver(void)
 	scc_net_procfs_remove();
 }
 
-MODULE_AUTHOR("Joerg Reuter <jreuter@poboxes.com>");
+MODULE_AUTHOR("Joerg Reuter <jreuter@yaina.de>");
 MODULE_DESCRIPTION("AX.25 Device Driver for Z8530 based HDLC cards");
-MODULE_SUPPORTED_DEVICE("scc");
+MODULE_SUPPORTED_DEVICE("Z8530 based SCC cards for Amateur Radio");
 module_init(scc_init_driver);
 module_exit(scc_cleanup_driver);

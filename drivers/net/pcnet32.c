@@ -683,11 +683,11 @@ pcnet32_probe1(unsigned long ioaddr, unsigned char irq_line, int shared, int car
     if (fdx && !(lp->options & PORT_ASEL) && full_duplex[card_idx])
 	lp->options |= PORT_FD;
     
-    lp->a = *a;
     if (a == NULL) {
       printk(KERN_ERR "pcnet32: No access methods\n");
       return -ENODEV;
     }
+    lp->a = *a;
     
     /* detect special T1/E1 WAN card by checking for MAC address */
     if (dev->dev_addr[0] == 0x00 && dev->dev_addr[1] == 0xe0 && dev->dev_addr[2] == 0x75)

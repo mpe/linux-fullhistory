@@ -419,7 +419,7 @@ therefore not rely on this parameter on function entry.
 free_irq() - Release Device Ownership
 
 A device driver may call free_irq() to release ownership of a previously
-aquired device.
+acquired device.
 
 void free_irq( unsigned int  irq,
                void         *dev_id);

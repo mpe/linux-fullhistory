@@ -1,11 +1,14 @@
 /*
- * $Id: capifs.c,v 1.9 2000/08/20 07:30:13 keil Exp $
+ * $Id: capifs.c,v 1.10 2000/10/12 10:12:35 calle Exp $
  * 
  * (c) Copyright 2000 by Carsten Paeth (calle@calle.de)
  *
  * Heavily based on devpts filesystem from H. Peter Anvin
  * 
  * $Log: capifs.c,v $
+ * Revision 1.10  2000/10/12 10:12:35  calle
+ * Bugfix: second iput(inode) on umount, destroies a foreign inode.
+ *
  * Revision 1.9  2000/08/20 07:30:13  keil
  * changes for 2.4
  *
@@ -69,7 +72,7 @@
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.de>");
 
-static char *revision = "$Revision: 1.9 $";
+static char *revision = "$Revision: 1.10 $";
 
 struct capifs_ncci {
 	struct inode *inode;
@@ -552,6 +555,7 @@ void capifs_free_ncci(char type, unsigned int num)
 				continue;
 			if (np->inode) {
 				inode = np->inode;
+				np->inode = 0;
 				np->used = 0;
 				inode->i_nlink--;
 				iput(inode);

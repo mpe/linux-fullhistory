@@ -16,6 +16,7 @@
  *	- as of 2.2.9/2.2.12, the following values are still wrong
  *		PAL_VM_SUMMARY: key & rid sizes
  */
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/init.h>

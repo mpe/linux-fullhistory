@@ -641,6 +641,9 @@ end_move_self:					# now we are at the right place
 	outb	%al, $0x60
 	call	empty_8042
 
+	movb	$02, %al			# "fast A20" version
+	outb	%al, $0x92			# some chips have only this
+
 # wait until a20 really *is* enabled; it can take a fair amount of
 # time on certain systems; Toshiba Tecras are known to have this
 # problem.  The memory location used here (0x200) is the int 0x80

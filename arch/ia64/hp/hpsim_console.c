@@ -28,17 +28,13 @@ static int simcons_wait_key (struct console *);
 static kdev_t simcons_console_device (struct console *);
 
 struct console hpsim_cons = {
-	"simcons",
-	simcons_write,		/* write */
-	NULL,			/* read */
-	simcons_console_device,	/* device */
-	simcons_wait_key,	/* wait_key */
-	NULL,			/* unblank */
-	simcons_init,		/* setup */
-	CON_PRINTBUFFER,	/* flags */
-	-1,			/* index */
-	0,			/* cflag */
-	NULL			/* next */
+	name:		"simcons",
+	write:		simcons_write,
+	device:		simcons_console_device,
+	wait_key:	simcons_wait_key,
+	setup:		simcons_init,
+	flags:		CON_PRINTBUFFER,
+	index:		-1,
 };
 
 static int

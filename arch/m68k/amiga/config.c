@@ -89,17 +89,10 @@ static void amiga_heartbeat(int on);
 #endif
 
 static struct console amiga_console_driver = {
-	"debug",
-	NULL,			/* write */
-	NULL,			/* read */
-	NULL,			/* device */
-	amiga_wait_key,		/* wait_key */
-	NULL,			/* unblank */
-	NULL,			/* setup */
-	CON_PRINTBUFFER,
-	-1,
-	0,
-	NULL
+	name:		"debug",
+	wait_key:	amiga_wait_key,
+	flags:		CON_PRINTBUFFER,
+	index:		-1,
 };
 
 #ifdef CONFIG_MAGIC_SYSRQ

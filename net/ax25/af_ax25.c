@@ -1193,7 +1193,7 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	 */
 	if (sk->zapped) {
 		/* check if we can remove this feature. It is broken. */
-		printk(KERN_WARNING "ax25_connect(): %s uses autobind, please contact jreuter@poboxes.com\n",
+		printk(KERN_WARNING "ax25_connect(): %s uses autobind, please contact jreuter@yaina.de\n",
 			current->comm);
 		if ((err = ax25_rt_autobind(sk->protinfo.ax25, &fsa->fsa_ax25.sax25_call)) < 0)
 			return err;

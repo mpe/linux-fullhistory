@@ -1703,7 +1703,7 @@ D: cfdisk (curses based disk partitioning program)
 
 N: Torben Mathiasen
 E: torben.mathiasen@compaq.com
-E: tmm@image.dk
+E: torben@kernel.dk
 W: http://tlan.kernel.dk
 D: ThunderLAN maintainer
 D: ThunderLAN updates and other kernel fixes.
@@ -2173,9 +2173,9 @@ S: 79098 Freiburg
 S: Germany
 
 N: Joerg Reuter
-E: jreuter@poboxes.com
-W: http://poboxes.com/jreuter/
-W: http://qsl.net/dl1bke/
+E: jreuter@yaina.de
+W: http://yaina.de/jreuter/
+W: http://www.qsl.net/dl1bke/
 D: Generic Z8530 driver, AX.25 DAMA slave implementation
 D: Several AX.25 hacks
 
