@@ -51,6 +51,9 @@ extern int apricot_probe(struct device *);
 extern int ewrk3_probe(struct device *);
 extern int de4x5_probe(struct device *);
 extern int el1_probe(struct device *);
+#if	defined(CONFIG_WAVELAN)
+extern int wavelan_probe(struct device *);
+#endif	/* defined(CONFIG_WAVELAN) */
 extern int el16_probe(struct device *);
 extern int elplus_probe(struct device *);
 extern int ac3200_probe(struct device *);
@@ -121,6 +124,9 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_EL1		/* 3c501 */
 	&& el1_probe(dev)
 #endif
+#if	defined(CONFIG_WAVELAN)	/* WaveLAN */
+	&& wavelan_probe(dev)
+#endif	/* defined(CONFIG_WAVELAN) */
 #ifdef CONFIG_EL16		/* 3c507 */
 	&& el16_probe(dev)
 #endif

@@ -346,7 +346,7 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 	/*
 	 *	We need to check if there is a primary net and if
 	 *	this is addressed to one of the *SPECIAL* sockets because
-	 *	these need to be propogated to the primary net.
+	 *	these need to be propagated to the primary net.
 	 *	The *SPECIAL* socket list contains: 0x452(SAP), 0x453(RIP) and
 	 *	0x456(Diagnostic).
 	 */
@@ -482,7 +482,7 @@ ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 		}
 	}
 
-	/* if the orginating net is not equal to our net; this is routed */
+	/* if the originating net is not equal to our net; this is routed */
 	if (ipx->ipx_source.net != intrfc->if_netnum) {
 		if (++(ipx->ipx_tctrl) > ipxcfg_max_hops) 
 			send_to_wire = 0;
@@ -621,6 +621,18 @@ ipxitf_create_internal(ipx_interface_definition *idef)
 	return ipxitf_add_local_route(intrfc);
 }
 
+static int
+ipx_map_frame_type(unsigned char type)
+{
+	switch (type) {
+	case IPX_FRAME_ETHERII: return htons(ETH_P_IPX);
+	case IPX_FRAME_8022: return htons(ETH_P_802_2);
+	case IPX_FRAME_SNAP: return htons(ETH_P_SNAP);
+	case IPX_FRAME_8023: return htons(ETH_P_802_3);
+	}
+	return 0;
+}
+
 static int 
 ipxitf_create(ipx_interface_definition *idef)
 {
@@ -629,10 +641,10 @@ ipxitf_create(ipx_interface_definition *idef)
 	struct datalink_proto	*datalink = NULL;
 	ipx_interface	*intrfc;
 
-	if (idef->ipx_internal) 
+	if (idef->ipx_special == IPX_INTERNAL) 
 		return ipxitf_create_internal(idef);
 
-	if (idef->ipx_primary && (ipx_primary_net != NULL))
+	if ((idef->ipx_special == IPX_PRIMARY) && (ipx_primary_net != NULL))
 		return -EEXIST;
 
 	if ((idef->ipx_network != 0L) &&
@@ -665,8 +677,11 @@ ipxitf_create(ipx_interface_definition *idef)
 		return -EPROTONOSUPPORT;
 
 	dev=dev_get(idef->ipx_device);
-	if(dev==NULL)
+	if (dev==NULL) 
 		return -ENODEV;
+
+	if (!(dev->flags & IFF_UP))
+		return -ENETDOWN;
 
 	/* Check addresses are suitable */
 	if(dev->addr_len>IPX_NODE_LEN)
@@ -688,7 +703,8 @@ ipxitf_create(ipx_interface_definition *idef)
 		intrfc->if_sklist = NULL;
 		intrfc->if_sknum = IPX_MIN_EPHEMERAL_SOCKET;
 		/* Setup primary if necessary */
-		if (idef->ipx_primary) ipx_primary_net = intrfc;
+		if ((idef->ipx_special == IPX_PRIMARY)) 
+			ipx_primary_net = intrfc;
 		intrfc->if_internal = 0;
 		intrfc->if_ipx_offset = dev->hard_header_len + datalink->header_length;
 		memset(intrfc->if_node, 0, IPX_NODE_LEN);
@@ -711,7 +727,7 @@ ipxitf_delete(ipx_interface_definition *idef)
 	unsigned short	dlink_type = 0;
 	ipx_interface	*intrfc;
 
-	if (idef->ipx_internal) {
+	if (idef->ipx_special == IPX_INTERNAL) {
 		if (ipx_internal_net != NULL) {
 			ipxitf_down(ipx_internal_net);
 			return 0;
@@ -719,24 +735,9 @@ ipxitf_delete(ipx_interface_definition *idef)
 		return -ENOENT;
 	}
 
-	switch (idef->ipx_dlink_type) {
-	case IPX_FRAME_ETHERII: 
-		dlink_type = htons(ETH_P_IPX);
-		break;
-	case IPX_FRAME_8022:
-		dlink_type = htons(ETH_P_802_2);
-		break;
-	case IPX_FRAME_SNAP:
-		dlink_type = htons(ETH_P_SNAP);
-		break;
-	case IPX_FRAME_8023:
-		dlink_type = htons(ETH_P_802_3);
-		break;
-	case IPX_FRAME_NONE:
-	default:
+	dlink_type = ipx_map_frame_type(idef->ipx_dlink_type);
+	if (dlink_type == 0)
 		return -EPROTONOSUPPORT;
-		break;
-	}
 
 	dev=dev_get(idef->ipx_device);
 	if(dev==NULL) return -ENODEV;
@@ -811,10 +812,10 @@ ipxitf_ioctl(unsigned int cmd, void *arg)
 				return -EINVAL;
 			f.ipx_network=sipx->sipx_network;
 			memcpy(f.ipx_device, ifr.ifr_name, sizeof(f.ipx_device));
+			memcpy(f.ipx_node, sipx->sipx_node, IPX_NODE_LEN);
 			f.ipx_dlink_type=sipx->sipx_type;
-			f.ipx_primary=sipx->sipx_primary;
-			f.ipx_internal=sipx->sipx_internal;
-			if(sipx->sipx_network==0)
+			f.ipx_special=sipx->sipx_special;
+			if(sipx->sipx_action==IPX_DLTITF)
 				return ipxitf_delete(&f);
 			else
 				return ipxitf_create(&f);
@@ -833,12 +834,13 @@ ipxitf_ioctl(unsigned int cmd, void *arg)
 			dev=dev_get(ifr.ifr_name);
 			if(!dev)
 				return -ENODEV;
-			ipxif=ipxitf_find_using_phys(dev, sipx->sipx_type);
+			ipxif=ipxitf_find_using_phys(dev, ipx_map_frame_type(sipx->sipx_type));
 			if(ipxif==NULL)
 				return -EADDRNOTAVAIL;
 			sipx->sipx_network=ipxif->if_netnum;
 			memcpy(sipx->sipx_node, ipxif->if_node, sizeof(sipx->sipx_node));
-						
+			memcpy_tofs(arg,&ifr,sizeof(ifr));
+			return 0;
 		}
 		case SIOCAIPXITFCRT:
 			err=verify_area(VERIFY_READ,arg,sizeof(char));
@@ -1054,7 +1056,7 @@ static int ipxrtr_ioctl(unsigned int cmd, void *arg)
 	switch(cmd)
 	{
 		case SIOCDELRT:
-			return ipxrtr_delete(sg->sipx_network);
+			return ipxrtr_delete(st->sipx_network);
 		case SIOCADDRT:
 		{
 			struct ipx_route_definition f;

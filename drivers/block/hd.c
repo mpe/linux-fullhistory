@@ -34,6 +34,7 @@
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
+#include <linux/mc146818rtc.h> /* CMOS defines */
 
 #define REALLY_SLOW_IO
 #include <asm/system.h>
@@ -46,12 +47,6 @@
 #define HD_IRQ 14
 
 static int revalidate_hddisk(int, int);
-
-static inline unsigned char CMOS_READ(unsigned char addr)
-{
-	outb_p(addr,0x70);
-	return inb_p(0x71);
-}
 
 #define	HD_DELAY	0
 

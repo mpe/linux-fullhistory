@@ -22,6 +22,7 @@
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
 #include <asm/bitops.h>
+#include <asm/pgtable.h>
 
 #define MAX_SWAPFILES 8
 

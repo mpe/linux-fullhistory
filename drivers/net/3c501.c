@@ -677,12 +677,15 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("3c501: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_3c501);
-	}
+	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
+	unregister_netdev(&dev_3c501);
+
+	/* Free up the private structure, or leak memory :-)  */
+	kfree(dev_3c501.priv);
+	dev_3c501.priv = NULL;	/* gets re-allocated by el1_probe1 */
+
+	/* If we don't do this, we can't re-insmod it later. */
+	release_region(dev_3c501.base_addr, EL1_IO_EXTENT);
 }
 #endif /* MODULE */
 

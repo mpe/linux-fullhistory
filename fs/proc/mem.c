@@ -13,6 +13,7 @@
 #include <asm/page.h>
 #include <asm/segment.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 
 /*
  * mem_write isn't really a good idea right now. It needs

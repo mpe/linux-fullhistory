@@ -78,7 +78,7 @@
 ** EISA Configuration Register 2 bit definitions
 */
 #define ER2_BRS       0xc0           /* Boot ROM Size */
-#define ER2_BRA       0x3c           /* Boot ROM Adress <16:13> */
+#define ER2_BRA       0x3c           /* Boot ROM Address <16:13> */
 
 /*
 ** EISA Configuration Register 3 bit definitions
@@ -247,7 +247,7 @@
 #define OMR_BP     0x00010000       /* Back Pressure */
 #define OMR_TR     0x0000c000       /* Threshold Control Bits */
 #define OMR_ST     0x00002000       /* Start/Stop Transmission Command */
-#define OMR_FC     0x00001000       /* Force Collisio Mode */
+#define OMR_FC     0x00001000       /* Force Collision Mode */
 #define OMR_OM     0x00000c00       /* Operating Mode */
 #define OMR_FD     0x00000200       /* Full Duplex Mode */
 #define OMR_FKD    0x00000100       /* Flaky Oscillator Disable */
@@ -343,7 +343,7 @@
 /*
 ** DC21040 SIA Transmit and Receive Register (DE4X5_STRR)
 */
-#define STRR_SPP   0x00004000       /* Set Polarit Plus */
+#define STRR_SPP   0x00004000       /* Set Polarity Plus */
 #define STRR_APE   0x00002000       /* Auto Polarity Enable */
 #define STRR_LTE   0x00001000       /* Link Test Enable */
 #define STRR_SQE   0x00000800       /* Signal Quality Enable */

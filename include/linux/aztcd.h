@@ -19,7 +19,7 @@
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *  History:	W.Zimmermann adaption to Aztech CD268-01A Version 1.3
- *		Oktober 1994 Email: zimmerma@rz.fht-esslingen.de
+ *		October 1994 Email: zimmerma@rz.fht-esslingen.de
  */
 
 /* *** change this to set the I/O port address */

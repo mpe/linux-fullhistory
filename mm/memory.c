@@ -47,6 +47,7 @@
 
 #include <asm/system.h>
 #include <asm/segment.h>
+#include <asm/pgtable.h>
 
 unsigned long high_memory = 0;
 

@@ -578,14 +578,6 @@ void scan_scsis (struct Scsi_Host * shpnt)
 	}       /* for lun ends */
   shpnt->host_queue = NULL;  /* No longer needed here */
   
-  printk("scsi : detected ");
-  for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
-    if(sdtpnt->dev_noticed && sdtpnt->name)
-      printk("%d SCSI %s%s ", sdtpnt->dev_noticed, sdtpnt->name,
-	     (sdtpnt->dev_noticed != 1) ? "s" : "");
-
-  printk("total.\n");
-  
   /* Last device block does not exist.  Free memory. */
   scsi_init_free((char *) SDpnt, sizeof(Scsi_Device));
   
@@ -1955,6 +1947,11 @@ void * scsi_init_malloc(unsigned int size, int priority)
   if(scsi_loadable_module_flag) {
     retval = (unsigned long) kmalloc(size, priority);
   } else {
+    /*
+     * Keep all memory aligned on 16-byte boundaries. Some host adaptors
+     * (e.g. BusLogic BT-445S) require DMA buffers to be aligned that way.
+     */
+    size = (size + 15) & ~15;
     retval = scsi_init_memory_start;
     scsi_init_memory_start += size;
   }
@@ -1968,6 +1965,7 @@ void scsi_init_free(char * ptr, unsigned int size)
   if((unsigned long) ptr > scsi_init_memory_start) {
     kfree(ptr);
   } else {
+    size = (size + 15) & ~15; /* Use the same alignment as scsi_init_malloc(). */
     if(((unsigned long) ptr) + size == scsi_init_memory_start)
       scsi_init_memory_start = (unsigned long) ptr;
   }
@@ -1993,7 +1991,8 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 
 	/* Init a few things so we can "malloc" memory. */
 	scsi_loadable_module_flag = 0;
-	scsi_init_memory_start = memory_start;
+	/* Align everything on 16-byte boundaries. */
+	scsi_init_memory_start = (memory_start + 15) & ~ 15;
 
 	timer_table[SCSI_TIMER].fn = scsi_main_timeout;
 	timer_table[SCSI_TIMER].expires = 0;
@@ -2006,6 +2005,13 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	for (shpnt = scsi_hostlist; shpnt; shpnt = shpnt->next)
 	  scan_scsis(shpnt);           /* scan for scsi devices */
 
+	printk("scsi : detected ");
+	for (sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
+	  if (sdtpnt->dev_noticed && sdtpnt->name)
+	    printk("%d SCSI %s%s ", sdtpnt->dev_noticed, sdtpnt->name,
+	    (sdtpnt->dev_noticed != 1) ? "s" : "");
+	printk("total.\n");
+  
 	for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
 	  if(sdtpnt->init && sdtpnt->dev_noticed) (*sdtpnt->init)();
 
@@ -2068,7 +2074,6 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	dma_sectors = (dma_sectors + 15) & 0xfff0;
 	dma_free_sectors = dma_sectors;  /* This must be a multiple of 16 */
 
-	scsi_init_memory_start = (scsi_init_memory_start + 3) & 0xfffffffc;
 	dma_malloc_freelist = (unsigned char *) 
 	  scsi_init_malloc(dma_sectors >> 3, GFP_ATOMIC);
 	memset(dma_malloc_freelist, 0, dma_sectors >> 3);
@@ -2077,9 +2082,6 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
  	  scsi_init_malloc(dma_sectors >> 1, GFP_ATOMIC);
  	memset(dma_malloc_pages, 0, dma_sectors >> 1);
  
-	/* Some host adapters require buffers to be word aligned */
-	if(scsi_init_memory_start & 1) scsi_init_memory_start++;
-	
  	for(i=0; i< dma_sectors >> 3; i++)
  	  dma_malloc_pages[i] = (unsigned char *) 
  	    scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);

@@ -12,6 +12,7 @@
 #include <linux/mm.h>
 
 #include <asm/segment.h>
+#include <asm/pgtable.h>
 #include <asm/io.h>
 
 /*

@@ -74,6 +74,9 @@ enum net_directory_inos {
 #ifdef CONFIG_IP_ACCT
 	PROC_NET_IPACCT,
 #endif
+#if	defined(CONFIG_WAVELAN)
+	PROC_NET_WAVELAN,
+#endif	/* defined(CONFIG_WAVELAN) */
 #endif
 #ifdef CONFIG_IPX
 	PROC_NET_IPX_INTERFACE,

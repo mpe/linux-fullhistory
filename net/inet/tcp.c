@@ -157,7 +157,7 @@
  *		Change the receive queue to assemble as it goes. This lets us
  *		dispose of most of tcp_sequence, half of tcp_ack and chunks of
  *		tcp_data/tcp_read as well as the window shrink crud.
- *		Seperate out duplicated code - tcp_alloc_skb, tcp_build_ack
+ *		Separate out duplicated code - tcp_alloc_skb, tcp_build_ack
  *		tcp_queue_skb seem obvious routines to extract.
  *	
  *		This program is free software; you can redistribute it and/or
@@ -582,7 +582,7 @@ static void tcp_retransmit(struct sock *sk, int all)
 }
 
 /*
- *	A write timeout has occured. Process the after effects.
+ *	A write timeout has occurred. Process the after effects.
  */
 
 static int tcp_write_timeout(struct sock *sk)
@@ -675,8 +675,7 @@ static void retransmit_timer(unsigned long data)
 		/* Window probing */
 		case TIME_PROBE0:
 			tcp_send_probe0(sk);
-			if(tcp_write_timeout(sk))
-				release_sock (sk);
+			tcp_write_timeout(sk);
 			break;
 		/* Retransmitting */
 		case TIME_WRITE:
@@ -704,7 +703,6 @@ static void retransmit_timer(unsigned long data)
 				{
 					reset_xmit_timer (sk, TIME_WRITE, skb->when + sk->rto - jiffies);
 					restore_flags(flags);
-					release_sock (sk);
 					break;
 				}
 				restore_flags(flags);
@@ -712,10 +710,8 @@ static void retransmit_timer(unsigned long data)
 				 *	Retransmission
 				 */
 				sk->prot->retransmit (sk, 0);
-				if(!tcp_write_timeout(sk))
-					break;
+				tcp_write_timeout(sk);
 			}
-			release_sock (sk);
 			break;
 		}
 		/* Sending Keepalives */
@@ -730,14 +726,13 @@ static void retransmit_timer(unsigned long data)
 			if (sk->prot->write_wakeup)
 				  sk->prot->write_wakeup (sk);
 			sk->retransmits++;
-			if(tcp_write_timeout(sk))
-				release_sock (sk);
+			tcp_write_timeout(sk);
 			break;
 		default:
 			printk ("rexmit_timer: timer expired - reason unknown\n");
-			release_sock (sk);
 			break;
 	}
+	release_sock(sk);
 }
 
 /*
@@ -2017,7 +2012,7 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 	struct wait_queue wait = { current, NULL };
 	int copied = 0;
 	unsigned long peek_seq;
-	volatile unsigned long *seq;	/* So gcc doesnt overoptimise */
+	volatile unsigned long *seq;	/* So gcc doesn't overoptimise */
 	unsigned long used;
 
 	/* 
@@ -2600,8 +2595,9 @@ static void tcp_options(struct sock *sk, struct tcphdr *th)
 	  	{
 	  		case TCPOPT_EOL:
 	  			return;
-	  		case TCPOPT_NOP:
-	  			length-=2;
+	  		case TCPOPT_NOP:	/* Ref: RFC 793 section 3.1 */
+	  			length--;
+	  			ptr--;		/* the opsize=*ptr++ above was a mistake */
 	  			continue;
 	  		
 	  		default:

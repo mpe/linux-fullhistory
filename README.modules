@@ -18,7 +18,7 @@ file README.  It generally goes like:
 	make zImage or make zlilo
 
 In "make config", you select what you want to include in the kernel.
-You will generally select the miminal set that is needed to boot:
+You will generally select the minimal set that is needed to boot:
 
 	The filesystem of your root partition
 	A scsi driver, but see below for a list of SCSI modules!

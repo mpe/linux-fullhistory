@@ -22,7 +22,7 @@ Contents of this file:
                          7. OTHER DRIVES
                          8. IF YOU DON'T SUCCEED ... DEBUGGING  
                          9. TECHNICAL HISTORY OF THE DRIVER
-                        10. ACKNOWLEDGEMENTS
+                        10. ACKNOWLEDGMENTS
                         11. PROGRAMMING ADD ONS: CDPLAY.C
                         APPENDIX: Source code of cdplay.c
 ----------------------------------------------------------------------------
@@ -51,7 +51,7 @@ The driver consists of a header file 'aztcd.h', which normally should reside
 in /usr/include/linux and the source code 'aztcd.c', which normally resides in
 /usr/src/linux/drivers/block. It uses /dev/aztcd0, which must be a valid block
 device with major number 29 and reside in directory /dev. To mount a CD-ROM,
-your kernel needs to have the ISO9660-filesysytem support included.
+your kernel needs to have the ISO9660-filesystem support included.
 
 
 3. CONFIGURING YOUR KERNEL
@@ -86,7 +86,7 @@ you try to mount the CD-ROM drive, you have to recompile your kernel.
 If your kernel is not yet configured for the AZTECH driver and the ISO9660-
 filesystem, you have to recompile your kernel: 
 
-- Edit aztcd.h to set the I/O-adress to your I/O-Base adress (AZT_BASE_ADDR), 
+- Edit aztcd.h to set the I/O-address to your I/O-Base address (AZT_BASE_ADDR), 
   the driver does not use interrupts or DMA, so if you are using an AZTECH
   CD268, an ORCHID CD-3110 or ORCHID/WEARNES CDD110 that's the only item you 
   have to set up. 
@@ -172,7 +172,7 @@ The following drives ORCHID CDS3110, OKANO CDD110 and WEARNES nearly look
 the same as AZTECH CDA268-01A, especially they seem to use the same command 
 codes. So it was quite simple to make the AZTECH driver work with these drives. 
 
-Unfortuntately I do not have any of these drives available, so I couldn't test
+Unfortunately I do not have any of these drives available, so I couldn't test
 it myself. But I've got reports, that it works with ORCHID CDS3110 and Game-
 Wave32 sound cards and also with WEARNES CDD110 in some different combinations. 
 In some installations, it seems necessary to initialize the drive with the DOS 
@@ -195,7 +195,7 @@ which you don't have available for testing. So if you like, please help us.
     DMA:           not used
     Base Address:  something like 300, 320 ...
  You can check this, when you start the DOS driver, which came with your
- drive. By appropiately configuring the drive and the DOS driver you can
+ drive. By appropriately configuring the drive and the DOS driver you can
  check, whether your drive does operate in this mode correctly under DOS. If
  it does not operate under DOS, it won't under Linux.
  Make sure the Base Address is configured correctly in aztcd.h, also make
@@ -297,7 +297,7 @@ with/without DOS, DOS-driver started/not started, which Linux-commands etc.)
 The AZTECH-Driver is a rework of the Mitsumi-Driver. Four major items had to
 be reworked:
 
-a) The Mitsumi drive does issue complete status informations acknowleding
+a) The Mitsumi drive does issue complete status information acknowledging
 each command, the Aztech drive does only signal that the command was
 processed. So whenever the complete status information is needed, an extra
 ACMD_GET_STATUS command is issued. The handshake procedure for the drive
@@ -326,7 +326,7 @@ not been able to switch to reading in raw mode. For reading raw mode, Aztech
 uses a different command than for cooked mode, which I only have implemen-
 ted in the ioctl-section but not in the section which is used by the ISO9660- 
 
-The driver was developped on an AST PC with Intel 486/DX2, 8MB RAM, 340MB IDE 
+The driver was developed on an AST PC with Intel 486/DX2, 8MB RAM, 340MB IDE 
 hard disk and on an AST PC with Intel Pentium 60MHz, 16MB RAM, 520MB IDE 
 running Linux kernel version 1.0.9 from the LST 1.8 Distribution. The kernel 
 was compiled with gcc.2.5.8. My CD-ROM drive is an Aztech CDA268-01A. My
@@ -341,7 +341,7 @@ marked with /*???*/ in the source code. There are also some parts in the
 Mitsumi driver, where I did not completely understand their code.
 
 
-10. ACKNOWLEDGEMENTS
+10. ACKNOWLEDGMENTS
 Without the help of P.Bush, Aztech, who delivered technical information
 about the Aztech Drive and without the help of E.Moenkeberg, GWDG, who did a
 great job in analyzing the command structure of various CD-ROM drives, this
@@ -360,7 +360,7 @@ Robby Schirmer (schirmer@fmi.uni-passau.de) tested the audio stuff (ioctls)
 and suggested a lot of patches for them.
 
 Joseph Piskor and Peter Nugent were the first users with the ORCHID CD3110
-and also were very patient with the problems, which occured.
+and also were very patient with the problems which occurred.
 
 Anybody, who is interested in these items should have a look at 'ftp.gwdg.de',
 directory 'pub/linux/cdrom' and at 'ftp.cdrom.com', directory 'pub/cdrom'.
@@ -415,7 +415,7 @@ APPENDIX: Source code of cdplay.c
 
    Copyright 1994, 1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
 
-This programm originally was written to test the audio functions of the
+This program originally was written to test the audio functions of the
 AZTECH.CDROM-driver, but it should work with every CD-ROM drive. Before 
 using it, you should set a symlink from /dev/cdrom to your real CDROM
 device.
@@ -592,7 +592,7 @@ int main(void)
                             }
                           break;
               case 'a':   cmd=CDROMPLAYMSF;
-                          printf("Adress (min:sec:frame)  ");
+                          printf("Address (min:sec:frame)  ");
                           scanf("%d:%d:%d",&arg1,&arg2,&arg3);
                           msf.cdmsf_min0  =arg1;
                           msf.cdmsf_sec0  =arg2;
@@ -603,12 +603,12 @@ int main(void)
                           msf.cdmsf_sec1=00;
                           msf.cdmsf_frame1=00;
                           if (ioctl(handle,cmd,&msf)) 
-                           { printf("Drive error or invalid adress\n");
+                           { printf("Drive error or invalid address\n");
                            }
                           break;
 #ifdef AZT_PRIVATE_IOCTLS /*not supported by every CDROM driver*/
               case 'd':   cmd=CDROMREADMODE1;
-                          printf("Adress (min:sec:frame)  ");
+                          printf("Address (min:sec:frame)  ");
                           scanf("%d:%d:%d",&arg1,&arg2,&arg3);
                           azt.msf.cdmsf_min0  =arg1;
                           azt.msf.cdmsf_sec0  =arg2;
@@ -616,7 +616,7 @@ int main(void)
                           if (azt.msf.cdmsf_sec0  > 59) azt.msf.cdmsf_sec0  =59;
                           if (azt.msf.cdmsf_frame0> 74) azt.msf.cdmsf_frame0=74;
                           if (ioctl(handle,cmd,&azt.msf)) 
-                           { printf("Drive error, invalid adress or unsupported command\n");
+                           { printf("Drive error, invalid address or unsupported command\n");
                            }
                           k=0;
                           getchar();
@@ -641,7 +641,7 @@ int main(void)
                            } 
                           break;
               case 'w':   cmd=CDROMREADMODE2;
-                          printf("Adress (min:sec:frame)  ");
+                          printf("Address (min:sec:frame)  ");
                           scanf("%d:%d:%d",&arg1,&arg2,&arg3);
                           azt.msf.cdmsf_min0  =arg1;
                           azt.msf.cdmsf_sec0  =arg2;
@@ -649,7 +649,7 @@ int main(void)
                           if (azt.msf.cdmsf_sec0  > 59) azt.msf.cdmsf_sec0  =59;
                           if (azt.msf.cdmsf_frame0> 74) azt.msf.cdmsf_frame0=74;
                           if (ioctl(handle,cmd,&azt)) 
-                           { printf("Drive error, invalid adress or unsupported command\n");
+                           { printf("Drive error, invalid address or unsupported command\n");
                            }
                           k=0;
                           for (i=0;i<146;i++)

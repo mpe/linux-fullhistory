@@ -98,11 +98,11 @@ snyder@fnald0.fnal.gov
 
 Some Terminology
 ----------------
-IDE = Integrated Drive Electonics, meaning that each drive has a built-in
+IDE = Integrated Drive Electronics, meaning that each drive has a built-in
 controller, which is why an "IDE interface card" is not a "controller card".
 
 IDE drives are designed to attach almost directly to the ISA bus of an AT-style
-computer.  The typcial IDE interface card merely provides I/O port address
+computer.  The typical IDE interface card merely provides I/O port address
 decoding and tri-state buffers, although several newer localbus cards go much
 beyond the basics.  When purchasing a localbus IDE interface, avoid cards with
 an onboard BIOS and those which require special drivers.  Instead, look for a
@@ -119,7 +119,7 @@ which grew out of vendor-specific "Enhanced IDE" (EIDE) implementations.
 ATAPI = ATA Packet Interface, a new protocol for controlling the drives,
 similar to SCSI protocols, created at the same time as the ATA2 standard.
 ATAPI is currently used for controlling CDROM and TAPE devices, and will
-likely also soon be used for Floppy drives, removeable R/W cartridges,
+likely also soon be used for Floppy drives, removable R/W cartridges,
 and for high capacity hard disk drives.
 
 How To Use *Big* ATA/IDE drives with Linux

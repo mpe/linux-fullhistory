@@ -436,7 +436,7 @@ final:
 
 		.data
 /*
- * Inital mapping tables for supported Mips boards.
+ * Initial mapping tables for supported Mips boards.
  * First item is always the number of wired TLB entries,
  * following by EntryHi/EntryLo pairs and page mask.
  * Since everything must be quad-aligned (8) we insert

@@ -167,7 +167,7 @@ int UMSDOS_ioctl_dir (
 			}else if (cmd == UMSDOS_RENAME_DOS){
 				/* #Specification: ioctl / UMSDOS_RENAME_DOS
 					A file or directory is rename in a DOS directory
-					(not moved accross directory). The source name
+					(not moved across directory). The source name
 					is in the dos_dirent.name field and the destination
 					is in umsdos_dirent.name field.
 

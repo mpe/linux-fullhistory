@@ -349,7 +349,7 @@ static void sr_photocd(struct inode *inode)
       min   = (unsigned long) rec[15]/16*10 + (unsigned long) rec[15]%16;
       sec   = (unsigned long) rec[16]/16*10 + (unsigned long) rec[16]%16;
       frame = (unsigned long) rec[17]/16*10 + (unsigned long) rec[17]%16;
-      /* if rec[14] is'nt 0xb0, the drive does not support multisession CD's, use zero */
+      /* if rec[14] isn't 0xb0, the drive does not support multisession CD's, use zero */
       sector = (0xb0 == rec[14]) ? min*CD_SECS*CD_FRAMES + sec*CD_FRAMES + frame : 0;
 #ifdef DEBUG
       printk("NEC: (%2x) %2li:%02li:%02li = %li\n",buf[8+14],min,sec,frame,sector);
@@ -377,7 +377,7 @@ static void sr_photocd(struct inode *inode)
     if (rc != 0) {
       printk("sr_photocd: ioctl error (TOSHIBA #1): 0x%x\n",rc);
       sector = 0;
-      break; /* if the first ioctl fails, we don't call the secound one */
+      break; /* if the first ioctl fails, we don't call the second one */
     }
     is_xa  = (rec[0] == 0x20);
 #ifdef DEBUG
@@ -411,7 +411,7 @@ static void sr_photocd(struct inode *inode)
     printk("sr_photocd: get_density: 0x%x\n",rec[4]);
 #endif
     
-    /* ...and only if nessesary a set_density */
+    /* ...and only if necessary a set_density */
     if ((rec[4] != 0x81 && is_xa) || (rec[4] != 0 && !is_xa)) {
 #ifdef DEBUG
       printk("sr_photocd: doing set_density\n");

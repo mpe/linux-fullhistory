@@ -30,6 +30,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
+#include <asm/pgtable.h>
 
 #define TIMER_IRQ 0
 

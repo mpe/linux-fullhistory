@@ -374,7 +374,7 @@ ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
 
   /* RFC 1331, section 7.2 says the minimum value is 1500 bytes */
   if (mru < PPP_MRU)
-    mru = new_mru = PPP_MRU;
+    mru = PPP_MRU;
 
   mtu = (mtu * 2) + 20;
   mru = (mru * 2) + 20;
@@ -1409,8 +1409,8 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCSMRU:
     error = verify_area (VERIFY_READ, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      PRINTKN (3,(KERN_INFO "ppp_ioctl: set mru to %x\n", temp_i));
       temp_i = (int) get_fs_long (l);
+      PRINTKN (3,(KERN_INFO "ppp_ioctl: set mru to %d\n", temp_i));
       if (ppp->mru != temp_i)
 	ppp_changedmtu (ppp, ppp->dev->mtu, temp_i);
     }

@@ -18,6 +18,7 @@
 
 #include <asm/system.h>
 #include <asm/segment.h>
+#include <asm/pgtable.h>
 
 extern void scsi_mem_init(unsigned long);
 extern void sound_mem_init(void);
@@ -137,7 +138,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 		}
 		pg_table = (pte_t *) pgd_page(pg_dir[768]);
 
-		/* also map it tempoarily at 0x0000000 for init */
+		/* also map it temporarily at 0x0000000 for init */
 		pgd_set(pg_dir+768, pg_table);
 		pgd_set(pg_dir, pg_table);
 		pg_dir++;

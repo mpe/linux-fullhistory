@@ -13,8 +13,6 @@ extern unsigned long high_memory;
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
 
-extern pgd_t swapper_pg_dir[1024];
-
 extern int verify_area(int, const void *, unsigned long);
 
 /*

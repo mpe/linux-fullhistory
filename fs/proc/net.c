@@ -55,6 +55,9 @@ extern int dev_get_info(char *, char **, off_t, int);
 extern int rt_get_info(char *, char **, off_t, int);
 extern int snmp_get_info(char *, char **, off_t, int);
 extern int afinet_get_info(char *, char **, off_t, int);
+#if	defined(CONFIG_WAVELAN)
+extern int wavelan_get_info(char *, char **, off_t, int);
+#endif	/* defined(CONFIG_WAVELAN) */
 extern int ip_acct_procinfo(char *, char **, off_t, int);
 extern int ip_fw_blk_procinfo(char *, char **, off_t, int);
 extern int ip_fw_fwd_procinfo(char *, char **, off_t, int);
@@ -145,6 +148,9 @@ static struct proc_dir_entry net_dir[] = {
 #ifdef CONFIG_IP_ACCT
 	{ PROC_NET_IPACCT,	7,  "ip_acct"},
 #endif
+#if	defined(CONFIG_WAVELAN)
+	{ PROC_NET_WAVELAN,	7, "wavelan" },
+#endif	/* defined(CONFIG_WAVELAN) */
 #endif	/* CONFIG_INET */
 #ifdef CONFIG_IPX
 	{ PROC_NET_IPX_ROUTE,	9, "ipx_route" },
@@ -305,6 +311,11 @@ static int proc_readnet(struct inode * inode, struct file * file,
 				length = rarp_get_info(page,&start,file->f_pos,thistime);
 				break;
 #endif /* CONFIG_INET_RARP */				
+#if	defined(CONFIG_WAVELAN)
+			case PROC_NET_WAVELAN:
+				length = wavelan_get_info(page, &start, file->f_pos, thistime);
+				break;
+#endif	/* defined(CONFIG_WAVELAN) */
 #endif /* CONFIG_INET */
 #ifdef CONFIG_IPX
 			case PROC_NET_IPX_INTERFACE:

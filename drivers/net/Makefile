@@ -164,6 +164,12 @@ else
 MODULES := $(MODULES) eexpress.o
 endif
 
+ifdef CONFIG_WAVELAN
+NETDRV_OBJS := $(NETDRV_OBJS) wavelan.o
+else
+MODULES := $(MODULES) wavelan.o
+endif
+
 ifdef CONFIG_ZNET
 NETDRV_OBJS := $(NETDRV_OBJS) znet.o
 endif

@@ -1158,34 +1158,6 @@ static void kbd_bh(void * unused)
 	sti();
 }
 
-long no_idt[2] = {0, 0};
-
-/*
- * This routine reboots the machine by asking the keyboard
- * controller to pulse the reset-line low. We try that for a while,
- * and if it doesn't work, we do some other stupid things.
- */
-#ifdef __i386__
-void hard_reset_now(void)
-{
-	int i, j;
-
-	sti();
-/* rebooting needs to touch the page at absolute addr 0 */
-	pg0[0] = 7;
-	*((unsigned short *)0x472) = 0x1234;
-	for (;;) {
-		for (i=0; i<100; i++) {
-			kb_wait();
-			for(j = 0; j < 100000 ; j++)
-				/* nothing */;
-			outb(0xfe,0x64);	 /* pulse reset low */
-		}
-		__asm__("\tlidt _no_idt");
-	}
-}
-#endif
-
 unsigned long kbd_init(unsigned long kmem_start)
 {
 	int i;

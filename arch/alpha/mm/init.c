@@ -18,6 +18,7 @@
 
 #include <asm/system.h>
 #include <asm/segment.h>
+#include <asm/pgtable.h>
 #include <asm/hwrpb.h>
 
 extern void scsi_mem_init(unsigned long);
@@ -38,10 +39,10 @@ extern void show_net_buffers(void);
  * ZERO_PAGE is a special page that is used for zero-initialized
  * data and COW.
  */
-pte_t * __bad_pagetable(void)
+pmd_t * __bad_pagetable(void)
 {
 	memset((void *) EMPTY_PGT, 0, PAGE_SIZE);
-	return (pte_t *) EMPTY_PGT;
+	return (pmd_t *) EMPTY_PGT;
 }
 
 pte_t __bad_page(void)
@@ -151,7 +152,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	start_mem = PAGE_ALIGN(start_mem);
 
 	/*
-	 * Mark the pages used by the kernel as reserved,,
+	 * Mark the pages used by the kernel as reserved..
 	 */
 	tmp = KERNEL_START;
 	while (tmp < start_mem) {

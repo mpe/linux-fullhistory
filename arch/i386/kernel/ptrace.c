@@ -9,10 +9,11 @@
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
+#include <linux/debugreg.h>
 
 #include <asm/segment.h>
+#include <asm/pgtable.h>
 #include <asm/system.h>
-#include <linux/debugreg.h>
 
 /*
  * does not yet catch signals sent when the child dies.

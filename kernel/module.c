@@ -32,7 +32,7 @@
  *	  and ALSO from loadable modules.
  *	  The goal is to assist in modularizing the kernel even more,
  *	  and finally: reducing the number of entries in ksyms.c
- *	  since every subsystem should now be able to decide amd
+ *	  since every subsystem should now be able to decide and
  *	  control exactly what symbols it wants to export, locally!
  */
 

@@ -1,3 +1,31 @@
+Thu Jan 26 09:02:49 1995  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* serial.c (rs_init, set_serial_info, get_serial_info, rs_close):
+		Support close_wait and close_wait2 in the serial driver.
+		This is helpful for slow devices (like serial plotters) so
+		that their outputs don't get flushed upon device close.
+		This has to be configurable because normally we don't want
+		ports to be hung up for long periods of time during a
+		close when they are not connected to a device, or the
+		device is powered off.
+
+		The default is to wait 30 seconds after shutting down the
+		receiver (to prevent echo wars).  This is done by setting
+		close_wait=ASYNC_CLOSE_WAIT_NONE, close_wait2 = 3000.  If
+		XON/XOFF handshaking is used, then the 30 second timeout
+		should happen before the receiver is shutdown; this is
+		done by reversing the values of close_wait and
+		close_wait2.  In the case of a very slow device, the
+		timeouts for close_wait or close_wait2 should be lengthed.
+		If either value is set to 0, the kernel will wait forever
+		for all of the data to be transmitted.  
+
+Thu Jan 17 01:17:20 1995  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* serial.c (startup, change_speed, rs_init): Add support to detect
+		the StarTech 16650 chip.  Treat it as a 16450 for now,
+		because of its FIFO bugs.
+
 Thu Jan  5 21:21:57 1995  <dhinds@allegro.stanford.edu>
 
 	* serial.c: (receive_char): Added counter to prevent infinite loop

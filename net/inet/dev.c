@@ -388,7 +388,12 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	{
 		for (nitcount= dev_nit, ptype = ptype_base; nitcount > 0 && ptype != NULL; ptype = ptype->next) 
 		{
-			if (ptype->type == htons(ETH_P_ALL) && (ptype->dev==dev || !ptype->dev)) 
+			/* Never send packets back to the socket
+			 * they originated from - MvS (miquels@drinkel.ow.org)
+			 */
+			if (ptype->type == htons(ETH_P_ALL) &&
+			   (ptype->dev == dev || !ptype->dev) &&
+			   ((struct sock *)ptype->data != skb->sk))
 			{
 				struct sk_buff *skb2;
 				if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)

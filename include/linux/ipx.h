@@ -7,9 +7,9 @@
 struct sockaddr_ipx
 {
 	short sipx_family;
+	short sipx_port;
 	unsigned long  sipx_network;
 	unsigned char sipx_node[IPX_NODE_LEN];
-	short sipx_port;
 	unsigned char	sipx_type;
 	unsigned char	sipx_zero;	/* 16 byte fill */
 };
@@ -18,8 +18,10 @@ struct sockaddr_ipx
  *	So we can fit the extra info for SIOCSIFADDR into the address nicely
  */
  
-#define sipx_primary	sipx_port
-#define sipx_internal	sipx_zero
+#define sipx_special	sipx_port
+#define sipx_action	sipx_zero
+#define IPX_DLTITF	0
+#define IPX_CRTITF	1
 
 typedef struct ipx_route_definition
 {
@@ -32,14 +34,16 @@ typedef struct ipx_interface_definition
 {
 	unsigned long ipx_network;
 	unsigned char ipx_device[16];
-	unsigned short ipx_dlink_type;
+	unsigned char ipx_dlink_type;
 #define IPX_FRAME_NONE		0
 #define IPX_FRAME_SNAP		1
 #define IPX_FRAME_8022		2
 #define IPX_FRAME_ETHERII	3
 #define IPX_FRAME_8023		4
-	unsigned char ipx_primary;
-	unsigned char ipx_internal;
+	unsigned char ipx_special;
+#define IPX_SPECIAL_NONE	0
+#define IPX_PRIMARY		1
+#define IPX_INTERNAL		2
 	unsigned char ipx_node[IPX_NODE_LEN];
 }	ipx_interface_definition;
 	
@@ -50,7 +54,7 @@ typedef struct ipx_config_data
 }	ipx_config_data;
 
 /*
- * OLD Route Definition for backware compatibility.
+ * OLD Route Definition for backward compatibility.
  */
 
 struct ipx_route_def

@@ -87,7 +87,7 @@ static int sd_open(struct inode * inode, struct file * filp)
 	  return -ENXIO;   /* No such device */
 	
 	/*
-	 * See if we are requesting a non-existant partition.
+	 * See if we are requesting a non-existent partition.
 	 */
 	if(sd_sizes[MINOR(inode->i_rdev)] == 0)
 	  return -ENXIO;

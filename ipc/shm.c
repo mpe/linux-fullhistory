@@ -6,13 +6,15 @@
  */
 
 #include <linux/errno.h>
-#include <asm/segment.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/ipc.h>
 #include <linux/shm.h>
 #include <linux/stat.h>
 #include <linux/malloc.h>
+
+#include <asm/segment.h>
+#include <asm/pgtable.h>
 
 extern int ipcperms (struct ipc_perm *ipcp, short shmflg);
 extern unsigned int get_swap_page (void);

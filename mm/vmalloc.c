@@ -16,6 +16,7 @@
 #include <linux/mm.h>
 
 #include <asm/segment.h>
+#include <asm/pgtable.h>
 
 struct vm_struct {
 	unsigned long flags;
@@ -26,122 +27,143 @@ struct vm_struct {
 
 static struct vm_struct * vmlist = NULL;
 
-static inline void set_pgdir(unsigned long dindex, pte_t * page_table)
+static inline void set_pgdir(unsigned long address, pgd_t entry)
 {
 	struct task_struct * p;
 
-	p = &init_task;
-	do {
-		pgd_set(PAGE_DIR_OFFSET(p,0) + dindex, page_table);
-		p = p->next_task;
-	} while (p != &init_task);
+	for_each_task(p)
+		*PAGE_DIR_OFFSET(p,address) = entry;
 }
 
-static inline void clear_pgdir(unsigned long dindex)
+static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned long size)
 {
-	struct task_struct * p;
+	pte_t * pte;
+	unsigned long end;
 
-	p = &init_task;
-	do {
-		pgd_clear(PAGE_DIR_OFFSET(p,0) + dindex);
-		p = p->next_task;
-	} while (p != &init_task);
+	if (pmd_none(*pmd))
+		return;
+	if (pmd_bad(*pmd)) {
+		printk("free_area_pte: bad pmd (%08lx)\n", pmd_val(*pmd));
+		pmd_clear(pmd);
+		return;
+	}
+	pte = pte_offset(pmd, address);
+	address &= ~PMD_MASK;
+	end = address + size;
+	if (end > PMD_SIZE)
+		end = PMD_SIZE;
+	while (address < end) {
+		pte_t page = *pte;
+		pte_clear(pte);
+		address += PAGE_SIZE;
+		pte++;
+		if (pte_none(page))
+			continue;
+		if (pte_present(page)) {
+			free_page(pte_page(page));
+			continue;
+		}
+		printk("Whee.. Swapped out page in kernel page table\n");
+	}
 }
 
-static int free_area_pages(unsigned long dindex, unsigned long index, unsigned long nr)
+static inline void free_area_pmd(pgd_t * dir, unsigned long address, unsigned long size)
+{
+	pmd_t * pmd;
+	unsigned long end;
+
+	if (pgd_none(*dir))
+		return;
+	if (pgd_bad(*dir)) {
+		printk("free_area_pmd: bad pgd (%08lx)\n", pgd_val(*dir));
+		pgd_clear(dir);
+		return;
+	}
+	pmd = pmd_offset(dir, address);
+	address &= ~PGDIR_MASK;
+	end = address + size;
+	if (end > PGDIR_SIZE)
+		end = PGDIR_SIZE;
+	while (address < end) {
+		free_area_pte(pmd, address, end - address);
+		address = (address + PMD_SIZE) & PMD_MASK;
+		pmd++;
+	}
+}
+
+static void free_area_pages(unsigned long address, unsigned long size)
 {
 	pgd_t * dir;
-	pte_t * page_table;
-	unsigned long page;
+	unsigned long end = address + size;
 
-	dir = swapper_pg_dir + dindex;
-	if (pgd_none(*dir))
-		return 0;
-	if (pgd_bad(*dir)) {
-		printk("bad page directory entry in free_area_pages: %08lx\n", pgd_val(*dir));
-		pgd_clear(dir);
-		return 0;
+	dir = pgd_offset(&init_task, address);
+	while (address < end) {
+		free_area_pmd(dir, address, end - address);
+		address = (address + PGDIR_SIZE) & PGDIR_MASK;
+		dir++;
 	}
-	page = pgd_page(*dir);
-	page_table = index + (pte_t *) page;
-	do {
-		pte_t pte = *page_table;
-		pte_clear(page_table);
-		if (pte_present(pte))
-			free_page(pte_page(pte));
-		page_table++;
-	} while (--nr);
-	page_table = (pte_t *) page;
-	for (nr = 0 ; nr < PTRS_PER_PAGE ; nr++, page_table++)
-		if (!pte_none(*page_table))
-			return 0;
-	clear_pgdir(dindex);
-	mem_map[MAP_NR(page)] = 1;
-	free_page(page);
 	invalidate();
-	return 0;
 }
 
-static int alloc_area_pages(unsigned long dindex, unsigned long index, unsigned long nr)
+static inline int alloc_area_pte(pte_t * pte, unsigned long address, unsigned long size)
 {
-	pgd_t *dir;
-	pte_t *page_table;
+	unsigned long end;
 
-	dir = swapper_pg_dir + dindex;
-	if (pgd_none(*dir)) {
-		unsigned long page = get_free_page(GFP_KERNEL);
+	address &= ~PMD_MASK;
+	end = address + size;
+	if (end > PMD_SIZE)
+		end = PMD_SIZE;
+	while (address < end) {
+		unsigned long page;
+		if (!pte_none(*pte))
+			printk("alloc_area_pte: page already exists\n");
+		page = __get_free_page(GFP_KERNEL);
 		if (!page)
 			return -ENOMEM;
-		if (!pgd_none(*dir)) {
-			free_page(page);
-		} else {
-			mem_map[MAP_NR(page)] = MAP_PAGE_RESERVED;
-			set_pgdir(dindex, (pte_t *) page);
-		}
+		*pte = mk_pte(page, PAGE_KERNEL);
+		address += PAGE_SIZE;
+		pte++;
 	}
-	if (pgd_bad(*dir)) {
-		printk("Bad page dir entry in alloc_area_pages (%08lx)\n", pgd_val(*dir));
-		return -ENOMEM;
-	}
-	page_table = index + (pte_t *) pgd_page(*dir);
-	/*
-	 * use a tempotary page-table entry to remove a race with
-	 * vfree(): it mustn't free the page table from under us
-	 * if we sleep in get_free_page()
-	 */
-	*page_table = BAD_PAGE;
-	do {
-		unsigned long pg = get_free_page(GFP_KERNEL);
-
-		if (!pg)
-			return -ENOMEM;
-		*page_table = mk_pte(pg, PAGE_KERNEL);
-		page_table++;
-	} while (--nr);
-	invalidate();
 	return 0;
 }
 
-static int do_area(void * addr, unsigned long size,
-	int (*area_fn)(unsigned long,unsigned long,unsigned long))
+static inline int alloc_area_pmd(pmd_t * pmd, unsigned long address, unsigned long size)
 {
-	unsigned long nr, dindex, index;
+	unsigned long end;
 
-	nr = size >> PAGE_SHIFT;
-	dindex = VMALLOC_VMADDR(addr);
-	index = (dindex >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
-	dindex = (dindex >> PGDIR_SHIFT) & (PTRS_PER_PAGE-1);
-	while (nr > 0) {
-		unsigned long i = PTRS_PER_PAGE - index;
-
-		if (i > nr)
-			i = nr;
-		nr -= i;
-		if (area_fn(dindex, index, i))
-			return -1;
-		index = 0;
-		dindex++;
+	address &= ~PGDIR_MASK;
+	end = address + size;
+	if (end > PGDIR_SIZE)
+		end = PGDIR_SIZE;
+	while (address < end) {
+		pte_t * pte = pte_alloc_kernel(pmd, address);
+		if (!pte)
+			return -ENOMEM;
+		if (alloc_area_pte(pte, address, end - address))
+			return -ENOMEM;
+		address = (address + PMD_SIZE) & PMD_MASK;
+		pmd++;
 	}
+	return 0;
+}
+
+static int alloc_area_pages(unsigned long address, unsigned long size)
+{
+	pgd_t * dir;
+	unsigned long end = address + size;
+
+	dir = PAGE_DIR_OFFSET(&init_task, address);
+	while (address < end) {
+		pmd_t *pmd = pmd_alloc_kernel(dir, address);
+		if (!pmd)
+			return -ENOMEM;
+		if (alloc_area_pmd(pmd, address, end - address))
+			return -ENOMEM;
+		set_pgdir(address, *dir);
+		address = (address + PGDIR_SIZE) & PGDIR_MASK;
+		dir++;
+	}
+	invalidate();
 	return 0;
 }
 
@@ -158,7 +180,7 @@ void vfree(void * addr)
 	for (p = &vmlist ; (tmp = *p) ; p = &tmp->next) {
 		if (tmp->addr == addr) {
 			*p = tmp->next;
-			do_area(tmp->addr, tmp->size, free_area_pages);
+			free_area_pages(VMALLOC_VMADDR(tmp->addr), tmp->size);
 			kfree(tmp);
 			return;
 		}
@@ -188,7 +210,7 @@ void * vmalloc(unsigned long size)
 	area->addr = addr;
 	area->next = *p;
 	*p = area;
-	if (do_area(addr, size, alloc_area_pages)) {
+	if (alloc_area_pages(VMALLOC_VMADDR(addr), size)) {
 		vfree(addr);
 		return NULL;
 	}

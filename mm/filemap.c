@@ -21,6 +21,7 @@
 
 #include <asm/segment.h>
 #include <asm/system.h>
+#include <asm/pgtable.h>
 
 /*
  * Shared mappings implemented 30.11.1994. It's not fully working yet,

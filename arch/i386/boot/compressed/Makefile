@@ -34,7 +34,7 @@ piggy.o:	$(SYSTEM) xtract piggyback
 xtract: xtract.c
 	$(HOSTCC) $(CFLAGS) -o xtract xtract.c
 
-piggyback: xtract.c
+piggyback: piggyback.c
 	$(HOSTCC) $(CFLAGS) -o piggyback piggyback.c
 
 clean:

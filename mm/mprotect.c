@@ -15,6 +15,7 @@
 
 #include <asm/segment.h>
 #include <asm/system.h>
+#include <asm/pgtable.h>
 
 static void change_protection(unsigned long start, unsigned long end, pgprot_t newprot)
 {

@@ -2,6 +2,7 @@
  *	SNAP data link layer. Derived from 802.2
  *
  *		Alan Cox <Alan.Cox@linux.org>, from the 802.2 layer by Greg Page.
+ *		Merged in additions from Greg Page's psnap.c.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -38,6 +39,15 @@ static struct datalink_proto *find_snap_client(unsigned char *desc)
  
 int snap_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
+	static struct packet_type psnap_packet_type = 
+	{
+		0,	
+		NULL,		/* All Devices */
+		snap_rcv,
+		NULL,
+		NULL,
+	};
+	
 	struct datalink_proto	*proto;
 
 	proto = find_snap_client(skb->h.raw);
@@ -49,7 +59,9 @@ int snap_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		 
 		skb->h.raw += 5;
 		skb->len -= 5;
-		return proto->rcvfunc(skb, dev, pt);
+		if (psnap_packet_type.type == 0)
+			psnap_packet_type.type=htons(ETH_P_SNAP);
+		return proto->rcvfunc(skb, dev, &psnap_packet_type);
 	}
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_READ);

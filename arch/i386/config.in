@@ -149,6 +149,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 		bool 'EtherExpress support' CONFIG_EEXPRESS n
 		bool 'NI5210 support' CONFIG_NI52 n
 		bool 'NI6510 support' CONFIG_NI65 n
+		bool 'WaveLAN support' CONFIG_WAVELAN n
 	fi
 	bool 'HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS n
 	bool 'HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN n

@@ -18,6 +18,7 @@
 
 #include <asm/system.h>
 #include <asm/segment.h>
+#include <asm/pgtable.h>
 
 extern void die_if_kernel(char *,struct pt_regs *,long);
 

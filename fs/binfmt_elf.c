@@ -33,6 +33,7 @@
 #include <linux/personality.h>
 
 #include <asm/segment.h>
+#include <asm/pgtable.h>
 
 #include <linux/config.h>
 

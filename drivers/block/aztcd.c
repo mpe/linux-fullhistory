@@ -32,7 +32,7 @@
 		   frame can be read in sequence, this is also the reason for
 		3. getting 'timeout in state 4' messages, but nevertheless
 		   it works
-		W.Zimmermann, Okt. 31, 1994
+		W.Zimmermann, Oct. 31, 1994
 	V0.1    Version is ALPHA, problems #2 and #3 resolved.  
 		W.Zimmermann, Nov. 3, 1994
 	V0.2    Modification to some comments, debugging aids for partial test
@@ -67,24 +67,24 @@
 		W.Zimmermann, Nov. 18, 1994
 	V0.42   Included getAztStatus command in GetQChannelInfo() to allow
 		reading Q-channel info on audio disks, if drive is stopped, 
-		and some other bug fixes in the audio stuff, suggestet by 
+		and some other bug fixes in the audio stuff, suggested by 
 		Robby Schirmer.
 		Added more ioctls (reading data in mode 1 and mode 2).
 		Completely removed the old azt_poll() routine.
 		Detection of ORCHID CDS-3110 in aztcd_init implemented.
 		Additional debugging aids (see the readme file).
-		W.Zimmermann, Dez. 9, 1994  
-	V0.50   Autodetection of drives inplemented.
-		W.Zimmermann, Dez. 12, 1994
+		W.Zimmermann, Dec. 9, 1994  
+	V0.50   Autodetection of drives implemented.
+		W.Zimmermann, Dec. 12, 1994
 	V0.52   Prepared for including in the standard kernel, renamed most
 		variables to contain 'azt', included autoconf.h
-		W.Zimmermann, Dez. 16, 1994        
+		W.Zimmermann, Dec. 16, 1994        
 	V0.6    Version for being included in the standard Linux kernel.
 		Renamed source and header file to aztcd.c and aztcd.h
-		W.Zimmermann, Dez. 24, 1994
+		W.Zimmermann, Dec. 24, 1994
 	V0.7    Changed VERIFY_READ to VERIFY_WRITE in aztcd_ioctl, case
 		CDROMREADMODE1 and CDROMREADMODE2; bug fix in the ioctl,
-		which causes kernel crashs, when playing audio, changed 
+		which causes kernel crashes when playing audio, changed 
 		include-files (config.h instead of autoconf.h, removed
 		delay.h)
 		W.Zimmermann, Jan. 8, 1995
@@ -209,7 +209,7 @@ static unsigned long aztTimeOutCount;
 
 /* Macros for the drive hardware interface handshake, these macros use
    busy waiting */
-/* Wait for OP_OK = drive answers with AFL_OP_OK after recieving a command*/
+/* Wait for OP_OK = drive answers with AFL_OP_OK after receiving a command*/
 # define OP_OK op_ok()
 void op_ok(void)
 { aztTimeOutCount=0; 
@@ -222,7 +222,7 @@ void op_ok(void)
      } while (aztIndatum!=AFL_OP_OK);
 }
 
-/* Wait for PA_OK = drive answers with AFL_PA_OK after recieving parameters*/
+/* Wait for PA_OK = drive answers with AFL_PA_OK after receiving parameters*/
 # define PA_OK pa_ok()
 void pa_ok(void)
 { aztTimeOutCount=0; 
@@ -377,7 +377,7 @@ static int check_aztcd_media_change(dev_t full_dev)
 }
 
 
-/* used in azt_poll to poll the status, expects another programm to issue a 
+/* used in azt_poll to poll the status, expects another program to issue a 
  * ACMD_GET_STATUS directly before 
  */
 static int aztStatus(void)  
@@ -637,7 +637,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 	 */
 		break;
 	case CDROMEJECT:
-	       /* all drives can atleast stop! */
+	       /* all drives can at least stop! */
 		if (aztAudioStatus == CDROM_AUDIO_PLAY) 
 		{ if (aztSendCmd(ACMD_STOP)) return -1;
 		  STEN_LOW_WAIT;
@@ -1439,7 +1439,7 @@ int aztGetQChannelInfo(struct azt_Toc *qp)
 }
 
 /*
- * Read the table of contents (TOC) and TOC header if neccessary
+ * Read the table of contents (TOC) and TOC header if necessary
  */
 static int aztUpdateToc()
 {

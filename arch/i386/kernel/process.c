@@ -21,7 +21,9 @@
 #include <linux/a.out.h>
 
 #include <asm/segment.h>
+#include <asm/pgtable.h>
 #include <asm/system.h>
+#include <asm/io.h>
 
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 
@@ -45,6 +47,41 @@ asmlinkage int sys_idle(void)
 		if (hlt_works_ok && !need_resched)
 			__asm__("hlt");
 		schedule();
+	}
+}
+
+/*
+ * This routine reboots the machine by asking the keyboard
+ * controller to pulse the reset-line low. We try that for a while,
+ * and if it doesn't work, we do some other stupid things.
+ */
+static long no_idt[2] = {0, 0};
+
+static inline void kb_wait(void)
+{
+	int i;
+
+	for (i=0; i<0x10000; i++)
+		if ((inb_p(0x64) & 0x02) == 0)
+			break;
+}
+
+void hard_reset_now(void)
+{
+	int i, j;
+
+	sti();
+/* rebooting needs to touch the page at absolute addr 0 */
+	pg0[0] = 7;
+	*((unsigned short *)0x472) = 0x1234;
+	for (;;) {
+		for (i=0; i<100; i++) {
+			kb_wait();
+			for(j = 0; j < 100000 ; j++)
+				/* nothing */;
+			outb(0xfe,0x64);	 /* pulse reset low */
+		}
+		__asm__ __volatile__("\tlidt %0": "=m" (no_idt));
 	}
 }
 

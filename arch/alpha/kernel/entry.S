@@ -68,11 +68,33 @@
 .ent	entInt
 entInt:
 	SAVE_ALL
+/* start atomic operation with respect to software interrupts */
+	lda	$0,intr_count
+	ldq	$1,0($0)
+	addq	$1,1,$1
+	stq	$1,0($0)
+/* set up the arguments to the C interrupt handler */
 	bis	$30,$30,$19
 	lda	$27,do_entInt
 	jsr	$26,($27),do_entInt
+/* ok, check if we need to do software interrupts */
+1:	lda	$0,intr_count
+	ldq	$1,0($0)
+	subq	$1,1,$1
+	bne	$1,2f		/* interrupt within interrupt: return now */
+	lda	$2,bh_active
+	ldq	$3,0($2)
+	lda	$2,bh_mask
+	ldq	$2,0($2)
+	and	$2,$3,$2
+	bne	$2,3f
+2:	stq	$1,0($0)
 	RESTORE_ALL
 	rti
+.align 5
+3:	lda	$27,do_bottom_half
+	jsr	$26,($27),do_bottom_half
+	br	$31,1b
 .end entInt
 
 .align 5

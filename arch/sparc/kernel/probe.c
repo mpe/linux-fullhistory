@@ -236,7 +236,7 @@ probe_mmu(void)
 void
 probe_clock(int fchild)
 {
-  /* TODO :> I just can't stomache it right now... */
+  /* TODO :> I just can't stomach it right now... */
   return;
 }
 

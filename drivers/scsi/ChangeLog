@@ -74,7 +74,7 @@ Fri Jan 13 12:54:46 1995  Eric Youngdale  (eric@andante)
 	scsi_init_malloc to get some memory we know will be safe).
 
 	* scsi.c: Change dma freelist to be a set of pages.  This allows
-	us to dynamicly adjust the size of the list by adding more pages
+	us to dynamically adjust the size of the list by adding more pages
 	to the pagelist.  Fix scsi_malloc and scsi_free accordingly.
 
 	* scsi_module.c: Fix include.

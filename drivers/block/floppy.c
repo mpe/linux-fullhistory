@@ -121,6 +121,7 @@ static int FDC2=-1;
 #include <linux/string.h>
 #include <linux/fcntl.h>
 #include <linux/delay.h>
+#include <linux/mc146818rtc.h> /* CMOS defines */
 
 #include <asm/dma.h>
 #include <asm/irq.h>
@@ -2851,11 +2852,6 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 	return 0;
 #undef IOCTL_ALLOWED
 }
-
-#define CMOS_READ(addr) ({ \
-outb_p(addr,0x70); \
-inb_p(0x71); \
-})
 
 static void set_base_type(int drive,int code)
 {
