@@ -35,11 +35,11 @@
 #define __invalidate() \
 __asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
 
-#ifdef CONFIG_M486
+#ifdef CONFIG_M386
+#define __invalidate_one(addr) invalidate()
+#else
 #define __invalidate_one(addr) \
 __asm__ __volatile__("invlpg %0": :"m" (*(char *) addr))
-#else
-#define __invalidate_one(addr) invalidate()
 #endif
  
 #ifndef __SMP__

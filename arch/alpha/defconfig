@@ -22,6 +22,7 @@ CONFIG_ALPHA_CABRIOLET=y
 # CONFIG_ALPHA_SRM is not set
 CONFIG_PCI=y
 CONFIG_ALPHA_APECS=y
+CONFIG_ALPHA_NEED_ROUNDING_EMULATION=y
 # CONFIG_SERIAL_ECHO is not set
 # CONFIG_TGA_CONSOLE is not set
 CONFIG_PCI_OPTIMIZE=y
@@ -33,6 +34,7 @@ CONFIG_SYSVIPC=y
 # block devices
 #
 CONFIG_BLK_DEV_FD=y
+# CONFIG_BLK_DEV_RAM is not set
 CONFIG_ST506=y
 
 #
@@ -142,6 +144,7 @@ CONFIG_DE4X5=y
 #
 # Filesystems
 #
+# CONFIG_QUOTA is not set
 # CONFIG_MINIX_FS is not set
 # CONFIG_EXT_FS is not set
 CONFIG_EXT2_FS=y
@@ -168,6 +171,7 @@ CONFIG_PSMOUSE=y
 # CONFIG_ATIXL_BUSMOUSE is not set
 # CONFIG_QIC02_TAPE is not set
 # CONFIG_APM is not set
+# CONFIG_WATCHDOG is not set
 
 #
 # Sound

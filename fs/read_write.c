@@ -263,6 +263,7 @@ asmlinkage int sys_readv(unsigned long fd, const struct iovec * vector, long cou
 
 asmlinkage int sys_writev(unsigned long fd, const struct iovec * vector, long count)
 {
+	int error;
 	struct file * file;
 	struct inode * inode;
 
@@ -270,5 +271,8 @@ asmlinkage int sys_writev(unsigned long fd, const struct iovec * vector, long co
 		return -EBADF;
 	if (!(file->f_mode & 2))
 		return -EBADF;
-	return do_readv_writev(VERIFY_READ, inode, file, vector, count);
+	down(&inode->i_sem);
+	error = do_readv_writev(VERIFY_READ, inode, file, vector, count);
+	up(&inode->i_sem);
+	return error;
 }

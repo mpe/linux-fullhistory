@@ -501,7 +501,7 @@ smb_iget(struct inode *dir, char *path, struct smb_dirent *finfo)
                 return NULL;
         }
 
-        new_inode_info->state = INODE_LOOKED_UP;
+        new_inode_info->state = SMB_INODE_LOOKED_UP;
         new_inode_info->nused = 0;
         new_inode_info->dir   = SMB_INOP(dir);
 
@@ -539,8 +539,8 @@ smb_free_inode_info(struct smb_inode_info *i)
                 return;
         }
 
-        i->state = INODE_CACHED;
-        while ((i->nused == 0) && (i->state == INODE_CACHED)) {
+        i->state = SMB_INODE_CACHED;
+        while ((i->nused == 0) && (i->state == SMB_INODE_CACHED)) {
                 struct smb_inode_info *dir = i->dir;
 
                 i->next->prev = i->prev;
@@ -565,7 +565,7 @@ smb_init_root(struct smb_server *server)
         root->finfo.len  = strlen(root->finfo.path);
         root->finfo.opened = 0;
 
-        root->state = INODE_LOOKED_UP;
+        root->state = SMB_INODE_LOOKED_UP;
         root->nused = 1;
         root->dir   = NULL;
         root->next = root->prev = root;
@@ -690,8 +690,8 @@ smb_lookup(struct inode *dir, const char *__name, int len,
 
         if (result_info != 0) {
 
-                if (result_info->state == INODE_CACHED)
-                        result_info->state = INODE_LOOKED_UP;
+                if (result_info->state == SMB_INODE_CACHED)
+                        result_info->state = SMB_INODE_LOOKED_UP;
 
                 put_pname(name);
 

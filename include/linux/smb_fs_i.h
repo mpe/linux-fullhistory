@@ -12,10 +12,10 @@
 #include <linux/smb.h>
 
 enum smb_inode_state {
-        INODE_VALID = 19,       /* Inode currently in use */
-        INODE_LOOKED_UP,        /* directly before iget */
-        INODE_CACHED,           /* in a path to an inode which is in use */
-        INODE_INVALID
+        SMB_INODE_VALID = 19,	/* Inode currently in use */
+        SMB_INODE_LOOKED_UP,	/* directly before iget */
+        SMB_INODE_CACHED,	/* in a path to an inode which is in use */
+        SMB_INODE_INVALID
 };
 
 /*

@@ -57,7 +57,7 @@ unsigned long high_memory = 0;
 int nr_swap_pages = 0;
 int nr_free_pages = 0;
 struct mem_list free_area_list[NR_MEM_LISTS];
-unsigned char * free_area_map[NR_MEM_LISTS];
+unsigned int * free_area_map[NR_MEM_LISTS];
 
 /*
  * We special-case the C-O-W ZERO_PAGE, because it's such
@@ -669,7 +669,7 @@ int verify_area(int type, const void * addr, unsigned long size)
 	 * case where we use a fake user buffer with get_fs/set_fs()) we
 	 * don't expect to find the address in the user vm map.
 	 */
-	if (get_fs() == get_ds())
+	if (!size || get_fs() == get_ds())
 		return 0;
 
 	vma = find_vma(current, start);

@@ -17,6 +17,11 @@
 #include <linux/smb_fs.h>
 #include <linux/malloc.h>
 
+static inline int min(int a, int b)
+{
+	return a<b ? a : b;
+}
+
 static int 
 smb_fsync(struct inode *inode, struct file *file)
 {

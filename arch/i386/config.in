@@ -27,10 +27,10 @@ tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 if [ "$CONFIG_BINFMT_ELF" = "y" ]; then
   bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF
 fi
-#bool 'Use Pentium-specific optimizations (does NOT work on i386)' CONFIG_M586
-#if [ "$CONFIG_M586" = "n" ]; then
-bool 'Use 486-specific optimizations (does NOT work on i386)' CONFIG_M486
-#fi
+choice 'Processor type' \
+	"386		CONFIG_M386	\
+	 486		CONFIG_M486	\
+	 Pentium	CONFIG_M586" Pentium
 
 source drivers/block/Config.in
 

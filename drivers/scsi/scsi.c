@@ -58,6 +58,21 @@ const unsigned char scsi_command_size[8] = { 6, 10, 10, 12, 12, 12, 10, 10 };
 
 #define INTERNAL_ERROR (panic ("Internal error in file %s, line %d.\n", __FILE__, __LINE__))
 
+/*
+ * PAGE_SIZE must be a multiple of the sector size (512).  True
+ * for all reasonably recent architectures (even the VAX...).
+ */
+#define SECTOR_SIZE		512
+#define SECTORS_PER_PAGE	(PAGE_SIZE/SECTOR_SIZE)
+
+#if SECTORS_PER_PAGE <= 8
+ typedef unsigned char	FreeSectorBitmap;
+#elif SECTORS_PER_PAGE <= 32
+ typedef unsigned int	FreeSectorBitmap;
+#else
+# error You lose.
+#endif
+
 static void scsi_done (Scsi_Cmnd *SCpnt);
 static int update_timeout (Scsi_Cmnd *, int);
 static void print_inquiry(unsigned char *data);
@@ -68,7 +83,7 @@ static int scan_scsis_single (int channel,int dev,int lun,int * max_scsi_dev ,
 void scsi_build_commandblocks(Scsi_Device * SDpnt);
 
 
-static unsigned char * dma_malloc_freelist = NULL;
+static FreeSectorBitmap * dma_malloc_freelist = NULL;
 static int scsi_need_isa_bounce_buffers;
 static unsigned int dma_sectors = 0;
 unsigned int dma_free_sectors = 0;
@@ -2145,8 +2160,6 @@ static int update_timeout(Scsi_Cmnd * SCset, int timeout)
     return oldto;
 }
 
-#define MALLOC_PAGEBITS 12
-
 #ifdef CONFIG_MODULES
 static int scsi_register_host(Scsi_Host_Template *);
 static void scsi_unregister_host(Scsi_Host_Template *);
@@ -2157,7 +2170,7 @@ void *scsi_malloc(unsigned int len)
     unsigned int nbits, mask;
     unsigned long flags;
     int i, j;
-    if((len & 0x1ff) || len > (1<<MALLOC_PAGEBITS))
+    if(len % SECTOR_SIZE != 0 || len > PAGE_SIZE)
 	return NULL;
     
     save_flags(flags);
@@ -2165,8 +2178,8 @@ void *scsi_malloc(unsigned int len)
     nbits = len >> 9;
     mask = (1 << nbits) - 1;
     
-    for(i=0;i < (dma_sectors >> (MALLOC_PAGEBITS - 9)); i++)
-	for(j=0; j<=(sizeof(*dma_malloc_freelist) * 8) - nbits; j++){
+    for(i=0;i < dma_sectors / SECTORS_PER_PAGE; i++)
+	for(j=0; j<=SECTORS_PER_PAGE - nbits; j++){
 	    if ((dma_malloc_freelist[i] & (mask << j)) == 0){
 		dma_malloc_freelist[i] |= (mask << j);
 		restore_flags(flags);
@@ -2183,43 +2196,38 @@ void *scsi_malloc(unsigned int len)
 
 int scsi_free(void *obj, unsigned int len)
 {
-    int page, sector, nbits, mask;
-    long offset;
+    unsigned int page, sector, nbits, mask;
     unsigned long flags;
     
 #ifdef DEBUG
     printk("scsi_free %p %d\n",obj, len);
 #endif
     
-    offset = -1;
-    for (page = 0; page < (dma_sectors >> 3); page++)
-	if ((unsigned long) obj >= (unsigned long) dma_malloc_pages[page] &&
-	    (unsigned long) obj < (unsigned long) dma_malloc_pages[page] 
-	    + (1 << MALLOC_PAGEBITS))
+    for (page = 0; page < dma_sectors / SECTORS_PER_PAGE; page++) {
+        unsigned long page_addr = (unsigned long) dma_malloc_pages[page];
+        if ((unsigned long) obj >= page_addr &&
+	    (unsigned long) obj <  page_addr + PAGE_SIZE)
 	{
-	    offset = ((unsigned long) obj) - ((unsigned long)dma_malloc_pages[page]);
-	    break;
+	    sector = (((unsigned long) obj) - page_addr) >> 9;
+
+            nbits = len >> 9;
+            mask = (1 << nbits) - 1;
+
+            if ((mask << sector) >= (1 << SECTORS_PER_PAGE))
+                panic ("scsi_free:Bad memory alignment");
+
+            save_flags(flags);
+            cli();
+            if((dma_malloc_freelist[page] & (mask << sector)) != (mask<<sector))
+                panic("scsi_free:Trying to free unused memory");
+
+            dma_free_sectors += nbits;
+            dma_malloc_freelist[page] &= ~(mask << sector);
+            restore_flags(flags);
+            return 0;
 	}
-    
-    if (page == (dma_sectors >> 3)) panic("scsi_free:Bad offset");
-    sector = offset >> 9;
-    if(sector >= dma_sectors) panic ("scsi_free:Bad page");
-    
-    sector = (offset >> 9) & (sizeof(*dma_malloc_freelist) * 8 - 1);
-    nbits = len >> 9;
-    mask = (1 << nbits) - 1;
-    
-    if ((mask << sector) > 0xffff) panic ("scsi_free:Bad memory alignment");
-    
-    save_flags(flags);
-    cli();
-    if((dma_malloc_freelist[page] & (mask << sector)) != (mask<<sector))
-	panic("scsi_free:Trying to free unused memory");
-    
-    dma_free_sectors += nbits;
-    dma_malloc_freelist[page] &= ~(mask << sector);
-    restore_flags(flags);
-    return 0;
+    }
+    panic("scsi_free:Bad offset");
 }
 
 
@@ -2521,11 +2529,12 @@ int scsi_proc_info(char *buffer, char **start, off_t offset, int length,
 static void resize_dma_pool(void)
 {
     int i;
+    unsigned long size;
     struct Scsi_Host * shpnt;
     struct Scsi_Host * host = NULL;
     Scsi_Device * SDpnt;
     unsigned long flags;
-    unsigned char * new_dma_malloc_freelist = NULL;
+    FreeSectorBitmap * new_dma_malloc_freelist = NULL;
     unsigned int new_dma_sectors = 0;
     unsigned int new_need_isa_buffer = 0;
     unsigned char ** new_dma_malloc_pages = NULL;
@@ -2538,14 +2547,15 @@ static void resize_dma_pool(void)
 	if( dma_free_sectors != dma_sectors )
 	    panic("SCSI DMA pool memory leak %d %d\n",dma_free_sectors,dma_sectors);
 
-	for(i=0; i < dma_sectors >> 3; i++)
+	for(i=0; i < dma_sectors / SECTORS_PER_PAGE; i++)
 	    scsi_init_free(dma_malloc_pages[i], PAGE_SIZE);
 	if (dma_malloc_pages)
 	    scsi_init_free((char *) dma_malloc_pages,
-                           (dma_sectors>>3)*sizeof(*dma_malloc_pages));
+                           (dma_sectors / SECTORS_PER_PAGE)*sizeof(*dma_malloc_pages));
 	dma_malloc_pages = NULL;
 	if (dma_malloc_freelist)
-	    scsi_init_free(dma_malloc_freelist, dma_sectors>>3);
+	    scsi_init_free((char *) dma_malloc_freelist,
+                           (dma_sectors / SECTORS_PER_PAGE)*sizeof(*dma_malloc_freelist));
 	dma_malloc_freelist = NULL;
 	dma_sectors = 0;
 	dma_free_sectors = 0;
@@ -2553,7 +2563,7 @@ static void resize_dma_pool(void)
     }
     /* Next, check to see if we need to extend the DMA buffer pool */
 	
-    new_dma_sectors = 16;  /* Base value we use */
+    new_dma_sectors = 2*SECTORS_PER_PAGE;		/* Base value we use */
 
     if (high_memory-1 > ISA_DMA_THRESHOLD)
 	scsi_need_isa_bounce_buffers = 1;
@@ -2562,7 +2572,7 @@ static void resize_dma_pool(void)
     
     if (scsi_devicelist)
 	for(shpnt=scsi_hostlist; shpnt; shpnt = shpnt->next)
-	    new_dma_sectors += 8;  /* Increment for each host */
+	    new_dma_sectors += SECTORS_PER_PAGE;	/* Increment for each host */
     
     for (SDpnt=scsi_devices; SDpnt; SDpnt = SDpnt->next) {
 	host = SDpnt->host;
@@ -2581,6 +2591,7 @@ static void resize_dma_pool(void)
 	}
     }
     
+    /* limit DMA memory to 32MB: */
     new_dma_sectors = (new_dma_sectors + 15) & 0xfff0;
     
     /*
@@ -2593,22 +2604,20 @@ static void resize_dma_pool(void)
     
     if (new_dma_sectors)
     {
-	new_dma_malloc_freelist = (unsigned char *)
-	    scsi_init_malloc(new_dma_sectors >> 3, GFP_ATOMIC);
-	memset(new_dma_malloc_freelist, 0, new_dma_sectors >> 3);
-	
-	new_dma_malloc_pages = (unsigned char **)
-	    scsi_init_malloc((new_dma_sectors>>3)*sizeof(*new_dma_malloc_pages),
-                             GFP_ATOMIC);
-	memset(new_dma_malloc_pages, 0,
-               (new_dma_sectors>>3)*sizeof(*new_dma_malloc_pages));
+        size = (new_dma_sectors / SECTORS_PER_PAGE)*sizeof(FreeSectorBitmap);
+	new_dma_malloc_freelist = (FreeSectorBitmap *) scsi_init_malloc(size, GFP_ATOMIC);
+	memset(new_dma_malloc_freelist, 0, size);
+
+        size = (new_dma_sectors / SECTORS_PER_PAGE)*sizeof(*new_dma_malloc_pages);
+	new_dma_malloc_pages = (unsigned char **) scsi_init_malloc(size, GFP_ATOMIC);
+	memset(new_dma_malloc_pages, 0, size);
     }
     
     /*
      * If we need more buffers, expand the list.
      */
     if( new_dma_sectors > dma_sectors ) { 
-	for(i=dma_sectors >> 3; i< new_dma_sectors >> 3; i++)
+	for(i=dma_sectors / SECTORS_PER_PAGE; i< new_dma_sectors / SECTORS_PER_PAGE; i++)
 	    new_dma_malloc_pages[i] = (unsigned char *)
 	        scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);
     }
@@ -2620,17 +2629,17 @@ static void resize_dma_pool(void)
     cli();
     if (dma_malloc_freelist)
     {
-	memcpy(new_dma_malloc_freelist, dma_malloc_freelist, dma_sectors >> 3);
-	scsi_init_free(dma_malloc_freelist, dma_sectors>>3);
+        size = (dma_sectors / SECTORS_PER_PAGE)*sizeof(FreeSectorBitmap);
+	memcpy(new_dma_malloc_freelist, dma_malloc_freelist, size);
+	scsi_init_free((char *) dma_malloc_freelist, size);
     }
     dma_malloc_freelist = new_dma_malloc_freelist;
     
     if (dma_malloc_pages)
     {
-	memcpy(new_dma_malloc_pages, dma_malloc_pages,
-               (dma_sectors>>3)*sizeof(*dma_malloc_pages));
-	scsi_init_free((char *) dma_malloc_pages,
-                       (dma_sectors>>3)*sizeof(*dma_malloc_pages));
+        size = (dma_sectors / SECTORS_PER_PAGE)*sizeof(*dma_malloc_pages);
+	memcpy(new_dma_malloc_pages, dma_malloc_pages, size);
+	scsi_init_free((char *) dma_malloc_pages, size);
     }
     
     dma_free_sectors += new_dma_sectors - dma_sectors;
@@ -3111,6 +3120,8 @@ scsi_dump_status(void)
 extern struct symbol_table scsi_symbol_table;
 
 int init_module(void) {
+    unsigned long size;
+
     /*
      * This makes /proc/scsi visible.
      */
@@ -3127,7 +3138,7 @@ int init_module(void) {
 #endif
 
     
-    dma_sectors = PAGE_SIZE / 512;
+    dma_sectors = PAGE_SIZE / SECTOR_SIZE;
     dma_free_sectors= dma_sectors;
     /*
      * Set up a minimal DMA buffer list - this will be used during scan_scsis
@@ -3135,13 +3146,13 @@ int init_module(void) {
      */
     
     /* One bit per sector to indicate free/busy */
-    dma_malloc_freelist = (unsigned char *)
-	scsi_init_malloc(dma_sectors >> 3, GFP_ATOMIC);
-    memset(dma_malloc_freelist, 0, dma_sectors >> 3);
-    
+    size = (dma_sectors / SECTORS_PER_PAGE)*sizeof(FreeSectorBitmap);
+    dma_malloc_freelist = (unsigned char *) scsi_init_malloc(size, GFP_ATOMIC);
+    memset(dma_malloc_freelist, 0, size);
+
     /* One pointer per page for the page list */
     dma_malloc_pages = (unsigned char **)
-	scsi_init_malloc((dma_sectors >> 3)*sizeof(*dma_malloc_pages), GFP_ATOMIC);
+	scsi_init_malloc((dma_sectors / SECTORS_PER_PAGE)*sizeof(*dma_malloc_pages), GFP_ATOMIC);
     dma_malloc_pages[0] = (unsigned char *)
 	scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);
     return 0;

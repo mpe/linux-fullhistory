@@ -26,7 +26,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-#include <asm/processor.h>
+#include <asm/ppc_machine.h>
 
 /*
  * Trap & Exception support
@@ -68,7 +68,8 @@ MachineCheckException(struct pt_regs *regs)
 ProgramCheckException(struct pt_regs *regs)
 {
 	printk("Program check at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);
-	_exception(SIGILL, regs);	
+	while(1) ;
+	_exception(SIGILL, regs);
 }
 
 FloatingPointCheckException(struct pt_regs *regs)

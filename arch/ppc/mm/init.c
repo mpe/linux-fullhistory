@@ -5,6 +5,7 @@
  *  Ported to PPC by Gary Thomas
  */
 
+
 #include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -27,7 +28,7 @@
    making it 8k for now.  will change later.
       -- Cort
    */
-pgd_t swapper_pg_dir[1024*8];
+pgd_t swapper_pg_dir[1024];
 /*pgd_t *swapper_pg_dir;*/
 
 pte *MMU_get_page(void);
@@ -331,6 +332,7 @@ BAT BAT1 =
    };
 BAT BAT2 =
    {
+/* map kernel with bats 0 = yes */
 #if 1
    	{
    		0x00000000>>17, 	/* bepi */
@@ -468,9 +470,9 @@ void MMU_init(void)
 {
 	int i, p;
 	SEGREG *segs;
-	_printk("MMU init - started\n");
+/*	_printk("MMU init - started\n");*/
 	find_end_of_memory();
-	_printk("  Start at 0x%08X, End at 0x%08X, Hash at 0x%08X\n", _start, _end, Hash);
+/*	_printk("  Start at 0x%08X, End at 0x%08X, Hash at 0x%08X\n", _start, _end, Hash);*/
 	_SDR1 = ((unsigned long)Hash & 0x00FFFFFF) | Hash_mask;
 	p = (int)mmu_pages;
 	p = (p + (MMU_PAGE_SIZE-1)) & ~(MMU_PAGE_SIZE-1);
@@ -507,7 +509,7 @@ void MMU_init(void)
 	{
 		MMU_map_page(&init_task.tss, i, i & 0x00FFFFFF, PAGE_KERNEL);
 	}
-	_printk("MMU init - done!\n");
+/*	_printk("MMU init - done!\n");*/
 }
 
 pte *
@@ -518,7 +520,7 @@ MMU_get_page(void)
 	{
 		bzero((char *)pg, MMU_PAGE_SIZE);
 	}
-	_printk("MMU Allocate Page at %08X\n", pg);
+/*	_printk("MMU Allocate Page at %08X\n", pg);*/
 	return(pg);
 }
 

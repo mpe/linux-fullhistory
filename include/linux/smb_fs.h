@@ -50,10 +50,6 @@
 #define SMB_HEADER_LEN   37     /* includes everything up to, but not
                                  * including smb_bcc */
 
-static inline int min(int a, int b) {
-  return a<b ? a : b;
-}
-
 #ifdef DEBUG_SMB_MALLOC
 
 #include <linux/malloc.h>

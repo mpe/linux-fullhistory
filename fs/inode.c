@@ -86,13 +86,13 @@ static inline void put_last_free(struct inode *inode)
 	inode->i_next->i_prev = inode;
 }
 
-void grow_inodes(void)
+int grow_inodes(void)
 {
 	struct inode * inode;
 	int i;
 
 	if (!(inode = (struct inode*) get_free_page(GFP_KERNEL)))
-		return;
+		return -ENOMEM;
 
 	i=PAGE_SIZE / sizeof(struct inode);
 	nr_inodes += i;
@@ -103,6 +103,7 @@ void grow_inodes(void)
 
 	for ( ; i ; i-- )
 		insert_inode_free(inode++);
+	return 0;
 }
 
 unsigned long inode_init(unsigned long start, unsigned long end)
@@ -443,7 +444,7 @@ struct inode * get_empty_inode(void)
 {
 	static int ino = 0;
 	struct inode * inode, * best;
-	unsigned long badness = ~0UL;
+	unsigned long badness = 1000;
 	int i;
 
 	if (nr_inodes < NR_INODE && nr_free_inodes < (nr_inodes >> 1))
@@ -461,10 +462,10 @@ repeat:
 			}
 		}
 	}
-	if (badness > 20)
+	if (badness)
 		if (nr_inodes < NR_INODE) {
-			grow_inodes();
-			goto repeat;
+			if (grow_inodes() == 0)
+				goto repeat;
 		}
 	inode = best;
 	if (!inode) {

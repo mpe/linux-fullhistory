@@ -12,16 +12,16 @@
 #
 # Copyright (C) 1994 by Linus Torvalds
 # Changes for PPC by Gary Thomas
+# Modified by Cort Dougan
 #
-
 # PowerPC (cross) tools
-AS		= as.ppc
-ASFLAGS		=
-LD		= ld.ppc
+AS		= /usr/local/bin/as.ppc
+ASFLAGS		= 
+LD		= /u/cort/ppc-gcc/bin/ld.ppc
 #LINKFLAGS	= -T arch/ppc/ld.script -Ttext 0x90000000 -Map vmlinux.map
 LINKFLAGS	= -T arch/ppc/ld.script -Ttext 0x90000000 
 HOSTCC		= gcc
-CC		= gcc.ppc
+CC		= /usr/local/bin/gcc.ppc 
 CFLAGS		= -D__KERNEL__ -I$(TOPDIR)/include \
 		-Wstrict-prototypes \
 		-fomit-frame-pointer \
@@ -30,10 +30,10 @@ CFLAGS		= -D__KERNEL__ -I$(TOPDIR)/include \
 		-O2 -pipe
 #-Wall
 CPP		= $(CC) -E $(CFLAGS)
-AR		= ar.ppc
-RANLIB		= ranlib.ppc
-STRIP		= strip.ppc
-NM		= nm.ppc
+AR		= /u/cort/ppc-gcc/bin/ar.ppc
+RANLIB		= /u/cort/ppc-gcc/bin/ranlib.ppc
+STRIP		= /u/cort/ppc-gcc/bin/strip.ppc
+NM		= /u/cort/ppc-gcc/bin/nm.ppc
 
 #
 # Set these to indicate how to link it..
@@ -99,6 +99,8 @@ arch/ppc/mm: dummy
 
 archclean:
 #	@$(MAKEBOOT) clean
+	/bin/rm -f arch/ppc/kernel/*.o arch/ppc/kernel/mk_defs arch/ppc/kernel/ppc_defs.h mm/*.o
+	/bin/rm -f arch/ppc/kernel/*~ arch/ppc/kernel/*~      
 
 archdep:
 #	@$(MAKEBOOT) dep

@@ -812,5 +812,10 @@ asmlinkage int sys_get_kernel_syms(void)
 	return -ENOSYS;
 }
 
+int register_symtab(struct symbol_table *intab)
+{
+	return 0;
+}
+
 #endif	/* CONFIG_MODULES */
 

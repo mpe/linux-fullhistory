@@ -11,7 +11,7 @@
  *		the status register flipped, I'll fix this "RSN"
  *
  *      This card does all the I/O via memory mapped I/O, so there is no need
- *      to check or snarf a region of the I/O address space.
+ *      to check or allocate a region of the I/O address space.
  */
 
 /*

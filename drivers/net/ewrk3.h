@@ -61,43 +61,43 @@
 /*
 ** Control and Status Register bit definitions (EWRK3_CSR)
 */
-#define RA		0x80	    /* Runt Accept */
-#define PME		0x40	    /* Promiscuous Mode Enable */
-#define MCE		0x20	    /* Multicast Enable */ 
-#define TNE		0x08	    /* TX Done Queue Not Empty */
-#define RNE		0x04	    /* RX Queue Not Empty */
-#define TXD		0x02	    /* TX Disable */
-#define RXD		0x01	    /* RX Disable */
+#define CSR_RA		0x80	    /* Runt Accept */
+#define CSR_PME		0x40	    /* Promiscuous Mode Enable */
+#define CSR_MCE		0x20	    /* Multicast Enable */ 
+#define CSR_TNE		0x08	    /* TX Done Queue Not Empty */
+#define CSR_RNE		0x04	    /* RX Queue Not Empty */
+#define CSR_TXD		0x02	    /* TX Disable */
+#define CSR_RXD		0x01	    /* RX Disable */
 
 /*
 ** Control Register bit definitions (EWRK3_CR)
 */
-#define APD		0x80	/* Auto Port Disable */
-#define PSEL		0x40	/* Port Select (0->TP port) */
-#define LBCK		0x20	/* LoopBaCK enable */
-#define FDUP		0x10	/* Full DUPlex enable */
-#define FBUS		0x08	/* Fast BUS enable (ISA clk > 8.33MHz) */
-#define EN_16		0x04	/* ENable 16 bit memory accesses */
-#define LED		0x02	/* LED (1-> turn on) */
+#define CR_APD		0x80	/* Auto Port Disable */
+#define CR_PSEL		0x40	/* Port Select (0->TP port) */
+#define CR_LBCK		0x20	/* LoopBaCK enable */
+#define CR_FDUP		0x10	/* Full DUPlex enable */
+#define CR_FBUS		0x08	/* Fast BUS enable (ISA clk > 8.33MHz) */
+#define CR_EN_16	0x04	/* ENable 16 bit memory accesses */
+#define CR_LED		0x02	/* LED (1-> turn on) */
 
 /*
 ** Interrupt Control Register bit definitions (EWRK3_ICR)
 */
-#define IE		0x80	/* Interrupt Enable */
-#define IS		0x60	/* Interrupt Selected */
-#define TNEM		0x08	/* TNE Mask (0->mask) */
-#define RNEM		0x04	/* RNE Mask (0->mask) */
-#define TXDM		0x02	/* TXD Mask (0->mask) */
-#define RXDM		0x01	/* RXD Mask (0->mask) */
+#define ICR_IE		0x80	/* Interrupt Enable */
+#define ICR_IS		0x60	/* Interrupt Selected */
+#define ICR_TNEM	0x08	/* TNE Mask (0->mask) */
+#define ICR_RNEM	0x04	/* RNE Mask (0->mask) */
+#define ICR_TXDM	0x02	/* TXD Mask (0->mask) */
+#define ICR_RXDM	0x01	/* RXD Mask (0->mask) */
 
 /*
 ** Transmit Status Register bit definitions (EWRK3_TSR)
 */
-#define NCL		0x80	/* No Carrier Loopback */
-#define ID		0x40	/* Initially Deferred */
-#define LCL		0x20	/* Late CoLlision */
-#define ECL		0x10	/* Excessive CoLlisions */
-#define RCNTR		0x0f	/* Retries CouNTeR */
+#define TSR_NCL		0x80	/* No Carrier Loopback */
+#define TSR_ID		0x40	/* Initially Deferred */
+#define TSR_LCL		0x20	/* Late CoLlision */
+#define TSR_ECL		0x10	/* Excessive CoLlisions */
+#define TSR_RCNTR	0x0f	/* Retries CouNTeR */
 
 /*
 ** I/O Page Register bit definitions (EWRK3_IOPR)
@@ -111,67 +111,68 @@
 /*
 ** I/O Base Register bit definitions (EWRK3_IOBR)
 */
-#define EISA		0x20	/* Enable EISA ID and Control Registers */
-#define IOB		0x1f	/* Compare bits for I/O Base Address */
+#define EISA_REGS_EN	0x20	/* Enable EISA ID and Control Registers */
+#define EISA_IOB        0x1f	/* Compare bits for I/O Base Address */
 
 /*
-** I/O Configuration/Management Register bit definitions (EWRK3_CMR)
+** I/O Congiguration/Management Register bit definitions (EWRK3_CMR)
 */
-#define RA              0x80    /* Read Ahead */
-#define WB              0x40    /* Write Behind */
-#define LINK		0x20	/* 0->TP */
-#define POLARITY	0x10	/* Informational */
-#define NO_EEPROM	0x0c	/* NO_EEPROM<1:0> pin status */
-#define HS	        0x08	/* Hard Strapped pin status (LeMAC2) */
-#define PNP             0x04    /* Plug 'n Play */
-#define DRAM		0x02	/* 0-> 1DRAM, 1-> 2 DRAM on board */
-#define _0WS            0x01    /* Zero Wait State */
+#define CMR_RA          0x80    /* Read Ahead */
+#define CMR_WB          0x40    /* Write Behind */
+#define CMR_LINK        0x20	/* 0->TP */
+#define CMR_POLARITY    0x10	/* Informational */
+#define CMR_NO_EEPROM	0x0c	/* NO_EEPROM<1:0> pin status */
+#define CMR_HS          0x08	/* Hard Strapped pin status (LeMAC2) */
+#define CMR_PNP         0x04    /* Plug 'n Play */
+#define CMR_DRAM        0x02	/* 0-> 1DRAM, 1-> 2 DRAM on board */
+#define CMR_0WS         0x01    /* Zero Wait State */
 
 /* 
 ** MAC Receive Status Register bit definitions
 */
 
-#define ROK     	0x80 	/* Receive OK summary */
-#define IAM     	0x10 	/* Individual Address Match */
-#define MCM     	0x08 	/* MultiCast Match */
-#define DBE     	0x04 	/* Dribble Bit Error */
-#define CRC     	0x02 	/* CRC error */
-#define PLL     	0x01 	/* Phase Lock Lost */
+#define R_ROK     	0x80 	/* Receive OK summary */
+#define R_IAM     	0x10 	/* Individual Address Match */
+#define R_MCM     	0x08 	/* MultiCast Match */
+#define R_DBE     	0x04 	/* Dribble Bit Error */
+#define R_CRC     	0x02 	/* CRC error */
+#define R_PLL     	0x01 	/* Phase Lock Lost */
 
 /* 
 ** MAC Transmit Control Register bit definitions
 */
 
-#define SQEE    	0x40 	/* SQE Enable - look for heartbeat  */
-#define SED     	0x20 	/* Stop when Error Detected */
-#define QMODE     	0x10 	/* Q_MODE */
-#define LAB             0x08 	/* Less Aggressive Backoff */
-#define PAD     	0x04 	/* PAD Runt Packets */
-#define IFC     	0x02 	/* Insert Frame Check */
-#define ISA     	0x01 	/* Insert Source Address */
+#define TCR_SQEE    	0x40 	/* SQE Enable - look for heartbeat  */
+#define TCR_SED     	0x20 	/* Stop when Error Detected */
+#define TCR_QMODE     	0x10 	/* Q_MODE */
+#define TCR_LAB         0x08 	/* Less Aggressive Backoff */
+#define TCR_PAD     	0x04 	/* PAD Runt Packets */
+#define TCR_IFC     	0x02 	/* Insert Frame Check */
+#define TCR_ISA     	0x01 	/* Insert Source Address */
 
 /* 
 ** MAC Transmit Status Register bit definitions
 */
 
-#define VSTS    	0x80 	/* Valid STatuS */
-#define MAC_CTU     	0x40 	/* Cut Through Used */
-#define MAC_SQE     	0x20 	/* Signal Quality Error */
-#define MAC_NCL     	0x10 	/* No Carrier Loopback */
-#define MAC_LCL         0x08 	/* Late Collision */
-#define MAC_ID      	0x04 	/* Initially Deferred */
-#define MAC_COLL     	0x03 	/* COLLision status */
-#define MAC_XCOLL       0x03    /* Excessive Collisions */
-#define MAC_MCOLL       0x02    /* Multiple Collisions */
-#define MAC_OCOLL       0x01    /* One Collision */
-#define MAC_NOCOLL      0x00    /* No Collisions */
-#define MAC_XUR         0x03    /* Excessive Underruns */
-#define MAC_TXE         0x7f    /* TX Errors */
+#define T_VSTS    	0x80 	/* Valid STatuS */
+#define T_CTU     	0x40 	/* Cut Through Used */
+#define T_SQE     	0x20 	/* Signal Quality Error */
+#define T_NCL     	0x10 	/* No Carrier Loopback */
+#define T_LCL           0x08 	/* Late Collision */
+#define T_ID      	0x04 	/* Initially Deferred */
+#define T_COLL     	0x03 	/* COLLision status */
+#define T_XCOLL         0x03    /* Excessive Collisions */
+#define T_MCOLL         0x02    /* Multiple Collisions */
+#define T_OCOLL         0x01    /* One Collision */
+#define T_NOCOLL        0x00    /* No Collisions */
+#define T_XUR           0x03    /* Excessive Underruns */
+#define T_TXE           0x7f    /* TX Errors */
 
 /* 
 ** EISA Configuration Register bit definitions 
 */
 
+#define EISA_ID       iobase + 0x0c80  /* EISA ID Registers */ 
 #define EISA_ID0      iobase + 0x0c80  /* EISA ID Register 0 */ 
 #define EISA_ID1      iobase + 0x0c81  /* EISA ID Register 1 */ 
 #define EISA_ID2      iobase + 0x0c82  /* EISA ID Register 2 */ 
@@ -282,6 +283,8 @@
 
 #define MASK_INTERRUPTS   1
 #define UNMASK_INTERRUPTS 0
+
+#define EEPROM_OFFSET(a) ((u_short)((u_long)(a)))
 
 /*
 ** Include the IOCTL stuff

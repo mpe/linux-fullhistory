@@ -109,8 +109,8 @@ struct vm_operations_struct {
 typedef struct page {
 	unsigned int count;
 	unsigned dirty:16,
-		 age:6,
-		 unused:9,
+		 age:8,
+		 unused:7,
 		 reserved:1;
 	unsigned long offset;
 	struct inode *inode;
@@ -137,7 +137,7 @@ struct mem_list {
 };
 
 extern struct mem_list free_area_list[NR_MEM_LISTS];
-extern unsigned char * free_area_map[NR_MEM_LISTS];
+extern unsigned int * free_area_map[NR_MEM_LISTS];
 
 /*
  * This is timing-critical - most of the time in getting a new page

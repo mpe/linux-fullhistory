@@ -33,6 +33,7 @@
  * Shared mappings now work. 15.8.1995  Bruno.
  */
 
+unsigned long page_cache_size = 0;
 struct page * page_hash_table[PAGE_HASH_SIZE];
 
 /*
@@ -78,14 +79,21 @@ int shrink_mmap(int priority, unsigned long limit)
 	limit = MAP_NR(limit);
 	if (clock >= limit)
 		clock = 0;
-	priority = limit >> priority;
+	priority = (limit<<2) >> priority;
 	page = mem_map + clock;
 	while (priority-- > 0) {
-		if (page->inode && page->count == 1) {
-			remove_page_from_hash_queue(page);
-			remove_page_from_inode_queue(page);
-			free_page(page_address(page));
-			return 1;
+		if (page->inode) {
+			unsigned age = page->age;
+			/* if the page is shared, we juvenate it slightly */
+			if (page->count != 1)
+				age |= PAGE_AGE_VALUE;
+			page->age = age >> 1;
+			if (age <= PAGE_AGE_VALUE/2) {
+				remove_page_from_hash_queue(page);
+				remove_page_from_inode_queue(page);
+				free_page(page_address(page));
+				return 1;
+			}
 		}
 		page++;
 		clock++;

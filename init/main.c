@@ -390,13 +390,10 @@ void calibrate_delay(void)
 static void parse_options(char *line)
 {
 	char *next;
-#ifdef CONFIG_ROOT_NFS
-	char *devnames[] = { "nfs", "hda", "hdb", "hdc", "hdd", "sda", "sdb", "sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
-	int devnums[]    = { 0x0FF, 0x300, 0x340, 0x1600, 0x1640, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0};
-#else
-	static const char *devnames[] = { "hda", "hdb", "hdc", "hdd", "sda", "sdb", "sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
-	static int devnums[]    = { 0x300, 0x340, 0x1600, 0x1640, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0};
-#endif
+	char *devnames[] = { "nfs", "hda", "hdb", "hdc", "hdd", "sda", "sdb",
+		"sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
+	int devnums[]    = { 0x0FF, 0x300, 0x340, 0x1600, 0x1640, 0x800,
+		0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0};
 	int args, envs;
 	if (!*line)
 		return;
@@ -435,7 +432,7 @@ static void parse_options(char *line)
 			ROOT_DEV = MKDEV(UNNAMED_MAJOR, 255);
 			if (line[0] == '/' || (line[0] >= '0' && line[0] <= '9')) {
 				strncpy(nfs_root_name, line, sizeof(nfs_root_name));
-				nfs_root_name[sizeof(nfs_root_name)] = '\0';
+				nfs_root_name[sizeof(nfs_root_name)-1] = '\0';
 				continue;
 			}
 			n = strlen(line) + strlen(NFS_ROOT);

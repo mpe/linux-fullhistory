@@ -24,6 +24,9 @@ modules:
 dep:
 	$(CPP) -M *.c > .depend
 
+fastdep:
+	$(CPP) -M *.c > .depend
+
 #
 # include a dependency file if one exists
 #

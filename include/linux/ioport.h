@@ -13,12 +13,11 @@
 #define HAVE_PORTRESERVE
 /*
  * Call check_region() before probing for your hardware.
- * Once you have found you hardware, register it with snarf_region().
+ * Once you have found you hardware, register it with request_region().
  * If you unload the driver, use release_region to free ports.
  */
 extern void reserve_setup(char *str, int *ints);
 extern int check_region(unsigned int from, unsigned int extent);
-extern void snarf_region(unsigned int from, unsigned int extent);
 extern void request_region(unsigned int from, unsigned int extent,const char *name);
 extern void release_region(unsigned int from, unsigned int extent);
 extern int get_ioport_list(char *);

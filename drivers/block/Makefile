@@ -30,6 +30,10 @@ endif
 
 ifeq ($(CONFIG_BLK_DEV_RAM),y)
 L_OBJS += rd.o
+else
+  ifeq ($(CONFIG_BLK_DEV_RAM),m)
+  M_OBJS += rd.o
+  endif
 endif
 
 ifeq ($(CONFIG_BLK_DEV_HD),y)

@@ -41,6 +41,7 @@
 #include <linux/ioport.h>
 #include <linux/config.h>
 #include <linux/mm.h>
+#include <linux/pagemap.h>
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
 #endif
@@ -276,10 +277,10 @@ static int get_meminfo(char * buffer)
 
 	si_meminfo(&i);
 	si_swapinfo(&i);
-	return sprintf(buffer, "        total:   used:    free:   shared:  buffers:\n"
-		"Mem:  %8lu %8lu %8lu %8lu %8lu\n"
+	return sprintf(buffer, "        total:    used:    free:  shared: buffers:  cached:\n"
+		"Mem:  %8lu %8lu %8lu %8lu %8lu %8lu\n"
 		"Swap: %8lu %8lu %8lu\n",
-		i.totalram, i.totalram-i.freeram, i.freeram, i.sharedram, i.bufferram,
+		i.totalram, i.totalram-i.freeram, i.freeram, i.sharedram, i.bufferram, page_cache_size*PAGE_SIZE,
 		i.totalswap, i.totalswap-i.freeswap, i.freeswap);
 }
 

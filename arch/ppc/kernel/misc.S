@@ -560,7 +560,8 @@ sys_call_table:
 	.long sys_uselib
 	.long sys_swapon
 	.long sys_reboot
-	.long sys_readdir
+/*	.long sys_readdir*/
+	.long old_readdir
 	.long sys_mmap			/* 90 */
 	.long sys_munmap
 	.long sys_truncate

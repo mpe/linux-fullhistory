@@ -46,14 +46,16 @@ LINKFLAGS =-qmagic -Ttext 0xfffe0
 endif
 CFLAGS := $(CFLAGS) -pipe
 
-ifdef CONFIG_M486
-CFLAGS := $(CFLAGS) -m486
-else
-ifdef CONFIG_M586
-CFLAGS := $(CFLAGS) -mpentium
-else
+ifdef CONFIG_M386
 CFLAGS := $(CFLAGS) -m386
 endif
+
+ifdef CONFIG_M486
+CFLAGS := $(CFLAGS) -m486
+endif
+
+ifdef CONFIG_M586
+CFLAGS := $(CFLAGS) -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2
 endif
 
 ifdef SMP

@@ -317,6 +317,14 @@ CONFIG_M486
   not sure, say N; This option will make the kernel use some
   instructions that are only available on 486+ machines.
 
+Use Pentium optimizations
+CONFIG_M586 
+  If you have a 586 or better, as opposed to a 486, or if you have a
+  486 and are very short on memory, say Y here.
+  Things will be slightly faster for a 586, and your kernel will be
+  smaller.  A kernel with this option enabled will still run on a 486,
+  although slightly slower.
+
 Enable loadable module support
 CONFIG_MODULES
   Kernel modules are small pieces of compiled code which can be 
@@ -568,11 +576,12 @@ CONFIG_SKB_LARGE
 The IPX protocol
 CONFIG_IPX
   This is support for the Novell networking protocol, IPX. You need it
-  if you want to access Novell Netware servers from within the Linux
-  DOS emulator dosemu (read the DOSEMU-HOWTO, available via ftp (user:
-  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO). To
-  turn your Linux box into a fully featured Netware file server and
-  IPX router, say Y here and fetch lwared from
+  if you want to access Novell Netware servers by using ncpfs or from
+  within the Linux DOS emulator dosemu (read the DOSEMU-HOWTO,
+  available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO). To turn your Linux box into
+  a fully featured Netware file server and IPX router, say Y here and
+  fetch lwared from
   sunsite.unc.edu:/pub/Linux/system/Networking/daemons/. General
   information about how to connect Linux, Windows machines and Macs is
   on the WWW at http://eats.com/linux_mac_win.html (to browse the WWW,
@@ -2003,7 +2012,7 @@ CONFIG_SYSV_FS
   Documentation/modules.txt. If you haven't heard about all of this
   before, it's safe to say N.
 
-SMB filesystem (to mount WfW shares etc..) support
+SMB filesystem support (to mount WfW shares etc..)
 CONFIG_SMB_FS
   SMB (Server Message Buffer) is the protocol Windows for Workgroups
   (WfW), Windows NT and Lan Manager use to talk to each other over an
@@ -2022,6 +2031,18 @@ CONFIG_SMB_FS
   as a module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
   Documentation/modules.txt. Most people say N, however.
+
+NCP filesystem support (to mount NetWare volumes)
+CONFIG_NCP_FS
+  NCP (NetWare Core Protocol) is a protocol that runs over IPX and is
+  used by NetWare clients to talk to file servers. Enabling this
+  allows you to mount NetWare file server volumes and access them just
+  like any other directory. To actually mount the filesystem, you need
+  a special mount program, available on sunsite.unc.edu via anonymous
+  ftp in /pub/Linux/system/Filesystem/ncpfs-xx.tgz. If you want to
+  compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt.
 
 Cyclades async mux support
 CONFIG_CYCLADES

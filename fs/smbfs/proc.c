@@ -32,6 +32,11 @@
 void smb_printerr(int class, int num);
 static int smb_request_ok(struct smb_server *s, int command, int wct, int bcc);
 
+static inline int min(int a, int b)
+{
+	return a<b ? a : b;
+}
+
 /*****************************************************************************/
 /*                                                                           */
 /*  Encoding/Decoding section                                                */

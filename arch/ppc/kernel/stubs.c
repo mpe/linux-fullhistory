@@ -1,5 +1,9 @@
 #include <linux/in.h>
 
+unsigned int csum_tcpudp_magic(void);
+void halt(void);
+void _do_bottom_half(void);
+
 void sys_ptrace(void) { _panic("sys_ptrace"); }
 void sys_iopl(void) { _panic("sys_iopl"); }
 void sys_vm86(void) { _panic("sys_vm86"); }
@@ -9,10 +13,11 @@ void sys_quotactl(void) { _panic("sys_quotactl"); }
 void sys_pipe(void) {_panic("sys_pipe"); }
 void sys_ipc(void) {_panic("sys_ipc"); }
 void sys_mmap(void) {_panic("sys_mmap"); }
-void sys_readdir(void) {_panic("sys_readdir"); }
+/* unneeded 
+void sys_readdir(void) {panic("sys_readdir"); }
+*/
 
-
-halt()
+void halt(void)
 {
 	_printk("\n...Halt!\n");
 	abort();
@@ -91,7 +96,8 @@ tcp_check(unsigned char *buf, int len, int saddr, int daddr)
 	return (_val);
 }
 #endif
-_do_bottom_half()
+
+void _do_bottom_half(void)
 {
 	_enable_interrupts(1);
 	do_bottom_half();

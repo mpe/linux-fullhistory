@@ -90,7 +90,7 @@ pcibios_read_config_word (unsigned char bus,
 #endif	
 	if ((bus != 0) || (dev < 11) || (dev > 16))
 	{
-		*val = 0xFFFFFFFF;
+		*val =(unsigned short) 0xFFFFFFFF;
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	} else
 	{
@@ -119,7 +119,7 @@ pcibios_read_config_byte (unsigned char bus,
 #endif		
 	if ((bus != 0) || (dev < 11) || (dev > 16))
 	{
-		*val = 0xFFFFFFFF;
+		*val = (unsigned char) 0xFFFFFFFF;
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	} else
 	{
@@ -207,7 +207,7 @@ pcibios_find_device (unsigned short vendor, unsigned short device_id,
 		     unsigned short index, unsigned char *bus,
 		     unsigned char *dev)
 {
-	unsigned long w, desired = (device_id << 16) | vendor;
+	unsigned int w, desired = (device_id << 16) | vendor;
 	int devnr;
 
 	if (vendor == 0xffff) {

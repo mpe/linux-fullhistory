@@ -124,14 +124,14 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 	    break;
 	case NOT_READY: /* This happens if there is no disc in drive */
 	    if(dev->removable){
-		printk("Device not ready.  Make sure there is a disc in the drive.\n");
+		printk(KERN_INFO "Device not ready.  Make sure there is a disc in the drive.\n");
 		break;
 	    };
 	case UNIT_ATTENTION:
 	    if (dev->removable){
 		dev->changed = 1;
 		SCpnt->result = 0; /* This is no longer considered an error */
-		printk("Disc change detected.\n");
+		printk(KERN_INFO "Disc change detected.\n");
 		break;
 	    };
 	default: /* Fall through for non-removable media */

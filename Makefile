@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 52
+SUBLEVEL = 53
 
 ARCH = i386
 
@@ -266,6 +266,7 @@ modules_install:
 	if [ -f IPV4_MODULES  ]; then inst_mod IPV4_MODULES  ipv4;  fi; \
 	if [ -f SCSI_MODULES  ]; then inst_mod SCSI_MODULES  scsi;  fi; \
 	if [ -f FS_MODULES    ]; then inst_mod FS_MODULES    fs;    fi; \
+	if [ -f CDROM_MODULES ]; then inst_mod CDROM_MODULES cdrom; fi; \
 	\
 	ls *.o > .allmods; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 .allmods - > .misc; \

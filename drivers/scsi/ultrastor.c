@@ -63,7 +63,7 @@
  * the 24F, cause the SCSI bus to do odd things and generally lead to
  * kernel panics and machine hangs.  This is like the Adaptec code.
  *
- * Use check/snarf_region for 14f, 34f to avoid I/O space address conflicts.
+ * Check I/O ports 14f, and 34f before allocating them to avoid conflicts.
  */
 
 /* Changes from version 1.8 to version 1.9

@@ -78,7 +78,7 @@ extern inline void end_bh_atomic(void)
  * 7. service the device to clear its pending interrupt.
  * 8. loop again if paranoia is required.
  *
- * probe_irq_on() returns a mask of snarfed irq's.
+ * probe_irq_on() returns a mask of allocated irq's.
  *
  * probe_irq_off() takes the mask as a parameter,
  * and returns the irq number which occurred,

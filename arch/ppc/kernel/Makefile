@@ -6,6 +6,10 @@
 # unless it's something special (ie not a .c file).
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
+#
+#
+# Modified by Cort Dougan
+#
 
 .c.s:
 	$(CC) $(CFLAGS) -S $<
@@ -26,7 +30,7 @@ HOST_CC = gcc
 OBJS  = misc.o setup.o port_io.o irq.o pci.o traps.o stubs.o process.o \
 	signal.o raw_printf.o ramdisk.o 
 
-all: head.o kernel.o cortstrip mkboot
+all: head.o kernel.o
 
 head.o: head.s
 head.s: head.S $(TOPDIR)/include/linux/tasks.h ppc_defs.h

@@ -25,6 +25,8 @@
 #include <linux/sched.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
+#include <linux/mm.h>
+#include <linux/pagemap.h>
 
 #define	NBUF	32
 
@@ -34,6 +36,7 @@
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
 
+static int ext2_readpage(struct inode *, unsigned long, char *);
 static int ext2_file_read (struct inode *, struct file *, char *, int);
 static int ext2_file_write (struct inode *, struct file *, const char *, int);
 static void ext2_release_file (struct inode *, struct file *);
@@ -71,7 +74,7 @@ struct inode_operations ext2_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* readpage */
+	ext2_readpage,		/* readpage */
 	NULL,			/* writepage */
 	ext2_bmap,		/* bmap */
 	ext2_truncate,		/* truncate */
@@ -79,155 +82,118 @@ struct inode_operations ext2_file_inode_operations = {
 	NULL			/* smap */
 };
 
-static int ext2_file_read (struct inode * inode, struct file * filp,
-		    char * buf, int count)
+static int ext2_readpage(struct inode * inode, unsigned long offset, char * page)
 {
-	int read, left, chars;
-	int block, blocks, offset;
-	int bhrequest, uptodate;
-	int clusterblocks;
-	struct buffer_head ** bhb, ** bhe;
-	struct buffer_head * bhreq[NBUF];
-	struct buffer_head * buflist[NBUF];
-	struct super_block * sb;
-	unsigned int size;
-	int err;
+	int *p, nr[PAGE_SIZE/512];
+	int i;
 
-	if (!inode) {
-		printk ("ext2_file_read: inode = NULL\n");
-		return -EINVAL;
-	}
-	sb = inode->i_sb;
-	if (!S_ISREG(inode->i_mode)) {
-		ext2_warning (sb, "ext2_file_read", "mode = %07o",
-			      inode->i_mode);
-		return -EINVAL;
-	}
-	offset = filp->f_pos;
-	size = inode->i_size;
-	if (offset > size)
-		left = 0;
-	else
-		left = size - offset;
-	if (left > count)
-		left = count;
-	if (left <= 0)
-		return 0;
-	read = 0;
-	block = offset >> EXT2_BLOCK_SIZE_BITS(sb);
-	offset &= (sb->s_blocksize - 1);
-	chars = sb->s_blocksize - offset;
-	size = (size + sb->s_blocksize - 1) >> EXT2_BLOCK_SIZE_BITS(sb);
-	blocks = (left + offset + sb->s_blocksize - 1) >> EXT2_BLOCK_SIZE_BITS(sb);
-	bhb = bhe = buflist;
-	if (filp->f_reada) {
-	        if (blocks < read_ahead[MAJOR(inode->i_dev)] >> (EXT2_BLOCK_SIZE_BITS(sb) - 9))
-	            blocks = read_ahead[MAJOR(inode->i_dev)] >> (EXT2_BLOCK_SIZE_BITS(sb) - 9);
-		if (block + blocks > size)
-			blocks = size - block;
-	}
-
-	/*
-	 * We do this in a two stage process.  We first try and request
-	 * as many blocks as we can, then we wait for the first one to
-	 * complete, and then we try and wrap up as many as are actually
-	 * done.  This routine is rather generic, in that it can be used
-	 * in a filesystem by substituting the appropriate function in
-	 * for getblk
-	 *
-	 * This routine is optimized to make maximum use of the various
-	 * buffers and caches.
-	 */
-
-	clusterblocks = 0;
-
+	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
+	offset >>= inode->i_sb->s_blocksize_bits;
+	p = nr;
 	do {
-		bhrequest = 0;
-		uptodate = 1;
-		while (blocks) {
-			--blocks;
-#if 1
-			if(!clusterblocks) clusterblocks = ext2_getcluster(inode, block);
-			if(clusterblocks) clusterblocks--;
-#endif
+		*p = ext2_bmap(inode, offset);
+		i--;
+		offset++;
+		p++;
+	} while (i > 0);
+	return bread_page((unsigned long) page, inode->i_dev, nr, inode->i_sb->s_blocksize);
+}
 
-			*bhb = ext2_getblk (inode, block++, 0, &err);
-			if (*bhb && !buffer_uptodate(*bhb)) {
-				uptodate = 0;
-				bhreq[bhrequest++] = *bhb;
+/*
+ * This is a generic file read routine, and uses the
+ * inode->i_op->readpage() function for the actual low-level
+ * stuff. We can put this into the other filesystems too
+ * once we've debugged it a bit more.
+ */
+static int ext2_file_read (struct inode * inode, struct file * filp,   
+		char * buf, int count)
+{
+	int read = 0;
+	unsigned long pos;
+	unsigned long addr;
+	unsigned long cached_page = 0;
+	struct page *page;
+
+	if (count <= 0)
+		return 0;
+
+	pos = filp->f_pos;
+	
+	for (;;) {
+		unsigned long offset, nr;
+
+		if (pos >= inode->i_size)
+			break;
+
+		offset = pos & ~PAGE_MASK;
+		nr = PAGE_SIZE - offset;
+		if (nr > count)
+			nr = count;
+
+		/* is it already cached? */
+		page = find_page(inode, pos & PAGE_MASK);
+		if (page)
+			goto found_page;
+
+		/* not cached, have to read it in.. */
+		if (!(addr = cached_page)) {
+			addr = cached_page = __get_free_page(GFP_KERNEL);
+			if (!addr) {
+				if (!read)
+					read = -ENOMEM;
+				break;
 			}
-
-			if (++bhb == &buflist[NBUF])
-				bhb = buflist;
-
-			/*
-			 * If the block we have on hand is uptodate, go ahead
-			 * and complete processing
-			 */
-			if (uptodate)
-				break;
-
-			if (bhb == bhe)
-				break;
 		}
+		inode->i_op->readpage(inode, pos & PAGE_MASK, (char *) addr);
 
-		/*
-		 * Now request them all
-		 */
-		if (bhrequest)
-			ll_rw_block (READ, bhrequest, bhreq);
+		/* while we did that, things may have changed.. */
+		if (pos >= inode->i_size)
+			break;
+		page = find_page(inode, pos & PAGE_MASK);
+		if (page)
+			goto found_page;
 
-		do {
-			/*
-			 * Finish off all I/O that has actually completed
-			 */
-			if (*bhe) {
-				wait_on_buffer (*bhe);
-				if (!buffer_uptodate(*bhe)) { /* read error? */
-				        brelse(*bhe);
-					if (++bhe == &buflist[NBUF])
-					  bhe = buflist;
-					left = 0;
-					break;
-				}
-			}
-			left -= chars;
-			if (left < 0)
-				chars += left;
-			filp->f_pos += chars;
-			read += chars;
-			if (*bhe) {
-				memcpy_tofs (buf, offset + (*bhe)->b_data,
-					     chars);
-				brelse (*bhe);
-				buf += chars;
-			} else {
-				while (chars-- > 0)
-					put_user (0, buf++);
-			}
-			offset = 0;
-			chars = sb->s_blocksize;
-			if (++bhe == &buflist[NBUF])
-				bhe = buflist;
-		} while (left > 0 && bhe != bhb && (!*bhe || !buffer_locked(*bhe)));
-	} while (left > 0);
+		/* nope, this is the only copy.. */
+		cached_page = 0;
+		page = mem_map + MAP_NR(addr);
+		page->offset = pos & PAGE_MASK;
+		add_page_to_inode_queue(inode, page);
+		add_page_to_hash_queue(inode, page);
 
-	/*
-	 * Release the read-ahead blocks
-	 */
-	while (bhe != bhb) {
-		brelse (*bhe);
-		if (++bhe == &buflist[NBUF])
-			bhe = buflist;
+found_page:
+		if (nr > inode->i_size - pos)
+			nr = inode->i_size - pos;
+		page->count++;
+		addr = page_address(page);
+		memcpy_tofs(buf, (void *) (addr + offset), nr);
+		free_page(addr);
+		buf += nr;
+		pos += nr;
+		read += nr;
+		count -= nr;
+		if (!count)
+			break;
 	}
-	if (!read)
-		return -EIO;
-	filp->f_reada = 1;
+	filp->f_pos = pos;
+	if (cached_page)
+		free_page(cached_page);
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}
 	return read;
+}
+
+static inline void update_vm_cache(struct inode * inode, unsigned long pos,
+	char * buf, int count)
+{
+	struct page * page;
+
+	page = find_page(inode, pos & PAGE_MASK);
+	if (page) {
+		pos = (pos & ~PAGE_MASK) + page_address(page);
+		memcpy((void *) pos, buf, count);
+	}
 }
 
 static int ext2_file_write (struct inode * inode, struct file * filp,
@@ -303,10 +269,11 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 				break;
 			}
 		}
+		memcpy_fromfs (bh->b_data + offset, buf, c);
+		update_vm_cache(inode, pos, bh->b_data + offset, c);
 		pos2 += c;
 		pos += c;
 		written += c;
-		memcpy_fromfs (bh->b_data + offset, buf, c);
 		buf += c;
 		mark_buffer_uptodate(bh, 1);
 		mark_buffer_dirty(bh, 0);

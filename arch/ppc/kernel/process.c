@@ -1,9 +1,10 @@
-/* * Last edited: Nov  8 12:32 1995 (cort) */
+/* * Last edited: Dec 14 17:32 1995 (cort) */
 /*
  *  linux/arch/ppc/kernel/process.c
  *
  *  Copyright (C) 1995  Linus Torvalds
  *  Adapted for PowerPC by Gary Thomas
+ *  Modified by Cort Dougan
  */
 
 /*
@@ -27,7 +28,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-#include <asm/processor.h>
+#include <asm/ppc_machine.h>
 
 int dump_fpu (struct user_i387_struct* fpu)
 {
@@ -122,10 +123,10 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	childregs = ((struct pt_regs *) (p->kernel_stack_page + 2*PAGE_SIZE)) - 2;
 	*childregs = *regs;	/* STRUCT COPY */
 	childregs->gpr[3] = 0;  /* Result from fork() */
-	p->tss.ksp = childregs;
+	p->tss.ksp = (unsigned long)childregs;
 	if (usp >= (unsigned long)regs)
 	{ /* Stack is in kernel space - must adjust */
-		childregs->gpr[1] = childregs+1;
+		childregs->gpr[1] = (long)(childregs+1);
 	} else
 	{ /* Provided stack is in user space */
 		childregs->gpr[1] = usp;
@@ -166,8 +167,18 @@ asmlinkage int sys_newselect(int p1, int p2, int p3, int p4, int p5, int p6, str
 
 asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6, struct pt_regs *regs)
 {
-printk("process.c: sys_fork() called\n");
-	return do_fork( CLONE_VM|SIGCHLD, regs->gpr[1], regs);
+  int i;
+  char *a;
+#if 0
+  for ( i = 0 ; i <= 0x400 ; i++)
+  {
+    printk("going to do kmalloc(%d)\n",i);
+    a = kmalloc(i,GFP_KERNEL);
+    a = kmalloc(i,GFP_KERNEL);
+    printk("a = %x\n",a);
+  }
+#endif
+  return do_fork( SIGCHLD, regs->gpr[1], regs);
 }
 
 asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
@@ -176,7 +187,6 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 {
 	int error;
 	char * filename;
-/*	printk("process.c: sys_execve(a0 = %s, a1 = %x, a2 = %x)\n",a0,a1,a2);*/
 
 #if 1
 	/* paranoia check.  I really don't trust head.S  -- Cort */
@@ -189,12 +199,7 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 	if (error)
 	  return error;
 	error = do_execve(filename, (char **) a1, (char **) a2, regs);
-#if 0
-	if (error)
-	{
-	  printk("EXECVE - file = '%s', error = %d\n", filename, error);
-	}
-#endif
+
 	putname(filename);
 	return error;
 }
@@ -210,9 +215,9 @@ asmlinkage int sys_clone(unsigned long clone_flags, unsigned long usp, unsigned 
     usp = regs->gpr[1];
   
 
-  i = do_fork(CLONE_VM/*clone_flags*/, /*usp*/regs->gpr[1], regs);
-/*  printk("sys_clone going to return %d\n", i);*/
-  return i;
+  /* I hard coded in all the arguments to clone since clone() is inlined
+     and has trouble with its args  with our gcc -- Cort*/
+  return do_fork(/*clone_flags*/CLONE_VM, /*usp*/ regs->gpr[1], regs);
 }
 
 
@@ -226,7 +231,7 @@ print_backtrace(void)
 	while (*sp)
 	{
 		printk("%08X ", sp[2]);
-		sp = *sp;
+		sp = (unsigned long *)*sp;
 		if (++cnt == 8)
 		{
 			printk("\n");

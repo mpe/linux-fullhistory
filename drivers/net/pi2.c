@@ -1407,7 +1407,7 @@ static int pi_probe(struct device *dev, int card_type)
 	}
 
 	/* Grab the region */
-	snarf_region(ioaddr & 0x3f0, PI_TOTAL_SIZE);
+	request_region(ioaddr & 0x3f0, PI_TOTAL_SIZE, "pi2" );
 
 
     }				/* Only for A port */

@@ -158,7 +158,7 @@ static int ac_probe1(int ioaddr, struct device *dev)
 		   inb(ioaddr + AC_ID_PORT + 2), inb(ioaddr + AC_ID_PORT + 3));
 #endif
 
-	/* Assign and snarf the interrupt now. */
+	/* Assign and allocate the interrupt now. */
 	if (dev->irq == 0)
 		dev->irq = config2irq(inb(ioaddr + AC_CONFIG));
 	else if (dev->irq == 2)

@@ -286,7 +286,8 @@ static inline void
 enable_interrupts(void)
 {
 #ifdef USE_IRQ
-	/* this code snarfed from cdu31a.c; it will not
+	/*
+	 * This code was taken from cdu31a.c; it will not
 	 * directly work for the cdu535 as written...
 	 */
 	curr_control_reg |= ( SONY_ATTN_INT_EN_BIT
@@ -300,7 +301,8 @@ static inline void
 disable_interrupts(void)
 {
 #ifdef USE_IRQ
-	/* this code snarfed from cdu31a.c; it will not
+	/*
+	 * This code was taken from cdu31a.c; it will not
 	 * directly work for the cdu535 as written...
 	 */
 	curr_control_reg &= ~(SONY_ATTN_INT_EN_BIT

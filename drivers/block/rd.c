@@ -23,6 +23,8 @@
  * loader now also loads into a dynamic (buffer cache based) ramdisk,
  * not the old static ramdisk.  Support for the old static ramdisk has
  * been completely removed.
+ *
+ * Loadable module support added by Tom Dyas.
  */
 
 #include <linux/sched.h>
@@ -35,6 +37,7 @@
 #include <linux/mman.h>
 #include <linux/malloc.h>
 #include <linux/ioctl.h>
+#include <linux/module.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -52,8 +55,10 @@ extern void wait_for_keypress(void);
 #define BUILD_CRAMDISK
 #define NUM_RAMDISKS 8
 
+#ifndef MODULE
 void rd_load(void);
 static int crd_load(struct file *fp, struct file *outfp);
+#endif
 
 /* Various static variables go here... mostly used within the ramdisk code only. */
 
@@ -66,9 +71,11 @@ static int rd_blocksizes[NUM_RAMDISKS];
  * architecture-specific setup routine (from the stored bootsector
  * information). 
  */
+#ifndef MODULE
 int rd_doload = 0;		/* 1 = load ramdisk, 0 = don't load */
 int rd_prompt = 1;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 int rd_image_start = 0;		/* starting block # of image */
+#endif
 
 /*
  *  Basically, my strategy here is to set up a buffer-head which can't be
@@ -143,8 +150,17 @@ static int rd_open(struct inode * inode, struct file * filp)
 	if (DEVICE_NR(inode->i_rdev) >= NUM_RAMDISKS)
 		return -ENODEV;
 
+	MOD_INC_USE_COUNT;
+
 	return 0;
 }
+
+#ifdef MODULE
+static void rd_release(struct inode * inode, struct file * filp)
+{
+	MOD_DEC_USE_COUNT;
+}
+#endif
 
 static struct file_operations fd_fops = {
 	NULL,		/* lseek - default */
@@ -155,7 +171,11 @@ static struct file_operations fd_fops = {
 	rd_ioctl, 	/* ioctl */
 	NULL,		/* mmap */
 	rd_open,	/* open */
+#ifndef MODULE
 	NULL,		/* no special release code... */
+#else
+	rd_release,	/* module needs to decrement use count */
+#endif
 	block_fsync		/* fsync */ 
 };
 
@@ -165,7 +185,7 @@ int rd_init(void)
 	int		i;
 
 	if (register_blkdev(MAJOR_NR, "ramdisk", &fd_fops)) {
-		printk("RAMDISK2 : Could not get major %d", MAJOR_NR);
+		printk("RAMDISK: Could not get major %d", MAJOR_NR);
 		return -EIO;
 	}
 
@@ -181,6 +201,7 @@ int rd_init(void)
 	return 0;
 }
 
+#ifndef MODULE
 /*
  * This routine tries to a ramdisk image to load, and returns the
  * number of blocks to read for a non-compressed image, 0 if the image
@@ -523,7 +544,27 @@ crd_load(struct file * fp, struct file *outfp)
 	return result;
 }
 
-#endif
+#endif  /* BUILD_CRAMDISK */
+
+#endif  /* MODULE */
 
 
+/* loadable module support */
 
+#ifdef MODULE
+
+int init_module(void)
+{
+	int error = rd_init();
+	if (!error)
+		printk(KERN_INFO "RAMDISK: Loaded as module.\n");
+	return error;
+}
+
+void cleanup_module(void)
+{
+	unregister_blkdev( MAJOR_NR, "ramdisk" );
+	blk_dev[MAJOR_NR].request_fn = 0;
+}
+
+#endif  /* MODULE */

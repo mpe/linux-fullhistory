@@ -877,7 +877,7 @@ static int pt_probe(struct device *dev)
         }
 
         /* Grab the region */
-        snarf_region(ioaddr & 0x3f0, PT_TOTAL_SIZE);
+        request_region(ioaddr & 0x3f0, PT_TOTAL_SIZE, "pt" );
     } /* A port */
     dev->open = pt_open;
     dev->stop = pt_close;

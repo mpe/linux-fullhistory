@@ -62,13 +62,13 @@ smb_read_inode(struct inode *inode)
 
         do {
                 if (inode_info == check_info) {
-                        if (check_info->state == INODE_LOOKED_UP) {
+                        if (check_info->state == SMB_INODE_LOOKED_UP) {
                                 DDPRINTK("smb_read_inode: found it!\n");
                                 goto good;
                         }
                         else {
                                 printk("smb_read_inode: "
-                                       "state != INODE_LOOKED_UP\n");
+                                       "state != SMB_INODE_LOOKED_UP\n");
                                 return;
                         }
                 }
@@ -82,7 +82,7 @@ smb_read_inode(struct inode *inode)
 
  good:
 #endif
-        inode_info->state = INODE_VALID;
+        inode_info->state = SMB_INODE_VALID;
 
         SMB_INOP(inode) = inode_info;
 

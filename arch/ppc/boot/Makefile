@@ -24,8 +24,11 @@ OBJECTS = head.o main.o
 
 all:	linux.boot
 
-linux.boot: $(TOPDIR)/vmlinux
-	mkboot $(TOPDIR)/vmlinux $@ 0
+linux.boot: $(TOPDIR)/vmlinux mkboot
+	mkboot $(TOPDIR)/vmlinux /u/cort/bootpd/vmlinux
+
+mkboot : cortstrip.c
+	$(HOSTCC) -o mkboot cortstrip.c
 
 clean:
 	rm -f linux.boot 

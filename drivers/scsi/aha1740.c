@@ -448,11 +448,11 @@ int aha1740_detect(Scsi_Host_Template * tpnt)
     for ( slot=MINEISA; slot <= MAXEISA; slot++ )
     {
 	base = SLOTBASE(slot);
-
-	/* The ioports for eisa boards are generally beyond that used in the
-	   check,snarf_region code, but this may change at some point, so we
-	   go through the motions. */
-
+	/*
+	 * The ioports for eisa boards are generally beyond that used in the
+	 * check/allocate region code, but this may change at some point,
+	 * so we go through the motions.
+	 */
 	if(check_region(base, 0x5c)) continue;  /* See if in use */
 	if ( aha1740_test_port())  break;
     }

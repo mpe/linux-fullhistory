@@ -17,6 +17,7 @@
 #include <linux/stat.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
+#include <linux/pagemap.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -452,6 +453,8 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 	 * fool it, but this should catch most mistakes.
 	 */
 	freepages = buffermem >> PAGE_SHIFT;
+	freepages += page_cache_size;
+	freepages >>= 1;
 	freepages += nr_free_pages;
 	freepages += nr_swap_pages;
 	freepages -= MAP_NR(high_memory) >> 4;

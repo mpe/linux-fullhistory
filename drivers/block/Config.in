@@ -5,7 +5,7 @@ mainmenu_option next_comment
 comment 'block devices'
 
 tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
-bool 'RAM disk support' CONFIG_BLK_DEV_RAM
+tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 bool 'Normal (MFM/RLL) disk and IDE disk/cdrom support' CONFIG_ST506
 if [ "$CONFIG_ST506" = "y" ]; then
   comment 'Please see drivers/block/README.ide for help/info on IDE drives'

@@ -569,7 +569,7 @@ lance_open(struct device *dev)
 	}
 
 	/* We used to allocate DMA here, but that was silly.
-	   DMA lines can't be shared!  We now permanently snarf them. */
+	   DMA lines can't be shared!  We now permanently allocate them. */
 
 	irq2dev_map[dev->irq] = dev;
 

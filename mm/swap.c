@@ -44,7 +44,7 @@ int min_free_pages = 20;
 
 swap_control_t swap_control = {
 	20, 3, 1, 3,		/* Page aging */
-	10, 2, 2, 0,		/* Buffer aging */
+	10, 2, 2, 4,		/* Buffer aging */
 	32, 4,			/* Aging cluster */
 	8192, 8192,		/* Pageout and bufferout weights */
 	-200,			/* Buffer grace */
@@ -1343,7 +1343,7 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 		bitmap_size = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT + i);
 		bitmap_size = (bitmap_size + 7) >> 3;
 		bitmap_size = LONG_ALIGN(bitmap_size);
-		free_area_map[i] = (unsigned char *) start_mem;
+		free_area_map[i] = (unsigned int *) start_mem;
 		memset((void *) start_mem, 0, bitmap_size);
 		start_mem += bitmap_size;
 	}
