@@ -3094,7 +3094,53 @@ out:
 
 static int selinux_socket_connect(struct socket *sock, struct sockaddr *address, int addrlen)
 {
-	return socket_has_perm(current, sock, SOCKET__CONNECT);
+	struct inode_security_struct *isec;
+	int err;
+
+	err = socket_has_perm(current, sock, SOCKET__CONNECT);
+	if (err)
+		return err;
+
+	/*
+	 * If a TCP socket, check name_connect permission for the port.
+	 */
+	isec = SOCK_INODE(sock)->i_security;
+	if (isec->sclass == SECCLASS_TCP_SOCKET) {
+		struct sock *sk = sock->sk;
+		struct avc_audit_data ad;
+		struct sockaddr_in *addr4 = NULL;
+		struct sockaddr_in6 *addr6 = NULL;
+		unsigned short snum;
+		u32 sid;
+
+		if (sk->sk_family == PF_INET) {
+			addr4 = (struct sockaddr_in *)address;
+			if (addrlen != sizeof(struct sockaddr_in))
+				return -EINVAL;
+			snum = ntohs(addr4->sin_port);
+		} else {
+			addr6 = (struct sockaddr_in6 *)address;
+			if (addrlen != sizeof(struct sockaddr_in6))
+				return -EINVAL;
+			snum = ntohs(addr6->sin6_port);
+		}
+
+		err = security_port_sid(sk->sk_family, sk->sk_type,
+					sk->sk_protocol, snum, &sid);
+		if (err)
+			goto out;
+
+		AVC_AUDIT_DATA_INIT(&ad,NET);
+		ad.u.net.dport = htons(snum);
+		ad.u.net.family = sk->sk_family;
+		err = avc_has_perm(isec->sid, sid, isec->sclass,
+				   TCP_SOCKET__NAME_CONNECT, &ad);
+		if (err)
+			goto out;
+	}
+
+out:
+	return err;
 }
 
 static int selinux_socket_listen(struct socket *sock, int backlog)
