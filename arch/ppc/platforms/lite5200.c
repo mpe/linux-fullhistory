@@ -73,8 +73,8 @@ lite5200_setup_cpu(void)
 	u32 intr_ctrl;
 
 	/* Map zones */
-	xlb  = ioremap(MPC52xx_XLB,sizeof(struct mpc52xx_xlb));
-	intr = ioremap(MPC52xx_INTR,sizeof(struct mpc52xx_intr));
+	xlb  = ioremap(MPC52xx_PA(MPC52xx_XLB_OFFSET), MPC52xx_XLB_SIZE);
+	intr = ioremap(MPC52xx_PA(MPC52xx_INTR_OFFSET), MPC52xx_INTR_SIZE);
 
 	if (!xlb || !intr) {
 		printk("lite5200.c: Error while mapping XLB/INTR during "

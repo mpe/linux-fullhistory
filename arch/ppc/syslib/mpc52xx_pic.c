@@ -180,8 +180,8 @@ mpc52xx_init_irq(void)
 	u32 intr_ctrl;
 
 	/* Remap the necessary zones */
-	intr = ioremap(MPC52xx_INTR, sizeof(struct mpc52xx_intr));
-	sdma = ioremap(MPC52xx_SDMA, sizeof(struct mpc52xx_sdma));
+	intr = ioremap(MPC52xx_PA(MPC52xx_INTR_OFFSET), MPC52xx_INTR_SIZE);
+	sdma = ioremap(MPC52xx_PA(MPC52xx_SDMA_OFFSET), MPC52xx_SDMA_SIZE);
 
 	if ((intr==NULL) || (sdma==NULL))
 		panic("Can't ioremap PIC/SDMA register for init_irq !");

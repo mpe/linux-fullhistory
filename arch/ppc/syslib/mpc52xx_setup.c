@@ -38,8 +38,7 @@ static int core_mult[] = {		/* CPU Frequency multiplier, taken    */
 void
 mpc52xx_restart(char *cmd)
 {
-	struct mpc52xx_gpt __iomem *gpt0 =
-		(struct mpc52xx_gpt __iomem *) MPC52xx_GPTx(0);
+	struct mpc52xx_gpt __iomem *gpt0 = MPC52xx_VA(MPC52xx_GPTx_OFFSET(0));
 
 	local_irq_disable();
 
@@ -92,9 +91,7 @@ mpc52xx_map_io(void)
 
 
 #ifdef CONFIG_SERIAL_TEXT_DEBUG
-#ifdef MPC52xx_PF_CONSOLE_PORT
-#define MPC52xx_CONSOLE MPC52xx_PSCx(MPC52xx_PF_CONSOLE_PORT)
-#else
+#ifndef MPC52xx_PF_CONSOLE_PORT
 #error "mpc52xx PSC for console not selected"
 #endif
 
@@ -110,8 +107,9 @@ void
 mpc52xx_progress(char *s, unsigned short hex)
 {
 	char c;
-	struct mpc52xx_psc __iomem *psc =
-		(struct mpc52xx_psc __iomem *)MPC52xx_CONSOLE;
+	struct mpc52xx_psc __iomem *psc;
+
+	psc = MPC52xx_VA(MPC52xx_PSCx_OFFSET(MPC52xx_PF_CONSOLE_PORT));
 
 	while ((c = *s++) != 0) {
 		if (c == '\n')
@@ -140,7 +138,7 @@ mpc52xx_find_end_of_memory(void)
 		u32 sdram_config_0, sdram_config_1;
 
 		/* Temp BAT2 mapping active when this is called ! */
-		mmap_ctl = (struct mpc52xx_mmap_ctl __iomem *) MPC52xx_MMAP_CTL;
+		mmap_ctl = MPC52xx_VA(MPC52xx_MMAP_CTL_OFFSET);
 
 		sdram_config_0 = in_be32(&mmap_ctl->sdram0);
 		sdram_config_1 = in_be32(&mmap_ctl->sdram1);
@@ -170,8 +168,8 @@ mpc52xx_calibrate_decr(void)
 		struct mpc52xx_rtc __iomem *rtc;
 		struct mpc52xx_cdm __iomem *cdm;
 
-		rtc = ioremap(MPC52xx_RTC, sizeof(struct mpc52xx_rtc));
-		cdm = ioremap(MPC52xx_CDM, sizeof(struct mpc52xx_cdm));
+		rtc = ioremap(MPC52xx_PA(MPC52xx_RTC_OFFSET), MPC52xx_RTC_SIZE);
+		cdm = ioremap(MPC52xx_PA(MPC52xx_CDM_OFFSET), MPC52xx_CDM_SIZE);
 
 		if ((rtc==NULL) || (cdm==NULL))
 			panic("Can't ioremap RTC/CDM while computing bus freq");
