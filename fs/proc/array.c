@@ -463,6 +463,7 @@ extern int get_device_list(char *);
 extern int get_filesystem_list(char *);
 extern int get_ksyms_list(char *);
 extern int get_irq_list(char *);
+extern int get_dma_list(char *);
 
 static int get_root_array(char * page, int type)
 {
@@ -501,6 +502,9 @@ static int get_root_array(char * page, int type)
 
 		case PROC_KSYMS:
 			return get_ksyms_list(page);
+
+		case PROC_DMA:
+			return get_dma_list(page);
 	}
 	return -EBADF;
 }

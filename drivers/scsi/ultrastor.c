@@ -498,7 +498,7 @@ static int ultrastor_14f_detect(Scsi_Host_Template * tpnt)
 	       config.interrupt);
 	return FALSE;
     }
-    if (config.dma_channel && request_dma(config.dma_channel)) {
+    if (config.dma_channel && request_dma(config.dma_channel,"Ultrastor")) {
 	printk("Unable to allocate DMA channel %u for UltraStor controller.\n",
 	       config.dma_channel);
 	free_irq(config.interrupt);

@@ -93,7 +93,7 @@ struct snd_wait {
 #define SOMEONE_WAITING(q, f) (f.mode & WK_SLEEP)
 #define WAKE_UP(q, f)			{f.mode = WK_WAKEUP;wake_up(&q);}
 
-#define ALLOC_DMA_CHN(chn)		request_dma(chn)
+#define ALLOC_DMA_CHN(chn,deviceID)	request_dma(chn,deviceID)
 #define RELEASE_DMA_CHN(chn)		free_dma(chn)
 
 #define GET_TIME()			jiffies

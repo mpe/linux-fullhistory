@@ -24,7 +24,7 @@ struct ext2_inode_info {
 	unsigned long  i_faddr;
 	unsigned char  i_frag_no;
 	unsigned char  i_frag_size;
-	unsigned short i_pad1;
+	unsigned short i_osync;
 	unsigned long  i_file_acl;
 	unsigned long  i_dir_acl;
 	unsigned long  i_dtime;

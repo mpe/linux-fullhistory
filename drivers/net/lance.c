@@ -371,7 +371,7 @@ lance_open(struct device *dev)
 	return -EAGAIN;
     }
 
-    if (request_dma(dev->dma)) {
+    if (request_dma(dev->dma,"lance")) {
 	free_irq(dev->irq);
 	return -EAGAIN;
     }

@@ -1047,7 +1047,7 @@ int wd7000_init( Adapter *host )
         printk("wd7000_init: can't get IRQ %d.\n", host->irq);
 	return 0;
     }
-    if (request_dma(host->dma))  {
+    if (request_dma(host->dma,"wd7000"))  {
         printk("wd7000_init: can't get DMA channel %d.\n", host->dma);
 	free_irq(host->irq);
 	return 0;

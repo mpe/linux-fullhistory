@@ -56,16 +56,8 @@
 #include <linux/termios.h>	/* For TIOCOUTQ/INQ */
 #include <linux/interrupt.h>
 #include "p8022.h"
-#include "ncp.h"
 
 #ifdef CONFIG_IPX
-
-static void ipx_delete_timer (ipx_socket *sk);
-static int ipx_do_sendto(ipx_socket *sk, ipx_address *ipx,
-			 void *ubuf, int len, int flag, unsigned char type);
-static void ipx_add_timer (ipx_socket *sk, int len);
-static void ipx_reset_timer (ipx_socket *sk, int len);
-
 /***********************************************************************************************************************\
 *															*
 *						Handlers for the socket list.						*
@@ -83,9 +75,7 @@ static ipx_socket *volatile ipx_socket_list=NULL;
 static void ipx_remove_socket(ipx_socket *sk)
 {
 	ipx_socket *s;
-	unsigned long flags;
 	
-	save_flags(flags);
 	cli();
 	s=ipx_socket_list;
 	if(s==sk)
@@ -99,23 +89,20 @@ static void ipx_remove_socket(ipx_socket *sk)
 		if(s->next==sk)
 		{
 			s->next=sk->next;
-			restore_flags(flags);
+			sti();
 			return;
 		}
 		s=s->next;
 	}
-	restore_flags(flags);
+	sti();
 }
 
 static void ipx_insert_socket(ipx_socket *sk)
 {
-	unsigned long flags;
-	
-	save_flags(flags);
 	cli();
 	sk->next=ipx_socket_list;
 	ipx_socket_list=sk;
-	restore_flags(flags);
+	sti();
 }
 
 static ipx_socket *ipx_find_socket(int port)
@@ -146,10 +133,9 @@ static void ipx_destroy_socket(ipx_socket *sk)
 	ipx_remove_socket(sk);
 	
 	while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
+	{
 		kfree_skb(skb,FREE_READ);
-	
-	while((skb=skb_dequeue(&sk->write_queue))!=NULL)
-		kfree_skb(skb,FREE_WRITE);
+	}
 	
 	kfree_s(sk,sizeof(*sk));
 }
@@ -165,24 +151,20 @@ int ipx_get_info(char *buffer, char **start, off_t offset, int length)
 
 	/* Theory.. Keep printing in the same place until we pass offset */
 	
-	len += sprintf (buffer,"   local_address              rem_address                tx_queue rx_queue st uid\n");
+	len += sprintf (buffer,"Type local_address             rem_address              tx_queue rx_queue st uid\n");
 	for (s = ipx_socket_list; s != NULL; s = s->next)
 	{
-		len += sprintf (buffer+len,"%02X ", s->ipx_type);
-		len += sprintf (buffer+len,"%08lX:%02X%02X%02X%02X%02X%02X:%04X ", htonl(s->ipx_source_addr.net),
+		len += sprintf (buffer+len,"%02X   ", s->ipx_type);
+		len += sprintf (buffer+len,"%08lX:%02X%02X%02X%02X%02X%02X:%02X ", htonl(s->ipx_source_addr.net),
 			s->ipx_source_addr.node[0], s->ipx_source_addr.node[1], s->ipx_source_addr.node[2],
 			s->ipx_source_addr.node[3], s->ipx_source_addr.node[4], s->ipx_source_addr.node[5],
 			htons(s->ipx_source_addr.sock));
-		len += sprintf (buffer+len,"%08lX:%02X%02X%02X%02X%02X%02X:%04X ", htonl(s->ipx_dest_addr.net),
+		len += sprintf (buffer+len,"%08lX:%02X%02X%02X%02X%02X%02X:%02X ", htonl(s->ipx_dest_addr.net),
 			s->ipx_dest_addr.node[0], s->ipx_dest_addr.node[1], s->ipx_dest_addr.node[2],
 			s->ipx_dest_addr.node[3], s->ipx_dest_addr.node[4], s->ipx_dest_addr.node[5],
 			htons(s->ipx_dest_addr.sock));
 		len += sprintf (buffer+len,"%08lX:%08lX ", s->wmem_alloc, s->rmem_alloc);
-		len += sprintf (buffer+len,"%02X ", s->state);
-		if (s->socket)
-			len += sprintf (buffer+len,"%d\n", SOCK_INODE(s->socket)->i_uid);
-		else
-			len += sprintf (buffer+len,"%d\n", SOCK_INODE(s->ncp.ncp->socket)->i_uid);
+		len += sprintf (buffer+len,"%02X %d\n", s->state, SOCK_INODE(s->socket)->i_uid);
 		
 		/* Are we still dumping unwanted data then discard the record */
 		pos=begin+len;
@@ -483,7 +465,7 @@ int ipx_rt_get_info(char *buffer, char **start, off_t offset, int length)
  
 static int ipx_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
-	/* ipx_socket *sk=(ipx_socket *)sock->data; */
+	ipx_socket *sk=(ipx_socket *)sock->data;
 	switch(cmd)
 	{
 		default:
@@ -584,56 +566,20 @@ static void def_callback2(struct sock *sk, int len)
 		wake_up_interruptible(sk->sleep);
 }
 
-static void watch_callback(struct sock *sk, int len)
+static int ipx_create(struct socket *sock, int protocol)
 {
-	ipx_packet	*ipx;
-	struct sk_buff *skb;
-	char *data;
-
-	skb=skb_dequeue(&sk->receive_queue);
-	if(skb==NULL)
-		return; 
-
-	ipx = (ipx_packet *)(skb->h.raw);
-	data = (char *)(ipx+1);
-
-        if (*(data+1) == '?')
-		ipx_do_sendto(sk,&(ipx->ipx_source),"\0Y",2,0,sk->ipx_type);
-
-	kfree_skb(skb, FREE_READ);
-}
-
-static void mail_callback(struct sock *sk, int len)
-{
-	ipx_packet	*ipx;
-	struct sk_buff *skb;
-	char *data;
-
-	skb=skb_dequeue(&sk->receive_queue);
-	if(skb==NULL)
-		return; 
-
-	ipx = (ipx_packet *)(skb->h.raw);
-	data = (char *)(ipx+1);
-        if (*(data+1) == '!')
+	ipx_socket *sk;
+	sk=(ipx_socket *)kmalloc(sizeof(*sk),GFP_KERNEL);
+	if(sk==NULL)
+		return(-ENOMEM);
+	switch(sock->type)
 	{
-	 	struct ncp_request_sf req;
-
-		req.func=0x15;
-		req.s_func=0x01;
-		req.s_len=htons(1);
-
-		ipx_do_sendto(sk->ncp.ncp, &(sk->ncp.ncp->ipx_dest_addr),
-				&req, sizeof(req), 0,sk->ncp.ncp->ipx_type);
+		case SOCK_DGRAM:
+			break;
+		default:
+			kfree_s((void *)sk,sizeof(*sk));
+			return(-ESOCKTNOSUPPORT);
 	}
-
-	kfree_skb(skb, FREE_READ);
-
-}
-
-static void ipx_do_create(struct socket *sock, ipx_socket *sk)
-{
-
 	sk->dead=0;
 	sk->next=NULL;
 	sk->broadcast=0;
@@ -652,6 +598,7 @@ static void ipx_do_create(struct socket *sock, ipx_socket *sk)
 	skb_queue_head_init(&sk->back_log);
 	sk->state=TCP_CLOSE;
 	sk->socket=sock;
+	sk->type=sock->type;
 	sk->ipx_type=0;		/* General user level IPX */
 	sk->debug=0;
 	
@@ -663,76 +610,14 @@ static void ipx_do_create(struct socket *sock, ipx_socket *sk)
 	{
 		sock->data=(void *)sk;
 		sk->sleep=sock->wait;
-		sk->type=sock->type;
 	}
-	else
-		sk->type=SOCK_DGRAM;
 	
-	sk->priority=SOPRI_NORMAL;
 	sk->state_change=def_callback1;
 	sk->data_ready=def_callback2;
 	sk->write_space=def_callback1;
 	sk->error_report=def_callback1;
 
 	sk->zapped=1;
-
-	return;
-}
-
-static int ncp_create(struct socket *sock, int protocol)
-{
-	ipx_socket *sk;
-	ipx_socket *skw;
-	ipx_socket *skm;
-
-	if ((sk=(ipx_socket *)kmalloc(sizeof(*sk),GFP_KERNEL))==NULL)
-		return(-ENOMEM);
-
-	if ((skw=(ipx_socket *)kmalloc(sizeof(*skw),GFP_KERNEL))==NULL)
-	{
-		kfree_s((void *)sk, sizeof(*sk));
-		return(-ENOMEM);
-	}
-
-	if ((skm=(ipx_socket *)kmalloc(sizeof(*skm),GFP_KERNEL))==NULL)
-	{
-		kfree_s((void *)skw, sizeof(*skw));
-		kfree_s((void *)sk, sizeof(*sk));
-		return(-ENOMEM);
-	}
-
-	ipx_do_create(sock, sk);
-	sk->ncp.ncp=NULL;
-	sk->ncp.watchdog=skw;
-	sk->ncp.mail=skm;
-	ipx_do_create(NULL, skw);
-	skw->ncp.ncp=sk;
-	skw->data_ready=watch_callback;
-	ipx_do_create(NULL, skm);
-	skm->ncp.ncp=sk;
-	skm->data_ready=mail_callback;
-	
-	return(0);
-}
-
-static int ipx_create(struct socket *sock, int protocol)
-{
-	ipx_socket *sk;
-
-	switch(sock->type)
-	{
-		case SOCK_DGRAM:
-			break;
- 		case SOCK_NCP:
-			return(ncp_create(sock, protocol));
-		default:
-			return(-ESOCKTNOSUPPORT);
-	}
-	if ((sk=(ipx_socket *)kmalloc(sizeof(*sk),GFP_KERNEL))==NULL)
-		return(-ENOMEM);
-
-	ipx_do_create(sock, sk);
-
 	return(0);
 }
 
@@ -748,57 +633,30 @@ static int ipx_release(struct socket *sock, struct socket *peer)
 		return(0);
 	if(!sk->dead)
 		sk->state_change(sk);
-
+	sk->dead=1;
 	sock->data=NULL;
-
-	if (sk->type == SOCK_NCP)
-	{
-		sk->ncp.watchdog->dead=1;
-		ipx_destroy_socket(sk->ncp.watchdog);
-		sk->ncp.mail->dead=1;
-		ipx_destroy_socket(sk->ncp.mail);
-
-		if ((sk->state == TCP_ESTABLISHED) || (sk->state == TCP_SYN_SENT))
-		{
-	 		struct ncp_request req;
-		
-			sk->state=TCP_CLOSE_WAIT;
-	
-			ipx_do_sendto(sk, &(sk->ipx_dest_addr), &req,
-					 sizeof(req), 0, sk->ipx_type);
-		}
-		else
-		{
-			sk->dead=1;
-			if (sk->state != TCP_CLOSE)
-				ipx_delete_timer(sk);
-			ipx_destroy_socket(sk);
-		}
-	}
-	else
-	{
-		sk->dead=1;
-		ipx_destroy_socket(sk);
-	}
+	ipx_destroy_socket(sk);
 	return(0);
 }
 		
 static unsigned short first_free_socketnum(void)
 {
-	static unsigned short	socketNum = 0x3fff;
+	static unsigned short	socketNum = 0x4000;
 
-	while (ipx_find_socket(htons(++socketNum)) != NULL)
-		if (socketNum > 0x7ffc) socketNum = 0x3fff;
+	while (ipx_find_socket(htons(socketNum)) != NULL)
+		if (socketNum > 0x7ffc) socketNum = 0x4000;
 
-	return	htons(socketNum);
+	return	htons(socketNum++);
 }
 	
 static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 {
-	ipx_socket *sk=(ipx_socket *)sock->data;
+	ipx_socket *sk;
 	struct ipx_route *rt;
 	unsigned char	*nodestart;
 	struct sockaddr_ipx *addr=(struct sockaddr_ipx *)uaddr;
+	
+	sk=(ipx_socket *)sock->data;
 	
 	if(sk->zapped==0)
 		return(-EIO);
@@ -806,21 +664,16 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 	if(addr_len!=sizeof(struct sockaddr_ipx))
 		return -EINVAL;
 	
-
 	if (addr->sipx_port == 0) 
 	{
 		addr->sipx_port = first_free_socketnum();
-		if (sk->type == SOCK_NCP)
-			while ((ipx_find_socket(htons(ntohs(addr->sipx_port)+1)))
-				|| (ipx_find_socket(htons(ntohs(addr->sipx_port)+2))))
-				addr->sipx_port = first_free_socketnum();
 		if (addr->sipx_port == 0)
 			return -EINVAL;
 	}
 		
 	if(ntohs(addr->sipx_port)<0x4000 && !suser())
 		return(-EPERM);	/* protect IPX system stuff like routing/sap */
-
+	
 	/* Source addresses are easy. It must be our network:node pair for
 	   an interface routed to IPX with the ipx routing ioctl() */
 
@@ -830,19 +683,6 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 			printk("IPX: bind failed because port %X in use.\n",
 				(int)addr->sipx_port);
 		return -EADDRINUSE;	   
-	}
-
-	if (sk->type == SOCK_NCP)
-	{
-		if ((ipx_find_socket(htons(ntohs(addr->sipx_port)+1)))
-			|| (ipx_find_socket(htons(ntohs(addr->sipx_port)+2))))
-		{
-			if(sk->debug)
-				printk("IPX: bind failed because port %X in use.\n",
-				(int)addr->sipx_port);
-			return -EADDRINUSE;	   
-		}
-		addr->sipx_type=IPX_TYPE_NCP;
 	}
 
 	sk->ipx_source_addr.sock=addr->sipx_port;
@@ -865,7 +705,6 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 	}
 
 	sk->ipx_source_addr.net=rt->net;
-	sk->ipx_type=addr->sipx_type;
 
 	/* IPX addresses zero pad physical addresses less than 6 */
 	memset(sk->ipx_source_addr.node,'\0',6);
@@ -874,62 +713,8 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 
 	ipx_insert_socket(sk);
 	sk->zapped=0;
-
-	if (sk->type == SOCK_NCP)
-	{
-		sk->ncp.watchdog->ipx_source_addr.net=rt->net;
-		sk->ncp.watchdog->ipx_source_addr.sock=htons(ntohs(addr->sipx_port)+1);
-
-		memset(sk->ncp.watchdog->ipx_source_addr.node,'\0',6);
-		nodestart = sk->ncp.watchdog->ipx_source_addr.node + (6 - rt->dev->addr_len);
-		memcpy(nodestart,rt->dev->dev_addr,rt->dev->addr_len);
-	
-		ipx_insert_socket(sk->ncp.watchdog);
-		sk->ncp.watchdog->zapped=0;
-
-		sk->ncp.mail->ipx_source_addr.net=rt->net;
-		sk->ncp.mail->ipx_source_addr.sock=htons(ntohs(addr->sipx_port)+2);
-
-		memset(sk->ncp.mail->ipx_source_addr.node,'\0',6);
-		nodestart = sk->ncp.mail->ipx_source_addr.node + (6 - rt->dev->addr_len);
-		memcpy(nodestart,rt->dev->dev_addr,rt->dev->addr_len);
-
-		ipx_insert_socket(sk->ncp.mail);
-		sk->ncp.mail->zapped=0;
-
-		sk->mtu=rt->dev->mtu;
-	}
-
 	if(sk->debug)
 		printk("IPX: socket is bound.\n");
-	return(0);
-}
-
-static int ncp_connect(struct socket *sock, ipx_socket *sk)
-{
-	struct ncp_request req;
-	int err;
-
-	sk->ncp.conn=0xffff;
-	sk->ncp.seq=0;
-	
-	sock->state = SS_CONNECTING;
-	sk->state = TCP_SYN_SENT;
-	sk->rto = 0;
-
-	ipx_do_sendto(sk, &(sk->ipx_dest_addr), &req, sizeof(req), 0, sk->ipx_type);
-
-	while(sk->state != TCP_ESTABLISHED)
-	{
-		if (sk->err)
-		{
-			err=sk->err;
-			sk->err=0;
-			return -err;
-		}
-		interruptible_sleep_on(sk->sleep);
-	}
-
 	return(0);
 }
 
@@ -937,39 +722,32 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 	int addr_len, int flags)
 {
 	ipx_socket *sk=(ipx_socket *)sock->data;
-	struct sockaddr_ipx *addr=(struct sockaddr_ipx *)uaddr;
-
+	struct sockaddr_ipx *addr;
+	
 	sk->state = TCP_CLOSE;	
 	sock->state = SS_UNCONNECTED;
 	
-	if(addr_len!=sizeof(struct sockaddr_ipx))
+	if(addr_len!=sizeof(addr))
 		return(-EINVAL);
+	addr=(struct sockaddr_ipx *)uaddr;
 	
-	if(sk->ipx_source_addr.sock==0)
+	if(sk->ipx_source_addr.net==0)
 	/* put the autobinding in */
 	{
+		struct sockaddr_ipx uaddr;
 		int ret;
-		struct sockaddr_ipx addr;
 	
-		addr.sipx_type = 0;
-		addr.sipx_port = 0;
-		addr.sipx_network = 0L; 
-		ret = ipx_bind (sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_ipx));
+		uaddr.sipx_port = 0;
+		uaddr.sipx_network = 0L; 
+		ret = ipx_bind (sock, (struct sockaddr *)&uaddr, sizeof(struct sockaddr_ipx));
 		if (ret != 0) return (ret);
 	}
-
 	
 	sk->ipx_dest_addr.net=addr->sipx_network;
 	sk->ipx_dest_addr.sock=addr->sipx_port;
 	memcpy(sk->ipx_dest_addr.node,addr->sipx_node,sizeof(sk->ipx_source_addr.node));
 	if(ipxrtr_get_dev(sk->ipx_dest_addr.net)==NULL)
 		return -ENETUNREACH;
-
-	if (sk->type == SOCK_NCP)
-		return(ncp_connect(sock, sk));
-
-	sk->ipx_type=addr->sipx_type;
-
 	sock->state = SS_CONNECTED;
 	sk->state=TCP_ESTABLISHED;
 	return(0);
@@ -992,9 +770,10 @@ static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
 {
 	ipx_address *addr;
 	struct sockaddr_ipx sipx;
-	ipx_socket *sk=(ipx_socket *)sock->data;
+	ipx_socket *sk;
 	
-
+	sk=(ipx_socket *)sock->data;
+	
 	*uaddr_len = sizeof(struct sockaddr_ipx);
 		
 	if(peer)
@@ -1004,432 +783,13 @@ static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
 		addr=&sk->ipx_dest_addr;
 	}
 	else
-	{
-		if(sk->ipx_source_addr.sock==0)
-		/* put the autobinding in */
-		{
-			int ret;
-	
-			sipx.sipx_type = 0;
-			sipx.sipx_port = 0;
-			sipx.sipx_network = 0L; 
-			ret = ipx_bind (sock, (struct sockaddr *)&sipx, sizeof(struct sockaddr_ipx));
-			if (ret != 0) return (ret);
-		}
-	
 		addr=&sk->ipx_source_addr;
-	}
 		
 	sipx.sipx_family = AF_IPX;
 	sipx.sipx_port = addr->sock;
 	sipx.sipx_network = addr->net;
 	memcpy(sipx.sipx_node,addr->node,sizeof(sipx.sipx_node));
 	memcpy(uaddr,&sipx,sizeof(sipx));
-	return(0);
-}
-
-static int ipx_build_header(ipx_address *ipx, struct sk_buff *skb,
-				ipx_socket *sk, int len, unsigned char type)
-{
-	ipx_packet *ipx_pack;
-	ipx_route *rt;
-	struct datalink_proto *dl = NULL;
-	unsigned char IPXaddr[6];
-	int self_addressing = 0;
-	int broadcast = 0;
-
-	if(sk->debug)
-		printk("IPX: build_header: Addresses built.\n");
-
-	if(memcmp(&ipx->node,&ipx_broadcast_node,6)==0) 
-	{
-		if (!sk->broadcast)
-			return -ENETUNREACH;
-		broadcast = 1;
-	}
-
-	/* Build a packet */
-	
-	if(sk->debug)
-		printk("IPX: build_header: building packet.\n");
-		
-	/* Find out where this has to go */
-	if (ipx->net == 0L) {
-		rt = ipxrtr_get_default_net();
-		if (rt != NULL)
-			ipx->net = rt->net;
-	} else
-		rt=ipxrtr_get_dev(ipx->net);
-
-	if(rt==NULL)
-	{
-		return -ENETUNREACH;
-	}
-
-	dl=rt->datalink;
-
-	skb->mem_addr=skb;
-	skb->sk=sk;
-	skb->free=1;
-	skb->arp=1;
-	skb->tries=0;
-
-	if(sk->debug)
-		printk("Building MAC header.\n");		
-	skb->dev=rt->dev;
-
-	/* Build Data Link header */
-	dl->datalink_header(dl, skb, 
-		(rt->flags&IPX_RT_ROUTED)?rt->router_node:ipx->node);
-
-	/* See if we are sending to ourself */
-	memset(IPXaddr, '\0', 6);
-	memcpy(IPXaddr+(6 - skb->dev->addr_len), skb->dev->dev_addr, 
-			skb->dev->addr_len);
-
-	self_addressing = !memcmp(IPXaddr, 
-				(rt->flags&IPX_RT_ROUTED)?rt->router_node
-				:ipx->node,
-				6);
-
-	/* Now the IPX */
-	if(sk->debug)
-		printk("Building IPX Header.\n");
-	ipx_pack=(ipx_packet *)skb->h.raw;
-	ipx_pack->ipx_checksum=0xFFFF;
-	ipx_pack->ipx_pktsize=htons(len+sizeof(ipx_packet));
-	ipx_pack->ipx_tctrl=0;
-	ipx_pack->ipx_type=type;
-
-	memcpy(&ipx_pack->ipx_source,&sk->ipx_source_addr,sizeof(ipx_pack->ipx_source));
-	memcpy(&ipx_pack->ipx_dest,ipx,sizeof(ipx_pack->ipx_dest));
-
-	if((skb->dev->flags&IFF_LOOPBACK) || self_addressing)
-		skb->pkt_type=PACKET_HOST;
-	else
-		if (broadcast)
-			skb->pkt_type=PACKET_BROADCAST;
-		else
-			skb->pkt_type=PACKET_OTHERHOST;
-
-	return 0;
-}
-
-static int ipx_xmit(struct sk_buff *skb)
-{
-	struct sk_buff *skb1;
-	struct device *dev= skb->dev;
-	ipx_packet *ipx=(ipx_packet *)skb->h.raw; 
-	ipx_route *rt;
-	struct packet_type	pt;
-
-	if (ipx->ipx_dest.net == 0L)
-		rt = ipxrtr_get_default_net();
-	else
-		rt=ipxrtr_get_dev(ipx->ipx_dest.net);
-
-	if (rt == NULL)
-		return -ENETUNREACH;
-
-	pt.type=rt->dlink_type;
-
-	skb->tries++;
-
-	switch (skb->pkt_type)
-	{
-		case PACKET_HOST:
-			if (!skb->free)
-			{
-				skb1=alloc_skb(skb->len, GFP_ATOMIC);
-				if (skb1 != NULL)
-				{
-					skb1->mem_addr=skb1;
-					skb1->free=1;
-					skb1->arp=1;
-					skb1->len=skb->len;
-					skb1->sk = NULL;
-					skb1->h.raw = skb1->data + rt->datalink->header_length
-						+ dev->hard_header_len;
-					memcpy(skb1->data, skb->data, skb->len);
-					ipx_rcv(skb1,dev,&pt);
-				}
-			}
-			else
-			{
-		
-		
-				/* loop back */
-				skb->sk->wmem_alloc-=skb->mem_len;
-				skb->sk = NULL;
-				ipx_rcv(skb,dev,&pt);
-			}
-			break;
-
-		case PACKET_BROADCAST:
-			skb1=alloc_skb(skb->len, GFP_ATOMIC);
-			if (skb1 != NULL)
-			{
-				skb1->mem_addr=skb1;
-				skb1->free=1;
-				skb1->arp=1;
-				skb1->len=skb->len;
-				skb1->sk = NULL;
-				skb1->h.raw = skb1->data + rt->datalink->header_length
-					+ dev->hard_header_len;
-				memcpy(skb1->data, skb->data, skb->len);
-				ipx_rcv(skb1,dev,&pt);
-			}
-		default:
-			if (!skb->free)
-			{
-				skb1=alloc_skb(skb->len, GFP_ATOMIC);
-				if (skb1 != NULL)
-				{
-					skb1->mem_addr=skb1;
-					skb1->free=1;
-					skb1->arp=1;
-					skb1->len=skb->len;
-					skb1->sk = NULL;
-					skb1->h.raw = skb1->data + rt->datalink->header_length
-						+ dev->hard_header_len;
-					memcpy(skb1->data, skb->data, skb->len);
-				}
-			}
-			else
-				skb1=skb;
-			if (skb1 != NULL)
-			{
-				if (skb1->sk)
-					dev_queue_xmit(skb1,dev,skb->sk->priority);
-				else
-					dev_queue_xmit(skb1,dev,SOPRI_NORMAL);
-			}
-	}
-
-	return(0);
-
-}
-
-static int ipx_retransmit(ipx_socket *sk)
-{
-	struct sk_buff *skb = sk->write_queue.next;
-	int num=0;
-
-	ipx_packet *ipx;
-	struct ncp_request *req;
-
-	if (skb == NULL)
-		return(num);
-
-	if (skb == skb->next)
-		return(num);
-
-	do 
-	{
-		ipx=(ipx_packet *)skb->h.raw; 
-		req=(struct ncp_request *)(ipx+1);
-
-		ipx_xmit(skb);
-
-		num++;
-		skb=skb->next;
-	}
-	while (skb->next != sk->write_queue.next);
-
-	return (num);
-}
-
-static void ipx_timer (unsigned long data)
-{
-	ipx_socket *sk = (ipx_socket *) data;
-        int num;
-
-	cli();
-	if (in_bh)
-	{
-		sk->timer.expires = 10;
-		add_timer(&sk->timer);
-		sti();
-		return;
-	}
-	sti();
-
-	num=ipx_retransmit(sk);
-
-	sk->rto++;
-
-	if (sk->rto >= MAX_TIMEOUT)
-	{
-		struct sk_buff *skb;
-
-		while((skb=skb_dequeue(&sk->write_queue))!=NULL)
-			kfree_skb(skb,FREE_WRITE);
-
-		sk->err=ETIMEDOUT;
-		sk->state=TCP_CLOSE;
-		sk->socket->state=SS_UNCONNECTED;
-		if(!sk->dead)
-			sk->error_report(sk);
-		return;
-	}
-		
-	if (num)
-		ipx_reset_timer(sk, NCP_TIMEOUT);
-
-	return;
-}
-
-static void ipx_delete_timer (ipx_socket *sk)
-{
-	unsigned long flags;
-
-	save_flags (flags);
-	cli();
-
-	del_timer (&sk->timer);
-
-	restore_flags(flags);
-}
-
-static void ipx_add_timer (ipx_socket *sk, int len)
-{
-	init_timer (&sk->timer);
-	sk->timer.data = (unsigned long) sk;
-	sk->timer.function = &ipx_timer;
-	sk->timer.expires = len;
-	add_timer(&sk->timer);
-}
-
-static void ipx_reset_timer (ipx_socket *sk, int len)
-{
-
-	ipx_delete_timer (sk);
-	sk->timer.data = (unsigned long) sk;
-	sk->timer.function = &ipx_timer;
-	sk->timer.expires = len;
-	add_timer(&sk->timer);
-}
-
-static struct sk_buff *find_req(ipx_socket *sk, unsigned char seq)
-{
-	ipx_packet *ipx;
-	struct ncp_request *req;
-	struct sk_buff *skb = sk->write_queue.next;
-
-	if (skb == NULL)
-		return (NULL);
-
-	if (skb == skb->next)
-		return (NULL);
-
-	do 
-	{
-		ipx=(ipx_packet *)skb->h.raw; 
-		req=(struct ncp_request *)(ipx+1);
-		if (req->seq == seq)
-		{
-			skb_unlink(skb);
-			return (skb);
-		}
-		skb=skb->next;
-	}
-	while (skb->next != sk->write_queue.next);
-
-	return (NULL);
-}
-
-static int ncp_rcv(ipx_socket *sk, struct sk_buff *skb)
-{
-	ipx_packet *ipx=(ipx_packet *)skb->h.raw; 
-	struct ncp_reply *rep= (struct ncp_reply *)(ipx+1);
-	struct ncp_request_sf *req;
-	struct sk_buff *skb1;
-
-	if (rep->p_type != NCP_REPLY)
-	{
-		kfree_skb(skb, FREE_READ);
-		return (0);
-	}
-
-	skb1=find_req(sk, rep->seq);
-
-	if (skb1 == NULL)
-	{
-		kfree_skb(skb, FREE_READ);
-		return (0);
-	}
-
-	if (&sk->write_queue == sk->write_queue.next)
-	{
-		sk->rto=0;
-		ipx_delete_timer(sk);
-	}
-
-	ipx=(ipx_packet *)skb1->h.raw; 
-	req=(struct ncp_request_sf *)(ipx+1);
-
-	switch (sk->state)
-	{
-		case TCP_CLOSE_WAIT:
-			kfree_skb(skb, FREE_READ);
-			sk->socket->data = NULL;
-			sk->state=TCP_CLOSE;
-			if(!sk->dead)
-				sk->state_change(sk);
-			sk->dead=1;
-			if (&sk->write_queue != sk->write_queue.next)
-				ipx_delete_timer(sk);
-			ipx_destroy_socket(sk);
-			break;
-		case TCP_SYN_SENT:
-
-			if ((rep->f_stat == 0) && (rep->c_stat == 0))
-			{
-				sk->state=TCP_ESTABLISHED;
-				sk->socket->state = SS_CONNECTED;
-				sk->ncp.conn=rep->c_low + (rep->c_high * 0xff);
-				if(!sk->dead)
-					sk->state_change(sk);
-			}
-			else
-			{
-				sk->state=TCP_CLOSE;
-				sk->socket->state = SS_UNCONNECTED;
-				sk->err=ECONNREFUSED;
-				if (&sk->write_queue != sk->write_queue.next)
-					ipx_delete_timer(sk);
-				if(!sk->dead)
-					sk->error_report(sk);
-			}
-			kfree_skb(skb, FREE_READ);
-			break;
-		default:
-			if ((req->func==0x15)&&(req->s_func==0x01))
-			{
-				char *data = (char *)(rep+1);
-				int len=(int)*data; 
-				
-				if (len != 0)
-				{
-					memcpy(data, data+1, len);
-					*(data+len)='\0';
-					printk("\007%s\n",data);
-				}
-				kfree_skb(skb, FREE_READ);
-			}
-			else
-			{
-				sk->rmem_alloc+=skb->mem_len;
-				skb->sk = sk;
-
-				skb_queue_tail(&sk->receive_queue,skb);
-				if(!sk->dead)
-					sk->data_ready(sk,skb->len);
-			}
-	}	
-	
-	kfree_skb(skb1, FREE_WRITE);
-
 	return(0);
 }
 
@@ -1582,9 +942,6 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		kfree_skb(skb,FREE_READ);	/* Socket is full */
 		return(0);
 	}
-
-	if (sock->type == SOCK_NCP)
-		return (ncp_rcv(sock, skb));
 	
 	sock->rmem_alloc+=skb->mem_len;
 	skb->sk = sock;
@@ -1595,27 +952,65 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	return(0);
 }
 
-static int ipx_do_sendto(ipx_socket *sk, ipx_address *ipx,
-			 void *ubuf, int len, int flag, unsigned char type)
+static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
+	unsigned flags, struct sockaddr *usip, int addr_len)
 {
+	ipx_socket *sk=(ipx_socket *)sock->data;
+	struct sockaddr_ipx *usipx=(struct sockaddr_ipx *)usip;
+	struct sockaddr_ipx local_sipx;
 	struct sk_buff *skb;
 	struct device *dev;
-	ipx_packet *ipx_pack;
+	struct ipx_packet *ipx;
 	int size;
 	ipx_route *rt;
 	struct datalink_proto *dl = NULL;
+	unsigned char IPXaddr[6];
+	int self_addressing = 0;
+	int broadcast = 0;
 
+	if(flags)
+		return -EINVAL;
+		
+	if(usipx)
+	{
+		if(sk->ipx_source_addr.net==0)
+		/* put the autobinding in */
+		{
+			struct sockaddr_ipx uaddr;
+			int ret;
 
+			uaddr.sipx_port = 0;
+			uaddr.sipx_network = 0L; 
+			ret = ipx_bind (sock, (struct sockaddr *)&uaddr, sizeof(struct sockaddr_ipx));
+			if (ret != 0) return (ret);
+		}
+
+		if(addr_len <sizeof(*usipx))
+			return(-EINVAL);
+		if(usipx->sipx_family != AF_IPX)
+			return -EINVAL;
+		if(htons(usipx->sipx_port)<0x4000 && !suser())
+			return -EPERM;
+	}
+	else
+	{
+		if(sk->state!=TCP_ESTABLISHED)
+			return -ENOTCONN;
+		usipx=&local_sipx;
+		usipx->sipx_family=AF_IPX;
+		usipx->sipx_port=sk->ipx_dest_addr.sock;
+		usipx->sipx_network=sk->ipx_dest_addr.net;
+		memcpy(usipx->sipx_node,sk->ipx_dest_addr.node,sizeof(usipx->sipx_node));
+	}
+	
 	if(sk->debug)
 		printk("IPX: sendto: Addresses built.\n");
 
-	if ((sk->type == SOCK_NCP) && (len < sizeof (struct ncp_request)))
-		return -EINVAL;
-
-	if(memcmp(&ipx->node,&ipx_broadcast_node,6)==0) 
+	if(memcmp(&usipx->sipx_node,&ipx_broadcast_node,6)==0) 
 	{
 		if (!sk->broadcast)
 			return -ENETUNREACH;
+		broadcast = 1;
 	}
 
 	/* Build a packet */
@@ -1626,12 +1021,12 @@ static int ipx_do_sendto(ipx_socket *sk, ipx_address *ipx,
 	size=sizeof(ipx_packet)+len;	/* For mac headers */
 
 	/* Find out where this has to go */
-	if (ipx->net == 0L) {
+	if (usipx->sipx_network == 0L) {
 		rt = ipxrtr_get_default_net();
 		if (rt != NULL)
-			ipx->net = rt->net;
+			usipx->sipx_network = rt->net;
 	} else
-		rt=ipxrtr_get_dev(ipx->net);
+		rt=ipxrtr_get_dev(usipx->sipx_network);
 
 	if(rt==NULL)
 	{
@@ -1651,117 +1046,86 @@ static int ipx_do_sendto(ipx_socket *sk, ipx_address *ipx,
 		return -EAGAIN;
 	}
 		
-	if (flag)
-		skb=alloc_skb(size,GFP_KERNEL);
-	else
-		skb=alloc_skb(size,GFP_ATOMIC);
-
+	skb=alloc_skb(size,GFP_KERNEL);
 	if(skb==NULL)
 		return -ENOMEM;
-
-	sk->wmem_alloc+=skb->mem_len;
 		
+	skb->mem_addr=skb;
+	skb->sk=sk;
+	skb->free=1;
+	skb->arp=1;
 	skb->len=size;
 
-	ipx_build_header(ipx, skb, sk, len, type);
-
-	ipx_pack = (ipx_packet *)(skb->h.raw);
-
-	/* User data follows immediately after the IPX data */
-	if (flag)
-		memcpy_fromfs((char *)(ipx_pack+1),ubuf,len);
-	else
-		memcpy((char *)(ipx_pack+1),ubuf,len);
-
-	if (sk->type == SOCK_NCP)
-	{
-		struct ncp_request *req=(struct ncp_request *)(ipx_pack+1);
-
-		switch (sk->state)
-		{
-			case TCP_SYN_SENT:
-				req->p_type = NCP_OPEN;
-				break;
-			case TCP_CLOSE_WAIT:
-				req->p_type = NCP_CLOSE;
-				break;
-			default:
-				req->p_type = NCP_REQUEST;
-		}
-		req->c_low = (sk->ncp.conn) & 0xff;
-		req->c_high = (sk->ncp.conn >>8) & 0xff;
-		req->seq = (sk->ncp.seq)++;
-		req->task = 1;
-
-		skb->free=0;
-
-		if (&sk->write_queue == sk->write_queue.next)
-			ipx_add_timer(sk, NCP_TIMEOUT);
-		else
-			ipx_reset_timer(sk, NCP_TIMEOUT);
-	
-		skb_queue_tail(&sk->write_queue,skb);
-	}
+	sk->wmem_alloc+=skb->mem_len;
 
 	if(sk->debug)
+		printk("Building MAC header.\n");		
+	skb->dev=rt->dev;
+	
+	/* Build Data Link header */
+	dl->datalink_header(dl, skb, 
+		(rt->flags&IPX_RT_ROUTED)?rt->router_node:usipx->sipx_node);
+
+	/* See if we are sending to ourself */
+	memset(IPXaddr, '\0', 6);
+	memcpy(IPXaddr+(6 - skb->dev->addr_len), skb->dev->dev_addr, 
+			skb->dev->addr_len);
+
+	self_addressing = !memcmp(IPXaddr, 
+				(rt->flags&IPX_RT_ROUTED)?rt->router_node
+				:usipx->sipx_node,
+				6);
+
+	/* Now the IPX */
+	if(sk->debug)
+		printk("Building IPX Header.\n");
+	ipx=(ipx_packet *)skb->h.raw;
+	ipx->ipx_checksum=0xFFFF;
+	ipx->ipx_pktsize=htons(len+sizeof(ipx_packet));
+	ipx->ipx_tctrl=0;
+	ipx->ipx_type=usipx->sipx_type;
+
+	memcpy(&ipx->ipx_source,&sk->ipx_source_addr,sizeof(ipx->ipx_source));
+	ipx->ipx_dest.net=usipx->sipx_network;
+	memcpy(ipx->ipx_dest.node,usipx->sipx_node,sizeof(ipx->ipx_dest.node));
+	ipx->ipx_dest.sock=usipx->sipx_port;
+	if(sk->debug)
+		printk("IPX: Appending user data.\n");
+	/* User data follows immediately after the IPX data */
+	memcpy_fromfs((char *)(ipx+1),ubuf,len);
+	if(sk->debug)
 		printk("IPX: Transmitting buffer\n");
+	if((dev->flags&IFF_LOOPBACK) || self_addressing) {
+		struct packet_type	pt;
 
-	ipx_xmit(skb);
+		/* loop back */
+		pt.type = rt->dlink_type;
+		sk->wmem_alloc-=skb->mem_len;
+		skb->sk = NULL;
+		ipx_rcv(skb,dev,&pt);
+	} else {
+		if (broadcast) {
+			struct packet_type	pt;
+			struct sk_buff		*skb2;
 
+			/* loop back */
+			pt.type = rt->dlink_type;
+			
+			skb2=alloc_skb(skb->len, GFP_ATOMIC);
+			skb2->mem_addr=skb2;
+			skb2->free=1;
+			skb2->arp=1;
+			skb2->len=skb->len;
+			skb2->sk = NULL;
+			skb2->h.raw = skb2->data + rt->datalink->header_length
+				+ dev->hard_header_len;
+			memcpy(skb2->data, skb->data, skb->len);
+			ipx_rcv(skb2,dev,&pt);
+		}
+		dev_queue_xmit(skb,dev,SOPRI_NORMAL);
+	}
 	return len;
 }
-
-static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
-	unsigned flags, struct sockaddr *usip, int addr_len)
-{
-	ipx_socket *sk=(ipx_socket *)sock->data;
-        ipx_address ipx;
-	struct sockaddr_ipx *usipx=(struct sockaddr_ipx *)usip;
-	struct sockaddr_ipx local_sipx;
-
-	if(flags)
-		return -EINVAL;
-		
-	if(usipx)
-	{
-		if (sk->type == SOCK_NCP)
-			return -EINVAL;
-
-		if(sk->ipx_source_addr.sock==0)
-		/* put the autobinding in */
-		{
-			int ret;
-
-			local_sipx.sipx_type = 0;
-			local_sipx.sipx_port = 0;
-			local_sipx.sipx_network = 0L; 
-			ret = ipx_bind (sock, (struct sockaddr *)&local_sipx, sizeof(struct sockaddr_ipx));
-			if (ret != 0) return (ret);
-		}
-
-		if(addr_len <sizeof(*usipx))
-			return(-EINVAL);
-		if(usipx->sipx_family != AF_IPX)
-			return -EINVAL;
-		if(htons(usipx->sipx_port)<0x4000 && !suser())
-			return -EPERM;
-
-		ipx.net=usipx->sipx_network;
-		ipx.sock=usipx->sipx_port;
-		memcpy(ipx.node,usipx->sipx_node, sizeof(ipx.node));
-		return (ipx_do_sendto(sk, &ipx, ubuf, len, 1,
-			usipx->sipx_type));
-	}
-	else
-	{
-		if(sk->state!=TCP_ESTABLISHED)
-			return -ENOTCONN;
-
-		return (ipx_do_sendto(sk, &(sk->ipx_dest_addr), ubuf,
-			len, 1, sk->ipx_type));
-	}
-}
-	
 
 static int ipx_send(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags)
 {
@@ -1778,7 +1142,7 @@ static int ipx_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	int copied = 0;
 	struct sk_buff *skb;
 	int er;
-
+	
 	if(sk->err)
 	{
 		er= -sk->err;
@@ -1806,14 +1170,12 @@ static int ipx_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 		sipx->sipx_type = ipx->ipx_type;
 	}
 	skb_free_datagram(skb);
-
 	return(copied);
 }		
 
 
 static int ipx_write(struct socket *sock, char *ubuf, int size, int noblock)
 {
-
 	return ipx_send(sock,ubuf,size,noblock,0);
 }
 

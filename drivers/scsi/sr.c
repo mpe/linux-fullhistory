@@ -654,7 +654,7 @@ static int sr_detect(Scsi_Device * SDp){
   if(SDp->type != TYPE_ROM && SDp->type != TYPE_WORM) return 0;
 
   printk("Detected scsi CD-ROM sr%d at scsi%d, id %d, lun %d\n", 
-	 ++sr_template.dev_noticed,
+	 sr_template.dev_noticed++,
 	 SDp->host->host_no , SDp->id, SDp->lun); 
 
 	 return 1;

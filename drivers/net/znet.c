@@ -248,8 +248,8 @@ int znet_probe(struct device *dev)
 
 	/* These should never fail.  You can't add devices to a sealed box! */
 	if (request_irq(dev->irq, &znet_interrupt, 0, "ZNet")
-		|| request_dma(zn.rx_dma)
-		|| request_dma(zn.tx_dma)) {
+		|| request_dma(zn.rx_dma,"ZNet rx")
+		|| request_dma(zn.tx_dma,"ZNet tx")) {
 		printk(KERN_WARNING "%s: Not opened -- resource busy?!?\n", dev->name);
 		return EBUSY;
 	}

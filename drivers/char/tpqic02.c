@@ -2840,7 +2840,7 @@ static int qic02_get_resources(void)
 	}
 
 	/* After IRQ, allocate DMA channel */
-	if (request_dma(QIC02_TAPE_DMA)) {
+	if (request_dma(QIC02_TAPE_DMA,"QIC-02")) {
 		printk(TPQIC02_NAME ": can't allocate DMA%d for QIC-02 tape\n",
 			QIC02_TAPE_DMA);
 		free_irq(QIC02_TAPE_IRQ);

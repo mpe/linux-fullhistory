@@ -47,7 +47,7 @@
 /*
  * The second extended file system version
  */
-#define EXT2FS_DATE		"94/08/12"
+#define EXT2FS_DATE		"94/08/24"
 #define EXT2FS_VERSION		"0.5a"
 
 /*
@@ -348,12 +348,15 @@ struct ext2_super_block {
 	unsigned long  s_lastcheck;	/* time of last check */
 	unsigned long  s_checkinterval;	/* max. time between checks */
 	unsigned long  s_creator_os;	/* OS */
-	unsigned long  s_reserved[237];	/* Padding to the end of the block */
+	unsigned long  s_rev_level;	/* Revision level */
+	unsigned long  s_reserved[236];	/* Padding to the end of the block */
 };
 
 #define EXT2_OS_LINUX		0
 #define EXT2_OS_HURD		1
 #define EXT2_OS_MASIX		2
+
+#define EXT2_CURRENT_REV	0
 
 /*
  * Structure of a directory entry

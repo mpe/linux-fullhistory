@@ -496,7 +496,7 @@ asmlinkage void start_kernel(void)
 	if (hlt_works_ok) {
 		printk("Checking 'hlt' instruction... ");
 		__asm__ __volatile__("hlt ; hlt ; hlt ; hlt");
-		printk(" Ok.\n");
+		printk("Ok.\n");
 	}
 
 	system_utsname.machine[1] = '0' + x86;

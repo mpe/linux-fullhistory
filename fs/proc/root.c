@@ -71,6 +71,7 @@ static struct proc_dir_entry root_dir[] = {
 	{ PROC_INTERRUPTS,	10,"interrupts" },
    	{ PROC_FILESYSTEMS,	11,"filesystems" },
    	{ PROC_KSYMS,		5, "ksyms" },
+   	{ PROC_DMA,		3, "dma" },
 };
 
 #define NR_ROOT_DIRENTRY ((sizeof (root_dir))/(sizeof (root_dir[0])))

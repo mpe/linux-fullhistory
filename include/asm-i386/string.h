@@ -447,7 +447,7 @@ extern inline void * __constant_c_and_count_memset(void * s, unsigned long patte
 			return s;
 		case 3:
 			*(unsigned short *)s = pattern;
-			*(2+(unsigned char *)s) = pattern >> 16;
+			*(2+(unsigned char *)s) = pattern;
 			return s;
 		case 4:
 			*(unsigned long *)s = pattern;

@@ -2035,7 +2035,7 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
          dma_channel = cdu31a_addresses[i].dma_num;
 	 if (dma_channel > 0)
 	 {
-	    if (request_dma(dma_channel))
+	    if (request_dma(dma_channel,"cdu31a"))
             {
                dma_channel = -1;
 	       printk("Unable to grab DMA%d for the CDU31A driver\n",

@@ -280,8 +280,8 @@ static struct floppy_struct floppy_type[32] = {
 	{ 3486,21,2,83,0,0x25,0x00,0xDF,0x0C,"H1743" }, /* 19 1.74 MB 3.5"  */
 
 	{ 1760,11,2,80,0,0x1C,0x09,0xCF,0x6C,"d880"  }, /* 20 880KB 5.25"   */
-	{ 2080,13,2,80,0,0x1C,0x0A,0xCF,0x6C,"D1040" }, /* 21 1.04MB 3.5"   */
-	{ 2240,14,2,80,0,0x1C,0x1A,0xCF,0x6C,"D1120" }, /* 22 1.12MB 3.5"   */
+	{ 2080,13,2,80,0,0x1C,0x01,0xCF,0x6C,"D1040" }, /* 21 1.04MB 3.5"   */
+	{ 2240,14,2,80,0,0x1C,0x19,0xCF,0x6C,"D1120" }, /* 22 1.12MB 3.5"   */
 	{ 3200,20,2,80,0,0x1C,0x20,0xCF,0x6C,"h1600" }, /* 23 1.6MB 5.25"   */
 	{ 3520,22,2,80,0,0x1C,0x08,0xCF,0x6C,"H1760" }, /* 24 1.76MB 3.5"   */
 	{ 3840,24,2,80,0,0x1C,0x18,0xCF,0x6C,"H1920" }, /* 25 1.92MB 3.5"   */
@@ -290,7 +290,7 @@ static struct floppy_struct floppy_type[32] = {
 	{ 7680,48,2,80,0,0x25,0x63,0xCF,0x6C,"E3840" }, /* 28 3.84MB 3.5"   */
 
 	{ 3680,23,2,80,0,0x1C,0x10,0xCF,0x6C,"H1840" }, /* 29 1.84MB 3.5"   */
-	{ 1600,10,2,80,0,0x25,0x02,0xDF,0x2E,"H800"  },	/* 30 800KB 3.5"    */
+	{ 1600,10,2,80,0,0x25,0x02,0xDF,0x2E,"D800"  },	/* 30 800KB 3.5"    */
 	{ 3200,20,2,80,0,0x1C,0x00,0xCF,0x6C,"H1600" }, /* 31 1.6MB 3.5"    */
 };
 
@@ -2923,7 +2923,8 @@ void floppy_init(void)
 #if N_FDC > 1
 	fdc_state[1].address = 0x370;
 #endif
-	for(fdc = 0 ; fdc < N_FDC; fdc++){
+	for (i = 0 ; i < N_FDC ; i++) {
+		fdc = i;
 		FDCS->dtr = -1;
 		FDCS->dor = 0;
 		FDCS->reset = 0;
@@ -2932,8 +2933,9 @@ void floppy_init(void)
 	}
 
 	/* initialise drive state */
-	for ( current_drive=0; current_drive < N_DRIVE ; current_drive++){
-		DRS->flags = 0;
+	for (i = 0; i < N_DRIVE ; i++) {
+		current_drive = i;
+		DRS->flags = FD_VERIFY;
 		DRS->generation = 0;
 		DRS->keep_data = 0;
 		DRS->fd_ref = 0;
@@ -2941,7 +2943,8 @@ void floppy_init(void)
 	}
 
 	floppy_grab_irq_and_dma();
-	for(fdc = 0 ; fdc < N_FDC; fdc++){
+	for (i = 0 ; i < N_FDC ; i++) {
+		fdc = i;
 		FDCS->rawcmd = 2;
 		if(user_reset_fdc(-1,FD_RESET_IF_NEEDED))
 			continue;
@@ -2980,7 +2983,7 @@ int floppy_grab_irq_and_dma(void)
 		       FLOPPY_IRQ);
 		return -1;
 	}
-	if (request_dma(FLOPPY_DMA)) {
+	if (request_dma(FLOPPY_DMA,"floppy")) {
 		printk(DEVICE_NAME
 		       ": Unable to grab DMA%d for the floppy driver\n",
 		       FLOPPY_DMA);

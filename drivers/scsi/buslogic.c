@@ -1082,7 +1082,7 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 	    }
 
 	    if (dma) {
-		if (request_dma(dma)) {
+		if (request_dma(dma,"buslogic")) {
 		    buslogic_printk("Unable to allocate DMA channel for "
 				    "BusLogic controller.\n");
 		    free_irq(irq);

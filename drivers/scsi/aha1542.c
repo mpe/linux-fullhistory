@@ -876,7 +876,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 		    }
 		    
 		    if (dma_chan != 0xFF) {
-			    if (request_dma(dma_chan)) {
+			    if (request_dma(dma_chan,"aha1542")) {
 				    printk("Unable to allocate DMA channel for Adaptec.\n");
 				    free_irq(irq_level);
 				    goto unregister;

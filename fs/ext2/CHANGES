@@ -1,5 +1,7 @@
 Changes from version 0.5 to version 0.5a
 ========================================
+	- Added a revision level in the superblock.
+	- Full support for O_SYNC flag of the open system call.
 	- New mount options: `bsddf' and `minixdf'.  `bsddf' causes ext2fs
 	  to remove the blocks used for FS structures from the total block
 	  count in statfs.  With `minixdf', ext2fs mimics Minix behavior

@@ -8,6 +8,7 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/locks.h>
+#include <linux/fcntl.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 
@@ -117,6 +118,10 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 		buf += chars;
 		bh->b_uptodate = 1;
 		mark_buffer_dirty(bh, 0);
+		if (filp->f_flags & O_SYNC) {
+			ll_rw_block(WRITE, 1, &bh);
+			wait_on_buffer(bh);
+		}
 		brelse(bh);
 	}
 	filp->f_reada = 1;

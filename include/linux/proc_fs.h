@@ -23,7 +23,8 @@ enum root_directory_inos {
 	PROC_DEVICES,
 	PROC_INTERRUPTS,
 	PROC_FILESYSTEMS,
-	PROC_KSYMS
+	PROC_KSYMS,
+	PROC_DMA
 };
 
 enum pid_directory_inos {

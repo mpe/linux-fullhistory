@@ -236,7 +236,7 @@ net_open(struct device *dev)
 
 
 	/* Always snarf a DMA channel after the IRQ. */
-	if (request_dma(dev->dma)) {
+	if (request_dma(dev->dma,"skeleton ethernet")) {
 		free_irq(dev->irq);
 		return -EAGAIN;
 	}

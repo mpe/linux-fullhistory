@@ -258,6 +258,14 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		pos = inode->i_size;
 	else
 		pos = filp->f_pos;
+	/*
+	 * If a file has been opened in synchronous mode, we have to ensure
+	 * that meta-data will also be written synchronously.  Thus, we
+	 * set the i_osync field.  This field is tested by the allocation
+	 * routines.
+	 */
+	if (filp->f_flags & O_SYNC)
+		inode->u.ext2_i.i_osync++;
 	written = 0;
 	while (written < count) {
 		bh = ext2_getblk (inode, pos / sb->s_blocksize, 1, &err);
@@ -286,10 +294,16 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		buf += c;
 		bh->b_uptodate = 1;
 		mark_buffer_dirty(bh, 0);
+		if (filp->f_flags & O_SYNC) {
+			ll_rw_block (WRITE, 1, &bh);
+			wait_on_buffer (bh);
+		}
 		brelse (bh);
 	}
 	if (pos > inode->i_size)
 		inode->i_size = pos;
+	if (filp->f_flags & O_SYNC)
+		inode->u.ext2_i.i_osync--;
 	up(&inode->i_sem);
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	filp->f_pos = pos;

@@ -87,12 +87,12 @@ struct hd_driveid {
 	unsigned short	vendor0;	/* vendor unique */
 	unsigned short	vendor1;	/* vendor unique */
 	unsigned short	vendor2;	/* vendor unique */
-	unsigned char	serial_no[20];	/* big_endian; 0 = not_specified */
+	unsigned char	serial_no[20];	/* 0 = not_specified */
 	unsigned short	buf_type;
 	unsigned short	buf_size;	/* 512 byte increments; 0 = not_specified */
 	unsigned short	ecc_bytes;	/* for r/w long cmds; 0 = not_specified */
-	unsigned char	fw_rev[8];	/* big_endian; 0 = not_specified */
-	unsigned char	model[40];	/* big_endian; 0 = not_specified */
+	unsigned char	fw_rev[8];	/* 0 = not_specified */
+	unsigned char	model[40];	/* 0 = not_specified */
 	unsigned char	max_multsect;	/* 0=not_implemented */
 	unsigned char	vendor3;	/* vendor unique */
 	unsigned short	dword_io;	/* 0=not_implemented; 1=implemented */

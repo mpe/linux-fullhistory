@@ -35,6 +35,7 @@
 #include <linux/genhd.h>
 #include <linux/config.h>
 #include <linux/malloc.h>
+#include <linux/string.h>
 
 #define REALLY_SLOW_IO
 #include <asm/system.h>
@@ -234,16 +235,39 @@ static unsigned int mult_req    [MAX_HD] = {0,}; /* requested MultMode count    
 static unsigned int mult_count  [MAX_HD] = {0,}; /* currently enabled MultMode count */
 static struct request WCURRENT;
 
-static void rawstring (char *prefix, unsigned char *s, int n)
+static void fixstring(unsigned char *s, int n)
 {
-	if (prefix)
-		printk(prefix);
-	if (s && *s) {
-		int i;
-		for (i=0; i < n && s[i^1] == ' '; ++i); /* skip blanks */
-		for (; i < n && s[i^1]; ++i)		/* flip bytes */
-			if (s[i^1] != ' ' || ((i+1) < n && s[(i+1)^1] != ' '))
-				printk("%c",s[i^1]);
+	int i;
+	unsigned short *ss = (unsigned short *) s;
+
+	/* convert from big-endian to little-endian */
+	for (i = n ; (i -= 2) >= 0 ; ss++)
+		*ss = (*ss >> 8) | (*ss << 8);
+
+	/* "strnlen()" */
+	for (i = 0 ; i < n ; i++) {
+		if (!s[i]) {
+			n = i;
+			break;
+		}
+	}
+
+	/* wipe out trailing spaces */
+	while (n > 0) {
+		if (s[n-1] != ' ')
+			break;
+		n--;
+		s[n] = '\0';
+	}
+
+	/* wipe out leading spaces */
+	if (*s == ' ') {
+		unsigned char *t = s;
+		while (n-- && *++s == ' ');
+		while (n-- >= 0) {
+			*t++ = *s;
+			*s++ = '\0';
+		}
 	}
 }
 
@@ -272,15 +296,21 @@ static void identify_intr(void)
 			hd_info[dev].head = id.cur_heads;
 			hd_info[dev].sect = id.cur_sectors; 
 		}
-		printk ("  hd%c: ", dev+'a');
-		rawstring(NULL, id.model, sizeof(id.model));
-		printk (", %dMB w/%dKB Cache, CHS=%d/%d/%d, MaxMult=%d\n",
-			id.cyls*id.heads*id.sectors/2048, id.buf_size/2,
-			hd_info[dev].cyl, hd_info[dev].head, hd_info[dev].sect, id.max_multsect);
+		fixstring (id.serial_no, sizeof(id.serial_no));
+		fixstring (id.fw_rev, sizeof(id.fw_rev));
+		fixstring (id.model, sizeof(id.model));
+		printk ("  hd%c: %.40s, %dMB w/%dKB Cache, CHS=%d/%d/%d, MaxMult=%d\n",
+			dev+'a', id.model, id.cyls*id.heads*id.sectors/2048,
+			id.buf_size/2, hd_info[dev].cyl, hd_info[dev].head,
+			hd_info[dev].sect, id.max_multsect);
 		/* save drive info for later query via HDIO_GETIDENTITY */
 		if (NULL != (hd_ident_info[dev] = (struct hd_driveid *)kmalloc(sizeof(id),GFP_ATOMIC)))
 			*hd_ident_info[dev] = id;
 		
+		/* Quantum drives go weird at this point, so reset them! In */
+		/* fact, do a reset in any case in case we changed the geometry */
+		special_op[dev] += reset = 1;
+
 		/* flush remaining 384 (reserved/undefined) ID bytes: */
 		insw(HD_DATA,(char *)&id,sizeof(id)/2);
 		insw(HD_DATA,(char *)&id,sizeof(id)/2);
@@ -335,7 +365,6 @@ static void reset_controller(void)
 {
 	int	i;
 
-	printk(KERN_DEBUG "HD-controller reset\n");
 	outb_p(4,HD_CMD);
 	for(i = 0; i < 1000; i++) nop();
 	outb(hd_info[0].ctl & 0x0f ,HD_CMD);
@@ -361,12 +390,15 @@ repeat:
 	}
 	if (++i < NR_HD) {
 		if (unmask_intr[i]) {
-			printk("hd%c: disabled irq-unmasking\n",i+'a');
-			unmask_intr[i] = 0;
+			unmask_intr[i] = DEFAULT_UNMASK_INTR;
+			printk("hd%c: reset irq-unmasking to %d\n",i+'a',
+				DEFAULT_UNMASK_INTR);
 		}
 		if (mult_req[i] || mult_count[i]) {
-			printk("hd%c: disabled multiple mode\n",i+'a');
-			mult_req[i] = mult_count[i] = 0;
+			mult_count[i] = 0;
+			mult_req[i] = DEFAULT_MULT_COUNT;
+			printk("hd%c: reset multiple mode to %d\n",i+'a',
+				DEFAULT_MULT_COUNT);
 		}
 		hd_out(i,hd_info[i].sect,hd_info[i].sect,hd_info[i].head-1,
 			hd_info[i].cyl,WIN_SPECIFY,&reset_hd);
@@ -399,7 +431,7 @@ static void bad_rw_intr(void)
 
 	if (!CURRENT)
 		return;
-	dev = MINOR(CURRENT->dev) >> 6;
+	dev = DEVICE_NR(CURRENT->dev);
 	if (++CURRENT->errors >= MAX_ERRORS || (hd_error & BBD_ERR)) {
 		end_request(0);
 		special_op[dev] += recalibrate[dev] = 1;
@@ -607,10 +639,9 @@ static void hd_times_out(void)
 {
 	DEVICE_INTR = NULL;
 	sti();
-	reset = 1;
 	if (!CURRENT)
 		return;
-	special_op [DEVICE_NR(CURRENT->dev)] ++;
+	special_op [DEVICE_NR(CURRENT->dev)] += reset = 1;
 	printk(KERN_DEBUG "HD timeout\n");
 	cli();
 	if (++CURRENT->errors >= MAX_ERRORS) {
@@ -761,7 +792,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 
 	if ((!inode) || (!inode->i_rdev))
 		return -EINVAL;
-	dev = MINOR(inode->i_rdev) >> 6;
+	dev = DEVICE_NR(inode->i_rdev);
 	if (dev >= NR_HD)
 		return -EINVAL;
 	switch (cmd) {
@@ -877,7 +908,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 static int hd_open(struct inode * inode, struct file * filp)
 {
 	int target;
-	target =  DEVICE_NR(MINOR(inode->i_rdev));
+	target =  DEVICE_NR(inode->i_rdev);
 
 	while (busy[target])
 		sleep_on(&busy_wait);
@@ -894,7 +925,7 @@ static void hd_release(struct inode * inode, struct file * file)
         int target;
 	sync_dev(inode->i_rdev);
 
-	target =  DEVICE_NR(MINOR(inode->i_rdev));
+	target =  DEVICE_NR(inode->i_rdev);
 	access_count[target]--;
 
 }
@@ -1073,7 +1104,7 @@ static int revalidate_hddisk(int dev, int maxusage)
 	int i;
 	long flags;
 
-	target =  DEVICE_NR(MINOR(dev));
+	target =  DEVICE_NR(dev);
 	gdev = &GENDISK_STRUCT;
 
 	save_flags(flags);

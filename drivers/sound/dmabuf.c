@@ -832,7 +832,7 @@ DMAbuf_open_dma (int dev)
   unsigned long   flags;
   int             chan = audio_devs[dev]->dmachan;
 
-  if (ALLOC_DMA_CHN (chan))
+  if (ALLOC_DMA_CHN (chan,"audio"))
     {
       printk ("Unable to grab DMA%d for the audio driver\n", chan);
       return RET_ERROR (EBUSY);

@@ -41,7 +41,7 @@ extern char * ftape_big_buffer;
 extern void (*do_floppy)(void);
 #endif
 
-extern int request_dma(unsigned int dmanr);
+extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
 
 extern int do_execve(char * filename, char ** argv, char ** envp,

@@ -108,6 +108,8 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
 		bool 'EtherExpress support' CONFIG_EEXPRESS n
 		bool 'AT1700 support' CONFIG_AT1700 n
+		bool 'NI5210 support' CONFIG_NI52 n
+		bool 'NI6510 support' CONFIG_NI65 n
 	fi
 	bool 'HP PCLAN support' CONFIG_HPLAN n
 	bool 'NE2000/NE1000 support' CONFIG_NE2000 y
@@ -118,8 +120,6 @@ bool 'EISA and on board controllers' CONFIG_NET_EISA n
 		bool 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
 	fi
 	bool 'Apricot Xen-II on board ethernet' CONFIG_APRICOT n
-#bool 'NI52EE support' CONFIG_NI52 n
-#bool 'NI65EE support' CONFIG_NI65 n
 bool 'Pocket and portable adaptors' CONFIG_NET_POCKET n
 if [ "$CONFIG_NET_POCKET" = "y" ]; then
 	bool 'D-Link DE600 pocket adaptor support' CONFIG_DE600 n

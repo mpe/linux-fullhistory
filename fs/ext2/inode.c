@@ -236,7 +236,7 @@ repeat:
 	inode->u.ext2_i.i_next_alloc_goal = tmp;
 	inode->i_ctime = CURRENT_TIME;
 	inode->i_blocks += blocks;
-	if (IS_SYNC(inode))
+	if (IS_SYNC(inode) || inode->u.ext2_i.i_osync)
 		ext2_sync_inode (inode);
 	else
 		inode->i_dirt = 1;
@@ -307,7 +307,7 @@ repeat:
 	}
 	*p = tmp;
 	mark_buffer_dirty(bh, 1);
-	if (IS_SYNC(inode)) {
+	if (IS_SYNC(inode) || inode->u.ext2_i.i_osync) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
 	}
@@ -535,6 +535,7 @@ void ext2_read_inode (struct inode * inode)
 	inode->u.ext2_i.i_faddr = raw_inode->i_faddr;
 	inode->u.ext2_i.i_frag_no = raw_inode->i_frag;
 	inode->u.ext2_i.i_frag_size = raw_inode->i_fsize;
+	inode->u.ext2_i.i_osync = 0;
 	inode->u.ext2_i.i_file_acl = raw_inode->i_file_acl;
 	inode->u.ext2_i.i_dir_acl = raw_inode->i_dir_acl;
 	inode->u.ext2_i.i_version = raw_inode->i_version;

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 47
+SUBLEVEL = 48
 
 ARCH = i386
 
@@ -110,7 +110,10 @@ boot:
 include/asm:
 	( cd include ; ln -sf asm-$(ARCH) asm)
 
-symlinks: boot include/asm
+kernel/entry.S:
+	ln -sf ../arch/$(ARCH)/entry.S kernel/entry.S
+
+symlinks: boot include/asm kernel/entry.S
 
 config.in: arch/$(ARCH)/config.in
 	cp $< $@
@@ -183,7 +186,7 @@ mrproper: clean
 	rm -f include/linux/autoconf.h tools/version.h
 	rm -f drivers/sound/local.h
 	rm -f .version .config* config.in config.old
-	rm -f boot include/asm
+	rm -f boot include/asm kernel/entry.S
 	rm -f .depend `find . -name .depend -print`
 
 distclean: mrproper

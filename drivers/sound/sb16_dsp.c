@@ -228,7 +228,7 @@ sb16_dsp_open (int dev, int mode)
 
   sb_reset_dsp ();
 
-  if (ALLOC_DMA_CHN (dma8))
+  if (ALLOC_DMA_CHN (dma8,"sb16 8bit"))
     {
       printk ("SB16: Unable to grab DMA%d\n", dma8);
       sb_free_irq ();
@@ -236,7 +236,7 @@ sb16_dsp_open (int dev, int mode)
     }
 
   if (dma16 != dma8)
-    if (ALLOC_DMA_CHN (dma16))
+    if (ALLOC_DMA_CHN (dma16,"sb16 16bit"))
       {
 	printk ("SB16: Unable to grab DMA%d\n", dma16);
 	sb_free_irq ();

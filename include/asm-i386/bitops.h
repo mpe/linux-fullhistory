@@ -66,7 +66,7 @@ extern __inline__ int test_bit(int nr, void * addr)
 /*
  * Find-bit routines..
  */
-extern inline int find_first_zero_bit (unsigned long * addr, unsigned size)
+extern inline int find_first_zero_bit(void * addr, unsigned size)
 {
 	int res;
 
@@ -92,8 +92,7 @@ extern inline int find_first_zero_bit (unsigned long * addr, unsigned size)
 	return res;
 }
 
-extern inline int find_next_zero_bit (unsigned long * addr, int size,
-				      int offset)
+extern inline int find_next_zero_bit (void * addr, int size, int offset)
 {
 	unsigned long * p = ((unsigned long *) addr) + (offset >> 5);
 	int set = 0, bit = offset & 31, res;
@@ -117,7 +116,7 @@ extern inline int find_next_zero_bit (unsigned long * addr, int size,
 	/*
 	 * No zero yet, search remaining full bytes for a zero
 	 */
-	res = find_first_zero_bit (p, size - 32 * (p - addr));
+	res = find_first_zero_bit (p, size - 32 * (p - (unsigned long *) addr));
 	return (offset + set + res);
 }
 

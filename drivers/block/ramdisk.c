@@ -189,6 +189,7 @@ void rd_load(void)
 		printk("Unable to grab floppy IRQ/DMA for loading ramdisk image\n");
 		return;
 	}
+	check_disk_change(ROOT_DEV);
 	do_load();
 	floppy_release_irq_and_dma();
 }
