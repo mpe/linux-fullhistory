@@ -1535,14 +1535,12 @@ nfs4_check_open(struct nfs4_file *fp, struct nfs4_stateowner *sop, struct nfsd4_
 	int status = nfserr_share_denied;
 
 	list_for_each_entry(local, &fp->fi_perfile, st_perfile) {
-		/* have we seen this open owner */
-		if (local->st_stateowner == sop) {
-			*stpp = local;
-			continue;
-		}
 		/* ignore lock owners */
 		if (local->st_stateowner->so_is_open_owner == 0)
 			continue;
+		/* remember if we have seen this open owner */
+		if (local->st_stateowner == sop)
+			*stpp = local;
 		/* check for conflicting share reservations */
 		if (!test_share(local, open))
 			goto out;
