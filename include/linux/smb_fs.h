@@ -65,20 +65,18 @@ smb_vfree(void *obj)
 
 #endif /* DEBUG_SMB_MALLOC */
 
-struct smb_sb_info;
+/* linux/fs/smbfs/mmap.c */
+int smb_mmap(struct file *, struct vm_area_struct *);
 
 /* linux/fs/smbfs/file.c */
 extern struct inode_operations smb_file_inode_operations;
 
 /* linux/fs/smbfs/dir.c */
 extern struct inode_operations smb_dir_inode_operations;
-void smb_init_root(struct smb_sb_info *);
-int  smb_stat_root(struct smb_sb_info *);
 void smb_renew_times(struct dentry *);
 
 /* linux/fs/smbfs/ioctl.c */
-int smb_ioctl (struct inode * inode, struct file * filp,
-               unsigned int cmd, unsigned long arg);
+int smb_ioctl (struct inode *, struct file *, unsigned int, unsigned long);
 
 /* linux/fs/smbfs/inode.c */
 struct super_block *smb_read_super(struct super_block *, void *, int);
@@ -126,6 +124,7 @@ int smb_proc_trunc(struct smb_sb_info *, __u16, __u32);
 void smb_init_root_dirent(struct smb_sb_info *server, struct smb_fattr *);
 
 /* linux/fs/smbfs/sock.c */
+int smb_round_length(int);
 int smb_valid_socket(struct inode *);
 void smb_close_socket(struct smb_sb_info *);
 int smb_release(struct smb_sb_info *server);
@@ -140,9 +139,6 @@ int smb_trans2_request(struct smb_sb_info *server, __u16 trans2_command,
 		       int lparam, unsigned char *param,
 		       int *lrdata, unsigned char **rdata,
 		       int *lrparam, unsigned char **rparam);
-
-/* linux/fs/smbfs/mmap.c */
-int smb_mmap(struct file * file, struct vm_area_struct * vma);
 
 /* fs/smbfs/cache.c */
 
@@ -206,7 +202,7 @@ struct cache_head * smb_get_dircache(struct dentry *);
 void smb_init_dircache(struct cache_head *);
 void smb_free_dircache(struct cache_head *);
 int  smb_refill_dircache(struct cache_head *, struct dentry *);
-void smb_add_to_cache(struct cache_head *, struct dirent *, off_t);
+void smb_add_to_cache(struct cache_head *, struct cache_dirent *, off_t);
 int  smb_find_in_cache(struct cache_head *, off_t, struct cache_dirent *);
 void smb_invalid_dir_cache(struct inode *);
 

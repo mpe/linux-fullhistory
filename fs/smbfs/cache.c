@@ -130,13 +130,14 @@ printk("smb_init_dircache: initializing cache, %d blocks\n", cachep->pages);
  * entries are coming in order and are added to the end.
  */
 void
-smb_add_to_cache(struct cache_head * cachep, struct dirent *entry, off_t fpos)
+smb_add_to_cache(struct cache_head * cachep, struct cache_dirent *entry,
+			off_t fpos)
 {
 	struct inode * inode = get_cache_inode(cachep);
 	struct cache_index * index;
 	struct cache_block * block;
 	unsigned long page_off;
-	unsigned int nent, offset, len = entry->d_reclen;
+	unsigned int nent, offset, len = entry->len;
 	unsigned int needed = len + sizeof(struct cache_entry);
 
 #ifdef SMBFS_DEBUG_VERBOSE
@@ -163,10 +164,10 @@ inode, cachep->status, entry->d_name, fpos);
 		offset = index->space + 
 			 index->num_entries * sizeof(struct cache_entry);
 		block = index->block;
-		memcpy(&block->cb_data.names[offset], entry->d_name, len);
+		memcpy(&block->cb_data.names[offset], entry->name, len);
 		block->cb_data.table[nent].namelen = len;
 		block->cb_data.table[nent].offset = offset;
-		block->cb_data.table[nent].ino = entry->d_ino;
+		block->cb_data.table[nent].ino = entry->ino;
 		cachep->entries++;
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_add_to_cache: added entry %s, len=%d, pos=%ld, entries=%d\n",

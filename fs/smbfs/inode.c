@@ -6,14 +6,10 @@
  *
  */
 
-#define SMBFS_DCACHE_EXT 1
-
 #include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/sched.h>
-#include <linux/smb_fs.h>
-#include <linux/smbno.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/string.h>
@@ -23,6 +19,9 @@
 #include <linux/malloc.h>
 #include <linux/init.h>
 #include <linux/dcache.h>
+#include <linux/smb_fs.h>
+#include <linux/smbno.h>
+#include <linux/smb_mount.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -30,17 +29,11 @@
 #define SMBFS_PARANOIA 1
 /* #define SMBFS_DEBUG_VERBOSE 1 */
 
-#ifndef SMBFS_DCACHE_EXT
-#define shrink_dcache_sb(sb) shrink_dcache()
-#endif
-extern void smb_renew_times(struct dentry *);
-extern int close_fp(struct file *filp);
-
+static void smb_read_inode(struct inode *);
 static void smb_put_inode(struct inode *);
 static void smb_delete_inode(struct inode *);
-static void smb_read_inode(struct inode *);
 static void smb_put_super(struct super_block *);
-static int smb_statfs(struct super_block *, struct statfs *, int);
+static int  smb_statfs(struct super_block *, struct statfs *, int);
 
 static struct super_operations smb_sops =
 {
@@ -147,6 +140,11 @@ printk("smb_invalidate_inodes\n");
 	invalidate_inodes(SB_of(server));
 }
 
+/*
+ * This is called when we want to check whether the inode
+ * has changed on the server.  If it has changed, we must
+ * invalidate our local caches.
+ */
 int
 smb_revalidate_inode(struct inode *inode)
 {
@@ -167,25 +165,23 @@ jiffies, inode->u.smbfs_i.oldmtime);
 	}
 
 	/*
-	 * Save the last modified time, then refresh the inode
+	 * Save the last modified time, then refresh the inode.
+	 * (Note: a size change should have a different mtime.)
 	 */
 	last_time = inode->i_mtime;
 	error = smb_refresh_inode(inode);
-	if (!error)
+	if (error || inode->i_mtime != last_time)
 	{
-		if (inode->i_mtime != last_time)
-		{
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_revalidate: %s/%s changed, old=%ld, new=%ld\n",
 ((struct dentry *)inode->u.smbfs_i.dentry)->d_parent->d_name.name,
 ((struct dentry *)inode->u.smbfs_i.dentry)->d_name.name,
 (long) last_time, (long) inode->i_mtime);
 #endif
-			if (!S_ISDIR(inode->i_mode))
-				invalidate_inode_pages(inode);
-			else
-				smb_invalid_dir_cache(inode);
-		}
+		if (!S_ISDIR(inode->i_mode))
+			invalidate_inode_pages(inode);
+		else
+			smb_invalid_dir_cache(inode);
 	}
 out:
 	return error;
@@ -253,10 +249,12 @@ inode->i_mode, fattr.f_mode);
 			/*
 			 * No need to worry about unhashing the dentry: the
 			 * lookup validation will see that the inode is bad.
-			 * But we may need to invalidate the caches ...
+			 * But we do want to invalidate the caches ...
 			 */
-			invalidate_inode_pages(inode);
-			smb_invalid_dir_cache(inode);
+			if (!S_ISDIR(inode->i_mode))
+				invalidate_inode_pages(inode);
+			else
+				smb_invalid_dir_cache(inode);
 			error = -EIO;
 		}
 	}
@@ -328,6 +326,7 @@ smb_put_super(struct super_block *sb)
 	if (server->conn_pid)
 	       kill_proc(server->conn_pid, SIGTERM, 0);
 
+	kfree(server->mnt);
 	if (server->packet)
 		smb_vfree(server->packet);
 	sb->s_dev = 0;
@@ -340,7 +339,7 @@ smb_put_super(struct super_block *sb)
 struct super_block *
 smb_read_super(struct super_block *sb, void *raw_data, int silent)
 {
-	struct smb_mount_data *data = (struct smb_mount_data *)raw_data;
+	struct smb_mount_data *mnt, *data = (struct smb_mount_data *) raw_data;
 	struct smb_fattr root;
 	kdev_t dev = sb->s_dev;
 	struct inode *root_inode;
@@ -368,16 +367,25 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	sb->u.smbfs_sb.conn_pid = 0;
 	sb->u.smbfs_sb.state = CONN_INVALID; /* no connection yet */
 	sb->u.smbfs_sb.generation = 0;
-	sb->u.smbfs_sb.packet_size = SMB_INITIAL_PACKET_SIZE;	
-	sb->u.smbfs_sb.packet = smb_vmalloc(SMB_INITIAL_PACKET_SIZE);	
+	sb->u.smbfs_sb.packet_size = smb_round_length(SMB_INITIAL_PACKET_SIZE);	
+	sb->u.smbfs_sb.packet = smb_vmalloc(sb->u.smbfs_sb.packet_size);
 	if (!sb->u.smbfs_sb.packet)
 		goto out_no_mem;
 
-	sb->u.smbfs_sb.m = *data;
-	sb->u.smbfs_sb.m.file_mode = (sb->u.smbfs_sb.m.file_mode &
-				      (S_IRWXU | S_IRWXG | S_IRWXO)) | S_IFREG;
-	sb->u.smbfs_sb.m.dir_mode = (sb->u.smbfs_sb.m.dir_mode &
-				     (S_IRWXU | S_IRWXG | S_IRWXO)) | S_IFDIR;
+	mnt = kmalloc(sizeof(struct smb_mount_data), GFP_KERNEL);
+	if (!mnt)
+		goto out_no_mount;
+	*mnt = *data;
+	mnt->version = 0; /* dynamic flags */
+#ifdef CONFIG_SMB_WIN95
+	mnt->version |= 1;
+#endif
+	mnt->file_mode &= (S_IRWXU | S_IRWXG | S_IRWXO);
+	mnt->file_mode |= S_IFREG;
+	mnt->dir_mode  &= (S_IRWXU | S_IRWXG | S_IRWXO);
+	mnt->dir_mode  |= S_IFDIR;
+	sb->u.smbfs_sb.mnt = mnt;
+
 	/*
 	 * Keep the super block locked while we get the root inode.
 	 */
@@ -398,20 +406,20 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 out_no_root:
 	printk(KERN_ERR "smb_read_super: get root inode failed\n");
 	iput(root_inode);
+	kfree(sb->u.smbfs_sb.mnt);
+out_no_mount:
 	smb_vfree(sb->u.smbfs_sb.packet);
 	goto out_unlock;
 out_no_mem:
 	printk("smb_read_super: could not alloc packet\n");
-	goto out_unlock;
+out_unlock:
+	unlock_super(sb);
+	goto out_fail;
 out_wrong_data:
-	printk(KERN_ERR "smb_read_super: wrong data argument."
-	       " Recompile smbmount.\n");
+	printk("smb_read_super: need mount version %d\n", SMB_MOUNT_VERSION);
 	goto out_fail;
 out_no_data:
 	printk("smb_read_super: missing data argument\n");
-	goto out_fail;
-out_unlock:
-	unlock_super(sb);
 out_fail:
 	sb->s_dev = 0;
 	MOD_DEC_USE_COUNT;
@@ -439,6 +447,7 @@ smb_notify_change(struct inode *inode, struct iattr *attr)
 {
 	struct smb_sb_info *server = SMB_SERVER(inode);
 	struct dentry *dentry = inode->u.smbfs_i.dentry;
+	unsigned int mask = (S_IFREG | S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO);
 	int error, refresh = 0;
 
 	error = -EIO;
@@ -459,14 +468,13 @@ smb_notify_change(struct inode *inode, struct iattr *attr)
 		goto out;
 
 	error = -EPERM;
-	if (((attr->ia_valid & ATTR_UID) && (attr->ia_uid != server->m.uid)))
+	if ((attr->ia_valid & ATTR_UID) && (attr->ia_uid != server->mnt->uid))
 		goto out;
 
-	if (((attr->ia_valid & ATTR_GID) && (attr->ia_uid != server->m.gid)))
+	if ((attr->ia_valid & ATTR_GID) && (attr->ia_uid != server->mnt->gid))
 		goto out;
 
-	if (((attr->ia_valid & ATTR_MODE) &&
-	(attr->ia_mode & ~(S_IFREG | S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO))))
+	if ((attr->ia_valid & ATTR_MODE) && (attr->ia_mode & ~mask))
 		goto out;
 
 	if ((attr->ia_valid & ATTR_SIZE) != 0)

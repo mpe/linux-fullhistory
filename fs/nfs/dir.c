@@ -333,7 +333,6 @@ nfs_invalidate_dircache_sb(struct super_block *sb)
 {
 	struct nfs_dirent *cache = dircache;
 	int		i;
-	int		freed = 0;
 
 	for (i = NFS_MAX_DIRCACHE; i--; cache++) {
 		if (sb && sb->s_dev != cache->dev)
@@ -347,14 +346,8 @@ nfs_invalidate_dircache_sb(struct super_block *sb)
 		if (cache->entry) {
 			free_page((unsigned long) cache->entry);
 			cache->entry = NULL;
-			freed++;
 		}
 	}
-#ifdef NFS_PARANOIA
-if (freed)
-printk("nfs_invalidate_dircache_sb: freed %d pages from %s\n", 
-freed, kdevname(sb->s_dev));
-#endif
 }
 
 /*
@@ -472,9 +465,9 @@ static int nfs_instantiate(struct inode *dir, struct dentry *dentry,
 	struct inode *inode;
 	int error = -EACCES;
 
+	nfs_invalidate_dircache(dir);
 	inode = nfs_fhget(dir->i_sb, fhandle, fattr);
 	if (inode) {
-		nfs_invalidate_dircache(dir);
 		d_instantiate(dentry, inode);
 		nfs_renew_times(dentry);
 		error = 0;
@@ -638,14 +631,15 @@ struct dentry *nfs_silly_lookup(struct dentry *parent, char *silly, int slen)
 {
 	struct qstr    sqstr;
 	struct dentry *sdentry;
+	unsigned long hash;
 	int i, error;
 
 	sqstr.name = silly;
 	sqstr.len  = slen;
-	sqstr.hash = init_name_hash();
+	hash = init_name_hash();
 	for (i= 0; i < slen; i++)
-		sqstr.hash = partial_name_hash(silly[i], sqstr.hash);
-	sqstr.hash = end_name_hash(sqstr.hash);
+		hash = partial_name_hash(silly[i], hash);
+	sqstr.hash = end_name_hash(hash);
 	sdentry = d_lookup(parent, &sqstr);
 	if (!sdentry) {
 		sdentry = d_alloc(parent, &sqstr);
@@ -674,6 +668,11 @@ static int nfs_sillyrename(struct inode *dir, struct dentry *dentry)
 		return -EIO;  /* No need to silly rename. */
 	}
 
+#ifdef NFS_PARANOIA
+if (!dentry->d_inode)
+printk("NFS: silly-renaming %s/%s, negative dentry??\n",
+dentry->d_parent->d_name.name, dentry->d_name.name);
+#endif
 	if (dentry->d_flags & DCACHE_NFSFS_RENAMED) {
 		return -EBUSY; /* don't allow to unlink silly inode -- nope,
 				* think a bit: silly DENTRY, NOT inode --
@@ -729,20 +728,28 @@ static void nfs_silly_delete(struct dentry *dentry)
 		error = nfs_proc_remove(NFS_SERVER(dir),
 					NFS_FH(dir), dentry->d_name.name);
 		if (error < 0)
-			printk("NFS " __FUNCTION__ " failed (err = %d)\n",
-			       -error);
+			printk("NFS: can't silly-delete %s/%s, error=%d\n",
+				dentry->d_parent->d_name.name,
+				dentry->d_name.name, error);
 		if (dentry->d_inode) {
 			if (dentry->d_inode->i_nlink)
 				dentry->d_inode->i_nlink --;
-		} else
+		} else {
+#ifdef NFS_PARANOIA
 			printk("nfs_silly_delete: negative dentry %s/%s\n",
 				dentry->d_parent->d_name.name,
 				dentry->d_name.name);
+#endif
+		}
 		nfs_invalidate_dircache(dir);
-		/*
-		 * The dentry is unhashed, but we want to make it negative.
-		 */
-		d_delete(dentry);
+	}
+	/*
+	 * Check whether to expire the dentry ...
+	 */
+	else {
+		unsigned long age = jiffies - dentry->d_time;
+		if (age > 10*HZ)
+			d_drop(dentry);
 	}
 }
 
@@ -769,12 +776,22 @@ static int nfs_unlink(struct inode *dir, struct dentry *dentry)
 		return -ENOENT;
 	}
 
+	error = -ENAMETOOLONG;
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
-		return -ENAMETOOLONG;
+		goto out;
 
 	error = nfs_sillyrename(dir, dentry);
 
 	if (error && error != -EBUSY) {
+#ifdef NFS_PARANOIA
+if (dentry->d_count > 1)
+printk("nfs_unlink: dentry %s/%s, d_count=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
+if (dentry->d_inode && dentry->d_inode->i_count > 1)
+printk("nfs_unlink: dentry %s/%s, inode i_count=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_inode->i_count);
+#endif
+		/* N.B. should check for d_count > 1 and fail */
 		error = nfs_proc_remove(NFS_SERVER(dir),
 					NFS_FH(dir), dentry->d_name.name);
 		if (!error) {
@@ -785,11 +802,12 @@ static int nfs_unlink(struct inode *dir, struct dentry *dentry)
 			d_delete(dentry);
 		}
 	}
-
+out:
 	return error;
 }
 
-static int nfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
+static int
+nfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
 	struct nfs_sattr sattr;
 	int error;
@@ -802,11 +820,12 @@ static int nfs_symlink(struct inode *dir, struct dentry *dentry, const char *sym
 		return -ENOENT;
 	}
 
+	error = -ENAMETOOLONG;
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
-		return -ENAMETOOLONG;
+		goto out;
 
 	if (strlen(symname) > NFS_MAXPATHLEN)
-		return -ENAMETOOLONG;
+		goto out;
 
 	sattr.mode = S_IFLNK | S_IRWXUGO; /* SunOS 4.1.2 crashes without this! */
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
@@ -827,10 +846,12 @@ static int nfs_symlink(struct inode *dir, struct dentry *dentry, const char *sym
 		 */
 		d_drop(dentry);
 	}
+out:
 	return error;
 }
 
-static int nfs_link(struct inode *inode, struct inode *dir, struct dentry *dentry)
+static int 
+nfs_link(struct inode *inode, struct inode *dir, struct dentry *dentry)
 {
 	int error;
 
@@ -843,18 +864,37 @@ static int nfs_link(struct inode *inode, struct inode *dir, struct dentry *dentr
 		return -ENOENT;
 	}
 
+	error = -ENAMETOOLONG;
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
-		return -ENAMETOOLONG;
+		goto out;
+
+	/*
+	 * The NFS server may want to use a new fileid for the link,
+	 * so we can't reuse the existing inode for the new dentry.
+	 * To force a new lookup after the link operation, we can just
+	 * drop the new dentry, as long as it's not busy. (See above.)
+	 */
+	error = -EBUSY;
+	if (dentry->d_count > 1) {
+#ifdef NFS_PARANOIA
+printk("nfs_link: dentry %s/%s busy, count=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
+#endif
+		goto out;
+	}
+	d_drop(dentry);
 
 	error = nfs_proc_link(NFS_SERVER(inode), NFS_FH(inode), NFS_FH(dir),
 				dentry->d_name.name);
 	if (!error) {
 		nfs_invalidate_dircache(dir);
+#if 0
 		inode->i_count ++;
 		inode->i_nlink ++; /* no need to wait for nfs_refresh_inode() */
 		d_instantiate(dentry, inode);
-		error = 0;
+#endif
 	}
+out:
 	return error;
 }
 
@@ -875,16 +915,31 @@ static int nfs_link(struct inode *inode, struct inode *dir, struct dentry *dentr
  * implementation that only depends on the dcache stuff instead of
  * using the inode layer
  *
+ * Unfortunately, things are a little more complicated than indicated
+ * above. The NFS server may decide to use a new fileid for the renamed
+ * file, so we can't link the new name to the old inode. Otherwise, the
+ * server might reuse the fileid after the old file has been removed, 
+ * which would leave the new dentry holding an invalid fileid (possibly
+ * leading to file corruption). To handle this consider these cases:
+ *   (1) within-directory:
+ *       -- no problem, just use nfs_proc_rename
+ *   (2) cross-directory, only one user for old and new dentry:
+ *       -- drop both dentries to force new lookups, then use rename
+ *   (3) cross-directory, multiple users for old, one user for new:
+ *       -- drop new dentry, silly-rename old dentry and make a link
+ *   (4) cross-directory, multiple users for new dentry:
+ *       -- sorry, we're busy.
  */
 static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		      struct inode *new_dir, struct dentry *new_dentry)
 {
-	int error;
+	int update = 1, error;
 
-	dfprintk(VFS, "NFS: rename(%x/%ld, %s -> %x/%ld, %s)\n",
-				old_dir->i_dev, old_dir->i_ino, old_dentry->d_name.name,
-				new_dir->i_dev, new_dir->i_ino, new_dentry->d_name.name);
-
+#ifdef NFS_DEBUG_VERBOSE
+printk("nfs_rename: old %s/%s, count=%d, new %s/%s, count=%d\n",
+old_dentry->d_parent->d_name.name,old_dentry->d_name.name,old_dentry->d_count,
+new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
+#endif
 	if (!old_dir || !S_ISDIR(old_dir->i_mode)) {
 		printk("nfs_rename: old inode is NULL or not a directory\n");
 		return -ENOENT;
@@ -895,37 +950,66 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		return -ENOENT;
 	}
 
-	if (old_dentry->d_name.len > NFS_MAXNAMLEN || new_dentry->d_name.len > NFS_MAXNAMLEN)
-		return -ENAMETOOLONG;
-
-	if (new_dir != old_dir) {
-		error = nfs_sillyrename(old_dir, old_dentry);
-
-		if (error == -EBUSY) {
-			return -EBUSY;
-		} else if (error == 0) { /* did silly rename stuff */
-			error = nfs_link(old_dentry->d_inode,
-					 new_dir, new_dentry);
-			
-			return error;
-		}
-		/* no need for silly rename, proceed as usual */
+	error = -ENAMETOOLONG;
+	if (old_dentry->d_name.len > NFS_MAXNAMLEN ||
+	    new_dentry->d_name.len > NFS_MAXNAMLEN)
+		goto out;
+	/*
+	 * Examine the cases as noted above.
+	 */
+	if (new_dir == old_dir)
+		goto simple_case;
+	error = -EBUSY;
+	if (new_dentry->d_count > 1) {
+#ifdef NFS_PARANOIA
+printk("nfs_rename: new dentry %s/%s busy, count=%d\n",
+new_dentry->d_parent->d_name.name, new_dentry->d_name.name,
+new_dentry->d_count);
+#endif
+		goto out;
 	}
+	d_drop(new_dentry);
+	if (old_dentry->d_count > 1)
+		goto complex_case;
+	d_drop(old_dentry);
+	update = 0;
+	
+	/* no need for silly rename, proceed as usual */
+simple_case:
 	error = nfs_proc_rename(NFS_SERVER(old_dir),
 				NFS_FH(old_dir), old_dentry->d_name.name,
 				NFS_FH(new_dir), new_dentry->d_name.name);
-	if (!error) {
-		nfs_invalidate_dircache(old_dir);
-		nfs_invalidate_dircache(new_dir);
-		/*
-		 * We know these paths are still valid ...
-		 */
-		nfs_renew_times(old_dentry);
-		nfs_renew_times(new_dentry->d_parent);
+	if (error)
+		goto out;
+	nfs_invalidate_dircache(new_dir);
+	nfs_invalidate_dircache(old_dir);
 
-		/* Update the dcache */
+	/* Update the dcache if needed */
+	if (update)
 		d_move(old_dentry, new_dentry);
-	}
+	goto out;
+
+	/*
+	 * We don't need to update the dcache in this case ... the
+	 * new dentry has been dropped, and the old one silly-renamed.
+	 */
+complex_case:
+	error = nfs_sillyrename(old_dir, old_dentry);
+	if (error)
+		goto out;
+	nfs_invalidate_dircache(old_dir);
+
+	error = nfs_link(old_dentry->d_inode, new_dir, new_dentry);
+	if (error)
+		goto out;
+	nfs_invalidate_dircache(new_dir);
+#ifdef NFS_PARANOIA
+printk("nfs_rename: dentry %s/%s linked to %s/%s, old count=%d\n",
+new_dentry->d_parent->d_name.name,new_dentry->d_name.name,
+old_dentry->d_parent->d_name.name,old_dentry->d_name.name,old_dentry->d_count);
+#endif
+
+out:
 	return error;
 }
 

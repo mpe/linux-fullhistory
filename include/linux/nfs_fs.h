@@ -176,7 +176,7 @@ extern int nfs_lock(struct file *file, int cmd, struct file_lock *fl);
  */
 extern int  nfs_writepage(struct inode *, struct page *);
 extern int  nfs_check_error(struct inode *);
-extern int  nfs_flush_dirty_pages(struct inode *, off_t, off_t);
+extern int  nfs_flush_dirty_pages(struct inode *, pid_t, off_t, off_t);
 extern int  nfs_truncate_dirty_pages(struct inode *, unsigned long);
 extern void nfs_invalidate_pages(struct inode *);
 extern int  nfs_updatepage(struct inode *, struct page *, const char *,

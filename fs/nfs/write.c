@@ -286,16 +286,17 @@ find_write_request(struct inode *inode, struct page *page)
  * Find a failed write request by pid
  */
 static struct nfs_wreq *
-find_failed_request(struct inode *inode, pid_t pid, int all)
+find_failed_request(struct inode *inode, pid_t pid)
 {
 	struct nfs_wreq	*head, *req;
 
-	if (!(req = head = nfs_failed_requests))
-		return NULL;
-	do {
-		if (req->wb_inode == inode && (all || req->wb_pid == pid))
+	req = head = nfs_failed_requests;
+	while (req != NULL) {
+		if (req->wb_inode == inode && (pid == 0 || req->wb_pid == pid))
 			return req;
-	} while ((req = WB_NEXT(req)) != head);
+		if ((req = WB_NEXT(req)) == head)
+			break;
+	}
 	return NULL;
 }
 
@@ -335,7 +336,7 @@ check_failed_request(struct inode * inode)
 	struct nfs_wreq * req;
 	int found = 0;
 
-	while ((req = find_failed_request(inode, 0, 1)) != NULL) {
+	while ((req = find_failed_request(inode, 0)) != NULL) {
 		remove_failed_request(req);
 		found++;
 	}
@@ -561,12 +562,13 @@ nfs_updatepage(struct inode *inode, struct page *page, const char *buffer,
 	}
 
 	/* Create the write request. */
-	if (!(req = create_write_request(inode, page, offset, count))) {
-		status = -ENOBUFS;
+	status = -ENOBUFS;
+	req = create_write_request(inode, page, offset, count);
+	if (!req)
 		goto done;
-	}
 
 	/* Copy data to page buffer. */
+	/* N.B. should check for fault here ... */
 	copy_from_user(page_addr + offset, buffer, count);
 
 	/* Schedule request */
@@ -593,6 +595,7 @@ done:
 			transfer_page_lock(req);
 			/* rpc_execute(&req->wb_task); */
 			if (sync) {
+				/* N.B. if signalled, result not ready? */
 				wait_on_write_request(req);
 				if ((count = nfs_write_error(inode)) < 0)
 					status = count;
@@ -652,10 +655,20 @@ nfs_flush_pages(struct inode *inode, pid_t pid, off_t offset, off_t len,
 
 			if (rqoffset < end && offset < rqend
 			 && (pid == 0 || req->wb_pid == pid)) {
-				if (!WB_HAVELOCK(req))
+				if (!WB_HAVELOCK(req)) {
+#ifdef NFS_PARANOIA
+printk("nfs_flush: flushing inode=%ld, %d @ %lu\n",
+req->wb_inode->i_ino, req->wb_bytes, rqoffset);
+#endif
 					nfs_flush_request(req);
+				}
 				last = req;
 			}
+		} else {
+#ifdef NFS_PARANOIA
+printk("nfs_flush_pages: in progress inode=%ld, %d @ %lu\n",
+req->wb_inode->i_ino, req->wb_bytes, rqoffset);
+#endif
 		}
 		if (invalidate)
 			req->wb_flags |= NFS_WRITE_INVALIDATE;
@@ -668,6 +681,10 @@ nfs_flush_pages(struct inode *inode, pid_t pid, off_t offset, off_t len,
 
 /*
  * Cancel all writeback requests, both pending and in progress.
+ *
+ * N.B. This doesn't seem to wake up the tasks -- are we sure
+ * they will eventually complete? Also, this could overwrite a
+ * failed status code from an already-completed task.
  */
 static void
 nfs_cancel_dirty(struct inode *inode, pid_t pid)
@@ -676,7 +693,8 @@ nfs_cancel_dirty(struct inode *inode, pid_t pid)
 
 	req = head = NFS_WRITEBACK(inode);
 	while (req != NULL) {
-		if (req->wb_pid == pid) {
+		/* N.B. check for task already finished? */
+		if (pid == 0 || req->wb_pid == pid) {
 			req->wb_flags |= NFS_WRITE_CANCELLED;
 			rpc_exit(&req->wb_task, 0);
 		}
@@ -694,24 +712,30 @@ nfs_cancel_dirty(struct inode *inode, pid_t pid)
  * this isn't used by the nlm module yet.
  */
 int
-nfs_flush_dirty_pages(struct inode *inode, off_t offset, off_t len)
+nfs_flush_dirty_pages(struct inode *inode, pid_t pid, off_t offset, off_t len)
 {
 	struct nfs_wreq *last = NULL;
-	int result = 0;
+	int result = 0, cancel = 0;
 
 	dprintk("NFS:      flush_dirty_pages(%x/%ld for pid %d %ld/%ld)\n",
 				inode->i_dev, inode->i_ino, current->pid,
 				offset, len);
 
+	if (IS_SOFT && signalled()) {
+		nfs_cancel_dirty(inode, pid);
+		cancel = 1;
+	}
+
 	for (;;) {
 		if (IS_SOFT && signalled()) {
-			nfs_cancel_dirty(inode, current->pid);
+			if (!cancel)
+				nfs_cancel_dirty(inode, pid);
 			result = -ERESTARTSYS;
 			break;
 		}
 
-		/* Flush all pending writes for this pid and file region */
-		last = nfs_flush_pages(inode, current->pid, offset, len, 0);
+		/* Flush all pending writes for the pid and file region */
+		last = nfs_flush_pages(inode, pid, offset, len, 0);
 		if (last == NULL)
 			break;
 		wait_on_write_request(last);
@@ -724,7 +748,7 @@ nfs_flush_dirty_pages(struct inode *inode, off_t offset, off_t len)
  * Flush out any pending write requests and flag that they be discarded
  * after the write is complete.
  *
- * This function is called from nfs_revalidate_inode just before it calls
+ * This function is called from nfs_refresh_inode just before it calls
  * invalidate_inode_pages. After nfs_flush_pages returns, we can be sure
  * that all dirty pages are locked, so that invalidate_inode_pages does
  * not throw away any dirty pages.
@@ -780,7 +804,7 @@ nfs_check_error(struct inode *inode)
 	dprintk("nfs:      checking for write error inode %04x/%ld\n",
 			inode->i_dev, inode->i_ino);
 
-	req = find_failed_request(inode, current->pid, 0);
+	req = find_failed_request(inode, current->pid);
 	if (req) {
 		dprintk("nfs: write error %d inode %04x/%ld\n",
 			req->wb_task.tk_status, inode->i_dev, inode->i_ino);
@@ -869,7 +893,7 @@ nfs_wback_result(struct rpc_task *task)
 		 * application by adding the request to the failed
 		 * requests list.
 		 */
-		if (find_failed_request(inode, req->wb_pid, 0))
+		if (find_failed_request(inode, req->wb_pid))
 			status = 0;
 		clear_bit(PG_uptodate, &page->flags);
 	} else if (!WB_CANCELLED(req)) {

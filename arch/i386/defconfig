@@ -198,10 +198,12 @@ CONFIG_EEXPRESS_PRO100=y
 # CONFIG_QUOTA is not set
 # CONFIG_MINIX_FS is not set
 CONFIG_EXT2_FS=y
+CONFIG_ISO9660_FS=y
+# CONFIG_JOLIET is not set
 # CONFIG_FAT_FS is not set
 # CONFIG_MSDOS_FS is not set
-# CONFIG_VFAT_FS is not set
 # CONFIG_UMSDOS_FS is not set
+# CONFIG_VFAT_FS is not set
 CONFIG_PROC_FS=y
 CONFIG_NFS_FS=y
 # CONFIG_ROOT_NFS is not set
@@ -209,7 +211,6 @@ CONFIG_NFS_FS=y
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
 # CONFIG_SMB_FS is not set
-CONFIG_ISO9660_FS=y
 # CONFIG_HPFS_FS is not set
 # CONFIG_SYSV_FS is not set
 # CONFIG_AFFS_FS is not set
@@ -217,6 +218,11 @@ CONFIG_ISO9660_FS=y
 CONFIG_AUTOFS_FS=y
 # CONFIG_UFS_FS is not set
 # CONFIG_MAC_PARTITION is not set
+
+#
+# Native Language Support
+#
+# CONFIG_NLS is not set
 
 #
 # Character devices

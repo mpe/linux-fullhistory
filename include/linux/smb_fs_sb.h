@@ -13,7 +13,6 @@
 
 #include <linux/types.h>
 #include <linux/smb.h>
-#include <linux/smb_mount.h>
 
 /* Get the server for the specified dentry */
 #define server_from_dentry(dentry) &dentry->d_sb->u.smbfs_sb
@@ -24,7 +23,7 @@ struct smb_sb_info {
         enum smb_conn_state state;
 	struct file * sock_file;
 
-        struct smb_mount_data m;
+        struct smb_mount_data *mnt;
 
 	/* Connections are counted. Each time a new socket arrives,
 	 * generation is incremented.

@@ -21,11 +21,7 @@
 #include <linux/malloc.h>
 #include <linux/blkdev.h> /* for blk_size */
 #include <linux/vmalloc.h>
-#include <linux/dcache.h>
 
-#include <asm/dma.h>
-#include <asm/system.h> /* for cli()/sti() */
-#include <asm/uaccess.h> /* for copy_to/from_user */
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 
@@ -122,52 +118,60 @@ unsigned long get_swap_page(void)
 	}
 }
 
+/*
+ * If the swap count overflows (swap_map[] == 127), the entry is considered
+ * "permanent" and can't be reclaimed until the swap device is closed.
+ */
 void swap_free(unsigned long entry)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
 
 	if (!entry)
-		return;
+		goto out;
 	type = SWP_TYPE(entry);
 	if (type & SHM_SWP_TYPE)
-		return;
-	if (type >= nr_swapfiles) {
-		printk("Trying to free nonexistent swap-page\n");
-		return;
-	}
+		goto out;
+	if (type >= nr_swapfiles)
+		goto bad_nofile;
 	p = & swap_info[type];
+	if (!(p->flags & SWP_USED))
+		goto bad_device;
+	if (p->prio > swap_info[swap_list.next].prio)
+		swap_list.next = swap_list.head;
 	offset = SWP_OFFSET(entry);
-	if (offset >= p->max) {
-		printk("swap_free: weirdness\n");
-		return;
-	}
-	if (!(p->flags & SWP_USED)) {
-		printk("Trying to free swap from unused swap-device\n");
-		return;
-	}
+	if (offset >= p->max)
+		goto bad_offset;
 	if (offset < p->lowest_bit)
 		p->lowest_bit = offset;
 	if (offset > p->highest_bit)
 		p->highest_bit = offset;
 	if (!p->swap_map[offset])
-		printk("swap_free: swap-space map bad (entry %08lx)\n",entry);
-	else
+		goto bad_free;
+	if (p->swap_map[offset] < 127) {
 		if (!--p->swap_map[offset])
 			nr_swap_pages++;
-	if (p->prio > swap_info[swap_list.next].prio) {
-	    swap_list.next = swap_list.head;
 	}
+out:
+	return;
+
+bad_nofile:
+	printk("swap_free: Trying to free nonexistent swap-page\n");
+	goto out;
+bad_device:
+	printk("swap_free: Trying to free swap from unused swap-device\n");
+	goto out;
+bad_offset:
+	printk("swap_free: offset exceeds max\n");
+	goto out;
+bad_free:
+	printk("swap_free: swap-space map bad (entry %08lx)\n",entry);
+	goto out;
 }
 
 /*
- * Trying to stop swapping from a file is fraught with races, so
- * we repeat quite a bit here when we have to pause. swapoff()
- * isn't exactly timing-critical, so who cares (but this is /really/
- * inefficient, ugh).
- *
- * We return 1 after having slept, which makes the process start over
- * from the beginning for this process..
+ * The swap entry has been read in advance, and we return 1 to indicate
+ * that the page has been used or is no longer needed.
  */
 static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
 	pte_t *dir, unsigned long entry, unsigned long page)
@@ -198,9 +202,8 @@ static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
 	if (pte_val(pte) != entry)
 		return 0;
 	set_pte(dir, pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot))));
-	flush_tlb_page(vma, address);
 	++vma->vm_mm->rss;
-	swap_free(pte_val(pte));
+	swap_free(entry);
 	return 1;
 }
 
@@ -296,18 +299,6 @@ static int unuse_process(struct mm_struct * mm, unsigned long entry,
 	return 0;
 }
 
-static unsigned long find_swap_entry(int type)
-{
-	struct swap_info_struct * p = &swap_info[type];
-	int i;
-
-	for (i = 1 ; i < p->max ; i++) {
-		if (p->swap_map[i] > 0 && p->swap_map[i] != 0x80)
-			return SWP_ENTRY(type, i);
-	}
-	return 0;
-}
-
 /*
  * We completely avoid races by reading each swap page in advance,
  * and then search for the process using it.  All the necessary
@@ -315,14 +306,13 @@ static unsigned long find_swap_entry(int type)
  */
 static int try_to_unuse(unsigned int type)
 {
-	unsigned long page = 0;
+	struct swap_info_struct * si = &swap_info[type];
 	struct task_struct *p;
+	unsigned long page = 0;
 	unsigned long entry;
+	int i;
 
-	/*
-	 * Find all swap entries in use ...
-	 */
-	while ((entry = find_swap_entry(type)) != 0) {
+	while (1) {
 		if (!page) {
 			page = __get_free_page(GFP_KERNEL);
 			if (!page)
@@ -330,8 +320,16 @@ static int try_to_unuse(unsigned int type)
 		}
 
 		/*
-		 * Read in the page, and then free the swap page.
-		 */
+	 	* Find a swap page in use and read it in.
+	 	*/
+		for (i = 1 , entry = 0; i < si->max ; i++) {
+			if (si->swap_map[i] > 0 && si->swap_map[i] != 0x80) {
+				entry = SWP_ENTRY(type, i);
+				break;
+			}
+		}
+		if (!entry)
+			break;
 		read_swap_page(entry, (char *) page);
 
 		read_lock(&tasklist_lock);
@@ -344,9 +342,19 @@ static int try_to_unuse(unsigned int type)
 	unlock:
 		read_unlock(&tasklist_lock);
 		if (page) {
-			printk("try_to_unuse: didn't find entry %8lx\n",
-				entry);
-			swap_free(entry);
+			/*
+			 * If we couldn't find an entry, there are several
+			 * possible reasons: someone else freed it first,
+			 * we freed the last reference to an overflowed entry,
+			 * or the system has lost track of the use counts.
+			 */
+			if (si->swap_map[i] != 0) {
+				if (si->swap_map[i] != 127)
+					printk("try_to_unuse: entry %08lx "
+					       "not in use\n", entry);
+				si->swap_map[i] = 0;
+				nr_swap_pages++;
+			}
 		}
 	}
 

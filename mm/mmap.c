@@ -92,25 +92,21 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 	struct mm_struct *mm = current->mm;
 
 	lock_kernel();
-	retval = mm->brk;
 	if (brk < mm->end_code)
 		goto out;
 	newbrk = PAGE_ALIGN(brk);
 	oldbrk = PAGE_ALIGN(mm->brk);
-	if (oldbrk == newbrk) {
-		retval = mm->brk = brk;
-		goto out;
-	}
+	if (oldbrk == newbrk)
+		goto set_brk;
 
 	/* Always allow shrinking brk. */
 	if (brk <= mm->brk) {
-		retval = mm->brk = brk;
-		do_munmap(newbrk, oldbrk-newbrk);
+		if (!do_munmap(newbrk, oldbrk-newbrk))
+			goto set_brk;
 		goto out;
 	}
 
 	/* Check against rlimit and stack.. */
-	retval = mm->brk;
 	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
 	if (rlim >= RLIM_INFINITY)
 		rlim = ~0;
@@ -126,12 +122,14 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 		goto out;
 
 	/* Ok, looks good - let it rip. */
-	if(do_mmap(NULL, oldbrk, newbrk-oldbrk,
+	if (do_mmap(NULL, oldbrk, newbrk-oldbrk,
 		   PROT_READ|PROT_WRITE|PROT_EXEC,
-		   MAP_FIXED|MAP_PRIVATE, 0) == oldbrk)
-		mm->brk = brk;
-	retval = mm->brk;
+		   MAP_FIXED|MAP_PRIVATE, 0) != oldbrk)
+		goto out;
+set_brk:
+	mm->brk = brk;
 out:
+	retval = mm->brk;
 	unlock_kernel();
 	return retval;
 }
@@ -163,7 +161,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 {
 	struct mm_struct * mm = current->mm;
 	struct vm_area_struct * vma;
-	int correct_wcount = 0;
+	int correct_wcount = 0, error;
 
 	if ((len = PAGE_ALIGN(len)) == 0)
 		return addr;
@@ -262,26 +260,24 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	vma->vm_dentry = NULL;
 	vma->vm_pte = 0;
 
-	do_munmap(addr, len);	/* Clear old maps */
+	/* Clear old maps */
+	error = -ENOMEM;
+	if (do_munmap(addr, len))
+		goto free_vma;
 
 	/* Check against address space limit. */
 	if ((mm->total_vm << PAGE_SHIFT) + len
-	    > current->rlim[RLIMIT_AS].rlim_cur) {
-		kmem_cache_free(vm_area_cachep, vma);
-		return -ENOMEM;
-	}
+	    > current->rlim[RLIMIT_AS].rlim_cur)
+		goto free_vma;
 
 	/* Private writable mapping? Check memory availability.. */
-	if ((vma->vm_flags & (VM_SHARED | VM_WRITE)) == VM_WRITE) {
-		if (!(flags & MAP_NORESERVE) &&
-		    !vm_enough_memory(len >> PAGE_SHIFT)) {
-			kmem_cache_free(vm_area_cachep, vma);
-			return -ENOMEM;
-		}
-	}
+	if ((vma->vm_flags & (VM_SHARED | VM_WRITE)) == VM_WRITE &&
+	    !(flags & MAP_NORESERVE)				 &&
+	    !vm_enough_memory(len >> PAGE_SHIFT))
+		goto free_vma;
 
+	error = 0;
 	if (file) {
-		int error = 0;
 		if (vma->vm_flags & VM_DENYWRITE) {
 			if (file->f_dentry->d_inode->i_writecount > 0)
 				error = -ETXTBSY;
@@ -298,23 +294,22 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		if (!error)
 			error = file->f_op->mmap(file, vma);
 	
-		if (error) {
-			if (correct_wcount)
-				file->f_dentry->d_inode->i_writecount++;
-			kmem_cache_free(vm_area_cachep, vma);
-			return error;
-		}
 	}
-
-	flags = vma->vm_flags;
-	insert_vm_struct(mm, vma);
+	/* Fix up the count if necessary, then check for an error */
 	if (correct_wcount)
 		file->f_dentry->d_inode->i_writecount++;
+	if (error)
+		goto free_vma;
+
+	/*
+	 * merge_segments may merge our vma, so we can't refer to it
+	 * after the call.  Save the values we need now ...
+	 */
+	flags = vma->vm_flags;
+	addr = vma->vm_start; /* can addr have changed?? */
+	insert_vm_struct(mm, vma);
 	merge_segments(mm, vma->vm_start, vma->vm_end);
 	
-	addr = vma->vm_start;
-
-	/* merge_segments might have merged our vma, so we can't use it any more */
 	mm->total_vm += len >> PAGE_SHIFT;
 	if ((flags & VM_LOCKED) && !(flags & VM_IO)) {
 		unsigned long start = addr;
@@ -328,6 +323,10 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		} while (len > 0);
 	}
 	return addr;
+
+free_vma:
+	kmem_cache_free(vm_area_cachep, vma);
+	return error;
 }
 
 /* Get an address range which is currently unmapped.

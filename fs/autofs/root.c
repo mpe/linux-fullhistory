@@ -100,7 +100,7 @@ static int autofs_root_readdir(struct file *filp, void *dirent, filldir_t filldi
 	return 0;
 }
 
-static int try_to_fill_dentry(struct dentry * dentry, struct super_block * sb, struct autofs_sb_info *sbi)
+static int try_to_fill_dentry(struct dentry *dentry, struct super_block *sb, struct autofs_sb_info *sbi)
 {
 	struct inode * inode;
 	struct autofs_dir_ent *ent;
@@ -132,9 +132,10 @@ static int try_to_fill_dentry(struct dentry * dentry, struct super_block * sb, s
 		dentry->d_inode = inode;
 	}
 
-	if (S_ISDIR(dentry->d_inode->i_mode)) {
-		while (dentry == dentry->d_mounts)
-			schedule();
+	/* If this is a directory that isn't a mount point, bitch at the
+	   daemon and fix it in user space */
+	if ( S_ISDIR(dentry->d_inode->i_mode) && dentry->d_mounts == dentry ) {
+		return !autofs_wait(sbi, &dentry->d_name);
 	}
 
 	autofs_update_usage(&sbi->dirhash,ent);
@@ -159,16 +160,24 @@ static int autofs_revalidate(struct dentry * dentry)
 	sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
 
 	/* Pending dentry */
-	if (dentry->d_flags & DCACHE_AUTOFS_PENDING) {
+	if ( dentry->d_flags & DCACHE_AUTOFS_PENDING ) {
 		if (autofs_oz_mode(sbi))
 			return 1;
-
-		return try_to_fill_dentry(dentry, dir->i_sb, sbi);
+		else
+			return try_to_fill_dentry(dentry, dir->i_sb, sbi);
 	}
 
 	/* Negative dentry.. invalidate if "old" */
 	if (!dentry->d_inode)
 		return (dentry->d_time - jiffies <= AUTOFS_NEGATIVE_TIMEOUT);
+		
+	/* Check for a non-mountpoint directory */
+	if ( S_ISDIR(dentry->d_inode->i_mode) && dentry->d_mounts == dentry ) {
+		if (autofs_oz_mode(sbi))
+			return 1;
+		else
+			return try_to_fill_dentry(dentry, dir->i_sb, sbi);
+	}
 
 	/* Update the usage list */
 	ent = (struct autofs_dir_ent *) dentry->d_time;
@@ -177,7 +186,7 @@ static int autofs_revalidate(struct dentry * dentry)
 }
 
 static struct dentry_operations autofs_dentry_operations = {
-	autofs_revalidate,
+	autofs_revalidate,	/* d_revalidate */
 	NULL,			/* d_hash */
 	NULL,			/* d_compare */
 };

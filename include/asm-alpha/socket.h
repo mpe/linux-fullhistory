@@ -1,8 +1,6 @@
 #ifndef _ASM_SOCKET_H
 #define _ASM_SOCKET_H
 
-#include <linux/types.h>
-#include <asm/ioctl.h>
 #include <asm/sockios.h>
 
 /* For setsockoptions(2) */

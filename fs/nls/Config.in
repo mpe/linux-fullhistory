@@ -5,35 +5,40 @@
 mainmenu_option next_comment
 comment 'Native Language Support'
 
-tristate 'Native language support (Unicode, codepages)' CONFIG_NLS
+# msdos and Joliet want NLS
+if [ "$CONFIG_JOLIET" = "y" -o "$CONFIG_FAT_FS" != "n" ]; then
+  define_bool CONFIG_NLS y
+else
+  define_bool CONFIG_NLS n
+fi
 
-if [ "$CONFIG_NLS" = "y" -o "$CONFIG_NLS" = "m" ]; then
-  dep_tristate 'Codepage 437'      CONFIG_NLS_CODEPAGE_437 $CONFIG_NLS
-  dep_tristate 'Codepage 737'      CONFIG_NLS_CODEPAGE_737 $CONFIG_NLS
-  dep_tristate 'Codepage 775'      CONFIG_NLS_CODEPAGE_775 $CONFIG_NLS
-  dep_tristate 'Codepage 850'      CONFIG_NLS_CODEPAGE_850 $CONFIG_NLS
-  dep_tristate 'Codepage 852'      CONFIG_NLS_CODEPAGE_852 $CONFIG_NLS
-  dep_tristate 'Codepage 855'      CONFIG_NLS_CODEPAGE_855 $CONFIG_NLS
-  dep_tristate 'Codepage 857'      CONFIG_NLS_CODEPAGE_857 $CONFIG_NLS
-  dep_tristate 'Codepage 860'      CONFIG_NLS_CODEPAGE_860 $CONFIG_NLS
-  dep_tristate 'Codepage 861'      CONFIG_NLS_CODEPAGE_861 $CONFIG_NLS
-  dep_tristate 'Codepage 862'      CONFIG_NLS_CODEPAGE_862 $CONFIG_NLS
-  dep_tristate 'Codepage 863'      CONFIG_NLS_CODEPAGE_863 $CONFIG_NLS
-  dep_tristate 'Codepage 864'      CONFIG_NLS_CODEPAGE_864 $CONFIG_NLS
-  dep_tristate 'Codepage 865'      CONFIG_NLS_CODEPAGE_865 $CONFIG_NLS
-  dep_tristate 'Codepage 866'      CONFIG_NLS_CODEPAGE_866 $CONFIG_NLS
-  dep_tristate 'Codepage 869'      CONFIG_NLS_CODEPAGE_869 $CONFIG_NLS
-  dep_tristate 'Codepage 874'      CONFIG_NLS_CODEPAGE_874 $CONFIG_NLS
-  dep_tristate 'NLS ISO 8859-1'    CONFIG_NLS_ISO8859_1    $CONFIG_NLS 
-  dep_tristate 'NLS ISO 8859-2'    CONFIG_NLS_ISO8859_2    $CONFIG_NLS
-  dep_tristate 'NLS ISO 8859-3'    CONFIG_NLS_ISO8859_3    $CONFIG_NLS
-  dep_tristate 'NLS ISO 8859-4'    CONFIG_NLS_ISO8859_4    $CONFIG_NLS
-  dep_tristate 'NLS ISO 8859-5'    CONFIG_NLS_ISO8859_5    $CONFIG_NLS
-  dep_tristate 'NLS ISO 8859-6'    CONFIG_NLS_ISO8859_6    $CONFIG_NLS
-  dep_tristate 'NLS ISO 8859-7'    CONFIG_NLS_ISO8859_7    $CONFIG_NLS
-  dep_tristate 'NLS ISO 8859-8'    CONFIG_NLS_ISO8859_8    $CONFIG_NLS
-  dep_tristate 'NLS ISO 8859-9'    CONFIG_NLS_ISO8859_9    $CONFIG_NLS
-  dep_tristate 'NLS KOI8-R'        CONFIG_NLS_KOI8_R       $CONFIG_NLS
+if [ "$CONFIG_NLS" = "y" ]; then
+  tristate 'Codepage 437'      CONFIG_NLS_CODEPAGE_437
+  tristate 'Codepage 737'      CONFIG_NLS_CODEPAGE_737
+  tristate 'Codepage 775'      CONFIG_NLS_CODEPAGE_775
+  tristate 'Codepage 850'      CONFIG_NLS_CODEPAGE_850
+  tristate 'Codepage 852'      CONFIG_NLS_CODEPAGE_852
+  tristate 'Codepage 855'      CONFIG_NLS_CODEPAGE_855
+  tristate 'Codepage 857'      CONFIG_NLS_CODEPAGE_857
+  tristate 'Codepage 860'      CONFIG_NLS_CODEPAGE_860
+  tristate 'Codepage 861'      CONFIG_NLS_CODEPAGE_861
+  tristate 'Codepage 862'      CONFIG_NLS_CODEPAGE_862
+  tristate 'Codepage 863'      CONFIG_NLS_CODEPAGE_863
+  tristate 'Codepage 864'      CONFIG_NLS_CODEPAGE_864
+  tristate 'Codepage 865'      CONFIG_NLS_CODEPAGE_865
+  tristate 'Codepage 866'      CONFIG_NLS_CODEPAGE_866
+  tristate 'Codepage 869'      CONFIG_NLS_CODEPAGE_869
+  tristate 'Codepage 874'      CONFIG_NLS_CODEPAGE_874
+  tristate 'NLS ISO 8859-1'    CONFIG_NLS_ISO8859_1
+  tristate 'NLS ISO 8859-2'    CONFIG_NLS_ISO8859_2
+  tristate 'NLS ISO 8859-3'    CONFIG_NLS_ISO8859_3
+  tristate 'NLS ISO 8859-4'    CONFIG_NLS_ISO8859_4
+  tristate 'NLS ISO 8859-5'    CONFIG_NLS_ISO8859_5
+  tristate 'NLS ISO 8859-6'    CONFIG_NLS_ISO8859_6
+  tristate 'NLS ISO 8859-7'    CONFIG_NLS_ISO8859_7
+  tristate 'NLS ISO 8859-8'    CONFIG_NLS_ISO8859_8
+  tristate 'NLS ISO 8859-9'    CONFIG_NLS_ISO8859_9
+  tristate 'NLS KOI8-R'        CONFIG_NLS_KOI8_R
 fi
 
 endmenu

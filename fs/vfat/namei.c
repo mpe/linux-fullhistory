@@ -1415,8 +1415,9 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 	struct buffer_head *old_bh,*new_bh,*dotdot_bh;
 	struct msdos_dir_entry *old_de,*new_de,*dotdot_de;
 	loff_t old_offset,new_offset,old_longname_offset;
-	int old_slots,old_ino,new_ino,dotdot_ino,ino;
-	struct inode *old_inode, *new_inode, *dotdot_inode, *walk;
+	int old_slots,old_ino,new_ino,dotdot_ino;
+	struct inode *old_inode, *new_inode, *dotdot_inode;
+	struct dentry *walk;
 	int res, is_dir, i;
 	int locked = 0;
 	struct slot_info sinfo;
@@ -1451,25 +1452,13 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 			res = -EINVAL;
 			goto rename_done;
 		}
-		if (!(walk = iget(new_dir->i_sb,new_dir->i_ino))) return -EIO;
+		walk = new_dentry;
 		/* prevent moving directory below itself */
-		while (walk->i_ino != MSDOS_ROOT_INO) {
-			ino = fat_parent_ino(walk,1);
-			iput(walk);
-			if (ino < 0) {
-				res = ino;
-				goto rename_done;
-			}
-			if (ino == old_ino) {
-				res = -EINVAL;
-				goto rename_done;
-			}
-			if (!(walk = iget(new_dir->i_sb,ino))) {
-				res = -EIO;
-				goto rename_done;
-			}
+		for (;;) {
+			if (walk == old_dentry) return -EINVAL;
+			if (walk == walk->d_parent) break;
+			walk = walk->d_parent;
 		}
-		iput(walk);
 	}
 
 	res = vfat_find(new_dir,&new_dentry->d_name,1,0,is_dir,&sinfo);
@@ -1589,8 +1578,9 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 	}
 
 	if (res > 0) res = 0;
-	d_instantiate(new_dentry,new_inode);
-	d_delete(old_dentry);
+	if (res == 0) {
+		d_move(old_dentry, new_dentry);
+	}
 
 rename_done:
 	if (locked)

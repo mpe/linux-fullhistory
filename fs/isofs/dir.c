@@ -20,6 +20,7 @@
 #include <linux/malloc.h>
 #include <linux/sched.h>
 #include <linux/locks.h>
+#include <linux/config.h>
 
 #include <asm/uaccess.h>
 
@@ -206,10 +207,13 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 			}
 		}
 
+#ifdef CONFIG_JOLIET
 		if (inode->i_sb->u.isofs_sb.s_joliet_level) {
 			len = get_joliet_filename(de, inode, tmpname);
 			p = tmpname;
-		} else {
+		} else 
+#endif
+		/* if not joliet */ {
 			map = 1;
 			if (inode->i_sb->u.isofs_sb.s_rock) {
 				len = get_rock_ridge_filename(de, tmpname, inode);

@@ -89,8 +89,7 @@ struct iso9660_options{
 
 static int parse_options(char *options, struct iso9660_options * popt)
 {
-	char *this_char,*value,*p;
-	int len;
+	char *this_char,*value;
 
 	popt->map = 'n';
 	popt->rock = 'y';
@@ -135,6 +134,9 @@ static int parse_options(char *options, struct iso9660_options * popt)
 
 #ifdef CONFIG_JOLIET
 		if (!strcmp(this_char,"iocharset")) {
+			char *p;
+			int len;
+
 			p = value;
 			while (*value && *value != ',') value++;
 			len = value - p;
@@ -275,7 +277,6 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	int				joliet_level = 0;
 	struct iso9660_options		opt;
 	int				orig_zonesize;
-	char			      * p;
 	struct iso_primary_descriptor * pri = NULL;
 	struct iso_directory_record   * rootp;
 	struct iso_supplementary_descriptor *sec = NULL;
@@ -413,8 +414,10 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	    MOD_DEC_USE_COUNT;
 	    return NULL;
 	}
-#ifdef CONFIG_JOLIET
+
 	s->u.isofs_sb.s_joliet_level = joliet_level;
+
+#ifdef CONFIG_JOLIET
 	if (joliet_level) {
 	    /* Note: In theory, it is possible to have Rock Ridge
 	     * extensions mixed with Joliet. All character strings
@@ -549,6 +552,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 			opt.iocharset = NULL;
 		}
 	} else if (opt.utf8 == 0) {
+		char * p;
 		p = opt.iocharset ? opt.iocharset : "iso8859-1";
 		s->u.isofs_sb.s_nls_iocharset = load_nls(p);
 		if (! s->u.isofs_sb.s_nls_iocharset) {

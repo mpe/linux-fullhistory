@@ -6,7 +6,6 @@
  *
  */
 
-#define ASC_LINUX_VERSION(V, P, S)	(((V) * 65536) + ((P) * 256) + (S))
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/string.h>
@@ -479,11 +478,10 @@ int init_nls(void)
 #ifdef CONFIG_NLS_CODEPAGE_874
 	init_nls_cp874();
 #endif
-#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,0)
-	return 0;
-#else
-	return register_symtab(&nls_syms);
+#ifdef CONFIG_NLS_KOI8_R
+	init_nls_koi8_r();
 #endif
+	return 0;
 }
 
 #ifdef MODULE

@@ -17,7 +17,8 @@
  */
 struct qstr {
 	const unsigned char * name;
-	unsigned int len, hash;
+	unsigned int len;
+	unsigned int hash;
 };
 
 /* Name hashing routines. Initial hash value */
@@ -36,6 +37,15 @@ static inline unsigned long end_name_hash(unsigned long hash)
 	if (sizeof(hash) > sizeof(unsigned int))
 		hash += hash >> 4*sizeof(hash);
 	return (unsigned int) hash;
+}
+
+/* Compute the hash for a name string. */
+static inline unsigned int full_name_hash(const char * name, unsigned int len)
+{
+	unsigned long hash = init_name_hash();
+	while (len--)
+		hash = partial_name_hash(*name++, hash);
+	return end_name_hash(hash);
 }
 
 struct dentry {

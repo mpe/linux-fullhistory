@@ -18,9 +18,6 @@
 #include <linux/swapctl.h>
 #include <linux/init.h>
 
-#include <asm/dma.h>
-#include <asm/system.h> /* for cli()/sti() */
-#include <asm/uaccess.h> /* for cop_to/from_user */
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 
@@ -60,31 +57,47 @@ int add_to_swap_cache(struct page *page, unsigned long entry)
 	return 0;
 }
 
+/*
+ * If swap_map[] reaches 127, the entries are treated as "permanent".
+ */
 void swap_duplicate(unsigned long entry)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
 
 	if (!entry)
-		return;
-	offset = SWP_OFFSET(entry);
+		goto out;
 	type = SWP_TYPE(entry);
 	if (type & SHM_SWP_TYPE)
-		return;
-	if (type >= nr_swapfiles) {
-		printk("Trying to duplicate nonexistent swap-page\n");
-		return;
-	}
+		goto out;
+	if (type >= nr_swapfiles)
+		goto bad_file;
 	p = type + swap_info;
-	if (offset >= p->max) {
-		printk("swap_duplicate: weirdness\n");
-		return;
+	offset = SWP_OFFSET(entry);
+	if (offset >= p->max)
+		goto bad_offset;
+	if (!p->swap_map[offset])
+		goto bad_unused;
+	if (p->swap_map[offset] < 126)
+		p->swap_map[offset]++;
+	else {
+		static int overflow = 0;
+		if (overflow++ < 5)
+			printk("swap_duplicate: entry %08lx map count=%d\n",
+				entry, p->swap_map[offset]);
+		p->swap_map[offset] = 127;
 	}
-	if (!p->swap_map[offset]) {
-		printk("swap_duplicate: trying to duplicate unused page\n");
-		return;
-	}
-	p->swap_map[offset]++;
+out:
 	return;
+
+bad_file:
+	printk("swap_duplicate: Trying to duplicate nonexistent swap-page\n");
+	goto out;
+bad_offset:
+	printk("swap_duplicate: offset exceeds max\n");
+	goto out;
+bad_unused:
+	printk("swap_duplicate: unused page\n");
+	goto out;
 }
 

@@ -10,18 +10,15 @@ tristate 'Minix fs support' CONFIG_MINIX_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS
 
 tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS
-tristate 'Native language support (Unicode, codepages)' CONFIG_NLS
-if [ "$CONFIG_NLS" = "y" -o "$CONFIG_NLS" = "m" ]; then
-  if [ "$CONFIG_ISO9660_FS" = "y" -o "$CONFIG_ISO9660_FS" = "m" ]; then
-    bool 'Microsoft Joliet cdrom extensions' CONFIG_JOLIET
-  fi
-
-  # msdos filesystems
-  dep_tristate 'DOS FAT fs support' CONFIG_FAT_FS $CONFIG_NLS
-  dep_tristate 'MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
-  dep_tristate 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
-  dep_tristate 'VFAT (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
+if [ "$CONFIG_ISO9660_FS" != "n" ]; then
+  bool 'Microsoft Joliet cdrom extensions' CONFIG_JOLIET
 fi
+
+# msdos filesystems
+tristate 'DOS FAT fs support' CONFIG_FAT_FS
+dep_tristate 'MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
+dep_tristate 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
+dep_tristate 'VFAT (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
 
 bool '/proc filesystem support' CONFIG_PROC_FS
 if [ "$CONFIG_INET" = "y" ]; then

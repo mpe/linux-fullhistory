@@ -368,9 +368,9 @@ S:	Maintained
 
 VFAT FILESYSTEM:
 P:	Gordon Chaffee
-M:	chaffee@plateau.cs.berkeley.edu
+M:	chaffee@cs.berkeley.edu
 L:	linux-kernel@vger.rutgers.edu
-W:	http://www-plateau.cs.berkeley.edu/people/chaffee
+W:	http://bmrc.berkeley.edu/people/chaffee
 S:	Maintained
 
 DIGI INTL. EPCA DRIVER:

@@ -91,16 +91,19 @@ nfs_put_inode(struct inode * inode)
 static void
 nfs_delete_inode(struct inode * inode)
 {
+	int failed;
+
 	dprintk("NFS: delete_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
 	/*
 	 * Flush out any pending write requests ...
 	 */
 	if (NFS_WRITEBACK(inode) != NULL) {
 		unsigned long timeout = jiffies + 5*HZ;
-		printk("NFS: invalidating pending RPC requests\n");
+		printk("NFS: inode %ld, invalidating pending RPC requests\n",
+			inode->i_ino);
 		nfs_invalidate_pages(inode);
 		while (NFS_WRITEBACK(inode) != NULL && jiffies < timeout) {
-			current->state = TASK_UNINTERRUPTIBLE;
+			current->state = TASK_INTERRUPTIBLE;
 			current->timeout = jiffies + HZ/10;
 			schedule();
 		}
@@ -109,8 +112,10 @@ nfs_delete_inode(struct inode * inode)
 			printk("NFS: Arghhh, stuck RPC requests!\n");
 	}
 
-	if (check_failed_request(inode))
-		printk("NFS: inode had failed requests\n");
+	failed = check_failed_request(inode);
+	if (failed)
+		printk("NFS: inode %ld had %d failed requests\n",
+			inode->i_ino, failed);
 	clear_inode(inode);
 }
 

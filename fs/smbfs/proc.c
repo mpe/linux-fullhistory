@@ -9,10 +9,7 @@
  *             by Riccardo Facchetti
  */
 
-#include <linux/config.h>
 #include <linux/fs.h>
-#include <linux/smbno.h>
-#include <linux/smb_fs.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
@@ -20,9 +17,15 @@
 #include <linux/fcntl.h>
 #include <linux/dcache.h>
 #include <linux/dirent.h>
+#include <linux/smb_fs.h>
+#include <linux/smbno.h>
+#include <linux/smb_mount.h>
 
-#include <asm/uaccess.h>
 #include <asm/string.h>
+
+#define SMBFS_PARANOIA 1
+/* #define SMBFS_DEBUG_VERBOSE 1 */
+/* #define pr_debug printk */
 
 #define SMB_VWV(packet)  ((packet) + SMB_HEADER_LEN)
 #define SMB_CMD(packet)  (*(packet+8))
@@ -33,12 +36,6 @@
 #define SMB_DIRINFO_SIZE 43
 #define SMB_STATUS_SIZE  21
 
-#define SMBFS_PARANOIA 1
-/* #define SMBFS_DEBUG_VERBOSE 1 */
-/* #define pr_debug printk */
-
-extern void smb_renew_times(struct dentry *);
-
 static inline int
 min(int a, int b)
 {
@@ -46,9 +43,9 @@ min(int a, int b)
 }
 
 static void
-str_upper(char *name)
+str_upper(char *name, int len)
 {
-	while (*name)
+	while (len--)
 	{
 		if (*name >= 'a' && *name <= 'z')
 			*name -= ('a' - 'A');
@@ -57,9 +54,9 @@ str_upper(char *name)
 }
 
 static void
-str_lower(char *name)
+str_lower(char *name, int len)
 {
-	while (*name)
+	while (len--)
 	{
 		if (*name >= 'A' && *name <= 'Z')
 			*name += ('a' - 'A');
@@ -158,7 +155,7 @@ static char *smb_encode_path(struct smb_sb_info *server, char *buf,
 	buf += smb_build_path(dir, name, buf);
 
 	if (server->opt.protocol <= SMB_PROTOCOL_COREPLUS)
-		str_upper(start);
+		str_upper(start, buf - start);
 
 	return buf;
 }
@@ -569,7 +566,7 @@ smb_offerconn(struct smb_sb_info *server)
 	int error;
 
 	error = -EACCES;
-	if (!suser() && (current->uid != server->m.mounted_uid))
+	if ((current->uid != server->mnt->mounted_uid) && !suser()) 
 		goto out;
 	if (atomic_read(&server->sem.count) == 1)
 	{
@@ -609,7 +606,7 @@ smb_newconn(struct smb_sb_info *server, struct smb_conn_opt *opt)
 		goto out;
 
 	error = -EACCES;
-	if (!suser() && (current->uid != server->m.mounted_uid))
+	if ((current->uid != server->mnt->mounted_uid) && !suser())
 		goto out;
 	if (atomic_read(&server->sem.count) == 1)
 	{
@@ -888,12 +885,11 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 			}
 			smb_unlock_server(server);
 		}
-	}
-	/* Consider dropping negative dentries? */
-#if 0
-	else
-		d_drop(dentry);
+#ifdef SMBFS_DEBUG_VERBOSE
+printk("smb_close_dentry: closed %s/%s, count=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 #endif
+	}
 }
 
 /* In smb_proc_read and smb_proc_write we do not retry, because the
@@ -951,11 +947,10 @@ smb_proc_write(struct inode *ino, off_t offset, int count, const char *data)
 
 	smb_lock_server(server);
 #if SMBFS_DEBUG_VERBOSE
-{struct dentry * dentry = ino->u.smbfs_i.dentry;
 printk("smb_proc_write: file %s/%s, count=%d@%ld, packet_size=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, 
+((struct dentry *)ino->u.smbfs_i.dentry)->d_parent->d_name.name, 
+((struct dentry *)ino->u.smbfs_i.dentry)->d_name.name, 
 count, offset, server->packet_size);
-}
 #endif
 	p = smb_setup_header(server, SMBwrite, 5, count + 3);
 	WSET(server->packet, smb_vwv0, ino->u.smbfs_i.fileid);
@@ -967,11 +962,11 @@ count, offset, server->packet_size);
 	WSET(p, 0, count);
 	memcpy(p+2, data, count);
 
-	if ((result = smb_request_ok(server, SMBwrite, 1, 0)) >= 0)
+	result = smb_request_ok(server, SMBwrite, 1, 0);
+	if (result >= 0)
 		result = WVAL(server->packet, smb_vwv0);
 
 	smb_unlock_server(server);
-
 	return result;
 }
 
@@ -997,9 +992,7 @@ smb_proc_create(struct dentry *dir, struct qstr *name,
 	if ((error = smb_request_ok(server, SMBcreate, 1, 0)) < 0)
 	{
 		if (smb_retry(server))
-		{
 			goto retry;
-		}
 		goto out;
 	}
 	smb_proc_close(server, WVAL(server->packet, smb_vwv0), CURRENT_TIME);
@@ -1033,10 +1026,11 @@ smb_proc_mv(struct dentry *odir, struct qstr *oname,
 	if ((result = smb_request_ok(server, SMBmv, 0, 0)) < 0)
 	{
 		if (smb_retry(server))
-		{
 			goto retry;
-		}
+		goto out;
 	}
+	result = 0;
+out:
 	smb_unlock_server(server);
 	return result;
 }
@@ -1060,10 +1054,11 @@ smb_proc_mkdir(struct dentry *dir, struct qstr *name)
 	if ((result = smb_request_ok(server, SMBmkdir, 0, 0)) < 0)
 	{
 		if (smb_retry(server))
-		{
 			goto retry;
-		}
+		goto out;
 	}
+	result = 0;
+out:
 	smb_unlock_server(server);
 	return result;
 }
@@ -1087,10 +1082,11 @@ smb_proc_rmdir(struct dentry *dir, struct qstr *name)
 	if ((result = smb_request_ok(server, SMBrmdir, 0, 0)) < 0)
 	{
 		if (smb_retry(server))
-		{
 			goto retry;
-		}
+		goto out;
 	}
+	result = 0;
+out:
 	smb_unlock_server(server);
 	return result;
 }
@@ -1115,10 +1111,11 @@ smb_proc_unlink(struct dentry *dir, struct qstr *name)
 	if ((result = smb_request_ok(server, SMBunlink, 0, 0)) < 0)
 	{
 		if (smb_retry(server))
-		{
 			goto retry;
-		}
+		goto out;
 	}
+	result = 0;
+out:
 	smb_unlock_server(server);
 	return result;
 }
@@ -1127,18 +1124,16 @@ int
 smb_proc_trunc(struct smb_sb_info *server, __u16 fid, __u32 length)
 {
 	char *p;
-	char *buf;
 	int result;
 
 	smb_lock_server(server);
 
       retry:
-	buf = server->packet;
 	p = smb_setup_header(server, SMBwrite, 5, 0);
-	WSET(buf, smb_vwv0, fid);
-	WSET(buf, smb_vwv1, 0);
-	DSET(buf, smb_vwv2, length);
-	WSET(buf, smb_vwv4, 0);
+	WSET(server->packet, smb_vwv0, fid);
+	WSET(server->packet, smb_vwv1, 0);
+	DSET(server->packet, smb_vwv2, length);
+	WSET(server->packet, smb_vwv4, 0);
 	*p++ = 4;
 	*p++ = 0;
 	smb_setup_bcc(server, p);
@@ -1146,10 +1141,11 @@ smb_proc_trunc(struct smb_sb_info *server, __u16 fid, __u32 length)
 	if ((result = smb_request_ok(server, SMBwrite, 1, 0)) < 0)
 	{
 		if (smb_retry(server))
-		{
 			goto retry;
-		}
+		goto out;
 	}
+	result = 0;
+out:
 	smb_unlock_server(server);
 	return result;
 }
@@ -1160,18 +1156,18 @@ smb_init_dirent(struct smb_sb_info *server, struct smb_fattr *fattr)
 	memset(fattr, 0, sizeof(*fattr));
 
 	fattr->f_nlink = 1;
-	fattr->f_uid = server->m.uid;
-	fattr->f_gid = server->m.gid;
+	fattr->f_uid = server->mnt->uid;
+	fattr->f_gid = server->mnt->gid;
 	fattr->f_blksize = 512;
 }
 
 static void
 smb_finish_dirent(struct smb_sb_info *server, struct smb_fattr *fattr)
 {
-	fattr->f_mode = server->m.file_mode;
+	fattr->f_mode = server->mnt->file_mode;
 	if (fattr->attr & aDIR)
 	{
-		fattr->f_mode = server->m.dir_mode;
+		fattr->f_mode = server->mnt->dir_mode;
 		fattr->f_size = 512;
 	}
 
@@ -1194,42 +1190,47 @@ smb_init_root_dirent(struct smb_sb_info *server, struct smb_fattr *fattr)
 	smb_finish_dirent(server, fattr);
 }
 
-
+/*
+ * Note that we are now returning the name as a reference to avoid
+ * an extra copy, and that the upper/lower casing is done in place.
+ */
 static __u8 *
-smb_decode_dirent(struct smb_sb_info *server, __u8 *p, struct dirent *entry)
+smb_decode_dirent(struct smb_sb_info *server, __u8 *p, 
+			struct cache_dirent *entry)
 {
 	int len;
 
+	/*
+	 * SMB doesn't have a concept of inode numbers ...
+	 */
+	entry->ino = 0;
+
 	p += SMB_STATUS_SIZE;	/* reserved (search_status) */
-	len = strlen(p + 9);
+	entry->name = p + 9;
+	len = strlen(entry->name);
 	if (len > 12)
 	{
 		len = 12;
 	}
-	memcpy(entry->d_name, p + 9, len);
-#ifdef SMBFS_TRIM_BLANKS
 	/*
 	 * Trim trailing blanks for Pathworks servers
 	 */
-	while (len > 2 && entry->d_name[len-1] == ' ')
+	while (len > 2 && entry->name[len-1] == ' ')
 		len--;
-#endif
-	entry->d_name[len] = '\0';
-	entry->d_reclen = len;
-	entry->d_ino = 0; /* no inode number available */
+	entry->len = len;
 
 	switch (server->opt.case_handling)
 	{
 	case SMB_CASE_UPPER:
-		str_upper(entry->d_name);
+		str_upper(entry->name, len);
 		break;
 	case SMB_CASE_LOWER:
-		str_lower(entry->d_name);
+		str_lower(entry->name, len);
 		break;
 	default:
 		break;
 	}
-	pr_debug("smb_decode_dirent: name = %s\n", entry->name);
+	pr_debug("smb_decode_dirent: len=%d, name=%s\n", len, entry->name);
 	return p + 22;
 }
 
@@ -1250,7 +1251,10 @@ smb_proc_readdir_short(struct smb_sb_info *server, struct dentry *dir, int fpos,
 	char status[SMB_STATUS_SIZE];
 	static struct qstr mask = { "*.*", 3, 0 };
 
-	pr_debug("smb_proc_readdir_short: %d @ %d\n", cache_size, fpos);
+#ifdef SMBFS_DEBUG_VERBOSE
+printk("smb_proc_readdir_short: %s/%s, pos=%d\n",
+dir->d_parent->d_name.name, dir->d_name.name, fpos);
+#endif
 
 	smb_lock_server(server);
 
@@ -1317,15 +1321,14 @@ smb_proc_readdir_short(struct smb_sb_info *server, struct dentry *dir, int fpos,
 
 		for (i = 0; i < count; i++)
 		{
-			struct dirent this_ent, *entry = &this_ent;
+			struct cache_dirent this_ent, *entry = &this_ent;
 
 			p = smb_decode_dirent(server, p, entry);
-			if (entries_seen == 2 && entry->d_name[0] == '.')
+			if (entries_seen == 2 && entry->name[0] == '.')
 			{
-				if (entry->d_reclen == 1)
+				if (entry->len == 1)
 					continue;
-				if (entry->d_name[1] == '.' &&
-				    entry->d_reclen == 2)
+				if (entry->name[1] == '.' && entry->len == 2)
 					continue;
 			}
 			if (entries_seen >= fpos)
@@ -1334,12 +1337,13 @@ smb_proc_readdir_short(struct smb_sb_info *server, struct dentry *dir, int fpos,
 					entries_seen);
 				smb_add_to_cache(cachep, entry, entries_seen);
 				entries++;
-			}
+			} else
+			{
 #ifdef SMBFS_DEBUG_VERBOSE
-else
 printk("smb_proc_readdir: skipped, seen=%d, i=%d, fpos=%d\n",
 entries_seen, i, fpos);
 #endif
+			}
 			entries_seen++;
 		}
 	}
@@ -1352,58 +1356,53 @@ entries_seen, i, fpos);
 
 /*
  * Interpret a long filename structure using the specified info level:
- *   level 1 -- Win NT, Win 95, OS/2
- *   level 2 -- OS/2
+ *   level 1   -- Win NT, Win 95, OS/2
  *   level 259 -- File name and length only, Win NT, Win 95
- *   level 260 -- Win NT, Win 95
  * There seem to be numerous inconsistencies and bugs in implementation.
+ *
+ * We return a reference to the name string to avoid copying, and perform
+ * any needed upper/lower casing in place.  Note!! Level 259 entries may
+ * not have any space beyond the name, so don't try to write a null byte!
  */
 static char *
 smb_decode_long_dirent(struct smb_sb_info *server, char *p,
-			struct dirent *entry, int level)
+			struct cache_dirent *entry, int level)
 {
 	char *result;
-	unsigned int len;
+	unsigned int len = 0;
 
 	/*
 	 * SMB doesn't have a concept of inode numbers ...
 	 */
-	entry->d_ino = 0;
+	entry->ino = 0;
 
 	switch (level)
 	{
 	case 1:
 		len = *((unsigned char *) p + 26);
-		entry->d_reclen = len;
-		strncpy(entry->d_name, p + 27, len);
-		entry->d_name[len] = '\0';
-
+		entry->len = len;
+		entry->name = p + 27;
 		result = p + 28 + len;
 		break;
 
 	case 259: /* SMB_FIND_FILE_NAMES_INFO = 0x103 */
-		/*
-		 * This info level returns just the file name and length,
-		 * which is all we need right now.
-		 */
 		result = p + DVAL(p, 0);
 		/* DVAL(p, 4) should be resume key? Seems to be 0 .. */
 		len = DVAL(p, 8);
 		if (len > 255)
 			len = 255;
-		strncpy(entry->d_name, p + 12, len);
+		entry->name = p + 12;
 		/*
 		 * Kludge alert: Win NT 4.0 adds a trailing null byte and
 		 * counts it in the name length, but Win 95 doesn't.  Hence
 		 * we test for a trailing null and decrement the length ...
 		 */
-		if (len && entry->d_name[len-1] == '\0')
+		if (len && entry->name[len-1] == '\0')
 			len--;
-		entry->d_name[len] = '\0';
-		entry->d_reclen = len;
+		entry->len = len;
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_decode_long_dirent: info 259, len=%d, name=%s\n",
-len, entry->d_name);
+printk("smb_decode_long_dirent: info 259 at %p, len=%d, name=%s\n",
+p, len, entry->name);
 #endif
 		break;
 
@@ -1415,10 +1414,10 @@ len, entry->d_name);
 	switch (server->opt.case_handling)
 	{
 	case SMB_CASE_UPPER:
-		str_upper(entry->d_name);
+		str_upper(entry->name, len);
 		break;
 	case SMB_CASE_LOWER:
-		str_lower(entry->d_name);
+		str_lower(entry->name, len);
 		break;
 	default:
 		break;
@@ -1460,7 +1459,7 @@ smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 	 * Check whether to change the info level.  There appears to be
 	 * a bug in Win NT 4.0's handling of info level 1, whereby it
 	 * truncates the directory scan for certain patterns of files.
-	 * Hence we use level 259 for NT. (Win 95 uses this too?)
+	 * Hence we use level 259 for NT. (And Win 95 as well ...)
 	 */
 	if (server->opt.protocol >= SMB_PROTOCOL_NT1)
 		info_level = 259;
@@ -1520,14 +1519,16 @@ ff_dir_handle, ff_resume_key, ff_lastname, mask);
 			WSET(param, 10, 8 + 4 + 2);	/* resume required +
 							   close on end +
 							   continue */
-#ifdef CONFIG_SMB_WIN95
-			/* Windows 95 is not able to deliver answers
-			   to FIND_NEXT fast enough, so sleep 0.2 seconds */
-			current->timeout = jiffies + HZ / 5;
-			current->state = TASK_INTERRUPTIBLE;
-			schedule();
-			current->timeout = 0;
-#endif
+			if (server->mnt->version & 1)
+			{
+				/* Windows 95 is not able to deliver answers
+				 * to FIND_NEXT fast enough, so sleep 0.2 sec
+				 */
+				current->timeout = jiffies + HZ / 5;
+				current->state = TASK_INTERRUPTIBLE;
+				schedule();
+				current->timeout = 0;
+			}
 		}
 
 		result = smb_trans2_request(server, command,
@@ -1591,7 +1592,7 @@ resp_data + resp_data_len, resp_data_len, server->packet + server->packet_size);
 			lastname = resp_data + ff_lastname;
 			switch (info_level)
 			{
-			case 260:
+			case 259:
  				if (ff_lastname < resp_data_len)
 					mask_len = resp_data_len - ff_lastname;
 				break;
@@ -1622,7 +1623,7 @@ mask_len, ff_lastname, mask);
 		p = resp_data;
 		for (i = 0; i < ff_searchcount; i++)
 		{
-			struct dirent this_ent, *entry = &this_ent;
+			struct cache_dirent this_ent, *entry = &this_ent;
 
 			p = smb_decode_long_dirent(server, p, entry,
 							info_level);
@@ -1630,12 +1631,11 @@ mask_len, ff_lastname, mask);
 			pr_debug("smb_readdir_long: got %s\n", entry->name);
 
 			/* ignore . and .. from the server */
-			if (entries_seen == 2 && entry->d_name[0] == '.')
+			if (entries_seen == 2 && entry->name[0] == '.')
 			{
-				if (entry->d_reclen == 1)
+				if (entry->len == 1)
 					continue;
-				if (entry->d_name[1] == '.' && 
-				    entry->d_reclen == 2)
+				if (entry->name[1] == '.' && entry->len == 2)
 					continue;
 			}
 			if (entries_seen >= fpos)
@@ -1742,7 +1742,13 @@ printk("smb_proc_getattr_trans2: for %s: result=%d, rcls=%d, err=%d\n",
 	}
 	result = -ENOENT;
 	if (resp_data_len < 22)
+	{
+#ifdef SMBFS_PARANOIA
+printk("smb_proc_getattr_trans2: not enough data for %s, len=%d\n",
+&param[6], resp_data_len);
+#endif
 		goto out;
+	}
 
 	attr->f_ctime = date_dos2unix(WVAL(resp_data, 2),
 				      WVAL(resp_data, 0));
@@ -1770,11 +1776,10 @@ smb_proc_getattr(struct dentry *dir, struct qstr *name,
 	smb_init_dirent(server, fattr);
 
 	/*
-	 * N.B. Why would we want to fall back to xxx_core on error?
-	 * If the file doesn't exist (a very common case), the core
-	 * protocol won't find it either.
-	 */
-	if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2)
+	 * Win 95 is painfully slow at returning trans2 getattr info ...
+ 	 */
+	if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2 &&
+	    !(server->mnt->version & 1))
 		result = smb_proc_getattr_trans2(server, dir, name, fattr);
 	else
 		result = smb_proc_getattr_core(server, dir, name, fattr);
@@ -1783,7 +1788,6 @@ smb_proc_getattr(struct dentry *dir, struct qstr *name,
 
 	return result;
 }
-
 
 /* In core protocol, there is only 1 time to be set, we use
    entry->f_mtime, to make touch work. */
@@ -1808,10 +1812,15 @@ smb_proc_setattr_core(struct smb_sb_info *server,
 	*p++ = 0;
 
 	smb_setup_bcc(server, p);
-	if ((result = smb_request_ok(server, SMBsetatr, 0, 0)) < 0)
+	result = smb_request_ok(server, SMBsetatr, 0, 0);
+	if (result < 0)
+	{
 		if (smb_retry(server))
 			goto retry;
-
+		goto out;
+	}
+	result = 0;
+out:
 	smb_unlock_server(server);
 	return result;
 }
@@ -1855,12 +1864,13 @@ smb_proc_setattr_trans2(struct smb_sb_info *server,
 			goto retry;
 		goto out;
 	}
+	result = 0;
 	if (server->rcls != 0)
 		result = -smb_errno(server->rcls, server->err);
 
 out:
 	smb_unlock_server(server);
-	return 0;
+	return result;
 }
 
 int
@@ -1869,9 +1879,6 @@ smb_proc_setattr(struct smb_sb_info *server, struct dentry *dir,
 {
 	int result;
 
-	/*
-	 * N.B. Why would we want to fall back to xxx_core on error?
-	 */
 	if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2)
 		result = smb_proc_setattr_trans2(server, dir, fattr);
 	else

@@ -4,15 +4,7 @@
 
 MOD_LIST_NAME := NLS_MODULES
 
-ifeq ($(CONFIG_NLS),y)
-NLS += nls_base.o
-O_TARGET = nls.o
-OX_OBJS  = $(NLS)
-else
-  ifeq ($(CONFIG_NLS),m)
-  MX_OBJS += nls_base.o
-  endif
-endif
+NLS = nls_base.o
 
 ifeq ($(CONFIG_NLS_CODEPAGE_437),y)
 NLS += nls_cp437.o
@@ -301,5 +293,8 @@ else
   M_OBJS += nls_koi8-r.o
   endif
 endif
+
+O_TARGET = nls.o
+OX_OBJS  = $(NLS)
 
 include $(TOPDIR)/Rules.make

@@ -465,12 +465,13 @@ static inline struct list_head * d_hash(struct dentry * parent, unsigned long ha
 	return dentry_hashtable + (hash & D_HASHMASK);
 }
 
-static inline struct dentry * __dlookup(struct list_head *head, struct dentry * parent, struct qstr * name)
+struct dentry * d_lookup(struct dentry * parent, struct qstr * name)
 {
-	struct list_head *tmp = head->next;
-	int len = name->len;
-	int hash = name->hash;
+	unsigned int len = name->len;
+	unsigned int hash = name->hash;
 	const unsigned char *str = name->name;
+	struct list_head *head = d_hash(parent,hash);
+	struct list_head *tmp = head->next;
 
 	while (tmp != head) {
 		struct dentry * dentry = list_entry(tmp, struct dentry, d_hash);
@@ -489,14 +490,9 @@ static inline struct dentry * __dlookup(struct list_head *head, struct dentry * 
 			if (memcmp(dentry->d_name.name, str, len))
 				continue;
 		}
-		return dget(dentry->d_mounts);
+		return dget(dentry);
 	}
 	return NULL;
-}
-
-struct dentry * d_lookup(struct dentry * dir, struct qstr * name)
-{
-	return __dlookup(d_hash(dir, name->hash), dir, name);
 }
 
 /*
