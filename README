@@ -2,10 +2,31 @@
 	Linux kernel release 1.0
 
 These are the release notes for linux version 1.0.  Read them carefully,
-as they tell you what's new, explain how to install the kernel, and what
-to do if something goes wrong. 
+as they tell you what this is all about, explain how to install the
+kernel, and what to do if something goes wrong. 
+
+WHAT IS LINUX?
+
+  Linux is a Unix clone for 386/486-based PCs written from scratch by
+  Linus Torvalds with assistance from a loosely-knit team of hackers
+  across the Net.  It aims towards POSIX compliance. 
+
+  It has all the features you would expect in a modern fully-fledged
+  Unix, including true multitasking, virtual memory, shared libraries,
+  demand loading, shared copy-on-write executables, proper memory
+  management and TCP/IP networking. 
+
+  It is distributed under the GNU General Public License - see the
+  accompanying COPYING file for more details. 
 
 INSTALLING the kernel:
+
+ - If you install the full sources, do a
+
+		cd /usr/src
+		tar xvf linux-1.0.tar
+
+   to get it all put in place.
 
  - if you install by patching, you need a *clean* 0.99.15 source tree,
    which presumably exists in /usr/src/linux.  If so, to get the kernel
@@ -17,13 +38,6 @@ INSTALLING the kernel:
    and you should be ok.  You may want to remove the backup files (xxx~
    or xxx.orig), and make sure that there are no failed patches (xxx# or
    xxx.rej).
-
- - If you install the full sources, do a
-
-		cd /usr/src
-		tar xvf linux-1.0.tar
-
-   to get it all put in place.
 
  - make sure your /usr/include/linux and /usr/include/asm directories
    are just symlinks to the kernel sources:
@@ -48,6 +62,9 @@ CONFIGURING the kernel:
    /bin/sh (in that order), so hopefully one of those is correct. 
 
 	NOTES on "make config":
+	- having unnecessary drivers will make the kernel bigger, and can
+	  under some circumstances lead to problems: probing for a
+	  nonexistent controller card may confuse your other controllers
 	- compiling the kernel with "-m486" for a number of 486-specific
 	  will result in a kernel that still works on a 386: it may be
 	  slightly larger and possibly slower by an insignificant amount,
@@ -74,10 +91,10 @@ CONFIGURING the kernel:
 
 COMPILING the kernel:
 
- - make sure you have gcc-2.4.5 or newer available with g++.  It seems
-   older gcc versions can have problems compiling linux 0.99.10 and
-   newer versions.  If you upgrade, remember to get the new binutils
-   package too (for as/ld/nm and company)
+ - make sure you have gcc-2.4.5 or newer available.  It seems older gcc
+   versions can have problems compiling newer versions of linux.  If you
+   upgrade your compiler, remember to get the new binutils package too
+   (for as/ld/nm and company)
 
  - do a "make zImage" to create a compressed kernel image.  If you want
    to make a bootdisk (without root filesystem or lilo), insert a floppy
@@ -94,12 +111,13 @@ COMPILING the kernel:
    For some, this is on a floppy disk, in which case you can "cp
    /usr/src/linux/zImage /dev/fd0" to make a bootable floppy. 
 
-   If you boot Linux from the hard drive, chances are you use LILO uses
-   the kernel image as specified in the file /etc/lilo/config.  The
-   kernel image file is usually /vmlinux, or /Image, or /etc/Image.  To
-   use the new kernel, copy the new image over the old one (save a
-   backup of the original!).  Then, you MUST REINSTALL LILO!! If you
-   don't, you won't be able to boot the new kernel image. 
+   If you boot Linux from the hard drive, chances are you use LILO which
+   uses the kernel image as specified in the file /etc/lilo/config.  The
+   kernel image file is usually /vmlinuz, or /zImage, or /etc/zImage. 
+   To use the new kernel, copy the new image over the old one (save a
+   backup of the original!).  Then, you MUST RERUN LILO to update the
+   loading map!! If you don't, you won't be able to boot the new kernel
+   image. 
 
    Reinstalling LILO is usually a matter of running /etc/lilo/install. 
    You may wish to edit /etc/lilo/config to specify an entry for your

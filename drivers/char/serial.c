@@ -462,7 +462,7 @@ static inline int check_modem_status(struct async_struct *info)
 
 static inline void figure_RS_timer(void)
 {
-	int	timeout = 6000;	/* 60 seconds; really big :-) */
+	int	timeout = jiffies + 60*HZ; /* 60 seconds; really big :-) */
 	int	i, mask;
 	
 	if (!IRQ_active)
@@ -473,7 +473,7 @@ static inline void figure_RS_timer(void)
 		if (IRQ_timer[i] < timeout)
 			timeout = IRQ_timer[i];
 	}
-	timer_table[RS_TIMER].expires = jiffies + timeout;
+	timer_table[RS_TIMER].expires = timeout;
 	timer_active |= 1 << RS_TIMER;
 }
 

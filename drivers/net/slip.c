@@ -243,9 +243,9 @@ static void sl_changedmtu(struct slip *sl)
 	
 	DPRINTF((DBG_SLIP,"SLIP: mtu changed!\n"));
 	
-	tb= (unsigned char *) kmalloc(l + 4, GFP_KERNEL);
-	rb= (unsigned char *) kmalloc(l + 4, GFP_KERNEL);
-	cb= (unsigned char *) kmalloc(l + 4, GFP_KERNEL);
+	tb= (unsigned char *) kmalloc(l + 4, GFP_ATOMIC);
+	rb= (unsigned char *) kmalloc(l + 4, GFP_ATOMIC);
+	cb= (unsigned char *) kmalloc(l + 4, GFP_ATOMIC);
 	
 	if(tb==NULL || rb==NULL || cb==NULL)
 	{

@@ -1,4 +1,4 @@
-VERSION = pre-1
+VERSION = 1
 PATCHLEVEL = 0
 ALPHA =
 

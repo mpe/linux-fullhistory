@@ -3552,7 +3552,9 @@ tcp_write_wakeup(struct sock *sk)
   if (sk->zapped)
 	return;	/* Afer a valid reset we can send no more */
 
-  if (sk -> state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT) return;
+  if (sk -> state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT &&
+      sk -> state != TCP_FIN_WAIT1 && sk->state != TCP_FIN_WAIT2)
+	return;
 
   buff = sk->prot->wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
   if (buff == NULL) return;

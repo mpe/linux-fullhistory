@@ -344,7 +344,7 @@ void isofs_read_inode(struct inode * inode)
 	if (!(bh=bread(inode->i_dev,block, bufsize))) {
 	  printk("unable to read i-node block");
 	  goto fail;
-	};
+	}
 	
 	pnt = ((unsigned char *) bh->b_data
 	       + (inode->i_ino & (bufsize - 1)));
@@ -353,18 +353,23 @@ void isofs_read_inode(struct inode * inode)
 
 	if ((inode->i_ino & (bufsize - 1)) + *pnt > bufsize){
 		cpnt = kmalloc(1 << ISOFS_BLOCK_BITS, GFP_KERNEL);
+		if (cpnt == NULL) {
+			printk(KERN_INFO "NoMem ISO inode %d\n",inode->i_ino);
+			brelse(bh);
+			goto fail;
+		}
 		memcpy(cpnt, bh->b_data, bufsize);
 		brelse(bh);
 		if (!(bh = bread(inode->i_dev,++block, bufsize))) {
-		        kfree_s (cpnt, 1 << ISOFS_BLOCK_BITS);
+			kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
 			printk("unable to read i-node block");
 			goto fail;
-		      };
+		}
 		memcpy((char *)cpnt + bufsize, bh->b_data, bufsize);
 		pnt = ((unsigned char *) cpnt
 		       + (inode->i_ino & (bufsize - 1)));
 		raw_inode = ((struct iso_directory_record *) pnt);
-	};
+	}
 
 	inode->i_mode = S_IRUGO; /* Everybody gets to read the file. */
 	inode->i_nlink = 1;
@@ -383,7 +388,7 @@ void isofs_read_inode(struct inode * inode)
 				break;
 		if(i == raw_inode->name_len[0] || raw_inode->name[i] == ';') 
 			inode->i_mode |= S_IXUGO; /* execute permission */
-	};
+	}
 	inode->i_uid = 0;
 	inode->i_gid = 0;
 	inode->i_size = isonum_733 (raw_inode->size);
@@ -394,7 +399,7 @@ void isofs_read_inode(struct inode * inode)
 	    inode->i_sb->u.isofs_sb.s_cruft == 'n') {
 	  printk("Warning: defective cdrom.  Enabling \"cruft\" mount option.\n");
 	  inode->i_sb->u.isofs_sb.s_cruft = 'y';
-	};
+	}
 
 /* Some dipshit decided to store some other bit of information in the high
    byte of the file length.  Catch this and holler.  WARNING: this will make
@@ -404,12 +409,12 @@ void isofs_read_inode(struct inode * inode)
 	   inode->i_size & 0xff000000){
 /*	  printk("Illegal format on cdrom.  Pester manufacturer.\n"); */
 	  inode->i_size &= 0x00ffffff;
-	};
+	}
 	
 	if (raw_inode->interleave[0]) {
 		printk("Interleaved files not (yet) supported.\n");
 		inode->i_size = 0;
-	};
+	}
 
 #ifdef DEBUG
 	/* I have no idea what extended attributes are used for, so
@@ -458,8 +463,7 @@ void isofs_read_inode(struct inode * inode)
 	case 'm':
 	  inode->u.isofs_i.i_file_format = ISOFS_FILE_TEXT_M; /* File type */
 	  break;
-	};
-	
+	}
 
 /* Now test for possible Rock Ridge extensions which will override some of
    these numbers in the inode structure. */
@@ -471,11 +475,6 @@ void isofs_read_inode(struct inode * inode)
 	printk("Inode: %x extent: %x\n",inode->i_ino, inode->u.isofs_i.i_first_extent);
 #endif
 	brelse(bh);
-	
-	if (cpnt) {
-		kfree_s (cpnt, 1 << ISOFS_BLOCK_BITS);
-		cpnt = NULL;
-	};
 	
 	inode->i_op = NULL;
 	if (inode->i_sb->u.isofs_sb.s_cruft != 'y' && 
@@ -494,6 +493,10 @@ void isofs_read_inode(struct inode * inode)
 	    inode->i_op = &blkdev_inode_operations;
 	  else if (S_ISFIFO(inode->i_mode))
 	    init_fifo(inode);
+	}
+	if (cpnt) {
+		kfree_s (cpnt, 1 << ISOFS_BLOCK_BITS);
+		cpnt = NULL;
 	}
 	return;
       fail:

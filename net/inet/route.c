@@ -276,6 +276,20 @@ static int rt_new(struct rtentry *r)
 	mask = ((struct sockaddr_in *) &r->rt_genmask)->sin_addr.s_addr;
 	gw = ((struct sockaddr_in *) &r->rt_gateway)->sin_addr.s_addr;
 
+/* BSD emulation: Permits route add someroute gw one-of-my-addresses
+   to indicate which iface. Not as clean as the nice Linux dev technique
+   but people keep using it... */
+	if (!dev && (flags & RTF_GATEWAY)) {
+		struct device *dev2;
+		for (dev2 = dev_base ; dev2 != NULL ; dev2 = dev2->next) {
+			if ((dev2->flags & IFF_UP) && dev2->pa_addr == gw) {
+				flags &= ~RTF_GATEWAY;
+				dev = dev2;
+				break;
+			}
+		}
+	}
+
 	if (bad_mask(mask, daddr))
 		mask = 0;
 

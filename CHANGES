@@ -1,3 +1,13 @@
+CHANGES since 0.99 patchlevel 15:
+
+ - removed all the bugs, of course.
+ - networking fixes.
+ - more changes than I really wanted..
+
+CHANGES since 0.99 patchlevel 14:
+
+ - too many to count, really.  Besides, I've lost my notes. 
+
 CHANGES since 0.99 patchlevel 13:
 
  - new kernel source layout: drivers separated
