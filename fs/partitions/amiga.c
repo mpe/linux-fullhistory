@@ -54,7 +54,7 @@ amiga_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector, int 
 
 	for (blk = 0; blk < RDB_ALLOCATION_LIMIT; blk++) {
 		if(!(bh = bread(dev,blk,blocksize))) {
-			printk("Dev %s: unable to read RDB block %d\n",
+			if (warn_no_part) printk("Dev %s: unable to read RDB block %d\n",
 			       kdevname(dev),blk);
 			goto rdb_done;
 		}
@@ -80,7 +80,7 @@ amiga_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector, int 
 			brelse(bh);
 			for (part = 1; blk > 0 && part <= 16; part++) {
 				if (!(bh = bread(dev,blk,blocksize))) {
-					printk("Dev %s: unable to read partition block %d\n",
+					if (warn_no_part) printk("Dev %s: unable to read partition block %d\n",
 						       kdevname(dev),blk);
 					goto rdb_done;
 				}

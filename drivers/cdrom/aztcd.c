@@ -183,6 +183,7 @@
 #include <linux/ioport.h>
 #include <linux/string.h>
 #include <linux/major.h>
+#include <linux/devfs_fs_kernel.h>
 
 #ifndef AZT_KERNEL_PRIOR_2_1
 #include <linux/init.h>
@@ -1785,7 +1786,9 @@ int __init aztcd_init(void)
                return -EIO;
 	     }
 	 }
-	if (register_blkdev(MAJOR_NR, "aztcd", &azt_fops) != 0)
+	devfs_register (NULL, "aztcd", 0, DEVFS_FL_DEFAULT, MAJOR_NR, 0,
+			S_IFBLK | S_IRUGO | S_IWUGO, 0, 0, &azt_fops, NULL);
+	if (devfs_register_blkdev(MAJOR_NR, "aztcd", &azt_fops) != 0)
 	{
 		printk("aztcd: Unable to get major %d for Aztech CD-ROM\n",
 		       MAJOR_NR);
@@ -1811,7 +1814,9 @@ int __init aztcd_init(void)
 
 void __exit aztcd_exit(void)
 {
-  if ((unregister_blkdev(MAJOR_NR, "aztcd") == -EINVAL))    
+  devfs_unregister(devfs_find_handle(NULL, "aztcd", 0, 0, 0, DEVFS_SPECIAL_BLK,
+				     0));
+  if ((devfs_unregister_blkdev(MAJOR_NR, "aztcd") == -EINVAL))    
     { printk("What's that: can't unregister aztcd\n");
       return;
     }

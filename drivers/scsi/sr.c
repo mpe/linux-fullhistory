@@ -23,6 +23,8 @@
  *       Modified by Jens Axboe <axboe@image.dk> - Uniform sr_packet()
  *       interface, capabilities probe additions, ioctl cleanups, etc.
  *
+ *       Modified by Richard Gooch <rgooch@atnf.csiro.au> to support devfs
+ *
  */
 
 #include <linux/module.h>
@@ -693,7 +695,7 @@ static int sr_init()
 		return 0;
 
 	if (!sr_registered) {
-		if (register_blkdev(MAJOR_NR, "sr", &cdrom_fops)) {
+		if (devfs_register_blkdev(MAJOR_NR, "sr", &cdrom_fops)) {
 			printk("Unable to get major %d for SCSI-CD\n", MAJOR_NR);
 			return 1;
 		}
@@ -767,6 +769,11 @@ void sr_finish()
 
 		sprintf(name, "sr%d", i);
 		strcpy(scsi_CDs[i].cdi.name, name);
+                scsi_CDs[i].cdi.de =
+                    devfs_register (scsi_CDs[i].device->de, "cd", 2,
+                                    DEVFS_FL_DEFAULT, MAJOR_NR, i,
+                                    S_IFBLK | S_IRUGO | S_IWUGO, 0, 0,
+                                    &cdrom_fops, NULL);
 		register_cdrom(&scsi_CDs[i].cdi);
 	}
 
@@ -828,7 +835,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	scsi_unregister_module(MODULE_SCSI_DEV, &sr_template);
-	unregister_blkdev(MAJOR_NR, "sr");
+	devfs_unregister_blkdev(MAJOR_NR, "sr");
 	sr_registered--;
 	if (scsi_CDs != NULL) {
 		kfree((char *) scsi_CDs);

@@ -1549,6 +1549,15 @@ static void idefloppy_setup (ide_drive_t *drive, idefloppy_floppy_t *floppy)
 
 	(void) idefloppy_get_capacity (drive);
 	idefloppy_add_settings(drive);
+	for (i = 0; i < MAX_DRIVES; ++i) {
+		ide_hwif_t *hwif = HWIF(drive);
+
+		if (drive != &hwif->drives[i]) continue;
+		hwif->gd->de_arr[i] = drive->de;
+		if (drive->removable)
+			hwif->gd->flags[i] |= GENHD_FL_REMOVABLE;
+		break;
+	}
 }
 
 static int idefloppy_cleanup (ide_drive_t *drive)

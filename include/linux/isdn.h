@@ -547,6 +547,10 @@ typedef struct {
 #  include <linux/concap.h>
 #endif
 
+#ifdef CONFIG_DEVFS_FS
+#  include <linux/devfs_fs_kernel.h>
+#endif
+
 #include <linux/isdnif.h>
 
 #define ISDN_DRVIOCTL_MASK       0x7f  /* Mask for Device-ioctl */
@@ -976,6 +980,15 @@ typedef struct isdn_devt {
 	struct semaphore  sem;                       /* serialize list access*/
 	isdn_module       *modules;
 	unsigned long     global_features;
+#ifdef CONFIG_DEVFS_FS
+	devfs_handle_t devfs_handle_isdninfo;
+	devfs_handle_t devfs_handle_isdnctrl;
+	devfs_handle_t devfs_handle_isdnX[ISDN_MAX_CHANNELS];
+	devfs_handle_t devfs_handle_isdnctrlX[ISDN_MAX_CHANNELS];
+#  ifdef CONFIG_ISDN_PPP
+	devfs_handle_t devfs_handle_ipppX[ISDN_MAX_CHANNELS];
+#  endif
+#endif
 } isdn_dev;
 
 extern isdn_dev *dev;

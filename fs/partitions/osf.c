@@ -57,7 +57,7 @@ int osf_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector,
 	struct d_partition * partition;
 
 	if (!(bh = bread(dev,0,get_ptable_blocksize(dev)))) {
-		printk("unable to read partition table\n");
+		if (warn_no_part) printk("unable to read partition table\n");
 		return -1;
 	}
 	label = (struct disklabel *) (bh->b_data+64);

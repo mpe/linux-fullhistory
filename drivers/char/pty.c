@@ -10,6 +10,7 @@
 #include <linux/config.h>
 #include <linux/module.h>	/* For EXPORT_SYMBOL */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
@@ -20,6 +21,7 @@
 #include <linux/major.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -27,6 +29,10 @@
 
 #define BUILDING_PTY_C 1
 #include <linux/devpts_fs.h>
+
+extern void tty_register_devfs (struct tty_driver *driver, unsigned int flags,
+				unsigned int minor);
+extern void tty_unregister_devfs (struct tty_driver *driver, unsigned minor);
 
 struct pty_struct {
 	int	magic;
@@ -94,6 +100,7 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 			}
 		}
 #endif
+		tty_unregister_devfs (&tty->link->driver, MINOR (tty->device));
 		tty_vhangup(tty->link);
 	}
 }
@@ -323,6 +330,11 @@ static int pty_open(struct tty_struct *tty, struct file * filp)
 	clear_bit(TTY_OTHER_CLOSED, &tty->link->flags);
 	wake_up_interruptible(&pty->open_wait);
 	set_bit(TTY_THROTTLED, &tty->flags);
+	/*  register a slave for the master  */
+	if (tty->driver.major == PTY_MASTER_MAJOR)
+		tty_register_devfs(&tty->link->driver, DEVFS_FL_WAIT,
+				   tty->link->driver.minor_start +
+				   MINOR(tty->device)-tty->driver.minor_start);
 	retval = 0;
 out:
 	return retval;
@@ -346,7 +358,7 @@ int __init pty_init(void)
 	memset(&pty_driver, 0, sizeof(struct tty_driver));
 	pty_driver.magic = TTY_DRIVER_MAGIC;
 	pty_driver.driver_name = "pty_master";
-	pty_driver.name = "pty";
+	pty_driver.name = "pty/m%d";
 	pty_driver.major = PTY_MASTER_MAJOR;
 	pty_driver.minor_start = 0;
 	pty_driver.num = NR_PTYS;
@@ -377,12 +389,16 @@ int __init pty_init(void)
 	pty_slave_driver = pty_driver;
 	pty_slave_driver.driver_name = "pty_slave";
 	pty_slave_driver.proc_entry = 0;
-	pty_slave_driver.name = "ttyp";
+	pty_slave_driver.name = "pty/s%d";
 	pty_slave_driver.subtype = PTY_TYPE_SLAVE;
 	pty_slave_driver.major = PTY_SLAVE_MAJOR;
 	pty_slave_driver.minor_start = 0;
 	pty_slave_driver.init_termios = tty_std_termios;
 	pty_slave_driver.init_termios.c_cflag = B38400 | CS8 | CREAD;
+	/* Slave ptys are registered when their corresponding master pty
+	 * is opened, and unregistered when the pair is closed.
+	 */
+	pty_slave_driver.flags |= TTY_DRIVER_NO_DEVFS;
 	pty_slave_driver.table = ttyp_table;
 	pty_slave_driver.termios = ttyp_termios;
 	pty_slave_driver.termios_locked = ttyp_termios_locked;
@@ -403,6 +419,7 @@ int __init pty_init(void)
 
 	/* Unix98 devices */
 #ifdef CONFIG_UNIX98_PTYS
+	devfs_mk_dir (NULL, "pts", 3, NULL);
 	printk("pty: %d Unix98 ptys configured\n", UNIX98_NR_MAJORS*NR_PTYS);
 	for ( i = 0 ; i < UNIX98_NR_MAJORS ; i++ ) {
 		int j;
@@ -415,6 +432,7 @@ int __init pty_init(void)
 		ptm_driver[i].name_base = i*NR_PTYS;
 		ptm_driver[i].num = NR_PTYS;
 		ptm_driver[i].other = &pts_driver[i];
+		ptm_driver[i].flags |= TTY_DRIVER_NO_DEVFS;
 		ptm_driver[i].table = ptm_table[i];
 		ptm_driver[i].termios = ptm_termios[i];
 		ptm_driver[i].termios_locked = ptm_termios_locked[i];
@@ -424,7 +442,7 @@ int __init pty_init(void)
 			init_waitqueue_head(&ptm_state[i][j].open_wait);
 		
 		pts_driver[i] = pty_slave_driver;
-		pts_driver[i].name = "pts";
+		pts_driver[i].name = "pts/%d";
 		pts_driver[i].proc_entry = 0;
 		pts_driver[i].major = UNIX98_PTY_SLAVE_MAJOR+i;
 		pts_driver[i].minor_start = 0;

@@ -22,6 +22,7 @@
 #include <linux/malloc.h>
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/adb.h>
@@ -664,6 +665,11 @@ void adbdev_init()
 		return;
 #endif
 
-	if (register_chrdev(ADB_MAJOR, "adb", &adb_fops))
+	if (devfs_register_chrdev(ADB_MAJOR, "adb", &adb_fops))
 		printk(KERN_ERR "adb: unable to get major %d\n", ADB_MAJOR);
+	else
+		devfs_register (NULL, "adb", 0, DEVFS_FL_NONE,
+				ADB_MAJOR, 0,
+				S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				&adb_fops, NULL);
 }

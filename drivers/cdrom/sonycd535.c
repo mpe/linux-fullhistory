@@ -124,6 +124,7 @@
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
+#include <linux/devfs_fs_kernel.h>
 
 #define REALLY_SLOW_IO
 #include <asm/system.h>
@@ -1586,7 +1587,12 @@ sony535_init(void)
 					printk("IRQ%d, ", tmp_irq);
 				printk("using %d byte buffer\n", sony_buffer_size);
 
-				if (register_blkdev(MAJOR_NR, CDU535_HANDLE, &cdu_fops)) {
+				devfs_register (NULL, CDU535_HANDLE, 0,
+						DEVFS_FL_DEFAULT,
+						MAJOR_NR, 0,
+						S_IFBLK | S_IRUGO | S_IWUGO,
+						0, 0, &cdu_fops, NULL);
+				if (devfs_register_blkdev(MAJOR_NR, CDU535_HANDLE, &cdu_fops)) {
 					printk("Unable to get major %d for %s\n",
 							MAJOR_NR, CDU535_MESSAGE_NAME);
 					return -EIO;
@@ -1684,7 +1690,9 @@ sony535_exit(void)
 	kfree_s(sony_buffer, 4 * sony_buffer_sectors);
 	kfree_s(last_sony_subcode, sizeof *last_sony_subcode);
 	kfree_s(sony_toc, sizeof *sony_toc);
-	if (unregister_blkdev(MAJOR_NR, CDU535_HANDLE) == -EINVAL)
+	devfs_unregister(devfs_find_handle(NULL, CDU535_HANDLE, 0, 0, 0,
+					   DEVFS_SPECIAL_BLK, 0));
+	if (devfs_unregister_blkdev(MAJOR_NR, CDU535_HANDLE) == -EINVAL)
 		printk("Uh oh, couldn't unregister " CDU535_HANDLE "\n");
 	else
 		printk(KERN_INFO CDU535_HANDLE " module released\n");

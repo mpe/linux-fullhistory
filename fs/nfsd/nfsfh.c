@@ -301,7 +301,7 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 	struct dentry *dentry, *result = NULL;
 	struct dentry *tmp;
 	int  found =0;
-	long err;
+	int err;
 	/* This semaphore is needed to make sure that only one unconnected (free)
 	 * dcache path ever exists, as otherwise two partial paths might get
 	 * joined together, which would be very confusing.

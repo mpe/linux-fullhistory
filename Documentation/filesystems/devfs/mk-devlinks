@@ -1,0 +1,123 @@
+#! /bin/csh -f
+
+# WARNING: make sure /devfs is not a mounted devfs
+
+cd /devfs
+if (-e .devfsd) then
+    echo "/devfs must not be a mounted devfs"
+    exit 1
+endif
+if ( ! -e null ) then
+    echo "Cannot find null device"
+    exit 1
+endif
+
+
+# Make SCSI disc links.
+# WARNING: this assumes your SCSI discs are numbered ID=0, ID=1, ID=2 and so on
+set discs = (a b c d e f)
+if ( ! -d sd ) mkdir sd
+ln -sf /devfs/sd /dev
+
+@ scsi_id = 0
+while ($scsi_id < $#discs)
+    @ discnum = $scsi_id + 1
+    ls -lF sd${discs[$discnum]}
+    rm /dev/sd${discs[$discnum]}
+    ln -s /devfs/sd${discs[$discnum]} /dev
+    ln -s ../sd${discs[$discnum]} sd/c0b0t${scsi_id}u0
+    @ partition = 1
+    while ($partition < 16)
+	ls -lF sd${discs[$discnum]}${partition}
+	rm /dev/sd${discs[$discnum]}${partition}
+	ln -s /devfs/sd${discs[$discnum]}${partition} /dev
+	ln -s ../sd${discs[$discnum]}${partition} sd/c0b0t${scsi_id}u0p$partition
+	@ partition ++
+    end
+    @ scsi_id ++
+end
+
+
+# Make IDE disc links
+foreach i (hd*)
+    rm /dev/$i
+    ln -s /devfs/$i /dev
+end
+
+
+# Make miscellaneous character devices links (character, major=10)
+foreach i (`ls -l * | grep '^c' | fgrep '10,' | awk '{print $10}'`)
+    rm /dev/$i
+    ln -s /devfs/$i /dev
+end
+
+
+# Make memory devices links (character, major=1)
+foreach i (`ls -l * | grep '^c' | fgrep ' 1,' | awk '{print $10}'`)
+    rm /dev/$i
+    ln -s /devfs/$i /dev
+end
+
+
+# Make loop device links
+foreach i (loop*)
+    rm /dev/$i
+    ln -s /devfs/$i /dev
+end
+
+
+# Make various tty device links
+foreach i (tty* pty* cua* console)
+    rm /dev/$i
+    ln -s /devfs/$i /dev
+end
+
+
+# Make SCSI CD-ROM, tapes and generic links
+ln -s /devfs/sr /dev
+ln -s /devfs/st /dev
+ln -s /devfs/sg /dev
+foreach i (sr* st* nst* sg*)
+    if ("$i" == "stderr") continue
+    if ("$i" == "stdin") continue
+    if ("$i" == "stdout") continue
+    rm /dev/$i
+    ln -s /devfs/$i /dev
+end
+
+
+# Make RAMDISC device links
+ln -s /devfs/rd /dev
+foreach i (ram*)
+    rm /dev/$i
+    ln -s /devfs/$i /dev
+end
+
+
+# Make floppy device links
+ln -s /devfs/floppy /dev
+foreach i (fd?*)
+    rm /dev/$i
+    ln -s /devfs/$i /dev
+end
+
+
+# Make line printer device links
+foreach i (lp*)
+    rm /dev/$i
+    ln -s /devfs/$i /dev
+end
+
+# Make sound devices links
+if ( ! -d sound ) mkdir sound
+ln -sf /devfs/sound /dev
+foreach i (mixer sequencer midi dsp audio sequencer2 mixer1 patmgr0 midi1\
+    dsp1 audio1 patmgr1 midi2 midi3)
+ 
+    if ( -f /dev/$i ) then
+	rm /dev/$i
+	ln -s /devfs/$i /dev
+    endif
+end
+
+

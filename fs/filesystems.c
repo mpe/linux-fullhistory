@@ -14,6 +14,7 @@
 #include <linux/msdos_fs.h>
 #include <linux/umsdos_fs.h>
 #include <linux/proc_fs.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/nfs_fs.h>
 #include <linux/iso_fs.h>
 #include <linux/sysv_fs.h>
@@ -85,6 +86,8 @@ void __init filesystem_setup(void)
 #ifdef CONFIG_PROC_FS
 	init_proc_fs();
 #endif
+
+	init_devfs_fs();  /*  Header file may make this empty  */
 
 #ifdef CONFIG_LOCKD
 	nlmxdr_init();

@@ -38,6 +38,7 @@ extern void rd_load(void);
 extern void initrd_load(void);
 
 struct gendisk *gendisk_head;
+int warn_no_part = 1; /*This is ugly: should make genhd removable media aware*/
 
 static int (*check_part[])(struct gendisk *hd, kdev_t dev, unsigned long first_sect, int first_minor) = {
 #ifdef CONFIG_ACORN_PARTITION
@@ -82,6 +83,14 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 	const char *maj = hd->major_name;
 	int unit = (minor >> hd->minor_shift) + 'a';
 
+	part = minor & ((1 << hd->minor_shift) - 1);
+	if (hd->part[minor].de) {
+		int pos;
+
+		pos = devfs_generate_path (hd->part[minor].de, buf, 64);
+		if (pos >= 0)
+			return buf + pos;
+	}
 	/*
 	 * IDE devices use multiple major numbers, but the drives
 	 * are named as:  {hda,hdb}, {hdc,hdd}, {hde,hdf}, {hdg,hdh}..
@@ -110,7 +119,6 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 			maj = "hd";
 			break;
 	}
-	part = minor & ((1 << hd->minor_shift) - 1);
 	if (hd->major >= SCSI_DISK1_MAJOR && hd->major <= SCSI_DISK7_MAJOR) {
 		unit = unit + (hd->major - SCSI_DISK1_MAJOR + 1) * 16;
 		if (unit > 'z') {
@@ -153,13 +161,20 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
  */
 void add_gd_partition(struct gendisk *hd, int minor, int start, int size)
 {
+#ifndef CONFIG_DEVFS_FS
 	char buf[40];
+#endif
+
 	hd->part[minor].start_sect = start;
 	hd->part[minor].nr_sects   = size;
+#ifdef CONFIG_DEVFS_FS
+	printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
+#else
 	if (hd->major >= COMPAQ_SMART2_MAJOR+0 && hd->major <= COMPAQ_SMART2_MAJOR+7)
 		printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
 	else
 		printk(" %s", disk_name(hd, minor, buf));
+#endif
 }
 
 int get_hardsect_size(kdev_t dev)
@@ -217,7 +232,7 @@ unsigned int get_ptable_blocksize(kdev_t dev)
 int get_partition_list(char * page)
 {
 	struct gendisk *p;
-	char buf[40];
+	char buf[64];
 	int n, len;
 
 	len = sprintf(page, "major minor  #blocks  name\n\n");
@@ -237,9 +252,10 @@ int get_partition_list(char * page)
 
 static void check_partition(struct gendisk *hd, kdev_t dev, int first_part_minor)
 {
+	devfs_handle_t de = NULL;
 	static int first_time = 1;
 	unsigned long first_sector;
-	char buf[40];
+	char buf[64];
 	int i;
 
 	if (first_time)
@@ -256,12 +272,104 @@ static void check_partition(struct gendisk *hd, kdev_t dev, int first_part_minor
 		return;
 	}
 
-	printk(KERN_INFO " %s:", disk_name(hd, MINOR(dev), buf));
+	if (hd->de_arr)
+		de = hd->de_arr[MINOR(dev) >> hd->minor_shift];
+	i = devfs_generate_path (de, buf, sizeof buf);
+	if (i >= 0)
+		printk(KERN_INFO " /dev/%s:", buf + i);
+	else
+		printk(KERN_INFO " %s:", disk_name(hd, MINOR(dev), buf));
 	for (i = 0; check_part[i]; i++)
 		if (check_part[i](hd, dev, first_sector, first_part_minor))
-			return;
+			goto setup_devfs;
 
 	printk(" unknown partition table\n");
+setup_devfs:
+	i = first_part_minor - 1;
+	devfs_register_partitions (hd, i, hd->sizes ? 0 : 1);
+}
+
+#ifdef CONFIG_DEVFS_FS
+static void devfs_register_partition (struct gendisk *dev, int minor, int part)
+{
+	int devnum = minor >> dev->minor_shift;
+	devfs_handle_t dir;
+	unsigned int devfs_flags = DEVFS_FL_DEFAULT;
+	char devname[16];
+
+	if (dev->part[minor + part].de) return;
+	dir = devfs_get_parent (dev->part[minor].de);
+	if (!dir) return;
+	if ( dev->flags && (dev->flags[devnum] & GENHD_FL_REMOVABLE) )
+		devfs_flags |= DEVFS_FL_REMOVABLE;
+	sprintf (devname, "part%d", part);
+	dev->part[minor + part].de =
+	    devfs_register (dir, devname, 0, devfs_flags,
+			    dev->major, minor + part,
+			    S_IFBLK | S_IRUSR | S_IWUSR, 0, 0,
+			    dev->fops, NULL);
+}
+
+static void devfs_register_disc (struct gendisk *dev, int minor)
+{
+	int pos = 0;
+	int devnum = minor >> dev->minor_shift;
+	devfs_handle_t dir, slave;
+	unsigned int devfs_flags = DEVFS_FL_DEFAULT;
+	char dirname[64], symlink[16];
+	static unsigned int disc_counter = 0;
+	static devfs_handle_t devfs_handle = NULL;
+
+	if (dev->part[minor].de) return;
+	if ( dev->flags && (dev->flags[devnum] & GENHD_FL_REMOVABLE) )
+		devfs_flags |= DEVFS_FL_REMOVABLE;
+	if (dev->de_arr) {
+		dir = dev->de_arr[devnum];
+		if (!dir)  /*  Aware driver wants to block disc management  */
+			return;
+		pos = devfs_generate_path (dir, dirname + 3, sizeof dirname-3);
+		if (pos < 0) return;
+		strncpy (dirname + pos, "../", 3);
+	}
+	else {
+		/*  Unaware driver: construct "real" directory  */
+		sprintf (dirname, "../%s/disc%d", dev->major_name, devnum);
+		dir = devfs_mk_dir (NULL, dirname + 3, 0, NULL);
+	}
+	if (!devfs_handle)
+		devfs_handle = devfs_mk_dir (NULL, "discs", 5, NULL);
+	sprintf (symlink, "disc%u", disc_counter++);
+	devfs_mk_symlink (devfs_handle, symlink, 0, DEVFS_FL_DEFAULT,
+			  dirname + pos, 0, &slave, NULL);
+	dev->part[minor].de =
+	    devfs_register (dir, "disc", 4, devfs_flags, dev->major, minor,
+			    S_IFBLK | S_IRUSR | S_IWUSR, 0, 0, dev->fops,NULL);
+	devfs_auto_unregister (dev->part[minor].de, slave);
+	if (!dev->de_arr)
+		devfs_auto_unregister (slave, dir);
+}
+#endif  /*  CONFIG_DEVFS_FS  */
+
+void devfs_register_partitions (struct gendisk *dev, int minor, int unregister)
+{
+#ifdef CONFIG_DEVFS_FS
+	int part;
+
+	if (!unregister)
+		devfs_register_disc (dev, minor);
+	for (part = 1; part < dev->max_p; part++) {
+		if ( unregister || (dev->part[part + minor].nr_sects < 1) ) {
+			devfs_unregister (dev->part[part + minor].de);
+			dev->part[part + minor].de = NULL;
+			continue;
+		}
+		devfs_register_partition (dev, minor, part);
+	}
+	if (unregister) {
+		devfs_unregister (dev->part[minor].de);
+		dev->part[minor].de = NULL;
+	}
+#endif  /*  CONFIG_DEVFS_FS  */
 }
 
 /*

@@ -787,6 +787,8 @@ extern int blkdev_get(struct block_device *, mode_t, unsigned, int);
 extern int blkdev_put(struct block_device *, int);
 
 /* fs/devices.c */
+extern const struct block_device_operations *get_blkfops(unsigned int);
+extern struct file_operations *get_chrfops(unsigned int, unsigned int);
 extern int register_chrdev(unsigned int, const char *, struct file_operations *);
 extern int unregister_chrdev(unsigned int, const char *);
 extern int chrdev_open(struct inode *, struct file *);
@@ -1016,6 +1018,8 @@ extern void put_super(kdev_t);
 unsigned long generate_cluster(kdev_t, int b[], int);
 unsigned long generate_cluster_swab32(kdev_t, int b[], int);
 extern kdev_t ROOT_DEV;
+extern char root_device_name[];
+
 
 extern void show_buffers(void);
 extern void mount_root(void);

@@ -466,7 +466,7 @@ int acorn_partition(struct gendisk *hd, kdev_t dev,
 		r = adfspart_check_POWERTEC(hd, dev, first_sector, first_part_minor);
 #endif
 	if (r < 0)
-		printk(" unable to read boot sectors / partition sectors\n");
+		if (warn_no_part) printk(" unable to read boot sectors / partition sectors\n");
 	else if (r)
 		printk("\n");
 	return r;

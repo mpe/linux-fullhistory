@@ -44,7 +44,7 @@ int sgi_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector, in
 	struct sgi_partition *p;
 
 	if(!(bh = bread(dev, 0, get_ptable_blocksize(dev)))) {
-		printk(KERN_WARNING "Dev %s: unable to read partition table\n", kdevname(dev));
+		if (warn_no_part) printk(KERN_WARNING "Dev %s: unable to read partition table\n", kdevname(dev));
 		return -1;
 	}
 	label = (struct sgi_disklabel *) bh->b_data;

@@ -75,7 +75,7 @@ int		nfsd_svc(unsigned short port, int nrservs);
 
 /* nfsd/vfs.c */
 int		fh_lock_parent(struct svc_fh *, struct dentry *);
-void		nfsd_racache_init(void);
+int		nfsd_racache_init(int);
 void		nfsd_racache_shutdown(void);
 int		nfsd_lookup(struct svc_rqst *, struct svc_fh *,
 				const char *, int, struct svc_fh *);
@@ -181,11 +181,6 @@ extern u32	nfs_ok,
  * Time of server startup
  */
 extern struct timeval	nfssvc_boot;
-
-/*
- * The number of nfsd threads.
- */
-extern int		nfsd_nservers;
 
 #endif /* __KERNEL__ */
 

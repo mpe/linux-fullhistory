@@ -229,6 +229,8 @@ static int video_mmap(struct inode * ino, struct file * file,
 	return -EINVAL;
 }
 
+extern struct file_operations video_fops;
+
 /*
  *	Video For Linux device drivers request registration here.
  */
@@ -239,24 +241,29 @@ int video_register_device(struct video_device *vfd, int type)
 	int base;
 	int err;
 	int end;
+	char *name_base;
 	
 	switch(type)
 	{
 		case VFL_TYPE_GRABBER:
 			base=0;
 			end=64;
+			name_base = "video";
 			break;
 		case VFL_TYPE_VTX:
 			base=192;
 			end=224;
+			name_base = "vtx";
 			break;
 		case VFL_TYPE_VBI:
 			base=224;
 			end=240;
+			name_base = "vbi";
 			break;
 		case VFL_TYPE_RADIO:
 			base=64;
 			end=128;
+			name_base = "radio";
 			break;
 		default:
 			return -1;
@@ -266,6 +273,8 @@ int video_register_device(struct video_device *vfd, int type)
 	{
 		if(video_device[i]==NULL)
 		{
+			char name[16];
+
 			video_device[i]=vfd;
 			vfd->minor=i;
 			/* The init call may sleep so we book the slot out
@@ -281,6 +290,12 @@ int video_register_device(struct video_device *vfd, int type)
 					return err;
 				}
 			}
+			sprintf (name, "v4l/%s%d", name_base, i - base);
+			vfd->devfs_handle =
+			    devfs_register (NULL, name, 0, DEVFS_FL_DEFAULT,
+					    VIDEO_MAJOR, vfd->minor,
+					    S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
+					    &video_fops, NULL);
 			return 0;
 		}
 	}
@@ -295,6 +310,7 @@ void video_unregister_device(struct video_device *vfd)
 {
 	if(video_device[vfd->minor]!=vfd)
 		panic("vfd: bad unregister");
+	devfs_unregister (vfd->devfs_handle);
 	video_device[vfd->minor]=NULL;
 	MOD_DEC_USE_COUNT;
 }
@@ -323,7 +339,7 @@ int videodev_init(void)
 	struct video_init *vfli = video_init_list;
 	
 	printk(KERN_INFO "Linux video capture interface: v1.00\n");
-	if(register_chrdev(VIDEO_MAJOR,"video_capture", &video_fops))
+	if(devfs_register_chrdev(VIDEO_MAJOR,"video_capture", &video_fops))
 	{
 		printk("video_dev: unable to get major %d\n", VIDEO_MAJOR);
 		return -EIO;
@@ -349,7 +365,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	unregister_chrdev(VIDEO_MAJOR, "video_capture");
+	devfs_unregister_chrdev(VIDEO_MAJOR, "video_capture");
 }
 
 

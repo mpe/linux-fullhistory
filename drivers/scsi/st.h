@@ -8,6 +8,7 @@
 #ifndef _SCSI_H
 #include "scsi.h"
 #endif
+#include <linux/devfs_fs_kernel.h>
 
 /* The tape buffer descriptor. */
 typedef struct {
@@ -85,6 +86,8 @@ typedef struct {
 	/* Mode characteristics */
 	ST_mode modes[ST_NBR_MODES];
 	int current_mode;
+	devfs_handle_t de_r[ST_NBR_MODES];  /*  Rewind entries     */
+	devfs_handle_t de_n[ST_NBR_MODES];  /*  No-rewind entries  */
 
 	/* Status variables */
 	int partition;

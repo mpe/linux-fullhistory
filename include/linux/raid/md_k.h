@@ -329,7 +329,7 @@ typedef struct mdk_thread_s {
 
 #define THREAD_WAKEUP  0
 
-#define MAX_DISKNAME_LEN 32
+#define MAX_DISKNAME_LEN 64
 
 typedef struct dev_name_s {
 	struct md_list_head list;

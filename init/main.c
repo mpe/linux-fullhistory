@@ -13,6 +13,7 @@
 
 #include <linux/config.h>
 #include <linux/proc_fs.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/unistd.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
@@ -122,6 +123,8 @@ kdev_t real_root_dev;
 
 int root_mountflags = MS_RDONLY;
 char *execute_command = NULL;
+char root_device_name[64];
+
 
 static char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
@@ -249,6 +252,7 @@ static struct dev_name_struct {
 kdev_t __init name_to_kdev_t(char *line)
 {
 	int base = 0;
+
 	if (strncmp(line,"/dev/",5) == 0) {
 		struct dev_name_struct *dev = root_dev_names;
 		line += 5;
@@ -267,7 +271,18 @@ kdev_t __init name_to_kdev_t(char *line)
 
 static int __init root_dev_setup(char *line)
 {
+	int i;
+	char ch;
+
 	ROOT_DEV = name_to_kdev_t(line);
+	memset (root_device_name, 0, sizeof root_device_name);
+	if (strncmp (line, "/dev/", 5) == 0) line += 5;
+	for (i = 0; i < sizeof root_device_name - 1; ++i)
+	{
+	    ch = line[i];
+	    if ( isspace (ch) || (ch == ',') || (ch == '\0') ) break;
+	    root_device_name[i] = ch;
+	}
 	return 1;
 }
 
@@ -676,6 +691,8 @@ static void __init do_basic_setup(void)
 #endif
 	/* Mount the root filesystem.. */
 	mount_root();
+
+	mount_devfs_fs ();
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	root_mountflags = real_root_mountflags;

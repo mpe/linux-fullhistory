@@ -338,6 +338,7 @@
 #include <linux/kernel.h>
 #include <linux/cdrom.h>
 #include <linux/ioport.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/major.h> 
 #include <linux/string.h>
 #include <linux/vmalloc.h>
@@ -5584,12 +5585,16 @@ static int __init config_spea(void)
  *  Test for presence of drive and initialize it.
  *  Called once at boot or load time.
  */
+
+static devfs_handle_t devfs_handle = NULL;
+
 #ifdef MODULE
 int __init __SBPCD_INIT(void)
 #else
 int __init SBPCD_INIT(void)
 #endif MODULE
 {
+	char nbuff[16];
 	int i=0, j=0;
 	int addr[2]={1, CDROM_PORT};
 	int port_index;
@@ -5732,7 +5737,7 @@ int __init SBPCD_INIT(void)
 	OUT(MIXER_data,0xCC); /* one nibble per channel, max. value: 0xFF */
 #endif SOUND_BASE
 	
-	if (register_blkdev(MAJOR_NR, major_name, &cdrom_fops) != 0)
+	if (devfs_register_blkdev(MAJOR_NR, major_name, &cdrom_fops) != 0)
 	{
 		msg(DBG_INF, "Can't get MAJOR %d for Matsushita CDROM\n", MAJOR_NR);
 #ifdef MODULE
@@ -5747,6 +5752,7 @@ int __init SBPCD_INIT(void)
 	
 	request_region(CDo_command,4,major_name);
 	
+	devfs_handle = devfs_mk_dir (NULL, "sbp", 0, NULL);
 	for (j=0;j<NR_SBPCD;j++)
 	{
 		struct cdrom_device_info * sbpcd_infop;
@@ -5768,7 +5774,7 @@ int __init SBPCD_INIT(void)
 		if (D_S[j].sbp_buf==NULL)
 		{
 			msg(DBG_INF,"data buffer (%d frames) not available.\n",D_S[j].sbp_bufsiz);
-			if ((unregister_blkdev(MAJOR_NR, major_name) == -EINVAL))
+			if ((devfs_unregister_blkdev(MAJOR_NR, major_name) == -EINVAL))
 			{
 				printk("Can't unregister %s\n", major_name);
 			}
@@ -5795,11 +5801,15 @@ int __init SBPCD_INIT(void)
 		sbpcd_infop->dev = MKDEV(MAJOR_NR, j);
 		strncpy(sbpcd_infop->name,major_name, sizeof(sbpcd_infop->name)); 
 
+		sprintf (nbuff, "c%dt%d/cd", SBPCD_ISSUE - 1, D_S[j].drv_id);
+		sbpcd_infop->de =
+		    devfs_register (devfs_handle, nbuff, 0, DEVFS_FL_DEFAULT,
+				    MAJOR_NR, j, S_IFBLK | S_IRUGO | S_IWUGO,
+				    0, 0, &cdrom_fops, NULL);
 		if (register_cdrom(sbpcd_infop))
 		{
                 	printk(" sbpcd: Unable to register with Uniform CD-ROm driver\n");
 		}
-
 		/*
 		 * set the block size
 		 */
@@ -5829,13 +5839,14 @@ void sbpcd_exit(void)
 {
 	int j;
 	
-	if ((unregister_blkdev(MAJOR_NR, major_name) == -EINVAL))
+	if ((devfs_unregister_blkdev(MAJOR_NR, major_name) == -EINVAL))
 	{
 		msg(DBG_INF, "What's that: can't unregister %s.\n", major_name);
 		return;
 	}
 	release_region(CDo_command,4);
 	
+	devfs_unregister (devfs_handle);
 	for (j=0;j<NR_SBPCD;j++)
 	{
 		if (D_S[j].drv_id==-1) continue;

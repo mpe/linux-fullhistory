@@ -181,7 +181,7 @@ encode_fattr3(struct svc_rqst *rqstp, u32 *p, struct dentry *dentry)
 	} else {
 		p = enc64(p, (u64) inode->i_size);
 	}
-	p = enc64(p, inode->i_blksize * inode->i_blocks);
+	p = enc64(p, ((u64)inode->i_blocks) << 9);
 	*p++ = htonl((u32) MAJOR(inode->i_rdev));
 	*p++ = htonl((u32) MINOR(inode->i_rdev));
 	p = enc64(p, (u64) inode->i_dev);
@@ -211,7 +211,7 @@ encode_saved_post_attr(struct svc_rqst *rqstp, u32 *p, struct svc_fh *fhp)
 	} else {
 		p = enc64(p, (u64) fhp->fh_post_size);
 	}
-	p = enc64(p, fhp->fh_post_blksize * fhp->fh_post_blocks);
+	p = enc64(p, ((u64)fhp->fh_post_blocks) << 9);
 	*p++ = htonl((u32) MAJOR(fhp->fh_post_rdev));
 	*p++ = htonl((u32) MINOR(fhp->fh_post_rdev));
 	p = enc64(p, (u64) inode->i_dev);

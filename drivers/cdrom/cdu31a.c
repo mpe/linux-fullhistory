@@ -162,6 +162,7 @@
 #include <linux/hdreg.h>
 #include <linux/genhd.h>
 #include <linux/ioport.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
@@ -3441,7 +3442,7 @@ cdu31a_init(void)
 
       request_region(cdu31a_port, 4,"cdu31a");
       
-      if (register_blkdev(MAJOR_NR,"cdu31a",&cdrom_fops))
+      if (devfs_register_blkdev(MAJOR_NR,"cdu31a",&cdrom_fops))
       {
 	 printk("Unable to get major %d for CDU-31a\n", MAJOR_NR);
          goto errout2;
@@ -3543,7 +3544,7 @@ cdu31a_init(void)
    }
 errout0:
    printk("Unable to register CDU-31a with Uniform cdrom driver\n");
-   if (unregister_blkdev(MAJOR_NR, "cdu31a"))    
+   if (devfs_unregister_blkdev(MAJOR_NR, "cdu31a"))    
    {
       printk("Can't unregister block device for cdu31a\n");
    }
@@ -3562,7 +3563,7 @@ cdu31a_exit(void)
       printk("Can't unregister cdu31a from Uniform cdrom driver\n");
       return;
    }
-   if ((unregister_blkdev(MAJOR_NR, "cdu31a") == -EINVAL))    
+   if ((devfs_unregister_blkdev(MAJOR_NR, "cdu31a") == -EINVAL))    
    {
       printk("Can't unregister cdu31a\n");
       return;

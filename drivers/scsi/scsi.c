@@ -636,6 +636,8 @@ int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt)
 	return rtn;
 }
 
+devfs_handle_t scsi_devfs_handle = NULL;
+
 /*
  * scsi_do_cmd sends all the commands out to the low-level driver.  It
  * handles the specifics required for each low level driver - ie queued
@@ -1168,7 +1170,39 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
 static int proc_scsi_gen_write(struct file * file, const char * buf,
                               unsigned long length, void *data);
 
+void __init scsi_host_no_insert(char *str, int n)
+{
+    Scsi_Host_Name *shn, *shn2;
+    int len;
+    
+    len = strlen(str);
+    if (len && (shn = (Scsi_Host_Name *) kmalloc(sizeof(Scsi_Host_Name), GFP_ATOMIC))) {
+	if ((shn->name = kmalloc(len+1, GFP_ATOMIC))) {
+	    strncpy(shn->name, str, len);
+	    shn->name[len] = 0;
+	    shn->host_no = n;
+	    shn->host_registered = 0;
+	    shn->loaded_as_module = 1; /* numbers shouldn't be freed in any case */
+	    shn->next = NULL;
+	    if (scsi_host_no_list) {
+		for (shn2 = scsi_host_no_list;shn2->next;shn2 = shn2->next)
+		    ;
+		shn2->next = shn;
+	    }
+	    else
+		scsi_host_no_list = shn;
+	    max_scsi_hosts = n+1;
+	}
+	else
+	    kfree((char *) shn);
+    }
+}
+
 #ifndef MODULE			/* { */
+
+char scsi_host_no_table[20][10] __initdata = {};
+int scsi_host_no_set __initdata = 0;
+
 /*
  * scsi_dev_init() is our initialization routine, which in turn calls host
  * initialization, bus scanning, and sd/st initialization routines.
@@ -1184,8 +1218,16 @@ int __init scsi_dev_init(void)
 	return;
 #endif
 
+        /* Initialize list of host_no if kernel parameter set */
+        if (scsi_host_no_set) {
+		int i;
+                for (i = 0;i < sizeof(scsi_host_no_table)/sizeof(scsi_host_no_table[0]);i++)
+			scsi_host_no_insert(scsi_host_no_table[i], i);
+        }
+
 	/* Yes we're here... */
 
+        scsi_devfs_handle = devfs_mk_dir (NULL, "scsi", 4, NULL);
 	/*
 	 * This makes /proc/scsi and /proc/scsi/scsi visible.
 	 */
@@ -1535,6 +1577,7 @@ static int proc_scsi_gen_write(struct file * file, const char * buf,
 			 * Nobody is using this device any more.
 			 * Free all of the command structures.
 			 */
+			devfs_unregister (scd->de);
 			scsi_release_commandblocks(scd);
 
 			/* Now we can remove the device structure */
@@ -1834,6 +1877,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 				printk("Attached usage count = %d\n", SDpnt->attached);
 				return;
 			}
+			devfs_unregister (SDpnt->de);
 		}
 	}
 
@@ -2221,7 +2265,49 @@ static void scsi_dump_status(int level)
 }
 #endif				/* CONFIG_PROC_FS */
 
+static int scsi_host_no_init (char *str)
+{
+    static int next_no = 0;
+    char *temp;
+
+#ifndef MODULE
+    int len;
+    scsi_host_no_set = 1;
+    memset(scsi_host_no_table, 0, sizeof(scsi_host_no_table));
+#endif /* MODULE */
+
+    while (str) {
+	temp = str;
+	while (*temp && (*temp != ':') && (*temp != ','))
+	    temp++;
+	if (!*temp)
+	    temp = NULL;
+	else
+	    *temp++ = 0;
 #ifdef MODULE
+	scsi_host_no_insert(str, next_no);
+#else
+	if (next_no < sizeof(scsi_host_no_table)/sizeof(scsi_host_no_table[0])) {
+	    if ((len = strlen(str)) >= sizeof(scsi_host_no_table[0]))
+		len = sizeof(scsi_host_no_table[0])-1;
+	    strncpy(scsi_host_no_table[next_no], str, len);
+	    scsi_host_no_table[next_no][len] = 0;
+	}
+#endif /* MODULE */
+	str = temp;
+	next_no++;
+    }
+    return 1;
+}
+
+#ifndef MODULE
+__setup("scsihosts=", scsi_host_no_init);
+#endif
+
+#ifdef MODULE
+static char *scsihosts;
+
+MODULE_PARM(scsihosts, "s");
 
 int init_module(void)
 {
@@ -2252,6 +2338,8 @@ int init_module(void)
 
 	scsi_loadable_module_flag = 1;
 
+        scsi_devfs_handle = devfs_mk_dir (NULL, "scsi", 4, NULL);
+        scsi_host_no_init (scsihosts);
 	/*
 	 * This is where the processing takes place for most everything
 	 * when commands are completed.
@@ -2263,7 +2351,20 @@ int init_module(void)
 
 void cleanup_module(void)
 {
+	Scsi_Host_Name *shn, *shn2 = NULL;
+
 	remove_bh(SCSI_BH);
+
+        devfs_unregister (scsi_devfs_handle);
+        for (shn = scsi_host_no_list;shn;shn = shn->next) {
+		if (shn->name)
+			kfree(shn->name);
+                if (shn2)
+			kfree (shn2);
+                shn2 = shn;
+        }
+        if (shn2)
+		kfree (shn2);
 
 #ifdef CONFIG_PROC_FS
 	/* No, we're not here anymore. Don't show the /proc/scsi files. */

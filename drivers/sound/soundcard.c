@@ -15,6 +15,9 @@
  *                   integrated sound_switch.c
  * Stefan Reinauer : integrated /proc/sound (equals to /dev/sndstat,
  *                   which should disappear in the near future)
+ * Eric Dumas      : devfs support (22-Jan-98) <dumas@linux.eu.org> with fixups
+ *                   by C. Scott Ananian <cananian@alumni.princeton.edu>
+ * Richard Gooch   : moved common (non OSS-specific) devices to sound_core.c
  *
  * Rob Riggs		Added persistent DMA buffers support (1998/10/17)
  */
@@ -36,6 +39,8 @@
 #include <linux/wait.h>
 #include <linux/malloc.h>
 #include <linux/ioport.h>
+#include <linux/devfs_fs_kernel.h>
+#include <linux/major.h>
 #endif				/* __KERNEL__ */
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
@@ -92,7 +97,6 @@ unsigned long seq_time = 0;	/* Time for /dev/sequencer */
  */
 static mixer_vol_table mixer_vols[MAX_MIXER_DEV];
 static int num_mixer_volumes = 0;
-
 
 int *load_mixer_volumes(char *name, int *levels, int present)
 {
@@ -811,6 +815,66 @@ bad1:
 	return -1;
 }
 
+
+/* These device names follow the official Linux device list,
+ * Documentation/devices.txt.  Let us know if there are other
+ * common names we should support for compatibility.
+ * Only those devices not created by the generic code in sound_core.c are
+ * registered here.
+ */
+static const struct {
+	unsigned short minor;
+	char *name;
+	umode_t mode;
+	int *num;
+} dev_list[] = { /* list of minor devices */
+#ifdef CONFIG_AUDIO
+/* seems to be some confusion here -- this device is not in the device list */
+	{SND_DEV_DSP16,     "dspW",	 S_IWUGO | S_IRUSR | S_IRGRP,
+	 &num_audiodevs},
+	{SND_DEV_AUDIO,     "audio",	 S_IWUGO | S_IRUSR | S_IRGRP,
+	 &num_audiodevs},
+#endif /* CONFIG_AUDIO */
+};
+
+static char * 
+soundcard_make_name(char *buf, char *name, int idx) {
+	if (idx==0)
+		sprintf(buf, "sound/%s", name);
+	else
+		sprintf(buf, "sound/%s%d", name, idx);
+	return buf;
+}
+	
+/* Register/unregister audio entries */
+static void soundcard_register_devfs (int do_register)
+{
+    char name_buf[32];
+    int i, j, num;
+
+    for (i = 0; i < sizeof (dev_list) / sizeof *dev_list; i++)
+    {
+	num = (dev_list[i].num == NULL) ? 0 : *dev_list[i].num;
+	for (j = 0; j < num || j == 0; j++)
+	{
+	    soundcard_make_name (name_buf, dev_list[i].name, j);
+	    if (do_register)
+		devfs_register (NULL, name_buf, 0, DEVFS_FL_NONE,
+				SOUND_MAJOR, dev_list[i].minor+ (j* 0x10),
+				S_IFCHR | dev_list[i].mode, 0, 0,
+				&oss_sound_fops, NULL);
+	    else
+	    {
+		devfs_handle_t de;
+
+		de = devfs_find_handle (NULL, name_buf, 0, 0, 0,
+					DEVFS_SPECIAL_CHR, 0);
+		devfs_unregister (de);
+	    }
+	}
+    }
+}
+
 #ifdef MODULE
 static void
 #else
@@ -849,6 +913,7 @@ soundcard_init(void)
 	if (!create_proc_info_entry("sound", 0, NULL, sound_proc_get_info))
 		printk(KERN_ERR "sound: registering /proc/sound failed\n");
 #endif		
+	soundcard_register_devfs(1); /* register after we know # of devices */
 }
 
 #ifdef MODULE
@@ -931,6 +996,7 @@ void cleanup_module(void)
 		return;
 	}
         remove_proc_entry("sound", NULL);
+	soundcard_register_devfs (0);
 	if (chrdev_registered)
 		destroy_special_devices();
 

@@ -1394,7 +1394,7 @@ static struct file_operations apm_bios_fops = {
 
 static struct miscdevice apm_device = {
 	APM_MINOR_DEV,
-	"apm",
+	"apm_bios",
 	&apm_bios_fops
 };
 

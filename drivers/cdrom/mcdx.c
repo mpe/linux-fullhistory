@@ -74,6 +74,7 @@ static const char *mcdx_c_version
 #include <linux/major.h>
 #define MAJOR_NR MITSUMI_X_CDROM_MAJOR
 #include <linux/blk.h>
+#include <linux/devfs_fs_kernel.h>
 
 /* for compatible parameter passing with "insmod" */
 #define	mcdx_drive_map mcdx
@@ -995,7 +996,7 @@ void __exit mcdx_exit(void)
 
     for (i = 0; i < MCDX_NDRIVES; i++) {
 		struct s_drive_stuff *stuffp;
-        if (unregister_cdrom(&mcdx_info)) {
+        	if (unregister_cdrom(&mcdx_info)) {
 			printk(KERN_WARNING "Can't unregister cdrom mcdx\n");
 			return;
 		}
@@ -1012,7 +1013,7 @@ void __exit mcdx_exit(void)
 		kfree(stuffp);
     }
 
-    if (unregister_blkdev(MAJOR_NR, "mcdx") != 0) {
+    if (devfs_unregister_blkdev(MAJOR_NR, "mcdx") != 0) {
         xwarn("cleanup() unregister_blkdev() failed\n");
     }
 #if !MCDX_QUIET
@@ -1123,7 +1124,7 @@ int __init mcdx_init_drive(int drive)
 	}
 
 	xtrace(INIT, "init() register blkdev\n");
-	if (register_blkdev(MAJOR_NR, "mcdx", &cdrom_fops) != 0) {
+	if (devfs_register_blkdev(MAJOR_NR, "mcdx", &cdrom_fops) != 0) {
 		xwarn("%s=0x%3p,%d: Init failed. Can't get major %d.\n",
 		      MCDX,
 		      stuffp->wreg_data, stuffp->irq, MAJOR_NR);
@@ -1181,7 +1182,7 @@ int __init mcdx_init_drive(int drive)
 			       MCDX_IO_SIZE);
 		free_irq(stuffp->irq, NULL);
 		kfree(stuffp);
-		if (unregister_blkdev(MAJOR_NR, "mcdx") != 0)
+		if (devfs_unregister_blkdev(MAJOR_NR, "mcdx") != 0)
         		xwarn("cleanup() unregister_blkdev() failed\n");
 		return 2;
         }

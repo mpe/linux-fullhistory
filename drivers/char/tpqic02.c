@@ -89,7 +89,8 @@
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
- 
+#include <linux/devfs_fs_kernel.h> 
+
 #include <asm/dma.h>
 #include <asm/system.h>
 #include <asm/io.h>
@@ -2902,7 +2903,7 @@ int __init qic02_tape_init(void)
 #endif
     printk(TPQIC02_NAME ": DMA buffers: %u blocks\n", NR_BLK_BUF);
     /* If we got this far, install driver functions */
-    if (register_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME, &qic02_tape_fops))
+    if (devfs_register_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME, &qic02_tape_fops))
     {
 	printk(TPQIC02_NAME ": Unable to get chrdev major %d\n", QIC02_TAPE_MAJOR);
 #ifndef CONFIG_QIC02_DYNCONF
@@ -2910,7 +2911,38 @@ int __init qic02_tape_init(void)
 #endif
 	return -ENODEV;
     }
-
+    devfs_register (NULL, "ntpqic11", 0, DEVFS_FL_NONE,
+		    QIC02_TAPE_MAJOR, 2,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    &qic02_tape_fops, NULL);
+    devfs_register (NULL, "tpqic11", 0, DEVFS_FL_NONE,
+		    QIC02_TAPE_MAJOR, 3,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    &qic02_tape_fops, NULL);
+    devfs_register (NULL, "ntpqic24", 0, DEVFS_FL_NONE,
+		    QIC02_TAPE_MAJOR, 4,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    &qic02_tape_fops, NULL);
+    devfs_register (NULL, "tpqic24", 0, DEVFS_FL_NONE,
+		    QIC02_TAPE_MAJOR, 5,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    &qic02_tape_fops, NULL);
+    devfs_register (NULL, "ntpqic120", 0, DEVFS_FL_NONE,
+		    QIC02_TAPE_MAJOR, 6,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    &qic02_tape_fops, NULL);
+    devfs_register (NULL, "tpqic120", 0, DEVFS_FL_NONE,
+		    QIC02_TAPE_MAJOR, 7,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    &qic02_tape_fops, NULL);
+    devfs_register (NULL, "ntpqic150", 0, DEVFS_FL_NONE,
+		    QIC02_TAPE_MAJOR, 8,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    &qic02_tape_fops, NULL);
+    devfs_register (NULL, "tpqic150", 0, DEVFS_FL_NONE,
+		    QIC02_TAPE_MAJOR, 9,
+		    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, 0, 0,
+		    &qic02_tape_fops, NULL);
     init_waitqueue_head(&qic02_tape_transfer);
     /* prepare timer */
     TIMEROFF;
@@ -2957,7 +2989,15 @@ void cleanup_module(void)
     {
 	qic02_release_resources();
     }
-    unregister_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME);
+    devfs_unregister_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME);
+    devfs_unregister(devfs_find_handle(NULL, "ntpqic11", 0, QIC02_TAPE_MAJOR, 2, DEVFS_SPECIAL_CHR, 0));
+    devfs_unregister(devfs_find_handle(NULL, "tpqic11", 0, QIC02_TAPE_MAJOR, 3, DEVFS_SPECIAL_CHR, 0));
+    devfs_unregister(devfs_find_handle(NULL, "ntpqic24", 0, QIC02_TAPE_MAJOR, 4, DEVFS_SPECIAL_CHR, 0));
+    devfs_unregister(devfs_find_handle(NULL, "tpqic24", 0, QIC02_TAPE_MAJOR, 5, DEVFS_SPECIAL_CHR, 0));
+    devfs_unregister(devfs_find_handle(NULL, "ntpqic120", 0, QIC02_TAPE_MAJOR, 6, DEVFS_SPECIAL_CHR, 0));
+    devfs_unregister(devfs_find_handle(NULL, "tpqic120", 0, QIC02_TAPE_MAJOR, 7, DEVFS_SPECIAL_CHR, 0));
+    devfs_unregister(devfs_find_handle(NULL, "ntpqic150", 0, QIC02_TAPE_MAJOR, 8, DEVFS_SPECIAL_CHR, 0));
+    devfs_unregister(devfs_find_handle(NULL, "tpqic150", 0, QIC02_TAPE_MAJOR, 9, DEVFS_SPECIAL_CHR, 0));
 }
 
 int init_module(void)

@@ -1089,7 +1089,7 @@ static boolean DAC960_RegisterBlockDevice(DAC960_Controller_T *Controller)
   /*
     Register the Block Device Major Number for this DAC960 Controller.
   */
-  if (register_blkdev(MajorNumber, "rd", &DAC960_FileOperations) < 0)
+  if (devfs_register_blkdev(MajorNumber, "dac960", &DAC960_FileOperations) < 0)
     {
       DAC960_Error("UNABLE TO ACQUIRE MAJOR NUMBER %d - DETACHING\n",
 		   Controller, MajorNumber);
@@ -1130,12 +1130,13 @@ static boolean DAC960_RegisterBlockDevice(DAC960_Controller_T *Controller)
     Complete initialization of the Generic Disk Information structure.
   */
   Controller->GenericDiskInfo.major = MajorNumber;
-  Controller->GenericDiskInfo.major_name = "rd";
+  Controller->GenericDiskInfo.major_name = "dac960";
   Controller->GenericDiskInfo.minor_shift = DAC960_MaxPartitionsBits;
   Controller->GenericDiskInfo.max_p = DAC960_MaxPartitions;
   Controller->GenericDiskInfo.nr_real = Controller->LogicalDriveCount;
   Controller->GenericDiskInfo.real_devices = Controller;
   Controller->GenericDiskInfo.next = NULL;
+  Controller->GenericDiskInfo.fops = &DAC960_FileOperations;
   /*
     Install the Generic Disk Information structure at the end of the list.
   */
@@ -1164,7 +1165,7 @@ static void DAC960_UnregisterBlockDevice(DAC960_Controller_T *Controller)
   /*
     Unregister the Block Device Major Number for this DAC960 Controller.
   */
-  unregister_blkdev(MajorNumber, "rd");
+  devfs_unregister_blkdev(MajorNumber, "dac960");
   /*
     Remove the I/O Request Function.
   */

@@ -8673,6 +8673,24 @@ CONFIG_PROC_FS
   This option will enlarge your kernel by about 67 KB. Several
   programs depend on this, so everyone should say Y here.
 
+/dev filesystem support (EXPERIMENTAL)
+CONFIG_DEVFS_FS
+  This is another virtual filesystem (like /proc) which provides the
+  filesystem interface to device drivers, normally found in /dev.
+  Devfs does not depend on major and minor number allocations. Device
+  drivers register entries in /dev which appear automagically. Without
+  devfs you need to populate /dev with hundreds, even thousands of
+  inodes.
+  This is work in progress. If you want to use this you *must* read
+  Documentation/filesystems/devfs/README
+
+Enable devfs debugging output
+CONFIG_DEVFS_DEBUG
+  This option appears if you have CONFIG_DEVFS_FS enabled. Setting
+  this to 'Y' enables devfs debugging output. See the file
+  Documentation/filesystems/devfs/boot-options for more details.
+  The default is 'N'.
+
 NFS filesystem support
 CONFIG_NFS_FS
   If you are connected to some other (usually local) Unix computer
@@ -9090,6 +9108,8 @@ CONFIG_DEVPTS_FS
   The GNU C library glibc 2.1 contains the requisite support for this
   mode of operation; you also need client programs that use the Unix98
   API.
+
+  Note that CONFIG_DEVFS_FS is a more general facility.
 
 UnixWare slices support (EXPERIMENTAL)
 CONFIG_UNIXWARE_DISKLABEL
@@ -10751,6 +10771,25 @@ CONFIG_ACQUIRE_WDT
   The module is called pscwdt.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt. Most people
   will say N.
+
+Intel P6 CPU Microcode Update Support
+CONFIG_MICROCODE
+  If you say Y here you will be able to update microcode on 
+  Intel processors in P6 family, e.g.  Pentium Pro, Pentium II, 
+  Pentium III, Xeon etc. You will obviously need the actual microcode
+  binary data itself which is not shipped with the Linux kernel. 
+  Contact Intel to obtain the latest revision of microcode for 
+  your CPU(s). With this support compiled you can use dd(1) to write
+  microcode, for example:
+
+     # dd if=/etc/microcode of=/proc/driver/microcode bs=98304 count=1
+
+  You need to be superuser to do that.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called microcode.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
 
 Enhanced Real Time Clock Support
 CONFIG_RTC

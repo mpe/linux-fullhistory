@@ -11,6 +11,7 @@
    - kerneld support by Boris Tobotras <boris@xtalk.msk.su>
    - kmod support by: Cyrus Durgin
    - RAID0 bugfixes: Mark Anthony Lisher <markal@iname.com>
+   - Devfs support by Richard Gooch <rgooch@atnf.csiro.au>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -24,6 +25,7 @@
 
 #include <linux/config.h>
 #include <linux/raid/md.h>
+#include <linux/devfs_fs_kernel.h>
 
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
@@ -68,6 +70,9 @@ static mdk_thread_t *md_recovery_thread = NULL;
 
 int md_size[MAX_MD_DEVS] = {0, };
 
+extern struct block_device_operations md_fops;
+static devfs_handle_t devfs_handle = NULL;
+
 static struct gendisk md_gendisk=
 {
 	MD_MAJOR,
@@ -78,7 +83,8 @@ static struct gendisk md_gendisk=
 	md_size,
 	MAX_MD_DEVS,
 	NULL,
-	NULL
+	NULL,
+	&md_fops,
 };
 
 void md_plug_device (request_queue_t *mdqueue, kdev_t dev)
@@ -3302,11 +3308,15 @@ int md__init md_init (void)
 			MD_MAJOR_VERSION, MD_MINOR_VERSION,
 			MD_PATCHLEVEL_VERSION, MAX_MD_DEVS, MAX_REAL);
 
-	if (register_blkdev (MD_MAJOR, "md", &md_fops))
+	if (devfs_register_blkdev (MD_MAJOR, "md", &md_fops))
 	{
 		printk (KERN_ALERT "Unable to get major %d for md\n", MD_MAJOR);
 		return (-1);
 	}
+	devfs_handle = devfs_mk_dir (NULL, "md", 0, NULL);
+	devfs_register_series (devfs_handle, "%u", MAX_MD_DEV,DEVFS_FL_DEFAULT,
+			       MAJOR_NR, 0, S_IFBLK | S_IRUSR | S_IWUSR, 0, 0,
+			       &md_fops, NULL);
 
 	blk_dev[MD_MAJOR].queue = md_get_queue;
 

@@ -197,10 +197,15 @@ struct tty_driver {
  *	optimize for this case if this flag is set.  (Note that there
  * 	is also a promise, if the above case is true, not to signal
  * 	overruns, either.)
+ *
+ * TTY_DRIVER_NO_DEVFS --- if set, do not create devfs entries. This
+ *	is only used by tty_register_driver().
+ *
  */
 #define TTY_DRIVER_INSTALLED		0x0001
 #define TTY_DRIVER_RESET_TERMIOS	0x0002
 #define TTY_DRIVER_REAL_RAW		0x0004
+#define TTY_DRIVER_NO_DEVFS		0x0008
 
 /* tty driver types */
 #define TTY_DRIVER_TYPE_SYSTEM		0x0001

@@ -25,6 +25,7 @@
 #include <linux/netlink.h>
 #include <linux/poll.h>
 #include <linux/init.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -175,12 +176,35 @@ static struct file_operations netlink_fops = {
 	release:	netlink_release,
 };
 
+static devfs_handle_t devfs_handle = NULL;
+
+static void __init make_devfs_entries (const char *name, int minor)
+{
+	devfs_register (devfs_handle, name, 0, DEVFS_FL_DEFAULT,
+			NETLINK_MAJOR, minor,
+			S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			&netlink_fops, NULL);
+}
+
 int __init init_netlink(void)
 {
-	if (register_chrdev(NETLINK_MAJOR,"netlink", &netlink_fops)) {
+	if (devfs_register_chrdev(NETLINK_MAJOR,"netlink", &netlink_fops)) {
 		printk(KERN_ERR "netlink: unable to get major %d\n", NETLINK_MAJOR);
 		return -EIO;
 	}
+	devfs_handle = devfs_mk_dir (NULL, "netlink", 7, NULL);
+	/*  Someone tell me the official names for the uppercase ones  */
+	make_devfs_entries ("route", 0);
+	make_devfs_entries ("skip", 1);
+	make_devfs_entries ("USERSOCK", 2);
+	make_devfs_entries ("fwmonitor", 3);
+	make_devfs_entries ("ARPD", 8);
+	make_devfs_entries ("ROUTE6", 11);
+	make_devfs_entries ("IP6_FW", 13);
+	devfs_register_series (devfs_handle, "tap%u", 16, DEVFS_FL_DEFAULT,
+			       NETLINK_MAJOR, 16,
+			       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       &netlink_fops, NULL);
 	return 0;
 }
 
@@ -194,7 +218,8 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	unregister_chrdev(NET_MAJOR,"netlink");
+	devfs_unregister (devfs_handle);
+	devfs_unregister_chrdev(NETLINK_MAJOR, "netlink");
 }
 
 #endif

@@ -419,4 +419,16 @@ unsigned long get_wchan(struct task_struct *p);
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)
 
+struct microcode {
+	unsigned int hdrver;
+	unsigned int rev;
+	unsigned int date;
+	unsigned int sig;
+	unsigned int cksum;
+	unsigned int ldrver;
+	unsigned int pf;
+	unsigned int reserved[5];
+	unsigned int bits[500];
+};
+
 #endif /* __ASM_I386_PROCESSOR_H */

@@ -25,6 +25,7 @@
 #include <linux/major.h>
 #include <linux/errno.h>
 #include <linux/tty.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/mm.h>
@@ -95,12 +96,11 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	unsigned int currcons = MINOR(inode->i_rdev);
-	long p = *ppos;
-	long viewed, attr, size, read;
-	char *con_buf0;
+	long pos = *ppos;
+	long viewed, attr, read;
 	int col, maxcol;
 	unsigned short *org = NULL;
-	ssize_t ret, orig_count;
+	ssize_t ret;
 
 	down(&con_buf_sem);
 
@@ -122,129 +122,150 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	if (!vc_cons_allocated(currcons))
 		goto unlock_out;
 
-	size = vcs_size(inode);
 	ret = -EINVAL;
-	if (p < 0 || p > size)
+	if (pos < 0)
 		goto unlock_out;
-	if (count > size - p)
-		count = size - p;
-	if (count > CON_BUF_SIZE)
-		count = CON_BUF_SIZE;
+	read = 0;
+	ret = 0;
+	while (count) {
+		char *con_buf0, *con_buf_start;
+		long this_round, size;
+		ssize_t orig_count;
+		long p = pos;
 
-	/* Perform the whole read into the local con_buf.
-	 * Then we can drop the console spinlock and safely
-	 * attempt to move it to userspace.
-	 */
+		/* Check whether we are above size each round,
+		 * as copy_to_user at the end of this loop
+		 * could sleep.
+		 */
+		size = vcs_size(inode);
+		if (pos >= size)
+			break;
+		if (count > size - pos)
+			count = size - pos;
 
-	con_buf0 = con_buf;
-	orig_count = count;
-	maxcol = video_num_columns;
-	if (!attr) {
-		org = screen_pos(currcons, p, viewed);
-		col = p % maxcol;
-		p += maxcol - col;
-		while (count-- > 0) {
-			*con_buf0++ = (vcs_scr_readw(currcons, org++) & 0xff);
-			if (++col == maxcol) {
-				org = screen_pos(currcons, p, viewed);
-				col = 0;
-				p += maxcol;
-			}
-		}
-	} else {
-		if (p < HEADER_SIZE) {
-			size_t tmp_count;
+		this_round = count;
+		if (this_round > CON_BUF_SIZE)
+			this_round = CON_BUF_SIZE;
 
-			con_buf0[0] = (char) video_num_lines;
-			con_buf0[1] = (char) video_num_columns;
-			getconsxy(currcons, con_buf0 + 2);
+		/* Perform the whole read into the local con_buf.
+		 * Then we can drop the console spinlock and safely
+		 * attempt to move it to userspace.
+		 */
 
-			tmp_count = HEADER_SIZE - p;
-			if (tmp_count > count)
-				tmp_count = count;
-
-			/* Advance state pointers and move on. */
-			count -= tmp_count;
-			buf += tmp_count;
-			p += tmp_count;
-			con_buf0 += tmp_count;
-		}
-		p -= HEADER_SIZE;
-		col = (p/2) % maxcol;
-		if (count > 0) {
-			char tmp_byte;
-
-			org = screen_pos(currcons, p/2, viewed);
-			if ((p & 1) && count > 0) {
-#ifdef __BIG_ENDIAN
-				tmp_byte = vcs_scr_readw(currcons, org++) & 0xff;
-#else
-				tmp_byte = vcs_scr_readw(currcons, org++) >> 8;
-#endif
-
-				*con_buf0++ = tmp_byte;
-
-				count--;   
-				p++;
-				if (++col == maxcol) {
-					org = screen_pos(currcons, p/2, viewed);
-					col = 0;
-				}
-			}
-			p /= 2;
+		con_buf_start = con_buf0 = con_buf;
+		orig_count = this_round;
+		maxcol = video_num_columns;
+		if (!attr) {
+			org = screen_pos(currcons, p, viewed);
+			col = p % maxcol;
 			p += maxcol - col;
-		}
-
-		if (count > 1) {
-			size_t tmp_count = count;
-			unsigned short *tmp_buf = (unsigned short *)con_buf0;
-
-			while (tmp_count > 1) {
-				*tmp_buf++ = vcs_scr_readw(currcons, org++);
-				tmp_count -= 2;
+			while (this_round-- > 0) {
+				*con_buf0++ = (vcs_scr_readw(currcons, org++) & 0xff);
 				if (++col == maxcol) {
 					org = screen_pos(currcons, p, viewed);
 					col = 0;
 					p += maxcol;
 				}
 			}
+		} else {
+			if (p < HEADER_SIZE) {
+				size_t tmp_count;
 
-			/* Advance pointers, and move on. */
-			count -= (char *)tmp_buf - con_buf0;
-			con_buf0 += (char *)tmp_buf - con_buf0;
-		}
-		if (count > 0) {
-			char tmp_byte;
+				con_buf0[0] = (char) video_num_lines;
+				con_buf0[1] = (char) video_num_columns;
+				getconsxy(currcons, con_buf0 + 2);
 
+				tmp_count = HEADER_SIZE - p;
+				if (tmp_count > this_round)
+					tmp_count = this_round;
+
+				/* Advance state pointers and move on. */
+				this_round -= tmp_count;
+				con_buf_start += p;
+				orig_count -= p;
+				p += tmp_count;
+				con_buf0 = con_buf + p;
+			}
+			p -= HEADER_SIZE;
+			col = (p/2) % maxcol;
+			if (this_round > 0) {
+				char tmp_byte;
+
+				org = screen_pos(currcons, p/2, viewed);
+				if ((p & 1) && this_round > 0) {
 #ifdef __BIG_ENDIAN
-			tmp_byte = vcs_scr_readw(currcons, org) >> 8;
+					tmp_byte = vcs_scr_readw(currcons, org++) & 0xff;
 #else
-			tmp_byte = vcs_scr_readw(currcons, org) & 0xff;
+					tmp_byte = vcs_scr_readw(currcons, org++) >> 8;
 #endif
 
-			*con_buf0++ = tmp_byte;
+					*con_buf0++ = tmp_byte;
+
+					this_round--;   
+					p++;
+					if (++col == maxcol) {
+						org = screen_pos(currcons, p/2, viewed);
+						col = 0;
+					}
+				}
+				p /= 2;
+				p += maxcol - col;
+			}
+
+			if (this_round > 1) {
+				size_t tmp_count = this_round;
+				unsigned short *tmp_buf = (unsigned short *)con_buf0;
+
+				while (tmp_count > 1) {
+					*tmp_buf++ = vcs_scr_readw(currcons, org++);
+					tmp_count -= 2;
+					if (++col == maxcol) {
+						org = screen_pos(currcons, p, viewed);
+						col = 0;
+						p += maxcol;
+					}
+				}
+
+				/* Advance pointers, and move on. */
+				this_round = tmp_count;
+				con_buf0 = (char*)tmp_buf;
+			}
+			if (this_round > 0) {
+				char tmp_byte;
+
+#ifdef __BIG_ENDIAN
+				tmp_byte = vcs_scr_readw(currcons, org) >> 8;
+#else
+				tmp_byte = vcs_scr_readw(currcons, org) & 0xff;
+#endif
+
+				*con_buf0++ = tmp_byte;
+			}
 		}
+
+		/* Finally, temporarily drop the console lock and push
+		 * all the data to userspace from our temporary buffer.
+		 */
+
+		spin_unlock_irq(&console_lock);
+		ret = copy_to_user(buf, con_buf_start, orig_count);
+		spin_lock_irq(&console_lock);
+
+		if (ret) {
+			read += (orig_count - ret);
+			ret = -EFAULT;
+			break;
+		}
+		buf += orig_count;
+		pos += orig_count;
+		read += orig_count;
+		count -= orig_count;
 	}
-
-	/* Finally, temporarily drop the console lock and push
-	 * all the data to userspace from our temporary buffer.
-	 */
-
-	spin_unlock_irq(&console_lock);
-	ret = copy_to_user(buf, con_buf0, orig_count);
-	spin_lock_irq(&console_lock);
-
-	if (ret) {
-		ret = -EFAULT;
-	} else {
-		read = orig_count;
-		*ppos += read;
+	*ppos += read;
+	if (read)
 		ret = read;
-	}
-
 unlock_out:
 	spin_unlock_irq(&console_lock);
-
 	up(&con_buf_sem);
 	return ret;
 }
@@ -254,12 +275,12 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	unsigned int currcons = MINOR(inode->i_rdev);
-	long p = *ppos;
+	long pos = *ppos;
 	long viewed, attr, size, written;
 	char *con_buf0;
 	int col, maxcol;
 	u16 *org0 = NULL, *org = NULL;
-	size_t ret, orig_count;
+	size_t ret;
 
 	down(&con_buf_sem);
 
@@ -284,125 +305,144 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 
 	size = vcs_size(inode);
 	ret = -EINVAL;
-	if (p < 0 || p > size)
+	if (pos < 0 || pos > size)
 		goto unlock_out;
-	if (count > size - p)
-		count = size - p;
-	if (count > CON_BUF_SIZE)
-		count = CON_BUF_SIZE;
+	if (count > size - pos)
+		count = size - pos;
+	written = 0;
+	while (count) {
+		long this_round = count;
+		size_t orig_count;
+		long p;
 
-	/* Temporarily drop the console lock so that we can read
-	 * in the write data from userspace safely.
-	 */
-	spin_unlock_irq(&console_lock);
-	ret = copy_from_user(con_buf, buf, count);
-	spin_lock_irq(&console_lock);
+		if (this_round > CON_BUF_SIZE)
+			this_round = CON_BUF_SIZE;
 
-	if (ret) {
-		ret = -EFAULT;
-		goto unlock_out;
-	}
+		/* Temporarily drop the console lock so that we can read
+		 * in the write data from userspace safely.
+		 */
+		spin_unlock_irq(&console_lock);
+		ret = copy_from_user(con_buf, buf, this_round);
+		spin_lock_irq(&console_lock);
 
-	/* The vcs_size might have changed while we slept to grab
-	 * the user buffer, so recheck.
-	 */
-	size = vcs_size(inode);
-	ret = -EINVAL;
-	if (p > size)
-		goto unlock_out;
-	if (count > size - p)
-		count = size - p;
-
-	/* OK, now actually push the write to the console
-	 * under the lock using the local kernel buffer.
-	 */
-
-	con_buf0 = con_buf;
-	orig_count = count;
-	maxcol = video_num_columns;
-	if (!attr) {
-		org0 = org = screen_pos(currcons, p, viewed);
-		col = p % maxcol;
-		p += maxcol - col;
-
-		while (count > 0) {
-			unsigned char c = *con_buf0++;
-
-			count--;
-			vcs_scr_writew(currcons,
-				       (vcs_scr_readw(currcons, org) & 0xff00) | c, org);
-			org++;
-			if (++col == maxcol) {
-				org = screen_pos(currcons, p, viewed);
-				col = 0;
-				p += maxcol;
+		if (ret) {
+			this_round -= ret;
+			if (!this_round) {
+				/* Abort loop if no data were copied. Otherwise
+				 * fail with -EFAULT.
+				 */
+				if (written)
+					break;
+				ret = -EFAULT;
+				goto unlock_out;
 			}
 		}
-	} else {
-		if (p < HEADER_SIZE) {
-			char header[HEADER_SIZE];
 
-			getconsxy(currcons, header + 2);
-			while (p < HEADER_SIZE && count > 0) {
-				count--;
-				header[p++] = *con_buf0++;
-			}
-			if (!viewed)
-				putconsxy(currcons, header + 2);
-		}
-		p -= HEADER_SIZE;
-		col = (p/2) % maxcol;
-		if (count > 0) {
-			org0 = org = screen_pos(currcons, p/2, viewed);
-			if ((p & 1) && count > 0) {
-				char c;
+		/* The vcs_size might have changed while we slept to grab
+		 * the user buffer, so recheck.
+		 * Return data written up to now on failure.
+		 */
+		size = vcs_size(inode);
+		if (pos >= size)
+			break;
+		if (this_round > size - pos)
+			this_round = size - pos;
 
-				count--;
-				c = *con_buf0++;
-#ifdef __BIG_ENDIAN
-				vcs_scr_writew(currcons, c |
-				     (vcs_scr_readw(currcons, org) & 0xff00), org);
-#else
-				vcs_scr_writew(currcons, (c << 8) |
-				     (vcs_scr_readw(currcons, org) & 0xff), org);
-#endif
+		/* OK, now actually push the write to the console
+		 * under the lock using the local kernel buffer.
+		 */
+
+		con_buf0 = con_buf;
+		orig_count = this_round;
+		maxcol = video_num_columns;
+		p = pos;
+		if (!attr) {
+			org0 = org = screen_pos(currcons, p, viewed);
+			col = p % maxcol;
+			p += maxcol - col;
+
+			while (this_round > 0) {
+				unsigned char c = *con_buf0++;
+
+				this_round--;
+				vcs_scr_writew(currcons,
+					       (vcs_scr_readw(currcons, org) & 0xff00) | c, org);
 				org++;
-				p++;
 				if (++col == maxcol) {
-					org = screen_pos(currcons, p/2, viewed);
+					org = screen_pos(currcons, p, viewed);
 					col = 0;
+					p += maxcol;
 				}
 			}
-			p /= 2;
-			p += maxcol - col;
-		}
-		while (count > 1) {
-			unsigned short w;
+		} else {
+			if (p < HEADER_SIZE) {
+				char header[HEADER_SIZE];
 
-			w = *((const unsigned short *)con_buf0);
-			vcs_scr_writew(currcons, w, org++);
-			con_buf0 += 2;
-			count -= 2;
-			if (++col == maxcol) {
-				org = screen_pos(currcons, p, viewed);
-				col = 0;
-				p += maxcol;
+				getconsxy(currcons, header + 2);
+				while (p < HEADER_SIZE && this_round > 0) {
+					this_round--;
+					header[p++] = *con_buf0++;
+				}
+				if (!viewed)
+					putconsxy(currcons, header + 2);
+			}
+			p -= HEADER_SIZE;
+			col = (p/2) % maxcol;
+			if (this_round > 0) {
+				org0 = org = screen_pos(currcons, p/2, viewed);
+				if ((p & 1) && this_round > 0) {
+					char c;
+
+					this_round--;
+					c = *con_buf0++;
+#ifdef __BIG_ENDIAN
+					vcs_scr_writew(currcons, c |
+					     (vcs_scr_readw(currcons, org) & 0xff00), org);
+#else
+					vcs_scr_writew(currcons, (c << 8) |
+					     (vcs_scr_readw(currcons, org) & 0xff), org);
+#endif
+					org++;
+					p++;
+					if (++col == maxcol) {
+						org = screen_pos(currcons, p/2, viewed);
+						col = 0;
+					}
+				}
+				p /= 2;
+				p += maxcol - col;
+			}
+			while (this_round > 1) {
+				unsigned short w;
+
+				w = *((const unsigned short *)con_buf0);
+				vcs_scr_writew(currcons, w, org++);
+				con_buf0 += 2;
+				this_round -= 2;
+				if (++col == maxcol) {
+					org = screen_pos(currcons, p, viewed);
+					col = 0;
+					p += maxcol;
+				}
+			}
+			if (this_round > 0) {
+				unsigned char c;
+
+				c = *con_buf0++;
+#ifdef __BIG_ENDIAN
+				vcs_scr_writew(currcons, (vcs_scr_readw(currcons, org) & 0xff) | (c << 8), org);
+#else
+				vcs_scr_writew(currcons, (vcs_scr_readw(currcons, org) & 0xff00) | c, org);
+#endif
 			}
 		}
-		if (count > 0) {
-			unsigned char c;
-
-			c = *con_buf0++;
-#ifdef __BIG_ENDIAN
-			vcs_scr_writew(currcons, (vcs_scr_readw(currcons, org) & 0xff) | (c << 8), org);
-#else
-			vcs_scr_writew(currcons, (vcs_scr_readw(currcons, org) & 0xff00) | c, org);
-#endif
-		}
+		count -= orig_count;
+		written += orig_count;
+		buf += orig_count;
+		pos += orig_count;
+		if (org0)
+			update_region(currcons, (unsigned long)(org0), org-org0);
 	}
-	if (org0)
-		update_region(currcons, (unsigned long)(org0), org-org0);
-	written = orig_count;
 	*ppos += written;
 	ret = written;
 
@@ -430,12 +470,49 @@ static struct file_operations vcs_fops = {
 	open:		vcs_open,
 };
 
+static devfs_handle_t devfs_handle = NULL;
+
+void vcs_make_devfs (unsigned int index, int unregister)
+{
+#ifdef CONFIG_DEVFS_FS
+    char name[8];
+
+    sprintf (name, "a%u", index + 1);
+    if (unregister)
+    {
+	devfs_unregister ( devfs_find_handle (devfs_handle, name + 1, 0, 0, 0,
+					      DEVFS_SPECIAL_CHR, 0) );
+	devfs_unregister ( devfs_find_handle (devfs_handle, name, 0, 0, 0,
+					      DEVFS_SPECIAL_CHR, 0) );
+    }
+    else
+    {
+	devfs_register (devfs_handle, name + 1, 0, DEVFS_FL_DEFAULT,
+			VCS_MAJOR, index + 1,
+			S_IFCHR | S_IRUSR | S_IWUSR, 0, 0, &vcs_fops, NULL);
+	devfs_register (devfs_handle, name, 0, DEVFS_FL_DEFAULT,
+			VCS_MAJOR, index + 129,
+			S_IFCHR | S_IRUSR | S_IWUSR, 0, 0, &vcs_fops, NULL);
+    }
+#endif /* CONFIG_DEVFS_FS */
+}
+
 int __init vcs_init(void)
 {
 	int error;
 
-	error = register_chrdev(VCS_MAJOR, "vcs", &vcs_fops);
+	error = devfs_register_chrdev(VCS_MAJOR, "vcs", &vcs_fops);
+
 	if (error)
 		printk("unable to get major %d for vcs device", VCS_MAJOR);
+
+	devfs_handle = devfs_mk_dir (NULL, "vcc", 3, NULL);
+	devfs_register (devfs_handle, "0", 1, DEVFS_FL_DEFAULT,
+			VCS_MAJOR, 0,
+			S_IFCHR | S_IRUSR | S_IWUSR, 0, 0, &vcs_fops, NULL);
+	devfs_register (devfs_handle, "a", 1, DEVFS_FL_DEFAULT,
+			VCS_MAJOR, 128,
+			S_IFCHR | S_IRUSR | S_IWUSR, 0, 0, &vcs_fops, NULL);
+
 	return error;
 }

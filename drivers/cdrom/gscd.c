@@ -63,6 +63,7 @@
 #include <linux/major.h>
 #include <linux/string.h>
 #include <linux/init.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -991,12 +992,13 @@ long err;
 void __exit exit_gscd(void)
 {
 
-   if ((unregister_blkdev(MAJOR_NR, "gscd" ) == -EINVAL))
+   devfs_unregister(devfs_find_handle(NULL, "gscd", 0, 0, 0, DEVFS_SPECIAL_BLK,
+				      0));
+   if ((devfs_unregister_blkdev(MAJOR_NR, "gscd" ) == -EINVAL))
    {
       printk("What's that: can't unregister GoldStar-module\n" );
       return;
    }
-
    release_region (gscd_port,4);
    printk(KERN_INFO "GoldStar-module released.\n" );
 }
@@ -1067,12 +1069,14 @@ int result;
            i++;
         }
 
-	if (register_blkdev(MAJOR_NR, "gscd", &gscd_fops) != 0)
+	if (devfs_register_blkdev(MAJOR_NR, "gscd", &gscd_fops) != 0)
 	{
 		printk("GSCD: Unable to get major %d for GoldStar CD-ROM\n",
 		       MAJOR_NR);
 		return -EIO;
 	}
+	devfs_register (NULL, "gscd", 0, DEVFS_FL_DEFAULT, MAJOR_NR, 0,
+			S_IFBLK | S_IRUGO | S_IWUGO, 0, 0, &gscd_fops, NULL);
 
 	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	blksize_size[MAJOR_NR] = gscd_blocksizes;

@@ -73,8 +73,6 @@ struct raparms {
 				p_rawin;
 };
 
-int nfsd_nservers = 0;
-#define FILECACHE_MAX		(2 * nfsd_nservers) 
 static struct raparms *		raparml = NULL;
 static struct raparms *		raparm_cache = NULL;
 
@@ -374,7 +372,7 @@ nfsd_access(struct svc_rqst *rqstp, struct svc_fh *fhp, u32 *access)
 	int			error;
 
 	error = fh_verify(rqstp, fhp, 0, MAY_NOP);
-	if (error < 0)
+	if (error)
 		goto out;
 
 	export = fhp->fh_export;
@@ -1698,34 +1696,34 @@ nfsd_racache_shutdown(void)
 {
 	if (!raparm_cache)
 		return;
-	dprintk("nfsd: freeing %d readahead buffers.\n", FILECACHE_MAX);
+	dprintk("nfsd: freeing readahead buffers.\n");
 	kfree(raparml);
-	nfsd_nservers = 0;
 	raparm_cache = raparml = NULL;
 }
 /*
  * Initialize readahead param cache
  */
-void
-nfsd_racache_init(void)
+int
+nfsd_racache_init(int cache_size)
 {
 	int	i;
 
 	if (raparm_cache)
-		return;
-	raparml = kmalloc(sizeof(struct raparms) * FILECACHE_MAX, GFP_KERNEL);
+		return 0;
+	raparml = kmalloc(sizeof(struct raparms) * cache_size, GFP_KERNEL);
 
 	if (raparml != NULL) {
 		dprintk("nfsd: allocating %d readahead buffers.\n",
-			FILECACHE_MAX);
-		memset(raparml, 0, sizeof(struct raparms) * FILECACHE_MAX);
-		for (i = 0; i < FILECACHE_MAX - 1; i++) {
+			cache_size);
+		memset(raparml, 0, sizeof(struct raparms) * cache_size);
+		for (i = 0; i < cache_size - 1; i++) {
 			raparml[i].p_next = raparml + i + 1;
 		}
 		raparm_cache = raparml;
 	} else {
 		printk(KERN_WARNING
 		       "nfsd: Could not allocate memory read-ahead cache.\n");
-		nfsd_nservers = 0;
+		return -ENOMEM;
 	}
+	return 0;
 }

@@ -9,6 +9,8 @@
  * Version 2 and 3 extensions to driver:
  *        Copyright (C) 1998, 1999 Douglas Gilbert
  *
+ *  Modified  19-JAN-1998  Richard Gooch <rgooch@atnf.csiro.au>  Devfs support
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2, or (at your option)
@@ -50,6 +52,7 @@
 #include <linux/fcntl.h>
 #include <linux/init.h>
 #include <linux/poll.h>
+
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -179,6 +182,7 @@ typedef struct sg_device /* holds the state of each scsi generic device */
     wait_queue_head_t o_excl_wait;   /* queue open() when O_EXCL in use */
     int sg_tablesize;   /* adapter's max scatter-gather table size */
     Sg_fd * headfp;     /* first open fd belonging to this device */
+    devfs_handle_t de;
     kdev_t i_rdev;      /* holds device major+minor number */
     char exclude;       /* opened for exclusive access */
     char sgdebug;       /* 0->off, 1->sense, 9->dump dev, 10-> all devs */
@@ -1075,7 +1079,7 @@ static int sg_init()
     if (sg_template.dev_noticed == 0) return 0;
 
     if(!sg_registered) {
-        if (register_chrdev(SCSI_GENERIC_MAJOR,"sg",&sg_fops))
+        if (devfs_register_chrdev(SCSI_GENERIC_MAJOR,"sg",&sg_fops))
         {
             printk("Unable to get major %d for generic SCSI device\n",
                    SCSI_GENERIC_MAJOR);
@@ -1150,6 +1154,10 @@ static int sg_attach(Scsi_Device * scsidp)
     sdp->sgdebug = 0;
     sdp->sg_tablesize = scsidp->host ? scsidp->host->sg_tablesize : 0;
     sdp->i_rdev = MKDEV(SCSI_GENERIC_MAJOR, k);
+    sdp->de = devfs_register (scsidp->de, "generic", 7, DEVFS_FL_NONE,
+			      SCSI_GENERIC_MAJOR, k,
+			      S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP, 0, 0,
+			      &sg_fops, NULL);
     sg_template.nr_dev++;
     return 0;
 }
@@ -1194,6 +1202,8 @@ static void sg_detach(Scsi_Device * scsidp)
             SCSI_LOG_TIMEOUT(3, printk("sg_detach: dev=%d\n", k));
 	    sdp->device = NULL;
         }
+	devfs_unregister (sdp->de);
+	sdp->de = NULL;
         scsidp->attached--;
         sg_template.nr_dev--;
 /* avoid associated device /dev/sg? being incremented
@@ -1219,7 +1229,7 @@ int init_module(void) {
 void cleanup_module( void)
 {
     scsi_unregister_module(MODULE_SCSI_DEV, &sg_template);
-    unregister_chrdev(SCSI_GENERIC_MAJOR, "sg");
+    devfs_unregister_chrdev(SCSI_GENERIC_MAJOR, "sg");
 
 #ifdef CONFIG_PROC_FS
     sg_proc_cleanup();

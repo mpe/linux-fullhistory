@@ -14,6 +14,8 @@
  *
  * Fixed do_loop_request() re-entrancy - Vincent.Renardias@waw.com Mar 20, 1997
  *
+ * Added devfs support - Richard Gooch <rgooch@atnf.csiro.au> 16-Jan-1998
+ *
  * Handle sparse backing files correctly - Kenn Humborg, Jun 28, 1998
  *
  * Loadable modules and other fixes by AK, 1998
@@ -56,6 +58,7 @@
 #include <linux/major.h>
 
 #include <linux/init.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/uaccess.h>
 
@@ -77,6 +80,7 @@ static int max_loop = 8;
 static struct loop_device *loop_dev;
 static int *loop_sizes;
 static int *loop_blksizes;
+static devfs_handle_t devfs_handle = NULL;      /*  For the directory        */
 
 #define FALSE 0
 #define TRUE (!FALSE)
@@ -750,11 +754,16 @@ int __init loop_init(void)
 {
 	int	i;
 
-	if (register_blkdev(MAJOR_NR, "loop", &lo_fops)) {
+	if (devfs_register_blkdev(MAJOR_NR, "loop", &lo_fops)) {
 		printk(KERN_WARNING "Unable to get major number %d for loop device\n",
 		       MAJOR_NR);
 		return -EIO;
 	}
+	devfs_handle = devfs_mk_dir (NULL, "loop", 0, NULL);
+	devfs_register_series (devfs_handle, "%u", max_loop, DEVFS_FL_DEFAULT,
+			       MAJOR_NR, 0,
+			       S_IFBLK | S_IRUSR | S_IWUSR | S_IRGRP, 0, 0,
+			       &lo_fops, NULL);
 
 	if ((max_loop < 1) || (max_loop > 255)) {
 		printk (KERN_WARNING "loop: invalid max_loop (must be between 1 and 255), using default (8)\n");
@@ -804,7 +813,8 @@ int __init loop_init(void)
 #ifdef MODULE
 void cleanup_module(void) 
 {
-	if (unregister_blkdev(MAJOR_NR, "loop") != 0)
+	devfs_unregister (devfs_handle);
+	if (devfs_unregister_blkdev(MAJOR_NR, "loop") != 0)
 		printk(KERN_WARNING "loop: cannot unregister blkdev\n");
 
 	kfree (loop_dev);

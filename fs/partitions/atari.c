@@ -48,7 +48,7 @@ int atari_partition (struct gendisk *hd, kdev_t dev,
 
   bh = bread (dev, 0, get_ptable_blocksize(dev));
   if (!bh) {
-      printk (" unable to read block 0 (partition table)\n");
+      if (warn_no_part) printk (" unable to read block 0 (partition table)\n");
       return -1;
   }
 

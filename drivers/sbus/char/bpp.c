@@ -19,6 +19,7 @@
 #include <linux/timer.h>
 #include <linux/ioport.h>
 #include <linux/major.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -1004,6 +1005,8 @@ static inline void freeLptPort(int idx)
 
 #endif
 
+static devfs_handle_t devfs_handle = NULL;
+
 #ifdef MODULE
 int init_module(void)
 #else
@@ -1017,14 +1020,19 @@ int __init bpp_init(void)
 	if (rc == 0)
 		return -ENODEV;
 
-	rc = register_chrdev(BPP_MAJOR, dev_name, &bpp_fops);
+	rc = devfs_register_chrdev(BPP_MAJOR, dev_name, &bpp_fops);
 	if (rc < 0)
 		return rc;
 
 	for (idx = 0; idx < BPP_NO; idx += 1) {
 		instances[idx].opened = 0;
 		probeLptPort(idx);
+		sprintf(devname, "%s%i", dev_name, idx);
 	}
+	devfs_handle = devfs_mk_dir (NULL, "bpp", 3, NULL);
+	devfs_register_series (devfs_handle, "%u", BPP_NO, DEVFS_FL_DEFAULT,
+			       BPP_MAJOR, 0, S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       &bpp_fops, NULL);
 
 	return 0;
 }
@@ -1034,7 +1042,8 @@ void cleanup_module(void)
 {
 	unsigned idx;
 
-	unregister_chrdev(BPP_MAJOR, dev_name);
+	devfs_unregister (devfs_handle);
+	devfs_unregister_chrdev(BPP_MAJOR, dev_name);
 
 	for (idx = 0 ;  idx < BPP_NO ;  idx += 1) {
 		if (instances[idx].present)

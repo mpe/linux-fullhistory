@@ -213,8 +213,7 @@ static int ll_merge_requests_fn(request_queue_t *q, struct request *req,
 {
 	int total_segments = req->nr_segments + next->nr_segments;
 
-	if (req->bhtail->b_data + req->bhtail->b_size == next->bh->b_data)
-	{
+	if (req->bhtail->b_data + req->bhtail->b_size == next->bh->b_data) {
 		total_segments--;
 		q->nr_segments--;
 	}
@@ -226,12 +225,35 @@ static int ll_merge_requests_fn(request_queue_t *q, struct request *req,
 	return 1;
 }
 
+/*
+ * "plug" the device if there are no outstanding requests: this will
+ * force the transfer to start only after we have put all the requests
+ * on the list.
+ *
+ * This is called with interrupts off and no requests on the queue.
+ * (and with the request spinlock aquired)
+ */
+static void generic_plug_device (request_queue_t *q, kdev_t dev)
+{
+#ifdef CONFIG_BLK_DEV_MD
+	if (MAJOR(dev) == MD_MAJOR) {
+		spin_unlock_irq(&io_request_lock);
+		BUG();
+	}
+#endif
+	if (!list_empty(&q->queue_head))
+		return;
+
+	q->plugged = 1;
+	queue_task(&q->plug_tq, &tq_disk);
+}
+
 void blk_init_queue(request_queue_t * q, request_fn_proc * rfn)
 {
 	INIT_LIST_HEAD(&q->queue_head);
 	q->elevator = ELEVATOR_DEFAULTS;
 	q->request_fn     	= rfn;
-	q->back_merge_fn       	= ll_back_merge_fn;
+	q->back_merges_fn       	= ll_back_merge_fn;
 	q->front_merge_fn      	= ll_front_merge_fn;
 	q->merge_requests_fn	= ll_merge_requests_fn;
 	q->make_request_fn	= NULL;
@@ -245,31 +267,8 @@ void blk_init_queue(request_queue_t * q, request_fn_proc * rfn)
 	 * use the appropriate functions to alter the queue properties.
 	 * as appropriate.
 	 */
-	q->plug_device_fn 	= NULL;
+	q->plug_device_fn 	= generic_plug_device;
 	q->head_active    	= 1;
-}
-
-/*
- * "plug" the device if there are no outstanding requests: this will
- * force the transfer to start only after we have put all the requests
- * on the list.
- *
- * This is called with interrupts off and no requests on the queue.
- * (and with the request spinlock aquired)
- */
-inline void generic_plug_device (request_queue_t *q, kdev_t dev)
-{
-#ifdef CONFIG_BLK_DEV_MD
-	if (MAJOR(dev) == MD_MAJOR) {
-		spin_unlock_irq(&io_request_lock);
-		BUG();
-	}
-#endif
-	if (!list_empty(&q->queue_head))
-		return;
-
-	q->plugged = 1;
-	queue_task(&q->plug_tq, &tq_disk);
 }
 
 /*
@@ -439,8 +438,7 @@ static inline struct list_head * seek_to_not_starving_chunk(request_queue_t * q,
 
 	do {
 		struct request * req = blkdev_entry_to_request(entry);
-		if (elevator_sequence_before(req->elevator_sequence, sequence))
-		{
+		if (elevator_sequence_before(req->elevator_sequence, sequence)) {
 			*lat -= q->nr_segments - pos;
 			*starving = 1;
 			return entry;
@@ -780,11 +778,7 @@ static inline void __make_request(request_queue_t * q, int rw,
 	empty = 0;
 	if (list_empty(&q->queue_head)) {
 		empty = 1;
-		/* MD and loop can't handle plugging without deadlocking */
-		if (q->plug_device_fn)
-			q->plug_device_fn(q, bh->b_rdev); /* is atomic */
-		else
-			generic_plug_device(q, bh->b_rdev); /* is atomic */
+		q->plug_device_fn(q, bh->b_rdev); /* is atomic */
 		goto get_rq;
 	}
 

@@ -24,6 +24,7 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/sysrq.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/kbio.h>
 #include <asm/vuid_event.h>
@@ -1549,7 +1550,11 @@ void __init keyboard_zsinit(void (*put_char)(unsigned char))
 	send_cmd(SKBDCMD_SETLED); send_cmd(0x0); /* All off */
 
 	/* Register the /dev/kbd interface */
-	if (register_chrdev (KBD_MAJOR, "kbd", &kbd_fops)){
+	devfs_register (NULL, "kbd", 0, DEVFS_FL_NONE,
+			KBD_MAJOR, 0,
+			S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, 0, 0,
+			&kbd_fops, NULL);
+	if (devfs_register_chrdev (KBD_MAJOR, "kbd", &kbd_fops)){
 		printk ("Could not register /dev/kbd device\n");
 		return;
 	}

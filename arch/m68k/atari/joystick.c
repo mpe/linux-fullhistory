@@ -12,6 +12,7 @@
 #include <linux/major.h>
 #include <linux/poll.h>
 #include <linux/init.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/atarikb.h>
 #include <asm/atari_joystick.h>
@@ -132,8 +133,11 @@ int __init atari_joystick_init(void)
     init_waitqueue_head(&joystick[0].wait);
     init_waitqueue_head(&joystick[1].wait);
 
-    if (register_chrdev(MAJOR_NR, "Joystick", &atari_joystick_fops))
+    if (devfs_register_chrdev(MAJOR_NR, "Joystick", &atari_joystick_fops))
 	printk("unable to get major %d for joystick devices\n", MAJOR_NR);
+    devfs_register_series (NULL, "joysticks/digital%u", 2, DEVFS_FL_DEFAULT,
+			   MAJOR_NR, 128, S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			   &atari_joystick_fops, NULL);
 
     return 0;
 }

@@ -9,6 +9,7 @@
 #if LINUX_VERSION_CODE >= 0x020100
 #include <linux/poll.h>
 #endif
+#include <linux/devfs_fs_kernel.h>
 
 struct video_device
 {
@@ -30,6 +31,7 @@ struct video_device
 	void *priv;		/* Used to be 'private' but that upsets C++ */
 	int busy;
 	int minor;
+	devfs_handle_t devfs_handle;
 };
 
 extern int videodev_init(void);

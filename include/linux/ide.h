@@ -13,6 +13,7 @@
 #include <linux/hdsmart.h>
 #include <linux/blkdev.h>
 #include <linux/proc_fs.h>
+#include <linux/devfs_fs_kernel.h>
 #include <asm/hdreg.h>
 
 /*
@@ -142,7 +143,7 @@ typedef unsigned char	byte;	/* used everywhere */
 /*
  * Some more useful definitions
  */
-#define IDE_MAJOR_NAME	"ide"	/* the same for all i/f; see also genhd.c */
+#define IDE_MAJOR_NAME	"hd"	/* the same for all i/f; see also genhd.c */
 #define MAJOR_NAME	IDE_MAJOR_NAME
 #define PARTN_BITS	6	/* number of minor dev bits for partitions */
 #define PARTN_MASK	((1<<PARTN_BITS)-1)	/* a useful bit mask */
@@ -290,6 +291,7 @@ typedef struct ide_drive_s {
 	char		name[4];	/* drive name, such as "hda" */
 	void 		*driver;	/* (ide_driver_t *) */
 	void		*driver_data;	/* extra driver data */
+	devfs_handle_t	de;		/* directory for device */
 	struct proc_dir_entry *proc;	/* /proc/ide/ directory entry */
 	void		*settings;	/* /proc/ide/ drive settings */
 	char		driver_req[10];	/* requests specific driver */

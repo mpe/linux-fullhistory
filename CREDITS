@@ -41,6 +41,7 @@ N: Tigran A. Aivazian
 E: tigran@ocston.org
 W: http://www.ocston.org/~tigran
 D: BFS filesystem
+D: Intel P6 CPU microcode update support
 S: United Kingdom
 
 N: Werner Almesberger
@@ -66,6 +67,10 @@ W: http://www.pdos.lcs.mit.edu/~cananian
 P: 1024/85AD9EED AD C0 49 08 91 67 DF D7  FA 04 1A EE 09 E8 44 B0
 D: Unix98 pty support.
 D: APM update to 1.2 spec.
+D: /devfs hacking.
+S: 322 N. Riverside Dr.
+S: Neptune, NJ 07753
+S: USA
 
 N: Erik Andersen
 E: andersee@debian.org
@@ -784,6 +789,7 @@ E: rgooch@atnf.csiro.au
 D: parent process death signal to children
 D: prctl() syscall
 D: /proc/mtrr support to manipulate MTRRs on Intel P6 family
+D: Device FileSystem (devfs)
 S: CSIRO Australia Telescope National Facility
 S: P.O. Box 76, Epping
 S: New South Wales, 2121
@@ -1264,6 +1270,10 @@ S: 7170 Warden Avenue, Unit 2
 S: Markham, Ontario
 S: L3R 8B2
 S: Canada
+
+N: Andrzej M. Krzysztofowicz
+E: ankry@mif.pg.gda.pl
+D: Some 8-bit XT disk driver and /devfs hacking 
 
 N: Andreas S. Krebs
 E: akrebs@altavista.net

@@ -4,6 +4,8 @@
  *
  *  Copyright (C) 1991-1998  Linus Torvalds
  *
+ *  devfs support - jj, rgooch, 980122
+ *
  *  Moved partition checking code to fs/partitions* - Russell King
  *  (linux@arm.uk.linux.org)
  */

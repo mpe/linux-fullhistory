@@ -17,6 +17,8 @@
  *
  *       Modified by Jirka Hanika geo@ff.cuni.cz to support more
  *       scsi disks using eight major numbers.
+ *
+ *       Modified by Richard Gooch rgooch@atnf.csiro.au to support devfs.
  */
 
 #include <linux/config.h>
@@ -489,7 +491,8 @@ static struct gendisk sd_gendisk =
 	NULL,			/* block sizes */
 	0,			/* number */
 	NULL,			/* internal */
-	NULL			/* next */
+	NULL,			/* next */
+        &sd_fops,		/* file operations */
 };
 
 static struct gendisk *sd_gendisks = &sd_gendisk;
@@ -948,7 +951,7 @@ static int sd_init()
 
 	if (!sd_registered) {
 		for (i = 0; i <= (sd_template.dev_max - 1) / SCSI_DISKS_PER_MAJOR; i++) {
-			if (register_blkdev(SD_MAJOR(i), "sd", &sd_fops)) {
+			if (devfs_register_blkdev(SD_MAJOR(i), "sd", &sd_fops)) {
 				printk("Unable to get major %d for SCSI disk\n", SD_MAJOR(i));
 				return 1;
 			}
@@ -988,6 +991,15 @@ static int sd_init()
 		sd_gendisks = (struct gendisk *)
 		    kmalloc(N_USED_SD_MAJORS * sizeof(struct gendisk), GFP_ATOMIC);
 	for (i = 0; i < N_USED_SD_MAJORS; i++) {
+		sd_gendisks[i] = sd_gendisk;
+		sd_gendisks[i].de_arr = kmalloc (SCSI_DISKS_PER_MAJOR * sizeof *sd_gendisks[i].de_arr,
+                                                 GFP_ATOMIC);
+                memset (sd_gendisks[i].de_arr, 0,
+                        SCSI_DISKS_PER_MAJOR * sizeof *sd_gendisks[i].de_arr);
+		sd_gendisks[i].flags = kmalloc (SCSI_DISKS_PER_MAJOR * sizeof *sd_gendisks[i].flags,
+                                                GFP_ATOMIC);
+                memset (sd_gendisks[i].flags, 0,
+                        SCSI_DISKS_PER_MAJOR * sizeof *sd_gendisks[i].flags);
 		sd_gendisks[i].major = SD_MAJOR(i);
 		sd_gendisks[i].major_name = "sd";
 		sd_gendisks[i].minor_shift = 4;
@@ -1061,8 +1073,10 @@ static int sd_detect(Scsi_Device * SDp)
 
 	return 1;
 }
+
 static int sd_attach(Scsi_Device * SDp)
 {
+        unsigned int devnum;
 	Scsi_Disk *dpnt;
 	int i;
 
@@ -1084,6 +1098,10 @@ static int sd_attach(Scsi_Device * SDp)
 	rscsi_disks[i].has_part_table = 0;
 	sd_template.nr_dev++;
 	SD_GENDISK(i).nr_real++;
+        devnum = i % SCSI_DISKS_PER_MAJOR;
+        SD_GENDISK(i).de_arr[devnum] = SDp->de;
+        if (SDp->removable)
+		SD_GENDISK(i).flags[devnum] |= GENHD_FL_REMOVABLE;
 	return 0;
 }
 
@@ -1182,6 +1200,8 @@ static void sd_detach(Scsi_Device * SDp)
 				sd_gendisks->part[index].nr_sects = 0;
 				sd_sizes[index] = 0;
 			}
+                        devfs_register_partitions (&SD_GENDISK (i),
+                                                   SD_MINOR_NUMBER (start), 1);
 			/* unregister_disk() */
 			dpnt->has_part_table = 0;
 			dpnt->device = NULL;
@@ -1212,7 +1232,7 @@ void cleanup_module(void)
 	scsi_unregister_module(MODULE_SCSI_DEV, &sd_template);
 
 	for (i = 0; i <= (sd_template.dev_max - 1) / SCSI_DISKS_PER_MAJOR; i++)
-		unregister_blkdev(SD_MAJOR(i), "sd");
+		devfs_unregister_blkdev(SD_MAJOR(i), "sd");
 
 	sd_registered--;
 	if (rscsi_disks != NULL) {

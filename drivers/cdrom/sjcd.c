@@ -73,6 +73,7 @@
 #include <linux/string.h>
 #include <linux/major.h>
 #include <linux/init.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -1471,7 +1472,7 @@ int __init sjcd_init( void ){
 	hardsect_size[MAJOR_NR] = &secsize;
 	blksize_size[MAJOR_NR] = &blksize;
 
-  if( register_blkdev( MAJOR_NR, "sjcd", &sjcd_fops ) != 0 ){
+  if( devfs_register_blkdev( MAJOR_NR, "sjcd", &sjcd_fops ) != 0 ){
     printk( "SJCD: Unable to get major %d for Sanyo CD-ROM\n", MAJOR_NR );
     return( -EIO );
   }
@@ -1563,6 +1564,8 @@ int __init sjcd_init( void ){
   }
 
   printk(KERN_INFO "SJCD: Status: port=0x%x.\n", sjcd_base);
+  devfs_register (NULL, "sjcd", 0, DEVFS_FL_DEFAULT, MAJOR_NR, 0,
+		  S_IFBLK | S_IRUGO | S_IWUGO, 0, 0, &sjcd_fops, NULL);
 
   sjcd_present++;
   return( 0 );
@@ -1571,7 +1574,7 @@ int __init sjcd_init( void ){
 static int
 sjcd_cleanup(void)
 {
-  if( (unregister_blkdev(MAJOR_NR, "sjcd") == -EINVAL) )
+  if( (devfs_unregister_blkdev(MAJOR_NR, "sjcd") == -EINVAL) )
     printk( "SJCD: cannot unregister device.\n" );
   else
     release_region( sjcd_base, 4 );
@@ -1582,6 +1585,8 @@ sjcd_cleanup(void)
 
 void __exit sjcd_exit(void)
 {
+  devfs_unregister(devfs_find_handle(NULL, "sjcd", 0, 0, 0, DEVFS_SPECIAL_BLK,
+				     0));
   if ( sjcd_cleanup() )
     printk( "SJCD: module: cannot be removed.\n" );
   else

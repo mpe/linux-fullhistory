@@ -744,6 +744,8 @@ static int idedisk_cleanup (ide_drive_t *drive)
 
 static void idedisk_setup (ide_drive_t *drive)
 {
+	int i;
+	
 	struct hd_driveid *id = drive->id;
 	unsigned long capacity;
 	
@@ -763,6 +765,15 @@ static void idedisk_setup (ide_drive_t *drive)
 		if (id->model[0] != 'W' || id->model[1] != 'D') {
 			drive->doorlocking = 1;
 		}
+	}
+	for (i = 0; i < MAX_DRIVES; ++i) {
+		ide_hwif_t *hwif = HWIF(drive);
+
+		if (drive != &hwif->drives[i]) continue;
+		hwif->gd->de_arr[i] = drive->de;
+		if (drive->removable)
+			hwif->gd->flags[i] |= GENHD_FL_REMOVABLE;
+		break;
 	}
 
 	/* Extract geometry if we did not already have one for the drive */

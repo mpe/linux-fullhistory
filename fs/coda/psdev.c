@@ -29,6 +29,7 @@
 #include <linux/delay.h>
 #include <linux/skbuff.h>
 #include <linux/proc_fs.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/vmalloc.h>
 #include <linux/fs.h>
 #include <linux/poll.h>
@@ -59,7 +60,7 @@ unsigned long coda_timeout = 30; /* .. secs, then signals will dequeue */
 
 struct coda_sb_info coda_super_info;
 struct venus_comm coda_upc_comm;
-	
+
 /*
  * Device operations
  */
@@ -358,13 +359,21 @@ int __init init_coda(void)
 	return status;
 }
 
+static devfs_handle_t devfs_handle = NULL;
+
 int init_coda_psdev(void)
 {
-	if(register_chrdev(CODA_PSDEV_MAJOR,"coda_psdev", &coda_psdev_fops)) {
+	if(devfs_register_chrdev(CODA_PSDEV_MAJOR,"coda_psdev",
+				 &coda_psdev_fops)) {
               printk(KERN_ERR "coda_psdev: unable to get major %d\n", 
 		     CODA_PSDEV_MAJOR);
               return -EIO;
 	}
+	devfs_handle = devfs_mk_dir (NULL, "coda", 4, NULL);
+	devfs_register_series (devfs_handle, "%u", MAX_CODADEVS, DEVFS_FL_NONE,
+			       CODA_PSDEV_MAJOR, 0,
+			       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       &coda_psdev_fops, NULL);
 	memset(&coda_upc_comm, 0, sizeof(coda_upc_comm));
 	memset(&coda_super_info, 0, sizeof(coda_super_info));
 	init_waitqueue_head(&coda_upc_comm.vc_waitq);
@@ -407,7 +416,8 @@ void cleanup_module(void)
         if ( (err = unregister_filesystem(&coda_fs_type)) != 0 ) {
                 printk("coda: failed to unregister filesystem\n");
         }
-        unregister_chrdev(CODA_PSDEV_MAJOR,"coda_psdev");
+	devfs_unregister (devfs_handle);
+        devfs_unregister_chrdev(CODA_PSDEV_MAJOR,"coda_psdev");
 	coda_sysctl_clean();
 }
 

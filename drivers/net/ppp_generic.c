@@ -30,6 +30,7 @@
 #include <linux/kmod.h>
 #include <linux/init.h>
 #include <linux/list.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/netdevice.h>
 #include <linux/poll.h>
 #include <linux/ppp_defs.h>
@@ -549,6 +550,8 @@ static struct file_operations ppp_device_fops = {
 
 #define PPP_MAJOR	108
 
+static devfs_handle_t devfs_handle = NULL;
+
 /* Called at boot time if ppp is compiled into the kernel,
    or at module load time (from init_module) if compiled as a module. */
 int __init ppp_init(void)
@@ -561,9 +564,13 @@ int __init ppp_init(void)
 #endif
 
 	printk(KERN_INFO "PPP generic driver version " PPP_VERSION "\n");
-	err = register_chrdev(PPP_MAJOR, "ppp", &ppp_device_fops);
+	err = devfs_register_chrdev(PPP_MAJOR, "ppp", &ppp_device_fops);
 	if (err)
 		printk(KERN_ERR "failed to register PPP device (%d)\n", err);
+	devfs_handle = devfs_register (NULL, "ppp", 0, DEVFS_FL_NONE,
+				       PPP_MAJOR, 0,
+				       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				       &ppp_device_fops, NULL);
 #ifndef MODULE
 #ifdef CONFIG_PPP_ASYNC
 	ppp_async_init();
@@ -1613,7 +1620,8 @@ cleanup_module(void)
 	/* should never happen */
 	if (!list_empty(&all_ppp_units))
 		printk(KERN_ERR "PPP: removing module but units remain!\n");
-	if (unregister_chrdev(PPP_MAJOR, "ppp") != 0)
+	if (devfs_unregister_chrdev(PPP_MAJOR, "ppp") != 0)
 		printk(KERN_ERR "PPP: failed to unregister PPP device\n");
+	devfs_unregister (devfs_handle);
 }
 #endif /* MODULE */

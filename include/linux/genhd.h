@@ -29,7 +29,7 @@
 #define EZD_PARTITION		0x55	/* EZ-DRIVE */
 #define DM6_AUX1PARTITION	0x51	/* no DDO:  use xlated geom */
 #define DM6_AUX3PARTITION	0x53	/* no DDO:  use xlated geom */
-	
+
 struct partition {
 	unsigned char boot_ind;		/* 0x80 - active */
 	unsigned char head;		/* starting head */
@@ -43,11 +43,17 @@ struct partition {
 	unsigned int nr_sects;		/* nr of sectors in partition */
 } __attribute__((packed));
 
+#ifdef __KERNEL__
+#  include <linux/devfs_fs_kernel.h>
+
 struct hd_struct {
 	long start_sect;
 	long nr_sects;
 	int type;			/* currently RAID or normal */
+	devfs_handle_t de;              /* primary (master) devfs entry  */
 };
+
+#define GENHD_FL_REMOVABLE  1
 
 struct gendisk {
 	int major;			/* major number of driver */
@@ -62,7 +68,12 @@ struct gendisk {
 
 	void *real_devices;		/* internal use */
 	struct gendisk *next;
+	struct block_device_operations *fops;
+
+	devfs_handle_t *de_arr;         /* one per physical disc */
+	char *flags;                    /* one per physical disc */
 };
+#endif  /*  __KERNEL__  */
 
 #ifdef CONFIG_SOLARIS_X86_PARTITION
 
@@ -217,7 +228,11 @@ extern struct gendisk *gendisk_head;	/* linked list of disks */
 
 char *disk_name (struct gendisk *hd, int minor, char *buf);
 
+extern void devfs_register_partitions (struct gendisk *dev, int minor,
+				       int unregister);
+
 int get_hardsect_size(kdev_t dev);
+
 #endif
 
 #endif

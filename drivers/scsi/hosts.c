@@ -665,6 +665,7 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
  *      MAX_SCSI_HOSTS here.
  */
 
+Scsi_Host_Name * scsi_host_no_list = NULL;
 struct Scsi_Host * scsi_hostlist = NULL;
 struct Scsi_Device_Template * scsi_devicelist = NULL;
 
@@ -674,7 +675,8 @@ int next_scsi_host = 0;
 void
 scsi_unregister(struct Scsi_Host * sh){
     struct Scsi_Host * shpnt;
-    
+    Scsi_Host_Name *shn;
+        
     if(scsi_hostlist == sh)
 	scsi_hostlist = sh->next;
     else {
@@ -682,6 +684,16 @@ scsi_unregister(struct Scsi_Host * sh){
 	while(shpnt->next != sh) shpnt = shpnt->next;
 	shpnt->next = shpnt->next->next;
     }
+
+    /*
+     * We have to unregister the host from the scsi_host_no_list as well.
+     * Decide by the host_no not by the name because most host drivers are
+     * able to handle more than one adapters from the same kind (or family).
+     */
+    for ( shn=scsi_host_no_list; shn && (sh->host_no != shn->host_no);
+	  shn=shn->next);
+    if (shn) shn->host_registered = 0;
+    /* else {} : This should not happen, we should panic here... */
     
     /* If we are removing the last host registered, it is safe to reuse
      * its host number (this avoids "holes" at boot time) (DB) 
@@ -708,16 +720,50 @@ scsi_unregister(struct Scsi_Host * sh){
 
 struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     struct Scsi_Host * retval, *shpnt;
+    Scsi_Host_Name *shn, *shn2;
+    int new = 1;
     retval = (struct Scsi_Host *)kmalloc(sizeof(struct Scsi_Host) + j,
 					 (tpnt->unchecked_isa_dma && j ? GFP_DMA : 0) | GFP_ATOMIC);
     memset(retval, 0, sizeof(struct Scsi_Host) + j);
+
+    /* trying to find a reserved entry (host_no) */
+    for (shn = scsi_host_no_list;shn;shn = shn->next)
+	if (!(shn->host_registered) && shn->loaded_as_module && tpnt->proc_dir &&
+		tpnt->proc_dir->name && !strncmp(tpnt->proc_dir->name, shn->name, strlen(tpnt->proc_dir->name))) {
+	    new = 0;
+	    retval->host_no = shn->host_no;
+	    shn->host_registered = 1;
+	    shn->loaded_as_module = scsi_loadable_module_flag;
+	    break;
+	}
     atomic_set(&retval->host_active,0);
     retval->host_busy = 0;
     retval->host_failed = 0;
     if(j > 0xffff) panic("Too many extra bytes requested\n");
     retval->extra_bytes = j;
     retval->loaded_as_module = scsi_loadable_module_flag;
-    retval->host_no = max_scsi_hosts++; /* never reuse host_no (DB) */
+    if (new) {
+	int len = 0;
+	shn = (Scsi_Host_Name *) kmalloc(sizeof(Scsi_Host_Name), GFP_ATOMIC);
+	if (tpnt->proc_dir)
+	    len = strlen(tpnt->proc_dir->name);
+	shn->name = kmalloc(len+1, GFP_ATOMIC);
+	if (tpnt->proc_dir)
+	    strncpy(shn->name, tpnt->proc_dir->name, len);
+	shn->name[len] = 0;
+	shn->host_no = max_scsi_hosts++;
+	shn->host_registered = 1;
+	shn->loaded_as_module = scsi_loadable_module_flag;
+	shn->next = NULL;
+	if (scsi_host_no_list) {
+	    for (shn2 = scsi_host_no_list;shn2->next;shn2 = shn2->next)
+		;
+	    shn2->next = shn;
+	}
+	else
+	    scsi_host_no_list = shn;
+	retval->host_no = shn->host_no;
+    }
     next_scsi_host++;
     retval->host_queue = NULL;
     init_waitqueue_head(&retval->host_wait);

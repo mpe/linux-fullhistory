@@ -43,13 +43,17 @@
 #include <linux/sound.h>
 #include <linux/major.h>
 #include <linux/kmod.h>
- 
- 
+#include <linux/devfs_fs_kernel.h>
+
+#define SOUND_STEP 16
+
+
 struct sound_unit
 {
 	int unit_minor;
 	struct file_operations *unit_fops;
 	struct sound_unit *next;
+	devfs_handle_t de;
 };
 
 #ifdef CONFIG_SOUND_MSNDCLAS
@@ -82,7 +86,7 @@ static int __sound_insert_unit(struct sound_unit * s, struct sound_unit **list, 
 			if(*list==NULL || (*list)->unit_minor>n)
 				break;
 			list=&((*list)->next);
-			n+=16;
+			n+=SOUND_STEP;
 		}
 
 		if(n>=top)
@@ -129,6 +133,7 @@ static void __sound_remove_unit(struct sound_unit **list, int unit)
 		if(p->unit_minor==unit)
 		{
 			*list=p->next;
+			devfs_unregister (p->de);
 			kfree(p);
 			MOD_DEC_USE_COUNT;
 			return;
@@ -148,11 +153,15 @@ spinlock_t sound_loader_lock = SPIN_LOCK_UNLOCKED;
  *	Allocate the controlling structure and add it to the sound driver
  *	list. Acquires locks as needed
  */
+
+static devfs_handle_t devfs_handle = NULL;
  
-static int sound_insert_unit(struct sound_unit **list, struct file_operations *fops, int index, int low, int top)
+static int sound_insert_unit(struct sound_unit **list, struct file_operations *fops, int index, int low, int top, const char *name, umode_t mode)
 {
 	int r;
 	struct sound_unit *s=(struct sound_unit *)kmalloc(sizeof(struct sound_unit), GFP_KERNEL);
+	char name_buf[16];
+
 	if(s==NULL)
 		return -ENOMEM;
 		
@@ -162,6 +171,13 @@ static int sound_insert_unit(struct sound_unit **list, struct file_operations *f
 	
 	if(r<0)
 		kfree(s);
+	if (r == low)
+		sprintf (name_buf, "%s", name);
+	else
+		sprintf (name_buf, "%s%d", name, (r - low) / SOUND_STEP);
+	s->de = devfs_register (devfs_handle, name_buf, 0,
+				DEVFS_FL_NONE, SOUND_MAJOR, s->unit_minor,
+				S_IFCHR | mode, 0, 0, fops, NULL);
 	return r;
 }
 
@@ -203,21 +219,76 @@ static struct sound_unit *chains[16];
 
 int register_sound_special(struct file_operations *fops, int unit)
 {
-	return sound_insert_unit(&chains[unit&15], fops, -1, unit, unit+1);
+	char *name;
+
+	switch (unit) {
+	    case 0:
+		name = "mixer";
+		break;
+	    case 1:
+		name = "sequencer";
+		break;
+	    case 2:
+		name = "midi00";
+		break;
+	    case 3:
+		name = "dsp";
+		break;
+	    case 4:
+		name = "audio";
+		break;
+	    case 5:
+		name = "unknown5";
+		break;
+	    case 6:
+		name = "sndstat";
+		break;
+	    case 7:
+		name = "unknown7";
+		break;
+	    case 8:
+		name = "sequencer2";
+		break;
+	    case 9:
+		name = "dmmidi";
+		break;
+	    case 10:
+		name = "dmfm";
+		break;
+	    case 11:
+		name = "unknown11";
+		break;
+	    case 12:
+		name = "adsp";
+		break;
+	    case 13:
+		name = "amidi";
+		break;
+	    case 14:
+		name = "admmidi";
+		break;
+	    default:
+		name = "unknown";
+		break;
+	}
+	return sound_insert_unit(&chains[unit&15], fops, -1, unit, unit+1,
+				 name, S_IRUGO | S_IWUGO);
 }
  
 EXPORT_SYMBOL(register_sound_special);
 
 int register_sound_mixer(struct file_operations *fops, int dev)
 {
-	return sound_insert_unit(&chains[0], fops, dev, 0, 128);
+	return sound_insert_unit(&chains[0], fops, dev, 0, 128,
+				 "mixer", S_IRUGO | S_IWUGO);
 }
 
 EXPORT_SYMBOL(register_sound_mixer);
 
 int register_sound_midi(struct file_operations *fops, int dev)
 {
-	return sound_insert_unit(&chains[2], fops, dev, 2, 130);
+	return sound_insert_unit(&chains[2], fops, dev, 2, 130,
+				 "midi", S_IRUGO | S_IWUGO);
 }
 
 EXPORT_SYMBOL(register_sound_midi);
@@ -229,14 +300,16 @@ EXPORT_SYMBOL(register_sound_midi);
  
 int register_sound_dsp(struct file_operations *fops, int dev)
 {
-	return sound_insert_unit(&chains[3], fops, dev, 3, 131);
+	return sound_insert_unit(&chains[3], fops, dev, 3, 131,
+				 "dsp", S_IWUGO | S_IRUSR | S_IRGRP);
 }
 
 EXPORT_SYMBOL(register_sound_dsp);
 
 int register_sound_synth(struct file_operations *fops, int dev)
 {
-	return sound_insert_unit(&chains[9], fops, dev, 9, 137);
+	return sound_insert_unit(&chains[9], fops, dev, 9, 137,
+				 "synth", S_IRUGO | S_IWUGO);
 }
 
 EXPORT_SYMBOL(register_sound_synth);
@@ -359,7 +432,8 @@ void cleanup_module(void)
 {
 	/* We have nothing to really do here - we know the lists must be
 	   empty */
-	unregister_chrdev(SOUND_MAJOR, "sound");
+	devfs_unregister_chrdev(SOUND_MAJOR, "sound");
+	devfs_unregister (devfs_handle);
 }
 
 int init_module(void)
@@ -367,11 +441,12 @@ int init_module(void)
 int soundcore_init(void)
 #endif
 {
-	if(register_chrdev(SOUND_MAJOR, "sound", &soundcore_fops)==-1)
+	if(devfs_register_chrdev(SOUND_MAJOR, "sound", &soundcore_fops)==-1)
 	{
 		printk(KERN_ERR "soundcore: sound device already in use.\n");
 		return -EBUSY;
 	}
+	devfs_handle = devfs_mk_dir (NULL, "sound", 0, NULL);
 	/*
 	 *	Now init non OSS drivers
 	 */

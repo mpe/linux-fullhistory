@@ -396,6 +396,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/major.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/errno.h>
 #include <linux/genhd.h>
 #include <linux/malloc.h>
@@ -794,6 +795,7 @@ typedef struct {
  */
 typedef struct {
 	ide_drive_t *drive;
+	devfs_handle_t de_r, de_n;
 
 	/*
 	 *	Since a typical character device operation requires more
@@ -5770,11 +5772,13 @@ static int idetape_cleanup (ide_drive_t *drive)
 	DRIVER(drive)->busy = 0;
 	(void) ide_unregister_subdriver (drive);
 	drive->driver_data = NULL;
+	devfs_unregister (tape->de_r);
+	devfs_unregister (tape->de_n);
 	kfree (tape);
 	for (minor = 0; minor < MAX_HWIFS * MAX_DRIVES; minor++)
 		if (idetape_chrdevs[minor].drive != NULL)
 			return 0;
-	unregister_chrdev (IDETAPE_MAJOR, "ht");
+	devfs_unregister_chrdev (IDETAPE_MAJOR, "ht");
 	idetape_chrdev_present = 0;
 	return 0;
 }
@@ -5871,7 +5875,8 @@ int idetape_init (void)
 #endif
 		return 0;
 	}
-	if (!idetape_chrdev_present && register_chrdev (IDETAPE_MAJOR, "ht", &idetape_fops)) {
+	if (!idetape_chrdev_present &&
+	    devfs_register_chrdev (IDETAPE_MAJOR, "ht", &idetape_fops)) {
 		printk (KERN_ERR "ide-tape: Failed to register character device interface\n");
 		MOD_DEC_USE_COUNT;
 #if ONSTREAM_DEBUG
@@ -5905,10 +5910,21 @@ int idetape_init (void)
 		for (minor = 0; idetape_chrdevs[minor].drive != NULL; minor++);
 		idetape_setup (drive, tape, minor);
 		idetape_chrdevs[minor].drive = drive;
+		tape->de_r =
+		    devfs_register (drive->de, "mt", 2, DEVFS_FL_DEFAULT,
+				    HWIF(drive)->major, minor,
+				    S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
+				    &idetape_fops, NULL);
+		tape->de_n =
+		    devfs_register (drive->de, "mtn", 3, DEVFS_FL_DEFAULT,
+				    HWIF(drive)->major, minor + 128,
+				    S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
+				    &idetape_fops, NULL);
+		devfs_register_tape (tape->de_r);
 		supported++; failed--;
 	} while ((drive = ide_scan_devices (ide_tape, idetape_driver.name, NULL, failed++)) != NULL);
 	if (!idetape_chrdev_present && !supported) {
-		unregister_chrdev (IDETAPE_MAJOR, "ht");
+		devfs_unregister_chrdev (IDETAPE_MAJOR, "ht");
 	} else
 		idetape_chrdev_present = 1;
 	ide_register_module (&idetape_module);

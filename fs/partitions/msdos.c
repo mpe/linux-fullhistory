@@ -353,7 +353,7 @@ int msdos_partition(struct gendisk *hd, kdev_t dev,
 read_mbr:
 #endif
 	if (!(bh = bread(dev,0,get_ptable_blocksize(dev)))) {
-		printk(" unable to read partition table\n");
+		if (warn_no_part) printk(" unable to read partition table\n");
 		return -1;
 	}
 	data = bh->b_data;

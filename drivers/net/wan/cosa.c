@@ -84,6 +84,7 @@
 #include <linux/malloc.h>
 #include <linux/poll.h>
 #include <linux/fs.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
@@ -359,6 +360,8 @@ static void debug_status_out(struct cosa_data *cosa, int status);
 
 /* ---------- Initialization stuff ---------- */
 
+static devfs_handle_t devfs_handle = NULL;
+
 #ifdef MODULE
 int init_module(void)
 #else
@@ -366,18 +369,19 @@ static int __init cosa_init(void)
 #endif
 {
 	int i;
+
 	printk(KERN_INFO "cosa v1.06 (c) 1997-8 Jan Kasprzak <kas@fi.muni.cz>\n");
 #ifdef __SMP__
 	printk(KERN_INFO "cosa: SMP found. Please mail any success/failure reports to the author.\n");
 #endif
 	if (cosa_major > 0) {
-		if (register_chrdev(cosa_major, "cosa", &cosa_fops)) {
+		if (devfs_register_chrdev(cosa_major, "cosa", &cosa_fops)) {
 			printk(KERN_WARNING "cosa: unable to get major %d\n",
 				cosa_major);
 			return -EIO;
 		}
 	} else {
-		if (!(cosa_major=register_chrdev(0, "cosa", &cosa_fops))) {
+		if (!(cosa_major=devfs_register_chrdev(0, "cosa", &cosa_fops))) {
 			printk(KERN_WARNING "cosa: unable to register chardev\n");
 			return -EIO;
 		}
@@ -386,9 +390,14 @@ static int __init cosa_init(void)
 		cosa_cards[i].num = -1;
 	for (i=0; io[i] != 0 && i < MAX_CARDS; i++)
 		cosa_probe(io[i], irq[i], dma[i]);
+	devfs_handle = devfs_mk_dir (NULL, "cosa", 4, NULL);
+	devfs_register_series (devfs_handle, "%u", nr_cards, DEVFS_FL_DEFAULT,
+			       cosa_major, 0,
+			       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       &cosa_fops, NULL);
 	if (!nr_cards) {
 		printk(KERN_WARNING "cosa: no devices found.\n");
-		unregister_chrdev(cosa_major, "cosa");
+		devfs_unregister_chrdev(cosa_major, "cosa");
 		return -ENODEV;
 	}
 	return 0;
@@ -397,9 +406,11 @@ static int __init cosa_init(void)
 #ifdef MODULE
 void cleanup_module (void)
 {
+	int i;
 	struct cosa_data *cosa;
 	printk(KERN_INFO "Unloading the cosa module\n");
 
+	devfs_unregister (devfs_handle);
 	for (cosa=cosa_cards; nr_cards--; cosa++) {
 		int i;
 		/* Clean up the per-channel data */
@@ -414,7 +425,7 @@ void cleanup_module (void)
 		free_dma(cosa->dma);
 		release_region(cosa->datareg,is_8bit(cosa)?2:4);
 	}
-	unregister_chrdev(cosa_major, "cosa");
+	devfs_unregister_chrdev(cosa_major, "cosa");
 }
 #endif
 

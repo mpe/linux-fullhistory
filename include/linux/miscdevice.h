@@ -1,6 +1,8 @@
 #ifndef _LINUX_MISCDEVICE_H
 #define _LINUX_MISCDEVICE_H
 
+#include <linux/devfs_fs_kernel.h>
+
 #define BUSMOUSE_MINOR 0
 #define PSMOUSE_MINOR  1
 #define MS_BUSMOUSE_MINOR 2
@@ -36,6 +38,7 @@ struct miscdevice
 	const char *name;
 	struct file_operations *fops;
 	struct miscdevice * next, * prev;
+	devfs_handle_t devfs_handle;
 };
 
 extern int misc_register(struct miscdevice * misc);

@@ -392,6 +392,7 @@ CONFIG_PSMOUSE=y
 # CONFIG_WATCHDOG is not set
 # CONFIG_NVRAM is not set
 # CONFIG_RTC is not set
+# CONFIG_MICROCODE is not set
 
 #
 # Video For Linux

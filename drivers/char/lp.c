@@ -16,6 +16,7 @@
  * Parport sharing hacking by Andrea Arcangeli
  * Fixed kernel_(to/from)_user memory copy to check for errors
  * 				by Riccardo Facchetti <fizban@tin.it>
+ * 22-JAN-1998  Added support for devfs  Richard Gooch <rgooch@atnf.csiro.au>
  * Redesigned interrupt handling for handle printers with buggy handshake
  *				by Andrea Arcangeli, 11 May 1998
  * Full efficient handling of printer with buggy irq handshake (now I have
@@ -118,6 +119,7 @@
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/sched.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/malloc.h>
 #include <linux/fcntl.h>
 #include <linux/delay.h>
@@ -137,6 +139,8 @@
 
 /* ROUND_UP macro from fs/select.c */
 #define ROUND_UP(x,y) (((x)+(y)-1)/(y))
+
+static devfs_handle_t devfs_handle = NULL;
 
 struct lp_struct lp_table[LP_NO];
 
@@ -772,7 +776,7 @@ int __init lp_init (void)
 		lp_table[i].timeout = 10 * HZ;
 	}
 
-	if (register_chrdev (LP_MAJOR, "lp", &lp_fops)) {
+	if (devfs_register_chrdev (LP_MAJOR, "lp", &lp_fops)) {
 		printk ("lp: unable to get major %d\n", LP_MAJOR);
 		return -EIO;
 	}
@@ -780,6 +784,22 @@ int __init lp_init (void)
 	if (parport_register_driver (&lp_driver)) {
 		printk ("lp: unable to register with parport\n");
 		return -EIO;
+	}
+
+	devfs_handle = devfs_mk_dir (NULL, "printers", 0, NULL);
+	if (lp_count) {
+		for (i = 0; i < LP_NO; ++i)
+		{
+		    char name[8];
+
+		    if (!(lp_table[i].flags & LP_EXIST)) 
+			continue; /* skip this entry: it doesn't exist. */
+		    sprintf (name, "%d", i);
+		    devfs_register (devfs_handle, name, 0,
+				    DEVFS_FL_DEFAULT, LP_MAJOR, i,
+				    S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
+				    &lp_fops, NULL);
+		}
 	}
 
 	if (!lp_count) {
@@ -832,7 +852,8 @@ void cleanup_module(void)
 	unregister_console (&lpcons);
 #endif
 
-	unregister_chrdev(LP_MAJOR, "lp");
+	devfs_unregister (devfs_handle);
+	devfs_unregister_chrdev(LP_MAJOR, "lp");
 	for (offset = 0; offset < LP_NO; offset++) {
 		if (lp_table[offset].dev == NULL)
 			continue;

@@ -43,6 +43,13 @@ tristate 'OS/2 HPFS filesystem support' CONFIG_HPFS_FS
 
 bool '/proc filesystem support' CONFIG_PROC_FS
 
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool '/dev filesystem support (EXPERIMENTAL)' CONFIG_DEVFS_FS
+  if [ "$CONFIG_DEVFS_FS" = "y" ]; then
+    bool '  Debug devfs' CONFIG_DEVFS_DEBUG
+  fi
+fi
+
 # It compiles as a module for testing only.  It should not be used
 # as a module in general.  If we make this "tristate", a bunch of people
 # who don't know what they are doing turn it on and complain when it

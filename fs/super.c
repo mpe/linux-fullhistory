@@ -15,12 +15,14 @@
  *
  *  Added kerneld support: Jacques Gelinas and Bjorn Ekwall
  *  Added change_root: Werner Almesberger & Hans Lermen, Feb '96
+ *  Added devfs support: Richard Gooch <rgooch@atnf.csiro.au>, 13-JAN-1998
  */
 
 #include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/locks.h>
 #include <linux/smp_lock.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/fd.h>
 #include <linux/init.h>
 #include <linux/quotaops.h>
@@ -1080,6 +1082,8 @@ asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
 		goto out;
 
 	if (fstype->fs_flags & FS_REQUIRES_DEV) {
+		struct block_device_operations *bdops;
+
 		dentry = namei(dev_name);
 		retval = PTR_ERR(dentry);
 		if (IS_ERR(dentry))
@@ -1095,6 +1099,8 @@ asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
 			goto dput_and_out;
 
 		bdev = inode->i_bdev;
+		bdops = devfs_get_ops ( devfs_get_handle_from_inode (inode) );
+		if (bdops) bdev->bd_op = bdops;
 	}
 
 	page = 0;
@@ -1123,6 +1129,9 @@ void __init mount_root(void)
 	struct block_device *bdev = NULL;
 	mode_t mode;
 	int retval;
+	void *handle;
+	char path[64];
+	int path_start = -1;
 
 #ifdef CONFIG_ROOT_NFS
 	if (MAJOR(ROOT_DEV) == UNNAMED_MAJOR) {
@@ -1178,9 +1187,22 @@ void __init mount_root(void)
 	}
 #endif
 
+	devfs_make_root (root_device_name);
+	handle = devfs_find_handle (NULL, ROOT_DEVICE_NAME, 0,
+	                            MAJOR (ROOT_DEV), MINOR (ROOT_DEV),
+				    DEVFS_SPECIAL_BLK, 1);
+	if (handle)  /*  Sigh: bd*() functions only paper over the cracks  */
+	{
+	    unsigned major, minor;
+
+	    devfs_get_maj_min (handle, &major, &minor);
+	    ROOT_DEV = MKDEV (major, minor);
+	}
 	bdev = bdget(kdev_t_to_nr(ROOT_DEV));
 	if (!bdev)
 		panic(__FUNCTION__ ": unable to allocate root device");
+	bdev->bd_op = devfs_get_ops (handle);
+	path_start = devfs_generate_path (handle, path + 5, sizeof (path) - 5);
 	mode = FMODE_READ;
 	if (!(root_mountflags & MS_RDONLY))
 		mode |= FMODE_WRITE;
@@ -1189,13 +1211,15 @@ void __init mount_root(void)
 		root_mountflags |= MS_RDONLY;
 		retval = blkdev_get(bdev, FMODE_READ, 0, BDEV_FS);
 	}
-	if (retval)
+	if (retval) {
 	        /*
 		 * Allow the user to distinguish between failed open
 		 * and bad superblock on root device.
 		 */
-		printk("VFS: Cannot open root device %s\n",
-		       kdevname(ROOT_DEV));
+		printk ("VFS: Cannot open root device \"%s\" or %s\n",
+			root_device_name, kdevname (ROOT_DEV));
+		printk ("Please append a correct \"root=\" boot option\n");
+	}
 	else for (fs_type = file_systems ; fs_type ; fs_type = fs_type->next) {
   		if (!(fs_type->fs_flags & FS_REQUIRES_DEV))
   			continue;
@@ -1207,7 +1231,16 @@ void __init mount_root(void)
 			printk ("VFS: Mounted root (%s filesystem)%s.\n",
 				fs_type->name,
 				(sb->s_flags & MS_RDONLY) ? " readonly" : "");
-			vfsmnt = add_vfsmnt(sb, "/dev/root", "/");
+			if (path_start >= 0) {
+				devfs_mk_symlink (NULL,
+						  "root", 0, DEVFS_FL_DEFAULT,
+						  path + 5 + path_start, 0,
+						  NULL, NULL);
+				memcpy (path + path_start, "/dev/", 5);
+				vfsmnt = add_vfsmnt (sb, path + path_start,
+						     "/");
+			}
+			else vfsmnt = add_vfsmnt (sb, "/dev/root", "/");
 			if (vfsmnt) {
 				bdput(bdev); /* sb holds a reference */
 				return;
@@ -1343,6 +1376,18 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 		printk(KERN_CRIT "New root is busy. Staying in initrd.\n");
 		return -EBUSY;
 	}
+	/*  First unmount devfs if mounted  */
+	dir_d = lookup_dentry ("/dev", NULL, 1);
+	if (!IS_ERR(dir_d)) {
+		struct super_block *sb = dir_d->d_inode->i_sb;
+
+		if (sb && (dir_d->d_inode == sb->s_root->d_inode) &&
+		    (sb->s_magic == DEVFS_SUPER_MAGIC)) {
+			dput (dir_d);
+			do_umount (sb->s_dev, 0, 0);
+		}
+		else dput (dir_d);
+	}
 	ROOT_DEV = new_root_dev;
 	mount_root();
 	dput(old_root);
@@ -1351,6 +1396,7 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 	shrink_dcache();
 	printk("change_root: old root has d_count=%d\n", old_root->d_count);
 #endif
+	mount_devfs_fs ();
 	/*
 	 * Get the new mount directory
 	 */

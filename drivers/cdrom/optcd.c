@@ -71,6 +71,8 @@
 #include <linux/mm.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
+#include <linux/devfs_fs_kernel.h>
+
 #include <asm/io.h>
 
 #define MAJOR_NR OPTICS_CDROM_MAJOR
@@ -2061,12 +2063,13 @@ int __init optcd_init(void)
 		DEBUG((DEBUG_VFS, "exec_cmd COMINITDOUBLE: %02x", -status));
 		return -EIO;
 	}
-	if (register_blkdev(MAJOR_NR, "optcd", &opt_fops) != 0)
+	if (devfs_register_blkdev(MAJOR_NR, "optcd", &opt_fops) != 0)
 	{
 		printk(KERN_ERR "optcd: unable to get major %d\n", MAJOR_NR);
 		return -EIO;
 	}
-
+	devfs_register (NULL, "optcd", 0, DEVFS_FL_DEFAULT, MAJOR_NR, 0,
+			S_IFBLK | S_IRUGO | S_IWUGO, 0, 0, &opt_fops, NULL);
 	hardsect_size[MAJOR_NR] = &hsecsize;
 	blksize_size[MAJOR_NR] = &blksize;
 	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
@@ -2081,7 +2084,9 @@ int __init optcd_init(void)
 
 void __exit optcd_exit(void)
 {
-	if (unregister_blkdev(MAJOR_NR, "optcd") == -EINVAL) {
+	devfs_unregister(devfs_find_handle(NULL, "optcd", 0, 0, 0,
+					   DEVFS_SPECIAL_BLK, 0));
+	if (devfs_unregister_blkdev(MAJOR_NR, "optcd") == -EINVAL) {
 		printk(KERN_ERR "optcd: what's that: can't unregister\n");
 		return;
 	}

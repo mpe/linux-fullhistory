@@ -144,6 +144,10 @@ static int irqdma_allocated = 0;
 #define FDPATCHES
 #include <linux/fdreg.h>
 
+/*
+ * 1998/1/21 -- Richard Gooch <rgooch@atnf.csiro.au> -- devfs support
+ */
+
 
 #include <linux/fd.h>
 #include <linux/hdreg.h>
@@ -158,6 +162,7 @@ static int irqdma_allocated = 0;
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/init.h>
+#include <linux/devfs_fs_kernel.h>
 
 /*
  * PS/2 floppies have much slower step rates than regular floppies.
@@ -196,6 +201,9 @@ static int use_virtual_dma=0;
 static unsigned short virtual_dma_port=0x3f0;
 void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs);
 static int set_dor(int fdc, char mask, char data);
+static void register_devfs_entries (int drive);
+static devfs_handle_t devfs_handle = NULL;
+
 #define K_64	0x10000		/* 64KB */
 #include <asm/floppy.h>
 
@@ -3614,6 +3622,7 @@ static void config_types(void)
 				first = 0;
 			}
 			printk("%s fd%d is %s", prepend, drive, name);
+			register_devfs_entries (drive);
 		}
 		*UDP = *params;
 	}
@@ -3826,6 +3835,37 @@ static struct block_device_operations floppy_fops = {
 	check_media_change:	check_floppy_change,
 	revalidate:		floppy_revalidate,
 };
+
+static void register_devfs_entries (int drive)
+{
+    int base_minor, i;
+    static char *table[] =
+    {"", "d360", "h1200", "u360", "u720", "h360", "h720",
+     "u1440", "u2880", "CompaQ", "h1440", "u1680", "h410",
+     "u820", "h1476", "u1722", "h420", "u830", "h1494", "u1743",
+     "h880", "u1040", "u1120", "h1600", "u1760", "u1920",
+     "u3200", "u3520", "u3840", "u1840", "u800", "u1600",
+     NULL
+    };
+    static int t360[] = {1,0}, t1200[] = {2,5,6,10,12,14,16,18,20,23,0},
+      t3in[] = {8,9,26,27,28, 7,11,15,19,24,25,29,31, 3,4,13,17,21,22,30,0};
+    static int *table_sup[] = 
+    {NULL, t360, t1200, t3in+5+8, t3in+5, t3in, t3in};
+
+    base_minor = (drive < 4) ? drive : (124 + drive);
+    if (UDP->cmos <= NUMBER(default_drive_params)) {
+	i = 0;
+	do {
+	    char name[16];
+
+	    sprintf (name, "%d%s", drive, table[table_sup[UDP->cmos][i]]);
+	    devfs_register (devfs_handle, name, 0, DEVFS_FL_DEFAULT, MAJOR_NR,
+			    base_minor + (table_sup[UDP->cmos][i] << 2),
+			    S_IFBLK | S_IRUSR | S_IWUSR | S_IRGRP |S_IWGRP,
+			    0, 0, &floppy_fops, NULL);
+	} while (table_sup[UDP->cmos][i++]);
+    }
+}
 
 /*
  * Floppy Driver initialization
@@ -4049,7 +4089,8 @@ int __init floppy_init(void)
 
 	raw_cmd = 0;
 
-	if (register_blkdev(MAJOR_NR,"fd",&floppy_fops)) {
+	devfs_handle = devfs_mk_dir (NULL, "floppy", 0, NULL);
+	if (devfs_register_blkdev(MAJOR_NR,"fd",&floppy_fops)) {
 		printk("Unable to get major %d for floppy\n",MAJOR_NR);
 		return -EBUSY;
 	}
@@ -4080,7 +4121,7 @@ int __init floppy_init(void)
 	use_virtual_dma = can_use_virtual_dma & 1;
 	fdc_state[0].address = FDC1;
 	if (fdc_state[0].address == -1) {
-		unregister_blkdev(MAJOR_NR,"fd");
+		devfs_unregister_blkdev(MAJOR_NR,"fd");
 		del_timer(&fd_timeout);
 		return -ENODEV;
 	}
@@ -4092,7 +4133,7 @@ int __init floppy_init(void)
 	if (floppy_grab_irq_and_dma()){
 		del_timer(&fd_timeout);
 		blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
-		unregister_blkdev(MAJOR_NR,"fd");
+		devfs_unregister_blkdev(MAJOR_NR,"fd");
 		del_timer(&fd_timeout);
 		return -EBUSY;
 	}
@@ -4158,7 +4199,7 @@ int __init floppy_init(void)
  		if (usage_count)
  			floppy_release_irq_and_dma();
 		blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
-		unregister_blkdev(MAJOR_NR,"fd");		
+		devfs_unregister_blkdev(MAJOR_NR,"fd");		
 	}
 	
 	for (drive = 0; drive < N_DRIVE; drive++) {
@@ -4395,7 +4436,8 @@ void cleanup_module(void)
 {
 	int dummy;
 		
-	unregister_blkdev(MAJOR_NR, "fd");
+	devfs_unregister (devfs_handle);
+	devfs_unregister_blkdev(MAJOR_NR, "fd");
 
 	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 	/* eject disk, if any */

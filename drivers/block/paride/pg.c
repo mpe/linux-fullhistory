@@ -164,6 +164,7 @@ static int pg_drive_count;
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/malloc.h>
@@ -286,6 +287,8 @@ void pg_init_units( void )
 	}
 } 
 
+static devfs_handle_t devfs_handle = NULL;
+
 int pg_init (void)      /* preliminary initialisation */
 
 {       int unit;
@@ -296,14 +299,17 @@ int pg_init (void)      /* preliminary initialisation */
 
 	if (pg_detect()) return -1;
 
-	if (register_chrdev(major,name,&pg_fops)) {
+	if (devfs_register_chrdev(major,name,&pg_fops)) {
 		printk("pg_init: unable to get major number %d\n",
 			major);
 		for (unit=0;unit<PG_UNITS;unit++)
 		  if (PG.present) pi_release(PI);
 		return -1;
 	}
-
+	devfs_handle = devfs_mk_dir (NULL, "pg", 2, NULL);
+	devfs_register_series (devfs_handle, "%u", 4, DEVFS_FL_DEFAULT,
+			       major, 0, S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       &pg_fops, NULL);
 	return 0;
 }
 
@@ -332,7 +338,8 @@ void    cleanup_module(void)
 
 {       int unit;
 
-	unregister_chrdev(major,name);
+	devfs_unregister (devfs_handle);
+	devfs_unregister_chrdev(major,name);
 
 	for (unit=0;unit<PG_UNITS;unit++)
 	  if (PG.present) pi_release(PI);

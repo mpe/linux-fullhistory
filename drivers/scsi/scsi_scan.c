@@ -455,6 +455,7 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	       int *sparse_lun, Scsi_Device ** SDpnt2, 
 		      struct Scsi_Host *shpnt, char *scsi_result)
 {
+	char devname[64];
 	unsigned char scsi_cmd[MAX_COMMAND_SIZE];
 	struct Scsi_Device_Template *sdtpnt;
 	Scsi_Device *SDtail, *SDpnt = *SDpnt2;
@@ -462,6 +463,7 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	int bflags, type = -1;
 	static int ghost_channel=-1, ghost_dev=-1;
 	int org_lun = lun;
+	extern devfs_handle_t scsi_devfs_handle;
 
 	SDpnt->host = shpnt;
 	SDpnt->id = dev;
@@ -636,6 +638,11 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	SDpnt->type = (type & 0x1f);
 
 	print_inquiry(scsi_result);
+
+        sprintf (devname, "host%d/bus%d/target%d/lun%d",
+                 SDpnt->host->host_no, SDpnt->channel, SDpnt->id, SDpnt->lun);
+        if (SDpnt->de) printk ("DEBUG: dir: \"%s\" already exists\n", devname);
+        else SDpnt->de = devfs_mk_dir (scsi_devfs_handle, devname, 0, NULL);
 
 	for (sdtpnt = scsi_devicelist; sdtpnt;
 	     sdtpnt = sdtpnt->next)

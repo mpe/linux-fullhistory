@@ -413,6 +413,16 @@ struct Scsi_Host
 extern void scsi_free_host_dev(Scsi_Device * SDpnt);
 extern Scsi_Device * scsi_get_host_dev(struct Scsi_Host * SHpnt);
 
+typedef struct SHN
+    {
+    struct SHN * next;
+    char * name;
+    unsigned short host_no;
+    unsigned short host_registered;
+    unsigned loaded_as_module;
+    } Scsi_Host_Name;
+	
+extern Scsi_Host_Name * scsi_host_no_list;
 extern struct Scsi_Host * scsi_hostlist;
 extern struct Scsi_Device_Template * scsi_devicelist;
 

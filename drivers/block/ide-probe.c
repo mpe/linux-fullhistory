@@ -699,13 +699,28 @@ static void init_gendisk (ide_hwif_t *hwif)
 	gd->nr_real	= units;		/* current num real drives */
 	gd->real_devices= hwif;			/* ptr to internal data */
 	gd->next	= NULL;			/* linked list of major devs */
+	gd->fops        = ide_fops;             /* file operations */
+	gd->de_arr	= kmalloc (sizeof *gd->de_arr * units, GFP_KERNEL);
+	gd->flags	= kmalloc (sizeof *gd->flags * units, GFP_KERNEL);
+	if (gd->de_arr)
+		memset (gd->de_arr, 0, sizeof *gd->de_arr * units);
+	if (gd->flags)
+		memset (gd->flags, 0, sizeof *gd->flags * units);
 
 	for (gdp = &gendisk_head; *gdp; gdp = &((*gdp)->next)) ;
 	hwif->gd = *gdp = gd;			/* link onto tail of list */
 
 	for (unit = 0; unit < units; ++unit) {
-		if (hwif->drives[unit].present)
+		if (hwif->drives[unit].present) {
+			char name[64];
+
 			ide_add_generic_settings(hwif->drives + unit);
+			sprintf (name, "ide/host%d/bus%d/target%d/lun%d",
+				 hwif->channel ? hwif->mate->index : hwif->index,
+				 hwif->channel, unit, 0);
+			hwif->drives[unit].de =
+				devfs_mk_dir (NULL, name, 0, NULL);
+		}
 	}
 }
 
@@ -764,7 +779,7 @@ static int hwif_init (ide_hwif_t *hwif)
 		printk("%s: request_fn NOT DEFINED\n", hwif->name);
 		return (hwif->present = 0);
 	}
-	if (register_blkdev (hwif->major, hwif->name, ide_fops)) {
+	if (devfs_register_blkdev (hwif->major, hwif->name, ide_fops)) {
 		printk("%s: UNABLE TO GET MAJOR NUMBER %d\n", hwif->name, hwif->major);
 		return (hwif->present = 0);
 	}

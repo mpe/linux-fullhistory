@@ -133,7 +133,7 @@
 	       Fixed version numbering and history for v1.23 -> v1.24.
   v1.26
     19990118   Richard Gooch <rgooch@atnf.csiro.au>
-	       PLACEHOLDER.
+	       Added devfs support.
   v1.27
     19990123   Richard Gooch <rgooch@atnf.csiro.au>
 	       Changed locking to spin with reschedule.
@@ -178,7 +178,6 @@
                Moved to linux/arch/i386/kernel/setup.c and
                linux/include/asm-i386/bugs.h
     19990228   Richard Gooch <rgooch@atnf.csiro.au>
-	       Added #ifdef CONFIG_DEVFS_FS
 	       Added MTRRIOC_KILL_ENTRY ioctl(2)
 	       Trap for counter underflow in <mtrr_file_del>.
 	       Trap for 4 MiB aligned regions for PPro, stepping <= 7.
@@ -241,6 +240,7 @@
 #include <linux/fs.h>
 #include <linux/ctype.h>
 #include <linux/proc_fs.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #define MTRR_NEED_STRINGS
@@ -305,11 +305,15 @@ typedef u8 mtrr_type;
 						       TRUE)
 #endif
 
-#ifndef CONFIG_PROC_FS
+#if defined(CONFIG_PROC_FS) || defined(CONFIG_DEVFS_FS)
+# define USERSPACE_INTERFACE
+#endif
+
+#ifndef USERSPACE_INTERFACE
 #  define compute_ascii() while (0)
 #endif
 
-#ifdef CONFIG_PROC_FS
+#ifdef USERSPACE_INTERFACE
 static char *ascii_buffer = NULL;
 static unsigned int ascii_buf_bytes = 0;
 #endif
@@ -317,7 +321,7 @@ static unsigned int *usage_table = NULL;
 static DECLARE_MUTEX(main_lock);
 
 /*  Private functions  */
-#ifdef CONFIG_PROC_FS
+#ifdef USERSPACE_INTERFACE
 static void compute_ascii (void);
 #endif
 
@@ -1010,7 +1014,7 @@ static void init_table (void)
 	return;
     }
     for (i = 0; i < max; i++) usage_table[i] = 1;
-#ifdef CONFIG_PROC_FS
+#ifdef USERSPACE_INTERFACE
     if ( ( ascii_buffer = kmalloc (max * LINE_SIZE, GFP_KERNEL) ) == NULL )
     {
 	printk ("mtrr: could not allocate\n");
@@ -1286,7 +1290,7 @@ int mtrr_del (int reg, unsigned long base, unsigned long size)
     return reg;
 }   /*  End Function mtrr_del  */
 
-#ifdef CONFIG_PROC_FS
+#ifdef USERSPACE_INTERFACE
 
 static int mtrr_file_add (unsigned long base, unsigned long size,
 			  unsigned int type, char increment, struct file *file)
@@ -1475,11 +1479,17 @@ static struct file_operations mtrr_fops =
 	 release:	mtrr_close,
 };
 
+#  ifdef CONFIG_PROC_FS
+
 static struct inode_operations proc_mtrr_inode_operations = {
 	&mtrr_fops,             /* default property file-ops */
 };
 
 static struct proc_dir_entry *proc_root_mtrr;
+
+#  endif  /*  CONFIG_PROC_FS  */
+
+static devfs_handle_t devfs_handle = NULL;
 
 static void compute_ascii (void)
 {
@@ -1515,10 +1525,13 @@ static void compute_ascii (void)
 	    ascii_buf_bytes += strlen (ascii_buffer + ascii_buf_bytes);
 	}
     }
+    devfs_set_file_size (devfs_handle, ascii_buf_bytes);
+#  ifdef CONFIG_PROC_FS
     proc_root_mtrr->size = ascii_buf_bytes;
+#  endif  /*  CONFIG_PROC_FS  */
 }   /*  End Function compute_ascii  */
 
-#endif  /*  CONFIG_PROC_FS  */
+#endif  /*  USERSPACE_INTERFACE  */
 
 EXPORT_SYMBOL(mtrr_add);
 EXPORT_SYMBOL(mtrr_del);
@@ -1786,9 +1799,12 @@ int __init mtrr_init(void)
 #  endif  /*  !__SMP__  */
 
 #  ifdef CONFIG_PROC_FS
-    proc_root_mtrr = create_proc_entry("mtrr", S_IWUSR|S_IRUGO, &proc_root);
+    proc_root_mtrr = create_proc_entry ("mtrr", S_IWUSR | S_IRUGO, &proc_root);
     proc_root_mtrr->ops = &proc_mtrr_inode_operations;
 #endif    
+    devfs_handle = devfs_register (NULL, "cpu/mtrr", 0, DEVFS_FL_DEFAULT, 0, 0,
+				   S_IFREG | S_IRUGO | S_IWUSR, 0, 0,
+				   &mtrr_fops, NULL);
     init_table ();
     return 0;
 }   /*  End Function mtrr_init  */

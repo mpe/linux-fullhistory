@@ -299,7 +299,6 @@
  * Generic packet command support and error handling routines.
  */
 
-
 /* Mark that we've seen a media change, and invalidate our internal
    buffers. */
 static void cdrom_saw_media_change (ide_drive_t *drive)
@@ -2270,7 +2269,12 @@ static int ide_cdrom_register (ide_drive_t *drive, int nslots)
 		devinfo->mask |= CDC_PLAY_AUDIO;
 	if (!CDROM_CONFIG_FLAGS (drive)->close_tray)
 		devinfo->mask |= CDC_CLOSE_TRAY;
-		
+
+	devinfo->de = devfs_register (drive->de, "cd", 2, DEVFS_FL_DEFAULT,
+				      HWIF(drive)->major, minor,
+				      S_IFBLK | S_IRUGO | S_IWUGO, 0, 0,
+				      ide_fops, NULL);
+
 	return register_cdrom (devinfo);
 }
 

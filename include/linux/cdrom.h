@@ -705,6 +705,7 @@ struct request_sense {
 };
 
 #ifdef __KERNEL__
+#include <linux/devfs_fs_kernel.h>
 
 struct cdrom_write_settings {
 	unsigned char fpacket;		/* fixed/variable packets */
@@ -718,6 +719,7 @@ struct cdrom_device_info {
 	struct cdrom_device_ops  *ops;  /* link to device_ops */
 	struct cdrom_device_info *next; /* next device_info for this major */
 	void *handle;		        /* driver-dependent data */
+	devfs_handle_t de;		/* real driver creates this  */
 /* specifications */
         kdev_t dev;	                /* device number */
 	int mask;                       /* mask of capability: disables them */

@@ -1978,6 +1978,10 @@ void ide_unregister (unsigned int index)
 	d = hwgroup->drive;
 	for (i = 0; i < MAX_DRIVES; ++i) {
 		drive = &hwif->drives[i];
+		if (drive->de) {
+			devfs_unregister (drive->de);
+			drive->de = NULL;
+		}
 		if (!drive->present)
 			continue;
 		while (hwgroup->drive->next != drive)
@@ -2026,6 +2030,10 @@ void ide_unregister (unsigned int index)
 		gd = *gdp; *gdp = gd->next;
 		kfree(gd->sizes);
 		kfree(gd->part);
+		if (gd->de_arr)
+			kfree (gd->de_arr);
+		if (gd->flags)
+			kfree (gd->flags);
 		kfree(gd);
 	}
 	old_hwif = *hwif;

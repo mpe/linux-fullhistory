@@ -291,6 +291,7 @@ int cdrom_get_next_writable(kdev_t dev, long *next_writable);
 static void cdrom_sysctl_register(void);
 #endif /* CONFIG_SYSCTL */ 
 static struct cdrom_device_info *topCdromPtr = NULL;
+static devfs_handle_t devfs_handle = NULL;
 
 struct block_device_operations cdrom_fops =
 {
@@ -313,6 +314,8 @@ int register_cdrom(struct cdrom_device_info *cdi)
 	int major = MAJOR(cdi->dev);
         struct cdrom_device_ops *cdo = cdi->ops;
         int *change_capability = (int *)&cdo->capability; /* hack */
+	char vname[16];
+	static unsigned int cdrom_counter = 0;
 
 	cdinfo(CD_OPEN, "entering register_cdrom\n"); 
 
@@ -351,6 +354,31 @@ int register_cdrom(struct cdrom_device_info *cdi)
 	if (check_media_type==1)
 		cdi->options |= (int) CDO_CHECK_TYPE;
 
+	if (!devfs_handle)
+		devfs_handle = devfs_mk_dir (NULL, "cdroms", 6, NULL);
+	sprintf (vname, "cdrom%u", cdrom_counter++);
+	if (cdi->de) {
+		int pos;
+		devfs_handle_t slave;
+		char rname[64];
+
+		pos = devfs_generate_path (cdi->de, rname + 3,
+					   sizeof rname - 3);
+		if (pos >= 0) {
+			strncpy (rname + pos, "../", 3);
+			devfs_mk_symlink (devfs_handle, vname, 0,
+					  DEVFS_FL_DEFAULT,
+					  rname + pos, 0, &slave, NULL);
+			devfs_auto_unregister (cdi->de, slave);
+		}
+	}
+	else {
+		cdi->de =
+		    devfs_register (devfs_handle, vname, 0, DEVFS_FL_DEFAULT,
+				    MAJOR (cdi->dev), MINOR (cdi->dev),
+				    S_IFBLK | S_IRUGO | S_IWUGO, 0, 0,
+				    &cdrom_fops, NULL);
+	}
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" registered\n", cdi->name);
 	cdi->next = topCdromPtr; 	
 	topCdromPtr = cdi;
@@ -382,6 +410,7 @@ int unregister_cdrom(struct cdrom_device_info *unreg)
 	else
 		topCdromPtr = cdi->next;
 	cdi->ops->n_minors--;
+	devfs_unregister (cdi->de);
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" unregistered\n", cdi->name);
 	return 0;
 }
@@ -2483,6 +2512,7 @@ int init_module(void)
 #ifdef CONFIG_SYSCTL
 	cdrom_sysctl_register();
 #endif
+	devfs_handle = devfs_mk_dir (NULL, "cdroms", 6, NULL);
 	return 0;
 }
 
@@ -2491,7 +2521,8 @@ void cleanup_module(void)
 	printk(KERN_INFO "Uniform CD-ROM driver unloaded\n");
 #ifdef CONFIG_SYSCTL
 	cdrom_sysctl_unregister();
-#endif /* CONFIG_SYSCTL */ 
+#endif /* CONFIG_SYSCTL */
+	devfs_unregister (devfs_handle);
 }
 #endif /* endif MODULE */
 

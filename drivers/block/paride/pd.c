@@ -156,6 +156,7 @@ static int pd_drive_count;
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/genhd.h>
@@ -339,6 +340,8 @@ static char *pd_errs[17] = { "ERR","INDEX","ECC","DRQ","SEEK","WRERR",
 
 /* kernel glue structures */
 
+extern struct block_device_operations pd_fops;
+
 static struct gendisk pd_gendisk = {
         PD_MAJOR,       /* Major number */
         PD_NAME,        /* Major name */
@@ -348,7 +351,8 @@ static struct gendisk pd_gendisk = {
         pd_sizes,       /* block sizes */
         0,              /* number */
         NULL,           /* internal */
-        NULL            /* next */
+        NULL,           /* next */
+	&pd_fops,       /* block device operations */
 };
 
 static struct block_device_operations pd_fops = {
@@ -386,8 +390,7 @@ int pd_init (void)
 {       int i;
 
 	if (disable) return -1;
-
-        if (register_blkdev(MAJOR_NR,name,&pd_fops)) {
+        if (devfs_register_blkdev(MAJOR_NR,name,&pd_fops)) {
                 printk("%s: unable to get major number %d\n",
                         name,major);
                 return -1;
@@ -592,8 +595,7 @@ void    cleanup_module(void)
 {       struct gendisk **gdp;
 	int unit;
 
-        unregister_blkdev(MAJOR_NR,name);
-
+        devfs_unregister_blkdev(MAJOR_NR,name);
         for(gdp=&gendisk_head;*gdp;gdp=&((*gdp)->next))
                 if (*gdp == &pd_gendisk) break;
         if (*gdp) *gdp = (*gdp)->next;

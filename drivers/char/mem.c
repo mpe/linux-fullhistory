@@ -2,6 +2,9 @@
  *  linux/drivers/char/mem.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
+ *
+ *  Added devfs support. 
+ *    Jan-11-1998, C. Scott Ananian <cananian@alumni.princeton.edu>
  */
 
 #include <linux/config.h>
@@ -570,14 +573,42 @@ static int memory_open(struct inode * inode, struct file * filp)
 	return 0;
 }
 
+void __init memory_devfs_register (void)
+{
+    /*  These are never unregistered  */
+    static const struct {
+	unsigned short minor;
+	char *name;
+	umode_t mode;
+	struct file_operations *fops;
+    } list[] = { /* list of minor devices */
+	{1, "mem",     S_IRUSR | S_IWUSR | S_IRGRP, &mem_fops},
+	{2, "kmem",    S_IRUSR | S_IWUSR | S_IRGRP, &kmem_fops},
+	{3, "null",    S_IRUGO | S_IWUGO,           &null_fops},
+	{4, "port",    S_IRUSR | S_IWUSR | S_IRGRP, &port_fops},
+	{5, "zero",    S_IRUGO | S_IWUGO,           &zero_fops},
+	{7, "full",    S_IRUGO | S_IWUGO,           &full_fops},
+	{8, "random",  S_IRUGO | S_IWUSR,           &random_fops},
+	{9, "urandom", S_IRUGO | S_IWUSR,           &urandom_fops}
+    };
+    int i;
+
+    for (i=0; i<(sizeof(list)/sizeof(*list)); i++)
+	devfs_register (NULL, list[i].name, 0, DEVFS_FL_NONE,
+			MEM_MAJOR, list[i].minor,
+			list[i].mode | S_IFCHR, 0, 0,
+			list[i].fops, NULL);
+}
+
 static struct file_operations memory_fops = {
 	open:		memory_open,	/* just a selector for the real open */
 };
 
 int __init chr_dev_init(void)
 {
-	if (register_chrdev(MEM_MAJOR,"mem",&memory_fops))
+	if (devfs_register_chrdev(MEM_MAJOR,"mem",&memory_fops))
 		printk("unable to get major %d for memory devs\n", MEM_MAJOR);
+	memory_devfs_register();
 	rand_initialize();
 	raw_init();
 #ifdef CONFIG_I2C

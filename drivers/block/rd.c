@@ -58,6 +58,7 @@
 #include <linux/fd.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -97,6 +98,7 @@ static unsigned long rd_length[NUM_RAMDISKS];	/* Size of RAM disks in bytes   */
 static int rd_hardsec[NUM_RAMDISKS];		/* Size of real blocks in bytes */
 static int rd_blocksizes[NUM_RAMDISKS];		/* Size of 1024 byte blocks :)  */
 static int rd_kbsize[NUM_RAMDISKS];		/* Size in blocks of 1024 bytes */
+static devfs_handle_t devfs_handle = NULL;
 
 /*
  * Parameters for the boot-loading of the RAM disk.  These are set by
@@ -179,6 +181,8 @@ __setup("ramdisk_size=", ramdisk_size2);
  *  Basically, my strategy here is to set up a buffer-head which can't be
  *  deleted, and make that my Ramdisk.  If the request is outside of the
  *  allocated size, we must get rid of it...
+ *
+ * 19-JAN-1998  Richard Gooch <rgooch@atnf.csiro.au>  Added devfs support
  *
  */
 static void rd_request(request_queue_t * q)
@@ -388,6 +392,7 @@ static void __exit rd_cleanup (void)
 	for (i = 0 ; i < NUM_RAMDISKS; i++)
 		destroy_buffers(MKDEV(MAJOR_NR, i));
 
+	devfs_unregister (devfs_handle);
 	unregister_blkdev( MAJOR_NR, "ramdisk" );
 	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 }
@@ -419,6 +424,11 @@ int __init rd_init (void)
 		rd_blocksizes[i] = rd_blocksize;
 		rd_kbsize[i] = rd_size;
 	}
+	devfs_handle = devfs_mk_dir (NULL, "rd", 0, NULL);
+	devfs_register_series (devfs_handle, "%u", NUM_RAMDISKS,
+			       DEVFS_FL_DEFAULT, MAJOR_NR, 0,
+			       S_IFBLK | S_IRUSR | S_IWUSR, 0, 0,
+			       &fd_fops, NULL);
 
 	hardsect_size[MAJOR_NR] = rd_hardsec;		/* Size of the RAM disk blocks */
 	blksize_size[MAJOR_NR] = rd_blocksizes;		/* Avoid set_blocksize() check */
@@ -681,6 +691,7 @@ static void __init rd_load_image(kdev_t device, int offset, int unit)
 successful_load:
 	invalidate_buffers(device);
 	ROOT_DEV = MKDEV(MAJOR_NR, unit);
+	if (ROOT_DEVICE_NAME != NULL) strcpy (ROOT_DEVICE_NAME, "rd/0");
 
 done:
 	if (infile.f_op->release)

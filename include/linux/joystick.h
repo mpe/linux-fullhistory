@@ -129,6 +129,7 @@ struct JS_DATA_SAVE_TYPE {
 #define JS_BUFF_SIZE		64		/* output buffer size */
 
 #include <linux/version.h>
+#include <linux/devfs_fs_kernel.h>
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,2,0)
 #error "You need to use at least v2.2 Linux kernel."
@@ -217,6 +218,7 @@ struct js_dev {
 	int num_axes;
 	int num_buttons;
 	char *name;
+	devfs_handle_t devfs_handle;
 };
 
 struct js_list {

@@ -16,6 +16,7 @@
 #define _SCSI_H
 
 #include <linux/config.h>	/* for CONFIG_SCSI_LOGGING */
+#include <linux/devfs_fs_kernel.h>
 #include <linux/proc_fs.h>
 
 /*
@@ -512,6 +513,7 @@ struct scsi_device {
 	int access_count;	/* Count of open channels/mounts */
 
 	void *hostdata;		/* available to low-level driver */
+	devfs_handle_t de;      /* directory for the device      */
 	char type;
 	char scsi_level;
 	char vendor[8], model[16], rev[4];

@@ -65,6 +65,7 @@ not be guaranteed. There are several ways to assure this:
 #include <linux/time.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -987,23 +988,28 @@ int attach_slm( int target, int lun )
 	return( 1 );
 }
 
+static devfs_handle_t devfs_handle = NULL;
 
 int slm_init( void )
 
 {
-	if (register_chrdev( MAJOR_NR, "slm", &slm_fops )) {
+	if (devfs_register_chrdev( MAJOR_NR, "slm", &slm_fops )) {
 		printk( KERN_ERR "Unable to get major %d for ACSI SLM\n", MAJOR_NR );
 		return -EBUSY;
 	}
 	
 	if (!(SLMBuffer = atari_stram_alloc( SLM_BUFFER_SIZE, NULL, "SLM" ))) {
 		printk( KERN_ERR "Unable to get SLM ST-Ram buffer.\n" );
-		unregister_chrdev( MAJOR_NR, "slm" );
+		devfs_unregister_chrdev( MAJOR_NR, "slm" );
 		return -ENOMEM;
 	}
 	BufferP = SLMBuffer;
 	SLMState = IDLE;
 	
+	devfs_handle = devfs_mk_dir (NULL, "slm", 3, NULL);
+	devfs_register_series (devfs_handle, "%u", MAX_SLM, DEVFS_FL_DEFAULT,
+			       MAJOR_NR, 0, S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       &slm_fops, NULL);
 	return 0;
 }
 
@@ -1026,7 +1032,8 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	if (unregister_chrdev( MAJOR_NR, "slm" ) != 0)
+	devfs_unregister (devfs_handle);
+	if (devfs_unregister_chrdev( MAJOR_NR, "slm" ) != 0)
 		printk( KERN_ERR "acsi_slm: cleanup_module failed\n");
 	atari_stram_free( SLMBuffer );
 }

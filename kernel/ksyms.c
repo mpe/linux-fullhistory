@@ -261,6 +261,7 @@ EXPORT_SYMBOL(is_read_only);
 EXPORT_SYMBOL(set_device_ro);
 EXPORT_SYMBOL(bmap);
 EXPORT_SYMBOL(sync_dev);
+EXPORT_SYMBOL(devfs_register_partitions);
 EXPORT_SYMBOL(blkdev_open);
 EXPORT_SYMBOL(blkdev_get);
 EXPORT_SYMBOL(blkdev_put);

@@ -274,6 +274,12 @@ M:	hpa@zytor.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+DEVICE FILESYSTEM
+P:	Richard Gooch
+M:	rgooch@atnf.csiro.au
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 DIGI INTL. EPCA DRIVER
 P:	 Chad Schwartz
 M:      support@dgii.com
@@ -494,6 +500,11 @@ S:	Maintained
 INTEL APIC/IOAPIC, LOWLEVEL X86 SMP SUPPORT
 P:	Ingo Molnar
 M:	mingo@redhat.com
+S:	Maintained
+
+INTEL P6 MICROCODE UPDATE SUPPORT
+P:	Tigran Aivazian
+M:	tigran@sco.com
 S:	Maintained
 
 IP MASQUERADING:

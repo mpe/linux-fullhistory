@@ -29,6 +29,8 @@
  *
  * Changes for kmod (from kerneld):
  *	Cyrus Durgin <cider@speakeasy.org>
+ *
+ * Added devfs support. Richard Gooch <rgooch@atnf.csiro.au>  10-Jan-1998
  */
 
 #include <linux/module.h>
@@ -41,6 +43,7 @@
 #include <linux/major.h>
 #include <linux/malloc.h>
 #include <linux/proc_fs.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/stat.h>
 #include <linux/init.h>
 
@@ -121,6 +124,8 @@ static struct file_operations misc_fops = {
 
 int misc_register(struct miscdevice * misc)
 {
+	static devfs_handle_t devfs_handle = NULL;
+
 	if (misc->next || misc->prev)
 		return -EBUSY;
 	if (misc->minor == MISC_DYNAMIC_MINOR) {
@@ -133,6 +138,13 @@ int misc_register(struct miscdevice * misc)
 	}
 	if (misc->minor < DYNAMIC_MINORS)
 		misc_minors[misc->minor >> 3] |= 1 << (misc->minor & 7);
+	if (!devfs_handle)
+		devfs_handle = devfs_mk_dir (NULL, "misc", 4, NULL);
+	misc->devfs_handle =
+	    devfs_register (devfs_handle, misc->name, 0, DEVFS_FL_NONE,
+			    MISC_MAJOR, misc->minor,
+			    S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP, 0, 0,
+			    misc->fops, NULL);
 
 	/*
 	 * Add it to the front, so that later devices can "override"
@@ -154,6 +166,7 @@ int misc_deregister(struct miscdevice * misc)
 	misc->next->prev = misc->prev;
 	misc->next = NULL;
 	misc->prev = NULL;
+	devfs_unregister (misc->devfs_handle);
 	if (i < DYNAMIC_MINORS && i>0) {
 		misc_minors[i>>3] &= ~(1 << (misc->minor & 7));
 	}
@@ -217,11 +230,10 @@ int __init misc_init(void)
 #ifdef CONFIG_SGI
 	streamable_init ();
 #endif
-	if (register_chrdev(MISC_MAJOR,"misc",&misc_fops)) {
+	if (devfs_register_chrdev(MISC_MAJOR,"misc",&misc_fops)) {
 		printk("unable to get major %d for misc devices\n",
 		       MISC_MAJOR);
 		return -EIO;
 	}
-
 	return 0;
 }

@@ -8,6 +8,8 @@ bfs.txt
 	- info for the SCO UnixWare Boot Filesystem (BFS).
 coda.txt
 	- description of the CODA filesystem.
+devfs
+	- directory containing devfs documentation.
 fat_cvf.txt
 	- info on the Compressed Volume Files extension to the FAT filesystem
 hpfs.txt

@@ -37,7 +37,8 @@ obj-y	 += tty_io.o n_tty.o tty_ioctl.o mem.o raw.o pty.o misc.o random.o
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
 export-objs     :=	busmouse.o console.o i2c-old.o keyboard.o \
-			misc.o pty.o random.o selection.o serial.o videodev.o
+			misc.o pty.o random.o selection.o serial.o videodev.o \
+			tty_io.o
 
 KEYMAP   =defkeymap.o
 KEYBD    =pc_keyb.o

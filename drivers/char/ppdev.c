@@ -45,6 +45,8 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/sched.h>
+#include <linux/init.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/ioctl.h>
 #include <linux/parport.h>
 #include <linux/ctype.h>
@@ -579,13 +581,20 @@ static struct file_operations pp_fops = {
 	release:	pp_release,
 };
 
+static devfs_handle_t devfs_handle = NULL;
+
 static int __init ppdev_init (void)
 {
-	if (register_chrdev (PP_MAJOR, CHRDEV, &pp_fops)) {
+	if (devfs_register_chrdev (PP_MAJOR, CHRDEV, &pp_fops)) {
 		printk (KERN_WARNING CHRDEV ": unable to get major %d\n",
 			PP_MAJOR);
 		return -EIO;
 	}
+	devfs_handle = devfs_mk_dir (NULL, "parports", 0, NULL);
+	devfs_register_series (devfs_handle, "%u", PARPORT_MAX,
+			       DEVFS_FL_DEFAULT, PP_MAJOR, 0,
+			       S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
+			       &pp_fops, NULL);
 
 	printk (KERN_INFO PP_VERSION "\n");
 	return 0;
@@ -594,7 +603,8 @@ static int __init ppdev_init (void)
 static void __exit ppdev_cleanup (void)
 {
 	/* Clean up all parport stuff */
-	unregister_chrdev (PP_MAJOR, CHRDEV);
+	devfs_unregister (devfs_handle);
+	devfs_unregister_chrdev (PP_MAJOR, CHRDEV);
 }
 
 module_init(ppdev_init);

@@ -41,6 +41,7 @@
 #include <linux/kernel.h>
 #include <linux/genhd.h>
 #include <linux/ps2esdi.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/blk.h>
 #include <linux/blkpg.h>
 #include <linux/mca.h>
@@ -164,7 +165,8 @@ static struct gendisk ps2esdi_gendisk =
 	ps2esdi_sizes,		/* block sizes */
 	0,			/* number */
 	(void *) ps2esdi_info,	/* internal */
-	NULL			/* next */
+	NULL,			/* next */
+	&ps2esdi_fops,          /* file operations */
 };
 
 /* initialization routine called by ll_rw_blk.c   */
@@ -173,7 +175,7 @@ int __init ps2esdi_init(void)
 
 	/* register the device - pass the name, major number and operations
 	   vector .                                                 */
-	if (register_blkdev(MAJOR_NR, "ed", &ps2esdi_fops)) {
+	if (devfs_register_blkdev(MAJOR_NR, "ed", &ps2esdi_fops)) {
 		printk("%s: Unable to get major number %d\n", DEVICE_NAME, MAJOR_NR);
 		return -1;
 	}
@@ -229,7 +231,7 @@ cleanup_module(void)
 	release_region(io_base, 4);
 	free_dma(dma_arb_level);
   	free_irq(PS2ESDI_IRQ, NULL)
-	unregister_blkdev(MAJOR_NR, "ed");
+	devfs_unregister_blkdev(MAJOR_NR, "ed");
 }
 #endif /* MODULE */
 

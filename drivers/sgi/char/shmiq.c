@@ -53,6 +53,7 @@
 #include <linux/wait.h>
 #include <linux/major.h>
 #include <linux/smp_lock.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/shmiq.h>
 #include <asm/mman.h>
@@ -443,5 +444,12 @@ void
 shmiq_init (void)
 {
 	printk ("SHMIQ setup\n");
-	register_chrdev (SHMIQ_MAJOR, "shmiq", &shmiq_fops);
+	devfs_register_chrdev(SHMIQ_MAJOR, "shmiq", &shmiq_fops);
+	devfs_register (NULL, "shmiq", 0, DEVFS_FL_DEFAULT,
+			SHMIQ_MAJOR, 0, S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			&shmiq_fops, NULL);
+	devfs_register_series (NULL, "qcntl%u", 2, DEVFS_FL_DEFAULT,
+			       SHMIQ_MAJOR, 1,
+			       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       &shmiq_fops, NULL);
 }

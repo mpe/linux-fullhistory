@@ -215,7 +215,12 @@ static char *serial_revdate = "2000-1-27";
 #else
 #define _INLINE_
 #endif
-	
+
+extern void tty_register_devfs  (struct tty_driver *driver, unsigned int flags,
+				 unsigned int minor);
+extern void tty_unregister_devfs (struct tty_driver *driver, unsigned minor);
+
+
 static char *serial_name = "Serial driver";
 
 static DECLARE_TASK_QUEUE(tq_serial);
@@ -4394,7 +4399,7 @@ int __init rs_init(void)
 #if (LINUX_VERSION_CODE > 0x20100)
 	serial_driver.driver_name = "serial";
 #endif
-	serial_driver.name = "ttyS";
+	serial_driver.name = "tts/%d";
 	serial_driver.major = TTY_MAJOR;
 	serial_driver.minor_start = 64 + SERIAL_DEV_OFFSET;
 	serial_driver.num = NR_PORTS;
@@ -4403,7 +4408,7 @@ int __init rs_init(void)
 	serial_driver.init_termios = tty_std_termios;
 	serial_driver.init_termios.c_cflag =
 		B9600 | CS8 | CREAD | HUPCL | CLOCAL;
-	serial_driver.flags = TTY_DRIVER_REAL_RAW;
+	serial_driver.flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_NO_DEVFS;
 	serial_driver.refcount = &serial_refcount;
 	serial_driver.table = serial_table;
 	serial_driver.termios = serial_termios;
@@ -4438,7 +4443,7 @@ int __init rs_init(void)
 	 * major number and the subtype code.
 	 */
 	callout_driver = serial_driver;
-	callout_driver.name = "cua";
+	callout_driver.name = "cua/%d";
 	callout_driver.major = TTYAUX_MAJOR;
 	callout_driver.subtype = SERIAL_TYPE_CALLOUT;
 #if (LINUX_VERSION_CODE >= 131343)
@@ -4485,6 +4490,10 @@ int __init rs_init(void)
 		       (state->flags & ASYNC_FOURPORT) ? " FourPort" : "",
 		       state->port, state->irq,
 		       uart_config[state->type].name);
+		tty_register_devfs(&serial_driver, 0,
+				   serial_driver.minor_start + state->line);
+		tty_register_devfs(&callout_driver, 0,
+				   callout_driver.minor_start + state->line);
 	}
 #ifdef ENABLE_SERIAL_PCI
 	probe_serial_pci();
@@ -4562,6 +4571,10 @@ int register_serial(struct serial_struct *req)
 	      state->iomem_base ? (unsigned long)state->iomem_base :
 	      (unsigned long)state->port,
 	      state->irq, uart_config[state->type].name);
+	tty_register_devfs(&serial_driver, 0,
+			   serial_driver.minor_start + state->line); 
+	tty_register_devfs(&callout_driver, 0,
+			   callout_driver.minor_start + state->line);
 	return state->line + SERIAL_DEV_OFFSET;
 }
 
@@ -4576,6 +4589,13 @@ void unregister_serial(int line)
 		tty_hangup(state->info->tty);
 	state->type = PORT_UNKNOWN;
 	printk(KERN_INFO "tty%02d unloaded\n", state->line);
+	/* These will be hidden, because they are devices that will no longer
+	 * be available to the system. (ie, PCMCIA modems, once ejected)
+	 */
+	tty_unregister_devfs(&serial_driver,
+			     serial_driver.minor_start + state->line);
+	tty_unregister_devfs(&callout_driver,
+			     callout_driver.minor_start + state->line);
 	restore_flags(flags);
 }
 

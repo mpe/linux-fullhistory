@@ -32,6 +32,7 @@
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/fs.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/kernel.h>
 #include <linux/hdreg.h>
 #include <linux/genhd.h>
@@ -662,6 +663,8 @@ static int hd_release(struct inode * inode, struct file * file)
 	return 0;
 }
 
+extern struct block_device_operations hd_fops;
+
 static struct gendisk hd_gendisk = {
 	MAJOR_NR,	/* Major number */	
 	"hd",		/* Major name */
@@ -671,7 +674,8 @@ static struct gendisk hd_gendisk = {
 	hd_sizes,	/* block sizes */
 	0,		/* number */
 	NULL,		/* internal use, not presently used */
-	NULL		/* next */
+	NULL,		/* next */
+	&hd_fops,       /* file operations */
 };
 	
 static void hd_interrupt(int irq, void *dev_id, struct pt_regs *regs)
@@ -800,7 +804,7 @@ static void hd_geninit(void)
 
 int __init hd_init(void)
 {
-	if (register_blkdev(MAJOR_NR,"hd",&hd_fops)) {
+	if (devfs_register_blkdev(MAJOR_NR,"hd",&hd_fops)) {
 		printk("hd: unable to get major %d for hard disk\n",MAJOR_NR);
 		return -1;
 	}

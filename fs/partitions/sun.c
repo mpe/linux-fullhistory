@@ -48,7 +48,7 @@ int sun_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector, in
 	unsigned long spc;
 
 	if(!(bh = bread(dev, 0, get_ptable_blocksize(dev)))) {
-		printk(KERN_WARNING "Dev %s: unable to read partition table\n",
+		if (warn_no_part) printk(KERN_WARNING "Dev %s: unable to read partition table\n",
 		       kdevname(dev));
 		return -1;
 	}

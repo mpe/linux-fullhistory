@@ -40,6 +40,7 @@
 #include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/smp_lock.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -774,13 +775,15 @@ int init_module()
 
 /*****************************************************************************/
 
+static devfs_handle_t devfs_handle = NULL;
+
 void cleanup_module()
 {
 	stlbrd_t	*brdp;
 	stlpanel_t	*panelp;
 	stlport_t	*portp;
 	unsigned long	flags;
-	int		i, j, k;
+	int		i, j, k, l;
 
 #if DEBUG
 	printk("cleanup_module()\n");
@@ -806,7 +809,8 @@ void cleanup_module()
 		restore_flags(flags);
 		return;
 	}
-	if ((i = unregister_chrdev(STL_SIOMEMMAJOR, "staliomem")))
+	devfs_unregister (devfs_handle);
+	if ((i = devfs_unregister_chrdev(STL_SIOMEMMAJOR, "staliomem")))
 		printk("STALLION: failed to un-register serial memory device, "
 			"errno=%d\n", -i);
 
@@ -3213,8 +3217,13 @@ int __init stl_init(void)
  *	Set up a character driver for per board stuff. This is mainly used
  *	to do stats ioctls on the ports.
  */
-	if (register_chrdev(STL_SIOMEMMAJOR, "staliomem", &stl_fsiomem))
+	if (devfs_register_chrdev(STL_SIOMEMMAJOR, "staliomem", &stl_fsiomem))
 		printk("STALLION: failed to register serial board device\n");
+	devfs_handle = devfs_mk_dir (NULL, "staliomem", 9, NULL);
+	devfs_register_series (devfs_handle, "%u", 4, DEVFS_FL_DEFAULT,
+			       STL_SIOMEMMAJOR, 0,
+			       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       &stl_fsiomem, NULL);
 
 /*
  *	Set up the tty driver structure and register us as a driver.

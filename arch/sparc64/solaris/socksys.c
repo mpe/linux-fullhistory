@@ -17,6 +17,7 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/malloc.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/uaccess.h>
 #include <asm/termios.h>
@@ -157,6 +158,8 @@ static struct file_operations socksys_fops = {
 	release:	socksys_release,
 };
 
+static devfs_handle_t devfs_handle = NULL;
+
 int __init
 init_socksys(void)
 {
@@ -167,7 +170,7 @@ init_socksys(void)
 	int (*sys_close)(unsigned int) = 
 		(int (*)(unsigned int))SYS(close);
 	
-	ret = register_chrdev (30, "socksys", &socksys_fops);
+	ret = devfs_register_chrdev (30, "socksys", &socksys_fops);
 	if (ret < 0) {
 		printk ("Couldn't register socksys character device\n");
 		return ret;
@@ -177,6 +180,10 @@ init_socksys(void)
 		printk ("Couldn't create socket\n");
 		return ret;
 	}
+	devfs_handle = devfs_register (NULL, "socksys", 0, DEVFS_FL_NONE,
+				       30, 0,
+				       S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				       &socksys_fops, NULL);
 	file = fcheck(ret);
 	/* N.B. Is this valid? Suppose the f_ops are in a module ... */
 	socksys_file_ops = *file->f_op;
@@ -190,6 +197,7 @@ init_socksys(void)
 void
 cleanup_socksys(void)
 {
-	if (unregister_chrdev (30, "socksys"))
+	if (devfs_unregister_chrdev(30, "socksys"))
 		printk ("Couldn't unregister socksys character device\n");
+	devfs_unregister (devfs_handle);
 }

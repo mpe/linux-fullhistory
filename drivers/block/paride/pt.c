@@ -143,6 +143,7 @@ static int pt_drive_count;
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/malloc.h>
@@ -290,6 +291,8 @@ void pt_init_units( void )
         }
 } 
 
+static devfs_handle_t devfs_handle = NULL;
+
 int pt_init (void)      /* preliminary initialisation */
 
 {       int unit;
@@ -300,7 +303,7 @@ int pt_init (void)      /* preliminary initialisation */
 
 	if (pt_detect()) return -1;
 
-        if (register_chrdev(major,name,&pt_fops)) {
+	if (devfs_register_chrdev(major,name,&pt_fops)) {
                 printk("pt_init: unable to get major number %d\n",
                         major);
 	        for (unit=0;unit<PT_UNITS;unit++)
@@ -308,6 +311,13 @@ int pt_init (void)      /* preliminary initialisation */
                 return -1;
         }
 
+	devfs_handle = devfs_mk_dir (NULL, "pt", 2, NULL);
+	devfs_register_series (devfs_handle, "%u", 4, DEVFS_FL_DEFAULT,
+			       major, 0, S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       &pt_fops, NULL);
+	devfs_register_series (devfs_handle, "%un", 4, DEVFS_FL_DEFAULT,
+			       major, 128, S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+			       &pt_fops, NULL);
         return 0;
 }
 
@@ -334,9 +344,10 @@ int     init_module(void)
 
 void    cleanup_module(void)
 
-{       int unit;
+{	int unit;
 
-        unregister_chrdev(major,name);
+	devfs_unregister (devfs_handle);
+	devfs_unregister_chrdev(major,name);
 
 	for (unit=0;unit<PT_UNITS;unit++)
 	  if (PT.present) pi_release(PI);

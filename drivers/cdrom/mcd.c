@@ -86,6 +86,7 @@
 #include <linux/timer.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
+#include <linux/devfs_fs_kernel.h>
 #include <linux/cdrom.h>
 #include <linux/ioport.h>
 #include <linux/string.h>
@@ -1156,7 +1157,7 @@ static void cleanup(int level)
   case 2:
     release_region(mcd_port,4);
   case 1:
-    if (unregister_blkdev(MAJOR_NR, "mcd")) {
+    if (devfs_unregister_blkdev(MAJOR_NR, "mcd")) {
       printk(KERN_WARNING "Can't unregister major mcd\n");
       return;
     }
@@ -1181,7 +1182,7 @@ int __init mcd_init(void)
           return -EIO;
 	}
 
-	if (register_blkdev(MAJOR_NR, "mcd", &cdrom_fops) != 0)
+	if (devfs_register_blkdev(MAJOR_NR, "mcd", &cdrom_fops) != 0)
 	{
 		printk("Unable to get major %d for Mitsumi CD-ROM\n",
 		       MAJOR_NR);

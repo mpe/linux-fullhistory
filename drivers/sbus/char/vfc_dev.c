@@ -41,6 +41,7 @@
 #include "vfc.h"
 #include <asm/vfc_ioctls.h>
 
+static devfs_handle_t devfs_handle = NULL;  /*  For the directory  */
 struct vfc_dev **vfc_dev_lst;
 static char vfcstr[]="vfc";
 static unsigned char saa9051_init_array[VFC_SAA9051_NR] = {
@@ -140,6 +141,8 @@ int init_vfc_devstruct(struct vfc_dev *dev, int instance)
 
 int init_vfc_device(struct sbus_dev *sdev,struct vfc_dev *dev, int instance)
 {
+	char devname[8];
+
 	if(dev == NULL) {
 		printk(KERN_ERR "VFC: Bogus pointer passed\n");
 		return -ENOMEM;
@@ -162,6 +165,11 @@ int init_vfc_device(struct sbus_dev *sdev,struct vfc_dev *dev, int instance)
 	if (init_vfc_hw(dev))
 		return -EIO;
 
+	sprintf (devname, "%d", instance);
+	dev->de = devfs_register (devfs_handle, devname, 0, DEVFS_FL_DEFAULT,
+				  VFC_MAJOR, instance,
+				  S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
+				  &vfc_fops, NULL);
 	return 0;
 }
 
@@ -659,12 +667,13 @@ static int vfc_probe(void)
 	memset(vfc_dev_lst, 0, sizeof(struct vfc_dev *) * (cards + 1));
 	vfc_dev_lst[cards] = NULL;
 
-	ret = register_chrdev(VFC_MAJOR, vfcstr, &vfc_fops);
+	ret = devfs_register_chrdev(VFC_MAJOR, vfcstr, &vfc_fops);
 	if(ret) {
 		printk(KERN_ERR "Unable to get major number %d\n", VFC_MAJOR);
 		kfree(vfc_dev_lst);
 		return -EIO;
 	}
+	devfs_handle = devfs_mk_dir (NULL, "vfc", 3, NULL);
 
 	instance = 0;
 	for_all_sbusdev(sdev, sbus) {
@@ -705,6 +714,7 @@ static void deinit_vfc_device(struct vfc_dev *dev)
 {
 	if(dev == NULL)
 		return;
+	devfs_unregister (dev->de);
 	sbus_iounmap((unsigned long)dev->regs, sizeof(struct vfc_regs));
 	kfree(dev);
 }
@@ -713,11 +723,12 @@ void cleanup_module(void)
 {
 	struct vfc_dev **devp;
 
-	unregister_chrdev(VFC_MAJOR,vfcstr);
+	devfs_unregister_chrdev(VFC_MAJOR,vfcstr);
 
 	for (devp = vfc_dev_lst; *devp; devp++)
 		deinit_vfc_device(*devp);
 
+	devfs_unregister (devfs_handle);
 	kfree(vfc_dev_lst);
 	return;
 }

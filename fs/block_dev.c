@@ -10,6 +10,7 @@
 #include <linux/fcntl.h>
 #include <linux/malloc.h>
 #include <linux/kmod.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/uaccess.h>
 
@@ -454,7 +455,7 @@ int get_blkdev_list(char * p)
 	Return the function table of a device.
 	Load the driver if needed.
 */
-static const struct block_device_operations * get_blkfops(unsigned int major)
+const struct block_device_operations * get_blkfops(unsigned int major)
 {
 	const struct block_device_operations *ret = NULL;
 
@@ -518,11 +519,20 @@ int unregister_blkdev(unsigned int major, const char * name)
 int check_disk_change(kdev_t dev)
 {
 	int i;
-	const struct block_device_operations * bdops;
+	const struct block_device_operations * bdops = NULL;
 	struct super_block * sb;
 
 	i = MAJOR(dev);
-	if (i >= MAX_BLKDEV || (bdops = blkdevs[i].bdops) == NULL)
+	if (i < MAX_BLKDEV)
+		bdops = blkdevs[i].bdops;
+	if (bdops == NULL) {
+		devfs_handle_t de;
+
+		de = devfs_find_handle (NULL, NULL, 0, i, MINOR (dev),
+					DEVFS_SPECIAL_BLK, 0);
+		if (de) bdops = devfs_get_ops (de);
+	}
+	if (bdops == NULL)
 		return 0;
 	if (bdops->check_media_change == NULL)
 		return 0;

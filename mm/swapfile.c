@@ -634,11 +634,15 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 
 	if (S_ISBLK(swap_dentry->d_inode->i_mode)) {
 		kdev_t dev = swap_dentry->d_inode->i_rdev;
+		struct block_device_operations *bdops;
 
 		p->swap_device = dev;
 		set_blocksize(dev, PAGE_SIZE);
 		
 		bdev = swap_dentry->d_inode->i_bdev;
+		bdops = devfs_get_ops ( devfs_get_handle_from_inode
+					(swap_dentry->d_inode) );
+		if (bdops) bdev->bd_op = bdops;
 
 		error = blkdev_get(bdev, FMODE_READ|FMODE_WRITE, 0, BDEV_SWAP);
 		if (error)

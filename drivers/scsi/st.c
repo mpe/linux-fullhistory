@@ -13,6 +13,8 @@
 
    Last modified: Fri Feb 11 19:43:57 2000 by makisara@kai.makisara.local
    Some small formal changes - aeb, 950809
+
+   Last modified: 18-JAN-1998 Richard Gooch <rgooch@atnf.csiro.au> Devfs support
  */
 
 #include <linux/module.h>
@@ -3221,7 +3223,7 @@ static int st_attach(Scsi_Device * SDp)
 	Scsi_Tape *tpnt;
 	ST_mode *STm;
 	ST_partstat *STps;
-	int i;
+	int i, mode;
 
 	if (SDp->type != TYPE_TAPE)
 		return 1;
@@ -3238,6 +3240,26 @@ static int st_attach(Scsi_Device * SDp)
 	if (i >= st_template.dev_max)
 		panic("scsi_devices corrupt (st)");
 
+	for (mode = 0; mode < ST_NBR_MODES; ++mode) {
+	    char name[8];
+	    static char *formats[ST_NBR_MODES] ={"", "l", "m", "a"};
+
+	    /*  Rewind entry  */
+	    sprintf (name, "mt%s", formats[mode]);
+	    tpnt->de_r[mode] =
+		devfs_register (SDp->de, name, 0, DEVFS_FL_DEFAULT,
+				MAJOR_NR, i + (mode << 5),
+				S_IFCHR | S_IRUGO | S_IWUGO,
+				0, 0, &st_fops, NULL);
+	    /*  No-rewind entry  */
+	    sprintf (name, "mt%sn", formats[mode]);
+	    tpnt->de_n[mode] =
+		devfs_register (SDp->de, name, 0, DEVFS_FL_DEFAULT,
+				MAJOR_NR, i + (mode << 5) + 128,
+				S_IFCHR | S_IRUGO | S_IWUGO,
+				0, 0, &st_fops, NULL);
+	}
+	devfs_register_tape (tpnt->de_r[0]);
 	scsi_tapes[i].device = SDp;
 	if (SDp->scsi_level <= 2)
 		scsi_tapes[i].mt_status->mt_type = MT_ISSCSI1;
@@ -3327,7 +3349,7 @@ static int st_init()
 	       st_buffer_size, st_write_threshold, st_max_buffers, st_max_sg_segs);
 
 	if (!st_registered) {
-		if (register_chrdev(SCSI_TAPE_MAJOR, "st", &st_fops)) {
+		if (devfs_register_chrdev(SCSI_TAPE_MAJOR, "st", &st_fops)) {
 			printk(KERN_ERR "Unable to get major %d for SCSI tapes\n",
                                MAJOR_NR);
 			return 1;
@@ -3346,7 +3368,7 @@ static int st_init()
 				      GFP_ATOMIC);
 	if (scsi_tapes == NULL) {
 		printk(KERN_ERR "Unable to allocate descriptors for SCSI tapes.\n");
-		unregister_chrdev(SCSI_TAPE_MAJOR, "st");
+		devfs_unregister_chrdev(SCSI_TAPE_MAJOR, "st");
 		return 1;
 	}
 
@@ -3363,7 +3385,7 @@ static int st_init()
 			for (j=0; j < i; j++)
 				kfree(scsi_tapes[j].mt_status);
 			kfree(scsi_tapes);
-			unregister_chrdev(SCSI_TAPE_MAJOR, "st");
+			devfs_unregister_chrdev(SCSI_TAPE_MAJOR, "st");
 			return 1;
 		}
 		/* Initialize status */
@@ -3376,7 +3398,7 @@ static int st_init()
 				   GFP_ATOMIC);
 	if (st_buffers == NULL) {
 		printk(KERN_ERR "Unable to allocate tape buffer pointers.\n");
-		unregister_chrdev(SCSI_TAPE_MAJOR, "st");
+		devfs_unregister_chrdev(SCSI_TAPE_MAJOR, "st");
 		for (i=0; i < st_template.dev_max; i++)
 			kfree(scsi_tapes[i].mt_status);
 		kfree(scsi_tapes);
@@ -3407,11 +3429,17 @@ static int st_init()
 static void st_detach(Scsi_Device * SDp)
 {
 	Scsi_Tape *tpnt;
-	int i;
+	int i, mode;
 
 	for (tpnt = scsi_tapes, i = 0; i < st_template.dev_max; i++, tpnt++)
 		if (tpnt->device == SDp) {
 			tpnt->device = NULL;
+			for (mode = 0; mode < ST_NBR_MODES; ++mode) {
+				devfs_unregister (tpnt->de_r[mode]);
+				tpnt->de_r[mode] = NULL;
+				devfs_unregister (tpnt->de_n[mode]);
+				tpnt->de_n[mode] = NULL;
+			}
 			SDp->attached--;
 			st_template.nr_dev--;
 			st_template.dev_noticed--;
@@ -3436,7 +3464,7 @@ void cleanup_module(void)
 	int i;
 
 	scsi_unregister_module(MODULE_SCSI_DEV, &st_template);
-	unregister_chrdev(SCSI_TAPE_MAJOR, "st");
+	devfs_unregister_chrdev(SCSI_TAPE_MAJOR, "st");
 	st_registered--;
 	if (scsi_tapes != NULL) {
 		for (i=0; i < st_template.dev_max; ++i)
