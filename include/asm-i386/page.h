@@ -69,10 +69,9 @@ typedef unsigned long pgprot_t;
  * you want to use more physical memory, change this define.
  *
  * For example, if you have 2GB worth of physical memory, you
- * could change this define to 0x70000000, which gives the
- * kernel slightly more than 2GB of virtual memory (enough to
- * map all your physical memory + a bit extra for various
- * io-memory mappings)
+ * could change this define to 0x80000000, which gives the
+ * kernel 2GB of virtual memory (enough to most of your physical memory
+ * as the kernel needs a bit extra for various io-memory mappings)
  *
  * IF YOU CHANGE THIS, PLEASE ALSO CHANGE
  *

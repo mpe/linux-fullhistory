@@ -49,12 +49,12 @@ D: APM update to 1.2 spec.
 
 N: Erik Andersen
 E: andersee@debian.org
-W: http://www.inconnect.com/~andersen
+W: http://www.xmission.com/~andersen
 P: 1024/FC4CFFED 78 3C 6A 19 FA 5D 92 5A  FB AC 7B A5 A5 E1 FF 8E
 D: Maintainer of ide-cd and Uniform CD-ROM driver, 
 D: ATAPI CD-Changer support, Major 2.1.x CD-ROM update.
 S: 4538 South Carnegie Tech Street
-S: West Valley City, Utah 84120
+S: Salt Lake City, Utah 84120
 S: USA
 
 N: H. Peter Anvin

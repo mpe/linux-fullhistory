@@ -113,6 +113,7 @@ void unload_sb(struct address_info *hw_config)
 }
 
 int sb_be_quiet=0;
+int esstype = 0;	/* ESS chip type */
 
 #ifdef MODULE
 
@@ -136,7 +137,6 @@ int trix = 0;	/* Set trix=1 to load this as support for trix */
 int pas2 = 0;	/* Set pas2=1 to load this as support for pas2 */
 int sm_games = 0;	/* Mixer - see sb_mixer.c */
 int acer = 0;	/* Do acer notebook init */
-int esstype = 0;	/* ESS chip type */
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");

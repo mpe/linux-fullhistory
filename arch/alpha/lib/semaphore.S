@@ -101,7 +101,7 @@ __down_failed_interruptible:
 	.prologue 1
 	
 	mov	$24, $16
-	jsr	__down
+	jsr	__down_interruptible
 	mov	$0, $24
 	
 	ldq	$28, 0*8($30)

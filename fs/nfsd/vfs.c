@@ -988,6 +988,20 @@ out_nfserr:
 }
 
 /*
+ * We need to do a check-parent every time
+ * after we have locked the parent - to verify
+ * that the parent is still our parent and
+ * that we are still hashed onto it..
+ *
+ * This is requied in case two processes race
+ * on removing (or moving) the same entry: the
+ * parent lock will serialize them, but the
+ * other process will be too late..
+ */
+#define check_parent(dir, dentry) \
+	((dir) == (dentry)->d_parent->d_inode && !list_empty(&dentry->d_hash))
+
+/*
  * This follows the model of double_lock() in the VFS.
  */
 static inline void nfsd_double_down(struct semaphore *s1, struct semaphore *s2)
@@ -1048,6 +1062,10 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	if (IS_ERR(odentry))
 		goto out_nfserr;
 
+	err = -ENOENT;
+	if (!odentry->d_inode)
+		goto out_dput_old;
+
 	ndentry = lookup_dentry(tname, dget(tdentry), 0);
 	err = PTR_ERR(ndentry);
 	if (IS_ERR(ndentry))
@@ -1057,13 +1075,18 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	 * Lock the parent directories.
 	 */
 	nfsd_double_down(&tdir->i_sem, &fdir->i_sem);
-	/* N.B. check for parent changes after locking?? */
+	err = -ENOENT;
+	/* GAM3 check for parent changes after locking. */
+	if (check_parent(fdir, odentry) &&
+	    check_parent(tdir, ndentry)) {
 
-	err = vfs_rename(fdir, odentry, tdir, ndentry);
-	if (!err && EX_ISSYNC(tfhp->fh_export)) {
-		write_inode_now(fdir);
-		write_inode_now(tdir);
-	}
+		err = vfs_rename(fdir, odentry, tdir, ndentry);
+		if (!err && EX_ISSYNC(tfhp->fh_export)) {
+			write_inode_now(fdir);
+			write_inode_now(tdir);
+		}
+	} else
+		dprintk("nfsd: Caught race in nfsd_rename");
 	DQUOT_DROP(fdir);
 	DQUOT_DROP(tdir);
 
@@ -1137,10 +1160,9 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 		if (!fhp->fh_pre_mtime)
 			fhp->fh_pre_mtime = dirp->i_mtime;
 		fhp->fh_locked = 1;
-		/* CHECKME: Should we do something with the child? */
 
 		err = -ENOENT;
-		if (rdentry->d_parent->d_inode == dirp)
+		if (check_parent(dirp, rdentry))
 			err = vfs_rmdir(dirp, rdentry);
 
 		rdentry->d_count--;

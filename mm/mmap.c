@@ -393,6 +393,7 @@ struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long addr)
 			} else {
 				/* Then go through the AVL tree quickly. */
 				struct vm_area_struct * tree = mm->mmap_avl;
+				vma = NULL;
 				for (;;) {
 					if (tree == vm_avl_empty)
 						break;
@@ -556,7 +557,7 @@ static void free_pgtables(struct mm_struct * mm, struct vm_area_struct *prev,
 	unsigned long start, unsigned long end)
 {
 	unsigned long first = start & PGDIR_MASK;
-	unsigned long last = (end & PGDIR_MASK) + PGDIR_SIZE;
+	unsigned long last = (end + PGDIR_SIZE - 1) & PGDIR_MASK;
 
 	if (!prev) {
 		prev = mm->mmap;
