@@ -25,10 +25,9 @@
 #define LP_NOPA  0x0010
 #define LP_ERR   0x0020
 #define LP_ABORT 0x0040
-#ifdef LP_NEED_CAREFUL
-#define LP_CAREFUL 0x0080
-#endif
+#define LP_CAREFUL 0x0080 /* obsoleted -arca */
 #define LP_ABORTOPEN 0x0100
+#define	LP_TRUST_IRQ 0x0200
 
 /* timeout for each character.  This is relative to bus cycles -- it
  * is the count in a busy loop.  THIS IS THE VALUE TO CHANGE if you
@@ -41,13 +40,10 @@
 #define LP_INIT_CHAR 1000
 
 /* The parallel port specs apparently say that there needs to be
- * a .5usec wait before and after the strobe.  Since there are wildly
- * different computers running linux, I can't come up with a perfect
- * value so if 20 is not good for you use `tunelp /dev/lp? -w ?`.
- * You can also set it to 0 if your printer handle that.
+ * a .5usec wait before and after the strobe.
  */
 
-#define LP_INIT_WAIT 20
+#define LP_INIT_WAIT 1
 
 /* This is the amount of time that the driver waits for the printer to
  * catch up when the printer's buffer appears to be filled.  If you
@@ -70,11 +66,10 @@
 			    or 0 for polling (no IRQ) */
 #define LPGETIRQ 0x0606  /* get the current IRQ number */
 #define LPWAIT   0x0608  /* corresponds to LP_INIT_WAIT */
-#ifdef LP_NEED_CAREFUL
+/* NOTE: LPCAREFUL is obsoleted and it' s always the default right now -arca */
 #define LPCAREFUL   0x0609  /* call with TRUE arg to require out-of-paper, off-
 			    line, and error indicators good on all writes,
 			    FALSE to ignore them.  Default is ignore. */
-#endif
 #define LPABORTOPEN 0x060a  /* call with TRUE arg to abort open() on error,
 			    FALSE to ignore error.  Default is ignore.  */
 #define LPGETSTATUS 0x060b  /* return LP_S(minor) */
@@ -83,6 +78,7 @@
 #define LPGETSTATS  0x060d  /* get statistics (struct lp_stats) */
 #endif
 #define LPGETFLAGS  0x060e  /* get status flags */
+#define LPTRUSTIRQ  0x060f  /* set/unset the LP_TRUST_IRQ flag */
 
 /* timeout for printk'ing a timeout, in jiffies (100ths of a second).
    This is also used for re-checking error conditions if LP_ABORT is
@@ -96,7 +92,7 @@
 #define LP_TIME(minor)	lp_table[(minor)].time		/* wait time */
 #define LP_WAIT(minor)	lp_table[(minor)].wait		/* strobe wait */
 #define LP_IRQ(minor)	lp_table[(minor)].dev->port->irq /* interrupt # */
-							/* 0 means polled */
+					/* PARPORT_IRQ_NONE means polled */
 #ifdef LP_STATS
 #define LP_STAT(minor)	lp_table[(minor)].stats		/* statistics area */
 #endif

@@ -868,7 +868,13 @@ static int init_dev(kdev_t device, struct tty_struct **ret_tty)
 	 * Failures after this point use release_mem to clean up, so 
 	 * there's no need to null out the local pointers.
 	 */
-	driver->table[idx] = tty;
+	driver->table[idx] = tty;	/* FIXME: this is broken and
+	probably causes ^D bug. tty->private_date does not (yet) point
+	to a console, if keypress comes now, await armagedon. 
+
+	also, driver->table is accessed from interrupt for vt case,
+	and this does not look like atomic access at all. */
+	
 	if (!*tp_loc)
 		*tp_loc = tp;
 	if (!*ltp_loc)

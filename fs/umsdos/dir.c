@@ -383,7 +383,6 @@ void umsdos_lookup_patch_new(struct dentry *dentry, struct umsdos_info *info)
 	if (inode->u.umsdos_i.i_patched)
 		goto out;
 	inode->u.umsdos_i.i_patched = 1;
-
 	if (S_ISREG (entry->mode))
 		entry->mtime = inode->i_mtime;
 	inode->i_mode = entry->mode;

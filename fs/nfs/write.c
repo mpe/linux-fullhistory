@@ -584,15 +584,6 @@ nfs_wb_pid(struct inode *inode, pid_t pid)
 }
 
 /*
- * Write back everything in a specific area for locking purposes..
- */
-int
-nfs_wb_area(struct inode *inode, off_t offset, off_t len)
-{
-	NFS_WB(inode, 1);
-}
-
-/*
  * Write back and invalidate. Sometimes we can't leave the stuff
  * hanging if we can't write it out.
  */

@@ -242,8 +242,6 @@ affs_unlink(struct inode *dir, struct dentry *dentry)
 
 	inode  = dentry->d_inode;
 	retval = -EPERM;
-	if (S_ISDIR(inode->i_mode))
-		goto unlink_done;
 	if (current->fsuid != inode->i_uid &&
 	    current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
 		goto unlink_done;

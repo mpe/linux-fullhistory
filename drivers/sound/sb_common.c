@@ -878,6 +878,7 @@ int sb_dsp_init(struct address_info *hw_config)
 
 			if(!sb16_set_dma_hw(devc)) {
 				free_irq(devc->irq, devc);
+			        release_region(hw_config->io_base, 16);
 				return 0;
 			}
 

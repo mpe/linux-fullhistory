@@ -296,58 +296,80 @@ sys_pciconfig_write(unsigned long bus, unsigned long dfn,
  * on SRM.  It is more trouble than it iw worth to conditionalize this.
  */
 
-static struct {
-	struct reset_irq {
-		struct pci_dev *dev;
-		u8 irq;
-	} irq[16];
-	int irq_count;
+struct srm_irq_reset {
+	struct srm_irq_reset *next;
+	struct pci_dev *dev;
+	u8 irq;
+} *srm_irq_resets;
 
-	struct reset_io {
-		struct pci_dev *dev;
-		u8 reg;
-		u32 io;
-	} io[16];
-	int io_count;
-} srm_resets;
+struct srm_io_reset {
+	struct srm_io_reset *next;
+	struct pci_dev *dev;
+	u32 io;
+	u8 reg;
+} *srm_io_resets;
 
 /* Apply the collected reset modifications.  */
 
 void
 reset_for_srm(void)
 {
-	struct pci_dev *dev;
-	int i;
+	struct srm_irq_reset *qreset;
+	struct srm_io_reset *ireset;
 
 	/* Reset any IRQs that we changed.  */
-	for (i = 0; i < srm_resets.irq_count; i++) {
-		dev = srm_resets.irq[i].dev;
-
-		pcibios_write_config_byte(dev->bus->number, dev->devfn,
+	for (qreset = srm_irq_resets; qreset ; qreset = qreset->next) {
+		pcibios_write_config_byte(qreset->dev->bus->number,
+					  qreset->dev->devfn,
 					  PCI_INTERRUPT_LINE,
-					  srm_resets.irq[i].irq);
+					  qreset->irq);
 #if 1
 		printk("reset_for_srm: bus %d slot 0x%x "
 		       "SRM IRQ 0x%x changed back from 0x%x\n",
-		       dev->bus->number, PCI_SLOT(dev->devfn),
-		       srm_resets.irq[i].irq, dev->irq);
+		       qreset->dev->bus->number,
+		       PCI_SLOT(qreset->dev->devfn),
+		       qreset->irq, qreset->dev->irq);
 #endif
 	}
 
 	/* Reset any IO addresses that we changed.  */
-	for (i = 0; i < srm_resets.io_count; i++) {
-		dev = srm_resets.io[i].dev;
-
-		pcibios_write_config_byte(dev->bus->number, dev->devfn,
-					  srm_resets.io[i].reg,
-					  srm_resets.io[i].io);
+	for (ireset = srm_io_resets; ireset ; ireset = ireset->next) {
+		pcibios_write_config_dword(ireset->dev->bus->number,
+					   ireset->dev->devfn,
+					   ireset->reg, ireset->io);
 #if 1
 		printk("reset_for_srm: bus %d slot 0x%x "
-		       "SRM IO restored to 0x%x\n",
-		       dev->bus->number, PCI_SLOT(dev->devfn),
-		       srm_resets.io[i].io);
+		       "SRM MEM/IO restored to 0x%x\n",
+		       ireset->dev->bus->number,
+		       PCI_SLOT(ireset->dev->devfn),
+		       ireset->io);
 #endif
 	}
+}
+
+static void
+new_irq_reset(struct pci_dev *dev, u8 irq)
+{
+	struct srm_irq_reset *n;
+	n = kmalloc(sizeof(*n), GFP_KERNEL);
+
+	n->next = srm_irq_resets;
+	n->dev = dev;
+	n->irq = irq;
+	srm_irq_resets = n;
+}
+
+static void
+new_io_reset(struct pci_dev *dev, u8 reg, u32 io)
+{
+	struct srm_io_reset *n;
+	n = kmalloc(sizeof(*n), GFP_KERNEL);
+
+	n->next = srm_io_resets;
+	n->dev = dev;
+	n->reg = reg;
+	n->io = io;
+	srm_io_resets = n;
 }
 
 
@@ -426,6 +448,7 @@ layout_dev(struct pci_dev *dev)
 	struct pci_bus *bus;
 	unsigned short cmd;
 	unsigned int base, mask, size, off, idx;
+	unsigned int orig_base;
 	unsigned int alignto;
 	unsigned long handle;
 
@@ -467,6 +490,8 @@ layout_dev(struct pci_dev *dev)
 		 * Figure out how much space and of what type this
 		 * device wants.
 		 */
+		pcibios_read_config_dword(bus->number, dev->devfn, off,
+					  &orig_base);
 		pcibios_write_config_dword(bus->number, dev->devfn, off,
 					   0xffffffff);
 		pcibios_read_config_dword(bus->number, dev->devfn, off, &base);
@@ -504,8 +529,10 @@ layout_dev(struct pci_dev *dev)
 			alignto = MAX(0x800, size);
 			base = ALIGN(io_base, alignto);
 			io_base = base + size;
+
 			pcibios_write_config_dword(bus->number, dev->devfn, 
 						   off, base | 0x1);
+			new_io_reset(dev, off, orig_base);
 
 			handle = PCI_HANDLE(bus->number) | base | 1;
 			dev->base_address[idx] = handle;
@@ -582,8 +609,11 @@ layout_dev(struct pci_dev *dev)
 				}
 			}
 			mem_base = base + size;
+
 			pcibios_write_config_dword(bus->number, dev->devfn,
 						   off, base);
+			new_io_reset(dev, off, orig_base);
+
 			handle = PCI_HANDLE(bus->number) | base;
 			dev->base_address[idx] = handle;
 
@@ -596,9 +626,16 @@ layout_dev(struct pci_dev *dev)
 			 * addresses to be used.
 			 */
 			if (type == PCI_BASE_ADDRESS_MEM_TYPE_64) {
-				pcibios_write_config_dword(bus->number,
-							   dev->devfn,
-							   off+4, 0);
+				unsigned int orig_base2;
+				pcibios_read_config_dword(bus->number,
+							  dev->devfn,
+							  off+4, &orig_base2);
+				if (0 != orig_base2) {
+					pcibios_write_config_dword(bus->number,
+								   dev->devfn,
+								   off+4, 0);
+					new_io_reset (dev, off+4, orig_base2);
+				}
 				/* Bypass hi reg in the loop.  */
 				dev->base_address[++idx] = 0;
 
@@ -720,10 +757,9 @@ layout_bus(struct pci_bus *bus)
 					   PCI_IO_BASE, l);
 
 		/*
-		 * Also:
-		 *       clear out the upper 16 bits of IO base/limit.
-		 *       clear out the upper 32 bits of PREF base/limit.
-		*/
+		 * Clear out the upper 16 bits of IO base/limit.
+		 * Clear out the upper 32 bits of PREF base/limit.
+		 */
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
 					   PCI_IO_BASE_UPPER16, 0);
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
@@ -738,6 +774,7 @@ layout_bus(struct pci_bus *bus)
 		l = ((bmem & 0xfff00000) >> 16) | ((tmem - 1) & 0xfff00000);
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
 					   PCI_MEMORY_BASE, l);
+
 		/*
 		 * Turn off downstream PF memory address range, unless
 		 * there is a VGA behind this bridge, in which case, we
@@ -839,7 +876,6 @@ check_behind_io(struct pci_dev *dev)
 {
 	struct pci_bus *bus = dev->bus;
 	unsigned int reg, orig_base, new_base, found_one = 0;
-	struct reset_io *ior;
 
 	for (reg = PCI_BASE_ADDRESS_0; reg <= PCI_BASE_ADDRESS_5; reg += 4) {
 		/* Read the current setting, check for I/O space and >= 64K */
@@ -870,10 +906,7 @@ printk("check_behind_io: ALERT! bus %d slot %d old 0x%x new 0x%x\n",
 		pcibios_write_config_dword(bus->number, dev->devfn,
 					   reg, new_base);
 
-		ior = &srm_resets.io[srm_resets.io_count++];
-		ior->dev = dev;
-		ior->reg = reg;
-		ior->io = orig_base;
+		new_io_reset(dev, reg, orig_base);
 		found_one++;
 	}
 
@@ -990,8 +1023,6 @@ common_pci_fixup(int (*map_irq)(struct pci_dev *dev, int slot, int pin),
 						 &irq_orig);
 
 			if (irq_orig != dev->irq) {
-				struct reset_irq *r;
-
 				DBG_DEVS(("common_pci_fixup: bus %d "
 					  "slot 0x%x SRM IRQ 0x%x "
 					  "changed to 0x%x\n",
@@ -999,9 +1030,7 @@ common_pci_fixup(int (*map_irq)(struct pci_dev *dev, int slot, int pin),
 					  PCI_SLOT(dev->devfn),
 					  irq_orig, dev->irq));
 
-				r = &srm_resets.irq[srm_resets.irq_count++];
-				r->dev = dev;
-				r->irq = irq_orig;
+				new_irq_reset(dev, irq_orig);
 			}
 		}
 

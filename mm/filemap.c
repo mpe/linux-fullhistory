@@ -200,8 +200,8 @@ int shrink_mmap(int priority, int gfp_mask)
 	struct page * page;
 	int count_max, count_min;
 
-	count_max = (limit<<1) >> (priority>>1);
-	count_min = (limit<<1) >> (priority);
+	count_max = limit;
+	count_min = (limit<<2) >> (priority);
 
 	page = mem_map + clock;
 	do {
@@ -214,7 +214,15 @@ int shrink_mmap(int priority, int gfp_mask)
 		if (shrink_one_page(page, gfp_mask))
 			return 1;
 		count_max--;
-		if (page->inode || page->buffers)
+		/* 
+		 * If the page we looked at was recyclable but we didn't
+		 * reclaim it (presumably due to PG_referenced), don't
+		 * count it as scanned.  This way, the more referenced
+		 * page cache pages we encounter, the more rapidly we
+		 * will age them. 
+		 */
+		if (atomic_read(&page->count) != 1 ||
+		    (!page->inode && !page->buffers))
 			count_min--;
 		page++;
 		clock++;

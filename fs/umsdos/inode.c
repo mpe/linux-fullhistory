@@ -60,6 +60,7 @@ void UMSDOS_put_inode (struct inode *inode)
 			" Notify jacques@solucorp.qc.ca\n");
 	}
 
+	inode->u.umsdos_i.i_patched = 0;
 	fat_put_inode (inode);
 }
 
@@ -124,15 +125,6 @@ void umsdos_set_dirinfo_new (struct dentry *dentry, off_t f_pos)
 	return;
 }
 
-
-/*
- * Tells if an Umsdos inode has been "patched" once.
- * Return != 0 if so.
- */
-int umsdos_isinit (struct inode *inode)
-{
-	return 0; /* inode->u.umsdos_i.i_emd_owner != 0; */
-}
 
 
 /*
@@ -200,7 +192,7 @@ dentry, f_pos));
  */
 void UMSDOS_read_inode (struct inode *inode)
 {
-	PRINTK ((KERN_DEBUG "UMSDOS_read_inode %p ino = %lu ",
+	Printk ((KERN_DEBUG "UMSDOS_read_inode %p ino = %lu ",
 		inode, inode->i_ino));
 	msdos_read_inode (inode);
 
@@ -235,8 +227,8 @@ int umsdos_notify_change_locked(struct dentry *dentry, struct iattr *attr)
 	struct file filp;
 	struct umsdos_dirent entry;
 
-Printk(("UMSDOS_notify_change: entering for %s/%s\n",
-dentry->d_parent->d_name.name, dentry->d_name.name));
+Printk(("UMSDOS_notify_change: entering for %s/%s (%d)\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, inode->u.umsdos_i.i_patched));
 
 	ret = inode_change_ok (inode, attr);
 	if (ret) {
@@ -348,7 +340,8 @@ void UMSDOS_write_inode (struct inode *inode)
 	 * But it has the side effect to re"dirt" the inode.
 	 */
 /*      
- * internal_notify_change (inode, &newattrs);
+ * UMSDOS_notify_change (inode, &newattrs);
+
  * inode->i_state &= ~I_DIRTY; / * FIXME: this doesn't work.  We need to remove ourselves from list on dirty inodes. /mn/ */
 }
 
@@ -385,7 +378,7 @@ struct super_block *UMSDOS_read_super (struct super_block *sb, void *data,
 	if (!res)
 		goto out_fail;
 
-	printk (KERN_INFO "UMSDOS dentry-Beta 0.83 "
+	printk (KERN_INFO "UMSDOS dentry-pre 0.84 "
 		"(compatibility level %d.%d, fast msdos)\n", 
 		UMSDOS_VERSION, UMSDOS_RELEASE);
 

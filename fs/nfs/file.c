@@ -240,22 +240,21 @@ nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
 	if (!fl->fl_owner || (fl->fl_flags & (FL_POSIX|FL_BROKEN)) != FL_POSIX)
 		return -ENOLCK;
 
-	/* If unlocking a file region, flush dirty pages (unless we've
-	 * been killed by a signal, that is). */
-	if (cmd == F_SETLK && fl->fl_type == F_UNLCK
-	    && !signal_pending(current)) {
-		status = nfs_wb_area(inode, /* current->pid  ?*/
-			fl->fl_start, fl->fl_end == NLM_OFFSET_MAX? 0 :
-			fl->fl_end - fl->fl_start + 1);
-		if (status < 0)
-			return status;
-	}
+	/*
+	 * Flush all pending writes before doing anything
+	 * with locks..
+	 */
+	status = nfs_wb_all(inode);
+	if (status < 0)
+		return status;
 
 	if ((status = nlmclnt_proc(inode, cmd, fl)) < 0)
 		return status;
 
-	/* Here, we could turn off write-back of pages in the
-	 * locked file region */
-
+	/*
+	 * Make sure we re-validate anything we've got cached.
+	 * This makes locking act as a cache coherency point.
+	 */
+	NFS_CACHEINV(inode);
 	return 0;
 }

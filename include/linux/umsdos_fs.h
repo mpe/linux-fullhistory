@@ -1,7 +1,9 @@
 #ifndef LINUX_UMSDOS_FS_H
 #define LINUX_UMSDOS_FS_H
 
-/* #define UMSDOS_DEBUG 1 */
+
+#define UMS_DEBUG 1	/* define for check_* functions */
+/*#define UMSDOS_DEBUG 1*/
 #define UMSDOS_PARANOIA 1
 
 #define UMSDOS_VERSION	0

@@ -83,17 +83,17 @@ int umsdos_rlookup_x ( struct inode *dir, struct dentry *dentry, int nopseudo)
 {
 	int ret;
 
-	/* N.B. this won't work ... lookups of `..' are done by VFS */
-#ifdef BROKEN_TO_BITS
-	if (pseudo_root && len == 2 && name[0] == '.' && name[1] == '.' &&
-	    dir == saved_root->d_inode) {
-printk (KERN_WARNING "umsdos_rlookup_x: we are at pseudo-root thingy?\n");
-		pseudo_root->i_count++;
-		d_add(dentry, pseudo_root);
-		ret = 0;
+	if (saved_root && dir == saved_root->d_inode && !nopseudo &&
+	    dentry->d_name.len == UMSDOS_PSDROOT_LEN &&
+	    memcmp (dentry->d_name.name, UMSDOS_PSDROOT_NAME, UMSDOS_PSDROOT_LEN) == 0) {
+		/* #Specification: pseudo root / DOS/linux
+		 * Even in the real root directory (c:\), the directory
+		 * /linux won't show
+		 */
+		 
+		ret = -ENOENT;
 		goto out;
 	}
-#endif
 
 	ret = msdos_lookup (dir, dentry);
 	if (ret) {
@@ -111,20 +111,6 @@ Printk ((KERN_DEBUG "umsdos_rlookup_x: patch_dentry_inode %s/%s\n",
 dentry->d_parent->d_name.name, dentry->d_name.name));
 		umsdos_patch_dentry_inode(dentry, 0);
 
-		/* N.B. Won't work -- /linux dentry will already have
-		 * an inode, so we'll never get called here.
-		 */
-#ifdef BROKEN_TO_BITS
-		if (dentry->d_inode == pseudo_root && !nopseudo) {
-			/* #Specification: pseudo root / DOS/linux
-			 * Even in the real root directory (c:\), the directory
-			 * /linux won't show
-			 */
-printk(KERN_WARNING "umsdos_rlookup_x: do the pseudo-thingy...\n");
-			/* make the dentry negative */
-			d_delete(dentry);
-		}
-#endif
 	}
 out:
 	/* always install our dentry ops ... */
@@ -180,7 +166,6 @@ static int UMSDOS_rrmdir ( struct inode *dir, struct dentry *dentry)
 	if (ret != -ENOTEMPTY)
 		goto out;
 
-	down(&dentry->d_inode->i_sem);
 	empty = umsdos_isempty (dentry);
 	if (empty == 1) {
 		struct dentry *demd;
@@ -194,7 +179,6 @@ static int UMSDOS_rrmdir ( struct inode *dir, struct dentry *dentry)
 			dput(demd);
 		}
 	}
-	up(&dentry->d_inode->i_sem);
 	if (ret)
 		goto out;
 

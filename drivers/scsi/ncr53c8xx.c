@@ -73,7 +73,7 @@
 */
 
 /*
-**	November 11 1998, version 3.1b
+**	November 26 1998, version 3.1d
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -582,7 +582,7 @@ static spinlock_t driver_lock;
 #define bus_dvma_to_mem(p)		(p)
 #endif
 
-#ifndef NCR_IOMAPPED
+#if defined(__i386__) || !defined(NCR_IOMAPPED)
 __initfunc(
 static vm_offset_t remap_pci_mem(u_long base, u_long size)
 )
@@ -601,7 +601,7 @@ static void unmap_pci_mem(vm_offset_t vaddr, u_long size)
 	if (vaddr)
 		iounmap((void *) (vaddr & PAGE_MASK));
 }
-#endif	/* !NCR_IOMAPPED */
+#endif	/* __i386__ || !NCR_IOMAPPED */
 
 /*
 **	Insert a delay in micro-seconds and milli-seconds.
@@ -2145,7 +2145,6 @@ static	void	ncr_script_copy_and_bind
 				(ncb_p np, ncrcmd *src, ncrcmd *dst, int len);
 static  void    ncr_script_fill (struct script * scr, struct scripth * scripth);
 static	int	ncr_scatter	(ccb_p cp, Scsi_Cmnd *cmd);
-static	void	ncr_setmaxtags	(ncb_p np, tcb_p tp, u_long numtags);
 static	void	ncr_getsync	(ncb_p np, u_char sfac, u_char *fakp, u_char *scntl3p);
 static	void	ncr_setsync	(ncb_p np, ccb_p cp, u_char scntl3, u_char sxfer);
 static	void	ncr_setup_tags	(ncb_p np, u_char tn, u_char ln);
@@ -5837,7 +5836,7 @@ void ncr_complete (ncb_p np, ccb_p cp)
 		**	If tags was reduced due to queue full,
 		**	increase tags if 1000 good status received.
 		*/
-		if (lp && lp->numtags < lp->maxtags) {
+		if (lp && lp->usetags && lp->numtags < lp->maxtags) {
 			++lp->num_good;
 			if (lp->num_good >= 1000) {
 				lp->num_good = 0;
@@ -6537,24 +6536,6 @@ static void ncr_setwide (ncb_p np, ccb_p cp, u_char wide, u_char ack)
 **==========================================================
 */
 
-static void ncr_setmaxtags (ncb_p np, tcb_p tp, u_long numtags)
-{
-	if (numtags > tp->usrtags)
-		numtags = tp->usrtags;
-
-	if (tp) {
-		int ln;
-		for (ln = 0; ln < MAX_LUN; ln++) {
-			lcb_p lp = tp->lp[ln];
-
-			if (!lp)
-				continue;
-			lp->maxtags = lp->numtags = numtags;
-			ncr_setup_tags (np, (tp - np->target), ln);
-		}
-	}
-}
-
 static void ncr_setup_tags (ncb_p np, u_char tn, u_char ln)
 {
 	tcb_p tp = &np->target[tn];
@@ -6671,10 +6652,17 @@ static void ncr_usercmd (ncb_p np)
 
 	case UC_SETTAGS:
 		for (t=0; t<MAX_TARGET; t++) {
+			int ln;
 			if (!((np->user.target>>t)&1)) continue;
 			np->target[t].usrtags = np->user.data;
-			ncr_setmaxtags (np, &np->target[t], np->user.data);
-		};
+			for (ln = 0; ln < MAX_LUN; ln++) {
+				lcb_p lp = np->target[t].lp[ln];
+				if (!lp)
+					continue;
+				lp->maxtags = lp->numtags = np->user.data;
+				ncr_setup_tags (np, t, ln);
+			}
+ 		};
 		break;
 
 	case UC_SETDEBUG:
@@ -7824,7 +7812,7 @@ void ncr_int_sir (ncb_p np)
 **	field of the controller's struct ncb.
 **
 **	Possible cases:		   hs  sir   msg_in value  send   goto
-**	We try try to negotiate:
+**	We try to negotiate:
 **	-> target doesnt't msgin   NEG FAIL  noop   defa.  -      dispatch
 **	-> target rejected our msg NEG FAIL  reject defa.  -      dispatch
 **	-> target answered  (ok)   NEG SYNC  sdtr   set    -      clrack
@@ -8718,7 +8706,7 @@ static lcb_p ncr_setup_lcb (ncb_p np, u_char tn, u_char ln, u_char *inq_data)
 	*/
 	if ((inq_byte7 ^ lp->inq_byte7) & INQ7_QUEUE) {
 		lp->inq_byte7 = inq_byte7;
-		lp->numtags   = tp->usrtags;
+		lp->numtags   = lp->maxtags;
 		ncr_setup_tags (np, tn, ln);
 	}
 
@@ -9622,8 +9610,6 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 #endif
 	ncr_chip *chip;
 
-	printk(KERN_INFO "ncr53c8xx: at PCI bus %d, device %d, function %d\n",
-		bus, (int) (device_fn & 0xf8) >> 3, (int) device_fn & 7);
 	/*
 	 * Read info from the PCI config space.
 	 * pcibios_read_config_xxx() functions are assumed to be used for 
@@ -9650,6 +9636,11 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 					PCI_BASE_ADDRESS_1, &base);
 	(void) pcibios_read_config_dword(bus, device_fn,
 					PCI_BASE_ADDRESS_2, &base_2);
+
+	/* Handle 64bit base adresses for 53C896. */
+	if ((base & PCI_BASE_ADDRESS_MEM_TYPE_MASK) == PCI_BASE_ADDRESS_MEM_TYPE_64)
+		(void) pcibios_read_config_dword(bus, device_fn,
+						 PCI_BASE_ADDRESS_3, &base_2);
 	(void) pcibios_read_config_byte(bus, device_fn,
 					PCI_INTERRUPT_LINE, &irq);
 #endif
@@ -9674,6 +9665,34 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 		chip->revision_id = revision;
 		break;
 	}
+
+#if defined(__i386__)
+	/*
+	 *	Ignore Symbios chips controlled by SISL RAID controller.
+	 */
+	if (chip && (base_2 & PCI_BASE_ADDRESS_MEM_MASK)) {
+		unsigned int ScriptsSize, MagicValue;
+		vm_offset_t ScriptsRAM;
+
+		if (chip->features & FE_RAM8K)
+			ScriptsSize = 8192;
+		else
+			ScriptsSize = 4096;
+
+		ScriptsRAM = remap_pci_mem(base_2 & PCI_BASE_ADDRESS_MEM_MASK,
+					   ScriptsSize);
+		if (ScriptsRAM) {
+			MagicValue = readl(ScriptsRAM + ScriptsSize - 16);
+			unmap_pci_mem(ScriptsRAM, ScriptsSize);
+			if (MagicValue == 0x52414944)
+				return -1;
+		}
+	}
+#endif
+
+	printk(KERN_INFO "ncr53c8xx: at PCI bus %d, device %d, function %d\n",
+		bus, (int) (device_fn & 0xf8) >> 3, (int) device_fn & 7);
+
 	if (!chip) {
 		printk("ncr53c8xx: not initializing, device not supported\n");
 		return -1;
@@ -10069,6 +10088,7 @@ static void ncr53c8xx_select_queue_depths(struct Scsi_Host *host, struct scsi_de
 		ncb_p np;
 		tcb_p tp;
 		lcb_p lp;
+		int numtags;
 
 		if (device->host != host)
 			continue;
@@ -10080,15 +10100,16 @@ static void ncr53c8xx_select_queue_depths(struct Scsi_Host *host, struct scsi_de
 		/*
 		**	Select queue depth from driver setup.
 		**	Donnot use more than configured by user.
-		**	Use 2 for devices that donnot support tags.
 		**	Use at least 2.
 		**	Donnot use more than our maximum.
 		*/
-		device->queue_depth =
-			device_queue_depth(np, device->id, device->lun);
-		if (device->queue_depth > tp->usrtags)
-			device->queue_depth = tp->usrtags;
-		if (!device->tagged_supported || device->queue_depth < 2)
+		numtags = device_queue_depth(np, device->id, device->lun);
+		if (numtags > tp->usrtags)
+			numtags = tp->usrtags;
+		if (!device->tagged_supported)
+			numtags = 1;
+		device->queue_depth = numtags;
+		if (device->queue_depth < 2)
 			device->queue_depth = 2;
 		if (device->queue_depth > SCSI_NCR_MAX_TAGS)
 			device->queue_depth = SCSI_NCR_MAX_TAGS;
@@ -10098,8 +10119,10 @@ static void ncr53c8xx_select_queue_depths(struct Scsi_Host *host, struct scsi_de
 		**	we need to know this value in order not to 
 		**	announce stupid things to user.
 		*/
-		if (lp)
+		if (lp) {
+			lp->numtags = lp->maxtags = numtags;
 			lp->scdev_depth = device->queue_depth;
+		}
 		ncr_setup_tags (np, device->id, device->lun);
 
 #ifdef DEBUG_NCR53C8XX

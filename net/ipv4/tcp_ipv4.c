@@ -265,7 +265,7 @@ unsigned short tcp_good_socknum(void)
 	struct tcp_bind_bucket *tb;
 	int low = sysctl_local_port_range[0];
 	int high = sysctl_local_port_range[1];
-	int remaining = high - low;
+	int remaining = high - low + 1;
 	int rover;
 
 	SOCKHASH_LOCK();

@@ -701,7 +701,6 @@ int ufs_rmdir (struct inode * dir, struct dentry *dentry)
 	if (SWAB32(de->d_ino) != inode->i_ino)
 		goto end_rmdir;
 
-	down(&inode->i_sem);
 	/*
 	 * Prune any child dentries so that this dentry becomes negative.
 	 */
@@ -727,7 +726,6 @@ int ufs_rmdir (struct inode * dir, struct dentry *dentry)
 		retval = ufs_delete_entry (dir, de, bh);
 		dir->i_version = ++event;
 	}
-	up(&inode->i_sem);
 	if (retval)
 		goto end_rmdir;
 	mark_buffer_dirty(bh, 1);
@@ -784,8 +782,6 @@ int ufs_unlink(struct inode * dir, struct dentry *dentry)
 		inode->i_sb->dq_op->initialize (inode, -1);
 
 	retval = -EPERM;
-	if (S_ISDIR(inode->i_mode))
-		goto end_unlink;
 	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
 		goto end_unlink;
 	if ((dir->i_mode & S_ISVTX) &&

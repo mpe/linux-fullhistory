@@ -396,8 +396,6 @@ no_psmouse:
 	cmp	bx,#0x0504d	! check for "PM" signature
 	jne	done_apm_bios	! no signature -> no APM BIOS
 
-	mov	[64],ax		! record the APM BIOS version
-	mov	[76],cx		!	and flags
 	and	cx,#0x02	! Is 32 bit supported?
 	je	done_apm_bios	!	no ...
 
@@ -416,6 +414,26 @@ no_psmouse:
 	mov	[74],dx		! BIOS data segment
 	mov	[78],esi	! BIOS code segment length
 	mov	[82],di		! BIOS data segment length
+!
+! Redo the installation check as the 32 bit connect
+! modifies the flags returned on some BIOSs
+!
+	mov	ax,#0x05300	! APM BIOS installation check
+	xor	bx,bx
+	int	0x15
+	jc	apm_disconnect	! error -> should not happen, tidy up
+
+	cmp	bx,#0x0504d	! check for "PM" signature
+	jne	apm_disconnect	! no signature -> should not happen, tidy up
+
+	mov	[64],ax		! record the APM BIOS version
+	mov	[76],cx		!	and flags
+	jmp	done_apm_bios
+
+apm_disconnect:
+	mov	ax,#0x05304	! Disconnect
+	xor	bx,bx
+	int	0x15		! ignore return code
 	jmp	done_apm_bios
 
 no_32_apm_bios:

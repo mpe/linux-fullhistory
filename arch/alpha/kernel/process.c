@@ -133,18 +133,15 @@ generic_kill_arch (int mode, char *restart_cmd)
 				strncpy((char *)cpup->ipc_buffer, restart_cmd,
 					sizeof(cpup->ipc_buffer));
 			}
-		}
-		else {
+		} else {
 			flags |=  0x00040000UL; /* "remain halted" */
 		}
 			
 		cpup->flags = flags;					       
 		mb();						
 
-		if (alpha_use_srm_setup) {
-			reset_for_srm();
-			set_hae(srm_hae);
-		}
+		reset_for_srm();
+		set_hae(srm_hae);
 
 #ifdef CONFIG_DUMMY_CONSOLE
 		/* This has the effect of reseting the VGA video origin.  */
@@ -156,10 +153,8 @@ generic_kill_arch (int mode, char *restart_cmd)
 	/* Reset rtc to defaults.  */
 	{
 		unsigned char control;
-		unsigned long flags;
 
-		/* I'm not sure if i really need to disable interrupts here. */
-		save_and_cli(flags);
+		cli();
 
 		/* Reset periodic interrupt frequency.  */
 		CMOS_WRITE(0x26, RTC_FREQ_SELECT);
@@ -170,7 +165,7 @@ generic_kill_arch (int mode, char *restart_cmd)
 		CMOS_WRITE(control, RTC_CONTROL);	
 		CMOS_READ(RTC_INTR_FLAGS);
 
-		restore_flags(flags);
+		sti();
 	}
 #endif
 

@@ -222,7 +222,6 @@ extern int  nfs_check_error(struct inode *);
 extern int  nfs_wb_all(struct inode *);
 extern int  nfs_wb_page(struct inode *, struct page *);
 extern int  nfs_wb_pid(struct inode *, pid_t);
-extern int  nfs_wb_area(struct inode *, off_t, off_t);
 
 /*
  * Invalidate write-backs, possibly trying to write them

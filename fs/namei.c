@@ -834,6 +834,37 @@ asmlinkage int sys_mkdir(const char * pathname, int mode)
 	return error;
 }
 
+/*
+ * Whee.. Deadlock country. Happily there are only two VFS
+ * operations that do this..
+ */
+static inline void double_lock(struct dentry *d1, struct dentry *d2)
+{
+	struct semaphore *s1 = &d1->d_inode->i_sem;
+	struct semaphore *s2 = &d2->d_inode->i_sem;
+
+	if (s1 != s2) {
+		if ((unsigned long) s1 < (unsigned long) s2) {
+			struct semaphore *tmp = s2;
+			s2 = s1; s1 = tmp;
+		}
+		down(s1);
+	}
+	down(s2);
+}
+
+static inline void double_unlock(struct dentry *d1, struct dentry *d2)
+{
+	struct semaphore *s1 = &d1->d_inode->i_sem;
+	struct semaphore *s2 = &d2->d_inode->i_sem;
+
+	up(s1);
+	if (s1 != s2)
+		up(s2);
+	dput(d1);
+	dput(d2);
+}
+
 static inline int do_rmdir(const char * name)
 {
 	int error;
@@ -845,13 +876,21 @@ static inline int do_rmdir(const char * name)
 	if (IS_ERR(dentry))
 		goto exit;
 
-	dir = lock_parent(dentry);
-	error = PTR_ERR(dir);
-	if (IS_ERR(dir))
-		goto exit_dput;
+	dir = dget(dentry->d_parent);
 
 	error = -ENOENT;
 	if (!dentry->d_inode)
+		goto exit;
+
+	/*
+	 * The dentry->d_count stuff confuses d_delete() enough to
+	 * not kill the inode from under us while it is locked. This
+	 * wouldn't be needed, except the dentry semaphore is really
+	 * in the inode, not in the dentry..
+	 */
+	dentry->d_count++;
+	double_lock(dir, dentry);
+	if (dentry->d_parent != dir)
 		goto exit_lock;
 
 	error = -EROFS;
@@ -886,9 +925,8 @@ static inline int do_rmdir(const char * name)
 	error = dir->d_inode->i_op->rmdir(dir->d_inode, dentry);
 
 exit_lock:
-        unlock_dir(dir);
-exit_dput:
-	dput(dentry);
+	dentry->d_count--;
+	double_unlock(dentry, dir);
 exit:
 	return error;
 }
@@ -943,13 +981,16 @@ static inline int do_unlink(const char * name)
 		goto exit_lock;
 
 	/*
+	 * A directory can't be unlink'ed.
 	 * A file cannot be removed from an append-only directory.
 	 */
 	error = -EPERM;
+	if (S_ISDIR(dentry->d_inode->i_mode))
+		goto exit_lock;
+
 	if (IS_APPEND(dir->d_inode))
 		goto exit_lock;
 
-	error = -EPERM;
 	if (!dir->d_inode->i_op || !dir->d_inode->i_op->unlink)
 		goto exit_lock;
 
@@ -1142,37 +1183,6 @@ asmlinkage int sys_link(const char * oldname, const char * newname)
 	}
 	unlock_kernel();
 	return error;
-}
-
-/*
- * Whee.. Deadlock country. Happily there is only one VFS
- * operation that does this..
- */
-static inline void double_lock(struct dentry *d1, struct dentry *d2)
-{
-	struct semaphore *s1 = &d1->d_inode->i_sem;
-	struct semaphore *s2 = &d2->d_inode->i_sem;
-
-	if (s1 != s2) {
-		if ((unsigned long) s1 < (unsigned long) s2) {
-			struct semaphore *tmp = s2;
-			s2 = s1; s1 = tmp;
-		}
-		down(s1);
-	}
-	down(s2);
-}
-
-static inline void double_unlock(struct dentry *d1, struct dentry *d2)
-{
-	struct semaphore *s1 = &d1->d_inode->i_sem;
-	struct semaphore *s2 = &d2->d_inode->i_sem;
-
-	up(s1);
-	if (s1 != s2)
-		up(s2);
-	dput(d1);
-	dput(d2);
 }
 
 static inline int do_rename(const char * oldname, const char * newname)

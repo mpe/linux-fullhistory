@@ -1,3 +1,19 @@
+Thu Nov 26  22:00 1998 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.1d
+	- The SISL RAID change requires now remap_pci_mem() stuff to be 
+	  compiled for __i386__ when normal IOs are used.
+	- Minor spelling fixes in doc files.
+
+Sat Nov 21  18:00 1998 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.1c
+	- Ignore chips that are driven by SISL RAID (DAC 960).
+	  Change sent by Leonard Zubkoff and slightly reworked.
+	- Still a buglet in the tags initial settings that needed to be fixed.
+	  It was not possible to disable TGQ at system startup for devices 
+	  that claim TGQ support. The driver used at least 2 for the queue 
+	  depth but did'nt keep track of user settings for tags depth lower 
+	  than 2.
+
 Wed Nov 11  10:00 1998 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.1b
 	- The driver was unhappy when configured with default_tags > MAX_TAGS

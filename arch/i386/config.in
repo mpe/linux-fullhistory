@@ -72,6 +72,7 @@ if [ "$CONFIG_APM" = "y" ]; then
   bool '   Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
   bool '   Power off on shutdown' CONFIG_APM_POWER_OFF
   bool '   Ignore multiple suspend' CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
+  bool '   Ignore multiple suspend/resume cycles' CONFIG_APM_IGNORE_SUSPEND_BOUNCE
 fi
 
 endmenu

@@ -607,10 +607,9 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
 	if ((++SCpnt->retries) < SCpnt->allowed)
 	{
 	    if ((SCpnt->retries >= (SCpnt->allowed >> 1))
-		/* FIXME: last_reset == 0 is allowed
-                 *  && !(SCpnt->host->last_reset > 0 */ &&
-		     time_before(jiffies, SCpnt->host->last_reset
-                                 + MIN_RESET_PERIOD)
+		/* FIXME: last_reset == 0 is allowed */
+                && time_after(jiffies, SCpnt->host->last_reset
+                              + MIN_RESET_PERIOD)
 		&& !(SCpnt->flags & WAS_RESET))
 	    {
 		printk("scsi%d channel %d : resetting for second half of retries.\n",

@@ -1020,11 +1020,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 		goto out;
 	}
 
-	/*
-	 * Lock the directory, then check whether it's empty.
-	 */
-	down(&dentry->d_inode->i_sem);
-
 	/* check whether the EMD is empty */
 	ret = -ENOTEMPTY;
 	empty = umsdos_isempty (dentry);
@@ -1050,7 +1045,6 @@ demd->d_parent->d_name.name, demd->d_name.name, err);
 		}
 	} else if (empty == 2)
 		ret = 0;
-	up(&dentry->d_inode->i_sem);
 	if (ret)
 		goto out;
 

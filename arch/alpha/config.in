@@ -22,14 +22,6 @@ endmenu
 mainmenu_option next_comment
 comment 'General setup'
 
-unset CONFIG_CROSSCOMPILE CONFIG_NATIVE
-
-if [ "`uname`" != "Linux" ]; then
-  define_bool CONFIG_CROSSCOMPILE y
-else
-  define_bool CONFIG_NATIVE y
-fi
-
 choice 'Alpha system type' \
 	"Generic		CONFIG_ALPHA_GENERIC		\
 	 Alcor/Alpha-XLT	CONFIG_ALPHA_ALCOR		\

@@ -32,16 +32,6 @@
 #include "bios32.h"
 #include "machvec.h"
 
-struct hwrpb_struct *hwrpb;
-
-/* hwrpb->sys_variation helpers */
-#define MEMBER_ID(x) (((x)>>10)&0x3f)
-
-#define DP264_ID	1
-#define MONET_ID	4
-#define GOLDRUSH_ID	6
-#define WEBBRICK_ID	7
-
 #define dev2hose(d) (bus2hose[(d)->bus->number]->pci_hose_index)
 
 /*
@@ -301,28 +291,22 @@ static void __init
 dp264_pci_fixup(void)
 {
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
+	common_pci_fixup(dp264_map_irq, common_swizzle);
+	SMC669_Init();
+}
 
-	/* must do map and/or swizzle different on some */
-	switch (MEMBER_ID(hwrpb->sys_variation)) {
-	case MONET_ID:
-	    common_pci_fixup(monet_map_irq, monet_swizzle);
-	    /* es1888_init(); */ /* later? */
-	    break;
-
-	case DP264_ID:
-	case GOLDRUSH_ID:
-	case WEBBRICK_ID:
-	default:
-	    common_pci_fixup(dp264_map_irq, common_swizzle);
-	    break;
-	} /* end MEMBER_ID switch */
-
+static void __init
+monet_pci_fixup(void)
+{
+	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
+	common_pci_fixup(monet_map_irq, monet_swizzle);
+	/* es1888_init(); */ /* later? */
 	SMC669_Init();
 }
 
 
 /*
- * The System Vector
+ * The System Vectors
  */
 
 struct alpha_machine_vector dp264_mv __initmv = {
@@ -347,3 +331,27 @@ struct alpha_machine_vector dp264_mv __initmv = {
 	kill_arch:		generic_kill_arch,
 };
 ALIAS_MV(dp264)
+
+struct alpha_machine_vector monet_mv __initmv = {
+	vector_name:		"Monet",
+	DO_EV6_MMU,
+	DO_DEFAULT_RTC,
+	DO_TSUNAMI_IO,
+	DO_TSUNAMI_BUS,
+	machine_check:		tsunami_machine_check,
+	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+
+	nr_irqs:		64,
+	irq_probe_mask:		_PROBE_MASK(64),
+	update_irq_hw:		dp264_update_irq_hw,
+	ack_irq:		generic_ack_irq,
+	device_interrupt:	dp264_device_interrupt,
+
+	init_arch:		tsunami_init_arch,
+	init_irq:		dp264_init_irq,
+	init_pit:		generic_init_pit,
+	pci_fixup:		monet_pci_fixup,
+	kill_arch:		generic_kill_arch,
+};
+/* No alpha_mv alias for monet, since we compile it in unconditionally
+   with DP264; setup_arch knows how to cope.  */

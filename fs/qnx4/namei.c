@@ -245,9 +245,6 @@ int qnx4_unlink(struct inode *dir, struct dentry *dentry)
 		goto end_unlink;
 	}
 	retval = -EPERM;
-	if (S_ISDIR(inode->i_mode)) {
-		goto end_unlink;
-	}
 	if ((dir->i_mode & S_ISVTX) &&
 	    current->fsuid != inode->i_uid &&
 	    current->fsuid != dir->i_uid && !capable(CAP_FOWNER)) {

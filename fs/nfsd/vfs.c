@@ -1072,6 +1072,11 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	if (IS_ERR(rdentry))
 		goto out_nfserr;
 
+	/*
+	 * FIXME!!
+	 *
+	 * This should do a double-lock on both rdentry and the parent
+	 */
 	err = fh_lock_parent(fhp, rdentry);
 	if (err)
 		goto out;

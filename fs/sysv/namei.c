@@ -476,8 +476,6 @@ repeat:
 	inode = dentry->d_inode;
 
 	retval = -EPERM;
-	if (S_ISDIR(inode->i_mode))
-		goto end_unlink;
 	if (de->inode != inode->i_ino) {
 		brelse(bh);
 		current->counter = 0;

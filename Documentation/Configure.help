@@ -2397,9 +2397,6 @@ CONFIG_IP_MASQUERADE
   information on the WWW at
   http://www.tor.shaw.wave.ca/~ambrose/kernel21.html. 
 
-  If you say Y here, you should also say Y to "IP: always defragment",
-  below. 
-
   If you say Y here, then the modules ip_masq_ftp.o (for ftp file
   transfers), ip_masq_irc.o (for irc chats), ip_masq_quake.o (you
   guessed it), ip_masq_vdolive.o (for VDOLive video connections),
@@ -2503,7 +2500,7 @@ CONFIG_IP_MASQUERADE_IPMARKFW
   The module will be called ip_masq_markfw.o. If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
 
-IP: always defragment 
+IP: always defragment (required for masquerading)
 CONFIG_IP_ALWAYS_DEFRAG
   If you say Y here, then all incoming fragments (parts of IP packets
   that arose when some host between origin and destination decided
@@ -2511,17 +2508,12 @@ CONFIG_IP_ALWAYS_DEFRAG
   reassembled (defragmented) before being processed, even if they are
   about to be forwarded.
 
-  This option is highly recommended if you have said Y to "IP:
-  masquerading" because that facility requires that second and further
-  fragments can be related to TCP or UDP port numbers, which are only
-  stored in the first fragment.
+  You must say Y here if you want to enable "IP: masquerading" or "IP:
+  transparent proxying".
 
   When using "IP: firewalling" support, you might also want to say Y
   here, to have a more reliable firewall (otherwise second and further
   fragments must be dealt with by the firewall, which can be tricky).
-
-  When using "IP: transparent proxying", this option is implicit,
-  although it is safe to say Y here.
 
   Only say Y here if running either a firewall that is the sole link
   to your network or a transparent proxy; never ever say Y here for a
@@ -3868,7 +3860,7 @@ CONFIG_SCSI_NCR53C7xx_DISCONNECT
 
 NCR53C8XX SCSI support
 CONFIG_SCSI_NCR53C8XX
-  This is the BSD ncr driver adapted to linux for the NCR53C8XX family
+  This is the BSD ncr driver adapted to Linux for the NCR53C8XX family
   of PCI-SCSI controllers. This driver supports parity checking,
   tagged command queuing and fast synchronous data transfers up to 80
   MB/s with wide FAST-40 LVD devices and controllers.
@@ -8327,6 +8319,16 @@ CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
   standby events while one is already being processed they will be
   ignored. Without this the Thinkpad 560 has troubles with the user
   level daemon apmd, and with the PCMCIA package pcmcia-cs.
+
+Ignore multiple suspend/resume cycles
+CONFIG_APM_IGNORE_SUSPEND_BOUNCE
+  This option is necessary on the Dell Inspiron 3200, but should be
+  safe for all other laptops. When enabled, a system suspend event
+  that occurs within one second of a resume is ignored. Without this
+  the Inspiron will shut itself off a few seconds after you open the
+  lid, requiring you to press the power button to resume it a second
+  time.
+  Say Y.
 
 Watchdog Timer Support 
 CONFIG_WATCHDOG

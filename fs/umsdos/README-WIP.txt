@@ -2,21 +2,19 @@ Changes by Matija Nalis (mnalis@jagor.srce.hr) on umsdos dentry fixing
 (started by Peter T. Waltenberg <peterw@karaka.chch.cri.nz>)
 (Final conversion to dentries Bill Hawes <whawes@star.net>)
 
----------- WARNING --------- WARNING --------- WARNING -----------
 There is no warning any more.
 Both read-only and read-write stuff is fixed, both in
 msdos-compatibile mode, and in umsdos EMD mode, and it seems stable.
-There are still few symlink/hardlink nuisances, but those are not fatal.
+There are still few hardlink nuisances, but those are not fatal.
 
-I'd call it wide beta, and ask for as many people as possible to
+I'd call it pre-release, and ask for as many people as possible to
 come and test it! See notes below for some more information, or if
 you are trying to use UMSDOS as root partition.
----------- WARNING --------- WARNING --------- WARNING -----------
 
 Legend: those lines marked with '+' on the beggining of line indicates it
 passed all of my tests, and performed perfect in all of them.
 
-Current status (981018) - UMSDOS dentry-Beta 0.83:
+Current status (981129) - UMSDOS dentry-pre 0.84:
 
 (1) pure MSDOS (no --linux-.--- EMD file):
 
@@ -51,13 +49,13 @@ READ:
 + resolve symlink		- works
 + dereference symlink		- works
 + dangling symlink		- works
-- hard links			- seems to work mostly
++ hard links			- works
 + special files (block/char devices, FIFOs, sockets...)	- works
-- various umsdos ioctls		- works
++ various umsdos ioctls		- works
 
 
 WRITE:
-- create symlink		- works mostly, but see WARNING below
++ create symlink		- works
 - create hardlink		- works, but see portability WARNING below
 + create file			- works
 + create special file		- works
@@ -66,16 +64,16 @@ WRITE:
 + rename file (dif. dir)	- works
 - rename hardlink (same dir)	-
 - rename hardlink (dif. dir)	-
-- rename symlink (same dir)	- 
-- rename symlink (dif. dir)	- problems sometimes. see warning below.
++ rename symlink (same dir)	- works
++ rename symlink (dif. dir)	- works
 + rename dir (same dir)		- works
 + rename dir (dif. dir)		- works
 + delete file			- works
 + notify_change (chown,perms)	- works
 + delete hardlink		- works
 + mkdir				- works
-- rmdir 			- HMMM. see with clean --linux-.--- files...
-- umssyncing (many ioctls)	- works
++ rmdir 			- works
++ umssyncing (many ioctls)	- works
 
 
 - CVF-FAT stuff (compressed DOS filesystem) - there is some support from Frank
@@ -91,13 +89,6 @@ in filesystems that might be externally modified like umsdos. There is
 example is specs file about it. Specifically, moving directory which
 contains hardlinks will break them.
 
-Warning: moving symlinks around may break them until umount/remount.
-
-Warning: I seem to able to reproduce one problem with creting symlink after
-I rm -rf directory: it is manifested as symlink apperantly being regular
-file instead of symlink until next umount/mount pair. Tracking this one
-down...
-
 Note: (about pseudoroot) If you are currently trying to use UMSDOS as root
 partition (with linux installed in c:\linux) it will boot, but there are
 some problems. Volunteers ready to test pseudoroot are needed (preferably
@@ -105,7 +96,8 @@ ones with working backups or unimportant data). There are problems with
 different interpretation of hard links in normal in pseudo-root modes,
 resulting is 'silent delete' of them sometimes. Also, '/DOS' pseudo
 directory is only partially re-implemented and buggy. It works most of the
-time, though.
+time, though. Update: should work ok in 0.84, although it still does not
+work correctly in combination with initrd featere. Working on this!
 
 Warning: (about creating hardlinks in pseudoroot mode) - hardlinks created in
 pseudoroot mode are not compatibile with 'normal' hardlinks, and vice versa.
@@ -114,6 +106,8 @@ That is because harlink which is /foo in pseudoroot mode, becomes
 people either always use pseudoroot, or always use normal umsdos filesystem,
 this is no showstopper.
 
+Warning: (about hardlinks) - modifying hardlinks (esp. if there are in
+different directories) are currently somewhat broken, I'm working on it.
 
 ------------------------------------------------------------------------------
 

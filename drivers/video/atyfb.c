@@ -973,6 +973,11 @@ aty_init_cursor(struct fb_info_aty *fb))
 #endif
 #endif
 
+	if (! cursor->ram) {
+		kfree(cursor);
+		return NULL;
+	}
+
 	if (curblink) {
 		init_timer(cursor->timer);
 		cursor->timer->expires = jiffies + (HZ / 50);
@@ -2917,6 +2922,11 @@ __initfunc(void atyfb_init(void))
 	    info->ati_regbase = (unsigned long)
 				ioremap(info->ati_regbase_phys, 0x1000);
 
+	    if(!info->ati_regbase) {
+		    kfree(info);
+		    return;
+	    }
+
 	    info->ati_regbase_phys += 0xc00;
 	    info->ati_regbase += 0xc00;
 
@@ -2938,6 +2948,11 @@ __initfunc(void atyfb_init(void))
 	    /* Map in frame buffer */
 	    info->frame_buffer_phys = addr;
 	    info->frame_buffer = (unsigned long)ioremap(addr, 0x800000);
+
+	    if(!info->frame_buffer) {
+		    kfree(info);
+		    return;
+	    }
 
 #endif /* __sparc__ */
 
@@ -3046,6 +3061,13 @@ __initfunc(void atyfb_of_init(struct device_node *dp))
     info->ati_regbase_phys = 0x7ff000+addr;
     info->ati_regbase = (unsigned long)ioremap(info->ati_regbase_phys,
 						   0x1000);
+
+    if(! info->ati_regbase) {
+	    printk("atyfb_init: ioremap() returned NULL\n");
+	    kfree(info);
+	    return;
+    }
+
     info->ati_regbase_phys += 0xc00;
     info->ati_regbase += 0xc00;
 
@@ -3066,6 +3088,12 @@ __initfunc(void atyfb_of_init(struct device_node *dp))
     /* Map in frame buffer */
     info->frame_buffer_phys = addr;
     info->frame_buffer = (unsigned long)ioremap(addr, 0x800000);
+
+    if(! info->frame_buffer) {
+	    printk("atyfb_init: ioremap() returned NULL\n");
+	    kfree(info);
+	    return;
+    }
 
     if (!aty_init(info, dp->full_name)) {
 	kfree(info);

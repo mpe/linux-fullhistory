@@ -84,11 +84,16 @@ static int remap_area_pages(unsigned long address, unsigned long phys_addr,
  * Remap an arbitrary physical address space into the kernel virtual
  * address space. Needed when the kernel wants to access high addresses
  * directly.
+ *
+ * NOTE! We need to allow non-page-aligned mappings too: we will obviously
+ * have to convert them into an offset in a page-aligned mapping, but the
+ * caller shouldn't need to know that small detail.
  */
 void * __ioremap(unsigned long phys_addr, unsigned long size, unsigned long flags)
 {
 	void * addr;
 	struct vm_struct * area;
+	unsigned long offset;
 
 	/*
 	 * Don't remap the low PCI/ISA area, it's always mapped..
@@ -105,9 +110,9 @@ void * __ioremap(unsigned long phys_addr, unsigned long size, unsigned long flag
 	/*
 	 * Mappings have to be page-aligned
 	 */
-	if (phys_addr & ~PAGE_MASK)
-		return NULL;
-	size = PAGE_ALIGN(size);
+	offset = phys_addr & ~PAGE_MASK;
+	phys_addr &= PAGE_MASK;
+	size = PAGE_ALIGN(size + offset);
 
 	/*
 	 * Don't allow mappings that wrap..
@@ -126,11 +131,11 @@ void * __ioremap(unsigned long phys_addr, unsigned long size, unsigned long flag
 		vfree(addr);
 		return NULL;
 	}
-	return addr;
+	return (void *) (offset + (char *)addr);
 }
 
 void iounmap(void *addr)
 {
 	if (addr > high_memory)
-		return vfree(addr);
+		return vfree((void *) (PAGE_MASK & (unsigned long) addr));
 }

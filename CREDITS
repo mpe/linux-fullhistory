@@ -1116,11 +1116,11 @@ E: Kai.Makisara@metla.fi
 D: SCSI Tape Driver
 
 N: Hamish Macdonald
-E: hamish@border.ocunix.on.ca
+E: hamish_macdonald@westendsys.com
 D: Linux/68k port
-S: 102-B Valleystream Drive
-S: Nepean, Ontario
-S: Canada K2H-9E1
+S: 32 Clydesdale Avenue
+S: Kanata, Ontario
+S: Canada K2M-2G7
 
 N: Peter MacDonald
 D: SLS distribution
@@ -2074,7 +2074,7 @@ S: San Jose, California 95148
 S: USA
 
 N: Marc Zyngier
-E: maz@gloups.fdn.fr
+E: maz@wild-wind.fr.eu.org
 D: MD driver
 S: 11 rue Victor HUGO
 S: 95560 Montsoult

@@ -431,7 +431,7 @@ static int do_try_to_free_page(int gfp_mask)
 	kmem_cache_reap(gfp_mask);
 
 	if (buffer_over_borrow() || pgcache_over_borrow())
-		shrink_mmap(i, gfp_mask);
+		state = 0;
 
 	switch (state) {
 		do {

@@ -21,6 +21,7 @@
 #include <linux/init.h>
 #include <linux/smp_lock.h>
 #include <linux/blk.h>
+#include <linux/hdreg.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -39,6 +40,10 @@
 
 #ifdef CONFIG_MTRR
 #  include <asm/mtrr.h>
+#endif
+
+#ifdef CONFIG_APM
+#include <linux/apm_bios.h>
 #endif
 
 /*
@@ -864,6 +869,9 @@ static struct kernel_param raw_params[] __initdata = {
 #endif
 #ifdef CONFIG_PARIDE_PG
         { "pg.", pg_setup },
+#endif
+#ifdef CONFIG_APM
+	{ "apm=", apm_setup },
 #endif
 	{ 0, 0 }
 };

@@ -57,7 +57,6 @@ void UMSDOS_put_super (struct super_block *);
 
 void umsdos_setup_dir(struct dentry *);
 void umsdos_set_dirinfo_new(struct dentry *, off_t);
-int umsdos_isinit (struct inode *inode);
 void umsdos_patch_dentry_inode (struct dentry *, off_t);
 int umsdos_get_dirowner (struct inode *inode, struct inode **result);
 

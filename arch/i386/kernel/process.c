@@ -102,44 +102,25 @@ static void hard_idle(void)
 
 /*
  * The idle loop on a uniprocessor i386..
- */
- 
-asmlinkage int sys_idle(void)
+ */ 
+static int cpu_idle(void *unused)
 {
-        unsigned long start_idle = 0;
-	int ret = -EPERM;
+	unsigned long start_idle = jiffies;
 
-	lock_kernel();
-	if (current->pid != 0)
-		goto out;
 	/* endless idle loop with no priority at all */
-	current->priority = 0;
-	current->counter = 0;
 	for (;;) {
-		/*
-		 *	We are locked at this point. So we can safely call
-		 *	the APM bios knowing only one CPU at a time will do
-		 *	so.
-		 */
-		if (!start_idle) {
-			check_pgt_cache();
-			start_idle = jiffies;
-		}
 		if (jiffies - start_idle > HARD_IDLE_TIMEOUT) 
 			hard_idle();
 		else  {
 			if (boot_cpu_data.hlt_works_ok && !hlt_counter && !current->need_resched)
 		        	__asm__("hlt");
 		}
-		run_task_queue(&tq_scheduler);
 		if (current->need_resched) 
-			start_idle = 0;
+			start_idle = jiffies;
+		current->policy = SCHED_YIELD;
 		schedule();
+		check_pgt_cache();
 	}
-	ret = 0;
-out:
-	unlock_kernel();
-	return ret;
 }
 
 #else
@@ -150,20 +131,18 @@ out:
 
 int cpu_idle(void *unused)
 {
-	current->priority = 0;
-	while(1)
-	{
-		if(current_cpu_data.hlt_works_ok &&
-		 		!hlt_counter && !current->need_resched)
-			__asm("hlt");
-		check_pgt_cache();
-		run_task_queue(&tq_scheduler);
 
-		/* endless idle loop with no priority at all */
-		current->counter = 0;
+	/* endless idle loop with no priority at all */
+	while(1) {
+		if (current_cpu_data.hlt_works_ok && !hlt_counter && !current->need_resched)
+			__asm__("hlt");
+		current->policy = SCHED_YIELD;
 		schedule();
+		check_pgt_cache();
 	}
 }
+
+#endif
 
 asmlinkage int sys_idle(void)
 {
@@ -172,8 +151,6 @@ asmlinkage int sys_idle(void)
 	cpu_idle(NULL);
 	return 0;
 }
-
-#endif
 
 /*
  * This routine reboots the machine by asking the keyboard
@@ -509,23 +486,27 @@ void release_segments(struct mm_struct *mm)
  */
 int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {
-	long retval;
+	long retval, d0;
 
 	__asm__ __volatile__(
 		"movl %%esp,%%esi\n\t"
 		"int $0x80\n\t"		/* Linux/i386 system call */
 		"cmpl %%esp,%%esi\n\t"	/* child or parent? */
 		"je 1f\n\t"		/* parent - jump */
-		"pushl %3\n\t"		/* push argument */
-		"call *%4\n\t"		/* call fn */
-		"movl %2,%0\n\t"	/* exit */
+		/* Load the argument into eax, and push it.  That way, it does
+		 * not matter whether the called function is compiled with
+		 * -mregparm or not.  */
+		"movl %4,%%eax\n\t"
+		"pushl %%eax\n\t"		
+		"call *%5\n\t"		/* call fn */
+		"movl %3,%0\n\t"	/* exit */
 		"int $0x80\n"
 		"1:\t"
-		:"=a" (retval)
+		:"=&a" (retval), "=&S" (d0)
 		:"0" (__NR_clone), "i" (__NR_exit),
 		 "r" (arg), "r" (fn),
 		 "b" (flags | CLONE_VM)
-		:"si");
+		: "memory");
 	return retval;
 }
 

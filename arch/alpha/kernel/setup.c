@@ -43,12 +43,6 @@
 
 #include "proto.h"
 
-#if 1
-# define DBG_SRM(args)         printk args
-#else
-# define DBG_SRM(args)
-#endif
-
 struct hwrpb_struct *hwrpb;
 unsigned long srm_hae;
 
@@ -114,6 +108,7 @@ extern struct alpha_machine_vector lx164_mv;
 extern struct alpha_machine_vector miata_mv;
 extern struct alpha_machine_vector mikasa_mv;
 extern struct alpha_machine_vector mikasa_primo_mv;
+extern struct alpha_machine_vector monet_mv;
 extern struct alpha_machine_vector noname_mv;
 extern struct alpha_machine_vector noritake_mv;
 extern struct alpha_machine_vector noritake_primo_mv;
@@ -127,6 +122,34 @@ extern struct alpha_machine_vector sx164_mv;
 extern struct alpha_machine_vector takara_mv;
 extern struct alpha_machine_vector xl_mv;
 extern struct alpha_machine_vector xlt_mv;
+#pragma weak alcor_mv
+#pragma weak alphabook1_mv
+#pragma weak avanti_mv
+#pragma weak cabriolet_mv
+#pragma weak dp264_mv
+#pragma weak eb164_mv
+#pragma weak eb64p_mv
+#pragma weak eb66_mv
+#pragma weak eb66p_mv
+#pragma weak jensen_mv
+#pragma weak lx164_mv
+#pragma weak miata_mv
+#pragma weak mikasa_mv
+#pragma weak mikasa_primo_mv
+#pragma weak monet_mv
+#pragma weak noname_mv
+#pragma weak noritake_mv
+#pragma weak noritake_primo_mv
+#pragma weak p2k_mv
+#pragma weak pc164_mv
+#pragma weak rawhide_mv
+#pragma weak ruffian_mv
+#pragma weak sable_mv
+#pragma weak sable_gamma_mv
+#pragma weak sx164_mv
+#pragma weak takara_mv
+#pragma weak xl_mv
+#pragma weak xlt_mv
 
 
 void __init
@@ -197,26 +220,18 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 				 cpu->type);
 	}
 
-#ifdef CONFIG_ALPHA_GENERIC
 	if (!vec) {
 		panic("Unsupported system type: %s%s%s (%ld %ld)\n",
 		      type_name, (*var_name ? " variation " : ""), var_name,
 		      hwrpb->sys_type, hwrpb->sys_variation);
 	}
-	alpha_mv = *vec;
+	if (vec != &alpha_mv)
+		alpha_mv = *vec;
 
+#ifdef CONFIG_ALPHA_GENERIC
 	/* Assume that we've booted from SRM if we havn't booted from MILO.
 	   Detect the later by looking for "MILO" in the system serial nr.  */
 	alpha_using_srm = strncmp((const char *)hwrpb->ssn, "MILO", 4) != 0;
-#else
-	/* Once we're sure we can reliably identify systems, we should
-	   simply panic as we do above.  */
-	if (vec != &alpha_mv) {
-		printk("WARNING: Not configured for system type: %s%s%s "
-		       "(%ld %ld)\nContinuing with trepidation...\n",
-		       type_name, (*var_name ? " variation " : ""), var_name,
-		       hwrpb->sys_type, hwrpb->sys_variation);
-	}
 #endif
 
 	printk("Booting on %s%s%s using machine vector %s\n",
@@ -361,7 +376,6 @@ static int tsunami_indices[] = {0,1,2,3,4,5,6,7,8};
 static struct alpha_machine_vector * __init
 get_sysvec(long type, long variation, long cpu)
 {
-#ifdef CONFIG_ALPHA_GENERIC
 	static struct alpha_machine_vector *systype_vecs[] __initlocaldata =
 	{
 		NULL,		/* 0 */
@@ -398,7 +412,7 @@ get_sysvec(long type, long variation, long cpu)
 		NULL,		/* XXM */
 		&takara_mv,
 		NULL,		/* Yukon */
-		&dp264_mv,
+		NULL,		/* Tsunami -- see variation.  */
 		NULL,		/* Wildfire */
 		NULL,		/* CUSCO */
 	};
@@ -430,6 +444,19 @@ get_sysvec(long type, long variation, long cpu)
 	{
 		&eb66_mv,
 		&eb66p_mv
+	};
+
+	static struct alpha_machine_vector *tsunami_vecs[]  __initlocaldata =
+	{
+		NULL,
+		&dp264_mv,		/* dp164 */
+		&dp264_mv,		/* warhol */
+		&dp264_mv,		/* windjammer */
+		&monet_mv,		/* monet */
+		&dp264_mv,		/* clipper */
+		&dp264_mv,		/* goldrush */
+		&dp264_mv,		/* webbrick */
+		&dp264_mv,		/* catamaran */
 	};
 
 	/* ??? Do we need to distinguish between Rawhides?  */
@@ -472,6 +499,10 @@ get_sysvec(long type, long variation, long cpu)
 			if (member < N(eb66_indices))
 				vec = eb66_vecs[eb66_indices[member]];
 			break;
+		case ST_DEC_TSUNAMI:
+			if (member < N(tsunami_indices))
+				vec = tsunami_vecs[tsunami_indices[member]];
+			break;
 		case ST_DEC_1000:
 			cpu &= 0xffffffff;
 			if (cpu == EV5_CPU || cpu == EV56_CPU)
@@ -496,17 +527,11 @@ get_sysvec(long type, long variation, long cpu)
 		}
 	}
 	return vec;
-#else
-	/* TODO: verify that the system is of the type for which we
-	   were configured.  For now, cop out and return success.  */
-	return &alpha_mv;
-#endif /* GENERIC */
 }
 
 static struct alpha_machine_vector * __init
 get_sysvec_byname(const char *name)
 {
-#ifdef CONFIG_ALPHA_GENERIC
 	static struct alpha_machine_vector *all_vecs[] __initlocaldata =
 	{
 		&alcor_mv,
@@ -523,6 +548,7 @@ get_sysvec_byname(const char *name)
 		&miata_mv,
 		&mikasa_mv,
 		&mikasa_primo_mv,
+		&monet_mv,
 		&noname_mv,
 		&noritake_mv,
 		&noritake_primo_mv,
@@ -545,11 +571,6 @@ get_sysvec_byname(const char *name)
 			return mv;
 	}
 	return NULL;
-#else
-	if (strcasecmp(alpha_mv.vector_name, name) == 0)
-		return &alpha_mv;
-	return NULL;
-#endif
 }
 
 static void

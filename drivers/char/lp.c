@@ -16,8 +16,17 @@
  * Parport sharing hacking by Andrea Arcangeli
  * Fixed kernel_(to/from)_user memory copy to check for errors
  * 				by Riccardo Facchetti <fizban@tin.it>
- * Interrupt handling workaround for printers with buggy handshake
- *				by Andrea Arcangeli, 11 May 98
+ * Redesigned interrupt handling for handle printers with buggy handshake
+ *				by Andrea Arcangeli, 11 May 1998
+ * Full efficient handling of printer with buggy irq handshake (now I have
+ * understood the meaning of the strange handshake). This is done sending new
+ * characters if the interrupt is just happened, even if the printer say to
+ * be still BUSY. This is needed at least with Epson Stylus Color. To enable
+ * the new TRUST_IRQ mode read the `LP OPTIMIZATION' section below...
+ * Fixed the irq on the rising edge of the strobe case.
+ * Obsoleted the CAREFUL flag since a printer that doesn' t work with
+ * CAREFUL will block a bit after in lp_check_status().
+ *				Andrea Arcangeli, 15 Oct 1998
  */
 
 /* This driver should, in theory, work with any parallel port that has an
@@ -47,6 +56,74 @@
  *	# insmod lp.o parport=auto
  *
  *	# insmod lp.o reset=1
+ */
+
+/*
+ * LP OPTIMIZATIONS
+ *
+ * - TRUST_IRQ flag
+ * 
+ * Epson Stylus Color, HP and many other new printers want the TRUST_IRQ flag
+ * set when printing with interrupts. This is a long story. Such printers
+ * use a broken handshake (see the timing graph below) when printing with
+ * interrupts. The lp driver as default is just able to handle such bogus
+ * handshake, but setting such flag cause lp to go faster and probably do
+ * what such printers want (even if not documented).
+ *
+ * NOTE that setting the TRUST_IRQ flag in some printer can cause the irq
+ * printing to fail completly. You must try, to know if your printer
+ * will handle it. I suggest a graphics printing to force a major flow of
+ * characters to the printer for do the test. NOTE also that the TRUST_IRQ
+ * flag _should_ be fine everywhere but there is a lot of buggy hardware out
+ * there, so I am forced to implement it as a not-default thing.
+ * WARNING: before to do the test, be sure to have not played with the
+ * `-w' parameter of tunelp!
+ *
+ * Note also that lp automagically warn you (with a KERN_WARNING) if it
+ * detects that you could _try_ to set the TRUST_IRQ flag to speed up the
+ * printing and decrease the CPU load.
+ *
+ * To set the TRUST_IRQ flag you can use this command:
+ *
+ * tunelp /dev/lp? -T on
+ *
+ * If you have an old tunelp executable you can (hack and) use this simple
+ * C lazy proggy to set the flag in the lp driver:
+
+-------------------------- cut here -------------------------------------
+#include <fcntl.h>
+#include <sys/ioctl.h>
+
+#define	LPTRUSTIRQ  0x060f
+
+int main(int argc, char **argv)
+{
+	int fd = open("/dev/lp0", O_RDONLY);
+	ioctl(fd, LPTRUSTIRQ, argc - 1);
+	if (argc - 1)
+		printf("trusting the irq\n");
+	else
+		printf("untrusting the irq\n");
+	return 0;
+}
+-------------------------- cut here -------------------------------------
+
+ * - LP_WAIT time
+ *
+ * You can use this setting if your printer is fast enough and/or your
+ * machine is slow enough ;-).
+ *
+ * tunelp /dev/lp? -w 0
+ *
+ * - LP_CHAR tries
+ *
+ * If you print with irqs probably you can decrease the CPU load a lot using
+ * this setting. This is not the default because the printing is reported to
+ * be jerky somewhere...
+ *
+ * tunelp /dev/lp? -c 1
+ *
+ *					11 Nov 1998, Andrea Arcangeli
  */
 
 /* COMPATIBILITY WITH OLD KERNELS
@@ -79,6 +156,12 @@
  *	ftp://e-mind.com/pub/linux/pscan/
  *
  *					11 May 98, Andrea Arcangeli
+ *
+ * My printer scanner run on an Epson Stylus Color show that such printer
+ * generates the irq on the _rising_ edge of the STROBE. Now lp handle
+ * this case fine too.
+ *
+ *					15 Oct 1998, Andrea Arcangeli
  */
 
 #include <linux/module.h>
@@ -95,7 +178,6 @@
 
 #include <linux/parport.h>
 #undef LP_STATS
-#undef LP_NEED_CAREFUL
 #include <linux/lp.h>
 
 #include <asm/irq.h>
@@ -115,16 +197,14 @@ struct lp_struct lp_table[LP_NO] =
 			   NULL, 0, 0, 0}
 };
 
-/* Test if printer is ready (and optionally has no error conditions) */
-#ifdef LP_NEED_CAREFUL
-#define LP_READY(minor, status) \
-  ((LP_F(minor) & LP_CAREFUL) ? _LP_CAREFUL_READY(status) : ((status) & LP_PBUSY))
-#define _LP_CAREFUL_READY(status) \
-   ((status) & (LP_PBUSY|LP_POUTPA|LP_PSELECD|LP_PERRORP)) == \
-      (LP_PBUSY|LP_PSELECD|LP_PERRORP)
-#else
-#define LP_READY(minor, status) ((status) & LP_PBUSY)
-#endif
+/* Test if printer is ready */
+#define	LP_READY(status)	((status) & LP_PBUSY)
+/* Test if the printer is not acking the strobe */
+#define	LP_NO_ACKING(status)	((status) & LP_PACK)
+/* Test if the printer has error conditions */
+#define LP_NO_ERROR(status)					\
+	 (((status) & (LP_POUTPA|LP_PSELECD|LP_PERRORP)) ==	\
+	 (LP_PSELECD|LP_PERRORP))
 
 #undef LP_DEBUG
 #undef LP_READ_DEBUG
@@ -187,60 +267,124 @@ static int lp_reset(int minor)
 	return retval;
 }
 
+#define	lp_wait(minor)	udelay(LP_WAIT(minor))
+
 static inline int lp_char(char lpchar, int minor)
 {
-	unsigned int wait = 0;
 	unsigned long count = 0;
 #ifdef LP_STATS
 	struct lp_stats *stats;
 #endif
 
+	if (signal_pending(current))
+		return 0;
+
 	for (;;)
 	{
+		unsigned char status;
+		int irq_ok = 0;
+
+		/*
+		 * Give a chance to other pardevice to run in the meantime.
+		 */
 		lp_yield(minor);
-		if (LP_READY(minor, r_str(minor)))
-			break;
- 		if (++count == LP_CHAR(minor) || signal_pending(current))
- 			return 0;
+
+		status = r_str(minor);
+		if (LP_NO_ERROR(status))
+		{
+			if (LP_READY(status))
+				break;
+
+			/*
+			 * This is a crude hack that should be well known
+			 * at least by Epson device driver developers. -arca
+			 */
+			irq_ok = (!LP_POLLED(minor) &&
+				  LP_NO_ACKING(status) &&
+				  lp_table[minor].irq_detected);
+			if ((LP_F(minor) & LP_TRUST_IRQ) && irq_ok)
+				break;
+		}
+		/*
+		 * NOTE: if you run with irqs you _must_ use
+		 * `tunelp /dev/lp? -c 1' to be rasonable efficient!
+		 */
+		if (++count == LP_CHAR(minor))
+		{
+			if (irq_ok)
+			{
+				static int first_time = 1;
+				/*
+				 * The printer is using a buggy handshake, so
+				 * revert to polling to not overload the
+				 * machine and warn the user that its printer
+				 * could get optimized trusting the irq. -arca
+				 */
+				lp_table[minor].irq_missed = 1;
+				if (first_time)
+				{
+					first_time = 0;
+					printk(KERN_WARNING "lp%d: the "
+					       "printing could be optimized "
+					       "using the TRUST_IRQ flag, "
+					       "see the top of "
+					       "linux/drivers/char/lp.c\n",
+					       minor);
+				}
+			}
+			return 0;
+		}
 	}
 
 	w_dtr(minor, lpchar);
+
 #ifdef LP_STATS
 	stats = &LP_STAT(minor);
 	stats->chars++;
 #endif
+
 	/* must wait before taking strobe high, and after taking strobe
 	   low, according spec.  Some printers need it, others don't. */
-#ifndef __sparc__
-	while (wait != LP_WAIT(minor)) /* FIXME: should be a udelay() */
-		wait++;
-#else
-	udelay(1);
-#endif
+	lp_wait(minor);
+
 	/* control port takes strobe high */
-	w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PSTROBE);
-#ifndef __sparc__
-	while (wait)			/* FIXME: should be a udelay() */
-		wait--;
-#else
-	udelay(1);
-#endif
-	/* take strobe low */
 	if (LP_POLLED(minor))
-		/* take strobe low */
-		w_ctr(minor, LP_PSELECP | LP_PINITP);
-	else
 	{
+		w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PSTROBE);
+		lp_wait(minor);
+		w_ctr(minor, LP_PSELECP | LP_PINITP);
+	} else {
+		/*
+		 * Epson Stylus Color generate the IRQ on the rising edge of
+		 * strobe so clean the irq's information before playing with
+		 * the strobe. -arca
+		 */
 		lp_table[minor].irq_detected = 0;
 		lp_table[minor].irq_missed = 0;
+		/*
+		 * Be sure that the CPU doesn' t reorder instructions. -arca
+		 */
+		mb();
+		w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PSTROBE | LP_PINTEN);
+		lp_wait(minor);
 		w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PINTEN);
 	}
+
+	/*
+	 * Give to the printer a chance to put BUSY low. Really we could
+	 * remove this because we could _guess_ that we are slower to reach
+	 * again lp_char() than the printer to put BUSY low, but I' d like
+	 * to remove this variable from the function I go solve
+	 * when I read bug reports ;-). -arca
+	 */
+	lp_wait(minor);
 
 #ifdef LP_STATS
 	/* update waittime statistics */
 	if (count > stats->maxwait) {
 #ifdef LP_DEBUG
-		printk(KERN_DEBUG "lp%d success after %d counts.\n", minor, count);
+		printk(KERN_DEBUG "lp%d success after %d counts.\n",
+		       minor, count);
 #endif
 		stats->maxwait = count;
 	}
@@ -325,7 +469,10 @@ static int lp_write_buf(unsigned int minor, const char *buf, int count)
 	lp_table[minor].irq_detected = 0;
 	lp_table[minor].irq_missed = 1;
 
-	w_ctr(minor, LP_PSELECP | LP_PINITP);
+	if (LP_POLLED(minor))
+		w_ctr(minor, LP_PSELECP | LP_PINITP);
+	else
+		w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PINTEN);
 
 	do {
 		bytes_written = 0;
@@ -396,9 +543,7 @@ static int lp_write_buf(unsigned int minor, const char *buf, int count)
 						goto lp_polling;
 					}
 					if (!lp_table[minor].irq_detected)
-					{
 						interruptible_sleep_on_timeout(&lp->wait_q, LP_TIMEOUT_INTERRUPT);
-					}
 					sti();
 				}
 			}
@@ -453,101 +598,97 @@ static int lp_read_nibble(int minor)
 	return (i & 0x0f);
 }
 
-static inline void lp_select_in_high(int minor) 
-{
-	parport_frob_control(lp_table[minor].dev->port, 8, 8);
+static void lp_read_terminate(struct parport *port) {
+	parport_write_control(port, (parport_read_control(port) & ~2) | 8);
+	/* SelectIN high, AutoFeed low */
+	if (parport_wait_peripheral(port, 0x80, 0)) 
+		/* timeout, SelectIN high, Autofeed low */
+		return;
+	parport_write_control(port, parport_read_control(port) | 2);
+	/* AutoFeed high */
+	parport_wait_peripheral(port, 0x80, 0x80);
+	/* no timeout possible, Autofeed low, SelectIN high */
+	parport_write_control(port, (parport_read_control(port) & ~2) | 8);
 }
 
 /* Status readback confirming to ieee1284 */
 static ssize_t lp_read(struct file * file, char * buf,
-		       size_t count, loff_t *ppos)
+		       size_t length, loff_t *ppos)
 {
-	unsigned char z=0, Byte=0, status;
-	char *temp;
-	ssize_t retval;
-	unsigned int counter=0;
-	unsigned int i;
+	int i;
 	unsigned int minor=MINOR(file->f_dentry->d_inode->i_rdev);
-	
- 	/* Claim Parport or sleep until it becomes available
- 	 */
- 	lp_parport_claim (minor);
+	char *temp = buf;
+	ssize_t count = 0;
+	unsigned char z = 0;
+	unsigned char Byte = 0;
+	struct parport *port = lp_table[minor].dev->port;
 
-	temp=buf;	
-#ifdef LP_READ_DEBUG 
-	printk(KERN_INFO "lp%d: read mode\n", minor);
-#endif
+	lp_parport_claim (minor);
 
-	retval = verify_area(VERIFY_WRITE, buf, count);
-	if (retval)
-		return retval;
-	if (parport_ieee1284_nibble_mode_ok(lp_table[minor].dev->port, 0)==0) {
-#ifdef LP_READ_DEBUG
-		printk(KERN_INFO "lp%d: rejected IEEE1284 negotiation.\n",
-		       minor);
-#endif
-		lp_select_in_high(minor);
-		parport_release(lp_table[minor].dev);
-		return temp-buf;          /*  End of file */
+	switch (parport_ieee1284_nibble_mode_ok(port, 0))
+	{
+	case 0:
+		/* Handshake failed. */
+		lp_read_terminate(port);
+		lp_parport_release (minor);
+		return -EIO;
+	case 1:
+		/* No data. */
+		lp_read_terminate(port);
+		lp_parport_release (minor);
+		return 0;
+	default:
+		/* Data available. */
+
+		/* Hack: Wait 10ms (between events 6 and 7) */
+                schedule_timeout((HZ+99)/100);
+                break;
 	}
-	for (i=0; i<=(count*2); i++) {
-		parport_frob_control(lp_table[minor].dev->port, 2, 2); /* AutoFeed high */
-		do {
-			status = (r_str(minor) & 0x40);
-			udelay(50);
-			counter++;
-			if (current->need_resched)
-				schedule ();
-		} while ((status == 0x40) && (counter < 20));
-		if (counter == 20) { 
-			/* Timeout */
+
+	for (i=0; ; i++) {
+		parport_frob_control(port, 2, 2); /* AutoFeed high */
+		if (parport_wait_peripheral(port, 0x40, 0)) {
 #ifdef LP_READ_DEBUG
-			printk(KERN_DEBUG "lp_read: (Autofeed high) timeout\n");
+			/* Some peripherals just time out when they've sent
+			   all their data.  */
+			printk("%s: read1 timeout.\n", port->name);
 #endif
-			parport_frob_control(lp_table[minor].dev->port, 2, 0);
-			lp_select_in_high(minor);
-			parport_release(lp_table[minor].dev);
-			return temp-buf; /* end the read at timeout */
+			parport_frob_control(port, 2, 0); /* AutoFeed low */
+			break;
 		}
-		counter=0;
 		z = lp_read_nibble(minor);
-		parport_frob_control(lp_table[minor].dev->port, 2, 0); /* AutoFeed low */
-		do {
-			status=(r_str(minor) & 0x40);
-			udelay(20);
-			counter++;
-			if (current->need_resched)
-				schedule ();
-		} while ( (status == 0) && (counter < 20) );
-		if (counter == 20) { /* Timeout */
-#ifdef LP_READ_DEBUG
-			printk(KERN_DEBUG "lp_read: (Autofeed low) timeout\n");
-#endif
-			if (signal_pending(current)) {
-				lp_select_in_high(minor);
-				parport_release(lp_table[minor].dev);
-				if (temp !=buf)
-					return temp-buf;
-				else 
-					return -EINTR;
-			}
-			current->state=TASK_INTERRUPTIBLE;
-			schedule_timeout(LP_TIME(minor));
+		parport_frob_control(port, 2, 0); /* AutoFeed low */
+		if (parport_wait_peripheral(port, 0x40, 0x40)) {
+			printk("%s: read2 timeout.\n", port->name);
+			break;
 		}
+		if ((i & 1) != 0) {
+			Byte |= (z<<4);
+			if (temp) {
+				if (__put_user (Byte, temp))
+				{
+					count = -EFAULT;
+					temp = NULL;
+				} else {
+					temp++;
 
-		counter=0;
-
-		if (( i & 1) != 0) {
-			Byte= (Byte | z<<4);
-			if (__put_user(Byte, (char *)temp))
-				return -EFAULT;
-			temp++;
-		} else Byte=z;
+					if (++count == length)
+						temp = NULL;
+				}
+			}
+			/* Does the error line indicate end of data? */
+			if ((parport_read_status(port) & LP_PERRORP) == 
+			    LP_PERRORP) 
+				break;
+		} else 
+			Byte=z;
 	}
 
-	lp_select_in_high(minor);
-	lp_parport_release(minor);
-	return temp-buf;	
+	lp_read_terminate(port);
+
+	lp_parport_release (minor);
+
+	return count;
 }
 
 #endif
@@ -645,7 +786,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			else
 				LP_F(minor) &= ~LP_ABORTOPEN;
 			break;
-#ifdef LP_NEED_CAREFUL
+#ifdef OBSOLETED
 		case LPCAREFUL:
 			if (arg)
 				LP_F(minor) |= LP_CAREFUL;
@@ -653,6 +794,12 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 				LP_F(minor) &= ~LP_CAREFUL;
 			break;
 #endif
+		case LPTRUSTIRQ:
+			if (arg)
+				LP_F(minor) |= LP_TRUST_IRQ;
+			else
+				LP_F(minor) &= ~LP_TRUST_IRQ;
+			break;
 		case LPWAIT:
 			LP_WAIT(minor) = arg;
 			break;
@@ -695,7 +842,6 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 	}
 	return retval;
 }
-
 
 static struct file_operations lp_fops = {
 	lp_lseek,

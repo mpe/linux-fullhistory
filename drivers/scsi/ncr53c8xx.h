@@ -45,7 +45,7 @@
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 3.1b"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 3.1d"
 
 /*
 **	Check supported Linux versions
@@ -424,6 +424,10 @@ typedef struct {
 #define FE_LDSTR	(1<<13)
 #define FE_RAM		(1<<14)
 #define FE_CLK80	(1<<15)
+#define FE_RAM8K	(1<<16)
+#define FE_64BIT	(1<<17)
+#define FE_IO256	(1<<18)
+#define FE_NOPM		(1<<19)
 #define FE_CACHE_SET	(FE_ERL|FE_CLSE|FE_WRIE|FE_ERMP)
 #define FE_SCSI_SET	(FE_WIDE|FE_ULTRA|FE_ULTRA2|FE_DBLR|FE_QUAD|F_CLK80)
 #define FE_SPECIAL_SET	(FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM)
@@ -484,7 +488,8 @@ typedef struct {
  FE_WIDE|FE_ULTRA2|FE_QUAD|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
  ,									\
  {PCI_DEVICE_ID_NCR_53C896, 0xff, "896",  7, 31, 7,			\
- FE_WIDE|FE_ULTRA2|FE_QUAD|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
+ FE_WIDE|FE_ULTRA2|FE_QUAD|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM|\
+ FE_RAM8K|FE_64BIT|FE_IO256|FE_NOPM}\
 }
 
 /*

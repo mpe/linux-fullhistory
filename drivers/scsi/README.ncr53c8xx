@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-18 October 1998
+22 November 1998
 ===============================================================================
 
 1.  Introduction
@@ -853,7 +853,7 @@ SCSI_NCR_SETUP_SPECIAL_FEATURES	(default: defined)
         For 810A, 860, 825A, 875 and 895 scsi chips, this option enables 
 	support of features that reduce load of PCI bus and memory accesses 
 	during  scsi transfer processing: burst op-code fetch, read multiple, 
-        read line, prefetch, cache line line, write and invalidate, 
+        read line, prefetch, cache line, write and invalidate, 
         burst 128 (875 only), large dma fifo (875 only), offset 16 (875 only).
 	Can be changed by the following boot setup command:
 		ncr53c8xx=specf:n

@@ -661,7 +661,6 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 	if (le32_to_cpu(de->inode) != inode->i_ino)
 		goto end_rmdir;
 
-	down(&inode->i_sem);
 	/*
 	 * Prune any child dentries so that this dentry becomes negative.
 	 */
@@ -686,7 +685,6 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 		retval = ext2_delete_entry (de, bh);
 		dir->i_version = ++event;
 	}
-	up(&inode->i_sem);
 	if (retval)
 		goto end_rmdir;
 	mark_buffer_dirty(bh, 1);
@@ -733,8 +731,6 @@ int ext2_unlink(struct inode * dir, struct dentry *dentry)
 	DQUOT_INIT(inode);
 
 	retval = -EPERM;
-	if (S_ISDIR(inode->i_mode))
-		goto end_unlink;
 	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
 		goto end_unlink;
 	if ((dir->i_mode & S_ISVTX) &&

@@ -592,7 +592,7 @@ handle_signal(unsigned long sig, struct k_sigaction *ka,
  * the kernel can handle, and then we build all the user-level signal handling
  * stack-frames in one go after that.
  */
-asmlinkage int do_signal(struct pt_regs *regs, sigset_t *oldset)
+int do_signal(struct pt_regs *regs, sigset_t *oldset)
 {
 	siginfo_t info;
 	struct k_sigaction *ka;

@@ -797,11 +797,11 @@ int close_fp(struct file *filp, fl_owner_t id)
 		printk("VFS: Close: file count is 0\n");
 		return 0;
 	}
-	if (dentry->d_inode)
-		locks_remove_posix(filp, id);
 	retval = 0;
 	if (filp->f_op && filp->f_op->flush)
 		retval = filp->f_op->flush(filp);
+	if (dentry->d_inode)
+		locks_remove_posix(filp, id);
 	fput(filp);
 	return retval;
 }

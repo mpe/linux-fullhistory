@@ -137,7 +137,7 @@ static inline struct task_struct ** find_empty_process(void)
 {
 	struct task_struct **tslot = NULL;
 
-	if (!current->uid || (nr_tasks < NR_TASKS - MIN_TASKS_LEFT_FOR_ROOT))
+	if ((nr_tasks < NR_TASKS - MIN_TASKS_LEFT_FOR_ROOT) || !current->uid)
 		tslot = get_free_taskslot();
 	return tslot;
 }
