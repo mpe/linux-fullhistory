@@ -1688,7 +1688,7 @@ static int prom_reconfig_notifier(struct notifier_block *nb, unsigned long actio
 }
 
 static struct notifier_block prom_reconfig_nb = {
-	.notifier_call prom_reconfig_notifier,
+	.notifier_call = prom_reconfig_notifier,
 	.priority = 10, /* This one needs to run first */
 };
 
