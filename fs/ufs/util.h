@@ -31,24 +31,46 @@
 /*
  * macros used for accesing structures
  */
-#define ufs_get_fs_state(usb3) _ufs_get_fs_state_(usb3,flags,swab)
-static inline __s32 _ufs_get_fs_state_(struct ufs_super_block_third * usb3,
-	unsigned flags, unsigned swab)
+#define ufs_get_fs_state(usb1,usb3) _ufs_get_fs_state_(usb1,usb3,flags,swab)
+static inline __s32 _ufs_get_fs_state_(struct ufs_super_block_first * usb1,
+	struct ufs_super_block_third * usb3, unsigned flags, unsigned swab)
 {
-	if ((flags & UFS_ST_MASK) == UFS_ST_SUN)
-		return SWAB32((usb3)->fs_u.fs_sun.fs_state);
-	else 
-		return SWAB32((usb3)->fs_u.fs_44.fs_state);
+	switch (flags & UFS_ST_MASK) {
+		case UFS_ST_SUN:
+			return SWAB32((usb3)->fs_u2.fs_sun.fs_state);
+		case UFS_ST_SUNx86:
+			return SWAB32((usb1)->fs_u1.fs_sunx86.fs_state);
+		case UFS_ST_44BSD:
+		default:
+			return SWAB32((usb3)->fs_u2.fs_44.fs_state);
+	}
 }
 
-#define ufs_set_fs_state(usb3,value) _ufs_set_fs_state_(usb3,value,flags,swab)
-static inline void _ufs_set_fs_state_(struct ufs_super_block_third * usb3,
-	__s32 value, unsigned flags, unsigned swab)
+#define ufs_set_fs_state(usb1,usb3,value) _ufs_set_fs_state_(usb1,usb3,value,flags,swab)
+static inline void _ufs_set_fs_state_(struct ufs_super_block_first * usb1,
+	struct ufs_super_block_third * usb3, __s32 value, unsigned flags, unsigned swab)
 {
-	if ((flags & UFS_ST_MASK) == UFS_ST_SUN)
-		(usb3)->fs_u.fs_sun.fs_state = SWAB32(value);
-	else 
-		(usb3)->fs_u.fs_44.fs_state = SWAB32(value);
+	switch (flags & UFS_ST_MASK) {
+		case UFS_ST_SUN:
+			(usb3)->fs_u2.fs_sun.fs_state = SWAB32(value);
+			break;
+		case UFS_ST_SUNx86:
+			(usb1)->fs_u1.fs_sunx86.fs_state = SWAB32(value);
+			break;
+		case UFS_ST_44BSD:
+			(usb3)->fs_u2.fs_44.fs_state = SWAB32(value);
+			break;
+	}
+}
+
+#define ufs_get_fs_npsect(usb1,usb3) _ufs_get_fs_npsect_(usb1,usb3,flags,swab)
+static inline __u32 _ufs_get_fs_npsect_(struct ufs_super_block_first * usb1,
+	struct ufs_super_block_third * usb3, unsigned flags, unsigned swab)
+{
+	if ((flags & UFS_ST_MASK) == UFS_ST_SUNx86)
+		return SWAB32((usb3)->fs_u2.fs_sunx86.fs_npsect);
+	else
+		return SWAB32((usb1)->fs_u1.fs_sun.fs_npsect);
 }
 
 #define ufs_get_fs_qbmask(usb3) _ufs_get_fs_qbmask_(usb3,flags,swab)
@@ -56,13 +78,19 @@ static inline __u64 _ufs_get_fs_qbmask_(struct ufs_super_block_third * usb3,
 	unsigned flags, unsigned swab)
 {
 	__u64 tmp;
-	if ((flags & UFS_ST_MASK) == UFS_ST_SUN) {
-		((u32 *)&tmp)[0] = usb3->fs_u.fs_sun.fs_qbmask[0];
-		((u32 *)&tmp)[1] = usb3->fs_u.fs_sun.fs_qbmask[1];
-	}
-	else {
-		((u32 *)&tmp)[0] = usb3->fs_u.fs_44.fs_qbmask[0];
-		((u32 *)&tmp)[1] = usb3->fs_u.fs_44.fs_qbmask[1];
+	switch (flags & UFS_ST_MASK) {
+		case UFS_ST_SUN:
+			((u32 *)&tmp)[0] = usb3->fs_u2.fs_sun.fs_qbmask[0];
+			((u32 *)&tmp)[1] = usb3->fs_u2.fs_sun.fs_qbmask[1];
+			break;
+		case UFS_ST_SUNx86:
+			((u32 *)&tmp)[0] = usb3->fs_u2.fs_sunx86.fs_qbmask[0];
+			((u32 *)&tmp)[1] = usb3->fs_u2.fs_sunx86.fs_qbmask[1];
+			break;
+		case UFS_ST_44BSD:
+			((u32 *)&tmp)[0] = usb3->fs_u2.fs_44.fs_qbmask[0];
+			((u32 *)&tmp)[1] = usb3->fs_u2.fs_44.fs_qbmask[1];
+			break;
 	}
 	return SWAB64(tmp);
 }
@@ -72,13 +100,19 @@ static inline __u64 _ufs_get_fs_qfmask_(struct ufs_super_block_third * usb3,
 	unsigned flags, unsigned swab)
 {
 	__u64 tmp;
-	if ((flags & UFS_ST_MASK) == UFS_ST_SUN) {
-		((u32 *)&tmp)[0] = usb3->fs_u.fs_sun.fs_qfmask[0];
-		((u32 *)&tmp)[1] = usb3->fs_u.fs_sun.fs_qfmask[1];
-	}
-	else {
-		((u32 *)&tmp)[0] = usb3->fs_u.fs_44.fs_qfmask[0];
-		((u32 *)&tmp)[1] = usb3->fs_u.fs_44.fs_qfmask[1];
+	switch (flags & UFS_ST_MASK) {
+		case UFS_ST_SUN:
+			((u32 *)&tmp)[0] = usb3->fs_u2.fs_sun.fs_qfmask[0];
+			((u32 *)&tmp)[1] = usb3->fs_u2.fs_sun.fs_qfmask[1];
+			break;
+		case UFS_ST_SUNx86:
+			((u32 *)&tmp)[0] = usb3->fs_u2.fs_sunx86.fs_qfmask[0];
+			((u32 *)&tmp)[1] = usb3->fs_u2.fs_sunx86.fs_qfmask[1];
+			break;
+		case UFS_ST_44BSD:
+			((u32 *)&tmp)[0] = usb3->fs_u2.fs_44.fs_qfmask[0];
+			((u32 *)&tmp)[1] = usb3->fs_u2.fs_44.fs_qfmask[1];
+			break;
 	}
 	return SWAB64(tmp);
 }

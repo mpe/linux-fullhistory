@@ -959,7 +959,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 		goto out_unlock;
 
 	err = nfserr_perm;
-	if (IS_IMMUTABLE(dest) /* || IS_APPEND(dest) */ )
+	if (IS_IMMUTABLE(dest) || IS_APPEND(dest))
 		goto out_unlock;
 	if (!dirp->i_op || !dirp->i_op->link)
 		goto out_unlock;

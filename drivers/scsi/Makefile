@@ -482,6 +482,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_SYM53C8XX),y)
+L_OBJS += sym53c8xx.o 
+else
+  ifeq ($(CONFIG_SCSI_SYM53C8XX),m)
+  M_OBJS += sym53c8xx.o 
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_PAS16),y)
 L_OBJS += pas16.o
 else

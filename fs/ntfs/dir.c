@@ -1,7 +1,9 @@
 /*
  *  dir.c
  *
- *  Copyright (C) 1995-1997 Martin von Löwis
+ *  Copyright (C) 1995-1997, 1999 Martin von Löwis
+ *  Copyright (C) 1999 Steve Dodd
+ *  Copyright (C) 1999 Joseph Malicki
  */
 
 #include "ntfstypes.h"
@@ -67,7 +69,7 @@ static ntfs_u64 ntfs_push(ntfs_u64 stack,int i)
 	if(i<55)return (stack<<8)|((i-23)<<3)|3;
 	if(i<120)return (stack<<10)|((i-55)<<4)|7;
 	ntfs_error("Too many entries\n");
-	return 0xFFFFFFFFFFFFFFFF;
+	return ~((ntfs_u64)0);
 }
 
 #if 0
@@ -166,6 +168,8 @@ static int ntfs_allocate_index_block(ntfs_iterate_s *walk)
 		int nr_fix = s1/vol->blocksize+1;
 		int hsize;
 		char *record=ntfs_malloc(s1);
+		if( !record )
+			return ENOMEM;
 		ntfs_bzero(record,s1);
 		/* magic */
 		ntfs_memcpy(record,"INDX",4);
@@ -356,8 +360,10 @@ static int ntfs_dir_insert(ntfs_iterate_s *walk, char *start, char* entry)
 	if(do_split){
 		error=ntfs_split_record(walk,start,blocksize,usedsize);
 		ntfs_free(start);
-	}else
-		ntfs_index_writeback(walk,start,walk->block,usedsize);
+	}else{
+		error=ntfs_index_writeback(walk,start,walk->block,usedsize);
+		if(error)return error;
+	}
 	return 0;
 }
 
@@ -395,8 +401,9 @@ ntfs_split_indexroot(ntfs_inode *ino)
 		goto out;
 	}
 	index = ntfs_malloc(ino->vol->index_recordsize);
-	if(!index)
-		goto out;
+	if(!index) {
+		error = ENOMEM; goto out;
+	}
 	walk.dir = ino;
 	walk.block = -1;
 	walk.result = walk.new_entry = 0;
@@ -462,12 +469,12 @@ static int ntfs_my_strcmp(ntfs_iterate_s *walk, const unsigned char *entry)
 	ntfs_u16* name=(ntfs_u16*)(entry+0x52);
 	ntfs_volume *vol=walk->dir->vol;
 	for(i=0;i<lu && i<walk->namelen;i++)
-		if(ntfs_my_toupper(vol,name[i])!=ntfs_my_toupper(vol,walk->name[i]))
+		if(ntfs_my_toupper(vol,NTFS_GETU16(name+i))!=ntfs_my_toupper(vol,NTFS_GETU16(walk->name+i)))
 			break;
 	if(i==lu && i==walk->namelen)return 0;
 	if(i==lu)return 1;
 	if(i==walk->namelen)return -1;
-	if(ntfs_my_toupper(vol,name[i])<ntfs_my_toupper(vol,walk->name[i]))return 1;
+	if(ntfs_my_toupper(vol,NTFS_GETU16(name+i))<ntfs_my_toupper(vol,NTFS_GETU16(walk->name+i)))return 1;
 	return -1;
 }
 
@@ -484,6 +491,9 @@ static int ntfs_getdir_record(ntfs_iterate_s *walk, int block)
 	int retval,error;
 	int oldblock;
 	ntfs_io io;
+
+	if( !record )
+		return ENOMEM;
 
 	io.fn_put=ntfs_put;
 	io.param=record;
@@ -607,7 +617,6 @@ ntfs_getdir_iterate_byposition(ntfs_iterate_s *walk,char* start,char *entry)
 static int ntfs_getdir_iterate(ntfs_iterate_s *walk, char *start, char *entry)
 {
 	int length;
-	int retval=0;
 	int cmp;
 
 	if(walk->type==BY_POSITION)
@@ -647,7 +656,7 @@ static int ntfs_getdir_iterate(ntfs_iterate_s *walk, char *start, char *entry)
 		}
 		entry+=length;
 	}while(1);
-	return retval;
+	return 0;
 }
 
 /*	Tree walking is done using position numbers. The following numbers have
@@ -682,6 +691,9 @@ int ntfs_getdir(ntfs_iterate_s* walk)
 	/* start at the index root.*/
 	char *root=ntfs_malloc(length);
 	ntfs_io io;
+
+	if( !root )
+		return ENOMEM;
 
 	io.fn_put=ntfs_put;
 	io.param=root;
@@ -747,6 +759,8 @@ int ntfs_getdir_unsorted(ntfs_inode *ino,ntfs_u32 *p_high,ntfs_u32* p_low,
 	/* are we still in the index root */
 	if(*p_high==0){
 		buf=ntfs_malloc(length=vol->mft_recordsize);
+		if( !buf )
+			return ENOMEM;
 		io.fn_put=ntfs_put;
 		io.param=buf;
 		io.size=length;
@@ -762,6 +776,8 @@ int ntfs_getdir_unsorted(ntfs_inode *ino,ntfs_u32 *p_high,ntfs_u32* p_low,
 	}else{ /* we are in an index record */
 		length=ino->u.index.recordsize;
 		buf=ntfs_malloc(length);
+		if( !buf )
+			return ENOMEM;
 		io.fn_put=ntfs_put;
 		io.param=buf;
 		io.size=length;
@@ -821,6 +837,9 @@ int ntfs_getdir_unsorted(ntfs_inode *ino,ntfs_u32 *p_high,ntfs_u32* p_low,
 		return 0;
 	}
 	buf=ntfs_malloc(length=attr->size);
+	if( !buf )
+		return ENOMEM;
+
 	io.param=buf;
 	io.size=length;
 	error=ntfs_read_attr(ino,vol->at_bitmap,I30,0,&io);
@@ -920,8 +939,8 @@ int ntfs_dir_add1(ntfs_inode *dir,const char* name,int namelen,ntfs_inode *ino)
 
 /* Fills out and creates an INDEX_ROOT attribute. */
 
-static int
-add_index_root (ntfs_inode *ino, int type)
+int
+ntfs_add_index_root (ntfs_inode *ino, int type)
 {
 	ntfs_attribute *da;
 	ntfs_u8 data[0x30]; /* 0x20 header, 0x10 last entry */
@@ -959,7 +978,7 @@ ntfs_mkdir(ntfs_inode* dir,const char* name,int namelen, ntfs_inode *result)
 	error = ntfs_alloc_inode(dir, result, name, namelen, NTFS_AFLAG_DIR);
 	if(error)
 		goto out;
-	error = add_index_root(result, 0x30);
+	error = ntfs_add_index_root(result, 0x30);
 	if (error)
 		goto out;
 	/* Set directory bit */

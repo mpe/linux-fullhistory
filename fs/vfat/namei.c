@@ -1570,14 +1570,6 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 		 old_dentry, old_dentry->d_inode, old_dentry->d_inode->i_ino,
 		 new_dentry, new_dentry->d_inode,
 		 new_dentry->d_inode ? new_dentry->d_inode->i_ino : 0));
-	/*
-	 * POSIX is braindead (surprise, surprise). It requires that rename()
-	 * should return 0 and do nothing if the target has the same inode as
-	 * the source. Somebody, get a time machine, return to '89 and tell
-	 * RMS & Co *not* to do that idiocy, FAST!
-	 */
-	if (old_dentry->d_inode == new_dentry->d_inode)
-		return 0;
 
 	old_bh = new_bh = NULL;
 	old_inode = new_inode = NULL;
@@ -1597,16 +1589,8 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 	old_inode = old_dentry->d_inode;
 	is_dir = S_ISDIR(old_inode->i_mode);
 
-	/*
-	 * Race: we can be hit by another rename after this check.
-	 * For the time being use fat_lock_creation(), but it's
-	 * ugly. FIXME.
-	 */
-
-	fat_lock_creation(); locked = 1;
-
 	if (is_dir) {
-		/* We can't use d_subdir() here. Arrgh. */
+		/* We can't use is_subdir() here. Even now. Arrgh. */
 		for (walk=new_dentry;walk!=walk->d_parent;walk=walk->d_parent) {
 			if (walk->d_inode != old_dentry->d_inode)
 				continue;
@@ -1614,6 +1598,8 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 			goto rename_done;
 		}
 	}
+
+	fat_lock_creation(); locked = 1;
 
 	if (new_dentry->d_inode) {
 		/*
@@ -1639,8 +1625,6 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 			 * be tolerated.
 			 */
 			res = -EBUSY;
-			if (d_invalidate(new_dentry) < 0)
-				goto rename_done;
 			/*
 			 * OK, let's try to get rid of other dentries.
 			 * No need to do it if i_count is 1.
@@ -1726,12 +1710,8 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 		fat_brelse(sb, dotdot_bh);
 	}
 
-	if (res >= 0) {
-		if (new_inode && is_dir)
-			d_rehash(new_dentry);
-		d_move(old_dentry, new_dentry);
+	if (res >= 0)
 		res = 0;
-	}
 
 rename_done:
 	if (locked)

@@ -604,7 +604,7 @@ int minix_link(struct dentry * old_dentry, struct inode * dir,
  * Anybody can rename anything with this: the permission checks are left to the
  * higher-level routines.
  */
-static int do_minix_rename(struct inode * old_dir, struct dentry *old_dentry,
+int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
 			   struct inode * new_dir, struct dentry *new_dentry)
 {
 	struct inode * old_inode, * new_inode;
@@ -640,24 +640,11 @@ start_up:
 			new_bh = NULL;
 		}
 	}
-	if (new_inode == old_inode) {
-		retval = 0;
-		goto end_rename;
-	}
 	if (S_ISDIR(old_inode->i_mode)) {
-		retval = -EINVAL;
-		if (is_subdir(new_dentry, old_dentry))
-			goto end_rename;
 		if (new_inode) {
-			/* Prune any children before testing for busy */
-			if (new_dentry->d_count > 1)
-				shrink_dcache_parent(new_dentry);
-			retval = -EBUSY;
-			if (new_dentry->d_count > 1)
 			retval = -ENOTEMPTY;
 			if (!empty_dir(new_inode))
 				goto end_rename;
-			retval = -EBUSY;
 		}
 		retval = -EIO;
 		dir_bh = minix_bread(old_inode,0,0);
@@ -713,38 +700,10 @@ start_up:
 			mark_inode_dirty(new_dir);
 		}
 	}
-	/* Update the dcache */
-	d_move(old_dentry, new_dentry);
 	retval = 0;
 end_rename:
 	brelse(dir_bh);
 	brelse(old_bh);
 	brelse(new_bh);
 	return retval;
-}
-
-/*
- * Ok, rename also locks out other renames, as they can change the parent of
- * a directory, and we don't want any races. Other races are checked for by
- * "do_rename()", which restarts if there are inconsistencies.
- *
- * Note that there is no race between different filesystems: it's only within
- * the same device that races occur: many renames can happen at once, as long
- * as they are on different partitions.
- */
-int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
-		 struct inode * new_dir, struct dentry *new_dentry)
-{
-	static struct wait_queue * wait = NULL;
-	static int lock = 0;
-	int result;
-
-	while (lock)
-		sleep_on(&wait);
-	lock = 1;
-	result = do_minix_rename(old_dir, old_dentry,
-				 new_dir, new_dentry);
-	lock = 0;
-	wake_up(&wait);
-	return result;
 }

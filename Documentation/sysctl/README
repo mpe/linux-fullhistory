@@ -1,5 +1,5 @@
-Documentation for /proc/sys/		kernel version 2.1.128
-	(c) 1998, Rik van Riel <H.H.vanRiel@phys.uu.nl>
+Documentation for /proc/sys/		kernel version 2.2.5
+	(c) 1998, 1999,  Rik van Riel <riel@nl.linux.org>
 
 'Why', I hear you ask, 'would anyone even _want_ documentation
 for them sysctl files? If anybody really needs it, it's all in
@@ -11,9 +11,6 @@ have the time or knowledge to read the source code.
 
 Furthermore, the programmers who built sysctl have built it to
 be actually used, not just for the fun of programming it :-)
-
-If you prefer HTML, feel free to visit the Linux-MM homepage
-<http://humbolt.geo.uu.nl/Linux-MM/>...
 
 ==============================================================
 
@@ -34,7 +31,7 @@ it. Not only to have a great laugh, but also to make sure that
 you're the last RTFMing person to screw up.
 
 In short, e-mail your suggestions, corrections and / or horror
-stories to: <H.H.vanRiel@phys.uu.nl>
+stories to: <riel@nl.linux.org>
 
 Rik van Riel.
 
@@ -68,6 +65,7 @@ kernel/		global kernel info / tuning
 net/		networking stuff, for documentation look in:
 		<linux/Documentation/networking/>
 proc/		<empty>
+sunrpc/		SUN Remote Procedure Call (NFS)
 vm/		memory management tuning
 		buffer and cache management
 

@@ -10,7 +10,7 @@
 #define ALLOC_REQUIRE_SIZE     2
 
 int ntfs_get_free_cluster_count(ntfs_inode *bitmap);
-int ntfs_get_volumesize(ntfs_volume *vol);
+int ntfs_get_volumesize(ntfs_volume *vol, long *vol_size );
 int ntfs_init_volume(ntfs_volume *vol,char *boot);
 int ntfs_load_special_files(ntfs_volume *vol);
 int ntfs_release_volume(ntfs_volume *vol);

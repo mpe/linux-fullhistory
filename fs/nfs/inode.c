@@ -224,6 +224,8 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 
 	lock_super(sb);
 
+	sb->s_flags |= MS_ODD_RENAME; /* This should go away */
+
 	sb->s_magic      = NFS_SUPER_MAGIC;
 	sb->s_op         = &nfs_sops;
 	sb->s_blocksize  = nfs_block_size(data->bsize, &sb->s_blocksize_bits);

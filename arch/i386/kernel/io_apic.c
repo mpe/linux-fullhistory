@@ -293,7 +293,8 @@ static int __init find_timer_pin(int type)
 	for (i = 0; i < mp_irq_entries; i++) {
 		int lbus = mp_irqs[i].mpc_srcbus;
 
-		if ((mp_bus_id_to_type[lbus] == MP_BUS_ISA) &&
+		if ((mp_bus_id_to_type[lbus] == MP_BUS_ISA ||
+		     mp_bus_id_to_type[lbus] == MP_BUS_EISA) &&
 		    (mp_irqs[i].mpc_irqtype == type) &&
 		    (mp_irqs[i].mpc_srcbusirq == 0x00))
 
@@ -326,20 +327,7 @@ int IO_APIC_get_PCI_irq_vector(int bus, int slot, int pci_pin)
 }
 
 /*
- * Unclear documentation on what a "conforming ISA interrupt" means.
- *
- * Should we, or should we not, take the ELCR register into account?
- * It's part of the EISA specification, but maybe it should only be
- * used if the interrupt is actually marked as EISA?
- *
- * Oh, well. Don't do it until somebody tells us what the right thing
- * to do is..
- */
-#undef USE_ELCR_TRIGGER_LEVEL
-#ifdef USE_ELCR_TRIGGER_LEVEL
-
-/*
- * ISA Edge/Level control register, ELCR
+ * EISA Edge/Level control register, ELCR
  */
 static int __init EISA_ELCR(unsigned int irq)
 {
@@ -349,17 +337,21 @@ static int __init EISA_ELCR(unsigned int irq)
 	}
 	printk("Broken MPtable reports ISA irq %d\n", irq);
 	return 0;
-}	
+}
 
-#define default_ISA_trigger(idx)	(EISA_ELCR(mp_irqs[idx].mpc_dstirq))
-#define default_ISA_polarity(idx)	(0)
+/* EISA interrupts are always polarity zero and can be edge or level
+ * trigger depending on the ELCR value.  If an interrupt is listed as
+ * EISA conforming in the MP table, that means its trigger type must
+ * be read in from the ELCR */
 
-#else
+#define default_EISA_trigger(idx)	(EISA_ELCR(mp_irqs[idx].mpc_dstirq))
+#define default_EISA_polarity(idx)	(0)
+
+/* ISA interrupts are always polarity zero edge triggered, even when
+ * listed as conforming in the MP table. */
 
 #define default_ISA_trigger(idx)	(0)
 #define default_ISA_polarity(idx)	(0)
-
-#endif
 
 static int __init MPBIOS_polarity(int idx)
 {
@@ -378,6 +370,11 @@ static int __init MPBIOS_polarity(int idx)
 				case MP_BUS_ISA: /* ISA pin */
 				{
 					polarity = default_ISA_polarity(idx);
+					break;
+				}
+				case MP_BUS_EISA:
+				{
+					polarity = default_EISA_polarity(idx);
 					break;
 				}
 				case MP_BUS_PCI: /* PCI pin */
@@ -437,6 +434,11 @@ static int __init MPBIOS_trigger(int idx)
 				case MP_BUS_ISA:
 				{
 					trigger = default_ISA_trigger(idx);
+					break;
+				}
+				case MP_BUS_EISA:
+				{
+					trigger = default_EISA_trigger(idx);
 					break;
 				}
 				case MP_BUS_PCI: /* PCI pin, level */
@@ -503,6 +505,7 @@ static int __init pin_2_irq(int idx, int pin)
 	switch (mp_bus_id_to_type[bus])
 	{
 		case MP_BUS_ISA: /* ISA pin */
+		case MP_BUS_EISA:
 		{
 			irq = mp_irqs[idx].mpc_srcbusirq;
 			break;
@@ -910,6 +913,8 @@ static void __init setup_ioapic_id(void)
 static void __init construct_default_ISA_mptable(void)
 {
 	int i, pos = 0;
+	const int bus_type = (mpc_default_type == 2 || mpc_default_type == 3 ||
+			      mpc_default_type == 6) ? MP_BUS_EISA : MP_BUS_ISA;
 
 	for (i = 0; i < 16; i++) {
 		if (!IO_APIC_IRQ(i))
@@ -917,14 +922,14 @@ static void __init construct_default_ISA_mptable(void)
 
 		mp_irqs[pos].mpc_irqtype = mp_INT;
 		mp_irqs[pos].mpc_irqflag = 0;		/* default */
-		mp_irqs[pos].mpc_srcbus = MP_BUS_ISA;
+		mp_irqs[pos].mpc_srcbus = bus_type;
 		mp_irqs[pos].mpc_srcbusirq = i;
 		mp_irqs[pos].mpc_dstapic = 0;
 		mp_irqs[pos].mpc_dstirq = i;
 		pos++;
 	}
 	mp_irq_entries = pos;
-	mp_bus_id_to_type[0] = MP_BUS_ISA;
+	mp_bus_id_to_type[0] = bus_type;
 
 	/*
 	 * MP specification 1.4 defines some extra rules for default

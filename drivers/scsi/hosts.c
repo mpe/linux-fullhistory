@@ -195,6 +195,10 @@
 #include "53c7,8xx.h"
 #endif
 
+#ifdef CONFIG_SCSI_SYM53C8XX
+#include "sym53c8xx.h"
+#endif
+
 #ifdef CONFIG_SCSI_NCR53C8XX
 #include "ncr53c8xx.h"
 #endif
@@ -501,6 +505,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_NCR53C7xx
     NCR53c7xx,
+#endif
+#ifdef CONFIG_SCSI_SYM53C8XX
+    SYM53C8XX,
 #endif
 #ifdef CONFIG_SCSI_NCR53C8XX
     NCR53C8XX,

@@ -1,8 +1,9 @@
 /*
  *  super.c
  *
- *  Copyright (C) 1995-1997 Martin von Löwis
+ *  Copyright (C) 1995-1997, 1999 Martin von Löwis
  *  Copyright (C) 1996-1997 Régis Duchesne
+ *  Copyright (C) 1999 Steve Dodd
  */
 
 #include "ntfstypes.h"
@@ -113,12 +114,14 @@ ntfs_init_upcase(ntfs_inode *upcase)
 	ntfs_io io;
 #define UPCASE_LENGTH  256
 	upcase->vol->upcase = ntfs_malloc(2*UPCASE_LENGTH);
-	upcase->vol->upcase_length = UPCASE_LENGTH;
+	if( !upcase->vol->upcase )
+		return;
 	io.fn_put=ntfs_put;
 	io.fn_get=0;
 	io.param=(char*)upcase->vol->upcase;
 	io.size=2*UPCASE_LENGTH;
 	ntfs_read_attr(upcase,upcase->vol->at_data,0,0,&io);
+	upcase->vol->upcase_length = io.size;
 }
 
 static int
@@ -246,11 +249,22 @@ int ntfs_release_volume(ntfs_volume *vol)
 	return 0;
 }
 
-int ntfs_get_volumesize(ntfs_volume *vol)
+/*
+ * Writes the volume size into vol_size. Returns 0 if successful
+ * or error.
+ */
+int ntfs_get_volumesize(ntfs_volume *vol, long *vol_size )
 {
 	ntfs_io io;
-	char *cluster0=ntfs_malloc(vol->clustersize);
 	ntfs_u64 size;
+	char *cluster0;
+
+	if( !vol_size )
+		return EFAULT;
+
+	cluster0=ntfs_malloc(vol->clustersize);
+	if( !cluster0 )
+		return ENOMEM;
 
 	io.fn_put=ntfs_put;
 	io.fn_get=ntfs_get;
@@ -262,7 +276,8 @@ int ntfs_get_volumesize(ntfs_volume *vol)
 	ntfs_free(cluster0);
 	/* FIXME: more than 2**32 cluster */
 	/* FIXME: gcc will emit udivdi3 if we don't truncate it */
-	return ((unsigned int)size)/vol->clusterfactor;
+	*vol_size = ((unsigned long)size)/vol->clusterfactor;
+	return 0;
 }
 
 static int nc[16]={4,3,3,2,3,2,2,1,3,2,2,1,2,1,1,0};
@@ -337,7 +352,7 @@ search_bits(unsigned char* bits,ntfs_cluster_t *loc,int *cnt,int l)
 	int start,stop=0,in=0;
 	/* special case searching for a single block */
 	if(*cnt==1){
-		while(l && *cnt==0xFF){
+		while(l && *bits==0xFF){
 			bits++;
 			*loc+=8;
 			l--;
@@ -398,7 +413,7 @@ ntfs_set_bitrange(ntfs_inode* bitmap,ntfs_cluster_t loc,int cnt,int bit)
 
 	io.fn_put=ntfs_put;
 	io.fn_get=ntfs_get;
-	bsize=(cnt+(loc & 7)+7) & ~7; /* round up to multiple of 8*/
+	bsize=(cnt+(loc & 7)+7) >> 3; /* round up to multiple of 8*/
 	bits=ntfs_malloc(bsize);
 	io.param=bits;
 	io.size=bsize;
@@ -418,7 +433,7 @@ ntfs_set_bitrange(ntfs_inode* bitmap,ntfs_cluster_t loc,int cnt,int bit)
 		else
 			*it &= ~(1<<(locit%8));
 		cnt--;locit++;
-		if(locit%8==7)
+		if(locit%8==0)
 			it++;
 	}
 	while(cnt>8){ /*process full bytes */
@@ -456,10 +471,13 @@ ntfs_search_bits(ntfs_inode* bitmap, ntfs_cluster_t *location, int *count, int f
 	unsigned char *bits;
 	ntfs_io io;
 	int error=0,found=0;
-	int loc,cnt,bloc=-1,bcnt=0;
+	int cnt,bloc=-1,bcnt=0;
 	int start;
+	ntfs_cluster_t loc;
 
 	bits=ntfs_malloc(2048);
+	if( !bits )
+		return ENOMEM;
 	io.fn_put=ntfs_put;
 	io.fn_get=ntfs_get;
 	io.param=bits;

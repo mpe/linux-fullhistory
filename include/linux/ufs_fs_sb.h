@@ -116,8 +116,6 @@ struct ufs_sb_private_info {
 struct ufs_sb_info {
 	struct ufs_sb_private_info * s_uspi;	
 	struct ufs_csum	* s_csp[UFS_MAXCSBUFS];
-	int s_rename_lock;
-	struct wait_queue * s_rename_wait;
 	unsigned s_swab;
 	unsigned s_flags;
 	struct buffer_head ** s_ucg;
@@ -167,7 +165,14 @@ struct ufs_super_block_first {
 	__u32	fs_inopb;
 	__u32	fs_nspf;
 	__u32	fs_optim;
-	__u32	fs_npsect;
+	union {
+		struct {
+			__u32	fs_npsect;
+		} fs_sun;
+		struct {
+			__s32	fs_state;
+		} fs_sunx86;
+	} fs_u1;
 	__u32	fs_interleave;
 	__u32	fs_trackskew;
 	__u32	fs_id[2];
@@ -182,16 +187,16 @@ struct ufs_super_block_first {
 	__u32	fs_ipg;
 	__u32	fs_fpg;
 	struct ufs_csum fs_cstotal;
-	__u8	fs_fmod;
-	__u8	fs_clean;
-	__u8	fs_ronly;
-	__u8	fs_flags;
-	__u8	fs_fsmnt[UFS_MAXMNTLEN - 212];
+	__s8	fs_fmod;
+	__s8	fs_clean;
+	__s8	fs_ronly;
+	__s8	fs_flags;
+	__s8	fs_fsmnt[UFS_MAXMNTLEN - 212];
 
 };
 
 struct ufs_super_block_second {
-	__u8	fs_fsmnt[212];
+	__s8	fs_fsmnt[212];
 	__u32	fs_cgrotor;
 	__u32	fs_csp[UFS_MAXCSBUFS];
 	__u32	fs_maxcluster;
@@ -211,6 +216,14 @@ struct ufs_super_block_third {
 			__u32	fs_qfmask[2];	/* ~usb_fmask */
 		} fs_sun;
 		struct {
+			__s32	fs_sparecon[53];/* reserved for future constants */
+			__s32	fs_reclaim;
+			__s32	fs_sparecon2[1];
+			__u32	fs_npsect;	/* # sectors/track including spares */
+			__u32	fs_qbmask[2];	/* ~usb_bmask */
+			__u32	fs_qfmask[2];	/* ~usb_fmask */
+		} fs_sunx86;
+		struct {
 			__s32	fs_sparecon[50];/* reserved for future constants */
 			__s32	fs_contigsumsize;/* size of cluster summary array */
 			__s32	fs_maxsymlinklen;/* max length of an internal symlink */
@@ -220,7 +233,7 @@ struct ufs_super_block_third {
 			__u32	fs_qfmask[2];	/* ~usb_fmask */
 			__s32	fs_state;	/* file system state time stamp */
 		} fs_44;
-	} fs_u;
+	} fs_u2;
 	__s32	fs_postblformat;
 	__s32	fs_nrpos;
 	__s32	fs_postbloff;

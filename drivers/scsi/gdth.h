@@ -4,13 +4,13 @@
 /*
  * Header file for the GDT ISA/EISA/PCI Disk Array Controller driver for Linux
  * 
- * gdth.h Copyright (C) 1995-98 ICP vortex Computersysteme GmbH, Achim Leubner
+ * gdth.h Copyright (C) 1995-99 ICP vortex Computersysteme GmbH, Achim Leubner
  * See gdth.c for further informations and 
  * below for supported controller types
  *
  * <achim@vortex.de>
  *
- * $Id: gdth.h,v 1.16 1998/12/17 15:54:53 achim Exp $
+ * $Id: gdth.h,v 1.21 1999/03/26 09:12:24 achim Exp $
  */
 
 #include <linux/version.h>
@@ -29,9 +29,9 @@
 /* defines, macros */
 
 /* driver version */
-#define GDTH_VERSION_STR        "1.10"
+#define GDTH_VERSION_STR        "1.14"
 #define GDTH_VERSION            1
-#define GDTH_SUBVERSION         10
+#define GDTH_SUBVERSION         14
 
 /* protocol version */
 #define PROTOCOL_VERSION        1
@@ -129,6 +129,7 @@
 #define GDTH_SCRATCH    4096                    /* 4KB scratch buffer */
 #define GDTH_MAXCMDS    124
 #define GDTH_MAXC_P_L   16                      /* max. cmds per lun */
+#define GDTH_MAX_RAW    2                       /* max. cmds per raw device */
 #define MAXOFFSETS      128
 #define MAXHA           16
 #define MAXID           127
@@ -199,14 +200,27 @@
 #define GDT_SCAN_END    20                      /* stop device scan */  
 
 /* IOCTL command defines */
-#define SCSI_CHAN_CNT   5                       /* subfunctions */
-#define GET_IOCHAN_DESC 0x5e
-#define L_CTRL_PATTERN  0x20000000L
-#define CACHE_INFO      4
-#define CACHE_CONFIG    5
-#define BOARD_INFO      0x28
-#define IO_CHANNEL      0x00020000L             /* channels */
-#define INVALID_CHANNEL 0x0000ffffL     
+#define SCSI_DR_INFO    0x00                    /* SCSI drive info */                   
+#define SCSI_CHAN_CNT   0x05                    /* SCSI channel count */   
+#define SCSI_DR_LIST    0x06                    /* SCSI drive list */
+#define SCSI_DEF_CNT    0x15                    /* grown/primary defects */
+#define DSK_STATISTICS  0x4b                    /* SCSI disk statistics */
+#define IOCHAN_DESC     0x5d                    /* description of IO channel */
+#define IOCHAN_RAW_DESC 0x5e                    /* description of raw IO channel */
+#define L_CTRL_PATTERN  0x20000000L             /* SCSI IOCTL mask */
+#define ARRAY_INFO      0x12                    /* array drive info */
+#define ARRAY_DRV_LIST  0x0f                    /* array drive list */
+#define LA_CTRL_PATTERN 0x10000000L             /* array IOCTL mask */
+#define CACHE_DRV_CNT   0x01                    /* cache drive count */
+#define CACHE_DRV_LIST  0x02                    /* cache drive list */
+#define CACHE_INFO      0x04                    /* cache info */
+#define CACHE_CONFIG    0x05                    /* cache configuration */
+#define CACHE_DRV_INFO  0x07                    /* cache drive info */
+#define BOARD_FEATURES  0x15                    /* controller features */
+#define BOARD_INFO      0x28                    /* controller info */
+#define HOST_GET        0x10001L                /* get host drive list */
+#define IO_CHANNEL      0x00020000L             /* default IO channel */
+#define INVALID_CHANNEL 0x0000ffffL             /* invalid channel */
 
 /* IOCTLs */
 #define GDTIOCTL_MASK       ('J'<<8)
@@ -225,8 +239,8 @@
 #define S_RAW_ILL       0xff                    /* raw serv.: illegal */
 
 /* timeout values */
-#define INIT_RETRIES    10000                   /* 10000 * 1ms = 10s */
-#define INIT_TIMEOUT    100000                  /* 1000 * 1ms = 1s */
+#define INIT_RETRIES    100000                  /* 100000 * 1ms = 100s */
+#define INIT_TIMEOUT    100000                  /* 100000 * 1ms = 100s */
 #define POLL_TIMEOUT    10000                   /* 10000 * 1ms = 10s */
 
 /* priorities */
@@ -276,28 +290,170 @@ typedef struct {
     char        msg_text[MSGLEN+2];             /* the message text */
 } PACKED gdth_msg_str;
 
-/* get channel count IOCTL */
+/* IOCTL data structures */
+/* SCSI drive info */
+typedef struct {
+    unchar      vendor[8];                      /* vendor string */
+    unchar      product[16];                    /* product string */
+    unchar      revision[4];                    /* revision */
+    ulong32     sy_rate;                        /* current rate for sync. tr. */
+    ulong32     sy_max_rate;                    /* max. rate for sync. tr. */
+    ulong32     no_ldrive;                      /* belongs to this logical drv.*/
+    ulong32     blkcnt;                         /* number of blocks */
+    ushort      blksize;                        /* size of block in bytes */
+    unchar      available;                      /* flag: access is available */
+    unchar      init;                           /* medium is initialized */
+    unchar      devtype;                        /* SCSI devicetype */
+    unchar      rm_medium;                      /* medium is removable */
+    unchar      wp_medium;                      /* medium is write protected */
+    unchar      ansi;                           /* SCSI I/II or III? */
+    unchar      protocol;                       /* same as ansi */
+    unchar      sync;                           /* flag: sync. transfer enab. */
+    unchar      disc;                           /* flag: disconnect enabled */
+    unchar      queueing;                       /* flag: command queing enab. */
+    unchar      cached;                         /* flag: caching enabled */
+    unchar      target_id;                      /* target ID of device */
+    unchar      lun;                            /* LUN id of device */
+    unchar      orphan;                         /* flag: drive fragment */
+    ulong32     last_error;                     /* sense key or drive state */
+    ulong32     last_result;                    /* result of last command */
+    ulong32     check_errors;                   /* err. in last surface check */
+    unchar      percent;                        /* progress for surface check */
+    unchar      last_check;                     /* IOCTRL operation */
+    unchar      res[2];
+    ulong32     flags;                          /* from 1.19/2.19: raw reserv.*/
+    unchar      multi_bus;                      /* multi bus dev? (fibre ch.) */
+    unchar      mb_status;                      /* status: available? */
+    unchar      res2[2];
+    unchar      mb_alt_status;                  /* status on second bus */
+    unchar      mb_alt_bid;                     /* number of second bus */
+    unchar      mb_alt_tid;                     /* target id on second bus */
+    unchar      res3;
+    unchar      fc_flag;                        /* from 1.22/2.22: info valid?*/
+    unchar      res4;
+    ushort      fc_frame_size;                  /* frame size (bytes) */
+    char        wwn[8];                         /* world wide name */
+} PACKED gdth_diskinfo_str;
+
+/* get SCSI channel count  */
 typedef struct {
     ulong32     channel_no;                     /* number of channel */
-    ulong32     drive_cnt;                      /* number of drives */
+    ulong32     drive_cnt;                      /* drive count */
     unchar      siop_id;                        /* SCSI processor ID */
     unchar      siop_state;                     /* SCSI processor state */ 
 } PACKED gdth_getch_str;
 
-/* get raw channel count IOCTL (NEW!) */
+/* get SCSI drive numbers */
 typedef struct {
-    ulong32     version;            /* version of information (-1UL: newest) */
-    unchar      list_entries;       /* list entry count */
-    unchar      first_chan;         /* first channel number */
-    unchar      last_chan;          /* last channel number */
-    unchar      chan_count;         /* (R) channel count */
-    ulong32     list_offset;        /* offset of list[0] */
+    ulong32     sc_no;                          /* SCSI channel */
+    ulong32     sc_cnt;                         /* sc_list[] elements */
+    ulong32     sc_list[MAXID];                 /* minor device numbers */
+} PACKED gdth_drlist_str;
+
+/* get grown/primary defect count */
+typedef struct {
+    unchar      sddc_type;                      /* 0x08: grown, 0x10: prim. */
+    unchar      sddc_format;                    /* list entry format */
+    unchar      sddc_len;                       /* list entry length */
+    unchar      sddc_res;
+    ulong32     sddc_cnt;                       /* entry count */
+} PACKED gdth_defcnt_str;
+
+/* disk statistics */
+typedef struct {
+    ulong32     bid;                            /* SCSI channel */
+    ulong32     first;                          /* first SCSI disk */
+    ulong32     entries;                        /* number of elements */
+    ulong32     count;                          /* (R) number of init. el. */
+    ulong32     mon_time;                       /* time stamp */
     struct {
-        unchar      proc_id;            /* processor id */
-        unchar      proc_defect;        /* defect ? */
-        unchar      reserved[2];
+        unchar  tid;                            /* target ID */
+        unchar  lun;                            /* LUN */
+        unchar  res[2];
+        ulong32 blk_size;                       /* block size in bytes */
+        ulong32 rd_count;                       /* bytes read */
+        ulong32 wr_count;                       /* bytes written */
+        ulong32 rd_blk_count;                   /* blocks read */
+        ulong32 wr_blk_count;                   /* blocks written */
+        ulong32 retries;                        /* retries */
+        ulong32 reassigns;                      /* reassigns */
+    } PACKED list[1];
+} PACKED gdth_dskstat_str;
+
+/* IO channel header */
+typedef struct {
+    ulong32     version;                        /* version (-1UL: newest) */
+    unchar      list_entries;                   /* list entry count */
+    unchar      first_chan;                     /* first channel number */
+    unchar      last_chan;                      /* last channel number */
+    unchar      chan_count;                     /* (R) channel count */
+    ulong32     list_offset;                    /* offset of list[0] */
+} PACKED gdth_iochan_header;
+
+/* get IO channel description */
+typedef struct {
+    gdth_iochan_header  hdr;
+    struct {
+        ulong32         address;                /* channel address */
+        unchar          type;                   /* type (SCSI, FCAL) */
+        unchar          local_no;               /* local number */
+        ushort          features;               /* channel features */
     } PACKED list[MAXBUS];
 } PACKED gdth_iochan_str;
+
+/* get raw IO channel description */
+typedef struct {
+    gdth_iochan_header  hdr;
+    struct {
+        unchar      proc_id;                    /* processor id */
+        unchar      proc_defect;                /* defect ? */
+        unchar      reserved[2];
+    } PACKED list[MAXBUS];
+} PACKED gdth_raw_iochan_str;
+
+/* array drive component */
+typedef struct {
+    ulong32     al_controller;                  /* controller ID */
+    unchar      al_cache_drive;                 /* cache drive number */
+    unchar      al_status;                      /* cache drive state */
+    unchar      al_res[2];     
+} PACKED gdth_arraycomp_str;
+
+/* array drive information */
+typedef struct {
+    unchar      ai_type;                        /* array type (RAID0,4,5) */
+    unchar      ai_cache_drive_cnt;             /* active cachedrives */
+    unchar      ai_state;                       /* array drive state */
+    unchar      ai_master_cd;                   /* master cachedrive */
+    ulong32     ai_master_controller;           /* ID of master controller */
+    ulong32     ai_size;                        /* user capacity [sectors] */
+    ulong32     ai_striping_size;               /* striping size [sectors] */
+    ulong32     ai_secsize;                     /* sector size [bytes] */
+    ulong32     ai_err_info;                    /* failed cache drive */
+    unchar      ai_name[8];                     /* name of the array drive */
+    unchar      ai_controller_cnt;              /* number of controllers */
+    unchar      ai_removable;                   /* flag: removable */
+    unchar      ai_write_protected;             /* flag: write protected */
+    unchar      ai_devtype;                     /* type: always direct access */
+    gdth_arraycomp_str  ai_drives[35];          /* drive components: */
+    unchar      ai_drive_entries;               /* number of drive components */
+    unchar      ai_protected;                   /* protection flag */
+    unchar      ai_verify_state;                /* state of a parity verify */
+    unchar      ai_ext_state;                   /* extended array drive state */
+    unchar      ai_expand_state;                /* array expand state (>=2.18)*/
+    unchar      ai_reserved[3];
+} PACKED gdth_arrayinf_str;
+
+/* get array drive list */
+typedef struct {
+    ulong32     controller_no;                  /* controller no. */
+    unchar      cd_handle;                      /* master cachedrive */
+    unchar      is_arrayd;                      /* Flag: is array drive? */
+    unchar      is_master;                      /* Flag: is array master? */
+    unchar      is_parity;                      /* Flag: is parity drive? */
+    unchar      is_hotfix;                      /* Flag: is hotfix drive? */
+    unchar      res[3];
+} PACKED gdth_arraylist_str;
 
 /* cache info/config IOCTL */
 typedef struct {
@@ -321,6 +477,34 @@ typedef struct {
     gdth_cpar_str   cpar;
     gdth_cstat_str  cstat;
 } PACKED gdth_cinfo_str;
+
+/* cache drive info */
+typedef struct {
+    unchar      cd_name[8];                     /* cache drive name */
+    ulong32     cd_devtype;                     /* SCSI devicetype */
+    ulong32     cd_ldcnt;                       /* number of log. drives */
+    ulong32     cd_last_error;                  /* last error */
+    unchar      cd_initialized;                 /* drive is initialized */
+    unchar      cd_removable;                   /* media is removable */
+    unchar      cd_write_protected;             /* write protected */
+    unchar      cd_flags;                       /* Pool Hot Fix? */
+    ulong32     ld_blkcnt;                      /* number of blocks */
+    ulong32     ld_blksize;                     /* blocksize */
+    ulong32     ld_dcnt;                        /* number of disks */
+    ulong32     ld_slave;                       /* log. drive index */
+    ulong32     ld_dtype;                       /* type of logical drive */
+    ulong32     ld_last_error;                  /* last error */
+    unchar      ld_name[8];                     /* log. drive name */
+    unchar      ld_error;                       /* error */
+} PACKED gdth_cdrinfo_str;
+
+/* board features */
+typedef struct {
+    unchar      chaining;                       /* Chaining supported */
+    unchar      striping;                       /* Striping (RAID-0) supp. */
+    unchar      mirroring;                      /* Mirroring (RAID-1) supp. */
+    unchar      raid;                           /* RAID-4/5/10 supported */
+} PACKED gdth_bfeat_str;
 
 /* board info IOCTL */
 typedef struct {
@@ -350,6 +534,28 @@ typedef struct {
     unchar      board_subtype;                  /* subtype/hardware level */
     unchar      ramparity_pres;                 /* RAM parity check hardware? */
 } PACKED gdth_binfo_str; 
+
+/* get host drive info */
+typedef struct {
+    char        name[8];                        /* host drive name */
+    ulong32     size;                           /* size (sectors) */
+    unchar      host_drive;                     /* host drive number */
+    unchar      log_drive;                      /* log. drive (master) */
+    unchar      reserved;
+    unchar      rw_attribs;                     /* r/w attribs */
+    ulong32     start_sec;                      /* start sector */
+} PACKED gdth_hentry_str;
+
+typedef struct {
+    ulong32     entries;                        /* entry count */
+    ulong32     offset;                         /* offset of entries */
+    unchar      secs_p_head;                    /* sectors/head */
+    unchar      heads_p_cyl;                    /* heads/cylinder */
+    unchar      reserved;
+    unchar      clust_drvtype;                  /* cluster drive type */
+    ulong32     location;                       /* controller number */
+    gdth_hentry_str entry[MAX_HDRIVES];         /* entries */
+} PACKED gdth_hget_str;    
 
 /* scatter/gather element */
 typedef struct {
@@ -642,16 +848,30 @@ typedef struct {
     ulong32             info2;                  /* additional info */
     Scsi_Cmnd           *req_first;             /* top of request queue */
     struct {
-        unchar          present;                /* host drive present? */
+        unchar          present;                /* Flag: host drive present? */
+        unchar          is_logdrv;              /* Flag: logical drive (master)? */
+        unchar          is_arraydrv;            /* Flag: array drive? */
+        unchar          is_master;              /* Flag: array drive master? */
+        unchar          is_parity;              /* Flag: parity drive? */
+        unchar          is_hotfix;              /* Flag: hotfix drive? */
+        unchar          master_no;              /* number of master drive */
         unchar          lock;                   /* drive locked? (hot plug) */
         unchar          heads;                  /* mapping */
         unchar          secs;
         ushort          devtype;                /* further information */
         ulong32         size;                   /* capacity */
-    } hdr[MAXID];                               /* host drives */
+        unchar          ldr_no;                 /* log. drive no. */
+        unchar          rw_attribs;             /* r/w attributes */
+        ulong32         start_sec;              /* start sector */
+    } hdr[MAX_HDRIVES];                         /* host drives */
     struct {
         unchar          lock;                   /* channel locked? (hot plug) */
-    } raw[MAXBUS];                              /* raw devices */
+        unchar          pdev_cnt;               /* physical device count */
+        unchar          local_no;               /* local channel number */
+	unchar          io_cnt[MAXID];          /* current IO count */
+        ulong32         address;                /* channel address */
+        ulong32         id_list[MAXID];         /* IDs of the phys. devices */
+    } raw[MAXBUS];                              /* SCSI channels */
     struct {
         Scsi_Cmnd       *cmnd;                  /* pending request */
         ushort          service;                /* service */
@@ -659,12 +879,15 @@ typedef struct {
     unchar              bus_cnt;                /* SCSI bus count */
     unchar              tid_cnt;                /* Target ID count */
     unchar              bus_id[MAXBUS];         /* IOP IDs */
+    unchar              virt_bus;               /* number of virtual bus */
+    unchar              more_proc;              /* more /proc info supported */
     ushort              cmd_cnt;                /* command count in DPRAM */
     ushort              cmd_len;                /* length of actual command */
     ushort              cmd_offs_dpmem;         /* actual offset in DPRAM */
     ushort              ic_all_size;            /* sizeof DPRAM interf. area */
     gdth_cpar_str       cpar;                   /* controller cache par. */
-    char                ctr_name[16];           /* controller name */
+    gdth_bfeat_str      bfeat;                  /* controller features */
+    gdth_binfo_str      binfo;                  /* controller info */
 #if LINUX_VERSION_CODE >= 0x02015F
     spinlock_t          smp_lock;
 #endif

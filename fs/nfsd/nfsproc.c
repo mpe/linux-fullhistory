@@ -382,8 +382,10 @@ nfsd_proc_symlink(struct svc_rqst *rqstp, struct nfsd_symlinkargs *argp,
 	nfserr = nfsd_symlink(rqstp, &argp->ffh, argp->fname, argp->flen,
 						 argp->tname, argp->tlen,
 						 &newfh);
-	if (!nfserr)
+	if (!nfserr) {
+		argp->attrs.ia_valid &= ~ATTR_SIZE;
 		nfserr = nfsd_setattr(rqstp, &newfh, &argp->attrs);
+	}
 
 	fh_put(&argp->ffh);
 	fh_put(&newfh);
@@ -407,6 +409,7 @@ nfsd_proc_mkdir(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 			"nfsd_proc_mkdir: response already verified??\n");
 	}
 
+	argp->attrs.ia_valid &= ~ATTR_SIZE;
 	nfserr = nfsd_create(rqstp, &argp->fh, argp->name, argp->len,
 				    &argp->attrs, S_IFDIR, 0, &resp->fh);
 	fh_put(&argp->fh);

@@ -115,6 +115,7 @@ extern char _stext, _etext;
 #define MAX_MP_BUSSES 32
 enum mp_bustype {
 	MP_BUS_ISA,
+	MP_BUS_EISA,
 	MP_BUS_PCI
 };
 extern int mp_bus_id_to_type [MAX_MP_BUSSES];

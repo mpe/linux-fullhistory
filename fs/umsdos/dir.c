@@ -598,6 +598,33 @@ int UMSDOS_lookup (struct inode *dir, struct dentry *dentry)
 	return ret;
 }
 
+struct dentry *umsdos_covered(struct dentry *parent, char *name, int len)
+{
+	struct dentry *result, *dentry;
+	int error;
+	struct qstr qstr;
+
+	qstr.name = name;
+	qstr.len  = len;
+	qstr.hash = full_name_hash(name, len);
+	result = ERR_PTR(-ENOMEM);
+	dentry = d_alloc(parent, &qstr);
+	if (dentry) {
+		result = dentry;
+		/* XXXXXXXXXXXXXXXXXXX Race alert! */
+		error = UMSDOS_rlookup(parent->d_inode, result);
+		d_drop(result);
+		if (error)
+			goto out_fail;
+	}
+out:
+	return result;
+
+out_fail:
+	dput(result);
+	result = ERR_PTR(error);
+	goto out;
+}
 
 /*
  * Lookup or create a dentry from within the filesystem.
@@ -706,11 +733,6 @@ hlink->d_parent->d_name.name, hlink->d_name.name, path);
 		len = (int) (pt - start);
 		if (*pt == '/') *pt++ = '\0';
 
-		real = (dir->d_inode->u.umsdos_i.i_emd_dir == 0);
-		/*
-		 * Hack alert! inode->u.umsdos_i.i_emd_dir isn't reliable,
-		 * so just check whether there's an EMD file ...
-		 */
 		real = 1;
 		demd = umsdos_get_emd_dentry(dir);
 		if (!IS_ERR(demd)) {
@@ -720,9 +742,8 @@ hlink->d_parent->d_name.name, hlink->d_name.name, path);
 		}
 
 #ifdef UMSDOS_DEBUG_VERBOSE
-printk ("umsdos_solve_hlink: dir %s/%s, name=%s, emd_dir=%ld, real=%d\n",
-dir->d_parent->d_name.name, dir->d_name.name, start,
-dir->d_inode->u.umsdos_i.i_emd_dir, real);
+printk ("umsdos_solve_hlink: dir %s/%s, name=%s, real=%d\n",
+dir->d_parent->d_name.name, dir->d_name.name, start, real);
 #endif
 		dentry_dst = umsdos_lookup_dentry(dir, start, len, real);
 		if (real)

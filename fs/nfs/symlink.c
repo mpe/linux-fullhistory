@@ -54,13 +54,12 @@ static int nfs_readlink(struct dentry *dentry, char *buffer, int buflen)
 	dfprintk(VFS, "nfs: readlink(%s/%s)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
 
-	if (buflen > NFS_MAXPATHLEN)
-		buflen = NFS_MAXPATHLEN;
 	error = nfs_proc_readlink(NFS_DSERVER(dentry), NFS_FH(dentry),
-					&mem, &res, &len, buflen);
+					&mem, &res, &len, NFS_MAXPATHLEN);
 	if (! error) {
+		if (len > buflen)
+			len = buflen;
 		copy_to_user(buffer, res, len);
-		put_user('\0', buffer + len);
 		error = len;
 		kfree(mem);
 	}

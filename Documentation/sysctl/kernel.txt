@@ -1,12 +1,12 @@
-Documentation for /proc/sys/kernel/*	kernel version 2.1.128
-	(c) 1998, Rik van Riel <H.H.vanRiel@phys.uu.nl>
+Documentation for /proc/sys/kernel/*	kernel version 2.2.5
+	(c) 1998, 1999,  Rik van Riel <riel@nl.linux.org>
 
 For general info and legal blurb, please look in README.
 
 ==============================================================
 
 This file contains documentation for the sysctl files in
-/proc/sys/kernel/ and is valid for Linux kernel version 2.1.
+/proc/sys/kernel/ and is valid for Linux kernel version 2.2.
 
 The files in this directory can be used to tune and monitor
 miscellaneous and general things in the operation of the Linux
@@ -24,6 +24,7 @@ show up in /proc/sys/kernel:
 - htab-reclaim                [ PPC only ]
 - java-appletviewer           [ binfmt_java, obsolete ]
 - java-interpreter            [ binfmt_java, obsolete ]
+- l2cr                        [ PPC only ]
 - modprobe                    ==> Documentation/kmod.txt
 - osrelease
 - ostype
@@ -32,6 +33,8 @@ show up in /proc/sys/kernel:
 - printk
 - real-root-dev               ==> Documentation/initrd.txt
 - reboot-cmd                  [ SPARC only ]
+- rtsig-nr
+- rtsig-max
 - sg-big-buff                 [ generic SCSI device (sg) ]
 - shmmax                      [ sysv ipc ]
 - version
@@ -88,6 +91,13 @@ Setting this to a non-zero value, the PowerPC htab
 (see Documentation/powerpc/ppc_htab.txt) is pruned
 each time the system hits the idle loop.
  
+==============================================================
+
+l2cr: (PPC only)
+
+This flag controls the L2 cache of G3 processor boards. If
+0, the cache is disabled. Enabled if nonzero.
+
 ==============================================================
 
 osrelease, ostype & version:
@@ -152,6 +162,16 @@ reboot-cmd: (Sparc only)
 ??? This seems to be a way to give an argument to the Sparc
 ROM/Flash boot loader. Maybe to tell it what to do after
 rebooting. ???
+
+==============================================================
+
+rtsig-max & rtsig-nr:
+
+The file rtsig-max can be used to tune the maximum number
+of POSIX realtime (queued) signals that can be outstanding
+in the system.
+
+Rtsig-nr shows the number of RT signals currently queued.
 
 ==============================================================
 

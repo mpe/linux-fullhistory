@@ -88,25 +88,63 @@ The X-Server must restore the video mode correctly, else you end up
 with a broken console (and vesafb cannot do anything about this).
 
 
+Refresh rates
+=============
+
+There is no way to change the vesafb video mode and/or timings after
+booting linux.  If you are not happy with the 60 Hz refresh rate, you
+have these options:
+
+ * configure and load the DOS-Tools for your the graphics board (if
+   available) and boot linux with loadlin.
+ * use a native driver (matroxfb/atyfb) instead if vesafb.  If none
+   is available, write a new one!
+ * VBE 3.0 might work too.  I havn't neither a gfx board with VBE 3.0
+   support nor the specs, so I havn't checked this yet.  But maybe...
+
+
 Configuration
 =============
 
-You can pass kernel command line options to vesafb with
-"video=vesa:option1".  Multiple options should be separated
-by comma.  Accepted options:
+The VESA BIOS provides protected mode interface for changing
+some parameters.  vesafb can use it for palette changes and
+to pan the display.  It is turned off by default becauce it
+seems not to work with some BIOS versions, but there are options
+to turn it on.
 
-invers	- no comment...
-redraw	- scroll by redrawing the affected part of the screen
-ypan    - enable display panning using the VESA protected mode
-	  interface.  This enables the Shift-PgUp scrollback 
-	  thing and greatly speeds up fullscreen scrolling.
-	  It is slower than "redraw" when scrolling only a halve
-	  screen.  This is the default.
-ywrap	- If your gfx board supports wrap-around, use this one
-	  instead of ypan. 
-nopal	- Don't use the protected mode interface for palette
-	  changes.  vesafb will try the standard vga registers
-	  instead.
+You can pass options to vesafb using "video=vesa:option" on
+the kernel command line.  Multiple options should be separated
+by comma, like this: "video=vesa:ypan,invers"
+
+Accepted options:
+
+invers	no comment...
+
+ypan	enable display panning using the VESA protected mode 
+	interface.  The visible screen is just a window of the
+	video memory, console scrolling is done by changing the
+	start of the window.
+	pro:	* scrolling (fullscreen) is fast, becauce there is
+		  no need to copy around data.
+		* You'll get scrollback (the Shift-PgUp thing),
+		  the video memory can be used as scrollback buffer
+	kontra: * scrolling only parts of the screen causes some
+		  ugly flicker effects (boot logo flickers for
+		  example).
+
+ywrap	Same as ypan, but assumes your gfx board can wrap-around 
+	the video memory (i.e. starts reading from top if it
+	reaches the end of video memory).  Faster than ypan.
+
+redraw	scroll by redrawing the affected part of the screen, this
+	is the safe (and slow) default.
+
+
+vgapal	Use the standard vga registers for palette changes.
+	This is the default.
+pmipal	Use the protected mode interface for palette changes.
+
+mtrr	setup memory type range registers for the vesafb framebuffer.
 
 
 Have fun!
@@ -114,7 +152,7 @@ Have fun!
   Gerd
 
 --
-Gerd Knorr <kraxel@cs.tu-berlin.de>
+Gerd Knorr <kraxel@goldbach.in-berlin.de>
 
 Minor (mostly typo) changes 
 by Nico Schmoigl <schmoigl@rumms.uni-mannheim.de>

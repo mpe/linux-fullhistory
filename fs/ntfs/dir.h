@@ -39,3 +39,4 @@ int ntfs_check_index_record(ntfs_inode *ino, char *record);
 int ntfs_getdir_byposition(ntfs_iterate_s *walk);
 int ntfs_mkdir(ntfs_inode* dir,const char* name,int namelen, ntfs_inode *ino);
 int ntfs_split_indexroot(ntfs_inode *ino);
+int ntfs_add_index_root( ntfs_inode *ino, int type );

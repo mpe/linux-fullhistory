@@ -1,7 +1,7 @@
 #define BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 2.2.1.10 $$Date: 1999/01/20 16:14:29 $";
+"$Revision: 2.2.2.1 $$Date: 1999/04/08 16:17:43 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -31,6 +31,13 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
+ * Revision 2.2.2.1  1999/04/08 16:17:43 ivan
+ * Fixed a bug in cy_wait_until_sent that was preventing the port to be 
+ * closed properly after a SIGINT;
+ * Module usage counter scheme revisited;
+ * Added support to the upcoming Y PCI boards (i.e., support to additional
+ * PCI Device ID's).
+ * 
  * Revision 2.2.1.10 1999/01/20 16:14:29 ivan
  * Removed all unnecessary page-alignement operations in ioremap calls
  * (ioremap is currently safe for these operations).
@@ -525,9 +532,11 @@ static char rcsid[] =
 #undef	CY_DEBUG_COUNT
 #undef	CY_DEBUG_DTR
 #undef	CY_DEBUG_WAIT_UNTIL_SENT
+#undef	CY_DEBUG_INTERRUPTS
 #undef	CY_16Y_HACK
 #undef	CY_ENABLE_MONITORING
 #undef	CY_PCI_DEBUG
+#define	CY_PROC
 
 #if 0
 #define PAUSE __asm__("nop");
@@ -763,16 +772,20 @@ static int cy_chip_offset [] =
 
 /* PCI related definitions */
 
-static unsigned short   cy_pci_nboard = 0;
-static unsigned short   cy_isa_nboard = 0;
-static unsigned short   cy_nboard = 0;
-static unsigned short   cy_pci_dev_id[] = {
-			    PCI_DEVICE_ID_CYCLOM_Y_Lo,/* PCI below 1Mb */
-			    PCI_DEVICE_ID_CYCLOM_Y_Hi,/* PCI above 1Mb */
-			    PCI_DEVICE_ID_CYCLOM_Z_Lo,/* PCI below 1Mb */
-			    PCI_DEVICE_ID_CYCLOM_Z_Hi,/* PCI above 1Mb */
-			    0                       /* end of table */
-                        };
+static unsigned short	cy_pci_nboard = 0;
+static unsigned short	cy_isa_nboard = 0;
+static unsigned short	cy_nboard = 0;
+static unsigned short	cy_pci_dev_id[] = {
+			    PCI_DEVICE_ID_CYCLOM_Y_Lo,	/* PCI < 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_Y_Hi,	/* PCI > 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_4Y_Lo,	/* 4Y PCI < 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_4Y_Hi,	/* 4Y PCI > 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_8Y_Lo,	/* 8Y PCI < 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_8Y_Hi,	/* 8Y PCI > 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_Z_Lo,	/* Z PCI < 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_Z_Hi,	/* Z PCI > 1Mb */
+			    0				/* end of table */
+			};
 
 
 static void cy_start(struct tty_struct *);
@@ -2448,12 +2461,15 @@ cy_open(struct tty_struct *tty, struct file * filp)
   int retval, line;
   unsigned long page;
 
+    MOD_INC_USE_COUNT;
     line = MINOR(tty->device) - tty->driver.minor_start;
     if ((line < 0) || (NR_PORTS <= line)){
+	MOD_DEC_USE_COUNT;
         return -ENODEV;
     }
     info = &cy_port[line];
     if (info->line < 0){
+	MOD_DEC_USE_COUNT;
         return -ENODEV;
     }
     
@@ -2479,6 +2495,8 @@ cy_open(struct tty_struct *tty, struct file * filp)
 #ifdef CY_DEBUG_OTHER
     printk("cyc:cy_open ttyC%d\n", info->line); /* */
 #endif
+    tty->driver_data = info;
+    info->tty = tty;
     if (serial_paranoia_check(info, tty->device, "cy_open")){
         return -ENODEV;
     }
@@ -2491,9 +2509,6 @@ cy_open(struct tty_struct *tty, struct file * filp)
     printk("cyc:cy_open (%d): incrementing count to %d\n",
         current->pid, info->count);
 #endif
-    tty->driver_data = info;
-    info->tty = tty;
-
     if (!tmp_buf) {
 	page = get_free_page(GFP_KERNEL);
 	if (!page)
@@ -2520,8 +2535,6 @@ cy_open(struct tty_struct *tty, struct file * filp)
     if (retval){
         return retval;
     }
-
-    MOD_INC_USE_COUNT;
 
     retval = block_til_ready(tty, filp, info);
     if (retval) {
@@ -2563,6 +2576,10 @@ static void cy_wait_until_sent(struct tty_struct *tty, int timeout)
     if (serial_paranoia_check(info, tty->device, "cy_wait_until_sent"))
 	return;
 
+    if (info->xmit_fifo_size == 0)
+	return; /* Just in case.... */
+
+
     orig_jiffies = jiffies;
     /*
      * Set the check interval to be 1/5 of the estimated time to
@@ -2580,6 +2597,17 @@ static void cy_wait_until_sent(struct tty_struct *tty, int timeout)
 	timeout = 0;
     if (timeout)
 	char_time = MIN(char_time, timeout);
+    /*
+     * If the transmitter hasn't cleared in twice the approximate
+     * amount of time to send the entire FIFO, it probably won't
+     * ever clear.  This assumes the UART isn't doing flow
+     * control, which is currently the case.  Hence, if it ever
+     * takes longer than info->timeout, this is probably due to a
+     * UART bug of some kind.  So, we clamp the timeout parameter at
+     * 2*info->timeout.
+     */
+    if (!timeout || timeout > 2*info->timeout)
+	timeout = 2*info->timeout;
 #ifdef CY_DEBUG_WAIT_UNTIL_SENT
     printk("In cy_wait_until_sent(%d) check=%lu...", timeout, char_time);
     printk("jiff=%lu...", jiffies);
@@ -2601,7 +2629,7 @@ static void cy_wait_until_sent(struct tty_struct *tty, int timeout)
 	    schedule_timeout(char_time);
 	    if (signal_pending(current))
 		break;
-	    if (timeout && time_before(orig_jiffies + timeout, jiffies))
+	    if (timeout && time_after(jiffies, orig_jiffies + timeout))
 		break;
 	}
 	current->state = TASK_RUNNING;
@@ -2631,13 +2659,9 @@ cy_close(struct tty_struct * tty, struct file * filp)
     printk("cyc:cy_close ttyC%d\n", info->line);
 #endif
 
-    if (!info
-    || serial_paranoia_check(info, tty->device, "cy_close")){
+    if (!info || serial_paranoia_check(info, tty->device, "cy_close")){
         return;
     }
-#ifdef CY_DEBUG_OPEN
-    printk("cyc:cy_close ttyC%d, count = %d\n", info->line, info->count);
-#endif
 
     save_flags(flags); cli();
 
@@ -2648,6 +2672,9 @@ cy_close(struct tty_struct * tty, struct file * filp)
         return;
     }
         
+#ifdef CY_DEBUG_OPEN
+    printk("cyc:cy_close ttyC%d, count = %d\n", info->line, info->count);
+#endif
     if ((tty->count == 1) && (info->count != 1)) {
         /*
          * Uh, oh.  tty->count is 1, which means that the tty
@@ -4579,6 +4606,8 @@ cy_detect_pci(void))
 		cy_pci_addr2 = pdev->base_address[2]; 
                 pci_read_config_byte(pdev, PCI_REVISION_ID, &cyy_rev_id);
 
+		device_id &= ~PCI_DEVICE_ID_MASK;
+
     if ((device_id == PCI_DEVICE_ID_CYCLOM_Y_Lo)
 	   || (device_id == PCI_DEVICE_ID_CYCLOM_Y_Hi)){
 #ifdef CY_PCI_DEBUG
@@ -4942,6 +4971,7 @@ show_version(void)
 	__DATE__, __TIME__);
 } /* show_version */
 
+#ifdef CY_PROC
 static int 
 cyclades_get_proc_info(char *buf, char **start, off_t offset, int length,
 		       int *eof, void *data)
@@ -4998,7 +5028,7 @@ done:
 	len = 0;
     return len;
 }
-
+#endif
 
 /* The serial driver boot-time initialization code!
     Hardware I/O ports are mapped to character special devices on a
@@ -5028,7 +5058,9 @@ cy_init(void))
   unsigned long mailbox;
   unsigned short chip_number;
   int nports;
+#ifdef CY_PROC
   struct proc_dir_entry *ent;
+#endif
 
     show_version();
 
@@ -5269,8 +5301,10 @@ cy_init(void))
 #endif
     }
 
+#ifdef CY_PROC
         ent = create_proc_entry("cyclades", S_IFREG | S_IRUGO, 0);
         ent->read_proc = cyclades_get_proc_info;
+#endif
 
     return 0;
     
@@ -5314,7 +5348,7 @@ cleanup_module(void)
             free_irq(cy_card[i].irq,NULL);
         }
     }
-#ifdef CONFIG_PROC_FS
+#ifdef CY_PROC
     remove_proc_entry("cyclades", 0);
 #endif
 

@@ -345,11 +345,13 @@ static int __init smp_read_mpc(struct mp_config_table *mpc)
 				SMP_PRINTK(("Bus #%d is %s\n",
 					m->mpc_busid,
 					str));
-				if ((strncmp(m->mpc_bustype,"ISA",3) == 0) ||
-					(strncmp(m->mpc_bustype,"EISA",4) == 0))
+				if (strncmp(m->mpc_bustype,"ISA",3) == 0)
 					mp_bus_id_to_type[m->mpc_busid] =
 						MP_BUS_ISA;
 				else
+				if (strncmp(m->mpc_bustype,"EISA",4) == 0)
+					mp_bus_id_to_type[m->mpc_busid] =
+						MP_BUS_EISA;
 				if (strncmp(m->mpc_bustype,"PCI",3) == 0) {
 					mp_bus_id_to_type[m->mpc_busid] =
 						MP_BUS_PCI;

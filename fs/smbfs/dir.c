@@ -423,9 +423,6 @@ smb_create(struct inode *dir, struct dentry *dentry, int mode)
 printk("smb_create: creating %s/%s, mode=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, mode);
 #endif
-	error = -ENAMETOOLONG;
-	if (dentry->d_name.len > SMB_MAXNAMELEN)
-		goto out;
 
 	smb_invalid_dir_cache(dir);
 	error = smb_proc_create(dentry, 0, CURRENT_TIME, &fileid);
@@ -439,7 +436,6 @@ printk("smb_create: %s/%s failed, error=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, error);
 #endif
 	}
-out:
 	return error;
 }
 
@@ -449,17 +445,12 @@ smb_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	int error;
 
-	error = -ENAMETOOLONG;
-	if (dentry->d_name.len > SMB_MAXNAMELEN)
-		goto out;
-
 	smb_invalid_dir_cache(dir);
 	error = smb_proc_mkdir(dentry);
 	if (!error)
 	{
 		error = smb_instantiate(dentry, 0, 0);
 	}
-out:
 	return error;
 }
 
@@ -514,11 +505,6 @@ smb_rename(struct inode *old_dir, struct dentry *old_dentry,
 {
 	int error;
 
-	error = -ENAMETOOLONG;
-	if (old_dentry->d_name.len > SMB_MAXNAMELEN ||
-	    new_dentry->d_name.len > SMB_MAXNAMELEN)
-		goto out;
-
 	/*
 	 * Close any open files, and check whether to delete the
 	 * target before attempting the rename.
@@ -537,6 +523,7 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name, error);
 #endif
 			goto out;
 		}
+		/* FIXME */
 		d_delete(new_dentry);
 	}
 
@@ -547,7 +534,6 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name, error);
 	{
 		smb_renew_times(old_dentry);
 		smb_renew_times(new_dentry);
-		d_move(old_dentry, new_dentry);
 	}
 out:
 	return error;

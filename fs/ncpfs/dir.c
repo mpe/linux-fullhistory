@@ -303,6 +303,8 @@ ncp_force_rename(struct inode *old_dir, struct dentry* old_dentry, char *_old_na
 
         memset(&ia,0,sizeof(struct iattr));
         ia.ia_mode = old_dentry->d_inode->i_mode;
+	if (S_ISDIR(ia.ia_mode))
+		goto leave_me;
         ia.ia_mode |= NCP_SERVER(old_dir)->m.file_mode & 0222;  /* set write bits */
         ia.ia_valid = ATTR_MODE;
 
@@ -1125,7 +1127,8 @@ static int ncp_rename(struct inode *old_dir, struct dentry *old_dentry,
                                 old_dentry->d_name.name,new_dentry->d_name.name);
                         ncp_invalid_dir_cache(old_dir);
                         ncp_invalid_dir_cache(new_dir);
-                        d_move(old_dentry,new_dentry);
+			if (!S_ISDIR(old_dentry->d_inode->i_mode))
+				d_move(old_dentry,new_dentry);
                 }
 	} else {
 		if (error == 0x9E)

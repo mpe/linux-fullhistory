@@ -4,12 +4,14 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-14 February 1999
+10 March 1999
 ===============================================================================
 
 1.  Introduction
 2.  Supported chips and SCSI features
-3.  Summary of other supported features
+3.  Advantages of the enhanced 896 driver
+      3.1 Optimized SCSI SCRIPTS
+      3.2 New features of the SYM53C896 (64 bit PCI dual LVD SCSI controller)
 4.  Memory mapped I/O versus normal I/O
 5.  Tagged command queueing
 6.  Parity checking
@@ -56,21 +58,30 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 
 1. Introduction
 
-This driver has been ported from FreeBSD to Linux and is currently 
-maintained by:
+The initial Linux ncr53c8xx driver has been a port of the ncr driver from 
+FreeBSD that has been achieved in November 1995 by:
           Gerard Roudier              <groudier@club-internet.fr>
 
 The original driver has been written for 386bsd and FreeBSD by:
           Wolfgang Stanglmeier        <wolf@cologne.de>
           Stefan Esser                <se@mi.Uni-Koeln.de>
 
+It is now available as a bundle of 2 drivers:
+
+- ncr53c8xx generic driver that supports all the SYM53C8XX family including 
+  the ealiest 810 rev. 1 and the latest 896 2 channels LVD SCSI controller.
+- sym53c8xx enhanced driver (a.k.a. 896 drivers) that drops support of oldest 
+  chips in order to gain advantage of new features, as LOAD/STORE intructions 
+  available since the 810A and hardware phase mismatch available with the 
+  latest 896.
+
 You can find technical information about the NCR 8xx family in the
 PCI-HOWTO written by Michael Will and in the SCSI-HOWTO written by
 Drew Eckhardt.
 
-Information about new chips is available at SYMBIOS web server:
+Information about new chips is available at LSILOGIC web server:
 
-          http://www.symbios.com/
+          http://www.lsilogic.com/
 
 SCSI standard documentations are available at SYMBIOS ftp server:
 
@@ -109,34 +120,65 @@ The following features are supported for all chips:
 	Master parity checking
 
 "Wide negotiation" is supported for chips that allow it.  The
-following table shows some characteristics of NCR 8xx family chips:
+following table shows some characteristics of NCR 8xx family chips 
+and what drivers support them.
 
-       On board                                  Supported by 
-Chip   SDMS BIOS   Wide   SCSI std.   Max. sync   the driver
-----   ---------   ----   ---------   ----------  ------------
-810        N         N      FAST10    10 MB/s        Y
-810A       N         N      FAST10    10 MB/s        Y
-815        Y         N      FAST10    10 MB/s        Y
-825        Y         Y      FAST10    20 MB/s        Y
-825A       Y         Y      FAST10    20 MB/s        Y
-860        N         N      FAST20    20 MB/s        Y
-875        Y         Y      FAST20    40 MB/s        Y
-876        Y         Y      FAST20    40 MB/s        Y
-895        Y         Y      FAST40    80 MB/s        Y
+                                                  Supported by   Supported by
+       On board                                   the generic    the enhanced 
+Chip   SDMS BIOS   Wide   SCSI std.   Max. sync   driver         driver
+----   ---------   ----   ---------   ----------  ------------   -------------
+810        N         N      FAST10    10 MB/s        Y             N
+810A       N         N      FAST10    10 MB/s        Y             Y
+815        Y         N      FAST10    10 MB/s        Y             N
+825        Y         Y      FAST10    20 MB/s        Y             N
+825A       Y         Y      FAST10    20 MB/s        Y             Y
+860        N         N      FAST20    20 MB/s        Y             Y
+875        Y         Y      FAST20    40 MB/s        Y             Y
+876        Y         Y      FAST20    40 MB/s        Y             Y
+895        Y         Y      FAST40    80 MB/s        Y             Y
+896        Y         Y      FAST40    80 MB/s        Y             Y
 
 
-3. Summary of other supported features.
+Summary of other supported features:
 
-        Module:                allow to load the driver
-        Memory mapped I/O:     increases performance
-        Profiling information: read operations from the proc SCSI file system
-        Control commands:      write operations to the proc SCSI file system
-        Debugging information: written to syslog (expert only)
-	Scatter / gather
-	Shared interrupt
-        Boot setup commands
-        Serial NVRAM:          Symbios and Tekram formats
+Module:                allow to load the driver
+Memory mapped I/O:     increases performance
+Profiling information: read operations from the proc SCSI file system
+Control commands:      write operations to the proc SCSI file system
+Debugging information: written to syslog (expert only)
+Scatter / gather
+Shared interrupt
+Boot setup commands
+Serial NVRAM:          Symbios and Tekram formats
 
+
+3. Advantages of the enhanced 896 driver
+
+3.1 Optimized SCSI SCRIPTS.
+
+The 810A, 825A, 875, 895 and newest 896 support new SCSI SCRIPTS instructions 
+named LOAD and STORE that allow to move 1 DWORD from/to an IO register to/from 
+memory much faster that the MOVE MEMORY instruction that is supported by the 
+53c7xx and 53c8xx family. The LOAD/STORE instructions support absolute and 
+DSA relative addressing modes. The SCSI SCRIPTS had been entirely rewritten 
+using LOAD/STORE instead of MOVE MEMORY instructions.
+
+3.2 New features of the SYM53C896 (64 bit PCI dual LVD SCSI controller)
+
+The 896 allows to handle the phase mismatch context saving from SCRIPTS 
+(avoids the phase mismatch interrupt that stops the SCSI processor 
+until the C code has saved the context of the transfer).
+Implementing this without using LOAD/STORE instructions would be painfull 
+and I did'nt even try it. This chip also supports 64 bit PCI transactions 
+and addressing. The SCRIPTS processor is not true 64 bit, but uses segment 
+registers for bit 32-63. Another interesting feature is that LOAD/STORE 
+instructions that address the on-chip RAM (8k) remain internal to the chip.
+
+Due to the use of LOAD/STORE SCRIPTS instructions, this driver does not 
+support the following chips:
+- SYM53C810 revision < 0x10 (16)
+- SYM53C815 all revisions
+- SYM53C825 revision < 0x10 (16)
 
 4. Memory mapped I/O versus normal I/O
 
@@ -703,6 +745,13 @@ Check SCSI BUS
         0x1:   Check and donnot attach the controller on error.  
         0x2:   Check and just warn on error.
 
+Exclude hosts from being attached
+    excl=<io_address>
+
+    Prevent host at a given io address from being attached.
+    For example 'ncr53c8xx=excl:0xb400,excl:0xc000' indicate to the 
+    ncr53c8xx driver not to attach hosts at address 0xb400 and 0xc000.
+
 Boot fail safe
     safe:y	load the following assumed fail safe initial setup
 
@@ -1036,15 +1085,20 @@ when the SCSI DATA IN phase is reentered after a phase mismatch.
 
 When an IRQ is shared by devices that are handled by different drivers, it 
 may happen that one driver complains about the request of the IRQ having 
-failed. This may be due to one driver having requested the IRQ using the 
-SA_INTERRUPT flag but some other having requested the same IRQ without this 
-flag, or to one driver not having requested the IRQ with the SA_SHIRQ flag.
+failed. Inder Linux-2.0, this may be due to one driver having requested the 
+IRQ using the SA_INTERRUPT flag but some other having requested the same IRQ 
+without this flag. Under both Linux-2.0 and linux-2.2, this may be caused by 
+one driver not having requested the IRQ with the SA_SHIRQ flag.
 
-By default, the ncr53c8xx driver requests IRQs with both the SA_INTERRUPT 
-and the SA_SHIRQ flag, but you can disable use of SA_INTERRUPT flags from 
-the boot command line by using the following option:
+By default, the ncr53c8xx and sym53c8xx drivers request IRQs with both the 
+SA_INTERRUPT and the SA_SHIRQ flag under Linux-2.0 and with only the SA_SHIRQ 
+flag under Linux-2.2.
 
-                      ncr53c8xx=irqm:0x20
+Under Linux-2.0, you can disable use of SA_INTERRUPT flag from the boot 
+command line by using the following option:
+
+     ncr53c8xx=irqm:0x20   (for the generic ncr53c8xx driver)
+     sym53c8xx=irqm:0x20   (for the sym53c8xx driver)
 
 If this does not fix the problem, then you may want to check how all other 
 drivers are requesting the IRQ and report the problem. Note that if at least 

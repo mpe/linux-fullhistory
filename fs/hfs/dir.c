@@ -430,8 +430,6 @@ int hfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 			update_dirs_plus(new_parent, is_dir);
 		}
 	
-		/* update dcache */
-		d_move(old_dentry, new_dentry);
 	}
 
 hfs_rename_put:

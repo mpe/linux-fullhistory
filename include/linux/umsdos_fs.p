@@ -12,6 +12,7 @@ int umsdos_is_pseudodos (struct inode *dir, struct dentry *dentry);
 int umsdos_lookup_x ( struct inode *dir, struct dentry *dentry, int nopseudo);
 int UMSDOS_lookup(struct inode *, struct dentry *);
 struct dentry *umsdos_lookup_dentry(struct dentry *, char *, int, int);
+struct dentry *umsdos_covered(struct dentry *, char *, int);
 
 struct dentry *umsdos_solve_hlink (struct dentry *hlink);
 

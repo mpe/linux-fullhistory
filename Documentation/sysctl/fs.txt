@@ -1,12 +1,12 @@
-Documentation for /proc/sys/fs/*	kernel version 2.1.128
-	(c) 1998, Rik van Riel <H.H.vanRiel@phys.uu.nl>
+Documentation for /proc/sys/fs/*	kernel version 2.2.5
+	(c) 1998, 1999,  Rik van Riel <riel@nl.linux.org>
 
 For general info and legal blurb, please look in README.
 
 ==============================================================
 
 This file contains documentation for the sysctl files in
-/proc/sys/fs/ and is valid for Linux kernel version 2.1.
+/proc/sys/fs/ and is valid for Linux kernel version 2.2.
 
 The files in this directory can be used to tune and monitor
 miscellaneous and general things in the operation of the Linux
@@ -23,6 +23,8 @@ Currently, these files are in /proc/sys/fs:
 - inode-max
 - inode-nr
 - inode-state
+- super-max
+- super-nr
 
 Documentation for the files in /proc/sys/fs/binfmt_misc is
 in Documentation/binfmt_misc.txt.
@@ -113,4 +115,12 @@ preshrink is nonzero when the nr_inodes > inode-max and the
 system needs to prune the inode list instead of allocating
 more.
 
+==============================================================
 
+super-max & super-nr:
+
+These numbers control the maximum number of superblocks, and
+thus the maximum number of mounted filesystems the kernel
+can have. You only need to increase super-max if you need to
+mount more filesystems than the current value in super-max
+allows you to.

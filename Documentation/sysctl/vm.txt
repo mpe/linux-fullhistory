@@ -1,17 +1,20 @@
-Documentation for /proc/sys/vm/*	kernel version 2.1.128
-	(c) 1998, Rik van Riel <H.H.vanRiel@phys.uu.nl>
+Documentation for /proc/sys/vm/*	kernel version 2.2.5
+	(c) 1998, 1999,  Rik van Riel <riel@nl.linux.org>
 
 For general info and legal blurb, please look in README.
 
 ==============================================================
 
 This file contains the documentation for the sysctl files in
-/proc/sys/vm and is valid for Linux kernel version 2.1.
+/proc/sys/vm and is valid for Linux kernel version 2.2.
 
 The files in this directory can be used to tune the operation
 of the virtual memory (VM) subsystem of the Linux kernel, and
 one of the files (bdflush) also has a little influence on disk
 usage.
+
+Default values and initialization routines for most of these
+files can be found in mm/swap.c.
 
 Currently, these files are in /proc/sys/vm:
 - bdflush
@@ -19,9 +22,9 @@ Currently, these files are in /proc/sys/vm:
 - freepages
 - kswapd
 - overcommit_memory
+- page-cluster
 - pagecache
 - pagetable_cache
-- swapctl
 
 ==============================================================
 
@@ -100,12 +103,8 @@ as a percentage of total system memory.
 The values are:
 min_percent	-- this is the minimum percentage of memory
 		   that should be spent on buffer memory
-borrow_percent  -- when Linux is short on memory, and the
-                   buffer cache uses more memory than this,
-                   the MM subsystem will prune the buffercache
-                   more heavily than other memory
-max_percent     -- this is the maximum amount of memory that
-                   can be used for buffer memory 
+borrow_percent  -- UNUSED
+max_percent     -- UNUSED
 
 ==============================================================
 freepages:
@@ -162,40 +161,28 @@ swap_cluster	This is the number of pages kswapd writes in
 
 overcommit_memory:
 
-This file contains only one value. The following algorithm
-is used to decide if there's enough memory. If the value
-of overcommit_memory > 0, then there's always enough
-memory :-). This is a useful feature, since programs often
-malloc() huge amounts of memory 'just in case', while they
-only use a small part of it. Leaving this value at 0 will
-lead to the failure of such a huge malloc(), when in fact
-the system has enough memory for the program to run...
-On the other hand, enabling this feature can cause you to
-run out of memory and thrash the system to death, so large
-and/or important servers will want to set this value to 0.
+This value contains a flag that enables memory overcommitment.
+When this flag is 0, the kernel checks before each malloc()
+to see if there's enough memory left. If the flag is nonzero,
+the system pretends there's always enough memory.
 
-From linux/mm/mmap.c:
---------------------------------------------------------------
-static inline int vm_enough_memory(long pages)
-{
-    /* This stupid algorithm decides whether we have enough memory:
-     * while simple, it should work in most obvious cases.  It's
-     * easily fooled, but this should catch most mistakes.
-     */
-    long freepages;
+This feature can be very useful because there are a lot of
+programs that malloc() huge amounts of memory "just-in-case"
+and don't much of it.
 
-    /* Sometimes we want to use more memory than we have. */
-    if (sysctl_overcommit_memory)
-        return 1;
+Look at: mm/mmap.c::vm_enough_memory() for more information.
 
-    freepages = buffermem >> PAGE_SHIFT;
-    freepages += page_cache_size;
-    freepages >>= 1;
-    freepages += nr_free_pages;
-    freepages += nr_swap_pages;
-    freepages -= num_physpages >> 4;
-    return freepages > pages;
-}
+==============================================================
+
+page-cluster:
+
+The Linux VM subsystem avoids excessive disk seeks by reading
+multiple pages on a page fault. The number of pages it reads
+is dependant on the amount of memory in your machine.
+
+The number of pages the kernel reads in at once is equal to
+2 ^ page-cluster. Values above 2 ^ 5 don't make much sense
+for swap because we only cluster swap data in 32-page groups.
 
 ==============================================================
 
@@ -203,12 +190,17 @@ pagecache:
 
 This file does exactly the same as buffermem, only this
 file controls the struct page_cache, and thus controls
-the amount of memory allowed for memory mapping and generic
-caching of files.
+the amount of memory used for the page cache.
 
-You don't want the minimum level to be too low, otherwise
-your system might thrash when memory is tight or fragmentation
-is high...
+In 2.2, the page cache is used for 3 main purposes:
+- caching read() data from files
+- caching mmap()ed data and executable files
+- swap cache
+
+When your system is both deep in swap and high on cache,
+it probably means that a lot of the swaped data is being
+cached, making for more efficient swapping than possible
+with the 2.0 kernel.
 
 ==============================================================
 
@@ -226,63 +218,4 @@ without having to aquire the kernel memory lock.
 For large systems, the settings are probably OK. For normal
 systems they won't hurt a bit. For small systems (<16MB ram)
 it might be advantageous to set both values to 0.
-
-==============================================================
-
-swapctl:
-
-This file contains no less than 8 variables.
-All of these values are used by kswapd, and the usage can be
-found in linux/mm/vmscan.c.
-
-From linux/include/linux/swapctl.h:
---------------------------------------------------------------
-typedef struct swap_control_v5
-{
-    unsigned int    sc_max_page_age;
-    unsigned int    sc_page_advance;
-    unsigned int    sc_page_decline;
-    unsigned int    sc_page_initial_age;
-    unsigned int    sc_age_cluster_fract;
-    unsigned int    sc_age_cluster_min;
-    unsigned int    sc_pageout_weight;
-    unsigned int    sc_bufferout_weight;
-} swap_control_v5;
---------------------------------------------------------------
-
-The first four variables are used to keep track of Linux's
-page aging. Page aging is a bookkeeping method to keep track
-of which pages of memory are used often, and which pages can
-be swapped out without consequences.
-
-When a page is swapped in, it starts at sc_page_initial_age
-(default 3) and when the page is scanned by kswapd, its age
-is adjusted according to the following scheme:
-- if the page was used since the last time we scanned, its
-  age is increased by sc_page_advance (default 3) up to a maximum
-  of sc_max_page_age (default 20)
-- else (it wasn't used) its age is decreased by sc_page_decline
-  (default 1)
-And when a page reaches age 0, it's ready to be swapped out.
-
-The next four variables can be used to control kswapd's
-aggressiveness in swapping out pages.
-
-sc_age_cluster_fract is used to calculate how many pages from
-a process are to be scanned by kswapd. The formula used is
-sc_age_cluster_fract/1024 * RSS, so if you want kswapd to scan
-the whole process, sc_age_cluster_fract needs to have a value
-of 1024. The minimum number of pages kswapd will scan is
-represented by sc_age_cluster_min, this is done so kswapd will
-also scan small processes.
-
-The values of sc_pageout_weight and sc_bufferout_weight are
-used to control how many tries kswapd will make in order
-to swapout one page / buffer. These values can be used to
-fine-tune the ratio between user pages and buffer/cache memory.
-When you find that your Linux system is swapping out too many
-process pages in order to satisfy buffer memory demands, you
-might want to either increase sc_bufferout_weight, or decrease
-the value of sc_pageout_weight.
-
 

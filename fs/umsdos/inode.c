@@ -50,10 +50,10 @@ void fill_new_filp (struct file *filp, struct dentry *dentry)
 void UMSDOS_put_inode (struct inode *inode)
 {
 	PRINTK ((KERN_DEBUG 
-		"put inode %p (%lu) owner %lu pos %lu dir %lu count=%d\n"
+		"put inode %p (%lu) pos %lu count=%d\n"
 		 ,inode, inode->i_ino
-		 ,inode->u.umsdos_i.i_emd_owner, inode->u.umsdos_i.pos
-		 ,inode->u.umsdos_i.i_emd_dir, inode->i_count));
+		 ,inode->u.umsdos_i.pos
+		 ,inode->i_count));
 
 	if (inode == pseudo_root) {
 		printk (KERN_ERR "Umsdos: Oops releasing pseudo_root."
@@ -94,7 +94,6 @@ void umsdos_setup_dir(struct dentry *dir)
 		printk(KERN_ERR "umsdos_setup_dir: %s/%s not a dir!\n",
 			dir->d_parent->d_name.name, dir->d_name.name);
 
-	inode->u.umsdos_i.i_emd_dir = 0;
 	inode->i_op = &umsdos_rdir_inode_operations;
 	if (umsdos_have_emd(dir)) {
 Printk((KERN_DEBUG "umsdos_setup_dir: %s/%s using EMD\n",
@@ -112,14 +111,11 @@ void umsdos_set_dirinfo_new (struct dentry *dentry, off_t f_pos)
 	struct inode *inode = dentry->d_inode;
 	struct dentry *demd;
 
-	inode->u.umsdos_i.i_emd_owner = 0;
 	inode->u.umsdos_i.pos = f_pos;
 
 	/* now check the EMD file */
 	demd = umsdos_get_emd_dentry(dentry->d_parent);
 	if (!IS_ERR(demd)) {
-		if (demd->d_inode)
-			inode->u.umsdos_i.i_emd_owner = demd->d_inode->i_ino;
 		dput(demd);
 	}
 	return;
@@ -149,7 +145,6 @@ PRINTK (("umsdos_patch_inode: call umsdos_set_dirinfo_new(%p,%lu)\n",
 dentry, f_pos));
 	umsdos_set_dirinfo_new(dentry, f_pos);
 
-	inode->u.umsdos_i.i_emd_dir = 0;
 	if (S_ISREG (inode->i_mode)) {
 		if (MSDOS_SB (inode->i_sb)->cvf_format) {
 			if (MSDOS_SB (inode->i_sb)->cvf_format->flags & CVF_USE_READPAGE) {
@@ -327,8 +322,6 @@ void UMSDOS_write_inode (struct inode *inode)
 {
 	struct iattr newattrs;
 
-	PRINTK (("UMSDOS_write_inode emd %d (FIXME: missing notify_change)\n",
-		inode->u.umsdos_i.i_emd_owner));
 	fat_write_inode (inode);
 	newattrs.ia_mtime = inode->i_mtime;
 	newattrs.ia_atime = inode->i_atime;

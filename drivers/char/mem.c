@@ -138,8 +138,11 @@ static ssize_t write_mem(struct file * file, const char * buf,
 static inline unsigned long pgprot_noncached(unsigned long prot)
 {
 #if defined(__i386__)
+	/* On PPro and successors, PCD alone doesn't always mean 
+	    uncached because of interactions with the MTRRs. PCD | PWT
+	    means definitely uncached. */ 
 	if (boot_cpu_data.x86 > 3)
-		prot |= _PAGE_PCD;
+		prot |= _PAGE_PCD | _PAGE_PWT;
 #elif defined(__powerpc__)
 	prot |= _PAGE_NO_CACHE | _PAGE_GUARDED;
 #elif defined(__mc68000__)
@@ -155,6 +158,28 @@ static inline unsigned long pgprot_noncached(unsigned long prot)
 	return prot;
 }
 
+/*
+ * Architectures vary in how they handle caching for addresses 
+ * outside of main memory.
+ */
+static inline int noncached_address(unsigned long addr)
+{
+#if defined(__i386__)
+	/* 
+	 * On the PPro and successors, the MTRRs are used to set
+	 * memory types for physical addresses outside main memory, 
+	 * so blindly setting PCD or PWT on those pages is wrong.
+	 * For Pentiums and earlier, the surround logic should disable 
+	 * caching for the high addresses through the KEN pin, but
+	 * we maintain the tradition of paranoia in this code.
+	 */
+ 	return !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR)
+		&& addr >= __pa(high_memory);
+#else
+	return addr >= __pa(high_memory);
+#endif
+}
+
 static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 {
 	unsigned long offset = vma->vm_offset;
@@ -166,15 +191,17 @@ static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 	 * Accessing memory above the top the kernel knows about or
 	 * through a file pointer that was marked O_SYNC will be
 	 * done non-cached.
-	 *
-	 * Set VM_IO, as this is likely a non-cached access to an
-	 * I/O area, and we don't want to include that in a core
-	 * file.
 	 */
-	if (offset >= __pa(high_memory) || (file->f_flags & O_SYNC)) {
-		pgprot_val(vma->vm_page_prot) = pgprot_noncached(pgprot_val(vma->vm_page_prot));
+	if (noncached_address(offset) || (file->f_flags & O_SYNC))
+		pgprot_val(vma->vm_page_prot) 
+			= pgprot_noncached(pgprot_val(vma->vm_page_prot));
+
+	/*
+	 * Don't dump addresses that are not real memory to a core file.
+	 */
+	if (offset >= __pa(high_memory) || (file->f_flags & O_SYNC))
 		vma->vm_flags |= VM_IO;
-	}
+
 	if (remap_page_range(vma->vm_start, offset, vma->vm_end-vma->vm_start,
 			     vma->vm_page_prot))
 		return -EAGAIN;

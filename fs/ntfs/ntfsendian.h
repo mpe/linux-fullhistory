@@ -1,8 +1,9 @@
 /*
  *  ntfsendian.h
  *
- *  Copyright (C) 1998 Martin von Löwis
+ *  Copyright (C) 1998, 1999 Martin von Löwis
  *  Copyright (C) 1998 Joseph Malicki
+ *  Copyright (C) 1999 Werner Seiler
  */
 
 #ifdef __linux__
@@ -36,9 +37,9 @@
 #ifdef __BIG_ENDIAN
 
 /* We hope its big-endian, not PDP-endian :) */
-#define CPU_TO_LE16(a) ((((a)&0xF) << 8)|((a) >> 8))
-#define CPU_TO_LE32(a) ((((a) & 0xF) << 24) | (((a) & 0xF0) << 8) | \
-			(((a) & 0xF00) >> 8) | ((a) >> 24))
+#define CPU_TO_LE16(a) ((((a)&0xFF) << 8)|((a) >> 8))
+#define CPU_TO_LE32(a) ((((a) & 0xFF) << 24) | (((a) & 0xFF00) << 8) | \
+			(((a) & 0xFF0000) >> 8) | ((a) >> 24))
 #define CPU_TO_LE64(a) ((CPU_TO_LE32(a)<<32)|CPU_TO_LE32((a)>>32)
 
 #define LE16_TO_CPU(a) CPU_TO_LE16(a)
@@ -55,7 +56,7 @@
 
 #define NTFS_GETU8(p)      (*(ntfs_u8*)(p))
 #define NTFS_GETU16(p)     ((ntfs_u16)LE16_TO_CPU(*(ntfs_u16*)(p)))
-#define NTFS_GETU24(p)     (NTFS_GETU32(p) & 0xFFFFFF)
+#define NTFS_GETU24(p)     ((ntfs_u32)NTFS_GETU16(p) | ((ntfs_u32)NTFS_GETU8(((char*)(p))+2)<<16))
 #define NTFS_GETU32(p)     ((ntfs_u32)LE32_TO_CPU(*(ntfs_u32*)(p)))
 #define NTFS_GETU40(p)     ((ntfs_u64)NTFS_GETU32(p)|(((ntfs_u64)NTFS_GETU8(((char*)(p))+4))<<32))
 #define NTFS_GETU48(p)     ((ntfs_u64)NTFS_GETU32(p)|(((ntfs_u64)NTFS_GETU16(((char*)(p))+4))<<32))
@@ -75,9 +76,9 @@
 #define NTFS_GETS16(p)       ((ntfs_s16)LE16_TO_CPU(*(short*)(p)))
 #define NTFS_GETS24(p)       (NTFS_GETU24(p) < 0x800000 ? (int)NTFS_GETU24(p) : (int)(NTFS_GETU24(p) - 0x1000000))
 #define NTFS_GETS32(p)       ((ntfs_s32)LE32_TO_CPU(*(int*)(p)))
-#define NTFS_GETS40(p)       (((ntfs_s64)NTFS_GETS32(p)) | (((ntfs_s64)NTFS_GETS8(((char*)(p))+4)) << 32))
-#define NTFS_GETS48(p)       (((ntfs_s64)NTFS_GETS32(p)) | (((ntfs_s64)NTFS_GETS16(((char*)(p))+4)) << 32))
-#define NTFS_GETS56(p)       (((ntfs_s64)NTFS_GETS32(p)) | (((ntfs_s64)NTFS_GETS24(((char*)(p))+4)) << 32))
+#define NTFS_GETS40(p)       (((ntfs_s64)NTFS_GETU32(p)) | (((ntfs_s64)NTFS_GETS8(((char*)(p))+4)) << 32))
+#define NTFS_GETS48(p)       (((ntfs_s64)NTFS_GETU32(p)) | (((ntfs_s64)NTFS_GETS16(((char*)(p))+4)) << 32))
+#define NTFS_GETS56(p)       (((ntfs_s64)NTFS_GETU32(p)) | (((ntfs_s64)NTFS_GETS24(((char*)(p))+4)) << 32))
 #define NTFS_GETS64(p)	     ((ntfs_s64)NTFS_GETU64(p))
  
 #define NTFS_PUTS8(p,v)      NTFS_PUTU8(p,v)

@@ -93,6 +93,7 @@ static union {
 } fbcon_cmap;
 
 static int             inverse   = 0;
+static int             mtrr      = 0;
 static int             currcon   = 0;
 
 static int             pmi_setpal = 0;	/* pmi for palette changes ??? */
@@ -495,6 +496,8 @@ void vesafb_setup(char *options, int *ints)
 			pmi_setpal=0;
 		else if (! strcmp(this_opt, "pmipal"))
 			pmi_setpal=1;
+		else if (! strcmp(this_opt, "mtrr"))
+			mtrr=1;
 		else if (!strncmp(this_opt, "font:", 5))
 			strcpy(fb_info.fontname, this_opt+5);
 	}
@@ -633,7 +636,8 @@ __initfunc(void vesafb_init(void))
 	}
 	request_region(0x3c0, 32, "vga+");
 #ifdef CONFIG_MTRR
-        mtrr_add((unsigned long)video_base, video_size, MTRR_TYPE_WRCOMB, 1);
+	if (mtrr)
+		mtrr_add((unsigned long)video_base, video_size, MTRR_TYPE_WRCOMB, 1);
 #endif
 	
 	strcpy(fb_info.modename, "VESA VGA");

@@ -559,6 +559,7 @@ static struct super_block * read_super(kdev_t dev,const char *name,int flags,
 	s->s_dev = dev;
 	s->s_flags = flags;
 	s->s_dirt = 0;
+	sema_init(&s->s_vfs_rename_sem,1);
 	/* N.B. Should lock superblock now ... */
 	if (!type->read_super(s, data, silent))
 		goto out_fail;

@@ -264,6 +264,8 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 
 	lock_super(sb);
 
+	sb->s_flags |= MS_ODD_RENAME; /* This should go away */
+
 	sb->s_blocksize = 1024;	/* Eh...  Is this correct? */
 	sb->s_blocksize_bits = 10;
 	sb->s_magic = NCP_SUPER_MAGIC;

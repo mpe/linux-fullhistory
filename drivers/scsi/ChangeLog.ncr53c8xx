@@ -1,3 +1,15 @@
+Thu Mar 11  23:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.2	  (8xx-896 driver bundle)
+	- Only define the host template in ncr53c8xx.h and include the 
+	  sym53c8xx_defs.h file.
+	- Declare static all symbols that donnot need to be visible from 
+	  outside the driver code.
+	- Add 'excl' boot command option that allows to pass to the driver 
+	  io address of devices not to attach.
+	- Add info() function called from the host template to print 
+	  driver/host information.
+	- Minor documentation additions.
+
 Sat Mar 6  11:00 1999 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.1h
 	- Fix some oooold bug that hangs the bus if a device rejects a 

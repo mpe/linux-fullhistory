@@ -250,12 +250,8 @@ parent->d_name.name, demd->d_name.name));
 		printk (KERN_WARNING
 			"umsdos_make_emd: create %s/%s failed, err=%d\n",
 			parent->d_name.name, demd->d_name.name, err);
-		goto out_dput;
 	}
 out_set:
-	parent->d_inode->u.umsdos_i.i_emd_dir = demd->d_inode->i_ino;
-
-out_dput:
 	dput(demd);
 out:
 	return err;

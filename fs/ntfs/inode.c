@@ -5,13 +5,18 @@
  *  Copyright (C) 1996 Albert D. Cahalan
  *  Copyright (C) 1996-1997 Régis Duchesne
  *  Copyright (C) 1998 Joseph Malicki
+ *  Copyright (C) 1999 Steve Dodd
  */
 
 #include "ntfstypes.h"
+#include "ntfsendian.h"
 #include "struct.h"
 #include "inode.h"
 
 #include <linux/errno.h>
+#ifdef HAVE_STRING_H
+#include <string.h>
+#endif
 #include "macros.h"
 #include "attr.h"
 #include "super.h"
@@ -30,8 +35,8 @@ typedef struct {
 	ntfs_mft_record* records;
 } ntfs_disk_inode;
 
-static void
-fill_mft_header(ntfs_u8*mft,int record_size,int blocksize,
+void
+ntfs_fill_mft_header(ntfs_u8*mft,int record_size,int blocksize,
 		int sequence_number)
 {
 	int fixup_count = record_size / blocksize + 1;
@@ -98,7 +103,7 @@ ntfs_extend_mft(ntfs_volume *vol)
 	if(mdata->allocated<mdata->size+vol->mft_recordsize){
 		size=ntfs_get_free_cluster_count(vol->bitmap)*vol->clustersize;
 		block=vol->mft_recordsize;
-		size=max(size/1000,block);
+		size=max(size/1000,mdata->size+vol->mft_recordsize);
 		size=((size+block-1)/block)*block;
 		/* require this to be a single chunk */
 		error=ntfs_extend_attr(vol->mft_ino,mdata,&size,
@@ -141,7 +146,7 @@ ntfs_extend_mft(ntfs_volume *vol)
 	/* now fill in the MFT header for the new block */
 	buf=ntfs_calloc(vol->mft_recordsize);
 	if(!buf)return ENOMEM;
-	fill_mft_header(buf,vol->mft_recordsize,vol->blocksize,0);
+	ntfs_fill_mft_header(buf,vol->mft_recordsize,vol->blocksize,0);
 	ntfs_insert_fixups(buf,vol->blocksize);
 	io.param=buf;
 	io.size=vol->mft_recordsize;
@@ -149,6 +154,8 @@ ntfs_extend_mft(ntfs_volume *vol)
 			      (rcount-1)*vol->mft_recordsize,&io);
 	if(error)return error;
 	if(io.size!=vol->mft_recordsize)return EIO;
+	error=ntfs_update_inode(vol->mft_ino);
+	if(error)return error;
 	return 0;
 }
 
@@ -165,13 +172,16 @@ void ntfs_insert_mft_attributes(ntfs_inode* ino,char *mft,int mftno)
 	/* (re-)allocate space if necessary */
 	if(ino->record_count % 8==0)
 	{
-		int *old=ino->records;
-		ino->records=ntfs_malloc((ino->record_count+8)*sizeof(int));
-		if(old) {
+		int *new;
+		new = ntfs_malloc((ino->record_count+8)*sizeof(int));
+		if( !new )
+			return;
+		if( ino->records ) {
 			for(i=0;i<ino->record_count;i++)
-				ino->records[i]=old[i];
-			ntfs_free(old);
+				new[i] = ino->records[i];
+			ntfs_free( ino->records );
 		}
+		ino->records = new;
 	}
 	ino->records[ino->record_count]=mftno;
 	ino->record_count++;
@@ -179,8 +189,10 @@ void ntfs_insert_mft_attributes(ntfs_inode* ino,char *mft,int mftno)
 	do{
 		type=NTFS_GETU32(it);
 		len=NTFS_GETU32(it+4);
-		if(type!=-1)
+		if(type!=-1) {
+			/* FIXME: check ntfs_insert_attribute for failure (e.g. no mem)? */
 			ntfs_insert_attribute(ino,it);
+		}
 		it+=len;
 	}while(type!=-1); /* attribute list ends with type -1 */
 }
@@ -195,6 +207,8 @@ static int parse_attributes(ntfs_inode *ino, ntfs_u8 *alist, int *plen)
 	int last_mft=-1;
 	int len=*plen;
 	mft=ntfs_malloc(ino->vol->mft_recordsize);
+	if( !mft )
+		return ENOMEM;
 	while(len>8)
 	{
 		l=NTFS_GETU16(alist+4);
@@ -239,6 +253,8 @@ static void ntfs_load_attributes(ntfs_inode* ino)
 		return;
 	}
 	buf=ntfs_malloc(1024);
+	if( !buf )
+		return;
 	delta=0;
 	for(offset=0;datasize;datasize-=len)
 	{
@@ -271,6 +287,8 @@ int ntfs_init_inode(ntfs_inode *ino,ntfs_volume *vol,int inum)
 	ino->i_number=inum;
 	ino->vol=vol;
 	ino->attr=buf=ntfs_malloc(vol->mft_recordsize);
+	if( !buf )
+		return ENOMEM;
 	error=ntfs_read_mft_record(vol,inum,ino->attr);
 	if(error){
 		ntfs_debug(DEBUG_OTHER, "init inode: %x failed\n",inum);
@@ -441,7 +459,7 @@ int ntfs_decompress_run(unsigned char **data, int *length, ntfs_cluster_t *clust
 int ntfs_readwrite_attr(ntfs_inode *ino, ntfs_attribute *attr, int offset,
 	ntfs_io *dest)
 {
-	int datasize,rnum;
+	int rnum;
 	ntfs_cluster_t cluster,s_cluster,vcn,len;
 	int l,chunk,copied;
 	int s_vcn;
@@ -449,26 +467,39 @@ int ntfs_readwrite_attr(ntfs_inode *ino, ntfs_attribute *attr, int offset,
 	int error;
 
 	clustersize=ino->vol->clustersize;
-	datasize=attr->size;
 	l=dest->size;
 	if(l==0)
 		return 0;
 	if(dest->do_read)
 	{
-		if(offset>=datasize){
+		/* if read _starts_ beyond end of stream, return nothing */
+		if(offset>=attr->size){
 			dest->size=0;
 			return 0;
 		}
-		if(offset+l>=datasize) 
-			l=dest->size=datasize-offset;
-	}else { /* fixed by CSA: if writing beyond end, extend attribute */
-		if (offset+l>datasize) {
+
+		/* if read _extends_ beyond end of stream, return as much
+			initialised data as we have */
+		if(offset+l>=attr->size) 
+			l=dest->size=attr->size-offset;
+
+	}else {
+		/* fixed by CSA: if writing beyond end, extend attribute */
+
+		/* if write extends beyond _allocated_ size, extend attrib */
+		if (offset+l>attr->allocated) {
 			error=ntfs_resize_attr(ino,attr,offset+l);
 			if(error)
 				return error;
 		}
-		if (offset+l > attr->initialized)
+
+		/* the amount of initialised data has increased; update */
+		/* FIXME: shouldn't we zero-out the section between the old
+			initialised length and the write start? */
+		if (offset+l > attr->initialized) {
 			attr->initialized = offset+l;
+			attr->size = offset+l;
+		}
 	}
 	if(attr->resident)
 	{
@@ -565,7 +596,6 @@ int ntfs_vcn_to_lcn(ntfs_inode *ino,int vcn)
 {
 	int rnum;
 	ntfs_attribute *data;
-	ntfs_error("bmap %x\n",vcn);
 	data=ntfs_find_attr(ino,ino->vol->at_data,0);
 	/* It's hard to give an error code */
 	if(!data)return -1;
@@ -583,7 +613,6 @@ int ntfs_vcn_to_lcn(ntfs_inode *ino,int vcn)
 		    vcn>data->d.r.runlist[rnum].len;rnum++)
 		vcn-=data->d.r.runlist[rnum].len;
 	
-	ntfs_error("result %x\n",data->d.r.runlist[rnum].cluster+vcn);
 	return data->d.r.runlist[rnum].cluster+vcn;
 }
 
@@ -655,7 +684,7 @@ layout_runs(ntfs_attribute *attr,char* rec,int* offs,int size)
     
 		*(rec+offset)|=coffs++;
 
-		if(rl[i].cluster==0) /*compressed run*/
+		if(rl[i].cluster==MAX_CLUSTER_T) /*compressed run*/
 			/*nothing*/;
 		else if(rclus>-0x80 && rclus<0x7F){
 			*(rec+offset)|=0x10;
@@ -768,7 +797,8 @@ layout_attr(ntfs_attribute* attr,char*buf, int size,int *psize)
 			NTFS_PUTU16(buf+0xA,asize);
 			ntfs_memcpy(buf+asize,attr->name,2*attr->namelen);
 			asize+=2*attr->namelen;
-			asize=(asize+7) & ~7;
+			/* SRD: you whaaa?
+			asize=(asize+7) & ~7;*/
 		}
 		/* asize points at the beginning of the data */
 		NTFS_PUTU16(buf+0x20,asize);
@@ -841,7 +871,12 @@ layout_inode(ntfs_inode *ino,ntfs_disk_inode *store)
 			if(error)
 				return error;
 		}
-		next=(next+7) & ~7; /* align to DWORD */
+		/* SRD: umm..
+		next=(next+7) & ~7; */
+		/* is this setting the length? if so maybe we could get
+		   away with rounding up so long as we set the length first..
+		   ..except, is the length the only way to get to the next attr?
+		 */
 		NTFS_PUTU16(rec+offset+4,next-offset);
 		offset=next;
 #endif
@@ -1038,7 +1073,8 @@ new_inode (ntfs_volume* vol,int* result)
 	data=ntfs_find_attr(vol->mft_ino,vol->at_data,0);
 	length=data->size/vol->mft_recordsize;
 
-	for (byte = 3; 8*byte < length; byte++)
+	/* SRD: start at byte 0: bits for system files _are_ already set in bitmap */
+	for (byte = 0; 8*byte < length; byte++)
 	{
 		value = buffer[byte];
 		if(value==0xFF)
@@ -1064,7 +1100,7 @@ add_mft_header (ntfs_inode *ino)
 	mft=ino->attr;
 
 	ntfs_bzero(mft, vol->mft_recordsize);
-	fill_mft_header(mft,vol->mft_recordsize,vol->blocksize,
+	ntfs_fill_mft_header(mft,vol->mft_recordsize,vol->blocksize,
 			ino->sequence_number);
 	return 0;
 }
@@ -1108,6 +1144,8 @@ add_filename (ntfs_inode* ino, ntfs_inode* dir,
 	/* work out the size */
 	size = 0x42 + 2 * length;
 	data = ntfs_malloc(size);
+	if( !data )
+		return ENOMEM;
 	ntfs_bzero(data,size);
 
 	/* search for a position */
@@ -1191,7 +1229,7 @@ int ntfs_alloc_inode (ntfs_inode *dir, ntfs_inode *result,
 {
 	ntfs_io io;
 	int error;
-	ntfs_u8 buffer[1];
+	ntfs_u8 buffer[2];
 	ntfs_volume* vol=dir->vol;
 	int byte,bit;
 
@@ -1230,7 +1268,7 @@ int ntfs_alloc_inode (ntfs_inode *dir, ntfs_inode *result,
 	  */
 	/* get the sequence number */
 	io.param = buffer;
-	io.size = 0x10;
+	io.size = 2;
 	error = ntfs_read_attr(vol->mft_ino, vol->at_data, 0, 
 			       result->i_number*vol->mft_recordsize+0x10,&io);
 	if(error)
@@ -1238,10 +1276,17 @@ int ntfs_alloc_inode (ntfs_inode *dir, ntfs_inode *result,
 	result->sequence_number=NTFS_GETU16(buffer)+1;
 	result->vol=vol;
 	result->attr=ntfs_malloc(vol->mft_recordsize);
+	if( !result->attr )
+		return ENOMEM;
 	result->attr_count=0;
 	result->attrs=0;
 	result->record_count=1;
 	result->records=ntfs_malloc(8*sizeof(int));
+	if( !result->records ) {
+		ntfs_free( result->attr );
+		result->attr = 0;
+		return ENOMEM;
+	}
 	result->records[0]=result->i_number;
 	error=add_mft_header(result);
 	if(error)

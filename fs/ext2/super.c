@@ -543,8 +543,6 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	else
 		sb->u.ext2_sb.s_resgid = le16_to_cpu(es->s_def_resgid);
 	sb->u.ext2_sb.s_mount_state = le16_to_cpu(es->s_state);
-	sb->u.ext2_sb.s_rename_lock = 0;
-	sb->u.ext2_sb.s_rename_wait = NULL;
 	sb->u.ext2_sb.s_addr_per_block_bits =
 		log2 (EXT2_ADDR_PER_BLOCK(sb));
 	sb->u.ext2_sb.s_desc_per_block_bits =

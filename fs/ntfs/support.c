@@ -246,6 +246,10 @@ int ntfs_dupuni2map(ntfs_volume *vol, ntfs_u16 *in, int in_len, char **out,
 		if(!(vol->nct & nct_uni_xlate))goto inval;
 		/* realloc */
 		buf=ntfs_malloc(*out_len+3);
+		if( !buf ) {
+			ntfs_free( result );
+			return ENOMEM;
+		}
 		memcpy(buf,result,o);
 		ntfs_free(result);
 		result=buf;

@@ -1,8 +1,18 @@
 /******************************************************************************
-**  Device driver for the PCI-SCSI NCR538XX controller family.
+**  High Performance device driver for the Symbios 53C896 controller.
 **
+**  Copyright (C) 1998  Gerard Roudier <groudier@club-internet.fr>
+**
+**  This driver also supports all the Symbios 53C8XX controller family, 
+**  except 53C810 revisions < 16, 53C825 revisions < 16 and all 
+**  revisions of 53C815 controllers.
+**
+**  This driver is based on the Linux port of the FreeBSD ncr driver.
+** 
 **  Copyright (C) 1994  Wolfgang Stanglmeier
-**
+**  
+**-----------------------------------------------------------------------------
+**  
 **  This program is free software; you can redistribute it and/or modify
 **  it under the terms of the GNU General Public License as published by
 **  the Free Software Foundation; either version 2 of the License, or
@@ -19,8 +29,8 @@
 **
 **-----------------------------------------------------------------------------
 **
-**  This driver has been ported to Linux from the FreeBSD NCR53C8XX driver
-**  and is currently maintained by
+**  The Linux port of the FreeBSD ncr driver has been achieved in 
+**  november 1995 by:
 **
 **          Gerard Roudier              <groudier@club-internet.fr>
 **
@@ -33,49 +43,54 @@
 **          Wolfgang Stanglmeier        <wolf@cologne.de>
 **          Stefan Esser                <se@mi.Uni-Koeln.de>
 **
-**  And has been ported to NetBSD by
-**          Charles M. Hannum           <mycroft@gnu.ai.mit.edu>
+**-----------------------------------------------------------------------------
+**
+**  Major contributions:
+**  --------------------
+**
+**  NVRAM detection and reading.
+**    Copyright (C) 1997 Richard Waltham <dormouse@farsrobt.demon.co.uk>
 **
 *******************************************************************************
 */
 
-#ifndef NCR53C8XX_H
-#define NCR53C8XX_H
+#ifndef SYM53C8XX_H
+#define SYM53C8XX_H
 
 #include "sym53c8xx_defs.h"
 
 /*
 **	Define Scsi_Host_Template parameters
 **
-**	Used by hosts.c and ncr53c8xx.c with module configuration.
+**	Used by hosts.c and sym53c8xx.c with module configuration.
 */
 
 #if defined(HOSTS_C) || defined(MODULE)
 
 #include <scsi/scsicam.h>
 
-int ncr53c8xx_abort(Scsi_Cmnd *);
-int ncr53c8xx_detect(Scsi_Host_Template *tpnt);
-const char *ncr53c8xx_info(struct Scsi_Host *host);
-int ncr53c8xx_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-int ncr53c8xx_reset(Scsi_Cmnd *, unsigned int);
+int sym53c8xx_abort(Scsi_Cmnd *);
+int sym53c8xx_detect(Scsi_Host_Template *tpnt);
+const char *sym53c8xx_info(struct Scsi_Host *host);
+int sym53c8xx_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
+int sym53c8xx_reset(Scsi_Cmnd *, unsigned int);
 
 #ifdef MODULE
-int ncr53c8xx_release(struct Scsi_Host *);
+int sym53c8xx_release(struct Scsi_Host *);
 #else
-#define ncr53c8xx_release NULL
+#define sym53c8xx_release NULL
 #endif
 
 
 #if	LINUX_VERSION_CODE >= LinuxVersionCode(2,1,75)
 
-#define NCR53C8XX {     name:           "",			\
-			detect:         ncr53c8xx_detect,	\
-			release:        ncr53c8xx_release,	\
-			info:           ncr53c8xx_info, 	\
-			queuecommand:   ncr53c8xx_queue_command,\
-			abort:          ncr53c8xx_abort,	\
-			reset:          ncr53c8xx_reset,	\
+#define SYM53C8XX {     name:           "",			\
+			detect:         sym53c8xx_detect,	\
+			release:        sym53c8xx_release,	\
+			info:           sym53c8xx_info, 	\
+			queuecommand:   sym53c8xx_queue_command,\
+			abort:          sym53c8xx_abort,	\
+			reset:          sym53c8xx_reset,	\
 			bios_param:     scsicam_bios_param,	\
 			can_queue:      SCSI_NCR_CAN_QUEUE,	\
 			this_id:        7,			\
@@ -85,11 +100,11 @@ int ncr53c8xx_release(struct Scsi_Host *);
 
 #else
 
-#define NCR53C8XX {	NULL, NULL, NULL, NULL,				\
-			NULL,			ncr53c8xx_detect,	\
-			ncr53c8xx_release,	ncr53c8xx_info,	NULL,	\
-			ncr53c8xx_queue_command,ncr53c8xx_abort,	\
-			ncr53c8xx_reset, NULL,	scsicam_bios_param,	\
+#define SYM53C8XX {	NULL, NULL, NULL, NULL,				\
+			NULL,			sym53c8xx_detect,	\
+			sym53c8xx_release,	sym53c8xx_info,	NULL,	\
+			sym53c8xx_queue_command,sym53c8xx_abort,	\
+			sym53c8xx_reset, NULL,	scsicam_bios_param,	\
 			SCSI_NCR_CAN_QUEUE,	7,			\
 			SCSI_NCR_SG_TABLESIZE,	SCSI_NCR_CMD_PER_LUN,	\
 			0,	0,	DISABLE_CLUSTERING} 
@@ -98,4 +113,4 @@ int ncr53c8xx_release(struct Scsi_Host *);
 
 #endif /* defined(HOSTS_C) || defined(MODULE) */ 
 
-#endif /* NCR53C8XX_H */
+#endif /* SYM53C8XX_H */

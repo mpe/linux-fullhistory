@@ -316,6 +316,7 @@ struct	FIRM_ID {
 #define C_IN_OVR_ERROR  0x00008000      /* overrun error */
 #define C_IN_RXOFL	0x00010000      /* RX buffer overflow */
 #define C_IN_IOCTLW	0x00020000      /* I/O control w/ wait */
+#define C_IN_MRTS	0x00040000	/* modem RTS drop */
  
 /* flow control */
 
@@ -332,12 +333,14 @@ struct	FIRM_ID {
 
 /* rs_control/rs_status RS-232 signals */
 
+#define C_RS_PARAM	0x80000000	/* Indicates presence of parameter in 
+					   IOCTLM command */
+#define	C_RS_RTS	0x00000001	/* RTS */
+#define	C_RS_DTR	0x00000004	/* DTR */
 #define	C_RS_DCD	0x00000100	/* CD */
 #define	C_RS_DSR	0x00000200	/* DSR */
 #define	C_RS_RI		0x00000400	/* RI */
 #define	C_RS_CTS	0x00000800	/* CTS */
-#define	C_RS_RTS	0x00000001	/* RTS */
-#define	C_RS_DTR	0x00000004	/* DTR */
 
 /* commands Host <-> Board */
 
@@ -353,13 +356,18 @@ struct	FIRM_ID {
 #define	C_CM_SET_BREAK	0x43		/* Tx break on */
 #define	C_CM_CLR_BREAK	0x44		/* Tx break off */
 #define	C_CM_CMD_DONE	0x45		/* Previous command done */
+#define C_CM_INTBACK2	0x46		/* Alternate Interrupt back */
 #define	C_CM_TINACT	0x51		/* set inactivity detection */
 #define	C_CM_IRQ_ENBL	0x52		/* enable generation of interrupts */
 #define	C_CM_IRQ_DSBL	0x53		/* disable generation of interrupts */
-#define	C_CM_ACK_ENBL	0x54		/* enable acknolowdged interrupt mode */
-#define	C_CM_ACK_DSBL	0x55		/* disable acknolowdged intr mode */
+#define	C_CM_ACK_ENBL	0x54		/* enable acknowledged interrupt mode */
+#define	C_CM_ACK_DSBL	0x55		/* disable acknowledged intr mode */
 #define	C_CM_FLUSH_RX	0x56		/* flushes Rx buffer */
 #define	C_CM_FLUSH_TX	0x57		/* flushes Tx buffer */
+#define C_CM_Q_ENABLE	0x58		/* enables queue access from the 
+					   driver */
+#define C_CM_Q_DISABLE  0x59            /* disables queue access from the 
+					   driver */
 
 #define	C_CM_TXBEMPTY	0x60		/* Tx buffer is empty */
 #define	C_CM_TXLOWWM	0x61		/* Tx buffer low water mark */
@@ -369,6 +377,7 @@ struct	FIRM_ID {
 #define	C_CM_MDSR	0x71		/* modem DSR change */
 #define	C_CM_MRI	0x72		/* modem RI change */
 #define	C_CM_MCTS	0x73		/* modem CTS change */
+#define C_CM_MRTS	0x74		/* modem RTS drop */
 #define	C_CM_RXBRK	0x84		/* Break received */
 #define	C_CM_PR_ERROR	0x85		/* Parity error */
 #define	C_CM_FR_ERROR	0x86		/* Frame error */
@@ -449,9 +458,22 @@ struct BOARD_CTRL {
 	/* FW to Host commands */
 	uclong	fwcmd_channel;	/* channel number */
 	uclong	fwcmd_param;	/* pointer to parameters */
+	uclong	zf_int_queue_addr; /* offset for INT_QUEUE structure */
 
 	/* filler so the structures are aligned */
-	uclong	filler[7];
+	uclong	filler[6];
+};
+
+/* Host Interrupt Queue */
+
+#define QUEUE_SIZE	(10*MAX_CHAN)
+
+struct	INT_QUEUE {
+	unsigned char	intr_code[QUEUE_SIZE];
+	unsigned long	channel[QUEUE_SIZE];
+	unsigned long	param[QUEUE_SIZE];
+	unsigned long	put;
+	unsigned long	get;
 };
 
 /*
@@ -585,6 +607,8 @@ struct cyclades_port {
 #define CyPCI_Zctl 	CTRL_WINDOW_SIZE
 #define CyPCI_Zwin 	0x80000
 #define CyPCI_Ze_win 	(2 * CyPCI_Zwin)
+
+#define PCI_DEVICE_ID_MASK	0x06
 
 /**** CD1400 registers ****/
 

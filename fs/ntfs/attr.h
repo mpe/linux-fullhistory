@@ -18,3 +18,7 @@ int ntfs_create_attr(ntfs_inode *ino, int anum, char *aname, void *data,
 int ntfs_read_zero(ntfs_io *dest,int size);
 int ntfs_make_attr_nonresident(ntfs_inode *ino, ntfs_attribute *attr);
 int ntfs_attr_allnonresident(ntfs_inode *ino);
+int ntfs_new_attr( ntfs_inode *ino, int type, void *name, int namelen,
+ int *pos, int *found, int do_search );
+void ntfs_insert_run( ntfs_attribute *attr, int cnum, ntfs_cluster_t cluster,
+ int len );

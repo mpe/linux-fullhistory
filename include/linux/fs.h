@@ -96,6 +96,10 @@ extern int max_super_blocks, nr_super_blocks;
 #define MS_NOATIME	1024	/* Do not update access times. */
 #define MS_NODIRATIME   2048    /* Do not update directory access times */
 
+#define MS_ODD_RENAME   32768    /* Temporary stuff; will go away as soon
+				  * as nfs_rename() will be cleaned up
+				  */
+
 /*
  * Flags that can be altered by MS_REMOUNT
  */
@@ -560,6 +564,11 @@ struct super_block {
 		struct qnx4_sb_info	qnx4_sb;	   
 		void			*generic_sbp;
 	} u;
+	/*
+	 * The next field is for VFS *only*. No filesystems have any business
+	 * even looking at it. You had been warned.
+	 */
+	struct semaphore s_vfs_rename_sem;	/* Kludge */
 };
 
 /*

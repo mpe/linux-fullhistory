@@ -179,6 +179,7 @@ extern void aic7xxx_setup(char *str, int *ints);
 extern void AM53C974_setup(char *str, int *ints);
 extern void BusLogic_Setup(char *str, int *ints);
 extern void ncr53c8xx_setup(char *str, int *ints);
+extern void sym53c8xx_setup(char *str, int *ints);
 extern void eata2x_setup(char *str, int *ints);
 extern void u14_34f_setup(char *str, int *ints);
 extern void fdomain_setup(char *str, int *ints);
@@ -677,6 +678,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_SCSI_NCR53C8XX
 	{ "ncr53c8xx=", ncr53c8xx_setup},
+#endif
+#ifdef CONFIG_SCSI_SYM53C8XX
+	{ "sym53c8xx=", sym53c8xx_setup},
 #endif
 #ifdef CONFIG_SCSI_EATA
 	{ "eata=", eata2x_setup},

@@ -1,9 +1,10 @@
 /*
  *  attr.c
  *
- *  Copyright (C) 1996-1998 Martin von Löwis
+ *  Copyright (C) 1996-1999 Martin von Löwis
  *  Copyright (C) 1996-1997 Régis Duchesne
  *  Copyright (C) 1998 Joseph Malicki
+ *  Copyright (C) 1999 Steve Dodd
  */
 
 #include "ntfstypes.h"
@@ -11,6 +12,9 @@
 #include "attr.h"
 
 #include <linux/errno.h>
+#ifdef HAVE_STRING_H
+#include <string.h>
+#endif
 #include "macros.h"
 #include "support.h"
 #include "util.h"
@@ -18,8 +22,9 @@
 #include "inode.h"
 
 /* Look if an attribute already exists in the inode, and if not, create it */
-static int 
-new_attr(ntfs_inode *ino,int type,void *name,int namelen,int *pos, int *found)
+int 
+ntfs_new_attr(ntfs_inode *ino,int type,void *name,int namelen,int *pos,
+			int *found, int do_search )
 {
 	int do_insert=0;
 	int i;
@@ -28,15 +33,17 @@ new_attr(ntfs_inode *ino,int type,void *name,int namelen,int *pos, int *found)
 	{
 		int n=min(namelen,ino->attrs[i].namelen);
 		int s=ntfs_uni_strncmp(ino->attrs[i].name,name,n);
-		/*
-		 * We assume that each attribute can be uniquely 
-		 * identified by inode
-		 * number, attribute type and attribute name.
-		 */
-		if(ino->attrs[i].type==type && ino->attrs[i].namelen==namelen && !s){
-			*found=1;
-			*pos=i;
-			return 0;
+		if( do_search ) {
+			/*
+			 * We assume that each attribute can be uniquely 
+			 * identified by inode
+			 * number, attribute type and attribute name.
+			 */
+			if(ino->attrs[i].type==type && ino->attrs[i].namelen==namelen && !s){
+				*found=1;
+				*pos=i;
+				return 0;
+			}
 		}
 		/* attributes are ordered by type, then by name */
 		if(ino->attrs[i].type>type || (ino->attrs[i].type==type && s==1)){
@@ -48,17 +55,21 @@ new_attr(ntfs_inode *ino,int type,void *name,int namelen,int *pos, int *found)
 	/* re-allocate space */
 	if(ino->attr_count % 8 ==0)
 	{
-		ntfs_attribute* old=ino->attrs;
-		ino->attrs = (ntfs_attribute*)ntfs_malloc((ino->attr_count+8)*
+		ntfs_attribute* new;
+		new = (ntfs_attribute*)ntfs_malloc((ino->attr_count+8)*
 			     sizeof(ntfs_attribute));
-		if(old){
-			ntfs_memcpy(ino->attrs,old,ino->attr_count*sizeof(ntfs_attribute));
-			ntfs_free(old);
+		if( !new )
+			return ENOMEM;
+		if( ino->attrs ) {
+			ntfs_memcpy( new, ino->attrs, ino->attr_count*sizeof(ntfs_attribute) );
+			ntfs_free( ino->attrs );
 		}
+		ino->attrs = new;
 	}
 	if(do_insert)
 		ntfs_memmove(ino->attrs+i+1,ino->attrs+i,(ino->attr_count-i)*
 			    sizeof(ntfs_attribute));
+
 	ino->attr_count++;
 	ino->attrs[i].type=type;
 	ino->attrs[i].namelen=namelen;
@@ -81,19 +92,21 @@ ntfs_make_attr_resident(ntfs_inode *ino,ntfs_attribute *attr)
 }
 
 /* Store in the inode readable information about a run */
-static void
+void
 ntfs_insert_run(ntfs_attribute *attr,int cnum,ntfs_cluster_t cluster,int len)
 {
 	/* (re-)allocate space if necessary */
 	if(attr->d.r.len % 8 == 0) {
-		ntfs_runlist* old;
-		old=attr->d.r.runlist;
-		attr->d.r.runlist=ntfs_malloc((attr->d.r.len+8)*sizeof(ntfs_runlist));
-		if(old) {
-			ntfs_memcpy(attr->d.r.runlist,old,attr->d.r.len
+		ntfs_runlist* new;
+		new = ntfs_malloc((attr->d.r.len+8)*sizeof(ntfs_runlist));
+		if( !new )
+			return;
+		if( attr->d.r.runlist ) {
+			ntfs_memcpy(new, attr->d.r.runlist, attr->d.r.len
 				    *sizeof(ntfs_runlist));
-			ntfs_free(old);
+			ntfs_free( attr->d.r.runlist );
 		}
+		attr->d.r.runlist = new;
 	}
 	if(attr->d.r.len>cnum)
 		ntfs_memmove(attr->d.r.runlist+cnum+1,attr->d.r.runlist+cnum,
@@ -103,6 +116,13 @@ ntfs_insert_run(ntfs_attribute *attr,int cnum,ntfs_cluster_t cluster,int len)
 	attr->d.r.len++;
 }
 
+/* Extends an attribute. Another run will be added if necessary,
+ * but we try to extend the last run in the runlist first.
+ * FIXME: what if there isn't enough contiguous space, we don't create
+ * multiple runs?
+ *
+ * *len: the desired new length of the attr (_not_ the amount to extend by)
+ */
 int ntfs_extend_attr(ntfs_inode *ino, ntfs_attribute *attr, int *len,
 		int flags)
 {
@@ -111,34 +131,46 @@ int ntfs_extend_attr(ntfs_inode *ino, ntfs_attribute *attr, int *len,
 	int rlen;
 	ntfs_cluster_t cluster;
 	int clen;
+
 	if(attr->compressed)return EOPNOTSUPP;
 	if(ino->record_count>1)return EOPNOTSUPP;
+
 	if(attr->resident) {
 		error = ntfs_make_attr_nonresident(ino,attr);
 		if(error)
 			return error;
 	}
 
+	if( *len <= attr->allocated )
+		return 0;	/* truely stupid things do sometimes happen */
+
 	rl=attr->d.r.runlist;
 	rlen=attr->d.r.len-1;
+
 	if(rlen>=0)
 		cluster=rl[rlen].cluster+rl[rlen].len;
 	else
 		/* no preference for allocation space */
 		cluster=0;
-	/* round up to multiple of cluster size */
-	clen=(*len+ino->vol->clustersize-1)/ino->vol->clustersize;
+
+	/* calculate the extra space we need, and round up to multiple of cluster
+	 * size to get number of new clusters needed */
+
+	clen=( (*len - attr->allocated ) + ino->vol->clustersize - 1 ) /
+		ino->vol->clustersize;
 	if(clen==0)
 		return 0;
+
 	/* FIXME: try to allocate smaller pieces */
 	error=ntfs_allocate_clusters(ino->vol,&cluster,&clen,
 				     flags|ALLOC_REQUIRE_SIZE);
 	if(error)return error;
 	attr->allocated += clen*ino->vol->clustersize;
-	*len=clen*ino->vol->clustersize;
+	*len = attr->allocated;
+
 	/* contiguous chunk */
 	if(rlen>=0 && cluster==rl[rlen].cluster+rl[rlen].len){
-		rl[rlen].len+=clen;
+		rl[rlen].len += clen;
 		return 0;
 	}
 	ntfs_insert_run(attr,rlen+1,cluster,clen);
@@ -208,8 +240,10 @@ int ntfs_resize_attr(ntfs_inode *ino, ntfs_attribute *attr, int newsize)
 		v=attr->d.data;
 		if(newsize){
 			attr->d.data=ntfs_malloc(newsize);
-			if(!attr->d.data)
+			if(!attr->d.data) {
+				ntfs_free(v);
 				return ENOMEM;
+			}
 			if(newsize>oldsize)
 				ntfs_bzero((char*)attr->d.data+oldsize,
 					   newsize-oldsize);
@@ -231,7 +265,7 @@ int ntfs_resize_attr(ntfs_inode *ino, ntfs_attribute *attr, int newsize)
 		newlen=i+1;
 		/* free unused clusters in current run, unless sparse */
 		newcount=count;
-		if(rl[i].cluster!=-1){
+		if(rl[i].cluster!=MAX_CLUSTER_T){
 			int rounded=newsize-count*clustersize;
 			rounded=(rounded+clustersize-1)/clustersize;
 			error=ntfs_deallocate_clusters(ino->vol,rl[i].cluster+rounded,
@@ -243,7 +277,7 @@ int ntfs_resize_attr(ntfs_inode *ino, ntfs_attribute *attr, int newsize)
 		}
 		/* free all other runs */
 		for(i++;i<attr->d.r.len;i++)
-			if(rl[i].cluster!=-1){
+			if(rl[i].cluster!=MAX_CLUSTER_T){
 				error=ntfs_deallocate_clusters(ino->vol,rl[i].cluster,(int)rl[i].len);
 				if(error)
 					return error; /* FIXME: incomplete operation */
@@ -279,12 +313,20 @@ int ntfs_create_attr(ntfs_inode *ino, int anum, char *aname, void *data,
 	if(aname){
 		namelen=strlen(aname);
 		name=ntfs_malloc(2*namelen);
+		if( !name )
+			return ENOMEM;
 		ntfs_ascii2uni(name,aname,namelen);
 	}else{
 		name=0;
 		namelen=0;
 	}
-	new_attr(ino,anum,name,namelen,&i,&found);
+
+	error = ntfs_new_attr(ino,anum,name,namelen,&i,&found,1);
+	if( error ) {
+		ntfs_free( name );
+		return error;
+	}
+
 	if(found){
 		ntfs_free(name);
 		return EEXIST;
@@ -309,6 +351,10 @@ int ntfs_create_attr(ntfs_inode *ino, int anum, char *aname, void *data,
 	}else
 		attr->indexed=0;
 	attr->d.data=ntfs_malloc(dsize);
+
+	if( !attr->d.data )
+		return ENOMEM;
+
 	ntfs_memcpy(attr->d.data,data,dsize);
 	return 0;
 }
@@ -366,6 +412,7 @@ int ntfs_insert_attribute(ntfs_inode *ino, unsigned char* attrdata)
 	int namelen;
 	void *data;
 	ntfs_attribute *attr;
+	int error;
 
 	type = NTFS_GETU32(attrdata);
 	namelen = NTFS_GETU8(attrdata+9);
@@ -376,15 +423,30 @@ int ntfs_insert_attribute(ntfs_inode *ino, unsigned char* attrdata)
 	{
 		/* 1 Unicode character fits in 2 bytes */
 		name=ntfs_malloc(2*namelen);
+		if( !name )
+			return ENOMEM;
+
 		ntfs_memcpy(name,attrdata+NTFS_GETU16(attrdata+10),2*namelen);
 	}
-	new_attr(ino,type,name,namelen,&i,&found);
+
+	error = ntfs_new_attr(ino,type,name,namelen,&i,&found,1);
+	if( error ) {
+		if( name ) ntfs_free( name );
+		return error;
+	}
+
 	/* We can have in one inode two attributes with type 0x00000030 (File Name) 
 	   and without name */
 	if(found && /*FIXME*/type!=ino->vol->at_file_name)
 	{
 		ntfs_process_runs(ino,ino->attrs+i,attrdata);
 		return 0;
+ 	} else if( found ) {
+ 		/*	Don't understand the above, but I know it leaks memory below
+ 			as it overwrites a found entry without freeing it. So here we
+ 			call ntfs_new_attr again but this time ask it to always allocate a
+ 			new	entry */
+ 		ntfs_new_attr(ino,type,name,namelen,&i,&found,0);
 	}
 	attr=ino->attrs+i;
 	attr->resident=NTFS_GETU8(attrdata+8)==0;
@@ -395,6 +457,8 @@ int ntfs_insert_attribute(ntfs_inode *ino, unsigned char* attrdata)
 		attr->size=NTFS_GETU16(attrdata+0x10);
 		data=attrdata+NTFS_GETU16(attrdata+0x14);
 		attr->d.data = (void*)ntfs_malloc(attr->size);
+		if( !attr->d.data )
+			return ENOMEM;
 		ntfs_memcpy(attr->d.data,data,attr->size);
 		attr->indexed=NTFS_GETU16(attrdata+0x16);
 	}else{
@@ -468,7 +532,7 @@ int ntfs_read_compressed(ntfs_inode *ino, ntfs_attribute *attr, int offset,
 	copied=0;
 	while(l){
 		chunk=0;
-		if(cluster==-1){
+		if(cluster==MAX_CLUSTER_T){
 			/* sparse cluster */
 			int l1;
 			if((len-(s_vcn-vcn)) & 15)
@@ -503,9 +567,9 @@ int ntfs_read_compressed(ntfs_inode *ino, ntfs_attribute *attr, int offset,
 				}
 				got+=l1;
 				comp1+=l1*clustersize;
-			}while(cluster!=-1 && got<16); /* until empty run */
+			}while(cluster!=MAX_CLUSTER_T && got<16); /* until empty run */
 			chunk=16*clustersize;
-			if(cluster!=-1 || got==16)
+			if(cluster!=MAX_CLUSTER_T || got==16)
 				/* uncompressible */
 				comp1=comp;
 			else{

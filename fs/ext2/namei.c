@@ -218,12 +218,6 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 		return NULL;
 	sb = dir->i_sb;
 
-	if (namelen > EXT2_NAME_LEN)
-	{
-		*err = -ENAMETOOLONG;
-		return NULL;
-	}
-
 	if (!namelen)
 		return NULL;
 	/*
@@ -409,10 +403,6 @@ int ext2_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
 	struct ext2_dir_entry_2 * de;
 	int err = -EIO;
 
-	err = -ENAMETOOLONG;
-	if (dentry->d_name.len > EXT2_NAME_LEN)
-		goto out;
-
 	inode = ext2_new_inode (dir, mode, &err);
 	if (!inode)
 		goto out;
@@ -473,10 +463,6 @@ int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	struct buffer_head * bh, * dir_block;
 	struct ext2_dir_entry_2 * de;
 	int err;
-
-	err = -ENAMETOOLONG;
-	if (dentry->d_name.len > EXT2_NAME_LEN)
-		goto out;
 
 	err = -EMLINK;
 	if (dir->i_nlink >= EXT2_LINK_MAX)
@@ -618,10 +604,6 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 	struct buffer_head * bh;
 	struct ext2_dir_entry_2 * de;
 
-	retval = -ENAMETOOLONG;
-	if (dentry->d_name.len > EXT2_NAME_LEN)
-		goto out;
-
 	retval = -ENOENT;
 	bh = ext2_find_entry (dir, dentry->d_name.name, dentry->d_name.len, &de);
 	if (!bh)
@@ -634,14 +616,12 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 	if (le32_to_cpu(de->inode) != inode->i_ino)
 		goto end_rmdir;
 
+	retval = -ENOTEMPTY;
 	if (!empty_dir (inode))
-		retval = -ENOTEMPTY;
-	else if (le32_to_cpu(de->inode) != inode->i_ino)
-		retval = -ENOENT;
-	else {
-		retval = ext2_delete_entry (de, bh);
-		dir->i_version = ++event;
-	}
+		goto end_rmdir;
+
+	retval = ext2_delete_entry (de, bh);
+	dir->i_version = ++event;
 	if (retval)
 		goto end_rmdir;
 	mark_buffer_dirty(bh, 1);
@@ -665,7 +645,6 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 
 end_rmdir:
 	brelse (bh);
-out:
 	return retval;
 }
 
@@ -675,10 +654,6 @@ int ext2_unlink(struct inode * dir, struct dentry *dentry)
 	struct inode * inode;
 	struct buffer_head * bh;
 	struct ext2_dir_entry_2 * de;
-
-	retval = -ENAMETOOLONG;
-	if (dentry->d_name.len > EXT2_NAME_LEN)
-		goto out;
 
 	retval = -ENOENT;
 	bh = ext2_find_entry (dir, dentry->d_name.name, dentry->d_name.len, &de);
@@ -718,7 +693,6 @@ int ext2_unlink(struct inode * dir, struct dentry *dentry)
 
 end_unlink:
 	brelse (bh);
-out:
 	return retval;
 }
 
@@ -805,9 +779,6 @@ int ext2_link (struct dentry * old_dentry,
 	if (S_ISDIR(inode->i_mode))
 		return -EPERM;
 
-	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
-		return -EPERM;
-
 	if (inode->i_nlink >= EXT2_LINK_MAX)
 		return -EMLINK;
 
@@ -851,17 +822,10 @@ int ext2_link (struct dentry * old_dentry,
 	le16_to_cpu(((struct ext2_dir_entry_2 *) buffer)->rec_len)))->inode
 
 /*
- * rename uses retrying to avoid race-conditions: at least they should be
- * minimal.
- * it tries to allocate all the blocks, then sanity-checks, and if the sanity-
- * checks fail, it tries to restart itself again. Very practical - no changes
- * are done until we know everything works ok.. and then all the changes can be
- * done in one fell swoop when we have claimed all the buffers needed.
- *
  * Anybody can rename anything with this: the permission checks are left to the
  * higher-level routines.
  */
-static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
+int ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 			   struct inode * new_dir,struct dentry *new_dentry)
 {
 	struct inode * old_inode, * new_inode;
@@ -870,9 +834,6 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 	int retval;
 
 	old_bh = new_bh = dir_bh = NULL;
-	retval = -ENAMETOOLONG;
-	if (old_dentry->d_name.len > EXT2_NAME_LEN)
-		goto end_rename;
 
 	old_bh = ext2_find_entry (old_dir, old_dentry->d_name.name, old_dentry->d_name.len, &old_de);
 	/*
@@ -897,24 +858,13 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 			DQUOT_INIT(new_inode);
 		}
 	}
-	retval = 0;
-	if (new_inode == old_inode)
-		goto end_rename;
 	if (S_ISDIR(old_inode->i_mode)) {
-		retval = -EINVAL;
-		if (is_subdir(new_dentry, old_dentry))
-			goto end_rename;
 		if (new_inode) {
-			/* Prune any children before testing for busy */
-			if (new_dentry->d_count > 1)
-				shrink_dcache_parent(new_dentry);
-			retval = -EBUSY;
-			if (new_dentry->d_count > 1)
-				goto end_rename;
 			retval = -ENOTEMPTY;
 			if (!empty_dir (new_inode))
 				goto end_rename;
 		}
+		retval = -EIO;
 		dir_bh = ext2_bread (old_inode, 0, 0, &retval);
 		if (!dir_bh)
 			goto end_rename;
@@ -977,8 +927,6 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 		wait_on_buffer (new_bh);
 	}
 
-	/* Update the dcache */
-	d_move(old_dentry, new_dentry);
 	retval = 0;
 
 end_rename:
@@ -986,31 +934,4 @@ end_rename:
 	brelse (old_bh);
 	brelse (new_bh);
 	return retval;
-}
-
-/*
- * Ok, rename also locks out other renames, as they can change the parent of
- * a directory, and we don't want any races. Other races are checked for by
- * "do_rename()", which restarts if there are inconsistencies.
- *
- * Note that there is no race between different filesystems: it's only within
- * the same device that races occur: many renames can happen at once, as long
- * as they are on different partitions.
- *
- * In the second extended file system, we use a lock flag stored in the memory
- * super-block.  This way, we really lock other renames only if they occur
- * on the same file system
- */
-int ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
-		 struct inode * new_dir, struct dentry *new_dentry)
-{
-	int result;
-
-	while (old_dir->i_sb->u.ext2_sb.s_rename_lock)
-		sleep_on (&old_dir->i_sb->u.ext2_sb.s_rename_wait);
-	old_dir->i_sb->u.ext2_sb.s_rename_lock = 1;
-	result = do_ext2_rename (old_dir, old_dentry, new_dir, new_dentry);
-	old_dir->i_sb->u.ext2_sb.s_rename_lock = 0;
-	wake_up (&old_dir->i_sb->u.ext2_sb.s_rename_wait);
-	return result;
 }

@@ -93,6 +93,7 @@
 #define UFS_ST_OLD		0x00000000
 #define UFS_ST_44BSD		0x00000100
 #define UFS_ST_SUN		0x00000200
+#define UFS_ST_SUNx86		0x00000400
 /*cylinder group encoding */
 #define UFS_CG_MASK		0x00003000	/* mask for the following */
 #define UFS_CG_OLD		0x00000000
@@ -110,12 +111,13 @@
 #define UFS_MOUNT_ONERROR_UMOUNT	0x00000004
 #define UFS_MOUNT_ONERROR_REPAIR	0x00000008
 
-#define UFS_MOUNT_UFSTYPE		0x000001F0
+#define UFS_MOUNT_UFSTYPE		0x000003F0
 #define UFS_MOUNT_UFSTYPE_OLD		0x00000010
 #define UFS_MOUNT_UFSTYPE_44BSD		0x00000020
 #define UFS_MOUNT_UFSTYPE_SUN		0x00000040
-#define UFS_MOUNT_UFSTYPE_NEXT		0x00000080
+#define UFS_MOUNT_UFSTYPE_NEXTSTEP	0x00000080
 #define UFS_MOUNT_UFSTYPE_OPENSTEP	0x00000100
+#define UFS_MOUNT_UFSTYPE_SUNx86	0x00000200
 
 #define ufs_clear_opt(o,opt)	o &= ~UFS_MOUNT_##opt
 #define ufs_set_opt(o,opt)	o |= UFS_MOUNT_##opt
@@ -203,7 +205,7 @@
 #define	UFS_MAXNAMLEN 255
 #define UFS_MAXMNTLEN 512
 #define UFS_MAXCSBUFS 31
-#define UFS_LINK_MAX EXT2_LINK_MAX
+#define UFS_LINK_MAX 32000
 
 /*
  * UFS_DIR_PAD defines the directory entries boundaries
@@ -294,7 +296,14 @@ struct ufs_super_block {
 /* yet another configuration parameter */
 	__u32	fs_optim;	/* optimization preference, see below */
 /* these fields are derived from the hardware */
-	__u32	fs_npsect;	/* # sectors/track including spares */
+	union {
+		struct {
+			__u32	fs_npsect;	/* # sectors/track including spares */
+		} fs_sun;
+		struct {
+			__s32	fs_state;	/* file system state time stamp */
+		} fs_sunx86;
+	} fs_u1;
 	__u32	fs_interleave;	/* hardware sector interleave */
 	__u32	fs_trackskew;	/* sector 0 skew, per track */
 /* a unique id for this filesystem (currently unused and unmaintained) */
@@ -319,11 +328,11 @@ struct ufs_super_block {
 /* this data must be re-computed after crashes */
 	struct ufs_csum fs_cstotal;	/* cylinder summary information */
 /* these fields are cleared at mount time */
-	__u8	fs_fmod;	/* super block modified flag */
-	__u8	fs_clean;	/* file system is clean flag */
-	__u8	fs_ronly;	/* mounted read-only flag */
-	__u8	fs_flags;	/* currently unused flag */
-	__u8	fs_fsmnt[UFS_MAXMNTLEN];	/* name mounted on */
+	__s8	fs_fmod;	/* super block modified flag */
+	__s8	fs_clean;	/* file system is clean flag */
+	__s8	fs_ronly;	/* mounted read-only flag */
+	__s8	fs_flags;	/* currently unused flag */
+	__s8	fs_fsmnt[UFS_MAXMNTLEN];	/* name mounted on */
 /* these fields retain the current block allocation info */
 	__u32	fs_cgrotor;	/* last cg searched */
 	__u32	fs_csp[UFS_MAXCSBUFS];	/* list of fs_cs info buffers */
@@ -340,6 +349,14 @@ struct ufs_super_block {
 			__u32	fs_qfmask[2];	/* ~usb_fmask */
 		} fs_sun;
 		struct {
+			__s32	fs_sparecon[53];/* reserved for future constants */
+			__s32	fs_reclaim;
+			__s32	fs_sparecon2[1];
+			__u32	fs_npsect;	/* # sectors/track including spares */
+			__u32	fs_qbmask[2];	/* ~usb_bmask */
+			__u32	fs_qfmask[2];	/* ~usb_fmask */
+		} fs_sunx86;
+		struct {
 			__s32	fs_sparecon[50];/* reserved for future constants */
 			__s32	fs_contigsumsize;/* size of cluster summary array */
 			__s32	fs_maxsymlinklen;/* max length of an internal symlink */
@@ -349,7 +366,7 @@ struct ufs_super_block {
 			__u32	fs_qfmask[2];	/* ~usb_fmask */
 			__s32	fs_state;	/* file system state time stamp */
 		} fs_44;
-	} fs_u;
+	} fs_u2;
 	__s32	fs_postblformat;	/* format of positional layout tables */
 	__s32	fs_nrpos;		/* number of rotational positions */
 	__s32	fs_postbloff;		/* (__s16) rotation block list head */

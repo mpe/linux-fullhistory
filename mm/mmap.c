@@ -490,8 +490,8 @@ struct vm_area_struct * find_vma_prev(struct mm_struct * mm, unsigned long addr,
  * allocate a new one, and the return indicates whether the old
  * area was reused.
  */
-static int unmap_fixup(struct vm_area_struct *area, unsigned long addr,
-			 size_t len, struct vm_area_struct **extra)
+static struct vm_area_struct * unmap_fixup(struct vm_area_struct *area,
+	unsigned long addr, size_t len, struct vm_area_struct *extra)
 {
 	struct vm_area_struct *mpnt;
 	unsigned long end = addr + len;
@@ -506,7 +506,8 @@ static int unmap_fixup(struct vm_area_struct *area, unsigned long addr,
 			area->vm_ops->close(area);
 		if (area->vm_file)
 			fput(area->vm_file);
-		return 0;
+		kmem_cache_free(vm_area_cachep, area);
+		return extra;
 	}
 
 	/* Work out to one of the ends. */
@@ -518,8 +519,8 @@ static int unmap_fixup(struct vm_area_struct *area, unsigned long addr,
 	} else {
 	/* Unmapping a hole: area->vm_start < addr <= end < area->vm_end */
 		/* Add end mapping -- leave beginning for below */
-		mpnt = *extra;
-		*extra = NULL;
+		mpnt = extra;
+		extra = NULL;
 
 		mpnt->vm_mm = area->vm_mm;
 		mpnt->vm_start = end;
@@ -539,7 +540,7 @@ static int unmap_fixup(struct vm_area_struct *area, unsigned long addr,
 	}
 
 	insert_vm_struct(current->mm, area);
-	return 1;
+	return extra;
 }
 
 /*
@@ -674,8 +675,7 @@ int do_munmap(unsigned long addr, size_t len)
 		/*
 		 * Fix the mapping, and free the old area if it wasn't reused.
 		 */
-		if (!unmap_fixup(mpnt, st, size, &extra))
-			kmem_cache_free(vm_area_cachep, mpnt);
+		extra = unmap_fixup(mpnt, st, size, extra);
 	}
 
 	/* Release the extra vma struct if it wasn't used */

@@ -279,7 +279,8 @@ static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry
 {
 	struct inode * inode = dentry->d_inode;
 
-	if (inode && inode->i_op && inode->i_op->follow_link) {
+	if ((follow & LOOKUP_FOLLOW)
+	    && inode && inode->i_op && inode->i_op->follow_link) {
 		if (current->link_count < 5) {
 			struct dentry * result;
 
@@ -402,9 +403,6 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 
 		/* Check mountpoints.. */
 		dentry = follow_mount(dentry);
-
-		if (!(flags & LOOKUP_FOLLOW))
-			break;
 
 		base = do_follow_link(base, dentry, flags);
 		if (IS_ERR(base))
@@ -1231,15 +1229,16 @@ asmlinkage int sys_link(const char * oldname, const char * newname)
 	return error;
 }
 
-int vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
+int vfs_rename_dir(struct inode *old_dir, struct dentry *old_dentry,
 	       struct inode *new_dir, struct dentry *new_dentry)
 {
 	int error;
-	int isdir;
+	int need_rehash = 0;
 
-	isdir = S_ISDIR(old_dentry->d_inode->i_mode);
+	if (old_dentry->d_inode == new_dentry->d_inode)
+		return 0;
 
-	error = may_delete(old_dir, old_dentry, isdir); /* XXX */
+	error = may_delete(old_dir, old_dentry, 1);
 	if (error)
 		return error;
 
@@ -1249,7 +1248,64 @@ int vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	if (!new_dentry->d_inode)
 		error = may_create(new_dir, new_dentry);
 	else
-		error = may_delete(new_dir, new_dentry, isdir);
+		error = may_delete(new_dir, new_dentry, 1);
+	if (error)
+		return error;
+
+	if (!old_dir->i_op || !old_dir->i_op->rename)
+		return -EPERM;
+
+	/*
+	 * If we are going to change the parent - check write permissions,
+	 * we'll need to flip '..'.
+	 */
+	if (new_dir != old_dir) {
+		error = permission(old_dentry->d_inode, MAY_WRITE);
+	}
+	if (error)
+		return error;
+
+	DQUOT_INIT(old_dir);
+	DQUOT_INIT(new_dir);
+	down(&old_dir->i_sb->s_vfs_rename_sem);
+	error = -EINVAL;
+	if (is_subdir(new_dentry, old_dentry))
+		goto out_unlock;
+	if (new_dentry->d_inode) {
+		error = -EBUSY;
+		if (d_invalidate(new_dentry)<0)
+			goto out_unlock;
+		need_rehash = 1;
+	}
+	error = old_dir->i_op->rename(old_dir, old_dentry, new_dir, new_dentry);
+	if (need_rehash)
+		d_rehash(new_dentry);
+	if (!error)
+		d_move(old_dentry,new_dentry);
+out_unlock:
+	up(&old_dir->i_sb->s_vfs_rename_sem);
+	return error;
+}
+
+int vfs_rename_other(struct inode *old_dir, struct dentry *old_dentry,
+	       struct inode *new_dir, struct dentry *new_dentry)
+{
+	int error;
+
+	if (old_dentry->d_inode == new_dentry->d_inode)
+		return 0;
+
+	error = may_delete(old_dir, old_dentry, 0);
+	if (error)
+		return error;
+
+	if (new_dir->i_dev != old_dir->i_dev)
+		return -EXDEV;
+
+	if (!new_dentry->d_inode)
+		error = may_create(new_dir, new_dentry);
+	else
+		error = may_delete(new_dir, new_dentry, 0);
 	if (error)
 		return error;
 
@@ -1259,8 +1315,22 @@ int vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	DQUOT_INIT(old_dir);
 	DQUOT_INIT(new_dir);
 	error = old_dir->i_op->rename(old_dir, old_dentry, new_dir, new_dentry);
+	if (error)
+		return error;
+	/* The following d_move() should become unconditional */
+	if (!(old_dir->i_sb->s_flags & MS_ODD_RENAME)) {
+		d_move(old_dentry, new_dentry);
+	}
+	return 0;
+}
 
-	return error;
+int vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
+	       struct inode *new_dir, struct dentry *new_dentry)
+{
+	if (S_ISDIR(old_dentry->d_inode->i_mode))
+		return vfs_rename_dir(old_dir,old_dentry,new_dir,new_dentry);
+	else
+		return vfs_rename_other(old_dir,old_dentry,new_dir,new_dentry);
 }
 
 static inline int do_rename(const char * oldname, const char * newname)

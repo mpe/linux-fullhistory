@@ -26,3 +26,5 @@ int ntfs_allocate_attr_number(ntfs_inode *ino, int *result);
 int ntfs_decompress_run(unsigned char **data, int *length, ntfs_cluster_t *cluster,
 			int *ctype);
 void ntfs_decompress(unsigned char *dest, unsigned char *src, ntfs_size_t l);
+void ntfs_fill_mft_header( ntfs_u8 *mft, int recordsize, int blocksize,
+			int sequence_number );

@@ -1,12 +1,12 @@
 /*
- *  types.h
+ *  ntfstypes.h
  *  This file defines four things:
  *   - generic platform independent fixed-size types (e.g. ntfs_u32)
  *   - specific fixed-size types (e.g. ntfs_offset_t)
  *   - macros that read and write those types from and to byte arrays
  *   - types derived from OS specific ones
  *
- *  Copyright (C) 1996,1998 Martin von Löwis
+ *  Copyright (C) 1996,1998, 1999 Martin von Löwis
  */
 
 #ifdef NTFS_IN_LINUX_KERNEL
@@ -52,6 +52,10 @@ typedef u64 ntfs_time64_t;
 #ifndef NTFS_CLUSTER_T
 #define NTFS_CLUSTER_T
 typedef u32 ntfs_cluster_t;
+#endif
+
+#ifndef MAX_CLUSTER_T
+#define MAX_CLUSTER_T (~((ntfs_cluster_t)0))
 #endif
 
 /* architecture independent macros */

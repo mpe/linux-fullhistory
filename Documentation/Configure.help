@@ -3956,8 +3956,8 @@ CONFIG_SCSI_NCR53C8XX
   tagged command queuing and fast synchronous data transfers up to 80
   MB/s with wide FAST-40 LVD devices and controllers.
 
-  The NCR53C860 and NCR53C875 support FAST-20 transfers. The NCR53C895
-  supports FAST-40 transfers with Ultra2 LVD devices.
+  An additionnal driver named SYM53C8XX (a.k.a 896 driver) can also be 
+  configured. See the help on the SYM53C8XX driver for more information.
 
   Note: there is another driver for the 53c8xx family of controllers
   ("NCR53c7,8xx SCSI support" above). If you want to use them both,
@@ -3965,6 +3965,30 @@ CONFIG_SCSI_NCR53C8XX
   may be active at a time. If you have a 53c8xx board, it's best to
   use this driver.
 
+  Please read drivers/scsi/README.ncr53c8xx for more information.
+
+SYM53C8XX SCSI support
+CONFIG_SCSI_SYM53C8XX
+  The 896 driver for Linux (a.k.a. sym53c8xx) is derivated from the 
+  ncr53c8xx driver and has been heavily reworked and enhanced to 
+  fully support all the features of recent 53C8XX chips, notably the 
+  hardware phase mismatch feature of the SYM53C896.
+
+  For that to be achieved without additionnal complexity, support of 
+  old 8XX chips has been dropped. If your system uses either a 
+  810 rev. < 16, a 815, or a 825 rev. < 16 PCI SCSI processor, you must 
+  use the generic NCR53C8XX driver or configure both the NCR53C8XX and 
+  the SYM53C8XX drivers either as module or linked to the kernel image.
+
+  When both drivers are linked to the kernel, the SYM53C8XX driver is 
+  called first at initialization and you can use the 'excl=ioaddr' 
+  driver boot option to exclude attachement of adapters by the SYM53C8XX 
+  driver. For instance, entering 'sym53c8xx=excl:0xb400,excl=0xc000' at 
+  lilo prompt prevents adapters at io address 0xb400 and 0xc000 from 
+  being attached by the SYM53C8XX driver, thus allowing the NCR53C8XX 
+  driver to attach them. The 'excl' option is also supported by the 
+  NCR53C8XX driver.
+  
   Please read drivers/scsi/README.ncr53c8xx for more information.
 
 synchronous data transfers frequency
@@ -4078,6 +4102,17 @@ CONFIG_SCSI_NCR53C8XX_PROFILE
   on systems that use very fast devices.
 
   The normal answer therefore is N.
+
+include support for the NCR PQS/PDS SCSI card
+CONFIG_SCSI_NCR53C8XX_PQS_PDS
+  This allows the driver to detect a special adapter produced by NCR
+  corporation called a PCI Quad SCSI or PCI Dual SCSI. You do not need
+  this if you do not have one of these adapters. However, since this 
+  device is detected as a specific PCI device, this option is quite 
+  safe. This option is only supported by the SYM53C8XX driver (not 
+  by the NCR53C8XX driver).
+
+  The common answer here is N, but answering Y is safe.
 
 IBMMCA SCSI support
 CONFIG_SCSI_IBMMCA
@@ -7613,8 +7648,7 @@ CONFIG_NLS_ISO8859_1
   set, which covers most West European languages such as Albanian,
   Catalan, Danish, Dutch, English, Faeroese, Finnish, French, German,
   Galician, Irish, Icelandic, Italian, Norwegian, Portuguese, Spanish,
-  Swedish, and Valencian. It is also the default for the US. If
-  unsure, say Y.
+  and Swedish. It is also the default for the US. If unsure, say Y.
 
 nls iso8859-2
 CONFIG_NLS_ISO8859_2
@@ -7706,7 +7740,7 @@ CONFIG_NLS_ISO8859_15
   set, which covers most West European languages such as Albanian,
   Catalan, Danish, Dutch, English, Estonian, Faeroese, Finnish,
   French, German, Galician, Irish, Icelandic, Italian, Norwegian,
-  Portuguese, Spanish, Swedish, and Valencian. Latin 9 is an update to
+  Portuguese, Spanish, and Swedish. Latin 9 is an update to
   Latin 1 (ISO 8859-1) that removes a handful of rarely used
   characters and instead adds support for Estonian, corrects the
   support for French and Finnish, and adds the new Euro character.  If

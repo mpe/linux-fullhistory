@@ -3,6 +3,10 @@
  *
  *  Written 1992,1993 by Werner Almesberger
  *  VFAT extensions by Gordon Chaffee, merged with msdos fs by Henrik Storner
+ *
+ *  Fixes:
+ *
+ *  	Max Cohan: Fixed invalid FSINFO offset when info_sector is 0
  */
 
 #include <linux/version.h>
@@ -362,8 +366,17 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 		fat32 = 1;
 		MSDOS_SB(sb)->fat_length= CF_LE_W(b->fat32_length)*sector_mult;
 		MSDOS_SB(sb)->root_cluster = CF_LE_L(b->root_cluster);
-		MSDOS_SB(sb)->fsinfo_offset =
-			CF_LE_W(b->info_sector) * logical_sector_size + 0x1e0;
+			CF_LE_W(b->info_sector), logical_sector_size);
+
+		/* MC - if info_sector is 0, don't multiply by 0 */
+		if(CF_LE_W(b->info_sector) == 0) {
+			MSDOS_SB(sb)->fsinfo_offset =
+	 			logical_sector_size + 0x1e0;
+		} else {
+			MSDOS_SB(sb)->fsinfo_offset =
+				(CF_LE_W(b->info_sector) * logical_sector_size)
+				+ 0x1e0;
+		}
 		if (MSDOS_SB(sb)->fsinfo_offset + sizeof(struct fat_boot_fsinfo) > sb->s_blocksize) {
 			printk("fat_read_super: Bad fsinfo_offset\n");
 			fat_brelse(sb, bh);

@@ -548,32 +548,14 @@ affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 			   "No inode for entry found (key=%lu)\n",new_ino);
 		goto end_rename;
 	}
-	if (new_inode == old_inode) {
-		if (old_ino == new_ino) {	/* Filename might have changed case	*/
-			retval = new_dentry->d_name.len < 31 ? new_dentry->d_name.len : 30;
-			strncpy(DIR_END(old_bh->b_data,old_inode)->dir_name + 1,
-				new_dentry->d_name.name,retval);
-			DIR_END(old_bh->b_data,old_inode)->dir_name[0] = retval;
-			goto new_checksum;
-		}
-		retval = 0;
-		goto end_rename;
-	}
 	if (S_ISDIR(old_inode->i_mode)) {
-		retval = -EINVAL;
-		if (is_subdir(new_dentry, old_dentry))
-			goto end_rename;
 		if (new_inode) {
-			if (new_dentry->d_count > 1)
-				shrink_dcache_parent(new_dentry);
-			retval = -EBUSY;
-			if (new_dentry->d_count > 1)
-				goto end_rename;
 			retval = -ENOTEMPTY;
 			if (!empty_dir(new_bh,AFFS_I2HSIZE(new_inode)))
 				goto end_rename;
 		}
 
+		retval = -ENOENT;
 		if (affs_parent_ino(old_inode) != old_dir->i_ino)
 			goto end_rename;
 	}
@@ -593,7 +575,6 @@ affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	affs_copy_name(FILE_END(old_bh->b_data,old_inode)->file_name,new_dentry->d_name.name);
 	if ((retval = affs_insert_hash(new_dir->i_ino,old_bh,new_dir)))
 		goto end_rename;
-new_checksum:
 	affs_fix_checksum(AFFS_I2BSIZE(new_dir),old_bh->b_data,5);
 
 	new_dir->i_ctime   = new_dir->i_mtime = old_dir->i_ctime
@@ -604,7 +585,6 @@ new_checksum:
 	mark_inode_dirty(new_dir);
 	mark_inode_dirty(old_dir);
 	mark_buffer_dirty(old_bh,1);
-	d_move(old_dentry,new_dentry);
 	
 end_rename:
 	affs_brelse(old_bh);

@@ -93,6 +93,18 @@ static inline struct user_struct *uid_hash_find(unsigned short uid, unsigned int
 	return up;
 }
 
+/*
+ * For SMP, we need to re-test the user struct counter
+ * after having aquired the spinlock. This allows us to do
+ * the common case (not freeing anything) without having
+ * any locking.
+ */
+#ifdef __SMP__
+  #define uid_hash_free(up)	(!atomic_read(&(up)->count))
+#else
+  #define uid_hash_free(up)	(1)
+#endif
+
 void free_uid(struct task_struct *p)
 {
 	struct user_struct *up = p->user;
@@ -101,9 +113,11 @@ void free_uid(struct task_struct *p)
 		p->user = NULL;
 		if (atomic_dec_and_test(&up->count)) {
 			spin_lock(&uidhash_lock);
-			uid_hash_remove(up);
+			if (uid_hash_free(up)) {
+				uid_hash_remove(up);
+				kmem_cache_free(uid_cachep, up);
+			}
 			spin_unlock(&uidhash_lock);
-			kmem_cache_free(uid_cachep, up);
 		}
 	}
 }
