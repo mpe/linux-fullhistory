@@ -1,0 +1,10 @@
+Mon Oct 24 23:27:42 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* fcntl.c (sys_fcntl): Liberalize security checks which Alan Cox
+		put in.
+
+Thu Oct 20 23:44:22 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* fcntl.c (sys_fcntl): Add more of a security check to the
+		F_SETOWN fcntl().
+

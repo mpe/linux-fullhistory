@@ -1175,6 +1175,12 @@ static int tty_fasync(struct inode * inode, struct file * filp, int on)
 		tty->fasync = fa;
 		if (!tty->read_wait)
 			tty->minimum_to_wake = 1;
+		if (filp->f_owner == 0) {
+			if (tty->pgrp)
+				filp->f_owner = -tty->pgrp;
+			else
+				filp->f_owner = current->pid;
+		}
 	} else {
 		if (!fa)
 			return 0;

@@ -14,3 +14,8 @@ o	Removed some surplus uncommented code from tcp.c
 o	Fixed protocol violation during closedown in tcp.c
 	[Still not got the window < MSS bug fix included]
 
+Fixes for 1.1.58
+
+o	non blocking connect fail gets the error code right.
+o	select() not reporting read ok after an urgent read fixed.
+

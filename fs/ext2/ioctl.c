@@ -33,10 +33,9 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		/*
 		 * Only the super-user can change the IMMUTABLE flag
 		 */
-		if (((flags & EXT2_IMMUTABLE_FL) &&
-		     !(inode->u.ext2_i.i_flags & EXT2_IMMUTABLE_FL)) ||
-		    (!(flags & EXT2_IMMUTABLE_FL) &&
-		     (inode->u.ext2_i.i_flags & EXT2_IMMUTABLE_FL))) {
+		if ((flags & EXT2_IMMUTABLE_FL) ^
+		    (inode->u.ext2_i.i_flags & EXT2_IMMUTABLE_FL)) {
+			/* This test looks nicer. Thanks to Pauline Middelink */
 			if (!fsuser())
 				return -EPERM;
 		} else

@@ -11,6 +11,7 @@
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
+#include <linux/ext2_fs.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -98,7 +99,17 @@ long rd_init(long mem_start, int length)
 static void do_load(void)
 {
 	struct buffer_head *bh;
-	struct minix_super_block s;
+	struct super_block {
+	  union
+	  {
+	    char minix [sizeof (struct minix_super_block)];
+	    char ext2 [sizeof (struct ext2_super_block)];
+	  } record;
+	} sb;
+	struct minix_super_block *minixsb =
+		(struct minix_super_block *)&sb;
+	struct ext2_super_block *ext2sb =
+		(struct ext2_super_block *)&sb;
 	int		block, tries;
 	int		i = 1;
 	int		nblocks;
@@ -121,12 +132,32 @@ static void do_load(void)
 		}
 
 		/* This is silly- why do we require it to be a MINIX FS? */
-		*((struct minix_super_block *) &s) =
-			*((struct minix_super_block *) bh->b_data);
+		*((struct super_block *) &sb) =
+			*((struct super_block *) bh->b_data);
 		brelse(bh);
-		nblocks = s.s_nzones << s.s_log_zone_size;
-		if (s.s_magic != MINIX_SUPER_MAGIC &&
-		    s.s_magic != MINIX_SUPER_MAGIC2) {
+
+
+		/* Try Minix */
+		nblocks = -1;
+		if (minixsb->s_magic == MINIX_SUPER_MAGIC ||
+		    minixsb->s_magic == MINIX_SUPER_MAGIC2) {
+			printk("RAMDISK: Minix filesystem found at block %d\n",
+				block);
+			nblocks = minixsb->s_nzones << minixsb->s_log_zone_size;
+		}
+
+		/* Try ext2 */
+		if (nblocks == -1 && (ext2sb->s_magic ==
+			EXT2_PRE_02B_MAGIC ||
+			ext2sb->s_magic == EXT2_SUPER_MAGIC))
+	        {
+			printk("RAMDISK: Ext2 filesystem found at block %d\n",
+				block);
+			nblocks = ext2sb->s_blocks_count;
+		}
+
+		if (nblocks == -1)
+		{
 			printk("RAMDISK: trying old-style RAM image.\n");
 			continue;
 		}

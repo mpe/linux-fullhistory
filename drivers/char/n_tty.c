@@ -584,6 +584,14 @@ static int n_tty_receive_room(struct tty_struct *tty)
 {
 	int	left = N_TTY_BUF_SIZE - tty->read_cnt - 1;
 
+	/*
+	 * If we are doing input canonicalization, let as many
+	 * characters through as possible, so that the excess
+	 * characters can be "beeped".
+	 */
+	if (L_ICANON(tty))
+		return N_TTY_BUF_SIZE;
+
 	if (left > 0)
 		return left;
 	return 0;

@@ -85,6 +85,7 @@
  *		Alan Cox	:	BSD accept semantics. 
  *		Alan Cox	:	Reset on closedown bug.
  *	Peter De Schrijver	:	ENOTCONN check missing in tcp_sendto().
+ *		Michael Pall	:	Handle select() after URG properly in all cases.
  *
  *
  * To Fix:
@@ -1410,15 +1411,29 @@ static int tcp_read_urg(struct sock * sk, int nonblock,
 	{
 		if (sk->urginline || !sk->urg_data || sk->urg_data == URG_READ)
 			return -EINVAL;
+		sk->inuse=1;
 		if (sk->urg_data & URG_VALID) 
 		{
 			char c = sk->urg_data;
 			if (!(flags & MSG_PEEK))
+			{
+				/* Skip over urgent data, so tcp_readable() returns
+				   something again.  This in turn makes tcp_select()
+				   happy.  Mike <pall@rz.uni-karlsruhe.de> */
+				if (sk->copied_seq + 1 == sk->urg_seq)
+				{
+					wake_up_interruptible(sk->sleep);
+					sk->copied_seq++;
+				}
 				sk->urg_data = URG_READ;
+			}
 			put_fs_byte(c, to);
+			release_sock(sk);
 			return 1;
 		}
 
+		release_sock(sk);
+		
 		if (sk->err) 
 		{
 			int tmp = -sk->err;

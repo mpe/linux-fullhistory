@@ -32,7 +32,7 @@ static int isofs_match(int len,const char * name, char * compare, int dlen)
 	/* check special "." and ".." files */
 	if (dlen == 1) {
 		/* "." */
-		if (compare[0] = 0) {
+		if (compare[0] == 0) {
 			if (!len)
 				return 1;
 			compare = ".";

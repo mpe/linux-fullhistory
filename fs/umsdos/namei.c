@@ -617,8 +617,10 @@ int UMSDOS_link (
 		iput (olddir);
 	}
 	if (ret == 0){
+		struct iattr newattrs;
 		oldinode->i_nlink++;
-		ret = UMSDOS_notify_change (0,NULL,oldinode);
+		newattrs.ia_valid = 0;
+		ret = UMSDOS_notify_change(oldinode, &newattrs);
 	}
 	iput (oldinode);
 	iput (dir);
@@ -923,7 +925,9 @@ int UMSDOS_unlink (
 								iput (hdir);
 							}
 						}else{
-							ret = UMSDOS_notify_change (0,NULL,inode);
+							struct iattr newattrs;
+							newattrs.ia_valid = 0;
+							ret = UMSDOS_notify_change (inode, &newattrs);
 						}
 						iput (inode);
 					}

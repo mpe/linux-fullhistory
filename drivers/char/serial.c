@@ -1735,6 +1735,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 {
 	struct async_struct * info = (struct async_struct *)tty->driver_data;
 	unsigned long flags;
+	unsigned long timeout;
 
 	if (!info || serial_paranoia_check(info, tty->device, "rs_close"))
 		return;
@@ -1786,10 +1787,13 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		 * has completely drained; this is especially
 		 * important if there is a transmit FIFO!
 		 */
+		timeout = jiffies+HZ;
 		while (!(serial_inp(info, UART_LSR) & UART_LSR_TEMT)) {
 			current->state = TASK_INTERRUPTIBLE;
 			current->timeout = jiffies + info->timeout;
 			schedule();
+			if (jiffies > timeout)
+				break;
 		}
 	}
 	shutdown(info);

@@ -515,7 +515,7 @@ void ext2_read_inode (struct inode * inode)
 		 / EXT2_INODES_PER_BLOCK(inode->i_sb));
 	if (!(bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize)))
 		ext2_panic (inode->i_sb, "ext2_read_inode",
-			    "unable to read i-node block\n"
+			    "unable to read i-node block - "
 			    "inode=%lu, block=%lu", inode->i_ino, block);
 	raw_inode = ((struct ext2_inode *) bh->b_data) +
 		(inode->i_ino - 1) % EXT2_INODES_PER_BLOCK(inode->i_sb);
@@ -606,7 +606,7 @@ static struct buffer_head * ext2_update_inode (struct inode * inode)
 		 / EXT2_INODES_PER_BLOCK(inode->i_sb));
 	if (!(bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize)))
 		ext2_panic (inode->i_sb, "ext2_write_inode",
-			    "unable to read i-node block\n"
+			    "unable to read i-node block - "
 			    "inode=%lu, block=%lu", inode->i_ino, block);
 	raw_inode = ((struct ext2_inode *)bh->b_data) +
 		(inode->i_ino - 1) % EXT2_INODES_PER_BLOCK(inode->i_sb);

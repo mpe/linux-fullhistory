@@ -1,3 +1,22 @@
+Mon Oct 24 23:36:21 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* serial.c (rs_close): Add a timeout to the transmitter flush
+		loop; this is just a sanity check in case we have flakey
+		(or non-existent-but-configured-by-the-user) hardware.
+
+Fri Oct 21 09:37:23 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* tty_io.c (tty_fasync): When asyncronous I/O is enabled, if the
+		process or process group has not be specified yet, set it
+		to be the tty's process group, or if that is not yet set,
+		to the current process's pid.
+
+Thu Oct 20 23:17:28 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* n_tty.c (n_tty_receive_room): If we are doing input
+		canonicalization, let as many characters through as
+		possible, so that the excess characters can be "beeped".
+
 Tue Oct 18 10:02:43 1994  Theodore Y. Ts'o  (tytso@rt-11)
 
 	* serial.c (rs_start): Removed an incorrect '!' that was

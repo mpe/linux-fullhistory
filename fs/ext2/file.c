@@ -230,7 +230,9 @@ static int ext2_file_read (struct inode * inode, struct file * filp,
 static int ext2_file_write (struct inode * inode, struct file * filp,
 			    char * buf, int count)
 {
-	off_t pos;
+	const loff_t two_gb = 2147483647;
+	loff_t pos;
+	off_t pos2;
 	int written, c;
 	struct buffer_head * bh, *bufferlist[NBUF];
 	char * p;
@@ -251,7 +253,7 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		return -ENOSPC;
 
 	if (!S_ISREG(inode->i_mode)) {
-		ext2_warning (sb, "ext2_file_write", "mode = %07o\n",
+		ext2_warning (sb, "ext2_file_write", "mode = %07o",
 			      inode->i_mode);
 		return -EINVAL;
 	}
@@ -260,6 +262,7 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		pos = inode->i_size;
 	else
 		pos = filp->f_pos;
+	pos2 = (off_t) pos;
 	/*
 	 * If a file has been opened in synchronous mode, we have to ensure
 	 * that meta-data will also be written synchronously.  Thus, we
@@ -270,13 +273,18 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		inode->u.ext2_i.i_osync++;
 	written = 0;
 	while (written < count) {
-		bh = ext2_getblk (inode, pos / sb->s_blocksize, 1, &err);
+		if (pos > two_gb) {
+			if (!written)
+				written = -EFBIG;
+			break;
+		}
+		bh = ext2_getblk (inode, pos2 / sb->s_blocksize, 1, &err);
 		if (!bh) {
 			if (!written)
 				written = err;
 			break;
 		}
-		c = sb->s_blocksize - (pos % sb->s_blocksize);
+		c = sb->s_blocksize - (pos2 % sb->s_blocksize);
 		if (c > count-written)
 			c = count - written;
 		if (c != sb->s_blocksize && !bh->b_uptodate) {
@@ -289,7 +297,8 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 				break;
 			}
 		}
-		p = (pos % sb->s_blocksize) + bh->b_data;
+		p = (pos2 % sb->s_blocksize) + bh->b_data;
+		pos2 += c;
 		pos += c;
 		written += c;
 		memcpy_fromfs (p, buf, c);

@@ -1,5 +1,9 @@
 Changes from version 0.5 to version 0.5a
 ========================================
+	- Some cleanups in the error messages (some versions of syslog contain
+	  a bug which truncates an error message if it contains '\n').
+	- Check that no data can be written to a file past the 2GB limit.
+	- The famous readdir() bug has been fixed by Stephen Tweedie.
 	- Added a revision level in the superblock.
 	- Full support for O_SYNC flag of the open system call.
 	- New mount options: `bsddf' and `minixdf'.  `bsddf' causes ext2fs

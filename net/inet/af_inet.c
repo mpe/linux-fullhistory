@@ -888,7 +888,11 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	if (sk->state > TCP_FIN_WAIT2 && sock->state==SS_CONNECTING)
 	{
 		sock->state=SS_UNCONNECTED;
-		return -ETIMEDOUT;
+		cli();
+		err=sk->err;
+		sk->err=0;
+		sti();
+		return -err;
 	}
 
 	if (sk->state != TCP_ESTABLISHED &&(flags & O_NONBLOCK)) 

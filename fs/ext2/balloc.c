@@ -44,7 +44,7 @@ static struct ext2_group_desc * get_group_desc (struct super_block * sb,
 
 	if (block_group >= sb->u.ext2_sb.s_groups_count)
 		ext2_panic (sb, "get_group_desc",
-			    "block_group >= groups_count\n"
+			    "block_group >= groups_count - "
 			    "block_group = %d, groups_count = %lu",
 			    block_group, sb->u.ext2_sb.s_groups_count);
 
@@ -52,7 +52,7 @@ static struct ext2_group_desc * get_group_desc (struct super_block * sb,
 	desc = block_group % EXT2_DESC_PER_BLOCK(sb);
 	if (!sb->u.ext2_sb.s_group_desc[group_desc])
 		ext2_panic (sb, "get_group_desc",
-			    "Group descriptor not loaded\n"
+			    "Group descriptor not loaded - "
 			    "block_group = %d, group_desc = %lu, desc = %lu",
 			     block_group, group_desc, desc);
 	gdp = (struct ext2_group_desc *) 
@@ -73,7 +73,7 @@ static void read_block_bitmap (struct super_block * sb,
 	bh = bread (sb->s_dev, gdp->bg_block_bitmap, sb->s_blocksize);
 	if (!bh)
 		ext2_panic (sb, "read_block_bitmap",
-			    "Cannot read block bitmap\n"
+			    "Cannot read block bitmap - "
 			    "block_group = %d, block_bitmap = %lu",
 			    block_group, gdp->bg_block_bitmap);
 	sb->u.ext2_sb.s_block_bitmap_number[bitmap_nr] = block_group;
@@ -100,7 +100,7 @@ static int load__block_bitmap (struct super_block * sb,
 
 	if (block_group >= sb->u.ext2_sb.s_groups_count)
 		ext2_panic (sb, "load_block_bitmap",
-			    "block_group >= groups_count\n"
+			    "block_group >= groups_count - "
 			    "block_group = %d, groups_count = %lu",
 			    block_group, sb->u.ext2_sb.s_groups_count);
 
@@ -185,7 +185,7 @@ void ext2_free_blocks (struct super_block * sb, unsigned long block,
 	if (block < es->s_first_data_block || 
 	    (block + count) > es->s_blocks_count) {
 		ext2_error (sb, "ext2_free_blocks",
-			    "Freeing blocks not in datazone\n"
+			    "Freeing blocks not in datazone - "
 			    "block = %lu, count = %lu", block, count);
 		unlock_super (sb);
 		return;
@@ -198,7 +198,7 @@ void ext2_free_blocks (struct super_block * sb, unsigned long block,
 	bit = (block - es->s_first_data_block) % EXT2_BLOCKS_PER_GROUP(sb);
 	if (bit + count > EXT2_BLOCKS_PER_GROUP(sb))
 		ext2_panic (sb, "ext2_free_blocks",
-			    "Freeing blocks across group boundary\n"
+			    "Freeing blocks across group boundary - "
 			    "Block = %lu, count = %lu",
 			    block, count);
 	bitmap_nr = load_block_bitmap (sb, block_group);
@@ -213,7 +213,7 @@ void ext2_free_blocks (struct super_block * sb, unsigned long block,
 	     in_range (block + count - 1, gdp->bg_inode_table,
 		       sb->u.ext2_sb.s_itb_per_group)))
 		ext2_panic (sb, "ext2_free_blocks",
-			    "Freeing blocks in system zones\n"
+			    "Freeing blocks in system zones - "
 			    "Block = %lu, count = %lu",
 			    block, count);
 
@@ -404,7 +404,7 @@ got_block:
 	     tmp == gdp->bg_inode_bitmap ||
 	     in_range (tmp, gdp->bg_inode_table, sb->u.ext2_sb.s_itb_per_group)))
 		ext2_panic (sb, "ext2_new_block",
-			    "Allocating block in system zone\n"
+			    "Allocating block in system zone - "
 			    "block = %u", tmp);
 
 	if (set_bit (j, bh->b_data)) {
@@ -445,7 +445,7 @@ got_block:
 
 	if (j >= es->s_blocks_count) {
 		ext2_error (sb, "ext2_new_block",
-			    "block >= blocks count\n"
+			    "block >= blocks count - "
 			    "block_group = %d, block=%d", i, j);
 		unlock_super (sb);
 		return 0;

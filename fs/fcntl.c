@@ -66,6 +66,8 @@ asmlinkage int sys_dup(unsigned int fildes)
 asmlinkage int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
+	struct task_struct *p;
+	int task_found = 0;
 
 	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
 		return -EBADF;
@@ -116,22 +118,45 @@ asmlinkage int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			return filp->f_owner;
 		case F_SETOWN:
 			/*
-			 *	Add the security checks - AC. Without this there is a massive
-			 *	Linux security hole here - consider what happens if you do 
-			 *	something like 
+			 *	Add the security checks - AC. Without
+			 *	this there is a massive Linux security
+			 *	hole here - consider what happens if
+			 *	you do something like
+			 * 
 			 *		fcntl(0,F_SETOWN,some_root_process);
 			 *		getchar();
+			 * 
 			 *	and input a line!
+			 * 
+			 * BTW: Don't try this for fun. Several Unix
+			 *	systems I tried this on fall for the
+			 *	trick!
+			 * 
+			 * I had to fix this botch job as Linux
+			 *	kill_fasync asserts priv making it a
+			 *	free all user process killer!
 			 *
-			 *	BTW: Don't try this for fun. Several Unix systems I tried this on
-			 *	fall for the trick!
-			 *
-			 *	I had to fix this botch job as Linux kill_fasync asserts
-			 *	priv making it a free all user process killer!
+			 * Changed to make the security checks more
+			 * liberal.  -- TYT
 			 */
-			if(!suser() && current->pgrp != -arg &&
-				current->pid != arg)
-					return -EPERM;
+			if (current->pgrp == -arg || current->pid != arg)
+				goto fasync_ok;
+			
+			for_each_task(p) {
+				if ((p->pid == arg) || (p->pid == -arg) || 
+				    (p->pgrp == -arg)) {
+					task_found++;
+					if ((p->session != current->session) &&
+					    (p->uid != current->uid) &&
+					    (p->euid != current->euid) &&
+					    !suser())
+						return -EPERM;
+					break;
+				}
+			}
+			if ((task_found == 0) && !suser())
+				return -EINVAL;
+		fasync_ok:
 			filp->f_owner = arg;
 			if (S_ISSOCK (filp->f_inode->i_mode))
 				sock_fcntl (filp, F_SETOWN, arg);

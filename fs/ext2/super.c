@@ -271,6 +271,11 @@ static int parse_options (char * options, unsigned long * sb_block,
 static void ext2_setup_super (struct super_block * sb,
 			      struct ext2_super_block * es)
 {
+	if (es->s_rev_level > EXT2_CURRENT_REV) {
+			printk ("EXT2-fs warning: revision level too high, "
+				"forcing read/only mode\n");
+			sb->s_flags |= MS_RDONLY;
+	}
 	if (!(sb->s_flags & MS_RDONLY)) {
 		if (!(sb->u.ext2_sb.s_mount_state & EXT2_VALID_FS))
 			printk ("EXT2-fs warning: mounting unchecked fs, "

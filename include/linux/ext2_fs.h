@@ -47,7 +47,7 @@
 /*
  * The second extended file system version
  */
-#define EXT2FS_DATE		"94/08/24"
+#define EXT2FS_DATE		"94/10/23"
 #define EXT2FS_VERSION		"0.5a"
 
 /*

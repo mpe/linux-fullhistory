@@ -78,7 +78,7 @@ struct file_operations umsdos_file_operations = {
 	msdos_mmap,			/* mmap */
 	NULL,				/* no special open is needed */
 	NULL,				/* release */
-	NULL				/* fsync */
+	file_fsync			/* fsync */
 };
 
 struct inode_operations umsdos_file_inode_operations = {
