@@ -276,7 +276,7 @@ static void * rvmalloc(signed long size)
 	void * mem;
 	unsigned long adr, page;
 
-	mem=vmalloc(size);
+	mem=vmalloc_32(size);
 	if (mem) 
 	{
 		memset(mem, 0, size); /* Clear the ram out, no junk to the user */

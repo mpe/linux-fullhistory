@@ -665,7 +665,7 @@ W:	http://www.acc.umu.se/~mcalinux/
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
-MODULE SUPPORT [GENERAL], KERNELD
+MODULE SUPPORT [GENERAL], KMOD
 P:	Keith Owens
 M:	kaos@ocs.com.au
 L:	linux-kernel@vger.rutgers.edu

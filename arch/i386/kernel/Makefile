@@ -40,6 +40,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_X86_MSR),y)
+OX_OBJS += msr.o
+else
+  ifeq ($(CONFIG_X86_MSR),m)
+  MX_OBJS += msr.o
+  endif
+endif
+
+ifeq ($(CONFIG_X86_CPUID),y)
+OX_OBJS += cpuid.o
+else
+  ifeq ($(CONFIG_X86_CPUID),m)
+  MX_OBJS += cpuid.o
+  endif
+endif
+
 ifeq ($(CONFIG_MICROCODE),y)
 OX_OBJS += microcode.o
 else

@@ -52,11 +52,6 @@
 #include <linux/kmod.h>
 #endif
 
-#ifdef CONFIG_BLK_DEV_LVM_MODULE
-extern void (*lvm_hd_name_ptr) ( char*, int);
-EXPORT_SYMBOL(lvm_hd_name_ptr);
-#endif
-
 extern int console_loglevel;
 extern void set_device_ro(kdev_t dev,int flag);
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
@@ -248,7 +243,6 @@ EXPORT_SYMBOL(vfs_follow_link);
 EXPORT_SYMBOL(page_readlink);
 EXPORT_SYMBOL(page_follow_link);
 EXPORT_SYMBOL(page_symlink_inode_operations);
-EXPORT_SYMBOL(block_fsync);
 EXPORT_SYMBOL(block_symlink);
 EXPORT_SYMBOL(vfs_readdir);
 EXPORT_SYMBOL(dcache_readdir);
@@ -288,7 +282,6 @@ EXPORT_SYMBOL(bmap);
 EXPORT_SYMBOL(sync_dev);
 EXPORT_SYMBOL(devfs_register_partitions);
 EXPORT_SYMBOL(blkdev_open);
-EXPORT_SYMBOL(blkdev_close);
 EXPORT_SYMBOL(blkdev_get);
 EXPORT_SYMBOL(blkdev_put);
 EXPORT_SYMBOL(ioctl_by_bdev);

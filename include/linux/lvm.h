@@ -65,7 +65,7 @@
 #define	LVM_TOTAL_RESET
 
 #define LVM_GET_INODE
-#define	LVM_HD_NAME
+#undef	LVM_HD_NAME
 
 /* lots of debugging output (see driver source)
    #define DEBUG_LVM_GET_INFO
@@ -263,8 +263,8 @@
 #define	LVM_MAX_STRIPES		128	/* max # of stripes */
 #define	LVM_MAX_SIZE            ( 1024LU * 1024 * 1024 * 2)	/* 1TB[sectors] */
 #define	LVM_MAX_MIRRORS    	2	/* future use */
-#define	LVM_MIN_READ_AHEAD	2	/* minimum read ahead sectors */
-#define	LVM_MAX_READ_AHEAD	120	/* maximum read ahead sectors */
+#define	LVM_MIN_READ_AHEAD	0	/* minimum read ahead sectors */
+#define	LVM_MAX_READ_AHEAD	256	/* maximum read ahead sectors */
 #define	LVM_MAX_LV_IO_TIMEOUT	60	/* seconds I/O timeout (future use) */
 #define	LVM_PARTITION           0xfe	/* LVM partition id */
 #define	LVM_NEW_PARTITION       0x8e	/* new LVM partition id (10/09/1999) */
@@ -592,6 +592,7 @@ typedef struct lv_v2
     struct lv_v2 *lv_snapshot_prev;
     struct lv_v2 *lv_snapshot_next;
     lv_block_exception_t *lv_block_exception;
+    uint8_t __unused;
     uint32_t lv_remap_ptr;
     uint32_t lv_remap_end;
     uint32_t lv_chunk_size;
@@ -788,7 +789,6 @@ pv_status_req_t, pv_change_req_t;
 typedef struct
   {
     char pv_name[NAME_LEN];
-    kdev_t pv_dev;
   }
 pv_flush_req_t;
 

@@ -871,7 +871,6 @@ extern int unregister_blkdev(unsigned int, const char *);
 extern struct block_device *bdget(dev_t);
 extern void bdput(struct block_device *);
 extern int blkdev_open(struct inode *, struct file *);
-extern int blkdev_close(struct inode * inode, struct file * filp);
 extern struct file_operations def_blk_fops;
 extern struct file_operations def_fifo_fops;
 extern int ioctl_by_bdev(struct block_device *, unsigned, unsigned long);
@@ -952,6 +951,21 @@ extern void FASTCALL(__mark_buffer_dirty(struct buffer_head *bh, int flag));
 extern void FASTCALL(mark_buffer_dirty(struct buffer_head *bh, int flag));
 
 #define atomic_set_buffer_dirty(bh) test_and_set_bit(BH_Dirty, &(bh)->b_state)
+
+/*
+ * If an error happens during the make_request, this function
+ * has to be recalled. It marks the buffer as clean and not
+ * uptodate, and it notifys the upper layer about the end
+ * of the I/O.
+ */
+static inline void buffer_IO_error(struct buffer_head * bh)
+{
+	mark_buffer_clean(bh);
+	/*
+	 * b_end_io has to clear the BH_Uptodate bitflag in the error case!
+	 */
+	bh->b_end_io(bh, 0);
+}
 
 extern void balance_dirty(kdev_t);
 extern int check_disk_change(kdev_t);
@@ -1090,7 +1104,6 @@ typedef int (get_block_t)(struct inode*,long,struct buffer_head*,int);
 
 /* Generic buffer handling for block filesystems.. */
 extern int block_flushpage(struct page *, unsigned long);
-extern int block_fsync(struct file *filp, struct dentry *dentry);
 extern int block_symlink(struct inode *, const char *, int);
 extern int block_write_full_page(struct page*, get_block_t*);
 extern int block_read_full_page(struct page*, get_block_t*);

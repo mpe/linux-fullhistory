@@ -821,8 +821,10 @@ static int __init get_model_name(struct cpuinfo_x86 *c)
 {
 	unsigned int n, dummy, *v;
 
-	/* Actually we must have cpuid or we could never have
-	 * figured out that this was AMD/Cyrix from the vendor info :-).
+	/* 
+	 * Actually we must have cpuid or we could never have
+	 * figured out that this was AMD/Cyrix/Transmeta
+	 * from the vendor info :-).
 	 */
 
 	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
@@ -1211,6 +1213,86 @@ static void __init centaur_model(struct cpuinfo_x86 *c)
 	sprintf( c->x86_model_id, "WinChip %s", name );
 }
 
+static void __init transmeta_model(struct cpuinfo_x86 *c)
+{
+	unsigned int cap_mask, uk, max, dummy, n, ecx, edx;
+	unsigned int cms_rev1, cms_rev2;
+	unsigned int cpu_rev, cpu_freq, cpu_flags;
+	char cpu_info[65];
+
+	get_model_name(c);	/* Same as AMD/Cyrix */
+
+	/* Print CMS and CPU revision */
+	cpuid(0x80860000, &max, &dummy, &dummy, &dummy);
+	if ( max >= 0x80860001 ) {
+		cpuid(0x80860001, &dummy, &cpu_rev, &cpu_freq, &cpu_flags); 
+		printk("CPU: Processor revision %u.%u.%u.%u, %u MHz%s%s\n",
+		       (cpu_rev >> 24) & 0xff,
+		       (cpu_rev >> 16) & 0xff,
+		       (cpu_rev >> 8) & 0xff,
+		       cpu_rev & 0xff,
+		       cpu_freq,
+		       (cpu_flags & 1) ? " [recovery]" : "",
+		       (cpu_flags & 2) ? " [longrun]" : "");
+	}
+	if ( max >= 0x80860002 ) {
+		cpuid(0x80860002, &dummy, &cms_rev1, &cms_rev2, &dummy);
+		printk("CPU: Code Morphing Software revision %u.%u.%u-%u-%u\n",
+		       (cms_rev1 >> 24) & 0xff,
+		       (cms_rev1 >> 16) & 0xff,
+		       (cms_rev1 >> 8) & 0xff,
+		       cms_rev1 & 0xff,
+		       cms_rev2);
+	}
+	if ( max >= 0x80860006 ) {
+		cpuid(0x80860003,
+		      (void *)&cpu_info[0],
+		      (void *)&cpu_info[4],
+		      (void *)&cpu_info[8],
+		      (void *)&cpu_info[12]);
+		cpuid(0x80860004,
+		      (void *)&cpu_info[16],
+		      (void *)&cpu_info[20],
+		      (void *)&cpu_info[24],
+		      (void *)&cpu_info[28]);
+		cpuid(0x80860005,
+		      (void *)&cpu_info[32],
+		      (void *)&cpu_info[36],
+		      (void *)&cpu_info[40],
+		      (void *)&cpu_info[44]);
+		cpuid(0x80860006,
+		      (void *)&cpu_info[48],
+		      (void *)&cpu_info[52],
+		      (void *)&cpu_info[56],
+		      (void *)&cpu_info[60]);
+		cpu_info[64] = '\0';
+		printk("CPU: %s\n", cpu_info);
+	}
+
+	/* Unhide possibly hidden flags */
+	rdmsr(0x80860004, cap_mask, uk);
+	wrmsr(0x80860004, ~0, uk);
+	cpuid(0x00000001, &dummy, &dummy, &dummy, &c->x86_capability);
+	wrmsr(0x80860004, cap_mask, uk);
+
+
+	/* L1/L2 cache */
+	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
+
+	if (n >= 0x80000005) {
+		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
+		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
+			ecx>>24, edx>>24);
+		c->x86_cache_size=(ecx>>24)+(edx>>24);	
+	}
+	if (n >= 0x80000006) {
+		cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
+		printk("CPU: L2 Cache: %dK\n", ecx>>16);
+		c->x86_cache_size=(ecx>>16);
+	}
+}
+
+
 void __init get_cpu_vendor(struct cpuinfo_x86 *c)
 {
 	char *v = c->x86_vendor_id;
@@ -1229,6 +1311,8 @@ void __init get_cpu_vendor(struct cpuinfo_x86 *c)
 		c->x86_vendor = X86_VENDOR_NEXGEN;
 	else if (!strcmp(v, "RiseRiseRise"))
 		c->x86_vendor = X86_VENDOR_RISE;
+	else if (!strcmp(v, "GenuineTMx86"))
+		c->x86_vendor = X86_VENDOR_TRANSMETA;
 	else
 		c->x86_vendor = X86_VENDOR_UNKNOWN;
 }
@@ -1278,6 +1362,9 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	{ X86_VENDOR_RISE,	5,
 	  { "mP6", "mP6", NULL, NULL, NULL, NULL, NULL,
 	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_TRANSMETA,	5,
+	  { NULL, NULL, NULL, "Crusoe", NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
 };
 
 void __init identify_cpu(struct cpuinfo_x86 *c)
@@ -1289,6 +1376,16 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 	c->x86_cache_size = -1;
 
 	get_cpu_vendor(c);
+
+	/* It should be possible for the user to override this. */
+	if(c->x86_capability&(1<<18)) {
+		/* Disable processor serial number */
+		unsigned long lo,hi;
+		rdmsr(0x119,lo,hi);
+		lo |= 0x200000;
+		wrmsr(0x119,lo,hi);
+		printk(KERN_INFO "CPU serial number disabled.\n");
+	}
 
 	switch (c->x86_vendor) {
 
@@ -1311,16 +1408,6 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 			return;
 
 		case X86_VENDOR_INTEL:
-			if(c->x86_capability&(1<<18)) {
-				/* Disable processor serial number on Intel Pentium III 
-				   from code by Phil Karn */
-				unsigned long lo,hi;
-				rdmsr(0x119,lo,hi);
-				lo |= 0x200000;
-				wrmsr(0x119,lo,hi);
-				printk(KERN_INFO "Pentium-III serial number disabled.\n");
-			}
-
 			if (c->cpuid_level > 1) {
 				/* supports eax=2  call */
 				int edx, dummy;
@@ -1389,6 +1476,10 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 				goto name_decoded;
 
 			break;
+
+		case X86_VENDOR_TRANSMETA:
+			transmeta_model(c);
+			return;
 	}
 	
 	
@@ -1427,7 +1518,7 @@ void __init dodgy_tsc(void)
 	
 
 static char *cpu_vendor_names[] __initdata = {
-	"Intel", "Cyrix", "AMD", "UMC", "NexGen", "Centaur", "Rise" };
+	"Intel", "Cyrix", "AMD", "UMC", "NexGen", "Centaur", "Rise", "Transmeta" };
 
 
 void __init print_cpu_info(struct cpuinfo_x86 *c)
@@ -1439,7 +1530,7 @@ void __init print_cpu_info(struct cpuinfo_x86 *c)
 	else if (c->cpuid_level >= 0)
 		vendor = c->x86_vendor_id;
 
-	if (vendor)
+	if (vendor && strncmp(c->x86_model_id, vendor, strlen(vendor)))
 		printk("%s ", vendor);
 
 	if (!c->x86_model_id[0])
@@ -1449,6 +1540,8 @@ void __init print_cpu_info(struct cpuinfo_x86 *c)
 
 	if (c->x86_mask || c->cpuid_level>=0) 
 		printk(" stepping %02x\n", c->x86_mask);
+	else
+		printk("\n");
 }
 
 /*
@@ -1539,7 +1632,7 @@ int get_cpuinfo(char * buffer)
 				break;
 
 		    default:
-				/* Unknown CPU manufacturer. Transmeta ? :-) */
+				/* Unknown CPU manufacturer or no special handling needed */
 				break;
 		}
 

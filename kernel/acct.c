@@ -71,7 +71,7 @@ void acct_timeout(unsigned long);
 static volatile int acct_active;
 static volatile int acct_needcheck;
 static struct file *acct_file;
-static struct timer_list acct_timer = { NULL, NULL, 0, 0, acct_timeout };
+static struct timer_list acct_timer;
 static int do_acct_process(long, struct file *);
 
 /*
@@ -180,6 +180,9 @@ asmlinkage long sys_acct(const char *name)
 		acct_file = file;
 		acct_needcheck = 0;
 		acct_active = 1;
+		/* Its been deleted if it was used before so this is safe */
+		init_timer(&acct_timer);
+		acct_timer.function = acct_timeout;
 		acct_timer.expires = jiffies + ACCT_TIMEOUT*HZ;
 		add_timer(&acct_timer);
 	}

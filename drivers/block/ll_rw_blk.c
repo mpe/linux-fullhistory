@@ -757,15 +757,6 @@ end_io:
 	bh->b_end_io(bh, test_bit(BH_Uptodate, &bh->b_state));
 }
 
-static inline void buffer_IO_error(struct buffer_head * bh)
-{
-	mark_buffer_clean(bh);
-	/*
-	 * b_end_io has to clear the BH_Uptodate bitflag in the error case!
-	 */
-	bh->b_end_io(bh, 0);
-}
-
 int generic_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
 {
 	unsigned long flags;

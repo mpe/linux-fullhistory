@@ -278,12 +278,12 @@ int lvm_snapshot_COW(kdev_t org_phys_dev,
 	lvm_hash_link(lv_snap->lv_block_exception + idx,
 		      org_phys_dev, org_start, lv_snap);
 	lv_snap->lv_remap_ptr = idx + 1;
-	return 0;
+	return 1;
 
 	/* slow path */
  out:
 	lvm_drop_snapshot(lv_snap, reason);
-	return 1;
+	return -1;
 
  fail_out_of_space:
 	reason = "out of space";

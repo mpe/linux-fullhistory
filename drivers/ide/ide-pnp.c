@@ -100,7 +100,7 @@ static int pnp_ide_dev_idx = 0;
 /*
  * Probe for ISA PnP IDE interfaces.
  */
-void pnpide_init(int enable)
+void __init pnpide_init(int enable)
 {
 	struct pci_dev *dev = NULL;
 	struct pnp_dev_t *dev_type;

@@ -25,6 +25,7 @@ choice 'Processor family' \
 	 PPro/P-II/P-III	CONFIG_M686 \
 	 Pentium-III		CONFIG_M686FX \
 	 K6/II/III		CONFIG_MK6 \
+	 Crusoe			CONFIG_MCRUSOE \
 	 Athlon                 CONFIG_MK7" PPro
 #
 # Define implied options from the CPU selection here
@@ -52,6 +53,10 @@ if [ "$CONFIG_M586TSC" = "y" ]; then
    define_int  CONFIG_X86_L1_CACHE_BYTES 32
    define_bool CONFIG_X86_USE_STRING_486 y
    define_bool CONFIG_X86_ALIGNMENT_16 y
+   define_bool CONFIG_X86_TSC y
+fi
+if [ "$CONFIG_MCRUSOE" = "y" ]; then
+   define_int  CONFIG_X86_L1_CACHE_BYTES 32
    define_bool CONFIG_X86_TSC y
 fi
 if [ "$CONFIG_M686" = "y" ]; then
@@ -85,6 +90,8 @@ if [ "$CONFIG_MK7" = "y" ]; then
 fi
 
 tristate '/dev/cpu/microcode - Intel P6 CPU microcode support' CONFIG_MICROCODE
+tristate '/dev/cpu/*/msr - Model-specific register support' CONFIG_X86_MSR
+tristate '/dev/cpu/*/cpuid - CPU information support' CONFIG_X86_CPUID
 
 choice 'High Memory Support' \
 	"off    CONFIG_NOHIGHMEM \

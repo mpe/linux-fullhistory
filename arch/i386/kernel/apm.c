@@ -922,6 +922,10 @@ static int send_event(apm_event_t event, struct apm_user *sender)
 	case APM_USER_SUSPEND:
 		/* map all suspends to ACPI D3 */
 		if (pm_send_all(PM_SUSPEND, (void *)3)) {
+			if (event == APM_CRITICAL_SUSPEND) {
+				printk(KERN_CRIT "apm: Critical suspend was vetoed, expect armagedon\n" );
+				return 0;
+			}
 			if (apm_bios_info.version > 0x100)
 				apm_set_power_state(APM_STATE_REJECT);
 			return 0;
@@ -934,7 +938,6 @@ static int send_event(apm_event_t event, struct apm_user *sender)
 		break;
 	}
 
-	queue_event(event, sender);
 	return 1;
 }
 
@@ -964,6 +967,7 @@ static void check_events(void)
 		case APM_SYS_STANDBY:
 		case APM_USER_STANDBY:
 			if (send_event(event, NULL)) {
+				queue_event(event, NULL);
 				if (standbys_pending <= 0)
 					standby();
 			}
@@ -980,17 +984,18 @@ static void check_events(void)
 			if (ignore_bounce)
 				break;
 #endif
-			/*
-			 * If we are already processing a SUSPEND,
-			 * then further SUSPEND events from the BIOS
-			 * will be ignored.  We also return here to
-			 * cope with the fact that the Thinkpads keep
-			 * sending a SUSPEND event until something else
-			 * happens!
-			 */
+ 			/*
+ 			 * If we are already processing a SUSPEND,
+ 			 * then further SUSPEND events from the BIOS
+ 			 * will be ignored.  We also return here to
+ 			 * cope with the fact that the Thinkpads keep
+ 			 * sending a SUSPEND event until something else
+ 			 * happens!
+ 			 */
 			if (waiting_for_resume)
-				return;
+ 				return;
 			if (send_event(event, NULL)) {
+				queue_event(event, NULL);
 				waiting_for_resume = 1;
 				if (suspends_pending <= 0)
 					(void) suspend();
@@ -1007,6 +1012,7 @@ static void check_events(void)
 #endif
 			set_time();
 			send_event(event, NULL);
+			queue_event(event, NULL);
 			break;
 
 		case APM_CAPABILITY_CHANGE:
@@ -1020,6 +1026,7 @@ static void check_events(void)
 			break;
 
 		case APM_CRITICAL_SUSPEND:
+			send_event(event, NULL);	/* We can only hope it worked; critical suspend may not fail */
 			(void) suspend();
 			break;
 		}
@@ -1056,6 +1063,7 @@ static void apm_event_handler(void)
 
 static void apm_mainloop(void)
 {
+	int timeout = HZ;
 	DECLARE_WAITQUEUE(wait, current);
 
 	if (smp_num_cpus > 1)
@@ -1065,7 +1073,10 @@ static void apm_mainloop(void)
 	current->state = TASK_INTERRUPTIBLE;
 	for (;;) {
 		/* Nothing to do, just sleep for the timeout */
-		schedule_timeout(APM_CHECK_TIMEOUT);
+		timeout = 2*timeout;
+		if (timeout > APM_CHECK_TIMEOUT)
+			timeout = APM_CHECK_TIMEOUT;
+		schedule_timeout(timeout);
 		if (exit_kapmd)
 			break;
 
@@ -1080,13 +1091,16 @@ static void apm_mainloop(void)
 			continue;
 		if (apm_do_idle()) {
 			unsigned long start = jiffies;
-			while (system_idle()) {
+			while ((!exit_kapmd) && system_idle()) {
 				apm_do_idle();
-				if (jiffies - start > APM_CHECK_TIMEOUT)
-					break;
+				if (jiffies - start > (5*APM_CHECK_TIMEOUT)) {
+					apm_event_handler();
+					start = jiffies;
+				}
 			}
 			apm_do_busy();
 			apm_event_handler();
+			timeout = 1;
 		}
 #endif
 	}

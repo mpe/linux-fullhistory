@@ -220,7 +220,8 @@ if [ "$CONFIG_FB" = "y" ]; then
 	   "$CONFIG_FB_P9100" = "y" -o "$CONFIG_FB_ATY128" = "y" -o \
 	   "$CONFIG_FB_RIVA" = "y" -o \
 	   "$CONFIG_FB_SGIVW" = "y" -o "$CONFIG_FB_CYBER2000" = "y" -o \
-	   "$CONFIG_FB_SA1100" = "y" -o "$CONFIG_FB_3DFX" = "y" ]; then
+	   "$CONFIG_FB_SA1100" = "y" -o "$CONFIG_FB_3DFX" = "y" -o \
+	   "$CONFIG_FB_SIS" = "y" ]; then
 	 define_tristate CONFIG_FBCON_CFB8 y
       else
 	 if [ "$CONFIG_FB_ACORN" = "m" -o "$CONFIG_FB_ATARI" = "m" -o \
@@ -236,7 +237,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	      "$CONFIG_FB_CT65550" = "m" -o "$CONFIG_FB_PM2" = "m" -o \
 	      "$CONFIG_FB_P9100" = "m" -o "$CONFIG_FB_ATY128" = "m" -o \
 	      "$CONFIG_FB_SGIVW" = "m" -o "$CONFIG_FB_CYBER2000" = "m" -o \
-	      "$CONFIG_FB_SA1100" = "m" ]; then
+	      "$CONFIG_FB_SA1100" = "m" -o "$CONFIG_FB_SIS" = "m" ]; then
 	    define_tristate CONFIG_FBCON_CFB8 m
 	 fi
       fi
@@ -250,7 +251,8 @@ if [ "$CONFIG_FB" = "y" ]; then
 	   "$CONFIG_FB_CT65550" = "y" -o "$CONFIG_FB_MATROX" = "y" -o \
 	   "$CONFIG_FB_PM2" = "y" -o "$CONFIG_FB_SGIVW" = "y" -o \
 	   "$CONFIG_FB_RIVA" = "y" -o "$CONFIG_FB_ATY128" = "y" -o \
-	   "$CONFIG_FB_CYBER2000" = "y" -o "$CONFIG_FB_3DFX" = "y" ]; then
+	   "$CONFIG_FB_CYBER2000" = "y" -o "$CONFIG_FB_3DFX" = "y" -o \
+	   "$CONFIG_FB_SIS" = "y" ]; then
 	 define_tristate CONFIG_FBCON_CFB16 y
       else
 	 if [ "$CONFIG_FB_ATARI" = "m" -o "$CONFIG_FB_ATY" = "m" -o \
@@ -262,7 +264,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	      "$CONFIG_FB_VALKYRIE" = "m" -o "$CONFIG_FB_PLATINUM" = "m" -o \
 	      "$CONFIG_FB_CT65550" = "m" -o "$CONFIG_FB_MATROX" = "m" -o \
 	      "$CONFIG_FB_PM2" = "m" -o "$CONFIG_FB_SGIVW" = "m" -o \
-	      "$CONFIG_FB_CYBER2000" = "m" ]; then
+	      "$CONFIG_FB_CYBER2000" = "m" -o "$CONFIG_FB_SIS" = "m" ]; then
 	    define_tristate CONFIG_FBCON_CFB16 m
 	 fi
       fi
@@ -288,7 +290,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	   "$CONFIG_FB_MATROX" = "y" -o "$CONFIG_FB_PM2" = "y" -o \
 	   "$CONFIG_FB_RIVA" = "y" -o "$CONFIG_FB_ATY128" = "y" -o \
 	   "$CONFIG_FB_FM2" = "y" -o "$CONFIG_FB_SGIVW" = "y" -o \
-	   "$CONFIG_FB_3DFX" = "y" ]; then
+	   "$CONFIG_FB_3DFX" = "y" -o "$CONFIG_FB_SIS" = "y" ]; then
 	 define_tristate CONFIG_FBCON_CFB32 y
       else
 	 if [ "$CONFIG_FB_ATARI" = "m" -o "$CONFIG_FB_ATY" = "m" -o \
@@ -297,7 +299,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	      "$CONFIG_FB_TGA" = "m" -o "$CONFIG_FB_PLATINUM" = "m" -o \
 	      "$CONFIG_FB_MATROX" = "m" -o "$CONFIG_FB_PM2" = "m" -o \
 	      "$CONFIG_FB_ATY128" = "m" -o \
-              "$CONFIG_FB_SGIVW" = "m" ]; then
+          "$CONFIG_FB_SGIVW" = "m" -o "$CONFIG_FB_SIS" = "m" ]; then
 	    define_tristate CONFIG_FBCON_CFB32 m
 	 fi
       fi

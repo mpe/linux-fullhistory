@@ -44,7 +44,6 @@
 #define FASTCALL(x)	x
 #endif
 
-extern void math_error(void);
 extern struct notifier_block *panic_notifier_list;
 NORET_TYPE void panic(const char * fmt, ...)
 	__attribute__ ((NORET_AND format (printf, 1, 2)));

@@ -216,7 +216,7 @@ static void *rvmalloc(unsigned long size)
 	size += (PAGE_SIZE - 1);
 	size &= ~(PAGE_SIZE - 1);
 
-	mem = vmalloc(size);
+	mem = vmalloc_32(size);
 	if (!mem)
 		return NULL;
 

@@ -220,8 +220,7 @@ static int md_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
 	if (mddev && mddev->pers)
 		return mddev->pers->make_request(q, mddev, rw, bh);
 	else {
-		mark_buffer_clean(bh);
-		bh->b_end_io(bh, 0);
+		buffer_IO_error(bh);
 		return -1;
 	}
 }

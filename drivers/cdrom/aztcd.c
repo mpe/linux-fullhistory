@@ -1727,7 +1727,8 @@ int __init aztcd_init(void)
                          return -EIO;
 	               } 
 	            
-	            for (count = 0; count < AZT_TIMEOUT; count++);
+	            for (count = 0; count < AZT_TIMEOUT; count++)
+	            	barrier();	/* Stop gcc 2.96 being smart */
 	            
 	            if ((st=getAztStatus())==-1)
 	               { printk("aztcd: Drive Status Error Status=%x\n",st);

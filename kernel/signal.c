@@ -145,7 +145,7 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 		if (q) {
 			if ((*pp = q->next) == NULL)
 				current->sigqueue_tail = pp;
-			*info = q->info;
+			copy_siginfo(info, &q->info);
 			kmem_cache_free(signal_queue_cachep,q);
 			atomic_dec(&nr_queued_signals);
 
@@ -371,7 +371,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 				q->info.si_uid = 0;
 				break;
 			default:
-				q->info = *info;
+				copy_siginfo(&q->info, info);
 				break;
 		}
 	} else if (sig >= SIGRTMIN && info && (unsigned long)info != 1
@@ -599,16 +599,18 @@ void
 notify_parent(struct task_struct *tsk, int sig)
 {
 	struct siginfo info;
-	int why;
+	int why, status;
 
 	info.si_signo = sig;
 	info.si_errno = 0;
 	info.si_pid = tsk->pid;
+	info.si_uid = tsk->uid;
 
 	/* FIXME: find out whether or not this is supposed to be c*time. */
 	info.si_utime = tsk->times.tms_utime;
 	info.si_stime = tsk->times.tms_stime;
 
+	status = tsk->exit_code & 0x7f;
 	why = SI_KERNEL;	/* shouldn't happen */
 	switch (tsk->state) {
 	case TASK_ZOMBIE:
@@ -616,12 +618,17 @@ notify_parent(struct task_struct *tsk, int sig)
 			why = CLD_DUMPED;
 		else if (tsk->exit_code & 0x7f)
 			why = CLD_KILLED;
-		else
+		else {
 			why = CLD_EXITED;
+			status = tsk->exit_code >> 8;
+		}
 		break;
 	case TASK_STOPPED:
 		/* FIXME -- can we deduce CLD_TRAPPED or CLD_CONTINUED? */
-		why = CLD_STOPPED;
+		if (tsk->flags & PF_PTRACED)
+			why = CLD_TRAPPED;
+		else
+			why = CLD_STOPPED;
 		break;
 
 	default:
@@ -630,6 +637,7 @@ notify_parent(struct task_struct *tsk, int sig)
 		break;
 	}
 	info.si_code = why;
+	info.si_status = status;
 
 	send_sig_info(sig, &info, tsk->p_pptr);
 	wake_up_interruptible(&tsk->p_pptr->wait_chldexit);
@@ -798,7 +806,7 @@ sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
 	if (sig) {
 		ret = sig;
 		if (uinfo) {
-			if (copy_to_user(uinfo, &info, sizeof(siginfo_t)))
+			if (copy_siginfo_to_user(uinfo, &info))
 				ret = -EFAULT;
 		}
 	} else {
@@ -815,8 +823,6 @@ sys_kill(int pid, int sig)
 {
 	struct siginfo info;
 
-	memset(&info, 0, sizeof(info));
-	
 	info.si_signo = sig;
 	info.si_errno = 0;
 	info.si_code = SI_USER;

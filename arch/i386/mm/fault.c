@@ -124,13 +124,14 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	unsigned long page;
 	unsigned long fixup;
 	int write;
-	int si_code = SEGV_MAPERR;
+	siginfo_t info;
 
 	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
 
 	tsk = current;
 	mm = tsk->mm;
+	info.si_code = SEGV_MAPERR;
 
 	/*
 	 * If we're in an interrupt or have no user
@@ -165,9 +166,8 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
  * we can handle it..
  */
 good_area:
+	info.si_code = SEGV_ACCERR;
 	write = 0;
-	si_code = SEGV_ACCERR;
-
 	switch (error_code & 3) {
 		default:	/* 3: write, present */
 #ifdef TEST_VERIFY_AREA
@@ -225,14 +225,14 @@ bad_area:
 
 	/* User mode accesses just cause a SIGSEGV */
 	if (error_code & 4) {
-		struct siginfo si;
 		tsk->thread.cr2 = address;
 		tsk->thread.error_code = error_code;
 		tsk->thread.trap_no = 14;
-		si.si_signo = SIGSEGV;
-		si.si_code = si_code;
-		si.si_addr = (void*) address;
-		force_sig_info(SIGSEGV, &si, tsk);
+		info.si_signo = SIGSEGV;
+		info.si_errno = 0;
+		/* info.si_code has been set above */
+		info.si_addr = (void *)address;
+		force_sig_info(SIGSEGV, &info, tsk);
 		return;
 	}
 
@@ -309,7 +309,11 @@ do_sigbus:
 	tsk->thread.cr2 = address;
 	tsk->thread.error_code = error_code;
 	tsk->thread.trap_no = 14;
-	force_sig(SIGBUS, tsk);
+	info.si_code = SIGBUS;
+	info.si_errno = 0;
+	info.si_code = BUS_ADRERR;
+	info.si_addr = (void *)address;
+	force_sig_info(SIGBUS, &info, tsk);
 
 	/* Kernel mode? Handle exceptions or die */
 	if (!(error_code & 4))

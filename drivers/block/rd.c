@@ -666,10 +666,12 @@ static void __init rd_load_image(kdev_t device, int offset, int unit)
 		}
 		infile.f_op->read(&infile, buf, BLOCK_SIZE, &infile.f_pos);
 		outfile.f_op->write(&outfile, buf, BLOCK_SIZE, &outfile.f_pos);
+#if !defined(CONFIG_ARCH_S390)
 		if (!(i % 16)) {
 			printk("%c\b", rotator[rotate & 0x3]);
 			rotate++;
 		}
+#endif
 	}
 	printk("done.\n");
 	kfree(buf);

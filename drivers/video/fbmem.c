@@ -111,6 +111,8 @@ extern int rivafb_init(void);
 extern int rivafb_setup(char*);
 extern int tdfxfb_init(void);
 extern int tdfxfb_setup(char*);
+extern int sisfb_init(void);
+extern int sisfb_setup(char*);
 
 static struct {
 	const char *name;
@@ -234,6 +236,9 @@ static struct {
 #ifdef CONFIG_FB_VIRTUAL
 	/* Must be last to avoid that vfb becomes your primary display */
 	{ "vfb", vfb_init, vfb_setup },
+#endif
+#ifdef CONFIG_FB_SIS
+	{ "sisfb", sisfb_init, sisfb_setup },
 #endif
 };
 

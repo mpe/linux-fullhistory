@@ -83,6 +83,20 @@ asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 	force_sig(signr, tsk); \
 }
 
+#define DO_ERROR_INFO(trapnr, signr, str, name, tsk, sicode, siaddr) \
+asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
+{ \
+	siginfo_t info; \
+	tsk->thread.error_code = error_code; \
+	tsk->thread.trap_no = trapnr; \
+	die_if_no_fixup(str,regs,error_code); \
+	info.si_signo = signr; \
+	info.si_errno = 0; \
+	info.si_code = sicode; \
+	info.si_addr = (void *)siaddr; \
+	force_sig_info(signr, &info, tsk); \
+}
+
 #define DO_VM86_ERROR(trapnr, signr, str, name, tsk) \
 asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 { \
@@ -95,6 +109,28 @@ asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 	tsk->thread.error_code = error_code; \
 	tsk->thread.trap_no = trapnr; \
 	force_sig(signr, tsk); \
+	die_if_kernel(str,regs,error_code); \
+out: \
+	unlock_kernel(); \
+}
+
+#define DO_VM86_ERROR_INFO(trapnr, signr, str, name, tsk, sicode, siaddr) \
+asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
+{ \
+	siginfo_t info; \
+	lock_kernel(); \
+	if (regs->eflags & VM_MASK) { \
+		if (!handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, trapnr)) \
+			goto out; \
+		/* else fall through */ \
+	} \
+	tsk->thread.error_code = error_code; \
+	tsk->thread.trap_no = trapnr; \
+	info.si_signo = signr; \
+	info.si_errno = 0; \
+	info.si_code = sicode; \
+	info.si_addr = (void *)siaddr; \
+	force_sig_info(signr, &info, tsk); \
 	die_if_kernel(str,regs,error_code); \
 out: \
 	unlock_kernel(); \
@@ -262,18 +298,27 @@ static void die_if_no_fixup(const char * str, struct pt_regs * regs, long err)
 	}
 }
 
-DO_VM86_ERROR( 0, SIGFPE,  "divide error", divide_error, current)
+static inline unsigned long get_cr2(void)
+{
+	unsigned long address;
+
+	/* get the address */
+	__asm__("movl %%cr2,%0":"=r" (address));
+	return address;
+}
+
+DO_VM86_ERROR_INFO( 0, SIGFPE,  "divide error", divide_error, current, FPE_INTDIV, regs->eip)
 DO_VM86_ERROR( 3, SIGTRAP, "int3", int3, current)
 DO_VM86_ERROR( 4, SIGSEGV, "overflow", overflow, current)
 DO_VM86_ERROR( 5, SIGSEGV, "bounds", bounds, current)
-DO_ERROR( 6, SIGILL,  "invalid operand", invalid_op, current)
+DO_ERROR_INFO( 6, SIGILL,  "invalid operand", invalid_op, current, ILL_ILLOPN, regs->eip)
 DO_VM86_ERROR( 7, SIGSEGV, "device not available", device_not_available, current)
 DO_ERROR( 8, SIGSEGV, "double fault", double_fault, current)
 DO_ERROR( 9, SIGFPE,  "coprocessor segment overrun", coprocessor_segment_overrun, current)
 DO_ERROR(10, SIGSEGV, "invalid TSS", invalid_TSS, current)
 DO_ERROR(11, SIGBUS,  "segment not present", segment_not_present, current)
 DO_ERROR(12, SIGBUS,  "stack segment", stack_segment, current)
-DO_ERROR(17, SIGSEGV, "alignment check", alignment_check, current)
+DO_ERROR_INFO(17, SIGBUS, "alignment check", alignment_check, current, BUS_ADRALN, get_cr2())
 DO_ERROR(18, SIGSEGV, "reserved", reserved, current)
 DO_VM86_ERROR(19, SIGFPE, "XMM fault", xmm_fault, current)
 
@@ -473,6 +518,7 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 {
 	unsigned int condition;
 	struct task_struct *tsk = current;
+	siginfo_t info;
 
 	__asm__ __volatile__("movl %%db6,%0" : "=r" (condition));
 
@@ -507,7 +553,11 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 	/* Ok, finally something we can handle */
 	tsk->thread.trap_no = 1;
 	tsk->thread.error_code = error_code;
-	force_sig(SIGTRAP, tsk);
+	info.si_signo = SIGTRAP;
+	info.si_errno = 0;
+	info.si_code = TRAP_BRKPT;
+	info.si_addr = (void *)regs->eip;
+	force_sig_info(SIGTRAP, &info, tsk);
 	return;
 
 debug_vm86:
@@ -532,9 +582,10 @@ clear_TF:
  * the correct behaviour even in the presence of the asynchronous
  * IRQ13 behaviour
  */
-void math_error(void)
+void math_error(void *eip)
 {
 	struct task_struct * task;
+	siginfo_t info;
 
 	/*
 	 * Save the info for the exception handler
@@ -544,13 +595,52 @@ void math_error(void)
 	save_fpu(task);
 	task->thread.trap_no = 16;
 	task->thread.error_code = 0;
-	force_sig(SIGFPE, task);
+	info.si_signo = SIGFPE;
+	info.si_errno = 0;
+	info.si_code = __SI_FAULT;
+	info.si_addr = eip;
+	/*
+	 * (~cwd & swd) will mask out exceptions that are not set to unmasked
+	 * status.  0x3f is the exception bits in these regs, 0x200 is the
+	 * C1 reg you need in case of a stack fault, 0x040 is the stack
+	 * fault bit.  We should only be taking one exception at a time,
+	 * so if this combination doesn't produce any single exception,
+	 * then we have a bad program that isn't syncronizing its FPU usage
+	 * and it will suffer the consequences since we won't be able to
+	 * fully reproduce the context of the exception
+	 */
+	switch(((~task->thread.i387.hard.cwd) &
+		task->thread.i387.hard.swd & 0x3f) |
+	       (task->thread.i387.hard.swd & 0x240)) {
+		case 0x000:
+		default:
+			break;
+		case 0x001: /* Invalid Op */
+		case 0x040: /* Stack Fault */
+		case 0x240: /* Stack Fault | Direction */
+			info.si_code = FPE_FLTINV;
+			break;
+		case 0x002: /* Denormalize */
+		case 0x010: /* Underflow */
+			info.si_code = FPE_FLTUND;
+			break;
+		case 0x004: /* Zero Divide */
+			info.si_code = FPE_FLTDIV;
+			break;
+		case 0x008: /* Overflow */
+			info.si_code = FPE_FLTOVF;
+			break;
+		case 0x020: /* Precision */
+			info.si_code = FPE_FLTRES;
+			break;
+	}
+	force_sig_info(SIGFPE, &info, task);
 }
 
 asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
 {
 	ignore_irq13 = 1;
-	math_error();
+	math_error((void *)regs->eip);
 }
 
 asmlinkage void do_spurious_interrupt_bug(struct pt_regs * regs,

@@ -122,7 +122,7 @@
  *               - avoided "/dev/" in proc filesystem output
  *               - avoided inline strings functions lvm_strlen etc.
  *    14/02/2000 - support for 2.3.43
- *               - integrated Andrea Arcagnelli's snapshot code
+ *               - integrated Andrea Arcangeli's snapshot code
  *
  */
 
@@ -171,9 +171,9 @@ static char *lvm_short_version = "version 0.8final  (15/02/2000)";
 #include <linux/errno.h>
 #include <linux/lvm.h>
 
-#define	LVM_CORRECT_READ_AHEAD( a) \
-   if      ( a < LVM_MIN_READ_AHEAD || \
-             a > LVM_MAX_READ_AHEAD) a = LVM_MAX_READ_AHEAD;
+#define	LVM_CORRECT_READ_AHEAD(a)				\
+	(((a) < LVM_MIN_READ_AHEAD || (a) > LVM_MAX_READ_AHEAD)	\
+	 ? LVM_MAX_READ_AHEAD : (a))
 
 #ifndef WRITEA
 #  define WRITEA WRITE
@@ -193,12 +193,10 @@ static void lvm_dummy_device_request(request_queue_t *);
 #define	DEVICE_REQUEST	lvm_dummy_device_request
 
 static int lvm_make_request_fn(request_queue_t *, int, struct buffer_head*);
+static void lvm_plug_device_noop(request_queue_t *, kdev_t);
 
 static int lvm_blk_ioctl(struct inode *, struct file *, uint, ulong);
 static int lvm_blk_open(struct inode *, struct file *);
-
-static ssize_t lvm_blk_read(struct file *, char *, size_t, loff_t *);
-static ssize_t lvm_blk_write(struct file *, const char *, size_t, loff_t *);
 
 static int lvm_chr_open(struct inode *, struct file *);
 
@@ -298,7 +296,6 @@ static DECLARE_WAIT_QUEUE_HEAD(lvm_wait);
 static DECLARE_WAIT_QUEUE_HEAD(lvm_map_wait);
 
 static spinlock_t lvm_lock = SPIN_LOCK_UNLOCKED;
-static spinlock_t lvm_snapshot_lock = SPIN_LOCK_UNLOCKED;
 
 static struct file_operations lvm_chr_fops =
 {
@@ -307,18 +304,6 @@ static struct file_operations lvm_chr_fops =
 	ioctl:		lvm_chr_ioctl,
 };
 
-static struct file_operations lvm_blk_fops =
-{
-        open:           lvm_blk_open,
-        release:        blkdev_close,
-        read:           lvm_blk_read,
-        write:          lvm_blk_write,
-        ioctl:          lvm_blk_ioctl,
-        fsync:          block_fsync,
-};
-
-#define BLOCK_DEVICE_OPERATIONS
-/* block device operations structure needed for 2.3.38? and above */
 static struct block_device_operations lvm_blk_dops =
 {
 	open: 		lvm_blk_open,
@@ -370,11 +355,7 @@ int __init lvm_init(void)
 		printk(KERN_ERR "%s -- register_chrdev failed\n", lvm_name);
 		return -EIO;
 	}
-#ifdef BLOCK_DEVICE_OPERATIONS
 	if (register_blkdev(MAJOR_NR, lvm_name, &lvm_blk_dops) < 0)
-#else
-	if (register_blkdev(MAJOR_NR, lvm_name, &lvm_blk_fops) < 0)
-#endif
 	{
 		printk("%s -- register_blkdev failed\n", lvm_name);
 		if (unregister_chrdev(LVM_CHAR_MAJOR, lvm_name) < 0)
@@ -410,6 +391,7 @@ int __init lvm_init(void)
 
 	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	blk_queue_make_request(BLK_DEFAULT_QUEUE(MAJOR_NR), lvm_make_request_fn);
+	blk_queue_pluggable(BLK_DEFAULT_QUEUE(MAJOR_NR), lvm_plug_device_noop);
 	/* optional read root VGDA */
 /*
    if ( *rootvg != 0) vg_read_with_pv_and_lv ( rootvg, &vg);
@@ -487,8 +469,6 @@ void __init lvm_init_vars(void)
 	int v;
 
 	loadtime = CURRENT_TIME;
-
-	lvm_lock = lvm_snapshot_lock = SPIN_LOCK_UNLOCKED;
 
 	pe_lock_req.lock = UNLOCK_PE;
 	pe_lock_req.data.lv_dev = \
@@ -724,8 +704,19 @@ static int lvm_chr_ioctl(struct inode *inode, struct file *file,
 				   sizeof(pv_flush_req)) != 0)
 			return -EFAULT;
 
-		fsync_dev(pv_flush_req.pv_dev);
-		invalidate_buffers(pv_flush_req.pv_dev);
+		for ( v = 0; v < ABS_MAX_VG; v++) {
+			unsigned int p;
+			if ( vg[v] == NULL) continue;
+			for ( p = 0; p < vg[v]->pv_max; p++) {
+				if ( vg[v]->pv[p] != NULL &&
+				     strcmp ( vg[v]->pv[p]->pv_name,
+					      pv_flush_req.pv_name) == 0) {
+					fsync_dev ( vg[v]->pv[p]->pv_dev);
+					invalidate_buffers ( vg[v]->pv[p]->pv_dev);
+					return 0;
+				}
+			}
+		}
 		return 0;
 
 	default:
@@ -813,10 +804,6 @@ static int lvm_blk_open(struct inode *inode, struct file *file)
 			if (!(lv_ptr->lv_access & LV_WRITE))  return -EACCES;
 		}
 
-#ifdef BLOCK_DEVICE_OPERATIONS
-		file->f_op = &lvm_blk_fops;
-#endif
-
                 /* be sure to increment VG counter */
 		if (lv_ptr->lv_open == 0) vg_ptr->lv_open++;
 		lv_ptr->lv_open++;
@@ -834,34 +821,6 @@ static int lvm_blk_open(struct inode *inode, struct file *file)
 	}
 	return -ENXIO;
 } /* lvm_blk_open() */
-
-
-/*
- * block device read
- */
-static ssize_t lvm_blk_read(struct file *file, char *buffer,
-	      		    size_t size, loff_t * offset)
-{
-	int minor = MINOR(file->f_dentry->d_inode->i_rdev);
-
-	read_ahead[MAJOR(file->f_dentry->d_inode->i_rdev)] =
-           vg[VG_BLK(minor)]->lv[LV_BLK(minor)]->lv_read_ahead;
-	return block_read(file, buffer, size, offset);
-}
-
-
-/*
- * block device write
- */
-static ssize_t lvm_blk_write(struct file *file, const char *buffer,
-	      		     size_t size, loff_t * offset)
-{
-	int minor = MINOR(file->f_dentry->d_inode->i_rdev);
-
-	read_ahead[MAJOR(file->f_dentry->d_inode->i_rdev)] =
-           vg[VG_BLK(minor)]->lv[LV_BLK(minor)]->lv_read_ahead;
-	return block_write(file, buffer, size, offset);
-}
 
 
 /*
@@ -906,6 +865,7 @@ static int lvm_blk_ioctl(struct inode *inode, struct file *file,
 		       "%s -- lvm_blk_ioctl -- BLKFLSBUF\n", lvm_name);
 #endif
 		fsync_dev(inode->i_rdev);
+		invalidate_buffers(inode->i_rdev);
 		break;
 
 
@@ -921,7 +881,7 @@ static int lvm_blk_ioctl(struct inode *inode, struct file *file,
 		if ((long) arg < LVM_MIN_READ_AHEAD ||
 		    (long) arg > LVM_MAX_READ_AHEAD)
 			return -EINVAL;
-		lv_ptr->lv_read_ahead = (long) arg;
+		read_ahead[MAJOR_NR] = lv_ptr->lv_read_ahead = (long) arg;
 		break;
 
 
@@ -1293,7 +1253,6 @@ static int lvm_proc_get_info(char *page, char **start, off_t pos, int count)
 static int lvm_map(struct buffer_head *bh, int rw)
 {
 	int minor = MINOR(bh->b_rdev);
-	int ret = 0;
 	ulong index;
 	ulong pe_start;
 	ulong size = bh->b_size >> 9;
@@ -1308,7 +1267,7 @@ static int lvm_map(struct buffer_head *bh, int rw)
 		printk(KERN_ALERT
 		       "%s - lvm_map: ll_rw_blk for inactive LV %s\n",
 		       lvm_name, lv->lv_name);
-		return -1;
+		goto error;
 	}
 /*
    if ( lv->lv_access & LV_SNAPSHOT)
@@ -1323,7 +1282,7 @@ static int lvm_map(struct buffer_head *bh, int rw)
 	    (rw == WRITEA || rw == WRITE))
 	{
    printk ( "%s -- doing snapshot write for %02d:%02d[%02d:%02d]  b_blocknr: %lu  b_rsector: %lu\n", lvm_name, MAJOR ( bh->b_dev), MINOR ( bh->b_dev), MAJOR ( bh->b_rdev), MINOR ( bh->b_rdev), bh->b_blocknr, bh->b_rsector);
-		return 0;
+		goto error;
 	}
 
 	if ((rw == WRITE || rw == WRITEA) &&
@@ -1331,7 +1290,7 @@ static int lvm_map(struct buffer_head *bh, int rw)
 		printk(KERN_CRIT
 		    "%s - lvm_map: ll_rw_blk write for readonly LV %s\n",
 		       lvm_name, lv->lv_name);
-		return -1;
+		goto error;
 	}
 #ifdef DEBUG_MAP
 	printk(KERN_DEBUG
@@ -1347,7 +1306,7 @@ static int lvm_map(struct buffer_head *bh, int rw)
 		printk(KERN_ALERT
 		       "%s - lvm_map *rsector: %lu or size: %lu wrong for"
 		    " minor: %2d\n", lvm_name, rsector_tmp, size, minor);
-		return -1;
+		goto error;
 	}
 	rsector_sav = rsector_tmp;
 	rdev_sav = rdev_tmp;
@@ -1444,11 +1403,11 @@ lvm_second_remap:
 									      pe_start,
 									      lv_ptr)) {
 							/* create a new mapping */
-							ret = lvm_snapshot_COW(rdev_tmp,
-									       rsector_tmp,
-									       pe_start,
-									       rsector_sav,
-									       lv_ptr); 
+							lvm_snapshot_COW(rdev_tmp,
+									 rsector_tmp,
+									 pe_start,
+									 rsector_sav,
+									 lv_ptr); 
 						}
 						rdev_tmp = rdev_sav;
 						rsector_tmp = rsector_sav;
@@ -1467,7 +1426,11 @@ lvm_second_remap:
 	bh->b_rdev = rdev_tmp;
 	bh->b_rsector = rsector_tmp;
 
-	return ret;
+	return 1;
+
+ error:
+	buffer_IO_error(bh);
+	return -1;
 } /* lvm_map() */
 
 
@@ -1519,6 +1482,12 @@ static int lvm_make_request_fn(request_queue_t *q, int rw, struct buffer_head *b
 	return 1;
 }
 
+/*
+ * plug device function is a noop because plugging has to happen
+ * in the queue of the physical blockdevice to allow the
+ * elevator to do a better job.
+ */
+static void lvm_plug_device_noop(request_queue_t *q, kdev_t dev) { }
 
 /********************************************************************
  *
@@ -2090,7 +2059,7 @@ static int lvm_do_lv_create(int minor, char *lv_name, lv_t *lv)
 	lvm_size[MINOR(lv_ptr->lv_dev)] = lv_ptr->lv_size >> 1;
 	vg_lv_map[MINOR(lv_ptr->lv_dev)].vg_number = vg_ptr->vg_number;
 	vg_lv_map[MINOR(lv_ptr->lv_dev)].lv_number = lv_ptr->lv_number;
-	LVM_CORRECT_READ_AHEAD(lv_ptr->lv_read_ahead);
+	read_ahead[MAJOR_NR] = lv_ptr->lv_read_ahead = LVM_CORRECT_READ_AHEAD(lv_ptr->lv_read_ahead);
 	vg_ptr->lv_cur++;
 	lv_ptr->lv_status = lv_status_save;
 
@@ -2328,7 +2297,7 @@ static int lvm_do_lv_extend_reduce(int minor, char *lv_name, lv_t *lv)
 	lvm_size[MINOR(lv_ptr->lv_dev)] = lv_ptr->lv_size >> 1;
 	/* vg_lv_map array doesn't have to be changed here */
 
-	LVM_CORRECT_READ_AHEAD(lv_ptr->lv_read_ahead);
+	read_ahead[MAJOR_NR] = lv_ptr->lv_read_ahead = LVM_CORRECT_READ_AHEAD(lv_ptr->lv_read_ahead);
 	lv_ptr->lv_status = lv_status_save;
 
 	return 0;

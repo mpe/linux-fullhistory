@@ -521,6 +521,7 @@ asmlinkage void __init start_kernel(void)
 {
 	char * command_line;
 	unsigned long mempages;
+	extern char saved_command_line[];
 /*
  * Interrupts are still disabled. Do necessary setups, then
  * enable them
@@ -528,6 +529,7 @@ asmlinkage void __init start_kernel(void)
 	lock_kernel();
 	printk(linux_banner);
 	setup_arch(&command_line);
+	printk("Kernel command line: %s\n", saved_command_line);
 	trap_init();
 	init_IRQ();
 	sched_init();

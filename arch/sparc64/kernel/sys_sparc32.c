@@ -2052,43 +2052,84 @@ asmlinkage int sys32_rt_sigpending(sigset_t32 *set, __kernel_size_t32 sigsetsize
 	return ret;
 }
 
-extern asmlinkage int
-sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
-		    const struct timespec *uts, size_t sigsetsize);
-
 asmlinkage int
 sys32_rt_sigtimedwait(sigset_t32 *uthese, siginfo_t32 *uinfo,
 		      struct timespec32 *uts, __kernel_size_t32 sigsetsize)
 {
-	sigset_t s;
-	sigset_t32 s32;
-	struct timespec t;
-	int ret;
-	mm_segment_t old_fs = get_fs();
+	int ret, sig;
+	sigset_t these;
+	sigset_t32 these32;
+	struct timespec ts;
 	siginfo_t info;
-		
-	if (copy_from_user (&s32, uthese, sizeof(sigset_t32)))
+	long timeout = 0;
+
+	/* XXX: Don't preclude handling different sized sigset_t's.  */
+	if (sigsetsize != sizeof(sigset_t))
+		return -EINVAL;
+
+	if (copy_from_user (&these32, uthese, sizeof(sigset_t32)))
 		return -EFAULT;
+
 	switch (_NSIG_WORDS) {
-	case 4: s.sig[3] = s32.sig[6] | (((long)s32.sig[7]) << 32);
-	case 3: s.sig[2] = s32.sig[4] | (((long)s32.sig[5]) << 32);
-	case 2: s.sig[1] = s32.sig[2] | (((long)s32.sig[3]) << 32);
-	case 1: s.sig[0] = s32.sig[0] | (((long)s32.sig[1]) << 32);
+	case 4: these.sig[3] = these32.sig[6] | (((long)these32.sig[7]) << 32);
+	case 3: these.sig[2] = these32.sig[4] | (((long)these32.sig[5]) << 32);
+	case 2: these.sig[1] = these32.sig[2] | (((long)these32.sig[3]) << 32);
+	case 1: these.sig[0] = these32.sig[0] | (((long)these32.sig[1]) << 32);
 	}
+		
+	/*
+	 * Invert the set of allowed signals to get those we
+	 * want to block.
+	 */
+	sigdelsetmask(&these, sigmask(SIGKILL)|sigmask(SIGSTOP));
+	signotset(&these);
+
 	if (uts) {
-		ret = get_user (t.tv_sec, &uts->tv_sec);
-		ret |= __get_user (t.tv_nsec, &uts->tv_nsec);
-		if (ret)
-			return -EFAULT;
+		if (get_user (ts.tv_sec, &uts->tv_sec) ||
+		    get_user (ts.tv_nsec, &uts->tv_nsec))
+			return -EINVAL;
+		if (ts.tv_nsec >= 1000000000L || ts.tv_nsec < 0
+		    || ts.tv_sec < 0)
+			return -EINVAL;
 	}
-	set_fs (KERNEL_DS);
-	ret = sys_rt_sigtimedwait(&s, &info, &t, sigsetsize);
-	set_fs (old_fs);
-	if (ret >= 0 && uinfo) {
-		extern int copy_siginfo_to_user32(siginfo_t32 *, siginfo_t *);
-		if (copy_siginfo_to_user32(uinfo, &info))
-			ret = -EFAULT;
+
+	spin_lock_irq(&current->sigmask_lock);
+	sig = dequeue_signal(&these, &info);
+	if (!sig) {
+		/* None ready -- temporarily unblock those we're interested
+		   in so that we'll be awakened when they arrive.  */
+		sigset_t oldblocked = current->blocked;
+		sigandsets(&current->blocked, &current->blocked, &these);
+		recalc_sigpending(current);
+		spin_unlock_irq(&current->sigmask_lock);
+
+		timeout = MAX_SCHEDULE_TIMEOUT;
+		if (uts)
+			timeout = (timespec_to_jiffies(&ts)
+				   + (ts.tv_sec || ts.tv_nsec));
+
+		current->state = TASK_INTERRUPTIBLE;
+		timeout = schedule_timeout(timeout);
+
+		spin_lock_irq(&current->sigmask_lock);
+		sig = dequeue_signal(&these, &info);
+		current->blocked = oldblocked;
+		recalc_sigpending(current);
 	}
+	spin_unlock_irq(&current->sigmask_lock);
+
+	if (sig) {
+		ret = sig;
+		if (uinfo) {
+			if (copy_siginfo_to_user32(uinfo, &info))
+				ret = -EFAULT;
+		}
+	} else {
+		ret = -EAGAIN;
+		if (timeout)
+			ret = -EINTR;
+	}
+
 	return ret;
 }
 

@@ -75,11 +75,6 @@ static int (*check_part[])(struct gendisk *hd, kdev_t dev, unsigned long first_s
 	NULL
 };
 
-#if defined CONFIG_BLK_DEV_LVM || defined CONFIG_BLK_DEV_LVM_MODULE
-#include <linux/lvm.h>
-void (*lvm_hd_name_ptr) (char *, int) = NULL;
-#endif
-
 /*
  * disk_name() is used by genhd.c and blkpg.c.
  * It formats the devicename of the indicated disk into
@@ -106,13 +101,6 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 	 * This requires special handling here.
 	 */
 	switch (hd->major) {
-#if defined CONFIG_BLK_DEV_LVM || defined CONFIG_BLK_DEV_LVM_MODULE
-		case LVM_BLK_MAJOR:
-			*buf = 0;
-			if ( lvm_hd_name_ptr != NULL)
-				(lvm_hd_name_ptr) ( buf, minor);
-			return buf;
-#endif
 		case IDE9_MAJOR:
 			unit += 2;
 		case IDE8_MAJOR:

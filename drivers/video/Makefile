@@ -88,6 +88,7 @@ obj-$(CONFIG_FB_TCX)              += tcxfb.o sbusfb.o
 obj-$(CONFIG_FB_CGFOURTEEN)       += cgfourteenfb.o sbusfb.o
 obj-$(CONFIG_FB_P9100)            += p9100fb.o sbusfb.o
 obj-$(CONFIG_FB_LEO)              += leofb.o sbusfb.o
+obj-$(CONFIG_FB_SIS)              += sisfb.o
 
 ifeq ($(CONFIG_FB_MATROX),y)
 SUB_DIRS			  += matrox

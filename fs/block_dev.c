@@ -313,7 +313,7 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
  *	since the vma has no handle.
  */
  
-int block_fsync(struct file *filp, struct dentry *dentry)
+static int block_fsync(struct file *filp, struct dentry *dentry)
 {
 	return fsync_dev(dentry->d_inode->i_rdev);
 }
@@ -650,7 +650,7 @@ int blkdev_put(struct block_device *bdev, int kind)
 	return ret;
 }
 
-int blkdev_close(struct inode * inode, struct file * filp)
+static int blkdev_close(struct inode * inode, struct file * filp)
 {
 	return blkdev_put(inode->i_bdev, BDEV_FILE);
 }

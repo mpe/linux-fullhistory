@@ -156,6 +156,61 @@ struct statfs32 {
        int f_spare[6];
 };
 
+typedef union sigval32 {
+	int sival_int;
+	unsigned int sival_ptr;
+} sigval_t32;
+
+typedef struct siginfo32 {
+	int si_signo;
+	int si_errno;
+	int si_code;
+
+	union {
+		int _pad[((128/sizeof(int)) - 3)];
+
+		/* kill() */
+		struct {
+			unsigned int _pid;	/* sender's pid */
+			unsigned int _uid;	/* sender's uid */
+		} _kill;
+
+		/* POSIX.1b timers */
+		struct {
+			unsigned int _timer1;
+			unsigned int _timer2;
+		} _timer;
+
+		/* POSIX.1b signals */
+		struct {
+			unsigned int _pid;	/* sender's pid */
+			unsigned int _uid;	/* sender's uid */
+			sigval_t32 _sigval;
+		} _rt;
+
+		/* SIGCHLD */
+		struct {
+			unsigned int _pid;	/* which child */
+			unsigned int _uid;	/* sender's uid */
+			int _status;		/* exit code */
+			__kernel_clock_t32 _utime;
+			__kernel_clock_t32 _stime;
+		} _sigchld;
+
+		/* SIGILL, SIGFPE, SIGSEGV, SIGBUS */
+		struct {
+			unsigned int _addr;	/* faulting insn/memory ref. */
+		} _sigfault;
+
+		/* SIGPOLL */
+		struct {
+			int _band;	/* POLL_IN, POLL_OUT, POLL_MSG */
+			int _fd;
+		} _sigpoll;
+	} _sifields;
+} siginfo_t32;
+
+
 /*
  * IA-32 ELF specific definitions for IA-64.
  */

@@ -1028,7 +1028,7 @@ void sx_transmit_chars (struct sx_port *port)
 		if (c > SERIAL_XMIT_SIZE - port->gs.xmit_tail) 
 			c = SERIAL_XMIT_SIZE - port->gs.xmit_tail;
 
-		sx_dprintk (SX_DEBUG_TRANSMIT, " %d(%d) \n", 
+		sx_dprintk (SX_DEBUG_TRANSMIT, " %d(%ld) \n", 
 		            c, SERIAL_XMIT_SIZE- port->gs.xmit_tail);
 
 		/* If for one reason or another, we can't copy more data, we're done! */

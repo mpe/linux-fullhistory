@@ -1092,6 +1092,7 @@ dgrs_download(struct net_device *dev0)
 
 	for (i = jiffies + 8 * HZ; time_after(i, jiffies); )
 	{
+		barrier();		/* Gcc 2.95 needs this */
 		if (priv0->bcomm->bc_status >= BC_RUN)
 			break;
 	}

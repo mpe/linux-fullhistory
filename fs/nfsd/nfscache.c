@@ -68,7 +68,7 @@ nfsd_cache_init(void)
 	i = HASHSIZE * sizeof (struct nfscache_head);
 	hash_list = kmalloc (i, GFP_KERNEL);
 	if (!hash_list) {
-		kfree (nfscache);
+		free_pages ((unsigned long)nfscache, order);
 		nfscache = NULL;
 		printk (KERN_ERR "nfsd: cannot allocate %d bytes for hash list\n", i);
 		return;

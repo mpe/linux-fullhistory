@@ -390,10 +390,11 @@ void __init init_8259A(int auto_eoi)
  
 static void math_error_irq(int cpl, void *dev_id, struct pt_regs *regs)
 {
+	extern void math_error(void *);
 	outb(0,0xF0);
 	if (ignore_irq13 || !boot_cpu_data.hard_math)
 		return;
-	math_error();
+	math_error((void *)regs->eip);
 }
 
 static struct irqaction irq13 = { math_error_irq, 0, 0, "fpu", NULL, NULL };

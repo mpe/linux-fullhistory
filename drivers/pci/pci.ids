@@ -2932,7 +2932,10 @@
 1277  Comstream
 1278  Transtech Parallel Systems Ltd.
 1279  Transmeta Corporation
-	0295  Virtual Northbridge
+	0295  Northbridge
+	0395  LongRun Northbridge
+	0396  SDRAM controller
+	0397  BIOS scratchpad
 127a  Rockwell International
 	1002  HCF 56k V90 FaxModem
 		127a 1002  HCF 56k V90 Modem

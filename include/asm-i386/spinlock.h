@@ -64,16 +64,13 @@ typedef struct {
 #define spin_unlock_string \
 	"movb $1,%0"
 
-/*
- * Won't work on i386-SMP. Does anybody care?
- */
 static inline int spin_trylock(spinlock_t *lock)
 {
 	char oldval;
 	__asm__ __volatile__(
-		"lock ; cmpxchg %b2,%1"
-		:"=a" (oldval), "=m" (__dummy_lock(lock))
-		:"q" (0), "0" (1));
+		"xchgb %b0,%1"
+		:"=q" (oldval), "=m" (__dummy_lock(lock))
+		:"0" (0));
 	return oldval > 0;
 }
 

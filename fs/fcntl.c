@@ -259,8 +259,7 @@ out:
 
 /* Table to convert sigio signal codes into poll band bitmaps */
 
-static long band_table[NSIGPOLL+1] = {
-	~0,
+static long band_table[NSIGPOLL] = {
 	POLLIN | POLLRDNORM,			/* POLL_IN */
 	POLLOUT | POLLWRNORM | POLLWRBAND,	/* POLL_OUT */
 	POLLIN | POLLRDNORM | POLLMSG,		/* POLL_MSG */
@@ -290,10 +289,15 @@ static void send_sigio_to_task(struct task_struct *p,
 			si.si_signo = fown->signum;
 			si.si_errno = 0;
 		        si.si_code  = reason;
-			if (reason < 0 || reason > NSIGPOLL)
+			/* Make sure we are called with one of the POLL_*
+			   reasons, otherwise we could leak kernel stack into
+			   userspace.  */
+			if ((reason & __SI_MASK) != __SI_POLL)
+				BUG();
+			if (reason - POLL_IN > NSIGPOLL)
 				si.si_band  = ~0L;
 			else
-				si.si_band = band_table[reason];
+				si.si_band = band_table[reason - POLL_IN];
 			si.si_fd    = fa->fa_fd;
 			if (!send_sig_info(fown->signum, &si, p))
 				break;

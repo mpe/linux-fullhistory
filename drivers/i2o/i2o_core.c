@@ -189,7 +189,7 @@ static int evt_q_len = 0;
  * I2O configuration spinlock. This isnt a big deal for contention
  * so we have one only
  */
-static spinlock_t i2o_configuration_lock = SPIN_LOCK_UNLOCKED;
+static struct semaphore i2o_configuration_lock;
 
 /* 
  * Event spinlock.  Used to keep event queue sane and from
@@ -215,7 +215,7 @@ static struct notifier_block i2o_reboot_notifier =
 /*
  * I2O Core reply handler
  */
-void i2o_core_reply(struct i2o_handler *h, struct i2o_controller *c,
+static void i2o_core_reply(struct i2o_handler *h, struct i2o_controller *c,
 		    struct i2o_message *m)
 {
 	u32 *msg=(u32 *)m;
@@ -297,29 +297,44 @@ void i2o_core_reply(struct i2o_handler *h, struct i2o_controller *c,
 	return;
 }
 
-/*
+/**
+ *	i2o_install_handler - install a message handler
+ *	@h: Handler structure
+ *
  *	Install an I2O handler - these handle the asynchronous messaging
- *	from the card once it has initialised.
+ *	from the card once it has initialised. If the table of handlers is
+ *	full then -ENOSPC is returned. On a success 0 is returned and the
+ *	context field is set by the function. The structure is part of the
+ *	system from this time onwards. It must not be freed until it has
+ *	been uninstalled
  */
  
 int i2o_install_handler(struct i2o_handler *h)
 {
 	int i;
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	for(i=0;i<MAX_I2O_MODULES;i++)
 	{
 		if(i2o_handlers[i]==NULL)
 		{
 			h->context = i;
 			i2o_handlers[i]=h;
-			spin_unlock(&i2o_configuration_lock);
+			up(&i2o_configuration_lock);
 			return 0;
 		}
 	}
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	return -ENOSPC;
 }
 
+/**
+ *	i2o_remove_handler - remove an i2o message handler
+ *	@h: handler
+ *
+ *	Remove a message handler previously installed with i2o_install_handler.
+ *	After this function returns the handler object can be freed or re-used
+ */
+ 
 int i2o_remove_handler(struct i2o_handler *h)
 {
 	i2o_handlers[h->context]=NULL;
@@ -332,12 +347,24 @@ int i2o_remove_handler(struct i2o_handler *h)
  * Each device has a pointer to it's LCT entry to be used
  * for fun purposes.
  */
+
+/**
+ *	i2o_install_device	-	attach a device to a controller
+ *	@c: controller
+ *	@d: device
+ * 	
+ *	Add a new device to an i2o controller. This can be called from
+ *	non interrupt contexts only. It adds the device and marks it as
+ *	unclaimed. The device memory becomes part of the kernel and must
+ *	be uninstalled before being freed or reused. Zero is returned
+ *	on success.
+ */
  
 int i2o_install_device(struct i2o_controller *c, struct i2o_device *d)
 {
 	int i;
 
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	d->controller=c;
 	d->owner=NULL;
 	d->next=c->devices;
@@ -347,7 +374,7 @@ int i2o_install_device(struct i2o_controller *c, struct i2o_device *d)
 	for(i = 0; i < I2O_MAX_MANAGERS; i++)
 		d->managers[i] = NULL;
 
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	return 0;
 }
 
@@ -411,11 +438,22 @@ int __i2o_delete_device(struct i2o_device *d)
 	return -EINVAL;
 }
 
+/**
+ *	i2o_delete_device	-	remove an i2o device
+ *	@d: device to remove
+ *
+ *	This function unhooks a device from a controller. The device
+ *	will not be unhooked if it has an owner who does not wish to free
+ *	it, or if the owner lacks a dev_del_notify function. In that case
+ *	-EBUSY is returned. On success 0 is returned. Other errors cause
+ *	negative errno values to be returned
+ */
+ 
 int i2o_delete_device(struct i2o_device *d)
 {
 	int ret;
 
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 
 	/*
 	 *	Seek, locate
@@ -423,23 +461,37 @@ int i2o_delete_device(struct i2o_device *d)
 
 	ret = __i2o_delete_device(d);
 
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 
 	return ret;
 }
 
-/*
- *	Add and remove controllers from the I2O controller list
+/**
+ *	i2o_install_controller	-	attach a controller
+ *	@c: controller
+ * 	
+ *	Add a new controller to the i2o layer. This can be called from
+ *	non interrupt contexts only. It adds the controller and marks it as
+ *	unused with no devices. If the tables are full or memory allocations
+ *	fail then a negative errno code is returned. On success zero is
+ *	returned and the controller is bound to the system. The structure
+ *	must not be freed or reused until being uninstalled.
  */
  
 int i2o_install_controller(struct i2o_controller *c)
 {
 	int i;
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	for(i=0;i<MAX_I2O_CONTROLLERS;i++)
 	{
 		if(i2o_controllers[i]==NULL)
 		{
+			c->dlct = (i2o_lct*)kmalloc(8192, GFP_KERNEL);
+			if(c->dlct==NULL)
+			{
+				up(&i2o_configuration_lock);
+				return -ENOMEM;
+			}
 			i2o_controllers[i]=c;
 			c->devices = NULL;
 			c->next=i2o_controller_chain;
@@ -448,20 +500,28 @@ int i2o_install_controller(struct i2o_controller *c)
 			c->page_frame = NULL;
 			c->hrt = NULL;
 			c->lct = NULL;
-			c->dlct = (i2o_lct*)kmalloc(8192, GFP_KERNEL);
 			c->status_block = NULL;
 			sprintf(c->name, "i2o/iop%d", i);
 			i2o_num_controllers++;
 			init_MUTEX_LOCKED(&c->lct_sem);
-			spin_unlock(&i2o_configuration_lock);
+			up(&i2o_configuration_lock);
 			return 0;
 		}
 	}
 	printk(KERN_ERR "No free i2o controller slots.\n");
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	return -EBUSY;
 }
 
+/**
+ *	i2o_delete_controller	- delete a controller
+ *	@c: controller
+ *	
+ *	Remove an i2o controller from the system. If the controller or its
+ *	devices are busy then -EBUSY is returned. On a failure a negative
+ *	errno code is returned. On success zero is returned.
+ */
+  
 int i2o_delete_controller(struct i2o_controller *c)
 {
 	struct i2o_controller **p;
@@ -477,12 +537,12 @@ int i2o_delete_controller(struct i2o_controller *c)
 	if(c->status_block->iop_state == ADAPTER_STATE_OPERATIONAL)
 		i2o_event_register(c, core_context, 0, 0, 0);
 
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	if((users=atomic_read(&c->users)))
 	{
 		dprintk(KERN_INFO "I2O: %d users for controller %s\n", users,
 			c->name);
-		spin_unlock(&i2o_configuration_lock);
+		up(&i2o_configuration_lock);
 		return -EBUSY;
 	}
 	while(c->devices)
@@ -491,7 +551,7 @@ int i2o_delete_controller(struct i2o_controller *c)
 		{
 			/* Shouldnt happen */
 			c->bus_disable(c);
-			spin_unlock(&i2o_configuration_lock);
+			up(&i2o_configuration_lock);
 			return -EBUSY;
 		}
 	}
@@ -528,7 +588,7 @@ int i2o_delete_controller(struct i2o_controller *c)
 			c->destructor(c);
 
 			*p=c->next;
-			spin_unlock(&i2o_configuration_lock);
+			up(&i2o_configuration_lock);
 
 			if(c->page_frame)
 				kfree(c->page_frame);
@@ -551,16 +611,33 @@ int i2o_delete_controller(struct i2o_controller *c)
 		}
 		p=&((*p)->next);
 	}
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	printk(KERN_ERR "i2o_delete_controller: bad pointer!\n");
 	return -ENOENT;
 }
 
+/**
+ *	i2o_unlock_controller	-	unlock a controller
+ *	@c: controller to unlock
+ *
+ *	Take a lock on an i2o controller. This prevents it being deleted.
+ *	i2o controllers are not refcounted so a deletion of an in use device
+ *	will fail, not take affect on the last dereference.
+ */
+ 
 void i2o_unlock_controller(struct i2o_controller *c)
 {
 	atomic_dec(&c->users);
 }
 
+/**
+ *	i2o_find_controller - return a locked controller
+ *	@n: controller number
+ *
+ *	Returns a pointer to the controller object. The controller is locked
+ *	on return. NULL is returned if the controller is not found.
+ */
+ 
 struct i2o_controller *i2o_find_controller(int n)
 {
 	struct i2o_controller *c;
@@ -568,17 +645,28 @@ struct i2o_controller *i2o_find_controller(int n)
 	if(n<0 || n>=MAX_I2O_CONTROLLERS)
 		return NULL;
 	
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	c=i2o_controllers[n];
 	if(c!=NULL)
 		atomic_inc(&c->users);
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	return c;
 }
 
-/*
- *	Issue UTIL_CLAIM or UTIL_RELEASE message
+/**
+ *	i2o_issue_claim	- claim or release a device
+ *	@cmd: command
+ *	@c: controller to claim for
+ *	@tid: i2o task id
+ *	@type: type of claim
+ *
+ *	Issue I2O UTIL_CLAIM and UTIL_RELEASE messages. The message to be sent
+ *	is set by cmd. The tid is the task id of the object to claim and the
+ *	type is the claim type (see the i2o standard)
+ *
+ *	Zero is returned on success.
  */
+ 
 static int i2o_issue_claim(u32 cmd, struct i2o_controller *c, int tid, u32 type)
 {
 	u32 msg[5];
@@ -592,54 +680,70 @@ static int i2o_issue_claim(u32 cmd, struct i2o_controller *c, int tid, u32 type)
 }
 
 /*
- * Claim a device for use by an OSM
+ * 	i2o_claim_device - claim a device for use by an OSM
+ *	@d: device to claim
+ *	@h: handler for this device
+ *
+ *	Do the leg work to assign a device to a given OSM on Linux. The
+ *	kernel updates the internal handler data for the device and then
+ *	performs an I2O claim for the device, attempting to claim the
+ *	device as primary. If the attempt fails a negative errno code
+ *	is returned. On success zero is returned.
  */
+ 
 int i2o_claim_device(struct i2o_device *d, struct i2o_handler *h)
 {
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	if (d->owner) {
 		printk(KERN_INFO "Device claim called, but dev allready owned by %s!",
 		       h->name);
-		spin_unlock(&i2o_configuration_lock);
+		up(&i2o_configuration_lock);
 		return -EBUSY;
 	}
+	d->owner=h;
 
 	if(i2o_issue_claim(I2O_CMD_UTIL_CLAIM ,d->controller,d->lct_data.tid, 
 			   I2O_CLAIM_PRIMARY))
 	{
-		spin_unlock(&i2o_configuration_lock);
+		d->owner = NULL;
 		return -EBUSY;
 	}
-
-	d->owner=h;
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	return 0;
 }
 
-/*
- * Release a device that the OSM is using
+/**
+ *	i2o_release_device - release a device that the OSM is using
+ *	@d: device to claim
+ *	@h: handler for this device
+ *
+ *	Drop a claim by an OSM on a given I2O device. The handler is cleared
+ *	and 0 is returned on success.
+ *
  */
+
 int i2o_release_device(struct i2o_device *d, struct i2o_handler *h)
 {
 	int err = 0;
 
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	if (d->owner != h) {
 		printk(KERN_INFO "Claim release called, but not owned by %s!",
 		       h->name);
-		spin_unlock(&i2o_configuration_lock);
+		up(&i2o_configuration_lock);
 		return -ENOENT;
 	}	
+
+	d->owner = NULL;
 
 	if(i2o_issue_claim(I2O_CMD_UTIL_RELEASE, d->controller, d->lct_data.tid, 
 			   I2O_CLAIM_PRIMARY))
 	{
 		err = -ENXIO;
+		d->owner = h;
 	}
 
-	d->owner = NULL;
-
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	return err;
 }
 
@@ -994,7 +1098,10 @@ static int i2o_dyn_lct(void *foo)
 	return 0;
 }
 
-/*
+/**
+ *	i2o_run_queue	-	process pending events on a controller
+ *	@c: controller to process
+ *
  *	This is called by the bus specific driver layer when an interrupt
  *	or poll of this card interface is desired.
  */
@@ -1046,9 +1153,13 @@ void i2o_run_queue(struct i2o_controller *c)
 }
 
 
-/*
- *	Do i2o class name lookup
+/**
+ *	i2o_get_class_name - 	do i2o class name lookup
+ *	@class: class number
+ *
+ *	Return a descriptive string for an i2o class
  */
+ 
 const char *i2o_get_class_name(int class)
 {
 	int idx = 16;
@@ -1112,8 +1223,18 @@ const char *i2o_get_class_name(int class)
 }
 
 
-/*
- *	Wait up to 5 seconds for a message slot to be available.
+/**
+ *	i2o_wait_message
+ *	@c: controller
+ *	@why: explanation
+ *
+ *	This function waits up to 5 seconds for a message slot to be
+ *	available. If no message is available it prints an error message
+ *	that is expected to be what the message will be used for (eg
+ *	"get_status"). 0xFFFFFFFF is returned on a failure.
+ *
+ *	On a success the message is returned. This is the physical page
+ *	frame offset address from the read port. (See the i2o spec)
  */
  
 u32 i2o_wait_message(struct i2o_controller *c, char *why)
@@ -1134,8 +1255,14 @@ u32 i2o_wait_message(struct i2o_controller *c, char *why)
 	return m;
 }
 	
-/*
- *	 Dump the information block associated with a given unit (TID)
+/**
+ *	i2o_report_controller_unit - print information about a tid
+ *	@c: controller
+ *	@d: device
+ *	
+ *	Dump an information block associated with a given unit (TID). The
+ *	tables are read and a block of text is output to printk that is
+ *	formatted intended for the user.
  */
  
 void i2o_report_controller_unit(struct i2o_controller *c, struct i2o_device *d)
@@ -1341,10 +1468,14 @@ static int i2o_parse_lct(struct i2o_controller *c)
 }
 
 
-/* 
- * Quiesce IOP. Causes IOP to make external operation quiescend. 
- * Internal operation of the IOP continues normally.
+/**
+ *	i2o_quiesce_controller - quiesce controller
+ *	@c: controller 
+ *
+ *	Quiesce an IOP. Causes IOP to make external operation quiescent
+ *	(i2o 'READY' state). Internal operation of the IOP continues normally.
  */
+ 
 int i2o_quiesce_controller(struct i2o_controller *c)
 {
 	u32 msg[4];
@@ -1373,14 +1504,18 @@ int i2o_quiesce_controller(struct i2o_controller *c)
 		dprintk(KERN_INFO "%s: Quiesced.\n", c->name);
 
 	i2o_status_get(c); // Entered READY state
-
-   return ret;
-
+	return ret;
 }
 
-/*
- * Enable IOP. Allows the IOP to resume external operations.
+/**
+ *	i2o_enable_controller - move controller from ready to operational
+ *	@c: controller
+ *
+ *	Enable IOP. This allows the IOP to resume external operations and
+ *	reverses the effect of a quiesce. In the event of an error a negative
+ *	errno code is returned.
  */
+ 
 int i2o_enable_controller(struct i2o_controller *c)
 {
 	u32 msg[4];
@@ -1395,7 +1530,7 @@ int i2o_enable_controller(struct i2o_controller *c)
 	msg[0]=FOUR_WORD_MSG_SIZE|SGL_OFFSET_0;
 	msg[1]=I2O_CMD_SYS_ENABLE<<24|HOST_TID<<12|ADAPTER_TID;
 
-   /* How long of a timeout do we need? */
+	/* How long of a timeout do we need? */
 
 	if ((ret = i2o_post_wait(c, msg, sizeof(msg), 240)))
 		printk(KERN_ERR "%s: Could not enable (status=%#x).\n",
@@ -1408,12 +1543,16 @@ int i2o_enable_controller(struct i2o_controller *c)
 	return ret;
 }
 
-/*
- * Clear an IOP to HOLD state, ie. terminate external operations, clear all
- * input queues and prepare for a system restart. IOP's internal operation
- * continues normally and the outbound queue is alive.
- * IOP is not expected to rebuild its LCT.
+/**
+ *	i2o_clear_controller	-	clear a controller
+ *	@c: controller
+ *
+ *	Clear an IOP to HOLD state, ie. terminate external operations, clear all
+ *	input queues and prepare for a system restart. IOP's internal operation
+ *	continues normally and the outbound queue is alive.
+ *	The IOP is not expected to rebuild its LCT.
  */
+ 
 int i2o_clear_controller(struct i2o_controller *c)
 {
 	struct i2o_controller *iop;
@@ -1447,12 +1586,16 @@ int i2o_clear_controller(struct i2o_controller *c)
 }
 
 
-/*
- * Reset the IOP into INIT state and wait until IOP gets into RESET state.
- * Terminate all external operations, clear IOP's inbound and outbound
- * queues, terminate all DDMs, and reload the IOP's operating environment
- * and all local DDMs. IOP rebuilds its LCT.
+/**
+ *	i2o_reset_controller
+ *	@c: controller to reset
+ *
+ *	Reset the IOP into INIT state and wait until IOP gets into RESET state.
+ *	Terminate all external operations, clear IOP's inbound and outbound
+ *	queues, terminate all DDMs, and reload the IOP's operating environment
+ *	and all local DDMs. The IOP rebuilds its LCT.
  */
+ 
 static int i2o_reset_controller(struct i2o_controller *c)
 {
 	struct i2o_controller *iop;
@@ -1556,9 +1699,16 @@ static int i2o_reset_controller(struct i2o_controller *c)
 }
 
 
-/*
- * Get the status block for the IOP
+/**
+ * 	i2o_status_get	-	get the status block for the IOP
+ *	@c: controller
+ *
+ *	Issue a status query on the controller. This updates the
+ *	attached status_block. If the controller fails to reply or an
+ *	error occurs then a negative errno code is returned. On success
+ *	zero is returned and the status_blok is updated.
  */
+ 
 int i2o_status_get(struct i2o_controller *c)
 {
 	long time;
@@ -1743,7 +1893,7 @@ static int i2o_systab_send(struct i2o_controller *iop)
 /*
  * Initialize I2O subsystem.
  */
-static void __init i2o_sys_init()
+static void __init i2o_sys_init(void)
 {
 	struct i2o_controller *iop, *niop = NULL;
 
@@ -1806,9 +1956,13 @@ rebuild_sys_tab:
 	}
 }
 
-/*
- * Shutdown I2O system
+/**
+ *	i2o_sys_shutdown - shutdown I2O system
+ *
+ *	Bring down each i2o controller and then return. Each controller
+ *	is taken through an orderly shutdown
  */
+ 
 static void i2o_sys_shutdown(void)
 {
 	struct i2o_controller *iop, *niop;
@@ -1822,9 +1976,16 @@ static void i2o_sys_shutdown(void)
 	}
 }
 
-/*
- *	Bring an I2O controller into HOLD state. See the spec.
+/**
+ *	i2o_activate_controller	-	bring controller up to HOLD
+ *	@iop: controller
+ *
+ *	This function brings an I2O controller into HOLD state. The adapter
+ *	is reset if neccessary and then the queues and resource table
+ *	are read. -1 is returned on a failure, 0 on success.
+ *	
  */
+ 
 int i2o_activate_controller(struct i2o_controller *iop)
 {
 	/* In INIT state, Wait Inbound Q to initialize (in i2o_status_get) */
@@ -1872,9 +2033,14 @@ int i2o_activate_controller(struct i2o_controller *iop)
 }
 
 
-/*
- * Clear and (re)initialize IOP's outbound queue
+/**
+ *	i2o_init_outbound_queue	- setup the outbound queue
+ *	@c: controller
+ *
+ *	Clear and (re)initialize IOP's outbound queue. Returns 0 on
+ *	success or a negative errno code on a failure.
  */
+ 
 int i2o_init_outbound_q(struct i2o_controller *c)
 {
 	u8 *status;
@@ -1937,6 +2103,15 @@ int i2o_init_outbound_q(struct i2o_controller *c)
 
 	return 0;
 }
+
+/**
+ *	i2o_post_outbound_messages	-	fill message queue
+ *	@c: controller
+ *
+ *	Allocate a message frame and load the messages into the IOP. The
+ *	function returns zero on success or a negative errno code on
+ *	failure.
+ */
 
 int i2o_post_outbound_messages(struct i2o_controller *c)
 {
@@ -3071,6 +3246,9 @@ extern int i2o_scsi_init(void);
 int __init i2o_init(void)
 {
 	printk(KERN_INFO "Loading I2O Core - (c) Copyright 1999 Red Hat Software\n");
+	
+	init_MUTEX(&i2o_configuration_lock);
+	
 	if (i2o_install_handler(&i2o_core_handler) < 0)
 	{
 		printk(KERN_ERR 
