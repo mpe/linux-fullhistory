@@ -4604,15 +4604,6 @@ struct _snd_pcm_runtime {
         zero <parameter>up</parameter> parameter when the transmission
         of data should be aborted.
         </para>
-
-        <para>
-        The <function>trigger</function> callback with nonzero
-        <paramater>up</parameter> parameter may be called from another
-        hardware interrupt handler.  This means that all spinlocks
-        taken in the <function>trigger</function> callback must be
-        taken with <function>spin_lock_irqsave</function> even when
-        you are in your own interrupt handler.
-        </para>
       </section>
 
       <section id="rawmidi-interface-op-trigger-in">
