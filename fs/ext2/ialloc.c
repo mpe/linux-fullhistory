@@ -154,6 +154,22 @@ static int load_inode_bitmap (struct super_block * sb,
 	return 0;
 }
 
+/*
+ * NOTE! When we get the inode, we're the only people
+ * that have access to it, and as such there are no
+ * race conditions we have to worry about. The inode
+ * is not on the hash-lists, and it cannot be reached
+ * through the filesystem because the directory entry
+ * has been deleted earlier.
+ *
+ * HOWEVER: we must make sure that we get no aliases,
+ * which means that we have to call "clear_inode()"
+ * _before_ we mark the inode not in use in the inode
+ * bitmaps. Otherwise a newly created file might use
+ * the same inode number (not actually the same pointer
+ * though), and then we'd have two inodes sharing the
+ * same inode number and space on the harddisk.
+ */
 void ext2_free_inode (struct inode * inode)
 {
 	int is_directory;
@@ -207,10 +223,12 @@ void ext2_free_inode (struct inode * inode)
 
 	is_directory = S_ISDIR(inode->i_mode);
 
+	/* Do this BEFORE marking the inode not in use */
 	if (sb->dq_op)
 		sb->dq_op->free_inode (inode, 1);
 	clear_inode (inode);
 
+	/* Ok, now we can actually update the inode bitmaps.. */
 	if (!ext2_clear_bit (bit, bh->b_data))
 		ext2_warning (sb, "ext2_free_inode",
 			      "bit already cleared for inode %lu", ino);

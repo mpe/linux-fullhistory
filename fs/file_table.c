@@ -102,6 +102,24 @@ again:
 	return f;
 }
 
+/*
+ * Clear and initialize a (private) struct file for the given dentry,
+ * and call the open function (if any).  The caller must verify that
+ * inode->i_op and inode->i_op->default_file_ops are not NULL.
+ */
+int init_private_file(struct file *filp, struct dentry *dentry, int mode)
+{
+	memset(filp, 0, sizeof(*filp));
+	filp->f_mode   = mode;
+	filp->f_count  = 1;
+	filp->f_dentry = dentry;
+	filp->f_op     = dentry->d_inode->i_op->default_file_ops;
+	if (filp->f_op->open)
+		return filp->f_op->open(dentry->d_inode, filp);
+	else
+		return 0;
+}
+
 #ifdef CONFIG_QUOTA
 
 void add_dquot_ref(kdev_t dev, short type)

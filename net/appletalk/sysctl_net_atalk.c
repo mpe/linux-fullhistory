@@ -6,6 +6,7 @@
  * Dynamic registration, added aarp entries. (5/30/97 Chris Horn)
  */
 
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/sysctl.h>
 

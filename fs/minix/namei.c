@@ -47,9 +47,6 @@ static int minix_match(int len, const char * name,
 	*offset += info->s_dirsize;
 	if (!de->inode || len > info->s_namelen)
 		return 0;
-	/* "" means "." ---> so paths like "/usr/lib//libc.a" work */
-	if (!len && (de->name[0]=='.') && (de->name[1]=='\0'))
-		return 1;
 	return namecompare(len,info->s_namelen,name,de->name);
 }
 
@@ -104,24 +101,22 @@ static struct buffer_head * minix_find_entry(struct inode * dir,
 	return NULL;
 }
 
-int minix_lookup(struct inode * dir, struct qstr *name,
-	struct inode ** result)
+int minix_lookup(struct inode * dir, struct dentry *dentry)
 {
-	int ino;
+	struct inode * inode = NULL;
 	struct minix_dir_entry * de;
 	struct buffer_head * bh;
 
-	*result = NULL;
-	if (!dir)
-		return -ENOENT;
-	if (!S_ISDIR(dir->i_mode))
-		return -ENOENT;
-	if (!(bh = minix_find_entry(dir, name->name, name->len, &de)))
-		return -ENOENT;
-	ino = de->inode;
-	brelse(bh);
-	if (!(*result = iget(dir->i_sb,ino)))
-		return -EACCES;
+	bh = minix_find_entry(dir, dentry->d_name.name, dentry->d_name.len, &de);
+	if (bh) {
+		unsigned long ino = le32_to_cpu(de->inode);
+		brelse (bh);
+		inode = iget(dir->i_sb, ino);
+ 
+		if (!inode)
+			return -EACCES;
+	}
+	d_add(dentry, inode);
 	return 0;
 }
 
@@ -602,29 +597,21 @@ int minix_link(struct inode * inode, struct inode * dir,
 	return 0;
 }
 
-static int subdir(struct inode * new_inode, struct inode * old_inode)
+static int subdir(struct dentry * new_dentry, struct dentry * old_dentry)
 {
-	int ino;
-	int result;
+	int result = 0;
 
-	new_inode->i_count++;
-	result = 0;
 	for (;;) {
-		if (new_inode == old_inode) {
-			result = 1;
-			break;
+		if (new_dentry != old_dentry) {
+			struct dentry * parent = new_dentry->d_parent;
+			if (parent == new_dentry)
+				break;
+			new_dentry = parent;
+			continue;
 		}
-		if (new_inode->i_dev != old_inode->i_dev)
-			break;
-		ino = new_inode->i_ino;
-		if (minix_lookup(new_inode,
-				 &(struct qstr) { "..", 2, 0 },
-				 &new_inode))
-			break;
-		if (new_inode->i_ino == ino)
-			break;
+		result = 1;
+		break;
 	}
-	iput(new_inode);
 	return result;
 }
 
@@ -690,7 +677,7 @@ start_up:
 		if (!S_ISDIR(old_inode->i_mode))
 			goto end_rename;
 		retval = -EINVAL;
-		if (subdir(new_dir, old_inode))
+		if (subdir(new_dentry, old_dentry))
 			goto end_rename;
 		retval = -ENOTEMPTY;
 		if (!empty_dir(new_inode))
@@ -709,7 +696,7 @@ start_up:
 		if (new_inode && !S_ISDIR(new_inode->i_mode))
 			goto end_rename;
 		retval = -EINVAL;
-		if (subdir(new_dir, old_inode))
+		if (subdir(new_dentry, old_dentry))
 			goto end_rename;
 		retval = -EIO;
 		dir_bh = minix_bread(old_inode,0,0);

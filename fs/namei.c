@@ -379,7 +379,7 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 	}
 
 	if (!*name)
-		return base;
+		goto return_base;
 
 	/* At this point we know we have a real path component. */
 	for(;;) {
@@ -388,9 +388,6 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 		struct qstr this;
 		char c, follow;
 
-		dentry = base;
-		if (IS_ERR(base))
-			break;
 		dentry = ERR_PTR(-ENOENT);
 		if (!base->d_inode)
 			break;
@@ -424,9 +421,10 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 			break;
 
 		base = do_follow_link(base, dentry);
-		if (c)
+		if (c && !IS_ERR(base))
 			continue;
 
+return_base:
 		return base;
 	}
 	dput(base);
@@ -744,7 +742,7 @@ static inline int do_rmdir(const char * name)
 	struct inode *dir;
 	struct dentry *dentry;
 
-	dentry = lookup_dentry(name, NULL, 1);
+	dentry = lookup_dentry(name, NULL, 0);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto exit;
@@ -1053,13 +1051,13 @@ static inline int do_rename(const char * oldname, const char * newname)
 	struct inode * old_dir, * new_dir;
 	struct dentry * old_dentry, *new_dentry;
 
-	old_dentry = lookup_dentry(oldname, NULL, 1);
+	old_dentry = lookup_dentry(oldname, NULL, 0);
 
 	error = PTR_ERR(old_dentry);
 	if (IS_ERR(old_dentry))
 		goto exit;
 
-	new_dentry = lookup_dentry(newname, NULL, 1);
+	new_dentry = lookup_dentry(newname, NULL, 0);
 
 	error = PTR_ERR(new_dentry);
 	if (IS_ERR(new_dentry))

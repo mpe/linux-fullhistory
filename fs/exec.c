@@ -352,17 +352,9 @@ int read_exec(struct dentry *dentry, unsigned long offset,
 
 	if (!inode->i_op || !inode->i_op->default_file_ops)
 		goto end_readexec;
-	file.f_mode = 1;
-	file.f_flags = 0;
-	file.f_count = 1;
-	file.f_dentry = dentry;
-	file.f_pos = 0;
-	file.f_reada = 0;
-	file.f_op = inode->i_op->default_file_ops;
-	if (file.f_op->open)
-		if (file.f_op->open(inode,&file))
-			goto end_readexec;
-	if (!file.f_op || !file.f_op->read)
+	if (init_private_file(&file, dentry, 1))
+		goto end_readexec;
+	if (!file.f_op->read)
 		goto close_readexec;
 	if (file.f_op->llseek) {
 		if (file.f_op->llseek(inode,&file,offset,0) != offset)

@@ -487,22 +487,17 @@ out:
 	return error;
 }
 
-asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
+static int chown_common(struct dentry * dentry, uid_t user, gid_t group)
 {
 	struct inode * inode;
-	struct dentry * dentry;
-	struct file * file;
 	struct iattr newattrs;
-	int error = -EBADF;
+	int error;
 
-	lock_kernel();
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-		goto out;
 	error = -ENOENT;
-	if (!(dentry = file->f_dentry))
+	if (!(inode = dentry->d_inode)) {
+		printk("chown_common: NULL inode\n");
 		goto out;
-	if (!(inode = dentry->d_inode))
-		goto out;
+	}
 	error = -EROFS;
 	if (IS_RDONLY(inode))
 		goto out;
@@ -545,16 +540,33 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	} else
 		error = notify_change(inode, &newattrs);
 out:
-	unlock_kernel();
 	return error;
+}
+
+asmlinkage int sys_lchown(const char * filename, uid_t user, gid_t group)
+{
+	struct dentry * dentry;
+	int error;
+
+	lock_kernel();
+	dentry = lnamei(filename);
+
+	error = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
+		goto out;
+
+	error = chown_common(dentry, user, group);
+
+	dput(dentry);
+out:
+	unlock_kernel();
+	return(error);
 }
 
 asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 {
 	struct dentry * dentry;
-	struct inode * inode;
 	int error;
-	struct iattr newattrs;
 
 	lock_kernel();
 	dentry = namei(filename);
@@ -562,56 +574,33 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto out;
-	inode = dentry->d_inode;
 
-	error = -EROFS;
-	if (IS_RDONLY(inode))
-		goto dput_and_out;
+	error = chown_common(dentry, user, group);
 
-	error = -EPERM;
-	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
-		goto dput_and_out;
-
-	if (user == (uid_t) -1)
-		user = inode->i_uid;
-	if (group == (gid_t) -1)
-		group = inode->i_gid;
-	newattrs.ia_mode = inode->i_mode;
-	newattrs.ia_uid = user;
-	newattrs.ia_gid = group;
-	newattrs.ia_valid =  ATTR_UID | ATTR_GID | ATTR_CTIME;
-	/*
-	 * If the owner has been changed, remove the setuid bit
-	 */
-	if (inode->i_mode & S_ISUID) {
-		newattrs.ia_mode &= ~S_ISUID;
-		newattrs.ia_valid |= ATTR_MODE;
-	}
-	/*
-	 * If the group has been changed, remove the setgid bit
-	 *
-	 * Don't remove the setgid bit if no group execute bit.
-	 * This is a file marked for mandatory locking.
-	 */
-	if (((inode->i_mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
-		newattrs.ia_mode &= ~S_ISGID;
-		newattrs.ia_valid |= ATTR_MODE;
-	}
-	if (inode->i_sb->dq_op) {
-		inode->i_sb->dq_op->initialize(inode, -1);
-		error = -EDQUOT;
-		if (inode->i_sb->dq_op->transfer(inode, &newattrs, 0))
-			goto dput_and_out;
-		error = notify_change(inode, &newattrs);
-		if (error)
-			inode->i_sb->dq_op->transfer(inode, &newattrs, 1);
-	} else
-		error = notify_change(inode, &newattrs);
-dput_and_out:
 	dput(dentry);
 out:
 	unlock_kernel();
 	return(error);
+}
+
+asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
+{
+	struct dentry * dentry;
+	struct file * file;
+	int error = -EBADF;
+
+	lock_kernel();
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+		goto out;
+	error = -ENOENT;
+	if (!(dentry = file->f_dentry))
+		goto out;
+
+	error = chown_common(dentry, user, group);
+
+out:
+	unlock_kernel();
+	return error;
 }
 
 /*

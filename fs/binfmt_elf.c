@@ -1091,16 +1091,8 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 		goto end_coredump;
 	if (!inode->i_op || !inode->i_op->default_file_ops)
 		goto end_coredump;
-	file.f_mode = 3;
-	file.f_flags = 0;
-	file.f_count = 1;
-	file.f_dentry = dentry;
-	file.f_pos = 0;
-	file.f_reada = 0;
-	file.f_op = inode->i_op->default_file_ops;
-	if (file.f_op->open)
-		if (file.f_op->open(inode,&file))
-			goto end_coredump;
+	if (init_private_file(&file, dentry, 3))
+		goto end_coredump;
 	if (!file.f_op->write)
 		goto close_coredump;
 	has_dumped = 1;

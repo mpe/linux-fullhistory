@@ -385,6 +385,8 @@ struct file {
 	void			*private_data;
 };
 
+extern int init_private_file(struct file *, struct dentry *, int);
+
 #define FL_POSIX	1
 #define FL_FLOCK	2
 #define FL_BROKEN	4	/* broken flock() emulation */

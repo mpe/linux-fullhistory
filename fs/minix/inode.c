@@ -24,10 +24,8 @@
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
 
-void minix_put_inode(struct inode *inode)
+static void minix_delete_inode(struct inode *inode)
 {
-	if (inode->i_nlink)
-		return;
 	inode->i_size = 0;
 	minix_truncate(inode);
 	minix_free_inode(inode);
@@ -77,9 +75,10 @@ void minix_put_super(struct super_block *sb)
 
 static struct super_operations minix_sops = {
 	minix_read_inode,
-	NULL,
 	minix_write_inode,
-	minix_put_inode,
+	NULL,			/* put_inode */
+	minix_delete_inode,
+	NULL,			/* notify_change */
 	minix_put_super,
 	minix_write_super,
 	minix_statfs,
