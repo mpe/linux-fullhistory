@@ -7,7 +7,8 @@
  * Alan Cox <Alan.Cox@linux.org>, 1995.
  * Ingo Molnar <mingo@redhat.com>, 1999, 2000
  */
-#define		APIC_PHYS_BASE	0xfee00000 /* IA s/w dev Vol 3, Section 7.4 */
+
+#define		APIC_DEFAULT_PHYS_BASE	0xfee00000
  
 #define		APIC_ID		0x20
 #define			GET_APIC_ID(x)		(((x)>>24)&0x0F)

@@ -6,6 +6,7 @@
  * Copyright (C) 1998 Ralf Baechle
  */
 #include <linux/init.h>
+#include <linux/types.h>
 
 #include <asm/addrspace.h>
 #include <asm/sgi/sgihpc.h>

@@ -8,7 +8,7 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 #
-# $Id: Makefile,v 1.1 2000/01/26 00:07:44 ralf Exp $
+# $Id$
 #
 
 .S.s:
@@ -17,6 +17,6 @@
 	$(CC) $(CFLAGS) -c $< -o $*.o
 
 O_TARGET = ddb5074.a
-O_OBJS  = setup.o irq.o time.o prom.o pci.o int-handler.o nile4.o
+O_OBJS  = setup.o irq.o time.o prom.o pci.o pci-dma.o int-handler.o nile4.o
 
 include $(TOPDIR)/Rules.make

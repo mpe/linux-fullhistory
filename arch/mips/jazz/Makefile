@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.6 1999/02/25 21:57:01 tsbogend Exp $
+# $Id: Makefile,v 1.5 1999/01/03 17:50:47 ralf Exp $
 #
 # Makefile for the Jazz family specific parts of the kernel
 #

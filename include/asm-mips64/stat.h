@@ -28,6 +28,32 @@ struct __old_kernel_stat {
 	unsigned int	st_gen;
 };
 
+struct stat32 {
+	__kernel_dev_t32    st_dev;
+	int		    st_pad1[3];
+	__kernel_ino_t32    st_ino;
+	__kernel_mode_t32   st_mode;
+	__kernel_nlink_t32  st_nlink;
+	__kernel_uid_t32    st_uid;
+	__kernel_gid_t32    st_gid;
+	__kernel_dev_t32    st_rdev;
+	int		    st_pad2[2];
+	__kernel_off_t32    st_size;
+	int		    st_pad3;
+	__kernel_time_t32   st_atime;
+	int		    reserved0;
+	__kernel_time_t32   st_mtime;
+	int		    reserved1;
+	__kernel_time_t32   st_ctime;
+	int		    reserved2;
+	int		    st_blksize;
+	int		    st_blocks;
+	char		    st_fstype[16];	/* Filesystem type name */
+	int		    st_pad4[8];
+	unsigned int	    st_flags;
+	unsigned int	    st_gen;
+};
+
 struct stat {
 	dev_t		st_dev;
 	long		st_pad1[3];		/* Reserved for network id */

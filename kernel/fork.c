@@ -674,7 +674,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 
 	if ((clone_flags & CLONE_VFORK) || !(clone_flags & CLONE_PARENT)) {
 		p->p_opptr = current;
-		if (!(current->flags & PF_PTRACED))
+		if (!(p->flags & PF_PTRACED))
 			p->p_pptr = current;
 	}
 	p->p_cptr = NULL;

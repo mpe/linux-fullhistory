@@ -1,4 +1,4 @@
-/* $Id: semaphore.h,v 1.13 2000/02/18 00:24:48 ralf Exp $
+/* $Id: semaphore.h,v 1.12 1999/12/08 22:05:10 harald Exp $
  *
  * SMP- and interrupt-safe semaphores..
  *
@@ -31,7 +31,7 @@ struct semaphore {
 #if WAITQUEUE_DEBUG
 	long __magic;
 #endif
-};
+} __attribute__((aligned(8)));
 
 #if WAITQUEUE_DEBUG
 # define __SEM_DEBUG_INIT(name) \

@@ -1,4 +1,4 @@
-/* $Id: sysirix.c,v 1.24 2000/02/05 06:47:08 ralf Exp $
+/* $Id: sysirix.c,v 1.26 2000/03/12 23:15:33 ralf Exp $
  *
  * sysirix.c: IRIX system call emulation.
  *
@@ -853,7 +853,6 @@ asmlinkage int irix_exec(struct pt_regs *regs)
 	int error, base = 0;
 	char *filename;
 
-	lock_kernel();
 	if(regs->regs[2] == 1000)
 		base = 1;
 	filename = getname((char *) (long)regs->regs[base + 4]);
@@ -865,7 +864,6 @@ asmlinkage int irix_exec(struct pt_regs *regs)
 	putname(filename);
 
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -1491,10 +1489,10 @@ asmlinkage int irix_statvfs(char *fname, struct irix_statvfs *buf)
 	printk("[%s:%ld] Wheee.. irix_statvfs(%s,%p)\n",
 	       current->comm, current->pid, fname, buf);
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct irix_statvfs));
-	if(error)
+	if (error)
 		goto out;
 	error = user_path_walk(fname, &nd);
-	if (err)
+	if (error)
 		goto out;
 	error = vfs_statfs(nd.dentry->d_inode->i_sb, &kbuf);
 	if (error)

@@ -54,9 +54,9 @@ extern __inline__ int find_first_zero_bit (void *addr, unsigned size);
 extern __inline__ int find_next_zero_bit (void * addr, int size, int offset);
 extern __inline__ unsigned long ffz(unsigned long word);
 
-#include <asm/mipsregs.h>
-
 #if defined(CONFIG_CPU_HAS_LLSC)
+
+#include <asm/mipsregs.h>
 
 /*
  * These functions for MIPS ISA > 1 are interrupt and SMP proof and

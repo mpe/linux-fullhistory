@@ -242,8 +242,18 @@ static inline void set_pte_phys (unsigned long vaddr,
 	pte_t *pte;
 
 	pgd = swapper_pg_dir + __pgd_offset(vaddr);
+	if (pgd_none(*pgd)) {
+		printk("PAE BUG #00!\n");
+		return;
+	}
 	pmd = pmd_offset(pgd, vaddr);
+	if (pmd_none(*pmd)) {
+		printk("PAE BUG #01!\n");
+		return;
+	}
 	pte = pte_offset(pmd, vaddr);
+	if (pte_val(*pte))
+		pte_ERROR(*pte);
 	pgprot_val(prot) = pgprot_val(PAGE_KERNEL) | pgprot_val(flags);
 	set_pte(pte, mk_pte_phys(phys, prot));
 
@@ -271,53 +281,65 @@ static void __init fixrange_init (unsigned long start, unsigned long end, pgd_t 
 	pmd_t *pmd;
 	pte_t *pte;
 	int i, j;
+	unsigned long vaddr;
 
-	i = __pgd_offset(start);
-	j = __pmd_offset(start);
+	vaddr = start;
+	i = __pgd_offset(vaddr);
+	j = __pmd_offset(vaddr);
 	pgd = pgd_base + i;
 
-	for ( ; (i < PTRS_PER_PGD) && (start != end); pgd++, i++) {
+	for ( ; (i < PTRS_PER_PGD) && (vaddr != end); pgd++, i++) {
 #if CONFIG_X86_PAE
 		if (pgd_none(*pgd)) {
 			pmd = (pmd_t *) alloc_bootmem_low_pages(PAGE_SIZE);
 			set_pgd(pgd, __pgd(__pa(pmd) + 0x1));
-			if (pmd != pmd_offset(pgd, start))
-				BUG();
+			if (pmd != pmd_offset(pgd, 0))
+				printk("PAE BUG #02!\n");
 		}
-		pmd = pmd_offset(pgd, start);
+		pmd = pmd_offset(pgd, vaddr);
 #else
 		pmd = (pmd_t *)pgd;
 #endif
-		for (; (j < PTRS_PER_PMD) && start; pmd++, j++) {
+		for (; (j < PTRS_PER_PMD) && (vaddr != end); pmd++, j++) {
 			if (pmd_none(*pmd)) {
 				pte = (pte_t *) alloc_bootmem_low_pages(PAGE_SIZE);
 				set_pmd(pmd, __pmd(_KERNPG_TABLE + __pa(pte)));
 				if (pte != pte_offset(pmd, 0))
 					BUG();
 			}
-			start += PMD_SIZE;
+			vaddr += PMD_SIZE;
 		}
 		j = 0;
 	}
 }
 
-static void __init pagetable_init(void)
+static void __init pagetable_init (void)
 {
+	unsigned long vaddr, end;
 	pgd_t *pgd, *pgd_base;
+	int i, j, k;
 	pmd_t *pmd;
 	pte_t *pte;
-	int i, j, k;
-	unsigned long vaddr, end;
 
-	end = (unsigned long)__va(max_low_pfn*PAGE_SIZE) - 1;
+	/*
+	 * This can be zero as well - no problem, in that case we exit
+	 * the loops anyway due to the PTRS_PER_* conditions.
+	 */
+	end = (unsigned long)__va(max_low_pfn*PAGE_SIZE);
 
-	i = __pgd_offset(PAGE_OFFSET);
 	pgd_base = swapper_pg_dir;
+#if CONFIG_X86_PAE
+	for (i = 0; i < PTRS_PER_PGD; i++) {
+		pgd = pgd_base + i;
+		__pgd_clear(pgd);
+	}
+#endif
+	i = __pgd_offset(PAGE_OFFSET);
 	pgd = pgd_base + i;
 
 	for (; i < PTRS_PER_PGD; pgd++, i++) {
 		vaddr = i*PGDIR_SIZE;
-		if (vaddr >= end)
+		if (end && (vaddr >= end))
 			break;
 #if CONFIG_X86_PAE
 		pmd = (pmd_t *) alloc_bootmem_low_pages(PAGE_SIZE);
@@ -329,7 +351,7 @@ static void __init pagetable_init(void)
 			BUG();
 		for (j = 0; j < PTRS_PER_PMD; pmd++, j++) {
 			vaddr = i*PGDIR_SIZE + j*PMD_SIZE;
-			if (vaddr >= end)
+			if (end && (vaddr >= end))
 				break;
 			if (cpu_has_pse) {
 				unsigned long __pe;
@@ -354,7 +376,7 @@ static void __init pagetable_init(void)
 
 			for (k = 0; k < PTRS_PER_PTE; pte++, k++) {
 				vaddr = i*PGDIR_SIZE + j*PMD_SIZE + k*PAGE_SIZE;
-				if (vaddr >= end)
+				if (end && (vaddr >= end))
 					break;
 				*pte = mk_pte_phys(__pa(vaddr), PAGE_KERNEL);
 			}

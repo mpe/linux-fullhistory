@@ -22,9 +22,6 @@
 /* This duplicates the definition from <asm/signal.h> */
 #define SIGILL		4		/* Illegal instruction (ANSI).  */
 
-/* Highest syscall handled here.  */
-#define MAX_SYSCALL_NO	__NR_Linux + __NR_Linux_syscalls
-
 #ifndef CONFIG_MIPS32_COMPAT
 #define handle_sys64 handle_sys
 #endif
@@ -35,18 +32,19 @@ NESTED(handle_sys64, PT_SIZE, sp)
 #ifndef CONFIG_MIPS32_COMPAT
 	.set	noat
 	SAVE_SOME
+	STI
 	.set	at
 #endif
 	ld	t1, PT_EPC(sp)		# skip syscall on return
 
-	sltiu	t0, v0, MAX_SYSCALL_NO + 1 # check syscall number
+	subu	t0, v0, __NR_Linux	# check syscall number
+	sltiu	t0, t0,	__NR_Linux_syscalls + 1
 	daddiu	t1, 4			# skip to next instruction
 	beqz	t0, illegal_syscall
 	sd	t1, PT_EPC(sp)
 
-	dsll	t0, v0, 3
+	dsll	t0, v0, 3		# offset into table
 	ld	t2, (sys_call_table - (__NR_Linux * 8))(t0) # syscall routine
-	beqz	t2, illegal_syscall;
 
 	sd	a3, PT_R26(sp)		# save a3 for syscall restarting
 
@@ -163,7 +161,7 @@ sys_call_table:
 	PTR	sys_ni_syscall		/* ptrace */
 	PTR	sys_alarm
 	PTR	sys_fstat
-	PTR	sys_ni_syscall
+	PTR	sys_pause
 	PTR	sys_utime				/* 4030 */
 	PTR	sys_ni_syscall
 	PTR	sys_ni_syscall
@@ -345,3 +343,5 @@ sys_call_table:
 	PTR	sys_ni_syscall
 	PTR	sys_ni_syscall
 	PTR	sys_pivot_root				/* 4210 */
+	PTR	sys_mincore
+	PTR	sys_madvise

@@ -1,4 +1,4 @@
-/* $Id: irixioctl.c,v 1.7 1999/09/28 22:25:46 ralf Exp $
+/* $Id: irixioctl.c,v 1.6 1999/02/06 05:12:56 adevries Exp $
  * irixioctl.c: A fucking mess...
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

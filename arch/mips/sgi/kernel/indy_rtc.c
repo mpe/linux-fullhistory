@@ -1,4 +1,4 @@
-/* $Id: indy_rtc.c,v 1.2 1999/10/21 00:23:05 ralf Exp $
+/* $Id: indy_rtc.c,v 1.1 1998/06/30 00:21:58 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

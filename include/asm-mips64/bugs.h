@@ -1,4 +1,4 @@
-/* $Id: bugs.h,v 1.1 1999/08/18 23:37:50 ralf Exp $
+/* $Id$
  *
  *  Copyright (C) 1995 Waldorf Electronics
  *  Copyright (C) 1997, 1999 Ralf Baechle

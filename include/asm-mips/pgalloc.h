@@ -1,4 +1,4 @@
-/* $Id: pgalloc.h,v 1.4 2000/02/24 00:13:19 ralf Exp $
+/* $Id: pgalloc.h,v 1.3 2000/02/23 00:41:38 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -9,6 +9,8 @@
  */
 #ifndef _ASM_PGALLOC_H
 #define _ASM_PGALLOC_H
+
+#include <linux/config.h>
 
 #include <linux/config.h>
 

@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.42 2000/02/24 00:12:40 ralf Exp $
+# $Id: config.in,v 1.46 2000/03/26 22:59:01 ralf Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -26,149 +26,141 @@ bool 'Support for SNI RM200 PCI' CONFIG_SNI_RM200_PCI
 #
 # Select some configuration options automatically for certain systems.
 #
+unset CONFIG_ARC32
+unset CONFIG_PCI
+unset CONFIG_ISA
 unset CONFIG_MIPS_JAZZ
 unset CONFIG_VIDEO_G364
 
 define_bool CONFIG_SBUS n
 
-if [ "$CONFIG_ALGOR_P4032" = "y" -o "$CONFIG_SNI_RM200_PCI" = "y" -o \
-     "$CONFIG_DDB5074" = "y" ]; then
+if [ "$CONFIG_ALGOR_P4032" = "y" ]; then
    define_bool CONFIG_PCI y
-else
-   define_bool CONFIG_PCI n
 fi
-if [ "$CONFIG_MIPS_MAGNUM_4000" = "y" -o "$CONFIG_OLIVETTI_M700" = "y" -o \
-     "$CONFIG_SNI_RM200_PCI" = "y" -o "$CONFIG_ACER_PICA_61" = "y" ]; then
-   define_bool CONFIG_ISA y
-else
-   define_bool CONFIG_ISA n
-fi
-
 if [ "$CONFIG_MIPS_MAGNUM_4000" = "y" -o \
      "$CONFIG_OLIVETTI_M700" = "y" ]; then
+   define_bool CONFIG_ARC32 y
    define_bool CONFIG_HAVE_IO_PORTS y
-   define_bool CONFIG_MIPS_JAZZ y
    define_bool CONFIG_FB y
    define_bool CONFIG_FB_G364 y	
+   define_bool CONFIG_MIPS_JAZZ y
 fi
 if [ "$CONFIG_ACER_PICA_61" = "y" ]; then
+   define_bool CONFIG_ARC32 y
    define_bool CONFIG_HAVE_IO_PORTS y
    define_bool CONFIG_MIPS_JAZZ y
 fi
+if [ "$CONFIG_SGI_IP22" = "y" ]; then
+   define_bool CONFIG_ARC32 y
+fi
 if [ "$CONFIG_SNI_RM200_PCI" = "y" ]; then
+   define_bool CONFIG_ARC32 y
    define_bool CONFIG_HAVE_IO_PORTS y
 fi
 if [ "$CONFIG_DDB5074" = "y" ]; then
    define_bool CONFIG_HAVE_IO_PORTS y
+   define_bool CONFIG_ISA y
+   define_bool CONFIG_PCI y
+fi
+
+if [ "$CONFIG_ISA" != "y" ]; then
+   define_bool CONFIG_ISA n
+fi
+
+if [ "$CONFIG_PCI" != "y" ]; then
+   define_bool CONFIG_PCI n
 fi
 endmenu
 
 mainmenu_option next_comment
-comment 'CPU selection'
+	comment 'CPU selection'
 
-if [ "$CONFIG_CPU_ADVANCED" = "y" ]; then
-    choice 'CPU core' \
-	"R3000 CONFIG_CPU_R3000	\
-	 R4300 CONFIG_CPU_R4300	\
-	 R4x00 CONFIG_CPU_R4X00	\
-	 R5000 CONFIG_CPU_R5000	\
-	 R56x0 CONFIG_CPU_NEVADA \
-	 R10000 CONFIG_CPU_R10000" R4x00
+	choice 'CPU type' \
+		"R3000 CONFIG_CPU_R3000	\
+		 R6000 CONFIG_CPU_R6000	\
+		 R4300 CONFIG_CPU_R4300	\
+		 R4x00 CONFIG_CPU_R4X00	\
+		 R5000 CONFIG_CPU_R5000	\
+		 R56x0 CONFIG_CPU_NEVADA \
+		 R8000 CONFIG_CPU_R8000	\
+		 R10000 CONFIG_CPU_R10000" R4x00
 
-    bool '  ll/sc Instructions available' CONFIG_CPU_HAS_LLSC
-    bool '  Writeback Buffer available' CONFIG_CPU_HAS_WB
-else
-    choice 'CPU type' \
-	"R3000 CONFIG_CPU_R3000	\
-	 R6000 CONFIG_CPU_R6000	\
-	 R4300 CONFIG_CPU_R4300	\
-	 R4x00 CONFIG_CPU_R4X00	\
-	 R5000 CONFIG_CPU_R5000	\
-	 R56x0 CONFIG_CPU_NEVADA \
-	 R8000 CONFIG_CPU_R8000	\
-	 R10000 CONFIG_CPU_R10000 \
-         Advanced CONFIG_CPU_ADVANCED" R4x00
+	bool 'Advanced CPU Config' CONFIG_CPU_ADVANCED
 
-    if [ "$CONFIG_CPU_R3000" = "y" ]; then
-        if [ "$CONFIG_DECSTATION" = "y" ]; then
-            define_bool CONFIG_CPU_HAS_LLSC n
-            define_bool CONFIG_CPU_HAS_WB y
-        else
-            define_bool CONFIG_CPU_HAS_LLSC n
-            define_bool CONFIG_CPU_HAS_WB n
-        fi
-    else
-        define_bool CONFIG_CPU_HAS_LLSC y
-        define_bool CONFIG_CPU_HAS_WB n
-    fi
-fi
+	if [ "$CONFIG_CPU_ADVANCED" = "y" ]; then
+		bool '  ll/sc Instructions available' CONFIG_CPU_HAS_LLSC
+		bool '  Writeback Buffer available' CONFIG_CPU_HAS_WB
+	else
+		if [ "$CONFIG_CPU_R3000" = "y" ]; then
+			if [ "$CONFIG_DECSTATION" = "y" ]; then
+				define_bool CONFIG_CPU_HAS_LLSC n
+				define_bool CONFIG_CPU_HAS_WB y
+			else
+				define_bool CONFIG_CPU_HAS_LLSC n
+				define_bool CONFIG_CPU_HAS_WB n
+			fi
+		else
+			define_bool CONFIG_CPU_HAS_LLSC y
+			define_bool CONFIG_CPU_HAS_WB n
+		fi
+	fi
 endmenu
 
 mainmenu_option next_comment
 comment 'General setup'
 
-if [ "$CONFIG_DECSTATION" = "y" -o "$CONFIG_DDB5074" = "y" ]; then
-   define_bool CONFIG_CPU_LITTLE_ENDIAN y
-else
-   bool 'Generate little endian code' CONFIG_CPU_LITTLE_ENDIAN
+	if [ "$CONFIG_DECSTATION" = "y" -o "$CONFIG_DDB5074" = "y" ]; then
+	   define_bool CONFIG_CPU_LITTLE_ENDIAN y
+	else
+	   bool 'Generate little endian code' CONFIG_CPU_LITTLE_ENDIAN
+	fi
+
+	if [ "$CONFIG_PROC_FS" = "y" ]; then
+	   define_bool CONFIG_KCORE_ELF y
+	fi
+	define_bool CONFIG_ELF_KERNEL y
+
+	if [ "$CONFIG_CPU_LITTLE_ENDIAN" = "n" ]; then
+	   bool 'Include IRIX binary compatibility' CONFIG_BINFMT_IRIX 
+	   bool 'Include forward keyboard' CONFIG_FORWARD_KEYBOARD 
+	fi
+
+	define_bool CONFIG_BINFMT_AOUT n
+	define_bool CONFIG_BINFMT_ELF y
+	tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+
+	bool 'Networking support' CONFIG_NET
+
+	if [ "$CONFIG_PCI" = "y" ]; then
+	    source drivers/pci/Config.in
+	fi
+
+	bool 'System V IPC' CONFIG_SYSVIPC
+	bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
+	bool 'Sysctl support' CONFIG_SYSCTL
+
+        source drivers/parport/Config.in
+
+	bool 'Enable loadable module support' CONFIG_MODULES
+	if [ "$CONFIG_MODULES" = "y" ]; then
+	   bool '  Set version information on all symbols for modules' CONFIG_MODVERSIONS
+	   bool '  Kernel module loader' CONFIG_KMOD
+	fi
+
+	if [ "$CONFIG_DECSTATION" = "y" ]; then
+            bool 'TURBOchannel support' CONFIG_TC
+	fi
+endmenu
+
+if [ "$CONFIG_ISA" = "y" ]; then
+   source drivers/pnp/Config.in
 fi
 
-if [ "$CONFIG_PROC_FS" = "y" ]; then
-   define_bool CONFIG_KCORE_ELF y
-fi
-define_bool CONFIG_ELF_KERNEL y
-
-if [ "$CONFIG_CPU_LITTLE_ENDIAN" = "n" ]; then
-   define_bool CONFIG_BINFMT_IRIX y
-   define_bool CONFIG_FORWARD_KEYBOARD y
-fi
-define_bool CONFIG_BINFMT_AOUT n
-define_bool CONFIG_BINFMT_ELF y
-tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
-
-bool 'Networking support' CONFIG_NET
-
-source drivers/pci/Config.in
-
-bool 'Support for hot-pluggable devices' CONFIG_HOTPLUG
-if [ "$CONFIG_HOTPLUG" = "y" ]; then
+if [ "$CONFIG_HOTPLUG" = "y" ] ; then
    source drivers/pcmcia/Config.in
 else
    define_bool CONFIG_PCMCIA n
 fi
-
-bool 'System V IPC' CONFIG_SYSVIPC
-bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
-bool 'Sysctl support' CONFIG_SYSCTL
-
-if [ "$CONFIG_SGI_IP22" != "y" -a "$CONFIG_DECSTATION" != "y" -a "$CONFIG_BAGET_MIPS" != "y" ]; then
-   source drivers/parport/Config.in
-fi
-endmenu
-
-mainmenu_option next_comment
-comment 'Loadable module support'
-bool 'Enable loadable module support' CONFIG_MODULES
-if [ "$CONFIG_MODULES" = "y" ]; then
-   bool '  Set version information on all symbols for modules' CONFIG_MODVERSIONS
-   bool '  Kernel module loader' CONFIG_KMOD
-fi
-
-source drivers/pci/Config.in
-
-endmenu
-
-if [ "$CONFIG_DECSTATION" = "y" ]; then
-   mainmenu_option next_comment
-   comment 'TURBOchannel support'
-   bool 'TURBOchannel support' CONFIG_TC
-#   if [ "$CONFIG_TC" = "y" ]; then
-#      tristate '  MAGMA Parallel port support' CONFIG_PARPORT
-#   fi
-   endmenu
-fi
-
-source drivers/pnp/Config.in
 
 source drivers/block/Config.in
 
@@ -176,18 +168,27 @@ if [ "$CONFIG_NET" = "y" ]; then
    source net/Config.in
 fi
 
-mainmenu_option next_comment
-comment 'ATA/IDE/MFM/RLL support'
-
-tristate 'ATA/IDE/MFM/RLL support' CONFIG_IDE
-
-if [ "$CONFIG_IDE" != "n" ]; then
-  source drivers/ide/Config.in
-else
-  define_bool CONFIG_BLK_DEV_IDE_MODES n
-  define_bool CONFIG_BLK_DEV_HD n
+if [ "$CONFIG_DECSTATION" != "n" -a \
+     "$CONFIG_SGI_IP22" != "n" ]; then
+    source drivers/telephony/Config.in
 fi
-endmenu
+
+if [ "$CONFIG_SGI_IP22" != "n" -a \
+     "$CONFIG_DECSTATION" != "n" ]; then
+
+    mainmenu_option next_comment
+    comment 'ATA/IDE/MFM/RLL support'
+    
+    tristate 'ATA/IDE/MFM/RLL support' CONFIG_IDE
+    
+    if [ "$CONFIG_IDE" != "n" ]; then
+      source drivers/ide/Config.in
+    else
+      define_bool CONFIG_BLK_DEV_IDE_MODES n
+      define_bool CONFIG_BLK_DEV_HD n
+    fi
+    endmenu
+fi
 
 mainmenu_option next_comment
 comment 'SCSI support'
@@ -195,35 +196,14 @@ comment 'SCSI support'
 tristate 'SCSI support' CONFIG_SCSI
 
 if [ "$CONFIG_SCSI" != "n" ]; then
-   if [ "$CONFIG_SGI" = "y" -o "$CONFIG_DECSTATION" = "y" ]; then
-      comment '  SCSI support type (disk, tape, CDrom)'
-
-      dep_tristate '  SCSI disk support' CONFIG_BLK_DEV_SD $CONFIG_SCSI
-      dep_tristate '  SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
-      dep_tristate '  SCSI CDROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
-      dep_tristate '  SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
-
-      comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
-
-      bool '  Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN
-
-      bool '  Verbose SCSI error reporting' CONFIG_SCSI_CONSTANTS
-
-      #mainmenu_option next_comment
-      comment 'SCSI low-level drivers'
-      if [ "$CONFIG_SGI" = "y" ]; then
-	 dep_tristate 'SGI wd93 Scsi Driver' CONFIG_SCSI_SGIWD93 $CONFIG_SCSI
-      else
-	 if [ "$CONFIG_TC" = "y" ]; then
-	    dep_tristate 'DEC NCR53C94 Scsi Driver' CONFIG_SCSI_DECNCR $CONFIG_SCSI
-	 fi
-	 dep_tristate 'DEC SII Scsi Driver' CONFIG_SCSI_DECSII $CONFIG_SCSI
-      fi
-   else
-      source drivers/scsi/Config.in
-   fi
+   source drivers/scsi/Config.in
 fi
 endmenu
+
+if [ "$CONFIG_DECSTATION" != "n" -a \
+     "$CONFIG_SGI_IP22" != "n" ]; then
+    source drivers/i2o/Config.in
+fi
 
 if [ "$CONFIG_NET" = "y" ]; then
    mainmenu_option next_comment
@@ -231,41 +211,42 @@ if [ "$CONFIG_NET" = "y" ]; then
 
    bool 'Network device support' CONFIG_NETDEVICES
    if [ "$CONFIG_NETDEVICES" = "y" ]; then
-      if [ "$CONFIG_SGI" != "y" -a "$CONFIG_DECSTATION" != "y" -a "$CONFIG_BAGET_MIPS" != "y" ]; then
+
+      if [ "$CONFIG_SGI_IP22" != "y" -a \
+      	   "$CONFIG_DECSTATION" != "y" -a \
+	   "$CONFIG_BAGET_MIPS" != "y" ]; then
+
 	 source drivers/net/Config.in
+
+	 if [ "$CONFIG_ATM" = "y" ]; then
+	    source drivers/atm/Config.in
+	 fi
       else
-	 tristate '  Dummy net driver support' CONFIG_DUMMY
-	 tristate '  SLIP (serial line) support' CONFIG_SLIP
+	 tristate 'Dummy net driver support' CONFIG_DUMMY
+	 tristate 'SLIP (serial line) support' CONFIG_SLIP
 	 if [ "$CONFIG_SLIP" != "n" ]; then
-	    bool '    CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
-	    bool '    Keepalive and linefill' CONFIG_SLIP_SMART
+	    bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
+	    bool ' Keepalive and linefill' CONFIG_SLIP_SMART
 	 fi
-	 tristate '  PPP (point-to-point) support' CONFIG_PPP
+	 tristate 'PPP (point-to-point) support' CONFIG_PPP
 	 if [ ! "$CONFIG_PPP" = "n" ]; then
-	    comment '    CCP compressors for PPP are only built as modules.'
+	    comment 'CCP compressors for PPP are only built as modules.'
 	 fi
-         if [ "$CONFIG_SGI" = "y" ]; then
-            bool '  SGI Seeq ethernet controller support' CONFIG_SGISEEQ
-         fi
-      fi
-      if [ "$CONFIG_DECSTATION" = "y" ]; then
-         bool '  DEC LANCE ethernet controller support' CONFIG_DECLANCE
-      fi
-      if [ "$CONFIG_BAGET_MIPS" = "y" ]; then
-	 tristate '  Baget AMD LANCE support' CONFIG_BAGETLANCE
-	 tristate '  Baget Backplane Shared Memory support' CONFIG_BAGETBSM
+         if [ "$CONFIG_SGI_IP22" = "y" ]; then
+	    bool 'SGI Seeq ethernet controller support' CONFIG_SGISEEQ
+	 fi
+	 if [ "$CONFIG_DECSTATION" = "y" ]; then
+	    bool 'DEC LANCE ethernet controller support' CONFIG_DECLANCE
+	 fi
+	 if [ "$CONFIG_BAGET_MIPS" = "y" ]; then
+	    tristate 'Baget AMD LANCE support' CONFIG_BAGETLANCE
+	 fi
       fi
    fi
    endmenu
 fi
 
-if [ "$CONFIG_SGI" != "y" -a "$CONFIG_DECSTATION" != "y" -a "$CONFIG_BAGET_MIPS" != "y" ]; then
-   mainmenu_option next_comment
-   # comment 'AX.25 network device drivers'
-
-   source drivers/net/hamradio/Config.in
-   endmenu
-
+if [ "$CONFIG_ISA" = "y" -o "$CONFIG_PCI" = "y" ]; then
    mainmenu_option next_comment
    comment 'ISDN subsystem'
 
@@ -287,20 +268,20 @@ if [ "$CONFIG_SGI" != "y" -a "$CONFIG_DECSTATION" != "y" -a "$CONFIG_BAGET_MIPS"
    endmenu
 fi
 
-if [ "$CONFIG_DECSTATION" != "y" ]; then
+if [ "$CONFIG_DECSTATION" != "n" -a \
+     "$CONFIG_SGI_IP22" != "n" ]; then
    source drivers/char/Config.in
-else
+fi
+
+if [ "$CONFIG_DECSTATION" = "y" ]; then
    mainmenu_option next_comment
-   comment 'DECstation Character devices'
+   comment 'DECStation Character devices'
 
    bool 'Virtual terminal' CONFIG_VT
    if [ "$CONFIG_VT" = "y" ]; then
       bool 'Support for console on virtual terminal' CONFIG_VT_CONSOLE
    fi
    tristate 'Standard/generic (dumb) serial support' CONFIG_SERIAL
-   if [ "$CONFIG_SGI_IP22" = "y" ]; then
-      bool 'SGI PROM Console Support' CONFIG_SGI_PROM_CONSOLE
-   fi
    if [ "$CONFIG_SERIAL" = "y" ]; then
       bool 'DZ11 Serial Support' CONFIG_DZ
       if [ "$CONFIG_TC" = "y" ]; then
@@ -314,32 +295,42 @@ else
    fi
    bool 'Keyboard Support' CONFIG_KEYBOARD
    bool 'Mouse Support' CONFIG_MOUSE
-#    bool 'Enhanced Real Time Clock Support' CONFIG_RTC
+   bool 'Enhanced Real Time Clock Support' CONFIG_RTC
    endmenu
 fi
 
-
-#source drivers/misc/Config.in
-
-source fs/Config.in
-
-if [ "$CONFIG_VT" = "y" ]; then
+if [ "$CONFIG_SGI_IP22" = "y" ]; then
    mainmenu_option next_comment
-   comment 'Console drivers'
-   if [ "$CONFIG_SGI_IP22" = "y" ]; then
+   comment 'SGI Character devices'
+   bool 'Virtual terminal' CONFIG_VT
+   if [ "$CONFIG_VT" = "y" ]; then
+      bool 'Support for console on virtual terminal' CONFIG_VT_CONSOLE
       tristate 'SGI Newport Console support' CONFIG_SGI_NEWPORT_CONSOLE
       if [ "$CONFIG_SGI_NEWPORT_CONSOLE" != "y" ]; then
 	 define_bool CONFIG_DUMMY_CONSOLE y
       else
          define_bool CONFIG_FONT_8x16 y
       fi
-   else
+      bool 'SGI PROM Console Support' CONFIG_SGI_PROM_CONSOLE
+   fi
+   bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
+   if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
+      int 'Maximum number of Unix98 PTYs in use (0-2048)' CONFIG_UNIX98_PTY_COUNT 256
+   fi
+   endmenu
+fi
+
+source fs/Config.in
+
+if [ "$CONFIG_VT" = "y" ]; then
+   mainmenu_option next_comment
+
+   comment 'Console drivers'
       if [ "$CONFIG_DECSTATION" != "y" ]; then
 	 bool 'VGA text console' CONFIG_VGA_CONSOLE
       fi
-	 bool 'Support for frame buffer devices' CONFIG_FB
-	 source drivers/video/Config.in
-   fi
+      bool 'Support for frame buffer devices' CONFIG_FB
+      source drivers/video/Config.in
    endmenu
 fi
 
@@ -363,7 +354,6 @@ source drivers/usb/Config.in
 mainmenu_option next_comment
 comment 'Kernel hacking'
 
-#bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
 bool 'Are you using a crosscompiler' CONFIG_CROSSCOMPILE
 if [ "$CONFIG_MODULES" = "y" ]; then
    bool ' Build fp execption handler module' CONFIG_MIPS_FPE_MODULE

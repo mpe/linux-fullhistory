@@ -4,7 +4,7 @@
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  * Copyright (C) 1998 Ralf Baechle
  *
- * $Id: asmmacro.h,v 1.4 1999/08/18 23:37:49 ralf Exp $
+ * $Id: asmmacro.h,v 1.3 1998/03/27 04:47:58 ralf Exp $
  */
 #ifndef __MIPS_ASMMACRO_H
 #define __MIPS_ASMMACRO_H

@@ -19,6 +19,10 @@ CONFIG_EXPERIMENTAL=y
 # CONFIG_OLIVETTI_M700 is not set
 CONFIG_SGI_IP22=y
 # CONFIG_SNI_RM200_PCI is not set
+# CONFIG_SBUS is not set
+CONFIG_ARC32=y
+# CONFIG_ISA is not set
+# CONFIG_PCI is not set
 
 #
 # CPU selection
@@ -47,50 +51,40 @@ CONFIG_FORWARD_KEYBOARD=y
 CONFIG_BINFMT_ELF=y
 # CONFIG_BINFMT_MISC is not set
 CONFIG_NET=y
-
-#
-# PCMCIA/CardBus support
-#
-# CONFIG_PCMCIA is not set
 CONFIG_SYSVIPC=y
 # CONFIG_BSD_PROCESS_ACCT is not set
 CONFIG_SYSCTL=y
 
 #
-# Loadable module support
+# Parallel port support
 #
+# CONFIG_PARPORT is not set
 CONFIG_MODULES=y
 # CONFIG_MODVERSIONS is not set
 CONFIG_KMOD=y
-
-#
-# Plug and Play configuration
-#
-# CONFIG_PNP is not set
-# CONFIG_ISAPNP is not set
+# CONFIG_PCMCIA is not set
 
 #
 # Block devices
 #
 # CONFIG_BLK_DEV_FD is not set
-# CONFIG_BLK_DEV_IDE is not set
-
-#
-# Please see Documentation/ide.txt for help/info on IDE drives
-#
-# CONFIG_BLK_DEV_HD_ONLY is not set
+# CONFIG_BLK_DEV_XD is not set
+# CONFIG_PARIDE is not set
+# CONFIG_BLK_CPQ_DA is not set
+# CONFIG_BLK_DEV_DAC960 is not set
 
 #
 # Additional Block Devices
 #
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
+# CONFIG_BLK_DEV_LVM is not set
 # CONFIG_BLK_DEV_MD is not set
+# CONFIG_MD_LINEAR is not set
+# CONFIG_MD_RAID0 is not set
+# CONFIG_RAID15_DANGEROUS is not set
 # CONFIG_BLK_DEV_RAM is not set
-# CONFIG_BLK_DEV_XD is not set
-# CONFIG_PARIDE is not set
-# CONFIG_BLK_DEV_IDE_MODES is not set
-# CONFIG_BLK_DEV_HD is not set
+# CONFIG_BLK_DEV_INITRD is not set
 
 #
 # Networking options
@@ -142,12 +136,6 @@ CONFIG_IP_PNP_BOOTP=y
 # CONFIG_NET_SCHED is not set
 
 #
-# Telephony Support
-#
-# CONFIG_PHONE is not set
-# CONFIG_PHONE_IXJ is not set
-
-#
 # SCSI support
 #
 CONFIG_SCSI=y
@@ -158,7 +146,6 @@ CONFIG_SCSI=y
 CONFIG_BLK_DEV_SD=y
 CONFIG_SD_EXTRA_DEVS=40
 CONFIG_CHR_DEV_ST=y
-CONFIG_ST_EXTRA_DEVS=2
 CONFIG_BLK_DEV_SR=y
 # CONFIG_BLK_DEV_SR_VENDOR is not set
 CONFIG_SR_EXTRA_DEVS=2
@@ -182,12 +169,12 @@ CONFIG_SCSI_SGIWD93=y
 # CONFIG_SCSI_AHA1542 is not set
 # CONFIG_SCSI_AHA1740 is not set
 # CONFIG_SCSI_AIC7XXX is not set
-# CONFIG_SCSI_IPS is not set
 # CONFIG_SCSI_ADVANSYS is not set
 # CONFIG_SCSI_IN2000 is not set
 # CONFIG_SCSI_AM53C974 is not set
 # CONFIG_SCSI_MEGARAID is not set
 # CONFIG_SCSI_BUSLOGIC is not set
+# CONFIG_SCSI_DMX3191D is not set
 # CONFIG_SCSI_DTC3280 is not set
 # CONFIG_SCSI_EATA is not set
 # CONFIG_SCSI_EATA_DMA is not set
@@ -195,32 +182,20 @@ CONFIG_SCSI_SGIWD93=y
 # CONFIG_SCSI_FUTURE_DOMAIN is not set
 # CONFIG_SCSI_GDTH is not set
 # CONFIG_SCSI_GENERIC_NCR5380 is not set
-# CONFIG_SCSI_PPA is not set
-# CONFIG_SCSI_IMM is not set
+# CONFIG_SCSI_INITIO is not set
+# CONFIG_SCSI_INIA100 is not set
 # CONFIG_SCSI_NCR53C406A is not set
 # CONFIG_SCSI_SYM53C416 is not set
 # CONFIG_SCSI_SIM710 is not set
+# CONFIG_SCSI_NCR53C7xx is not set
 # CONFIG_SCSI_PAS16 is not set
 # CONFIG_SCSI_PCI2000 is not set
 # CONFIG_SCSI_PCI2220I is not set
 # CONFIG_SCSI_PSI240I is not set
 # CONFIG_SCSI_QLOGIC_FAS is not set
-# CONFIG_SCSI_SEAGATE is not set
 # CONFIG_SCSI_T128 is not set
 # CONFIG_SCSI_U14_34F is not set
-# CONFIG_SCSI_ULTRASTOR is not set
 # CONFIG_SCSI_DEBUG is not set
-# CONFIG_BLK_DEV_3W_XXXX_RAID is not set
-
-#
-# I2O device support
-#
-# CONFIG_I2O is not set
-# CONFIG_I2O_PCI is not set
-# CONFIG_I2O_BLOCK is not set
-# CONFIG_I2O_LAN is not set
-# CONFIG_I2O_SCSI is not set
-# CONFIG_I2O_PROC is not set
 
 #
 # Network device support
@@ -232,64 +207,14 @@ CONFIG_NETDEVICES=y
 CONFIG_SGISEEQ=y
 
 #
-# Character devices
+# SGI Character devices
 #
 CONFIG_VT=y
 CONFIG_VT_CONSOLE=y
-# CONFIG_SERIAL is not set
-# CONFIG_SERIAL_EXTENDED is not set
-# CONFIG_SERIAL_NONSTANDARD is not set
+CONFIG_SGI_NEWPORT_CONSOLE=y
+CONFIG_FONT_8x16=y
+# CONFIG_SGI_PROM_CONSOLE is not set
 # CONFIG_UNIX98_PTYS is not set
-# CONFIG_PRINTER is not set
-# CONFIG_PPDEV is not set
-
-#
-# I2C support
-#
-# CONFIG_I2C is not set
-
-#
-# Mice
-#
-# CONFIG_BUSMOUSE is not set
-CONFIG_MOUSE=y
-CONFIG_PSMOUSE=y
-# CONFIG_82C710_MOUSE is not set
-# CONFIG_PC110_PAD is not set
-
-#
-# Joysticks
-#
-# CONFIG_JOYSTICK is not set
-# CONFIG_QIC02_TAPE is not set
-
-#
-# Watchdog Cards
-#
-# CONFIG_WATCHDOG is not set
-# CONFIG_NVRAM is not set
-# CONFIG_RTC is not set
-
-#
-# Video For Linux
-#
-# CONFIG_VIDEO_DEV is not set
-# CONFIG_DTLK is not set
-# CONFIG_R3964 is not set
-# CONFIG_APPLICOM is not set
-
-#
-# Ftape, the floppy tape device driver
-#
-# CONFIG_FTAPE is not set
-# CONFIG_DRM is not set
-# CONFIG_DRM_TDFX is not set
-# CONFIG_AGP is not set
-
-#
-# USB support
-#
-# CONFIG_USB is not set
 
 #
 # File systems
@@ -298,6 +223,7 @@ CONFIG_PSMOUSE=y
 CONFIG_AUTOFS_FS=y
 CONFIG_AUTOFS4_FS=y
 # CONFIG_ADFS_FS is not set
+# CONFIG_ADFS_FS_RW is not set
 # CONFIG_AFFS_FS is not set
 # CONFIG_HFS_FS is not set
 # CONFIG_BFS_FS is not set
@@ -307,10 +233,12 @@ CONFIG_AUTOFS4_FS=y
 # CONFIG_VFAT_FS is not set
 # CONFIG_EFS_FS is not set
 # CONFIG_CRAMFS is not set
+# CONFIG_RAMFS is not set
 CONFIG_ISO9660_FS=y
 # CONFIG_JOLIET is not set
 # CONFIG_MINIX_FS is not set
 # CONFIG_NTFS_FS is not set
+# CONFIG_NTFS_RW is not set
 # CONFIG_HPFS_FS is not set
 CONFIG_PROC_FS=y
 # CONFIG_DEVFS_FS is not set
@@ -318,17 +246,22 @@ CONFIG_PROC_FS=y
 # CONFIG_DEVFS_DEBUG is not set
 # CONFIG_DEVPTS_FS is not set
 # CONFIG_QNX4FS_FS is not set
+# CONFIG_QNX4FS_RW is not set
 # CONFIG_ROMFS_FS is not set
 CONFIG_EXT2_FS=y
 # CONFIG_SYSV_FS is not set
+# CONFIG_SYSV_FS_WRITE is not set
 # CONFIG_UDF_FS is not set
+# CONFIG_UDF_RW is not set
 # CONFIG_UFS_FS is not set
+# CONFIG_UFS_FS_WRITE is not set
 
 #
 # Network File Systems
 #
 # CONFIG_CODA_FS is not set
 CONFIG_NFS_FS=y
+# CONFIG_NFS_V3 is not set
 CONFIG_ROOT_NFS=y
 CONFIG_NFSD=y
 # CONFIG_NFSD_V3 is not set
@@ -336,19 +269,45 @@ CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
 # CONFIG_SMB_FS is not set
 # CONFIG_NCP_FS is not set
+# CONFIG_NCPFS_PACKET_SIGNING is not set
+# CONFIG_NCPFS_IOCTL_LOCKING is not set
+# CONFIG_NCPFS_STRONG is not set
+# CONFIG_NCPFS_NFS_NS is not set
+# CONFIG_NCPFS_OS2_NS is not set
+# CONFIG_NCPFS_SMALLDOS is not set
+# CONFIG_NCPFS_MOUNT_SUBDIR is not set
+# CONFIG_NCPFS_NDS_DOMAINS is not set
+# CONFIG_NCPFS_NLS is not set
+# CONFIG_NCPFS_EXTRAS is not set
 
 #
 # Partition Types
 #
-# CONFIG_PARTITION_ADVANCED is not set
+CONFIG_PARTITION_ADVANCED=y
+# CONFIG_ACORN_PARTITION is not set
+# CONFIG_OSF_PARTITION is not set
+# CONFIG_AMIGA_PARTITION is not set
+# CONFIG_ATARI_PARTITION is not set
+# CONFIG_MAC_PARTITION is not set
+CONFIG_MSDOS_PARTITION=y
+# CONFIG_BSD_DISKLABEL is not set
+# CONFIG_SOLARIS_X86_PARTITION is not set
+# CONFIG_UNIXWARE_DISKLABEL is not set
 CONFIG_SGI_PARTITION=y
+# CONFIG_ULTRIX_PARTITION is not set
+# CONFIG_SUN_PARTITION is not set
 # CONFIG_NLS is not set
 
 #
 # Console drivers
 #
-CONFIG_SGI_NEWPORT_CONSOLE=y
-CONFIG_FONT_8x16=y
+# CONFIG_VGA_CONSOLE is not set
+# CONFIG_FB is not set
+
+#
+# Frame-buffer support
+#
+# CONFIG_FB is not set
 
 #
 # Sound
@@ -359,8 +318,14 @@ CONFIG_FONT_8x16=y
 # SGI devices
 #
 CONFIG_SGI_SERIAL=y
+# CONFIG_SERIAL_CONSOLE is not set
 CONFIG_SGI_DS1286=y
 # CONFIG_SGI_NEWPORT_GFX is not set
+
+#
+# USB support
+#
+# CONFIG_USB is not set
 
 #
 # Kernel hacking

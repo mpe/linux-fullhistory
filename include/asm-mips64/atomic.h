@@ -1,4 +1,4 @@
-/* $Id: atomic.h,v 1.1 1999/08/18 23:37:50 ralf Exp $
+/* $Id$
  *
  * Atomic operations that C can't guarantee us.  Useful for
  * resource counting etc..
@@ -16,6 +16,7 @@
 #define _ASM_ATOMIC_H
 
 #include <linux/config.h>
+
 #include <asm/sgidefs.h>
 
 #ifdef CONFIG_SMP

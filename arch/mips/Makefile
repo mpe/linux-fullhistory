@@ -125,6 +125,7 @@ endif
 ifdef CONFIG_BAGET_MIPS
 SUBDIRS       += arch/mips/baget arch/mips/baget/prom
 LIBS          += arch/mips/baget/baget.a arch/mips/baget/prom/bagetlib.a
+LOADADDR      += 0x80001000
 endif
 
 #
@@ -189,6 +190,7 @@ archclean:
 	@$(MAKEBOOT) clean
 	$(MAKE) -C arch/$(ARCH)/kernel clean
 	$(MAKE) -C arch/$(ARCH)/tools clean
+	$(MAKE) -C arch/mips/baget clean
 
 archmrproper:
 

@@ -29,7 +29,7 @@ dump_tlb(int first, int last)
 
 	for(i=first;i<=last;i++)
 	{
-		write_32bit_cp0_register(CP0_INDEX, i);
+		write_32bit_cp0_register(CP0_INDEX, i<<8);
 		__asm__ __volatile__(
 			".set\tnoreorder\n\t"
 			"tlbr\n\t"

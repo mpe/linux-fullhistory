@@ -2634,7 +2634,7 @@ static void __devinit sv_remove(struct pci_dev *dev)
 
 static struct pci_device_id id_table[] __devinitdata = {
        { PCI_VENDOR_ID_S3, PCI_DEVICE_ID_S3_SONICVIBES, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },
-       { 0, 0, 0, 0, 0, 0 }
+       { 0, }
 };
 
 MODULE_DEVICE_TABLE(pci, id_table);

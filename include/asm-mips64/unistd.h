@@ -1014,7 +1014,7 @@
 #define __NR_Linux32_ptrace		(__NR_Linux32 +  26)
 #define __NR_Linux32_alarm		(__NR_Linux32 +  27)
 #define __NR_Linux32_oldfstat		(__NR_Linux32 +  28)
-#define __NR_Linux32_unused29		(__NR_Linux32 +  29)
+#define __NR_Linux32_pause		(__NR_Linux32 +  29)
 #define __NR_Linux32_utime		(__NR_Linux32 +  30)
 #define __NR_Linux32_stty		(__NR_Linux32 +  31)
 #define __NR_Linux32_gtty		(__NR_Linux32 +  32)
@@ -1202,11 +1202,13 @@
 #define __NR_Linux32_lstat64		(__NR_Linux32 + 214)
 #define __NR_Linux32_fstat64		(__NR_Linux32 + 215)
 #define __NR_Linux32_root_pivot		(__NR_Linux32 + 216)
+#define __NR_Linux32_mincore		(__NR_Linux32 + 217)
+#define __NR_Linux32_madvise		(__NR_Linux32 + 218)
 
 /*
  * Offset of the last Linux o32 flavoured syscall
  */
-#define __NR_Linux32_syscalls		216
+#define __NR_Linux32_syscalls		218
 
 /*
  * Linux 64-bit syscalls are in the range from 5000 to 5999.
@@ -1241,7 +1243,7 @@
 #define __NR_ptrace			(__NR_Linux +  26)
 #define __NR_alarm			(__NR_Linux +  27)
 #define __NR_oldfstat			(__NR_Linux +  28)
-#define __NR_unused29			(__NR_Linux +  29)
+#define __NR_pause			(__NR_Linux +  29)
 #define __NR_utime			(__NR_Linux +  30)
 #define __NR_stty			(__NR_Linux +  31)
 #define __NR_gtty			(__NR_Linux +  32)
@@ -1423,11 +1425,13 @@
 #define __NR_getpmsg			(__NR_Linux + 208)
 #define __NR_putpmsg			(__NR_Linux + 209)
 #define __NR_root_pivot			(__NR_Linux + 210)
+#define __NR_mincore			(__NR_Linux + 211)
+#define __NR_madvise			(__NR_Linux + 212)
 
 /*
  * Offset of the last Linux flavoured syscall
  */
-#define __NR_Linux_syscalls		210
+#define __NR_Linux_syscalls		212
 
 #ifndef _LANGUAGE_ASSEMBLY
 

@@ -11,6 +11,8 @@
 #ifndef _ASM_SYSTEM_H
 #define _ASM_SYSTEM_H
 
+#include <linux/config.h>
+
 #include <asm/sgidefs.h>
 #include <linux/kernel.h>
 
@@ -105,14 +107,27 @@ __restore_flags(int flags)
 		: "$8", "$9", "memory");
 }
 
-/*
- * Non-SMP versions ...
- */
-#define sti() __sti()
+#ifdef CONFIG_SMP
+
+extern void __global_cli(void);
+extern void __global_sti(void);
+extern unsigned long __global_save_flags(void);
+extern void __global_restore_flags(unsigned long);
+#define cli() __global_cli()
+#define sti() __global_sti()
+#define save_flags(x) ((x)=__global_save_flags())
+#define restore_flags(x) __global_restore_flags(x)
+#define save_and_cli(x) do { save_flags(flags); cli(); } while(0)
+
+#else
+
 #define cli() __cli()
+#define sti() __sti()
 #define save_flags(x) __save_flags(x)
-#define save_and_cli(x) __save_and_cli(x)
 #define restore_flags(x) __restore_flags(x)
+#define save_and_cli(x) __save_and_cli(x)
+
+#endif /* CONFIG_SMP */
 
 /* For spinlocks etc */
 #define local_irq_save(x)	__save_and_cli(x);
@@ -154,8 +169,25 @@ extern asmlinkage void *resume(void *last, void *next);
 #endif /* !defined (_LANGUAGE_ASSEMBLY) */
 
 #define prepare_to_switch()	do { } while(0)
+
+extern asmlinkage void lazy_fpu_switch(void *, void *);
+extern asmlinkage void init_fpu(void);
+extern asmlinkage void save_fp(void *);
+
+#ifdef CONFIG_SMP
+#define SWITCH_DO_LAZY_FPU \
+	if (prev->flags & PF_USEDFPU) { \
+		lazy_fpu_switch(prev, 0); \
+		set_cp0_status(ST0_CU1, ~ST0_CU1); \
+		prev->flags &= ~PF_USEDFPU; \
+	}
+#else /* CONFIG_SMP */
+#define SWITCH_DO_LAZY_FPU	do { } while(0)
+#endif /* CONFIG_SMP */
+
 #define switch_to(prev,next,last) \
 do { \
+	SWITCH_DO_LAZY_FPU; \
 	(last) = resume(prev, next); \
 } while(0)
 

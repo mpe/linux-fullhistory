@@ -1,4 +1,4 @@
-/* $Id: sgiseeq.c,v 1.9 1998/10/14 23:40:46 ralf Exp $
+/* $Id: sgiseeq.c,v 1.17 2000/03/27 23:02:57 ralf Exp $
  *
  * sgiseeq.c: Seeq8003 ethernet driver for SGI machines.
  *
@@ -694,15 +694,14 @@ int sgiseeq_probe(struct net_device *dev)
 	char *ep;
 
 	if (initialized)	/* Already initialized? */
-		return 0;
+		return 1;
 	initialized++;
 
-	/* First get the ethernet address of the onboard
-	 * interface from ARCS.
+	/* First get the ethernet address of the onboard interface from ARCS.
 	 * This is fragile; PROM doesn't like running from cache.
-	 * On MIPS64 it crashes for some other, yet unknown reason.
+	 * On MIPS64 it crashes for some other, yet unknown reason ...
 	 */
-	ep = romvec->get_evar("eaddr");
+	ep = ArcGetEnvironmentVariable("eaddr");
 	str2eaddr(onboard_eth_addr, ep);
 	return sgiseeq_init(dev,
 			    (struct sgiseeq_regs *) (KSEG1ADDR(0x1fbd4000)),

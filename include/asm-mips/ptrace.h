@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.8 1999/10/12 17:33:50 harald Exp $
+/* $Id: ptrace.h,v 1.7 1999/09/28 22:27:17 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

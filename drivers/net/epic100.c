@@ -189,7 +189,7 @@ static struct pci_device_id epic_pci_tbl[] __devinitdata = {
 	{ 0x10B8, 0x0005, 0x1092, 0x0AB4, 0, 0, SMSC_83C170_0 },
 	{ 0x10B8, 0x0005, PCI_ANY_ID, PCI_ANY_ID, 0, 0, SMSC_83C170 },
 	{ 0x10B8, 0x0006, PCI_ANY_ID, PCI_ANY_ID, 0, 0, SMSC_83C175 },
-	{ 0,},
+	{ 0,}
 };
 MODULE_DEVICE_TABLE (pci, epic_pci_tbl);
 

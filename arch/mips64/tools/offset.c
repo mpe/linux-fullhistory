@@ -82,6 +82,7 @@ void output_task_defines(void)
 	offset("#define TASK_COUNTER       ", struct task_struct, counter);
 	offset("#define TASK_PRIORITY      ", struct task_struct, priority);
 	offset("#define TASK_MM            ", struct task_struct, mm);
+	offset("#define TASK_PROCESSOR     ", struct task_struct, processor);
 	size("#define TASK_STRUCT_SIZE   ", struct task_struct);
 	linefeed;
 }

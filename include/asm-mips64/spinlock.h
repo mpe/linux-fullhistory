@@ -22,6 +22,9 @@ typedef struct {
 
 #define spin_lock_init(x)	do { (x)->lock = 0; } while(0);
 
+#define spin_is_locked(x)	((x)->lock != 0)
+#define spin_unlock_wait(x)	({ do { barrier(); } while ((x)->lock); })
+
 /*
  * Simple spin lock operations.  There are two variants, one clears IRQ's
  * on the local processor, one does not.
@@ -62,7 +65,24 @@ static inline void spin_unlock(spinlock_t *lock)
 	: "memory");
 }
 
-#define spin_trylock(lock) (!test_and_set_bit(0,(lock)))
+static inline unsigned int spin_trylock(spinlock_t *lock)
+{
+	unsigned int temp, res;
+
+	__asm__ __volatile__(
+	".set\tnoreorder\t\t\t# spin_trylock\n\t"
+	"1:\tll\t%0, %1\n\t"
+	"or\t%2, %0, %3\n\t"
+	"sc\t%2, %1\n\t"
+	"beqz\t%2, 1b\n\t"
+	" and\t%2, %0, %3\n\t"
+	".set\treorder"
+	:"=&r" (temp), "=m" (*lock), "=&r" (res)
+	:"r" (1), "m" (*lock)
+	: "memory");
+
+	return res == 0;
+}
 
 /*
  * Read-write spinlocks, allowing multiple readers but only one writer.
@@ -110,6 +130,7 @@ static inline void read_unlock(rwlock_t *rw)
 	"sub\t%1, 1\n\t"
 	"sc\t%1, %0\n\t"
 	"beqz\t%1, 1b\n\t"
+	"sync\n\t"
 	".set\treorder"	
 	: "=o" (__dummy_lock(rw)), "=&r" (tmp)
 	: "o" (__dummy_lock(rw))

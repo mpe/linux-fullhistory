@@ -1,4 +1,4 @@
-/* $Id: reset.c,v 1.8 1999/10/21 00:23:05 ralf Exp $
+/* $Id: reset.c,v 1.7 1999/08/11 20:26:51 andrewb Exp $
  *
  * Reset a SGI.
  *

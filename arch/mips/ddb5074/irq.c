@@ -2,7 +2,7 @@
  *  arch/mips/ddb5074/irq.c -- NEC DDB Vrc-5074 interrupt routines
  *
  *  Copyright (C) 2000 Geert Uytterhoeven <geert@sonycom.com>
- *                     Sony Suprastructure Center Europe (SUPC-E), Brussels
+ *                     Sony Software Development Center Europe (SDCE), Brussels
  *
  *  $Id: irq.c,v 1.1 2000/01/26 00:07:44 ralf Exp $
  */
@@ -30,7 +30,7 @@ extern asmlinkage void i8259_do_irq(int irq, struct pt_regs *regs);
 extern asmlinkage void do_IRQ(int irq, struct pt_regs * regs);
 
 
-static void no_action(int cpl, void *dev_id, struct pt_regs *regs)
+void no_action(int cpl, void *dev_id, struct pt_regs *regs)
 {
 }
 

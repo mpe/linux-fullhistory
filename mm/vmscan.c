@@ -538,16 +538,19 @@ int kswapd(void *unused)
 			int i;
 			for(i = 0; i < MAX_NR_ZONES; i++) {
 				zone_t *zone = pgdat->node_zones+ i;
+				if (tsk->need_resched)
+					schedule();
 				if (!zone->size || !zone->zone_wake_kswapd)
 					continue;
-				something_to_do = 1;
+				if (zone->free_pages < zone->pages_low)
+					something_to_do = 1;
 				do_try_to_free_pages(GFP_KSWAPD);
 			}
 			run_task_queue(&tq_disk);
 			pgdat = pgdat->node_next;
 		} while (pgdat);
 
-		if (tsk->need_resched || !something_to_do) {
+		if (!something_to_do) {
 			tsk->state = TASK_INTERRUPTIBLE;
 			interruptible_sleep_on(&kswapd_wait);
 		}

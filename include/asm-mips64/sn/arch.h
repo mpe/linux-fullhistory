@@ -1,10 +1,10 @@
-/* $Id: arch.h,v 1.2 2000/02/10 07:28:35 kanoj Exp $
+/* $Id$
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * SGI IP27 specific setup.
+ * SGI specific setup.
  *
  * Copyright (C) 1995 - 1997, 1999 Silcon Graphics, Inc.
  * Copyright (C) 1999 Ralf Baechle (ralf@gnu.org)
@@ -13,28 +13,37 @@
 #define _ASM_SN_ARCH_H
 
 #include <linux/types.h>
+#include <linux/config.h>
 
+#if !defined(CONFIG_SGI_IO)
 #include <asm/sn/types.h>
 #include <asm/sn/sn0/arch.h>
+#endif
+
 
 #if defined(_LANGUAGE_C) || defined(_LANGUAGE_C_PLUS_PLUS)
+#if !defined(CONFIG_SGI_IO)
 typedef u64	hubreg_t;
 typedef u64	nic_t;
 #endif
+#endif
 
+#ifdef CONFIG_SGI_IP27
 #define CPUS_PER_NODE		2	/* CPUs on a single hub */
 #define CPUS_PER_NODE_SHFT	1	/* Bits to shift in the node number */
+#define CPUS_PER_SUBNODE	2	/* CPUs on a single hub PI */
+#endif
 #define CNODE_NUM_CPUS(_cnode)		(NODEPDA(_cnode)->node_num_cpus)
+
 #define CNODE_TO_CPU_BASE(_cnode)	(NODEPDA(_cnode)->node_first_cpu)
 #define cputocnode(cpu)				\
-               (ASSERT(pdaindr[(cpu)].pda), (pdaindr[(cpu)].pda->p_nodeid))
+               (cpu_data[(cpu)].p_nodeid)
 #define cputonasid(cpu)				\
-               (ASSERT(pdaindr[(cpu)].pda), (pdaindr[(cpu)].pda->p_nasid))
+               (cpu_data[(cpu)].p_nasid)
 #define cputoslice(cpu)				\
-               (ASSERT(pdaindr[(cpu)].pda), (pdaindr[(cpu)].pda->p_slice))
+               (cpu_data[(cpu)].p_slice)
 #define makespnum(_nasid, _slice)					\
 		(((_nasid) << CPUS_PER_NODE_SHFT) | (_slice))
-
 
 #if defined(_LANGUAGE_C) || defined(_LANGUAGE_C_PLUS_PLUS)
 
@@ -45,6 +54,9 @@ typedef u64	nic_t;
 #define	INVALID_PARTID		(partid_t)-1
 
 extern nasid_t get_nasid(void);
+extern cnodeid_t get_cpu_cnode(int);
+extern int get_cpu_slice(cpuid_t);
+
 /*
  * NO ONE should access these arrays directly.  The only reason we refer to
  * them here is to avoid the procedure call that would be required in the
@@ -63,6 +75,12 @@ extern nasid_t compact_to_nasid_node[MAX_COMPACT_NODES];
 #define	NASID_TO_REGION(nnode)	      	\
     ((nnode) >> \
      (is_fine_dirmode() ? NASID_TO_FINEREG_SHFT : NASID_TO_COARSEREG_SHFT))
+
+#if !defined(_STANDALONE)
+extern cnodeid_t nasid_to_compact_node[MAX_NASIDS];
+extern nasid_t compact_to_nasid_node[MAX_COMPACT_NODES];
+extern cnodeid_t cpuid_to_compact_node[MAXCPUS];
+#endif
 
 #if !defined(DEBUG) && (!defined(SABLE) || defined(_STANDALONE))
 
@@ -90,13 +108,8 @@ extern int node_getlastslot(cnodeid_t);
 #define SLOT_BITMASK    	(MAX_MEM_SLOTS - 1)
 #define SLOT_SIZE		(1LL<<SLOT_SHIFT)
 
-#if SABLE
-#define node_getnumslots(node)	(1)
-#define	NODE_MAX_MEM_SIZE	SLOT_SIZE * 1
-#else
 #define node_getnumslots(node)	(MAX_MEM_SLOTS)
 #define NODE_MAX_MEM_SIZE	SLOT_SIZE * MAX_MEM_SLOTS
-#endif /* SABLE */
 
 /*
  * New stuff in here from Irix sys/pfdat.h.

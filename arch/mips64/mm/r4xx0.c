@@ -784,7 +784,7 @@ r4k_flush_cache_range_s16d16i16(struct mm_struct *mm, unsigned long start,
 	struct vm_area_struct *vma;
 	unsigned long flags;
 
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 	start &= PAGE_MASK;
@@ -793,7 +793,8 @@ r4k_flush_cache_range_s16d16i16(struct mm_struct *mm, unsigned long start,
 #endif
 	vma = find_vma(mm, start);
 	if(vma) {
-		if(mm->context != current->mm->context) {
+		if (CPU_CONTEXT(smp_processor_id(), mm) !=
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 			r4k_flush_cache_all_s16d16i16();
 		} else {
 			pgd_t *pgd;
@@ -822,7 +823,7 @@ r4k_flush_cache_range_s32d16i16(struct mm_struct *mm, unsigned long start,
 	struct vm_area_struct *vma;
 	unsigned long flags;
 
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 	start &= PAGE_MASK;
@@ -831,7 +832,8 @@ r4k_flush_cache_range_s32d16i16(struct mm_struct *mm, unsigned long start,
 #endif
 	vma = find_vma(mm, start);
 	if(vma) {
-		if(mm->context != current->mm->context) {
+		if (CPU_CONTEXT(smp_processor_id(), mm) !=
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 			r4k_flush_cache_all_s32d16i16();
 		} else {
 			pgd_t *pgd;
@@ -860,7 +862,7 @@ r4k_flush_cache_range_s64d16i16(struct mm_struct *mm, unsigned long start,
 	struct vm_area_struct *vma;
 	unsigned long flags;
 
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 	start &= PAGE_MASK;
@@ -869,7 +871,8 @@ r4k_flush_cache_range_s64d16i16(struct mm_struct *mm, unsigned long start,
 #endif
 	vma = find_vma(mm, start);
 	if(vma) {
-		if(mm->context != current->mm->context) {
+		if (CPU_CONTEXT(smp_processor_id(), mm) !=
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 			r4k_flush_cache_all_s64d16i16();
 		} else {
 			pgd_t *pgd;
@@ -898,7 +901,7 @@ r4k_flush_cache_range_s128d16i16(struct mm_struct *mm, unsigned long start,
 	struct vm_area_struct *vma;
 	unsigned long flags;
 
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 	start &= PAGE_MASK;
@@ -907,7 +910,8 @@ r4k_flush_cache_range_s128d16i16(struct mm_struct *mm, unsigned long start,
 #endif
 	vma = find_vma(mm, start);
 	if(vma) {
-		if(mm->context != current->mm->context) {
+		if (CPU_CONTEXT(smp_processor_id(), mm) !=
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 			r4k_flush_cache_all_s128d16i16();
 		} else {
 			pgd_t *pgd;
@@ -936,7 +940,7 @@ r4k_flush_cache_range_s32d32i32(struct mm_struct *mm, unsigned long start,
 	struct vm_area_struct *vma;
 	unsigned long flags;
 
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 	start &= PAGE_MASK;
@@ -945,7 +949,8 @@ r4k_flush_cache_range_s32d32i32(struct mm_struct *mm, unsigned long start,
 #endif
 	vma = find_vma(mm, start);
 	if(vma) {
-		if(mm->context != current->mm->context) {
+		if (CPU_CONTEXT(smp_processor_id(), mm) !=
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 			r4k_flush_cache_all_s32d32i32();
 		} else {
 			pgd_t *pgd;
@@ -974,7 +979,7 @@ r4k_flush_cache_range_s64d32i32(struct mm_struct *mm, unsigned long start,
 	struct vm_area_struct *vma;
 	unsigned long flags;
 
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 	start &= PAGE_MASK;
@@ -983,7 +988,8 @@ r4k_flush_cache_range_s64d32i32(struct mm_struct *mm, unsigned long start,
 #endif
 	vma = find_vma(mm, start);
 	if(vma) {
-		if(mm->context != current->mm->context) {
+		if (CPU_CONTEXT(smp_processor_id(), mm) !=
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 			r4k_flush_cache_all_s64d32i32();
 		} else {
 			pgd_t *pgd;
@@ -1012,7 +1018,7 @@ r4k_flush_cache_range_s128d32i32(struct mm_struct *mm, unsigned long start,
 	struct vm_area_struct *vma;
 	unsigned long flags;
 
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 		return;
 
 	start &= PAGE_MASK;
@@ -1021,7 +1027,8 @@ r4k_flush_cache_range_s128d32i32(struct mm_struct *mm, unsigned long start,
 #endif
 	vma = find_vma(mm, start);
 	if(vma) {
-		if(mm->context != current->mm->context) {
+		if (CPU_CONTEXT(smp_processor_id(), mm) !=
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 			r4k_flush_cache_all_s128d32i32();
 		} else {
 			pgd_t *pgd;
@@ -1047,7 +1054,7 @@ static void
 r4k_flush_cache_range_d16i16(struct mm_struct *mm, unsigned long start,
                              unsigned long end)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 		unsigned long flags;
 
 #ifdef DEBUG_CACHE
@@ -1063,7 +1070,7 @@ static void
 r4k_flush_cache_range_d32i32(struct mm_struct *mm, unsigned long start,
                              unsigned long end)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 		unsigned long flags;
 
 #ifdef DEBUG_CACHE
@@ -1082,7 +1089,7 @@ r4k_flush_cache_range_d32i32(struct mm_struct *mm, unsigned long start,
  */
 static void r4k_flush_cache_mm_s16d16i16(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 #ifdef DEBUG_CACHE
 		printk("cmm[%d]", (int)mm->context);
 #endif
@@ -1092,7 +1099,7 @@ static void r4k_flush_cache_mm_s16d16i16(struct mm_struct *mm)
 
 static void r4k_flush_cache_mm_s32d16i16(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 #ifdef DEBUG_CACHE
 		printk("cmm[%d]", (int)mm->context);
 #endif
@@ -1102,7 +1109,7 @@ static void r4k_flush_cache_mm_s32d16i16(struct mm_struct *mm)
 
 static void r4k_flush_cache_mm_s64d16i16(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 #ifdef DEBUG_CACHE
 		printk("cmm[%d]", (int)mm->context);
 #endif
@@ -1112,7 +1119,7 @@ static void r4k_flush_cache_mm_s64d16i16(struct mm_struct *mm)
 
 static void r4k_flush_cache_mm_s128d16i16(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 #ifdef DEBUG_CACHE
 		printk("cmm[%d]", (int)mm->context);
 #endif
@@ -1122,7 +1129,7 @@ static void r4k_flush_cache_mm_s128d16i16(struct mm_struct *mm)
 
 static void r4k_flush_cache_mm_s32d32i32(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 #ifdef DEBUG_CACHE
 		printk("cmm[%d]", (int)mm->context);
 #endif
@@ -1132,7 +1139,7 @@ static void r4k_flush_cache_mm_s32d32i32(struct mm_struct *mm)
 
 static void r4k_flush_cache_mm_s64d32i32(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 #ifdef DEBUG_CACHE
 		printk("cmm[%d]", (int)mm->context);
 #endif
@@ -1142,7 +1149,7 @@ static void r4k_flush_cache_mm_s64d32i32(struct mm_struct *mm)
 
 static void r4k_flush_cache_mm_s128d32i32(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 #ifdef DEBUG_CACHE
 		printk("cmm[%d]", (int)mm->context);
 #endif
@@ -1152,7 +1159,7 @@ static void r4k_flush_cache_mm_s128d32i32(struct mm_struct *mm)
 
 static void r4k_flush_cache_mm_d16i16(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 #ifdef DEBUG_CACHE
 		printk("cmm[%d]", (int)mm->context);
 #endif
@@ -1162,7 +1169,7 @@ static void r4k_flush_cache_mm_d16i16(struct mm_struct *mm)
 
 static void r4k_flush_cache_mm_d32i32(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 #ifdef DEBUG_CACHE
 		printk("cmm[%d]", (int)mm->context);
 #endif
@@ -1184,7 +1191,7 @@ r4k_flush_cache_page_s16d16i16(struct vm_area_struct *vma, unsigned long page)
 	 * If ownes no valid ASID yet, cannot possibly have gotten
 	 * this page into the cache.
 	 */
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 #ifdef DEBUG_CACHE
@@ -1209,7 +1216,8 @@ r4k_flush_cache_page_s16d16i16(struct vm_area_struct *vma, unsigned long page)
 	 * for every cache flush operation.  So we do indexed flushes
 	 * in that case, which doesn't overly flush the cache too much.
 	 */
-	if(mm->context != current->mm->context) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 		/* Do indexed flush, too much work to get the (possible)
 		 * tlb refills to work correctly.
 		 */
@@ -1238,7 +1246,7 @@ r4k_flush_cache_page_s32d16i16(struct vm_area_struct *vma, unsigned long page)
 	 * If ownes no valid ASID yet, cannot possibly have gotten
 	 * this page into the cache.
 	 */
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 #ifdef DEBUG_CACHE
@@ -1262,7 +1270,8 @@ r4k_flush_cache_page_s32d16i16(struct vm_area_struct *vma, unsigned long page)
 	 * for every cache flush operation.  So we do indexed flushes
 	 * in that case, which doesn't overly flush the cache too much.
 	 */
-	if(mm->context != current->mm->context) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 		/* Do indexed flush, too much work to get the (possible)
 		 * tlb refills to work correctly.
 		 */
@@ -1291,7 +1300,7 @@ r4k_flush_cache_page_s64d16i16(struct vm_area_struct *vma, unsigned long page)
 	 * If ownes no valid ASID yet, cannot possibly have gotten
 	 * this page into the cache.
 	 */
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 #ifdef DEBUG_CACHE
@@ -1316,7 +1325,8 @@ r4k_flush_cache_page_s64d16i16(struct vm_area_struct *vma, unsigned long page)
 	 * for every cache flush operation.  So we do indexed flushes
 	 * in that case, which doesn't overly flush the cache too much.
 	 */
-	if(mm->context != current->mm->context) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 		/* Do indexed flush, too much work to get the (possible)
 		 * tlb refills to work correctly.
 		 */
@@ -1345,7 +1355,7 @@ r4k_flush_cache_page_s128d16i16(struct vm_area_struct *vma, unsigned long page)
 	 * If ownes no valid ASID yet, cannot possibly have gotten
 	 * this page into the cache.
 	 */
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 #ifdef DEBUG_CACHE
@@ -1370,7 +1380,8 @@ r4k_flush_cache_page_s128d16i16(struct vm_area_struct *vma, unsigned long page)
 	 * for every cache flush operation.  So we do indexed flushes
 	 * in that case, which doesn't overly flush the cache too much.
 	 */
-	if(mm->context != current->mm->context) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 		/*
 		 * Do indexed flush, too much work to get the (possible)
 		 * tlb refills to work correctly.
@@ -1400,7 +1411,7 @@ r4k_flush_cache_page_s32d32i32(struct vm_area_struct *vma, unsigned long page)
 	 * If ownes no valid ASID yet, cannot possibly have gotten
 	 * this page into the cache.
 	 */
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 #ifdef DEBUG_CACHE
@@ -1426,7 +1437,8 @@ r4k_flush_cache_page_s32d32i32(struct vm_area_struct *vma, unsigned long page)
 	 * for every cache flush operation.  So we do indexed flushes
 	 * in that case, which doesn't overly flush the cache too much.
 	 */
-	if(mm->context != current->mm->context) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 		/*
 		 * Do indexed flush, too much work to get the (possible)
 		 * tlb refills to work correctly.
@@ -1456,7 +1468,7 @@ r4k_flush_cache_page_s64d32i32(struct vm_area_struct *vma, unsigned long page)
 	 * If ownes no valid ASID yet, cannot possibly have gotten
 	 * this page into the cache.
 	 */
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 #ifdef DEBUG_CACHE
@@ -1482,7 +1494,8 @@ r4k_flush_cache_page_s64d32i32(struct vm_area_struct *vma, unsigned long page)
 	 * for every cache flush operation.  So we do indexed flushes
 	 * in that case, which doesn't overly flush the cache too much.
 	 */
-	if(mm->context != current->mm->context) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 		/*
 		 * Do indexed flush, too much work to get the (possible)
 		 * tlb refills to work correctly.
@@ -1512,7 +1525,7 @@ r4k_flush_cache_page_s128d32i32(struct vm_area_struct *vma, unsigned long page)
 	 * If ownes no valid ASID yet, cannot possibly have gotten
 	 * this page into the cache.
 	 */
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 #ifdef DEBUG_CACHE
@@ -1537,7 +1550,8 @@ r4k_flush_cache_page_s128d32i32(struct vm_area_struct *vma, unsigned long page)
 	 * for every cache flush operation.  So we do indexed flushes
 	 * in that case, which doesn't overly flush the cache too much.
 	 */
-	if(mm->context != current->mm->context) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 
+				CPU_CONTEXT(smp_processor_id(), current->mm)) {
 		/* Do indexed flush, too much work to get the (possible)
 		 * tlb refills to work correctly.
 		 */
@@ -1566,7 +1580,7 @@ r4k_flush_cache_page_d16i16(struct vm_area_struct *vma, unsigned long page)
 	 * If ownes no valid ASID yet, cannot possibly have gotten
 	 * this page into the cache.
 	 */
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 #ifdef DEBUG_CACHE
@@ -1622,7 +1636,7 @@ r4k_flush_cache_page_d32i32(struct vm_area_struct *vma, unsigned long page)
 	 * If ownes no valid ASID yet, cannot possibly have gotten
 	 * this page into the cache.
 	 */
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 #ifdef DEBUG_CACHE
@@ -1681,7 +1695,7 @@ r4k_flush_cache_page_d32i32_r4600(struct vm_area_struct *vma,
 	 * If ownes no valid ASID yet, cannot possibly have gotten
 	 * this page into the cache.
 	 */
-	if(mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 #ifdef DEBUG_CACHE
@@ -2010,7 +2024,7 @@ static inline void r4k_flush_tlb_all(void)
 	printk("[tlball]");
 #endif
 
-	save_and_cli(flags);
+	__save_and_cli(flags);
 	/* Save old context and create impossible VPN2 value */
 	old_ctx = (get_entryhi() & 0xff);
 	set_entryhi(KSEG0);
@@ -2030,29 +2044,29 @@ static inline void r4k_flush_tlb_all(void)
 	}
 	BARRIER;
 	set_entryhi(old_ctx);
-	restore_flags(flags);
+	__restore_flags(flags);
 }
 
 static void r4k_flush_tlb_mm(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 		unsigned long flags;
 
 #ifdef DEBUG_TLB
 		printk("[tlbmm<%d>]", mm->context);
 #endif
-		save_and_cli(flags);
-		get_new_mmu_context(mm, asid_cache);
+		__save_and_cli(flags);
+		get_new_cpu_mmu_context(mm, smp_processor_id());
 		if(mm == current->mm)
-			set_entryhi(mm->context & 0xff);
-		restore_flags(flags);
+			set_entryhi(CPU_CONTEXT(smp_processor_id(), mm) & 0xff);
+		__restore_flags(flags);
 	}
 }
 
 static void r4k_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 				unsigned long end)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 		unsigned long flags;
 		int size;
 
@@ -2060,12 +2074,12 @@ static void r4k_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 		printk("[tlbrange<%02x,%08lx,%08lx>]", (mm->context & 0xff),
 		       start, end);
 #endif
-		save_and_cli(flags);
+		__save_and_cli(flags);
 		size = (end - start + (PAGE_SIZE - 1)) >> PAGE_SHIFT;
 		size = (size + 1) >> 1;
 		if(size <= NTLB_ENTRIES_HALF) {
 			int oldpid = (get_entryhi() & 0xff);
-			int newpid = (mm->context & 0xff);
+			int newpid = (CPU_CONTEXT(smp_processor_id(), mm) & 0xff);
 
 			start &= (PAGE_MASK << 1);
 			end += ((PAGE_SIZE << 1) - 1);
@@ -2090,9 +2104,10 @@ static void r4k_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			}
 			set_entryhi(oldpid);
 		} else {
-			get_new_mmu_context(mm, asid_cache);
+			get_new_cpu_mmu_context(mm, smp_processor_id());
 			if(mm == current->mm)
-				set_entryhi(mm->context & 0xff);
+				set_entryhi(CPU_CONTEXT(smp_processor_id(), 
+								mm) & 0xff);
 		}
 		__restore_flags(flags);
 	}
@@ -2100,16 +2115,16 @@ static void r4k_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 
 static void r4k_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 {
-	if(vma->vm_mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), vma->vm_mm) != 0) {
 		unsigned long flags;
 		int oldpid, newpid, idx;
 
 #ifdef DEBUG_TLB
 		printk("[tlbpage<%d,%08lx>]", vma->vm_mm->context, page);
 #endif
-		newpid = (vma->vm_mm->context & 0xff);
+		newpid = (CPU_CONTEXT(smp_processor_id(), vma->vm_mm) & 0xff);
 		page &= (PAGE_MASK << 1);
-		save_and_cli(flags);
+		__save_and_cli(flags);
 		oldpid = (get_entryhi() & 0xff);
 		set_entryhi(page | newpid);
 		BARRIER;
@@ -2127,7 +2142,7 @@ static void r4k_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 	finish:
 		BARRIER;
 		set_entryhi(oldpid);
-		restore_flags(flags);
+		__restore_flags(flags);
 	}
 }
 
@@ -2150,16 +2165,18 @@ static void r4k_update_mmu_cache(struct vm_area_struct * vma,
 	pte_t *ptep;
 	int idx, pid;
 
+	__save_and_cli(flags);
 	pid = (get_entryhi() & 0xff);
 
 #ifdef DEBUG_TLB
-	if((pid != (vma->vm_mm->context & 0xff)) || (vma->vm_mm->context == 0)) {
-		printk("update_mmu_cache: Wheee, bogus tlbpid mmpid=%d tlbpid=%d\n",
-		       (int) (vma->vm_mm->context & 0xff), pid);
+	if((pid != (CPU_CONTEXT(smp_processor_id(), vma->vm_mm) & 0xff)) ||
+	   (CPU_CONTEXT(smp_processor_id(), vma->vm_mm) == 0)) {
+		printk("update_mmu_cache: Wheee, bogus tlbpid mmpid=%d
+			tlbpid=%d\n", (int) (CPU_CONTEXT(smp_processor_id(),
+			vma->vm_mm) & 0xff), pid);
 	}
 #endif
 
-	__save_and_cli(flags);
 	address &= (PAGE_MASK << 1);
 	set_entryhi(address | (pid));
 	pgdp = pgd_offset(vma->vm_mm, address);
@@ -2538,5 +2555,5 @@ void __init ld_mmu_r4xx0(void)
 	 *     be set for 4kb pages.
 	 */
 	write_32bit_cp0_register(CP0_PAGEMASK, PM_4K);
-	flush_tlb_all();
+	_flush_tlb_all();
 }

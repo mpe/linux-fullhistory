@@ -1,4 +1,4 @@
-/* $Id: ptrace.c,v 1.18 1999/10/09 00:00:58 ralf Exp $
+/* $Id: ptrace.c,v 1.17 1999/09/28 22:25:47 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -28,7 +28,6 @@
 asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
-	unsigned int flags;
 	int res;
 	extern void save_fp(void*);
 
@@ -49,19 +48,22 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		res = 0;
 		goto out;
 	}
-	if (pid == 1) {		/* you may not mess with init */
-		res = -EPERM;
+	res = -ESRCH;
+	read_lock(&tasklist_lock);
+	child = find_task_by_pid(pid);
+	if (child)
+		get_task_struct(child);
+	read_unlock(&tasklist_lock);
+	if (!child)
 		goto out;
-	}
-	if (!(child = find_task_by_pid(pid))) {
-		res = -ESRCH;
+
+	res = -EPERM;
+	if (pid == 1)		/* you may not mess with init */
 		goto out;
-	}
+
 	if (request == PTRACE_ATTACH) {
-		if (child == current) {
-			res = -EPERM;
-			goto out;
-		}
+		if (child == current)
+			goto out_tsk;
 		if ((!child->dumpable ||
 		    (current->uid != child->euid) ||
 		    (current->uid != child->suid) ||
@@ -71,42 +73,34 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	 	    (current->gid != child->gid) ||
 		    (!cap_issubset(child->cap_permitted,
 		                  current->cap_permitted)) ||
-                    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE)){
-			res = -EPERM;
-			goto out;
-		}
+                    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
+			goto out_tsk;
 		/* the same process cannot be attached many times */
 		if (child->flags & PF_PTRACED)
-			goto out;
+			goto out_tsk;
 		child->flags |= PF_PTRACED;
 
-		write_lock_irqsave(&tasklist_lock, flags);
+		write_lock_irq(&tasklist_lock);
 		if (child->p_pptr != current) {
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
 			SET_LINKS(child);
 		}
-		write_unlock_irqrestore(&tasklist_lock, flags);
+		write_unlock_irq(&tasklist_lock);
 
 		send_sig(SIGSTOP, child, 1);
 		res = 0;
-		goto out;
+		goto out_tsk;
 	}
-	if (!(child->flags & PF_PTRACED)) {
-		res = -ESRCH;
-		goto out;
-	}
+	res = -ESRCH;
+	if (!(child->flags & PF_PTRACED))
+		goto out_tsk;
 	if (child->state != TASK_STOPPED) {
-		if (request != PTRACE_KILL) {
-			res = -ESRCH;
-			goto out;
-		}
+		if (request != PTRACE_KILL)
+			goto out_tsk;
 	}
-	if (child->p_pptr != current) {
-		res = -ESRCH;
-		goto out;
-	}
-
+	if (child->p_pptr != current)
+		goto out_tsk;
 	switch (request) {
 	case PTRACE_PEEKTEXT: /* read word at location addr. */ 
 	case PTRACE_PEEKDATA: {
@@ -116,11 +110,11 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		copied = access_process_vm(child, addr, &tmp, sizeof(tmp), 0);
 		res = -EIO;
 		if (copied != sizeof(tmp))
-			goto out;
+			break;
 		res = put_user(tmp,(unsigned long *) data);
 
 		goto out;
-	}
+		}
 
 	/* Read the word at location addr in the USER area.  */
 	case PTRACE_PEEKUSR: {
@@ -189,7 +183,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		res = 0;
 		if (access_process_vm(child, addr, &data, sizeof(data), 1)
 		    == sizeof(data))
-			goto out;
+			break;
 		res = -EIO;
 		goto out;
 
@@ -240,23 +234,22 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			res = -EIO;
 			break;
 		}
-		goto out;
+		break;
 		}
 
 	case PTRACE_SYSCALL: /* continue and stop at next (return from) syscall */
 	case PTRACE_CONT: { /* restart after signal. */
-		if ((unsigned long) data > _NSIG) {
-			res = -EIO;
-			goto out;
-		}
+		res = -EIO;
+		if ((unsigned long) data > _NSIG)
+			break;
 		if (request == PTRACE_SYSCALL)
 			child->flags |= PF_TRACESYS;
 		else
 			child->flags &= ~PF_TRACESYS;
 		child->exit_code = data;
 		wake_up_process(child);
-		res = data;
-		goto out;
+		res = 0;
+		break;
 		}
 
 	/*
@@ -264,34 +257,35 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	 * perhaps it should be put in the status that it wants to 
 	 * exit.
 	 */
-	case PTRACE_KILL: {
-		if (child->state != TASK_ZOMBIE) {
-			child->exit_code = SIGKILL;
-			wake_up_process(child);
-		}
+	case PTRACE_KILL:
 		res = 0;
-		goto out;
-		}
+		if (child->state != TASK_ZOMBIE)	/* already dead */
+			break;
+		child->exit_code = SIGKILL;
+		wake_up_process(child);
+		break;
 
-	case PTRACE_DETACH: { /* detach a process that was attached. */
-		if ((unsigned long) data > _NSIG) {
-			res = -EIO;
-			goto out;
-		}
+	case PTRACE_DETACH: /* detach a process that was attached. */
+		res = -EIO;
+		if ((unsigned long) data > _NSIG)
+			break;
 		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 		child->exit_code = data;
+		write_lock_irq(&tasklist_lock);
 		REMOVE_LINKS(child);
 		child->p_pptr = child->p_opptr;
 		SET_LINKS(child);
+		write_unlock_irq(&tasklist_lock);
 		wake_up_process(child);
 		res = 0;
-		goto out;
-		}
+		break;
 
 	default:
 		res = -EIO;
 		goto out;
 	}
+out_tsk:
+	free_task_struct(child);
 out:
 	unlock_kernel();
 	return res;

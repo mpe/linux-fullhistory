@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1998 by Ralf Baechle
  *
- * $Id: memset.S,v 1.1 1998/05/04 09:12:54 ralf Exp $
+ * $Id: memset.S,v 1.2 1998/04/25 17:01:45 ralf Exp $
  */
 #include <asm/asm.h>
 #include <asm/offset.h>

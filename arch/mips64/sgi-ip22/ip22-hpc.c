@@ -1,4 +1,4 @@
-/* $Id: ip22-hpc.c,v 1.2 1999/12/04 03:59:01 ralf Exp $
+/* $Id: ip22-hpc.c,v 1.2 1999/10/19 20:51:52 ralf Exp $
  *
  * ip22-hpc.c: Routines for generic manipulation of the HPC controllers.
  *

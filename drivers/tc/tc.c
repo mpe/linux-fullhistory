@@ -1,4 +1,4 @@
-/* $Id: $
+/* $Id: tc.c,v 1.3 1999/10/09 00:01:32 ralf Exp $
  * tc-init: We assume the TURBOchannel to be up and running so
  * just probe for Modules and fill in the global data structure
  * tc_bus.
@@ -13,6 +13,7 @@
 
 #include <linux/string.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
 #include <asm/addrspace.h>
 #include <asm/errno.h>
 #include <asm/dec/machtype.h>
@@ -231,6 +232,6 @@ void __init tc_init(void)
 					tc_bus[i].name, tc_bus[i].firmware);
 			}
 #endif
+		ioport_resource.end = KSEG2 - 1;
 	}
-
 }

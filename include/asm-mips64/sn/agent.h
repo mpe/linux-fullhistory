@@ -1,4 +1,4 @@
-/* $Id: agent.h,v 1.1 2000/01/13 00:17:02 ralf Exp $
+/* $Id$
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -14,17 +14,23 @@
 
 #include <asm/sn/addrs.h>
 #include <asm/sn/arch.h>
-//#include <sys/SN/io.h>
+//#include <asm/sn/io.h>
 
+#if defined(CONFIG_SGI_IP27)
 #include <asm/sn/sn0/hub.h>
+#elif defined(CONFIG_SGI_IP35)
+#include <asm/sn/sn1/hub.h>
+#endif	/* !CONFIG_SGI_IP27 && !CONFIG_SGI_IP35 */
 
 /*
  * NIC register macros
  */
 
+#if defined(CONFIG_SGI_IP27)
 #define HUB_NIC_ADDR(_cpuid) 						   \
 	REMOTE_HUB_ADDR(COMPACT_TO_NASID_NODEID(cputocnode(_cpuid)),       \
 		MD_MLAN_CTL)
+#endif
 
 #define SET_HUB_NIC(_my_cpuid, _val) 				  	   \
 	(HUB_S(HUB_NIC_ADDR(_my_cpuid), (_val)))

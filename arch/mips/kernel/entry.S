@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.20 2000/02/23 00:41:00 ralf Exp $
+/* $Id: entry.S,v 1.19 1999/12/08 22:05:10 harald Exp $
  *
  * Low level exception handling
  *

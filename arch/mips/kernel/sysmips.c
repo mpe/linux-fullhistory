@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
  *
- * $Id: sysmips.c,v 1.9 2000/02/18 00:24:30 ralf Exp $
+ * $Id: sysmips.c,v 1.8 2000/02/05 06:47:08 ralf Exp $
  */
 #include <linux/errno.h>
 #include <linux/linkage.h>
@@ -123,4 +123,11 @@ asmlinkage int
 sys_cachectl(char *addr, int nbytes, int op)
 {
 	return -ENOSYS;
+}
+
+asmlinkage int sys_pause(void)
+{
+	current->state = TASK_INTERRUPTIBLE;
+	schedule();
+	return -ERESTARTNOHAND;
 }

@@ -1,4 +1,4 @@
-/* $Id: irixelf.c,v 1.24 2000/02/04 07:40:23 ralf Exp $
+/* $Id: irixelf.c,v 1.28 2000/03/23 02:25:42 ralf Exp $
  *
  * irixelf.c: Code to load IRIX ELF executables which conform to
  *            the MIPS ABI.
@@ -29,6 +29,7 @@
 #include <linux/shm.h>
 #include <linux/personality.h>
 #include <linux/elfcore.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgalloc.h>
@@ -253,10 +254,10 @@ static unsigned int load_irix_interp(struct elfhdr * interp_elf_ex,
 #endif
 
 	/* First of all, some simple consistency checks */
-	if((interp_elf_ex->e_type != ET_EXEC &&
-	    interp_elf_ex->e_type != ET_DYN) ||
-	    !elf_check_arch(interp_elf_ex->e_machine) ||
-	    !interpreter->f_op->mmap) {
+	if ((interp_elf_ex->e_type != ET_EXEC &&
+	     interp_elf_ex->e_type != ET_DYN) ||
+	     !elf_check_arch(interp_elf_ex->e_machine) ||
+	     !interpreter->f_op->mmap) {
 		printk("IRIX interp has bad e_type %d\n", interp_elf_ex->e_type);
 		return 0xffffffff;
 	}
@@ -424,42 +425,41 @@ static inline int look_for_irix_interpreter(char **name,
 					    struct elf_phdr *epp,
 					    struct linux_binprm *bprm, int pnum)
 {
-	mm_segment_t old_fs;
 	int i;
 	int retval = -EINVAL;
 	struct file *file = NULL;
 
 	*name = NULL;
 	for(i = 0; i < pnum; i++, epp++) {
-		if(epp->p_type != PT_INTERP)
+		if (epp->p_type != PT_INTERP)
 			continue;
 
 		/* It is illegal to have two interpreters for one executable. */
-		if(*name != NULL)
+		if (*name != NULL)
 			goto out;
 
 		*name = (char *) kmalloc((epp->p_filesz +
 					  strlen(IRIX_INTERP_PREFIX)),
 					 GFP_KERNEL);
-		if(!*name)
+		if (!*name)
 			return -ENOMEM;
 
 		strcpy(*name, IRIX_INTERP_PREFIX);
 		retval = kernel_read(bprm->file, epp->p_offset, (*name + 16),
-				   epp->p_filesz);
-		if(retval < 0)
+		                     epp->p_filesz);
+		if (retval < 0)
 			goto out;
 
 		file = open_exec(*name);
-		if(IS_ERR(file)) {
+		if (IS_ERR(file)) {
 			retval = PTR_ERR(file);
 			goto out;
 		}
 		retval = kernel_read(file, 0, bprm->buf, 128);
-		if(retval < 0)
+		if (retval < 0)
 			goto dput_and_out;
 
-		*interp_elf_ex = *((struct elfhdr *) bprm->buf);
+		*interp_elf_ex = *(struct elfhdr *) bprm->buf;
 	}
 	*interpreter = file;
 	return 0;
@@ -548,7 +548,7 @@ static inline int map_interpreter(struct elf_phdr *epp, struct elfhdr *ihp,
 
 		fput(interp);
 
-		if(*eentry == 0xffffffff)
+		if (*eentry == 0xffffffff)
 			return -1;
 	}
 	return 0;
@@ -655,10 +655,10 @@ static int load_irix_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	                                   &interpreter,
 					   &interp_elf_ex, elf_phdata, bprm,
 					   elf_ex.e_phnum);
-	if(retval)
+	if (retval)
 		goto out_free_file;
 
-	if(elf_interpreter) {
+	if (elf_interpreter) {
 		retval = verify_irix_interpreter(&interp_elf_ex);
 		if(retval)
 			goto out_free_interp;
@@ -841,8 +841,8 @@ static int load_irix_library(struct file *file)
 	up(&current->mm->mmap_sem);
 
 	k = elf_phdata->p_vaddr + elf_phdata->p_filesz;
-	if(k > elf_bss) elf_bss = k;
-	
+	if (k > elf_bss) elf_bss = k;
+
 	if (error != (elf_phdata->p_vaddr & 0xfffff000)) {
 		kfree(elf_phdata);
 		return error;

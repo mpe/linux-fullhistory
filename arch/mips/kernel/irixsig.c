@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: irixsig.c,v 1.14 2000/01/17 03:58:59 ralf Exp $
+ * $Id: irixsig.c,v 1.13 1999/10/09 00:00:58 ralf Exp $
  */
 
 #include <linux/kernel.h>

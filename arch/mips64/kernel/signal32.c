@@ -1,4 +1,4 @@
-/* $Id: signal32.c,v 1.2 2000/02/18 00:03:48 ralf Exp $
+/* $Id: signal32.c,v 1.4 2000/03/15 22:46:55 kanoj Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -8,6 +8,7 @@
  * Copyright (C) 1994 - 1999  Ralf Baechle
  * Copyright (C) 1999 Silicon Graphics, Inc.
  */
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
@@ -25,6 +26,7 @@
 #include <asm/stackframe.h>
 #include <asm/uaccess.h>
 #include <asm/ucontext.h>
+#include <asm/system.h>
 
 #define DEBUG_SIG 0
 
@@ -38,12 +40,11 @@ extern asmlinkage int restore_fp_context(struct sigcontext *sc);
 
 /* 32-bit compatibility types */
 
-#define _NSIG32		128
 #define _NSIG32_BPW	32
-#define _NSIG_WORDS	(_NSIG / _NSIG_BPW)
+#define _NSIG32_WORDS	(_NSIG / _NSIG32_BPW)
 
 typedef struct {
-	unsigned int sig[_NSIG_WORDS];
+	unsigned int sig[_NSIG32_WORDS];
 } sigset32_t;
 
 typedef unsigned int __sighandler32_t;
@@ -64,6 +65,35 @@ typedef struct sigaltstack32 {
 	int ss_flags;
 } stack32_t;
 
+
+static inline int store_fp_context(struct sigcontext *sc)
+{
+	unsigned int fcr0;
+	int err = 0;
+
+	err |= __copy_to_user(&sc->sc_fpregs[0], 
+		&current->thread.fpu.hard.fp_regs[0], NUM_FPU_REGS * 
+						sizeof(unsigned long));
+	err |= __copy_to_user(&sc->sc_fpc_csr, &current->thread.fpu.hard.control,
+						sizeof(unsigned int));
+	__asm__ __volatile__("cfc1 %0, $0\n\t" : "=r" (fcr0));
+	err |= __copy_to_user(&sc->sc_fpc_eir, &fcr0, sizeof(unsigned int));
+
+	return err;
+}
+
+static inline int refill_fp_context(struct sigcontext *sc)
+{
+	int err = 0;
+
+	if (verify_area(VERIFY_READ, sc, sizeof(*sc)))
+		return -EFAULT;
+	err |= __copy_from_user(&current->thread.fpu.hard.fp_regs[0], 
+			&sc->sc_fpregs[0], NUM_FPU_REGS * sizeof(unsigned long));
+	err |= __copy_from_user(&current->thread.fpu.hard.control, &sc->sc_fpc_csr,
+							sizeof(unsigned int));
+	return err;
+}
 
 /*
  * Atomically swap in the new signal mask, and wait for a signal.
@@ -211,8 +241,12 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc)
 
 	err |= __get_user(owned_fp, &sc->sc_ownedfp);
 	if (owned_fp) {
-		err |= restore_fp_context(sc);
-		last_task_used_math = current;
+		if (IS_FPU_OWNER()) {
+			CLEAR_FPU_OWNER();
+			regs->cp0_status &= ~ST0_CU1;
+		}
+		current->used_math = 1;
+		err |= refill_fp_context(sc);
 	}
 
 	return err;
@@ -237,7 +271,10 @@ sys32_sigreturn(abi64_no_regargs, struct pt_regs regs)
 {
 	struct sigframe *frame;
 	sigset_t blocked;
+
+#if DEBUG_MIPS64
 printk("%s called.\n", __FUNCTION__);
+#endif
 
 	frame = (struct sigframe *) regs.regs[29];
 	if (!access_ok(VERIFY_READ, frame, sizeof(*frame)))
@@ -314,11 +351,9 @@ badframe:
 static int inline
 setup_sigcontext(struct pt_regs *regs, struct sigcontext *sc)
 {
-	int owned_fp;
 	int err = 0;
 
 	err |= __put_user(regs->cp0_epc, &sc->sc_pc);
-	err |= __put_user(regs->cp0_status, &sc->sc_status);
 
 #define save_gp_reg(i) {						\
 	err |= __put_user(regs->regs[i], &sc->sc_regs[i]);		\
@@ -339,16 +374,19 @@ setup_sigcontext(struct pt_regs *regs, struct sigcontext *sc)
 	err |= __put_user(regs->cp0_cause, &sc->sc_cause);
 	err |= __put_user(regs->cp0_badvaddr, &sc->sc_badvaddr);
 
-	owned_fp = (current == last_task_used_math);
-	err |= __put_user(owned_fp, &sc->sc_ownedfp);
-
 	if (current->used_math) {	/* fp is active.  */
-		set_cp0_status(ST0_CU1, ST0_CU1);
-		err |= save_fp_context(sc);
-		last_task_used_math = NULL;
-		regs->cp0_status &= ~ST0_CU1;
+		if (IS_FPU_OWNER()) {
+			lazy_fpu_switch(current, 0);
+			CLEAR_FPU_OWNER();
+			regs->cp0_status &= ~ST0_CU1;
+		}
+		err |= __put_user(1, &sc->sc_ownedfp);
+		err |= store_fp_context(sc);
 		current->used_math = 0;
+	} else {
+		err |= __put_user(0, &sc->sc_ownedfp);
 	}
+	err |= __put_user(regs->cp0_status, &sc->sc_status);
 
 	return err;
 }
@@ -390,10 +428,10 @@ setup_frame(struct k_sigaction * ka, struct pt_regs *regs,
 		/*
 		 * Set up the return code ...
 		 *
-		 *         li      v0, __NR_sigreturn
+		 *         li      v0, __NR_Linux32_sigreturn
 		 *         syscall
 		 */
-		err |= __put_user(0x24020000 + __NR_sigreturn,
+		err |= __put_user(0x24020000 + __NR_Linux32_sigreturn,
 		                  frame->sf_code + 0);
 		err |= __put_user(0x0000000c                 ,
 		                  frame->sf_code + 1);
@@ -453,10 +491,10 @@ setup_rt_frame(struct k_sigaction * ka, struct pt_regs *regs,
 		/*
 		 * Set up the return code ...
 		 *
-		 *         li      v0, __NR_sigreturn
+		 *         li      v0, __NR_Linux32_sigreturn
 		 *         syscall
 		 */
-		err |= __put_user(0x24020000 + __NR_sigreturn,
+		err |= __put_user(0x24020000 + __NR_Linux32_sigreturn,
 		                  frame->rs_code + 0);
 		err |= __put_user(0x0000000c                 ,
 		                  frame->rs_code + 1);
@@ -555,7 +593,10 @@ asmlinkage int do_signal32(sigset_t *oldset, struct pt_regs *regs)
 {
 	struct k_sigaction *ka;
 	siginfo_t info;
+
+#if DEBUG_MIPS64
 printk("%s: delivering signal.\n", current->comm);
+#endif
 
 	if (!oldset)
 		oldset = &current->blocked;
@@ -656,7 +697,9 @@ printk("%s: delivering signal.\n", current->comm);
 		if (regs->regs[0])
 			syscall_restart(regs, ka);
 		/* Whee!  Actually deliver the signal.  */
+#if DEBUG_MIPS64
 printk("%s: delivering signal.\n", __FUNCTION__);
+#endif
 		handle_signal(signr, ka, &info, oldset, regs);
 		return 1;
 	}
@@ -674,6 +717,25 @@ printk("%s: delivering signal.\n", __FUNCTION__);
 			regs->cp0_epc -= 8;
 		}
 	}
+	return 0;
+}
+
+extern asmlinkage int sys_sigprocmask(int how, old_sigset_t *set,
+						old_sigset_t *oset);
+
+asmlinkage int sys32_sigprocmask(int how, old_sigset_t32 *set, 
+							old_sigset_t32 *oset)
+{
+	old_sigset_t s;
+	int ret;
+	mm_segment_t old_fs = get_fs();
+
+	if (set && get_user (s, set)) return -EFAULT;
+	set_fs (KERNEL_DS);
+	ret = sys_sigprocmask(how, set ? &s : NULL, oset ? &s : NULL);
+	set_fs (old_fs);
+	if (ret) return ret;
+	if (oset && put_user (s, oset)) return -EFAULT;
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.3 2000/01/17 23:32:46 ralf Exp $
+# $Id: Makefile,v 1.1 1999/08/20 21:13:32 ralf Exp $
 #
 # Makefile for the ARC prom monitor library routines under Linux.
 #

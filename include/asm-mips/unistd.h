@@ -1015,7 +1015,7 @@
 #define __NR_ptrace			(__NR_Linux +  26)
 #define __NR_alarm			(__NR_Linux +  27)
 #define __NR_oldfstat			(__NR_Linux +  28)
-#define __NR_unused29			(__NR_Linux +  29)
+#define __NR_pause			(__NR_Linux +  29)
 #define __NR_utime			(__NR_Linux +  30)
 #define __NR_stty			(__NR_Linux +  31)
 #define __NR_gtty			(__NR_Linux +  32)
@@ -1203,11 +1203,13 @@
 #define __NR_lstat64			(__NR_Linux + 214)
 #define __NR_fstat64			(__NR_Linux + 215)
 #define __NR_pivot_root			(__NR_Linux + 216)
+#define __NR_mincore			(__NR_Linux + 217)
+#define __NR_madvise			(__NR_Linux + 218)
 
 /*
  * Offset of the last Linux flavoured syscall
  */
-#define __NR_Linux_syscalls		216
+#define __NR_Linux_syscalls		218
 
 #ifndef _LANGUAGE_ASSEMBLY
 

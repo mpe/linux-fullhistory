@@ -1,4 +1,4 @@
-/* $Id: addrspace.h,v 1.6 2000/02/10 20:20:15 kanoj Exp $
+/* $Id: addrspace.h,v 1.5 2000/02/01 00:32:01 kanoj Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -103,5 +103,10 @@
 #define K1BASE		0x9000000000000000
 #endif
 #define K2BASE		0xc000000000000000
+
+#if !defined (CONFIG_CPU_R8000)
+#define COMPAT_K1BASE32		0xffffffffa0000000
+#define PHYS_TO_COMPATK1(x)	((x) | COMPAT_K1BASE32) /* 32-bit compat k1 */
+#endif
 
 #endif /* _ASM_ADDRSPACE_H */

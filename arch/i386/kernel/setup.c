@@ -406,6 +406,32 @@ void __init add_memory_region(unsigned long start,
 	e820.nr_map++;
 } /* add_memory_region */
 
+#define E820_DEBUG	1
+
+static __init void print_e820_map (void)
+{
+	int i;
+
+	for (i = 0; i < e820.nr_map; i++) {
+		printk(" e820: %016Lx @ %016Lx ",
+			e820.map[i].size, e820.map[i].addr);
+		switch (e820.map[i].type) {
+		case E820_RAM:	printk("(usable)\n");
+				break;
+		case E820_RESERVED:
+				printk("(reserved)\n");
+				break;
+		case E820_ACPI:
+				printk("(ACPI data)\n");
+				break;
+		case E820_NVS:
+				printk("(ACPI NVS)\n");
+				break;
+		default:	printk("type %lu\n", e820.map[i].type);
+				break;
+		}
+	}
+}
 
 /*
  * Do NOT EVER look at the BIOS memory size location.
@@ -415,11 +441,6 @@ void __init add_memory_region(unsigned long start,
 
 void __init setup_memory_region(void)
 {
-#define E820_DEBUG	1
-#ifdef E820_DEBUG
-	int i;
-#endif
-
 	/*
 	 * If we're lucky and live on a modern system, the setup code
 	 * will have given us a memory map that we can use to properly
@@ -439,27 +460,6 @@ void __init setup_memory_region(void)
 		if (e820.nr_map > E820MAX)
 			e820.nr_map = E820MAX;
 		memcpy(e820.map, E820_MAP, e820.nr_map * sizeof e820.map[0]);
-#ifdef E820_DEBUG
-		for (i=0; i < e820.nr_map; i++) {
-			printk("e820: %08x @ %08x ", (int)e820.map[i].size,
-						(int)e820.map[i].addr);
-			switch (e820.map[i].type) {
-			case E820_RAM:	printk("(usable)\n");
-					break;
-			case E820_RESERVED:
-					printk("(reserved)\n");
-					break;
-			case E820_ACPI:
-					printk("(ACPI data)\n");
-					break;
-			case E820_NVS:
-					printk("(ACPI NVS)\n");
-					break;
-			default:	printk("type %lu\n", e820.map[i].type);
-					break;
-			}
-		}
-#endif
 	}
 	else {
 		/* otherwise fake a memory map; one section from 0k->640k,
@@ -472,6 +472,8 @@ void __init setup_memory_region(void)
 		add_memory_region(0, LOWMEMSIZE(), E820_RAM);
 		add_memory_region(HIGH_MEMORY, mem_size << 10, E820_RAM);
   	}
+	printk("BIOS-provided physical RAM map:\n");
+	print_e820_map();
 } /* setup_memory_region */
 
 
@@ -538,6 +540,10 @@ static inline void parse_mem_cmdline (char ** cmdline_p)
 	}
 	*to = '\0';
 	*cmdline_p = command_line;
+	if (usermem) {
+		printk("user-defined physical RAM map:\n");
+		print_e820_map();
+	}
 }
 
 void __init setup_arch(char **cmdline_p)

@@ -2,9 +2,9 @@
  *  arch/mips/ddb5074/nile4.c -- NEC Vrc-5074 Nile 4 support routines
  *
  *  Copyright (C) 2000 Geert Uytterhoeven <geert@sonycom.com>
- *                     Sony Suprastructure Center Europe (SUPC-E), Brussels
+ *                     Sony Software Development Center Europe (SDCE), Brussels
  *
- *  $Id: nile4.c,v 1.1 2000/01/26 00:07:44 ralf Exp $
+ *  $Id$
  */
 
 #include <linux/kernel.h>

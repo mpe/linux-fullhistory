@@ -729,17 +729,21 @@ static struct file_operations devfsd_fops =
 
 /*  Support functions follow  */
 
+
+/**
+ *	search_for_entry_in_dir - Search for a devfs entry inside another devfs entry.
+ *	@parent:  The parent devfs entry.
+ *	@name:  The name of the entry.
+ *	@namelen:  The number of characters in @name.
+ *	@traverse_symlink:  If %TRUE then the entry is traversed if it is a symlink.
+ *
+ *	Returns a pointer to the entry on success, else %NULL.
+ */
+
 static struct devfs_entry *search_for_entry_in_dir (struct devfs_entry *parent,
 						    const char *name,
 						    unsigned int namelen,
 						    int traverse_symlink)
-/*  [SUMMARY] Search for a devfs entry inside another devfs entry.
-    <parent> The parent devfs entry.
-    <name> The name of the entry.
-    <namelen> The number of characters in <<name>>.
-    <traverse_symlink> If TRUE then the entry is traversed if it is a symlink.
-    [RETURNS] A pointer to the entry on success, else NULL.
-*/
 {
     struct devfs_entry *curr;
 
@@ -783,10 +787,14 @@ static struct devfs_entry *create_entry (struct devfs_entry *parent,
     return new;
 }   /*  End Function create_entry  */
 
+
+/**
+ *	get_root_entry - Get the root devfs entry.
+ *
+ *	Returns the root devfs entry on success, else %NULL.
+ */
+
 static struct devfs_entry *get_root_entry (void)
-/*  [SUMMARY] Get the root devfs entry.
-    [RETURNS] The root devfs entry on success, else NULL.
-*/
 {
     struct devfs_entry *new;
 
@@ -809,23 +817,27 @@ static struct devfs_entry *get_root_entry (void)
     return root_entry;
 }   /*  End Function get_root_entry  */
 
+
+/**
+ *	search_for_entry - Search for an entry in the devfs tree.
+ *	@dir: The parent directory to search from. If this is %NULL the root is used
+ *	@name: The name of the entry.
+ *	@namelen: The number of characters in @name.
+ *	@mkdir: If %TRUE intermediate directories are created as needed.
+ *	@mkfile: If %TRUE the file entry is created if it doesn't exist.
+ *	@is_new: If the returned entry was newly made, %TRUE is written here. If
+ * 		this is %NULL nothing is written here.
+ *	@traverse_symlink: If %TRUE then symbolic links are traversed.
+ *
+ *	If the entry is created, then it will be in the unregistered state.
+ *	Returns a pointer to the entry on success, else %NULL.
+ */
+
 static struct devfs_entry *search_for_entry (struct devfs_entry *dir,
 					     const char *name,
 					     unsigned int namelen, int mkdir,
 					     int mkfile, int *is_new,
 					     int traverse_symlink)
-/*  [SUMMARY] Search for an entry in the devfs tree.
-    <dir> The parent directory to search from. If this is NULL the root is used
-    <name> The name of the entry.
-    <namelen> The number of characters in <<name>>.
-    <mkdir> If TRUE intermediate directories are created as needed.
-    <mkfile> If TRUE the file entry is created if it doesn't exist.
-    <is_new> If the returned entry was newly made, TRUE is written here. If
-    this is NULL nothing is written here.
-    <traverse_symlink> If TRUE then symbolic links are traversed.
-    [NOTE] If the entry is created, then it will be in the unregistered state.
-    [RETURNS] A pointer to the entry on success, else NULL.
-*/
 {
     int len;
     const char *subname, *stop, *ptr;
@@ -887,16 +899,20 @@ static struct devfs_entry *search_for_entry (struct devfs_entry *dir,
     return NULL;
 }   /*  End Function search_for_entry  */
 
+
+/**
+ *	find_by_dev - Find a devfs entry in a directory.
+ *	@major: The major number to search for.
+ *	@minor: The minor number to search for.
+ *	@type: The type of special file to search for. This may be either
+ *		%DEVFS_SPECIAL_CHR or %DEVFS_SPECIAL_BLK.
+ *
+ *	Returns the devfs_entry pointer on success, else %NULL.
+ */
+
 static struct devfs_entry *find_by_dev (struct devfs_entry *dir,
 					unsigned int major, unsigned int minor,
 					char type)
-/*  [SUMMARY] Find a devfs entry in a directory.
-    <major> The major number to search for.
-    <minor> The minor number to search for.
-    <type> The type of special file to search for. This may be either
-    DEVFS_SPECIAL_CHR or DEVFS_SPECIAL_BLK.
-    [RETURNS] The devfs_entry pointer on success, else NULL.
-*/
 {
     struct devfs_entry *entry, *de;
 
@@ -926,26 +942,31 @@ static struct devfs_entry *find_by_dev (struct devfs_entry *dir,
     return NULL;
 }   /*  End Function find_by_dev  */
 
+
+/**
+ *	find_entry - Find a devfs entry.
+ *	@dir: The handle to the parent devfs directory entry. If this is %NULL the
+ *		name is relative to the root of the devfs.
+ *	@name: The name of the entry. This is ignored if @handle is not %NULL.
+ *	@namelen: The number of characters in @name, not including a %NULL
+ *		terminator. If this is 0, then @name must be %NULL-terminated and the
+ *		length is computed internally.
+ *	@major: The major number. This is used if @handle and @name are %NULL.
+ *	@minor: The minor number. This is used if @handle and @name are %NULL.
+ *		NOTE: If @major and @minor are both 0, searching by major and minor
+ *		numbers is disabled.
+ *	@type: The type of special file to search for. This may be either
+ *		%DEVFS_SPECIAL_CHR or %DEVFS_SPECIAL_BLK.
+ *	@traverse_symlink: If %TRUE then symbolic links are traversed.
+ *
+ *	FIXME: What the hell is @handle? - ch
+ *	Returns the devfs_entry pointer on success, else %NULL.
+ */
+
 static struct devfs_entry *find_entry (devfs_handle_t dir,
 				       const char *name, unsigned int namelen,
 				       unsigned int major, unsigned int minor,
 				       char type, int traverse_symlink)
-/*  [SUMMARY] Find a devfs entry.
-    <dir> The handle to the parent devfs directory entry. If this is NULL the
-    name is relative to the root of the devfs.
-    <name> The name of the entry. This is ignored if <<handle>> is not NULL.
-    <namelen> The number of characters in <<name>>, not including a NULL
-    terminator. If this is 0, then <<name>> must be NULL-terminated and the
-    length is computed internally.
-    <major> The major number. This is used if <<handle>> and <<name>> are NULL.
-    <minor> The minor number. This is used if <<handle>> and <<name>> are NULL.
-    [NOTE] If <<major>> and <<minor>> are both 0, searching by major and minor
-    numbers is disabled.
-    <type> The type of special file to search for. This may be either
-    DEVFS_SPECIAL_CHR or DEVFS_SPECIAL_BLK.
-    <traverse_symlink> If TRUE then symbolic links are traversed.
-    [RETURNS] The devfs_entry pointer on success, else NULL.
-*/
 {
     struct devfs_entry *entry;
 
@@ -991,11 +1012,13 @@ static struct devfs_inode *get_devfs_inode_from_vfs_inode (struct inode *inode)
     return fs_info->table[inode->i_ino - FIRST_INODE];
 }   /*  End Function get_devfs_inode_from_vfs_inode  */
 
+
+/**
+ *	free_dentries - Free the dentries for a device entry and invalidate inodes.
+ *	@de: The entry.
+ */
+
 static void free_dentries (struct devfs_entry *de)
-/*  [SUMMARY] Free the dentries for a device entry and invalidate inodes.
-    <de> The entry.
-    [RETURNS] Nothing.
-*/
 {
     struct devfs_inode *di;
     struct dentry *dentry;
@@ -1015,11 +1038,15 @@ static void free_dentries (struct devfs_entry *de)
     }
 }   /*  End Function free_dentries  */
 
+
+/**
+ *	is_devfsd_or_child - Test if the current process is devfsd or one of its children.
+ *	fs_info: The filesystem information.
+ *
+ *	Returns %TRUE if devfsd or child, else %FALSE.
+ */
+
 static int is_devfsd_or_child (struct fs_info *fs_info)
-/*  [SUMMARY] Test if the current process is devfsd or one of its children.
-    <fs_info> The filesystem information.
-    [RETURNS] TRUE if devfsd or child, else FALSE.
-*/
 {
     struct task_struct *p;
 
@@ -1030,20 +1057,28 @@ static int is_devfsd_or_child (struct fs_info *fs_info)
     return (FALSE);
 }   /*  End Function is_devfsd_or_child  */
 
+
+/**
+ *	devfsd_queue_empty - Test if devfsd has work pending in its event queue.
+ *	@fs_info: The filesystem information.
+ *
+ *	Returns %TRUE if the queue is empty, else %FALSE.
+ */
+
 static inline int devfsd_queue_empty (struct fs_info *fs_info)
-/*  [SUMMARY] Test if devfsd has work pending in its event queue.
-    <fs_info> The filesystem information.
-    [RETURNS] TRUE if the queue is empty, else FALSE.
-*/
 {
     return (fs_info->devfsd_buf_out == fs_info->devfsd_buf_in) ? TRUE : FALSE;
 }   /*  End Function devfsd_queue_empty  */
 
+
+/**
+ *	wait_for_devfsd_finished - Wait for devfsd to finish processing its event queue.
+ *	@fs_info: The filesystem information.
+ *
+ *	Returns %TRUE if no more waiting will be required, else %FALSE.
+ */
+
 static int wait_for_devfsd_finished (struct fs_info *fs_info)
-/*  [SUMMARY] Wait for devfsd to finish processing its event queue.
-    <fs_info> The filesystem information.
-    [RETURNS] TRUE if no more waiting will be required, else FALSE.
-*/
 {
     DECLARE_WAITQUEUE (wait, current);
 
@@ -1059,17 +1094,21 @@ static int wait_for_devfsd_finished (struct fs_info *fs_info)
     return (TRUE);
 }   /*  End Function wait_for_devfsd_finished  */
 
+
+/**
+ *	devfsd_notify_one - Notify a single devfsd daemon of a change.
+ *	@data: Data to be passed.
+ *	@type: The type of change.
+ *	@mode: The mode of the entry.
+ *	@uid: The user ID.
+ *	@gid: The group ID.
+ *	@fs_info: The filesystem info.
+ *
+ *	Returns %TRUE if an event was queued and devfsd woken up, else %FALSE.
+ */
+
 static int devfsd_notify_one (void *data, unsigned int type, umode_t mode,
 			      uid_t uid, gid_t gid, struct fs_info *fs_info)
-/*  [SUMMARY] Notify a single devfsd daemon of a change.
-    <data> Data to be passed.
-    <type> The type of change.
-    <mode> The mode of the entry.
-    <uid> The user ID.
-    <gid> The group ID.
-    <fs_info> The filesystem info.
-    [RETURNS] TRUE if an event was queued and devfsd woken up, else FALSE.
-*/
 {
     unsigned int next_pos;
     unsigned long flags;
@@ -1103,14 +1142,16 @@ static int devfsd_notify_one (void *data, unsigned int type, umode_t mode,
     return (TRUE);
 }   /*  End Function devfsd_notify_one  */
 
+
+/**
+ *	devfsd_notify - Notify all devfsd daemons of a change.
+ *	@de: The devfs entry that has changed.
+ *	@type: The type of change event.
+ *	@wait: If TRUE, the functions waits for all daemons to finish processing
+ *		the event.
+ */
+
 static void devfsd_notify (struct devfs_entry *de, unsigned int type, int wait)
-/*  [SUMMARY] Notify all devfsd daemons of a change.
-    <de> The devfs entry that has changed.
-    <type> The type of change event.
-    <wait> If TRUE, the functions waits for all daemons to finish processing
-    the event.
-    [RETURNS] Nothing.
-*/
 {
     struct fs_info *fs_info;
 
@@ -1122,35 +1163,38 @@ static void devfsd_notify (struct devfs_entry *de, unsigned int type, int wait)
     }
 }   /*  End Function devfsd_notify  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_register - Register a device entry.
+ *	@dir: The handle to the parent devfs directory entry. If this is %NULL the
+ *		new name is relative to the root of the devfs.
+ *	@name: The name of the entry.
+ *	@namelen: The number of characters in @name, not including a %NULL
+ *		terminator. If this is 0, then @name must be %NULL-terminated and the
+ *		length is computed internally.
+ *	@flags: A set of bitwise-ORed flags (DEVFS_FL_*).
+ *	@major: The major number. Not needed for regular files.
+ *	@minor: The minor number. Not needed for regular files.
+ *	@mode: The default file mode.
+ *	@uid: The default UID of the file.
+ *	@guid: The default GID of the file.
+ *	@ops: The &file_operations or &block_device_operations structure.
+ *		This must not be externally deallocated.
+ *	@info: An arbitrary pointer which will be written to the @private_data
+ *		field of the &file structure passed to the device driver. You can set
+ *		this to whatever you like, and change it once the file is opened (the next
+ *		file opened will not see this change).
+ *
+ *	Returns a handle which may later be used in a call to devfs_unregister().
+ *	On failure %NULL is returned.
+ */
+
 devfs_handle_t devfs_register (devfs_handle_t dir,
 			       const char *name, unsigned int namelen,
 			       unsigned int flags,
 			       unsigned int major, unsigned int minor,
 			       umode_t mode, uid_t uid, gid_t gid,
 			       void *ops, void *info)
-/*  [SUMMARY] Register a device entry.
-    <dir> The handle to the parent devfs directory entry. If this is NULL the
-    new name is relative to the root of the devfs.
-    <name> The name of the entry.
-    <namelen> The number of characters in <<name>>, not including a NULL
-    terminator. If this is 0, then <<name>> must be NULL-terminated and the
-    length is computed internally.
-    <flags> A set of bitwise-ORed flags (DEVFS_FL_*).
-    <major> The major number. Not needed for regular files.
-    <minor> The minor number. Not needed for regular files.
-    <mode> The default file mode.
-    <uid> The default UID of the file.
-    <guid> The default GID of the file.
-    <ops> The <<file_operations>> or <<block_device_operations>> structure.
-    This must not be externally deallocated.
-    <info> An arbitrary pointer which will be written to the <<private_data>>
-    field of the <<file>> structure passed to the device driver. You can set
-    this to whatever you like, and change it once the file is opened (the next
-    file opened will not see this change).
-    [RETURNS] A handle which may later be used in a call to
-    [<devfs_unregister>]. On failure NULL is returned.
-*/
 {
     int is_new;
     struct devfs_entry *de;
@@ -1276,11 +1320,13 @@ devfs_handle_t devfs_register (devfs_handle_t dir,
     return de;
 }   /*  End Function devfs_register  */
 
+
+/**
+ *	unregister - Unregister a device entry.
+ *	@de: The entry to unregister.
+ */
+
 static void unregister (struct devfs_entry *de)
-/*  [SUMMARY] Unregister a device entry.
-    <de> The entry to unregister.
-    [RETURNS] Nothing.
-*/
 {
     struct devfs_entry *child;
 
@@ -1332,13 +1378,14 @@ static void unregister (struct devfs_entry *de)
     }
 }   /*  End Function unregister  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_unregister - Unregister a device entry.
+ *	de: A handle previously created by devfs_register() or returned from
+ *		devfs_find_handle(). If this is %NULL the routine does nothing.
+ */
+
 void devfs_unregister (devfs_handle_t de)
-/*  [SUMMARY] Unregister a device entry.
-    <de> A handle previously created by [<devfs_register>] or returned from
-    [<devfs_find_handle>]. If this is NULL the routine does nothing.
-    [RETURNS] Nothing.
-*/
 {
     if (de == NULL) return;
 #ifdef CONFIG_DEVFS_DEBUG
@@ -1349,28 +1396,31 @@ void devfs_unregister (devfs_handle_t de)
     unregister (de);
 }   /*  End Function devfs_unregister  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_mk_symlink Create a symbolic link in the devfs namespace.
+ *	@dir: The handle to the parent devfs directory entry. If this is %NULL the
+ *		new name is relative to the root of the devfs.
+ *	@name: The name of the entry.
+ *	@namelen: The number of characters in @name, not including a %NULL
+ *		terminator. If this is 0, then @name must be %NULL-terminated and the
+ *		length is computed internally.
+ *	@flags: A set of bitwise-ORed flags (DEVFS_FL_*).
+ *	@link: The destination name.
+ *	@linklength: The number of characters in @link, not including a %NULL
+ *		terminator. If this is 0, then @link must be %NULL-terminated and the
+ *		length is computed internally.
+ *	@handle: The handle to the symlink entry is written here. This may be %NULL.
+ *	@info: An arbitrary pointer which will be associated with the entry.
+ *
+ *	Returns 0 on success, else a negative error code is returned.
+ */
+
 int devfs_mk_symlink (devfs_handle_t dir,
 		      const char *name, unsigned int namelen,
 		      unsigned int flags,
 		      const char *link, unsigned int linklength,
 		      devfs_handle_t *handle, void *info)
-/*  [SUMMARY] Create a symbolic link in the devfs namespace.
-    <dir> The handle to the parent devfs directory entry. If this is NULL the
-    new name is relative to the root of the devfs.
-    <name> The name of the entry.
-    <namelen> The number of characters in <<name>>, not including a NULL
-    terminator. If this is 0, then <<name>> must be NULL-terminated and the
-    length is computed internally.
-    <flags> A set of bitwise-ORed flags (DEVFS_FL_*).
-    <link> The destination name.
-    <linklength> The number of characters in <<link>>, not including a NULL
-    terminator. If this is 0, then <<link>> must be NULL-terminated and the
-    length is computed internally.
-    <handle> The handle to the symlink entry is written here. This may be NULL.
-    <info> An arbitrary pointer which will be associated with the entry.
-    [RETURNS] 0 on success, else a negative error code is returned.
-*/
 {
     int is_new;
     char *newname;
@@ -1439,23 +1489,26 @@ int devfs_mk_symlink (devfs_handle_t dir,
     return 0;
 }   /*  End Function devfs_mk_symlink  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_mk_dir - Create a directory in the devfs namespace.
+ *	@dir: The handle to the parent devfs directory entry. If this is %NULL the
+ *		new name is relative to the root of the devfs.
+ *	@name: The name of the entry.
+ *	@namelen: The number of characters in @name, not including a %NULL
+ *		terminator. If this is 0, then @name must be %NULL-terminated and the
+ *		length is computed internally.
+ *	@info: An arbitrary pointer which will be associated with the entry.
+ *
+ *	Use of this function is optional. The devfs_register() function
+ *	will automatically create intermediate directories as needed. This function
+ *	is provided for efficiency reasons, as it provides a handle to a directory.
+ *	Returns a handle which may later be used in a call to devfs_unregister().
+ *	On failure %NULL is returned.
+ */
+
 devfs_handle_t devfs_mk_dir (devfs_handle_t dir, const char *name,
 			     unsigned int namelen, void *info)
-/*  [SUMMARY] Create a directory in the devfs namespace.
-    <dir> The handle to the parent devfs directory entry. If this is NULL the
-    new name is relative to the root of the devfs.
-    <name> The name of the entry.
-    <namelen> The number of characters in <<name>>, not including a NULL
-    terminator. If this is 0, then <<name>> must be NULL-terminated and the
-    length is computed internally.
-    <info> An arbitrary pointer which will be associated with the entry.
-    [NOTE] Use of this function is optional. The [<devfs_register>] function
-    will automatically create intermediate directories as needed. This function
-    is provided for efficiency reasons, as it provides a handle to a directory.
-    [RETURNS] A handle which may later be used in a call to
-    [<devfs_unregister>]. On failure NULL is returned.
-*/
 {
     int is_new;
     struct devfs_entry *de;
@@ -1499,29 +1552,31 @@ devfs_handle_t devfs_mk_dir (devfs_handle_t dir, const char *name,
     return de;
 }   /*  End Function devfs_mk_dir  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_find_handle - Find the handle of a devfs entry.
+ *	@dir: The handle to the parent devfs directory entry. If this is %NULL the
+ *		name is relative to the root of the devfs.
+ *	@name: The name of the entry.
+ *	@namelen: The number of characters in @name, not including a %NULL
+ *		terminator. If this is 0, then @name must be %NULL-terminated and the
+ *		length is computed internally.
+ *	@major: The major number. This is used if @name is %NULL.
+ *	@minor: The minor number. This is used if @name is %NULL.
+ *	@type: The type of special file to search for. This may be either
+ *		%DEVFS_SPECIAL_CHR or %DEVFS_SPECIAL_BLK.
+ *	@traverse_symlinks: If %TRUE then symlink entries in the devfs namespace are
+ *		traversed. Symlinks pointing out of the devfs namespace will cause a
+ *		failure. Symlink traversal consumes stack space.
+ *
+ *	Returns a handle which may later be used in a call to devfs_unregister(),
+ *	devfs_get_flags(), or devfs_set_flags(). On failure %NULL is returned.
+ */
+
 devfs_handle_t devfs_find_handle (devfs_handle_t dir,
 				  const char *name, unsigned int namelen,
 				  unsigned int major, unsigned int minor,
 				  char type, int traverse_symlinks)
-/*  [SUMMARY] Find the handle of a devfs entry.
-    <dir> The handle to the parent devfs directory entry. If this is NULL the
-    name is relative to the root of the devfs.
-    <name> The name of the entry.
-    <namelen> The number of characters in <<name>>, not including a NULL
-    terminator. If this is 0, then <<name>> must be NULL-terminated and the
-    length is computed internally.
-    <major> The major number. This is used if <<name>> is NULL.
-    <minor> The minor number. This is used if <<name>> is NULL.
-    <type> The type of special file to search for. This may be either
-    DEVFS_SPECIAL_CHR or DEVFS_SPECIAL_BLK.
-    <traverse_symlinks> If TRUE then symlink entries in the devfs namespace are
-    traversed. Symlinks pointing out of the devfs namespace will cause a
-    failure. Symlink traversal consumes stack space.
-    [RETURNS] A handle which may later be used in a call to
-    [<devfs_unregister>], [<devfs_get_flags>], or [<devfs_set_flags>].
-    On failure NULL is returned.
-*/
 {
     devfs_handle_t de;
 
@@ -1533,13 +1588,16 @@ devfs_handle_t devfs_find_handle (devfs_handle_t dir,
     return de;
 }   /*  End Function devfs_find_handle  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_get_flags - Get the flags for a devfs entry.
+ *	@de: The handle to the device entry.
+ *	@flags: The flags are written here.
+ *
+ *	Returns 0 on success, else a negative error code.
+ */
+
 int devfs_get_flags (devfs_handle_t de, unsigned int *flags)
-/*  [SUMMARY] Get the flags for a devfs entry.
-    <de> The handle to the device entry.
-    <flags> The flags are written here.
-    [RETURNS] 0 on success, else a negative error code.
-*/
 {
     unsigned int fl = 0;
 
@@ -1557,13 +1615,16 @@ int devfs_get_flags (devfs_handle_t de, unsigned int *flags)
     return 0;
 }   /*  End Function devfs_get_flags  */
 
-/*PUBLIC_FUNCTION*/
+
+/*
+ *	devfs_set_flags - Set the flags for a devfs entry.
+ *	@de: The handle to the device entry.
+ *	@flags: The flags to set. Unset flags are cleared.
+ *
+ *	Returns 0 on success, else a negative error code.
+ */
+
 int devfs_set_flags (devfs_handle_t de, unsigned int flags)
-/*  [SUMMARY] Set the flags for a devfs entry.
-    <de> The handle to the device entry.
-    <flags> The flags to set. Unset flags are cleared.
-    [RETURNS] 0 on success, else a negative error code.
-*/
 {
     if (de == NULL) return -EINVAL;
     if (!de->registered) return -ENODEV;
@@ -1592,15 +1653,18 @@ int devfs_set_flags (devfs_handle_t de, unsigned int flags)
     return 0;
 }   /*  End Function devfs_set_flags  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_get_maj_min - Get the major and minor numbers for a devfs entry.
+ *	@de: The handle to the device entry.
+ *	@major: The major number is written here. This may be %NULL.
+ *	@minor: The minor number is written here. This may be %NULL.
+ *
+ *	Returns 0 on success, else a negative error code.
+ */
+
 int devfs_get_maj_min (devfs_handle_t de, unsigned int *major,
 		       unsigned int *minor)
-/*  [SUMMARY] Get the major and minor numbers for a devfs entry.
-    <de> The handle to the device entry.
-    <major> The major number is written here. This may be NULL.
-    <minor> The minor number is written here. This may be NULL.
-    [RETURNS] 0 on success, else a negative error code.
-*/
 {
     if (de == NULL) return -EINVAL;
     if (!de->registered) return -ENODEV;
@@ -1611,12 +1675,15 @@ int devfs_get_maj_min (devfs_handle_t de, unsigned int *major,
     return 0;
 }   /*  End Function devfs_get_maj_min  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_get_handle_from_inode - Get the devfs handle for a VFS inode.
+ *	@inode: The VFS inode.
+ *
+ *	Returns the devfs handle on success, else %NULL.
+ */
+
 devfs_handle_t devfs_get_handle_from_inode (struct inode *inode)
-/*  [SUMMARY] Get the devfs handle for a VFS inode.
-    <inode> The VFS inode.
-    [RETURNS] The devfs handle on success, else NULL.
-*/
 {
     struct devfs_inode *di;
 
@@ -1627,16 +1694,19 @@ devfs_handle_t devfs_get_handle_from_inode (struct inode *inode)
     return di->de;
 }   /*  End Function devfs_get_handle_from_inode  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_generate_path - Generate a pathname for an entry, relative to the devfs root.
+ *	@de: The devfs entry.
+ *	@path: The buffer to write the pathname to. The pathname and '\0'
+ *		terminator will be written at the end of the buffer.
+ *	@buflen: The length of the buffer.
+ *
+ *	Returns the offset in the buffer where the pathname starts on success,
+ *	else a negative error code.
+ */
+
 int devfs_generate_path (devfs_handle_t de, char *path, int buflen)
-/*  [SUMMARY] Generate a pathname for an entry, relative to the devfs root.
-    <de> The devfs entry.
-    <path> The buffer to write the pathname to. The pathname and '\0'
-    terminator will be written at the end of the buffer.
-    <buflen> The length of the buffer.
-    [RETURNS] The offset in the buffer where the pathname starts on success,
-    else a negative error code.
-*/
 {
     int pos;
 
@@ -1656,12 +1726,15 @@ int devfs_generate_path (devfs_handle_t de, char *path, int buflen)
     return pos;
 }   /*  End Function devfs_generate_path  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_get_ops - Get the device operations for a devfs entry.
+ *	@de: The handle to the device entry.
+ *
+ *	Returns a pointer to the device operations on success, else NULL.
+ */
+
 void *devfs_get_ops (devfs_handle_t de)
-/*  [SUMMARY] Get the device operations for a devfs entry.
-    <de> The handle to the device entry.
-    [RETURNS] A pointer to the device operations on success, else NULL.
-*/
 {
     if (de == NULL) return NULL;
     if (!de->registered) return NULL;
@@ -1670,13 +1743,16 @@ void *devfs_get_ops (devfs_handle_t de)
     return NULL;
 }   /*  End Function devfs_get_ops  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_set_file_size - Set the file size for a devfs regular file.
+ *	de: The handle to the device entry.
+ *	size: The new file size.
+ *
+ *	Returns 0 on success, else a negative error code.
+ */
+
 int devfs_set_file_size (devfs_handle_t de, unsigned long size)
-/*  [SUMMARY] Set the file size for a devfs regular file.
-    <de> The handle to the device entry.
-    <size> The new file size.
-    [RETURNS] 0 on success, else a negative error code.
-*/
 {
     struct devfs_inode *di;
 
@@ -1694,24 +1770,28 @@ int devfs_set_file_size (devfs_handle_t de, unsigned long size)
     return 0;
 }   /*  End Function devfs_set_file_size  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_get_info - Get the info pointer written to private_data of @de upon open.
+ *	@de: The handle to the device entry.
+ *
+ *	Returns the info pointer.
+ */
 void *devfs_get_info (devfs_handle_t de)
-/*  [SUMMARY] Get the info pointer written to <<private_data>> upon open.
-    <de> The handle to the device entry.
-    [RETURNS] The info pointer.
-*/
 {
     if (de == NULL) return NULL;
     if (!de->registered) return NULL;
     return de->info;
 }   /*  End Function devfs_get_info  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_set_info - Set the info pointer written to private_data upon open.
+ *	@de: The handle to the device entry.
+ *
+ *	Returns 0 on success, else a negative error code.
+ */
 int devfs_set_info (devfs_handle_t de, void *info)
-/*  [SUMMARY] Set the info pointer written to <<private_data>> upon open.
-    <de> The handle to the device entry.
-    [RETURNS] 0 on success, else a negative error code.
-*/
 {
     if (de == NULL) return -EINVAL;
     if (!de->registered) return -EINVAL;
@@ -1719,24 +1799,29 @@ int devfs_set_info (devfs_handle_t de, void *info)
     return 0;
 }   /*  End Function devfs_set_info  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_get_parent - Get the parent device entry.
+ *	@de: The handle to the device entry.
+ *
+ *	Returns the parent device entry if it exists, else %NULL.
+ */
 devfs_handle_t devfs_get_parent (devfs_handle_t de)
-/*  [SUMMARY] Get the parent device entry.
-    <de> The handle to the device entry.
-    [RETURNS] The parent device entry if it exists, else NULL.
-*/
 {
     if (de == NULL) return NULL;
     if (!de->registered) return NULL;
     return de->parent;
 }   /*  End Function devfs_get_parent  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_get_first_child - Get the first leaf node in a directory.
+ *	@de: The handle to the device entry.
+ *
+ *	Returns the leaf node device entry if it exists, else %NULL.
+ */
+
 devfs_handle_t devfs_get_first_child (devfs_handle_t de)
-/*  [SUMMARY] Get the first leaf node in a directory.
-    <de> The handle to the device entry.
-    [RETURNS] The leaf node device entry if it exists, else NULL.
-*/
 {
     if (de == NULL) return NULL;
     if (!de->registered) return NULL;
@@ -1744,27 +1829,31 @@ devfs_handle_t devfs_get_first_child (devfs_handle_t de)
     return de->u.dir.first;
 }   /*  End Function devfs_get_first_child  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_get_next_sibling - Get the next sibling leaf node. for a device entry.
+ *	@de: The handle to the device entry.
+ *
+ *	Returns the leaf node device entry if it exists, else %NULL.
+ */
+
 devfs_handle_t devfs_get_next_sibling (devfs_handle_t de)
-/*  [SUMMARY] Get the next sibling leaf node. for a device entry.
-    <de> The handle to the device entry.
-    [RETURNS] The leaf node device entry if it exists, else NULL.
-*/
 {
     if (de == NULL) return NULL;
     if (!de->registered) return NULL;
     return de->next;
 }   /*  End Function devfs_get_next_sibling  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_auto_unregister - Configure a devfs entry to be automatically unregistered.
+ *	@master: The master devfs entry. Only one slave may be registered.
+ *	@slave: The devfs entry which will be automatically unregistered when the
+ *		master entry is unregistered. It is illegal to call devfs_unregister()
+ *		on this entry.
+ */
+
 void devfs_auto_unregister (devfs_handle_t master, devfs_handle_t slave)
-/*  [SUMMARY] Configure a devfs entry to be automatically unregistered.
-    <master> The master devfs entry. Only one slave may be registered.
-    <slave> The devfs entry which will be automatically unregistered when the
-    master entry is unregistered. It is illegal to call [<devfs_unregister>] on
-    this entry.
-    [RETURNS] Nothing.
-*/
 {
     if (master == NULL) return;
     if (master->slave != NULL)
@@ -1779,25 +1868,30 @@ void devfs_auto_unregister (devfs_handle_t master, devfs_handle_t slave)
     master->slave = slave;
 }   /*  End Function devfs_auto_unregister  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_get_unregister_slave - Get the slave entry which will be automatically unregistered.
+ *	@master: The master devfs entry.
+ *
+ *	Returns the slave which will be unregistered when @master is unregistered.
+ */
+
 devfs_handle_t devfs_get_unregister_slave (devfs_handle_t master)
-/*  [SUMMARY] Get the slave entry which will be automatically unregistered.
-    <master> The master devfs entry.
-    [RETURNS] The slave which will be unregistered when <<master>> is
-    unregistered.
-*/
 {
     if (master == NULL) return NULL;
     return master->slave;
 }   /*  End Function devfs_get_unregister_slave  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_get_name - Get the name for a device entry in its parent directory.
+ *	@de: The handle to the device entry.
+ *	@namelen: The length of the name is written here. This may be %NULL.
+ *
+ *	Returns the name on success, else %NULL.
+ */
+
 const char *devfs_get_name (devfs_handle_t de, unsigned int *namelen)
-/*  [SUMMARY] Get the name for a device entry in its parent directory.
-    <de> The handle to the device entry.
-    <namelen> The length of the name is written here. This may be NULL.
-    [RETURNS] The name on success, else NULL.
-*/
 {
     if (de == NULL) return NULL;
     if (!de->registered) return NULL;
@@ -1805,61 +1899,73 @@ const char *devfs_get_name (devfs_handle_t de, unsigned int *namelen)
     return de->name;
 }   /*  End Function devfs_get_name  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_register_chrdev - Optionally register a conventional character driver.
+ *	@major: The major number for the driver.
+ *	@name: The name of the driver (as seen in /proc/devices).
+ *	@fops: The &file_operations structure pointer.
+ *
+ *	This function will register a character driver provided the "devfs=only"
+ *	option was not provided at boot time.
+ *	Returns 0 on success, else a negative error code on failure.
+ */
+
 int devfs_register_chrdev (unsigned int major, const char *name,
 			   struct file_operations *fops)
-/*  [SUMMARY] Optionally register a conventional character driver.
-    [PURPOSE] This function will register a character driver provided the
-    "devfs=only" option was not provided at boot time.
-    <major> The major number for the driver.
-    <name> The name of the driver (as seen in /proc/devices).
-    <fops> The file_operations structure pointer.
-    [RETURNS] 0 on success, else a negative error code on failure.
-*/
 {
     if (boot_options & OPTION_ONLY) return 0;
     return register_chrdev (major, name, fops);
 }   /*  End Function devfs_register_chrdev  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_register_blkdev - Optionally register a conventional block driver.
+ *	@major: The major number for the driver.
+ *	@name: The name of the driver (as seen in /proc/devices).
+ *	@bdops: The &block_device_operations structure pointer.
+ *
+ *	This function will register a block driver provided the "devfs=only"
+ *	option was not provided at boot time.
+ *	Returns 0 on success, else a negative error code on failure.
+ */
+
 int devfs_register_blkdev (unsigned int major, const char *name,
 			   struct block_device_operations *bdops)
-/*  [SUMMARY] Optionally register a conventional block driver.
-    [PURPOSE] This function will register a block driver provided the
-    "devfs=only" option was not provided at boot time.
-    <major> The major number for the driver.
-    <name> The name of the driver (as seen in /proc/devices).
-    <bdops> The block_device_operations structure pointer.
-    [RETURNS] 0 on success, else a negative error code on failure.
-*/
 {
     if (boot_options & OPTION_ONLY) return 0;
     return register_blkdev (major, name, bdops);
 }   /*  End Function devfs_register_blkdev  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_unregister_chrdev - Optionally unregister a conventional character driver.
+ *	major: The major number for the driver.
+ *	name: The name of the driver (as seen in /proc/devices).
+ *
+ *	This function will unregister a character driver provided the "devfs=only"
+ *	option was not provided at boot time.
+ *	Returns 0 on success, else a negative error code on failure.
+ */
+
 int devfs_unregister_chrdev (unsigned int major, const char *name)
-/*  [SUMMARY] Optionally unregister a conventional character driver.
-    [PURPOSE] This function will unregister a character driver provided the
-    "devfs=only" option was not provided at boot time.
-    <major> The major number for the driver.
-    <name> The name of the driver (as seen in /proc/devices).
-    [RETURNS] 0 on success, else a negative error code on failure.
-*/
 {
     if (boot_options & OPTION_ONLY) return 0;
     return unregister_chrdev (major, name);
 }   /*  End Function devfs_unregister_chrdev  */
 
-/*PUBLIC_FUNCTION*/
+
+/**
+ *	devfs_unregister_blkdev - Optionally unregister a conventional block driver.
+ *	@major: The major number for the driver.
+ *	@name: The name of the driver (as seen in /proc/devices).
+ *
+ *	This function will unregister a block driver provided the "devfs=only"
+ *	option was not provided at boot time.
+ *	Returns 0 on success, else a negative error code on failure.
+ */
+
 int devfs_unregister_blkdev (unsigned int major, const char *name)
-/*  [SUMMARY] Optionally unregister a conventional block driver.
-    [PURPOSE] This function will unregister a block driver provided the
-    "devfs=only" option was not provided at boot time.
-    <major> The major number for the driver.
-    <name> The name of the driver (as seen in /proc/devices).
-    [RETURNS] 0 on success, else a negative error code on failure.
-*/
 {
     if (boot_options & OPTION_ONLY) return 0;
     return unregister_blkdev (major, name);
@@ -1867,13 +1973,13 @@ int devfs_unregister_blkdev (unsigned int major, const char *name)
 
 #ifndef MODULE
 
-/*UNPUBLISHED_FUNCTION*/
+/**
+ *	devfs_setup - Process kernel boot options.
+ *	@str: The boot options after the "devfs=".
+ *	@unused: Unused.
+ */
+
 SETUP_STATIC int __init devfs_setup (char *str)
-/*  [SUMMARY] Process kernel boot options.
-    <str> The boot options after the "devfs=".
-    <unused> Unused.
-    [RETURNS] Nothing.
-*/
 {
     while ( (*str != '\0') && !isspace (*str) )
     {
@@ -2027,13 +2133,17 @@ static void update_devfs_inode_from_entry (struct devfs_inode *di)
     }
 }   /*  End Function update_devfs_inode_from_entry  */
 
+
+/**
+ *	create_devfs_inode - Create a devfs inode entry.
+ *	@de: The devfs entry to associate the new inode with.
+ *	@fs_info: The FS info.
+ *
+ *	Returns a pointer to the devfs inode on success, else %NULL.
+ */
+
 static struct devfs_inode *create_devfs_inode (struct devfs_entry *de,
 					       struct fs_info *fs_info)
-/*  [SUMMARY] Create a devfs inode entry.
-    <de> The devfs entry to associate the new inode with.
-    <fs_info> The FS info.
-    [RETURNS] A pointer to the devfs inode on success, else NULL.
-*/
 {
     struct devfs_inode *di, **table;
 
@@ -2077,18 +2187,22 @@ static struct devfs_inode *create_devfs_inode (struct devfs_entry *de,
     return di;
 }   /*  End Function create_devfs_inode  */
 
+
+/**
+ *	try_modload - Notify devfsd of an inode lookup.
+ *	@parent: The parent devfs entry.
+ *	@fs_info: The filesystem info.
+ *	@name: The device name.
+ *	@namelen: The number of characters in @name.
+ *	@buf: A working area that will be used. This must not go out of scope until
+ *		devfsd is idle again.
+ *
+ *	Returns 0 on success, else a negative error code.
+ */
+
 static int try_modload (struct devfs_entry *parent, struct fs_info *fs_info,
 			const char *name, unsigned namelen,
 			char buf[STRING_LENGTH])
-/*  [SUMMARY] Notify devfsd of an inode lookup.
-    <parent> The parent devfs entry.
-    <fs_info> The filesystem info.
-    <name> The device name.
-    <namelen> The number of characters in <<name>>.
-    <buf> A working area that will be used. This must not go out of scope until
-    devfsd is idle again.
-    [RETURNS] 0 on success, else a negative error code.
-*/
 {
     int pos;
 
@@ -2136,11 +2250,15 @@ static void delete_fs (struct fs_info *fs_info)
     kfree (fs_info);
 }   /*  End Function delete_fs  */
 
+
+/**
+ *	check_disc_changed - Check if a removable disc was changed.
+ *	@de: The device.
+ *
+ *	Returns 1 if the media was changed, else 0.
+ */
+
 static int check_disc_changed (struct devfs_entry *de)
-/*  [SUMMARY] Check if a removable disc was changed.
-    <de> The device.
-    [RETURNS] 1 if the media was changed, else 0.
-*/
 {
     int tmp;
     kdev_t dev = MKDEV (de->u.fcb.u.device.major, de->u.fcb.u.device.minor);
@@ -2166,11 +2284,13 @@ static int check_disc_changed (struct devfs_entry *de)
     return 1;
 }   /*  End Function check_disc_changed  */
 
+
+/**
+ *	scan_dir_for_removable - Scan a directory for removable media devices and check media.
+ *	@dir: The directory.
+ */
+
 static void scan_dir_for_removable (struct devfs_entry *dir)
-/*  [SUMMARY] Scan a directory for removable media devices and check media.
-    <dir> The directory.
-    [RETURNS] Nothing.
-*/
 {
     struct devfs_entry *de;
 
@@ -2184,14 +2304,17 @@ static void scan_dir_for_removable (struct devfs_entry *dir)
     }
 }   /*  End Function scan_dir_for_removable  */
 
+/**
+ *	get_removable_partition - Get removable media partition.
+ *	@dir: The parent directory.
+ *	@name: The name of the entry.
+ *	@namelen: The number of characters in <<name>>.
+ *
+ *	Returns 1 if the media was changed, else 0.
+ */
+
 static int get_removable_partition (struct devfs_entry *dir, const char *name,
 				    unsigned int namelen)
-/*  [SUMMARY] Get removable media partition.
-    <dir> The parent directory.
-    <name> The name of the entry.
-    <namelen> The number of characters in <<name>>.
-    [RETURNS] 1 if the media was changed, else 0.
-*/
 {
     struct devfs_entry *de;
 
@@ -2365,15 +2488,19 @@ static struct super_operations devfs_sops =
     statfs:        devfs_statfs,
 };
 
+
+/**
+ *	get_vfs_inode - Get a VFS inode.
+ *	@sb: The super block.
+ *	@di: The devfs inode.
+ *	@dentry The dentry to register with the devfs inode.
+ *
+ *	Returns the inode on success, else %NULL.
+ */
+
 static struct inode *get_vfs_inode (struct super_block *sb,
 				    struct devfs_inode *di,
 				    struct dentry *dentry)
-/*  [SUMMARY] Get a VFS inode.
-    <sb> The super block.
-    <di> The devfs inode.
-    <dentry> The dentry to register with the devfs inode.
-    [RETURNS] The inode on success, else NULL.
-*/
 {
     struct inode *inode;
 
@@ -2551,9 +2678,13 @@ static struct file_operations devfs_fops =
 
 /*  Dentry operations for device entries follow  */
 
+
+/**
+ *	devfs_d_release - Callback for when a dentry is freed.
+ *	@dentry: The dentry.
+ */
+
 static void devfs_d_release (struct dentry *dentry)
-/*  [SUMMARY] Callback for when a dentry is freed.
-*/
 {
 #ifdef CONFIG_DEVFS_DEBUG
     struct inode *inode = dentry->d_inode;
@@ -2564,9 +2695,13 @@ static void devfs_d_release (struct dentry *dentry)
 #endif
 }   /*  End Function devfs_d_release  */
 
+/**
+ *	devfs_d_iput - Callback for when a dentry loses its inode.
+ *	@dentry: The dentry.
+ *	@inode:	The inode.
+ */
+
 static void devfs_d_iput (struct dentry *dentry, struct inode *inode)
-/*  [SUMMARY] Callback for when a dentry loses its inode.
-*/
 {
     struct devfs_inode *di;
 
@@ -2606,9 +2741,12 @@ static struct dentry_operations devfs_wait_dops =
     d_revalidate: devfs_d_revalidate_wait,
 };
 
+/**
+ *	devfs_d_delete - Callback for when all files for a dentry are closed.
+ *	@detry: The dentry.
+ */
+
 static void devfs_d_delete (struct dentry *dentry)
-/*  [SUMMARY] Callback for when all files for a dentry are closed.
-*/
 {
     struct inode *inode = dentry->d_inode;
     struct devfs_inode *di;

@@ -13,9 +13,11 @@
 #include <linux/config.h>
 
 #if defined(CONFIG_CPU_R3000) || defined(CONFIG_CPU_R6000)
-#define L1_CACHE_BYTES	16
+#define L1_CACHE_BYTES		16
 #else
-#define L1_CACHE_BYTES  32	/* A guess */
+#define L1_CACHE_BYTES 		32	/* A guess */
 #endif
+
+#define SMP_CACHE_BYTES		L1_CACHE_BYTES
 
 #endif /* _ASM_CACHE_H */

@@ -1,4 +1,4 @@
-/* $Id: vic.h,v 1.1 1999/01/27 23:59:07 ralf Exp $
+/* $Id$
  *
  * vic.h: Various VIC controller defines.  The VIC is an interrupt controller
  *        used in Baget/MIPS series.

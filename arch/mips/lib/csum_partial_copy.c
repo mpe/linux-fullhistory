@@ -14,7 +14,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * $Id: csum_partial_copy.c,v 1.3 2000/02/05 06:47:08 ralf Exp $
+ * $Id: csum_partial_copy.c,v 1.2 1998/09/19 19:16:17 ralf Exp $
  */
 #include <net/checksum.h>
 #include <linux/types.h>

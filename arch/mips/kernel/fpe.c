@@ -6,7 +6,7 @@
  *
  * Copyright (C) 1997 Ralf Baechle
  *
- * $Id: fpe.c,v 1.4 1999/05/01 22:40:35 ralf Exp $
+ * $Id: fpe.c,v 1.3 1998/04/05 11:23:50 ralf Exp $
  */
 #include <linux/kernel.h>
 #include <linux/module.h>

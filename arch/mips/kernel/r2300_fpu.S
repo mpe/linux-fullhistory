@@ -1,4 +1,4 @@
-/* $Id: r2300_fpu.S,v 1.7 1999/09/28 22:25:47 ralf Exp $
+/* $Id: r2300_fpu.S,v 1.6 1999/08/09 19:43:14 harald Exp $
  *
  * r2300_fpu.S: Save/restore floating point context for signal handlers.
  *

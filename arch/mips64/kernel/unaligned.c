@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.2 2000/01/17 23:32:46 ralf Exp $
+/* $Id: unaligned.c,v 1.2 1999/11/23 17:12:50 ralf Exp $
  *
  * Handle unaligned accesses by emulation.
  *

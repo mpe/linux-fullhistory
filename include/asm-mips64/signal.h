@@ -1,4 +1,4 @@
-/* $Id: signal.h,v 1.2 1999/09/28 22:27:19 ralf Exp $
+/* $Id: signal.h,v 1.2 1999/09/27 16:01:40 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -21,6 +21,7 @@ typedef struct {
 } sigset_t;
 
 typedef unsigned long old_sigset_t;		/* at least 32 bits */
+typedef unsigned int old_sigset_t32;
 
 #define SIGHUP		 1	/* Hangup (POSIX).  */
 #define SIGINT		 2	/* Interrupt (ANSI).  */

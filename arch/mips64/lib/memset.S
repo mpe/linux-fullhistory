@@ -1,4 +1,4 @@
-/* $Id: memset.S,v 1.3 2000/01/16 01:37:19 ralf Exp $
+/* $Id: memset.S,v 1.3 2000/01/15 23:48:55 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

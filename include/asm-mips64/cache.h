@@ -11,6 +11,7 @@
 #define _ASM_CACHE_H
 
 /* bytes per L1 cache line */
-#define L1_CACHE_BYTES	32	/* A guess */
+#define L1_CACHE_BYTES		32	/* A guess */
+#define SMP_CACHE_BYTES		L1_CACHE_BYTES
 
 #endif /* _ASM_CACHE_H */

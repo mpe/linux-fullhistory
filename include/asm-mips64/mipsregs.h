@@ -1,4 +1,4 @@
-/* $Id: mipsregs.h,v 1.2 2000/01/17 23:32:47 ralf Exp $
+/* $Id: mipsregs.h,v 1.1 1999/08/18 23:37:51 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -238,6 +238,7 @@ __BUILD_SET_CP0(config,CP0_CONFIG)
 #define ST0_CE			0x00020000
 #define ST0_CH			0x00040000
 #define ST0_SR			0x00100000
+#define ST0_TS			0x00200000
 #define ST0_BEV			0x00400000
 #define ST0_RE			0x02000000
 #define ST0_FR			0x04000000

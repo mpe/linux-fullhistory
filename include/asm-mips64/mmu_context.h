@@ -12,11 +12,17 @@
 #ifndef _ASM_MMU_CONTEXT_H
 #define _ASM_MMU_CONTEXT_H
 
+#include <linux/config.h>
+#include <linux/slab.h>
 #include <asm/pgalloc.h>
+#include <asm/processor.h>
 
-/* Fuck.  The f-word is here so you can grep for it :-)  */
-extern unsigned long asid_cache;
-extern pgd_t *current_pgd;
+#ifndef CONFIG_SMP
+#define CPU_CONTEXT(cpu, mm)	(mm)->context
+#else
+#define CPU_CONTEXT(cpu, mm)	(*((unsigned long *)((mm)->context) + cpu))
+#endif
+#define ASID_CACHE(cpu)		cpu_data[cpu].asid_cache
 
 #define ASID_INC	0x1
 #define ASID_MASK	0xff
@@ -33,14 +39,16 @@ static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk,
 #define ASID_FIRST_VERSION ((unsigned long)(~ASID_VERSION_MASK) + 1)
 
 extern inline void
-get_new_mmu_context(struct mm_struct *mm, unsigned long asid)
+get_new_cpu_mmu_context(struct mm_struct *mm, unsigned long cpu)
 {
+	unsigned long asid = ASID_CACHE(cpu);
+
 	if (! ((asid += ASID_INC) & ASID_MASK) ) {
-		flush_tlb_all(); /* start new asid cycle */
+		_flush_tlb_all(); /* start new asid cycle */
 		if (!asid)      /* fix version if needed */
 			asid = ASID_FIRST_VERSION;
 	}
-	mm->context = asid_cache = asid;
+	CPU_CONTEXT(cpu, mm) = ASID_CACHE(cpu) = asid;
 }
 
 /*
@@ -50,20 +58,34 @@ get_new_mmu_context(struct mm_struct *mm, unsigned long asid)
 extern inline void
 init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 {
+#ifndef CONFIG_SMP
 	mm->context = 0;
+#else
+	/* Make sure not to do anything during a clone-vm operation */
+	if ((current == tsk) || (current->mm != mm)) {
+		mm->context = (unsigned long)kmalloc(smp_num_cpus * 
+					sizeof(unsigned long), GFP_KERNEL);
+		/*
+	 	 * Init the "context" values so that a tlbpid allocation 
+	 	 * happens on the first switch.
+	 	 */
+		if (mm->context)
+			memset((void *)mm->context, 0, smp_num_cpus * 
+							sizeof(unsigned long));
+		else
+			printk("Warning: init_new_context failed\n");
+	}
+#endif
 }
 
 extern inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,
                              struct task_struct *tsk, unsigned cpu)
 {
-	unsigned long asid = asid_cache;
-
 	/* Check if our ASID is of an older version and thus invalid */
-	if ((next->context ^ asid) & ASID_VERSION_MASK)
-		get_new_mmu_context(next, asid);
+	if ((CPU_CONTEXT(cpu, next) ^ ASID_CACHE(cpu)) & ASID_VERSION_MASK)
+		get_new_cpu_mmu_context(next, cpu);
 
-	current_pgd = next->pgd;
-	set_entryhi(next->context);
+	set_entryhi(CPU_CONTEXT(cpu, next));
 }
 
 /*
@@ -72,7 +94,10 @@ extern inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,
  */
 extern inline void destroy_context(struct mm_struct *mm)
 {
-	/* Nothing to do.  */
+#ifdef CONFIG_SMP
+	if (mm->context)
+		kfree((void *)mm->context);
+#endif
 }
 
 /*
@@ -83,10 +108,9 @@ extern inline void
 activate_mm(struct mm_struct *prev, struct mm_struct *next)
 {
 	/* Unconditionally get a new ASID.  */
-	get_new_mmu_context(next, asid_cache);
+	get_new_cpu_mmu_context(next, smp_processor_id());
 
-	current_pgd = next->pgd;
-	set_entryhi(next->context);
+	set_entryhi(CPU_CONTEXT(smp_processor_id(), next));
 }
 
 #endif /* _ASM_MMU_CONTEXT_H */

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.10 2000/02/24 00:13:20 ralf Exp $
+/* $Id: processor.h,v 1.11 2000/03/14 01:39:27 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -11,6 +11,8 @@
  */
 #ifndef _ASM_PROCESSOR_H
 #define _ASM_PROCESSOR_H
+
+#include <linux/config.h>
 
 /*
  * Default implementation of macro that returns current
@@ -25,13 +27,27 @@
 #include <asm/reg.h>
 #include <asm/system.h>
 
-struct mips_cpuinfo {
+#if (defined(CONFIG_SGI_IP27))
+#include <asm/sn/types.h>
+#include <asm/sn/intr_public.h>
+#endif
+
+struct cpuinfo_mips {
 	unsigned long udelay_val;
 	unsigned long *pgd_quick;
 	unsigned long *pmd_quick;
 	unsigned long *pte_quick;
 	unsigned long pgtable_cache_sz;
-};
+	unsigned long last_asn;
+	unsigned int irq_count, bh_count;
+	unsigned long asid_cache;
+#if defined(CONFIG_SGI_IP27)
+	cnodeid_t	p_nodeid;	/* my node ID in compact-id-space */
+	nasid_t		p_nasid;	/* my node ID in numa-as-id-space */
+	unsigned char	p_slice;	/* Physical position on node board */
+	hub_intmasks_t	p_intmasks;	/* SN0 per-CPU interrupt masks */
+#endif
+} __attribute__((aligned(128)));
 
 /*
  * System setup and hardware flags..
@@ -43,15 +59,13 @@ extern char dedicated_iv_available;	/* some embedded MIPS like Nevada */
 extern char vce_available;		/* Supports VCED / VCEI exceptions */
 extern char mips4_available;		/* CPU has MIPS IV ISA or better */
 
-extern struct mips_cpuinfo boot_cpu_data;
 extern unsigned int vced_count, vcei_count;
+extern struct cpuinfo_mips cpu_data[];
 
 #ifdef CONFIG_SMP
-extern struct mips_cpuinfo cpu_data[];
 #define current_cpu_data cpu_data[smp_processor_id()]
 #else
-#define cpu_data &boot_cpu_data
-#define current_cpu_data boot_cpu_data
+#define current_cpu_data cpu_data[0]
 #endif
 
 /*
@@ -73,6 +87,14 @@ extern int EISA_bus;
 
 /* Lazy FPU handling on uni-processor */
 extern struct task_struct *last_task_used_math;
+
+#ifndef CONFIG_SMP
+#define IS_FPU_OWNER()		(last_task_used_math == current)
+#define CLEAR_FPU_OWNER()	last_task_used_math = NULL;
+#else
+#define IS_FPU_OWNER()		(current->flags & PF_USEDFPU)
+#define CLEAR_FPU_OWNER()	current->flags &= ~PF_USEDFPU;
+#endif
 
 /*
  * User space process size: 1TB. This is hardcoded into a few places,
@@ -215,13 +237,19 @@ extern int (*_user_mode)(struct pt_regs *);
 /*
  * Do necessary setup to start up a newly executed thread.
  */
-#define start_thread(regs, new_pc, new_sp) do {				\
+#define start_thread(regs, pc, sp) 					\
+do {									\
+	unsigned long __status;						\
+									\
 	/* New thread looses kernel privileges. */			\
-	regs->cp0_status = (regs->cp0_status & ~(ST0_CU0|ST0_KSU)) | KSU_USER;\
-	regs->cp0_epc = new_pc;						\
-	regs->regs[29] = new_sp;					\
+	__status = regs->cp0_status & ~(ST0_CU0|ST0_FR|ST0_KSU);	\
+	__status |= KSU_USER;						\
+	__status |= (current->thread.mflags & MF_32BIT) ? 0 : ST0_FR;	\
+	regs->cp0_status = __status;					\
+	regs->cp0_epc = pc;						\
+	regs->regs[29] = sp;						\
 	current->thread.current_ds = USER_DS;				\
-} while (0)
+} while(0)
 
 unsigned long get_wchan(struct task_struct *p);
 

@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.4 1999/10/09 00:00:57 ralf Exp $
+/* $Id: time.c,v 1.3 1999/08/17 22:18:37 ralf Exp $
  * time.c: Baget/MIPS specific time handling details
  *
  * Copyright (C) 1998 Gleb Raiko & Vladimir Roganov

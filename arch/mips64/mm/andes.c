@@ -1,4 +1,4 @@
-/* $Id: andes.c,v 1.6 2000/02/24 00:12:41 ralf Exp $
+/* $Id: andes.c,v 1.7 2000/03/13 22:43:25 kanoj Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -91,7 +91,7 @@ andes_flush_cache_all(void)
 static void
 andes_flush_cache_mm(struct mm_struct *mm)
 {
-	if (mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 #ifdef DEBUG_CACHE
 		printk("cmm[%d]", (int)mm->context);
 #endif
@@ -103,7 +103,7 @@ static void
 andes_flush_cache_range(struct mm_struct *mm, unsigned long start,
                         unsigned long end)
 {
-	if (mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 		unsigned long flags;
 
 #ifdef DEBUG_CACHE
@@ -129,7 +129,7 @@ andes_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
 	 * If ownes no valid ASID yet, cannot possibly have gotten
 	 * this page into the cache.
 	 */
-	if (mm->context == 0)
+	if (CPU_CONTEXT(smp_processor_id(), mm) == 0)
 		return;
 
 #ifdef DEBUG_CACHE
@@ -244,17 +244,17 @@ andes_flush_tlb_all(void)
 
 static void andes_flush_tlb_mm(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 		unsigned long flags;
 
 #ifdef DEBUG_TLB
 		printk("[tlbmm<%d>]", mm->context);
 #endif
-		save_and_cli(flags);
-		get_new_mmu_context(mm, asid_cache);
+		__save_and_cli(flags);
+		get_new_cpu_mmu_context(mm, smp_processor_id());
 		if(mm == current->mm)
-			set_entryhi(mm->context & 0xff);
-		restore_flags(flags);
+			set_entryhi(CPU_CONTEXT(smp_processor_id(), mm) & 0xff);
+		__restore_flags(flags);
 	}
 }
 
@@ -262,7 +262,7 @@ static void
 andes_flush_tlb_range(struct mm_struct *mm, unsigned long start,
                       unsigned long end)
 {
-	if(mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), mm) != 0) {
 		unsigned long flags;
 		int size;
 
@@ -270,12 +270,12 @@ andes_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 		printk("[tlbrange<%02x,%08lx,%08lx>]", (mm->context & 0xff),
 		       start, end);
 #endif
-		save_and_cli(flags);
+		__save_and_cli(flags);
 		size = (end - start + (PAGE_SIZE - 1)) >> PAGE_SHIFT;
 		size = (size + 1) >> 1;
 		if(size <= NTLB_ENTRIES_HALF) {
 			int oldpid = (get_entryhi() & 0xff);
-			int newpid = (mm->context & 0xff);
+			int newpid = (CPU_CONTEXT(smp_processor_id(), mm) & 0xff);
 
 			start &= (PAGE_MASK << 1);
 			end += ((PAGE_SIZE << 1) - 1);
@@ -300,9 +300,10 @@ andes_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			}
 			set_entryhi(oldpid);
 		} else {
-			get_new_mmu_context(mm, asid_cache);
+			get_new_cpu_mmu_context(mm, smp_processor_id());
 			if(mm == current->mm)
-				set_entryhi(mm->context & 0xff);
+				set_entryhi(CPU_CONTEXT(smp_processor_id(), mm) & 
+									0xff);
 		}
 		__restore_flags(flags);
 	}
@@ -311,16 +312,16 @@ andes_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 static void
 andes_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 {
-	if(vma->vm_mm->context != 0) {
+	if (CPU_CONTEXT(smp_processor_id(), vma->vm_mm) != 0) {
 		unsigned long flags;
 		int oldpid, newpid, idx;
 
 #ifdef DEBUG_TLB
 		printk("[tlbpage<%d,%08lx>]", vma->vm_mm->context, page);
 #endif
-		newpid = (vma->vm_mm->context & 0xff);
+		newpid = (CPU_CONTEXT(smp_processor_id(), vma->vm_mm) & 0xff);
 		page &= (PAGE_MASK << 1);
-		save_and_cli(flags);
+		__save_and_cli(flags);
 		oldpid = (get_entryhi() & 0xff);
 		set_entryhi(page | newpid);
 		BARRIER;
@@ -338,7 +339,7 @@ andes_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 	finish:
 		BARRIER;
 		set_entryhi(oldpid);
-		restore_flags(flags);
+		__restore_flags(flags);
 	}
 }
 
@@ -354,17 +355,16 @@ static void andes_update_mmu_cache(struct vm_area_struct * vma,
 	pte_t *ptep;
 	int idx, pid;
 
+	__save_and_cli(flags);
 	pid = get_entryhi() & 0xff;
 
-#ifdef DEBUG_TLB
-	if((pid != (vma->vm_mm->context & 0xff)) ||
-           (vma->vm_mm->context == 0)) {
-		printk("update_mmu_cache: Wheee, bogus tlbpid mmpid=%d tlbpid=%d\n",
-		       (int) (vma->vm_mm->context & 0xff), pid);
+	if((pid != (CPU_CONTEXT(smp_processor_id(), vma->vm_mm) & 0xff)) ||
+	   (CPU_CONTEXT(smp_processor_id(), vma->vm_mm) == 0)) {
+		printk("update_mmu_cache: Wheee, bogus tlbpid mmpid=%d 
+			tlbpid=%d\n", (int) (CPU_CONTEXT(smp_processor_id(), 
+			vma->vm_mm) & 0xff), pid);
 	}
-#endif
 
-	__save_and_cli(flags);
 	address &= (PAGE_MASK << 1);
 	set_entryhi(address | (pid));
 	pgdp = pgd_offset(vma->vm_mm, address);
@@ -398,6 +398,7 @@ andes_user_mode(struct pt_regs *regs)
 
 static void andes_show_regs(struct pt_regs *regs)
 {
+	printk("Cpu %d\n", smp_processor_id());
 	/* Saved main processor registers. */
 	printk("$0      : %016lx %016lx %016lx %016lx\n",
 	       0UL, regs->regs[1], regs->regs[2], regs->regs[3]);
@@ -469,7 +470,7 @@ void __init ld_mmu_andes(void)
 	write_32bit_cp0_register(CP0_PAGEMASK, PM_4K);
 
         /* From this point on the ARC firmware is dead.  */
-	flush_tlb_all();
+	_flush_tlb_all();
 
         /* Did I tell you that ARC SUCKS?  */
 }

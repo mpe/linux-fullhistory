@@ -28,36 +28,34 @@
  */
 
 /*
- * Special IRQ vectors used by the SMP architecture, 0x30-0x4f
+ * Special IRQ vectors used by the SMP architecture, 0xf0-0xff
  *
  *  some of the following vectors are 'rare', they are merged
  *  into a single vector (CALL_FUNCTION_VECTOR) to save vector space.
  *  TLB, reschedule and local APIC vectors are performance-critical.
+ *
+ *  Vectors 0xf0-0xfa are free (reserved for future Linux use).
  */
-#define INVALIDATE_TLB_VECTOR	0x30
-#define LOCAL_TIMER_VECTOR	0x31
-#define RESCHEDULE_VECTOR	0x40
-
-/* 'rare' vectors: */
-#define CALL_FUNCTION_VECTOR	0x41
-
-/*
- * These IRQs should never really happen on perfect hardware running
- * a perfect kernel, but we nevertheless print a message to catch the
- * rest ;) Subtle, the APIC architecture mandates the spurious vector
- * to have bits 0-3 set to 1. Note that these vectors do not occur
- * normally, so we violate the 'only 2 vectors per priority level'
- * rule here.
- */
-#define SPURIOUS_APIC_VECTOR	0x3f
-#define ERROR_APIC_VECTOR	0x43
+#define SPURIOUS_APIC_VECTOR	0xff
+#define ERROR_APIC_VECTOR	0xfe
+#define INVALIDATE_TLB_VECTOR	0xfd
+#define RESCHEDULE_VECTOR	0xfc
+#define CALL_FUNCTION_VECTOR	0xfb
 
 /*
- * First APIC vector available to drivers: (vectors 0x51-0xfe)
- * we start at 0x51 to spread out vectors between priority levels
- * evenly. (note that 0x80 is the syscall vector)
+ * Local APIC timer IRQ vector is on a different priority level,
+ * to work around the 'lost local interrupt if more than 2 IRQ
+ * sources per level' errata.
  */
-#define IRQ0_TRAP_VECTOR	0x51
+#define LOCAL_TIMER_VECTOR	0xef
+
+/*
+ * First APIC vector available to drivers: (vectors 0x30-0xee)
+ * we start at 0x31 to spread out vectors evenly between priority
+ * levels. (0x80 is the syscall vector)
+ */
+#define FIRST_DEVICE_VECTOR	0x31
+#define FIRST_SYSTEM_VECTOR	0xef
 
 extern int irq_vector[NR_IRQS];
 #define IO_APIC_VECTOR(irq)	irq_vector[irq]

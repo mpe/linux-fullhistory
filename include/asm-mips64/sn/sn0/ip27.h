@@ -1,4 +1,4 @@
-/* $Id: ip27.h,v 1.2 2000/01/26 06:11:50 kanoj Exp $
+/* $Id$
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -85,9 +85,19 @@
 
 /* Sanity hazzard ...  Below all the Origin hacks are following.  */
 
-#define IOC3_SERIAL_INT		8
-#define IOC3_ETH_INT		9
-#define SCSI1_INT		1
 #define SCSI0_INT		0
+#define SCSI1_INT		1
+#define CPU_RESCHED_A_IRQ	3
+#define CPU_RESCHED_B_IRQ	4
+#define QLOGICFC_SLOT5          5
+#define CPU_CALL_A_IRQ		6
+#define CPU_CALL_B_IRQ		7
+#define IOC3_SERIAL_INT		8
+/*#define IOC3_ETH_INT		9*/
+#define IOC3_ETH_INT		0x0809	/* nasid 0, wid 0x8 */
 
+#define SN00_BRIDGE		0x9200000008000000
+#define SN00I_BRIDGE0		0x920000000b000000
+#define SN00I_BRIDGE1		0x920000000e000000
+#define SN00I_BRIDGE2		0x920000000f000000
 #endif /* _ASM_SN_SN0_IP27_H */

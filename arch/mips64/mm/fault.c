@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.6 2000/02/18 00:24:31 ralf Exp $
+/* $Id: fault.c,v 1.7 2000/03/13 22:43:25 kanoj Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -27,17 +27,35 @@
 #include <asm/softirq.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
+#include <asm/ptrace.h>
 
 #define development_version (LINUX_VERSION_CODE & 0x100)
 
 extern void die(char *, struct pt_regs *, unsigned long write);
 
-unsigned long asid_cache;
-
 /*
  * Macro for exception fixup code to access integer registers.
  */
 #define dpf_reg(r) (regs->regs[r])
+
+asmlinkage void
+dodebug(abi64_no_regargs, struct pt_regs regs)
+{
+	printk("Got syscall %d, cpu %d proc %s:%d epc 0x%lx\n", regs.regs[2], smp_processor_id(), current->comm, current->pid, regs.cp0_epc);
+}
+
+asmlinkage void
+dodebug2(abi64_no_regargs, struct pt_regs regs)
+{
+	unsigned long retaddr;
+
+	__asm__ __volatile__(
+		".set noreorder\n\t"
+		"add %0,$0,$31\n\t"
+		".set reorder"
+		: "=r" (retaddr));
+	printk("Got exception 0x%lx at 0x%lx\n", retaddr, regs.cp0_epc);
+}
 
 /*
  * This routine handles page faults.  It determines the address,
@@ -59,9 +77,9 @@ do_page_fault(struct pt_regs *regs, unsigned long write, unsigned long address)
 	 */
 	if (in_interrupt() || mm == &init_mm)
 		goto no_context;
-#if 0
-	printk("[%s:%d:%08lx:%ld:%08lx]\n", current->comm, current->pid,
-	       address, write, regs->cp0_epc);
+#if DEBUG_MIPS64
+	printk("Cpu%d[%s:%d:%08lx:%ld:%08lx]\n", smp_processor_id(), current->comm,
+		current->pid, address, write, regs->cp0_epc);
 #endif
 	down(&mm->mmap_sem);
 	vma = find_vma(mm, address);
@@ -93,12 +111,17 @@ good_area:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	{
-		int fault = handle_mm_fault(mm, vma, address, write);
-		if (fault < 0)
-			goto out_of_memory;
-		if (!fault)
-			goto do_sigbus;
+	switch (handle_mm_fault(mm, vma, address, write)) {
+	case 1:
+		tsk->min_flt++;
+		break;
+	case 2:
+		tsk->maj_flt++;
+		break;
+	case 0:
+		goto do_sigbus;
+	default:
+		goto out_of_memory;
 	}
 
 	up(&mm->mmap_sem);
@@ -150,10 +173,9 @@ no_context:
 	 * Oops. The kernel tried to access some bad page. We'll have to
 	 * terminate things with extreme prejudice.
 	 */
-	printk(KERN_ALERT "Unable to handle kernel paging request at virtual "
+	printk(KERN_ALERT "Cpu %d Unable to handle kernel paging request at "
 	       "address %08lx, epc == %08lx, ra == %08lx\n",
-	       address, regs->cp0_epc, regs->regs[31]);
-while(1);
+	       smp_processor_id(), address, regs->cp0_epc, regs->regs[31]);
 	die("Oops", regs, write);
 	do_exit(SIGKILL);
 

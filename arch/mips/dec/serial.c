@@ -31,11 +31,11 @@ extern int dz_init(void);
 #ifdef CONFIG_SERIAL_CONSOLE
 
 #ifdef CONFIG_ZS
-extern long zs_serial_console_init(long, long);
+extern void zs_serial_console_init(void);
 #endif
 
 #ifdef CONFIG_DZ
-extern long dz_serial_console_init(long, long);
+extern void dz_serial_console_init(void);
 #endif
 
 #endif
@@ -66,6 +66,8 @@ int __init rs_init(void)
 #endif
 }
 
+__initcall(rs_init);
+
 #endif
 
 #ifdef CONFIG_SERIAL_CONSOLE
@@ -73,26 +75,24 @@ int __init rs_init(void)
 /* serial_console_init handles the special case of starting
  *   up the console on the serial port
  */
-long __init serial_console_init(long kmem_start, long kmem_end)
+void __init serial_console_init(void)
 {
 #if defined(CONFIG_ZS) && defined(CONFIG_DZ)
     if (IOASIC)
-	kmem_start = zs_serial_console_init(kmem_start, kmem_end);
+	zs_serial_console_init();
     else
-	kmem_start = dz_serial_console_init(kmem_start, kmem_end);
+	dz_serial_console_init();
 #else
 
 #ifdef CONFIG_ZS
-    kmem_start = zs_serial_console_init(kmem_start, kmem_end);
+    zs_serial_console_init();
 #endif
 
 #ifdef CONFIG_DZ
-    kmem_start = dz_serial_console_init(kmem_start, kmem_end);
+    dz_serial_console_init();
 #endif
 
 #endif
-
-    return kmem_start;
 }
 
 #endif

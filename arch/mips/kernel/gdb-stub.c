@@ -12,7 +12,7 @@
  *
  *  Copyright (C) 1995 Andreas Busse
  *
- * $Id: gdb-stub.c,v 1.7 1999/06/12 18:39:28 ulfc Exp $
+ * $Id: gdb-stub.c,v 1.6 1999/05/01 22:40:35 ralf Exp $
  */
 
 /*

@@ -7,7 +7,7 @@
  * Copyright (C) 1998, 2000 Harald Koerfgen
  * Copyright (C) 1998 Gleb Raiko & Vladimir Roganov
  *
- * $Id: r2300.c,v 1.15 2000/02/24 00:12:40 ralf Exp $
+ * $Id: r2300.c,v 1.16 2000/03/13 10:33:05 raiko Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -18,7 +18,6 @@
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
 #include <asm/system.h>
-#include <asm/sgialib.h>
 #include <asm/isadep.h>
 #include <asm/io.h>
 #include <asm/wbflush.h>
@@ -116,7 +115,7 @@ static void r3k_copy_page(void * to, void * from)
 		 "I" (PAGE_SIZE));
 }
 
-static unsigned long __init size_cache(unsigned long ca_flags)
+unsigned long __init r3k_cache_size(unsigned long ca_flags)
 {
 	unsigned long flags, status, dummy, size;
 	volatile unsigned long *p;
@@ -152,14 +151,14 @@ static unsigned long __init size_cache(unsigned long ca_flags)
 
 static void __init probe_dcache(void)
 {
-	dcache_size = size_cache(ST0_DE);
+	dcache_size = r3k_cache_size(ST0_DE);
 	printk("Primary data cache %dkb, linesize 4 bytes\n",
 		dcache_size >> 10);
 }
 
 static void __init probe_icache(void)
 {
-	icache_size = size_cache(ST0_DE|ST0_CE);
+	icache_size = r3k_cache_size(ST0_DE|ST0_CE);
 	printk("Primary instruction cache %dkb, linesize 8 bytes\n",
 		icache_size >> 10);
 }

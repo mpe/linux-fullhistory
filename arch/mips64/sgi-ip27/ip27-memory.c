@@ -1,4 +1,4 @@
-/* $Id: ip27-memory.c,v 1.9 2000/02/10 09:07:31 kanoj Exp $
+/* $Id: ip27-memory.c,v 1.2 2000/01/27 01:05:24 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -57,17 +57,12 @@ int numa_debug(void)
  */
 pfn_t node_getfirstfree(cnodeid_t cnode)
 {
-#ifdef LATER
 	nasid_t nasid = COMPACT_TO_NASID_NODEID(cnode);
 
 	if (cnode == 0)
-		return KDM_TO_PHYS((unsigned long)(&_end));
-	return KDM_TO_PHYS(SYMMON_STK_ADDR(nasid, 0));
-#endif
-	if (cnode == 0)
 		return (KDM_TO_PHYS(PAGE_ALIGN((unsigned long)(&_end)) - 
 					(CKSEG0 - K0BASE)) >> PAGE_SHIFT);
-	return slot_getbasepfn(cnode, 0);
+	return (KDM_TO_PHYS(PAGE_ALIGN(SYMMON_STK_ADDR(nasid, 0))) >> PAGE_SHIFT);
 }
 
 /*
@@ -124,7 +119,7 @@ static pfn_t slot_psize_compute(cnodeid_t node, int slot)
 
 	nasid = COMPACT_TO_NASID_NODEID(node);
 	/* Find the node board */
-	brd = find_lboard_real((lboard_t *)KL_CONFIG_INFO(nasid), KLTYPE_IP27);
+	brd = find_lboard((lboard_t *)KL_CONFIG_INFO(nasid), KLTYPE_IP27);
 	if (!brd)
 		return 0;
 
@@ -269,28 +264,24 @@ prom_free_prom_memory (void)
 void __init paging_init(void)
 {
 	cnodeid_t node;
-	unsigned int zones_size[MAX_NR_ZONES] = {0, 0, 0};
+	unsigned long zones_size[MAX_NR_ZONES] = {0, 0, 0};
 
 	/* Initialize the entire pgd.  */
 	pgd_init((unsigned long)swapper_pg_dir);
-	pgd_init((unsigned long)swapper_pg_dir + PAGE_SIZE / 2);
 	pmd_init((unsigned long)invalid_pmd_table);
+	memset((void *)invalid_pte_table, 0, sizeof(pte_t) * 2 * PTRS_PER_PTE);
 
 	for (node = 0; node < numnodes; node++) {
 		pfn_t start_pfn = slot_getbasepfn(node, 0);
 		pfn_t end_pfn = node_getmaxclick(node);
 
 		zones_size[ZONE_DMA] = end_pfn + 1 - start_pfn;
-		PLAT_NODE_DATA(node)->physstart = (start_pfn << PAGE_SHIFT);
-		PLAT_NODE_DATA(node)->size = (zones_size[ZONE_DMA] << PAGE_SHIFT);
 		free_area_init_node(node, NODE_DATA(node), zones_size, 
 						start_pfn << PAGE_SHIFT, 0);
-		PLAT_NODE_DATA(node)->start_mapnr = 
-					(NODE_DATA(node)->node_mem_map - mem_map);
-		if ((PLAT_NODE_DATA(node)->start_mapnr + 
-					PLAT_NODE_DATA(node)->size) > pagenr)
-			pagenr = PLAT_NODE_DATA(node)->start_mapnr +
-					PLAT_NODE_DATA(node)->size;
+		if ((PLAT_NODE_DATA_STARTNR(node) + 
+					PLAT_NODE_DATA_SIZE(node)) > pagenr)
+			pagenr = PLAT_NODE_DATA_STARTNR(node) +
+					PLAT_NODE_DATA_SIZE(node);
 	}
 }
 
@@ -314,6 +305,11 @@ void __init mem_init(void)
 	for (nid = 0; nid < numnodes; nid++) {
 
 		/*
+		 * Hack till free_area_init_core() zeroes free_pages
+		 */
+		for (tmp = 0; tmp < MAX_NR_ZONES; tmp++)
+			PLAT_NODE_DATA(nid)->gendata.node_zones[tmp].free_pages=0;
+		/*
 	 	 * This will free up the bootmem, ie, slot 0 memory.
 	 	 */
 		totalram_pages += free_all_bootmem_node(nid);
@@ -322,7 +318,7 @@ void __init mem_init(void)
 		 * We need to manually do the other slots.
 		 */
 		pg = NODE_DATA(nid)->node_mem_map + slot_getsize(nid, 0);
-		pgnr = PLAT_NODE_DATA(nid)->start_mapnr + slot_getsize(nid, 0);
+		pgnr = PLAT_NODE_DATA_STARTNR(nid) + slot_getsize(nid, 0);
 		numslots = node_getlastslot(nid);
 		for (slot = 1; slot <= numslots; slot++) {
 			pslot = NODE_DATA(nid)->node_mem_map + 
@@ -357,9 +353,9 @@ void __init mem_init(void)
 
 	reservedpages = ram = 0;
 	for (nid = 0; nid < numnodes; nid++) {
-		for (tmp = PLAT_NODE_DATA(nid)->start_mapnr; tmp < 
-			((PLAT_NODE_DATA(nid)->start_mapnr) + 
-			(PLAT_NODE_DATA(nid)->size >> PAGE_SHIFT)); tmp++) {
+		for (tmp = PLAT_NODE_DATA_STARTNR(nid); tmp < 
+			(PLAT_NODE_DATA_STARTNR(nid) +
+			PLAT_NODE_DATA_SIZE(nid)); tmp++) {
 			/* Ignore holes */
 			if (PageSkip(mem_map+tmp))
 				continue;

@@ -80,7 +80,7 @@ static char *card_names[] __devinitdata = {
 	"EMU10K1",
 };
 
-static struct pci_device_id emu10k1_pci_tbl[] = {
+static struct pci_device_id emu10k1_pci_tbl[] __devinitdata = {
 	{PCI_VENDOR_ID_CREATIVE, PCI_DEVICE_ID_CREATIVE_EMU10K1,
 	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, EMU10K1},
 	{0,}

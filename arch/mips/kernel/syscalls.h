@@ -44,7 +44,7 @@ SYS(sys_stime, 1)				/* 4025 */
 SYS(sys_ptrace, 4)
 SYS(sys_alarm, 1)
 SYS(sys_fstat, 2)
-SYS(sys_ni_syscall, 0)
+SYS(sys_pause, 0)
 SYS(sys_utime, 2)				/* 4030 */
 SYS(sys_ni_syscall, 0)
 SYS(sys_ni_syscall, 0)
@@ -232,3 +232,5 @@ SYS(sys_stat64, 3)
 SYS(sys_lstat64, 3)
 SYS(sys_fstat64, 3)				/* 4215 */
 SYS(sys_pivot_root, 2)
+SYS(sys_mincore, 3)
+SYS(sys_madvise, 3)

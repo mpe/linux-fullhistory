@@ -291,7 +291,7 @@ static struct pci_device_id via_rhine_pci_tbl[] __devinitdata =
 {
 	{0x1106, 0x6100, PCI_ANY_ID, PCI_ANY_ID, 0, 0, VT86C100A},
 	{0x1106, 0x3043, PCI_ANY_ID, PCI_ANY_ID, 0, 0, VT3043},
-	{0,},			/* terminate list */
+	{0,}			/* terminate list */
 };
 MODULE_DEVICE_TABLE(pci, via_rhine_pci_tbl);
 

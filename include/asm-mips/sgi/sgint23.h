@@ -1,12 +1,16 @@
-/* $Id: sgint23.h,v 1.1 1999/10/21 00:23:05 ralf Exp $
+/* $Id: sgint23.h,v 1.4 1999/09/28 21:02:12 ralf Exp $
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
  *
  * sgint23.h: Defines for the SGI INT2 and INT3 chipsets.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  * Copyright (C) 1999 Andrew R. Baker (andrewb@uab.edu) - INT2 corrections
  */
-#ifndef _ASM_SGINT23_H
-#define _ASM_SGINT23_H
+#ifndef _ASM_SGI_SGINT23_H
+#define _ASM_SGI_SGINT23_H
 
 /* These are the virtual IRQ numbers, we divide all IRQ's into
  * 'spaces', the 'space' determines where and how to enable/disable
@@ -163,7 +167,7 @@ struct sgi_ioc_timers {
 struct sgi_int2_regs {
 	struct sgi_ioc_ints ints;
 
-	volatile unsigned long ledbits;   /* LED control bits */
+	volatile u32 ledbits; 		  /* LED control bits */
 #define INT2_LED_TXCLK         0x01       /* GPI to TXCLK enable */
 #define INT2_LED_SERSLCT0      0x02       /* serial port0: 0=apple 1=pc */
 #define INT2_LED_SERSLCT1      0x04       /* serial port1: 0=apple 1=pc */
@@ -182,8 +186,8 @@ struct sgi_int2_regs {
 /* I am guesing there are only two unused registers here 
  * but I could be wrong...			- andrewb
  */
-/*	unsigned long _unused[3]; */
-	unsigned long _unused[2];
+/*	u32 _unused[3]; */
+	u32 _unused[2];
 	struct sgi_ioc_timers timers;
 };
 
@@ -192,13 +196,13 @@ struct sgi_int3_regs {
 
 #ifdef __MIPSEB__
 	unsigned char _unused0[3];
-	volatile unsigned char tclear;    /* Timer clear strobe address */
+	volatile unsigned char tclear;		/* Timer clear strobe address */
 #else
-	volatile unsigned char tclear;    /* Timer clear strobe address */
+	volatile unsigned char tclear;		/* Timer clear strobe address */
 	unsigned char _unused0[3];
 #endif
-	volatile unsigned long estatus;   /* Error status reg */
-	unsigned long _unused1[2];
+	volatile u32 estatus;			/* Error status reg */
+	u32 _unused1[2];
 	struct sgi_ioc_timers timers;
 };
 

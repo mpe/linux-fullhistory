@@ -2599,7 +2599,7 @@ static void __devinit es1370_remove(struct pci_dev *dev)
 
 static struct pci_device_id id_table[] __devinitdata = {
 	{ PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },
-	{ 0, 0, 0, 0, 0, 0 }
+	{ 0, }
 };
 
 MODULE_DEVICE_TABLE(pci, id_table);

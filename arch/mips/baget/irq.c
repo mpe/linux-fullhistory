@@ -29,8 +29,7 @@
 
 #include <asm/baget/baget.h>
 
-unsigned int local_bh_count[NR_CPUS];
-unsigned int local_irq_count[NR_CPUS];
+irq_cpustat_t irq_stat [NR_CPUS];
 unsigned long spurious_count = 0;
 
 /*

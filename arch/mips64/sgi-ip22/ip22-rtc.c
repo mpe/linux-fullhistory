@@ -1,4 +1,4 @@
-/* $Id: ip22-rtc.c,v 1.2 1999/12/04 03:59:01 ralf Exp $
+/* $Id: ip22-rtc.c,v 1.1 1999/08/20 21:13:34 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

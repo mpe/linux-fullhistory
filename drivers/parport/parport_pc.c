@@ -2360,7 +2360,7 @@ static struct pci_device_id parport_pc_pci_tbl[] __devinitdata = {
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, afavlab_tk9902 },
 	{ PCI_VENDOR_ID_TIMEDIA, PCI_DEVICE_ID_TIMEDIA_1889,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, timedia_1889 },
-	{ 0, }, /* terminate list */
+	{ 0, } /* terminate list */
 };
 MODULE_DEVICE_TABLE(pci,parport_pc_pci_tbl);
 

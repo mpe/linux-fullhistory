@@ -1,4 +1,4 @@
-/* $Id: stackframe.h,v 1.4 2000/02/24 03:24:38 ulfc Exp $
+/* $Id: stackframe.h,v 1.3 1999/12/04 03:59:12 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -11,8 +11,12 @@
 #ifndef _ASM_STACKFRAME_H
 #define _ASM_STACKFRAME_H
 
+#include <linux/config.h>
+
 #include <asm/asm.h>
 #include <asm/offset.h>
+#include <asm/processor.h>
+#include <asm/addrspace.h>
 
 #ifdef _LANGUAGE_C
 
@@ -82,8 +86,20 @@
 		 move	k1, sp
 		.set	reorder
 		/* Called from user mode, new stack. */
+#ifndef CONFIG_SMP
 		lui	k1, %hi(kernelsp)
 		ld	k1, %lo(kernelsp)(k1)
+#else
+		mfc0	k0, CP0_WATCHLO
+		mfc0	k1, CP0_WATCHHI
+		dsll32	k0, k0, 0	/* Get rid of sign extension */
+		dsrl32	k0, k0, 0	/* Get rid of sign extension */
+		dsll32	k1, k1, 0
+		or	k1, k1, k0
+		li	k0, K0BASE
+		or	k1, k1, k0
+		daddiu	k1, k1, KERNEL_STACK_SIZE-32
+#endif
 8:		move	k0, sp
 		dsubu	sp, k1, PT_SIZE
 		sd	k0, PT_R29(sp)

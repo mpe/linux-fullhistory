@@ -2283,7 +2283,7 @@ static struct pci_device_id eni_pci_tbl[] __devinitdata = {
 	  0, 0, 0 /* FPGA */ },
 	{ PCI_VENDOR_ID_EF, PCI_DEVICE_ID_EF_ATM_ASIC, PCI_ANY_ID, PCI_ANY_ID,
 	  0, 0, 1 /* ASIC */ },
-	{ 0 }
+	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci,eni_pci_tbl);
 

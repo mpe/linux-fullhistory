@@ -1,4 +1,4 @@
-/* $Id: signal.c,v 1.5 2000/02/04 07:40:24 ralf Exp $
+/* $Id: signal.c,v 1.4 2000/01/17 23:32:46 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -26,6 +26,7 @@
 #include <asm/stackframe.h>
 #include <asm/uaccess.h>
 #include <asm/ucontext.h>
+#include <asm/system.h>
 
 #define DEBUG_SIG 0
 
@@ -36,6 +37,35 @@ extern asmlinkage int sys_wait4(pid_t pid, unsigned long *stat_addr,
 extern asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs);
 extern asmlinkage int save_fp_context(struct sigcontext *sc);
 extern asmlinkage int restore_fp_context(struct sigcontext *sc);
+
+static inline int store_fp_context(struct sigcontext *sc)
+{
+	unsigned int fcr0;
+	int err = 0;
+
+	err |= __copy_to_user(&sc->sc_fpregs[0], 
+		&current->thread.fpu.hard.fp_regs[0], NUM_FPU_REGS * 
+						sizeof(unsigned long));
+	err |= __copy_to_user(&sc->sc_fpc_csr, &current->thread.fpu.hard.control,
+						sizeof(unsigned int));
+	__asm__ __volatile__("cfc1 %0, $0\n\t" : "=r" (fcr0));
+	err |= __copy_to_user(&sc->sc_fpc_eir, &fcr0, sizeof(unsigned int));
+
+	return err;
+}
+
+static inline int refill_fp_context(struct sigcontext *sc)
+{
+	int err = 0;
+
+	if (verify_area(VERIFY_READ, sc, sizeof(*sc)))
+		return -EFAULT;
+	err |= __copy_from_user(&current->thread.fpu.hard.fp_regs[0], 
+			&sc->sc_fpregs[0], NUM_FPU_REGS * sizeof(unsigned long));
+	err |= __copy_from_user(&current->thread.fpu.hard.control, &sc->sc_fpc_csr,
+							sizeof(unsigned int));
+	return err;
+}
 
 /*
  * Atomically swap in the new signal mask, and wait for a signal.
@@ -180,8 +210,12 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc)
 
 	err |= __get_user(owned_fp, &sc->sc_ownedfp);
 	if (owned_fp) {
-		err |= restore_fp_context(sc);
-		last_task_used_math = current;
+		if (IS_FPU_OWNER()) {
+			CLEAR_FPU_OWNER();
+			regs->cp0_status &= ~ST0_CU1;
+		}
+		current->used_math = 1;
+		err |= refill_fp_context(sc);
 	}
 
 	return err;
@@ -281,11 +315,9 @@ badframe:
 static int inline
 setup_sigcontext(struct pt_regs *regs, struct sigcontext *sc)
 {
-	int owned_fp;
 	int err = 0;
 
 	err |= __put_user(regs->cp0_epc, &sc->sc_pc);
-	err |= __put_user(regs->cp0_status, &sc->sc_status);
 
 #define save_gp_reg(i) {						\
 	err |= __put_user(regs->regs[i], &sc->sc_regs[i]);		\
@@ -306,16 +338,19 @@ setup_sigcontext(struct pt_regs *regs, struct sigcontext *sc)
 	err |= __put_user(regs->cp0_cause, &sc->sc_cause);
 	err |= __put_user(regs->cp0_badvaddr, &sc->sc_badvaddr);
 
-	owned_fp = (current == last_task_used_math);
-	err |= __put_user(owned_fp, &sc->sc_ownedfp);
-
 	if (current->used_math) {	/* fp is active.  */
-		set_cp0_status(ST0_CU1, ST0_CU1);
-		err |= save_fp_context(sc);
-		last_task_used_math = NULL;
-		regs->cp0_status &= ~ST0_CU1;
+		if (IS_FPU_OWNER()) {
+			lazy_fpu_switch(current, 0);
+			CLEAR_FPU_OWNER();
+			regs->cp0_status &= ~ST0_CU1;
+		}
+		err |= __put_user(1, &sc->sc_ownedfp);
+		err |= store_fp_context(sc);
 		current->used_math = 0;
+	} else {
+		err |= __put_user(0, &sc->sc_ownedfp);
 	}
+	err |= __put_user(regs->cp0_status, &sc->sc_status);
 
 	return err;
 }

@@ -55,17 +55,17 @@ typedef enum { false, true } __attribute__ ((packed)) boolean;
 
 
 /*
-  Define a 32 bit I/O Address data type.
+  Define a 32/64 bit I/O Address data type.
 */
 
-typedef unsigned int DAC960_IO_Address_T;
+typedef unsigned long DAC960_IO_Address_T;
 
 
 /*
-  Define a 32 bit PCI Bus Address data type.
+  Define a 32/64 bit PCI Bus Address data type.
 */
 
-typedef unsigned int DAC960_PCI_Address_T;
+typedef unsigned long DAC960_PCI_Address_T;
 
 
 /*
@@ -196,6 +196,7 @@ typedef unsigned char DAC960_CommandIdentifier_T;
 #define DAC960_RebuildFailed_BadBlocksOnOther	0x0003	/* Consistency */
 #define DAC960_RebuildFailed_NewDriveFailed	0x0004	/* Consistency */
 #define DAC960_RebuildSuccessful		0x0100	/* Consistency */
+#define DAC960_RebuildSuccessfullyTerminated	0x0107	/* Consistency */
 #define DAC960_AddCapacityInProgress		0x0004	/* Consistency */
 #define DAC960_AddCapacityFailedOrSuspended	0x00F4	/* Consistency */
 #define DAC960_Config2ChecksumError		0x0002	/* Configuration */
@@ -513,7 +514,7 @@ typedef struct DAC960_DeviceState
   unsigned char SynchronousMultiplier;			/* Byte 4 */
   unsigned char SynchronousOffset:5;			/* Byte 5 Bits 0-4 */
   unsigned char :3;					/* Byte 5 Bits 5-7 */
-  unsigned long DiskSize __attribute__ ((packed));	/* Bytes 6-9 */
+  unsigned int DiskSize __attribute__ ((packed));	/* Bytes 6-9 */
 }
 DAC960_DeviceState_T;
 
@@ -1212,6 +1213,7 @@ typedef struct DAC960_Controller
   unsigned char LogicalDriveCount;
   unsigned char GeometryTranslationHeads;
   unsigned char GeometryTranslationSectors;
+  unsigned char PendingRebuildFlag;
   unsigned short ControllerQueueDepth;
   unsigned short DriverQueueDepth;
   unsigned short MaxBlocksPerCommand;
@@ -1247,6 +1249,9 @@ typedef struct DAC960_Controller
   boolean NeedRebuildProgress;
   boolean NeedConsistencyCheckProgress;
   boolean EphemeralProgressMessage;
+  boolean RebuildFlagPending;
+  boolean RebuildStatusPending;
+  boolean DriveSpinUpMessageDisplayed;
   Timer_T MonitoringTimer;
   GenericDiskInfo_T GenericDiskInfo;
   DAC960_Command_T *FreeCommands;
@@ -1265,6 +1270,7 @@ typedef struct DAC960_Controller
   DAC960_EventLogEntry_T EventLogEntry;
   DAC960_RebuildProgress_T RebuildProgress;
   DAC960_CommandStatus_T LastRebuildStatus;
+  DAC960_CommandStatus_T PendingRebuildStatus;
   DAC960_LogicalDriveInformation_T
     LogicalDriveInformation[2][DAC960_MaxLogicalDrives];
   DAC960_LogicalDriveState_T LogicalDriveInitialState[DAC960_MaxLogicalDrives];
@@ -1389,7 +1395,8 @@ typedef enum
   DAC960_V5_MailboxRegister11Offset =		0x5B,
   DAC960_V5_MailboxRegister12Offset =		0x5C,
   DAC960_V5_StatusCommandIdentifierRegOffset =	0x5D,
-  DAC960_V5_StatusRegisterOffset =		0x5E
+  DAC960_V5_StatusRegisterOffset =		0x5E,
+  DAC960_V5_ErrorStatusRegisterOffset =		0x63
 }
 DAC960_V5_RegisterOffsets_T;
 
@@ -1411,7 +1418,8 @@ typedef union DAC960_V5_InboundDoorBellRegister
   } Write;
   struct {
     boolean HardwareMailboxEmpty:1;			/* Bit 0 */
-    unsigned char :7;					/* Bits 1-7 */
+    boolean InitializationNotInProgress:1;		/* Bit 1 */
+    unsigned char :6;					/* Bits 2-7 */
   } Read;
 }
 DAC960_V5_InboundDoorBellRegister_T;
@@ -1452,6 +1460,22 @@ typedef union DAC960_V5_InterruptMaskRegister
   } Bits;
 }
 DAC960_V5_InterruptMaskRegister_T;
+
+
+/*
+  Define the structure of the DAC960 V5 Error Status Register.
+*/
+
+typedef union DAC960_V5_ErrorStatusRegister
+{
+  unsigned char All;
+  struct {
+    unsigned int :2;					/* Bits 0-1 */
+    boolean ErrorStatusPending:1;			/* Bit 2 */
+    unsigned int :5;					/* Bits 3-7 */
+  } Bits;
+}
+DAC960_V5_ErrorStatusRegister_T;
 
 
 /*
@@ -1510,12 +1534,21 @@ void DAC960_V5_MemoryMailboxNewCommand(void *ControllerBaseAddress)
 }
 
 static inline
-boolean DAC960_V5_HardwareMailboxEmptyP(void *ControllerBaseAddress)
+boolean DAC960_V5_HardwareMailboxFullP(void *ControllerBaseAddress)
 {
   DAC960_V5_InboundDoorBellRegister_T InboundDoorBellRegister;
   InboundDoorBellRegister.All =
     readb(ControllerBaseAddress + DAC960_V5_InboundDoorBellRegisterOffset);
-  return InboundDoorBellRegister.Read.HardwareMailboxEmpty;
+  return !InboundDoorBellRegister.Read.HardwareMailboxEmpty;
+}
+
+static inline
+boolean DAC960_V5_InitializationInProgressP(void *ControllerBaseAddress)
+{
+  DAC960_V5_InboundDoorBellRegister_T InboundDoorBellRegister;
+  InboundDoorBellRegister.All =
+    readb(ControllerBaseAddress + DAC960_V5_InboundDoorBellRegisterOffset);
+  return !InboundDoorBellRegister.Read.InitializationNotInProgress;
 }
 
 static inline
@@ -1571,7 +1604,7 @@ static inline
 void DAC960_V5_EnableInterrupts(void *ControllerBaseAddress)
 {
   DAC960_V5_InterruptMaskRegister_T InterruptMaskRegister;
-  InterruptMaskRegister.All = 0;
+  InterruptMaskRegister.All = 0xFF;
   InterruptMaskRegister.Bits.DisableInterrupts = false;
   writeb(InterruptMaskRegister.All,
 	 ControllerBaseAddress + DAC960_V5_InterruptMaskRegisterOffset);
@@ -1581,7 +1614,7 @@ static inline
 void DAC960_V5_DisableInterrupts(void *ControllerBaseAddress)
 {
   DAC960_V5_InterruptMaskRegister_T InterruptMaskRegister;
-  InterruptMaskRegister.All = 0;
+  InterruptMaskRegister.All = 0xFF;
   InterruptMaskRegister.Bits.DisableInterrupts = true;
   writeb(InterruptMaskRegister.All,
 	 ControllerBaseAddress + DAC960_V5_InterruptMaskRegisterOffset);
@@ -1603,7 +1636,9 @@ void DAC960_V5_WriteCommandMailbox(DAC960_CommandMailbox_T *NextCommandMailbox,
   NextCommandMailbox->Words[1] = CommandMailbox->Words[1];
   NextCommandMailbox->Words[2] = CommandMailbox->Words[2];
   NextCommandMailbox->Words[3] = CommandMailbox->Words[3];
+  wmb();
   NextCommandMailbox->Words[0] = CommandMailbox->Words[0];
+  mb();
 }
 
 static inline
@@ -1631,6 +1666,26 @@ static inline DAC960_CommandStatus_T
 DAC960_V5_ReadStatusRegister(void *ControllerBaseAddress)
 {
   return readw(ControllerBaseAddress + DAC960_V5_StatusRegisterOffset);
+}
+
+static inline boolean
+DAC960_V5_ReadErrorStatus(void *ControllerBaseAddress,
+			  unsigned char *ErrorStatus,
+			  unsigned char *Parameter0,
+			  unsigned char *Parameter1)
+{
+  DAC960_V5_ErrorStatusRegister_T ErrorStatusRegister;
+  ErrorStatusRegister.All =
+    readb(ControllerBaseAddress + DAC960_V5_ErrorStatusRegisterOffset);
+  if (!ErrorStatusRegister.Bits.ErrorStatusPending) return false;
+  ErrorStatusRegister.Bits.ErrorStatusPending = false;
+  *ErrorStatus = ErrorStatusRegister.All;
+  *Parameter0 =
+    readb(ControllerBaseAddress + DAC960_V5_CommandOpcodeRegisterOffset);
+  *Parameter1 =
+    readb(ControllerBaseAddress + DAC960_V5_CommandIdentifierRegisterOffset);
+  writeb(0xFF, ControllerBaseAddress + DAC960_V5_ErrorStatusRegisterOffset);
+  return true;
 }
 
 static inline
@@ -1691,7 +1746,8 @@ typedef enum
   DAC960_V4_MailboxRegister11Offset =		0x100B,
   DAC960_V4_MailboxRegister12Offset =		0x100C,
   DAC960_V4_StatusCommandIdentifierRegOffset =	0x1018,
-  DAC960_V4_StatusRegisterOffset =		0x101A
+  DAC960_V4_StatusRegisterOffset =		0x101A,
+  DAC960_V4_ErrorStatusRegisterOffset =		0x103F
 }
 DAC960_V4_RegisterOffsets_T;
 
@@ -1713,7 +1769,8 @@ typedef union DAC960_V4_InboundDoorBellRegister
   } Write;
   struct {
     boolean HardwareMailboxFull:1;			/* Bit 0 */
-    unsigned int :31;					/* Bits 1-31 */
+    boolean InitializationInProgress:1;			/* Bit 1 */
+    unsigned int :30;					/* Bits 2-31 */
   } Read;
 }
 DAC960_V4_InboundDoorBellRegister_T;
@@ -1755,6 +1812,22 @@ typedef union DAC960_V4_InterruptMaskRegister
   } Bits;
 }
 DAC960_V4_InterruptMaskRegister_T;
+
+
+/*
+  Define the structure of the DAC960 V4 Error Status Register.
+*/
+
+typedef union DAC960_V4_ErrorStatusRegister
+{
+  unsigned char All;
+  struct {
+    unsigned int :2;					/* Bits 0-1 */
+    boolean ErrorStatusPending:1;			/* Bit 2 */
+    unsigned int :5;					/* Bits 3-7 */
+  } Bits;
+}
+DAC960_V4_ErrorStatusRegister_T;
 
 
 /*
@@ -1819,6 +1892,15 @@ boolean DAC960_V4_HardwareMailboxFullP(void *ControllerBaseAddress)
   InboundDoorBellRegister.All =
     readl(ControllerBaseAddress + DAC960_V4_InboundDoorBellRegisterOffset);
   return InboundDoorBellRegister.Read.HardwareMailboxFull;
+}
+
+static inline
+boolean DAC960_V4_InitializationInProgressP(void *ControllerBaseAddress)
+{
+  DAC960_V4_InboundDoorBellRegister_T InboundDoorBellRegister;
+  InboundDoorBellRegister.All =
+    readl(ControllerBaseAddress + DAC960_V4_InboundDoorBellRegisterOffset);
+  return InboundDoorBellRegister.Read.InitializationInProgress;
 }
 
 static inline
@@ -1910,7 +1992,9 @@ void DAC960_V4_WriteCommandMailbox(DAC960_CommandMailbox_T *NextCommandMailbox,
   NextCommandMailbox->Words[1] = CommandMailbox->Words[1];
   NextCommandMailbox->Words[2] = CommandMailbox->Words[2];
   NextCommandMailbox->Words[3] = CommandMailbox->Words[3];
+  wmb();
   NextCommandMailbox->Words[0] = CommandMailbox->Words[0];
+  mb();
 }
 
 static inline
@@ -1940,11 +2024,31 @@ DAC960_V4_ReadStatusRegister(void *ControllerBaseAddress)
   return readw(ControllerBaseAddress + DAC960_V4_StatusRegisterOffset);
 }
 
+static inline boolean
+DAC960_V4_ReadErrorStatus(void *ControllerBaseAddress,
+			  unsigned char *ErrorStatus,
+			  unsigned char *Parameter0,
+			  unsigned char *Parameter1)
+{
+  DAC960_V4_ErrorStatusRegister_T ErrorStatusRegister;
+  ErrorStatusRegister.All =
+    readb(ControllerBaseAddress + DAC960_V4_ErrorStatusRegisterOffset);
+  if (!ErrorStatusRegister.Bits.ErrorStatusPending) return false;
+  ErrorStatusRegister.Bits.ErrorStatusPending = false;
+  *ErrorStatus = ErrorStatusRegister.All;
+  *Parameter0 =
+    readb(ControllerBaseAddress + DAC960_V4_CommandOpcodeRegisterOffset);
+  *Parameter1 =
+    readb(ControllerBaseAddress + DAC960_V4_CommandIdentifierRegisterOffset);
+  writeb(0, ControllerBaseAddress + DAC960_V4_ErrorStatusRegisterOffset);
+  return true;
+}
+
 static inline
 void DAC960_V4_SaveMemoryMailboxInfo(DAC960_Controller_T *Controller)
 {
   void *ControllerBaseAddress = Controller->BaseAddress;
-  writel(0xAABBFFFF,
+  writel(0x743C485E,
 	 ControllerBaseAddress + DAC960_V4_CommandOpcodeRegisterOffset);
   writel((unsigned long) Controller->FirstCommandMailbox,
 	 ControllerBaseAddress + DAC960_V4_MailboxRegister4Offset);
@@ -1962,7 +2066,7 @@ void DAC960_V4_RestoreMemoryMailboxInfo(DAC960_Controller_T *Controller,
 {
   void *ControllerBaseAddress = Controller->BaseAddress;
   if (readl(ControllerBaseAddress
-	    + DAC960_V4_CommandOpcodeRegisterOffset) != 0xAABBFFFF)
+	    + DAC960_V4_CommandOpcodeRegisterOffset) != 0x743C485E)
     return;
   *MemoryMailboxAddress =
     (void *) readl(ControllerBaseAddress + DAC960_V4_MailboxRegister4Offset);
@@ -1996,6 +2100,7 @@ typedef enum
   DAC960_V3_MailboxRegister12Offset =		0x0C,
   DAC960_V3_StatusCommandIdentifierRegOffset =	0x0D,
   DAC960_V3_StatusRegisterOffset =		0x0E,
+  DAC960_V3_ErrorStatusRegisterOffset =		0x3F,
   DAC960_V3_InboundDoorBellRegisterOffset =	0x40,
   DAC960_V3_OutboundDoorBellRegisterOffset =	0x41,
   DAC960_V3_InterruptEnableRegisterOffset =	0x43
@@ -2019,7 +2124,8 @@ typedef union DAC960_V3_InboundDoorBellRegister
   } Write;
   struct {
     boolean MailboxFull:1;				/* Bit 0 */
-    unsigned char :7;					/* Bits 1-7 */
+    boolean InitializationInProgress:1;			/* Bit 1 */
+    unsigned char :6;					/* Bits 2-7 */
   } Read;
 }
 DAC960_V3_InboundDoorBellRegister_T;
@@ -2057,6 +2163,22 @@ typedef union DAC960_V3_InterruptEnableRegister
   } Bits;
 }
 DAC960_V3_InterruptEnableRegister_T;
+
+
+/*
+  Define the structure of the DAC960 V3 Error Status Register.
+*/
+
+typedef union DAC960_V3_ErrorStatusRegister
+{
+  unsigned char All;
+  struct {
+    unsigned int :2;					/* Bits 0-1 */
+    boolean ErrorStatusPending:1;			/* Bit 2 */
+    unsigned int :5;					/* Bits 3-7 */
+  } Bits;
+}
+DAC960_V3_ErrorStatusRegister_T;
 
 
 /*
@@ -2111,6 +2233,15 @@ boolean DAC960_V3_MailboxFullP(void *ControllerBaseAddress)
   InboundDoorBellRegister.All =
     readb(ControllerBaseAddress + DAC960_V3_InboundDoorBellRegisterOffset);
   return InboundDoorBellRegister.Read.MailboxFull;
+}
+
+static inline
+boolean DAC960_V3_InitializationInProgressP(void *ControllerBaseAddress)
+{
+  DAC960_V3_InboundDoorBellRegister_T InboundDoorBellRegister;
+  InboundDoorBellRegister.All =
+    readb(ControllerBaseAddress + DAC960_V3_InboundDoorBellRegisterOffset);
+  return InboundDoorBellRegister.Read.InitializationInProgress;
 }
 
 static inline
@@ -2186,6 +2317,26 @@ static inline DAC960_CommandStatus_T
 DAC960_V3_ReadStatusRegister(void *ControllerBaseAddress)
 {
   return readw(ControllerBaseAddress + DAC960_V3_StatusRegisterOffset);
+}
+
+static inline boolean
+DAC960_V3_ReadErrorStatus(void *ControllerBaseAddress,
+			  unsigned char *ErrorStatus,
+			  unsigned char *Parameter0,
+			  unsigned char *Parameter1)
+{
+  DAC960_V3_ErrorStatusRegister_T ErrorStatusRegister;
+  ErrorStatusRegister.All =
+    readb(ControllerBaseAddress + DAC960_V3_ErrorStatusRegisterOffset);
+  if (!ErrorStatusRegister.Bits.ErrorStatusPending) return false;
+  ErrorStatusRegister.Bits.ErrorStatusPending = false;
+  *ErrorStatus = ErrorStatusRegister.All;
+  *Parameter0 =
+    readb(ControllerBaseAddress + DAC960_V3_CommandOpcodeRegisterOffset);
+  *Parameter1 =
+    readb(ControllerBaseAddress + DAC960_V3_CommandIdentifierRegisterOffset);
+  writeb(0, ControllerBaseAddress + DAC960_V3_ErrorStatusRegisterOffset);
+  return true;
 }
 
 

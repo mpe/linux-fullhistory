@@ -1,4 +1,4 @@
-/* $Id: andes.c,v 1.11 2000/02/24 00:12:40 ralf Exp $
+/* $Id: andes.c,v 1.10 2000/02/13 20:52:05 harald Exp $
  *
  * andes.c: MMU and cache operations for the R10000 (ANDES).
  *

@@ -1,5 +1,5 @@
 /*
- *  $Id: reset.c,v 1.4 1999/04/11 17:06:16 harald Exp $
+ *  $Id: $
  *
  *  Reset a DECstation machine.
  *

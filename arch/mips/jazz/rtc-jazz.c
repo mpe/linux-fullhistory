@@ -1,4 +1,4 @@
-/* $Id: rtc-jazz.c,v 1.2 1998/08/26 21:46:38 tsbogend Exp $
+/* $Id: rtc-jazz.c,v 1.2 1998/06/25 20:19:14 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

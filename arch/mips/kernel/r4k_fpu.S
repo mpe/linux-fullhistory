@@ -32,7 +32,6 @@ LEAF(save_fp_context)
 	cfc1	t1,fcr31
 
 	/* Store the 16 even double precision registers */
-1:
 	EX(sdc1	$f0,(SC_FPREGS+0)(a0))
 	EX(sdc1	$f2,(SC_FPREGS+16)(a0))
 	EX(sdc1	$f4,(SC_FPREGS+32)(a0))
@@ -75,7 +74,7 @@ LEAF(restore_fp_context)
 	 * Restore the 16 even double precision registers
 	 * when cp1 was enabled in the cp0 status register.
 	 */
-1:	EX(ldc1	$f0,(SC_FPREGS+0)(a0))
+	EX(ldc1	$f0,(SC_FPREGS+0)(a0))
 	EX(ldc1	$f2,(SC_FPREGS+16)(a0))
 	EX(ldc1	$f4,(SC_FPREGS+32)(a0))
 	EX(ldc1	$f6,(SC_FPREGS+48)(a0))

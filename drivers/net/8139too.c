@@ -201,7 +201,7 @@ static struct pci_device_id rtl8139_pci_tbl[] __devinitdata = {
 /*	{0x1113, 0x1211, PCI_ANY_ID, PCI_ANY_ID, 0, 0, MPX5030 },*/
 	{0x1500, 0x1360, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DELTA8139 },
 	{0x4033, 0x1360, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ADDTRON8139 },
-	{0,},
+	{0,}
 };
 MODULE_DEVICE_TABLE (pci, rtl8139_pci_tbl);
 

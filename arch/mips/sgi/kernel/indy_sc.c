@@ -1,4 +1,4 @@
-/* $Id: indy_sc.c,v 1.13 1999/12/04 03:59:00 ralf Exp $
+/* $Id: indy_sc.c,v 1.14 2000/03/25 22:35:07 ralf Exp $
  *
  * indy_sc.c: Indy cache managment functions.
  *
@@ -28,16 +28,17 @@ static unsigned long scache_size;
 #define SC_SIZE 0x00080000
 #define SC_LINE 32
 #define CI_MASK (SC_SIZE - SC_LINE)
-#define SC_ROUND(n) ((n) + SC_LINE - 1)
 #define SC_INDEX(n) ((n) & CI_MASK)
 
 static inline void indy_sc_wipe(unsigned long first, unsigned long last)
 {
+	unsigned long tmp;
+
 	__asm__ __volatile__("
 		.set	noreorder
 		.set	mips3
 		.set	noat
-		mfc0	$2, $12
+		mfc0	%2, $12
 		li	$1, 0x80	# Go 64 bit
 		mtc0	$1, $12
 
@@ -50,12 +51,12 @@ static inline void indy_sc_wipe(unsigned long first, unsigned long last)
 		bne	%0, %1, 1b
 		daddu	%0, 32
 
-		mtc0	$2, $12		# Back to 32 bit
+		mtc0	%2, $12		# Back to 32 bit
 		nop; nop; nop; nop;
 		.set mips0
 		.set reorder"
-		: /* no output */
-		: "r" (first), "r" (last)
+		: "=r" (first), "=r" (last), "=&r" (tmp)
+		: "0" (first), "1" (last)
 		: "$1");
 }
 
@@ -67,12 +68,13 @@ static void indy_sc_wback_invalidate(unsigned long addr, unsigned long size)
 #ifdef DEBUG_CACHE
 	printk("indy_sc_wback_invalidate[%08lx,%08lx]", addr, size);
 #endif
+
+	if (!size)
+		return;
+
 	/* Which lines to flush?  */
 	first_line = SC_INDEX(addr);
-	if (size <= SC_LINE)
-		last_line = SC_INDEX(addr);
-	else
-		last_line = SC_INDEX(addr + size - 1);
+	last_line = SC_INDEX(addr + size - 1);
 
 	__save_and_cli(flags);
 	if (first_line <= last_line) {
@@ -80,9 +82,6 @@ static void indy_sc_wback_invalidate(unsigned long addr, unsigned long size)
 		goto out;
 	}
 
-	/* Cache index wrap around.  Due to the way the buddy system works
-	   this case should not happen.  We're prepared to handle it,
-	   though. */
 	indy_sc_wipe(first_line, SC_SIZE - SC_LINE);
 	indy_sc_wipe(0, last_line);
 out:
@@ -98,8 +97,9 @@ static void indy_sc_enable(void)
 	printk("Enabling R4600 SCACHE\n");
 #endif
 	__asm__ __volatile__("
-		.set noreorder
-		.set mips3
+		.set	push
+		.set	noreorder
+		.set	mips3
 		mfc0	%2, $12
 		nop; nop; nop; nop;
 		li	%1, 0x80
@@ -115,8 +115,7 @@ static void indy_sc_enable(void)
 		nop; nop; nop; nop;
 		mtc0	%2, $12
 		nop; nop; nop; nop;
-		.set mips0
-		.set reorder"
+		.set	pop"
 		: "=r" (tmp1), "=r" (tmp2), "=r" (addr));
 }
 
@@ -128,8 +127,9 @@ static void indy_sc_disable(void)
 	printk("Disabling R4600 SCACHE\n");
 #endif
 	__asm__ __volatile__("
-		.set noreorder
-		.set mips3
+		.set	push
+		.set	noreorder
+		.set	mips3
 		li	%0, 0x1
 		dsll	%0, 31
 		lui	%1, 0x9000
@@ -145,9 +145,8 @@ static void indy_sc_disable(void)
 		nop; nop; nop; nop;
 		mtc0	%2, $12
 		nop; nop; nop; nop;
-		.set mips2
-		.set reorder
-        " : "=r" (tmp1), "=r" (tmp2), "=r" (tmp3));
+		.set	pop"
+		: "=r" (tmp1), "=r" (tmp2), "=r" (tmp3));
 }
 
 static inline int __init indy_sc_probe(void)
@@ -221,7 +220,6 @@ struct bcache_ops indy_sc_ops = {
 
 void __init indy_sc_init(void)
 {
-return;
 	if (indy_sc_probe()) {
 		indy_sc_enable();
 		bcops = &indy_sc_ops;

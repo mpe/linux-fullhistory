@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.12 2000/02/24 00:13:20 ralf Exp $
+/* $Id: pgtable.h,v 1.14 2000/03/02 02:37:13 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -72,6 +72,7 @@ extern void (*_flush_page_to_ram)(struct page * page);
 #define PTRS_PER_PMD	1024
 #define PTRS_PER_PTE	512
 #define USER_PTRS_PER_PGD	(TASK_SIZE/PGDIR_SIZE)
+#define FIRST_USER_PGD_NR	0
 
 #define VMALLOC_START     XKSEG
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
@@ -123,15 +124,15 @@ extern void (*_flush_page_to_ram)(struct page * page);
 
 #define _PAGE_CHG_MASK  (PAGE_MASK | _PAGE_ACCESSED | _PAGE_MODIFIED | _CACHE_MASK)
 
-#define PAGE_NONE	__pgprot(_PAGE_PRESENT | _CACHE_CACHABLE_NONCOHERENT)
+#define PAGE_NONE	__pgprot(_PAGE_PRESENT | _CACHE_CACHABLE_COW)
 #define PAGE_SHARED     __pgprot(_PAGE_PRESENT | _PAGE_READ | _PAGE_WRITE | \
-			_CACHE_CACHABLE_NONCOHERENT)
+			_CACHE_CACHABLE_COW)
 #define PAGE_COPY       __pgprot(_PAGE_PRESENT | _PAGE_READ | \
-			_CACHE_CACHABLE_NONCOHERENT)
+			_CACHE_CACHABLE_COW)
 #define PAGE_READONLY   __pgprot(_PAGE_PRESENT | _PAGE_READ | \
-			_CACHE_CACHABLE_NONCOHERENT)
+			_CACHE_CACHABLE_COW)
 #define PAGE_KERNEL	__pgprot(_PAGE_PRESENT | __READABLE | __WRITEABLE | \
-			_CACHE_CACHABLE_NONCOHERENT)
+			_CACHE_CACHABLE_COW)
 #define PAGE_USERIO     __pgprot(_PAGE_PRESENT | _PAGE_READ | _PAGE_WRITE | \
 			_CACHE_UNCACHED)
 #define PAGE_KERNEL_UNCACHED __pgprot(_PAGE_PRESENT | __READABLE | __WRITEABLE | \
@@ -204,7 +205,7 @@ extern unsigned long zero_page_mask;
 #define PAGE_PTR(address) \
 ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
 
-extern pte_t invalid_pte_table[PAGE_SIZE/sizeof(pte_t)];
+extern pte_t invalid_pte_table[2*PAGE_SIZE/sizeof(pte_t)];
 extern pmd_t invalid_pmd_table[2*PAGE_SIZE/sizeof(pmd_t)];
 
 /*
@@ -411,8 +412,8 @@ extern inline pte_t pte_mkyoung(pte_t pte)
 #define PAGE_TO_PA(page)	((page - mem_map) << PAGE_SHIFT)
 #else
 #define PAGE_TO_PA(page) \
-		((((page)-(page)->zone->zone_pgdat->node_mem_map) << PAGE_SHIFT) \
-		+ ((PAGE_TO_PLAT_NODE(page))->physstart))
+		((((page)-(page)->zone->zone_mem_map) << PAGE_SHIFT) \
+		+ ((page)->zone->zone_start_paddr))
 #endif
 #define mk_pte(page, pgprot)						\
 ({									\
@@ -469,6 +470,7 @@ extern void pgd_init(unsigned long page);
 extern void pmd_init(unsigned long page);
 
 extern pgd_t swapper_pg_dir[1024];
+extern void paging_init(void);
 
 extern void (*update_mmu_cache)(struct vm_area_struct *vma,
 				unsigned long address, pte_t pte);

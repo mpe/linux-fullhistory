@@ -11,9 +11,6 @@
 
 typedef struct plat_pglist_data {
 	pg_data_t	gendata;
-	unsigned long	physstart;
-	unsigned long	size;
-	unsigned long	start_mapnr;
 } plat_pg_data_t;
 
 /*
@@ -25,10 +22,10 @@ extern plat_pg_data_t *plat_node_data[];
 
 #define PHYSADDR_TO_NID(pa)		NASID_TO_COMPACT_NODEID(NASID_GET(pa))
 #define PLAT_NODE_DATA(n)		(plat_node_data[n])
-#define PLAT_NODE_DATA_STARTNR(n)	(PLAT_NODE_DATA(n)->start_mapnr)
+#define PLAT_NODE_DATA_STARTNR(n)    (PLAT_NODE_DATA(n)->gendata.node_start_mapnr)
+#define PLAT_NODE_DATA_SIZE(n)	     (PLAT_NODE_DATA(n)->gendata.node_size)
 #define PLAT_NODE_DATA_LOCALNR(p, n) \
-			(((p) - PLAT_NODE_DATA(n)->physstart) >> PAGE_SHIFT)
-#define PAGE_TO_PLAT_NODE(p)		(plat_pg_data_t *)((p)->zone->zone_pgdat)
+		(((p) - PLAT_NODE_DATA(n)->gendata.node_start_paddr) >> PAGE_SHIFT)
 
 #ifdef CONFIG_DISCONTIGMEM
 
@@ -38,8 +35,6 @@ extern plat_pg_data_t *plat_node_data[];
 
 /*
  * Given a kernel address, find the home node of the underlying memory.
- * For production kern_addr_valid, change to return "numnodes" instead
- * of panicing.
  */
 #define KVADDR_TO_NID(kaddr) \
 	((NASID_TO_COMPACT_NODEID(NASID_GET(__pa(kaddr))) != -1) ? \
@@ -58,13 +53,6 @@ extern plat_pg_data_t *plat_node_data[];
 #define NODE_MEM_MAP(nid)	(NODE_DATA(nid)->node_mem_map)
 
 /*
- * Given a mem_map_t, LOCAL_MAP_BASE finds the owning node for the
- * physical page and returns the kaddr for the mem_map of that node.
- */
-#define LOCAL_MAP_BASE(page) \
-			NODE_MEM_MAP(KVADDR_TO_NID((unsigned long)(page)))
-
-/*
  * Given a kaddr, ADDR_TO_MAPBASE finds the owning node of the memory
  * and returns the the mem_map of that node.
  */
@@ -77,6 +65,18 @@ extern plat_pg_data_t *plat_node_data[];
  * node's mem_map.
  */
 #define LOCAL_BASE_ADDR(kaddr)	((unsigned long)(kaddr) & ~(NODE_MAX_MEM_SIZE-1))
+
+#define LOCAL_MAP_NR(kvaddr) \
+	(((unsigned long)(kvaddr)-LOCAL_BASE_ADDR((kvaddr))) >> PAGE_SHIFT)
+
+#define MAP_NR(kaddr)	(((unsigned long)(kaddr) > (unsigned long)high_memory)\
+		? (max_mapnr + 1) : (LOCAL_MAP_NR((kaddr)) + \
+		(((unsigned long)ADDR_TO_MAPBASE((kaddr)) - PAGE_OFFSET) / \
+		sizeof(mem_map_t))))
+
+#define kern_addr_valid(addr)	((KVADDR_TO_NID((unsigned long)addr) > \
+	-1) ? 0 : (test_bit(LOCAL_MAP_NR((addr)), \
+	NODE_DATA(KVADDR_TO_NID((unsigned long)addr))->valid_addr_bitmap)))
 
 #endif /* CONFIG_DISCONTIGMEM */
 

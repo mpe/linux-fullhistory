@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/smp.h>
 #include <asm/bootinfo.h>
 #include <asm/mipsregs.h>
 #include <asm/processor.h>
@@ -45,6 +46,7 @@ int get_cpuinfo(char *buffer)
 	len += sprintf(buffer + len, "BogoMIPS\t\t: %lu.%02lu\n",
 		       (loops_per_sec + 2500) / 500000,
 	               ((loops_per_sec + 2500) / 5000) % 100);
+	len += sprintf(buffer + len, "Number of cpus\t\t: %d\n", smp_num_cpus);
 #if defined (__MIPSEB__)
 	len += sprintf(buffer + len, "byteorder\t\t: big endian\n");
 #endif
@@ -68,4 +70,9 @@ int get_cpuinfo(char *buffer)
 	len += sprintf(buffer + len, fmt, 'I', vcei_count);
 
 	return len;
+}
+
+void init_irq_proc(void)
+{
+	/* Nothing, for now.  */
 }

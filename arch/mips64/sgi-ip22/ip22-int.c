@@ -1,4 +1,4 @@
-/* $Id: ip22-int.c,v 1.4 2000/02/04 07:40:24 ralf Exp $
+/* $Id: ip22-int.c,v 1.5 2000/03/02 02:36:50 ralf Exp $
  *
  * indy_int.c: Routines for generic manipulation of the INT[23] ASIC
  *             found on INDY workstations..
@@ -36,6 +36,24 @@
 #include <asm/sgi/sgihpc.h>
 #include <asm/sgi/sgint23.h>
 #include <asm/sgialib.h>
+
+/*
+ * Linux has a controller-independent x86 interrupt architecture.
+ * every controller has a 'controller-template', that is used
+ * by the main code to do the right thing. Each driver-visible
+ * interrupt source is transparently wired to the apropriate
+ * controller. Thus drivers need not be aware of the
+ * interrupt-controller.
+ *
+ * Various interrupt controllers we handle: 8259 PIC, SMP IO-APIC,
+ * PIIX4's internal 8259 PIC and SGI's Visual Workstation Cobalt (IO-)APIC.
+ * (IO-APICs assumed to be messaging to Pentium local-APICs)
+ *
+ * the code is designed to be easily extended with new/different
+ * interrupt controllers, without having to do assembly magic.
+ */
+
+irq_cpustat_t irq_stat [NR_CPUS];
 
 struct sgi_int2_regs *sgi_i2regs;
 struct sgi_int3_regs *sgi_i3regs;
@@ -272,7 +290,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	int do_random, cpu;
 
 	cpu = smp_processor_id();
-	irq_enter(cpu);
+	irq_enter(cpu, irq);
 	kstat.irqs[0][irq]++;
 
 	printk("Got irq %d, press a key.", irq);
@@ -308,7 +326,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 			add_interrupt_randomness(irq);
 		__cli();
 	}
-	irq_exit(cpu);
+	irq_exit(cpu, irq);
 
 	/* unmasking and bottom half handling is done magically for us. */
 }
@@ -433,10 +451,10 @@ void indy_local0_irqdispatch(struct pt_regs *regs)
 		action = local_irq_action[irq];
 	}
 
-	irq_enter(cpu);
+	irq_enter(cpu, irq);
 	kstat.irqs[0][irq + 16]++;
 	action->handler(irq, action->dev_id, regs);
-	irq_exit(cpu);
+	irq_exit(cpu, irq);
 }
 
 void indy_local1_irqdispatch(struct pt_regs *regs)
@@ -457,10 +475,10 @@ void indy_local1_irqdispatch(struct pt_regs *regs)
 		irq = lc1msk_to_irqnr[mask];
 		action = local_irq_action[irq];
 	}
-	irq_enter(cpu);
+	irq_enter(cpu, irq);
 	kstat.irqs[0][irq + 24]++;
 	action->handler(irq, action->dev_id, regs);
-	irq_exit(cpu);
+	irq_exit(cpu, irq);
 }
 
 void indy_buserror_irq(struct pt_regs *regs)
@@ -468,13 +486,13 @@ void indy_buserror_irq(struct pt_regs *regs)
 	int cpu = smp_processor_id();
 	int irq = 6;
 
-	irq_enter(cpu);
+	irq_enter(cpu, irq);
 	kstat.irqs[0][irq]++;
 	printk("Got a bus error IRQ, shouldn't happen yet\n");
 	show_regs(regs);
 	printk("Spinning...\n");
 	while(1);
-	irq_exit(cpu);
+	irq_exit(cpu, irq);
 }
 
 /* Misc. crap just to keep the kernel linking... */

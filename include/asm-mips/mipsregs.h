@@ -30,6 +30,7 @@
 #define CP0_RANDOM $1
 #define CP0_ENTRYLO0 $2
 #define CP0_ENTRYLO1 $3
+#define CP0_CONF $3
 #define CP0_CONTEXT $4
 #define CP0_PAGEMASK $5
 #define CP0_WIRED $6
@@ -333,6 +334,8 @@ __BUILD_SET_CP0(config,CP0_CONFIG)
 #define CONF_DB				(1 <<  4)
 #define CONF_IB				(1 <<  5)
 #define CONF_SC				(1 << 17)
+#define CONF_AC                         (1 << 23)
+#define CONF_HALT                       (1 << 25)
 
 /*
  * R10000 performance counter definitions.

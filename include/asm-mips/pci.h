@@ -1,4 +1,4 @@
-/* $Id: pci.h,v 1.9 2000/02/24 00:13:19 ralf Exp $
+/* $Id: pci.h,v 1.10 2000/03/23 02:26:00 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -34,6 +34,13 @@ extern inline void pcibios_set_master(struct pci_dev *dev)
 #include <asm/scatterlist.h>
 #include <linux/string.h>
 #include <asm/io.h>
+
+#ifdef CONFIG_DDB5074
+#undef PCIBIOS_MIN_IO
+#undef PCIBIOS_MIN_MEM
+#define PCIBIOS_MIN_IO		0x0100000
+#define PCIBIOS_MIN_MEM		0x1000000
+#endif
 
 struct pci_dev;
 

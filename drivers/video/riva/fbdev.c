@@ -127,7 +127,7 @@ static struct pci_device_id rivafb_pci_tbl[] __devinitdata = {
 	{ PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_VTNT2, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_RIVA_VTNT2 },
 	{ PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_UVTNT2, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_RIVA_VTNT2 },
 	{ PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_ITNT2, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_RIVA_ITNT2 },
-	{ 0, }, /* terminate list */
+	{ 0, } /* terminate list */
 };
 MODULE_DEVICE_TABLE(pci, rivafb_pci_tbl);
 

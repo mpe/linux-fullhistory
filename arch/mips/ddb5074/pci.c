@@ -3,7 +3,7 @@
  *
  *  Copyright (C) 2000 Geert Uytterhoeven <geert@sonycom.com>
  *                     Albert Dorofeev <albert@sonycom.com>
- *                     Sony Suprastructure Center Europe (SUPC-E), Brussels
+ *                     Sony Software Development Center Europe (SDCE), Brussels
  *
  *  $Id: pci.c,v 1.4 2000/02/18 00:02:17 ralf Exp $
  */
@@ -168,163 +168,136 @@ struct pci_ops nile4_pci_ops = {
     nile4_pci_write_config_dword
 };
 
+struct {
+    struct resource ram;
+    struct resource flash;
+    struct resource isa_io;
+    struct resource pci_io;
+    struct resource isa_mem;
+    struct resource pci_mem;
+    struct resource nile4;
+    struct resource boot;
+} ddb5074_resources = {
+    { "RAM", 0x00000000, 0x03ffffff,
+      IORESOURCE_MEM | PCI_BASE_ADDRESS_MEM_TYPE_64 },
+    { "Flash ROM", 0x04000000, 0x043fffff },
+    { "Nile4 ISA I/O", 0x06000000, 0x060fffff },
+    { "Nile4 PCI I/O", 0x06100000, 0x07ffffff },
+    { "Nile4 ISA mem", 0x08000000, 0x08ffffff, IORESOURCE_MEM },
+    { "Nile4 PCI mem", 0x09000000, 0x0fffffff, IORESOURCE_MEM },
+    { "Nile4 ctrl", 0x1fa00000, 0x1fbfffff,
+      IORESOURCE_MEM | PCI_BASE_ADDRESS_MEM_TYPE_64 },
+    { "Boot ROM", 0x1fc00000, 0x1fffffff }
+};
 
-static void __init pcibios_claim_resources(struct list_head *bus_list)
+static void __init ddb5074_pci_fixup(void)
 {
-    struct list_head *ln, *dn;
-    struct pci_bus *bus;
     struct pci_dev *dev;
-    int idx;
 
-    for (ln = bus_list->next; ln != bus_list; ln = ln->next) {
-	bus = pci_bus_b(ln);
-	for (dn = bus->devices.next; dn != &bus->devices; dn = dn->next) {
-	    dev = pci_dev_b(dn);
-	    for (idx = 0; idx < PCI_NUM_RESOURCES; idx++) {
-		struct resource *r = &dev->resource[idx];
-		struct resource *pr;
-		if (!r->start)
-		    continue;
-		pr = pci_find_parent_resource(dev, r);
-		if (!pr || request_resource(pr, r) < 0) {
-		    printk(KERN_ERR "PCI: Address space collision on region %d of device %s\n", idx, dev->name);
-		    /* We probably should disable the region, shouldn't we? */
-		}
-	    }
+    pci_for_each_dev(dev) {
+	if (dev->vendor == PCI_VENDOR_ID_NEC &&
+	    dev->device == PCI_DEVICE_ID_NEC_NILE4) {
+	    /*
+	     *  The first 64-bit PCI base register should point to the Nile4
+	     *  control registers. Unfortunately this isn't the case, so we fix
+	     *  it ourselves. This allows the serial driver to find the UART.
+	     */
+	    dev->resource[0] = ddb5074_resources.nile4;
+	    request_resource(&iomem_resource, &dev->resource[0]);
+	    /*
+	     *  The second 64-bit PCI base register points to the first memory
+	     *  bank. Unfortunately the address is wrong, so we fix it (again).
+	     */
+	    dev->resource[2] = ddb5074_resources.ram;
+	    request_resource(&iomem_resource, &dev->resource[2]);
+	} else if (dev->vendor == PCI_VENDOR_ID_AL &&
+		   dev->device == PCI_DEVICE_ID_AL_M7101) {
+	    /*
+	     *  It's nice to have the LEDs on the GPIO pins available for
+	     *  debugging
+	     */
+	    extern struct pci_dev *pci_pmu;
+	    u8 t8;
+
+	    pci_pmu = dev;		/* for LEDs D2 and D3 */
+	    /* Program the lines for LEDs D2 and D3 to output */
+	    nile4_pci_read_config_byte(dev, 0x7d, &t8);
+	    t8 |= 0xc0;
+	    nile4_pci_write_config_byte(dev, 0x7d, t8);
+	    /* Turn LEDs D2 and D3 off */
+	    nile4_pci_read_config_byte(dev, 0x7e, &t8);
+	    t8 |= 0xc0;
+	    nile4_pci_write_config_byte(dev, 0x7e, t8);
 	}
-	pcibios_claim_resources(&bus->children);
     }
 }
 
-
-void pcibios_init(void)
+static void __init pcibios_fixup_irqs(void)
 {
-    printk("PCI: Probing PCI hardware\n");
-    ioport_resource.end = 0x1ffffff;
-    pci_scan_bus(0, &nile4_pci_ops, NULL);
-    pcibios_claim_resources(&pci_root_buses);
-}
-
-void pcibios_fixup_bus(struct pci_bus *bus)
-{
-    struct list_head *dn;
     struct pci_dev *dev;
-    extern struct pci_dev *pci_pmu;	/* for LEDs D2 and D3 */
-    int slot_num, func_num;
-    u8 t8;
+    int slot_num;
 
-    /*
-     *  FIXME: PMON doesn't autoconfigure the PCI devices
-     *         For now we just hardcode them for our configuration
-     */
-    printk("PCI: Configuring PCI devices (hardcoded)\n");
-    for (dn = bus->devices.next; dn != &bus->devices; dn = dn->next) {
-	dev = pci_dev_b(dn);
-
+    pci_for_each_dev(dev) {
 	slot_num = PCI_SLOT(dev->devfn);
-	func_num = PCI_FUNC(dev->devfn);
-	printk("  Device %2d: ", slot_num);
 	switch (slot_num) {
 	    case 0:
-		printk("[onboard] Acer Labs M1533 Aladdin IV\n");
 		dev->irq = nile4_to_irq(NILE4_INT_INTE);
 		break;
 	    case 1:
-		printk("[onboard] DEC DC21140\n");
 		dev->irq = nile4_to_irq(NILE4_INT_INTA);
-		dev->resource[0].start = 0x100000;
-		dev->resource[0].end = dev->resource[0].start+0x7f;
-		nile4_pci_write_config_dword(dev, PCI_BASE_ADDRESS_0,
-					     dev->resource[0].start);
-		dev->resource[1].start = 0x1000000;
-		dev->resource[1].end = dev->resource[1].start+0x7f;
-		nile4_pci_write_config_dword(dev, PCI_BASE_ADDRESS_0,
-					     dev->resource[1].start);
 		break;
-	    case 2:
-		printk("[slot 1]  Realtek 8029\n");
+	    case 2:	/* slot 1 */
 		dev->irq = nile4_to_irq(NILE4_INT_INTA);
-		dev->resource[0].start = 0x800000;
-		dev->resource[0].end = dev->resource[0].start+0x1f;
-		nile4_pci_write_config_dword(dev, PCI_BASE_ADDRESS_0,
-					     dev->resource[0].start);
 		break;
-	    case 3:
-		printk("[slot 2]  DEC DC21140 (#2)\n");
+	    case 3:	/* slot 2 */
 		dev->irq = nile4_to_irq(NILE4_INT_INTB);
-		dev->resource[0].start = 0x1000000;
-		dev->resource[0].end = dev->resource[0].start+0x7f;
-		nile4_pci_write_config_dword(dev, PCI_BASE_ADDRESS_0,
-					     dev->resource[0].start);
-		dev->resource[1].start = 0x4000000;
-		dev->resource[1].end = dev->resource[1].start+0x7f;
-		nile4_pci_write_config_dword(dev, PCI_BASE_ADDRESS_0,
-					     dev->resource[1].start);
 		break;
-	    case 4:
-		printk("[slot 3]  Promise Technology IDE UltraDMA/33");
-		printk(" or 3Com 3c905 :-)\n");
+	    case 4:	/* slot 3 */
 		dev->irq = nile4_to_irq(NILE4_INT_INTC);
-		dev->resource[0].start = 0x1800000;
-		dev->resource[0].end = dev->resource[0].start+0x7fffff;
-		nile4_pci_write_config_dword(dev, PCI_BASE_ADDRESS_0,
-					     dev->resource[0].start);
 		break;
 	    case 5:
-		printk("[onboard] NEC Vrc-5074 Nile 4 Host Bridge\n");
 		/*
 		 * Fixup so the serial driver can use the UART
 		 */
 		dev->irq = nile4_to_irq(NILE4_INT_UART);
-		dev->resource[0].start = PHYSADDR(NILE4_BASE);
-		dev->resource[0].end = dev->resource[0].start+NILE4_SIZE-1;
-		dev->resource[0].flags = IORESOURCE_MEM |
-					 PCI_BASE_ADDRESS_MEM_TYPE_64;
-		
-		break;
-	    case 10:
-		printk("[onboard] Acer Labs M7101 PMU\n");
-		pci_pmu = dev;
-		/* Program the lines for LEDs D2 and D3 to output */
-		nile4_pci_read_config_byte(dev, 0x7d, &t8);
-		t8 |= 0xc0;
-		nile4_pci_write_config_byte(dev, 0x7d, t8);
-		/* Turn LEDs D2 and D3 off */
-		nile4_pci_read_config_byte(dev, 0x7e, &t8);
-		t8 |= 0xc0;
-		nile4_pci_write_config_byte(dev, 0x7e, t8);
 		break;
 	    case 13:
-		printk("[onboard] Acer Labs M5237 USB\n");
 		dev->irq = nile4_to_irq(NILE4_INT_INTE);
-		dev->resource[0].start = 0x1001000;
-		dev->resource[0].end = dev->resource[0].start+0xfff;
-		nile4_pci_write_config_dword(dev, PCI_BASE_ADDRESS_0,
-					     dev->resource[0].start);
 		break;
 	    default:
-		printk("\n");
 		break;
 	}
     }
+}
+
+void __init pcibios_init(void)
+{
+    printk("PCI: Probing PCI hardware\n");
+    ioport_resource.end = 0x1ffffff;		/*  32 MB */
+    iomem_resource.end = 0x1fffffff;		/* 512 MB */
+    /* `ram' and `nile4' are requested through the Nile4 pci_dev */
+    request_resource(&iomem_resource, &ddb5074_resources.flash);
+    request_resource(&iomem_resource, &ddb5074_resources.isa_io);
+    request_resource(&iomem_resource, &ddb5074_resources.pci_io);
+    request_resource(&iomem_resource, &ddb5074_resources.isa_mem);
+    request_resource(&iomem_resource, &ddb5074_resources.pci_mem);
+    request_resource(&iomem_resource, &ddb5074_resources.boot);
+
+    pci_scan_bus(0, &nile4_pci_ops, NULL);
+    ddb5074_pci_fixup();
+    pci_assign_unassigned_resources();
+    pci_set_bus_ranges();
+    pcibios_fixup_irqs();
+}
+
+void __init pcibios_fixup_bus(struct pci_bus *bus)
+{
+    bus->resource[1] = &ddb5074_resources.pci_mem;
 }
 
 char *pcibios_setup (char *str)
 {
     return str;
-}
-
-void __init pcibios_update_resource(struct pci_dev *dev, struct resource *root,
-				    struct resource *res, int resource)
-{
-    unsigned long where, size;
-    u32 reg;
-
-    where = PCI_BASE_ADDRESS_0 + (resource * 4);
-    size = res->end - res->start;
-    pci_read_config_dword(dev, where, &reg);
-    reg = (reg & size) | (((u32)(res->start - root->start)) & ~size);
-    pci_write_config_dword(dev, where, reg);
 }
 
 void __init pcibios_update_irq(struct pci_dev *dev, int irq)
@@ -341,15 +314,85 @@ void __init pcibios_fixup_pbus_ranges(struct pci_bus *bus,
     ranges->mem_end -= bus->resource[1]->start;
 }
 
-int __init pcibios_enable_device(struct pci_dev *dev)
+int pcibios_enable_resources(struct pci_dev *dev)
 {
-    printk("pcibios_enable_device for %04x:%04x\n", dev->vendor, dev->device);
-    panic("pcibios_enable_device: not yet implemented\n");
+	u16 cmd, old_cmd;
+	int idx;
+	struct resource *r;
+
+	pci_read_config_word(dev, PCI_COMMAND, &cmd);
+	old_cmd = cmd;
+	for(idx=0; idx<6; idx++) {
+		r = &dev->resource[idx];
+		if (!r->start && r->end) {
+			printk(KERN_ERR "PCI: Device %s not available because of resource collisions\n", dev->slot_name);
+			return -EINVAL;
+		}
+		if (r->flags & IORESOURCE_IO)
+			cmd |= PCI_COMMAND_IO;
+		if (r->flags & IORESOURCE_MEM)
+			cmd |= PCI_COMMAND_MEMORY;
+	}
+	if (cmd != old_cmd) {
+		printk("PCI: Enabling device %s (%04x -> %04x)\n", dev->slot_name, old_cmd, cmd);
+		pci_write_config_word(dev, PCI_COMMAND, cmd);
+	}
+	return 0;
 }
 
-void __init pcibios_align_resource(void *data, struct resource *res,
-				   unsigned long size)
-{}
+int pcibios_enable_device(struct pci_dev *dev)
+{
+    return pcibios_enable_resources(dev);
+}
+
+void pcibios_update_resource(struct pci_dev *dev, struct resource *root,
+			     struct resource *res, int resource)
+{
+	u32 new, check;
+	int reg;
+
+	new = res->start | (res->flags & PCI_REGION_FLAG_MASK);
+	if (resource < 6) {
+		reg = PCI_BASE_ADDRESS_0 + 4*resource;
+	} else if (resource == PCI_ROM_RESOURCE) {
+		res->flags |= PCI_ROM_ADDRESS_ENABLE;
+		reg = dev->rom_base_reg;
+	} else {
+		/* Somebody might have asked allocation of a non-standard resource */
+		return;
+	}
+	
+	pci_write_config_dword(dev, reg, new);
+	pci_read_config_dword(dev, reg, &check);
+	if ((new ^ check) & ((new & PCI_BASE_ADDRESS_SPACE_IO) ? PCI_BASE_ADDRESS_IO_MASK : PCI_BASE_ADDRESS_MEM_MASK)) {
+		printk(KERN_ERR "PCI: Error while updating region "
+		       "%s/%d (%08x != %08x)\n", dev->slot_name, resource,
+		       new, check);
+	}
+}
+
+void pcibios_align_resource(void *data, struct resource *res,
+			    unsigned long size)
+{
+	struct pci_dev *dev = data;
+
+	if (res->flags & IORESOURCE_IO) {
+		unsigned long start = res->start;
+
+		/* We need to avoid collisions with `mirrored' VGA ports
+		   and other strange ISA hardware, so we always want the
+		   addresses kilobyte aligned.  */
+		if (size > 0x100) {
+			printk(KERN_ERR "PCI: I/O Region %s/%d too large"
+			       " (%ld bytes)\n", dev->slot_name,
+			       dev->resource - res, size);
+		}
+
+		start = (start + 1024 - 1) & ~(1024 - 1);
+		res->start = start;
+	}
+}
+
 
 struct pci_fixup pcibios_fixups[] = {};
 

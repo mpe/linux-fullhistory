@@ -139,7 +139,9 @@ static struct pci_device_id com20020pci_id_table[] __devinitdata = {
 	{0,}
 };
 
-static struct pci_driver com20020pci_driver __devinitdata = {
+MODULE_DEVICE_TABLE(pci, com20020pci_id_table);
+
+static struct pci_driver com20020pci_driver = {
 	name:		"com20020",
 	id_table:	com20020pci_id_table,
 	probe:		com20020pci_probe,

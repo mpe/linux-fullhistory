@@ -115,7 +115,7 @@ static struct pci_device_id ne2k_pci_tbl[] __devinitdata = {
 	{ 0x1050, 0x5a5a, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_Winbond_W89C940F },
 	{ 0x12c3, 0x0058, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_Holtek_HT80232 },
 	{ 0x12c3, 0x5598, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_Holtek_HT80229 },
-	{ 0, },
+	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, ne2k_pci_tbl);
 

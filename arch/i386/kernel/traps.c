@@ -790,7 +790,7 @@ cobalt_init(void)
 	 * On normal SMP PC this is used only with SMP, but we have to
 	 * use it and set it up here to start the Cobalt clock
 	 */
-	set_fixmap(FIX_APIC_BASE, APIC_PHYS_BASE);
+	set_fixmap(FIX_APIC_BASE, APIC_DEFAULT_PHYS_BASE);
 	printk("Local APIC ID %lx\n", apic_read(APIC_ID));
 	printk("Local APIC Version %lx\n", apic_read(APIC_LVR));
 

@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.16 2000/02/18 00:24:30 ralf Exp $
+/* $Id: fault.c,v 1.15 2000/02/04 07:40:23 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -90,12 +90,17 @@ good_area:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	{
-		int fault = handle_mm_fault(mm, vma, address, write);
-		if (fault < 0)
-			goto out_of_memory;
-		if (!fault)
-			goto do_sigbus;
+	switch (handle_mm_fault(mm, vma, address, write)) {
+	case 1:
+		tsk->min_flt++;
+		break;
+	case 2:
+		tsk->maj_flt++;
+		break;
+	case 0:
+		goto do_sigbus;
+	default:
+		goto out_of_memory;
 	}
 
 	up(&mm->mmap_sem);

@@ -129,7 +129,6 @@ asmlinkage int sys_execve(struct pt_regs regs)
 	int error;
 	char * filename;
 
-	lock_kernel();
 	filename = getname((char *) (long)regs.regs[4]);
 	error = PTR_ERR(filename);
 	if (IS_ERR(filename))
@@ -139,7 +138,6 @@ asmlinkage int sys_execve(struct pt_regs regs)
 	putname(filename);
 
 out:
-	unlock_kernel();
 	return error;
 }
 

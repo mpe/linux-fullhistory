@@ -66,8 +66,7 @@ static struct console sercons =
  *    Register console.
  */
 
-long __init sgi_prom_console_init(long kmem_start, long kmem_end)
+void __init sgi_prom_console_init(void )
 {
     register_console(&sercons);
-    return kmem_start;
 }

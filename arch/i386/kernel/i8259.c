@@ -456,7 +456,7 @@ void __init init_IRQ(void)
 	 * IRQ0 must be given a fixed assignment and initialized,
 	 * because it's used before the IO-APIC is set up.
 	 */
-	set_intr_gate(IRQ0_TRAP_VECTOR, interrupt[0]);
+	set_intr_gate(FIRST_DEVICE_VECTOR, interrupt[0]);
 
 	/*
 	 * The reschedule interrupt is a CPU-to-CPU reschedule-helper

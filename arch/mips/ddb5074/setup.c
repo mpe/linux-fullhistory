@@ -2,9 +2,9 @@
  *  arch/mips/ddb5074/setup.c -- NEC DDB Vrc-5074 setup routines
  *
  *  Copyright (C) 2000 Geert Uytterhoeven <geert@sonycom.com>
- *                     Sony Suprastructure Center Europe (SUPC-E), Brussels
+ *                     Sony Software Development Center Europe (SDCE), Brussels
  *
- *  $Id: setup.c,v 1.2 2000/02/14 17:07:36 ralf Exp $
+ *  $Id: setup.c,v 1.1 2000/01/26 00:07:44 ralf Exp $
  */
 
 #include <linux/config.h>
@@ -40,12 +40,12 @@ extern void console_setup(char *);
 
 extern struct rtc_ops ddb_rtc_ops;
 
+static void (*back_to_prom)(void) = (void (*)(void))0xbfc00000;
+
 static void ddb_machine_restart(char *command)
 {
     u32 t;
 
-    // FIXME: This doesn't seem to work...
-    printk("Restarting DDB Vrc-5074...");
     /* PCI cold reset */
     t = nile4_in32(NILE4_PCICTRL+4);
     t |= 0x40000000;
@@ -54,8 +54,8 @@ static void ddb_machine_restart(char *command)
     t = nile4_in32(NILE4_CPUSTAT);
     t |= 1;
     nile4_out32(NILE4_CPUSTAT, t);
-    printk("Restart failed!\n");
-    do {} while (1);
+    /* Call the PROM */
+    back_to_prom();
 }
 
 static void ddb_machine_halt(void)
@@ -91,6 +91,8 @@ static void __init ddb_time_init(struct irqaction *irq)
 
 void __init ddb_setup(void)
 {
+    extern int panic_timeout;
+
     irq_setup = ddb_irq_setup;
     mips_io_port_base = NILE4_PCI_IO_BASE;
     isa_slot_offset = NILE4_PCI_MEM_BASE;
@@ -106,6 +108,9 @@ void __init ddb_setup(void)
     _machine_power_off = ddb_machine_power_off;
 
     rtc_ops = &ddb_rtc_ops;
+
+    /* Reboot on panic */
+    panic_timeout = 180;
 }
 
 int __init page_is_ram(unsigned long pagenr)

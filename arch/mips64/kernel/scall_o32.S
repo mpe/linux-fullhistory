@@ -1,4 +1,4 @@
-/* $Id: scall_o32.S,v 1.8 2000/02/23 00:41:00 ralf Exp $
+/* $Id: scall_o32.S,v 1.18 2000/03/27 21:04:13 ulfc Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -35,23 +35,26 @@ NESTED(handle_sys, PT_SIZE, sp)
 	SAVE_SOME
 	STI
 	.set	at
- SAVE_ALL
- ld	a1, PT_R2(sp)
- PRINT("Got syscall %d\n")
- RESTORE_ALL
-
+#if DEBUG_MIPS64
+ jal dodebug
+ ld $4, PT_R4(sp)
+ ld $5, PT_R5(sp)
+ ld $6, PT_R6(sp)
+ ld $7, PT_R7(sp)
+ ld $2, PT_R2(sp)
+#endif
 	ld	t1, PT_EPC(sp)		# skip syscall on return
 
-	sltiu	t0, v0, MAX_SYSCALL_NO + 1 # check syscall number
+	subu	t0, v0, __NR_Linux32	# check syscall number
+	sltiu	t0, t0, __NR_Linux32_syscalls + 1
 	daddiu	t1, 4			# skip to next instruction
 	beqz	t0, not_o32_scall
 	sd	t1, PT_EPC(sp)
 
 	/* XXX Put both in one cacheline, should save a bit. */
-	dsll	t0, v0, 3
+	dsll	t0, v0, 3		# offset into table
 	ld	t2, (sys_call_table - (__NR_Linux32 * 8))(t0) # syscall routine
 	lbu	t3, (sys_narg_table - __NR_Linux32)(v0)	# number of arguments
-	beqz	t2, illegal_syscall;
 
 	subu	t0, t3, 5		# 5 or more arguments?
 	sd	a3, PT_R26(sp)		# save a3 for syscall restarting
@@ -72,7 +75,7 @@ stack_done:
 	negu	v0			# error
 	sd	v0, PT_R0(sp)		# set flag for syscall restarting
 1:	sd	v0, PT_R2(sp)		# result
-
+	
 FEXPORT(o32_ret_from_sys_call)
 	lw	t0, softirq_state
 	lw	t1, softirq_state+4	# unused delay slot
@@ -110,6 +113,11 @@ o32_reschedule:
 
 trace_a_syscall:
 	SAVE_STATIC
+	sd	a4, PT_R8(sp)
+	sd	a5, PT_R9(sp)
+	sd	a6, PT_R10(sp)
+	sd	a7, PT_R11(sp)
+
 	sd	t2,PT_R1(sp)
 	jal	syscall_trace
 	ld	t2,PT_R1(sp)
@@ -118,6 +126,9 @@ trace_a_syscall:
 	ld	a1, PT_R5(sp)
 	ld	a2, PT_R6(sp)
 	ld	a3, PT_R7(sp)
+	ld	a4, PT_R8(sp)
+	ld	a5, PT_R9(sp)
+
 	jalr	t2
 
 	li	t0, -EMAXERRNO - 1	# error?
@@ -130,7 +141,7 @@ trace_a_syscall:
 1:	sd	v0, PT_R2(sp)		# result
 
 	jal	syscall_trace
-	j	ret_from_sys_call
+	j	o32_ret_from_sys_call
 
 /* ------------------------------------------------------------------------ */
 
@@ -197,12 +208,12 @@ illegal_syscall:
 	sys	sys_read	3
 	sys	sys_write	3
 	sys	sys_open	3			/* 4005 */
-	sys	sys_close	3
+	sys	sys_close	1
 	sys	sys_waitpid	3
 	sys	sys_creat	2
 	sys	sys_link	2
 	sys	sys_unlink	1			/* 4010 */
-	sys	sys_execve	0
+	sys	sys32_execve	0
 	sys	sys_chdir	1
 	sys	sys_time	1
 	sys	sys_mknod	3
@@ -217,10 +228,10 @@ illegal_syscall:
 	sys	sys_setuid	1
 	sys	sys_getuid	0
 	sys	sys_stime	1			/* 4025 */
-	sys	sys_ni_syscall	0	/* ptrace */
-	sys	sys_alarm	1
+	sys	sys32_ptrace	4
+	sys	sys32_alarm	1
 	sys	sys_fstat	2
-	sys	sys_ni_syscall	0
+	sys	sys_pause	0
 	sys	sys_utime	2			/* 4030 */
 	sys	sys_ni_syscall	0
 	sys	sys_ni_syscall	0
@@ -245,7 +256,7 @@ illegal_syscall:
 	sys	sys_acct	0
 	sys	sys_umount	2
 	sys	sys_ni_syscall	0
-	sys	sys_ioctl	3
+	sys	sys32_ioctl	3
 	sys	sys_fcntl	3			/* 4055 */
 	sys	sys_ni_syscall	2
 	sys	sys_setpgid	2
@@ -266,11 +277,11 @@ illegal_syscall:
 	sys	sys32_sigsuspend	0
 	sys	sys32_sigpending	1
 	sys	sys_sethostname	2
-	sys	sys_setrlimit	2			/* 4075 */
-	sys	sys_old_getrlimit	2
-	sys	sys_getrusage	2
-	sys	sys_gettimeofday 2
-	sys	sys_settimeofday 2
+	sys	sys32_setrlimit	2			/* 4075 */
+	sys	sys32_getrlimit	2
+	sys	sys32_getrusage	2
+	sys	sys32_gettimeofday 2
+	sys	sys32_settimeofday 2
 	sys	sys_getgroups	2			/* 4080 */
 	sys	sys_setgroups	2
 	sys	sys_ni_syscall	0 /* old_select */
@@ -280,7 +291,7 @@ illegal_syscall:
 	sys	sys_uselib	1
 	sys	sys_swapon	2
 	sys	sys_reboot	3
-	sys	old_readdir	3
+	sys	sys32_readdir	3
 	sys	sys_mmap	6			/* 4090 */
 	sys	sys_munmap	2
 	sys	sys_truncate	2
@@ -290,13 +301,13 @@ illegal_syscall:
 	sys	sys_getpriority	2
 	sys	sys_setpriority	3
 	sys	sys_ni_syscall	0
-	sys	sys_statfs	2
-	sys	sys_fstatfs	2			/* 4100 */
+	sys	sys32_statfs	2
+	sys	sys32_fstatfs	2			/* 4100 */
 	sys	sys_ni_syscall	0	/* sys_ioperm */
 	sys	sys_socketcall	2
 	sys	sys_syslog	3
-	sys	sys_setitimer	3
-	sys	sys_getitimer	2			/* 4105 */
+	sys	sys32_setitimer	3
+	sys	sys32_getitimer	2			/* 4105 */
 	sys	sys32_newstat	2
 	sys	sys32_newlstat	2
 	sys	sys32_newfstat	2
@@ -305,7 +316,7 @@ illegal_syscall:
 	sys	sys_vhangup	0
 	sys	sys_ni_syscall	0	/* was sys_idle	 */
 	sys	sys_ni_syscall	0	/* sys_vm86 */
-	sys	sys_wait4	4
+	sys	sys32_wait4	4
 	sys	sys_swapoff	1			/* 4115 */
 	sys	sys_sysinfo	1
 	sys	sys_ipc		6
@@ -317,7 +328,7 @@ illegal_syscall:
 	sys	sys_ni_syscall	0	/* sys_modify_ldt */
 	sys	sys_adjtimex	1
 	sys	sys_mprotect	3			/* 4125 */
-	sys	sys_sigprocmask	3
+	sys	sys32_sigprocmask	3
 	sys	sys_create_module 2
 	sys	sys_init_module	5
 	sys	sys_delete_module 1
@@ -331,13 +342,13 @@ illegal_syscall:
 	sys	sys_ni_syscall	0 /* for afs_syscall */
 	sys	sys_setfsuid	1
 	sys	sys_setfsgid	1
-	sys	sys_llseek	5			/* 4140 */
-	sys	sys_getdents	3
-	sys	sys_select	5
+	sys	sys32_llseek	5			/* 4140 */
+	sys	sys32_getdents	3
+	sys	sys32_select	5
 	sys	sys_flock	2
 	sys	sys_msync	3
-	sys	sys_readv	3			/* 4145 */
-	sys	sys_writev	3
+	sys	sys32_readv	3			/* 4145 */
+	sys	sys32_writev	3
 	sys	sys_cacheflush	3
 	sys	sys_cachectl	3
 	sys	sys_sysmips	4
@@ -356,8 +367,8 @@ illegal_syscall:
 	sys	sys_sched_yield	0
 	sys	sys_sched_get_priority_max 1
 	sys	sys_sched_get_priority_min 1
-	sys	sys_sched_rr_get_interval 2		/* 4165 */
-	sys	sys_nanosleep	2
+	sys	sys32_sched_rr_get_interval 2		/* 4165 */
+	sys	sys32_nanosleep	2
 	sys	sys_mremap	4
 	sys	sys_accept	3
 	sys	sys_bind	3
@@ -408,6 +419,8 @@ illegal_syscall:
 	sys	sys_lstat64	3
 	sys	sys_fstat64	3			/* 4210 */
 	sys	sys_pivot_root	2
+	sys	sys_mincore	3
+	sys	sys_madvise	3
 	.endm
 
 	.macro	sys function, nargs

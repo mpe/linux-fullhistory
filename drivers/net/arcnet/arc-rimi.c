@@ -345,9 +345,8 @@ static int __init arcrimi_setup(char *s)
 	s = get_options(s, 8, ints);
 	if (!ints[0])
 		return 1;
-	dev = alloc_bootmem(sizeof(struct net_device) + 10);
-	memset(dev, 0, sizeof(struct net_device) + 10);
-	dev->name = (char *) (dev + 1);
+	dev = alloc_bootmem(sizeof(struct net_device));
+	memset(dev, 0, sizeof(struct net_device));
 	dev->init = arcrimi_probe;
 
 	switch (ints[0]) {

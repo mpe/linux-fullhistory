@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.3 1999/11/19 23:29:05 ralf Exp $
+/* $Id: time.c,v 1.2 1999/08/21 21:42:59 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

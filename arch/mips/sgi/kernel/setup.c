@@ -30,17 +30,16 @@
 #ifdef CONFIG_REMOTE_DEBUG
 extern void rs_kgdb_hook(int);
 extern void breakpoint(void);
+static int remote_debug = 0;
 #endif
 
-#if defined(CONFIG_SERIAL_CONSOLE) || defined(CONFIG_PROM_CONSOLE)
+#if defined(CONFIG_SERIAL_CONSOLE) || defined(CONFIG_SGI_PROM_CONSOLE)
 extern void console_setup(char *);
 #endif
 
 extern struct rtc_ops indy_rtc_ops;
 void indy_reboot_setup(void);
 void sgi_volume_set(unsigned char);
-
-static int remote_debug = 0;
 
 #define sgi_kh ((struct hpc_keyb *) (KSEG1 + 0x1fbd9800 + 64))
 
@@ -166,7 +165,7 @@ void __init sgi_setup(void)
 	 * graphics console, it is set to "d" for the first serial
 	 * line and "d2" for the second serial line.
 	 */
-	ctype = prom_getenv("console");
+	ctype = ArcGetEnvironmentVariable("console");
 	if(*ctype == 'd') {
 		if(*(ctype+1)=='2')
 			console_setup ("ttyS1");
@@ -197,10 +196,10 @@ void __init sgi_setup(void)
 #endif
 
 #ifdef CONFIG_SGI_PROM_CONSOLE
-	console_setup("ttyS0", NULL);
+	console_setup("ttyS0");
 #endif
-	  
-	sgi_volume_set(simple_strtoul(prom_getenv("volume"), NULL, 10));
+ 
+	sgi_volume_set(simple_strtoul(ArcGetEnvironmentVariable("volume"), NULL, 10));
 
 #ifdef CONFIG_VT
 #ifdef CONFIG_SGI_NEWPORT_CONSOLE
@@ -231,3 +230,4 @@ void __init sgi_setup(void)
 	init_vino();
 #endif
 }
+__initcall(rs_init);

@@ -50,11 +50,6 @@ static unsigned int num_processors = 0;
 unsigned long phys_cpu_present_map = 0;
 
 /*
- * IA s/w dev Vol 3, Section 7.4
- */
-#define APIC_DEFAULT_PHYS_BASE 0xfee00000
-
-/*
  * Intel MP BIOS table parsing routines:
  */
 
@@ -65,10 +60,12 @@ unsigned long phys_cpu_present_map = 0;
 
 static int __init mpf_checksum(unsigned char *mp, int len)
 {
-	int sum=0;
-	while(len--)
-		sum+=*mp++;
-	return sum&0xFF;
+	int sum = 0;
+
+	while (len--)
+		sum += *mp++;
+
+	return sum & 0xFF;
 }
 
 /*

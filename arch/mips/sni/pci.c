@@ -1,4 +1,4 @@
-/* $Id: pci.c,v 1.10 2000/02/05 06:47:09 ralf Exp $
+/* $Id: pci.c,v 1.9 1999/12/04 03:59:00 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

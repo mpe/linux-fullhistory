@@ -1,10 +1,8 @@
-/* $Id: addrs.h,v 1.1 2000/01/13 00:17:02 ralf Exp $
+/* $Id$
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
- *
- * Derived from IRIX <sys/SN/addrs.h>.
  *
  * Copyright (C) 1992 - 1997, 1999 Silicon Graphics, Inc.
  * Copyright (C) 1999 by Ralf Baechle
@@ -20,10 +18,23 @@
 #include <asm/reg.h>
 #include <asm/sn/kldir.h>
 
+#if defined(CONFIG_SGI_IP27)
+#include <asm/sn/sn0/addrs.h>
+#elif defined(CONFIG_SGI_IP35)
+#include <asm/sn/sn1/addrs.h>
+#endif
+
+
 #if _LANGUAGE_C
 
+#if defined(CONFIG_SGI_IO)	/* FIXME */
+#define PS_UINT_CAST		(__psunsigned_t)
+#define UINT64_CAST		(__uint64_t)
+#else	/* CONFIG_SGI_IO */
 #define PS_UINT_CAST		(unsigned long)
 #define UINT64_CAST		(unsigned long)
+#endif	/* CONFIG_SGI_IO */
+
 #define HUBREG_CAST		(volatile hubreg_t *)
 
 #elif _LANGUAGE_ASSEMBLY
@@ -36,7 +47,9 @@
 
 
 #define NASID_GET_META(_n)	((_n) >> NASID_LOCAL_BITS)
+#ifdef CONFIG_SGI_IP27
 #define NASID_GET_LOCAL(_n)	((_n) & 0xf)
+#endif
 #define NASID_MAKE(_m, _l)	(((_m) << NASID_LOCAL_BITS) | (_l))
 
 #define NODE_ADDRSPACE_MASK	(NODE_ADDRSPACE_SIZE - 1)
@@ -128,6 +141,7 @@
  * The bottom of ualias space is flipped depending on whether you're
  * processor 0 or 1 within a node.
  */
+#ifdef CONFIG_SGI_IP27
 #define UALIAS_FLIP_BASE	UALIAS_BASE
 #define UALIAS_FLIP_SIZE	0x20000
 #define UALIAS_FLIP_BIT		0x10000
@@ -137,6 +151,9 @@
 #define LBOOT_BASE		(HSPEC_BASE + 0x10000000)
 #define LBOOT_SIZE		0x10000000
 #define LBOOT_LIMIT		(LBOOT_BASE + LBOOT_SIZE)
+#define LBOOT_STRIDE		0		/* IP27 has only one CPU PROM */
+
+#endif
 
 #define	HUB_REGISTER_WIDGET	1
 #define IALIAS_BASE		NODE_SWIN_BASE(0, HUB_REGISTER_WIDGET)
@@ -147,9 +164,13 @@
 /*
  * Macro for referring to Hub's RBOOT space
  */
+
+#ifdef CONFIG_SGI_IP27
 #define RBOOT_SIZE		0x10000000	/* 256 Megabytes */
 #define NODE_RBOOT_BASE(_n)	(NODE_HSPEC_BASE(_n) + 0x30000000)
 #define NODE_RBOOT_LIMIT(_n)	(NODE_RBOOT_BASE(_n) + RBOOT_SIZE)
+
+#endif
 
 /*
  * Macros for referring the Hub's back door space
@@ -162,14 +183,18 @@
  *   BDDIR_ENTRY_HI returns the address of the high double-word of the entry.
  *   BDPRT_ENTRY    returns the address of the double-word protection entry
  *                  corresponding to the page containing the physical address.
+ *   BDPRT_ENTRY_S  Stores the value into the protection entry.
+ *   BDPRT_ENTRY_L  Load the value from the protection entry.
  *   BDECC_ENTRY    returns the address of the ECC byte corresponding to a
  *                  double-word at a specified physical address.
+ *   BDECC_ENTRY_H  returns the address of the two ECC bytes corresponding to a
+ *                  quad-word at a specified physical address.
  */
 #define NODE_BDOOR_BASE(_n)	(NODE_HSPEC_BASE(_n) + (NODE_ADDRSPACE_SIZE/2))
 
 #define NODE_BDECC_BASE(_n)	(NODE_BDOOR_BASE(_n))
 #define NODE_BDDIR_BASE(_n)	(NODE_BDOOR_BASE(_n) + (NODE_ADDRSPACE_SIZE/4))
-
+#ifdef CONFIG_SGI_IP27
 #define BDDIR_ENTRY_LO(_pa)	((HSPEC_BASE +				      \
 				  NODE_ADDRSPACE_SIZE * 3 / 4 +		      \
 				  0x200)				    | \
@@ -189,6 +214,9 @@
 				 UINT64_CAST (_pa)	 & NASID_MASK	    | \
 				 UINT64_CAST (_pa) >> 2 & BDDIR_UPPER_MASK  | \
 				 (_rgn) << 3)
+#define BDPRT_ENTRY_ADDR(_pa,_rgn) (BDPRT_ENTRY((_pa),(_rgn)))
+#define BDPRT_ENTRY_S(_pa,_rgn,_val) (*(__psunsigned_t *)BDPRT_ENTRY((_pa),(_rgn))=(_val))
+#define BDPRT_ENTRY_L(_pa,_rgn)	(*(__psunsigned_t *)BDPRT_ENTRY((_pa),(_rgn)))
 
 #define BDECC_ENTRY(_pa)	((HSPEC_BASE +				      \
 				  NODE_ADDRSPACE_SIZE / 2)		    | \
@@ -213,6 +241,7 @@
 #define BDECC_TO_MEM(_ba)	(UINT64_CAST  (_ba) & NASID_MASK	    | \
 				 (UINT64_CAST (_ba) & BDECC_UPPER_MASK)<<2  | \
 				 (UINT64_CAST (_ba) & 3) << 3)
+#endif /* CONFIG_SGI_IP27 */
 
 
 /*
@@ -230,7 +259,6 @@
 #define LOCAL_HUB(_x)		(HUBREG_CAST (IALIAS_BASE + (_x)))
 #define REMOTE_HUB(_n, _x)	(HUBREG_CAST (NODE_SWIN_BASE(_n, 1) +	\
 					      0x800000 + (_x)))
-
 #endif /* _STANDALONE */
 
 /*
@@ -244,6 +272,10 @@
 #define LOCAL_HUB_ADDR(_x)	(HUBREG_CAST (IALIAS_BASE + (_x)))
 #define REMOTE_HUB_ADDR(_n, _x)	(HUBREG_CAST (NODE_SWIN_BASE(_n, 1) +	\
 					      0x800000 + (_x)))
+#ifdef CONFIG_SGI_IP27
+#define REMOTE_HUB_PI_ADDR(_n, _sn, _x)	(HUBREG_CAST (NODE_SWIN_BASE(_n, 1) +	\
+					      0x800000 + (_x)))
+#endif /* CONFIG_SGI_IP27 */
 
 #if _LANGUAGE_C
 
@@ -254,6 +286,8 @@
 #define LOCAL_HUB_S(_r, _d)		HUB_S(LOCAL_HUB_ADDR(_r), (_d))
 #define REMOTE_HUB_L(_n, _r)		HUB_L(REMOTE_HUB_ADDR((_n), (_r)))
 #define REMOTE_HUB_S(_n, _r, _d)	HUB_S(REMOTE_HUB_ADDR((_n), (_r)), (_d))
+#define REMOTE_HUB_PI_L(_n, _sn, _r)	HUB_L(REMOTE_HUB_PI_ADDR((_n), (_sn), (_r)))
+#define REMOTE_HUB_PI_S(_n, _sn, _r, _d) HUB_S(REMOTE_HUB_PI_ADDR((_n), (_sn), (_r)), (_d))
 
 #endif /* _LANGUAGE_C */
 
@@ -383,11 +417,7 @@
 /* loading symmon 4k below UNIX. the arcs loader needs the topaddr for a
  * relocatable program
  */
-#ifdef SN0XXL
-#define UNIX_DEBUG_LOADADDR     0x360000
-#else
 #define	UNIX_DEBUG_LOADADDR	0x300000
-#endif
 #define	SYMMON_LOADADDR(nasid)						\
 	TO_NODE(nasid, PHYS_TO_K0(UNIX_DEBUG_LOADADDR - 0x1000))
 
@@ -420,9 +450,9 @@
 #define	KERN_XP_ADDR(nasid)	KLD_KERN_XP(nasid)->pointer
 #define	KERN_XP_SIZE(nasid)	KLD_KERN_XP(nasid)->size
 
+#define GPDA_ADDR(nasid)	TO_NODE_CAC(nasid, GPDA_OFFSET)
+
 #endif /* _LANGUAGE_C */
 
-/* Fixme for SN1 */
-#include <asm/sn/sn0/addrs.h>
 
 #endif /* _ASM_SN_ADDRS_H */

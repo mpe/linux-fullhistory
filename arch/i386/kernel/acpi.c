@@ -824,12 +824,12 @@ const static struct
 	{acpi_init_via},
 };
 	
-const static struct pci_device_id acpi_pci_tbl[] =
+const static struct pci_device_id acpi_pci_tbl[] __devinitdata =
 {
 	{0x8086, 0x7113, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_INTEL_PIIX4},
 	{0x1106, 0x3040, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_VIA_586},
 	{0x1106, 0x3057, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_VIA_686A},
-	{0,}, /* terminate list */
+	{0,} /* terminate list */
 };
 
 static int __init acpi_probe(struct pci_dev *dev,

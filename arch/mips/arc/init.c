@@ -1,4 +1,4 @@
-/* $Id: init.c,v 1.4 1999/10/09 00:00:57 ralf Exp $
+/* $Id: init.c,v 1.5 2000/03/07 15:45:27 ralf Exp $
  * This file is subject to the terms and conditions of the GNU General Public+ 
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -23,7 +23,7 @@ unsigned short prom_vers, prom_rev;
 
 extern void prom_testtree(void);
 
-int __init prom_init(int argc, char **argv, char **envp)
+int __init prom_init(int argc, char **argv, char **envp, int *prom_vec)
 {
 	struct linux_promblock *pb;
 

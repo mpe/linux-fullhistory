@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.30 2000/02/24 00:13:19 ralf Exp $
+/* $Id: pgtable.h,v 1.31 2000/03/02 02:37:13 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -439,6 +439,7 @@ extern void __bad_pte_kernel(pmd_t *pmd);
 extern int do_check_pgt_cache(int, int);
 
 extern pgd_t swapper_pg_dir[1024];
+extern void paging_init(void);
 
 extern void update_mmu_cache(struct vm_area_struct *vma,
 				unsigned long address, pte_t pte);

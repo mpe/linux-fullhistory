@@ -1,4 +1,4 @@
-/* $Id: print.c,v 1.2 1999/10/09 00:00:57 ralf Exp $
+/* $Id: print.c,v 1.1 1999/01/17 03:49:38 ralf Exp $
  *
  * print.c: Simple print fascility
  *

@@ -2335,7 +2335,7 @@ static void __devinit solo1_remove(struct pci_dev *dev)
 
 static struct pci_device_id id_table[] __devinitdata = {
 	{ PCI_VENDOR_ID_ESS, PCI_DEVICE_ID_ESS_SOLO1, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },
-	{ 0, 0, 0, 0, 0, 0 }
+	{ 0, }
 };
 
 MODULE_DEVICE_TABLE(pci, id_table);

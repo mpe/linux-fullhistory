@@ -18,8 +18,8 @@ extern int sgi_boardid;  /* Board revision. */
 
 /* An HPC dma descriptor. */
 struct hpc_dma_desc {
-	unsigned long pbuf;      /* physical address of data buffer */
-	unsigned long cntinfo;   /* counter and info bits */
+	unsigned int pbuf;      /* physical address of data buffer */
+	unsigned int cntinfo;   /* counter and info bits */
 #define HPCDMA_EOX    0x80000000 /* last desc in chain for tx */
 #define HPCDMA_EOR    0x80000000 /* last desc in chain for rx */
 #define HPCDMA_EOXP   0x40000000 /* end of packet for tx */
@@ -31,10 +31,10 @@ struct hpc_dma_desc {
 #define HPCDMA_OWN    0x00004000 /* Denotes ring buffer ownership on rx */
 #define HPCDMA_BCNT   0x00003fff /* size in bytes of this dma buffer */
 
-	unsigned long pnext;     /* paddr of next hpc_dma_desc if any */
+	unsigned int pnext;     /* paddr of next hpc_dma_desc if any */
 };
 
-typedef volatile unsigned long hpcreg;
+typedef volatile unsigned int hpcreg;
 
 /* HPC1 stuff. */
 

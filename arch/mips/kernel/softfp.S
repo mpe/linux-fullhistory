@@ -147,7 +147,7 @@
 insn:	LOCK_KERNEL;							\
 	la	a1, 8f;							\
 	TEXT(#insn);							\
-	la	a1, nosim;						\
+	la	a0, nosim;						\
 	UNLOCK_KERNEL;							\
 	j	done
 

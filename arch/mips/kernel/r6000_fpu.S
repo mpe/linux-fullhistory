@@ -10,7 +10,7 @@
  * Multi-arch abstraction and asm macros for easier reading:
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: r6000_fpu.S,v 1.6 1999/08/09 19:43:15 harald Exp $
+ * $Id: r6000_fpu.S,v 1.5 1999/05/01 22:40:37 ralf Exp $
  */
 #include <asm/asm.h>
 #include <asm/fpregdef.h>

@@ -1,23 +1,19 @@
-/**************************************************************************
- *                                                                        *
- *               Copyright (C) 1992-1997, Silicon Graphics, Inc.          *
- *                                                                        *
- *  These coded instructions, statements, and computer programs  contain  *
- *  unpublished  proprietary  information of Silicon Graphics, Inc., and  *
- *  are protected by Federal copyright law.  They  may  not be disclosed  *
- *  to  third  parties  or copied or duplicated in any form, in whole or  *
- *  in part, without the prior written consent of Silicon Graphics, Inc.  *
- *                                                                        *
- **************************************************************************/
-
-/*
+/* $Id$
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * Derived from IRIX <sys/SN/gda.h>.
+ *
+ * Copyright (C) 1992 - 1997, 2000 Silicon Graphics, Inc.
+ *
  * gda.h -- Contains the data structure for the global data area,
  * 	The GDA contains information communicated between the
  *	PROM, SYMMON, and the kernel. 
  */
-
-#ifndef __SYS_SN_GDA_H__
-#define __SYS_SN_GDA_H__
+#ifndef _ASM_SN_GDA_H
+#define _ASM_SN_GDA_H
 
 #include <asm/sn/addrs.h>
 
@@ -109,4 +105,4 @@ typedef struct gda {
 #define PROMOP_BIST1		0x0800		/* keep track of which BIST ran */
 #define PROMOP_BIST2		0x1000		/* keep track of which BIST ran */
 
-#endif /* __SYS_SN_GDA_H__ */
+#endif /* _ASM_SN_GDA_H */

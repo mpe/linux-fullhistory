@@ -1,4 +1,4 @@
-/* $Id: identify.c,v 1.5 2000/01/17 23:32:46 ralf Exp $
+/* $Id: identify.c,v 1.5 1999/11/19 20:35:21 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

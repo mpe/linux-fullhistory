@@ -2,7 +2,7 @@
  *  asm-mips/nile4.h -- NEC Vrc-5074 Nile 4 definitions
  *
  *  Copyright (C) 2000 Geert Uytterhoeven <geert@sonycom.com>
- *                     Sony Suprastructure Center Europe (SUPC-E), Brussels
+ *                     Sony Software Development Center Europe (SDCE), Brussels
  *
  *  This file is based on the following documentation:
  *
@@ -10,8 +10,6 @@
  *
  *  $Id: nile4.h,v 1.1 2000/01/26 00:07:45 ralf Exp $
  */
-
-#include <asm/addrspace.h>
 
 
 #define NILE4_BASE		0xbfa00000

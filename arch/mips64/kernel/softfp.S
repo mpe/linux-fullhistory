@@ -1,4 +1,4 @@
-/* $Id: softfp.S,v 1.1 1999/12/04 03:59:00 ralf Exp $
+/* $Id: softfp.S,v 1.2 2000/03/21 23:50:42 ulfc Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -148,7 +148,8 @@
 insn:	LOCK_KERNEL;							\
 	la	a1, 8f;							\
 	TEXT(#insn);							\
-	la	a1, nosim;						\
+	la	a0, nosim;						\
+	jal	printk;							\
 	UNLOCK_KERNEL;							\
 	j	done
 
@@ -165,9 +166,9 @@ LEAF(simfp)
 	.cpload	$25
 	.set	reorder
 
-	subu	sp, 16
+	dsubu	sp, 16
 	.cprestore 20
-	sw	ra, 16(sp)
+	sd	ra, 0(sp)
 
 	/* For now we assume that we get the opcode to simulate passed in as
 	   an argument.  */
@@ -178,9 +179,9 @@ LEAF(simfp)
 	 */
 	la	ta1, lowtab
 	andi	ta2, ta0, 0x3f
-	sll	ta2, ta2, 2
-	addu	ta1, ta2
-	lw	ta1, (ta1)
+	sll	ta2, ta2, 3
+	daddu	ta1, ta2
+	ld	ta1, (ta1)
 	jr	ta1
 	END(simfp)
 
@@ -189,17 +190,17 @@ LEAF(simfp)
  * can keep the jump table significantly shorter.
  */
 #define FMT_switch(insn,opc,temp0,temp1)				\
-insn:	srl	temp0, opc, 19;						\
+insn:	srl	temp0, opc, 18;						\
 	andi	temp0, 0x1c;						\
 	la	temp1, insn ## .tab;					\
-	addu	temp0, temp1;						\
-	lw	temp0, (temp0);						\
+	daddu	temp0, temp1;						\
+	ld	temp0, (temp0);						\
 	jr	temp0;							\
 									\
 	.data;								\
 insn ## .tab:								\
-	.word	insn ## .s, insn ## .d, unimp, unimp;			\
-	.word	insn ## .w, insn ## .l, unimp, unimp;			\
+	.dword	insn ## .s, insn ## .d, unimp, unimp;			\
+	.dword	insn ## .w, insn ## .l, unimp, unimp;			\
 	.previous
 
 	BITCH(add)
@@ -293,8 +294,8 @@ cvt.w.s:
 	   full fp simulation.  */
 
 	/* Done, return.  */
-	lw	ra, 16(sp)
-	addu	sp, 16
+	ld	ra, 0(sp)
+	daddu	sp, 16
 	jr	ra
 
 /* Convert a double fp to a fixed point integer.  */
@@ -378,8 +379,8 @@ cvt.w.d:
 	jal	s_put_fpreg
 
 	/* Done, return.  */
-	lw	ra, 16(sp)
-	addu	sp, 16
+	ld	ra, 0(sp)
+	daddu	sp, 16
 	jr	ra
 
 cvt.w.w = unimp				# undefined result
@@ -410,11 +411,9 @@ cvt.l = unimp
 /* Get the single precission register which's number is in ta1.  */
 s_get_fpreg:
 	.set	noat
-	sll	AT, ta1, 2
 	sll	ta1, 3
-	addu	ta1, AT
 	la	AT, 1f
-	addu	AT, ta1
+	daddu	AT, ta1
 	jr	AT
 	.set	at
 
@@ -489,11 +488,9 @@ s_get_fpreg:
  */
 s_put_fpreg:
 	.set	noat
-	sll	AT, ta1, 2
 	sll	ta1, 3
-	addu	ta1, AT
 	la	AT, 1f
-	addu	AT, ta1
+	daddu	AT, ta1
 	jr	AT
 	.set	at
 	
@@ -565,9 +562,11 @@ s_put_fpreg:
 /* Get the double precission register which's number is in ta1 into ta1/ta2.  */
 d_get_fpreg:
 	.set	noat
-	sll	ta1, 3
+	sll	AT, ta1, 1
+	sll	ta1, 2
+	daddu	ta1, AT
 	la	AT, 1f
-	addu	AT, ta1
+	daddu	AT, ta1
 	jr	AT
 	.set	at
 
@@ -624,16 +623,16 @@ d_get_fpreg:
  * Send an invalid operation exception.
  */
 invalid:
-	lw	ra, 16(sp)
-	addu	sp, 16
+	ld	ra, 0(sp)
+	daddu	sp, 16
 	jr	ra
 
 /*
  * Done, just skip over the current instruction
  */
 done:
-	lw	ra, 16(sp)
-	addu	sp, 16
+	ld	ra, 0(sp)
+	daddu	sp, 16
 	jr	ra
 
 unimp:
@@ -641,7 +640,7 @@ unimp:
 	   on new, yet unsupported CPU types or when the faulting instruction
 	   is being executed for cache but has been overwritten in memory.  */
 	LOCK_KERNEL
-	move	a0, ta0
+	move	a1, ta0
 	PRINT(KERN_DEBUG "FP support: unknown fp op %08lx, ")
 	PRINT("please mail to ralf@gnu.org.\n")
 	UNLOCK_KERNEL
@@ -650,19 +649,19 @@ unimp:
 	move	a1, $28
 	jal	force_sig
 
-	lw	ra, 16(sp)
-	addu	sp, 16
+	ld	ra, 0(sp)
+	daddu	sp, 16
 	jr	ra
 
 /*
  * Jump table for the lowest 6 bits of a cp1 instruction.
  */
 	.data
-lowtab:	.word	add,   sub,   mul,   div,   sqrt,  abs,   mov,   neg
-	.word	round.l,trunc.l,ceil.l,floor.l,round.w,trunc.w,ceil.w,floor.w
-	.word	unimp, unimp, unimp, unimp, unimp, unimp, unimp, unimp
-	.word	unimp, unimp, unimp, unimp, unimp, unimp, unimp, unimp
-	.word	cvt.s, cvt.d, unimp, unimp, cvt.w, cvt.l, unimp, unimp
-	.word	unimp, unimp, unimp, unimp, unimp, unimp, unimp, unimp
-	.word	c.f,   c.un,  c.eq,  c.ueq, c.olt, c.ult, c.ole, c.ule
-	.word	c.sf,  c.ngle,c.seq, c.ngl, c.lt,  c.nge, c.le, c.ngt
+lowtab:	.dword	add,   sub,   mul,   div,   sqrt,  abs,   mov,   neg
+	.dword	round.l,trunc.l,ceil.l,floor.l,round.w,trunc.w,ceil.w,floor.w
+	.dword	unimp, unimp, unimp, unimp, unimp, unimp, unimp, unimp
+	.dword	unimp, unimp, unimp, unimp, unimp, unimp, unimp, unimp
+	.dword	cvt.s, cvt.d, unimp, unimp, cvt.w, cvt.l, unimp, unimp
+	.dword	unimp, unimp, unimp, unimp, unimp, unimp, unimp, unimp
+	.dword	c.f,   c.un,  c.eq,  c.ueq, c.olt, c.ult, c.ole, c.ule
+	.dword	c.sf,  c.ngle,c.seq, c.ngl, c.lt,  c.nge, c.le, c.ngt

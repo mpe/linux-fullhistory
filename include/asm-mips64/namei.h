@@ -1,4 +1,4 @@
-/* $Id: namei.h,v 1.1 1999/08/20 21:59:08 ralf Exp $
+/* $Id$
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

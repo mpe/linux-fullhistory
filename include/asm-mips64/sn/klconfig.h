@@ -1,4 +1,4 @@
-/* $Id: klconfig.h,v 1.2 2000/01/16 01:39:08 ralf Exp $
+/* $Id$
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -34,17 +34,35 @@
 
 #include <linux/types.h>
 #include <asm/sn/types.h>
+#if defined(CONFIG_SGI_IP27)
 #include <asm/sn/sn0/addrs.h>
 //#include <sys/SN/router.h>
 // XXX Stolen from <sys/SN/router.h>:
-#define MAX_ROUTER_PORTS (6)	/* Max. number of ports on a router */
+#define MAX_ROUTER_PORTS (6)    /* Max. number of ports on a router */
+#include <asm/sn/sn0/sn0_fru.h>
 #include <asm/sn/agent.h>
 //#include <sys/graph.h>
 #include <asm/arc/types.h>
 #include <asm/arc/hinv.h>
 //#include <sys/xtalk/xbow.h>
-#include <asm/sn/sn0/sn0_fru.h>
-
+#if defined(CONFIG_SGI_IO)
+// The hack file has to be before vector and after sn0_fru....
+#include <asm/hack.h>
+#include <asm/sn/vector.h>
+#include <asm/xtalk/xtalk.h>
+#endif  /* CONFIG_SGI_IO */
+#elif defined(CONFIG_SGI_IP35)
+#include <asm/hack.h>
+#include <asm/sn/sn1/addrs.h>
+#include <asm/sn/vector.h>
+#include <sys/sn/router.h>
+#include <asm/sn/agent.h>
+#include <sys/graph.h>
+#include <asm/arc/types.h>
+#include <asm/arc/hinv.h>
+#include <asm/xtalk/xbow.h>
+#include <asm/xtalk/xtalk.h>
+#endif  /* !CONFIG_SGI_IP27 && !CONFIG_SGI_IP35 */
 
 #define KLCFGINFO_MAGIC	0xbeedbabe
 
@@ -118,9 +136,15 @@ typedef s32 klconf_off_t;
 
 
 typedef struct console_s {
+#if defined(CONFIG_SGI_IO)	/* FIXME */
+	__psunsigned_t 	uart_base;
+	__psunsigned_t 	config_base;
+	__psunsigned_t 	memory_base;
+#else
 	unsigned long 	uart_base;
 	unsigned long 	config_base;
 	unsigned long 	memory_base;
+#endif
 	short		baud;
 	short		flag;
 	int		type;
@@ -175,13 +199,23 @@ typedef struct kl_config_hdr {
 
 /* --- New Macros for the changed kl_config_hdr_t structure --- */
 
+#if defined(CONFIG_SGI_IO)
 #define PTR_CH_MALLOC_HDR(_k)   ((klc_malloc_hdr_t *)\
-			((unsigned long)_k + (_k->ch_malloc_hdr_off)))
+			((__psunsigned_t)_k + (_k->ch_malloc_hdr_off)))
+#else
+#define PTR_CH_MALLOC_HDR(_k)   ((klc_malloc_hdr_t *)\
+			(unsigned long)_k + (_k->ch_malloc_hdr_off)))
+#endif
 
 #define KL_CONFIG_CH_MALLOC_HDR(_n)   PTR_CH_MALLOC_HDR(KL_CONFIG_HDR(_n))
 
+#if defined(CONFIG_SGI_IO)
+#define PTR_CH_CONS_INFO(_k)	((console_t *)\
+			((__psunsigned_t)_k + (_k->ch_cons_off)))
+#else
 #define PTR_CH_CONS_INFO(_k)	((console_t *)\
 			((unsigned long)_k + (_k->ch_cons_off)))
+#endif
 
 #define KL_CONFIG_CH_CONS_INFO(_n)   PTR_CH_CONS_INFO(KL_CONFIG_HDR(_n))
 
@@ -313,7 +347,7 @@ typedef struct kl_config_hdr {
 #define KL_CPU_NONE		(-1)	/* no cpu present in slot */
 
 /*
- * SN0 BOARD classes
+ * IP27 BOARD classes
  */
 
 #define KLCLASS_MASK	0xf0   
@@ -331,15 +365,15 @@ typedef struct kl_config_hdr {
 					 * hw ifc to xtalk and are not gfx
 					 * class for sw purposes */
 
-#define KLCLASS_MAX	6		/* Bump this if a new CLASS is added */
-#define KLTYPE_MAX	8		/* Bump this if a new CLASS is added */
+#define KLCLASS_MAX	7		/* Bump this if a new CLASS is added */
+#define KLTYPE_MAX	10		/* Bump this if a new CLASS is added */
 
 #define KLCLASS_UNKNOWN	0xf0
 
 #define KLCLASS(_x) ((_x) & KLCLASS_MASK)
 
 /*
- * SN0 board types
+ * IP27 board types
  */
 
 #define KLTYPE_MASK	0x0f
@@ -369,8 +403,8 @@ typedef struct kl_config_hdr {
 #define KLTYPE_GSN_B   	(KLCLASS_IO  | 0xD) /* Auxiliary GSN board */
 
 #define KLTYPE_GFX	(KLCLASS_GFX | 0x0) /* unknown graphics type */
-#define KLTYPE_GFX_KONA (KLCLASS_GFX | 0x1) /* KONA graphics on SN0 */
-#define KLTYPE_GFX_MGRA (KLCLASS_GFX | 0x3) /* MGRAS graphics on SN0 */
+#define KLTYPE_GFX_KONA (KLCLASS_GFX | 0x1) /* KONA graphics on IP27 */
+#define KLTYPE_GFX_MGRA (KLCLASS_GFX | 0x3) /* MGRAS graphics on IP27 */
 
 #define KLTYPE_WEIRDROUTER (KLCLASS_ROUTER | 0x0)
 #define KLTYPE_ROUTER     (KLCLASS_ROUTER | 0x1)
@@ -381,6 +415,14 @@ typedef struct kl_config_hdr {
 #define KLTYPE_WEIRDMIDPLANE (KLCLASS_MIDPLANE | 0x0)
 #define KLTYPE_MIDPLANE8  (KLCLASS_MIDPLANE | 0x1) /* 8 slot backplane */
 #define KLTYPE_MIDPLANE    KLTYPE_MIDPLANE8
+#define KLTYPE_PBRICK_XBOW	(KLCLASS_MIDPLANE | 0x2)
+
+#define KLTYPE_IOBRICK		(KLCLASS_IOBRICK | 0x0)
+#define KLTYPE_IBRICK		(KLCLASS_IOBRICK | 0x1)
+#define KLTYPE_PBRICK		(KLCLASS_IOBRICK | 0x2)
+#define KLTYPE_XBRICK		(KLCLASS_IOBRICK | 0x3)
+
+#define KLTYPE_PBRICK_BRIDGE	KLTYPE_PBRICK
 
 /* The value of type should be more than 8 so that hinv prints
  * out the board name from the NIC string. For values less than
@@ -898,6 +940,43 @@ typedef union {
 
 /* external declarations of Linux kernel functions. */
 
-extern lboard_t *find_lboard(unsigned int type);
+extern lboard_t *find_lboard(lboard_t *start, unsigned char type);
+extern klinfo_t *find_component(lboard_t *brd, klinfo_t *kli, unsigned char type);
+extern klinfo_t *find_first_component(lboard_t *brd, unsigned char type);
+extern klcpu_t *nasid_slice_to_cpuinfo(nasid_t, int);
+
+
+#if defined(CONFIG_SGI_IO)
+extern xwidgetnum_t nodevertex_widgetnum_get(vertex_hdl_t node_vtx);
+extern vertex_hdl_t nodevertex_xbow_peer_get(vertex_hdl_t node_vtx);
+extern lboard_t *find_gfxpipe(int pipenum);
+extern void setup_gfxpipe_link(vertex_hdl_t vhdl,int pipenum);
+extern lboard_t *find_lboard_class(lboard_t *start, unsigned char brd_class);
+extern lboard_t *find_lboard_module_class(lboard_t *start, moduleid_t mod,
+                                               unsigned char brd_class);
+extern lboard_t *find_nic_lboard(lboard_t *, nic_t);
+extern lboard_t *find_nic_type_lboard(nasid_t, unsigned char, nic_t);
+extern lboard_t *find_lboard_modslot(lboard_t *start, moduleid_t mod, slotid_t slot);
+extern lboard_t *find_lboard_module(lboard_t *start, moduleid_t mod);
+extern lboard_t *get_board_name(nasid_t nasid, moduleid_t mod, slotid_t slot, char *name);
+extern int	config_find_nic_router(nasid_t, nic_t, lboard_t **, klrou_t**);
+extern int	config_find_nic_hub(nasid_t, nic_t, lboard_t **, klhub_t**);
+extern int	config_find_xbow(nasid_t, lboard_t **, klxbow_t**);
+extern klcpu_t *get_cpuinfo(cpuid_t cpu);
+extern int 	update_klcfg_cpuinfo(nasid_t, int);
+extern void 	board_to_path(lboard_t *brd, char *path);
+extern moduleid_t get_module_id(nasid_t nasid);
+extern void 	nic_name_convert(char *old_name, char *new_name);
+extern int 	module_brds(nasid_t nasid, lboard_t **module_brds, int n);
+extern lboard_t *brd_from_key(ulong_t key);
+extern void 	device_component_canonical_name_get(lboard_t *,klinfo_t *,
+						    char *);
+extern int	board_serial_number_get(lboard_t *,char *);
+extern int	is_master_baseio(nasid_t,moduleid_t,slotid_t);
+extern nasid_t	get_actual_nasid(lboard_t *brd) ;
+extern net_vec_t klcfg_discover_route(lboard_t *, lboard_t *, int);
+#else	/* CONFIG_SGI_IO */
+extern klcpu_t *sn_get_cpuinfo(cpuid_t cpu);
+#endif	/* CONFIG_SGI_IO */
 
 #endif /* _ASM_SN_KLCONFIG_H */

@@ -12,12 +12,15 @@
 
 #include <linux/config.h>
 
+#include <linux/config.h>
+
 /* TLB flushing:
  *
  *  - flush_tlb_all() flushes all processes TLB entries
  *  - flush_tlb_mm(mm) flushes the specified mm context TLB entries
  *  - flush_tlb_page(mm, vmaddr) flushes a single page
  *  - flush_tlb_range(mm, start, end) flushes a range of pages
+ *  - flush_tlb_pgtables(mm, start, end) flushes a range of page tables
  */
 extern void (*_flush_tlb_all)(void);
 extern void (*_flush_tlb_mm)(struct mm_struct *mm);
@@ -25,10 +28,21 @@ extern void (*_flush_tlb_range)(struct mm_struct *mm, unsigned long start,
 			       unsigned long end);
 extern void (*_flush_tlb_page)(struct vm_area_struct *vma, unsigned long page);
 
+#ifndef CONFIG_SMP
+
 #define flush_tlb_all()			_flush_tlb_all()
 #define flush_tlb_mm(mm)		_flush_tlb_mm(mm)
 #define flush_tlb_range(mm,vmaddr,end)	_flush_tlb_range(mm, vmaddr, end)
 #define flush_tlb_page(vma,page)	_flush_tlb_page(vma, page)
+
+#else /* CONFIG_SMP */
+
+extern void flush_tlb_all(void);
+extern void flush_tlb_mm(struct mm_struct *);
+extern void flush_tlb_range(struct mm_struct *, unsigned long, unsigned long);
+extern void flush_tlb_page(struct vm_area_struct *, unsigned long);
+
+#endif /* CONFIG_SMP */
 
 extern inline void flush_tlb_pgtables(struct mm_struct *mm,
                                       unsigned long start, unsigned long end)
@@ -111,8 +125,8 @@ extern inline pmd_t *get_pmd_fast(void)
 {
 	unsigned long *ret;
 
-	if ((ret = (unsigned long *)pte_quicklist) != NULL) {
-		pte_quicklist = (unsigned long *)(*ret);
+	if ((ret = (unsigned long *)pmd_quicklist) != NULL) {
+		pmd_quicklist = (unsigned long *)(*ret);
 		ret[0] = ret[1];
 		pgtable_cache_size--;
 		return (pmd_t *)ret;
@@ -123,8 +137,8 @@ extern inline pmd_t *get_pmd_fast(void)
 
 extern inline void free_pmd_fast(pmd_t *pmd)
 {
-	*(unsigned long *)pmd = (unsigned long) pte_quicklist;
-	pte_quicklist = (unsigned long *) pmd;
+	*(unsigned long *)pmd = (unsigned long) pmd_quicklist;
+	pmd_quicklist = (unsigned long *) pmd;
 	pgtable_cache_size++;
 }
 

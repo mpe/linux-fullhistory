@@ -1,4 +1,4 @@
-/* $Id: loadmmu.c,v 1.6 2000/02/24 00:12:41 ralf Exp $
+/* $Id: loadmmu.c,v 1.5 2000/01/27 01:05:24 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

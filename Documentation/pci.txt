@@ -89,6 +89,13 @@ Please mark the initialization and cleanup functions where appropriate
 			function otherwise.
 	__devexit	The same for __exit.
 
+Tips:
+	The module_init()/module_exit() functions (and all initialization
+        functions called only from these) should be marked __init/exit.
+	The struct pci_driver shouldn't be marked with any of these tags.
+	The ID table array should be marked __devinitdata.
+	The probe() and remove() functions (and all initialization
+	functions called only from these) should be marked __devinit/exit.
 
 2. How to find PCI devices manually (the old style)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -32,6 +32,24 @@
 #include <asm/nile4.h>
 
 /*
+ * Linux has a controller-independent x86 interrupt architecture.
+ * every controller has a 'controller-template', that is used
+ * by the main code to do the right thing. Each driver-visible
+ * interrupt source is transparently wired to the apropriate
+ * controller. Thus drivers need not be aware of the
+ * interrupt-controller.
+ *
+ * Various interrupt controllers we handle: 8259 PIC, SMP IO-APIC,
+ * PIIX4's internal 8259 PIC and SGI's Visual Workstation Cobalt (IO-)APIC.
+ * (IO-APICs assumed to be messaging to Pentium local-APICs)
+ *
+ * the code is designed to be easily extended with new/different
+ * interrupt controllers, without having to do assembly magic.
+ */
+
+irq_cpustat_t irq_stat [NR_CPUS];
+
+/*
  * This contains the irq mask for both 8259A irq controllers, it's an
  * int so we can deal with the third PIC in some systems like the RM300.
  * (XXX This is broken for big endian.)

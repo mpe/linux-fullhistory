@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.7 2000/02/23 00:41:38 ralf Exp $
+/* $Id: irq.h,v 1.6 2000/01/26 00:07:45 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

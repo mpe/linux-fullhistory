@@ -1,4 +1,4 @@
-/* $Id: sgint23.h,v 1.2 1999/12/04 03:59:13 ralf Exp $
+/* $Id: sgint23.h,v 1.3 1999/10/20 18:10:32 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

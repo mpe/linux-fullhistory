@@ -1,4 +1,4 @@
-/* $Id: current.h,v 1.6 1999/09/28 22:27:17 ralf Exp $
+/* $Id: current.h,v 1.5 1999/07/26 19:42:43 harald Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

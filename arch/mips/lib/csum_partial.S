@@ -1,4 +1,4 @@
-/* $Id: csum_partial.S,v 1.2 1998/05/07 23:44:01 ralf Exp $
+/* $Id: csum_partial.S,v 1.1 1998/05/04 09:12:52 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

@@ -1,4 +1,4 @@
-/* $Id: hdreg.h,v 1.1 1999/06/17 14:09:00 ralf Exp $
+/* $Id: hdreg.h,v 1.4 1998/05/08 21:05:26 davem Exp $
  *
  *  linux/include/asm-mips/hdreg.h
  *

@@ -1,5 +1,9 @@
 /* $Id: serial.h,v 1.9 2000/02/16 01:45:55 ralf Exp $
  *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
  * Copyright (C) 1999 by Ralf Baechle
  * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */

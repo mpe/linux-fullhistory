@@ -334,8 +334,10 @@ static struct pci_device_id pcnet32_pci_tbl[] __devinitdata = {
     { PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_PCNETHOME, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
     { PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_LANCE, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
     { PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_LANCE, 0x1014, 0x2000, 0, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0 },
+    { 0, }
 };
+
+MODULE_DEVICE_TABLE (pci, pcnet32_pci_tbl);
 
 static u16 pcnet32_wio_read_csr (unsigned long addr, int index)
 {

@@ -1,12 +1,13 @@
-/* $Id: traps.c,v 1.27 2000/01/16 01:29:05 ralf Exp $
+/* $Id: traps.c,v 1.28 2000/03/13 10:33:02 raiko Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright 1994, 1995, 1996, 1997, 1998 by Ralf Baechle
+ * Copyright (C) 1994 - 1999 by Ralf Baechle
  * Modified for R3000 by Paul M. Antoine, 1995, 1996
  * Complete output from die() by Ulf Carlsson, 1998
+ * Copyright (C) 1999 Silicon Graphics, Inc.
  */
 #include <linux/config.h>
 #include <linux/init.h>
@@ -226,8 +227,50 @@ void __die_if_kernel(const char * str, struct pt_regs * regs, const char *where,
 		__die(str, regs, where, line);
 }
 
+extern const struct exception_table_entry __start___dbe_table[];
+extern const struct exception_table_entry __stop___dbe_table[];
+
+static void __declare_dbe_table(void)
+{
+	__asm__ __volatile__(
+	".section\t__dbe_table,\"a\"\n\t"
+	".previous"
+	);
+}
+
+static inline unsigned long
+search_one_table(const struct exception_table_entry *first,
+		 const struct exception_table_entry *last,
+		 unsigned long value)
+{
+	const struct exception_table_entry *mid;
+	long diff;
+
+	while (first < last) {
+		mid = (last - first) / 2 + first;
+		diff = mid->insn - value;
+		if (diff < 0)
+			first = mid + 1;
+		else
+			last = mid;
+	}
+	return (first == last && first->insn == value) ? first->nextinsn : 0;
+}
+
+#define search_dbe_table(addr)	\
+	search_one_table(__start___dbe_table, __stop___dbe_table - 1, (addr))
+
 static void default_be_board_handler(struct pt_regs *regs)
 {
+	unsigned long new_epc;
+	unsigned long fixup = search_dbe_table(regs->cp0_epc);
+
+	if (fixup) {
+		new_epc = fixup_exception(dpf_reg, fixup, regs->cp0_epc);
+		regs->cp0_epc = new_epc;
+		return;
+	}
+
 	/*
 	 * Assume it would be too dangerous to continue ...
 	 */
@@ -281,7 +324,7 @@ void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 {
 	unsigned long pc;
 	unsigned int insn;
-	extern void simfp(void*);
+	extern void simfp(unsigned int);
 
 #ifdef CONFIG_MIPS_FPE_MODULE
 	if (fpe_handler != NULL) {
@@ -688,8 +731,7 @@ void __init trap_init(void)
 		else
 			memcpy((void *)KSEG0, &except_vec0_r4000, 0x80);
 
-		/* Cache error vector  */
-		memcpy((void *)(KSEG0 + 0x100), (void *) KSEG0, 0x80);
+		/* Cache error vector already set above.  */
 
 		if (vce_available) {
 			memcpy((void *)(KSEG0 + 0x180), &except_vec3_r4000,
@@ -698,7 +740,6 @@ void __init trap_init(void)
 			memcpy((void *)(KSEG0 + 0x180), &except_vec3_generic,
 			       0x80);
 		}
-
 		break;
 
 	case CPU_R6000:
@@ -718,14 +759,14 @@ void __init trap_init(void)
 	case CPU_R2000:
 	case CPU_R3000:
 	case CPU_R3000A:
-		memcpy((void *)KSEG0, &except_vec0_r2300, 0x80);
-		memcpy((void *)(KSEG0 + 0x80), &except_vec3_generic, 0x80);
-		break;
 	case CPU_R3041:
 	case CPU_R3051:
 	case CPU_R3052:
 	case CPU_R3081:
 	case CPU_R3081E:
+		memcpy((void *)KSEG0, &except_vec0_r2300, 0x80);
+		memcpy((void *)(KSEG0 + 0x80), &except_vec3_generic, 0x80);
+		break;
 	case CPU_R8000:
 		printk("Detected unsupported CPU type %s.\n",
 			cpu_names[mips_cputype]);

@@ -2,7 +2,7 @@
  *  include/asm-mips/ddb5074.h -- NEC DDB Vrc-5074 definitions
  *
  *  Copyright (C) 2000 Geert Uytterhoeven <geert@sonycom.com>
- *                     Sony Suprastructure Center Europe (SUPC-E), Brussels
+ *                     Sony Software Development Center Europe (SDCE), Brussels
  */
 
 extern void ddb5074_led_hex(int hex);

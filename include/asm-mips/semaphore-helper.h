@@ -1,4 +1,4 @@
-/* $Id: semaphore-helper.h,v 1.7 1999/10/21 00:23:05 ralf Exp $
+/* $Id: semaphore-helper.h,v 1.6 1999/10/20 21:10:58 ralf Exp $
  *
  * SMP- and interrupt-safe semaphores helper functions.
  *
@@ -92,7 +92,6 @@ waking_non_zero(struct semaphore *sem)
 	"sc\t%0, %2\n\t"
 	"beqz\t%0, 1b\n\t"
 	"2:"
-	".text"
 	: "=r"(ret), "=r"(tmp), "=m"(__atomic_fool_gcc(&sem->waking))
 	: "0"(0));
 

@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.5 2000/02/24 00:12:41 ralf Exp $
+/* $Id: traps.c,v 1.4 2000/01/20 23:50:27 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -328,8 +328,9 @@ void do_tr(struct pt_regs *regs)
 void do_ri(struct pt_regs *regs)
 {
 	lock_kernel();
-	printk("[%s:%ld] Illegal instruction at %08lx ra=%08lx\n",
-	       current->comm, current->pid, regs->cp0_epc, regs->regs[31]);
+	printk("Cpu%d[%s:%ld] Illegal instruction at %08lx ra=%08lx\n",
+	        smp_processor_id(), current->comm, current->pid, regs->cp0_epc, 
+		regs->regs[31]);
 	unlock_kernel();
 	if (compute_return_epc(regs))
 		return;
@@ -345,16 +346,27 @@ void do_cpu(struct pt_regs *regs)
 		goto bad_cid;
 
 	regs->cp0_status |= ST0_CU1;
+#ifndef CONFIG_SMP
 	if (last_task_used_math == current)
 		return;
 
 	if (current->used_math) {		/* Using the FPU again.  */
-		lazy_fpu_switch(last_task_used_math);
+		lazy_fpu_switch(last_task_used_math, current);
 	} else {				/* First time FPU user.  */
+		lazy_fpu_switch(last_task_used_math, 0);
 		init_fpu();
 		current->used_math = 1;
 	}
 	last_task_used_math = current;
+#else
+	if (current->used_math) {
+		lazy_fpu_switch(0, current);
+	} else {
+		init_fpu();
+		current->used_math = 1;
+	}
+	current->flags |= PF_USEDFPU;
+#endif
 	return;
 
 bad_cid:
@@ -446,7 +458,6 @@ static inline void mips4_setup(void)
 		mips4_available = 1;
 		set_cp0_status(ST0_XX, ST0_XX);
 	}
-	mips4_available = 0;
 }
 
 static inline void go_64(void)
@@ -561,5 +572,4 @@ r4k:
 
 	atomic_inc(&init_mm.mm_count);	/* XXX UP?  */
 	current->active_mm = &init_mm;
-	current_pgd = init_mm.pgd;
 }

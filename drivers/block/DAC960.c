@@ -19,8 +19,9 @@
 */
 
 
-#define DAC960_DriverVersion			"2.3.4"
-#define DAC960_DriverDate			"23 September 1999"
+#define DAC960_DriverVersion                  "2.3.5"
+#define DAC960_DriverDate                     "23 January 2000"
+
 
 
 #include <linux/version.h>
@@ -110,7 +111,7 @@ static void DAC960_AnnounceDriver(DAC960_Controller_T *Controller)
   DAC960_Announce("***** DAC960 RAID Driver Version "
 		  DAC960_DriverVersion " of "
 		  DAC960_DriverDate " *****\n", Controller);
-  DAC960_Announce("Copyright 1998-1999 by Leonard N. Zubkoff "
+  DAC960_Announce("Copyright 1998-2000 by Leonard N. Zubkoff "
 		  "<lnz@dandelion.com>\n", Controller);
 }
 
@@ -180,6 +181,23 @@ static inline void DAC960_DeallocateCommand(DAC960_Command_T *Command)
   DAC960_Controller_T *Controller = Command->Controller;
   Command->Next = Controller->FreeCommands;
   Controller->FreeCommands = Command;
+}
+
+
+/*
+  DAC960_WaitForCommand waits for a wake_up on Controller's Command Wait Queue.
+*/
+
+static void DAC960_WaitForCommand(DAC960_Controller_T *Controller)
+{
+  DECLARE_WAITQUEUE(WaitQueueEntry, current);
+  add_wait_queue(&Controller->CommandWaitQueue, &WaitQueueEntry);
+  current->state = TASK_UNINTERRUPTIBLE;
+  spin_unlock(&io_request_lock);
+  schedule();
+  current->state = TASK_RUNNING;
+  remove_wait_queue(&Controller->CommandWaitQueue, &WaitQueueEntry);
+  spin_lock_irq(&io_request_lock);
 }
 
 
@@ -307,6 +325,62 @@ static boolean DAC960_ExecuteType3D(DAC960_Controller_T *Controller,
 
 
 /*
+  DAC960_ReportErrorStatus reports Controller BIOS Messages passed through
+  the Error Status Register when the driver performs the BIOS handshaking.
+  It returns true for fatal errors and false otherwise.
+*/
+
+static boolean DAC960_ReportErrorStatus(DAC960_Controller_T *Controller,
+					unsigned char ErrorStatus,
+					unsigned char Parameter0,
+					unsigned char Parameter1)
+{
+  switch (ErrorStatus)
+    {
+    case 0x00:
+      DAC960_Notice("Physical Drive %d:%d Not Responding\n",
+		    Controller, Parameter1, Parameter0);
+      break;
+    case 0x08:
+      if (Controller->DriveSpinUpMessageDisplayed) break;
+      DAC960_Notice("Spinning Up Drives\n", Controller);
+      Controller->DriveSpinUpMessageDisplayed = true;
+      break;
+    case 0x30:
+      DAC960_Notice("Configuration Checksum Error\n", Controller);
+      break;
+    case 0x60:
+      DAC960_Notice("Mirror Race Recovery Failed\n", Controller);
+      break;
+    case 0x70:
+      DAC960_Notice("Mirror Race Recovery In Progress\n", Controller);
+      break;
+    case 0x90:
+      DAC960_Notice("Physical Drive %d:%d COD Mismatch\n",
+		    Controller, Parameter1, Parameter0);
+      break;
+    case 0xA0:
+      DAC960_Notice("Logical Drive Installation Aborted\n", Controller);
+      break;
+    case 0xB0:
+      DAC960_Notice("Mirror Race On A Critical Logical Drive\n", Controller);
+      break;
+    case 0xD0:
+      DAC960_Notice("New Controller Configuration Found\n", Controller);
+      break;
+    case 0xF0:
+      DAC960_Error("Fatal Memory Parity Error for Controller at\n", Controller);
+      return true;
+    default:
+      DAC960_Error("Unknown Initialization Error %02X for Controller at\n",
+		   Controller, ErrorStatus);
+      return true;
+    }
+  return false;
+}
+
+
+/*
   DAC960_EnableMemoryMailboxInterface enables the Memory Mailbox Interface.
 */
 
@@ -372,7 +446,7 @@ static boolean DAC960_EnableMemoryMailboxInterface(DAC960_Controller_T
       case DAC960_V5_Controller:
 	while (--TimeoutCounter >= 0)
 	  {
-	    if (DAC960_V5_HardwareMailboxEmptyP(ControllerBaseAddress))
+	    if (!DAC960_V5_HardwareMailboxFullP(ControllerBaseAddress))
 	      break;
 	    udelay(10);
 	  }
@@ -469,6 +543,9 @@ static void DAC960_DetectControllers(DAC960_ControllerType_T ControllerType)
       unsigned long BaseAddress1 = pci_resource_start (PCI_Device, 1);
       unsigned short SubsystemVendorID, SubsystemDeviceID;
       int CommandIdentifier;
+      unsigned char ErrorStatus, Parameter0, Parameter1;
+      void *BaseAddress;
+
 
       if (pci_enable_device(PCI_Device))
 	  goto Ignore;
@@ -517,6 +594,84 @@ static void DAC960_DetectControllers(DAC960_ControllerType_T ControllerType)
       Controller->Function = Function;
       sprintf(Controller->ControllerName, "c%d", Controller->ControllerNumber);
       /*
+	Map the Controller Register Window.
+      */
+      if (MemoryWindowSize < PAGE_SIZE)
+	MemoryWindowSize = PAGE_SIZE;
+      Controller->MemoryMappedAddress =
+	ioremap_nocache(PCI_Address & PAGE_MASK, MemoryWindowSize);
+      Controller->BaseAddress =
+	Controller->MemoryMappedAddress + (PCI_Address & ~PAGE_MASK);
+      if (Controller->MemoryMappedAddress == NULL)
+	{
+	  DAC960_Error("Unable to map Controller Register Window for "
+		       "Controller at\n", Controller);
+	  goto Failure;
+	}
+      BaseAddress = Controller->BaseAddress;
+      switch (ControllerType)
+	{
+	case DAC960_V5_Controller:
+	  DAC960_V5_DisableInterrupts(BaseAddress);
+	  DAC960_V5_AcknowledgeHardwareMailboxStatus(BaseAddress);
+	  udelay(1000);
+	  while (DAC960_V5_InitializationInProgressP(BaseAddress))
+	    {
+	      if (DAC960_V5_ReadErrorStatus(BaseAddress, &ErrorStatus,
+					    &Parameter0, &Parameter1) &&
+		  DAC960_ReportErrorStatus(Controller, ErrorStatus,
+					   Parameter0, Parameter1))
+		goto Failure;
+	      udelay(10);
+	    }
+	  if (!DAC960_EnableMemoryMailboxInterface(Controller))
+	    {
+	      DAC960_Error("Unable to Enable Memory Mailbox Interface "
+			   "for Controller at\n", Controller);
+	      goto Failure;
+	    }
+	  DAC960_V5_EnableInterrupts(BaseAddress);
+	  break;
+	case DAC960_V4_Controller:
+	  DAC960_V4_DisableInterrupts(BaseAddress);
+	  DAC960_V4_AcknowledgeHardwareMailboxStatus(BaseAddress);
+	  udelay(1000);
+	  while (DAC960_V4_InitializationInProgressP(BaseAddress))
+	    {
+	      if (DAC960_V4_ReadErrorStatus(BaseAddress, &ErrorStatus,
+					    &Parameter0, &Parameter1) &&
+		  DAC960_ReportErrorStatus(Controller, ErrorStatus,
+					   Parameter0, Parameter1))
+		goto Failure;
+	      udelay(10);
+	    }
+	  if (!DAC960_EnableMemoryMailboxInterface(Controller))
+	    {
+	      DAC960_Error("Unable to Enable Memory Mailbox Interface "
+			   "for Controller at\n", Controller);
+	      goto Failure;
+	    }
+	  DAC960_V4_EnableInterrupts(BaseAddress);
+	  break;
+	case DAC960_V3_Controller:
+	  request_region(Controller->IO_Address, 0x80,
+			 Controller->FullModelName);
+	  DAC960_V3_DisableInterrupts(BaseAddress);
+	  DAC960_V3_AcknowledgeStatus(BaseAddress);
+	  udelay(1000);
+	  while (DAC960_V3_InitializationInProgressP(BaseAddress))
+	    {
+	      if (DAC960_V3_ReadErrorStatus(BaseAddress, &ErrorStatus,
+					    &Parameter0, &Parameter1) &&
+		  DAC960_ReportErrorStatus(Controller, ErrorStatus,
+					   Parameter0, Parameter1))
+		goto Failure;
+	      udelay(10);
+	    }
+	  DAC960_V3_EnableInterrupts(BaseAddress);
+	  break;
+	}
+      /*
 	Acquire shared access to the IRQ Channel.
       */
       if (IRQ_Channel == 0)
@@ -534,49 +689,6 @@ static void DAC960_DetectControllers(DAC960_ControllerType_T ControllerType)
 	  goto Failure;
 	}
       Controller->IRQ_Channel = IRQ_Channel;
-      /*
-	Map the Controller Register Window.
-      */
-      if (MemoryWindowSize < PAGE_SIZE)
-	MemoryWindowSize = PAGE_SIZE;
-      Controller->MemoryMappedAddress =
-	ioremap_nocache(PCI_Address & PAGE_MASK, MemoryWindowSize);
-      Controller->BaseAddress =
-	Controller->MemoryMappedAddress + (PCI_Address & ~PAGE_MASK);
-      if (Controller->MemoryMappedAddress == NULL)
-	{
-	  DAC960_Error("Unable to map Controller Register Window for "
-		       "Controller at\n", Controller);
-	  goto Failure;
-	}
-      switch (ControllerType)
-	{
-	case DAC960_V5_Controller:
-	  DAC960_V5_DisableInterrupts(Controller->BaseAddress);
-	  if (!DAC960_EnableMemoryMailboxInterface(Controller))
-	    {
-	      DAC960_Error("Unable to Enable Memory Mailbox Interface "
-			   "for Controller at\n", Controller);
-	      goto Failure;
-	    }
-	  DAC960_V5_EnableInterrupts(Controller->BaseAddress);
-	  break;
-	case DAC960_V4_Controller:
-	  DAC960_V4_DisableInterrupts(Controller->BaseAddress);
-	  if (!DAC960_EnableMemoryMailboxInterface(Controller))
-	    {
-	      DAC960_Error("Unable to Enable Memory Mailbox Interface "
-			   "for Controller at\n", Controller);
-	      goto Failure;
-	    }
-	  DAC960_V4_EnableInterrupts(Controller->BaseAddress);
-	  break;
-	case DAC960_V3_Controller:
-	  request_region(Controller->IO_Address, 0x80,
-			 Controller->FullModelName);
-	  DAC960_V3_EnableInterrupts(Controller->BaseAddress);
-	  break;
-	}
       DAC960_ActiveControllerCount++;
       for (CommandIdentifier = 0;
 	   CommandIdentifier < DAC960_MaxChannels;
@@ -597,11 +709,11 @@ static void DAC960_DetectControllers(DAC960_ControllerType_T ControllerType)
 			"0x%X PCI Address 0x%X\n", Controller,
 			Bus, Device, Function, IO_Address, PCI_Address);
       if (Controller == NULL) break;
-      if (Controller->IRQ_Channel > 0)
-	free_irq(IRQ_Channel, Controller);
       if (Controller->MemoryMappedAddress != NULL)
 	iounmap(Controller->MemoryMappedAddress);
       DAC960_Controllers[Controller->ControllerNumber] = NULL;
+      if (Controller->IRQ_Channel > 0)
+	free_irq(IRQ_Channel, Controller);
     Ignore:
       kfree(Controller);
     }
@@ -1346,9 +1458,7 @@ static boolean DAC960_ProcessRequest(DAC960_Controller_T *Controller,
       Command = DAC960_AllocateCommand(Controller);
       if (Command != NULL) break;
       if (!WaitForCommand) return false;
-      spin_unlock(&io_request_lock);
-      sleep_on(&Controller->CommandWaitQueue);
-      spin_lock_irq(&io_request_lock);
+      DAC960_WaitForCommand(Controller);
     }
   DAC960_ClearCommand(Command);
   if (Request->cmd == READ)
@@ -1900,6 +2010,20 @@ static void DAC960_ProcessCompletedCommand(DAC960_Command_T *Command)
 	      }
 	  else if (NewEnquiry->RebuildFlag == DAC960_BackgroundCheckInProgress)
 	    Controller->NeedConsistencyCheckProgress = true;
+	  if (CommandType != DAC960_MonitoringCommand &&
+	      Controller->RebuildFlagPending)
+	    {
+	      DAC960_Enquiry_T *Enquiry = (DAC960_Enquiry_T *)
+		Bus_to_Virtual(Command->CommandMailbox.Type3.BusAddress);
+	      Enquiry->RebuildFlag = Controller->PendingRebuildFlag;
+	      Controller->RebuildFlagPending = false;
+	    }
+	  else if (CommandType == DAC960_MonitoringCommand &&
+		   NewEnquiry->RebuildFlag > DAC960_BackgroundCheckInProgress)
+	    {
+	      Controller->PendingRebuildFlag = NewEnquiry->RebuildFlag;
+	      Controller->RebuildFlagPending = true;
+	    }
 	}
       else if (CommandOpcode == DAC960_PerformEventLogOperation)
 	{
@@ -2083,6 +2207,9 @@ static void DAC960_ProcessCompletedCommand(DAC960_Command_T *Command)
 	    Controller->RebuildProgress.LogicalDriveSize;
 	  unsigned int BlocksCompleted =
 	    LogicalDriveSize - Controller->RebuildProgress.RemainingBlocks;
+	  if (CommandStatus == DAC960_NoRebuildOrCheckInProgress &&
+	      Controller->LastRebuildStatus == DAC960_NormalCompletion)
+	    CommandStatus = DAC960_RebuildSuccessful;
 	  switch (CommandStatus)
 	    {
 	    case DAC960_NormalCompletion:
@@ -2110,13 +2237,28 @@ static void DAC960_ProcessCompletedCommand(DAC960_Command_T *Command)
 			      "Failure of Drive Being Rebuilt\n", Controller);
 	      break;
 	    case DAC960_NoRebuildOrCheckInProgress:
-	      if (Controller->LastRebuildStatus != DAC960_NormalCompletion)
-		break;
+	      break;
 	    case DAC960_RebuildSuccessful:
 	      DAC960_Progress("Rebuild Completed Successfully\n", Controller);
 	      break;
+	    case DAC960_RebuildSuccessfullyTerminated:
+	      DAC960_Progress("Rebuild Successfully Terminated\n", Controller);
+	      break;
 	    }
 	  Controller->LastRebuildStatus = CommandStatus;
+	  if (CommandType != DAC960_MonitoringCommand &&
+	      Controller->RebuildStatusPending)
+	    {
+	      Command->CommandStatus = Controller->PendingRebuildStatus;
+	      Controller->RebuildStatusPending = false;
+	    }
+	  else if (CommandType == DAC960_MonitoringCommand &&
+		   CommandStatus != DAC960_NormalCompletion &&
+		   CommandStatus != DAC960_NoRebuildOrCheckInProgress)
+	    {
+	      Controller->PendingRebuildStatus = CommandStatus;
+	      Controller->RebuildStatusPending = true;
+	    }
 	}
       else if (CommandOpcode == DAC960_RebuildStat)
 	{
@@ -2331,7 +2473,7 @@ static void DAC960_ProcessCompletedCommand(DAC960_Command_T *Command)
   if (CommandType == DAC960_QueuedCommand)
     {
       DAC960_KernelCommand_T *KernelCommand = Command->KernelCommand;
-      KernelCommand->CommandStatus = CommandStatus;
+      KernelCommand->CommandStatus = Command->CommandStatus;
       Command->KernelCommand = NULL;
       if (CommandOpcode == DAC960_DCDB)
 	Controller->DirectCommandActive[KernelCommand->DCDB->Channel]
@@ -2352,9 +2494,12 @@ static void DAC960_ProcessCompletedCommand(DAC960_Command_T *Command)
       return;
     }
   /*
-    Deallocate the Command, and wake up any processes waiting on a free Command.
+    Deallocate the Command.
   */
   DAC960_DeallocateCommand(Command);
+  /*
+    Wake up any processes waiting on a free Command.
+  */
   wake_up(&Controller->CommandWaitQueue);
 }
 
@@ -2761,19 +2906,14 @@ static int DAC960_UserIOCTL(Inode_T *Inode, File_T *File,
 	  }
 	if (CommandOpcode == DAC960_DCDB)
 	  {
-	    while (true)
-	      {
-		DAC960_AcquireControllerLock(Controller, &ProcessorFlags);
-		if (!Controller->DirectCommandActive[DCDB.Channel]
-						    [DCDB.TargetID])
-		  Command = DAC960_AllocateCommand(Controller);
-		if (Command != NULL)
-		  Controller->DirectCommandActive[DCDB.Channel]
-						 [DCDB.TargetID] = true;
-		DAC960_ReleaseControllerLock(Controller, &ProcessorFlags);
-		if (Command != NULL) break;
-		sleep_on(&Controller->CommandWaitQueue);
-	      }
+	    DAC960_AcquireControllerLock(Controller, &ProcessorFlags);
+	    while (Controller->DirectCommandActive[DCDB.Channel]
+						  [DCDB.TargetID] ||
+		   (Command = DAC960_AllocateCommand(Controller)) == NULL)
+	      DAC960_WaitForCommand(Controller);
+	    Controller->DirectCommandActive[DCDB.Channel]
+					   [DCDB.TargetID] = true;
+	    DAC960_ReleaseControllerLock(Controller, &ProcessorFlags);
 	    DAC960_ClearCommand(Command);
 	    Command->CommandType = DAC960_ImmediateCommand;
 	    memcpy(&Command->CommandMailbox, &UserCommand.CommandMailbox,
@@ -2783,14 +2923,10 @@ static int DAC960_UserIOCTL(Inode_T *Inode, File_T *File,
 	  }
 	else
 	  {
-	    while (true)
-	      {
-		DAC960_AcquireControllerLock(Controller, &ProcessorFlags);
-		Command = DAC960_AllocateCommand(Controller);
-		DAC960_ReleaseControllerLock(Controller, &ProcessorFlags);
-		if (Command != NULL) break;
-		sleep_on(&Controller->CommandWaitQueue);
-	      }
+	    DAC960_AcquireControllerLock(Controller, &ProcessorFlags);
+	    while ((Command = DAC960_AllocateCommand(Controller)) == NULL)
+	      DAC960_WaitForCommand(Controller);
+	    DAC960_ReleaseControllerLock(Controller, &ProcessorFlags);
 	    DAC960_ClearCommand(Command);
 	    Command->CommandType = DAC960_ImmediateCommand;
 	    memcpy(&Command->CommandMailbox, &UserCommand.CommandMailbox,
@@ -3194,14 +3330,10 @@ static boolean DAC960_ExecuteUserCommand(DAC960_Controller_T *Controller,
   DAC960_CommandMailbox_T *CommandMailbox;
   ProcessorFlags_T ProcessorFlags;
   unsigned char Channel, TargetID, LogicalDriveNumber;
-  while (true)
-    {
-      DAC960_AcquireControllerLock(Controller, &ProcessorFlags);
-      Command = DAC960_AllocateCommand(Controller);
-      DAC960_ReleaseControllerLock(Controller, &ProcessorFlags);
-      if (Command != NULL) break;
-      sleep_on(&Controller->CommandWaitQueue);
-    }
+  DAC960_AcquireControllerLock(Controller, &ProcessorFlags);
+  while ((Command = DAC960_AllocateCommand(Controller)) == NULL)
+    DAC960_WaitForCommand(Controller);
+  DAC960_ReleaseControllerLock(Controller, &ProcessorFlags);
   Controller->UserStatusLength = 0;
   DAC960_ClearCommand(Command);
   Command->CommandType = DAC960_ImmediateCommand;

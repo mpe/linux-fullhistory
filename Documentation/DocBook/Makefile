@@ -51,6 +51,7 @@ kernel-api.sgml: kernel-api.tmpl
 		$(TOPDIR)/drivers/sound/sound_firmware.c \
 		$(TOPDIR)/drivers/net/wan/syncppp.c \
 		$(TOPDIR)/drivers/net/wan/z85230.c \
+		$(TOPDIR)/fs/devfs/base.c \
 		$(TOPDIR)/kernel/pm.c \
 		$(TOPDIR)/kernel/ksyms.c \
 		$(TOPDIR)/net/netsyms.c \

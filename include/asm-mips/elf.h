@@ -1,5 +1,5 @@
 /*
- * $Id: elf.h,v 1.7 1999/08/20 21:59:08 ralf Exp $
+ * $Id: elf.h,v 1.6 1999/02/15 02:22:10 ralf Exp $
  */
 #ifndef __ASM_MIPS_ELF_H
 #define __ASM_MIPS_ELF_H

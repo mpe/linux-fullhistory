@@ -1,4 +1,4 @@
-/* $Id: r4k_genex.S,v 1.3 2000/01/20 23:32:21 ralf Exp $
+/* $Id: r4k_genex.S,v 1.3 1999/11/23 17:12:49 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -69,6 +69,14 @@
 	NESTED(handle_\exception, PT_SIZE, sp)
 	.set	noat
 	SAVE_ALL
+#if DEBUG_MIPS64
+jal dodebug2
+ld $4, PT_R4(sp)
+ld $5, PT_R5(sp)
+ld $6, PT_R6(sp)
+ld $7, PT_R7(sp)
+ld $2, PT_R2(sp)
+#endif
 	__BUILD_clear_\clear
 	.set	at
 	__BUILD_\verbose \exception

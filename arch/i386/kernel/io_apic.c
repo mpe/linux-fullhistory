@@ -48,6 +48,11 @@ struct mpc_config_intsrc mp_irqs[MAX_IRQ_SOURCES];
 /* MP IRQ source entries */
 int mp_irq_entries = 0;
 
+#if CONFIG_SMP
+# define TARGET_CPUS cpu_online_map
+#else
+# define TARGET_CPUS 0x01
+#endif
 /*
  * Rough estimation of how many shared IRQs there are, can
  * be changed anytime.
@@ -89,7 +94,7 @@ static void add_pin_to_irq(unsigned int irq, int apic, int pin)
 	entry->pin = pin;
 }
 
-#define __DO_ACTION(name,R,ACTION, FINAL)				\
+#define __DO_ACTION(R, ACTION, FINAL)					\
 									\
 {									\
 	int pin;							\
@@ -112,8 +117,8 @@ static void add_pin_to_irq(unsigned int irq, int apic, int pin)
 
 #define DO_ACTION(name,R,ACTION, FINAL)					\
 									\
-static void name##_IO_APIC_irq(unsigned int irq)			\
-__DO_ACTION(name,R,ACTION, FINAL)
+	static void name##_IO_APIC_irq (unsigned int irq)		\
+	__DO_ACTION(R, ACTION, FINAL)
 
 DO_ACTION( __mask,    0, |= 0x00010000, io_apic_sync(entry->apic))/* mask = 1 */
 DO_ACTION( __unmask,  0, &= 0xfffeffff, )				/* mask = 0 */
@@ -542,24 +547,25 @@ static inline int IO_APIC_irq_trigger(int irq)
 	return 0;
 }
 
-int irq_vector[NR_IRQS] = { IRQ0_TRAP_VECTOR , 0 };
+int irq_vector[NR_IRQS] = { FIRST_DEVICE_VECTOR , 0 };
 
 static int __init assign_irq_vector(int irq)
 {
-	static int current_vector = IRQ0_TRAP_VECTOR, offset = 0;
+	static int current_vector = FIRST_DEVICE_VECTOR, offset = 0;
 	if (IO_APIC_VECTOR(irq) > 0)
 		return IO_APIC_VECTOR(irq);
-	if (current_vector == 0xFF)
-		panic("ran out of interrupt sources!");
 next:
 	current_vector += 8;
 	if (current_vector == SYSCALL_VECTOR)
 		goto next;
 
-	if (current_vector > 0xFF) {
+	if (current_vector > FIRST_SYSTEM_VECTOR) {
 		offset++;
-		current_vector = IRQ0_TRAP_VECTOR + offset;
+		current_vector = FIRST_DEVICE_VECTOR + offset;
 	}
+
+	if (current_vector == FIRST_SYSTEM_VECTOR)
+		panic("ran out of interrupt sources!");
 
 	IO_APIC_VECTOR(irq) = current_vector;
 	return current_vector;
@@ -587,7 +593,7 @@ void __init setup_IO_APIC_irqs(void)
 		entry.delivery_mode = dest_LowestPrio;
 		entry.dest_mode = 1;			/* logical delivery */
 		entry.mask = 0;				/* enable IRQ */
-		entry.dest.logical.logical_dest = APIC_ALL_CPUS;
+		entry.dest.logical.logical_dest = TARGET_CPUS;
 
 		idx = find_irq_entry(apic,pin,mp_INT);
 		if (idx == -1) {
@@ -605,7 +611,7 @@ void __init setup_IO_APIC_irqs(void)
 		if (irq_trigger(idx)) {
 			entry.trigger = 1;
 			entry.mask = 1;
-			entry.dest.logical.logical_dest = APIC_ALL_CPUS;
+			entry.dest.logical.logical_dest = TARGET_CPUS;
 		}
 
 		irq = pin_2_irq(idx, apic, pin);
@@ -660,7 +666,7 @@ void __init setup_ExtINT_IRQ0_pin(unsigned int pin, int vector)
 	 */
 	entry.dest_mode = 1;				/* logical delivery */
 	entry.mask = 0;					/* unmask IRQ now */
-	entry.dest.logical.logical_dest = APIC_ALL_CPUS;
+	entry.dest.logical.logical_dest = TARGET_CPUS;
 	entry.delivery_mode = dest_LowestPrio;
 	entry.polarity = 0;
 	entry.trigger = 0;
@@ -1167,7 +1173,7 @@ static void set_ioapic_affinity (unsigned int irq, unsigned long mask)
 	mask = mask << 24;
 
 	spin_lock_irqsave(&ioapic_lock, flags);
-	__DO_ACTION( target,  1, = mask, )
+	__DO_ACTION(1, = mask, )
 	spin_unlock_irqrestore(&ioapic_lock, flags);
 }
 

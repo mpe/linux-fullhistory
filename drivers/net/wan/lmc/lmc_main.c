@@ -112,7 +112,7 @@ int LMC_PKT_BUF_SZ = 1542;
 #ifdef MODULE
 static struct pci_device_id lmc_pci_tbl[] __devinitdata = {
     { 0x1011, 0x009, 0x1379, PCI_ANY_ID, 0, 0, 0},
-    { 0 },
+    { 0, }
 };
 
 MODULE_DEVICE_TABLE(pci, lmc_pci_tbl);

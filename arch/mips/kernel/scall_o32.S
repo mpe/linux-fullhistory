@@ -1,4 +1,4 @@
-/* $Id: scall_o32.S,v 1.11 2000/02/23 01:33:55 ralf Exp $
+/* $Id: scall_o32.S,v 1.10 2000/02/23 00:41:00 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

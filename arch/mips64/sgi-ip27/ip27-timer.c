@@ -19,6 +19,7 @@
 #include <asm/sn/klconfig.h>
 #include <asm/sn/arch.h>
 #include <asm/sn/addrs.h>
+#include <asm/sn/sn_private.h>
 #include <asm/sn/sn0/ip27.h>
 #include <asm/sn/sn0/hub.h>
 
@@ -44,7 +45,6 @@ static int set_rtc_mmss(unsigned long nowtime)
 {               
         int retval = 0;
         int real_seconds, real_minutes, cmos_minutes;
-        unsigned char save_control, save_freq_select;
 	struct m48t35_rtc *rtc;
 	nasid_t nid;
 
@@ -89,20 +89,50 @@ static int set_rtc_mmss(unsigned long nowtime)
 
 void rt_timer_interrupt(struct pt_regs *regs)
 {
+	int cpu = smp_processor_id();
+	int cpuA = ((cputoslice(smp_processor_id())) == 0);
+	int user = user_mode(regs);
 	int irq = 7;				/* XXX Assign number */
 
 	write_lock(&xtime_lock);
 
 again:
-	LOCAL_HUB_S(PI_RT_PEND_A, 0);		/* Ack  */
+	LOCAL_HUB_S(cpuA ? PI_RT_PEND_A : PI_RT_PEND_B, 0);	/* Ack  */
 	ct_cur += CYCLES_PER_JIFFY;
-	LOCAL_HUB_S(PI_RT_COMPARE_A, ct_cur);
+	LOCAL_HUB_S(cpuA ? PI_RT_COMPARE_A : PI_RT_COMPARE_B, ct_cur);
 
 	if (LOCAL_HUB_L(PI_RT_COUNT) >= ct_cur)
 		goto again;
 
-	kstat.irqs[0][irq]++;
+	kstat.irqs[cpu][irq]++;		/* kstat+do_timer only for bootcpu? */
 	do_timer(regs);
+
+#ifdef CONFIG_SMP
+	if (current->pid) {
+		unsigned int *inc, *inc2;
+
+		update_one_process(current, 1, user, !user, cpu);
+		if (--current->counter <= 0) {
+			current->counter = 0;
+			current->need_resched = 1;
+		}
+
+		if (user) {
+			if (current->priority < DEF_PRIORITY) {
+				inc = &kstat.cpu_nice;
+				inc2 = &kstat.per_cpu_nice[cpu];
+			} else {
+				inc = &kstat.cpu_user;
+				inc2 = &kstat.per_cpu_user[cpu];
+			}
+		} else {
+			inc = &kstat.cpu_system;
+			inc2 = &kstat.per_cpu_system[cpu];
+		}
+		atomic_inc((atomic_t *)inc);
+		atomic_inc((atomic_t *)inc2);
+	}
+#endif /* CONFIG_SMP */
 	
         /*
          * If we have an externally synchronized Linux clock, then update
@@ -194,7 +224,8 @@ static unsigned long __init get_m48t35_time(void)
 	nasid_t nid;
 
 	nid = get_nasid();
-	rtc = KL_CONFIG_CH_CONS_INFO(nid)->memory_base + IOC3_BYTEBUS_DEV0;
+	rtc = (struct m48t35_rtc *)(KL_CONFIG_CH_CONS_INFO(nid)->memory_base + 
+							IOC3_BYTEBUS_DEV0);
 
         rtc->control |= M48T35_RTC_READ;
 	sec = rtc->sec;
@@ -221,15 +252,18 @@ extern void ioc3_eth_init(void);
 
 void __init time_init(void)
 {
+	xtime.tv_sec = get_m48t35_time();
+	xtime.tv_usec = 0;
+}
+
+void __init cpu_time_init(void)
+{
 	lboard_t *board;
 	klcpu_t *cpu;
 	int cpuid;
 	
-	xtime.tv_sec = get_m48t35_time();
-	xtime.tv_usec = 0;
-
 	/* Don't use ARCS.  ARCS is fragile.  Klconfig is simple and sane.  */
-	board = find_lboard(KLTYPE_IP27);
+	board = find_lboard(KL_CONFIG_INFO(get_nasid()), KLTYPE_IP27);
 	if (!board)
 		panic("Can't find board info for myself.");
 
@@ -238,15 +272,29 @@ void __init time_init(void)
 	if (!cpu)
 		panic("No information about myself?");
 
-	printk("CPU clock is %dMHz.\n", cpu->cpu_speed);
-
-	/* Don't worry about second CPU, it's disabled.  */
-	LOCAL_HUB_S(PI_RT_EN_A, 1);
-	LOCAL_HUB_S(PI_PROF_EN_A, 0);
-	ct_cur = CYCLES_PER_JIFFY;
-	LOCAL_HUB_S(PI_RT_COMPARE_A, ct_cur);
-	LOCAL_HUB_S(PI_RT_COUNT, 0);
-	LOCAL_HUB_S(PI_RT_PEND_A, 0);
+	printk("CPU %d clock is %dMHz.\n", smp_processor_id(), cpu->cpu_speed);
 
 	set_cp0_status(SRB_TIMOCLK, SRB_TIMOCLK);
+}
+
+void __init hub_rtc_init(cnodeid_t cnode)
+{
+	/*
+	 * We only need to initialize the current node.
+	 * If this is not the current node then it is a cpuless
+	 * node and timeouts will not happen there.
+	 */
+	if (get_compact_nodeid() == cnode) {
+		LOCAL_HUB_S(PI_RT_EN_A, 1);
+		LOCAL_HUB_S(PI_RT_EN_B, 1);
+		LOCAL_HUB_S(PI_PROF_EN_A, 0);
+		LOCAL_HUB_S(PI_PROF_EN_B, 0);
+		ct_cur = CYCLES_PER_JIFFY;
+		LOCAL_HUB_S(PI_RT_COMPARE_A, ct_cur);
+		LOCAL_HUB_S(PI_RT_COUNT, 0);
+		LOCAL_HUB_S(PI_RT_PEND_A, 0);
+		LOCAL_HUB_S(PI_RT_COMPARE_B, ct_cur);
+		LOCAL_HUB_S(PI_RT_COUNT, 0);
+		LOCAL_HUB_S(PI_RT_PEND_B, 0);
+	}
 }

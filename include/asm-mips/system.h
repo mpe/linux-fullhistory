@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.21 1999/12/30 14:21:21 raiko Exp $
+/* $Id: system.h,v 1.20 1999/12/06 23:13:21 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

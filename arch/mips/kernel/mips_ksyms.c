@@ -23,6 +23,7 @@
 #include <asm/io.h>
 #include <asm/page.h>
 #include <asm/pgalloc.h>
+#include <asm/semaphore.h>
 #include <asm/sgi/sgihpc.h>
 #include <asm/softirq.h>
 #include <asm/uaccess.h>
@@ -56,8 +57,6 @@ EXPORT_SYMBOL_NOVERS(strtok);
 EXPORT_SYMBOL_NOVERS(strpbrk);
 
 EXPORT_SYMBOL(_clear_page);
-EXPORT_SYMBOL(local_bh_count);
-EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(kernel_thread);
@@ -87,6 +86,13 @@ EXPORT_SYMBOL(_dma_cache_wback_inv);
 EXPORT_SYMBOL(_dma_cache_inv);
 
 EXPORT_SYMBOL(invalid_pte_table);
+
+/*
+ * Semaphore stuff
+ */
+EXPORT_SYMBOL(__down_read);
+EXPORT_SYMBOL(__down_write);
+EXPORT_SYMBOL(__rwsem_wake);
 
 /*
  * Base address of ports for Intel style I/O.

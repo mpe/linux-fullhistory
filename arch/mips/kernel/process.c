@@ -40,10 +40,8 @@ void cpu_idle(void)
 
 	while (1) {
 		while (!current->need_resched)
-			if (wait_available)
-				__asm__(".set\tmips3\n\t"
-					"wait\n\t"
-					".set\tmips0");
+			if (cpu_wait)
+				(*cpu_wait)();
 		schedule();
 		check_pgt_cache();
 	}

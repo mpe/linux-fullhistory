@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.12 1999/12/04 03:59:00 ralf Exp $
+# $Id: Makefile,v 1.11 1999/10/17 19:55:22 harald Exp $
 #
 # Makefile for MIPS-specific library files..
 #

@@ -1,4 +1,4 @@
-/* $Id: setup.c,v 1.14 2000/01/27 01:05:23 ralf Exp $
+/* $Id: setup.c,v 1.13 1999/12/04 03:59:00 ralf Exp $
  *
  * Setup pointers to hardware-dependent routines.
  *

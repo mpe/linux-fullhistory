@@ -10,8 +10,6 @@
 #ifndef _ASM_CHECKSUM_H
 #define _ASM_CHECKSUM_H
 
-#include <asm/checksum.h>
-
 /*
  * computes the checksum of a memory block at buff, length len,
  * and adds in "sum" (32-bit)

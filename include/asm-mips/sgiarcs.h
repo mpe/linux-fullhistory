@@ -4,9 +4,10 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  */
+#ifndef _ASM_SGIARCS_H
+#define _ASM_SGIARCS_H
 
-#ifndef _MIPS_SGIARCS_H
-#define _MIPS_SGIARCS_H
+#include <asm/arc/types.h>
 
 /* Various ARCS error codes. */
 #define PROM_ESUCCESS                   0x00
@@ -232,8 +233,8 @@ struct linux_romvec {
 	long (*mount)(char *file, enum linux_mountops op);
 
 	/* Dealing with firmware environment variables. */
-	char *(*get_evar)(char *name);
-	long (*set_evar)(char *name, char *value);
+	PCHAR (*get_evar)(CHAR *name);
+	LONG (*set_evar)(PCHAR name, PCHAR value);
 
 	long (*get_finfo)(unsigned long fd, struct linux_finfo *buf);
 	long (*set_finfo)(unsigned long fd, unsigned long flags,
@@ -366,4 +367,4 @@ struct linux_smonblock {
 	int             smax;              /* Max # of symbols. */
 };
 
-#endif /* !(_MIPS_SGIARCS_H) */
+#endif /* _ASM_SGIARCS_H */

@@ -1,9 +1,9 @@
-/* $Id: newport_con.c,v 1.13 1999/04/11 10:37:08 ulfc Exp $
+/* $Id: newport_con.c,v 1.14 1999/06/24 01:10:24 ulfc Exp $
  *
  * newport_con.c: Abscon for newport hardware
  * 
  * (C) 1998 Thomas Bogendoerfer (tsbogend@alpha.franken.de)
- * (C) 1999 Ulf Carlsson (ulfc@bun.falkenberg.se)
+ * (C) 1999 Ulf Carlsson (ulfc@thepuffingruop.com)
  * 
  * This driver is based on sgicons.c and cons_newport.
  * 
@@ -26,14 +26,19 @@
 #include <asm/system.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
-#include <asm/newport.h>
+#include <video/newport.h>
 #define INCLUDE_LINUX_LOGO_DATA
 #include <asm/linux_logo.h>
+
+#include <video/font.h>
 
 #define LOGO_W		80
 #define LOGO_H		80
 
-extern unsigned char vga_font[];
+extern struct fbcon_font_desc font_vga_8x16;
+
+#define FONT_DATA ((unsigned char *)font_vga_8x16.data)
+
 extern struct newport_regs *npregs;
 
 static int logo_active;
@@ -148,9 +153,9 @@ void newport_reset (void)
     for(i = 0; i < 128; i++) {
 	newport_bfwait();
 	if (i == 92 || i == 94)
-	    npregs->set.dcbdata0.hwords.s1 = 0xff00;
+	    npregs->set.dcbdata0.byshort.s1 = 0xff00;
 	else
-	    npregs->set.dcbdata0.hwords.s1 = 0x0000;
+	    npregs->set.dcbdata0.byshort.s1 = 0x0000;
     }
 
     newport_init_cmap();
@@ -158,10 +163,10 @@ void newport_reset (void)
     /* turn off popup plane */
     npregs->set.dcbmode = (DCB_XMAP0 | R_DCB_XMAP9_PROTOCOL |
                            XM9_CRS_CONFIG | NPORT_DMODE_W1);
-    npregs->set.dcbdata0.bytes.b3 &= ~XM9_PUPMODE;
+    npregs->set.dcbdata0.bybytes.b3 &= ~XM9_PUPMODE;
     npregs->set.dcbmode = (DCB_XMAP1 | R_DCB_XMAP9_PROTOCOL |
                            XM9_CRS_CONFIG | NPORT_DMODE_W1);
-    npregs->set.dcbdata0.bytes.b3 &= ~XM9_PUPMODE;
+    npregs->set.dcbdata0.bybytes.b3 &= ~XM9_PUPMODE;
     
     topscan = 0;
     npregs->cset.topscan = 0x3ff;
@@ -187,7 +192,7 @@ void newport_get_screensize(void)
 			   NPORT_DMODE_W2 | VC2_PROTOCOL);
     for(i = 0; i < 128; i++) {
 	newport_bfwait();
-	linetable[i] = npregs->set.dcbdata0.hwords.s1;
+	linetable[i] = npregs->set.dcbdata0.byshort.s1;
     }
 
     newport_xsize = newport_ysize = 0;
@@ -198,12 +203,12 @@ void newport_get_screensize(void)
 			       NPORT_DMODE_W2 | VC2_PROTOCOL);
 	do {
 	    newport_bfwait();
-	    treg = npregs->set.dcbdata0.hwords.s1;
+	    treg = npregs->set.dcbdata0.byshort.s1;
 	    if ((treg & 1) == 0)
 		cols += (treg >> 7) & 0xfe;
 	    if ((treg & 0x80) == 0) {
 		newport_bfwait();
-		treg = npregs->set.dcbdata0.hwords.s1;
+		treg = npregs->set.dcbdata0.byshort.s1;
 	    } 
 	} while ((treg & 0x8000) == 0);
 	if (cols) {
@@ -226,18 +231,18 @@ static void newport_get_revisions(void)
     unsigned int bt445_rev;
     unsigned int bitplanes;
 
-    rex3_rev = npregs->cset.stat & NPORT_STAT_VERS;
+    rex3_rev = npregs->cset.status & NPORT_STAT_VERS;
 
     npregs->set.dcbmode = (DCB_CMAP0 | NCMAP_PROTOCOL |
                            NCMAP_REGADDR_RREG | NPORT_DMODE_W1);
-    tmp = npregs->set.dcbdata0.bytes.b3;
+    tmp = npregs->set.dcbdata0.bybytes.b3;
     cmap_rev = tmp & 7;
     board_rev = (tmp >> 4) & 7;
     bitplanes = ((board_rev > 1) && (tmp & 0x80)) ? 8 : 24; 
 
     npregs->set.dcbmode = (DCB_CMAP1 | NCMAP_PROTOCOL |
                            NCMAP_REGADDR_RREG | NPORT_DMODE_W1);
-    tmp = npregs->set.dcbdata0.bytes.b3;
+    tmp = npregs->set.dcbdata0.bybytes.b3;
     if ((tmp & 7) < cmap_rev)
 	cmap_rev = (tmp & 7);
 
@@ -245,14 +250,14 @@ static void newport_get_revisions(void)
 
     npregs->set.dcbmode = (DCB_XMAP0 | R_DCB_XMAP9_PROTOCOL |
                            XM9_CRS_REVISION | NPORT_DMODE_W1);
-    xmap9_rev = npregs->set.dcbdata0.bytes.b3 & 7;
+    xmap9_rev = npregs->set.dcbdata0.bybytes.b3 & 7;
 
     npregs->set.dcbmode = (DCB_BT445 | BT445_PROTOCOL |
                            BT445_CSR_ADDR_REG | NPORT_DMODE_W1);
-    npregs->set.dcbdata0.bytes.b3 = BT445_REVISION_REG;
+    npregs->set.dcbdata0.bybytes.b3 = BT445_REVISION_REG;
     npregs->set.dcbmode = (DCB_BT445 | BT445_PROTOCOL |
                            BT445_CSR_REVISION | NPORT_DMODE_W1);
-    bt445_rev = (npregs->set.dcbdata0.bytes.b3 >> 4) - 0x0a;
+    bt445_rev = (npregs->set.dcbdata0.bybytes.b3 >> 4) - 0x0a;
 
 #define L(a)     (char)('A'+(a))
     printk ("NG1: Revision %d, %d bitplanes, REX3 revision %c, VC2 revision %c, xmap9 revision %c, cmap revision %c, bt445 revision %c\n",
@@ -281,7 +286,7 @@ static const char * __init newport_startup(void)
 	return NULL;
     }
 
-    p->set.xstarti = TESTVAL; if(p->set._xstart.i != XSTI_TO_FXSTART(TESTVAL)) {
+    p->set.xstarti = TESTVAL; if(p->set._xstart.word != XSTI_TO_FXSTART(TESTVAL)) {
 	return NULL;
     }
 
@@ -325,7 +330,7 @@ static void newport_putc(struct vc_data *vc, int charattr, int ypos, int xpos)
 {
     unsigned char *p;
     
-    p = &vga_font[(charattr & 0xff) << 4];
+    p = &FONT_DATA[(charattr & 0xff) << 4];
     charattr = (charattr >> 8) & 0xff;
     xpos <<= 3;
     ypos <<= 4;
@@ -374,7 +379,7 @@ static void newport_putcs(struct vc_data *vc, const unsigned short *s,
 			     NPORT_DMODE0_L32);
     
     for (i = 0; i < count; i++, xpos += 8) {
-	p = &vga_font[(s[i] & 0xff) << 4];
+	p = &FONT_DATA[(s[i] & 0xff) << 4];
 
 	newport_wait();
 

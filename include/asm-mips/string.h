@@ -100,20 +100,18 @@ strncmp(__const__ char *__cs, __const__ char *__ct, size_t __count)
 	".set\tnoreorder\n\t"
 	".set\tnoat\n"
 	"1:\tlbu\t%3,(%0)\n\t"
-#if defined(CONFIG_CPU_R3000)
-	"lbu\t$1,(%1)\n\t"
-	"nop\n\t"
-	"beqz\t%2,2f\n\t"
-#else
 	"beqz\t%2,2f\n\t"
 	"lbu\t$1,(%1)\n\t"
-#endif
 	"subu\t%2,1\n\t"
 	"bne\t$1,%3,3f\n\t"
 	"addiu\t%0,1\n\t"
 	"bnez\t%3,1b\n\t"
 	"addiu\t%1,1\n"
-	"2:\tmove\t%3,$1\n"
+	"2:\n\t"
+#if defined(CONFIG_CPU_R3000)
+	"nop\n\t"
+#endif	
+	"move\t%3,$1\n"
 	"3:\tsubu\t%3,$1\n\t"
 	".set\tat\n\t"
 	".set\treorder"

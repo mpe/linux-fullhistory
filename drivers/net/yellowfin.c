@@ -237,7 +237,7 @@ static struct chip_info chip_info[] = {
 static struct pci_device_id yellowfin_pci_tbl[] __devinitdata = {
 	{ 0x1000, 0x0702, PCI_ANY_ID, PCI_ANY_ID, 0, 0, YELLOWFIN_GNIC },
 	{ 0x1000, 0x0701, PCI_ANY_ID, PCI_ANY_ID, 0, 0, SYM83C885 },
-	{ 0, },
+	{ 0, }
 };
 MODULE_DEVICE_TABLE (pci, yellowfin_pci_tbl);
 

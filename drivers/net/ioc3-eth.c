@@ -97,6 +97,7 @@ struct ioc3_private {
 	int rx_pi;			/* RX producer index */
 	int tx_ci;			/* TX consumer index */
 	int tx_pi;			/* TX producer index */
+	spinlock_t ioc3_lock;
 };
 
 /* We use this to acquire receive skb's that we can DMA directly into. */
@@ -390,6 +391,7 @@ ioc3_tx(struct ioc3_private *ip, struct ioc3 *ioc3)
 	struct sk_buff *skb;
 	u32 etcir;
 
+	spin_lock(&ip->ioc3_lock);
 	etcir = ioc3->etcir;
 	tx_entry = (etcir >> 7) & 127;
 	o_entry = ip->tx_ci;
@@ -401,7 +403,7 @@ ioc3_tx(struct ioc3_private *ip, struct ioc3 *ioc3)
 		skb = ip->tx_skbs[o_entry];
 		ip->stats.tx_packets++;
 		ip->stats.tx_bytes += skb->len;
-		dev_kfree_skb(skb);
+		dev_kfree_skb_irq(skb);
 		ip->tx_skbs[o_entry] = NULL;
 
 		o_entry = (o_entry + 1) & 127;		/* Next */
@@ -410,6 +412,7 @@ ioc3_tx(struct ioc3_private *ip, struct ioc3 *ioc3)
 		tx_entry = (etcir >> 7) & 127;
 	}
 	ip->tx_ci = o_entry;
+	spin_unlock(&ip->ioc3_lock);
 }
 
 /*
@@ -602,20 +605,30 @@ ioc3_ssram_disc(struct ioc3_private *ip)
 
 static void ioc3_probe1(struct net_device *dev, struct ioc3 *ioc3)
 {
-	struct ioc3_private *p;
+	struct ioc3_private *ip;
 
 	dev = init_etherdev(dev, 0);
-	p = (struct ioc3_private *) kmalloc(sizeof(*p), GFP_KERNEL);
-	memset(p, 0, sizeof(*p));
-	dev->priv = p;
+
+	/*
+	 * This probably needs to be register_netdevice, or call
+	 * init_etherdev so that it calls register_netdevice. Quick
+	 * hack for now.
+	 */
+	netif_device_attach(dev);
+
+	ip = (struct ioc3_private *) kmalloc(sizeof(*ip), GFP_KERNEL);
+	memset(ip, 0, sizeof(*ip));
+	dev->priv = ip;
 	dev->irq = IOC3_ETH_INT;
 
-	p->regs = ioc3;
+	ip->regs = ioc3;
 
-	ioc3_eth_init(dev, p, ioc3);
-	ioc3_ssram_disc(p);
+	ioc3_eth_init(dev, ip, ioc3);
+	ioc3_ssram_disc(ip);
         ioc3_get_eaddr(dev, ioc3);
-	ioc3_init_rings(dev, p, ioc3);
+	ioc3_init_rings(dev, ip, ioc3);
+
+	spin_lock_init(&ip->ioc3_lock);
 
 	/* Misc registers  */
 	ioc3->erbar = 0;
@@ -702,6 +715,7 @@ ioc3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		return 1;
 	}
 
+	spin_lock_irq(&ip->ioc3_lock);
 	data = (unsigned long) skb->data;
 	len = skb->len;
 
@@ -718,7 +732,7 @@ ioc3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 		desc->cmd    = len | ETXD_INTWHENDONE | ETXD_D0V;
 		desc->bufcnt = len;
-	} if ((data ^ (data + len)) & 0x4000) {
+	} else if ((data ^ (data + len)) & 0x4000) {
 		unsigned long b2, s1, s2;
 
 		b2 = (data | 0x3fffUL) + 1UL;
@@ -747,6 +761,7 @@ ioc3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	if (TX_BUFFS_AVAIL(ip))
 		netif_wake_queue(dev);
+	spin_unlock_irq(&ip->ioc3_lock);
 
 	return 0;
 }

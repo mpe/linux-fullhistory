@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.15 2000/01/26 00:07:44 ralf Exp $
+# $Id: Makefile,v 1.14 1999/10/09 00:00:58 ralf Exp $
 #
 # Makefile for the Linux/MIPS kernel.
 #

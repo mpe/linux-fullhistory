@@ -30,11 +30,6 @@ int prof_multiplier[NR_CPUS] = { 1, };
 int prof_old_multiplier[NR_CPUS] = { 1, };
 int prof_counter[NR_CPUS] = { 1, };
 
-/*
- * IA s/w dev Vol 3, Section 7.4
- */
-#define APIC_DEFAULT_PHYS_BASE 0xfee00000
-
 int get_maxlvt(void)
 {
 	unsigned int v, ver, maxlvt;

@@ -1,4 +1,4 @@
-/* $Id: ip27-berr.c,v 1.1 2000/01/20 23:50:27 ralf Exp $
+/* $Id: ip27-berr.c,v 1.1 2000/01/20 22:50:29 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

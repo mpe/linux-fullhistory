@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: loadmmu.c,v 1.15 2000/02/24 00:12:40 ralf Exp $
+ * $Id: loadmmu.c,v 1.17 2000/03/13 10:33:05 raiko Exp $
  */
 #include <linux/config.h>
 #include <linux/init.h>
@@ -15,7 +15,6 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/bootinfo.h>
-#include <asm/sgialib.h>
 
 /* memory functions */
 void (*_clear_page)(void * page);
@@ -59,6 +58,7 @@ void __init loadmmu(void)
 	case CPU_R2000:
 	case CPU_R3000:
 	case CPU_R3000A:
+	case CPU_R3081E:
 		printk("Loading R[23]00 MMU routines.\n");
 		ld_mmu_r2300();
 		break;

@@ -2,9 +2,9 @@
  *  arch/mips/ddb5074/prom.c -- NEC DDB Vrc-5074 PROM routines
  *
  *  Copyright (C) 2000 Geert Uytterhoeven <geert@sonycom.com>
- *                     Sony Suprastructure Center Europe (SUPC-E), Brussels
+ *                     Sony Software Development Center Europe (SDCE), Brussels
  *
- *  $Id: prom.c,v 1.2 2000/02/14 17:07:36 ralf Exp $
+ *  $Id: prom.c,v 1.1 2000/01/26 00:07:44 ralf Exp $
  */
 
 #include <linux/init.h>

@@ -52,7 +52,7 @@
 #define TASK_COUNTER       32
 #define TASK_PRIORITY      36
 #define TASK_MM            44
-#define TASK_STRUCT_SIZE   904
+#define TASK_STRUCT_SIZE   880
 
 /* MIPS specific thread_struct offsets. */
 #define THREAD_REG16   584
@@ -80,7 +80,7 @@
 /* Linux mm_struct offsets. */
 #define MM_USERS      16
 #define MM_PGD        12
-#define MM_CONTEXT    64
+#define MM_CONTEXT    68
 
 /* Linux sigcontext offsets. */
 #define SC_REGS       16

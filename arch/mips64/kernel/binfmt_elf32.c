@@ -1,4 +1,4 @@
-/* $Id: binfmt_elf32.c,v 1.2 2000/01/17 23:32:46 ralf Exp $
+/* $Id: binfmt_elf32.c,v 1.1 1999/11/24 06:56:13 ralf Exp $
  *
  * Support for 32-bit Linux/MIPS ELF binaries.
  *

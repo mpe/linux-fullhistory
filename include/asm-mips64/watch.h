@@ -1,4 +1,4 @@
-/* $Id: watch.h,v 1.1 1999/09/28 22:27:20 ralf Exp $
+/* $Id: watch.h,v 1.1 1999/09/27 16:01:41 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

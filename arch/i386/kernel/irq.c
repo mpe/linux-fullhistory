@@ -1117,7 +1117,8 @@ static void register_irq_proc (unsigned int irq)
 	struct proc_dir_entry *entry;
 	char name [MAX_NAMELEN];
 
-	if (!root_irq_dir || (irq_desc[irq].handler == &no_irq_type))
+	if (!root_irq_dir || (irq_desc[irq].handler == &no_irq_type) ||
+			irq_dir[irq])
 		return;
 
 	memset(name, 0, MAX_NAMELEN);
@@ -1158,10 +1159,7 @@ void init_irq_proc (void)
 	/*
 	 * Create entries for all existing IRQs.
 	 */
-	for (i = 0; i < NR_IRQS; i++) {
-		if (irq_desc[i].handler == &no_irq_type)
-			continue;
+	for (i = 0; i < NR_IRQS; i++)
 		register_irq_proc(i);
-	}
 }
 

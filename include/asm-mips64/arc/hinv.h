@@ -1,4 +1,4 @@
-/* $Id: hinv.h,v 1.1 2000/01/17 23:32:47 ralf Exp $
+/* $Id$
  *
  * ARCS hardware/memory inventory/configuration and system ID definitions.
  */

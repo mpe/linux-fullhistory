@@ -33,7 +33,15 @@ extern cycles_t cacheflush_time;
 
 static inline cycles_t get_cycles (void)
 {
-	return read_32bit_cp0_register(CP0_COUNT);
+	cycles_t val;
+
+	__asm__ __volatile__(
+		".set noreorder\n\t"
+		"mfc0 %0, $9\n\t"
+		".set reorder"
+		: "=r" (val));
+
+	return val;
 }
 
 #endif /*  _ASM_TIMEX_H */

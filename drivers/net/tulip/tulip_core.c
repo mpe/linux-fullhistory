@@ -168,7 +168,7 @@ static struct pci_device_id tulip_pci_tbl[] __devinitdata = {
 	{ 0x1282, 0x9100, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21140 },
 	{ 0x1282, 0x9102, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21140 },
 	{ 0x1113, 0x1217, PCI_ANY_ID, PCI_ANY_ID, 0, 0, MX98715 },
-	{0},
+	{0, }
 };
 MODULE_DEVICE_TABLE(pci, tulip_pci_tbl);
 

@@ -1,4 +1,4 @@
-/* $Id: param.h,v 1.2 2000/01/19 02:08:47 ralf Exp $
+/* $Id: param.h,v 1.1 1999/08/18 23:37:51 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

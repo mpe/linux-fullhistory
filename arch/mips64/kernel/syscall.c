@@ -108,7 +108,6 @@ asmlinkage int sys_execve(abi64_no_regargs, struct pt_regs regs)
 	int error;
 	char * filename;
 
-	lock_kernel();
 	filename = getname((char *) (long)regs.regs[4]);
 	error = PTR_ERR(filename);
 	if (IS_ERR(filename))
@@ -118,7 +117,6 @@ asmlinkage int sys_execve(abi64_no_regargs, struct pt_regs regs)
 	putname(filename);
 
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -322,4 +320,11 @@ sys_cachectl(char *addr, int nbytes, int op)
 asmlinkage void bad_stack(void)
 {
 	do_exit(SIGSEGV);
+}
+
+asmlinkage int sys_pause(void)
+{
+	current->state = TASK_INTERRUPTIBLE;
+	schedule();
+	return -ERESTARTNOHAND;
 }
