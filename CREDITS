@@ -53,7 +53,8 @@ S: University of Calgary
 S: Calgary, Alberta, Canada
 
 N: Ralf Baechle
-E: ralf@waldorf-gmbh.de
+E: ralf@gnu.ai.mit.edu
+P: 1024/AF7B30C1 CF 97 C2 CC 6D AE A7 FE  C8 BA 9C FC 88 DE 32 C3
 D: Linux/MIPS port
 D: Linux/68k hacker
 S: Hauptstrasse 19
@@ -802,10 +803,10 @@ S: Nepean, Ontario
 S: Canada K2H 6S3
 
 N: Warner Losh
-E: imp@boulder.parcplace.com
-D: Provided OI/OB for Linux, general hacker
-S: 4909 Pearl East Circle, Suite 200
-S: Boulder, Colorado 80303
+E: imp@village.org
+D: Linux/MIPS Deskstation support, Provided OI/OB for Linux
+S: 8786 Niwot Rd
+S: Niwot, CO 80503
 S: USA
 
 N: H.J. Lu
@@ -1407,6 +1408,10 @@ S: Germany
 N: Jeffrey A. Uphoff
 E: juphoff@nrao.edu
 E: jeff.uphoff@linux.org
+P: 1024/9ED505C5 D7 BB CA AA 10 45 40 1B  16 19 0A C0 38 A0 3E CB
+D: Linux Security/Alert mailing lists' moderator/maintainer.
+D: NSM (rpc.statd) developer.
+D: PAM S/Key module developer.
 D: 'dip' contributor.
 D: AIPS port, astronomical community support.
 S: National Radio Astronomy Observatory

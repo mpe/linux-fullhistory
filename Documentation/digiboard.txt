@@ -60,7 +60,7 @@ do
   for c in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15;
   do
 	name=`expr $boardnum \* 16 + $c`
-	mknod /dev/cud$name c $DIGI_CUMAJOR $name
+	mknod /dev/cud$name c $DIGICU_MAJOR $name
 	mknod /dev/ttyD$name c $DIGI_MAJOR $name
   done
   boardnum=`expr $boardnum + 1`

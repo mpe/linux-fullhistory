@@ -546,7 +546,7 @@ function parser(ifile,menu) {
 			printf("}\n") >>menu
 			return
 		} 
-		else if ($0 ~ /^#|$MAKE|mainmenu_name/) {
+		else if ($0 ~ /^#|\$MAKE|mainmenu_name/) {
 			printf("") >>menu
 		}
 		else if ($1 == "source") {

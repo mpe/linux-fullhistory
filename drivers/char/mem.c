@@ -196,6 +196,7 @@ static int mmap_zero(struct inode * inode, struct file * file, struct vm_area_st
 
 static int read_full(struct inode * node, struct file * file, char * buf,int count)
 {
+	file->f_pos += count;
 	return count;
 }
 

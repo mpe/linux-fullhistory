@@ -327,8 +327,8 @@ int get_cpuinfo(char * buffer)
                         }
                         len += sprintf(buffer+len,
                                        "\nbogomips\t: %lu.%02lu\n",
-                                       CD(loops_per_sec)/500000,
-                                       (CD(loops_per_sec)/5000) % 100);
+                                       CD(loops_per_sec+2500)/500000,
+                                       (CD(loops_per_sec+2500)/5000) % 100);
 #ifdef __SMP__
                 }
         }

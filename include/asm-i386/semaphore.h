@@ -34,7 +34,7 @@ extern inline void down(struct semaphore * sem)
 	__asm__ __volatile__(
 		"# atomic down operation\n"
 		"1:\n\t"
-		"leal 1b,%%eax\n\t"
+		"movl $1b,%%eax\n\t"
 #ifdef __SMP__
 		"lock ; "
 #endif
@@ -55,7 +55,7 @@ extern inline void up(struct semaphore * sem)
 {
 	__asm__ __volatile__(
 		"# atomic up operation\n\t"
-		"leal 1f,%%eax\n\t"
+		"movl $1f,%%eax\n\t"
 #ifdef __SMP__
 		"lock ; "
 #endif

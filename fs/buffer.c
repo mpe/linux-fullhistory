@@ -69,6 +69,7 @@ int buffers_lav[NR_SIZES] = {0,};  /* Load average of buffer usage */
 int nr_free[NR_SIZES] = {0,};
 int buffermem = 0;
 int nr_buffer_heads = 0;
+int refilled = 0;       /* Set NZ when a buffer freelist is refilled */
 extern int *blksize_size[];
 
 /* Here is the parameter block for the bdflush process. If you add or
@@ -493,7 +494,7 @@ struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 		bh->b_count++;
 		wait_on_buffer(bh);
 		if (bh->b_dev == dev && bh->b_blocknr == block
-		                             && bh->b_size == size)
+					     && bh->b_size == size)
 			return bh;
 		bh->b_count--;
 	}
@@ -512,7 +513,7 @@ void set_blocksize(kdev_t dev, int size)
 
 	switch (size) {
 		default: panic("Invalid blocksize passed to set_blocksize");
-	        case 512: case 1024: case 2048: case 4096: case 8192: ;
+		case 512: case 1024: case 2048: case 4096: case 8192: ;
 	}
 
 	if (blksize_size[MAJOR(dev)][MINOR(dev)] == 0 && size == BLOCK_SIZE) {
@@ -568,6 +569,7 @@ void refill_freelist(int size)
 	if (nr_free[isize] > 100)
 		return;
 
+	++refilled;
 	/* If there are too many dirty buffers, we wake up the update process
 	   now so as to ensure that there are still clean buffers available
 	   for user processes to use (and dirty) */
@@ -723,7 +725,7 @@ repeat0:
 	
 	if (nr_free_pages > min_free_pages + 5) {
 		if (grow_buffers(GFP_BUFFER, size)) {
-	                needed -= PAGE_SIZE;
+			needed -= PAGE_SIZE;
 			goto repeat0;
 		};
 	}
@@ -810,6 +812,7 @@ void set_writetime(struct buffer_head * buf, int flag)
 void refile_buffer(struct buffer_head * buf)
 {
 	int dispose;
+	int isize;
 
 	if(buf->b_dev == B_FREE) {
 		printk("Attempt to refile free buffer\n");
@@ -835,10 +838,21 @@ void refile_buffer(struct buffer_head * buf)
 		remove_from_queues(buf);
 		buf->b_list = dispose;
 		insert_into_queues(buf);
-		if(dispose == BUF_DIRTY && nr_buffers_type[BUF_DIRTY] > 
+		if (dispose == BUF_DIRTY) {
+		/* This buffer is dirty, maybe we need to start flushing. */
+		/* If too high a percentage of the buffers are dirty... */
+		if (nr_buffers_type[BUF_DIRTY] > 
 		   (nr_buffers - nr_buffers_type[BUF_SHARED]) *
 		   bdf_prm.b_un.nfract/100)
 			 wakeup_bdflush(0);
+		/* If this is a loop device, and
+		 * more than half of the buffers of this size are dirty... */ 
+		/* (Prevents no-free-buffers deadlock with loop device.) */
+		isize = BUFSIZE_INDEX(buf->b_size);
+		if (MAJOR(buf->b_dev) == LOOP_MAJOR &&
+		    nr_buffers_st[isize][BUF_DIRTY]*2>nr_buffers_size[isize])
+			wakeup_bdflush(1);
+		}
 	}
 }
 
@@ -924,7 +938,7 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 	index = BUFSIZE_INDEX(bh->b_size);
 
 	if (buffer_uptodate(bh))
-	        return(bh);   
+		return(bh);   
 	else ll_rw_block(READ, 1, &bh);
 
 	blocks = (filesize - pos) >> (9+index);
@@ -952,7 +966,7 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 	if (j>1)  
 		ll_rw_block(READA, (j-1), bhlist+1); 
 	for(i=1; i<j; i++)
-	        brelse(bhlist[i]);
+		brelse(bhlist[i]);
 
 	/* Wait for this buffer, and then continue on */
 	bh = bhlist[0];
@@ -1371,7 +1385,7 @@ static int grow_buffers(int pri, int size)
 
 	tmp = bh;
 	while (1) {
-	        nr_free[isize]++;
+		nr_free[isize]++;
 		if (insert_point) {
 			tmp->b_next_free = insert_point->b_next_free;
 			tmp->b_prev_free = insert_point;
@@ -1383,6 +1397,7 @@ static int grow_buffers(int pri, int size)
 		}
 		insert_point = tmp;
 		++nr_buffers;
+		++nr_buffers_size[isize];
 		if (tmp->b_this_page)
 			tmp = tmp->b_this_page;
 		else
@@ -1412,7 +1427,7 @@ int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp,
 {
 	unsigned long page;
 	struct buffer_head * tmp, * p;
-        int isize = BUFSIZE_INDEX(bh->b_size);
+	int isize = BUFSIZE_INDEX(bh->b_size);
 
 	*bhp = bh;
 	page = (unsigned long) bh->b_data;
@@ -1607,8 +1622,8 @@ static int shrink_specific_buffers(unsigned int priority, int size)
 				continue;
 			}
 			/* At priority 6, only consider really old
-                           (age==0) buffers for reclaiming.  At
-                           priority 0, consider any buffers. */
+			   (age==0) buffers for reclaiming.  At
+			   priority 0, consider any buffers. */
 			if ((age_of((unsigned long) bh->b_data) >>
 			     (6-priority)) > 0)
 				continue;				
@@ -1733,7 +1748,7 @@ static int reassign_cluster(kdev_t dev,
 		     unsigned int starting_block, int size)
 {
 	struct buffer_head *bh;
-        int isize = BUFSIZE_INDEX(size);
+	int isize = BUFSIZE_INDEX(size);
 	int i;
 
 	/* We want to give ourselves a really good shot at generating
@@ -1759,7 +1774,7 @@ static int reassign_cluster(kdev_t dev,
 static unsigned long try_to_generate_cluster(kdev_t dev, int block, int size)
 {
 	struct buffer_head * bh, * tmp, * arr[MAX_BUF_PER_PAGE];
-        int isize = BUFSIZE_INDEX(size);
+	int isize = BUFSIZE_INDEX(size);
 	unsigned long offset;
 	unsigned long page;
 	int nblock;
@@ -1886,9 +1901,12 @@ void buffer_init(void)
  */
 struct wait_queue * bdflush_wait = NULL;
 struct wait_queue * bdflush_done = NULL;
+struct task_struct *bdflush_tsk = 0;
 
 static void wakeup_bdflush(int wait)
 {
+	if (current == bdflush_tsk)
+		return;
 	wake_up(&bdflush_wait);
 	if (wait) {
 		run_task_queue(&tq_disk);
@@ -2018,6 +2036,14 @@ asmlinkage int sys_bdflush(int func, long data)
  * the syscall above, but now we launch it ourselves internally with
  * kernel_thread(...)  directly after the first thread in init/main.c */
 
+/* To prevent deadlocks for a loop device:
+ * 1) Do non-blocking writes to loop (avoids deadlock with running
+ *	out of request blocks).
+ * 2) But do a blocking write if the only dirty buffers are loop buffers
+ *	(otherwise we go into an infinite busy-loop).
+ * 3) Quit writing loop blocks if a freelist went low (avoids deadlock
+ *	with running out of free buffers for loop's "real" device).
+*/
 int bdflush(void * unused) 
 {
 	int i;
@@ -2025,6 +2051,8 @@ int bdflush(void * unused)
 	int nlist;
 	int ncount;
 	struct buffer_head * bh, *next;
+	int major;
+	int wrta_cmd = WRITEA;	/* non-blocking write for LOOP */
 
 	/*
 	 *	We have a bare-bones task_struct, and really should fill
@@ -2035,6 +2063,7 @@ int bdflush(void * unused)
 	current->session = 1;
 	current->pgrp = 1;
 	sprintf(current->comm, "kflushd");
+	bdflush_tsk = current;
 
 	/*
 	 *	As a kernel thread we want to tamper with system buffers
@@ -2060,6 +2089,7 @@ int bdflush(void * unused)
 #endif
 		 {
 			 ndirty = 0;
+			 refilled = 0;
 		 repeat:
 			 bh = lru_list[nlist];
 			 if(bh) 
@@ -2082,11 +2112,21 @@ int bdflush(void * unused)
 					  
 					  if (buffer_locked(bh) || !buffer_dirty(bh))
 						   continue;
+					  major = MAJOR(bh->b_dev);
 					  /* Should we write back buffers that are shared or not??
 					     currently dirty buffers are not shared, so it does not matter */
+					  if (refilled && major == LOOP_MAJOR)
+						   continue;
 					  bh->b_count++;
 					  ndirty++;
 					  bh->b_flushtime = 0;
+					  if (major == LOOP_MAJOR) {
+						  ll_rw_block(wrta_cmd,1, &bh);
+						  wrta_cmd = WRITEA;
+						  if (buffer_dirty(bh))
+							  --ndirty;
+					  }
+					  else
 					  ll_rw_block(WRITE, 1, &bh);
 #ifdef DEBUG
 					  if(nlist != BUF_DIRTY) ncount++;
@@ -2098,6 +2138,14 @@ int bdflush(void * unused)
 		if (ncount) printk("sys_bdflush: %d dirty buffers not on dirty list\n", ncount);
 		printk("sleeping again.\n");
 #endif
+		/* If we didn't write anything, but there are still
+		 * dirty buffers, then make the next write to a
+		 * loop device to be a blocking write.
+		 * This lets us block--which we _must_ do! */
+		if (ndirty == 0 && nr_buffers_type[BUF_DIRTY] > 0) {
+			wrta_cmd = WRITE;
+			continue;
+		}
 		run_task_queue(&tq_disk);
 		wake_up(&bdflush_done);
 		

@@ -182,6 +182,10 @@ NO_DOOR_LOCKING
   If this is set, the driver will never attempt to lock the door of
   the drive.
 
+CDROM_NBLOCKS_BUFFER
+  This sets the size of the buffer to be used for a CDROMREADAUDIO
+  ioctl.  The default is 8.
+
 TEST
   This presently enables an additional ioctl which enables a user-mode
   program to execute an arbitrary packet command.  See the source for
@@ -366,6 +370,7 @@ e. Directory listings are unpredictably truncated, and `dmesg' shows
 #include <unistd.h>
 #include <stdio.h>
 #include <linux/cdrom.h>
+#include <linux/ucdrom.h>
 
 
 int
@@ -396,10 +401,10 @@ main (int argc, char **argv)
 	}
 
 	/* load */ 
-	status = ioctl (fd, CDROMLOADFROMSLOT, x_slot);
+	status = ioctl (fd, CDROM_SELECT_DISC, x_slot);
 	if (status != 0) {
 		fprintf (stderr,
-			 "%s: CDROMLOADFROMSLOT ioctl failed for `%s': %s\n",
+			 "%s: CDROM_SELECT_DISC ioctl failed for `%s': %s\n",
 			 program, device, strerror (errno));
 		exit (1);
 	}

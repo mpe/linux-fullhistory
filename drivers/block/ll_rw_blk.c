@@ -349,6 +349,10 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	}
 
 /* look for a free request. */
+       /* Loop uses two requests, 1 for loop and 1 for the real device.
+        * Cut max_req in half to avoid running out and deadlocking. */
+        if (major == LOOP_MAJOR)
+	     max_req >>= 1;
 
 	/*
 	 * Try to coalesce the new request with old requests
@@ -508,7 +512,6 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	for (i = 0; i < nr; i++) {
 		if (bh[i]) {
 			set_bit(BH_Req, &bh[i]->b_state);
-
 			make_request(MAJOR(bh[i]->b_rdev), rw, bh[i]);
 		}
 	}
@@ -528,6 +531,7 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 {
 	int i, j;
 	int buffersize;
+	int max_req;
 	unsigned long rsector;
 	kdev_t rdev;
 	struct request * req[8];
@@ -539,10 +543,12 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
                                    " nonexistent block-device\n");
 		return;
 	}
+	max_req = NR_REQUEST;
 	switch (rw) {
 		case READ:
 			break;
 		case WRITE:
+			max_req = (NR_REQUEST * 2) / 3;
 			if (is_read_only(dev)) {
 				printk(KERN_NOTICE
                                        "Can't swap to read-only device %s\n",
@@ -555,6 +561,8 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 	}
 	buffersize = PAGE_SIZE / nb;
 
+	if (major == LOOP_MAJOR)
+	     max_req >>= 1;
 	for (j=0, i=0; i<nb;)
 	{
 		for (; j < 8 && i < nb; j++, i++, buf += buffersize)
@@ -572,10 +580,10 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 #endif
 			
 			if (j == 0) {
-				req[j] = get_request_wait(NR_REQUEST, rdev);
+				req[j] = get_request_wait(max_req, rdev);
 			} else {
 				cli();
-				req[j] = get_request(NR_REQUEST, rdev);
+				req[j] = get_request(max_req, rdev);
 				sti();
 				if (req[j] == NULL)
 					break;

@@ -6,6 +6,8 @@
  *  Copyright (C) 1996  Linus Torvalds, Igor Abramov, and Mark Lord
  */
 
+#include <linux/config.h>
+
 /*
  * Shared data/functions for determining best PIO mode for an IDE drive.
  * Most of this stuff originally lived in cmd640.c, and changes to the

@@ -1002,6 +1002,8 @@ static int extract_entropy(struct random_bucket *r, char * buf,
 		nbytes -= i;
 		buf += i;
 		add_timer_randomness(r, &extract_timer_state, nbytes);
+		if (to_user && need_resched)
+			schedule();
 	}
 
 	/* Wipe data from memory */
@@ -1229,7 +1231,7 @@ random_ioctl(struct inode * inode, struct file * file,
 			return -EINVAL;
 		size = get_user(p++);
 		retval = random_write(0, file, (const char *) p, size);
-		if (retval)
+		if (retval < 0)
 			return retval;
 		/*
 		 * Add ent_count to entropy_count, limiting the result to be

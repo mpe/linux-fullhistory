@@ -128,21 +128,20 @@ static void locks_delete_lock(struct file_lock **fl, unsigned int wait);
 static char *lock_get_status(struct file_lock *fl, char *p, int id, char *pfx);
 
 static struct file_lock *file_lock_table = NULL;
+static struct file_lock *unused_file_locks = NULL;
 
-/* Free lock not inserted in any queue */
+/*
+ * Free lock not inserted in any queue
+ *
+ * Careful! We can't just "kfree()" it: there may be other processes
+ * that have yet to remove themselves from the wait queues. Thus the
+ * internal memory management.
+ */
 static inline void locks_free_lock(struct file_lock *fl)
 {
-	/*
-	 * CAREFUL! We can't free it until everybody waiting for
-	 * this block have removed themselves from the wait queue
-	 */
-	if (fl->fl_wait) {
-		struct wait_queue *head = WAIT_QUEUE_HEAD(&fl->fl_wait);
-		while (fl->fl_wait != head)
-			schedule();
-	}
-	kfree(fl);
-	return;
+	struct file_lock *next = unused_file_locks;
+	unused_file_locks = fl;
+	fl->fl_next = next;
 }
 
 /* Add lock fl to the blocked list pointed to by block.
@@ -914,26 +913,30 @@ repeat:
 
 static struct file_lock *locks_alloc_lock(struct file_lock *fl)
 {
-	struct file_lock *tmp;
+	struct file_lock *retval;
 
-	/* Okay, let's make a new file_lock structure... */
-	if ((tmp = (struct file_lock *)kmalloc(sizeof(struct file_lock),
-					       GFP_ATOMIC)) == NULL)
-		return (tmp);
-
-	tmp->fl_nextlink = NULL;
-	tmp->fl_prevlink = NULL;
-	tmp->fl_next = NULL;
-	tmp->fl_block = NULL;
-	tmp->fl_flags = fl->fl_flags;
-	tmp->fl_owner = fl->fl_owner;
-	tmp->fl_file = fl->fl_file;
-	tmp->fl_wait = NULL;
-	tmp->fl_type = fl->fl_type;
-	tmp->fl_start = fl->fl_start;
-	tmp->fl_end = fl->fl_end;
-
-	return (tmp);
+	retval = unused_file_locks;
+	if (retval) {
+		unused_file_locks = retval->fl_next;
+		goto init_file_lock;
+	}
+	retval = (struct file_lock *)
+		kmalloc(sizeof(struct file_lock), GFP_ATOMIC);
+	if (retval) {
+		retval->fl_wait = NULL;
+init_file_lock:
+		retval->fl_next = NULL;
+		retval->fl_nextlink = NULL;
+		retval->fl_prevlink = NULL;
+		retval->fl_block = NULL;
+		retval->fl_owner = fl->fl_owner;
+		retval->fl_file = fl->fl_file;
+		retval->fl_flags = fl->fl_flags;
+		retval->fl_type = fl->fl_type;
+		retval->fl_start = fl->fl_start;
+		retval->fl_end = fl->fl_end;		
+	}
+	return retval;
 }
 
 /* Insert file lock fl into an inode's lock list at the position indicated

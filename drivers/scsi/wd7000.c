@@ -100,21 +100,33 @@
  *                                                           J.B. Jan 1994.
  *
  *
- *  Revision: 08/24/1996. by Miroslav Zagorac <zaga@fly.cc.fer.hr>
+ *  Revisions by Miroslav Zagorac <zaga@fly.cc.fer.hr>
+ *
+ *  08/24/1996.
  *
  *  Enhancement for wd7000_detect function has been made, so you don't have
- *  to enter BIOS ROM adress and IO port in initialisation data (see struct
- *  Config). We cannot detect IRQ and DMA for now, so we have to enter them
- *  as arguments while wd_7000 is detected. If someone has IRQ and DMA set
- *  to some other value, he can enter them in configuration without any
- *  problem. Also I wrote a function wd7000_setup, so now you can enter
- *  WD-7000 definition as kernel arguments, as in lilo.conf:
+ *  to enter BIOS ROM adress in initialisation data (see struct Config).
+ *  We cannot detect IRQ, DMA and I/O base address for now, so we have to
+ *  enter them as arguments while wd_7000 is detected. If someone has IRQ,
+ *  DMA or I/O base address set to some other value, he can enter them in
+ *  configuration without any problem. Also I wrote a function wd7000_setup,
+ *  so now you can enter WD-7000 definition as kernel arguments,
+ *  as in lilo.conf:
  *
- *     append="wd7000=IRQ,DMA"
+ *     append="wd7000=IRQ,DMA,IO"
  *
  *  PS: If card BIOS ROM is disabled, function wd7000_detect now will recognize
  *      adapter, unlike the old one. Anyway, BIOS ROM from WD7000 adapter is
- *      worthless for Linux. :)
+ *      useless for Linux. B^)
+ *
+ *
+ *  09/06/1996.
+ *
+ *  Autodetecting of I/O base address from wd7000_detect function is removed,
+ *  some little bugs removed, etc...
+ *
+ *  Thanks to Roger Scott for driver debugging.
+ *
  */
 
 #ifdef MODULE
@@ -232,18 +244,19 @@ static const short wd7000_dma[] = { 5, 6, 7 };
  *  Standard Adapter Configurations - used by wd7000_detect
  */
 typedef struct {
-  int irq;			/* IRQ level */
-  int dma;			/* DMA channel */
+  int      irq;			/* IRQ level        */
+  int      dma;			/* DMA channel      */
+  unsigned iobase;		/* I/O base address */
 } Config;
 
 /*
  * Add here your configuration...
  */
 static const Config configs[] = {
-  { 15,  6 },			/* defaults for single adapter */
-  { 11,  5 },			/* defaults for second adapter */
-  {  9,  6 },			/* My configuretion (Zaga)     */
-  { -1, -1 }                    /* Empty slot                  */
+  { 15,  6, 0x350 },		/* defaults for single adapter */
+  { 11,  5, 0x320 },		/* defaults for second adapter */
+  {  7,  6, 0x350 },		/* My configuration (Zaga)     */
+  { -1, -1, 0x0   }		/* Empty slot                  */
 };
 #define NUM_CONFIGS (sizeof(configs)/sizeof(Config))
 
@@ -530,6 +543,7 @@ static int freescbs = MAX_SCBS;  /* free list counter */
  */
 static short wd7000_setupIRQ[NUM_CONFIGS];
 static short wd7000_setupDMA[NUM_CONFIGS];
+static short wd7000_setupIO[NUM_CONFIGS];
 static short wd7000_card_num = 0;
 
 /*
@@ -541,14 +555,15 @@ static short wd7000_card_num = 0;
  * Note: You can now set these options from the kernel's "command line".
  * The syntax is:
  *
- *     wd7000=IRQ,DMA
+ *     wd7000=IRQ,DMA,IO
  * eg:
- *     wd7000=15,6
+ *     wd7000=7,6,0x350
  *
  * will configure the driver for a WD-7000 controller
- * using IRQ 15 with a DMA channel 6.
+ * using IRQ 15 with a DMA channel 6, at IO base address 0x350.
  */
-void wd7000_setup (char *str, int *ints) {
+void wd7000_setup (char *str, int *ints)
+{
     short i, j;
 
     if (wd7000_card_num >= NUM_CONFIGS) {
@@ -558,16 +573,17 @@ void wd7000_setup (char *str, int *ints) {
         return;
     }
 
-    if (ints[0] != 2)
+    if (ints[0] != 3)
 	printk ("wd7000_setup: Error in command line!  "
-	        "Usage: wd7000=IRQ,DMA\n");
+	        "Usage: wd7000=IRQ,DMA,IO\n");
     else {
 	for (i = 0; i < NUM_IRQS; i++)
 	    if (ints[1] == wd7000_irq[i])
 		break;
 
 	if (i == NUM_IRQS) {
-	    printk ("wd7000_setup: invalid IRQ.\n");
+	    printk ("wd7000_setup: \"wd7000=%d,%d,0x%x\" -> "
+		    "invalid IRQ.\n", ints[1], ints[2], ints[3]);
 	    return;
 	}
 	else
@@ -577,29 +593,53 @@ void wd7000_setup (char *str, int *ints) {
 	    if (ints[2] == wd7000_dma[i])
 		break;
 
-	if (i == NUM_IRQS) {
-	    printk ("wd7000_setup: invalid DMA channel.\n");
+	if (i == NUM_DMAS) {
+	    printk ("wd7000_setup: \"wd7000=%d,%d,0x%x\" -> "
+		    "invalid DMA channel.\n", ints[1], ints[2], ints[3]);
 	    return;
 	}
 	else
 	    wd7000_setupDMA[wd7000_card_num] = ints[2];
 
+	for (i = 0; i < NUM_IOPORTS; i++)
+	    if (ints[3] == wd7000_iobase[i])
+		break;
+
+	if (i == NUM_IOPORTS) {
+	    printk ("wd7000_setup: \"wd7000=%d,%d,0x%x\" -> "
+		    "invalid I/O base address.\n", ints[1], ints[2], ints[3]);
+	    return;
+	}
+	else
+	    wd7000_setupIO[wd7000_card_num] = ints[3];
+
 	if (wd7000_card_num)
 	    for (i = 0; i < (wd7000_card_num - 1); i++)
 	        for (j = i + 1; j < wd7000_card_num; j++)
 	            if (wd7000_setupIRQ[i] == wd7000_setupIRQ[j]) {
-	                printk ("wd7000_setup: duplicated IRQ!\n");
+	                printk ("wd7000_setup: \"wd7000=%d,%d,0x%x\" -> "
+			        "duplicated IRQ!\n",
+				ints[1], ints[2], ints[3]);
 		        return;
 	            }
 	            else if (wd7000_setupDMA[i] == wd7000_setupDMA[j]) {
-	                printk ("wd7000_setup: duplicated DMA channel!\n");
+	                printk ("wd7000_setup: \"wd7000=%d,%d,0x%x\" -> "
+			        "duplicated DMA channel!\n",
+				ints[1], ints[2], ints[3]);
+		        return;
+	            }
+	            else if (wd7000_setupIO[i] == wd7000_setupIO[j]) {
+	                printk ("wd7000_setup: \"wd7000=%d,%d,0x%x\" -> "
+			        "duplicated I/O base address!\n",
+				ints[1], ints[2], ints[3]);
 		        return;
 	            }
 
 #ifdef DEBUG
-	printk ("wd7000_setup: IRQ=%d, DMA=%d\n",
+	printk ("wd7000_setup: IRQ=%d, DMA=%d, I/O=0x%x\n",
 	        wd7000_setupIRQ[wd7000_card_num],
-		wd7000_setupDMA[wd7000_card_num]);
+		wd7000_setupDMA[wd7000_card_num],
+		wd7000_setupIO[wd7000_card_num]);
 #endif
 
 	wd7000_card_num++;
@@ -675,16 +715,20 @@ static inline void wd7000_enable_dma(Adapter *host)
 
 #define WAITnexttimeout 200  /* 2 seconds */
 
-#define WAIT(port, mask, allof, noneof)					\
- { register volatile unsigned WAITbits; 				\
-   register unsigned long WAITtimeout = jiffies + WAITnexttimeout;	\
-   while (1) {								\
-     WAITbits = inb(port) & (mask);					\
-     if ((WAITbits & (allof)) == (allof) && ((WAITbits & (noneof)) == 0)) \
-       break;                                                         	\
-     if (jiffies > WAITtimeout) goto fail;				\
-   }									\
- }
+static inline short WAIT (unsigned port, unsigned mask, unsigned allof, unsigned noneof)
+{
+    register unsigned WAITbits;
+    register unsigned long WAITtimeout = jiffies + WAITnexttimeout;
+
+    while (jiffies <= WAITtimeout) {
+     	WAITbits = inb (port) & mask;
+
+	if (((WAITbits & allof) == allof) && ((WAITbits & noneof) == 0))
+	    return (0);
+    }
+
+    return (1);
+}
 
 
 static inline void delay( unsigned how_long )
@@ -697,17 +741,19 @@ static inline void delay( unsigned how_long )
 
 static inline int command_out(Adapter *host, unchar *cmd, int len)
 {
-    WAIT(host->iobase+ASC_STAT,ASC_STATMASK,CMD_RDY,0);
-    while (len--)  {
-	do  {
-	    outb(*cmd, host->iobase+ASC_COMMAND);
-	    WAIT(host->iobase+ASC_STAT, ASC_STATMASK, CMD_RDY, 0);
-	}  while (inb(host->iobase+ASC_STAT) & CMD_REJ);
-	cmd++;
-    }
-    return 1;
+    if (! WAIT (host->iobase+ASC_STAT,ASC_STATMASK,CMD_RDY,0)) {
+	while (len--)  {
+	    do  {
+		outb(*cmd, host->iobase+ASC_COMMAND);
+		WAIT(host->iobase+ASC_STAT, ASC_STATMASK, CMD_RDY, 0);
+	    }  while (inb(host->iobase+ASC_STAT) & CMD_REJ);
 
-fail:
+	    cmd++;
+	}
+
+	return 1;
+    }
+
     printk("wd7000 command_out: WAIT failed(%d)\n", len+1);
     return 0;
 }
@@ -921,7 +967,7 @@ int make_code(unsigned hosterr, unsigned scsierr)
 static void wd7000_scsi_done(Scsi_Cmnd * SCpnt)
 {
 #ifdef DEBUG
-    printk("wd7000_scsi_done: 0x%06x\n",(long) SCpnt);
+    printk ("wd7000_scsi_done: 0x%06lx\n", (long) SCpnt);
 #endif
     SCpnt->SCp.phase = 0;
 }
@@ -1121,16 +1167,20 @@ int wd7000_init( Adapter *host )
     int diag;
 
     /*
-       Reset the adapter - only.  The SCSI bus was initialized at power-up,
-       and we need to do this just so we control the mailboxes, etc.
-    */
+     *  Reset the adapter - only.  The SCSI bus was initialized at power-up,
+     *  and we need to do this just so we control the mailboxes, etc.
+     */
     outb(ASC_RES, host->iobase+ASC_CONTROL);
     delay(1);  /* reset pulse: this is 10ms, only need 25us */
     outb(0,host->iobase+ASC_CONTROL);
     host->control = 0;   /* this must always shadow ASC_CONTROL */
-    WAIT(host->iobase+ASC_STAT, ASC_STATMASK, CMD_RDY, 0);
 
-    if ((diag = inb(host->iobase+ASC_INTR_STAT)) != 1)  {
+    if (WAIT (host->iobase+ASC_STAT, ASC_STATMASK, CMD_RDY, 0)) {
+        printk ("wd7000_init: WAIT timed out.\n"); 
+        return 0;					/* 0 = not ok */
+    }
+
+    if ((diag = inb(host->iobase+ASC_INTR_STAT)) != 1) {
 	printk("wd7000_init: ");
 
 	switch (diag)  {
@@ -1167,7 +1217,11 @@ int wd7000_init( Adapter *host )
 	printk("wd7000_init: adapter initialization failed.\n"); 
 	return 0;
     }
-    WAIT(host->iobase+ASC_STAT, ASC_STATMASK, ASC_INIT, 0);
+
+    if (WAIT (host->iobase+ASC_STAT, ASC_STATMASK, ASC_INIT, 0)) {
+        printk ("wd7000_init: WAIT timed out.\n"); 
+        return 0;
+    }
 
     if (request_irq(host->irq, wd7000_intr_handle, SA_INTERRUPT, "wd7000", NULL)) {
 	printk("wd7000_init: can't get IRQ %d.\n", host->irq);
@@ -1188,10 +1242,6 @@ int wd7000_init( Adapter *host )
     }
 
     return 1;
-
-  fail:
-    printk("wd7000_init: WAIT timed out.\n"); 
-    return 0;					/* 0 = not ok */
 }
 
 
@@ -1226,8 +1276,9 @@ void wd7000_revision(Adapter *host)
  */
 int wd7000_detect (Scsi_Host_Template *tpnt)
 {
-    short present = 0, biosaddr_ptr, iobase_ptr, cfg_ptr, sig_ptr, i;
+    short present = 0, biosaddr_ptr, cfg_ptr, sig_ptr, i, pass;
     short biosptr[NUM_CONFIGS];
+    unsigned iobase;
     Adapter *host = NULL;
     struct Scsi_Host *sh;
 
@@ -1240,14 +1291,14 @@ int wd7000_detect (Scsi_Host_Template *tpnt)
      */
     init_scbs ();
 
-    for (cfg_ptr = 0; cfg_ptr < NUM_CONFIGS; cfg_ptr++) {
+    for (pass = 0, cfg_ptr = 0; pass < NUM_CONFIGS; pass++) {
         for (biosaddr_ptr = 0; biosaddr_ptr < NUM_ADDRS; biosaddr_ptr++)
 	    for (sig_ptr = 0; sig_ptr < NUM_SIGNATURES; sig_ptr++) {
-	        for (i = 0; i < cfg_ptr; i++)
+	        for (i = 0; i < pass; i++)
 	            if (biosptr[i] == biosaddr_ptr)
 		        break;
 
-		if ((i == cfg_ptr) &&
+		if ((i == pass) &&
 		    !memcmp ((void *) (wd7000_biosaddr[biosaddr_ptr] +
 		             signatures[sig_ptr].ofs), signatures[sig_ptr].sig,
 		             signatures[sig_ptr].len))
@@ -1257,7 +1308,7 @@ int wd7000_detect (Scsi_Host_Template *tpnt)
 bios_matched:
 
 #ifdef DEBUG
-	printk ("wd7000_detect: pass %d\n", cfg_ptr + 1);
+	printk ("wd7000_detect: pass %d\n", pass + 1);
 
         if (biosaddr_ptr == NUM_ADDRS)
 	    printk ("WD-7000 SST BIOS not detected...\n");
@@ -1266,91 +1317,122 @@ bios_matched:
 	            wd7000_biosaddr[biosaddr_ptr]);
 #endif
 
-	for (iobase_ptr = 0; iobase_ptr < NUM_IOPORTS; iobase_ptr++)
-	    if (! check_region (wd7000_iobase[iobase_ptr], 4)) {
-	        /*
-		 * ASC reset...
+	if (wd7000_card_num) 
+	    iobase = wd7000_setupIO[wd7000_card_num - 1];
+	else {
+	    if (configs[cfg_ptr++].irq < 0)
+		continue;
+
+	    iobase = configs[cfg_ptr - 1].iobase;
+	}
+
+#ifdef DEBUG
+ 	printk ("wd7000_detect: check IO 0x%x region...\n", iobase);
+#endif
+
+	if (! check_region (iobase, 4)) {
+
+#ifdef DEBUG
+ 	    printk ("wd7000_detect: ASC reset (IO 0x%x) ...", iobase);
+#endif
+
+ 	    /*
+  	     * ASC reset...
+ 	     */
+ 	    outb (ASC_RES, iobase + ASC_CONTROL);
+ 	    delay (1);
+ 	    outb (0, iobase + ASC_CONTROL);
+
+ 	    if (WAIT (iobase + ASC_STAT, ASC_STATMASK, CMD_RDY, 0))
+#ifdef DEBUG
+ 	    {
+  		printk ("failed!\n");
+  		continue;
+ 	    }
+ 	    else
+  		printk ("ok!\n");
+#else
+	    continue;
+#endif
+
+	    if (inb (iobase + ASC_INTR_STAT) == 1) {
+		/*
+		 *  We register here, to get a pointer to the extra space,
+		 *  which we'll use as the Adapter structure (host) for
+		 *  this adapter.  It is located just after the registered
+		 *  Scsi_Host structure (sh), and is located by the empty
+		 *  array hostdata.
 		 */
- 	        outb (ASC_RES, wd7000_iobase[iobase_ptr] + ASC_CONTROL);
-	        delay (1);
-	        outb (0, wd7000_iobase[iobase_ptr] + ASC_CONTROL);
-	        WAIT (wd7000_iobase[iobase_ptr] + ASC_STAT, ASC_STATMASK,
-		      CMD_RDY, 0);
-
-		if (inb (wd7000_iobase[iobase_ptr] + ASC_INTR_STAT) == 1) {
-		   /*
-		    *  We register here, to get a pointer to the extra space,
-		    *  which we'll use as the Adapter structure (host) for
-		    *  this adapter.  It is located just after the registered
-		    *  Scsi_Host structure (sh), and is located by the empty
-		    *  array hostdata.
-		    */
-	    	    sh = scsi_register (tpnt, sizeof (Adapter));
-	    	    host = (Adapter *) sh->hostdata;
+		sh = scsi_register (tpnt, sizeof (Adapter));
+		host = (Adapter *) sh->hostdata;
 
 #ifdef DEBUG
-	    	    printk ("wd7000_detect: adapter allocated at 0x%x\n",
-	    		    (int) host);
+		printk ("wd7000_detect: adapter allocated at 0x%x\n",
+			(int) host);
 #endif
 
-	    	    memset (host, 0, sizeof (Adapter));
+		memset (host, 0, sizeof (Adapter));
 
-		    if (wd7000_card_num) {
-	    	        host->irq = wd7000_setupIRQ[--wd7000_card_num];
-	    	        host->dma = wd7000_setupDMA[wd7000_card_num];
-		    }
-		    else {
-	    	        host->irq = configs[cfg_ptr].irq;
-	    	        host->dma = configs[cfg_ptr].dma;
-		    }
-
-	    	    host->sh = sh;
-	    	    host->iobase = wd7000_iobase[iobase_ptr];
-	    	    irq2host[host->irq] = host;
-
-#ifdef DEBUG
-		    printk ("wd7000_detect: Trying init WD-7000 card at IO "
-			    "0x%x, IRQ %d, DMA %d...\n",
-			    host->iobase, host->irq, host->dma);
-#endif
-
-	    	    if (! wd7000_init (host)) {  /* Initialization failed */
-	    		scsi_unregister (sh);
-
-	    		continue;
-	    	    }
-
-		    /*
-		     *  OK from here - we'll use this adapter/configuration.
-		     */
-		    wd7000_revision (host);   /* important for scatter/gather */
-
-                    /*
-		     * Register our ports.
-		     */
-    		    request_region (host->iobase, 4, "wd7000");
-
-    		    /*
-    		     *  For boards before rev 6.0, scatter/gather
-		     *  isn't supported.
-    		     */
-    		    if (host->rev1 < 6)
-   		       sh->sg_tablesize = SG_NONE;
-
-    		    present++;		/* count it */
-
-		    if (biosaddr_ptr != NUM_ADDRS)
-                        biosptr[cfg_ptr] = biosaddr_ptr;
-
-                    printk ("Western Digital WD-7000 (rev %d.%d) ",
-			    host->rev1, host->rev2);
-                    printk ("using IO 0x%xh, IRQ %d, DMA %d.\n", 
-	                    host->iobase, host->irq, host->dma);
-
-	    	    break;
+		if (wd7000_card_num) {
+		    host->irq = wd7000_setupIRQ[--wd7000_card_num];
+		    host->dma = wd7000_setupDMA[wd7000_card_num];
 		}
-fail:
+		else {
+		    host->irq = configs[cfg_ptr - 1].irq;
+		    host->dma = configs[cfg_ptr - 1].dma;
+		}
+
+	    	host->sh = sh;
+    		host->iobase = iobase;
+		irq2host[host->irq] = host;
+
+#ifdef DEBUG
+		printk ("wd7000_detect: Trying init WD-7000 card at IO "
+			"0x%x, IRQ %d, DMA %d...\n",
+			host->iobase, host->irq, host->dma);
+#endif
+
+		if (! wd7000_init (host)) {  /* Initialization failed */
+		    scsi_unregister (sh);
+
+		    continue;
+		}
+
+		/*
+		 *  OK from here - we'll use this adapter/configuration.
+		 */
+		wd7000_revision (host);   /* important for scatter/gather */
+
+		/*
+		 * Register our ports.
+		 */
+		request_region (host->iobase, 4, "wd7000");
+
+		/*
+		 *  For boards before rev 6.0, scatter/gather
+		 *  isn't supported.
+		 */
+		if (host->rev1 < 6)
+		    sh->sg_tablesize = SG_NONE;
+
+		present++;		/* count it */
+
+		if (biosaddr_ptr != NUM_ADDRS)
+		    biosptr[pass] = biosaddr_ptr;
+
+		printk ("Western Digital WD-7000 (rev %d.%d) ",
+			host->rev1, host->rev2);
+		printk ("using IO 0x%x, IRQ %d, DMA %d.\n", 
+			host->iobase, host->irq, host->dma);
 	    }
+	}
+
+#ifdef DEBUG
+	else
+ 	    printk ("wd7000_detect: IO 0x%x region already allocated!\n",
+		    iobase);
+#endif
+
     }
 
     if (! present)

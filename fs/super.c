@@ -948,7 +948,7 @@ static void do_mount_root(void)
 				current->fs->root = inode;
 				ROOT_DEV = sb->s_dev;
 				printk (KERN_NOTICE "VFS: Mounted root (nfs filesystem).\n");
-				vfsmnt = add_vfsmnt(ROOT_DEV, "rootfs", "/");
+				vfsmnt = add_vfsmnt(ROOT_DEV, "/dev/root", "/");
 				if (!vfsmnt)
 					panic("VFS: add_vfsmnt failed for NFS root.\n");
 				vfsmnt->mnt_sb = sb;
@@ -1010,7 +1010,7 @@ static void do_mount_root(void)
 			printk ("VFS: Mounted root (%s filesystem)%s.\n",
 				fs_type->name,
 				(sb->s_flags & MS_RDONLY) ? " readonly" : "");
-			vfsmnt = add_vfsmnt(ROOT_DEV, "rootfs", "/");
+			vfsmnt = add_vfsmnt(ROOT_DEV, "/dev/root", "/");
 			if (!vfsmnt)
 				panic("VFS: add_vfsmnt failed for root fs");
 			vfsmnt->mnt_sb = sb;
@@ -1075,7 +1075,7 @@ int change_root(kdev_t new_root_dev,const char *put_old)
 	}
 	iput(old_root); /* sb->s_covered */
 	remove_vfsmnt(old_root_dev);
-	vfsmnt = add_vfsmnt(old_root_dev,"old_rootfs",put_old);
+	vfsmnt = add_vfsmnt(old_root_dev,"/dev/root.old",put_old);
 	if (!vfsmnt) printk(KERN_CRIT "Trouble: add_vfsmnt failed\n");
 	else {
 		vfsmnt->mnt_sb = old_root->i_sb;

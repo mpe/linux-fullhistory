@@ -50,8 +50,8 @@ extern int max_files, nr_files;
 
 #define READ 0
 #define WRITE 1
-#define READA 2		/* read-ahead - don't pause */
-#define WRITEA 3	/* "write-ahead" - silly, but somewhat useful */
+#define READA 2		/* read-ahead  - don't block if no resources */
+#define WRITEA 3	/* write-ahead - don't block if no resources */
 
 #ifndef NULL
 #define NULL ((void *) 0)

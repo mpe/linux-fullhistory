@@ -859,8 +859,8 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 		    if (count+1 != SCpnt->use_sg) panic("Bad sr request list");
 		    break;
 		};
-		if (((long) sgpnt[count].address) + sgpnt[count].length > ISA_DMA_THRESHOLD &&
-		  SCpnt->host->unchecked_isa_dma) {
+		if (((long) sgpnt[count].address) + sgpnt[count].length - 1 >
+		    ISA_DMA_THRESHOLD && SCpnt->host->unchecked_isa_dma) {
 		    sgpnt[count].alt_address = sgpnt[count].address;
 		    /* We try to avoid exhausting the DMA pool, since it is easier
 		     * to control usage here.  In other places we might have a more

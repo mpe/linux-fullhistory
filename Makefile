@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 0
-SUBLEVEL = 20
+SUBLEVEL = 21
 
 ARCH = i386
 
@@ -24,9 +24,10 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 TOPDIR	:= $(shell if [ "$$PWD" != "" ]; then echo $$PWD; else pwd; fi)
 
 HPATH   	= $(TOPDIR)/include
+FINDHPATH	= $(HPATH)/asm $(HPATH)/linux $(HPATH)/scsi $(HPATH)/net
 
 HOSTCC  	=gcc -I$(HPATH)
-HOSTCFLAGS	=
+HOSTCFLAGS	=-O2 -fomit-frame-pointer
 
 CROSS_COMPILE 	=
 
@@ -38,7 +39,6 @@ AR	=$(CROSS_COMPILE)ar
 NM	=$(CROSS_COMPILE)nm
 STRIP	=$(CROSS_COMPILE)strip
 MAKE	=make
-AWK	=gawk
 
 all:	do-it-all
 
@@ -327,7 +327,7 @@ mrproper: clean
 	rm -f .menuconfig .menuconfig.log
 	rm -f include/asm
 	rm -f .depend `find . -name .depend -print`
-	rm -f .hdepend
+	rm -f .hdepend scripts/mkdep
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -f $(TOPDIR)/include/linux/modules/*
 
@@ -344,8 +344,9 @@ backup: mrproper
 sums:
 	find . -type f -print | sort | xargs sum > .SUMS
 
-dep-files: archdep .hdepend include/linux/version.h
-	$(AWK) -f scripts/depend.awk init/*.c > .tmpdepend
+dep-files: scripts/mkdep archdep include/linux/version.h
+	scripts/mkdep init/*.c > .tmpdepend
+	scripts/mkdep `find $(FINDHPATH) -follow -name \*.h ! -name modversions.h -print` > .hdepend
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i fastdep; done
 	mv .tmpdepend .depend
 
@@ -383,7 +384,5 @@ include Rules.make
 # This generates dependencies for the .h files.
 #
 
-.hdepend: dummy
-	rm -f $@
-	$(AWK) -f scripts/depend.awk `find $(HPATH) -name \*.h ! -name modversions.h -print` > .$@
-	mv .$@ $@
+scripts/mkdep: scripts/mkdep.c
+	$(HOSTCC) $(HOSTCFLAGS) -o scripts/mkdep scripts/mkdep.c

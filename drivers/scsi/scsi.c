@@ -2116,7 +2116,19 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 		
 		host->last_reset = jiffies;
 		temp = host->hostt->reset(SCpnt, reset_flags);
-		host->last_reset = jiffies;
+		/*
+		  This test allows the driver to introduce an additional bus
+		  settle time delay by setting last_reset up to 20 seconds in
+		  the future.  In the normal case where the driver does not
+		  modify last_reset, it must be assumed that the actual bus
+		  reset occurred immediately prior to the return to this code,
+		  and so last_reset must be updated to the current time, so
+		  that the delay in internal_cmnd will guarantee at least a
+		  MIN_RESET_DELAY bus settle time.
+		*/
+		if ((host->last_reset < jiffies) || 
+		    (host->last_reset > (jiffies + 20 * HZ)))
+		  host->last_reset = jiffies;
 	    }
 	    else
 	    {
@@ -2125,7 +2137,9 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 		host->last_reset = jiffies;
 	        SCpnt->flags |= (WAS_RESET | IS_RESETTING);
 		temp = host->hostt->reset(SCpnt, reset_flags);
-		host->last_reset = jiffies;
+		if ((host->last_reset < jiffies) || 
+		    (host->last_reset > (jiffies + 20 * HZ)))
+		  host->last_reset = jiffies;
 		if (!host->block) host->host_busy--;
 	    }
 	    

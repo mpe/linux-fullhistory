@@ -312,7 +312,7 @@ static ushort read_eeprom(short ioaddr, int index)
 {
 	outw(EEPROM_READ + index, ioaddr + 10);
 	/* Pause for at least 162 us. for the read to take place. */
-	udelay (200);
+	udelay (300);
 	return inw(ioaddr + 12);
 }
 
@@ -326,7 +326,7 @@ static ushort id_read_eeprom(int index)
 	outb(EEPROM_READ + index, id_port);
 
 	/* Pause for at least 162 us. for the read to take place. */
-	udelay (200);
+	udelay (300);
 	
 	for (bit = 15; bit >= 0; bit--)
 		word = (word << 1) + (inb(id_port) & 0x01);

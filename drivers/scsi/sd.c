@@ -428,7 +428,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 		   SCpnt->host->host_no, (int) SCpnt->channel, 
 		   (int) SCpnt->target, (int) SCpnt->lun);
 	    print_command(SCpnt->cmnd);
-	    print_sense("sr", SCpnt);
+	    print_sense("sd", SCpnt);
 	    SCpnt = end_scsi_request(SCpnt, 0, block_sectors);
 	    requeue_sd_request(SCpnt);
 	    return;
