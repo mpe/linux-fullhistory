@@ -75,7 +75,7 @@ extern int shift_state;
 extern int do_screendump(int arg);
 
 struct termios tty_std_termios;		/* for the benefit of tty drivers  */
-struct tty_driver *tty_drivers;		/* linked list of tty drivers */
+struct tty_driver *tty_drivers = NULL;	/* linked list of tty drivers */
 struct tty_ldisc ldiscs[NR_LDISCS];	/* line disc dispatch table	*/
 
 /*
@@ -1529,13 +1529,14 @@ void tty_default_put_char(struct tty_struct *tty, unsigned char ch)
  */
 int tty_register_driver(struct tty_driver *driver)
 {
+	int error;
+
 	if (driver->flags & TTY_DRIVER_INSTALLED)
 		return 0;
-	/*
-	 * XXX need to check to see if major device already
-	 * registered, and then handle error checking.
-	 */
-	(void) register_chrdev(driver->major, driver->name, &tty_fops);
+
+	error = register_chrdev(driver->major, driver->name, &tty_fops);
+	if (error)
+		return error;
 
 	if (!driver->put_char)
 		driver->put_char = tty_default_put_char;
@@ -1555,7 +1556,6 @@ long tty_init(long kmem_start)
 		panic("unable to get major %d for tty device", TTY_MAJOR);
 	if (register_chrdev(TTYAUX_MAJOR,"tty",&tty_fops))
 		panic("unable to get major %d for tty device", TTYAUX_MAJOR);
-	tty_drivers = 0;
 
 	/* Setup the default TTY line discipline. */
 	memset(ldiscs, 0, sizeof(ldiscs));
@@ -1573,7 +1573,6 @@ long tty_init(long kmem_start)
 	tty_std_termios.c_lflag = ISIG | ICANON | ECHO | ECHOE | ECHOK |
 		ECHOCTL | ECHOKE | IEXTEN;
 	
-	kmem_start = con_init(kmem_start);
 	kmem_start = kbd_init(kmem_start);
 	kmem_start = rs_init(kmem_start);
 	kmem_start = pty_init(kmem_start);

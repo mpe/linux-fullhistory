@@ -128,7 +128,7 @@
  *				shutdown.  There may still be data in our
  *				buffer that we have to finish sending
  *		
- *	TCP_CLOSED		socket is finished
+ *	TCP_CLOSE		socket is finished
  */
 #include <linux/types.h>
 #include <linux/sched.h>
@@ -798,10 +798,11 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
 		if (sk->send_head == NULL && skb_peek(&sk->write_queue) == NULL
 				  && sk->timeout == TIME_WRITE) 
 		{
-			if(sk->keepopen)
+			if(sk->keepopen) {
 				reset_timer(sk,TIME_KEEPOPEN,TCP_TIMEOUT_LEN);
-			else
+			} else {
 				delete_timer(sk);
+			}
 		}
   	}
   	t1->ack_seq = ntohl(ack);
@@ -1672,8 +1673,8 @@ void tcp_shutdown(struct sock *sk, int how)
 	tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), sk);
 
 	/*
-	 * Can't just queue this up.
-	 * It should go at the end of the write queue.
+	 * If there is data in the write queue, the fin must be appended to
+	 * the write queue.
  	 */
  	
  	if (skb_peek(&sk->write_queue) != NULL) 
@@ -2514,6 +2515,12 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 	{
 		if(sk->debug)
 			printk("Ack ignored %lu %lu\n",ack,sk->sent_seq);
+		/*
+		 * What is all this crap? the ack sequence number is bad or
+		 * old, we should return 0 to ignore the packet. XXX
+		 */
+		return(0);
+#ifdef NOTDEF
 		if (after(ack, sk->sent_seq) ||
 		   (sk->state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT)) 
 		{
@@ -2524,6 +2531,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 			reset_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
 		}
 		return(1);
+#endif
 	}
 
 	if (len != th->doff*4) 
@@ -2786,6 +2794,15 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 	}
 
 	/*
+	 * XXX someone ought to look at this too.. at the moment, if skb_peek()
+	 * returns non-NULL, we complete ignore the timer stuff in the else
+	 * clause.  We ought to organize the code so that else clause can
+	 * (should) be executed regardless, possibly moving the PROBE timer
+	 * reset over.  The skb_peek() thing should only move stuff to the
+	 * write queue, NOT also manage the timer functions.
+	 */
+
+	/*
 	 * Maybe we can take some stuff off of the write queue,
 	 * and put it onto the xmit queue.
 	 */
@@ -2810,15 +2827,57 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 	}
 	else
 	{
+		/*
+		 * from TIME_WAIT we stay in TIME_WAIT as long as we rx packets
+		 * from TCP_CLOSE we don't do anything
+		 *
+		 * from anything else, if there is write data (or fin) pending,
+		 * we use a TIME_WRITE timeout, else if keepalive we reset to
+		 * a KEEPALIVE timeout, else we delete the timer.
+		 *
+		 * We do not set flag for nominal write data, otherwise we may
+		 * force a state where we start to write itsy bitsy tidbits
+		 * of data.
+		 */
+
+		switch(sk->state) {
+		case TCP_TIME_WAIT:
+			/*
+			 * keep us in TIME_WAIT until we stop getting packets,
+			 * reset the timeout.
+			 */
+			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+			break;
+		case TCP_CLOSE:
+			/*
+			 * don't touch the timer.
+			 */
+			break;
+		default:
+			/*
+			 * must check send_head, write_queue, and ack_backlog
+			 * to determine which timeout to use.
+			 */
+			if (sk->send_head || skb_peek(&sk->write_queue) != NULL || sk->ack_backlog) {
+				reset_timer(sk, TIME_WRITE, sk->rto);
+			} else if (sk->keepopen) {
+				reset_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
+			} else {
+				delete_timer(sk);
+			}
+			break;
+		}
+#ifdef NOTDEF
 		if (sk->send_head == NULL && sk->ack_backlog == 0 &&
 		sk->state != TCP_TIME_WAIT && !sk->keepopen) 
 		{
 			if (!sk->dead)
 				sk->write_space(sk);
-			if (sk->keepopen)
+			if (sk->keepopen) {
 				reset_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
-			else
+			} else {
 				delete_timer(sk);
+			}
 		}
 		else
 		{
@@ -2831,6 +2890,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 				reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 			}	
 		}
+#endif
 	}
 
 	if (sk->packets_out == 0 && sk->partial != NULL &&
@@ -3302,7 +3362,7 @@ static inline int tcp_urg(struct sock *sk, struct tcphdr *th,
  *  This deals with incoming fins. 'Linus at 9 O'clock' 8-) 
  *
  *  If we are ESTABLISHED, a received fin moves us to CLOSE-WAIT
- *  (and thence onto LAST-ACK and finally, CLOSED, we never enter
+ *  (and thence onto LAST-ACK and finally, CLOSE, we never enter
  *  TIME-WAIT)
  *
  *  If we are in FINWAIT-1, a received FIN indicates simultanious
@@ -3362,6 +3422,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th,
 			 * XXX timeout not set properly
 			 */
 
+			tcp_statistics.TcpCurrEstab--;
 			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 			/*sk->fin_seq = th->seq+1;*/
 			sk->state = TCP_CLOSING;

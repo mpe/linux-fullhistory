@@ -255,7 +255,7 @@ while (tries --)
     printk ("%d blocks per page\n",page->nfree);
 #endif
     /* Now we're going to muck with the "global" freelist for this size:
-       this should be uniterruptible */
+       this should be uninterruptible */
     cli ();
     /* 
      * sizes[order].firstfree used to be NULL, otherwise we wouldn't be

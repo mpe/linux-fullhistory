@@ -389,7 +389,7 @@ static struct vm_operations_struct shm_vm_ops = {
 
 /*
  * This is really minimal support to make the shared mem stuff
- * ve known by the general VM manager. It should add the vm_ops
+ * be known by the general VM manager. It should add the vm_ops
  * field so that 'munmap()' and friends work correctly on shared
  * memory areas..
  */
@@ -636,7 +636,7 @@ static unsigned long shm_swap_in(struct vm_area_struct * vma, unsigned long code
 
 	id = (code >> SHM_ID_SHIFT) & SHM_ID_MASK;
 	if (id > max_shmid) {
-		printk ("shm_no_page: id=%d too big. proc mem corruptedn", id);
+		printk ("shm_no_page: id=%d too big. proc mem corrupted\n", id);
 		return BAD_PAGE | PAGE_SHARED;
 	}
 	shp = shm_segs[id];

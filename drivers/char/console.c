@@ -9,7 +9,7 @@
  *
  * This module exports the console io functions:
  * 
- *	'long con_init(long)'
+ *	'long console_init(long, long)'
  *	'int con_open(struct tty_struct *tty, struct file * filp)'
  * 	'void update_screen(int new_console)'
  * 	'void blank_screen(void)'
@@ -801,6 +801,7 @@ static void cursor_report(int currcons, struct tty_struct * tty)
 	respond_string(buf, tty);
 }
 
+#ifdef CONFIG_SELECTION
 static void mouse_report(int currcons, struct tty_struct * tty,
 			 int butt, int mrx, int mry)
 {
@@ -810,6 +811,7 @@ static void mouse_report(int currcons, struct tty_struct * tty,
 		(char)('!' + mry));
 	respond_string(buf, tty);
 }
+#endif
 
 static inline void status_report(int currcons, struct tty_struct * tty)
 {
@@ -1519,7 +1521,7 @@ static void con_unthrottle(struct tty_struct *tty)
 }
 
 /*
- *  long con_init(long);
+ *  long console_init(long, long);
  *
  * This routine initalizes console interrupts, and does nothing
  * else. If you want the screen to clear, call tty_write with
@@ -1528,7 +1530,7 @@ static void con_unthrottle(struct tty_struct *tty)
  * Reads the information preserved by setup.s to determine the current display
  * type and sets everything accordingly.
  */
-long con_init(long kmem_start)
+long console_init(long kmem_start, long kmem_end)
 {
 	char *display_desc = "????";
 	int currcons = 0;

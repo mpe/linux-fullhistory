@@ -66,7 +66,7 @@ int register_chrdev(unsigned int major, const char * name, struct file_operation
 {
 	if (major >= MAX_CHRDEV)
 		return -EINVAL;
-	if (chrdevs[major].fops)
+	if (chrdevs[major].fops && chrdevs[major].fops != fops)
 		return -EBUSY;
 	chrdevs[major].name = name;
 	chrdevs[major].fops = fops;
@@ -77,7 +77,7 @@ int register_blkdev(unsigned int major, const char * name, struct file_operation
 {
 	if (major >= MAX_BLKDEV)
 		return -EINVAL;
-	if (blkdevs[major].fops)
+	if (blkdevs[major].fops && blkdevs[major].fops != fops)
 		return -EBUSY;
 	blkdevs[major].name = name;
 	blkdevs[major].fops = fops;

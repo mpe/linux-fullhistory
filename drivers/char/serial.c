@@ -1205,7 +1205,7 @@ static void rs_put_char(struct tty_struct *tty, unsigned char ch)
 	if (serial_paranoia_check(info, tty->device, "rs_put_char"))
 		return;
 
-	if (!tty || tty->stopped || tty->hw_stopped || !info->xmit_buf)
+	if (!tty || !info->xmit_buf)
 		return;
 
 	save_flags(flags); cli();

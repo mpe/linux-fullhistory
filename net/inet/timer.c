@@ -86,7 +86,10 @@ void net_timer (unsigned long data)
 {
 	struct sock *sk = (struct sock*)data;
 	int why = sk->timeout;
-	/* timeout is overwritten by 'delete_timer' and 'reset_timer' */
+
+	/* 
+	 * only process if socket is not in use
+	 */
 
 	cli();
 	if (sk->inuse || in_bh) 
@@ -100,6 +103,13 @@ void net_timer (unsigned long data)
 	sk->inuse = 1;
 	sti();
 
+#ifdef NOTDEF
+	/* 
+	 * what the hell is this doing here?  this belongs in tcp.c.
+	 * I believe that this code is the cause of a lot of timer
+	 * screwups, especially during close (like FIN_WAIT1 states
+	 * with a KEEPOPEN timeout rather then a WRITE timeout).
+	 */
 	if (skb_peek(&sk->write_queue) && 
 	      before(sk->window_seq, sk->write_queue.next->h.seq) &&
 	      sk->send_head == NULL &&
@@ -108,6 +118,7 @@ void net_timer (unsigned long data)
 		reset_timer(sk, TIME_PROBE0, sk->rto);
 	else if (sk->keepopen)
 		reset_timer (sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
+#endif
 
 	/* Always see if we need to send an ack. */
 
@@ -216,7 +227,13 @@ void net_timer (unsigned long data)
 			break;
 		}
 		case TIME_KEEPOPEN:
-		/* Send something to keep the connection open. */
+			/* 
+			 * this reset_timer() call is a hack, this is not
+			 * how KEEPOPEN is supposed to work.
+			 */
+			reset_timer (sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
+
+			/* Send something to keep the connection open. */
 			if (sk->prot->write_wakeup)
 				  sk->prot->write_wakeup (sk);
 			sk->retransmits++;

@@ -45,9 +45,9 @@ static inline struct task_struct * get_task(int pid)
 }
 
 /*
- * this routine will get a word off of the processes priviledged stack. 
+ * this routine will get a word off of the processes privileged stack. 
  * the offset is how far from the base addr as stored in the TSS.  
- * this routine assumes that all the priviledged stacks are in our
+ * this routine assumes that all the privileged stacks are in our
  * data space.
  */   
 static inline int get_stack_long(struct task_struct *task, int offset)
@@ -60,9 +60,9 @@ static inline int get_stack_long(struct task_struct *task, int offset)
 }
 
 /*
- * this routine will put a word on the processes priviledged stack. 
+ * this routine will put a word on the processes privileged stack. 
  * the offset is how far from the base addr as stored in the TSS.  
- * this routine assumes that all the priviledged stacks are in our
+ * this routine assumes that all the privileged stacks are in our
  * data space.
  */
 static inline int put_stack_long(struct task_struct *task, int offset,
@@ -280,7 +280,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		/* are we already being traced? */
 		if (current->flags & PF_PTRACED)
 			return -EPERM;
-		/* set the ptrace bit in the proccess flags. */
+		/* set the ptrace bit in the process flags. */
 		current->flags |= PF_PTRACED;
 		return 0;
 	}
@@ -319,7 +319,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		return -ESRCH;
 
 	switch (request) {
-	/* when I and D space are seperate, these will need to be fixed. */
+	/* when I and D space are separate, these will need to be fixed. */
 		case PTRACE_PEEKTEXT: /* read word at location addr. */ 
 		case PTRACE_PEEKDATA: {
 			unsigned long tmp;
@@ -366,7 +366,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			return 0;
 		}
 
-      /* when I and D space are seperate, this will have to be fixed. */
+      /* when I and D space are separate, this will have to be fixed. */
 		case PTRACE_POKETEXT: /* write the word at location addr. */
 		case PTRACE_POKEDATA:
 			return write_long(child,addr,data);
@@ -376,7 +376,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			    addr > sizeof(struct user) - 3)
 				return -EIO;
 
-			addr = addr >> 2; /* temproary hack. */
+			addr = addr >> 2; /* temporary hack. */
 
 			if (addr == ORIG_EAX)
 				return -EIO;

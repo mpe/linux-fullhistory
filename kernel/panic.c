@@ -5,7 +5,7 @@
  */
 
 /*
- * This function is used through-out the kernel (includeinh mm and fs)
+ * This function is used through-out the kernel (including mm and fs)
  * to indicate a major problem.
  */
 #include <stdarg.h>

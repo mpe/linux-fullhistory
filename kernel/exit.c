@@ -121,7 +121,7 @@ int bad_task_ptr(struct task_struct *p)
 }
 	
 /*
- * This routine scans the pid tree and make sure the rep invarient still
+ * This routine scans the pid tree and makes sure the rep invariant still
  * holds.  Used for debugging only, since it's very slow....
  *
  * It looks a lot scarier than it really is.... we're doing nothing more
@@ -198,7 +198,7 @@ void audit_ptree(void)
 
 /*
  * This checks not only the pgrp, but falls back on the pid if no
- * satisfactory prgp is found. I dunno - gdb doesn't work correctly
+ * satisfactory pgrp is found. I dunno - gdb doesn't work correctly
  * without this...
  */
 int session_of_pgrp(int pgrp)

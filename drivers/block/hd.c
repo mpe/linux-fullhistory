@@ -604,9 +604,10 @@ static void hd_times_out(void)
 {
 	DEVICE_INTR = NULL;
 	sti();
-	special_op [DEVICE_NR(CURRENT->dev)] += reset = 1;
+	reset = 1;
 	if (!CURRENT)
 		return;
+	special_op [DEVICE_NR(CURRENT->dev)] ++;
 	printk(KERN_DEBUG "HD timeout\n");
 	cli();
 	if (++CURRENT->errors >= MAX_ERRORS) {

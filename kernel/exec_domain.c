@@ -17,7 +17,7 @@ struct exec_domain default_exec_domain = {
 	"Linux",	/* name */
 	no_lcall7,	/* lcall7 causes a seg fault. */
 	0, 0xff,	/* All personalities. */
-	ident_map,	/* Identiy map signals. */
+	ident_map,	/* Identify map signals. */
 	ident_map,	/*  - both ways. */
 	NULL,		/* No usage counter. */
 	NULL		/* Nothing after this in the list. */

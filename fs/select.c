@@ -191,7 +191,7 @@ __get_fd_set(nr, (unsigned long *) (fsp), (unsigned long *) (fdp))
 __set_fd_set(nr, (unsigned long *) (fsp), (unsigned long *) (fdp))
 
 /*
- * We can actually return ERESTARTSYS insetad of EINTR, but I'd
+ * We can actually return ERESTARTSYS instead of EINTR, but I'd
  * like to be certain this leads to no problems. So I return
  * EINTR just for safety.
  *

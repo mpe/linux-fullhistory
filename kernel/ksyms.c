@@ -51,7 +51,6 @@ extern void (* iABI_hook)(struct pt_regs * regs);
 
 #ifdef CONFIG_INET
 extern void snarf_region(unsigned int, unsigned int);
-extern void dev_tint(struct device *);
 extern struct device *irq2dev_map[];
 #endif
 
@@ -188,7 +187,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	 */
 	{ NULL, NULL } /* mark end of table */
 	},
-	{ NULL, NULL } /* no module refs */
+	{ { NULL, NULL } /* no module refs */ }
 };
 
 /*

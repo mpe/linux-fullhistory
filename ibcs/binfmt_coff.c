@@ -4,13 +4,13 @@
  * Compatibility Specification 2 or O'Rilley's book on COFF. The shared
  * libraries are defined only the in the Intel book.
  *
- * This file is based upon code written by Eric Youndale for the ELF object
+ * This file is based upon code written by Eric Youngdale for the ELF object
  * file format.
  *
  * Author: Al Longyear (longyear@sii.com)
  *
  * Latest Revision:
- *    3 Feburary 1994
+ *    3 February 1994
  *      Al Longyear (longyear@sii.com)
  *      Cleared first page of bss section using put_fs_byte.
  */
@@ -162,7 +162,7 @@ load_object (struct linux_binprm * bprm, struct pt_regs *regs, int lib_ok)
 	sections  = COFF_SHORT (coff_hdr->f_nscns);   /* Number of sections */
 	aout_size = COFF_SHORT (coff_hdr->f_opthdr);  /* Size of opt. headr */
 /*
- *  If the file is not executable then reject the exectution. This means
+ *  If the file is not executable then reject the execution. This means
  *  that there must not be external references.
  */
 	if ((flags & COFF_F_EXEC) == 0) {
@@ -173,7 +173,7 @@ load_object (struct linux_binprm * bprm, struct pt_regs *regs, int lib_ok)
 	    break;
 	}
 /*
- *  There must be atleast one section.
+ *  There must be at least one section.
  */
 	if (sections == 0) {
 #ifdef COFF_DEBUG
@@ -509,7 +509,7 @@ load_object (struct linux_binprm * bprm, struct pt_regs *regs, int lib_ok)
 	}
 /*
  *   Construct the bss data for the process. The bss ranges from the
- *   end of the data (which may not be on a page boundry) to the end
+ *   end of the data (which may not be on a page boundary) to the end
  *   of the bss section. Allocate any necessary pages for the data.
  */
 	if (status >= 0 && bss_size != 0) {
@@ -531,8 +531,8 @@ load_object (struct linux_binprm * bprm, struct pt_regs *regs, int lib_ok)
 	    int nIndex;
 	    COFF_SCNHDR *sect_ptr = sect_bufr;
 /*
- *  Find the library sections. (There should be atleast one. It was counted
- *  earlier.) This will evenutally recurse to our code and load the shared
+ *  Find the library sections. (There should be at least one. It was counted
+ *  earlier.) This will eventually recurse to our code and load the shared
  *  library with our own procedures.
  */
 	    for (nIndex = 0; nIndex < sections; ++nIndex) {
@@ -581,7 +581,7 @@ load_object (struct linux_binprm * bprm, struct pt_regs *regs, int lib_ok)
 
 /*
  *  This procedure will load the library listed in the file name given
- *  as the paramter. The result will be non-zero should something fail
+ *  as the parameter. The result will be non-zero should something fail
  *  to load.
  */
 
@@ -624,7 +624,7 @@ preload_library (struct linux_binprm *exe_bprm,
     int status = 0;		/* Completion status                  */
     long nbytes;		/* Count of bytes in the header area  */
 /*
- *  Fetch the size of the section. There must be enough room for atleast
+ *  Fetch the size of the section. There must be enough room for at least
  *  one entry.
  */
     nbytes = COFF_LONG (sect->s_size);
@@ -659,7 +659,7 @@ preload_library (struct linux_binprm *exe_bprm,
 			    nbytes);                    /* Byte count reqd.  */
 	    set_fs (old_fs);                         /* Restore the selector */
 /*
- *  Check the result. The value returned is the byte count actaully read.
+ *  Check the result. The value returned is the byte count actually read.
  */
 	    if (status >= 0 && status != nbytes) {
 #ifdef COFF_DEBUG

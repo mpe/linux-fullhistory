@@ -32,7 +32,6 @@
 #define RTC_ALWAYS_BCD 1
 
 #include <linux/timex.h>
-extern struct timeval xtime;
 
 /* converts date to days since 1/1/1970
  * assumes year,mon,day in normal date format

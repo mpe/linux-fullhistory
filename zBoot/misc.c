@@ -94,7 +94,7 @@ void *malloc(int size)
 	free_mem_ptr += size;
 
 	/*
-  	 * The part of the compresed kernel which has already been expanded
+  	 * The part of the compressed kernel which has already been expanded
 	 * is no longer needed. Therefore we can reuse it for malloc.
 	 * With bigger kernels, this is necessary.
 	 */

@@ -705,7 +705,7 @@ static void NCR5380_print_options (struct Scsi_Host *instance) {
  * Inputs : instance, pointer to this instance.  
  */
 
-void NCR5380_print_status (struct Scsi_Host *instance) {
+static void NCR5380_print_status (struct Scsi_Host *instance) {
     struct NCR5380_hostdata *hostdata = (struct NCR5380_hostdata *) 
 	instance->hostdata;
     Scsi_Cmnd *ptr;

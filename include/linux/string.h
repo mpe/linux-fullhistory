@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-#include <i386/string.h>	/* inline functions for i386.. */
+#include <asm/string.h>		/* inline functions for i386.. */
 
 extern char * strcpy(char *, const char *);
 extern char * strncpy(char *, const char *, size_t);

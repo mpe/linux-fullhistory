@@ -161,7 +161,7 @@ unsigned long itimer_next = ~0;
  * information in task[0] is never used.
  *
  * The "confuse_gcc" goto is used only to get better assembly code..
- * Djikstra probably hates me.
+ * Dijkstra probably hates me.
  */
 asmlinkage void schedule(void)
 {

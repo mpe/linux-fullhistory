@@ -358,7 +358,7 @@ static int lock_it(struct file *filp, struct file_lock *caller, unsigned int fd)
 			/*
 			 * Replace the old lock with the new one. Wake up
 			 * anybody waiting for the old one, as the change in
-			 * lock type migth satisfy his needs.
+			 * lock type might satisfy his needs.
 			 */
 			wake_up(&fl->fl_wait);
 			fl->fl_start = caller->fl_start;

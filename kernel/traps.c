@@ -188,7 +188,7 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
  * which were in force when the exception condition arose.
  *
  * Note that we play around with the 'TS' bit to hopefully get
- * the correct behaviour even in the presense of the asynchronous
+ * the correct behaviour even in the presence of the asynchronous
  * IRQ13 behaviour
  */
 void math_error(void)

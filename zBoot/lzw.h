@@ -15,7 +15,7 @@
 
 #define	LZW_MAGIC  "\037\235"   /* Magic header for lzw files, 1F 9D */
 
-#define BIT_MASK    0x1f /* Mask for 'number of compresssion bits' */
+#define BIT_MASK    0x1f /* Mask for 'number of compression bits' */
 /* Mask 0x20 is reserved to mean a fourth header byte, and 0x40 is free.
  * It's a pity that old uncompress does not check bit 0x20. That makes
  * extension of the format actually undesirable because old compress
@@ -26,7 +26,7 @@
  */
 
 #define BLOCK_MODE  0x80
-/* Block compresssion: if table is full and compression rate is dropping,
+/* Block compression: if table is full and compression rate is dropping,
  * clear the dictionary.
  */
 

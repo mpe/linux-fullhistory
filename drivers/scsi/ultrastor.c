@@ -298,15 +298,18 @@ static inline int find_and_clear_bit_16(unsigned short *field)
   return rv;
 }
 
-/* This asm is fragile: it doesn't work without the casts and it may
+/* This has been re-implemented with the help of Richard Earnshaw,
+   <rwe@pegasus.esprit.ec.org> and works with gcc-2.5.8 and gcc-2.6.0.
+   The instability noted by jfc below appears to be a bug in
+   gcc-2.5.x when compiling w/o optimization.  --Caleb
+
+   This asm is fragile: it doesn't work without the casts and it may
    not work without optimization.  Maybe I should add a swap builtin
    to gcc.  --jfc  */
 static inline unsigned char xchgb(unsigned char reg,
 				  volatile unsigned char *mem)
 {
-  asm("xchgb %0,%1" :
-      "=q" (reg), "=m" (*(unsigned char *)mem) :
-      "0" (reg), "1" (*(unsigned char *)mem));
+  asm ("xchgb %0, (%2)" : "=q" (reg) : "0" (reg), "q" (mem) : "m");
   return reg;
 }
 

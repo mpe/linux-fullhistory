@@ -422,7 +422,7 @@ static struct buffer_head * find_buffer(dev_t dev, int block, int size)
 
 /*
  * Why like this, I hear you say... The reason is race-conditions.
- * As we don't lock buffers (unless we are readint them, that is),
+ * As we don't lock buffers (unless we are reading them, that is),
  * something might happen to it while we sleep (ie a read-error
  * will force it bad). This shouldn't really happen currently, but
  * the code is ready.
@@ -675,7 +675,7 @@ repeat0:
  * race-conditions. Most of the code is seldom used, (ie repeating),
  * so it should be much more efficient than it looks.
  *
- * The algoritm is changed: hopefully better, and an elusive bug removed.
+ * The algorithm is changed: hopefully better, and an elusive bug removed.
  *
  * 14.02.92: changed it to sync dirty buffers a bit: better performance
  * when the filesystem starts to get full of dirty blocks (I hope).
@@ -1465,7 +1465,7 @@ static inline int try_to_reassign(struct buffer_head * bh, struct buffer_head **
  * pages for the buffer cache as much of the time as possible.
  * This way the other buffers on a particular page are likely
  * to be very near each other on the free list, and we will not
- * be expiring data prematurely.  For now we only canibalize buffers
+ * be expiring data prematurely.  For now we only cannibalize buffers
  * of the same size to keep the code simpler.
  */
 static int reassign_cluster(dev_t dev, 
@@ -1619,7 +1619,7 @@ void buffer_init(void)
 	return;
 }
 
-/* This is a simple kernel daemon, whose job it is to provide a dynamicly
+/* This is a simple kernel daemon, whose job it is to provide a dynamically
  * response to dirty buffers.  Once this process is activated, we write back
  * a limited number of buffers to the disks and then go back to sleep again.
  * In effect this is a process which never leaves kernel mode, and does not have
@@ -1645,7 +1645,7 @@ static void wakeup_bdflush(int wait)
 
 
 /* 
- * Here we attempt to write back old buffers.  We also try and flush indoes 
+ * Here we attempt to write back old buffers.  We also try and flush inodes 
  * and supers as well, since this function is essentially "update", and 
  * otherwise there would be no way of ensuring that these quantities ever 
  * get written back.  Ideally, we would have a timestamp on the inodes

@@ -430,7 +430,7 @@ void merge_segments(struct vm_area_struct *mpnt)
 
 /*
  * Map memory not associated with any file into a process
- * address space.  Adjecent memory is merged.
+ * address space.  Adjacent memory is merged.
  */
 static int anon_map(struct inode *ino, struct file * file, struct vm_area_struct * vma)
 {

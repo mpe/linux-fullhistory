@@ -64,7 +64,7 @@ static int isofs_match(int len,const char * name, char * compare, int dlen)
  * entry - you'll have to do that yourself if you want to.
  */
 static struct buffer_head * isofs_find_entry(struct inode * dir,
-	const char * name, int namelen, int * ino, int * ino_back)
+	const char * name, int namelen, unsigned long * ino, unsigned long * ino_back)
 {
 	unsigned long bufsize = ISOFS_BUFFER_SIZE(dir);
 	unsigned char bufbits = ISOFS_BUFFER_BITS(dir);
@@ -213,7 +213,7 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 int isofs_lookup(struct inode * dir,const char * name, int len,
 	struct inode ** result)
 {
-	int ino, ino_back;
+	unsigned long ino, ino_back;
 	struct buffer_head * bh;
 
 #ifdef DEBUG

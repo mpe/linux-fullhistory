@@ -1,4 +1,4 @@
-/* crypt.h (dummy version) -- do not perform encrytion
+/* crypt.h (dummy version) -- do not perform encryption
  * Hardly worth copyrighting :-)
  */
 

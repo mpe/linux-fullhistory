@@ -2,7 +2,7 @@
  * splx.c - SYSV DDI/DKI ipl manipulation functions
  *
  * Internally, many unices use a range of different interrupt 
- * priveledge levels, ie from "allow all interrupts" (7) to 
+ * privilege levels, ie from "allow all interrupts" (7) to 
  * "allow no interrupts." (0) under SYSV.
  *
  * This a simple splx() function behaves as the SYSV DDI/DKI function does,
@@ -10,7 +10,7 @@
  * level 7 (sti), this implementation only implements those levels.
  * 
  * Also, unlike the current Linux routines, splx() also returns the 
- * old priveledge level so that it can be restored.
+ * old privilege level so that it can be restored.
  */
 
 #include <asm/system.h>

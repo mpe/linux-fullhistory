@@ -19,7 +19,7 @@ CHANGES since 0.99 patchlevel 13:
  - readonly OS/2 filesystem support (HPFS) added (Chris Smith)
  - NTP support (Philip Gladstone, Torsten Duwe, ??)
  - fixed 16MB swap-area limit
- - lots of minor cleanups, buxfixes etc.
+ - lots of minor cleanups, bugfixes etc.
 
 CHANGES since 0.99 patchlevel 12 and earlier:
 
@@ -117,7 +117,7 @@ NOTABLE changes since patchlevel 10 or earlier:
    it.
 
  - named pipes and normal pipes should hopefully have the right select()
-   semantics in the presense/absense of writers.
+   semantics in the presence/absence of writers.
 
  - QIC-02 tape driver by Hennus Bergman
 
@@ -135,7 +135,7 @@ NOTABLE changes since patchlevel 10 or earlier:
  - udelay() function for short delays (busy-waiting) added.  Used
    currently only by the QIC driver.
 
- - fork() and sheduler changes to make task switches happen only from
+ - fork() and scheduler changes to make task switches happen only from
    kernel mode to kernel mode.  Cleaner and more portable than the old
    code which counted on being able to task-switch directly into user
    mode.

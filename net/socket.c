@@ -363,7 +363,7 @@ static int sock_lseek(struct inode *inode, struct file *file, off_t offset, int 
 
 /*
  *	Read data from a socket. ubuf is a user mode pointer. We make sure the user
- *	area ubuf...ubuf+size-1 is writeable before asking the protocol.
+ *	area ubuf...ubuf+size-1 is writable before asking the protocol.
  */
 
 static int sock_read(struct inode *inode, struct file *file, char *ubuf, int size)
@@ -934,7 +934,7 @@ static int sock_send(int fd, void * buff, int len, unsigned flags)
 
 /*
  *	Send a datagram to a given address. We move the address into kernel
- *	spacee and check the user space data area is readable before invoking
+ *	space and check the user space data area is readable before invoking
  *	the protocol.
  */
 
@@ -1113,7 +1113,7 @@ int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
  *	we have this level of indirection. Not a lot of overhead, since more of
  *	the work is done via read/write/select directly.
  *
- *	I'm now expanding this up to a higher level to seperate the assorted
+ *	I'm now expanding this up to a higher level to separate the assorted
  *	kernel/user space manipulations and global assumptions from the protocol
  *	layers proper - AC.
  */

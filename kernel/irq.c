@@ -295,7 +295,7 @@ void free_irq(unsigned int irq)
 /*
  * Note that on a 486, we don't want to do a SIGFPE on a irq13
  * as the irq is unreliable, and exception 16 works correctly
- * (ie as explained in the intel litterature). On a 386, you
+ * (ie as explained in the intel literature). On a 386, you
  * can't use exception 16 due to bad IBM design, so we have to
  * rely on the less exact irq13.
  *
@@ -331,7 +331,7 @@ void init_IRQ(void)
 	if (request_irq(13,math_error_irq))
 		printk("Unable to get IRQ13 for math-error handler\n");
 
-	/* intialize the bottom half routines. */
+	/* initialize the bottom half routines. */
 	for (i = 0; i < 32; i++) {
 		bh_base[i].routine = NULL;
 		bh_base[i].data = NULL;

@@ -20,7 +20,7 @@ OBJS  = tty_io.o n_tty.o console.o keyboard.o serial.o \
 	tty_ioctl.o pty.o vt.o mem.o \
 	defkeymap.o
 
-SRCS  = tty_io.c console.c keyboard.c serial.c \
+SRCS  = tty_io.c n_tty.c console.c keyboard.c serial.c \
 	tty_ioctl.c pty.c vt.c mem.c \
 	defkeymap.c
 

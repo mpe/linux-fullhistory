@@ -117,7 +117,6 @@ struct timex {
  */
 extern long tick;                      /* timer interrupt period */
 extern int tickadj;			/* amount of adjustment per tick */
-extern volatile struct timeval xtime;		/* The current time */
 
 /*
  * phase-lock loop variables

@@ -465,7 +465,7 @@ int ipx_rt_get_info(char *buffer, char **start, off_t offset, int length)
  
 static int ipx_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
-	ipx_socket *sk=(ipx_socket *)sock->data;
+	/* ipx_socket *sk=(ipx_socket *)sock->data; */
 	switch(cmd)
 	{
 		default:

@@ -1750,6 +1750,8 @@ static void rw_interrupt(void)
 			return;
 		}
 		current_type[current_drive] = floppy;
+		floppy_sizes[DRIVE(current_drive) + (FDC(current_drive) << 7)] =
+			floppy->size >> 1;
 		break;
 	}
 

@@ -1,5 +1,5 @@
 /*
- *	Protocol intialiser table. Here seperately for convenience
+ *	Protocol initializer table. Here separately for convenience
  *
  */
  

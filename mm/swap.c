@@ -102,11 +102,6 @@ static unsigned long init_swap_cache(unsigned long mem_start,
 	swap_cache = (unsigned long *) mem_start;
 	swap_cache_size = mem_end >> PAGE_SHIFT;
 	memset(swap_cache, 0, swap_cache_size * sizeof (unsigned long));
-#ifdef SWAP_CACHE_INFO
-	printk("%ld bytes for swap cache allocated\n",
-	       swap_cache_size * sizeof(unsigned long));
-#endif	
-	
 	return (unsigned long) (swap_cache + swap_cache_size);
 }
 
@@ -153,8 +148,8 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 				It sounds like ll_rw_swap_file defined
 				it operation size (sector size) based on
 				PAGE_SIZE and the number of block to read.
-				So using bmap ou smap should work even if
-				smap will requiered more blocks.
+				So using bmap or smap should work even if
+				smap will require more blocks.
 			*/
 			int j;
 			unsigned int block = offset << 3;
@@ -355,7 +350,7 @@ static inline int try_to_swap_out(unsigned long * table_ptr)
  */
 
 /*
- * These are the miminum and maximum number of pages to swap from one process,
+ * These are the minimum and maximum number of pages to swap from one process,
  * before proceeding to the next:
  */
 #define SWAP_MIN	4
@@ -575,7 +570,7 @@ void free_pages(unsigned long addr, unsigned long order)
 			}
 			return;
 		}
-		printk("Trying to free free memory (%08lx): memory probabably corrupted\n",addr);
+		printk("Trying to free free memory (%08lx): memory probably corrupted\n",addr);
 		printk("PC = %08lx\n",*(((unsigned long *)&addr)-1));
 		return;
 	}

@@ -243,7 +243,7 @@ end_move:
 ! we let the gnu-compiled 32-bit programs do that. We just jump to
 ! absolute address 0x00000, in 32-bit protected mode.
 !
-! Note that the short jump isn't strictly needed, althought there are
+! Note that the short jump isn't strictly needed, although there are
 ! reasons why it might be a good idea. It won't hurt in any case.
 !
 	xor	ax,ax
@@ -408,7 +408,7 @@ svga:   cld
 	mov	bh,al		! store current value of CRT-register 0x38
 	mov	ax,#0x0038
 	call	outidx		! disable writing to special regs
-	movb	al,cl		! check wether we can write special reg 0x35
+	movb	al,cl		! check whether we can write special reg 0x35
 	call	inidx
 	movb	bl,al		! save the current value of CRT reg 0x35
 	andb	al,#0xf0	! clear bits 0-3
@@ -436,7 +436,7 @@ s3_2:	mov	ax,cx		! load ah with 0xf and al with 0x35
 	je	no_s3		! writing is allowed => this is not an S3
 s3_1:	mov	ax,#0x4838	! allow writing to special regs by putting
 	call	outidx		! magic number into CRT-register 0x38
-	movb	al,cl		! check wether we can write special reg 0x35
+	movb	al,cl		! check whether we can write special reg 0x35
 	call	inidx
 	movb	bl,al
 	andb	al,#0xf0

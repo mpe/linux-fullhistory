@@ -205,10 +205,10 @@ _system_call:
 ret_from_sys_call:
 	cmpl $0,_intr_count
 	jne 2f
-	movl _bh_mask,%eax
+9:	movl _bh_mask,%eax
 	andl _bh_active,%eax
 	jne handle_bottom_half
-9:	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are
+	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are
 	testl $(VM_MASK),%eax		# different then
 	jne 1f
 	cmpw $(KERNEL_CS),CS(%esp)	# was old code segment supervisor ?

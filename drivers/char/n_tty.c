@@ -76,7 +76,8 @@ void n_tty_flush_buffer(struct tty_struct * tty)
 	if (!tty->link)
 		return;
 
-	wake_up_interruptible(&tty->link->write_wait);
+	if (tty->driver.unthrottle)
+		(tty->driver.unthrottle)(tty);
 	if (tty->link->packet) {
 		tty->ctrl_status |= TIOCPKT_FLUSHREAD;
 		wake_up_interruptible(&tty->link->read_wait);
@@ -895,12 +896,6 @@ static int read_chan(struct tty_struct *tty, struct file *file,
 
 	current->state = TASK_RUNNING;
 	current->timeout = 0;
-	/*
-	 * Hack for PTY's; we need to wake up the other tty if there's
-	 * enough space.
-	 */
-	if (tty->link && tty->read_cnt <= TTY_THRESHOLD_UNTHROTTLE)
-		wake_up_interruptible(&tty->link->write_wait);
 	return (b - buf) ? b - buf : retval;
 }
 

@@ -202,6 +202,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	if (blk_size[major])
 		if (blk_size[major][MINOR(bh->b_dev)] < (sector + count)>>1) {
 			bh->b_dirt = bh->b_uptodate = 0;
+			bh->b_req = 0;
 			return;
 		}
 	lock_buffer(bh);

@@ -242,7 +242,7 @@ root_defined:
 	seg cs
 	mov	root_dev,ax
 
-! after that (everyting loaded), we jump to
+! after that (everything loaded), we jump to
 ! the setup-routine loaded directly after
 ! the bootblock:
 
@@ -397,7 +397,7 @@ print_nl:
 
 /*
  *	print_hex is for debugging purposes, and prints the word
- *	pointed to by ss:bp in hexadecmial.
+ *	pointed to by ss:bp in hexadecimal.
 */
 
 print_hex:

@@ -15,7 +15,7 @@
 
 
 /* We don't use the head/tail construction any more. Now we use the start/len*/
-/* contruction providing full use of PIPE_BUF (multiple of PAGE_SIZE) */
+/* construction providing full use of PIPE_BUF (multiple of PAGE_SIZE) */
 /* Florian Coosmann (FGC)                                ^ current = 1       */
 /* Additionally, we now use locking technique. This prevents race condition  */
 /* in case of paging and multiple read/write on the same pipe. (FGC)         */

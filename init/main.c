@@ -71,7 +71,8 @@ extern char empty_zero_page[PAGE_SIZE];
 extern void init(void);
 extern void init_IRQ(void);
 extern void init_modules(void);
-extern long kmalloc_init (long,long);
+extern long console_init(long, long);
+extern long kmalloc_init(long,long);
 extern long blk_dev_init(long,long);
 extern long chr_dev_init(long,long);
 extern void floppy_init(void);
@@ -228,7 +229,7 @@ void ramdisk_setup(char *str, int *ints)
       ramdisk_size = ints[1];
 }
 
-int checksetup(char *line)
+static int checksetup(char *line)
 {
 	int i = 0;
 	int ints[11];
@@ -237,11 +238,11 @@ int checksetup(char *line)
 		int n = strlen(bootsetups[i].str);
 		if (!strncmp(line,bootsetups[i].str,n)) {
 			bootsetups[i].setup_func(get_options(line+n,ints), ints);
-			return(0);
+			return 1;
 		}
 		i++;
 	}
-	return(1);
+	return 0;
 }
 
 unsigned long loops_per_sec = 1;
@@ -316,21 +317,33 @@ static void parse_options(char *line)
 					break;
 				}
 			}
-		} else if (!strcmp(line,"ro"))
+			continue;
+		}
+		if (!strcmp(line,"ro")) {
 			root_mountflags |= MS_RDONLY;
-		else if (!strcmp(line,"rw"))
+			continue;
+		}
+		if (!strcmp(line,"rw")) {
 			root_mountflags &= ~MS_RDONLY;
-		else if (!strcmp(line,"debug"))
+			continue;
+		}
+		if (!strcmp(line,"debug")) {
 			console_loglevel = 10;
-		else if (!strcmp(line,"no-hlt"))
+			continue;
+		}
+		if (!strcmp(line,"no-hlt")) {
 			hlt_works_ok = 0;
-		else if (!strcmp(line,"no387")) {
+			continue;
+		}
+		if (!strcmp(line,"no387")) {
 			hard_math = 0;
 			__asm__("movl %%cr0,%%eax\n\t"
 				"orl $0xE,%%eax\n\t"
 				"movl %%eax,%%cr0\n\t" : : : "ax");
-		} else
-			checksetup(line);
+			continue;
+		}
+		if (checksetup(line))
+			continue;
 		/*
 		 * Then check if it's an environment variable or
 		 * an option.
@@ -421,17 +434,13 @@ asmlinkage void start_kernel(void)
 	prof_len >>= 2;
 	memory_start += prof_len * sizeof(unsigned long);
 #endif
+	memory_start = console_init(memory_start,memory_end);
 	memory_start = bios32_init(memory_start,memory_end);
 	memory_start = kmalloc_init(memory_start,memory_end);
 	memory_start = chr_dev_init(memory_start,memory_end);
 	memory_start = blk_dev_init(memory_start,memory_end);
 	sti();
 	calibrate_delay();
-	if (hlt_works_ok) {
-		printk("Checking 'hlt' ...");
-		__asm__ __volatile__("hlt");
-		printk(" ok\n");
-	}
 #ifdef CONFIG_INET
 	memory_start = net_dev_init(memory_start,memory_end);
 #endif
@@ -476,6 +485,11 @@ asmlinkage void start_kernel(void)
 		if (!fpu_error)
 			printk("Ok, fpu using %s error reporting.\n",
 				ignore_irq13?"exception 16":"irq13");
+	}
+	if (hlt_works_ok) {
+		printk("Checking 'hlt' instruction... ");
+		__asm__ __volatile__("hlt ; hlt ; hlt ; hlt");
+		printk(" Ok.\n");
 	}
 #ifndef CONFIG_MATH_EMULATION
 	else {

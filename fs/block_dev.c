@@ -175,14 +175,15 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	rblocks = blocks = (left + offset + blocksize - 1) >> blocksize_bits;
 	bhb = bhe = buflist;
 	if (filp->f_reada) {
-	        if(blocks < read_ahead[MAJOR(dev)] / (blocksize >> 9))
-		  blocks = read_ahead[MAJOR(dev)] / (blocksize >> 9);
-		if (block + blocks > size)
-			blocks = size - block;
+	        if (blocks < read_ahead[MAJOR(dev)] / (blocksize >> 9))
+			blocks = read_ahead[MAJOR(dev)] / (blocksize >> 9);
 		blocks -= (block % blocks_per_cluster);
-		if(rblocks > blocks) blocks = rblocks;
+		if (rblocks > blocks)
+			blocks = rblocks;
 		
 	}
+	if (block + blocks > size)
+		blocks = size - block;
 
 	/* We do this in a two stage process.  We first try and request
 	   as many blocks as we can, then we wait for the first one to

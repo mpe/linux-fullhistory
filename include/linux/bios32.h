@@ -22,7 +22,7 @@
 #ifndef BIOS32_H
 #define BIOS32_H
 
-long bios32_init (long memory_start, long memory_end);
+unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end);
 
 extern int pcibios_find_class (unsigned long class_code, unsigned short index, 
     unsigned char *bus, unsigned char *device_fn);
@@ -41,4 +41,5 @@ extern int pcibios_write_config_word (unsigned char bus,
     unsigned char device_fn, unsigned char where, unsigned short value);
 extern pcibios_write_config_dword (unsigned char bus,
     unsigned char device_fn, unsigned char where, unsigned long value);
+
 #endif /* ndef BIOS32_H */

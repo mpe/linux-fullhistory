@@ -11,7 +11,7 @@
  * This source is covered by the GNU GPL, the same as all kernel sources.
  *
  * Features:
- *	- Supports stacked modules (removeable only of there are no dependants).
+ *	- Supports stacked modules (removable only of there are no dependents).
  *	- Supports table of symbols defined by the modules.
  *	- Supports /proc/ksyms, showing value, name and owner of all
  *	  the symbols defined by all modules (in stack order).
@@ -292,7 +292,7 @@ sys_delete_module(char *module_name)
  * (as that format is quite handy for the kernel...)
  *
  * For every module, the first (pseudo)symbol copied is the module name
- * and the adress of the module struct.
+ * and the address of the module struct.
  * This lets "insmod" keep track of references, and build the array of
  * struct module_refs in the symbol table.
  * The format of the module name is "#module", so that "insmod" can easily

@@ -6,7 +6,7 @@ are unique.
 It is a *very* good idea to protect kernel data structures with magic
 numbers.  This allows you to check at run time whether (a) a structure
 has been clobbered, or (b) you've passed the wrong structure to a
-routine.  This last is especially useful --- particlarly when you are
+routine.  This last is especially useful --- particularly when you are
 passing pointers to structures via a void * pointer.  The tty code,
 for example, does this frequently to pass driver-specific and line
 discipline-specific structures back and forth.
@@ -19,11 +19,11 @@ struct tty_ldisc {
 	...
 };
 
-Please follow this discpline when you are adding future enhancements
+Please follow this discipline when you are adding future enhancements
 to the kernel!  It has saved me countless hours of debugging,
 especially in the screw cases where an array has been overrun and
 structures following the array have been overwritten.  Using this
-discpline, these cases get detected quickly and safely.
+discipline, these cases get detected quickly and safely.
 
 					Theodore Ts'o
 					31-Mar-94

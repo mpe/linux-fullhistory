@@ -670,18 +670,20 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
  *	target ID are asserted.  A valid initator ID is not on the bus
  *	until IO is asserted, so we must wait for that.
  */
-		
-		for (clock = jiffies + 10, temp = 0; (jiffies < clock) &&
-		    !((temp = STATUS) & (STAT_IO | STAT_BSY)););
+		clock = jiffies + 10;
+		for (;;) {
+			temp = STATUS;
+			if ((temp & STAT_IO) && !(temp & STAT_BSY))
+				break;
 
-		if (jiffies >= clock)
-			{
+			if (jiffies > clock) {
 #if (DEBUG & PHASE_RESELECT)
-			printk("scsi%d : RESELECT timed out while waiting for IO .\n",
-				hostno);
+				printk("scsi%d : RESELECT timed out while waiting for IO .\n",
+					hostno);
 #endif
-			return (DID_BAD_INTR << 16);
+				return (DID_BAD_INTR << 16);
 			}
+		}
 
 /* 
  * 	After I/O is asserted by the target, we can read our ID and its
