@@ -224,6 +224,8 @@ void scsi_wait_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 {
 	DECLARE_MUTEX_LOCKED(sem);
 	
+        if (buffer != NULL && SCpnt->sc_data_direction == SCSI_DATA_NONE)
+                BUG();
 	SCpnt->request.sem = &sem;
 	SCpnt->request.rq_status = RQ_SCSI_BUSY;
 	scsi_do_cmd (SCpnt, (void *) cmnd,

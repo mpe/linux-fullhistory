@@ -6,7 +6,6 @@ o	insw_and_csum
 
 o	Should unix domain connect never block ?
 o	Screend loadable firewall module
-o	Fix merging the bridge code
 o	Remove kernel RARP and replace with user mode daemon.
 o	Merge ARM half word trap fixes for ethernet headers
 o	Stop route addition to downed interfaces

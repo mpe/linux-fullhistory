@@ -330,6 +330,13 @@ M:	Philip.Blundell@pobox.com
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
+ETHERNET BRIDGE
+P:	Lennert Buytenhek
+M:	buytenh@openrock.net
+L:	bridge@openrock.net
+W:	http://openrock.net/bridge
+S:	Maintained
+
 ETHERTEAM 16I DRIVER
 P:      Mika Kuoppala
 M:      miku@iki.fi

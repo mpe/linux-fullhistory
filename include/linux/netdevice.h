@@ -316,9 +316,6 @@ struct net_device
 	/* Called after last user reference disappears. */
 	void			(*destructor)(struct net_device *dev);
 
-	/* Bridge stuff */
-	int			bridge_port_id;		
-	
 	/* Pointers to interface service routines.	*/
 	int			(*open)(struct net_device *dev);
 	int			(*stop)(struct net_device *dev);
@@ -358,6 +355,9 @@ struct net_device
 						     unsigned char *haddr);
 	int			(*neigh_setup)(struct net_device *dev, struct neigh_parms *);
 	int			(*accept_fastpath)(struct net_device *, struct dst_entry*);
+
+	/* bridge stuff */
+	struct net_bridge_port	*br_port;
 
 #ifdef CONFIG_NET_FASTROUTE
 #define NETDEV_FASTROUTE_HMASK 0xF
@@ -526,6 +526,7 @@ extern __inline__ void dev_kfree_skb_any(struct sk_buff *skb)
 		dev_kfree_skb(skb);
 }
 
+extern void		net_call_rx_atomic(void (*fn)(void));
 #define HAVE_NETIF_RX 1
 extern void		netif_rx(struct sk_buff *skb);
 extern int		dev_ioctl(unsigned int cmd, void *);

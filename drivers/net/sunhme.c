@@ -1,4 +1,4 @@
-/* $Id: sunhme.c,v 1.91 2000/02/17 18:29:02 davem Exp $
+/* $Id: sunhme.c,v 1.92 2000/02/18 13:49:22 davem Exp $
  * sunhme.c: Sparc HME/BigMac 10/100baseT half/full duplex auto switching,
  *           auto carrier detecting ethernet driver.  Also known as the
  *           "Happy Meal Ethernet" found on SunSwift SBUS cards.
@@ -228,12 +228,12 @@ static u32 pci_hme_read_desc32(u32 *p)
 	((__hp)->write_txd((__txd), (__flags), (__addr)))
 #define hme_read_desc32(__hp, __p) \
 	((__hp)->read_desc32(__p))
-#define hme_dma_map(__hp, __ptr, __size) \
-	((__hp)->dma_map((__hp)->happy_dev, (__ptr), (__size)))
-#define hme_dma_unmap(__hp, __addr, __size) \
-	((__hp)->dma_unmap((__hp)->happy_dev, (__addr), (__size)))
-#define hme_dma_sync(__hp, __addr, __size) \
-	((__hp)->dma_sync((__hp)->happy_dev, (__addr), (__size)))
+#define hme_dma_map(__hp, __ptr, __size, __dir) \
+	((__hp)->dma_map((__hp)->happy_dev, (__ptr), (__size), (__dir)))
+#define hme_dma_unmap(__hp, __addr, __size, __dir) \
+	((__hp)->dma_unmap((__hp)->happy_dev, (__addr), (__size), (__dir)))
+#define hme_dma_sync(__hp, __addr, __size, __dir) \
+	((__hp)->dma_sync((__hp)->happy_dev, (__addr), (__size), (__dir)))
 #else
 #ifdef CONFIG_SBUS
 /* SBUS only compilation */
@@ -252,12 +252,12 @@ do {	(__txd)->tx_addr = (__addr); \
 	(__txd)->tx_flags = (__flags); \
 } while(0)
 #define hme_read_desc32(__hp, __p)	(*(__p))
-#define hme_dma_map(__hp, __ptr, __size) \
-	sbus_map_single((__hp)->happy_dev, (__ptr), (__size))
+#define hme_dma_map(__hp, __ptr, __size, __dir) \
+	sbus_map_single((__hp)->happy_dev, (__ptr), (__size), (__dir))
 #define hme_dma_unmap(__hp, __addr, __size) \
-	sbus_unmap_single((__hp)->happy_dev, (__addr), (__size))
-#define hme_dma_sync(__hp, __addr, __size) \
-	sbus_dma_sync_single((__hp)->happy_dev, (__addr), (__size))
+	sbus_unmap_single((__hp)->happy_dev, (__addr), (__size), (__dir))
+#define hme_dma_sync(__hp, __addr, __size, __dir) \
+	sbus_dma_sync_single((__hp)->happy_dev, (__addr), (__size), (__dir))
 #else
 /* PCI only compilation */
 #define hme_write32(__hp, __reg, __val) \
@@ -275,14 +275,18 @@ do {	(__txd)->tx_addr = cpu_to_le32(__addr); \
 	(__txd)->tx_flags = cpu_to_le32(__flags); \
 } while(0)
 #define hme_read_desc32(__hp, __p)	cpu_to_le32p(__p)
-#define hme_dma_map(__hp, __ptr, __size) \
-	pci_map_single((__hp)->happy_dev, (__ptr), (__size))
-#define hme_dma_unmap(__hp, __addr, __size) \
-	pci_unmap_single((__hp)->happy_dev, (__addr), (__size))
-#define hme_dma_sync(__hp, __addr, __size) \
-	pci_dma_sync_single((__hp)->happy_dev, (__addr), (__size))
+#define hme_dma_map(__hp, __ptr, __size, __dir) \
+	pci_map_single((__hp)->happy_dev, (__ptr), (__size), (__dir))
+#define hme_dma_unmap(__hp, __addr, __size, __dir) \
+	pci_unmap_single((__hp)->happy_dev, (__addr), (__size), (__dir))
+#define hme_dma_sync(__hp, __addr, __size, __dir) \
+	pci_dma_sync_single((__hp)->happy_dev, (__addr), (__size), (__dir))
 #endif
 #endif
+
+#define DMA_BIDIRECTIONAL	SBUS_DMA_BIDIRECTIONAL
+#define DMA_FROMDEVICE		SBUS_DMA_FROMDEVICE
+#define DMA_TODEVICE		SBUS_DMA_TODEVICE
 
 /* Oh yes, the MIF BitBang is mighty fun to program.  BitBucket is more like it. */
 static void BB_PUT_BIT(struct happy_meal *hp, unsigned long tregs, int bit)
@@ -1208,7 +1212,7 @@ static void happy_meal_clean_rings(struct happy_meal *hp)
 
 			rxd = &hp->happy_block->happy_meal_rxd[i];
 			dma_addr = hme_read_desc32(hp, &rxd->rx_addr);
-			hme_dma_unmap(hp, dma_addr, RX_BUF_ALLOC_SIZE);
+			hme_dma_unmap(hp, dma_addr, RX_BUF_ALLOC_SIZE, DMA_FROMDEVICE);
 			dev_kfree_skb_any(skb);
 			hp->rx_skbs[i] = NULL;
 		}
@@ -1222,7 +1226,7 @@ static void happy_meal_clean_rings(struct happy_meal *hp)
 
 			txd = &hp->happy_block->happy_meal_txd[i];
 			dma_addr = hme_read_desc32(hp, &txd->tx_addr);
-			hme_dma_unmap(hp, dma_addr, skb->len);
+			hme_dma_unmap(hp, dma_addr, skb->len, DMA_TODEVICE);
 			dev_kfree_skb_any(skb);
 			hp->tx_skbs[i] = NULL;
 		}
@@ -1262,7 +1266,7 @@ static void happy_meal_init_rings(struct happy_meal *hp, int from_irq)
 		skb_put(skb, (ETH_FRAME_LEN + RX_OFFSET));
 		hme_write_rxd(hp, &hb->happy_meal_rxd[i],
 			      (RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16)),
-			      hme_dma_map(hp, skb->data, RX_BUF_ALLOC_SIZE));
+			      hme_dma_map(hp, skb->data, RX_BUF_ALLOC_SIZE, DMA_FROMDEVICE));
 		skb_reserve(skb, RX_OFFSET);
 	}
 
@@ -1904,7 +1908,7 @@ static void happy_meal_tx(struct happy_meal *hp)
 			break;
 		dma_addr = hme_read_desc32(hp, &this->tx_addr);
 		skb = hp->tx_skbs[elem];
-		hme_dma_unmap(hp, dma_addr, skb->len);
+		hme_dma_unmap(hp, dma_addr, skb->len, DMA_TODEVICE);
 		hp->tx_skbs[elem] = NULL;
 		hp->net_stats.tx_bytes += skb->len;
 
@@ -1982,13 +1986,13 @@ static void happy_meal_rx(struct happy_meal *hp, struct net_device *dev)
 				drops++;
 				goto drop_it;
 			}
-			hme_dma_unmap(hp, dma_addr, RX_BUF_ALLOC_SIZE);
+			hme_dma_unmap(hp, dma_addr, RX_BUF_ALLOC_SIZE, DMA_FROMDEVICE);
 			hp->rx_skbs[elem] = new_skb;
 			new_skb->dev = dev;
 			skb_put(new_skb, (ETH_FRAME_LEN + RX_OFFSET));
 			hme_write_rxd(hp, this,
 				      (RXFLAG_OWN|((RX_BUF_ALLOC_SIZE-RX_OFFSET)<<16)),
-				      hme_dma_map(hp, new_skb->data, RX_BUF_ALLOC_SIZE));
+				      hme_dma_map(hp, new_skb->data, RX_BUF_ALLOC_SIZE, DMA_FROMDEVICE));
 			skb_reserve(new_skb, RX_OFFSET);
 
 			/* Trim the original skb for the netif. */
@@ -2004,7 +2008,7 @@ static void happy_meal_rx(struct happy_meal *hp, struct net_device *dev)
 			copy_skb->dev = dev;
 			skb_reserve(copy_skb, 2);
 			skb_put(copy_skb, len);
-			hme_dma_sync(hp, dma_addr, len);
+			hme_dma_sync(hp, dma_addr, len, DMA_FROMDEVICE);
 			memcpy(copy_skb->data, skb->data, len);
 
 			/* Reuse original ring buffer. */
@@ -2187,7 +2191,7 @@ static int happy_meal_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	u32 mapping;
 
 	len = skb->len;
-	mapping = hme_dma_map(hp, skb->data, len);
+	mapping = hme_dma_map(hp, skb->data, len, DMA_TODEVICE);
 
 	spin_lock_irq(&hp->happy_lock);
 
@@ -2652,9 +2656,9 @@ static int __init happy_meal_sbus_init(struct net_device *dev,
 	hp->read_desc32 = sbus_hme_read_desc32;
 	hp->write_txd = sbus_hme_write_txd;
 	hp->write_rxd = sbus_hme_write_rxd;
-	hp->dma_map = (u32 (*)(void *, void *, long))sbus_map_single;
-	hp->dma_unmap = (void (*)(void *, u32, long))sbus_unmap_single;
-	hp->dma_sync = (void (*)(void *, u32, long))sbus_dma_sync_single;
+	hp->dma_map = (u32 (*)(void *, void *, long, int))sbus_map_single;
+	hp->dma_unmap = (void (*)(void *, u32, long, int))sbus_unmap_single;
+	hp->dma_sync = (void (*)(void *, u32, long, int))sbus_dma_sync_single;
 	hp->read32 = sbus_hme_read32;
 	hp->write32 = sbus_hme_write32;
 #endif
@@ -2827,9 +2831,9 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 	hp->read_desc32 = pci_hme_read_desc32;
 	hp->write_txd = pci_hme_write_txd;
 	hp->write_rxd = pci_hme_write_rxd;
-	hp->dma_map = (u32 (*)(void *, void *, long))pci_map_single;
-	hp->dma_unmap = (void (*)(void *, u32, long))pci_unmap_single;
-	hp->dma_sync = (void (*)(void *, u32, long))pci_dma_sync_single;
+	hp->dma_map = (u32 (*)(void *, void *, long, int))pci_map_single;
+	hp->dma_unmap = (void (*)(void *, u32, long, int))pci_unmap_single;
+	hp->dma_sync = (void (*)(void *, u32, long, int))pci_dma_sync_single;
 	hp->read32 = pci_hme_read32;
 	hp->write32 = pci_hme_write32;
 #endif

@@ -1196,7 +1196,7 @@ static void rtl8139_tx_timeout (struct net_device *dev)
 			tp->stats.tx_dropped++;
 		}
 		if (rp->mapping != 0) {
-			pci_unmap_single (tp->pci_dev, rp->mapping, rp->skb->len);
+			pci_unmap_single (tp->pci_dev, rp->mapping, rp->skb->len, PCI_DMA_TODEVICE);
 			rp->mapping = 0;
 		}
 	}
@@ -1252,7 +1252,7 @@ static int rtl8139_start_xmit (struct sk_buff *skb, struct net_device *dev)
 		RTL_W32 (TxAddr0 + entry * 4, tp->tx_bufs_dma + (tp->tx_buf[entry] - tp->tx_bufs));
 	} else {
 		tp->tx_info[entry].mapping =
-			pci_map_single(tp->pci_dev, skb->data, skb->len);
+			pci_map_single(tp->pci_dev, skb->data, skb->len, PCI_DMA_TODEVICE);
 
 		assert (tp->tx_info[entry].mapping > 0);
 		RTL_W32 (TxAddr0 + entry * 4, tp->tx_info[entry].mapping);
@@ -1328,7 +1328,8 @@ static inline void rtl8139_tx_interrupt (struct net_device *dev,
 		if (tp->tx_info[entry].mapping != 0) {
 			pci_unmap_single (tp->pci_dev,
 					  tp->tx_info[entry].mapping,
-					  tp->tx_info[entry].skb->len);
+					  tp->tx_info[entry].skb->len,
+					  PCI_DMA_TODEVICE);
 			tp->tx_info[entry].mapping = 0;
 		}
 		/* Free the original skb. */
@@ -1669,7 +1670,7 @@ static int rtl8139_close (struct net_device *dev)
 
 		if (skb) {
 			if (mapping)
-				pci_unmap_single (tp->pci_dev, mapping, skb->len);
+				pci_unmap_single (tp->pci_dev, mapping, skb->len, PCI_DMA_TODEVICE);
 			dev_kfree_skb (skb);
 		}
 		tp->tx_info[i].skb = NULL;

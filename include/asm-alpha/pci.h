@@ -76,7 +76,7 @@ extern void pci_free_consistent(struct pci_dev *, long, void *, dma_addr_t);
    Once the device is given the dma address, the device owns this memory
    until either pci_unmap_single or pci_dma_sync_single is performed.  */
 
-extern dma_addr_t pci_map_single(struct pci_dev *, void *, long);
+extern dma_addr_t pci_map_single(struct pci_dev *, void *, long, int);
 
 /* Unmap a single streaming mode DMA translation.  The DMA_ADDR and
    SIZE must match what was provided for in a previous pci_map_single
@@ -84,7 +84,7 @@ extern dma_addr_t pci_map_single(struct pci_dev *, void *, long);
    the cpu to the buffer are guarenteed to see whatever the device
    wrote there.  */
 
-extern void pci_unmap_single(struct pci_dev *, dma_addr_t, long);
+extern void pci_unmap_single(struct pci_dev *, dma_addr_t, long, int);
 
 /* Map a set of buffers described by scatterlist in streaming mode for
    PCI DMA.  This is the scather-gather version of the above
@@ -100,13 +100,13 @@ extern void pci_unmap_single(struct pci_dev *, dma_addr_t, long);
    Device ownership issues as mentioned above for pci_map_single are
    the same here.  */
 
-extern int pci_map_sg(struct pci_dev *, struct scatterlist *, int);
+extern int pci_map_sg(struct pci_dev *, struct scatterlist *, int, int);
 
 /* Unmap a set of streaming mode DMA translations.  Again, cpu read
    rules concerning calls here are the same as for pci_unmap_single()
    above.  */
 
-extern void pci_unmap_sg(struct pci_dev *, struct scatterlist *, int);
+extern void pci_unmap_sg(struct pci_dev *, struct scatterlist *, int, int);
 
 /* Make physical memory consistant for a single streaming mode DMA
    translation after a transfer.
@@ -118,7 +118,7 @@ extern void pci_unmap_sg(struct pci_dev *, struct scatterlist *, int);
    again owns the buffer.  */
 
 extern inline void
-pci_dma_sync_single(struct pci_dev *dev, dma_addr_t dma_addr, long size)
+pci_dma_sync_single(struct pci_dev *dev, dma_addr_t dma_addr, long size, int direction)
 {
 	/* Nothing to do.  */
 }
@@ -128,9 +128,19 @@ pci_dma_sync_single(struct pci_dev *dev, dma_addr_t dma_addr, long size)
    for a scatter-gather list, same rules and usage.  */
 
 extern inline void
-pci_dma_sync_sg(struct pci_dev *dev, struct scatterlist *sg, int nents)
+pci_dma_sync_sg(struct pci_dev *dev, struct scatterlist *sg, int nents, int direction)
 {
 	/* Nothing to do.  */
+}
+
+/* Return whether the given PCI device DMA address mask can
+ * be supported properly.  For example, if your device can
+ * only drive the low 24-bits during PCI bus mastering, then
+ * you would pass 0x00ffffff as the mask to this function.
+ */
+extern inline int pci_dma_supported(struct pci_dev *hwdev, dma_addr_t mask)
+{
+	return 1;
 }
 
 #endif /* __ALPHA_PCI_H */

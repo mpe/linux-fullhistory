@@ -400,6 +400,7 @@ modules_install:
 	if [ -f FC4_MODULES   ]; then inst_mod FC4_MODULES   fc4;   fi; \
 	if [ -f IRDA_MODULES  ]; then inst_mod IRDA_MODULES  net;   fi; \
 	if [ -f SK98LIN_MODULES ]; then inst_mod SK98LIN_MODULES  net;   fi; \
+	if [ -f SKFP_MODULES ]; then inst_mod SKFP_MODULES   net;   fi; \
 	if [ -f USB_MODULES   ]; then inst_mod USB_MODULES   usb;   fi; \
 	if [ -f IEEE1394_MODULES ]; then inst_mod IEEE1394_MODULES ieee1394; fi; \
 	if [ -f PCMCIA_MODULES ]; then inst_mod PCMCIA_MODULES pcmcia; fi; \

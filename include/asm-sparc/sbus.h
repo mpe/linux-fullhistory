@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.21 2000/01/28 13:43:11 jj Exp $
+/* $Id: sbus.h,v 1.22 2000/02/18 13:50:50 davem Exp $
  * sbus.h:  Defines for the Sun SBus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -97,22 +97,27 @@ sbus_is_slave(struct sbus_dev *dev)
 	for((bus) = sbus_root, ((device) = (bus) ? (bus)->devices : 0); (bus); (device)=((device)->next ? (device)->next : ((bus) = (bus)->next, (bus) ? (bus)->devices : 0)))
 
 /* Driver DVMA interfaces. */
-#define sbus_can_dma_64bit(sdev)	(1)
-#define sbus_can_burst64(sdev)		(1)
+#define sbus_can_dma_64bit(sdev)	(0) /* actually, sparc_cpu_model==sun4d */
+#define sbus_can_burst64(sdev)		(0) /* actually, sparc_cpu_model==sun4d */
 extern void sbus_set_sbus64(struct sbus_dev *, int);
 
 /* These yield IOMMU mappings in consistent mode. */
 extern void *sbus_alloc_consistent(struct sbus_dev *, long, u32 *dma_addrp);
 extern void sbus_free_consistent(struct sbus_dev *, long, void *, u32);
 
+#define SBUS_DMA_BIDIRECTIONAL	0
+#define SBUS_DMA_TODEVICE	1
+#define SBUS_DMA_FROMDEVICE	2
+#define	SBUS_DMA_NONE		3
+
 /* All the rest use streaming mode mappings. */
-extern u32 sbus_map_single(struct sbus_dev *, void *, long);
-extern void sbus_unmap_single(struct sbus_dev *, u32, long);
-extern int sbus_map_sg(struct sbus_dev *, struct scatterlist *, int);
-extern void sbus_unmap_sg(struct sbus_dev *, struct scatterlist *, int);
+extern u32 sbus_map_single(struct sbus_dev *, void *, long, int);
+extern void sbus_unmap_single(struct sbus_dev *, u32, long, int);
+extern int sbus_map_sg(struct sbus_dev *, struct scatterlist *, int, int);
+extern void sbus_unmap_sg(struct sbus_dev *, struct scatterlist *, int, int);
 
 /* Finally, allow explicit synchronization of streamable mappings. */
-extern void sbus_dma_sync_single(struct sbus_dev *, u32, long);
-extern void sbus_dma_sync_sg(struct sbus_dev *, struct scatterlist *, int);
+extern void sbus_dma_sync_single(struct sbus_dev *, u32, long, int);
+extern void sbus_dma_sync_sg(struct sbus_dev *, struct scatterlist *, int, int);
 
 #endif /* !(_SPARC_SBUS_H) */

@@ -697,7 +697,7 @@ static int sd_init_onedisk(int i)
 			SCpnt->cmd_len = 0;
 			SCpnt->sense_buffer[0] = 0;
 			SCpnt->sense_buffer[2] = 0;
-			SCpnt->sc_data_direction = SCSI_DATA_NONE;
+			SCpnt->sc_data_direction = SCSI_DATA_READ;
 
 			scsi_wait_cmd (SCpnt, (void *) cmd, (void *) buffer,
 				0/*512*/, SD_TIMEOUT, MAX_RETRIES);
@@ -741,7 +741,7 @@ static int sd_init_onedisk(int i)
 				SCpnt->sense_buffer[0] = 0;
 				SCpnt->sense_buffer[2] = 0;
 
-				SCpnt->sc_data_direction = SCSI_DATA_NONE;
+				SCpnt->sc_data_direction = SCSI_DATA_READ;
 				scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
 					    0/*512*/, SD_TIMEOUT, MAX_RETRIES);
 			}

@@ -1,4 +1,4 @@
-/* $Id: floppy.h,v 1.27 2000/02/15 02:58:40 davem Exp $
+/* $Id: floppy.h,v 1.28 2000/02/18 13:50:54 davem Exp $
  * asm-sparc64/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -273,7 +273,7 @@ static struct linux_ebus_dma *sun_pci_fd_ebus_dma;
 static struct pci_dev *sun_pci_ebus_dev;
 static int sun_pci_broken_drive = -1;
 static unsigned int sun_pci_dma_addr = -1U;
-static int sun_pci_dma_len;
+static int sun_pci_dma_len, sun_pci_dma_direction;
 
 extern void floppy_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
@@ -369,7 +369,8 @@ static void sun_pci_fd_disable_dma(void)
 	if (sun_pci_dma_addr != -1U)
 		pci_unmap_single(sun_pci_ebus_dev,
 				 sun_pci_dma_addr,
-				 sun_pci_dma_len);
+				 sun_pci_dma_len,
+				 sun_pci_dma_direction);
 	sun_pci_dma_addr = -1U;
 }
 
@@ -388,10 +389,13 @@ static void sun_pci_fd_set_dma_mode(int mode)
 	 * For EBus WRITE means to system memory, which is
 	 * READ for us.
 	 */
-	if (mode == DMA_MODE_WRITE)
+	if (mode == DMA_MODE_WRITE) {
 		dcsr &= ~(EBUS_DCSR_WRITE);
-	else
+		sun_pci_dma_direction = PCI_DMA_TODEVICE;
+	} else {
 		dcsr |= EBUS_DCSR_WRITE;
+		sun_pci_dma_direction = PCI_DMA_FROMDEVICE;
+	}
 	writel(dcsr, &sun_pci_fd_ebus_dma->dcsr);
 }
 
@@ -407,7 +411,8 @@ static void sun_pci_fd_set_dma_addr(char *buffer)
 
 	addr = sun_pci_dma_addr = pci_map_single(sun_pci_ebus_dev,
 						 buffer,
-						 sun_pci_dma_len);
+						 sun_pci_dma_len,
+						 sun_pci_dma_direction);
 	writel(addr, &sun_pci_fd_ebus_dma->dacr);
 }
 

@@ -4,7 +4,7 @@
  *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>
  *			Florian La Roche <rzsfl@rz.uni-sb.de>
  *
- *	Version:	$Id: skbuff.c,v 1.67 2000/02/11 22:27:23 davem Exp $
+ *	Version:	$Id: skbuff.c,v 1.68 2000/02/18 16:47:18 davem Exp $
  *
  *	Fixes:	
  *		Alan Cox	:	Fixed the worst of the load balancer bugs.
@@ -194,7 +194,6 @@ static inline void skb_headerinit(void *p, kmem_cache_t *cache,
 
 	skb->destructor = NULL;
 	skb->pkt_type = PACKET_HOST;	/* Default type */
-	skb->pkt_bridged = 0;		/* Not bridged */
 	skb->prev = skb->next = NULL;
 	skb->list = NULL;
 	skb->sk = NULL;

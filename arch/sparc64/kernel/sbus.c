@@ -1,4 +1,4 @@
-/* $Id: sbus.c,v 1.8 2000/02/16 07:31:34 davem Exp $
+/* $Id: sbus.c,v 1.9 2000/02/18 13:48:57 davem Exp $
  * sbus.c: UltraSparc SBUS controller support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -308,12 +308,16 @@ void sbus_free_consistent(struct sbus_dev *sdev, size_t size, void *cpu, dma_add
 		free_pages((unsigned long)cpu, order);
 }
 
-dma_addr_t sbus_map_single(struct sbus_dev *sdev, void *ptr, size_t size)
+dma_addr_t sbus_map_single(struct sbus_dev *sdev, void *ptr, size_t size, int dir)
 {
 	struct sbus_iommu *iommu = sdev->bus->iommu;
 	unsigned long npages, phys_base, flags;
 	iopte_t *iopte;
 	u32 dma_base, offset;
+	unsigned long iopte_bits;
+
+	if (dir == SBUS_DMA_NONE)
+		BUG();
 
 	phys_base = (unsigned long) ptr;
 	offset = (u32) (phys_base & ~PAGE_MASK);
@@ -325,10 +329,11 @@ dma_addr_t sbus_map_single(struct sbus_dev *sdev, void *ptr, size_t size)
 	iopte = alloc_streaming_cluster(iommu, npages);
 	dma_base = MAP_BASE + ((iopte - iommu->page_table) << PAGE_SHIFT);
 	npages = size >> PAGE_SHIFT;
+	iopte_bits = IOPTE_VALID | IOPTE_STBUF | IOPTE_CACHE;
+	if (dir != SBUS_DMA_TODEVICE)
+		iopte_bits |= IOPTE_WRITE;
 	while (npages--) {
-		*iopte++ = __iopte(IOPTE_VALID | IOPTE_STBUF |
-				   IOPTE_CACHE | IOPTE_WRITE |
-				   (phys_base & IOPTE_PAGE));
+		*iopte++ = __iopte(iopte_bits | (phys_base & IOPTE_PAGE));
 		phys_base += PAGE_SIZE;
 	}
 	npages = size >> PAGE_SHIFT;
@@ -338,7 +343,7 @@ dma_addr_t sbus_map_single(struct sbus_dev *sdev, void *ptr, size_t size)
 	return (dma_base | offset);
 }
 
-void sbus_unmap_single(struct sbus_dev *sdev, dma_addr_t dma_addr, size_t size)
+void sbus_unmap_single(struct sbus_dev *sdev, dma_addr_t dma_addr, size_t size, int direction)
 {
 	struct sbus_iommu *iommu = sdev->bus->iommu;
 	u32 dma_base = dma_addr & PAGE_MASK;
@@ -352,7 +357,7 @@ void sbus_unmap_single(struct sbus_dev *sdev, dma_addr_t dma_addr, size_t size)
 	spin_unlock_irqrestore(&iommu->lock, flags);
 }
 
-static inline void fill_sg(iopte_t *iopte, struct scatterlist *sg, int nused)
+static inline void fill_sg(iopte_t *iopte, struct scatterlist *sg, int nused, unsigned long iopte_bits)
 {
 	struct scatterlist *dma_sg = sg;
 	int i;
@@ -392,9 +397,7 @@ static inline void fill_sg(iopte_t *iopte, struct scatterlist *sg, int nused)
 				sg++;
 			}
 
-			pteval = ((pteval & IOPTE_PAGE) |
-				  IOPTE_VALID | IOPTE_STBUF |
-				  IOPTE_CACHE | IOPTE_WRITE);
+			pteval = ((pteval & IOPTE_PAGE) | iopte_bits);
 			while (len > 0) {
 				*iopte++ = __iopte(pteval);
 				pteval += PAGE_SIZE;
@@ -424,7 +427,7 @@ static inline void fill_sg(iopte_t *iopte, struct scatterlist *sg, int nused)
 	}
 }
 
-int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
+int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents, int dir)
 {
 	struct sbus_iommu *iommu = sdev->bus->iommu;
 	unsigned long flags, npages;
@@ -432,10 +435,14 @@ int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
 	u32 dma_base;
 	struct scatterlist *sgtmp;
 	int used;
+	unsigned long iopte_bits;
+
+	if (dir == SBUS_DMA_NONE)
+		BUG();
 
 	/* Fast path single entry scatterlists. */
 	if (nents == 1) {
-		sg->dvma_address = sbus_map_single(sdev, sg->address, sg->length);
+		sg->dvma_address = sbus_map_single(sdev, sg->address, sg->length, dir);
 		sg->dvma_length = sg->length;
 		return 1;
 	}
@@ -457,7 +464,11 @@ int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
 	}
 	used = nents - used;
 
-	fill_sg(iopte, sg, used);
+	iopte_bits = IOPTE_VALID | IOPTE_STBUF | IOPTE_CACHE;
+	if (dir != SBUS_DMA_TODEVICE)
+		iopte_bits |= IOPTE_WRITE;
+
+	fill_sg(iopte, sg, used, iopte_bits);
 #ifdef VERIFY_SG
 	verify_sglist(sg, nents, iopte, npages);
 #endif
@@ -467,7 +478,7 @@ int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
 	return used;
 }
 
-void sbus_unmap_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
+void sbus_unmap_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents, int direction)
 {
 	unsigned long size, flags;
 	struct sbus_iommu *iommu;
@@ -476,7 +487,7 @@ void sbus_unmap_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
 
 	/* Fast path single entry scatterlists. */
 	if (nents == 1) {
-		sbus_unmap_single(sdev, sg->dvma_address, sg->dvma_length);
+		sbus_unmap_single(sdev, sg->dvma_address, sg->dvma_length, direction);
 		return;
 	}
 
@@ -495,7 +506,7 @@ void sbus_unmap_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
 	spin_unlock_irqrestore(&iommu->lock, flags);
 }
 
-void sbus_dma_sync_single(struct sbus_dev *sdev, dma_addr_t base, size_t size)
+void sbus_dma_sync_single(struct sbus_dev *sdev, dma_addr_t base, size_t size, int direction)
 {
 	struct sbus_iommu *iommu = sdev->bus->iommu;
 	unsigned long flags;
@@ -507,7 +518,7 @@ void sbus_dma_sync_single(struct sbus_dev *sdev, dma_addr_t base, size_t size)
 	spin_unlock_irqrestore(&iommu->lock, flags);
 }
 
-void sbus_dma_sync_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents)
+void sbus_dma_sync_sg(struct sbus_dev *sdev, struct scatterlist *sg, int nents, int direction)
 {
 	struct sbus_iommu *iommu = sdev->bus->iommu;
 	unsigned long flags, size;

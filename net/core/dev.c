@@ -81,7 +81,7 @@
 #include <net/slhc.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
-#include <net/br.h>
+#include <linux/if_bridge.h>
 #include <net/dst.h>
 #include <net/pkt_sched.h>
 #include <net/profile.h>
@@ -833,37 +833,6 @@ drop:
 	kfree_skb(skb);
 }
 
-#ifdef CONFIG_BRIDGE
-static inline void handle_bridge(struct sk_buff *skb, unsigned short type)
-{
-	/* 
-	 * The br_stats.flags is checked here to save the expense of a 
-	 * function call.
-	 */
-	if ((br_stats.flags & BR_UP) && br_call_bridge(skb, type))
-	{
-		/*
-		 *	We pass the bridge a complete frame. This means
-		 *	recovering the MAC header first.
-		 */
-		
-		int offset;
-
-		skb=skb_clone(skb, GFP_ATOMIC);
-		if (skb == NULL)		
-			return;
-			
-		offset=skb->data-skb->mac.raw;
-		skb_push(skb,offset);	/* Put header back on for bridge */
-
-		if (br_receive_frame(skb))
-			return;
-		kfree_skb(skb);
-	}
-	return;
-}
-#endif
-
 /* Deliver skb to an old protocol, which is not threaded well
    or which do not understand shared skbs.
  */
@@ -953,6 +922,32 @@ static void net_tx_action(struct softirq_action *h)
 	}
 }
 
+void net_call_rx_atomic(void (*fn)(void))
+{
+	write_lock_bh(&ptype_lock);
+	fn();
+	write_unlock_bh(&ptype_lock);
+}
+
+#if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
+void (*br_handle_frame_hook)(struct sk_buff *skb) = NULL;
+#endif
+
+#define HANDLE_BRIDGE(SKB, PT_PREV)					\
+do {									\
+	if ((SKB)->dev->br_port != NULL &&				\
+	    br_handle_frame_hook != NULL) {				\
+		if (PT_PREV)						\
+			if (!(PT_PREV->data))				\
+				deliver_to_old_ones(PT_PREV, SKB, 1);	\
+			else						\
+				pt_prev->func(SKB, SKB->dev, PT_PREV);	\
+									\
+		br_handle_frame_hook(SKB);				\
+		continue;						\
+	}								\
+} while(0)
+
 static void net_rx_action(struct softirq_action *h)
 {
 	int this_cpu = smp_processor_id();
@@ -985,9 +980,7 @@ static void net_rx_action(struct softirq_action *h)
 		{
 			struct packet_type *ptype, *pt_prev;
 			unsigned short type = skb->protocol;
-#ifdef CONFIG_BRIDGE
-			handle_bridge(skb, type);
-#endif
+
 			pt_prev = NULL;
 			for (ptype = ptype_all; ptype; ptype = ptype->next) {
 				if (!ptype->dev || ptype->dev == skb->dev) {
@@ -1004,6 +997,11 @@ static void net_rx_action(struct softirq_action *h)
 					pt_prev = ptype;
 				}
 			}
+
+#if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
+			HANDLE_BRIDGE(skb, pt_prev);
+#endif
+
 			for (ptype=ptype_base[ntohs(type)&15];ptype;ptype=ptype->next) {
 				if (ptype->type == type &&
 				    (!ptype->dev || ptype->dev == skb->dev)) {
@@ -1020,6 +1018,7 @@ static void net_rx_action(struct softirq_action *h)
 					pt_prev = ptype;
 				}
 			}
+
 			if (pt_prev) {
 				if (!pt_prev->data)
 					deliver_to_old_ones(pt_prev, skb, 1);
@@ -2071,15 +2070,6 @@ int __init net_dev_init(void)
 		queue->completion_queue = NULL;
 	}
 	
-	/*
-	 *	The bridge has to be up before the devices
-	 */
-
-#ifdef CONFIG_BRIDGE	 
-	br_init();
-#endif	
-	
-
 #ifdef CONFIG_NET_PROFILE
 	net_profile_init();
 	NET_PROFILE_REGISTER(dev_queue_xmit);
@@ -2146,13 +2136,6 @@ int __init net_dev_init(void)
 
 	dst_init();
 	dev_mcast_init();
-
-#ifdef CONFIG_BRIDGE
-	/*
-	 * Register any statically linked ethernet devices with the bridge
-	 */
-	br_spacedevice_register();
-#endif
 
 	/*
 	 *	Initialise network devices

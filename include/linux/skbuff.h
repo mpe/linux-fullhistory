@@ -96,7 +96,6 @@ struct sk_buff {
 	unsigned char	is_clone,		/* We are a clone				*/
 			cloned, 		/* head may be cloned (check refcnt to be sure). */
   			pkt_type,		/* Packet class					*/
-  			pkt_bridged,		/* Tracker for bridging 			*/
   			ip_summed;		/* Driver fed us an IP checksum			*/
 	__u32		priority;		/* Packet queueing priority			*/
 	atomic_t	users;			/* User count - see datagram.c,tcp.c 		*/

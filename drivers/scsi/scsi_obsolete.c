@@ -231,7 +231,7 @@ static void scsi_request_sense(Scsi_Cmnd * SCpnt)
 	SCpnt->use_sg = 0;
 	SCpnt->cmd_len = COMMAND_SIZE(SCpnt->cmnd[0]);
 	SCpnt->result = 0;
-	SCpnt->sc_data_direction = SCSI_DATA_NONE;
+	SCpnt->sc_data_direction = SCSI_DATA_READ;
 
         /*
          * Ugly, ugly.  The newer interfaces all assume that the lock

@@ -56,7 +56,7 @@ pci_free_consistent(struct pci_dev *hwdev, size_t size, void *vaddr,
  * until either pci_unmap_single or pci_dma_sync_single is performed.
  */
 extern inline dma_addr_t
-pci_map_single(struct pci_dev *hwdev, void *ptr, size_t size)
+pci_map_single(struct pci_dev *hwdev, void *ptr, size_t size, int direction)
 {
 	consistent_sync(ptr, size, 3);
 	return virt_to_bus(ptr);
@@ -70,7 +70,7 @@ pci_map_single(struct pci_dev *hwdev, void *ptr, size_t size)
  * whatever the device wrote there.
  */
 extern inline void
-pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size)
+pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size, int direction)
 {
 	/* nothing to do */
 }
@@ -91,7 +91,7 @@ pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size)
  * the same here.
  */
 extern inline int
-pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents)
+pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direction)
 {
 	int i;
 
@@ -106,7 +106,7 @@ pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents)
  * pci_unmap_single() above.
  */
 extern inline void
-pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents)
+pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direction)
 {
 	/* nothing to do */
 }
@@ -121,7 +121,7 @@ pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents)
  * device again owns the buffer.
  */
 extern inline void
-pci_dma_sync_single(struct pci_dev *hwdev, dma_addr_t dma_handle, size_t size)
+pci_dma_sync_single(struct pci_dev *hwdev, dma_addr_t dma_handle, size_t size, int direction)
 {
 	consistent_sync(bus_to_virt(dma_handle), size, 3);
 }
@@ -133,12 +133,22 @@ pci_dma_sync_single(struct pci_dev *hwdev, dma_addr_t dma_handle, size_t size)
  * same rules and usage.
  */
 extern inline void
-pci_dma_sync_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nelems)
+pci_dma_sync_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nelems, int direction)
 {
 	int i;
 
 	for (i = 0; i < nelems; i++, sg++)
 		consistent_sync(sg->address, sg->length, 3);
+}
+
+/* Return whether the given PCI device DMA address mask can
+ * be supported properly.  For example, if your device can
+ * only drive the low 24-bits during PCI bus mastering, then
+ * you would pass 0x00ffffff as the mask to this function.
+ */
+extern inline int pci_dma_supported(struct pci_dev *hwdev, dma_addr_t mask)
+{
+	return 1;
 }
 
 /* These macros should be used after a pci_map_sg call has been done

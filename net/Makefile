@@ -67,6 +67,10 @@ endif
 
 ifeq ($(CONFIG_BRIDGE),y)
 SUB_DIRS += bridge
+else
+  ifeq ($(CONFIG_BRIDGE),m)
+    MOD_SUB_DIRS += bridge
+  endif
 endif
 
 ifeq ($(CONFIG_IPX),y)

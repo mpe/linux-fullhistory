@@ -2899,11 +2899,12 @@ aic7xxx_done(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
     struct scatterlist *sg;
 
     sg = (struct scatterlist *)cmd->request_buffer;
-    pci_unmap_sg(p->pdev, sg, cmd->use_sg);
+    pci_unmap_sg(p->pdev, sg, cmd->use_sg, scsi_to_pci_dma_dir(cmd->sc_data_direction));
   }
   else if (cmd->request_bufflen)
     pci_unmap_single(p->pdev, le32_to_cpu(scb->sg_list[0].address),
-		     le32_to_cpu(scb->sg_list[0].length));
+		     le32_to_cpu(scb->sg_list[0].length),
+                     scsi_to_pci_dma_dir(cmd->sc_data_direction));
   if (scb->flags & SCB_RECOVERY_SCB)
   {
     p->flags &= ~AHC_ABORT_PENDING;
@@ -4887,7 +4888,8 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
                 }
 		scb->sg_list[0].address =
                         cpu_to_le32(pci_map_single(p->pdev, sense_buffer,
-                                                   sizeof(cmd->sense_buffer)));
+                                                   sizeof(cmd->sense_buffer),
+                                                   scsi_to_pci_dma_dir(cmd->sc_data_direction)));
                 hscb->data_pointer = scb->sg_list[0].address;
 
                 scb->flags |= SCB_SENSE;
@@ -10607,6 +10609,7 @@ aic7xxx_allocate_negotiation_command(struct aic7xxx_host *p,
   cmd->lun = 0;
   cmd->request_bufflen = 255;
   cmd->request_buffer = buffer;
+  cmd->sc_data_direction = SCSI_DATA_READ;
   cmd->use_sg = cmd->old_use_sg = cmd->sglist_len = 0;
   cmd->bufflen = 0;
   cmd->buffer = NULL;
@@ -10954,7 +10957,7 @@ aic7xxx_buildscb(struct aic7xxx_host *p, Scsi_Cmnd *cmd,
 
     sg = (struct scatterlist *)cmd->request_buffer;
     scb->sg_length = 0;
-    use_sg = pci_map_sg(p->pdev, sg, cmd->use_sg);
+    use_sg = pci_map_sg(p->pdev, sg, cmd->use_sg, scsi_to_pci_dma_dir(cmd->sc_data_direction));
     /*
      * Copy the segments into the SG array.  NOTE!!! - We used to
      * have the first entry both in the data_pointer area and the first
@@ -10981,7 +10984,8 @@ aic7xxx_buildscb(struct aic7xxx_host *p, Scsi_Cmnd *cmd,
     if (cmd->request_bufflen)
     {
       unsigned int address = pci_map_single(p->pdev, cmd->request_buffer,
-					    cmd->request_bufflen);
+					    cmd->request_bufflen,
+                                            scsi_to_pci_dma_dir(cmd->sc_data_direction));
       scb->sg_list[0].address = cpu_to_le32(address);
       scb->sg_list[0].length = cpu_to_le32(cmd->request_bufflen);
       scb->sg_count = 1;

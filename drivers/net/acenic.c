@@ -121,8 +121,8 @@ static inline void *pci_alloc_consistent(struct pci_dev *hwdev, size_t size,
 	return virt_ptr;
 }
 #define pci_free_consistent(cookie, size, ptr, dma_ptr)	kfree(ptr)
-#define pci_map_single(cookie, address, size)		virt_to_bus(address)
-#define pci_unmap_single(cookie, address, size)
+#define pci_map_single(cookie, address, size, dir)		virt_to_bus(address)
+#define pci_unmap_single(cookie, address, size, dir)
 #endif
 
 #if (LINUX_VERSION_CODE < 0x02032b)
@@ -632,7 +632,8 @@ void __exit ace_module_cleanup(void)
 				ap->rx_std_ring[i].size = 0;
 				ap->skb->rx_std_skbuff[i].skb = NULL;
 				pci_unmap_single(ap->pdev, mapping,
-						 ACE_STD_BUFSIZE - (2 + 16));
+						 ACE_STD_BUFSIZE - (2 + 16),
+						 PCI_DMA_FROMDEVICE);
 				dev_kfree_skb(skb);
 			}
 		}
@@ -647,7 +648,8 @@ void __exit ace_module_cleanup(void)
 					ap->rx_mini_ring[i].size = 0;
 					ap->skb->rx_mini_skbuff[i].skb = NULL;
 					pci_unmap_single(ap->pdev, mapping,
-							 ACE_MINI_BUFSIZE - (2 + 16));
+							 ACE_MINI_BUFSIZE - (2 + 16),
+							 PCI_DMA_FROMDEVICE);
 					dev_kfree_skb(skb);
 				}
 			}
@@ -662,7 +664,8 @@ void __exit ace_module_cleanup(void)
 				ap->rx_jumbo_ring[i].size = 0;
 				ap->skb->rx_jumbo_skbuff[i].skb = NULL;
 				pci_unmap_single(ap->pdev, mapping,
-						 ACE_JUMBO_BUFSIZE - (2 + 16));
+						 ACE_JUMBO_BUFSIZE - (2 + 16),
+						 PCI_DMA_FROMDEVICE);
 				dev_kfree_skb(skb);
 			}
 		}
@@ -1020,6 +1023,21 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 			}
 		}
 	}
+#ifdef __sparc__
+	/* On this platform, we know what the best dma settings
+	 * are.  We use 64-byte maximum bursts, because if we
+	 * burst larger than the cache line size (or even cross
+	 * a 64byte boundry in a single burst) the UltraSparc
+	 * PCI controller will disconnect at 64-byte multiples.
+	 *
+	 * Read-multiple will be properly enabled above, and when
+	 * set will give the PCI controller proper hints about
+	 * prefetching.
+	 */
+	tmp = (tmp & ~(0xfc));
+	tmp |= DMA_READ_MAX_64;
+	tmp |= DMA_WRITE_MAX_64;
+#endif
 	writel(tmp, &regs->PciState);
 
 	/*
@@ -1477,7 +1495,8 @@ static void ace_load_std_rx_ring(struct ace_private *ap, int nr_bufs)
 		 */
 		skb_reserve(skb, 2 + 16);
 		mapping = pci_map_single(ap->pdev, skb->data,
-					 ACE_STD_BUFSIZE - (2 + 16));
+					 ACE_STD_BUFSIZE - (2 + 16),
+					 PCI_DMA_FROMDEVICE);
 		ap->skb->rx_std_skbuff[idx].skb = skb;
 		ap->skb->rx_std_skbuff[idx].mapping = mapping;
 
@@ -1538,7 +1557,8 @@ static void ace_load_mini_rx_ring(struct ace_private *ap, int nr_bufs)
 		 */
 		skb_reserve(skb, 2 + 16);
 		mapping = pci_map_single(ap->pdev, skb->data,
-					 ACE_MINI_BUFSIZE - (2 + 16));
+					 ACE_MINI_BUFSIZE - (2 + 16),
+					 PCI_DMA_FROMDEVICE);
 		ap->skb->rx_mini_skbuff[idx].skb = skb;
 		ap->skb->rx_mini_skbuff[idx].mapping = mapping;
 
@@ -1596,7 +1616,8 @@ static void ace_load_jumbo_rx_ring(struct ace_private *ap, int nr_bufs)
 		 */
 		skb_reserve(skb, 2 + 16);
 		mapping = pci_map_single(ap->pdev, skb->data,
-					 ACE_JUMBO_BUFSIZE - (2 + 16));
+					 ACE_JUMBO_BUFSIZE - (2 + 16),
+					 PCI_DMA_FROMDEVICE);
 		ap->skb->rx_jumbo_skbuff[idx].skb = skb;
 		ap->skb->rx_jumbo_skbuff[idx].mapping = mapping;
 
@@ -1774,7 +1795,7 @@ static void ace_rx_int(struct net_device *dev, u32 rxretprd, u32 rxretcsm)
 
 		skb = rip->skb;
 		rip->skb = NULL;
-		pci_unmap_single(ap->pdev, rip->mapping, mapsize);
+		pci_unmap_single(ap->pdev, rip->mapping, mapsize, PCI_DMA_FROMDEVICE);
 		skb_put(skb, retdesc->size);
 #if 0
 		/* unncessary */
@@ -1881,7 +1902,7 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 
 			ap->stats.tx_packets++;
 			ap->stats.tx_bytes += skb->len;
-			pci_unmap_single(ap->pdev, mapping, skb->len);
+			pci_unmap_single(ap->pdev, mapping, skb->len, PCI_DMA_TODEVICE);
 			dev_kfree_skb_irq(skb);
 
 			ap->skb->tx_skbuff[idx].skb = NULL;
@@ -2122,7 +2143,7 @@ static int ace_close(struct net_device *dev)
 			writel(0, &ap->tx_ring[i].addr.addrhi);
 			writel(0, &ap->tx_ring[i].addr.addrlo);
 			writel(0, &ap->tx_ring[i].flagsize);
-			pci_unmap_single(ap->pdev, mapping, skb->len);
+			pci_unmap_single(ap->pdev, mapping, skb->len, PCI_DMA_TODEVICE);
 			dev_kfree_skb(skb);
 			ap->skb->tx_skbuff[i].skb = NULL;
 		}
@@ -2172,7 +2193,7 @@ static int ace_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	ap->skb->tx_skbuff[idx].skb = skb;
 	ap->skb->tx_skbuff[idx].mapping =
-		pci_map_single(ap->pdev, skb->data, skb->len);
+		pci_map_single(ap->pdev, skb->data, skb->len, PCI_DMA_TODEVICE);
 	addr = (unsigned long) ap->skb->tx_skbuff[idx].mapping;
 #if (BITS_PER_LONG == 64)
 	writel(addr >> 32, &ap->tx_ring[idx].addr.addrhi);

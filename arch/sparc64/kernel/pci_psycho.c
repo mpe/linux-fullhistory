@@ -1,4 +1,4 @@
-/* $Id: pci_psycho.c,v 1.12 2000/02/17 08:58:18 davem Exp $
+/* $Id: pci_psycho.c,v 1.13 2000/02/18 13:48:54 davem Exp $
  * pci_psycho.c: PSYCHO/U2P specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1264,6 +1264,7 @@ static void __init psycho_iommu_init(struct pci_controller_info *p)
 	p->iommu.page_table = (iopte_t *)tsbbase;
 	p->iommu.page_table_sz_bits = 17;
 	p->iommu.page_table_map_base = 0xc0000000;
+	p->iommu.dma_addr_mask = 0xffffffff;
 	memset((char *)tsbbase, 0, PAGE_SIZE << 7);
 
 	/* Make sure DMA address 0 is never returned just to allow catching

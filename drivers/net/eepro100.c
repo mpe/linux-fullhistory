@@ -1101,7 +1101,7 @@ speedo_init_rx_ring(struct net_device *dev)
 		rxf = (struct RxFD *)skb->tail;
 		sp->rx_ringp[i] = rxf;
 		sp->rx_ring_dma[i] =
-			pci_map_single(sp->pdev, rxf, PKT_BUF_SZ + sizeof(struct RxFD));
+			pci_map_single(sp->pdev, rxf, PKT_BUF_SZ + sizeof(struct RxFD), PCI_DMA_FROMDEVICE);
 		skb_reserve(skb, sizeof(struct RxFD));
 		if (last_rxf)
 			last_rxf->link = cpu_to_le32(sp->rx_ring_dma[i]);
@@ -1202,7 +1202,7 @@ speedo_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		sp->tx_ring[entry].count = cpu_to_le32(sp->tx_threshold);
 		sp->tx_ring[entry].tx_buf_addr0 =
 			cpu_to_le32(pci_map_single(sp->pdev, skb->data,
-						   skb->len));
+						   skb->len, PCI_DMA_TODEVICE));
 		sp->tx_ring[entry].tx_buf_size0 = cpu_to_le32(skb->len);
 		/* Todo: perhaps leave the interrupt bit set if the Tx queue is more
 		   than half full.  Argument against: we should be receiving packets
@@ -1300,14 +1300,15 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					sp->stats.tx_bytes += sp->tx_skbuff[entry]->len;
 					pci_unmap_single(sp->pdev,
 							 le32_to_cpu(sp->tx_ring[entry].tx_buf_addr0),
-							 sp->tx_skbuff[entry]->len);
+							 sp->tx_skbuff[entry]->len, PCI_DMA_TODEVICE);
 					dev_kfree_skb_irq(sp->tx_skbuff[entry]);
 					sp->tx_skbuff[entry] = 0;
 				} else if ((status & 0x70000) == CmdNOp) {
 					if (sp->mc_setup_busy)
 						pci_unmap_single(sp->pdev,
 								 sp->mc_setup_dma,
-								 sp->mc_setup_frm_len);
+								 sp->mc_setup_frm_len,
+								 PCI_DMA_TODEVICE);
 					sp->mc_setup_busy = 0;
 				}
 				dirty_tx++;
@@ -1392,7 +1393,7 @@ speedo_rx(struct net_device *dev)
 				skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
 				/* 'skb_put()' points to the start of sk_buff data area. */
 				pci_dma_sync_single(sp->pdev, sp->rx_ring_dma[entry],
-						    PKT_BUF_SZ + sizeof(struct RxFD));
+						    PKT_BUF_SZ + sizeof(struct RxFD), PCI_DMA_FROMDEVICE);
 #if 1 || USE_IP_CSUM
 				/* Packet is in one chunk -- we can copy + cksum. */
 				eth_copy_and_sum(skb, sp->rx_skbuff[entry]->tail, pkt_len, 0);
@@ -1414,7 +1415,7 @@ speedo_rx(struct net_device *dev)
 				temp = skb_put(skb, pkt_len);
 				sp->rx_ringp[entry] = NULL;
 				pci_unmap_single(sp->pdev, sp->rx_ring_dma[entry],
-						 PKT_BUF_SZ + sizeof(struct RxFD));
+						 PKT_BUF_SZ + sizeof(struct RxFD), PCI_DMA_FROMDEVICE);
 			}
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
@@ -1440,7 +1441,7 @@ speedo_rx(struct net_device *dev)
 			rxf = sp->rx_ringp[entry] = (struct RxFD *)skb->tail;
 			sp->rx_ring_dma[entry] =
 				pci_map_single(sp->pdev, rxf, PKT_BUF_SZ
-					       + sizeof(struct RxFD));
+					       + sizeof(struct RxFD), PCI_DMA_FROMDEVICE);
 			skb->dev = dev;
 			skb_reserve(skb, sizeof(struct RxFD));
 			rxf->rx_buf_addr = 0xffffffff;
@@ -1489,7 +1490,7 @@ speedo_close(struct net_device *dev)
 		if (skb) {
 			pci_unmap_single(sp->pdev,
 					 sp->rx_ring_dma[i],
-					 PKT_BUF_SZ + sizeof(struct RxFD));
+					 PKT_BUF_SZ + sizeof(struct RxFD), PCI_DMA_FROMDEVICE);
 			dev_kfree_skb(skb);
 		}
 	}
@@ -1502,7 +1503,7 @@ speedo_close(struct net_device *dev)
 		if (skb) {
 			pci_unmap_single(sp->pdev,
 							 le32_to_cpu(sp->tx_ring[i].tx_buf_addr0),
-							 skb->len);
+							 skb->len, PCI_DMA_TODEVICE);
 			dev_kfree_skb(skb);
 		}
 	}
@@ -1747,7 +1748,7 @@ static void set_rx_mode(struct net_device *dev)
 		/* Change the command to a NoOp, pointing to the CmdMulti command. */
 		sp->tx_skbuff[entry] = 0;
 		sp->tx_ring[entry].status = cpu_to_le32(CmdNOp);
-		sp->mc_setup_dma = pci_map_single(sp->pdev, mc_setup_frm, sp->mc_setup_frm_len);
+		sp->mc_setup_dma = pci_map_single(sp->pdev, mc_setup_frm, sp->mc_setup_frm_len, PCI_DMA_TODEVICE);
 		sp->tx_ring[entry].link = cpu_to_le32(sp->mc_setup_dma);
 
 		/* Set the link in the setup frame. */

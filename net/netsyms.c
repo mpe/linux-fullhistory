@@ -28,11 +28,8 @@
 #endif
 #include <net/pkt_sched.h>
 #include <net/scm.h>
+#include <linux/if_bridge.h>
 #include <linux/random.h>
-
-#ifdef CONFIG_BRIDGE
-#include <net/br.h>
-#endif
 
 #ifdef CONFIG_NET
 extern __u32 sysctl_wmem_max;
@@ -217,10 +214,9 @@ EXPORT_SYMBOL(sklist_insert_socket);
 
 EXPORT_SYMBOL(scm_detach_fds);
 
-#ifdef CONFIG_BRIDGE 
-EXPORT_SYMBOL(br_ioctl);
-EXPORT_SYMBOL(port_info);
-EXPORT_SYMBOL(br_avl_find_addr);
+#if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
+EXPORT_SYMBOL(br_handle_frame_hook);
+EXPORT_SYMBOL(br_ioctl_hook);
 #endif
 
 #ifdef CONFIG_INET
@@ -597,6 +593,7 @@ EXPORT_SYMBOL(nf_hooks);
 
 EXPORT_SYMBOL(register_gifconf);
 
+EXPORT_SYMBOL(net_call_rx_atomic);
 EXPORT_SYMBOL(softirq_state);
 EXPORT_SYMBOL(softnet_data);
 

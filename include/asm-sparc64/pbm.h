@@ -1,4 +1,4 @@
-/* $Id: pbm.h,v 1.19 1999/12/17 12:32:13 jj Exp $
+/* $Id: pbm.h,v 1.20 2000/02/18 13:50:55 davem Exp $
  * pbm.h: UltraSparc PCI controller software state.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -69,6 +69,18 @@ struct pci_iommu {
 	 * these counters.  You have been duly warned. -DaveM
 	 */
 	u16		lowest_free[PBM_NCLUSTERS];
+
+	/* Here a PCI controller driver describes the areas of
+	 * PCI memory space where DMA to/from physical memory
+	 * are addressed.  Drivers interrogate the PCI layer
+	 * if their device has addressing limitations.  They
+	 * do so via pci_dma_supported, and pass in a mask of
+	 * DMA address bits their device can actually drive.
+	 *
+	 * The test for being usable is:
+	 * 	(device_mask & dma_addr_mask) == dma_addr_mask
+	 */
+	u32 dma_addr_mask;
 };
 
 /* This describes a PCI bus module's streaming buffer. */

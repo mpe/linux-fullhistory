@@ -476,7 +476,7 @@ void dev_deactivate(struct net_device *dev)
 
 	dev_watchdog_down(dev);
 
-	if (test_bit(__LINK_STATE_SCHED, &dev->state)) {
+	while (test_bit(__LINK_STATE_SCHED, &dev->state)) {
 		current->policy |= SCHED_YIELD;
 		schedule();
 	}

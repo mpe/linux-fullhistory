@@ -17,7 +17,8 @@ obj-            :=
 SUB_DIRS     := 
 MOD_SUB_DIRS :=
 MOD_IN_SUB_DIRS :=
-ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan sk98lin arcnet
+ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan sk98lin \
+		arcnet skfp
 
 O_TARGET := net.o
 MOD_LIST_NAME := NET_MODULES
@@ -134,6 +135,15 @@ obj-y += sk98lin/sk98lin.o
 else
   ifeq ($(CONFIG_SK98LIN),m)
   MOD_IN_SUB_DIRS += sk98lin
+  endif
+endif
+
+ifeq ($(CONFIG_SKFP),y)
+  SUB_DIRS += skfp
+  obj-y += skfp/skfp.o
+else
+  ifeq ($(CONFIG_SKFP),m)
+    MOD_IN_SUB_DIRS += skfp
   endif
 endif
 

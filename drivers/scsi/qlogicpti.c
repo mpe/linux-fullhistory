@@ -1036,7 +1036,7 @@ static inline int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 		int sg_count;
 
 		sg = (struct scatterlist *) Cmnd->buffer;
-		sg_count = sbus_map_sg(qpti->sdev, sg, Cmnd->use_sg);
+		sg_count = sbus_map_sg(qpti->sdev, sg, Cmnd->use_sg, scsi_to_sbus_dma_dir(Cmnd->sc_data_direction));
 
 		ds = cmd->dataseg;
 		cmd->segment_cnt = sg_count;
@@ -1078,7 +1078,8 @@ static inline int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 		Cmnd->SCp.ptr = (char *)(unsigned long)
 			sbus_map_single(qpti->sdev,
 					Cmnd->request_buffer,
-					Cmnd->request_bufflen);
+					Cmnd->request_bufflen,
+					scsi_to_sbus_dma_dir(Cmnd->sc_data_direction));
 
 		cmd->dataseg[0].d_base = (u32) ((unsigned long)Cmnd->SCp.ptr);
 		cmd->dataseg[0].d_count = Cmnd->request_bufflen;
@@ -1413,11 +1414,13 @@ static Scsi_Cmnd *qlogicpti_intr_handler(struct qlogicpti *qpti)
 		if (Cmnd->use_sg) {
 			sbus_unmap_sg(qpti->sdev,
 				      (struct scatterlist *)Cmnd->buffer,
-				      Cmnd->use_sg);
+				      Cmnd->use_sg,
+				      scsi_to_sbus_dma_dir(Cmnd->sc_data_direction));
 		} else {
 			sbus_unmap_single(qpti->sdev,
 					  (__u32)((unsigned long)Cmnd->SCp.ptr),
-					  Cmnd->request_bufflen);
+					  Cmnd->request_bufflen,
+					  scsi_to_sbus_dma_dir(Cmnd->sc_data_direction));
 		}
 		qpti->cmd_count[Cmnd->target]--;
 		sbus_writew(out_ptr, qpti->qregs + MBOX5);

@@ -561,7 +561,8 @@ static size_t parport_pc_fifo_write_block_dma (struct parport *port,
 		if ((start ^ end) & ~0xffffUL)
 			maxlen = (0x10000 - start) & 0xffff;
 
-		dma_addr = dma_handle = pci_map_single(priv->dev, (void *)buf, length);
+		dma_addr = dma_handle = pci_map_single(priv->dev, (void *)buf, length,
+						       PCI_DMA_TODEVICE);
         } else {
 		/* above 16 MB we use a bounce buffer as ISA-DMA is not possible */
 		maxlen   = PAGE_SIZE;          /* sizeof(priv->dma_buf) */
@@ -661,7 +662,7 @@ static size_t parport_pc_fifo_write_block_dma (struct parport *port,
 	frob_econtrol (port, 1<<3, 0);
 	
 	if (dma_handle)
-		pci_unmap_single(priv->dev, dma_handle, length);
+		pci_unmap_single(priv->dev, dma_handle, length, PCI_DMA_TODEVICE);
 
 	return length - left;
 }

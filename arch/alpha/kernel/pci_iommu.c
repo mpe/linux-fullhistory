@@ -124,7 +124,7 @@ iommu_arena_free(struct pci_iommu_arena *arena, long ofs, long n)
    until either pci_unmap_single or pci_dma_sync_single is performed.  */
 
 dma_addr_t
-pci_map_single(struct pci_dev *pdev, void *cpu_addr, long size)
+pci_map_single(struct pci_dev *pdev, void *cpu_addr, long size, int direction)
 {
 	struct pci_controler *hose = pdev ? pdev->sysdata : pci_isa_hose;
 	dma_addr_t max_dma = pdev ? pdev->dma_mask : 0x00ffffff;
@@ -186,7 +186,7 @@ pci_map_single(struct pci_dev *pdev, void *cpu_addr, long size)
    wrote there.  */
 
 void
-pci_unmap_single(struct pci_dev *pdev, dma_addr_t dma_addr, long size)
+pci_unmap_single(struct pci_dev *pdev, dma_addr_t dma_addr, long size, int direction)
 {
 	struct pci_controler *hose = pdev ? pdev->sysdata : pci_isa_hose;
 	struct pci_iommu_arena *arena;
@@ -247,7 +247,7 @@ pci_alloc_consistent(struct pci_dev *pdev, long size, dma_addr_t *dma_addrp)
 	}
 	memset(cpu_addr, 0, size);
 
-	*dma_addrp = pci_map_single(pdev, cpu_addr, size);
+	*dma_addrp = pci_map_single(pdev, cpu_addr, size, PCI_DMA_BIDIRECTIONAL);
 	if (*dma_addrp == 0) {
 		free_pages((unsigned long)cpu_addr, order);
 		return NULL;
@@ -270,7 +270,7 @@ void
 pci_free_consistent(struct pci_dev *pdev, long size, void *cpu_addr,
 		    dma_addr_t dma_addr)
 {
-	pci_unmap_single(pdev, dma_addr, size);
+	pci_unmap_single(pdev, dma_addr, size, PCI_DMA_BIDIRECTIONAL);
 	free_pages((unsigned long)cpu_addr, get_order(size));
 
 	DBGA2("pci_free_consistent: [%x,%lx] from %p\n",
@@ -424,7 +424,7 @@ sg_fill(struct scatterlist *leader, struct scatterlist *end,
 }
 
 int
-pci_map_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents)
+pci_map_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents, int direction)
 {
 	struct scatterlist *start, *end, *out;
 	struct pci_controler *hose;
@@ -435,7 +435,7 @@ pci_map_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents)
 	if (nents == 1) {
 		sg->dma_length = sg->length;
 		sg->dma_address
-		  = pci_map_single(pdev, sg->address, sg->length);
+		  = pci_map_single(pdev, sg->address, sg->length, direction);
 		return sg->dma_address != 0;
 	}
 
@@ -489,7 +489,7 @@ error:
 	/* Some allocation failed while mapping the scatterlist
 	   entries.  Unmap them now.  */
 	if (out > start)
-		pci_unmap_sg(pdev, start, out - start);
+		pci_unmap_sg(pdev, start, out - start, direction);
 	return 0;
 }
 
@@ -499,7 +499,7 @@ error:
    above.  */
 
 void
-pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents)
+pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents, int direction)
 {
 	struct pci_controler *hose;
 	struct pci_iommu_arena *arena;

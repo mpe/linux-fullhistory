@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.106 2000/02/04 21:04:06 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.107 2000/02/18 16:47:20 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -103,9 +103,7 @@
 #ifdef CONFIG_IP_MROUTE
 #include <linux/mroute.h>
 #endif
-#ifdef CONFIG_BRIDGE
-#include <net/br.h>
-#endif
+#include <linux/if_bridge.h>
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
@@ -136,6 +134,8 @@ extern int dlci_ioctl(unsigned int, void*);
 #ifdef CONFIG_DLCI_MODULE
 int (*dlci_ioctl_hook)(unsigned int, void *) = NULL;
 #endif
+
+int (*br_ioctl_hook)(unsigned long) = NULL;
 
 /* New destruction routine */
 
@@ -837,14 +837,14 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			return(devinet_ioctl(cmd,(void *) arg));
 		case SIOCGIFBR:
 		case SIOCSIFBR:
-#ifdef CONFIG_BRIDGE
-			lock_kernel();
-			err = br_ioctl(cmd,(void *) arg);
-			unlock_kernel();
-			return err;
-#else
+#ifdef CONFIG_KMOD
+			if (br_ioctl_hook == NULL)
+				request_module("bridge");
+#endif
+			if (br_ioctl_hook != NULL)
+				return br_ioctl_hook(arg);
+
 			return -ENOPKG;
-#endif						
 			
 		case SIOCADDDLCI:
 		case SIOCDELDLCI:

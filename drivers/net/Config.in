@@ -189,6 +189,7 @@ endmenu
 bool 'FDDI driver support' CONFIG_FDDI
 if [ "$CONFIG_FDDI" = "y" ]; then
    bool '  Digital DEFEA and DEFPA adapter support' CONFIG_DEFXX
+   tristate '  SysKonnect FDDI PCI support' CONFIG_SKFP
 fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

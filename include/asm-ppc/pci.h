@@ -27,36 +27,58 @@ extern void *pci_alloc_consistent(struct pci_dev *hwdev, size_t size,
 extern void pci_free_consistent(struct pci_dev *hwdev, size_t size,
 				void *vaddr, dma_addr_t dma_handle);
 extern inline dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr,
-					size_t size)
+					size_t size, int direction)
 {
+	if (direction == PCI_DMA_NONE)
+		BUG();
 	return virt_to_bus(ptr);
 }
 extern inline void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr,
-				    size_t size)
+				    size_t size, int direction)
 {
+	if (direction == PCI_DMA_NONE)
+		BUG();
 	/* nothing to do */
 }
 extern inline int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg,
-			     int nents)
+			     int nents, int direction)
 {
+	if (direction == PCI_DMA_NONE)
+		BUG();
 	return nents;
 }
 extern inline void pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg,
-				int nents)
+				int nents, int direction)
 {
+	if (direction == PCI_DMA_NONE)
+		BUG();
 	/* nothing to do */
 }
 extern inline void pci_dma_sync_single(struct pci_dev *hwdev,
 				       dma_addr_t dma_handle,
-				       size_t size)
+				       size_t size, int direction)
 {
+	if (direction == PCI_DMA_NONE)
+		BUG();
 	/* nothing to do */
 }
 extern inline void pci_dma_syng_sg(struct pci_dev *hwdev,
 				   struct scatterlist *sg,
-				   int nelems)
+				   int nelems, int direction)
 {
+	if (direction == PCI_DMA_NONE)
+		BUG();
 	/* nothing to do */
+}
+
+/* Return whether the given PCI device DMA address mask can
+ * be supported properly.  For example, if your device can
+ * only drive the low 24-bits during PCI bus mastering, then
+ * you would pass 0x00ffffff as the mask to this function.
+ */
+extern inline int pci_dma_supported(struct pci_dev *hwdev, dma_addr_t mask)
+{
+	return 1;
 }
 
 #define sg_dma_address(sg)	(virt_to_bus((sg)->address))

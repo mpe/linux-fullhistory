@@ -256,7 +256,7 @@ static void myri_clean_rings(struct myri_eth *mp)
 			u32 dma_addr;
 
 			dma_addr = sbus_readl(&rxd->myri_scatters[0].addr);
-			sbus_unmap_single(mp->myri_sdev, dma_addr, RX_ALLOC_SIZE);
+			sbus_unmap_single(mp->myri_sdev, dma_addr, RX_ALLOC_SIZE, SBUS_DMA_FROMDEVICE);
 			dev_kfree_skb(mp->rx_skbs[i]);
 			mp->rx_skbs[i] = NULL;
 		}
@@ -272,7 +272,7 @@ static void myri_clean_rings(struct myri_eth *mp)
 			u32 dma_addr;
 
 			dma_addr = sbus_readl(&txd->myri_gathers[0].addr);
-			sbus_unmap_single(mp->myri_sdev, dma_addr, (skb->len + 3) & ~3);
+			sbus_unmap_single(mp->myri_sdev, dma_addr, (skb->len + 3) & ~3, SBUS_DMA_TODEVICE);
 			dev_kfree_skb(mp->tx_skbs[i]);
 			mp->tx_skbs[i] = NULL;
 		}
@@ -301,7 +301,7 @@ static void myri_init_rings(struct myri_eth *mp, int from_irq)
 		skb->dev = dev;
 		skb_put(skb, RX_ALLOC_SIZE);
 
-		dma_addr = sbus_map_single(mp->myri_sdev, skb->data, RX_ALLOC_SIZE);
+		dma_addr = sbus_map_single(mp->myri_sdev, skb->data, RX_ALLOC_SIZE, SBUS_DMA_FROMDEVICE);
 		sbus_writel(dma_addr, &rxd[i].myri_scatters[0].addr);
 		sbus_writel(RX_ALLOC_SIZE, &rxd[i].myri_scatters[0].len);
 		sbus_writel(i, &rxd[i].ctx);
@@ -363,7 +363,7 @@ static void myri_tx(struct myri_eth *mp, struct net_device *dev)
 
 		DTX(("SKB[%d] ", entry));
 		dma_addr = sbus_readl(&sq->myri_txd[entry].myri_gathers[0].addr);
-		sbus_unmap_single(mp->myri_sdev, dma_addr, skb->len);
+		sbus_unmap_single(mp->myri_sdev, dma_addr, skb->len, SBUS_DMA_TODEVICE);
 		dev_kfree_skb(skb);
 		mp->tx_skbs[entry] = NULL;
 		mp->enet_stats.tx_packets++;
@@ -444,7 +444,7 @@ static void myri_rx(struct myri_eth *mp, struct net_device *dev)
 		DRX(("rxd[%d]: %p len[%d] csum[%08x] ", entry, rxd, len, csum));
 		sbus_dma_sync_single(mp->myri_sdev,
 				     sbus_readl(&rxd->myri_scatters[0].addr),
-				     RX_ALLOC_SIZE);
+				     RX_ALLOC_SIZE, SBUS_DMA_FROMDEVICE);
 		if (len < (ETH_HLEN + MYRI_PAD_LEN) || (skb->data[0] != MYRI_PAD_LEN)) {
 			DRX(("ERROR["));
 			mp->enet_stats.rx_errors++;
@@ -481,13 +481,15 @@ static void myri_rx(struct myri_eth *mp, struct net_device *dev)
 			}
 			sbus_unmap_single(mp->myri_sdev,
 					  sbus_readl(&rxd->myri_scatters[0].addr),
-					  RX_ALLOC_SIZE);
+					  RX_ALLOC_SIZE,
+					  SBUS_DMA_FROMDEVICE);
 			mp->rx_skbs[index] = new_skb;
 			new_skb->dev = dev;
 			skb_put(new_skb, RX_ALLOC_SIZE);
 			dma_addr = sbus_map_single(mp->myri_sdev,
 						   new_skb->data,
-						   RX_ALLOC_SIZE);
+						   RX_ALLOC_SIZE,
+						   SBUS_DMA_FROMDEVICE);
 			sbus_writel(dma_addr, &rxd->myri_scatters[0].addr);
 			sbus_writel(RX_ALLOC_SIZE, &rxd->myri_scatters[0].len);
 			sbus_writel(index, &rxd->ctx);
@@ -650,7 +652,7 @@ static int myri_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		sbus_writew((skb->data[4] << 8) | skb->data[5], &txd->addr[3]);
 	}
 
-	dma_addr = sbus_map_single(mp->myri_sdev, skb->data, len);
+	dma_addr = sbus_map_single(mp->myri_sdev, skb->data, len, SBUS_DMA_TODEVICE);
 	sbus_writel(dma_addr, &txd->myri_gathers[0].addr);
 	sbus_writel(len, &txd->myri_gathers[0].len);
 	sbus_writel(1, &txd->num_sg);

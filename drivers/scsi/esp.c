@@ -1,4 +1,4 @@
-/* $Id: esp.c,v 1.91 2000/02/14 08:46:24 jj Exp $
+/* $Id: esp.c,v 1.92 2000/02/18 13:49:58 davem Exp $
  * esp.c:  EnhancedScsiProcessor Sun SCSI driver code.
  *
  * Copyright (C) 1995, 1998 David S. Miller (davem@caip.rutgers.edu)
@@ -1414,7 +1414,8 @@ static void esp_get_dmabufs(struct esp *esp, Scsi_Cmnd *sp)
 		sp->SCp.buffers_residual = 0;
 		if (sp->request_bufflen) {
 			sp->SCp.have_data_in = sbus_map_single(esp->sdev, sp->SCp.buffer,
-							       sp->SCp.this_residual);
+							       sp->SCp.this_residual,
+							       scsi_to_sbus_dma_dir(sp->sc_data_direction));
 			sp->SCp.ptr = (char *) ((unsigned long)sp->SCp.have_data_in);
 		} else {
 			sp->SCp.ptr = NULL;
@@ -1423,7 +1424,8 @@ static void esp_get_dmabufs(struct esp *esp, Scsi_Cmnd *sp)
 		sp->SCp.buffer = (struct scatterlist *) sp->buffer;
 		sp->SCp.buffers_residual = sbus_map_sg(esp->sdev,
 						       sp->SCp.buffer,
-						       sp->use_sg);
+						       sp->use_sg,
+						       scsi_to_sbus_dma_dir(sp->sc_data_direction));
 		sp->SCp.this_residual = sg_dma_len(sp->SCp.buffer);
 		sp->SCp.ptr = (char *) ((unsigned long)sg_dma_address(sp->SCp.buffer));
 	}
@@ -1432,11 +1434,13 @@ static void esp_get_dmabufs(struct esp *esp, Scsi_Cmnd *sp)
 static void esp_release_dmabufs(struct esp *esp, Scsi_Cmnd *sp)
 {
 	if (sp->use_sg) {
-		sbus_unmap_sg(esp->sdev, sp->buffer, sp->use_sg);
+		sbus_unmap_sg(esp->sdev, sp->buffer, sp->use_sg,
+			      scsi_to_sbus_dma_dir(sp->sc_data_direction));
 	} else if (sp->request_bufflen) {
 		sbus_unmap_single(esp->sdev,
 				  sp->SCp.have_data_in,
-				  sp->request_bufflen);
+				  sp->request_bufflen,
+				  scsi_to_sbus_dma_dir(sp->sc_data_direction));
 	}
 }
 

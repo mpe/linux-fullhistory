@@ -53,7 +53,15 @@
 #include "pci2000.h"
 #include "psi_roy.h"
 
-#include <linux/spinlock.h>
+#if LINUX_VERSION_CODE >= LINUXVERSION(2,1,95)
+#include <asm/spinlock.h>
+#endif
+#if LINUX_VERSION_CODE < LINUXVERSION(2,1,93)
+#include <linux/bios32.h>
+#endif
+
+struct proc_dir_entry Proc_Scsi_Pci2000 =
+	{ PROC_SCSI_PCI2000, 7, "pci2000", S_IFDIR | S_IRUGO | S_IXUGO, 2 };
 
 //#define DEBUG 1
 
@@ -112,6 +120,28 @@ static int WaitReady (PADAPTER2000 padapter)
 	ULONG	z;
 
 	for ( z = 0;  z < (TIMEOUT_COMMAND * 4);  z++ )
+		{
+		if ( !inb_p (padapter->cmd) )
+			return FALSE;
+		udelay (250);
+		};								
+	return TRUE;
+	}
+/****************************************************************
+ *	Name:			WaitReadyLong	:LOCAL
+ *
+ *	Description:	Wait for controller ready.
+ *
+ *	Parameters:		padapter - Pointer adapter data structure.
+ *
+ *	Returns:		TRUE on not ready.
+ *
+ ****************************************************************/
+static int WaitReadyLong (PADAPTER2000 padapter)
+	{
+	ULONG	z;
+
+	for ( z = 0;  z < (5000 * 4);  z++ )
 		{
 		if ( !inb_p (padapter->cmd) )
 			return FALSE;
@@ -204,7 +234,7 @@ static int PsiRaidCmd (PADAPTER2000 padapter, char cmd)
 	if ( WaitReady (padapter) )						// test for command register ready
 		return DID_TIME_OUT;
 	outb_p (cmd, padapter->cmd);					// issue command
-	if ( WaitReady (padapter) )						// wait for adapter ready
+	if ( WaitReadyLong (padapter) )					// wait for adapter ready
 		return DID_TIME_OUT;
 	return DID_OK;
 	}
@@ -232,13 +262,23 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 	int					pun;
 	int					bus;
 	int					z;
+#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
+    int					flags;
+#else /* version >= v2.1.95 */
     unsigned long		flags;
+#endif /* version >= v2.1.95 */
 
+#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
+    /* Disable interrupts, if they aren't already disabled. */
+    save_flags (flags);
+    cli ();
+#else /* version >= v2.1.95 */
     /*
      * Disable interrupts, if they aren't already disabled and acquire
      * the I/O spinlock.
      */
     spin_lock_irqsave (&io_request_lock, flags);
+#endif /* version >= v2.1.95 */
 
 	DEB(printk ("\npci2000 recieved interrupt "));
 	for ( z = 0; z < NumAdapters;  z++ )										// scan for interrupt to process
@@ -327,12 +367,20 @@ irqProceed:;
 	OpDone (SCpnt, DID_OK << 16);
 
 irq_return:;
+#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
+    /*
+     * Restore the original flags which will enable interrupts
+     * if and only if they were enabled on entry.
+     */
+    restore_flags (flags);
+#else /* version >= v2.1.95 */
     /*
      * Release the I/O spinlock and restore the original flags
      * which will enable interrupts if and only if they were
      * enabled on entry.
      */
     spin_unlock_irqrestore (&io_request_lock, flags);
+#endif /* version >= v2.1.95 */
 	}
 /****************************************************************
  *	Name:	Pci2000_QueueCommand
@@ -589,21 +637,37 @@ int Pci2000_Detect (Scsi_Host_Template *tpnt)
 	PADAPTER2000	    padapter;
 	int					z, zz;
 	int					setirq;
+#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 	struct pci_dev	   *pdev = NULL;
+#else
+	UCHAR	pci_bus, pci_device_fn;
+#endif
 
+#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 	if ( !pci_present () )
+#else
+	if ( !pcibios_present () )
+#endif
 		{
 		printk ("pci2000: PCI BIOS not present\n");
 		return 0;
 		}
 
+#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 	while ( (pdev = pci_find_device (VENDOR_PSI, DEVICE_ROY_1, pdev)) != NULL )
+#else
+	while ( !pcibios_find_device (VENDOR_PSI, DEVICE_ROY_1, found, &pci_bus, &pci_device_fn) )
+#endif
 		{
 		pshost = scsi_register (tpnt, sizeof(ADAPTER2000));
 		padapter = HOSTDATA(pshost);
 
-		padapter->basePort = pdev->resource[1].start;
-
+#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
+		padapter->basePort = pdev->base_address[1] & 0xFFFE;
+#else
+		pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_1, &padapter->basePort);
+		padapter->basePort &= 0xFFFE;
+#endif
 		DEB (printk ("\nBase Regs = %#04X", padapter->basePort));			// get the base I/O port address
 		padapter->mb0	= padapter->basePort + RTR_MAILBOX;		   			// get the 32 bit mail boxes
 		padapter->mb1	= padapter->basePort + RTR_MAILBOX + 4;
@@ -620,7 +684,11 @@ int Pci2000_Detect (Scsi_Host_Template *tpnt)
 		if ( WaitReady (padapter) )
 			goto unregister;
 
+#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 		pshost->irq = pdev->irq;
+#else
+		pcibios_read_config_byte (pci_bus, pci_device_fn, PCI_INTERRUPT_LINE, &pshost->irq);
+#endif
 		setirq = 1;
 		padapter->irqOwned = 0;
 		for ( z = 0;  z < installed;  z++ )									// scan for shared interrupts
@@ -714,7 +782,11 @@ int Pci2000_Release (struct Scsi_Host *pshost)
     PADAPTER2000	padapter = HOSTDATA (pshost);
 
 	if ( padapter->irqOwned )
+#if LINUX_VERSION_CODE < LINUXVERSION(1,3,70)
+	    free_irq (pshost->irq);
+#else /* version >= v1.3.70 */
 		free_irq (pshost->irq, padapter);
+#endif /* version >= v1.3.70 */
     release_region (pshost->io_port, pshost->n_io_port);
     scsi_unregister(pshost);
     return 0;
@@ -760,4 +832,3 @@ Scsi_Host_Template driver_template = PCI2000;
 
 #include "scsi_module.c"
 #endif
-

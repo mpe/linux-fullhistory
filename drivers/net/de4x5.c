@@ -1759,7 +1759,8 @@ static inline void
 de4x5_free_tx_buff(struct de4x5_private *lp, int entry)
 {
     pci_unmap_single(lp->pdev, le32_to_cpu(lp->tx_ring[entry].buf),
-		     le32_to_cpu(lp->tx_ring[entry].des1) & TD_TBS1);
+		     le32_to_cpu(lp->tx_ring[entry].des1) & TD_TBS1,
+		     PCI_DMA_TODEVICE);
     if ((u_long) lp->tx_skb[entry] > 1)
 	dev_kfree_skb_irq(lp->tx_skb[entry]);
     lp->tx_skb[entry] = NULL;
@@ -1980,7 +1981,7 @@ load_packet(struct net_device *dev, char *buf, u32 flags, struct sk_buff *skb)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     int entry = (lp->tx_new ? lp->tx_new-1 : lp->txRingSize-1);
-    dma_addr_t buf_dma = pci_map_single(lp->pdev, buf, flags & TD_TBS1);
+    dma_addr_t buf_dma = pci_map_single(lp->pdev, buf, flags & TD_TBS1, PCI_DMA_TODEVICE);
 
     lp->tx_ring[lp->tx_new].buf = cpu_to_le32(buf_dma);
     lp->tx_ring[lp->tx_new].des1 &= cpu_to_le32(TD_TER);

@@ -143,6 +143,8 @@ sx164_device_interrupt(unsigned long vector, struct pt_regs *regs)
 static void
 sx164_init_irq(void)
 {
+	static struct irqaction timer = { no_action, 0, 0, "sx164-timer", NULL, NULL};
+	static struct irqaction cascade = { no_action, 0, 0, "sx164-isa-cascade", NULL, NULL};
 	struct hw_interrupt_type *ops;
 	long i;
 
@@ -171,8 +173,8 @@ sx164_init_irq(void)
 		irq_desc[i].handler = ops;
 	}
 
-	ops->startup(16 + 6);	/* enable timer */
-	ops->startup(16 + 7);	/* enable ISA PIC cascade */
+	setup_irq(16 + 6, &timer);	/* enable timer */
+	setup_irq(16 + 7, &cascade);	/* enable ISA PIC cascade */
 }
 
 /*

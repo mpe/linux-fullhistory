@@ -810,7 +810,8 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 		sg = (struct scatterlist *) Cmnd->request_buffer;
 		ds = cmd->dataseg;
 
-		sg_count = pci_map_sg(hostdata->pci_dev, sg, Cmnd->use_sg);
+		sg_count = pci_map_sg(hostdata->pci_dev, sg, Cmnd->use_sg,
+				      scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
 
 		cmd->segment_cnt = cpu_to_le16(sg_count);
 
@@ -856,7 +857,8 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 		Cmnd->SCp.ptr = (char *)(unsigned long)
 			pci_map_single(hostdata->pci_dev,
 				       Cmnd->request_buffer,
-				       Cmnd->request_bufflen);
+				       Cmnd->request_bufflen,
+				       scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
 
 		cmd->dataseg[0].d_base =
 			cpu_to_le32((u32)(long)Cmnd->SCp.ptr);
@@ -977,11 +979,13 @@ void isp1020_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 		if (Cmnd->use_sg)
 			pci_unmap_sg(hostdata->pci_dev,
 				     (struct scatterlist *)Cmnd->buffer,
-				     Cmnd->use_sg);
+				     Cmnd->use_sg,
+				     scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
 		else if (Cmnd->request_bufflen)
 			pci_unmap_single(hostdata->pci_dev,
 					 (u32)((long)Cmnd->SCp.ptr),
-					 Cmnd->request_bufflen);
+					 Cmnd->request_bufflen,
+					 scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
 
 		isp_outw(out_ptr, host, MBOX5);
 		(*Cmnd->scsi_done)(Cmnd);

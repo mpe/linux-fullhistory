@@ -813,7 +813,7 @@ static void init_ring(struct net_device *dev)
 		np->rx_info[i].skb = skb;
 		if (skb == NULL)
 			break;
-		np->rx_info[i].mapping = pci_map_single(np->pdev, skb->tail, np->rx_buf_sz);
+		np->rx_info[i].mapping = pci_map_single(np->pdev, skb->tail, np->rx_buf_sz, PCI_DMA_FROMDEVICE);
 		skb->dev = dev;			/* Mark as being used by this device. */
 		/* Grrr, we cannot offset to correctly align the IP header. */
 		np->rx_ring[i].rxaddr = cpu_to_le32(np->rx_info[i].mapping | RxDescValid);
@@ -859,7 +859,7 @@ static int start_tx(struct sk_buff *skb, struct net_device *dev)
 
 	np->tx_info[entry].skb = skb;
 	np->tx_info[entry].mapping =
-		pci_map_single(np->pdev, skb->data, skb->len);
+		pci_map_single(np->pdev, skb->data, skb->len, PCI_DMA_TODEVICE);
 
 	np->tx_ring[entry].addr = cpu_to_le32(np->tx_info[entry].mapping);
 	/* Add  |TxDescIntr to generate Tx-done interrupts. */
@@ -959,10 +959,10 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 					skb = np->tx_info[entry].skb;
 					pci_unmap_single(np->pdev,
 									 np->tx_info[entry].mapping,
-									 skb->len);
+									 skb->len, PCI_DMA_TODEVICE);
 
 					/* Scavenge the descriptor. */
-					kfree_skb(skb);
+					dev_kfree_skb_irq(skb);
 					np->tx_info[entry].skb = NULL;
 					np->tx_info[entry].mapping = 0;
 					np->dirty_tx++;
@@ -1044,7 +1044,7 @@ static int netdev_rx(struct net_device *dev)
 				skb_reserve(skb, 2);	/* 16 byte align the IP header */
 				pci_dma_sync_single(np->pdev,
 									np->rx_info[entry].mapping,
-									pkt_len);
+									pkt_len, PCI_DMA_FROMDEVICE);
 #if HAS_IP_COPYSUM			/* Call copy + cksum if available. */
 				eth_copy_and_sum(skb, np->rx_info[entry].skb->tail, pkt_len, 0);
 				skb_put(skb, pkt_len);
@@ -1055,7 +1055,7 @@ static int netdev_rx(struct net_device *dev)
 			} else {
 				char *temp;
 
-				pci_unmap_single(np->pdev, np->rx_info[entry].mapping, np->rx_buf_sz);
+				pci_unmap_single(np->pdev, np->rx_info[entry].mapping, np->rx_buf_sz, PCI_DMA_FROMDEVICE);
 				skb = np->rx_info[entry].skb;
 				temp = skb_put(skb, pkt_len);
 				np->rx_info[entry].skb = NULL;
@@ -1099,7 +1099,7 @@ static int netdev_rx(struct net_device *dev)
 			if (skb == NULL)
 				break;			/* Better luck next round. */
 			np->rx_info[entry].mapping =
-				pci_map_single(np->pdev, skb->tail, np->rx_buf_sz);
+				pci_map_single(np->pdev, skb->tail, np->rx_buf_sz, PCI_DMA_FROMDEVICE);
 			skb->dev = dev;			/* Mark as being used by this device. */
 			np->rx_ring[entry].rxaddr =
 				cpu_to_le32(np->rx_info[entry].mapping | RxDescValid);
@@ -1324,8 +1324,8 @@ static int netdev_close(struct net_device *dev)
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		np->rx_ring[i].rxaddr = cpu_to_le32(0xBADF00D0); /* An invalid address. */
 		if (np->rx_info[i].skb != NULL) {
-			pci_unmap_single(np->pdev, np->rx_info[i].mapping, np->rx_buf_sz);
-			kfree_skb(np->rx_info[i].skb);
+			pci_unmap_single(np->pdev, np->rx_info[i].mapping, np->rx_buf_sz, PCI_DMA_FROMDEVICE);
+			dev_kfree_skb(np->rx_info[i].skb);
 		}
 		np->rx_info[i].skb = NULL;
 		np->rx_info[i].mapping = 0;
@@ -1335,8 +1335,8 @@ static int netdev_close(struct net_device *dev)
 		if (skb != NULL) {
 			pci_unmap_single(np->pdev,
 							 np->tx_info[i].mapping,
-							 skb->len);
-			kfree_skb(skb);
+							 skb->len, PCI_DMA_TODEVICE);
+			dev_kfree_skb(skb);
 		}
 		np->tx_info[i].skb = NULL;
 		np->tx_info[i].mapping = 0;

@@ -214,6 +214,10 @@ static int ide_build_sglist (ide_hwif_t *hwif, struct request *rq)
 	struct scatterlist *sg = hwif->sg_table;
 	int nents = 0;
 
+	if (rq->cmd == READ)
+		hwif->sg_dma_direction = PCI_DMA_FROMDEVICE;
+	else
+		hwif->sg_dma_direction = PCI_DMA_TODEVICE;
 	bh = rq->bh;
 	do {
 		unsigned char *virt_addr = bh->b_data;
@@ -230,7 +234,7 @@ static int ide_build_sglist (ide_hwif_t *hwif, struct request *rq)
 		nents++;
 	} while (bh != NULL);
 
-	return pci_map_sg(hwif->pci_dev, sg, nents);
+	return pci_map_sg(hwif->pci_dev, sg, nents, hwif->sg_dma_direction);
 }
 
 /*
@@ -265,7 +269,8 @@ int ide_build_dmatable (ide_drive_t *drive, ide_dma_action_t func)
 				printk("%s: DMA table too small\n", drive->name);
 				pci_unmap_sg(HWIF(drive)->pci_dev,
 					     HWIF(drive)->sg_table,
-					     HWIF(drive)->sg_nents);
+					     HWIF(drive)->sg_nents,
+					     HWIF(drive)->sg_dma_direction);
 				return 0; /* revert to PIO for this request */
 			} else {
 				u32 xcount, bcount = 0x10000 - (cur_addr & 0xffff);
@@ -301,7 +306,7 @@ void ide_destroy_dmatable (ide_drive_t *drive)
 	struct scatterlist *sg = HWIF(drive)->sg_table;
 	int nents = HWIF(drive)->sg_nents;
 
-	pci_unmap_sg(dev, sg, nents);
+	pci_unmap_sg(dev, sg, nents, HWIF(drive)->sg_dma_direction);
 }
 
 /*

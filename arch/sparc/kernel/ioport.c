@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.33 2000/02/16 07:31:29 davem Exp $
+/* $Id: ioport.c,v 1.34 2000/02/18 13:48:48 davem Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -348,7 +348,7 @@ void sbus_free_consistent(struct sbus_dev *sdev, long n, void *p, u32 ba)
  * CPU view of this memory may be inconsistent with
  * a device view and explicit flushing is necessary.
  */
-u32 sbus_map_single(struct sbus_dev *sdev, void *va, long len)
+u32 sbus_map_single(struct sbus_dev *sdev, void *va, long len, int direction)
 {
 #if 0 /* This is the version that abuses consistent space */
 	unsigned long len_total = (len + PAGE_SIZE-1) & PAGE_MASK;
@@ -395,7 +395,7 @@ u32 sbus_map_single(struct sbus_dev *sdev, void *va, long len)
 #endif
 }
 
-void sbus_unmap_single(struct sbus_dev *sdev, u32 ba, long n)
+void sbus_unmap_single(struct sbus_dev *sdev, u32 ba, long n, int direction)
 {
 #if 0 /* This is the version that abuses consistent space */
 	struct resource *res;
@@ -424,7 +424,7 @@ void sbus_unmap_single(struct sbus_dev *sdev, u32 ba, long n)
 #endif
 }
 
-int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n)
+int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n, int direction)
 {
 	mmu_get_scsi_sgl(sg, n, sdev->bus);
 
@@ -435,14 +435,14 @@ int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n)
 	return n;
 }
 
-void sbus_unmap_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n)
+void sbus_unmap_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n, int direction)
 {
 	mmu_release_scsi_sgl(sg, n, sdev->bus);
 }
 
 /*
  */
-void sbus_dma_sync_single(struct sbus_dev *sdev, u32 ba, long size)
+void sbus_dma_sync_single(struct sbus_dev *sdev, u32 ba, long size, int direction)
 {
 	unsigned long va;
 	struct resource *res;
@@ -456,7 +456,7 @@ void sbus_dma_sync_single(struct sbus_dev *sdev, u32 ba, long size)
 	mmu_inval_dma_area(va, (size + PAGE_SIZE-1) & PAGE_MASK);
 }
 
-void sbus_dma_sync_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n)
+void sbus_dma_sync_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n, int direction)
 {
 	printk("sbus_dma_sync_sg: not implemented yet\n");
 }
@@ -577,8 +577,10 @@ void pci_free_consistent(struct pci_dev *pdev, size_t n, void *p, dma_addr_t ba)
  * Once the device is given the dma address, the device owns this memory
  * until either pci_unmap_single or pci_dma_sync_single is performed.
  */
-dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr, size_t size)
+dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr, size_t size, int direction)
 {
+	if (direction == PCI_DMA_NONE)
+		BUG();
 	return virt_to_bus(ptr);
 }
 
@@ -589,8 +591,10 @@ dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr, size_t size)
  * After this call, reads by the cpu to the buffer are guarenteed to see
  * whatever the device wrote there.
  */
-void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size)
+void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size, int direction)
 {
+	if (direction == PCI_DMA_NONE)
+		BUG();
 	/* Nothing to do... */
 }
 
@@ -609,9 +613,13 @@ void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size)
  * Device ownership issues as mentioned above for pci_map_single are
  * the same here.
  */
-int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents)
+int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direction)
 {
 	int n;
+
+	if (direction == PCI_DMA_NONE)
+		BUG();
+
 	for (n = 0; n < nents; n++) {
 		sg->dvma_address = virt_to_bus(sg->address);
 		sg->dvma_length = sg->length;
@@ -624,8 +632,10 @@ int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents)
  * Again, cpu read rules concerning calls here are the same as for
  * pci_unmap_single() above.
  */
-void pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nhwents)
+void pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nhwents, int direction)
 {
+	if (direction == PCI_DMA_NONE)
+		BUG();
 	/* Nothing to do... */
 }
 
@@ -638,8 +648,10 @@ void pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nhwents)
  * next point you give the PCI dma address back to the card, the
  * device again owns the buffer.
  */
-void pci_dma_sync_single(struct pci_dev *hwdev, dma_addr_t ba, size_t size)
+void pci_dma_sync_single(struct pci_dev *hwdev, dma_addr_t ba, size_t size, int direction)
 {
+	if (direction == PCI_DMA_NONE)
+		BUG();
 	mmu_inval_dma_area((unsigned long)bus_to_virt(ba),
 	    (size + PAGE_SIZE-1) & PAGE_MASK);
 }
@@ -650,8 +662,10 @@ void pci_dma_sync_single(struct pci_dev *hwdev, dma_addr_t ba, size_t size)
  * The same as pci_dma_sync_single but for a scatter-gather list,
  * same rules and usage.
  */
-void pci_dma_sync_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents)
+void pci_dma_sync_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direction)
 {
+	if (direction == PCI_DMA_NONE)
+		BUG();
 	while (nents) {
 		--nents;
 		mmu_inval_dma_area((unsigned long)sg->address,

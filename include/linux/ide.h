@@ -379,6 +379,7 @@ typedef struct hwif_s {
 	u32		dmatable_dma;	/* dma physical region descriptor table (dma view) */
 	struct scatterlist *sg_table;	/* Scatter-gather list used to build the above */
 	int sg_nents;			/* Current number of entries in it */
+	int sg_dma_direction;		/* dma transfer direction */
 	struct hwif_s	*mate;		/* other hwif from same PCI chip */
 	unsigned long	dma_base;	/* base addr for dma ports */
 	unsigned	dma_extra;	/* extra addr for dma ports */

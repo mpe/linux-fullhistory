@@ -908,7 +908,7 @@ static void rtl8129_tx_timeout(struct net_device *dev)
 
 			saved_skb[j] = rp->skb;
 			if (rp->mapping != 0) {
-				pci_unmap_single(tp->pdev, rp->mapping, rp->skb->len);
+				pci_unmap_single(tp->pdev, rp->mapping, rp->skb->len, PCI_DMA_TODEVICE);
 				rp->mapping = 0;
 			}
 		}
@@ -922,7 +922,7 @@ static void rtl8129_tx_timeout(struct net_device *dev)
 					 ioaddr + TxAddr0 + i*4);
 			} else {
 				tp->tx_info[i].mapping =
-					pci_map_single(tp->pdev, skb->data, skb->len);
+					pci_map_single(tp->pdev, skb->data, skb->len, PCI_DMA_TODEVICE);
 				outl(tp->tx_info[i].mapping, ioaddr + TxAddr0 + i*4);
 			}
 			/* Note: the chip doesn't have auto-pad! */
@@ -991,7 +991,7 @@ rtl8129_start_xmit(struct sk_buff *skb, struct net_device *dev)
 			 ioaddr + TxAddr0 + entry*4);
 	} else {
 		tp->tx_info[entry].mapping =
-			pci_map_single(tp->pdev, skb->data, skb->len);
+			pci_map_single(tp->pdev, skb->data, skb->len, PCI_DMA_TODEVICE);
 		outl(tp->tx_info[entry].mapping, ioaddr + TxAddr0 + entry*4);
 	}
 	/* Note: the chip doesn't have auto-pad! */
@@ -1085,7 +1085,8 @@ static void rtl8129_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				if (tp->tx_info[entry].mapping != 0) {
 					pci_unmap_single(tp->pdev,
 									 tp->tx_info[entry].mapping,
-									 tp->tx_info[entry].skb->len);
+									 tp->tx_info[entry].skb->len,
+									 PCI_DMA_TODEVICE);
 					tp->tx_info[entry].mapping = 0;
 				}
 
@@ -1315,7 +1316,7 @@ rtl8129_close(struct net_device *dev)
 
 		if (skb) {
 			if (mapping)
-				pci_unmap_single(tp->pdev, mapping, skb->len);
+				pci_unmap_single(tp->pdev, mapping, skb->len, PCI_DMA_TODEVICE);
 			dev_kfree_skb(skb);
 		}
 		tp->tx_info[i].skb = NULL;

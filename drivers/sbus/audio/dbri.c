@@ -1,4 +1,4 @@
-/* $Id: dbri.c,v 1.18 2000/01/28 13:42:50 jj Exp $
+/* $Id: dbri.c,v 1.19 2000/02/18 13:49:42 davem Exp $
  * drivers/sbus/audio/dbri.c
  *
  * Copyright (C) 1997 Rudolf Koenig (rfkoenig@immd4.informatik.uni-erlangen.de)
@@ -356,7 +356,8 @@ static void transmission_complete_intr(struct dbri *dbri, int pipe)
                 if (buffer)
                         sbus_unmap_single(dbri->sdev,
                                           dbri->descs[td].buffer_dvma,
-                                          dbri->descs[td].len);
+                                          dbri->descs[td].len,
+                                          SBUS_DMA_TODEVICE);
 
                 callback = dbri->descs[td].output_callback;
 		callback_arg = dbri->descs[td].output_callback_arg;
@@ -391,7 +392,8 @@ static void reception_complete_intr(struct dbri *dbri, int pipe)
         if (buffer)
                 sbus_unmap_single(dbri->sdev,
                                   dbri->descs[rd].buffer_dvma,
-                                  dbri->descs[rd].len);
+                                  dbri->descs[rd].len,
+                                  SBUS_DMA_FROMDEVICE);
 
         callback = dbri->descs[rd].input_callback;
         if (callback != NULL)
@@ -592,7 +594,9 @@ static void reset_pipe(struct dbri *dbri, int pipe)
 		if (buffer)
                         sbus_unmap_single(dbri->sdev,
                                           dbri->descs[desc].buffer_dvma,
-                                          dbri->descs[desc].len);
+                                          dbri->descs[desc].len,
+                                          output_callback != NULL ? SBUS_DMA_TODEVICE
+                                          : SBUS_DMA_FROMDEVICE);
 
 		dbri->descs[desc].inuse = 0;
 		desc = dbri->descs[desc].next;
@@ -863,7 +867,8 @@ static void xmit_on_pipe(struct dbri *dbri, int pipe,
                 return;
         }
 
-        dvma_buffer_base = dvma_buffer = sbus_map_single(dbri->sdev, buffer, len);
+        dvma_buffer_base = dvma_buffer = sbus_map_single(dbri->sdev, buffer, len,
+							 SBUS_DMA_TODEVICE);
         while (len > 0) {
                 int mylen;
 
@@ -907,6 +912,9 @@ static void xmit_on_pipe(struct dbri *dbri, int pipe,
         }
 
 	if (first_td == -1 || last_td == -1) {
+		sbus_unmap_single(dbri->sdev, dvma_buffer_base,
+				  dvma_buffer - dvma_buffer_base + len,
+				  SBUS_DMA_TODEVICE);
                 return;
         }
 
@@ -914,7 +922,7 @@ static void xmit_on_pipe(struct dbri *dbri, int pipe,
 
         dbri->descs[last_td].buffer = buffer;
         dbri->descs[last_td].buffer_dvma = dvma_buffer_base;
-        dbri->descs[last_td].len = len;
+        dbri->descs[last_td].len = dvma_buffer - dvma_buffer_base + len;
         dbri->descs[last_td].output_callback = callback;
         dbri->descs[last_td].output_callback_arg = callback_arg;
 
@@ -999,7 +1007,8 @@ static void recv_on_pipe(struct dbri *dbri, int pipe,
         /* Make sure buffer size is multiple of four */
         len &= ~3;
 
-        bus_buffer_base = bus_buffer = sbus_map_single(dbri->sdev, buffer, len);
+        bus_buffer_base = bus_buffer = sbus_map_single(dbri->sdev, buffer, len,
+						       SBUS_DMA_FROMDEVICE);
 
 	while (len > 0) {
 		int rd, mylen;
@@ -1043,8 +1052,12 @@ static void recv_on_pipe(struct dbri *dbri, int pipe,
 		len -= mylen;
         }
 
-	if (last_rd == -1 || first_rd == -1)
+	if (last_rd == -1 || first_rd == -1) {
+		sbus_unmap_single(dbri->sdev, bus_buffer_base,
+				  bus_buffer - bus_buffer_base + len,
+				  SBUS_DMA_FROMDEVICE);
                 return;
+	}
 
 	for (rd=first_rd; rd != -1; rd = dbri->descs[rd].next) {
 		dprintk(D_DESC, ("DBRI RD %d: %08x %08x %08x %08x\n",
@@ -1057,7 +1070,7 @@ static void recv_on_pipe(struct dbri *dbri, int pipe,
 
 	dbri->descs[last_rd].buffer = buffer;
         dbri->descs[last_rd].buffer_dvma = bus_buffer_base;
-	dbri->descs[last_rd].len = len;
+	dbri->descs[last_rd].len = bus_buffer - bus_buffer_base + len;
 	dbri->descs[last_rd].input_callback = callback;
 	dbri->descs[last_rd].input_callback_arg = callback_arg;
 

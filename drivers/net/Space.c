@@ -120,6 +120,7 @@ extern int de620_probe(struct net_device *);
 /* FDDI adapters */
 extern int dfx_probe(struct net_device *dev);
 extern int apfddi_init(struct net_device *dev);
+extern int skfp_probe(struct net_device *dev);
 
 /* Fibre Channel adapters */
 extern int iph5526_probe(struct net_device *dev);
@@ -469,6 +470,9 @@ static int __init fddiif_probe(struct net_device *dev)
 #endif
 #ifdef CONFIG_APFDDI
 	&& apfddi_init(dev)
+#endif
+#ifdef CONFIG_SKFP
+	&& skfp_probe(dev)
 #endif
 	&& 1 ) {
 	    return 1;	/* -ENODEV or -EAGAIN would be more accurate. */

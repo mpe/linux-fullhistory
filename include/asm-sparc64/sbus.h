@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.13 2000/01/28 13:43:14 jj Exp $
+/* $Id: sbus.h,v 1.14 2000/02/18 13:50:55 davem Exp $
  * sbus.h: Defines for the Sun SBus.
  *
  * Copyright (C) 1996, 1999 David S. Miller (davem@redhat.com)
@@ -98,14 +98,19 @@ extern void sbus_set_sbus64(struct sbus_dev *, int);
 extern void *sbus_alloc_consistent(struct sbus_dev *, size_t, dma_addr_t *dma_addrp);
 extern void sbus_free_consistent(struct sbus_dev *, size_t, void *, dma_addr_t);
 
+#define SBUS_DMA_BIDIRECTIONAL	0
+#define SBUS_DMA_TODEVICE	1
+#define SBUS_DMA_FROMDEVICE	2
+#define	SBUS_DMA_NONE		3
+
 /* All the rest use streaming mode mappings. */
-extern dma_addr_t sbus_map_single(struct sbus_dev *, void *, size_t);
-extern void sbus_unmap_single(struct sbus_dev *, dma_addr_t, size_t);
-extern int sbus_map_sg(struct sbus_dev *, struct scatterlist *, int);
-extern void sbus_unmap_sg(struct sbus_dev *, struct scatterlist *, int);
+extern dma_addr_t sbus_map_single(struct sbus_dev *, void *, size_t, int);
+extern void sbus_unmap_single(struct sbus_dev *, dma_addr_t, size_t, int);
+extern int sbus_map_sg(struct sbus_dev *, struct scatterlist *, int, int);
+extern void sbus_unmap_sg(struct sbus_dev *, struct scatterlist *, int, int);
 
 /* Finally, allow explicit synchronization of streamable mappings. */
-extern void sbus_dma_sync_single(struct sbus_dev *, dma_addr_t, size_t);
-extern void sbus_dma_sync_sg(struct sbus_dev *, struct scatterlist *, int);
+extern void sbus_dma_sync_single(struct sbus_dev *, dma_addr_t, size_t, int);
+extern void sbus_dma_sync_sg(struct sbus_dev *, struct scatterlist *, int, int);
 
 #endif /* !(_SPARC64_SBUS_H) */

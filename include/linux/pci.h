@@ -286,6 +286,12 @@
 #include <linux/ioport.h>
 #include <linux/list.h>
 
+/* This defines the direction arg to the DMA mapping routines. */
+#define PCI_DMA_BIDIRECTIONAL	0
+#define PCI_DMA_TODEVICE	1
+#define PCI_DMA_FROMDEVICE	2
+#define PCI_DMA_NONE		3
+
 #include <asm/pci.h>
 
 #define DEVICE_COUNT_COMPATIBLE	4

@@ -367,6 +367,13 @@ D: Original author of Amiga FFS filesystem
 S: Orlando, Florida
 S: USA
 
+N: Lennert Buytenhek
+E: buytenh@gnu.org
+D: Rewrite of the ethernet bridging code
+S: Handelstraat 35
+S: 3131 EK Vlaardingen
+S: The Netherlands
+
 N: Michael Callahan
 E: callahan@maths.ox.ac.uk
 D: PPP for Linux

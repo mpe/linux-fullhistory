@@ -43,6 +43,42 @@
 #define SCSI_DATA_READ          2
 #define SCSI_DATA_NONE          3
 
+#ifdef CONFIG_PCI
+#include <linux/pci.h>
+#if ((SCSI_DATA_UNKNOWN == PCI_DMA_BIDIRECTIONAL) && (SCSI_DATA_WRITE == PCI_DMA_TODEVICE) && (SCSI_DATA_READ == PCI_DMA_FROMDEVICE) && (SCSI_DATA_NONE == PCI_DMA_NONE))
+#define scsi_to_pci_dma_dir(scsi_dir)	((int)(scsi_dir))
+#else
+extern __inline__ int scsi_to_pci_dma_dir(unsigned char scsi_dir)
+{
+        if (scsi_dir == SCSI_DATA_UNKNOWN)
+                return PCI_DMA_BIDIRECTIONAL;
+        if (scsi_dir == SCSI_DATA_WRITE)
+                return PCI_DMA_TODEVICE;
+        if (scsi_dir == SCSI_DATA_READ)
+                return PCI_DMA_FROMDEVICE;
+        return PCI_DMA_NONE;
+}
+#endif
+#endif
+
+#ifdef CONFIG_SBUS
+#include <asm/sbus.h>
+#if ((SCSI_DATA_UNKNOWN == SBUS_DMA_BIDIRECTIONAL) && (SCSI_DATA_WRITE == SBUS_DMA_TODEVICE) && (SCSI_DATA_READ == SBUS_DMA_FROMDEVICE) && (SCSI_DATA_NONE == SBUS_DMA_NONE))
+#define scsi_to_sbus_dma_dir(scsi_dir)	((int)(scsi_dir))
+#else
+extern __inline__ int scsi_to_sbus_dma_dir(unsigned char scsi_dir)
+{
+        if (scsi_dir == SCSI_DATA_UNKNOWN)
+                return SBUS_DMA_BIDIRECTIONAL;
+        if (scsi_dir == SCSI_DATA_WRITE)
+                return SBUS_DMA_TODEVICE;
+        if (scsi_dir == SCSI_DATA_READ)
+                return SBUS_DMA_FROMDEVICE;
+        return SBUS_DMA_NONE;
+}
+#endif
+#endif
+
 /*
  * Some defs, in case these are not defined elsewhere.
  */
