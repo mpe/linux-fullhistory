@@ -3,10 +3,14 @@
 
 #include <linux/compiler.h>
 
-#define __GENERIC_PER_CPU
 #ifdef CONFIG_SMP
 
-extern unsigned long __per_cpu_offset[NR_CPUS];
+extern void setup_per_cpu_areas(void);
+
+extern unsigned long __per_cpu_base;
+extern unsigned long __per_cpu_shift;
+#define __per_cpu_offset(__cpu) \
+	(__per_cpu_base + ((unsigned long)(__cpu) << __per_cpu_shift))
 
 /* Separate out the type, so (int[3], foo) works. */
 #define DEFINE_PER_CPU(type, name) \
@@ -15,7 +19,7 @@ extern unsigned long __per_cpu_offset[NR_CPUS];
 register unsigned long __local_per_cpu_offset asm("g5");
 
 /* var is in discarded region: offset to particular copy we want */
-#define per_cpu(var, cpu) (*RELOC_HIDE(&per_cpu__##var, __per_cpu_offset[cpu]))
+#define per_cpu(var, cpu) (*RELOC_HIDE(&per_cpu__##var, __per_cpu_offset(cpu)))
 #define __get_cpu_var(var) (*RELOC_HIDE(&per_cpu__##var, __local_per_cpu_offset))
 
 /* A macro to avoid #include hell... */
@@ -24,7 +28,7 @@ do {								\
 	unsigned int __i;					\
 	for (__i = 0; __i < NR_CPUS; __i++)			\
 		if (cpu_possible(__i))				\
-			memcpy((pcpudst)+__per_cpu_offset[__i],	\
+			memcpy((pcpudst)+__per_cpu_offset(__i),	\
 			       (src), (size));			\
 } while (0)
 #else /* ! SMP */

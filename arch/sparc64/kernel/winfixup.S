@@ -94,11 +94,8 @@ fill_fixup:
 	mov		%o7, %g6
 	ldx		[%g6 + TI_TASK], %g4
 #ifdef CONFIG_SMP
-	ldub		[%g6 + TI_CPU], %g1
-	sethi		%hi(__per_cpu_offset), %g2
-	or		%g2, %lo(__per_cpu_offset), %g2
-	sllx		%g1, 3, %g1
-	ldx		[%g2 + %g1], %g5
+	mov		TSB_REG, %g1
+	ldxa		[%g1] ASI_IMMU, %g5
 #endif
 
 	/* This is the same as below, except we handle this a bit special
@@ -221,11 +218,8 @@ fill_fixup_mna:
 	mov		%o7, %g6			! Get current back.
 	ldx		[%g6 + TI_TASK], %g4		! Finish it.
 #ifdef CONFIG_SMP
-	ldub		[%g6 + TI_CPU], %g1
-	sethi		%hi(__per_cpu_offset), %g2
-	or		%g2, %lo(__per_cpu_offset), %g2
-	sllx		%g1, 3, %g1
-	ldx		[%g2 + %g1], %g5
+	mov		TSB_REG, %g1
+	ldxa		[%g1] ASI_IMMU, %g5
 #endif
 	call		mem_address_unaligned
 	 add		%sp, PTREGS_OFF, %o0
@@ -333,11 +327,8 @@ fill_fixup_dax:
 	mov		%o7, %g6			! Get current back.
 	ldx		[%g6 + TI_TASK], %g4		! Finish it.
 #ifdef CONFIG_SMP
-	ldub		[%g6 + TI_CPU], %g1
-	sethi		%hi(__per_cpu_offset), %g2
-	or		%g2, %lo(__per_cpu_offset), %g2
-	sllx		%g1, 3, %g1
-	ldx		[%g2 + %g1], %g5
+	mov		TSB_REG, %g1
+	ldxa		[%g1] ASI_IMMU, %g5
 #endif
 	call		data_access_exception
 	 add		%sp, PTREGS_OFF, %o0
