@@ -30,6 +30,7 @@
  * Replaced dumb busy loop with udelay()  16 Nov 95
  *   Nathan Laredo <laredo@gnu.ai.mit.edu>
  *
+ * Track I/O ports with request_region().  12 Dec 95 Philip Blundell 
  */
 
 #include <linux/module.h>
@@ -43,6 +44,7 @@
 #include <linux/mouse.h>
 #include <linux/random.h>
 #include <linux/delay.h>
+#include <linux/ioport.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -137,7 +139,7 @@ static int open_mouse(struct inode * inode, struct file * file)
 		return -EINVAL;
 	if (mouse.active++)
 		return 0;
-	if (request_irq(mouse_irq, mouse_interrupt, 0, "Busmouse")) {
+	if (request_irq(mouse_irq, mouse_interrupt, 0, "busmouse")) {
 		mouse.active--;
 		return -EBUSY;
 	}
@@ -242,7 +244,10 @@ static struct mouse bus_mouse = {
 
 int bus_mouse_init(void)
 {
-	int i;
+	if (check_region(LOGIBM_BASE, LOGIBM_EXTENT)) {
+	  mouse.present = 0;
+	  return -EIO;
+	}
 
 	outb(MSE_CONFIG_BYTE, MSE_CONFIG_PORT);
 	outb(MSE_SIGNATURE_BYTE, MSE_SIGNATURE_PORT);
@@ -253,6 +258,9 @@ int bus_mouse_init(void)
 	}
 	outb(MSE_DEFAULT_MODE, MSE_CONFIG_PORT);
 	MSE_INT_OFF();
+	
+	request_region(LOGIBM_BASE, LOGIBM_EXTENT, "busmouse");
+
 	mouse.present = 1;
 	mouse.active = 0;
 	mouse.ready = 0;
@@ -260,7 +268,7 @@ int bus_mouse_init(void)
 	mouse.dx = 0;
 	mouse.dy = 0;
 	mouse.wait = NULL;
-	printk("Logitech Bus mouse detected and installed with IRQ %d.\n",
+	printk("Logitech bus mouse detected, using IRQ %d.\n",
 	       mouse_irq);
 	mouse_register(&bus_mouse);
 	return 0;
@@ -276,5 +284,6 @@ int init_module(void)
 void cleanup_module(void)
 {
 	mouse_deregister(&bus_mouse);
+	release_region(LOGIBM_BASE, LOGIBM_EXTENT);
 }
 #endif

@@ -1,14 +1,11 @@
 /*
  *  linux/arch/mips/kernel/process.c
  *
- *  Copyright (C) 1995  Waldorf Electronics,
+ *  Copyright (C) 1995 Ralf Baechle
  *  written by Ralf Baechle
+ *
+ * This file handles the architecture-dependent parts of initialization
  */
-
-/*
- * This file handles the architecture-dependent parts of process handling..
- */
-
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -18,54 +15,80 @@
 #include <linux/ptrace.h>
 #include <linux/malloc.h>
 #include <linux/ldt.h>
+#include <linux/mman.h>
+#include <linux/sys.h>
 #include <linux/user.h>
 #include <linux/a.out.h>
 
+#include <asm/bootinfo.h>
 #include <asm/segment.h>
+#include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/mipsregs.h>
-#include <asm/mipsconfig.h>
+#include <asm/processor.h>
 #include <asm/stackframe.h>
+#include <asm/io.h>
 
-asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
+asmlinkage void ret_from_sys_call(void);
 
 /*
- * The idle loop on a MIPS..
+ * This routine reboots the machine by asking the keyboard
+ * controller to pulse the reset-line low. We try that for a while,
+ * and if it doesn't work, we do some other stupid things.
+ * Should be ok for Deskstation Tynes. Reseting others needs to be
+ * investigated...
  */
-asmlinkage int sys_idle(void)
+static inline void kb_wait(void)
 {
-#if 0
 	int i;
-#endif
 
-	if (current->pid != 0)
-		return -EPERM;
-
-#if 0
-	/* Map out the low memory: it's no longer needed */
-	for (i = 0 ; i < 512 ; i++)
-		pgd_clear(swapper_pg_dir + i);
-#endif
-
-	/* endless idle loop with no priority at all */
-	current->counter = -100;
-	for (;;) {
-		/*
-		 * R4[26]00 have wait, R4[04]00 don't.
-		 */
-		if (wait_available && !need_resched)
-			__asm__("wait");
-		schedule();
-	}
+	for (i=0; i<0x10000; i++)
+		if ((inb_p(0x64) & 0x02) == 0)
+			break;
 }
 
 /*
- * Do necessary setup to start up a newly executed thread.
+ * Hard reset for Deskstation Tyne
+ * No hint how this works on Pica boards.
  */
-void start_thread(struct pt_regs * regs, unsigned long eip, unsigned long esp)
+void hard_reset_now(void)
 {
-	regs->cp0_epc = eip;
-	regs->reg29 = esp;
+	int i, j;
+
+	sti();
+	for (;;) {
+		for (i=0; i<100; i++) {
+			kb_wait();
+			for(j = 0; j < 100000 ; j++)
+				/* nothing */;
+			outb(0xfe,0x64);	 /* pulse reset low */
+		}
+	}
+}
+
+void show_regs(struct pt_regs * regs)
+{
+	/*
+	 * Saved main processor registers
+	 */
+	printk("$0 : %08x %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+	       0, regs->reg1, regs->reg2, regs->reg3,
+               regs->reg4, regs->reg5, regs->reg6, regs->reg7);
+	printk("$8 : %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+	       regs->reg8, regs->reg9, regs->reg10, regs->reg11,
+               regs->reg12, regs->reg13, regs->reg14, regs->reg15);
+	printk("$16: %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+	       regs->reg16, regs->reg17, regs->reg18, regs->reg19,
+               regs->reg20, regs->reg21, regs->reg22, regs->reg23);
+	printk("$24: %08lx %08lx                   %08lx %08lx %08lx %08lx\n",
+	       regs->reg24, regs->reg25, regs->reg28, regs->reg29,
+               regs->reg30, regs->reg31);
+
+	/*
+	 * Saved cp0 registers
+	 */
+	printk("epc  : %08lx\nStatus: %08lx\nCause : %08lx\n",
+	       regs->cp0_epc, regs->cp0_status, regs->cp0_cause);
 }
 
 /*
@@ -91,31 +114,52 @@ void release_thread(struct task_struct *dead_task)
 	 * Nothing to do
 	 */
 }
-
-#define IS_CLONE (regs->orig_reg2 == __NR_clone)
-
-void copy_thread(int nr, unsigned long clone_flags, struct task_struct * p, struct pt_regs * regs)
+  
+void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
+                 struct task_struct * p, struct pt_regs * regs)
 {
 	struct pt_regs * childregs;
+	unsigned long childksp;
 
+	childksp = p->kernel_stack_page + PAGE_SIZE - 8;
 	/*
 	 * set up new TSS
 	 */
-	p->tss.fs = KERNEL_DS;
-	p->tss.ksp = (p->kernel_stack_page + PAGE_SIZE - 4) | KSEG0;
 	childregs = ((struct pt_regs *) (p->kernel_stack_page + PAGE_SIZE)) - 1;
-	p->tss.reg29 = ((unsigned long) childregs) | KSEG0; /* new sp */
-	p->tss.reg31 = (unsigned long) ret_from_sys_call;
 	*childregs = *regs;
-	childregs->reg2 = 0;
+	childregs->reg2 = 0;		/* Child gets zero as return value */
+	childregs->reg7 = 0;		/* Clear error flag */
+	regs->reg2 = p->pid;
+	if (childregs->cp0_status & ST0_CU0)
+		childregs->reg29 = childksp;
+	else
+		childregs->reg29 = usp;
+	p->tss.ksp = childksp;
+	p->tss.reg29 = (unsigned long) childregs;	/* new sp */
+	p->tss.reg31 = (unsigned long) ret_from_sys_call;
 
 	/*
 	 * New tasks loose permission to use the fpu. This accelerates context
-	 * switching for non fp programs, which true for the most programs.
+	 * switching for most programs since they don't use the fpu.
 	 */
-	p->tss.cp0_status = regs->cp0_status &
-	                    ~(ST0_CU1|ST0_CU0|ST0_KSU|ST0_ERL|ST0_EXL);
-	childregs->cp0_status &= ~(ST0_CU1|ST0_CU0);
+	p->tss.cp0_status = read_32bit_cp0_register(CP0_STATUS) &
+                            ~(ST0_CU3|ST0_CU2|ST0_CU1|ST0_KSU|ST0_ERL|ST0_EXL);
+	childregs->cp0_status &= ~(ST0_CU3|ST0_CU2|ST0_CU1);
+}
+
+/*
+ * fill in the fpu structure for a core dump..
+ *
+ * Actually this is "int dump_fpu (struct elf_fpregset_t *fpu)"
+ */
+int dump_fpu (int shutup_the_gcc_warning_about_elf_fpregset_t)
+{
+	int fpvalid = 0;
+	/*
+	 * To do...
+	 */
+
+	return fpvalid;
 }
 
 /*
@@ -124,56 +168,6 @@ void copy_thread(int nr, unsigned long clone_flags, struct task_struct * p, stru
 void dump_thread(struct pt_regs * regs, struct user * dump)
 {
 	/*
-	 * Not ready yet
+	 * To do...
 	 */
-#if 0
-	int i;
-
-/* changed the size calculations - should hopefully work better. lbt */
-	dump->magic = CMAGIC;
-	dump->start_code = 0;
-	dump->start_stack = regs->esp & ~(PAGE_SIZE - 1);
-	dump->u_tsize = ((unsigned long) current->mm->end_code) >> 12;
-	dump->u_dsize = ((unsigned long) (current->mm->brk + (PAGE_SIZE-1))) >> 12;
-	dump->u_dsize -= dump->u_tsize;
-	dump->u_ssize = 0;
-	for (i = 0; i < 8; i++)
-		dump->u_debugreg[i] = current->debugreg[i];  
-
-	if (dump->start_stack < TASK_SIZE)
-		dump->u_ssize = ((unsigned long) (TASK_SIZE - dump->start_stack)) >> 12;
-
-	dump->regs = *regs;
-
-/* Flag indicating the math stuff is valid. We don't support this for the
-   soft-float routines yet */
-	if (hard_math) {
-		if ((dump->u_fpvalid = current->used_math) != 0) {
-			if (last_task_used_math == current)
-				__asm__("clts ; fnsave %0": :"m" (dump->i387));
-			else
-				memcpy(&dump->i387,&current->tss.i387.hard,sizeof(dump->i387));
-		}
-	} else {
-		/* we should dump the emulator state here, but we need to
-		   convert it into standard 387 format first.. */
-		dump->u_fpvalid = 0;
-	}
-#endif
-}
-
-/*
- * sys_execve() executes a new program.
- */
-asmlinkage int sys_execve(struct pt_regs regs)
-{
-	int error;
-	char * filename;
-
-	error = getname((char *) regs.reg4, &filename);
-	if (error)
-		return error;
-	error = do_execve(filename, (char **) regs.reg5, (char **) regs.reg6, &regs);
-	putname(filename);
-	return error;
 }

@@ -24,6 +24,7 @@
 #include <linux/config.h>	/* CONFIG_ALPHA_LCA etc */
 
 #include <asm/segment.h>
+#include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/hwrpb.h>
 #include <asm/dma.h>
@@ -44,7 +45,7 @@ unsigned char aux_device_present = 0xaa;
  * initialized, we need to copy things out into a more permanent
  * place.
  */
-#define PARAM			ZERO_PGE
+#define PARAM			ZERO_PAGE
 #define COMMAND_LINE		((char*)(PARAM + 0x0000))
 #define COMMAND_LINE_SIZE	256
 

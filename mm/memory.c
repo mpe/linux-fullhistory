@@ -59,7 +59,19 @@ int nr_free_pages = 0;
 struct mem_list free_area_list[NR_MEM_LISTS];
 unsigned char * free_area_map[NR_MEM_LISTS];
 
-#define copy_page(from,to) memcpy((void *) to, (void *) from, PAGE_SIZE)
+/*
+ * We special-case the C-O-W ZERO_PAGE, because it's such
+ * a common occurrence (no need to read the page to know
+ * that it's zero - better for the cache and memory subsystem).
+ */
+static inline void copy_page(unsigned long from, unsigned long to)
+{
+	if (from == ZERO_PAGE) {
+		memset((void *) to, 0, PAGE_SIZE);
+		return;
+	}
+	memcpy((void *) to, (void *) from, PAGE_SIZE);
+}
 
 #define USER_PTRS_PER_PGD (TASK_SIZE / PGDIR_SIZE)
 
@@ -549,8 +561,8 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 	}
 	if (!pte_none(*pte)) {
 		printk("put_dirty_page: page already exists\n");
-		pte_clear(pte);
-		invalidate_page(tsk->mm, address);
+		free_page(page);
+		return 0;
 	}
 	set_pte(pte, pte_mkwrite(pte_mkdirty(mk_pte(page, PAGE_COPY))));
 /* no need for invalidate */
@@ -613,17 +625,17 @@ void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 			copy_page(old_page,new_page);
 			set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
 			free_page(old_page);
-			invalidate_page(vma->vm_mm, address);
+			invalidate_page(vma, address);
 			return;
 		}
 		set_pte(page_table, BAD_PAGE);
 		free_page(old_page);
 		oom(tsk);
-		invalidate_page(vma->vm_mm, address);
+		invalidate_page(vma, address);
 		return;
 	}
 	set_pte(page_table, pte_mkdirty(pte_mkwrite(pte)));
-	invalidate_page(vma->vm_mm, address);
+	invalidate_page(vma, address);
 	if (new_page)
 		free_page(new_page);
 	return;
@@ -845,7 +857,7 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 		return 1;
 /* ok, need to mark it read-only, so invalidate any possible old TB entry */
 	set_pte(from_table, pte_wrprotect(from));
-	invalidate_page(from_area->vm_mm, from_address);
+	invalidate_page(from_area, from_address);
 	return 1;
 }
 

@@ -97,6 +97,16 @@ struct serial_multiport_struct {
 	int	reserved[32];
 };
 
+/*
+ * Serial input interrupt line counters -- external structure
+ * Four lines can interrupt: CTS, DSR, RI, DCD
+ */
+struct serial_icounter_struct {
+	int cts, dsr, rng, dcd;
+	int reserved[16];
+};
+
+
 #ifdef __KERNEL__
 /*
  * This is our internal structure for each serial port's state.
@@ -109,6 +119,13 @@ struct serial_multiport_struct {
 
 #include <linux/termios.h>
 #include <linux/tqueue.h>
+
+/*
+ * Counters of the input lines (CTS, DSR, RI, CD) interrupts
+ */
+struct async_icount {
+	__u32	cts, dsr, rng, dcd;	
+};
 
 struct async_struct {
 	int			magic;
@@ -148,6 +165,8 @@ struct async_struct {
 	struct termios		callout_termios;
 	struct wait_queue	*open_wait;
 	struct wait_queue	*close_wait;
+	struct wait_queue	*delta_msr_wait;
+	struct async_icount	icount;	/* kernel counters for the 4 input interrupts */
 	struct async_struct	*next_port; /* For the linked list */
 	struct async_struct	*prev_port;
 };

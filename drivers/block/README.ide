@@ -12,6 +12,8 @@ See description later on below for handling BIG IDE drives with >1024 cyls.
 
 Major features of ide.c & ide-cd.c:
 
+NEW!	- support for IDE ATAPI *tape* drives, courtesy of Gadi Oxman
+		(run MAKEDEV.ide to create the tape device entries in /dev/)
 NEW!	- support for up to *four* IDE interfaces on one or more IRQs
 NEW!	- support for any mix of up to *eight* disk and/or cdrom drives
 	- support for reading IDE ATAPI cdrom drives (NEC,MITSUMI,VERTOS,SONY)

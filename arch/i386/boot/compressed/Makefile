@@ -7,7 +7,7 @@
 HEAD = head.o
 SYSTEM = $(TOPDIR)/vmlinux
 
-OBJECTS = $(HEAD) inflate.o unzip.o misc.o
+OBJECTS = $(HEAD) misc.o
 
 CFLAGS = -O2 -DSTDC_HEADERS
 

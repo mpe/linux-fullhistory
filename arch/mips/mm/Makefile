@@ -1,5 +1,5 @@
 #
-# Makefile for the linux mips-specific parts of the memory manager.
+# Makefile for the Linux/MIPS-specific parts of the memory manager.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here

@@ -9,17 +9,62 @@
  * in <asm/page.h> (currently 8192).
  */
 
-#define invalidate_all() \
-__asm__ __volatile__( \
-	"lda $16,-2($31)\n\t" \
-	".long 51" \
-	: : :"$1", "$16", "$17", "$22","$23","$24","$25")
+extern void tbi(long type, ...);
 
-#define invalidate() \
-__asm__ __volatile__( \
-	"lda $16,-1($31)\n\t" \
-	".long 51" \
-	: : :"$1", "$16", "$17", "$22","$23","$24","$25")
+#define tbisi(x)	tbi(1,(x))
+#define tbisd(x)	tbi(2,(x))
+#define tbis(x)		tbi(3,(x))
+#define tbiap()		tbi(-1)
+#define tbia()		tbi(-2)
+
+/*
+ * Invalidate current user mapping.
+ */
+static inline void invalidate(void)
+{
+	tbiap();
+}
+
+/*
+ * Invalidate everything (kernel mapping may also have
+ * changed due to vmalloc/vfree)
+ */
+static inline void invalidate_all(void)
+{
+	tbia();
+}
+
+/*
+ * Invalidate a specified user mapping
+ */
+static inline void invalidate_mm(struct mm_struct *mm)
+{
+	tbiap();
+}
+
+/*
+ * Page-granular invalidate.
+ *
+ * do a tbisd (type = 2) normally, and a tbis (type = 3)
+ * if it is an executable mapping.  We want to avoid the
+ * itlb invalidate, because that potentially also does a
+ * icache invalidate. 
+ */
+static inline void invalidate_page(struct vm_area_struct *vma,
+	unsigned long addr)
+{
+	tbi(2 + ((vma->vm_flags & VM_EXEC) != 0), addr);
+}
+
+/*
+ * Invalidate a specified range of user mapping: on the
+ * alpha we invalidate the whole user tlb
+ */
+static inline void invalidate_range(struct mm_struct *mm,
+	unsigned long start, unsigned long end)
+{
+	tbiap();
+}
 
 /* Certain architectures need to do special things when pte's
  * within a page table are directly modified.  Thus, the following
@@ -143,9 +188,9 @@ extern pmd_t * __bad_pagetable(void);
 
 extern unsigned long __zero_page(void);
 
-#define BAD_PAGETABLE __bad_pagetable()
-#define BAD_PAGE __bad_page()
-#define ZERO_PAGE __zero_page()
+#define BAD_PAGETABLE	__bad_pagetable()
+#define BAD_PAGE	__bad_page()
+#define ZERO_PAGE	0xfffffc000030A000
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR			(8*sizeof(unsigned long))

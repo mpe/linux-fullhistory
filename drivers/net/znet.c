@@ -623,7 +623,6 @@ static struct enet_statistics *net_get_stats(struct device *dev)
 		return &lp->stats;
 }
 
-#ifdef HAVE_MULTICAST
 /* Set or clear the multicast filter for this adaptor.
    As a side effect this routine must also initialize the device parameters.
    This is taken advantage of in open().
@@ -662,7 +661,6 @@ static void set_multicast_list(struct device *dev)
 	}
 #endif
 }
-#endif
 
 void show_dma(void)
 {

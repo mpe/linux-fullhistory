@@ -623,6 +623,7 @@ int blk_dev_init(void)
 		req->next = NULL;
 	}
 	memset(ro_bits,0,sizeof(ro_bits));
+	rd_init();
 #ifdef CONFIG_BLK_DEV_IDE
 	ide_init();		/* this MUST preceed hd_init */
 #endif

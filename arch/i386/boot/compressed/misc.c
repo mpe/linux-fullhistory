@@ -8,12 +8,68 @@
  * puts by Nick Holloway 1993, better puts by Martin Mares 1995
  */
 
-#include "gzip.h"
-#include "lzw.h"
+#include <string.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
 
+/*
+ * gzip declarations
+ */
+
+#define OF(args)  args
+#define STATIC static
+
+#define memzero(s, n)     memset ((s), 0, (n))
+
+typedef unsigned char  uch;
+typedef unsigned short ush;
+typedef unsigned long  ulg;
+
+#define WSIZE 0x8000		/* Window size must be at least 32k, */
+				/* and a power of two */
+
+static uch *inbuf;	     /* input buffer */
+static uch window[WSIZE];    /* Sliding window buffer */
+
+static unsigned insize = 0;  /* valid bytes in inbuf */
+static unsigned inptr = 0;   /* index of next byte to be processed in inbuf */
+static unsigned outcnt = 0;  /* bytes in output buffer */
+
+/* gzip flag byte */
+#define ASCII_FLAG   0x01 /* bit 0 set: file probably ascii text */
+#define CONTINUATION 0x02 /* bit 1 set: continuation of multi-part gzip file */
+#define EXTRA_FIELD  0x04 /* bit 2 set: extra field present */
+#define ORIG_NAME    0x08 /* bit 3 set: original file name present */
+#define COMMENT      0x10 /* bit 4 set: file comment present */
+#define ENCRYPTED    0x20 /* bit 5 set: file is encrypted */
+#define RESERVED     0xC0 /* bit 6,7:   reserved */
+
+#define get_byte()  (inptr < insize ? inbuf[inptr++] : fill_inbuf())
+		
+/* Diagnostic functions */
+#ifdef DEBUG
+#  define Assert(cond,msg) {if(!(cond)) error(msg);}
+#  define Trace(x) fprintf x
+#  define Tracev(x) {if (verbose) fprintf x ;}
+#  define Tracevv(x) {if (verbose>1) fprintf x ;}
+#  define Tracec(c,x) {if (verbose && (c)) fprintf x ;}
+#  define Tracecv(c,x) {if (verbose>1 && (c)) fprintf x ;}
+#else
+#  define Assert(cond,msg)
+#  define Trace(x)
+#  define Tracev(x)
+#  define Tracevv(x)
+#  define Tracec(c,x)
+#  define Tracecv(c,x)
+#endif
+
+static int  fill_inbuf(void);
+static void flush_window(void);
+static void error(char *m);
+static void gzip_mark(void **);
+static void gzip_release(void **);
+  
 /*
  * These are set up by the setup-routine at boot-time:
  */
@@ -42,83 +98,63 @@ struct screen_info {
 #define ORIG_ROOT_DEV (*(unsigned short *)0x901FC)
 #define AUX_DEVICE_INFO (*(unsigned char *)0x901FF)
 
-#define EOF -1
-
-DECLARE(uch, inbuf, INBUFSIZ);
-DECLARE(uch, outbuf, OUTBUFSIZ+OUTBUF_EXTRA);
-DECLARE(uch, window, WSIZE);
-
-unsigned outcnt;
-unsigned insize;
-unsigned inptr;
-
 extern char input_data[];
 extern int input_len;
 
-int input_ptr;
-
-int method, exit_code, part_nb, last_member;
-int test = 0;
-int force = 0;
-int verbose = 1;
-long bytes_in, bytes_out;
-
-char *output_data;
-unsigned long output_ptr;
-
-extern int end;
-long free_mem_ptr = (long)&end;
-
-int to_stdout = 0;
-int hard_math = 0;
-
-void (*work)(int inf, int outf);
-void makecrc(void);
-
-local int get_method(int);
-
-char *vidmem = (char *)0xb8000;
-int vidport;
-int lines, cols;
-
+static long bytes_out = 0;
+static uch *output_data;
+static unsigned long output_ptr = 0;
+ 
+static void *malloc(int size);
+static void free(void *where);
+static void error(char *m);
+static void gzip_mark(void **);
+static void gzip_release(void **);
+ 
+#ifndef STANDALONE_DEBUG
 static void puts(const char *);
+  
+extern int end;
+static long free_mem_ptr = (long)&end;
 
-void *malloc(int size)
+static char *vidmem = (char *)0xb8000;
+static int vidport;
+static int lines, cols;
+
+#include "../../../../lib/inflate.c"
+
+static void *malloc(int size)
 {
 	void *p;
 
 	if (size <0) error("Malloc error\n");
 	if (free_mem_ptr <= 0) error("Memory error\n");
 
-   while(1) {
 	free_mem_ptr = (free_mem_ptr + 3) & ~3;	/* Align */
 
 	p = (void *)free_mem_ptr;
 	free_mem_ptr += size;
 
-	/*
-  	 * The part of the compressed kernel which has already been expanded
-	 * is no longer needed. Therefore we can reuse it for malloc.
-	 * With bigger kernels, this is necessary.
-	 */
-          
-	if (free_mem_ptr < (long)&end) {
-		if (free_mem_ptr > (long)&input_data[input_ptr])
-			error("\nOut of memory\n");
+	if (free_mem_ptr >= 0x90000)
+		error("\nOut of memory\n");
 
-		return p;
-	}
-	if (free_mem_ptr < 0x90000)
 	return p;
-	puts("large kernel, low 1M tight...");
-	free_mem_ptr = (long)input_data;
-	}
 }
 
-void free(void *where)
+static void free(void *where)
 {	/* Don't care */
 }
 
+static void gzip_mark(void **ptr)
+{
+	*ptr = (void *) free_mem_ptr;
+}
+
+static void gzip_release(void **ptr)
+{
+	free_mem_ptr = (long) *ptr;
+}
+ 
 static void scroll()
 {
 	int i;
@@ -181,129 +217,47 @@ __ptr_t memcpy(__ptr_t __dest, __const __ptr_t __src,
 
 	for (i=0;i<__n;i++) d[i] = s[i];
 }
-
-extern ulg crc_32_tab[];   /* crc table, defined below */
-
-/* ===========================================================================
- * Run a set of bytes through the crc shift register.  If s is a NULL
- * pointer, then initialize the crc shift register contents instead.
- * Return the current crc in either case.
- */
-ulg updcrc(s, n)
-    uch *s;                 /* pointer to bytes to pump through */
-    unsigned n;             /* number of bytes in s[] */
-{
-    register ulg c;         /* temporary variable */
-
-    static ulg crc = (ulg)0xffffffffL; /* shift register contents */
-
-    if (s == NULL) {
-	c = 0xffffffffL;
-    } else {
-	c = crc;
-	while (n--) {
-	    c = crc_32_tab[((int)c ^ (*s++)) & 0xff] ^ (c >> 8);
-	}
-    }
-    crc = c;
-    return c ^ 0xffffffffL;       /* (instead of ~c for 64-bit machines) */
-}
-
-/* ===========================================================================
- * Clear input and output buffers
- */
-void clear_bufs()
-{
-    outcnt = 0;
-    insize = inptr = 0;
-    bytes_in = bytes_out = 0L;
-}
+#endif
 
 /* ===========================================================================
  * Fill the input buffer. This is called only when the buffer is empty
  * and at least one byte is really needed.
  */
-int fill_inbuf()
+static int fill_inbuf()
 {
-    int len, i;
+	if (insize != 0) {
+		error("ran out of input data\n");
+	}
 
-    /* Read as much as possible */
-    insize = 0;
-    do {
-	len = INBUFSIZ-insize;
-	if (len > (input_len-input_ptr+1)) len=input_len-input_ptr+1;
-        if (len == 0 || len == EOF) break;
-
-        for (i=0;i<len;i++) inbuf[insize+i] = input_data[input_ptr+i];
-	insize += len;
-	input_ptr += len;
-    } while (insize < INBUFSIZ);
-
-    if (insize == 0) {
-	error("unable to fill buffer\n");
-    }
-    bytes_in += (ulg)insize;
-    inptr = 1;
-    return inbuf[0];
+	inbuf = input_data;
+	insize = input_len;
+	inptr = 1;
+	return inbuf[0];
 }
 
 /* ===========================================================================
  * Write the output window window[0..outcnt-1] and update crc and bytes_out.
  * (Used for the decompressed data only.)
  */
-void flush_window()
+static void flush_window()
 {
-    if (outcnt == 0) return;
-    updcrc(window, outcnt);
-
-    memcpy(&output_data[output_ptr], (char *)window, outcnt);
-
+    ulg c = crc;         /* temporary variable */
+    unsigned n;
+    uch *in, *out, ch;
+    
+    in = window;
+    out = &output_data[output_ptr]; 
+    for (n = 0; n < outcnt; n++) {
+	    ch = *out++ = *in++;
+	    c = crc_32_tab[((int)c ^ ch) & 0xff] ^ (c >> 8);
+    }
+    crc = c;
     bytes_out += (ulg)outcnt;
     output_ptr += (ulg)outcnt;
     outcnt = 0;
 }
 
-/*
- * Code to compute the CRC-32 table. Borrowed from 
- * gzip-1.0.3/makecrc.c.
- */
-
-ulg crc_32_tab[256];
-
-void
-makecrc(void)
-{
-/* Not copyrighted 1990 Mark Adler	*/
-
-  unsigned long c;      /* crc shift register */
-  unsigned long e;      /* polynomial exclusive-or pattern */
-  int i;                /* counter for all possible eight bit values */
-  int k;                /* byte being shifted into crc apparatus */
-
-  /* terms of polynomial defining this crc (except x^32): */
-  static int p[] = {0,1,2,4,5,7,8,10,11,12,16,22,23,26};
-
-  /* Make exclusive-or pattern from polynomial */
-  e = 0;
-  for (i = 0; i < sizeof(p)/sizeof(int); i++)
-    e |= 1L << (31 - p[i]);
-
-  crc_32_tab[0] = 0;
-
-  for (i = 1; i < 256; i++)
-  {
-    c = 0;
-    for (k = i | 256; k != 1; k >>= 1)
-    {
-      c = c & 1 ? (c >> 1) ^ e : c >> 1;
-      if (k & 1)
-        c ^= e;
-    }
-    crc_32_tab[i] = c;
-  }
-}
-
-void error(char *x)
+static void error(char *x)
 {
 	puts("\n\n");
 	puts(x);
@@ -321,6 +275,34 @@ struct {
 	short b;
 	} stack_start = { & user_stack [STACK_SIZE] , KERNEL_DS };
 
+#ifdef STANDALONE_DEBUG
+
+static void gzip_mark(void **ptr)
+{
+}
+
+static void gzip_release(void **ptr)
+{
+}
+
+char output_buffer[1024 * 800];
+
+int
+main(argc, argv)
+	int	argc;
+	char	**argv;
+{
+	output_data = output_buffer;
+
+	makecrc();
+	puts("Uncompressing Linux...");
+	gunzip();
+	puts("done.\n");
+	return 0;
+}
+
+#else
+
 void decompress_kernel()
 {
 	if (SCREEN_INFO.orig_video_mode == 7) {
@@ -337,94 +319,13 @@ void decompress_kernel()
 	if (EXT_MEM_K < 1024) error("<2M of mem\n");
 
 	output_data = (char *)0x100000;	/* Points to 1M */
-	output_ptr = 0;
-
-	exit_code = 0;
-	test = 0;
-	input_ptr = 0;
-	part_nb = 0;
-
-	clear_bufs();
 	makecrc();
-
 	puts("Uncompressing Linux...");
-
-	method = get_method(0);
-
-	work(0, 0);
-
-	puts("done.\n");
-
-	puts("Now booting the kernel\n");
+	gunzip();
+	puts("done.\nNow booting the kernel\n");
 }
+#endif
 
-/* ========================================================================
- * Check the magic number of the input file and update ofname if an
- * original name was given and to_stdout is not set.
- * Return the compression method, -1 for error, -2 for warning.
- * Set inptr to the offset of the next byte to be processed.
- * This function may be called repeatedly for an input file consisting
- * of several contiguous gzip'ed members.
- * IN assertions: there is at least one remaining compressed member.
- *   If the member is a zip file, it must be the only one.
- */
-local int get_method(in)
-    int in;        /* input file descriptor */
-{
-    uch flags;
-    char magic[2]; /* magic header */
 
-    magic[0] = (char)get_byte();
-    magic[1] = (char)get_byte();
 
-    method = -1;                 /* unknown yet */
-    part_nb++;                   /* number of parts in gzip file */
-    last_member = 0;
-    /* assume multiple members in gzip file except for record oriented I/O */
 
-    if (memcmp(magic, GZIP_MAGIC, 2) == 0
-        || memcmp(magic, OLD_GZIP_MAGIC, 2) == 0) {
-
-	work = unzip;
-	method = (int)get_byte();
-	flags  = (uch)get_byte();
-	if ((flags & ENCRYPTED) != 0)
-	    error("Input is encrypted\n");
-	if ((flags & CONTINUATION) != 0)
-	       error("Multi part input\n");
-	if ((flags & RESERVED) != 0) {
-	    error("Input has invalid flags\n");
-	    exit_code = ERROR;
-	    if (force <= 1) return -1;
-	}
-	(ulg)get_byte();	/* Get timestamp */
-	((ulg)get_byte()) << 8;
-	((ulg)get_byte()) << 16;
-	((ulg)get_byte()) << 24;
-
-	(void)get_byte();  /* Ignore extra flags for the moment */
-	(void)get_byte();  /* Ignore OS type for the moment */
-
-	if ((flags & EXTRA_FIELD) != 0) {
-	    unsigned len = (unsigned)get_byte();
-	    len |= ((unsigned)get_byte())<<8;
-	    while (len--) (void)get_byte();
-	}
-
-	/* Get original file name if it was truncated */
-	if ((flags & ORIG_NAME) != 0) {
-	    if (to_stdout || part_nb > 1) {
-		/* Discard the old name */
-		while (get_byte() != 0) /* null */ ;
-	    } else {
-	    } /* to_stdout */
-	} /* orig_name */
-
-	/* Discard file comment if any */
-	if ((flags & COMMENT) != 0) {
-	    while (get_byte() != 0) /* null */ ;
-	}
-    } else
-	error("unknown compression method");
-    return method;
-}

@@ -20,10 +20,6 @@
 #include <asm/pgtable.h>
 
 extern void die_if_kernel(char *,struct pt_regs *,long);
-extern void tbi(unsigned long type, unsigned long arg);
-#define tbisi(x) tbi(1,(x))
-#define tbisd(x) tbi(2,(x))
-#define tbis(x)  tbi(3,(x))
 
 /*
  * This routine handles page faults.  It determines the address,

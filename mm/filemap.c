@@ -142,7 +142,7 @@ int filemap_swapout(struct vm_area_struct * vma,
 
 	set_pte(page_table, __pte(entry));
 	/* Yuck, perhaps a slightly modified swapout parameter set? */
-	invalidate_page(vma->vm_mm, (offset + vma->vm_start - vma->vm_offset));
+	invalidate_page(vma, (offset + vma->vm_start - vma->vm_offset));
 	error = filemap_write_page(vma, offset, page);
 	if (pte_val(*page_table) == entry)
 		pte_clear(page_table);
@@ -180,14 +180,14 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 		if (!pte_dirty(pte))
 			return 0;
 		set_pte(ptep, pte_mkclean(pte));
-		invalidate_page(vma->vm_mm, address);
+		invalidate_page(vma, address);
 		page = pte_page(pte);
 		mem_map[MAP_NR(page)].count++;
 	} else {
 		if (pte_none(pte))
 			return 0;
 		pte_clear(ptep);
-		invalidate_page(vma->vm_mm, address);
+		invalidate_page(vma, address);
 		if (!pte_present(pte)) {
 			swap_free(pte_val(pte));
 			return 0;

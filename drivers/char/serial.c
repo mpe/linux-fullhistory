@@ -11,6 +11,8 @@
  *  set_serial_info fixed to set the flags, custom divisor, and uart
  * 	type fields.  Fix suggested by Michael K. Johnson 12/12/92.
  *
+ *  TIOCMIWAIT, TIOCGICOUNT by Angelo Haritsis <ah@doc.ic.ac.uk>
+ *
  * This module exports the following rs232 io functions:
  *
  *	int rs_init(void);
@@ -454,6 +456,19 @@ static _INLINE_ void check_modem_status(struct async_struct *info)
 	int	status;
 	
 	status = serial_in(info, UART_MSR);
+
+	if (status & UART_MSR_ANY_DELTA) {
+		/* update input line counters */
+		if (status & UART_MSR_TERI)
+			info->icount.rng++;
+		if (status & UART_MSR_DDSR)
+			info->icount.dsr++;
+		if (status & UART_MSR_DDCD)
+			info->icount.dcd++;
+		if (status & UART_MSR_DCTS)
+			info->icount.cts++;
+		wake_up_interruptible(&info->delta_msr_wait);
+	}
 
 	if ((info->flags & ASYNC_CHECK_CD) && (status & UART_MSR_DDCD)) {
 #if (defined(SERIAL_DEBUG_OPEN) || defined(SERIAL_DEBUG_INTR))
@@ -1304,6 +1319,8 @@ static int rs_write(struct tty_struct * tty, int from_user,
 	if (!tty || !info->xmit_buf || !tmp_buf)
 		return 0;
 	    
+	if (from_user)
+		down(&tmp_buf_sem);
 	save_flags(flags);
 	while (1) {
 		cli();		
@@ -1313,12 +1330,10 @@ static int rs_write(struct tty_struct * tty, int from_user,
 			break;
 
 		if (from_user) {
-			down(&tmp_buf_sem);
 			memcpy_fromfs(tmp_buf, buf, c);
 			c = MIN(c, MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
 				       SERIAL_XMIT_SIZE - info->xmit_head));
 			memcpy(info->xmit_buf + info->xmit_head, tmp_buf, c);
-			up(&tmp_buf_sem);
 		} else
 			memcpy(info->xmit_buf + info->xmit_head, buf, c);
 		info->xmit_head = (info->xmit_head + c) & (SERIAL_XMIT_SIZE-1);
@@ -1328,6 +1343,8 @@ static int rs_write(struct tty_struct * tty, int from_user,
 		count -= c;
 		total += c;
 	}
+	if (from_user)
+		up(&tmp_buf_sem);
 	if (info->xmit_cnt && !tty->stopped && !tty->hw_stopped &&
 	    !(info->IER & UART_IER_THRI)) {
 		info->IER |= UART_IER_THRI;
@@ -1843,13 +1860,16 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 	int error;
 	struct async_struct * info = (struct async_struct *)tty->driver_data;
 	int retval;
+	struct async_icount cprev, cnow;	/* kernel counter temps */
+	struct serial_icounter_struct *p_cuser;	/* user space */
 
 	if (serial_paranoia_check(info, tty->device, "rs_ioctl"))
 		return -ENODEV;
 
 	if ((cmd != TIOCGSERIAL) && (cmd != TIOCSSERIAL) &&
 	    (cmd != TIOCSERCONFIG) && (cmd != TIOCSERGWILD)  &&
-	    (cmd != TIOCSERSWILD) && (cmd != TIOCSERGSTRUCT)) {
+	    (cmd != TIOCSERSWILD) && (cmd != TIOCSERGSTRUCT) &&
+	    (cmd != TIOCMIWAIT) && (cmd != TIOCGICOUNT)) {
 		if (tty->flags & (1 << TTY_IO_ERROR))
 		    return -EIO;
 	}
@@ -1949,6 +1969,55 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 		case TIOCSERSETMULTI:
 			return set_multiport_struct(info,
 				       (struct serial_multiport_struct *) arg);
+		/*
+		 * Wait for any of the 4 modem inputs (DCD,RI,DSR,CTS) to change
+		 * - mask passed in arg for lines of interest
+ 		 *   (use |'ed TIOCM_RNG/DSR/CD/CTS for masking)
+		 * Caller should use TIOCGICOUNT to see which one it was
+		 */
+		 case TIOCMIWAIT:
+			cli();
+			cprev = info->icount;	/* note the counters on entry */
+			sti();
+			while (1) {
+				interruptible_sleep_on(&info->delta_msr_wait);
+				/* see if a signal did it */
+				if (current->signal & ~current->blocked)
+					return -ERESTARTSYS;
+				cli();
+				cnow = info->icount;	/* atomic copy */
+				sti();
+				if ( ((arg & TIOCM_RNG) && (cnow.rng != cprev.rng)) ||
+				     ((arg & TIOCM_DSR) && (cnow.dsr != cprev.dsr)) ||
+				     ((arg & TIOCM_CD)  && (cnow.dcd != cprev.dcd)) ||
+				     ((arg & TIOCM_CTS) && (cnow.cts != cprev.cts)) ) {
+					return 0;
+				}
+				cprev = cnow;
+			}
+			/* NOTREACHED */
+
+		/* 
+		 * Get counter of input serial line interrupts (DCD,RI,DSR,CTS)
+		 * Return: write counters to the user passed counter struct
+		 * NB: both 1->0 and 0->1 transitions are counted except for
+		 *     RI where only 0->1 is counted.
+		 */
+		case TIOCGICOUNT:
+			error = verify_area(VERIFY_WRITE, (void *) arg,
+				sizeof(struct serial_icounter_struct));
+			if (error)
+				return error;
+			cli();
+			cnow = info->icount;
+			sti();
+			p_cuser = (struct serial_icounter_struct *) arg;
+			put_user(cnow.cts, &p_cuser->cts);
+			put_user(cnow.dsr, &p_cuser->dsr);
+			put_user(cnow.rng, &p_cuser->rng);
+			put_user(cnow.dcd, &p_cuser->dcd);
+			return 0;
+
 		default:
 			return -ENOIOCTLCMD;
 		}
@@ -2662,6 +2731,9 @@ int rs_init(void)
 		info->normal_termios = serial_driver.init_termios;
 		info->open_wait = 0;
 		info->close_wait = 0;
+		info->delta_msr_wait = 0;
+		info->icount.cts = info->icount.dsr = 
+			info->icount.rng = info->icount.dcd = 0;
 		info->next_port = 0;
 		info->prev_port = 0;
 		if (info->irq == 2)

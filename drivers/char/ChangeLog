@@ -1,3 +1,14 @@
+Tue Dec  5 13:21:27 1995    <tytso@rsts-11.mit.edu>
+
+	* serial.c (check_modem_status, rs_ioctl): Support the new
+		ioctl()'s TIOCGICOUNT, TIOCMIWAIT.  These allow an
+		application program to wait on a modem serial register
+		status bit change, and to find out how many changes have
+		taken place for the MSR bits.
+
+		(rs_write): Eliminate a race condition which is introduced
+		if it is necessary to wait for the semaphore.
+
 Sat Nov  4 17:14:45 1995    <tytso@rsts-11.mit.edu>
 
 	* tty_io.c (tty_init): Move registration of TTY_MAJOR and

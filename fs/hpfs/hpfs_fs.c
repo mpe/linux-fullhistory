@@ -232,7 +232,7 @@ struct quad_buffer_head {
 /* forwards */
 
 static int parse_opts(char *opts, uid_t *uid, gid_t *gid, umode_t *umask,
-		      int *lowercase, int *conv);
+		      int *lowercase, int *conv, int *nocheck);
 static int check_warn(int not_ok,
 		      const char *p1, const char *p2, const char *p3);
 static int zerop(void *addr, unsigned len);
@@ -344,6 +344,7 @@ struct super_block *hpfs_read_super(struct super_block *s,
 	int lowercase;
 	int conv;
 	int dubious;
+	int nocheck;
 
 	MOD_INC_USE_COUNT;
 
@@ -351,7 +352,8 @@ struct super_block *hpfs_read_super(struct super_block *s,
 	 * Get the mount options
 	 */
 
-	if (!parse_opts(options, &uid, &gid, &umask, &lowercase, &conv)) {
+	if (!parse_opts(options, &uid, &gid, &umask, &lowercase, &conv,
+				 &nocheck)) {
 		printk("HPFS: syntax error in mount options.  Not mounted.\n");
 		s->s_dev = 0;
 		MOD_DEC_USE_COUNT;
@@ -414,7 +416,7 @@ struct super_block *hpfs_read_super(struct super_block *s,
 	 * so don't
 	 */
 
-	if (dubious)
+	if (dubious && !nocheck)
 		goto bail2;
 
 	dubious |= check_warn((spareblock->n_dnode_spares !=
@@ -544,7 +546,7 @@ static int zerop(void *addr, unsigned len)
  */
 
 static int parse_opts(char *opts, uid_t *uid, gid_t *gid, umode_t *umask,
-		      int *lowercase, int *conv)
+		      int *lowercase, int *conv, int *nocheck)
 {
 	char *p, *rhs;
 
@@ -553,6 +555,7 @@ static int parse_opts(char *opts, uid_t *uid, gid_t *gid, umode_t *umask,
 	*umask = current->fs->umask;
 	*lowercase = 1;
 	*conv = CONV_BINARY;
+        *nocheck = 0;
 
 	if (!opts)
 		return 1;
@@ -599,6 +602,8 @@ static int parse_opts(char *opts, uid_t *uid, gid_t *gid, umode_t *umask,
 			else
 				return 0;
 		}
+		else if (!strcmp(p,"nocheck")) 
+			*nocheck=1;
 		else
 			return 1;
 	}

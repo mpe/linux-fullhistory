@@ -1,11 +1,8 @@
 /*
  *  arch/mips/mm/fault.c
  *
- *  Copyright (C) 1991, 1992, 1993, 1994  Linus Torvalds
- *  Ported to MIPS by Ralf Baechle
+ *  Copyright (C) 1995 by Ralf Baechle
  */
-
-#include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/head.h>
@@ -19,7 +16,7 @@
 
 #include <asm/system.h>
 #include <asm/segment.h>
-#include <asm/mipsconfig.h>
+#include <asm/pgtable.h>
 
 extern void die_if_kernel(char *, struct pt_regs *, long);
 
@@ -27,61 +24,43 @@ extern void die_if_kernel(char *, struct pt_regs *, long);
  * This routine handles page faults.  It determines the address,
  * and the problem, and then passes it off to one of the appropriate
  * routines.
- *
- * The error_code parameter just the same as in the i386 version:
- *
- *	bit 0 == 0 means no page found, 1 means protection fault
- *	bit 1 == 0 means read, 1 means write
- *	bit 2 == 0 means kernel, 1 means user-mode
  */
-asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
+asmlinkage void
+do_page_fault(struct pt_regs *regs, unsigned long writeaccess, unsigned long address)
 {
 	struct vm_area_struct * vma;
-	unsigned long address;
-	unsigned long page;
 
-	/* get the address */
-	__asm__("dmfc0\t%0,$8"
-	        : "=r" (address));
-
-	for (vma = current->mm->mmap ; ; vma = vma->vm_next) {
-		if (!vma)
-			goto bad_area;
-		if (vma->vm_end > address)
-			break;
-	}
+#if 0
+	printk("do_page_fault() #1: %s %08lx (epc == %08lx, ra == %08lx)\n",
+	       writeaccess ? "writeaccess to" : "readaccess from",
+	       address, regs->cp0_epc, regs->reg31);
+#endif
+	vma = find_vma(current, address);
+	if (!vma)
+		goto bad_area;
 	if (vma->vm_start <= address)
 		goto good_area;
 	if (!(vma->vm_flags & VM_GROWSDOWN))
 		goto bad_area;
-	if (vma->vm_end - address > current->rlim[RLIMIT_STACK].rlim_cur)
+	if (expand_stack(vma, address))
 		goto bad_area;
-	vma->vm_offset -= vma->vm_start - (address & PAGE_MASK);
-	vma->vm_start = (address & PAGE_MASK);
 /*
  * Ok, we have a good vm_area for this memory access, so
  * we can handle it..
  */
 good_area:
-	/*
-	 * was it a write?
-	 */
-	if (error_code & 2) {
+	if (writeaccess) {
 		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
 	} else {
-		/* read with protection fault? */
-		if (error_code & 1)
-			goto bad_area;
 		if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
 	}
-	if (error_code & 1) {
-		do_wp_page(vma, address, error_code & 2);
-		return;
-	}
-	do_no_page(vma, address, error_code & 2);
-	return;
+	handle_mm_fault(vma, address, writeaccess);
+	/* FIXME: This flushes the cache far to often */
+	sys_cacheflush(address, PAGE_SIZE, BCACHE);
+
+        return;
 
 /*
  * Something tried to access memory that isn't in our memory map..
@@ -90,10 +69,7 @@ good_area:
 bad_area:
 	if (user_mode(regs)) {
 		current->tss.cp0_badvaddr = address;
-		current->tss.error_code = error_code;
-#if 0
-		current->tss.trap_no = 14;
-#endif
+		current->tss.error_code = writeaccess;
 		send_sig(SIGSEGV, current, 1);
 		return;
 	}
@@ -101,22 +77,8 @@ bad_area:
 	 * Oops. The kernel tried to access some bad page. We'll have to
 	 * terminate things with extreme prejudice.
 	 */
-	if ((unsigned long) (address-TASK_SIZE) < PAGE_SIZE) {
-		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
-		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
-	} else
-		printk(KERN_ALERT "Unable to handle kernel paging request");
-	printk(" at virtual address %08lx\n",address);
-	page = current->tss.pg_dir;
-	printk(KERN_ALERT "current->tss.pg_dir = %08lx\n", page);
-	page = ((unsigned long *) page)[address >> PGDIR_SHIFT];
-	printk(KERN_ALERT "*pde = %08lx\n", page);
-	if (page & 1) {
-		page &= PAGE_MASK;
-		address &= 0x003ff000;
-		page = ((unsigned long *) page)[address >> PAGE_SHIFT];
-		printk(KERN_ALERT "*pte = %08lx\n", page);
-	}
-	die_if_kernel("Oops", regs, error_code);
+	printk(KERN_ALERT "Unable to handle kernel paging request at virtual "
+	       "address %08lx\n", address);
+	die_if_kernel("Oops", regs, writeaccess);
 	do_exit(SIGKILL);
 }

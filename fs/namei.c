@@ -371,7 +371,7 @@ int open_namei(const char * pathname, int flag, int mode,
 			error = -EROFS;
 		else {
 			dir->i_count++;		/* create eats the dir */
-			if (dir->i_sb->dq_op)
+			if (dir->i_sb && dir->i_sb->dq_op)
 				dir->i_sb->dq_op->initialize(dir, -1);
 			error = dir->i_op->create(dir, basename, namelen, mode, res_inode);
 			up(&dir->i_sem);
@@ -422,7 +422,7 @@ int open_namei(const char * pathname, int flag, int mode,
 			iput(inode);
 			return error;
 		}
-		if (inode->i_sb->dq_op)
+		if (inode->i_sb && inode->i_sb->dq_op)
 			inode->i_sb->dq_op->initialize(inode, -1);
 		newattrs.ia_size = 0;
 		newattrs.ia_valid = ATTR_SIZE;
@@ -440,7 +440,7 @@ int open_namei(const char * pathname, int flag, int mode,
 		put_write_access(inode);
 	} else
 		if (flag & FMODE_WRITE)
-			if (inode->i_sb->dq_op)
+			if (inode->i_sb && inode->i_sb->dq_op)
 				inode->i_sb->dq_op->initialize(inode, -1);
 	*res_inode = inode;
 	return 0;
@@ -473,7 +473,7 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 		return -EPERM;
 	}
 	dir->i_count++;
-	if (dir->i_sb->dq_op)
+	if (dir->i_sb && dir->i_sb->dq_op)
 		dir->i_sb->dq_op->initialize(dir, -1);
 	down(&dir->i_sem);
 	error = dir->i_op->mknod(dir,basename,namelen,mode,dev);
@@ -532,7 +532,7 @@ static int do_mkdir(const char * pathname, int mode)
 		return -EPERM;
 	}
 	dir->i_count++;
-	if (dir->i_sb->dq_op)
+	if (dir->i_sb && dir->i_sb->dq_op)
 		dir->i_sb->dq_op->initialize(dir, -1);
 	down(&dir->i_sem);
 	error = dir->i_op->mkdir(dir, basename, namelen, mode & 0777 & ~current->fs->umask);
@@ -586,7 +586,7 @@ static int do_rmdir(const char * name)
 		iput(dir);
 		return -EPERM;
 	}
-	if (dir->i_sb->dq_op)
+	if (dir->i_sb && dir->i_sb->dq_op)
 		dir->i_sb->dq_op->initialize(dir, -1);
 	return dir->i_op->rmdir(dir,basename,namelen);
 }
@@ -636,7 +636,7 @@ static int do_unlink(const char * name)
 		iput(dir);
 		return -EPERM;
 	}
-	if (dir->i_sb->dq_op)
+	if (dir->i_sb && dir->i_sb->dq_op)
 		dir->i_sb->dq_op->initialize(dir, -1);
 	return dir->i_op->unlink(dir,basename,namelen);
 }
@@ -680,7 +680,7 @@ static int do_symlink(const char * oldname, const char * newname)
 		return -EPERM;
 	}
 	dir->i_count++;
-	if (dir->i_sb->dq_op)
+	if (dir->i_sb && dir->i_sb->dq_op)
 		dir->i_sb->dq_op->initialize(dir, -1);
 	down(&dir->i_sem);
 	error = dir->i_op->symlink(dir,basename,namelen,oldname);
@@ -751,7 +751,7 @@ static int do_link(struct inode * oldinode, const char * newname)
 		return -EPERM;
 	}
 	dir->i_count++;
-	if (dir->i_sb->dq_op)
+	if (dir->i_sb && dir->i_sb->dq_op)
 		dir->i_sb->dq_op->initialize(dir, -1);
 	down(&dir->i_sem);
 	error = dir->i_op->link(oldinode, dir, basename, namelen);
@@ -839,7 +839,7 @@ static int do_rename(const char * oldname, const char * newname)
 		return -EPERM;
 	}
 	new_dir->i_count++;
-	if (new_dir->i_sb->dq_op)
+	if (new_dir->i_sb && new_dir->i_sb->dq_op)
 		new_dir->i_sb->dq_op->initialize(new_dir, -1);
 	down(&new_dir->i_sem);
 	error = old_dir->i_op->rename(old_dir, old_base, old_len, 

@@ -46,6 +46,9 @@ struct thread_struct {
 	0, 0, 0, \
 }
 
+#define alloc_kernel_stack()    get_free_page(GFP_KERNEL)
+#define free_kernel_stack(page) free_page((page))
+
 #include <asm/ptrace.h>
 
 /*

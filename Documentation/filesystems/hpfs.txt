@@ -9,10 +9,12 @@ Mount options are the same as for msdos partitions.
   conv=text     (Carriage return, line feed) is replaced with newline.
   conv=auto     Chooses, file by file, conv=binary or conv=text (by guessing)
 
-There is one mount option unique to HPFS.
+There are mount options unique to HPFS.
 
   case=lower	Convert file names to lower case.  [default]
   case=asis     Return file names as is, in mixed case.
+
+  nocheck	Proceed even if "Improperly stopped flag is set"
 
 Case is not significant in filename matching, like real HPFS.
 

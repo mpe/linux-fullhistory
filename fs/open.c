@@ -367,6 +367,7 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	struct inode * inode;
 	struct file * file;
 	struct iattr newattrs;
+	int error;
 
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
@@ -400,7 +401,16 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 		newattrs.ia_valid |= ATTR_MODE;
 	}
 	inode->i_dirt = 1;
-	return notify_change(inode, &newattrs);
+	if (inode->i_sb->dq_op) {
+		inode->i_sb->dq_op->initialize(inode, -1);
+		if (inode->i_sb->dq_op->transfer(inode, &newattrs, 0))
+			return -EDQUOT;
+		error = notify_change(inode, &newattrs);
+		if (error)
+			inode->i_sb->dq_op->transfer(inode, &newattrs, 1);
+	} else
+		error = notify_change(inode, &newattrs);
+	return error;
 }
 
 asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
@@ -444,7 +454,15 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 		newattrs.ia_valid |= ATTR_MODE;
 	}
 	inode->i_dirt = 1;
-	error = notify_change(inode, &newattrs);
+	if (inode->i_sb->dq_op) {
+		inode->i_sb->dq_op->initialize(inode, -1);
+		if (inode->i_sb->dq_op->transfer(inode, &newattrs, 0))
+			return -EDQUOT;
+		error = notify_change(inode, &newattrs);
+		if (error)
+			inode->i_sb->dq_op->transfer(inode, &newattrs, 1);
+	} else
+		error = notify_change(inode, &newattrs);
 	iput(inode);
 	return(error);
 }

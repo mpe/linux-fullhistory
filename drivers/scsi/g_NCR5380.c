@@ -177,3 +177,10 @@ const char * generic_NCR5380_info (void) {
 }
 
 #include "NCR5380.c"
+#ifdef MODULE
+/* Eventually this will go into an include file, but this will be later */
+Scsi_Host_Template driver_template = GENERIC_NCR5380;
+
+#include <linux/module.h>
+#include "scsi_module.c"
+#endif

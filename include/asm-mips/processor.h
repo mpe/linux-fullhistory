@@ -8,7 +8,10 @@
 #ifndef __ASM_MIPS_PROCESSOR_H
 #define __ASM_MIPS_PROCESSOR_H
 
-#if !defined (__ASSEMBLY__)
+#if !defined (__LANGUAGE_ASSEMBLY__)
+#include <asm/cachectl.h>
+#include <asm/mipsregs.h>
+#include <asm/reg.h>
 #include <asm/system.h>
 
 /*
@@ -18,46 +21,6 @@ extern char wait_available;		/* only available on R4[26]00 */
 
 extern unsigned long intr_count;
 extern unsigned long event;
-
-#if defined (__R4000__)
-
-#define start_bh_atomic()        \
-__asm__ __volatile__(            \
-	".set\tnoreorder\n\t"    \
-	".set\tnoat\n\t"         \
-	"ll\t$1,(%0)\n"          \
-	"1:\taddiu\t$1,$1,1\n\t" \
-	"sc\t$1,(%0)\n\t"        \
-	"beqzl\t$1,1b\n\t"       \
-	"ll\t$1,(%0)\n\t"        \
-	".set\tat\n\t"           \
-	".set\treorder"          \
-	: /* no outputs */       \
-	: "r" (&intr_count));
-
-#define end_bh_atomic()          \
-__asm__ __volatile__(            \
-	".set\tnoreorder\n\t"    \
-	".set\tnoat\n\t"         \
-	"ll\t$1,(%0)\n"          \
-	"1:\tsubu\t$1,$1,1\n\t"  \
-	"sc\t$1,(%0)\n\t"        \
-	"beqzl\t$1,1b\n\t"       \
-	"ll\t$1,(%0)\n\t"        \
-	".set\tat\n\t"           \
-	".set\treorder"          \
-	: /* no outputs */       \
-	: "r" (&intr_count));
-
-#else /* !defined (__R4000__) */
-
-#define start_bh_atomic() \
-{int flags; save_flags(flags); cli(); intr_count++; restore_flags(flags)}
-
-#define end_bh_atomic() \
-{int flags; save_flags(flags); cli(); intr_count--; restore_flags(flags)}
-
-#endif
 
 /*
  * Bus types (default is ISA, but people can check others with these..)
@@ -107,7 +70,7 @@ union mips_fpu_union {
 };
 
 #define INIT_FPU { \
-	0, \
+	{{0,},} \
 }
 
 /*
@@ -128,17 +91,18 @@ struct thread_struct {
 	 */
 	union mips_fpu_union fpu;
 	/*
-	 * Other stuff associated with the process
+	 * Other stuff associated with the thread
 	 */
 	unsigned long cp0_badvaddr;
 	unsigned long error_code;
 	unsigned long trap_no;
 	unsigned long ksp;		/* Top of kernel stack   */
-	unsigned long fs;		/* "Segment" pointer     */
 	unsigned long pg_dir;		/* L1 page table pointer */
+#define MF_FIXADE 1
+	unsigned long mflags;
 };
 
-#endif /* !defined (__ASSEMBLY__) */
+#endif /* !defined (__LANGUAGE_ASSEMBLY__) */
 
 /*
  * If you change the #defines remember to change thread_struct above too!
@@ -164,10 +128,13 @@ struct thread_struct {
 #define TOFF_ERROR_CODE		(TOFF_CP0_BADVADDR+4)
 #define TOFF_TRAP_NO		(TOFF_ERROR_CODE+4)
 #define TOFF_KSP		(TOFF_TRAP_NO+4)
-#define TOFF_FS			(TOFF_KSP+4)
-#define TOFF_PG_DIR		(TOFF_FS+4)
+#define TOFF_PG_DIR		(TOFF_KSP+4)
+#define TOFF_MFLAGS		(TOFF_PG_DIR+4)
 
-#if !defined (__ASSEMBLY__)
+#if !defined (__LANGUAGE_ASSEMBLY__)
+
+#define INIT_MMAP { &init_mm, KSEG0, KSEG1, PAGE_SHARED, \
+                    VM_READ | VM_WRITE | VM_EXEC }
 
 #define INIT_TSS  { \
         /* \
@@ -186,8 +153,39 @@ struct thread_struct {
 	/* \
 	 * Other stuff associated with the process\
 	 */ \
-	0, 0, 0, (((unsigned long)init_kernel_stack)+4096-8), \
-	KERNEL_DS, (unsigned long) swapper_pg_dir \
+	0, 0, 0, sizeof(init_kernel_stack) + (unsigned long)init_kernel_stack - 8, \
+	(unsigned long) swapper_pg_dir - PT_OFFSET, 0 \
+}
+
+/*
+ * Return saved PC of a blocked thread.
+ */
+extern inline unsigned long thread_saved_pc(struct thread_struct *t)
+{
+	return ((unsigned long *)t->reg29)[EF_CP0_EPC];
+}
+
+/*
+ * Do necessary setup to start up a newly executed thread.
+ */
+static __inline__
+void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
+{
+	/*
+	 * Pure paranoia; probably not needed.
+	 */
+	sys_cacheflush(0, ~0, BCACHE);
+	sync_mem();
+	regs->cp0_epc = pc;
+	/*
+	 * New thread looses kernel priviledges.
+	 */
+	regs->cp0_status = (regs->cp0_status & ~(ST0_CU0|ST0_KSU)) | KSU_USER;
+	/*
+	 * Reserve argument save space for registers a0 - a3.
+	regs->reg29 = sp - 4 * sizeof(unsigned long);
+	 */
+	regs->reg29 = sp;
 }
 
 #ifdef __KERNEL__
@@ -210,12 +208,21 @@ asmlinkage void resume(struct task_struct *tsk, int offset);
 
 #else /* !defined (__R4000__) */
 
-#error "#define USES_USER_TIME(regs)!"
+#define USES_USER_TIME(regs) (!((regs)->cp0_status & 0x4))
 
 #endif /* !defined (__R4000__) */
 
 #endif /* __KERNEL__ */
 
-#endif /* !defined (__ASSEMBLY__) */
+#endif /* !defined (__LANGUAGE_ASSEMBLY__) */
+
+/*
+ * ELF support
+ *
+ * Using EM_MIPS is actually wrong - this one is reserved for big endian
+ * machines only
+ */
+#define INCOMPATIBLE_MACHINE(m) ((m) != EM_MIPS && (m) != EM_MIPS_RS4_BE)
+#define ELF_EM_CPU EM_MIPS
 
 #endif /* __ASM_MIPS_PROCESSOR_H */

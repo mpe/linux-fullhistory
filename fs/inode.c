@@ -150,7 +150,7 @@ void clear_inode(struct inode * inode)
 
 	wait_on_inode(inode);
 	if (IS_WRITABLE(inode)) {
-		if (inode->i_sb->dq_op)
+		if (inode->i_sb && inode->i_sb->dq_op)
 			inode->i_sb->dq_op->drop(inode);
 	}
 	remove_inode_hash(inode);
@@ -415,7 +415,7 @@ repeat:
 
 	inode->i_count--;
 	if (IS_WRITABLE(inode)) {
-		if (inode->i_sb->dq_op)
+		if (inode->i_sb && inode->i_sb->dq_op)
 			inode->i_sb->dq_op->drop(inode);
 	}
 
@@ -540,6 +540,7 @@ repeat:
 	inode->i_sb = sb;
 	inode->i_dev = sb->s_dev;
 	inode->i_ino = nr;
+	inode->i_flags = sb->s_flags;
 	put_last_free(inode);
 	insert_inode_hash(inode);
 	read_inode(inode);

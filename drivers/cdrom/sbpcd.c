@@ -285,6 +285,7 @@
 #include <asm/segment.h>
 #include <stdarg.h>
 #include <linux/sbpcd.h>
+#include <linux/config.h>
 
 #if !(SBPCD_ISSUE-1)
 #define MAJOR_NR MATSUSHITA_CDROM_MAJOR

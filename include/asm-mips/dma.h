@@ -3,6 +3,10 @@
  * Written by Hennus Bergman, 1992.
  * High DMA channel support & info by Hannu Savolainen
  * and John Boyd, Nov. 1992.
+ *
+ * NOTE: all this is true *only* for ISA/EISA expansions on Mips boards
+ * and can only be used for expansion cards. Onboard DMA controller, such
+ * as the R4030 on Jazz boards behave totally different!
  */
 
 #ifndef __ASM_MIPS_DMA_H
@@ -69,10 +73,12 @@
 
 #define MAX_DMA_CHANNELS	8
 
-/* The maximum address that we can perform a DMA transfer to on this platform */
-#define MAX_DMA_ADDRESS      0x1000000
-
-/* The maximum address that we can perform a DMA transfer to on this platform */
+/*
+ * The maximum address that we can perform a DMA transfer to on this platform
+ * This discribes only the PC style part of the DMA logic like on Deskstations
+ * or Acer PICA but not the much more versatile DMA logic used for the
+ * local devices on Acer PICA or Mangnums.
+ */
 #define MAX_DMA_ADDRESS		0x1000000
 
 /* 8237 DMA controllers */
@@ -270,5 +276,10 @@ static __inline__ int get_dma_residue(unsigned int dmanr)
 extern int request_dma(unsigned int dmanr, const char * device_id);	/* reserve a DMA channel */
 extern void free_dma(unsigned int dmanr);	/* release it again */
 
+/*
+ * DMA memory allocation - formerly in include/linux/mm.h
+ */
+#define __get_dma_pages(priority, order) __get_free_pages((priority),(order), \
+                                             0x80000000 + MAX_DMA_ADDRESS)
 
 #endif /* __ASM_MIPS_DMA_H */

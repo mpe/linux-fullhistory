@@ -45,6 +45,7 @@ typedef struct {
   unsigned char fast_mteom;
   unsigned char density;
   unsigned char door_locked;
+  unsigned char rew_at_close;
   ST_buffer * buffer;
   struct semaphore sem;
   int block_size;

@@ -71,6 +71,20 @@
  *	- much better than its 1Gig cousin, this drive is reported to work
  *	  very well with DMA (7.3MB/sec).
  *
+ * Other drives:
+ *
+ *   Maxtor 7540AV (515Meg w/32kB buffer), DMA modes mword0/sword2, PIO mode3.
+ *	- a budget drive, with budget performance, around 3MB/sec.
+ *
+ *   Western Digital AC2850F (814Meg w/64kB buffer), DMA mode1, PIO mode3.
+ *	- another "caviar" drive, similar to the AC31000, except that this one
+ *	  worked with DMA in at least one system.  Throughput is about 3.8MB/sec
+ *	  for both DMA and PIO.
+ *
+ *   Conner CFS850A (812Meg w/64kB buffer), DMA mode2, PIO mode4.
+ *	- like most Conner models, this drive proves that even a fast interface
+ *	  cannot improve slow media.  Both DMA and PIO peak around 3.5MB/sec.
+ *
  * If you have any drive models to add, email your results to:  mlord@bnr.ca
  * Keep an eye on /var/adm/messages for "DMA disabled" messages.
  *

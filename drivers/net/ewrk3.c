@@ -625,9 +625,7 @@ ewrk3_hw_init(struct device *dev, short iobase)
       dev->hard_start_xmit = &ewrk3_queue_pkt;
       dev->stop = &ewrk3_close;
       dev->get_stats = &ewrk3_get_stats;
-#ifdef HAVE_MULTICAST
       dev->set_multicast_list = &set_multicast_list;
-#endif
       dev->do_ioctl = &ewrk3_ioctl;
 
       dev->mem_start = 0;

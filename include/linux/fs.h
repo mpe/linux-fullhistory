@@ -15,8 +15,6 @@
 #include <linux/kdev_t.h>
 #include <linux/ioctl.h>
 
-#include <asm/bitops.h>
-
 /*
  * It's silly to have NR_OPEN bigger than NR_FILE, but I'll fix
  * that later. Anyway, now the file code is no longer dependent
@@ -114,6 +112,9 @@
 #define FIGETBSZ   _IO(0x00,2)	/* get the block size used for bmap */
 
 #ifdef __KERNEL__
+
+#include <asm/bitops.h>
+
 extern void buffer_init(void);
 extern unsigned long inode_init(unsigned long start, unsigned long end);
 extern unsigned long file_table_init(unsigned long start, unsigned long end);
@@ -128,6 +129,7 @@ typedef char buffer_block[BLOCK_SIZE];
 #define BH_Req		3	/* 0 if the buffer has been invalidated */
 #define BH_Touched	4	/* 1 if the buffer has been touched (aging) */
 #define BH_Has_aged	5	/* 1 if the buffer has been aged (aging) */
+#define BH_Protected	6	/* 1 if the buffer is protected */
 
 struct buffer_head {
 	char * b_data;			/* pointer to data block (1024 bytes) */
@@ -178,6 +180,11 @@ static inline int buffer_touched(struct buffer_head * bh)
 static inline int buffer_has_aged(struct buffer_head * bh)
 {
 	return test_bit(BH_Has_aged, &bh->b_state);
+}
+
+static inline int buffer_protected(struct buffer_head * bh)
+{
+	return test_bit(BH_Protected, &bh->b_state);
 }
 
 #include <linux/pipe_fs_i.h>

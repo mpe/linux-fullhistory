@@ -17,7 +17,7 @@
 #include <asm/vector.h>
 
 #define fd_inb(port)			feature->fd_inb(port)
-#define fd_outb(port,value)		feature->fd_outb(port,value)
+#define fd_outb(value,port)		feature->fd_outb(value,port)
 
 #define fd_enable_dma()			feature->fd_enable_dma()
 #define fd_disable_dma()		feature->fd_disable_dma()
@@ -36,6 +36,7 @@
 				            "floppy")
 #define fd_free_irq()           free_irq(FLOPPY_IRQ);
 
+#define MAX_BUFFER_SECTORS 24
 #define virtual_dma_init()                                              \
         if (boot_info.machtype == MACH_ACER_PICA_61 ||                  \
             boot_info.machtype == MACH_MIPS_MAGNUM_4000 ||              \

@@ -283,8 +283,8 @@ int msdos_file_write(
 		printk("msdos_file_write: mode = %07o\n",inode->i_mode);
 		return -EINVAL;
 	}
-	/* Must not harm system files */
-	if (MSDOS_I(inode)->i_attrs & ATTR_SYS) return -EPERM;
+	/* system files are immutable */
+	if (IS_IMMUTABLE(inode)) return -EPERM;
 /*
  * ok, append may not work when many processes are writing at the same time
  * but so what. That way leads to madness anyway.
@@ -362,9 +362,8 @@ void msdos_truncate(struct inode *inode)
 {
 	int cluster;
 
-	/* Must not harm system files */
 	/* Why no return value?  Surely the disk could fail... */
-	if (MSDOS_I(inode)->i_attrs & ATTR_SYS) return /* -EPERM */;
+	if (IS_IMMUTABLE(inode)) return /* -EPERM */;
 	cluster = SECTOR_SIZE*MSDOS_SB(inode->i_sb)->cluster_size;
 	(void) fat_free(inode,(inode->i_size+(cluster-1))/cluster);
 	MSDOS_I(inode)->i_attrs |= ATTR_ARCH;

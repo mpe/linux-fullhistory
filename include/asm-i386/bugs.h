@@ -110,8 +110,25 @@ static void check_hlt(void)
 	printk("Ok.\n");
 }
 
+static void check_tlb(void)
+{
+	/*
+	 * The 386 chips don't support TLB finegrained invalidation.
+	 * They will fault when they hit a invlpg instruction.
+	 */
+	if (x86 == 3) {
+#if defined(CONFIG_M486) || defined(CONFIG_M586)
+		printk("CPU is a 386 and this kernel was compiled for 486 or better.\n");
+		printk("Giving up.\n");
+		for (;;) ;
+#endif
+		return;
+	}
+}
+
 static void check_bugs(void)
 {
+	check_tlb();
 	check_fpu();
 	check_hlt();
 	system_utsname.machine[1] = '0' + x86;

@@ -2,7 +2,7 @@
 #define _AHA152X_H
 
 /*
- * $Id: aha152x.h,v 1.9 1995/03/18 09:21:04 root Exp root $
+ * $Id: aha152x.h,v 1.11 1995/12/07 01:03:20 fischer Exp root $
  */
 
 #if defined(__KERNEL__)
@@ -17,20 +17,21 @@ int        aha152x_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int        aha152x_abort(Scsi_Cmnd *);
 int        aha152x_reset(Scsi_Cmnd *);
 int        aha152x_biosparam(Disk *, kdev_t, int*);
+int aha152x_proc_info(char *buffer, char **start, off_t offset, int length, int hostno, int inout);
 
 /* number of queueable commands
    (unless we support more than 1 cmd_per_lun this should do) */
 #define AHA152X_MAXQUEUE	7		
 
-#define AHA152X_REVID "Adaptec 152x SCSI driver; $Revision: 1.9 $"
+#define AHA152X_REVID "Adaptec 152x SCSI driver; $Revision: 1.11 $"
 
 extern struct proc_dir_entry proc_scsi_aha152x;
 
 /* Initial value of Scsi_Host entry */
 #define AHA152X       { /* next */		NULL,			    \
 			/* usage_count */  	NULL,			    \
-			                        &proc_scsi_aha152x,         \
-						NULL,                       \
+			/* proc_dir */		&proc_scsi_aha152x,         \
+			/* proc_info */		aha152x_proc_info,          \
 			/* name */		AHA152X_REVID, 		    \
 			/* detect */		aha152x_detect,             \
 			/* release */		NULL,			    \
@@ -52,37 +53,44 @@ extern struct proc_dir_entry proc_scsi_aha152x;
 
 
 /* port addresses */
-#define SCSISEQ		(port_base+0x00)	/* SCSI sequence control */
-#define SXFRCTL0	(port_base+0x01)	/* SCSI transfer control 0 */
-#define SXFRCTL1	(port_base+0x02)	/* SCSI transfer control 1 */
-#define SCSISIG		(port_base+0x03)	/* SCSI signal in/out */
-#define SCSIRATE	(port_base+0x04)	/* SCSI rate control */
-#define SELID		(port_base+0x05)	/* selection/reselection ID */
+#define SCSISEQ		(shpnt->io_port+0x00)	/* SCSI sequence control */
+#define SXFRCTL0	(shpnt->io_port+0x01)	/* SCSI transfer control 0 */
+#define SXFRCTL1	(shpnt->io_port+0x02)	/* SCSI transfer control 1 */
+#define SCSISIG		(shpnt->io_port+0x03)	/* SCSI signal in/out */
+#define SCSIRATE	(shpnt->io_port+0x04)	/* SCSI rate control */
+#define SELID		(shpnt->io_port+0x05)	/* selection/reselection ID */
 #define SCSIID		SELID			/* SCSI ID */
-#define SCSIDAT		(port_base+0x06)	/* SCSI latched data */
-#define SCSIBUS		(port_base+0x07)	/* SCSI data bus */
-#define STCNT0		(port_base+0x08)	/* SCSI transfer count 0 */
-#define STCNT1		(port_base+0x09)	/* SCSI transfer count 1 */
-#define STCNT2		(port_base+0x0a)	/* SCSI transfer count 2 */
-#define SSTAT0		(port_base+0x0b)	/* SCSI interrupt status 0 */
-#define SSTAT1		(port_base+0x0c)	/* SCSI interrupt status 1 */
-#define SSTAT2		(port_base+0x0d)	/* SCSI interrupt status 2 */
-#define SCSITEST	(port_base+0x0e)	/* SCSI test control */
-#define SSTAT4		(port_base+0x0f)	/* SCSI status 4 */
-#define SIMODE0		(port_base+0x10)	/* SCSI interrupt mode 0 */
-#define SIMODE1		(port_base+0x11)	/* SCSI interrupt mode 1 */
-#define DMACNTRL0	(port_base+0x12)	/* DMA control 0 */
-#define DMACNTRL1	(port_base+0x13)	/* DMA control 1 */
-#define DMASTAT		(port_base+0x14)	/* DMA status */
-#define FIFOSTAT	(port_base+0x15)	/* FIFO status */
-#define DATAPORT	(port_base+0x16)	/* DATA port */
-#define BRSTCNTRL	(port_base+0x18)	/* burst control */
-#define PORTA		(port_base+0x1a)	/* PORT A */
-#define PORTB		(port_base+0x1b)	/* PORT B */
-#define REV		(port_base+0x1c)	/* revision */
-#define STACK		(port_base+0x1d)	/* stack */
-#define TEST		(port_base+0x1e)	/* test register */
+#define SCSIDAT		(shpnt->io_port+0x06)	/* SCSI latched data */
+#define SCSIBUS		(shpnt->io_port+0x07)	/* SCSI data bus */
+#define STCNT0		(shpnt->io_port+0x08)	/* SCSI transfer count 0 */
+#define STCNT1		(shpnt->io_port+0x09)	/* SCSI transfer count 1 */
+#define STCNT2		(shpnt->io_port+0x0a)	/* SCSI transfer count 2 */
+#define SSTAT0		(shpnt->io_port+0x0b)	/* SCSI interrupt status 0 */
+#define SSTAT1		(shpnt->io_port+0x0c)	/* SCSI interrupt status 1 */
+#define SSTAT2		(shpnt->io_port+0x0d)	/* SCSI interrupt status 2 */
+#define SCSITEST	(shpnt->io_port+0x0e)	/* SCSI test control */
+#define SSTAT3		SCSITEST                /* SCSI interrupt status 3 */
+#define SSTAT4		(shpnt->io_port+0x0f)	/* SCSI status 4 */
+#define SIMODE0		(shpnt->io_port+0x10)	/* SCSI interrupt mode 0 */
+#define SIMODE1		(shpnt->io_port+0x11)	/* SCSI interrupt mode 1 */
+#define DMACNTRL0	(shpnt->io_port+0x12)	/* DMA control 0 */
+#define DMACNTRL1	(shpnt->io_port+0x13)	/* DMA control 1 */
+#define DMASTAT		(shpnt->io_port+0x14)	/* DMA status */
+#define FIFOSTAT	(shpnt->io_port+0x15)	/* FIFO status */
+#define DATAPORT	(shpnt->io_port+0x16)	/* DATA port */
+#define BRSTCNTRL	(shpnt->io_port+0x18)	/* burst control */
+#define PORTA		(shpnt->io_port+0x1a)	/* PORT A */
+#define PORTB		(shpnt->io_port+0x1b)	/* PORT B */
+#define REV		(shpnt->io_port+0x1c)	/* revision */
+#define STACK		(shpnt->io_port+0x1d)	/* stack */
+#define TEST		(shpnt->io_port+0x1e)	/* test register */
 
+/* used in aha152x_porttest */
+#define O_PORTA		(0x1a)                  /* PORT A */
+#define O_PORTB		(0x1b)                  /* PORT B */
+#define O_DMACNTRL1	(0x13)                  /* DMA control 1 */
+#define O_STACK         (0x1d)                  /* stack */
+#define IO_RANGE	0x20
 
 /* bits and bitmasks to ports */
 

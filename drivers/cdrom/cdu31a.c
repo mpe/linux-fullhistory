@@ -170,7 +170,6 @@
  */
 
 #include <linux/major.h>
-#include <linux/config.h>
 
 #include <linux/module.h>
 

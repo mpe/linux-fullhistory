@@ -50,12 +50,6 @@ pte_t __bad_page(void)
 	return pte_mkdirty(mk_pte((unsigned long) EMPTY_PGE, PAGE_SHARED));
 }
 
-unsigned long __zero_page(void)
-{
-	memset((void *) ZERO_PGE, 0, PAGE_SIZE);
-	return (unsigned long) ZERO_PGE;
-}
-
 void show_mem(void)
 {
 	int i,free = 0,total = 0,reserved = 0;
@@ -131,7 +125,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 
 	/* unmap the console stuff: we don't need it, and we don't want it */
 	/* Also set up the real kernel PCB while we're at it.. */
-	memset((void *) ZERO_PGE, 0, PAGE_SIZE);
+	memset((void *) ZERO_PAGE, 0, PAGE_SIZE);
 	memset(swapper_pg_dir, 0, PAGE_SIZE);
 	newptbr = ((unsigned long) swapper_pg_dir - PAGE_OFFSET) >> PAGE_SHIFT;
 	pgd_val(swapper_pg_dir[1023]) = (newptbr << 32) | pgprot_val(PAGE_KERNEL);

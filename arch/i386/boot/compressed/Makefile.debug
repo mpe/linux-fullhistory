@@ -1,0 +1,21 @@
+#
+# linux/arch/i386/boot/compressed/Makefile
+#
+# create a compressed vmlinux image from the original vmlinux
+#
+
+OBJECTS = misc.o 
+
+CFLAGS = -g -O2 -DSTDC_HEADERS -DSTANDALONE_DEBUG -Wall
+
+test-gzip: piggy.o $(OBJECTS)
+	$(CC) -g -o test-gzip $(OBJECTS) piggy.o
+
+clean: 
+	$(RM) inflate.o misc.o test-gzip
+
+inflate.o: inflate.c gzip.h
+
+misc.o: misc.c gzip.h
+
+

@@ -10,8 +10,12 @@
 #ifndef __ASM_MIPS_BITOPS_H
 #define __ASM_MIPS_BITOPS_H
 
-#ifdef __R4000__
+#if __mips > 1
 
+/*
+ * These functions for MIPS ISA >= 2 are interrupt and SMP proof and
+ * interrupt friendly
+ */
 #include <asm/mipsregs.h>
 
 /*
@@ -62,14 +66,19 @@ extern __inline__ int change_bit(int nr, void *addr)
 	return retval;
 }
 
-#else /* !defined(__R4000__) */
+#else /* __mips <= 1 */
 
+/*
+ * These functions are only used for MIPS ISA 1 CPUs.  Since I don't
+ * believe that someone ever will run Linux/SMP on such a beast I don't
+ * worry about making them SMP proof.
+ */
 #include <asm/system.h>
 
 #ifdef __KERNEL__
 /*
- * Only disable interrupt for kernelmode stuff to keep some
- * usermode stuff alive
+ * Only disable interrupt for kernel mode stuff to keep usermode stuff
+ * that dares to use kernel include files alive.
  */
 #define __flags unsigned long flags
 #define __cli() cli()
@@ -133,17 +142,11 @@ extern __inline__ int change_bit(int nr, void * addr)
 #undef __save_flags(x)
 #undef __restore_flags(x)
 
-#endif /* !defined(__R4000__) */
+#endif /* __mips <= 1 */
 
 extern __inline__ int test_bit(int nr, const void *addr)
 {
-	int	mask;
-	unsigned long	*a;
-
-	a = addr;
-	addr += nr >> 5;
-	mask = 1 << (nr & 0x1f);
-	return ((mask & *a) != 0);
+	return 1UL & (((const unsigned int *) addr)[nr >> 5] >> (nr & 31));
 }
 
 extern __inline__ int find_first_zero_bit (void *addr, unsigned size)
@@ -227,19 +230,17 @@ extern __inline__ unsigned long ffz(unsigned long word)
 	__asm__ __volatile__ (
 		".set\tnoreorder\n\t"
 		".set\tnoat\n\t"
-		"li\t%2,1\n"
+		"move\t%0,$0\n"
 		"1:\tand\t$1,%2,%1\n\t"
-		"beq\t$0,$1,2f\n\t"
-		"sll\t%2,%2,1\n\t"
-		"bne\t$0,%2,1b\n\t"
-		"add\t%0,%0,1\n\t"
+		"beqz\t$1,2f\n\t"
+		"sll\t%1,1\n\t"
+		"bnez\t%1,1b\n\t"
+		"addiu\t%0,1\n\t"
 		".set\tat\n\t"
 		".set\treorder\n"
 		"2:\n\t"
-		: "=r" (__res), "=r" (word), "=r" (mask)
-		: "1" (~(word)),
-		  "2" (mask),
-		  "0" (0)
+		: "=r" (__res), "=r" (mask)
+		: "r" (word), "1" (mask)
 		: "$1");
 
 	return __res;

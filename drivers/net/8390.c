@@ -612,9 +612,7 @@ int ethdev_init(struct device *dev)
     
     dev->hard_start_xmit = &ei_start_xmit;
     dev->get_stats	= get_stats;
-#ifdef HAVE_MULTICAST
     dev->set_multicast_list = &set_multicast_list;
-#endif
 
     ether_setup(dev);
         

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.22  Dec 10, 1995
+ *  linux/drivers/block/ide.c	Version 5.23  Dec 15, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -178,6 +178,7 @@
  *			generalized ide_do_drive_cmd() for tape/cdrom driver use
  *  Version 5.21	fix nasty cdrom/tape bug (ide_preempt was messed up)
  *  Version 5.22	fix ide_xlate_1024() to work with/without drive->id
+ *  Version 5.23	miscellaneous touch-ups
  *
  *  Driver compile-time options are in ide.h
  *
@@ -187,6 +188,7 @@
  *	- add ioctls to get/set interface timings on various interfaces
  *	- add Promise Caching controller support from peterd@pnd-pc.demon.co.uk
  *	- modify kernel to obtain BIOS geometry for drives on 2nd/3rd/4th i/f
+ *	- add new HT6560B code from malafoss@snakemail.hut.fi
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -315,7 +317,9 @@ static void init_ide_data (void)
 		hwif->name[1]	= 'd';
 		hwif->name[2]	= 'e';
 		hwif->name[3]	= '0' + h;
-
+#ifdef CONFIG_BLK_DEV_IDETAPE
+		hwif->tape_drive = NULL;
+#endif /* CONFIG_BLK_DEV_IDETAPE */
 		for (unit = 0; unit < MAX_DRIVES; ++unit) {
 			ide_drive_t *drive = &hwif->drives[unit];
 
@@ -415,6 +419,7 @@ void ide_hwif_select (ide_hwif_t *hwif)
 	static byte current_select = 0;
 
 	if (hwif->select != current_select) {
+		byte t;
 		unsigned long flags;
 		save_flags (flags);
 		cli();
@@ -422,8 +427,16 @@ void ide_hwif_select (ide_hwif_t *hwif)
 		(void) inb(0x3e6);
 		(void) inb(0x3e6);
 		(void) inb(0x3e6);
-		(void) inb(0x3e6);
-		outb(current_select,0x3e6);
+		/*
+		 * Avoid clobbering existing bits at 0x3e6:
+		 *	bit5 (0x20) - disables fast interface speed
+		 *	bit0 (0x01) - enables secondary interface
+		 *	we don't touch any other bits
+		 */
+		t = inb(0x3e6);
+		t &= (~0x21);
+		t |= (current_select & 0x21);
+		outb(t,0x3e6);
 		restore_flags (flags);
 	}
 }
@@ -877,7 +890,7 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
 	} else {
 		if (drive->media == ide_disk && (stat & ERR_STAT)) {
 			/* err has different meaning on cdrom and tape */
-			if (err & BBD_ERR)		/* retries won't help this! */
+			if (err & (BBD_ERR | ECC_ERR))	/* retries won't help these */
 				rq->errors = ERROR_MAX;
 			else if (err & TRK0_ERR)	/* help it find track zero */
 				rq->errors |= ERROR_RECAL;
@@ -1271,8 +1284,10 @@ static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned 
 	if (rq->cmd == IDE_DRIVE_CMD) {
 		byte *args = rq->buffer;
 		if (args) {
+#ifdef DEBUG
 			printk("%s: DRIVE_CMD cmd=0x%02x sc=0x%02x fr=0x%02x\n",
 			 drive->name, args[0], args[1], args[2]);
+#endif
 			OUT_BYTE(args[2],io_base+IDE_FEATURE_OFFSET);
 			ide_cmd(drive, args[0], args[1], &drive_cmd_intr);
 			return;
@@ -1341,11 +1356,17 @@ static inline void do_request (ide_hwif_t *hwif, struct request *rq)
 	if (hwif->select)
 		ide_hwif_select (hwif);
 #endif
+
+#ifdef CONFIG_BLK_DEV_IDETAPE
+	POLL_HWIF_TAPE_DRIVE;	/* macro from ide-tape.h */
+#endif /* CONFIG_BLK_DEV_IDETAPE */
+
 	OUT_BYTE(drive->select.all,IDE_SELECT_REG);
 	if (ide_wait_stat(drive, drive->ready_stat, BUSY_STAT|DRQ_STAT, WAIT_READY)) {
 		printk("%s: drive not ready for command\n", drive->name);
 		return;
 	}
+	
 	if (!drive->special.all) {
 #ifdef CONFIG_BLK_DEV_IDEATAPI
 		switch (drive->media) {
@@ -1638,6 +1659,12 @@ void ide_init_drive_cmd (struct request *rq)
  * returns without waiting for the new rq to be completed.  As above,
  * This is VERY DANGEROUS, and is intended for careful use by the
  * ATAPI tape/cdrom driver code.
+ *
+ * If action is ide_end, then the rq is queued at the end of the
+ * request queue, and the function returns immediately without waiting
+ * for the new rq to be completed. This is again intended for careful
+ * use by the ATAPI tape/cdrom driver code. (Currently used by ide-tape.c,
+ * when operating in the pipelined operation mode).
  */
 int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t action)
 {
@@ -1664,7 +1691,7 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 		if (action != ide_preempt)
 			bdev->request_fn();
 	} else {
-		if (action == ide_wait) {
+		if (action == ide_wait || action == ide_end) {
 			while (cur_rq->next != NULL)	/* find end of list */
 				cur_rq = cur_rq->next;
 		}
@@ -1704,7 +1731,12 @@ static int ide_open(struct inode * inode, struct file * filp)
 		check_disk_change(inode->i_rdev);
 		ide_init_drive_cmd (&rq);
 		rq.buffer = door_lock;
-		return ide_do_drive_cmd(drive, &rq, ide_wait);
+		/*
+		 * Ignore the return code from door_lock,
+		 * since the open() has already succeeded,
+		 * and the door_lock is irrelevant at this point.
+		 */
+		(void) ide_do_drive_cmd(drive, &rq, ide_wait);
 	}
 	return 0;
 }
@@ -1997,7 +2029,7 @@ static int ide_check_media_change (kdev_t i_rdev)
 	return 0;
 }
 
-static void fixstring (byte *s, const int bytecount, const int byteswap)
+void ide_fixstring (byte *s, const int bytecount, const int byteswap)
 {
 	byte *p = s, *end = &s[bytecount & ~1]; /* bytecount must be even */
 
@@ -2055,9 +2087,9 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		 || (id->model[0] == 'P' && id->model[1] == 'i'))/* Pioneer */
 			bswap = 0;	/* Vertos drives may still be weird */
 	}
-	fixstring (id->model,     sizeof(id->model),     bswap);
-	fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);
-	fixstring (id->serial_no, sizeof(id->serial_no), bswap);
+	ide_fixstring (id->model,     sizeof(id->model),     bswap);
+	ide_fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);
+	ide_fixstring (id->serial_no, sizeof(id->serial_no), bswap);
 
 	/*
 	 * Check for an ATAPI device
@@ -2678,15 +2710,19 @@ void ide_setup (char *s)
 				/*
 				 * Using 0x1c and 0x1d apparently selects a
 				 * faster interface speed than 0x3c and 0x3d.
+				 * (bit5 (0x20) selects fast speed when set)
+				 * (bit0 (0x01) selects second interface)
 				 *
-				 * Need to add an ioctl to select between them.
+				 * Need to set these per-drive, rather than
+				 * per-hwif, and also add an ioctl to select
+				 * between them.
 				 */
 				if (check_region(0x3e6,1)) {
 					printk(" -- HT6560 PORT 0x3e6 ALREADY IN USE");
 					goto done;
 				}
 				request_region(0x3e6, 1, hwif->name);
-				ide_hwifs[0].select = 0x3c;
+				ide_hwifs[0].select = 0x1c;
 				ide_hwifs[1].select = 0x3d;
 				goto do_serialize;
 #endif /* SUPPORT_HT6560B */
@@ -2741,13 +2777,13 @@ int ide_xlate_1024 (kdev_t i_rdev, int offset, const char *msg)
 		return 0;
 
 	if (drive->id) {
-		drive->bios_cyl  = drive->id->cyls;
-		drive->bios_head = drive->id->heads;
-		drive->bios_sect = drive->id->sectors;
+		drive->cyl  = drive->id->cyls;
+		drive->head = drive->id->heads;
+		drive->sect = drive->id->sectors;
 	}
-	drive->cyl  = drive->bios_cyl;
-	drive->head = drive->bios_head;
-	drive->sect = drive->bios_sect;
+	drive->bios_cyl  = drive->cyl;
+	drive->bios_head = drive->head;
+	drive->bios_sect = drive->sect;
 	drive->special.b.set_geometry = 1;
 
 	tracks = drive->bios_cyl * drive->bios_head * drive->bios_sect / 63;

@@ -30,7 +30,6 @@ struct gendisk *gendisk_head = NULL;
 static int current_minor = 0;
 extern int *blk_size[];
 extern void rd_load(void);
-extern int ramdisk_size;
 
 extern int chr_dev_init(void);
 extern int blk_dev_init(void);
@@ -559,6 +558,5 @@ void device_setup(void)
 		nr += p->nr_real;
 	}
 
-	if (ramdisk_size)
-		rd_load();
+	rd_load();
 }

@@ -193,7 +193,7 @@ void netlink_detach(int unit)
 int netlink_post(int unit, struct sk_buff *skb)
 {
 	unsigned long flags;
-	int ret=0;
+	int ret=-EUNATCH;
 	if(open_map&(1<<unit))
 	{
 		save_flags(flags);

@@ -229,7 +229,7 @@ void start_kernel(void)
 			  envval, sizeof(envval));
 	if (nbytes > 0) {
 		envval[nbytes] = '\0';
-		strcpy((char*)ZERO_PGE, envval);
+		strcpy((char*)ZERO_PAGE, envval);
 	}
 
 	printk(" Ok\nNow booting the kernel\n");

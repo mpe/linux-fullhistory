@@ -18,7 +18,7 @@ MX_OBJS  :=
 MOD_LIST_NAME := SCSI_MODULES
 SCSI_SRCS = $(wildcard $(L_OBJS:%.o=%.c))
 
-AHA152X	= -DDEBUG_AHA152X -DAUTOCONF -DSKIP_BIOSTEST -DIRQ=11
+AHA152X	= -DDEBUG_AHA152X -DAUTOCONF
 
 ifeq (${CFLAGS},)
 CFLAGS = -D__KERNEL__=1 \
@@ -170,6 +170,10 @@ endif
 
 ifeq ($(CONFIG_SCSI_GENERIC_NCR5380),y)
 L_OBJS += g_NCR5380.o
+else
+  ifeq ($(CONFIG_SCSI_GENERIC_NCR5380),m)
+  M_OBJS += g_NCR5380.o
+  endif
 endif
 
 ifeq ($(CONFIG_SCSI_NCR53C7xx),y)
@@ -182,6 +186,10 @@ endif
 
 ifeq ($(CONFIG_SCSI_PAS16),y)
 L_OBJS += pas16.o
+else
+  ifeq ($(CONFIG_SCSI_PAS16),m)
+  M_OBJS += pas16.o
+  endif
 endif
 
 ifeq ($(CONFIG_SCSI_SEAGATE),y)
@@ -211,6 +219,10 @@ endif
 
 ifeq ($(CONFIG_SCSI_T128),y)
 L_OBJS += t128.o
+else
+  ifeq ($(CONFIG_SCSI_T128),m)
+  M_OBJS += t128.o
+  endif
 endif
 
 ifeq ($(CONFIG_SCSI_ULTRASTOR),y)

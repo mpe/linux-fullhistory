@@ -9,7 +9,7 @@
 
 SUB_DIRS     := block char net #streams
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sound
+ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sound cdrom
 
 ifdef CONFIG_PCI
 SUB_DIRS += pci

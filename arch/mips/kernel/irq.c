@@ -16,6 +16,8 @@
  */
 
 /*
+ * Mips support by Ralf Baechle and Andreas Busse
+ *
  * The Deskstation Tyne is almost completely like an IBM compatible PC with
  * another type of microprocessor. Therefore this code is almost completely
  * the same. More work needs to be done to support Acer PICA and other
@@ -27,13 +29,18 @@
 #include <linux/kernel_stat.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
+#include <linux/types.h>
 #include <linux/interrupt.h>
 #include <linux/timex.h>
+#include <linux/random.h>
 
-#include <asm/system.h>
+#include <asm/bitops.h>
+#include <asm/bootinfo.h>
 #include <asm/io.h>
 #include <asm/irq.h>
-#include <asm/bitops.h>
+#include <asm/jazz.h>
+#include <asm/mipsregs.h>
+#include <asm/system.h>
 
 unsigned char cache_21 = 0xff;
 unsigned char cache_A1 = 0xff;
@@ -117,7 +124,7 @@ int get_irq_list(char *buf)
 	for (i = 0 ; i < 16 ; i++, action++) {
 		if (!action->handler)
 			continue;
-		len += sprintf(buf+len, "%2d: %8d %c %s\n",
+		len += sprintf(buf+len, "%3d: %8d %c %s\n",
 			i, kstat.interrupts[i],
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
 			action->name);
@@ -137,6 +144,8 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	struct irqaction * action = irq + irq_action;
 
 	kstat.interrupts[irq]++;
+	if (action->flags & SA_SAMPLE_RANDOM)
+		add_interrupt_randomness(irq);
 	action->handler(irq, regs);
 }
 
@@ -150,6 +159,8 @@ asmlinkage void do_fast_IRQ(int irq)
 	struct irqaction * action = irq + irq_action;
 
 	kstat.interrupts[irq]++;
+	if (action->flags & SA_SAMPLE_RANDOM)
+		add_interrupt_randomness(irq);
 	action->handler(irq, NULL);
 }
 
@@ -168,6 +179,8 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 		return -EBUSY;
 	if (!handler)
 		return -EINVAL;
+	if (irqflags & SA_SAMPLE_RANDOM)
+		rand_initialize_irq(irq);
 	save_flags(flags);
 	cli();
 	action->handler = handler;
@@ -179,9 +192,9 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 		 * FIXME: Does the SA_INTERRUPT flag make any sense on MIPS???
 		 */
 		if (action->flags & SA_INTERRUPT)
-			set_intr_gate(irq,fast_interrupt);
+			set_int_vector(irq,fast_interrupt);
 		else
-			set_intr_gate(irq,interrupt);
+			set_int_vector(irq,interrupt);
 	}
 	if (irq < 8) {
 		cache_21 &= ~(1<<irq);
@@ -218,7 +231,7 @@ void free_irq(unsigned int irq)
 		cache_A1 |= 1 << (irq-8);
 		outb(cache_A1,0xA1);
 	}
-	set_intr_gate(irq,bad_interrupt);
+	set_int_vector(irq,bad_interrupt);
 	action->handler = NULL;
 	action->flags = 0;
 	action->mask = 0;
@@ -228,7 +241,7 @@ void free_irq(unsigned int irq)
 
 static void no_action(int cpl, struct pt_regs * regs) { }
 
-unsigned int probe_irq_on (void)
+unsigned long probe_irq_on (void)
 {
 	unsigned int i, irqs = 0, irqmask;
 	unsigned long delay;
@@ -258,7 +271,7 @@ unsigned int probe_irq_on (void)
 	return irqs;
 }
 
-int probe_irq_off (unsigned int irqs)
+int probe_irq_off (unsigned long irqs)
 {
 	unsigned int i, irqmask;
 
@@ -284,14 +297,35 @@ void init_IRQ(void)
 {
 	int i;
 
-	/* set the clock to 100 Hz */
-	outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
-	outb_p(LATCH & 0xff , 0x40);	/* LSB */
-	outb(LATCH >> 8 , 0x40);	/* MSB */
+	switch (boot_info.machtype) {
+		case MACH_MIPS_MAGNUM_4000:
+		case MACH_ACER_PICA_61:
+	                r4030_write_reg16(JAZZ_IO_IRQ_ENABLE,
+					  JAZZ_IE_ETHERNET |
+					  JAZZ_IE_SERIAL1  |
+					  JAZZ_IE_SERIAL2  |
+ 					  JAZZ_IE_PARALLEL |
+					  JAZZ_IE_FLOPPY);
+	                r4030_read_reg16(JAZZ_IO_IRQ_SOURCE); /* clear pending IRQs */
+			set_cp0_status(ST0_IM, IE_IRQ4 | IE_IRQ1);
+			/* set the clock to 100 Hz */
+			r4030_write_reg32(JAZZ_TIMER_INTERVAL, 9);
+			break;
+		case MACH_DESKSTATION_TYNE:
+			/* set the clock to 100 Hz */
+			outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
+			outb_p(LATCH & 0xff , 0x40);	/* LSB */
+			outb(LATCH >> 8 , 0x40);	/* MSB */
+
+			if (request_irq(2, no_action, SA_INTERRUPT, "cascade"))
+				printk("Unable to get IRQ2 for cascade\n");
+			break;
+		default:
+			panic("Unknown machtype in init_IRQ");
+	}
+
 	for (i = 0; i < 16 ; i++)
-		set_intr_gate(i, bad_interrupt);
-	if (request_irq(2, no_action, SA_INTERRUPT, "cascade"))
-		printk("Unable to get IRQ2 for cascade\n");
+		set_int_vector(i, bad_interrupt);
 
 	/* initialize the bottom half routines. */
 	for (i = 0; i < 32; i++) {

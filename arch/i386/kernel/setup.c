@@ -62,7 +62,9 @@ struct apm_bios_info apm_bios_info;
 #endif
 
 unsigned char aux_device_present;
-extern int ramdisk_size;
+extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
+extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
+extern int rd_image_start;	/* starting block # of image */
 extern int root_mountflags;
 extern int _etext, _edata, _end;
 
@@ -79,11 +81,15 @@ extern char empty_zero_page[PAGE_SIZE];
 #define DRIVE_INFO (*(struct drive_info_struct *) (PARAM+0x80))
 #define SCREEN_INFO (*(struct screen_info *) (PARAM+0))
 #define MOUNT_ROOT_RDONLY (*(unsigned short *) (PARAM+0x1F2))
-#define RAMDISK_SIZE (*(unsigned short *) (PARAM+0x1F8))
+#define RAMDISK_FLAGS (*(unsigned short *) (PARAM+0x1F8))
 #define ORIG_ROOT_DEV (*(unsigned short *) (PARAM+0x1FC))
 #define AUX_DEVICE_INFO (*(unsigned char *) (PARAM+0x1FF))
 #define COMMAND_LINE ((char *) (PARAM+2048))
 #define COMMAND_LINE_SIZE 256
+
+#define RAMDISK_IMAGE_START_MASK  	0x07FF
+#define RAMDISK_PROMPT_FLAG		0x8000
+#define RAMDISK_LOAD_FLAG		0x4000	
 
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
 
@@ -110,7 +116,9 @@ void setup_arch(char **cmdline_p,
 	aux_device_present = AUX_DEVICE_INFO;
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
 	memory_end &= PAGE_MASK;
-	ramdisk_size = RAMDISK_SIZE;
+	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;
+	rd_prompt = ((RAMDISK_FLAGS & RAMDISK_PROMPT_FLAG) != 0);
+	rd_doload = ((RAMDISK_FLAGS & RAMDISK_LOAD_FLAG) != 0);
 #ifdef CONFIG_MAX_16M
 	if (memory_end > 16*1024*1024)
 		memory_end = 16*1024*1024;

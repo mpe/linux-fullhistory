@@ -716,9 +716,7 @@ de4x5_hw_init(struct device *dev, u_long iobase)
     dev->hard_start_xmit = &de4x5_queue_pkt;
     dev->stop = &de4x5_close;
     dev->get_stats = &de4x5_get_stats;
-#ifdef HAVE_MULTICAST
     dev->set_multicast_list = &set_multicast_list;
-#endif
     dev->do_ioctl = &de4x5_ioctl;
     
     dev->mem_start = 0;

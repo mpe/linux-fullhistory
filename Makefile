@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 47
+SUBLEVEL = 48
 
 ARCH = i386
 
@@ -171,11 +171,9 @@ symlinks:
 oldconfig: symlinks
 	$(CONFIG_SHELL) scripts/Configure -d arch/$(ARCH)/config.in
 
-xconfig: symlinks scripts/kconfig.tk
-	wish -f scripts/kconfig.tk
-
-scripts/kconfig.tk:
+xconfig: symlinks
 	$(MAKE) -C scripts kconfig.tk
+	wish -f scripts/kconfig.tk
 
 config: symlinks
 	$(CONFIG_SHELL) scripts/Configure arch/$(ARCH)/config.in

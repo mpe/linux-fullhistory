@@ -593,7 +593,7 @@ void print_hostbyte(int scsiresult)
 }
 #else
 void print_hostbyte(int scsiresult)
-{   printk("Hostbyte=0x%02x ",hostbyte(scsiresult));
+{   printk("Hostbyte=0x%02x ",host_byte(scsiresult));
 }
 #endif
 

@@ -15,6 +15,7 @@
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 #include <linux/sched.h>
+#include <linux/kernel_stat.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/ptrace.h>
@@ -342,6 +343,7 @@ struct symbol_table symbol_table = {
 	X(do_gettimeofday),
 	X(loops_per_sec),
 	X(need_resched),
+	X(kstat),
 	X(kill_proc),
 	X(kill_pg),
 	X(kill_sl),
@@ -473,6 +475,7 @@ struct symbol_table symbol_table = {
  	X(scsi_init_malloc),
  	X(scsi_init_free),
  	X(scsi_ioctl),
+	X(scsi_mark_host_bus_reset),
   	X(print_command),
       	X(print_msg),
   	X(print_status),

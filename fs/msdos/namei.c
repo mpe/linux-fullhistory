@@ -452,7 +452,7 @@ static int msdos_unlinkx(
 		res = -EPERM;
 		goto unlink_done;
 	}
-	if (MSDOS_I(inode)->i_attrs & ATTR_SYS){
+	if (IS_IMMUTABLE(inode)){
 		res = -EPERM;
 		goto unlink_done;
 	}

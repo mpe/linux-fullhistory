@@ -78,11 +78,14 @@ extern int xd_init(void);
 #endif
 
 extern void set_device_ro(kdev_t dev,int flag);
+void add_blkdev_randomness(int major);
 
 extern int floppy_init(void);
 extern void rd_load(void);
-extern long rd_init(long mem_start, int length);
-extern int ramdisk_size;
+extern int rd_init(void);
+extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
+extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
+extern int rd_image_start;	/* starting block # of image */
 
 #define RO_IOCTLS(dev,where) \
   case BLKROSET: if (!suser()) return -EACCES; \
@@ -102,14 +105,15 @@ extern int ramdisk_size;
 #define DEVICE_ON(device)	/* nothing */
 #define DEVICE_OFF(device)	/* nothing */
 
-#elif (MAJOR_NR == MEM_MAJOR)
+#elif (MAJOR_NR == RAMDISK_MAJOR)
 
 /* ram disk */
 #define DEVICE_NAME "ramdisk"
-#define DEVICE_REQUEST do_rd_request
-#define DEVICE_NR(device) (MINOR(device) & 7)
+#define DEVICE_REQUEST rd_request
+#define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device) 
 #define DEVICE_OFF(device)
+#define DEVICE_NO_RANDOM
 
 #elif (MAJOR_NR == FLOPPY_MAJOR)
 
@@ -374,6 +378,9 @@ static void end_request(int uptodate) {
 			return;
 		}
 	}
+#ifndef DEVICE_NO_RANDOM
+	add_blkdev_randomness(MAJOR(req->rq_dev));
+#endif
 #ifdef IDE_DRIVER
 	blk_dev[MAJOR(req->rq_dev)].current_request = req->next;
 	hwgroup->rq = NULL;

@@ -33,6 +33,8 @@ enum machine_type {
 #endif
   /* skip a bunch so we don't run into any of sun's numbers */
   M_386 = 100,
+  M_MIPS1 = 151,	/* MIPS R3000/R3000 binary */
+  M_MIPS2 = 152,	/* MIPS R6000/R4000 binary */
 };
 
 #if !defined (N_MAGIC)

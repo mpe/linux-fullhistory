@@ -55,6 +55,7 @@
 
 #define UNNAMED_MAJOR	0
 #define MEM_MAJOR	1
+#define RAMDISK_MAJOR	1
 #define FLOPPY_MAJOR	2
 #define PTY_MASTER_MAJOR 2
 #define IDE0_MAJOR	3

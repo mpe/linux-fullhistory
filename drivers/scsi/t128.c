@@ -393,3 +393,10 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
 }
 
 #include "NCR5380.c"
+
+#ifdef MODULE
+/* Eventually this will go into an include file, but this will be later */
+Scsi_Host_Template driver_template = TRANTOR_T128;
+
+#include "scsi_module.c"
+#endif

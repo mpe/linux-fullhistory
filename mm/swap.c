@@ -457,7 +457,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 				return 0;
 			vma->vm_mm->rss--;
 			set_pte(page_table, __pte(entry));
-			invalidate_page(vma->vm_mm, address);
+			invalidate_page(vma, address);
 			tsk->nswap++;
 			write_swap_page(entry, (char *) page);
 		}
@@ -472,13 +472,13 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 		}
 		vma->vm_mm->rss--;
 		set_pte(page_table, __pte(entry));
-		invalidate_page(vma->vm_mm, address);
+		invalidate_page(vma, address);
 		free_page(page);
 		return 1;
 	} 
 	vma->vm_mm->rss--;
 	pte_clear(page_table);
-	invalidate_page(vma->vm_mm, address);
+	invalidate_page(vma, address);
 	entry = mem_map[MAP_NR(page)].count;
 	free_page(page);
 	return entry;

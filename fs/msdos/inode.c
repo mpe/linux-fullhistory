@@ -81,7 +81,9 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 
 	*check = 'n';
 	*conversion = 'b';
-	*dotsOK =0;
+	/* Please leave dotsOK as 1, and contact Albert Cahalan if */
+	/* it causes any problems for you. <albert@ccs.neu.edu>    */
+	*dotsOK =1;  /* see note above, and report problems */
 	*uid = current->uid;
 	*gid = current->gid;
 	*umask = current->fs->umask;
@@ -427,6 +429,8 @@ void msdos_read_inode(struct inode *inode)
 		inode->i_nlink = 1;
 		inode->i_size = CF_LE_L(raw_entry->size);
 	}
+	if(raw_entry->attr & ATTR_SYS)
+		inode->i_flags |= S_IMMUTABLE;
 	MSDOS_I(inode)->i_binary = is_binary(MSDOS_SB(inode->i_sb)->conversion,
 	    raw_entry->ext);
 	MSDOS_I(inode)->i_attrs = raw_entry->attr & ATTR_UNUSED;

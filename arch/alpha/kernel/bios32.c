@@ -427,6 +427,14 @@ static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_sl
 		pcibios_write_config_byte(dev->bus->number, dev->devfn,
 					  PCI_INTERRUPT_LINE, dev->irq);
 #endif
+		/*
+		 * if its a VGA, enable its BIOS ROM at C0000
+		 */
+		if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA) {
+			pcibios_write_config_dword(dev->bus->number, dev->devfn,
+						   PCI_ROM_ADDRESS,
+						   0x000c0000 | PCI_ROM_ADDRESS_ENABLE);
+		}
 	}
 	if (ide_base) {
 		enable_ide(ide_base);
@@ -612,6 +620,14 @@ static inline void avanti_and_noname_fixup(void)
 		if (pirq < 0) {
 			continue;
 		}
+		/*
+		 * if its a VGA, enable its BIOS ROM at C0000
+		 */
+		if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA) {
+			pcibios_write_config_dword(dev->bus->number, dev->devfn,
+						   PCI_ROM_ADDRESS,
+						   0x000c0000 | PCI_ROM_ADDRESS_ENABLE);
+		}
 		if ((dev->class >> 16) == PCI_BASE_CLASS_DISPLAY) {
 			continue; /* for now, displays get no IRQ */
 		}
@@ -620,7 +636,6 @@ static inline void avanti_and_noname_fixup(void)
 		/* must set the PCI IRQs to level triggered */
 		/* assume they are all >= 8 */
 		level_bits |= (1 << (dev->irq - 8));
-		outb(level_bits, 0x4d1);
 
 #if PCI_MODIFY
 		/* tell the device: */
@@ -628,6 +643,10 @@ static inline void avanti_and_noname_fixup(void)
 					  PCI_INTERRUPT_LINE, dev->irq);
 #endif
 	}
+	/* now, set any level-triggered IRQs */
+	if (level_bits)
+		outb(level_bits, 0x4d1);
+
 
 #if PCI_MODIFY
 	{

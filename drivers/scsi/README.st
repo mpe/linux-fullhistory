@@ -1,5 +1,5 @@
 This file contains brief information about the SCSI tape driver.
-Last modified: Sun Sep 24 23:40:06 1995 by root@kai.makisara.fi
+Last modified: Sun Nov 26 12:54:21 1995 by root@kai.makisara.fi
 
 BASICS
 
@@ -43,7 +43,17 @@ a filemark to truncate a read request or that don't like backspacing.
 The buffer size is defined (in 1024 byte units) by ST_BUFFER_BLOCKS or
 at boot time. If this size is not enough, the driver tries to allocate
 a large enough temporary buffer that is released when the device is
-closed.
+closed. The maximum buffer size is defined by the kernel memory
+allocation (currently 256 kB for Alphas and 128 kB for other
+architectures).
+
+Allocation of the buffers is done at run-time when they are
+needed. Allocation of the specified number of buffers can be done at
+initialization if ST_RUNTIME_BUFFERS is defined non-zero. The
+advantage of run-time allocation is that memory is not wasted for
+buffers not being used. The disadvantage is that there may not be
+memory available at the time when a buffer is needed for the first
+time (once a buffer is allocated, it is not released).
 
 The maximum number of buffers allocated at initialization is defined by
 ST_MAX_BUFFERS. One buffer is allocated for each drive detected when
@@ -54,14 +64,10 @@ initialization (a SCSI adapter driver is loaded as a module). The
 default for ST_EXTRA_DEVS is two. The driver tries to allocate new
 buffers at run-time if necessary.
 
-Allocation of the buffers can be postponed to run-time if
-(ST_RUNTIME_BUFFERS). The advantage is that memory is not wasted for
-buffers not being used. The disadvantage is that there may not be
-memory available at the time when a buffer is needed for the first
-time (once a buffer is allocated, it is not released).
-
 The threshold for triggering asynchronous write in fixed block mode
-is defined by ST_WRITE_THRESHOLD.
+is defined by ST_WRITE_THRESHOLD. This may be optimized for each
+use pattern. The default triggers asynchronous write after three
+default sized writes (10 kB) from tar.
 
 
 BOOT TIME CONFIGURATION

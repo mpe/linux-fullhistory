@@ -355,6 +355,9 @@ typedef struct hwif_s {
 	struct request request_sense_request;	/* from ide-cd.c */
 	struct packet_command request_sense_pc;	/* from ide-cd.c */
 #endif /* CONFIG_BLK_DEV_IDECD */
+#ifdef CONFIG_BLK_DEV_IDETAPE
+	ide_drive_t	*tape_drive;	/* Pointer to the tape on this interface */
+#endif /* CONFIG_BLK_DEV_IDETAPE */
 	} ide_hwif_t;
 
 /*
@@ -413,6 +416,14 @@ byte ide_dump_status (ide_drive_t *drive, const char *msg, byte stat);
 void ide_error (ide_drive_t *drive, const char *msg, byte stat);
 
 /*
+ * ide_fixstring() cleans up and (optionally) byte-swaps a text string,
+ * removing leading/trailing blanks and compressing internal blanks.
+ * It is primarily used to tidy up the model name/number fields as
+ * returned by the WIN_[P]IDENTIFY commands.
+ */
+void ide_fixstring (byte *s, const int bytecount, const int byteswap);
+
+/*
  * This routine busy-waits for the drive status to be not "busy".
  * It then checks the status for all of the "good" bits and none
  * of the "bad" bits, and if all is okay it returns 0.  All other
@@ -443,7 +454,8 @@ void ide_init_drive_cmd (struct request *rq);
 typedef enum
 	{ide_wait,	/* insert rq at end of list, and wait for it */
 	 ide_next,	/* insert rq immediately after current request */
-	 ide_preempt}	/* insert rq in front of current request */
+	 ide_preempt,	/* insert rq in front of current request */
+	 ide_end}	/* insert rq at end of list, but don't wait for it */
  ide_action_t;
 
 /*
@@ -465,6 +477,12 @@ typedef enum
  * returns without waiting for the new rq to be completed.  As above,
  * This is VERY DANGEROUS, and is intended for careful use by the 
  * ATAPI tape/cdrom driver code.
+ *
+ * If action is ide_end, then the rq is queued at the end of the
+ * request queue, and the function returns immediately without waiting
+ * for the new rq to be completed. This is again intended for careful
+ * use by the ATAPI tape/cdrom driver code. (Currently used by ide-tape.c,
+ * when operating in the pipelined operation mode).
  */
 int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t action);
  
@@ -534,6 +552,13 @@ void idetape_blkdev_release (struct inode *inode, struct file *filp, ide_drive_t
  */
  
 void idetape_register_chrdev (void);
+
+/*
+ *	The following function is called to re-insert a postponed tape
+ *	request into the request queue.
+ */
+ 
+void idetape_put_back_postponed_request (ide_drive_t *drive);
 
 #endif /* CONFIG_BLK_DEV_IDETAPE */
 

@@ -23,15 +23,15 @@ dep_tristate 'EATA-DMA (DPT, NEC, ATT, Olivetti) support' CONFIG_SCSI_EATA_DMA $
 dep_tristate 'EATA-PIO (old DPT PM2001, PM2012A) support' CONFIG_SCSI_EATA_PIO $CONFIG_SCSI
 dep_tristate 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F $CONFIG_SCSI
 dep_tristate 'Future Domain 16xx SCSI support' CONFIG_SCSI_FUTURE_DOMAIN $CONFIG_SCSI
-bool 'Generic NCR5380 SCSI support' CONFIG_SCSI_GENERIC_NCR5380
+dep_tristate 'Generic NCR5380 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 $CONFIG_SCSI
 if [ "$CONFIG_PCI" = "y" ]; then
   dep_tristate 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx $CONFIG_SCSI
 fi
 dep_tristate 'Always IN2000 SCSI support (test release)' CONFIG_SCSI_IN2000 $CONFIG_SCSI
-bool 'PAS16 SCSI support' CONFIG_SCSI_PAS16
+dep_tristate 'PAS16 SCSI support' CONFIG_SCSI_PAS16 $CONFIG_SCSI
 dep_tristate 'QLOGIC SCSI support' CONFIG_SCSI_QLOGIC $CONFIG_SCSI
 dep_tristate 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE $CONFIG_SCSI
-bool 'Trantor T128/T128F/T228 SCSI support' CONFIG_SCSI_T128
+dep_tristate 'Trantor T128/T128F/T228 SCSI support' CONFIG_SCSI_T128 $CONFIG_SCSI
 dep_tristate 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR $CONFIG_SCSI
 dep_tristate '7000FASST SCSI support' CONFIG_SCSI_7000FASST $CONFIG_SCSI
 dep_tristate 'EATA ISA/EISA (DPT PM2011/021/012/022/122/322) support' CONFIG_SCSI_EATA $CONFIG_SCSI

@@ -96,7 +96,7 @@ void release(struct task_struct * p)
 			release_thread(p);
 			if (STACK_MAGIC != *(unsigned long *)p->kernel_stack_page)
 				printk(KERN_ALERT "release: %s kernel stack corruption. Aiee\n", p->comm);
-			free_page(p->kernel_stack_page);
+			free_kernel_stack(p->kernel_stack_page);
 			current->cmin_flt += p->min_flt + p->cmin_flt;
 			current->cmaj_flt += p->maj_flt + p->cmaj_flt;
 			current->cnswap += p->nswap + p->cnswap;
@@ -446,7 +446,7 @@ static void exit_notify(void)
 	/* 
 	 * Check to see if any process groups have become orphaned
 	 * as a result of our exiting, and if they have any stopped
-	 * jobs, send them a SIGUP and then a SIGCONT.  (POSIX 3.2.2.2)
+	 * jobs, send them a SIGHUP and then a SIGCONT.  (POSIX 3.2.2.2)
 	 *
 	 * Case i: Our father is in a different pgrp than we are
 	 * and we were the only connection outside, so our pgrp

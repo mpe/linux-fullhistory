@@ -49,7 +49,6 @@ extern void init_modules(void);
 extern long console_init(long, long);
 extern long kmalloc_init(long,long);
 extern void sock_init(void);
-extern long rd_init(long mem_start, int length);
 extern long pci_init(long, long);
 
 extern void swap_setup(char *str, int *ints);
@@ -102,7 +101,9 @@ extern void optcd_setup(char *str, int *ints);
 #ifdef CONFIG_SJCD
 extern void sjcd_setup(char *str, int *ints);
 #endif CONFIG_SJCD
-static void ramdisk_setup(char *str, int *ints);
+static void ramdisk_start_setup(char *str, int *ints);
+static void load_ramdisk(char *str, int *ints);
+static void prompt_ramdisk(char *str, int *ints);
 
 #ifdef CONFIG_SYSVIPC
 extern void ipc_init(void);
@@ -121,7 +122,9 @@ static unsigned long memory_end = 0;
 
 int rows, cols;
 
-int ramdisk_size;
+extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
+extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
+extern int rd_image_start;	/* starting block # of image */
 int root_mountflags = MS_RDONLY;
 char *execute_command = 0;
 
@@ -173,7 +176,9 @@ struct {
 } bootsetups[] = {
 	{ "reserve=", reserve_setup },
 	{ "profile=", profile_setup },
-	{ "ramdisk=", ramdisk_setup },
+	{ "ramdisk_start=", ramdisk_start_setup },
+	{ "load_ramdisk", load_ramdisk },
+	{ "prompt_ramdisk", prompt_ramdisk },
 	{ "swap=", swap_setup },
 	{ "buff=", buff_setup },
 #ifdef CONFIG_BUGi386
@@ -268,10 +273,20 @@ struct {
 	{ 0, 0 }
 };
 
-static void ramdisk_setup(char *str, int *ints)
+static void ramdisk_start_setup(char *str, int *ints)
 {
    if (ints[0] > 0 && ints[1] >= 0)
-      ramdisk_size = ints[1];
+      rd_image_start = ints[1];
+}
+
+static void load_ramdisk(char *str, int *ints)
+{
+	rd_doload = 1;
+}
+
+static void prompt_ramdisk(char *str, int *ints)
+{
+	rd_prompt = 1;
 }
 
 static int checksetup(char *line)
@@ -578,8 +593,6 @@ asmlinkage void start_kernel(void)
 	memory_start = inode_init(memory_start,memory_end);
 	memory_start = file_table_init(memory_start,memory_end);
 	memory_start = name_cache_init(memory_start,memory_end);
-	if (ramdisk_size)
-		memory_start += rd_init(memory_start, ramdisk_size*1024);
 	mem_init(memory_start,memory_end);
 	buffer_init();
 	sock_init();

@@ -51,8 +51,7 @@ int generic_NCR5380_reset(Scsi_Cmnd *);
 #define CAN_QUEUE 16
 #endif
 
-#ifdef HOSTS_C
-
+#if defined(HOSTS_C) || defined(MODULE)
 
 #define GENERIC_NCR5380 {NULL, NULL, NULL, NULL, \
 	"Trantor T128/T128F/T228", 		\
@@ -62,7 +61,10 @@ int generic_NCR5380_reset(Scsi_Cmnd *);
 	NULL, /* can queue */ CAN_QUEUE, /* id */ 7, SG_ALL,		\
 	/* cmd per lun */ CMD_PER_LUN , 0, 0, DISABLE_CLUSTERING}
 
-#else
+#endif
+
+#ifndef HOSTS_C
+
 #define NCR5380_implementation_fields \
     int port
 

@@ -1,6 +1,8 @@
 #ifndef _I386_PGTABLE_H
 #define _I386_PGTABLE_H
 
+#include <linux/config.h>
+
 /*
  * Define USE_PENTIUM_MM if you want the 4MB page table optimizations.
  * This works only on a intel Pentium.
@@ -33,7 +35,7 @@
 #define __invalidate() \
 __asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
 
-#ifdef __i486__
+#ifdef CONFIG_M486
 #define __invalidate_one(addr) \
 __asm__ __volatile__("invlpg %0": :"m" (*(char *) addr))
 #else
@@ -51,10 +53,10 @@ static inline void invalidate_mm(struct mm_struct *mm)
 		__invalidate();
 }
 
-static inline void invalidate_page(struct mm_struct *mm,
+static inline void invalidate_page(struct vm_area_struct *vma,
 	unsigned long addr)
 {
-	if (mm == current->mm)
+	if (vma->vm_mm == current->mm)
 		__invalidate_one(addr);
 }
 
@@ -87,7 +89,7 @@ static inline void invalidate_mm(struct mm_struct *mm)
 	invalidate();
 }
 
-static inline void invalidate_page(struct mm_struct *mm,
+static inline void invalidate_page(struct vm_area_struct *vma,
 	unsigned long addr)
 {
 	invalidate();

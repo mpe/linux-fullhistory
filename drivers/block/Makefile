@@ -16,7 +16,7 @@
 
 
 L_TARGET := block.a
-L_OBJS   := ll_rw_blk.o ramdisk.o genhd.o 
+L_OBJS   := ll_rw_blk.o rd.o genhd.o 
 M_OBJS   :=
 MOD_LIST_NAME := BLOCK_MODULES
 

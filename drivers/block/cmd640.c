@@ -237,7 +237,7 @@ int ide_probe_for_cmd640x(void)
 {
 	int  i;
 	int  second_port;
-	int  read_ahead;
+	int  cmd_read_ahead;
 	byte b;
 
 	for (i = 0; i < MAX_HWIFS; i++)
@@ -287,13 +287,13 @@ int ide_probe_for_cmd640x(void)
 	 */
 	bus_speed = (bus_type == vlb) ? 50 : 40; 
 
-#if 0	/* don't know if this is reliable yet */
+#if 1	/* don't know if this is reliable yet */
 	/*
 	 * Enable readahead for versions above 'A'
 	 */
-	read_ahead = (cmd640_chip_version > 1);
+	cmd_read_ahead = (cmd640_chip_version > 1);
 #else
-	read_ahead = 0;
+	cmd_read_ahead = 0;
 #endif
 	/*
 	 * Setup Control Register
@@ -303,7 +303,7 @@ int ide_probe_for_cmd640x(void)
 		b |= CNTRL_ENA_2ND;
 	else
 		b &= ~CNTRL_ENA_2ND;
-	if (read_ahead)
+	if (cmd_read_ahead)
 		b &= ~(CNTRL_DIS_RA0 | CNTRL_DIS_RA1);
 	else
 		b |= (CNTRL_DIS_RA0 | CNTRL_DIS_RA1);
@@ -314,7 +314,7 @@ int ide_probe_for_cmd640x(void)
 	 */
 	if (second_port) {
 		/* We reset timings, and setup read-ahead */
-		b = read_ahead ? 0 : (DIS_RA2 | DIS_RA3);
+		b = cmd_read_ahead ? 0 : (DIS_RA2 | DIS_RA3);
 		put_cmd640_reg(cmd640_key, ARTTIM23, b);
 		put_cmd640_reg(cmd640_key, DRWTIM23, 0);
 	}
@@ -343,7 +343,7 @@ int ide_probe_for_cmd640x(void)
 	put_cmd640_reg(cmd640_key, CMDTIM, 0);
 
 	printk("\n ... serialized, %s read-ahead, secondary interface %s\n",
-	       read_ahead ? "enabled" : "disabled",
+	       cmd_read_ahead ? "enabled" : "disabled",
 	       second_port ? "enabled" : "disabled");
 
 	return 1;

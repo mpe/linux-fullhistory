@@ -206,7 +206,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p = (struct task_struct *) kmalloc(sizeof(*p), GFP_KERNEL);
 	if (!p)
 		goto bad_fork;
-	new_stack = get_free_page(GFP_KERNEL);
+	new_stack = alloc_kernel_stack();
 	if (!new_stack)
 		goto bad_fork_free_p;
 	error = -EAGAIN;
@@ -285,7 +285,7 @@ bad_fork_cleanup:
 	REMOVE_LINKS(p);
 	nr_tasks--;
 bad_fork_free_stack:
-	free_page(new_stack);
+	free_kernel_stack(new_stack);
 bad_fork_free_p:
 	kfree(p);
 bad_fork:

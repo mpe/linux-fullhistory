@@ -1,0 +1,87 @@
+#
+# Automatically generated make config: don't edit
+#
+
+#
+# Machine setup
+#
+CONFIG_ACER_PICA_61=y
+# CONFIG_DECSTATION is not set
+# CONFIG_DESKSTATION_RPC44 is not set
+# CONFIG_DESKSTATION_TYNE is not set
+# CONFIG_MIPS_MAGNUM_3000 is not set
+# CONFIG_MIPS_MAGNUM_4000 is not set
+# CONFIG_OLIVETTI_M700 is not set
+CONFIG_MIPS_JAZZ=y
+# CONFIG_CPU_R3000 is not set
+# CONFIG_CPU_R6000 is not set
+CONFIG_CPU_R4X00=y
+# CONFIG_CPU_R4600 is not set
+# CONFIG_CPU_R8000 is not set
+# CONFIG_CPU_R10000 is not set
+CONFIG_TLB_SHUTDOWN=y
+CONFIG_BINFMT_ELF=y
+# CONFIG_ELF_KERNEL is not set
+CONFIG_CPU_LITTLE_ENDIAN=y
+# CONFIG_NET is not set
+# CONFIG_SYSVIPC is not set
+
+#
+# Loadable module support
+#
+# CONFIG_MODVERSIONS is not set
+
+#
+# block devices
+#
+CONFIG_BLK_DEV_FD=y
+# CONFIG_ST506 is not set
+# CONFIG_BLK_DEV_XD is not set
+
+#
+# SCSI support
+#
+# CONFIG_SCSI is not set
+
+#
+# CD-ROM drivers (not for SCSI or IDE/ATAPI drives)
+#
+# CONFIG_CD_NO_IDESCSI is not set
+
+#
+# Filesystems
+#
+# CONFIG_MINIX_FS is not set
+# CONFIG_EXT_FS is not set
+CONFIG_EXT2_FS=y
+# CONFIG_XIA_FS is not set
+# CONFIG_MSDOS_FS is not set
+CONFIG_PROC_FS=y
+# CONFIG_ISO9660_FS is not set
+# CONFIG_HPFS_FS is not set
+# CONFIG_SYSV_FS is not set
+# CONFIG_SMB_FS is not set
+
+#
+# character devices
+#
+# CONFIG_CYCLADES is not set
+# CONFIG_STALDRV is not set
+# CONFIG_PRINTER is not set
+# CONFIG_BUSMOUSE is not set
+# CONFIG_PSMOUSE is not set
+# CONFIG_MS_BUSMOUSE is not set
+# CONFIG_ATIXL_BUSMOUSE is not set
+# CONFIG_QIC02_TAPE is not set
+# CONFIG_APM is not set
+# CONFIG_SERIAL is not set
+
+#
+# Sound
+#
+# CONFIG_SOUND is not set
+
+#
+# Kernel hacking
+#
+# CONFIG_PROFILE is not set

@@ -138,7 +138,7 @@ int pas16_reset(Scsi_Cmnd *);
  * macros when this is being used solely for the host stub.
  */
 
-#ifdef HOSTS_C
+#if defined(HOSTS_C) || defined(MODULE)
 
 #define MV_PAS16 {NULL, NULL, NULL, NULL, \
 	"Pro Audio Spectrum-16 SCSI", 		\
@@ -148,7 +148,8 @@ int pas16_reset(Scsi_Cmnd *);
 	/* can queue */ CAN_QUEUE, /* id */ 7, SG_ALL,			\
 	/* cmd per lun */ CMD_PER_LUN , 0, 0, DISABLE_CLUSTERING}
 
-#else
+#endif
+#ifndef HOSTS_C
 
 #define NCR5380_implementation_fields \
     volatile unsigned short io_port

@@ -3,7 +3,7 @@
 
    Copyright 1995 Kai Makisara.
 
-   Last modified: Sun Sep 24 11:46:15 1995 by root@kai.makisara.fi
+   Last modified: Thu Dec 14 21:51:27 1995 by root@kai.makisara.fi
 */
 
 #ifndef _ST_OPTIONS_H

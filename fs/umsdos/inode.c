@@ -404,6 +404,7 @@ struct super_block *UMSDOS_read_super(
 	printk ("UMSDOS Beta 0.6 (compatibility level %d.%d, fast msdos)\n"
 		,UMSDOS_VERSION,UMSDOS_RELEASE);
 	if (sb != NULL){
+		MSDOS_SB(sb)->dotsOK = 0;  /* disable hidden==dotfile */
 		sb->s_op = &umsdos_sops;
 		PRINTK (("umsdos_read_super %p\n",sb->s_mounted));
 		umsdos_setup_dir_inode (sb->s_mounted);

@@ -588,7 +588,7 @@ repeat0:
 				 continue;
 			 }
 			 
-			 if (bh->b_count || bh->b_size != size)
+			 if (bh->b_count || buffer_protected(bh) || bh->b_size != size)
 				  continue;
 			 
 			 /* Buffers are written in the order they are placed 
@@ -632,6 +632,8 @@ repeat0:
 			 panic("Busy buffer in candidate list\n");
 		if (mem_map[MAP_NR((unsigned long) bh->b_data)].count != 1)
 			 panic("Shared buffer in candidate list\n");
+		if (buffer_protected(bh))
+			panic("Protected buffer in candidate list\n");
 		if (BADNESS(bh)) panic("Buffer in candidate list with BADNESS != 0\n");
 		
 		if(bh->b_dev == B_FREE)
@@ -780,7 +782,7 @@ void refile_buffer(struct buffer_head * buf)
 	}
 	if (buffer_dirty(buf))
 		dispose = BUF_DIRTY;
-	else if (mem_map[MAP_NR((unsigned long) buf->b_data)].count > 1)
+	else if ((mem_map[MAP_NR((unsigned long) buf->b_data)].count > 1) || buffer_protected(buf))
 		dispose = BUF_SHARED;
 	else if (buffer_locked(buf))
 		dispose = BUF_LOCKED;
@@ -836,6 +838,10 @@ void __bforget(struct buffer_head * buf)
 	}
 	if (mem_map[MAP_NR(buf->b_data)].count != 1) {
 		printk("Aieee... bforget(): shared buffer\n");
+		return;
+	}
+	if (buffer_protected(buf)) {
+		printk("Aieee... bforget(): protected buffer\n");
 		return;
 	}
 	mark_buffer_clean(buf);
@@ -1315,7 +1321,8 @@ static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp,
 	do {
 		if (!tmp)
 			return 0;
-		if (tmp->b_count || buffer_dirty(tmp) || buffer_locked(tmp) || tmp->b_wait)
+		if (tmp->b_count || buffer_protected(tmp) ||
+		    buffer_dirty(tmp) || buffer_locked(tmp) || tmp->b_wait)
 			return 0;
 		if (priority && buffer_touched(tmp))
 			return 0;
@@ -1465,7 +1472,8 @@ static int shrink_specific_buffers(unsigned int priority, int size)
 		bh = free_list[isize];
 		if(!bh) continue;
 		for (i=0 ; !i || bh != free_list[isize]; bh = bh->b_next_free, i++) {
-			if (bh->b_count || !bh->b_this_page)
+			if (bh->b_count || buffer_protected(bh) ||
+			    !bh->b_this_page)
 				 continue;
 			if (!age_of((unsigned long) bh->b_data) &&
 			    try_to_free(bh, &bh, 6))
@@ -1494,7 +1502,8 @@ static int shrink_specific_buffers(unsigned int priority, int size)
 			/* We may have stalled while waiting for I/O
 			   to complete. */
 			if(bh->b_list != nlist) goto repeat1;
-			if (bh->b_count || !bh->b_this_page)
+			if (bh->b_count || buffer_protected(bh) ||
+			    !bh->b_this_page)
 				 continue;
 			if(size && bh->b_size != size) continue;
 			if (buffer_locked(bh))
@@ -1530,6 +1539,7 @@ void show_buffers(void)
 {
 	struct buffer_head * bh;
 	int found = 0, locked = 0, dirty = 0, used = 0, lastused = 0;
+	int protected = 0;
 	int shared;
 	int nlist, isize;
 
@@ -1538,13 +1548,15 @@ void show_buffers(void)
 	printk("Buffer blocks:   %6d\n",nr_buffers);
 
 	for(nlist = 0; nlist < NR_LIST; nlist++) {
-	  shared = found = locked = dirty = used = lastused = 0;
+	  shared = found = locked = dirty = used = lastused = protected = 0;
 	  bh = lru_list[nlist];
 	  if(!bh) continue;
 	  do {
 		found++;
 		if (buffer_locked(bh))
 			locked++;
+		if (buffer_protected(bh))
+			protected++;
 		if (buffer_dirty(bh))
 			dirty++;
 		if(mem_map[MAP_NR(((unsigned long) bh->b_data))].count !=1) shared++;
@@ -1552,10 +1564,11 @@ void show_buffers(void)
 			used++, lastused = found;
 		bh = bh->b_next_free;
 	      } while (bh != lru_list[nlist]);
-	printk("Buffer[%d] mem: %d buffers, %d used (last=%d), %d locked, %d dirty %d shrd\n",
-		nlist, found, used, lastused, locked, dirty, shared);
+	printk("Buffer[%d] mem: %d buffers, %d used (last=%d), %d locked, "
+	       "%d protected, %d dirty %d shrd\n",
+		nlist, found, used, lastused, locked, protected, dirty, shared);
 	};
-	printk("Size    [LAV]     Free  Clean  Unshar     Lck    Lck1   Dirty  Shared\n");
+	printk("Size    [LAV]     Free  Clean  Unshar     Lck    Lck1   Dirty  Shared \n");
 	for(isize = 0; isize<NR_SIZES; isize++){
 		printk("%5d [%5d]: %7d ", bufferindex_size[isize],
 		       buffers_lav[isize], nr_free[isize]);
@@ -1587,7 +1600,8 @@ static inline int try_to_reassign(struct buffer_head * bh, struct buffer_head **
 		if (!tmp)
 			 return 0;
 		
-		if (tmp->b_count || buffer_dirty(tmp) || buffer_locked(tmp))
+		if (tmp->b_count || buffer_protected(tmp) ||
+		    buffer_dirty(tmp) || buffer_locked(tmp))
 			 return 0;
 		tmp = tmp->b_this_page;
 	} while (tmp != bh);
@@ -1792,8 +1806,11 @@ static int bdflush_running = 0;
 
 static void wakeup_bdflush(int wait)
 {
-	if(!bdflush_running){
-		printk("Warning - bdflush not running\n");
+	extern int	rd_loading;
+	
+	if (!bdflush_running){
+		if (!rd_loading)
+			printk("Warning - bdflush not running\n");
 		sync_buffers(0,0);
 		return;
 	};

@@ -13,7 +13,7 @@
 
 struct vfsmount
 {
-   dev_t mnt_dev;                      /* Device this applies to */
+   kdev_t mnt_dev;                     /* Device this applies to */
    char *mnt_devname;                  /* Name of device e.g. /dev/dsk/hda1 */
    char *mnt_dirname;                  /* Name of directory mounted on */
    unsigned int mnt_flags;             /* Flags of this device */
@@ -25,6 +25,6 @@ struct vfsmount
    struct vfsmount *mnt_next;          /* pointer to next in linkedlist */
 };
 
-struct vfsmount *lookup_vfsmnt(dev_t dev);
+struct vfsmount *lookup_vfsmnt(kdev_t dev);
 
 #endif /* _LINUX_MOUNT_H */
