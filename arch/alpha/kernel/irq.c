@@ -232,6 +232,8 @@ static inline void handle_irq(int irq, struct pt_regs * regs)
 	action->handler(irq, regs);
 }
 
+#ifndef CONFIG_PCI
+
 static void local_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 	switch (vector) {
@@ -258,6 +260,8 @@ static void local_device_interrupt(unsigned long vector, struct pt_regs * regs)
 			printk("Unknown local interrupt %lx\n", vector);
 	}
 }
+
+#endif /* !CONFIG_PCI */
 
 /*
  * The vector is 0x8X0 for EISA interrupt X, and 0x9X0 for the local
@@ -373,6 +377,11 @@ int probe_irq_off(unsigned int irqs)
 static void machine_check(unsigned long vector, unsigned long la_ptr, struct pt_regs * regs)
 {
 	printk("Machine check\n");
+#ifdef LCA_MEM_ESR
+	printk("esr=%lx, ear=%lx, ioc_stat0=%lx, ioc_stat1=%lx\n",
+	       *(unsigned long*)LCA_MEM_ESR, *(unsigned long*)LCA_MEM_EAR,
+	       *(unsigned long*)LCA_IOC_STAT0, *(unsigned long*)LCA_IOC_STAT1);
+#endif
 }
 
 asmlinkage void do_entInt(unsigned long type, unsigned long vector, unsigned long la_ptr,

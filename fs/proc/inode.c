@@ -196,8 +196,10 @@ void proc_read_inode(struct inode * inode)
 		return;
 	}
 	ino &= 0x0000ffff;
-	inode->i_uid = p->euid;
-	inode->i_gid = p->egid;
+	if (p->dumpable) {
+		inode->i_uid = p->uid;
+		inode->i_gid = p->gid;
+	}
 	switch (ino) {
 		case PROC_PID_INO:
 			inode->i_nlink = 4;

@@ -132,4 +132,12 @@ static inline void start_thread(struct pt_regs * regs, unsigned long eip, unsign
 	regs->esp = esp;
 }
 
+/*
+ * Return saved PC of a blocked thread.
+ */
+extern inline unsigned long thread_saved_pc(struct thread_struct *t)
+{
+	return ((unsigned long *)t->esp)[3];
+}
+
 #endif /* __ASM_I386_PROCESSOR_H */

@@ -18,7 +18,8 @@
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
 
-OBJS  = process.o signal.o entry.o traps.o irq.o vm86.o bios32.o ptrace.o ioport.o ldt.o setup.o
+OBJS  = process.o signal.o entry.o traps.o irq.o vm86.o bios32.o ptrace.o \
+	ioport.o ldt.o setup.o sys_i386.o
 
 all: kernel.o head.o
 

@@ -1,6 +1,34 @@
 #ifndef _LINUX_TYPES_H
 #define _LINUX_TYPES_H
 
+/*
+ * This allows for 256 file descriptors: if NR_OPEN is ever grown beyond that
+ * you'll have to change this too. But 256 fd's seem to be enough even for such
+ * "real" unices like SunOS, so hopefully this is one limit that doesn't have
+ * to be changed.
+ *
+ * Note that POSIX wants the FD_CLEAR(fd,fdsetp) defines to be in <sys/time.h>
+ * (and thus <linux/time.h>) - but this is a more logical place for them. Solved
+ * by having dummy defines in <sys/time.h>.
+ */
+
+/*
+ * Those macros may have been defined in <gnu/types.h>. But we always
+ * use the ones here. 
+ */
+#undef __FDSET_LONGS
+#define __FDSET_LONGS (256/(8*sizeof(unsigned long)))
+
+typedef struct fd_set {
+	unsigned long fds_bits [__FDSET_LONGS];
+} fd_set;
+
+#undef __NFDBITS
+#define __NFDBITS	(8 * sizeof(unsigned long))
+
+#undef __FD_SETSIZE
+#define __FD_SETSIZE	(__FDSET_LONGS*__NFDBITS)
+
 #include <asm/types.h>
 
 #ifndef NULL
@@ -29,59 +57,6 @@ typedef char *caddr_t;
 typedef unsigned char cc_t;
 typedef unsigned int speed_t;
 typedef unsigned int tcflag_t;
-
-/*
- * This allows for 256 file descriptors: if NR_OPEN is ever grown beyond that
- * you'll have to change this too. But 256 fd's seem to be enough even for such
- * "real" unices like SunOS, so hopefully this is one limit that doesn't have
- * to be changed.
- *
- * Note that POSIX wants the FD_CLEAR(fd,fdsetp) defines to be in <sys/time.h>
- * (and thus <linux/time.h>) - but this is a more logical place for them. Solved
- * by having dummy defines in <sys/time.h>.
- */
-
-/*
- * Those macros may have been defined in <gnu/types.h>. But we always
- * use the ones here. 
- */
-#undef __FDSET_LONGS
-#define __FDSET_LONGS 8
-
-typedef struct fd_set {
-	unsigned long fds_bits [__FDSET_LONGS];
-} fd_set;
-
-#undef __NFDBITS
-#define __NFDBITS	(8 * sizeof(unsigned long))
-
-#undef __FD_SETSIZE
-#define __FD_SETSIZE	(__FDSET_LONGS*__NFDBITS)
-
-#undef	__FD_SET
-#define __FD_SET(fd,fdsetp) \
-		__asm__ __volatile__("btsl %1,%0": \
-			"=m" (*(fd_set *) (fdsetp)):"r" ((int) (fd)))
-
-#undef	__FD_CLR
-#define __FD_CLR(fd,fdsetp) \
-		__asm__ __volatile__("btrl %1,%0": \
-			"=m" (*(fd_set *) (fdsetp)):"r" ((int) (fd)))
-
-#undef	__FD_ISSET
-#define __FD_ISSET(fd,fdsetp) (__extension__ ({ \
-		unsigned char __result; \
-		__asm__ __volatile__("btl %1,%2 ; setb %0" \
-			:"=q" (__result) :"r" ((int) (fd)), \
-			"m" (*(fd_set *) (fdsetp))); \
-		__result; }))
-
-#undef	__FD_ZERO
-#define __FD_ZERO(fdsetp) \
-		__asm__ __volatile__("cld ; rep ; stosl" \
-			:"=m" (*(fd_set *) (fdsetp)) \
-			:"a" (0), "c" (__FDSET_LONGS), \
-			"D" ((fd_set *) (fdsetp)) :"cx","di")
 
 struct ustat {
 	daddr_t f_tfree;

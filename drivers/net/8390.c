@@ -190,7 +190,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
     }
 
     /* Mask interrupts from the ethercard. */
-    outb(0x00, e8390_base + EN0_IMR);
+    outb_p(0x00, e8390_base + EN0_IMR);
     ei_local->irqlock = 1;
     restore_flags(flags);
 

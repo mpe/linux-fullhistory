@@ -113,7 +113,7 @@ struct fs_struct {
 
 struct mm_struct {
 	int count;
-	unsigned long start_code, end_code, end_data;
+	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack, start_mmap;
 	unsigned long arg_start, arg_end, env_start, env_end;
 	unsigned long rss;
@@ -129,7 +129,7 @@ struct mm_struct {
 
 #define INIT_MM { \
 		0, \
-		0, 0, 0, \
+		0, 0, 0, 0, \
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \
 		0, \
@@ -280,7 +280,6 @@ extern void exit_thread(void);
 
 extern int do_execve(char *, char **, char **, struct pt_regs *);
 extern int do_fork(unsigned long, unsigned long, struct pt_regs *);
-asmlinkage int do_signal(unsigned long, struct pt_regs *);
 
 /*
  * The wait-queues are circular lists, and you have to be *very* sure
@@ -293,10 +292,11 @@ extern inline void add_wait_queue(struct wait_queue ** p, struct wait_queue * wa
 
 #ifdef DEBUG
 	if (wait->next) {
+		__label__ here;
 		unsigned long pc;
-		__asm__ __volatile__("call 1f\n"
-			"1:\tpopl %0":"=r" (pc));
-		printk("add_wait_queue (%08x): wait->next = %08x\n",pc,(unsigned long) wait->next);
+		pc = (unsigned long) &&here;
+	      here:
+		printk("add_wait_queue (%08lx): wait->next = %08lx\n",pc,(unsigned long) wait->next);
 	}
 #endif
 	save_flags(flags);
@@ -342,10 +342,12 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 	restore_flags(flags);
 #ifdef DEBUG
 	if (!ok) {
+		__label__ here;
+		ok = (unsigned long) &&here;
 		printk("removed wait_queue not on list.\n");
-		printk("list = %08x, queue = %08x\n",(unsigned long) p, (unsigned long) wait);
-		__asm__("call 1f\n1:\tpopl %0":"=r" (ok));
-		printk("eip = %08x\n",ok);
+		printk("list = %08lx, queue = %08lx\n",(unsigned long) p, (unsigned long) wait);
+	      here:
+		printk("eip = %08lx\n",ok);
 	}
 #endif
 }

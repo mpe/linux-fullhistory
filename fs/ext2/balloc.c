@@ -257,7 +257,6 @@ int ext2_new_block (struct super_block * sb, unsigned long goal,
 	struct buffer_head * bh2;
 	char * p, * r;
 	int i, j, k, tmp;
-	unsigned long lmap;
 	int bitmap_nr;
 	struct ext2_group_desc * gdp;
 	struct ext2_super_block * es;
@@ -310,22 +309,16 @@ repeat:
 		if (j) {
 			/*
 			 * The goal was occupied; search forward for a free 
-			 * block within the next 32 blocks
+			 * block within the next XX blocks.
+			 *
+			 * end_goal is more or less random, but it has to be
+			 * less than EXT2_BLOCKS_PER_GROUP. Aligning up to the
+			 * next 64-bit boundary is simple..
 			 */
-			lmap = ((((unsigned long *) bh->b_data)[j >> 5]) >>
-				((j & 31) + 1));
-			if (j < EXT2_BLOCKS_PER_GROUP(sb) - 32)
-				lmap |= (((unsigned long *) bh->b_data)[(j >> 5) + 1]) <<
-				 (31 - (j & 31));
-			else
-				lmap |= 0xffffffff << (31 - (j & 31));
-			if (lmap != 0xffffffffl) {
-				k = ffz(lmap) + 1;
-				if ((j + k) < EXT2_BLOCKS_PER_GROUP(sb)) {
-					j += k;
-					goto got_block;
-				}
-			}
+			int end_goal = (j + 63) & ~63;
+			j = find_next_zero_bit(bh->b_data, end_goal, j);
+			if (j < end_goal)
+				goto got_block;
 		}
 	
 		ext2_debug ("Bit not found near goal\n");

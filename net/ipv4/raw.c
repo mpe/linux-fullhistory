@@ -144,6 +144,13 @@ static void raw_getrawfrag(void *p, int saddr, char *to, unsigned int offset, un
 		struct iphdr *iph=(struct iphdr *)to;
 		iph->saddr=saddr;
 		iph->check=0;
+		iph->tot_len=htons(fraglen);	/* This is right as you cant frag
+					   RAW packets */
+		/*
+	 	 *	Deliberate breach of modularity to keep 
+	 	 *	ip_build_xmit clean (well less messy).
+		 */
+		iph->id = htons(ip_id_count++);
 		iph->check=ip_fast_csum((unsigned char *)iph, iph->ihl);
 	}
 }

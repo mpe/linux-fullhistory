@@ -21,7 +21,8 @@ struct linux_binprm{
 	struct inode * inode;
 	int e_uid, e_gid;
 	int argc, envc;
-	char * filename;	   /* Name of binary */
+	char * filename;	/* Name of binary */
+	unsigned long loader, exec;
 };
 
 /*
@@ -40,13 +41,13 @@ extern int register_binfmt(struct linux_binfmt *);
 extern int unregister_binfmt(struct linux_binfmt *);
 
 extern int read_exec(struct inode *inode, unsigned long offset,
-	char * addr, unsigned long count);
+	char * addr, unsigned long count, int to_kmem);
 
 extern int open_inode(struct inode * inode, int mode);
 
 extern void flush_old_exec(struct linux_binprm * bprm);
 extern unsigned long setup_arg_pages(unsigned long text_size,unsigned long * page);
-extern unsigned long * create_tables(char * p,int argc,int envc,int ibcs);
+extern unsigned long * create_tables(char * p,struct linux_binprm * bprm,int ibcs);
 extern unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		unsigned long p, int from_kmem);
 

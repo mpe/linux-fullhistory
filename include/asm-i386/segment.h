@@ -42,7 +42,7 @@ static inline void __put_user(unsigned long x, void * y, int size)
 		case 2:
 			__asm__ ("movw %w1,%%fs:%0"
 				:"=m" (*__sd(y))
-				:"iq" ((unsigned short) x), "m" (*__sd(y)));
+				:"ir" ((unsigned short) x), "m" (*__sd(y)));
 			break;
 		case 4:
 			__asm__ ("movl %1,%%fs:%0"
@@ -66,7 +66,7 @@ static inline unsigned long __get_user(const void * y, int size)
 			return (unsigned char) result;
 		case 2:
 			__asm__ ("movw %%fs:%1,%w0"
-				:"=q" (result)
+				:"=r" (result)
 				:"m" (*__sd(y)));
 			return (unsigned short) result;
 		case 4:
@@ -249,7 +249,7 @@ static inline void __constant_memcpy_fromfs(void * to, const void * from, unsign
 		case 12:
 			*(int *) to = __get_user((const int *) from, 4);
 			*(1+(int *) to) = __get_user(1+(const int *) from, 4);
-			*(1+(int *) to) = __get_user(2+(const int *) from, 4);
+			*(2+(int *) to) = __get_user(2+(const int *) from, 4);
 			return;
 		case 16:
 			*(int *) to = __get_user((const int *) from, 4);

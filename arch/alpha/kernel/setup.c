@@ -61,7 +61,8 @@ struct screen_info screen_info = {
 	0,			/* orig-video-mode */
 	80,			/* orig-video-cols */
 	0,0,0,			/* ega_ax, ega_bx, ega_cx */
-	25			/* orig-video-lines */
+	25,			/* orig-video-lines */
+	16			/* orig-video-points */
 };
 
 static unsigned long find_end_memory(void)
@@ -94,11 +95,7 @@ void setup_arch(char **cmdline_p,
 	set_hae(hae.cache);		/* sync HAE register w/hae_cache */
 
 	ROOT_DEV = 0x0802;		/* sda2 */
-#ifndef CONFIG_PCI
 	aux_device_present = 0xaa;
-#else
-	aux_device_present = 0x00;
-#endif
 	command_line[COMMAND_LINE_SIZE - 1] = '\0';
 	strcpy(command_line, COMMAND_LINE);
 

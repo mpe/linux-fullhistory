@@ -103,6 +103,7 @@ void filemap_swapout(struct vm_area_struct * vma,
 	unsigned long entry = SWP_ENTRY(SHM_SWP_TYPE, MAP_NR(page));
 
 	pte_val(*page_table) = entry;
+	invalidate();
 	filemap_sync_page(vma, offset, page);
 	if (pte_val(*page_table) == entry)
 		pte_clear(page_table);

@@ -33,11 +33,14 @@
 #define IOCBASECMD(cmd)	((cmd) & ~IOCPARM_MASK)
 #define IOCGROUP(cmd)	(((cmd) >> 8) & 0xFF)
 
+#ifndef _IO
 /* _IO(magic, subcode); size field is zero and the 
  * subcode determines the command.
  */
 #define _IO(c,d)	(IOC_VOID | ((c)<<8) | (d)) /* param encoded */
+#endif
 
+#ifndef _IOW
 /* _IOXX(magic, subcode, arg_t); where arg_t is the type of the
  * (last) argument field in the ioctl call, if present.
  */
@@ -48,6 +51,7 @@
 /* WR rather than RW to avoid conflict with stdio.h */
 #define _IOWR(c,d,t)	(IOC_INOUT | ((sizeof(t)<<16) & IOCSIZE_MASK) | \
 				     ((c)<<8) | (d))
+#endif /* !_IOW */
 
 #endif /* _LINUX_IOCTL_H */
 

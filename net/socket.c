@@ -559,7 +559,7 @@ int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
  *	family, then create a fresh socket.
  */
 
-static int sock_socket(int family, int type, int protocol)
+asmlinkage int sys_socket(int family, int type, int protocol)
 {
 	int i, fd;
 	struct socket *sock;
@@ -599,7 +599,7 @@ static int sock_socket(int family, int type, int protocol)
 
 	if (!(sock = sock_alloc())) 
 	{
-		printk("NET: sock_socket: no more sockets\n");
+		printk("NET: sys_socket: no more sockets\n");
 		return(-ENOSR);	/* Was: EAGAIN, but we are out of
 				   system resources! */
 	}
@@ -625,7 +625,7 @@ static int sock_socket(int family, int type, int protocol)
  *	Create a pair of connected sockets.
  */
 
-static int sock_socketpair(int family, int type, int protocol, unsigned long usockvec[2])
+asmlinkage int sys_socketpair(int family, int type, int protocol, unsigned long usockvec[2])
 {
 	int fd1, fd2, i;
 	struct socket *sock1, *sock2;
@@ -636,7 +636,7 @@ static int sock_socketpair(int family, int type, int protocol, unsigned long uso
 	 * supports the socketpair call.
 	 */
 
-	if ((fd1 = sock_socket(family, type, protocol)) < 0) 
+	if ((fd1 = sys_socket(family, type, protocol)) < 0) 
 		return(fd1);
 	sock1 = sockfd_lookup(fd1, NULL);
 	if (!sock1->ops->socketpair) 
@@ -649,7 +649,7 @@ static int sock_socketpair(int family, int type, int protocol, unsigned long uso
 	 *	Now grab another socket and try to connect the two together. 
 	 */
 
-	if ((fd2 = sock_socket(family, type, protocol)) < 0) 
+	if ((fd2 = sys_socket(family, type, protocol)) < 0) 
 	{
 		sys_close(fd1);
 		return(-EINVAL);
@@ -690,7 +690,7 @@ static int sock_socketpair(int family, int type, int protocol, unsigned long uso
  *	the protocol layer (having also checked the address is ok).
  */
  
-static int sock_bind(int fd, struct sockaddr *umyaddr, int addrlen)
+asmlinkage int sys_bind(int fd, struct sockaddr *umyaddr, int addrlen)
 {
 	struct socket *sock;
 	int i;
@@ -720,7 +720,7 @@ static int sock_bind(int fd, struct sockaddr *umyaddr, int addrlen)
  *	ready for listening.
  */
 
-static int sock_listen(int fd, int backlog)
+asmlinkage int sys_listen(int fd, int backlog)
 {
 	struct socket *sock;
 
@@ -749,7 +749,7 @@ static int sock_listen(int fd, int backlog)
  *	we open the socket then return an error.
  */
 
-static int sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
+asmlinkage int sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
 {
 	struct file *file;
 	struct socket *sock, *newsock;
@@ -811,7 +811,7 @@ static int sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrl
  *	is in user space so we verify it is OK and move it to kernel space.
  */
  
-static int sock_connect(int fd, struct sockaddr *uservaddr, int addrlen)
+asmlinkage int sys_connect(int fd, struct sockaddr *uservaddr, int addrlen)
 {
 	struct socket *sock;
 	struct file *file;
@@ -862,7 +862,7 @@ static int sock_connect(int fd, struct sockaddr *uservaddr, int addrlen)
  *	name to user space.
  */
 
-static int sock_getsockname(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
+asmlinkage int sys_getsockname(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
 {
 	struct socket *sock;
 	char address[MAX_SOCK_ADDR];
@@ -887,7 +887,7 @@ static int sock_getsockname(int fd, struct sockaddr *usockaddr, int *usockaddr_l
  *	name to user space.
  */
  
-static int sock_getpeername(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
+asmlinkage int sys_getpeername(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
 {
 	struct socket *sock;
 	char address[MAX_SOCK_ADDR];
@@ -912,7 +912,7 @@ static int sock_getpeername(int fd, struct sockaddr *usockaddr, int *usockaddr_l
  *	in user space. We check it can be read.
  */
 
-static int sock_send(int fd, void * buff, int len, unsigned flags)
+asmlinkage int sys_send(int fd, void * buff, int len, unsigned flags)
 {
 	struct socket *sock;
 	struct file *file;
@@ -937,7 +937,7 @@ static int sock_send(int fd, void * buff, int len, unsigned flags)
  *	the protocol.
  */
 
-static int sock_sendto(int fd, void * buff, int len, unsigned flags,
+asmlinkage int sys_sendto(int fd, void * buff, int len, unsigned flags,
 	   struct sockaddr *addr, int addr_len)
 {
 	struct socket *sock;
@@ -972,7 +972,7 @@ static int sock_sendto(int fd, void * buff, int len, unsigned flags,
  *	We check the buffer is writable and valid.
  */
 
-static int sock_recv(int fd, void * buff, int len, unsigned flags)
+asmlinkage int sys_recv(int fd, void * buff, int len, unsigned flags)
 {
 	struct socket *sock;
 	struct file *file;
@@ -1001,7 +1001,7 @@ static int sock_recv(int fd, void * buff, int len, unsigned flags)
  *	sender address from kernel to user space.
  */
 
-static int sock_recvfrom(int fd, void * buff, int len, unsigned flags,
+asmlinkage int sys_recvfrom(int fd, void * buff, int len, unsigned flags,
 	     struct sockaddr *addr, int *addr_len)
 {
 	struct socket *sock;
@@ -1038,7 +1038,7 @@ static int sock_recvfrom(int fd, void * buff, int len, unsigned flags,
  *	to pass the user mode parameter for the protocols to sort out.
  */
  
-static int sock_setsockopt(int fd, int level, int optname, char *optval, int optlen)
+asmlinkage int sys_setsockopt(int fd, int level, int optname, char *optval, int optlen)
 {
 	struct socket *sock;
 	struct file *file;
@@ -1056,7 +1056,7 @@ static int sock_setsockopt(int fd, int level, int optname, char *optval, int opt
  *	to pass a user mode parameter for the protocols to sort out.
  */
 
-static int sock_getsockopt(int fd, int level, int optname, char *optval, int *optlen)
+asmlinkage int sys_getsockopt(int fd, int level, int optname, char *optval, int *optlen)
 {
 	struct socket *sock;
 	struct file *file;
@@ -1076,7 +1076,7 @@ static int sock_getsockopt(int fd, int level, int optname, char *optval, int *op
  *	Shutdown a socket.
  */
  
-static int sock_shutdown(int fd, int how)
+asmlinkage int sys_shutdown(int fd, int how)
 {
 	struct socket *sock;
 	struct file *file;
@@ -1139,61 +1139,61 @@ asmlinkage int sys_socketcall(int call, unsigned long *args)
 	switch(call) 
 	{
 		case SYS_SOCKET:
-			return(sock_socket(a0,a1,get_fs_long(args+2)));
+			return(sys_socket(a0,a1,get_fs_long(args+2)));
 		case SYS_BIND:
-			return(sock_bind(a0,(struct sockaddr *)a1,
+			return(sys_bind(a0,(struct sockaddr *)a1,
 				get_fs_long(args+2)));
 		case SYS_CONNECT:
-			return(sock_connect(a0, (struct sockaddr *)a1,
+			return(sys_connect(a0, (struct sockaddr *)a1,
 				get_fs_long(args+2)));
 		case SYS_LISTEN:
-			return(sock_listen(a0,a1));
+			return(sys_listen(a0,a1));
 		case SYS_ACCEPT:
-			return(sock_accept(a0,(struct sockaddr *)a1,
+			return(sys_accept(a0,(struct sockaddr *)a1,
 				(int *)get_fs_long(args+2)));
 		case SYS_GETSOCKNAME:
-			return(sock_getsockname(a0,(struct sockaddr *)a1,
+			return(sys_getsockname(a0,(struct sockaddr *)a1,
 				(int *)get_fs_long(args+2)));
 		case SYS_GETPEERNAME:
-			return(sock_getpeername(a0, (struct sockaddr *)a1,
+			return(sys_getpeername(a0, (struct sockaddr *)a1,
 				(int *)get_fs_long(args+2)));
 		case SYS_SOCKETPAIR:
-			return(sock_socketpair(a0,a1,
+			return(sys_socketpair(a0,a1,
 				get_fs_long(args+2),
 				(unsigned long *)get_fs_long(args+3)));
 		case SYS_SEND:
-			return(sock_send(a0,
+			return(sys_send(a0,
 				(void *)a1,
 				get_fs_long(args+2),
 				get_fs_long(args+3)));
 		case SYS_SENDTO:
-			return(sock_sendto(a0,(void *)a1,
+			return(sys_sendto(a0,(void *)a1,
 				get_fs_long(args+2),
 				get_fs_long(args+3),
 				(struct sockaddr *)get_fs_long(args+4),
 				get_fs_long(args+5)));
 		case SYS_RECV:
-			return(sock_recv(a0,
+			return(sys_recv(a0,
 				(void *)a1,
 				get_fs_long(args+2),
 				get_fs_long(args+3)));
 		case SYS_RECVFROM:
-			return(sock_recvfrom(a0,
+			return(sys_recvfrom(a0,
 				(void *)a1,
 				get_fs_long(args+2),
 				get_fs_long(args+3),
 				(struct sockaddr *)get_fs_long(args+4),
 				(int *)get_fs_long(args+5)));
 		case SYS_SHUTDOWN:
-			return(sock_shutdown(a0,a1));
+			return(sys_shutdown(a0,a1));
 		case SYS_SETSOCKOPT:
-			return(sock_setsockopt(a0,
+			return(sys_setsockopt(a0,
 				a1,
 				get_fs_long(args+2),
 				(char *)get_fs_long(args+3),
 				get_fs_long(args+4)));
 		case SYS_GETSOCKOPT:
-			return(sock_getsockopt(a0,
+			return(sys_getsockopt(a0,
 				a1,
 				get_fs_long(args+2),
 				(char *)get_fs_long(args+3),

@@ -1,6 +1,9 @@
 #ifndef _LINUX_SHM_H_
 #define _LINUX_SHM_H_
+
 #include <linux/ipc.h>
+
+#include <asm/shmparam.h>
 
 struct shmid_ds {
 	struct ipc_perm shm_perm;	/* operation perms */
@@ -38,40 +41,6 @@ struct	shminfo {
     int shmall;	
 };
 
-/* address range for shared memory attaches if no address passed to shmat() */
-#define SHM_RANGE_START	0x50000000
-#define SHM_RANGE_END	0x60000000
-
-/* format of page table entries that correspond to shared memory pages
-   currently out in swap space (see also mm/swap.c):
-   bit 0 (PAGE_PRESENT) is  = 0
-   bits 7..1 (SWP_TYPE) are = SHM_SWP_TYPE
-   bits 31..8 are used like this:
-   bits 14..8 (SHM_ID) the id of the shared memory segment
-   bits 29..15 (SHM_IDX) the index of the page within the shared memory segment
-                    (actually only bits 24..15 get used since SHMMAX is so low)
-*/
-
-#define SHM_ID_SHIFT	8
-/* Keep _SHM_ID_BITS as low as possible since SHMMNI depends on it and
-   there is a static array of size SHMMNI. */
-#define _SHM_ID_BITS	7
-#define SHM_ID_MASK	((1<<_SHM_ID_BITS)-1)
-
-#define SHM_IDX_SHIFT	(SHM_ID_SHIFT+_SHM_ID_BITS)
-#define _SHM_IDX_BITS	15
-#define SHM_IDX_MASK	((1<<_SHM_IDX_BITS)-1)
-
-/* We must have SHM_ID_SHIFT + _SHM_ID_BITS + _SHM_IDX_BITS <= 32
-   and SHMMAX <= (PAGE_SIZE << _SHM_IDX_BITS). */
-
-#define SHMMAX 0x3fa000				/* max shared seg size (bytes) */
-#define SHMMIN 1	 /* really PAGE_SIZE */	/* min shared seg size (bytes) */
-#define SHMMNI (1<<_SHM_ID_BITS)		/* max num of segs system wide */
-#define SHMALL (1<<(_SHM_IDX_BITS+_SHM_ID_BITS))/* max shm system wide (pages) */
-#define	SHMLBA 0x1000				/* attach addr a multiple of this */
-#define SHMSEG SHMMNI				/* max shared segs per process */
-
 #ifdef __KERNEL__
 
 /* shm_mode upper byte flags */
@@ -89,6 +58,11 @@ struct shm_info {
 	ulong swap_attempts;
 	ulong swap_successes;
 };
+
+extern asmlinkage int sys_shmget (key_t key, int size, int flag);
+extern asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *addr);
+extern asmlinkage int sys_shmdt (char *shmaddr);
+extern asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
 
 #endif /* __KERNEL__ */
 

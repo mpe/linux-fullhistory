@@ -26,6 +26,7 @@
 #include <linux/major.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
+#include <linux/shm.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -41,7 +42,7 @@ extern dev_t get_unnamed_dev(void);
 extern void put_unnamed_dev(dev_t);
 
 extern asmlinkage int sys_umount(char *);
-extern asmlinkage int sys_swapon(const char *specialfile);
+extern asmlinkage int sys_swapon(const char *specialfile, int swap_flags);
 
 /*
  * OSF/1 directory handling functions...
@@ -51,7 +52,7 @@ extern asmlinkage int sys_swapon(const char *specialfile);
  * offset differences aren't the same as "d_reclen").
  */
 #define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
-#define ROUND_UP(x) (((x)+7) & ~7)
+#define ROUND_UP(x) (((x)+3) & ~3)
 
 struct osf_dirent {
 	unsigned int	d_ino;
@@ -115,7 +116,7 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent * dirent,
 	buf.basep = basep;
 	buf.count = count;
 	buf.error = 0;
-	error = file->f_op->readdir(file->f_inode, file, dirent, osf_filldir);
+	error = file->f_op->readdir(file->f_inode, file, &buf, osf_filldir);
 	if (error < 0)
 		return error;
 	if (count == buf.count)
@@ -442,8 +443,8 @@ asmlinkage int osf_utsname(char * name)
 
 asmlinkage int osf_swapon(const char * path, int flags, int lowat, int hiwat)
 {
-	/* for now, simply ignore flags, lowat and hiwat... */
-	return sys_swapon(path);
+	/* for now, simply ignore lowat and hiwat... */
+	return sys_swapon(path, flags);
 }
 
 asmlinkage unsigned long sys_getpagesize(void)
@@ -491,4 +492,20 @@ asmlinkage int osf_getdomainname(char *name, int namelen)
 		  break;
 	}
 	return 0;
+}
+
+
+asmlinkage long osf_shmat(int shmid, void *shmaddr, int shmflg)
+{
+	unsigned long raddr;
+	int err;
+
+	err = sys_shmat(shmid, shmaddr, shmflg, &raddr);
+	if (err)
+		return err;
+	/*
+	 * This works because all user-level addresses are
+	 * non-negative longs!
+	 */
+	return raddr;
 }

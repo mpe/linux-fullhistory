@@ -36,6 +36,9 @@
  *		Alan Cox	:	routing cache support
  *		Alan Cox	:	memzero the socket structure for compactness.
  *		Matt Day	:	nonblock connect error handler
+ *		Alan Cox	:	Allow large numbers of pending sockets
+ *					(eg for big web sites), but only if
+ *					specifically application requested.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -485,9 +488,10 @@ static int inet_listen(struct socket *sock, int backlog)
 	 * note that the backlog is "unsigned char", so truncate it
 	 * somewhere. We might as well truncate it to what everybody
 	 * else does..
+	 * Now truncate to 128 not 5. 
 	 */
-	if (backlog > 5)
-		backlog = 5;
+	if ((unsigned) backlog > 128)
+		backlog = 128;
 	sk->max_ack_backlog = backlog;
 	if (sk->state != TCP_LISTEN)
 	{

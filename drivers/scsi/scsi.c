@@ -876,9 +876,6 @@ inline void internal_cmnd (Scsi_Cmnd * SCpnt)
 	int clock;
 #endif
 
-	if ((unsigned long) &SCpnt < current->kernel_stack_page)
-	  panic("Kernel stack overflow.");
-
 	host = SCpnt->host;
 
 /*

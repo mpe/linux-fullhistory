@@ -129,7 +129,7 @@ found:
 	return (unsigned int) shp->shm_perm.seq * SHMMNI + id;
 }
 
-int sys_shmget (key_t key, int size, int shmflg)
+asmlinkage int sys_shmget (key_t key, int size, int shmflg)
 {
 	struct shmid_ds *shp;
 	int id = 0;
@@ -199,7 +199,7 @@ static void killseg (int id)
 	return;
 }
 
-int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
+asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 {
 	struct shmid_ds tbuf;
 	struct shmid_ds *shp;
@@ -392,7 +392,7 @@ static inline void remove_attach (struct shmid_ds * shp, struct vm_area_struct *
 	if (shmd->vm_next_share == shmd) {
 		if (shp->attaches != shmd) {
 			printk("shm_close: shm segment (id=%ld) attach list inconsistent\n",
-				(shmd->vm_pte >> SHM_ID_SHIFT) & SHM_ID_MASK);
+			       SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK);
 			printk("shm_close: %d %08lx-%08lx %c%c%c%c %08lx %08lx\n",
 				shmd->vm_task->pid, shmd->vm_start, shmd->vm_end,
 				shmd->vm_flags & VM_READ ? 'r' : '-',
@@ -429,9 +429,12 @@ static int shm_map (struct vm_area_struct *shmd)
 	merge_segments(current, shmd->vm_start, shmd->vm_end);
 
 	/* map page range */
-	shm_sgn = shmd->vm_pte + ((shmd->vm_offset >> PAGE_SHIFT) << SHM_IDX_SHIFT);
-	for (tmp = shmd->vm_start; tmp < shmd->vm_end; tmp += PAGE_SIZE,
-	     shm_sgn += (1 << SHM_IDX_SHIFT)) {
+	shm_sgn = shmd->vm_pte +
+	  SWP_ENTRY(0, (shmd->vm_offset >> PAGE_SHIFT) << SHM_IDX_SHIFT);
+	for (tmp = shmd->vm_start;
+	     tmp < shmd->vm_end;
+	     tmp += PAGE_SIZE, shm_sgn += SWP_ENTRY(0, 1 << SHM_IDX_SHIFT))
+	{
 		page_dir = pgd_offset(shmd->vm_task,tmp);
 		page_middle = pmd_alloc(page_dir,tmp);
 		if (!page_middle)
@@ -448,7 +451,7 @@ static int shm_map (struct vm_area_struct *shmd)
 /*
  * Fix shmaddr, allocate descriptor, map shm, add attach descriptor to lists.
  */
-int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
+asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 {
 	struct shmid_ds *shp;
 	struct vm_area_struct *shmd;
@@ -478,7 +481,13 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		else
 			return -EINVAL;
 	}
-	if ((addr > current->mm->start_stack - 16384 - PAGE_SIZE*shp->shm_npages)) {
+	/*
+	 * If shm segment goes below stack, make sure there is some
+	 * space left for the stack to grow (presently 4 pages).
+	 */
+	if (addr < current->mm->start_stack &&
+	    addr > current->mm->start_stack - PAGE_SIZE*(shp->shm_npages + 4))
+	{
 		/* printk("shmat() -> EINVAL because segment intersects stack\n"); */
 		return -EINVAL;
 	}
@@ -538,7 +547,7 @@ static void shm_open (struct vm_area_struct *shmd)
 	unsigned int id;
 	struct shmid_ds *shp;
 
-	id = (shmd->vm_pte >> SHM_ID_SHIFT) & SHM_ID_MASK;
+	id = SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK;
 	shp = shm_segs[id];
 	if (shp == IPC_UNUSED) {
 		printk("shm_open: unused id=%d PANIC\n", id);
@@ -564,7 +573,7 @@ static void shm_close (struct vm_area_struct *shmd)
 	unmap_page_range (shmd->vm_start, shmd->vm_end - shmd->vm_start);
 
 	/* remove from the list of attaches of the shm segment */
-	id = (shmd->vm_pte >> SHM_ID_SHIFT) & SHM_ID_MASK;
+	id = SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK;
 	shp = shm_segs[id];
 	remove_attach(shp,shmd);  /* remove from shp->attaches */
   	shp->shm_lpid = current->pid;
@@ -577,7 +586,7 @@ static void shm_close (struct vm_area_struct *shmd)
  * detach and kill segment if marked destroyed.
  * The work is done in shm_close.
  */
-int sys_shmdt (char *shmaddr)
+asmlinkage int sys_shmdt (char *shmaddr)
 {
 	struct vm_area_struct *shmd, *shmdnext;
 
@@ -599,10 +608,10 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 	struct shmid_ds *shp;
 	unsigned int id, idx;
 
-	id = (code >> SHM_ID_SHIFT) & SHM_ID_MASK;
-	if (id != ((shmd->vm_pte >> SHM_ID_SHIFT) & SHM_ID_MASK)) {
+	id = SWP_OFFSET(code) & SHM_ID_MASK;
+	if (id != (SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK)) {
 		printk ("shm_swap_in: code id = %d and shmd id = %ld differ\n",
-			id, (shmd->vm_pte >> SHM_ID_SHIFT) & SHM_ID_MASK);
+			id, SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK);
 		return BAD_PAGE;
 	}
 	if (id > max_shmid) {
@@ -614,7 +623,7 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 		printk ("shm_swap_in: id=%d invalid. Race.\n", id);
 		return BAD_PAGE;
 	}
-	idx = (code >> SHM_IDX_SHIFT) & SHM_IDX_MASK;
+	idx = (SWP_OFFSET(code) >> SHM_IDX_SHIFT) & SHM_IDX_MASK;
 	if (idx != (offset >> PAGE_SHIFT)) {
 		printk ("shm_swap_in: code idx = %u and shmd idx = %lu differ\n",
 			idx, offset >> PAGE_SHIFT);
@@ -719,8 +728,9 @@ int shm_swap (int prio)
 		pte_t *page_table, pte;
 		unsigned long tmp;
 
-		if ((shmd->vm_pte >> SHM_ID_SHIFT & SHM_ID_MASK) != id) {
-			printk ("shm_swap: id=%ld does not match shmd->vm_pte.id=%ld\n", id, shmd->vm_pte >> SHM_ID_SHIFT & SHM_ID_MASK);
+		if (SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK != id) {
+			printk ("shm_swap: id=%ld does not match shmd->vm_pte.id=%ld\n",
+				id, SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK);
 			continue;
 		}
 		tmp = shmd->vm_start + (idx << PAGE_SHIFT) - shmd->vm_offset;
@@ -750,7 +760,8 @@ int shm_swap (int prio)
 		}
 		if (pte_page(pte) != pte_page(page))
 			printk("shm_swap_out: page and pte mismatch\n");
-		pte_val(*page_table) = shmd->vm_pte | idx << SHM_IDX_SHIFT;
+		pte_val(*page_table) =
+		  shmd->vm_pte + SWP_ENTRY(0, idx << SHM_IDX_SHIFT);
 		mem_map[MAP_NR(pte_page(pte))]--;
 		if (shmd->vm_task->mm->rss > 0)
 			shmd->vm_task->mm->rss--;

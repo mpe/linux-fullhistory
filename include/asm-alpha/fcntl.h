@@ -33,13 +33,26 @@
 /* for F_[GET|SET]FL */
 #define FD_CLOEXEC	1	/* actually anything with low bit set goes */
 
+/* for posix fcntl() and lockf() */
 #define F_RDLCK		1
 #define F_WRLCK		2
 #define F_UNLCK		8
 
-/* For bsd flock () */
+/* for old implementation of bsd flock () */
 #define F_EXLCK		16	/* or 3 */
 #define F_SHLCK		32	/* or 4 */
+
+/* operations for bsd flock(), also used by the kernel implementation */
+#define LOCK_SH		1	/* shared lock */
+#define LOCK_EX		2	/* exclusive lock */
+#define LOCK_NB		4	/* or'd with one of the above to prevent
+				   blocking */
+#define LOCK_UN		8	/* remove lock */
+
+#ifdef __KERNEL__
+#define F_POSIX		1
+#define F_FLOCK		2
+#endif /* __KERNEL__ */
 
 struct flock {
 	short l_type;

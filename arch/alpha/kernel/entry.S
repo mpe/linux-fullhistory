@@ -505,10 +505,11 @@ sys_call_table:
 	.quad do_entSys, osf_vfork, sys_newstat, sys_newlstat, do_entSys
 	.quad do_entSys, osf_mmap, do_entSys, sys_munmap, sys_mprotect
 	.quad sys_madvise, do_entSys, do_entSys, do_entSys, sys_getgroups
-	.quad do_entSys, do_entSys, do_entSys, sys_setitimer, do_entSys
-	.quad do_entSys, sys_getitimer, sys_gethostname, do_entSys, sys_getdtablesize
+	/* map BSD's setpgrp to sys_setpgid for binary compatibility: */
+	.quad sys_setgroups, do_entSys, sys_setpgid, sys_setitimer, do_entSys
+	.quad do_entSys, sys_getitimer, sys_gethostname, sys_sethostname, sys_getdtablesize
 	.quad sys_dup2, sys_newfstat, sys_fcntl, sys_select, do_entSys
-	.quad sys_fsync, do_entSys, sys_socket, do_entSys, do_entSys
+	.quad sys_fsync, sys_setpriority, sys_socket, do_entSys, do_entSys
 /*100*/	.quad do_entSys, do_entSys, do_entSys, sys_sigreturn, sys_bind
 	.quad do_entSys, sys_listen, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, sys_sigsuspend, do_entSys, do_entSys, do_entSys
@@ -529,9 +530,9 @@ sys_call_table:
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, osf_swapon
-/*200*/	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, osf_utsname, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
+/*200*/	.quad sys_msgctl, sys_msgget, sys_msgrcv, sys_msgsnd, sys_semctl
+	.quad sys_semget, sys_semop, osf_utsname, do_entSys, osf_shmat
+	.quad sys_shmctl, sys_shmdt, sys_shmget, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
@@ -550,5 +551,5 @@ sys_call_table:
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 /* linux-specific system calls start at 300 */
-/*300*/	.quad sys_bdflush, sys_sethae, do_entSys, do_entSys, do_entSys
+/*300*/	.quad sys_bdflush, sys_sethae, sys_mount, sys_adjtimex, sys_swapoff
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys

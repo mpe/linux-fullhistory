@@ -36,7 +36,7 @@ void msg_init (void)
 	return;
 }
 
-int sys_msgsnd (int msqid, struct msgbuf *msgp, int msgsz, int msgflg)
+asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
 {
 	int id, err;
 	struct msqid_ds *msq;
@@ -44,7 +44,7 @@ int sys_msgsnd (int msqid, struct msgbuf *msgp, int msgsz, int msgflg)
 	struct msg *msgh;
 	long mtype;
 	
-	if (msgsz > MSGMAX || msgsz < 0 || msqid < 0)
+	if (msgsz > MSGMAX || (long) msgsz < 0 || msqid < 0)
 		return -EINVAL;
 	if (!msgp) 
 		return -EFAULT;
@@ -108,7 +108,7 @@ int sys_msgsnd (int msqid, struct msgbuf *msgp, int msgsz, int msgflg)
 	return msgsz;
 }
 
-int sys_msgrcv (int msqid, struct msgbuf *msgp, int msgsz, long msgtyp, 
+asmlinkage int sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, 
 		int msgflg)
 {
 	struct msqid_ds *msq;
@@ -117,7 +117,7 @@ int sys_msgrcv (int msqid, struct msgbuf *msgp, int msgsz, long msgtyp,
 	struct msg *nmsg = NULL;
 	int id, err;
 
-	if (msqid < 0 || msgsz < 0)
+	if (msqid < 0 || (long) msgsz < 0)
 		return -EINVAL;
 	if (!msgp || !msgp->mtext)
 	    return -EFAULT;
@@ -267,7 +267,7 @@ found:
 	return (unsigned int) msq->msg_perm.seq * MSGMNI + id;
 }
 
-int sys_msgget (key_t key, int msgflg)
+asmlinkage int sys_msgget (key_t key, int msgflg)
 {
 	int id;
 	struct msqid_ds *msq;
@@ -316,7 +316,7 @@ static void freeque (int id)
 	kfree(msq);
 }
 
-int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
+asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 {
 	int id, err;
 	struct msqid_ds *msq;

@@ -741,17 +741,22 @@ static void show_task(int nr,struct task_struct * p)
 		printk(stat_nam[p->state]);
 	else
 		printk(" ");
-#ifdef __i386__
+#if ((~0UL) == 0xffffffff)
 	if (p == current)
 		printk(" current  ");
 	else
-		printk(" %08lX ", ((unsigned long *)p->tss.esp)[3]);
+		printk(" %08lX ", thread_saved_pc(&p->tss));
+#else
+	if (p == current)
+		printk("   current task   ");
+	else
+		printk(" %016lx ", thread_saved_pc(&p->tss));
 #endif
-	for (free = 1; free < 1024 ; free++) {
+	for (free = 1; free < PAGE_SIZE/sizeof(long) ; free++) {
 		if (((unsigned long *)p->kernel_stack_page)[free])
 			break;
 	}
-	printk("%5lu %5d %6d ", free << 2, p->pid, p->p_pptr->pid);
+	printk("%5lu %5d %6d ", free*sizeof(long), p->pid, p->p_pptr->pid);
 	if (p->p_cptr)
 		printk("%5d ", p->p_cptr->pid);
 	else
@@ -770,8 +775,15 @@ void show_state(void)
 {
 	int i;
 
-	printk("                         free                        sibling\n");
+#if ((~0UL) == 0xffffffff)
+	printk("\n"
+	       "                         free                        sibling\n");
 	printk("  task             PC    stack   pid father child younger older\n");
+#else
+	printk("\n"
+	       "                                 free                        sibling\n");
+	printk("  task                 PC        stack   pid father child younger older\n");
+#endif
 	for (i=0 ; i<NR_TASKS ; i++)
 		if (task[i])
 			show_task(i,task[i]);

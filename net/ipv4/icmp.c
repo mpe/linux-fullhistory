@@ -126,7 +126,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 	 */
 	 
 	atype=ip_chk_addr(iph->daddr);
-	if(atype==IS_BROADCAST || IN_MULTICAST(iph->daddr))
+	if(atype==IS_BROADCAST || atype==IS_MULTICAST)
 		return;
 
 	/*

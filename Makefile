@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 1
+SUBLEVEL = 2
 
 ARCH = i386
 
@@ -84,7 +84,7 @@ endif
 # Include the make variables (CC, etc...)
 #
 
-ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o ipc/ipc.o
+ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o ipc/ipc.o net/network.a
 FILESYSTEMS	=fs/filesystems.a
 DRIVERS		=drivers/block/block.a \
 		 drivers/char/char.a \

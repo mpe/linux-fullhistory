@@ -118,7 +118,7 @@ static char *version =
 #include <linux/timer.h>
 #include "pi2.h"
 #include "z8530.h"
-#include "ax25.h"
+#include <net/ax25.h>
 
 
 struct mbuf {

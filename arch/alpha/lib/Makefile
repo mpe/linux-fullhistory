@@ -9,7 +9,8 @@
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-OBJS  = __divqu.o __remqu.o __divlu.o __remlu.o memset.o memcpy.o io.o
+OBJS  = __divqu.o __remqu.o __divlu.o __remlu.o memset.o memcpy.o io.o \
+	checksum.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)

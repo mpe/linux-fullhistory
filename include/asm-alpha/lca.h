@@ -56,20 +56,6 @@
 #define LCA_DMA_WIN_SIZE	(1024*1024*1024)
 
 /*
- * Translate physical memory address as seen on (PCI) bus into
- * a kernel virtual address and vv.
- */
-extern inline unsigned long virt_to_bus(void * address)
-{
-	return virt_to_phys(address) + LCA_DMA_WIN_BASE;
-}
-
-extern inline void * bus_to_virt(unsigned long address)
-{
-	return phys_to_virt(address - LCA_DMA_WIN_BASE);
-}
-
-/*
  * Memory Controller registers:
  */
 #define LCA_MEM_BCR0		(IDENT_ADDR + 0x120000000UL)
@@ -141,6 +127,22 @@ extern inline void * bus_to_virt(unsigned long address)
 #define LCA_IOC_STAT0_P_NBR_MASK	0x7ffff
 
 #define HAE_ADDRESS	LCA_IOC_HAE
+
+#ifdef __KERNEL__
+
+/*
+ * Translate physical memory address as seen on (PCI) bus into
+ * a kernel virtual address and vv.
+ */
+extern inline unsigned long virt_to_bus(void * address)
+{
+	return virt_to_phys(address) + LCA_DMA_WIN_BASE;
+}
+
+extern inline void * bus_to_virt(unsigned long address)
+{
+	return phys_to_virt(address - LCA_DMA_WIN_BASE);
+}
 
 /*
  * I/O functions:
@@ -287,6 +289,14 @@ extern void outb(unsigned char b, unsigned long addr);
 extern void outw(unsigned short b, unsigned long addr);
 extern void outl(unsigned int b, unsigned long addr);
 
+/*
+ * String versions of in/out ops:
+ */
+extern void insw (unsigned long port, void *src, unsigned long count);
+extern void insl (unsigned long port, void *src, unsigned long count);
+extern void outsw (unsigned long port, void *dst, unsigned long count);
+extern void outsl (unsigned long port, void *dst, unsigned long count);
+
 extern unsigned long readb(unsigned long addr);
 extern unsigned long readw(unsigned long addr);
 
@@ -309,4 +319,10 @@ extern void writew(unsigned short b, unsigned long addr);
 
 extern unsigned long lca_init (unsigned long mem_start, unsigned long mem_end);
 
-#endif
+#endif /* __KERNEL__ */
+
+#define RTC_PORT(x) (0x70 + (x))
+#define RTC_ADDR(x) (0x80 | (x))
+#define RTC_ALWAYS_BCD 0
+
+#endif /* __ALPHA_LCA__H */

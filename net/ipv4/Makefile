@@ -17,7 +17,7 @@
 
 OBJS	:= utils.o route.o proc.o timer.o protocol.o packet.o \
 		   arp.o ip.o raw.o icmp.o tcp.o udp.o devinet.o af_inet.o \
-		   igmp.o ip_fw.o checksum.o ipip.o
+		   igmp.o ip_fw.o ipip.o
 
 ifdef CONFIG_INET_RARP
 

@@ -97,20 +97,19 @@ extern void time_init(void);
 static unsigned long memory_start = 0;
 static unsigned long memory_end = 0;
 
-static char term[21];
 int rows, cols;
 
 int ramdisk_size;
 int root_mountflags = 0;
 
 static char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
-static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", term, NULL, };
+static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 
 static char * argv_rc[] = { "/bin/sh", NULL };
-static char * envp_rc[] = { "HOME=/", term, NULL };
+static char * envp_rc[] = { "HOME=/", "TERM=linux", NULL };
 
 static char * argv[] = { "-/bin/sh",NULL };
-static char * envp[] = { "HOME=/usr/root", term, NULL };
+static char * envp[] = { "HOME=/usr/root", "TERM=linux", NULL };
 
 char *get_options(char *str, int *ints)
 {
@@ -272,14 +271,14 @@ static void calibrate_delay(void)
 static void parse_options(char *line)
 {
 	char *next;
-	char *devnames[] = { "hda", "hdb", "hdc", "hdd", "sda", "sdb", "sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
-	int devnums[]    = { 0x300, 0x340, 0x1600, 0x1640, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0};
+	static char *devnames[] = { "hda", "hdb", "hdc", "hdd", "sda", "sdb", "sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
+	static int devnums[]    = { 0x300, 0x340, 0x1600, 0x1640, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0};
 	int args, envs;
 
 	if (!*line)
 		return;
 	args = 0;
-	envs = 1;	/* TERM is set to 'console' by default */
+	envs = 1;	/* TERM is set to 'linux' by default */
 	next = line;
 	while ((line = next) != NULL) {
 		if ((next = strchr(line,' ')) != NULL)
@@ -422,7 +421,6 @@ void init(void)
 	int pid,i;
 
 	setup();
-	sprintf(term, "TERM=con%dx%d", ORIG_VIDEO_COLS, ORIG_VIDEO_LINES);
 
 	#ifdef CONFIG_UMSDOS_FS
 	{

@@ -57,4 +57,5 @@ extern int pcibios_write_config_word (unsigned char bus, unsigned char dev_fn,
 extern pcibios_write_config_dword (unsigned char bus, unsigned char dev_fn,
 				   unsigned char where, unsigned int val);
 extern char *pcibios_strerror (int error);
+
 #endif /* BIOS32_H */

@@ -149,8 +149,6 @@ static int eql_header(unsigned char *buff, struct device *dev,
 		      unsigned len, struct sk_buff *skb); /*  */
 static int eql_rebuild_header(void *buff, struct device *dev, 
 			      unsigned long raddr, struct sk_buff *skb); /*  */
-static unsigned short eql_type_trans (struct sk_buff *skb, 
-				      struct device *dev);	/*  */
 
 /* ioctl() handlers
    ---------------- */
@@ -414,12 +412,6 @@ eql_rebuild_header(void *buff, struct device *dev,
 }
 
 
-static
-unsigned short 
-eql_type_trans (struct sk_buff *skb, struct device *dev)
-{
-  return htons (ETH_P_IP);
-}
 
 
 /* private ioctl functions

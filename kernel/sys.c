@@ -439,8 +439,8 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 }
 
 /*
- * This needs some heave checking ...
- * I just haven't get the stomach for it. I also don't fully
+ * This needs some heavy checking ...
+ * I just haven't the stomach for it. I also don't fully
  * understand sessions/pgrp etc. Let somebody who does explain it.
  *
  * OK, I think I have the protection semantics right.... this is really

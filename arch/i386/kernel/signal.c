@@ -20,6 +20,7 @@
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
 asmlinkage int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
+asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs);
 
 /*
  * atomically swap in the new signal mask, and wait for a signal.

@@ -15,20 +15,13 @@ struct timezone {
 
 #ifdef __KERNEL__
 void do_gettimeofday(struct timeval *tv);
-#include <asm/bitops.h>
-#include <linux/string.h>
-#define FD_SETSIZE		__FD_SETSIZE
-#define FD_SET(fd,fdsetp)	set_bit(fd,fdsetp)
-#define FD_CLR(fd,fdsetp)	clear_bit(fd,fdsetp)
-#define FD_ISSET(fd,fdsetp)	(0 != test_bit(fd,fdsetp))
-#define FD_ZERO(fdsetp)		memset(fdsetp, 0, sizeof(struct fd_set))
-#else
+#endif
+
 #define FD_SETSIZE		__FD_SETSIZE
 #define FD_SET(fd,fdsetp)	__FD_SET(fd,fdsetp)
 #define FD_CLR(fd,fdsetp)	__FD_CLR(fd,fdsetp)
 #define FD_ISSET(fd,fdsetp)	__FD_ISSET(fd,fdsetp)
 #define FD_ZERO(fdsetp)		__FD_ZERO(fdsetp)
-#endif
 
 /*
  * Names of the interval timers, and structure

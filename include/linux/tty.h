@@ -269,14 +269,6 @@ extern struct tty_ldisc ldiscs[];
 extern int fg_console;
 extern struct wait_queue * keypress_wait;
 
-/*	intr=^C		quit=^|		erase=del	kill=^U
-	eof=^D		vtime=\0	vmin=\1		sxtc=\0
-	start=^Q	stop=^S		susp=^Z		eol=\0
-	reprint=^R	discard=^U	werase=^W	lnext=^V
-	eol2=\0
-*/
-#define INIT_C_CC "\003\034\177\025\004\0\1\0\021\023\032\0\022\017\027\026\0"
-
 extern long rs_init(long);
 extern long lp_init(long);
 extern long con_init(long);

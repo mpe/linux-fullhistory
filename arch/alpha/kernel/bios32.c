@@ -1,4 +1,3 @@
-#define  DEBUG
 /*
  * bios32.c - PCI BIOS functions for Alpha systems not using BIOS
  *	      emulation code.
@@ -108,7 +107,8 @@ static void layout_dev(struct pci_dev *dev)
 					   0xffffffff);
 		pcibios_read_config_dword(bus->number, dev->devfn, reg, &base);
 		if (!base) {
-			break;		/* done with this device */
+			/* this base-address register is unused */
+			continue;
 		}
 		/*
 		 * We've read the base address register back after
@@ -449,6 +449,48 @@ static void noname_fixup(void)
 		}
 	}
 #endif /* !PCI_MODIFY */
+
+	/*
+	 * The SRM console *disables* the IDE interface, this code *
+	 * enables it.	With the miniloader, this may not be necessary
+	 * but it shouldn't hurt either.
+	 *
+	 * This code bangs on a control register of the 87312 Super
+	 * I/O chip that implements parallel port/serial
+	 * ports/IDE/FDI.  Depending on the motherboard, the Super I/O
+	 * chip can be configured through a pair of registers that are
+	 * located either at I/O ports 0x26e/0x26f or 0x398/0x399.
+	 * Unfortunately, autodetecting which base address is in use
+	 * works only once (right after a reset).  On the other hand,
+	 * the Noname board hardwires the I/O ports to 0x26e/0x26f so
+	 * we just use those.  The Super I/O chip has the additional
+	 * quirk that configuration register data must be written
+	 * twice (I believe this is a saftey feature to prevent
+	 * accidental modification---happy PC world...).
+	 */
+	{
+		long flags;
+		int data;
+
+		/* update needs to be atomic: */
+
+		save_flags(flags);
+		cli();
+
+		outb(0, 0x26e); /* set the index register for reg #0 */
+		data = inb(0x26f); /* read the current contents */
+#ifdef DEBUG
+		printk("base @ 0x26e: reg#0 0x%x\n", data);
+#endif
+		outb(0, 0x26e); /* set the index register for reg #0 */
+		outb(data | 0x40, 0x26f); /* turn on IDE */
+		outb(data | 0x40, 0x26f); /* yes, we really mean it... */
+#ifdef DEBUG
+		outb(0, 0x26e); data = inb(0x26f);
+		printk("base @ 0x26e: reg#0 0x%x\n", data);
+#endif
+		restore_flags(flags);
+	}
 }
 
 
@@ -473,6 +515,33 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 		break;
 	}
 	return mem_start;
+}
+
+
+char *pcibios_strerror (int error)
+{
+        static char buf[80];
+
+        switch (error) {
+                case PCIBIOS_SUCCESSFUL:
+                        return "SUCCESSFUL";
+
+                case PCIBIOS_FUNC_NOT_SUPPORTED:
+                        return "FUNC_NOT_SUPPORTED";
+
+                case PCIBIOS_BAD_VENDOR_ID:
+                        return "SUCCESSFUL";
+
+                case PCIBIOS_DEVICE_NOT_FOUND:
+                        return "DEVICE_NOT_FOUND";
+
+                case PCIBIOS_BAD_REGISTER_NUMBER:
+                        return "BAD_REGISTER_NUMBER";
+
+                default:
+                        sprintf (buf, "UNKNOWN RETURN 0x%x", error);
+                        return buf;
+        }
 }
 
 #endif /* CONFIG_PCI */

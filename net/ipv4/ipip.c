@@ -19,7 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
-#include <netinet/in.h>
+#include <linux/in.h>
 #include <net/datalink.h>
 #include <net/sock.h>
 #include <net/ip.h>

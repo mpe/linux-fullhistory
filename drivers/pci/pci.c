@@ -6,6 +6,7 @@
  * Copyright 1993, 1994, 1995 Drew Eckhardt, Frederic Potter,
  *	David Mosberger-Tang
  */
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/bios32.h>
@@ -68,6 +69,8 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( INTEL,		INTEL_82375,	"82375EB"),
 	BRIDGE( INTEL,		INTEL_82434,	"82434LX Mercury/Neptune", 0x00),
 	DEVICE( INTEL,		INTEL_82430,	"82430ZX Aries"),
+	DEVICE( INTEL,		INTEL_82437,	"82437 Triton"),
+	DEVICE( INTEL,		INTEL_82371,	"82471 Triton"),
 	DEVICE( SMC,		SMC_37C665,	"FDC 37C665"),
 	DEVICE( ATI,		ATI_M32,	"Mach 32"),
 	DEVICE( ATI,		ATI_M64,	"Mach 64"),
@@ -84,6 +87,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( AL,		AL_M1445,	"M1445"),
 	DEVICE( AL,		AL_M1449,	"M1449"),
 	DEVICE( AL,		AL_M1451,	"M1451"),
+	DEVICE( AL,		AL_M4803,	"M4803"),
 	DEVICE( TSENG,		TSENG_W32P_2,	"ET4000W32P"),
 	DEVICE( TSENG,		TSENG_W32P_b,	"ET4000W32P rev B"),
 	DEVICE( TSENG,		TSENG_W32P_c,	"ET4000W32P rev C"),
@@ -112,7 +116,6 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( IMS,		IMS_8849,	"8849"),
 	DEVICE( ZEINET,		ZEINET_1221,	"1221"),
 	DEVICE( EF,		EF_ATM,		"155P-MF1"),
-	DEVICE( HER,		HER_STING,	"Stingray"),
 	DEVICE( HER,		HER_STING,	"Stingray"),
   	DEVICE( ATRONICS,	ATRONICS_2015,	"IDE-2015PL"),
 	DEVICE( CT,		CT_65545,	"65545"),

@@ -258,7 +258,6 @@ struct symbol_table symbol_table = {
 	X(sys_call_table),
 
 	/* Signal interfaces */
-	X(do_signal),
 	X(send_sig),
 
 	/* Program loader interfaces */

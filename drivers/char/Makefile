@@ -110,7 +110,7 @@ endif
 
 dummy:
 
-conhakehash: conmakehash.c
+conmakehash: conmakehash.c
 	$(HOSTCC) -o conmakehash conmakehash.c
 
 uni_hash_tbl.h: $(FONTMAPFILE) conmakehash

@@ -54,6 +54,7 @@ asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask,
 {
 	printk("Arithmetic trap: %02lx %016lx\n", summary, write_mask);
 	die_if_kernel("Arithmetic fault", &regs, 0);
+	send_sig(SIGFPE, current, 1);
 }
 
 asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
@@ -61,6 +62,7 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
 	struct pt_regs regs)
 {
 	die_if_kernel("Instruction fault", &regs, type);
+	send_sig(SIGILL, current, 1);
 }
 
 /*

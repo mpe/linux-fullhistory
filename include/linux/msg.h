@@ -67,6 +67,12 @@ struct msg {
 #define MSG_STAT 11
 #define MSG_INFO 12
 
+extern asmlinkage int sys_msgget (key_t key, int msgflg);
+extern asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg);
+extern asmlinkage int sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp,
+		       int msgflg);
+extern asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf);
+
 #endif /* __KERNEL__ */
 
 #endif /* _LINUX_MSG_H */

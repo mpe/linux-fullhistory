@@ -103,6 +103,13 @@ void time_init(void)
 	    BCD_TO_BIN(mon);
 	    BCD_TO_BIN(year);
 	  }
+#if defined(__alpha__) && defined(CONFIG_PCI)
+	/*
+	 * The meaning of life, the universe, and everything. Plus
+	 * this makes the year come out right.
+	 */
+	year -= 42;
+#endif
 	if ((year += 1900) < 1970)
 		year += 100;
 	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);

@@ -103,6 +103,10 @@ struct sem_undo {
     short *	       semadj;	  /* array of adjustments, one per semaphore */
 };
 
+extern asmlinkage int sys_semget (key_t key, int nsems, int semflg);
+extern asmlinkage int sys_semop (int semid, struct sembuf *sops, unsigned nsops);
+extern asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg);
+
 #endif /* __KERNEL__ */
 
 #endif /* _LINUX_SEM_H */

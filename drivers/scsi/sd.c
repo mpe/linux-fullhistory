@@ -915,7 +915,7 @@ static int sd_init_onedisk(int i)
 	while(jiffies < time1 + HZ); /* Wait 1 second for next try */
 	printk( "." );
       };
-    } while(the_result && spintime && spintime+50*HZ > jiffies);
+    } while(the_result && spintime && spintime+100*HZ > jiffies);
     if (spintime) {
        if (the_result)
            printk( "not responding...\n" );

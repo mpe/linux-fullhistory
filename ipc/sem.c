@@ -129,7 +129,7 @@ found:
 	return (unsigned int) sma->sem_perm.seq * SEMMNI + id;
 }
 
-int sys_semget (key_t key, int nsems, int semflg)
+asmlinkage int sys_semget (key_t key, int nsems, int semflg)
 {
 	int id;
 	struct semid_ds *sma;
@@ -357,7 +357,7 @@ static void freeary (int id)
 	kfree(sma);
 }
 
-int sys_semctl (int semid, int semnum, int cmd, union semun arg)
+asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 {
 	struct semid_ds *buf = NULL;
 	struct semid_ds tbuf;
@@ -554,7 +554,7 @@ int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 	return 0;
 }
 
-int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
+asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 {
 	int i, id, size, error;
 	struct semid_ds *sma;

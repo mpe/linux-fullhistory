@@ -618,7 +618,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	if ((skb = alloc_skb(len,GFP_ATOMIC)) == NULL)
 	{
 		ip_statistics.IpReasmFails++;
-		NETDEBUG(printk("IP: queue_glue: no memory for gluing queue 0x%X\n", (int) qp));
+		NETDEBUG(printk("IP: queue_glue: no memory for gluing queue %p\n", qp));
 		ip_free(qp);
 		return(NULL);
 	}

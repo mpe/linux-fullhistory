@@ -123,10 +123,9 @@ asmlinkage unsigned long sys_signal(int signum, void (*handler)(int))
 		if (err)
 			return err;
 	}
+	memset(&tmp, 0, sizeof(tmp));
 	tmp.sa_handler = handler;
-	tmp.sa_mask = 0;
 	tmp.sa_flags = SA_ONESHOT | SA_NOMASK;
-	tmp.sa_restorer = NULL;
 	handler = current->sigaction[signum-1].sa_handler;
 	current->sigaction[signum-1] = tmp;
 	check_pending(signum);

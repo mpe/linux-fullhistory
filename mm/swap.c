@@ -17,6 +17,7 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/stat.h>
+#include <linux/swap.h>
 #include <linux/fs.h>
 
 #include <asm/dma.h>
@@ -33,17 +34,23 @@ int min_free_pages = 20;
 
 static int nr_swapfiles = 0;
 static struct wait_queue * lock_queue = NULL;
+static struct {
+	int head;	/* head of priority-ordered swapfile list */
+	int next;	/* swapfile to be used next */
+} swap_list = {-1, -1};
 
 static struct swap_info_struct {
-	unsigned long flags;
-	struct inode * swap_file;
+	unsigned int flags;
 	unsigned int swap_device;
+	struct inode * swap_file;
 	unsigned char * swap_map;
 	unsigned char * swap_lockmap;
-	int pages;
 	int lowest_bit;
 	int highest_bit;
+	int prio;			/* swap priority */
+	int pages;
 	unsigned long max;
+	int next;			/* next entry on swap list */
 } swap_info[MAX_SWAPFILES];
 
 extern int shm_swap (int);
@@ -180,26 +187,47 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 unsigned long get_swap_page(void)
 {
 	struct swap_info_struct * p;
-	unsigned long offset, type;
+	unsigned long offset, entry;
+	int type, wrapped = 0;
 
-	p = swap_info;
-	for (type = 0 ; type < nr_swapfiles ; type++,p++) {
-		if ((p->flags & SWP_WRITEOK) != SWP_WRITEOK)
-			continue;
-		for (offset = p->lowest_bit; offset <= p->highest_bit ; offset++) {
-			if (p->swap_map[offset])
-				continue;
-			if (test_bit(offset, p->swap_lockmap))
-				continue;
-			p->swap_map[offset] = 1;
-			nr_swap_pages--;
-			if (offset == p->highest_bit)
-				p->highest_bit--;
-			p->lowest_bit = offset;
-			return SWP_ENTRY(type,offset);
+	type = swap_list.next;
+	if (type < 0)
+	  return 0;
+
+	while (1) {
+		p = &swap_info[type];
+		if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
+			for (offset = p->lowest_bit; offset <= p->highest_bit ; offset++) {
+				if (p->swap_map[offset])
+				  continue;
+				if (test_bit(offset, p->swap_lockmap))
+				  continue;
+				p->swap_map[offset] = 1;
+				nr_swap_pages--;
+				if (offset == p->highest_bit)
+				  p->highest_bit--;
+				p->lowest_bit = offset;
+				entry = SWP_ENTRY(type,offset);
+
+				type = swap_info[type].next;
+				if (type < 0 || p->prio != swap_info[type].prio) {
+				    swap_list.next = swap_list.head;
+				} else {
+				    swap_list.next = type;
+				}
+				return entry;
+			}
+		}
+		type = p->next;
+		if (!wrapped) {
+			if (type < 0 || p->prio != swap_info[type].prio) {
+				type = swap_list.head;
+				wrapped = 1;
+			}
+		} else if (type < 0) {
+			return 0;	/* out of swap space */
 		}
 	}
-	return 0;
 }
 
 void swap_duplicate(unsigned long entry)
@@ -263,6 +291,9 @@ void swap_free(unsigned long entry)
 	else
 		if (!--p->swap_map[offset])
 			nr_swap_pages++;
+	if (p->prio > swap_info[swap_list.next].prio) {
+	    swap_list.next = swap_list.head;
+	}
 }
 
 /*
@@ -275,7 +306,7 @@ void swap_free(unsigned long entry)
 void swap_in(struct vm_area_struct * vma, pte_t * page_table,
 	unsigned long entry, int write_access)
 {
-	unsigned long page = get_free_page(GFP_KERNEL);
+	unsigned long page = __get_free_page(GFP_KERNEL);
 
 	if (pte_val(*page_table) != entry) {
 		free_page(page);
@@ -977,33 +1008,41 @@ asmlinkage int sys_swapoff(const char * specialfile)
 {
 	struct swap_info_struct * p;
 	struct inode * inode;
-	unsigned int type;
 	struct file filp;
-	int i;
+	int i, type, prev;
 
 	if (!suser())
 		return -EPERM;
 	i = namei(specialfile,&inode);
 	if (i)
 		return i;
-	p = swap_info;
-	for (type = 0 ; type < nr_swapfiles ; type++,p++) {
-		if ((p->flags & SWP_WRITEOK) != SWP_WRITEOK)
-			continue;
-		if (p->swap_file) {
-			if (p->swap_file == inode)
-				break;
-		} else {
-			if (!S_ISBLK(inode->i_mode))
-				continue;
-			if (p->swap_device == inode->i_rdev)
-				break;
+	prev = -1;
+	for (type = swap_list.head; type >= 0; type = swap_info[type].next) {
+		p = swap_info + type;
+		if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
+			if (p->swap_file) {
+				if (p->swap_file == inode)
+				  break;
+			} else {
+				if (S_ISBLK(inode->i_mode)
+				    && (p->swap_device == inode->i_rdev))
+				  break;
+			}
 		}
+		prev = type;
 	}
-
-	if (type >= nr_swapfiles){
+	if (type < 0){
 		iput(inode);
 		return -EINVAL;
+	}
+	if (prev < 0) {
+		swap_list.head = p->next;
+	} else {
+		swap_info[prev].next = p->next;
+	}
+	if (type == swap_list.next) {
+		/* just pick something that's safe... */
+		swap_list.next = swap_list.head;
 	}
 	p->flags = SWP_USED;
 	i = try_to_unuse(type);
@@ -1043,14 +1082,15 @@ asmlinkage int sys_swapoff(const char * specialfile)
  *
  * The swapon system call
  */
-asmlinkage int sys_swapon(const char * specialfile)
+asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 {
 	struct swap_info_struct * p;
 	struct inode * swap_inode;
 	unsigned int type;
-	int i,j;
+	int i, j, prev;
 	int error;
 	struct file filp;
+	static int least_priority = 0;
 
 	memset(&filp, 0, sizeof(filp));
 	if (!suser())
@@ -1071,6 +1111,13 @@ asmlinkage int sys_swapon(const char * specialfile)
 	p->lowest_bit = 0;
 	p->highest_bit = 0;
 	p->max = 1;
+	p->next = -1;
+	if (swap_flags & SWAP_FLAG_PREFER) {
+		p->prio =
+		  (swap_flags & SWAP_FLAG_PRIO_MASK)>>SWAP_FLAG_PRIO_SHIFT;
+	} else {
+		p->prio = --least_priority;
+	}
 	error = namei(specialfile,&swap_inode);
 	if (error)
 		goto bad_swap_2;
@@ -1149,6 +1196,21 @@ asmlinkage int sys_swapon(const char * specialfile)
 	p->pages = j;
 	nr_swap_pages += j;
 	printk("Adding Swap: %dk swap-space\n",j<<(PAGE_SHIFT-10));
+
+	/* insert swap space into swap_list: */
+	prev = -1;
+	for (i = swap_list.head; i >= 0; i = swap_info[i].next) {
+		if (p->prio >= swap_info[i].prio) {
+			break;
+		}
+		prev = i;
+	}
+	p->next = i;
+	if (prev < 0) {
+		swap_list.head = swap_list.next = p - swap_info;
+	} else {
+		swap_info[prev].next = p - swap_info;
+	}
 	return 0;
 bad_swap:
 	if(filp.f_op && filp.f_op->release)

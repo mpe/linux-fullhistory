@@ -20,15 +20,11 @@ SUBOBJS     := $(foreach f,$(SUBDIRS),$f/$f.o)
 
 OBJS	=  socket.o protocols.o
 
-all:		net.o
+all:		network.a
 
-net.o:		$(OBJS) network.a
-		$(LD) -u _eth_setup -r -o net.o $(OBJS) network.a
-
-network.a:	subdirs
+network.a:	subdirs $(OBJS)
 		rm -f $@
-		ar rc $@ $(SUBOBJS)
-		ranlib $@
+		ar rcs $@ $(OBJS) $(SUBOBJS)
 
 subdirs:	dummy
 		set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done

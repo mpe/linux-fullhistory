@@ -8,6 +8,8 @@
  * yet. I'll have to see about this later..
  */
 
+#ifdef __LIBRARY__
+
 /* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
 #define _syscall0(type,name) \
 type name(void) \
@@ -46,7 +48,11 @@ type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5) \
 	return (type) -1; \
 }
 
+#endif /* __LIBRARY__ */
+
 #ifdef __KERNEL_SYSCALLS__
+
+#include <linux/string.h>
 
 extern unsigned long kernel_fork(void);
 static inline unsigned long fork(void)

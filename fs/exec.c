@@ -7,7 +7,6 @@
 /*
  * #!-checking implemented by tytso.
  */
-
 /*
  * Demand-loading implemented 01.12.91 - no need to read anything but
  * the header into memory. The inode of the executable is put into
@@ -297,17 +296,19 @@ asmlinkage int sys_uselib(const char * library)
  * memory and creates the pointer tables from them, and puts their
  * addresses on the "stack", returning the new stack pointer value.
  */
-unsigned long * create_tables(char * p,int argc,int envc,int ibcs)
+unsigned long * create_tables(char * p, struct linux_binprm * bprm, int ibcs)
 {
 	unsigned long *argv,*envp;
 	unsigned long * sp;
 	struct vm_area_struct *mpnt;
+	int argc = bprm->argc;
+	int envc = bprm->envc;
 
 	mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
 	if (mpnt) {
 		mpnt->vm_task = current;
 		mpnt->vm_start = PAGE_MASK & (unsigned long) p;
-		mpnt->vm_end = TASK_SIZE;
+		mpnt->vm_end = STACK_TOP;
 		mpnt->vm_page_prot = PAGE_COPY;
 		mpnt->vm_flags = VM_STACK_FLAGS;
 		mpnt->vm_ops = NULL;
@@ -316,28 +317,28 @@ unsigned long * create_tables(char * p,int argc,int envc,int ibcs)
 		mpnt->vm_pte = 0;
 		insert_vm_struct(current, mpnt);
 	}
-	sp = (unsigned long *) (0xfffffffc & (unsigned long) p);
+	sp = (unsigned long *) ((-(unsigned long)sizeof(char *)) & (unsigned long) p);
 	sp -= envc+1;
 	envp = sp;
 	sp -= argc+1;
 	argv = sp;
 	if (!ibcs) {
-		put_fs_long((unsigned long)envp,--sp);
-		put_fs_long((unsigned long)argv,--sp);
+		put_user(envp,--sp);
+		put_user(argv,--sp);
 	}
-	put_fs_long((unsigned long)argc,--sp);
+	put_user(argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
-		put_fs_long((unsigned long) p,argv++);
+		put_user(p,argv++);
 		while (get_fs_byte(p++)) /* nothing */ ;
 	}
-	put_fs_long(0,argv);
+	put_user(NULL,argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
-		put_fs_long((unsigned long) p,envp++);
+		put_user(p,envp++);
 		while (get_fs_byte(p++)) /* nothing */ ;
 	}
-	put_fs_long(0,envp);
+	put_user(NULL,envp);
 	current->mm->env_end = (unsigned long) p;
 	return sp;
 }
@@ -357,7 +358,7 @@ static int count(char ** argv)
 		error = verify_area(VERIFY_READ, tmp, sizeof(char *));
 		if (error)
 			return error;
-		while ((p = (char *) get_fs_long((unsigned long *) (tmp++))) != NULL) {
+		while ((p = (char *) get_user(tmp++)) != NULL) {
 			i++;
 			error = verify_area(VERIFY_READ, p, 1);
 			if (error)
@@ -400,7 +401,7 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 	while (argc-- > 0) {
 		if (from_kmem == 1)
 			set_fs(new_fs);
-		if (!(tmp = (char *)get_fs_long(((unsigned long *)argv)+argc)))
+		if (!(tmp = (char *)get_user(argv+argc)))
 			panic("VFS: argc is wrong");
 		if (from_kmem == 1)
 			set_fs(old_fs);
@@ -439,8 +440,8 @@ unsigned long setup_arg_pages(unsigned long text_size,unsigned long * page)
 	unsigned long code_limit,data_limit,code_base,data_base;
 	int i;
 
-	code_limit = TASK_SIZE;
-	data_limit = TASK_SIZE;
+	code_limit = STACK_TOP;
+	data_limit = STACK_TOP;
 	code_base = data_base = 0;
 	current->mm->start_code = code_base;
 	data_base += data_limit;
@@ -460,7 +461,7 @@ unsigned long setup_arg_pages(unsigned long text_size,unsigned long * page)
  * without bmap support.
  */
 int read_exec(struct inode *inode, unsigned long offset,
-	char * addr, unsigned long count)
+	char * addr, unsigned long count, int to_kmem)
 {
 	struct file file;
 	int result = -ENOEXEC;
@@ -484,12 +485,17 @@ int read_exec(struct inode *inode, unsigned long offset,
  			goto close_readexec;
 	} else
 		file.f_pos = offset;
-	if (get_fs() == USER_DS) {
+	if (to_kmem) {
+		unsigned long old_fs = get_fs();
+		set_fs(get_ds());
+		result = file.f_op->read(inode, &file, addr, count);
+		set_fs(old_fs);
+	} else {
 		result = verify_area(VERIFY_WRITE, addr, count);
 		if (result)
 			goto close_readexec;
+		result = file.f_op->read(inode, &file, addr, count);
 	}
-	result = file.f_op->read(inode, &file, addr, count);
 close_readexec:
 	if (file.f_op->release)
 		file.f_op->release(inode,&file);
@@ -552,18 +558,19 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 {
 	struct linux_binprm bprm;
 	struct linux_binfmt * fmt;
-	unsigned long old_fs;
 	int i;
 	int retval;
 	int sh_bang = 0;
 
-	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-4;
+	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
 		bprm.page[i] = 0;
 	retval = open_namei(filename, 0, 0, &bprm.inode, NULL);
 	if (retval)
 		return retval;
 	bprm.filename = filename;
+	bprm.loader = 0;
+	bprm.exec = 0;
 	if ((bprm.argc = count(argv)) < 0)
 		return bprm.argc;
 	if ((bprm.envc = count(envp)) < 0)
@@ -608,10 +615,7 @@ restart_interp:
 		goto exec_error2;
 	}
 	memset(bprm.buf,0,sizeof(bprm.buf));
-	old_fs = get_fs();
-	set_fs(get_ds());
-	retval = read_exec(bprm.inode,0,bprm.buf,128);
-	set_fs(old_fs);
+	retval = read_exec(bprm.inode,0,bprm.buf,128,1);
 	if (retval < 0)
 		goto exec_error2;
 	if ((bprm.buf[0] == '#') && (bprm.buf[1] == '!') && (!sh_bang)) {
@@ -688,6 +692,8 @@ restart_interp:
 		goto restart_interp;
 	}
 	if (!sh_bang) {
+		bprm.p = copy_strings(1, &bprm.filename, bprm.page, bprm.p, 2);
+		bprm.exec = bprm.p;
 		bprm.p = copy_strings(bprm.envc,envp,bprm.page,bprm.p,0);
 		bprm.p = copy_strings(bprm.argc,argv,bprm.page,bprm.p,0);
 		if (!bprm.p) {
@@ -738,20 +744,23 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
 	struct exec ex;
 	struct file * file;
-	int fd, error;
+	int fd;
+	unsigned long error;
 	unsigned long p = bprm->p;
 	unsigned long fd_offset;
 
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC && 
 	     N_MAGIC(ex) != QMAGIC) ||
-	    ex.a_trsize || ex.a_drsize ||
-	    bprm->inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
+	    N_TRSIZE(ex) || N_DRSIZE(ex) ||
+	    bprm->inode->i_size < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
 		return -ENOEXEC;
 	}
 
 	current->personality = PER_LINUX;
 	fd_offset = N_TXTOFF(ex);
+
+#ifdef __i386__
 	if (N_MAGIC(ex) == ZMAGIC && fd_offset != BLOCK_SIZE) {
 		printk(KERN_NOTICE "N_TXTOFF != BLOCK_SIZE. See a.out.h.\n");
 		return -ENOEXEC;
@@ -762,15 +771,18 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		printk(KERN_NOTICE "N_TXTOFF < BLOCK_SIZE. Please convert binary.\n");
 		return -ENOEXEC;
 	}
+#endif
 
 	/* OK, This is the point of no return */
 	flush_old_exec(bprm);
 
+	current->mm->end_code = ex.a_text +
+		(current->mm->start_code = N_TXTADDR(ex));
+	current->mm->end_data = ex.a_data +
+		(current->mm->start_data = N_DATADDR(ex));
 	current->mm->brk = ex.a_bss +
-		(current->mm->start_brk =
-		(current->mm->end_data = ex.a_data +
-		(current->mm->end_code = ex.a_text +
-		(current->mm->start_code = N_TXTADDR(ex)))));
+		(current->mm->start_brk = N_BSSADDR(ex));
+
 	current->mm->rss = 0;
 	current->mm->mmap = NULL;
 	current->suid = current->euid = current->fsuid = bprm->e_uid;
@@ -779,7 +791,7 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		do_mmap(NULL, 0, ex.a_text+ex.a_data,
 			PROT_READ|PROT_WRITE|PROT_EXEC,
 			MAP_FIXED|MAP_PRIVATE, 0);
-		read_exec(bprm->inode, 32, (char *) 0, ex.a_text+ex.a_data);
+		read_exec(bprm->inode, 32, (char *) 0, ex.a_text+ex.a_data, 0);
 	} else {
 		if (ex.a_text & 0xfff || ex.a_data & 0xfff)
 			printk(KERN_NOTICE "executable not page aligned\n");
@@ -795,7 +807,7 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 				PROT_READ|PROT_WRITE|PROT_EXEC,
 				MAP_FIXED|MAP_PRIVATE, 0);
 			read_exec(bprm->inode, fd_offset,
-				  (char *) N_TXTADDR(ex), ex.a_text+ex.a_data);
+				  (char *) N_TXTADDR(ex), ex.a_text+ex.a_data, 0);
 			goto beyond_if;
 		}
 
@@ -810,12 +822,12 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			return error;
 		}
 		
- 		error = do_mmap(file, N_TXTADDR(ex) + ex.a_text, ex.a_data,
+ 		error = do_mmap(file, N_DATADDR(ex), ex.a_data,
 				PROT_READ | PROT_WRITE | PROT_EXEC,
 				MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE,
 				fd_offset + ex.a_text);
 		sys_close(fd);
-		if (error != N_TXTADDR(ex) + ex.a_text) {
+		if (error != N_DATADDR(ex)) {
 			send_sig(SIGKILL, current, 0);
 			return error;
 		}
@@ -833,11 +845,14 @@ beyond_if:
 		(*current->binfmt->use_count)++;
 
 	set_brk(current->mm->start_brk, current->mm->brk);
+
+	fd_offset = setup_arg_pages(ex.a_text,bprm->page) - MAX_ARG_PAGES*PAGE_SIZE;
+	p += fd_offset;
+	if (bprm->loader)
+		bprm->loader += fd_offset;
+	bprm->exec += fd_offset;
 	
-	p += setup_arg_pages(ex.a_text,bprm->page);
-	p -= MAX_ARG_PAGES*PAGE_SIZE;
-	p = (unsigned long)create_tables((char *)p,
-					bprm->argc, bprm->envc,
+	p = (unsigned long)create_tables((char *)p, bprm,
 					current->personality != PER_LINUX);
 	current->mm->start_stack = p;
 	start_thread(regs, ex.a_entry, p);
@@ -855,7 +870,7 @@ static int load_aout_library(int fd)
 	unsigned int len;
 	unsigned int bss;
 	unsigned int start_addr;
-	int error;
+	unsigned long error;
 	
 	file = current->files->fd[fd];
 	inode = file->f_inode;
@@ -867,9 +882,9 @@ static int load_aout_library(int fd)
 	set_fs(USER_DS);
 	
 	/* We come in here for the regular a.out style of shared libraries */
-	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != QMAGIC) || ex.a_trsize ||
-	    ex.a_drsize || ((ex.a_entry & 0xfff) && N_MAGIC(ex) == ZMAGIC) ||
-	    inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
+	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != QMAGIC) || N_TRSIZE(ex) ||
+	    N_DRSIZE(ex) || ((ex.a_entry & 0xfff) && N_MAGIC(ex) == ZMAGIC) ||
+	    inode->i_size < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
 		return -ENOEXEC;
 	}
 	if (N_MAGIC(ex) == ZMAGIC && N_TXTOFF(ex) && 

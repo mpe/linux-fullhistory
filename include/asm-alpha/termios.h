@@ -60,6 +60,7 @@ struct ltchars {
 
 #define TIOCSWINSZ	_IOW('t', 103, struct winsize)
 #define TIOCGWINSZ	_IOR('t', 104, struct winsize)
+#define TIOCOUTQ        _IOR('t', 115, int)     /* output queue size */
 
 #define TIOCGLTC	_IOR('t', 116, struct ltchars)
 #define TIOCSLTC	_IOW('t', 117, struct ltchars)
@@ -70,7 +71,6 @@ struct ltchars {
 #define TIOCNXCL	0x540D
 #define TIOCSCTTY	0x540E
 
-#define TIOCOUTQ	0x5411
 #define TIOCSTI		0x5412
 #define TIOCMGET	0x5415
 #define TIOCMBIS	0x5416
