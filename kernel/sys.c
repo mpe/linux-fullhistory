@@ -41,10 +41,6 @@ int unregister_reboot_notifier(struct notifier_block * nb)
 	return notifier_chain_unregister(&reboot_notifier_list, nb);
 }
 
-
-
-extern void adjust_clock(void);
-
 asmlinkage long sys_ni_syscall(void)
 {
 	return -ENOSYS;

@@ -16,7 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/blkdev.h>
 #include <linux/hdreg.h>
-#include <linux/zorro.h>
+#include <linux/delay.h>
 #include <linux/ide.h>
 
 #include <asm/machw.h>
@@ -68,64 +68,16 @@ static int macide_offsets[IDE_NR_PORTS] = {
 
 #define MAC_HD_ISR	0x101
 
-	/*
-	 * IDE interrupt glue - seems to be wired to Nubus, Slot C?
-	 * (ROM code disassembly again)
-	 * First try: just use Nubus interrupt for Slot C. Have Nubus code call
-	 * a wrapper to ide_intr that checks the ISR (see above).
-	 * Need to #define IDE_IRQ_NUBUS though.
-	 * Alternative method: set a mac_ide_hook function pointer to the wrapper 
-	 * here and have via_do_nubus call that hook if set. 
-	 *
-	 * Quadra needs the hook, Powerbook can use Nubus slot C. 
-	 * Checking the ISR on Quadra is done by mac_ack_intr (see Amiga code). mac_ide_intr
-	 * mac_ide_intr is obsolete except for providing the hwgroup argument.
-	 */
-
-	/* The Mac hwif data, for passing hwgroup to ide_intr */
-static ide_hwif_t *mac_hwif = NULL;
-
-	/* The function pointer used in the Nubus handler */
-void (*mac_ide_intr_hook)(int, void *, struct pt_regs *) = NULL;
-
-	/*
-	 * Only purpose: feeds the hwgroup to the main IDE handler. 
-	 * Obsolete as soon as Nubus code is fixed WRT pseudo slot C int.
-	 * (should be the case on Powerbooks)
-	 * Alas, second purpose: feed correct irq to IDE handler (I know,
-	 * that's cheating) :-(((
-	 * Fix needed for interrupt code: accept Nubus ints in the regular
-	 * request_irq code, then register Powerbook IDE as Nubus slot C, 
-	 * Quadra as slot F (F for fictious).
-	 */
-void mac_ide_intr(int irq, void *dev_id, struct pt_regs *regs)
+static int mac_ack_intr(ide_hwif_t* hwif)
 {
-	ide_intr(mac_hwif->irq, mac_hwif->hwgroup, regs);
-}
+	unsigned char isr;
+	isr = readb(MAC_HD_BASE + MAC_HD_ISR);
+	if (isr & (1<<5)) {
+		writeb(isr & ~(1<<5), MAC_HD_BASE + MAC_HD_ISR);
+		return 1;
+	}
 
-    /*
-     *  Check the interrupt status
-     *
-     *  Note: In 2.0 kernels, there have been timing problems with the 
-     *  Powerbook IDE interface (BUSY was asserted too long after the
-     *  interrupt triggered). Result: repeated errors, recalibrate etc. 
-     *  Adding a wait loop to read_intr, write_intr and set_geom_intr
-     *  fixed the problem (waits in read/write_intr were present for Amiga
-     *  already). 
-     *  Powerbooks were not tested with 2.1 due to lack of FPU emulation
-     *  (thanks Apple for using LC040). If the BUSY problem resurfaces in 
-     *  2.1, my best bet would be to add the wait loop right here, afterr
-     *  checking the interrupt register.
-     */
-
-static int mac_ack_intr(ide_hwif_t *hwif)
-{
-    unsigned char ch;
-
-    ch = inb(hwif->io_ports[IDE_IRQ_OFFSET]);
-    if (!(ch & 0x20))
 	return 0;
-    return 1;
 }
 
     /*
@@ -134,34 +86,31 @@ static int mac_ack_intr(ide_hwif_t *hwif)
 
 void macide_init(void)
 {
-    hw_regs_t hw;
-    int index = -1;
+	hw_regs_t hw;
+	int index = -1;
 
-    if (MACH_IS_MAC) {
-	switch(macintosh_config->ide_type) {
-	case 0:
-	    break;
+	if (!MACH_IS_MAC || macintosh_config->ide_type == 0)
+		return;
 
+	switch (macintosh_config->ide_type) {
 	case MAC_IDE_QUADRA:
-	    ide_setup_ports(&hw, (ide_ioreg_t)MAC_HD_BASE, macide_offsets,
-	    		    0, (ide_ioreg_t)(MAC_HD_BASE+MAC_HD_ISR),
-			    mac_ack_intr, IRQ_MAC_NUBUS);
-	    index = ide_register_hw(&hw, &mac_hwif);
-	    mac_ide_intr_hook = mac_ide_intr;
-	    break;
+		ide_setup_ports(&hw, (ide_ioreg_t)MAC_HD_BASE, macide_offsets,
+				0, (ide_ioreg_t)(MAC_HD_BASE+MAC_HD_ISR),
+				mac_ack_intr, IRQ_NUBUS_F);
+		index = ide_register_hw(&hw, NULL);
+		break;
 
 	default:
 	    ide_setup_ports(&hw, (ide_ioreg_t)MAC_HD_BASE, macide_offsets,
-	    		    0, 0, NULL, IRQ_MAC_NUBUS);
-	    index = ide_register_hw(&hw, &mac_hwif);
+	    		    0, 0, NULL, IRQ_NUBUS_C);
+	    index = ide_register_hw(&hw, NULL);
 	    break;
 	}
 
         if (index != -1) {
-	    if (macintosh_config->ide_type == MAC_IDE_QUADRA)
-		printk("ide%d: Macintosh Quadra IDE interface\n", index);
-	    else
-		printk("ide%d: Macintosh Powerbook IDE interface\n", index);
+		if (macintosh_config->ide_type == MAC_IDE_QUADRA)
+			printk("ide%d: Macintosh Quadra IDE interface\n", index);
+		else
+			printk("ide%d: Macintosh Powerbook IDE interface\n", index);
 	}
-    }
 }

@@ -1360,13 +1360,6 @@ static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
 	return (0);
 }
 
-/*
- * Not relevant
- */
-static int atalk_accept(struct socket *sock, struct socket *newsock, int flags)
-{
-	return (-EOPNOTSUPP);
-}
 
 /*
  * Find the name of an AppleTalk socket. Just copy the right
@@ -1918,10 +1911,6 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	return (err ? err : (copied));
 }
 
-static int atalk_shutdown(struct socket *sk,int how)
-{
-	return (-EOPNOTSUPP);
-}
 
 /*
  * AppleTalk ioctl calls.
@@ -2029,12 +2018,12 @@ static struct proto_ops SOCKOPS_WRAPPED(atalk_dgram_ops)=
 	atalk_bind,
 	atalk_connect,
 	sock_no_socketpair,
-	atalk_accept,
+	sock_no_accept,
 	atalk_getname,
 	datagram_poll,
 	atalk_ioctl,
 	sock_no_listen,
-	atalk_shutdown,
+	sock_no_shutdown,
 	sock_no_setsockopt,
 	sock_no_getsockopt,
 	sock_no_fcntl,

@@ -198,8 +198,8 @@ if [ "$CONFIG_ATARI" = "y" ]; then
   fi
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
-  bool 'MAC NCR5380 SCSI' CONFIG_MAC_SCSI
-  dep_tristate 'MAC NCR53c9[46] SCSI' CONFIG_SCSI_MAC_ESP $CONFIG_SCSI
+  bool 'Macintosh NCR5380 SCSI' CONFIG_MAC_SCSI
+  dep_tristate 'Macintosh NCR53c9[46] SCSI' CONFIG_SCSI_MAC_ESP $CONFIG_SCSI
 fi
 #dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
 
@@ -329,19 +329,19 @@ fi
 if [ "$CONFIG_AMIGA" = "y" ]; then
   tristate 'Amiga mouse support' CONFIG_AMIGAMOUSE
   if [ "$CONFIG_AMIGAMOUSE" != "n" ]; then
-    define_bool CONFIG_MOUSE y
+    define_bool CONFIG_BUSMOUSE y
   fi
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari mouse support' CONFIG_ATARIMOUSE
   if [ "$CONFIG_ATARIMOUSE" != "n" ]; then
-    define_bool CONFIG_MOUSE y
+    define_bool CONFIG_BUSMOUSE y
   fi
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
    bool 'Mac ADB mouse support' CONFIG_ADBMOUSE
   if [ "$CONFIG_ADBMOUSE" != "n" ]; then
-    define_bool CONFIG_MOUSE y
+    define_bool CONFIG_BUSMOUSE y
   fi
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
@@ -381,7 +381,7 @@ if [ "$CONFIG_SUN3X" = "y" ]; then
     bool 'Sun keyboard support' CONFIG_SUN_KEYBOARD
     bool 'Sun mouse support' CONFIG_SUN_MOUSE
     if [ "$CONFIG_SUN_MOUSE" != "n" ]; then
-      define_bool CONFIG_MOUSE y
+      define_bool CONFIG_BUSMOUSE y
     fi
     define_bool CONFIG_SBUS y
     define_bool CONFIG_SBUSCHAR y

@@ -67,7 +67,7 @@
 #define ARPHRD_HIPPI	780		/* High Performance Parallel Interface */
 #define ARPHRD_ASH	781		/* Nexus 64Mbps Ash		*/
 #define ARPHRD_ECONET	782		/* Acorn Econet			*/
-#define ARPHRD_IRDA 	783		/* Linux/IR			*/
+#define ARPHRD_IRDA 	783		/* Linux-IrDA			*/
 /* ARP works differently on different FC media .. so  */
 #define ARPHRD_FCPP	784		/* Point to point fibrechanel	*/
 #define ARPHRD_FCAL	785		/* Fibrechannel arbitrated loop */

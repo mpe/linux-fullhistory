@@ -1,6 +1,7 @@
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <asm/irq.h>
 #include <asm/setup.h>
 #include <asm/bootinfo.h>
 #include <asm/macintosh.h>

@@ -57,6 +57,7 @@ extern int ap_init(void);
 extern int ddv_init(void);
 extern int z2_init(void);
 extern int swim3_init(void);
+extern int swimiop_init(void);
 extern int amiga_floppy_init(void);
 extern int atari_floppy_init(void);
 extern int nbd_init(void);

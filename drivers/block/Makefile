@@ -54,6 +54,10 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_BLK_DEV_SWIM_IOP),y)
+  L_OBJS += swim_iop.o
+endif
+
 ifeq ($(CONFIG_ATARI_ACSI),y)
   LX_OBJS += acsi.o
 else
@@ -136,6 +140,10 @@ endif
 
 ifeq ($(CONFIG_BLK_DEV_GAYLE),y)
 IDE_OBJS += gayle.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_Q40IDE),y)
+IDE_OBJS += q40ide.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_HD),y)

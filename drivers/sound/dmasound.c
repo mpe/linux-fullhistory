@@ -5646,7 +5646,9 @@ void cleanup_module(void)
 		sound.mach.irqcleanup();
 	}
 
+#ifdef CONFIG_PPC
 	sq_release_read_buffers();
+#endif
 	sq_release_buffers();
 
 	if (mixer_unit >= 0)

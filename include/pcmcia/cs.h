@@ -1,5 +1,5 @@
 /*
- * cs.h 1.66 1999/08/28 04:12:32
+ * cs.h 1.67 1999/09/02 18:34:59
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -256,7 +256,7 @@ typedef struct eventmask_t {
 #define EXCLUSIVE_USE		0x02
 #define VALID_CLIENT		0x04
 
-/* For MapMemPage */
+/* For GetMemPage, MapMemPage */
 typedef struct memreq_t {
     u_int	CardOffset;
     page_t	Page;
@@ -429,7 +429,8 @@ enum service {
     RequestSocketMask, RequestWindow, ResetCard, ReturnSSEntry,
     SetEventMask, SetRegion, ValidateCIS, VendorSpecific,
     WriteMemory, BindDevice, BindMTD, ReportError,
-    SuspendCard, ResumeCard, EjectCard, InsertCard, ReplaceCIS
+    SuspendCard, ResumeCard, EjectCard, InsertCard, ReplaceCIS,
+    GetFirstWindow, GetNextWindow, GetMemPage
 };
 
 #ifdef IN_CARD_SERVICES

@@ -731,7 +731,11 @@ void __init enable_local_APIC(void)
 
  	value = apic_read(APIC_SPIV);
  	value |= (1<<8);		/* Enable APIC (bit==1) */
+#if 0
  	value &= ~(1<<9);		/* Enable focus processor (bit==0) */
+#else
+	value |= (1<<9);		/* Disable focus processor (bit==1) */
+#endif
 	value |= 0xff;			/* Set spurious IRQ vector to 0xff */
  	apic_write(APIC_SPIV,value);
 

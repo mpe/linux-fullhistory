@@ -10,11 +10,16 @@
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
 
+ifndef CONFIG_SUN3
 all: head.o kernel.o
+else
+all: sun3-head.o kernel.o
+endif 
+
 O_TARGET := kernel.o
 O_OBJS := entry.o process.o traps.o ints.o signal.o ptrace.o \
-	  setup.o sys_m68k.o time.o
-OX_OBJS := m68k_ksyms.o
+	  sys_m68k.o time.o semaphore.o
+OX_OBJS := setup.o m68k_ksyms.o
 
 ifdef CONFIG_KGDB
 O_OBJS += kgdb.o
@@ -25,6 +30,8 @@ O_OBJS += bios32.o
 endif
 
 head.o: head.S m68k_defs.h
+
+sun3-head.o: sun3-head.S m68k_defs.h
 
 m68k_defs.h: m68k_defs.c m68k_defs.head
 	rm -f m68k_defs.d

@@ -275,7 +275,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	vma->vm_ops = NULL;
 	vma->vm_offset = off;
 	vma->vm_file = NULL;
-	vma->vm_pte = 0;
+	vma->vm_private_data = NULL;
 
 	/* Clear old maps */
 	error = -ENOMEM;
@@ -547,7 +547,7 @@ static struct vm_area_struct * unmap_fixup(struct vm_area_struct *area,
 		mpnt->vm_ops = area->vm_ops;
 		mpnt->vm_offset = area->vm_offset + (end - area->vm_start);
 		mpnt->vm_file = area->vm_file;
-		mpnt->vm_pte = area->vm_pte;
+		mpnt->vm_private_data = area->vm_private_data;
 		if (mpnt->vm_file)
 			get_file(mpnt->vm_file);
 		if (mpnt->vm_ops && mpnt->vm_ops->open)
@@ -778,7 +778,7 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	vma->vm_ops = NULL;
 	vma->vm_offset = 0;
 	vma->vm_file = NULL;
-	vma->vm_pte = 0;
+	vma->vm_private_data = NULL;
 
 	/*
 	 * merge_segments may merge our vma, so we can't refer to it
@@ -920,7 +920,7 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 
 		/* To share, we must have the same file, operations.. */
 		if ((mpnt->vm_file != prev->vm_file)||
-		    (mpnt->vm_pte != prev->vm_pte)	||
+		    (mpnt->vm_private_data != prev->vm_private_data)	||
 		    (mpnt->vm_ops != prev->vm_ops)	||
 		    (mpnt->vm_flags != prev->vm_flags)	||
 		    (prev->vm_end != mpnt->vm_start))

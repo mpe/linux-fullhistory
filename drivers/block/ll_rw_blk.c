@@ -26,6 +26,14 @@
 #include <linux/module.h>
 
 /*
+ * MAC Floppy IWM hooks
+ */
+
+#ifdef CONFIG_MAC_FLOPPY_IWM
+extern int mac_floppy_init(void);
+#endif
+
+/*
  * The request-struct contains all necessary data
  * to load a nr of sectors into memory
  */
@@ -809,6 +817,9 @@ int __init blk_dev_init(void)
 #endif
 #ifdef CONFIG_MAC_FLOPPY
 	swim3_init();
+#endif
+#ifdef CONFIG_BLK_DEV_SWIM_IOP
+	swimiop_init();
 #endif
 #ifdef CONFIG_AMIGA_FLOPPY
 	amiga_floppy_init();

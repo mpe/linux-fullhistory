@@ -2,7 +2,7 @@
 
     PCMCIA Card Information Structure parser
 
-    cistpl.c 1.69 1999/08/28 04:01:45
+    cistpl.c 1.70 1999/09/07 15:18:58
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -91,7 +91,7 @@ void read_cis_mem(socket_info_t *s, int attr, u_int addr,
     u_char *sys;
     u_int inc = 1;
     
-    DEBUG(3, ("cs: read_cis_mem(%d, %#x, %u)\n", attr, addr, len));
+    DEBUG(3, "cs: read_cis_mem(%d, %#x, %u)\n", attr, addr, len);
     if (setup_cis_mem(s) != 0) {
 	memset(ptr, 0xff, len);
 	return;
@@ -103,12 +103,12 @@ void read_cis_mem(socket_info_t *s, int attr, u_int addr,
 
     for (; len > 0; sys = s->cis_virt) {
 	s->ss_entry(s->sock, SS_SetMemMap, mem);
-	DEBUG(3,  ("cs:  %#2.2x %#2.2x %#2.2x %#2.2x %#2.2x ...\n",
-		   bus_readb(s->cap.bus, sys),
-		   bus_readb(s->cap.bus, sys+inc),
-		   bus_readb(s->cap.bus, sys+2*inc),
-		   bus_readb(s->cap.bus, sys+3*inc),
-		   bus_readb(s->cap.bus, sys+4*inc)));
+	DEBUG(3,  "cs:  %#2.2x %#2.2x %#2.2x %#2.2x %#2.2x ...\n",
+	      bus_readb(s->cap.bus, sys),
+	      bus_readb(s->cap.bus, sys+inc),
+	      bus_readb(s->cap.bus, sys+2*inc),
+	      bus_readb(s->cap.bus, sys+3*inc),
+	      bus_readb(s->cap.bus, sys+4*inc));
 	for ( ; len > 0; len--, ((u_char *)ptr)++, sys += inc) {
 	    if (sys == s->cis_virt+s->cap.map_size) break;
 	    *(u_char *)ptr = bus_readb(s->cap.bus, sys);
@@ -124,7 +124,7 @@ void write_cis_mem(socket_info_t *s, int attr, u_int addr,
     u_char *sys;
     int inc = 1;
     
-    DEBUG(3, ("cs: write_cis_mem(%d, %#x, %u)\n", attr, addr, len));
+    DEBUG(3, "cs: write_cis_mem(%d, %#x, %u)\n", attr, addr, len);
     if (setup_cis_mem(s) != 0) return;
     mem->flags &= ~MAP_ATTRIB;
     if (attr) { mem->flags |= MAP_ATTRIB; inc++; addr *= 2; }
@@ -511,8 +511,8 @@ int get_next_tuple(client_handle_t handle, tuple_t *tuple)
 	ofs += link[1] + 2;
     }
     if (i == MAX_TUPLES) {
-	DEBUG(1, ("cs: overrun in get_next_tuple for socket %d\n",
-		  handle->Socket));
+	DEBUG(1, "cs: overrun in get_next_tuple for socket %d\n",
+	      handle->Socket);
 	return CS_NO_MORE_ITEMS;
     }
     

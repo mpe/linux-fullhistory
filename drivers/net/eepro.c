@@ -23,6 +23,7 @@
 	This is a compatibility hardware problem.
 
 	Versions:
+	0.11e   some tweaks about multiple cards support (PdP, jul/aug 1999)
 	0.11d	added __initdata, __init stuff; call spin_lock_init
 	        in eepro_probe1. Replaced "eepro" by dev->name. Augmented 
 		the code protected by spin_lock in interrupt routine 
@@ -1661,17 +1662,10 @@ static int io[MAX_EEPRO] = {
 #else
   0x200,  /* Why? */
 #endif
-  -1, -1, -1, -1, -1, -1, -1};
-static int irq[MAX_EEPRO] = {0, 0, 0, 0, 0, 0, 0, 0};
+  [1 ... MAX_EEPRO - 1] = -1 };
+static int irq[MAX_EEPRO] = { [0 ... MAX_EEPRO-1] = 0 };
 static int mem[MAX_EEPRO] = {	/* Size of the rx buffer in KB */
-  (RCV_RAM/1024),
-  (RCV_RAM/1024),
-  (RCV_RAM/1024),
-  (RCV_RAM/1024),
-  (RCV_RAM/1024),
-  (RCV_RAM/1024),
-  (RCV_RAM/1024),
-  (RCV_RAM/1024)
+  [0 ... MAX_EEPRO-1] = RCV_RAM/1024
 };
 
 static int n_eepro = 0;
@@ -1679,9 +1673,9 @@ static int n_eepro = 0;
 #if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE > 0x20155
 MODULE_AUTHOR("Pascal Dupuis <dupuis@lei.ucl.ac.be> for the 2.1 stuff (locking,...)");
 MODULE_DESCRIPTION("Intel i82595 ISA EtherExpressPro10/10+ driver");
-MODULE_PARM(io, "i");
-MODULE_PARM(irq, "i");
-MODULE_PARM(mem, "i");
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_EEPRO) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_EEPRO) "i");
+MODULE_PARM(mem, "1-" __MODULE_STRING(MAX_EEPRO) "i");
 #endif 
 
 int 

@@ -64,7 +64,7 @@ struct Xgt_desc_struct {
  * This is the ldt that every process will get unless we need
  * something other than this.
  */
-extern struct desc_struct default_ldt;
+extern struct desc_struct default_ldt[];
 extern void set_intr_gate(unsigned int irq, void * addr);
 extern void set_ldt_desc(unsigned int n, void *addr, unsigned int size);
 extern void set_tss_desc(unsigned int n, void *addr);
@@ -72,7 +72,7 @@ extern void set_tss_desc(unsigned int n, void *addr);
 extern inline void clear_LDT(void)
 {
 	int cpu = smp_processor_id();
-	set_ldt_desc(cpu, &default_ldt, 1);
+	set_ldt_desc(cpu, &default_ldt[0], 5);
 	__load_LDT(cpu);
 }
 
@@ -86,8 +86,8 @@ extern inline void load_LDT (struct mm_struct *mm)
 	int count = LDT_ENTRIES;
 
 	if (!segments) {
-		segments = &default_ldt;
-		count = 1;
+		segments = &default_ldt[0];
+		count = 5;
 	}
 		
 	set_ldt_desc(cpu, segments, count);

@@ -147,6 +147,7 @@ struct rs_multiport_struct {
 #define ALPHA_KLUDGE_MCR 0
 #endif
 
+#ifdef CONFIG_PCI
 /*
  * Structures and definitions for PCI support
  */
@@ -171,6 +172,7 @@ struct pci_board_inst {
 
 #ifndef PCI_ANY_ID
 #define PCI_ANY_ID (~0)
+#endif
 #endif
 
 #define SPCI_FL_BASE_MASK	0x0007

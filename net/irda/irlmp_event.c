@@ -347,16 +347,17 @@ static void irlmp_state_active(struct lap_cb *self, IRLMP_EVENT event,
 		 *  must be the one that tries to close IrLAP. It will be 
 		 *  removed later and moved to the list of unconnected LSAPs
 		 */
-		if (hashbin_get_size(self->lsaps) == 1)
+		if (hashbin_get_size(self->lsaps) > 0)
 			irlmp_start_idle_timer(self, LM_IDLE_TIMEOUT);
-
+		else {
+			/* No more connections, so close IrLAP */
+			irlmp_next_lap_state(self, LAP_STANDBY);
+			irlap_disconnect_request(self->irlap);
+		}
 		break;
 	case LM_LAP_IDLE_TIMEOUT:
 		if (hashbin_get_size(self->lsaps) == 0) {
-			DEBUG(2, __FUNCTION__ 
-			      "(), no more LSAPs so time to close IrLAP\n");
 			irlmp_next_lap_state(self, LAP_STANDBY);
-			
 			irlap_disconnect_request(self->irlap);
 		} else
 			/* Still not ready, so wait a little bit more */

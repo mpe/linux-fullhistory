@@ -43,45 +43,58 @@ struct ezusb_ctrltransfer {
 	void *data;
 };
 
-#define EZUSB_CONTROL        _IOWR('E', 0, struct ezusb_ctrltransfer)
-
 struct ezusb_bulktransfer {
 	unsigned int ep;
 	unsigned int len;
 	void *data;
 };
 
-#define EZUSB_BULK           _IOWR('E', 2, struct ezusb_bulktransfer)
-
-#define EZUSB_RESETEP        _IOR('E', 3, unsigned int)
-
 struct ezusb_setinterface {
 	unsigned int interface;
 	unsigned int altsetting;
 };
 
-#define EZUSB_SETINTERFACE   _IOR('E', 4, struct ezusb_setinterface)
-
-struct ezusb_isotransfer {
-	unsigned int ep;
-	unsigned int pktsz;
-	unsigned int framesperint;
+struct ezusb_isoframestat {
+	unsigned int length;
+	unsigned int status;
 };
 
-struct ezusb_isodata {
+struct ezusb_asynccompleted {
+	int status;
+	unsigned length;
+	void *context;
+	struct ezusb_isoframestat isostat[0];
+};
+
+struct ezusb_asyncbulk {
 	unsigned int ep;
-	unsigned int size;
-	unsigned int bufqueued;
-	unsigned int buffree;
+	unsigned int len;
+	void *context;
 	void *data;
 };
 
-#define EZUSB_STARTISO		_IOR('E', 8, struct ezusb_isotransfer)
-#define EZUSB_STOPISO		_IOR('E', 9, unsigned int)
-#define EZUSB_ISODATA		_IOWR('E', 10, struct ezusb_isodata)
-#define EZUSB_PAUSEISO		_IOR('E', 11, unsigned int)
-#define EZUSB_RESUMEISO		_IOR('E', 12, unsigned int)
+struct ezusb_asynciso {
+	unsigned int ep;
+	
+	unsigned int framecnt;
+	unsigned int startframe;
+
+	void *context;
+	void *data;
+	struct ezusb_isoframestat isostat[0];
+};
+
+#define EZUSB_CONTROL           _IOWR('E', 0, struct ezusb_ctrltransfer)
+#define EZUSB_BULK              _IOWR('E', 2, struct ezusb_bulktransfer)
+#define EZUSB_RESETEP           _IOR('E', 3, unsigned int)
+#define EZUSB_SETINTERFACE      _IOR('E', 4, struct ezusb_setinterface)
+#define EZUSB_SETCONFIGURATION  _IOR('E', 5, unsigned int)
+#define EZUSB_ASYNCCOMPLETED    _IOW('E', 8, struct ezusb_asynccompleted)
+#define EZUSB_ASYNCCOMPLETEDNB  _IOW('E', 9, struct ezusb_asynccompleted)
+#define EZUSB_REQUESTBULK       _IOR('E', 16, struct ezusb_asyncbulk)
+#define EZUSB_REQUESTISO        _IOR('E', 17, struct ezusb_asynciso)
+#define EZUSB_TERMINATEASYNC    _IOR('E', 18, void *)
+#define EZUSB_GETFRAMENUMBER    _IOW('E', 18, unsigned int)
 
 /* --------------------------------------------------------------------- */
 #endif /* _LINUX_EZUSB_H */
-

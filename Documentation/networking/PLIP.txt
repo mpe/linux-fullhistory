@@ -49,17 +49,69 @@ an existing Ethernet. Isn't standard (not even de facto standard, like
 SLIP).
 
 Performance
-==========
+===========
 
 PLIP easily outperforms Ethernet cards....(ups, I was dreaming, but
 it *is* getting late. EOB)
+
+PLIP driver details
+-------------------
+
+The Linux PLIP driver is an implementation of the original Crynwr protocol,
+that uses the parallel port subsystem of the kernel in order to properly
+share parallel ports between PLIP and other services.
+
+IRQs and trigger timeouts
+=========================
+
+When a parallel port used for a PLIP driver has an IRQ configured to it, the
+PLIP driver is signaled whenever data is sent to it via the cable, such that
+when no data is available, the driver isn't being used.
+
+However, on some machines it is hard, if not impossible, to configure an IRQ
+to a certain parallel port, mainly because it is used by some other device.
+On these machines, the PLIP driver can be used in IRQ-less mode, where
+the PLIP driver would constantly poll the parallel port for data waiting,
+and if such data is available, process it. This mode is less efficient than
+the IRQ mode, because the driver has to check the parallel port many times
+per second, even when no data at all is sent. Some rough measurements
+indicate that there isn't a noticeable performance drop when using IRQ-less
+mode as compared to IRQ mode as far as the data transfer speed is involved.
+There is a performance drop on the machine hosting the driver.
+
+When the PLIP driver is used in IRQ mode, the timeout used for triggering a
+data transfer (the maximal time the PLIP driver would allow the other side
+before announcing a timeout, when trying to handshake a transfer of some
+data) is, by default, 500usec. As IRQ delivery is more or less immediate,
+this timeout is quite sufficient. 
+
+When in IRQ-less mode, the PLIP driver polls the parallel port HZ times
+per second (where HZ is typically 100 on most platforms, and 1024 on an
+Alpha, as of this writing). Between two such polls, there are 10^6/HZ usecs.
+On an i386, for example, 10^6/100 = 10000usec. It is easy to see that it is
+quite possible for the trigger timeout to expire between two such polls, as
+the timeout is only 500usec long. As a result, it is required to change the
+trigger timeout on the *other* side of a PLIP connection, to about
+10^6/HZ usecs. If both sides of a PLIP connection are used in IRQ-less mode,
+this timeout is required on both sides.
+
+It appears that in practice, the trigger timeout can be shorter than in the
+above calculation. It isn't an important issue, unless the wire is faulty,
+in which case a long timeout would stall the machine when, for whatever
+reason, bits are dropped.
+
+A utility that can perform this change in Linux is plipconfig, which is part
+of the net-tools package (its location can be found in the
+Documentation/Changes file). An example command would be
+'plipconfig plipX trigger 10000', where plipX is the appropriate
+PLIP device.
 
 PLIP hardware interconnection
 -----------------------------
 
 PLIP uses several different data transfer methods.  The first (and the
 only one implemented in the early version of the code) uses a standard
-printer "null" cable to transfers data four bits at a time using
+printer "null" cable to transfer data four bits at a time using
 data bit outputs connected to status bit inputs.
 
 The second data transfer method relies on both machines having
@@ -138,18 +190,18 @@ PLIP Mode 0 transfer protocol
 The PLIP driver is compatible with the "Crynwr" parallel port transfer
 standard in Mode 0.  That standard specifies the following protocol:
 
-   send header nibble '8'
+   send header nibble '0x8'
    count-low octet
    count-high octet
    ... data octets
    checksum octet
 
 Each octet is sent as
-	<wait for rx. '1'>	<send 0x10+(octet&0x0F)>
-	<wait for rx. '0'>	<send 0x00+((octet>>4)&0x0F)>
+	<wait for rx. '0x1?'>	<send 0x10+(octet&0x0F)>
+	<wait for rx. '0x0?'>	<send 0x00+((octet>>4)&0x0F)>
 
 To start a transfer the transmitting machine outputs a nibble 0x08.
-The raises the ACK line, triggering an interrupt in the receiving
+That raises the ACK line, triggering an interrupt in the receiving
 machine.  The receiving machine disables interrupts and raises its own ACK
 line. 
 

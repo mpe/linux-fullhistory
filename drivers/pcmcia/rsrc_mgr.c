@@ -2,7 +2,7 @@
 
     Resource management routines
 
-    rsrc_mgr.c 1.69 1999/08/28 04:01:46
+    rsrc_mgr.c 1.70 1999/09/07 15:19:32
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file

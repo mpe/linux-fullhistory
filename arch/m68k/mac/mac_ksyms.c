@@ -1,7 +1,8 @@
 #include <linux/module.h>
 #include <asm/ptrace.h>
 #include <asm/traps.h>
-/* Hook for mouse driver */
-extern void (*adb_mouse_interrupt_hook) (char *);
 
-EXPORT_SYMBOL(adb_mouse_interrupt_hook);
+/* Says whether we're using A/UX interrupts or not */
+extern int via_alt_mapping;
+
+EXPORT_SYMBOL(via_alt_mapping);

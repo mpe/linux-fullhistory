@@ -28,9 +28,10 @@
 #define PER_IRIXN32             (0x000a | STICKY_TIMEOUTS) /* IRIX6 new 32-bit */
 #define PER_IRIX64              (0x000b | STICKY_TIMEOUTS) /* IRIX6 64-bit     */
 #define PER_RISCOS		(0x000c)
+#define PER_SOLARIS		(0x000d | STICKY_TIMEOUTS)
 
 /* Prototype for an lcall7 syscall handler. */
-typedef void (*lcall7_func)(struct pt_regs *);
+typedef void (*lcall7_func)(int, struct pt_regs *);
 
 
 /* Description of an execution domain - personality range supported,

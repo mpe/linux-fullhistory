@@ -3,6 +3,7 @@
 
 #include <linux/config.h>
 #include <asm/setup.h>
+#include <asm/page.h>
 #ifdef CONFIG_KGDB
 #include <asm/kgdb.h>
 #endif
@@ -132,7 +133,7 @@ PF_DTRACE_BIT = 5
 
 .macro	get_current reg=%d0
 	movel	%sp,\reg
-	andw	#-8192,\reg
+	andw	#-KTHREAD_SIZE,\reg
 	movel	\reg,%curptr
 .endm
 
@@ -161,7 +162,7 @@ PF_DTRACE_BIT = 5
 #endif
 #define GET_CURRENT(tmp) \
 	"movel	%%sp,"#tmp"\n\t" \
-	"andw	#-8192,"#tmp"\n\t" \
+	"andw	#-KTHREAD_SIZE,"#tmp"\n\t" \
 	"movel	"#tmp",%%a2"
 
 #endif

@@ -43,12 +43,12 @@ static void atari_mouse_interrupt(char *buf)
 
 /*    ikbd_mouse_disable(); */
 
-    buttons = ((buf[0] & 1 ? 1 : 0)
-	       | (buf[0] & 2 ? 4 : 0)
+    buttons = ((buf[0] & 1)
+	       | ((buf[0] & 2) << 1)
 	       | (atari_mouse_buttons & 2));
     atari_mouse_buttons = buttons;
 
-    busmouse_add_movementbuttons(msedev, buf[1], -buf[2], buttons);
+    busmouse_add_movementbuttons(msedev, buf[1], -buf[2], buttons ^ 7);
 /*    ikbd_mouse_rel_pos(); */
 }
 

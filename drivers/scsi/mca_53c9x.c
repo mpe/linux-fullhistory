@@ -157,7 +157,7 @@ int mca_esp_detect(Scsi_Host_Template *tpnt)
 			{
 				printk("Unable to request IRQ %d.\n", esp->irq);
 				esp_deallocate(esp);
-				unregister_scsi(esp->ehost);
+				scsi_unregister(esp->ehost);
 				return 0;
 			}
 
@@ -166,7 +166,7 @@ int mca_esp_detect(Scsi_Host_Template *tpnt)
 				 esp->dma);
 				free_irq(esp->irq, esp_intr);
 				esp_deallocate(esp);
-				unregister_scsi(esp->ehost);
+				scsi_unregister(esp->ehost);
 				return 0;
 			}
 

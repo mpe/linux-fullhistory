@@ -117,7 +117,7 @@ void __init amiga_init_IRQ(void)
 	cia_init_IRQ(&ciab_base);
 }
 
-static inline void amiga_insert_irq(irq_node_t **list, irq_node_t *node)
+static inline int amiga_insert_irq(irq_node_t **list, irq_node_t *node)
 {
 	unsigned long flags;
 	irq_node_t *cur;
@@ -133,7 +133,7 @@ static inline void amiga_insert_irq(irq_node_t **list, irq_node_t *node)
 
 	if (node->flags & SA_INTERRUPT) {
 		if (node->flags & SA_SHIRQ)
-			return;
+			return -EBUSY;
 		/*
 		 * There should never be more than one
 		 */
@@ -152,6 +152,7 @@ static inline void amiga_insert_irq(irq_node_t **list, irq_node_t *node)
 	*list = node;
 
 	restore_flags(flags);
+	return 0;
 }
 
 static inline void amiga_delete_irq(irq_node_t **list, void *dev_id)
@@ -186,6 +187,7 @@ int amiga_request_irq(unsigned int irq,
                       unsigned long flags, const char *devname, void *dev_id)
 {
 	irq_node_t *node;
+	int error = 0;
 
 	if (irq >= AMI_IRQS) {
 		printk ("%s: Unknown IRQ %d from %s\n", __FUNCTION__,
@@ -218,7 +220,7 @@ int amiga_request_irq(unsigned int irq,
 		node->dev_id  = dev_id;
 		node->devname = devname;
 		node->next    = NULL;
-		amiga_insert_irq(&ami_irq_list[irq], node);
+		error = amiga_insert_irq(&ami_irq_list[irq], node);
 	} else {
 		ami_irq_list[irq]->handler = handler;
 		ami_irq_list[irq]->flags   = flags;
@@ -230,7 +232,7 @@ int amiga_request_irq(unsigned int irq,
 	if (irq < IRQ_AMIGA_PORTS && !ami_ablecount[irq])
 		custom.intena = IF_SETCLR | ami_intena_vals[irq];
 
-	return 0;
+	return error;
 }
 
 void amiga_free_irq(unsigned int irq, void *dev_id)

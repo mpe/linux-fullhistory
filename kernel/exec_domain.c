@@ -2,7 +2,7 @@
 #include <linux/smp_lock.h>
 #include <linux/module.h>
 
-static asmlinkage void no_lcall7(struct pt_regs * regs);
+static asmlinkage void no_lcall7(int segment, struct pt_regs * regs);
 
 
 static unsigned long ident_map[32] = {
@@ -25,9 +25,8 @@ struct exec_domain default_exec_domain = {
 static struct exec_domain *exec_domains = &default_exec_domain;
 
 
-static asmlinkage void no_lcall7(struct pt_regs * regs)
+static asmlinkage void no_lcall7(int segment, struct pt_regs * regs)
 {
-
   /*
    * This may have been a static linked SVr4 binary, so we would have the
    * personality set incorrectly.  Check to see whether SVr4 is available,
@@ -44,7 +43,7 @@ static asmlinkage void no_lcall7(struct pt_regs * regs)
 
 	if (current->exec_domain && current->exec_domain->handler
 	&& current->exec_domain->handler != no_lcall7) {
-		current->exec_domain->handler(regs);
+		current->exec_domain->handler(segment, regs);
 		return;
 	}
 

@@ -1,19 +1,19 @@
 /*
- *	sd.h Copyright (C) 1992 Drew Eckhardt 
- *	SCSI disk driver header file by
- *		Drew Eckhardt 
+ *    sd.h Copyright (C) 1992 Drew Eckhardt 
+ *      SCSI disk driver header file by
+ *              Drew Eckhardt 
  *
- *	<drew@colorado.edu>
+ *      <drew@colorado.edu>
  *
- *	 Modified by Eric Youngdale eric@aib.com to
- *	 add scatter-gather, multiple outstanding request, and other
- *	 enhancements.
+ *       Modified by Eric Youngdale eric@aib.com to
+ *       add scatter-gather, multiple outstanding request, and other
+ *       enhancements.
  */
 #ifndef _SD_H
 #define _SD_H
 /*
-    $Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/sd.h,v 1.1 1992/07/24 06:27:38 root Exp root $
-*/
+   $Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/sd.h,v 1.1 1992/07/24 06:27:38 root Exp root $
+ */
 
 #ifndef _SCSI_H
 #include "scsi.h"
@@ -23,22 +23,22 @@
 #include <linux/genhd.h>
 #endif
 
-extern struct hd_struct * sd;
+extern struct hd_struct *sd;
 
 typedef struct scsi_disk {
-    unsigned capacity;		    /* size in blocks */
-    unsigned sector_size;	    /* size in bytes */
-    Scsi_Device	 *device;	    
-    unsigned char ready;	    /* flag ready for FLOPTICAL */
-    unsigned char write_prot;	    /* flag write_protect for rmvable dev */
-    unsigned char sector_bit_size;  /* sector_size = 2 to the  bit size power */
-    unsigned char sector_bit_shift; /* power of 2 sectors per FS block */
-    unsigned ten:1;		    /* support ten byte read / write */
-    unsigned remap:1;		    /* support remapping  */
-    unsigned has_part_table:1;	    /* has partition table */
+	unsigned capacity;	/* size in blocks */
+	unsigned sector_size;	/* size in bytes */
+	Scsi_Device *device;
+	unsigned char ready;	/* flag ready for FLOPTICAL */
+	unsigned char write_prot;	/* flag write_protect for rmvable dev */
+	unsigned char sector_bit_size;	/* sector_size = 2 to the  bit size power */
+	unsigned char sector_bit_shift;		/* power of 2 sectors per FS block */
+	unsigned ten:1;		/* support ten byte read / write */
+	unsigned remap:1;	/* support remapping  */
+	unsigned has_part_table:1;	/* has partition table */
 } Scsi_Disk;
 
-extern Scsi_Disk * rscsi_disks;
+extern Scsi_Disk *rscsi_disks;
 
 extern int revalidate_scsidisk(kdev_t dev, int maxusage);
 
@@ -67,4 +67,3 @@ extern int revalidate_scsidisk(kdev_t dev, int maxusage);
  * tab-width: 8
  * End:
  */
-

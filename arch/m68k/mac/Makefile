@@ -7,11 +7,9 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-EXTRA_CFLAGS := -Wa,-m68020
-
 O_TARGET := mac.o
-O_OBJS	 := config.o bootparse.o macints.o via6522.o \
-		mackeyb.o adb-bus.o macboing.o debug.o
 OX_OBJS  := mac_ksyms.o
+O_OBJS	 := config.o bootparse.o macints.o iop.o via.o oss.o psc.o \
+		macboing.o debug.o misc.o
 
 include $(TOPDIR)/Rules.make

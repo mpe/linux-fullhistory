@@ -1239,9 +1239,6 @@ static int dn_listen(struct socket *sock, int backlog)
 	if ((sk->protinfo.dn.state != DN_O) || (sk->state == TCP_LISTEN))
 		goto out;
 
-	if (backlog > SOMAXCONN)
-		backlog = SOMAXCONN;
-
 	sk->max_ack_backlog = backlog;
 	sk->ack_backlog     = 0;
 	sk->state           = TCP_LISTEN;

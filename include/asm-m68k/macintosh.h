@@ -6,6 +6,7 @@
  */
  
 extern void mac_reset(void);
+extern void mac_poweroff(void);
 extern void mac_init_IRQ(void);
 extern int mac_request_irq (unsigned int, void (*)(int, void *, 
 				struct pt_regs *),
@@ -13,6 +14,7 @@ extern int mac_request_irq (unsigned int, void (*)(int, void *,
 extern void mac_free_irq(unsigned int, void *);
 extern void mac_enable_irq(unsigned int);
 extern void mac_disable_irq(unsigned int);
+extern int mac_irq_pending(unsigned int);
 extern int mac_get_irq_list(char *);
 #if 0
 extern void mac_default_handler(int irq);
@@ -21,7 +23,6 @@ extern void mac_identify(void);
 extern void mac_report_hardware(void);
 extern void mac_debugging_penguin(int);
 extern void mac_boom(int);
-extern void mac_video_setup(char *,int *);
 
 /*
  *	Floppy driver magic hook - probably shouldnt be here
@@ -58,6 +59,7 @@ struct mac_model
 #define MAC_ADB_CUDA		3
 #define MAC_ADB_PB1		4
 #define MAC_ADB_PB2		5
+#define MAC_ADB_IOP		6
 
 #define MAC_VIA_II		1
 #define MAC_VIA_IIci		2
@@ -131,6 +133,7 @@ struct mac_model
 #define MAC_MODEL_P550		80	/* aka: LC550, P560 */
 #define MAC_MODEL_CCLII		83	/* aka: P275 */
 #define MAC_MODEL_PB165		84
+#define MAC_MODEL_PB190		85	/* aka: PB190CS */
 #define MAC_MODEL_TV		88
 #define MAC_MODEL_P475		89	/* aka: LC475, P476 */
 #define MAC_MODEL_P475F		90	/* aka: P475 w/ FPU (no LC040) */
@@ -141,7 +144,6 @@ struct mac_model
 #define MAC_MODEL_PB280		102
 #define MAC_MODEL_PB280C	103
 #define MAC_MODEL_PB150		115
-#define MAC_MODEL_PB190		122	/* aka: PB190CS */
 
 extern struct mac_model *macintosh_config;
  

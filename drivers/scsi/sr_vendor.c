@@ -60,8 +60,7 @@
 
 #define VENDOR_ID (scsi_CDs[minor].vendor)
 
-void
-sr_vendor_init(int minor)
+void sr_vendor_init(int minor)
 {
 #ifndef CONFIG_BLK_DEV_SR_VENDOR
 	VENDOR_ID = VENDOR_SCSI3;
@@ -104,8 +103,7 @@ sr_vendor_init(int minor)
 /* small handy function for switching block length using MODE SELECT,
  * used by sr_read_sector() */
 
-int
-sr_set_blocklength(int minor, int blocklength)
+int sr_set_blocklength(int minor, int blocklength)
 {
 	unsigned char           *buffer;    /* the buffer for the ioctl */
 	unsigned char		cmd[12];    /* the scsi-command */

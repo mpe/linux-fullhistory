@@ -30,6 +30,8 @@ extern void (*mach_gettod)(int *year, int *mon, int *day, int *hour,
 extern int (*mach_hwclk)(int, struct hwclk_time*);
 extern int (*mach_set_clock_mmss)(unsigned long);
 extern void (*mach_reset)( void );
+extern void (*mach_halt)( void );
+extern void (*mach_power_off)( void );
 extern unsigned long (*mach_hd_init) (unsigned long, unsigned long);
 extern void (*mach_hd_setup)(char *, int *);
 extern long mach_max_dma_address;

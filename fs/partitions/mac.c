@@ -1,5 +1,5 @@
 /*
- *  fs/partitions/msdos.c
+ *  fs/partitions/mac.c
  *
  *  Code extracted from drivers/block/genhd.c
  *  Copyright (C) 1991-1998  Linus Torvalds

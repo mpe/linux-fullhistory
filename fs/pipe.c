@@ -213,7 +213,7 @@ pipe_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 			wake_up_interruptible(PIPE_WAIT(*inode));
 			pipe_wait(inode);
 			if (signal_pending(current))
-				goto out;
+				goto out_nolock;
 			if (down_interruptible(PIPE_SEM(*inode)))
 				goto out_nolock;
 			if (!PIPE_READERS(*inode))

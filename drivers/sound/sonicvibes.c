@@ -79,6 +79,8 @@
  *                     __initlocaldata to fix gcc 2.7.x problems
  *                     use new resource allocation to allocate DDMA IO space
  *                     replaced current->state = x with set_current_state(x)
+ *    03.09.99   0.21  change read semantics for MIDI to match
+ *                     OSS more closely; remove possible wakeup race
  *
  */
 
@@ -1885,6 +1887,7 @@ static /*const*/ struct file_operations sv_audio_fops = {
 static ssize_t sv_midi_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 {
 	struct sv_state *s = (struct sv_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned ptr;
@@ -1895,7 +1898,10 @@ static ssize_t sv_midi_read(struct file *file, char *buffer, size_t count, loff_
 		return -ESPIPE;
 	if (!access_ok(VERIFY_WRITE, buffer, count))
 		return -EFAULT;
+	if (count == 0)
+		return 0;
 	ret = 0;
+	add_wait_queue(&s->midi.iwait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.ird;
@@ -1906,15 +1912,25 @@ static ssize_t sv_midi_read(struct file *file, char *buffer, size_t count, loff_
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->midi.iwait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+                      if (file->f_flags & O_NONBLOCK) {
+                              if (!ret)
+                                      ret = -EAGAIN;
+                              break;
+                      }
+                      __set_current_state(TASK_INTERRUPTIBLE);
+                      schedule();
+                      if (signal_pending(current)) {
+                              if (!ret)
+                                      ret = -ERESTARTSYS;
+                              break;
+                      }
 			continue;
 		}
-		if (copy_to_user(buffer, s->midi.ibuf + ptr, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_to_user(buffer, s->midi.ibuf + ptr, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		ptr = (ptr + cnt) % MIDIINBUF;
 		spin_lock_irqsave(&s->lock, flags);
 		s->midi.ird = ptr;
@@ -1923,13 +1939,17 @@ static ssize_t sv_midi_read(struct file *file, char *buffer, size_t count, loff_
 		count -= cnt;
 		buffer += cnt;
 		ret += cnt;
+		break;
 	}
+	__set_current_state(TASK_RUNNING);
+	remove_wait_queue(&s->midi.iwait, &wait);
 	return ret;
 }
 
 static ssize_t sv_midi_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	struct sv_state *s = (struct sv_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned ptr;
@@ -1940,7 +1960,10 @@ static ssize_t sv_midi_write(struct file *file, const char *buffer, size_t count
 		return -ESPIPE;
 	if (!access_ok(VERIFY_READ, buffer, count))
 		return -EFAULT;
+	if (count == 0)
+		return 0;
 	ret = 0;
+        add_wait_queue(&s->midi.owait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.owr;
@@ -1953,15 +1976,25 @@ static ssize_t sv_midi_write(struct file *file, const char *buffer, size_t count
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->midi.owait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (file->f_flags & O_NONBLOCK) {
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			__set_current_state(TASK_INTERRUPTIBLE);
+			schedule();
+			if (signal_pending(current)) {
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_from_user(s->midi.obuf + ptr, buffer, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_from_user(s->midi.obuf + ptr, buffer, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		ptr = (ptr + cnt) % MIDIOUTBUF;
 		spin_lock_irqsave(&s->lock, flags);
 		s->midi.owr = ptr;
@@ -1974,6 +2007,8 @@ static ssize_t sv_midi_write(struct file *file, const char *buffer, size_t count
 		sv_handle_midi(s);
 		spin_unlock_irqrestore(&s->lock, flags);
 	}
+	__set_current_state(TASK_RUNNING);
+	remove_wait_queue(&s->midi.owait, &wait);
 	return ret;
 }
 
@@ -2338,13 +2373,15 @@ static struct initvol {
 				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
 #define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
 
-
 static int __init init_sonicvibes(void)
 {
-	struct sv_state *s;
+	static const char __initlocaldata sv_ddma_name[] = "S3 Inc. SonicVibes DDMA Controller";
+       	struct sv_state *s;
 	struct pci_dev *pcidev = NULL;
 	mm_segment_t fs;
 	int i, val, index = 0;
+	char *ddmaname;
+	unsigned ddmanamelen;
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
@@ -2366,8 +2403,15 @@ static int __init init_sonicvibes(void)
 		/* try to allocate a DDMA resource if not already available */
 		if (!RSRCISIOREGION(pcidev, RESOURCE_DDMA)) {
 			/* take care of ISA aliases */
+			ddmanamelen = strlen(sv_ddma_name)+1;
+			if (!(ddmaname = kmalloc(ddmanamelen, GFP_KERNEL)))
+				continue;
+			memcpy(ddmaname, sv_ddma_name, ddmanamelen);
+			pcidev->resource[RESOURCE_DDMA].name = ddmaname;
 			if (allocate_resource(&ioport_resource, pcidev->resource+RESOURCE_DDMA, 
 					      2*SV_EXTENT_DMA, 0x1000, 0x10000-2*SV_EXTENT_DMA, 1024)) {
+				pcidev->resource[RESOURCE_DDMA].name = NULL;
+				kfree(ddmaname);
 				printk(KERN_ERR "sv: cannot allocate DDMA controller io ports\n");
 				continue;
 			}

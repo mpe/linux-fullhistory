@@ -176,7 +176,7 @@ int __init i2o_pci_install(struct pci_dev *dev)
 			i2o_delete_controller(c);
 #endif /* MODULE */	
 			kfree(c);
-			iofree(mem);
+			iounmap(mem);
 			return -EBUSY;
 		}
 	}
@@ -257,6 +257,7 @@ static void i2o_pci_activate(void)
 
 		if(c==NULL)
 			continue;		
+			
 		if(c->type == I2O_TYPE_PCI)
 		{
 #ifdef MODULE
@@ -275,7 +276,6 @@ static void i2o_pci_activate(void)
 #endif
 				continue;
 			}
-		
 			I2O_IRQ_WRITE32(c,0);
 		}
 #ifdef MODULE

@@ -17,7 +17,7 @@
 
 /* We did not do anything.  
  * Wait some more for this command to complete, and if this does not work, 
- * try something more serious. */ 
+ * try something more serious. */
 #define SCSI_ABORT_SNOOZE 0
 
 /* This means that we were able to abort the command.  We have already
@@ -103,4 +103,4 @@
  */
 #define SCSI_RESET_ACTION   0xff
 
-#endif /* SCSI_OBSOLETE_H */
+#endif				/* SCSI_OBSOLETE_H */

@@ -4,14 +4,27 @@
 #include <linux/config.h>
 
 /* PAGE_SHIFT determines the page size */
-#define PAGE_SHIFT	12
-#define PAGE_SIZE	(1UL << PAGE_SHIFT)
+#ifndef CONFIG_SUN3
+#define PAGE_SHIFT	(12)
+#define PAGE_SIZE	(4096)
+#else
+#define PAGE_SHIFT	(13)
+#define PAGE_SIZE	(8192)
+#endif
 #define PAGE_MASK	(~(PAGE_SIZE-1))
 
 #ifdef __KERNEL__
 
 #include <asm/setup.h>
 
+#if PAGE_SHIFT < 13
+#define KTHREAD_SIZE (8192)
+#else
+#define KTHREAD_SIZE PAGE_SIZE
+#endif
+ 
+#ifndef __ASSEMBLY__
+ 
 #define STRICT_MM_TYPECHECKS
 
 #define get_user_page(vaddr)	__get_free_page(GFP_KERNEL)
@@ -110,7 +123,13 @@ typedef unsigned long pgprot_t;
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
 /* This handles the memory map.. */
+#ifndef CONFIG_SUN3
 #define PAGE_OFFSET		0
+#else
+#define PAGE_OFFSET		0x0E000000
+#endif
+
+#ifndef CONFIG_SUN3
 #define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
 /*
  * A hacky workaround for the problems with mmap() of frame buffer
@@ -128,12 +147,46 @@ extern inline void *__va(unsigned long physaddr)
 #endif
 		return (void *)(physaddr+PAGE_OFFSET);
 }
+#else	/* !CONFIG_SUN3 */
+/* This #define is a horrible hack to suppress lots of warnings. --m */
+#define __pa(x) ___pa((unsigned long)x)
+static inline unsigned long ___pa(unsigned long x)
+{
+     if(x == 0)
+	  return 0;
+     if(x > PAGE_OFFSET)
+        return (x-PAGE_OFFSET);
+     else
+        return (x+0x2000000);
+}
+
+static inline void *__va(unsigned long x)
+{
+     if(x == 0)
+	  return (void *)0;
+
+     if(x < 0x2000000)
+        return (void *)(x+PAGE_OFFSET);
+     else
+        return (void *)(x-0x2000000);
+}
+#endif	/* CONFIG_SUN3 */
+
 #define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
 
+#endif /* !__ASSEMBLY__ */
+
+#ifndef CONFIG_SUN3
 #define BUG() do { \
 	printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); \
 	asm volatile("illegal"); \
 } while (0)
+#else
+#define BUG() do { \
+	printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); \
+	panic("BUG!"); \
+} while (0)
+#endif
 
 #define PAGE_BUG(page) do { \
 	BUG(); \

@@ -287,6 +287,14 @@ static inline void isapnp_set_rdp(void)
 	udelay(100);
 }
 
+/*
+ *	This code is badly broken. We cannot simply pick ports as the 
+ *	ISAPnP specification implies. We should try 4 or 5 safe ports
+ *	then bale by default.
+ *
+ *	This code touches NE2K cards or other devices and your box is
+ *	history.
+ */
 
 static int __init isapnp_isolate_rdp_select(void)
 {
@@ -2102,6 +2110,13 @@ int __init isapnp_init(void)
 		printk("isapnp: Write Data Register 0x%x already used\n", _PNPWRP);
 		return -EBUSY;
 	}
+	
+	/*
+	 *	Print a message. The existing ISAPnP code is hanging machines
+	 *	so let the user know where.
+	 */
+	 
+	printk("isapnp: Scanning for Pnp cards...\n");
 	if (isapnp_rdp >= 0x203 && isapnp_rdp <= 0x3ff) {
 		isapnp_rdp |= 3;
 		isapnp_rdp_res=request_region(isapnp_rdp, 1, "isapnp read");

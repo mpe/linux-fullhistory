@@ -121,7 +121,7 @@ struct usb_proc_ctrltransfer {
         void *data;
 };
 
-#define USB_PROC_CONTROL        _IOWR('U', 0, struct usb_proc_ctrltransfer)
+#define USB_PROC_CONTROL           _IOWR('U', 0, struct usb_proc_ctrltransfer)
 
 struct usb_proc_bulktransfer {
         unsigned int ep;
@@ -129,16 +129,18 @@ struct usb_proc_bulktransfer {
         void *data;
 };
 
-#define USB_PROC_BULK           _IOWR('U', 2, struct usb_proc_bulktransfer)
+#define USB_PROC_BULK              _IOWR('U', 2, struct usb_proc_bulktransfer)
 
-#define USB_PROC_RESETEP        _IOR('U', 3, unsigned int)
+#define USB_PROC_RESETEP           _IOR('U', 3, unsigned int)
 
 struct usb_proc_setinterface {
         unsigned int interface;
         unsigned int altsetting;
 };
 
-#define USB_PROC_SETINTERFACE   _IOR('U', 4, struct usb_proc_setinterface)
+#define USB_PROC_SETINTERFACE      _IOR('U', 4, struct usb_proc_setinterface)
+
+#define USB_PROC_SETCONFIGURATION  _IOR('U', 5, unsigned int)
 
 
 

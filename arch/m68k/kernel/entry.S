@@ -72,6 +72,16 @@ ENTRY(reschedule)
 	pea	SYMBOL_NAME(ret_from_exception)
 	jmp	SYMBOL_NAME(schedule)
 
+	| After a fork we jump here directly from resume,
+	| so that %d1 contains the previous task
+	| Theoretically only needed on SMP, but let's watch
+	| what happens in schedule_tail() in future...
+ENTRY(ret_from_fork)
+	movel	%d1,%sp@-
+	jsr	SYMBOL_NAME(schedule_tail)
+	addql	#4,%sp
+	jra	SYMBOL_NAME(ret_from_exception)
+
 badsys:
 	movel	#-ENOSYS,PT_D0(%sp)
 	jra	SYMBOL_NAME(ret_from_exception)
@@ -88,16 +98,6 @@ do_trace:
 	subql	#4,%sp			| dummy return address
 	SAVE_SWITCH_STACK
 	jbsr	SYMBOL_NAME(syscall_trace)
-
-	| After a fork we jump here directly from resume,
-	| so that %d1 contains the previous task
-	| Theoretically only needed on SMP, but let's watch
-	| what happens in schedule_tail() in future...
-ENTRY(ret_from_fork)
-	movel	%d1,%sp@-
-	jsr	SYMBOL_NAME(schedule_tail)
-	addql	#4,%sp
-	jra	SYMBOL_NAME(ret_from_exception)
 
 SYMBOL_NAME_LABEL(ret_from_signal)
 	RESTORE_SWITCH_STACK

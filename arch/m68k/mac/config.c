@@ -37,7 +37,20 @@
 #include <asm/macints.h>
 #include <asm/machw.h>
 
-#include "via6522.h"
+#include <asm/mac_iop.h>
+#include <asm/mac_via.h>
+#include <asm/mac_oss.h>
+#include <asm/mac_psc.h>
+
+/* Offset between Unix time (1970-based) and Mac time (1904-based) */
+
+#define MAC_TIME_OFFSET 2082844800
+
+/*
+ * hardware reset vector
+ */
+
+static void (*rom_reset)(void);
 
 /* Mac bootinfo struct */
 
@@ -59,30 +72,21 @@ void *mac_env;		/* Loaded by the boot asm */
 unsigned long mac_orig_videoaddr;
 
 /* Mac specific keyboard functions */
-extern int mac_keyb_init(void);
-extern int mac_kbdrate(struct kbd_repeat *k);
-extern void mac_kbd_leds(unsigned int leds);
-
-/* Mac specific irq functions */
-extern void mac_init_IRQ (void);
-extern void (*mac_handlers[]) (int, void *, struct pt_regs *);
-extern int mac_request_irq (unsigned int irq,
-			    void (*handler)(int, void *, struct pt_regs *),
-                            unsigned long flags, const char *devname,
-			    void *dev_id);
-extern void mac_free_irq (unsigned int irq, void *dev_id);
-extern void mac_enable_irq (unsigned int);
-extern void mac_disable_irq (unsigned int);
-static void mac_get_model(char *model);
-/*static int mac_get_hardware_list(char *buffer);*/
-extern int mac_get_irq_list (char *);
+extern int mackbd_init_hw(void);
+extern void mackbd_leds(unsigned int leds);
 
 /* Mac specific timer functions */
 extern unsigned long mac_gettimeoffset (void);
 static void mac_gettod (int *, int *, int *, int *, int *, int *);
 static int mac_hwclk (int, struct hwclk_time *);
 static int mac_set_clock_mmss (unsigned long);
+extern void iop_preinit(void);
+extern void iop_init(void);
+extern void via_init(void);
 extern void via_init_clock(void (*func)(int, void *, struct pt_regs *));
+extern void via_flush_cache(void);
+extern void oss_init(void);
+extern void psc_init(void);
 
 extern void (*kd_mksound)(unsigned int, unsigned int);
 extern void mac_mksound(unsigned int, unsigned int);
@@ -94,6 +98,18 @@ extern void nubus_sweep_video(void);
 /* Mac specific debug functions (in debug.c) */
 extern void mac_debug_init(void);
 extern void mac_debugging_long(int, long);
+
+/* poweroff functions */
+extern void via_poweroff(void);
+extern void oss_poweroff(void);
+extern void adb_poweroff(void);
+extern void adb_hwreset(void);
+
+/* pram functions */
+extern __u32 via_read_time(void);
+extern void via_write_time(__u32);
+extern __u32 adb_read_time(void);
+extern void adb_write_time(__u32);
 
 #ifdef CONFIG_MAGIC_SYSRQ
 static char mac_sysrq_xlate[128] =
@@ -124,104 +140,195 @@ static void mac_sched_init(void (*vector)(int, void *, struct pt_regs *))
 
 extern int console_loglevel;
 
-/*
- * This function translates the boot timeval into a proper date, to initialize
- * the system time.
+/* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
+ * Assumes input in normal date format, i.e. 1980-12-31 23:59:59
+ * => year=1980, mon=12, day=31, hour=23, min=59, sec=59.
+ *
+ * [For the Julian calendar (which was used in Russia before 1917,
+ * Britain & colonies before 1752, anywhere else before 1582,
+ * and is still in use by some communities) leave out the
+ * -year/100+year/400 terms, and add 10.]
+ *
+ * This algorithm was first published by Gauss (I think).
+ *
+ * WARNING: this function will overflow on 2106-02-07 06:28:16 on
+ * machines were long is 32-bit! (However, as time_t is signed, we
+ * will already get problems at other places on 2038-01-19 03:14:08)
  */
-
-static void mac_gettod (int *yearp, int *monp, int *dayp,
-		 int *hourp, int *minp, int *secp)
+static unsigned long mktime(unsigned int year, unsigned int mon,
+	unsigned int day, unsigned int hour,
+	unsigned int min, unsigned int sec)
 {
-	unsigned long time;
-	int leap, oldleap, isleap;
-	int mon_days[14] = { -1, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, -1 };
+	if (0 >= (int) (mon -= 2)) {	/* 1..12 -> 11,12,1..10 */
+		mon += 12;	/* Puts Feb last since it has leap day */
+		year -= 1;
+	}
+	return (((
+	    (unsigned long)(year/4 - year/100 + year/400 + 367*mon/12 + day) +
+	      year*365 - 719499
+	    )*24 + hour /* now have hours */
+	   )*60 + min /* now have minutes */
+	  )*60 + sec; /* finally seconds */
+}
 
-	time = mac_bi_data.boottime - 60*mac_bi_data.gmtbias; /* seconds */
+/*
+ * This function translates seconds since 1970 into a proper date.
+ *
+ * Algorithm cribbed from glibc2.1, __offtime().
+ */
+#define SECS_PER_MINUTE (60)
+#define SECS_PER_HOUR  (SECS_PER_MINUTE * 60)
+#define SECS_PER_DAY   (SECS_PER_HOUR * 24)
 
-	*minp = time / 60;
-	*secp = time - (*minp * 60);
-	time  = *minp;				/* minutes now */
+static void unmktime(unsigned long time, long offset,
+		     int *yearp, int *monp, int *dayp,
+		     int *hourp, int *minp, int *secp)
+{
+        /* How many days come before each month (0-12).  */
+	static const unsigned short int __mon_yday[2][13] =
+	{
+		/* Normal years.  */
+		{ 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365 },
+		/* Leap years.  */
+		{ 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366 }
+	};
+	long int days, rem, y, wday, yday;
+	const unsigned short int *ip;
 
-	*hourp = time / 60;
-	*minp  = time - (*hourp * 60);
-	time   = *hourp;			/* hours now */
+	days = time / SECS_PER_DAY;
+	rem = time % SECS_PER_DAY;
+	rem += offset;
+	while (rem < 0) {
+		rem += SECS_PER_DAY;
+		--days;
+	}
+	while (rem >= SECS_PER_DAY) {
+		rem -= SECS_PER_DAY;
+		++days;
+	}
+	*hourp = rem / SECS_PER_HOUR;
+	rem %= SECS_PER_HOUR;
+	*minp = rem / SECS_PER_MINUTE;
+	*secp = rem % SECS_PER_MINUTE;
+	/* January 1, 1970 was a Thursday. */
+	wday = (4 + days) % 7; /* Day in the week. Not currently used */
+	if (wday < 0) wday += 7;
+	y = 1970;
 
-	*dayp  = time / 24;
-	*hourp = time - (*dayp * 24);
-	time   = *dayp;				/* days now ... */
+#define DIV(a, b) ((a) / (b) - ((a) % (b) < 0))
+#define LEAPS_THRU_END_OF(y) (DIV (y, 4) - DIV (y, 100) + DIV (y, 400))
+#define __isleap(year)	\
+  ((year) % 4 == 0 && ((year) % 100 != 0 || (year) % 400 == 0))
 
-	/* for leap day calculation */
-	*yearp = (time / 365) + 1970;		/* approx. year */
+	while (days < 0 || days >= (__isleap (y) ? 366 : 365))
+	{
+		/* Guess a corrected year, assuming 365 days per year.  */
+		long int yg = y + days / 365 - (days % 365 < 0);
 
-	/* leap year calculation - there's an easier way, I bet. And it's broken :-( */
-	/* calculate leap days up to previous year */
-	oldleap =  (*yearp-1)/4 - (*yearp-1)/100 + (*yearp-1)/400;
-	/* calculate leap days incl. this year */
-	leap    =  *yearp/4 - *yearp/100 + *yearp/400;
-	/* this year a leap year ?? */
-	isleap  = (leap != oldleap);
-
-	/* adjust days: days, excluding past leap days since epoch */
-	time  -= oldleap - (1970/4 - 1970/100 + 1970/400);
-
-	/* precise year, and day in year */
-	*yearp = (time / 365);			/* #years since epoch */
-	*dayp  = time - (*yearp * 365) + 1;	/* #days this year (0: Jan 1) */
-	*yearp += 70;				/* add epoch :-) */
-	time = *dayp;
-	
-	if (isleap)				/* add leap day ?? */
-		mon_days[2] += 1;
-
-	/* count the months */
-	for (*monp = 1; time > mon_days[*monp]; (*monp)++) 
-		time -= mon_days[*monp];
-
-	*dayp = time;
-
+		/* Adjust DAYS and Y to match the guessed year.  */
+		days -= ((yg - y) * 365
+			 + LEAPS_THRU_END_OF (yg - 1)
+			 - LEAPS_THRU_END_OF (y - 1));
+		y = yg;
+	}
+	*yearp = y - 1900;
+	yday = days; /* day in the year.  Not currently used. */
+	ip = __mon_yday[__isleap(y)];
+	for (y = 11; days < (long int) ip[y]; --y)
+		continue;
+	days -= ip[y];
+	*monp = y;
+	*dayp = days + 1; /* day in the month */
 	return;
 }
 
-/* 
- * TBI: read and write hwclock
+/*
+ * Return the boot time for use in initializing the kernel clock.
+ *
+ * I'd like to read the hardware clock here but many machines read
+ * the PRAM through ADB, and interrupts aren't initialized when this
+ * is called so ADB obviously won't work.
  */
 
-static int mac_hwclk( int op, struct hwclk_time *t )
+static void mac_gettod(int *yearp, int *monp, int *dayp,
+		       int *hourp, int *minp, int *secp)
 {
-    return 0;
+	/* Yes the GMT bias is backwards.  It looks like Penguin is
+           screwing up the boottime it gives us... This works for me
+           in Canada/Eastern but it might be wrong everywhere else. */
+	unmktime(mac_bi_data.boottime, -mac_bi_data.gmtbias * 60,
+		yearp, monp, dayp, hourp, minp, secp);
+	/* For some reason this is off by one */
+	*monp = *monp + 1;
+}
+
+/* 
+ * Read/write the hardware clock.
+ */
+
+static int mac_hwclk(int op, struct hwclk_time *t)
+{
+	unsigned long now;
+
+	if (!op) { /* read */
+		if (macintosh_config->adb_type == MAC_ADB_II) {
+			now = via_read_time();
+		} else if ((macintosh_config->adb_type == MAC_ADB_IISI) ||
+			   (macintosh_config->adb_type == MAC_ADB_CUDA)) {
+			now = adb_read_time();
+		} else if (macintosh_config->adb_type == MAC_ADB_IOP) {
+			now = via_read_time();
+		} else {
+			now = MAC_TIME_OFFSET;
+		}
+
+		now -= MAC_TIME_OFFSET;
+
+		t->wday = 0;
+		unmktime(now, 0,
+			 &t->year, &t->mon, &t->day,
+			 &t->hour, &t->min, &t->sec);
+	} else { /* write */
+		now = mktime(t->year + 1900, t->mon + 1, t->day,
+			     t->hour, t->min, t->sec) + MAC_TIME_OFFSET;
+
+		if (macintosh_config->adb_type == MAC_ADB_II) {
+			via_write_time(now);
+		} else if ((macintosh_config->adb_type == MAC_ADB_IISI) ||
+			   (macintosh_config->adb_type == MAC_ADB_CUDA)) {
+			adb_write_time(now);
+		} else if (macintosh_config->adb_type == MAC_ADB_IOP) {
+			via_write_time(now);
+		}
+	}
+	return 0;
 }
 
 /*
- * TBI: set minutes/seconds in hwclock
+ * Set minutes/seconds in the hardware clock
  */
 
 static int mac_set_clock_mmss (unsigned long nowtime)
 {
-    short real_seconds = nowtime % 60, real_minutes = (nowtime / 60) % 60;
+	struct hwclk_time now;
 
-    return 0;
+	mac_hwclk(0, &now);
+	now.sec = nowtime % 60;
+	now.min = (nowtime / 60) % 60;
+	mac_hwclk(1, &now);
+
+	return 0;
 }
 
+#if 0
 void mac_waitbut (void)
 {
 	;
 }
+#endif
 
 extern struct consw fb_con;
 extern struct fb_info *mac_fb_init(long *);
-extern void mac_video_setup(char *, int *);
-
-void (*mac_handlers[8])(int, void *, struct pt_regs *)=
-{
-	mac_default_handler,
-	mac_default_handler,
-	mac_default_handler,
-	mac_default_handler,
-	mac_default_handler,
-	mac_default_handler,
-	mac_default_handler,
-	mac_default_handler
-};
 
     /*
      *  Parse a Macintosh-specific record in the bootinfo
@@ -237,7 +344,7 @@ int __init mac_parse_bootinfo(const struct bi_record *record)
 	    mac_bi_data.id = *data;
 	    break;
 	case BI_MAC_VADDR:
-	    mac_bi_data.videoaddr = VIDEOMEMBASE + (*data & ~VIDEOMEMMASK);
+	    mac_bi_data.videoaddr = *data;
 	    break;
 	case BI_MAC_VDEPTH:
 	    mac_bi_data.videodepth = *data;
@@ -249,7 +356,8 @@ int __init mac_parse_bootinfo(const struct bi_record *record)
 	    mac_bi_data.dimensions = *data;
 	    break;
 	case BI_MAC_VLOGICAL:
-	    mac_bi_data.videological = *data;
+	    mac_bi_data.videological = VIDEOMEMBASE + (*data & ~VIDEOMEMMASK);
+	    mac_orig_videoaddr = *data;
 	    break;
 	case BI_MAC_SCCBASE:
 	    mac_bi_data.sccbase = *data;
@@ -266,6 +374,9 @@ int __init mac_parse_bootinfo(const struct bi_record *record)
 	case BI_MAC_CPUID:
 	    mac_bi_data.cpuid = *data;
 	    break;
+        case BI_MAC_ROMBASE:
+	    mac_bi_data.rombase = *data;
+	    break;
 	default:
 	    unknown = 1;
     }
@@ -280,12 +391,11 @@ int __init mac_parse_bootinfo(const struct bi_record *record)
 
 static void mac_cache_card_flush(int writeback)
 {
-	unsigned long flags;
-	save_flags(flags);
+	unsigned long cpu_flags;
+	save_flags(cpu_flags);
 	cli();
-	via_write(via2, vBufB, via_read(via2,vBufB)&~VIA2B_vMode32);
-	via_write(via2, vBufB, via_read(via2,vBufB)|VIA2B_vMode32);
-	restore_flags(flags);
+	via_flush_cache();
+	restore_flags(cpu_flags);
 }
 
 void __init config_mac(void)
@@ -295,22 +405,15 @@ void __init config_mac(void)
       printk("ERROR: no Mac, but config_mac() called!! \n");
     }
     
-    mac_debug_init();
-        
     mach_sched_init      = mac_sched_init;
-    mach_keyb_init       = mac_keyb_init;
-    mach_kbdrate         = mac_kbdrate;
-    mach_kbd_leds        = mac_kbd_leds;
+    mach_keyb_init       = mackbd_init_hw;
+    mach_kbd_leds        = mackbd_leds;
     mach_init_IRQ        = mac_init_IRQ;
     mach_request_irq     = mac_request_irq;
     mach_free_irq        = mac_free_irq;
     enable_irq           = mac_enable_irq;
     disable_irq          = mac_disable_irq;
-#if 1
-    mach_default_handler = &mac_handlers;
-#endif
     mach_get_model	 = mac_get_model;
-    mach_get_irq_list	 = mac_get_irq_list;
     mach_gettimeoffset   = mac_gettimeoffset;
     mach_gettod          = mac_gettod;
     mach_hwclk           = mac_hwclk;
@@ -319,11 +422,12 @@ void __init config_mac(void)
     mach_mksound         = mac_mksound;
 #endif
     mach_reset           = mac_reset;
+    mach_halt            = mac_poweroff;
+    mach_power_off       = mac_poweroff;
     conswitchp	         = &dummy_con;
     mach_max_dma_address = 0xffffffff;
 #if 0
     mach_debug_init	 = mac_debug_init;
-    mach_video_setup	 = mac_video_setup;
 #endif
     kd_mksound		 = mac_mksound;
 #ifdef CONFIG_MAGIC_SYSRQ
@@ -346,18 +450,15 @@ void __init config_mac(void)
     mac_identify();
     mac_report_hardware();
     
-    if(
-    	/* Cache cards */
-        macintosh_config->ident == MAC_MODEL_IICI||
-    	macintosh_config->ident == MAC_MODEL_IISI||
-    	macintosh_config->ident == MAC_MODEL_IICX||
-    	/* On board L2 cache */
-    	macintosh_config->ident == MAC_MODEL_IIFX)
-    {
+    /* AFAIK only the IIci takes a cache card.  The IIfx has onboard
+       cache ... someone needs to figure out how to tell if it's on or
+       not. */
+    if (macintosh_config->ident == MAC_MODEL_IICI
+	|| macintosh_config->ident == MAC_MODEL_IIFX) {
     	mach_l2_flush = mac_cache_card_flush;
     }
-    /* goes on forever if timers broken */
 #ifdef MAC_DEBUG_SOUND
+    /* goes on forever if timers broken */
     mac_mksound(1000,10);
 #endif
 
@@ -365,7 +466,9 @@ void __init config_mac(void)
      * Check for machine specific fixups.
      */
 
+#ifdef OLD_NUBUS_CODE
     nubus_sweep_video();
+#endif
 }	
 
 
@@ -386,6 +489,13 @@ struct mac_model *macintosh_config;
 static struct mac_model mac_data_table[]=
 {
 	/*
+	 *	The default machine, in case we get an unsupported one
+	 *	We'll pretend to be a Macintosh II, that's pretty safe.
+	 */
+
+	{	MAC_MODEL_II,	"Unknown",	MAC_ADB_II,	MAC_VIA_II,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+
+	/*
 	 *	Original MacII hardware
 	 *	
 	 */
@@ -403,10 +513,11 @@ static struct mac_model mac_data_table[]=
 	 *	The IIfx apparently has different ADB hardware, and stuff
 	 *	so zany nobody knows how to drive it.
 	 *	Even so, with Marten's help we'll try to deal with it :-)
+	 * CSA: see http://developer.apple.com/technotes/hw/hw_09.html
 	 */
 
 	{	MAC_MODEL_IICI,	"IIci",	MAC_ADB_II,	MAC_VIA_IIci,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_IIFX,	"IIfx",	MAC_ADB_II,	MAC_VIA_IIci,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_IIFX,	"IIfx",	MAC_ADB_IOP,	MAC_VIA_IIci,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_IOP,	MAC_ETHER_NONE,	MAC_NUBUS},
 	{	MAC_MODEL_IISI, "IIsi",	MAC_ADB_IISI,	MAC_VIA_IIci,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
 	{	MAC_MODEL_IIVI,	"IIvi",	MAC_ADB_IISI,	MAC_VIA_IIci,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
 	{	MAC_MODEL_IIVX,	"IIvx",	MAC_ADB_IISI,	MAC_VIA_IIci,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
@@ -435,70 +546,72 @@ static struct mac_model mac_data_table[]=
 	 *	confuse us. The 840AV has a SCSI location of its own (same as
 	 *	the 660AV).
 	 */	 
-
+	 
 	{	MAC_MODEL_Q605, "Quadra 605", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE,   MAC_SCC_QUADRA,	MAC_ETHER_NONE,		MAC_NUBUS},
 	{	MAC_MODEL_Q610, "Quadra 610", MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE,   MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
 	{	MAC_MODEL_Q630, "Quadra 630", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_QUADRA, MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
  	{	MAC_MODEL_Q650, "Quadra 650", MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE,   MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
 	/*	The Q700 does have a NS Sonic */
-	{	MAC_MODEL_Q700, "Quadra 700",   MAC_ADB_II,  MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE,   MAC_SCC_QUADRA2,	MAC_ETHER_SONIC,	MAC_NUBUS},
+	{	MAC_MODEL_Q700, "Quadra 700", MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE,   MAC_SCC_QUADRA2,	MAC_ETHER_SONIC,	MAC_NUBUS},
 	{	MAC_MODEL_Q800, "Quadra 800", MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE,   MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
 	{	MAC_MODEL_Q840, "Quadra 840AV", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA3, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_MACE,		MAC_NUBUS},
-	/* These might have IOP problems */
-	{	MAC_MODEL_Q900, "Quadra 900", MAC_ADB_IISI, MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE,   MAC_SCC_IOP,	MAC_ETHER_SONIC,	MAC_NUBUS},
-	{	MAC_MODEL_Q950, "Quadra 950", MAC_ADB_IISI, MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE,   MAC_SCC_IOP,	MAC_ETHER_SONIC,	MAC_NUBUS},
+	{	MAC_MODEL_Q900, "Quadra 900", MAC_ADB_IOP, MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE,   MAC_SCC_IOP,	MAC_ETHER_SONIC,	MAC_NUBUS},
+	{	MAC_MODEL_Q950, "Quadra 950", MAC_ADB_IOP, MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE,   MAC_SCC_IOP,	MAC_ETHER_SONIC,	MAC_NUBUS},
 
 	/* 
 	 *	Performa - more LC type machines
 	 */
 
-	{	MAC_MODEL_P460,  "Performa 460", MAC_ADB_IISI, MAC_VIA_IIci,   MAC_SCSI_OLD,    MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_P475,  "Performa 475", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE, MAC_NUBUS},
-	{	MAC_MODEL_P475F, "Performa 475", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE, MAC_NUBUS},
-	{	MAC_MODEL_P520,  "Performa 520", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_P550,  "Performa 550", MAC_ADB_CUDA, MAC_VIA_IIci,   MAC_SCSI_OLD,    MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_P575,  "Performa 575", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_P588,  "Performa 588", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_TV,    "TV",           MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_OLD,	MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_P600,  "Performa 600", MAC_ADB_IISI, MAC_VIA_IIci,   MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
-#if 0	/* other sources seem to suggest the P630/Q630/LC630 is more like LCIII */
-	{	MAC_MODEL_P630,  "Performa 630", MAC_ADB_IISI, MAC_VIA_IIci,   MAC_SCSI_OLD, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
-#endif
+	{	MAC_MODEL_P460,  "Performa 460", MAC_ADB_IISI, MAC_VIA_IIci,   MAC_SCSI_OLD, 	MAC_IDE_NONE,   MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_P475,  "Performa 475", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE,   MAC_SCC_II,	MAC_ETHER_NONE, MAC_NUBUS},
+	{	MAC_MODEL_P475F, "Performa 475", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE,   MAC_SCC_II,	MAC_ETHER_NONE, MAC_NUBUS},
+	{	MAC_MODEL_P520,  "Performa 520", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE,   MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+
+	{	MAC_MODEL_P550,  "Performa 550", MAC_ADB_CUDA, MAC_VIA_IIci,   MAC_SCSI_OLD,    MAC_IDE_NONE,   MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_P575,  "Performa 575", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE,   MAC_SCC_II,	MAC_ETHER_NONE, MAC_NUBUS},
+	/* These have the comm slot, and therefore the possibility of SONIC ethernet */
+	{	MAC_MODEL_P588,  "Performa 588", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_QUADRA, MAC_SCC_II,	MAC_ETHER_SONIC, MAC_NUBUS},
+	{	MAC_MODEL_TV,    "TV",           MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_OLD,	MAC_IDE_NONE,   MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_P600,  "Performa 600", MAC_ADB_IISI, MAC_VIA_IIci,   MAC_SCSI_OLD,	MAC_IDE_NONE,   MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+
 	/*
 	 *	Centris - just guessing again; maybe like Quadra
 	 */
 
-	{	MAC_MODEL_C610, "Centris 610",   MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC, MAC_NUBUS},
-	{	MAC_MODEL_C650, "Centris 650",   MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC, MAC_NUBUS},
-	{	MAC_MODEL_C660, "Centris 660AV", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA3, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	/* The C610 may or may not have SONIC.  We probe to make sure */
+	{	MAC_MODEL_C610, "Centris 610",   MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
+	{	MAC_MODEL_C650, "Centris 650",   MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
+	{	MAC_MODEL_C660, "Centris 660AV", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA3, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_MACE,		MAC_NUBUS},
 
 	/*
 	 *      Power books - seem similar to early Quadras ? (most have 030 though)
 	 */
 
-	{	MAC_MODEL_PB140,  "PowerBook 140",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB145,  "PowerBook 145",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB140,  "PowerBook 140",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_OLD,  MAC_IDE_NONE,	MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB145,  "PowerBook 145",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_NONE, MAC_IDE_NONE,	MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
 	/*	The PB150 has IDE, and IIci style VIA */
-	{	MAC_MODEL_PB150,  "PowerBook 150",   MAC_ADB_PB1, MAC_VIA_IIci,   MAC_SCSI_QUADRA, MAC_IDE_PB,	 MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB160,  "PowerBook 160",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB165,  "PowerBook 165",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB165C, "PowerBook 165c",  MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB170,  "PowerBook 170",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_OLD,    MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB180,  "PowerBook 180",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB180C, "PowerBook 180c",  MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB190,  "PowerBook 190",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_PB,   MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB520,  "PowerBook 520",   MAC_ADB_PB2, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB150,  "PowerBook 150",   MAC_ADB_PB1, MAC_VIA_IIci,   MAC_SCSI_NONE, MAC_IDE_PB,	MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB160,  "PowerBook 160",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_NONE, MAC_IDE_NONE,	MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB165,  "PowerBook 165",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_NONE, MAC_IDE_NONE,	MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB165C, "PowerBook 165c",  MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_NONE, MAC_IDE_NONE,	MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB170,  "PowerBook 170",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_OLD,  MAC_IDE_NONE,	MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB180,  "PowerBook 180",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_NONE, MAC_IDE_NONE,	MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB180C, "PowerBook 180c",  MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_NONE, MAC_IDE_NONE,	MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB190,  "PowerBook 190cs", MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_NONE, MAC_IDE_PB,	MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	/* These have onboard SONIC */
+	{	MAC_MODEL_PB520,  "PowerBook 520",   MAC_ADB_PB2, MAC_VIA_QUADRA, MAC_SCSI_NONE, MAC_IDE_NONE,	MAC_SCC_QUADRA,	MAC_ETHER_SONIC, MAC_NUBUS},
 
 	/*
 	 *      Power book Duos - similar to Power books, I hope
 	 */
 
-	{	MAC_MODEL_PB210,  "PowerBook Duo 210",  MAC_ADB_PB2,  MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB230,  "PowerBook Duo 230",  MAC_ADB_PB2,  MAC_VIA_IIci, MAC_SCSI_OLD,    MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB250,  "PowerBook Duo 250",  MAC_ADB_PB2,  MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB270C, "PowerBook Duo 270c", MAC_ADB_PB2,  MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB280,  "PowerBook Duo 280",  MAC_ADB_PB2,  MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB280C, "PowerBook Duo 280c", MAC_ADB_PB2,  MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	/* All of these might have onboard SONIC in the Dock but I'm not quite sure */
+	{	MAC_MODEL_PB210,  "PowerBook Duo 210",  MAC_ADB_PB2,  MAC_VIA_IIci, MAC_SCSI_OLD, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB230,  "PowerBook Duo 230",  MAC_ADB_PB2,  MAC_VIA_IIci, MAC_SCSI_OLD, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB250,  "PowerBook Duo 250",  MAC_ADB_PB2,  MAC_VIA_IIci, MAC_SCSI_OLD, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB270C, "PowerBook Duo 270c", MAC_ADB_PB2,  MAC_VIA_IIci, MAC_SCSI_OLD, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB280,  "PowerBook Duo 280",  MAC_ADB_PB2,  MAC_VIA_IIci, MAC_SCSI_OLD, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB280C, "PowerBook Duo 280c", MAC_ADB_PB2,  MAC_VIA_IIci, MAC_SCSI_OLD, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
 
 	/*
 	 *	Other stuff ??
@@ -508,7 +621,7 @@ static struct mac_model mac_data_table[]=
 
 void mac_identify(void)
 {
-	struct mac_model *m=&mac_data_table[0];
+	struct mac_model *m;
 
 	/* Penguin data useful? */	
 	int model = mac_bi_data.id;
@@ -519,31 +632,22 @@ void mac_identify(void)
 		printk ("No bootinfo model ID, using cpuid instead (hey, use Penguin!)\n");
 	}
 
-	printk ("Detected Macintosh model: %d \n", model);
-	
-	while(m->ident != -1)
-	{
-		if(m->ident == model)
+	macintosh_config = mac_data_table; 
+	for (m = macintosh_config ; m->ident != -1 ; m++) {
+		if (m->ident == model) {
+			macintosh_config = m;
 			break;
-		m++;
-	}
-	if(m->ident==-1)
-	{
-		printk("\nUnknown macintosh model %d, probably unsupported.\n", 
-			model);
-		model = MAC_MODEL_Q800;
-		printk("Defaulting to: Quadra800, model id %d\n", model);
-		printk("Please report this case to linux-mac68k@wave.lm.com\n");
-		m=&mac_data_table[0];
-		while(m->ident != -1)
-		{
-			if(m->ident == model)
-				break;
-			m++;
 		}
-		if(m->ident==-1)
-			panic("mac model config data corrupt!\n");
 	}
+
+	/* We need to pre-init the IOPs, if any. Otherwise */
+	/* the serial console won't work if the user had   */
+	/* the serial ports set to "Faster" mode in MacOS. */
+
+	iop_preinit();
+	mac_debug_init();
+
+	printk ("Detected Macintosh model: %d \n", model);
 
 	/*
 	 * Report booter data:
@@ -566,12 +670,6 @@ void mac_identify(void)
 #endif
 
 	/*
-	 *	Save the pointer
-	 */
-
-	macintosh_config=m;
-
-	/*
 	 * TODO: set the various fields in macintosh_config->hw_present here!
 	 */
 	switch (macintosh_config->scsi_type) {
@@ -592,7 +690,10 @@ void mac_identify(void)
 	  break;
 
 	}
-	via_configure_base();
+	iop_init();
+	via_init();
+	oss_init();
+	psc_init();
 }
 
 void mac_report_hardware(void)
@@ -604,8 +705,133 @@ static void mac_get_model(char *str)
 {
 	strcpy(str,"Macintosh ");
 	strcat(str, macintosh_config->name);
-	if(mach_l2_flush && !(via_read(via2, vBufB)&VIA2B_vCDis))
-		strcat(str, "(+L2 cache)");
+}
+
+/*
+ *	The power switch - yes it's software!
+ */
+
+void mac_poweroff(void)
+{
+	/*
+	 * MAC_ADB_IISI may need to be moved up here if it doesn't actually
+	 * work using the ADB packet method.  --David Kilzer
+	 */
+
+	if (oss_present) {
+		oss_poweroff();
+	} else if (macintosh_config->adb_type == MAC_ADB_II) {
+		via_poweroff();
+	} else {
+		adb_poweroff();
+	}
+}
+
+/* 
+ * Not all Macs support software power down; for the rest, just 
+ * try the ROM reset vector ...
+ */
+void mac_reset(void)
+{
+	/*
+	 * MAC_ADB_IISI may need to be moved up here if it doesn't actually
+	 * work using the ADB packet method.  --David Kilzer
+	 */
+
+	if (macintosh_config->adb_type == MAC_ADB_II) {
+		unsigned long cpu_flags;
+
+		/* need ROMBASE in booter */
+		/* indeed, plus need to MAP THE ROM !! */
+
+		if (mac_bi_data.rombase == 0)
+			mac_bi_data.rombase = 0x40800000;
+
+		/* works on some */
+		rom_reset = (void *) (mac_bi_data.rombase + 0xa);
+
+		if (macintosh_config->ident == MAC_MODEL_SE30) {
+			/*
+			 * MSch: Machines known to crash on ROM reset ...
+			 */
+			printk("System halted.\n");
+			while(1);
+		} else {
+			save_flags(cpu_flags);
+			cli();
+
+			rom_reset();
+
+			restore_flags(cpu_flags);
+		}
+
+		/* We never make it this far... it usually panics above. */
+		printk ("Restart failed.  Please restart manually.\n");
+
+		/* XXX - delay do we need to spin here ? */
+		while(1);       /* Just in case .. */
+	} else if (macintosh_config->adb_type == MAC_ADB_IISI
+		|| macintosh_config->adb_type == MAC_ADB_CUDA) {
+		adb_hwreset();
+	} else if (CPU_IS_030) {
+
+		/* 030-specific reset routine.  The idea is general, but the
+		 * specific registers to reset are '030-specific.  Until I
+		 * have a non-030 machine, I can't test anything else.
+		 *  -- C. Scott Ananian <cananian@alumni.princeton.edu>
+		 */
+
+		unsigned long rombase = 0x40000000;
+
+		/* make a 1-to-1 mapping, using the transparent tran. reg. */
+		unsigned long virt = (unsigned long) mac_reset;
+		unsigned long phys = virt_to_phys(mac_reset);
+		unsigned long offset = phys-virt;
+		cli(); /* lets not screw this up, ok? */
+		__asm__ __volatile__(".chip 68030\n\t"
+				     "pmove %0,%/tt0\n\t"
+				     ".chip 68k"
+				     : : "m" ((phys&0xFF000000)|0x8777));
+		/* Now jump to physical address so we can disable MMU */
+		__asm__ __volatile__(
+                    ".chip 68030\n\t"
+		    "lea %/pc@(1f),%/a0\n\t"
+		    "addl %0,%/a0\n\t"/* fixup target address and stack ptr */
+		    "addl %0,%/sp\n\t" 
+		    "pflusha\n\t"
+		    "jmp %/a0@\n\t" /* jump into physical memory */
+		    "0:.long 0\n\t" /* a constant zero. */
+		    /* OK.  Now reset everything and jump to reset vector. */
+		    "1:\n\t"
+		    "lea %/pc@(0b),%/a0\n\t"
+		    "pmove %/a0@, %/tc\n\t" /* disable mmu */
+		    "pmove %/a0@, %/tt0\n\t" /* disable tt0 */
+		    "pmove %/a0@, %/tt1\n\t" /* disable tt1 */
+		    "movel #0, %/a0\n\t"
+		    "movec %/a0, %/vbr\n\t" /* clear vector base register */
+		    "movec %/a0, %/cacr\n\t" /* disable caches */
+		    "movel #0x0808,%/a0\n\t"
+		    "movec %/a0, %/cacr\n\t" /* flush i&d caches */
+		    "movew #0x2700,%/sr\n\t" /* set up status register */
+		    "movel %1@(0x0),%/a0\n\t"/* load interrupt stack pointer */
+		    "movec %/a0, %/isp\n\t" 
+		    "movel %1@(0x4),%/a0\n\t" /* load reset vector */
+		    "reset\n\t" /* reset external devices */
+		    "jmp %/a0@\n\t" /* jump to the reset vector */
+		    ".chip 68k"
+		    : : "r" (offset), "a" (rombase) : "a0");
+
+		/* should never get here */
+		sti(); /* sure, why not */
+		printk ("030 Restart failed.  Please restart manually.\n");
+		while(1);
+	} else {
+		/* We never make it here... The above shoule handle all cases. */
+		printk ("Restart failed.  Please restart manually.\n");
+
+		/* XXX - delay do we need to spin here ? */
+		while(1);       /* Just in case .. */
+	}
 }
 
 /*

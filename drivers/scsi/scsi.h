@@ -15,7 +15,7 @@
 #ifndef _SCSI_H
 #define _SCSI_H
 
-#include <linux/config.h> /* for CONFIG_SCSI_LOGGING */
+#include <linux/config.h>	/* for CONFIG_SCSI_LOGGING */
 
 /*
  * Some of the public constants are being moved to this file.
@@ -33,19 +33,19 @@
  * Some defs, in case these are not defined elsewhere.
  */
 #ifndef TRUE
-# define TRUE 1
+#define TRUE 1
 #endif
 #ifndef FALSE
-# define FALSE 0
+#define FALSE 0
 #endif
 
 #define MAX_SCSI_DEVICE_CODE 14
 extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 
 #ifdef DEBUG
-    #define SCSI_TIMEOUT (5*HZ)
+#define SCSI_TIMEOUT (5*HZ)
 #else
-    #define SCSI_TIMEOUT (2*HZ)
+#define SCSI_TIMEOUT (2*HZ)
 #endif
 
 /*
@@ -104,9 +104,9 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 #define IDENTIFY_BASE       0x80
 #define IDENTIFY(can_disconnect, lun)   (IDENTIFY_BASE |\
 		     ((can_disconnect) ?  0x40 : 0) |\
-		     ((lun) & 0x07)) 
+		     ((lun) & 0x07))
 
-		 
+
 /*
  * This defines the scsi logging feature.  It is a means by which the
  * user can select how much information they get about various goings on,
@@ -205,7 +205,7 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
         SCSI_CHECK_LOGGING(SCSI_LOG_HLCOMPLETE_SHIFT, SCSI_LOG_HLCOMPLETE_BITS, LEVEL,CMD);
 #define SCSI_LOG_IOCTL(LEVEL,CMD)  \
         SCSI_CHECK_LOGGING(SCSI_LOG_IOCTL_SHIFT, SCSI_LOG_IOCTL_BITS, LEVEL,CMD);
-    
+
 
 #define SCSI_SET_ERROR_RECOVERY_LOGGING(LEVEL)  \
         SCSI_SET_LOGGING(SCSI_LOG_ERROR_SHIFT, SCSI_LOG_ERROR_BITS, LEVEL);
@@ -227,7 +227,7 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
         SCSI_SET_LOGGING(SCSI_LOG_HLCOMPLETE_SHIFT, SCSI_LOG_HLCOMPLETE_BITS, LEVEL);
 #define SCSI_SET_IOCTL_LOGGING(LEVEL)  \
         SCSI_SET_LOGGING(SCSI_LOG_IOCTL_SHIFT, SCSI_LOG_IOCTL_BITS, LEVEL);
-    
+
 /*
  *  the return of the status word will be in the following format :
  *  The low byte is the status returned by the SCSI command, 
@@ -248,19 +248,19 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
  */
 
 
-#define DID_OK          0x00 /* NO error                                */
-#define DID_NO_CONNECT  0x01 /* Couldn't connect before timeout period  */
-#define DID_BUS_BUSY    0x02 /* BUS stayed busy through time out period */
-#define DID_TIME_OUT    0x03 /* TIMED OUT for other reason              */
-#define DID_BAD_TARGET  0x04 /* BAD target.                             */
-#define DID_ABORT       0x05 /* Told to abort for some other reason     */
-#define DID_PARITY      0x06 /* Parity error                            */
-#define DID_ERROR       0x07 /* Internal error                          */
-#define DID_RESET       0x08 /* Reset by somebody.                      */
-#define DID_BAD_INTR    0x09 /* Got an interrupt we weren't expecting.  */ 
-#define DID_PASSTHROUGH 0x0a /* Force command past mid-layer            */
-#define DID_SOFT_ERROR  0x0b /* The low level driver just wish a retry  */
-#define DRIVER_OK       0x00 /* Driver status                           */ 
+#define DID_OK          0x00	/* NO error                                */
+#define DID_NO_CONNECT  0x01	/* Couldn't connect before timeout period  */
+#define DID_BUS_BUSY    0x02	/* BUS stayed busy through time out period */
+#define DID_TIME_OUT    0x03	/* TIMED OUT for other reason              */
+#define DID_BAD_TARGET  0x04	/* BAD target.                             */
+#define DID_ABORT       0x05	/* Told to abort for some other reason     */
+#define DID_PARITY      0x06	/* Parity error                            */
+#define DID_ERROR       0x07	/* Internal error                          */
+#define DID_RESET       0x08	/* Reset by somebody.                      */
+#define DID_BAD_INTR    0x09	/* Got an interrupt we weren't expecting.  */
+#define DID_PASSTHROUGH 0x0a	/* Force command past mid-layer            */
+#define DID_SOFT_ERROR  0x0b	/* The low level driver just wish a retry  */
+#define DRIVER_OK       0x00	/* Driver status                           */
 
 /*
  *  These indicate the error that occurred, and what is available.
@@ -269,7 +269,7 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 #define DRIVER_BUSY         0x01
 #define DRIVER_SOFT         0x02
 #define DRIVER_MEDIA        0x03
-#define DRIVER_ERROR        0x04    
+#define DRIVER_ERROR        0x04
 
 #define DRIVER_INVALID      0x05
 #define DRIVER_TIMEOUT      0x06
@@ -277,7 +277,7 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 #define DRIVER_SENSE	    0x08
 
 #define SUGGEST_RETRY       0x10
-#define SUGGEST_ABORT       0x20 
+#define SUGGEST_ABORT       0x20
 #define SUGGEST_REMAP       0x30
 #define SUGGEST_DIE         0x40
 #define SUGGEST_SENSE       0x80
@@ -339,7 +339,7 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
  * Add some typedefs so that we can prototyope a bunch of the functions.
  */
 typedef struct scsi_device Scsi_Device;
-typedef struct scsi_cmnd   Scsi_Cmnd;
+typedef struct scsi_cmnd Scsi_Cmnd;
 
 /*
  * Here is where we prototype most of the mid-layer.
@@ -347,18 +347,18 @@ typedef struct scsi_cmnd   Scsi_Cmnd;
 
 /*
  *  Initializes all SCSI devices.  This scans all scsi busses.
- */ 
+ */
 
-extern int scsi_dev_init (void);
+extern int scsi_dev_init(void);
 
 
 
-void *   scsi_malloc(unsigned int);
-int      scsi_free(void *, unsigned int);
-extern unsigned int scsi_logging_level; /* What do we log? */
-extern unsigned int scsi_dma_free_sectors;  /* How much room do we have left */
-extern unsigned int scsi_need_isa_buffer;   /* True if some devices need indirection
-					* buffers */
+void *scsi_malloc(unsigned int);
+int scsi_free(void *, unsigned int);
+extern unsigned int scsi_logging_level;		/* What do we log? */
+extern unsigned int scsi_dma_free_sectors;	/* How much room do we have left */
+extern unsigned int scsi_need_isa_buffer;	/* True if some devices need indirection
+						   * buffers */
 extern void scsi_make_blocked_list(void);
 extern volatile int in_scan_scsis;
 extern const unsigned char scsi_command_size[8];
@@ -366,16 +366,16 @@ extern const unsigned char scsi_command_size[8];
 /*
  * These are the error handling functions defined in scsi_error.c
  */
-extern void scsi_add_timer(Scsi_Cmnd * SCset, int timeout, 
-                                void (*complete)(Scsi_Cmnd *));
-extern void scsi_done (Scsi_Cmnd *SCpnt);
-extern int  scsi_delete_timer(Scsi_Cmnd * SCset);
-extern void scsi_error_handler(void * host);
-extern int  scsi_retry_command(Scsi_Cmnd *);
+extern void scsi_add_timer(Scsi_Cmnd * SCset, int timeout,
+			   void (*complete) (Scsi_Cmnd *));
+extern void scsi_done(Scsi_Cmnd * SCpnt);
+extern int scsi_delete_timer(Scsi_Cmnd * SCset);
+extern void scsi_error_handler(void *host);
+extern int scsi_retry_command(Scsi_Cmnd *);
 extern void scsi_finish_command(Scsi_Cmnd *);
-extern int  scsi_sense_valid(Scsi_Cmnd *);
-extern int  scsi_decide_disposition (Scsi_Cmnd * SCpnt);
-extern int  scsi_block_when_processing_errors(Scsi_Device *);
+extern int scsi_sense_valid(Scsi_Cmnd *);
+extern int scsi_decide_disposition(Scsi_Cmnd * SCpnt);
+extern int scsi_block_when_processing_errors(Scsi_Device *);
 extern void scsi_sleep(int);
 
 /*
@@ -384,15 +384,15 @@ extern void scsi_sleep(int);
  *  DID_ABORT is returned in the hostbyte.
  */
 
-extern void scsi_do_cmd (Scsi_Cmnd *, const void *cmnd ,
-			 void *buffer, unsigned bufflen, 
-			 void (*done)(struct scsi_cmnd *),
-			 int timeout, int retries);
+extern void scsi_do_cmd(Scsi_Cmnd *, const void *cmnd,
+			void *buffer, unsigned bufflen,
+			void (*done) (struct scsi_cmnd *),
+			int timeout, int retries);
 
 
-extern Scsi_Cmnd * scsi_allocate_device(struct request **, Scsi_Device *, int);
+extern Scsi_Cmnd *scsi_allocate_device(struct request **, Scsi_Device *, int);
 
-extern Scsi_Cmnd * scsi_request_queueable(struct request *, Scsi_Device *);
+extern Scsi_Cmnd *scsi_request_queueable(struct request *, Scsi_Device *);
 
 extern void scsi_release_command(Scsi_Cmnd *);
 
@@ -412,62 +412,62 @@ extern void print_hostbyte(int scsiresult);
 
 struct scsi_device {
 /* private: */
-    /*
-     * This information is private to the scsi mid-layer.  Wrapping it in a
-     * struct private is a way of marking it in a sort of C++ type of way.
-     */
-    struct scsi_device * next;      /* Used for linked list */
-    struct scsi_device * prev;      /* Used for linked list */
-    wait_queue_head_t device_wait;/* Used to wait if
-                                                      device is busy */
-    struct Scsi_Host   * host;
-    volatile unsigned short device_busy;   /* commands actually active on low-level */
-    void              (* scsi_request_fn)(void);  /* Used to jumpstart things after an 
-                                     * ioctl */
-    Scsi_Cmnd          * device_queue;    /* queue of SCSI Command structures */
+	/*
+	 * This information is private to the scsi mid-layer.  Wrapping it in a
+	 * struct private is a way of marking it in a sort of C++ type of way.
+	 */
+	struct scsi_device *next;	/* Used for linked list */
+	struct scsi_device *prev;	/* Used for linked list */
+	wait_queue_head_t device_wait;	/* Used to wait if
+					   device is busy */
+	struct Scsi_Host *host;
+	volatile unsigned short device_busy;	/* commands actually active on low-level */
+	void (*scsi_request_fn) (void);		/* Used to jumpstart things after an 
+						   * ioctl */
+	Scsi_Cmnd *device_queue;	/* queue of SCSI Command structures */
 
 /* public: */
-    unsigned char id, lun, channel;
+	unsigned char id, lun, channel;
 
-    unsigned int manufacturer;      /* Manufacturer of device, for using 
-				     * vendor-specific cmd's */
-    int attached;                   /* # of high level drivers attached to 
-				     * this */
-    int access_count;               /* Count of open channels/mounts */
+	unsigned int manufacturer;	/* Manufacturer of device, for using 
+					 * vendor-specific cmd's */
+	int attached;		/* # of high level drivers attached to 
+				 * this */
+	int access_count;	/* Count of open channels/mounts */
 
-    void *hostdata;                 /* available to low-level driver */
-    char type;
-    char scsi_level;
-    char vendor[8], model[16], rev[4];
-    unsigned char current_tag;      /* current tag */
-    unsigned char sync_min_period;  /* Not less than this period */
-    unsigned char sync_max_offset;  /* Not greater than this offset */
-    unsigned char queue_depth;	    /* How deep a queue to use */
+	void *hostdata;		/* available to low-level driver */
+	char type;
+	char scsi_level;
+	char vendor[8], model[16], rev[4];
+	unsigned char current_tag;	/* current tag */
+	unsigned char sync_min_period;	/* Not less than this period */
+	unsigned char sync_max_offset;	/* Not greater than this offset */
+	unsigned char queue_depth;	/* How deep a queue to use */
 
-    unsigned online:1;
-    unsigned writeable:1;
-    unsigned removable:1; 
-    unsigned random:1;
-    unsigned has_cmdblocks:1;
-    unsigned changed:1;             /* Data invalid due to media change */
-    unsigned busy:1;                /* Used to prevent races */
-    unsigned lockable:1;            /* Able to prevent media removal */
-    unsigned borken:1;              /* Tell the Seagate driver to be 
-				     * painfully slow on this device */ 
-    unsigned tagged_supported:1;    /* Supports SCSI-II tagged queuing */
-    unsigned tagged_queue:1;        /* SCSI-II tagged queuing enabled */
-    unsigned disconnect:1;          /* can disconnect */
-    unsigned soft_reset:1;          /* Uses soft reset option */
-    unsigned sync:1;                /* Negotiate for sync transfers */
-    unsigned wide:1;                /* Negotiate for WIDE transfers */
-    unsigned single_lun:1;          /* Indicates we should only allow I/O to
-                                     * one of the luns for the device at a 
-                                     * time. */
-    unsigned was_reset:1;           /* There was a bus reset on the bus for 
-                                     * this device */
-    unsigned expecting_cc_ua:1;     /* Expecting a CHECK_CONDITION/UNIT_ATTN
-                                     * because we did a bus reset. */
-    unsigned device_blocked:1;      /* Device returned QUEUE_FULL. */
+	unsigned online:1;
+	unsigned writeable:1;
+	unsigned removable:1;
+	unsigned random:1;
+	unsigned has_cmdblocks:1;
+	unsigned changed:1;	/* Data invalid due to media change */
+	unsigned busy:1;	/* Used to prevent races */
+	unsigned lockable:1;	/* Able to prevent media removal */
+	unsigned borken:1;	/* Tell the Seagate driver to be 
+				 * painfully slow on this device */
+	unsigned tagged_supported:1;	/* Supports SCSI-II tagged queuing */
+	unsigned tagged_queue:1;	/* SCSI-II tagged queuing enabled */
+	unsigned disconnect:1;	/* can disconnect */
+	unsigned soft_reset:1;	/* Uses soft reset option */
+	unsigned sync:1;	/* Negotiate for sync transfers */
+	unsigned wide:1;	/* Negotiate for WIDE transfers */
+	unsigned single_lun:1;	/* Indicates we should only allow I/O to
+				 * one of the luns for the device at a 
+				 * time. */
+	unsigned was_reset:1;	/* There was a bus reset on the bus for 
+				 * this device */
+	unsigned expecting_cc_ua:1;	/* Expecting a CHECK_CONDITION/UNIT_ATTN
+					 * because we did a bus reset. */
+	unsigned device_blocked:1;	/* Device returned QUEUE_FULL. */
 };
 
 
@@ -476,147 +476,147 @@ struct scsi_device {
  * with low level drivers that support multiple outstanding commands.
  */
 typedef struct scsi_pointer {
-    char * ptr;                     /* data pointer */
-    int this_residual;              /* left in this buffer */
-    struct scatterlist *buffer;     /* which buffer */
-    int buffers_residual;           /* how many buffers left */
-    
-    volatile int Status;
-    volatile int Message;
-    volatile int have_data_in;
-    volatile int sent_command;
-    volatile int phase;
+	char *ptr;		/* data pointer */
+	int this_residual;	/* left in this buffer */
+	struct scatterlist *buffer;	/* which buffer */
+	int buffers_residual;	/* how many buffers left */
+
+	volatile int Status;
+	volatile int Message;
+	volatile int have_data_in;
+	volatile int sent_command;
+	volatile int phase;
 } Scsi_Pointer;
 
 
 struct scsi_cmnd {
 /* private: */
-    /*
-     * This information is private to the scsi mid-layer.  Wrapping it in a
-     * struct private is a way of marking it in a sort of C++ type of way.
-     */
-    struct Scsi_Host * host;
-    unsigned short     state;
-    unsigned short     owner;
-    Scsi_Device      * device;
-    struct scsi_cmnd * next;
-    struct scsi_cmnd * reset_chain;
-    
-    int                 eh_state; /* Used for state tracking in error handlr */
-    void               (*done)(struct scsi_cmnd *);  /* Mid-level done function */
-    /*
-      A SCSI Command is assigned a nonzero serial_number when internal_cmnd
-      passes it to the driver's queue command function.  The serial_number
-      is cleared when scsi_done is entered indicating that the command has
-      been completed.  If a timeout occurs, the serial number at the moment
-      of timeout is copied into serial_number_at_timeout.  By subsequently
-      comparing the serial_number and serial_number_at_timeout fields
-      during abort or reset processing, we can detect whether the command
-      has already completed.  This also detects cases where the command has
-      completed and the SCSI Command structure has already being reused
-      for another command, so that we can avoid incorrectly aborting or
-      resetting the new command.
-      */
-    
-    unsigned long      serial_number;
-    unsigned long      serial_number_at_timeout;
-    
-    int                retries;
-    int                allowed;
-    int                timeout_per_command;
-    int                timeout_total;
-    int                timeout;
-    
-    /*
-     * We handle the timeout differently if it happens when a reset, 
-     * abort, etc are in process. 
-     */
-    unsigned volatile char internal_timeout;
-    struct scsi_cmnd  * bh_next;  /* To enumerate the commands waiting 
-                                     to be processed. */
-    
+	/*
+	 * This information is private to the scsi mid-layer.  Wrapping it in a
+	 * struct private is a way of marking it in a sort of C++ type of way.
+	 */
+	struct Scsi_Host *host;
+	unsigned short state;
+	unsigned short owner;
+	Scsi_Device *device;
+	struct scsi_cmnd *next;
+	struct scsi_cmnd *reset_chain;
+
+	int eh_state;		/* Used for state tracking in error handlr */
+	void (*done) (struct scsi_cmnd *);	/* Mid-level done function */
+	/*
+	   A SCSI Command is assigned a nonzero serial_number when internal_cmnd
+	   passes it to the driver's queue command function.  The serial_number
+	   is cleared when scsi_done is entered indicating that the command has
+	   been completed.  If a timeout occurs, the serial number at the moment
+	   of timeout is copied into serial_number_at_timeout.  By subsequently
+	   comparing the serial_number and serial_number_at_timeout fields
+	   during abort or reset processing, we can detect whether the command
+	   has already completed.  This also detects cases where the command has
+	   completed and the SCSI Command structure has already being reused
+	   for another command, so that we can avoid incorrectly aborting or
+	   resetting the new command.
+	 */
+
+	unsigned long serial_number;
+	unsigned long serial_number_at_timeout;
+
+	int retries;
+	int allowed;
+	int timeout_per_command;
+	int timeout_total;
+	int timeout;
+
+	/*
+	 * We handle the timeout differently if it happens when a reset, 
+	 * abort, etc are in process. 
+	 */
+	unsigned volatile char internal_timeout;
+	struct scsi_cmnd *bh_next;	/* To enumerate the commands waiting 
+					   to be processed. */
+
 /* public: */
 
-    unsigned char      target;
-    unsigned char      lun;
-    unsigned char      channel;
-    unsigned char      cmd_len;
-    unsigned char      old_cmd_len;
+	unsigned char target;
+	unsigned char lun;
+	unsigned char channel;
+	unsigned char cmd_len;
+	unsigned char old_cmd_len;
 
-    /* These elements define the operation we are about to perform */
-    unsigned char      cmnd[12];
-    unsigned           request_bufflen;	/* Actual request size */
-    
-    struct timer_list  eh_timeout;         /* Used to time out the command. */
-    void             * request_buffer;	/* Actual requested buffer */
-    
-    /* These elements define the operation we ultimately want to perform */
-    unsigned char      data_cmnd[12];
-    unsigned short     old_use_sg;	/* We save  use_sg here when requesting
-                                         * sense info */
-    unsigned short     use_sg;          /* Number of pieces of scatter-gather */
-    unsigned short     sglist_len;	/* size of malloc'd scatter-gather list */
-    unsigned short     abort_reason;    /* If the mid-level code requests an
-                                         * abort, this is the reason. */
-    unsigned           bufflen;		/* Size of data buffer */
-    void             * buffer;		/* Data buffer */
-    
-    unsigned           underflow;	/* Return error if less than
-                                           this amount is transfered */
-    
-    unsigned           transfersize;	/* How much we are guaranteed to
-                                           transfer with each SCSI transfer
-                                           (ie, between disconnect / 
-                                           reconnects.	 Probably == sector
-                                           size */
-    
-    
-    struct request     request;           /* A copy of the command we are
-                                             working on */
+	/* These elements define the operation we are about to perform */
+	unsigned char cmnd[12];
+	unsigned request_bufflen;	/* Actual request size */
 
-    unsigned char      sense_buffer[16];  /* Sense for this command, 
-                                             needed */
-    
-    unsigned           flags;
-    
-    /*
-     * These two flags are used to track commands that are in the
-     * mid-level queue.  The idea is that a command can be there for
-     * one of two reasons - either the host is busy or the device is
-     * busy.  Thus when a command on the host finishes, we only try
-     * and requeue commands that we might expect to be queueable.
-     */
-    unsigned           host_wait:1;
-    unsigned           device_wait:1;
+	struct timer_list eh_timeout;	/* Used to time out the command. */
+	void *request_buffer;	/* Actual requested buffer */
 
-    /* These variables are for the cdrom only. Once we have variable size 
-     * buffers in the buffer cache, they will go away. */
-    int                this_count; 
-    /* End of special cdrom variables */
-    
-    /* Low-level done function - can be used by low-level driver to point
-     *	to completion function.	 Not used by mid/upper level code. */
-    void               (*scsi_done)(struct scsi_cmnd *);  
-    
-    /*
-     * The following fields can be written to by the host specific code. 
-     * Everything else should be left alone. 
-     */
-    
-    Scsi_Pointer       SCp;	   /* Scratchpad used by some host adapters */
-    
-    unsigned char    * host_scribble; /* The host adapter is allowed to
-				    * call scsi_malloc and get some memory
-				    * and hang it here.	 The host adapter
-				    * is also expected to call scsi_free
-				    * to release this memory.  (The memory
-				    * obtained by scsi_malloc is guaranteed
-				    * to be at an address < 16Mb). */
-    
-    int                result;	   /* Status code from lower level driver */
-    
-    unsigned char      tag;	   /* SCSI-II queued command tag */
-    unsigned long      pid;	   /* Process ID, starts at 0 */
+	/* These elements define the operation we ultimately want to perform */
+	unsigned char data_cmnd[12];
+	unsigned short old_use_sg;	/* We save  use_sg here when requesting
+					 * sense info */
+	unsigned short use_sg;	/* Number of pieces of scatter-gather */
+	unsigned short sglist_len;	/* size of malloc'd scatter-gather list */
+	unsigned short abort_reason;	/* If the mid-level code requests an
+					 * abort, this is the reason. */
+	unsigned bufflen;	/* Size of data buffer */
+	void *buffer;		/* Data buffer */
+
+	unsigned underflow;	/* Return error if less than
+				   this amount is transfered */
+
+	unsigned transfersize;	/* How much we are guaranteed to
+				   transfer with each SCSI transfer
+				   (ie, between disconnect / 
+				   reconnects.   Probably == sector
+				   size */
+
+
+	struct request request;	/* A copy of the command we are
+				   working on */
+
+	unsigned char sense_buffer[16];		/* Sense for this command, 
+						   needed */
+
+	unsigned flags;
+
+	/*
+	 * These two flags are used to track commands that are in the
+	 * mid-level queue.  The idea is that a command can be there for
+	 * one of two reasons - either the host is busy or the device is
+	 * busy.  Thus when a command on the host finishes, we only try
+	 * and requeue commands that we might expect to be queueable.
+	 */
+	unsigned host_wait:1;
+	unsigned device_wait:1;
+
+	/* These variables are for the cdrom only. Once we have variable size 
+	 * buffers in the buffer cache, they will go away. */
+	int this_count;
+	/* End of special cdrom variables */
+
+	/* Low-level done function - can be used by low-level driver to point
+	 *        to completion function.  Not used by mid/upper level code. */
+	void (*scsi_done) (struct scsi_cmnd *);
+
+	/*
+	 * The following fields can be written to by the host specific code. 
+	 * Everything else should be left alone. 
+	 */
+
+	Scsi_Pointer SCp;	/* Scratchpad used by some host adapters */
+
+	unsigned char *host_scribble;	/* The host adapter is allowed to
+					   * call scsi_malloc and get some memory
+					   * and hang it here.     The host adapter
+					   * is also expected to call scsi_free
+					   * to release this memory.  (The memory
+					   * obtained by scsi_malloc is guaranteed
+					   * to be at an address < 16Mb). */
+
+	int result;		/* Status code from lower level driver */
+
+	unsigned char tag;	/* SCSI-II queued command tag */
+	unsigned long pid;	/* Process ID, starts at 0 */
 };
 
 
@@ -627,63 +627,61 @@ struct scsi_cmnd {
 #define SCSI_MLQUEUE_DEVICE_BUSY 0x1056
 
 extern int scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason);
-extern int scsi_mlqueue_finish(struct Scsi_Host * host, Scsi_Device * device);
+extern int scsi_mlqueue_finish(struct Scsi_Host *host, Scsi_Device * device);
 
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
 #include "hosts.h"
 
-static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
+static Scsi_Cmnd *end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 {
-    struct request * req;
-    struct buffer_head * bh;
-    
-    req = &SCpnt->request;
-    req->errors = 0;
-    if (!uptodate) {
-	printk(DEVICE_NAME " I/O error: dev %s, sector %lu\n",
-	       kdevname(req->rq_dev), req->sector);
-    }
-    
-    do {
-	if ((bh = req->bh) != NULL) {
-	    req->bh = bh->b_reqnext;
-	    req->nr_sectors -= bh->b_size >> 9;
-	    req->sector += bh->b_size >> 9;
-	    bh->b_reqnext = NULL;
-	    bh->b_end_io(bh, uptodate);
-	    sectors -= bh->b_size >> 9;
-	    if ((bh = req->bh) != NULL) {
-		req->current_nr_sectors = bh->b_size >> 9;
-		if (req->nr_sectors < req->current_nr_sectors) {
-		    req->nr_sectors = req->current_nr_sectors;
-		    printk("end_scsi_request: buffer-list destroyed\n");
-		}
-	    }
+	struct request *req;
+	struct buffer_head *bh;
+
+	req = &SCpnt->request;
+	req->errors = 0;
+	if (!uptodate) {
+		printk(DEVICE_NAME " I/O error: dev %s, sector %lu\n",
+		       kdevname(req->rq_dev), req->sector);
 	}
-    } while(sectors && bh);
-    if (req->bh){
-	req->buffer = bh->b_data;
-	return SCpnt;
-    }
-    DEVICE_OFF(req->rq_dev);
-    if (req->sem != NULL) {
-	up(req->sem);
-    }
-    add_blkdev_randomness(MAJOR(req->rq_dev));
-    
-    if (SCpnt->host->block) {
-	struct Scsi_Host * next;
-	
-	for (next = SCpnt->host->block; next != SCpnt->host;
-	     next = next->block)
-	    wake_up(&next->host_wait);
-    }
-    
-    wake_up(&wait_for_request);
-    wake_up(&SCpnt->device->device_wait);
-    scsi_release_command(SCpnt);
-    return NULL;
+	do {
+		if ((bh = req->bh) != NULL) {
+			req->bh = bh->b_reqnext;
+			req->nr_sectors -= bh->b_size >> 9;
+			req->sector += bh->b_size >> 9;
+			bh->b_reqnext = NULL;
+			bh->b_end_io(bh, uptodate);
+			sectors -= bh->b_size >> 9;
+			if ((bh = req->bh) != NULL) {
+				req->current_nr_sectors = bh->b_size >> 9;
+				if (req->nr_sectors < req->current_nr_sectors) {
+					req->nr_sectors = req->current_nr_sectors;
+					printk("end_scsi_request: buffer-list destroyed\n");
+				}
+			}
+		}
+	} while (sectors && bh);
+	if (req->bh) {
+		req->buffer = bh->b_data;
+		return SCpnt;
+	}
+	DEVICE_OFF(req->rq_dev);
+	if (req->sem != NULL) {
+		up(req->sem);
+	}
+	add_blkdev_randomness(MAJOR(req->rq_dev));
+
+	if (SCpnt->host->block) {
+		struct Scsi_Host *next;
+
+		for (next = SCpnt->host->block; next != SCpnt->host;
+		     next = next->block)
+			wake_up(&next->host_wait);
+	}
+	wake_up(&wait_for_request);
+	wake_up(&SCpnt->device->device_wait);
+	scsi_release_command(SCpnt);
+	return NULL;
 }
 
 

@@ -530,10 +530,6 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 
 	memory_end = 0;
 	for (i=0; i < e820.nr_map; i++) {
-		printk("type=%d, addr=%08x, size=%08x",
-			e820.map[i].type,
-			e820.map[i].addr,
-			e820.map[i].size);
 		/* RAM? */
 		if (e820.map[i].type == 1) {
 			unsigned long end = e820.map[i].addr + e820.map[i].size;

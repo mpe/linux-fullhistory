@@ -45,7 +45,7 @@ static struct signal_struct init_signals = INIT_SIGNALS;
 struct mm_struct init_mm = INIT_MM(init_mm);
 
 union task_union init_task_union
-__attribute__((section("init_task"), aligned(THREAD_SIZE)))
+__attribute__((section("init_task"), aligned(KTHREAD_SIZE)))
 	= { task: INIT_TASK(init_task_union.task) };
 
 asmlinkage void ret_from_fork(void);
@@ -90,10 +90,14 @@ void machine_restart(char * __unused)
 {
 	if (mach_reset)
 		mach_reset();
+	for (;;);
 }
 
 void machine_halt(void)
 {
+	if (mach_halt)
+		mach_halt();
+	for (;;);
 }
 
 void machine_power_off(void)
@@ -101,6 +105,10 @@ void machine_power_off(void)
 #if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
 	apm_set_power_state(APM_STATE_OFF);
 #endif
+
+	if (mach_power_off)
+		mach_power_off();
+	for (;;);
 }
 
 void show_regs(struct pt_regs * regs)
@@ -138,7 +146,7 @@ int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 	   "trap #0\n\t"		/* Linux/m68k system call */
 	   "tstl %0\n\t"		/* child or parent */
 	   "jne 1f\n\t"			/* parent - jump */
-	   "lea %%sp@(-8192),%6\n\t"	/* reload current */
+	   "lea %%sp@(%c7),%6\n\t"	/* reload current */
 	   "movel %3,%%sp@-\n\t"	/* push argument */
 	   "jsr %4@\n\t"		/* call fn */
 	   "movel %0,%%d1\n\t"		/* pass exit value */
@@ -147,7 +155,8 @@ int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 	   "1:"
 	   : "=d" (retval)
 	   : "0" (__NR_clone), "i" (__NR_exit),
-	     "r" (arg), "a" (fn), "d" (clone_arg), "r" (current)
+	     "r" (arg), "a" (fn), "d" (clone_arg), "r" (current),
+	     "i" (-KTHREAD_SIZE)
 	   : "d0", "d2");
 	pid = retval;
 	}
@@ -204,7 +213,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	struct switch_stack * childstack, *stack;
 	unsigned long stack_offset, *retp;
 
-	stack_offset = THREAD_SIZE - sizeof(struct pt_regs);
+	stack_offset = KTHREAD_SIZE - sizeof(struct pt_regs);
 	childregs = (struct pt_regs *) ((unsigned long) p + stack_offset);
 
 	*childregs = *regs;

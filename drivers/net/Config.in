@@ -95,6 +95,10 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate 'RealTek 8129/8139 (not 8019/8029!) support' CONFIG_RTL8139
       tristate 'SiS 900 PCI Fast Ethernet Adapter support' CONFIG_SIS900
       tristate 'Packet Engines Yellowfin Gigabit-NIC support' CONFIG_YELLOWFIN
+      tristate 'Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support' CONFIG_ACENIC
+      if [ "$CONFIG_ACENIC" != "n" ]; then
+	  bool 'Omit support for old Tigon I based AceNICs' CONFIG_ACENIC_OMIT_TIGON_I
+      fi
   fi
   bool 'Other ISA cards' CONFIG_NET_ISA
   if [ "$CONFIG_NET_ISA" = "y" ]; then
@@ -125,7 +129,6 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   if [ "$CONFIG_NET_EISA" = "y" ]; then
     tristate 'AMD PCnet32 (VLB and PCI) support' CONFIG_PCNET32
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support' CONFIG_ACENIC
       tristate 'Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
     fi
 

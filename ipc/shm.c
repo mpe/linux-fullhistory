@@ -372,7 +372,7 @@ out:
  * shmd->vm_next	next attach for task
  * shmd->vm_next_share	next attach for segment
  * shmd->vm_offset	offset into segment
- * shmd->vm_pte		signature for this attach
+ * shmd->vm_private_data		signature for this attach
  */
 
 static struct vm_operations_struct shm_vm_ops = {
@@ -511,7 +511,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		goto out;
 	}
 
-	shmd->vm_pte = SWP_ENTRY(SHM_SWP_TYPE, id);
+	shmd->vm_private_data = shm_segs + id;
 	shmd->vm_start = addr;
 	shmd->vm_end = addr + shp->shm_npages * PAGE_SIZE;
 	shmd->vm_mm = current->mm;
@@ -547,16 +547,10 @@ out:
 /* This is called by fork, once for every shm attach. */
 static void shm_open (struct vm_area_struct *shmd)
 {
-	unsigned int id;
 	struct shmid_kernel *shp;
 
 	lock_kernel();
-	id = SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK;
-	shp = shm_segs[id];
-	if (shp == IPC_UNUSED) {
-		printk("shm_open: unused id=%d PANIC\n", id);
-		return;
-	}
+	shp = *(struct shmid_kernel **) shmd->vm_private_data;
 	insert_attach(shp,shmd);  /* insert shmd into shp->attaches */
 	shp->u.shm_nattch++;
 	shp->u.shm_atime = CURRENT_TIME;
@@ -573,17 +567,17 @@ static void shm_open (struct vm_area_struct *shmd)
 static void shm_close (struct vm_area_struct *shmd)
 {
 	struct shmid_kernel *shp;
-	int id;
 
 	lock_kernel();
 	/* remove from the list of attaches of the shm segment */
-	id = SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK;
-	shp = shm_segs[id];
+	shp = *(struct shmid_kernel **) shmd->vm_private_data;
 	remove_attach(shp,shmd);  /* remove from shp->attaches */
   	shp->u.shm_lpid = current->pid;
 	shp->u.shm_dtime = CURRENT_TIME;
-	if (--shp->u.shm_nattch <= 0 && shp->u.shm_perm.mode & SHM_DEST)
+	if (--shp->u.shm_nattch <= 0 && shp->u.shm_perm.mode & SHM_DEST) {
+		unsigned int id = (struct shmid_kernel **)shmd->vm_private_data - shm_segs;
 		killseg (id);
+	}
 	unlock_kernel();
 }
 
@@ -628,20 +622,12 @@ static unsigned long shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 {
 	pte_t pte;
 	struct shmid_kernel *shp;
-	unsigned int id, idx;
+	unsigned int idx;
 	unsigned long page;
 	struct page * page_map;
 
-	id = SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK;
+	shp = *(struct shmid_kernel **) shmd->vm_private_data;
 	idx = (address - shmd->vm_start + shmd->vm_offset) >> PAGE_SHIFT;
-
-#ifdef DEBUG_SHM
-	if (id > max_shmid) {
-		printk ("shm_nopage: id=%d too big. proc mem corrupted\n", id);
-		return 0;
-	}
-#endif
-	shp = shm_segs[id];
 
 #ifdef DEBUG_SHM
 	if (shp == IPC_UNUSED || shp == IPC_NOID) {

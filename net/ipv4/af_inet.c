@@ -285,11 +285,6 @@ int inet_listen(struct socket *sock, int backlog)
 	if (sock->state != SS_UNCONNECTED || sock->type != SOCK_STREAM)
 		return -EINVAL;
 
-	if ((unsigned) backlog == 0)	/* BSDism */
-		backlog = 1;
-	if ((unsigned) backlog > SOMAXCONN)
-		backlog = SOMAXCONN;
-
 	lock_sock(sk);
 	old_state = sk->state;
 	err = -EINVAL;

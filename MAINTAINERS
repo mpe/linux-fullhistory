@@ -442,7 +442,7 @@ S:	Maintained
 IRDA SUBSYSTEM
 P:      Dag Brattli
 M:      Dag Brattli <dagb@cs.uit.no>
-L:      linux-irda@list.uit.no
+L:      linux-irda@pasta.cs.uit.no
 W:      http://www.cs.uit.no/linux-irda/
 S:      Maintained
 
@@ -845,6 +845,13 @@ U14-34F SCSI DRIVER
 P:	Dario Ballabio
 M:	dario@milano.europe.dg.com
 L:	linux-scsi@vger.rutgers.edu
+S:	Maintained
+
+UDF FILESYSTEM
+P:	Ben Fennema
+M:	bfennema@falcon.csc.calpoly.edu
+L:	linux_udf@hootie.lvld.hp.com
+W:	http://www.trylinux.com/projects/udf/index.html
 S:	Maintained
 
 UMSDOS FILESYSTEM

@@ -1,9 +1,9 @@
 
 #ifndef _ST_H
-	#define _ST_H
+#define _ST_H
 /*
-	$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/st.h,v 1.1 1992/04/24 18:01:50 root Exp root $
-*/
+   $Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/st.h,v 1.1 1992/04/24 18:01:50 root Exp root $
+ */
 
 #ifndef _SCSI_H
 #include "scsi.h"
@@ -11,36 +11,36 @@
 
 /* The tape buffer descriptor. */
 typedef struct {
-  unsigned char in_use;
-  unsigned char dma;	/* DMA-able buffer */
-  int this_size;        /* allocated size of the structure */
-  int buffer_size;
-  int buffer_blocks;
-  int buffer_bytes;
-  int read_pointer;
-  int writing;
-  int last_result;
-  int last_result_fatal;
-  Scsi_Cmnd *last_SCpnt;
-  unsigned char *b_data;
-  unsigned short   use_sg;     /* zero or number of segments for this adapter */
-  unsigned short sg_segs;      /* total number of allocated segments */
-  unsigned short orig_sg_segs; /* number of segments allocated at first try */
-  struct scatterlist sg[1];    /* MUST BE last item */
+	unsigned char in_use;
+	unsigned char dma;	/* DMA-able buffer */
+	int this_size;		/* allocated size of the structure */
+	int buffer_size;
+	int buffer_blocks;
+	int buffer_bytes;
+	int read_pointer;
+	int writing;
+	int last_result;
+	int last_result_fatal;
+	Scsi_Cmnd *last_SCpnt;
+	unsigned char *b_data;
+	unsigned short use_sg;	/* zero or number of segments for this adapter */
+	unsigned short sg_segs;	/* total number of allocated segments */
+	unsigned short orig_sg_segs;	/* number of segments allocated at first try */
+	struct scatterlist sg[1];	/* MUST BE last item */
 } ST_buffer;
 
 
 /* The tape mode definition */
 typedef struct {
-  unsigned char defined;
-  unsigned char sysv;   /* SYS V semantics? */
-  unsigned char do_async_writes;
-  unsigned char do_buffer_writes;
-  unsigned char do_read_ahead;
-  unsigned char defaults_for_writes;
-  unsigned char default_compression; /* 0 = don't touch, etc */
-  short default_density; /* Forced density, -1 = no value */
-  int default_blksize;	/* Forced blocksize, -1 = no value */
+	unsigned char defined;
+	unsigned char sysv;	/* SYS V semantics? */
+	unsigned char do_async_writes;
+	unsigned char do_buffer_writes;
+	unsigned char do_read_ahead;
+	unsigned char defaults_for_writes;
+	unsigned char default_compression;	/* 0 = don't touch, etc */
+	short default_density;	/* Forced density, -1 = no value */
+	int default_blksize;	/* Forced blocksize, -1 = no value */
 } ST_mode;
 
 #define ST_NBR_MODE_BITS 2
@@ -50,76 +50,76 @@ typedef struct {
 
 /* The status related to each partition */
 typedef struct {
-  unsigned char rw;
-  unsigned char eof;
-  unsigned char at_sm;
-  unsigned char last_block_valid;
-  u32 last_block_visited;
-  int drv_block;	/* The block where the drive head is */
-  int drv_file;
+	unsigned char rw;
+	unsigned char eof;
+	unsigned char at_sm;
+	unsigned char last_block_valid;
+	u32 last_block_visited;
+	int drv_block;		/* The block where the drive head is */
+	int drv_file;
 } ST_partstat;
 
 #define ST_NBR_PARTITIONS 4
 
 /* The tape drive descriptor */
 typedef struct {
-  kdev_t devt;
-  unsigned capacity;
-  Scsi_Device* device;
-  struct semaphore sem;
-  ST_buffer * buffer;
+	kdev_t devt;
+	unsigned capacity;
+	Scsi_Device *device;
+	struct semaphore sem;
+	ST_buffer *buffer;
 
-  /* Drive characteristics */
-  unsigned char omit_blklims;
-  unsigned char do_auto_lock;
-  unsigned char can_bsr;
-  unsigned char can_partitions;
-  unsigned char two_fm;
-  unsigned char fast_mteom;
-  unsigned char restr_dma;
-  unsigned char scsi2_logical;
-  unsigned char default_drvbuffer;  /* 0xff = don't touch, value 3 bits */
-  int write_threshold;
-  int timeout;			/* timeout for normal commands */
-  int long_timeout;		/* timeout for commands known to take long time*/
+	/* Drive characteristics */
+	unsigned char omit_blklims;
+	unsigned char do_auto_lock;
+	unsigned char can_bsr;
+	unsigned char can_partitions;
+	unsigned char two_fm;
+	unsigned char fast_mteom;
+	unsigned char restr_dma;
+	unsigned char scsi2_logical;
+	unsigned char default_drvbuffer;	/* 0xff = don't touch, value 3 bits */
+	int write_threshold;
+	int timeout;		/* timeout for normal commands */
+	int long_timeout;	/* timeout for commands known to take long time */
 
-  /* Mode characteristics */
-  ST_mode modes[ST_NBR_MODES];
-  int current_mode;
+	/* Mode characteristics */
+	ST_mode modes[ST_NBR_MODES];
+	int current_mode;
 
-  /* Status variables */
-  int partition;
-  int new_partition;
-  int nbr_partitions;    /* zero until partition support enabled */
-  ST_partstat ps[ST_NBR_PARTITIONS];
-  unsigned char dirty;
-  unsigned char ready;
-  unsigned char write_prot;
-  unsigned char drv_write_prot;
-  unsigned char in_use;
-  unsigned char blksize_changed;
-  unsigned char density_changed;
-  unsigned char compression_changed;
-  unsigned char drv_buffer;
-  unsigned char density;
-  unsigned char door_locked;
-  unsigned char rew_at_close;
-  int block_size;
-  int min_block;
-  int max_block;
-  int recover_count;
-  struct mtget * mt_status;
+	/* Status variables */
+	int partition;
+	int new_partition;
+	int nbr_partitions;	/* zero until partition support enabled */
+	ST_partstat ps[ST_NBR_PARTITIONS];
+	unsigned char dirty;
+	unsigned char ready;
+	unsigned char write_prot;
+	unsigned char drv_write_prot;
+	unsigned char in_use;
+	unsigned char blksize_changed;
+	unsigned char density_changed;
+	unsigned char compression_changed;
+	unsigned char drv_buffer;
+	unsigned char density;
+	unsigned char door_locked;
+	unsigned char rew_at_close;
+	int block_size;
+	int min_block;
+	int max_block;
+	int recover_count;
+	struct mtget *mt_status;
 
 #if DEBUG
-  unsigned char write_pending;
-  int nbr_finished;
-  int nbr_waits;
-  unsigned char last_cmnd[6];
-  unsigned char last_sense[16];
+	unsigned char write_pending;
+	int nbr_finished;
+	int nbr_waits;
+	unsigned char last_cmnd[6];
+	unsigned char last_sense[16];
 #endif
 } Scsi_Tape;
 
-extern Scsi_Tape * scsi_tapes;
+extern Scsi_Tape *scsi_tapes;
 
 /* Values of eof */
 #define	ST_NOEOF	0
@@ -159,4 +159,3 @@ extern Scsi_Tape * scsi_tapes;
 #define ST_YES         2
 
 #endif
-

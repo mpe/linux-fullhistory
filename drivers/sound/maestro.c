@@ -69,15 +69,29 @@
  *	Once input is actually written, it will be worth pointing out
  *	that only 44/16 input actually works.
  *
+ * History
+ *  v0.04 - Sep 01 1999 - Zach Brown <zab@redhat.com>
+ *	copied memory leak fix from sonicvibes driver
+ *	different ac97 reset, play with 2.0 ac97, simplify ring bus setup
+ *	bob freq code, region sanity, jitter sync fix; all from eric 
+ *
  * TODO
- *	Leaks memory?
  *	recording is horribly broken
- *	apus or dmas get out sync
- *	bob can be started twice
+ *	codec timeouts (we're way under the example source's 20ms(!?))
+ *	some people get indir reg timeouts?
+ *	mixer interface broken?
  *	anyone have a pt101 codec?
  *	ess's ac97 codec (es1921) doesn't work
- *	generally test across codecs..
  *	mmap(), but beware stereo encoding nastiness.
+ *	actually post pci writes
+ *	check for bogon bios set irq/io windows
+ *	compare our pci setup to the dos one, explains register timeouts?
+ *	look really hard at the apu/bob/dma buffer code paths.
+ *
+ *	the entire issue of smp safety needs to be looked at.  cli() needs
+ *	to be replaced with spinlock_irqsave, being very careful of call
+ *	paths avoiding deadlock.  if lock hold times are quick just
+ *	use one big ass per device spinlock.. 
  */
 
 /*****************************************************************************/
@@ -124,7 +138,7 @@ static int debug=0;
 
 /* --------------------------------------------------------------------- */
 
-#define DRIVER_VERSION "0.03"
+#define DRIVER_VERSION "0.04"
 
 #ifndef PCI_VENDOR_ESS
 #define PCI_VENDOR_ESS			0x125D
@@ -293,22 +307,21 @@ static void maestro_ac97_set(int io, u8 cmd, u16 val)
 	 
 	for(i=0;i<10000;i++)
 	{
-		if(!(inb(io+ESS_AC97_INDEX)&1))
+		if(!(inb(io+ESS_AC97_INDEX)&1)) 
 			break;
 	}
 	/*
 	 *	Write the bus
 	 */ 
 	outw(val, io+ESS_AC97_DATA);
-	udelay(1);
-	/* should actually be delaying 10 milliseconds? */
+	mdelay(1);
 	outb(cmd, io+ESS_AC97_INDEX);
-	udelay(1);
+	mdelay(1);
 }
 
 static u16 maestro_ac97_get(int io, u8 cmd)
 {
-	int sanity=100000;
+	int sanity=10000;
 	u16 data;
 	int i;
 	
@@ -323,7 +336,7 @@ static u16 maestro_ac97_get(int io, u8 cmd)
 	}
 
 	outb(cmd|0x80, io+ESS_AC97_INDEX);
-	udelay(1);
+	mdelay(1);
 	
 	while(inb(io+ESS_AC97_INDEX)&1)
 	{
@@ -335,7 +348,7 @@ static u16 maestro_ac97_get(int io, u8 cmd)
 		}
 	}
 	data=inw(io+ESS_AC97_DATA);
-	udelay(1);
+	mdelay(1);
 	return data;
 }
 
@@ -349,27 +362,35 @@ static u16 maestro_ac97_get(int io, u8 cmd)
  
 static u16 maestro_ac97_init(int iobase)
 {
-
 	int val, seid, caps;
 	u16 vend1, vend2;
 
-#if 0 /* an experiment for another time */
-		/* aim at the second codec */
-		outw(0x21, iobase+0x38);
-		outw(0x5555, iobase+0x3a);
-		outw(0x5555, iobase+0x3c);
-		udelay(1);
-		vend1 = maestro_ac97_get(iobase, 0x7c);
-		vend2 = maestro_ac97_get(iobase, 0x7e);
-		if(vend1 != 0xffff || vend2 != 0xffff) {
-			printk("maestro: It seems you have a second codec: %x %x, please report this.\n",
-				vend1,vend2);
-		}
-		/* back to the first */
+#if 0  /* this needs to be thought about harder */
+	/* aim at the second codec */
+	outw(0x21, iobase+0x38);
+	outw(0x5555, iobase+0x3a);
+	outw(0x5555, iobase+0x3c);
+	udelay(1);
+	vend1 = maestro_ac97_get(iobase, 0x7c);
+	vend2 = maestro_ac97_get(iobase, 0x7e);
+	if(vend1 != 0xffff || vend2 != 0xffff) {
+		printk("maestro: second codec 0x%4x%4x found, enabling both.  please report this.\n",
+			vend1,vend2);
+		/* enable them both */
+		outw(0x00, iobase+0x38);
+		outw(0xFFFC, iobase+0x3a);
+		outw(0x000C, iobase+0x3c);
+	} else {
+		/* back to the first only */
 		outw(0x0, iobase+0x38);
 		outw(0x0, iobase+0x3a);
 		outw(0x0, iobase+0x3c);
+	}
+	udelay(1);
 #endif
+
+	/* perform codec reset */
+	maestro_ac97_set(iobase, 0x00, 0x0000);
 
 	/* should make sure we're ac97 2.1? */
 	vend1 = maestro_ac97_get(iobase, 0x7c);
@@ -382,9 +403,15 @@ static u16 maestro_ac97_init(int iobase)
 	printk(KERN_INFO "maestro: AC97 Codec detected: v: 0x%2x%2x 3d: 0x%x caps: 0x%x\n",
 		vend1,vend2,seid, caps);
 
+	/* XXX endianness, dork head. */
+	/* magic vendor specifc init code, _no_ idea what these do */
 	switch ((long)(vend1 << 16) | vend2) {
-		/* magic vendor specifc init code, _no_ idea what these do */
-#if 0
+	case 0x545200ff:	/* TriTech */
+		
+		maestro_ac97_set(iobase,0x2a,0x0001);
+		maestro_ac97_set(iobase,0x2c,0x0000);
+		maestro_ac97_set(iobase,0x2c,0xffff);
+		break;
 	case 0x83847609:	/* ESS 1921 */
 		maestro_ac97_set(iobase,0x76,0xABBA); /* o/~ Take a chance on me o/~ */
 		udelay(20);
@@ -393,7 +420,6 @@ static u16 maestro_ac97_init(int iobase)
 		maestro_ac97_set(iobase,0x78,0x3802);
 		udelay(20);
 		break;
-#endif
 	default: break;
 	}
 
@@ -424,6 +450,15 @@ static u16 maestro_ac97_init(int iobase)
 	/* power up various units? */
 	maestro_ac97_set(iobase, 0x26, 0x000F);
 
+	/* lets see if they actually default to the spec :) */
+	if(maestro_ac97_get(iobase,0x36) ==0x8080) {
+		int reg;
+		printk("maestro: your ac97 might be 2.0, see if this makes sense:\n");
+		for(reg = 0x28; reg <= 0x58 ; reg += 2) {
+			printk("   0x%2x: %4x\n",reg,maestro_ac97_get(iobase,reg));
+		}
+	}
+
 	return 0;
 }
 
@@ -450,10 +485,43 @@ static u16 maestro_pt101_init(int iobase)
 
 static void maestro_ac97_reset(int ioaddr)
 {
+/*	outw(0x2000,  ioaddr+0x36);
+	inb(ioaddr);
+	mdelay(1);
+	outw(0x0000,  ioaddr+0x36);
+	inb(ioaddr);
+	mdelay(1);*/
+
+	/* well this seems to work a little
+		better on the 2e */
+	/* this screws around with the gpio
+		mask/input/direction.. */
+	outw(0x0000,  ioaddr+0x36);
+	udelay(20);
+	outw(0xFFFE,  ioaddr+0x64);
+	outw(0x1,  ioaddr+0x68);
+	outw(0x0,  ioaddr+0x60);
+	udelay(20);
+	outw(0x1,  ioaddr+0x60);
+	udelay(20); /* other source says 500ms.. INSANE */
 	outw(0x2000,  ioaddr+0x36);
 	udelay(20);
-	outw(0x0000,  ioaddr+0x36);
+	outw(0x3000,  ioaddr+0x36);
 	udelay(200);
+	outw(0x0001,  ioaddr+0x68);
+	outw(0xFFFF,  ioaddr+0x64);
+
+	/* strange strange reset tickling the ring bus */
+	outw(0x0, ioaddr+0x36);
+	udelay(20);
+	outw(0x200, ioaddr+0x36); /* first codec only */
+	udelay(20);
+	outw(0x0, ioaddr+0x36);
+	udelay(20);
+	outw(0x2000, ioaddr+0x36);
+	udelay(20);
+	outw(0x3000, ioaddr+0x36);
+	udelay(20);
 }
 
 /*
@@ -621,9 +689,9 @@ static u16 wave_get_register(struct ess_state *ess, u16 reg)
 static void sound_reset(int ioaddr)
 {
 	outw(0x2000, 0x18+ioaddr);
-	udelay(10);
+	udelay(1);
 	outw(0x0000, 0x18+ioaddr);
-	udelay(10);
+	udelay(1);
 }
 
 static void set_apu_fmt(struct ess_state *s, int apu, int mode)
@@ -790,9 +858,9 @@ static void ess_play_setup(struct ess_state *ess, int mode, u32 rate, void *buff
 /*		apu_set_register(ess, channel, 2, (rate&0xFF)<<8|0x10);
 		apu_set_register(ess, channel, 3, rate>>8);*/
 		
+/* XXX think about endianess when writing these registers */
 		/* Load the buffer into the wave engine */
 		apu_set_register(ess, channel, 4, ((pa>>16)&0xFF)<<8);
-		/* XXX reg is little endian.. */
 		apu_set_register(ess, channel, 5, pa&0xFFFF);
 		apu_set_register(ess, channel, 6, (pa+size)&0xFFFF);
 		/* setting loop == sample len */
@@ -949,7 +1017,7 @@ static void start_bob(struct ess_state *s)
 
 #else
 
-/* nice HW BOB implementation.  cheers, eric. */
+/* nice HW BOB implementation. */
 
 static void stop_bob(struct ess_state *s)
 {
@@ -961,17 +1029,51 @@ static void stop_bob(struct ess_state *s)
 /* eventually we could be clever and limit bob ints
 	to the frequency at which our smallest duration
 	chunks may expire */
+#define ESS_SYSCLK	50000000
 static void start_bob(struct ess_state *s)
 {
-	stop_bob(s);	// make sure bob's not already running
+	int prescale;
+	int divide;
 	
-	maestro_write(s, 6, 0x8000 |(1<<12) | (5<<5) | 11);		// (50MHz/2^14)/12 = 254 Hz = 40 mS
+	int freq = 200;		/* requested frequency - calculate what we want here. */
+	
+	stop_bob(s);	/* make sure bob's not already running */
+	
+	/* compute ideal interrupt frequency for buffer size & play rate */
+	/* first, find best prescaler value to match freq */
+	for(prescale=5;prescale<12;prescale++)
+		if(freq > (ESS_SYSCLK>>(prescale+9)))
+			break;
+			
+	/* next, back off prescaler whilst getting divider into optimum range */
+	divide=1;
+	while((prescale > 5) && (divide<32))
+	{
+		prescale--;
+		divide <<=1;
+	}
+	divide>>=1;
+	
+	/* now fine-tune the divider for best match */
+	for(;divide<31;divide++)
+		if(freq >= ((ESS_SYSCLK>>(prescale+9))/(divide+1)))
+			break;
+	
+	/* divide = 0 is illegal, but don't let prescale = 4! */
+	if(divide == 0)
+	{
+		divide++;
+		if(prescale>5)
+			prescale--;
+	}
+
+	maestro_write(s, 6, 0x9000 | (prescale<<5) | divide); /* set reg */
 	
 	/* Now set IDR 11/17 */
 	maestro_write(s, 0x11, maestro_read(s, 0x11)|1);
 	maestro_write(s, 0x17, maestro_read(s, 0x17)|1);
 }
-#endif // ESS_HW_TIMER
+#endif /* ESS_HW_TIMER */
 /* --------------------------------------------------------------------- */
 
 static int adc_active = 0;
@@ -986,8 +1088,8 @@ extern inline void stop_adc(struct ess_state *s)
 	apu_set_register(s, 2, 0, apu_get_register(s, 2, 0)&0xFF0F);
 	apu_set_register(s, 3, 0, apu_get_register(s, 3, 0)&0xFF0F);
 	adc_active&=~1;
-//	if(!adc_active)
-//		stop_bob(s);
+/*	if(!adc_active)
+		stop_bob(s); */
 	spin_unlock_irqrestore(&s->lock, flags);
 }	
 
@@ -1000,8 +1102,8 @@ extern inline void stop_dac(struct ess_state *s)
 	apu_set_register(s, 0, 0, apu_get_register(s, 0, 0)&0xFF0F);
 	apu_set_register(s, 1, 0, apu_get_register(s, 1, 0)&0xFF0F);
 	adc_active&=~2;
-//	if(!adc_active)
-//		stop_bob(s);
+/*	if(!adc_active)
+		stop_bob(s); */
 	spin_unlock_irqrestore(&s->lock, flags);
 }	
 
@@ -1020,8 +1122,8 @@ static void start_dac(struct ess_state *s)
 			apu_set_register(s, 1, 0, 
 				(apu_get_register(s, 1, 0)&0xFF0F)|s->apu_mode[1]);
 	}
-//	if(!adc_active)
-//		start_bob(s);
+/*	if(!adc_active)
+		start_bob(s);*/
 	adc_active|=2;
 	spin_unlock_irqrestore(&s->lock, flags);
 }	
@@ -1039,8 +1141,8 @@ static void start_adc(struct ess_state *s)
 		apu_set_register(s, 3, 0, 
 			(apu_get_register(s, 3, 0)&0xFF0F)|s->apu_mode[3]);
 	}
-//	if(!adc_active)
-//		start_bob(s);
+/*	if(!adc_active)
+		start_bob(s); */
 	adc_active|=1;
 	spin_unlock_irqrestore(&s->lock, flags);
 }	
@@ -1094,8 +1196,9 @@ static int prog_dmabuf(struct ess_state *s, unsigned rec)
 		db->ready = db->mapped = 0;
 
 		/* alloc as big a chunk as we can */
-		for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER && !db->rawbuf; order--)
-			db->rawbuf = (void *)__get_free_pages(GFP_KERNEL|GFP_DMA, order);
+		for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER; order--)
+			if((db->rawbuf = (void *)__get_free_pages(GFP_KERNEL|GFP_DMA, order)))
+				break;
 
 		if (!db->rawbuf)
 			return -ENOMEM;
@@ -1144,10 +1247,10 @@ static int prog_dmabuf(struct ess_state *s, unsigned rec)
 		/* program enhanced mode registers */
 		/* FILL */
 	} else {
-		//set_dmaa(s, virt_to_bus(db->rawbuf), db->numfrag << db->fragshift);
+		/* set_dmaa(s, virt_to_bus(db->rawbuf), db->numfrag << db->fragshift); */
 		/* program enhanced mode registers */
 		/* FILL */
-		//set_dac_rate(s, s->ratedac);	// redundant
+		/*set_dac_rate(s, s->ratedac);	 redundant */
 		ess_play_setup(s, fmt, s->ratedac, 
 			db->rawbuf, db->numfrag << db->fragshift);
 	}
@@ -1156,6 +1259,7 @@ static int prog_dmabuf(struct ess_state *s, unsigned rec)
 	return 0;
 }
 
+/* XXX haha, way broken with our split stereo setup.  giggle. */
 extern __inline__ void clear_advance(struct ess_state *s)
 {
 	unsigned char c = (s->fmt & (ESS_CFMT_16BIT << ESS_CFMT_ASHIFT)) ? 0 : 0x80;
@@ -1180,9 +1284,9 @@ static void ess_update_ptr(struct ess_state *s)
 	unsigned hwptr;
 	int diff;
 
+/* ADC is way broken.  compare to DAC.. */
 	/* update ADC pointer */
 	if (s->dma_adc.ready) {
-		M_printk("adc ready.. \n");
 		hwptr = (/*s->dma_adc.dmasize - */get_dmac(s)) % s->dma_adc.dmasize;
 		diff = (s->dma_adc.dmasize + hwptr - s->dma_adc.hwptr) % s->dma_adc.dmasize;
 		s->dma_adc.hwptr = hwptr;
@@ -1193,16 +1297,17 @@ static void ess_update_ptr(struct ess_state *s)
 		if (!s->dma_adc.mapped) {
 			if (s->dma_adc.count > (signed)(s->dma_adc.dmasize - ((3 * s->dma_adc.fragsize) >> 1))) {
 				s->enable &= ~ESS_ENABLE_RE;
-				/* FILL ME */
-//				wrindir(s, SV_CIENABLE, s->enable);
-				stop_adc(s);
+				/* FILL ME 
+				wrindir(s, SV_CIENABLE, s->enable); */
+				stop_adc(s); 
 				s->dma_adc.error++;
 			}
 		}
 	}
 	/* update DAC pointer */
 	if (s->dma_dac.ready) {
-		hwptr = (/*s->dma_dac.dmasize -*/ get_dmaa(s)) % s->dma_dac.dmasize;
+		/* this is so gross.  */
+		hwptr = (/*s->dma_dac.dmasize -*/ get_dmaa(s)) % s->dma_dac.dmasize; 
 		diff = (s->dma_dac.dmasize + hwptr - s->dma_dac.hwptr) % s->dma_dac.dmasize;
 /*		M_printk("updating dac: hwptr: %d diff: %d\n",hwptr,diff);*/
 		s->dma_dac.hwptr = hwptr;
@@ -1213,12 +1318,17 @@ static void ess_update_ptr(struct ess_state *s)
 				wake_up(&s->dma_dac.wait);
 		} else {
 			s->dma_dac.count -= diff;
+/*			M_printk("maestro: ess_update_ptr: diff: %d, count: %d\n", diff, s->dma_dac.count); */
 			if (s->dma_dac.count <= 0) {
 				s->enable &= ~ESS_ENABLE_PE;
-/* FILL ME */
-//				wrindir(s, SV_CIENABLE, s->enable);
-
+				/* FILL ME 
+				wrindir(s, SV_CIENABLE, s->enable); */
+				/* XXX how on earth can calling this with the lock held work.. */
 				stop_dac(s);
+				/* brute force everyone back in sync, sigh */
+				s->dma_dac.count = 0; 
+				s->dma_dac.swptr = 0; 
+				s->dma_dac.hwptr = 0; 
 				s->dma_dac.error++;
 			} else if (s->dma_dac.count <= (signed)s->dma_dac.fragsize && !s->dma_dac.endcleared) {
 				clear_advance(s);
@@ -1708,8 +1818,8 @@ static ssize_t ess_read(struct file *file, char *buffer, size_t count, loff_t *p
 				set_dmac(s, virt_to_bus(s->dma_adc.rawbuf), s->dma_adc.numfrag << s->dma_adc.fragshift);
 				/* program enhanced mode registers */
 				/* FILL ME */
-//				wrindir(s, SV_CIDMACBASECOUNT1, (s->dma_adc.fragsamples-1) >> 8);
-//				wrindir(s, SV_CIDMACBASECOUNT0, s->dma_adc.fragsamples-1);
+/*				wrindir(s, SV_CIDMACBASECOUNT1, (s->dma_adc.fragsamples-1) >> 8);
+				wrindir(s, SV_CIDMACBASECOUNT0, s->dma_adc.fragsamples-1); */
 				s->dma_adc.count = s->dma_adc.hwptr = s->dma_adc.swptr = 0;
 				spin_unlock_irqrestore(&s->lock, flags);
 			}
@@ -1739,9 +1849,7 @@ int split_stereo(unsigned char *real_buffer,unsigned char  *tmp_buffer, int offs
 {  
 	/* oh, bother.	stereo decoding APU's don't work in 16bit so we
 	use dual linear decoders.  which means we have to hack up stereo
-	buffer's we're given.  yuck. 
-
-	and we have to be able to work a byte at a time..*/
+	buffer's we're given.  yuck.  */
 
 	unsigned char *so,*left,*right;
 	int i;
@@ -1780,6 +1888,8 @@ static ssize_t ess_write(struct file *file, const char *buffer, size_t count, lo
 	unsigned char *splitbuf = NULL;
 	int cnt;
 
+/*	printk("maestro: ess_write: count %d\n", count);*/
+	
 	VALIDATE_STATE(s);
 	if (ppos != &file->f_pos)
 		return -ESPIPE;
@@ -1789,7 +1899,7 @@ static ssize_t ess_write(struct file *file, const char *buffer, size_t count, lo
 		return ret;
 	if (!access_ok(VERIFY_READ, buffer, count))
 		return -EFAULT;
-	/* I wish we could be more clever than this */
+	/* XXX be more clever than this.. */
 	if (!(splitbuf = kmalloc(count,GFP_KERNEL)))
 		return -ENOMEM; 
 	ret = 0;
@@ -1840,8 +1950,8 @@ static ssize_t ess_write(struct file *file, const char *buffer, size_t count, lo
 				spin_lock_irqsave(&s->lock, flags);
 				set_dmaa(s, virt_to_bus(s->dma_dac.rawbuf), s->dma_dac.numfrag << s->dma_dac.fragshift);
 				/* program enhanced mode registers */
-//				wrindir(s, SV_CIDMAABASECOUNT1, (s->dma_dac.fragsamples-1) >> 8);
-//				wrindir(s, SV_CIDMAABASECOUNT0, s->dma_dac.fragsamples-1);
+/*				wrindir(s, SV_CIDMAABASECOUNT1, (s->dma_dac.fragsamples-1) >> 8);
+				wrindir(s, SV_CIDMAABASECOUNT0, s->dma_dac.fragsamples-1); */
 				/* FILL ME */
 				s->dma_dac.count = s->dma_dac.hwptr = s->dma_dac.swptr = 0;
 				spin_unlock_irqrestore(&s->lock, flags);
@@ -1957,6 +2067,8 @@ static int ess_ioctl(struct inode *inode, struct file *file, unsigned int cmd, u
 	int val, mapped, ret;
 	unsigned char fmtm, fmtd;
 
+/*	printk("maestro: ess_ioctl: cmd %d\n", cmd);*/
+	
 	VALIDATE_STATE(s);
         mapped = ((file->f_mode & FMODE_WRITE) && s->dma_dac.mapped) ||
 		((file->f_mode & FMODE_READ) && s->dma_adc.mapped);
@@ -2248,7 +2360,6 @@ static int ess_ioctl(struct inode *inode, struct file *file, unsigned int cmd, u
                 return -EINVAL;
 		
 	}
-//	return mixer_ioctl(s, cmd, arg);
 	return -EINVAL;
 }
 
@@ -2374,7 +2485,7 @@ static /*const*/ struct file_operations ess_audio_fops = {
 static int maestro_install(struct pci_dev *pcidev, int card_type, int index)
 {
 	u16 w;
-	u32 n;
+/*	u32 n;*/
 	int iobase;
 	int i;
 	struct ess_card *card;
@@ -2383,6 +2494,12 @@ static int maestro_install(struct pci_dev *pcidev, int card_type, int index)
 	int num = 0;
 			
 	iobase = pcidev->resource[0].start;
+
+	if(check_region(iobase, 256))
+	{
+		printk(KERN_WARNING "maestro: can't allocate 256 bytes I/O at 0x%4.4x\n", iobase);
+		return 0;
+	}
 
 	card = kmalloc(sizeof(struct ess_card), GFP_KERNEL);
 	if(card == NULL)
@@ -2531,14 +2648,37 @@ static int maestro_install(struct pci_dev *pcidev, int card_type, int index)
 	 
 	pci_write_config_word(pcidev, 0x40, w);
 
+	/* stake our claim on the iospace */
+	request_region(iobase, 256, card_names[card_type]);
+	
 	sound_reset(iobase);
+#if 0
+
+	/* reset the ring bus */
+
+	outw(inw(iobase + 0x36) & 0xdfff,  iobase+0x36); /* disable */
+	outw(0xC090, iobase+0x34);
+	udelay(20);
+	outw(inw(iobase + 0x36) |0x2000,  iobase+0x36); /* enable */
+#endif
+	/*
+	 *	Ring Bus Setup
+	 */
+
+	/* setup usual 0x34 stuff.. 0x36 may be chip specific */
+        outw(0xC090, iobase+0x34); /* direct sound, stereo */
+        udelay(20);
+        outw(0x3000, iobase+0x36); /* direct sound, stereo */
+        udelay(20);
+
 
 	/*
 	 *	Reset the CODEC
 	 */
 	 
 	maestro_ac97_reset(iobase);
-		
+	
+#if 0
 	/*
 	 *	Ring Bus Setup
 	 */
@@ -2546,6 +2686,7 @@ static int maestro_install(struct pci_dev *pcidev, int card_type, int index)
 	n=inl(iobase+0x34);
 	n&=~0xF000;
 	n|=12<<12;		/* Direct Sound, Stereo */
+	outl(n, iobase+0x34);
 
 	n=inl(iobase+0x34);
 	n&=~0x0F00;		/* Modem off */
@@ -2605,11 +2746,15 @@ static int maestro_install(struct pci_dev *pcidev, int card_type, int index)
 	w=inw(iobase+0x18);
 	w|=(1<<0);		/* SB IRQ on */
 	outw(w, iobase+0x18);
+#endif
 
 
-	outb(0, iobase+0xA4);
-	outb(3, iobase+0xA2);
+#if 0
+	/* asp crap */
+	outb(0, iobase+0xA4); 
+	outb(3, iobase+0xA2); 
 	outb(0, iobase+0xA6);
+#endif
 	
 	for(apu=0;apu<16;apu++)
 	{
@@ -2698,10 +2843,18 @@ static int maestro_install(struct pci_dev *pcidev, int card_type, int index)
 	if(request_irq(card->irq, ess_interrupt, SA_SHIRQ, card_names[card_type], card))
 	{
 		printk(KERN_ERR "maestro: unable to allocate irq %d,\n", card->irq);
+		unregister_sound_mixer(card->dev_mixer);
+		for(i=0;i<8;i++)
+		{
+			struct ess_state *s = &card->channels[i];
+			if(s->dev_audio != -1)
+				unregister_sound_dsp(s->dev_audio);
+		}
+		release_region(card->iobase, 256);		
+		kfree(card);
 		return 0;
 	}
 
-//	ess_play_test(ess);
 	printk("maestro: %d channels configured.\n", num);
 	return 1; 
 }
@@ -2776,18 +2929,11 @@ void cleanup_module(void)
 	while ((s = devs)) {
 		int i;
 		devs = devs->next;
-//		ess_play_test(&s->channels[0]);
 #ifndef ESS_HW_TIMER
 		kill_bob(&s->channels[0]);
 #else
 		stop_bob(&s->channels[0]);
 #endif
-//		outb(~0, s->ioenh + SV_CODEC_INTMASK);  /* disable ints */
-//		synchronize_irq();
-//		inb(s->ioenh + SV_CODEC_STATUS); /* ack interrupts */
-//		wrindir(s, SV_CIENABLE, 0);     /* disable DMAA and DMAC */
-		//outb(0, s->iodmaa + SV_DMA_RESET);
-		//outb(0, s->iodmac + SV_DMA_RESET);
 		free_irq(s->irq, s);
 		unregister_sound_mixer(s->dev_mixer);
 		for(i=0;i<8;i++)
@@ -2796,6 +2942,7 @@ void cleanup_module(void)
 			if(ess->dev_audio != -1)
 				unregister_sound_dsp(ess->dev_audio);
 		}
+		release_region(s->iobase, 256);
 		kfree(s);
 	}
 	M_printk("maestro: unloading\n");
@@ -2808,6 +2955,7 @@ void cleanup_module(void)
  *  ex-code that we're not using anymore..
  *============================================================================
  */
+
 /*
  *	The ASSP is fortunately not double indexed
  */

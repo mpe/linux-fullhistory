@@ -758,11 +758,11 @@ scsi_register_device(struct Scsi_Device_Template * sdpnt)
  * Why is this a separate function?  Because the kernel_thread code
  * effectively does a fork, and there is a builtin exit() call when
  * the child returns.   The difficulty is that scsi_init() is
- * marked __initfunc(), which means the memory is unmapped after bootup
+ * marked __init, which means the memory is unmapped after bootup
  * is complete, which means that the thread's exit() call gets wiped.
  *
  * The lesson is to *NEVER*, *NEVER* call kernel_thread() from an
- * __initfunc() function, if that function could ever return.
+ * __init function, if that function could ever return.
  */
 static void launch_error_handler_thread(struct Scsi_Host * shpnt)
 {

@@ -1,6 +1,8 @@
 #ifndef __M68K_MMU_CONTEXT_H
 #define __M68K_MMU_CONTEXT_H
 
+#ifndef CONFIG_SUN3
+
 #include <asm/setup.h>
 #include <asm/page.h>
 
@@ -90,4 +92,68 @@ extern inline void activate_mm(struct mm_struct *prev_mm,
 		switch_mm_0460(next_mm);
 }
 
+#else  /* CONFIG_SUN3 */
+#include <asm/sun3mmu.h>
+#include <linux/sched.h>
+
+extern unsigned long get_free_context(struct mm_struct *mm);
+extern void clear_context(unsigned long context);
+extern unsigned char ctx_next_to_die;
+extern unsigned char ctx_live[SUN3_CONTEXTS_NUM];
+
+/* set the context for a new task to unmapped */
+static inline void init_new_context(struct task_struct *tsk, struct mm_struct *mm)
+{
+	mm->context = SUN3_INVALID_CONTEXT;
+}
+
+/* find the context given to this process, and if it hasn't already
+   got one, go get one for it. */
+static inline void get_mmu_context(struct mm_struct *mm)
+{
+	if(mm->context == SUN3_INVALID_CONTEXT)
+		mm->context = get_free_context(mm);
+}
+
+#if 0
+/* we used to clear the context after the process exited.  we still
+   should, things are faster that way...  but very unstable.  so just
+   clear out a context next time we need a new one..  consider this a
+   FIXME. */
+
+/* flush context if allocated... */	
+static inline void destroy_context(struct mm_struct *mm)
+{
+	if(mm->context != SUN3_INVALID_CONTEXT)
+		clear_context(mm->context);
+}
+#else
+/* mark this context as dropped and set it for next death */
+static inline void destroy_context(struct mm_struct *mm) 
+{
+	if(mm->context != SUN3_INVALID_CONTEXT) {
+		ctx_next_to_die = mm->context;
+		ctx_live[mm->context] = 0;
+	}
+}
+#endif
+
+static inline void activate_context(struct mm_struct *mm)
+{
+	get_mmu_context(mm);
+	sun3_put_context(mm->context);
+}
+
+static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next, struct task_struct *tsk, unsigned cpu)
+{
+	activate_context(tsk->mm);
+}
+
+extern inline void activate_mm(struct mm_struct *prev_mm,
+			       struct mm_struct *next_mm)
+{
+	activate_context(next_mm);
+}
+
+#endif 
 #endif

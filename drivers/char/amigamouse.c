@@ -58,7 +58,7 @@
 
 #include "busmouse.h"
 
-#if 0
+#if AMIGA_OLD_INT
 #define AMI_MSE_INT_ON()	mouseint_allowed = 1
 #define AMI_MSE_INT_OFF()	mouseint_allowed = 0
 static int mouseint_allowed;
@@ -75,7 +75,7 @@ static void mouse_interrupt(int irq, void *dummy, struct pt_regs *fp)
 
 	unsigned short joy0dat, potgor;
 
-#if 0
+#if AMIGA_OLD_INT
 	if(!mouseint_allowed)
 		return;
 	AMI_MSE_INT_OFF();
@@ -136,7 +136,7 @@ static void mouse_interrupt(int irq, void *dummy, struct pt_regs *fp)
 
 
 	busmouse_add_movementbuttons(msedev, dx, -dy, buttons);
-#if 0
+#if AMIGA_OLD_INT
 	AMI_MSE_INT_ON();
 #endif
 }
@@ -148,7 +148,7 @@ static void mouse_interrupt(int irq, void *dummy, struct pt_regs *fp)
 static int release_mouse(struct inode * inode, struct file * file)
 {
 	free_irq(IRQ_AMIGA_VERTB, mouse_interrupt);
-#if 0
+#if AMIGA_OLD_INT
 	AMI_MSE_INT_OFF();
 #endif
 	MOD_DEC_USE_COUNT;
@@ -173,7 +173,7 @@ static int open_mouse(struct inode * inode, struct file * file)
 	}
 
 	MOD_INC_USE_COUNT;
-#if 0
+#if AMIGA_OLD_INT
 	AMI_MSE_INT_ON();
 #endif
 	return 0;
@@ -189,7 +189,7 @@ int __init amiga_mouse_init(void)
 		return -ENODEV;
 
 	custom.joytest = 0;	/* reset counters */
-#if 0
+#if AMIGA_OLD_INT
 	AMI_MSE_INT_OFF();
 #endif
 	msedev = register_busmouse(&amigamouse);
@@ -200,15 +200,12 @@ int __init amiga_mouse_init(void)
 	return msedev < 0 ? msedev : 0;
 }
 
+void __exit amiga_mouse_exit(void)
+{
+	unregister_busmouse(msedev);
+}
+
 #ifdef MODULE
-
-int init_module(void)
-{
-	return amiga_mouse_init();
-}
-
-void cleanup_module(void)
-{
-	unregsiter_busmouse(msedev);
-}
+module_init(amiga_mouse_init)
+module_exit(amiga_mouse_exit)
 #endif

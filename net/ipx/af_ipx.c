@@ -1983,10 +1983,6 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 	return (0);
 }
 
-static int ipx_accept(struct socket *sock, struct socket *newsock, int flags)
-{
-	return (-EOPNOTSUPP);
-}
 
 static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
 	int *uaddr_len, int peer)
@@ -2213,13 +2209,6 @@ out:
 	return (err);
 }
 
-/*
- * FIXME: We have to really support shutdown.
- */
-static int ipx_shutdown(struct socket *sk,int how)
-{
-	return (-EOPNOTSUPP);
-}
 
 static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 {
@@ -2342,12 +2331,12 @@ static struct proto_ops SOCKOPS_WRAPPED(ipx_dgram_ops) = {
 	ipx_bind,
 	ipx_connect,
 	sock_no_socketpair,
-	ipx_accept,
+	sock_no_accept,
 	ipx_getname,
 	datagram_poll,
 	ipx_ioctl,
 	sock_no_listen,
-	ipx_shutdown,
+	sock_no_shutdown, /* FIXME: We have to really support shutdown. */
 	ipx_setsockopt,
 	ipx_getsockopt,
 	sock_no_fcntl,

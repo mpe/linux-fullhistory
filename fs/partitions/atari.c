@@ -13,7 +13,9 @@
 #include <linux/major.h>
 #include <linux/string.h>
 #include <linux/blk.h>
+#include <linux/ctype.h>
 
+#include <asm/byteorder.h>
 #include <asm/system.h>
 
 #include "check.h"
@@ -23,6 +25,14 @@
  */
 #define ICD_PARTS
 
+/* check if a partition entry looks valid -- Atari format is assumed if at
+   least one of the primary entries is ok this way */
+#define	VALID_PARTITION(pi,hdsiz)					     \
+    (((pi)->flg & 1) &&							     \
+     isalnum((pi)->id[0]) && isalnum((pi)->id[1]) && isalnum((pi)->id[2]) && \
+     be32_to_cpu((pi)->st) <= (hdsiz) &&				     \
+     be32_to_cpu((pi)->st) + be32_to_cpu((pi)->siz) <= (hdsiz))
+
 int atari_partition (struct gendisk *hd, kdev_t dev,
 		     unsigned long first_sector, int first_part_minor)
 {
@@ -30,9 +40,8 @@ int atari_partition (struct gendisk *hd, kdev_t dev,
   struct buffer_head *bh;
   struct rootsector *rs;
   struct partition_info *pi;
-  ulong extensect;
-  unsigned int psum;
-  int i;
+  u32 extensect;
+  u32 hd_size;
 #ifdef ICD_PARTS
   int part_fmt = 0; /* 0:unknown, 1:AHDI, 2:ICD/Supra */
 #endif
@@ -44,16 +53,18 @@ int atari_partition (struct gendisk *hd, kdev_t dev,
   }
 
   /* Verify this is an Atari rootsector: */
-  psum = 0;
-  for (i=0;i<256;i++) {
-    psum+=ntohs(((__u16 *) (bh->b_data))[i]);
-  }
-  if ((psum & 0xFFFF) != 0x1234) {
-    brelse(bh);
-    return 0;
+  rs = (struct rootsector *) bh->b_data;
+  hd_size = hd->part[minor - 1].nr_sects;
+  if (!VALID_PARTITION(&rs->part[0], hd_size) &&
+      !VALID_PARTITION(&rs->part[1], hd_size) &&
+      !VALID_PARTITION(&rs->part[2], hd_size) &&
+      !VALID_PARTITION(&rs->part[3], hd_size)) {
+      /* if there's no valid primary partition, assume that no Atari
+	 format partition table (there's no reliable magic or the like
+	 :-() */
+      return 0;
   }
 
-  rs = (struct rootsector *) bh->b_data;
   pi = &rs->part[0];
   printk (" AHDI");
   for (; pi < &rs->part[4] && minor < m_lim; minor++, pi++)
@@ -72,7 +83,7 @@ int atari_partition (struct gendisk *hd, kdev_t dev,
 	      part_fmt = 1;
 #endif
 	      printk(" XGM<");
-	      partsect = extensect = ntohl(pi->st);
+	      partsect = extensect = be32_to_cpu(pi->st);
 	      while (1)
 		{
 		  xbh = bread (dev, partsect / 2, get_ptable_blocksize(dev));
@@ -93,8 +104,9 @@ int atari_partition (struct gendisk *hd, kdev_t dev,
 		    break;
 		  }
 
-		  add_gd_partition(hd, minor, partsect + ntohl(xrs->part[0].st),
-				ntohl(xrs->part[0].siz));
+		  add_gd_partition(hd, minor,
+				   partsect + be32_to_cpu(xrs->part[0].st),
+				   be32_to_cpu(xrs->part[0].siz));
 
 		  if (!(xrs->part[1].flg & 1)) {
 		    /* end of linked partition list */
@@ -107,7 +119,7 @@ int atari_partition (struct gendisk *hd, kdev_t dev,
 		    break;
 		  }
 
-		  partsect = ntohl(xrs->part[1].st) + extensect;
+		  partsect = be32_to_cpu(xrs->part[1].st) + extensect;
 		  brelse (xbh);
 		  minor++;
 		  if (minor >= m_lim) {
@@ -120,7 +132,8 @@ int atari_partition (struct gendisk *hd, kdev_t dev,
 	  else
 	    {
 	      /* we don't care about other id's */
-	      add_gd_partition (hd, minor, ntohl(pi->st), ntohl(pi->siz));
+	      add_gd_partition (hd, minor, be32_to_cpu(pi->st),
+				be32_to_cpu(pi->siz));
 	    }
 	}
     }
@@ -147,7 +160,8 @@ int atari_partition (struct gendisk *hd, kdev_t dev,
              memcmp (pi->id, "RAW", 3) == 0) )
         {
           part_fmt = 2;
-	  add_gd_partition (hd, minor, ntohl(pi->st), ntohl(pi->siz));
+	  add_gd_partition (hd, minor, be32_to_cpu(pi->st),
+			    be32_to_cpu(pi->siz));
         }
       }
       printk(" >");

@@ -62,18 +62,6 @@ static int pvc_connect(struct socket *sock,struct sockaddr *sockaddr,
 }
 
 
-static int pvc_listen(struct socket *sock,int backlog)
-{
-	return -EOPNOTSUPP;
-}
-
-
-static int pvc_accept(struct socket *sock,struct socket *newsock,int flags)
-{
-	return -EOPNOTSUPP;
-}
-
-
 static int pvc_getname(struct socket *sock,struct sockaddr *sockaddr,
     int *sockaddr_len,int peer)
 {
@@ -100,11 +88,11 @@ static struct proto_ops SOCKOPS_WRAPPED(pvc_proto_ops) = {
 	pvc_bind,
 	pvc_connect,
 	sock_no_socketpair,
-	pvc_accept,
+	sock_no_accept,
 	pvc_getname,
 	atm_poll,
 	atm_ioctl,
-	pvc_listen,
+	sock_no_listen,
 	pvc_shutdown,
 	atm_setsockopt,
 	atm_getsockopt,

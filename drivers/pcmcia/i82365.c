@@ -3,7 +3,7 @@
     Device driver for Intel 82365 and compatible PC Card controllers,
     and Yenta-compatible PCI-to-CardBus controllers.
 
-    i82365.c $Revision: 1.249 $ $Date: 1999/08/28 04:01:46 $
+    i82365.c 1.251 1999/09/07 15:19:23
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -72,11 +72,11 @@
 #ifdef PCMCIA_DEBUG
 static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
-#define DEBUG(n, args) do { if (pc_debug>(n)) printk(KERN_DEBUG args); } while (0)
+#define DEBUG(n, args...) do { if (pc_debug>(n)) printk(KERN_DEBUG args); } while (0)
 static const char *version =
 "i82365.c $Revision: 1.249 $ $Date: 1999/08/28 04:01:46 $ (David Hinds)";
 #else
-#define DEBUG(n, args) do { } while (0)
+#define DEBUG(n, args...) do { } while (0)
 #endif
 
 static void irq_count(int, void *, struct pt_regs *);
@@ -325,7 +325,7 @@ typedef enum pcic_id {
     IS_RL5C465, IS_RL5C466, IS_RL5C475, IS_RL5C476, IS_RL5C478,
     IS_SMC34C90,
     IS_TI1130, IS_TI1131, IS_TI1250A, IS_TI1220, IS_TI1221, IS_TI1210,
-    IS_TI1251A, IS_TI1251B, IS_TI1450, IS_TI1225,
+    IS_TI1251A, IS_TI1251B, IS_TI1450, IS_TI1225, IS_TI1211, IS_TI1420,
     IS_TOPIC95_A, IS_TOPIC95_B, IS_TOPIC97,
     IS_UNK_PCI, IS_UNK_CARDBUS
 #endif
@@ -419,6 +419,10 @@ static pcic_t pcic[] = {
       PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_1450 },
     { "TI 1225", IS_TI|IS_CARDBUS|IS_DF_PWR,
       PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_1225 },
+    { "TI 1211", IS_TI|IS_CARDBUS|IS_DF_PWR,
+      PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_1211 },
+    { "TI 1420", IS_TI|IS_CARDBUS|IS_DF_PWR,
+      PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_1420 },
     { "Toshiba ToPIC95-A", IS_CARDBUS|IS_TOPIC|IS_DF_PWR,
       PCI_VENDOR_ID_TOSHIBA, PCI_DEVICE_ID_TOSHIBA_TOPIC95_A },
     { "Toshiba ToPIC95-B", IS_CARDBUS|IS_TOPIC|IS_DF_PWR,
@@ -1245,7 +1249,7 @@ static void irq_count(int irq, void *dev, struct pt_regs *regs)
 static u_int test_irq(u_short sock, int irq, int pci)
 {
     u_char csc = (pci) ? 0 : irq;
-    DEBUG(2, ("  testing %s irq %d\n", pci ? "PCI" : "ISA", irq));
+    DEBUG(2, "  testing %s irq %d\n", pci ? "PCI" : "ISA", irq);
     
     if (request_irq(irq, irq_count, (pci?SA_SHIRQ:0), "scan", NULL) != 0)
 	return 1;
@@ -1265,7 +1269,7 @@ static u_int test_irq(u_short sock, int irq, int pci)
 	i365_set(sock, I365_CSCINT, I365_CSC_STSCHG | (csc << 4));
 	cb_writel(sock, CB_SOCKET_EVENT, -1);
 	cb_writel(sock, CB_SOCKET_MASK, CB_SM_CSTSCHG);
-	cb_writel(sock, CB_SOCKET_FORCE, CB_SE_CSTSCHG|0x410);
+	cb_writel(sock, CB_SOCKET_FORCE, CB_SE_CSTSCHG);
 	udelay(1000);
 	cb_writel(sock, CB_SOCKET_EVENT, -1);
 	cb_writel(sock, CB_SOCKET_MASK, 0);
@@ -1281,7 +1285,7 @@ static u_int test_irq(u_short sock, int irq, int pci)
 
     /* mask all interrupts */
     i365_set(sock, I365_CSCINT, 0);
-    DEBUG(2, ("    hits = %d\n", irq_hits));
+    DEBUG(2, "    hits = %d\n", irq_hits);
     
     return (irq_hits != 1);
 }
@@ -1304,16 +1308,16 @@ static u_int isa_scan(u_short sock, u_int mask0)
     if (!(socket[sock].flags & IS_CARDBUS) ||
 	(cb_set_irq_mode(sock, 0, 0) == 0))
 #endif
-	if (do_scan) {
-	    set_host_state(sock);
-	    i365_set(sock, I365_CSCINT, 0);
-	    for (i = 0; i < 16; i++)
-		if ((mask0 & (1 << i)) && (test_irq(sock, i, 0) == 0))
-		    mask1 |= (1 << i);
-	    for (i = 0; i < 16; i++)
-		if ((mask1 & (1 << i)) && (test_irq(sock, i, 0) != 0))
-		    mask1 ^= (1 << i);
-	}
+    if (do_scan) {
+	set_host_state(sock);
+	i365_set(sock, I365_CSCINT, 0);
+	for (i = 0; i < 16; i++)
+	    if ((mask0 & (1 << i)) && (test_irq(sock, i, 0) == 0))
+		mask1 |= (1 << i);
+	for (i = 0; i < 16; i++)
+	    if ((mask1 & (1 << i)) && (test_irq(sock, i, 0) != 0))
+		mask1 ^= (1 << i);
+    }
     
     printk(KERN_INFO "    ISA irqs (");
     if (mask1) {
@@ -1661,12 +1665,14 @@ static void add_cb_bridge(int type, u_char bus, u_char devfn,
 	pci_readl(bus, devfn, PCI_BASE_ADDRESS_0, &s->cb_phys);
 	if (s->cb_phys == 0) {
 	    int i;
+	    pci_writew(bus, devfn, PCI_COMMAND, CMD_DFLT);
 	    for (i = 0; i < sizeof(cb_mem_base)/sizeof(u_int); i++) {
 		s->cb_phys = cb_mem_base[i];
 		s->cb_virt = ioremap(s->cb_phys, 0x1000);
 		pci_writel(bus, devfn, PCI_BASE_ADDRESS_0, s->cb_phys);
 		/* Simple sanity checks */
-		if (!(readb(s->cb_virt+0x800+I365_IDENT) & 0x70) &&
+		if (((readb(s->cb_virt+0x800+I365_IDENT) & 0xf0)
+		     == 0x80) &&
 		    !(readb(s->cb_virt+0x800+I365_CSC) &&
 		      readb(s->cb_virt+0x800+I365_CSC) &&
 		      readb(s->cb_virt+0x800+I365_CSC)))
@@ -1675,6 +1681,7 @@ static void add_cb_bridge(int type, u_char bus, u_char devfn,
 	    }
 	    if (i == sizeof(cb_mem_base)/sizeof(u_int)) {
 		pci_writel(bus, devfn, PCI_BASE_ADDRESS_0, 0);
+		s->cb_phys = 0; s->cb_virt = NULL;
 		printk("\n");
 		printk(KERN_NOTICE "  Bridge register mapping failed:"
 		       " check cb_mem_base setting\n");
@@ -1721,6 +1728,7 @@ static void add_cb_bridge(int type, u_char bus, u_char devfn,
 	    child->number = child->secondary = s[a].cap.cardbus;
 	    child->subordinate = s[a].sub_bus;
 	    child->parent = parent;
+	    child->ops = parent->ops;
 	    child->next = parent->children;
 	}
 	s[a].cap.cb_bus = parent->children = child;
@@ -1805,7 +1813,7 @@ static void isa_probe(void)
 
 static int pcic_init(void)
 {
-    DEBUG(0, ("%s\n", version));
+    DEBUG(0, "%s\n", version);
     printk(KERN_INFO "Intel PCIC probe: ");
     sockets = 0;
 
@@ -1819,12 +1827,12 @@ static int pcic_init(void)
 #ifdef CONFIG_ISA
     isa_probe();
 #endif
-	
+
     if (sockets == 0) {
 	printk("not found.\n");
 	return -ENODEV;
     }
-    
+
     /* Set up interrupt handler, and/or polling */
 #ifdef CONFIG_ISA
     if (grab_irq != 0)
@@ -1913,7 +1921,7 @@ static void pcic_interrupt(int irq, void *dev, struct pt_regs *regs)
     u_long flags = 0;
 #endif
     
-    DEBUG(4, ("i82365: pcic_interrupt(%d)\n", irq));
+    DEBUG(4, "i82365: pcic_interrupt(%d)\n", irq);
 
     for (j = 0; j < 20; j++) {
 	active = 0;
@@ -1946,7 +1954,7 @@ static void pcic_interrupt(int irq, void *dev, struct pt_regs *regs)
 	    if (!(socket[i].flags & IS_CARDBUS))
 		spin_unlock_irqrestore(&isa_lock, flags);
 #endif
-	    DEBUG(2, ("i82365: socket %d event 0x%02x\n", i, events));
+	    DEBUG(2, "i82365: socket %d event 0x%02x\n", i, events);
 	    if (events)
 		socket[i].handler(socket[i].info, events);
 	    active |= events;
@@ -2028,7 +2036,7 @@ static int i365_get_status(u_short sock, u_int *value)
     }
 #endif
     
-    DEBUG(1, ("i82365: GetStatus(%d) = %#4.4x\n", sock, *value));
+    DEBUG(1, "i82365: GetStatus(%d) = %#4.4x\n", sock, *value);
     return 0;
 } /* i365_get_status */
 
@@ -2108,9 +2116,9 @@ static int i365_get_socket(u_short sock, socket_state_t *state)
 	state->csc_mask |= (reg & I365_CSC_READY) ? SS_READY : 0;
     }
     
-    DEBUG(1, ("i82365: GetSocket(%d) = flags %#3.3x, Vcc %d, Vpp %d, "
-	      "io_irq %d, csc_mask %#2.2x\n", sock, state->flags,
-	      state->Vcc, state->Vpp, state->io_irq, state->csc_mask));
+    DEBUG(1, "i82365: GetSocket(%d) = flags %#3.3x, Vcc %d, Vpp %d, "
+	  "io_irq %d, csc_mask %#2.2x\n", sock, state->flags,
+	  state->Vcc, state->Vpp, state->io_irq, state->csc_mask);
     return 0;
 } /* i365_get_socket */
 
@@ -2121,9 +2129,9 @@ static int i365_set_socket(u_short sock, socket_state_t *state)
     socket_info_t *t = &socket[sock];
     u_char reg;
     
-    DEBUG(1, ("i82365: SetSocket(%d, flags %#3.3x, Vcc %d, Vpp %d, "
-	      "io_irq %d, csc_mask %#2.2x)\n", sock, state->flags,
-	      state->Vcc, state->Vpp, state->io_irq, state->csc_mask));
+    DEBUG(1, "i82365: SetSocket(%d, flags %#3.3x, Vcc %d, Vpp %d, "
+	  "io_irq %d, csc_mask %#2.2x)\n", sock, state->flags,
+	  state->Vcc, state->Vpp, state->io_irq, state->csc_mask);
     
     /* First set global controller options */
 #ifdef CONFIG_PCI
@@ -2254,9 +2262,9 @@ static int i365_get_io_map(u_short sock, struct pccard_io_map *io)
     io->flags |= (ioctl & I365_IOCTL_0WS(map)) ? MAP_0WS : 0;
     io->flags |= (ioctl & I365_IOCTL_16BIT(map)) ? MAP_16BIT : 0;
     io->flags |= (ioctl & I365_IOCTL_IOCS16(map)) ? MAP_AUTOSZ : 0;
-    DEBUG(1, ("i82365: GetIOMap(%d, %d) = %#2.2x, %d ns, "
-	      "%#4.4x-%#4.4x\n", sock, map, io->flags, io->speed,
-	      io->start, io->stop));
+    DEBUG(1, "i82365: GetIOMap(%d, %d) = %#2.2x, %d ns, "
+	  "%#4.4x-%#4.4x\n", sock, map, io->flags, io->speed,
+	  io->start, io->stop);
     return 0;
 } /* i365_get_io_map */
 
@@ -2266,9 +2274,9 @@ static int i365_set_io_map(u_short sock, struct pccard_io_map *io)
 {
     u_char map, ioctl;
     
-    DEBUG(1, ("i82365: SetIOMap(%d, %d, %#2.2x, %d ns, "
-	      "%#4.4x-%#4.4x)\n", sock, io->map, io->flags,
-	      io->speed, io->start, io->stop));
+    DEBUG(1, "i82365: SetIOMap(%d, %d, %#2.2x, %d ns, "
+	  "%#4.4x-%#4.4x)\n", sock, io->map, io->flags,
+	  io->speed, io->start, io->stop);
     map = io->map;
     if ((map > 1) || (io->start > 0xffff) || (io->stop > 0xffff) ||
 	(io->stop < io->start)) return -EINVAL;
@@ -2330,9 +2338,9 @@ static int i365_get_mem_map(u_short sock, struct pccard_mem_map *mem)
     }
 #endif
     
-    DEBUG(1, ("i82365: GetMemMap(%d, %d) = %#2.2x, %d ns, %#5.5lx-%#5."
-	      "5lx, %#5.5x\n", sock, mem->map, mem->flags, mem->speed,
-	      mem->sys_start, mem->sys_stop, mem->card_start));
+    DEBUG(1, "i82365: GetMemMap(%d, %d) = %#2.2x, %d ns, %#5.5lx-%#5."
+	  "5lx, %#5.5x\n", sock, mem->map, mem->flags, mem->speed,
+	  mem->sys_start, mem->sys_stop, mem->card_start);
     return 0;
 } /* i365_get_mem_map */
 
@@ -2343,9 +2351,9 @@ static int i365_set_mem_map(u_short sock, struct pccard_mem_map *mem)
     u_short base, i;
     u_char map;
     
-    DEBUG(1, ("i82365: SetMemMap(%d, %d, %#2.2x, %d ns, %#5.5lx-%#5.5"
-	      "lx, %#5.5x)\n", sock, mem->map, mem->flags, mem->speed,
-	      mem->sys_start, mem->sys_stop, mem->card_start));
+    DEBUG(1, "i82365: SetMemMap(%d, %d, %#2.2x, %d ns, %#5.5lx-%#5.5"
+	  "lx, %#5.5x)\n", sock, mem->map, mem->flags, mem->speed,
+	  mem->sys_start, mem->sys_stop, mem->card_start);
 
     map = mem->map;
     if ((map > 4) || (mem->card_start > 0x3ffffff) ||
@@ -2455,7 +2463,7 @@ static int cb_get_status(u_short sock, u_int *value)
     *value |= (s & CB_SS_PWRCYCLE) ? (SS_POWERON|SS_READY) : 0;
     *value |= (s & CB_SS_3VCARD) ? SS_3VCARD : 0;
     *value |= (s & CB_SS_XVCARD) ? SS_XVCARD : 0;
-    DEBUG(1, ("yenta: GetStatus(%d) = %#4.4x\n", sock, *value));
+    DEBUG(1, "yenta: GetStatus(%d) = %#4.4x\n", sock, *value);
     return 0;
 } /* cb_get_status */
 
@@ -2471,9 +2479,9 @@ static int cb_get_socket(u_short sock, socket_state_t *state)
 	state->io_irq = s->cap.pci_irq;
     else
 	state->io_irq = i365_get(sock, I365_INTCTL) & I365_IRQ_MASK;
-    DEBUG(1, ("yenta: GetSocket(%d) = flags %#3.3x, Vcc %d, Vpp %d, "
-	      "io_irq %d, csc_mask %#2.2x\n", sock, state->flags,
-	      state->Vcc, state->Vpp, state->io_irq, state->csc_mask));
+    DEBUG(1, "yenta: GetSocket(%d) = flags %#3.3x, Vcc %d, Vpp %d, "
+	  "io_irq %d, csc_mask %#2.2x\n", sock, state->flags,
+	  state->Vcc, state->Vpp, state->io_irq, state->csc_mask);
     return 0;
 } /* cb_get_socket */
 
@@ -2482,9 +2490,9 @@ static int cb_set_socket(u_short sock, socket_state_t *state)
     socket_info_t *s = &socket[sock];
     u_int reg;
     
-    DEBUG(1, ("yenta: SetSocket(%d, flags %#3.3x, Vcc %d, Vpp %d, "
-	      "io_irq %d, csc_mask %#2.2x)\n", sock, state->flags,
-	      state->Vcc, state->Vpp, state->io_irq, state->csc_mask));
+    DEBUG(1, "yenta: SetSocket(%d, flags %#3.3x, Vcc %d, Vpp %d, "
+	  "io_irq %d, csc_mask %#2.2x)\n", sock, state->flags,
+	  state->Vcc, state->Vpp, state->io_irq, state->csc_mask);
     
     /* First set global controller options */
     if (s->cap.pci_irq)
@@ -2530,8 +2538,8 @@ static int cb_get_bridge(u_short sock, struct cb_bridge_map *m)
 	pci_readw(s->bus, s->devfn, CB_BRIDGE_CONTROL, &bcr);
 	m->flags |= (bcr & CB_BCR_PREFETCH(map)) ? MAP_PREFETCH : 0;
     }
-    DEBUG(1, ("yenta: GetBridge(%d, %d) = %#2.2x, %#4.4x-%#4.4x\n",
-	      sock, map, m->flags, m->start, m->stop));
+    DEBUG(1, "yenta: GetBridge(%d, %d) = %#2.2x, %#4.4x-%#4.4x\n",
+	  sock, map, m->flags, m->start, m->stop);
     return 0;
 }
 
@@ -2540,8 +2548,8 @@ static int cb_set_bridge(u_short sock, struct cb_bridge_map *m)
     socket_info_t *s = &socket[sock];
     u_char map;
     
-    DEBUG(1, ("yenta: SetBridge(%d, %d, %#2.2x, %#4.4x-%#4.4x)\n",
-	      sock, m->map, m->flags, m->start, m->stop));
+    DEBUG(1, "yenta: SetBridge(%d, %d, %#2.2x, %#4.4x-%#4.4x)\n",
+	  sock, m->map, m->flags, m->start, m->stop);
     map = m->map;
     if (!(s->flags & IS_CARDBUS) || (map > 1) || (m->stop < m->start))
 	return -EINVAL;
@@ -2742,7 +2750,7 @@ static int pcic_service(u_int sock, u_int cmd, void *arg)
 {
     subfn_t fn;
 
-    DEBUG(2, ("pcic_ioctl(%d, %d, 0x%p)\n", sock, cmd, arg));
+    DEBUG(2, "pcic_ioctl(%d, %d, 0x%p)\n", sock, cmd, arg);
 
     if (cmd >= NFUNC)
 	return -EINVAL;

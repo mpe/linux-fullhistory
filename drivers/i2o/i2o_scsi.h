@@ -11,7 +11,7 @@
 #include <linux/kdev_t.h>
 
 #define I2O_SCSI_ID 15
-#define I2O_SCSI_CAN_QUEUE 8
+#define I2O_SCSI_CAN_QUEUE 4
 #define I2O_SCSI_CMD_PER_LUN 6
 
 extern struct proc_dir_entry proc_scsi_i2o_scsi;

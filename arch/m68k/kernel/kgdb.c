@@ -189,6 +189,11 @@
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
 #endif
+#ifdef CONFIG_MAC
+#include <linux/tty.h>
+#include <asm/bootinfo.h>
+#include <asm/macints.h>
+#endif
 
 
 #undef DEBUG
@@ -238,6 +243,15 @@ static unsigned char atari_scc_intr( void );
 #ifdef CONFIG_AMIGA
 extern int amiga_ser_out( unsigned char c );
 extern unsigned char amiga_ser_in( void );
+#endif
+#ifdef CONFIG_MAC
+static unsigned char mac_scca_in( void );
+static unsigned char mac_scca_out( unsigned char c );
+static unsigned char mac_scca_intr( void ); 
+static unsigned char mac_sccb_in( void );
+static unsigned char mac_sccb_out( unsigned char c);
+static unsigned char mac_sccb_intr( void );
+extern void mac_init_scc_port( int cflag, int port );
 #endif
 
 /************************* End of Prototypes **************************/
@@ -668,6 +682,31 @@ void kgdb_init(void)
 	}
 #endif
 
+#ifdef CONFIG_MAC
+	if (MACH_IS_MAC) {
+		if (!strcmp( m68k_debug_device, "ser" ) ||
+		    !strcmp( m68k_debug_device, "ser1" )) {
+			mac_init_scc_port( B9600|CS8, 0 );
+			serial_in = mac_scca_in;
+			serial_out = mac_scca_out;
+			serial_intr = mac_scca_intr;
+		} else if (!strcmp( m68k_debug_device, "ser2" )) {
+			mac_init_scc_port( B9600|CS8, 1 );
+			serial_in = mac_sccb_in;
+			serial_out = mac_sccb_out;
+			serial_intr = mac_sccb_intr;
+		}
+	}
+	if (!serial_in || !serial_out) {
+		if (*m68k_debug_device)
+			printk( "kgdb_init failed: no valid serial device!\n" );
+		else
+			printk( "kgdb not enabled\n" );
+		return;
+	}
+	request_irq(4, kgdb_intr, IRQ_TYPE_FAST, "kgdb", NULL);
+#endif
+
 #ifdef CONFIG_ATARI
 	if (!serial_in || !serial_out) {
 		if (*m68k_debug_device)
@@ -781,8 +820,15 @@ __asm__
   /* copy format/vector word */
   "		movew	%a0@("FRAMEOFF_VECTOR"),%a1@("GDBOFF_VECTOR")\n"
   /* save FPU regs */
+#ifndef CONFIG_M68KFPU_EMU_ONLY
+#ifdef CONFIG_M68KFPU_EMU
+  "		tstl	"SYMBOL_NAME_STR(m68k_fputype)"\n"
+  "		jeq	1f\n"
+#endif
   "		fmovemx	%fp0-%fp7,%a1@("GDBOFF_FP0")\n"
   "		fmoveml	%fpcr/%fpsr/%fpiar,%a1@("GDBOFF_FPCTL")\n"
+  "1:\n"
+#endif	/* CONFIG_M68KFPU_EMU_ONLY */
 
   /* set stack to CPU frame */
   "		addl	#"FRAMEOFF_SR",%a0\n"
@@ -801,8 +847,15 @@ __asm__
 
   /* after return, first restore FPU registers */
   "		movel	#"SYMBOL_NAME_STR(kgdb_registers)",%a0\n" /* source */
+#ifndef CONFIG_M68KFPU_EMU_ONLY
+#ifdef CONFIG_M68KFPU_EMU
+  "		tstl	"SYMBOL_NAME_STR(m68k_fputype)"\n"
+  "		jeq	1f\n"
+#endif
   "		fmovemx	%a0@("GDBOFF_FP0"),%fp0-%fp7\n"
   "		fmoveml	%a0@("GDBOFF_FPCTL"),%fpcr/%fpsr/%fpiar\n"
+  "1:\n"
+#endif	/* CONFIG_M68KFPU_EMU_ONLY */
   /* set new stack pointer */
   "		movel	%a0@("GDBOFF_A7"),%sp\n"
   "		clrw	%sp@-\n"		/* fake format $0 frame */
@@ -849,8 +902,15 @@ __asm__
   /* fake format 0 and vector 1 (translated to SIGINT) */
   "		movew	#4,%a1@("GDBOFF_VECTOR")\n"
   /* save FPU regs */
+#ifndef CONFIG_M68KFPU_EMU_ONLY
+#ifdef CONFIG_M68KFPU_EMU
+  "		tstl	"SYMBOL_NAME_STR(m68k_fputype)"\n"
+  "		jeq	1f\n"
+#endif
   "		fmovemx	%fp0-%fp7,%a1@("GDBOFF_FP0")\n"
   "		fmoveml	%fpcr/%fpsr/%fpiar,%a1@("GDBOFF_FPCTL")\n"
+  "1:\n"
+#endif	/* CONFIG_M68KFPU_EMU_ONLY */
   /* pop off the CPU stack frame */
   "		addql	#8,%sp\n"
   "		movel	%sp,%a1@("GDBOFF_A7")\n" /* save a7 now */
@@ -1188,6 +1248,114 @@ static unsigned char atari_scc_intr( void )
 	}
 	scc.cha_b_ctrl = 0x38; /* reset highest IUS */
 	MFPDELAY();
+	return( c );
+}
+
+#endif
+
+/* -------------------- Macintosh serial I/O -------------------- */
+
+#ifdef CONFIG_MAC
+
+struct SCC
+ {
+  u_char cha_b_ctrl;
+  u_char char_dummy1;
+  u_char cha_a_ctrl;
+  u_char char_dummy2;
+  u_char cha_b_data;
+  u_char char_dummy3;
+  u_char cha_a_data;
+ };
+
+#define scc (*((volatile struct SCC*)mac_bi_data.sccbase))
+
+#define uSEC 1
+#define LONG_DELAY()				\
+    do {					\
+	int i;					\
+	for( i = 60*uSEC; i > 0; --i )		\
+	    barrier();				\
+    } while(0)
+
+static unsigned char mac_sccb_out (unsigned char c)
+{
+    int i;
+    do {
+	LONG_DELAY();
+    } while (!(scc.cha_b_ctrl & 0x04)); /* wait for tx buf empty */
+    for( i = uSEC; i > 0; --i )
+	barrier();
+    scc.cha_b_data = c;
+}
+
+static unsigned char mac_scca_out (unsigned char c)
+{
+    int i;
+    do {
+	LONG_DELAY();
+    } while (!(scc.cha_a_ctrl & 0x04)); /* wait for tx buf empty */
+    for( i = uSEC; i > 0; --i )
+	barrier();
+    scc.cha_a_data = c;
+}
+
+static unsigned char mac_sccb_in( void )
+{
+    do {
+	LONG_DELAY();
+    } while( !(scc.cha_b_ctrl & 0x01) ); /* wait for rx buf filled */
+    LONG_DELAY();
+    return( scc.cha_b_data );
+}
+
+static unsigned char mac_scca_in( void )
+
+{
+    do {
+	LONG_DELAY();
+    } while( !(scc.cha_a_ctrl & 0x01) ); /* wait for rx buf filled */
+    LONG_DELAY();
+    return( scc.cha_a_data );
+}
+
+static unsigned char mac_sccb_intr( void )
+
+{	unsigned char c, stat;
+	
+	LONG_DELAY();
+	scc.cha_b_ctrl = 1; /* RR1 */
+	LONG_DELAY();
+	stat = scc.cha_b_ctrl;
+	LONG_DELAY();
+	c = scc.cha_b_data;
+	LONG_DELAY();
+	if (stat & 0x30) {
+		scc.cha_b_ctrl = 0x30; /* error reset for overrun and parity */
+		LONG_DELAY();
+	}
+	scc.cha_b_ctrl = 0x38; /* reset highest IUS */
+	LONG_DELAY();
+	return( c );
+}
+
+static unsigned char mac_scca_intr( void )
+
+{	unsigned char c, stat;
+	
+	LONG_DELAY();
+	scc.cha_a_ctrl = 1; /* RR1 */
+	LONG_DELAY();
+	stat = scc.cha_a_ctrl;
+	LONG_DELAY();
+	c = scc.cha_a_data;
+	LONG_DELAY();
+	if (stat & 0x30) {
+		scc.cha_a_ctrl = 0x30; /* error reset for overrun and parity */
+		LONG_DELAY();
+	}
+	scc.cha_a_ctrl = 0x38; /* reset highest IUS */
+	LONG_DELAY();
 	return( c );
 }
 

@@ -412,6 +412,10 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SUN3LANCE),y)
+L_OBJS += sun3lance.o
+endif
+
 ifeq ($(CONFIG_PCNET32),y)
 L_OBJS += pcnet32.o
 else

@@ -91,14 +91,8 @@ static void mac_init_asc( void )
 			mac_special_bell = mac_quadra_start_bell;
 			mac_asc_samplespersec = 22150;
 			break;	
-		case MAC_MODEL_Q650:
-		case MAC_MODEL_Q700:
-		case MAC_MODEL_Q800:
-		case MAC_MODEL_Q900:
-		case MAC_MODEL_Q950:
-			/*
-			 * Currently not implemented!
-			 */
+		case MAC_MODEL_C660:
+		case MAC_MODEL_Q840:
 			/*
 			 * The Quadra 660AV and 840AV use the "Singer" custom ASIC for sound I/O.
 			 * It appears to be similar to the "AWACS" custom ASIC in the Power Mac 
@@ -125,6 +119,22 @@ static void mac_init_asc( void )
 			 * --David Kilzer
 			 */
 			mac_special_bell = mac_av_start_bell;
+			break;
+		case MAC_MODEL_Q650:
+		case MAC_MODEL_Q700:
+		case MAC_MODEL_Q800:
+		case MAC_MODEL_Q900:
+		case MAC_MODEL_Q950:
+			/*
+			 * Currently not implemented!
+			 */
+			mac_special_bell = NULL;
+			break;
+		default:
+			/*
+			 * Every switch needs a default
+			 */
+			mac_special_bell = NULL;
 			break;
 	}
 
@@ -154,6 +164,12 @@ void mac_mksound( unsigned int freq, unsigned int length )
 	__u32 cfreq = ( freq << 5 ) / 468;
 	__u32 flags;
 	int i;
+
+	if ( mac_special_bell == NULL )
+	{
+		/* Do nothing */
+		return;
+	}
 
 	if ( !mac_asc_inited )
 		mac_init_asc();

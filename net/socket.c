@@ -42,6 +42,8 @@
  *		Andi Kleen	:	Some small cleanups, optimizations,
  *					and fixed a copy_from_user() bug.
  *		Tigran Aivazian	:	sys_send(args) calls sys_sendto(args, NULL, 0)
+ *		Tigran Aivazian	:	Made listen(2) backlog sanity checks 
+ *					protocol-independent
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -894,6 +896,10 @@ asmlinkage long sys_listen(int fd, int backlog)
 	int err;
 	
 	if ((sock = sockfd_lookup(fd, &err)) != NULL) {
+		if ((unsigned) backlog == 0)	/* BSDism */
+			backlog = 1;
+		if ((unsigned) backlog > SOMAXCONN)
+			backlog = SOMAXCONN;
 		err=sock->ops->listen(sock, backlog);
 		sockfd_put(sock);
 	}

@@ -22,6 +22,8 @@ smbfs.txt
 	- info on using filesystems with the SMB protocol (Windows 3.11 and NT)
 sysv-fs.txt
 	- info on the SystemV/Coherent filesystem.
+udf.txt
+	- info and mount options for the UDF filesystem.
 ufs.txt
 	- info on the ufs filesystem.
 umsdos.txt

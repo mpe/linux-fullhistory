@@ -38,11 +38,14 @@ EXPORT_SYMBOL(mm_vtop);
 EXPORT_SYMBOL(mm_ptov);
 EXPORT_SYMBOL(mm_end_of_chunk);
 #endif
-EXPORT_SYMBOL(mm_vtop_fallback);
 EXPORT_SYMBOL(m68k_realnum_memory);
 EXPORT_SYMBOL(m68k_memory);
+#ifndef CONFIG_SUN3
+EXPORT_SYMBOL(mm_vtop_fallback);
 EXPORT_SYMBOL(__ioremap);
 EXPORT_SYMBOL(iounmap);
+EXPORT_SYMBOL(kernel_set_cachemode);
+#endif
 EXPORT_SYMBOL(m68k_debug_device);
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(dump_thread);
@@ -53,7 +56,6 @@ EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
-EXPORT_SYMBOL(kernel_set_cachemode);
 EXPORT_SYMBOL(kernel_thread);
 
 /* Networking helper routines. */
@@ -67,6 +69,7 @@ EXPORT_SYMBOL_NOVERS(__ashrdi3);
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memset);
 EXPORT_SYMBOL_NOVERS(memcmp);
+EXPORT_SYMBOL_NOVERS(memscan);
 
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);

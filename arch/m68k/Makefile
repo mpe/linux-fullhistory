@@ -24,7 +24,11 @@ ifneq ($(COMPILE_ARCH),$(ARCH))
 	CROSS_COMPILE = m68k-linux-
 endif
 
+ifndef CONFIG_SUN3
 LINKFLAGS = -T $(TOPDIR)/arch/m68k/vmlinux.lds
+else
+LINKFLAGS = -T $(TOPDIR)/arch/m68k/vmlinux-sun3.lds -N
+endif
 
 # without -fno-strength-reduce the 53c7xx.c driver fails ;-(
 CFLAGS += -pipe -fno-strength-reduce -ffixed-a2
@@ -50,7 +54,11 @@ ifdef CONFIG_KGDB
 CFLAGS := $(subst -fomit-frame-pointer,,$(CFLAGS)) -g
 endif
 
+ifndef CONFIG_SUN3
 HEAD := arch/m68k/kernel/head.o
+else
+HEAD := arch/m68k/kernel/sun3-head.o
+endif 
 
 SUBDIRS += arch/m68k/kernel arch/m68k/mm arch/m68k/lib
 CORE_FILES := arch/m68k/kernel/kernel.o arch/m68k/mm/mm.o $(CORE_FILES)
@@ -106,6 +114,11 @@ CORE_FILES := $(CORE_FILES) arch/m68k/sun3x/sun3x.o
 SUBDIRS := $(SUBDIRS) arch/m68k/sun3x
 endif
 
+ifdef CONFIG_SUN3
+CORE_FILES := $(CORE_FILES) arch/m68k/sun3/sun3.o arch/m68k/sun3/prom/promlib.a
+SUBDIRS := $(SUBDIRS) arch/m68k/sun3 arch/m68k/sun3/prom
+endif
+
 ifdef CONFIG_M68040
 CORE_FILES := $(CORE_FILES) arch/m68k/fpsp040/fpsp.o
 SUBDIRS := $(SUBDIRS) arch/m68k/fpsp040
@@ -132,7 +145,7 @@ zImage compressed: vmlinux.gz
 
 vmlinux.gz: vmlinux
 
-ifdef CONFIG_KGDB
+ifndef CONFIG_KGDB
 	cp vmlinux vmlinux.tmp
 	$(STRIP) vmlinux.tmp
 	gzip -9c vmlinux.tmp >vmlinux.gz
@@ -141,8 +154,21 @@ else
 	gzip -9c vmlinux >vmlinux.gz
 endif
 
+bzImage: vmlinux.bz2
+
+vmlinux.bz2: vmlinux
+
+ifndef CONFIG_KGDB
+	cp vmlinux vmlinux.tmp
+	$(STRIP) vmlinux.tmp
+	bzip2 -1c vmlinux.tmp >vmlinux.bz2
+	rm vmlinux.tmp
+else
+	bzip2 -1c vmlinux >vmlinux.bz2
+endif
+
 archclean:
-	rm -f vmlinux.gz
+	rm -f vmlinux.gz vmlinux.bz2
 	rm -f arch/m68k/kernel/m68k_defs.h arch/m68k/kernel/m68k_defs.d
 
 archmrproper:

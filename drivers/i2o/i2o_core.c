@@ -265,7 +265,7 @@ int i2o_delete_controller(struct i2o_controller *c)
 	spin_lock(&i2o_configuration_lock);
 	if(atomic_read(&c->users))
 	{
-		printk("Someones using controller iop%d\n", c->unit);
+		printk("Someone is using controller iop%d\n", c->unit);
 		spin_unlock(&i2o_configuration_lock);
 		return -EBUSY;
 	}
@@ -1058,7 +1058,7 @@ int i2o_status_get(struct i2o_controller *c)
 
 	/* Wait for a reply */
 	time=jiffies;
-		 
+
 	while(status_block[87]!=0xFF)
 	{
 		if((jiffies-time)>=5*HZ)

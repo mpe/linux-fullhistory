@@ -2,8 +2,13 @@
 #define _M68K_SHMPARAM_H
 
 /* address range for shared memory attaches if no address passed to shmat() */
+#ifndef CONFIG_SUN3
 #define SHM_RANGE_START	0xC0000000
 #define SHM_RANGE_END	0xD0000000
+#else
+#define SHM_RANGE_START	0x0C000000
+#define SHM_RANGE_END	0x0D000000
+#endif
 
 /*
  * Format of a swap-entry for shared memory pages currently out in

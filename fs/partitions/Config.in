@@ -13,7 +13,10 @@ else
   if [ "$ARCH" = "ppc" -o "$CONFIG_MAC" = "y" ]; then
     define_bool CONFIG_MAC_PARTITION y
   fi
-  define_bool CONFIG_MSDOS_PARTITION y
+  if [ "$CONFIG_AMIGA" != "y" -a "$CONFIG_ATARI" != "y" -a \
+       "$CONFIG_MAC" != "y" ]; then
+    define_bool CONFIG_MSDOS_PARTITION y
+  fi
 fi
 if [ "$CONFIG_MSDOS_PARTITION" = "y" ]; then
   bool '  BSD disklabel (FreeBSD partition tables) support' CONFIG_BSD_DISKLABEL

@@ -385,7 +385,7 @@ unsigned long mm_vtop_fallback(unsigned long vaddr)
 }
 
 #ifndef CONFIG_SINGLE_MEMORY_CHUNK
-void *mm_ptov (unsigned long paddr)
+unsigned long mm_ptov (unsigned long paddr)
 {
 	int i = 0;
 	unsigned long poff, voff = PAGE_OFFSET;
@@ -396,7 +396,7 @@ void *mm_ptov (unsigned long paddr)
 #ifdef DEBUGPV
 			printk ("PTOV(%lx)=%lx\n", paddr, poff + voff);
 #endif
-			return (void *)(poff + voff);
+			return poff + voff;
 		}
 		voff += m68k_memory[i].size;
 	} while (++i < m68k_num_memory);
@@ -429,9 +429,9 @@ void *mm_ptov (unsigned long paddr)
 	 * to the ZTWO_VADDR range
 	 */
 	if (MACH_IS_AMIGA && paddr < 16*1024*1024)
-		return (void *)ZTWO_VADDR(paddr);
+		return ZTWO_VADDR(paddr);
 #endif
-	return (void *)-1;
+	return -1;
 }
 #endif
 
@@ -491,14 +491,7 @@ void *mm_ptov (unsigned long paddr)
  * this?). So we have to push first and then additionally to invalidate.
  */
 
-#ifdef CONFIG_M68K_L2_CACHE
-/*
- *	Jes was worried about performance (urhh ???) so its optional
- */
- 
-void (*mach_l2_flush)(int) = NULL;
-#endif
- 
+
 /*
  * cache_clear() semantics: Clear any cache entries for the area in question,
  * without writing back dirty entries first. This is useful if the data will

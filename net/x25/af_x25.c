@@ -1044,10 +1044,6 @@ static int x25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int fl
 	return copied;
 }
 
-static int x25_shutdown(struct socket *sk, int how)
-{
-	return -EOPNOTSUPP;
-}
 
 static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
@@ -1246,7 +1242,7 @@ static struct proto_ops SOCKOPS_WRAPPED(x25_proto_ops) = {
 	datagram_poll,
 	x25_ioctl,
 	x25_listen,
-	x25_shutdown,
+	sock_no_shutdown,
 	x25_setsockopt,
 	x25_getsockopt,
 	sock_no_fcntl,

@@ -93,6 +93,7 @@ extern int bigmac_probe(struct net_device *);
 extern int myri_sbus_probe(struct net_device *);
 extern int sgiseeq_probe(struct net_device *);
 extern int atarilance_probe(struct net_device *);
+extern int sun3lance_probe(struct net_device *);
 extern int a2065_probe(struct net_device *);
 extern int ariadne_probe(struct net_device *);
 extern int ariadne2_probe(struct net_device *);
@@ -409,6 +410,9 @@ struct devprobe parport_probes[] __initdata = {
 struct devprobe m68k_probes[] __initdata = {
 #ifdef CONFIG_ATARILANCE	/* Lance-based Atari ethernet boards */
 	{atarilance_probe, 0},
+#endif
+#ifdef CONFIG_SUN3LANCE         /* sun3 onboard Lance chip */
+	{sun3lance_probe, 0},
 #endif
 #ifdef CONFIG_A2065		/* Commodore/Ameristar A2065 Ethernet Board */
 	{a2065_probe, 0},

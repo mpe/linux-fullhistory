@@ -6064,16 +6064,28 @@ CONFIG_NET_SB1000
 
 Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support
 CONFIG_ACENIC
-  Say Y here if you have an Alteon AceNIC or 3Com 3C985 PCI Gigabit
-  Ethernet adapter. The driver allows for using the Jumbo Frame
-  option (9000 bytes/frame) however it requires that your switches
-  can handle this as well. To enable Jumbo Frames, add `mtu 9000' to
-  your ifconfig line.
+  Say Y here if you have an Alteon AceNIC, 3Com 3C985(B), NetGear
+  GA620, SGI Gigabit or Farallon PN9000-SX PCI Gigabit Ethernet
+  adapter. The driver allows for using the Jumbo Frame option (9000
+  bytes/frame) however it requires that your switches can handle this
+  as well. To enable Jumbo Frames, add `mtu 9000' to your ifconfig
+  line.
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. This is recommended.
   The module will be called acenic.o.
+
+Omit support for older Tigon I based AceNICs
+CONFIG_ACENIC_OMIT_TIGON_I
+  Say Y here if you only have Tigon II based AceNICs and want to leave
+  out support for the older Tigon I based cards which are no longer
+  being sold (ie. the original Alteon AceNIC and 3Com 3C985 (non B
+  version)). This will reduce the size of the driver object by
+  app. 100KB. If you are not sure whether your card is a Tigon I or a
+  Tigon II, say N here.
+
+  The safe and default value for this is N.
 
 AMD LANCE and PCnet (AT1500 and NE2100) support
 CONFIG_LANCE
@@ -7317,6 +7329,25 @@ CONFIG_JOLIET
   need to have access to a machine on the Internet that has a program
   like lynx or netscape). Say Y here if you want to be able to read
   Joliet CDROMs under Linux.
+
+UDF Filesystem support
+CONFIG_UDF_FS
+  This is the new filesystem used by some CDROMS and DVD drivers. 
+  Say Y if you intend to mount DVD discs or CDRWs written in packet mode,
+  or if written to by other UDF utilities, such as DirectCD.
+
+  This filesystem support is also available as a module ( = code which
+  can be inserted in and removed from the running kernel whenever you
+  want). The module is called udf.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. 
+
+  If unsure, say N.
+
+UDF read-write support (EXPERIMENTAL)
+CONFIG_UDF_RW
+  Say Y if you want to test write support for UDF filesystems.
+  Due to lack of support for writing to CDR/CDRW's, this option
+  is only supported for Hard Discs, DVD-RAM, and loopback files.
 
 fat fs support
 CONFIG_FAT_FS
@@ -10673,11 +10704,23 @@ CONFIG_HP300
   If you plan to try to use the kernel on such a machine say Y here.
   Everybody else says N.
 
+Sun 3 support
+CONFIG_SUN3
+  This option enables support for the Sun 3 series of workstations.
+  Be warned that this support is very experimental. You will also
+  want to say Y to 68020 support and N to the other processors below.
+  Currently, it is not possible to build a kernel with support for
+  the Sun 3 and and something else, so make sure you have said N to
+  all the other machines. This option does not support the sun3x series
+  of machines (the Sun 3/80 and 3/460). If you don't want to compile a
+  kernel for a Sun 3, say N.
+
 68020 support
 CONFIG_M68020
   If you anticipate running this kernel on a computer with a MC68020
   processor, say Y. Otherwise, say N. Note that the 68020 requires a
-  68851 MMU (Memory Management Unit) to run Linux/m68k.
+  68851 MMU (Memory Management Unit) to run Linux/m68k, except on the
+  Sun 3, which provides its own version.
 
 68030 support
 CONFIG_M68030
@@ -11128,6 +11171,11 @@ HP on-board LANCE support
 CONFIG_HPLANCE
   If you want to use the builtin "LANCE" Ethernet controller on an
   HP300 machine, say Y here.
+
+Sun 3 onboard LANCE support
+CONFIG_SUN3LANCE
+  If you want to use the onboard AMD "LANCE" (le) Ethernet hardware
+  on a Sun 3, you will need to say Y here.
 
 DIO bus support
 CONFIG_DIO

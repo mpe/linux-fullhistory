@@ -29,6 +29,7 @@
 
 
 #include <linux/types.h>
+#include <linux/kdev_t.h>
 #include <linux/genhd.h>
 #include <linux/sched.h>
 #include <linux/init.h>

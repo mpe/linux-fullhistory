@@ -23,6 +23,7 @@ enum root_directory_inos {
 	PROC_PCI,
 	PROC_MCA,
 	PROC_NUBUS,
+	PROC_MAC_VIA,
 	PROC_SELF,	/* will change inode # */
 	PROC_NET,
         PROC_SCSI,
@@ -234,6 +235,8 @@ enum bus_directory_inos {
 	PROC_BUS_ZORRO,
 	PROC_BUS_ZORRO_DEVICES,
 	PROC_BUS_ECARD_DEVICES,
+	PROC_BUS_NUBUS,
+	PROC_BUS_NUBUS_DEVICES,
 	PROC_BUS_LAST
 };
 

@@ -5,14 +5,14 @@
 
 int scsi_debug_detect(Scsi_Host_Template *);
 int scsi_debug_command(Scsi_Cmnd *);
-int scsi_debug_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
+int scsi_debug_queuecommand(Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
 int scsi_debug_abort(Scsi_Cmnd *);
 int scsi_debug_biosparam(Disk *, kdev_t, int[]);
 int scsi_debug_reset(Scsi_Cmnd *, unsigned int);
 int scsi_debug_proc_info(char *, char **, off_t, int, int, int);
- 
+
 #ifndef NULL
-	#define NULL 0
+#define NULL 0
 #endif
 
 

@@ -1100,10 +1100,6 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	return copied;
 }
 
-static int nr_shutdown(struct socket *sk, int how)
-{
-	return -EOPNOTSUPP;
-}
 
 static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
@@ -1255,7 +1251,7 @@ static struct proto_ops SOCKOPS_WRAPPED(nr_proto_ops) = {
 	datagram_poll,
 	nr_ioctl,
 	nr_listen,
-	nr_shutdown,
+	sock_no_shutdown,
 	nr_setsockopt,
 	nr_getsockopt,
 	sock_no_fcntl,

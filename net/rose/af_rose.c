@@ -1245,10 +1245,6 @@ static int rose_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	return copied;
 }
 
-static int rose_shutdown(struct socket *sk, int how)
-{
-	return -EOPNOTSUPP;
-}
 
 static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
@@ -1445,7 +1441,7 @@ static struct proto_ops SOCKOPS_WRAPPED(rose_proto_ops) = {
 	datagram_poll,
 	rose_ioctl,
 	rose_listen,
-	rose_shutdown,
+	sock_no_shutdown,
 	rose_setsockopt,
 	rose_getsockopt,
 	sock_no_fcntl,

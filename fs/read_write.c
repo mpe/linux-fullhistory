@@ -13,7 +13,7 @@
 
 #include <asm/uaccess.h>
 
-static loff_t default_llseek(struct file *file, loff_t offset, int origin)
+loff_t default_llseek(struct file *file, loff_t offset, int origin)
 {
 	long long retval;
 

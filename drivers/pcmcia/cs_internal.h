@@ -1,5 +1,5 @@
 /*
- * cs_internal.h 1.41 1999/08/28 04:01:47
+ * cs_internal.h 1.43 1999/09/07 15:19:04
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -196,6 +196,8 @@ typedef struct socket_info_t {
     ((h)->event_handler((e), (p), &(h)->event_callback_args))
 
 /* In cardbus.c */
+int cb_alloc(socket_info_t *s);
+void cb_free(socket_info_t *s);
 int cb_config(socket_info_t *s);
 void cb_release(socket_info_t *s);
 void cb_enable(socket_info_t *s);
@@ -269,11 +271,10 @@ extern struct proc_dir_entry *proc_pccard;
 #endif
 
 #ifdef PCMCIA_DEBUG
-#define _printk(args...) printk(KERN_DEBUG args)
 extern int pc_debug;
-#define DEBUG(n, args) do { if (pc_debug>(n)) _printk args; } while (0)
+#define DEBUG(n, args...) do { if (pc_debug>(n)) printk(args); } while (0)
 #else
-#define DEBUG(n, args) do { } while (0)
+#define DEBUG(n, args...) do { } while (0)
 #endif
 
 #endif /* _LINUX_CS_INTERNAL_H */

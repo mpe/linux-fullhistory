@@ -14,7 +14,7 @@
  * as some of them are in PCI shared memory and it is necessary to use
  * readl/writel to access them.
  *
- * The addressing code is derived from Pete Beckman's work, but
+ * The addressing code is derived from Pete Wyckoff's work, but
  * modified to deal properly with readl/writel usage.
  */
 
@@ -143,11 +143,11 @@ struct ace_regs {
 	u32	Mb2Hi;
 	u32	TxPrd;
 	u32	Mb3Hi;
-	u32	Mb3Lo;
+	u32	RxStdPrd; /* RxStdPrd */
 	u32	Mb4Hi;
-	u32	Mb4Lo;
+	u32	RxJumboPrd; /* RxJumboPrd */
 	u32	Mb5Hi;
-	u32	Mb5Lo;
+	u32	RxMiniPrd;
 	u32	Mb6Hi;
 	u32	Mb6Lo;
 	u32	Mb7Hi;
@@ -197,7 +197,7 @@ struct ace_regs {
 	u32	IfIdx;
 	u32	IfMtu;		/* 0x660 */
 	u32	MaskInt;
-	u32	LnkState;
+	u32	GigLnkState;
 	u32	FastLnkState;
 	u32	pad16[4];	/* 0x670 */
 	u32	RxRetCsm;	/* 0x680 */
@@ -279,6 +279,7 @@ struct ace_regs {
 #define DMA_WRITE_MAX_256	0xc0
 #define DMA_WRITE_MAX_1K	0xe0
 #define MEM_READ_MULTIPLE	0x00020000
+#define PCI_66MHZ		0x00080000
 #define DMA_WRITE_ALL_ALIGN	0x00800000
 #define READ_CMD_MEM		0x06000000
 #define WRITE_CMD_MEM		0x70000000
@@ -365,6 +366,7 @@ struct event {
 #define E_LNK_STATE		0x06
 #define E_C_LINK_UP		0x01
 #define E_C_LINK_DOWN		0x02
+#define E_C_LINK_UP_FAST	0x03
 
 #define E_ERROR			0x07
 #define E_C_ERR_INVAL_CMD	0x01
@@ -416,6 +418,10 @@ struct cmd {
 #define C_C_PROMISC_DISABLE	0x02
 
 #define C_LNK_NEGOTIATION	0x0b
+#define C_C_NEGOTIATE_BOTH	0x00
+#define C_C_NEGOTIATE_GIG	0x01
+#define C_C_NEGOTIATE_10_100	0x02
+
 #define C_SET_MAC_ADDR		0x0c
 #define C_CLEAR_PROFILE		0x0d
 
@@ -429,33 +435,30 @@ struct cmd {
 
 
 /*
- * Descriptor types.
- */
-
-#define DESC_TX			0x01
-#define DESC_RX			0x02
-#define DESC_END		0x04
-#define DESC_MORE		0x08
-
-/*
- * Control block flags
- */
-
-#define FLG_RX_TCP_UDP_SUM	0x01
-#define FLG_RX_IP_SUM		0x02
-#define FLG_RX_SPLIT_HDRS	0x04
-#define FLG_RX_NO_PSDO_HDR_SUM	0x08
-#define FLG_RNG_DISABLED	0x200
-
-/*
  * Descriptor flags
  */
-#define DFLG_RX_JUMBO		0x10
+#define BD_FLG_TCP_UDP_SUM	0x01
+#define BD_FLG_IP_SUM		0x02
+#define BD_FLG_END		0x04
+#define BD_FLG_JUMBO		0x10
+#define BD_FLG_MINI		0x1000
+
+
+/*
+ * Ring Control block flags
+ */
+#define RCB_FLG_TCP_UDP_SUM	0x01
+#define RCB_FLG_IP_SUM		0x02
+#define RCB_FLG_VLAN_ASSIST	0x10
+#define RCB_FLG_COAL_INT_ONLY	0x20
+#define RCB_FLG_IEEE_SNAP_SUM	0x80
+#define RCB_FLG_EXT_RX_BD	0x100
+#define RCB_FLG_RNG_DISABLE	0x200
+
 
 /*
  * TX ring
  */
-
 #define TX_RING_ENTRIES	128
 #define TX_RING_SIZE	(TX_RING_ENTRIES * sizeof(struct tx_desc))
 #define TX_RING_BASE	0x3800
@@ -471,12 +474,16 @@ struct tx_desc{
 #if __LITTLE_ENDIAN
 	u16	flags;
 	u16	size;
+	u16	vlan;
+	u16	reserved;
 #else
 	u16	size;
 	u16	flags;
+	u16	reserved;
+	u16	vlan;
 #endif
 #endif
-	u32	nic_addr;
+	u32	vlanres;
 };
 
 
@@ -492,9 +499,6 @@ struct tx_desc{
 #define RX_RETURN_RING_ENTRIES	2048
 #define RX_RETURN_RING_SIZE	(RX_MAX_RETURN_RING_ENTRIES * \
 				 sizeof(struct rx_desc))
-
-#define RX_RING_THRESH		64
-#define RX_RING_JUMBO_THRESH	48
 
 struct rx_desc{
 	aceaddr	addr;
@@ -520,14 +524,14 @@ struct rx_desc{
 	u16	tcp_udp_csum;
 #endif
 #ifdef __LITTLE_ENDIAN
-	u16	reserved;
+	u16	vlan;
 	u16	err_flags;
 #else
 	u16	err_flags;
-	u16	reserved;
+	u16	vlan;
 #endif
-	u32	nic_addr;
-	u32	pad[1];
+	u32	reserved;
+	u32	opague;
 };
 
 
@@ -598,55 +602,72 @@ struct ace_info {
 	aceaddr	stats2_ptr;
 };
 
-/*
- * Struct private for the AceNIC.
- */
 
-struct ace_private
-{
-	struct ace_regs		*regs;		/* register base */
-	volatile __u32		*sgt;
-	struct sk_buff		*pkt_buf;	/* Receive buffer */
 /*
- * The send ring is located in the shared memory window
+ * struct ace_skb holding the rings of skb's. This is an awful lot of
+ * pointers, but I don't see any other smart mode to do this in an
+ * efficient manner ;-(
  */
-	struct tx_desc		*tx_ring;
-	struct rx_desc		rx_std_ring[RX_STD_RING_ENTRIES];
-	struct rx_desc		rx_jumbo_ring[RX_JUMBO_RING_ENTRIES];
-#if 0
-	struct rx_desc		rx_mini_ring[RX_MINI_RING_ENTRIES];
-#endif
-	struct rx_desc		rx_return_ring[RX_RETURN_RING_ENTRIES];
-	struct event		evt_ring[EVT_RING_ENTRIES];
-	struct ace_info		*info;
+struct ace_skb
+{
 	struct sk_buff		*tx_skbuff[TX_RING_ENTRIES];
 	struct sk_buff		*rx_std_skbuff[RX_STD_RING_ENTRIES];
+	struct sk_buff		*rx_mini_skbuff[RX_MINI_RING_ENTRIES];
 	struct sk_buff		*rx_jumbo_skbuff[RX_JUMBO_RING_ENTRIES];
-	spinlock_t		lock;
+};
+
+
+/*
+ * Struct private for the AceNIC.
+ *
+ * Elements are grouped so variables used by the tx handling goes
+ * together, and will go into the same cache lines etc. in order to
+ * avoid cache line contention between the rx and tx handling on SMP.
+ *
+ * Frequently accessed variables are put at the beginning of the
+ * struct to help the compiler generate better/shorter code.
+ */
+struct ace_private
+{
+	struct ace_skb		*skb;
+	struct ace_regs		*regs;		/* register base */
+	int			version, fw_running, fw_up, link;
+	int			promisc, mcast_all;
+	/*
+	 * The send ring is located in the shared memory window
+	 */
+	struct ace_info		*info;
+	struct tx_desc		*tx_ring;
+	u32			tx_prd, tx_full, tx_ret_csm;
 	struct timer_list	timer;
-	u32			cur_rx, tx_prd;
-	u32			dirty_rx, tx_ret_csm, dirty_event;
-	u32			rx_std_skbprd, rx_jumbo_skbprd;
-	u32			tx_full;
+
+	unsigned long		std_refill_busy
+				__attribute__ ((aligned (L1_CACHE_BYTES)));
+	unsigned long		mini_refill_busy, jumbo_refill_busy;
+	atomic_t		cur_rx_bufs,
+				cur_mini_bufs,
+				cur_jumbo_bufs;
+	u32			rx_std_skbprd, rx_mini_skbprd, rx_jumbo_skbprd;
+	u32			cur_rx;
+	struct tq_struct	immediate;
+	int			bh_pending, jumbo;
+	struct rx_desc		rx_std_ring[RX_STD_RING_ENTRIES]
+				__attribute__ ((aligned (L1_CACHE_BYTES)));
+	struct rx_desc		rx_jumbo_ring[RX_JUMBO_RING_ENTRIES];
+	struct rx_desc		rx_mini_ring[RX_MINI_RING_ENTRIES];
+	struct rx_desc		rx_return_ring[RX_RETURN_RING_ENTRIES];
+	struct event		evt_ring[EVT_RING_ENTRIES];
 	volatile u32		evt_prd
 				__attribute__ ((aligned (L1_CACHE_BYTES)));
 	volatile u32		rx_ret_prd
 				__attribute__ ((aligned (L1_CACHE_BYTES)));
 	volatile u32		tx_csm
 				__attribute__ ((aligned (L1_CACHE_BYTES)));
-	struct net_device		*next
-				__attribute__ ((aligned (L1_CACHE_BYTES)));
 	unsigned char		*trace_buf;
-	int			fw_running, fw_up, jumbo, promisc, mcast_all;
-	int			version;
-	int			flags;
-	u16			vendor;
-	u16			pci_command;
 	struct pci_dev		*pdev;
-#if 0
-	u8			pci_bus;
-	u8			pci_dev_fun;
-#endif
+	struct net_device	*next;
+	u16			pci_command;
+	u8			pci_latency;
 	char			name[24];
 	struct net_device_stats stats;
 };
@@ -655,8 +676,9 @@ struct ace_private
  * Prototypes
  */
 static int ace_init(struct net_device *dev, int board_idx);
-static int ace_load_std_rx_ring(struct net_device *dev);
-static int ace_load_jumbo_rx_ring(struct net_device *dev);
+static void ace_load_std_rx_ring(struct ace_private *ap, int nr_bufs);
+static void ace_load_mini_rx_ring(struct ace_private *ap, int nr_bufs);
+static void ace_load_jumbo_rx_ring(struct ace_private *ap, int nr_bufs);
 static int ace_flush_jumbo_rx_ring(struct net_device *dev);
 static void ace_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int ace_load_firmware(struct net_device *dev);
@@ -664,9 +686,14 @@ static int ace_open(struct net_device *dev);
 static int ace_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static int ace_close(struct net_device *dev);
 static void ace_timer(unsigned long data);
+static void ace_bh(struct net_device *dev);
 static void ace_dump_trace(struct ace_private *ap);
 static void ace_set_multicast_list(struct net_device *dev);
 static int ace_change_mtu(struct net_device *dev, int new_mtu);
+#ifdef SKB_RECYCLE
+extern int ace_recycle(struct sk_buff *skb);
+#endif
+static int ace_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 static int ace_set_mac_addr(struct net_device *dev, void *p);
 static struct net_device_stats *ace_get_stats(struct net_device *dev);
 static u8 read_eeprom_byte(struct ace_regs *regs, unsigned long offset);

@@ -225,7 +225,7 @@ static void destroy_all_async(struct ezusb *ez)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ez->lock, flags);
-	if (!list_empty(&ez->async_completed)) {
+	if (!list_empty(&ez->async_pending)) {
 		as = list_entry(ez->async_pending.next, struct async, asynclist);
 		list_del(&as->asynclist);
 		INIT_LIST_HEAD(&as->asynclist);
@@ -430,7 +430,7 @@ static int ezusb_control(struct usb_device *usbdev, unsigned char requesttype,
 		}
 	}
 	i = usb_control_msg(usbdev, pipe, request, requesttype, value, index, tbuf, length);
-	if (i) {
+	if (i < 0) {
 		if (length > 0)
 			free_page((unsigned long)tbuf);
 		printk(KERN_WARNING "ezusb: EZUSB_CONTROL failed rqt %u rq %u len %u ret %d\n", 
@@ -474,7 +474,7 @@ static int ezusb_bulk(struct usb_device *usbdev, unsigned int ep, unsigned int l
 		}
 	}
 	ret = usbdev->bus->op->bulk_msg(usbdev, pipe, tbuf, length, &len2);
-	if (ret) {
+	if (ret < 0) {
 		if (length > 0)
 			free_page((unsigned long)tbuf);
 		printk(KERN_WARNING "ezusb: EZUSB_BULK failed ep 0x%x len %u ret %d\n", 
@@ -501,14 +501,14 @@ static int ezusb_resetep(struct usb_device *usbdev, unsigned int ep)
 
 static int ezusb_setinterface(struct usb_device *usbdev, unsigned int interface, unsigned int altsetting)
 {
-	if (usb_set_interface(usbdev, interface, altsetting))
+	if (usb_set_interface(usbdev, interface, altsetting) < 0)
 		return -EINVAL;
 	return 0;
 }
 
 static int ezusb_setconfiguration(struct usb_device *usbdev, unsigned int config)
 {
-	if (usb_set_configuration(usbdev, config))
+	if (usb_set_configuration(usbdev, config) < 0)
 		return -EINVAL;
 	return 0;
 }
@@ -628,7 +628,8 @@ static int ezusb_requestiso(struct ezusb *ez, struct ezusb_asynciso *ai, unsigne
 		printk(KERN_DEBUG "ezusb: usb_init_isoc error %d\n", i);
 		goto err_inval;
 	}
-	as->desc.iso->start_type = START_ASAP;
+	as->desc.iso->start_type = START_ABSOLUTE;
+	as->desc.iso->start_frame = ai->startframe;
 	as->desc.iso->callback_frames = 0;
 	as->desc.iso->callback_fn = async_completed;
 	as->desc.iso->data = as->data;
@@ -939,12 +940,12 @@ static int ezusb_probe(struct usb_device *usbdev)
 	}
 	ez->usbdev = usbdev;
 	usbdev->private = ez;
-        if (usb_set_configuration(usbdev, usbdev->config[0].bConfigurationValue)) {
+        if (usb_set_configuration(usbdev, usbdev->config[0].bConfigurationValue) < 0) {
 		printk(KERN_ERR "ezusb: set_configuration failed\n");
 		goto err;
 	}
         interface = &usbdev->config[0].interface[0].altsetting[1];
-	if (usb_set_interface(usbdev, 0, 1)) {
+	if (usb_set_interface(usbdev, 0, 1) < 0) {
 		printk(KERN_ERR "ezusb: set_interface failed\n");
 		goto err;
 	}

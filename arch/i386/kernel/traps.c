@@ -46,8 +46,10 @@
 
 asmlinkage int system_call(void);
 asmlinkage void lcall7(void);
+asmlinkage void lcall27(void);
 
-struct desc_struct default_ldt = { 0, 0 };
+struct desc_struct default_ldt[] = { { 0, 0 }, { 0, 0 }, { 0, 0 },
+		{ 0, 0 }, { 0, 0 } };
 
 /*
  * The IDT has to be page-aligned to simplify the Pentium
@@ -696,9 +698,11 @@ void __init trap_init(void)
 	set_system_gate(SYSCALL_VECTOR,&system_call);
 
 	/*
-	 * default LDT is a single-entry callgate to lcall7
+	 * default LDT is a single-entry callgate to lcall7 for iBCS
+	 * and a callgate to lcall27 for Solaris/x86 binaries
 	 */
-	set_call_gate(&default_ldt,lcall7);
+	set_call_gate(&default_ldt[0],lcall7);
+	set_call_gate(&default_ldt[4],lcall27);
 
 	/*
 	 * on SMP we do not yet know which CPU is on which TSS,

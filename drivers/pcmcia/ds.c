@@ -2,7 +2,7 @@
 
     PC Card Driver Services
     
-    ds.c 1.95 1999/08/28 04:01:46
+    ds.c 1.96 1999/09/02 18:35:34
     
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -56,7 +56,7 @@ int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static const char *version =
-"ds.c 1.95 1999/08/28 04:01:46 (David Hinds)";
+"ds.c 1.96 1999/09/02 18:35:34 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -719,6 +719,19 @@ static int ds_ioctl(struct inode * inode, struct file * file,
 	break;
     case DS_GET_NEXT_REGION:
 	ret = CardServices(GetNextRegion, s->handle, &buf.region);
+	break;
+    case DS_GET_FIRST_WINDOW:
+	buf.win_info.handle = (window_handle_t)s->handle;
+	ret = CardServices(GetFirstWindow, &buf.win_info.handle,
+			   &buf.win_info.window);
+	break;
+    case DS_GET_NEXT_WINDOW:
+	ret = CardServices(GetNextWindow, &buf.win_info.handle,
+			   &buf.win_info.window);
+	break;
+    case DS_GET_MEM_PAGE:
+	ret = CardServices(GetMemPage, buf.win_info.handle,
+			   &buf.win_info.map);
 	break;
     case DS_REPLACE_CIS:
 	ret = CardServices(ReplaceCIS, s->handle, &buf.cisdump);

@@ -300,6 +300,14 @@ extern inline void flush_tlb_kernel_page(unsigned long addr)
 #define _PAGE_CACHE040	0x020	/* 68040 cache mode, cachable, copyback */
 #define _PAGE_CACHE040W	0x000	/* 68040 cache mode, cachable, write-through */
 
+/* Page protection values within PTE. */
+#define SUN3_PAGE_VALID     (0x80000000)
+#define SUN3_PAGE_WRITEABLE (0x40000000)
+#define SUN3_PAGE_SYSTEM    (0x20000000)
+#define SUN3_PAGE_NOCACHE   (0x10000000)
+#define SUN3_PAGE_ACCESSED  (0x02000000)
+#define SUN3_PAGE_MODIFIED  (0x01000000)
+
 #define _DESCTYPE_MASK	0x003
 
 #define _CACHEMASK040	(~0x060)

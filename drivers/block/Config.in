@@ -11,6 +11,11 @@ fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari floppy support' CONFIG_ATARI_FLOPPY
 fi
+if [ "$CONFIG_MAC" = "y" ]; then
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    bool 'Macintosh IIfx/Quadra 900/Quadra 950 floppy support (EXPERIMENTAL)' CONFIG_BLK_DEV_SWIM_IOP
+  fi
+fi
 
 tristate 'Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support' CONFIG_BLK_DEV_IDE
 comment 'Please see Documentation/ide.txt for help/info on IDE drives'

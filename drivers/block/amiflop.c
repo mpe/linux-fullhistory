@@ -135,10 +135,10 @@ MODULE_PARM(fd_def_df0,"l");
 static struct fd_drive_type drive_types[] = {
 /*  code	name	   tr he   rdsz   wrsz sm pc1 pc2 sd  st st*/
 /*  warning: times are now in milliseconds (ms)                    */
- { FD_DD_3,	"DD 3.5",  80, 2, 14716, 13630, 1, 80,161, 3, 18, 1},
- { FD_HD_3,	"HD 3.5",  80, 2, 28344, 27258, 2, 80,161, 3, 18, 1},
- { FD_DD_5,	"DD 5.25", 40, 2, 14716, 13630, 1, 40, 81, 6, 30, 2},
- { FD_NODRIVE, "No Drive", 0, 0,     0,     0, 0,  0,  0,  0,  0, 0}
+{ FD_DD_3,	"DD 3.5",  80, 2, 14716, 13630, 1, 80,161, 3, 18, 1},
+{ FD_HD_3,	"HD 3.5",  80, 2, 28344, 27258, 2, 80,161, 3, 18, 1},
+{ FD_DD_5,	"DD 5.25", 40, 2, 14716, 13630, 1, 40, 81, 6, 30, 2},
+{ FD_NODRIVE, "No Drive", 0, 0,     0,     0, 0,  0,  0,  0,  0, 0}
 };
 static int num_dr_types = sizeof(drive_types) / sizeof(drive_types[0]);
 
@@ -150,8 +150,8 @@ static int floppy_blocksizes[256]={0,};
 static int amiga_read(int), dos_read(int);
 static void amiga_write(int), dos_write(int);
 static struct fd_data_type data_types[] = {
-  { "Amiga", 11 , amiga_read, amiga_write},
-  { "MS-Dos", 9, dos_read, dos_write}
+	{ "Amiga", 11 , amiga_read, amiga_write},
+	{ "MS-Dos", 9, dos_read, dos_write}
 };
 
 /* current info on each unit */
@@ -189,8 +189,8 @@ static DECLARE_WAIT_QUEUE_HEAD(wait_fd_block);
 
 /* MS-Dos MFM Coding tables (should go quick and easy) */
 static unsigned char mfmencode[16]={
-  0x2a, 0x29, 0x24, 0x25, 0x12, 0x11, 0x14, 0x15,
-  0x4a, 0x49, 0x44, 0x45, 0x52, 0x51, 0x54, 0x55
+	0x2a, 0x29, 0x24, 0x25, 0x12, 0x11, 0x14, 0x15,
+	0x4a, 0x49, 0x44, 0x45, 0x52, 0x51, 0x54, 0x55
 };
 static unsigned char mfmdecode[128];
 
@@ -231,29 +231,29 @@ static int fd_device[4] = { 0,0,0,0 };
 
 static void ms_isr(int irq, void *dummy, struct pt_regs *fp)
 {
-ms_busy = -1;
-wake_up(&ms_wait);
+	ms_busy = -1;
+	wake_up(&ms_wait);
 }
 
 /* all waits are queued up 
    A more generic routine would do a schedule a la timer.device */
 static void ms_delay(int ms)
 {
-  unsigned long flags;
-  int ticks;
-  if (ms > 0) {
-    save_flags(flags);
-    cli();
-    while (ms_busy == 0)
-      sleep_on(&ms_wait);
-    ms_busy = 0;
-    restore_flags(flags);
-    ticks = MS_TICKS*ms-1;
-    ciaa.tblo=ticks%256;
-    ciaa.tbhi=ticks/256;
-    ciaa.crb=0x19; /*count eclock, force load, one-shoot, start */
-    sleep_on(&ms_wait);
-  }
+	unsigned long flags;
+	int ticks;
+	if (ms > 0) {
+		save_flags(flags);
+		cli();
+		while (ms_busy == 0)
+			sleep_on(&ms_wait);
+		ms_busy = 0;
+		restore_flags(flags);
+		ticks = MS_TICKS*ms-1;
+		ciaa.tblo=ticks%256;
+		ciaa.tbhi=ticks/256;
+		ciaa.crb=0x19; /*count eclock, force load, one-shoot, start */
+		sleep_on(&ms_wait);
+	}
 }
 
 /* Hardware semaphore */
@@ -267,33 +267,33 @@ static inline int try_fdc(int drive)
 
 static void get_fdc(int drive)
 {
-unsigned long flags;
+	unsigned long flags;
 
-       drive &= 3;
+	drive &= 3;
 #ifdef DEBUG
-       printk("get_fdc: drive %d  fdc_busy %d  fdc_nested %d\n",drive,fdc_busy,fdc_nested);
+	printk("get_fdc: drive %d  fdc_busy %d  fdc_nested %d\n",drive,fdc_busy,fdc_nested);
 #endif
-       save_flags(flags);
-       cli();
-       while (!try_fdc(drive))
-	       sleep_on(&fdc_wait);
-       fdc_busy = drive;
-       fdc_nested++;
-       restore_flags(flags);
+	save_flags(flags);
+	cli();
+	while (!try_fdc(drive))
+		sleep_on(&fdc_wait);
+	fdc_busy = drive;
+	fdc_nested++;
+	restore_flags(flags);
 }
 
 static inline void rel_fdc(void)
 {
 #ifdef DEBUG
-       if (fdc_nested == 0)
-         printk("fd: unmatched rel_fdc\n");
-       printk("rel_fdc: fdc_busy %d fdc_nested %d\n",fdc_busy,fdc_nested);
+	if (fdc_nested == 0)
+		printk("fd: unmatched rel_fdc\n");
+	printk("rel_fdc: fdc_busy %d fdc_nested %d\n",fdc_busy,fdc_nested);
 #endif
-       fdc_nested--;
-       if (fdc_nested == 0) {
-         fdc_busy = -1;
-         wake_up(&fdc_wait);
-       }
+	fdc_nested--;
+	if (fdc_nested == 0) {
+		fdc_busy = -1;
+		wake_up(&fdc_wait);
+	}
 }
 
 static void fd_select (int drive)
@@ -395,9 +395,9 @@ static int fd_motor_on(int nr)
 
 static void fd_motor_off(unsigned long drive)
 {
-long calledfromint;
+	long calledfromint;
 #ifdef MODULE
-long decusecount;
+	long decusecount;
 
 	decusecount = drive & 0x40000000;
 #endif
@@ -416,18 +416,18 @@ long decusecount;
 
 #ifdef MODULE
 /*
-this is the last interrupt for any drive access, happens after
-release (from floppy_off). So we have to wait until now to decrease
-the use count.
+  this is the last interrupt for any drive access, happens after
+  release (from floppy_off). So we have to wait until now to decrease
+  the use count.
 */
-       if (decusecount)
-         MOD_DEC_USE_COUNT;
+	if (decusecount)
+		MOD_DEC_USE_COUNT;
 #endif
 }
 
 static void floppy_off (unsigned int nr)
 {
-int drive;
+	int drive;
 
 	drive = nr & 3;
 	del_timer(motor_off_timer + drive);
@@ -588,29 +588,29 @@ static unsigned long fd_get_drive_id(int drive)
          * type.
          */
         if(drive == 0 && id == FD_NODRIVE)
-         {
+	{
                 id = fd_def_df0;
                 printk(KERN_NOTICE "fd: drive 0 didn't identify, setting default %08lx\n", (ulong)fd_def_df0);
-         }
+	}
 	/* return the ID value */
 	return (id);
 }
 
 static void fd_block_done(int irq, void *dummy, struct pt_regs *fp)
 {
-  if (block_flag)
-    custom.dsklen = 0x4000;
+	if (block_flag)
+		custom.dsklen = 0x4000;
 
-  if (block_flag == 2) { /* writing */
-    writepending = 2;
-    post_write_timer.expires = jiffies + 1; /* at least 2 ms */
-    post_write_timer.data = selected;
-    add_timer(&post_write_timer);
-  }
-  else {                /* reading */
-    block_flag = 0;
-    wake_up (&wait_fd_block);
-  }
+	if (block_flag == 2) { /* writing */
+		writepending = 2;
+		post_write_timer.expires = jiffies + 1; /* at least 2 ms */
+		post_write_timer.data = selected;
+		add_timer(&post_write_timer);
+	}
+	else {                /* reading */
+		block_flag = 0;
+		wake_up (&wait_fd_block);
+	}
 }
 
 static void raw_read(int drive)
@@ -680,17 +680,17 @@ static int raw_write(int drive)
 static void post_write (unsigned long drive)
 {
 #ifdef DEBUG
-  printk("post_write for drive %ld\n",drive);
+	printk("post_write for drive %ld\n",drive);
 #endif
-  drive &= 3;
-  custom.dsklen = 0;
-  block_flag = 0;
-  writepending = 0;
-  writefromint = 0;
-  unit[drive].dirty = 0;
-  wake_up(&wait_fd_block);
-  fd_deselect(drive);
-  rel_fdc(); /* corresponds to get_fdc() in raw_write */
+	drive &= 3;
+	custom.dsklen = 0;
+	block_flag = 0;
+	writepending = 0;
+	writefromint = 0;
+	unit[drive].dirty = 0;
+	wake_up(&wait_fd_block);
+	fd_deselect(drive);
+	rel_fdc(); /* corresponds to get_fdc() in raw_write */
 }
 
 
@@ -727,7 +727,7 @@ static inline unsigned long checksum(unsigned long *addr, int len)
 }
 
 static unsigned long decode (unsigned long *data, unsigned long *raw,
-				   int len)
+			     int len)
 {
 	ulong *odd, *even;
 
@@ -822,34 +822,34 @@ static int amiga_read(int drive)
 
 static void encode(unsigned long data, unsigned long *dest)
 {
-  unsigned long data2;
+	unsigned long data2;
 
-  data &= 0x55555555;
-  data2 = data ^ 0x55555555;
-  data |= ((data2 >> 1) | 0x80000000) & (data2 << 1);
+	data &= 0x55555555;
+	data2 = data ^ 0x55555555;
+	data |= ((data2 >> 1) | 0x80000000) & (data2 << 1);
 
-  if (*(dest - 1) & 0x00000001)
-    data &= 0x7FFFFFFF;
+	if (*(dest - 1) & 0x00000001)
+		data &= 0x7FFFFFFF;
 
-  *dest = data;
+	*dest = data;
 }
 
 static void encode_block(unsigned long *dest, unsigned long *src, int len)
 {
-  int cnt, to_cnt = 0;
-  unsigned long data;
+	int cnt, to_cnt = 0;
+	unsigned long data;
 
-  /* odd bits */
-  for (cnt = 0; cnt < len / 4; cnt++) {
-    data = src[cnt] >> 1;
-    encode(data, dest + to_cnt++);
-  }
+	/* odd bits */
+	for (cnt = 0; cnt < len / 4; cnt++) {
+		data = src[cnt] >> 1;
+		encode(data, dest + to_cnt++);
+	}
 
-  /* even bits */
-  for (cnt = 0; cnt < len / 4; cnt++) {
-    data = src[cnt];
-    encode(data, dest + to_cnt++);
-  }
+	/* even bits */
+	for (cnt = 0; cnt < len / 4; cnt++) {
+		data = src[cnt];
+		encode(data, dest + to_cnt++);
+	}
 }
 
 static unsigned long *putsec(int disk, unsigned long *raw, int cnt)
@@ -904,15 +904,15 @@ static void amiga_write(int disk)
 
 
 struct dos_header {
-unsigned char track,   /* 0-80 */
-              side,    /* 0-1 */
-              sec,     /* 0-...*/
-              len_desc;/* 2 */
-unsigned short crc;     /* on 68000 we got an alignment problem, 
-                           but this compiler solves it  by adding silently 
-                           adding a pad byte so data won't fit
-                           and this took about 3h to discover.... */
-unsigned char gap1[22];     /* for longword-alignedness (0x4e) */
+	unsigned char track,   /* 0-80 */
+		side,    /* 0-1 */
+		sec,     /* 0-...*/
+		len_desc;/* 2 */
+	unsigned short crc;     /* on 68000 we got an alignment problem, 
+				   but this compiler solves it  by adding silently 
+				   adding a pad byte so data won't fit
+				   and this took about 3h to discover.... */
+	unsigned char gap1[22];     /* for longword-alignedness (0x4e) */
 };
 
 /* crc routines are borrowed from the messydos-handler  */
@@ -972,299 +972,308 @@ my only works was to code this from manx to C....
 
 static ushort dos_crc(void * data_a3, int data_d0, int data_d1, int data_d3)
 {
-static unsigned char CRCTable1[] = {
-	0x00,0x10,0x20,0x30,0x40,0x50,0x60,0x70,0x81,0x91,0xa1,0xb1,0xc1,0xd1,0xe1,0xf1,
-	0x12,0x02,0x32,0x22,0x52,0x42,0x72,0x62,0x93,0x83,0xb3,0xa3,0xd3,0xc3,0xf3,0xe3,
-	0x24,0x34,0x04,0x14,0x64,0x74,0x44,0x54,0xa5,0xb5,0x85,0x95,0xe5,0xf5,0xc5,0xd5,
-	0x36,0x26,0x16,0x06,0x76,0x66,0x56,0x46,0xb7,0xa7,0x97,0x87,0xf7,0xe7,0xd7,0xc7,
-	0x48,0x58,0x68,0x78,0x08,0x18,0x28,0x38,0xc9,0xd9,0xe9,0xf9,0x89,0x99,0xa9,0xb9,
-	0x5a,0x4a,0x7a,0x6a,0x1a,0x0a,0x3a,0x2a,0xdb,0xcb,0xfb,0xeb,0x9b,0x8b,0xbb,0xab,
-	0x6c,0x7c,0x4c,0x5c,0x2c,0x3c,0x0c,0x1c,0xed,0xfd,0xcd,0xdd,0xad,0xbd,0x8d,0x9d,
-	0x7e,0x6e,0x5e,0x4e,0x3e,0x2e,0x1e,0x0e,0xff,0xef,0xdf,0xcf,0xbf,0xaf,0x9f,0x8f,
-	0x91,0x81,0xb1,0xa1,0xd1,0xc1,0xf1,0xe1,0x10,0x00,0x30,0x20,0x50,0x40,0x70,0x60,
-	0x83,0x93,0xa3,0xb3,0xc3,0xd3,0xe3,0xf3,0x02,0x12,0x22,0x32,0x42,0x52,0x62,0x72,
-	0xb5,0xa5,0x95,0x85,0xf5,0xe5,0xd5,0xc5,0x34,0x24,0x14,0x04,0x74,0x64,0x54,0x44,
-	0xa7,0xb7,0x87,0x97,0xe7,0xf7,0xc7,0xd7,0x26,0x36,0x06,0x16,0x66,0x76,0x46,0x56,
-	0xd9,0xc9,0xf9,0xe9,0x99,0x89,0xb9,0xa9,0x58,0x48,0x78,0x68,0x18,0x08,0x38,0x28,
-	0xcb,0xdb,0xeb,0xfb,0x8b,0x9b,0xab,0xbb,0x4a,0x5a,0x6a,0x7a,0x0a,0x1a,0x2a,0x3a,
-	0xfd,0xed,0xdd,0xcd,0xbd,0xad,0x9d,0x8d,0x7c,0x6c,0x5c,0x4c,0x3c,0x2c,0x1c,0x0c,
-	0xef,0xff,0xcf,0xdf,0xaf,0xbf,0x8f,0x9f,0x6e,0x7e,0x4e,0x5e,0x2e,0x3e,0x0e,0x1e
-};
+	static unsigned char CRCTable1[] = {
+		0x00,0x10,0x20,0x30,0x40,0x50,0x60,0x70,0x81,0x91,0xa1,0xb1,0xc1,0xd1,0xe1,0xf1,
+		0x12,0x02,0x32,0x22,0x52,0x42,0x72,0x62,0x93,0x83,0xb3,0xa3,0xd3,0xc3,0xf3,0xe3,
+		0x24,0x34,0x04,0x14,0x64,0x74,0x44,0x54,0xa5,0xb5,0x85,0x95,0xe5,0xf5,0xc5,0xd5,
+		0x36,0x26,0x16,0x06,0x76,0x66,0x56,0x46,0xb7,0xa7,0x97,0x87,0xf7,0xe7,0xd7,0xc7,
+		0x48,0x58,0x68,0x78,0x08,0x18,0x28,0x38,0xc9,0xd9,0xe9,0xf9,0x89,0x99,0xa9,0xb9,
+		0x5a,0x4a,0x7a,0x6a,0x1a,0x0a,0x3a,0x2a,0xdb,0xcb,0xfb,0xeb,0x9b,0x8b,0xbb,0xab,
+		0x6c,0x7c,0x4c,0x5c,0x2c,0x3c,0x0c,0x1c,0xed,0xfd,0xcd,0xdd,0xad,0xbd,0x8d,0x9d,
+		0x7e,0x6e,0x5e,0x4e,0x3e,0x2e,0x1e,0x0e,0xff,0xef,0xdf,0xcf,0xbf,0xaf,0x9f,0x8f,
+		0x91,0x81,0xb1,0xa1,0xd1,0xc1,0xf1,0xe1,0x10,0x00,0x30,0x20,0x50,0x40,0x70,0x60,
+		0x83,0x93,0xa3,0xb3,0xc3,0xd3,0xe3,0xf3,0x02,0x12,0x22,0x32,0x42,0x52,0x62,0x72,
+		0xb5,0xa5,0x95,0x85,0xf5,0xe5,0xd5,0xc5,0x34,0x24,0x14,0x04,0x74,0x64,0x54,0x44,
+		0xa7,0xb7,0x87,0x97,0xe7,0xf7,0xc7,0xd7,0x26,0x36,0x06,0x16,0x66,0x76,0x46,0x56,
+		0xd9,0xc9,0xf9,0xe9,0x99,0x89,0xb9,0xa9,0x58,0x48,0x78,0x68,0x18,0x08,0x38,0x28,
+		0xcb,0xdb,0xeb,0xfb,0x8b,0x9b,0xab,0xbb,0x4a,0x5a,0x6a,0x7a,0x0a,0x1a,0x2a,0x3a,
+		0xfd,0xed,0xdd,0xcd,0xbd,0xad,0x9d,0x8d,0x7c,0x6c,0x5c,0x4c,0x3c,0x2c,0x1c,0x0c,
+		0xef,0xff,0xcf,0xdf,0xaf,0xbf,0x8f,0x9f,0x6e,0x7e,0x4e,0x5e,0x2e,0x3e,0x0e,0x1e
+	};
 
-static unsigned char CRCTable2[] = {
-	0x00,0x21,0x42,0x63,0x84,0xa5,0xc6,0xe7,0x08,0x29,0x4a,0x6b,0x8c,0xad,0xce,0xef,
-	0x31,0x10,0x73,0x52,0xb5,0x94,0xf7,0xd6,0x39,0x18,0x7b,0x5a,0xbd,0x9c,0xff,0xde,
-	0x62,0x43,0x20,0x01,0xe6,0xc7,0xa4,0x85,0x6a,0x4b,0x28,0x09,0xee,0xcf,0xac,0x8d,
-	0x53,0x72,0x11,0x30,0xd7,0xf6,0x95,0xb4,0x5b,0x7a,0x19,0x38,0xdf,0xfe,0x9d,0xbc,
-	0xc4,0xe5,0x86,0xa7,0x40,0x61,0x02,0x23,0xcc,0xed,0x8e,0xaf,0x48,0x69,0x0a,0x2b,
-	0xf5,0xd4,0xb7,0x96,0x71,0x50,0x33,0x12,0xfd,0xdc,0xbf,0x9e,0x79,0x58,0x3b,0x1a,
-	0xa6,0x87,0xe4,0xc5,0x22,0x03,0x60,0x41,0xae,0x8f,0xec,0xcd,0x2a,0x0b,0x68,0x49,
-	0x97,0xb6,0xd5,0xf4,0x13,0x32,0x51,0x70,0x9f,0xbe,0xdd,0xfc,0x1b,0x3a,0x59,0x78,
-	0x88,0xa9,0xca,0xeb,0x0c,0x2d,0x4e,0x6f,0x80,0xa1,0xc2,0xe3,0x04,0x25,0x46,0x67,
-	0xb9,0x98,0xfb,0xda,0x3d,0x1c,0x7f,0x5e,0xb1,0x90,0xf3,0xd2,0x35,0x14,0x77,0x56,
-	0xea,0xcb,0xa8,0x89,0x6e,0x4f,0x2c,0x0d,0xe2,0xc3,0xa0,0x81,0x66,0x47,0x24,0x05,
-	0xdb,0xfa,0x99,0xb8,0x5f,0x7e,0x1d,0x3c,0xd3,0xf2,0x91,0xb0,0x57,0x76,0x15,0x34,
-	0x4c,0x6d,0x0e,0x2f,0xc8,0xe9,0x8a,0xab,0x44,0x65,0x06,0x27,0xc0,0xe1,0x82,0xa3,
-	0x7d,0x5c,0x3f,0x1e,0xf9,0xd8,0xbb,0x9a,0x75,0x54,0x37,0x16,0xf1,0xd0,0xb3,0x92,
-	0x2e,0x0f,0x6c,0x4d,0xaa,0x8b,0xe8,0xc9,0x26,0x07,0x64,0x45,0xa2,0x83,0xe0,0xc1,
-	0x1f,0x3e,0x5d,0x7c,0x9b,0xba,0xd9,0xf8,0x17,0x36,0x55,0x74,0x93,0xb2,0xd1,0xf0
-};
+	static unsigned char CRCTable2[] = {
+		0x00,0x21,0x42,0x63,0x84,0xa5,0xc6,0xe7,0x08,0x29,0x4a,0x6b,0x8c,0xad,0xce,0xef,
+		0x31,0x10,0x73,0x52,0xb5,0x94,0xf7,0xd6,0x39,0x18,0x7b,0x5a,0xbd,0x9c,0xff,0xde,
+		0x62,0x43,0x20,0x01,0xe6,0xc7,0xa4,0x85,0x6a,0x4b,0x28,0x09,0xee,0xcf,0xac,0x8d,
+		0x53,0x72,0x11,0x30,0xd7,0xf6,0x95,0xb4,0x5b,0x7a,0x19,0x38,0xdf,0xfe,0x9d,0xbc,
+		0xc4,0xe5,0x86,0xa7,0x40,0x61,0x02,0x23,0xcc,0xed,0x8e,0xaf,0x48,0x69,0x0a,0x2b,
+		0xf5,0xd4,0xb7,0x96,0x71,0x50,0x33,0x12,0xfd,0xdc,0xbf,0x9e,0x79,0x58,0x3b,0x1a,
+		0xa6,0x87,0xe4,0xc5,0x22,0x03,0x60,0x41,0xae,0x8f,0xec,0xcd,0x2a,0x0b,0x68,0x49,
+		0x97,0xb6,0xd5,0xf4,0x13,0x32,0x51,0x70,0x9f,0xbe,0xdd,0xfc,0x1b,0x3a,0x59,0x78,
+		0x88,0xa9,0xca,0xeb,0x0c,0x2d,0x4e,0x6f,0x80,0xa1,0xc2,0xe3,0x04,0x25,0x46,0x67,
+		0xb9,0x98,0xfb,0xda,0x3d,0x1c,0x7f,0x5e,0xb1,0x90,0xf3,0xd2,0x35,0x14,0x77,0x56,
+		0xea,0xcb,0xa8,0x89,0x6e,0x4f,0x2c,0x0d,0xe2,0xc3,0xa0,0x81,0x66,0x47,0x24,0x05,
+		0xdb,0xfa,0x99,0xb8,0x5f,0x7e,0x1d,0x3c,0xd3,0xf2,0x91,0xb0,0x57,0x76,0x15,0x34,
+		0x4c,0x6d,0x0e,0x2f,0xc8,0xe9,0x8a,0xab,0x44,0x65,0x06,0x27,0xc0,0xe1,0x82,0xa3,
+		0x7d,0x5c,0x3f,0x1e,0xf9,0xd8,0xbb,0x9a,0x75,0x54,0x37,0x16,0xf1,0xd0,0xb3,0x92,
+		0x2e,0x0f,0x6c,0x4d,0xaa,0x8b,0xe8,0xc9,0x26,0x07,0x64,0x45,0xa2,0x83,0xe0,0xc1,
+		0x1f,0x3e,0x5d,0x7c,0x9b,0xba,0xd9,0xf8,0x17,0x36,0x55,0x74,0x93,0xb2,0xd1,0xf0
+	};
 
 /* look at the asm-code - what looks in C a bit strange is almost as good as handmade */
-register int i;
-register unsigned char *CRCT1, *CRCT2, *data, c, crch, crcl;
+	register int i;
+	register unsigned char *CRCT1, *CRCT2, *data, c, crch, crcl;
 
-CRCT1=CRCTable1;
-CRCT2=CRCTable2;
-data=data_a3;
-crcl=data_d1;
-crch=data_d0;
-for (i=data_d3; i>=0; i--) {
-  c = (*data++) ^ crch;
-  crch = CRCT1[c] ^ crcl;
-  crcl = CRCT2[c];
-}
-return (crch<<8)|crcl;
+	CRCT1=CRCTable1;
+	CRCT2=CRCTable2;
+	data=data_a3;
+	crcl=data_d1;
+	crch=data_d0;
+	for (i=data_d3; i>=0; i--) {
+		c = (*data++) ^ crch;
+		crch = CRCT1[c] ^ crcl;
+		crcl = CRCT2[c];
+	}
+	return (crch<<8)|crcl;
 }
 
 static inline ushort dos_hdr_crc (struct dos_header *hdr)
 {
-return dos_crc(&(hdr->track), 0xb2, 0x30, 3); /* precomputed magic */
+	return dos_crc(&(hdr->track), 0xb2, 0x30, 3); /* precomputed magic */
 }
 
 static inline ushort dos_data_crc(unsigned char *data)
 {
-return dos_crc(data, 0xe2, 0x95 ,511); /* precomputed magic */
+	return dos_crc(data, 0xe2, 0x95 ,511); /* precomputed magic */
 }
 
 static inline unsigned char dos_decode_byte(ushort word)
 {
-register ushort w2;
-register unsigned char byte;
-register unsigned char *dec = mfmdecode;
+	register ushort w2;
+	register unsigned char byte;
+	register unsigned char *dec = mfmdecode;
 
-w2=word;
-w2>>=8;
-w2&=127;
-byte = dec[w2];
-byte <<= 4;
-w2 = word & 127;
-byte |= dec[w2];
-return byte;
+	w2=word;
+	w2>>=8;
+	w2&=127;
+	byte = dec[w2];
+	byte <<= 4;
+	w2 = word & 127;
+	byte |= dec[w2];
+	return byte;
 }
 
 static unsigned long dos_decode(unsigned char *data, unsigned short *raw, int len)
 {
-int i;
+	int i;
 
-for (i = 0; i < len; i++)
-  *data++=dos_decode_byte(*raw++);
-return ((ulong)raw);
+	for (i = 0; i < len; i++)
+		*data++=dos_decode_byte(*raw++);
+	return ((ulong)raw);
 }
 
 #ifdef DEBUG
 static void dbg(unsigned long ptr)
 {
-  printk("raw data @%08lx: %08lx, %08lx ,%08lx, %08lx\n",ptr,
-    ((ulong *)ptr)[0],((ulong *)ptr)[1],((ulong *)ptr)[2],((ulong *)ptr)[3]);
+	printk("raw data @%08lx: %08lx, %08lx ,%08lx, %08lx\n", ptr,
+	       ((ulong *)ptr)[0], ((ulong *)ptr)[1],
+	       ((ulong *)ptr)[2], ((ulong *)ptr)[3]);
 }
 #endif
 
 static int dos_read(int drive)
 {
-  unsigned long end;
-  unsigned long raw;
-  int scnt;
-  unsigned short crc,data_crc[2];
-  struct dos_header hdr;
+	unsigned long end;
+	unsigned long raw;
+	int scnt;
+	unsigned short crc,data_crc[2];
+	struct dos_header hdr;
 
-  drive&=3;
-  raw = (long) raw_buf;
-  end = raw + unit[drive].type->read_size;
+	drive&=3;
+	raw = (long) raw_buf;
+	end = raw + unit[drive].type->read_size;
 
-  for (scnt=0; scnt < unit[drive].dtype->sects * unit[drive].type->sect_mult; scnt++) {
-  do { /* search for the right sync of each sec-hdr */
-    if (!(raw = scan_sync (raw, end))) {
-      printk(KERN_INFO "dos_read: no hdr sync on track %d, unit %d for sector %d\n",
-        unit[drive].track,drive,scnt);
-      return MFM_NOSYNC;
-    }
+	for (scnt=0; scnt < unit[drive].dtype->sects * unit[drive].type->sect_mult; scnt++) {
+		do { /* search for the right sync of each sec-hdr */
+			if (!(raw = scan_sync (raw, end))) {
+				printk(KERN_INFO "dos_read: no hdr sync on "
+				       "track %d, unit %d for sector %d\n",
+				       unit[drive].track,drive,scnt);
+				return MFM_NOSYNC;
+			}
 #ifdef DEBUG
-  dbg(raw);
+			dbg(raw);
 #endif
-  } while (*((ushort *)raw)!=0x5554); /* loop usually only once done */
-  raw+=2; /* skip over headermark */
-  raw = dos_decode((unsigned char *)&hdr,(ushort *) raw,8);
-  crc = dos_hdr_crc(&hdr);
+		} while (*((ushort *)raw)!=0x5554); /* loop usually only once done */
+		raw+=2; /* skip over headermark */
+		raw = dos_decode((unsigned char *)&hdr,(ushort *) raw,8);
+		crc = dos_hdr_crc(&hdr);
 
 #ifdef DEBUG
-  printk("(%3d,%d,%2d,%d) %x\n", hdr.track, hdr.side,
-     hdr.sec, hdr.len_desc, hdr.crc);
-#endif
-
-  if (crc != hdr.crc) {
-    printk(KERN_INFO "dos_read: MFM_HEADER %04x,%04x\n", hdr.crc, crc);
-    return MFM_HEADER;
-  }
-  if (hdr.track != unit[drive].track/unit[drive].type->heads) {
-    printk(KERN_INFO "dos_read: MFM_TRACK %d, %d\n", hdr.track,
-      unit[drive].track/unit[drive].type->heads);
-    return MFM_TRACK;
-  }
-
-  if (hdr.side != unit[drive].track%unit[drive].type->heads) {
-    printk(KERN_INFO "dos_read: MFM_SIDE %d, %d\n", hdr.side,
-      unit[drive].track%unit[drive].type->heads);
-    return MFM_TRACK;
-  }
-
-  if (hdr.len_desc != 2) {
-    printk(KERN_INFO "dos_read: unknown sector len descriptor %d\n", hdr.len_desc);
-    return MFM_DATA;
-  }
-#ifdef DEBUG
-  printk("hdr accepted\n");
-#endif
-  if (!(raw = scan_sync (raw, end))) {
-    printk(KERN_INFO "dos_read: no data sync on track %d, unit %d for sector%d, disk sector %d\n",
-      unit[drive].track, drive, scnt, hdr.sec);
-    return MFM_NOSYNC;
-  }
-#ifdef DEBUG
-  dbg(raw);
+		printk("(%3d,%d,%2d,%d) %x\n", hdr.track, hdr.side,
+		       hdr.sec, hdr.len_desc, hdr.crc);
 #endif
 
-  if (*((ushort *)raw)!=0x5545) {
-    printk(KERN_INFO "dos_read: no data mark after sync (%d,%d,%d,%d) sc=%d\n",
-      hdr.track,hdr.side,hdr.sec,hdr.len_desc,scnt);
-    return MFM_NOSYNC;
-  }
+		if (crc != hdr.crc) {
+			printk(KERN_INFO "dos_read: MFM_HEADER %04x,%04x\n",
+			       hdr.crc, crc);
+			return MFM_HEADER;
+		}
+		if (hdr.track != unit[drive].track/unit[drive].type->heads) {
+			printk(KERN_INFO "dos_read: MFM_TRACK %d, %d\n",
+			       hdr.track,
+			       unit[drive].track/unit[drive].type->heads);
+			return MFM_TRACK;
+		}
 
-  raw+=2;  /* skip data mark (included in checksum) */
-  raw = dos_decode((unsigned char *)(unit[drive].trackbuf + (hdr.sec - 1) * 512), (ushort *) raw, 512);
-  raw = dos_decode((unsigned char  *)data_crc,(ushort *) raw,4);
-  crc = dos_data_crc(unit[drive].trackbuf + (hdr.sec - 1) * 512);
+		if (hdr.side != unit[drive].track%unit[drive].type->heads) {
+			printk(KERN_INFO "dos_read: MFM_SIDE %d, %d\n",
+			       hdr.side,
+			       unit[drive].track%unit[drive].type->heads);
+			return MFM_TRACK;
+		}
 
-  if (crc != data_crc[0]) {
-    printk(KERN_INFO "dos_read: MFM_DATA (%d,%d,%d,%d) sc=%d, %x %x\n",
-      hdr.track, hdr.side, hdr.sec, hdr.len_desc,
-      scnt,data_crc[0], crc);
-    printk(KERN_INFO "data=(%lx,%lx,%lx,%lx,...)\n",
-      ((ulong *)(unit[drive].trackbuf+(hdr.sec-1)*512))[0],
-      ((ulong *)(unit[drive].trackbuf+(hdr.sec-1)*512))[1],
-      ((ulong *)(unit[drive].trackbuf+(hdr.sec-1)*512))[2],
-      ((ulong *)(unit[drive].trackbuf+(hdr.sec-1)*512))[3]);
-    return MFM_DATA;
-  }
-  }
- return 0;
+		if (hdr.len_desc != 2) {
+			printk(KERN_INFO "dos_read: unknown sector len "
+			       "descriptor %d\n", hdr.len_desc);
+			return MFM_DATA;
+		}
+#ifdef DEBUG
+		printk("hdr accepted\n");
+#endif
+		if (!(raw = scan_sync (raw, end))) {
+			printk(KERN_INFO "dos_read: no data sync on track "
+			       "%d, unit %d for sector%d, disk sector %d\n",
+			       unit[drive].track, drive, scnt, hdr.sec);
+			return MFM_NOSYNC;
+		}
+#ifdef DEBUG
+		dbg(raw);
+#endif
+
+		if (*((ushort *)raw)!=0x5545) {
+			printk(KERN_INFO "dos_read: no data mark after "
+			       "sync (%d,%d,%d,%d) sc=%d\n",
+			       hdr.track,hdr.side,hdr.sec,hdr.len_desc,scnt);
+			return MFM_NOSYNC;
+		}
+
+		raw+=2;  /* skip data mark (included in checksum) */
+		raw = dos_decode((unsigned char *)(unit[drive].trackbuf + (hdr.sec - 1) * 512), (ushort *) raw, 512);
+		raw = dos_decode((unsigned char  *)data_crc,(ushort *) raw,4);
+		crc = dos_data_crc(unit[drive].trackbuf + (hdr.sec - 1) * 512);
+
+		if (crc != data_crc[0]) {
+			printk(KERN_INFO "dos_read: MFM_DATA (%d,%d,%d,%d) "
+			       "sc=%d, %x %x\n", hdr.track, hdr.side,
+			       hdr.sec, hdr.len_desc, scnt,data_crc[0], crc);
+			printk(KERN_INFO "data=(%lx,%lx,%lx,%lx,...)\n",
+			       ((ulong *)(unit[drive].trackbuf+(hdr.sec-1)*512))[0],
+			       ((ulong *)(unit[drive].trackbuf+(hdr.sec-1)*512))[1],
+			       ((ulong *)(unit[drive].trackbuf+(hdr.sec-1)*512))[2],
+			       ((ulong *)(unit[drive].trackbuf+(hdr.sec-1)*512))[3]);
+			return MFM_DATA;
+		}
+	}
+	return 0;
 }
 
 static inline ushort dos_encode_byte(unsigned char byte)
 {
-register unsigned char *enc, b2, b1;
-register ushort word;
+	register unsigned char *enc, b2, b1;
+	register ushort word;
 
-enc=mfmencode;
-b1=byte;
-b2=b1>>4;
-b1&=15;
-word=enc[b2] <<8 | enc [b1];
-return (word|((word&(256|64)) ? 0: 128));
+	enc=mfmencode;
+	b1=byte;
+	b2=b1>>4;
+	b1&=15;
+	word=enc[b2] <<8 | enc [b1];
+	return (word|((word&(256|64)) ? 0: 128));
 }
 
 static void dos_encode_block(ushort *dest, unsigned char *src, int len)
 {
-int i;
+	int i;
 
-for (i = 0; i < len; i++) {
-  *dest=dos_encode_byte(*src++);
-  *dest|=((dest[-1]&1)||(*dest&0x4000))? 0: 0x8000;
-  dest++;
-}
+	for (i = 0; i < len; i++) {
+		*dest=dos_encode_byte(*src++);
+		*dest|=((dest[-1]&1)||(*dest&0x4000))? 0: 0x8000;
+		dest++;
+	}
 }
 
 static unsigned long *ms_putsec(int drive, unsigned long *raw, int cnt)
 {
-static struct dos_header hdr={0,0,0,2,0,
-  {78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78}};
-int i;
-static ushort crc[2]={0,0x4e4e};
+	static struct dos_header hdr={0,0,0,2,0,
+	  {78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78,78}};
+	int i;
+	static ushort crc[2]={0,0x4e4e};
 
-drive&=3;
+	drive&=3;
 /* id gap 1 */
 /* the MFM word before is always 9254 */
-for(i=0;i<6;i++)
-  *raw++=0xaaaaaaaa;
+	for(i=0;i<6;i++)
+		*raw++=0xaaaaaaaa;
 /* 3 sync + 1 headermark */
-*raw++=0x44894489;
-*raw++=0x44895554;
+	*raw++=0x44894489;
+	*raw++=0x44895554;
 
 /* fill in the variable parts of the header */
-hdr.track=unit[drive].track/unit[drive].type->heads;
-hdr.side=unit[drive].track%unit[drive].type->heads;
-hdr.sec=cnt+1;
-hdr.crc=dos_hdr_crc(&hdr);
+	hdr.track=unit[drive].track/unit[drive].type->heads;
+	hdr.side=unit[drive].track%unit[drive].type->heads;
+	hdr.sec=cnt+1;
+	hdr.crc=dos_hdr_crc(&hdr);
 
 /* header (without "magic") and id gap 2*/
-dos_encode_block((ushort *)raw,(unsigned char *) &hdr.track,28);
-raw+=14;
+	dos_encode_block((ushort *)raw,(unsigned char *) &hdr.track,28);
+	raw+=14;
 
 /*id gap 3 */
-for(i=0;i<6;i++)
-  *raw++=0xaaaaaaaa;
+	for(i=0;i<6;i++)
+		*raw++=0xaaaaaaaa;
 
 /* 3 syncs and 1 datamark */
-*raw++=0x44894489;
-*raw++=0x44895545;
+	*raw++=0x44894489;
+	*raw++=0x44895545;
 
 /* data */
-dos_encode_block((ushort *)raw,(unsigned char *)unit[drive].trackbuf+cnt*512,512);
-raw+=256;
+	dos_encode_block((ushort *)raw,
+			 (unsigned char *)unit[drive].trackbuf+cnt*512,512);
+	raw+=256;
 
 /*data crc + jd's special gap (long words :-/) */
-crc[0]=dos_data_crc(unit[drive].trackbuf+cnt*512);
-dos_encode_block((ushort *) raw,(unsigned char *)crc,4);
-raw+=2;
+	crc[0]=dos_data_crc(unit[drive].trackbuf+cnt*512);
+	dos_encode_block((ushort *) raw,(unsigned char *)crc,4);
+	raw+=2;
 
 /* data gap */
-for(i=0;i<38;i++)
-  *raw++=0x92549254;
+	for(i=0;i<38;i++)
+		*raw++=0x92549254;
 
-return raw; /* wrote 652 MFM words */
+	return raw; /* wrote 652 MFM words */
 }
 
 static void dos_write(int disk)
 {
-int cnt;
-unsigned long raw = (unsigned long) raw_buf;
-unsigned long *ptr=(unsigned long *)raw;
+	int cnt;
+	unsigned long raw = (unsigned long) raw_buf;
+	unsigned long *ptr=(unsigned long *)raw;
 
-disk&=3;
+	disk&=3;
 /* really gap4 + indexgap , but we write it first and round it up */
-for (cnt=0;cnt<425;cnt++)
-  *ptr++=0x92549254;
+	for (cnt=0;cnt<425;cnt++)
+		*ptr++=0x92549254;
 
 /* the following is just guessed */
-if (unit[disk].type->sect_mult==2)  /* check for HD-Disks */
-  for(cnt=0;cnt<473;cnt++)
-    *ptr++=0x92549254;
+	if (unit[disk].type->sect_mult==2)  /* check for HD-Disks */
+		for(cnt=0;cnt<473;cnt++)
+			*ptr++=0x92549254;
 
 /* now the index marks...*/
-for (cnt=0;cnt<20;cnt++)
-  *ptr++=0x92549254;
-for (cnt=0;cnt<6;cnt++)
-  *ptr++=0xaaaaaaaa;
-*ptr++=0x52245224;
-*ptr++=0x52245552;
-for (cnt=0;cnt<20;cnt++)
-  *ptr++=0x92549254;
+	for (cnt=0;cnt<20;cnt++)
+		*ptr++=0x92549254;
+	for (cnt=0;cnt<6;cnt++)
+		*ptr++=0xaaaaaaaa;
+	*ptr++=0x52245224;
+	*ptr++=0x52245552;
+	for (cnt=0;cnt<20;cnt++)
+		*ptr++=0x92549254;
 
 /* sectors */
-for(cnt = 0; cnt < unit[disk].dtype->sects * unit[disk].type->sect_mult; cnt++)
-  ptr=ms_putsec(disk,ptr,cnt);
+	for(cnt = 0; cnt < unit[disk].dtype->sects * unit[disk].type->sect_mult; cnt++)
+		ptr=ms_putsec(disk,ptr,cnt);
 
-*(ushort *)ptr = 0xaaa8; /* MFM word before is always 0x9254 */
+	*(ushort *)ptr = 0xaaa8; /* MFM word before is always 0x9254 */
 }
 
 /*
@@ -1299,37 +1308,38 @@ static void flush_track_callback(unsigned long nr)
 
 static int non_int_flush_track (unsigned long nr)
 {
-unsigned long flags;
+	unsigned long flags;
 
-  nr&=3;
-  writefromint = 0;
-  del_timer(&post_write_timer);
-  get_fdc(nr);
-  if (!fd_motor_on(nr)) {
-  	writepending = 0;
-  	rel_fdc();
-  	return 0;
-  }
-  save_flags(flags);
-  cli();
-  if (writepending != 2) {
-    restore_flags(flags);
-    (*unit[nr].dtype->write_fkt)(nr);
-    if (!raw_write(nr)) {
-      printk (KERN_NOTICE "floppy disk write protected in write!\n");
-      writepending = 0;
-      return 0;
-    }
-    while (block_flag == 2)
-      sleep_on (&wait_fd_block);
-  }
-  else {
-    restore_flags(flags);
-    ms_delay(2); /* 2 ms post_write delay */
-    post_write(nr);
-  }
-  rel_fdc();
-  return 1;
+	nr&=3;
+	writefromint = 0;
+	del_timer(&post_write_timer);
+	get_fdc(nr);
+	if (!fd_motor_on(nr)) {
+		writepending = 0;
+		rel_fdc();
+		return 0;
+	}
+	save_flags(flags);
+	cli();
+	if (writepending != 2) {
+		restore_flags(flags);
+		(*unit[nr].dtype->write_fkt)(nr);
+		if (!raw_write(nr)) {
+			printk (KERN_NOTICE "floppy disk write protected "
+				"in write!\n");
+			writepending = 0;
+			return 0;
+		}
+		while (block_flag == 2)
+			sleep_on (&wait_fd_block);
+	}
+	else {
+		restore_flags(flags);
+		ms_delay(2); /* 2 ms post_write delay */
+		post_write(nr);
+	}
+	rel_fdc();
+	return 1;
 }
 
 static int get_track(int drive, int track)
@@ -1379,7 +1389,7 @@ static void redo_fd_request(void)
 		return;
 	}
 
-    repeat:
+ repeat:
 	if (!CURRENT) {
 		/* Nothing left to do */
 		return;
@@ -1406,11 +1416,12 @@ static void redo_fd_request(void)
 		floppy = unit + drive;
 	}
 
- /* Here someone could investigate to be more efficient */
+	/* Here someone could investigate to be more efficient */
 	for (cnt = 0; cnt < CURRENT->current_nr_sectors; cnt++) { 
 #ifdef DEBUG
-		printk("fd: sector %ld + %d requested for %s\n",CURRENT->sector,cnt,
-			(CURRENT->cmd==READ)?"read":"write");
+		printk("fd: sector %ld + %d requested for %s\n",
+		       CURRENT->sector,cnt,
+		       (CURRENT->cmd==READ)?"read":"write");
 #endif
 		block = CURRENT->sector + cnt;
 		if ((int)block > floppy->blocks) {
@@ -1422,8 +1433,8 @@ static void redo_fd_request(void)
 		sector = block % (floppy->dtype->sects * floppy->type->sect_mult);
 		data = CURRENT->buffer + 512 * cnt;
 #ifdef DEBUG
-		printk("access to track %d, sector %d, with buffer at 0x%08lx\n",
-			track, sector, data);
+		printk("access to track %d, sector %d, with buffer at "
+		       "0x%08lx\n", track, sector, data);
 #endif
 
 		if ((CURRENT->cmd != READ) && (CURRENT->cmd != WRITE)) {
@@ -1437,11 +1448,11 @@ static void redo_fd_request(void)
 		}
 
 		switch (CURRENT->cmd) {
-		    case READ:
+		case READ:
 			memcpy(data, unit[drive].trackbuf + sector * 512, 512);
 			break;
 
-		    case WRITE:
+		case WRITE:
 			memcpy(unit[drive].trackbuf + sector * 512, data, 512);
 
 			/* keep the drive spinning while writes are scheduled */
@@ -1494,7 +1505,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		loc.cylinders = unit[drive].type->tracks;
 		loc.start = 0;
 		if (copy_to_user((void *)param, (void *)&loc,
-					  sizeof(struct hd_geometry)))
+				 sizeof(struct hd_geometry)))
 			return -EFAULT;
 		break;
 	}
@@ -1545,10 +1556,10 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		getprm.sect=unit[drive].dtype->sects * unit[drive].type->sect_mult;
 		getprm.size=unit[drive].blocks;
 		if (copy_to_user((void *)param,
-					  (void *)&getprm,
-					  sizeof(struct floppy_struct)))
+				 (void *)&getprm,
+				 sizeof(struct floppy_struct)))
 			return -EFAULT;
-	    break;
+		break;
 	case BLKGETSIZE:
 		return put_user(unit[drive].blocks,(long *)param);
 		break;
@@ -1562,13 +1573,14 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 #ifdef RAW_IOCTL
 	case IOCTL_RAW_TRACK:
 		if (copy_to_user((void *)param, raw_buf,
-				     unit[drive].type->read_size))
+				 unit[drive].type->read_size))
 			return -EFAULT;
 		else
 			return unit[drive].type->read_size;
 #endif
 	default:
-		printk(KERN_DEBUG "fd_ioctl: unknown cmd %d for drive %d.",cmd,drive);
+		printk(KERN_DEBUG "fd_ioctl: unknown cmd %d for drive %d.",
+		       cmd, drive);
 		return -ENOSYS;
 	}
 	return 0;
@@ -1589,8 +1601,8 @@ static void fd_probe(int dev)
 			break;
 
 	if (type >= num_dr_types) {
-		printk(KERN_WARNING "fd_probe: unsupported drive type %08lx found\n",
-		       code);
+		printk(KERN_WARNING "fd_probe: unsupported drive type "
+		       "%08lx found\n", code);
 		unit[drive].type = &drive_types[num_dr_types-1]; /* FD_NODRIVE */
 		return;
 	}
@@ -1611,93 +1623,93 @@ static void fd_probe(int dev)
  */
 static int floppy_open(struct inode *inode, struct file *filp)
 {
-  int drive;
-  int old_dev;
-  int system;
-  unsigned long flags;
+	int drive;
+	int old_dev;
+	int system;
+	unsigned long flags;
 
-  drive = MINOR(inode->i_rdev) & 3;
-  old_dev = fd_device[drive];
+	drive = MINOR(inode->i_rdev) & 3;
+	old_dev = fd_device[drive];
 
-  if (fd_ref[drive])
-    if (old_dev != inode->i_rdev)
-      return -EBUSY;
+	if (fd_ref[drive])
+		if (old_dev != inode->i_rdev)
+			return -EBUSY;
 
-  if (unit[drive].type->code == FD_NODRIVE)
-    return -ENODEV;
+	if (unit[drive].type->code == FD_NODRIVE)
+		return -ENODEV;
 
-  if (filp && filp->f_mode & 3) {
-    check_disk_change(inode->i_rdev);
-    if (filp->f_mode & 2 ) {
-	  int wrprot;
+	if (filp && filp->f_mode & 3) {
+		check_disk_change(inode->i_rdev);
+		if (filp->f_mode & 2 ) {
+			int wrprot;
 
-	  get_fdc(drive);
-	  fd_select (drive);
-	  wrprot = !(ciaa.pra & DSKPROT);
-	  fd_deselect (drive);
-	  rel_fdc();
+			get_fdc(drive);
+			fd_select (drive);
+			wrprot = !(ciaa.pra & DSKPROT);
+			fd_deselect (drive);
+			rel_fdc();
 
-	  if (wrprot)
-		  return -EROFS;
-    }
-  }
+			if (wrprot)
+				return -EROFS;
+		}
+	}
 
-  save_flags(flags);
-  cli();
-  fd_ref[drive]++;
-  fd_device[drive] = inode->i_rdev;
+	save_flags(flags);
+	cli();
+	fd_ref[drive]++;
+	fd_device[drive] = inode->i_rdev;
 #ifdef MODULE
-  if (unit[drive].motor == 0)
-    MOD_INC_USE_COUNT;
+	if (unit[drive].motor == 0)
+		MOD_INC_USE_COUNT;
 #endif
-  restore_flags(flags);
+	restore_flags(flags);
 
-  if (old_dev && old_dev != inode->i_rdev)
-    invalidate_buffers(old_dev);
+	if (old_dev && old_dev != inode->i_rdev)
+		invalidate_buffers(old_dev);
 
-  system=(inode->i_rdev & 4)>>2;
-  unit[drive].dtype=&data_types[system];
-  unit[drive].blocks=unit[drive].type->heads*unit[drive].type->tracks*
+	system=(inode->i_rdev & 4)>>2;
+	unit[drive].dtype=&data_types[system];
+	unit[drive].blocks=unit[drive].type->heads*unit[drive].type->tracks*
 		data_types[system].sects*unit[drive].type->sect_mult;
-  floppy_sizes[MINOR(inode->i_rdev)] = unit[drive].blocks >> 1;
+	floppy_sizes[MINOR(inode->i_rdev)] = unit[drive].blocks >> 1;
 
-  printk(KERN_INFO "fd%d: accessing %s-disk with %s-layout\n",drive,
-	unit[drive].type->name, data_types[system].name);
+	printk(KERN_INFO "fd%d: accessing %s-disk with %s-layout\n",drive,
+	       unit[drive].type->name, data_types[system].name);
 
-  return 0;
+	return 0;
 }
 
 static int floppy_release(struct inode * inode, struct file * filp)
 {
 #ifdef DEBUG
-  struct super_block * sb;
+	struct super_block * sb;
 #endif
-  int drive = MINOR(inode->i_rdev) & 3;
+	int drive = MINOR(inode->i_rdev) & 3;
 
-  fsync_dev(inode->i_rdev);
+	fsync_dev(inode->i_rdev);
 
 #ifdef DEBUG
-  /* This is now handled in floppy_change, but still useful for debugging */
-  sb = get_super(inode->i_rdev);
-  if (sb)
-	  invalidate_inodes(sb);
-  invalidate_buffers(inode->i_rdev);
+	/* This is now handled in floppy_change, but still useful for debugging */
+	sb = get_super(inode->i_rdev);
+	if (sb)
+		invalidate_inodes(sb);
+	invalidate_buffers(inode->i_rdev);
 #endif
 
-  if (unit[drive].dirty == 1) {
-	  del_timer (flush_track_timer + drive);
-	  non_int_flush_track (drive);
-  }
+	if (unit[drive].dirty == 1) {
+		del_timer (flush_track_timer + drive);
+		non_int_flush_track (drive);
+	}
   
-  if (!fd_ref[drive]--) {
-    printk(KERN_CRIT "floppy_release with fd_ref == 0");
-    fd_ref[drive] = 0;
-  }
+	if (!fd_ref[drive]--) {
+		printk(KERN_CRIT "floppy_release with fd_ref == 0");
+		fd_ref[drive] = 0;
+	}
 #ifdef MODULE
 /* the mod_use counter is handled this way */
-  floppy_off (drive | 0x40000000);
+	floppy_off (drive | 0x40000000);
 #endif
-  return 0;
+	return 0;
 }
 
 /*
@@ -1769,23 +1781,23 @@ static int __init fd_probe_drives(void)
 	drives=0;
 	nomem=0;
 	for(drive=0;drive<FD_MAX_UNITS;drive++) {
-	  fd_probe(drive);
-	  if (unit[drive].type->code != FD_NODRIVE) {
-	    drives++;
-	    if ((unit[drive].trackbuf = kmalloc(FLOPPY_MAX_SECTORS * 512, GFP_KERNEL)) == NULL) {
-	      printk("no mem for ");
-	      unit[drive].type = &drive_types[num_dr_types - 1]; /* FD_NODRIVE */
-	      drives--;
-	      nomem = 1;
-	    }
-	    printk("fd%d ",drive);
-	  }
+		fd_probe(drive);
+		if (unit[drive].type->code != FD_NODRIVE) {
+			drives++;
+			if ((unit[drive].trackbuf = kmalloc(FLOPPY_MAX_SECTORS * 512, GFP_KERNEL)) == NULL) {
+				printk("no mem for ");
+				unit[drive].type = &drive_types[num_dr_types - 1]; /* FD_NODRIVE */
+				drives--;
+				nomem = 1;
+			}
+			printk("fd%d ",drive);
+		}
 	}
 	if ((drives > 0) || (nomem == 0)) {
-	  if (drives == 0)
-	    printk("no drives");
-	  printk("\n");
-	  return drives;
+		if (drives == 0)
+			printk("no drives");
+		printk("\n");
+		return drives;
 	}
 	printk("\n");
 	return -ENOMEM;
@@ -1793,85 +1805,87 @@ static int __init fd_probe_drives(void)
 
 int __init amiga_floppy_init(void)
 {
-  int i;
+	int i;
 
-  if (!AMIGAHW_PRESENT(AMI_FLOPPY))
-    return -ENXIO;
-  if (register_blkdev(MAJOR_NR,"fd",&floppy_fops)) {
-    printk("fd: Unable to get major %d for floppy\n",MAJOR_NR);
-    return -EBUSY;
-  }
-  if ((raw_buf = (char *)amiga_chip_alloc (RAW_BUF_SIZE)) == NULL) {
-  	printk("fd: cannot get chip mem buffer\n");
-  	unregister_blkdev(MAJOR_NR,"fd");
-  	return -ENOMEM;
-  }
+	if (!AMIGAHW_PRESENT(AMI_FLOPPY))
+		return -ENXIO;
 
-  if (request_irq(IRQ_FLOPPY, fd_block_done, 0, "floppy_dma", NULL) != 0) {
-  	printk("fd: cannot get irq for dma\n");
-  	amiga_chip_free(raw_buf);
-  	unregister_blkdev(MAJOR_NR,"fd");
-  	return -EBUSY;
-  }
-  if (request_irq(IRQ_AMIGA_CIAA_TB, ms_isr, 0, "floppy_timer", NULL) != 0) {
-  	printk("fd: cannot get irq for timer\n");
-  	free_irq(IRQ_FLOPPY, NULL);
-  	amiga_chip_free(raw_buf);
-  	unregister_blkdev(MAJOR_NR,"fd");
-  	return -EBUSY;
-  }
-  if (fd_probe_drives() < 1) { /* No usable drives */
-  	free_irq(IRQ_AMIGA_CIAA_TB, NULL);
-  	free_irq(IRQ_FLOPPY, NULL);
-  	amiga_chip_free(raw_buf);
-  	unregister_blkdev(MAJOR_NR,"fd");
-  	return -ENXIO;
-  }
+	if (register_blkdev(MAJOR_NR,"fd",&floppy_fops)) {
+		printk("fd: Unable to get major %d for floppy\n",MAJOR_NR);
+		return -EBUSY;
+	}
 
-  /* initialize variables */
-  motor_on_timer.next = NULL;
-  motor_on_timer.prev = NULL;
-  motor_on_timer.expires = 0;
-  motor_on_timer.data = 0;
-  motor_on_timer.function = motor_on_callback;
-  for (i = 0; i < FD_MAX_UNITS; i++) {
-	  motor_off_timer[i].next = NULL;
-	  motor_off_timer[i].prev = NULL;
-	  motor_off_timer[i].expires = 0;
-	  motor_off_timer[i].data = i|0x80000000;
-	  motor_off_timer[i].function = fd_motor_off;
-	  flush_track_timer[i].next = NULL;
-	  flush_track_timer[i].prev = NULL;
-	  flush_track_timer[i].expires = 0;
-	  flush_track_timer[i].data = i;
-	  flush_track_timer[i].function = flush_track_callback;
+	if ((raw_buf = (char *)amiga_chip_alloc (RAW_BUF_SIZE)) == NULL) {
+		printk("fd: cannot get chip mem buffer\n");
+		unregister_blkdev(MAJOR_NR,"fd");
+		return -ENOMEM;
+	}
 
-	  unit[i].track = -1;
-  }
+	if (!request_irq(IRQ_AMIGA_DSKBLK, fd_block_done, 0, "floppy_dma", NULL)) {
+		printk("fd: cannot get irq for dma\n");
+		amiga_chip_free(raw_buf);
+		unregister_blkdev(MAJOR_NR,"fd");
+		return -EBUSY;
+	}
+	if (!request_irq(IRQ_AMIGA_CIAA_TB, ms_isr, 0, "floppy_timer", NULL)) {
+		printk("fd: cannot get irq for timer\n");
+		free_irq(IRQ_AMIGA_DSKBLK, NULL);
+		amiga_chip_free(raw_buf);
+		unregister_blkdev(MAJOR_NR,"fd");
+		return -EBUSY;
+	}
+	if (fd_probe_drives() < 1) { /* No usable drives */
+		free_irq(IRQ_AMIGA_CIAA_TB, NULL);
+		free_irq(IRQ_AMIGA_DSKBLK, NULL);
+		amiga_chip_free(raw_buf);
+		unregister_blkdev(MAJOR_NR,"fd");
+		return -ENXIO;
+	}
 
-  post_write_timer.next = NULL;
-  post_write_timer.prev = NULL;
-  post_write_timer.expires = 0;
-  post_write_timer.data = 0;
-  post_write_timer.function = post_write;
+	/* initialize variables */
+	motor_on_timer.next = NULL;
+	motor_on_timer.prev = NULL;
+	motor_on_timer.expires = 0;
+	motor_on_timer.data = 0;
+	motor_on_timer.function = motor_on_callback;
+	for (i = 0; i < FD_MAX_UNITS; i++) {
+		motor_off_timer[i].next = NULL;
+		motor_off_timer[i].prev = NULL;
+		motor_off_timer[i].expires = 0;
+		motor_off_timer[i].data = i|0x80000000;
+		motor_off_timer[i].function = fd_motor_off;
+		flush_track_timer[i].next = NULL;
+		flush_track_timer[i].prev = NULL;
+		flush_track_timer[i].expires = 0;
+		flush_track_timer[i].data = i;
+		flush_track_timer[i].function = flush_track_callback;
+
+		unit[i].track = -1;
+	}
+
+	post_write_timer.next = NULL;
+	post_write_timer.prev = NULL;
+	post_write_timer.expires = 0;
+	post_write_timer.data = 0;
+	post_write_timer.function = post_write;
   
-  blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-  blksize_size[MAJOR_NR] = floppy_blocksizes;
-  blk_size[MAJOR_NR] = floppy_sizes;
+	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blksize_size[MAJOR_NR] = floppy_blocksizes;
+	blk_size[MAJOR_NR] = floppy_sizes;
 
-  for (i = 0; i < 128; i++)
-	  mfmdecode[i]=255;
-  for (i = 0; i < 16; i++)
-	  mfmdecode[mfmencode[i]]=i;
+	for (i = 0; i < 128; i++)
+		mfmdecode[i]=255;
+	for (i = 0; i < 16; i++)
+		mfmdecode[mfmencode[i]]=i;
 
-  /* make sure that disk DMA is enabled */
-  custom.dmacon = DMAF_SETCLR | DMAF_DISK;
+	/* make sure that disk DMA is enabled */
+	custom.dmacon = DMAF_SETCLR | DMAF_DISK;
 
-  /* init ms timer */
-  ciaa.crb = 8; /* one-shot, stop */
+	/* init ms timer */
+	ciaa.crb = 8; /* one-shot, stop */
 
-  (void)do_floppy; /* avoid warning about unused variable */
-  return 0;
+	(void)do_floppy; /* avoid warning about unused variable */
+	return 0;
 }
 
 #ifdef MODULE
@@ -1879,25 +1893,25 @@ int __init amiga_floppy_init(void)
 
 int init_module(void)
 {
-  if (!MACH_IS_AMIGA)
-    return -ENXIO;
-  return amiga_floppy_init();
+	if (!MACH_IS_AMIGA)
+		return -ENXIO;
+	return amiga_floppy_init();
 }
 
 void cleanup_module(void)
 {
-int i;
+	int i;
 
-for( i = 0; i < FD_MAX_UNITS; i++)
-  if (unit[i].type->code != FD_NODRIVE)
-    kfree(unit[i].trackbuf);
-free_irq(IRQ_AMIGA_CIAA_TB, NULL);
-free_irq(IRQ_FLOPPY, NULL);
-custom.dmacon = DMAF_DISK; /* disable DMA */
-amiga_chip_free(raw_buf);
-blk_size[MAJOR_NR] = NULL;
-blksize_size[MAJOR_NR] = NULL;
-blk_dev[MAJOR_NR].request_fn = NULL;
-unregister_blkdev(MAJOR_NR, "fd");
+	for( i = 0; i < FD_MAX_UNITS; i++)
+		if (unit[i].type->code != FD_NODRIVE)
+			kfree(unit[i].trackbuf);
+	free_irq(IRQ_AMIGA_CIAA_TB, NULL);
+	free_irq(IRQ_AMIGA_DSKBLK, NULL);
+	custom.dmacon = DMAF_DISK; /* disable DMA */
+	amiga_chip_free(raw_buf);
+	blk_size[MAJOR_NR] = NULL;
+	blksize_size[MAJOR_NR] = NULL;
+	blk_dev[MAJOR_NR].request_fn = NULL;
+	unregister_blkdev(MAJOR_NR, "fd");
 }
 #endif

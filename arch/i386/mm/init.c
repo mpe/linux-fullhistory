@@ -375,7 +375,6 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 	int datapages = 0;
 	int initpages = 0;
 	unsigned long tmp;
-	unsigned long addr;
 	int i, avail;
 
 	end_mem &= PAGE_MASK;
@@ -413,17 +412,27 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 	/* walk the whitelist, unreserving good memory
 	 */
 	for (avail = i = 0; i < e820.nr_map; i++) {
+		unsigned long addr, end, size;
+
 		if (e820.map[i].type != 1)	/* not usable memory */
 			continue;
-		printk("memory region: %luk @ %08lx\n",
-				    ((long)(e820.map[i].size)) / 1024,
-				    (long)(e820.map[i].addr) );
-		for (addr=PAGE_ALIGN(((long)(e820.map[i].addr)))+PAGE_OFFSET,
-								     tmp = 0;
-				     tmp < (unsigned long)(e820.map[i].size);
-							    tmp += PAGE_SIZE,
-							   addr += PAGE_SIZE) {
+		addr = e820.map[i].addr;
+		size = e820.map[i].size;
 
+		/* Overflow large memory reasonably gracefully */
+		if (addr != e820.map[i].addr)
+			continue;
+
+		printk("memory region: %luk @ %08lx\n", size >> 10, addr );
+
+		/* Make sure we don't get fractional pages */
+		end = (addr + size) & PAGE_MASK;
+		addr = PAGE_ALIGN(addr);
+		if (end <= addr)
+			continue;
+
+		size = end - addr;
+		for (addr = addr + PAGE_OFFSET ; size ; addr += PAGE_SIZE, size -= PAGE_SIZE) {
 			/* this little bit of grossness is for dealing
 			 * with memory borrowing for system bookkeeping
 			 * (smp stacks, zero page, kernel code, etc)
@@ -437,9 +446,11 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 			 * in any case, we don't want to hack mem_map
 			 * entries above end_mem.
 			 */
-			if ( (addr < start_low_mem)
-			  || (addr >= HIGH_MEMORY && addr <= start_mem)
-			  || (addr > end_mem) )
+			if ( addr < start_low_mem )
+				continue;
+			if ( addr > end_mem )
+				continue;
+			if ( addr >= HIGH_MEMORY && addr <= start_mem )
 				continue;
 
 			avail++;

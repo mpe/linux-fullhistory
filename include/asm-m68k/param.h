@@ -5,7 +5,11 @@
 #define HZ 100
 #endif
 
+#ifndef CONFIG_SUN3
 #define EXEC_PAGESIZE	4096
+#else
+#define EXEC_PAGESIZE	8192
+#endif
 
 #ifndef NGROUPS
 #define NGROUPS		32

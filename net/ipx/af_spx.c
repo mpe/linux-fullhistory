@@ -113,10 +113,6 @@ static int spx_create(struct socket *sock, int protocol)
 	return (0);
 }
 
-static int spx_shutdown(struct socket *sk,int how)
-{
-        return (-EOPNOTSUPP);
-}
 
 void spx_close_socket(struct sock *sk)
 {
@@ -184,10 +180,6 @@ static int spx_listen(struct socket *sock, int backlog)
         if(sk->zapped != 0)
                 return (-EAGAIN);
 
-        if((unsigned) backlog == 0)     /* BSDism */
-                backlog = 1;
-        if((unsigned) backlog > SOMAXCONN)
-                backlog = SOMAXCONN;
         sk->max_ack_backlog = backlog;
         if(sk->state != TCP_LISTEN)
         {
@@ -853,7 +845,7 @@ static struct proto_ops SOCKOPS_WRAPPED(spx_ops) = {
         datagram_poll,  /* this does seqpacket too */
 	spx_ioctl,
         spx_listen,
-        spx_shutdown,
+        sock_no_shutdown,
 	spx_setsockopt,
 	spx_getsockopt,
         sock_no_fcntl,

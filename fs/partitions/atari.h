@@ -13,10 +13,10 @@
 
 struct partition_info
 {
-  u_char flg;			/* bit 0: active; bit 7: bootable */
+  u8 flg;			/* bit 0: active; bit 7: bootable */
   char id[3];			/* "GEM", "BGM", "XGM", or other */
-  u_long st;			/* start of partition */
-  u_long siz;			/* length of partition */
+  u32 st;			/* start of partition */
+  u32 siz;			/* length of partition */
 };
 
 struct rootsector
@@ -24,11 +24,11 @@ struct rootsector
   char unused[0x156];		/* room for boot code */
   struct partition_info icdpart[8];	/* info for ICD-partitions 5..12 */
   char unused2[0xc];
-  u_long hd_siz;		/* size of disk in blocks */
+  u32 hd_siz;			/* size of disk in blocks */
   struct partition_info part[4];
-  u_long bsl_st;		/* start of bad sector list */
-  u_long bsl_cnt;		/* length of bad sector list */
-  u_short checksum;		/* checksum for bootable disks */
+  u32 bsl_st;			/* start of bad sector list */
+  u32 bsl_cnt;			/* length of bad sector list */
+  u16 checksum;			/* checksum for bootable disks */
 } __attribute__((__packed__));
 
 int atari_partition (struct gendisk *hd, kdev_t dev,

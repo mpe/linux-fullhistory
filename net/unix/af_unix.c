@@ -414,8 +414,6 @@ static int unix_listen(struct socket *sock, int backlog)
 	err = -EINVAL;
 	if (!sk->protinfo.af_unix.addr)
 		goto out;			/* No listens on an unbound socket */
-	if ((unsigned) backlog > SOMAXCONN)
-		backlog = SOMAXCONN;
 	unix_state_wlock(sk);
 	if (sk->state != TCP_CLOSE && sk->state != TCP_LISTEN)
 		goto out_unlock;

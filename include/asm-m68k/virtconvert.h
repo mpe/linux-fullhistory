@@ -17,9 +17,21 @@
 /*
  * Change virtual addresses to physical addresses and vv.
  */
+#ifndef CONFIG_SUN3
 extern unsigned long mm_vtop(unsigned long addr) __attribute__ ((const));
 extern unsigned long mm_vtop_fallback (unsigned long) __attribute__ ((const));
 extern unsigned long mm_ptov(unsigned long addr) __attribute__ ((const));
+#else
+extern inline unsigned long mm_vtop(unsigned long vaddr)
+{
+	return __pa(vaddr);
+}
+
+extern inline unsigned long mm_ptov(unsigned long paddr)
+{
+	return (unsigned long)__va(paddr);
+}
+#endif 
 
 #ifdef CONFIG_SINGLE_MEMORY_CHUNK
 extern inline unsigned long virt_to_phys(volatile void * address)

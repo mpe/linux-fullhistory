@@ -8,6 +8,13 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := mm.o
-O_OBJS	 := init.o fault.o memory.o kmap.o extable.o hwtest.o
+O_OBJS	 := init.o fault.o extable.o hwtest.o
+
+ifndef CONFIG_SUN3
+O_OBJS 	 += kmap.o memory.o motorola.o
+else
+O_OBJS	 += sun3mmu.o
+endif
+
 
 include $(TOPDIR)/Rules.make

@@ -56,6 +56,8 @@
  *                     Bugs remaining: plops and clicks when starting/stopping playback
  *    31.08.99   0.7   add spin_lock_init
  *                     replaced current->state = x with set_current_state(x)
+ *    03.09.99   0.8   change read semantics for MIDI to match
+ *                     OSS more closely; remove possible wakeup race
  *
  */
 
@@ -1601,6 +1603,7 @@ static void solo1_midi_timer(unsigned long data)
 static ssize_t solo1_midi_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 {
 	struct solo1_state *s = (struct solo1_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned ptr;
@@ -1611,7 +1614,10 @@ static ssize_t solo1_midi_read(struct file *file, char *buffer, size_t count, lo
 		return -ESPIPE;
 	if (!access_ok(VERIFY_WRITE, buffer, count))
 		return -EFAULT;
+	if (count == 0)
+		return 0;
 	ret = 0;
+	add_wait_queue(&s->midi.iwait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.ird;
@@ -1622,15 +1628,25 @@ static ssize_t solo1_midi_read(struct file *file, char *buffer, size_t count, lo
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->midi.iwait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (file->f_flags & O_NONBLOCK) {
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			__set_current_state(TASK_INTERRUPTIBLE);
+			schedule();
+			if (signal_pending(current)) {
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_to_user(buffer, s->midi.ibuf + ptr, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_to_user(buffer, s->midi.ibuf + ptr, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		ptr = (ptr + cnt) % MIDIINBUF;
 		spin_lock_irqsave(&s->lock, flags);
 		s->midi.ird = ptr;
@@ -1639,13 +1655,17 @@ static ssize_t solo1_midi_read(struct file *file, char *buffer, size_t count, lo
 		count -= cnt;
 		buffer += cnt;
 		ret += cnt;
+		break;
 	}
+	__set_current_state(TASK_RUNNING);
+	remove_wait_queue(&s->midi.iwait, &wait);
 	return ret;
 }
 
 static ssize_t solo1_midi_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	struct solo1_state *s = (struct solo1_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned ptr;
@@ -1656,7 +1676,10 @@ static ssize_t solo1_midi_write(struct file *file, const char *buffer, size_t co
 		return -ESPIPE;
 	if (!access_ok(VERIFY_READ, buffer, count))
 		return -EFAULT;
+	if (count == 0)
+		return 0;
 	ret = 0;
+        add_wait_queue(&s->midi.owait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.owr;
@@ -1669,15 +1692,25 @@ static ssize_t solo1_midi_write(struct file *file, const char *buffer, size_t co
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->midi.owait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (file->f_flags & O_NONBLOCK) {
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			__set_current_state(TASK_INTERRUPTIBLE);
+			schedule();
+			if (signal_pending(current)) {
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_from_user(s->midi.obuf + ptr, buffer, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_from_user(s->midi.obuf + ptr, buffer, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		ptr = (ptr + cnt) % MIDIOUTBUF;
 		spin_lock_irqsave(&s->lock, flags);
 		s->midi.owr = ptr;
@@ -1690,6 +1723,8 @@ static ssize_t solo1_midi_write(struct file *file, const char *buffer, size_t co
 		solo1_handle_midi(s);
 		spin_unlock_irqrestore(&s->lock, flags);
 	}
+	__set_current_state(TASK_RUNNING);
+	remove_wait_queue(&s->midi.owait, &wait);
 	return ret;
 }
 

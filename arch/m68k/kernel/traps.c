@@ -47,7 +47,9 @@ asmlinkage void buserr(void);
 asmlinkage void trap(void);
 asmlinkage void inthandler(void);
 asmlinkage void nmihandler(void);
+#ifdef CONFIG_M68KFPU_EMU
 asmlinkage void fpu_emu(void);
+#endif
 
 e_vector vectors[256] = {
 	0, 0, buserr, trap, trap, trap, trap, trap,
@@ -68,8 +70,17 @@ asm(".text\n"
 
 void __init base_trap_init(void)
 {
+#ifdef CONFIG_SUN3
+	/* Keep the keyboard interrupt working with PROM for debugging. --m */
+	e_vector *old_vbr;
+	__asm__ volatile ("movec %%vbr,%1\n\t"
+			  "movec %0,%%vbr"
+			  : "=&r" (old_vbr) : "r" ((void*)vectors));
+	vectors[0x1E] = old_vbr[0x1E];	/* Copy int6 vector. */
+#else
 	/* setup the exception vector table */
 	__asm__ volatile ("movec %0,%%vbr" : : "r" ((void*)vectors));
+#endif
 
 	if (CPU_IS_040 && !FPU_IS_EMU) {
 		/* set up FPSP entry points */
@@ -143,6 +154,10 @@ void __init trap_init (void)
 	if (MACH_IS_AMIGA) {
 		vectors[VEC_INT7] = nmihandler;
 	}
+#ifdef CONFIG_SUN3
+	/* Moved from setup_arch() */
+	base_trap_init();
+#endif
 }
 
 
@@ -175,11 +190,17 @@ static char *vec_names[] = {
 	"MMU CONFIGURATION ERROR"
 	};
 
+#ifndef CONFIG_SUN3
 static char *space_names[] = {
 	"Space 0", "User Data", "User Program", "Space 3",
 	"Space 4", "Super Data", "Super Program", "CPU"
 	};
-
+#else
+static char *space_names[] = {
+	"Space 0", "User Data", "User Program", "Control",
+	"Space 4", "Super Data", "Super Program", "CPU"
+	};
+#endif
 
 void die_if_kernel(char *,struct pt_regs *,int);
 asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
@@ -330,6 +351,17 @@ static inline void access_error040 (struct frame *fp)
 #endif
 		errorcode = ((mmusr & MMU_R_040) ? 1 : 0) |
 			((ssw & RW_040) ? 0 : 2);
+#ifdef CONFIG_FTRACE
+		{
+			unsigned long flags;
+
+			save_flags(flags);
+			cli();
+			do_ftrace(0xfa000000 | errorcode);
+			do_ftrace(mmusr);
+			restore_flags(flags);
+		}
+#endif
 		do_page_fault (&fp->ptregs, addr, errorcode);
 	} else {
 		printk ("68040 access error, ssw=%x\n", ssw);
@@ -363,6 +395,132 @@ static inline void access_error040 (struct frame *fp)
 }
 #endif /* CONFIG_M68040 */
 
+#if defined(CONFIG_SUN3)
+#include <asm/sun3mmu.h>
+
+extern int mmu_emu_handle_fault (unsigned long, int, int);
+
+/* sun3 version of bus_error030 */
+
+extern inline void bus_error030 (struct frame *fp)
+{
+	unsigned char buserr_type = sun3_get_buserr ();
+	unsigned long addr, errorcode;
+	unsigned short ssw = fp->un.fmtb.ssw;
+
+#if DEBUG
+	if (ssw & (FC | FB))
+		printk ("Instruction fault at %#010lx\n",
+			ssw & FC ?
+			fp->ptregs.format == 0xa ? fp->ptregs.pc + 2 : fp->un.fmtb.baddr - 2
+			:
+			fp->ptregs.format == 0xa ? fp->ptregs.pc + 4 : fp->un.fmtb.baddr);
+	if (ssw & DF) 
+		printk ("Data %s fault at %#010lx in %s (pc=%#lx)\n",
+			ssw & RW ? "read" : "write",
+			fp->un.fmtb.daddr,
+			space_names[ssw & DFC], fp->ptregs.pc);
+#endif
+
+	/*
+	 * Check if this page should be demand-mapped. This needs to go before
+	 * the testing for a bad kernel-space access (demand-mapping applies
+	 * to kernel accesses too).
+	 */
+	
+	if ((ssw & DF)
+	    && (buserr_type & (SUN3_BUSERR_PROTERR | SUN3_BUSERR_INVALID))) {
+		if (mmu_emu_handle_fault (fp->un.fmtb.daddr, ssw & RW, 0))
+			return;
+	}
+
+	/* Check for kernel-space pagefault (BAD). */
+	if (fp->ptregs.sr & PS_S) {
+		/* kernel fault must be a data fault to user space */
+		if (! ((ssw & DF) && ((ssw & DFC) == USER_DATA))) {
+		     // try checking the kernel mappings before surrender
+		     if (mmu_emu_handle_fault (fp->un.fmtb.daddr, ssw & RW, 1))
+			  return;
+			/* instruction fault or kernel data fault! */
+			if (ssw & (FC | FB))
+				printk ("Instruction fault at %#010lx\n",
+					fp->ptregs.pc);
+			if (ssw & DF) {
+				printk ("Data %s fault at %#010lx in %s (pc=%#lx)\n",
+					ssw & RW ? "read" : "write",
+					fp->un.fmtb.daddr,
+					space_names[ssw & DFC], fp->ptregs.pc);
+			}
+			printk ("BAD KERNEL BUSERR\n");
+
+			die_if_kernel("Oops", &fp->ptregs,0);
+			force_sig(SIGKILL, current);
+			return;
+		}
+	} else {
+		/* user fault */
+		if (!(ssw & (FC | FB)) && !(ssw & DF))
+			/* not an instruction fault or data fault! BAD */
+			panic ("USER BUSERR w/o instruction or data fault");
+	}
+
+
+	/* First handle the data fault, if any.  */
+	if (ssw & DF) {
+		addr = fp->un.fmtb.daddr;
+
+// errorcode bit 0:	0 -> no page		1 -> protection fault
+// errorcode bit 1:	0 -> read fault		1 -> write fault
+
+// (buserr_type & SUN3_BUSERR_PROTERR)	-> protection fault
+// (buserr_type & SUN3_BUSERR_INVALID)	-> invalid page fault
+
+		if (buserr_type & SUN3_BUSERR_PROTERR)
+			errorcode = 0x01;
+		else if (buserr_type & SUN3_BUSERR_INVALID)
+			errorcode = 0x00;
+		else {
+			printk ("*** unexpected busfault type=%#04x\n", buserr_type);
+			printk ("invalid %s access at %#lx from pc %#lx\n",
+				!(ssw & RW) ? "write" : "read", addr,
+				fp->ptregs.pc);
+			die_if_kernel ("Oops", &fp->ptregs, buserr_type);
+			force_sig (SIGSEGV, current);
+			return;
+		}
+
+//todo: wtf is RM bit? --m
+		if (!(ssw & RW) || ssw & RM)
+			errorcode |= 0x02;
+
+		/* Handle page fault. */
+		do_page_fault (&fp->ptregs, addr, errorcode);
+
+		/* Retry the data fault now. */
+		return;
+	}
+
+	/* Now handle the instruction fault. */
+
+	/* Get the fault address. */
+	if (fp->ptregs.format == 0xA)
+		addr = fp->ptregs.pc + 4;
+	else
+		addr = fp->un.fmtb.baddr;
+	if (ssw & FC)
+		addr -= 2;
+
+	if (buserr_type & SUN3_BUSERR_INVALID) {
+		if (!mmu_emu_handle_fault (fp->un.fmtb.daddr, 1, 0))
+			do_page_fault (&fp->ptregs, addr, 0);
+       } else {
+#ifdef DEBUG
+		printk ("protection fault on insn access (segv).\n");
+#endif
+		force_sig (SIGSEGV, current);
+       }	
+}
+#else
 #if defined(CPU_M68020_OR_M68030)
 static inline void bus_error030 (struct frame *fp)
 {
@@ -568,6 +726,7 @@ create_atc_entry:
 		      : "a" (addr));
 }
 #endif /* CPU_M68020_OR_M68030 */
+#endif /* !CONFIG_SUN3 */
 
 asmlinkage void buserr_c(struct frame *fp)
 {

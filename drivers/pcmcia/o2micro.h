@@ -1,5 +1,5 @@
 /*
- * o2micro.h $Revision: 1.9 $ $Date: 1999/08/28 04:01:47 $
+ * o2micro.h 1.10 1999/09/03 16:43:35
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
