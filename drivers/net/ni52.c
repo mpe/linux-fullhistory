@@ -199,6 +199,7 @@ static int     ni52_close(struct net_device *dev);
 static int     ni52_send_packet(struct sk_buff *,struct net_device *);
 static struct  net_device_stats *ni52_get_stats(struct net_device *dev);
 static void    set_multicast_list(struct net_device *dev);
+static void    ni52_timeout(struct net_device *dev);
 #if 0
 static void    ni52_dump(struct net_device *,void *);
 #endif
@@ -244,9 +245,7 @@ static int ni52_close(struct net_device *dev)
 
 	ni_reset586(); /* the hard way to stop the receiver */
 
-	dev->start = 0;
-	dev->tbusy = 0;
-
+	netif_stop_queue(dev);
 	MOD_DEC_USE_COUNT;
 
 	return 0;
@@ -269,10 +268,7 @@ static int ni52_open(struct net_device *dev)
 		return -EAGAIN;
 	}
 
-	dev->interrupt = 0;
-	dev->tbusy = 0;
-	dev->start = 1;
-
+	netif_start_queue(dev);
 	MOD_INC_USE_COUNT;
 
 	return 0; /* most done by init */
@@ -512,19 +508,17 @@ static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 		printk("IRQ %d (assigned and not checked!).\n",dev->irq);
 	}
 
-	dev->open		= &ni52_open;
-	dev->stop		= &ni52_close;
-	dev->get_stats		= &ni52_get_stats;
-	dev->hard_start_xmit 	= &ni52_send_packet;
-	dev->set_multicast_list = &set_multicast_list;
+	dev->open		= ni52_open;
+	dev->stop		= ni52_close;
+	dev->get_stats		= ni52_get_stats;
+	dev->tx_timeout 	= ni52_timeout;
+	dev->watchdog_timeo	= HZ/20;
+	dev->hard_start_xmit 	= ni52_send_packet;
+	dev->set_multicast_list = set_multicast_list;
 
 	dev->if_port 		= 0;
 
 	ether_setup(dev);
-
-	dev->tbusy		= 0;
-	dev->interrupt		= 0;
-	dev->start		= 0;
 
 	return 0;
 }
@@ -831,8 +825,6 @@ static void ni52_interrupt(int irq,void *dev_id,struct pt_regs *reg_ptr)
 	if(debuglevel > 1)
 		printk("I");
 
-	dev->interrupt = 1;
-
 	WAIT_4_SCB_CMD(); /* wait for last command	*/
 
 	while((stat=p->scb->cus & STAT_MASK))
@@ -866,7 +858,7 @@ static void ni52_interrupt(int irq,void *dev_id,struct pt_regs *reg_ptr)
 #ifndef NO_NOPCOMMANDS
 		if(stat & STAT_CNA)	/* CU went 'not ready' */
 		{
-			if(dev->start)
+			if(test_bit(LINK_STATE_START, &dev->state))
 				printk("%s: oops! CU has left active state. stat: %04x/%02x.\n",dev->name,(int) stat,(int) p->scb->cus);
 		}
 #endif
@@ -885,8 +877,6 @@ static void ni52_interrupt(int irq,void *dev_id,struct pt_regs *reg_ptr)
 
 	if(debuglevel > 1)
 		printk("i");
-
-	dev->interrupt = 0;
 }
 
 /*******************************************************
@@ -1083,9 +1073,7 @@ static void ni52_xmt_int(struct net_device *dev)
 	if( (++p->xmit_last) == NUM_XMIT_BUFFS)
 		p->xmit_last = 0;
 #endif
-
-	dev->tbusy = 0;
-	mark_bh(NET_BH);
+	netif_wake_queue(dev);
 }
 
 /***********************************************************
@@ -1104,6 +1092,40 @@ static void startrecv586(struct net_device *dev)
 	WAIT_4_SCB_CMD_RUC();	/* wait for accept cmd. (no timeout!!) */
 }
 
+static void ni52_timeout(struct net_device *dev)
+{
+	struct priv *p = (struct priv *) dev->priv;
+#ifndef NO_NOPCOMMANDS
+	if(p->scb->cus & CU_ACTIVE) /* COMMAND-UNIT active? */
+	{
+		netif_wake_queue(dev);
+#ifdef DEBUG
+		printk("%s: strange ... timeout with CU active?!?\n",dev->name);
+		printk("%s: X0: %04x N0: %04x N1: %04x %d\n",dev->name,(int)p->xmit_cmds[0]->cmd_status,(int)p->nop_cmds[0]->cmd_status,(int)p->nop_cmds[1]->cmd_status,(int)p->nop_point);
+#endif
+		p->scb->cmd_cuc = CUC_ABORT;
+		ni_attn586();
+		WAIT_4_SCB_CMD();
+		p->scb->cbl_offset = make16(p->nop_cmds[p->nop_point]);
+		p->scb->cmd_cuc = CUC_START;
+		ni_attn586();
+		WAIT_4_SCB_CMD();
+		dev->trans_start = jiffies;
+		return 0;
+	}
+#endif
+	{
+#ifdef DEBUG
+		printk("%s: xmitter timed out, try to restart! stat: %02x\n",dev->name,p->scb->cus);
+		printk("%s: command-stats: %04x %04x\n",dev->name,p->xmit_cmds[0]->cmd_status,p->xmit_cmds[1]->cmd_status);
+		printk("%s: check, whether you set the right interrupt number!\n",dev->name);
+#endif
+		ni52_close(dev);
+		ni52_open(dev);
+	}
+	dev->trans_start = jiffies;
+}
+
 /******************************************************
  * send frame
  */
@@ -1116,62 +1138,21 @@ static int ni52_send_packet(struct sk_buff *skb, struct net_device *dev)
 #endif
 	struct priv *p = (struct priv *) dev->priv;
 
-	if(dev->tbusy)
-	{
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 5)
-			return 1;
-
-#ifndef NO_NOPCOMMANDS
-		if(p->scb->cus & CU_ACTIVE) /* COMMAND-UNIT active? */
-		{
-			dev->tbusy = 0;
-#ifdef DEBUG
-			printk("%s: strange ... timeout with CU active?!?\n",dev->name);
-			printk("%s: X0: %04x N0: %04x N1: %04x %d\n",dev->name,(int)p->xmit_cmds[0]->cmd_status,(int)p->nop_cmds[0]->cmd_status,(int)p->nop_cmds[1]->cmd_status,(int)p->nop_point);
-#endif
-			p->scb->cmd_cuc = CUC_ABORT;
-			ni_attn586();
-			WAIT_4_SCB_CMD();
-			p->scb->cbl_offset = make16(p->nop_cmds[p->nop_point]);
-			p->scb->cmd_cuc = CUC_START;
-			ni_attn586();
-			WAIT_4_SCB_CMD();
-			dev->trans_start = jiffies;
-			return 0;
-		}
-		else
-#endif
-		{
-#ifdef DEBUG
-			printk("%s: xmitter timed out, try to restart! stat: %02x\n",dev->name,p->scb->cus);
-			printk("%s: command-stats: %04x %04x\n",dev->name,p->xmit_cmds[0]->cmd_status,p->xmit_cmds[1]->cmd_status);
-			printk("%s: check, whether you set the right interrupt number!\n",dev->name);
-#endif
-			ni52_close(dev);
-			ni52_open(dev);
-		}
-		dev->trans_start = jiffies;
-		return 0;
-	}
-
 	if(skb->len > XMIT_BUFF_SIZE)
 	{
 		printk("%s: Sorry, max. framelength is %d bytes. The length of your frame is %d bytes.\n",dev->name,XMIT_BUFF_SIZE,skb->len);
 		return 0;
 	}
 
-	if (test_and_set_bit(0, (void*)&dev->tbusy)) {
-		printk("%s: Transmitter access conflict.\n", dev->name);
-		return 1;
-	}
+	netif_stop_queue(dev);
+
 #if(NUM_XMIT_BUFFS > 1)
-	else if(test_and_set_bit(0,(void *) &p->lock)) {
+	if(test_and_set_bit(0,(void *) &p->lock)) {
 		printk("%s: Queue was locked\n",dev->name);
 		return 1;
 	}
-#endif
 	else
+#endif
 	{
 		memcpy((char *)p->xmit_cbuffs[p->xmit_count],(char *)(skb->data),skb->len);
 		len = (ETH_ZLEN < skb->len) ? skb->len : ETH_ZLEN;
@@ -1231,7 +1212,7 @@ static int ni52_send_packet(struct sk_buff *skb, struct net_device *dev)
 			next_nop = 0;
 
 		p->xmit_cmds[p->xmit_count]->cmd_status	= 0;
-	/* linkpointer of xmit-command already points to next nop cmd */
+		/* linkpointer of xmit-command already points to next nop cmd */
 		p->nop_cmds[next_nop]->cmd_link = make16((p->nop_cmds[next_nop]));
 		p->nop_cmds[next_nop]->cmd_status = 0;
 
@@ -1240,11 +1221,11 @@ static int ni52_send_packet(struct sk_buff *skb, struct net_device *dev)
 		p->xmit_count = next_nop;
 
 		{
-			long flags;
+			unsigned long flags;
 			save_flags(flags);
 			cli();
 			if(p->xmit_count != p->xmit_last)
-				dev->tbusy = 0;
+				netif_wake_queue(dev);
 			p->lock = 0;
 			restore_flags(flags);
 		}
@@ -1283,23 +1264,16 @@ static struct net_device_stats *ni52_get_stats(struct net_device *dev)
 /********************************************************
  * Set MC list ..
  */
+
 static void set_multicast_list(struct net_device *dev)
 {
-	if(!dev->start)
-	{
-		printk("%s: Can't apply promiscuous/multicastmode to a not running interface.\n",dev->name);
-		return;
-	}
-
-	dev->start = 0;
-
+	netif_stop_queue(dev);
 	ni_disint();
 	alloc586(dev);
 	init586(dev);
 	startrecv586(dev);
 	ni_enaint();
-
-	dev->start = 1;
+	netif_wake_queue(dev);
 }
 
 #ifdef MODULE

@@ -453,6 +453,7 @@ static void el16_tx_timeout (struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *) dev->priv;
 	int ioaddr = dev->base_addr;
+	unsigned long shmem = dev->mem_start;
 
 	if (net_debug > 1)
 		printk ("%s: transmit timed out, %s?  ", dev->name,
@@ -481,7 +482,6 @@ static int el16_send_packet (struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *) dev->priv;
 	int ioaddr = dev->base_addr;
-	unsigned long shmem = dev->mem_start;
 	unsigned long flags;
 	short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 	unsigned char *buf = skb->data;

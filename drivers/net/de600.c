@@ -348,7 +348,6 @@ de600_open(struct net_device *dev)
 	}
 
 	MOD_INC_USE_COUNT;
-	dev->start = 1;
 	if (adapter_init(dev)) {
 		return 1;
 	}
@@ -369,9 +368,8 @@ de600_close(struct net_device *dev)
 	de600_put_command(0);
 	select_prn();
 
-	if (dev->start) {
+	if (test_bit(LINK_STATE_START, &dev->state)) { /* perhaps not needed? */
 		free_irq(DE600_IRQ, dev);
-		dev->start = 0;
 		MOD_DEC_USE_COUNT;
 	}
 	return 0;
@@ -400,6 +398,7 @@ trigger_interrupt(struct net_device *dev)
 static int
 de600_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
+	unsigned long flags;
 	int	transmit_from;
 	int	len;
 	int	tickssofar;
@@ -429,6 +428,7 @@ de600_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	if ((len = skb->len) < RUNT)
 		len = RUNT;
 
+	save_flags(flags);
 	cli();
 	select_nic();
 	tx_fifo[tx_fifo_in] = transmit_from = tx_page_adr(tx_fifo_in) - len;
@@ -440,7 +440,7 @@ de600_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	de600_read_byte(READ_DATA, dev);
 	if (was_down || (de600_read_byte(READ_DATA, dev) != 0xde)) {
 		if (adapter_init(dev)) {
-			sti();
+			restore_flags(flags);
 			return 1;
 		}
 	}
@@ -452,17 +452,20 @@ de600_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	if (free_tx_pages-- == TX_PAGES) { /* No transmission going on */
 		dev->trans_start = jiffies;
-		dev->tbusy = 0;	/* allow more packets into adapter */
+		netif_start_queue(dev); /* allow more packets into adapter */
 		/* Send page and generate a faked interrupt */
 		de600_setup_address(transmit_from, TX_ADDR);
 		de600_put_command(TX_ENABLE);
 	}
 	else {
-		dev->tbusy = !free_tx_pages;
+		if (free_tx_pages)
+			netif_start_queue(dev);
+		else
+			netif_stop_queue(dev);
 		select_prn();
 	}
 
-	sti(); /* interrupts back on */
+	restore_flags(flags);
 
 #ifdef FAKE_SMALL_MAX
 	/* This will "patch" the socket TCP proto at an early moment */
@@ -489,12 +492,11 @@ de600_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	int		boguscount = 0;
 
 	/* This might just as well be deleted now, no crummy drivers present :-) */
-	if ((dev == NULL) || (dev->start == 0) || (DE600_IRQ != irq)) {
+	if ((dev == NULL) || (DE600_IRQ != irq)) {
 		printk("%s: bogus interrupt %d\n", dev?dev->name:"DE-600", irq);
 		return;
 	}
 
-	dev->interrupt = 1;
 	select_nic();
 	irq_status = de600_read_status(dev);
 
@@ -521,13 +523,11 @@ de600_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	 */
 
 	/* Enable adapter interrupts */
-	dev->interrupt = 0;
 	select_prn();
 
 	if (retrig)
 		trigger_interrupt(dev);
 
-	sti();
 	return;
 }
 
@@ -538,7 +538,6 @@ de600_tx_intr(struct net_device *dev, int irq_status)
 	 * Returns 1 if tx still not done
 	 */
 
-	mark_bh(NET_BH);
 	/* Check if current transmission is done yet */
 	if (irq_status & TX_BUSY)
 		return 1; /* tx not done, try again */
@@ -549,7 +548,7 @@ de600_tx_intr(struct net_device *dev, int irq_status)
 		tx_fifo_out = (tx_fifo_out + 1) % TX_PAGES;
 		++free_tx_pages;
 		((struct net_device_stats *)(dev->priv))->tx_packets++;
-		dev->tbusy = 0;
+		netif_wake_queue(dev);
 	}
 
 	/* More to send, or resend last packet? */
@@ -571,12 +570,15 @@ static void
 de600_rx_intr(struct net_device *dev)
 {
 	struct sk_buff	*skb;
+	unsigned long flags;
 	int		i;
 	int		read_from;
 	int		size;
 	register unsigned char	*buffer;
 
+	save_flags(flags);
 	cli();
+
 	/* Get size of received packet */
 	size = de600_read_byte(RX_LEN, dev);	/* low byte */
 	size += (de600_read_byte(RX_LEN, dev) << 8);	/* high byte */
@@ -586,7 +588,8 @@ de600_rx_intr(struct net_device *dev)
 	read_from = rx_page_adr();
 	next_rx_page();
 	de600_put_command(RX_ENABLE);
-	sti();
+
+	restore_flags(flags);
 
 	if ((size < 32)  ||  (size > 1535)) {
 		printk("%s: Bogus packet size %d.\n", dev->name, size);
@@ -596,7 +599,7 @@ de600_rx_intr(struct net_device *dev)
 	}
 
 	skb = dev_alloc_skb(size+2);
-	sti();
+	restore_flags(flags);
 	if (skb == NULL) {
 		printk("%s: Couldn't allocate a sk_buff of size %d.\n",
 			dev->name, size);
@@ -738,7 +741,7 @@ adapter_init(struct net_device *dev)
 		de600_close(dev);
 #endif /* SHUTDOWN_WHEN_LOST */
 		was_down = 1;
-		dev->tbusy = 1;		/* Transmit busy...  */
+		netif_stop_queue(dev); /* Transmit busy...  */
 		restore_flags(flags);
 		return 1; /* failed */
 	}
@@ -748,8 +751,7 @@ adapter_init(struct net_device *dev)
 		was_down = 0;
 	}
 
-	dev->tbusy = 0;		/* Transmit busy...  */
-	dev->interrupt = 0;
+	netif_start_queue(dev);
 	tx_fifo_in = 0;
 	tx_fifo_out = 0;
 	free_tx_pages = TX_PAGES;

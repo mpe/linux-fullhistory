@@ -112,9 +112,10 @@ extern int fmv18x_probe(struct net_device *dev);
 
 static int fmv18x_probe1(struct net_device *dev, short ioaddr);
 static int net_open(struct net_device *dev);
-static int	net_send_packet(struct sk_buff *skb, struct net_device *dev);
+static int net_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void net_rx(struct net_device *dev);
+static void net_timeout(struct net_device *dev);
 static int net_close(struct net_device *dev);
 static struct net_device_stats *net_get_stats(struct net_device *dev);
 static void set_multicast_list(struct net_device *dev);
@@ -276,9 +277,11 @@ int __init fmv18x_probe1(struct net_device *dev, short ioaddr)
 
 	dev->open		= net_open;
 	dev->stop		= net_close;
-	dev->hard_start_xmit = net_send_packet;
-	dev->get_stats	= net_get_stats;
-	dev->set_multicast_list = &set_multicast_list;
+	dev->hard_start_xmit	= net_send_packet;
+	dev->tx_timeout		= net_timeout;
+	dev->watchdog_timeo	= HZ/10;
+	dev->get_stats		= net_get_stats;
+	dev->set_multicast_list = set_multicast_list;
 
 	/* Fill in the fields of 'dev' with ethernet-generic values. */
 
@@ -310,10 +313,8 @@ static int net_open(struct net_device *dev)
 	outb(0xff, ioaddr + RX_STATUS);
 	lp->open_time = jiffies;
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
+	netif_start_queue(dev);
+	
 	/* Enable the IRQ of the LAN Card */
 	outb(0x80, ioaddr + FJ_CONFIG1);
 
@@ -325,93 +326,86 @@ static int net_open(struct net_device *dev)
 	return 0;
 }
 
-static int
-net_send_packet(struct sk_buff *skb, struct net_device *dev)
+static void net_timeout(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
+	unsigned long flags;
+	
+	
+	printk(KERN_WARNING "%s: transmit timed out with status %04x, %s?\n", dev->name,
+		   htons(inw(ioaddr + TX_STATUS)),
+		   inb(ioaddr + TX_STATUS) & 0x80
+		   ? "IRQ conflict" : "network cable problem");
+	printk(KERN_WARNING "%s: timeout registers: %04x %04x %04x %04x %04x %04x %04x %04x.\n",
+		   dev->name, htons(inw(ioaddr + 0)),
+		   htons(inw(ioaddr + 2)), htons(inw(ioaddr + 4)),
+		   htons(inw(ioaddr + 6)), htons(inw(ioaddr + 8)),
+		   htons(inw(ioaddr +10)), htons(inw(ioaddr +12)),
+		   htons(inw(ioaddr +14)));
+	printk(KERN_WARNING "eth card: %04x %04x\n",
+		htons(inw(ioaddr+FJ_STATUS0)),
+		htons(inw(ioaddr+FJ_CONFIG0)));
+	lp->stats.tx_errors++;
+	/* ToDo: We should try to restart the adaptor... */
+	save_flags(flags);
+	cli();
 
-	if (dev->tbusy) {
-		/* If we get here, some higher level has decided we are broken.
-		   There should really be a "kick me" function call instead. */
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 10)
-			return 1;
-		printk("%s: transmit timed out with status %04x, %s?\n", dev->name,
-			   htons(inw(ioaddr + TX_STATUS)),
-			   inb(ioaddr + TX_STATUS) & 0x80
-			   ? "IRQ conflict" : "network cable problem");
-		printk("%s: timeout registers: %04x %04x %04x %04x %04x %04x %04x %04x.\n",
-			   dev->name, htons(inw(ioaddr + 0)),
-			   htons(inw(ioaddr + 2)), htons(inw(ioaddr + 4)),
-			   htons(inw(ioaddr + 6)), htons(inw(ioaddr + 8)),
-			   htons(inw(ioaddr +10)), htons(inw(ioaddr +12)),
-			   htons(inw(ioaddr +14)));
-		printk("eth card: %04x %04x\n",
-			htons(inw(ioaddr+FJ_STATUS0)),
-			htons(inw(ioaddr+FJ_CONFIG0)));
-		lp->stats.tx_errors++;
-		/* ToDo: We should try to restart the adaptor... */
-		cli();
+	/* Initialize LAN Controller and LAN Card */
+	outb(0xda, ioaddr + CONFIG_0);   /* Initialize LAN Controller */
+	outb(0x00, ioaddr + CONFIG_1);   /* Stand by mode */
+	outb(0x00, ioaddr + FJ_CONFIG1); /* Disable IRQ of LAN Card */
+	outb(0x00, ioaddr + FJ_BUFCNTL); /* Reset ? I'm not sure */
+	net_open(dev);
+	restore_flags(flags);
+}
 
-		/* Initialize LAN Controller and LAN Card */
-		outb(0xda, ioaddr + CONFIG_0);   /* Initialize LAN Controller */
-		outb(0x00, ioaddr + CONFIG_1);   /* Stand by mode */
-		outb(0x00, ioaddr + FJ_CONFIG1); /* Disable IRQ of LAN Card */
-		outb(0x00, ioaddr + FJ_BUFCNTL); /* Reset ? I'm not sure */
-		net_open(dev);
+static int net_send_packet(struct sk_buff *skb, struct net_device *dev)
+{
+	struct net_local *lp = (struct net_local *)dev->priv;
+	int ioaddr = dev->base_addr;
+	short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
+	unsigned char *buf = skb->data;
 
-		sti();
+	/* Block a transmit from overlapping.  */
+	
+	netif_stop_queue(dev);
+	
+	if (length > ETH_FRAME_LEN) {
+		if (net_debug)
+			printk("%s: Attempting to send a large packet (%d bytes).\n",
+				dev->name, length);
+		return 1;
 	}
-
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
-		printk("%s: Transmitter access conflict.\n", dev->name);
-	else {
-		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		unsigned char *buf = skb->data;
-
-		if (length > ETH_FRAME_LEN) {
-			if (net_debug)
-				printk("%s: Attempting to send a large packet (%d bytes).\n",
-					dev->name, length);
-			return 1;
-		}
-
-		if (net_debug > 4)
-			printk("%s: Transmitting a packet of length %lu.\n", dev->name,
-				   (unsigned long)skb->len);
-
-		/* We may not start transmitting unless we finish transferring
-		   a packet into the Tx queue. During executing the following
-		   codes we possibly catch a Tx interrupt. Thus we flag off
-		   tx_queue_ready, so that we prevent the interrupt routine
-		   (net_interrupt) to start transmitting. */
-		lp->tx_queue_ready = 0;
-		{
-			outw(length, ioaddr + DATAPORT);
-			outsw(ioaddr + DATAPORT, buf, (length + 1) >> 1);
-
-			lp->tx_queue++;
-			lp->tx_queue_len += length + 2;
-		}
-		lp->tx_queue_ready = 1;
-
-		if (lp->tx_started == 0) {
-			/* If the Tx is idle, always trigger a transmit. */
-			outb(0x80 | lp->tx_queue, ioaddr + TX_START);
-			lp->tx_queue = 0;
-			lp->tx_queue_len = 0;
-			dev->trans_start = jiffies;
-			lp->tx_started = 1;
-			dev->tbusy = 0;
-		} else if (lp->tx_queue_len < 4096 - 1502)
-			/* Yes, there is room for one more packet. */
-			dev->tbusy = 0;
+	if (net_debug > 4)
+		printk("%s: Transmitting a packet of length %lu.\n", dev->name,
+			   (unsigned long)skb->len);
+	/* We may not start transmitting unless we finish transferring
+	   a packet into the Tx queue. During executing the following
+	   codes we possibly catch a Tx interrupt. Thus we flag off
+	   tx_queue_ready, so that we prevent the interrupt routine
+	   (net_interrupt) to start transmitting. */
+	lp->tx_queue_ready = 0;
+	{
+		outw(length, ioaddr + DATAPORT);
+		outsw(ioaddr + DATAPORT, buf, (length + 1) >> 1);
+		lp->tx_queue++;
+		lp->tx_queue_len += length + 2;
 	}
-	dev_kfree_skb (skb);
+	lp->tx_queue_ready = 1;
+	if (lp->tx_started == 0) {
+		/* If the Tx is idle, always trigger a transmit. */
+		outb(0x80 | lp->tx_queue, ioaddr + TX_START);
+		lp->tx_queue = 0;
+		lp->tx_queue_len = 0;
+		dev->trans_start = jiffies;
+		lp->tx_started = 1;
+		netif_wake_queue(dev);
+	} else if (lp->tx_queue_len < 4096 - 1502)
+		/* Yes, there is room for one more packet. */
+		netif_wake_queue(dev);
 
+	dev_kfree_skb(skb);
 	return 0;
 }
 
@@ -423,12 +417,6 @@ net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	struct net_device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status;
-
-	if (dev == NULL) {
-		printk ("fmv18x_interrupt(): irq %d for unknown device.\n", irq);
-		return;
-	}
-	dev->interrupt = 1;
 
 	ioaddr = dev->base_addr;
 	lp = (struct net_local *)dev->priv;
@@ -467,23 +455,18 @@ net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				lp->tx_queue = 0;
 				lp->tx_queue_len = 0;
 				dev->trans_start = jiffies;
-				dev->tbusy = 0;
-				mark_bh(NET_BH);	/* Inform upper layers. */
+				netif_wake_queue(dev);	/* Inform upper layers. */
 			} else {
 				lp->tx_started = 0;
-				dev->tbusy = 0;
-				mark_bh(NET_BH);	/* Inform upper layers. */
+				netif_wake_queue(dev);	/* Inform upper layers. */
 			}
 		}
 	}
-
-	dev->interrupt = 0;
 	return;
 }
 
 /* We have a good packet(s), get it/them out of the buffers. */
-static void
-net_rx(struct net_device *dev)
+static void net_rx(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -578,9 +561,8 @@ static int net_close(struct net_device *dev)
 
 	((struct net_local *)dev->priv)->open_time = 0;
 
-	dev->tbusy = 1;
-	dev->start = 0;
-
+	netif_stop_queue(dev);
+	
 	/* Set configuration register 0 to disable Tx and Rx. */
 	outb(0xda, ioaddr + CONFIG_0);
 
