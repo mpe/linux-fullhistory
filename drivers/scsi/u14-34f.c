@@ -416,10 +416,6 @@ int u14_34f_detect (Scsi_Host_Template * tpnt) {
    return j;
 }
 
-const char *u14_34f_info(void) {
-   return driver_name;
-}
-
 static inline void build_sg_list(struct mscp *cpp, Scsi_Cmnd *SCpnt) {
    unsigned int k, data_len = 0;
    struct scatterlist * sgpnt;
@@ -506,7 +502,7 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       cpp->data_len = SCpnt->request_bufflen;
       }
 
-   cpp->scsi_cdbs_len = COMMAND_SIZE(*(unsigned char *)SCpnt->cmnd);
+   cpp->scsi_cdbs_len = SCpnt->cmd_len;
    memcpy(cpp->scsi_cdbs, SCpnt->cmnd, cpp->scsi_cdbs_len);
 
    if (wait_on_busy(sh[j]->io_port)) {

@@ -42,11 +42,14 @@
 #ifndef _LINUX_INET_H
 #define _LINUX_INET_H
 
-#ifdef __i386__
+#if defined(__i386__)
 #define NET16(x)	((((x) >> 8) & 0x00FF) | (((x) << 8) & 0xFF00))
-#endif
-#ifdef __mc680x0__
+#elif defined(__mc68000__)
 #define NET16(x)	(x)
+#elif defined(__alpha__)
+#define NET16(x)	((((x) >> 8) & 0x00FF) | (((x) << 8) & 0xFF00))
+#else
+#error change this to match your machine
 #endif
 
 #ifdef __KERNEL__

@@ -94,7 +94,6 @@
 int t128_abort(Scsi_Cmnd *);
 int t128_biosparam(Disk *, int, int*);
 int t128_detect(Scsi_Host_Template *);
-const char *t128_info(void);
 int t128_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int t128_reset(Scsi_Cmnd *);
 
@@ -118,8 +117,8 @@ int t128_reset(Scsi_Cmnd *);
 
 #ifdef HOSTS_C
 
-#define TRANTOR_T128 {NULL, "Trantor T128/T128F/T228", t128_detect, NULL,  \
-	t128_info,							\
+#define TRANTOR_T128 {NULL, NULL, "Trantor T128/T128F/T228", t128_detect, NULL,  \
+	NULL,							\
 	NULL, t128_queue_command, t128_abort, t128_reset, NULL, 	\
 	t128_biosparam, 						\
 	/* can queue */ CAN_QUEUE, /* id */ 7, SG_ALL,			\

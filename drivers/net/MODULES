@@ -3,5 +3,6 @@ MODULES = \
 	de600.o \
 	de620.o \
 	3c501.o \
+	eexpress.o \
 	plip.o \
 	8390.o

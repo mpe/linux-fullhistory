@@ -367,10 +367,6 @@ int eata_detect (Scsi_Host_Template * tpnt) {
    return j;
 }
 
-const char *eata_info (void) {
-   return driver_name;
-}
-
 static inline void build_sg_list(struct mscp *cpp, Scsi_Cmnd *SCpnt) {
    unsigned int k;
    struct scatterlist * sgpnt;
@@ -471,7 +467,7 @@ int eata_queuecommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       cpp->data_len = htonl(SCpnt->request_bufflen);
       }
 
-   memcpy(cpp->cdb, SCpnt->cmnd, COMMAND_SIZE(*SCpnt->cmnd));
+   memcpy(cpp->cdb, SCpnt->cmnd, SCpnt->cmd_len);
 
    /* Send control packet to the board */
    if (do_dma(sh[j]->io_port, (unsigned int) cpp, SEND_CP_DMA)) {

@@ -545,7 +545,7 @@ plip_device_clear(struct device *dev)
     enable_irq(dev->irq);
 }
 
-/* PLIP_ERROR --- wait til other end setteled */
+/* PLIP_ERROR --- wait til other end settled */
 static int
 plip_error(struct device *dev)
 {

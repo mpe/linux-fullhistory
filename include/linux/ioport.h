@@ -14,10 +14,12 @@
 /*
  * Call check_region() before probing for your hardware.
  * Once you have found you hardware, register it with snarf_region().
+ * If you unload the driver, use release_region to free ports.
  */
 extern void reserve_setup(char *str, int *ints);
 extern int check_region(unsigned int from, unsigned int extent);
 extern void snarf_region(unsigned int from, unsigned int extent);
+extern void release_region(unsigned int from, unsigned int extent);
 
 
 #define HAVE_AUTOIRQ

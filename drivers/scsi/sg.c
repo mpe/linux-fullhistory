@@ -220,6 +220,7 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
   int dev=MINOR(inode->i_rdev);
   Scsi_Cmnd *SCpnt;
   int bsize,size,amt,i;
+  unsigned char opcode;
   unsigned char cmnd[MAX_COMMAND_SIZE];
   struct scsi_generic *device=&scsi_generics[dev];
 
@@ -274,6 +275,9 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
   SCpnt->request.dev=dev;
   SCpnt->sense_buffer[0]=0;
   size=COMMAND_SIZE(get_fs_byte(buf));
+  size=COMMAND_SIZE(opcode);
+  if (opcode >= 0xc0 && device->header.twelve_byte) size = 12;
+  SCpnt->cmd_len = size;
   memcpy_fromfs(cmnd,buf,size);
   buf+=size;
   memcpy_fromfs(device->buff,buf,device->header.pack_len-size-sizeof(struct sg_header));

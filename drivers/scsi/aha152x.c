@@ -268,8 +268,6 @@
 #define P_BUSFREE  1
 #define P_PARITY   2
 
-static char *aha152x_id = AHA152X_REVID;
-
 static int port_base      = 0;
 static int this_host      = 0;
 static int can_disconnect = 0;
@@ -732,14 +730,6 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 
   SETBITS( DMACNTRL0, INTEN);
   return 1;
-}
-
-/*
- *  return the name of the thing
- */
-const char *aha152x_info(void)
-{
-  return(aha152x_id);
 }
 
 /* 
@@ -1590,14 +1580,14 @@ void aha152x_intr( int irqno )
           if(aha152x_debug & debug_cmd)
           {
             printk("DFIFOEMP, outsw (%d words), ",
-                   COMMAND_SIZE(current_SC->cmnd[0])>>1);
+                   current_SC->cmd_len >>1 );
             disp_ports();
           }
 #endif
   
           outsw( DATAPORT,
                  &current_SC->cmnd,
-                 COMMAND_SIZE(current_SC->cmnd[0])>>1 );
+		current_SC->cmd_len >>1 );
 
 #if defined(DEBUG_CMD)
 	  if(aha152x_debug & debug_cmd)
@@ -1622,7 +1612,7 @@ void aha152x_intr( int irqno )
 #if defined(DEBUG_CMD) || defined(DEBUG_INTR)
           if(debug_cmd & debug_intr)
             printk("sent %d/%d command bytes, ", GETSTCNT(),
-                   COMMAND_SIZE(current_SC->cmnd[0]));
+                   current_SC->cmd_len);
 #endif
 
         }

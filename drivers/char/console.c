@@ -2106,7 +2106,7 @@ void update_screen(int new_console)
 	}
 	lock = 1;
 #ifdef CONFIG_SELECTION
-	highlight_pointer(fg_console,-1);
+	clear_selection();
 #endif /* CONFIG_SELECTION */
 	if (!console_blanked)
 		get_scrmem(fg_console);
@@ -2148,7 +2148,7 @@ int do_screendump(int arg, int mode)
 	/* mode 0 needs 2+wd*ht, modes 1 and 2 need 4+2*wd*ht */
 	chcount=video_num_columns*video_num_lines;
 	l = verify_area(mode==2 ? VERIFY_READ :VERIFY_WRITE,
-		buf, (2+chcount)*(1+mode!=0));
+		buf, (2+chcount)*(mode ? 2 : 1));
 	if (l)
 		return l;
 	if (mode<2) {
@@ -2162,12 +2162,14 @@ int do_screendump(int arg, int mode)
 		put_fs_byte(*sptr++,buf++);	
 			break;
 	    case 1:
+#ifdef CONFIG_SELECTION
+			clear_selection();
+#endif
 			put_fs_byte((char)x,buf++); put_fs_byte((char)y,buf++); 
 			memcpy_tofs(buf,(char *)origin,2*chcount);
 			break;
 	    case 2:
-			buf+=2; /* skip the the numnber 9 and console number */
-			x=get_fs_byte(buf++); y=get_fs_byte(buf++);
+			buf+=4; /* ioctl#, console#, x,y */
 			memcpy_fromfs((char *)origin,buf,2*chcount);
 			break;
 	    }
@@ -2356,7 +2358,6 @@ int set_selection(const int arg, struct tty_struct *tty)
 		case 3: /* pointer highlight */
 			if (sel_cons != currcons)
 			{
-				highlight_pointer(sel_cons,-1);
 				clear_selection();
 				sel_cons = currcons;
 			}
@@ -2491,7 +2492,8 @@ static void clear_selection()
  */
 
 #define colourmap ((char *)0xa0000)
-/* Pauline Middelink reports that we should use 0xA0000 for the bwmap as well.. */
+/* Pauline Middelink <middelin@polyware.iaf.nl> reports that we
+   should use 0xA0000 for the bwmap as well.. */
 #define blackwmap ((char *)0xa0000)
 #define cmapsz 8192
 #define seq_port_reg (0x3c4)

@@ -46,7 +46,7 @@
  *		Alan Cox	:	Added RCVBUF,SNDBUF size setting. It suddenly occurred to me how easy it was so...
  *		Rick Sladkey	:	Relaxed UDP rules for matching packets.
  *		C.E.Hawkins	:	IFF_PROMISC/SIOCGHWADDR support
- *	Pauline Middelink	:	Pidentd support
+ *	Pauline Middelink	:	identd support
  *		Alan Cox	:	Fixed connect() taking signals I think.
  *		Alan Cox	:	SO_LINGER supported
  *		Alan Cox	:	Error reporting fixes

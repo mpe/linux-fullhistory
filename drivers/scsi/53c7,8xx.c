@@ -2424,7 +2424,7 @@ static struct NCR53c7x0_cmd *create_cmd (Scsi_Cmnd *cmd) {
     tmp->select[0] = IDENTIFY (0, cmd->lun);
 #endif
     patch_dsa_32(tmp->dsa, dsa_msgout, 1, tmp->select);
-    patch_dsa_32(tmp->dsa, dsa_cmdout, 0, COMMAND_SIZE(cmd->cmnd[0]));
+    patch_dsa_32(tmp->dsa, dsa_cmdout, 0, cmd->cmd_len);
     patch_dsa_32(tmp->dsa, dsa_cmdout, 1, cmd->cmnd);
     patch_dsa_32(tmp->dsa, dsa_dataout, 0, cmd_dataout ? 
     	cmd_dataout : hostdata->script + hostdata->E_other_transfer / 
@@ -3740,10 +3740,6 @@ int NCR53c7xx_reset (Scsi_Cmnd *cmd) {
     printk ("scsi%d : DANGER : NCR53c7xx_reset is NOP\n",
 	cmd->host->host_no);
     return SCSI_RESET_SNOOZE;
-}
-
-const char *NCR53c7xx_info (void) {
-    return("More info here\n");
 }
 
 /*

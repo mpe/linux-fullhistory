@@ -12,7 +12,7 @@
  *                      make sure SET_PROCTITLE works. Also removed
  *                      bad '!' which forced address recalculation for
  *                      EVERY character on the current page.
- *                      <middelin@calvin.iaf.nl>
+ *                      <middelin@polyware.iaf.nl>
  */
 
 #include <linux/types.h>

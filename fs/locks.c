@@ -186,7 +186,7 @@ int locks_deadlocked(int my_pid,int blocked_pid)
 				if (ret_val) return -EDEADLOCK;
 			}
 			dlock_wait = dlock_wait->next;
-		} while (dlock_wait != fl->fl_wait);
+		} while (dlock_wait != NULL);
 	}
 	return 0;
 }

@@ -165,6 +165,16 @@ void snarf_region(unsigned int from, unsigned int num)
 	return;
 }
 
+void release_region(unsigned int from, unsigned int num)
+{
+	if (from > IO_BITMAP_SIZE*32)
+		return;
+	if (from + num > IO_BITMAP_SIZE*32)
+		num = IO_BITMAP_SIZE*32 - from;
+	set_bitmap(ioport_registrar, from, num, 0);
+	return;
+}
+
 int check_region(unsigned int from, unsigned int num)
 {
 	if (from > IO_BITMAP_SIZE*32)

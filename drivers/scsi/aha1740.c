@@ -163,12 +163,6 @@ int aha1740_test_port(void)
     return 0;
 }
 
-const char *aha1740_info(void)
-{
-    static char buffer[] = "Adaptec 174x (EISA)";
-    return buffer;
-}
-
 /* A "high" level interrupt handler */
 void aha1740_intr_handle(int foo)
 {
@@ -273,7 +267,7 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
         i = -1;
     printk("aha1740_queuecommand: dev %d cmd %02x pos %d len %d ", target, *cmd, i, bufflen);
     printk("scsi cmd:");
-    for (i = 0; i < (COMMAND_SIZE(*cmd)); i++) printk("%02x ", cmd[i]);
+    for (i = 0; i < SCpnt->cmd_len; i++) printk("%02x ", cmd[i]);
     printk("\n");
 #endif
 
@@ -302,7 +296,7 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     printk("Sending command (%d %x)...",ecbno, done);
 #endif
 
-    ecb[ecbno].cdblen = COMMAND_SIZE(*cmd);	/* SCSI Command Descriptor Block Length */
+    ecb[ecbno].cdblen = SCpnt->cmd_len;	/* SCSI Command Descriptor Block Length */
 
     direction = 0;
     if (*cmd == READ_10 || *cmd == READ_6)

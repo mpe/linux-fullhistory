@@ -428,6 +428,8 @@ typedef struct scsi_cmnd {
 	struct Scsi_Host * host;
 	Scsi_Device * device;
 	unsigned char target, lun;
+	unsigned char cmd_len;
+	unsigned char old_cmd_len;
 	struct scsi_cmnd *next, *prev;	
 
 /* These elements define the operation we are about to perform */

@@ -2,7 +2,7 @@
 #define _QLOGIC_H
 
 int qlogic_detect(Scsi_Host_Template * );
-const char * qlogic_info(void);
+const char * qlogic_info(struct Scsi_Host *);
 int qlogic_command(Scsi_Cmnd *);
 int qlogic_queuecommand(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
 int qlogic_abort(Scsi_Cmnd *);
@@ -14,6 +14,7 @@ int qlogic_biosparam(Disk *,int,int[]);
 #endif
 
 #define QLOGIC {		\
+	NULL,			\
 	NULL,			\
 	NULL,			\
 	qlogic_detect,		\

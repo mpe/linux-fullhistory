@@ -900,7 +900,7 @@ int wd7000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     register short cdblen;
     Adapter *host = (Adapter *) SCpnt->host->hostdata;
 
-    cdblen = COMMAND_SIZE(cdb[0]);
+    cdblen = SCpnt->cmd_len;
     idlun = ((SCpnt->target << 5) & 0xe0) | (SCpnt->lun & 7);
     SCpnt->scsi_done = done;
     SCpnt->SCp.phase = 1;
@@ -1203,18 +1203,6 @@ int wd7000_abort(Scsi_Cmnd * SCpnt)
 int wd7000_reset(Scsi_Cmnd * SCpnt)
 {
     return SCSI_RESET_PUNT;
-}
-
-
-/*
- *  The info routine in the WD7000 structure isn't per-adapter, so it can't
- *  really return any useful information about an adapter.  Because of this,
- *  I'm no longer using it to return rev. level.
- */
-const char *wd7000_info(void)
-{
-    static char info[] = "Western Digital WD-7000";
-    return info;
 }
 
 

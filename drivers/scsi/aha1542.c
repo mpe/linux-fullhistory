@@ -10,6 +10,8 @@
  *        have the bios enabled to use the aha1542.
  *  Modified by David Gentzel
  *	  Don't call request_dma if dma mask is 0 (for BusLogic BT-445S VL-Bus controller).
+ *  Modified by Matti Aarnio
+ *        Accept parameters from LILO cmd-line. -- 1-Oct-94
  */
 
 #include <linux/kernel.h>
@@ -43,9 +45,38 @@ static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/aha
 /* The adaptec can be configured for quite a number of addresses, but
 I generally do not want the card poking around at random.  We allow
 two addresses - this allows people to use the Adaptec with a Midi
-card, which also used 0x330 */
+card, which also used 0x330 -- can be overriden with LILO! */
 
-static unsigned int bases[]={0x330, 0x334};
+#define MAXBOARDS 2	/* Increase this and the sizes of the
+			   arrays below, if you need more.. */
+
+static unsigned int bases[MAXBOARDS]={0x330, 0x334};
+
+/* set by aha1542_setup according to the command line */
+static int setup_called[MAXBOARDS]   = {0,0};
+static int setup_buson[MAXBOARDS]    = {0,0};
+static int setup_busoff[MAXBOARDS]   = {0,0};
+static int setup_dmaspeed[MAXBOARDS] = {-1,-1};
+
+static char *setup_str[MAXBOARDS] = {(char *)NULL,(char *)NULL};
+
+/*
+ * LILO params:  aha1542=<PORTBASE>[,<BUSON>,<BUSOFF>[,<DMASPEED>]]
+ *
+ * Where:  <PORTBASE> is any of the valid AHA addresses:
+ *			0x130, 0x134, 0x230, 0x234, 0x330, 0x334
+ *	   <BUSON>  is the time (in microsecs) that AHA spends on the AT-bus
+ *		    when transferring data.  1542A power-on default is 11us,
+ *		    valid values are in range: 2..15 (decimal)
+ *	   <BUSOFF> is the time that AHA spends OFF THE BUS after while
+ *		    it is transferring data (not to monopolize the bus).
+ *		    Power-on default is 4us, valid range: 1..64 microseconds.
+ *	   <DMASPEED> Default is jumper selected (1542A: on the J1),
+ *		    but experimenter can alter it with this.
+ *		    Valid values: 5, 6, 7, 8, 10 (MB/s)
+ *		    Factory default is 5 MB/s.
+ */
+
 
 /* The DMA-Controller.  We need to fool with this because we want to 
    be able to use the aha1542 without having to have the bios enabled */
@@ -253,6 +284,7 @@ static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
 
     /* In case some other card was probing here, reset interrupts */
     aha1542_intr_reset(bse);     /* reset interrupts, so they don't block */	
+
     outb(SRST|IRST/*|SCRST*/, CONTROL(bse));
 
     i = jiffies + 2;
@@ -300,14 +332,6 @@ static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
     return debug;				/* 1 = ok */
   fail:
     return 0;					/* 0 = not ok */
-}
-
-static const char aha_ident[] = "Adaptec 1542";
-
-/* What's this little function for? */
-const char *aha1542_info(void)
-{
-    return aha_ident;
 }
 
 /* A "high" level interrupt handler */
@@ -513,7 +537,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       printk("aha1542_command: dev %d cmd %02x pos %d len %d ", target, *cmd, i, bufflen);
     aha1542_stat();
     printk("aha1542_queuecommand: dumping scsi cmd:");
-    for (i = 0; i < (COMMAND_SIZE(*cmd)); i++) printk("%02x ", cmd[i]);
+    for (i = 0; i < SCpnt->cmd_len; i++) printk("%02x ", cmd[i]);
     printk("\n");
     if (*cmd == WRITE_10 || *cmd == WRITE_6)
       return 0; /* we are still testing, so *don't* write */
@@ -549,7 +573,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 
     memset(&ccb[mbo], 0, sizeof(struct ccb));
 
-    ccb[mbo].cdblen = COMMAND_SIZE(*cmd);     /* SCSI Command Descriptor Block Length */
+    ccb[mbo].cdblen = SCpnt->cmd_len;
 
     direction = 0;
     if (*cmd == READ_10 || *cmd == READ_6)
@@ -590,7 +614,6 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	any2scsi(cptr[i].datalen, sgpnt[i].length);
       };
       any2scsi(ccb[mbo].datalen, SCpnt->use_sg * sizeof(struct chain));
-      if(((unsigned int) buff & 0xff000000)) goto baddma;
       any2scsi(ccb[mbo].dataptr, cptr);
 #ifdef DEBUG
       printk("cptr %x: ",cptr);
@@ -601,6 +624,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       ccb[mbo].op = 0;	      /* SCSI Initiator Command */
       SCpnt->host_scribble = NULL;
       any2scsi(ccb[mbo].datalen, bufflen);
+      if(((unsigned int) buff & 0xff000000)) goto baddma;
       any2scsi(ccb[mbo].dataptr, buff);
     };
     ccb[mbo].idlun = (target&7)<<5 | direction | (lun & 7); /*SCSI Target Id*/
@@ -813,6 +837,66 @@ static int aha1542_query(int base_io, int * transl)
   return 0;
 }
 
+/* called from init/main.c */
+void aha1542_setup( char *str, int *ints)
+{
+    char *ahausage = "aha1542: usage: aha1542=<PORTBASE>[,<BUSON>,<BUSOFF>[,<DMASPEED>]]\n";
+    static int setup_idx = 0;
+    int setup_portbase;
+
+    if(setup_idx >= MAXBOARDS)
+      {
+	printk("aha1542: aha1542_setup called too many times! Bad LILO params ?\n");
+	printk("   Entryline 1: %s\n",setup_str[0]);
+	printk("   Entryline 2: %s\n",setup_str[1]);
+	printk("   This line:   %s\n",str);
+	return;
+      }
+    if (ints[0] < 1 || ints[0] > 4)
+      {
+	printk("aha1542: %s\n", str );
+	printk(ahausage);
+	printk("aha1542: Wrong parameters may cause system malfunction.. We try anyway..\n");
+      }
+
+    setup_called[setup_idx]=ints[0];
+    setup_str[setup_idx]=str;
+
+    setup_portbase             = ints[0] >= 1 ? ints[1] : 0; /* Preserve the default value.. */
+    setup_buson   [setup_idx]  = ints[0] >= 2 ? ints[2] : 7;
+    setup_busoff  [setup_idx]  = ints[0] >= 3 ? ints[3] : 5;
+    if (ints[0] >= 4) {
+      int atbt = -1;
+      switch (ints[4]) {
+	case 5:
+	    atbt = 0x00;
+	    break;
+	case 6:
+	    atbt = 0x04;
+	    break;
+        case 7:
+	    atbt = 0x01;
+	    break;
+	case 8:
+	    atbt = 0x02;
+	    break;
+	case 10:
+	    atbt = 0x03;
+	    break;
+	default:
+	    printk("aha1542: %s\n", str );
+	    printk(ahausage);
+	    printk("aha1542: Valid values for DMASPEED are 5-8, 10 MB/s.  Using jumper defaults.\n");
+	    break;
+      }
+      setup_dmaspeed[setup_idx]  = atbt;
+    }
+
+    if (setup_portbase != 0)
+      bases[setup_idx] = setup_portbase;
+
+    ++setup_idx;
+}
 
 /* return non-zero on detection */
 int aha1542_detect(Scsi_Host_Template * tpnt)
@@ -826,11 +910,18 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
     int indx;
 
     DEB(printk("aha1542_detect: \n"));
-    
+
     for(indx = 0; indx < sizeof(bases)/sizeof(bases[0]); indx++)
-	    if(!check_region(bases[indx], 4)) { 
+	    if(bases[indx] != 0 && !check_region(bases[indx], 4)) { 
 		    shpnt = scsi_register(tpnt,
 					  sizeof(struct aha1542_hostdata));
+
+		    /* For now we do this - until kmalloc is more intelligent
+		       we are resigned to stupid hacks like this */
+		    if ((unsigned int) shpnt > 0xffffff) {
+		      printk("Invalid address for shpnt with 1542.\n");
+		      goto unregister;
+		    }
 
 		    if(!aha1542_test_port(bases[indx], shpnt)) goto unregister;
 
@@ -841,6 +932,12 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 	    {
 		    unchar oncmd[] = {CMD_BUSON_TIME, 7};
 		    unchar offcmd[] = {CMD_BUSOFF_TIME, 5};
+
+		    if(setup_called[indx])
+		      {
+			oncmd[1]  = setup_buson[indx];
+			offcmd[1] = setup_busoff[indx];
+		      }
 		    
 		    aha1542_intr_reset(base_io);
 		    aha1542_out(base_io, oncmd, 2);
@@ -848,6 +945,14 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 		    aha1542_intr_reset(base_io);
 		    aha1542_out(base_io, offcmd, 2);
 		    WAIT(INTRFLAGS(base_io), INTRMASK, HACC, 0);
+		    if (setup_dmaspeed[indx] >= 0)
+		      {
+			unchar dmacmd[] = {CMD_DMASPEED, 0};
+			dmacmd[1] = setup_dmaspeed[indx];
+			aha1542_intr_reset(base_io);
+			aha1542_out(base_io, dmacmd, 2);
+			WAIT(INTRFLAGS(base_io), INTRMASK, HACC, 0);
+		      }
 		    while (0) {
 		    fail:
 			    printk("aha1542_detect: setting bus on/off-time failed\n");
@@ -889,6 +994,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 		    }
 		    aha_host[irq_level - 9] = shpnt;
 		    shpnt->io_port = base_io;
+		    shpnt->n_io_port = 4;  /* Number of bytes of I/O space used */
 		    shpnt->dma_channel = dma_chan;
 		    shpnt->irq = irq_level;
 		    HOSTDATA(shpnt)->bios_translation  = trans;
@@ -1120,3 +1226,12 @@ int aha1542_biosparam(Scsi_Disk * disk, int dev, int * ip)
 /*  if (ip[2] >= 1024) ip[2] = 1024; */
   return 0;
 }
+
+
+#ifdef MODULE
+/* Eventually this will go into an include file, but this will be later */
+Scsi_Host_Template driver_template = AHA1542;
+
+#include "scsi_module.c"
+#endif
+

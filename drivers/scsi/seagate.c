@@ -362,7 +362,7 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 		}
 	}
 	 
-const char *seagate_st0x_info(void) {
+const char *seagate_st0x_info(struct Scsi_Host * shpnt) {
       static char buffer[256];
         sprintf(buffer, "scsi%d : %s at irq %d address %p options :"
 #ifdef ARBITRATE
@@ -525,7 +525,7 @@ int seagate_st0x_queue_command (Scsi_Cmnd * SCpnt,  void (*done)(Scsi_Cmnd *))
  * Set linked command bit in control field of SCSI command.
  */
 
-	  current_cmnd[COMMAND_SIZE(current_cmnd[0])] |= 0x01;
+	  current_cmnd[SCpnt->cmd_len] |= 0x01;
 	  if (linked_connected) {
 #if (DEBUG & DEBUG_LINKED) 
 	    printk("scsi%d : using linked commands, current I_T_L nexus is ",

@@ -32,7 +32,8 @@
  */
 #define AHA274X	{						\
 	NULL,							\
-	"",							\
+	NULL,							\
+	NULL,							\
 	aha274x_detect,						\
 	NULL,							\
 	aha274x_info,						\
@@ -57,6 +58,6 @@ extern int aha274x_detect(Scsi_Host_Template *);
 extern int aha274x_command(Scsi_Cmnd *);
 extern int aha274x_abort(Scsi_Cmnd *);
 extern int aha274x_reset(Scsi_Cmnd *);
-extern const char *aha274x_info(void);
+extern const char *aha274x_info(struct Scsi_Host *);
 
 #endif

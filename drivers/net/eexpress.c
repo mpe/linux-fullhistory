@@ -17,6 +17,8 @@
 	Move the theory of operation and memory map documentation.
 	Rework the board error reset
 	The statistics need to be updated correctly.
+
+        Modularized my Pauline Middelink <middelin@polyware.iaf.nl>
 */
 
 static char *version =
@@ -53,6 +55,10 @@ static char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#ifdef MODULE
+#include <linux/module.h>
+#include "../../tools/version.h"
+#endif
 
 #include <linux/malloc.h>
 
@@ -435,6 +441,9 @@ eexp_open(struct device *dev)
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	dev->start = 1;
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
 	return 0;
 }
 
@@ -647,6 +656,9 @@ eexp_close(struct device *dev)
 
 	/* Update the statistics here. */
 
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
 	return 0;
 }
 
@@ -981,6 +993,32 @@ eexp_rx(struct device *dev)
 	outw(saved_write_ptr, ioaddr + WRITE_PTR);
 }
 
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_eexpress = {
+	"        " /*"eexpress"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, express_probe };
+
+int
+init_module(void)
+{
+	if (register_netdev(&dev_eexpress) != 0)
+		return -EIO;
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("express: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_eexpress);
+		kfree_s(dev_eexpress.priv,sizeof(struct net_local));
+		dev_eexpress.priv=NULL;
+	}
+}
+#endif /* MODULE */
 /*
  * Local variables:
  *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -I/usr/src/linux/drivers/net -Wall -Wstrict-prototypes -O6 -m486 -c eexpress.c"

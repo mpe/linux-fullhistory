@@ -258,7 +258,7 @@ unsigned int	    i;
 	outb(0x99, qbase + 5);	/* timer */
 	outb(cmd->target, qbase + 4);
 
-	for (i = 0; i < COMMAND_SIZE(cmd->cmnd[0]); i++)
+	for (i = 0; i < cmd->cmd_len; i++)
 		outb(cmd->cmnd[i], qbase + 2);
 	qlcmd = cmd;
 	outb(0x41, qbase + 3);	/* select and send command */
@@ -558,7 +558,7 @@ int	qlogic_reset(Scsi_Cmnd * cmd)
 
 /*----------------------------------------------------------------*/
 /* return info string */
-const char	*qlogic_info()
+const char	*qlogic_info(struct Scsi_Host * host)
 {
 	return qinfo;
 }

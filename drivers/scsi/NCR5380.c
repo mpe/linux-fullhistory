@@ -2306,7 +2306,7 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 		msgout = NOP;
 		break;
 	    case PHASE_CMDOUT:
-		len = COMMAND_SIZE(cmd->cmnd[0]);
+		len = cmd->cmd_len;
 		data = cmd->cmnd;
 		/* 
 		 * XXX for performance reasons, on machines with a 

@@ -325,9 +325,11 @@ static void sr_photocd(struct inode *inode)
       sec   = (unsigned long)buffer[16]/16*10 + (unsigned long)buffer[16]%16;
       frame = (unsigned long)buffer[17]/16*10 + (unsigned long)buffer[17]%16;
       sector = min*60*75 + sec*75 + frame;
-      sector-=CD_BLOCK_OFFSET;
       if (sector) {
-	printk("sr_photocd: multisession PhotoCD detected\n"); }}
+      	sector -= CD_BLOCK_OFFSET;
+	printk("sr_photocd: multisession PhotoCD detected\n");
+      }
+    }
     scsi_free(buffer,512);
     SCpnt->request.dev = -1;
     break;
@@ -374,9 +376,11 @@ static void sr_photocd(struct inode *inode)
       sec   = (unsigned long)buffer[2]/16*10 + (unsigned long)buffer[2]%16;
       frame = (unsigned long)buffer[3]/16*10 + (unsigned long)buffer[3]%16;
       sector = min*60*75 + sec*75 + frame;
-      sector-=CD_BLOCK_OFFSET;
       if (sector) {
-        printk("sr_photocd: multisession PhotoCD detected: %lu\n",sector); }}
+        sector -= CD_BLOCK_OFFSET;
+        printk("sr_photocd: multisession PhotoCD detected: %lu\n",sector);
+      }
+    }
     scsi_free(buffer,512);
     SCpnt->request.dev = -1;
     break;
@@ -826,10 +830,11 @@ static void sr_init_done (Scsi_Cmnd * SCpnt)
 
 static void get_sectorsize(int i){
   unsigned char cmd[10];
-  unsigned char buffer[513];
+  unsigned char *buffer;
   int the_result, retries;
   Scsi_Cmnd * SCpnt;
   
+  buffer = (unsigned char *) scsi_malloc(512);
   SCpnt = allocate_device(NULL, scsi_CDs[i].device, 1);
 
   retries = 3;
@@ -838,6 +843,7 @@ static void get_sectorsize(int i){
     cmd[1] = (scsi_CDs[i].device->lun << 5) & 0xe0;
     memset ((void *) &cmd[2], 0, 8);
     SCpnt->request.dev = 0xffff;  /* Mark as really busy */
+    SCpnt->cmd_len = 0;
     
     memset(buffer, 0, 8);
 
@@ -887,6 +893,7 @@ static void get_sectorsize(int i){
       scsi_CDs[i].capacity *= 4;
     scsi_CDs[i].needs_sector_size = 0;
   };
+  scsi_free(buffer, 512);
 }
 
 static void sr_init()

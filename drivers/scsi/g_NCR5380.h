@@ -35,7 +35,6 @@
 #ifndef ASM
 int generic_NCR5380_abort(Scsi_Cmnd *);
 int generic_NCR5380_detect(Scsi_Host_Template *);
-const char *generic_NCR5380_info(void);
 int generic_NCR5380_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int generic_NCR5380_reset(Scsi_Cmnd *);
 
@@ -54,8 +53,8 @@ int generic_NCR5380_reset(Scsi_Cmnd *);
 
 #ifdef HOSTS_C
 
-#define GENERIC_NCR5380 {NULL, "Trantor T128/T128F/T228", 		\
-	generic_NCR5380_detect, NULL, generic_NCR5380_info, NULL, 	\
+#define GENERIC_NCR5380 {NULL, NULL, "Trantor T128/T128F/T228", 	\
+	generic_NCR5380_detect, NULL, NULL, NULL, 	\
 	generic_NCR5380_queue_command, generic_NCR5380_abort, 		\
 	generic_NCR5380_reset, NULL, 					\
 	NULL, /* can queue */ CAN_QUEUE, /* id */ 7, SG_ALL,		\

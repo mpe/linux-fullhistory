@@ -92,6 +92,7 @@ extern void t128_setup(char *str, int *ints);
 extern void pas16_setup(char *str, int *ints);
 extern void generic_NCR5380_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
+extern void aha1542_setup(char *str, int *ints);
 extern void aha274x_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
@@ -210,6 +211,9 @@ struct {
 #endif
 #ifdef CONFIG_SCSI_AHA152X
         { "aha152x=", aha152x_setup},
+#endif
+#ifdef CONFIG_SCSI_AHA1542
+        { "aha1542=", aha1542_setup},
 #endif
 #ifdef CONFIG_SCSI_AHA274X
         { "aha274x=", aha274x_setup},

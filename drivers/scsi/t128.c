@@ -385,17 +385,4 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
 	return 0;
 }
 
-/*
- * Function : const char *t128_info(void)
- *
- * Purpose : provide further information about this driver.
- *
- * Returns : an empty string.
- */
-
-const char *t128_info (void) {
-    static const char string[]="";
-    return string;
-}
-
 #include "NCR5380.c"

@@ -620,7 +620,7 @@ int ultrastor_detect(Scsi_Host_Template * tpnt)
   return ultrastor_14f_detect(tpnt) || ultrastor_24f_detect(tpnt);
 }
 
-const char *ultrastor_info(void)
+const char *ultrastor_info(struct Scsi_Host * shpnt)
 {
     static char buf[64];
 
@@ -714,7 +714,7 @@ int ultrastor_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
     my_mscp->command_link = 0;		/*???*/
     my_mscp->scsi_command_link_id = 0;	/*???*/
     my_mscp->length_of_sense_byte = sizeof SCpnt->sense_buffer;
-    my_mscp->length_of_scsi_cdbs = COMMAND_SIZE(*(unsigned char *)SCpnt->cmnd);
+    my_mscp->length_of_scsi_cdbs = SCpnt->cmd_len;
     memcpy(my_mscp->scsi_cdbs, SCpnt->cmnd, my_mscp->length_of_scsi_cdbs);
     my_mscp->adapter_status = 0;
     my_mscp->target_status = 0;

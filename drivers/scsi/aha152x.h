@@ -12,7 +12,6 @@
 #include <asm/io.h>
 
 int        aha152x_detect(Scsi_Host_Template *);
-const char *aha152x_info(void);
 int        aha152x_command(Scsi_Cmnd *);
 int        aha152x_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int        aha152x_abort(Scsi_Cmnd *);
@@ -27,10 +26,11 @@ int        aha152x_biosparam(Disk *, int, int*);
 
 /* Initial value of Scsi_Host entry */
 #define AHA152X       { /* next */		NULL,			    \
+			/* usage_count */  	NULL,			    \
 			/* name */		AHA152X_REVID, 		    \
 			/* detect */		aha152x_detect,             \
 			/* release */		NULL,			    \
-			/* info */		aha152x_info,               \
+			/* info */		NULL,		            \
 			/* command */		aha152x_command,            \
 			/* queuecommand */	aha152x_queue,              \
                         /* abort */		aha152x_abort,              \

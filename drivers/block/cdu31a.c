@@ -2773,7 +2773,7 @@ cdu31a_setup(char *strings,
    {
       irq_used = ints[2];
    }
-   if (*strings != '\0')
+   if ((strings != NULL) && (*strings != '\0'))
    {
       if (strcmp(strings, "PAS") == 0)
       {

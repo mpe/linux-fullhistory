@@ -37,7 +37,7 @@ struct tcphdr {
 		ack:1,
 		urg:1,
 		res2:2;
-#elif defined(__mc680x0__)
+#elif defined(__mc68000__)
 	u16	res2:2,
 		urg:1,
 		ack:1,

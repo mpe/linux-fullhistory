@@ -838,6 +838,7 @@ static int sd_init_onedisk(int i)
       cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
       memset ((void *) &cmd[2], 0, 8);
       SCpnt->request.dev = 0xffff;  /* Mark as really busy again */
+      SCpnt->cmd_len = 0;
       SCpnt->sense_buffer[0] = 0;
       SCpnt->sense_buffer[2] = 0;
       
@@ -863,6 +864,7 @@ static int sd_init_onedisk(int i)
 	  memset ((void *) &cmd[2], 0, 8);
 	  cmd[4] = 1; /* Start spin cycle */
 	  SCpnt->request.dev = 0xffff;  /* Mark as really busy again */
+	  SCpnt->cmd_len = 0;
 	  SCpnt->sense_buffer[0] = 0;
 	  SCpnt->sense_buffer[2] = 0;
 	  
@@ -897,6 +899,7 @@ static int sd_init_onedisk(int i)
     memset ((void *) &cmd[2], 0, 8);
     memset ((void *) buffer, 0, 8);
     SCpnt->request.dev = 0xffff;  /* Mark as really busy again */
+    SCpnt->cmd_len = 0;
     SCpnt->sense_buffer[0] = 0;
     SCpnt->sense_buffer[2] = 0;
     

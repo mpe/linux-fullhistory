@@ -8,17 +8,23 @@
  *	The original version of this driver was derived from aha1542.[ch] which
  *	is Copyright (C) 1992 Tommy Thorn.  Much has been reworked, but most of
  *	basic structure and substantial chunks of code still remain.
+ *
+ *	Thanks to the following individuals who have made contributions (of
+ *	(code, information, support, or testing) to this driver:
+ *		Eric Youngdale		Leonard Zubkoff
+ *		Tomas Hurka		Andrew Walker
  */
 
 /*
  * TODO:
- *	1. Cleanup error handling & reporting.
+ *	1. Clean up error handling & reporting.
  *	2. Find out why scatter/gather is limited to 16 requests per command.
- *	3. Add multiple outstanding requests.
- *	4. See if we can make good use of having more than one command per lun.
- *	5. Test/improve/fix abort & reset functions.
- *	6. Look at command linking.
- *	7. Allow multiple boards to share an IRQ if the bus allows (e.g. EISA).
+ *	3. Test/improve/fix abort & reset functions.
+ *	4. Look at command linking.
+ *	5. Allow multiple boards to share an IRQ if the bus allows (EISA, MCA,
+ *	   and PCI).
+ *	6. Avoid using the 445S workaround for board revs >= D.
+ *	7. Get cmd_per_lun put in the Scsi_Host structure.
  */
 
 /*
@@ -39,8 +45,6 @@
  *	BT-542B - ISA first-party DMA with floppy support.
  *	BT-545S - 542B + FAST SCSI and active termination.
  *	BT-545D - 545S + differential termination.
- *	BT-445S - VESA bus-master FAST SCSI with active termination and floppy
- *		  support.
  *	BT-640A - MCA bus-master with floppy support.
  *	BT-646S - 640A + FAST SCSI and active termination.
  *	BT-646D - 646S + differential termination.
@@ -49,13 +53,20 @@
  *	BT-747D - 747S + differential termination.
  *	BT-757S - 747S + WIDE SCSI.
  *	BT-757D - 747D + WIDE SCSI.
+ *	BT-445S - VESA bus-master FAST SCSI with active termination and floppy
+ *		  support.
+ *	BT-445C - 445S + enhanced BIOS & firmware options.
  *	BT-946C - PCI bus-master FAST SCSI. (??? Nothing else known.)
  *
- *    Should you require further information on any of these boards, BusLogic
- *    can be reached at (408)492-9090.
+ *    ??? I believe other boards besides the 445 now have a "C" model, but I
+ *    have no facts on them.
  *
  *    This driver SHOULD support all of these boards.  It has only been tested
  *    with a 747S and 445S.
+ *
+ *    Should you require further information on any of these boards, BusLogic
+ *    can be reached at (408)492-9090.  Their BBS # is (408)492-1984 (maybe BBS
+ *    stands for "Big Brother System"?).
  *
  *    Places flagged with a triple question-mark are things which are either
  *    unfinished, questionable, or wrong.
@@ -81,13 +92,27 @@
 #include "buslogic.h"
 
 #ifndef BUSLOGIC_DEBUG
-# define BUSLOGIC_DEBUG UD_ABORT
+# define BUSLOGIC_DEBUG 0
 #endif
 
-#define BUSLOGIC_VERSION "1.00"
+/* If different port addresses are needed (e.g. to install more than two
+   cards), you must define BUSLOGIC_PORT_OVERRIDE to be a comma-separated list
+   of the addresses which will be checked.  This can also be used to resolve a
+   conflict if the port-probing at a standard port causes problems with
+   another board. */
+/* #define BUSLOGIC_PORT_OVERRIDE 0x330, 0x334, 0x130, 0x134, 0x230, 0x234 */
+
+/* Define this to be either BIOS_TRANSLATION_DEFAULT or BIOS_TRANSLATION_BIG
+   if you wish to bypass the test for this, which uses an undocumented port.
+   The test is believed to fail on at least some AMI BusLogic clones. */
+/* #define BIOS_TRANSLATION_OVERRIDE BIOS_TRANSLATION_BIG */
+
+#define BUSLOGIC_VERSION "1.13"
 
 /* Not a random value - if this is too large, the system hangs for a long time
    waiting for something to happen if a board is not installed. */
+/* ??? I don't really like this as it will wait longer on slow machines.
+   Perhaps we should base this on the loops_per_second "Bogomips" value? */
 #define WAITNEXTTIMEOUT 3000000
 
 /* This is for the scsi_malloc call in buslogic_queuecommand. */
@@ -101,22 +126,16 @@
 /* Since the SG list is malloced, we have to limit the length. */
 #define BUSLOGIC_MAX_SG (BUSLOGIC_SG_MALLOC / sizeof (struct chain))
 
-/* The DMA-Controller.  We need to fool with this because we want to be able to
-   use an ISA BusLogic without having to have the BIOS enabled. */
-#define DMA_MODE_REG 0xD6
-#define DMA_MASK_REG 0xD4
-#define	CASCADE 0xC0
+/* ??? Arbitrary.  If we can dynamically allocate the mailbox arrays, I may
+   bump up this number. */
+#define BUSLOGIC_MAILBOXES 16
 
-#define BUSLOGIC_MAILBOXES 16	/* ??? Arbitrary? */
+#define BUSLOGIC_NONISA_CMDLUN 4	/* ??? Arbitrary (> 1) */
 
 /* BusLogic boards can be configured for quite a number of port addresses (six
    to be exact), but I generally do not want the driver poking around at
    random.  We allow two port addresses - this allows people to use a BusLogic
-   with a MIDI card, which frequently also uses 0x330.  If different port
-   addresses are needed (e.g. to install more than two cards), you must define
-   BUSLOGIC_PORT_OVERRIDE to be a list of the addresses which will be checked.
-   This can also be used to resolve a conflict if the port-probing at a
-   standard port causes problems with another board. */
+   with a MIDI card, which frequently also uses 0x330. */
 static const unsigned int bases[] = {
 #ifdef BUSLOGIC_PORT_OVERRIDE
     BUSLOGIC_PORT_OVERRIDE
@@ -129,10 +148,12 @@ static const unsigned int bases[] = {
 #define BIOS_TRANSLATION_BIG 1		/* Big disk (> 1G) case */
 
 struct hostdata {
-    unsigned char bus_type;
-    int bios_translation;	/* Mapping bios uses - for compatibility */
+    unsigned int bus_type;
+    unsigned int bios_translation: 1;	/* BIOS mapping (for compatibility) */
     size_t last_mbi_used;
     size_t last_mbo_used;
+    char model[7];
+    char firmware_rev[6];
     Scsi_Cmnd *sc[BUSLOGIC_MAILBOXES];
     struct mailbox mb[2 * BUSLOGIC_MAILBOXES];
     struct ccb ccbs[BUSLOGIC_MAILBOXES];
@@ -152,25 +173,28 @@ static int restart(struct Scsi_Host *shpnt);
 
 #define CHECK(cond) if (cond) ; else goto fail
 
-#define WAIT(port, mask, allof, noneof) \
-    CHECK(wait(port, mask, allof, noneof, WAITNEXTTIMEOUT, FALSE))
-#define WAIT_WHILE(port, mask) WAIT(port, mask, 0, mask)
-#define WAIT_UNTIL(port, mask) WAIT(port, mask, mask, 0)
-#define WAIT_FAST(port, mask, allof, noneof) \
-    CHECK(wait(port, mask, allof, noneof, 100, TRUE))
-#define WAIT_WHILE_FAST(port, mask) WAIT_FAST(port, mask, 0, mask)
-#define WAIT_UNTIL_FAST(port, mask) WAIT_FAST(port, mask, mask, 0)
+#define WAIT(port, allof, noneof) \
+    CHECK(wait(port, allof, noneof, WAITNEXTTIMEOUT, FALSE))
+#define WAIT_WHILE(port, mask) WAIT(port, 0, mask)
+#define WAIT_UNTIL(port, mask) WAIT(port, mask, 0)
+#define WAIT_FAST(port, allof, noneof) \
+    CHECK(wait(port, allof, noneof, 100, TRUE))
+#define WAIT_WHILE_FAST(port, mask) WAIT_FAST(port, 0, mask)
+#define WAIT_UNTIL_FAST(port, mask) WAIT_FAST(port, mask, 0)
 
 /* If delay != 0, we use the udelay call to regulate the amount of time we
-   wait. */
-static __inline__ int wait(unsigned short port, unsigned char mask,
+   wait.
+
+   This is inline as it is always called with constant arguments and hence
+   will be very well optimized. */
+static __inline__ int wait(unsigned short port,
 			   unsigned char allof, unsigned char noneof,
 			   unsigned int timeout, int delay)
 {
     int bits;
 
     for (;;) {
-	bits = inb(port) & mask;
+	bits = inb(port);
 	if ((bits & allof) == allof && (bits & noneof) == 0)
 	    return TRUE;
 	if (delay)
@@ -185,16 +209,12 @@ static void buslogic_prefix(void)
     printk("BusLogic SCSI: ");
 }
 
-#if BUSLOGIC_DEBUG
 static void buslogic_stat(unsigned int base)
 {
     int s = inb(STATUS(base)), i = inb(INTERRUPT(base));
 
-    printk("status=%02X intrflags=%02X\n", s, i);
+    buslogic_printk("status=%02X intrflags=%02X\n", s, i);
 }
-#else
-# define buslogic_stat(base)
-#endif
 
 /* This is a bit complicated, but we need to make sure that an interrupt
    routine does not send something out while we are in the middle of this.
@@ -231,28 +251,9 @@ static int buslogic_out(unsigned int base, const unsigned char *cmdp,
 }
 
 /* Only used at boot time, so we do not need to worry about latency as much
-   here. */
+   here.  This waits a very short period of time.  We use this if we are not
+   sure whether the board will respond to the command we just sent. */
 static int buslogic_in(unsigned int base, unsigned char *cmdp, size_t len)
-{
-    cli();
-    while (len--) {
-	WAIT_UNTIL(STATUS(base), DIRRDY);
-	*cmdp++ = inb(DATA_IN(base));
-    }
-    sti();
-    return FALSE;
-  fail:
-    sti();
-    buslogic_printk("buslogic_in failed(%u): ", len + 1);
-    buslogic_stat(base);
-    return TRUE;
-}
-
-#if 0
-/* Similar to buslogic_in, except that we wait a very short period of time.
-   We use this if we know the board is alive and awake, but we are not sure
-   whether the board will respond the the command we are about to send. */
-static int buslogic_in_fast(unsigned int base, unsigned char *cmdp, size_t len)
 {
     cli();
     while (len--) {
@@ -263,13 +264,47 @@ static int buslogic_in_fast(unsigned int base, unsigned char *cmdp, size_t len)
     return FALSE;
   fail:
     sti();
+#if (BUSLOGIC_DEBUG & BD_IO)
+    buslogic_printk("buslogic_in failed(%u): ", len + 1);
+    buslogic_stat(base);
+#endif
     return TRUE;
 }
+
+static unsigned int makecode(unsigned int haerr, unsigned int scsierr)
+{
+    unsigned int hosterr;
+    const char *errstr = NULL;
+#if (BUSLOGIC_DEBUG & BD_ERRORS) && defined(CONFIG_SCSI_CONSTANTS)
+    static const char *const buslogic_status[] = {
+    /* 00 */	"Command completed normally",
+    /* 01-07 */	NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+    /* 08-09 */	NULL, NULL,
+    /* 0A */	"Linked command completed normally",
+    /* 0B */	"Linked command completed normally, interrupt generated",
+    /* 0C-0F */	NULL, NULL, NULL, NULL,
+    /* 10 */	NULL,
+    /* 11 */	"Selection timed out",
+    /* 12 */	"Data overrun/underrun",
+    /* 13 */	"Unexpected bus free",
+    /* 14 */	"Target bus phase sequence failure",
+    /* 15 */	"First byte of outgoing MB was invalid",
+    /* 16 */	"Invalid CCB Operation Code",
+    /* 17 */	"Linked CCB does not have the same LUN",
+    /* 18 */	"Invalid Target Direction received from Host",
+    /* 19 */	"Duplicate CCB Received in Target Mode",
+    /* 1A */	"Invalid CCB or Segment List Parameter",
+    /* 1B */	"Auto request sense failed",
+    /* 1C */	"SCSI-2 tagged queueing message was rejected by the target",
+    /* 1D-1F */	NULL, NULL, NULL,
+    /* 20 */	"Host adapter hardware failure",
+    /* 21 */	"Target did not respond to SCSI ATN and the HA SCSI bus reset",
+    /* 22 */	"Host adapter asserted a SCSI bus reset",
+    /* 23 */	"Other SCSI devices asserted a SCSI bus reset",
+    };
 #endif
 
-static unsigned int makecode(unsigned int hosterr, unsigned int scsierr)
-{
-    switch (hosterr) {
+    switch (haerr) {
       case 0x00:	/* Normal completion. */
       case 0x0A:	/* Linked command complete without error and linked
 			   normally. */
@@ -280,7 +315,7 @@ static unsigned int makecode(unsigned int hosterr, unsigned int scsierr)
 
       case 0x11:	/* Selection time out: the initiator selection or
 			   target reselection was not complete within the SCSI
-			   Time out period. */
+			   time out period. */
 	hosterr = DID_TIME_OUT;
 	break;
 
@@ -289,6 +324,10 @@ static unsigned int makecode(unsigned int hosterr, unsigned int scsierr)
 			   target.  The host adapter will generate a SCSI
 			   Reset Condition, notifying the host with a RSTS
 			   interrupt. */
+      case 0x21:	/* The target did not respond to SCSI ATN and the host
+			   adapter consequently issued a SCSI bus reset to
+			   clear up the failure. */
+      case 0x22:	/* The host adapter asserted a SCSI bus reset. */
 	hosterr = DID_RESET;
 	break;
 
@@ -322,100 +361,38 @@ static unsigned int makecode(unsigned int hosterr, unsigned int scsierr)
       case 0x1C:	/* SCSI-2 tagged queueing message was rejected by the
 			   target. */
       case 0x20:	/* The host adapter hardware failed. */
-      case 0x21:	/* The target did not respond to SCSI ATN and the host
-			   adapter consequently issued a SCSI bus reset to
-			   clear up the failure. */
-      case 0x22:	/* The host adapter asserted a SCSI bus reset. */
       case 0x23:	/* Other SCSI devices asserted a SCSI bus reset. */
-#if BUSLOGIC_DEBUG
-	buslogic_printk("%X %X\n", hosterr, scsierr);
-#endif
 	hosterr = DID_ERROR;	/* ??? Couldn't find any better. */
 	break;
 
       default:
-	buslogic_printk("makecode: unknown hoststatus %X\n", hosterr);
+#ifndef CONFIG_SCSI_CONSTANTS
+	errstr = "unknown hoststatus";
+#endif
+	hosterr = DID_ERROR;
 	break;
     }
-    return (hosterr << 16) | scsierr;
-}
-
-static int test_port(unsigned int base, struct Scsi_Host *shpnt)
-{
-    unsigned int i;
-    unsigned char inquiry_cmd[] = { CMD_INQUIRY };
-    unsigned char inquiry_result[4];
-    unsigned char *cmdp;
-    int len;
-    volatile int debug = 0;
-
-    /* Quick and dirty test for presence of the card. */
-    if (inb(STATUS(base)) == 0xFF)
-	return TRUE;
-
-    /* Reset the adapter.  I ought to make a hard reset, but it's not really
-       necessary. */
-
-#if BUSLOGIC_DEBUG
-    buslogic_printk("test_port called\n");
-#endif
-
-    /* In case some other card was probing here, reset interrupts. */
-    INTR_RESET(base);	/* reset interrupts, so they don't block */
-
-    outb(RSOFT | RINT/* | RSBUS*/, CONTROL(base));
-
-    /* Wait a little bit for things to settle down. */
-    i = jiffies + 2;
-    while (i > jiffies);
-
-    debug = 1;
-    /* Expect INREQ and HARDY, any of the others are bad. */
-    WAIT(STATUS(base), STATMASK, INREQ | HARDY,
-	 DACT | DFAIL | CMDINV | DIRRDY | CPRBSY);
-
-    debug = 2;
-    /* Shouldn't have generated any interrupts during reset. */
-    if (inb(INTERRUPT(base)) & INTRMASK)
-	goto fail;
-
-    /* Perform a host adapter inquiry instead so we do not need to set up the
-       mailboxes ahead of time. */
-    buslogic_out(base, inquiry_cmd, 1);
-
-    debug = 3;
-    len = 4;
-    cmdp = &inquiry_result[0];
-    while (len--) {
-	WAIT(STATUS(base), DIRRDY, DIRRDY, 0);
-	*cmdp++ = inb(DATA_IN(base));
+#if (BUSLOGIC_DEBUG & BD_ERRORS)
+# ifdef CONFIG_SCSI_CONSTANTS
+    if (hosterr != DID_OK) {
+	if (haerr < ARRAY_SIZE(buslogic_status))
+	    errstr = buslogic_status[haerr];
+	if (errstr == NULL)
+	    errstr = "unknown hoststatus";
     }
-
-    debug = 4;
-    /* Reading port should reset DIRRDY. */
-    if (inb(STATUS(base)) & DIRRDY)
-	goto fail;
-
-    debug = 5;
-    /* When CMDC, command is completed, and we're though testing. */
-    WAIT_UNTIL(INTERRUPT(base), CMDC);
-
-    /* now initialize adapter. */
-
-    debug = 6;
-    /* Clear interrupts. */
-    outb(RINT, CONTROL(base));
-
-    debug = 7;
-
-    return FALSE;				/* 0 = ok */
-  fail:
-    return TRUE;				/* 1 = not ok */
+# else
+    if (hosterr == DID_ERROR)
+	errstr = "";
+# endif
+#endif
+    if (errstr != NULL)
+	buslogic_printk("makecode: %s (%02X)\n", errstr, haerr);
+    return (hosterr << 16) | scsierr;
 }
 
 const char *buslogic_info(void)
 {
-    return "BusLogic SCSI Driver version " BUSLOGIC_VERSION;
+    return "BusLogic SCSI driver version " BUSLOGIC_VERSION;
 }
 
 /* A "high" level interrupt handler. */
@@ -442,7 +419,7 @@ static void buslogic_interrupt(int junk)
     ccb = HOSTDATA(shpnt)->ccbs;
     base = shpnt->io_port;
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_INTERRUPT)
     flag = inb(INTERRUPT(base));
 
     buslogic_printk("buslogic_interrupt: ");
@@ -469,15 +446,17 @@ static void buslogic_interrupt(int junk)
 	   probably do something special, but for now just printing a message
 	   is sufficient.  A SCSI reset detected is something that we really
 	   need to deal with in some way. */
-	if (flag & ~IMBL) {
+	if (flag & (MBOR | CMDC | RSTS)) {
+	    buslogic_printk("Unusual flag:");
 	    if (flag & MBOR)
-		printk("MBOR ");
+		printk(" MBOR");
 	    if (flag & CMDC)
-		printk("CMDC ");
+		printk(" CMDC");
 	    if (flag & RSTS) {
 		needs_restart = 1;
-		printk("RSTS ");
+		printk(" RSTS");
 	    }
+	    printk("\n");
 	}
 
 	INTR_RESET(base);
@@ -522,7 +501,7 @@ static void buslogic_interrupt(int junk)
 	    return;
 	}
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_INTERRUPT)
 	if (ccb[mbo].tarstat || ccb[mbo].hastat)
 	    buslogic_printk("buslogic_interrupt: returning %08X (status %d)\n",
 			    ((int)ccb[mbo].hastat << 16) | ccb[mbo].tarstat,
@@ -532,7 +511,7 @@ static void buslogic_interrupt(int junk)
 	if (mbistatus == MBX_COMPLETION_NOT_FOUND)
 	    continue;
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_INTERRUPT)
 	buslogic_printk("...done %u %u\n", mbo, mbi);
 #endif
 
@@ -540,7 +519,7 @@ static void buslogic_interrupt(int junk)
 
 	if (!sctmp || !sctmp->scsi_done) {
 	    buslogic_printk("buslogic_interrupt: Unexpected interrupt\n");
-	    buslogic_printk("tarstat=%02X, hastat=%02X id=%d lun=%d ccb#=%d\n",
+	    buslogic_printk("tarstat=%02X, hastat=%02X id=%d lun=%d ccb#=%u\n",
 			    ccb[mbo].tarstat, ccb[mbo].hastat,
 			    ccb[mbo].id, ccb[mbo].lun, mbo);
 	    return;
@@ -550,26 +529,17 @@ static void buslogic_interrupt(int junk)
 	if (sctmp->host_scribble)
 	    scsi_free(sctmp->host_scribble, BUSLOGIC_SG_MALLOC);
 
-#if 0	/* ??? */
-	/* Fetch the sense data, and tuck it away, in the required slot.  The
-	   BusLogic automatically fetches it, and there is no guarantee that we
-	   will still have it in the cdb when we come back. */
-	if (ccb[mbo].tarstat == 2)	/* ??? */
-	    memcpy(sctmp->sense_buffer, &ccb[mbo].cdb[ccb[mbo].cdblen],
-		   sizeof sctmp->sense_buffer);
-#endif
-
 	/* ??? more error checking left out here */
-	if (mbistatus != MBX_COMPLETION_OK)
+	if (mbistatus != MBX_COMPLETION_OK) {
 	    /* ??? This is surely wrong, but I don't know what's right. */
 	    errstatus = makecode(ccb[mbo].hastat, ccb[mbo].tarstat);
-	else
+	} else
 	    errstatus = 0;
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_INTERRUPT)
 	if (errstatus)
-	    buslogic_printk("error: %08X %04X %04X\n",
-			    errstatus, ccb[mbo].hastat, ccb[mbo].tarstat);
+	    buslogic_printk("error: %04X %04X\n",
+			    ccb[mbo].hastat, ccb[mbo].tarstat);
 
 	if (status_byte(ccb[mbo].tarstat) == CHECK_CONDITION) {
 	    size_t i;
@@ -594,6 +564,7 @@ static void buslogic_interrupt(int junk)
     }
 }
 
+/* ??? Why does queuecommand return a value?  scsi.c never looks at it... */
 int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
 {
     static const unsigned char buscmd[] = { CMD_START_SCSI };
@@ -607,7 +578,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
     struct mailbox *mb;
     struct ccb *ccb;
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_COMMAND)
     if (target > 1) {
 	scpnt->result = DID_TIME_OUT << 16;
 	done(scpnt);
@@ -616,7 +587,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
 #endif
 
     if (*cmd == REQUEST_SENSE) {
-#ifndef DEBUG
+#if (BUSLOGIC_DEBUG & (BD_COMMAND | BD_ERRORS))
 	if (bufflen != sizeof scpnt->sense_buffer) {
 	    buslogic_printk("Wrong buffer length supplied for request sense"
 			    " (%d)\n",
@@ -628,7 +599,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
 	return 0;
     }
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_COMMAND)
     {
 	int i;
 
@@ -671,8 +642,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
 	    mbo = 0;
     } while (mbo != HOSTDATA(scpnt->host)->last_mbo_used);
 
-    if (mb[mbo].status != MBX_NOT_IN_USE
-	|| HOSTDATA(scpnt->host)->sc[mbo]) {
+    if (mb[mbo].status != MBX_NOT_IN_USE || HOSTDATA(scpnt->host)->sc[mbo]) {
 	/* ??? Instead of panicing, should we enable OMBR interrupts and
 	   sleep until we get one? */
 	panic("buslogic.c: unable to find empty mailbox");
@@ -686,7 +656,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
 
     sti();
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_COMMAND)
     buslogic_printk("sending command (%d %08X)...", mbo, done);
 #endif
 
@@ -731,7 +701,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
 	}
 	ccb[mbo].datalen = scpnt->use_sg * sizeof (struct chain);
 	ccb[mbo].dataptr = cptr;
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_COMMAND)
 	{
 	    unsigned char *ptr;
 
@@ -756,7 +726,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
     ccb[mbo].linkptr = NULL;
     ccb[mbo].commlinkid = 0;
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_COMMAND)
     {
 	size_t i;
 
@@ -768,7 +738,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
 #endif
 
     if (done) {
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_COMMAND)
 	buslogic_printk("buslogic_queuecommand: now waiting for interrupt: ");
 	buslogic_stat(scpnt->host->io_port);
 #endif
@@ -776,7 +746,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
 	mb[mbo].status = MBX_ACTION_START;
 	/* start scsi command */
 	buslogic_out(scpnt->host->io_port, buscmd, sizeof buscmd);
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_COMMAND)
 	buslogic_stat(scpnt->host->io_port);
 #endif
     } else
@@ -793,8 +763,8 @@ static void internal_done(Scsi_Cmnd *scpnt)
 
 int buslogic_command(Scsi_Cmnd *scpnt)
 {
-#if BUSLOGIC_DEBUG
-    buslogic_printk("buslogic_command: ..calling buslogic_queuecommand\n");
+#if (BUSLOGIC_DEBUG & BD_COMMAND)
+    buslogic_printk("buslogic_command: calling buslogic_queuecommand\n");
 #endif
 
     buslogic_queuecommand(scpnt, internal_done);
@@ -824,46 +794,43 @@ static int setup_mailboxes(unsigned int base, struct Scsi_Host *shpnt)
     }
     INTR_RESET(base);	/* reset interrupts, so they don't block */
 
-    /* If this fails, this must be an Adaptec board */
     if (buslogic_out(base, (unsigned char *)&cmd, sizeof cmd))
-	goto must_be_adaptec;
-
-    /* Wait until host adapter is done messing around, and then check to see
-       if the command was accepted.  If it failed, this must be an Adaptec
-       board. */
-    WAIT_UNTIL(STATUS(base), HARDY);
-    if (inb(STATUS(base)) & CMDINV)
-	goto must_be_adaptec;
-
+	goto fail;
     WAIT_UNTIL(INTERRUPT(base), CMDC);
+
+    ok = TRUE;
+
     while (0) {
       fail:
 	buslogic_printk("buslogic_detect: failed setting up mailboxes\n");
     }
-    ok = TRUE;
-  must_be_adaptec:
+
     INTR_RESET(base);
-    if (!ok)
-	printk("- must be Adaptec\n");	/* So that the adaptec detect looks
-					   clean */
-    return ok;
+
+    return !ok;
 }
 
 static int getconfig(unsigned int base, unsigned char *irq,
 		     unsigned char *dma, unsigned char *id,
-		     unsigned char *bus_type, unsigned short *max_sg)
+		     char *bus_type, unsigned short *max_sg,
+		     const unsigned char **bios)
 {
     unsigned char inquiry_cmd[2];
     unsigned char inquiry_result[4];
     int i;
+
+#if (BUSLOGIC_DEBUG & BD_DETECT)
+    buslogic_printk("getconfig: called\n");
+#endif
 
     i = inb(STATUS(base));
     if (i & DIRRDY)
 	i = inb(DATA_IN(base));
     inquiry_cmd[0] = CMD_RETCONF;
     buslogic_out(base, inquiry_cmd, 1);
-    buslogic_in(base, inquiry_result, 3);
-    WAIT_UNTIL(INTERRUPT(base), CMDC);
+    if (buslogic_in(base, inquiry_result, 3))
+	goto fail;
+    WAIT_UNTIL_FAST(INTERRUPT(base), CMDC);
     INTR_RESET(base);
     /* Defer using the DMA value until we know the bus type. */
     *dma = inquiry_result[0];
@@ -889,29 +856,27 @@ static int getconfig(unsigned int base, unsigned char *irq,
       default:
 	buslogic_printk("Unable to determine BusLogic IRQ level."
 			"  Disabling board.\n");
-	return TRUE;
+	goto fail;
     }
     *id = inquiry_result[2] & 0x7;
 
+    /* I expected Adaptec boards to fail on this, but it doesn't happen... */
     inquiry_cmd[0] = CMD_INQEXTSETUP;
     inquiry_cmd[1] = 4;
-    if (buslogic_out(base, inquiry_cmd, 2)
-	|| buslogic_in(base, inquiry_result, 4))
-	return TRUE;
-    WAIT_UNTIL(INTERRUPT(base), CMDC);
+    if (buslogic_out(base, inquiry_cmd, 2))
+	goto fail;
+    if (buslogic_in(base, inquiry_result, inquiry_cmd[1]))
+	goto fail;
+    WAIT_UNTIL_FAST(INTERRUPT(base), CMDC);
+    if (inb(STATUS(base)) & CMDINV)
+	goto fail;
     INTR_RESET(base);
 
-#ifdef BUSLOGIC_BUS_TYPE_OVERRIDE
-    *bus_type = BUS_TYPE_OVERRIDE;
-#else
     *bus_type = inquiry_result[0];
-#endif
     CHECK(*bus_type == 'A' || *bus_type == 'E' || *bus_type == 'M');
-#ifdef BUSLOGIC_BUS_TYPE_OVERRIDE
-    if (inquiry_result[0] != BUS_TYPE_OVERRIDE)
-	buslogic_printk("Overriding bus type %c with %c\n",
-			inquiry_result[0], BUS_TYPE_OVERRIDE);
-#endif
+
+    *bios = (const unsigned char *)((unsigned int)inquiry_result[1] << 12);
+
     *max_sg = (inquiry_result[3] << 8) | inquiry_result[2];
 
     /* We only need a DMA channel for ISA boards.  Some other types of boards
@@ -935,59 +900,181 @@ static int getconfig(unsigned int base, unsigned char *irq,
 	  default:
 	    buslogic_printk("Unable to determine BusLogic DMA channel."
 			    "  Disabling board.\n");
-	    return TRUE;
+	    goto fail;
 	}
     else
 	*dma = 0;
 
     while (0) {
       fail:
+#if (BUSLOGIC_DEBUG & BD_DETECT)
 	buslogic_printk("buslogic_detect: query board settings\n");
+#endif
 	return TRUE;
     }
 
     return FALSE;
 }
 
-static int get_translation(unsigned int base)
+/* Query the board.  This acts both as part of the detection sequence and as a
+   means to get necessary configuration information. */
+static int buslogic_query(unsigned int base, unsigned char *trans,
+			  unsigned char *irq, unsigned char *dma,
+			  unsigned char *id, char *bus_type,
+			  unsigned short *max_sg, const unsigned char **bios,
+			  char *model, char *firmware_rev)
 {
-    /* ??? Unlike UltraStor, I see no way of determining whether > 1G mapping
-       has been enabled.  However, it appears that BusLogic uses a mapping
-       scheme which varies with the disk size when > 1G mapping is enabled.
-       For disks <= 1G, this mapping is the same regardless of the setting of
-       > 1G mapping.  Therefore, we should be safe in always assuming that > 1G
-       mapping has been enabled. */
-    return BIOS_TRANSLATION_BIG;
-}
+    unsigned char inquiry_cmd[2];
+    unsigned char inquiry_result[6];
+    unsigned char geo;
+    unsigned int i;
 
-/* Query the board to find out the model. */
-static int buslogic_query(unsigned int base, int *trans)
-{
-    static const unsigned char inquiry_cmd[] = { CMD_INQUIRY };
-    unsigned char inquiry_result[4];
-    int i;
+#if (BUSLOGIC_DEBUG & BD_DETECT)
+    buslogic_printk("buslogic_query: called\n");
+#endif
 
-    i = inb(STATUS(base));
-    if (i & DIRRDY)
-	i = inb(DATA_IN(base));
-    buslogic_out(base, inquiry_cmd, sizeof inquiry_cmd);
-    buslogic_in(base, inquiry_result, 4);
-    WAIT_UNTIL(INTERRUPT(base), CMDC);
+    /* Quick and dirty test for presence of the card. */
+    if (inb(STATUS(base)) == 0xFF)
+	goto fail;
+
+    /* Check the GEOMETRY port early for quick bailout on Adaptec boards. */
+    geo = inb(GEOMETRY(base));
+#if (BUSLOGIC_DEBUG & BD_DETECT)
+    buslogic_printk("geometry bits: %02X\n", geo);
+#endif
+    /* Here is where we tell the men from the boys (i.e. Adaptec's don't
+       support the GEOMETRY port, the men do :-) */
+    if (geo == 0xFF)
+	goto fail;
+
+    /* In case some other card was probing here, reset interrupts. */
     INTR_RESET(base);
 
-#if 1	/* ??? Temporary */
-    buslogic_printk("Inquiry Bytes: %02X %02X %02X %02X\n",
-		    inquiry_result[0], inquiry_result[1],
-		    inquiry_result[2], inquiry_result[3]);
+    /* Reset the adapter.  I ought to make a hard reset, but it's not really
+       necessary. */
+    outb(RSOFT | RINT/* | RSBUS*/, CONTROL(base));
+
+    /* Wait a little bit for things to settle down. */
+    i = jiffies + 2;
+    while (i > jiffies);
+
+    /* Expect INREQ and HARDY, any of the others are bad. */
+    WAIT(STATUS(base), INREQ | HARDY, DACT | DFAIL | CMDINV | DIRRDY | CPRBSY);
+
+    /* Shouldn't have generated any interrupts during reset. */
+    if (inb(INTERRUPT(base)) & INTRMASK)
+	goto fail;
+
+    /* Getting the BusLogic firmware revision level is a bit tricky.  We get
+       the first two digits (d.d) from CMD_INQUIRY and then use two undocumented
+       commands to get the remaining digit and letter (d.ddl as in 3.31C). */
+
+    inquiry_cmd[0] = CMD_INQUIRY;
+    buslogic_out(base, inquiry_cmd, 1);
+    if (buslogic_in(base, inquiry_result, 4))
+	goto fail;
+    /* Reading port should reset DIRRDY. */
+    if (inb(STATUS(base)) & DIRRDY)
+	goto fail;
+    WAIT_UNTIL_FAST(INTERRUPT(base), CMDC);
+    INTR_RESET(base);
+    firmware_rev[0] = inquiry_result[2];
+    firmware_rev[1] = '.';
+    firmware_rev[2] = inquiry_result[3];
+    firmware_rev[3] = '\0';
+#if 0
+    buslogic_printk("Inquiry Bytes: %02X(%c) %02X(%c)\n",
+		    inquiry_result[0], inquiry_result[0],
+		    inquiry_result[1], inquiry_result[1]);
 #endif
+
+    if (getconfig(base, irq, dma, id, bus_type, max_sg, bios))
+	goto fail;
+
+    /* Set up defaults */
+#ifdef BIOS_TRANSLATION_OVERRIDE
+    *trans = BIOS_TRANSLATION_OVERRIDE;
+#else
+    *trans = BIOS_TRANSLATION_DEFAULT;
+#endif
+    model[0] = '\0';
+    model[6] = 0;
+
+    /* ??? Begin undocumented command use.
+       These may not be supported by clones. */
+
+    do {
+	/* ??? It appears as though AMI BusLogic clones don't implement this
+	   feature.  As an experiment, if we read a 00 we ignore the GEO_GT_1GB
+	   bit and skip all further undocumented commands. */
+	if (geo == 0x00)
+	    break;
+#ifndef BIOS_TRANSLATION_OVERRIDE
+	*trans = ((geo & GEO_GT_1GB)
+		  ? BIOS_TRANSLATION_BIG : BIOS_TRANSLATION_DEFAULT);
+#endif
+
+	inquiry_cmd[0] = CMD_VER_NO_LAST;
+	buslogic_out(base, inquiry_cmd, 1);
+	if (buslogic_in(base, inquiry_result, 1))
+	    break;
+	WAIT_UNTIL_FAST(INTERRUPT(base), CMDC);
+	INTR_RESET(base);
+	firmware_rev[3] = inquiry_result[0];
+	firmware_rev[4] = '\0';
+
+	inquiry_cmd[0] = CMD_VER_NO_LETTER;
+	buslogic_out(base, inquiry_cmd, 1);
+	if (buslogic_in(base, inquiry_result, 1))
+	    break;
+	WAIT_UNTIL_FAST(INTERRUPT(base), CMDC);
+	INTR_RESET(base);
+	firmware_rev[4] = inquiry_result[0];
+	firmware_rev[5] = '\0';
+
+	/* Use undocumented command to get model number and revision. */
+
+	inquiry_cmd[0] = CMD_RET_MODEL_NO;
+	inquiry_cmd[1] = 6;
+	buslogic_out(base, inquiry_cmd, 2);
+	if (buslogic_in(base, inquiry_result, inquiry_cmd[1]))
+	    break;
+	WAIT_UNTIL_FAST(INTERRUPT(base), CMDC);
+	INTR_RESET(base);
+	memcpy(model, inquiry_result, 5);
+	model[5] = '\0';
+	model[6] = inquiry_result[5];
+    } while (0);
+
+    /* ??? End undocumented command use. */
+
+    /* bus_type from getconfig doesn't differentiate between EISA/VESA.  We
+       override using the model number here. */
+    /* ??? What bus_type gets returned for PCI? */
+    switch (*bus_type) {
+      case 'E':
+	switch (model[0]) {
+	  case '4':
+	    *bus_type = 'V';
+	    break;
+	  case '7':
+	    break;
+	  default:
+	    *bus_type = 'X';
+	    break;
+	}
+	break;
+      default:
+	break;
+    }
 
     while (0) {
       fail:
+#if (BUSLOGIC_DEBUG & BD_DETECT)
 	buslogic_printk("buslogic_query: query board settings\n");
+#endif
 	return TRUE;
     }
-
-    *trans = get_translation(base);
 
     return FALSE;
 }
@@ -997,31 +1084,46 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 {
     unsigned char dma;
     unsigned char irq;
-    unsigned int base = 0;
+    unsigned int base;
     unsigned char id;
-    unsigned char bus_type;
+    char bus_type;
     unsigned short max_sg;
-    int trans;
-    struct Scsi_Host *shpnt = NULL;
+    unsigned char bios_translation;
+    const unsigned char *bios;
+    char *model;
+    char *firmware_rev;
+    struct Scsi_Host *shpnt;
+    size_t indx;
     int count = 0;
-    int indx;
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_DETECT)
     buslogic_printk("buslogic_detect:\n");
 #endif
 
     tpnt->can_queue = BUSLOGIC_MAILBOXES;
     for (indx = 0; indx < ARRAY_SIZE(bases); indx++)
-	if (!check_region(bases[indx], 3)) {
+	if (!check_region(bases[indx], 4)) {
 	    shpnt = scsi_register(tpnt, sizeof (struct hostdata));
 
 	    base = bases[indx];
 
-	    if (test_port(base, shpnt))
+	    model = HOSTDATA(shpnt)->model;
+	    firmware_rev = HOSTDATA(shpnt)->firmware_rev;
+	    if (buslogic_query(base, &bios_translation, &irq, &dma, &id,
+			       &bus_type, &max_sg, &bios, model, firmware_rev))
 		goto unregister;
 
-	    /* Set the Bus on/off-times as not to ruin floppy performance. */
-	    {
+#if (BUSLOGIC_DEBUG & BD_DETECT)
+	    buslogic_stat(base);
+#endif
+
+	    if (setup_mailboxes(base, shpnt))
+		goto unregister;
+
+	    /* Set the Bus on/off-times as not to ruin floppy performance.
+	       CMD_BUSOFF_TIME is a noop for EISA boards (and possibly
+	       others???). */
+	    if (bus_type != 'E') {
 		/* The default ON/OFF times for BusLogic adapters is 7/4. */
 		static const unsigned char oncmd[] = { CMD_BUSON_TIME, 7 };
 		static const unsigned char offcmd[] = { CMD_BUSOFF_TIME, 5 };
@@ -1029,9 +1131,6 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 		INTR_RESET(base);
 		buslogic_out(base, oncmd, sizeof oncmd);
 		WAIT_UNTIL(INTERRUPT(base), CMDC);
-		/* CMD_BUSOFF_TIME is a noop for EISA boards, but as there is
-		   no way to to differentiate EISA from VESA we send it
-		   unconditionally. */
 		INTR_RESET(base);
 		buslogic_out(base, offcmd, sizeof offcmd);
 		WAIT_UNTIL(INTERRUPT(base), CMDC);
@@ -1043,33 +1142,32 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 		INTR_RESET(base);
 	    }
 
-	    if (buslogic_query(base, &trans))
-		goto unregister;
-
-	    if (getconfig(base, &irq, &dma, &id, &bus_type, &max_sg))
-		goto unregister;
-
-#if BUSLOGIC_DEBUG
-	    buslogic_stat(base);
-#endif
-	    /* Here is where we tell the men from the boys (i.e. an Adaptec
-	       will fail in setup_mailboxes, the men will not :-) */
-	    if (!setup_mailboxes(base, shpnt))
-		goto unregister;
-
-	    printk("Configuring BusLogic %s HA at port 0x%03X, IRQ %u",
-		   (bus_type == 'A' ? "ISA"
-		    : (bus_type == 'E' ? "EISA/VESA" : "MCA")),
-		   base, irq);
+	    buslogic_printk("Configuring %s HA at port 0x%03X, IRQ %u",
+			    (bus_type == 'A' ? "ISA"
+			     : (bus_type == 'E' ? "EISA"
+				: (bus_type == 'M' ? "MCA"
+				   : (bus_type == 'P' ? "PCI"
+				      : (bus_type == 'V' ? "VESA"
+					 : (bus_type == 'X' ? "EISA/VESA"
+					    : "Unknown")))))),
+			    base, irq);
+	    if (bios != NULL)
+		printk(", BIOS 0x%05X", (unsigned int)bios);
 	    if (dma != 0)
 		printk(", DMA %u", dma);
 	    printk(", ID %u\n", id);
+	    buslogic_printk("Model Number: %s",
+			    (model[0] ? model : "Unknown"));
+	    if (model[0])
+		printk(" (revision %d)", model[6]);
+	    printk("\n");
+	    buslogic_printk("Firmware revision: %s\n", firmware_rev);
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_DETECT)
 	    buslogic_stat(base);
 #endif
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_DETECT)
 	    buslogic_printk("buslogic_detect: enable interrupt channel %d\n",
 			    irq);
 #endif
@@ -1083,7 +1181,7 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 	    }
 
 	    if (dma) {
-		if (request_dma(dma,"buslogic")) {
+		if (request_dma(dma, "buslogic")) {
 		    buslogic_printk("Unable to allocate DMA channel for "
 				    "BusLogic controller.\n");
 		    free_irq(irq);
@@ -1091,36 +1189,63 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 		    goto unregister;
 		}
 
-		if (dma >= 5) {
-		    outb((dma - 4) | CASCADE, DMA_MODE_REG);
-		    outb(dma - 4, DMA_MASK_REG);
-		}
+		/* The DMA-Controller.  We need to fool with this because we
+		   want to be able to use an ISA BusLogic without having to
+		   have the BIOS enabled. */
+		set_dma_mode(dma, DMA_MODE_CASCADE);
+		enable_dma(dma);
 	    }
 
 	    host[irq - 9] = shpnt;
 	    shpnt->this_id = id;
-#ifdef CONFIG_NO_BUGGY_BUSLOGIC
 	    /* Only type 'A' (AT/ISA) bus adapters use unchecked DMA. */
 	    shpnt->unchecked_isa_dma = (bus_type == 'A');
+#ifndef CONFIG_NO_BUGGY_BUSLOGIC
+	    /* There is a hardware bug in the BT-445S prior to revision D.
+	       When the BIOS is enabled and you have more than 16MB of memory,
+	       the card mishandles memory transfers over 16MB which (if viewed
+	       as a 24-bit address) overlap with the BIOS address space.  For
+	       example if you have the BIOS located at physical address
+	       0xDC000 and a DMA transfer from the card to RAM starts at
+	       physical address 0x10DC000 then the transfer is messed up.  To
+	       be more precise every fourth byte of the transfer is messed up.
+	       (This analysis courtesy of Tomas Hurka, author of the NeXTSTEP
+	       BusLogic driver.) */
+
+	    if (bus_type == 'V'				    /* 445 */
+		&& firmware_rev[0] <= '3'		    /* S */
+		&& bios != NULL) {			    /* BIOS enabled */
+#if 0
+		/* ??? Once LNZ's forbidden_addr stuff makes it into the higher
+		   level scsi code, we can use this instead. */
+		/* Avoid addresses which "mirror" the BIOS for DMA. */
+		shpnt->forbidden_addr = bios;
+		shpnt->forbidden_size = 16 * 1024;
 #else
-	    /* Bugs in the firmware of the 445S with >16M.  This does not seem
-	       to affect Revision E boards with firmware 3.37. */
-	    shpnt->unchecked_isa_dma = 1;
+		/* Use double-buffering. */
+		shpnt->unchecked_isa_dma = TRUE;
 #endif
+	    }
+#endif
+	    /* Have to keep cmd_per_lun at 1 for ISA machines otherwise lots
+	       of memory gets sucked up for bounce buffers.  */
+	    /* ??? Unfortunately, cmd_per_lun is only in the
+	       Scsi_Host_Template structure, not the Scsi_Host structure.
+	       Therefore, this could cause high memory consumption if a system
+	       has multiple BusLogic adapters which are a mix of ISA and
+	       non-ISA. */
+	    if (!shpnt->unchecked_isa_dma)
+		shpnt->hostt->cmd_per_lun = BUSLOGIC_NONISA_CMDLUN;
 	    shpnt->sg_tablesize = max_sg;
 	    if (shpnt->sg_tablesize > BUSLOGIC_MAX_SG)
 		shpnt->sg_tablesize = BUSLOGIC_MAX_SG;
-	    /* ??? If we can dynamically allocate the mailbox arrays, I'll
-	       probably bump up this number. */
-	    shpnt->hostt->can_queue = BUSLOGIC_MAILBOXES;
-	    /* No known way to determine BIOS base address, but we don't
-	       care since we don't use it anyway. */
-	    shpnt->base = NULL;
+	    /* ??? shpnt->base should really be "const unsigned char *"... */
+	    shpnt->base = (unsigned char *)bios;
 	    shpnt->io_port = base;
 	    shpnt->dma_channel = dma;
 	    shpnt->irq = irq;
-	    HOSTDATA(shpnt)->bios_translation = trans;
-	    if (trans == BIOS_TRANSLATION_BIG)
+	    HOSTDATA(shpnt)->bios_translation = bios_translation;
+	    if (bios_translation == BIOS_TRANSLATION_BIG)
 		buslogic_printk("Using extended bios translation.\n");
 	    HOSTDATA(shpnt)->last_mbi_used = 2 * BUSLOGIC_MAILBOXES - 1;
 	    HOSTDATA(shpnt)->last_mbo_used = BUSLOGIC_MAILBOXES - 1;
@@ -1134,7 +1259,7 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 		    = { READ_CAPACITY, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 		size_t i;
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_DETECT)
 		buslogic_printk("*** READ CAPACITY ***\n");
 #endif
 		for (i = 0; i < sizeof buf; i++)
@@ -1146,7 +1271,7 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 					i, *(int *)(buf + 4), *(int *)buf);
 		    }
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_DETECT)
 		buslogic_printk("*** NOW RUNNING MY OWN TEST ***\n");
 #endif
 		for (i = 0; i < 4; i++) {
@@ -1164,7 +1289,7 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 	    }
 #endif
 
-	    snarf_region(bases[indx], 3);	/* Register the IO ports that
+	    snarf_region(bases[indx], 4);	/* Register the IO ports that
 						   we use */
 	    count++;
 	    continue;
@@ -1292,7 +1417,7 @@ int buslogic_reset(Scsi_Cmnd *scpnt)
     static const unsigned char buscmd[] = { CMD_START_SCSI };
     unsigned int i;
 
-#if BUSLOGIC_DEBUG
+#if (BUSLOGIC_DEBUG & BD_RESET)
     buslogic_printk("buslogic_reset\n");
 #endif
 #if 0
@@ -1303,8 +1428,7 @@ int buslogic_reset(Scsi_Cmnd *scpnt)
     /* First locate the ccb for this command. */
     for (i = 0; i < BUSLOGIC_MAILBOXES; i++)
 	if (HOSTDATA(scpnt->host)->sc[i] == scpnt) {
-	    HOSTDATA(scpnt->host)->ccbs[i].op = 0x81;	/* ??? BUS DEVICE
-							   RESET */
+	    HOSTDATA(scpnt->host)->ccbs[i].op = CCB_OP_BUS_RESET;
 
 	    /* Now tell the BusLogic to flush all pending commands for this
 	       target. */
@@ -1329,7 +1453,8 @@ int buslogic_reset(Scsi_Cmnd *scpnt)
 		    sctmp->result = DID_RESET << 16;
 		    if (sctmp->host_scribble)
 			scsi_free(sctmp->host_scribble, BUSLOGIC_SG_MALLOC);
-		    printk("Sending DID_RESET for target %d\n", scpnt->target);
+		    buslogic_printk("Sending DID_RESET for target %d\n",
+				    scpnt->target);
 		    sctmp->scsi_done(scpnt);
 
 		    HOSTDATA(scpnt->host)->sc[i] = NULL;
@@ -1347,35 +1472,41 @@ int buslogic_reset(Scsi_Cmnd *scpnt)
     return SCSI_RESET_PUNT;
 }
 
+/* ??? This is probably not correct for series "C" boards.  I believe these
+   support separate mappings for each disk.  We would need to issue a
+   CMD_READ_FW_LOCAL_RAM command to check for the particular drive being
+   queried.  Note that series "C" boards can be differentiated by having
+   HOSTDATA(disk->device->host)->firmware_rev[0] >= '4'. */
 int buslogic_biosparam(Disk *disk, int dev, int *ip)
 {
-    /* ??? This truncates.  Should we round up to next MB? */
-    unsigned int mb = disk->capacity >> 11;
+    unsigned int size = disk->capacity;
 
     /* ip[0] == heads, ip[1] == sectors, ip[2] == cylinders */
     if (HOSTDATA(disk->device->host)->bios_translation == BIOS_TRANSLATION_BIG
-	&& mb > 1024) {
-	if (mb > 4096) {
+	&& size >= 0x200000) {		/* 1GB */
+	if (size >= 0x400000) {		/* 2GB */
+#if 0	/* ??? Used in earlier kernels, but disagrees with BusLogic info. */
+	    if (mb >= 0x800000) {	/* 4GB */
+		ip[0] = 256;
+		ip[1] = 64;
+	    } else {
+		ip[0] = 256;
+		ip[1] = 32;
+	    }
+#else
 	    ip[0] = 256;
 	    ip[1] = 64;
-	    ip[2] = mb >> 3;
-/*	    if (ip[2] > 1024)
-		ip[2] = 1024; */
-	} else if (mb > 2048) {
-	    ip[0] = 256;
-	    ip[1] = 32;
-	    ip[2] = mb >> 2;
+#endif
 	} else {
 	    ip[0] = 128;
 	    ip[1] = 32;
-	    ip[2] = mb >> 1;
 	}
     } else {
 	ip[0] = 64;
 	ip[1] = 32;
-	ip[2] = mb;
-/*	if (ip[2] > 1024)
-	    ip[2] = 1024; */
     }
+    ip[2] = size / (ip[0] * ip[1]);
+/*    if (ip[2] > 1024)
+	ip[2] = 1024; */
     return 0;
 }

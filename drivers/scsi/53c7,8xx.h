@@ -50,12 +50,11 @@
 #include <linux/scsicam.h>
 extern int NCR53c7xx_abort(Scsi_Cmnd *);
 extern int NCR53c7xx_detect(Scsi_Host_Template *tpnt);
-extern const char *NCR53c7xx_info(void);
 extern int NCR53c7xx_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 extern int NCR53c7xx_reset(Scsi_Cmnd *);
 
-#define NCR53c7xx {NULL, "NCR53c{7,8}xx (rel 3)", NCR53c7xx_detect, 	\
-    	NULL, NCR53c7xx_info,						\
+#define NCR53c7xx {NULL, NULL, "NCR53c{7,8}xx (rel 3)", NCR53c7xx_detect, 	\
+    	NULL, NULL,						\
 	NULL, NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,\
         NULL, scsicam_bios_param, 					\
 	/* can queue */ 1, /* id */ 7, 255 /* old SG_ALL */, 		\

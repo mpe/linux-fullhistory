@@ -539,6 +539,13 @@ S: Ormond
 S: Victoria 3163
 S: Australia
 
+N: Pauline Middelink
+E: middelin@polyware.iaf.nl
+D: General low-level bug fixes, /proc fixes, identd support
+S: Boterkorfhoek 34
+S: 7546 JA  Enschede
+S: Netherlands
+
 N: Rick Miller
 E: rick@discus.mil.wi.us
 D: Linux Device Registrar (Major/minor numbers), "au-play", "bwBASIC"

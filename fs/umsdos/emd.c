@@ -25,9 +25,10 @@ int umsdos_readdir_kmem(
 	int count)
 {
 	int ret;
+	int old_fs = get_fs();
 	set_fs (KERNEL_DS);
 	ret = msdos_readdir(inode,filp,dirent,count);
-	set_fs (USER_DS);
+	set_fs (old_fs);
 	return ret;
 }
 /*
@@ -39,10 +40,11 @@ int umsdos_file_read_kmem(
 	char *buf,
 	int count)
 {
-	int ret;	
+	int ret;
+	int old_fs = get_fs();	
 	set_fs (KERNEL_DS);
 	ret = msdos_file_read(inode,filp,buf,count);
-	set_fs (USER_DS);
+	set_fs (old_fs);
 	return ret;
 }
 /*
@@ -55,9 +57,10 @@ int umsdos_file_write_kmem(
 	int count)
 {
 	int ret;
+	int old_fs = get_fs();
 	set_fs (KERNEL_DS);
 	ret = msdos_file_write(inode,filp,buf,count);
-	set_fs (USER_DS);
+	set_fs (old_fs);
 	return ret;
 }
 
@@ -208,7 +211,7 @@ int umsdos_writeentry (
 	return ret;
 }
 
-#define CHUNK_SIZE (16*UMSDOS_REC_SIZE)
+#define CHUNK_SIZE (8*UMSDOS_REC_SIZE)
 struct find_buffer{
 	char buffer[CHUNK_SIZE];
 	int pos;	/* read offset in buffer */

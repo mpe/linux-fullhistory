@@ -35,7 +35,7 @@ struct timestamp {
 #if defined(__i386__)  
 		u8	flags:4,
 			overflow:4;
-#elif defined(__mc680x0__)
+#elif defined(__mc68000__)
 		u8	overflow:4,
 			flags:4;
 #elif defined(__alpha__)
@@ -76,7 +76,7 @@ struct iphdr {
 #if defined(__i386__)
 	u8	ihl:4,
 		version:4;
-#elif defined (__mc680x0__)
+#elif defined (__mc68000__)
 	u8	version:4,
   		ihl:4;
 #elif defined (__alpha__)

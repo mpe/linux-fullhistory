@@ -156,7 +156,6 @@ int aha1740_detect(Scsi_Host_Template *);
 int aha1740_command(Scsi_Cmnd *);
 int aha1740_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha1740_abort(Scsi_Cmnd *);
-const char *aha1740_info(void);
 int aha1740_reset(Scsi_Cmnd *);
 int aha1740_biosparam(Disk *, int, int*);
 
@@ -167,11 +166,11 @@ int aha1740_biosparam(Disk *, int, int*);
 #define NULL 0
 #endif
 
-#define AHA1740 {NULL,					\
-		   "Adaptec 1740", 			\
+#define AHA1740 {NULL,	NULL,				\
+		   "Adaptec 174x (EISA)",		\
 		   aha1740_detect,			\
 		   NULL,				\
-		   aha1740_info, 			\
+		   NULL, 				\
 		   aha1740_command,			\
 		   aha1740_queuecommand,		\
 		   aha1740_abort,			\

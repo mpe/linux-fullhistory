@@ -234,6 +234,11 @@ extern unsigned short * mem_map;
 #define GFP_NOBUFFER	0x04
 #define GFP_NFS		0x05
 
+/* Flag - indicates that the buffer will be suitable for DMA.  Ignored on some
+   platforms, used as appropriate on others */
+
+#define GFP_DMA		0x80
+
 /*
  * vm_ops not present page codes for shared memory.
  *

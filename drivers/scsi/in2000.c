@@ -399,7 +399,7 @@ static void in2000_intr_handle(int foo)
 	}			/* end while intrpt active */
 }
 
-static int in2000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
+int in2000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 {
     unchar direction;
     unchar *cmd = (unchar *) SCpnt->cmnd;
@@ -551,7 +551,7 @@ static void internal_done(Scsi_Cmnd * SCpnt)
     ++internal_done_flag;
 }
 
-static int in2000_command(Scsi_Cmnd * SCpnt)
+int in2000_command(Scsi_Cmnd * SCpnt)
 {
     in2000_queuecommand(SCpnt, internal_done);
 
@@ -560,7 +560,7 @@ static int in2000_command(Scsi_Cmnd * SCpnt)
     return internal_done_errcode;
 }
 
-static int in2000_detect(Scsi_Host_Template * tpnt)
+int in2000_detect(Scsi_Host_Template * tpnt)
 {
 /* Order chosen to reduce conflicts with some multi-port serial boards */
     int base_tab[] = { 0x220,0x200,0x110,0x100 };
@@ -632,7 +632,7 @@ static int in2000_detect(Scsi_Host_Template * tpnt)
     return 1;
 }
 
-static int in2000_abort(Scsi_Cmnd * SCpnt)
+int in2000_abort(Scsi_Cmnd * SCpnt)
 {
     DEB(printk("in2000_abort\n"));
     /*
@@ -649,7 +649,7 @@ static inline void delay( unsigned how_long )
     while (jiffies < time) ;
 }
 
-static int in2000_reset(Scsi_Cmnd * SCpnt)
+int in2000_reset(Scsi_Cmnd * SCpnt)
 {
     DEB(printk("in2000_reset called\n"));
     /*
@@ -671,7 +671,7 @@ static int in2000_reset(Scsi_Cmnd * SCpnt)
 #endif
 }
 
-static int in2000_biosparam(Disk * disk, int dev, int* iinfo)
+int in2000_biosparam(Disk * disk, int dev, int* iinfo)
 	{
 	  int size = disk->capacity;
     DEB(printk("in2000_biosparam\n"));

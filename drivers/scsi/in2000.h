@@ -94,12 +94,12 @@
 #define MAX_SENSE 14
 #define MAX_STATUS 32
 
-static int in2000_detect(Scsi_Host_Template *);
-static int in2000_command(Scsi_Cmnd *);
-static int in2000_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-static int in2000_abort(Scsi_Cmnd *);
-static int in2000_reset(Scsi_Cmnd *);
-static int in2000_biosparam(Disk *, int, int*);
+int in2000_detect(Scsi_Host_Template *);
+int in2000_command(Scsi_Cmnd *);
+int in2000_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
+int in2000_abort(Scsi_Cmnd *);
+int in2000_reset(Scsi_Cmnd *);
+int in2000_biosparam(Disk *, int, int*);
 
 
 #ifndef NULL
@@ -108,7 +108,7 @@ static int in2000_biosparam(Disk *, int, int*);
 
 /* next may be "SG_NONE" or "SG_ALL" or nr. of (1k) blocks per R/W Cmd. */
 #define IN2000_SG SG_ALL
-#define IN2000 {NULL, "Always IN2000", in2000_detect, NULL,	\
+#define IN2000 {NULL, NULL, "Always IN2000", in2000_detect, NULL,	\
 		NULL, in2000_command,		\
 		in2000_queuecommand,		\
 		in2000_abort,			\

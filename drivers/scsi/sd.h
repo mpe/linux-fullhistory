@@ -39,6 +39,7 @@ typedef struct scsi_disk {
 		unsigned char sector_bit_shift;	/* power of 2 sectors per FS block */
 		unsigned ten:1;			/* support ten byte read / write */
 		unsigned remap:1;		/* support remapping  */
+		unsigned has_part_table:1;	/* has partition table */
 		} Scsi_Disk;
 	
 extern Scsi_Disk * rscsi_disks;

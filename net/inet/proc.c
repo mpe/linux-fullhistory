@@ -17,7 +17,7 @@
  * Fixes:
  *		Alan Cox	:	UDP sockets show the rxqueue/txqueue
  *					using hint flag for the netinfo.
- *	Pauline Middelink	:	Pidentd support
+ *	Pauline Middelink	:	identd support
  *		Alan Cox	:	Make /proc safer.
  *	Erik Schoenfelder	:	/proc/net/snmp
  *		Alan Cox	:	Handle dead sockets properly.

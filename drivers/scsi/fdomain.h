@@ -28,13 +28,13 @@
 int        fdomain_16x0_detect( Scsi_Host_Template * );
 int        fdomain_16x0_command( Scsi_Cmnd * );
 int        fdomain_16x0_abort( Scsi_Cmnd * );
-const char *fdomain_16x0_info( void );
+const char *fdomain_16x0_info( struct Scsi_Host * );
 int        fdomain_16x0_reset( Scsi_Cmnd * ); 
 int        fdomain_16x0_queue( Scsi_Cmnd *, void (*done)(Scsi_Cmnd *) );
 int        fdomain_16x0_biosparam( Disk *, int, int * );
 
-#define FDOMAIN_16X0 { NULL,                             \
-		       "Future Domain TMC-16x0",         \
+#define FDOMAIN_16X0 { NULL, NULL,                            \
+		       NULL,			         \
 		       fdomain_16x0_detect,              \
 		       NULL,				 \
 		       fdomain_16x0_info,                \

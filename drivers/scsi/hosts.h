@@ -52,6 +52,9 @@ typedef struct  SHT
 	  /* Used with loadable modules so we can construct a linked list. */
 	  struct SHT * next;
 
+	  /* Used with loadable modules so that we know when it is safe to unload */
+	  int * usage_count;
+
 	/*
 		The name pointer is a pointer to the name of the SCSI
 		device detected.
@@ -77,14 +80,18 @@ typedef struct  SHT
 
 	int (* detect)(struct SHT *); 
 
-	  /* Used with loadable modules to unload the host structures */
+	  /* Used with loadable modules to unload the host structures.  Note:
+	   there is a default action built into the modules code which may
+	   be sufficient for most host adapters.  Thus you may not have to supply
+	   this at all. */
 	int (*release)(struct Scsi_Host *);
 	/*
 		The info function will return whatever useful
-		information the developer sees fit.              
+		information the developer sees fit.  If not provided, then
+		the name field will be used instead.
 	*/
 
-        const char *(* info)(void);
+        const char *(* info)(struct Scsi_Host *);
 
 	/*
 		The command function takes a target, a command (this is a SCSI 
@@ -221,6 +228,8 @@ typedef struct  SHT
 	be two Scsi_Host entries, but only 1 Scsi_Host_Template entries.
 */
 
+#define SCSI_HOST_BLOCK 0x800
+
 struct Scsi_Host
 	{
 		struct Scsi_Host * next;
@@ -232,9 +241,15 @@ struct Scsi_Host
 		Scsi_Cmnd *host_queue; 
 		Scsi_Host_Template * hostt;
 
+		/* Pointer to a circularly linked list - this indicates the hosts
+		   that should be locked out of performing I/O while we have an active
+		   command on this host. */
+		struct Scsi_Host * block;
+
 		/* These parameters should be set by the detect routine */
 		unsigned char *base;
 		short unsigned int io_port;
+		unsigned char n_io_port;
 		unsigned char irq;
 		unsigned char dma_channel;
 		/*

@@ -1033,11 +1033,11 @@ int aha274x_detect(Scsi_Host_Template *template)
 			found += aha274x_register(template, type, base);
 		}
 	}
-	template->name = (char *)aha274x_info();
+	template->name = (char *)aha274x_info(NULL);
 	return(found);
 }
 
-const char *aha274x_info(void)
+const char *aha274x_info(struct Scsi_Host * shost)
 {
 	return("Adaptec AHA274x/284x (EISA/VL-bus -> Fast SCSI) "
 	       AHA274X_SEQ_VERSION "/"
@@ -1100,7 +1100,7 @@ void aha274x_buildscb(struct aha274x_host *p,
 	 *	  little-endian format.
 	 */
 	addr = cmd->cmnd;
-	scb->SCSI_cmd_length = COMMAND_SIZE(cmd->cmnd[0]);
+	scb->SCSI_cmd_length = cmd->cmd_len;
 	memcpy(scb->SCSI_cmd_pointer, &addr, sizeof(scb->SCSI_cmd_pointer));
 
 	if (cmd->use_sg) {
@@ -1155,7 +1155,7 @@ int aha274x_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
 #if 0
 	debug("aha274x_queue: cmd 0x%x (size %u), target %d, lun %d\n",
 	      cmd->cmnd[0],
-	      COMMAND_SIZE(cmd->cmnd[0]),
+	      cmd->cmd_len,
 	      cmd->target,
 	      cmd->lun);
 #endif

@@ -375,9 +375,9 @@ struct signature {
 
 #define SIGNATURE_COUNT (sizeof( signatures ) / sizeof( struct signature ))
 
-static void print_banner( void )
+static void print_banner( struct Scsi_Host * shpnt )
 {
-   printk( "%s", fdomain_16x0_info() );
+   printk( "%s", fdomain_16x0_info(shpnt) );
    printk( "Future Domain: BIOS version %d.%d, %s\n",
 	   bios_major, bios_minor,
 	   chip == tmc1800 ? "TMC-1800"
@@ -637,7 +637,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
       return 0;		/* Cannot find valid set of ports */
    }
 
-   print_banner();
+   print_banner(NULL);
 
    SCSI_Mode_Cntl_port   = port_base + SCSI_Mode_Cntl;
    FIFO_Data_Count_port  = port_base + FIFO_Data_Count;
@@ -755,7 +755,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
    return 1;
 }
 
-const char *fdomain_16x0_info(void)
+const char *fdomain_16x0_info(struct Scsi_Host * shpnt)
 {
    static char buffer[80];
    char        *pt;
@@ -1014,7 +1014,7 @@ void fdomain_16x0_intr( int unused )
    if (chip == tmc1800
        && !current_SC->SCp.have_data_in
        && (current_SC->SCp.sent_command
-	   >= COMMAND_SIZE( current_SC->cmnd[ 0 ] ))) {
+	   >= current_SC->cmd_len)) {
 				/* We have to get the FIFO direction
 				   correct, so I've made a table based
 				   on the SCSI Standard of which commands
@@ -1376,7 +1376,7 @@ void print_info( Scsi_Cmnd *SCpnt )
    unsigned int irr;
    unsigned int isr;
    
-   print_banner();
+   print_banner(SCpnt->host);
    switch (SCpnt->SCp.phase) {
    case in_arbitration: printk( "arbitration " ); break;
    case in_selection:   printk( "selection " );   break;
