@@ -19,6 +19,10 @@
  *
  *	- Hardware cursor (useful for other graphics boards too)
  *
+ *	- Support for more resolutions
+ *
+ *	- Some redraws can stall kernel for several seconds
+ *
  * KNOWN PROBLEMS/TO DO ==================================================== */
 
 #include <linux/module.h>
@@ -800,18 +804,56 @@ static int tgafbcon_updatevar(int con, struct fb_info *info)
 }
 
     /*
-     *  Blank the display.
+     *  Blank and unblank the display.
      */
 
 static void tgafbcon_blank(int blank, struct fb_info *info)
 {
-    /* Should also do stuff here for vesa blanking  -tor */
+    static int tga_vesa_blanked = 0;
+    u32 vhcr, vvcr;
+    unsigned long flags;
+    
+    save_flags(flags);
+    cli();
 
-    if (blank > 0) {
+    vhcr = TGA_READ_REG(TGA_HORIZ_REG);
+    vvcr = TGA_READ_REG(TGA_VERT_REG);
+
+    switch (blank) {
+    case 0: /* Unblanking */
+        if (tga_vesa_blanked) {
+	   TGA_WRITE_REG(vhcr & 0xbfffffff, TGA_HORIZ_REG);
+	   TGA_WRITE_REG(vvcr & 0xbfffffff, TGA_VERT_REG);
+	   tga_vesa_blanked = 0;
+	}
+ 	TGA_WRITE_REG(0x01, TGA_VALID_REG); /* SCANNING */
+	break;
+
+    case 1: /* Normal blanking */
 	TGA_WRITE_REG(0x03, TGA_VALID_REG); /* SCANNING and BLANK */
-    } else {
-	TGA_WRITE_REG(0x01, TGA_VALID_REG); /* SCANNING */
+	break;
+
+    case 2: /* VESA blank (vsync off) */
+	TGA_WRITE_REG(vvcr | 0x40000000, TGA_VERT_REG);
+	TGA_WRITE_REG(0x02, TGA_VALID_REG); /* BLANK */
+	tga_vesa_blanked = 1;
+	break;
+
+    case 3: /* VESA blank (hsync off) */
+	TGA_WRITE_REG(vhcr | 0x40000000, TGA_HORIZ_REG);
+	TGA_WRITE_REG(0x02, TGA_VALID_REG); /* BLANK */
+	tga_vesa_blanked = 1;
+	break;
+
+    case 4: /* Poweroff */
+	TGA_WRITE_REG(vhcr | 0x40000000, TGA_HORIZ_REG);
+	TGA_WRITE_REG(vvcr | 0x40000000, TGA_VERT_REG);
+	TGA_WRITE_REG(0x02, TGA_VALID_REG); /* BLANK */
+	tga_vesa_blanked = 1;
+	break;
     }
+
+    restore_flags(flags);
 }
 
     /*

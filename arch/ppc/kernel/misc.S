@@ -383,6 +383,177 @@ _GLOBAL(_set_THRM3)
 	mtspr	THRM3,r3
 	blr
 	
+_GLOBAL(_get_PVR)
+	mfspr	r3,PVR
+	blr
+/*
+	L2CR functions
+	Copyright © 1997-1998 by PowerLogix R & D, Inc.
+	
+	This program is free software; you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation; either version 2 of the License, or
+	(at your option) any later version.
+	
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+	
+	You should have received a copy of the GNU General Public License
+	along with this program; if not, write to the Free Software
+	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+*/
+/*
+	Thur, Dec. 12, 1998.
+	- First public release, contributed by PowerLogix.
+	
+	Author:	Terry Greeniaus (tgree@phys.ualberta.ca)
+	Please e-mail updates to this file to me, thanks!
+*/
+
+_GLOBAL(_set_L2CR)
+	/* Usage:
+	
+		When setting the L2CR register, you must do a few special things.  If you are enabling the
+		cache, you must perform a global invalidate.  If you are disabling the cache, you must
+		flush the cache contents first.  This routine takes care of doing these things.  When first
+		enabling the cache, make sure you pass in the L2CR you want, as well as passing in the
+		global invalidate bit set.  A global invalidate will only be performed if the L2I bit is set
+		in applyThis.  When enabling the cache, you should also set the L2E bit in applyThis.  If you
+		want to modify the L2CR contents after the cache has been enabled, the recommended
+		procedure is to first call __setL2CR(0) to disable the cache and then call it again with
+		the new values for L2CR.  Examples:
+	
+			_setL2CR(0)			-	disables the cache
+			_setL2CR(0xB3A04000)		-	enables my G3 upgrade card:
+							-	L2E set to turn on the cache
+							-	L2SIZ set to 1MB
+							-	L2CLK set to 1:1
+							-	L2RAM set to pipelined syncronous late-write
+							-	L2I set to perform a global invalidation
+							-	L2OH set to 0.5 nS
+							-	L2DF set because this upgrade card requires it
+	
+		A similar call should work for your card.  You need to know the correct setting for your
+		card and then place them in the fields I have outlined above.  Other fields support optional
+		features, such as L2DO which caches only data, or L2TS which causes cache pushes from
+		the L1 cache to go to the L2 cache instead of to main memory.
+	*/
+	
+	/* Make sure this is a 750 chip */
+	mfspr	r4,PVR
+	rlwinm	r4,r4,16,16,31
+	cmplwi	r4,0x0008
+	beq	thisIs750
+	li	r3,-1
+	blr
+	
+thisIs750:
+	/* Get the current enable bit of the L2CR into r4 */
+	mfspr	r4,L2CR
+	rlwinm	r4,r4,0,0,0
+	
+	/* See if we want to perform a global inval this time. */
+	rlwinm	r6,r3,0,10,10		/* r6 contains the new invalidate bit */
+	rlwinm.	r5,r3,0,0,0		/* r5 contains the new enable bit */
+	rlwinm	r3,r3,0,11,9		/* Turn off the invalidate bit */
+	rlwinm	r3,r3,0,1,31		/* Turn off the enable bit */
+	or	r3,r3,r4		/* Keep the enable bit the same as it was for now. */
+	bne	dontDisableCache	/* Only disable the cache if L2CRApply has the enable bit off */
+
+disableCache:
+	/* Disable the cache.  First, we turn off data relocation. */
+	mfmsr	r7
+	rlwinm	r4,r7,0,28,26		/* Turn off DR bit */
+	rlwinm	r4,r4,0,17,15		/* Turn off EE bit - an external exception while we are flushing
+					   the cache is fatal (comment this line and see!) */
+	sync
+	mtmsr	r4
+	sync
+	
+	/*
+		Now, read the first 2MB of memory to put new data in the cache.
+		(Actually we only need the size of the L2 cache plus
+		the size of the L1 cache, but 2MB will cover everything just to be safe).
+	*/
+	lis	r4,0x0001
+	mtctr	r4
+	li	r4,0
+loadLoop:
+	lwzx	r0,r0,r4
+	addi	r4,r4,0x0020		/* Go to start of next cache line */
+	bdnz	loadLoop
+	
+	/* Now, flush the first 2MB of memory */
+	lis	r4,0x0001
+	mtctr	r4
+	li	r4,0
+	sync
+flushLoop:
+	dcbf	r0,r4
+	addi	r4,r4,0x0020	/* Go to start of next cache line */
+	bdnz	flushLoop
+	
+	/* Turn off the L2CR enable bit. */
+	rlwinm	r3,r3,0,1,31
+	
+	/* Reenable data relocation. */
+	sync
+	mtmsr	r7
+	sync
+	
+dontDisableCache:
+	/* Set up the L2CR configuration bits */
+	sync
+	mtspr	L2CR,r3
+	sync
+	cmplwi	r6,0
+	beq	noInval
+	
+	/* Perform a global invalidation */
+	oris	r3,r3,0x0020
+	sync
+	mtspr	1017,r3
+	sync
+invalCompleteLoop:			/* Wait for the invalidation to complete */
+	mfspr	r3,1017
+	rlwinm.	r4,r3,0,31,31
+	bne	invalCompleteLoop
+	
+	rlwinm	r3,r3,0,11,9;		/* Turn off the L2I bit */
+	sync
+	mtspr	L2CR,r3
+	sync
+	
+noInval:
+	/* See if we need to enable the cache */
+	cmplwi	r5,0
+	beqlr
+	
+enableCache:
+	/* Enable the cache */
+	oris	r3,r3,0x8000
+	mtspr	L2CR,r3
+	sync
+	blr
+
+_GLOBAL(_get_L2CR)
+	/* Make sure this is a 750 chip */
+	mfspr	r3,PVR
+	rlwinm	r3,r3,16,16,31
+	cmplwi	r3,0x0008
+	li	r3,0
+	bnelr
+	
+	/* Return the L2CR contents */
+	mfspr	r3,L2CR
+	blr
+
+/* --- End of PowerLogix code ---
+ */
+
+/*
 _GLOBAL(_get_L2CR)
 	mfspr	r3,L2CR
 	blr
@@ -391,9 +562,7 @@ _GLOBAL(_set_L2CR)
 	mtspr	L2CR,r3
 	blr
 		
-_GLOBAL(_get_PVR)
-	mfspr	r3,PVR
-	blr
+*/
 
 /*
  * These are used in the alignment trap handler when emulating

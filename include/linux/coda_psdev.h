@@ -20,7 +20,7 @@ struct coda_sb_info
 	struct list_head    sbi_volroothead;
 };
 
-/* communication pending/processing queues queues */
+/* communication pending/processing queues */
 struct venus_comm {
 	u_long		    vc_seq;
 	struct wait_queue  *vc_waitq; /* Venus wait queue */
@@ -51,7 +51,8 @@ int venus_setattr(struct super_block *, struct ViceFid *,
 int venus_lookup(struct super_block *sb, struct ViceFid *fid, 
 		    const char *name, int length, int *type, 
 		    struct ViceFid *resfid);
-int venus_release(struct super_block *sb, struct ViceFid *fid, int flags);
+int venus_release(struct super_block *sb, struct ViceFid *fid, int flags,
+		  struct coda_cred *);
 int venus_open(struct super_block *sb, struct ViceFid *fid,
 		  int flags, ino_t *ino, dev_t *dev);
 int venus_mkdir(struct super_block *sb, struct ViceFid *dirfid, 
@@ -107,7 +108,7 @@ struct upc_req {
 struct coda_upcallstats {
 	int	ncalls;			/* client requests */
 	int	nbadcalls;		/* upcall failures */
-	int	reqs[CFS_NCALLS];	/* count of each request */
+	int	reqs[CODA_NCALLS];	/* count of each request */
 } ;
 
 extern struct coda_upcallstats coda_callstats;
@@ -115,7 +116,7 @@ extern struct coda_upcallstats coda_callstats;
 static inline void clstats(int opcode)
 {
     coda_callstats.ncalls++;
-    if ( (0 <= opcode) && (opcode <= CFS_NCALLS) )
+    if ( (0 <= opcode) && (opcode <= CODA_NCALLS) )
 	coda_callstats.reqs[opcode]++;
     else
 	printk("clstats called with bad opcode %d\n", opcode); 

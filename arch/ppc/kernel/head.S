@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.111 1998/11/10 01:10:32 paulus Exp $
+ *  $Id: head.S,v 1.113 1998/12/02 18:41:00 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -147,6 +147,10 @@ _start:
  *  r3: 'BooX' (0x426f6f58)
  *  r4: virtual address of boot_infos_t
  *  r5: 0
+ *
+ * APUS
+ *   r3: 'APUS'
+ *   Linux/m68k style BootInfo structure at &_end.
  *
  * PREP
  * This is jumped to on prep systems right after the kernel is relocated
@@ -1204,9 +1208,23 @@ stack_ovf:
 Hash_base = 0x180000
 Hash_bits = 12				/* e.g. 256kB hash table */
 Hash_msk = (((1 << Hash_bits) - 1) * 64)
-
+	
+	.globl	hash_table_lock
+hash_table_lock:
+.long	0
+	
 	.globl	hash_page
 hash_page:
+#ifdef __SMP__
+	lis	r2,hash_table_lock@h
+	ori	r2,r2,hash_table_lock@l
+	tophys(r2,r2,r6)
+10:	lwarx	r6,0,r2
+	stwcx.	r2,0,r2
+	bne-	10b
+	cmpi	0,0,r6,0
+	bne	10b
+#endif
 	/* Get PTE (linux-style) and check access */
 	lwz	r5,PG_TABLES(r5)		
 	tophys(r5,r5,r2)		/* convert to phys addr */
@@ -1379,6 +1397,13 @@ found_slot:
 	mtcrf	0xff,r3
 	mtlr	r4
 	mtctr	r5
+#ifdef __SMP__
+	lis	r2,hash_table_lock@h
+	ori	r2,r2,hash_table_lock@l
+	tophys(r2,r2,r6)
+	li	r6,0
+	stw	r6,0(r2)
+#endif		
 	REST_GPR(0, r21)
 	REST_2GPRS(1, r21)
 	REST_4GPRS(3, r21)
@@ -1392,6 +1417,13 @@ found_slot:
 	rfi
 	
 hash_page_out:
+#ifdef __SMP__
+	lis	r2,hash_table_lock@h
+	ori	r2,r2,hash_table_lock@l
+	tophys(r2,r2,r6)
+	li	r6,0
+	stw	r6,0(r2)
+#endif		
 	blr
 next_slot:
 	.long	0
@@ -2195,6 +2227,15 @@ _GLOBAL(flush_page_to_ram)
  */
 #ifndef CONFIG_8xx	
 _GLOBAL(flush_hash_segments)
+#ifdef __SMP__
+	lis	r9,hash_table_lock@h
+	ori	r9,r9,hash_table_lock@l
+10:	lwarx	r6,0,r9
+	stwcx.	r9,0,r9
+	bne-	10b
+	cmpi	0,0,r6,0
+	bne	10b
+#endif
 #ifdef NO_RELOAD_HTAB
 /*
  * Bitmask of PVR numbers of 603-like chips,
@@ -2231,6 +2272,12 @@ _GLOBAL(flush_hash_segments)
 	sync
 99:	tlbia
 	isync
+#ifdef __SMP__
+	lis	r3,hash_table_lock@h
+	ori	r3,r3,hash_table_lock@l
+	li	r6,0
+	stw	r6,0(r3)
+#endif		
 	blr
 
 /*
@@ -2239,6 +2286,15 @@ _GLOBAL(flush_hash_segments)
  * flush_hash_page(unsigned context, unsigned long va)
  */
 _GLOBAL(flush_hash_page)
+#ifdef __SMP__
+	lis	r9,hash_table_lock@h
+	ori	r9,r9,hash_table_lock@l
+10:	lwarx	r6,0,r9
+	stwcx.	r9,0,r9
+	bne-	10b
+	cmpi	0,0,r6,0
+	bne	10b
+#endif
 #ifdef NO_RELOAD_HTAB
 	mfspr	r0,PVR
 	rlwinm	r0,r0,16,27,31
@@ -2280,6 +2336,12 @@ _GLOBAL(flush_hash_page)
 4:	sync
 99:	tlbie	r4			/* in hw tlb too */
 	isync
+#ifdef __SMP__
+	lis	r3,hash_table_lock@h
+	ori	r3,r3,hash_table_lock@l
+	li	r6,0
+	stw	r6,0(r3)
+#endif		
 	blr
 #endif /* CONFIG_8xx */
 /*

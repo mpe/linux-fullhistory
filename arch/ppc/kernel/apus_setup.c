@@ -329,9 +329,9 @@ unsigned long mm_ptov (unsigned long paddr)
 		int i;
 
 		for (i = 0; i < kmap_chunk_count;){
-			unsigned long virt = kmap_chunks[i++];
-			unsigned long size = kmap_chunks[i++];
 			unsigned long phys = kmap_chunks[i++];
+			unsigned long size = kmap_chunks[i++];
+			unsigned long virt = kmap_chunks[i++];
 			if (paddr >= phys
 			    && paddr < (phys + size)){
 				ret = virt + paddr - phys;

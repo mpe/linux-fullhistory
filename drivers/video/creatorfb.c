@@ -1,4 +1,4 @@
-/* $Id: creatorfb.c,v 1.15 1998/09/04 15:43:40 jj Exp $
+/* $Id: creatorfb.c,v 1.16 1998/12/21 05:14:39 davem Exp $
  * creatorfb.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -123,7 +123,12 @@
 #define FFB_ROP_NEW                  0x83
 
 #define FFB_UCSR_FIFO_MASK     0x00000fff
+#define FFB_UCSR_FB_BUSY       0x01000000
 #define FFB_UCSR_RP_BUSY       0x02000000
+#define FFB_UCSR_ALL_BUSY      (FFB_UCSR_RP_BUSY|FFB_UCSR_FB_BUSY)
+#define FFB_UCSR_READ_ERR      0x40000000
+#define FFB_UCSR_FIFO_OVFL     0x80000000
+#define FFB_UCSR_ALL_ERRORS    (FFB_UCSR_READ_ERR|FFB_UCSR_FIFO_OVFL)
 
 struct ffb_fbc {
 	/* Next vertex registers */
@@ -271,6 +276,30 @@ struct ffb_fbc {
 	volatile u32	mer;
 };
 
+static __inline__ void FFBFifo(struct ffb_fbc *ffb, int n)
+{
+	int limit = 10000;
+
+	do {
+		if((ffb->ucsr & FFB_UCSR_FIFO_MASK) >= (n + 4))
+			break;
+		if((ffb->ucsr & FFB_UCSR_ALL_ERRORS) != 0)
+			ffb->ucsr = FFB_UCSR_ALL_ERRORS;
+	} while(--limit > 0);
+}
+
+static __inline__ void FFBWait(struct ffb_fbc *ffb)
+{
+	int limit = 10000;
+
+	do {
+		if((ffb->ucsr & FFB_UCSR_ALL_BUSY) == 0)
+			break;
+		if((ffb->ucsr & FFB_UCSR_ALL_ERRORS) != 0)
+			ffb->ucsr = FFB_UCSR_ALL_ERRORS;
+	} while(--limit > 0);
+}
+
 struct ffb_dac {
 	volatile u32	type;
 	volatile u32	value;
@@ -313,6 +342,7 @@ static void ffb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	register struct ffb_fbc *fbc = fb->s.ffb.fbc;
 	int x, y, w, h;
 	
+	FFBFifo(fbc, 6);
 	fbc->fg = ((u32 *)p->dispsw_data)[attr_bgcol_ec(p,conp)];
 	fbc->drawop = FFB_DRAWOP_RECTANGLE;
 
@@ -330,6 +360,7 @@ static void ffb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	fbc->bx = x + fb->x_margin;
 	fbc->bh = h;
 	fbc->bw = w;
+	FFBWait(fbc);
 }
 
 static void ffb_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
@@ -337,15 +368,18 @@ static void ffb_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
 {
 	register struct ffb_fbc *fbc = fb->s.ffb.fbc;
 
+	FFBFifo(fbc, 2);
 	fbc->fg = ((u32 *)p->dispsw_data)[attr_bgcol(p,s)];
 	fbc->drawop = FFB_DRAWOP_RECTANGLE;
 	while (count-- > 0) {
+		FFBFifo(fbc, 4);
 		fbc->by = boxes[1];
 		fbc->bx = boxes[0];
 		fbc->bh = boxes[3] - boxes[1];
 		fbc->bw = boxes[2] - boxes[0];
 		boxes += 4;
 	}
+	FFBWait(fbc);
 }
 
 static void ffb_putc(struct vc_data *conp, struct display *p, int c, int yy, int xx)
@@ -370,11 +404,13 @@ static void ffb_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 		xy += (xx << fontwidthlog(p)) + fb->s.ffb.xy_margin;
 	else
 		xy += (xx * fontwidth(p)) + fb->s.ffb.xy_margin;
+	FFBFifo(fbc, 5);
 	fbc->fg = ((u32 *)p->dispsw_data)[attr_fgcol(p,c)];
 	fbc->bg = ((u32 *)p->dispsw_data)[attr_bgcol(p,c)];
 	fbc->fontw = fontwidth(p);
 	fbc->fontinc = 0x10000;
 	fbc->fontxy = xy;
+	FFBFifo(fbc, fontheight(p));
 	if (fontwidth(p) <= 8) {
 		for (i = 0; i < fontheight(p); i++)
 			fbc->font = *fd++ << 24;
@@ -384,6 +420,7 @@ static void ffb_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 			fd += 2;
 		}
 	}
+	FFBWait(fbc);
 }
 
 static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned short *s,
@@ -394,6 +431,7 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	int i, xy;
 	u8 *fd1, *fd2, *fd3, *fd4;
 
+	FFBFifo(fbc, 2);
 	fbc->fg = ((u32 *)p->dispsw_data)[attr_fgcol(p,*s)];
 	fbc->bg = ((u32 *)p->dispsw_data)[attr_bgcol(p,*s)];
 	xy = fb->s.ffb.xy_margin;
@@ -408,6 +446,7 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	if (fontwidth(p) <= 8) {
 		while (count >= 4) {
 			count -= 4;
+			FFBFifo(fbc, 3);
 			fbc->fontw = 4 * fontwidth(p);
 			fbc->fontinc = 0x10000;
 			fbc->fontxy = xy;
@@ -422,6 +461,7 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 				fd3 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
 				fd4 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
 			}
+			FFBFifo(fbc, fontheight(p));
 			if (fontwidth(p) == 8) {
 				for (i = 0; i < fontheight(p); i++)
 					fbc->font = ((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
@@ -437,6 +477,7 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	} else {
 		while (count >= 2) {
 			count -= 2;
+			FFBFifo(fbc, 3);
 			fbc->fontw = 2 * fontwidth(p);
 			fbc->fontinc = 0x10000;
 			fbc->fontxy = xy;
@@ -447,6 +488,7 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 				fd1 = p->fontdata + (((*s++ & p->charmask) * fontheight(p)) << 1);
 				fd2 = p->fontdata + (((*s++ & p->charmask) * fontheight(p)) << 1);
 			}
+			FFBFifo(fbc, fontheight(p));
 			for (i = 0; i < fontheight(p); i++) {
 				fbc->font = ((((u32)*(u16 *)fd1) << fontwidth(p)) | ((u32)*(u16 *)fd2)) << (16 - fontwidth(p));
 				fd1 += 2; fd2 += 2;
@@ -456,6 +498,7 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	}
 	while (count) {
 		count--;
+		FFBFifo(fbc, 3);
 		fbc->fontw = fontwidth(p);
 		fbc->fontinc = 0x10000;
 		fbc->fontxy = xy;
@@ -463,6 +506,7 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 			i = ((*s++ & p->charmask) << fontheightlog(p));
 		else
 			i = ((*s++ & p->charmask) * fontheight(p));
+		FFBFifo(fbc, fontheight(p));
 		if (fontwidth(p) <= 8) {
 			fd1 = p->fontdata + i;
 			for (i = 0; i < fontheight(p); i++)
@@ -476,6 +520,7 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 		}
 		xy += fontwidth(p);
 	}
+	FFBWait(fbc);
 }
 
 static void ffb_revc(struct display *p, int xx, int yy)
@@ -573,10 +618,12 @@ static void ffb_switch_from_graph (struct fb_info_sbusfb *fb)
 {
 	register struct ffb_fbc *fbc = fb->s.ffb.fbc;
 
+	FFBFifo(fbc, 4);
 	fbc->ppc = FFB_PPC_VCE_DISABLE|FFB_PPC_TBE_OPAQUE|FFB_PPC_APE_DISABLE|FFB_PPC_CS_CONST;
 	fbc->fbc = 0x2000707f;
 	fbc->rop = FFB_ROP_NEW;
 	fbc->pmask = 0xffffffff;
+	FFBWait(fbc);
 }                                
 
 static char idstring[60] __initdata = { 0 };
@@ -625,6 +672,12 @@ __initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
 	fb->switch_from_graph = ffb_switch_from_graph;
 	fb->fill = ffb_fill;
 	
+	/* If there are any read errors or fifo overflow conditions,
+	 * clear them now.
+	 */
+	if((fb->s.ffb.fbc->ucsr & FFB_UCSR_ALL_ERRORS) != 0)
+		fb->s.ffb.fbc->ucsr = FFB_UCSR_ALL_ERRORS;
+
 	ffb_switch_from_graph(fb);
 	
 	fb->physbase = regs[0].phys_addr;

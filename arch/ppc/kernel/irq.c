@@ -1,4 +1,6 @@
 /*
+ * $Id: irq.c,v 1.90 1998/12/10 02:39:46 cort Exp $
+ *
  *  arch/ppc/kernel/irq.c
  *
  *  Derived from arch/i386/kernel/irq.c
@@ -6,6 +8,7 @@
  *  Adapted from arch/i386 by Gary Thomas
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
  *  Updated and modified by Cort Dougan (cort@cs.nmt.edu)
+ *    Copyright (C) 1996 Cort Dougan
  *  Adapted for Power Macintosh by Paul Mackerras
  *    Copyright (C) 1996 Paul Mackerras (paulus@cs.anu.edu.au)
  *  Amiga/APUS changes by Jesper Skov (jskov@cygnus.co.uk).
@@ -309,14 +312,14 @@ static void __openfirmware chrp_unmask_irq(unsigned int irq_nr)
 static void mbx_mask_irq(unsigned int irq_nr)
 {
 	cached_irq_mask[0] &= ~(1 << (31-irq_nr));
-	((immap_t *)MBX_IMAP_ADDR)->im_siu_conf.sc_simask =
+	((immap_t *)IMAP_ADDR)->im_siu_conf.sc_simask =
 							cached_irq_mask[0];
 }
 
 static void mbx_unmask_irq(unsigned int irq_nr)
 {
 	cached_irq_mask[0] |= (1 << (31-irq_nr));
-	((immap_t *)MBX_IMAP_ADDR)->im_siu_conf.sc_simask =
+	((immap_t *)IMAP_ADDR)->im_siu_conf.sc_simask =
 							cached_irq_mask[0];
 }
 #endif /* CONFIG_8xx */
@@ -799,9 +802,13 @@ apus_out:
 	}
 
 	if (irq < 0) {
-		printk(KERN_DEBUG "Bogus interrupt %d from PC = %lx\n",
-		       irq, regs->nip);
-		spurious_interrupts++;
+		/* we get here with Gatwick but the 'bogus' isn't correct in that case -- Cort */
+		if ( irq != second_irq )
+		{
+			printk(KERN_DEBUG "Bogus interrupt %d from PC = %lx\n",
+			       irq, regs->nip);
+			spurious_interrupts++;
+		}
 		goto out;
 	}					
 	
@@ -809,7 +816,7 @@ apus_out:
 	/* For MPC8xx, read the SIVEC register and shift the bits down
 	 * to get the irq number.
 	 */
-	bits = ((immap_t *)MBX_IMAP_ADDR)->im_siu_conf.sc_sivec;
+	bits = ((immap_t *)IMAP_ADDR)->im_siu_conf.sc_sivec;
 	irq = bits >> 26;
 #endif /* CONFIG_8xx */
 	mask_and_ack_irq(irq);
@@ -1089,17 +1096,6 @@ __initfunc(void init_IRQ(void))
 			 */
 			if ( _prep_type == _PREP_IBM )
 				irq_mode2 |= 0xa0;
-			/*
-			 * Sound on the Powerstack reportedly needs to be edge triggered
-			 */
-			if ( _prep_type == _PREP_Motorola )
-			{
-				irq_mode2 &= ~0x04L;
-				irq_mode2 = 0xca;
-				outb( irq_mode1 , 0x4d0 );
-				outb( irq_mode2 , 0x4d1 );
-			}
-
 		}
 		break;
 #ifdef CONFIG_APUS		
@@ -1116,8 +1112,7 @@ __initfunc(void init_IRQ(void))
 /* This routine will fix some missing interrupt values in the device tree
  * on the gatwick mac-io controller used by some PowerBooks
  */
-__pmac
-static void pmac_fix_gatwick_interrupts(struct device_node *gw, int irq_base)
+static void __init pmac_fix_gatwick_interrupts(struct device_node *gw, int irq_base)
 {
 	struct device_node *node;
 	static struct interrupt_info int_pool[4];

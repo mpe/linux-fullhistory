@@ -691,12 +691,12 @@ static struct buffer_head *find_candidate(struct buffer_head *bh,
 		goto no_candidate;
 
 	for (; (*list_len) > 0; bh = bh->b_next_free, (*list_len)--) {
-		if (size != bh->b_size) {
+		if (size != bh->b_size && !buffer_touched(bh)) {
 			/* This provides a mechanism for freeing blocks
 			 * of other sizes, this is necessary now that we
 			 * no longer have the lav code.
 			 */
-			try_to_free_buffer(bh,&bh,1);
+			try_to_free_buffer(bh,&bh);
 			if (!bh)
 				break;
 			continue;
@@ -920,7 +920,6 @@ repeat:
 				 put_last_lru(bh);
 			bh->b_flushtime = 0;
 		}
-		set_bit(BH_Touched, &bh->b_state);
 		return bh;
 	}
 
@@ -936,7 +935,7 @@ get_free:
 	 */
 	init_buffer(bh, dev, block, end_buffer_io_sync, NULL);
 	bh->b_lru_time	= jiffies;
-	bh->b_state=(1<<BH_Touched);
+	bh->b_state=0;
 	insert_into_queues(bh);
 	return bh;
 
@@ -1063,6 +1062,7 @@ struct buffer_head * bread(kdev_t dev, int block, int size)
 	struct buffer_head * bh = getblk(dev, block, size);
 
 	if (bh) {
+		touch_buffer(bh);
 		if (buffer_uptodate(bh))
 			return bh;
 		ll_rw_block(READ, 1, &bh);
@@ -1101,6 +1101,7 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 
 	index = BUFSIZE_INDEX(bh->b_size);
 
+	touch_buffer(bh);
 	if (buffer_uptodate(bh))
 		return(bh);   
 	else ll_rw_block(READ, 1, &bh);
@@ -1638,8 +1639,7 @@ static inline int buffer_waiting(struct buffer_head * bh)
  * try_to_free_buffer() checks if all the buffers on this particular page
  * are unused, and free's the page if so.
  */
-int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp,
-		       int priority)
+int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp)
 {
 	unsigned long page;
 	struct buffer_head * tmp, * p;
@@ -1654,8 +1654,6 @@ int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp,
 		if (tmp->b_count || buffer_protected(tmp) ||
 		    buffer_dirty(tmp) || buffer_locked(tmp) ||
 		    buffer_waiting(tmp))
-			return 0;
-		if (priority && buffer_touched(tmp))
 			return 0;
 		tmp = tmp->b_this_page;
 	} while (tmp != bh);

@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.117 1998/11/09 19:55:53 geert Exp $
+ * $Id: setup.c,v 1.120 1998/12/10 00:24:28 cort Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -35,7 +35,7 @@ extern unsigned long m68k_machtype;
 extern int parse_bootinfo(const struct bi_record *);
 extern char _end[];
 #ifdef CONFIG_APUS
-struct mem_info ramdisk;
+extern struct mem_info ramdisk;
 unsigned long isa_io_base;
 unsigned long isa_mem_base;
 unsigned long pci_dram_offset;
@@ -665,7 +665,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 #else /* CONFIG_MBX */
 
 	if ( r3 )
-		memcpy( (void *)&res,(void *)(r3+KERNELBASE), sizeof(bd_t) );
+		memcpy( (void *)res,(void *)(r3+KERNELBASE), sizeof(bd_t) );
 	
 #ifdef CONFIG_PCI
 	setup_pci_ptrs();
@@ -693,7 +693,20 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		extern int __map_without_bats;
 		__map_without_bats = 1;
 	}
+	
 	return 0;
+}
+
+/* Checks "l2cr=xxxx" command-line option */
+void ppc_setup_l2cr(char *str, int *ints)
+{
+	if ( (_get_PVR() >> 16) == 8)
+	{
+		unsigned long val = simple_strtoul(str, NULL, 0);
+		printk(KERN_INFO "l2cr set to %lx\n", val);
+		_set_L2CR(0);
+		_set_L2CR(val);
+	}
 }
 
 __initfunc(void setup_arch(char **cmdline_p,

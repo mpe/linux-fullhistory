@@ -17,8 +17,8 @@
 extern char cmd_line[CL_SIZE];
 
 int num_memory = 0;
-extern struct mem_info memory[NUM_MEMINFO];
-extern struct mem_info ramdisk;
+struct mem_info memory[NUM_MEMINFO];
+struct mem_info ramdisk;
 
 extern int amiga_parse_bootinfo(const struct bi_record *);
 extern int atari_parse_bootinfo(const struct bi_record *);

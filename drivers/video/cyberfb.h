@@ -421,7 +421,7 @@ do { \
      /* --------------------------------- */
 
 /* in cvision_core.c */
-inline void __delay(unsigned long usecs);
+inline void __cv_delay(unsigned long usecs);
 inline void GfxBusyWait(volatile caddr_t board);
 inline void GfxFifoWait(volatile caddr_t board);
 inline unsigned char RAttr(volatile caddr_t board, short idx);

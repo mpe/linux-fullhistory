@@ -15,8 +15,7 @@ OX_OBJS := ppc_ksyms.o setup.o
 
 
 O_OBJS := traps.o irq.o idle.o time.o process.o signal.o syscalls.o misc.o \
-	  bitops.o ptrace.o align.o ppc_htab.o feature.o
-
+	  bitops.o ptrace.o align.o ppc_htab.o
 ifdef CONFIG_PCI
 O_OBJS += pci.o
 endif
@@ -33,15 +32,17 @@ else
 ifeq ($(CONFIG_APUS),y)
 O_OBJS += apus_setup.o prom.o openpic.o
 else
+ifneq ($(CONFIG_MBX),y)
 O_OBJS += prep_time.o pmac_time.o chrp_time.o \
 	  pmac_setup.o pmac_support.o \
 	  prep_pci.o pmac_pci.o chrp_pci.o \
-	  residual.o prom.o openpic.o
+	  residual.o prom.o openpic.o feature.o
 OX_OBJS += chrp_setup.o prep_setup.o
 endif
 endif
+endif
 
-ifdef CONFIG_SMP
+ifdef SMP
 O_OBJS += smp.o
 endif
 

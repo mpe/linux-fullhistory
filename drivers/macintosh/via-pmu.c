@@ -523,7 +523,7 @@ via_pmu_interrupt(int irq, void *arg, struct pt_regs *regs)
 	int intr;
 	int nloop = 0;
 
-	while ((intr = (in_8(&via[IFR]) & (SR_INT | CB1_INT))) != 0) {
+	while ((intr = in_8(&via[IFR])) != 0) {
 		if (++nloop > 1000) {
 			printk(KERN_DEBUG "PMU: stuck in intr loop, "
 			       "intr=%x pmu_state=%d\n", intr, pmu_state);
@@ -534,6 +534,12 @@ via_pmu_interrupt(int irq, void *arg, struct pt_regs *regs)
 		else if (intr & CB1_INT) {
 			adb_int_pending = 1;
 			out_8(&via[IFR], CB1_INT);
+		} else
+		{
+			/* -- Disabled printk, will happen _really_ often on
+				  PowerBooks ((CB2 interrupts) --
+			printk(KERN_DEBUG "PMU: spurrious interrupt intr=%x\n", intr); */
+			out_8(&via[IFR], intr);
 		}
 	}
 	if (pmu_state == idle) {
@@ -750,7 +756,8 @@ pmu_restart(void)
 
 	_disable_interrupts();
 	
-	pmu_request(&req, NULL, 2, PMU_SET_INTR_MASK, CB1_INT);
+	pmu_request(&req, NULL, 2, PMU_SET_INTR_MASK, PMU_INT_ADB |
+					PMU_INT_TICK );
 	while(!req.complete)
 		pmu_poll();
 	
@@ -768,7 +775,8 @@ pmu_shutdown(void)
 
 	_disable_interrupts();
 	
-	pmu_request(&req, NULL, 2, PMU_SET_INTR_MASK, CB1_INT);
+	pmu_request(&req, NULL, 2, PMU_SET_INTR_MASK, PMU_INT_ADB |
+					PMU_INT_TICK );
 	while(!req.complete)
 		pmu_poll();
 

@@ -166,6 +166,8 @@ static unsigned char Cyber_colour_table [256][3];
 static unsigned long CyberMem;
 static unsigned long CyberSize;
 static volatile char *CyberRegs;
+static unsigned long CyberMem_phys;
+static unsigned long CyberRegs_phys;
 /* From cvision.c  for cvision_core.c */
 static unsigned long cv64_mem;
 static unsigned long cv64_fbmem;
@@ -428,9 +430,9 @@ static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 	DPRINTK("ENTER\n");
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, cyberfb_name);
-	fix->smem_start = (char*) virt_to_phys ((void *)CyberMem);
+	fix->smem_start = (char*) CyberMem_phys;
 	fix->smem_len = CyberSize;
-	fix->mmio_start = (char*) virt_to_phys ((void *)CyberRegs);
+	fix->mmio_start = (char*) CyberRegs_phys;
 	fix->mmio_len = 0x10000;
 
 	fix->type = FB_TYPE_PACKED_PIXELS;
@@ -1153,6 +1155,8 @@ __initfunc(void cyberfb_init(void))
 
 	CyberMem = cv64_fbmem;
 	CyberRegs = cv64_regs;
+	CyberMem_phys = board_addr + 0x01400000;
+	CyberRegs_phys = CyberMem_phys + 0x00c00000;
 	DPRINTK("CyberMem=%08lx CyberRegs=%08lx\n", CyberMem,
 		(long unsigned int)CyberRegs);
 
@@ -1453,7 +1457,7 @@ unsigned char cvconscolors[16][3] = {	/* background, foreground, hilite */
 /* -------------------- Hardware specific routines ------------------------- */
 #if 0
 /* ARB Generates 100 usec delay */
-inline void __delay (unsigned long usecs)
+inline void __cv_delay (unsigned long usecs)
 {
 	int k;
 	
@@ -1493,7 +1497,7 @@ inline unsigned char RAttr (volatile caddr_t board, short idx)
 {
 	vgaw (board, ACT_ADDRESS_W, idx);
 	udelay(100);
-	/* __delay (0); */
+	/* __cv_delay (0); */
 	return (vgar (board, ACT_ADDRESS_R));
 }
 
@@ -1895,7 +1899,7 @@ static void cv64_board_init (void)
   vgaw16 (cv64_regs, ECR_BKGD_MIX, 0x07);
   vgaw16 (cv64_regs, ECR_READ_REG_DATA, 0x1000);
   udelay(200);
-  /* __delay (200000); */
+  /* __cv_delay (200000); */
   vgaw16 (cv64_regs, ECR_READ_REG_DATA, 0x2000);
   Cyber_WaitBlit();
   /* GfxBusyWait (cv64_regs); */
@@ -1903,7 +1907,7 @@ static void cv64_board_init (void)
   Cyber_WaitBlit();
   /* GfxBusyWait (cv64_regs); */
   udelay(200);
-  /* __delay (200000); */
+  /* __cv_delay (200000); */
   vgaw16 (cv64_regs, ECR_READ_REG_DATA, 0x4FFF);
   Cyber_WaitBlit();
   /* GfxBusyWait (cv64_regs); */
@@ -1961,7 +1965,9 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
   int xres, hfront, hsync, hback;
   int yres, vfront, vsync, vback;
   int bpp;
+#if 0
   float freq_f;
+#endif
   long freq;
   /* ---------------- */
 	
@@ -2066,9 +2072,15 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
   /* cv64_compute_clock accepts arguments in Hz */
   /* pixclock is in ps ... convert to Hz */
 	
+#if 0
   freq_f = (1.0 / (float) video_mode->pixclock) * 1000000000;
   freq = ((long) freq_f) * 1000;
-	
+#else
+/* freq = (long) ((long long)1000000000000 / (long long) video_mode->pixclock);
+ */
+  freq = (1000000000 / video_mode->pixclock) * 1000;
+#endif
+
   mnr = cv64_compute_clock (freq);
   WSeq (cv64_regs, SEQ_ID_DCLK_HI, ((mnr & 0xFF00) >> 8));
   WSeq (cv64_regs, SEQ_ID_DCLK_LO, (mnr & 0xFF));
@@ -2257,14 +2269,14 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
   WCrt (cv64_regs, CRT_ID_EXT_SYS_CNTL_1, cr50);
 	
   udelay(100);
-  /* __delay (100000); */
+  /* __cv_delay (100000); */
   WAttr (cv64_regs, ACT_ID_ATTR_MODE_CNTL, (TEXT ? 0x08 : 0x41));
   udelay(100);
-  /* __delay (100000); */
+  /* __cv_delay (100000); */
   WAttr (cv64_regs, ACT_ID_COLOR_PLANE_ENA,
 	 (video_mode->bits_per_pixel == 1) ? 0x01 : 0x0F);
   udelay(100);
-  /* __delay (100000); */
+  /* __cv_delay (100000); */
 	
   tfillm = (96 * (cv64_memclk / 1000)) / 240000;
 	
@@ -2296,7 +2308,7 @@ static void cv64_load_video_mode (struct fb_var_screeninfo *video_mode)
   WCrt (cv64_regs, CRT_ID_EXT_MEM_CNTL_2, m);
   WCrt (cv64_regs, CRT_ID_EXT_MEM_CNTL_3, n);
   udelay(10);
-  /* __delay (10000); */
+  /* __cv_delay (10000); */
 	
   /* Text initialization */
 	

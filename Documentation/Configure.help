@@ -1767,7 +1767,7 @@ CONFIG_FB_MATROX
 
 Matrox Millennium support
 CONFIG_FB_MATROX_MILLENIUM
-  Say Y here if you have Matrox Millennium  or Matrox Milleninium II in 
+  Say Y here if you  have Matrox Millennium  or Matrox Millennium II in 
   the box. If you select "Advanced lowlevel driver options", you should 
   check 4 bpp packed pixel, 8 bpp packed pixel, 16 bpp packed pixel, 24
   bpp  packed pixel  and 32  bpp packed  pixel. You  can also  use font 
@@ -1783,13 +1783,10 @@ CONFIG_FB_MATROX_MYSTIQUE
 
 Matrox G100 support
 CONFIG_FB_MATROX_G100
-  Say Y here  if you have  Matrox Productiva G100  in the box. But THIS 
-  DRIVER  IS NOT  TESTED BECAUSE  OF I  HAVE NO  G100  board  and  G100 
-  technical sheets  are top secret at this time.  But driver should not 
-  cause any damage to your computer.
-  If you select  "Advanced lowlevel  driver options",  you should check
-  8 bpp  packed pixel,  16 bpp  packed pixel,  24 bpp  packed pixel and 
-  32 bpp packed pixel. You can also use font widths different from 8.
+  Say Y  here if  you have  Matrox Productiva G100  in the box.  If you
+  select  "Advanced lowlevel  driver options",  you should  check 8 bpp
+  packed pixel,  16 bpp packed  pixel, 24 bpp  packed pixel  and 32 bpp
+  packed pixel. You can also use font widths different from 8.
 
 Matrox unified driver multihead support
 CONFIG_FB_MATROX_MULTIHEAD

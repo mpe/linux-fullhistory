@@ -1134,9 +1134,11 @@ __initfunc(void sbusfb_init(void))
 		int root, node;
 		root = prom_getchild(prom_root_node);
 		for (node = prom_searchsiblings(root, "SUNW,ffb"); node;
-		     node = prom_searchsiblings(prom_getsibling(node), "SUNW,ffb")) {
+		     node = prom_searchsiblings(prom_getsibling(node), "SUNW,ffb"))
 			sbusfb_init_fb(node, prom_root_node, FBTYPE_CREATOR, NULL);
-		}
+		for (node = prom_searchsiblings(root, "SUNW,afb"); node;
+		     node = prom_searchsiblings(prom_getsibling(node), "SUNW,afb"))
+			sbusfb_init_fb(node, prom_root_node, FBTYPE_CREATOR, NULL);
 	}
 #endif
 #ifdef CONFIG_SUN4

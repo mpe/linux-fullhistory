@@ -1175,7 +1175,6 @@ void __init smp_boot_cpus(void)
 smp_done:
 }
 
-
 void send_IPI(int dest, int vector)
 {
 	unsigned long cfg;

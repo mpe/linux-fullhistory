@@ -302,7 +302,7 @@ extern void imsttfb_of_init(struct device_node *dp);
 extern void chips_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_CT65550 */
 #ifdef CONFIG_FB_MATROX
-extern void matrox_of_init(struct device_node *dp);
+extern int matrox_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_MATROX */
 #ifdef CONFIG_FB_CONTROL
 extern void control_of_init(struct device_node *dp);
@@ -329,43 +329,43 @@ __initfunc(void offb_init(void))
     /* If we're booted from BootX... */
     if (prom_num_displays == 0 && boot_infos != 0) {
 	unsigned long addr = (unsigned long) boot_infos->dispDeviceBase;
-	if (!ofonly) {
-	    /* find the device node corresponding to the macos display */
-	    for (dp = displays; dp != NULL; dp = dp->next) {
-		int i;
-		/*
-		 * Grrr...  It looks like the MacOS ATI driver
-		 * munges the assigned-addresses property (but
-		 * the AAPL,address value is OK).
-		 */
-		if (strncmp(dp->name, "ATY,", 4) == 0 && dp->n_addrs == 1) {
-		    unsigned int *ap = (unsigned int *)
-			get_property(dp, "AAPL,address", NULL);
-		    if (ap != NULL) {
-			dp->addrs[0].address = *ap;
-			dp->addrs[0].size = 0x01000000;
-		    }
+	/* find the device node corresponding to the macos display */
+	for (dp = displays; dp != NULL; dp = dp->next) {
+	    int i;
+	    /*
+	     * Grrr...  It looks like the MacOS ATI driver
+	     * munges the assigned-addresses property (but
+	     * the AAPL,address value is OK).
+	     */
+	    if (strncmp(dp->name, "ATY,", 4) == 0 && dp->n_addrs == 1) {
+		unsigned int *ap = (unsigned int *)
+		    get_property(dp, "AAPL,address", NULL);
+		if (ap != NULL) {
+		    dp->addrs[0].address = *ap;
+		    dp->addrs[0].size = 0x01000000;
 		}
-		/*
-		 * See if the display address is in one of the address
-		 * ranges for this display.
-		 */
-		for (i = 0; i < dp->n_addrs; ++i) {
-		    if (dp->addrs[i].address <= addr
-			&& addr < dp->addrs[i].address + dp->addrs[i].size)
-			break;
-		}
-		if (i < dp->n_addrs) {
-		    printk(KERN_INFO "MacOS display is %s\n", dp->full_name);
-		    macos_display = dp;
+	    }
+	    /*
+	     * See if the display address is in one of the address
+	     * ranges for this display.
+	     */
+	    for (i = 0; i < dp->n_addrs; ++i) {
+		if (dp->addrs[i].address <= addr
+		    && addr < dp->addrs[i].address + dp->addrs[i].size)
 		    break;
-		}
+	    }
+	    if (i < dp->n_addrs) {
+		printk(KERN_INFO "MacOS display is %s\n", dp->full_name);
+		macos_display = dp;
+		break;
 	    }
 	}
 
 	/* initialize it */
-	if (macos_display == NULL || !offb_init_driver(macos_display)) {
-	    offb_init_fb("MacOS display", "MacOS display",
+	if (ofonly || macos_display == NULL 
+	    || !offb_init_driver(macos_display)) {
+	    offb_init_fb(macos_display? macos_display->name: "MacOS display",
+			 macos_display? macos_display->full_name: "MacOS display",
 			 boot_infos->dispDeviceRect[2],
 			 boot_infos->dispDeviceRect[3],
 			 boot_infos->dispDeviceDepth,
@@ -403,7 +403,7 @@ __initfunc(static int offb_init_driver(struct device_node *dp))
 	return 1;
 #endif /* CONFIG_FB_S3TRIO */
 #ifdef CONFIG_FB_IMSTT
-    if (!strncmp(dp->name, "IMS,tt128mb", 11)) {
+    if (!strncmp(dp->name, "IMS,tt", 6)) {
 	imsttfb_of_init(dp);
 	return 1;
     }
@@ -524,7 +524,8 @@ __initfunc(static void offb_init_fb(const char *name, const char *full_name,
 
 	/* XXX kludge for ati */
     if (strncmp(name, "ATY,", 4) == 0) {
-	info->cmap_adr = ioremap(address + 0x7ff000, 0x1000) + 0xcc0;
+	unsigned long base = address & 0xff000000UL;
+	info->cmap_adr = ioremap(base + 0x7ff000, 0x1000) + 0xcc0;
 	info->cmap_data = info->cmap_adr + 1;
     }
 
@@ -674,9 +675,10 @@ __initfunc(static void offb_init_fb(const char *name, const char *full_name,
 	display_info.disp_reg_address = 0;
 	/* XXX kludge for ati */
 	if (strncmp(name, "ATY,", 4) == 0) {
-	    display_info.disp_reg_address = address + 0x7ffc00;
-	    display_info.cmap_adr_address = address + 0x7ffcc0;
-	    display_info.cmap_data_address = address + 0x7ffcc1;
+	    unsigned long base = address & 0xff000000UL;
+	    display_info.disp_reg_address = base + 0x7ffc00;
+	    display_info.cmap_adr_address = base + 0x7ffcc0;
+	    display_info.cmap_data_address = base + 0x7ffcc1;
 	}
 	console_fb_info = &info->info;
     }

@@ -1,5 +1,5 @@
 /*
- * $Id: pci.c,v 1.39 1998/10/13 20:59:04 cort Exp $
+ * $Id: pci.c,v 1.42 1998/12/04 14:31:37 cort Exp $
  * Common pmac/prep/chrp pci routines. -- Cort
  */
 
@@ -188,13 +188,7 @@ __initfunc(void pcibios_fixup(void))
 	extern struct bridge_data **bridges;
 	extern unsigned char *Motherboard_map;
 	extern unsigned char *Motherboard_routes;
-	
-	/*
-	 * FIXME: This is broken: We should not assign IRQ's to IRQless
-	 *	  devices (look at PCI_INTERRUPT_PIN) and we also should
-	 *	  honor the existence of multi-function devices where
-	 *	  different functions have different interrupt pins. [mj]
-	 */
+#ifndef CONFIG_MBX
 	switch (_machine )
 	{
 	case _MACH_prep:
@@ -206,8 +200,23 @@ __initfunc(void pcibios_fixup(void))
 			 * irq this device uses.  This is necessary on things
 			 * without residual data. -- Cort
 			 */
-			unsigned char d = PCI_SLOT(dev->devfn);
+			unsigned char d = PCI_SLOT(dev->devfn), i;
 			dev->irq = Motherboard_routes[Motherboard_map[d]];
+			for ( i = 0 ; i <= 5 ; i++ )
+			{
+				if ( dev->base_address[i] > 0x10000000 )
+				{
+					printk("Relocating PCI address %x -> %x\n",
+					       dev->base_address[i],
+					       (dev->base_address[i] & 0x00FFFFFF)
+				               | 0x01000000);
+					dev->base_address[i] =
+					  (dev->base_address[i] & 0x00FFFFFF) | 0x01000000;
+					pci_write_config_dword(dev,
+						PCI_BASE_ADDRESS_0+(i*0x4),
+						dev->base_address[i] );
+				}
+			}
 #if 0			
 			/*
 			 * If we have residual data and if it knows about this
@@ -255,6 +264,11 @@ __initfunc(void pcibios_fixup(void))
 		}
 		break;
 	}
+#else /* CONFIG_MBX */
+	for(dev=pci_devices; dev; dev=dev->next)
+	{
+	}
+#endif /* CONFIG_MBX */
 }
 
 __initfunc(void pcibios_fixup_bus(struct pci_bus *bus))

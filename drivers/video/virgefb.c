@@ -32,6 +32,7 @@
 #include <asm/irq.h>
 #include <asm/pgtable.h>
 #include <asm/amigahw.h>
+#include <asm/io.h>
 
 #include <video/s3blit.h>
 #include <video/fbcon.h>

@@ -161,17 +161,17 @@ out:
 
 /*
  * Try to invalidate the dentry if it turns out to be
- * possible. If there are other users of the dentry we
- * can't invalidate it.
+ * possible. If there are other dentries that can be
+ * reached through this one we can't delete it.
  */
 int d_invalidate(struct dentry * dentry)
 {
 	/* Check whether to do a partial shrink_dcache */
-	if (!list_empty(&dentry->d_subdirs))
+	if (!list_empty(&dentry->d_subdirs)) {
 		shrink_dcache_parent(dentry);
-
-	if (dentry->d_count != 1)
-		return -EBUSY;
+		if (!list_empty(&dentry->d_subdirs))
+			return -EBUSY;
+	}
 
 	d_drop(dentry);
 	return 0;

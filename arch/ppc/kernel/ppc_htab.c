@@ -1,5 +1,5 @@
 /*
- * $Id: ppc_htab.c,v 1.25 1998/08/26 10:28:26 davem Exp $
+ * $Id: ppc_htab.c,v 1.26 1998/12/10 00:24:23 cort Exp $
  *
  * PowerPC hash table management proc entry.  Will show information
  * about the current hash table and will allow changes to it.
@@ -569,6 +569,7 @@ int proc_dol2crvec(ctl_table *table, int write, struct file *filp,
 				break;
 			buffer += len;
 			left -= len;
+			_set_L2CR(0);
 			_set_L2CR(val);
 			while ( _get_L2CR() & 0x1 )
 				/* wait for invalidate to finish */;

@@ -1,7 +1,7 @@
 /*
  * misc.c
  *
- * $Id: misc.c,v 1.52 1998/09/19 01:21:24 cort Exp $
+ * $Id: misc.c,v 1.53 1998/12/15 17:40:15 cort Exp $
  * 
  * Adapted for PowerPC by Gary Thomas
  *
@@ -12,7 +12,7 @@
 #include <linux/types.h>
 #include "../coffboot/zlib.h"
 #include "asm/residual.h"
-#include <elf.h>
+#include <linux/elf.h>
 #include <linux/config.h>
 #include <asm/page.h>
 #include <asm/processor.h>
@@ -23,6 +23,10 @@
 #ifdef CONFIG_FADS
 #include <asm/fads.h>
 #endif
+#if defined(CONFIG_SERIAL_CONSOLE) && !defined(CONFIG_MBX)
+#include "ns16550.h"
+struct NS16550 *com_port;
+#endif /* CONFIG_SERIAL_CONSOLE */
 
 /*
  * Please send me load/board info and such data for hardware not
@@ -42,6 +46,7 @@ char *end_avail;
  * save here and pass to the kernel (command line and board info).
  * On the MBX we grab some known memory holes to hold this information.
  */
+char cmd_preset[] = "console=tty0 console=ttyS0,9600n8";
 char	cmd_buf[256];
 char	*cmd_line = cmd_buf;
 
@@ -108,12 +113,19 @@ static void scroll()
 
 tstc(void)
 {
+#if defined(CONFIG_SERIAL_CONSOLE) && !defined(CONFIG_MBX)
+	return (CRT_tstc() || NS16550_tstc(com_port));
+#else
 	return (CRT_tstc() );
+#endif /* CONFIG_SERIAL_CONSOLE */
 }
 
 getc(void)
 {
 	while (1) {
+#if defined(CONFIG_SERIAL_CONSOLE) && !defined(CONFIG_MBX)
+		if (NS16550_tstc(com_port)) return (NS16550_getc(com_port));
+#endif /* CONFIG_SERIAL_CONSOLE */
 		if (CRT_tstc()) return (CRT_getc());
 	}
 }
@@ -122,6 +134,11 @@ void
 putc(const char c)
 {
 	int x,y;
+
+#if defined(CONFIG_SERIAL_CONSOLE) && !defined(CONFIG_MBX)
+	NS16550_putc(com_port, c);
+	if ( c == '\n' ) NS16550_putc(com_port, '\r');
+#endif /* CONFIG_SERIAL_CONSOLE */
 
 	x = orig_x;
 	y = orig_y;
@@ -162,12 +179,21 @@ void puts(const char *s)
 	y = orig_y;
 
 	while ( ( c = *s++ ) != '\0' ) {
+#if defined(CONFIG_SERIAL_CONSOLE) && !defined(CONFIG_MBX)
+	        NS16550_putc(com_port, c);
+	        if ( c == '\n' ) NS16550_putc(com_port, '\r');
+#endif /* CONFIG_SERIAL_CONSOLE */
+
 		if ( c == '\n' ) {
 			x = 0;
 			if ( ++y >= lines ) {
 				scroll();
 				y--;
 			}
+		} else if (c == '\b') {
+		  if (x > 0) {
+		    x--;
+		  }
 		} else {
 			vidmem [ ( x + cols * y ) * 2 ] = c; 
 			if ( ++x >= cols ) {
@@ -358,6 +384,10 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	_put_MSR(_get_MSR() & ~0x0030);
 	vga_init(0xC0000000);
 
+#if defined(CONFIG_SERIAL_CONSOLE) && !defined(CONFIG_MBX)
+	com_port = (struct NS16550 *)NS16550_init(0);
+#endif /* CONFIG_SERIAL_CONSOLE */
+
 	if (residual)
 		memcpy(hold_residual,residual,sizeof(RESIDUAL));
 #else /* CONFIG_MBX */
@@ -510,6 +540,8 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	puts("\nLinux/PPC load: ");
 	timer = 0;
 	cp = cmd_line;
+	memcpy (cmd_line, cmd_preset, sizeof(cmd_preset));
+	while ( *cp ) putc(*cp++);
 	while (timer++ < 5*1000) {
 		if (tstc()) {
 			while ((ch = getc()) != '\n' && ch != '\r') {

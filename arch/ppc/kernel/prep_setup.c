@@ -189,11 +189,6 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 	/* Enable L2.  Assume we don't need to flush -- Cort*/
 	*(unsigned char *)(0x8000081c) = *(unsigned char *)(0x8000081c)|3;
 	
-	/* make the serial port the console */
-	/* strcat(cmd_line,"console=ttyS0,9600n8"); */
-	/* use the normal console but send output to the serial port, too */
-	/*strcat(cmd_line,"console=tty0 console=ttyS0,9600n8");*/
-        sprintf(cmd_line,"%s console=tty0 console=ttyS0,9600n8", cmd_line);
 	printk("Boot arguments: %s\n", cmd_line);
 	
 #ifdef CONFIG_SOUND_CS4232

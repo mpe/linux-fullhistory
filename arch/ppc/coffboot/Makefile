@@ -3,18 +3,6 @@
 #
 # Paul Mackerras	January 1997
 
-# PowerPC (cross) tools
-ifneq ($(shell uname -m),ppc)
-CROSS_COMPILE 	=powerpc-eabi-
-endif
-
-
-# PowerPC (cross) tools
-ifneq ($(shell uname -m),ppc)
-#CROSS_COMPILE 	=powerpc-eabi-
-CROSS_COMPILE  =ppc-linux-elf-
-endif
-
 HOSTCC	= gcc
 HOSTCFLAGS = -O -I$(TOPDIR)/include
 

@@ -451,7 +451,7 @@ static int kswapd_free_pages(int kswapd_state)
 	/* max one hundreth of a second */
 	end_time = jiffies + (HZ-1)/100;
 	do {
-		int priority = 7;
+		int priority = 5;
 		int count = pager_daemon.swap_cluster;
 
 		switch (kswapd_state) {
@@ -562,7 +562,7 @@ int try_to_free_pages(unsigned int gfp_mask, int count)
 
 		current->flags |= PF_MEMALLOC;
 	
-		priority = 8;
+		priority = 5;
 		do {
 			free_memory(shrink_mmap(priority, gfp_mask));
 			free_memory(shm_swap(priority, gfp_mask));

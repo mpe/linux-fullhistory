@@ -16,20 +16,20 @@
 
 #ifndef __ASSEMBLY__
 
-#ifndef iobarrier /* Don't include io.h - avoid circular dependency */
-#define iobarrier() eieio()
+#ifndef iobarrier_rw /* Don't include io.h - avoid circular dependency */
+#define iobarrier_rw() eieio()
 #endif
 
 #define APUS_WRITE(_a_, _v_)				\
 do {							\
 	(*((volatile unsigned char *)(_a_)) = (_v_));	\
-	iobarrier ();					\
+	iobarrier_rw ();				\
 } while (0)
 
 #define APUS_READ(_a_, _v_) 				\
 do {							\
 	(_v_) = (*((volatile unsigned char *)(_a_)));	\
-	iobarrier ();					\
+	iobarrier_rw ();				\
 } while (0)
 #endif /* ndef __ASSEMBLY__ */
 

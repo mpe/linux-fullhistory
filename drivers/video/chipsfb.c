@@ -358,6 +358,7 @@ static void chips_set_bitdepth(struct fb_info_chips *p, struct display* disp, in
 		if (con == currcon) {
 			write_cr(0x13, 200);		// 16 bit display width (decimal)
 			write_xr(0x81, 0x14);		// 15 bit (TrueColor) color mode
+			write_xr(0x82, 0x00);		// disable palettes
 			write_xr(0x20, 0x10);		// 16 bit blitter mode
 		}
 
@@ -379,6 +380,7 @@ static void chips_set_bitdepth(struct fb_info_chips *p, struct display* disp, in
 		if (con == currcon) {
 			write_cr(0x13, 100);		// 8 bit display width (decimal)
 			write_xr(0x81, 0x12);		// 8 bit color mode
+			write_xr(0x82, 0x08);		// Graphics gamma enable
 			write_xr(0x20, 0x00);		// 8 bit blitter mode
 		}
 

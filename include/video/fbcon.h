@@ -100,6 +100,7 @@ extern struct display_switch fbcon_dummy;
 #define __SCROLL_YFIXED		0x010
 #define __SCROLL_YNOMOVE	0x020
 #define __SCROLL_YPANREDRAW	0x040
+#define __SCROLL_YNOPARTIAL	0x080
 
 /* Only these should be used by the drivers */
 /* Which one should you use? If you have a fast card and slow bus,
@@ -116,6 +117,15 @@ extern struct display_switch fbcon_dummy;
  */
 #define SCROLL_YREDRAW		(__SCROLL_YFIXED|__SCROLL_YREDRAW)
 #define SCROLL_YNOMOVE		(__SCROLL_YNOMOVE|__SCROLL_YPANREDRAW)
+
+/* SCROLL_YNOPARTIAL, used in combination with the above, is for video
+   cards which can not handle using panning to scroll a portion of the
+   screen without excessive flicker.  Panning will only be used for
+   whole screens.
+ */
+/* Namespace consistency */
+#define SCROLL_YNOPARTIAL	__SCROLL_YNOPARTIAL
+
 
 extern void fbcon_redraw_bmove(struct display *, int, int, int, int, int, int);
 

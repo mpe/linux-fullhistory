@@ -1,4 +1,6 @@
 /*
+ * $Id: mbx_setup.c,v 1.4 1998/11/15 19:58:55 cort Exp $
+ *
  *  linux/arch/ppc/kernel/setup.c
  *
  *  Copyright (C) 1995  Linus Torvalds
@@ -51,10 +53,17 @@ extern int rd_image_start;	/* starting block # of image */
 extern char saved_command_line[256];
 
 extern unsigned long find_available_memory(void);
-extern void mbx_cpm_reset(uint);
+extern void m8xx_cpm_reset(uint);
 
+/* this really does make things cleaner -- Cort */
+void __init powermac_init(void)
+{
+}
+void __init adbdev_init(void)
+{
+}
 
-void mbx_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
+void __init mbx_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
 
 	*p = 0;
@@ -88,7 +97,7 @@ mbx_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 
 	/* Reset the Communication Processor Module.
 	*/
-	mbx_cpm_reset(cpm_page);
+	m8xx_cpm_reset(cpm_page);
 
 #ifdef notdef
 	ROOT_DEV = to_kdev_t(0x0301); /* hda1 */

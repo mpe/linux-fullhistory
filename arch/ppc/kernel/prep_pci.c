@@ -1,5 +1,5 @@
 /*
- * $Id: prep_pci.c,v 1.23 1998/10/21 10:52:24 cort Exp $
+ * $Id: prep_pci.c,v 1.24 1998/12/10 02:39:51 cort Exp $
  * PReP pci functions.
  * Originally by Gary Thomas
  * rewritten and updated by Cort Dougan (cort@cs.nmt.edu)
@@ -107,7 +107,7 @@ static char Omaha_pci_IRQ_routes[] __prepdata =
 };
 
 /* Motorola PowerStack */
-static char Blackhawk_pci_IRQ_map[16] __prepdata =
+static char Blackhawk_pci_IRQ_map[19] __prepdata =
 {
   	0,	/* Slot 0  - unused */
   	0,	/* Slot 1  - unused */
@@ -125,6 +125,9 @@ static char Blackhawk_pci_IRQ_map[16] __prepdata =
   	0,	/* Slot 13 - unused */
   	1,	/* Slot 14 - Ethernet */
   	0,	/* Slot 15 - unused */
+  	1,	/* Slot P7 */
+  	2,	/* Slot P6 */
+  	3,	/* Slot P5 */
 };
 
 static char Blackhawk_pci_IRQ_routes[] __prepdata =
@@ -132,7 +135,7 @@ static char Blackhawk_pci_IRQ_routes[] __prepdata =
    	0,	/* Line 0 - Unused */
    	9,	/* Line 1 */
    	11,	/* Line 2 */
-   	14,	/* Line 3 */
+   	15,	/* Line 3 */
    	15	/* Line 4 */
 };
    
@@ -226,6 +229,7 @@ static char ibm8xx_pci_IRQ_map[23] __prepdata = {
         0, /* Slot 21 - unused */
         2, /* Slot 22 - PCI slot 1 PCIINTx# (See below) */
 };
+
 static char ibm8xx_pci_IRQ_routes[] __prepdata = {
         0,      /* Line 0 - unused */
         13,     /* Line 1 */
@@ -440,6 +444,8 @@ __initfunc(unsigned long route_pci_interrupts(void))
 	
 	if ( _prep_type == _PREP_Motorola)
 	{
+		unsigned short irq_mode;
+
 		switch (inb(0x800) & 0xF0)
 		{
 		case 0x10: /* MVME16xx */
@@ -474,6 +480,14 @@ __initfunc(unsigned long route_pci_interrupts(void))
 			Motherboard_routes = Blackhawk_pci_IRQ_routes;
 			break;
 		}
+		/* AJF adjust level/edge control according to routes */
+		irq_mode = 0;
+		for (i = 1;  i <= 4;  i++)
+		{
+			irq_mode |= ( 1 << Motherboard_routes[i] );
+		}
+		outb( irq_mode & 0xff, 0x4d0 );
+		outb( (irq_mode >> 8) & 0xff, 0x4d1 );
 	} else if ( _prep_type == _PREP_IBM )
 	{
 		unsigned char pl_id;

@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.130 1998/11/10 10:09:20 paulus Exp $
+ *  $Id: init.c,v 1.138 1998/12/15 17:34:43 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -55,7 +55,7 @@
 /* END APUS includes */
 
 int prom_trashed;
-int next_mmu_context;
+atomic_t next_mmu_context;
 unsigned long *end_of_DRAM;
 int mem_init_done;
 extern pgd_t swapper_pg_dir[];
@@ -71,7 +71,8 @@ unsigned long ioremap_base;
 unsigned long ioremap_bot;
 unsigned long avail_start;
 struct pgtable_cache_struct quicklists;
-struct mem_info memory[NUM_MEMINFO];
+extern int num_memory;
+extern struct mem_info memory[NUM_MEMINFO];
 extern boot_infos_t *boot_infos;
 
 void MMU_init(void);
@@ -88,6 +89,27 @@ void map_page(struct task_struct *, unsigned long va,
 		     unsigned long pa, int flags);
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
+
+
+/*
+ * The following stuff defines a data structure for representing
+ * areas of memory as an array of (address, length) pairs, and
+ * procedures for manipulating them.
+ */
+#define MAX_MEM_REGIONS	32
+
+struct mem_pieces {
+	int n_regions;
+	struct reg_property regions[MAX_MEM_REGIONS];
+};
+struct mem_pieces phys_mem;
+struct mem_pieces phys_avail;
+struct mem_pieces prom_mem;
+
+static void remove_mem_piece(struct mem_pieces *, unsigned, unsigned, int);
+void *find_mem_piece(unsigned, unsigned);
+static void print_mem_pieces(struct mem_pieces *);
+static void append_mem_piece(struct mem_pieces *, unsigned, unsigned);
 
 extern struct task_struct *current_set[NR_CPUS];
 
@@ -529,36 +551,17 @@ mmu_context_overflow(void)
 	}
 	read_unlock(&tasklist_lock);
 	flush_hash_segments(0x10, 0xffffff);
-	next_mmu_context = 0;
+	atomic_set(&next_mmu_context, 0);
 	/* make sure current always has a context */
-	current->mm->context = MUNGE_CONTEXT(++next_mmu_context);
+	current->mm->context = MUNGE_CONTEXT(atomic_inc_return(&next_mmu_context));
 	set_context(current->mm->context);
 #else
 	/* We set the value to -1 because it is pre-incremented before
 	 * before use.
 	 */
-	next_mmu_context = -1;
+	atomic_set(&next_mmu_context, -1);
 #endif
 }
-
-/*
- * The following stuff defines a data structure for representing
- * areas of memory as an array of (address, length) pairs, and
- * procedures for manipulating them.
- */
-#define MAX_MEM_REGIONS	32
-
-struct mem_pieces {
-	int n_regions;
-	struct reg_property regions[MAX_MEM_REGIONS];
-};
-struct mem_pieces phys_mem;
-struct mem_pieces phys_avail;
-struct mem_pieces prom_mem;
-
-static void remove_mem_piece(struct mem_pieces *, unsigned, unsigned, int);
-void *find_mem_piece(unsigned, unsigned);
-static void print_mem_pieces(struct mem_pieces *);
 
 /*
  * Scan a region for a piece of a given size with the required alignment.
@@ -653,14 +656,26 @@ __initfunc(static void print_mem_pieces(struct mem_pieces *mp))
 	printk("\n");
 }
 
+/*
+ * Add some memory to an array of pieces
+ */
+__initfunc(static void
+	   append_mem_piece(struct mem_pieces *mp, unsigned start, unsigned size))
+{
+	struct reg_property *rp;
 
+	if (mp->n_regions >= MAX_MEM_REGIONS)
+		return;
+	rp = &mp->regions[mp->n_regions++];
+	rp->address = start;
+	rp->size = size;
+}
 
 #ifndef CONFIG_8xx
 static void hash_init(void);
 static void get_mem_prop(char *, struct mem_pieces *);
 static void sort_mem_pieces(struct mem_pieces *);
 static void coalesce_mem_pieces(struct mem_pieces *);
-static void append_mem_piece(struct mem_pieces *, unsigned, unsigned);
 
 __initfunc(static void sort_mem_pieces(struct mem_pieces *mp))
 {
@@ -700,21 +715,6 @@ __initfunc(static void coalesce_mem_pieces(struct mem_pieces *mp))
 		++d;
 	}
 	mp->n_regions = d;
-}
-
-/*
- * Add some memory to an array of pieces
- */
-__initfunc(static void
-	   append_mem_piece(struct mem_pieces *mp, unsigned start, unsigned size))
-{
-	struct reg_property *rp;
-
-	if (mp->n_regions >= MAX_MEM_REGIONS)
-		return;
-	rp = &mp->regions[mp->n_regions++];
-	rp->address = start;
-	rp->size = size;
 }
 
 /*
@@ -963,8 +963,10 @@ __initfunc(void MMU_init(void))
 #ifndef CONFIG_8xx
 	if (have_of)
 		end_of_DRAM = pmac_find_end_of_memory();
+#ifdef CONFIG_APUS
 	else if (_machine == _MACH_apus )
 		end_of_DRAM = apus_find_end_of_memory();
+#endif
 	else /* prep */
 		end_of_DRAM = prep_find_end_of_memory();
 
@@ -1023,7 +1025,7 @@ __initfunc(void MMU_init(void))
          */
         ioremap(NVRAM_ADDR, NVRAM_SIZE);
         ioremap(MBX_CSR_ADDR, MBX_CSR_SIZE);
-        ioremap(MBX_IMAP_ADDR, MBX_IMAP_SIZE);
+        ioremap(IMAP_ADDR, IMAP_SIZE);
         ioremap(PCI_CSR_ADDR, PCI_CSR_SIZE);
 #endif /* CONFIG_8xx */
 }
@@ -1189,7 +1191,7 @@ __initfunc(unsigned long *mbx_find_end_of_memory(void))
 	volatile memctl8xx_t	*mcp;
 	unsigned long *ret;
 	
-	binfo = (bd_t *)&res;
+	binfo = (bd_t *)res;
 
 	/*
 	 * The MBX does weird things with the mmaps for ram.
@@ -1200,11 +1202,13 @@ __initfunc(unsigned long *mbx_find_end_of_memory(void))
 	 * In fact, it might be the best idea to just read the DRAM
 	 * config registers and set the mem areas accordingly.
 	 */
-	mcp = (memctl8xx_t *)(&(((immap_t *)MBX_IMAP_ADDR)->im_memctl));
+	mcp = (memctl8xx_t *)(&(((immap_t *)IMAP_ADDR)->im_memctl));
+	append_mem_piece(&phys_mem, 0, binfo->bi_memsize);
+#if 0
 	phys_mem.regions[0].address = 0;
-	phys_mem.regions[0].size = binfo->bi_memsize;
-	
+	phys_mem.regions[0].size = binfo->bi_memsize;	
 	phys_mem.n_regions = 1;
+#endif	
 	
 	ret = __va(phys_mem.regions[0].address+
 		   phys_mem.regions[0].size);
@@ -1322,6 +1326,7 @@ __initfunc(unsigned long *prep_find_end_of_memory(void))
 	return (__va(total));
 }
 
+#ifdef CONFIG_APUS
 #define HARDWARE_MAPPED_SIZE (512*1024)
 __initfunc(unsigned long *apus_find_end_of_memory(void))
 {
@@ -1381,15 +1386,22 @@ __initfunc(unsigned long *apus_find_end_of_memory(void))
 		/* Remove the upper 512KB where the PPC exception
                    vectors are mapped. */
 		top -= HARDWARE_MAPPED_SIZE;
-		remove_mem_piece(&phys_avail, top,
-				 HARDWARE_MAPPED_SIZE, 0);
+#if 0
+		/* This would be neat, but it breaks on A3000 machines!? */
+		remove_mem_piece(&phys_avail, top, 16384, 0);
+#else
+		remove_mem_piece(&phys_avail, top, HARDWARE_MAPPED_SIZE, 0);
+#endif
+
 	}
 
-	/* FIXME:APUS: Only handles one block of memory! Problem is
-	   that the VTOP/PTOV code in head.S would be a mess if it had
-	   to handle more than one block.  */
+	/* Linux/APUS only handles one block of memory -- the one on
+	   the PowerUP board. Other system memory is horrible slow in
+	   comparison. The user can use other memory for swapping
+	   using the z2ram device. */
 	return __va(memory[0].addr + memory[0].size);
 }
+#endif /* CONFIG_APUS */
 
 /*
  * Initialize the hash table and patch the instructions in head.S.
@@ -1400,7 +1412,7 @@ __initfunc(static void hash_init(void))
 	unsigned long h, ramsize;
 
 	extern unsigned int hash_page_patch_A[], hash_page_patch_B[],
-		hash_page_patch_C[];
+		hash_page_patch_C[], hash_page[];
 
 	/*
 	 * Allow 64k of hash table for every 16MB of memory,
@@ -1475,7 +1487,17 @@ __initfunc(static void hash_init(void))
 		flush_icache_range((unsigned long) b(hash_page_patch_A),
 				   (unsigned long) b(hash_page_patch_C + 1));
 	}
-	else
+	else {
 		Hash_end = 0;
+		/*
+		 * Put a blr (procedure return) instruction at the
+		 * start of hash_page, since we can still get DSI
+		 * exceptions on a 603.
+		 */
+		*b(hash_page) = 0x4e800020;
+		flush_icache_range((unsigned long) b(hash_page),
+				   (unsigned long) b(hash_page + 1));
+	}
 }
 #endif /* ndef CONFIG_8xx */
+

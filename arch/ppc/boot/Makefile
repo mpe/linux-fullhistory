@@ -48,6 +48,9 @@ OBJECTS += mbxtty.o
 CFLAGS += -DCONFIG_MBX
 else
 OBJECTS += vreset.o kbd.o
+ ifeq ($(CONFIG_SERIAL_CONSOLE),y)
+  OBJECTS += ns16550.o
+ endif
 endif
 
 all:	zImage

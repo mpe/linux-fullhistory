@@ -176,8 +176,6 @@ typedef char buffer_block[BLOCK_SIZE];
 #define BH_Dirty	1	/* 1 if the buffer is dirty */
 #define BH_Lock		2	/* 1 if the buffer is locked */
 #define BH_Req		3	/* 0 if the buffer has been invalidated */
-#define BH_Touched	4	/* 1 if the buffer has been touched (aging) */
-#define BH_Has_aged	5	/* 1 if the buffer has been aged (aging) */
 #define BH_Protected	6	/* 1 if the buffer is protected */
 
 /*
@@ -248,20 +246,18 @@ static inline int buffer_req(struct buffer_head * bh)
 	return test_bit(BH_Req, &bh->b_state);
 }
 
-static inline int buffer_touched(struct buffer_head * bh)
-{
-	return test_bit(BH_Touched, &bh->b_state);
-}
-
-static inline int buffer_has_aged(struct buffer_head * bh)
-{
-	return test_bit(BH_Has_aged, &bh->b_state);
-}
-
 static inline int buffer_protected(struct buffer_head * bh)
 {
 	return test_bit(BH_Protected, &bh->b_state);
 }
+
+/*
+ * Deprecated - we don't keep per-buffer reference flags
+ * any more.
+ */
+#define buffer_page(bh)		(mem_map + MAP_NR((bh)->b_data))
+#define buffer_touched(bh)	(PageReferenced(buffer_page(bh)))
+#define touch_buffer(bh)	set_bit(PG_referenced, buffer_page(bh))
 
 #include <linux/pipe_fs_i.h>
 #include <linux/minix_fs_i.h>
@@ -736,7 +732,7 @@ extern struct file *inuse_filps;
 
 extern void refile_buffer(struct buffer_head * buf);
 extern void set_writetime(struct buffer_head * buf, int flag);
-extern int try_to_free_buffer(struct buffer_head*, struct buffer_head**, int);
+extern int try_to_free_buffer(struct buffer_head*, struct buffer_head**);
 
 extern int nr_buffers;
 extern int buffermem;

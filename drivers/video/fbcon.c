@@ -944,7 +944,8 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
 {
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
-    int is_txt = (p->type == FB_TYPE_TEXT);
+    int scroll_partial = !(p->scrollmode & __SCROLL_YNOPARTIAL);
+    int logos_left = 0; int logos_width = conp->vc_cols;
 
     if (!p->can_soft_blank && console_blanked)
 	return 0;
@@ -962,22 +963,34 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
 
     switch (dir) {
 	case SM_UP:
+	    /* K.Garloff@ping.de, 98/10/21: If logo is diplayed, only save logo
+	     * and not the hole top region. In combination with the logo being
+	     * displayed on the right side, this allows scrollback feature
+	     * when bootlogo is displayed. */
+            if (t != 0 && logo_shown == fg_console) {
+		struct display *p = &fb_display[unit];
+		int lw = (smp_num_cpus * (LOGO_W + 8) - 7) / fontwidth(p) + 1;
+		logos_left = conp->vc_cols - lw;
+		while (logos_left < 0) logos_left += (LOGO_W + 8 - 7) / fontwidth(p);
+		logos_width = conp->vc_cols - logos_left;
+	    }
 	    if (count > conp->vc_rows)	/* Maximum realistic size */
 		count = conp->vc_rows;
 	    switch (p->scrollmode & __SCROLL_YMASK) {
 	    case __SCROLL_YMOVE:
-		p->dispsw->bmove(p, t+count, 0, t, 0, b-t-count,
+	        if (t > 0) p->dispsw->bmove(p, 0, logos_left, count,
+					logos_left, t, logos_width);
+	        p->dispsw->bmove(p, count, 0, 0, 0, b-count,
 				 conp->vc_cols);
-		p->dispsw->clear(conp, p, b-count, 0, count,
+	        p->dispsw->clear(conp, p, b-count, 0, count,
 				 conp->vc_cols);
 		break;
 
 	    case __SCROLL_YWRAP:
-		if (b-t-count > 3*conp->vc_rows>>2) {
+		if (b-t-count > 2*conp->vc_rows/3) {
 		    if (t > 0)
-			fbcon_bmove(conp, 0, 0, count, 0, t,
-				    conp->vc_cols);
-			ywrap_up(unit, conp, p, count);
+			fbcon_bmove(conp, 0, logos_left, count, logos_left, t, logos_width);
+		    ywrap_up(unit, conp, p, count);
 		    if (conp->vc_rows-b > 0)
 			fbcon_bmove(conp, b-count, 0, b, 0,
 				    conp->vc_rows-b, conp->vc_cols);
@@ -990,11 +1003,11 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
 		break;
 
 	    case __SCROLL_YPAN:
-		if (( is_txt && (b-t == conp->vc_rows)) ||
-		    (!is_txt && (b-t-count > 3*conp->vc_rows>>2))) {
+		if (( !scroll_partial && (b-t == conp->vc_rows)) ||
+		    ( scroll_partial  && (b-t-count > 3*conp->vc_rows>>2))) {
 		    if (t > 0)
-			fbcon_bmove(conp, 0, 0, count, 0, t,
-				    conp->vc_cols);
+			fbcon_bmove(conp, 0, logos_left, count, logos_left, t,
+				    logos_width);
 		    ypan_up(unit, conp, p, count);
 		    if (conp->vc_rows-b > 0)
 			fbcon_bmove(conp, b-count, 0, b, 0,
@@ -1049,8 +1062,8 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
 		break;
 
 	    case __SCROLL_YPAN:
-		if (( is_txt && (b-t == conp->vc_rows)) ||
-		    (!is_txt && (b-t-count > 3*conp->vc_rows>>2))) {
+		if (( !scroll_partial && (b-t == conp->vc_rows)) ||
+		    ( scroll_partial  && (b-t-count > 3*conp->vc_rows>>2))) {
 		    if (conp->vc_rows-b > 0)
 			fbcon_bmove(conp, b, 0, b-count, 0,
 				    conp->vc_rows-b, conp->vc_cols);
@@ -1250,46 +1263,41 @@ static inline int fbcon_get_font(int unit, struct console_font_op *op)
     if (!op->data) return 0;
     
     if (op->width <= 8) {
+	j = fontheight(p);
     	for (i = 0; i < op->charcount; i++) {
-	    for (j = 0; j < fontheight(p); j++)
-		*data++ = *fontdata++;
-	    memset(data, 0, 32-j);
-	    data += 32 - j;
+	    memcpy(data, fontdata, j);
+	    memset(data+j, 0, 32-j);
+	    data += 32;
+	    fontdata += j;
 	}
     }
 #ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
     else if (op->width <= 16) {
+	j = fontheight(p) * 2;
 	for (i = 0; i < op->charcount; i++) {
-	    for (j = 0; j < fontheight(p); j++) {
-		*data++ = *(u16 *)fontdata >> 8;
-		*data++ = *(u16 *)fontdata;
-		fontdata += sizeof(u16);
-	    }
-	    memset(data, 0, 2*(32-j));
-	    data += 2 * (32 - j);
+	    memcpy(data, fontdata, j);
+	    memset(data+j, 0, 64-j);
+	    data += 64;
+	    fontdata += j;
 	}
     } else if (op->width <= 24) {
 	for (i = 0; i < op->charcount; i++) {
 	    for (j = 0; j < fontheight(p); j++) {
-		*data++ = *(u32 *)fontdata >> 24;
-		*data++ = *(u32 *)fontdata >> 16;
-		*data++ = *(u32 *)fontdata >> 8;
+		*data++ = fontdata[0];
+		*data++ = fontdata[1];
+		*data++ = fontdata[2];
 		fontdata += sizeof(u32);
 	    }
 	    memset(data, 0, 3*(32-j));
 	    data += 3 * (32 - j);
 	}
     } else {
+	j = fontheight(p) * 4;
 	for (i = 0; i < op->charcount; i++) {
-	    for (j = 0; j < fontheight(p); j++) {
-		*data++ = *(u32 *)fontdata >> 24;
-		*data++ = *(u32 *)fontdata >> 16;
-		*data++ = *(u32 *)fontdata >> 8;
-		*data++ = *(u32 *)fontdata;
-		fontdata += sizeof(u32);
-	    }
-	    memset(data, 0, 4*(32-j));
-	    data += 4 * (32 - j);
+	    memcpy(data, fontdata, j);
+	    memset(data+j, 0, 128-j);
+	    data += 128;
+	    fontdata += j;
 	}
     }
 #endif
@@ -1329,12 +1337,44 @@ static int fbcon_do_set_font(int unit, struct console_font_op *op, u8 *data, int
     	p->fgshift--;
     	p->bgshift--;
     	p->charmask = 0xff;
+
+	/* ++Edmund: reorder the attribute bits */
+	{
+	    struct vc_data *conp = p->conp;
+	    unsigned short *cp = (unsigned short *) conp->vc_origin;
+	    int count = conp->vc_screenbuf_size/2;
+	    unsigned short c;
+	    for (; count > 0; count--, cp++) {
+	        c = scr_readw(cp);
+		scr_writew(((c & 0xfe00) >> 1) | (c & 0xff), cp);
+	    }
+	    c = conp->vc_video_erase_char;
+	    conp->vc_video_erase_char = ((c & 0xfe00) >> 1) | (c & 0xff);
+	    conp->vc_attr >>= 1;
+	}
+
     } else if (!p->conp->vc_hi_font_mask && cnt == 512) {
     	p->conp->vc_hi_font_mask = 0x100;
     	p->conp->vc_complement_mask <<= 1;
     	p->fgshift++;
     	p->bgshift++;
     	p->charmask = 0x1ff;
+
+	/* ++Edmund: reorder the attribute bits */
+	{
+	    struct vc_data *conp = p->conp;
+	    unsigned short *cp = (unsigned short *) conp->vc_origin;
+	    int count = conp->vc_screenbuf_size/2;
+	    unsigned short c;
+	    for (; count > 0; count--, cp++) {
+	        c = scr_readw(cp);
+		scr_writew(((c & 0xff00) << 1) | (c & 0xff), cp);
+	    }
+	    c = conp->vc_video_erase_char;
+	    conp->vc_video_erase_char = ((c & 0xff00) << 1) | (c & 0xff);
+	    conp->vc_attr <<= 1;
+	}
+
     }
     fbcon_font_widths(p);
 
@@ -1381,16 +1421,13 @@ static inline int fbcon_set_font(int unit, struct console_font_op *op)
     int h = op->height;
     int size = h;
     int i, j, k;
-    u8 *new_data, *data = op->data, c, *p;
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
-    u32 d;
-#else
+    u8 *new_data, *data = op->data, *p;
 
+#ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
     if (w != 8)
     	return -EINVAL;
 #endif
-
-    if (w > 32 || (op->charcount != 256 && op->charcount != 512))
+    if ((w <= 0) || (w > 32) || (op->charcount != 256 && op->charcount != 512))
         return -EINVAL;
     
     if (w > 8) { 
@@ -1407,56 +1444,46 @@ static inline int fbcon_set_font(int unit, struct console_font_op *op)
     FNTSIZE(new_data) = size;
     FNTCHARCNT(new_data) = op->charcount;
     REFCOUNT(new_data) = 0; /* usage counter */
-    k = 0;
     p = new_data;
     if (w <= 8) {
 	for (i = 0; i < op->charcount; i++) {
-	    for (j = 0; j < h; j++) {
-	        c = *data++;
-		k += c;
-		*p++ = c;
-	    }
-	    data += 32 - h;
+	    memcpy(p, data, h);
+	    data += 32;
+	    p += h;
 	}
     }
 #ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
     else if (w <= 16) {
+	h *= 2;
 	for (i = 0; i < op->charcount; i++) {
-	    for (j = 0; j < h; j++) {
-	        d = (data[0] << 8) | data[1];
-	        data += 2;
-		k += d;
-		*(u16 *)p = d;
-		p += sizeof(u16);
-	    }
-	    data += 2*(32 - h);
+	    memcpy(p, data, h);
+	    data += 64;
+	    p += h;
 	}
-    } else {
+    } else if (w <= 24) {
 	for (i = 0; i < op->charcount; i++) {
 	    for (j = 0; j < h; j++) {
-	    	if (w <= 24) {
-		    d = (data[0] << 24) | 
-			(data[1] << 16) | 
-			(data[2] << 8);
-		    data += 3;
-		} else {
-		    d = (data[0] << 24) | 
-			(data[1] << 16) | 
-			(data[2] << 8) |
-			data[3];
-		    data += 4;
-		}
-		k += d;
-		*(u32 *)p = d;
+	        memcpy(p, data, 3);
+		p[3] = 0;
+		data += 3;
 		p += sizeof(u32);
 	    }
-	    if (w <= 24)
-		data += 3*(32 - h);
-	    else
-		data += 4*(32 - h);
+	    data += 3*(32 - h);
+	}
+    } else {
+	h *= 4;
+	for (i = 0; i < op->charcount; i++) {
+	    memcpy(p, data, h);
+	    data += 128;
+	    p += h;
 	}
     }
 #endif
+    /* we can do it in u32 chunks because of charcount is 256 or 512, so
+       font length must be multiple of 256, at least. And 256 is multiple
+       of 4 */
+    k = 0;
+    while (p > new_data) k += *--(u32 *)p;
     FNTSUM(new_data) = k;
     /* Check if the same font is on some other console already */
     for (i = 0; i < MAX_NR_CONSOLES; i++) {
@@ -1587,7 +1614,7 @@ static int fbcon_scrolldelta(struct vc_data *conp, int lines)
     p->var.xoffset = 0;
     p->var.yoffset = offset*fontheight(p);
     p->fb_info->updatevar(unit, p->fb_info);
-    if (!offset)
+    if (!scrollback_current)
 	fbcon_cursor(conp, CM_DRAW);
     return 0;
 }
@@ -1664,8 +1691,8 @@ __initfunc(static int fbcon_show_logo( void ))
 	logo_depth = 1;
     }
 
-    for (x = 0; x < smp_num_cpus * (LOGO_W + 8) &&
-    	 x < p->var.xres - (LOGO_W + 8); x += (LOGO_W + 8)) {
+    for (x = p->var.xres - LOGO_W; x > 0 && x > (int)p->var.xres 
+        - smp_num_cpus * (LOGO_W + 8); x -= (LOGO_W + 8)) {
     	 
 #if defined(CONFIG_FBCON_CFB16) || defined(CONFIG_FBCON_CFB24) || \
     defined(CONFIG_FBCON_CFB32) || defined(CONFIG_FB_SBUS)
@@ -1766,6 +1793,20 @@ __initfunc(static int fbcon_show_logo( void ))
 		}
 	    }
 	    done = 1;
+	}
+#endif
+#if defined(CONFIG_FBCON_CFB4)
+	if (depth == 4 && p->type == FB_TYPE_PACKED_PIXELS) {
+		src = logo;
+		for( y1 = 0; y1 < LOGO_H; y1++) {
+			dst = fb + y1*line + x/2;
+			for( x1 = 0; x1 < LOGO_W/2; x1++) {
+				u8 q = *src++;
+				q = (q << 4) | (q >> 4);
+				*dst++ = q;
+			}
+		}
+		done = 1;
 	}
 #endif
 #if defined(CONFIG_FBCON_CFB8) || defined(CONFIG_FB_SBUS)

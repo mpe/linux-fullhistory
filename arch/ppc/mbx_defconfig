@@ -14,16 +14,16 @@ CONFIG_8xx=y
 # CONFIG_ALL_PPC is not set
 # CONFIG_APUS is not set
 CONFIG_MBX=y
-# CONFIG_SMP is not set
-CONFIG_SERIAL_CONSOLE=y
 CONFIG_MACH_SPECIFIC=y
+CONFIG_SERIAL_CONSOLE=y
 
 #
 # General setup
 #
-# CONFIG_EXPERIMENTAL is not set
+CONFIG_EXPERIMENTAL=y
 # CONFIG_MODULES is not set
 CONFIG_PCI=y
+# CONFIG_PCI_QUIRKS is not set
 CONFIG_PCI_OLD_PROC=y
 CONFIG_NET=y
 # CONFIG_SYSCTL is not set
@@ -34,13 +34,19 @@ CONFIG_KERNEL_ELF=y
 # CONFIG_BINFMT_MISC is not set
 # CONFIG_BINFMT_JAVA is not set
 # CONFIG_PARPORT is not set
+# CONFIG_VGA_CONSOLE is not set
+# CONFIG_FB is not set
+# CONFIG_PMAC_PBOOK is not set
 # CONFIG_MAC_KEYBOARD is not set
 # CONFIG_MAC_FLOPPY is not set
 # CONFIG_MAC_SERIAL is not set
+# CONFIG_ADBMOUSE is not set
+# CONFIG_BLK_DEV_IDE_PMAC is not set
 # CONFIG_PROC_DEVICETREE is not set
 # CONFIG_KGDB is not set
 # CONFIG_XMON is not set
-CONFIG_VGA_CONSOLE=y
+# CONFIG_TOTALMP is not set
+# CONFIG_BOOTX_TEXT is not set
 
 #
 # Plug and Play support
@@ -48,7 +54,7 @@ CONFIG_VGA_CONSOLE=y
 # CONFIG_PNP is not set
 
 #
-# Floppy, IDE, and other block devices
+# Block devices
 #
 # CONFIG_BLK_DEV_FD is not set
 # CONFIG_BLK_DEV_IDE is not set
@@ -85,8 +91,19 @@ CONFIG_IP_PNP_BOOTP=y
 # CONFIG_INET_RARP is not set
 CONFIG_IP_NOSR=y
 # CONFIG_SKB_LARGE is not set
+# CONFIG_IPV6 is not set
 # CONFIG_IPX is not set
 # CONFIG_ATALK is not set
+# CONFIG_X25 is not set
+# CONFIG_LAPB is not set
+# CONFIG_BRIDGE is not set
+# CONFIG_LLC is not set
+# CONFIG_ECONET is not set
+# CONFIG_WAN_ROUTER is not set
+# CONFIG_NET_FASTROUTE is not set
+# CONFIG_NET_HW_FLOWCONTROL is not set
+# CONFIG_CPU_IS_SLOW is not set
+# CONFIG_NET_SCHED is not set
 
 #
 # SCSI support
@@ -101,22 +118,26 @@ CONFIG_NETDEVICES=y
 # CONFIG_DUMMY is not set
 # CONFIG_EQUALIZER is not set
 CONFIG_NET_ETHERNET=y
+# CONFIG_MACE is not set
+# CONFIG_BMAC is not set
 # CONFIG_NET_VENDOR_3COM is not set
 # CONFIG_LANCE is not set
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_VENDOR_RACAL is not set
+# CONFIG_RTL8139 is not set
+# CONFIG_YELLOWFIN is not set
 # CONFIG_NET_ISA is not set
 # CONFIG_NET_EISA is not set
 # CONFIG_NET_POCKET is not set
 # CONFIG_FDDI is not set
+# CONFIG_HIPPI is not set
 # CONFIG_DLCI is not set
 # CONFIG_PPP is not set
 # CONFIG_SLIP is not set
 # CONFIG_NET_RADIO is not set
 # CONFIG_TR is not set
-# CONFIG_WAN_DRIVERS is not set
-# CONFIG_LAPBETHER is not set
-# CONFIG_X25_ASY is not set
+# CONFIG_SHAPER is not set
+# CONFIG_HOSTESS_SV11 is not set
 
 #
 # Amateur Radio support
@@ -132,6 +153,32 @@ CONFIG_NET_ETHERNET=y
 # CD-ROM drivers (not for SCSI or IDE/ATAPI drives)
 #
 # CONFIG_CD_NO_IDESCSI is not set
+
+#
+# Console drivers
+#
+
+#
+# Character devices
+#
+# CONFIG_VT is not set
+CONFIG_SERIAL=y
+CONFIG_SERIAL_CONSOLE=y
+# CONFIG_SERIAL_EXTENDED is not set
+# CONFIG_SERIAL_NONSTANDARD is not set
+# CONFIG_UNIX98_PTYS is not set
+# CONFIG_MOUSE is not set
+# CONFIG_QIC02_TAPE is not set
+# CONFIG_WATCHDOG is not set
+# CONFIG_RTC is not set
+# CONFIG_VIDEO_DEV is not set
+# CONFIG_NVRAM is not set
+# CONFIG_JOYSTICK is not set
+
+#
+# Ftape, the floppy tape device driver
+#
+# CONFIG_FTAPE is not set
 
 #
 # Filesystems
@@ -160,29 +207,13 @@ CONFIG_LOCKD=y
 # CONFIG_ROMFS_FS is not set
 # CONFIG_AUTOFS_FS is not set
 # CONFIG_UFS_FS is not set
+# CONFIG_BSD_DISKLABEL is not set
+# CONFIG_SMD_DISKLABEL is not set
+# CONFIG_SOLARIS_X86_PARTITION is not set
+# CONFIG_ADFS_FS is not set
+# CONFIG_QNX4FS_FS is not set
 # CONFIG_MAC_PARTITION is not set
 # CONFIG_NLS is not set
-
-#
-# Character devices
-#
-# CONFIG_VT is not set
-# CONFIG_SERIAL is not set
-# CONFIG_SERIAL_EXTENDED is not set
-# CONFIG_SERIAL_NONSTANDARD is not set
-# CONFIG_MOUSE is not set
-# CONFIG_QIC02_TAPE is not set
-# CONFIG_WATCHDOG is not set
-# CONFIG_RTC is not set
-# CONFIG_VIDEO_DEV is not set
-# CONFIG_NVRAM is not set
-# CONFIG_JOYSTICK is not set
-# CONFIG_MISC_RADIO is not set
-
-#
-# Ftape, the floppy tape device driver
-#
-# CONFIG_FTAPE is not set
 
 #
 # Sound

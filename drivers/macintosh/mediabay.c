@@ -180,7 +180,7 @@ check_media_bay(struct device_node *which_bay, int what)
 {
 #ifdef CONFIG_BLK_DEV_IDE
 	int	i;
-	
+
 	for (i=0; i<media_bay_count; i++)
 		if (which_bay == media_bays[i].dev_node)
 		{
@@ -196,9 +196,9 @@ check_media_bay(struct device_node *which_bay, int what)
 int
 check_media_bay_by_base(unsigned long base, int what)
 {
+#ifdef CONFIG_BLK_DEV_IDE
 	int	i;
 
-#ifdef CONFIG_BLK_DEV_IDE
 	for (i=0; i<media_bay_count; i++)
 		if (base == media_bays[i].cd_base)
 		{
@@ -216,9 +216,9 @@ int
 media_bay_set_ide_infos(struct device_node* which_bay, unsigned long base,
 	int irq, int index)
 {
-	int	i;
-	
 #ifdef CONFIG_BLK_DEV_IDE
+	int	i;
+
 	for (i=0; i<media_bay_count; i++)
 		if (which_bay == media_bays[i].dev_node)
 		{

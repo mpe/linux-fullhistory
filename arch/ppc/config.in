@@ -22,9 +22,6 @@ choice 'Machine Type' \
 if [ "$CONFIG_ALL_PPC" != "y" ];then
   define_bool CONFIG_MACH_SPECIFIC y
 fi
-
-bool 'Symmetric multi-processing support' CONFIG_SMP
-
 endmenu
 
 if [ "$CONFIG_MBX" = "y" ];then

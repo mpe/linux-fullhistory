@@ -192,7 +192,13 @@ extern inline void eieio(void)
 {
 	__asm__ __volatile__ ("eieio" : : : "memory");
 }
-#define iobarrier() eieio()
+
+/* Enforce in-order execution of data I/O. 
+ * No distinction between read/write on PPC; use eieio for all three.
+ */
+#define iobarrier_rw() eieio()
+#define iobarrier_r()  eieio()
+#define iobarrier_w()  eieio()
 
 /*
  * 8, 16 and 32 bit, big and little endian I/O operations, with barrier.

@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.90 1998/11/20 12:27:03 geert Exp $
+/*  $Id: atyfb.c,v 1.93 1998/12/18 18:33:13 geert Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -1457,7 +1457,7 @@ static int aty_pll_gx_to_var(const struct pll_gx *pll, u32 *vclk_per)
     vco_div_count = pll->m & 0x3f;
     ref_div_count = pll->n;
 
-    *vclk_per = (ref_clk_per*(vco_div_count+65)/ref_div_count)>>(3-df);
+    *vclk_per = ((ref_clk_per*ref_div_count)<<(3-df))/(vco_div_count+65);
 
     return 0;
 }
@@ -1719,6 +1719,22 @@ static void atyfb_set_par(const struct atyfb_par *par,
 	aty_set_pll_gx(info, &par->pll.gx);
 	aty_st_le32(BUS_CNTL, 0x890e20f1, info);
 	aty_st_le32(DAC_CNTL, 0x47052100, info);
+
+	/* Don't forget MEM_CNTL */
+	i = aty_ld_le32(MEM_CNTL, info) & 0xf0ffffff;
+	switch (par->crtc.bpp) {
+	    case 8:
+		i |= 0x02000000;
+		break;
+	    case 16:
+		i |= 0x03000000;
+		break;
+	    case 32:
+		i |= 0x06000000;
+		break;
+	}
+	aty_st_le32(MEM_CNTL, i, info);
+					
     } else {
 	aty_set_pll_ct(info, &par->pll.ct);
 	i = aty_ld_le32(MEM_CNTL, info) & 0xf30fffff;

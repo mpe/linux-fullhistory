@@ -742,7 +742,7 @@ static void amiga_savekmsg_init(void)
 static void amiga_serial_putc(char c)
 {
     custom.serdat = (unsigned char)c | 0x100;
-    iobarrier ();
+    iobarrier_rw ();
     while (!(custom.serdatr & 0x2000))
        ;
 }

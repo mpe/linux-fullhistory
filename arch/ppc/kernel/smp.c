@@ -1,5 +1,5 @@
 /*
- * $Id: smp.c,v 1.36 1998/10/08 01:17:48 cort Exp $
+ * $Id: smp.c,v 1.38 1998/12/02 21:23:49 cort Exp $
  *
  * Smp support for ppc.
  *
@@ -152,7 +152,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 {
 	if ( _machine != _MACH_Pmac )
 		return;
-	/*printk("SMP %d: sending smp message\n", current->processor);*/
+printk("SMP %d: sending smp message %x\n", current->processor, msg);
 if (smp_processor_id() ) printk("pass from cpu 1\n");
 	spin_lock(&mesg_pass_lock);
 #define OTHER (~smp_processor_id() & 1)
@@ -179,7 +179,7 @@ if (smp_processor_id() ) printk("pass from cpu 1\n");
 	spin_unlock(&mesg_pass_lock);	
 }
 
-__initfunc(void smp_boot_cpus(void))
+void __init smp_boot_cpus(void)
 {
 	extern struct task_struct *current_set[NR_CPUS];
 	extern void __secondary_start(void);
@@ -251,19 +251,17 @@ __initfunc(void smp_boot_cpus(void))
 	smp_message_pass(1,0xf0f0, 0, 0);
 }
 
-__initfunc(void smp_commence(void))
+void __init smp_commence(void)
 {
 	printk("SMP %d: smp_commence()\n",current->processor);
 	/*
 	 *	Lets the callin's below out of their loop.
 	 */
-	local_flush_tlb_all();
 	smp_commenced = 1;
-	local_flush_tlb_all();
 }
 
 /* intel needs this */
-__initfunc(void initialize_secondary(void))
+void __init initialize_secondary(void)
 {
 }
 
@@ -275,33 +273,33 @@ asmlinkage int __init start_secondary(void *unused)
 	return cpu_idle(NULL);
 }
 
-__initfunc(void smp_callin(void))
+void __init smp_callin(void)
 {
 	printk("SMP %d: smp_callin()\n",current->processor);
         smp_store_cpu_info(current->processor);
 	set_dec(decrementer_count);
-	
+#if 0
 	current->mm->mmap->vm_page_prot = PAGE_SHARED;
 	current->mm->mmap->vm_start = PAGE_OFFSET;
 	current->mm->mmap->vm_end = init_task.mm->mmap->vm_end;
-
-	cpu_callin_map[current->processor] = current->processor;
+#endif
+	cpu_callin_map[current->processor] = 1;
 	while(!smp_commenced)
 		barrier();
 	__sti();
 }
 
-__initfunc(void smp_setup(char *str, int *ints))
+void __init smp_setup(char *str, int *ints)
 {
 	printk("SMP %d: smp_setup()\n",current->processor);
 }
 
-__initfunc(int setup_profiling_timer(unsigned int multiplier))
+int __init setup_profiling_timer(unsigned int multiplier)
 {
 	return 0;
 }
 
-__initfunc(void smp_store_cpu_info(int id))
+void __init smp_store_cpu_info(int id)
 {
         struct cpuinfo_PPC *c = &cpu_data[id];
 

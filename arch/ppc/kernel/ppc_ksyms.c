@@ -185,7 +185,9 @@ EXPORT_SYMBOL(pci_device_loc);
 EXPORT_SYMBOL(feature_set);
 EXPORT_SYMBOL(feature_clear);
 EXPORT_SYMBOL(feature_test);
+#ifdef CONFIG_SCSI
 EXPORT_SYMBOL(note_scsi_host);
+#endif
 EXPORT_SYMBOL(kd_mksound);
 #ifdef CONFIG_PMAC
 EXPORT_SYMBOL(nvram_read_byte);

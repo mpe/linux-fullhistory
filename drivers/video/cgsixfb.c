@@ -1,4 +1,4 @@
-/* $Id: cgsixfb.c,v 1.11 1998/09/04 15:43:42 jj Exp $
+/* $Id: cgsixfb.c,v 1.12 1998/11/27 00:02:04 anton Exp $
  * cgsixfb.c: CGsix (GX,GXplus) frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -534,6 +534,7 @@ static void cg6_reset (struct fb_info_sbusfb *fb)
 	unsigned int rev, conf;
 	struct cg6_tec *tec = fb->s.cg6.tec;
 	struct cg6_fbc *fbc = fb->s.cg6.fbc;
+	u32 mode;
 	
 	/* Turn off stuff in the Transform Engine. */
 	tec->tec_matrix = 0;
@@ -552,15 +553,20 @@ static void cg6_reset (struct fb_info_sbusfb *fb)
 		*(fb->s.cg6.fhc) = conf;
 	}
 
-	/* Set things in the FBC. */
-	fbc->mode &= ~(CG6_FBC_BLIT_MASK | CG6_FBC_MODE_MASK |
+	/* Set things in the FBC. Bad things appear to happen if we do
+	 * back to back store/loads on the mode register, so copy it
+	 * out instead. */
+	mode = fbc->mode;
+	mode &= ~(CG6_FBC_BLIT_MASK | CG6_FBC_MODE_MASK |
 		       CG6_FBC_DRAW_MASK | CG6_FBC_BWRITE0_MASK |
 		       CG6_FBC_BWRITE1_MASK | CG6_FBC_BREAD_MASK |
 		       CG6_FBC_BDISP_MASK);
-	fbc->mode |= (CG6_FBC_BLIT_SRC | CG6_FBC_MODE_COLOR8 |
+	mode |= (CG6_FBC_BLIT_SRC | CG6_FBC_MODE_COLOR8 |
 		      CG6_FBC_DRAW_RENDER | CG6_FBC_BWRITE0_ENABLE |
 		      CG6_FBC_BWRITE1_DISABLE | CG6_FBC_BREAD_0 |
 		      CG6_FBC_BDISP_0);
+	fbc->mode = mode;
+
 	fbc->clip = 0;
 	fbc->offx = 0;
 	fbc->offy = 0;

@@ -1,4 +1,5 @@
 /*
+ * $Id: enet.c,v 1.8 1998/11/15 19:58:07 cort Exp $
  * Ethernet driver for Motorola MPC8xx.
  * Copyright (c) 1997 Dan Malek (dmalek@jlc.net)
  *
@@ -657,7 +658,7 @@ __initfunc(int cpm_enet_init(void))
 
 	cp = cpmp;	/* Get pointer to Communication Processor */
 
-	immap = (immap_t *)MBX_IMAP_ADDR;	/* and to internal registers */
+	immap = (immap_t *)IMAP_ADDR;	/* and to internal registers */
 
 	/* Allocate some private information.
 	*/
@@ -719,11 +720,11 @@ __initfunc(int cpm_enet_init(void))
 	 * These are relative offsets in the DP ram address space.
 	 * Initialize base addresses for the buffer descriptors.
 	 */
-	i = mbx_cpm_dpalloc(sizeof(cbd_t) * RX_RING_SIZE);
+	i = m8xx_cpm_dpalloc(sizeof(cbd_t) * RX_RING_SIZE);
 	ep->sen_genscc.scc_rbase = i;
 	cep->rx_bd_base = (cbd_t *)&cp->cp_dpmem[i];
 
-	i = mbx_cpm_dpalloc(sizeof(cbd_t) * TX_RING_SIZE);
+	i = m8xx_cpm_dpalloc(sizeof(cbd_t) * TX_RING_SIZE);
 	ep->sen_genscc.scc_tbase = i;
 	cep->tx_bd_base = (cbd_t *)&cp->cp_dpmem[i];
 
@@ -912,4 +913,3 @@ __initfunc(int cpm_enet_init(void))
 
 	return 0;
 }
-

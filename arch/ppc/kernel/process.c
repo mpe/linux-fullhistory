@@ -1,4 +1,6 @@
 /*
+ * $Id: process.c,v 1.68 1998/11/15 19:59:02 cort Exp $
+ *
  *  linux/arch/ppc/kernel/process.c
  *
  *  Derived from "arch/i386/kernel/process.c"
@@ -450,6 +452,7 @@ print_backtrace(unsigned long *sp)
 	printk("\n");
 }
 
+#if 0
 /*
  * Low level print for debugging - Cort
  */
@@ -537,3 +540,4 @@ __initfunc(void ll_puts(const char *s))
 	orig_x = x;
 	orig_y = y;
 }
+#endif

@@ -178,7 +178,11 @@ static struct fb_videomode retz3fb_predefined[] __initdata = {
 	"640x480", {		/* 640x480, 8 bpp */
 	    640, 480, 640, 480, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+#if 1
+	    0, 0, -1, -1, FB_ACCEL_NONE, 39722, 48, 16, 33, 10, 96, 2,
+#else
 	    0, 0, -1, -1, FB_ACCELF_TEXT, 38461, 28, 32, 12, 10, 96, 2,
+#endif
 	    FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,FB_VMODE_NONINTERLACED
 	}
     },
@@ -194,8 +198,24 @@ static struct fb_videomode retz3fb_predefined[] __initdata = {
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     },
+    {
+	"800x600-60", {		/* 800x600, 8 bpp */
+	    800, 600, 800, 600, 0, 0, 8, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCELF_TEXT, 25000, 88, 40, 23, 1, 128, 4,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    },
+    {
+	"800x600-70", {		/* 800x600, 8 bpp */
+	    800, 600, 800, 600, 0, 0, 8, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCELF_TEXT, 22272, 40, 24, 15, 9, 144, 12,
+	    FB_SYNC_COMP_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    },
     /*
-     ModeLine "1024x768i" 45 1024 1064 1224 1264 768 777 785 817 interlace
+      ModeLine "1024x768i" 45 1024 1064 1224 1264 768 777 785 817 interlace
 	       < name >   DCF HR  SH1  SH2  HFL  VR  SV1 SV2 VFL
      */
     {
@@ -205,14 +225,24 @@ static struct fb_videomode retz3fb_predefined[] __initdata = {
 	    0, 0, -1, -1, FB_ACCELF_TEXT, 22222, 40, 40, 32, 9, 160, 8,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_INTERLACED
 	}
-    }, {
+    },
+    {
+	"1024x768", {
+	    1024, 768, 1024, 768, 0, 0, 8, 0, 
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0}, 
+	    0, 0, -1, -1, FB_ACCEL_NONE, 12500, 92, 112, 31, 2, 204, 4,
+	    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	 }
+    },
+    {
 	"640x480-16", {		/* 640x480, 16 bpp */
 	    640, 480, 640, 480, 0, 0, 16, 0,
 	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
 	    0, 0, -1, -1, 0, 38461/2, 28, 32, 12, 10, 96, 2,
 	    FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,FB_VMODE_NONINTERLACED
 	}
-    }, {
+    },
+    {
 	"640x480-24", {		/* 640x480, 24 bpp */
 	    640, 480, 640, 480, 0, 0, 24, 0,
 	    {8, 8, 8}, {8, 8, 8}, {8, 8, 8}, {0, 0, 0},
@@ -421,7 +451,7 @@ static int retz3_set_video(struct fb_info *info,
 	data.h_total	= (hback / 8) + (xres / 8)
 			+ (hfront / 8) + (hsync / 8) - 1 /* + 1 */;
 	data.h_dispend	= ((xres + bpp - 1)/ 8) - 1;
-	data.h_bstart	= xres / 8 /* + 1 */;
+	data.h_bstart	= xres / 8 - 1 /* + 1 */;
 
 	data.h_bstop	= data.h_total+1 + 2 + 1;
 	data.h_sstart	= (xres / 8) + (hfront / 8) + 1;
@@ -430,7 +460,7 @@ static int retz3_set_video(struct fb_info *info,
 	data.v_total	= yres + vfront + vsync + vback - 1;
 
 	data.v_dispend	= yres - 1;
-	data.v_bstart	= yres;
+	data.v_bstart	= yres - 1;
 
 	data.v_bstop	= data.v_total;
 	data.v_sstart	= yres + vfront - 1 - 2;
@@ -1198,7 +1228,7 @@ static void retz3fb_set_disp(int con, struct fb_info *info)
 	case 8:
 		if (display->var.accel_flags & FB_ACCELF_TEXT) {
 		    display->dispsw = &fbcon_retz3_8;
-#warning FIXME: We should reinit the graphics engine here
+		    retz3_set_video(info, &display->var, &zinfo->current_par);
 		} else
 		    display->dispsw = &fbcon_cfb8;
 		break;
@@ -1266,7 +1296,6 @@ static int retz3fb_set_var(struct fb_var_screeninfo *var, int con,
 			case 8:
 				if (var->accel_flags & FB_ACCELF_TEXT) {
 					display->dispsw = &fbcon_retz3_8;
-#warning FIXME: We should reinit the graphics engine here
 				} else
 					display->dispsw = &fbcon_cfb8;
 				break;
@@ -1280,9 +1309,14 @@ static int retz3fb_set_var(struct fb_var_screeninfo *var, int con,
 				display->dispsw = &fbcon_dummy;
 				break;
 			}
-/*
-	retz3fb_set_disp(con, info);
-*/
+			/*
+			 * We still need to find a way to tell the X
+			 * server that the video mem has been fiddled with
+			 * so it redraws the entire screen when switching
+			 * between X and a text console.
+			 */
+			retz3_set_video(info, var, &zinfo->current_par);
+
 			if (info->changevar)
 				(*info->changevar)(con);
 		}

@@ -51,11 +51,6 @@
 #define eieio()		/* Enforce In-order Execution of I/O */
 #endif
 
-enum {
-	IBM = 0x00,
-	TVP = 0x01
-};
-
 /* TwinTurbo (Cosmo) registers */
 enum {
 	S1SA	=  0, /* 0x00 */
@@ -63,7 +58,8 @@ enum {
 	SP	=  2, /* 0x08 */
 	DSA	=  3, /* 0x0C */
 	CNT	=  4, /* 0x10 */
-	DP_OCTRL=  5, /* 0x14 */
+	DP_OCTL	=  5, /* 0x14 */
+	CLR	=  6, /* 0x18 */
 	BI	=  8, /* 0x20 */
 	MBC	=  9, /* 0x24 */
 	BLTCTL	= 10, /* 0x28 */
@@ -113,7 +109,7 @@ enum {
 #endif
 };
 
-/* IBM ramdac direct registers */
+/* IBM 624 RAMDAC Direct Registers */
 enum {
 	PADDRW	= 0x00,
 	PDATA	= 0x04,
@@ -125,7 +121,7 @@ enum {
 	PIDXCTL	= 0x1c
 };
 
-/* IBM ramdac indirect registers */
+/* IBM 624 RAMDAC Indirect Registers */
 enum {
 	CLKCTL		= 0x02,	/* (0x01) Miscellaneous Clock Control */
 	SYNCCTL		= 0x03,	/* (0x00) Sync Control */
@@ -255,7 +251,7 @@ static struct initvalues ibm_initregs[] __initdata = {
 	 * used in the 2MB and 4MB cards, at least.
 	 */
 	{ BPP8,		0x00 },
-	{ BPP16,	0x00 },
+	{ BPP16,	0x01 },
 	{ BPP24,	0x00 },
 	{ BPP32,	0x00 },
 
@@ -265,7 +261,7 @@ static struct initvalues ibm_initregs[] __initdata = {
 	{ SYSCLKM,	0x4f },
 	{ SYSCLKP,	0x00 },
 	{ SYSCLKC,	0x00 },
-	{ CURSCTL,	0x02 },
+	{ CURSCTL,	0x00 },
 	{ CURSACCTL,	0x01 },
 	{ CURSACATTR,	0xa8 },
 	{ CURS1R,	0xff },
@@ -287,24 +283,24 @@ static struct initvalues ibm_initregs[] __initdata = {
 };
 
 static struct initvalues tvp_initregs[] __initdata = {
-	{ 0x6,	0x00 },
-	{ 0x7,	0xe4 },
-	{ 0xf,	0x06 },
-	{ 0x18,	0x80 },
-	{ 0x19,	0x4d },
-	{ 0x1a,	0x05 },
-	{ 0x1c,	0x00 },
-	{ 0x1d,	0x00 },
-	{ 0x1e,	0x08 },
-	{ 0x30,	0xff },
-	{ 0x31,	0xff },
-	{ 0x32,	0xff },
-	{ 0x33,	0xff },
-	{ 0x34,	0xff },
-	{ 0x35,	0xff },
-	{ 0x36,	0xff },
-	{ 0x37,	0xff },
-	{ 0x38,	0x00 },
+	{ TVPIRICC,	0x00 },
+	{ TVPIRBRC,	0xe4 },
+	{ TVPIRLAC,	0x06 },
+	{ TVPIRTCC,	0x80 },
+	{ TVPIRMXC,	0x4d },
+	{ TVPIRCLS,	0x05 },
+	{ TVPIRPPG,	0x00 },
+	{ TVPIRGEC,	0x00 },
+	{ TVPIRMIC,	0x08 },
+	{ TVPIRCKL,	0xff },
+	{ TVPIRCKH,	0xff },
+	{ TVPIRCRL,	0xff },
+	{ TVPIRCRH,	0xff },
+	{ TVPIRCGL,	0xff },
+	{ TVPIRCGH,	0xff },
+	{ TVPIRCBL,	0xff },
+	{ TVPIRCBH,	0xff },
+	{ TVPIRCKC,	0x00 },
 	{ TVPIRPLA,	0x00 },
 	{ TVPIRPPD,	0xc0 },
 	{ TVPIRPPD,	0xd5 },
@@ -358,11 +354,16 @@ struct fb_info_imstt {
 	} palette[256];
 	struct imstt_regvals init;
 	struct imstt_cursor cursor;
-	volatile __u8 *frame_buffer_phys, *frame_buffer;
-	volatile __u32 *dc_regs_phys, *dc_regs;
-	volatile __u8 *cmap_regs_phys, *cmap_regs;
+	__u8 *frame_buffer_phys, *frame_buffer;
+	__u32 *dc_regs_phys, *dc_regs;
+	__u8 *cmap_regs_phys, *cmap_regs;
 	__u32 total_vram;
 	__u32 ramdac;
+};
+
+enum {
+	IBM = 0,
+	TVP = 1
 };
 
 #define USE_NV_MODES		1
@@ -378,6 +379,9 @@ static char curblink __initdata = 1;
 static char noaccel __initdata = 0;
 #if defined(CONFIG_PPC)
 static signed char init_vmode __initdata = -1, init_cmode __initdata = -1;
+#endif
+#ifdef MODULE
+static struct fb_info_imstt *fb_info_imstt_p[FB_MAX] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
 static struct imstt_regvals tvp_reg_init_2 = {
@@ -619,7 +623,12 @@ set_imstt_regvals_tvp (struct fb_info_imstt *p, u_int bpp)
 			lckl_p = init->lckl_p[1];
 			break;
 		case 24:
-			/* ?!? */
+			tcc = 0x5e;
+			mxc = 0x5d;
+			lckl_n = 0xf1;
+			mlc = init->mlc[2];
+			lckl_p = init->lckl_p[2];
+			break;
 		case 32:
 			tcc = 0x46;
 			mxc = 0x5d;
@@ -666,7 +675,7 @@ static void
 set_imstt_regvals (struct fb_info_imstt *p, u_int bpp)
 {
 	struct imstt_regvals *init = &p->init;
-	__u32 ctl, pitch, byteswap, scr, line_pitch = init->pitch * (bpp >> 3);
+	__u32 ctl, pitch, byteswap, scr;
 
 	if (p->ramdac == IBM)
 		set_imstt_regvals_ibm(p, bpp);
@@ -682,7 +691,6 @@ set_imstt_regvals (struct fb_info_imstt *p, u_int bpp)
    *     ==========     =====   =====
    *        8bpp          0       0
    *       16bpp          0       1
-   *       24bpp          1       0
    *       32bpp          1       1
    */
 	switch (bpp) {
@@ -737,64 +745,97 @@ set_imstt_regvals (struct fb_info_imstt *p, u_int bpp)
 	}
 
 	switch (p->total_vram) {
-		case 0x00200000:
+		case 0x200000:
 			scr = 0x059d | byteswap;
 			break;
-		case 0x00400000:
-		case 0x00800000:
-			pitch /= 2;
+		/* case 0x400000:
+		   case 0x800000: */
+		default:
+			pitch >>= 1;
 			scr = 0x150dd | byteswap;
 			break;
 	}
 
 	out_le32(&p->dc_regs[SCR], scr);
 	out_le32(&p->dc_regs[SPR], pitch);
-	out_le32(&p->dc_regs[SP], (line_pitch << 16) | line_pitch);
-	out_le32(&p->dc_regs[DP_OCTRL], line_pitch);
-
 	out_le32(&p->dc_regs[STGCTL], ctl);
 }
 
-static void
-set_16 (struct fb_info_imstt *p, __u8 x)
+static inline void
+set_offset (struct display *disp, struct fb_info_imstt *p)
+{
+	__u32 off = disp->var.yoffset * (disp->line_length >> 3)
+		    + ((disp->var.xoffset * (disp->var.bits_per_pixel >> 3)) >> 3);
+	out_le32(&p->dc_regs[SSR], off);
+}
+
+static inline void
+set_555 (struct fb_info_imstt *p)
 {
 	if (p->ramdac == IBM) {
 		p->cmap_regs[PIDXHI] = 0;	eieio();
 		p->cmap_regs[PIDXLO] = BPP16;	eieio();
-		p->cmap_regs[PIDXDATA] = x;	eieio();
+		p->cmap_regs[PIDXDATA] = 0x01;	eieio();
 	} else {
-		/* ?!? */
+		p->cmap_regs[TVPADDRW] = TVPIRTCC;	eieio();
+		p->cmap_regs[TVPIDATA] = 0x44;		eieio();
 	}
 }
 
-#define set_555(_p)	set_16(_p, 0x01)
-#define set_565(_p)	set_16(_p, 0x03)
+static inline void
+set_565 (struct fb_info_imstt *p)
+{
+	if (p->ramdac == IBM) {
+		p->cmap_regs[PIDXHI] = 0;	eieio();
+		p->cmap_regs[PIDXLO] = BPP16;	eieio();
+		p->cmap_regs[PIDXDATA] = 0x03;	eieio();
+	} else {
+		p->cmap_regs[TVPADDRW] = TVPIRTCC;	eieio();
+		p->cmap_regs[TVPIDATA] = 0x45;		eieio();
+	}
+}
 
 static void
 imstt_set_cursor (struct fb_info_imstt *p, int on)
 {
 	struct imstt_cursor *c = &p->cursor;
 
-	p->cmap_regs[PIDXHI] = 0;
-	if (!on) {
-		p->cmap_regs[PIDXLO] = CURSCTL;	eieio();
-		p->cmap_regs[PIDXDATA] = 0x00;	eieio();
+	if (p->ramdac == IBM) {
+		p->cmap_regs[PIDXHI] = 0;	eieio();
+		if (!on) {
+			p->cmap_regs[PIDXLO] = CURSCTL;	eieio();
+			p->cmap_regs[PIDXDATA] = 0x00;	eieio();
+		} else {
+			p->cmap_regs[PIDXLO] = CURSXHI;		eieio();
+			p->cmap_regs[PIDXDATA] = c->x >> 8;	eieio();
+			p->cmap_regs[PIDXLO] = CURSXLO;		eieio();
+			p->cmap_regs[PIDXDATA] = c->x & 0xff;	eieio();
+			p->cmap_regs[PIDXLO] = CURSYHI;		eieio();
+			p->cmap_regs[PIDXDATA] = c->y >> 8;	eieio();
+			p->cmap_regs[PIDXLO] = CURSYLO;		eieio();
+			p->cmap_regs[PIDXDATA] = c->y & 0xff;	eieio();
+			p->cmap_regs[PIDXLO] = CURSCTL;		eieio();
+			p->cmap_regs[PIDXDATA] = 0x02;		eieio();
+		}
 	} else {
-		p->cmap_regs[PIDXLO] = CURSXHI;		eieio();
-		p->cmap_regs[PIDXDATA] = c->x >> 8;	eieio();
-		p->cmap_regs[PIDXLO] = CURSXLO;		eieio();
-		p->cmap_regs[PIDXDATA] = c->x & 0xff;	eieio();
-		p->cmap_regs[PIDXLO] = CURSYHI;		eieio();
-		p->cmap_regs[PIDXDATA] = c->y >> 8;	eieio();
-		p->cmap_regs[PIDXLO] = CURSYLO;		eieio();
-		p->cmap_regs[PIDXDATA] = c->y & 0xff;	eieio();
-		p->cmap_regs[PIDXLO] = CURSCTL;		eieio();
-		p->cmap_regs[PIDXDATA] = 0x02;		eieio();
+		if (!on) {
+			p->cmap_regs[TVPADDRW] = TVPIRICC;	eieio();
+			p->cmap_regs[TVPIDATA] = 0x00;		eieio();
+		} else {
+			__u16 x = c->x + 0x40, y = c->y + 0x40;
+
+			p->cmap_regs[TVPCXPOH] = x >> 8;	eieio();
+			p->cmap_regs[TVPCXPOL] = x & 0xff;	eieio();
+			p->cmap_regs[TVPCYPOH] = y >> 8;	eieio();
+			p->cmap_regs[TVPCYPOL] = y & 0xff;	eieio();
+			p->cmap_regs[TVPADDRW] = TVPIRICC;	eieio();
+			p->cmap_regs[TVPIDATA] = 0x02;		eieio();
+		}
 	}
 }
 
 static void
-imsttfb_cursor (struct display *disp, int mode, int x, int y)
+imsttfbcon_cursor (struct display *disp, int mode, int x, int y)
 {
 	struct fb_info_imstt *p = (struct fb_info_imstt *)disp->fb_info;
 	struct imstt_cursor *c = &p->cursor;
@@ -827,11 +868,12 @@ imsttfb_cursor (struct display *disp, int mode, int x, int y)
 }
 
 static int
-imsttfb_set_font (struct display *disp, int width, int height)
+imsttfbcon_set_font (struct display *disp, int width, int height)
 {
 	struct fb_info_imstt *p = (struct fb_info_imstt *)disp->fb_info;
 	struct imstt_cursor *c = &p->cursor;
 	u_int x, y;
+	__u8 fgc;
 
 	if (width > 32 || height > 32)
 		return -EINVAL;
@@ -839,17 +881,68 @@ imsttfb_set_font (struct display *disp, int width, int height)
 	c->height = height;
 	c->width = width;
 
-	p->cmap_regs[PIDXHI] = 1;	eieio();
-	for (x = 0; x < 0x100; x++) {
-		p->cmap_regs[PIDXLO] = x;	eieio();
-		p->cmap_regs[PIDXDATA] = 0x00;	eieio();
-	}
-	p->cmap_regs[PIDXHI] = 1;	eieio();
-	for (y = 0; y < height; y++)
-		for (x = 0; x < width >> 2; x++) {
-			p->cmap_regs[PIDXLO] = x + y * 8;	eieio();
-			p->cmap_regs[PIDXDATA] = 0xff;		eieio();
+	fgc = ~attr_bgcol_ec(disp, disp->conp);
+
+	if (p->ramdac == IBM) {
+		p->cmap_regs[PIDXHI] = 1;	eieio();
+		for (x = 0; x < 0x100; x++) {
+			p->cmap_regs[PIDXLO] = x;	eieio();
+			p->cmap_regs[PIDXDATA] = 0x00;	eieio();
 		}
+		p->cmap_regs[PIDXHI] = 1;	eieio();
+		for (y = 0; y < height; y++)
+			for (x = 0; x < width >> 2; x++) {
+				p->cmap_regs[PIDXLO] = x + y * 8;	eieio();
+				p->cmap_regs[PIDXDATA] = 0xff;		eieio();
+			}
+		p->cmap_regs[PIDXHI] = 0;	eieio();
+		p->cmap_regs[PIDXLO] = CURS1R;	eieio();
+		p->cmap_regs[PIDXDATA] = fgc;	eieio();
+		p->cmap_regs[PIDXLO] = CURS1G;	eieio();
+		p->cmap_regs[PIDXDATA] = fgc;	eieio();
+		p->cmap_regs[PIDXLO] = CURS1B;	eieio();
+		p->cmap_regs[PIDXDATA] = fgc;	eieio();
+		p->cmap_regs[PIDXLO] = CURS2R;	eieio();
+		p->cmap_regs[PIDXDATA] = fgc;	eieio();
+		p->cmap_regs[PIDXLO] = CURS2G;	eieio();
+		p->cmap_regs[PIDXDATA] = fgc;	eieio();
+		p->cmap_regs[PIDXLO] = CURS2B;	eieio();
+		p->cmap_regs[PIDXDATA] = fgc;	eieio();
+		p->cmap_regs[PIDXLO] = CURS3R;	eieio();
+		p->cmap_regs[PIDXDATA] = fgc;	eieio();
+		p->cmap_regs[PIDXLO] = CURS3G;	eieio();
+		p->cmap_regs[PIDXDATA] = fgc;	eieio();
+		p->cmap_regs[PIDXLO] = CURS3B;	eieio();
+		p->cmap_regs[PIDXDATA] = fgc;	eieio();
+	} else {
+		p->cmap_regs[TVPADDRW] = TVPIRICC;	eieio();
+		p->cmap_regs[TVPIDATA] &= 0x03;		eieio();
+		p->cmap_regs[TVPADDRW] = 0;		eieio();
+		for (x = 0; x < 0x200; x++) {
+			p->cmap_regs[TVPCRDAT] = 0x00;	eieio();
+		}
+		for (x = 0; x < 0x200; x++) {
+			p->cmap_regs[TVPCRDAT] = 0xff;	eieio();
+		}
+		p->cmap_regs[TVPADDRW] = TVPIRICC;	eieio();
+		p->cmap_regs[TVPIDATA] &= 0x03;		eieio();
+		for (y = 0; y < height; y++)
+			for (x = 0; x < width >> 3; x++) {
+				p->cmap_regs[TVPADDRW] = x + y * 8;	eieio();
+				p->cmap_regs[TVPCRDAT] = 0xff;		eieio();
+			}
+		p->cmap_regs[TVPADDRW] = TVPIRICC;	eieio();
+		p->cmap_regs[TVPIDATA] |= 0x08;		eieio();
+		for (y = 0; y < height; y++)
+			for (x = 0; x < width >> 3; x++) {
+				p->cmap_regs[TVPADDRW] = x + y * 8;	eieio();
+				p->cmap_regs[TVPCRDAT] = 0xff;		eieio();
+			}
+		p->cmap_regs[TVPCADRW] = 0x00;	eieio();
+		for (x = 0; x < 12; x++) {
+			p->cmap_regs[TVPCDATA] = fgc;	eieio();
+		}
+	}
 
 	return 1;
 }
@@ -879,7 +972,7 @@ imstt_cursor_init (struct fb_info_imstt *p))
 {
 	struct imstt_cursor *c = &p->cursor;
 
-	imsttfb_set_font(&p->disp, fontwidth(&p->disp), fontheight(&p->disp));
+	imsttfbcon_set_font(&p->disp, fontwidth(&p->disp), fontheight(&p->disp));
 
 	c->enable = 1;
 	c->on = 1;
@@ -898,75 +991,152 @@ imstt_cursor_init (struct fb_info_imstt *p))
 }
 
 static void
-imsttfb_rectcopy (struct display *disp, int sy, int sx, int dy, int dx, int height, int width)
-{
-	struct fb_info_imstt *p = (struct fb_info_imstt *)disp->fb_info;
-	__u32	Bpp = disp->var.bits_per_pixel >> 3,
-		line_pitch = disp->line_length,
-		fb_offset_old, fb_offset_new;
-
-	fb_offset_old = sy * line_pitch + sx * Bpp;
-	fb_offset_new = dy * line_pitch + dx * Bpp;
-
-	while (in_le32(&p->dc_regs[SSTATUS]) & 0x80);
-	out_le32(&p->dc_regs[CNT], ((height - 1) << 16) | (width * Bpp - 1));
-	out_le32(&p->dc_regs[S1SA], fb_offset_old);
-	/* out_le32(&p->dc_regs[S2SA], fb_offset_new); */
-	out_le32(&p->dc_regs[DSA], fb_offset_new);
-	out_le32(&p->dc_regs[BLTCTL], 0xc0000005);
-	while (in_le32(&p->dc_regs[SSTATUS]) & 0x80);
-	while (in_le32(&p->dc_regs[SSTATUS]) & 0x40);
-}
-
-static void
 imsttfbcon_bmove (struct display *disp, int sy, int sx, int dy, int dx, int height, int width)
 {
-	/* XXX .. */
-	if (sy < dy || (sy == dy && sx < dx)) {
-		switch (disp->var.bits_per_pixel) {
-		case 8: fbcon_cfb8_bmove(disp, sy, sx, dy, dx, height, width); break;
-		case 16: fbcon_cfb16_bmove(disp, sy, sx, dy, dx, height, width); break;
-		case 24: fbcon_cfb24_bmove(disp, sy, sx, dy, dx, height, width); break;
-		case 32: fbcon_cfb32_bmove(disp, sy, sx, dy, dx, height, width); break;
-		}
-		return;
-	}
+	struct fb_info_imstt *p = (struct fb_info_imstt *)disp->fb_info;
+	__u32	Bpp, line_pitch,
+		fb_offset_old, fb_offset_new,
+		sp, dp_octl, cnt, bltctl;
+
+	Bpp = disp->var.bits_per_pixel >> 3,
 
 	sy *= fontheight(disp);
 	sx *= fontwidth(disp);
+	sx *= Bpp;
 	dy *= fontheight(disp);
 	dx *= fontwidth(disp);
+	dx *= Bpp;
 	height *= fontheight(disp);
+	height--;
 	width *= fontwidth(disp);
+	width *= Bpp;
+	width--;
 
-	imsttfb_rectcopy(disp, sy, sx, dy, dx, height, width);
+	line_pitch = disp->line_length;
+	bltctl = 0x05;
+	sp = line_pitch << 16;
+	cnt = height << 16;
+
+	if (sy < dy) {
+		sy += height;
+		dy += height;
+		sp |= -(line_pitch) & 0xffff;
+		dp_octl = -(line_pitch) & 0xffff;
+	} else {
+		sp |= line_pitch;
+		dp_octl = line_pitch;
+	}
+	if (sx < dx) {
+		sx += width;
+		dx += width;
+		bltctl |= 0x80;
+		cnt |= -(width) & 0xffff;
+	} else {
+		cnt |= width;
+	}
+	fb_offset_old = sy * line_pitch + sx;
+	fb_offset_new = dy * line_pitch + dx;
+
+	while(in_le32(&p->dc_regs[SSTATUS]) & 0x80);
+	out_le32(&p->dc_regs[S1SA], fb_offset_old);
+	out_le32(&p->dc_regs[SP], sp);
+	out_le32(&p->dc_regs[DSA], fb_offset_new);
+	out_le32(&p->dc_regs[CNT], cnt);
+	out_le32(&p->dc_regs[DP_OCTL], dp_octl);
+	out_le32(&p->dc_regs[BLTCTL], bltctl);
+	while(in_le32(&p->dc_regs[SSTATUS]) & 0x80);
+	while(in_le32(&p->dc_regs[SSTATUS]) & 0x40);
+}
+
+static void
+imsttfbcon_clear (struct vc_data *conp, struct display *disp,
+		  int sy, int sx, int height, int width)
+{
+	struct fb_info_imstt *p = (struct fb_info_imstt *)disp->fb_info;
+	__u32 Bpp, line_pitch, bgc;
+
+	bgc = attr_bgcol_ec(disp, conp);
+	bgc |= (bgc << 8);
+	bgc |= (bgc << 16);
+
+	Bpp = disp->var.bits_per_pixel >> 3,
+	line_pitch = disp->line_length;
+
+	sy *= fontheight(disp);
+	sy *= line_pitch;
+	sx *= fontwidth(disp);
+	sx *= Bpp;
+	height *= fontheight(disp);
+	height--;
+	width *= fontwidth(disp);
+	width *= Bpp;
+	width--;
+
+	while(in_le32(&p->dc_regs[SSTATUS]) & 0x80);
+	out_le32(&p->dc_regs[DSA], sy + sx);
+	out_le32(&p->dc_regs[CNT], (height << 16) | width);
+	out_le32(&p->dc_regs[DP_OCTL], line_pitch);
+	out_le32(&p->dc_regs[BI], 0xffffffff);
+	out_le32(&p->dc_regs[MBC], 0xffffffff);
+	out_le32(&p->dc_regs[CLR], bgc);
+	out_le32(&p->dc_regs[BLTCTL], 0x200000);
+	while(in_le32(&p->dc_regs[SSTATUS]) & 0x80);
+	while(in_le32(&p->dc_regs[SSTATUS]) & 0x40);
+}
+
+static void
+imsttfbcon_revc (struct display *disp, int sx, int sy)
+{
+	struct fb_info_imstt *p = (struct fb_info_imstt *)disp->fb_info;
+	__u32 Bpp, line_pitch, height, width;
+
+	Bpp = disp->var.bits_per_pixel >> 3,
+	line_pitch = disp->line_length;
+
+	height = fontheight(disp);
+	width = fontwidth(disp) * Bpp;
+	sy *= height;
+	sy *= line_pitch;
+	sx *= width;
+	height--;
+	width--;
+
+	while(in_le32(&p->dc_regs[SSTATUS]) & 0x80);
+	out_le32(&p->dc_regs[DSA], sy + sx);
+	out_le32(&p->dc_regs[S1SA], sy + sx);
+	out_le32(&p->dc_regs[CNT], (height << 16) | width);
+	out_le32(&p->dc_regs[DP_OCTL], line_pitch);
+	out_le32(&p->dc_regs[SP], line_pitch);
+	out_le32(&p->dc_regs[BLTCTL], 0x40005);
+	while(in_le32(&p->dc_regs[SSTATUS]) & 0x80);
+	while(in_le32(&p->dc_regs[SSTATUS]) & 0x40);
 }
 
 #ifdef FBCON_HAS_CFB8
 static struct display_switch fbcon_imstt8 = {
-	fbcon_cfb8_setup, imsttfbcon_bmove, fbcon_cfb8_clear, fbcon_cfb8_putc,
-	fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL, NULL, fbcon_cfb8_clear_margins,
+	fbcon_cfb8_setup, imsttfbcon_bmove, imsttfbcon_clear, fbcon_cfb8_putc,
+	fbcon_cfb8_putcs, imsttfbcon_revc, imsttfbcon_cursor, imsttfbcon_set_font, fbcon_cfb8_clear_margins,
 	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 #ifdef FBCON_HAS_CFB16
 static struct display_switch fbcon_imstt16 = {
-	fbcon_cfb16_setup, imsttfbcon_bmove, fbcon_cfb16_clear, fbcon_cfb16_putc,
-	fbcon_cfb16_putcs, fbcon_cfb16_revc, NULL, NULL, fbcon_cfb16_clear_margins,
+	fbcon_cfb16_setup, imsttfbcon_bmove, imsttfbcon_clear, fbcon_cfb16_putc,
+	fbcon_cfb16_putcs, imsttfbcon_revc, imsttfbcon_cursor, imsttfbcon_set_font, fbcon_cfb16_clear_margins,
 	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 #ifdef FBCON_HAS_CFB24
 static struct display_switch fbcon_imstt24 = {
-	fbcon_cfb24_setup, imsttfbcon_bmove, fbcon_cfb24_clear, fbcon_cfb24_putc,
-	fbcon_cfb24_putcs, fbcon_cfb24_revc, NULL, NULL, fbcon_cfb24_clear_margins,
+	fbcon_cfb24_setup, imsttfbcon_bmove, imsttfbcon_clear, fbcon_cfb24_putc,
+	fbcon_cfb24_putcs, imsttfbcon_revc, imsttfbcon_cursor, imsttfbcon_set_font, fbcon_cfb24_clear_margins,
 	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 #ifdef FBCON_HAS_CFB32
 static struct display_switch fbcon_imstt32 = {
-	fbcon_cfb32_setup, imsttfbcon_bmove, fbcon_cfb32_clear, fbcon_cfb32_putc,
-	fbcon_cfb32_putcs, fbcon_cfb32_revc, NULL, NULL, fbcon_cfb32_clear_margins,
+	fbcon_cfb32_setup, imsttfbcon_bmove, imsttfbcon_clear, fbcon_cfb32_putc,
+	fbcon_cfb32_putcs, imsttfbcon_revc, imsttfbcon_cursor, imsttfbcon_set_font, fbcon_cfb32_clear_margins,
 	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
@@ -1049,11 +1219,12 @@ imsttfb_setcolreg (u_int regno, u_int red, u_int green, u_int blue,
 	p->palette[regno].blue = blue;
 
 	/* PADDRW/PDATA are the same as TVPPADDRW/TVPPDATA */
-	if (bpp == 16 && p->ramdac == TVP && fb_display[currcon].var.green.length == 5) {
-		p->cmap_regs[PADDRW] = regno << 3;	eieio();
-	} else {
-		p->cmap_regs[PADDRW] = regno;		eieio();
-	}
+	if (0 && bpp == 16)	/* screws up X */
+		p->cmap_regs[PADDRW] = regno << 3;
+	else
+		p->cmap_regs[PADDRW] = regno;
+	eieio();
+
 	p->cmap_regs[PDATA] = red;	eieio();
 	p->cmap_regs[PDATA] = green;	eieio();
 	p->cmap_regs[PDATA] = blue;	eieio();
@@ -1129,9 +1300,12 @@ imsttfb_get_var (struct fb_var_screeninfo *var, int con, struct fb_info *info)
 }
 
 static void
-set_disp (struct display *disp, struct fb_info_imstt *p)
+set_dispsw (struct display *disp, struct fb_info_imstt *p)
 {
 	u_int accel = disp->var.accel_flags & FB_ACCELF_TEXT;
+
+	if (disp->conp && disp->conp->vc_sw && disp->conp->vc_sw->con_cursor)
+		disp->conp->vc_sw->con_cursor(disp->conp, CM_ERASE);
 
 	p->dispsw = fbcon_dummy;
 	disp->dispsw = &p->dispsw;
@@ -1150,7 +1324,7 @@ set_disp (struct display *disp, struct fb_info_imstt *p)
 			p->dispsw = accel ? fbcon_imstt8 : fbcon_cfb8;
 #endif
 			break;
-		case 16:	/* RGB 555 */
+		case 16:	/* RGB 555 or 565 */
 			if (disp->var.green.length != 6)
 				disp->var.red.offset = 10;
 			disp->var.red.length = 5;
@@ -1196,10 +1370,24 @@ set_disp (struct display *disp, struct fb_info_imstt *p)
 			break;
 	}
 
-	if (p->ramdac == IBM) {
-		p->dispsw.cursor = imsttfb_cursor;
-		p->dispsw.set_font = imsttfb_set_font;
+	if (accel && p->ramdac != IBM) {
+		p->dispsw.cursor = 0;
+		p->dispsw.set_font = 0;
 	}
+
+#ifdef CONFIG_FB_COMPAT_XPMAC
+	set_display_info(disp);
+#endif
+}
+
+static void
+set_disp (struct display *disp, struct fb_info_imstt *p)
+{
+	u_int accel = disp->var.accel_flags & FB_ACCELF_TEXT;
+
+	disp->fb_info = &p->info;
+
+	set_dispsw(disp, p);
 
 	disp->visual = disp->var.bits_per_pixel == 8 ? FB_VISUAL_PSEUDOCOLOR
 					 	     : FB_VISUAL_DIRECTCOLOR;
@@ -1222,8 +1410,6 @@ set_disp (struct display *disp, struct fb_info_imstt *p)
 		}
 	} else {
 		disp->scrollmode = SCROLL_YREDRAW;
-		disp->var.yoffset = disp->var.xoffset = 0;
-		out_le32(&p->dc_regs[SSR], 0);
 	}
 
 	disp->var.activate = 0;
@@ -1237,10 +1423,6 @@ set_disp (struct display *disp, struct fb_info_imstt *p)
 	disp->var.left_margin = disp->var.right_margin = 16;
 	disp->var.upper_margin = disp->var.lower_margin = 16;
 	disp->var.hsync_len = disp->var.vsync_len = 8;
-
-#ifdef CONFIG_FB_COMPAT_XPMAC
-	set_display_info(disp);
-#endif
 }
 
 static int
@@ -1248,7 +1430,7 @@ imsttfb_set_var (struct fb_var_screeninfo *var, int con, struct fb_info *info)
 {
 	struct fb_info_imstt *p = (struct fb_info_imstt *)info;
 	struct display *disp;
-	u_int oldbpp, oldxres, oldyres, oldgreenlen;
+	u_int oldbpp, oldxres, oldyres, oldgreenlen, oldaccel;
 
 	disp = &fb_display[con];
 
@@ -1273,6 +1455,7 @@ imsttfb_set_var (struct fb_var_screeninfo *var, int con, struct fb_info *info)
 	oldxres = disp->var.xres;
 	oldyres = disp->var.yres;
 	oldgreenlen = disp->var.green.length;
+	oldaccel = disp->var.accel_flags;
 
 	disp->var.bits_per_pixel = var->bits_per_pixel;
 	disp->var.xres = var->xres;
@@ -1306,6 +1489,7 @@ imsttfb_set_var (struct fb_var_screeninfo *var, int con, struct fb_info *info)
 			return err;
 		do_install_cmap(con, info);
 	}
+	*var = disp->var;
 
 	return 0;
 }
@@ -1315,7 +1499,6 @@ imsttfb_pan_display (struct fb_var_screeninfo *var, int con, struct fb_info *inf
 {
 	struct fb_info_imstt *p = (struct fb_info_imstt *)info;
 	struct display *disp = &fb_display[con];
-	__u32 off;
 
 	if (var->xoffset + disp->var.xres > disp->var.xres_virtual
 	    || var->yoffset + disp->var.yres > disp->var.yres_virtual)
@@ -1323,11 +1506,8 @@ imsttfb_pan_display (struct fb_var_screeninfo *var, int con, struct fb_info *inf
 
 	disp->var.xoffset = var->xoffset;
 	disp->var.yoffset = var->yoffset;
-	if (con == currcon) {
-		off = var->yoffset * (disp->line_length >> 3)
-		      + ((var->xoffset * (disp->var.bits_per_pixel >> 3)) >> 3);
-		out_le32(&p->dc_regs[SSR], off);
-	}
+	if (con == currcon)
+		set_offset(disp, p);
 
 	return 0;
 }
@@ -1377,48 +1557,48 @@ imsttfb_ioctl (struct inode *inode, struct file *file, u_int cmd,
 	       u_long arg, int con, struct fb_info *info)
 {
 	struct fb_info_imstt *p = (struct fb_info_imstt *)info;
-	__u8 init[2];
+	__u8 idx[2];
 	__u32 reg[2];
 
 	switch (cmd) {
 		case FBIMSTT_SETREG:
-			if (copy_from_user(reg, (void *)arg, 8) || reg[0] > (0x40000 - sizeof(reg[0])) / sizeof(reg[0]))
+			if (copy_from_user(reg, (void *)arg, 8) || reg[0] > (0x1000 - sizeof(reg[0])) / sizeof(reg[0]))
 				return -EFAULT;
 			out_le32(&p->dc_regs[reg[0]], reg[1]);
 			return 0;
 		case FBIMSTT_GETREG:
-			if (copy_from_user(reg, (void *)arg, 4) || reg[0] > (0x40000 - sizeof(reg[0])) / sizeof(reg[0]))
+			if (copy_from_user(reg, (void *)arg, 4) || reg[0] > (0x1000 - sizeof(reg[0])) / sizeof(reg[0]))
 				return -EFAULT;
 			reg[1] = in_le32(&p->dc_regs[reg[0]]);
 			if (copy_to_user((void *)(arg + 4), &reg[1], 4))
 				return -EFAULT;
 			return 0;
 		case FBIMSTT_SETCMAPREG:
-			if (copy_from_user(reg, (void *)arg, 8) || reg[0] > (0x17c0000 - sizeof(reg[0])) / sizeof(reg[0]))
+			if (copy_from_user(reg, (void *)arg, 8) || reg[0] > (0x1000 - sizeof(reg[0])) / sizeof(reg[0]))
 				return -EFAULT;
 			out_le32(&((u_int *)p->cmap_regs)[reg[0]], reg[1]);
 			return 0;
 		case FBIMSTT_GETCMAPREG:
-			if (copy_from_user(reg, (void *)arg, 4) || reg[0] > (0x17c0000 - sizeof(reg[0])) / sizeof(reg[0]))
+			if (copy_from_user(reg, (void *)arg, 4) || reg[0] > (0x1000 - sizeof(reg[0])) / sizeof(reg[0]))
 				return -EFAULT;
 			reg[1] = in_le32(&((u_int *)p->cmap_regs)[reg[0]]);
 			if (copy_to_user((void *)(arg + 4), &reg[1], 4))
 				return -EFAULT;
 			return 0;
 		case FBIMSTT_SETIDXREG:
-			if (copy_from_user(init, (void *)arg, 2))
+			if (copy_from_user(idx, (void *)arg, 2))
 				return -EFAULT;
 			p->cmap_regs[PIDXHI] = 0;		eieio();
-			p->cmap_regs[PIDXLO] = init[0];		eieio();
-			p->cmap_regs[PIDXDATA] = init[1];	eieio();
+			p->cmap_regs[PIDXLO] = idx[0];		eieio();
+			p->cmap_regs[PIDXDATA] = idx[1];	eieio();
 			return 0;
 		case FBIMSTT_GETIDXREG:
-			if (copy_from_user(init, (void *)arg, 1))
+			if (copy_from_user(idx, (void *)arg, 1))
 				return -EFAULT;
 			p->cmap_regs[PIDXHI] = 0;		eieio();
-			p->cmap_regs[PIDXLO] = init[0];		eieio();
-			init[1] = p->cmap_regs[PIDXDATA];
-			if (copy_to_user((void *)(arg + 1), &init[1], 1))
+			p->cmap_regs[PIDXLO] = idx[0];		eieio();
+			idx[1] = p->cmap_regs[PIDXDATA];
+			if (copy_to_user((void *)(arg + 1), &idx[1], 1))
 				return -EFAULT;
 			return 0;
 		default:
@@ -1443,21 +1623,21 @@ imsttfbcon_switch (int con, struct fb_info *info)
 {
 	struct fb_info_imstt *p = (struct fb_info_imstt *)info;
 	struct display *old = &fb_display[currcon], *new = &fb_display[con];
-	__u32 off;
 
 	if (old->cmap.len)
 		fb_get_cmap(&old->cmap, 1, imsttfb_getcolreg, info);
-	
-	if (p->ramdac == IBM)
-		imsttfb_cursor(old, CM_ERASE, p->cursor.x, p->cursor.y);
+
+	if (old->conp && old->conp->vc_sw && old->conp->vc_sw->con_cursor)
+		old->conp->vc_sw->con_cursor(old->conp, CM_ERASE);
 
 	currcon = con;
 
 	if (old->var.xres != new->var.xres
 	    || old->var.yres != new->var.yres
 	    || old->var.bits_per_pixel != new->var.bits_per_pixel
-	    || old->var.green.length != new->var.green.length) {
-		set_disp(new, p);
+	    || old->var.green.length != new->var.green.length
+	    || old->var.accel_flags != new->var.accel_flags) {
+		set_dispsw(new, p);
 		if (!compute_imstt_regvals(p, new->var.xres, new->var.yres))
 			return -1;
 		if (new->var.bits_per_pixel == 16) {
@@ -1468,21 +1648,13 @@ imsttfbcon_switch (int con, struct fb_info *info)
 		}
 		set_imstt_regvals(p, new->var.bits_per_pixel);
 	}
-	if (old->var.yoffset != new->var.yoffset || old->var.xoffset != new->var.xoffset) {
-		off = new->var.yoffset * (new->line_length >> 3)
-		      + ((new->var.xoffset * (new->var.bits_per_pixel >> 3)) >> 3);
-		out_le32(&p->dc_regs[SSR], off);
-	}
+	set_offset(new, p);
+
+	imsttfbcon_set_font(new, fontwidth(new), fontheight(new));
 
 	do_install_cmap(con, info);
 
 	return 0;
-}
-
-static inline void
-imsttfb_rectfill (struct display *disp, u_int sy, u_int sx, u_int height, u_int width, __u32 bgx)
-{
-	memset(disp->screen_base + sy + sx, bgx, height * width * (disp->var.bits_per_pixel >> 3));
 }
 
 static int
@@ -1490,31 +1662,14 @@ imsttfbcon_updatevar (int con, struct fb_info *info)
 {
 	struct fb_info_imstt *p = (struct fb_info_imstt *)info;
 	struct display *disp = &fb_display[con];
-	struct vc_data *conp = disp->conp;
-	__u32 off, yres, yoffset, sy, height;
 
 	if (con != currcon)
 		goto out;
 
-	yres = disp->var.yres;
-	yoffset = disp->var.yoffset;
-	sy = (conp->vc_rows + disp->yscroll) * fontheight(disp);
-	height = yres - conp->vc_rows * fontheight(disp);
+	if (p->ramdac == IBM)
+		imsttfbcon_cursor(disp, CM_ERASE, p->cursor.x, p->cursor.y);
 
-	if (height && (yoffset + yres > sy)) {
-		__u32 bgx = attr_bgcol_ec(disp, conp);
-
-		if (sy + height > disp->var.yres_virtual)
-			printk("updatevar: %u + %u > %u\n", sy, height, disp->var.yres_virtual);
-		imsttfb_rectfill(disp, sy, disp->var.xoffset, height, disp->var.xres, bgx);
-	}
-
-	if (p->ramdac == IBM && (yoffset + yres <= sy))
-		imsttfb_cursor(disp, CM_ERASE, p->cursor.x, p->cursor.y);
-
-	off = disp->var.yoffset * (disp->line_length >> 3)
-	      + ((disp->var.xoffset * (disp->var.bits_per_pixel >> 3)) >> 3); 
-	out_le32(&p->dc_regs[SSR], off);
+	set_offset(disp, p);
 
 out:
 	return 0;
@@ -1581,9 +1736,9 @@ init_imstt(struct fb_info_imstt *p))
 
 	tmp = in_le32(&p->dc_regs[PRC]);
 	if (p->ramdac == IBM)
-		p->total_vram = (tmp & 0x0004) ? 0x00400000 : 0x00200000;
+		p->total_vram = (tmp & 0x0004) ? 0x400000 : 0x200000;
 	else
-		p->total_vram = 0x00800000;
+		p->total_vram = 0x800000;
 
 	ip = (__u32 *)p->frame_buffer;
 	end = (__u32 *)(p->frame_buffer + p->total_vram);
@@ -1660,7 +1815,7 @@ init_imstt(struct fb_info_imstt *p))
 	p->disp.var.accel_flags = noaccel ? 0 : FB_ACCELF_TEXT;
 	set_disp(&p->disp, p);
 
-	if (p->ramdac == IBM)
+	if (!noaccel && p->ramdac == IBM)
 		imstt_cursor_init(p);
 	if (p->disp.var.green.length == 6)
 		set_565(p);
@@ -1693,64 +1848,65 @@ init_imstt(struct fb_info_imstt *p))
 		return;
 	}
 
+	i = GET_FB_IDX(p->info.node);
 	tmp = (in_le32(&p->dc_regs[SSTATUS]) & 0x0f00) >> 8;
-	printk("fb%d: %s frame buffer; %uMB vram; chip version %u\n",
-		GET_FB_IDX(p->info.node), p->fix.id, p->total_vram >> 20, tmp);
+	printk("fb%u: %s frame buffer; %uMB vram; chip version %u\n",
+		i, p->fix.id, p->total_vram >> 20, tmp);
 
+#ifdef MODULE
+	fb_info_imstt_p[i] = p;
+#endif
 #ifdef CONFIG_FB_COMPAT_XPMAC
 	strncpy(display_info.name, "IMS,tt128mb", sizeof(display_info.name));
 	display_info.fb_address = (__u32)p->frame_buffer_phys;
 	display_info.cmap_adr_address = (__u32)&p->cmap_regs_phys[PADDRW];
 	display_info.cmap_data_address = (__u32)&p->cmap_regs_phys[PDATA];
 	display_info.disp_reg_address = (__u32)p->dc_regs_phys;
-	set_display_info(&p->disp);
 	if (!console_fb_info)
 		console_fb_info = &p->info;
 #endif /* CONFIG_FB_COMPAT_XPMAC */
 }
 
-#if defined(CONFIG_FB_OF)
+#if defined(CONFIG_FB_OF) && !defined(MODULE)
 __initfunc(void
 imsttfb_of_init(struct device_node *dp))
 {
 	struct fb_info_imstt *p;
 	int i;
-	__u32 addr, size = 0;
+	__u32 addr = 0;
 	__u8 bus, devfn;
 	__u16 cmd;
 
 	for (i = 0; i < dp->n_addrs; i++) {
-		if (dp->addrs[i].size >= 0x02000000) {
+		if (dp->addrs[i].size >= 0x02000000)
 			addr = dp->addrs[i].address;
-			size = dp->addrs[i].size;
-		}
 	}
-	if (!size)
+	if (!addr)
 		return;
-
-	p = kmalloc(sizeof(struct fb_info_imstt), GFP_ATOMIC);
-	if (!p)
-		return;
-
-	memset(p, 0, sizeof(struct fb_info_imstt));
-	p->frame_buffer_phys = (__u8 *)addr;
-	p->frame_buffer = (__u8 *)ioremap(addr, size);
-	p->dc_regs_phys = (__u32 *)(p->frame_buffer_phys + 0x00800000);
-	p->dc_regs = (__u32 *)(p->frame_buffer + 0x00800000);
-	p->cmap_regs_phys = (__u8 *)(p->frame_buffer_phys + 0x00840000);
-	p->cmap_regs = (__u8 *)(p->frame_buffer + 0x00840000);
-
-	if (dp->name[11] == '8')
-		p->ramdac = TVP;
-	else
-		p->ramdac = IBM;
 
 	if (!pci_device_loc(dp, &bus, &devfn)) {
-		if (!pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd)) {
+		if (!pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd) && !(cmd & PCI_COMMAND_MEMORY)) {
 			cmd |= PCI_COMMAND_MEMORY;
 			pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd);
 		}
 	}
+
+	p = kmalloc(sizeof(struct fb_info_imstt), GFP_ATOMIC);
+	if (!p)
+		return;
+	memset(p, 0, sizeof(struct fb_info_imstt));
+
+	if (dp->name[11] == '8' || (dp->name[6] == '3' && dp->name[7] == 'd'))
+		p->ramdac = TVP;
+	else
+		p->ramdac = IBM;
+
+	p->frame_buffer_phys = (__u8 *)addr;
+	p->frame_buffer = (__u8 *)ioremap(addr, p->ramdac == IBM ? 0x400000 : 0x800000);
+	p->dc_regs_phys = (__u32 *)(addr + 0x800000);
+	p->dc_regs = (__u32 *)ioremap(addr + 0x800000, 0x1000);
+	p->cmap_regs_phys = (__u8 *)(addr + 0x840000);
+	p->cmap_regs = (__u8 *)ioremap(addr + 0x840000, 0x1000);
 
 	init_imstt(p);
 }
@@ -1759,11 +1915,60 @@ imsttfb_of_init(struct device_node *dp))
 __initfunc(void
 imsttfb_init(void))
 {
-#if !defined(CONFIG_FB_OF)
-	/* ... */
-#endif
+#if defined(CONFIG_FB_OF) && !defined(MODULE)
+	/* We don't want to be called like this. */
+	/* We rely on Open Firmware (offb) instead. */
+#elif defined(CONFIG_PCI)
+	struct pci_dev *pdev;
+	struct fb_info_imstt *p;
+	__u32 addr;
+	__u16 cmd;
+
+	for (pdev = pci_devices; pdev; pdev = pdev->next) {
+		if (!(((pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY)
+		      && (pdev->vendor == PCI_VENDOR_ID_IMS)))
+			continue;
+
+		pci_read_config_word(pdev, PCI_COMMAND, &cmd);
+		if (!(cmd & PCI_COMMAND_MEMORY)) {
+			cmd |= PCI_COMMAND_MEMORY;
+			pci_write_config_word(pdev, PCI_COMMAND, cmd);
+		}
+
+		addr = pdev->base_address[0] & PCI_BASE_ADDRESS_MEM_MASK;
+		if (!addr)
+			continue;
+
+		p = kmalloc(sizeof(struct fb_info_imstt), GFP_ATOMIC);
+		if (!p)
+			return;
+		memset(p, 0, sizeof(struct fb_info_imstt));
+
+		printk("imsttfb: device=%04x\n", pdev->device);
+
+		switch (pdev->device) {
+			case 0x9128:	/* IMS,tt128mbA */
+				p->ramdac = IBM;
+				break;
+			case 0x9135:	/* IMS,tt3d */
+			default:
+				p->ramdac = TVP;
+				break;
+		}
+
+		p->frame_buffer_phys = (__u8 *)addr;
+		p->frame_buffer = (__u8 *)ioremap(addr, p->ramdac == IBM ? 0x400000 : 0x800000);
+		p->dc_regs_phys = (__u32 *)(addr + 0x800000);
+		p->dc_regs = (__u32 *)ioremap(addr + 0x800000, 0x1000);
+		p->cmap_regs_phys = (__u8 *)(addr + 0x840000);
+		p->cmap_regs = (__u8 *)ioremap(addr + 0x840000, 0x1000);
+
+		init_imstt(p);
+	}
+#endif /* CONFIG_PCI */
 }
 
+#ifndef MODULE
 __initfunc(void
 imsttfb_setup(char *options, int *ints))
 {
@@ -1816,3 +2021,42 @@ imsttfb_setup(char *options, int *ints))
 #endif
 	}
 }
+
+#else /* MODULE */
+
+int
+init_module (void)
+{
+	struct fb_info_imstt *p;
+	__u32 i;
+
+	imsttfb_init();
+
+	for (i = 0; i < FB_MAX; i++) {
+		p = fb_info_imstt_p[i];
+		if (p)
+			return 0;
+	}
+
+	return -ENXIO;
+}
+
+void
+cleanup_module (void)
+{
+	struct fb_info_imstt *p;
+	__u32 i;
+
+	for (i = 0; i < FB_MAX; i++) {
+		p = fb_info_imstt_p[i];
+		if (!p)
+			continue;
+		iounmap(p->cmap_regs);
+		iounmap(p->dc_regs);
+		iounmap(p->frame_buffer);
+		kfree(p);
+	}
+}
+
+#include "macmodes.c"
+#endif /* MODULE */

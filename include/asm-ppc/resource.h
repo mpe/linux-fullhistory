@@ -21,7 +21,7 @@
     {LONG_MAX, LONG_MAX},			/* RLIMIT_CPU */	\
     {LONG_MAX, LONG_MAX},			/* RLIMIT_FSIZE */	\
     {LONG_MAX, LONG_MAX},			/* RLIMIT_DATA */	\
-    {_STK_LIM, _STK_LIM},			/* RLIMIT_STACK */	\
+    {_STK_LIM, LONG_MAX},			/* RLIMIT_STACK */	\
     {       0, LONG_MAX},			/* RLIMIT_CORE */	\
     {LONG_MAX, LONG_MAX},			/* RLIMIT_RSS */	\
     {MAX_TASKS_PER_USER, MAX_TASKS_PER_USER},	/* RLIMIT_NPROC */	\

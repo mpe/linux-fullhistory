@@ -38,7 +38,7 @@
 #define MUNGE_CONTEXT(n)        (((n) * 897) & LAST_CONTEXT)
 #endif
 
-extern int next_mmu_context;
+extern atomic_t next_mmu_context;
 extern void mmu_context_overflow(void);
 
 #ifndef CONFIG_8xx
@@ -54,9 +54,9 @@ extern void set_context(int context);
 do { 								\
 	struct mm_struct *mm = (tsk)->mm;			\
 	if (mm->context == NO_CONTEXT) {			\
-		if (next_mmu_context == LAST_CONTEXT)		\
+		if (atomic_read(&next_mmu_context) == LAST_CONTEXT)		\
 			mmu_context_overflow();			\
-		mm->context = MUNGE_CONTEXT(++next_mmu_context);\
+		mm->context = MUNGE_CONTEXT(atomic_inc_return(&next_mmu_context));\
 	}							\
 } while (0)
 

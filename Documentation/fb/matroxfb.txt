@@ -1,0 +1,283 @@
+[This file is cloned from VesaFB. Thanks go to Gerd Knorr]
+
+what is matroxfb?
+=================
+
+This is a driver for a graphic framebuffer for Matrox devices on
+Alpha, Intel and PPC boxes.
+
+Advantages:
+
+ * It provides a nice large console (128 cols + 48 lines with 1024x768)
+   without using tiny, unreadable fonts.
+ * You can run XF68_FBDev on top of /dev/fb0
+ * Most important: boot logo :-)
+
+Disadvantages:
+
+ * graphic mode is slower than text mode... but you should not notice
+   if you use same resolution as you used in textmode.
+
+
+How to use it?
+==============
+
+Switching modes is done using the video=matrox:vesa=... boot parameter
+or using `fbset' program.
+
+You should compile in both vgacon (to boot if you remove you Matrox from
+box) and matroxfb (for graphics mode). You should not compile-in vesafb
+unless you have primary display on non-Matrox VBE2.0 device (see 
+Documentation/vesafb.txt for details).
+
+Currently supported video modes are (through vesa=... interface, PowerMac
+has (as addon) compatibility code.
+
+bpp | 640x400  640x480  768x576  800x600  960x720  1024x768 1152x864 1280x1024 1408x1056 1600x1200
+----+----------------------------------------------------------------------------------------------
+  4 |            0x12             0x102             0x104             0x106
+  8 |  0x100    0x101    0x180    0x103    0x188    0x105    0x190    0x107     0x198     0x11C
+ 15 |           0x110    0x181    0x113    0x189    0x116    0x191    0x119     0x199     0x11D
+ 16 |           0x111    0x182    0x114    0x18A    0x117    0x192    0x11A     0x19A     0x11E
+ 24 |           0x1B2    0x184    0x1B5    0x18C    0x1B8    0x194    0x1BB     0x19C     0x1BF
+ 32 |           0x112    0x183    0x115    0x18B    0x118    0x193    0x11B     0x19B
+
+text | 640x400  640x480  1056x344  1056x400  1056x480
+-----+------------------------------------------------
+ 8x8 |  0x1C0    0x108     0x10A     0x10B     0x10C
+8x16 | 2, 3, 7                       0x109
+
+You can enter these number either hexadecimal (leading `0x') or decimal (0x100 = 256). You can also
+use value + 512 to achieve compatibility with your old number passed to vesafb.
+
+Non-listed number can be achieved by more complicated command-line, for example
+1600x1200x32bpp can be specified by `video=matrox:vesa:0x11C,depth:32'.
+
+
+X11
+===
+
+XF68_FBDev should work just fine, but it is non-accelerated. On non-intel
+architectures there are some glitches for 24bpp videomodes. 8, 16 and 32bpp
+works fine.
+
+Running another (accelerated) X-Server like XF86_SVGA works too. But (at least)
+XFree servers have big troubles in multihead configurations (even on first
+head, not even talking about second).
+
+
+SVGALib
+=======
+
+Driver contains SVGALib compatibility code. It is turned on by choosing textual
+mode for console. You can do it at boottime by using videomode 2,3,7,0x108-0x10C 
+or 0x1C0. At runtime, `fbset -depth 0' does this work.
+Unfortunately, after SVGALib application exits, screen contents is corrupted.
+Switching to another console and back fixes it. I hope that it is SVGALib and
+not mine problem, but I'm not sure.
+
+
+Configuration
+=============
+
+You can pass kernel command line options to vesafb with
+`video=matrox:option1,option2:value2,option3' (multiple options should be 
+separated by comma, values are separated from options by `:'). 
+Accepted options:
+
+mem:X    - size of memory (X can be in megabytes, kilobytes or bytes)
+           You can only decrease value determined by driver because of
+	   it always probe for memory. Default is to use whole detected
+	   memory usable for on-screen display (i.e. max. 8MB).
+disabled - do not load driver; you can use also `off', but `disabled'
+           is here too.
+enabled  - load driver, if you have `video=matrox:disabled' in LILO configuration,
+           you can override it by this (you cannot override `off').
+	   It is default.
+noaccel  - do not use acceleration engine. It does not work on Alphas.
+accel    - use acceleration engine. It is default.
+nopan    - create initial consoles with vyres = yres, thus disabling virtual
+           scrolling.
+pan      - create initial consoles as tall as possible (vyres = memory/vxres).
+           It is default.
+nopciretry - disable PCI retries. It is needed for some broken chipsets,
+           it is autodetected for intel's 82437. In this case device does
+	   not comply to PCI 2.1 specs (it will not guarantee that every transaction
+	   terminate with success or retry in 32 PCLK).
+pciretry - enable PCI retries. It is default, except for intel's 82437.
+novga    - disables VGA I/O ports. It is default if BIOS did not enable device.
+           You should not use this option, some boards then do not restart without
+	   power off.
+vga      - preserve state of VGA I/O ports. It is default. Driver does not enable
+           VGA I/O if BIOS did not it (it is not safe to enable it in most cases).
+nobios   - disables BIOS ROM. It is default if BIOS did not enable BIOS itself.
+           You should not use this option, some boards then do not restart without
+	   power off.
+bios     - preserve state of BIOS ROM. It is default. Driver does not enable BIOS
+           if BIOS was not enabled before.
+noinit   - tells driver, that devices were already initialized. You should use it
+           if you have G100 and/or if driver cannot detect memory, you see strange
+	   pattern on screen and so on. Devices not enabled by BIOS are still
+	   initialized.
+init     - driver initializes every device it knows about. It is default.
+inv24    - change timings parameters for 24bpp modes on Millenium and Millenium II.
+           Specify this if you see strange color shadows around characters.
+noinv24  - use standard timmings. It is default.
+inverse  - invert colors on screen (for LCD displays)
+noinverse - show true colors on screen. It is default.
+dev:X    - bind driver to device X. Driver numbers device from 0 up to N, where device
+           0 is first `known' device found, 1 second and so on. lspci lists
+	   devices in this order.
+	   Default is `every' known device for driver with multihead support and
+	   first working device (usually dev:0) for driver without multihead support.
+nohwcursor - disables hardware cursor (use software cursor instead).
+hwcursor - enables hardware cursor. It is default. If you are using non-accelerated mode
+           (`noaccel' or `fbset -accel false'), software cursor is used (except for
+	   text mode).
+noblink  - disables cursor blinking. Cursor in text mode always blinks (hw limitation).
+blink    - enables cursor blinking. It is default.
+nofastfont - disables fastfont feature. It is default.
+fastfont:X - enables fastfont feature. X specifies size of memory reserved for font data,
+           it must be >= (fontwidth*fontheight*chars_in_font)/8. It is faster on
+	   Gx00 series, but slower on older cards.
+grayscale - enable grayscale summing. It works in PSEUDOCOLOR modes (text, 4bpp, 8bpp). In
+           DIRECTCOLOR modes it is limited to characters displayed through putc/putcs. Direct
+	   accesses to framebuffer can paint colors.
+nograyscale - disable grayscale summing. It is default.
+cross4MB - enables that pixel line can cross 4MB boundary. It is default for non-Millenium.
+nocross4MB - pixel line must not cross 4MB boundary. It is default for Millenium I or II,
+           because of these devices have hardware limitations which do not allow this.
+	   But this option is incompatible with some (if not all yet released) versions
+	   of XF86_FBDev.
+vesa:X   - selects startup videomode. X is number from 0 to 0x1FF, see table above
+           for detailed explanation. Default is 640x480, 8bpp if driver has 8bpp support.
+	   Otherwise first available of 640x350x4bpp, 640x480x15bpp, 640x480x24bpp,
+	   640x480x32bpp or 80x25 text (80x25 text is always available).
+If you are not satisfied with videomode selected by `vesa' option, you
+can modify it with these options:
+xres:X   - horizontal resolution, in pixels. Default is derived from `vesa' option.
+yres:X   - vertical resolution, in pixel lines. Default is derived from `vesa' option.
+upper:X  - top boundary: lines between end of VSYNC pulse and start of first pixel line 
+           of picture. Default is derived from `vesa' option.
+lower:X  - bottom boundary: lines between end of picture and start of VSYNC pulse.
+           Default is derived from `vesa' option.
+vslen:X  - length of VSYNC pulse, in lines. Default is derived from `vesa' option.
+left:X   - left boundary: pixels between end of HSYNC pulse and first pixel. Default
+           is derived from `vesa' option.
+right:X  - right boundary: pixels between end of picture and start of HSYNC pulse.
+           Default is derived from `vesa' option.
+hslen:X  - length of HSYNC pulse, in pixels. Default is derived from `vesa' option.
+pixclock:X - dotclocks, in ps (picoseconds). Default is derived from `vesa' option and
+           from `fh' and `fv' options.
+sync:X   - sync. pulse - bit 0 inverts HSYNC polarity, bit 1 VSYNC polarity.
+           If bit 3 (value 0x08) is set, composite sync instead of HSYNC is generated.
+	   If bit 5 (value 0x20) is set, sync on green is turned on.
+	   Default depends on `vesa'.
+depth:X  - Bits per pixel: 0=text, 4,8,15,16,24 or 32. Default depends on `vesa'.
+If you know capabilities of your monitor, you can specify some (or all) of `pixclk', `fh'
+and `fv'. In this case, `pixclock' is computed so that pixclock <= maxclk, real_fh <= fh
+and real_fv <= fv.
+maxclk:X - maximum dotclock. X can be specified in MHz, kHz or Hz. Default is `don't care'.
+fh:X     - maximum horizontal synchronization frequency. X can be specified in kHz or Hz.
+           Default is `don't care'.
+fv:X     - maximum vertical frequency. X must be specified in Hz. Default is 70 for modes
+           derived from `vesa' with yres <= 400, 60Hz for yres > 400.
+
+
+Limitations
+===========
+
+There are known and unknown bugs, features and misfeatures.
+Currently there are following known bugs:
+ + G100 support does not work as expected, I'm still investigating this one.
+   Using `noinit' option works, but only for `first' head :-(
+ + SVGALib does not restore screen on exit
+ + generic fbcon-cfbX procedures do not work on Alphas. Due to this,
+   `noaccel' (and cfb4 accel) driver does not work on Alpha. So everyone
+   with access to /dev/fb* on Alpha can hang machine (you should restrict
+   access to /dev/fb* - everyone with access to this device can destroy
+   your monitor, believe me...).
+ + 24bpp does not support correctly XF-FBDev on big-endian architectures.
+ + interlaced text mode is not supported; it looks like hardware limitiation,
+   but I'm not sure.
+ + maybe more...
+And following misfeatures:
+ + SVGALib does not restore screen on exit.
+ + pixclock for text modes is limited by hardware to
+    83MHz on G200
+    66MHz on Millenium I
+    60MHz on Millenium II
+   Because of I have not access to other devices, I do not know specific
+   frequencies for them. So driver does not check this and allows you to
+   set frequency higher that this. It cause sparks, black holes and other
+   pretty effects on screen. Device was not destroyed during tests :-)
+ + my Millenium G200 oscillator has frequency range from 35MHz to 380MHz
+   (and it works with 8bpp on about 320MHz dotclocks (and changed mclk)).
+   But Matrox says on product sheet that VCO limit is 50-250MHz, so I believe
+   them (maybe that chip overheates, but it has very big cooler (G100 has
+   not one), so it should work).
+ + special mixed video/graphics videomodes of Mystique and Gx00 - 2G8V16 and
+   G16V16 are not supported
+ + color keying is not supported
+ + feature connector of Mystique and Gx00 is set to VGA mode (it is disabled
+   by BIOS)
+ + DCC (monitor detection) protocol is not implemented
+ + some check for input values are not so strict how it should be (you can
+   specify vslen=4000 and so on).
+ + maybe more...
+And following features:
+ + 4bpp is available only on Millenium I and Millenium II. It is hardware
+   limitiation.
+ + current fbset is not able to set 15bpp videomode: you must specify
+   depth==16 and green.length==5. fbset does not allow you to set 
+   green.length.
+ + hardware cursor is available only in accelerated videomodes. Maybe that
+   this is misfeature and not feature.
+ + text mode uses 6 bit VGA palette instead of 8 bit (one of 262144 colors
+   instead of one of 16M colors). It is due to hardware limitation of 
+   MilleniumI/II and SVGALib compatibility.
+
+
+Benchmarks
+==========
+It is time to redraw whole screen 1000 times in 1024x768, 60Hz. It is
+time for draw 6144000 characters on screen through /dev/vcsa
+(for 32bpp it is about 3GB of data (exactly 3000 MB); for 8x16 font in 
+16 seconds, i.e. 187MBps).
+Times were obtained from one older version of driver, now they are about 3%
+faster, it is kernel-space only time on P-II/350MHz, Millenium I in 33MHz
+PCI slot, G200 in AGP 2x slot. I did not test vgacon.
+
+NOACCEL
+        8x16                 12x22
+        MilleniumI   G200    MilleniumI   G200
+8bpp    16.42         9.54   12.33         9.13
+16bpp   21.00        15.70   19.11        15.02
+24bpp   36.66        36.66   35.00        35.00
+32bpp   35.00        30.00   33.85        28.66
+
+ACCEL, nofastfont
+        8x16                 12x22                6x11
+	MilleniumI   G200    MilleniumI   G200    MilleniumI   G200
+8bpp     7.79         7.24   13.55         7.78   30.00        21.01
+16bpp    9.13         7.78   16.16         7.78   30.00        21.01
+24bpp   14.17        10.72   18.69        10.24   34.99        21.01
+32bpp   16.15	     16.16   18.73        13.09   34.99        21.01
+
+ACCEL, fastfont
+        8x16                 12x22                6x11
+	MilleniumI   G200    MilleniumI   G200    MilleniumI   G200
+8bpp     8.41         6.01    6.54         4.37   16.00        10.51
+16bpp    9.54         9.12    8.76         6.17   17.52        14.01
+24bpp   15.00        12.36   11.67        10.00   22.01        18.32
+32bpp   16.18        18.29*  12.71        12.74   24.44        21.00
+
+TEXT
+        8x16
+	MilleniumI   G200
+TEXT     3.29         1.50
+
+	
+* Yes, it is slower than Millenium I.
+--
+Petr Vandrovec <vandrove@vc.cvut.cz>

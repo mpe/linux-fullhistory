@@ -143,12 +143,12 @@ void fbcon_cfb8_putc(struct vc_data *conp, struct display *p, int c, int yy,
     case 12:
     case 16:
 	for (rows = fontheight(p) ; rows-- ; dest += bytes) {
-	    ((u32 *)dest)[0]= (nibbletab_cfb8[*(u16 *)cdat >> 12] & eorx) ^ bgx;
-	    ((u32 *)dest)[1]= (nibbletab_cfb8[(*(u16 *)cdat >> 8) & 0xf] & eorx) ^ bgx;
-	    ((u32 *)dest)[2]= (nibbletab_cfb8[(*(u16 *)cdat >> 4) & 0xf] & eorx) ^ bgx;
+	    ((u32 *)dest)[0]= (nibbletab_cfb8[*cdat >> 4] & eorx) ^ bgx;
+	    ((u32 *)dest)[1]= (nibbletab_cfb8[*cdat++ & 0xf] & eorx) ^ bgx;
+	    ((u32 *)dest)[2]= (nibbletab_cfb8[*cdat >> 4] & eorx) ^ bgx;
 	    if (fontwidth(p) == 16)
 	        ((u32 *)dest)[3]= (nibbletab_cfb8[*cdat & 0xf] & eorx) ^ bgx;
-	    cdat += 2;
+	    cdat++;
         }
         break;
     }
@@ -200,12 +200,12 @@ void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p,
 	    cdat = p->fontdata + (c * fontheight(p) << 1);
 
 	    for (rows = fontheight(p), dest = dest0; rows-- ; dest += bytes) {
-		((u32 *)dest)[0]= (nibbletab_cfb8[*(u16 *)cdat >> 12] & eorx) ^ bgx;
-		((u32 *)dest)[1]= (nibbletab_cfb8[(*(u16 *)cdat >> 8) & 0xf] & eorx) ^ bgx;
-		((u32 *)dest)[2]= (nibbletab_cfb8[(*(u16 *)cdat >> 4) & 0xf] & eorx) ^ bgx;
+		((u32 *)dest)[0]= (nibbletab_cfb8[*cdat >> 4] & eorx) ^ bgx;
+		((u32 *)dest)[1]= (nibbletab_cfb8[*cdat++ & 0xf] & eorx) ^ bgx;
+		((u32 *)dest)[2]= (nibbletab_cfb8[(*cdat >> 4) & 0xf] & eorx) ^ bgx;
 		if (fontwidth(p) == 16)
 		    ((u32 *)dest)[3]= (nibbletab_cfb8[*cdat & 0xf] & eorx) ^ bgx;
-		cdat += 2;
+		cdat++;
 	    }
 	    dest0+=fontwidth(p);
         }
