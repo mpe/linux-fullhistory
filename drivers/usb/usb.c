@@ -1720,11 +1720,15 @@ int usb_new_device(struct usb_device *dev)
 
 	info("USB new device connect, assigned device number %d", dev->devnum);
  
-	dev->maxpacketsize = 0;		/* Default to 8 byte max packet size */
+	/* USB v1.1 5.5.3 */
+	/* We read the first 8 bytes from the device descriptor to get to */
+	/*  the bMaxPacketSize0 field. Then we set the maximum packet size */
+	/*  for the control pipe, and retrieve the rest */
 	dev->epmaxpacketin [0] = 8;
 	dev->epmaxpacketout[0] = 8;
 
-	/* We still haven't set the Address yet */
+	/* Even though we have assigned an address for the device, we */
+	/*  haven't told it what it's address is yet */
 	addr = dev->devnum;
 	dev->devnum = 0;
 
@@ -1740,12 +1744,6 @@ int usb_new_device(struct usb_device *dev)
 	}
 	dev->epmaxpacketin [0] = dev->descriptor.bMaxPacketSize0;
 	dev->epmaxpacketout[0] = dev->descriptor.bMaxPacketSize0;
-	switch (dev->descriptor.bMaxPacketSize0) {
-		case 8: dev->maxpacketsize = 0; break;
-		case 16: dev->maxpacketsize = 1; break;
-		case 32: dev->maxpacketsize = 2; break;
-		case 64: dev->maxpacketsize = 3; break;
-	}
 
 	dev->devnum = addr;
 

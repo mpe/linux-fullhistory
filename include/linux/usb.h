@@ -539,7 +539,6 @@ struct usb_device {
 
 	atomic_t refcnt;		/* Reference count */
 
-	int maxpacketsize;		/* Maximum packet size; encoded as 0,1,2,3 = 8,16,32,64 */
 	unsigned int toggle[2];		/* one bit for each endpoint ([0] = IN, [1] = OUT) */
 	unsigned int halted[2];		/* endpoint halts; one bit per endpoint # & direction; */
 					/* [0] = IN, [1] = OUT */
@@ -686,7 +685,7 @@ int usb_get_current_frame_number (struct usb_device *usb_dev);
 
 static inline unsigned int __create_pipe(struct usb_device *dev, unsigned int endpoint)
 {
-	return (dev->devnum << 8) | (endpoint << 15) | (dev->slow << 26) | dev->maxpacketsize;
+	return (dev->devnum << 8) | (endpoint << 15) | (dev->slow << 26);
 }
 
 static inline unsigned int __default_pipe(struct usb_device *dev)

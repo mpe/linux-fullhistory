@@ -24,7 +24,7 @@ O_OBJS += pci-i386.o
 ifdef CONFIG_VISWS
 O_OBJS += pci-visws.o
 else
-O_OBJS += pci-pc.o
+O_OBJS += pci-pc.o pci-irq.o
 endif
 endif
 

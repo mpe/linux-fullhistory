@@ -465,6 +465,7 @@ int pcibios_find_device (unsigned short vendor, unsigned short dev_id,
 /* Generic PCI functions used internally */
 
 void pci_init(void);
+int pci_bus_exists(const struct list_head *list, int nr);
 struct pci_bus *pci_scan_bus(int bus, struct pci_ops *ops, void *sysdata);
 struct pci_bus *pci_alloc_primary_bus(int bus);
 struct pci_dev *pci_scan_slot(struct pci_dev *temp);
@@ -474,7 +475,8 @@ void pci_name_device(struct pci_dev *dev);
 char *pci_class_name(u32 class);
 void pci_read_bridge_bases(struct pci_bus *child);
 struct resource *pci_find_parent_resource(const struct pci_dev *dev, struct resource *res);
-int pci_setup_device(struct pci_dev * dev);
+int pci_setup_device(struct pci_dev *dev);
+int pci_get_interrupt_pin(struct pci_dev *dev, struct pci_dev **bridge);
 
 /* Generic PCI functions exported to card drivers */
 

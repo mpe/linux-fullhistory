@@ -254,6 +254,23 @@ pci_enable_device(struct pci_dev *dev)
 	return 0;
 }
 
+int
+pci_get_interrupt_pin(struct pci_dev *dev, struct pci_dev **bridge)
+{
+	u8 pin;
+
+	pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
+	if (!pin)
+		return -1;
+	pin--;
+	while (dev->bus->self) {
+		pin = (pin + PCI_SLOT(dev->devfn)) % 4;
+		dev = dev->bus->self;
+	}
+	*bridge = dev;
+	return pin;
+}
+
 /*
  *  Registration of PCI drivers and handling of hot-pluggable devices.
  */
@@ -961,7 +978,7 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 	return max;
 }
 
-static int __init pci_bus_exists(const struct list_head *list, int nr)
+int __init pci_bus_exists(const struct list_head *list, int nr)
 {
 	const struct list_head *l;
 

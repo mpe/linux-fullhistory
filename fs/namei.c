@@ -522,7 +522,7 @@ static inline int
 walk_init_root(const char *name, unsigned flags, struct nameidata *nd)
 {
 	if (current->personality != PER_LINUX)
-		if (__emul_lookup_dentry(name,flags,nd));
+		if (__emul_lookup_dentry(name,flags,nd))
 			return 0;
 	nd->mnt = mntget(current->fs->rootmnt);
 	nd->dentry = dget(current->fs->root);

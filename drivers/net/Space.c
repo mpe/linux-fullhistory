@@ -186,7 +186,7 @@ struct devprobe eisa_probes[] __initdata = {
 	{ne3210_probe, 0},
 #endif
 #ifdef CONFIG_DEFXX
-	{dfx_probe, 0}.
+	{dfx_probe, 0},
 #endif
 	{NULL, 0},
 };

@@ -198,7 +198,7 @@ nfs_block_bits(unsigned long bsize, unsigned char *nrbitsp)
 static inline unsigned long
 nfs_calc_block_size(u64 tsize)
 {
-	loff_t used = (tsize + 511) / 512;
+	loff_t used = (tsize + 511) >> 9;
 	return (used > ULONG_MAX) ? ULONG_MAX : used;
 }
 
