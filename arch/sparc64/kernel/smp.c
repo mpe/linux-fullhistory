@@ -627,7 +627,10 @@ extern unsigned long xcall_flush_tlb_all_spitfire;
 extern unsigned long xcall_flush_tlb_all_cheetah;
 extern unsigned long xcall_report_regs;
 extern unsigned long xcall_receive_signal;
+
+#ifdef DCACHE_ALIASING_POSSIBLE
 extern unsigned long xcall_flush_dcache_page_cheetah;
+#endif
 extern unsigned long xcall_flush_dcache_page_spitfire;
 
 #ifdef CONFIG_DEBUG_DCFLUSH
@@ -637,7 +640,7 @@ extern atomic_t dcpage_flushes_xcall;
 
 static __inline__ void __local_flush_dcache_page(struct page *page)
 {
-#if (L1DCACHE_SIZE > PAGE_SIZE)
+#ifdef DCACHE_ALIASING_POSSIBLE
 	__flush_dcache_page(page_address(page),
 			    ((tlb_type == spitfire) &&
 			     page_mapping(page) != NULL));
@@ -672,11 +675,13 @@ void smp_flush_dcache_page_impl(struct page *page, int cpu)
 					       (u64) pg_addr,
 					       mask);
 		} else {
+#ifdef DCACHE_ALIASING_POSSIBLE
 			data0 =
 				((u64)&xcall_flush_dcache_page_cheetah);
 			cheetah_xcall_deliver(data0,
 					      __pa(pg_addr),
 					      0, mask);
+#endif
 		}
 #ifdef CONFIG_DEBUG_DCFLUSH
 		atomic_inc(&dcpage_flushes_xcall);
@@ -709,10 +714,12 @@ void flush_dcache_page_all(struct mm_struct *mm, struct page *page)
 				       (u64) pg_addr,
 				       mask);
 	} else {
+#ifdef DCACHE_ALIASING_POSSIBLE
 		data0 = ((u64)&xcall_flush_dcache_page_cheetah);
 		cheetah_xcall_deliver(data0,
 				      __pa(pg_addr),
 				      0, mask);
+#endif
 	}
 #ifdef CONFIG_DEBUG_DCFLUSH
 	atomic_inc(&dcpage_flushes_xcall);

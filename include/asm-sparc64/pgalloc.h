@@ -11,6 +11,7 @@
 #include <asm/spitfire.h>
 #include <asm/pgtable.h>
 #include <asm/cpudata.h>
+#include <asm/cacheflush.h>
 
 /* Page table allocation/freeing. */
 #ifdef CONFIG_SMP
@@ -125,7 +126,7 @@ static __inline__ void free_pgd_slow(pgd_t *pgd)
 
 #endif /* CONFIG_SMP */
 
-#if (L1DCACHE_SIZE > PAGE_SIZE)			/* is there D$ aliasing problem */
+#ifdef DCACHE_ALIASING_POSSIBLE
 #define VPTE_COLOR(address)		(((address) >> (PAGE_SHIFT + 10)) & 1UL)
 #define DCACHE_COLOR(address)		(((address) >> PAGE_SHIFT) & 1UL)
 #else

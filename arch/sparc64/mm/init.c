@@ -135,7 +135,7 @@ __inline__ void flush_dcache_page_impl(struct page *page)
 	atomic_inc(&dcpage_flushes);
 #endif
 
-#if (L1DCACHE_SIZE > PAGE_SIZE)
+#ifdef DCACHE_ALIASING_POSSIBLE
 	__flush_dcache_page(page_address(page),
 			    ((tlb_type == spitfire) &&
 			     page_mapping(page) != NULL));
@@ -947,6 +947,7 @@ void prom_reload_locked(void)
 	}
 }
 
+#ifdef DCACHE_ALIASING_POSSIBLE
 void __flush_dcache_range(unsigned long start, unsigned long end)
 {
 	unsigned long va;
@@ -970,6 +971,7 @@ void __flush_dcache_range(unsigned long start, unsigned long end)
 					       "i" (ASI_DCACHE_INVALIDATE));
 	}
 }
+#endif /* DCACHE_ALIASING_POSSIBLE */
 
 /* If not locked, zap it. */
 void __flush_tlb_all(void)
@@ -1087,7 +1089,7 @@ struct pgtable_cache_struct pgt_quicklists;
  * using the later address range, accesses with the first address
  * range will see the newly initialized data rather than the garbage.
  */
-#if (L1DCACHE_SIZE > PAGE_SIZE)			/* is there D$ aliasing problem */
+#ifdef DCACHE_ALIASING_POSSIBLE
 #define DC_ALIAS_SHIFT	1
 #else
 #define DC_ALIAS_SHIFT	0
@@ -1111,7 +1113,7 @@ pte_t *__pte_alloc_one_kernel(struct mm_struct *mm, unsigned long address)
 		unsigned long paddr;
 		pte_t *pte;
 
-#if (L1DCACHE_SIZE > PAGE_SIZE)			/* is there D$ aliasing problem */
+#ifdef DCACHE_ALIASING_POSSIBLE
 		set_page_count(page, 1);
 		ClearPageCompound(page);
 
@@ -1129,7 +1131,7 @@ pte_t *__pte_alloc_one_kernel(struct mm_struct *mm, unsigned long address)
 			to_free = (unsigned long *) paddr;
 		}
 
-#if (L1DCACHE_SIZE > PAGE_SIZE)			/* is there D$ aliasing problem */
+#ifdef DCACHE_ALIASING_POSSIBLE
 		/* Now free the other one up, adjust cache size. */
 		preempt_disable();
 		*to_free = (unsigned long) pte_quicklist[color ^ 0x1];

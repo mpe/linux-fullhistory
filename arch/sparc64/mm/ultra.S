@@ -13,6 +13,7 @@
 #include <asm/pil.h>
 #include <asm/head.h>
 #include <asm/thread_info.h>
+#include <asm/cacheflush.h>
 
 	/* Basically, most of the Spitfire vs. Cheetah madness
 	 * has to do with the fact that Cheetah does not support
@@ -127,15 +128,13 @@ __flush_icache_page:	/* %o0 = phys_page */
 	retl
 	 nop
 
-#if (PAGE_SHIFT == 13)
-#define DTAG_MASK 0x3
-#elif (PAGE_SHIFT == 16)
-#define DTAG_MASK 0x1f
-#elif (PAGE_SHIFT == 19)
-#define DTAG_MASK 0xff
-#elif (PAGE_SHIFT == 22)
-#define DTAG_MASK 0x3ff
+#ifdef DCACHE_ALIASING_POSSIBLE
+
+#if (PAGE_SHIFT != 13)
+#error only page shift of 13 is supported by dcache flush
 #endif
+
+#define DTAG_MASK 0x3
 
 	.align		64
 	.globl		__flush_dcache_page
@@ -193,6 +192,7 @@ dflush4:stxa		%g0, [%o4] ASI_DCACHE_TAG
 	membar		#Sync
 	ba,pt		%xcc, 2b
 	 nop
+#endif /* DCACHE_ALIASING_POSSIBLE */
 
 	.align		32
 __prefill_dtlb:
@@ -266,6 +266,7 @@ __cheetah_flush_tlb_pending:	/* 22 insns */
 	retl
 	 wrpr		%g7, 0x0, %pstate
 
+#ifdef DCACHE_ALIASING_POSSIBLE
 flush_dcpage_cheetah: /* 11 insns */
 	sethi		%uhi(PAGE_OFFSET), %g1
 	sllx		%g1, 32, %g1
@@ -278,6 +279,7 @@ flush_dcpage_cheetah: /* 11 insns */
 	 nop
 	retl		/* I-cache flush never needed on Cheetah, see callers. */
 	 nop
+#endif /* DCACHE_ALIASING_POSSIBLE */
 
 cheetah_patch_one:
 1:	lduw		[%o1], %g1
@@ -308,12 +310,14 @@ cheetah_patch_cachetlbops:
 	call		cheetah_patch_one
 	 mov		22, %o2
 
+#ifdef DCACHE_ALIASING_POSSIBLE
 	sethi		%hi(__flush_dcache_page), %o0
 	or		%o0, %lo(__flush_dcache_page), %o0
 	sethi		%hi(flush_dcpage_cheetah), %o1
 	or		%o1, %lo(flush_dcpage_cheetah), %o1
 	call		cheetah_patch_one
 	 mov		11, %o2
+#endif /* DCACHE_ALIASING_POSSIBLE */
 
 	ret
 	 restore
@@ -429,6 +433,7 @@ xcall_report_regs:
 	b		rtrap_xcall
 	 ldx		[%sp + PTREGS_OFF + PT_V9_TSTATE], %l1
 
+#ifdef DCACHE_ALIASING_POSSIBLE
 	.align		32
 	.globl		xcall_flush_dcache_page_cheetah
 xcall_flush_dcache_page_cheetah: /* %g1 == physical page address */
@@ -440,12 +445,13 @@ xcall_flush_dcache_page_cheetah: /* %g1 == physical page address */
 	 nop
 	retry
 	nop
+#endif /* DCACHE_ALIASING_POSSIBLE */
 
 	.globl		xcall_flush_dcache_page_spitfire
 xcall_flush_dcache_page_spitfire: /* %g1 == physical page address
 				     %g7 == kernel page virtual address
 				     %g5 == (page->mapping != NULL)  */
-#if (L1DCACHE_SIZE > PAGE_SIZE)
+#ifdef DCACHE_ALIASING_POSSIBLE
 	srlx		%g1, (13 - 2), %g1	! Form tag comparitor
 	sethi		%hi(L1DCACHE_SIZE), %g3	! D$ size == 16K
 	sub		%g3, (1 << 5), %g3	! D$ linesize == 32
@@ -464,7 +470,7 @@ xcall_flush_dcache_page_spitfire: /* %g1 == physical page address
 	 sub		%g3, (1 << 5), %g3
 
 	brz,pn		%g5, 2f
-#endif /* L1DCACHE_SIZE > PAGE_SIZE */
+#endif /* DCACHE_ALIASING_POSSIBLE */
 	 sethi		%hi(PAGE_SIZE), %g3
 
 1:	flush		%g7
