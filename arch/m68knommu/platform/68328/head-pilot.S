@@ -1,6 +1,6 @@
 /*
- * linux/arch/m68knommu/platform/68328/pilot/crt0_rom.S
- * - A startup file for the MC68332 
+ * linux/arch/m68knommu/platform/68328/head-rom.S
+ * - A startup file for the MC68328
  *
  * Copyright (C) 1998  D. Jeff Dionne <jeff@ryeham.ee.ryerson.ca>,
  *                     Kenneth Albanowski <kjahds@kjahds.com>,
