@@ -309,7 +309,7 @@ static void update_queue (struct sem_array * sma)
 	for (q = sma->sem_pending; q; q = q->next) {
 			
 		if (q->status == 1)
-			return; /* wait for other process */
+			continue;	/* this one was woken up before */
 
 		error = try_atomic_semop(sma, q->sops, q->nsops,
 					 q->undo, q->pid, q->alter);

@@ -22,16 +22,18 @@
  * for more info.
  *
  *
- * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
- *		     general sleep/wakeup clean up.
- * Alan Cox	   : reformatted. Fixed SMP bugs. Moved to kernel alloc/free
- *		     of irqs. Use dev_id.
+ * Thomas Sailer	: ioctl code reworked (vmalloc/vfree removed)
+ *			  general sleep/wakeup clean up.
+ * Alan Cox		: reformatted. Fixed SMP bugs. Moved to kernel alloc/free
+ *		          of irqs. Use dev_id.
+ * Christoph Hellwig	: adapted to module_init/module_exit
  *
  * Status:
  *		Tested. Believed fully functional.
  */
 
 #include <linux/config.h>
+#include <linux/init.h>
 #include <linux/module.h>
 #include <linux/stddef.h>
 
@@ -40,6 +42,8 @@
 #define DEB(x)
 #define DEB1(x)
 #include "sound_config.h"
+
+#include "ad1848.h"
 #include "ad1848_mixer.h"
 
 typedef struct
@@ -99,22 +103,18 @@ ad1848_port_info;
 static int nr_ad1848_devs = 0;
 int deskpro_xl = 0;
 int deskpro_m = 0;
-#ifdef CONFIG_SOUND_SPRO
-int soundpro = 1;
-#else
 int soundpro = 0;
-#endif
 
 static volatile signed char irq2dev[17] = {
 	-1, -1, -1, -1, -1, -1, -1, -1,
 	-1, -1, -1, -1, -1, -1, -1, -1, -1
 };
 
-#ifdef MODULE
-
+#ifndef EXCLUDE_TIMERS
 static int timer_installed = -1;
-
 #endif
+
+static int loaded = 0;
 
 static int ad_format_mask[10 /*devc->model */ ] =
 {
@@ -2502,6 +2502,11 @@ void attach_ms_sound(struct address_info *hw_config)
 	int dma = hw_config->dma;
 	int dma2 = hw_config->dma2;
 
+	if(hw_config->io_base != -1 || hw_config->irq == -1 || hw_config->dma == -1) {
+		printk(KERN_WARNING "ad1848: must give I/O , IRQ and DMA.\n");
+		return;
+	}
+
 	if (hw_config->card_subtype == 1)	/* Has no IRQ/DMA registers */
 	{
 		hw_config->slots[0] = ad1848_init("MS Sound System", hw_config->io_base + 4,
@@ -2568,6 +2573,9 @@ void attach_ms_sound(struct address_info *hw_config)
 					  dma2, 0,
 					  hw_config->osp);
 	request_region(hw_config->io_base, 4, "WSS config");
+
+	SOUND_LOCK;
+	loaded = 1;
 }
 
 void unload_ms_sound(struct address_info *hw_config)
@@ -2702,8 +2710,6 @@ EXPORT_SYMBOL(probe_ms_sound);
 EXPORT_SYMBOL(attach_ms_sound);
 EXPORT_SYMBOL(unload_ms_sound);
 
-#ifdef MODULE
-
 MODULE_PARM(io, "i");			/* I/O for a raw AD1848 card */
 MODULE_PARM(irq, "i");			/* IRQ to use */
 MODULE_PARM(dma, "i");			/* First DMA channel */
@@ -2713,45 +2719,57 @@ MODULE_PARM(deskpro_xl, "i");		/* Special magic for Deskpro XL boxen */
 MODULE_PARM(deskpro_m, "i");		/* Special magic for Deskpro M box */
 MODULE_PARM(soundpro, "i");		/* More special magic for SoundPro chips */
 
-int io = -1;
-int irq = -1;
-int dma = -1;
-int dma2 = -1;
-int type = 0;
+static int __initdata io = -1;
+static int __initdata irq = -1;
+static int __initdata dma = -1;
+static int __initdata dma2 = -1;
+static int __initdata type = 0;
 
-static int loaded = 0;
+static struct address_info cfg;
 
-struct address_info hw_config;
-
-int init_module(void)
+static int __init init_ad1848(void)
 {
 	printk(KERN_INFO "ad1848/cs4248 codec driver Copyright (C) by Hannu Savolainen 1993-1996\n");
-	if(io != -1)
-	{
-		if(irq == -1 || dma == -1)
-		{
-			printk(KERN_WARNING "ad1848: must give I/O , IRQ and DMA.\n");
-			return -EINVAL;
-		}
-		hw_config.irq = irq;
-		hw_config.io_base = io;
-		hw_config.dma = dma;
-		hw_config.dma2 = dma2;
-		hw_config.card_subtype = type;
-		if(!probe_ms_sound(&hw_config))
-			return -ENODEV;
-		attach_ms_sound(&hw_config);
-		loaded=1;
-	}
-	SOUND_LOCK;
-	return 0;
+
+	cfg.irq = irq;
+	cfg.io_base = io;
+	cfg.dma = dma;
+	cfg.dma2 = dma2;
+	cfg.card_subtype = type;
+
+	if(probe_ms_sound(&cfg)) {
+		attach_ms_sound(&cfg);
+		return 0;
+	} else
+		return -ENODEV;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_ad1848(void)
 {
 	SOUND_LOCK_END;
 	if(loaded)
-		unload_ms_sound(&hw_config);
+		unload_ms_sound(&cfg);
 }
 
-#endif /* MODULE */
+module_init(init_ad1848);
+module_exit(cleanup_ad1848);
+
+#ifndef MODULE
+static int __init setup_ad1848(char *str)
+{
+        /* io, irq, dma, dma2, type */
+	int ints[6];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	
+	io	= ints[1];
+	irq	= ints[2];
+	dma	= ints[3];
+	dma2	= ints[4];
+	type	= ints[5];
+
+	return 1;
+}
+
+__setup("ad1848=", setup_ad1848);	
+#endif

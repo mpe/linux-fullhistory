@@ -15,6 +15,7 @@
  * Alan Cox		modularisation, use normal request_irq, use dev_id
  */
 
+#include <linux/init.h>
 #include <linux/module.h>
 
 #define USE_SEQ_MACROS
@@ -24,7 +25,7 @@
 #include "soundmodule.h"
 
 #include "coproc.h"
-
+#include "mpu401.h"
 
 static int      timer_mode = TMR_INTERNAL, timer_caps = TMR_INTERNAL;
 
@@ -910,7 +911,7 @@ static struct midi_operations mpu401_midi_proto =
 
 static struct midi_operations mpu401_midi_operations[MAX_MIDI_DEV];
 
-static void mpu401_chk_version(int n, struct mpu_config *devc)
+static void __init mpu401_chk_version(int n, struct mpu_config *devc)
 {
 	int tmp;
 	unsigned long flags;
@@ -941,7 +942,7 @@ static void mpu401_chk_version(int n, struct mpu_config *devc)
 	restore_flags(flags);
 }
 
-void attach_mpu401(struct address_info *hw_config)
+void __init attach_mpu401(struct address_info *hw_config)
 {
 	unsigned long flags;
 	char revision_char;
@@ -1164,7 +1165,7 @@ static void set_uart_mode(int dev, struct mpu_config *devc, int arg)
 
 }
 
-int probe_mpu401(struct address_info *hw_config)
+int __init probe_mpu401(struct address_info *hw_config)
 {
 	int ok = 0;
 	struct mpu_config tmp_devc;
@@ -1197,7 +1198,7 @@ int probe_mpu401(struct address_info *hw_config)
 	return ok;
 }
 
-void unload_mpu401(struct address_info *hw_config)
+void __exit unload_mpu401(struct address_info *hw_config)
 {
 	void *p;
 	int n=hw_config->slots[1];
@@ -1659,7 +1660,7 @@ static void timer_ext_event(struct mpu_config *devc, int event, int parm)
 	}
 }
 
-static int mpu_timer_init(int midi_dev)
+static int __init mpu_timer_init(int midi_dev)
 {
 	struct mpu_config *devc;
 	int n;
@@ -1713,39 +1714,56 @@ EXPORT_SYMBOL(unload_mpu401);
 EXPORT_SYMBOL(intchk_mpu401);
 EXPORT_SYMBOL(mpuintr);
 
-#ifdef MODULE
+static struct address_info cfg;
+
+static int __initdata io = -1;
+static int __initdata irq = -1;
 
 MODULE_PARM(irq, "i");
 MODULE_PARM(io, "i");
 
-int             io = -1;
-int             irq = -1;
-struct address_info hw;
-
-int init_module(void)
+int init_mpu401(void)
 {
 	/* Can be loaded either for module use or to provide functions
 	   to others */
-	if (io != -1 && irq != -1)
-	{
-		hw.irq = irq;
-		hw.io_base = io;
-		if (probe_mpu401(&hw) == 0)
-			return -ENODEV;
-		attach_mpu401(&hw);
+	cfg.irq = irq;
+	cfg.io_base = io;
+	
+	if (cfg.io_base != -1 && cfg.irq != -1) {
+		printk(KERN_WARNING "mpu401: need io and irq !");
+		return -ENODEV;
 	}
+	
+	if (probe_mpu401(&cfg) == 0)
+		return -ENODEV;
+	attach_mpu401(&cfg);
+
 	SOUND_LOCK;
 	return 0;
 }
 
-void cleanup_module(void)
+void cleanup_mpu401(void)
 {
-	if (io != -1 && irq != -1)
-	{
-		unload_mpu401(&hw);
-	}
-	/*  FREE SYMTAB */
+	unload_mpu401(&cfg);
 	SOUND_LOCK_END;
 }
 
-#endif /* MODULE */
+module_init(init_mpu401);
+module_exit(cleanup_mpu401);
+
+#ifndef MODULE
+static int __init setup_mpu401(char *str)
+{
+        /* io, irq */
+	int ints[3];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	
+	io = ints[1];
+	irq = ints[2];
+
+	return 1;
+}
+
+__setup("mpu401=", setup_mpu401);
+#endif

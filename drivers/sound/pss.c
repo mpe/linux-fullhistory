@@ -24,15 +24,21 @@
  *          To probe_pss_mss added test for initialize AD1848
  * 98-05-28: Vladimir Michl <vladimir.michl@upol.cz>
  *          Fixed computation of mixer volumes
+ * 00-03-03: Christoph Hellwig <chhellwig@gmx.net>
+ *          Adapted to module_init/module_exit
  */
 
 
 #include <linux/config.h>
+#include <linux/init.h>
 #include <linux/module.h>
 
 #include "sound_config.h"
 #include "sound_firmware.h"
 #include "soundmodule.h"
+
+#include "ad1848.h"
+#include "mpu401.h"
 
 /*
  * PSS registers.
@@ -910,14 +916,14 @@ static coproc_operations pss_coproc_operations =
 	&pss_data
 };
 
-void attach_pss_mpu(struct address_info *hw_config)
+static void __init attach_pss_mpu(struct address_info *hw_config)
 {
 	attach_mpu401(hw_config);	/* Slot 1 */
 	if (hw_config->slots[1] != -1)	/* The MPU driver installed itself */
 		midi_devs[hw_config->slots[1]]->coproc = &pss_coproc_operations;
 }
 
-int probe_pss_mss(struct address_info *hw_config)
+static int __init probe_pss_mss(struct address_info *hw_config)
 {
 	volatile int timeout;
 
@@ -950,16 +956,20 @@ int probe_pss_mss(struct address_info *hw_config)
 	 * downloaded to the ADSP2115 spends some time initializing the card.
 	 * Let's try to wait until it finishes this task.
 	 */
-	for (timeout = 0; timeout < 100000 && (inb(hw_config->io_base + WSS_INDEX) & WSS_INITIALIZING); timeout++);
+	for (timeout = 0; timeout < 100000 && (inb(hw_config->io_base + WSS_INDEX) &
+	  WSS_INITIALIZING); timeout++)
+		;
 
 	outb((0x0b), hw_config->io_base + WSS_INDEX);	/* Required by some cards */
 
-	for (timeout = 0; (inb(hw_config->io_base + WSS_DATA) & WSS_AUTOCALIBRATION) && (timeout < 100000); timeout++);
+	for (timeout = 0; (inb(hw_config->io_base + WSS_DATA) & WSS_AUTOCALIBRATION) &&
+	  (timeout < 100000); timeout++)
+		;
 
 	return probe_ms_sound(hw_config);
 }
 
-void attach_pss_mss(struct address_info *hw_config)
+static void __init attach_pss_mss(struct address_info *hw_config)
 {
 	int        my_mix = -999;	/* gcc shut up */
 	
@@ -991,36 +1001,33 @@ void attach_pss_mss(struct address_info *hw_config)
 	}
 }
 
-void unload_pss(struct address_info *hw_config)
+static inline void __exit unload_pss(struct address_info *hw_config)
 {
 	release_region(hw_config->io_base, 0x10);
 	release_region(hw_config->io_base+0x10, 0x9);
 }
 
-void unload_pss_mpu(struct address_info *hw_config)
+static inline void __exit unload_pss_mpu(struct address_info *hw_config)
 {
 	unload_mpu401(hw_config);
 }
 
-void unload_pss_mss(struct address_info *hw_config)
+static inline void __exit unload_pss_mss(struct address_info *hw_config)
 {
 	unload_ms_sound(hw_config);
 }
 
-#ifdef MODULE
 
-int pss_io = -1;
+static struct address_info cfg;
+static struct address_info cfg2;
+static struct address_info cfg_mpu;
 
-int mss_io = -1;
-int mss_irq = -1;
-int mss_dma = -1;
-
-int mpu_io = -1;
-int mpu_irq = -1;
-
-struct address_info cfgpss = { 0 /* pss_io */, 0, -1, -1 };
-struct address_info cfgmpu = { 0 /* mpu_io */, 0 /* mpu_irq */, 0, -1 };
-struct address_info cfgmss = { 0 /* mss_io */, 0 /* mss_irq */, 0 /* mss_dma */, -1 };
+static int pss_io __initdata	= -1;
+static int mss_io __initdata	= -1;
+static int mss_irq __initdata	= -1;
+static int mss_dma __initdata	= -1;
+static int mpu_io __initdata	= -1;
+static int mpu_irq __initdata	= -1;
 
 MODULE_PARM(pss_io, "i");
 MODULE_PARM_DESC(pss_io, "Set i/o base of PSS card (probably 0x220 or 0x240)");
@@ -1046,54 +1053,76 @@ static int pssmpu = 0, pssmss = 0;
  *    Load a PSS sound card module
  */
 
-int init_module(void)
+static int __init init_pss(void)
 {
-	if (pss_io == -1 || mss_io == -1 || mss_irq == -1 || mss_dma == -1) {
+	cfg.io_base = pss_io;
+
+	cfg2.io_base = mss_io;
+	cfg2.irq = mss_irq;
+	cfg2.dma = mss_dma;
+
+	cfg_mpu.io_base = mpu_io;
+	cfg_mpu.irq = mpu_irq;
+
+	if (cfg.io_base == -1 || cfg2.io_base == -1 || cfg2.irq == -1 || cfg.dma == -1) {
 		printk(KERN_INFO "pss: mss_io, mss_dma, mss_irq and pss_io must be set.\n");
 		return -EINVAL;
 	}
 
-	cfgpss.io_base = pss_io;
-
-	cfgmss.io_base = mss_io;
-	cfgmss.irq = mss_irq;
-	cfgmss.dma = mss_dma;
-
-	cfgmpu.io_base = mpu_io;
-	cfgmpu.irq = mpu_irq;
-
-	if (!pss_synth) 
-	{
+	if (!pss_synth) {
 		fw_load = 1;
 		pss_synthLen = mod_firmware_load("/etc/sound/pss_synth", (void *) &pss_synth);
 	}
-	if (!probe_pss(&cfgpss))
+	if (!probe_pss(&cfg))
 		return -ENODEV;
-	attach_pss(&cfgpss);
+	attach_pss(&cfg);
 	/*
 	 *    Attach stuff
 	 */
-	if (probe_pss_mpu(&cfgmpu)) {
+	if (probe_pss_mpu(&cfg_mpu)) {
 		pssmpu = 1;
-		attach_pss_mpu(&cfgmpu);
+		attach_pss_mpu(&cfg_mpu);
 	}
-	if (probe_pss_mss(&cfgmss)) {
+	if (probe_pss_mss(&cfg2)) {
 		pssmss = 1;
-		attach_pss_mss(&cfgmss);
+		attach_pss_mss(&cfg2);
 	}
 	SOUND_LOCK;
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_pss(void)
 {
 	if (fw_load && pss_synth)
 		vfree(pss_synth);
 	if (pssmss)
-		unload_pss_mss(&cfgmss);
+		unload_pss_mss(&cfg2);
 	if (pssmpu)
-		unload_pss_mpu(&cfgmpu);
-	unload_pss(&cfgpss);
+		unload_pss_mpu(&cfg_mpu);
+	unload_pss(&cfg);
 	SOUND_LOCK_END;
 }
-#endif /* MODULE */
+
+module_init(init_pss);
+module_exit(cleanup_pss);
+
+#ifndef MODULE
+static int __init setup_pss(char *str)
+{
+	/* io, mss_io, mss_irq, mss_dma, mpu_io, mpu_irq */
+	int ints[7];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+
+	pss_io	= ints[1];
+	mss_io	= ints[2];
+	mss_irq	= ints[3];
+	mss_dma	= ints[4];
+	mpu_io	= ints[5];
+	mpu_irq	= ints[6];
+
+	return 1;
+}
+
+__setup("pss=", setup_pss);
+#endif

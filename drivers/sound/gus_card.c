@@ -2,18 +2,13 @@
  * sound/gus_card.c
  *
  * Detection routine for the Gravis Ultrasound.
- */
- 
-/*
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
- * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
- * Version 2 (June 1991). See the "COPYING" file distributed with this software
- * for more info.
- */
-/*
+ *
  * Frank van de Pol : Fixed GUS MAX interrupt handling, enabled simultanious
  *                    usage of CS4231A codec, GUS wave and MIDI for GUS MAX.
+ * Christoph Hellwig: Adapted to module_init/module_exit, simple cleanups.
  *
  * Status:
  *              Tested... 
@@ -21,11 +16,13 @@
       
  
 #include <linux/config.h>
+#include <linux/init.h>
 #include <linux/module.h>
 
 #include "sound_config.h"
 #include "soundmodule.h"
 
+#include "gus.h"
 #include "gus_hw.h"
 
 void            gusintr(int irq, void *dev_id, struct pt_regs *dummy);
@@ -36,13 +33,12 @@ extern int      gus_wave_volume;
 extern int      gus_pcm_volume;
 extern int      have_gus_max;
 int             gus_pnp_flag = 0;
-#ifdef CONFIG_GUS16
+#ifdef CONFIG_SOUND_GUS16
 static int      db16 = 0;	/* Has a Gus16 AD1848 on it */
 #endif
 
-void attach_gus_card(struct address_info *hw_config)
+static void __init attach_gus(struct address_info *hw_config)
 {
-
 	gus_wave_init(hw_config);
 
 	request_region(hw_config->io_base, 16, "GUS");
@@ -57,9 +53,10 @@ void attach_gus_card(struct address_info *hw_config)
 	if(request_irq(hw_config->irq, gusintr, 0,  "Gravis Ultrasound", hw_config)<0)
 		printk(KERN_ERR "gus_card.c: Unable to allocate IRQ %d\n", hw_config->irq);
 
+	return;
 }
 
-int probe_gus(struct address_info *hw_config)
+static int __init probe_gus(struct address_info *hw_config)
 {
 	int             irq;
 	int             io_addr;
@@ -102,10 +99,11 @@ int probe_gus(struct address_info *hw_config)
 					  }
 #endif
 
+	printk("NO GUS card found !\n");
 	return 0;
 }
 
-void unload_gus(struct address_info *hw_config)
+static void __exit unload_gus(struct address_info *hw_config)
 {
 	DDB(printk("unload_gus(%x)\n", hw_config->io_base));
 
@@ -128,13 +126,13 @@ void gusintr(int irq, void *dev_id, struct pt_regs *dummy)
 
 	sti();
 
-#ifdef CONFIG_GUSMAX
+#ifdef CONFIG_SOUND_GUSMAX
 	if (have_gus_max) {
 		struct address_info *hw_config = dev_id;
 		adintr(irq, (void *)hw_config->slots[1], NULL);
 	}
 #endif
-#ifdef CONFIG_GUS16
+#ifdef CONFIG_SOUND_GUS16
 	if (db16) {
 		struct address_info *hw_config = dev_id;
 		adintr(irq, (void *)hw_config->slots[3], NULL);
@@ -170,14 +168,14 @@ void gusintr(int irq, void *dev_id, struct pt_regs *dummy)
  *	Some extra code for the 16 bit sampling option
  */
 
-#ifdef CONFIG_GUS16
+#ifdef CONFIG_SOUND_GUS16
 
-int probe_gus_db16(struct address_info *hw_config)
+static int __init probe_gus_db16(struct address_info *hw_config)
 {
 	return ad1848_detect(hw_config->io_base, NULL, hw_config->osp);
 }
 
-void attach_gus_db16(struct address_info *hw_config)
+static void __init attach_gus_db16(struct address_info *hw_config)
 {
 	gus_pcm_volume = 100;
 	gus_wave_volume = 90;
@@ -189,7 +187,7 @@ void attach_gus_db16(struct address_info *hw_config)
 					  hw_config->osp);
 }
 
-void unload_gus_db16(struct address_info *hw_config)
+static void __exit unload_gus_db16(struct address_info *hw_config)
 {
 
 	ad1848_unload(hw_config->io_base,
@@ -200,27 +198,25 @@ void unload_gus_db16(struct address_info *hw_config)
 }
 #endif
 
+static int gus16 = 0;
+#ifdef CONFIG_SOUND_GUSMAX
+static int no_wave_dma = 0;/* Set if no dma is to be used for the
+                                   wave table (GF1 chip) */
+#endif
 
-
-#ifdef MODULE
-
-static struct address_info config;
 
 /*
  *    Note DMA2 of -1 has the right meaning in the GUS driver as well
  *      as here. 
  */
 
-int             io = -1;
-int             irq = -1;
-int             dma = -1;
-int             dma16 = -1;	/* Set this for modules that need it */
-int             type = 0;	/* 1 for PnP */
-int             gus16 = 0;
-#ifdef CONFIG_GUSMAX
-static int      no_wave_dma = 0;/* Set if no dma is to be used for the 
-				   wave table (GF1 chip) */
-#endif
+static struct address_info cfg;
+
+static int __initdata io = -1;
+static int __initdata irq = -1;
+static int __initdata dma = -1;
+static int __initdata dma16 = -1;	/* Set this for modules that need it */
+static int __initdata type = 0;		/* 1 for PnP */
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
@@ -228,54 +224,73 @@ MODULE_PARM(dma, "i");
 MODULE_PARM(dma16, "i");
 MODULE_PARM(type, "i");
 MODULE_PARM(gus16, "i");
-#ifdef CONFIG_GUSMAX
+#ifdef CONFIG_SOUND_GUSMAX
 MODULE_PARM(no_wave_dma, "i");
 #endif
-#ifdef CONFIG_GUS16
+#ifdef CONFIG_SOUND_GUS16
 MODULE_PARM(db16, "i");
 #endif
 
-int init_module(void)
+static int __init init_gus(void)
 {
 	printk(KERN_INFO "Gravis Ultrasound audio driver Copyright (C) by Hannu Savolainen 1993-1996\n");
 
-	if (io == -1 || dma == -1 || irq == -1)
-	{
-		printk(KERN_ERR "I/O, IRQ, and DMA are mandatory\n");
-		return -EINVAL;
-	}
-	config.io_base = io;
-	config.irq = irq;
-	config.dma = dma;
-	config.dma2 = dma16;
-	config.card_subtype = type;
-	
-#ifdef CONFIG_GUSMAX
+	cfg.io_base = io;
+	cfg.irq = irq;
+	cfg.dma = dma;
+	cfg.dma2 = dma16;
+	cfg.card_subtype = type;
+#ifdef CONFIG_SOUND_GUSMAX
 	gus_no_wave_dma = no_wave_dma;
 #endif
 
-#if defined(CONFIG_GUS16)
-	if (probe_gus_db16(&config) && gus16)
-	{
-		attach_gus_db16(&config);
+	if (cfg.io_base == -1 || cfg.dma == -1 || cfg.irq == -1) {
+		printk(KERN_ERR "I/O, IRQ, and DMA are mandatory\n");
+		return -EINVAL;
+	}
+
+#ifdef CONFIG_SOUND_GUS16
+	if (probe_gus_db16(&cfg) && gus16) {
+		/* FIXME: This can't work, can it ? -- Christoph */
+		attach_gus_db16(&cfg);
 		db16 = 1;
 	}	
 #endif
-	if (probe_gus(&config) == 0)
+	if (!probe_gus(&cfg))
 		return -ENODEV;
-	attach_gus_card(&config);
+	attach_gus(&cfg);
 	SOUND_LOCK;
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_gus(void)
 {
-#if defined(CONFIG_GUS16)
+#ifdef CONFIG_SOUND_GUS16
 	if (db16)
-		unload_gus_db16(&config);
+		unload_gus_db16(&cfg);
 #endif
-	unload_gus(&config);
+	unload_gus(&cfg);
 	SOUND_LOCK_END;
 }
 
-#endif /* MODULE */
+module_init(init_gus);
+module_exit(cleanup_gus);
+
+#ifndef MODULE
+static int __init setup_gus(char *str)
+{
+	/* io, irq, dma, dma2 */
+	int ints[5];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	
+	io	= ints[1];
+	irq	= ints[2];
+	dma	= ints[3];
+	dma16	= ints[4];
+
+	return 1;
+}
+
+__setup("gus=", setup_gus);
+#endif

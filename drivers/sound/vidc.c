@@ -14,6 +14,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 
@@ -412,7 +413,7 @@ void vidc_update_filler(int format, int channels)
 	}
 }
 
-void attach_vidc(struct address_info *hw_config)
+static void __init attach_vidc(struct address_info *hw_config)
 {
 	char name[32];
 	int i, adev;
@@ -486,7 +487,7 @@ audio_failed:
 	return;
 }
 
-int probe_vidc(struct address_info *hw_config)
+static int __init probe_vidc(struct address_info *hw_config)
 {
 	hw_config->irq		= IRQ_DMAS0;
 	hw_config->dma		= DMA_VIRTUAL_SOUND;
@@ -496,7 +497,7 @@ int probe_vidc(struct address_info *hw_config)
 	return 1;
 }
 
-void unload_vidc(struct address_info *hw_config)
+static void __exit unload_vidc(struct address_info *hw_config)
 {
 	int i, adev = vidc_adev;
 
@@ -516,27 +517,27 @@ void unload_vidc(struct address_info *hw_config)
 	}
 }
 
-#ifdef MODULE
-static struct address_info config;
+static struct address_info cfg;
 /*
  * Note! Module use count is handled by SOUNDLOCK/SOUND_LOCK_END
  */
 
-int init_module(void)
+static int __init init_vidc(void)
 {
-	if (probe_vidc(&config) == 0)
+	if (probe_vidc(&cfg) == 0)
 		return -ENODEV;
 
 	SOUND_LOCK;
-	attach_vidc(&config);
+	attach_vidc(&cfg);
 
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_vidc(void)
 {
-	unload_vidc(&config);
+	unload_vidc(&cfg);
 	SOUND_LOCK_END;
 }
 
-#endif
+module_init(init_vidc);
+module_exit(cleanup_vidc);

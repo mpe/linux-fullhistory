@@ -10,7 +10,10 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+
 #include "sound_config.h"
+
+#include "pas2.h"
 
 static int      midi_busy = 0, input_opened = 0;
 static int      my_dev;

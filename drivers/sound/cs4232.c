@@ -1,5 +1,7 @@
 /*
- * sound/cs4232.c
+ * Copyright (C) by Hannu Savolainen 1993-1997
+ *
+ *	cs4232.c
  *
  * The low level driver for Crystal CS4232 based cards. The CS4232 is
  * a PnP compatible chip which contains a CS4231A codec, SB emulation,
@@ -35,21 +37,20 @@
  *	Alan Cox		Modularisation, Basic cleanups.
  *      Paul Barton-Davis	Separated MPU configuration, added
  *                                       Tropez+ (WaveFront) support
- */
-
-/*
- * Copyright (C) by Hannu Savolainen 1993-1997
- *
- * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
- * Version 2 (June 1991). See the "COPYING" file distributed with this software
- * for more info.
+ *	Christoph Hellwig	Adapted to module_init/module_exit,
+ * 					simple cleanups
  */
 
 #include <linux/config.h>
 #include <linux/module.h>
+#include <linux/init.h>
 
 #include "sound_config.h"
 #include "soundmodule.h"
+
+#include "cs4232.h"
+#include "ad1848.h"
+#include "mpu401.h"
 
 #define KEY_PORT	0x279	/* Same as LPT1 status port */
 #define CSN_NUM		0x99	/* Just a random number */
@@ -76,11 +77,6 @@ int probe_cs4232_mpu(struct address_info *hw_config)
 	mpu_irq = hw_config->irq;
 
 	return 1;
-}
-
-void attach_cs4232_mpu(struct address_info *hw_config)
-{
-	/* Nothing needs doing */
 }
 
 static unsigned char crystal_key[] =	/* A 32 byte magic key sequence */
@@ -215,8 +211,15 @@ int probe_cs4232(struct address_info *hw_config)
 
 void attach_cs4232(struct address_info *hw_config)
 {
-	int base = hw_config->io_base, irq = hw_config->irq;
-	int dma1 = hw_config->dma, dma2 = hw_config->dma2;
+	int base = hw_config->io_base,
+		irq = hw_config->irq,
+		dma1 = hw_config->dma,
+		dma2 = hw_config->dma2;
+
+	if (base == -1 || irq == -1 || dma1 == -1) {
+		printk(KERN_ERR "cs4232: dma, irq and io must be set.\n");
+		return;
+	}
 
 	if (dma2 == -1)
 		dma2 = dma1;
@@ -263,6 +266,7 @@ void attach_cs4232(struct address_info *hw_config)
 		}
 		hw_config->slots[1] = hw_config2.slots[1];
 	}
+	SOUND_LOCK;
 }
 
 void unload_cs4232(struct address_info *hw_config)
@@ -302,19 +306,18 @@ void unload_cs4232(struct address_info *hw_config)
 	}
 }
 
-void unload_cs4232_mpu(struct address_info *hw_config)
-{
-	/* Not required. Handled by cs4232_unload */
-}
+static struct address_info cfg;
+static struct address_info cfg_mpu;
 
-#ifdef MODULE
+static int __initdata io	= -1;
+static int __initdata irq	= -1;
+static int __initdata dma	= -1;
+static int __initdata dma2	= -1;
+static int __initdata mpuio	= -1;
+static int __initdata mpuirq	= -1;
+static int __initdata synthio	= -1;
+static int __initdata synthirq	= -1;
 
-int             io = -1;
-int             irq = -1;
-int             dma = -1;
-int             dma2 = -1;
-int             mpuio = -1;
-int             mpuirq = -1;
 
 MODULE_PARM(io,"i");
 MODULE_PARM(irq,"i");
@@ -322,34 +325,20 @@ MODULE_PARM(dma,"i");
 MODULE_PARM(dma2,"i");
 MODULE_PARM(mpuio,"i");
 MODULE_PARM(mpuirq,"i");
-
-int             synthio = -1;
-int             synthirq = -1;
 MODULE_PARM(synthio,"i");
 MODULE_PARM(synthirq,"i");
-
-EXPORT_NO_SYMBOLS;
-
-struct address_info cfg;
-struct address_info mpu_cfg;
 
 /*
  *	Install a CS4232 based card. Need to have ad1848 and mpu401
  *	loaded ready.
  */
 
-int init_module(void)
+static int __init init_cs4232(void)
 {
-	if (io == -1 || irq == -1 || dma == -1 || dma2 == -1)
-	{
-		printk(KERN_ERR "cs4232: dma, dma2, irq and io must be set.\n");
-		return -EINVAL;
-	}
 #ifdef CONFIG_SOUND_WAVEFRONT_MODULE
 	if(synthio == -1)
 		printk(KERN_WARNING "cs4232: set synthio and synthirq to use the wavefront facilities.\n");
-	else
-	{
+	else {
 		synth_base = synthio;
 		synth_irq =  synthirq;	
 	}
@@ -363,32 +352,48 @@ int init_module(void)
 	cfg.dma = dma;
 	cfg.dma2 = dma2;
 
-	mpu_cfg.io_base = -1;
-	mpu_cfg.irq = -1;
+	cfg_mpu.io_base = -1;
+	cfg_mpu.irq = -1;
 
 	if (mpuio != -1 && mpuirq != -1) {
-		mpu_cfg.io_base = mpuio;
-		mpu_cfg.irq = mpuirq;
-		probe_cs4232_mpu(&mpu_cfg); /* Bug always returns 0 not OK -- AC */
+		cfg_mpu.io_base = mpuio;
+		cfg_mpu.irq = mpuirq;
+		probe_cs4232_mpu(&cfg_mpu); /* Bug always returns 0 not OK -- AC */
 	}
 
 	if (probe_cs4232(&cfg) == 0)
 		return -ENODEV;
-
 	attach_cs4232(&cfg);
-
-	if (mpuio != -1 && mpuirq != -1) {
-		attach_cs4232_mpu(&mpu_cfg);
-	}
-
-	SOUND_LOCK;
+	
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_cs4232(void)
 {
         unload_cs4232(&cfg); /* unloads MPU as well, if needed */
 	SOUND_LOCK_END;
 }
 
-#endif /* MODULE */
+module_init(init_cs4232);
+module_exit(cleanup_cs4232);
+
+#ifndef MODULE
+static int __init setup_cs4232(char *str)
+{
+	/* io, irq, dma, dma2 mpuio, mpuirq*/
+	int ints[7];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	
+	io	= ints[1];
+	irq	= ints[2];
+	dma	= ints[3];
+	dma2	= ints[4];
+	mpuio	= ints[5];
+	mpuirq	= ints[6];
+
+	return 1;
+}
+
+__setup("cs4232=", setup_cs4232);
+#endif

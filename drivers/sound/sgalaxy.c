@@ -9,8 +9,8 @@
  *    Aztech Sound Galaxy Washington 16
  *
  * Based on cs4232.c by Hannu Savolainen and Alan Cox.
- */
-/*
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
@@ -18,10 +18,13 @@
  * for more info.
  */
 
+#include <linux/init.h>
 #include <linux/module.h>
 
 #include "sound_config.h"
 #include "soundmodule.h"
+
+#include "ad1848.h"
 
 static void sleep( unsigned howlong )
 {
@@ -79,10 +82,9 @@ static int sb_cmd( int base, unsigned char val )
 
 #define ai_sgbase    driver_use_1
 
-int probe_sgalaxy( struct address_info *ai )
+static int __init probe_sgalaxy( struct address_info *ai )
 {
-	if ( check_region( ai->io_base, 8 ) )
-	{
+	if ( check_region( ai->io_base, 8 ) ) {
 		printk(KERN_ERR "sgalaxy: WSS IO port 0x%03x not available\n", ai->io_base);
 		return 0;
 	}
@@ -90,8 +92,7 @@ int probe_sgalaxy( struct address_info *ai )
 	if ( ad1848_detect( ai->io_base+4, NULL, ai->osp ) )
 		return probe_ms_sound(ai);  /* The card is already active, check irq etc... */
 
-	if ( check_region( ai->ai_sgbase, 0x10 ) )
-	{
+	if ( check_region( ai->ai_sgbase, 0x10 ) ) {
 		printk(KERN_ERR "sgalaxy: SB IO port 0x%03x not available\n", ai->ai_sgbase);
 		return 0;
 	}
@@ -108,7 +109,7 @@ int probe_sgalaxy( struct address_info *ai )
       	return probe_ms_sound(ai);
 }
 
-void attach_sgalaxy( struct address_info *ai )
+static void __init attach_sgalaxy( struct address_info *ai )
 {
 	int n;
 	
@@ -117,27 +118,26 @@ void attach_sgalaxy( struct address_info *ai )
 	attach_ms_sound( ai );
 	n=ai->slots[0];
 	
-	if (n!=-1 && audio_devs[n]->mixer_dev != -1 )
-	{
+	if (n!=-1 && audio_devs[n]->mixer_dev != -1 ) {
 		AD1848_REROUTE( SOUND_MIXER_LINE1, SOUND_MIXER_LINE );   /* Line-in */
 		AD1848_REROUTE( SOUND_MIXER_LINE2, SOUND_MIXER_SYNTH );  /* FM+Wavetable*/
 		AD1848_REROUTE( SOUND_MIXER_LINE3, SOUND_MIXER_CD );     /* CD */
 	}
 }
 
-void unload_sgalaxy( struct address_info *ai )
+static void __exit unload_sgalaxy( struct address_info *ai )
 {
 	unload_ms_sound( ai );
 	release_region( ai->ai_sgbase, 0x10 );
 }
 
-#ifdef MODULE
+static struct address_info cfg;
 
-int   io       = -1;
-int   irq      = -1;
-int   dma      = -1;
-int   dma2     = -1;
-int   sgbase   = -1;
+static int __initdata io	= -1;
+static int __initdata irq	= -1;
+static int __initdata dma	= -1;
+static int __initdata dma2	= -1;
+static int __initdata sgbase	= -1;
 
 MODULE_PARM(io,"i");
 MODULE_PARM(irq,"i");
@@ -145,38 +145,52 @@ MODULE_PARM(dma,"i");
 MODULE_PARM(dma2,"i");
 MODULE_PARM(sgbase,"i");
 
-EXPORT_NO_SYMBOLS;
-
-struct address_info ai;
-
-
-int init_module(void)
+static int __init init_sgalaxy(void)
 {
-	if ( io==-1 || irq==-1 || dma==-1 || sgbase==-1 )
-	{
+	cfg.io_base   = io;
+	cfg.irq       = irq;
+	cfg.dma       = dma;
+	cfg.dma2      = dma2;
+	cfg.ai_sgbase = sgbase;
+
+	if (cfg.io_base == -1 || cfg.irq == -1 || cfg.dma == -1 || cfg.ai_sgbase == -1 ) {
 		printk(KERN_ERR "sgalaxy: io, irq, dma and sgbase must be set.\n");
 		return -EINVAL;
 	}
 
-	ai.io_base   = io;
-	ai.irq       = irq;
-	ai.dma       = dma;
-	ai.dma2      = dma2;
-	ai.ai_sgbase = sgbase;
-
-	if ( probe_sgalaxy( &ai )==0 )
+	if ( probe_sgalaxy(&cfg) == 0 )
 		return -ENODEV;
 
-	attach_sgalaxy( &ai );
+	attach_sgalaxy(&cfg);
 
 	SOUND_LOCK;
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_sgalaxy(void)
 {
-	unload_sgalaxy( &ai );
+	unload_sgalaxy(&cfg);
 	SOUND_LOCK_END;
 }
 
-#endif /* MODULE */
+module_init(init_sgalaxy);
+module_exit(cleanup_sgalaxy);
+
+#ifndef MODULE
+static int __init setup_sgalaxy(char *str)
+{
+	/* io, irq, dma, dma2, sgbase */
+	int ints[6];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	io	= ints[1];
+	irq	= ints[2];
+	dma	= ints[3];
+	dma2	= ints[4];
+	sgbase	= ints[5];
+
+	return 1;
+}
+
+__setup("sgalaxy=", setup_sgalaxy);
+#endif

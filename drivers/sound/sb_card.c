@@ -11,11 +11,14 @@
  * for more info.
  *
  *
- * 26th November 1999 - patched to compile without ISA PnP support in the
- * kernel. -Daniel Stone (tamriel@ductape.net) 
+ * 26-11-1999 Patched to compile without ISA PnP support in the
+ * kernel - Daniel Stone (tamriel@ductape.net) 
  *
  * 06-01-2000 Refined and bugfixed ISA PnP support, added
  *  CMI 8330 support - Alessandro Zummo <azummo@ita.flashnet.it>
+ *
+ * 18-01-2000 Separated sb_card and sb_common
+ *  Jeff Garzik <jgarzik@mandrakesoft.com>
  *
  * 04-02-2000 Added Soundblaster AWE 64 PnP support, isapnpjump
  *  Alessandro Zummo <azummo@ita.flashnet.it>
@@ -23,7 +26,7 @@
  * 11-02-2000 Added Soundblaster AWE 32 PnP support, refined PnP code
  *  Alessandro Zummo <azummo@ita.flashnet.it>
  *
- * 13-02-2000 Hopefully fixed awe/sb16 related bugs, code cleanup.
+ * 13-02-2000 Hopefully fixed awe/sb16 related bugs, code cleanup
  *  Alessandro Zummo <azummo@ita.flashnet.it>
  *
  */
@@ -42,14 +45,23 @@
 
 static int sbmpu = 0;
 
-void attach_sb_card(struct address_info *hw_config)
+extern void *smw_free;
+
+static void __init attach_sb_card(struct address_info *hw_config)
 {
 	if(!sb_dsp_init(hw_config))
 		hw_config->slots[0] = -1;
+	SOUND_LOCK;
 }
 
-int probe_sb(struct address_info *hw_config)
+static int __init probe_sb(struct address_info *hw_config)
 {
+	if (hw_config->io_base == -1 || hw_config->dma == -1 || hw_config->irq == -1)
+	{
+		printk(KERN_ERR "sb_card: I/O, IRQ, and DMA are mandatory\n");
+		return -EINVAL;
+	}
+
 #ifdef CONFIG_MCA
 	/* MCA code added by ZP Gu (zpg@castle.net) */
 	if (MCA_bus) {               /* no multiple REPLY card probing */
@@ -121,19 +133,16 @@ iobase=0x%x irq=%d lo_dma=%d hi_dma=%d\n",
 	return sb_dsp_detect(hw_config, 0, 0);
 }
 
-void unload_sb(struct address_info *hw_config)
+static void __exit unload_sb(struct address_info *hw_config)
 {
 	if(hw_config->slots[0]!=-1)
 		sb_dsp_unload(hw_config, sbmpu);
 }
 
-int sb_be_quiet=0;
 extern int esstype;	/* ESS chip type */
 
-#ifdef MODULE
-
-static struct address_info config;
-static struct address_info config_mpu;
+static struct address_info cfg;
+static struct address_info cfg_mpu;
 
 struct pci_dev 	*sb_dev 	= NULL, 
 		*wss_dev	= NULL, 
@@ -146,25 +155,21 @@ struct pci_dev 	*sb_dev 	= NULL,
  *    to the 8bit channel.
  */
 
-int mpu_io 	= 0;
-int io 		= -1;
-int irq 	= -1;
-int dma 	= -1;
-int dma16 	= -1;	/* Set this for modules that need it */
-int type 	= 0;	/* Can set this to a specific card type */
-int mad16 	= 0;	/* Set mad16=1 to load this as support for mad16 */
-int trix 	= 0;	/* Set trix=1 to load this as support for trix */
-int pas2 	= 0;	/* Set pas2=1 to load this as support for pas2 */
-int support	= 0;	/* Set support to load this as a support module */
-int sm_games	= 0;	/* Mixer - see sb_mixer.c */
-int acer	= 0;	/* Do acer notebook init */
+static int __initdata mpu_io	= 0;
+static int __initdata io	= -1;
+static int __initdata irq	= -1;
+static int __initdata dma	= -1;
+static int __initdata dma16	= -1;   /* Set this for modules that need it */
+static int __initdata type	= 0;    /* Can set this to a specific card type */
+
 
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
-int isapnp      = 1;
-int isapnpjump  = 0;
-int nosbwave    = 0;	/* This option will be removed when the new awe_wave driver will be in the kernel tree */
+static int isapnp	= 1;
+static int isapnpjump	= 0;
+static int nosbwave	= 0;	/* This option will be removed when the new awe_wave driver will be
+				   in the kernel tree */
 #else
-int isapnp 	= 0;
+int isapnp	= 0;
 #endif
 
 MODULE_DESCRIPTION("Soundblaster driver");
@@ -175,10 +180,6 @@ MODULE_PARM(dma,	"i");
 MODULE_PARM(dma16,	"i");
 MODULE_PARM(mpu_io,	"i");
 MODULE_PARM(type,	"i");
-MODULE_PARM(mad16,	"i");
-MODULE_PARM(support,	"i");
-MODULE_PARM(trix,	"i");
-MODULE_PARM(pas2,	"i");
 MODULE_PARM(sm_games,	"i");
 MODULE_PARM(esstype,	"i");
 MODULE_PARM(acer,	"i");
@@ -198,15 +199,9 @@ MODULE_PARM_DESC(dma,		"8-bit DMA channel (0,1,3)");
 MODULE_PARM_DESC(dma16,		"16-bit DMA channel (5,6,7)");
 MODULE_PARM_DESC(mpu_io,	"Mpu base address");
 MODULE_PARM_DESC(type,		"You can set this to specific card type");
-MODULE_PARM_DESC(mad16,		"Enable MAD16 support");
-MODULE_PARM_DESC(trix,		"Enable Audiotrix support");
-MODULE_PARM_DESC(pas2,		"Enable Pas2 support");
-MODULE_PARM_DESC(support,	"Set this to load as generic support module");
 MODULE_PARM_DESC(sm_games,	"Enable support for Logitech soundman games");
 MODULE_PARM_DESC(esstype,	"ESS chip type");
 MODULE_PARM_DESC(acer,		"Set this to detect cards in some ACER notebooks");
-
-void *smw_free = NULL;
 
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
 
@@ -631,7 +626,7 @@ static int __init sb_init_isapnp(struct address_info *hw_config, struct address_
    Should this be fixed? - azummo
 */
 
-static int __init sb_probe_isapnp(struct address_info *hw_config, struct address_info *mpu_config) 
+int __init sb_probe_isapnp(struct address_info *hw_config, struct address_info *mpu_config) 
 {
 	int i;
 
@@ -687,65 +682,55 @@ static int __init sb_probe_isapnp(struct address_info *hw_config, struct address
 }
 #endif
 
-int init_module(void)
+static int __init init_sb(void)
 {
 	printk(KERN_INFO "Soundblaster audio driver Copyright (C) by Hannu Savolainen 1993-1996\n");
 
-	if (mad16 == 0 && trix == 0 && pas2 == 0 && support == 0)
-	{
-		/* Please remember that even with CONFIG_ISAPNP defined one should still be
-			able to disable PNP support for this single driver!
-		*/
+	/* Please remember that even with CONFIG_ISAPNP defined one should still be
+		able to disable PNP support for this single driver!
+	*/
 
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE			
-		if(isapnp && (sb_probe_isapnp(&config, &config_mpu) < 0) )
-		{
-			printk(KERN_NOTICE "sb_card: No ISAPnP cards found, trying standard ones...\n");
-			isapnp = 0;
-		}
-#endif
-		if(isapnp == 0)
-		{
-			if (io == -1 || dma == -1 || irq == -1)
-			{
-				printk(KERN_ERR "sb_card: I/O, IRQ, and DMA are mandatory\n");
-				return -EINVAL;
-			}
-
-			config.io_base	= io;
-			config.irq	= irq;
-			config.dma	= dma;
-			config.dma2	= dma16;
-		}
-
-		config.card_subtype = type;
-
-		if (!probe_sb(&config))
-			return -ENODEV;
-		attach_sb_card(&config);
-	
-		if(config.slots[0]==-1)
-			return -ENODEV;
-
-		if (isapnp == 0) 
-			config_mpu.io_base = mpu_io;
-		if (probe_sbmpu(&config_mpu))
-			sbmpu = 1;
-		if (sbmpu)
-			attach_sbmpu(&config_mpu);
+	if(isapnp && (sb_probe_isapnp(&cfg, &cfg_mpu) < 0) ) {
+		printk(KERN_NOTICE "sb_card: No ISAPnP cards found, trying standard ones...\n");
+		isapnp = 0;
 	}
-	SOUND_LOCK;
+#endif
+
+	if( isapnp == 0 ) {
+		cfg.io_base	= io;
+		cfg.irq		= irq;
+		cfg.dma		= dma;
+		cfg.dma2	= dma16;
+	}
+
+	cfg.card_subtype = type;
+
+	if (!probe_sb(&cfg))
+		return -ENODEV;
+	attach_sb_card(&cfg);
+
+	if(cfg.slots[0]==-1)
+		return -ENODEV;
+		
+	if (isapnp == 0) 
+		cfg_mpu.io_base = mpu_io;
+	if (probe_sbmpu(&cfg_mpu))
+		sbmpu = 1;
+	if (sbmpu)
+		attach_sbmpu(&cfg_mpu);
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_sb(void)
 {
-	if (smw_free)
+	if (smw_free) {
 		vfree(smw_free);
-	if (!mad16 && !trix && !pas2 && !support)
-		unload_sb(&config);
+		smw_free = NULL;
+	}
+	unload_sb(&cfg);
 	if (sbmpu)
-		unload_sbmpu(&config_mpu);
+		unload_sbmpu(&cfg_mpu);
 	SOUND_LOCK_END;
 
 	if(sb_dev)	sb_dev->deactivate(sb_dev);
@@ -755,28 +740,23 @@ void cleanup_module(void)
 	if(wss_dev)	wss_dev->deactivate(wss_dev);
 }
 
-#else
+module_init(init_sb);
+module_exit(cleanup_sb);
 
-#ifdef CONFIG_SM_GAMES
-int             sm_games = 1;
-#else
-int             sm_games = 0;
-#endif
-#ifdef CONFIG_SB_ACER
-int             acer = 1;
-#else
-int             acer = 0;
-#endif
-#endif
+#ifndef MODULE
+static int __init setup_sb(char *str)
+{
+	/* io, irq, dma, dma2 */
+	int ints[5];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	
+	io	= ints[1];
+	irq	= ints[2];
+	dma	= ints[3];
+	dma16	= ints[4];
 
-EXPORT_SYMBOL(sb_dsp_init);
-EXPORT_SYMBOL(sb_dsp_detect);
-EXPORT_SYMBOL(sb_dsp_unload);
-EXPORT_SYMBOL(sb_dsp_disable_midi);
-EXPORT_SYMBOL(attach_sb_card);
-EXPORT_SYMBOL(probe_sb);
-EXPORT_SYMBOL(unload_sb);
-EXPORT_SYMBOL(sb_be_quiet);
-EXPORT_SYMBOL(attach_sbmpu);
-EXPORT_SYMBOL(probe_sbmpu);
-EXPORT_SYMBOL(unload_sbmpu);
+	return 1;
+}
+__setup("sb=", setup_sb);
+#endif

@@ -1,14 +1,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
- * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
- * Version 2 (June 1991). See the "COPYING" file distributed with this software
- * for more info.
- */
-#include <linux/config.h>
-#include <linux/module.h>
-/*
- * sound/mad16.c
+ * mad16.c
  *
  * Initialization code for OPTi MAD16 compatible audio chips. Including
  *
@@ -72,21 +65,22 @@
  *
  *	Paul Grayson		Added support for Midi on later Mozart cards.
  *								25-Nov-1999
+ *	Christoph Hellwig	Adapted to module_init/module_exit.
  */
+
+#include <linux/config.h>
+#include <linux/init.h>
+#include <linux/module.h>
 
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#ifdef MODULE
-#define MAD16_CDSEL   mad16_cdsel
-#define MAD16_CONF    mad16_conf
+#include "ad1848.h"
+#include "sb.h"
+#include "mpu401.h"
 
 static int      mad16_conf;
 static int      mad16_cdsel;
-
-#endif
-
-#include "sb.h"
 
 static int      already_initialized = 0;
 
@@ -222,7 +216,7 @@ static void mad_write(int port, int value)
 	restore_flags(flags);
 }
 
-static int detect_c930(void)
+static int __init detect_c930(void)
 {
 	unsigned char   tmp = mad_read(MC1_PORT);
 
@@ -295,7 +289,7 @@ static int detect_c930(void)
 	return 1;
 }
 
-static int detect_mad16(void)
+static int __init detect_mad16(void)
 {
 	unsigned char tmp, tmp2, bit;
 	int i, port;
@@ -346,7 +340,7 @@ static int detect_mad16(void)
 	return 1;		/* Bingo */
 }
 
-static int wss_init(struct address_info *hw_config)
+static int __init wss_init(struct address_info *hw_config)
 {
 	int ad_flags = 0;
 
@@ -397,7 +391,7 @@ static int wss_init(struct address_info *hw_config)
 	return 1;
 }
 
-static int init_c930(struct address_info *hw_config)
+static int __init init_c930(struct address_info *hw_config)
 {
 	unsigned char cfg = 0;
 
@@ -457,7 +451,7 @@ static int init_c930(struct address_info *hw_config)
 	return wss_init(hw_config);
 }
 
-static int chip_detect(void)
+static int __init chip_detect(void)
 {
 	int i;
 
@@ -536,7 +530,7 @@ static int chip_detect(void)
 	return 1;
 }
 
-int probe_mad16(struct address_info *hw_config)
+static int __init probe_mad16(struct address_info *hw_config)
 {
 	int i;
 	static int valid_ports[] = 
@@ -646,7 +640,7 @@ int probe_mad16(struct address_info *hw_config)
 	return 1;
 }
 
-void attach_mad16(struct address_info *hw_config)
+static void __init attach_mad16(struct address_info *hw_config)
 {
 
 	static char     interrupt_bits[12] = {
@@ -720,7 +714,7 @@ void attach_mad16(struct address_info *hw_config)
 	request_region(hw_config->io_base, 4, "MAD16 WSS config");
 }
 
-void attach_mad16_mpu(struct address_info *hw_config)
+static void __init attach_mad16_mpu(struct address_info *hw_config)
 {
 #ifdef CONFIG_MAD16_OLDCARD
 
@@ -742,7 +736,7 @@ void attach_mad16_mpu(struct address_info *hw_config)
 	attach_uart401(hw_config);
 }
 
-int probe_mad16_mpu(struct address_info *hw_config)
+static int __init probe_mad16_mpu(struct address_info *hw_config)
 {
 	static int mpu_attached = 0;
 	static int valid_ports[] = {
@@ -898,7 +892,7 @@ int probe_mad16_mpu(struct address_info *hw_config)
 	return probe_uart401(hw_config);
 }
 
-void unload_mad16(struct address_info *hw_config)
+static void __exit unload_mad16(struct address_info *hw_config)
 {
 	ad1848_unload(hw_config->io_base + 4,
 			hw_config->irq,
@@ -908,8 +902,7 @@ void unload_mad16(struct address_info *hw_config)
 	sound_unload_audiodev(hw_config->slots[0]);
 }
 
-void
-unload_mad16_mpu(struct address_info *hw_config)
+static void __exit unload_mad16_mpu(struct address_info *hw_config)
 {
 #ifdef CONFIG_MAD16_OLDCARD
 	if (board_type < C929)	/* Early chip. No MPU support. Just SB MIDI */
@@ -922,21 +915,23 @@ unload_mad16_mpu(struct address_info *hw_config)
 	unload_uart401(hw_config);
 }
 
-#ifdef MODULE
+static struct address_info cfg;
+static struct address_info cfg_mpu;
 
-int		mpu_io = 0;
-int		mpu_irq = 0;
-int             io = -1;
-int             dma = -1;
-int             dma16 = -1;	/* Set this for modules that need it */
-int             irq = -1;
+static int found_mpu;
 
-int             cdtype = 0;
-int             cdirq = 0;
-int             cdport = 0x340;
-int             cddma = -1;
-int             opl4 = 0;
-int             joystick = 0;
+static int __initdata mpu_io = 0;
+static int __initdata mpu_irq = 0;
+static int __initdata io = -1;
+static int __initdata dma = -1;
+static int __initdata dma16 = -1; /* Set this for modules that need it */
+static int __initdata irq = -1;
+static int __initdata cdtype = 0;
+static int __initdata cdirq = 0;
+static int __initdata cdport = 0x340;
+static int __initdata cddma = -1;
+static int __initdata opl4 = 0;
+static int __initdata joystick = 0;
 
 MODULE_PARM(mpu_io, "i");
 MODULE_PARM(mpu_irq, "i");
@@ -952,18 +947,13 @@ MODULE_PARM(opl4,"i");
 MODULE_PARM(joystick,"i");
 MODULE_PARM(debug,"i");
 
-EXPORT_NO_SYMBOLS;
-
-static int found_mpu;
-
-
-static int dma_map[2][8] =
+static int __initdata dma_map[2][8] =
 {
 	{0x03, -1, -1, -1, -1, 0x00, 0x01, 0x02},
 	{0x03, -1, 0x01, 0x00, -1, -1, -1, -1}
 };
 
-static int irq_map[16] =
+static int __initdata irq_map[16] =
 {
 	0x00, -1, -1, 0x0A,
 	-1, 0x04, -1, 0x08,
@@ -971,20 +961,12 @@ static int irq_map[16] =
 	-1, -1, -1, -1
 };
 
-struct address_info config;
-struct address_info config_mpu;
-
-int init_module(void)
+static int __init init_mad16(void)
 {
 	int dmatype = 0;
 
 	printk(KERN_INFO "MAD16 audio driver Copyright (C) by Hannu Savolainen 1993-1996\n");
 
-	if (io == -1 || dma == -1 || irq == -1)
-	{
-		printk(KERN_ERR "I/O, DMA and irq are mandatory\n");
-		return -EINVAL;
-	}
 	printk(KERN_INFO "CDROM ");
 	switch (cdtype)
 	{
@@ -1089,33 +1071,61 @@ int init_module(void)
                 printk("disabled.\n");
         }
 
-	config.io_base = io;
-	config.irq = irq;
-	config.dma = dma;
-	config.dma2 = dma16;
+	cfg.io_base = io;
+	cfg.irq = irq;
+	cfg.dma = dma;
+	cfg.dma2 = dma16;
 
-	if (!probe_mad16(&config))
+	if (cfg.io_base == -1 || cfg.dma == -1 || cfg.irq == -1) {
+		printk(KERN_ERR "I/O, DMA and irq are mandatory\n");
+		return -EINVAL;
+	}
+	
+	if (!probe_mad16(&cfg))
 		return -ENODEV;
 
-	config_mpu.io_base = mpu_io;
-	config_mpu.irq = mpu_irq;
-	attach_mad16(&config);
+	cfg_mpu.io_base = mpu_io;
+	cfg_mpu.irq = mpu_irq;
 
-	found_mpu = probe_mad16_mpu(&config_mpu);
+	attach_mad16(&cfg);
+
+	found_mpu = probe_mad16_mpu(&cfg_mpu);
 
 	if (found_mpu)
-		attach_mad16_mpu(&config_mpu);
+		attach_mad16_mpu(&cfg_mpu);
 
 	SOUND_LOCK;
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_mad16(void)
 {
 	if (found_mpu)
-		unload_mad16_mpu(&config_mpu);
-	unload_mad16(&config);
+		unload_mad16_mpu(&cfg_mpu);
+	unload_mad16(&cfg);
 	SOUND_LOCK_END;
 }
 
-#endif /* MODULE */
+module_init(init_mad16);
+module_exit(exit_mad16);
+
+#ifndef MODULE
+static int __init setup_mad16(char *str)
+{
+        /* io, irq */
+	int ints[7];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+
+	io	= ints[1];
+	irq	= ints[2];
+	dma	= ints[3];
+	dma16	= ints[4];
+	mpu_io	= ints[5];
+	mpu_irq = ints[6];
+
+	return 1;
+}
+
+__setup("mad16=", setup_mad16);
+#endif

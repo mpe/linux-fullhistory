@@ -15,6 +15,7 @@
 
 #define __NO_VERSION__
 #include <linux/pci.h>
+#include <linux/init.h>
 #include <linux/module.h>
 #include <linux/pm.h>
 #include "sound_config.h"
@@ -1639,8 +1640,6 @@ static struct audio_driver nm256_audio_driver =
 
 EXPORT_SYMBOL(init_nm256);
 
-#ifdef MODULE
-
 static int loaded = 0;
 
 MODULE_PARM (usecache, "i");
@@ -1648,8 +1647,7 @@ MODULE_PARM (buffertop, "i");
 MODULE_PARM (nm256_debug, "i");
 MODULE_PARM (force_load, "i");
 
-int
-init_module (void)
+static int __init do_init_nm256(void)
 {
     nmcard_list = NULL;
     printk (KERN_INFO "NeoMagic 256AV/256ZX audio driver, version 1.1\n");
@@ -1663,8 +1661,7 @@ init_module (void)
 	return -ENODEV;
 }
 
-void
-cleanup_module (void)
+static void __exit cleanup_nm256 (void)
 {
     if (loaded) {
 	struct nm256_info *card;
@@ -1688,8 +1685,10 @@ cleanup_module (void)
     }
     pm_unregister_all (&handle_pm_event);
 }
-#endif
-
+
+module_init(do_init_nm256);
+module_exit(cleanup_nm256);
+
 /*
  * Local variables:
  *  c-basic-offset: 4

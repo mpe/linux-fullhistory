@@ -2,24 +2,24 @@
  * linux/drivers/sound/soundcard.c
  *
  * Sound card driver for Linux
- */
-/*
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
- */
-/*
- * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
- *                   integrated sound_switch.c
- * Stefan Reinauer : integrated /proc/sound (equals to /dev/sndstat,
- *                   which should disappear in the near future)
- * Eric Dumas      : devfs support (22-Jan-98) <dumas@linux.eu.org> with fixups
- *                   by C. Scott Ananian <cananian@alumni.princeton.edu>
- * Richard Gooch   : moved common (non OSS-specific) devices to sound_core.c
  *
- * Rob Riggs		Added persistent DMA buffers support (1998/10/17)
+ *
+ * Thomas Sailer     : ioctl code reworked (vmalloc/vfree removed)
+ *                   integrated sound_switch.c
+ * Stefan Reinauer   : integrated /proc/sound (equals to /dev/sndstat,
+ *                   which should disappear in the near future)
+ * Eric Dumas	     : devfs support (22-Jan-98) <dumas@linux.eu.org> with
+ *                   fixups by C. Scott Ananian <cananian@alumni.princeton.edu>
+ * Richard Gooch     : moved common (non OSS-specific) devices to sound_core.c
+ * Rob Riggs	     : Added persistent DMA buffers support (1998/10/17)
+ * Christoph Hellwig : Some cleanup work (2000/03/01)
  */
 
 #include <linux/config.h>
@@ -32,7 +32,6 @@
 #include <linux/ctype.h>
 #include <linux/stddef.h>
 #include <linux/kmod.h>
-#ifdef __KERNEL__
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -41,23 +40,22 @@
 #include <linux/ioport.h>
 #include <linux/devfs_fs_kernel.h>
 #include <linux/major.h>
-#endif				/* __KERNEL__ */
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
 #include <linux/smp_lock.h>
 #include "soundmodule.h"
+
+
+#if defined(CONFIG_LOWLEVEL_SOUND) && !defined MODULE
+extern void sound_preinit_lowlevel_drivers(void);
+extern void sound_init_lowlevel_drivers(void);
+#endif
 
 /* From obsolete legacy.h */
 #define SELECTED_SOUND_OPTIONS 0x0
 
 struct notifier_block *sound_locker=(struct notifier_block *)0;
 static int lock_depth = 0;
-
-#ifdef MODULE
-#define modular 1
-#else
-#define modular 0
-#endif
 
 /*
  * This ought to be moved into include/asm/dma.h
@@ -76,16 +74,9 @@ caddr_t         sound_mem_blocks[1024];
 int             sound_nblocks = 0;
 
 /* Persistent DMA buffers */
-#ifdef CONFIG_SOUND_DMAP
-int		sound_dmap_flag = 1;
-#else
 int		sound_dmap_flag = 0;
-#endif
-
 static int      soundcard_configured = 0;
-
-static char     dma_alloc_map[MAX_DMA_CHANNELS] =
-{0};
+static char     dma_alloc_map[MAX_DMA_CHANNELS] = {0};
 
 #define DMA_MAP_UNAVAIL		0
 #define DMA_MAP_FREE		1
@@ -100,6 +91,8 @@ unsigned long seq_time = 0;	/* Time for /dev/sequencer */
  */
 static mixer_vol_table mixer_vols[MAX_MIXER_DEV];
 static int num_mixer_volumes = 0;
+
+int traceinit = 0;
 
 int *load_mixer_volumes(char *name, int *levels, int present)
 {
@@ -159,204 +152,12 @@ static int get_mixer_levels(caddr_t arg)
 	return 0;
 }
 
-static int sound_proc_get_info(char *buffer, char **start, off_t offset, int length)
-{
-	int len, i, drv;
-        off_t pos = 0;
-        off_t begin = 0;
-
-#ifdef MODULE
-#define MODULEPROCSTRING "Driver loaded as a module"
-#else
-#define MODULEPROCSTRING "Driver compiled into kernel"
-#endif
-
-	down_read(&uts_sem);	
-
-	len = sprintf(buffer, "OSS/Free:" SOUND_VERSION_STRING "\n"
-		      "Load type: " MODULEPROCSTRING "\n"
-		      "Kernel: %s %s %s %s %s\n"
-		      "Config options: %x\n\nInstalled drivers: \n", 
-		      system_utsname.sysname, system_utsname.nodename, system_utsname.release, 
-		      system_utsname.version, system_utsname.machine, SELECTED_SOUND_OPTIONS);
-	up_read(&uts_sem);
-	
-	for (i = 0; (i < num_sound_drivers) && (pos <= offset + length); i++) {
-		if (!sound_drivers[i].card_type)
-			continue;
-		len += sprintf(buffer + len, "Type %d: %s\n", 
-			       sound_drivers[i].card_type, sound_drivers[i].name);
-		pos = begin + len;
-		if (pos < offset) {
-			len = 0;
-			begin = pos;
-		}
-	}
-	len += sprintf(buffer + len, "\nCard config: \n");
-
-	for (i = 0; (i < num_sound_cards) && (pos <= offset + length); i++) 
-	{
-		if (!snd_installed_cards[i].card_type)
-			continue;
-		if (!snd_installed_cards[i].enabled)
-			len += sprintf(buffer + len, "(");
-		if ((drv = snd_find_driver(snd_installed_cards[i].card_type)) != -1)
-			len += sprintf(buffer + len, "%s", sound_drivers[drv].name);
-		if (snd_installed_cards[i].config.io_base)
-			len += sprintf(buffer + len, " at 0x%x", snd_installed_cards[i].config.io_base);
-		if (snd_installed_cards[i].config.irq != 0)
-			len += sprintf(buffer + len, " irq %d", abs(snd_installed_cards[i].config.irq));
-		if (snd_installed_cards[i].config.dma != -1) {
-			len += sprintf(buffer + len, " drq %d", snd_installed_cards[i].config.dma);
-			if (snd_installed_cards[i].config.dma2 != -1)
-				len += sprintf(buffer + len, ",%d", snd_installed_cards[i].config.dma2);
-		}
-		if (!snd_installed_cards[i].enabled)
-			len += sprintf(buffer + len, ")");
-		len += sprintf(buffer + len, "\n");
-		pos = begin + len;
-		if (pos < offset) {
-			len = 0;
-			begin = pos;
-		}
-	}
-	if (!sound_started)
-		len += sprintf(buffer + len, "\n\n***** Sound driver not started *****\n\n");
-	len += sprintf(buffer + len, "\nAudio devices:\n");
-	for (i = 0; (i < num_audiodevs) && (pos <= offset + length); i++) {
-		if (audio_devs[i] == NULL)
-			continue;
-		len += sprintf(buffer + len, "%d: %s%s\n", i, audio_devs[i]->name, 
-			       audio_devs[i]->flags & DMA_DUPLEX ? " (DUPLEX)" : "");
-		pos = begin + len;
-		if (pos < offset) {
-			len = 0;
-			begin = pos;
-		}
-	}
-
-	len += sprintf(buffer + len, "\nSynth devices:\n");
-	for (i = 0; (i < num_synths) && (pos <= offset + length); i++) {
-		if (synth_devs[i] == NULL)
-			continue;
-		len += sprintf(buffer + len, "%d: %s\n", i, synth_devs[i]->info->name);
-		pos = begin + len;
-		if (pos < offset) {
-			len = 0;
-			begin = pos;
-		}
-	}
-
-	len += sprintf(buffer + len, "\nMidi devices:\n");
-	for (i = 0; (i < num_midis) && (pos <= offset + length); i++) {
-		if (midi_devs[i] == NULL)
-			continue;
-		len += sprintf(buffer + len, "%d: %s\n", i, midi_devs[i]->info.name);
-		pos = begin + len;
-		if (pos < offset) {
-			len = 0;
-			begin = pos;
-		}
-	}
-
-	len += sprintf(buffer + len, "\nTimers:\n");
-
-	for (i = 0; (i < num_sound_timers) && (pos <= offset + length); i++) {
-		if (sound_timer_devs[i] == NULL)
-			continue;
-		len += sprintf(buffer + len, "%d: %s\n", i, sound_timer_devs[i]->info.name);
-		pos = begin + len;
-		if (pos < offset) {
-			len = 0;
-			begin = pos;
-		}
-	}
-
-	len += sprintf(buffer + len, "\nMixers:\n");
-	for (i = 0; (i < num_mixers) && (pos <= offset + length); i++) {
-		if (mixer_devs[i] == NULL)
-			continue;
-		len += sprintf(buffer + len, "%d: %s\n", i, mixer_devs[i]->name);
-		pos = begin + len;
-		if (pos < offset) {
-			len = 0;
-			begin = pos;
-		}
-	}
-	*start = buffer + (offset - begin);
-	len -= (offset - begin);
-        if (len > length) 
-		len = length;
-        return len;
-}
-
 #ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
 /* 4K page size but our output routines use some slack for overruns */
 #define PROC_BLOCK_SIZE (3*1024)
-
-/*
- * basically copied from fs/proc/generic.c:proc_file_read 
- * should be removed sometime in the future together with /dev/sndstat
- * (a symlink /dev/sndstat -> /proc/sound will do as well)
- */
-static ssize_t sndstat_file_read(struct file * file, char * buf, size_t nbytes, loff_t *ppos)
-{
-        char    *page;
-        ssize_t retval=0;
-        int     eof=0;
-        ssize_t n, count;
-        char    *start;
-
-        if (!(page = (char*) __get_free_page(GFP_KERNEL)))
-                return -ENOMEM;
-
-        while ((nbytes > 0) && !eof)
-        {
-                count = MIN(PROC_BLOCK_SIZE, nbytes);
-
-                start = NULL;
-		n = sound_proc_get_info(page, &start, *ppos, count);
-		if (n < count)
-			eof = 1;
-                        
-                if (!start) {
-                        /*
-                         * For proc files that are less than 4k
-                         */
-                        start = page + *ppos;
-                        n -= *ppos;
-                        if (n <= 0)
-                                break;
-                        if (n > count)
-                                n = count;
-                }
-                if (n == 0)
-                        break;  /* End of file */
-                if (n < 0) {
-                        if (retval == 0)
-                                retval = n;
-                        break;
-                }
-                
-                n -= copy_to_user(buf, start, n);       /* BUG ??? */
-                if (n == 0) {
-                        if (retval == 0)
-                                retval = -EFAULT;
-                        break;
-                }
-                
-                *ppos += n;     /* Move down the file */
-                nbytes -= n;
-                buf += n;
-                retval += n;
-        }
-        free_page((unsigned long) page);
-        return retval;
-}
-
 
 static ssize_t sound_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 {
@@ -373,10 +174,6 @@ static ssize_t sound_read(struct file *file, char *buf, size_t count, loff_t *pp
 	
 	DEB(printk("sound_read(dev=%d, count=%d)\n", dev, count));
 	switch (dev & 0x0f) {
-	case SND_DEV_STATUS:
-		ret = sndstat_file_read(file, buf, count, ppos);
-		break;
-
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
@@ -484,10 +281,8 @@ static int sound_open(struct inode *inode, struct file *file)
 	}
 	in_use++;
 
-#ifdef CONFIG_MODULES
 	notifier_call_chain(&sound_locker, 1, 0);
 	lock_depth++;
-#endif
 
 	return 0;
 }
@@ -522,10 +317,8 @@ static int sound_release(struct inode *inode, struct file *file)
 	}
 	in_use--;
 
-#ifdef CONFIG_MODULES
 	notifier_call_chain(&sound_locker, 0, 0);
 	lock_depth--;
-#endif
 
 	return 0;
 }
@@ -844,22 +637,13 @@ soundcard_init(void)
 
 	soundcard_configured = 1;
 
-	sndtable_init();	/* Initialize call tables and detect cards */
-
-
-#ifdef FIXME
-	if (sndtable_get_cardcount() == 0)
-		return;		/* No cards detected */
+#if defined(CONFIG_LOWLEVEL_SOUND) && !defined(MODULE)
+        sound_preinit_lowlevel_drivers();
+	sound_init_lowlevel_drivers();
 #endif
 
-	if (num_audiodevs || modular)	/* Audio devices present */
-	{
-		audio_init_devices();
-	}
-#ifdef CONFIG_PROC_FS
-	if (!create_proc_info_entry("sound", 0, NULL, sound_proc_get_info))
-		printk(KERN_ERR "sound: registering /proc/sound failed\n");
-#endif		
+	audio_init_devices();
+
 	soundcard_register_devfs(1); /* register after we know # of devices */
 }
 
@@ -876,7 +660,6 @@ static int      sound[20] = {
 	0
 };
 
-int traceinit = 0;
 static int dmabuf = 0;
 static int dmabug = 0;
 
@@ -892,8 +675,6 @@ int init_module(void)
 	int             i;
 #endif
 
-	trace_init=traceinit;
-	
 #ifdef HAS_BRIDGE_BUGGY_FUNC
 	if(dmabug)
 		isa_dma_bridge_buggy = dmabug;
@@ -956,7 +737,6 @@ void cleanup_module(void)
 		sound_unload_lowlevel_drivers();
 	}
 #endif
-	sound_unload_drivers();
 	sequencer_unload();
 
 	for (i = 0; i < MAX_DMA_CHANNELS; i++)
@@ -1075,9 +855,8 @@ void sound_stop_timer(void)
 
 void conf_printf(char *name, struct address_info *hw_config)
 {
-	if (!trace_init)
+	if (!traceinit)
 		return;
-
 	printk("<%s> at 0x%03x", name, hw_config->io_base);
 
 	if (hw_config->irq)
@@ -1094,7 +873,7 @@ void conf_printf(char *name, struct address_info *hw_config)
 
 void conf_printf2(char *name, int base, int irq, int dma, int dma2)
 {
-	if (!trace_init)
+	if (!traceinit)
 		return;
 
 	printk("<%s> at 0x%03x", name, base);

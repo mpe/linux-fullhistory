@@ -44,7 +44,7 @@ MODULE_PARM_DESC(product, "User specified USB idProduct");
 #define FTDI_SIO_SERIAL_CONVERTER_ID	0x8372
 #define KEYSPAN_VENDOR_ID		0x06cd
 #define KEYSPAN_PDA_FAKE_ID		0x0103
-#define KEYSPAN_PDA_ID			0x0103
+#define KEYSPAN_PDA_ID			0x0104 /* no clue */
 
 #define SERIAL_TTY_MAJOR	188	/* Nice legal number now */
 #define SERIAL_TTY_MINORS	16	/* Actually we are allowed 255, but this is good for now */
@@ -52,29 +52,45 @@ MODULE_PARM_DESC(product, "User specified USB idProduct");
 
 #define MAX_NUM_PORTS	8	/* The maximum number of ports one device can grab at once */
 
+
+struct usb_serial_port {
+	struct usb_serial	*serial;	/* pointer back to the owner of this port */
+	struct tty_struct *	tty;		/* the coresponding tty for this device */
+	unsigned char		minor;
+	unsigned char		number;
+	char			active;		/* someone has this device open */
+
+	struct usb_endpoint_descriptor * interrupt_in_endpoint;
+	__u8			interrupt_in_interval;
+	unsigned char *		interrupt_in_buffer;
+	struct urb		control_urb;
+
+	unsigned char *		bulk_in_buffer;
+	struct urb		read_urb;
+
+	unsigned char *		bulk_out_buffer;
+	int			bulk_out_size;
+	struct urb		write_urb;
+	void *			private;	/* data private to the specific driver */
+};
+
 struct usb_serial {
 	struct usb_device *		dev;
 	struct usb_serial_device_type *	type;
-	void *				irq_handle;
-	unsigned int			irqpipe;
 	struct tty_struct *		tty;			/* the coresponding tty for this device */
 	unsigned char			minor;
 	unsigned char			num_ports;		/* the number of ports this device has */
-	char				active[MAX_NUM_PORTS];	/* someone has this device open */
+	char				num_interrupt_in;	/* number of interrupt in endpoints we have */
+	char				num_bulk_in;		/* number of bulk in endpoints we have */
+	char				num_bulk_out;		/* number of bulk out endpoints we have */
+	struct usb_serial_port		port[MAX_NUM_PORTS];
 
-	char			num_interrupt_in;		/* number of interrupt in endpoints we have */
-	__u8			interrupt_in_interval[MAX_NUM_PORTS];
-	unsigned char *		interrupt_in_buffer[MAX_NUM_PORTS];
-	struct urb		control_urb[MAX_NUM_PORTS];
+	/* FIXME! These should move to the private area of the keyspan driver */
+	int			tx_room;
+	int			tx_throttled;
+	wait_queue_head_t 	write_wait;
 
-	char			num_bulk_in;			/* number of bulk in endpoints we have */
-	unsigned char *		bulk_in_buffer[MAX_NUM_PORTS];
-	struct urb		read_urb[MAX_NUM_PORTS];
-
-	char			num_bulk_out;			/* number of bulk out endpoints we have */
-	unsigned char *		bulk_out_buffer[MAX_NUM_PORTS];
-	int			bulk_out_size[MAX_NUM_PORTS];
-	struct urb		write_urb[MAX_NUM_PORTS];
+	void *			private;		/* data private to the specific driver */
 };
 
 
@@ -101,8 +117,6 @@ struct usb_serial_device_type {
 	char	num_bulk_out;
 	char	num_ports;		/* number of serial ports this device has */
 
-	void	*private;		/* data private to the specific driver */
-	
 	/* function call to make before accepting driver */
 	int (*startup) (struct usb_serial *serial);	/* return 0 to continue initialization, anything else to abort */
 	
@@ -113,13 +127,13 @@ struct usb_serial_device_type {
 	int  (*write_room)(struct tty_struct *tty);
 	int  (*ioctl)(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg);
 	void (*set_termios)(struct tty_struct *tty, struct termios * old);
+	void (*break_ctl)(struct tty_struct *tty, int break_state);
 	int  (*chars_in_buffer)(struct tty_struct *tty);
 	void (*throttle)(struct tty_struct * tty);
 	void (*unthrottle)(struct tty_struct * tty);
 	
 	void (*read_bulk_callback)(struct urb *urb);
 	void (*write_bulk_callback)(struct urb *urb);
-
 };
 
 
@@ -317,10 +331,31 @@ static struct usb_serial_device_type ftdi_sio_device = {
 
 
 #ifdef CONFIG_USB_SERIAL_KEYSPAN_PDA
-/* function prototypes for a FTDI serial converter */
-static int  keyspan_pda_serial_open	(struct tty_struct *tty, struct file *filp);
-static void keyspan_pda_serial_close	(struct tty_struct *tty, struct file *filp);
+/* function prototypes for a Keyspan PDA serial converter */
+static int  keyspan_pda_serial_open	(struct tty_struct *tty, 
+					 struct file *filp);
+static void keyspan_pda_serial_close	(struct tty_struct *tty, 
+					 struct file *filp);
 static int  keyspan_pda_startup		(struct usb_serial *serial);
+static void keyspan_pda_rx_throttle	(struct tty_struct *tty);
+static void keyspan_pda_rx_unthrottle	(struct tty_struct *tty);
+static int  keyspan_pda_setbaud		(struct usb_serial *serial, int baud);
+static int  keyspan_pda_write_room	(struct tty_struct *tty);
+static int  keyspan_pda_write		(struct tty_struct *tty,
+					 int from_user,
+					 const unsigned char *buf,
+					 int count);
+static void keyspan_pda_write_bulk_callback (struct urb *urb);
+static int  keyspan_pda_chars_in_buffer (struct tty_struct *tty);
+static int  keyspan_pda_ioctl		(struct tty_struct *tty,
+					 struct file *file,
+					 unsigned int cmd,
+					 unsigned long arg);
+static void keyspan_pda_set_termios	(struct tty_struct *tty,
+					 struct termios *old);
+static void keyspan_pda_break_ctl	(struct tty_struct *tty,
+					 int break_state);
+static int  keyspan_pda_fake_startup	(struct usb_serial *serial);
 
 /* All of the device info needed for the Keyspan PDA serial converter */
 static __u16	keyspan_vendor_id		= KEYSPAN_VENDOR_ID;
@@ -336,23 +371,34 @@ static struct usb_serial_device_type keyspan_pda_fake_device = {
 	num_interrupt_in:	NUM_DONT_CARE,
 	num_bulk_in:		NUM_DONT_CARE,
 	num_bulk_out:		NUM_DONT_CARE,
-	startup:		keyspan_pda_startup	
+	startup:		keyspan_pda_fake_startup
 };
 static struct usb_serial_device_type keyspan_pda_device = {
 	name:			"Keyspan PDA",
 	idVendor:		&keyspan_vendor_id,		/* the Keyspan PDA vendor ID */
 	idProduct:		&keyspan_pda_product_id,	/* the Keyspan PDA product id */
-	needs_interrupt_in:	MUST_HAVE_NOT,			/* this device must not have an interrupt in endpoint */
-	needs_bulk_in:		MUST_HAVE,			/* this device must have a bulk in endpoint */
-	needs_bulk_out:		MUST_HAVE,			/* this device must have a bulk out endpoint */
-	num_interrupt_in:	0,
-	num_bulk_in:		1,
+	needs_interrupt_in:	MUST_HAVE,
+	needs_bulk_in:		DONT_CARE,
+	needs_bulk_out:		MUST_HAVE,
+	num_interrupt_in:	1,
+	num_bulk_in:		0,
 	num_bulk_out:		1,
 	num_ports:		1,
 	open:			keyspan_pda_serial_open,
 	close:			keyspan_pda_serial_close,
+	write:			keyspan_pda_write,
+	write_room:		keyspan_pda_write_room,
+	write_bulk_callback: 	keyspan_pda_write_bulk_callback,
+	chars_in_buffer:	keyspan_pda_chars_in_buffer,
+	throttle:		keyspan_pda_rx_throttle,
+	unthrottle:		keyspan_pda_rx_unthrottle,
+	startup:		keyspan_pda_startup,
+	ioctl:			keyspan_pda_ioctl,
+	set_termios:		keyspan_pda_set_termios,
+	break_ctl:		keyspan_pda_break_ctl,
 };
 #endif
+
 
 /* To add support for another serial converter, create a usb_serial_device_type
    structure for that device, and add it to this list, making sure that the
@@ -385,11 +431,6 @@ static struct usb_serial_device_type *usb_serial_devices[] = {
 #else
 	#undef 	USES_EZUSB_FUNCTIONS
 #endif
-
-
-/* used to mark that a pointer is empty (and not NULL) */
-#define SERIAL_PTR_EMPTY ((void *)(-1))
-
 
 #endif	/* ifdef __LINUX_USB_SERIAL_H */
 

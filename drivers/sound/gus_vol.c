@@ -1,8 +1,8 @@
 
 /*
  * gus_vol.c - Compute volume for GUS.
- */
-/*
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
@@ -10,6 +10,8 @@
  * for more info.
  */
 #include "sound_config.h"
+
+#include "gus.h"
 #include "gus_linearvol.h"
 
 #define GUS_VOLUME	gus_wave_volume

@@ -1,59 +1,43 @@
 /*
-
-AD1816 lowlevel sound driver for Linux 2.2.0 and above
-
-Copyright (C) 1998 by Thorsten Knabe <tek@rbg.informatik.tu-darmstadt.de>
-Based on the CS4232/AD1848 driver Copyright (C) by Hannu Savolainen 1993-1996
-
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
-
--------------------------------------------------------------------------------
-NOTE!   NOTE!   NOTE!   NOTE!   NOTE!   NOTE!   NOTE!   NOTE!   NOTE!
-
-This software is still under development. New versions of the driver 
-are available from:
-  http://www.student.informatik.tu-darmstadt.de/~tek/projects/linux.html
-or
-  http://www.tu-darmstadt.de/~tek01/projects/linux.html
-
-Please report any bugs to: tek@rbg.informatik.tu-darmstadt.de
-
--------------------------------------------------------------------------------
-
-version: 1.3
-cvs: $Header: /home/tek/CVSROOT/sound22/ad1816.c,v 1.3 1999/04/18 16:41:41 tek Exp $
-status: experimental
-date: 1999/4/18
-
-Changes:
-	Oleg Drokin: Some cleanup of load/unload functions.    1998/11/24
-	
-	Thorsten Knabe: attach and unload rewritten, 
-	some argument checks added                             1998/11/30
-
-	Thorsten Knabe: Buggy isa bridge workaround added      1999/01/16
-	
-	David Moews/Thorsten Knabe: Introduced options 
-	parameter. Added slightly modified patch from 
-	David Moews to disable dsp audio sources by setting 
-	bit 0 of options parameter. This seems to be
-	required by some Aztech/Newcom SC-16 cards.            1999/04/18
-	
-*/
+ *
+ * AD1816 lowlevel sound driver for Linux 2.2.0 and above
+ *
+ * Copyright (C) 1998 by Thorsten Knabe <tek@rbg.informatik.tu-darmstadt.de>
+ *
+ * Based on the CS4232/AD1848 driver Copyright (C) by Hannu Savolainen 1993-1996
+ *
+ * This software is still under development. New versions of the driver 
+ * are available from:
+ * http://www.student.informatik.tu-darmstadt.de/~tek/projects/linux.html
+ * or http://www.tu-darmstadt.de/~tek01/projects/linux.html
+ * 
+ * Please report any bugs to: tek@rbg.informatik.tu-darmstadt.de
+ *
+ *
+ * version: 1.3
+ * cvs: $Header: /home/tek/CVSROOT/sound22/ad1816.c,v 1.3 1999/04/18 16:41:41 tek Exp $
+ * status: experimental
+ * date: 1999/4/18
+ *
+ * Changes:
+ *	Oleg Drokin: Some cleanup of load/unload functions.	1998/11/24
+ *	
+ *	Thorsten Knabe: attach and unload rewritten, 
+ *	some argument checks added				1998/11/30
+ *
+ *	Thorsten Knabe: Buggy isa bridge workaround added	1999/01/16
+ *	
+ *	David Moews/Thorsten Knabe: Introduced options 
+ *	parameter. Added slightly modified patch from 
+ *	David Moews to disable dsp audio sources by setting 
+ *	bit 0 of options parameter. This seems to be
+ *	required by some Aztech/Newcom SC-16 cards.		1999/04/18
+ *
+ *	Christoph Hellwig: Adapted to module_init/module_exit.	2000/03/03
+ */
 
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/stddef.h>
 #include "soundmodule.h"
 #include "sound_config.h"
@@ -96,14 +80,10 @@ typedef struct
 	int            irq_ok;
 	int            *osp;
   
-}
+} ad1816_info;
 
-ad1816_info;
-
-static int  nr_ad1816_devs = 0;
-
-static int  ad1816_clockfreq=33000;
-
+static int nr_ad1816_devs = 0;
+static int ad1816_clockfreq=33000;
 static int options=0;
 
 /* for backward mapping of irq to sound device */
@@ -617,7 +597,8 @@ static struct audio_driver ad1816_audio_driver =
 
 /* Interrupt handler */
 
-void ad1816_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
+
+static void ad1816_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
 {
 	unsigned char   status;
 	ad1816_info    *devc;
@@ -1089,7 +1070,7 @@ static struct mixer_operations ad1816_mixer_operations =
 
 
 /* replace with probe routine */
-int probe_ad1816 ( struct address_info *hw_config )
+static int __init probe_ad1816 ( struct address_info *hw_config )
 {
 	ad1816_info    *devc = &dev_info[nr_ad1816_devs];
 	int io_base=hw_config->io_base;
@@ -1097,7 +1078,6 @@ int probe_ad1816 ( struct address_info *hw_config )
 	int tmp;
 	
 	printk("ad1816: AD1816 sounddriver Copyright (C) 1998 by Thorsten Knabe\n");
-	printk("ad1816: $Header: /home/tek/CVSROOT/sound22/ad1816.c,v 1.3 1999/04/18 16:41:41 tek Exp $\n");
 	printk("ad1816: io=0x%x, irq=%d, dma=%d, dma2=%d, clockfreq=%d, options=%d isadmabug=%d\n",
 	       hw_config->io_base,
 	       hw_config->irq,
@@ -1183,7 +1163,7 @@ int probe_ad1816 ( struct address_info *hw_config )
   
  */
 
-void attach_ad1816 (struct address_info *hw_config)
+static void __init attach_ad1816 (struct address_info *hw_config)
 {
 	int             my_dev;
 	char            dev_name[100];
@@ -1309,7 +1289,7 @@ void attach_ad1816 (struct address_info *hw_config)
 	}
 }
 
-void unload_card(ad1816_info *devc)
+static void __exit unload_card(ad1816_info *devc)
 {
 	int  mixer, dev = 0;
 	
@@ -1343,51 +1323,12 @@ void unload_card(ad1816_info *devc)
 	}
 }
 
-void unload_ad1816 (struct address_info *hw_config)
-{
-	int          i;
-	ad1816_info  *devc = NULL;
-  
-	/* remove any soundcard */
-	if (hw_config==NULL) {
-		for (i = 0;  i < nr_ad1816_devs; i++) {
-			devc = &dev_info[i];
-			unload_card(devc);
-		}     
-		nr_ad1816_devs=0;
-	} else { 
-		/* remove specified soundcard */
-		for (i = 0; i < nr_ad1816_devs; i++) {
-		        int j;
-			
-			if (dev_info[i].base == hw_config->io_base) {
-				devc = &dev_info[i];
-				unload_card(devc);
-				nr_ad1816_devs--;
-				for ( j=i; j < nr_ad1816_devs ; j++) {
-					dev_info[j] = dev_info[j+1];
-				}
-				i--;
-			}
-		}
-	}
-}
+static struct address_info cfg;
 
-
-/* ----------------------------- 2.1.xxx module stuff ----------------- */
-
-EXPORT_SYMBOL(ad1816_interrupt);
-EXPORT_SYMBOL(probe_ad1816);
-EXPORT_SYMBOL(attach_ad1816);
-EXPORT_SYMBOL(unload_ad1816);
-
-
-#ifdef MODULE
-
-int             io = -1;
-int             irq = -1;
-int             dma = -1;
-int             dma2 = -1;
+static int __initdata io = -1;
+static int __initdata irq = -1;
+static int __initdata dma = -1;
+static int __initdata dma2 = -1;
 
 MODULE_PARM(io,"i");
 MODULE_PARM(irq,"i");
@@ -1396,33 +1337,59 @@ MODULE_PARM(dma2,"i");
 MODULE_PARM(ad1816_clockfreq,"i");
 MODULE_PARM(options,"i");
 
-struct address_info cfg;
-
-
-int init_module(void)
+static int __init init_ad1816(void)
 {
-        if (io == -1 || irq == -1 || dma == -1 || dma2 == -1) {
-		printk("ad1816: dma, dma2, irq and io must be set.\n");
-                return -EINVAL;
-        }
-        cfg.io_base = io;
-        cfg.irq = irq;
-        cfg.dma = dma;
-        cfg.dma2 = dma2;
-	
-        if (probe_ad1816(&cfg) == 0) {
-                return -ENODEV;
+	cfg.io_base     = io;
+	cfg.irq         = irq;
+	cfg.dma         = dma;
+	cfg.dma2        = dma2;
+
+	if (cfg.io_base == -1 || cfg.irq == -1 || cfg.dma == -1 || cfg.dma2 == -1) {
+		printk(KERN_INFO "ad1816: dma, dma2, irq and io must be set.\n");
+		return -EINVAL;
 	}
-        attach_ad1816(&cfg);
-        SOUND_LOCK;
-        return 0;
+
+	if (probe_ad1816(&cfg) == 0) {
+		return -ENODEV;
+	}
+	
+	attach_ad1816(&cfg);
+	SOUND_LOCK;
 }
 
-
-void cleanup_module(void)
+static void __exit cleanup_ad1816 (void)
 {
-        unload_ad1816(NULL);
-        SOUND_LOCK_END;
+	int          i;
+	ad1816_info  *devc = NULL;
+  
+	/* remove any soundcard */
+	for (i = 0;  i < nr_ad1816_devs; i++) {
+		devc = &dev_info[i];
+		unload_card(devc);
+	}     
+	nr_ad1816_devs=0;
+
+	SOUND_LOCK_END;
 }
 
-#endif /* MODULE */
+module_init(init_ad1816);
+module_exit(cleanup_ad1816);
+
+#ifndef MODULE
+static int __init setup_ad1816(char *str)
+{
+	/* io, irq, dma, dma2 */
+	int ints[5];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	
+	io	= ints[1];
+	irq	= ints[2];
+	dma	= ints[3];
+	dma16	= ints[4];
+
+	return 1;
+}
+
+__setup("ad1816=", setup_ad1816);
+#endif

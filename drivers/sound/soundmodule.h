@@ -2,11 +2,10 @@
 #define _SOUNDMODULE_H
 
 #include <linux/notifier.h>
+#include <linux/module.h>
 
 extern struct notifier_block *sound_locker;
 extern void sound_notifier_chain_register(struct notifier_block *);
-
-#ifdef MODULE
 
 #define SOUND_LOCK		sound_notifier_chain_register(&sound_notifier); 
 #define SOUND_LOCK_END		notifier_chain_unregister(&sound_locker, &sound_notifier)
@@ -27,5 +26,4 @@ static struct notifier_block sound_notifier=
 	0
 };
 
-#endif
 #endif

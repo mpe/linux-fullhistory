@@ -2,21 +2,22 @@
  * sound/sscape.c
  *
  * Low level driver for Ensoniq SoundScape
- */
-/*
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
- */
- 
-/*
+ *
+ *
  * Thomas Sailer   	: ioctl code reworked (vmalloc/vfree removed)
  * Sergey Smitienko	: ensoniq p'n'p support
+ * Christoph Hellwig	: adapted to module_init/module_exit
  */
 
 #include <linux/config.h>
+#include <linux/init.h>
 #include <linux/module.h>
 
 #include "sound_config.h"
@@ -30,18 +31,19 @@
 #include <linux/ctype.h>
 #include <linux/stddef.h>
 #include <linux/kmod.h>
-#ifdef __KERNEL__
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <linux/wait.h>
 #include <linux/malloc.h>
 #include <linux/ioport.h>
-#endif				/* __KERNEL__ */
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
 
 #include "coproc.h"
+
+#include "ad1848.h"
+#include "mpu401.h"
 
 /*
  *    I/O ports
@@ -1005,7 +1007,7 @@ static	int	sscape_pnp_upload_file(sscape_info* devc, char* fn)
 	return 1;
 }
 
-static	void	sscape_pnp_init_hw(sscape_info* devc)
+static void __init sscape_pnp_init_hw(sscape_info* devc)
 {	
 	unsigned char midi_irq = 0, sb_irq = 0;
 	unsigned i;
@@ -1127,7 +1129,7 @@ static	void	sscape_pnp_init_hw(sscape_info* devc)
 	sscape_pnp_free_dma(devc);
 }
 
-static int	detect_sscape_pnp(sscape_info* devc)
+static int __init detect_sscape_pnp(sscape_info* devc)
 {
 	long	 i, irq_bits = 0xff;
 	unsigned int d;
@@ -1240,7 +1242,7 @@ static int	detect_sscape_pnp(sscape_info* devc)
 	return 1;	
 }
 
-int probe_sscape(struct address_info *hw_config)
+static int __init probe_sscape(struct address_info *hw_config)
 {
 
 	if (sscape_detected != 0 && sscape_detected != hw_config->io_base)
@@ -1289,7 +1291,7 @@ int probe_sscape(struct address_info *hw_config)
 	return 1;
 }
 
-int probe_ss_ms_sound(struct address_info *hw_config)
+static int __init probe_ss_ms_sound(struct address_info *hw_config)
 {
 	int i, irq_bits = 0xff;
 	int ad_flags = 0;
@@ -1332,7 +1334,7 @@ int probe_ss_ms_sound(struct address_info *hw_config)
 	}
 }
 
-void attach_ss_ms_sound(struct address_info *hw_config)
+static void __init attach_ss_ms_sound(struct address_info *hw_config)
 {
 	/*
 	 * This routine configures the SoundScape card for use with the
@@ -1413,13 +1415,13 @@ void attach_ss_ms_sound(struct address_info *hw_config)
 
 }
 
-void unload_sscape(struct address_info *hw_config)
+static void __exit unload_sscape(struct address_info *hw_config)
 {
 	release_region(devc->base + 2, 6);
 	unload_mpu401(hw_config);
 }
 
-void unload_ss_ms_sound(struct address_info *hw_config)
+static void __exit unload_ss_ms_sound(struct address_info *hw_config)
 {
 	ad1848_unload(hw_config->io_base,
 		      hw_config->irq,
@@ -1429,18 +1431,16 @@ void unload_ss_ms_sound(struct address_info *hw_config)
 	sound_unload_audiodev(hw_config->slots[0]);
 }
 
-#ifdef MODULE
+static struct address_info cfg;
+static struct address_info cfg_mpu;
 
-int             dma = -1;
-int             irq = -1;
-int             io = -1;
-
-int             mpu_irq = -1;
-int             mpu_io = -1;
-
-int		spea = -1;
-
-static int      mss = 0;
+static int __initdata spea = -1;
+static int __initdata mss = 0;
+static int __initdata dma = -1;
+static int __initdata irq = -1;
+static int __initdata io = -1;
+static int __initdata mpu_irq = -1;
+static int __initdata mpu_io = -1;
 
 MODULE_PARM(dma, "i");
 MODULE_PARM(irq, "i");
@@ -1450,63 +1450,80 @@ MODULE_PARM(mpu_irq, "i");
 MODULE_PARM(mpu_io, "i");
 MODULE_PARM(mss, "i");
 
-struct address_info config;
-struct address_info mpu_config;
-
-int init_module(void)
+static int __init init_sscape(void)
 {
 	printk(KERN_INFO "Soundscape driver Copyright (C) by Hannu Savolainen 1993-1996\n");
-	if (dma == -1 || irq == -1 || io == -1)
-	{
-		printk(KERN_ERR "DMA, IRQ, and IO port must be specified.\n");
-		return -EINVAL;
-	}
-	if (mpu_irq == -1 && mpu_io != -1)
-	{
-		  printk(KERN_ERR "CONFIG_MPU_IRQ must be specified if CONFIG_MPU_IO is set.\n");
-		  return -EINVAL;
-	}
 	
-	devc->codec = io;
-	devc->codec_irq = irq;
+	cfg.irq = irq;
+	cfg.dma = dma;
+	cfg.io_base = io;
+
+	cfg_mpu.irq = mpu_irq;
+	cfg_mpu.io_base = mpu_io;
+	/* WEH - Try to get right dma channel */
+        cfg_mpu.dma = dma;
+	
+	devc->codec = cfg.io_base;
+	devc->codec_irq = cfg.irq;
 	devc->codec_type = 0;
 	devc->ic_type = 0;
 	devc->raw_buf = NULL;
-	
-	config.irq = irq;
-	config.dma = dma;
-	config.io_base = io;
 
-	mpu_config.irq = mpu_irq;
-	mpu_config.io_base = mpu_io;
-	/* WEH - Try to get right dma channel */
-        mpu_config.dma = dma;
-      
-	if(spea != -1)
-	{
+	if (cfg.dma == -1 || cfg.irq == -1 || cfg.io_base == -1) {
+		printk(KERN_ERR "DMA, IRQ, and IO port must be specified.\n");
+		return -EINVAL;
+	}
+	
+	if (cfg_mpu.irq == -1 && cfg_mpu.io_base != -1) {
+		printk(KERN_ERR "MPU_IRQ must be specified if MPU_IO is set.\n");
+		return -EINVAL;
+	}
+	
+	if(spea != -1) {
 		old_hardware = spea;
 		printk(KERN_INFO "Forcing %s hardware support.\n",
 			spea?"new":"old");
 	}	
-	if (probe_sscape(&mpu_config) == 0)
+	if (probe_sscape(&cfg_mpu) == 0)
 		return -ENODEV;
 
-	attach_sscape(&mpu_config);
+	attach_sscape(&cfg_mpu);
 	
-	mss = probe_ss_ms_sound(&config);
+	mss = probe_ss_ms_sound(&cfg);
 
 	if (mss)
-		attach_ss_ms_sound(&config);
+		attach_ss_ms_sound(&cfg);
 	SOUND_LOCK;
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_sscape(void)
 {
 	if (mss)
-		unload_ss_ms_sound(&config);
+		unload_ss_ms_sound(&cfg);
 	SOUND_LOCK_END;
-	unload_sscape(&mpu_config);
+	unload_sscape(&cfg_mpu);
 }
 
-#endif /* MODULE */
+module_init(init_sscape);
+module_exit(cleanup_sscape);
+
+#ifndef MODULE
+static int __init setup_sscape(char *str)
+{
+	/* io, irq, dma, mpu_io, mpu_irq */
+	int ints[6];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	
+	io	= ints[1];
+	irq	= ints[2];
+	dma	= ints[3];
+	mpu_io	= ints[4];
+	mpu_irq	= ints[5];
+
+	return 1;
+}
+
+__setup("sscape=", setup_sscape);
+#endif

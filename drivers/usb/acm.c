@@ -134,6 +134,7 @@ struct acm {
 	struct tty_struct *tty;				/* the coresponding tty */
 	struct urb ctrlurb, readurb, writeurb;		/* urbs */
 	struct acm_line line;				/* line coding (bits, stop, parity) */
+	struct tq_struct tqueue;			/* task queue for line discipline waking up */
 	unsigned int ctrlin;				/* input control lines (DCD, DSR, RI, break, overruns) */
 	unsigned int ctrlout;				/* output control lines (DTR, RTS) */
 	unsigned int writesize;				/* max packet size for the output bulk endpoint */
@@ -251,12 +252,21 @@ static void acm_read_bulk(struct urb *urb)
 static void acm_write_bulk(struct urb *urb)
 {
 	struct acm *acm = (struct acm *)urb->context;
-	struct tty_struct *tty = acm->tty;
 
 	if (!ACM_READY(acm)) return;
 
 	if (urb->status)
 		dbg("nonzero write bulk status received: %d", urb->status);
+
+	queue_task(&acm->tqueue, &tq_scheduler);
+}
+
+static void acm_softint(void *private)
+{
+	struct acm *acm = private;
+	struct tty_struct *tty = acm->tty;
+
+ 	if (!ACM_READY(acm)) return;
 
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
@@ -534,6 +544,9 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 		acm->iface = cfacm->interface;
 		acm->minor = minor;
 		acm->dev = dev;
+
+		acm->tqueue.routine = acm_softint;
+		acm->tqueue.data = acm;
 
 		if (!(buf = kmalloc(ctrlsize + readsize + acm->writesize, GFP_KERNEL))) {
 			err("out of memory");

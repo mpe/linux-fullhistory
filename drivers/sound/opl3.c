@@ -3,7 +3,7 @@
  *
  * A low level driver for Yamaha YM3812 and OPL-3 -chips
  *
-*
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
@@ -12,14 +12,16 @@
  *
  *
  * Changes
- *	Thomas Sailer   ioctl code reworked (vmalloc/vfree removed)
- *	Alan Cox	modularisation, fixed sound_mem allocs.
+ *	Thomas Sailer   	ioctl code reworked (vmalloc/vfree removed)
+ *	Alan Cox		modularisation, fixed sound_mem allocs.
+ *	Christoph Hellwig	Adapted to module_init/module_exit
  *
  * Status
  *	Believed to work. Badly needs rewriting a bit to support multiple
  *	OPL3 devices.
  */
 
+#include <linux/init.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 
@@ -32,6 +34,7 @@
 #include "soundmodule.h"
 
 #include "opl3.h"
+#include "opl3_hw.h"
 
 #define MAX_VOICE	18
 #define OFFS_4OP	11
@@ -1171,18 +1174,19 @@ int opl3_init(int ioaddr, int *osp)
 	return me;
 }
 
-#ifdef MODULE
+EXPORT_SYMBOL(opl3_init);
+EXPORT_SYMBOL(opl3_detect);
 
-/*
- *    We provide OPL3 functions.
- */
+static int me;
 
-int io = -1;
-int me;
+static int io = -1;
 
-int init_module (void)
+MODULE_PARM(io, "i");
+
+static int __init init_opl3 (void)
 {
 	printk(KERN_INFO "YM3812 and OPL-3 driver Copyright (C) by Hannu Savolainen, Rob Hooft 1993-1996\n");
+
 	if (io != -1)	/* User loading pure OPL3 module */
 	{
     		if (check_region(io, 4))
@@ -1195,14 +1199,14 @@ int init_module (void)
 			return -ENODEV;
 		}
 		me = opl3_init(io, NULL);
-		request_region(io,4,devc->fm_info.name);
+		request_region(io, 4, devc->fm_info.name);
 
 	}
 	SOUND_LOCK;
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_opl3(void)
 {
 	if (devc && io != -1)
 	{
@@ -1215,10 +1219,21 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-MODULE_PARM(io, "i");
+module_init(init_opl3);
+module_exit(cleanup_opl3);
 
-#endif /* MODULE */
+#ifndef MODULE
+static int __init setup_opl3(char *str)
+{
+        /* io  */
+	int ints[2];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	
+	io = ints[1];
 
-EXPORT_SYMBOL(opl3_init);
-EXPORT_SYMBOL(opl3_detect);
+	return 1;
+}
 
+__setup("opl3=", setup_opl3);
+#endif

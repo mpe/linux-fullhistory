@@ -164,3 +164,13 @@ void sb_audio_close(int dev);
 
 extern int acer;
 extern sb_devc *last_sb;
+
+/*	From sb_common.c */
+void sb_dsp_disable_midi(int port);
+void sb_dsp_disable_recording(int port);
+void attach_sbmpu (struct address_info *hw_config);
+int probe_sbmpu (struct address_info *hw_config);
+void unload_sbmpu (struct address_info *hw_config);
+
+void unload_sb16(struct address_info *hw_info);
+void unload_sb16midi(struct address_info *hw_info);

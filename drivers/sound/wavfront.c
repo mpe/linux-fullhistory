@@ -65,6 +65,7 @@
 #include <linux/module.h>
 
 #include <linux/kernel.h>
+#include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/ptrace.h>
 #include <linux/fcntl.h>
@@ -127,10 +128,6 @@
 static int (*midi_load_patch) (int devno, int format, const char *addr,
 			       int offs, int count, int pmgr_flag) = NULL;
 #endif OSS_SUPPORT_SEQ
-
-/* This is meant to work as a module */
-
-#if defined(CONFIG_SOUND_WAVEFRONT_MODULE) && defined(MODULE)
 
 /* if WF_DEBUG not defined, no run-time debugging messages will
    be available via the debug flag setting. Given the current
@@ -2144,25 +2141,23 @@ static struct synth_operations wavefront_operations =
 
 #if OSS_SUPPORT_LEVEL & OSS_SUPPORT_STATIC_INSTALL
 
-void attach_wavefront (struct address_info *hw_config)
-
+static void __init attach_wavefront (struct address_info *hw_config)
 {
     (void) install_wavefront ();
 }
 
-int probe_wavefront (struct address_info *hw_config)
-
+static int __init probe_wavefront (struct address_info *hw_config)
 {
     return !detect_wavefront (hw_config->irq, hw_config->io_base);
 }
 
-void unload_wavefront (struct address_info *hw_config) 
+static void __exit unload_wavefront (struct address_info *hw_config) 
 {
     (void) uninstall_wavefront ();
 }
 
 #endif OSS_SUPPORT_STATIC_INSTALL
-
+
 /***********************************************************************/
 /* WaveFront: Linux modular sound kernel installation interface        */
 /***********************************************************************/
@@ -2814,8 +2809,7 @@ wavefront_do_reset (int atboot)
 	return 1;
 }
 
-static int
-wavefront_init (int atboot)
+static int __init wavefront_init (int atboot)
 {
 	int samples_are_from_rom;
 
@@ -2884,9 +2878,7 @@ static int __init install_wavefront (void)
 	return dev.oss_dev;
 }
 
-void
-uninstall_wavefront (void)
-
+static void __exit uninstall_wavefront (void)
 {
 	/* the first two i/o addresses are freed by the wf_mpu code */
 	release_region (dev.base+2, 6);
@@ -2938,7 +2930,7 @@ wffx_idle (void)
 	return (1);
 }
 
-static int __init detect_wffx (void)
+int __init detect_wffx (void)
 {
 	/* This is a crude check, but its the best one I have for now.
 	   Certainly on the Maui and the Tropez, wffx_idle() will
@@ -2954,7 +2946,7 @@ static int __init detect_wffx (void)
 	return 0;
 }	
 
-static int __init attach_wffx (void)
+int __init attach_wffx (void)
 {
 	if ((dev.fx_mididev = sound_alloc_mididev ()) < 0) {
 		printk (KERN_WARNING LOGNAME "cannot install FX Midi driver\n");
@@ -2964,7 +2956,7 @@ static int __init attach_wffx (void)
 	return 0;
 }
 
-static void
+void
 wffx_mute (int onoff)
     
 {
@@ -3087,9 +3079,7 @@ wffx_ioctl (wavefront_fx_info *r)
    a somewhat "algorithmic" approach.
 */
 
-static int
-wffx_init (void)
-
+static int wffx_init (void)
 {
 	int i;
 	int j;
@@ -3543,18 +3533,15 @@ wffx_init (void)
 	return (0);
 }
 
-EXPORT_NO_SYMBOLS;
-
-int io = -1;
-int irq = -1;
+static int io = -1;
+static int irq = -1;
 
 MODULE_AUTHOR      ("Paul Barton-Davis <pbd@op.net>");
 MODULE_DESCRIPTION ("Turtle Beach WaveFront Linux Driver");
 MODULE_PARM        (io,"i");
 MODULE_PARM        (irq,"i");
 
-int init_module (void)
-
+static int __init init_wavfront (void)
 {
 	printk ("Turtle Beach WaveFront Driver\n"
 		"Copyright (C) by Hannu Solvainen, "
@@ -3585,14 +3572,11 @@ int init_module (void)
 	return 0;
 }
 
-void cleanup_module (void)
-
+static void __exit cleanup_wavfront (void)
 {
 	uninstall_wavefront ();
-
 	SOUND_LOCK_END;
 }
 
-#endif CONFIG_SOUND_WAVEFRONT_MODULE && MODULE
-
-
+module_init(init_wavfront);
+module_exit(cleanup_wavfront);

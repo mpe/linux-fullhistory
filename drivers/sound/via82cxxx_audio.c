@@ -33,6 +33,7 @@
 #include "soundmodule.h"
 #include "sb.h"
 #include "ac97.h"
+#include "mpu401.h"
 
 #ifndef SOUND_LOCK
 #define SOUND_LOCK do {} while (0)

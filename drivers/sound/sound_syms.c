@@ -46,8 +46,6 @@ EXPORT_SYMBOL(sound_unload_synthdev);
 
 EXPORT_SYMBOL(load_mixer_volumes);
 
-EXPORT_SYMBOL(trace_init); /* oops! this is needed for maui.c -- AJK */
-
 EXPORT_SYMBOL(conf_printf);
 EXPORT_SYMBOL(conf_printf2);
 

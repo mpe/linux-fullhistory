@@ -9,24 +9,41 @@
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
- */
-/*
+ *
+ *
  * Daniel J. Rodriksson: Modified sbintr to handle 8 and 16 bit interrupts
  *                       for full duplex support ( only sb16 by now )
  * Rolf Fokkens:	 Added (BETA?) support for ES1887 chips.
  * (fokkensr@vertis.nl)	 Which means: You can adjust the recording levels.
+ *
+ * 2000/01/18 - separated sb_card and sb_common -
+ * Jeff Garzik <jgarzik@mandrakesoft.com>
+ *
  */
+
+/* FIXME: *grr* why can't the f**in Makefile do this for me ? */
+#define EXPORT_SYMTAB
+
 #include <linux/config.h>
-#include <linux/delay.h>
 #include <linux/init.h>
+#include <linux/module.h>
+#include <linux/delay.h>
 
 #include "sound_config.h"
 #include "sound_firmware.h"
+#include "soundmodule.h"
+
+#include "mpu401.h"
 
 #include "sb_mixer.h"
 #include "sb.h"
-
 #include "sb_ess.h"
+
+/*
+ * global module flag
+ */
+
+int sb_be_quiet = 0;
 
 static sb_devc *detected_devc = NULL;	/* For communication from probe to init */
 static sb_devc *last_devc = NULL;	/* For MPU401 initialization */
@@ -38,6 +55,16 @@ static unsigned char jazz_irq_bits[] = {
 static unsigned char jazz_dma_bits[] = {
 	0, 1, 0, 2, 0, 3, 0, 4
 };
+
+/* Do acer notebook init? */
+int acer = 0;
+
+/* soundman games? */
+int sm_games = 0;
+
+extern int esstype;
+
+void *smw_free = NULL;
 
 /*
  * Jazz16 chipset specific control variables
@@ -1033,8 +1060,6 @@ static int smw_midi_init(sb_devc * devc, struct address_info *hw_config)
 #ifdef MODULE
 	if (!smw_ucode)
 	{
-		extern void *smw_free;
-
 		smw_ucodeLen = mod_firmware_load("/etc/sound/midi0001.bin", (void *) &smw_ucode);
 		smw_free = smw_ucode;
 	}
@@ -1272,3 +1297,17 @@ void unload_sbmpu(struct address_info *hw_config)
 #endif
 	unload_uart401(hw_config);
 }
+
+MODULE_PARM(acer, "i");
+MODULE_PARM(sm_games, "i");
+MODULE_PARM(esstype, "i");
+
+EXPORT_SYMBOL(sb_dsp_init);
+EXPORT_SYMBOL(sb_dsp_detect);
+EXPORT_SYMBOL(sb_dsp_unload);
+EXPORT_SYMBOL(sb_dsp_disable_midi);
+EXPORT_SYMBOL(sb_be_quiet);
+EXPORT_SYMBOL(attach_sbmpu);
+EXPORT_SYMBOL(probe_sbmpu);
+EXPORT_SYMBOL(unload_sbmpu);
+EXPORT_SYMBOL(smw_free);

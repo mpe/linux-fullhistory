@@ -2,8 +2,8 @@
  * sound/uart401.c
  *
  * MPU-401 UART driver (formerly uart401_midi.c)
- */
-/*
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
@@ -11,18 +11,22 @@
  * for more info.
  *
  * Changes:
- *	Alan Cox	Reformatted, removed sound_mem usage, use normal Linux
- *			interrupt allocation. Protect against bogus unload
- *			Fixed to allow IRQ > 15
+ *	Alan Cox		Reformatted, removed sound_mem usage, use normal Linux
+ *				interrupt allocation. Protect against bogus unload
+ *				Fixed to allow IRQ > 15
+ *	Christoph Hellwig	Adapted to module_init/module_exit
  *
  * Status:
  *		Untested
  */
- 
+
+#include <linux/init.h>
 #include <linux/module.h>
 
 #include "sound_config.h"
 #include "soundmodule.h"
+
+#include "mpu401.h"
 
 typedef struct uart401_devc
 {
@@ -177,21 +181,21 @@ static int uart401_out(int dev, unsigned char midi_byte)
 	return 1;
 }
 
-static int uart401_start_read(int dev)
+static inline int uart401_start_read(int dev)
 {
 	return 0;
 }
 
-static int uart401_end_read(int dev)
+static inline int uart401_end_read(int dev)
 {
 	return 0;
 }
 
-static void uart401_kick(int dev)
+static inline void uart401_kick(int dev)
 {
 }
 
-static int uart401_buffer_status(int dev)
+static inline int uart401_buffer_status(int dev)
 {
 	return 0;
 }
@@ -444,43 +448,60 @@ void unload_uart401(struct address_info *hw_config)
 	sound_unload_mididev(hw_config->slots[4]);
 }
 
-#ifdef MODULE
+EXPORT_SYMBOL(attach_uart401);
+EXPORT_SYMBOL(probe_uart401);
+EXPORT_SYMBOL(unload_uart401);
+EXPORT_SYMBOL(uart401intr);
 
-int io = -1;
-int irq = -1;
+static struct address_info cfg_mpu;
+
+static int __initdata io = -1;
+static int __initdata irq = -1;
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
-struct address_info hw;
 
-int init_module(void)
+
+static int __init init_uart401(void)
 {
+	cfg_mpu.irq = irq;
+	cfg_mpu.io_base = io;
+
 	/* Can be loaded either for module use or to provide functions
 	   to others */
-	if (io != -1 && irq != -1)
-	{
+	if (cfg_mpu.io_base != -1 && cfg_mpu.irq != -1) {
 		printk(KERN_INFO "MPU-401 UART driver Copyright (C) Hannu Savolainen 1993-1997");
-		hw.irq = irq;
-		hw.io_base = io;
-		if (probe_uart401(&hw) == 0)
+		if (probe_uart401(&cfg_mpu) == 0)
 			return -ENODEV;
-		attach_uart401(&hw);
+		attach_uart401(&cfg_mpu);
 	}
 	SOUND_LOCK;
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_uart401(void)
 {
-	if (io != -1 && irq != -1)
-		unload_uart401(&hw);
-	/*  FREE SYMTAB */
+	if (cfg_mpu.io_base != -1 && cfg_mpu.irq != -1)
+		unload_uart401(&cfg_mpu);
 	SOUND_LOCK_END;
 }
 
-#endif /* MODULE */
+module_init(init_uart401);
+module_exit(cleanup_uart401);
 
-EXPORT_SYMBOL(attach_uart401);
-EXPORT_SYMBOL(probe_uart401);
-EXPORT_SYMBOL(unload_uart401);
-EXPORT_SYMBOL(uart401intr);
+#ifndef MODULE
+static int __init setup_uart401(char *str)
+{
+	/* io, irq */
+	int ints[3];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+
+	io = ints[1];
+	irq = ints[2];
+	
+	return 1;
+}
+
+__setup("uart401=", setup_uart401);
+#endif

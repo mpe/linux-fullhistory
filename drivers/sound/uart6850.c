@@ -1,7 +1,7 @@
 /*
  * sound/uart6850.c
- */
-/*
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
@@ -10,12 +10,15 @@
  * Extended by Alan Cox for Red Hat Software. Now a loadable MIDI driver.
  * 28/4/97 - (C) Copyright Alan Cox. Released under the GPL version 2.
  *
- * Alan Cox:	Updated for new modular code. Removed snd_* irq handling. Now
- *		uses native linux resources
+ * Alan Cox:		Updated for new modular code. Removed snd_* irq handling. Now
+ *			uses native linux resources
+ * Christoph Hellwig:	Adapted to module_init/module_exit
  *
  *	Status: Testing required
  *
  */
+
+#include <linux/init.h>
 #include <linux/module.h>
 
 /* Mon Nov 22 22:38:35 MET 1993 marco@driq.home.usn.nl:
@@ -199,26 +202,26 @@ static int uart6850_out(int dev, unsigned char midi_byte)
 	return 1;
 }
 
-static int uart6850_command(int dev, unsigned char *midi_byte)
+static inline int uart6850_command(int dev, unsigned char *midi_byte)
 {
 	return 1;
 }
 
-static int uart6850_start_read(int dev)
+static inline int uart6850_start_read(int dev)
 {
 	return 0;
 }
 
-static int uart6850_end_read(int dev)
+static inline int uart6850_end_read(int dev)
 {
 	return 0;
 }
 
-static void uart6850_kick(int dev)
+static inline void uart6850_kick(int dev)
 {
 }
 
-static int uart6850_buffer_status(int dev)
+static inline int uart6850_buffer_status(int dev)
 {
 	return 0;		/*
 				 * No data in buffers
@@ -246,7 +249,7 @@ static struct midi_operations uart6850_operations =
 };
 
 
-void attach_uart6850(struct address_info *hw_config)
+static void __init attach_uart6850(struct address_info *hw_config)
 {
 	int ok, timeout;
 	unsigned long   flags;
@@ -292,7 +295,7 @@ static int reset_uart6850(void)
 }
 
 
-int probe_uart6850(struct address_info *hw_config)
+static int __init probe_uart6850(struct address_info *hw_config)
 {
 	int ok = 0;
 
@@ -308,45 +311,58 @@ int probe_uart6850(struct address_info *hw_config)
 	return ok;
 }
 
-void unload_uart6850(struct address_info *hw_config)
+static void __exit unload_uart6850(struct address_info *hw_config)
 {
 	free_irq(hw_config->irq, NULL);
 	sound_unload_mididev(hw_config->slots[4]);
 }
 
+static struct address_info cfg_mpu;
 
-#ifdef MODULE
-
-int io = -1;
-int irq = -1;
+static int __initdata io = -1;
+static int __initdata irq = -1;
 
 MODULE_PARM(io,"i");
 MODULE_PARM(irq,"i");
 
-EXPORT_NO_SYMBOLS;
-
-struct address_info cfg;
-
-int init_module(void)
+static int __init init_uart6850(void)
 {
-	if (io == -1 || irq == -1)
-	{
+	cfg_mpu.io_base = io;
+	cfg_mpu.irq = irq;
+
+	if (cfg_mpu.io_base == -1 || cfg_mpu.irq == -1) {
 		printk(KERN_INFO "uart6850: irq and io must be set.\n");
 		return -EINVAL;
 	}
-	cfg.io_base = io;
-	cfg.irq = irq;
 
-	if (probe_uart6850(&cfg))
+	if (probe_uart6850(&cfg_mpu))
 		return -ENODEV;
 
 	SOUND_LOCK;
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_uart6850(void)
 {
-	unload_uart6850(&cfg);
+	unload_uart6850(&cfg_mpu);
 	SOUND_LOCK_END;
 }
-#endif /* MODULE */
+
+module_init(init_uart6850);
+module_exit(cleanup_uart6850);
+
+#ifndef MODULE
+static int __init setup_uart6850(char *str)
+{
+	/* io, irq */
+	int ints[3];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	
+	io = ints[1];
+	irq = ints[2];
+
+	return 1;
+}
+__setup("uart6850=", setup_uart6850);
+#endif

@@ -6,9 +6,8 @@
  *
  * Cleaned up and integrated into 2.1 by Russell King (rmk@arm.linux.org.uk)
  * and Pat Beirne (patb@corel.ca)
- */
-
-/*
+ *
+ *
  * Copyright (C) by Rebel.com 1998-1999
  *
  * RWA010 specs received under NDA from Rockwell
@@ -31,6 +30,7 @@
 #define debug_flg (0)
 
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
@@ -1281,8 +1281,7 @@ nomem:
 	return -1;
 }
 
-int
-probe_waveartist(struct address_info *hw_config)
+static int __init probe_waveartist(struct address_info *hw_config)
 {
 	wavnc_info *devc = &adev_info[nr_waveartist_devs];
 
@@ -1316,8 +1315,7 @@ probe_waveartist(struct address_info *hw_config)
 	return 1;
 }
 
-void
-attach_waveartist(struct address_info *hw)
+static void __init attach_waveartist(struct address_info *hw)
 {
 	wavnc_info *devc = &adev_info[nr_waveartist_devs];
 
@@ -1359,8 +1357,7 @@ attach_waveartist(struct address_info *hw)
 	}
 }
 
-void
-unload_waveartist(struct address_info *hw)
+static void __exit unload_waveartist(struct address_info *hw)
 {
 	wavnc_info *devc = NULL;
 	int i;
@@ -1757,45 +1754,63 @@ vnc_private_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	return -ENOIOCTLCMD;
 }
 
-#ifdef MODULE
+static struct address_info cfg;
+
+static int attached;
+
+static int __initdata io;
+static int __initdata irq;
+static int __initdata dma;
+static int __initdata dma2;
+
 
 MODULE_PARM(io, "i");		/* IO base */
 MODULE_PARM(irq, "i");		/* IRQ */
 MODULE_PARM(dma, "i");		/* DMA */
 MODULE_PARM(dma2, "i");		/* DMA2 */
 
-static int io   = CONFIG_WAVEARTIST_BASE;
-static int irq  = CONFIG_WAVEARTIST_IRQ;
-static int dma  = CONFIG_WAVEARTIST_DMA;
-static int dma2 = CONFIG_WAVEARTIST_DMA2;
-
-static int attached;
-
-static struct address_info hw_config;
-
-int init_module(void)
+static int __init init_waveartist(void)
 {
-	hw_config.io_base = io;
-	hw_config.irq = irq;
-	hw_config.dma = dma;
-	hw_config.dma2 = dma2;
+	cfg.io_base = io;
+	cfg.irq = irq;
+	cfg.dma = dma;
+	cfg.dma2 = dma2;
 
-	if (!probe_waveartist(&hw_config))
+	if (!probe_waveartist(&cfg))
 		return -ENODEV;
 
-	attach_waveartist(&hw_config);
+	attach_waveartist(&cfg);
 	attached = 1;
 
 	SOUND_LOCK;
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_waveartist(void)
 {
 	if (attached) {
 		SOUND_LOCK_END;
-
-		unload_waveartist(&hw_config);
+		unload_waveartist(&cfg);
 	}
 }
+
+module_init(init_waveartist);
+module_exit(cleanup_waveartist);
+
+#ifndef MODULE
+static int __init setup_waveartist(char *str)
+{
+	/* io, irq, dma, dma2 */
+	int ints[5];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	
+	io	= ints[1];
+	irq	= ints[2];
+	dma	= ints[3];
+	dma16	= ints[4];
+
+	return 1;
+}
+__setup("waveartist=", setup_waveartist);
 #endif

@@ -67,6 +67,32 @@ Current status:
   http://usbvisor.sourceforge.net/
 
 
+Keyspan PDA Serial Adapter
+
+  Single port DB-9 serial adapter, pushed as a PDA adapter for iMacs (mostly
+  sold in Macintosh catalogs, comes in a translucent white/green dongle).
+  Fairly simple device. Firmware is homebrew.
+
+Current status:
+ Things that work:
+   basic input/output (tested with 'cu')
+   blocking write when serial line can't keep up
+   changing baud rates (up to 115200)
+   getting/setting modem control pins (TIOCM{GET,SET,BIS,BIC})
+   sending break (although duration looks suspect)
+ Things that don't:
+   device strings (as logged by kernel) have trailing binary garbage
+   device ID isn't right, might collide with other Keyspan products
+   changing baud rates ought to flush tx/rx to avoid mangled half characters
+ Big Things on the todo list:
+   parity, 7 vs 8 bits per char, 1 or 2 stop bits
+   HW flow control
+   not all of the standard USB descriptors are handled: Get_Status, Set_Feature
+   O_NONBLOCK, select()
+
+ The device usually appears at /dev/ttyUSB1 .
+
+
 Generic Serial driver
 
   If your device is not one of the above listed devices, compatible with

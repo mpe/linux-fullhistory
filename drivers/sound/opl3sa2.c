@@ -32,14 +32,19 @@
  * Scott Murray            Simpler detection code should work all the time now
  *                         (with thanks to Ben Hutchings for the heuristic),
  *                         removed now unnecessary force option. (Jan 5, 1999)
+ * Christoph Hellwig	   Adapted to module_init/module_exit (Mar 4, 2000)
  *
  */
 
 #include <linux/config.h>
+#include <linux/init.h>
 #include <linux/module.h>
 
 #include "sound_config.h"
 #include "soundmodule.h"
+
+#include "ad1848.h"
+#include "mpu401.h"
 
 /* Useful control port indexes: */
 #define OPL3SA2_MASTER_LEFT  0x07
@@ -439,31 +444,31 @@ static struct mixer_operations opl3sa2_mixer_operations =
 /* End of mixer-related stuff */
 
 
-int probe_opl3sa2_mpu(struct address_info *hw_config)
+static inline int __init probe_opl3sa2_mpu(struct address_info *hw_config)
 {
 	return probe_mpu401(hw_config);
 }
 
 
-void attach_opl3sa2_mpu(struct address_info *hw_config)
+static inline void __init attach_opl3sa2_mpu(struct address_info *hw_config)
 {
 	attach_mpu401(hw_config);
 }
 
 
-void unload_opl3sa2_mpu(struct address_info *hw_config)
+static inline void __exit unload_opl3sa2_mpu(struct address_info *hw_config)
 {
 	unload_mpu401(hw_config);
 }
 
 
-int probe_opl3sa2_mss(struct address_info *hw_config)
+static inline int __init probe_opl3sa2_mss(struct address_info *hw_config)
 {
 	return probe_ms_sound(hw_config);
 }
 
 
-void attach_opl3sa2_mss(struct address_info *hw_config)
+static void __init attach_opl3sa2_mss(struct address_info *hw_config)
 {
 	char mixer_name[64];
 
@@ -506,13 +511,13 @@ void attach_opl3sa2_mss(struct address_info *hw_config)
 }
 
 
-void unload_opl3sa2_mss(struct address_info *hw_config)
+static inline void __exit unload_opl3sa2_mss(struct address_info *hw_config)
 {
 	unload_ms_sound(hw_config);
 }
 
 
-int probe_opl3sa2(struct address_info *hw_config)
+static int __init probe_opl3sa2(struct address_info *hw_config)
 {
 	unsigned char version = 0;
 	char tag;
@@ -582,16 +587,13 @@ int probe_opl3sa2(struct address_info *hw_config)
 	{
 		/* Generate a pretty name */
 		sprintf(chipset_name, "OPL3-SA%c", tag);
-#if defined(CONFIG_OPL3SA2_MPU_BASE) && !defined(MODULE)
-		sound_getconf(SNDCARD_OPL3SA2_MPU)->always_detect = 1;
-#endif
 		return 1;
 	}
 	return 0;
 }
 
 
-void attach_opl3sa2(struct address_info *hw_config)
+static void __init attach_opl3sa2(struct address_info *hw_config)
 {
    	request_region(hw_config->io_base, 2, chipset_name);
 
@@ -599,7 +601,7 @@ void attach_opl3sa2(struct address_info *hw_config)
 }
 
 
-void unload_opl3sa2(struct address_info *hw_config)
+static void __exit unload_opl3sa2(struct address_info *hw_config)
 {
         /* Release control ports */
 	release_region(hw_config->io_base, 2);
@@ -609,15 +611,16 @@ void unload_opl3sa2(struct address_info *hw_config)
 		sound_unload_mixerdev(opl3sa2_mixer);
 }
 
+static struct address_info cfg;
+static struct address_info cfg2;
+static struct address_info cfg_mpu;
 
-#ifdef MODULE
-
-int io      = -1;
-int mss_io  = -1;
-int mpu_io  = -1;
-int irq     = -1;
-int dma     = -1;
-int dma2    = -1;
+static int __initdata io	= -1;
+static int __initdata mss_io	= -1;
+static int __initdata mpu_io	= -1;
+static int __initdata irq	= -1;
+static int __initdata dma	= -1;
+static int __initdata dma2	= -1;
 
 MODULE_PARM(io, "i");
 MODULE_PARM_DESC(io, "Set i/o base of OPL3-SA2 or SA3 card (usually 0x370)");
@@ -640,30 +643,15 @@ MODULE_PARM_DESC(dma2, "Set MSS (audio) second DMA channel (0, 1, 3)");
 MODULE_DESCRIPTION("Module for OPL3-SA2 and SA3 sound cards (uses AD1848 MSS driver).");
 MODULE_AUTHOR("Scott Murray <scottm@interlog.com>");
 
-EXPORT_NO_SYMBOLS;
-
-struct address_info cfg;
-struct address_info mss_cfg;
-struct address_info mpu_cfg;
-
-
 /*
  * Install a OPL3SA2 based card.
  *
  * Need to have ad1848 and mpu401 loaded ready.
  */
-int init_module(void)
+static int __init init_opl3sa2(void)
 {
         int i;
 
-	if(io == -1 || irq == -1 || dma == -1 || dma2 == -1 || mss_io == -1)
-	{
-		printk(KERN_ERR
-		       "%s: io, mss_io, irq, dma, and dma2 must be set.\n",
-		       __FILE__);
-		return -EINVAL;
-	}
-   
         /* Our own config: */
         cfg.io_base = io;
 	cfg.irq     = irq;
@@ -671,16 +659,26 @@ int init_module(void)
 	cfg.dma2    = dma2;
 	
         /* The MSS config: */
-	mss_cfg.io_base      = mss_io;
-	mss_cfg.irq          = irq;
-	mss_cfg.dma          = dma;
-	mss_cfg.dma2         = dma2;
-	mss_cfg.card_subtype = 1;      /* No IRQ or DMA setup */
+	cfg2.io_base      = mss_io;
+	cfg2.irq          = irq;
+	cfg2.dma          = dma;
+	cfg2.dma2         = dma2;
+	cfg2.card_subtype = 1;      /* No IRQ or DMA setup */
+
+	cfg_mpu.io_base       = mpu_io;
+	cfg_mpu.irq           = irq;
+	cfg_mpu.dma           = dma;
+	cfg_mpu.always_detect = 1;  /* It's there, so use shared IRQs */
+
+	if(cfg.io_base == -1 || cfg.irq == -1 || cfg.dma == -1 || cfg.dma2 == -1 || cfg2.io_base == -1) {
+		printk(KERN_ERR "opl3sa2: io, mss_io, irq, dma, and dma2 must be set.\n");
+		return -EINVAL;
+	}
 
 	/* Call me paranoid: */
 	for(i = 0; i < 6; i++)
 	{
-		cfg.slots[i] = mss_cfg.slots[i] = mpu_cfg.slots[i] = -1;
+		cfg.slots[i] = cfg2.slots[i] = cfg_mpu.slots[i] = -1;
 	}
 
 	if(probe_opl3sa2(&cfg) == 0)
@@ -688,41 +686,54 @@ int init_module(void)
 		return -ENODEV;
 	}
 
-	if(probe_opl3sa2_mss(&mss_cfg) == 0)
+	if(probe_opl3sa2_mss(&cfg2) == 0)
 	{
 		return -ENODEV;
 	}
 
 	attach_opl3sa2(&cfg);
-	attach_opl3sa2_mss(&mss_cfg);
+	attach_opl3sa2_mss(&cfg2);
 
-	if(mpu_io != -1)
-	{
-            /* MPU config: */
-	    mpu_cfg.io_base       = mpu_io;
-	    mpu_cfg.irq           = irq;
-	    mpu_cfg.dma           = dma;
-	    mpu_cfg.always_detect = 1;  /* It's there, so use shared IRQs */
-
-	    if(probe_opl3sa2_mpu(&mpu_cfg))
-	    {
-		    attach_opl3sa2_mpu(&mpu_cfg);
-	    }
+	if(cfg_mpu.io_base != -1) {
+		if(probe_opl3sa2_mpu(&cfg_mpu)) {
+			attach_opl3sa2_mpu(&cfg_mpu);
+		}
 	}
 	SOUND_LOCK;
 	return 0;
 }
 
 
-void cleanup_module(void)
+static void __exit cleanup_opl3sa2(void)
 {
-        if(mpu_cfg.slots[1] != -1)
-	{
-		unload_opl3sa2_mpu(&mpu_cfg);
+        if(cfg_mpu.slots[1] != -1) {
+		unload_opl3sa2_mpu(&cfg_mpu);
 	}
-	unload_opl3sa2_mss(&mss_cfg);
+	unload_opl3sa2_mss(&cfg2);
 	unload_opl3sa2(&cfg);
 	SOUND_LOCK_END;
 }
 
-#endif /* MODULE */
+module_init(init_opl3sa2);
+module_exit(cleanup_opl3sa2);
+
+#ifndef MODULE
+static int __init setup_opl3sa2(char *str)
+{
+	/* io, irq, dma, dma2 */
+	int ints[7];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	
+	io	= ints[1];
+	irq	= ints[2];
+	dma	= ints[3];
+	dma2	= ints[4];
+	mss_io	= ints[5];
+	mpu_io	= ints[6];
+
+	return 1;
+}
+
+__setup("opl3sa2=", setup_opl3sa2);
+#endif

@@ -16,6 +16,8 @@
 
 #include "sound_config.h"
 
+#include "pas2.h"
+
 #ifndef DEB
 #define DEB(WHAT)
 #endif
