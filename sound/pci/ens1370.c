@@ -1797,7 +1797,7 @@ static int __devinit snd_ensoniq_create_gameport(ensoniq_t *ensoniq, int dev)
 
 	gameport_set_name(gp, "ES137x");
 	gameport_set_phys(gp, "pci%s/gameport0", pci_name(ensoniq->pci));
-	gp->dev.parent = &ensoniq->pci->dev;
+	gameport_set_dev_parent(gp, &ensoniq->pci->dev);
 	gp->io = io_port;
 
 	ensoniq->ctrl |= ES_JYSTK_EN;

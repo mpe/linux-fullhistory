@@ -1660,9 +1660,9 @@ static int __devinit snd_via686_create_gameport(via82xx_t *chip, int dev, unsign
 
 	gameport_set_name(gp, "VIA686 Gameport");
 	gameport_set_phys(gp, "pci%s/gameport0", pci_name(chip->pci));
-	gp->dev.parent = &chip->pci->dev;
+	gameport_set_dev_parent(gp, &chip->pci->dev);
 	gp->io = JOYSTICK_ADDR;
-	gp->port_data = r;
+	gameport_set_port_data(gp, r);
 
 	/* Enable legacy joystick port */
 	*legacy |= VIA_FUNC_ENABLE_GAME;
@@ -1676,7 +1676,7 @@ static int __devinit snd_via686_create_gameport(via82xx_t *chip, int dev, unsign
 static void snd_via686_free_gameport(via82xx_t *chip)
 {
 	if (chip->gameport) {
-		struct resource *r = chip->gameport->port_data;
+		struct resource *r = gameport_get_port_data(chip->gameport);
 
 		gameport_unregister_port(chip->gameport);
 		chip->gameport = NULL;

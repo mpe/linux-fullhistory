@@ -2690,7 +2690,7 @@ int __devinit snd_cs46xx_midi(cs46xx_t *chip, int device, snd_rawmidi_t **rrawmi
 
 static void snd_cs46xx_gameport_trigger(struct gameport *gameport)
 {
-	cs46xx_t *chip = gameport->port_data;
+	cs46xx_t *chip = gameport_get_port_data(gameport);
 
 	snd_assert(chip, return);
 	snd_cs46xx_pokeBA0(chip, BA0_JSPT, 0xFF);  //outb(gameport->io, 0xFF);
@@ -2698,7 +2698,7 @@ static void snd_cs46xx_gameport_trigger(struct gameport *gameport)
 
 static unsigned char snd_cs46xx_gameport_read(struct gameport *gameport)
 {
-	cs46xx_t *chip = gameport->port_data;
+	cs46xx_t *chip = gameport_get_port_data(gameport);
 
 	snd_assert(chip, return 0);
 	return snd_cs46xx_peekBA0(chip, BA0_JSPT); //inb(gameport->io);
@@ -2706,7 +2706,7 @@ static unsigned char snd_cs46xx_gameport_read(struct gameport *gameport)
 
 static int snd_cs46xx_gameport_cooked_read(struct gameport *gameport, int *axes, int *buttons)
 {
-	cs46xx_t *chip = gameport->port_data;
+	cs46xx_t *chip = gameport_get_port_data(gameport);
 	unsigned js1, js2, jst;
 
 	snd_assert(chip, return 0);
@@ -2752,8 +2752,8 @@ int __devinit snd_cs46xx_gameport(cs46xx_t *chip)
 
 	gameport_set_name(gp, "CS46xx Gameport");
 	gameport_set_phys(gp, "pci%s/gameport0", pci_name(chip->pci));
-	gp->dev.parent = &chip->pci->dev;
-	gp->port_data = chip;
+	gameport_set_dev_parent(gp, &chip->pci->dev);
+	gameport_set_port_data(gp, chip);
 
 	gp->open = snd_cs46xx_gameport_open;
 	gp->read = snd_cs46xx_gameport_read;

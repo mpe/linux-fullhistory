@@ -1240,7 +1240,7 @@ static void __devinit snd_cs4281_proc_init(cs4281_t * chip)
 
 static void snd_cs4281_gameport_trigger(struct gameport *gameport)
 {
-	cs4281_t *chip = gameport->port_data;
+	cs4281_t *chip = gameport_get_port_data(gameport);
 
 	snd_assert(chip, return);
 	snd_cs4281_pokeBA0(chip, BA0_JSPT, 0xff);
@@ -1248,7 +1248,7 @@ static void snd_cs4281_gameport_trigger(struct gameport *gameport)
 
 static unsigned char snd_cs4281_gameport_read(struct gameport *gameport)
 {
-	cs4281_t *chip = gameport->port_data;
+	cs4281_t *chip = gameport_get_port_data(gameport);
 
 	snd_assert(chip, return 0);
 	return snd_cs4281_peekBA0(chip, BA0_JSPT);
@@ -1257,7 +1257,7 @@ static unsigned char snd_cs4281_gameport_read(struct gameport *gameport)
 #ifdef COOKED_MODE
 static int snd_cs4281_gameport_cooked_read(struct gameport *gameport, int *axes, int *buttons)
 {
-	cs4281_t *chip = gameport->port_data;
+	cs4281_t *chip = gameport_get_port_data(gameport);
 	unsigned js1, js2, jst;
 	
 	snd_assert(chip, return 0);
@@ -1308,12 +1308,12 @@ static int __devinit snd_cs4281_create_gameport(cs4281_t *chip)
 
 	gameport_set_name(gp, "CS4281 Gameport");
 	gameport_set_phys(gp, "pci%s/gameport0", pci_name(chip->pci));
-	gp->dev.parent = &chip->pci->dev;
+	gameport_set_dev_parent(gp, &chip->pci->dev);
 	gp->open = snd_cs4281_gameport_open;
 	gp->read = snd_cs4281_gameport_read;
 	gp->trigger = snd_cs4281_gameport_trigger;
 	gp->cooked_read = snd_cs4281_gameport_cooked_read;
-	gp->port_data = chip;
+	gameport_set_port_data(gp, chip);
 
 	snd_cs4281_pokeBA0(chip, BA0_JSIO, 0xFF); // ?
 	snd_cs4281_pokeBA0(chip, BA0_JSCTL, JSCTL_SP_MEDIUM_SLOW);
