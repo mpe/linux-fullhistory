@@ -435,13 +435,12 @@ else
   endif
 endif
 
-ifdef CONFIG_APM
-LX_OBJS += apm_bios.o
+ifdef CONFIG_H8
+LX_OBJS += h8.o
 M = y
 endif
 
-ifdef CONFIG_H8
-LX_OBJS += h8.o
+ifdef CONFIG_APM
 M = y
 endif
 

@@ -1226,9 +1226,7 @@ void __init mount_root(void)
 
 #ifdef CONFIG_BLK_DEV_INITRD
 
-extern int initmem_freed;
-
-static int __init do_change_root(kdev_t new_root_dev,const char *put_old)
+int __init change_root(kdev_t new_root_dev,const char *put_old)
 {
 	kdev_t old_root_dev;
 	struct vfsmount *vfsmnt;
@@ -1248,7 +1246,7 @@ static int __init do_change_root(kdev_t new_root_dev,const char *put_old)
 	dput(old_pwd);
 #if 1
 	shrink_dcache();
-	printk("do_change_root: old root has d_count=%d\n", old_root->d_count);
+	printk("change_root: old root has d_count=%d\n", old_root->d_count);
 #endif
 	/*
 	 * Get the new mount directory
@@ -1291,15 +1289,6 @@ static int __init do_change_root(kdev_t new_root_dev,const char *put_old)
 	}
 	printk(KERN_CRIT "Trouble: add_vfsmnt failed\n");
 	return -ENOMEM;
-}
-
-int change_root(kdev_t new_root_dev,const char *put_old)
-{
-	if (initmem_freed) {
-		printk (KERN_CRIT "Initmem has been already freed. Staying in initrd\n");
-		return -EBUSY;
-	}
-	return do_change_root(new_root_dev, put_old);
 }
 
 #endif

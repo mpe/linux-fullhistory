@@ -96,6 +96,8 @@
 #include <linux/apm_bios.h>
 #include <linux/init.h>
 
+#include "desc.h"
+
 EXPORT_SYMBOL(apm_register_callback);
 EXPORT_SYMBOL(apm_unregister_callback);
 
@@ -213,7 +215,7 @@ extern unsigned long get_cmos_time(void);
 /*
  * Save a segment register away
  */
-#define savesegment(seg, where)	__asm__ __volatile__("movw %%" #seg ", %0\n" : "=m" (where))
+#define savesegment(seg, where)	__asm__ __volatile__("movl %%" #seg ",%0" : "=m" (where))
 
 /*
  * Forward declarations
@@ -354,8 +356,7 @@ static const lookup_t error_table[] = {
 static inline int apm_bios_call(u32 eax_in, u32 ebx_in, u32 ecx_in,
 	u32 *eax, u32 *ebx, u32 *ecx, u32 *edx, u32 *esi)
 {
-	u16	old_fs;
-	u16	old_gs;
+	unsigned int old_fs, old_gs;
 	int	error;
 
 #ifdef APM_ZERO_SEGS
@@ -370,10 +371,10 @@ static inline int apm_bios_call(u32 eax_in, u32 ebx_in, u32 ecx_in,
 #ifdef APM_ZERO_SEGS
 		"pushl %%ds\n\t"
 		"pushl %%es\n\t"
-		"movw %9, %%ds\n\t"
-		"movw %9, %%es\n\t"
-		"movw %9, %%fs\n\t"
-		"movw %9, %%gs\n\t"
+		"movl %w9,%%ds\n\t"
+		"movl %w9,%%es\n\t"
+		"movl %w9,%%fs\n\t"
+		"movl %w9,%%gs\n\t"
 #endif
 		"lcall %%cs:" SYMBOL_NAME_STR(apm_bios_entry) "\n\t"
 		"movl $0, %%edi\n\t"
@@ -402,8 +403,7 @@ static inline int apm_bios_call(u32 eax_in, u32 ebx_in, u32 ecx_in,
 
 static inline int apm_bios_call_simple(u32 eax_in, u32 ebx_in, u32 ecx_in, u32 *eax)
 {
-	u16	old_fs;
-	u16	old_gs;
+	unsigned int old_fs, old_gs;
 	int	error;
 
 #ifdef APM_ZERO_SEGS
@@ -418,10 +418,10 @@ static inline int apm_bios_call_simple(u32 eax_in, u32 ebx_in, u32 ecx_in, u32 *
 #ifdef APM_ZERO_SEGS
 		"pushl %%ds\n\t"
 		"pushl %%es\n\t"
-		"movw %5, %%ds\n\t"
-		"movw %5, %%es\n\t"
-		"movw %5, %%fs\n\t"
-		"movw %5, %%gs\n\t"
+		"movl %w5,%%ds\n\t"
+		"movl %w5,%%es\n\t"
+		"movl %w5,%%fs\n\t"
+		"movl %w5,%%gs\n\t"
 #endif
 		"lcall %%cs:" SYMBOL_NAME_STR(apm_bios_entry) "\n\t"
 		"movl $0, %%edi\n\t"
@@ -1176,7 +1176,7 @@ int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 }
 #endif
 
-__initfunc(void apm_bios_init(void))
+void __init apm_bios_init(void)
 {
 	unsigned short	bx;
 	unsigned short	cx;

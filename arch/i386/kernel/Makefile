@@ -34,6 +34,10 @@ else
   endif
 endif
 
+ifdef CONFIG_APM
+OX_OBJS += apm.o
+endif
+
 ifdef SMP
 O_OBJS += io_apic.o smp.o trampoline.o
 endif

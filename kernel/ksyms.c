@@ -401,3 +401,6 @@ EXPORT_SYMBOL(unregister_console);
 
 /* time */
 EXPORT_SYMBOL(get_fast_time);
+
+/* library functions */
+EXPORT_SYMBOL(strnicmp);
