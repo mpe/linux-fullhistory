@@ -140,6 +140,8 @@
 #define   CHIPREV_5703_AX		 0x10
 #define   CHIPREV_5704_AX		 0x20
 #define   CHIPREV_5704_BX		 0x21
+#define   CHIPREV_5750_AX		 0x40
+#define   CHIPREV_5750_BX		 0x41
 #define  GET_METAL_REV(CHIP_REV_ID)	((CHIP_REV_ID) & 0xff)
 #define   METAL_REV_A0			 0x00
 #define   METAL_REV_A1			 0x01
