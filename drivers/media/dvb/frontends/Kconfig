@@ -108,14 +108,14 @@ config DVB_MT352
 	  A DVB-T tuner module. Say Y when you want to support this frontend.
 
 config DVB_DIB3000MB
-	tristate "DiBcom 3000-MB"
+	tristate "DiBcom 3000M-B"
 	depends on DVB_CORE
 	help
 	  A DVB-T tuner module. Designed for mobile usage. Say Y when you want
 	  to support this frontend.
 
 config DVB_DIB3000MC
-	tristate "DiBcom 3000-MC/P"
+	tristate "DiBcom 3000P/M-C"
 	depends on DVB_CORE
 	help
 	  A DVB-T tuner module. Designed for mobile usage. Say Y when you want

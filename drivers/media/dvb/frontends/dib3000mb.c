@@ -1,5 +1,5 @@
 /*
- * Frontend driver for mobile DVB-T demodulator DiBcom 3000-MB
+ * Frontend driver for mobile DVB-T demodulator DiBcom 3000M-B
  * DiBcom (http://www.dibcom.fr/)
  *
  * Copyright (C) 2004-5 Patrick Boettcher (patrick.boettcher@desy.de)
@@ -35,7 +35,7 @@
 
 /* Version information */
 #define DRIVER_VERSION "0.1"
-#define DRIVER_DESC "DiBcom 3000M-B DVB-T demodulator driver"
+#define DRIVER_DESC "DiBcom 3000M-B DVB-T demodulator"
 #define DRIVER_AUTHOR "Patrick Boettcher, patrick.boettcher@desy.de"
 
 #ifdef CONFIG_DVB_DIBCOM_DEBUG
@@ -745,7 +745,7 @@ error:
 static struct dvb_frontend_ops dib3000mb_ops = {
 
 	.info = {
-		.name			= "DiBcom 3000-MB DVB-T",
+		.name			= "DiBcom 3000M-B DVB-T",
 		.type			= FE_OFDM,
 		.frequency_min		= 44250000,
 		.frequency_max		= 867250000,
