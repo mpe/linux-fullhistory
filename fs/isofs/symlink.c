@@ -9,6 +9,7 @@
  *  extensions to iso9660
  */
 
+#include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/fs.h>

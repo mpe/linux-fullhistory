@@ -1,0 +1,336 @@
+June 1999		  Kernel Parameters			v2.2.9
+			  ~~~~~~~~~~~~~~~~~
+
+The following is a consolidated list of the kernel parameters as defined
+in the file init/main.c and sorted into English Dictionary order (defined
+as ignoring all punctuation and sorting digits before letters in a case
+insensitive manner), and with descriptions where known.
+
+The text in square brackets at the beginning of the description state the
+restrictions on the kernel for the said kernel parameter to be valid. The
+restrictions referred to are that the relevant option is valid if:
+
+    APIC	APIC support is enabled.
+    APM 	Automatic Power Management support is enabled.
+    AX25	Appropriate AX.25 support is enabled.
+    CD		Appropriate CD support is enabled.
+    EIDE	EIDE/ATAPI support is enabled.
+    FB		The frame buffer device is enabled.
+    HW		Appropriate hardware is enabled.
+    ISDN	Appropriate ISDN support is enabled.
+    JOY 	Appropriate joystick support is enabled.
+    LPT 	Printer support is enabled.
+    MCA 	MCA bus support is enabled.
+    MDA 	The MDA console is enabled.
+    MOUSE	Appropriate mouse support is enabled.
+    NET 	Appropriate network support is enabled.
+    NFS 	Appropriate NFS support is enabled.
+    PARIDE	The ParIDE subsystem is enabled.
+    PCI 	PCI bus support is enabled.
+    PCMCIA	The PCMCIA subsystem is enabled.
+    PNP 	Plug & Play support is enabled.
+    PS2 	Appropriate PS/2 support is enabled.
+    RAM 	RAMdisc support is enabled.
+    SCSI	Appropriate SCSI support is enabled.
+    SERIAL	Serial support is enabled.
+    SMP 	The kernel is an SMP kernel.
+    SOUND	Appropriate sound system support is enabled.
+    VGA 	The VGA console has been enabled.
+    VT		Virtual terminal support is enabled.
+    XT		IBM PC/XT support is enabled.
+
+In addition, the following text indicates that the option:
+
+    BUGS=	Relates to possible processor bugs on the said processor.
+    KNL 	Is a kernel start-up parameter.
+
+Note that ALL kernel parameters listed below are CASE SENSITIVE, and that
+a trailing = on the name of any parameter states that that parameter will
+be entered as an environment variable, whereas its absence indicates that
+it will appear as a kernel argument readable via /proc/cmdline by programs
+running once the system is up.
+
+    53c7xx=		[HW,SCSI]
+
+    adb_buttons=	[HW,MOUSE]
+
+    advansys=		[HW,SCSI]
+
+    aha152x=		[HW,SCSI]
+
+    aha1542=		[HW,SCSI]
+
+    aic7xxx=		[HW,SCSI]
+
+    AM53C974=		[HW,SCSI]
+
+    apm=		[APM] Automatic Power Management.
+
+    arcrimi=		[HW,NET]
+
+    atamouse=		[HW,MOUSE] Atari Mouse.
+
+    atascsi=		[HW,SCSI] Atari SCSI.
+
+    aztcd=		[HW,CD] Aztec CD driver.
+
+    baycom_par= 	[HW,AX25] BayCom Parallel Port AX.25 Modem.
+
+    baycom_ser_fdx=	[HW,AX25] BayCom Serial Port AX.25 Modem in Full
+			Duplex Mode.
+
+    baycom_ser_hdx=	[HW,AX25] BayCom Serial Port AX.25 Modem in Half
+			Duplex Mode.
+
+    bmouse=		[HW,MOUSE,PS2] Bus mouse.
+
+    BusLogic=		[HW,SCSI]
+
+    cdu31a=		[HW,CD]
+
+    cm206=		[HW,CD]
+
+    com20020=		[HW,NET]
+
+    com90io=		[HW,NET]
+
+    com90xx=		[HW,NET]
+
+    console=		
+
+    cyclades=		[HW,SERIAL] Cyclades multi-serial port adapter.
+
+    debug		[KNL] Enable kernel debugging.
+
+    decnet=		[HW,NET]
+
+    digi=		[HW,SERIAL]
+
+    digiepca=		[HW,SERIAL]
+
+    dmascc=		[HW,AX25,SERIAL] AX.25 Z80SCC driver with DMA
+			support available.
+
+    dmasound=		[HW,SOUND]
+
+    dtc3181e=		[HW,SCSI]
+
+    eata=		[HW,SCSI]
+
+    eda=		[HW,PS2]
+
+    edb=		[HW,PS2]
+
+    ether=		[HW,NET] Ethernet.
+
+    fd_mcs=		[HW,SCSI]
+
+    fdomain=		[HW,SCSI]
+
+    floppy=		[HW]
+
+    ftape=		[HW] Floppy Tape subsystem.
+
+    gdth=		[HW,SCSI]
+
+    gscd=		[HW,CD]
+
+    gvp11=		[HW,SCSI]
+
+    hd= 		[EIDE] IDE and EIDE hard drive subsystem.
+
+    hfmodem=		[HW,AX25]
+
+    HiSax=		[HW,ISDN]
+
+    hisax=		[HW,ISDN]
+
+    ibmmcascsi= 	[HW,MCA,SCSI] IBM MicroChannel SCSI adapter.
+
+    icn=		[HW,ISDN]
+
+    in2000=		[HW,SCSI]
+
+    init=		[KNL]
+
+    ip= 		[PNP]
+
+    isp16=		[HW,CD]
+
+    js_14=		[HW,JOY]
+
+    js_am=		[HW,JOY]
+
+    js_an=		[HW,JOY]
+
+    js_as=		[HW.JOY]
+
+    js_console= 	[HW,JOY]
+
+    js_console2=	[HW,JOY]
+
+    js_console3=	[HW,JOY]
+
+    js_db9=		[HW,JOY]
+
+    js_db9_2=		[HW,JOY]
+
+    js_db9_3=		[HW,JOY]
+
+    js_tg=		[HW,JOY]
+
+    js_tg_2=		[HW,JOY]
+
+    js_tg_3=		[HW,JOY]
+
+    kbd-reset		[VT]
+
+    load_ramdisk=	[RAM]
+
+    lp= 		[LPT] Parallel Printer.
+
+    ltpc=		[HW]
+
+    mac5380=		[HW,SCSI]
+
+    maxcpus=		[SMP] States the maximum number of processors that
+			an SMP kernel should make use of.
+
+    max_scsi_luns=	[SCSI]
+
+    mca-pentium 	[BUGS=ix86]
+
+    mcd=		[HW,CD]
+
+    mcdx=		[HW,CD]
+
+    md= 		[HW]
+
+    mdacon=		[MDA]
+
+    msmouse=		[HW,MOUSE] Microsoft Mouse.
+
+    ncr5380=		[HW,SCSI]
+
+    ncr53c400=		[HW,SCSI]
+
+    ncr53c400a= 	[HW,SCSI]
+
+    ncr53c406a= 	[HW,SCSI]
+
+    ncr53c8xx=		[HW,SCSI]
+
+    nfsaddrs=		[NFS]
+
+    nfsroot=		[NFS]
+
+    no387		[BUGS=ix86] Tells the kernel to use the 387 maths
+			emulation library even if a 387 maths coprocessor
+			is present.
+
+    noapic		[SMP,APIC] Tells the kernel not to make use of any
+			APIC that may be present on the system.
+
+    no-halt		[BUGS=ix86]
+
+    noinitrd		[RAM] Tells the kernel not to load any configured
+			initial ramdisc.
+
+    no-scroll		[VGA]
+
+    nosmp		[SMP] Tells an SMP kernel to act as a UP kernel.
+
+    optcd=		[HW,CD]
+
+    panic=		
+
+    parport=		[HW,LP]
+
+    pas16=		[HW,SCSI]
+
+    pcbit=		[HW,ISDN]
+
+    pcd.		[PARIDE]
+
+    pci=		[PCI]
+
+    pd. 		[PARIDE]
+
+    pf. 		[PARIDE]
+
+    pg. 		[PARIDE]
+
+    pirq=		[SMP,APIC]
+
+    plip=		[LP,NET] Parallel port network link.
+
+    profile=
+
+    prompt_ramdisk=	[RAM] Whether to prompt for ramdisk before loading
+			its contents into memory.
+
+    pt. 		[PARIDE]
+
+    ramdisk=		[RAM]
+
+    ramdisk_size=	[RAM]
+
+    ramdisk_start=	[RAM]
+
+    reboot=		[BUGS=ix86]
+
+    reserve=
+
+    riscom8=		[HW,SERIAL]
+
+    ro			[KNL] Mount root device read-only on boot.
+
+    root=		
+
+    rw			[KNL] Mount root device read-write on boot.
+
+    sbpcd=		[HW,CD] Soundblaster CD adapter.
+
+    scsi_logging=	[SCSI]
+
+    sjcd=		[HW,CD]
+
+    sonycd535=		[HW,CD]
+
+    sound=		[SOUND]
+
+    soundmodem= 	[HW,AX25,SOUND] Sound cards used as AX.25 modems.
+
+    specialix=		[HW,SERIAL] Specialix multi-serial port adapter.
+
+    st= 		[HW]
+
+    st0x=		[HW,SCSI]
+
+    stram_swap= 	[HW]
+
+    sym53c416=		[HW,SCSI]
+
+    sym53c8xx=		[HW,SCSI]
+
+    t128=		[HW,SCSI]
+
+    tmc8xx=		[HW,SCSI]
+
+    tmscsim=		[HW,SCSI]
+
+    tp720=		[HW,PS2]
+
+    u14-34f=		[HW,SCSI]
+
+    video=		[FB]
+
+    wd33c93=		[HW,SCSI]
+
+    wd7000=		[HW,SCSI]
+
+    wdt=		[HW]
+
+    xd= 		[HW,XT]
+
+    xd_geo=		[HW,XT]

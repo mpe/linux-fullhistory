@@ -9,7 +9,7 @@
  *
  * Author:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Donald Becker, <becker@super.org>
- *		Alan Cox, <alan@cymru.net>
+ *		Alan Cox, <alan@redhat.com>
  *		Steve Whitehouse, <gw7rrm@eeshack3.swan.ac.uk>
  *		Jes Sorensen, <Jes.Sorensen@cern.ch>
  *

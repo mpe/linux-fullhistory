@@ -7,6 +7,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/in.h>
 #include <linux/sunrpc/svc.h>

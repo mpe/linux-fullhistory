@@ -573,13 +573,12 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		  passed_p = passed_fileno;
 
 		  if (elf_interpreter) {
-		    bprm->p = copy_strings(1,&passed_p,bprm->page,bprm->p,2);
+		    retval = copy_strings_kernel(1,&passed_p,bprm);
+			if (retval)
+				goto out_free_dentry; 
 		    bprm->argc++;
 		  }
 		}
-		retval = -E2BIG;
-		if (!bprm->p)
-			goto out_free_dentry;
 	}
 
 	/* Flush all traces of the currently running executable */
@@ -601,7 +600,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
 	current->mm->rss = 0;
-	bprm->p = setup_arg_pages(bprm->p, bprm);
+	setup_arg_pages(bprm); /* XXX: check error */
 	current->mm->start_stack = bprm->p;
 
 	/* Try and get dynamic programs out of the way of the default mmap

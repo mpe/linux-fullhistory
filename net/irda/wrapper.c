@@ -8,6 +8,8 @@
  * Created at:    Mon Aug  4 20:40:53 1997
  * Modified at:   Sun May  2 21:58:00 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
+ * Modified at:   Fri May 28  3:11 CST 1999
+ * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
@@ -24,6 +26,7 @@
  ********************************************************************/
 
 #include <linux/skbuff.h>
+#include <linux/string.h>
 #include <asm/byteorder.h>
 
 #include <net/irda/irda.h>

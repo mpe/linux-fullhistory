@@ -8,6 +8,7 @@
 static char *version =
         "ptifddi.c:v1.0 10/Dec/96 David S. Miller (davem@caipfs.rutgers.edu)\n";
 
+#include <linux/string.h>
 #include <linux/init.h>
 
 #include "ptifddi.h"

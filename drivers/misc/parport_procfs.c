@@ -12,6 +12,7 @@
  * Cleaned up include files - Russell King <linux@arm.uk.linux.org>
  */
 
+#include <linux/string.h>
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/delay.h>

@@ -6,6 +6,7 @@
  *  file VFS functions
  */
 
+#include <linux/string.h>
 #include "hpfs_fn.h"
 
 int hpfs_open(struct inode *i, struct file *f)

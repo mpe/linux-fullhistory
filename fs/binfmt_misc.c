@@ -210,13 +210,12 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 
 	/* Build args for interpreter */
 	remove_arg_zero(bprm);
-	bprm->p = copy_strings(1, &bprm->filename, bprm->page, bprm->p, 2);
+	retval = copy_strings_kernel(1, &bprm->filename, bprm);
+	if (retval < 0) goto _ret; 
 	bprm->argc++;
-	bprm->p = copy_strings(1, &iname_addr, bprm->page, bprm->p, 2);
+	retval = copy_strings_kernel(1, &iname_addr, bprm);
+	if (retval < 0) goto _ret; 
 	bprm->argc++;
-	retval = -E2BIG;
-	if (!bprm->p)
-		goto _ret;
 	bprm->filename = iname;	/* for binfmt_script */
 
 	dentry = open_namei(iname, 0, 0);

@@ -6,6 +6,7 @@
  * Portions derived from work (c) 1995,1996 Christian Vogelgsang.
  */
 
+#include <linux/string.h>
 #include <linux/efs_fs.h>
 
 static efs_ino_t efs_find_entry(struct inode *inode, const char *name, int len) {

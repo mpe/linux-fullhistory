@@ -8,6 +8,8 @@
  * Created at:    Wed Sep  2 20:22:08 1998
  * Modified at:   Mon May 10 23:02:47 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
+ * Modified at:   Fri May 28  3:11 CST 1999
+ * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
@@ -23,6 +25,7 @@
  ********************************************************************/
 
 #include <linux/config.h>
+#include <linux/string.h>
 #include <linux/proc_fs.h>
 #include <linux/skbuff.h>
 #include <linux/if.h>

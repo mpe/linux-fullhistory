@@ -5,6 +5,7 @@
  *  Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/file.h>
 #include <linux/init.h>

@@ -8,6 +8,8 @@
  * Created at:    Fri Oct  9 09:18:07 1998
  * Modified at:   Sun May  9 11:37:06 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
+ * Modified at:   Fri May 28  3:11 CST 1999
+ * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
  * Sources:       ppp.c, isdn_ppp.c
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -22,6 +24,8 @@
  *     provided "AS-IS" and at no charge.
  *     
  ********************************************************************/
+
+#include <linux/string.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irqueue.h>

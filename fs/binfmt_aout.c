@@ -307,7 +307,6 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	struct file * file;
 	int fd;
 	unsigned long error;
-	unsigned long p = bprm->p;
 	unsigned long fd_offset;
 	unsigned long rlim;
 	int retval;
@@ -468,14 +467,18 @@ beyond_if:
 
 	set_brk(current->mm->start_brk, current->mm->brk);
 
-	p = setup_arg_pages(p, bprm);
+	retval = setup_arg_pages(bprm); 
+	if (retval < 0) { 
+		/* Someone check-me: is this error path enough? */ 
+		send_sig(SIGKILL, current, 0); 
+		return retval;
+	}
 
-	p = (unsigned long) create_aout_tables((char *)p, bprm);
-	current->mm->start_stack = p;
+	current->mm->start_stack = create_aout_tables(bprm->p, bprm);
 #ifdef __alpha__
 	regs->gp = ex.a_gpvalue;
 #endif
-	start_thread(regs, ex.a_entry, p);
+	start_thread(regs, ex.a_entry, current->mm->start_stack);
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);
 	return 0;

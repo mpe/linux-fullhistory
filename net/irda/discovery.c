@@ -8,6 +8,8 @@
  * Created at:    Tue Apr  6 15:33:50 1999
  * Modified at:   Sun May  9 22:40:43 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
+ * Modified at:   Fri May 28  3:11 CST 1999
+ * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
  *     
@@ -28,6 +30,7 @@
  *     
  ********************************************************************/
 
+#include <linux/string.h>
 #include <linux/socket.h>
 #include <linux/irda.h>
 

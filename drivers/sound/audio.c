@@ -20,10 +20,12 @@
  * Thomas Sailer   : use more logical O_NONBLOCK semantics
  * Daniel Rodriksson: reworked the use of the device specific copy_user
  *                    still generic
+ * Horst von Brand:  Add missing #include <linux/string.h>
  */
 
 #include <linux/config.h>
 #include <linux/stddef.h>
+#include <linux/string.h>
 #include <linux/kmod.h>
 
 #include "sound_config.h"

@@ -188,13 +188,13 @@ smb_writepage(struct file *file, struct page *page)
 }
 
 static int
-smb_updatepage(struct file *file, struct page *page, unsigned long offset, unsigned int count, int sync)
+smb_updatepage(struct file *file, struct page *page, unsigned long offset, unsigned int count)
 {
 	struct dentry *dentry = file->f_dentry;
 
-	pr_debug("SMBFS: smb_updatepage(%s/%s %d@%ld, sync=%d)\n",
+	pr_debug("SMBFS: smb_updatepage(%s/%s %d@%ld)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
-	 	count, page->offset+offset, sync);
+	 	count, page->offset+offset);
 
 	return smb_writepage_sync(dentry, page, offset, count);
 }
@@ -256,6 +256,26 @@ out:
 	return status;
 }
 
+/*
+ * This does the "real" work of the write. The generic routine has
+ * allocated the page, locked it, done all the page alignment stuff
+ * calculations etc. Now we should just copy the data from user
+ * space and write it back to the real medium..
+ *
+ * If the writer ends up delaying the write, the writer needs to
+ * increment the page use counts until he is done with the page.
+ */
+static long smb_write_one_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
+{
+	long status;
+
+	bytes -= copy_from_user((u8*)page_address(page) + offset, buf, bytes);
+	status = -EFAULT;
+	if (bytes)
+		status = smb_updatepage(file, page, offset, bytes);
+	return status;
+}
+
 /* 
  * Write to a file (through the page cache).
  */
@@ -287,7 +307,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, result);
 
 	if (count > 0)
 	{
-		result = generic_file_write(file, buf, count, ppos);
+		result = generic_file_write(file, buf, count, ppos, smb_write_one_page);
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_file_write: pos=%ld, size=%ld, mtime=%ld, atime=%ld\n",
 (long) file->f_pos, dentry->d_inode->i_size, dentry->d_inode->i_mtime,
@@ -386,6 +406,6 @@ struct inode_operations smb_file_inode_operations =
 	NULL,			/* truncate */
 	smb_file_permission,	/* permission */
 	NULL,			/* smap */
-	smb_updatepage,		/* updatepage */
+	NULL,			/* updatepage */
 	smb_revalidate_inode,	/* revalidate */
 };

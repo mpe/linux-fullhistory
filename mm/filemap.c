@@ -1425,7 +1425,8 @@ out:
  */
 ssize_t
 generic_file_write(struct file *file, const char *buf,
-		   size_t count, loff_t *ppos)
+		   size_t count, loff_t *ppos,
+		   writepage_t write_one_page)
 {
 	struct dentry	*dentry = file->f_dentry; 
 	struct inode	*inode = dentry->d_inode; 
@@ -1434,10 +1435,7 @@ generic_file_write(struct file *file, const char *buf,
 	struct page	*page, **hash;
 	unsigned long	page_cache = 0;
 	unsigned long	written;
-	long		status, sync;
-
-	if (!inode->i_op || !inode->i_op->updatepage)
-		return -EIO;
+	long		status;
 
 	if (file->f_error) {
 		int error = file->f_error;
@@ -1445,7 +1443,6 @@ generic_file_write(struct file *file, const char *buf,
 		return error;
 	}
 
-	sync    = file->f_flags & O_SYNC;
 	written = 0;
 
 	if (file->f_flags & O_APPEND)
@@ -1501,15 +1498,7 @@ generic_file_write(struct file *file, const char *buf,
 		wait_on_page(page);
 		set_bit(PG_locked, &page->flags);
 
-		/*
-		 * Do the real work.. If the writer ends up delaying the write,
-		 * the writer needs to increment the page use counts until he
-		 * is done with the page.
-		 */
-		bytes -= copy_from_user((u8*)page_address(page) + offset, buf, bytes);
-		status = -EFAULT;
-		if (bytes)
-			status = inode->i_op->updatepage(file, page, offset, bytes, sync);
+		status = write_one_page(file, page, offset, bytes, buf);
 
 		/* Mark it unlocked again and drop the page.. */
 		clear_bit(PG_locked, &page->flags);

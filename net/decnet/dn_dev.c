@@ -1189,15 +1189,14 @@ int dnet_gifconf(struct device *dev, char *buf, int len)
 {
 	struct dn_dev *dn_db = (struct dn_dev *)dev->dn_ptr;
 	struct dn_ifaddr *ifa;
-	char buffer[DN_IFREQ_SIZE];
-	struct ifreq *ifr = (struct ifreq *)buffer;
+	struct ifreq *ifr = (struct ifreq *)buf;
 	int done = 0;
 
 	if ((dn_db == NULL) || ((ifa = dn_db->ifa_list) == NULL))
 		return 0;
 
 	for(; ifa; ifa = ifa->ifa_next) {
-		if (!buf) {
+		if (!ifr) {
 			done += sizeof(DN_IFREQ_SIZE);
 			continue;
 		}
@@ -1214,10 +1213,7 @@ int dnet_gifconf(struct device *dev, char *buf, int len)
 		(*(struct sockaddr_dn *) &ifr->ifr_addr).sdn_add.a_len = 2;
 		(*(dn_address *)(*(struct sockaddr_dn *) &ifr->ifr_addr).sdn_add.a_addr) = ifa->ifa_local;
 
-		if (copy_to_user(buf, ifr, DN_IFREQ_SIZE))
-			return -EFAULT;
-
-		buf  += DN_IFREQ_SIZE;
+		ifr = (struct ifreq *)((char *)ifr + DN_IFREQ_SIZE);
 		len  -= DN_IFREQ_SIZE;
 		done += DN_IFREQ_SIZE;
 	}

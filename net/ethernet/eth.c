@@ -67,7 +67,7 @@ __initfunc(void eth_setup(char *str, int *ints))
 
 	if (!str || !*str)
 		return;
-	read_lock_bh(&dev_base_lock);
+
 	d = dev_base;
 	while (d) 
 	{
@@ -85,7 +85,6 @@ __initfunc(void eth_setup(char *str, int *ints))
 		}
 		d=d->next;
 	}
-	read_unlock_bh(&dev_base_lock);
 }
 
 

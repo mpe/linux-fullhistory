@@ -10,7 +10,7 @@
  *	14478 Potsdam, Germany
  *
  *	Most of this code is directly derived from his userspace driver.
- *	His driver works so send any reports to alan@cymru.net unless the
+ *	His driver works so send any reports to alan@redhat.com unless the
  *	userspace driver also doesnt work for you...
  */
 

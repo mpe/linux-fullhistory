@@ -6,7 +6,7 @@
  *	This is used because UDP, RAW, PACKET, DDP, IPX, AX.25 and NetROM layer all have identical poll code and mostly
  *	identical recvmsg() code. So we share it here. The poll was shared before but buried in udp.c so I moved it.
  *
- *	Authors:	Alan Cox <alan@cymru.net>. (datagram_poll() from old udp.c code)
+ *	Authors:	Alan Cox <alan@redhat.com>. (datagram_poll() from old udp.c code)
  *
  *	Fixes:
  *		Alan Cox	:	NULL return from skb_peek_copy() understood

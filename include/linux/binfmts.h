@@ -19,7 +19,7 @@
 struct linux_binprm{
 	char buf[128];
 	unsigned long page[MAX_ARG_PAGES];
-	unsigned long p;
+	unsigned long p; /* current top of mem */
 	int sh_bang;
 	int java;		/* Java binary, prevent recursive invocation */
 	struct dentry * dentry;
@@ -63,14 +63,16 @@ extern int prepare_binprm(struct linux_binprm *);
 extern void remove_arg_zero(struct linux_binprm *);
 extern int search_binary_handler(struct linux_binprm *,struct pt_regs *);
 extern int flush_old_exec(struct linux_binprm * bprm);
-extern unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm);
-extern unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
-		unsigned long p, int from_kmem);
-
+extern int setup_arg_pages(struct linux_binprm * bprm);
+extern int copy_strings(int argc,char ** argv,struct linux_binprm *bprm); 
+extern int copy_strings_kernel(int argc,char ** argv,struct linux_binprm *bprm);
 extern void compute_creds(struct linux_binprm *binprm);
 
-/* this eventually goes away */
+
+#if 0
+/* this went away now */
 #define change_ldt(a,b) setup_arg_pages(a,b)
+#endif
 
 #endif /* __KERNEL__ */
 #endif /* _LINUX_BINFMTS_H */

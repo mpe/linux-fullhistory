@@ -5,6 +5,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 
 #define ABANDON(why) { fprintf(stderr, "%s\n", why); exit(1); }

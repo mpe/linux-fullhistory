@@ -3,7 +3,7 @@
 
 /*
  *	Generic SMP support
- *		Alan Cox. <alan@cymru.net>
+ *		Alan Cox. <alan@redhat.com>
  */
 
 #ifdef __SMP__

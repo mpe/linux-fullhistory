@@ -10,6 +10,9 @@
  * Fixes:	Minor changes for 2.1 by
  *		Steven Clarke <Steven.Clarke@ThePlanet.Net>, Planet Online Ltd
  *
+ *              Add missing #include <linux/string.h>
+ *              Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
+ *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
  *	as published by the Free Software Foundation; either version
@@ -25,6 +28,7 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/types.h>
+#include <linux/string.h>
 #include <linux/kernel.h>
 #include <asm/system.h>
 #include <linux/skbuff.h>

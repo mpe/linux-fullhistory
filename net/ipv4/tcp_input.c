@@ -2321,8 +2321,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 	    !(th->fin && TCP_SKB_CB(skb)->end_seq == tp->rcv_nxt)) {
 		if (!th->rst) {
 			tcp_send_ack(sk);
-			goto discard;
 		}
+		goto discard;
 	}
 
 	/* step 2: check RST bit */

@@ -222,78 +222,64 @@ static int count(char ** argv)
 }
 
 /*
- * 'copy_string()' copies argument/envelope strings from user
+ * 'copy_strings()' copies argument/envelope strings from user
  * memory to free pages in kernel mem. These are in a format ready
  * to be put directly into the top of new user memory.
- *
- * Modified by TYT, 11/24/91 to add the from_kmem argument, which specifies
- * whether the string and the string array are from user or kernel segments:
- * 
- * from_kmem     argv *        argv **
- *    0          user space    user space
- *    1          kernel space  user space
- *    2          kernel space  kernel space
- * 
- * We do this by playing games with the fs segment register.  Since it
- * is expensive to load a segment register, we try to avoid calling
- * set_fs() unless we absolutely have to.
  */
-unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
-		unsigned long p, int from_kmem)
+int copy_strings(int argc,char ** argv, struct linux_binprm *bprm) 
 {
-	char *str;
-	mm_segment_t old_fs;
-
-	if (!p)
-		return 0;	/* bullet-proofing */
-	old_fs = get_fs();
-	if (from_kmem==2)
-		set_fs(KERNEL_DS);
 	while (argc-- > 0) {
+		char *str;
 		int len;
 		unsigned long pos;
 
-		if (from_kmem == 1)
-			set_fs(KERNEL_DS);
-		get_user(str, argv+argc);
-		if (!str)
-			panic("VFS: argc is wrong");
-		if (from_kmem == 1)
-			set_fs(old_fs);
-		len = strlen_user(str);	/* includes the '\0' */
-		if (p < len) {	/* this shouldn't happen - 128kB */
-			set_fs(old_fs);
-			return 0;
-		}
-		p -= len;
-		pos = p;
+		if (get_user(str, argv+argc) || !str || !(len = strlen_user(str))) 
+			return -EFAULT;
+		if (bprm->p < len) 
+			return -E2BIG; 
+
+		bprm->p -= len;
+		/* XXX: add architecture specific overflow check here. */ 
+
+		pos = bprm->p;
 		while (len) {
 			char *pag;
 			int offset, bytes_to_copy;
 
 			offset = pos % PAGE_SIZE;
-			if (!(pag = (char *) page[pos/PAGE_SIZE]) &&
-			    !(pag = (char *) page[pos/PAGE_SIZE] =
-			      (unsigned long *) get_free_page(GFP_USER))) {
-				if (from_kmem==2)
-					set_fs(old_fs);
-				return 0;
-			}
+			if (!(pag = (char *) bprm->page[pos/PAGE_SIZE]) &&
+			    !(pag = (char *) bprm->page[pos/PAGE_SIZE] =
+			      (unsigned long *) get_free_page(GFP_USER))) 
+				return -ENOMEM; 
+
 			bytes_to_copy = PAGE_SIZE - offset;
 			if (bytes_to_copy > len)
 				bytes_to_copy = len;
-			copy_from_user(pag + offset, str, bytes_to_copy);
+			if (copy_from_user(pag + offset, str, bytes_to_copy)) 
+				return -EFAULT; 
+
 			pos += bytes_to_copy;
 			str += bytes_to_copy;
 			len -= bytes_to_copy;
 		}
 	}
-	if (from_kmem==2)
-		set_fs(old_fs);
-	return p;
+	return 0;
 }
 
-unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm)
+/*
+ * Like copy_strings, but get argv and its values from kernel memory.
+ */
+int copy_strings_kernel(int argc,char ** argv, struct linux_binprm *bprm)
+{
+	int r;
+	mm_segment_t oldfs = get_fs();
+	set_fs(KERNEL_DS); 
+	r = copy_strings(argc, argv, bprm);
+	set_fs(oldfs);
+	return r; 
+}
+
+int setup_arg_pages(struct linux_binprm *bprm)
 {
 	unsigned long stack_base;
 	struct vm_area_struct *mpnt;
@@ -301,15 +287,18 @@ unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm)
 
 	stack_base = STACK_TOP - MAX_ARG_PAGES*PAGE_SIZE;
 
-	p += stack_base;
+	bprm->p += stack_base;
 	if (bprm->loader)
 		bprm->loader += stack_base;
 	bprm->exec += stack_base;
 
 	mpnt = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
-	if (mpnt) {
+	if (!mpnt) 
+		return -ENOMEM; 
+	
+	{
 		mpnt->vm_mm = current->mm;
-		mpnt->vm_start = PAGE_MASK & (unsigned long) p;
+		mpnt->vm_start = PAGE_MASK & (unsigned long) bprm->p;
 		mpnt->vm_end = STACK_TOP;
 		mpnt->vm_page_prot = PAGE_COPY;
 		mpnt->vm_flags = VM_STACK_FLAGS;
@@ -319,7 +308,7 @@ unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm)
 		mpnt->vm_pte = 0;
 		insert_vm_struct(current->mm, mpnt);
 		current->mm->total_vm = (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
-	}
+	} 
 
 	for (i = 0 ; i < MAX_ARG_PAGES ; i++) {
 		if (bprm->page[i]) {
@@ -328,7 +317,8 @@ unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm)
 		}
 		stack_base += PAGE_SIZE;
 	}
-	return p;
+	
+	return 0;
 }
 
 /*
@@ -804,8 +794,7 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	int i;
 
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
-	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
-		bprm.page[i] = 0;
+	memset(bprm.page, 0, MAX_ARG_PAGES*sizeof(bprm.page[0])); 
 
 	dentry = open_namei(filename, 0, 0);
 	retval = PTR_ERR(dentry);
@@ -829,26 +818,34 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	}
 
 	retval = prepare_binprm(&bprm);
-	
-	if (retval >= 0) {
-		bprm.p = copy_strings(1, &bprm.filename, bprm.page, bprm.p, 2);
-		bprm.exec = bprm.p;
-		bprm.p = copy_strings(bprm.envc,envp,bprm.page,bprm.p,0);
-		bprm.p = copy_strings(bprm.argc,argv,bprm.page,bprm.p,0);
-		if (!bprm.p)
-			retval = -E2BIG;
-	}
+	if (retval < 0) 
+		goto out; 
 
-	if (retval >= 0)
-		retval = search_binary_handler(&bprm,regs);
+	retval = copy_strings_kernel(1, &bprm.filename, &bprm);
+	if (retval < 0) 
+		goto out; 
+
+	bprm.exec = bprm.p;
+	retval = copy_strings(bprm.envc, envp, &bprm);
+	if (retval < 0) 
+		goto out; 
+
+	retval = copy_strings(bprm.argc, argv, &bprm);
+	if (retval < 0) 
+		goto out; 
+
+	retval = search_binary_handler(&bprm,regs);
 	if (retval >= 0)
 		/* execve success */
 		return retval;
 
+out:
 	/* Something went wrong, return the inode and free the argument pages*/
 	if (bprm.dentry)
 		dput(bprm.dentry);
 
+	/* Assumes that free_page() can take a NULL argument. */ 
+	/* I hope this is ok for all architectures */ 
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
 		free_page(bprm.page[i]);
 

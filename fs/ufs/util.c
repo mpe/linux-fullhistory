@@ -6,6 +6,7 @@
  * Charles University, Faculty of Mathematics and Physics
  */
  
+#include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/locks.h>
 

@@ -1342,11 +1342,8 @@ int init_module(void)
 #if defined(CONFIG_LLC) || defined(CONFIG_LLC_MODULE)
 					   || dev->type == ARPHRD_ETHER
 #endif
-			)) {
-			read_unlock_bh(&dev_base_lock);
+			))
 			x25_link_device_up(dev);
-			read_lock_bh(&dev_base_lock);
-		}
 	}
 	read_unlock_bh(&dev_base_lock);
 

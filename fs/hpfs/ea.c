@@ -6,6 +6,7 @@
  *  handling extended attributes
  */
 
+#include <linux/string.h>
 #include "hpfs_fn.h"
 
 /* Remove external extended attributes. ano specifies wheter a is a 

@@ -6,6 +6,7 @@
  * Portions derived from work (c) 1995,1996 Christian Vogelgsang.
  */
 
+#include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/efs_fs.h>
 

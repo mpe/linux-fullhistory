@@ -4,9 +4,12 @@
  * Generic RPC authentication API.
  *
  * Copyright (C) 1996, Olaf Kirch <okir@monad.swb.de>
+ *
+ * Modified May 1999, Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
  */
 
 #include <linux/types.h>
+#include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/malloc.h>
 #include <linux/errno.h>

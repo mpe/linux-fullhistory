@@ -42,6 +42,8 @@
  *
  */
 
+#include <linux/string.h>
+
 
 static inline void
 waitforCEC(struct IsdnCardState *cs, int hscx)

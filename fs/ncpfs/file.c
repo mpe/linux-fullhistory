@@ -21,7 +21,7 @@
 #include <linux/ncp_fs.h>
 #include "ncplib_kernel.h"
 
-static inline int min(int a, int b)
+static inline unsigned int min(unsigned int a, unsigned int b)
 {
 	return a < b ? a : b;
 }
@@ -99,9 +99,10 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	struct inode *inode = dentry->d_inode;
 	size_t already_read = 0;
 	off_t pos;
-	int bufsize, error;
+	size_t bufsize;
+	int error;
 	void* freepage;
-	int freelen;
+	size_t freelen;
 
 	DPRINTK(KERN_DEBUG "ncp_file_read: enter %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
@@ -121,10 +122,12 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 		goto out;
 	}
 
-	pos = file->f_pos;
+	pos = *ppos;
+/* leave it out on server ...
 	if (pos + count > inode->i_size) {
 		count = inode->i_size - pos;
 	}
+*/
 	error = 0;
 	if (!count)	/* size_t is never < 0 */
 		goto out;
@@ -146,7 +149,7 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	/* First read in as much as possible for each bufsize. */
 	while (already_read < count) {
 		int read_this_time;
-		int to_read = min(bufsize - (pos % bufsize),
+		size_t to_read = min(bufsize - (pos % bufsize),
 				  count - already_read);
 
 		error = ncp_read_bounce(NCP_SERVER(inode),
@@ -162,13 +165,13 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 		buf += read_this_time;
 		already_read += read_this_time;
 
-		if (read_this_time < to_read) {
+		if (read_this_time != to_read) {
 			break;
 		}
 	}
 	kfree(freepage);
 
-	file->f_pos = pos;
+	*ppos = pos;
 
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;
@@ -187,7 +190,8 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	struct inode *inode = dentry->d_inode;
 	size_t already_written = 0;
 	off_t pos;
-	int bufsize, errno;
+	size_t bufsize;
+	int errno;
 	void* bouncebuffer;
 
 	DPRINTK(KERN_DEBUG "ncp_file_write: enter %s/%s\n",
@@ -213,7 +217,7 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 		printk(KERN_ERR "ncp_file_write: open failed, error=%d\n", errno);
 		return errno;
 	}
-	pos = file->f_pos;
+	pos = *ppos;
 
 	if (file->f_flags & O_APPEND) {
 		pos = inode->i_size;
@@ -227,7 +231,7 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 		return -EIO;	/* -ENOMEM */
 	while (already_written < count) {
 		int written_this_time;
-		int to_write = min(bufsize - (pos % bufsize),
+		size_t to_write = min(bufsize - (pos % bufsize),
 				   count - already_written);
 
 		if (copy_from_user(bouncebuffer, buf, to_write)) {
@@ -244,14 +248,14 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 		buf += written_this_time;
 		already_written += written_this_time;
 
-		if (written_this_time < to_write) {
+		if (written_this_time != to_write) {
 			break;
 		}
 	}
 	kfree(bouncebuffer);
 	inode->i_mtime = inode->i_atime = CURRENT_TIME;
 	
-	file->f_pos = pos;
+	*ppos = pos;
 
 	if (pos > inode->i_size) {
 		inode->i_size = pos;

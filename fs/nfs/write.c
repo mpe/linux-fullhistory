@@ -408,17 +408,17 @@ nfs_writepage(struct file * file, struct page *page)
  * things with a page scheduled for an RPC call (e.g. invalidate it).
  */
 int
-nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsigned int count, int sync)
+nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsigned int count)
 {
 	struct dentry	*dentry = file->f_dentry;
 	struct inode	*inode = dentry->d_inode;
 	struct nfs_wreq	*req;
-	int		synchronous = sync;
+	int		synchronous = file->f_flags & O_SYNC;
 	int		retval;
 
-	dprintk("NFS:      nfs_updatepage(%s/%s %d@%ld, sync=%d)\n",
+	dprintk("NFS:      nfs_updatepage(%s/%s %d@%ld)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
-		count, page->offset+offset, sync);
+		count, page->offset+offset);
 
 	/*
 	 * Try to find a corresponding request on the writeback queue.
@@ -454,7 +454,7 @@ nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 	file->f_count++;
 
 	/* Schedule request */
-	synchronous = schedule_write_request(req, sync);
+	synchronous = schedule_write_request(req, synchronous);
 
 updated:
 	if (req->wb_bytes == PAGE_SIZE)

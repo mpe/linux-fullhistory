@@ -1,8 +1,8 @@
 /*
  *			Simple traffic shaper for Linux NET3.
  *
- *	(c) Copyright 1996 Alan Cox <alan@cymru.net>, All Rights Reserved.
- *				http://www.cymru.net
+ *	(c) Copyright 1996 Alan Cox <alan@redhat.com>, All Rights Reserved.
+ *				http://www.redhat.com
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License

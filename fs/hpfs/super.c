@@ -6,6 +6,7 @@
  *  mouning, unmounting, error handling
  */
 
+#include <linux/string.h>
 #include "hpfs_fn.h"
 #include <linux/module.h>
 

@@ -15,6 +15,8 @@
 
 #include <linux/config.h>
 
+#include <linux/string.h>
+
 #include <linux/tasks.h>
 
 #include <linux/parport.h>

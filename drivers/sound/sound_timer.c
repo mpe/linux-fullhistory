@@ -12,6 +12,7 @@
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
  */
 #include <linux/config.h>
+#include <linux/string.h>
 
 
 #include "sound_config.h"

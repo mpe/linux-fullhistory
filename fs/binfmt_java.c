@@ -67,15 +67,18 @@ static int do_load_java(struct linux_binprm *bprm,struct pt_regs *regs)
 		i_name++;
 	else
 		i_name = bprm->filename;
-	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
+
+	retval = copy_strings_kernel(1, &i_name, bprm); 
+	if (retval < 0) 
+		return retval; 
 	bprm->argc++;
 
 	i_name = binfmt_java_interpreter;
-	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
+	retval = copy_strings_kernel(1, &i_name, bprm); 
+	if (retval < 0) 
+		return retval; 
 	bprm->argc++;
 
-	if (!bprm->p) 
-		return -E2BIG;
 	/*
 	 * OK, now restart the process with the interpreter's dentry.
 	 */
@@ -114,15 +117,15 @@ static int do_load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
 	 */
 	remove_arg_zero(bprm);
 	i_name = bprm->filename;
-	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
+	retval = copy_strings_kernel(1, &i_name, bprm);
+	if (retval < 0) return retval; 
 	bprm->argc++;
 
 	i_name = binfmt_java_appletviewer;
-	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
+	retval = copy_strings_kernel(1, &i_name, bprm);
+	if (retval < 0) return retval; 
 	bprm->argc++;
 
-	if (!bprm->p) 
-		return -E2BIG;
 	/*
 	 * OK, now restart the process with the interpreter's dentry.
 	 */

@@ -1,7 +1,7 @@
 /*
  *	NET3:	Implementation of the ICMP protocol layer. 
  *	
- *		Alan Cox, <alan@cymru.net>
+ *		Alan Cox, <alan@redhat.com>
  *
  *	Version: $Id: icmp.c,v 1.54 1999/05/30 01:16:22 davem Exp $
  *

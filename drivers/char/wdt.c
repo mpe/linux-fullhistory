@@ -1,8 +1,8 @@
 /*
  *	Industrial Computer Source WDT500/501 driver for Linux 2.1.x
  *
- *	(c) Copyright 1996-1997 Alan Cox <alan@cymru.net>, All Rights Reserved.
- *				http://www.cymru.net
+ *	(c) Copyright 1996-1997 Alan Cox <alan@redhat.com>, All Rights Reserved.
+ *				http://www.redhat.com
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -15,7 +15,7 @@
  *
  *	(c) Copyright 1995    Alan Cox <alan@lxorguk.ukuu.org.uk>
  *
- *	Release 0.07.
+ *	Release 0.08.
  *
  *	Fixes
  *		Dave Gregorich	:	Modularisation and minor bugs
@@ -24,6 +24,8 @@
  *					Matt Crocker).
  *		Alan Cox	:	Added wdt= boot option
  *		Alan Cox	:	Cleaned up copy/user stuff
+ *		Tim Hockin	:	Added insmod parameters, comment cleanup
+ *					Parameterized timeout
  */
 
 #include <linux/config.h>

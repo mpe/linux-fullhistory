@@ -20,11 +20,13 @@
  *				route changes now work.
  *				ip6_forward does not confuse sniffers.
  *				etc.
- *				
+ *
+ *      H. von Brand    :       Added missing #include <linux/string.h>
  */
 
 #include <linux/errno.h>
 #include <linux/types.h>
+#include <linux/string.h>
 #include <linux/socket.h>
 #include <linux/net.h>
 #include <linux/netdevice.h>

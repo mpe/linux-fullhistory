@@ -6,6 +6,7 @@
  *  adding & removing files & directories
  */
 
+#include <linux/string.h>
 #include "hpfs_fn.h"
 
 int hpfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)

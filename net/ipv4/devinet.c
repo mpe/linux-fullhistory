@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.29 1999/05/27 00:37:57 davem Exp $
+ *	Version: $Id: devinet.c,v 1.30 1999/06/01 07:49:59 davem Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -607,31 +607,29 @@ inet_gifconf(struct device *dev, char *buf, int len)
 {
 	struct in_device *in_dev = dev->ip_ptr;
 	struct in_ifaddr *ifa;
-	struct ifreq ifr;
+	struct ifreq *ifr = (struct ifreq *) buf;
 	int done=0;
 
 	if (in_dev==NULL || (ifa=in_dev->ifa_list)==NULL)
 		return 0;
 
 	for ( ; ifa; ifa = ifa->ifa_next) {
-		if (!buf) {
+		if (!ifr) {
 			done += sizeof(ifr);
 			continue;
 		}
 		if (len < (int) sizeof(ifr))
 			return done;
-		memset(&ifr, 0, sizeof(struct ifreq));
+		memset(ifr, 0, sizeof(struct ifreq));
 		if (ifa->ifa_label)
-			strcpy(ifr.ifr_name, ifa->ifa_label);
+			strcpy(ifr->ifr_name, ifa->ifa_label);
 		else
-			strcpy(ifr.ifr_name, dev->name);
+			strcpy(ifr->ifr_name, dev->name);
 
-		(*(struct sockaddr_in *) &ifr.ifr_addr).sin_family = AF_INET;
-		(*(struct sockaddr_in *) &ifr.ifr_addr).sin_addr.s_addr = ifa->ifa_local;
+		(*(struct sockaddr_in *) &ifr->ifr_addr).sin_family = AF_INET;
+		(*(struct sockaddr_in *) &ifr->ifr_addr).sin_addr.s_addr = ifa->ifa_local;
 
-		if (copy_to_user(buf, &ifr, sizeof(struct ifreq)))
-			return -EFAULT;
-		buf += sizeof(struct ifreq);
+		ifr++;
 		len -= sizeof(struct ifreq);
 		done += sizeof(struct ifreq);
 	}

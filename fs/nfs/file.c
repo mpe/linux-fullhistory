@@ -27,6 +27,7 @@
 #include <linux/pagemap.h>
 #include <linux/lockd/bind.h>
 
+#include <asm/uaccess.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 
@@ -75,7 +76,7 @@ struct inode_operations nfs_file_inode_operations = {
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	nfs_updatepage,		/* updatepage */
+	NULL,			/* updatepage */
 	nfs_revalidate,		/* revalidate */
 };
 
@@ -156,6 +157,25 @@ nfs_fsync(struct file *file, struct dentry *dentry)
 	return status;
 }
 
+/*
+ * This does the "real" work of the write. The generic routine has
+ * allocated the page, locked it, done all the page alignment stuff
+ * calculations etc. Now we should just copy the data from user
+ * space and write it back to the real medium..
+ *
+ * If the writer ends up delaying the write, the writer needs to
+ * increment the page use counts until he is done with the page.
+ */
+static long nfs_write_one_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
+{
+	long status;
+
+	bytes -= copy_from_user((u8*)page_address(page) + offset, buf, bytes);
+	status = -EFAULT;
+	if (bytes)
+		status = nfs_updatepage(file, page, offset, bytes);
+	return status;
+}
 
 /* 
  * Write to a file (through the page cache).
@@ -182,7 +202,7 @@ nfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	if (!count)
 		goto out;
 
-	result = generic_file_write(file, buf, count, ppos);
+	result = generic_file_write(file, buf, count, ppos, nfs_write_one_page);
 out:
 	return result;
 

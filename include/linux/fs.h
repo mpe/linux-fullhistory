@@ -625,7 +625,7 @@ struct inode_operations {
 	void (*truncate) (struct inode *);
 	int (*permission) (struct inode *, int);
 	int (*smap) (struct inode *,int);
-	int (*updatepage) (struct file *, struct page *, unsigned long, unsigned int, int);
+	int (*updatepage) (struct file *, struct page *, unsigned long, unsigned int);
 	int (*revalidate) (struct dentry *);
 };
 
@@ -874,10 +874,12 @@ extern struct buffer_head * breada(kdev_t dev,int block, int size,
 
 extern int brw_page(int, struct page *, kdev_t, int [], int, int);
 
+typedef long (*writepage_t)(struct file *, struct page *, unsigned long, unsigned long, const char *);
+
 extern int generic_readpage(struct file *, struct page *);
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
-extern ssize_t generic_file_write(struct file *, const char*, size_t, loff_t*);
+extern ssize_t generic_file_write(struct file *, const char*, size_t, loff_t *, writepage_t);
 
 extern struct super_block *get_super(kdev_t dev);
 extern void put_super(kdev_t dev);

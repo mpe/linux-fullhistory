@@ -24,6 +24,7 @@
  */
 #define __NO_VERSION__
 #include <linux/config.h>
+#include <linux/string.h>
 #include "hisax.h"
 #include "isac.h"
 #include "hscx.h"

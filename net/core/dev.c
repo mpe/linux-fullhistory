@@ -453,11 +453,8 @@ void dev_clear_fastroute(struct device *dev)
 		dev_do_clear_fastroute(dev);
 	} else {
 		read_lock_bh(&dev_base_lock);
-		for (dev = dev_base; dev; dev = dev->next) {
-			read_unlock_bh(&dev_base_lock);
+		for (dev = dev_base; dev; dev = dev->next)
 			dev_do_clear_fastroute(dev);
-			read_lock_bh(&dev_base_lock);
-		}
 		read_unlock_bh(&dev_base_lock);
 	}
 }
@@ -1128,8 +1125,13 @@ static int dev_ifconf(char *arg)
 	if (copy_from_user(&ifc, arg, sizeof(struct ifconf)))
 		return -EFAULT;
 
-	pos = ifc.ifc_buf;
 	len = ifc.ifc_len;
+	if (ifc.ifc_buf) {
+		pos = (char *) kmalloc(len, GFP_KERNEL);
+		if(pos == NULL)
+			return -ENOBUFS;
+	} else
+		pos = NULL;
 
 	/*
 	 *	Loop over the interfaces, and write an info block for each. 
@@ -1138,7 +1140,6 @@ static int dev_ifconf(char *arg)
 	total = 0;
 	read_lock_bh(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
-		read_unlock_bh(&dev_base_lock);
 		for (i=0; i<NPROTO; i++) {
 			if (gifconf_list[i]) {
 				int done;
@@ -1147,15 +1148,19 @@ static int dev_ifconf(char *arg)
 				} else {
 					done = gifconf_list[i](dev, pos+total, len-total);
 				}
-				if (done<0) {
-					return -EFAULT;
-				}
 				total += done;
 			}
 		}
-		read_lock_bh(&dev_base_lock);
   	}
 	read_unlock_bh(&dev_base_lock);
+
+	if(pos != NULL) {
+		int err = copy_to_user(ifc.ifc_buf, pos, total);
+
+		kfree(pos);
+		if(err)
+			return -EFAULT;
+	}
 
 	/*
 	 *	All done.  Write the updated control block back to the caller. 
@@ -2016,7 +2021,6 @@ __initfunc(int net_dev_init(void))
 	 */
 
 	dp = &dev_base;
-	write_lock_bh(&dev_base_lock);
 	while ((dev = *dp) != NULL) {
 		dev->iflink = -1;
 		if (dev->init && dev->init(dev)) {
@@ -2026,15 +2030,12 @@ __initfunc(int net_dev_init(void))
 			*dp = dev->next;
 		} else {
 			dp = &dev->next;
-			write_unlock_bh(&dev_base_lock);
 			dev->ifindex = dev_new_index();
-			write_lock_bh(&dev_base_lock);
 			if (dev->iflink == -1)
 				dev->iflink = dev->ifindex;
 			dev_init_scheduler(dev);
 		}
 	}
-	write_unlock_bh(&dev_base_lock);
 
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_dev);

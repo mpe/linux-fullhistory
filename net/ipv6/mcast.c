@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/types.h>
+#include <linux/string.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/sched.h>

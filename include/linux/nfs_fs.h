@@ -228,7 +228,7 @@ extern int  nfs_wb_file(struct inode *, struct file *);
  * back first..
  */
 extern void nfs_inval(struct inode *);
-extern int  nfs_updatepage(struct file *, struct page *, unsigned long, unsigned int, int);
+extern int  nfs_updatepage(struct file *, struct page *, unsigned long, unsigned int);
 
 /*
  * linux/fs/nfs/read.c

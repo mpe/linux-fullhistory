@@ -2,7 +2,7 @@
  *	Intel MP v1.1/v1.4 specification support routines for multi-pentium
  *	hosts.
  *
- *	(c) 1995 Alan Cox, CymruNET Ltd  <alan@cymru.net>
+ *	(c) 1995 Alan Cox, Building #3 <alan@redhat.com>
  *	(c) 1998 Ingo Molnar
  *
  *	Supported by Caldera http://www.caldera.com.

@@ -66,16 +66,17 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	 * user environment and arguments are stored.
 	 */
 	remove_arg_zero(bprm);
-	bprm->p = copy_strings(1, &bprm->filename, bprm->page, bprm->p, 2);
+	retval = copy_strings_kernel(1, &bprm->filename, bprm);
+	if (retval < 0) return retval; 
 	bprm->argc++;
 	if (i_arg) {
-		bprm->p = copy_strings(1, &i_arg, bprm->page, bprm->p, 2);
+		retval = copy_strings_kernel(1, &i_arg, bprm);
+		if (retval < 0) return retval; 
 		bprm->argc++;
 	}
-	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
+	retval = copy_strings_kernel(1, &i_name, bprm);
+	if (retval) return retval; 
 	bprm->argc++;
-	if (!bprm->p) 
-		return -E2BIG;
 	/*
 	 * OK, now restart the process with the interpreter's dentry.
 	 */

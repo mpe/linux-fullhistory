@@ -12,10 +12,12 @@
  *
  *	Fixes:
  *	Vitaly E. Lavrov	releasing NULL neighbor in neigh_add.
+ *      Horst von Brand        Add #include <linux/string.h>
  */
 
 #include <linux/config.h>
 #include <linux/types.h>
+#include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/socket.h>
 #include <linux/sched.h>

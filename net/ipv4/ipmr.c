@@ -1,7 +1,7 @@
 /*
  *	IP multicast routing support for mrouted 3.6/3.8
  *
- *		(c) 1995 Alan Cox, <alan@cymru.net>
+ *		(c) 1995 Alan Cox, <alan@redhat.com>
  *	  Linux Consultancy and Custom Driver Development
  *
  *	This program is free software; you can redistribute it and/or

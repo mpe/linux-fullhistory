@@ -17,6 +17,8 @@
  *		Alan Cox	:	Chainsawed to Linux format
  *					Added llc_ to names
  *					Started restructuring handlers
+ *
+ *              Horst von Brand :      Add #include <linux/string.h>
  */
 
 #include <linux/module.h>
@@ -24,6 +26,7 @@
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 #include <linux/unistd.h>
+#include <linux/string.h>
 #include <linux/netdevice.h>
 #include <linux/init.h>
 #include <net/p8022.h>

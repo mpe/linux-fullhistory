@@ -14,6 +14,7 @@
 #include <linux/config.h>
 #include <linux/proc_fs.h>
 #include <linux/unistd.h>
+#include <linux/string.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>
 #include <linux/utsname.h>

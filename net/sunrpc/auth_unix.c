@@ -4,9 +4,12 @@
  * UNIX-style authentication; no AUTH_SHORT support
  *
  * Copyright (C) 1996, Olaf Kirch <okir@monad.swb.de>
+ *
+ * Modified May 1999 Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
  */
 
 #include <linux/types.h>
+#include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/socket.h>
 #include <linux/in.h>

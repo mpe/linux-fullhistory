@@ -8,6 +8,7 @@
  *  12-09-1997	RMK	Added interrupt enable/disable
  */
 
+#include <linux/string.h>
 #include <linux/module.h>
 #include <linux/ioport.h>
 #include <linux/malloc.h>

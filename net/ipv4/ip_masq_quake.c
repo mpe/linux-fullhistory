@@ -12,6 +12,7 @@
  *                                 http://www.gamers.org/dEngine/quake/spec/ 
  *      Harald Hoyer            :       Check for QUAKE-STRING
  *	Juan Jose Ciarlante	:  litl bits for 2.1
+ *      Horst von Brand         :  Add #include <linux/string.h>
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -24,6 +25,7 @@
 #include <linux/module.h>
 #include <asm/system.h>
 #include <linux/types.h>
+#include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/skbuff.h>
 #include <linux/in.h>
