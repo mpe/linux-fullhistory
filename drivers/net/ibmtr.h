@@ -8,6 +8,16 @@
 #define NOTOK 0
 #define TOKDEBUG 1
 
+/* Mike Eckhoff -- 96/02/08 */
+/* This defines the minimum timeout. If a transmission takes */
+/* longer then TX_TIMEOUT to send, we will wait and retry. */
+/* On large networks, this value may need to be increased. */
+/* We will start at .2s because that is what most drivers seem to be doing */
+/* now and the original value of .05s was not nearly enough for large nets. */
+
+#define TX_TIMEOUT (HZ/5)
+
+
 #ifndef IBMTR_SHARED_RAM_BASE
 #define IBMTR_SHARED_RAM_BASE 0xD0
 #define IBMTR_SHARED_RAM_SIZE 0x10

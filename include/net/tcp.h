@@ -19,6 +19,7 @@
 #define _TCP_H
 
 #include <linux/tcp.h>
+#include <net/checksum.h>
 
 #define MAX_SYN_SIZE	44 + MAX_HEADER + 15
 #define MAX_FIN_SIZE	40 + MAX_HEADER + 15
@@ -104,6 +105,160 @@ extern __inline int between(__u32 seq1, __u32 seq2, __u32 seq3)
 	return (after(seq1+1, seq2) && before(seq1, seq3+1));
 }
 
+static __inline__ int min(unsigned int a, unsigned int b)
+{
+	if (a < b) 
+		return(a);
+	return(b);
+}
+
+extern struct proto tcp_prot;
+extern struct tcp_mib tcp_statistics;
+extern struct wait_queue *master_select_wakeup;
+
+extern void	tcp_err(int type, int code, unsigned char *header, __u32 daddr,
+			__u32, struct inet_protocol *protocol);
+extern void	tcp_shutdown (struct sock *sk, int how);
+extern int	tcp_rcv(struct sk_buff *skb, struct device *dev,
+			struct options *opt, __u32 daddr,
+			unsigned short len, __u32 saddr, int redo,
+			struct inet_protocol *protocol);
+
+extern int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg);
+
+extern void tcp_read_wakeup(struct sock *);
+extern void tcp_write_xmit(struct sock *);
+extern void tcp_time_wait(struct sock *);
+extern void tcp_retransmit(struct sock *, int);
+extern void tcp_do_retransmit(struct sock *, int);
+extern void tcp_send_check(struct tcphdr *th, unsigned long saddr, 
+		unsigned long daddr, int len, struct sock *sk);
+
+/* tcp_output.c */
+
+extern void tcp_send_probe0(struct sock *);
+extern void tcp_send_partial(struct sock *);
+extern void tcp_write_wakeup(struct sock *);
+extern void tcp_send_fin(struct sock *sk);
+extern void tcp_send_synack(struct sock *, struct sock *, struct sk_buff *);
+extern void tcp_send_skb(struct sock *, struct sk_buff *);
+extern void tcp_send_ack(u32, u32, struct sock *sk, struct tcphdr *th, u32);
+extern void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
+	  struct proto *prot, struct options *opt, struct device *dev, int tos, int ttl);
+
+extern void tcp_enqueue_partial(struct sk_buff *, struct sock *);
+extern struct sk_buff * tcp_dequeue_partial(struct sock *);
+
+/* tcp_input.c */
+extern void tcp_cache_zap(void);
+
+/* tcp_timer.c */
+#define     tcp_reset_msl_timer(x,y,z)	reset_timer(x,y,z)
+extern void tcp_reset_xmit_timer(struct sock *, int, unsigned long);
+extern void tcp_retransmit_timer(unsigned long);
+
+/*
+ *	Default sequence number picking algorithm.
+ *	As close as possible to RFC 793, which
+ *	suggests using a 250kHz clock.
+ *	Further reading shows this assumes 2MB/s networks.
+ *	For 10MB/s ethernet, a 1MHz clock is appropriate.
+ *	That's funny, Linux has one built in!  Use it!
+ */
+
+static inline u32 tcp_init_seq(void)
+{
+	struct timeval tv;
+	do_gettimeofday(&tv);
+	return tv.tv_usec+tv.tv_sec*1000000;
+}
+
+/*
+ *      This function returns the amount that we can raise the
+ *      usable window based on the following constraints
+ *  
+ *	1. The window can never be shrunk once it is offered (RFC 793)
+ *	2. We limit memory per socket
+ */
+
+static __inline__ unsigned short tcp_raise_window(struct sock *sk)
+{
+	long free_space = sock_rspace(sk);
+	long window;
+
+	if (free_space > 1024)
+		free_space &= ~0x3FF; /* make free space a multiple of 1024 */
+
+	if(sk->window_clamp)
+		free_space = min(sk->window_clamp, free_space);
+ 
+	/* 
+         * compute the actual window i.e. 
+         * old_window - received_bytes_on_that_win 
+	 */
+
+	window = sk->window - (sk->acked_seq - sk->lastwin_seq);
+
+	if (sk->mss == 0)
+		sk->mss = sk->mtu;
+ 
+	if ( window < 0 ) {	
+		window = 0;
+		printk(KERN_DEBUG "TRW: win < 0 w=%d 1=%u 2=%u\n", 
+		       sk->window, sk->acked_seq, sk->lastwin_seq);
+	}
+	
+	if ( (free_space - window) >= min(sk->mss, MAX_WINDOW/2) )
+		return ((free_space - window) / sk->mss) * sk->mss;
+
+	return 0;
+}
+
+static __inline__ unsigned short tcp_select_window(struct sock *sk)
+{
+	long free_space = sock_rspace(sk);
+	long window;
+
+	if (free_space > 1024)
+		free_space &= ~0x3FF;	/* make free space a multiple of 1024 */
+
+	if (sk->window_clamp)
+		free_space = min(sk->window_clamp, free_space);
+	
+	/*
+	 * compute the actual window i.e.
+	 * old_window - received_bytes_on_that_win
+	 */
+
+	if (sk->mss == 0)
+		sk->mss = sk->mtu;
+
+	window = sk->window - (sk->acked_seq - sk->lastwin_seq);
+
+	if ( window < 0 ) {
+		window = 0;
+		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
+			sk->window, sk->acked_seq, sk->lastwin_seq);
+	}
+
+	/*
+	 * RFC 1122:
+	 * "the suggested [SWS] avoidance algoritm for the receiver is to keep
+	 *  RECV.NEXT + RCV.WIN fixed until:
+	 *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
+	 *
+	 * i.e. don't raise the right edge of the window until you can't raise
+	 * it MSS bytes
+	 */
+
+	if ( (free_space - window) >= min(sk->mss, MAX_WINDOW/2) )
+		window += ((free_space - window) / sk->mss) * sk->mss;
+
+	sk->window = window;
+	sk->lastwin_seq = sk->acked_seq;
+
+	return sk->window;
+}
 
 /*
  * List all states of a TCP socket that can be viewed as a "connected"
@@ -119,25 +274,45 @@ extern __inline const int tcp_connected(const int state)
 	 state == TCP_SYN_RECV);
 }
 
+/*
+ * Calculate(/check) TCP checksum
+ */
+static __inline__ u16 tcp_check(struct tcphdr *th, int len,
+	unsigned long saddr, unsigned long daddr, unsigned long base)
+{
+	return csum_tcpudp_magic(saddr,daddr,len,IPPROTO_TCP,base);
+}
 
-extern struct proto tcp_prot;
+#undef STATE_TRACE
 
+#ifdef STATE_TRACE
+static char *statename[]={
+	"Unused","Established","Syn Sent","Syn Recv",
+	"Fin Wait 1","Fin Wait 2","Time Wait", "Close",
+	"Close Wait","Last ACK","Listen","Closing"
+};
+#endif
 
-extern void	tcp_err(int type, int code, unsigned char *header, __u32 daddr,
-			__u32, struct inet_protocol *protocol);
-extern void	tcp_shutdown (struct sock *sk, int how);
-extern int	tcp_rcv(struct sk_buff *skb, struct device *dev,
-			struct options *opt, __u32 daddr,
-			unsigned short len, __u32 saddr, int redo,
-			struct inet_protocol *protocol);
-
-extern int	tcp_ioctl(struct sock *sk, int cmd, unsigned long arg);
-
-extern void tcp_send_check(struct tcphdr *th, unsigned long saddr, 
-		unsigned long daddr, int len, struct sock *sk);
-extern void tcp_send_probe0(struct sock *sk);
-extern void tcp_enqueue_partial(struct sk_buff *, struct sock *);
-extern struct sk_buff * tcp_dequeue_partial(struct sock *);
-extern void tcp_cache_zap(void);
+static __inline__ void tcp_set_state(struct sock *sk, int state)
+{
+	if(sk->state==TCP_ESTABLISHED)
+		tcp_statistics.TcpCurrEstab--;
+#ifdef STATE_TRACE
+	if(sk->debug)
+		printk("TCP sk=%p, State %s -> %s\n",sk, statename[sk->state],statename[state]);
+#endif	
+	/* This is a hack but it doesn't occur often and it's going to
+	   be a real        to fix nicely */
+	   
+	if(state==TCP_ESTABLISHED && sk->state==TCP_SYN_RECV)
+	{
+		wake_up_interruptible(&master_select_wakeup);
+	}
+	sk->state=state;
+	if(state==TCP_ESTABLISHED)
+		tcp_statistics.TcpCurrEstab++;
+	if(sk->state==TCP_CLOSE)
+		tcp_cache_zap();
+}
 
 #endif	/* _TCP_H */

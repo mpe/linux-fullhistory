@@ -290,13 +290,6 @@ void destroy_sock(struct sock *sk)
 
   	sk->inuse = 1;			/* just to be safe. */
 
-  	/* 
-  	 *	In case it's sleeping somewhere. 
-  	 */
-  	 
-  	if (!sk->dead) 
-  		sk->write_space(sk);
-
   	remove_sock(sk);
   
   	/*
@@ -326,6 +319,13 @@ void destroy_sock(struct sock *sk)
 		kfree_skb(skb, FREE_WRITE);
   	}
   	
+  	/* 
+  	 *	In case it's sleeping somewhere. 
+  	 */
+  	 
+  	if (!sk->dead) 
+  		sk->write_space(sk);
+
   	/*
   	 *	Don't discard received data until the user side kills its
   	 *	half of the socket.
@@ -383,6 +383,7 @@ void destroy_sock(struct sock *sk)
   	while((skb=skb_dequeue(&sk->back_log))!=NULL) 
   	{
 		/* this should [almost] never happen. */
+		skb->sk = NULL;
 		kfree_skb(skb, FREE_READ);
 	}
 
@@ -562,7 +563,7 @@ static void def_callback2(struct sock *sk,int len)
 
 static void def_callback3(struct sock *sk)
 {
-	if(!sk->dead)
+	if(!sk->dead && sk->wmem_alloc*2 <= sk->sndbuf)
 	{
 		wake_up_interruptible(sk->sleep);
 		sock_wake_async(sk->socket, 2);

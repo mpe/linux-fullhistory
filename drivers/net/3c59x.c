@@ -413,6 +413,16 @@ static int vortex_found_device(struct device *dev, int ioaddr, int irq,
 	vp  = (struct vortex_private *)dev->priv;
 	vp->product_name = product_names[product_index];
 	vp->options = options;
+	if (options >= 0) {
+		vp->media_override = options & 7;
+		vp->full_duplex = (options & 8) ? 1 : 0;
+		vp->bus_master = (options & 16) ? 1 : 0;
+	} else {
+		vp->media_override = 7;
+		vp->full_duplex = 0;
+		vp->bus_master = 0;
+	}
+
 	vortex_probe1(dev);
 #endif /* MODULE */
 	return 0;

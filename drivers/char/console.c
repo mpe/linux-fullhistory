@@ -73,6 +73,12 @@
 #define CTRL_ALWAYS 0x0800f501	/* Cannot be overridden by disp_ctrl */
 
 /*
+ * Here is the default bell parameters: 750HZ, 1/8th of a second
+ */
+#define DEFAULT_BELL_PITCH	750
+#define DEFAULT_BELL_DURATION	(HZ/8)
+
+/*
  *  NOTE!!! We sometimes disable and enable interrupts for a short while
  * (to put a word in video IO), but this will work even for keyboard
  * interrupts. We know interrupts aren't enabled when getting a keyboard
@@ -1136,17 +1142,16 @@ static void setterm_command(int currcons)
 			break;
 		case 10: /* set bell frequency in Hz */
 			if (npar >= 1)
-				bell_pitch = (par[1] < 20 || par[1] > 32767) ?
-					0 : 1193180 / par[1];
+				bell_pitch = par[1];
 			else
-				bell_pitch = 0x637;
+				bell_pitch = DEFAULT_BELL_PITCH;
 			break;
 		case 11: /* set bell duration in msec */
 			if (npar >= 1)
 				bell_duration = (par[1] < 2000) ?
 					par[1]*HZ/1000 : 0;
 			else
-				bell_duration = HZ/8;
+				bell_duration = DEFAULT_BELL_DURATION;
 			break;
 		case 12: /* bring specified console to the front */
 			if (par[1] >= 1 && vc_cons_allocated(par[1]-1))
@@ -1318,8 +1323,8 @@ static void reset_terminal(int currcons, int do_clear)
 	tab_stop[3]	=
 	tab_stop[4]	= 0x01010101;
 
-	bell_pitch = 0x637;
-	bell_duration = HZ/8;
+	bell_pitch = DEFAULT_BELL_PITCH;
+	bell_duration = DEFAULT_BELL_DURATION;
 
 	gotoxy(currcons,0,0);
 	save_cur(currcons);
@@ -1475,7 +1480,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 		 */
 		switch (c) {
 			case 7:
-				if (bell_pitch && bell_duration)
+				if (bell_duration)
 					kd_mksound(bell_pitch, bell_duration);
 				continue;
 			case 8:

@@ -17,6 +17,7 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/ioctl.h>
+#include <linux/dirent.h>
 
 #include <asm/segment.h>
 
@@ -44,30 +45,12 @@ struct file_operations fat_dir_operations = {
 	file_fsync		/* fsync */
 };
 
-
-int fat_dir_ioctl(struct inode * inode, struct file * filp,
-		  unsigned int cmd, unsigned long arg)
-{
-	switch (cmd) {
-#if 0
-	/*
-	 * We want to provide an interface for Samba to be able
-	 * to get the short filename for a given long filename.
-	 * We should be able to accomplish by modifying fat_readdir
-	 * slightly.
-	 */
-	case VFAT_LONGNAME_TO_SHORT:
-#endif
-	default:
-		return -EINVAL;
-	}
-}
-
-int fat_readdir(
+int fat_readdirx(
 	struct inode *inode,
 	struct file *filp,
 	void *dirent,
-	filldir_t filldir)
+	filldir_t filldir,
+	int both)
 {
 	struct super_block *sb = inode->i_sb;
 	int ino,i,i2,last;
@@ -76,7 +59,7 @@ int fat_readdir(
 	struct msdos_dir_entry *de;
 	unsigned long oldpos = filp->f_pos;
 	int is_long;
-	char longname[256];
+	char longname[275];
 	unsigned char long_len = 0; /* Make compiler warning go away */
 	unsigned char alias_checksum = 0; /* Make compiler warning go away */
 
@@ -209,7 +192,7 @@ int fat_readdir(
 			}
 			PRINTK(("Long filename: %s, get_new_entry: %d\n", longname, get_new_entry));
 		} else if (!IS_FREE(de->name) && !(de->attr & ATTR_VOLUME)) {
-			char bufname[13];
+			char bufname[14];
 			char *ptname = bufname;
 			int dotoffset = 0;
 
@@ -258,11 +241,20 @@ int fat_readdir(
 					ino = fat_parent_ino(inode,0);
 
 				if (!is_long) {
+					dcache_add(inode, bufname, i+dotoffset, ino);
+					if (both) {
+						bufname[i+dotoffset] = '\0';
+					}
 					if (filldir(dirent, bufname, i+dotoffset, oldpos, ino) < 0) {
 						filp->f_pos = oldpos;
 						break;
 					}
 				} else {
+					dcache_add(inode, longname, long_len, ino);
+					if (both) {
+						memcpy(&longname[long_len+1], bufname, i+dotoffset);
+						long_len += i+dotoffset;
+					}
 					if (filldir(dirent, longname, long_len, oldpos, ino) < 0) {
 						filp->f_pos = oldpos;
 						break;
@@ -278,5 +270,82 @@ int fat_readdir(
 		ino = fat_get_entry(inode,&filp->f_pos,&bh,&de);	
 	}
 	if (bh) brelse(bh);
+	return 0;
+}
+
+int fat_readdir(
+	struct inode *inode,
+	struct file *filp,
+	void *dirent,
+	filldir_t filldir)
+{
+    return fat_readdirx(inode, filp, dirent, filldir, 0);
+}
+static int vfat_ioctl_fill(
+	void * buf,
+	const char * name,
+	int name_len,
+	off_t offset,
+	ino_t ino)
+{
+	struct dirent *d1 = (struct dirent *)buf;
+	struct dirent *d2 = d1 + 1;
+	int len, slen;
+	int dotdir;
+
+	if (get_user(&d1->d_reclen) != 0) {
+		return -1;
+	}
+
+	if ((name_len == 1 && name[0] == '.') ||
+	    (name_len == 2 && name[0] == '.' && name[1] == '.')) {
+		dotdir = 1;
+		len = name_len;
+	} else {
+		dotdir = 0;
+		len = strlen(name);
+	}
+	if (len != name_len) {
+		memcpy_tofs(d2->d_name, name, len);
+		put_user(0, d2->d_name + len);
+		put_user(len, &d2->d_reclen);
+		put_user(ino, &d2->d_ino);
+		put_user(offset, &d2->d_off);
+		slen = name_len - len;
+		memcpy_tofs(d1->d_name, name+len+1, slen);
+		put_user(0, d1->d_name+slen);
+		put_user(slen, &d1->d_reclen);
+	} else {
+		put_user(0, d2->d_name);
+		put_user(0, &d2->d_reclen);
+		memcpy_tofs(d1->d_name, name, len);
+		put_user(0, d1->d_name+len);
+		put_user(len, &d1->d_reclen);
+	}
+	PRINTK(("FAT d1=%p d2=%p len=%d, name_len=%d\n",
+		d1, d2, len, name_len));
+
+	return 0;
+}
+
+int fat_dir_ioctl(struct inode * inode, struct file * filp,
+		  unsigned int cmd, unsigned long arg)
+{
+	/*
+	 * We want to provide an interface for Samba to be able
+	 * to get the short filename for a given long filename.
+	 * Samba should use this ioctl instead of readdir() to
+	 * get the information it needs.
+	 */
+	switch (cmd) {
+	case VFAT_IOCTL_READDIR_BOTH: {
+		struct dirent *d1 = (struct dirent *)arg;
+		put_user(0, &d1->d_reclen);
+		return fat_readdirx(inode,filp,(void *)arg,vfat_ioctl_fill,1);
+	}
+	default:
+		return -EINVAL;
+	}
+
 	return 0;
 }

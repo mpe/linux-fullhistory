@@ -72,7 +72,7 @@ int need_resched = 0;
 unsigned long event = 0;
 
 extern int _setitimer(int, struct itimerval *, struct itimerval *);
-unsigned long * prof_buffer = NULL;
+unsigned int * prof_buffer = NULL;
 unsigned long prof_len = 0;
 unsigned long prof_shift = 0;
 
@@ -1115,8 +1115,8 @@ asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 	if (error)
 		return error;
 	
-	t.tv_sec = 0;
-	t.tv_nsec = 0;   /* <-- Linus, please fill correct value in here */
+	t.ts_sec = 0;
+	t.ts_nsec = 0;   /* <-- Linus, please fill correct value in here */
 	return -ENOSYS;  /* and then delete this line. Thanks!           */
 	memcpy_tofs(interval, &t, sizeof(struct timespec));
 

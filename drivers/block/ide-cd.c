@@ -79,13 +79,18 @@
  *                       Try to eliminate byteorder assumptions.
  *                       Use atapi_cdrom_subchnl struct definition.
  *                       Add STANDARD_ATAPI compilation option.
+ * 3.07  Jan 29, 1996 -- More twiddling for broken drives: Sony 55D,
+ *                        Vertos 300.
+ *                       Add NO_DOOR_LOCKING configuration option.
+ *                       Handle drive_cmd requests w/NULL args (for hdparm -t).
+ *                       Work around sporadic Sony55e audio play problem.
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
  *
  * ATAPI cd-rom driver.  To be used with ide.c.
  *
- * Copyright (C) 1994, 1995  scott snyder  <snyder@fnald0.fnal.gov>
+ * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
  * May be copied or modified under the terms of the GNU General Public License
  * (../../COPYING).
  */
@@ -127,6 +132,14 @@
 
 #ifndef STANDARD_ATAPI
 #define STANDARD_ATAPI 0
+#endif
+
+
+/* Turning this on will disable the door-locking functionality.
+   This is apparently needed for supermount. */
+
+#ifndef NO_DOOR_LOCKING
+#define NO_DOOR_LOCKING 0
 #endif
 
 
@@ -1422,6 +1435,43 @@ int cdrom_queue_packet_command (ide_drive_t *drive, struct packet_command *pc)
 
 
 /****************************************************************************
+ * drive_cmd handling.
+ *
+ * Most of the functions accessed via drive_cmd are not valid for ATAPI
+ * devices.  Only attempt to execute those which actually should be valid.
+ */
+
+static
+void cdrom_do_drive_cmd (ide_drive_t *drive)
+{
+  struct request *rq = HWGROUP(drive)->rq;
+  byte *args = rq->buffer;
+
+  if (args)
+    {
+#if 0  /* This bit isn't done yet... */
+      if (args[0] == WIN_SETFEATURES &&
+	  (args[2] == 0x66 || args[2] == 0xcc || args[2] == 0x02 ||
+	   args[2] == 0xdd || args[2] == 0x5d))
+	{
+	  OUT_BYTE (args[2], io_base + IDE_FEATURE_OFFSET);
+	  <send cmd>
+	}
+      else
+#endif
+	{
+	  printk ("%s: Unsupported drive command %02x %02x %02x\n",
+		  drive->name, args[0], args[1], args[2]);
+	  rq->errors = 1;
+	}
+    }
+
+  cdrom_end_request (1, drive);
+}
+
+
+
+/****************************************************************************
  * cdrom driver request routine.
  */
 
@@ -1438,6 +1488,9 @@ void ide_do_rw_cdrom (ide_drive_t *drive, unsigned long block)
       ide_do_reset (drive);
       return;
     }
+
+  else if (rq -> cmd == IDE_DRIVE_CMD)
+    cdrom_do_drive_cmd (drive);
 
   else if (rq -> cmd != READ)
     {
@@ -1890,11 +1943,9 @@ cdrom_play_lba_range_msf (ide_drive_t *drive, int lba_start, int lba_end,
 #endif  /* not STANDARD_ATAPI */
 
 
-/* Play audio starting at LBA LBA_START and finishing with the
-   LBA before LBA_END. */
 static int
-cdrom_play_lba_range (ide_drive_t *drive, int lba_start, int lba_end,
-		      struct atapi_request_sense *reqbuf)
+cdrom_play_lba_range_1 (ide_drive_t *drive, int lba_start, int lba_end,
+			struct atapi_request_sense *reqbuf)
 {
   /* This is rather annoying.
      My NEC-260 won't recognize group 5 commands such as PLAYAUDIO12;
@@ -1939,6 +1990,38 @@ cdrom_play_lba_range (ide_drive_t *drive, int lba_start, int lba_end,
       /* Failed for some other reason.  Give up. */
       return stat;
     }
+}
+
+
+/* Play audio starting at LBA LBA_START and finishing with the
+   LBA before LBA_END. */
+static int
+cdrom_play_lba_range (ide_drive_t *drive, int lba_start, int lba_end,
+		      struct atapi_request_sense *reqbuf)
+{
+  int i, stat;
+  struct atapi_request_sense my_reqbuf;
+
+  if (reqbuf == NULL)
+    reqbuf = &my_reqbuf;
+
+  /* Some drives, will, for certain audio cds,
+     give an error if you ask them to play the entire cd using the
+     values which are returned in the TOC.  The play will succeed, however,
+     if the ending address is adjusted downwards by a few frames. */
+  for (i=0; i<75; i++)
+    {
+      stat = cdrom_play_lba_range_1 (drive, lba_start, lba_end, reqbuf);
+
+      if (stat == 0 ||
+          !(reqbuf->sense_key == ILLEGAL_REQUEST && reqbuf->asc == 0x24))
+	return stat;
+
+      --lba_end;
+      if (lba_end <= lba_start) break;
+    }
+
+  return stat;
 }
 
 
@@ -2575,7 +2658,12 @@ void ide_cdrom_setup (ide_drive_t *drive)
   /* Turn this off by default, since many people don't like it. */
   CDROM_STATE_FLAGS (drive)->eject_on_close= 0;
 
+#if NO_DOOR_LOCKING
+  CDROM_CONFIG_FLAGS (drive)->no_doorlock = 1;
+#else
   CDROM_CONFIG_FLAGS (drive)->no_doorlock = 0;
+#endif
+
   CDROM_CONFIG_FLAGS (drive)->drq_interrupt =
     ((drive->id->config & 0x0060) == 0x20);
 
@@ -2608,17 +2696,30 @@ void ide_cdrom_setup (ide_drive_t *drive)
       CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 1;
     }
 
-  else if (strcmp (drive->id->model, "V003S0DS") == 0 ||  /* Vertos */
-	   strcmp (drive->id->model, "0V300SSD") == 0)
+  /* Vertos 300.
+     There seem to be at least two different, incompatible versions
+     of this drive floating around.  Luckily, they appear to return their
+     id strings with different byte orderings. */
+  else if (strcmp (drive->id->model, "V003S0DS") == 0)
     {
       CDROM_CONFIG_FLAGS (drive)->vertos_lossage = 1;
       CDROM_CONFIG_FLAGS (drive)->playmsf_uses_bcd = 1;
       CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
     }
+  else if (strcmp (drive->id->model, "0V300SSD") == 0 ||
+	   strcmp (drive->id->model, "V003M0DP") == 0)
+    CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
 
+  /* Vertos 400. */
   else if (strcmp (drive->id->model, "V004E0DT") == 0 ||
 	   strcmp (drive->id->model, "0V400ETD") == 0)
     CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
+
+  else if ( strcmp (drive->id->model, "CD-ROM CDU55D") == 0) /*sony cdu55d */
+    CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 1;
+
+ else if (strcmp (drive->id->model, "CD-ROM CDU55E") == 0)
+	CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 1;
 #endif  /* not STANDARD_ATAPI */
 
   drive->cdrom_info.toc               = NULL;

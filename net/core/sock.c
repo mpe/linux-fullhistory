@@ -169,19 +169,19 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 			sk->broadcast=valbool;
 			return 0;
 		case SO_SNDBUF:
-			if(val>32767)
-				val=32767;
-			if(val<256)
-				val=256;
-			sk->sndbuf=val;
+			if(val > SK_WMEM_MAX*2)
+				val = SK_WMEM_MAX*2;
+			if(val < 256)
+				val = 256;
+			sk->sndbuf = val;
 			return 0;
 
 		case SO_RCVBUF:
-			if(val>32767)
-				val=32767;
-			if(val<256)
-				val=256;
-			sk->rcvbuf=val;
+			if(val > SK_RMEM_MAX*2)
+			 	val = SK_RMEM_MAX*2;
+			if(val < 256)
+				val = 256;
+			sk->rcvbuf = val;
 			return(0);
 
 		case SO_KEEPALIVE:

@@ -34,7 +34,6 @@ struct msdos_inode_info {
 	struct inode *i_old;	/* pointer to the old inode this inode
 				   depends on */
 	int i_binary;	/* file contains non-text data */
-	int sys_immutable;	/* file is an immutable system file */
 };
 
 #endif

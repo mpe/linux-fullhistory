@@ -23,7 +23,6 @@
 #ifndef _PROTOCOL_H
 #define _PROTOCOL_H
 
-
 #define MAX_INET_PROTOS	32		/* Must be a power of 2		*/
 
 

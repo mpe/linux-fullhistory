@@ -456,7 +456,7 @@ static void parse_options(char *line)
 		if (!strncmp(line, "nfsaddrs=", 9)) {
 			line += 9;
 			strncpy(nfs_root_addrs, line, sizeof(nfs_root_addrs));
-			nfs_root_addrs[sizeof(nfs_root_addrs)] = '\0';
+			nfs_root_addrs[sizeof(nfs_root_addrs)-1] = '\0';
 			continue;
 		}
 #endif
@@ -620,11 +620,11 @@ asmlinkage void start_kernel(void)
 #endif
 #endif
 	if (prof_shift) {
-		prof_buffer = (unsigned long *) memory_start;
+		prof_buffer = (unsigned int *) memory_start;
 		/* only text is profiled */
 		prof_len = (unsigned long) &_etext - (unsigned long) &_stext;
 		prof_len >>= prof_shift;
-		memory_start += prof_len * sizeof(unsigned long);
+		memory_start += prof_len * sizeof(unsigned int);
 	}
 	memory_start = console_init(memory_start,memory_end);
 #ifdef CONFIG_PCI

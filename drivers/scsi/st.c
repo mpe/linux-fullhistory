@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994, 1995 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Thu Dec 14 21:51:16 1995 by root@kai.makisara.fi
+  Last modified: Mon Jan 29 21:18:12 1996 by root@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
 
@@ -438,6 +438,11 @@ flush_buffer(struct inode * inode, struct file * filp, int seek_next)
     if (!result && backspace > 0)
       result = st_int_ioctl(inode, filp, MTBSR, backspace);
   }
+  else if ((STp->eof == ST_FM) && !STp->eof_hit) {
+    (STp->mt_status)->mt_fileno++;
+    STp->drv_block = 0;
+  }
+
   return result;
 
 }
@@ -1847,6 +1852,10 @@ st_ioctl(struct inode * inode,struct file * file,
        return (-EINVAL);
      i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct mtget));
      if (i)
+       return i;
+
+     i = flush_buffer(inode, file, FALSE);
+     if (i < 0)
        return i;
 
      (STp->mt_status)->mt_dsreg =

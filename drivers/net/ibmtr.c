@@ -1242,7 +1242,7 @@ DPRINTK("tada: sending packet...\n");
 
 	if (dev->tbusy) {
 		int ticks_waited=jiffies - dev->trans_start;
-		if(ticks_waited<5)
+		if(ticks_waited<TX_TIMEOUT)
 			return 1;
 		DPRINTK("Arrg. Transmitter busy for more than 50 msec. Donald resets adapter, but resetting\n \
 the IBM tokenring adapter takes a long time. It might not even help when the\n \

@@ -8,10 +8,11 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := ipv4.o
-IPV4_OBJS	:= utils.o route.o proc.o timer.o protocol.o packet.o \
-		   arp.o ip_input.o ip_fragment.o ip_forward.o ip_options.o \
-		   ip_output.o ip_sockglue.o raw.o icmp.o tcp.o udp.o \
-		   devinet.o af_inet.o igmp.o ip_fw.o
+IPV4_OBJS := utils.o route.o proc.o timer.o protocol.o packet.o \
+	     ip_input.o ip_fragment.o ip_forward.o ip_options.o \
+	     ip_output.o ip_sockglue.o \
+	     tcp.o tcp_input.o tcp_output.o tcp_timer.o \
+	     raw.o udp.o arp.o icmp.o devinet.o af_inet.o igmp.o ip_fw.o
 
 MOD_LIST_NAME := IPV4_MODULES
 M_OBJS :=

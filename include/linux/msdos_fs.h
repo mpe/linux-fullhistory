@@ -37,6 +37,12 @@
 #define ATTR_EXT     (ATTR_RO | ATTR_HIDDEN | ATTR_SYS | ATTR_VOLUME)
 	/* bits that are used by the Windows 95/Windows NT extended FAT */
 
+#define ATTR_DIR_READ_BOTH 512 /* read both short and long names from the
+				* vfat filesystem.  This is used by Samba
+				* to export the vfat filesystem with correct
+				* shortnames. */
+#define ATTR_DIR_READ_SHORT 1024
+
 #define CASE_LOWER_BASE 8	/* base is lower case */
 #define CASE_LOWER_EXT  16	/* extension is lower case */
 
@@ -62,6 +68,17 @@
 #define MSDOS_DOTDOT "..         " /* "..", padded to MSDOS_NAME chars */
 
 #define MSDOS_FAT12 4078 /* maximum number of clusters in a 12 bit FAT */
+
+/*
+ * Inode flags
+ */
+#define FAT_BINARY_FL		0x00000001 /* File contains binary data */
+
+/*
+ * ioctl commands
+ */
+#define	VFAT_IOCTL_READDIR_BOTH		_IOR('r', 1, long)
+#define	VFAT_IOCTL_READDIR_SHORT	_IOW('r', 2, long)
 
 /*
  * Conversion from and to little-endian byte order. (no-op on i386/i486)
@@ -128,14 +145,6 @@ struct slot_info {
 	int ino;		       /* ino for the file */
 };
 
-struct fat_cache {
-	kdev_t device; /* device number. 0 means unused. */
-	int ino; /* inode number. */
-	int file_cluster; /* cluster number in the file. */
-	int disk_cluster; /* cluster number on disk. */
-	struct fat_cache *next; /* next cache entry */
-};
-
 /* Determine whether this FS has kB-aligned data. */
 #define MSDOS_CAN_BMAP(mib) (!(((mib)->cluster_size & 1) || \
     ((mib)->data_start & 1)))
@@ -148,6 +157,14 @@ struct fat_cache {
 
 
 #ifdef __KERNEL__
+
+struct fat_cache {
+	kdev_t device; /* device number. 0 means unused. */
+	int ino; /* inode number. */
+	int file_cluster; /* cluster number in the file. */
+	int disk_cluster; /* cluster number on disk. */
+	struct fat_cache *next; /* next cache entry */
+};
 
 /* misc.c */
 extern int is_binary(char conversion,char *extension);

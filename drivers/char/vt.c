@@ -155,10 +155,16 @@ kd_nosound(unsigned long ignored)
 }
 
 void
-kd_mksound(unsigned int count, unsigned int ticks)
+_kd_mksound(unsigned int hz, unsigned int ticks)
 {
-	static struct timer_list sound_timer = { NULL, NULL, 0, 0, kd_nosound };
+	static struct timer_list sound_timer = { NULL, NULL, 0, 0,
+						 kd_nosound };
 
+	unsigned int count = 0;
+
+	if (hz > 20 && hz < 32767)
+		count = 1193180 / hz;
+	
 	cli();
 	del_timer(&sound_timer);
 	if (count) {
@@ -180,6 +186,8 @@ kd_mksound(unsigned int count, unsigned int ticks)
 	return;
 }
 
+void (*kd_mksound)(unsigned int hz, unsigned int ticks) = _kd_mksound;
+	
 /*
  * We handle the console-specific ioctl's here.  We allow the
  * capability to modify any console, not just the fg_console. 
@@ -211,22 +219,22 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	case KIOCSOUND:
 		if (!perm)
 			return -EPERM;
-		kd_mksound((unsigned int)arg, 0);
+		kd_mksound(1193180 / (unsigned int) arg, 0);
 		return 0;
 
 	case KDMKTONE:
 		if (!perm)
 			return -EPERM;
 	{
-		unsigned int ticks = HZ * ((arg >> 16) & 0xffff) / 1000;
-
+		unsigned int ticks, count;
+		
 		/*
 		 * Generate the tone for the appropriate number of ticks.
 		 * If the time is zero, turn off sound ourselves.
 		 */
-		kd_mksound(arg & 0xffff, ticks);
-		if (ticks == 0)
-			kd_nosound(0);
+		ticks = HZ * ((arg >> 16) & 0xffff) / 1000;
+		count = ticks ? (1193180 / (arg & 0xffff)) : 0;
+		kd_mksound(count, ticks);
 		return 0;
 	}
 

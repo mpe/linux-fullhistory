@@ -705,7 +705,10 @@ static void do_apm_timer(unsigned long unused)
 		if (err)
 			apm_error("busy", err);
 	}
-	check_events();
+
+	if (!(((standbys_pending > 0) || (suspends_pending > 0))
+	      && (apm_bios_info.version == 0x100)))
+		check_events();
 
 	init_timer(&apm_timer);
 	apm_timer.expires = APM_CHECK_TIMEOUT + jiffies;

@@ -1,0 +1,1099 @@
+/*
+ * INET		An implementation of the TCP/IP protocol suite for the LINUX
+ *		operating system.  INET is implemented using the  BSD Socket
+ *		interface as the means of communication with the user level.
+ *
+ *		Implementation of the Transmission Control Protocol(TCP).
+ *
+ * Version:	@(#)tcp_input.c	1.0.16	05/25/93
+ *
+ * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
+ *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
+ *		Mark Evans, <evansmp@uhura.aston.ac.uk>
+ *		Corey Minyard <wf-rch!minyard@relay.EU.net>
+ *		Florian La Roche, <flla@stud.uni-sb.de>
+ *		Charles Hedrick, <hedrick@klinzhai.rutgers.edu>
+ *		Linus Torvalds, <torvalds@cs.helsinki.fi>
+ *		Alan Cox, <gw4pts@gw4pts.ampr.org>
+ *		Matthew Dillon, <dillon@apollo.west.oic.com>
+ *		Arnt Gulbrandsen, <agulbra@nvg.unit.no>
+ *		Jorge Cwik, <jorge@laser.satlink.net>
+ */
+
+#include <linux/config.h>
+#include <net/tcp.h>
+
+/*
+ *	This is the main buffer sending routine. We queue the buffer
+ *	having checked it is sane seeming.
+ */
+ 
+void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
+{
+	int size;
+	struct tcphdr * th = skb->h.th;
+
+	/*
+	 *	length of packet (not counting length of pre-tcp headers) 
+	 */
+	 
+	size = skb->len - ((unsigned char *) th - skb->data);
+
+	/*
+	 *	Sanity check it.. 
+	 */
+	 
+	if (size < sizeof(struct tcphdr) || size > skb->len) 
+	{
+		printk("tcp_send_skb: bad skb (skb = %p, data = %p, th = %p, len = %lu)\n",
+			skb, skb->data, th, skb->len);
+		kfree_skb(skb, FREE_WRITE);
+		return;
+	}
+
+	/*
+	 *	If we have queued a header size packet.. (these crash a few
+	 *	tcp stacks if ack is not set)
+	 */
+	 
+	if (size == sizeof(struct tcphdr)) 
+	{
+		/* If it's got a syn or fin it's notionally included in the size..*/
+		if(!th->syn && !th->fin) 
+		{
+			printk("tcp_send_skb: attempt to queue a bogon.\n");
+			kfree_skb(skb,FREE_WRITE);
+			return;
+		}
+	}
+
+	/*
+	 *	Actual processing.
+	 */
+	 
+	tcp_statistics.TcpOutSegs++;  
+	skb->seq = ntohl(th->seq);
+	skb->end_seq = skb->seq + size - 4*th->doff;
+	
+	/*
+	 *	We must queue if
+	 *
+	 *	a) The right edge of this frame exceeds the window
+	 *	b) We are retransmitting (Nagle's rule)
+	 *	c) We have too many packets 'in flight'
+	 */
+	 
+	if (after(skb->end_seq, sk->window_seq) ||
+	    (sk->retransmits && sk->ip_xmit_timeout == TIME_WRITE) ||
+	     sk->packets_out >= sk->cong_window) 
+	{
+		/* checksum will be supplied by tcp_write_xmit.  So
+		 * we shouldn't need to set it at all.  I'm being paranoid */
+		th->check = 0;
+		if (skb->next != NULL) 
+		{
+			printk("tcp_send_partial: next != NULL\n");
+			skb_unlink(skb);
+		}
+		skb_queue_tail(&sk->write_queue, skb);
+		
+		/*
+		 *	If we don't fit we have to start the zero window
+		 *	probes. This is broken - we really need to do a partial
+		 *	send _first_ (This is what causes the Cisco and PC/TCP
+		 *	grief).
+		 */
+		 
+		if (before(sk->window_seq, sk->write_queue.next->end_seq) &&
+		    sk->send_head == NULL && sk->ack_backlog == 0)
+			tcp_reset_xmit_timer(sk, TIME_PROBE0, sk->rto);
+	} 
+	else 
+	{
+		/*
+		 *	This is going straight out
+		 */
+		 
+		th->ack_seq = htonl(sk->acked_seq);
+		th->window = htons(tcp_select_window(sk));
+
+		tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
+
+		sk->sent_seq = sk->write_seq;
+		
+		/*
+		 *	This is mad. The tcp retransmit queue is put together
+		 *	by the ip layer. This causes half the problems with
+		 *	unroutable FIN's and other things.
+		 */
+		 
+		sk->prot->queue_xmit(sk, skb->dev, skb, 0);
+		
+		
+		sk->ack_backlog = 0;
+		sk->bytes_rcv = 0;
+
+		/*
+		 *	Set for next retransmit based on expected ACK time.
+		 *	FIXME: We set this every time which means our 
+		 *	retransmits are really about a window behind.
+		 */
+
+		tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
+	}
+}
+
+/*
+ *	Locking problems lead us to a messy situation where we can have
+ *	multiple partially complete buffers queued up. This is really bad
+ *	as we don't want to be sending partial buffers. Fix this with
+ *	a semaphore or similar to lock tcp_write per socket.
+ *
+ *	These routines are pretty self descriptive.
+ */
+ 
+struct sk_buff * tcp_dequeue_partial(struct sock * sk)
+{
+	struct sk_buff * skb;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	skb = sk->partial;
+	if (skb) {
+		sk->partial = NULL;
+		del_timer(&sk->partial_timer);
+	}
+	restore_flags(flags);
+	return skb;
+}
+
+/*
+ *	Empty the partial queue
+ */
+ 
+void tcp_send_partial(struct sock *sk)
+{
+	struct sk_buff *skb;
+
+	if (sk == NULL)
+		return;
+	while ((skb = tcp_dequeue_partial(sk)) != NULL)
+		tcp_send_skb(sk, skb);
+}
+
+/*
+ *	Queue a partial frame
+ */
+ 
+void tcp_enqueue_partial(struct sk_buff * skb, struct sock * sk)
+{
+	struct sk_buff * tmp;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	tmp = sk->partial;
+	if (tmp)
+		del_timer(&sk->partial_timer);
+	sk->partial = skb;
+	init_timer(&sk->partial_timer);
+	/*
+	 *	Wait up to 1 second for the buffer to fill.
+	 */
+	sk->partial_timer.expires = jiffies+HZ;
+	sk->partial_timer.function = (void (*)(unsigned long)) tcp_send_partial;
+	sk->partial_timer.data = (unsigned long) sk;
+	add_timer(&sk->partial_timer);
+	restore_flags(flags);
+	if (tmp)
+		tcp_send_skb(sk, tmp);
+}
+
+/*
+ * 	This routine takes stuff off of the write queue,
+ *	and puts it in the xmit queue. This happens as incoming acks
+ *	open up the remote window for us.
+ */
+ 
+void tcp_write_xmit(struct sock *sk)
+{
+	struct sk_buff *skb;
+
+	/*
+	 *	The bytes will have to remain here. In time closedown will
+	 *	empty the write queue and all will be happy 
+	 */
+
+	if(sk->zapped)
+		return;
+
+	/*
+	 *	Anything on the transmit queue that fits the window can
+	 *	be added providing we are not
+	 *
+	 *	a) retransmitting (Nagle's rule)
+	 *	b) exceeding our congestion window.
+	 */
+	 
+	while((skb = skb_peek(&sk->write_queue)) != NULL &&
+		before(skb->end_seq, sk->window_seq + 1) &&
+		(sk->retransmits == 0 ||
+		 sk->ip_xmit_timeout != TIME_WRITE ||
+		 before(skb->end_seq, sk->rcv_ack_seq + 1))
+		&& sk->packets_out < sk->cong_window) 
+	{
+		IS_SKB(skb);
+		skb_unlink(skb);
+		
+		/*
+		 *	See if we really need to send the packet. 
+		 */
+		 
+		if (before(skb->end_seq, sk->rcv_ack_seq +1)) 
+		{
+			/*
+			 *	This is acked data. We can discard it. This 
+			 *	cannot currently occur.
+			 */
+			 
+			sk->retransmits = 0;
+			kfree_skb(skb, FREE_WRITE);
+			if (!sk->dead) 
+				sk->write_space(sk);
+		} 
+		else
+		{
+			struct tcphdr *th;
+			struct iphdr *iph;
+			int size;
+/*
+ * put in the ack seq and window at this point rather than earlier,
+ * in order to keep them monotonic.  We really want to avoid taking
+ * back window allocations.  That's legal, but RFC1122 says it's frowned on.
+ * Ack and window will in general have changed since this packet was put
+ * on the write queue.
+ */
+			iph = skb->ip_hdr;
+			th = (struct tcphdr *)(((char *)iph) +(iph->ihl << 2));
+			size = skb->len - (((unsigned char *) th) - skb->data);
+#ifndef CONFIG_NO_PATH_MTU_DISCOVERY
+			if (size > sk->mtu - sizeof(struct iphdr))
+			{
+				iph->frag_off &= ~htons(IP_DF);
+				ip_send_check(iph);
+			}
+#endif
+			
+			th->ack_seq = htonl(sk->acked_seq);
+			th->window = htons(tcp_select_window(sk));
+
+			tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
+
+			sk->sent_seq = skb->end_seq;
+			
+			/*
+			 *	IP manages our queue for some crazy reason
+			 */
+			 
+			sk->prot->queue_xmit(sk, skb->dev, skb, skb->free);
+			
+			
+			sk->ack_backlog = 0;
+			sk->bytes_rcv = 0;
+
+			/*
+			 *	Again we slide the timer wrongly
+			 */
+			 
+			tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
+		}
+	}
+}
+
+
+/*
+ *	A socket has timed out on its send queue and wants to do a
+ *	little retransmitting. Currently this means TCP.
+ */
+
+void tcp_do_retransmit(struct sock *sk, int all)
+{
+	struct sk_buff * skb;
+	struct proto *prot;
+	struct device *dev;
+	int ct=0;
+	struct rtable *rt;
+
+	prot = sk->prot;
+	skb = sk->send_head;
+
+	while (skb != NULL)
+	{
+		struct tcphdr *th;
+		struct iphdr *iph;
+		int size;
+
+		dev = skb->dev;
+		IS_SKB(skb);
+		skb->when = jiffies;
+		
+		/* dl1bke 960201 - @%$$! Hope this cures strange race conditions    */
+		/*		   with AX.25 mode VC. (esp. DAMA)		    */
+		/*		   if the buffer is locked we should not retransmit */
+		/*		   anyway, so we don't need all the fuss to prepare */
+		/*		   the buffer in this case. 			    */
+		/*		   (the skb_pull() changes skb->data while we may   */
+		/*		   actually try to send the data. Ough. A side	    */
+		/*		   effect is that we'll send some unnecessary data, */
+		/*		   but the alternative is desastrous...		    */
+		
+		if (skb_device_locked(skb))
+			break;
+
+		/*
+		 *	Discard the surplus MAC header
+		 */
+		 
+		skb_pull(skb,((unsigned char *)skb->ip_hdr)-skb->data);
+
+		/*
+		 * In general it's OK just to use the old packet.  However we
+		 * need to use the current ack and window fields.  Urg and
+		 * urg_ptr could possibly stand to be updated as well, but we
+		 * don't keep the necessary data.  That shouldn't be a problem,
+		 * if the other end is doing the right thing.  Since we're
+		 * changing the packet, we have to issue a new IP identifier.
+		 */
+
+		iph = (struct iphdr *)skb->data;
+		th = (struct tcphdr *)(((char *)iph) + (iph->ihl << 2));
+		size = ntohs(iph->tot_len) - (iph->ihl<<2);
+		
+		/*
+		 *	Note: We ought to check for window limits here but
+		 *	currently this is done (less efficiently) elsewhere.
+		 */
+
+		/*
+		 *	Put a MAC header back on (may cause ARPing)
+		 */
+		 
+	        {
+			/* ANK: UGLY, but the bug, that was here, should be fixed.
+			 */
+			struct options *  opt = (struct options*)skb->proto_priv;
+			rt = ip_check_route(&sk->ip_route_cache, opt->srr?opt->faddr:iph->daddr, skb->localroute);
+	        }
+
+		iph->id = htons(ip_id_count++);
+#ifndef CONFIG_NO_PATH_MTU_DISCOVERY
+		if (rt && ntohs(iph->tot_len) > rt->rt_mtu)
+			iph->frag_off &= ~htons(IP_DF);
+#endif
+		ip_send_check(iph);
+			
+		if (rt==NULL)	/* Deep poo */
+		{
+			if(skb->sk)
+			{
+				skb->sk->err_soft=ENETUNREACH;
+				skb->sk->error_report(skb->sk);
+			}
+		}
+		else
+		{
+			dev=rt->rt_dev;
+			skb->raddr=rt->rt_gateway;
+			skb->dev=dev;
+			skb->arp=1;
+			if (rt->rt_hh)
+			{
+				memcpy(skb_push(skb,dev->hard_header_len),rt->rt_hh->hh_data,dev->hard_header_len);
+				if (!rt->rt_hh->hh_uptodate)
+				{
+					skb->arp = 0;
+#if RT_CACHE_DEBUG >= 2
+					printk("tcp_do_retransmit: hh miss %08x via %08x\n", iph->daddr, rt->rt_gateway);
+#endif
+				}
+			}
+			else if (dev->hard_header)
+			{
+				if(dev->hard_header(skb, dev, ETH_P_IP, NULL, NULL, skb->len)<0)
+					skb->arp=0;
+			}
+		
+			/*
+			 *	This is not the right way to handle this. We have to
+			 *	issue an up to date window and ack report with this 
+			 *	retransmit to keep the odd buggy tcp that relies on 
+			 *	the fact BSD does this happy. 
+			 *	We don't however need to recalculate the entire 
+			 *	checksum, so someone wanting a small problem to play
+			 *	with might like to implement RFC1141/RFC1624 and speed
+			 *	this up by avoiding a full checksum.
+			 */
+		 
+			th->ack_seq = htonl(sk->acked_seq);
+			sk->ack_backlog = 0;
+			sk->bytes_rcv = 0;
+			th->window = ntohs(tcp_select_window(sk));
+			tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
+		
+			/*
+			 *	If the interface is (still) up and running, kick it.
+			 */
+	
+			if (dev->flags & IFF_UP)
+			{
+				/*
+				 *	If the packet is still being sent by the device/protocol
+				 *	below then don't retransmit. This is both needed, and good -
+				 *	especially with connected mode AX.25 where it stops resends
+				 *	occurring of an as yet unsent anyway frame!
+				 *	We still add up the counts as the round trip time wants
+				 *	adjusting.
+				 */
+				if (sk && !skb_device_locked(skb))
+				{
+					/* Remove it from any existing driver queue first! */
+					skb_unlink(skb);
+					/* Now queue it */
+					ip_statistics.IpOutRequests++;
+					dev_queue_xmit(skb, dev, sk->priority);
+				}
+			}
+		}
+		
+		/*
+		 *	Count retransmissions
+		 */
+		 
+		ct++;
+		sk->prot->retransmits ++;
+		tcp_statistics.TcpRetransSegs++;
+		
+
+		/*
+		 *	Only one retransmit requested.
+		 */
+	
+		if (!all)
+			break;
+
+		/*
+		 *	This should cut it off before we send too many packets.
+		 */
+
+		if (ct >= sk->cong_window)
+			break;
+		skb = skb->link3;
+	}
+}
+
+/*
+ *	This routine will send an RST to the other tcp. 
+ */
+ 
+void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
+	  struct proto *prot, struct options *opt, struct device *dev, int tos, int ttl)
+{
+	struct sk_buff *buff;
+	struct tcphdr *t1;
+	int tmp;
+	struct device *ndev=NULL;
+
+	/*
+	 *	Cannot reset a reset (Think about it).
+	 */
+	 
+	if(th->rst)
+		return;
+  
+	/*
+	 * We need to grab some memory, and put together an RST,
+	 * and then put it into the queue to be sent.
+	 */
+
+	buff = sock_wmalloc(NULL, MAX_RESET_SIZE, 1, GFP_ATOMIC);
+	if (buff == NULL) 
+	  	return;
+
+	buff->sk = NULL;
+	buff->dev = dev;
+	buff->localroute = 0;
+
+	/*
+	 *	Put in the IP header and routing stuff. 
+	 */
+
+	tmp = prot->build_header(buff, saddr, daddr, &ndev, IPPROTO_TCP, opt,
+			   sizeof(struct tcphdr),tos,ttl,NULL);
+	if (tmp < 0) 
+	{
+  		buff->free = 1;
+		sock_wfree(NULL, buff);
+		return;
+	}
+
+	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
+	memcpy(t1, th, sizeof(*t1));
+
+	/*
+	 *	Swap the send and the receive. 
+	 */
+
+	t1->dest = th->source;
+	t1->source = th->dest;
+	t1->rst = 1;  
+	t1->window = 0;
+  
+	if(th->ack)
+	{
+		t1->ack = 0;
+	  	t1->seq = th->ack_seq;
+	  	t1->ack_seq = 0;
+	}
+	else
+	{
+	  	t1->ack = 1;
+	  	if(!th->syn)
+			t1->ack_seq = th->seq;
+		else
+			t1->ack_seq = htonl(ntohl(th->seq)+1);
+		t1->seq = 0;
+	}
+
+	t1->syn = 0;
+	t1->urg = 0;
+	t1->fin = 0;
+	t1->psh = 0;
+	t1->doff = sizeof(*t1)/4;
+	tcp_send_check(t1, saddr, daddr, sizeof(*t1), NULL);
+	prot->queue_xmit(NULL, ndev, buff, 1);
+	tcp_statistics.TcpOutSegs++;
+}
+
+/*
+ *	Send a fin.
+ */
+
+void tcp_send_fin(struct sock *sk)
+{
+	struct proto *prot =(struct proto *)sk->prot;
+	struct tcphdr *th =(struct tcphdr *)&sk->dummy_th;
+	struct tcphdr *t1;
+	struct sk_buff *buff;
+	struct device *dev=NULL;
+	int tmp;
+		
+	release_sock(sk); /* in case the malloc sleeps. */
+	
+	buff = sock_wmalloc(sk, MAX_RESET_SIZE,1 , GFP_KERNEL);
+	sk->inuse = 1;
+
+	if (buff == NULL)
+	{
+		/* This is a disaster if it occurs */
+		printk("tcp_send_fin: Impossible malloc failure");
+		return;
+	}
+
+	/*
+	 *	Administrivia
+	 */
+	 
+	buff->sk = sk;
+	buff->localroute = sk->localroute;
+
+	/*
+	 *	Put in the IP header and routing stuff. 
+	 */
+
+	tmp = prot->build_header(buff,sk->saddr, sk->daddr, &dev,
+			   IPPROTO_TCP, sk->opt,
+			   sizeof(struct tcphdr),sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
+	if (tmp < 0) 
+	{
+		int t;
+  		/*
+  		 *	Finish anyway, treat this as a send that got lost. 
+  		 *	(Not good).
+  		 */
+  		 
+	  	buff->free = 1;
+		sock_wfree(sk,buff);
+		sk->write_seq++;
+		t=del_timer(&sk->timer);
+		if(t)
+			add_timer(&sk->timer);
+		else
+			tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+		return;
+	}
+	
+	/*
+	 *	We ought to check if the end of the queue is a buffer and
+	 *	if so simply add the fin to that buffer, not send it ahead.
+	 */
+
+	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
+	buff->dev = dev;
+	memcpy(t1, th, sizeof(*t1));
+	buff->seq = sk->write_seq;
+	sk->write_seq++;
+	buff->end_seq = sk->write_seq;
+	t1->seq = htonl(buff->seq);
+	t1->ack = 1;
+	t1->ack_seq = htonl(sk->acked_seq);
+	t1->window = htons(sk->window=tcp_select_window(sk));
+	t1->fin = 1;
+	t1->rst = 0;
+	t1->doff = sizeof(*t1)/4;
+	tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), sk);
+
+	/*
+	 * If there is data in the write queue, the fin must be appended to
+	 * the write queue.
+ 	 */
+ 	
+ 	if (skb_peek(&sk->write_queue) != NULL) 
+ 	{
+  		buff->free = 0;
+		if (buff->next != NULL) 
+		{
+			printk("tcp_send_fin: next != NULL\n");
+			skb_unlink(buff);
+		}
+		skb_queue_tail(&sk->write_queue, buff);
+  	} 
+  	else 
+  	{
+        	sk->sent_seq = sk->write_seq;
+		sk->prot->queue_xmit(sk, dev, buff, 0);
+		tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
+	}
+}
+
+
+void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb)
+{
+	struct tcphdr *t1;
+	unsigned char *ptr;
+	struct sk_buff * buff;
+	struct device *ndev=NULL;
+	int tmp;
+
+	buff = sock_wmalloc(newsk, MAX_SYN_SIZE, 1, GFP_ATOMIC);
+	if (buff == NULL) 
+	{
+		sk->err = ENOMEM;
+		newsk->dead = 1;
+		newsk->state = TCP_CLOSE;
+		/* And this will destroy it */
+		release_sock(newsk);
+		kfree_skb(skb, FREE_READ);
+		tcp_statistics.TcpAttemptFails++;
+		return;
+	}
+  
+	buff->sk = newsk;
+	buff->localroute = newsk->localroute;
+
+	/*
+	 *	Put in the IP header and routing stuff. 
+	 */
+
+	tmp = sk->prot->build_header(buff, newsk->saddr, newsk->daddr, &ndev,
+			       IPPROTO_TCP, NULL, MAX_SYN_SIZE,sk->ip_tos,sk->ip_ttl,&newsk->ip_route_cache);
+
+	/*
+	 *	Something went wrong. 
+	 */
+
+	if (tmp < 0) 
+	{
+		sk->err = tmp;
+		buff->free = 1;
+		kfree_skb(buff,FREE_WRITE);
+		newsk->dead = 1;
+		newsk->state = TCP_CLOSE;
+		release_sock(newsk);
+		skb->sk = sk;
+		kfree_skb(skb, FREE_READ);
+		tcp_statistics.TcpAttemptFails++;
+		return;
+	}
+
+	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
+  
+	memcpy(t1, skb->h.th, sizeof(*t1));
+	buff->seq = newsk->write_seq++;
+	buff->end_seq = newsk->write_seq;
+	/*
+	 *	Swap the send and the receive. 
+	 */
+	t1->dest = skb->h.th->source;
+	t1->source = newsk->dummy_th.source;
+	t1->seq = ntohl(buff->seq);
+	t1->ack = 1;
+	newsk->sent_seq = newsk->write_seq;
+	t1->window = ntohs(tcp_select_window(newsk));
+	t1->res1 = 0;
+	t1->res2 = 0;
+	t1->rst = 0;
+	t1->urg = 0;
+	t1->psh = 0;
+	t1->syn = 1;
+	t1->ack_seq = htonl(newsk->acked_seq);
+	t1->doff = sizeof(*t1)/4+1;
+	ptr = skb_put(buff,4);
+	ptr[0] = 2;
+	ptr[1] = 4;
+	ptr[2] = ((newsk->mtu) >> 8) & 0xff;
+	ptr[3] =(newsk->mtu) & 0xff;
+
+	tcp_send_check(t1, newsk->saddr, newsk->daddr, sizeof(*t1)+4, newsk);
+	newsk->prot->queue_xmit(newsk, ndev, buff, 0);
+	tcp_reset_xmit_timer(newsk, TIME_WRITE , TCP_TIMEOUT_INIT);
+	skb->sk = newsk;
+
+	/*
+	 *	Charge the sock_buff to newsk. 
+	 */
+	 
+	sk->rmem_alloc -= skb->truesize;
+	newsk->rmem_alloc += skb->truesize;
+	
+	skb_queue_tail(&sk->receive_queue,skb);
+	sk->ack_backlog++;
+	release_sock(newsk);
+	tcp_statistics.TcpOutSegs++;
+}
+
+/*
+ *	This routine sends an ack and also updates the window. 
+ */
+ 
+void tcp_send_ack(u32 sequence, u32 ack,
+	     struct sock *sk,
+	     struct tcphdr *th, u32 daddr)
+{
+	struct sk_buff *buff;
+	struct tcphdr *t1;
+	struct device *dev = NULL;
+	int tmp;
+
+	if(sk->zapped)
+		return;		/* We have been reset, we may not send again */
+		
+	/*
+	 * We need to grab some memory, and put together an ack,
+	 * and then put it into the queue to be sent.
+	 */
+
+	buff = sock_wmalloc(sk, MAX_ACK_SIZE, 1, GFP_ATOMIC);
+	if (buff == NULL) 
+	{
+		/* 
+		 *	Force it to send an ack. We don't have to do this
+		 *	(ACK is unreliable) but it's much better use of 
+		 *	bandwidth on slow links to send a spare ack than
+		 *	resend packets. 
+		 */
+		 
+		sk->ack_backlog++;
+		if (sk->ip_xmit_timeout != TIME_WRITE && tcp_connected(sk->state)) 
+		{
+			tcp_reset_xmit_timer(sk, TIME_WRITE, HZ);
+		}
+		return;
+	}
+
+	/*
+	 *	Assemble a suitable TCP frame
+	 */
+	 
+	buff->sk = sk;
+	buff->localroute = sk->localroute;
+
+	/* 
+	 *	Put in the IP header and routing stuff. 
+	 */
+	 
+	tmp = sk->prot->build_header(buff, sk->saddr, daddr, &dev,
+				IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
+	if (tmp < 0) 
+	{
+  		buff->free = 1;
+		sock_wfree(sk, buff);
+		return;
+	}
+	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
+
+	memcpy(t1, th, sizeof(*t1));
+
+	/*
+	 *	Swap the send and the receive. 
+	 */
+	 
+	t1->dest = th->source;
+	t1->source = th->dest;
+	t1->seq = ntohl(sequence);
+	t1->ack = 1;
+	sk->window = tcp_select_window(sk);
+	t1->window = ntohs(sk->window);
+	t1->res1 = 0;
+	t1->res2 = 0;
+	t1->rst = 0;
+	t1->urg = 0;
+	t1->syn = 0;
+	t1->psh = 0;
+	t1->fin = 0;
+	
+	/*
+	 *	If we have nothing queued for transmit and the transmit timer
+	 *	is on we are just doing an ACK timeout and need to switch
+	 *	to a keepalive.
+	 */
+	 
+	if (ack == sk->acked_seq) {	       	  
+		sk->ack_backlog = 0;
+		sk->bytes_rcv = 0;
+		sk->ack_timed = 0;
+
+		if (sk->send_head == NULL && skb_peek(&sk->write_queue) == NULL
+		    && sk->ip_xmit_timeout == TIME_WRITE) 	
+		  if(sk->keepopen) 
+		    tcp_reset_xmit_timer(sk,TIME_KEEPOPEN,TCP_TIMEOUT_LEN);
+		  else 
+		    delete_timer(sk);	         		
+	}
+
+  	/*
+  	 *	Fill in the packet and send it
+  	 */
+  	 
+  	t1->ack_seq = htonl(ack);
+  	t1->doff = sizeof(*t1)/4;
+  	tcp_send_check(t1, sk->saddr, daddr, sizeof(*t1), sk);
+  	if (sk->debug)
+  		 printk("\rtcp_ack: seq %x ack %x\n", sequence, ack);
+  	sk->prot->queue_xmit(sk, dev, buff, 1);
+  	tcp_statistics.TcpOutSegs++;
+}
+
+/*
+ *	This routine sends a packet with an out of date sequence
+ *	number. It assumes the other end will try to ack it.
+ */
+
+void tcp_write_wakeup(struct sock *sk)
+{
+	struct sk_buff *buff,*skb;
+	struct tcphdr *t1;
+	struct device *dev=NULL;
+	int tmp;
+
+	if (sk->zapped)
+		return;	/* After a valid reset we can send no more */
+
+	/*
+	 *	Write data can still be transmitted/retransmitted in the
+	 *	following states.  If any other state is encountered, return.
+	 *	[listen/close will never occur here anyway]
+	 */
+
+	if (sk->state != TCP_ESTABLISHED && 
+	    sk->state != TCP_CLOSE_WAIT &&
+	    sk->state != TCP_FIN_WAIT1 && 
+	    sk->state != TCP_LAST_ACK &&
+	    sk->state != TCP_CLOSING
+	) 
+	{
+		return;
+	}
+	if ( before(sk->sent_seq, sk->window_seq) && 
+	    (skb=skb_peek(&sk->write_queue)))
+	{
+		/*
+	    	 * We are probing the opening of a window
+	    	 * but the window size is != 0
+	    	 * must have been a result SWS advoidance ( sender )
+	    	 */
+	    
+	    	struct iphdr *iph;
+	    	struct tcphdr *th;
+	    	struct tcphdr *nth;
+	    	unsigned long win_size;
+#if 0
+		unsigned long ow_size;
+#endif
+	    	void * tcp_data_start;
+	
+		/*
+		 *	How many bytes can we send ?
+		 */
+		 
+		win_size = sk->window_seq - sk->sent_seq;
+
+		/*
+		 *	Recover the buffer pointers
+		 */
+		 
+	    	iph = (struct iphdr *)skb->ip_hdr;
+	    	th = (struct tcphdr *)(((char *)iph) +(iph->ihl << 2));
+
+		/*
+		 *	Grab the data for a temporary frame
+		 */
+		 
+	    	buff = sock_wmalloc(sk, win_size + th->doff * 4 + 
+				     (iph->ihl << 2) +
+				     sk->prot->max_header + 15, 
+				     1, GFP_ATOMIC);
+	    	if ( buff == NULL )
+	    		return;
+
+	 	/* 
+	 	 *	If we strip the packet on the write queue we must
+	 	 *	be ready to retransmit this one 
+	 	 */
+	    
+	    	buff->free = /*0*/1;
+
+	    	buff->sk = sk;
+	    	buff->localroute = sk->localroute;
+	    	
+	    	/*
+	    	 *	Put headers on the new packet
+	    	 */
+
+	    	tmp = sk->prot->build_header(buff, sk->saddr, sk->daddr, &dev,
+					 IPPROTO_TCP, sk->opt, buff->truesize,
+					 sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
+	    	if (tmp < 0) 
+	    	{
+			sock_wfree(sk, buff);
+			return;
+		}
+		
+		/*
+		 *	Move the TCP header over
+		 */
+
+		buff->dev = dev;
+
+		nth = (struct tcphdr *) skb_put(buff,th->doff*4);
+
+		memcpy(nth, th, th->doff * 4);
+		
+		/*
+		 *	Correct the new header
+		 */
+		 
+		nth->ack = 1; 
+		nth->ack_seq = htonl(sk->acked_seq);
+		nth->window = htons(tcp_select_window(sk));
+		nth->check = 0;
+
+		/*
+		 *	Find the first data byte.
+		 */
+		 
+		tcp_data_start = (char *) th + (th->doff << 2);
+
+		/*
+		 *	Add it to our new buffer
+		 */
+		 
+		memcpy(skb_put(buff,win_size), tcp_data_start, win_size);
+		
+		/*
+		 *	Remember our right edge sequence number.
+		 */
+		 
+	    	buff->end_seq = sk->sent_seq + win_size;
+	    	sk->sent_seq = buff->end_seq;		/* Hack */
+		if(th->urg && ntohs(th->urg_ptr) < win_size)
+			nth->urg = 0;
+
+		/*
+		 *	Checksum the split buffer
+		 */
+		 
+	    	tcp_send_check(nth, sk->saddr, sk->daddr, 
+			   nth->doff * 4 + win_size , sk);
+	}
+	else
+	{	
+		buff = sock_wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
+		if (buff == NULL) 
+			return;
+
+		buff->free = 1;
+		buff->sk = sk;
+		buff->localroute = sk->localroute;
+
+		/*
+		 *	Put in the IP header and routing stuff. 
+		 */
+		 
+		tmp = sk->prot->build_header(buff, sk->saddr, sk->daddr, &dev,
+				IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
+		if (tmp < 0) 
+		{
+			sock_wfree(sk, buff);
+			return;
+		}
+
+		t1 = (struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
+		memcpy(t1,(void *) &sk->dummy_th, sizeof(*t1));
+
+		/*
+		 *	Use a previous sequence.
+		 *	This should cause the other end to send an ack.
+		 */
+	 
+		t1->seq = htonl(sk->sent_seq-1);
+		t1->ack = 1; 
+		t1->res1= 0;
+		t1->res2= 0;
+		t1->rst = 0;
+		t1->urg = 0;
+		t1->psh = 0;
+		t1->fin = 0;	/* We are sending a 'previous' sequence, and 0 bytes of data - thus no FIN bit */
+		t1->syn = 0;
+		t1->ack_seq = htonl(sk->acked_seq);
+		t1->window = htons(tcp_select_window(sk));
+		t1->doff = sizeof(*t1)/4;
+		tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), sk);
+
+	}		
+
+	/*
+	 *	Send it.
+	 */
+	
+	sk->prot->queue_xmit(sk, dev, buff, 1);
+	tcp_statistics.TcpOutSegs++;
+}
+
+/*
+ *	A window probe timeout has occurred.
+ */
+
+void tcp_send_probe0(struct sock *sk)
+{
+	if (sk->zapped)
+		return;		/* After a valid reset we can send no more */
+
+	tcp_write_wakeup(sk);
+
+	sk->backoff++;
+	sk->rto = min(sk->rto << 1, 120*HZ);
+	sk->retransmits++;
+	sk->prot->retransmits ++;
+	tcp_reset_xmit_timer (sk, TIME_PROBE0, sk->rto);
+}

@@ -434,7 +434,7 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 		inode->i_size = CF_LE_L(raw_entry->size);
 	}
 	if(raw_entry->attr & ATTR_SYS)
-		if (MSDOS_I(inode)->sys_immutable)
+		if (MSDOS_SB(inode->i_sb)->sys_immutable)
 			inode->i_flags |= S_IMMUTABLE;
 	MSDOS_I(inode)->i_binary = is_binary(MSDOS_SB(inode->i_sb)->conversion,
 	    raw_entry->ext);

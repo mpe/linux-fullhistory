@@ -1,3 +1,8 @@
+Fri Feb  9 14:15:47 1996    <tytso@rsts-11.mit.edu>
+
+	* serial.c (block_til_ready): Fixed another race condition which
+		happens if a hangup happens during the open.
+
 Wed Jan 10 10:08:00 1996    <tytso@rsts-11.mit.edu>
 
 	* serial.c (block_til_ready): Remove race condition which happened

@@ -141,7 +141,8 @@ void net_timer (unsigned long data)
 			}
 			if(sk->wmem_alloc==0 && sk->rmem_alloc==0)
 				destroy_sock(sk);	/* Socket gone, DON'T update sk->inuse! */
-				break;
+			break;
+
 		case TIME_CLOSE:
 			/* We've waited long enough, close the socket. */
 			sk->state = TCP_CLOSE;
@@ -152,6 +153,7 @@ void net_timer (unsigned long data)
 			reset_timer (sk, TIME_DESTROY, TCP_DONE_TIME);
 			release_sock (sk);
 			break;
+
 		default:
 			printk ("net_timer: timer expired - reason %d is unknown\n", why);
 			release_sock (sk);

@@ -128,26 +128,12 @@ entInt:
 /* set up the arguments to the C interrupt handler */
 	lda	$27,do_entInt
 	jsr	$26,($27),do_entInt
-/* ok, check if we need to do software interrupts */
-1:	lda	$0,intr_count
+/* ok, return */
+	lda	$0,intr_count
 	ldq	$1,0($0)
 	subq	$1,1,$1
-	bne	$1,2f		/* interrupt within interrupt: return now */
-	lda	$2,bh_active
-	ldq	$3,0($2)
-	lda	$2,bh_mask
-	ldq	$2,0($2)
-	and	$2,$3,$2
-	bne	$2,3f
 	stq	$1,0($0)
 	br	$31,ret_from_sys_call
-.align 3
-2:	stq	$1,0($0)
-	br	$31,restore_all
-.align 3
-3:	lda	$27,do_bottom_half
-	jsr	$26,($27),do_bottom_half
-	br	$31,1b
 .end entInt
 
 .align 3
@@ -204,7 +190,7 @@ kernel_clone:
 	lda $27,sys_clone
 	jsr $26,($27),sys_clone
 	stq $0,0($30)	
-	br ret_from_sys_call
+	br $31,ret_from_sys_call
 .end	kernel_clone
 
 /*
@@ -502,10 +488,23 @@ entSys:
 	blt	$0,syscall_error	/* the call failed */
 	stq	$0,0($30)
 	stq	$31,72($30)		/* a3=0 => no error */
+
 .align 3
 ret_from_sys_call:
-	ldq	$0,SP_OFF($30)
 	cmovne	$26,0,$19		/* $19 = 0 => non-restartable */
+	/* check bottom half interrupts */
+	lda	$0,intr_count
+	ldq	$1,0($0)
+	bne	$1,ret_from_handle_bh
+	lda	$2,bh_active
+	ldq	$3,0($2)
+	lda	$2,bh_mask
+	ldq	$4,0($2)
+	addq	$1,1,$1
+	and	$3,$4,$2
+	bne	$2,handle_bottom_half	
+ret_from_handle_bh:
+	ldq	$0,SP_OFF($30)
 	and	$0,8,$0
 	beq	$0,restore_all
 ret_from_reschedule:
@@ -524,6 +523,25 @@ ret_from_reschedule:
 restore_all:
 	RESTORE_ALL
 	rti
+
+	.align 3
+handle_bottom_half:
+	/*
+	 * We're called with $0 containing the address of
+	 * 'intr_count' and $1 containing 'intr_count+1'
+	 */
+	stq	$1,0($0)	/* intr_count = 1 */
+	subq	$30,16,$30
+	stq	$19,0($30)	/* save syscall nr */
+	stq	$20,8($30)	/* and error indication (a3) */
+	lda	$27,do_bottom_half
+	jsr	$26,($27),do_bottom_half
+	lda	$0,intr_count
+	ldq	$19,0($30)
+	ldq	$20,8($30)
+	addq	$30,16,$30
+	stq	$31,0($0)	/* intr_count = 0 */
+	br	$31,ret_from_handle_bh
 
 	.align 3
 syscall_error:

@@ -19,6 +19,10 @@
 #define	_ICMP_H
 
 #include <linux/icmp.h>
+#include <linux/skbuff.h>
+
+#include <net/sock.h>
+#include <net/protocol.h>
 
 extern struct icmp_err icmp_err_convert[];
 extern struct icmp_mib icmp_statistics;

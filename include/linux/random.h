@@ -25,18 +25,20 @@ struct rand_pool_info {
 
 #ifdef __KERNEL__
 
-void rand_initialize(void);
-void rand_initialize_irq(int irq);
-void rand_initialize_blkdev(int irq, int mode);
+extern void rand_initialize(void);
+extern void rand_initialize_irq(int irq);
+extern void rand_initialize_blkdev(int irq, int mode);
 
-void add_keyboard_randomness(unsigned char scancode);
-void add_mouse_randomness(__u32 mouse_data);
-void add_interrupt_randomness(int irq);
-void add_blkdev_randomness(int major);
+extern void add_keyboard_randomness(unsigned char scancode);
+extern void add_mouse_randomness(__u32 mouse_data);
+extern void add_interrupt_randomness(int irq);
+extern void add_blkdev_randomness(int major);
 
-void get_random_bytes(void *buf, int nbytes);
+extern void get_random_bytes(void *buf, int nbytes);
 
-struct file_operations random_fops, urandom_fops;
+#ifndef MODULE
+extern struct file_operations random_fops, urandom_fops;
+#endif
 
 #endif /* __KERNEL___ */
 
