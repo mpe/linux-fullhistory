@@ -55,7 +55,8 @@ struct sock {
   struct options		*opt;
   volatile unsigned long	wmem_alloc;
   volatile unsigned long	rmem_alloc;
-  unsigned long			send_seq;
+  unsigned long			write_seq;
+  unsigned long			sent_seq;
   unsigned long			acked_seq;
   unsigned long			copied_seq;
   unsigned long			rcv_ack_seq;

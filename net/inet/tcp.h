@@ -80,13 +80,12 @@
  */
 static inline int before(unsigned long seq1, unsigned long seq2)
 {
-	seq2 -= seq1+1;
-	return (seq2 < 65536);
+        return (long)(seq1-seq2) < 0;
 }
 
 static inline int after(unsigned long seq1, unsigned long seq2)
 {
-	return before(seq2, seq1);
+	return (long)(seq1-seq2) > 0;
 }
 
 

@@ -17,10 +17,10 @@
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
- *		Stephen A. Wood, <saw@hallc1.cebaf.gov>
  *		Arnt Gulbrandsen, <agulbra@pvv.unit.no>
  *
  * Fixes:
+ *		Stephen A. Wood	:	arp problems
  *		'Mr Linux'	:	arp problems.
  *		Alan Cox	:	arp_ioctl now checks memory areas with verify_area.
  *		Alan Cox	:	Non IP arp message now only appears with debugging on.

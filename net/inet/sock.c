@@ -119,8 +119,8 @@ print_sk(struct sock *sk)
   printk("  daddr = %lX, saddr = %lX\n", sk->daddr,sk->saddr);
   printk("  num = %d", sk->num);
   printk(" next = %p\n", sk->next);
-  printk("  send_seq = %ld, acked_seq = %ld, copied_seq = %ld\n",
-	  sk->send_seq, sk->acked_seq, sk->copied_seq);
+  printk("  write_seq = %ld, acked_seq = %ld, copied_seq = %ld\n",
+	  sk->write_seq, sk->acked_seq, sk->copied_seq);
   printk("  rcv_ack_seq = %ld, window_seq = %ld, fin_seq = %ld\n",
 	  sk->rcv_ack_seq, sk->window_seq, sk->fin_seq);
   printk("  prot = %p\n", sk->prot);
@@ -838,7 +838,7 @@ inet_create(struct socket *sock, int protocol)
   sk->rcvbuf = SK_RMEM_MAX;
   sk->pair = NULL;
   sk->opt = NULL;
-  sk->send_seq = 0;
+  sk->write_seq = 0;
   sk->acked_seq = 0;
   sk->copied_seq = 0;
   sk->fin_seq = 0;

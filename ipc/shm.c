@@ -391,6 +391,12 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if (shmid < 0)
 		return -EINVAL;
 
+	if (raddr) {
+		err = verify_area(VERIFY_WRITE, raddr, sizeof(long));
+		if (err)
+			return err;
+	}
+
 	shp = shm_segs[id = shmid % SHMMNI];
 	if (shp == IPC_UNUSED || shp == IPC_NOID)
 		return -EINVAL;
