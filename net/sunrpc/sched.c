@@ -872,7 +872,6 @@ static int
 rpciod(void *ptr)
 {
 	wait_queue_head_t *assassin = (wait_queue_head_t*) ptr;
-	unsigned long	oldflags;
 	int		rounds = 0;
 
 	MOD_INC_USE_COUNT;
@@ -907,7 +906,6 @@ rpciod(void *ptr)
 			schedule();
 			rounds = 0;
 		}
-		save_flags(oldflags); cli();
 		dprintk("RPC: rpciod running checking dispatch\n");
 		rpciod_tcp_dispatcher();
 
@@ -917,7 +915,6 @@ rpciod(void *ptr)
 			dprintk("RPC: switch to rpciod\n");
 			rounds = 0;
 		}
-		restore_flags(oldflags);
 	}
 
 	dprintk("RPC: rpciod shutdown commences\n");

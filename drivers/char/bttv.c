@@ -2618,14 +2618,13 @@ static void handle_chipset(void)
 	if (triton1)
 		triton1=BT848_INT_ETBF;
 	
-	while ((dev = pci_find_device(PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_496, dev))) 
+	
+	if(pci_pci_problems&PCIPCI_FAIL)
 	{
-		/* Beware the SiS 85C496 my friend - rev 49 don't work with a bttv */
-		printk(KERN_WARNING "BT848 and SIS 85C496 chipset don't always work together.\n");
-	}			
-
-	/* dev == NULL */
-
+		printk(KERN_WARNING "bttv: This configuration is known to have PCI to PCI DMA problems\n");
+		printk(KERN_WARNING "bttv: You may not be able to use overlay mode.\n");
+	}
+			
 	while ((dev = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82441, dev))) 
 	{
 		unsigned char b;

@@ -4,15 +4,15 @@
 mainmenu_option next_comment
 comment 'Filesystems'
 
-bool	 'Quota support' CONFIG_QUOTA
+bool 'Quota support' CONFIG_QUOTA
 tristate 'Kernel automounter support' CONFIG_AUTOFS_FS
 
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'ADFS filesystem support (read only) (EXPERIMENTAL)' CONFIG_ADFS_FS
+   tristate 'ADFS filesystem support (read only) (EXPERIMENTAL)' CONFIG_ADFS_FS
 fi
 tristate 'Amiga FFS filesystem support' CONFIG_AFFS_FS
-tristate 'Apple Macintosh filesystem support (experimental)' CONFIG_HFS_FS
+tristate 'Apple Macintosh filesystem support (EXPERIMENTAL)' CONFIG_HFS_FS
 # msdos filesystems
 tristate 'DOS FAT fs support' CONFIG_FAT_FS
 dep_tristate '  MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
@@ -20,51 +20,51 @@ dep_tristate '  UMSDOS: Unix-like filesystem on top of standard MSDOS filesystem
 dep_tristate '  VFAT (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'EFS filesystem support (read only) (experimental)' CONFIG_EFS_FS
+   tristate 'EFS filesystem support (read only) (EXPERIMENTAL)' CONFIG_EFS_FS
 fi
 
 tristate 'ISO 9660 CDROM filesystem support' CONFIG_ISO9660_FS
 if [ "$CONFIG_ISO9660_FS" != "n" ]; then
-  bool 'Microsoft Joliet CDROM extensions' CONFIG_JOLIET
+   bool '  Microsoft Joliet CDROM extensions' CONFIG_JOLIET
 else
-  # needed by nls/Config.in
-  define_bool CONFIG_JOLIET n
+   # needed by nls/Config.in
+   define_bool CONFIG_JOLIET n
 fi
 
-tristate 'UDF filesystem support' CONFIG_UDF_FS
+tristate 'UDF filesystem support (read only)' CONFIG_UDF_FS
 if [ "$CONFIG_UDF_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool '   UDF read-write support (EXPERIMENTAL)' CONFIG_UDF_RW
+   bool '  UDF write support (DANGEROUS)' CONFIG_UDF_RW
 fi
 
 tristate 'Minix fs support' CONFIG_MINIX_FS
 tristate 'NTFS filesystem support (read only)' CONFIG_NTFS_FS
 if [ "$CONFIG_NTFS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool '   NTFS read-write support (DANGEROUS)' CONFIG_NTFS_RW
+   bool '  NTFS write support (DANGEROUS)' CONFIG_NTFS_RW
 fi
-tristate 'OS/2 HPFS filesystem support (read/write) (NEW)' CONFIG_HPFS_FS
+tristate 'OS/2 HPFS filesystem support' CONFIG_HPFS_FS
 bool '/proc filesystem support' CONFIG_PROC_FS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
-  # It compiles as a module for testing only.  It should not be used
-  # as a module in general.  If we make this "tristate", a bunch of people
-  # who don't know what they are doing turn it on and complain when it
-  # breaks.
-  bool '/dev/pts filesystem for Unix98 PTYs' CONFIG_DEVPTS_FS
+   # It compiles as a module for testing only.  It should not be used
+   # as a module in general.  If we make this "tristate", a bunch of people
+   # who don't know what they are doing turn it on and complain when it
+   # breaks.
+   bool '/dev/pts filesystem for Unix98 PTYs' CONFIG_DEVPTS_FS
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'QNX filesystem support (EXPERIMENTAL)' CONFIG_QNX4FS_FS
-  if [ "$CONFIG_QNX4FS_FS" != "n" ]; then
-    bool '   QNXFS read-write support (FOR TESTING ONLY)' CONFIG_QNX4FS_RW
-  fi    
+   tristate 'QNX filesystem support (read only) (EXPERIMENTAL)' CONFIG_QNX4FS_FS
+   if [ "$CONFIG_QNX4FS_FS" != "n" ]; then
+      bool '  QNXFS write support (DANGEROUS)' CONFIG_QNX4FS_RW
+   fi    
 fi
 tristate 'ROM filesystem support' CONFIG_ROMFS_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
 if [ "$CONFIG_SYSV_FS" != "n" -a "$CONFIG_EXPERIMENTAL" ]; then
-  bool '   SYSV filesystem write support (DANGEROUS)' CONFIG_SYSV_FS_WRITE
+   bool '  SYSV filesystem write support (DANGEROUS)' CONFIG_SYSV_FS_WRITE
 fi
-tristate 'UFS filesystem support' CONFIG_UFS_FS
-if [ "$CONFIG_UFS_FS" != "n" ]; then
-  bool '   UFS filesystem write support (experimental)' CONFIG_UFS_FS_WRITE
+tristate 'UFS filesystem support (read only)' CONFIG_UFS_FS
+if [ "$CONFIG_UFS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" ]; then
+   bool '  UFS filesystem write support (DANGEROUS)' CONFIG_UFS_FS_WRITE
 fi
 
 
@@ -74,35 +74,36 @@ mainmenu_option next_comment
 comment 'Network File Systems'
 
 if [ "$CONFIG_INET" = "y" ]; then
-  tristate 'Coda filesystem support (advanced network fs)' CONFIG_CODA_FS
-  tristate 'NFS filesystem support' CONFIG_NFS_FS
-  if [ "$CONFIG_NFS_FS" = "y" -a "$CONFIG_IP_PNP" = "y" ]; then
-    bool '   Root file system on NFS' CONFIG_ROOT_NFS
-  fi
-  # considering that RedHat-6.0 ships with this on, I guess it's not really experimental
-  tristate 'NFS server support' CONFIG_NFSD
-  if [ "$CONFIG_NFSD" != "n" ]; then
-    bool '   Emulate SUN NFS server' CONFIG_NFSD_SUN
-  fi
-  if [ "$CONFIG_NFS_FS" = "y" -o "$CONFIG_NFSD" = "y" ]; then
-    define_bool CONFIG_SUNRPC y
-    define_bool CONFIG_LOCKD y
-  else
-    if [ "$CONFIG_NFS_FS" = "m" -o "$CONFIG_NFSD" = "m" ]; then
-      define_bool CONFIG_SUNRPC m
-      define_bool CONFIG_LOCKD m
-    else
-      define_bool CONFIG_SUNRPC n
-      define_bool CONFIG_LOCKD n
-    fi
-  fi
-  tristate 'SMB filesystem support (to mount WfW shares etc.)' CONFIG_SMB_FS
+   tristate 'Coda filesystem support (advanced network fs)' CONFIG_CODA_FS
+   tristate 'NFS filesystem support' CONFIG_NFS_FS
+   if [ "$CONFIG_NFS_FS" = "y" -a "$CONFIG_IP_PNP" = "y" ]; then
+      bool '  Root file system on NFS' CONFIG_ROOT_NFS
+   fi
+   if [ "$CONFIG_EXPERIMENTAL" ]; then
+      tristate 'NFS server support (EXPERIMENTAL)' CONFIG_NFSD
+      if [ "$CONFIG_NFSD" != "n" ]; then
+	 bool '  Emulate SUN NFS server' CONFIG_NFSD_SUN
+      fi
+   fi
+   if [ "$CONFIG_NFS_FS" = "y" -o "$CONFIG_NFSD" = "y" ]; then
+      define_bool CONFIG_SUNRPC y
+      define_bool CONFIG_LOCKD y
+   else
+      if [ "$CONFIG_NFS_FS" = "m" -o "$CONFIG_NFSD" = "m" ]; then
+	 define_bool CONFIG_SUNRPC m
+	 define_bool CONFIG_LOCKD m
+   else
+	 define_bool CONFIG_SUNRPC n
+	 define_bool CONFIG_LOCKD n
+      fi
+   fi
+   tristate 'SMB filesystem support (to mount WfW shares etc.)' CONFIG_SMB_FS
 fi
 if [ "$CONFIG_IPX" != "n" -o "$CONFIG_INET" != "n" ]; then
-  tristate 'NCP filesystem support (to mount NetWare volumes)' CONFIG_NCP_FS
-  if [ "$CONFIG_NCP_FS" != "n" ]; then
-    source fs/ncpfs/Config.in
-  fi
+   tristate 'NCP filesystem support (to mount NetWare volumes)' CONFIG_NCP_FS
+   if [ "$CONFIG_NCP_FS" != "n" ]; then
+      source fs/ncpfs/Config.in
+   fi
 fi
 
 endmenu

@@ -881,6 +881,15 @@ static void __init cyrix_model(struct cpuinfo_x86 *c)
 		 *	on the MediaGX. So we turn it off for now. 
 		 */
 		
+#ifdef CONFIG_PCI
+		/* It isnt really a PCI quirk directly, but the cure is the
+		   same. The MediaGX has deep magic SMM stuff that handles the
+		   SB emulation. It thows away the fifo on disable_dma() which
+		   is wrong and ruins the audio. */
+		
+		printk(KERN_INFO "Working around Cyrix MediaGX virtual DMA bug.\n");
+		isa_dma_bridge_buggy = 1;
+#endif		
 		/* GXm supports extended cpuid levels 'ala' AMD */
 		if (c->cpuid_level == 2) {
 			get_model_name(c);  /* get CPU marketing name */
@@ -893,15 +902,6 @@ static void __init cyrix_model(struct cpuinfo_x86 *c)
 			c->x86_model = (dir1 & 0x20) ? 1 : 2;
 			c->x86_capability&=~X86_FEATURE_TSC;
 		}
-#ifdef CONFIG_PCI
-		/* It isnt really a PCI quirk directly, but the cure is the
-		   same. The MediaGX has deep magic SMM stuff that handles the
-		   SB emulation. It thows away the fifo on disable_dma() which
-		   is wrong and ruins the audio. */
-		
-		printk(KERN_INFO "Working around Cyrix MediaGX virtual DMA bug.\n");
-		isa_dma_bridge_buggy = 1;
-#endif		
 		break;
 
         case 5: /* 6x86MX/M II */

@@ -80,9 +80,13 @@ CONFIG_EXPERIMENTAL
   MAINTAINERS, REPORTING_BUGS, Documentation/BUG-HUNTING, and
   Documentation/oops-tracing.txt in the kernel source). 
 
+  This option will also make obsoleted drivers available. These are
+  drivers that have been replaced by something else, and/or are
+  scheduled to be removed in a future kernel release.
+
   Unless you intend to help test and develop a feature or driver that
   falls into this category, or you have a situation that requires
-  using these features you should probably say N here, which will
+  using these features, you should probably say N here, which will
   cause this configure script to present you with fewer choices. If
   you say Y here, you will be offered the choice of using features or
   drivers that are currently considered to be in the alpha-test phase.
@@ -137,7 +141,7 @@ CONFIG_MATH_EMULATION
   More information about the internals of the Linux math coprocessor
   emulation can be found in arch/i386/math-emu/README.
 
-  If you are not sure, say Y; apart from resulting in a 45 KB bigger
+  If you are not sure, say Y; apart from resulting in a 66 KB bigger
   kernel, it won't hurt.
 
 Timer and CPU usage LEDs
@@ -165,7 +169,7 @@ CONFIG_LEDS_CPU
   time indication of CPU usage, by lighting whenever the idle task
   is not currently executing.
 
-Kernel FP software completion
+Kernel FP software completion (EXPERIMENTAL)
 CONFIG_MATHEMU
   This option is required for IEEE compliant floating point arithmetic
   on the Alpha. The only time you would ever not say Y is to say M in
@@ -1321,7 +1325,7 @@ CONFIG_ACER_PICA_61
   the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
   http://lena.fnet.fr/ .
 
-Support for Algorithmics P4032
+Support for Algorithmics P4032 (EXPERIMENTAL)
 CONFIG_ALGOR_P4032
   This is an evaluation board of the British company Algorithmics. The
   board uses the R4300 and a R5230 CPUs. For more information about
@@ -1641,7 +1645,7 @@ CONFIG_SGI_SERIAL
   If you want to use your SGI's built-in serial ports under Linux,
   answer Y.
 
-SGI Newport Graphics support
+SGI Newport Graphics support (EXPERIMENTAL)
 CONFIG_SGI_NEWPORT_GFX
   If you have an SGI machine and you want to compile the graphics
   drivers, say Y here. This will include the code for the
@@ -1835,7 +1839,7 @@ CONFIG_SYSVIPC
   section 6.4 of the Linux Programmer's Guide, available from
   http://metalab.unc.edu/mdw/linux.html#guide .
 
-  Saying Y here enlarges your kernel by about 7 KB. Just say Y.
+  Saying Y here enlarges your kernel by about 18 KB. Just say Y.
 
 BSD Process Accounting
 CONFIG_BSD_PROCESS_ACCT
@@ -1869,7 +1873,7 @@ CONFIG_BINFMT_ELF
   ELF (Executable and Linkable Format) is a format for libraries and
   executables used across different architectures and operating
   systems. Saying Y here will enable your kernel to run ELF binaries
-  and enlarge it by about 2 KB. ELF support under Linux has now all
+  and enlarge it by about 13 KB. ELF support under Linux has now all
   but replaced the traditional Linux a.out formats (QMAGIC and ZMAGIC)
   because it is portable (this does *not* mean that you will be able
   to run executables from different architectures or operating systems
@@ -1950,7 +1954,7 @@ CONFIG_BINFMT_MISC
   you have use for it; the module is called binfmt_misc.o. If you
   don't know what to answer at this point, say Y.
 
-Solaris binary emulation
+Solaris binary emulation (EXPERIMENTAL)
 CONFIG_SOLARIS_EMUL
   This is experimental code which will enable you to run (many)
   Solaris binaries on your SPARC Linux machine. 
@@ -2108,7 +2112,7 @@ CONFIG_FB_RETINAZ3
   you have a Retina Z3 or plan to get one before you next recompile
   the kernel.
 
-Cirrus Logic support (EXPERIMENTAL)
+Cirrus Logic generic driver (EXPERIMENTAL)
 CONFIG_FB_CLGEN
   This enables support for Cirrus Logic GD542x/543x based boards on
   Amiga: SD64, Piccolo, Picasso II/II+, Picasso IV, or EGS Spectrum.
@@ -2579,7 +2583,7 @@ TCP/IP networking
 CONFIG_INET
   These are the protocols used on the Internet and on most local
   Ethernets. It is highly recommended to say Y here (this will enlarge
-  your kernel by about 35 KB), since some programs (e.g. the X window
+  your kernel by about 144 KB), since some programs (e.g. the X window
   system) use TCP/IP even if your machine is not connected to any
   other computer. You will get the so-called loopback device which
   allows you to ping yourself (great fun, that!).
@@ -2934,7 +2938,7 @@ CONFIG_UNIX
 
   Say Y unless you know what you are doing.
 
-The IPv6 protocol
+The IPv6 protocol (EXPERIMENTAL)
 CONFIG_IPV6
   This is experimental support for the next version of the Internet
   Protocol: IP version 6 (also called IPng "IP next generation").
@@ -3006,7 +3010,7 @@ CONFIG_IPX
   General information about how to connect Linux, Windows machines and
   Macs is on the WWW at http://www.eats.com/linux_mac_win.html .
 
-  The IPX driver would enlarge your kernel by about 5 kB. This driver
+  The IPX driver would enlarge your kernel by about 16 KB. This driver
   is also available as a module ( = code which can be inserted in and
   removed from the running kernel whenever you want). The module will
   be called ipx.o. If you want to compile it as a module, say M here
@@ -4201,6 +4205,15 @@ CONFIG_AIC7XXX_RESET_DELAY
   interactions between the aic7xxx driver and the rest of the linux
   kernel. The default value has been reduced to 5 seconds. If this
   doesn't work with your hardware, try increasing this value.
+
+IBM ServeRAID Support
+CONFIG_SCSI_IPS
+  This is support for the IBM ServeRAID hardware RAID controllers.
+  Consult the SCSI-HOWTO, available via anonymous FTP from
+  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO, and the file
+  README.ips in drivers/scsi for more information.  If this driver
+  does not work correctly without modification please contact the
+  author by email at ipslinux@us.ibm.com.
 
 IBM ServeRAID Support
 CONFIG_SCSI_IPS
@@ -5970,6 +5983,18 @@ CONFIG_RCPCI
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
   
+SBNI Leased Line Adapters
+CONFIG_SBNI
+  This is a driver for ISA SBNI12-xx cards that is a low cost
+  alternative to leased line modems. Say Y if you want to insert
+  driver into kernel or say M to compile driver as a module. 
+  
+  You can find more information and last versions of drivers and 
+  utilities at http://www.granch.ru. If you have any question you
+  can mail to sbni@granch.ru.
+  
+  Say N if unsure.
+  
 WAN Drivers
 CONFIG_WAN_DRIVERS
   Say Y to this option if your Linux box contains a WAN card and you
@@ -6203,6 +6228,18 @@ CONFIG_NE2K_PCI
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
+PCI DM9102 support
+CONFIG_DM9102
+  This driver is for DM9102 compatible PCI cards from Davicom 
+  (http://www.davicom.com.tw) 
+  If you have a PCI DM9102 network (Ethernet) card, say Y.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called dmfe.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt.
+
 Racal-Interlan (Micom) NI cards
 CONFIG_NET_VENDOR_RACAL
   If you have a network (Ethernet) card belonging to this class, such
@@ -6398,7 +6435,7 @@ CONFIG_ELPLUS
   Documentation/networking/net-modules.txt. The module will be called
   3c505.o.
 
-3c507 support
+3c507 support (EXPERIMENTAL)
 CONFIG_EL16
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
@@ -7111,19 +7148,21 @@ CONFIG_IBMOL
   Linux Token Ring Project site for the latest information at
   http://www.linuxtr.net
 
-SysKonnect adapter support
-CONFIG_SKTR
-  This is support for all SysKonnect Token Ring cards, specifically
-  SysKonnect TR4/16(+) ISA (SK-4190), SysKonnect TR4/16(+) PCI
-  (SK-4590), SysKonnect TR4/16 PCI (SK-4591) adapters.
+Generic TMS380 Token Ring ISA/PCI adapter support
+CONFIG_TMS380TR
+  This driver provides generic support for token ring adapters
+  based on the Texas Instruments TMS380 series chipsets.  This
+  includes the SysKonnect TR4/16(+) ISA (SK-4190), SysKonnect
+  TR4/16(+) PCI (SK-4590), SysKonnect TR4/16 PCI (SK-4591),
+  Compaq 4/16 PCI, Thomas-Conrad TC4048 4/16 PCI, and Intel 
+  TokenExpress 4/16 and PRO ISA adapters.
 
   If you have such an adapter and would like to use it, say Y or M and
   read the Token-Ring mini-HOWTO, available from
   http://metalab.unc.edu/mdw/linux.html#howto .
 
   Also read the file linux/Documentation/networking/sktr.txt or check
-  the Linux-SNA WWW site for the latest information at
-  http://www.linux-sna.org .
+  http://www.auk.cx/tms380tr/
 
 Traffic Shaper (EXPERIMENTAL)
 CONFIG_SHAPER
@@ -7795,7 +7834,7 @@ CONFIG_ISO9660_FS
   listen to audio CDs and watch its LEDs, say Y (and read
   Documentation/filesystems/isofs.txt and the CDROM-HOWTO, available
   from http://metalab.unc.edu/mdw/linux.html#howto ), thereby
-  enlarging your kernel by about 27 kB; otherwise say N.
+  enlarging your kernel by about 27 KB; otherwise say N.
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -7854,7 +7893,7 @@ CONFIG_FAT_FS
   It is now also becoming possible to read and write compressed FAT
   filesystems; read Documentation/filesystems/fat_cvf.txt for details.
   
-  The FAT support will enlarge your kernel by about 24 kB. If unsure,
+  The FAT support will enlarge your kernel by about 37 KB. If unsure,
   say Y.
 
   If you want to compile this as a module however ( = code which can
@@ -7889,7 +7928,7 @@ CONFIG_MSDOS_FS
   support" below), or you will not be able to see the long filenames
   generated by Windows 95 / Windows NT.
 
-  This option will enlarge your kernel by about 7 kB. If unsure,
+  This option will enlarge your kernel by about 7 KB. If unsure,
   answer Y. This will only work if you said Y to "fat fs support" as
   well. If you want to compile this as a module however ( = code which
   can be inserted in and removed from the running kernel whenever you
@@ -7907,7 +7946,7 @@ CONFIG_VFAT_FS
   want to run Linux from within a DOS partition (i.e. say Y to
   "umsdos: Unix like fs on top of std MSDOS fs", below).
 
-  The VFAT support enlarges your kernel by about 10 kB and it only
+  The VFAT support enlarges your kernel by about 10 KB and it only
   works if you said Y to the "fat fs support" above. Please read the
   file Documentation/filesystems/vfat.txt for details. If unsure, 
   say Y.
@@ -7931,7 +7970,7 @@ CONFIG_UMSDOS_FS
   MSDOS floppies. You will need a program called umssync in order to
   make use of umsdos; read Documentation/filesystems/umsdos.txt. 
 
-  This option enlarges your kernel by about 25 kB and it only works if
+  This option enlarges your kernel by about 28 KB and it only works if
   you said Y to both "fat fs support" and "msdos fs support" above. If
   you want to compile this as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want), say M
@@ -7980,7 +8019,7 @@ CONFIG_NFS_FS
   the Coda filesystem; see "Coda filesystem support" below.
 
   If you say Y here, you should have said Y to TCP/IP networking also.
-  This option would enlarge your kernel by about 27 kB. 
+  This option would enlarge your kernel by about 27 KB. 
 
   This filesystem is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).

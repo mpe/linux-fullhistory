@@ -145,7 +145,7 @@ start_of_setup:
 #ifdef SAFE_RESET_DISK_CONTROLLER
 # Reset the disk controller.
 	movw	$0x0000, %ax
-	movb	$0x80, $dl
+	movb	$0x80, %dl
 	int	$0x13
 #endif
 
@@ -400,7 +400,7 @@ is_disk1:
 	subw	$DELTA_INITSEG, %ax		# aka INITSEG
 	movw	%ax, %ds
 	xorw	%ax, %ax
-	movw	%ax, 0xa0			# set table length to 0
+	movw	%ax, (0xa0)			# set table length to 0
 	movb	$0xc0, %ah
 	stc
 	int	$0x15				# moves feature table to es:bx
@@ -496,7 +496,7 @@ done_apm_bios:
 	cmpw	$0, %cs:realmode_swtch
 	jz	rmodeswtch_normal
 
-	call	*%cs:realmode_swtch
+	lcall	%cs:realmode_swtch
 
 	jmp	rmodeswtch_end
 

@@ -3366,29 +3366,25 @@ static int find_zr36057(void)
 	return zoran_num;
 }
 
-#include "chipsets.h"
-
 static void handle_chipset(void)
 {
-	int index;
-	struct pci_dev *dev = NULL;
+	if(pci_pci_problems&PCIPCI_FAIL)
+	{
+		printk(KERN_WARNING "buz: This configuration is known to have PCI to PCI DMA problems\n");
+		printk(KERN_WARNING "buz: You may not be able to use overlay mode.\n");
+	}
+			
 
-	for (index = 0; index < sizeof(black) / sizeof(black[0]); index++) {
-		if ((dev = pci_find_device(black[index].vendor, black[index].device, dev)) != NULL) {
-			printk(KERN_INFO ": Host bridge: %s, ", black[index].name);
-			switch (black[index].action) {
-
-			case TRITON:
-				printk("enabling Triton support.\n");
-				triton = 1;
-				break;
-
-			case NATOMA:
-				printk("enabling Natoma workaround.\n");
-				natoma = 1;
-				break;
-			}
-		}
+	if(pci_pci_problems&PCIPCI_TRITON)
+	{
+		printk("buz: Enabling Triton support.\n");
+		triton = 1;
+	}
+	
+	if(pci_pci_problems&PCIPCI_NATOMA)
+	{
+		printk("buz: Enabling Natoma workaround.\n");
+		natoma = 1;
 	}
 }
 
