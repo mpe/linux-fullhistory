@@ -36,7 +36,7 @@
 #define ANODE_ALLOC_FWD	512
 #define FNODE_ALLOC_FWD	0
 #define ALLOC_FWD_MIN	16
-#define ALLOC_FWD_MAX	512
+#define ALLOC_FWD_MAX	128
 #define ALLOC_M		1
 #define FNODE_RD_AHEAD	16
 #define ANODE_RD_AHEAD	16

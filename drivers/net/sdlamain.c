@@ -11,6 +11,7 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* May 19, 1999  Arnaldo Melo    __initfunc for wanpipe_init
 * Nov 28, 1997	Jaspreet Singh	Changed DRV_RELEASE to 1
 * Nov 10, 1997	Jaspreet Singh	Changed sti() to restore_flags();
 * Nov 06, 1997 	Jaspreet Singh	Changed DRV_VERSION to 4 and DRV_RELEASE to 0
@@ -42,6 +43,7 @@
 #include <linux/wanpipe.h>	/* WANPIPE common user API definitions */
 #include <asm/uaccess.h>	/* kernel <-> user copy */
 #include <asm/io.h>		/* phys_to_virt() */
+#include <linux/init.h>         /* __initfunc (when not using as a module) */
 
 
 /****** Defines & Macros ****************************************************/
@@ -122,7 +124,7 @@ static struct tq_struct sdla_tq =
 #ifdef MODULE
 int init_module (void)
 #else
-int wanpipe_init(void)
+__initfunc(int wanpipe_init(void))
 #endif
 {
 	int cnt, err = 0;

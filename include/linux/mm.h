@@ -314,6 +314,7 @@ extern unsigned long get_unmapped_area(unsigned long, unsigned long);
 extern unsigned long do_mmap(struct file *, unsigned long, unsigned long,
 	unsigned long, unsigned long, unsigned long);
 extern int do_munmap(unsigned long, size_t);
+extern unsigned long do_brk(unsigned long, unsigned long);
 
 /* filemap.c */
 extern void remove_inode_page(struct page *);
@@ -381,6 +382,8 @@ static inline struct vm_area_struct * find_vma_intersection(struct mm_struct * m
 		vma = NULL;
 	return vma;
 }
+
+extern struct vm_area_struct *find_extend_vma(struct task_struct *tsk, unsigned long addr);
 
 #define buffer_under_min()	((buffermem >> PAGE_SHIFT) * 100 < \
 				buffer_mem.min_percent * num_physpages)

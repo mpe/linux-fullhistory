@@ -183,26 +183,15 @@ out:
 	return err;
 }
 
-static void send_sigio(struct fown_struct *fown, struct fasync_struct *fa)
+static void send_sigio_to_task(struct task_struct *p,
+			       struct fown_struct *fown, struct fasync_struct *fa)
 {
-	struct task_struct * p;
-	int   pid	= fown->pid;
-	uid_t uid	= fown->uid;
-	uid_t euid	= fown->euid;
-	
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		int match = p->pid;
-		if (pid < 0)
-			match = -p->pgrp;
-		if (pid != match)
-			continue;
-		if ((euid != 0) &&
-		    (euid ^ p->suid) && (euid ^ p->uid) &&
-		    (uid ^ p->suid) && (uid ^ p->uid))
-			continue;
-		switch (fown->signum) {
-			siginfo_t si;
+	if ((fown->euid != 0) &&
+	    (fown->euid ^ p->suid) && (fown->euid ^ p->uid) &&
+	    (fown->uid ^ p->suid) && (fown->uid ^ p->uid))
+		return;
+	switch (fown->signum) {
+		siginfo_t si;
 		default:
 			/* Queue a rt signal with the appropriate fd as its
 			   value.  We use SI_SIGIO as the source, not 
@@ -213,16 +202,36 @@ static void send_sigio(struct fown_struct *fown, struct fasync_struct *fa)
 			si.si_signo = fown->signum;
 			si.si_errno = 0;
 		        si.si_code  = SI_SIGIO;
-			si.si_pid   = pid;
-			si.si_uid   = uid;
+			si.si_pid   = fown->pid;
+			si.si_uid   = fown->uid;
 			si.si_fd    = fa->fa_fd;
 			if (!send_sig_info(fown->signum, &si, p))
 				break;
 		/* fall-through: fall back on the old plain SIGIO signal */
 		case 0:
 			send_sig(SIGIO, p, 1);
-		}
 	}
+}
+
+static void send_sigio(struct fown_struct *fown, struct fasync_struct *fa)
+{
+	struct task_struct * p;
+	int   pid	= fown->pid;
+	
+	read_lock(&tasklist_lock);
+	if ( (pid > 0) && (p = find_task_by_pid(pid)) ) {
+		send_sigio_to_task(p, fown, fa);
+		goto out;
+	}
+	for_each_task(p) {
+		int match = p->pid;
+		if (pid < 0)
+			match = -p->pgrp;
+		if (pid != match)
+			continue;
+		send_sigio_to_task(p, fown, fa);
+	}
+out:
 	read_unlock(&tasklist_lock);
 }
 

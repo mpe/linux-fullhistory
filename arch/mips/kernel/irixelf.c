@@ -132,9 +132,7 @@ static void set_brk(unsigned long start, unsigned long end)
 	end = PAGE_ALIGN(end);
 	if (end <= start) 
 		return;
-	do_mmap(NULL, start, end - start,
-		PROT_READ | PROT_WRITE | PROT_EXEC,
-		MAP_FIXED | MAP_PRIVATE, 0);
+	do_brk(start, end - start);
 }
 
 
@@ -394,9 +392,7 @@ static unsigned int load_irix_interp(struct elfhdr * interp_elf_ex,
 
 	/* Map the last of the bss segment */
 	if (last_bss > len) {
-		do_mmap(NULL, len, (last_bss - len),
-			PROT_READ|PROT_WRITE|PROT_EXEC,
-			MAP_FIXED|MAP_PRIVATE, 0);
+		do_brk(len, (last_bss - len));
 	}
 	kfree(elf_phdata);
 
@@ -589,8 +585,7 @@ void irix_map_prda_page (void)
 	unsigned long v;
 	struct prda *pp;
 
-	v =  do_mmap (NULL, PRDA_ADDRESS, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC,
-		      MAP_FIXED | MAP_PRIVATE, 0);
+	v =  do_brk (PRDA_ADDRESS, PAGE_SIZE);
 	
 	if (v < 0)
 		return;
@@ -931,9 +926,7 @@ static inline int do_load_irix_library(int fd)
 	len = (elf_phdata->p_filesz + elf_phdata->p_vaddr+ 0xfff) & 0xfffff000;
 	bss = elf_phdata->p_memsz + elf_phdata->p_vaddr;
 	if (bss > len)
-	  do_mmap(NULL, len, bss-len,
-		  PROT_READ|PROT_WRITE|PROT_EXEC,
-		  MAP_FIXED|MAP_PRIVATE, 0);
+	  do_brk(len, bss-len);
 	kfree(elf_phdata);
 	return 0;
 }

@@ -7,6 +7,10 @@
 #
 # Note 2! The CFLAGS definitions are now inherited from the
 # parent makes..
+#
+# Note 3! Parport is the Borg.  We have assimilated some other
+# drivers in the `char', `net' and `scsi' directories, but left them
+# there to allay suspicion.
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)

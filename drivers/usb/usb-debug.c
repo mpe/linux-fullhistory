@@ -24,11 +24,18 @@ static void usb_show_interface(struct usb_interface_descriptor *interface)
 
 static void usb_show_config(struct usb_config_descriptor *config)
 {
-	int i;
+  int i, j;
+  struct usb_alternate_setting *as;
 
-	usb_show_config_descriptor(config);
-	for (i = 0 ; i < config->bNumInterfaces; i++)
-		usb_show_interface(config->interface + i);
+  usb_show_config_descriptor(config);
+  for (i = 0; i < config->num_altsetting; i++) {
+    as = config->altsetting + i;
+    if ((as) == NULL)
+      break;
+    printk("\n  Alternate Setting: %d\n", i);
+    for (j = 0 ; j < config->bNumInterfaces; j++)
+      usb_show_interface(as->interface + j);
+  }
 }
 
 void usb_show_device(struct usb_device *dev)

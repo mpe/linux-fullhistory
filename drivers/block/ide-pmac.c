@@ -65,7 +65,6 @@ void pmac_ide_init_hwif_ports (	hw_regs_t *hw,
 				ide_ioreg_t ctrl_port,
 				int *irq)
 {
-	ide_ioreg_t reg = ide_ioreg_t data_port;
 	int i, r;
 
 	if (data_port == 0)
@@ -76,20 +75,15 @@ void pmac_ide_init_hwif_ports (	hw_regs_t *hw,
 	r = check_media_bay_by_base(data_port, MB_CD);
 	if (r == -EINVAL)
 		return;
-		
-	for (i = IDE_DATA_OFFSET; i <= IDE_STATUS_OFFSET; i++) {
-		hw->io_ports[i] = reg * 0x10;
-		reg += 1;
-	}
-	if (ctrl_port) {
-		hw->io_ports[IDE_CONTROL_OFFSET] = ctrl_port;
-	} else {
-		hw->io_ports[IDE_CONTROL_OFFSET] = hw->io_ports[IDE_DATA_OFFSET] + 0x160;
-	}
+	
+	for ( i = 0; i < 8 ; ++i )
+		hw->io_ports[i] = data_port + i * 0x10;
+	hw->io_ports[8] = data_port + 0x160;
+
 	if (irq != NULL) {
 		*irq = 0;
 		for (i = 0; i < MAX_HWIFS; ++i) {
-			if (base == pmac_ide_regbase[i]) {
+			if (data_port == pmac_ide_regbase[i]) {
 				*irq = pmac_ide_irq[i];
 				break;
 			}
@@ -156,7 +150,7 @@ __initfunc(void pmac_ide_probe(void))
 			       np->full_name);
 			continue;
 		}
-		
+
 		base = (unsigned long) ioremap(np->addrs[0].address, 0x200);
 		
 		/* XXX This is bogus. Should be fixed in the registry by checking

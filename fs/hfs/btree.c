@@ -173,7 +173,7 @@ struct hfs_btree * hfs_btree_init(struct hfs_mdb *mdb, ino_t cnid,
 	bt->sys_mdb = mdb->sys_mdb;
 	bt->reserved = 0;
 	bt->lock = 0;
-	init_waitqueue_head(&bt->wait);
+	hfs_init_waitqueue(&bt->wait);
 	bt->dirt = 0;
 	memset(bt->cache, 0, sizeof(bt->cache));
 

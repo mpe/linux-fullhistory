@@ -17,6 +17,8 @@ M_OBJS   :=
 
 ifndef CONFIG_MBX
 L_OBJS   := via-cuda.o macio-adb.o via-pmu.o mediabay.o
+endif
+ifeq ($(CONFIG_MAC_KEYBOARD),y)
 LX_OBJS  := adb.o
 endif
 

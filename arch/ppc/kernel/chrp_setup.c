@@ -32,6 +32,7 @@
 #include <linux/console.h>
 #include <linux/pci.h>
 #include <linux/openpic.h>
+#include <linux/version.h>
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -65,6 +66,7 @@ extern volatile unsigned char *chrp_int_ack_special;
 
 unsigned long chrp_get_rtc_time(void);
 int chrp_set_rtc_time(unsigned long nowtime);
+unsigned long rtas_event_scan_rate = 0, rtas_event_scan_ct = 0;
 void chrp_calibrate_decr(void);
 void chrp_time_init(void);
 
@@ -235,6 +237,7 @@ __initfunc(void
 	   chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	extern char cmd_line[];
+	struct device_node *device;
 
 	/* init to some ~sane value until calibrate_delay() runs */
 	loops_per_sec = 50000000;
@@ -274,57 +277,73 @@ __initfunc(void
 			find_path_device("/"), "platform-open-pic", NULL);
 		OpenPIC = ioremap((unsigned long)OpenPIC, sizeof(struct OpenPIC));
 	}
-	
+
 	/*
 	 *  Fix the Super I/O configuration
 	 */
-	sio_init();
+	/*sio_init();*/
 #ifdef CONFIG_DUMMY_CONSOLE
 	conswitchp = &dummy_con;
 #endif
-	/* my starmax 6000 needs this but the longtrail shouldn't do it -- Cort */
-	if ( !strncmp("MOT", get_property(find_path_device("/"),
-					  "model", NULL),3) )
-		*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
+	*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
+
+	/* Get the event scan rate for the rtas so we know how
+	 * often it expects a heartbeat. -- Cort
+	 */
+	if ( rtas_data )
+	{
+		struct property *p;
+		device = find_devices("rtas");
+		for ( p = device->properties;
+		      strncmp(p->name, "rtas-event-scan-rate", 20) && p ;
+		      p = p->next )
+			/* nothing */ ;
+		if ( p && *(unsigned long *)p->value )
+		{
+			rtas_event_scan_rate = (HZ/(*(unsigned long *)p->value)*30)-1;
+			rtas_event_scan_ct = 1;
+			printk("RTAS Event Scan Rate: %lu (%lu jiffies)\n",
+			       *(unsigned long *)p->value, rtas_event_scan_rate );
+		}
+	}
 }
 
 void
+chrp_event_scan(void)
+{
+	unsigned char log[1024];
+	if ( rtas_event_scan_rate && (rtas_event_scan_ct-- <= 0) )
+	{
+		call_rtas( "event-scan", 4, 1, NULL, 0x0, 1, __pa(log), 1024 );
+		rtas_event_scan_ct = rtas_event_scan_rate;
+	}
+}
+	
+void
 chrp_restart(char *cmd)
 {
-#if 0
-	extern unsigned int rtas_entry, rtas_data, rtas_size;
 	printk("RTAS system-reboot returned %d\n",
 	       call_rtas("system-reboot", 0, 1, NULL));
-	printk("rtas_entry: %08lx rtas_data: %08lx rtas_size: %08lx\n",
-	       rtas_entry,rtas_data,rtas_size);
 	for (;;);
-#else
-	printk("System Halted\n");
-	while(1);
-#endif
 }
 
 void
 chrp_power_off(void)
 {
-	/* RTAS doesn't seem to work on Longtrail.
-	   For now, do it the same way as the PReP. */
-#if 0
-	extern unsigned int rtas_entry, rtas_data, rtas_size;
+	/* allow power on only with power button press */
+#define	PWR_FIELD(x) (0x8000000000000000 >> ((x)-96))
 	printk("RTAS power-off returned %d\n",
-	       call_rtas("power-off", 2, 1, NULL, 0, 0));
-	printk("rtas_entry: %08lx rtas_data: %08lx rtas_size: %08lx\n",
-	       rtas_entry,rtas_data,rtas_size);
+	       call_rtas("power-off", 2, 1, NULL,
+			 ((PWR_FIELD(96)|PWR_FIELD(97))>>32)&0xffffffff,
+			 (PWR_FIELD(96)|PWR_FIELD(97))&0xffffffff));
+#undef PWR_FIELD	
 	for (;;);
-#else
-	chrp_restart(NULL);
-#endif
 }
 
 void
 chrp_halt(void)
 {
-	chrp_restart(NULL);
+	chrp_power_off();
 }
 
 u_int
@@ -653,5 +672,21 @@ __initfunc(void
         ppc_ide_md.ide_init_hwif = chrp_ide_init_hwif_ports;
 
         ppc_ide_md.io_base = _IO_BASE;
-#endif		
+#endif
+	/*
+	 * Print the banner, then scroll down so boot progress
+	 * can be printed.  -- Cort 
+	 */
+	chrp_progress("Linux/PPC "UTS_RELEASE"\n");
+}
+
+void chrp_progress(char *s)
+{
+	extern unsigned int rtas_data;
+	
+	if ( (_machine != _MACH_chrp) || !rtas_data )
+		return;
+	call_rtas( "display-character", 1, 1, NULL, '\r' );
+	while ( *s )
+		call_rtas( "display-character", 1, 1, NULL, *s++ );
 }

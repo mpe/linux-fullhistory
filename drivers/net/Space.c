@@ -69,6 +69,7 @@ extern int el1_probe(struct device *);
 extern int wavelan_probe(struct device *);
 extern int el16_probe(struct device *);
 extern int elmc_probe(struct device *);
+extern int skmca_probe(struct device *);
 extern int elplus_probe(struct device *);
 extern int ac3200_probe(struct device *);
 extern int es_probe(struct device *);
@@ -266,6 +267,9 @@ struct devprobe mca_probes[] __initdata = {
 #endif
 #ifdef CONFIG_ELMC		/* 3c523 */
 	{elmc_probe, 0},
+#endif
+#ifdef CONFIG_SKMC              /* SKnet Microchannel */
+        {skmca_probe, 0},
 #endif
 	{NULL, 0},
 };

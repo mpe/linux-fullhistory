@@ -52,6 +52,22 @@ struct sound_unit
 	struct sound_unit *next;
 };
 
+#ifdef CONFIG_SOUND_SONICVIBES
+extern int init_sonicvibes(void);
+#endif
+#ifdef CONFIG_SOUND_ES1370
+extern int init_es1370(void);
+#endif
+#ifdef CONFIG_SOUND_ES1371
+extern int init_es1371(void);
+#endif
+#ifdef CONFIG_SOUND_MSNDCLAS
+extern int msnd_classic_init(void);
+#endif
+#ifdef CONFIG_SOUND_MSNDPIN
+extern int msnd_pinnacle_init(void);
+#endif
+
 /*
  *	Low level list operator. Scan the ordered list, find a hole and
  *	join into it. Called with the lock asserted
@@ -132,7 +148,7 @@ static void __sound_remove_unit(struct sound_unit **list, int unit)
  *	This lock guards the sound loader list.
  */
 
-static spinlock_t sound_loader_lock = SPIN_LOCK_UNLOCKED;
+spinlock_t sound_loader_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  *	Allocate the controlling structure and add it to the sound driver

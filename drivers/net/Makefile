@@ -486,6 +486,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SKMC),y)
+L_OBJS += sk_mca.o
+else
+  ifeq ($(CONFIG_SKMC),m)
+  M_OBJS += sk_mca.o
+  endif
+endif
+
 ifeq ($(CONFIG_ELMC_II),y)
 L_OBJS += 3c527.o
 else
@@ -1048,6 +1056,23 @@ ifeq ($(CONFIG_VENDOR_SANGOMA),m)
   endif
 endif
 
+ifeq ($(CONFIG_CYCLADES_SYNC),y)
+  LX_OBJS += cycx_drv.o
+  L_OBJS += cycx_main.o
+  ifeq ($(CONFIG_CYCLOMX_X25),y)
+    L_OBJS += cycx_x25.o
+  endif
+endif
+
+ifeq ($(CONFIG_CYCLADES_SYNC),m)
+  MX_OBJS += cycx_drv.o
+  M_OBJS += cyclomx.o
+  CYCLOMX_OBJS = cycx_main.o
+  ifeq ($(CONFIG_CYCLOMX_X25),y)
+    CYCLOMX_OBJS += cycx_x25.o
+  endif
+endif
+
 ifeq ($(CONFIG_X25_ASY),y)
 L_OBJS += x25_asy.o
 else
@@ -1084,6 +1109,9 @@ clean:
 
 wanpipe.o: $(WANPIPE_OBJS)
 	ld -r -o $@ $(WANPIPE_OBJS)
+
+cyclomx.o: $(CYCLOMX_OBJS)
+	ld -r -o $@ $(CYCLOMX_OBJS)
 
 rcpci.o: rcpci45.o rclanmtl.o
 	$(LD) -r -o rcpci.o rcpci45.o rclanmtl.o

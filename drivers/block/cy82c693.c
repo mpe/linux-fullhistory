@@ -423,7 +423,8 @@ static void init_cy82c693_chip (struct pci_dev *dev)
 __initfunc(void ide_init_cy82c693(ide_hwif_t *hwif))
 {
 	hwif->chipset = ide_cy82c693;
-	hwif->dmaproc = &cy82c693_dmaproc;
+	if (hwif->dma_base)
+		hwif->dmaproc = &cy82c693_dmaproc;
 	hwif->tuneproc = &cy82c693_tune_drive;
 
 	init_cy82c693_chip(hwif->pci_dev);

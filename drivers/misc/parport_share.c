@@ -39,6 +39,11 @@
 
 #define PARPORT_DEFAULT_TIMESLICE	(HZ/5)
 
+unsigned long parport_default_timeslice = PARPORT_DEFAULT_TIMESLICE;
+
+/* This doesn't do anything yet. */
+int parport_default_spintime;
+
 static struct parport *portlist = NULL, *portlist_tail = NULL;
 spinlock_t parportlist_lock = SPIN_LOCK_UNLOCKED;
 
@@ -231,25 +236,6 @@ void parport_unregister_port(struct parport *port)
 	kfree(port);
 }
 
-void parport_quiesce(struct parport *port)
-{
-	if (port->devices) {
-		printk(KERN_WARNING "%s: attempt to quiesce active port.\n",
-		       port->name);
-		return;
-	}
-
-	if (port->flags & PARPORT_FLAG_COMA) {
-		printk(KERN_WARNING "%s: attempt to quiesce comatose port.\n",
-		       port->name);
-		return;
-	}
-
-	port->ops->release_resources(port);
-
-	port->flags |= PARPORT_FLAG_COMA; 
-}
-
 struct pardevice *parport_register_device(struct parport *port, const char *name,
 			  int (*pf)(void *), void (*kf)(void *),
 			  void (*irq_func)(int, void *, struct pt_regs *), 
@@ -282,19 +268,6 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 		printk(KERN_WARNING "%s: memory squeeze, couldn't register %s.\n", port->name, name);
 		kfree(tmp);
 		return NULL;
-	}
-
-	/* We may need to claw back the port hardware. */
-	if (port->flags & PARPORT_FLAG_COMA) {
-		if (port->ops->claim_resources(port)) {
-			printk(KERN_WARNING
-			       "%s: unable to get hardware to register %s.\n",
-			       port->name, name);
-			kfree (tmp->state);
-			kfree (tmp);
-			return NULL;
-		}
-		port->flags &= ~PARPORT_FLAG_COMA;
 	}
 
 	tmp->name = name;
@@ -338,7 +311,7 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 	port->ops->inc_use_count();
 
 	init_waitqueue_head(&tmp->wait_q);
-	tmp->timeslice = PARPORT_DEFAULT_TIMESLICE;
+	tmp->timeslice = parport_default_timeslice;
 	tmp->waitnext = tmp->waitprev = NULL;
 
 	return tmp;
@@ -358,9 +331,9 @@ void parport_unregister_device(struct pardevice *dev)
 	port = dev->port;
 
 	if (port->cad == dev) {
-		printk(KERN_WARNING "%s: refused to unregister "
-		       "currently active device %s.\n", port->name, dev->name);
-		return;
+		printk(KERN_DEBUG "%s: %s forgot to release port\n",
+		       port->name, dev->name);
+		parport_release (dev);
 	}
 
 	spin_lock(&port->pardevice_lock);
@@ -381,10 +354,6 @@ void parport_unregister_device(struct pardevice *dev)
 
 	dec_parport_count();
 	port->ops->dec_use_count();
-
-	/* If there are no more devices, put the port to sleep. */
-	if (!port->devices)
-		parport_quiesce(port);
 
 	return;
 }

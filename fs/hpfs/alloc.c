@@ -164,8 +164,11 @@ secno hpfs_alloc_sector(struct super_block *s, secno near, unsigned n, int forwa
 	if (near && near < s->s_hpfs_fs_size)
 		if ((sec = alloc_in_bmp(s, near, n, f_p ? forward : forward/4))) goto ret;
 	if (b != -1) {
-		if (b < 0x10000000) if ((sec = alloc_in_bmp(s, b<<14, n, f_p ? forward : forward/2))) goto ret;
-		else if ((sec = alloc_in_bmp(s, (b&0xfffffff)<<14, n, f_p ? forward : 0))) goto ret;
+		if ((sec = alloc_in_bmp(s, b<<14, n, f_p ? forward : forward/2))) {
+			b &= 0x0fffffff;
+			goto ret;
+		}
+		if (b > 0x10000000) if ((sec = alloc_in_bmp(s, (b&0xfffffff)<<14, n, f_p ? forward : 0))) goto ret;
 	}	
 	n_bmps = (s->s_hpfs_fs_size + 0x4000 - 1) >> 14;
 	for (i = 0; i < n_bmps / 2; i++) {

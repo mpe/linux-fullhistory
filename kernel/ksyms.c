@@ -82,6 +82,7 @@ EXPORT_SYMBOL(get_options);
 /* process memory management */
 EXPORT_SYMBOL(do_mmap);
 EXPORT_SYMBOL(do_munmap);
+EXPORT_SYMBOL(do_brk);
 EXPORT_SYMBOL(exit_mm);
 EXPORT_SYMBOL(exit_files);
 EXPORT_SYMBOL(exit_fs);

@@ -1,5 +1,5 @@
 /*
- * $Id: idle.c,v 1.61 1999/03/18 04:15:45 cort Exp $
+ * $Id: idle.c,v 1.62 1999/05/24 05:43:18 cort Exp $
  *
  * Idle daemon for PowerPC.  Idle daemon will handle any action
  * that needs to be taken when the system becomes idle.
@@ -50,6 +50,7 @@ int idled(void *unused)
 	/* endless loop with no priority at all */
 	current->priority = 0;
 	current->counter = -100;
+	init_idle();	
 	for (;;)
 	{
 		__sti();

@@ -383,7 +383,7 @@ __initfunc(void ip6_fw_init(void))
 }
 
 #ifdef MODULE
-void module_cleanup(void)
+void cleanup_module(void)
 {
 #ifdef CONFIG_NETLINK
 	netlink_detach(NETLINK_IP6_FW);

@@ -150,7 +150,6 @@ asmlinkage int sunos_brk(unsigned long brk)
 	unsigned long newbrk, oldbrk;
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
 	if(ARCH_SUN4C_SUN4) {
 		if(brk >= 0x20000000 && brk < 0xe0000000) {
 			goto out;
@@ -210,12 +209,9 @@ asmlinkage int sunos_brk(unsigned long brk)
 	 * Ok, we have probably got enough memory - let it rip.
 	 */
 	current->mm->brk = brk;
-	do_mmap(NULL, oldbrk, newbrk-oldbrk,
-		PROT_READ|PROT_WRITE|PROT_EXEC,
-		MAP_FIXED|MAP_PRIVATE, 0);
+	do_brk(oldbrk, newbrk-oldbrk)
 	retval = 0;
 out:
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 	return retval;
 }

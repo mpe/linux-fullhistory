@@ -260,7 +260,7 @@ static int printer_probe(struct usb_device *dev)
 		return -1;
 	}
 
-	interface = dev->config->interface;
+	interface = dev->config->altsetting->interface;
 
 	/* Lets be paranoid (for the moment)*/
 	if (interface->bInterfaceClass != 7 ||

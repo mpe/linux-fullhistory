@@ -11,6 +11,7 @@
  */
 
 #define __HAVE_ARCH_MEMCPY
+#define __HAVE_ARCH_MEMMOVE
 /* For backward compatibility with modules.  Unused otherwise.  */
 extern void * __memcpy(void *, const void *, size_t);
 

@@ -75,7 +75,7 @@ static int mouse_irq(int state, void *__buffer, void *dev_id)
 	mouse->buttons = data[0] & 0x07;
 	mouse->dx += data[1]; /* data[] is signed, so this works */
 	mouse->dy -= data[2]; /* y-axis is reversed */
-	mouse->dz += data[3];
+	mouse->dz -= data[3];
 	mouse->ready = 1;
 
 	add_mouse_randomness((mouse->buttons << 24) + (mouse->dz << 16 ) + 
@@ -249,7 +249,7 @@ static int mouse_probe(struct usb_device *dev)
 		return -1;
 
 	/* Is it a mouse interface? */
-	interface = &dev->config[0].interface[0];
+	interface = &dev->config[0].altsetting[0].interface[0];
 	if (interface->bInterfaceClass != 3)
 		return -1;
 	if (interface->bInterfaceSubClass != 1)

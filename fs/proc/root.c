@@ -155,7 +155,7 @@ struct proc_dir_entry proc_root = {
 	&proc_root, NULL
 };
 
-struct proc_dir_entry *proc_net, *proc_scsi, *proc_bus;
+struct proc_dir_entry *proc_net, *proc_scsi, *proc_bus, *proc_sysvipc;
 
 #ifdef CONFIG_MCA
 struct proc_dir_entry proc_mca = {
@@ -681,6 +681,9 @@ __initfunc(void proc_root_init(void))
 	proc_register(&proc_root, &proc_root_self);
 	proc_net = create_proc_entry("net", S_IFDIR, 0);
 	proc_scsi = create_proc_entry("scsi", S_IFDIR, 0);
+#ifdef CONFIG_SYSVIPC
+	proc_sysvipc = create_proc_entry("sysvipc", S_IFDIR, 0);
+#endif
 #ifdef CONFIG_SYSCTL
 	proc_register(&proc_root, &proc_sys_root);
 #endif

@@ -227,6 +227,11 @@ wrperfmon(unsigned long perf_fun, unsigned long arg)
 #define __save_and_cli(flags)	((flags) = swpipl(7))
 #define __restore_flags(flags)	setipl(flags)
 
+#define local_irq_save(flags)		__save_and_cli(flags)
+#define local_irq_restore(flags)	__restore_flags(flags)
+#define local_irq_disable()		__cli()
+#define local_irq_enable()		__sti()
+
 #ifdef __SMP__
 
 extern int global_irq_holder;

@@ -4,6 +4,8 @@
  *         Many improvements/fixes by Bruno Haible.
  * Replaced `struct shm_desc' by `struct vm_area_struct', July 1994.
  * Fixed the shm swap deallocation (shm_unuse()), August 1998 Andrea Arcangeli.
+ *
+ * /proc/sysvipc/shm support (c) 1999 Dragos Acostachioaie <dragos@iname.com>
  */
 
 #include <linux/malloc.h>
@@ -12,6 +14,7 @@
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/vmalloc.h>
+#include <linux/proc_fs.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -26,6 +29,9 @@ static void shm_open (struct vm_area_struct *shmd);
 static void shm_close (struct vm_area_struct *shmd);
 static unsigned long shm_nopage(struct vm_area_struct *, unsigned long, int);
 static int shm_swapout(struct vm_area_struct *, struct page *);
+#ifdef CONFIG_PROC_FS
+static int sysvipc_shm_read_proc(char *buffer, char **start, off_t offset, int length, int *eof, void *data);
+#endif
 
 static int shm_tot = 0; /* total number of shared memory pages */
 static int shm_rss = 0; /* number of shared memory pages that are in memory */
@@ -44,11 +50,18 @@ static ulong used_segs = 0;
 void __init shm_init (void)
 {
 	int id;
+#ifdef CONFIG_PROC_FS
+	struct proc_dir_entry *ent;
+#endif
 
 	for (id = 0; id < SHMMNI; id++)
 		shm_segs[id] = (struct shmid_kernel *) IPC_UNUSED;
 	shm_tot = shm_rss = shm_seq = max_shmid = used_segs = 0;
 	init_waitqueue_head(&shm_lock);
+#ifdef CONFIG_PROC_FS
+	ent = create_proc_entry("sysvipc/shm", 0, 0);
+	ent->read_proc = sysvipc_shm_read_proc;
+#endif
 	return;
 }
 
@@ -762,3 +775,50 @@ void shm_unuse(unsigned long entry, unsigned long page)
 					return;
 				}
 }
+
+#ifdef CONFIG_PROC_FS
+static int sysvipc_shm_read_proc(char *buffer, char **start, off_t offset, int length, int *eof, void *data)
+{
+	off_t pos = 0;
+	off_t begin = 0;
+	int i, len = 0;
+
+    	len += sprintf(buffer, "       key      shmid perms       size  cpid  lpid nattch   uid   gid  cuid  cgid      atime      dtime      ctime\n");
+
+    	for(i = 0; i < SHMMNI; i++)
+		if(shm_segs[i] != IPC_UNUSED) {
+	    		len += sprintf(buffer + len, "%10d %10d  %4o %10d %5u %5u  %5d %5u %5u %5u %5u %10lu %10lu %10lu\n",
+			shm_segs[i]->u.shm_perm.key,
+			shm_segs[i]->u.shm_perm.seq * SHMMNI + i,
+			shm_segs[i]->u.shm_perm.mode,
+			shm_segs[i]->u.shm_segsz,
+			shm_segs[i]->u.shm_cpid,
+			shm_segs[i]->u.shm_lpid,
+			shm_segs[i]->u.shm_nattch,
+			shm_segs[i]->u.shm_perm.uid,
+			shm_segs[i]->u.shm_perm.gid,
+			shm_segs[i]->u.shm_perm.cuid,
+			shm_segs[i]->u.shm_perm.cgid,
+			shm_segs[i]->u.shm_atime,
+			shm_segs[i]->u.shm_dtime,
+			shm_segs[i]->u.shm_ctime);
+
+			pos += len;
+			if(pos < offset) {
+				len = 0;
+				begin = pos;
+			}
+			if(pos > offset + length)
+				goto done;
+		}
+	*eof = 1;
+done:
+	*start = buffer + (offset - begin);
+	len -= (offset - begin);
+	if(len > length)
+		len = length;
+	if(len < 0)
+		len = 0;
+	return len;
+}
+#endif

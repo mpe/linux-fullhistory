@@ -482,14 +482,9 @@ int hpfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	de.hidden = new_name[0] == '.';
 
 	if (new_inode) {
-		hpfs_brelse4(&qbh);
-		if ((nde = map_dirent(new_dir, new_dir->i_hpfs_dno, (char *)new_name, new_len, NULL, &qbh1))) {
-			int r;
-			if ((r = hpfs_remove_dirent(old_dir, dno, dep, &qbh, 1)) != 2) {
-				if (!(nde = map_dirent(new_dir, new_dir->i_hpfs_dno, (char *)new_name, new_len, NULL, &qbh1))) {
-					hpfs_error(new_dir->i_sb, "hpfs_rename: could not find dirent #2");
-					goto end1;
-				}
+		int r;
+		if ((r = hpfs_remove_dirent(old_dir, dno, dep, &qbh, 1)) != 2) {
+			if ((nde = map_dirent(new_dir, new_dir->i_hpfs_dno, (char *)new_name, new_len, NULL, &qbh1))) {
 				new_inode->i_nlink = 0;
 				copy_de(nde, &de);
 				memcpy(nde->name, new_name, new_len);
@@ -497,11 +492,11 @@ int hpfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 				hpfs_brelse4(&qbh1);
 				goto end;
 			}
-			err = r == 2 ? -ENOSPC : r == 1 ? -EFSERROR : 0;
+			hpfs_error(new_dir->i_sb, "hpfs_rename: could not find dirent");
+			err = -EFSERROR;
 			goto end1;
 		}
-		hpfs_error(new_dir->i_sb, "hpfs_rename: could not find dirent");
-		err = -EFSERROR;
+		err = r == 2 ? -ENOSPC : r == 1 ? -EFSERROR : 0;
 		goto end1;
 	}
 

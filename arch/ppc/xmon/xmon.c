@@ -999,7 +999,7 @@ dump()
 	int c;
 
 	c = inchar();
-	if ((isxdigit(c) && c != 'f' && c != 'd') || c == '\n')
+	if ((isxdigit(c) && (c != 'f') && (c != 'd')) || (c == '\n'))
 		termch = c;
 	scanhex(&adrs);
 	if( termch != '\n')

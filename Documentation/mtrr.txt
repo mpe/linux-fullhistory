@@ -1,15 +1,25 @@
 MTRR (Memory Type Range Register) control
-16 May 1999
+3 Jun 1999
 Richard Gooch
 <rgooch@atnf.csiro.au>
 
-  On Intel Pentium Pro/Pentium II systems the Memory Type Range
-  Registers (MTRRs) may be used to control processor access to memory
-  ranges. This is most useful when you have a video (VGA) card on a
-  PCI or AGP bus. Enabling write-combining allows bus write transfers
-  to be combined into a larger transfer before bursting over the
-  PCI/AGP bus. This can increase performance of image write operations
-  2.5 times or more.
+  On Intel P6 family processors (Pentium Pro, Pentium II and later)
+  the Memory Type Range Registers (MTRRs) may be used to control
+  processor access to memory ranges. This is most useful when you have
+  a video (VGA) card on a PCI or AGP bus. Enabling write-combining
+  allows bus write transfers to be combined into a larger transfer
+  before bursting over the PCI/AGP bus. This can increase performance
+  of image write operations 2.5 times or more.
+
+  The Cyrix 6x86, 6x86MX and M II processors have Address Range
+  Registers (ARRs) which provide a similar functionality to MTRRs. For
+  these, the ARRs are used to emulate the MTRRs.
+
+  The AMD K6-2 (stepping 8 and above) and K6-3 processors have two
+  MTRRs. These are supported.
+  
+  The Centaur C6 (WinChip) has 8 MCRs, allowing write-combining. These
+  are supported.
 
   The CONFIG_MTRR option creates a /proc/mtrr file which may be used
   to manipulate your MTRRs. Typically the X server should use

@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.165 1999/05/14 22:37:29 cort Exp $
+ *  $Id: init.c,v 1.166 1999/05/22 18:18:30 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -402,7 +402,7 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 	for (i = 0; i < size; i += PAGE_SIZE)
 		map_page(&init_task, v+i, p+i, flags);
 out:	
-	return (void *) (v + (p & ~PAGE_MASK));
+	return (void *) (v + (addr & ~PAGE_MASK));
 }
 
 void iounmap(void *addr)

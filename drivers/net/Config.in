@@ -109,6 +109,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   fi
   if [ "$CONFIG_MCA" = "y" ]; then
     tristate 'NE/2 (ne2000 MCA version) support' CONFIG_NE2_MCA
+    tristate 'SKnet MCA support' CONFIG_SKMC
   fi
   bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA
   if [ "$CONFIG_NET_EISA" = "y" ]; then
@@ -237,6 +238,12 @@ if [ "$CONFIG_WAN_ROUTER" != "n" ]; then
       bool '  WANPIPE X.25 support' CONFIG_WANPIPE_X25
       bool '  WANPIPE Frame Relay support' CONFIG_WANPIPE_FR
       bool '  WANPIPE PPP support' CONFIG_WANPIPE_PPP
+    fi
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      dep_tristate 'Cyclom 2X(tm) multiprotocol cards (EXPERIMENTAL)' CONFIG_CYCLADES_SYNC $CONFIG_WAN_DRIVERS
+      if [ "$CONFIG_CYCLADES_SYNC" != "n" ]; then
+        bool '  Cyclom 2X X.25 support (EXPERIMENTAL)' CONFIG_CYCLOMX_X25
+      fi
     fi
   fi
 fi

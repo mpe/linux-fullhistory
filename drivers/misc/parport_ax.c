@@ -201,39 +201,9 @@ parport_ax_enable_irq(struct parport *p)
 	writel(dcsr, (unsigned long)&dma->dcsr);
 }
 
-void
-parport_ax_release_resources(struct parport *p)
-{
-	if (p->irq != PARPORT_IRQ_NONE) {
-		parport_ax_disable_irq(p);
-		free_irq(p->irq, p);
-	}
-	release_region(p->base, p->size);
-	if (p->modes & PARPORT_MODE_PCECR)
-		release_region(p->base+0x400, 3);
-	release_region((unsigned long)p->private_data,
-		       sizeof(struct linux_ebus_dma));
-}
-
 int
 parport_ax_claim_resources(struct parport *p)
 {
-	/* FIXME check that resources are free */
-	int err;
-
-	if (p->irq != PARPORT_IRQ_NONE) {
-		if ((err = request_irq(p->irq, parport_ax_interrupt,
-				       0, p->name, p)) != 0)
-			return err;
-		else
-			parport_ax_enable_irq(p);
-	}
-	request_region(p->base, p->size, p->name);
-	if (p->modes & PARPORT_MODE_PCECR)
-		request_region(p->base+0x400, 3, p->name);
-	request_region((unsigned long)p->private_data,
-		       sizeof(struct linux_ebus_dma), p->name);
-	return 0;
 }
 
 void
@@ -331,9 +301,6 @@ static struct parport_operations parport_ax_ops =
 	parport_ax_read_fifo,
 	
 	parport_ax_change_mode,
-	
-	parport_ax_release_resources,
-	parport_ax_claim_resources,
 	
 	parport_ax_write_epp,
 	parport_ax_read_epp,
@@ -572,6 +539,20 @@ init_one_port(struct linux_ebus_device *dev)
 	if (p->dma == PARPORT_DMA_AUTO)
 		p->dma = (p->modes & PARPORT_MODE_PCECP) ? 0 : PARPORT_DMA_NONE;
 
+	if (p->irq != PARPORT_IRQ_NONE) {
+		int err;
+		if ((err = request_irq(p->irq, parport_ax_interrupt,
+				       0, p->name, p)) != 0)
+			return err;
+		else
+			parport_ax_enable_irq(p);
+	}
+	request_region(p->base, p->size, p->name);
+	if (p->modes & PARPORT_MODE_PCECR)
+		request_region(p->base+0x400, 3, p->name);
+	request_region((unsigned long)p->private_data,
+		       sizeof(struct linux_ebus_dma), p->name);
+
 	printk(KERN_INFO "%s: PC-style at 0x%lx", p->name, p->base);
 	if (p->irq != PARPORT_IRQ_NONE)
 		printk(", irq %s", __irq_itoa(p->irq));
@@ -587,13 +568,14 @@ init_one_port(struct linux_ebus_device *dev)
 	}
 	printk("]\n");
 	parport_proc_register(p);
-	p->flags |= PARPORT_FLAG_COMA;
 
 	p->ops->write_control(p, 0x0c);
 	p->ops->write_data(p, 0);
 
 	if (parport_probe_hook)
 		(*parport_probe_hook)(p);
+
+	parport_announce_port (p);
 
 	return 1;
 }
@@ -627,8 +609,15 @@ cleanup_module(void)
 	while (p) {
 		tmp = p->next;
 		if (p->modes & PARPORT_MODE_PCSPP) { 
-			if (!(p->flags & PARPORT_FLAG_COMA)) 
-				parport_quiesce(p);
+			if (p->irq != PARPORT_IRQ_NONE) {
+				parport_ax_disable_irq(p);
+				free_irq(p->irq, p);
+			}
+			release_region(p->base, p->size);
+			if (p->modes & PARPORT_MODE_PCECR)
+				release_region(p->base+0x400, 3);
+			release_region((unsigned long)p->private_data,
+				       sizeof(struct linux_ebus_dma));
 			parport_proc_unregister(p);
 			parport_unregister_port(p);
 		}

@@ -84,7 +84,7 @@ int init_module(void)
 {
 	return usb_init();
 }
-void module_cleanup(void)
+void cleanup_module(void)
 {
 	cleanup_drivers();
 }

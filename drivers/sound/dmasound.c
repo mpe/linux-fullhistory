@@ -784,6 +784,7 @@ static ssize_t sound_copy_translate(const u_char *userPtr,
 
 struct sound_mixer {
     int busy;
+    int modify_counter;
 };
 
 static struct sound_mixer mixer;
@@ -3811,10 +3812,23 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		       u_long arg)
 {
 	int data;
+	if (_SIOC_DIR(cmd) & _SIOC_WRITE)
+	    mixer.modify_counter++;
+	if (cmd == OSS_GETVERSION)
+	    return IOCTL_OUT(arg, SOUND_VERSION);
 	switch (sound.mach.type) {
 #ifdef CONFIG_ATARI
 	case DMASND_FALCON:
 		switch (cmd) {
+		case SOUND_MIXER_INFO: {
+		    mixer_info info;
+		    strncpy(info.id, "FALCON", sizeof(info.id));
+		    strncpy(info.name, "FALCON", sizeof(info.name));
+		    info.name[sizeof(info.name)-1] = 0;
+		    info.modify_counter = mixer.modify_counter;
+		    copy_to_user_ret((int *)arg, &info, sizeof(info), -EFAULT);
+		    return 0;
+		}
 		case SOUND_MIXER_READ_DEVMASK:
 			return IOCTL_OUT(arg, SOUND_MASK_VOLUME | SOUND_MASK_MIC | SOUND_MASK_SPEAKER);
 		case SOUND_MIXER_READ_RECMASK:
@@ -3866,6 +3880,15 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 
 	case DMASND_TT:
 		switch (cmd) {
+		case SOUND_MIXER_INFO: {
+		    mixer_info info;
+		    strncpy(info.id, "TT", sizeof(info.id));
+		    strncpy(info.name, "TT", sizeof(info.name));
+		    info.name[sizeof(info.name)-1] = 0;
+		    info.modify_counter = mixer.modify_counter;
+		    copy_to_user_ret((int *)arg, &info, sizeof(info), -EFAULT);
+		    return 0;
+		}
 		case SOUND_MIXER_READ_DEVMASK:
 			return IOCTL_OUT(arg,
 					 SOUND_MASK_VOLUME | SOUND_MASK_TREBLE | SOUND_MASK_BASS |
@@ -3927,6 +3950,15 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 #ifdef CONFIG_AMIGA
 	case DMASND_AMIGA:
 		switch (cmd) {
+		case SOUND_MIXER_INFO: {
+		    mixer_info info;
+		    strncpy(info.id, "AMIGA", sizeof(info.id));
+		    strncpy(info.name, "AMIGA", sizeof(info.name));
+		    info.name[sizeof(info.name)-1] = 0;
+		    info.modify_counter = mixer.modify_counter;
+		    copy_to_user_ret((int *)arg, &info, sizeof(info), -EFAULT);
+		    return 0;
+		}
 		case SOUND_MIXER_READ_DEVMASK:
 			return IOCTL_OUT(arg, SOUND_MASK_VOLUME | SOUND_MASK_TREBLE);
 		case SOUND_MIXER_READ_RECMASK:
@@ -3953,6 +3985,16 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	case DMASND_AWACS:
 		if (awacs_revision<AWACS_BURGUNDY) { /* Different IOCTLS for burgundy*/
 			switch (cmd) {
+			case SOUND_MIXER_INFO: {
+			    mixer_info info;
+			    strncpy(info.id, "AWACS", sizeof(info.id));
+			    strncpy(info.name, "AWACS", sizeof(info.name));
+			    info.name[sizeof(info.name)-1] = 0;
+			    info.modify_counter = mixer.modify_counter;
+			    copy_to_user_ret((int *)arg, &info, 
+					     sizeof(info), -EFAULT);
+			    return 0;
+			}
 			case SOUND_MIXER_READ_DEVMASK:
 				data = SOUND_MASK_VOLUME | SOUND_MASK_SPEAKER
 					| SOUND_MASK_LINE | SOUND_MASK_MIC
@@ -4066,6 +4108,16 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		} else {
 			/* We are, we are, we are... Burgundy or better */
 			switch(cmd) {
+			case SOUND_MIXER_INFO: {
+			    mixer_info info;
+			    strncpy(info.id, "AWACS", sizeof(info.id));
+			    strncpy(info.name, "AWACS", sizeof(info.name));
+			    info.name[sizeof(info.name)-1] = 0;
+			    info.modify_counter = mixer.modify_counter;
+			    copy_to_user_ret((int *)arg, &info, 
+					     sizeof(info), -EFAULT);
+			    return 0;
+			}
 			case SOUND_MIXER_READ_DEVMASK:
 				data = SOUND_MASK_VOLUME | SOUND_MASK_CD |
 					SOUND_MASK_LINE | SOUND_MASK_MIC |

@@ -6369,6 +6369,20 @@ CONFIG_NE2_MCA
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
+SKnet MCA support
+CONFIG_SKMC
+  This are Micro Channel ethernet adapters.  You need to set CONFIG_MCA
+  to use this driver.  It's both available as an in-kernel driver and
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a module,
+  say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more than
+  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
+  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.  Supported
+  cards are the SKnet Junior MC2 and the SKnet MC2(+).  Distinguishing
+  both cards is done automatically.  Note that using multiple boards
+  of different type hasn't been tested with this driver.
+
 EISA, VLB, PCI and on board controllers
 CONFIG_NET_EISA
   This is another class of network cards which attach directly to the

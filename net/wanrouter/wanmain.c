@@ -30,6 +30,7 @@
 * Dec 22, 1998  Arnaldo Melo    vmalloc/vfree used in device_setup to allocate
 *                               kernel memory and copy configuration data to
 *                               kernel space (for big firmwares)
+* May 19, 1999  Arnaldo Melo    __initfunc in wanrouter_init
 *****************************************************************************/
 
 #include <linux/config.h>
@@ -104,17 +105,18 @@ static unsigned char oui_802_2[] = { 0x00, 0x80, 0xC2 };
 #endif
 
 #ifndef MODULE
-
-int wanrouter_init(void)
+__initfunc(int wanrouter_init(void))
 {
 	int err;
-	extern void wanpipe_init(void);
+	extern int wanpipe_init(void),
+		   cyclomx_init(void);
 
 	printk(KERN_INFO "%s v%u.%u %s\n",
 		fullname, ROUTER_VERSION, ROUTER_RELEASE, copyright);
 	err = wanrouter_proc_init();
 	if (err)
-		printk(KERN_ERR "%s: can't create entry in proc filesystem!\n", modname);		
+		printk(KERN_ERR "%s: can't create entry in proc filesystem!\n",
+				modname);		
 
 	/*
 	 *	Initialise compiled in boards
@@ -123,6 +125,9 @@ int wanrouter_init(void)
 #ifdef CONFIG_VENDOR_SANGOMA
 	wanpipe_init();
 #endif	
+#ifdef CONFIG_CYCLADES_SYNC
+	cyclomx_init();
+#endif
 	return err;
 }
 
@@ -187,7 +192,6 @@ void cleanup_module (void)
  *	Context:	process
  */
 
-
 int register_wan_device(wan_device_t* wandev)
 {
 	int err, namelen;
@@ -207,7 +211,6 @@ int register_wan_device(wan_device_t* wandev)
 	printk(KERN_INFO "%s: registering WAN device %s\n",
 		modname, wandev->name);
 #endif
-
 	/*
 	 *	Register /proc directory entry 
 	 */

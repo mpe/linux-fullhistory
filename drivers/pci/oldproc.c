@@ -102,6 +102,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( DEC,		DEC_21150,	"DC21150"),
 	DEVICE( DEC,		DEC_21152,	"DC21152"),
 	DEVICE( DEC,		DEC_21153,	"DC21153"),
+	DEVICE( DEC,		DEC_21154,	"DC21154"),
 	DEVICE( CIRRUS,		CIRRUS_7548,	"GD 7548"),
 	DEVICE( CIRRUS,		CIRRUS_5430,	"GD 5430"),
 	DEVICE( CIRRUS,		CIRRUS_5434_4,	"GD 5434"),
@@ -202,6 +203,8 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( MOTOROLA,	MOTOROLA_MPC105,"MPC105 Eagle"),
 	DEVICE( MOTOROLA,	MOTOROLA_MPC106,"MPC106 Grackle"),
 	DEVICE( MOTOROLA,	MOTOROLA_RAVEN,	"Raven"),
+	DEVICE( MOTOROLA,	MOTOROLA_FALCON,"Falcon"),
+	DEVICE( MOTOROLA,	MOTOROLA_CPX8216,"CPX8216"),
 	DEVICE( PROMISE,        PROMISE_20246,	"IDE UltraDMA/33"),
 	DEVICE(	PROMISE,	PROMISE_20262,	"IDE UltraDMA/66"),
 	DEVICE( PROMISE,	PROMISE_5300,	"DC5030"),
@@ -467,6 +470,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( PICTUREL,	PICTUREL_PCIVST,"PCIVST"),
 	DEVICE( NVIDIA_SGS,	NVIDIA_SGS_RIVA128,	"Riva 128"),
 	DEVICE( CBOARDS,	CBOARDS_DAS1602_16,"DAS1602/16"),
+	DEVICE( MOTOROLA_OOPS,	MOTOROLA_FALCON,"Falcon"),
 	DEVICE( SYMPHONY,	SYMPHONY_101,	"82C101"),
 	DEVICE( TEKRAM,		TEKRAM_DC290,	"DC-290"),
 	DEVICE( 3DLABS,		3DLABS_300SX,	"GLINT 300SX"),
@@ -676,6 +680,8 @@ static const char *pci_strclass (unsigned int class)
 	      case PCI_CLASS_SERIAL_USB:		return "USB Controller";
 	      case PCI_CLASS_SERIAL_FIBER:		return "Fiber Channel";
 
+	      case PCI_CLASS_HOT_SWAP_CONTROLLER:	return "Hot Swap Controller";
+
 	      default:					return "Unknown class";
 	}
 }
@@ -715,6 +721,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_OAK: 		return "OAK";
 	      case PCI_VENDOR_ID_WINBOND2:	return "Winbond";
 	      case PCI_VENDOR_ID_MOTOROLA:	return "Motorola";
+	      case PCI_VENDOR_ID_MOTOROLA_OOPS:	return "Motorola";
 	      case PCI_VENDOR_ID_PROMISE:	return "Promise Technology";
 	      case PCI_VENDOR_ID_N9:		return "Number Nine";
 	      case PCI_VENDOR_ID_UMC:		return "UMC";

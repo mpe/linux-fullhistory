@@ -198,7 +198,7 @@ static int acm_probe(struct usb_device *dev)
 	/*Now scan all configs for a ACM configuration*/
 	for (cfgnum=0;cfgnum<dev->descriptor.bNumConfigurations;cfgnum++) {
 		/* The first one should be Communications interface? */
-		interface = &dev->config[cfgnum].interface[0];
+		interface = &dev->config[cfgnum].altsetting[0].interface[0];
 		if (interface->bInterfaceClass != 2 ||
 		    interface->bInterfaceSubClass != 2 ||
 		    interface->bInterfaceProtocol != 1 ||
@@ -212,7 +212,7 @@ static int acm_probe(struct usb_device *dev)
 			continue;
 			
 		/* The second one should be a Data interface? */
-		interface = &dev->config[cfgnum].interface[1];
+		interface = &dev->config[cfgnum].altsetting[0].interface[1];
 		if (interface->bInterfaceClass != 10 ||
 		    interface->bInterfaceSubClass != 0 ||
 		    interface->bInterfaceProtocol != 0 ||
@@ -234,12 +234,12 @@ static int acm_probe(struct usb_device *dev)
 		printk("USB ACM found\n");
 		usb_set_configuration(dev, dev->config[cfgnum].bConfigurationValue);
 		acm->dev=dev;
-		acm->readendp=dev->config[cfgnum].interface[1].endpoint[0].bEndpointAddress;
-		acm->writeendp=dev->config[cfgnum].interface[1].endpoint[1].bEndpointAddress;
-		acm->ctrlendp=dev->config[cfgnum].interface[0].endpoint[0].bEndpointAddress;
+		acm->readendp=dev->config[cfgnum].altsetting[0].interface[1].endpoint[0].bEndpointAddress;
+		acm->writeendp=dev->config[cfgnum].altsetting[0].interface[1].endpoint[1].bEndpointAddress;
+		acm->ctrlendp=dev->config[cfgnum].altsetting[0].interface[0].endpoint[0].bEndpointAddress;
 		acm->readpipe=usb_rcvbulkpipe(dev,acm->readendp);
 		acm->writepipe=usb_sndbulkpipe(dev,acm->writeendp);
-		usb_request_irq(dev,acm->ctrlpipe=usb_rcvctrlpipe(dev,acm->ctrlendp), acm_irq, dev->config[cfgnum].interface[0].endpoint[0].bInterval, &acm->ctrlbuffer);
+		usb_request_irq(dev,acm->ctrlpipe=usb_rcvctrlpipe(dev,acm->ctrlendp), acm_irq, dev->config[cfgnum].altsetting[0].interface[0].endpoint[0].bInterval, &acm->ctrlbuffer);
 		acm->present = 1;
 		acm->buffer=0;
 		return 0;

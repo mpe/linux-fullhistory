@@ -1164,7 +1164,7 @@ static int cpia_probe(struct usb_device *dev)
 		return -1;
 #endif
 
-	interface = &dev->config[0].interface[0];
+	interface = &dev->config[0].altsetting[0].interface[0];
 
 	/* Is it a CPiA? */
 /*
@@ -1260,7 +1260,7 @@ int init_module(void)
 {
 	return usb_cpia_init();
 }
-void module_cleanup(void)
+void cleanup_module(void)
 {
 }
 #endif

@@ -155,19 +155,6 @@ static void amiga_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 
-static void amiga_release_resources(struct parport *p)
-{
-DPRINTK("realease_resources\n");
-	if (p->irq != PARPORT_IRQ_NONE)
-		free_irq(IRQ_AMIGA_CIAA_FLG, p);
-}
-
-static int amiga_claim_resources(struct parport *p)
-{
-DPRINTK("claim_resources\n");
-	return request_irq(IRQ_AMIGA_CIAA_FLG, amiga_interrupt, 0, p->name, p);
-}
-
 static void amiga_init_state(struct parport_state *s)
 {
 	s->u.amiga.data = 0;
@@ -243,10 +230,6 @@ static struct parport_operations pp_amiga_ops = {
 	amiga_change_mode,
 
 
-	amiga_release_resources,
-	amiga_claim_resources,
-
-
 	NULL, /* epp_write_data */
 	NULL, /* epp_read_data */
 	NULL, /* epp_write_addr */
@@ -289,10 +272,17 @@ __initfunc(int parport_amiga_init(void))
 		printk(KERN_INFO "%s: Amiga built-in port using irq\n", p->name);
 		/* XXX: set operating mode */
 		parport_proc_register(p);
-		p->flags |= PARPORT_FLAG_COMA;
+		if (request_irq(IRQ_AMIGA_CIAA_FLG, amiga_interrupt, 0,
+				p->name, p)) {
+			parport_unregister_port (p);
+			return 0;
+		}
 
 		if (parport_probe_hook)
 			(*parport_probe_hook)(p);
+
+		parport_announce_port (p);
+
 		return 1;
 
 	}
@@ -312,8 +302,8 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	if (!(this_port->flags & PARPORT_FLAG_COMA))
-		parport_quiesce(this_port);
+	if (p->irq != PARPORT_IRQ_NONE)
+		free_irq(IRQ_AMIGA_CIAA_FLG, p);
 	parport_proc_unregister(this_port);
 	parport_unregister_port(this_port);
 }

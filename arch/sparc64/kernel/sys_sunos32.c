@@ -134,7 +134,6 @@ asmlinkage int sunos_brk(u32 baddr)
 	unsigned long newbrk, oldbrk, brk = (unsigned long) baddr;
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
 	if (brk < current->mm->end_code)
 		goto out;
 	newbrk = PAGE_ALIGN(brk);
@@ -175,12 +174,9 @@ asmlinkage int sunos_brk(u32 baddr)
 		goto out;
 	/* Ok, we have probably got enough memory - let it rip. */
 	current->mm->brk = brk;
-	do_mmap(NULL, oldbrk, newbrk-oldbrk,
-		PROT_READ|PROT_WRITE|PROT_EXEC,
-		MAP_FIXED|MAP_PRIVATE, 0);
+	do_brk(oldbrk, newbrk-oldbrk);
 	retval = 0;
 out:
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 	return retval;
 }

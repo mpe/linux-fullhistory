@@ -16,3 +16,5 @@ Things to be done.
 3. Support more hardware (eg m68k, Sun bpp).
 
 4. A better PLIP (make use of bidirectional/ECP/EPP ports).
+
+See <URL:http://www.cyberelk.demon.co.uk/parport.html>.

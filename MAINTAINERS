@@ -192,6 +192,13 @@ P:	John A. Martin
 M:	jam@acm.org
 S:	Maintained
 
+CYCLADES 2X SYNC CARD DRIVER
+P:	Arnaldo Carvalho de Melo
+M:	acme@conectiva.com.br
+W:	http://www.conectiva.com.br/~acme
+L:	cycsyn-devel@bazar.conectiva.com.br
+S:	Maintained
+
 CYCLADES ASYNC MUX DRIVER
 P:	Ivan Passos
 M:	Ivan Passos <ivan@cyclades.com>
@@ -390,6 +397,11 @@ P:	Paul Russell
 M:	Paul.Russell@rustcorp.com.au
 W:	http://www.rustcorp.com/linux/ipchains
 S:	Supported
+
+IP MASQUERADING:
+P:	Juanjo Ciarlante
+M:	jjciarla@raiz.uncu.edu.ar
+S:	Maintained
 
 IPX/SPX NETWORK LAYER
 P:	Jay Schulist

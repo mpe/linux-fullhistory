@@ -52,7 +52,8 @@ enum root_directory_inos {
 	PROC_STRAM,
 	PROC_SOUND,
 	PROC_MTRR, /* whether enabled or not */
-	PROC_FS
+	PROC_FS,
+	PROC_SYSVIPC
 };
 
 enum pid_directory_inos {
@@ -243,6 +244,12 @@ enum fs_coda_directory_inos {
 	PROC_CODA_FS_LAST
 };
 
+enum sysvipc_directory_inos {
+	PROC_SYSVIPC_SHM = PROC_CODA_FS_LAST,
+	PROC_SYSVIPC_SEM,
+	PROC_SYSVIPC_MSG
+};
+
 /* Finally, the dynamically allocatable proc entries are reserved: */
 
 #define PROC_DYNAMIC_FIRST 4096
@@ -313,6 +320,7 @@ extern struct proc_dir_entry proc_pid;
 extern struct proc_dir_entry proc_pid_fd;
 extern struct proc_dir_entry proc_mca;
 extern struct proc_dir_entry *proc_bus;
+extern struct proc_dir_entry *proc_sysvipc;
 
 extern struct inode_operations proc_scsi_inode_operations;
 
@@ -422,6 +430,7 @@ extern struct inode_operations proc_ringbuf_inode_operations;
 #endif
 extern struct inode_operations proc_omirr_inode_operations;
 extern struct inode_operations proc_ppc_htab_inode_operations;
+extern struct inode_operations proc_sysvipc_inode_operations;
 
 /*
  * generic.c

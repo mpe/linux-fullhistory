@@ -77,9 +77,7 @@ static void set_brk(unsigned long start, unsigned long end)
 	end = ELF_PAGEALIGN(end);
 	if (end <= start)
 		return;
-	do_mmap(NULL, start, end - start,
-		PROT_READ | PROT_WRITE | PROT_EXEC,
-		MAP_FIXED | MAP_PRIVATE, 0);
+	do_brk(start, end - start);
 }
 
 
@@ -328,9 +326,7 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 
 	/* Map the last of the bss segment */
 	if (last_bss > elf_bss)
-		do_mmap(NULL, elf_bss, last_bss - elf_bss,
-			PROT_READ|PROT_WRITE|PROT_EXEC,
-			MAP_FIXED|MAP_PRIVATE, 0);
+		do_brk(elf_bss, last_bss - elf_bss);
 
 	*interp_load_addr = load_addr;
 	error = ((unsigned long) interp_elf_ex->e_entry) + load_addr;
@@ -370,17 +366,15 @@ static unsigned long load_aout_interp(struct exec * interp_ex,
 		goto out;
 	}
 
-	do_mmap(NULL, 0, text_data,
-		PROT_READ|PROT_WRITE|PROT_EXEC, MAP_FIXED|MAP_PRIVATE, 0);
+	do_brk(0, text_data);
 	retval = read_exec(interpreter_dentry, offset, addr, text_data, 0);
 	if (retval < 0)
 		goto out;
 	flush_icache_range((unsigned long)addr,
 	                   (unsigned long)addr + text_data);
 
-	do_mmap(NULL, ELF_PAGESTART(text_data + ELF_EXEC_PAGESIZE - 1),
-		interp_ex->a_bss,
-		PROT_READ|PROT_WRITE|PROT_EXEC, MAP_FIXED|MAP_PRIVATE, 0);
+	do_brk(ELF_PAGESTART(text_data + ELF_EXEC_PAGESIZE - 1),
+		interp_ex->a_bss);
 	elf_entry = interp_ex->a_entry;
 
 out:
@@ -885,9 +879,7 @@ do_load_elf_library(int fd)
 				ELF_EXEC_PAGESIZE - 1);
 	bss = elf_phdata->p_memsz + elf_phdata->p_vaddr;
 	if (bss > len)
-		do_mmap(NULL, len, bss - len,
-			PROT_READ|PROT_WRITE|PROT_EXEC,
-			MAP_FIXED|MAP_PRIVATE, 0);
+		do_brk(len, bss - len);
 	error = 0;
 
 out_free_ph:

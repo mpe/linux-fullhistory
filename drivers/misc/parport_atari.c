@@ -118,20 +118,6 @@ parport_atari_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static void
-parport_atari_release_resources(struct parport *p)
-{
-	if (p->irq != PARPORT_IRQ_NONE)
-		free_irq(IRQ_MFP_BUSY, p);
-}
-
-static int
-parport_atari_claim_resources(struct parport *p)
-{
-	return request_irq(IRQ_MFP_BUSY, parport_atari_interrupt,
-			   IRQ_TYPE_SLOW, p->name, p);
-}
-
-static void
 parport_atari_inc_use_count(void)
 {
 	MOD_INC_USE_COUNT;
@@ -173,9 +159,6 @@ static struct parport_operations parport_atari_ops = {
 	NULL, /* read fifo */
 
 	NULL, /* change_mode */
-
-	parport_atari_release_resources,
-	parport_atari_claim_resources,
 
 	NULL, /* epp_write_data */
 	NULL, /* epp_read_data */
@@ -228,13 +211,21 @@ parport_atari_init(void)
 					  &parport_atari_ops);
 		if (!p)
 			return 0;
+		if (request_irq(IRQ_MFP_BUSY, parport_atari_interrupt,
+				IRQ_TYPE_SLOW, p->name, p)) {
+			parport_unregister_port (p);
+			return 0;
+		}
+
 		this_port = p;
 		printk(KERN_INFO "%s: Atari built-in port using irq\n", p->name);
 		parport_proc_register(p);
-		p->flags |= PARPORT_FLAG_COMA;
 
 		if (parport_probe_hook)
 			(*parport_probe_hook)(p);
+
+		parport_announce_port (p);
+
 		return 1;
 	}
 	return 0;
@@ -255,8 +246,8 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	if (!(this_port->flags & PARPORT_FLAG_COMA))
-		parport_quiesce(this_port);
+	if (p->irq != PARPORT_IRQ_NONE)
+		free_irq(IRQ_MFP_BUSY, p);
 	parport_proc_unregister(this_port);
 	parport_unregister_port(this_port);
 }

@@ -866,7 +866,11 @@ sys_call_table:
 	.long sys_getresuid	/* 165 */
 	.long sys_query_module
 	.long sys_poll
+#ifdef CONFIG_NFS	
 	.long sys_nfsservctl
+#else
+	.long sys_ni_syscall
+#endif		
 	.long sys_setresgid
 	.long sys_getresgid	/* 170 */
 	.long sys_prctl

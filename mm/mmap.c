@@ -84,6 +84,13 @@ static inline void remove_shared_vm_struct(struct vm_area_struct *vma)
 	}
 }
 
+/*
+ *  sys_brk() for the most part doesn't need the global kernel
+ *  lock, except when an application is doing something nasty
+ *  like trying to un-brk an area that has already been mapped
+ *  to a regular file.  in this case, the unmapping will need
+ *  to invoke file system routines that need the global lock.
+ */
 asmlinkage unsigned long sys_brk(unsigned long brk)
 {
 	unsigned long rlim, retval;
@@ -91,20 +98,6 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 	struct mm_struct *mm = current->mm;
 
 	down(&mm->mmap_sem);
-
-	/*
-	 * This lock-kernel is one of the main contention points for
-	 * certain normal loads.  And it really should not be here: almost
-	 * everything in brk()/mmap()/munmap() is protected sufficiently by
-	 * the mmap semaphore that we got above.
-	 *
-	 * We should move this into the few things that really want the
-	 * lock, namely anything that actually touches a file descriptor
-	 * etc.  We can do all the normal anonymous mapping cases without
-	 * ever getting the lock at all - the actual memory management
-	 * code is already completely thread-safe.
-	 */
-	lock_kernel();
 
 	if (brk < mm->end_code)
 		goto out;
@@ -134,15 +127,12 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 		goto out;
 
 	/* Ok, looks good - let it rip. */
-	if (do_mmap(NULL, oldbrk, newbrk-oldbrk,
-		   PROT_READ|PROT_WRITE|PROT_EXEC,
-		   MAP_FIXED|MAP_PRIVATE, 0) != oldbrk)
+	if (do_brk(oldbrk, newbrk-oldbrk) != oldbrk)
 		goto out;
 set_brk:
 	mm->brk = brk;
 out:
 	retval = mm->brk;
-	unlock_kernel();
 	up(&mm->mmap_sem);
 	return retval;
 }
@@ -470,6 +460,28 @@ struct vm_area_struct * find_vma_prev(struct mm_struct * mm, unsigned long addr,
 	return NULL;
 }
 
+struct vm_area_struct * find_extend_vma(struct task_struct * tsk, unsigned long addr)
+{
+	struct vm_area_struct * vma;
+	unsigned long start;
+
+	addr &= PAGE_MASK;
+	vma = find_vma(tsk->mm,addr);
+	if (!vma)
+		return NULL;
+	if (vma->vm_start <= addr)
+		return vma;
+	if (!(vma->vm_flags & VM_GROWSDOWN))
+		return NULL;
+	start = vma->vm_start;
+	if (expand_stack(vma, addr))
+		return NULL;
+	if (vma->vm_flags & VM_LOCKED) {
+		make_pages_present(addr, start);
+	}
+	return vma;
+}
+
 /* Normal function to fix up a mapping
  * This function is the default for when an area has no specific
  * function.  This may be used as part of a more specific routine.
@@ -665,6 +677,8 @@ int do_munmap(unsigned long addr, size_t len)
 		end = end > mpnt->vm_end ? mpnt->vm_end : end;
 		size = end - st;
 
+		lock_kernel();
+
 		if (mpnt->vm_ops && mpnt->vm_ops->unmap)
 			mpnt->vm_ops->unmap(mpnt, st, size);
 
@@ -679,6 +693,8 @@ int do_munmap(unsigned long addr, size_t len)
 		 * Fix the mapping, and free the old area if it wasn't reused.
 		 */
 		extra = unmap_fixup(mpnt, st, size, extra);
+
+		unlock_kernel();
 	}
 
 	/* Release the extra vma struct if it wasn't used */
@@ -696,11 +712,85 @@ asmlinkage int sys_munmap(unsigned long addr, size_t len)
 	int ret;
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
 	ret = do_munmap(addr, len);
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 	return ret;
+}
+
+/*
+ *  this is really a simplified "do_mmap".  it only handles
+ *  anonymous maps.  eventually we may be able to do some
+ *  brk-specific accounting here.
+ */
+unsigned long do_brk(unsigned long addr, unsigned long len)
+{
+	struct mm_struct * mm = current->mm;
+	struct vm_area_struct * vma;
+	unsigned long flags, retval;
+
+	/*
+	 * mlock MCL_FUTURE?
+	 */
+	if (mm->def_flags & VM_LOCKED) {
+		unsigned long locked = mm->locked_vm << PAGE_SHIFT;
+		locked += len;
+		if (locked > current->rlim[RLIMIT_MEMLOCK].rlim_cur)
+			return -EAGAIN;
+	}
+
+	/*
+	 * Clear old maps.  this also does some error checking for us
+	 */
+	retval = do_munmap(addr, len);
+	if (retval != 0)
+		return retval;
+
+	/* Check against address space limits *after* clearing old maps... */
+	if ((mm->total_vm << PAGE_SHIFT) + len
+	    > current->rlim[RLIMIT_AS].rlim_cur)
+		return -ENOMEM;
+
+	if (mm->map_count > MAX_MAP_COUNT)
+		return -ENOMEM;
+
+	if (!vm_enough_memory(len >> PAGE_SHIFT))
+		return -ENOMEM;
+
+	/*
+	 * create a vma struct for an anonymous mapping
+	 */
+	vma = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
+	if (!vma)
+		return -ENOMEM;
+
+	vma->vm_mm = mm;
+	vma->vm_start = addr;
+	vma->vm_end = addr + len;
+	vma->vm_flags = vm_flags(PROT_READ|PROT_WRITE|PROT_EXEC,
+				MAP_FIXED|MAP_PRIVATE) | mm->def_flags;
+
+	vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
+	vma->vm_page_prot = protection_map[vma->vm_flags & 0x0f];
+	vma->vm_ops = NULL;
+	vma->vm_offset = 0;
+	vma->vm_file = NULL;
+	vma->vm_pte = 0;
+
+	/*
+	 * merge_segments may merge our vma, so we can't refer to it
+	 * after the call.  Save the values we need now ...
+	 */
+	flags = vma->vm_flags;
+	addr = vma->vm_start;
+	insert_vm_struct(mm, vma);
+	merge_segments(mm, vma->vm_start, vma->vm_end);
+	
+	mm->total_vm += len >> PAGE_SHIFT;
+	if (flags & VM_LOCKED) {
+		mm->locked_vm += len >> PAGE_SHIFT;
+		make_pages_present(addr, addr + len);
+	}
+	return addr;
 }
 
 /* Build the AVL tree corresponding to the VMA list. */

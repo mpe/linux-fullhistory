@@ -123,6 +123,8 @@ void hfs_bnode_read(struct hfs_bnode *bnode, struct hfs_btree *tree,
 	bnode->tree = tree;
 	bnode->node = node;
 	bnode->sticky = sticky;
+	hfs_init_waitqueue(&bnode->rqueue);
+	hfs_init_waitqueue(&bnode->wqueue);
 
 	if (sticky == HFS_NOT_STICKY) {
 		/* Insert it in the cache if appropriate */

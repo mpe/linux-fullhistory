@@ -248,7 +248,7 @@ __initfunc(int adb_mouse_init(void))
 {
     mouse.active = 0;
     mouse.ready = 0;
-    mouse.wait = NULL;
+    init_waitqueue_head(&mouse.wait);
 
 #ifdef __powerpc__
     if ( (_machine != _MACH_chrp) && (_machine != _MACH_Pmac) )

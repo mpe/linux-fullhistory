@@ -1929,7 +1929,7 @@ int ohci_init(void)
 /*
  *  Clean up when unloading the module
  */
-void module_cleanup(void){
+void cleanup_module(void){
 #	ifdef CONFIG_APM
 	apm_unregister_callback(&handle_apm_event);
 #	endif

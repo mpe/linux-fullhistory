@@ -251,7 +251,6 @@ int adb_button3_keycode = 0x7c; /* right option key */
 extern int console_loglevel;
 
 extern struct kbd_struct kbd_table[];
-extern struct wait_queue_head_t keypress_wait;
 
 extern void handle_scancode(unsigned char, int);
 

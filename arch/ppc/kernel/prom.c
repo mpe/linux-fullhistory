@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.54 1999/05/10 04:43:46 cort Exp $
+ * $Id: prom.c,v 1.60 1999/05/25 01:42:41 cort Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -24,6 +24,7 @@
 #include <asm/io.h>
 #include <asm/smp.h>
 #include <asm/bootx.h>
+#include <asm/system.h>
 
 /*
  * Properties whose value is longer than this get excluded from our
@@ -412,6 +413,9 @@ prom_init(int r3, int r4, prom_entry pp)
 	mem = copy_device_tree(mem, mem + (1<<20));
 	prom_print(RELOC("done\n"));
 
+
+	RELOC(klimit) = (char *) (mem - offset);
+	
 	prom_rtas = call_prom(RELOC("finddevice"), 1, 1, RELOC("/rtas"));
 	if (prom_rtas != (void *) -1) {
 		RELOC(rtas_size) = 0;
@@ -421,9 +425,19 @@ prom_init(int r3, int r4, prom_entry pp)
 		if (RELOC(rtas_size) == 0) {
 			RELOC(rtas_data) = 0;
 		} else {
-			mem = (mem + 4095) & -4096; /* round to page bdry */
+			/*
+			 * We do _not_ want the rtas_data inside the klimit
+			 * boundry since it'll be squashed when we do the
+			 * relocate of the kernel on chrp right after prom_init()
+			 * in head.S.  So, we just pick a spot in memory.
+			 * -- Cort
+			 */
+#if 0
+			mem = (mem + 4095) & -4096;
 			RELOC(rtas_data) = mem + KERNELBASE;
 			mem += RELOC(rtas_size);
+#endif
+			RELOC(rtas_data) = (6<<20) + KERNELBASE;
 		}
 		prom_rtas = call_prom(RELOC("open"), 1, 1, RELOC("/rtas"));
 		{
@@ -448,7 +462,7 @@ prom_init(int r3, int r4, prom_entry pp)
 		else
 			prom_print(RELOC(" done\n"));
 	}
-	RELOC(klimit) = (char *) (mem - offset);
+
 #ifdef CONFIG_SMP
 	/*
 	 * With CHRP SMP we need to use the OF to start the other
@@ -1289,7 +1303,7 @@ call_rtas(const char *service, int nargs, int nret,
 	  unsigned long *outputs, ...)
 {
 	va_list list;
-	int i;
+	int i, s;
 	struct device_node *rtas;
 	int *tokp;
 	union {
@@ -1305,16 +1319,19 @@ call_rtas(const char *service, int nargs, int nret,
 		printk(KERN_ERR "No RTAS service called %s\n", service);
 		return -1;
 	}
-	u.words[0] = __pa(*tokp);
+	u.words[0] = *tokp;
 	u.words[1] = nargs;
 	u.words[2] = nret;
 	va_start(list, outputs);
 	for (i = 0; i < nargs; ++i)
 		u.words[i+3] = va_arg(list, unsigned long);
 	va_end(list);
+	
+	s = _disable_interrupts();
 	spin_lock(&rtas_lock);
 	enter_rtas((void *)__pa(&u));
 	spin_unlock(&rtas_lock);
+	_enable_interrupts(s);
 	if (nret > 1 && outputs != NULL)
 		for (i = 0; i < nret-1; ++i)
 			outputs[i] = u.words[i+nargs+4];
@@ -1326,8 +1343,7 @@ void
 abort()
 {
 #ifdef CONFIG_XMON
-	extern void xmon(void *);
-	xmon(0);
+	xmon(NULL);
 #endif
 	prom_exit();
 }

@@ -302,6 +302,8 @@ static void __read_entry(struct hfs_cat_entry *entry,
 		entry->modify_date = hfs_get_nl(cat->u.dir.MdDat);
 		entry->backup_date = hfs_get_nl(cat->u.dir.BkDat);
 		dir->dirs = dir->files = 0;
+		hfs_init_waitqueue(&dir->read_wait);
+		hfs_init_waitqueue(&dir->write_wait);
 	} else if (cat->cdrType == HFS_CDR_FIL) {
 		struct hfs_file *fil = &entry->u.file;
 

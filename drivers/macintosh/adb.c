@@ -24,6 +24,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
+#include <linux/wait.h>
 #include <asm/prom.h>
 #include <asm/adb.h>
 #include <asm/cuda.h>
@@ -375,7 +376,7 @@ struct adbdev_state {
 	spinlock_t	lock;
 	atomic_t	n_pending;
 	struct adb_request *completed;
-	wait_queue_head_t wait_queue;
+  	wait_queue_head_t wait_queue;
 	int		inuse;
 };
 
@@ -421,7 +422,7 @@ static int adb_open(struct inode *inode, struct file *file)
 	spin_lock_init(&state->lock);
 	atomic_set(&state->n_pending, 0);
 	state->completed = NULL;
-	state->wait_queue = NULL;
+	init_waitqueue_head(&state->wait_queue);
 	state->inuse = 1;
 
 	return 0;
@@ -458,7 +459,7 @@ static ssize_t adb_read(struct file *file, char *buf,
 	int ret;
 	struct adbdev_state *state = file->private_data;
 	struct adb_request *req;
-	DECLARE_WAITQUEUE(wait, current);
+	wait_queue_t wait = __WAITQUEUE_INITIALIZER(wait,current);
 	unsigned long flags;
 
 	if (count < 2)

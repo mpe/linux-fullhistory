@@ -471,6 +471,8 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	     case IDE3_MAJOR:
 	     case IDE4_MAJOR:
 	     case IDE5_MAJOR:
+	     case IDE6_MAJOR:
+	     case IDE7_MAJOR:
 	     case ACSI_MAJOR:
 	     case MFM_ACORN_MAJOR:
 		/*
@@ -497,6 +499,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	     case SCSI_DISK6_MAJOR:
 	     case SCSI_DISK7_MAJOR:
 	     case SCSI_CDROM_MAJOR:
+	     case I2O_MAJOR:
 
 		do {
 			if (req->sem)

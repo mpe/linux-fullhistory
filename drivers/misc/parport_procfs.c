@@ -1,4 +1,4 @@
-/* Parallel port /proc interface code.
+/* Sysctl interface for parport devices.
  * 
  * Authors: David Campbell <campbell@torque.net>
  *          Tim Waugh <tim@cyberelk.demon.co.uk>
@@ -14,400 +14,425 @@
 
 #include <linux/string.h>
 #include <linux/config.h>
-#include <linux/sched.h>
-#include <linux/delay.h>
 #include <linux/errno.h>
-#include <linux/interrupt.h>
-#include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
-#include <linux/proc_fs.h>
 #include <linux/parport.h>
 #include <linux/ctype.h>
+#include <linux/sysctl.h>
 
-#include <asm/io.h>
-#include <asm/dma.h>
-#include <asm/irq.h>
+#include <asm/uaccess.h>
 
-#ifdef CONFIG_PROC_FS
+#ifdef CONFIG_SYSCTL
 
-struct proc_dir_entry *base = NULL;
 
-static int irq_write_proc(struct file *file, const char *buffer,
-			  unsigned long count, void *data)
+static int do_active_device(ctl_table *table, int write, struct file *filp,
+		      void *result, size_t *lenp)
 {
-	int retval = -EINVAL;
-	int newirq = PARPORT_IRQ_NONE;
-	struct parport *pp = (struct parport *)data;
-	int oldirq = pp->irq;
+	struct parport *port = (struct parport *)table->extra1;
+	char buffer[256];
+	struct pardevice *dev;
+	int len = 0;
 
-/*
- * We can have these valid cases:
- * 	"none" (count == 4 || count == 5)
- * 	decimal number (count == 2 || count == 3)
- * 	octal number (count == 3 || count == 4)
- * 	hex number (count == 4 || count == 5)
- * all other cases are -EINVAL
- *
- * Note: newirq is alredy set up to NONE.
- *
- * -RF
- */
-	if (count > 5  || count < 1)
-		goto out;
+	if (write)		/* can't happen anyway */
+		return -EACCES;
 
-	if (isdigit(buffer[0]))
-		newirq = simple_strtoul(buffer, NULL, 0);
-	else if (strncmp(buffer, "none", 4) != 0) {
-		if (buffer[0] < 32)
-			/* Things like '\n' are harmless */
-			retval = count;
-
-		goto out;
+	if (filp->f_pos) {
+		*lenp = 0;
+		return 0;
 	}
-
-	retval = count;
-
-	if (oldirq == newirq)
-		goto out;
-
-	if (pp->flags & PARPORT_FLAG_COMA)
-		goto out_ok;
-
-	retval = -EBUSY;
-
-	/*
-	 * Here we don' t need the irq version of spinlocks because
-	 * the parport_lowlevel irq handler must not change the cad,
-	 * and so has no one reason to write_lock() the cad_lock spinlock.
-	 *						-arca
-	 */
-	read_lock(&pp->cad_lock);
-
-	if (pp->cad)
-	{
-		read_unlock(&pp->cad_lock);
-		return retval;
-	}
-
-	if (newirq != PARPORT_IRQ_NONE) { 
-		retval = request_irq(newirq, pp->ops->interrupt,
-				     0, pp->name, pp);
-		if (retval)
-		{
-			read_unlock(&pp->cad_lock);
-			return retval;
+	
+	for (dev = port->devices; dev ; dev = dev->next) {
+		if(dev == port->cad) {
+			len += sprintf(buffer, "%s\n", dev->name);
 		}
 	}
 
-	if (oldirq != PARPORT_IRQ_NONE)
-		free_irq(oldirq, pp);
-
-	retval = count;
-
-	read_unlock(&pp->cad_lock);
-
-out_ok:
-	pp->irq = newirq;
-
-out:
-	return retval;
-}
-
-static int irq_read_proc(char *page, char **start, off_t off,
-					 int count, int *eof, void *data)
-{
-	struct parport *pp = (struct parport *)data;
-	int len;
-	
-	if (pp->irq == PARPORT_IRQ_NONE) {
-		len = sprintf(page, "none\n");
-	} else {
-#ifdef __sparc__
-		len = sprintf(page, "%s\n", __irq_itoa(pp->irq));
-#else
-		len = sprintf(page, "%d\n", pp->irq);
-#endif
-	}
-	
-	*start = 0;
-	*eof   = 1;
-	return len;
-}
-
-static int devices_read_proc(char *page, char **start, off_t off,
-					 int count, int *eof, void *data)
-{
-	struct parport *pp = (struct parport *)data;
-	struct pardevice *pd1;
-	int len=0;
-
-	for (pd1 = pp->devices; pd1 ; pd1 = pd1->next) {
-		if (pd1 == pp->cad)
-			page[len++] = '+';
-		else
-			page[len++] = ' ';
-
-		len += sprintf(page+len, "%s", pd1->name);
-
-		page[len++] = '\n';
-	}
-		
-	*start = 0;
-	*eof   = 1;
-	return len;
-}
-
-static int hardware_read_proc(char *page, char **start, off_t off,
-				  int count, int *eof, void *data)
-{
-	struct parport *pp = (struct parport *)data;
-	int len=0;
-	
-	len += sprintf(page+len, "base:\t0x%lx\n",pp->base);
-
-	if (pp->irq == PARPORT_IRQ_NONE) {
-		len += sprintf(page+len, "irq:\tnone\n");
-	} else {
-#ifdef __sparc__
-		len += sprintf(page+len, "irq:\t%s\n",__irq_itoa(pp->irq));
-#else
-		len += sprintf(page+len, "irq:\t%d\n",pp->irq);
-#endif
+	if(!len) {
+		len += sprintf(buffer, "%s\n", "none");
 	}
 
-	if (pp->dma == PARPORT_DMA_NONE)
-		len += sprintf(page+len, "dma:\tnone\n");
+	if (len > *lenp)
+		len = *lenp;
 	else
-		len += sprintf(page+len, "dma:\t%d\n",pp->dma);
+		*lenp = len;
 
-	len += sprintf(page+len, "modes:\t");
-	{
-#define printmode(x) {if(pp->modes&PARPORT_MODE_PC##x){len+=sprintf(page+len,"%s%s",f?",":"",#x);f++;}}
-		int f = 0;
-		printmode(SPP);
-		printmode(PS2);
-		printmode(EPP);
-		printmode(ECP);
-		printmode(ECPEPP);
-		printmode(ECPPS2);
-#undef printmode
-	}
-	page[len++] = '\n';
+	filp->f_pos += len;
 
-	*start = 0;
-	*eof   = 1;
-	return len;
+	return copy_to_user(result, buffer, len) ? -EFAULT : 0;
 }
 
-static int autoprobe_read_proc (char *page, char **start, off_t off,
-				int count, int *eof, void *data)
+#if 0 && defined (CONFIG_PARPORT_1284)
+static int do_autoprobe(ctl_table *table, int write, struct file *filp,
+			void *result, size_t *lenp)
 {
-	struct parport *pp = (struct parport *) data;
-	int len = 0;
+	struct parport_device_info *info = table->extra2;
 	const char *str;
+	char buffer[256];
+	int len = 0;
 
-	page[0] = '\0';
+	if (write) /* permissions stop this */
+		return -EACCES;
 
-	if ((str = pp->probe_info.class_name) != NULL)
-		len += sprintf (page+len, "CLASS:%s;\n", str);
-
-	if ((str = pp->probe_info.model) != NULL)
-		len += sprintf (page+len, "MODEL:%s;\n", str);
-
-	if ((str = pp->probe_info.mfr) != NULL)
-		len += sprintf (page+len, "MANUFACTURER:%s;\n", str);
-
-	if ((str = pp->probe_info.description) != NULL)
-		len += sprintf (page+len, "DESCRIPTION:%s;\n", str);
-
-	if ((str = pp->probe_info.cmdset) != NULL)
-		len += sprintf (page+len, "COMMAND SET:%s;\n", str);
-
-	*start = 0;
-	*eof   = 1;
-	return len;
-}
-
-static inline void destroy_proc_entry(struct proc_dir_entry *root, 
-				      struct proc_dir_entry **d)
-{
-	proc_unregister(root, (*d)->low_ino);
-	kfree(*d);
-	*d = NULL;
-}
-
-static void destroy_proc_tree(struct parport *pp) {
-	if (pp->pdir.entry) {
-		if (pp->pdir.irq) 
-			destroy_proc_entry(pp->pdir.entry, &pp->pdir.irq);
-		if (pp->pdir.devices) 
-			destroy_proc_entry(pp->pdir.entry, &pp->pdir.devices);
-		if (pp->pdir.hardware)
-			destroy_proc_entry(pp->pdir.entry, &pp->pdir.hardware);
-		if (pp->pdir.probe)
-			destroy_proc_entry(pp->pdir.entry, &pp->pdir.probe);
-		destroy_proc_entry(base, &pp->pdir.entry);
-	}
-}
-
-static struct proc_dir_entry *new_proc_entry(const char *name, mode_t mode,
-					     struct proc_dir_entry *parent,
-					     unsigned short ino,
-					     struct parport *p)
-{
-	struct proc_dir_entry *ent;
-
-	ent = kmalloc(sizeof(struct proc_dir_entry), GFP_KERNEL);
-	if (!ent)
-		return NULL;
-
-	memset(ent, 0, sizeof(struct proc_dir_entry));
-	
-	if (mode == S_IFDIR)
-		mode |= S_IRUGO | S_IXUGO;
-	else if (mode == 0)
-		mode = S_IFREG | S_IRUGO;
-
-	ent->low_ino = ino;
-	ent->name = name;
-	ent->namelen = strlen(name);
-	ent->mode = mode;
-
-	if (S_ISDIR(mode))
-	{
-		if (p && p->ops)
-			ent->fill_inode = p->ops->fill_inode;
-		ent->nlink = 2;
-	} else
-		ent->nlink = 1;
-
-	proc_register(parent, ent);
-	
-	return ent;
-}
-
-/*
- * This is called as the fill_inode function when an inode
- * is going into (fill = 1) or out of service (fill = 0).
- * We use it here to manage the module use counts.
- *
- * Note: only the top-level directory needs to do this; if
- * a lower level is referenced, the parent will be as well.
- */
-static void parport_modcount(struct inode *inode, int fill)
-{
-#ifdef MODULE
-	if (fill)
-		inc_parport_count();
-	else
-		dec_parport_count();
-#endif
-}
-
-int parport_proc_init(void)
-{
-	base = new_proc_entry("parport", S_IFDIR, &proc_root,PROC_PARPORT,
-			      NULL);
-	if (base == NULL) {
-		printk(KERN_ERR "Unable to initialise /proc/parport.\n");
+	if (filp->f_pos) {
+		*lenp = 0;
 		return 0;
 	}
-	base->fill_inode = &parport_modcount;
+	
+	if ((str = info->class_name) != NULL)
+		len += sprintf (buffer + len, "CLASS:%s;\n", str);
 
-	return 1;
+	if ((str = info->model) != NULL)
+		len += sprintf (buffer + len, "MODEL:%s;\n", str);
+
+	if ((str = info->mfr) != NULL)
+		len += sprintf (buffer + len, "MANUFACTURER:%s;\n", str);
+
+	if ((str = info->description) != NULL)
+		len += sprintf (buffer + len, "DESCRIPTION:%s;\n", str);
+
+	if ((str = info->cmdset) != NULL)
+		len += sprintf (buffer + len, "COMMAND SET:%s;\n", str);
+
+	if (len > *lenp)
+		len = *lenp;
+	else
+		*lenp = len;
+
+	filp->f_pos += len;
+
+	return copy_to_user (result, buffer, len) ? -EFAULT : 0;
 }
+#endif /* IEEE1284.3 support. */
 
-void parport_proc_cleanup(void)
+static int do_hardware(ctl_table *table, int write, struct file *filp,
+		       void *result, size_t *lenp)
 {
-	if (base) {
-		proc_unregister(&proc_root,base->low_ino);
-		kfree(base);
-		base = NULL;
+	struct parport *port = (struct parport *)table->extra1;
+	char buffer[256];
+	int len = 0;
+
+	if (filp->f_pos) {
+		*lenp = 0;
+		return 0;
 	}
+	
+	if (write)		/* can't happen anyway */
+		return -EACCES;
+	
+	len += sprintf(buffer+len, "base:\t0x%lx", port->base);
+	if (port->base_hi)
+		len += sprintf(buffer+len, " (0x%lx)", port->base_hi);
+	buffer[len++] = '\n';
+
+	if (port->irq == PARPORT_IRQ_NONE) {
+		len += sprintf(buffer+len, "irq:\tnone\n");
+	} else {
+#ifdef __sparc__
+		len += sprintf(buffer+len, "irq:\t%s\n", 
+			       __irq_itoa(port->irq));
+#else
+		len += sprintf(buffer+len, "irq:\t%d\n", port->irq);
+#endif
+	}
+
+	if (port->dma == PARPORT_DMA_NONE)
+		len += sprintf(buffer+len, "dma:\tnone\n");
+	else
+		len += sprintf(buffer+len, "dma:\t%d\n", port->dma);
+
+	len += sprintf(buffer+len, "modes:\t");
+	{
+#define printmode(x) {if(port->modes&PARPORT_MODE_##x){len+=sprintf(buffer+len,"%s%s",f?",":"",#x);f++;}}
+		int f = 0;
+		printmode(PCSPP);
+		printmode(PCPS2);
+		printmode(PCEPP);
+		printmode(PCECP);
+#undef printmode
+	}
+	buffer[len++] = '\n';
+
+	if (len > *lenp)
+		len = *lenp;
+	else
+		*lenp = len;
+
+	filp->f_pos += len;
+
+	return copy_to_user(result, buffer, len) ? -EFAULT : 0;
 }
+
+#define PARPORT_PORT_DIR(child) { 0, NULL, NULL, 0, 0555, child }
+#define PARPORT_PARPORT_DIR(child) { DEV_PARPORT, "parport", \
+                                     NULL, 0, 0555, child }
+#define PARPORT_DEV_DIR(child) { CTL_DEV, "dev", NULL, 0, 0555, child }
+#define PARPORT_DEVICES_ROOT_DIR  { DEV_PARPORT_DEVICES, "devices", \
+                                    NULL, 0, 0555, NULL }
+
+
+struct parport_sysctl_table {
+	struct ctl_table_header *sysctl_header;
+	ctl_table vars[9];
+	ctl_table device_dir[2];
+	ctl_table port_dir[2];
+	ctl_table parport_dir[2];
+	ctl_table dev_dir[2];
+};
+
+static const struct parport_sysctl_table parport_sysctl_template = {
+	NULL,
+        {
+		{ DEV_PARPORT_SPINTIME, "spintime",
+		  NULL, sizeof(int), 0644, NULL,
+		  &proc_dointvec },
+		{ DEV_PARPORT_HARDWARE, "hardware",
+		  NULL, 0, 0444, NULL,
+		  &do_hardware },
+		PARPORT_DEVICES_ROOT_DIR,
+#if 0 && defined(CONFIG_PARPORT_1284)
+		{ DEV_PARPORT_AUTOPROBE, "autoprobe",
+		  NULL, 0, 0444, NULL,
+		  &do_autoprobe },
+		{ DEV_PARPORT_AUTOPROBE + 1, "autoprobe0",
+		 NULL, 0, 0444, NULL,
+		 &do_autoprobe },
+		{ DEV_PARPORT_AUTOPROBE + 2, "autoprobe1",
+		  NULL, 0, 0444, NULL,
+		  &do_autoprobe },
+		{ DEV_PARPORT_AUTOPROBE + 3, "autoprobe2",
+		  NULL, 0, 0444, NULL,
+		  &do_autoprobe },
+		{ DEV_PARPORT_AUTOPROBE + 4, "autoprobe3",
+		  NULL, 0, 0444, NULL,
+		  &do_autoprobe },
+#endif /* IEEE 1284 support */
+		{0}
+	},
+	{ {DEV_PARPORT_DEVICES_ACTIVE, "active", NULL, 0, 444, NULL,
+	  &do_active_device }, {0}},
+	{ PARPORT_PORT_DIR(NULL), {0}},
+	{ PARPORT_PARPORT_DIR(NULL), {0}},
+	{ PARPORT_DEV_DIR(NULL), {0}}
+};
+
+struct parport_device_sysctl_table
+{
+	struct ctl_table_header *sysctl_header;
+	ctl_table vars[2];
+	ctl_table device_dir[2];
+	ctl_table devices_root_dir[2];
+	ctl_table port_dir[2];
+	ctl_table parport_dir[2];
+	ctl_table dev_dir[2];
+};
+
+static const struct parport_device_sysctl_table
+parport_device_sysctl_template = {
+	NULL,
+	{
+		{ DEV_PARPORT_DEVICE_TIMESLICE, "timeslice",
+		  NULL, sizeof(int), 0644, NULL,
+		  &proc_dointvec },
+	},
+	{ {0, NULL, NULL, 0, 0555, NULL}, {0}},
+	{ PARPORT_DEVICES_ROOT_DIR, {0}},
+	{ PARPORT_PORT_DIR(NULL), {0}},
+	{ PARPORT_PARPORT_DIR(NULL), {0}},
+	{ PARPORT_DEV_DIR(NULL), {0}}
+};
+
+struct parport_default_sysctl_table
+{
+	struct ctl_table_header *sysctl_header;
+	ctl_table vars[3];
+        ctl_table default_dir[2];
+	ctl_table parport_dir[2];
+	ctl_table dev_dir[2];
+};
+
+extern unsigned long parport_default_timeslice;
+extern int parport_default_spintime;
+
+static struct parport_default_sysctl_table
+parport_default_sysctl_table = {
+	NULL,
+	{
+		{ DEV_PARPORT_DEFAULT_TIMESLICE, "timeslice",
+		  &parport_default_timeslice,
+		  sizeof(parport_default_timeslice), 0644, NULL,
+		  &proc_dointvec },
+		{ DEV_PARPORT_DEFAULT_SPINTIME, "spintime",
+		  &parport_default_spintime,
+		  sizeof(parport_default_timeslice), 0644, NULL,
+		  &proc_dointvec },
+		{0}
+	},
+	{ { DEV_PARPORT_DEFAULT, "default", NULL, 0, 0555,
+	    parport_default_sysctl_table.vars },{0}},
+	{
+	PARPORT_PARPORT_DIR(parport_default_sysctl_table.default_dir), 
+	{0}},
+	{ PARPORT_DEV_DIR(parport_default_sysctl_table.parport_dir), {0}}
+};
+
+
+int parport_proc_register(struct parport *port)
+{
+	struct parport_sysctl_table *t;
+	int i;
+
+	t = kmalloc(sizeof(*t), GFP_KERNEL);
+	if (t == NULL)
+		return -ENOMEM;
+	memcpy(t, &parport_sysctl_template, sizeof(*t));
+
+	t->device_dir[0].extra1 = port;
+
+	for (i = 0; i < 8; i++)
+		t->vars[i].extra1 = port;
+
+#if 0 /* Wait for IEEE 1284 support */
+	t->vars[0].data = &port->spintime;
+#endif
+	t->vars[2].child = t->device_dir;
+	
+	for (i = 0; i < 5; i++)
+#if 0
+		t->vars[3 + i].extra2 = &port->probe_info[i];
+#else
+		t->vars[3 + i].extra2 = &port->probe_info;
+#endif
+
+	t->port_dir[0].procname = port->name;
+	t->port_dir[0].ctl_name = port->number + 1; /* nb 0 isn't legal here */
+
+	t->port_dir[0].child = t->vars;
+	t->parport_dir[0].child = t->port_dir;
+	t->dev_dir[0].child = t->parport_dir;
+
+	t->sysctl_header = register_sysctl_table(t->dev_dir, 0);
+	if (t->sysctl_header == NULL) {
+		kfree(t);
+		t = NULL;
+	}
+	port->sysctl_table = t;
+	return 0;
+}
+
+int parport_proc_unregister(struct parport *port)
+{
+	if (port->sysctl_table) {
+		struct parport_sysctl_table *t = port->sysctl_table;
+		port->sysctl_table = NULL;
+		unregister_sysctl_table(t->sysctl_header);
+		kfree(t);
+	}
+	return 0;
+}
+
+int parport_device_proc_register(struct pardevice *device)
+{
+	struct parport_device_sysctl_table *t;
+	struct parport * port = device->port;
+	
+	t = kmalloc(sizeof(*t), GFP_KERNEL);
+	if (t == NULL)
+		return -ENOMEM;
+	memcpy(t, &parport_device_sysctl_template, sizeof(*t));
+
+	t->dev_dir[0].child = t->parport_dir;
+	t->parport_dir[0].child = t->port_dir;
+	t->port_dir[0].procname = port->name;
+	t->port_dir[0].ctl_name = port->number + 1; /* nb 0 isn't legal here */
+	t->port_dir[0].child = t->devices_root_dir;
+	t->devices_root_dir[0].child = t->device_dir;
+
+#if 0 && defined(CONFIG_PARPORT_1284)
+
+	t->device_dir[0].ctl_name =
+		parport_device_num(port->number, port->muxport,
+				   device->daisy)
+		+ 1;  /* nb 0 isn't legal here */ 
+
+#else /* No IEEE 1284 support */
+
+	/* parport_device_num isn't available. */
+	t->device_dir[0].ctl_name = 1;
+	
+#endif /* IEEE 1284 support or not */
+
+	t->device_dir[0].procname = device->name;
+	t->device_dir[0].extra1 = device;
+	t->device_dir[0].child = t->vars;
+	t->vars[0].data = &device->timeslice;
+
+	t->sysctl_header = register_sysctl_table(t->dev_dir, 0);
+	if (t->sysctl_header == NULL) {
+		kfree(t);
+		t = NULL;
+	}
+	device->sysctl_table = t;
+	return 0;
+}
+
+int parport_device_proc_unregister(struct pardevice *device)
+{
+	if (device->sysctl_table) {
+		struct parport_device_sysctl_table *t = device->sysctl_table;
+		device->sysctl_table = NULL;
+		unregister_sysctl_table(t->sysctl_header);
+		kfree(t);
+	}
+	return 0;
+}
+
+int parport_default_proc_register(void)
+{
+	parport_default_sysctl_table.sysctl_header =
+		register_sysctl_table(parport_default_sysctl_table.dev_dir, 0);
+	return 0;
+}
+
+int parport_default_proc_unregister(void)
+{
+	if (parport_default_sysctl_table.sysctl_header) {
+		unregister_sysctl_table(parport_default_sysctl_table.
+					sysctl_header);
+		parport_default_sysctl_table.sysctl_header = NULL;
+	}
+	return 0;
+}
+
+#else /* no sysctl */
 
 int parport_proc_register(struct parport *pp)
 {
-	memset(&pp->pdir, 0, sizeof(struct parport_dir));
-
-	if (base == NULL) {
-		printk(KERN_ERR "parport_proc not initialised yet.\n");
-		return 1;
-	}
-	
-	strncpy(pp->pdir.name, pp->name + strlen("parport"), 
-		sizeof(pp->pdir.name));
-
-	pp->pdir.entry = new_proc_entry(pp->pdir.name, S_IFDIR, base, 0, pp);
-	if (pp->pdir.entry == NULL)
-		goto out_fail;
-
-	pp->pdir.irq = new_proc_entry("irq", S_IFREG | S_IRUGO | S_IWUSR, 
-				      pp->pdir.entry, 0, pp);
-	if (pp->pdir.irq == NULL)
-		goto out_fail;
-
-	pp->pdir.irq->read_proc = irq_read_proc;
-	pp->pdir.irq->write_proc = irq_write_proc;
-	pp->pdir.irq->data = pp;
-	
-	pp->pdir.devices = new_proc_entry("devices", 0, pp->pdir.entry, 0, pp);
-	if (pp->pdir.devices == NULL)
-		goto out_fail;
-
-	pp->pdir.devices->read_proc = devices_read_proc;
-	pp->pdir.devices->data = pp;
-	
-	pp->pdir.hardware = new_proc_entry("hardware", 0, pp->pdir.entry, 0,
-					   pp);
-	if (pp->pdir.hardware == NULL)
-		goto out_fail;
-
-	pp->pdir.hardware->read_proc = hardware_read_proc;
-	pp->pdir.hardware->data = pp;
-
-	pp->pdir.probe = new_proc_entry("autoprobe", 0, pp->pdir.entry, 0, pp);
-	if (pp->pdir.probe == NULL)
-		goto out_fail;
-
-	pp->pdir.probe->read_proc = autoprobe_read_proc;
-	pp->pdir.probe->data = pp;
-
 	return 0;
-
-out_fail:
-
-	printk(KERN_ERR "%s: failure registering /proc/ entry.\n", pp->name);
-	destroy_proc_tree(pp);
-	return 1;
 }
 
 int parport_proc_unregister(struct parport *pp)
 {
-	destroy_proc_tree(pp);
 	return 0;
 }
 
-#else
-
-int parport_proc_register(struct parport *p) 
+int parport_device_proc_register(struct pardevice *device)
 {
 	return 0;
 }
 
-int parport_proc_unregister(struct parport *p)
+int parport_device_proc_unregister(struct pardevice *device)
 {
 	return 0;
 }
 
-int parport_proc_init(void)
+int parport_default_proc_register (void)
 {
 	return 0;
 }
 
-void parport_proc_cleanup(void)
+int parport_default_proc_unregister (void)
 {
+	return 0;
 }
-
 #endif

@@ -13,6 +13,7 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* May 19, 1999	Arnaldo Melo	wanpipe_init belongs to sdlamain.c
 * Dec 20, 1996	Gene Kozin	Version 3.0.0. Complete overhaul.
 * Jul 12, 1996	Gene Kozin	Changes for Linux 2.0 compatibility.
 * Jun 12, 1996	Gene Kozin 	Added support for S503 card.
@@ -89,7 +90,6 @@
 #include <linux/sched.h>	/* for jiffies, HZ, etc. */
 #include <linux/sdladrv.h>	/* API definitions */
 #include <linux/sdlasfm.h>	/* SDLA firmware module definitions */
-#include <linux/init.h>
 #include <asm/io.h>		/* for inb(), outb(), etc. */
 #define _INB(port)		(inb(port))
 #define _OUTB(port, byte)	(outb((byte),(port)))
@@ -288,9 +288,6 @@ static unsigned char s507_irqmask[] =
 
 #ifdef MODULE
 int init_module (void)
-#else
-__initfunc(int wanpipe_init(void))
-#endif
 {
 	printk(KERN_INFO "%s v%u.%u %s\n",
 		fullname, MOD_VERSION, MOD_RELEASE, copyright);
@@ -301,7 +298,6 @@ __initfunc(int wanpipe_init(void))
 	return 0;
 }
 
-#ifdef MODULE
 /*============================================================================
  * Module 'remove' entry point.
  * o release all remaining system resources

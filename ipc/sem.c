@@ -48,11 +48,14 @@
  *      better but only get the semops right which only wait for zero or
  *      increase. If there are decrement operations in the operations
  *      array we do the same as before.
+ *
+ * /proc/sysvipc/sem support (c) 1999 Dragos Acostachioaie <dragos@iname.com>
  */
 
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#include <linux/proc_fs.h>
 
 #include <asm/uaccess.h>
 
@@ -60,6 +63,9 @@ extern int ipcperms (struct ipc_perm *ipcp, short semflg);
 static int newary (key_t, int, int);
 static int findkey (key_t key);
 static void freeary (int id);
+#ifdef CONFIG_PROC_FS
+static int sysvipc_sem_read_proc(char *buffer, char **start, off_t offset, int length, int *eof, void *data);
+#endif
 
 static struct semid_ds *semary[SEMMNI];
 static int used_sems = 0, used_semids = 0;
@@ -71,11 +77,18 @@ static unsigned short sem_seq = 0;
 void __init sem_init (void)
 {
 	int i;
+#ifdef CONFIG_PROC_FS
+	struct proc_dir_entry *ent;
+#endif
 
 	init_waitqueue_head(&sem_lock);
 	used_sems = used_semids = max_semid = sem_seq = 0;
 	for (i = 0; i < SEMMNI; i++)
 		semary[i] = (struct semid_ds *) IPC_UNUSED;
+#ifdef CONFIG_PROC_FS
+	ent = create_proc_entry("sysvipc/sem", 0, 0);
+	ent->read_proc = sysvipc_sem_read_proc;
+#endif
 	return;
 }
 
@@ -785,3 +798,46 @@ found:
 	}
 	current->semundo = NULL;
 }
+
+#ifdef CONFIG_PROC_FS
+static int sysvipc_sem_read_proc(char *buffer, char **start, off_t offset, int length, int *eof, void *data)
+{
+	off_t pos = 0;
+	off_t begin = 0;
+	int i, len = 0;
+
+	len += sprintf(buffer, "       key      semid perms nsems   uid   gid  cuid  cgid      otime      ctime\n");
+
+	for(i = 0; i < SEMMNI; i++)
+		if(semary[i] != IPC_UNUSED) {
+			len += sprintf(buffer + len, "%10d %10d  %4o %5u %5u %5u %5u %5u %10lu %10lu\n",
+				semary[i]->sem_perm.key,
+				semary[i]->sem_perm.seq * SEMMNI + i,
+				semary[i]->sem_perm.mode,
+				semary[i]->sem_nsems,
+				semary[i]->sem_perm.uid,
+				semary[i]->sem_perm.gid,
+				semary[i]->sem_perm.cuid,
+				semary[i]->sem_perm.cgid,
+				semary[i]->sem_otime,
+				semary[i]->sem_ctime);
+
+			pos += len;
+			if(pos < offset) {
+				len = 0;
+	    		begin = pos;
+			}
+			if(pos > offset + length)
+				goto done;
+		}
+	*eof = 1;
+done:
+	*start = buffer + (offset - begin);
+	len -= (offset - begin);
+	if(len > length)
+		len = length;
+	if(len < 0)
+		len = 0;
+	return len;
+}
+#endif

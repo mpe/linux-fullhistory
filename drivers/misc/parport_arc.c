@@ -28,10 +28,26 @@
 #include <asm/arch/oldlatches.h>
 #include <asm/arch/irqs.h>
 
-#define DATA_LATCH    0x3350010
+#define DATA_ADDRESS    0x3350010
 
-/* ARC can't read from the data latch, so we must use a soft copy. */
+/* This is equivalent to the above and only used for request_region. */
+#define PORT_BASE       0x80000000 | ((DATA_ADDRESS - IO_BASE) >> 2)
+
+/* The hardware can't read from the data latch, so we must use a soft
+   copy. */
 static unsigned char data_copy;
+
+/* These are pretty simple. We know the irq is never shared and the
+   kernel does all the magic that's required. */
+static void arc_enable_irq(struct parport *p)
+{
+	enable_irq(p->irq);
+}
+
+static void arc_disable_irq(struct parport *p)
+{
+	disable_irq(p->irq);
+}
 
 static void arc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
@@ -41,7 +57,7 @@ static void arc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 static void arc_write_data(struct parport *p, unsigned char data)
 {
 	data_copy = data;
-	outb(data, DATA_LATCH);
+	outb_t(data, DATA_LATCH);
 }
 
 static unsigned char arc_read_data(struct parport *p)
@@ -94,9 +110,6 @@ static struct parport_operations parport_arc_ops =
 	
 	NULL, /* change_mode */
 	
-	arc_release_resources,
-	arc_claim_resources,
-	
 	NULL, /* epp_write_data */
 	NULL, /* epp_read_data */
 	NULL, /* epp_write_addr */
@@ -129,23 +142,27 @@ int parport_arc_init(void)
 	/* Archimedes hardware provides only one port, at a fixed address */
 	struct parport *p;
 
-	if (check_region(DATA_LATCH, 4))
+	if (check_region(PORT_BASE, 4))
 		return 0;
 	
-       	if (!(p = parport_register_port(base, IRQ_PRINTERACK, 
-					PARPORT_DMA_NONE, &parport_arc_ops))) 
+	p = parport_register_port(base, IRQ_PRINTERACK, 
+				  PARPORT_DMA_NONE, &parport_arc_ops);
+
+	if (!p)
 		return 0;
 
 	p->modes = PARPORT_MODE_ARCSPP;
-	p->size = 4;
+	p->size = 1;
 
 	printk(KERN_INFO "%s: Archimedes on-board port, using irq %d\n",
 	       p->irq);
 	parport_proc_register(p);
-	p->flags |= PARPORT_FLAG_COMA;
 
 	if (parport_probe_hook)
 		(*parport_probe_hook)(p);
+
+	/* Tell the high-level drivers about the port. */
+	parport_announce_port (p);
 
 	return 1;
 }

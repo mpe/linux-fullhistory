@@ -74,6 +74,9 @@ extern void giveup_fpu(struct task_struct *);
 extern void enable_kernel_fp(void);
 extern void cvt_fd(float *from, double *to, unsigned long *fpscr);
 extern void cvt_df(double *from, float *to, unsigned long *fpscr);
+extern int call_rtas(const char *, int, int, unsigned long *, ...);
+extern void chrp_progress(char *);
+void chrp_event_scan(void);
 
 struct device_node;
 extern void note_scsi_host(struct device_node *, void *);
@@ -87,6 +90,8 @@ struct thread_struct;
 extern struct task_struct *_switch(struct thread_struct *prev,
 				     struct thread_struct *next,
 				     unsigned long context);
+
+extern unsigned int rtas_data;
 
 struct pt_regs;
 extern void dump_regs(struct pt_regs *);

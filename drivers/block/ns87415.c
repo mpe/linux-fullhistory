@@ -166,13 +166,15 @@ __initfunc(void ide_init_ns87415 (ide_hwif_t *hwif))
 #endif
 	}
 
-	outb(0x60, hwif->dma_base + 2);
+	if (hwif->dma_base)
+		outb(0x60, hwif->dma_base + 2);
 
 	if (!using_inta)
 		hwif->irq = hwif->channel ? 15 : 14;	/* legacy mode */
 	else if (!hwif->irq && hwif->mate && hwif->mate->irq)
 		hwif->irq = hwif->mate->irq;	/* share IRQ with mate */
 
-	hwif->dmaproc = &ns87415_dmaproc;
+	if (hwif->dma_base)
+		hwif->dmaproc = &ns87415_dmaproc;
 	hwif->selectproc = &ns87415_selectproc;
 }

@@ -17,7 +17,7 @@
 	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
 
 CFLAGS	= -O -fno-builtin -DSTDC_HEADERS -I$(TOPDIR)/include
-LD_ARGS = -T ../vmlinux.lds -Ttext 0x00800000
+LD_ARGS = -Ttext 0x00400000
 OBJCOPY = $(CROSS_COMPILE)objcopy
 
 OBJS = crt0.o start.o main.o misc.o ../coffboot/string.o ../coffboot/zlib.o image.o # initrd.o
@@ -65,9 +65,10 @@ image.o: piggyback ../coffboot/vmlinux.gz
 initrd.o: ramdisk.image.gz piggyback
 	./piggyback initrd < ramdisk.image.gz | $(AS) -o initrd.o
 
-zImage: $(OBJS) no_initrd.o
+zImage: $(OBJS) no_initrd.o mknote
 	$(LD) $(LD_ARGS) -o $@ $(OBJS) no_initrd.o $(LIBS)
-	objcopy zImage zImage
+	./mknote > note
+	$(OBJCOPY) $@ $@ --add-section=.note=note -R .comment
 
 zImage.initrd: $(OBJS) initrd.o
 	$(LD) $(LD_ARGS) -o $@ $(OBJS) initrd.o $(LIBS)
@@ -92,8 +93,7 @@ vmlinux.coff.initrd:
 
 
 clean:
-	rm -f piggyback
-	rm -f $(OBJS) zImage
+	rm -f piggyback note mknote $(OBJS) zImage
 
 fastdep:
 	$(TOPDIR)/scripts/mkdep *.[Sch] > .depend

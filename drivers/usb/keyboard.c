@@ -171,7 +171,7 @@ usb_kbd_probe(struct usb_device *dev)
     struct usb_endpoint_descriptor *endpoint;
     struct usb_keyboard *kbd;
 
-    interface = &dev->config[0].interface[0];
+    interface = &dev->config[0].altsetting[0].interface[0];
     endpoint = &interface->endpoint[0];
 
     if(interface->bInterfaceClass != 3
@@ -233,7 +233,7 @@ int init_module(void)
 	return usb_kbd_init();
 }
 
-void module_cleanup(void)
+void cleanup_module(void)
 {
 	usb_deregister(&usb_kbd_driver);
 }

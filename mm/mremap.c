@@ -134,12 +134,14 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 			new_vma->vm_start = new_addr;
 			new_vma->vm_end = new_addr+new_len;
 			new_vma->vm_offset = vma->vm_offset + (addr - vma->vm_start);
+			lock_kernel();
 			if (new_vma->vm_file)
 				new_vma->vm_file->f_count++;
 			if (new_vma->vm_ops && new_vma->vm_ops->open)
 				new_vma->vm_ops->open(new_vma);
 			insert_vm_struct(current->mm, new_vma);
 			merge_segments(current->mm, new_vma->vm_start, new_vma->vm_end);
+			unlock_kernel();
 			do_munmap(addr, old_len);
 			current->mm->total_vm += new_len >> PAGE_SHIFT;
 			if (new_vma->vm_flags & VM_LOCKED) {
@@ -166,7 +168,6 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	unsigned long ret = -EINVAL;
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
 	if (addr & ~PAGE_MASK)
 		goto out;
 	old_len = PAGE_ALIGN(old_len);
@@ -239,7 +240,6 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	else
 		ret = -ENOMEM;
 out:
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 	return ret;
 }

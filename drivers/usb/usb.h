@@ -112,6 +112,7 @@ struct usb_devmap {
  */
 
 #define USB_MAXCONFIG		8
+#define USB_MAXALTSETTING       5
 #define USB_MAXINTERFACES	32
 #define USB_MAXENDPOINTS	32
 #define USB_MAXSTRINGS		16
@@ -160,6 +161,11 @@ struct usb_interface_descriptor {
 	void  *audio;
 };
 
+/* hack for alternate settings */
+struct usb_alternate_setting {
+        struct usb_interface_descriptor *interface;
+};
+
 /* Configuration descriptor information.. */
 struct usb_config_descriptor {
 	__u8  bLength;
@@ -170,8 +176,9 @@ struct usb_config_descriptor {
 	__u8  iConfiguration;
 	__u8  bmAttributes;
 	__u8  MaxPower;
-
-	struct usb_interface_descriptor *interface;
+        int act_altsetting;                /* active alternate setting */
+        int num_altsetting;                /* number of alternate settings */
+	struct usb_alternate_setting *altsetting;
 };
 
 /* String descriptor */
@@ -239,22 +246,22 @@ struct usb_bus {
 #define USB_MAXCHILDREN (8)
 
 struct usb_device {
-	int devnum;						/* Device number on USB bus */
-	int slow;						/* Slow device? */
-	int maxpacketsize;					/* Maximum packet size */
-	__u16 toggle;						/* one bit for each endpoint */
-	struct usb_config_descriptor *actconfig;		/* the active configuration */
-	int epmaxpacket[16];					/* endpoint specific maximums */
-	int ifnum;						/* active interface number */
-	struct usb_bus *bus;					/* Bus we're apart of */
-	struct usb_driver *driver;				/* Driver */
-	struct usb_device_descriptor descriptor;		/* Descriptor */
-	struct usb_config_descriptor *config;			/* All of the configs */
+	int devnum;			/* Device number on USB bus */
+	int slow;			/* Slow device? */
+	int maxpacketsize;		/* Maximum packet size */
+	__u16 toggle;			/* one bit for each endpoint */
+	struct usb_config_descriptor *actconfig;/* the active configuration */
+	int epmaxpacket[16];		/* endpoint specific maximums */
+	int ifnum;			/* active interface number */
+	struct usb_bus *bus;		/* Bus we're apart of */
+	struct usb_driver *driver;	/* Driver */
+	struct usb_device_descriptor descriptor;/* Descriptor */
+	struct usb_config_descriptor *config;	/* All of the configs */
 	struct usb_device *parent;
-	char *stringtable;					/* Strings (multiple, null term) */
-	char **stringindex;					/* pointers to strings */
-	int maxstring;						/* max valid index */
-  
+	char *stringtable;		/* Strings (multiple, null term) */
+	char **stringindex;		/* pointers to strings */
+	int maxstring;			/* max valid index */
+
 	/*
 	 * Child devices - these can be either new devices
 	 * (if this is a hub device), or different instances

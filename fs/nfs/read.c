@@ -257,6 +257,7 @@ nfs_readpage(struct file *file, struct page *page)
 
 out_error:
 	clear_bit(PG_locked, &page->flags);
+	wake_up(&page->wait);
 out_free:
 	free_page(page_address(page));
 out:

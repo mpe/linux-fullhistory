@@ -289,7 +289,7 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 #define TCP_PROBEWAIT_LEN (1*HZ)/* time to wait between probes when
 				 * I've got something to write and
 				 * there is no window			*/
-#define TCP_KEEPALIVE_TIME (180*60*HZ)		/* two hours */
+#define TCP_KEEPALIVE_TIME (120*60*HZ)		/* two hours */
 #define TCP_KEEPALIVE_PROBES	9		/* Max of 9 keepalive probes	*/
 #define TCP_KEEPALIVE_PERIOD ((75*HZ)>>2)	/* period of keepalive check	*/
 

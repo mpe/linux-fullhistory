@@ -452,12 +452,42 @@ enum
 /* CTL_DEV names: */
 enum {
 	DEV_CDROM=1,
-	DEV_HWMON=2
+	DEV_HWMON=2,
+	DEV_PARPORT=3
 };
 
 /* /proc/sys/dev/cdrom */
 enum {
 	DEV_CDROM_INFO=1
+};
+
+/* /proc/sys/dev/parport */
+enum {
+	DEV_PARPORT_DEFAULT=-3
+};
+
+/* /proc/sys/dev/parport/default */
+enum {
+	DEV_PARPORT_DEFAULT_TIMESLICE=1,
+	DEV_PARPORT_DEFAULT_SPINTIME=2
+};
+
+/* /proc/sys/dev/parport/parport n */
+enum {
+	DEV_PARPORT_SPINTIME=1,
+	DEV_PARPORT_HARDWARE=2,
+	DEV_PARPORT_DEVICES=3,
+	DEV_PARPORT_AUTOPROBE=16
+};
+
+/* /proc/sys/dev/parport/parport n/devices/ */
+enum {
+	DEV_PARPORT_DEVICES_ACTIVE=-3,
+};
+
+/* /proc/sys/dev/parport/parport n/devices/device n */
+enum {
+	DEV_PARPORT_DEVICE_TIMESLICE=1,
 };
 
 #ifdef __KERNEL__

@@ -5,6 +5,7 @@
 *
 * Author:	Gene Kozin	<genek@compuserve.com>
 *		Jaspreet Singh	<jaspreet@sangoma.com>
+* Additions:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
 *
 * Copyright:	(c) 1995-1997 Sangoma Technologies Inc.
 *
@@ -13,11 +14,14 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* May 23, 1999	Arnaldo Melo	Added local_addr to wanif_conf_t
+*				WAN_DISCONNECTING state added
 * Nov 06, 1997	Jaspreet Singh	Changed Router Driver version to 1.1 from 1.0
 * Oct 20, 1997	Jaspreet Singh	Added 'cir','bc','be' and 'mc' to 'wanif_conf_t'
 *				Added 'enable_IPX' and 'network_number' to 
 *				'wan_device_t'.  Also added defines for
-*				UDP PACKET TYPE, Interrupt test, critical values*				for RACE conditions.
+*				UDP PACKET TYPE, Interrupt test, critical values
+*				for RACE conditions.
 * Oct 05, 1997	Jaspreet Singh	Added 'dlci_num' and 'dlci[100]' to 
 *				'wan_fr_conf_t' to configure a list of dlci(s)
 *				for a NODE 
@@ -125,7 +129,7 @@ typedef struct wan_fr_conf
 	unsigned n392;		/* error threshold counter */
 	unsigned n393;		/* monitored events counter */
 	unsigned dlci_num;	/* number of DLCs (access node) */
-	unsigned  dlci[100];    /* List of all DLCIs */
+	unsigned dlci[100];	/* List of all DLCIs */
 } wan_fr_conf_t;
 
 /*----------------------------------------------------------------------------
@@ -274,6 +278,7 @@ enum wan_states
 	WAN_DISCONNECTED,	/* link/channel is disconnected */
 	WAN_CONNECTING,		/* connection is in progress */
 	WAN_CONNECTED,		/* link/channel is operational */
+	WAN_DISCONNECTING,	/* disconnection is in progress */
 	WAN_LIMIT		/* for verification only */
 };
 
@@ -298,6 +303,8 @@ typedef struct wanif_conf
 	unsigned bc;			/* Committed Burst Size fwd, bwd */
 	unsigned be;			/* Excess Burst Size fwd, bwd */ 
 	char mc;			/* Multicast on or off */
+	char local_addr[WAN_ADDRESS_SZ+1];/* local media address, ASCIIZ */
+	unsigned char port;		/* board port */
 	int reserved[8];		/* reserved for future extensions */
 } wanif_conf_t;
 

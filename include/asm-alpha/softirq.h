@@ -5,6 +5,16 @@
 #include <asm/atomic.h>
 #include <asm/hardirq.h>
 
+/*
+ * This works but is wrong - on SMP it should disable only on the
+ * current CPU and shouldn't synchronize like the heavy global
+ * disable does. Oh, well.
+ *
+ * See the x86 version for an example.
+ */
+#define local_bh_enable()	start_bh_atomic()
+#define local_bh_disable()	end_bh_atomic()
+
 extern unsigned int local_bh_count[NR_CPUS];
 
 #define get_active_bhs()	(bh_mask & bh_active)

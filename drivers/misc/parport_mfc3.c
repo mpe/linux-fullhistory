@@ -217,22 +217,9 @@ static void mfc3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			}
 }
 
-static void mfc3_release_resources(struct parport *p)
-{
-DPRINTK("realease_resources\n");
-	if (p->irq != PARPORT_IRQ_NONE) 
-		if (--use_cnt == 0) 
-			free_irq(IRQ_AMIGA_PORTS, &pp_mfc3_ops);
-}
-
 static int mfc3_claim_resources(struct parport *p)
 {
 DPRINTK("claim_resources\n");
-	if (p->irq != PARPORT_IRQ_NONE)
-		if (use_cnt++ == 0)
-			if (request_irq(IRQ_AMIGA_PORTS, mfc3_interrupt, 0, p->name, &pp_mfc3_ops))
-				 return use_cnt--;
-	return 0;
 }
 
 static void mfc3_init_state(struct parport_state *s)
@@ -379,11 +366,17 @@ __initfunc(int parport_mfc3_init(void))
 					printk(KERN_INFO "%s: Multiface III port using irq\n", p->name);
 					/* XXX: set operating mode */
 					parport_proc_register(p);
-					p->flags |= PARPORT_FLAG_COMA;
+
+					if (p->irq != PARPORT_IRQ_NONE)
+						if (use_cnt++ == 0)
+							if (request_irq(IRQ_AMIGA_PORTS, mfc3_interrupt, 0, p->name, &pp_mfc3_ops))
+								use_cnt--;
+
 					if (parport_probe_hook)
 						(*parport_probe_hook)(p);
 					zorro_config_board(key, 0);
 					p->private_data = (void *)key;
+					parport_announce_port (p);
 				}
 			}
 		}
@@ -408,8 +401,9 @@ void cleanup_module(void)
 
 	for (i = 0; i < MAX_MFC; i++)
 		if (this_port[i] != NULL) {
-			if (!(this_port[i]->flags & PARPORT_FLAG_COMA))
-				parport_quiesce(this_port[i]);
+			if (p->irq != PARPORT_IRQ_NONE) 
+				if (--use_cnt == 0) 
+			free_irq(IRQ_AMIGA_PORTS, &pp_mfc3_ops);
 			parport_proc_unregister(this_port[i]);
 			parport_unregister_port(this_port[i]);
 			zorro_unconfig_board((unsigned int)this_port[i]->private_data, 0);

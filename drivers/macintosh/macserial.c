@@ -137,11 +137,11 @@ static struct termios *serial_termios_locked[NUM_CHANNELS];
  * memory if large numbers of serial ports are open.
  */
 static unsigned char tmp_buf[4096]; /* This is cheating */
-static struct semaphore tmp_buf_sem = MUTEX;
+DECLARE_MUTEX(tmp_buf_sem);
 
-__openfirmware
 
-static inline int serial_paranoia_check(struct mac_serial *info,
+static inline int __pmac
+serial_paranoia_check(struct mac_serial *info,
 					dev_t device, const char *routine)
 {
 #ifdef SERIAL_PARANOIA_CHECK
@@ -165,7 +165,7 @@ static inline int serial_paranoia_check(struct mac_serial *info,
 /* 
  * Reading and writing Z8530 registers.
  */
-static inline unsigned char read_zsreg(struct mac_zschannel *channel,
+static inline unsigned char __pmac read_zsreg(struct mac_zschannel *channel,
 				       unsigned char reg)
 {
 	unsigned char retval;
@@ -185,7 +185,7 @@ static inline unsigned char read_zsreg(struct mac_zschannel *channel,
 	return retval;
 }
 
-static inline void write_zsreg(struct mac_zschannel *channel,
+static inline void __pmac write_zsreg(struct mac_zschannel *channel,
 			       unsigned char reg, unsigned char value)
 {
 	unsigned long flags;
@@ -201,7 +201,7 @@ static inline void write_zsreg(struct mac_zschannel *channel,
 	return;
 }
 
-static inline unsigned char read_zsdata(struct mac_zschannel *channel)
+static inline unsigned char __pmac read_zsdata(struct mac_zschannel *channel)
 {
 	unsigned char retval;
 
@@ -1997,8 +1997,8 @@ int macserial_init(void)
 		info->tqueue.data = info;
 		info->callout_termios =callout_driver.init_termios;
 		info->normal_termios = serial_driver.init_termios;
-		info->open_wait = 0;
-		info->close_wait = 0;
+		init_waitqueue_head(&info->open_wait);
+		init_waitqueue_head(&info->close_wait);
 		info->timeout = HZ;
 		printk("tty%02d at 0x%08x (irq = %d)", info->line, 
 			info->port, info->irq);

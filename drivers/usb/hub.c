@@ -159,7 +159,7 @@ static int hub_probe(struct usb_device *dev)
 	if (dev->config[0].bNumInterfaces != 1)
 		return -1;
 
-	interface = &dev->config[0].interface[0];
+	interface = &dev->config[0].altsetting[0].interface[0];
 
 	/* Is it a hub? */
 	if (interface->bInterfaceClass != 9)
@@ -421,7 +421,7 @@ int init_module(void){
 	return usb_hub_init();
 }
 
-void module_cleanup(void){
+void cleanup_module(void){
 	usb_hub_cleanup();
 }
 #endif

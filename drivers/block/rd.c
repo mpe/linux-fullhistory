@@ -627,7 +627,7 @@ __initfunc(void rd_load_secondary(void))
 #ifdef CONFIG_BLK_DEV_INITRD
 __initfunc(void initrd_load(void))
 {
-	rd_load_image(MKDEV(MAJOR_NR, INITRD_MINOR),0,0);
+	rd_load_image(MKDEV(MAJOR_NR, INITRD_MINOR),rd_image_start,0);
 }
 #endif
 

@@ -99,13 +99,17 @@ __initfunc(void parport_setup(char *str, int *ints))
 #ifdef MODULE
 int init_module(void)
 {
-	(void)parport_proc_init();	/* We can go on without it. */
+#ifdef CONFIG_SYSCTL
+	parport_default_proc_register ();
+#endif
 	return 0;
 }
 
 void cleanup_module(void)
 {
-	parport_proc_cleanup();
+#ifdef CONFIG_SYSCTL
+	parport_default_proc_unregister ();
+#endif
 }
 
 #else
@@ -118,9 +122,10 @@ __initfunc(int parport_init(void))
 #ifdef CONFIG_PNP_PARPORT
 	parport_probe_hook = &parport_probe_one;
 #endif
-#ifdef	CONFIG_PROC_FS
-	parport_proc_init();
+#ifdef	CONFIG_SYSCTL
+	parport_default_proc_register ();
 #endif
+
 #ifdef CONFIG_PARPORT_PC
 	parport_pc_init(io, io_hi, irq, dma);
 #endif
@@ -136,6 +141,9 @@ __initfunc(int parport_init(void))
 #ifdef CONFIG_PARPORT_ATARI
 	parport_atari_init();
 #endif
+#ifdef CONFIG_PARPORT_ARC
+	parport_arc_init();
+#endif
 	return 0;
 }
 #endif
@@ -148,7 +156,6 @@ EXPORT_SYMBOL(parport_release);
 EXPORT_SYMBOL(parport_register_port);
 EXPORT_SYMBOL(parport_announce_port);
 EXPORT_SYMBOL(parport_unregister_port);
-EXPORT_SYMBOL(parport_quiesce);
 EXPORT_SYMBOL(parport_register_driver);
 EXPORT_SYMBOL(parport_unregister_driver);
 EXPORT_SYMBOL(parport_register_device);

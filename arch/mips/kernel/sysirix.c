@@ -571,7 +571,7 @@ asmlinkage int irix_brk(unsigned long brk)
 	 * Check against existing mmap mappings.
 	 */
 	if (find_vma_intersection(mm, oldbrk, newbrk+PAGE_SIZE)) {
-		return -ENOMEM;
+		ret = -ENOMEM;
 		goto out;
 	}
 
@@ -579,7 +579,7 @@ asmlinkage int irix_brk(unsigned long brk)
 	 * Check if we have enough memory..
 	 */
 	if (!vm_enough_memory((newbrk-oldbrk) >> PAGE_SHIFT)) {
-		return -ENOMEM;
+		ret = -ENOMEM;
 		goto out;
 	}
 
@@ -587,10 +587,7 @@ asmlinkage int irix_brk(unsigned long brk)
 	 * Ok, looks good - let it rip.
 	 */
 	mm->brk = brk;
-	do_mmap(NULL, oldbrk, newbrk-oldbrk,
-		PROT_READ|PROT_WRITE|PROT_EXEC,
-		MAP_FIXED|MAP_PRIVATE, 0);
-
+	do_brk(oldbrk, newbrk-oldbrk);
 	ret = 0;
 
 out:

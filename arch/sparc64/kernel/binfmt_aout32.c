@@ -48,9 +48,7 @@ static void set_brk(unsigned long start, unsigned long end)
 	end = PAGE_ALIGN(end);
 	if (end <= start)
 		return;
-	do_mmap(NULL, start, end - start,
-		PROT_READ | PROT_WRITE | PROT_EXEC,
-		MAP_FIXED | MAP_PRIVATE, 0);
+	do_brk(start, end - start);
 }
 
 /*
@@ -284,24 +282,18 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
  	current->flags &= ~PF_FORKNOEXEC;
 	if (N_MAGIC(ex) == NMAGIC) {
 		/* Fuck me plenty... */
-		error = do_mmap(NULL, N_TXTADDR(ex), ex.a_text,
-				PROT_READ|PROT_WRITE|PROT_EXEC,
-				MAP_FIXED|MAP_PRIVATE, 0);
+		error = do_brk(N_TXTADDR(ex), ex.a_text);
 		read_exec(bprm->dentry, fd_offset, (char *) N_TXTADDR(ex),
 			  ex.a_text, 0);
-		error = do_mmap(NULL, N_DATADDR(ex), ex.a_data,
-				PROT_READ|PROT_WRITE|PROT_EXEC,
-				MAP_FIXED|MAP_PRIVATE, 0);
+		error = do_brk(N_DATADDR(ex), ex.a_data);
 		read_exec(bprm->dentry, fd_offset + ex.a_text, (char *) N_DATADDR(ex),
 			  ex.a_data, 0);
 		goto beyond_if;
 	}
 
 	if (N_MAGIC(ex) == OMAGIC) {
-		do_mmap(NULL, N_TXTADDR(ex) & PAGE_MASK,
-			ex.a_text+ex.a_data + PAGE_SIZE - 1,
-			PROT_READ|PROT_WRITE|PROT_EXEC,
-			MAP_FIXED|MAP_PRIVATE, 0);
+		do_brk(N_TXTADDR(ex) & PAGE_MASK,
+			ex.a_text+ex.a_data + PAGE_SIZE - 1);
 		read_exec(bprm->dentry, fd_offset, (char *) N_TXTADDR(ex),
 			  ex.a_text+ex.a_data, 0);
 	} else {
@@ -316,9 +308,7 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 
 		if (!file->f_op || !file->f_op->mmap) {
 			sys_close(fd);
-			do_mmap(NULL, 0, ex.a_text+ex.a_data,
-				PROT_READ|PROT_WRITE|PROT_EXEC,
-				MAP_FIXED|MAP_PRIVATE, 0);
+			do_brk(0, ex.a_text+ex.a_data);
 			read_exec(bprm->dentry, fd_offset,
 				  (char *) N_TXTADDR(ex), ex.a_text+ex.a_data, 0);
 			goto beyond_if;
@@ -442,9 +432,7 @@ do_load_aout32_library(int fd)
 	len = PAGE_ALIGN(ex.a_text + ex.a_data);
 	bss = ex.a_text + ex.a_data + ex.a_bss;
 	if (bss > len) {
-		error = do_mmap(NULL, start_addr + len, bss - len,
-				PROT_READ | PROT_WRITE | PROT_EXEC,
-				MAP_PRIVATE | MAP_FIXED, 0);
+		error = do_brk(start_addr + len, bss - len);
 		retval = error;
 		if (error != start_addr + len)
 			goto out_putf;

@@ -42,7 +42,7 @@ static int usb_audio_probe(struct usb_device *dev)
 	int i;
 	int na=0;
 	
-	interface = &dev->config[0].interface[0];
+	interface = &dev->config[0].altsetting[0].interface[0];
 
 	for(i=0;i<dev->config[0].bNumInterfaces;i++)
 	{
@@ -133,7 +133,7 @@ int init_module(void)
 	return usb_audio_init();
 }
 
-void module_cleanup(void)
+void cleanup_module(void)
 {
 	usb_deregister(&usb_audio_driver);
 }

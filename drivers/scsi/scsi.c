@@ -263,6 +263,7 @@ static struct dev_info device_list[] =
 {"HP", "C1790A", "", BLIST_NOLUN},              /* scanjet iip */
 {"HP", "C2500A", "", BLIST_NOLUN},              /* scanjet iicx */
 {"YAMAHA", "CDR102", "1.00", BLIST_NOLUN},	/* extra reset */
+{"RELISYS", "Scorpio", "*", BLIST_NOLUN},	/* responds to all LUN */
 
 /*
  * Other types of devices that have special flags.

@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.131 1999/05/14 22:37:21 cort Exp $
+ *  $Id: head.S,v 1.133 1999/05/20 05:13:08 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -2615,7 +2615,6 @@ _GLOBAL(__main)
  */
 	.globl	enter_rtas
 enter_rtas:
-	stwu	r1,-16(r1)
 	mflr	r0
 	stw	r0,20(r1)
 	lis	r4,rtas_data@ha
@@ -2636,7 +2635,6 @@ enter_rtas:
 	andi.	r9,r9,MSR_ME|MSR_RI
 	sync			/* disable interrupts so SRR0/1 */
 	mtmsr	r0		/* don't get trashed */
-	li	r6,0	
 	mtlr	r6
 	mtspr	SPRG2,r7
 	mtspr	SRR0,r8

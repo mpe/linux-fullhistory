@@ -1,4 +1,4 @@
-Read/Write HPFS 1.99b
+Read/Write HPFS 2.00
 1998-1999, Mikulas Patocka
 
 email: mikulas@artax.karlin.mff.cuni.cz
@@ -267,6 +267,8 @@ History
 	file
      Now it tries to truncate the file if there's not enough space when deleting
      Removed a lot of redundat code
+2.00 Fixed a bug in rename (it was there since 1.96)
+     Better anti-fragmentation strategy
 
 
  vim: set textwidth=80:

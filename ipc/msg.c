@@ -8,6 +8,7 @@
  * Fixed up the unchecked user space derefs
  * Copyright (C) 1998 Alan Cox & Andi Kleen
  *
+ * /proc/sysvipc/msg support (c) 1999 Dragos Acostachioaie <dragos@iname.com>
  */
 
 #include <linux/malloc.h>
@@ -15,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#include <linux/proc_fs.h>
 
 #include <asm/uaccess.h>
 
@@ -23,6 +25,9 @@ extern int ipcperms (struct ipc_perm *ipcp, short msgflg);
 static void freeque (int id);
 static int newque (key_t key, int msgflg);
 static int findkey (key_t key);
+#ifdef CONFIG_PROC_FS
+static int sysvipc_msg_read_proc(char *buffer, char **start, off_t offset, int length, int *eof, void *data);
+#endif
 
 static struct msqid_ds *msgque[MSGMNI];
 static int msgbytes = 0;
@@ -35,11 +40,18 @@ static DECLARE_WAIT_QUEUE_HEAD(msg_lock);
 void __init msg_init (void)
 {
 	int id;
-	
+#ifdef CONFIG_PROC_FS
+	struct proc_dir_entry *ent;
+#endif
+
 	for (id = 0; id < MSGMNI; id++) 
 		msgque[id] = (struct msqid_ds *) IPC_UNUSED;
 	msgbytes = msghdrs = msg_seq = max_msqid = used_queues = 0;
 	init_waitqueue_head(&msg_lock);
+#ifdef CONFIG_PROC_FS
+	ent = create_proc_entry("sysvipc/msg", 0, 0);
+	ent->read_proc = sysvipc_msg_read_proc;
+#endif
 	return;
 }
 
@@ -492,3 +504,49 @@ out:
 	return err;
 }
 
+#ifdef CONFIG_PROC_FS
+static int sysvipc_msg_read_proc(char *buffer, char **start, off_t offset, int length, int *eof, void *data)
+{
+	off_t pos = 0;
+	off_t begin = 0;
+	int i, len = 0;
+
+	len += sprintf(buffer, "       key      msqid perms cbytes  qnum lspid lrpid   uid   gid  cuid  cgid      stime      rtime      ctime\n");
+
+	for(i = 0; i < MSGMNI; i++)
+		if(msgque[i] != IPC_UNUSED) {
+			len += sprintf(buffer + len, "%10d %10d  %4o  %5u %5u %5u %5u %5u %5u %5u %5u %10lu %10lu %10lu\n",
+				msgque[i]->msg_perm.key,
+				msgque[i]->msg_perm.seq * MSGMNI + i,
+				msgque[i]->msg_perm.mode,
+				msgque[i]->msg_cbytes,
+				msgque[i]->msg_qnum,
+				msgque[i]->msg_lspid,
+				msgque[i]->msg_lrpid,
+				msgque[i]->msg_perm.uid,
+				msgque[i]->msg_perm.gid,
+				msgque[i]->msg_perm.cuid,
+				msgque[i]->msg_perm.cgid,
+				msgque[i]->msg_stime,
+				msgque[i]->msg_rtime,
+				msgque[i]->msg_ctime);
+
+			pos += len;
+			if(pos < offset) {
+				len = 0;
+				begin = pos;
+			}
+			if(pos > offset + length)
+				goto done;
+		}
+	*eof = 1;
+done:
+	*start = buffer + (offset - begin);
+	len -= (offset - begin);
+	if(len > length)
+		len = length;
+	if(len < 0)
+		len = 0;
+	return len;
+}
+#endif
