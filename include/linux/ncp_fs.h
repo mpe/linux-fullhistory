@@ -63,7 +63,7 @@ struct ncp_fs_info {
 #define NCP_READDIR_CACHE_SIZE        64
 
 
-#define NCP_MAX_RPC_TIMEOUT (60) /* 6 seconds */
+#define NCP_MAX_RPC_TIMEOUT (6*HZ)
 
 /* Guess, what 0x564c is :-) */
 #define NCP_SUPER_MAGIC  0x564c

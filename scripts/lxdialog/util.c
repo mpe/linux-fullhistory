@@ -36,33 +36,33 @@ chtype attributes[] =
 {
     A_NORMAL,			/* screen_attr */
     A_NORMAL,			/* shadow_attr */
-    A_REVERSE,			/* dialog_attr */
-    A_REVERSE,			/* title_attr */
-    A_REVERSE,			/* border_attr */
-    A_BOLD,			/* button_active_attr */
+    A_NORMAL,			/* dialog_attr */
+    A_BOLD,			/* title_attr */
+    A_NORMAL,			/* border_attr */
+    A_REVERSE,			/* button_active_attr */
     A_DIM,			/* button_inactive_attr */
-    A_UNDERLINE,		/* button_key_active_attr */
-    A_UNDERLINE,		/* button_key_inactive_attr */
-    A_NORMAL,			/* button_label_active_attr */
+    A_REVERSE,			/* button_key_active_attr */
+    A_BOLD,			/* button_key_inactive_attr */
+    A_REVERSE,			/* button_label_active_attr */
     A_NORMAL,			/* button_label_inactive_attr */
-    A_REVERSE,			/* inputbox_attr */
-    A_REVERSE,			/* inputbox_border_attr */
-    A_REVERSE,			/* searchbox_attr */
-    A_REVERSE,			/* searchbox_title_attr */
-    A_REVERSE,			/* searchbox_border_attr */
-    A_REVERSE,			/* position_indicator_attr */
-    A_REVERSE,			/* menubox_attr */
-    A_REVERSE,			/* menubox_border_attr */
-    A_REVERSE,			/* item_attr */
-    A_NORMAL,			/* item_selected_attr */
-    A_REVERSE,			/* tag_attr */
+    A_NORMAL,			/* inputbox_attr */
+    A_NORMAL,			/* inputbox_border_attr */
+    A_NORMAL,			/* searchbox_attr */
+    A_BOLD,			/* searchbox_title_attr */
+    A_NORMAL,			/* searchbox_border_attr */
+    A_BOLD,			/* position_indicator_attr */
+    A_NORMAL,			/* menubox_attr */
+    A_NORMAL,			/* menubox_border_attr */
+    A_NORMAL,			/* item_attr */
+    A_REVERSE,			/* item_selected_attr */
+    A_BOLD,			/* tag_attr */
     A_REVERSE,			/* tag_selected_attr */
-    A_NORMAL,			/* tag_key_attr */
-    A_BOLD,			/* tag_key_selected_attr */
-    A_REVERSE,			/* check_attr */
+    A_BOLD,			/* tag_key_attr */
+    A_REVERSE,			/* tag_key_selected_attr */
+    A_BOLD,			/* check_attr */
     A_REVERSE,			/* check_selected_attr */
-    A_REVERSE,			/* uarrow_attr */
-    A_REVERSE			/* darrow_attr */
+    A_BOLD,			/* uarrow_attr */
+    A_BOLD			/* darrow_attr */
 };
 
 
@@ -340,7 +340,7 @@ draw_shadow (WINDOW * win, int y, int x, int height, int width)
  *  Return the position of the first alphabetic character in a string.
  */
 int
-first_alpha(const char *string)
+first_alpha(const char *string, const char *exempt)
 {
 	int i, in_paren=0, c;
 
@@ -351,7 +351,7 @@ first_alpha(const char *string)
 		if (c == ')') --in_paren;
 
 		if ((! in_paren) && isalpha(c) && 
-		     strchr("nNyYmM", c) == 0)
+		     strchr(exempt, c) == 0)
 			return i;
 	}
 

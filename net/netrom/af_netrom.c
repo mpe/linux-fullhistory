@@ -282,6 +282,82 @@ static int nr_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return -EINVAL;
 }
 
+/*
+ * dl1bke 960311: set parameters for existing NET/ROM connections,
+ *		  includes a KILL command to abort any connection.
+ *		  VERY useful for debugging ;-)
+ */
+static int nr_ctl_ioctl(const unsigned int cmd, void *arg)
+{
+	struct nr_ctl_struct nr_ctl;
+	struct sock *sk;
+	unsigned long flags;
+	int err;
+	
+	if ((err = verify_area(VERIFY_READ, arg, sizeof(nr_ctl))) != 0)
+		return err;
+
+	memcpy_fromfs(&nr_ctl, arg, sizeof(nr_ctl));
+	
+	if ((sk = nr_find_socket(nr_ctl.index, nr_ctl.id)) == NULL)
+		return -ENOTCONN;
+
+	switch (nr_ctl.cmd) {
+		case NETROM_KILL:
+			nr_clear_queues(sk);
+			nr_write_internal(sk, NR_DISCREQ);
+			sk->nr->state = NR_STATE_0;
+			sk->state = TCP_CLOSE;
+			sk->err   = ENETRESET;
+			if (!sk->dead)
+				sk->state_change(sk);
+			sk->dead  = 1;
+			nr_set_timer(sk);
+	  		break;
+
+	  	case NETROM_T1:
+  			if (nr_ctl.arg < 1) 
+  				return -EINVAL;
+  			sk->nr->rtt = (nr_ctl.arg * PR_SLOWHZ) / 2;
+  			sk->nr->t1 = nr_ctl.arg * PR_SLOWHZ;
+  			save_flags(flags); cli();
+  			if (sk->nr->t1timer > sk->nr->t1)
+  				sk->nr->t1timer = sk->nr->t1;
+  			restore_flags(flags);
+  			break;
+
+	  	case NETROM_T2:
+	  		if (nr_ctl.arg < 1) 
+	  			return -EINVAL;
+	  		save_flags(flags); cli();
+	  		sk->nr->t2 = nr_ctl.arg * PR_SLOWHZ;
+	  		if (sk->nr->t2timer > sk->nr->t2)
+	  			sk->nr->t2timer = sk->nr->t2;
+	  		restore_flags(flags);
+	  		break;
+
+	  	case NETROM_N2:
+	  		if (nr_ctl.arg < 1 || nr_ctl.arg > 10) 
+	  			return -EINVAL;
+	  		sk->nr->n2count = 0;
+	  		sk->nr->n2 = nr_ctl.arg;
+	  		break;
+
+	  	case NETROM_PACLEN:
+	  		if (nr_ctl.arg < 16 || nr_ctl.arg > 65535) 
+	  			return -EINVAL;
+	  		if (nr_ctl.arg > 236) /* we probably want this */
+	  			printk("nr_ctl_ioctl: Warning --- huge paclen %d\n", (int)nr_ctl.arg);
+	  		sk->nr->paclen = nr_ctl.arg;
+	  		break;
+
+	  	default:
+	  		return -EINVAL;
+	  }
+	  
+	  return 0;
+}
+
 static int nr_setsockopt(struct socket *sock, int level, int optname,
 	char *optval, int optlen)
 {
@@ -326,6 +402,12 @@ static int nr_setsockopt(struct socket *sock, int level, int optname,
 		case NETROM_HDRINCL:
 			sk->nr->hdrincl = opt ? 1 : 0;
 			return 0;
+
+		case NETROM_PACLEN:
+			if (opt < 1 || opt > 65536)
+				return -EINVAL;
+			sk->nr->paclen = opt;
+			return 0;
 			
 		default:
 			return -ENOPROTOOPT;
@@ -362,6 +444,10 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 						
 		case NETROM_HDRINCL:
 			val = sk->nr->hdrincl;
+			break;
+
+		case NETROM_PACLEN:
+			val = sk->nr->paclen;
 			break;
 
 		default:
@@ -461,6 +547,7 @@ static int nr_create(struct socket *sock, int protocol)
 	nr->t1       = nr_default.timeout;
 	nr->t2       = nr_default.ack_delay;
 	nr->n2       = nr_default.tries;
+	nr->paclen   = nr_default.paclen;
 
 	nr->t1timer  = 0;
 	nr->t2timer  = 0;
@@ -542,6 +629,7 @@ static struct sock *nr_make_new(struct sock *osk)
 	nr->t1       = osk->nr->t1;
 	nr->t2       = osk->nr->t2;
 	nr->n2       = osk->nr->n2;
+	nr->paclen   = osk->nr->paclen;
 
 	nr->device   = osk->nr->device;
 	nr->bpqext   = osk->nr->bpqext;
@@ -1216,12 +1304,16 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			return 0;
 		}
 		
-		default:
+ 		case SIOCNRCTLCON:
+ 			if (!suser()) return -EPERM;
+ 			return nr_ctl_ioctl(cmd, (void *)arg);
+ 
+ 		default:
 			return dev_ioctl(cmd, (void *)arg);
 	}
 
 	/*NOTREACHED*/
-	return(0);
+	return 0;
 }
 
 static int nr_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
@@ -1235,7 +1327,7 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
   
 	cli();
 
-	len += sprintf(buffer, "user_addr dest_node src_node  dev    my  your  st vs vr va    t1     t2    n2  rtt wnd Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "user_addr dest_node src_node  dev    my  your  st vs vr va    t1     t2    n2  rtt wnd paclen Snd-Q Rcv-Q\n");
 
 	for (s = nr_list; s != NULL; s = s->next) {
 		if ((dev = s->nr->device) == NULL)
@@ -1247,7 +1339,7 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 			ax2asc(&s->nr->user_addr));
 		len += sprintf(buffer + len, "%-9s ",
 			ax2asc(&s->nr->dest_addr));
-		len += sprintf(buffer + len, "%-9s %-3s  %02X/%02X %02X/%02X %2d %2d %2d %2d %3d/%03d %2d/%02d %2d/%02d %3d %3d %5d %5d\n",
+		len += sprintf(buffer + len, "%-9s %-3s  %02X/%02X %02X/%02X %2d %2d %2d %2d %3d/%03d %2d/%02d %2d/%02d %3d %3d %6d %5d %5d\n",
 			ax2asc(&s->nr->source_addr),
 			devname, s->nr->my_index, s->nr->my_id,
 			s->nr->your_index, s->nr->your_id,
@@ -1259,7 +1351,7 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 			s->nr->t2      / PR_SLOWHZ,
 			s->nr->n2count, s->nr->n2,
 			s->nr->rtt     / PR_SLOWHZ,
-			s->window,
+			s->window, s->nr->paclen,
 			s->wmem_alloc, s->rmem_alloc);
 		
 		pos = begin + len;
@@ -1324,6 +1416,7 @@ void nr_proto_init(struct net_proto *pro)
 	nr_default.busy_delay = NR_DEFAULT_T4;
 	nr_default.tries      = NR_DEFAULT_N2;
 	nr_default.window     = NR_DEFAULT_WINDOW;
+	nr_default.paclen     = NR_DEFAULT_PACLEN;
 
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_NR, 2, "nr",

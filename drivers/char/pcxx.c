@@ -28,6 +28,8 @@
  *  1.5.5 April 5, 1996 Major device numbers corrected.
  *              Mike McLagan<mike.mclagan@linux.org>: Add setup
  *              variable handling, instead of using the old pcxxconfig.h
+ *  1.5.6 April 16, 1996 Christoph Lameter: Pointer cleanup, macro cleanup.
+ *		Call out devices changed to /dev/cudxx.
  *
  */
 
@@ -64,8 +66,8 @@
 #include <asm/segment.h>
 #include <asm/bitops.h>
 
-#define VERSION 	"1.5.5"
-static char *banner = "Digiboard PC/X{i,e,eve,em} driver v1.5.5.  Christoph Lameter <clameter@fuller.edu>.";
+#define VERSION 	"1.5.6"
+static char *banner = "Digiboard PC/X{i,e,eve} driver v1.5.6.  Christoph Lameter <clameter@fuller.edu>.";
 
 /*#define	DEFAULT_HW_FLOW	1 */
 /*#define	DEBUG_IOCTL */
@@ -81,16 +83,13 @@ static char *banner = "Digiboard PC/X{i,e,eve,em} driver v1.5.5.  Christoph Lame
  */
 static struct board_info boards[MAX_DIGI_BOARDS] = { {	ENABLED, 0, ON, 16, 0x200, 0xd0000,0 } };
  
-static int               numcards = 1;
-static int               nbdevs = 0;
+static int numcards = 1;
+static int nbdevs = 0;
  
-/* C is a pain!  I want a pointer to an array of structs */
-static struct channel    *(*digi_channels);
-
-/* this is supposed to be a pointer to an array of pointers */
-static struct tty_struct *(*pcxe_table)[];
-static struct termios    *(*pcxe_termios)[];
-static struct termios    *(*pcxe_termios_locked)[];
+static struct channel    *digi_channels;
+static struct tty_struct **pcxe_table;
+static struct termios    **pcxe_termios;
+static struct termios    **pcxe_termios_locked;
  
 int pcxx_ncook=sizeof(pcxx_cook);
 int pcxx_nbios=sizeof(pcxx_bios);
@@ -150,7 +149,7 @@ static inline struct channel *chan(register struct tty_struct *tty)
 {
 	if (tty) {
 		register struct channel *ch=(struct channel *)tty->driver_data;
-		if ((ch >= &((*digi_channels)[0])) && (ch < &((*digi_channels)[nbdevs]))) {
+		if (ch >= digi_channels && ch < digi_channels+nbdevs) {
 			if (ch->magic==PCXX_MAGIC)
 				return ch;
 		}
@@ -319,7 +318,7 @@ int pcxe_open(struct tty_struct *tty, struct file * filp)
 		return(-ENODEV);
 	}
 
-	ch = &((*digi_channels)[line]);
+	ch = digi_channels+line;
 
 	if(ch->brdchan == 0) {
 		tty->driver_data = NULL;
@@ -990,22 +989,21 @@ int pcxe_init(void)
 
 	/*
 	 * this turns out to be more memory efficient, as there are no 
-	 * unused spaces.  There is *NO* way I'm going to explain these
-	 * convoluted casts, suffice it to say they WORK!  :)
+	 * unused spaces.
 	 */
-	digi_channels = (struct channel **) kmalloc(sizeof(struct channel) * nbdevs, GFP_KERNEL);
+	digi_channels = kmalloc(sizeof(struct channel) * nbdevs, GFP_KERNEL);
 	if (!digi_channels)
 		panic("Unable to allocate digi_channel struct");
 
-	pcxe_table = (struct tty_struct *(*)[]) kmalloc(sizeof(struct tty_struct *) * nbdevs, GFP_KERNEL);
+	pcxe_table =  kmalloc(sizeof(struct tty_struct *) * nbdevs, GFP_KERNEL);
 	if (!pcxe_table)
 		panic("Unable to allocate pcxe_table struct");
 
-	pcxe_termios = (struct termios *(*)[]) kmalloc(sizeof(struct termios *) * nbdevs, GFP_KERNEL);
+	pcxe_termios = kmalloc(sizeof(struct termios *) * nbdevs, GFP_KERNEL);
 	if (!pcxe_termios)
 		panic("Unable to allocate pcxe_termios struct");
 
-	pcxe_termios_locked = (struct termios *(*)[]) kmalloc(sizeof(struct termios *) * nbdevs, GFP_KERNEL);
+	pcxe_termios_locked = kmalloc(sizeof(struct termios *) * nbdevs, GFP_KERNEL);
 	if (!pcxe_termios_locked)
 		panic("Unable to allocate pcxe_termios_locked struct");
 
@@ -1018,7 +1016,7 @@ int pcxe_init(void)
 
 	memset(&pcxe_driver, 0, sizeof(struct tty_driver));
 	pcxe_driver.magic = TTY_DRIVER_MAGIC;
-	pcxe_driver.name = "ttyd";
+	pcxe_driver.name = "cud";
 	pcxe_driver.major = DIGI_MAJOR; 
 	pcxe_driver.minor_start = 0;
 
@@ -1031,9 +1029,9 @@ int pcxe_init(void)
 	pcxe_driver.flags = TTY_DRIVER_REAL_RAW;
 	pcxe_driver.refcount = &pcxe_refcount;
 
-	pcxe_driver.table = *pcxe_table;
-	pcxe_driver.termios = *pcxe_termios;
-	pcxe_driver.termios_locked = *pcxe_termios_locked;
+	pcxe_driver.table = pcxe_table;
+	pcxe_driver.termios = pcxe_termios;
+	pcxe_driver.termios_locked = pcxe_termios_locked;
 
 	pcxe_driver.open = pcxe_open;
 	pcxe_driver.close = pcxe_close;
@@ -1259,8 +1257,8 @@ load_fep:
 		if(bd->status == DISABLED)
 			continue;
 
-		ch = &((*digi_channels)[bd->first_minor]);
-		pcxxassert(ch < &((*digi_channels)[nbdevs]), "ch out of range");
+		ch = digi_channels+bd->first_minor;
+		pcxxassert(ch < digi_channels+nbdevs, "ch out of range");
 
 		bc = (volatile struct board_chan *)((ulong)memaddr + CHANSTRUCT);
 		gd = (volatile struct global_data *)((ulong)memaddr + GLOBAL);
@@ -1391,7 +1389,7 @@ static void pcxxpoll(void)
 	for(crd=0; crd < numcards; crd++) {
 		bd = &boards[crd];
 
-		ch = &((*digi_channels)[bd->first_minor]);
+		ch = digi_channels+bd->first_minor;
 
 		if(bd->status == DISABLED)
 			continue;
@@ -1428,8 +1426,8 @@ static void doevent(int crd)
 
 	bd = &boards[crd];
 
-	chan0 = &((*digi_channels)[bd->first_minor]);
-	pcxxassert(chan0 < &((*digi_channels)[nbdevs]), "ch out of range");
+	chan0 = digi_channels+bd->first_minor;
+	pcxxassert(chan0 < digi_channels+nbdevs, "ch out of range");
 
 
 	assertgwinon(chan0);

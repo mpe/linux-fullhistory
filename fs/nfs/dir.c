@@ -671,7 +671,6 @@ void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 	if (inode->i_size != fattr->size)
 		NFS_CACHEINV(inode);
 	inode->i_size = fattr->size;
-	inode->i_blksize = fattr->blocksize;
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		inode->i_rdev = to_kdev_t(fattr->rdev);
 	else

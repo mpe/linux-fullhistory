@@ -410,6 +410,20 @@ unsigned long alcor_init(unsigned long mem_start, unsigned long mem_end)
 		hwrpb->max_asn = MAX_ASN;
 	}
 
+        /*
+         * Finally, clear the CIA_CFG register, which gets used
+         *  for PCI Config Space accesses. That is the way
+         *  we want to use it, and we do not want to depend on
+         *  what ARC or SRM might have left behind...
+         */
+        {
+#if 0
+          unsigned int cia_cfg = *((unsigned int *)ALCOR_IOC_CFG); mb();
+          if (cia_cfg) printk("alcor_init: CFG was 0x%x\n", cia_cfg);
+#endif
+          *((unsigned int *)ALCOR_IOC_CFG) = 0; mb();
+        }
+ 
 	return mem_start;
 }
 

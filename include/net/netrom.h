@@ -45,6 +45,7 @@
 #define	NR_DEFAULT_TTL		16			/* Default Time To Live */
 #define NR_MODULUS 		256
 #define NR_MAX_WINDOW_SIZE	127			/* Maximum Window Allowable */
+#define	NR_DEFAULT_PACLEN	236			/* Default Packet Length */
 
 typedef struct {
 	ax25_address		user_addr, source_addr, dest_addr;
@@ -56,7 +57,7 @@ typedef struct {
 	unsigned char		n2, n2count;
 	unsigned short		t1, t2, rtt;
 	unsigned short		t1timer, t2timer, t4timer;
-	unsigned short		fraglen;
+	unsigned short		fraglen, paclen;
 	struct sk_buff_head	ack_queue;
 	struct sk_buff_head	reseq_queue;
 	struct sk_buff_head	frag_queue;

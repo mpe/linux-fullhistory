@@ -137,7 +137,7 @@ int ip_send(struct rtable * rt, struct sk_buff *skb, __u32 daddr, int len, struc
 #endif
 			skb->arp = 0;
 			skb->raddr = daddr;
-			return -dev->hard_header_len;
+			return dev->hard_header_len;
 		}
 		mac = dev->hard_header(skb, dev, ETH_P_IP, NULL, NULL, len);
 		if (mac < 0)

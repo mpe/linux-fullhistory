@@ -189,12 +189,30 @@ static int                c_size;
 static int                c_seen_eof;
 static int                c_last_returned_index;
 static struct ncp_dirent* c_entry = NULL;
+static int                c_lock = 0;
+static struct wait_queue *c_wait = NULL;
+
+static inline void
+ncp_lock_dircache(void)
+{
+	while (c_lock)
+		sleep_on(&c_wait);
+	c_lock = 1;
+}
+
+static inline void
+ncp_unlock_dircache(void)
+{
+	c_lock = 0;
+	wake_up(&c_wait);
+}
 
 static int
 ncp_readdir(struct inode *inode, struct file *filp,
             void *dirent, filldir_t filldir)
 {
-	int result, i = 0;
+	int result = 0;
+	int i = 0;
         int index = 0;
 	struct ncp_dirent *entry = NULL;
         struct ncp_server *server = NCP_SERVER(inode);
@@ -215,6 +233,8 @@ ncp_readdir(struct inode *inode, struct file *filp,
 		return -EIO;
 	}
 
+	ncp_lock_dircache();
+
 	if (c_entry == NULL) 
 	{
 		i = sizeof (struct ncp_dirent) * NCP_READDIR_CACHE_SIZE;
@@ -222,7 +242,8 @@ ncp_readdir(struct inode *inode, struct file *filp,
 		if (c_entry == NULL)
 		{
 			printk("ncp_readdir: no MEMORY for cache\n");
-			return -ENOMEM;
+			result = -ENOMEM;
+			goto finished;
 		}
 	}
 
@@ -232,7 +253,7 @@ ncp_readdir(struct inode *inode, struct file *filp,
 		if (filldir(dirent,".",1, filp->f_pos,
 			    ncp_info_ino(server, dir)) < 0)
 		{
-			return 0;
+			goto finished;
 		}
 		filp->f_pos += 1;
         }
@@ -242,7 +263,7 @@ ncp_readdir(struct inode *inode, struct file *filp,
 		if (filldir(dirent,"..",2, filp->f_pos,
 			    ncp_info_ino(server, dir->dir)) < 0)
 		{
-			return 0;
+			goto finished;
 		}
 		filp->f_pos += 1;
 	}
@@ -261,42 +282,44 @@ ncp_readdir(struct inode *inode, struct file *filp,
 		}
                 if ((entry == NULL) && c_seen_eof)
 		{
-                        return 0;
+			goto finished;
 		}
 	}
 
 	if (entry == NULL)
 	{
+		int entries;
 		DDPRINTK("ncp_readdir: Not found in cache.\n");
 
 		if (ncp_is_server_root(inode))
 		{
-			result = ncp_read_volume_list(server, filp->f_pos,
-						      NCP_READDIR_CACHE_SIZE);
-			DPRINTK("ncp_read_volume_list returned %d\n", result);
+			entries = ncp_read_volume_list(server, filp->f_pos,
+						       NCP_READDIR_CACHE_SIZE);
+			DPRINTK("ncp_read_volume_list returned %d\n", entries);
 
 		}
 		else
 		{
-			result = ncp_do_readdir(server, inode, filp->f_pos,
-						NCP_READDIR_CACHE_SIZE,
-						c_entry);
-			DPRINTK("ncp_readdir returned %d\n", result);
+			entries = ncp_do_readdir(server, inode, filp->f_pos,
+						 NCP_READDIR_CACHE_SIZE,
+						 c_entry);
+			DPRINTK("ncp_readdir returned %d\n", entries);
 		}
 
-		if (result < 0)
+		if (entries < 0)
 		{
 			c_dev = 0;
 			c_ino = 0;
-			return result;
+			result = entries;
+			goto finished;
 		}
 
-		if (result > 0)
+		if (entries > 0)
 		{
-                        c_seen_eof = (result < NCP_READDIR_CACHE_SIZE);
+                        c_seen_eof = (entries < NCP_READDIR_CACHE_SIZE);
 			c_dev  = inode->i_dev;
 			c_ino  = inode->i_ino;
-			c_size = result;
+			c_size = entries;
 			entry = c_entry;
                         c_last_returned_index = 0;
                         index = 0;
@@ -311,7 +334,7 @@ ncp_readdir(struct inode *inode, struct file *filp,
         if (entry == NULL)
 	{
                 /* Nothing found, even from a ncp call */
-                return 0;
+		goto finished;
         }
 
         while (index < c_size)
@@ -363,7 +386,9 @@ ncp_readdir(struct inode *inode, struct file *filp,
                 index += 1;
                 entry += 1;
 	}
-	return 0;
+ finished:
+	ncp_unlock_dircache();
+	return result;
 }
 
 static int
@@ -809,6 +834,7 @@ ncp_lookup(struct inode *dir, const char *__name, int len,
            server. */
 
         found_in_cache = 0;
+	ncp_lock_dircache();
 
         if ((dir->i_dev == c_dev) && (dir->i_ino == c_ino))
 	{
@@ -832,6 +858,7 @@ ncp_lookup(struct inode *dir, const char *__name, int len,
                 }
 		while (i != first);
         }
+	ncp_unlock_dircache();
 
         if (found_in_cache == 0)
 	{

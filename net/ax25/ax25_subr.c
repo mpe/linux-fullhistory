@@ -494,13 +494,9 @@ static int ax25_list_length(struct sk_buff_head *list, struct sk_buff *skb)
                 return 0;
         }
 
-	skbq = (struct sk_buff *) list->next;
-
-	while (skbq != (struct sk_buff *)list) {
+	for (skbq = list->next; skbq != (struct sk_buff *)list; skbq = skbq->next)
 		if (skb->sk == skbq->sk)
 			count++;
-		skbq = skbq->next;
-	}
 
         restore_flags(flags);
         return count;
@@ -512,7 +508,7 @@ static int ax25_list_length(struct sk_buff_head *list, struct sk_buff *skb)
 
 int ax25_queue_length(ax25_cb *ax25, struct sk_buff *skb)
 {
-	return ax25_list_length(&ax25->write_queue, skb)+ax25_list_length(&ax25->ack_queue, skb);
+	return ax25_list_length(&ax25->write_queue, skb) + ax25_list_length(&ax25->ack_queue, skb);
 }
 
 /*

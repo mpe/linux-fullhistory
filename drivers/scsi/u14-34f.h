@@ -7,10 +7,10 @@
 int u14_34f_detect(Scsi_Host_Template *);
 int u14_34f_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int u14_34f_abort(Scsi_Cmnd *);
-int u14_34f_reset(Scsi_Cmnd *);
+int u14_34f_reset(Scsi_Cmnd *, unsigned int);
 int u14_34f_biosparam(Disk *, kdev_t, int *);
 
-#define U14_34F_VERSION "2.01.00"
+#define U14_34F_VERSION "2.10.00"
 
 #define ULTRASTOR_14_34F {                                            \
 		NULL, /* Ptr for modules */                           \

@@ -19,6 +19,13 @@
 #include <linux/errno.h>
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
+
+#include <linux/tty.h>
+
+/* serial module kerneld load support */
+struct tty_driver *get_tty_driver(kdev_t device);
+#define isa_tty_dev(ma)	(ma == TTY_MAJOR || ma == TTYAUX_MAJOR)
+#define need_serial(ma,mi) (get_tty_driver(to_kdev_t(MKDEV(ma,mi))) == NULL)
 #endif
 
 struct device_struct {
@@ -53,17 +60,20 @@ int get_device_list(char * page)
 	}
 	return len;
 }
+
 /*
 	Return the function table of a device.
 	Load the driver if needed.
 */
 static struct file_operations * get_fops(
 	unsigned int major,
+	unsigned int minor,
 	unsigned int maxdev,
 	const char *mangle,		/* String to use to build the module name */
 	struct device_struct tb[])
 {
 	struct file_operations *ret = NULL;
+
 	if (major < maxdev){
 #ifdef CONFIG_KERNELD
 		/*
@@ -75,8 +85,14 @@ static struct file_operations * get_fops(
 		 * it locks the reboot process :-(
 		 *
 		 * Jacques Gelinas (jacques@solucorp.qc.ca)
+		 *
+		 * A. Haritsis <ah@doc.ic.ac.uk>: fix for serial module
+		 *  though we need the minor here to check if serial dev,
+		 *  we pass only the normal major char dev to kerneld 
+		 *  as there is no other loadable dev on these majors
 		 */
-		if (!tb[major].fops && major != 0) {
+		if ((isa_tty_dev(major) && need_serial(major,minor)) ||
+		    (major != 0 && !tb[major].fops)) {
 			char name[20];
 			sprintf(name, mangle, major);
 			request_module(name);
@@ -94,12 +110,12 @@ static struct file_operations * get_fops(
 */
 struct file_operations * get_blkfops(unsigned int major)
 {
-	return get_fops (major,MAX_BLKDEV,"block-major-%d",blkdevs);
+	return get_fops (major,0,MAX_BLKDEV,"block-major-%d",blkdevs);
 }
 
-struct file_operations * get_chrfops(unsigned int major)
+struct file_operations * get_chrfops(unsigned int major, unsigned int minor)
 {
-	return get_fops (major,MAX_CHRDEV,"char-major-%d",chrdevs);
+	return get_fops (major,minor,MAX_CHRDEV,"char-major-%d",chrdevs);
 }
 
 int register_chrdev(unsigned int major, const char * name, struct file_operations *fops)
@@ -271,7 +287,8 @@ struct inode_operations blkdev_inode_operations = {
 int chrdev_open(struct inode * inode, struct file * filp)
 {
 	int ret = -ENODEV;
-	filp->f_op = get_chrfops(MAJOR(inode->i_rdev));
+
+	filp->f_op = get_chrfops(MAJOR(inode->i_rdev), MINOR(inode->i_rdev));
 	if (filp->f_op != NULL){
 		ret = 0;
 		if (filp->f_op->open != NULL)

@@ -25,6 +25,10 @@
  */
 #include <linux/config.h>
 
+#if 0
+#define DEBUG_PRINT_DEVS 1
+#endif
+
 #ifndef CONFIG_PCI
 
 int pcibios_present(void)
@@ -265,6 +269,10 @@ static void layout_dev(struct pci_dev *dev)
 
 	pcibios_write_config_word(bus->number, dev->devfn, PCI_COMMAND,
 				  cmd | PCI_COMMAND_MASTER);
+#if DEBUG_PRINT_DEVS
+printk("layout_dev: bus %d  slot 0x%x  VID 0x%x  DID 0x%x  class 0x%x\n",
+       bus->number, PCI_SLOT(dev->devfn), dev->vendor, dev->device, dev->class);
+#endif
 }
 
 
@@ -273,6 +281,10 @@ static void layout_bus(struct pci_bus *bus)
 	unsigned int l, tio, bio, tmem, bmem;
 	struct pci_bus *child;
 	struct pci_dev *dev;
+
+#if DEBUG_PRINT_DEVS
+printk("layout_bus: starting bus %d\n", bus->number);
+#endif
 
 	if (!bus->devices && !bus->children)
 	  return;
@@ -302,6 +314,10 @@ static void layout_bus(struct pci_bus *bus)
 	/*
 	 * Allocate space to each device:
 	 */
+#if DEBUG_PRINT_DEVS
+printk("layout_bus: starting bus %d devices\n", bus->number);
+#endif
+
 	for (dev = bus->devices; dev; dev = dev->sibling) {
 		if (dev->class >> 16 != PCI_BASE_CLASS_BRIDGE) {
 			layout_dev(dev);
@@ -310,6 +326,10 @@ static void layout_bus(struct pci_bus *bus)
 	/*
 	 * Recursively allocate space for all of the sub-buses:
 	 */
+#if DEBUG_PRINT_DEVS
+printk("layout_bus: starting bus %d children\n", bus->number);
+#endif
+
     	for (child = bus->children; child; child = child->next) {
 		layout_bus(child);
         }
@@ -560,9 +580,9 @@ static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_sl
 			}
 		}
 
-		if (ide_base) {
-		        enable_ide(ide_base);
-		}
+	}
+	if (ide_base) {
+		enable_ide(ide_base);
 	}
 }
 
@@ -732,7 +752,7 @@ static inline void sio_fixup(void)
 	 */
 	const unsigned int route_tab = 0x0b0a090f;
 	unsigned int level_bits;
-	unsigned char pin;
+	unsigned char pin, slot;
 	int pirq;
 
 	pcibios_write_config_dword(0, PCI_DEVFN(7, 0), 0x60, route_tab);
@@ -742,23 +762,41 @@ static inline void sio_fixup(void)
 	 */
 	level_bits = inb(0x4d0) | (inb(0x4d1) << 8);
 	for (dev = pci_devices; dev; dev = dev->next) {
+	        if (dev->class >> 16 == PCI_BASE_CLASS_BRIDGE)
+			continue;
 		dev->irq = 0;
 		if (dev->bus->number != 0) {
-			printk("bios32.sio_fixup: don't know how to fixup devices on bus %d\n",
-			       dev->bus->number);
-			continue;
+			struct pci_dev *curr = dev ;
+			/* read the pin and do the PCI-PCI bridge
+			   interrupt pin swizzle */
+			pcibios_read_config_byte(dev->bus->number, dev->devfn,
+						 PCI_INTERRUPT_PIN, &pin);
+			/* cope with 0 */
+			if (pin == 0) pin = 1 ;
+			/* follow the chain of bridges, swizzling as we go */
+			do {
+				/* swizzle */
+				pin = bridge_swizzle(pin, PCI_SLOT(curr->devfn)) ;
+				/* move up the chain of bridges */
+				curr = curr->bus->self ;
+			} while (curr->bus->self) ;
+			/* The slot is the slot of the last bridge. */
+			slot = PCI_SLOT(curr->devfn) ;
+		} else {
+			/* work out the slot */
+			slot = PCI_SLOT(dev->devfn) ;
+			/* read the pin */
+			pcibios_read_config_byte(dev->bus->number, dev->devfn,
+						 PCI_INTERRUPT_PIN, &pin);
 		}
-		if (PCI_SLOT(dev->devfn) < 6 ||
-		    PCI_SLOT(dev->devfn) >= 6 + sizeof(pirq_tab)/sizeof(pirq_tab[0]))
-		{
-			printk("bios32.sio_fixup: "
-			       "weird, found device %04x:%04x in non-existent slot %d!!\n",
-			       dev->vendor, dev->device, PCI_SLOT(dev->devfn));
-			continue;
-		}
-		pcibios_read_config_byte(dev->bus->number, dev->devfn,
-					 PCI_INTERRUPT_PIN, &pin);
-		pirq = pirq_tab[PCI_SLOT(dev->devfn) - 6][pin];
+
+		pirq = pirq_tab[slot - 6][pin];
+
+#if DEBUG_PRINT_DEVS
+printk("sio_fixup: bus %d  slot 0x%x  VID 0x%x  DID 0x%x  int_slot 0x%x  int_pin 0x%x,  pirq 0x%x\n",
+       dev->bus->number, PCI_SLOT(dev->devfn), dev->vendor, dev->device, slot, pin, pirq);
+#endif
+
 		if (pirq < 0) {
 			continue;
 		}
@@ -790,6 +828,7 @@ static inline void sio_fixup(void)
 	 * these registers must be accessed byte-wise.  outw() doesn't
 	 * work.
 	 */
+	level_bits |= (inb(0x4d0) | (inb(0x4d1) << 8));
 	outb((level_bits >> 0) & 0xff, 0x4d0);
 	outb((level_bits >> 8) & 0xff, 0x4d1);
 	enable_ide(0x26e);

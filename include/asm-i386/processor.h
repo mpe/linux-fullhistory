@@ -52,6 +52,7 @@ struct i387_hard_struct {
 	long	foo;
 	long	fos;
 	long	st_space[20];	/* 8*10 bytes for each FP-reg = 80 bytes */
+	long	status;		/* software status information */
 };
 
 struct i387_soft_struct {

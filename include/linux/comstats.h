@@ -104,5 +104,15 @@ typedef struct {
 #define	COM_CLRPORTSTATS	_IO('c',31)
 #define	COM_GETBRDSTATS		_IO('c',32)
 
+
+/*
+ *	Define the set of ioctls that give user level access to the
+ *	private port, panel and board structures. The argument required
+ *	will be driver dependant!  
+ */
+#define	COM_READPORT		_IO('c',40)
+#define	COM_READBOARD		_IO('c',41)
+#define	COM_READPANEL		_IO('c',42)
+
 /*****************************************************************************/
 #endif

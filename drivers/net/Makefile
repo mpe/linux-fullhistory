@@ -526,3 +526,5 @@ sdla.o: sdla.c CONFIG
 
 dlci.o: dlci.c CONFIG
 
+tulip.o: tulip.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(TULIP_OPTS) -c $<

@@ -50,6 +50,23 @@
  * 
  * -1 should be specified for no or DMA interrupt, -2 to autoprobe for an 
  * 	IRQ line if overridden on the command line.
+ *
+ * 3.  When included as a module, with arguments passed on the command line:
+ *         ncr_irq=xx	the interrupt
+ *         ncr_addr=xx  the port or base address (for port or memory
+ *              	mapped, resp.)
+ *         ncr_dma=xx	the DMA
+ *         ncr_5380=1	to set up for a NCR5380 board
+ *         ncr_53c400=1	to set up for a NCR53C400 board
+ *     e.g.
+ *     modprobe g_NCR5380 ncr_irq=5 ncr_addr=0x350 ncr_5380=1
+ *       for a port mapped NCR5380 board or
+ *     modprobe g_NCR5380 ncr_irq=255 ncr_addr=0xc8000 ncr_53c400=1
+ *       for a memory mapped NCR53C400 board with interrupts disabled.
+ * 
+ * 255 should be specified for no or DMA interrupt, 254 to autoprobe for an 
+ * 	IRQ line if overridden on the command line.
+ *     
  */
  
 /*
@@ -92,6 +109,13 @@ struct proc_dir_entry proc_scsi_g_ncr5380 = {
     PROC_SCSI_GENERIC_NCR5380, 9, "g_NCR5380",
     S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
+
+#define NCR_NOT_SET 0
+static int ncr_irq=NCR_NOT_SET;
+static int ncr_dma=NCR_NOT_SET;
+static int ncr_addr=NCR_NOT_SET;
+static int ncr_5380=NCR_NOT_SET;
+static int ncr_53c400=NCR_NOT_SET;
 
 static struct override {
 	NCR5380_implementation_fields;
@@ -189,6 +213,17 @@ int generic_NCR5380_detect(Scsi_Host_Template * tpnt) {
     int flags = 0;
     struct Scsi_Host *instance;
 
+    if (ncr_irq != NCR_NOT_SET)
+	overrides[0].irq=ncr_irq;
+    if (ncr_dma != NCR_NOT_SET)
+	overrides[0].dma=ncr_dma;
+    if (ncr_addr != NCR_NOT_SET)
+	overrides[0].NCR5380_map_name=(NCR5380_map_type)ncr_addr;
+    if (ncr_5380 != NCR_NOT_SET)
+	overrides[0].board=BOARD_NCR5380;
+    else if (ncr_53c400 != NCR_NOT_SET)
+	overrides[0].board=BOARD_NCR53C400;
+
     tpnt->proc_dir = &proc_scsi_g_ncr5380;
 
     for (count = 0; current_override < NO_OVERRIDES; ++current_override) {
@@ -253,7 +288,8 @@ int generic_NCR5380_release_resources(struct Scsi_Host * instance)
 
     NCR5380_setup(instance);
 
-    free_irq(instance->irq, NULL);
+    if (instance->irq != IRQ_NONE)
+	free_irq(instance->irq, NULL);
 
 	return 0;
 }

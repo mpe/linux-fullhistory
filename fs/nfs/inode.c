@@ -62,6 +62,12 @@ static struct super_operations nfs_sops = {
  */
 static void nfs_read_inode(struct inode * inode)
 {
+	int rsize = inode->i_sb->u.nfs_sb.s_server.rsize;
+	int size = inode->i_sb->u.nfs_sb.s_server.wsize;
+
+	if (rsize > size)
+		size = rsize;
+	inode->i_blksize = size;
 	inode->i_mode = 0;
 	inode->i_op = NULL;
 	NFS_CACHEINV(inode);

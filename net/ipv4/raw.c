@@ -109,6 +109,33 @@ void raw_err (int type, int code, unsigned char *header, __u32 daddr,
 	return;
 }
 
+static inline void raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
+{
+	/* Charge it to the socket. */
+	
+	if (sock_queue_rcv_skb(sk,skb)<0)
+	{
+		ip_statistics.IpInDiscards++;
+		skb->sk=NULL;
+		kfree_skb(skb, FREE_READ);
+		return;
+	}
+
+	ip_statistics.IpInDelivers++;
+}
+
+/*
+ * This is the prot->rcv() function. It's called when we have
+ * backlogged packets from core/sock.c if we couldn't receive it
+ * when the packet arrived.
+ */
+static int raw_rcv_redo(struct sk_buff *skb, struct device *dev, struct options *opt,
+	__u32 daddr, unsigned short len,
+	__u32 saddr, int redo, struct inet_protocol * protocol)
+{
+	raw_rcv_skb(skb->sk, skb);
+	return 0;
+}
 
 /*
  *	This should be the easiest of all, all we do is
@@ -137,17 +164,11 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, __u32 sadd
 		skb->ip_hdr->tot_len=ntohs(skb->ip_hdr->tot_len-4*skb->ip_hdr->ihl);
 #endif
 	
-	/* Charge it to the socket. */
-	
-	if(sock_queue_rcv_skb(sk,skb)<0)
-	{
-		ip_statistics.IpInDiscards++;
-		skb->sk=NULL;
-		kfree_skb(skb, FREE_READ);
-		return(0);
+	if (sk->users) {
+		__skb_queue_tail(&sk->back_log, skb);
+		return 0;
 	}
-
-	ip_statistics.IpInDelivers++;
+	raw_rcv_skb(sk, skb);
 	return 0;
 }
 
@@ -357,7 +378,7 @@ struct proto raw_prot = {
 	NULL,
 	NULL,
 	NULL,
-	NULL,
+	raw_rcv_redo,
 	datagram_select,
 #ifdef CONFIG_IP_MROUTE	
 	ipmr_ioctl,

@@ -194,7 +194,9 @@ static void setup_frame(struct sigaction * sa, struct sigcontext_struct ** fp,
 	put_fs_quad(0x43ecf40047de0410, sc->sc_retcode+0);
 	put_fs_quad(0x0000000000000083, sc->sc_retcode+1);
 	regs->r26 = (unsigned long) sc->sc_retcode;
-	regs->r16 = signr;
+	regs->r16 = signr;		/* a0: signal number */
+	regs->r17 = 0;			/* a1: exception code; see gentrap.h */
+	regs->r18 = (unsigned long) sc;	/* a2: sigcontext pointer */
 	*fp = sc;
 }
 

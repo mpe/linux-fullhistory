@@ -131,7 +131,7 @@ void draw_box (WINDOW * win, int y, int x, int height, int width, chtype box,
 		chtype border);
 void draw_shadow (WINDOW * win, int y, int x, int height, int width);
 
-int first_alpha (const char *string);
+int first_alpha (const char *string, const char *exempt);
 int dialog_yesno (const char *title, const char *prompt, int height, int width);
 int dialog_msgbox (const char *title, const char *prompt, int height,
 		int width, int pause);
@@ -145,8 +145,6 @@ int dialog_checklist (const char *title, const char *prompt, int height,
 extern unsigned char dialog_input_result[];
 int dialog_inputbox (const char *title, const char *prompt, int height,
 		int width, const char *init);
-int dialog_gauge (const char *title, const char *prompt, int height, int width,
-		int percent);
 
 /*
  * This is the base for fictitious keys, which activate

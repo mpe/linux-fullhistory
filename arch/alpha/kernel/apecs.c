@@ -453,6 +453,22 @@ unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
 	    hwrpb->chksum = sum;
 	}
 #endif /* CONFIG_ALPHA_CABRIOLET */
+
+       /*
+        * Finally, clear the HAXR2 register, which gets used
+        *  for PCI Config Space accesses. That is the way
+        *  we want to use it, and we do not want to depend on
+        *  what ARC or SRM might have left behind...
+        */
+       {
+#if 0
+         unsigned int haxr2 = *((unsigned int *)APECS_IOC_HAXR2); mb();
+         if (haxr2) printk("apecs_init: HAXR2 was 0x%x\n", haxr2);
+#endif
+         *((unsigned int *)APECS_IOC_HAXR2) = 0; mb();
+       }
+
+
 	return mem_start;
 }
 

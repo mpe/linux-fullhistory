@@ -11,27 +11,28 @@ may be completely removed altogether.  There are also certain
 kernel parameters which are not really features, but must be 
 entered in as decimal or hexadecimal numbers or possibly text.
 
-Menu items beginning with (*), (M) or ( ) represent features 
+Menu items beginning with [*], <M> or [ ] represent features 
 configured to be built in, modularized or removed respectively.
 Pointed brackets <> represent module capable features.
                                                              more...
 
 To change any of these features, highlight it with the cursor 
 keys and press <Y> to build it in, <M> to make it a module or
-<N> to removed it.  (See keyboard hints below)
+<N> to removed it.  You may also press the <Space Bar> to cycle
+through the available options (ie. Y->N->M->Y). 
 
 Items beginning with numbers or other text within parenthesis can 
 be changed by highlighting the item and pressing <Enter>.  Then
 enter the new parameter into the dialog box that pops up.
 
 
-Some keyboard hints:
+Some additional keyboard hints:
 
 Menus
 ----------
 o  Use the Up/Down arrow keys (cursor keys) to highlight the item 
-   you wish to change or submenu wish to select.  Submenus are
-   designated by "--->".
+   you wish to change or submenu wish to select and press <Enter>.
+   Submenus are designated by "--->".
 
    Shortcut: Press the option's highlighted letter (hotkey).
              Pressing a hotkey more than once will sequence
@@ -136,8 +137,13 @@ intensity of color, bright.
 
 Menuconfig will display larger menus on screens or xterms which are
 set to display more than the standard 25 row by 80 column geometry.
-In order for this to work, the "stty -a" command must be able to 
-display the screen's current row and column geometry.
+In order for this to work, the "stty size" command must be able to 
+display the screen's current row and column geometry.  I STRONGLY
+RECOMMEND that you make sure you do NOT have the shell variables
+LINES and COLUMNS exported into your environment.  Some distributions
+export those variables via /etc/profile.  Some ncurses programs can
+become confused when those variables (LINES & COLUMNS) don't reflect
+the true screen size.
 
 
 NOTICE:  lxdialog requires the ncurses libraries to compile.  If you

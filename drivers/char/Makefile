@@ -25,7 +25,11 @@ L_OBJS   := tty_io.o n_tty.o console.o keyboard.o \
 	defkeymap.o consolemap.o selection.o
  
 ifeq ($(CONFIG_SERIAL),y)
-L_OBJS += serial.o
+LX_OBJS += serial.o
+else
+  ifeq ($(CONFIG_SERIAL),m)
+  MX_OBJS += serial.o
+  endif
 endif
 
 ifeq ($(CONFIG_DIGI),y)

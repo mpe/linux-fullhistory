@@ -255,6 +255,7 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 			   struct inode * inode){
   int len;
   unsigned char * chr;
+  int symlink_len = 0;
   CONTINUE_DECLS;
 
   if (!inode->i_sb->u.isofs_sb.s_rock) return 0;
@@ -334,7 +335,7 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	 struct SL_component * slp;
 	 slen = rr->len - 5;
 	 slp = &rr->u.SL.link;
-	 inode->i_size = 0;
+	 inode->i_size = symlink_len;
 	 while (slen > 1){
 	   rootflag = 0;
 	   switch(slp->flags &~1){
@@ -359,8 +360,9 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 
 	   if(slen < 2) break;
 	   if(!rootflag) inode->i_size += 1;
-	 };
-       };
+	 }
+	}
+	symlink_len = inode->i_size;
 	break;
       case SIG('R','E'):
 	printk("Attempt to read inode for relocated directory\n");
@@ -458,7 +460,6 @@ char * get_rock_ridge_symlink(struct inode * inode)
   
  repeat:
   while (len > 1){ /* There may be one byte for padding somewhere */
-    if (rpnt) break;
     rr = (struct rock_ridge *) chr;
     if (rr->len == 0) goto out; /* Something got screwed up here */
     sig = (chr[0] << 8) + chr[1];

@@ -317,12 +317,17 @@ struct scatterlist {
 #define SCSI_RESET_SYNCHRONOUS		0x01
 #define SCSI_RESET_ASYNCHRONOUS		0x02
 #define SCSI_RESET_SUGGEST_BUS_RESET	0x04
-
+#define SCSI_RESET_SUGGEST_HOST_RESET	0x08
 /*
  * This is a bitmask that is ored with one of the above codes.
  * It tells the mid-level code that we did a hard reset.
  */
 #define SCSI_RESET_BUS_RESET 0x100
+/*
+ * This is a bitmask that is ored with one of the above codes.
+ * It tells the mid-level code that we did a host adapter reset.
+ */
+#define SCSI_RESET_HOST_RESET 0x200
 /*
  * Used to mask off bits and to obtain the basic action that was
  * performed.  
@@ -477,7 +482,8 @@ extern void print_sense(const char *, Scsi_Cmnd *);
 extern void print_driverbyte(int scsiresult);
 extern void print_hostbyte(int scsiresult);
 
-extern void scsi_mark_host_bus_reset(struct Scsi_Host *Host);
+extern void scsi_mark_host_reset(struct Scsi_Host *Host);
+extern void scsi_mark_bus_reset(struct Scsi_Host *Host, int channel);
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
 #include "hosts.h"

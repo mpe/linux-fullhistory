@@ -2196,6 +2196,23 @@ CONFIG_DE4X5
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
+DECchip Tulip (dc21x4x) PCI support
+CONFIG_DEC_ELCP
+  This driver is developed for the SMC EtherPower series ethernet
+  cards and also works with the DECchip 21040/21041/21140
+  (Tulip series) based other cards.  If you have a network card of
+  this type, say Y and read the Ethernet-HOWTO, available via ftp
+  (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. More
+  specific information is contained in
+  Documentation/networking/tulip.txt. This driver is also available
+  as a module ( = code which can be inserted in and removed from
+  the running kernel whenever you want).  If you want to compile
+  it as a module, say M here and read Documentation/modules.txt as
+  well as Documentation/networking/net-modules.txt.
+  ******************************************************************
+      If your card is NOT SMC EtherPower 10/100 PCI (smc9332dst),
+      you can try the de4x5.c driver.
+
 ICL EtherTeam 16i/32 support
 CONFIG_ETH16I
   If you have a network (ethernet) card of this type, say Y and read
@@ -2751,12 +2768,16 @@ CONFIG_SERIAL
   This selects whether you want to include the driver for the standard
   serial ports.  People who might say N here are those that are
   setting up dedicated ethernet WWW/ftp servers, or users that have
-  one of the various bus mice instead of a serial mouse.  Note that
-  the Cyclades and Stallion drivers do not need this driver to be
-  built in for them to work. They are completely independent of each
-  other. Most people will say Y here however, so that they can use
-  serial mice, modems and similar devices connecting to the standard
-  serial ports.
+  one of the various bus mice instead of a serial mouse.  (Note that
+  the Cyclades and Stallion drivers do not need this driver built in
+  for them to work. They are completely independent of each other.)
+  If you want to compile this driver as a module, say M here and read
+  Documentation/modules.txt.  [WARNING: Do not compile this driver as
+  a module if you are using non-standard serial ports, since the
+  configuration information will be lost when kerneld automatically
+  unloads the driver.  This limitation may be lifted in the future.]
+  Most people will say Y or M here, so that they can use serial mice,
+  modems and similar devices connecting to the standard serial ports.
 
 Digiboard PC/X Support
 CONFIG_DIGI

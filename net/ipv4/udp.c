@@ -135,8 +135,6 @@ void udp_cache_zap(void)
 	restore_flags(flags);
 }
 
-static int udp_deliver(struct sock *sk, struct udphdr *uh, struct sk_buff *skb, struct device *dev, long saddr, long daddr, int len);
-
 #define min(a,b)	((a)<(b)?(a):(b))
 
 
@@ -583,6 +581,37 @@ static void udp_close(struct sock *sk, unsigned long timeout)
 	destroy_sock(sk);
 }
 
+static inline void udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
+{
+	/*
+	 *	Charge it to the socket, dropping if the queue is full.
+	 */
+
+	/* I assume this includes the IP options, as per RFC1122 (4.1.3.2). */
+	/* If not, please let me know. -- MS */
+
+	if (sock_queue_rcv_skb(sk,skb)<0) {
+		udp_statistics.UdpInErrors++;
+		ip_statistics.IpInDiscards++;
+		ip_statistics.IpInDelivers--;
+		skb->sk = NULL;
+		kfree_skb(skb, FREE_WRITE);
+		return;
+	}
+	udp_statistics.UdpInDatagrams++;
+}
+
+
+static inline void udp_deliver(struct sock *sk, struct sk_buff *skb)
+{
+	skb->sk = sk;
+
+	if (sk->users) {
+		__skb_queue_tail(&sk->back_log, skb);
+		return;
+	}
+	udp_queue_rcv_skb(sk, skb);
+}
 
 /*
  *	All we need to do is get the socket, and then do a checksum. 
@@ -595,8 +624,23 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   	struct sock *sk;
   	struct udphdr *uh;
 	unsigned short ulen;
-	int addr_type = IS_MYADDR;
-	
+	int addr_type;
+
+	/*
+	 * If we're doing a "redo" (the socket was busy last time
+	 * around), we can just queue the packet now..
+	 */
+	if (redo) {
+		udp_queue_rcv_skb(skb->sk, skb);
+		return 0;
+	}
+
+	/*
+	 * First time through the loop.. Do all the setup stuff
+	 * (including finding out the socket we go to etc)
+	 */
+
+	addr_type = IS_MYADDR;
 	if(!dev || dev->pa_addr!=daddr)
 		addr_type=ip_chk_addr(daddr);
 		
@@ -651,8 +695,17 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		return(0);
 	}
 
+	/*
+	 *	These are supposed to be switched. 
+	 */
+	 
+	skb->daddr = saddr;
+	skb->saddr = daddr;
 
 	len=ulen;
+
+	skb->dev = dev;
+	skb_trim(skb,len);
 
 #ifdef CONFIG_IP_MULTICAST
 	if (addr_type!=IS_MYADDR)
@@ -675,7 +728,7 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				else
 					skb1=skb;
 				if(skb1)
-					udp_deliver(sk, uh, skb1, dev,saddr,daddr,len);
+					udp_deliver(sk, skb1);
 				sk=sknext;
 			}
 			while(sknext!=NULL);
@@ -712,43 +765,9 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		kfree_skb(skb, FREE_WRITE);
 		return(0);
   	}
-	return udp_deliver(sk,uh,skb,dev, saddr, daddr, len);
+	udp_deliver(sk, skb);
+	return 0;
 }
-
-static int udp_deliver(struct sock *sk, struct udphdr *uh, struct sk_buff *skb, struct device *dev, long saddr, long daddr, int len)
-{
-	skb->sk = sk;
-	skb->dev = dev;
-	skb_trim(skb,len);
-
-	/*
-	 *	These are supposed to be switched. 
-	 */
-	 
-	skb->daddr = saddr;
-	skb->saddr = daddr;
-
-
-	/*
-	 *	Charge it to the socket, dropping if the queue is full.
-	 */
-
-	/* I assume this includes the IP options, as per RFC1122 (4.1.3.2). */
-	/* If not, please let me know. -- MS */
-
-	if (sock_queue_rcv_skb(sk,skb)<0) 
-	{
-		udp_statistics.UdpInErrors++;
-		ip_statistics.IpInDiscards++;
-		ip_statistics.IpInDelivers--;
-		skb->sk = NULL;
-		kfree_skb(skb, FREE_WRITE);
-		return(0);
-	}
-  	udp_statistics.UdpInDatagrams++;
-	return(0);
-}
-
 
 struct proto udp_prot = {
 	udp_close,

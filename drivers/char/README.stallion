@@ -26,9 +26,9 @@ These boards cannot be used without this.
 The following ftp sites (and their mirrors) definitely have the stallion
 driver utility package: ftp.stallion.com, tsx-11.mit.edu, sunsite.unc.edu.
 
-ftp.stallion.com:/drivers/ata5/Linux/stallion-1.0.7.tar.gz
-tsx-11.mit.edu:/pub/linux/BETA/serial/stallion/stallion-1.0.7.tar.gz
-sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-1.0.7.tar.gz
+ftp.stallion.com:/drivers/ata5/Linux/stallion-1.1.0.tar.gz
+tsx-11.mit.edu:/pub/linux/BETA/serial/stallion/stallion-1.1.0.tar.gz
+sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-1.1.0.tar.gz
 
 If you are using the EasyIO or EasyConnection 8/32 boards then you don't
 need this package. Although it does have a handy script to create the
@@ -250,11 +250,11 @@ Since this driver tries to emulate the standard serial ports as much as
 possible, most system utilities should work as they do for the standard
 COM ports. Most importantly "stty" works as expected and "setserial" can be
 also be used (excepting the ability to auto-configure the I/O and IRQ
-addresses of boards). Higher baud rates are supported in the
-usual fashion through setserial or using the CBAUDEX extensions. Note that
-the EasyIO and EasyConnection (all types) support 57600 and 115200 baud. The
-older boards including ONboard, Brumby and the original Stallion support a
-maximum baud rate of 38400.
+addresses of boards). Higher baud rates are supported in the usual fashion
+through setserial or using the CBAUDEX extensions. Note that the EasyIO and
+EasyConnection (all types) support 57600 and 115200 baud. The older boards
+including ONboard, Brumby and the original Stallion support a maximum baud
+rate of 38400.
 
 If you are unfamiliar with how to use serial ports, then get the Serial-HOWTO
 by Greg Hankins. It will explain everything you need to know!
@@ -280,12 +280,12 @@ boards like the Stallion and ONboard need large areas (64K or even 128K), so
 they can be very difficult to get into a system. If you have 16 Mb of RAM
 then you have no choice but to put them somewhere in the 640K -> 1Mb range.
 ONboards require 64K, so typically 0xd0000 is good, or 0xe0000 on some
-systems. If you have an original Stallion board, "V4.0" or Rev.O,
-then you need a 64K memory address space, so again 0xd0000 and 0xe0000 are
-good. Older Stallion boards are a much bigger problem. They need 128K of
-address space and must be on a 128K boundary. If you don't have a VGA card
-then 0xc0000 might be usable - there is really no other place you can put
-them below 1Mb.
+systems. If you have an original Stallion board, "V4.0" or Rev.O, then you
+need a 64K memory address space, so again 0xd0000 and 0xe0000 are good.
+Older Stallion boards are a much bigger problem. They need 128K of address
+space and must be on a 128K boundary. If you don't have a VGA card then
+0xc0000 might be usable - there is really no other place you can put them
+below 1Mb.
 
 Both the ONboard and old Stallion boards can use higher memory addresses as
 well, but you must have less than 16Mb of RAM to be able to use them. Usual

@@ -34,7 +34,7 @@
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif
-#include <errno.h>
+#include <linux/errno.h>
 
 #define MAJOR_NR MD_MAJOR
 #define MD_DRIVER

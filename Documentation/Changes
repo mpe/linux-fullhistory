@@ -2,7 +2,7 @@ This document contains a list of the latest releases of the most
 important packages for Linux as well as instructions for newcomers to
 the 1.3.x series of kernels.
 
-Last updated: Apr 15, 1996.
+Last updated: Apr 17, 1996.
 Authors: Alessandro Sigala (ssigala@globalnet.it) and Chris Ricker
 (gt1355b@prism.gatech.edu).
 
@@ -18,9 +18,9 @@ Current Releases
 - Dynamic linker (ld.so) 1.7.14
 - GNU CC		 2.7.2
 - Binutils		 2.6.0.12
-- Linux C Library	 Stable:  5.2.18, Exp:  5.3.9
+- Linux C Library	 Stable:  5.2.18, Exp:  5.3.9, Alpha:  5.3.11
 - Linux C++ Library	 2.7.1.4
-- Termcap		 2.0.7
+- Termcap		 2.0.8
 - Procps		 0.99a
 - Gpm			 1.06
 - SysVinit		 2.60
@@ -86,7 +86,7 @@ is at the end of this file).
 The Termcap Library
 ===================
 
-   The current Termcap release is 2.0.7. If you upgrade to this release
+   The current Termcap release is 2.0.8. If you upgrade to this release
 read the `README' file contained into the package to get some important
 information about the `tgetent' function changes!
 
@@ -162,7 +162,7 @@ Named pipes
    Linux's handling of named pipes changed (it now does it The Right Way
 instead of the SunOS way ;-).  This broke some programs that depended
 on the SunOS behavior, most notably SysVinit.  If you're running 2.59
-or earlier, you will probably get a weird error on shutdown in which
+or earlier, you will probably get a wierd error on shutdown in which
 your computer shuts down fine but "INIT: error reading initrequest" or
 words to that effect scroll across your screen hundreds of times.  To
 fix, upgrade to
@@ -188,7 +188,7 @@ the following as root:
    ln -s /usr/lib/terminfo/l/linux /usr/lib/terminfo/c/console
 
    Better yet, just get the latest official Linux termcap from
-ftp://sunsite.unc.edu/pub/Linux/GCC/termcap-2.0.7.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/termcap-2.0.8.tar.gz
 
 Hdparm
 ======
@@ -353,7 +353,7 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/ld.so-1.7.14.tar.gz
 Termcap Library
 ===============
 
-ftp://sunsite.unc.edu/pub/Linux/GCC/termcap-2.0.7.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/termcap-2.0.8.tar.gz
 
 Modules utilities
 =================

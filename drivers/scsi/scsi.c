@@ -1935,11 +1935,22 @@ static inline void scsi_mark_device_reset(Scsi_Device *Device)
 
 /* Mark all SCSI Devices on a specific Host as having been reset. */
 
-void scsi_mark_host_bus_reset(struct Scsi_Host *Host)
+void scsi_mark_host_reset(struct Scsi_Host *Host)
 {
   Scsi_Cmnd *SCpnt;
-  for(SCpnt = Host->host_queue; SCpnt; SCpnt = SCpnt->next)
+  for (SCpnt = Host->host_queue; SCpnt; SCpnt = SCpnt->next)
     scsi_mark_device_reset(SCpnt->device);
+}
+
+
+/* Mark all SCSI Devices on a specific Host Bus as having been reset. */
+
+void scsi_mark_bus_reset(struct Scsi_Host *Host, int channel)
+{
+  Scsi_Cmnd *SCpnt;
+  for (SCpnt = Host->host_queue; SCpnt; SCpnt = SCpnt->next)
+      if (SCpnt->channel == channel)
+	  scsi_mark_device_reset(SCpnt->device);
 }
 
 
@@ -2071,8 +2082,10 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
              */
             switch(temp & SCSI_RESET_ACTION) {
 	    case SCSI_RESET_SUCCESS:
-	        if (temp & SCSI_RESET_BUS_RESET)
-		  scsi_mark_host_bus_reset(host);
+	        if (temp & SCSI_RESET_HOST_RESET)
+		  scsi_mark_host_reset(host);
+	        else if (temp & SCSI_RESET_BUS_RESET)
+		  scsi_mark_bus_reset(host, SCpnt->channel);
 		else scsi_mark_device_reset(SCpnt->device);
 		save_flags(flags);
 		cli();
@@ -2080,8 +2093,10 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 		restore_flags(flags);
 		return 0;
 	    case SCSI_RESET_PENDING:
-	        if (temp & SCSI_RESET_BUS_RESET)
-		  scsi_mark_host_bus_reset(host);
+	        if (temp & SCSI_RESET_HOST_RESET)
+		  scsi_mark_host_reset(host);
+	        else if (temp & SCSI_RESET_BUS_RESET)
+		  scsi_mark_bus_reset(host, SCpnt->channel);
 		else scsi_mark_device_reset(SCpnt->device);
 	    case SCSI_RESET_NOT_RUNNING:
 		return 0;
@@ -2090,8 +2105,10 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
                 scsi_request_sense (SCpnt);
                 return 0;
 	    case SCSI_RESET_WAKEUP:
-	        if (temp & SCSI_RESET_BUS_RESET)
-		  scsi_mark_host_bus_reset(host);
+	        if (temp & SCSI_RESET_HOST_RESET)
+		  scsi_mark_host_reset(host);
+	        else if (temp & SCSI_RESET_BUS_RESET)
+		  scsi_mark_bus_reset(host, SCpnt->channel);
 		else scsi_mark_device_reset(SCpnt->device);
 		SCpnt->internal_timeout &= ~IN_RESET;
 		scsi_request_sense (SCpnt);

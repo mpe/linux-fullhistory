@@ -10,7 +10,7 @@
  *              be here without 3C505 technical reference provided by
  *              3Com.
  *
- * $Id: 3c505.c,v 1.7 1996/04/09 19:01:30 phil Exp phil $
+ * $Id: 3c505.c,v 1.10 1996/04/16 13:06:27 phil Exp $
  *
  * Authors:     Linux 3c505 device driver by
  *                      Craig Southeren, <craigs@ineluki.apana.org.au>
@@ -174,8 +174,7 @@ static const int elp_debug = 0;
  * Last element MUST BE 0!
  *****************************************************************/
 
-const int addr_list[] =
-{0x300, 0x280, 0x310, 0};
+const int addr_list[] = {0x300, 0x280, 0x310, 0};
 
 /* Dma Memory related stuff */
 
@@ -248,10 +247,6 @@ static inline void outw_data(unsigned int val, unsigned int base_addr)
  *  structure to hold context information for adapter
  *
  *****************************************************************/
-
-/* We allocate 8k of DMA buffer for each adapter.  This gives us one buffer for
- * received data, and four for the transmit backlog.
- */
 
 #define DMA_BUFFER_SIZE  1600
 #define BACKLOG_SIZE      4
@@ -364,6 +359,10 @@ inline static void adapter_reset(struct device *dev)
 		printk("%s: start receive command failed \n", dev->name);
 }
 
+/* Check to make sure that a DMA transfer hasn't timed out.  This should never happen
+ * in theory, but seems to occur occasionally if the card gets prodded at the wrong
+ * time.
+ */
 static inline void check_dma(struct device *dev)
 {
 	elp_device *adapter = dev->priv;
@@ -406,9 +405,6 @@ static inline unsigned int send_pcb_fast(unsigned int base_addr, unsigned char b
 	printk("3c505: send_pcb_fast timed out\n");
 	return TRUE;
 }
-
-static int
- start_receive(struct device *dev, pcb_struct * tx_pcb);
 
 /* Check to see if the receiver needs restarting, and kick it if so */
 static inline void prime_rx(struct device *dev)
@@ -871,18 +867,15 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 						printk("%s: interrupt - packet sent\n", dev->name);
 					if (dev->start == 0)
 						break;
-					if (adapter->irx_pcb.data.xmit_resp.c_stat != 0) {
-						if (elp_debug >= 0)
-							printk("%s: interrupt - error sending packet %4.4x\n",
-							       dev->name, adapter->irx_pcb.data.xmit_resp.c_stat);
-						switch (adapter->irx_pcb.data.xmit_resp.c_stat) {
-						case 0xffff:
-							adapter->stats.tx_aborted_errors++;
-							break;
-						case 0xfffe:
-							adapter->stats.tx_fifo_errors++;
-							break;
-						}
+					switch (adapter->irx_pcb.data.xmit_resp.c_stat) {
+					case 0xffff:
+						adapter->stats.tx_aborted_errors++;
+						printk(KERN_INFO "%s: transmit timed out, network cable problem?\n", dev->name);
+						break;
+					case 0xfffe:
+						adapter->stats.tx_fifo_errors++;
+						printk(KERN_INFO "%s: transmit timed out, FIFO underrun\n", dev->name);
+						break;
 					}
 					dev->tbusy = 0;
 					mark_bh(NET_BH);
@@ -892,7 +885,7 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 					 * some unknown PCB
 					 */
 				default:
-					printk("%s: unknown PCB received - %2.2x\n", dev->name, adapter->irx_pcb.command);
+					printk(KERN_DEBUG "%s: unknown PCB received - %2.2x\n", dev->name, adapter->irx_pcb.command);
 					break;
 				}
 			} else {
@@ -1147,7 +1140,7 @@ static int elp_start_xmit(struct sk_buff *skb, struct device *dev)
 			return 1;
 
 		stat = inb_status(dev->base_addr);
-		printk("%s: transmit timed out, %s?\n", dev->name, (stat & ACRF) ? "IRQ conflict" : "network cable problem");
+		printk("%s: transmit timed out, lost %s?\n", dev->name, (stat & ACRF) ? "interrupt" : "command");
 		if (elp_debug >= 1)
 			printk("%s: status %#02x\n", dev->name, stat);
 		dev->trans_start = jiffies;
@@ -1200,8 +1193,7 @@ static int elp_start_xmit(struct sk_buff *skb, struct device *dev)
  *
  ******************************************************/
 
-static struct enet_statistics *
- elp_get_stats(struct device *dev)
+static struct enet_statistics *elp_get_stats(struct device *dev)
 {
 	elp_device *adapter = (elp_device *) dev->priv;
 
@@ -1544,27 +1536,27 @@ int elplus_probe(struct device *dev)
 			/* Nope, it's ignoring the command register.  This means that
 			 * either it's still booting up, or it's died.
 			 */
-			printk("%s: command register wouldn't drain, assuming ", dev->name);
+			printk("%s: command register wouldn't drain, ", dev->name);
 			if ((inb_status(dev->base_addr) & 7) == 3) {
 				/* If the adapter status is 3, it *could* still be booting.
 				 * Give it the benefit of the doubt for 10 seconds.
 				 */
-				printk("3c505 still starting\n");
+				printk("assuming 3c505 still starting\n");
 				timeout = jiffies + 10 * HZ;
 				while (jiffies < timeout && (inb_status(dev->base_addr) & 7));
 				if (inb_status(dev->base_addr) & 7) {
 					printk("%s: 3c505 failed to start\n", dev->name);
-					continue;
+				} else {
+					okay = 1;  /* It started */
 				}
 			} else {
 				/* Otherwise, it must just be in a strange state.  We probably
 				 * need to kick it.
 				 */
-				printk("3c505 dead\n");
-				continue;
+				printk("3c505 is sulking\n");
 			}
 		}
-		for (tries = 0; tries < 5; tries++) {
+		for (tries = 0; tries < 5 && okay; tries++) {
 
 			/*
 			 * Try to set the Ethernet address, to make sure that the board
@@ -1598,7 +1590,7 @@ int elplus_probe(struct device *dev)
 		outb_control(inb_control(dev->base_addr) | FLSH | ATTN, dev->base_addr);
 		outb_control(inb_control(dev->base_addr) & ~(FLSH | ATTN), dev->base_addr);
 	}
-	printk("%s: 3c505 is sulking, giving up\n", dev->name);
+	printk("%s: failed to initialise 3c505\n", dev->name);
 	return -ENODEV;
 
       okay:
@@ -1696,8 +1688,7 @@ int elplus_probe(struct device *dev)
 }
 
 #ifdef MODULE
-static char devicename[9] =
-{0,};
+static char devicename[9] = {0,};
 static struct device dev_3c505 =
 {
 	devicename,		/* device name is inserted by linux/drivers/net/net_init.c */
@@ -1715,7 +1706,6 @@ int init_module(void)
 	dev_3c505.base_addr = io;
 	dev_3c505.irq = irq;
 	if (register_netdev(&dev_3c505) != 0) {
-		printk("3c505: register_netdev() returned non-zero.\n");
 		return -EIO;
 	}
 	return 0;

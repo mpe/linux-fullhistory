@@ -1,6 +1,5 @@
 /*
  *	eata.h - used by the low-level driver for EATA/DMA SCSI host adapters.
- *
  */
 #ifndef _EATA_H
 #define _EATA_H
@@ -10,9 +9,9 @@
 int eata2x_detect(Scsi_Host_Template *);
 int eata2x_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int eata2x_abort(Scsi_Cmnd *);
-int eata2x_reset(Scsi_Cmnd *);
+int eata2x_reset(Scsi_Cmnd *, unsigned int);
 
-#define EATA_VERSION "2.01.00"
+#define EATA_VERSION "2.10.00"
 
 
 #define EATA {                                                 \

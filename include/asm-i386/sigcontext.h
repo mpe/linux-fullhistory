@@ -1,6 +1,31 @@
 #ifndef _ASMi386_SIGCONTEXT_H
 #define _ASMi386_SIGCONTEXT_H
 
+/*
+ * As documented in the iBCS2 standard..
+ *
+ * The first part of "struct _fpstate" is just the
+ * normal i387 hardware setup, the extra "status"
+ * word is used to save the coprocessor status word
+ * before entering the handler.
+ */
+struct _fpreg {
+	unsigned short significand[4];
+	unsigned short exponent;
+};
+
+struct _fpstate {
+	unsigned long 	cw,
+			sw,
+			tag,
+			ipoff,
+			cssel,
+			dataoff,
+			datasel;
+	struct _fpreg	_st[8];
+	unsigned long	status;
+};
+
 struct sigcontext_struct {
 	unsigned short gs, __gsh;
 	unsigned short fs, __fsh;
@@ -21,7 +46,7 @@ struct sigcontext_struct {
 	unsigned long eflags;
 	unsigned long esp_at_signal;
 	unsigned short ss, __ssh;
-	unsigned long i387;
+	struct _fpstate * fpstate;
 	unsigned long oldmask;
 	unsigned long cr2;
 };

@@ -15,6 +15,8 @@
  *	History
  *	NET/ROM 001	Jonathan(G4KLX)	Cloned from loopback.c
  *	NET/ROM 002	Steve Whitehouse(GW7RRM) fixed the set_mac_address
+ *	NET/ROM 003	Jonathan(G4KLX)	Put nr_rebuild_header into line with
+ *					ax25_rebuild_header
  */
 
 #include <linux/config.h>
@@ -109,12 +111,10 @@ static int nr_rebuild_header(void *buff, struct device *dev,
 {
 	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
 	unsigned char *bp = (unsigned char *)buff;
-
-	skb_device_unlock(skb);
+	struct sk_buff *skbn;
 
 	if (!arp_query(bp + 7, raddr, dev)) {
-		skb->free = 1;
-		kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb, FREE_WRITE);
 		return 1;
 	}
 
@@ -127,9 +127,20 @@ static int nr_rebuild_header(void *buff, struct device *dev,
 	bp[6] |= LAPB_E;
 	bp[6] |= SSSID_SPARE;
 
-	if (!nr_route_frame(skb, NULL)) {
-		skb->free = 1;
-		kfree_skb(skb, FREE_WRITE);
+	if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
+		dev_kfree_skb(skb, FREE_WRITE);
+		return 1;
+	}
+
+	skbn->sk = skb->sk;
+	
+	if (skbn->sk != NULL)
+		atomic_add(skbn->truesize, &skbn->sk->wmem_alloc);
+
+	dev_kfree_skb(skb, FREE_WRITE);
+
+	if (!nr_route_frame(skbn, NULL)) {
+		dev_kfree_skb(skbn, FREE_WRITE);
 		stats->tx_errors++;
 	}
 

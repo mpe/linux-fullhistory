@@ -686,8 +686,8 @@ static int get_stat(int pid, char * buffer)
 	nice = 20 - (nice * 20 + DEF_PRIORITY / 2) / DEF_PRIORITY;
 
 	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
-%lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu %lu %lu %lu %lu \
-%lu %lu %lu %lu\n",
+%lu %lu %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu \
+%lu %lu %lu %lu %lu %lu %lu %lu\n",
 		pid,
 		tsk->comm,
 		state,
@@ -722,7 +722,9 @@ static int get_stat(int pid, char * buffer)
 		tsk->blocked,
 		sigignore,
 		sigcatch,
-		wchan);
+		wchan,
+		tsk->nswap,
+		tsk->cnswap);
 }
 		
 static inline void statm_pte_range(pmd_t * pmd, unsigned long address, unsigned long size,

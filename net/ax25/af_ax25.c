@@ -534,8 +534,7 @@ static int ax25_uid_ioctl(int cmd, struct sockaddr_ax25 *sax)
  *		  includes a KILL command to abort any connection.
  *		  VERY useful for debugging ;-)
  */
-
-static int ax25_ctl_ioctl(const unsigned int cmd, const unsigned long arg)
+static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 {
 	struct ax25_ctl_struct ax25_ctl;
 	struct device *dev;
@@ -543,10 +542,10 @@ static int ax25_ctl_ioctl(const unsigned int cmd, const unsigned long arg)
 	unsigned long flags;
 	int err;
 	
-	if ((err = verify_area(VERIFY_READ, (void *)arg, sizeof(ax25_ctl))) != 0)
+	if ((err = verify_area(VERIFY_READ, arg, sizeof(ax25_ctl))) != 0)
 		return err;
 
-	memcpy_fromfs(&ax25_ctl, (void *) arg, sizeof(ax25_ctl));
+	memcpy_fromfs(&ax25_ctl, arg, sizeof(ax25_ctl));
 	
 	if ((dev = ax25rtr_get_dev(&ax25_ctl.port_addr)) == NULL)
 		return -ENODEV;
@@ -574,6 +573,7 @@ static int ax25_ctl_ioctl(const unsigned int cmd, const unsigned long arg)
 			ax25_dama_off(ax25);
 			ax25_set_timer(ax25);
 	  		break;
+
 	  	case AX25_WINDOW:
 	  		if (ax25->modulus == MODULUS) {
 	  			if (ax25_ctl.arg < 1 || ax25_ctl.arg > 7) 
@@ -584,6 +584,7 @@ static int ax25_ctl_ioctl(const unsigned int cmd, const unsigned long arg)
 	  		}
 	  		ax25->window = ax25_ctl.arg;
 	  		break;
+
 	  	case AX25_T1:
   			if (ax25_ctl.arg < 1) 
   				return -EINVAL;
@@ -594,6 +595,7 @@ static int ax25_ctl_ioctl(const unsigned int cmd, const unsigned long arg)
   				ax25->t1timer = ax25->t1;
   			restore_flags(flags);
   			break;
+
 	  	case AX25_T2:
 	  		if (ax25_ctl.arg < 1) 
 	  			return -EINVAL;
@@ -603,12 +605,14 @@ static int ax25_ctl_ioctl(const unsigned int cmd, const unsigned long arg)
 	  			ax25->t2timer = ax25->t2;
 	  		restore_flags(flags);
 	  		break;
+
 	  	case AX25_N2:
 	  		if (ax25_ctl.arg < 1 || ax25_ctl.arg > 31) 
 	  			return -EINVAL;
 	  		ax25->n2count = 0;
 	  		ax25->n2 = ax25_ctl.arg;
 	  		break;
+
 	  	case AX25_T3:
 	  		if (ax25_ctl.arg < 1) 
 	  			return -EINVAL;
@@ -618,6 +622,7 @@ static int ax25_ctl_ioctl(const unsigned int cmd, const unsigned long arg)
 	  			ax25->t3timer = ax25->t3;
 	  		restore_flags(flags);
 	  		break;
+
 	  	case AX25_IDLE:
 	  		if (ax25_ctl.arg < 1) 
 	  			return -EINVAL;
@@ -629,27 +634,27 @@ static int ax25_ctl_ioctl(const unsigned int cmd, const unsigned long arg)
 	  			ax25->idletimer = ax25->idle;
 	  		restore_flags(flags);
 	  		break;
+
 	  	case AX25_PACLEN:
 	  		if (ax25_ctl.arg < 16 || ax25_ctl.arg > 65535) 
 	  			return -EINVAL;
-
 	  		if (ax25_ctl.arg > 256) /* we probably want this */
-	  			printk("ax25_ctl_ioctl(): Warning --- huge paclen %d", (int) ax25_ctl.arg);
+	  			printk("ax25_ctl_ioctl: Warning --- huge paclen %d\n", (int)ax25_ctl.arg);
 	  		ax25->paclen = ax25_ctl.arg;
 	  		break;
+
 	  	case AX25_IPMAXQUEUE:
 	  		if (ax25_ctl.arg < 1)
 	  			return -EINVAL;
-	  			
 	  		ax25->maxqueue = ax25_ctl.arg;
 	  		break;
+
 	  	default:
 	  		return -EINVAL;
 	  }
 	  
 	  return 0;
 }
-
 
 /*
  * Create an empty AX.25 control block.
@@ -1189,6 +1194,7 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 	ax25->t3      = osk->ax25->t3;
 	ax25->n2      = osk->ax25->n2;
 	ax25->idle    = osk->ax25->idle;
+	ax25->paclen  = osk->ax25->paclen;
 
 	ax25->window  = osk->ax25->window;
 
@@ -2235,7 +2241,7 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCAX25CTLCON:
 			if (!suser())
 				return -EPERM;
-			return ax25_ctl_ioctl(cmd, arg);
+			return ax25_ctl_ioctl(cmd, (void *)arg);
 
 		case SIOCGIFADDR:
 		case SIOCSIFADDR:
@@ -2250,11 +2256,11 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			return -EINVAL;
 
 		default:
-			return(dev_ioctl(cmd, (void *)arg));
+			return dev_ioctl(cmd, (void *)arg);
 	}
 
 	/*NOTREACHED*/
-	return(0);
+	return 0;
 }
 
 
@@ -2534,6 +2540,7 @@ int ax25_encapsulate(struct sk_buff *skb, struct device *dev, unsigned short typ
 
 int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long dest, struct sk_buff *skb)
 {
+	struct sk_buff *ourskb;
 	int mode;
 
   	if (arp_find(bp + 1, dest, dev, dev->pa_addr, skb))
@@ -2556,20 +2563,22 @@ int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long des
 			 *	as we have pulled the frame from the queue by
 			 *	freeing it).
 			 */
-			struct sk_buff *ourskb=skb_clone(skb, GFP_ATOMIC);
-
-			if(ourskb==NULL) {
+			if ((ourskb = skb_clone(skb, GFP_ATOMIC)) == NULL) {
 				dev_kfree_skb(skb, FREE_WRITE);
 				return 1;
 			}
 
 			ourskb->sk = skb->sk;
+
 			if (ourskb->sk != NULL)
 				atomic_add(ourskb->truesize, &ourskb->sk->wmem_alloc);
 
 			dev_kfree_skb(skb, FREE_WRITE);
+
 			skb_pull(ourskb, AX25_HEADER_LEN - 1);	/* Keep PID */
+
 			ax25_send_frame(ourskb, (ax25_address *)(bp + 8), (ax25_address *)(bp + 1), NULL, dev);
+
 			return 1;
 		}
 	}

@@ -1,0 +1,110 @@
+                Tulip ethernet card driver
+
+The Tulip driver is developed by Donald Becker and changed by
+Takashi Manabe. This driver is designed to work with PCI ethernet
+cards which use the DECchip DC21x4x family. This driver hopefully
+works with all of 1.2.x and 1.3.x kernels, but I tested only
+with 1.2.13, 1.3.39, 1.3.49, 1.3.52, 1.3.57 and later.
+
+Hopefully, the de4x5.c driver will support all cards supported
+by the tulip.c driver. However, the SMC's 9332dst card and some
+cards do not work with the de4x5.c driver. So, if your card is
+not a 9332dst, please try the de4x5.c driver first.
+
+Success List
+============
+
++-------------------------------------+-----------+-------------+
+|vendor/card                          |chip       |system       |
++-------------------------------------+-----------+-------------+
+|SMC                                  |           |             |
+|     EtherPower 10 PCI(8432T/8432BT) |21040/21041|Pentium      |
++-------------------------------------+-----------+-------------+
+|SMC                                  |           |             |
+|     EtherPower 10/100 PCI(9332DST)  |21140      |Pentium/UDB  |
++-------------------------------------+-----------+-------------+
+|DEC                                  |           |             |
+|     EtherWorks 100/10 PCI(DE500-XA) |21140      |Pentium      |
++-------------------------------------+-----------+-------------+
+|DEC                                  |           |             |
+|     EtherWorks 10 PCI(DE450)        |21041      |Pentium      |
++-------------------------------------+-----------+-------------+
+|DEC                                  |           |             |
+|     QSILVER's                       |21040      |UDB          |
++-------------------------------------+-----------+-------------+
+|ZNYX                                 |           |             |
+|     312 etherarray                  |21040      |Pentium      |
++-------------------------------------+-----------+-------------+
+|Allied Telesis                       |           |             |
+|     LA100PCI-T                      |21140      |Pentium/UDB  |
++-------------------------------------+-----------+-------------+
+|Danpex ('Planet Japan' in Japan?)    |           |             |
+|     EN-9400                         |21040      |Pentium      |
++-------------------------------------+-----------+-------------+
+|Cogent                               |           |             |
+|     EM110                           |21140      |Pentium      |
++-------------------------------------+-----------+-------------+
+
+Pentium: PCI machine with Pentium CPU
+UDB:     Universal Desktop Box(aka Multia) with Alpha 21066 CPU
+
+Known bug(s)
+============
+This driver's media detection is very simple and sometimes
+it causes serious problem. The driver automatically switches
+media when it causes timeout. If you want to speficy or to fix
+a media;
+
+- Modify TULIP_PORT in tulip.c, line 33.
+- Uncommennt the definition of TULIP_FIX_PORT in tulip.c, line 40.
+
+or
+
+- Use patched ifconfig command and specify 'link='. The patch
+  against ifconfig.c in net-tools-1.3.50-BETA6e is included in
+  this file.
+
+Thanks
+======
+
+o becker@CESDIS.gsfc.nasa.gov (author of the tulip.c driver)
+o davies@wanton.lkg.dec.com (author of the de4x5.c driver)
+
+o siekas@mailhost.tcs.tulane.edu
+
+o jheiss@calvin.caltech.edu (providing information about smc8432 card)
+o goto@plathome.co.jp (lending me a DE450 card)
+o ted@physics.ucsb.edu
+o pmheuvel@xs4all.nl
+o hjl@lucon.org (EN-9400)
+o niles@axp745.gsfc.nasa.gov (ZNYX312)
+o pkc@scs.carleton.ca (EM110)
+o and testers...
+
+-----------------------------------------------------------------------
+*** ifconfig.c-dist	Wed Jan 17 07:25:36 1996
+--- ifconfig.c	Tue Apr  9 15:24:25 1996
+***************
+*** 765,770 ****
+--- 766,786 ----
+  			continue;
+  		}
+  		ifr.ifr_map.irq = atoi(*spp);
++ 		if (ioctl(skfd, SIOCSIFMAP, &ifr) < 0) {
++ 			fprintf(stderr, "SIOCSIFMAP: %s\n", strerror(errno));
++ 			goterr = 1;
++ 		}
++ 		spp++;
++ 		continue;
++ 	}
++ 
++ 	if (!strcmp(*spp, "link")) {
++ 		if (*++spp == NULL) usage();
++ 		if (ioctl(skfd, SIOCGIFMAP, &ifr) < 0) {
++ 			goterr = 1;
++ 			continue;
++ 		}
++ 		ifr.ifr_map.port = atoi(*spp);
+  		if (ioctl(skfd, SIOCSIFMAP, &ifr) < 0) {
+  			fprintf(stderr, "SIOCSIFMAP: %s\n", strerror(errno));
+  			goterr = 1;

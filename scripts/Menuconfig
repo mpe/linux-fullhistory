@@ -82,7 +82,7 @@ function bool () {
 	n)	flag=" " ;;
 	esac
 
-	echo -ne "'$2' '($flag) $1' " >>MCmenu
+	echo -ne "'$2' '[$flag] $1' " >>MCmenu
 
 	echo -e "function $2 () { l_bool '$2' \"\$1\" }\n" >>MCradiolists
 }
@@ -245,10 +245,10 @@ function help () {
 	if extract_help $1 >help.out
 	then
 		$DIALOG	--backtitle "$backtitle" --title "$2"\
-			--textbox help.out $LINES $COLS
+			--textbox help.out $ROWS $COLS
 	else
 		$DIALOG	--backtitle "$backtitle" \
-			--textbox help.out $LINES $COLS
+			--textbox help.out $ROWS $COLS
 	fi
 	rm help.out
 }
@@ -258,7 +258,7 @@ function help () {
 #
 function show_readme () {
 	$DIALOG --backtitle "$backtitle" \
-		--textbox scripts/README.Menuconfig $LINES $COLS
+		--textbox scripts/README.Menuconfig $ROWS $COLS
 }
 
 #
@@ -269,7 +269,7 @@ function menu_name () {
 	echo -ne "$DIALOG --title '$1'\
 			--backtitle '$backtitle' \
 			--menu '$menu_instructions' \
-			$LINES $COLS $((LINES-10)) \
+			$ROWS $COLS $((ROWS-10)) \
 			'$default' " >MCmenu
 	>MCradiolists
 }
@@ -306,6 +306,11 @@ function l_bool () {
 	then
 		case "$2" in
 		y|m)	eval $1=y ;;
+		c)	eval x=\$$1
+		   	case $x in
+		   	y) eval $1=n ;;
+		   	n) eval $1=y ;;
+		   	esac ;;
 		*)	eval $1=n ;;
 		esac
 	else
@@ -336,7 +341,19 @@ function l_mod_bool() {
 	if [ -n "$2" ]
 	then
 		case "$2" in
-		y|m)	eval $1=m ;;
+		y)	echo -en "\007"
+			${DIALOG} --backtitle "$backtitle" \
+				  --infobox "\
+This feature depends on another which has been configured as a module.  \
+As a result, this feature will be built as a module." 4 70
+			sleep 5
+			eval $1=m ;;
+		m)	eval $1=m ;;
+		c)	eval x=\$$1
+			case $x in
+			m) eval $1=n ;;
+			n) eval $1=m ;;
+			esac ;;
 		*)	eval $1=n ;;
 		esac
 	else
@@ -350,9 +367,17 @@ function l_mod_bool() {
 function l_tristate () {
 	if [ -n "$2" ]
 	then
+		eval x=\$$1
+
 		case "$2" in
 		y) eval $1=y ;;
 		m) eval $1=m ;;
+		c) eval x=\$$1
+		   case $x in
+		   y) eval $1=n ;;
+		   n) eval $1=m ;;
+		   m) eval $1=y ;;
+		   esac ;;
 		*) eval $1=n ;;
 		esac
 	else
@@ -628,18 +653,19 @@ function activate_menu () {
 		read selection <MCdialog.out
 
 		case "$ret" in
-		0|3|4|5)
+		0|3|4|5|6)
 			defaults="$selection$defaults"  #pseudo stack
 			case "$ret" in
 			0) eval $selection   ;;
 			3) eval $selection y ;;
 			4) eval $selection n ;;
 			5) eval $selection m ;;
+			6) eval $selection c ;;
 			esac
 			default="${defaults%%*}" defaults="${defaults#*}"
 			;;
 		2)	
-			default="${selection%% *}"
+			default="${selection%%\ *}"
 
 			case "$selection" in
 			*"-->"*|*"alt_config"*)
@@ -711,7 +737,7 @@ configuration files.  You should therefor leave this blank to abort.
 EOM
 			$DIALOG	--backtitle "$backtitle"\
 				--title "Load Alternate Configuration"\
-				--textbox help.out $LINES $COLS
+				--textbox help.out $ROWS $COLS
 		fi
 	done
 
@@ -771,7 +797,7 @@ leave this blank.
 EOM
 			$DIALOG	--backtitle "$backtitle"\
 				--title "Store Alternate Configuration"\
-				--textbox help.out $LINES $COLS
+				--textbox help.out $ROWS $COLS
 		fi
 	done
 
@@ -991,35 +1017,38 @@ cleanup2 () {
 	rm -f .tmpconfig .tmpconfig.h
 }
 
-x=`stty -a`
-case $x in
-*\ rows\ *\;*)
-	LINES=${x##*rows}    LINES=${LINES%%;*} LINES=$((${LINES:-25}-4))
-	COLS=${x##*columns}  COLS=${COLS%%;*}   COLS=$((${COLS:-80}-5))
-	;;
-*)
-	LINES=21
-	COLS=75
-	;;
-esac
+set_geometry () {
+	# Some distributions export these with incorrect values
+	# which can really screw up some ncurses programs.
+	unset LINES COLUMNS
 
-if [ $LINES -lt 15 -o $COLS -lt 75 ]
-then
-	echo -e "\n\007Your display is too small to run Menuconfig!\n"
-	echo "It is currently set to $LINES lines by $COLS columns."
-	echo "It must be at least 15 lines by 75 columns."
-	exit 0
-fi
+	ROWS=${1:-24}  COLS=${2:-80} 
 
+	# Just in case the nasty rlogin bug returns.
+	#
+	[ $ROWS = 0 ] && ROWS=24
+	[ $COLS = 0 ] && COLS=80
+
+	if [ $ROWS -lt 19 -o $COLS -lt 80 ]
+	then
+		echo -e "\n\007Your display is too small to run Menuconfig!"
+		echo "It must be at least 19 lines by 80 columns."
+		exit 0
+	fi 
+
+	ROWS=$((ROWS-4))  COLS=$((COLS-5))
+}
+
+
+set_geometry `stty size 2>/dev/null`
 
 menu_instructions="\
 Arrow keys navigate the menu.  \
+<Enter> selects submenus --->.  \
 Highlighted letters are hotkeys.  \
-Pressing <Y> includes a feature, <N> excludes it, <M> makes it modular.  \
-Press <Esc><Esc> to exit or <?> for Help.  \
-(*) shows built in features.  \
-(M) shows modules.  \
-< > features are module capable."
+Pressing <Y> includes, <N> excludes, <M> modularizes features.  \
+Press <Esc><Esc> to exit, <?> for Help.  \
+Legend: [*] built-in  [ ] excluded  <M> module  < > module capable"
 
 radiolist_instructions="\
 Use the arrow keys to navigate this window or \

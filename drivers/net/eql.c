@@ -17,7 +17,7 @@
  */
 
 static const char *version = 
-	"Equalizer: $Revision: 3.12 $ $Date: 1995/01/19 $ Simon Janes (simon@ncm.com)\n";
+	"Equalizer1996: $Revision: 1.2 $ $Date: 1996/04/11 17:51:52 $ Simon Janes (simon@ncm.com)\n";
 
 /*
  * Sources:
@@ -31,6 +31,12 @@ static const char *version =
 
 /*
  * $Log: eql.c,v $
+ * Revision 1.2  1996/04/11 17:51:52  guru
+ * Added one-line eql_remove_slave patch.
+ *
+ * Revision 1.1  1996/04/11 17:44:17  guru
+ * Initial revision
+ *
  * Revision 3.13  1996/01/21  15:17:18  alan
  * tx_queue_len changes.
  * reformatted.
@@ -287,6 +293,8 @@ static int eql_open(struct device *dev)
 		printk ("%s: open\n", dev->name);
 #endif
 
+	printk ("%s: remember to turn off Van-Jacobson compression on your slave devices.\n", dev->name);
+
 	new_queue = eql_new_slave_queue (dev);
     
 	if (new_queue != 0)
@@ -431,8 +439,14 @@ static int eql_enslave(struct device *dev, slaving_request_t *srqp)
 	int err;
 
 	err = verify_area(VERIFY_READ, (void *)srqp, sizeof (slaving_request_t));
-	if (err) 
+	if (err)  
+	  {
+#ifdef EQL_DEBUG
+	if (eql_debug >= 20)
+		printk ("EQL enslave: error detected by verify_area\n");
+#endif  
 		return err;
+	  }
 	memcpy_fromfs (&srq, srqp, sizeof (slaving_request_t));
 
 #ifdef EQL_DEBUG
@@ -458,8 +472,17 @@ static int eql_enslave(struct device *dev, slaving_request_t *srqp)
 			eql_insert_slave (eql->queue, s);
 			return 0;
 		}
+#ifdef EQL_DEBUG
+	if (eql_debug >= 20)
+		printk ("EQL enslsave: slave is master or slave is already slave\n");
+#endif  
+
 		return -EINVAL;
 	}
+#ifdef EQL_DEBUG
+	if (eql_debug >= 20)
+		printk ("EQL enslave: master or slave are NULL");
+#endif  
 	return -EINVAL;
 }
 
@@ -798,36 +821,13 @@ static slave_t *eql_remove_slave(slave_queue_t *queue, slave_t *slave)
 	{
 		prev->next = curr->next;
 		queue->num_slaves--;
+		curr->dev->flags = curr->dev->flags & ~IFF_SLAVE;
 		sti();
 		return curr;
 	}
 	sti ();
 	return 0;			/* not found */
 }
-
-
-#if 0
-static int eql_insert_slave_dev(slave_queue_t *queue, struct device *dev)
-{
-	slave_t *slave;
-	cli ();
-
-	if ( ! eql_is_full (queue) )
-	{
-		slave = eql_new_slave ();
-		slave->dev = dev;
-		slave->priority = EQL_DEFAULT_SLAVE_PRIORITY;
-		slave->priority_bps = EQL_DEFAULT_SLAVE_PRIORITY;
-		slave->priority_Bps = EQL_DEFAULT_SLAVE_PRIORITY / 8;
-		slave->next = queue->head->next;
-		queue->head->next = slave;
-		sti ();
-		return 0;
-	}
-	sti ();
-	return 1;
-}
-#endif
 
 
 static int eql_remove_slave_dev(slave_queue_t *queue, struct device *dev)
@@ -931,6 +931,7 @@ static inline void eql_schedule_slaves(slave_queue_t *queue)
 					{
 						slave_load = (ULONG_MAX - (ULONG_MAX / 2)) - 
 							(priority_Bps) + bytes_queued * 8;
+
 		      				if (slave_load < best_load)
 						{
 							best_load = slave_load;
@@ -995,42 +996,6 @@ static inline slave_t *eql_next_slave(slave_queue_t *queue, slave_t *slave)
 static inline void eql_set_best_slave(slave_queue_t *queue, slave_t *slave)
 {
 	queue->best_slave = slave;
-}
-
-#if 0
-static inline int eql_lock_slave_queue(slave_queue_t *queue)
-{
-	int result = 0;
-
-	printk ("eql: lock == %d\n", queue->lock);
-	if (queue->lock)
-	{
-		printk ("eql: lock_slave-q sleeping for lock\n");
-		sleep_on (&eql_queue_lock);
-		printk ("eql: lock_slave-q woken up\n");
-		queue->lock = 1;
-	}
-	queue->lock = 1;
-	return result;
-}
-
-static inline int eql_unlock_slave_queue(slave_queue_t *queue)
-{
-	int result = 0;
-
-	if (queue->lock != 0)
-	{
-		queue->lock = 0;
-		printk ("eql: unlock_slave-q waking up lock waiters\n");
-		wake_up (&eql_queue_lock);
-	}
-	return result;
-}
-#endif 
-
-static inline int eql_is_locked_slave_queue(slave_queue_t *queue)
-{
-	return test_bit(1, (void *) &queue->lock);
 }
 
 static void eql_timer(unsigned long param)

@@ -175,7 +175,7 @@ typedef struct page {
  * A page may be used for kmalloc() or anyone else who does a
  * get_free_page(). In this case the page->count is at least 1, and
  * all other fields are unused but should be 0 or NULL. The
- * managament of this page is the responsibility of the one who uses
+ * management of this page is the responsibility of the one who uses
  * it.
  *
  * The other pages (we may call them "process pages") are completely

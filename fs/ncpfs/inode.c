@@ -91,7 +91,7 @@ ncp_read_inode(struct inode *inode)
         inode->i_nlink   = 1;
         inode->i_uid     = NCP_SERVER(inode)->m.uid;
         inode->i_gid     = NCP_SERVER(inode)->m.gid;
-        inode->i_blksize = 1024;
+        inode->i_blksize = 512;
         inode->i_rdev    = 0;
 
         if ((inode->i_blksize != 0) && (inode->i_size != 0))
@@ -370,8 +370,10 @@ ncp_put_super(struct super_block *sb)
 void
 ncp_trigger_message(struct ncp_server *server)
 {
+#ifdef CONFIG_KERNELD
 	char command[ sizeof(server->m.mount_point)
 		     + sizeof(NCP_MSG_COMMAND) + 2];
+#endif
 
 	if (server == NULL)
 	{

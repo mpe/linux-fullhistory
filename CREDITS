@@ -665,6 +665,13 @@ S: Am Muehlenweg 38
 S: D53424 Remagen
 S: Germany
 
+N: Phil Lewis
+E: beans@bucket.ualr.edu
+D: Promised to send money if I would put his name in the source tree.
+S: PO Box 371
+S: North Little Rock, Arkansas 72115
+S: US
+
 N: Martin von Loewis
 E: loewis@informatik.hu-berlin.de
 D: script binary format
@@ -774,6 +781,15 @@ E: dirk@merlin.nbg.sub.org
 D: 8 bit XT hard disk driver for OMTI5520
 S: Branderweg 4
 S: D-91058 Erlangen
+S: Germany
+
+N: Michael Meskes
+E: meskes@informatik.rwth-aachen.de
+D: Kernel hacker. Software watchdog daemon.
+D: Maintainer of several Debian packages
+S: Lehrstuhl fuer angewandte Mathematik insb. Informatik
+S: RWTH-Aachen
+S: D-52056 Aachen
 S: Germany
 
 N: Craig Metz

@@ -319,7 +319,6 @@ static int			apm_enabled = 0;
 #ifdef CONFIG_APM_CPU_IDLE
 static int			clock_slowed = 0;
 #endif
-static int			apm_major;
 static int			suspends_pending = 0;
 static int			standbys_pending = 0;
 

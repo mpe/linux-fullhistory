@@ -11,7 +11,9 @@
  *  set_serial_info fixed to set the flags, custom divisor, and uart
  * 	type fields.  Fix suggested by Michael K. Johnson 12/12/92.
  *
- *  TIOCMIWAIT, TIOCGICOUNT by Angelo Haritsis <ah@doc.ic.ac.uk>
+ *  11/95: TIOCMIWAIT, TIOCGICOUNT by Angelo Haritsis <ah@doc.ic.ac.uk>
+ *
+ *  03/96: Modularised by Angelo Haritsis <ah@doc.ic.ac.uk>
  *
  * This module exports the following rs232 io functions:
  *
@@ -19,6 +21,7 @@
  * 	int rs_open(struct tty_struct * tty, struct file * filp)
  */
 
+#include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -40,6 +43,9 @@
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>
+
+static char *serial_name = "Serial driver";
+static char *serial_version = "4.12";
 
 DECLARE_TASK_QUEUE(tq_serial);
 
@@ -80,6 +86,13 @@ static int serial_refcount;
 
 #define _INLINE_ inline
   
+#if defined(MODULE) && defined(SERIAL_DEBUG_MCOUNT)
+#define DBG_CNT(s) printk("(%s): [%x] refc=%d, serc=%d, ttyc=%d -> %s\n", \
+ kdevname(tty->device), (info->flags), serial_refcount,info->count,tty->count,s)
+#else
+#define DBG_CNT(s)
+#endif
+
 /*
  * IRQ_timeout		- How long the timeout should be for each IRQ
  * 				should be after the IRQ has been active.
@@ -1076,6 +1089,12 @@ static void shutdown(struct async_struct * info)
 #endif
 	
 	save_flags(flags); cli(); /* Disable interrupts */
+
+	/*
+	 * clear delta_msr_wait queue to avoid mem leaks: we may free the irq
+	 * here so the queue might never be waken up
+	 */
+	wake_up_interruptible(&info->delta_msr_wait);
 	
 	/*
 	 * First unlink the serial port from the IRQ chain...
@@ -2002,6 +2021,9 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 				cli();
 				cnow = info->icount;	/* atomic copy */
 				sti();
+				if (cnow.rng == cprev.rng && cnow.dsr == cprev.dsr && 
+				    cnow.dcd == cprev.dcd && cnow.cts == cprev.cts)
+					return -EIO; /* no change => error */
 				if ( ((arg & TIOCM_RNG) && (cnow.rng != cprev.rng)) ||
 				     ((arg & TIOCM_DSR) && (cnow.dsr != cprev.dsr)) ||
 				     ((arg & TIOCM_CD)  && (cnow.dcd != cprev.dcd)) ||
@@ -2089,6 +2111,8 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	save_flags(flags); cli();
 	
 	if (tty_hung_up_p(filp)) {
+		DBG_CNT("before DEC-hung");
+		MOD_DEC_USE_COUNT;
 		restore_flags(flags);
 		return;
 	}
@@ -2114,6 +2138,8 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		info->count = 0;
 	}
 	if (info->count) {
+		DBG_CNT("before DEC-2");
+		MOD_DEC_USE_COUNT;
 		restore_flags(flags);
 		return;
 	}
@@ -2165,14 +2191,6 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	tty->closing = 0;
 	info->event = 0;
 	info->tty = 0;
-	if (tty->ldisc.num != ldiscs[N_TTY].num) {
-		if (tty->ldisc.close)
-			(tty->ldisc.close)(tty);
-		tty->ldisc = ldiscs[N_TTY];
-		tty->termios->c_line = N_TTY;
-		if (tty->ldisc.open)
-			(tty->ldisc.open)(tty);
-	}
 	if (info->blocked_open) {
 		if (info->close_delay) {
 			current->state = TASK_INTERRUPTIBLE;
@@ -2184,6 +2202,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	info->flags &= ~(ASYNC_NORMAL_ACTIVE|ASYNC_CALLOUT_ACTIVE|
 			 ASYNC_CLOSING);
 	wake_up_interruptible(&info->close_wait);
+	MOD_DEC_USE_COUNT;
 	restore_flags(flags);
 }
 
@@ -2387,6 +2406,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 	if (retval)
 		return retval;
 
+	MOD_INC_USE_COUNT;
 	retval = block_til_ready(tty, filp, info);
 	if (retval) {
 #ifdef SERIAL_DEBUG_OPEN
@@ -2428,7 +2448,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
  */
 static void show_serial_version(void)
 {
-	printk("Serial driver version 4.11a with");
+ 	printk("%s version %s with", serial_name, serial_version);
 #ifdef CONFIG_HUB6
 	printk(" HUB-6");
 #define SERIAL_OPT
@@ -2663,6 +2683,16 @@ static void autoconfig(struct async_struct * info)
 	restore_flags(flags);
 }
 
+int register_serial(struct serial_struct *req);
+void unregister_serial(int line);
+
+static struct symbol_table serial_syms = {
+#include <linux/symtab_begin.h>
+	X(register_serial),
+	X(unregister_serial),
+#include <linux/symtab_end.h>
+};
+
 /*
  * The serial driver boot-time initialization code!
  */
@@ -2791,6 +2821,7 @@ int rs_init(void)
 				break;
 		}
 	}
+	register_symtab(&serial_syms);
 	return 0;
 }
 
@@ -2867,3 +2898,30 @@ void unregister_serial(int line)
 	printk("tty%02d unloaded\n", info->line);
 	restore_flags(flags);
 }
+
+#ifdef MODULE
+int init_module(void)
+{
+	return rs_init();
+}
+
+void cleanup_module(void) 
+{
+	unsigned long flags;
+	int e1, e2;
+
+	/* printk("Unloading %s: version %s\n", serial_name, serial_version); */
+	save_flags(flags);
+	cli();
+	timer_active &= ~(1 << RS_TIMER);
+	timer_table[RS_TIMER].fn = NULL;
+	timer_table[RS_TIMER].expires = 0;
+	if ((e1 = tty_unregister_driver(&serial_driver)))
+		printk("SERIAL: failed to unregister serial driver (%d)\n",
+		       e1);
+	if ((e2 = tty_unregister_driver(&callout_driver)))
+		printk("SERIAL: failed to unregister callout driver (%d)\n", 
+		       e2);
+	restore_flags(flags);
+}
+#endif /* MODULE */

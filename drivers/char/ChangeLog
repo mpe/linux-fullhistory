@@ -1,3 +1,33 @@
+Mon Apr  1 10:22:01 1996    <tytso@rsts-11.mit.edu>
+
+	* serial.c (rs_close): Cleaned up modularization changes.
+		Remove code which forced line discpline back to N_TTY
+		this is done in the tty upper layers, and there's no
+		reason to do it here.  (Making this change also
+		removed the requirement that the serial module access
+		the internal kernel symbol "ldiscs".)
+
+	* tty_io.c (tty_init): Formally register a tty_driver entry for
+		/dev/tty (device 4, 0) and /dev/console (device 5, 0).
+		This guarantees that major device numbers 4 and 5 will be
+		reserved for the tty subsystem (as they have to be because
+		of /dev/tty and /dev/console).  Removed tty_regdev, as
+		this interface is no longer necessary.
+
+Sun Mar 17 20:42:47 GMT 1996 <ah@doc.ic.ac.uk>
+
+	* serial.c : modularisation (changes in linux/fs/device.c allow
+		kerneld to automatically load the serial module).
+
+	* Makefile, Config.in : serial modularisation adds.
+
+	* tty_io.c : tty_init_ctty used by to register "cua" driver just
+		for the /dev/tty device (5,0).  Added tty_regdev.
+	
+	* serial.c (shutdown, rs_ioctl) : when port shuts down wakeup processes
+	  waiting on delta_msr_wait. The TIOCMIWAIT ioctl returns EIO
+	  if no change was done since the time of call.
+
 Sat Mar 16 14:33:13 1996 <aeb@cwi.nl>
 
 	* tty_io.c (disassociate_ctty): If disassociate_ctty is called by

@@ -770,6 +770,13 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
       }
       break;
 
+    case SNDCTL_DSP_SETDUPLEX:
+      if (audio_devs[dev]->flags & DMA_DUPLEX)
+	 return 0;
+      else
+         return -EIO;
+      break;
+
     case SNDCTL_DSP_SETFRAGMENT:
       {
 	int             fact = get_fs_long ((long *) arg);

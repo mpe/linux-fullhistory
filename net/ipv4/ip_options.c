@@ -277,7 +277,7 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 		if (optlen<2 || optlen>l)
 		{
 			pp_ptr = optptr;
-			break;
+			goto error;
 		}
 		switch (*optptr) 
 		{
@@ -286,25 +286,25 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 			if (optlen < 3) 
 			{
 				pp_ptr = optptr + 1;
-				break;
+				goto error;
 			}
 			if (optptr[2] < 4) 
 			{
 				pp_ptr = optptr + 2;
-				break;
+				goto error;
 			}
 			/* NB: cf RFC-1812 5.2.4.1 */
 			if (opt->srr) 
 			{
 				pp_ptr = optptr;
-				break;
+				goto error;
 			}
 			if (!skb) 
 			{
 				if (optptr[2] != 4 || optlen < 7 || ((optlen-3) & 3)) 
 				{
 					pp_ptr = optptr + 1;
-					break;
+					goto error;
 				}
 				memcpy(&opt->faddr, &optptr[3], 4);
 				if (optlen > 7)
@@ -317,24 +317,24 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 			if (opt->rr) 
 			{
 				pp_ptr = optptr;
-				break;
+				goto error;
 			}
 			if (optlen < 3) 
 			{
 				pp_ptr = optptr + 1;
-				break;
+				goto error;
 			}
 			if (optptr[2] < 4) 
 			{
 				pp_ptr = optptr + 2;
-				break;
+				goto error;
 			}
 			if (optptr[2] <= optlen) 
 			{
 				if (optptr[2]+3 > optlen) 
 				{
 					pp_ptr = optptr + 2;
-					break;
+					goto error;
 				}
 				if (skb) 
 				{
@@ -350,17 +350,17 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 			if (opt->ts) 
 			{
 				pp_ptr = optptr;
-				break;
+				goto error;
 			}
 			if (optlen < 4) 
 			{
 				pp_ptr = optptr + 1;
-				break;
+				goto error;
 			}
 			if (optptr[2] < 5) 
 			{
 				pp_ptr = optptr + 2;
-				break;
+				goto error;
 			}
 			if (optptr[2] <= optlen) 
 			{
@@ -369,7 +369,7 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 				if (ts->ptr+3 > ts->len) 
 				{
 					pp_ptr = optptr + 2;
-					break;
+					goto error;
 				}
 				switch (ts->flags) 
 				{
@@ -384,7 +384,7 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 					if (ts->ptr+7 > ts->len) 
 					{
 						pp_ptr = optptr + 2;
-						break;
+						goto error;
 					}
 					opt->ts = optptr - iph;
 					if (skb) 
@@ -400,7 +400,7 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 					if (ts->ptr+7 > ts->len) 
 					{
 						pp_ptr = optptr + 2;
-						break;
+						goto error;
 					}
 					opt->ts = optptr - iph;
 					{
@@ -417,7 +417,7 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 					break;
 				      default:
 					pp_ptr = optptr + 3;
-					break;
+					goto error;
 				}
 				if (timeptr) 
 				{
@@ -435,7 +435,7 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 				if (ts->overflow == 15) 
 				{
 					pp_ptr = optptr + 3;
-					break;
+					goto error;
 				}
 				opt->ts = optptr - iph;
 				if (skb) 
@@ -451,7 +451,7 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 			if (!skb) 
 			{
 				pp_ptr = optptr;
-				break;
+				goto error;
 			}
 			break;
 		}
@@ -463,6 +463,7 @@ eol:
 	if (!pp_ptr)
 		return 0;
 
+error:
 	if (skb) 
 	{
 		icmp_send(skb, ICMP_PARAMETERPROB, 0, pp_ptr-iph, skb->dev);

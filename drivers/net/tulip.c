@@ -16,16 +16,18 @@
 
 static char *version =
 "tulip.c:v0.10 8/11/95 becker@cesdis.gsfc.nasa.gov\n"
-"        +0.68 3/09/96 "
-"http://www.dsl.tutics.tut.ac.jp/~manabe/linux/tulip.html\n";
+"        +0.72 4/17/96 "
+"http://www.dsl.tutics.tut.ac.jp/~linux/tulip\n";
 
 /* A few user-configurable values. */
 
-/* Default to using 10baseT (i.e. non-AUI/10base2/100baseT port) port. */
+/* Default to using 10baseT (i.e. AUI/10base2/100baseT port) port. */
 #define	TULIP_10TP_PORT		0
 #define	TULIP_100TP_PORT	1
 #define	TULIP_AUI_PORT		1
 #define	TULIP_BNC_PORT		2
+#define	TULIP_MAX_PORT		3
+#define	TULIP_AUTO_PORT		-1
 
 #ifndef	TULIP_PORT
 #define	TULIP_PORT			TULIP_10TP_PORT
@@ -34,36 +36,13 @@ static char *version =
 /* Define to force full-duplex operation on all Tulip interfaces. */
 /* #define  TULIP_FULL_DUPLEX 1 */
 
+/* Define to fix port. */
+/* #define  TULIP_FIX_PORT 1 */
+
 /* Define to probe only first detected device */
-/* #define	TULIP_ONLY_ONE 1 */
+/*#define	TULIP_MAX_CARDS 1*/
 
-#include <linux/config.h>
-
-#if defined(MODULE) && defined(CONFIG_MODVERSIONS)
-#define	MODVERSIONS
-#include <linux/modversions.h>
-#endif
-
-#include <linux/version.h>
-
-#if LINUX_VERSION_CODE < 0x10300
-/* i.e. version 1.2.x */
-#define	virt_to_bus(address)	(unsigned long)(address)
-#define	bus_to_virt(address)	(void *)(address)
-#define	PCI_DEVICE_ID_DEC_TULIP_PLUS	0x0014
-#ifdef	MODULE
 #include <linux/module.h>
-char kernel_version[] = UTS_RELEASE;
-#else
-#undef	MOD_INC_USE_COUNT
-#undef	MOD_DEC_USE_COUNT
-#define	MOD_INC_USE_COUNT
-#define	MOD_DEC_USE_COUNT
-#endif
-#else
-/* i.e. version 1.3.x */
-#include <linux/module.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -75,6 +54,7 @@ char kernel_version[] = UTS_RELEASE;
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/bios32.h>
+#include <linux/delay.h>
 #include <asm/byteorder.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -87,12 +67,6 @@ char kernel_version[] = UTS_RELEASE;
 /* The total size is unusually large: The 21040 aligns each of its 16
    longword-wide registers on a quadword boundary. */
 #define TULIP_TOTAL_SIZE 0x80
-
-#ifdef TULIP_DEBUG
-int tulip_debug = TULIP_DEBUG;
-#else
-int tulip_debug = 3;
-#endif
 
 /*
 				Theory of Operation
@@ -150,7 +124,6 @@ autoswitch between internal 10baseT, SIA and AUI transceivers.
 The databook claims that CSR13, CSR14, and CSR15 should each be the last
 register of the set CSR12-15 written.   Hmmm, now how is that possible?
 */
-
 
 /* A few values that may be tweaked. */
 /* Keep the ring sizes a power of two for efficiency. */
@@ -266,9 +239,15 @@ enum tulip_offsets {
 #define	TINTR_ENABLE		0xFFFFFFFF
 #define	TINTR_DISABLE		0x00000000
 
+/* description of CSR11 G.P. timer (21041/21140) register */
+#define	TGEPT_COUNT			0x0001FFFF
+
 /* description of CSR12 SIA status(2104x)/GP(21140) register */
 #define	TSIAS_CONERROR		0x00000002	/* connection error */
 #define	TSIAS_LNKERROR		0x00000004	/* link error */
+#define TSIAS_ACTERROR		0x00000200  /* port Rx activity */
+#define TSIAS_RxACTIVE		0x00000100  /* port Rx activity */
+
 #define	TGEPR_LK10NG		0x00000080	/* 10Mbps N.G. (R) */
 #define	TGEPR_LK100NG		0x00000040	/* 100Mbps N.G. (R) */
 #define	TGEPR_DETECT		0x00000020	/* detect signal (R) */
@@ -354,12 +333,13 @@ struct tulip_private {
 	struct enet_statistics stats;
 	int setup_frame[48];	/* Pseudo-Tx frame to init address table. */
 	void (*port_select)(struct device *dev);
-	int (*port_error)(struct device *dev);
+	int (*port_fail)(struct device *dev);
 	char *signature;
 	unsigned int cur_rx, cur_tx;		/* The next free ring entry */
 	unsigned int dirty_rx, dirty_tx;	/* The ring entries to be free()ed. */
 	unsigned int tx_full:1;				/* The Tx queue is full. */
 	unsigned int full_duplex:1;			/* Full-duplex operation requested. */
+	unsigned int port_fix:1;			/* Fix if_port to specified port. */
 };
 
 struct eeprom {
@@ -384,55 +364,55 @@ static int tulip_open(struct device *dev);
 static void tulip_init_ring(struct device *dev);
 static int tulip_start_xmit(struct sk_buff *skb, struct device *dev);
 static int tulip_rx(struct device *dev);
-static void tulip_interrupt(int irq, struct pt_regs *regs);
+static void tulip_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int tulip_close(struct device *dev);
 static struct enet_statistics *tulip_get_stats(struct device *dev);
 static struct device *tulip_alloc(struct device *dev);
-#if LINUX_VERSION_CODE < 0x10300
-static void set_multicast_list(struct device *dev, int num_addrs,
-							   void *addrs);
-#else
 static void set_multicast_list(struct device *dev);
-#endif
 
-#define	generic21140_error	NULL
+#define	generic21140_fail	NULL
 static void generic21040_select(struct device *dev);
 static void generic21140_select(struct device *dev);
 static void generic21041_select(struct device *dev);
 static void auto21140_select(struct device *dev);
-static int generic21040_error(struct device *dev);
-static int generic21041_error(struct device *dev);
+static void cogent21140_select(struct device *dev);
+static int generic21040_fail(struct device *dev);
+static int generic21041_fail(struct device *dev);
 
 static struct {
 	void (*port_select)(struct device *dev);
-	int (*port_error)(struct device *dev);
+	int (*port_fail)(struct device *dev);
 	unsigned int vendor_id, device_id;
 	char *signature;
-	unsigned int port_auto:1;
+	unsigned int array:1;
 } cardVendor[] = {
-	{generic21140_select, generic21140_error,
+	{generic21140_select, generic21140_fail,
 		 0x0000c000, PCI_DEVICE_ID_DEC_TULIP_FAST, "smc9332", 0},
-	{generic21041_select, generic21041_error,
+	{generic21041_select, generic21041_fail,
 		 0x0000c000, PCI_DEVICE_ID_DEC_TULIP_PLUS, "smc8432", 0},
-	{generic21040_select, generic21040_error,
+	{generic21040_select, generic21040_fail,
 		 0x0000c000, PCI_DEVICE_ID_DEC_TULIP, "old smc8432", 0},
-	{auto21140_select, generic21140_error,
-		 0x0000f400, PCI_DEVICE_ID_DEC_TULIP_FAST, "LA100PCI", 1},
-	{generic21140_select, generic21140_error,
+	{auto21140_select, generic21140_fail,
+		 0x0000f400, PCI_DEVICE_ID_DEC_TULIP_FAST, "LA100PCI", 0},
+	{cogent21140_select, generic21140_fail,
+		 0x00009200, PCI_DEVICE_ID_DEC_TULIP_FAST, "cogent_em110", 0},
+	{generic21140_select, generic21140_fail,
 		 0x0000f800, PCI_DEVICE_ID_DEC_TULIP_FAST, "DE500", 0},
-	{generic21041_select, generic21041_error,
+	{generic21041_select, generic21041_fail,
 		 0x0000f800, PCI_DEVICE_ID_DEC_TULIP_PLUS, "DE450", 0},
-	{generic21040_select, generic21040_error,
+	{generic21040_select, generic21040_fail,
 		 0x0000f800, PCI_DEVICE_ID_DEC_TULIP, "DE43x", 0},
-	{generic21040_select, generic21040_error,
+	{generic21040_select, generic21040_fail,
 		 0x0040c700, PCI_DEVICE_ID_DEC_TULIP, "EN9400", 0},
-	{generic21040_select, generic21040_error,
-		 0x00c09500, PCI_DEVICE_ID_DEC_TULIP, "ZNYX312", 0},
-	{generic21040_select, generic21040_error,
+	{generic21040_select, generic21040_fail,
+		 0x00c09500, PCI_DEVICE_ID_DEC_TULIP, "ZNYX312", 1},
+	{generic21040_select, generic21040_fail,
+		 0x08002b00, PCI_DEVICE_ID_DEC_TULIP, "QSILVER's", 0},
+	{generic21040_select, generic21040_fail,
 		 0, PCI_DEVICE_ID_DEC_TULIP, "21040", 0},
-	{generic21140_select, generic21140_error,
+	{generic21140_select, generic21140_fail,
 		 0, PCI_DEVICE_ID_DEC_TULIP_FAST, "21140", 0},
-	{generic21041_select, generic21041_error,
+	{generic21041_select, generic21041_fail,
 		 0, PCI_DEVICE_ID_DEC_TULIP_PLUS, "21041", 0},
 	{NULL, NULL, 0, 0, "Unknown", 0}
 };
@@ -449,26 +429,23 @@ static struct {
 #define EE_DATA_READ	0x08	/* EEPROM chip data out. */
 #define EE_ENB			(0x4800 | EE_CS)
 
-/* Delay between EEPROM clock transitions.
-   This is a "nasty" timing loop, but PC compatible machines are *supposed*
-   to delay an ISA compatible period for the SLOW_DOWN_IO macro.  */
-
-#define eeprom_delay(nanosec)\
-	do { int _i = 3; while (--_i > 0) { __SLOW_DOWN_IO; }} while (0)
-
 /* The EEPROM commands include the alway-set leading bit. */
 #define EE_WRITE_CMD	(5 << 6)
 #define EE_READ_CMD		(6 << 6)
 #define EE_ERASE_CMD	(7 << 6)
 
 #ifdef MODULE
-static u_long alloc_size;
+static int if_port=TULIP_AUTO_PORT;
+static size_t alloc_size;
+#ifdef TULIP_FULL_DUPLEX
+static int full_duplex=1;
+#else
+static int full_duplex=0;
+#endif
 #endif
 
-#ifdef	__i386__
 #define	tio_write(val, port)	outl(val, ioaddr + port)
 #define	tio_read(port)			inl(ioaddr + port)
-#endif
 
 static void inline
 tio_sia_write(u32 ioaddr, u32 val13, u32 val14, u32 val15)
@@ -479,7 +456,11 @@ tio_sia_write(u32 ioaddr, u32 val13, u32 val14, u32 val15)
 	tio_write(val13,CSR13);
 }
 
-static char *
+/*
+   card_type returns 1 if the card is 'etherarray'
+*/
+
+static int
 card_type(struct tulip_private *tp, int device_id, int vendor_id)
 {
 	int n;
@@ -489,9 +470,9 @@ card_type(struct tulip_private *tp, int device_id, int vendor_id)
 			&& (cardVendor[n].vendor_id == vendor_id
 				|| cardVendor[n].vendor_id == 0)) break;
 	tp->port_select = cardVendor[n].port_select;
-	tp->port_error = cardVendor[n].port_error;
+	tp->port_fail = cardVendor[n].port_fail;
 	tp->signature = cardVendor[n].signature;
-	return(cardVendor[n].signature);
+	return(cardVendor[n].array ? 1: 0);
 }
 
 static int
@@ -510,22 +491,21 @@ read_eeprom(int ioaddr, struct eeprom *eepp)
 		for (i = 10; i >= 0; i--) {
 			short dataval = (read_cmd & (1 << i)) ? EE_DATA_WRITE : 0;
 			tio_write(EE_ENB | dataval, CSR9);
-			eeprom_delay(100);
+			udelay(100);
 			tio_write(EE_ENB | dataval | EE_SHIFT_CLK, CSR9);
-			eeprom_delay(150);
+			udelay(150);
 			tio_write(EE_ENB | dataval, CSR9);
-			/* Finish EEPROM a clock tick. */
-			eeprom_delay(250);
+			udelay(250);
 		}
 		tio_write(EE_ENB, CSR9);
 
 		for (i = 16; i > 0; i--) {
 			tio_write(EE_ENB | EE_SHIFT_CLK, CSR9);
-			eeprom_delay(100);
+			udelay(100);
 			val = (val << 1)
 				| ((tio_read(CSR9) & EE_DATA_READ) ? 1 : 0);
 			tio_write(EE_ENB, CSR9);
-			eeprom_delay(100);
+			udelay(100);
 		}
 
 		/* Terminate the EEPROM access. */
@@ -540,9 +520,9 @@ read_eeprom(int ioaddr, struct eeprom *eepp)
 	return(-1); /* broken */
 }
 
-/* Is this correct ? */
+/* Is this required ? */
 static int
-generic21040_error(struct device *dev)
+generic21040_fail(struct device *dev)
 {
 	int ioaddr = dev->base_addr;
 
@@ -550,43 +530,55 @@ generic21040_error(struct device *dev)
 }
 
 static int
-generic21041_error(struct device *dev)
+generic21041_fail(struct device *dev)
 {
 	int ioaddr = dev->base_addr;
+	u32 csr12 = tio_read(CSR12);
 
-	return(tio_read(CSR12) & TSIAS_LNKERROR);
+	return((!(csr12 & TSIAS_CONERROR)
+			|| !(csr12 & TSIAS_LNKERROR)) ? 0: 1);
 }
 
 static void
 generic21040_select(struct device *dev)
 {
 	int ioaddr = dev->base_addr;
-	const char *if_port;
+	const char *media;
 
 	dev->if_port &= 3;
 	switch (dev->if_port)
 	{
 	case TULIP_10TP_PORT:
-		if_port = "10baseT";
+		media = "10baseT";
 		break;
-	case TULIP_100TP_PORT:
-	/* TULIP_AUI_PORT is the same as TULIP_100TP_PORT. */
-		if_port = "100baseT/AUI";
+	case TULIP_AUI_PORT:
+		media = "AUI";
 		break;
 	case TULIP_BNC_PORT:
-		if_port = "BNC";
+		media = "BNC";
 		break;
 	default:
-		if_port = "unknown type";
+		media = "unknown type";
 		break;
 	}
-	printk("%s: enabling %s port.\n", dev->name, if_port);
+	printk("%s: enabling %s port.\n", dev->name, media);
 	/* Set the full duplex match frame. */
 	tio_write(FULL_DUPLEX_MAGIC, CSR11);
 	tio_write(TSIAC_RESET, CSR13);
 	/* Reset the serial interface */
 	tio_write((dev->if_port ? TSIAC_NO10TP: 0) | TSIAC_C21040, CSR13);
 }
+
+#if 0
+static void
+generic_timer(struct device *dev, u32 count)
+{
+	int ioaddr = dev->base_addr;
+
+	tio_write(count, CSR11);
+	while (tio_read(CSR11) & TGEPT_COUNT);
+}
+#endif
 
 static void
 generic21041_select(struct device *dev)
@@ -596,33 +588,32 @@ generic21041_select(struct device *dev)
 	u32 tsiax = TSIAX_10TP;
 	u32 tsiag = TSIAG_10TP;
 
-	printk("%s: enabling ", dev->name);
 	switch(dev->if_port) {
 	case TULIP_AUI_PORT:
 		tsiac |= TSIAC_NO10TP;
 		tsiax = TSIAX_NO10TP;
 		tsiag = TSIAG_AUI;
-		printk("AUI");
 		break;
 	case TULIP_BNC_PORT:
 		tsiac |= TSIAC_NO10TP;
 		tsiax = TSIAX_NO10TP;
 		tsiag = TSIAG_BNC;
-		printk("BNC");
 		break;
 	default:
 		dev->if_port = TULIP_10TP_PORT;
-		printk("10TP");
 		break;
 	}
 	tio_sia_write(ioaddr, tsiac, tsiax, tsiag);
-	printk(" port.\n");
+	if (dev->start)
+		printk("%s: enabling %s port.\n", dev->name,
+			   (dev->if_port == TULIP_AUI_PORT) ? "AUI":
+			   (dev->if_port == TULIP_BNC_PORT) ? "BNC": "10TP");
 }
 
 static void
 auto21140_select(struct device *dev)
 {
-	int ioaddr = dev->base_addr;
+	int i, ioaddr = dev->base_addr;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 
 	/* kick port */
@@ -631,12 +622,32 @@ auto21140_select(struct device *dev)
 	tio_write(TCMOD_AUTO|TCMOD_TRxSTART, CSR6);
 	dev->if_port = !(tio_read(CSR12) & TGEPR_FORCEALED);
 	printk("%s: probed %s port.\n",
-		   dev->name, dev->if_port ? "100baseTx" : "10baseT");
+		   dev->name, dev->if_port ? "100TX" : "10TP");
 	tio_write((dev->if_port ? TGEPR_FORCE100: 0)
 			  | (tp->full_duplex ? 0:TGEPR_HALFDUPLEX), CSR12);	
 	tio_write(TINTR_DISABLE, CSR7);
-	tio_read(CSR8) & 0xffff;
+	i = tio_read(CSR8) & 0xffff;
 	tio_write(TCMOD_AUTO, CSR6);
+}
+
+static void
+cogent21140_select(struct device *dev)
+{
+	int ioaddr = dev->base_addr, csr6;
+	struct tulip_private *tp = (struct tulip_private *)dev->priv;
+	dev->if_port &= 1;
+	csr6 = tio_read(CSR6) &
+		~(TCMOD_10TP|TCMOD_100TP|TCMOD_TRxSTART|TCMOD_SCRM);
+	/* Stop the transmit process. */
+	tio_write(csr6 | TCMOD_RxSTART, CSR6);
+	printk("%s: enabling %s port.\n",
+		   dev->name, dev->if_port ? "100baseTx" : "10baseT");
+	/* Turn on the output drivers */
+	tio_write(0x0000013F, CSR12);
+	tio_write((dev->if_port ? TGEPR_FORCE100: 0)
+			  | (tp->full_duplex ? 0:TGEPR_HALFDUPLEX), CSR12);
+	tio_write((dev->if_port ? TCMOD_100TP: TCMOD_10TP)
+			  | TCMOD_TRxSTART | TCMOD_TH128 | csr6, CSR6);
 }
 
 static void
@@ -651,8 +662,9 @@ generic21140_select(struct device *dev)
 
 	/* Stop the transmit process. */
 	tio_write(csr6 | TCMOD_RxSTART, CSR6);
-	printk("%s: enabling %s port.\n",
-		   dev->name, dev->if_port ? "100baseTx" : "10baseT");
+	if (dev->start)
+		printk("%s: enabling %s port.\n",
+			   dev->name, dev->if_port ? "100TX" : "10TP");
 	tio_write((dev->if_port ? TCMOD_100TP: TCMOD_10TP)
 			  | TCMOD_TRxSTART | TCMOD_TH128 | csr6, CSR6);
 	tio_write((dev->if_port ? TGEPR_FORCE100: 0)
@@ -667,31 +679,16 @@ tulip_open(struct device *dev)
 
 	/* Reset the chip, holding bit 0 set at least 10 PCI cycles. */
 	tio_write(tio_read(CSR0)|TBMOD_RESET, CSR0);
-/*	tio_write(TBMOD_RESERVED|TBMOD_RESET, CSR0);*/
-	SLOW_DOWN_IO;
+	udelay(1000);
 	/* Deassert reset.  Set 8 longword cache alignment, 8 longword burst.
 	   -> Set 32 longword cache alignment, unlimited longword burst ?
 	   Wait the specified 50 PCI cycles after a reset by initializing
 	   Tx and Rx queues and the address filter list. */
 	tio_write(tio_read(CSR0)|TBMOD_ALIGN32|TBMOD_BURST0, CSR0);
-/*	tio_write(TBMOD_RESERVED|TBMOD_ALIGN32|TBMOD_BURST0, CSR0);*/
 
-	if (irq2dev_map[dev->irq] != NULL
-		|| (irq2dev_map[dev->irq] = dev) == NULL
-		|| dev->irq == 0
-#if LINUX_VERSION_CODE < 0x10346
-		|| request_irq(dev->irq, &tulip_interrupt, 0, tp->signature)) {
-#else
-		|| request_irq(dev->irq, (void *)&tulip_interrupt, 0,
-					   tp->signature, dev)) {
-#endif
+	if (request_irq(dev->irq, (void *)&tulip_interrupt, SA_SHIRQ,
+					tp->signature, dev))
 		return -EAGAIN;
-	}
-
-/*
-	if (tulip_debug > 1)
-		printk("%s: tulip_open() irq %d.\n", dev->name, dev->irq);
-*/
 
 	tulip_init_ring(dev);
 
@@ -722,18 +719,18 @@ tulip_open(struct device *dev)
 	tio_write(virt_to_bus(tp->rx_ring), CSR3);
 	tio_write(virt_to_bus(tp->tx_ring), CSR4);
 
-	dev->if_port = TULIP_PORT;
+	dev->tbusy = 0;
+	dev->interrupt = 0;
+	dev->start = 1;
+
 	if (tp->port_select) tp->port_select(dev);
+
 	/* Start the chip's Tx and Rx processes. */
 	tio_write(tio_read(CSR6) | TCMOD_TRxSTART
 			  | (tp->full_duplex ? TCMOD_FULLDUPLEX:0), CSR6);
 
 	/* Trigger an immediate transmit demand to process the setup frame. */
 	tio_write(TPOLL_TRIGGER, CSR1);
-
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
 
 	/* Enable interrupts by setting the interrupt mask. */
 	tio_write(TINTR_ENABLE, CSR7);
@@ -778,13 +775,12 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 	int entry;
 
 	/* Transmitter timeout, serious problems. */
-	if (dev->tbusy) {
+	if (dev->tbusy || (tp->port_fail && tp->port_fail(dev))) {
 		int tickssofar = jiffies - dev->trans_start;
 		int i;
 		if (tickssofar < 40) return(1);
-		if (tp->port_select
-			&& (!tp->port_error || tp->port_error(dev))) {
-			dev->if_port ++;
+		if (tp->port_select) {
+			if (!tp->port_fix) dev->if_port ++;
 			tp->port_select(dev);
 			dev->trans_start = jiffies;
 			return(0);
@@ -793,10 +789,14 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 			   "SIA %8.8x %8.8x %8.8x %8.8x, resetting...\n",
 			   dev->name, tio_read(CSR5), tio_read(CSR12),
 			   tio_read(CSR13), tio_read(CSR14), tio_read(CSR15));
+#ifndef	__alpha__
 		printk("  Rx ring %8.8x: ", (int)tp->rx_ring);
+#endif
 		for (i = 0; i < RX_RING_SIZE; i++)
 			printk(" %8.8x", (unsigned int)tp->rx_ring[i].status);
+#ifndef	__alpha__
 		printk("\n  Tx ring %8.8x: ", (int)tp->tx_ring);
+#endif
 		for (i = 0; i < TX_RING_SIZE; i++)
 			printk(" %8.8x", (unsigned int)tp->tx_ring[i].status);
 		printk("\n");
@@ -856,9 +856,9 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 
 /* The interrupt handler does all of the Rx thread work and cleans up
    after the Tx thread. */
-static void tulip_interrupt(int irq, struct pt_regs *regs)
+static void tulip_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev = (struct device *)dev_id;
 	struct tulip_private *lp;
 	int csr5, ioaddr, boguscnt=10;
 
@@ -878,7 +878,6 @@ static void tulip_interrupt(int irq, struct pt_regs *regs)
 		csr5 = tio_read(CSR5);
 		/* Acknowledge all of the current interrupt sources ASAP. */
 		tio_write(csr5 & TSTAT_CLEARINTR, CSR5);
-
 		/* check interrupt ? */
 		if ((csr5 & (TSTAT_NORINTR|TSTAT_ABNINTR)) == 0) break;
 
@@ -967,11 +966,7 @@ static void tulip_interrupt(int irq, struct pt_regs *regs)
 		if (dev->start == 0  &&  --stopit < 0) {
 			printk("%s: Emergency stop, looping startup interrupt.\n",
 				   dev->name);
-#if LINUX_VERSION_CODE < 0x10346
-			free_irq(irq);
-#else
 			free_irq(irq, dev);
-#endif
 		}
 	}
 
@@ -1005,11 +1000,7 @@ tulip_rx(struct device *dev)
 			short pkt_len = lp->rx_ring[entry].status >> 16;
 			struct sk_buff *skb;
 
-#if LINUX_VERSION_CODE < 0x10300
-			skb = alloc_skb(pkt_len, GFP_ATOMIC);
-#else
 			skb = dev_alloc_skb(pkt_len + 2);
-#endif
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, deferring packet.\n",
 					   dev->name);
@@ -1027,17 +1018,11 @@ tulip_rx(struct device *dev)
 				break;
 			}
 			skb->dev = dev;
-#if LINUX_VERSION_CODE < 0x10300
-			skb->len = pkt_len;
-			memcpy(skb->data, bus_to_virt(lp->rx_ring[entry].buffer1),
-				   pkt_len);
-#else
 			skb_reserve(skb, 2);
 			memcpy(skb_put(skb, pkt_len),
 				   bus_to_virt(lp->rx_ring[entry].buffer1), pkt_len);
 			/* Needed for 1.3.x */
 			skb->protocol = eth_type_trans(skb,dev);
-#endif
 			netif_rx(skb);
 			lp->stats.rx_packets++;
 		}
@@ -1069,14 +1054,21 @@ tulip_close(struct device *dev)
 	tio_write(0, CSR13);
 /*	tio_write(0, CSR8);	wake up chip ? */
 
-#if LINUX_VERSION_CODE < 0x10346
-	free_irq(dev->irq);
-#else
 	free_irq(dev->irq, dev);
-#endif
-	irq2dev_map[dev->irq] = 0;
 
 	MOD_DEC_USE_COUNT;
+	return(0);
+}
+
+static int
+tulip_config(struct device *dev, struct ifmap *map)
+{
+	struct tulip_private *tp = (struct tulip_private *)dev->priv;
+
+	if (map->port == 0xff) return(-EINVAL);
+	dev->if_port = map->port;
+	tp->port_fix = 1;
+	if (tp->port_select) tp->port_select(dev);
 	return(0);
 }
 
@@ -1084,9 +1076,7 @@ static struct enet_statistics *
 tulip_get_stats(struct device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
-	short ioaddr = dev->base_addr;
-
-	tp->stats.rx_missed_errors += tio_read(CSR8) & 0xffff;
+	/*	short ioaddr = dev->base_addr;*/
 
 	return(&tp->stats);
 }
@@ -1095,12 +1085,7 @@ tulip_get_stats(struct device *dev)
  *	Set or clear the multicast filter for this adaptor.
  */
 
-#if LINUX_VERSION_CODE < 0x10300
-static void set_multicast_list(struct device *dev, int num_addrs,
-							   void *addrs)
-#else
 static void set_multicast_list(struct device *dev)
-#endif
 {
 	short ioaddr = dev->base_addr;
 	int csr6 = tio_read(CSR6) & ~(TCMOD_MODEMASK|TCMOD_FILTERMASK);
@@ -1128,12 +1113,9 @@ static void set_multicast_list(struct device *dev)
 		   16 address perfect filtering of the Tulip.  Note that only
 		   the low shortword of setup_frame[] is valid. */
 		tio_write(csr6 | 0x0000, CSR6);
-		i=0;
-		while(dmi) 
-		{
+		for (i = 0; i < dev->mc_count; i ++) {
 			eaddrs=(unsigned short *)dmi->dmi_addr;
 			dmi=dmi->next;
-			i++;
 			*setup_frm++ = *eaddrs++;
 			*setup_frm++ = *eaddrs++;
 			*setup_frm++ = *eaddrs++;
@@ -1150,28 +1132,12 @@ static void set_multicast_list(struct device *dev)
 	}
 }
 
-#if 0
-static int
-set_mac_address(struct device *dev, void *addr)
-{
-	int i;
-	struct sockaddr *sa=(struct sockaddr *)addr;
-	if (dev->start)
-		return -EBUSY;
-	printk("%s: Setting MAC address to ", dev->name);
-	for (i = 0; i < ETH_ALEN - 1; i++)
-		printk("%2.2x:", dev->dev_addr[i] = sa->sa_data[i]);
-	printk("%2.2x.\n", dev->dev_addr[i] = sa->sa_data[i]);
-	return 0;
-}
-#endif
-
 static struct device *tulip_alloc(struct device *dev)
 {
 	struct tulip_private *tp;
 	char *buff;
 #ifndef	MODULE
-	int alloc_size;
+	size_t alloc_size;
 #endif
 	if (!dev || dev->priv) {
 		struct device *olddev = dev;
@@ -1210,14 +1176,14 @@ tulip_hwinit(struct device *dev, int ioaddr,
 			 int irq, int device_id)
 {
 	/* See note below on the Znyx 315 etherarray. */
-	unsigned char last_phys_addr[6] = {0x00, 'L', 'i', 'n', 'u', 'x'};
-	char detect_mesg[80], *mesgp=detect_mesg, *card_name=NULL;
+	static unsigned char last_phys_addr[6] = {0x00, 'L', 'i', 'n', 'u', 'x'};
+	char detect_mesg[80], *mesgp=detect_mesg;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	int i;
 	unsigned short sum, bitsum;
 
 	if (check_region(ioaddr, TULIP_TOTAL_SIZE) != 0) {
-		printk("tulip_alloc: region already allocated at %#3x.\n",
+		printk("tulip_hwinit: region already allocated at %#3x.\n",
 			   ioaddr);
 		return(-1);
 	}
@@ -1229,11 +1195,11 @@ tulip_hwinit(struct device *dev, int ioaddr,
 	/* Stop the chip's Tx and Rx processes. */
 	tio_write(tio_read(CSR6) & ~TCMOD_TRxSTART, CSR6);
 	/* Clear the missed-packet counter. */
-	tio_read(CSR8) & 0xffff;
+	i = tio_read(CSR8) & 0xffff;
 
 	if (device_id == PCI_DEVICE_ID_DEC_TULIP_PLUS
 	    && (tio_read(CSR9) & 0x8000)) {
-		mesgp += sprintf(mesgp, "treat as 21040 ");
+		mesgp += sprintf(mesgp, " treat as 21040");
 	    device_id = PCI_DEVICE_ID_DEC_TULIP;
 	}
 	
@@ -1252,7 +1218,7 @@ tulip_hwinit(struct device *dev, int ioaddr,
 				value = tio_read(CSR9);
 			while (value < 0  && --boguscnt > 0);
 			dev->dev_addr[i] = value;
-			sum += value;
+			sum += value & 0xFF;
 			bitsum &= value;
 	    }
 	} else {
@@ -1282,41 +1248,50 @@ tulip_hwinit(struct device *dev, int ioaddr,
 		dev->dev_addr[i] = last_phys_addr[i] + 1;
 	}
 	for (i = 0; i < ETH_ALEN - 1; i++)
-		mesgp += sprintf(mesgp, "%2.2x:",
-						 last_phys_addr[i] = dev->dev_addr[i]);
+		mesgp += sprintf(mesgp, "%2.2x:", dev->dev_addr[i]);
 	mesgp += sprintf(mesgp, "%2.2x, IRQ %d\n",
 					 last_phys_addr[i] = dev->dev_addr[i], irq);
 
-	card_name = card_type(tp, device_id,
-						  htonl((*(int*)dev->dev_addr) & 0xFFFFFF));
-
+	/* copy ethernet address */
+	if (card_type(tp, device_id,
+				  htonl((*(int*)dev->dev_addr) & 0xFFFFFF)))
+		for (i = 0; i < ETH_ALEN - 1; i++)
+			last_phys_addr[i] = dev->dev_addr[i];
 	/* We do a request_region() only to register /proc/ioports info. */
 	request_region(ioaddr, TULIP_TOTAL_SIZE, tp->signature);
 
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 
-#ifdef TULIP_FULL_DUPLEX
-	tp->full_duplex = 1;
-#endif
-
 	/* The Tulip-specific entries in the device structure. */
 	dev->open = &tulip_open;
 	dev->hard_start_xmit = &tulip_start_xmit;
 	dev->stop = &tulip_close;
 	dev->get_stats = &tulip_get_stats;
+	dev->set_config = &tulip_config;
 	dev->set_multicast_list = &set_multicast_list;
-#if 0
-	dev->set_mac_address = &set_mac_address;
-#endif
 
 #ifdef	MODULE
     ether_setup(dev);
+	if (if_port == TULIP_AUTO_PORT)
+		if_port = TULIP_PORT;
+	else
+		tp->port_fix = 1;
+	dev->if_port = if_port;
+	tp->full_duplex = full_duplex;
 #else
+#ifdef TULIP_FULL_DUPLEX
+	tp->full_duplex = 1;
+#endif
     init_etherdev(dev, 0);
+	dev->if_port = TULIP_PORT;
 #endif
 
-	printk("%s: %s %s", dev->name, card_name, detect_mesg);
+#ifdef	TULIP_FIX_PORT
+	tp->port_fix = 1;
+#endif
+
+	printk("%s: %s %s", dev->name, tp->signature, detect_mesg);
 
 	/* Reset the xcvr interface and turn on heartbeat. */
 	tio_write(TSIAC_RESET, CSR13);
@@ -1327,11 +1302,11 @@ tulip_hwinit(struct device *dev, int ioaddr,
 
 int tulip_probe(struct device *dev)
 {
-	static u_short probed_irqs=0;
+	static struct device *tulip_head=NULL;
 	u_char pci_bus, pci_device_fn, pci_latency, pci_irq;
 	u_int pci_ioaddr;
 	u_short pci_command;
-	u_long pci_chips[] = {
+	u_int pci_chips[] = {
 		PCI_DEVICE_ID_DEC_TULIP,
 		PCI_DEVICE_ID_DEC_TULIP_FAST,
 		PCI_DEVICE_ID_DEC_TULIP_PLUS,
@@ -1349,27 +1324,32 @@ int tulip_probe(struct device *dev)
 									pci_chips[cno],
 									pci_index, &pci_bus,
 									&pci_device_fn) == 0) {
-				/* get IRQ */
-				pcibios_read_config_byte(pci_bus, pci_device_fn,
-										 PCI_INTERRUPT_LINE, &pci_irq);
-				if (probed_irqs & (1 << pci_irq)) continue;
+				struct device *dp;
+
 				/* get IO address */
 				pcibios_read_config_dword(pci_bus, pci_device_fn,
 										  PCI_BASE_ADDRESS_0,
 										  &pci_ioaddr);
 				/* Remove I/O space marker in bit 0. */
 				pci_ioaddr &= ~3;
+				for (dp = tulip_head; dp != NULL; dp = dp->next)
+					if (dp->base_addr == pci_ioaddr) break;
+				if (dp) continue;
+				/* get IRQ */
+				pcibios_read_config_byte(pci_bus, pci_device_fn,
+										 PCI_INTERRUPT_LINE, &pci_irq);
 #ifdef	MODULE
 				/* compare requested IRQ/IO address */
-				if (dev && dev->irq && dev->base_addr &&
-					(dev->irq != pci_irq
-					 || dev->base_addr != pci_ioaddr)) continue;
+				if (dev && dev->base_addr &&
+					dev->base_addr != pci_ioaddr) continue;
 #else
 				if ((dev = tulip_alloc(dev)) == NULL) break;
 #endif
-				if (!probed_irqs) printk(version);
-				probed_irqs |= (1 << pci_irq);
-				
+				if (!tulip_head) {
+					printk(version);
+					tulip_head = dev;
+				}
+
 				/* Get and check the bus-master and latency values. */
 				pcibios_read_config_word(pci_bus, pci_device_fn,
 										 PCI_COMMAND, &pci_command);
@@ -1393,8 +1373,11 @@ int tulip_probe(struct device *dev)
 				if (tulip_hwinit(dev, pci_ioaddr, pci_irq,
 								 pci_chips[cno]) < 0) continue;
 				num ++;
-#if defined(MODULE) || defined(TULIP_ONLY_ONE)
+#ifdef	MODULE
 				return(0);
+#endif
+#ifdef	TULIP_MAX_CARDS
+				if (num >= TULIP_MAX_CARDS) return(0);
 #endif
 		}
 	}
@@ -1402,8 +1385,15 @@ int tulip_probe(struct device *dev)
 }
 
 #ifdef MODULE
-static int io = 0xfc00;
-static int irq = 9;
+#ifdef __alpha__
+#if 1
+static int io = 0xb000;
+#else
+static int io = 0x10400;
+#endif
+#else
+static int io = 0xfc80;
+#endif
 
 static struct device *mod_dev;
 
@@ -1412,7 +1402,7 @@ int init_module(void)
 	if ((mod_dev = tulip_alloc(0)) == NULL) return(-EIO);
 
 	mod_dev->base_addr = io;
-	mod_dev->irq = irq;
+	mod_dev->irq = 0;
 	mod_dev->init = &tulip_probe;
 
 	if (register_netdev(mod_dev)) {

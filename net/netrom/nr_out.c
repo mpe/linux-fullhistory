@@ -52,7 +52,7 @@ void nr_output(struct sock *sk, struct sk_buff *skb)
 	unsigned char transport[NR_TRANSPORT_LEN];
 	int err, frontlen, len, mtu;
 
-	mtu = sk->nr->device->mtu;
+	mtu = sk->nr->paclen;
 	
 	if (skb->len - NR_TRANSPORT_LEN > mtu) {
 		/* Save a copy of the Transport Header */

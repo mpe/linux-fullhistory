@@ -38,6 +38,7 @@
 #include <linux/serial.h>
 #include <linux/cd1400.h>
 #include <linux/comstats.h>
+#include <linux/stallion.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/ioport.h>
@@ -124,12 +125,6 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
 #define	STL_DRVTYPSERIAL	1
 #define	STL_DRVTYPCALLOUT	2
 
-#define	STL_MAXBRDS		4
-#define	STL_MAXPANELS		4
-#define	STL_PORTSPERPANEL	16
-#define	STL_MAXPORTS		64
-#define	STL_MAXDEVS		(STL_MAXBRDS * STL_MAXPORTS)
-
 /*
  *	I haven't really decided (or measured) what TX buffer size gives
  *	a good balance between performance and memory usage. These seem
@@ -145,7 +140,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
  *	all the local structures required by a serial tty driver.
  */
 static char	*stl_drvname = "Stallion Multiport Serial Driver";
-static char	*stl_drvversion = "1.0.8";
+static char	*stl_drvversion = "1.1.1";
 static char	*stl_serialname = "ttyE";
 static char	*stl_calloutname = "cue";
 
@@ -186,6 +181,8 @@ static struct termios		stl_deftermios = {
  */
 static comstats_t	stl_comstats;
 static combrd_t		stl_brdstats;
+static stlbrd_t		stl_dummybrd;
+static stlport_t	stl_dummyport;
 
 /*
  *	Keep track of what interrupts we have requested for us.
@@ -196,98 +193,6 @@ static int	stl_gotintrs[STL_MAXBRDS];
 static int	stl_numintrs = 0;
 
 /*****************************************************************************/
-
-/*
- *	Define a set of structures to hold all the board/panel/port info
- *	for our ports. These will be dynamically allocated as required.
- */
-
-/*
- *	Define a ring queue structure for each port. This will hold the
- *	TX data waiting to be output. Characters are fed into this buffer
- *	from the line discipline (or even direct from user space!) and
- *	then fed into the UARTs during interrupts. Will use a classic ring
- *	queue here for this. The good thing about this type of ring queue
- *	is that the head and tail pointers can be updated without interrupt
- *	protection - since "write" code only needs to change the head, and
- *	interrupt code only needs to change the tail.
- */
-typedef struct {
-	char	*buf;
-	char	*head;
-	char	*tail;
-} stlrq_t;
-
-/*
- *	Port, panel and board structures to hold status info about each.
- *	The board structure contains pointers to structures for each panel
- *	connected to it, and in turn each panel structure contains pointers
- *	for each port structure for each port on that panel. Note that
- *	the port structure also contains the board and panel number that it
- *	is associated with, this makes it (fairly) easy to get back to the
- *	board/panel info for a port.
- */
-typedef struct {
-	int			portnr;
-	int			panelnr;
-	int			brdnr;
-	int			ioaddr;
-	int			uartaddr;
-	int			pagenr;
-	int			istate;
-	int			flags;
-	int			baud_base;
-	int			custom_divisor;
-	int			close_delay;
-	int			closing_wait;
-	int			refcount;
-	int			openwaitcnt;
-	int			brklen;
-	long			session;
-	long			pgrp;
-	unsigned int		sigs;
-	unsigned int		rxignoremsk;
-	unsigned int		rxmarkmsk;
-	unsigned long		clk;
-	unsigned long		hwid;
-	struct tty_struct	*tty;
-	struct wait_queue	*open_wait;
-	struct wait_queue	*close_wait;
-	struct termios		normaltermios;
-	struct termios		callouttermios;
-	struct tq_struct	tqueue;
-	comstats_t		stats;
-	stlrq_t			tx;
-} stlport_t;
-
-typedef struct {
-	int		panelnr;
-	int		brdnr;
-	int		pagenr;
-	int		nrports;
-	int		iobase;
-	unsigned int	hwid;
-	unsigned int	ackmask;
-	stlport_t	*ports[STL_PORTSPERPANEL];
-} stlpanel_t;
-
-typedef struct {
-	int		brdnr;
-	int		brdtype;
-	int		state;
-	int		nrpanels;
-	int		nrports;
-	int		irq;
-	int		irqtype;
-	unsigned int	ioaddr1;
-	unsigned int	ioaddr2;
-	unsigned int	iostatus;
-	unsigned int	ioctrl;
-	unsigned int	ioctrlval;
-	unsigned int	hwid;
-	unsigned long	clk;
-	stlpanel_t	*panels[STL_MAXPANELS];
-} stlbrd_t;
 
 static stlbrd_t		*stl_brds[STL_MAXBRDS];
 
@@ -501,6 +406,8 @@ static int	stl_setserial(stlport_t *portp, struct serial_struct *sp);
 static int	stl_getbrdstats(combrd_t *bp);
 static int	stl_getportstats(stlport_t *portp, comstats_t *cp);
 static int	stl_clrportstats(stlport_t *portp, comstats_t *cp);
+static int	stl_getportstruct(unsigned long arg);
+static int	stl_getbrdstruct(unsigned long arg);
 static void	stl_setreg(stlport_t *portp, int regnr, int value);
 static int	stl_getreg(stlport_t *portp, int regnr);
 static int	stl_updatereg(stlport_t *portp, int regnr, int value);
@@ -785,13 +692,22 @@ static int stl_open(struct tty_struct *tty, struct file *filp)
 static int stl_waitcarrier(stlport_t *portp, struct file *filp)
 {
 	unsigned long	flags;
-	int		rc;
+	int		rc, doclocal;
 
 #if DEBUG
 	printk("stl_waitcarrier(portp=%x,filp=%x)\n", (int) portp, (int) filp);
 #endif
 
 	rc = 0;
+	doclocal = 0;
+
+	if (portp->flags & ASYNC_CALLOUT_ACTIVE) {
+		if (portp->normaltermios.c_cflag & CLOCAL)
+			doclocal++;
+	} else {
+		if (portp->tty->termios->c_cflag & CLOCAL)
+			doclocal++;
+	}
 
 	save_flags(flags);
 	cli();
@@ -811,8 +727,7 @@ static int stl_waitcarrier(stlport_t *portp, struct file *filp)
 		}
 		if (((portp->flags & ASYNC_CALLOUT_ACTIVE) == 0) &&
 				((portp->flags & ASYNC_CLOSING) == 0) &&
-				((portp->tty->termios->c_cflag & CLOCAL) ||
-				(portp->sigs & TIOCM_CD))) {
+				(doclocal || (portp->sigs & TIOCM_CD))) {
 			break;
 		}
 		if (current->signal & ~current->blocked) {
@@ -1747,8 +1662,10 @@ static inline void stl_rxisr(stlpanel_t *panelp, int ioaddr)
 				if (status & ST_BREAK) {
 					status = TTY_BREAK;
 #ifndef MODULE
-					if (portp->flags & ASYNC_SAK)
+					if (portp->flags & ASYNC_SAK) {
 						do_SAK(tty);
+						BRDENABLE(portp->brdnr, portp->pagenr);
+					}
 #endif
 				} else if (status & ST_PARITY) {
 					status = TTY_PARITY;
@@ -1995,9 +1912,11 @@ static void stl_offintr(void *private)
 		if ((portp->sigs & TIOCM_CD) && ((oldsigs & TIOCM_CD) == 0))
 			wake_up_interruptible(&portp->open_wait);
 		if ((oldsigs & TIOCM_CD) && ((portp->sigs & TIOCM_CD) == 0)) {
-			if (! ((portp->flags & ASYNC_CALLOUT_ACTIVE) &&
-					(portp->flags & ASYNC_CALLOUT_NOHUP))) {
-				tty_hangup(tty);
+			if (portp->flags & ASYNC_CHECK_CD) {
+				if (! ((portp->flags & ASYNC_CALLOUT_ACTIVE) &&
+						(portp->flags & ASYNC_CALLOUT_NOHUP))) {
+					tty_hangup(tty);
+				}
 			}
 		}
 	}
@@ -2164,6 +2083,9 @@ static void stl_setport(stlport_t *portp, struct termios *tiosp)
 		mcor1 |= MCOR1_DCD;
 		mcor2 |= MCOR2_DCD;
 		sreron |= SRER_MODEM;
+		portp->flags |= ASYNC_CHECK_CD;
+	} else {
+		portp->flags &= ~ASYNC_CHECK_CD;
 	}
 
 /*
@@ -2533,6 +2455,7 @@ static int stl_initports(stlbrd_t *brdp, stlpanel_t *panelp)
 			break;
 		}
 		memset(portp, 0, sizeof(stlport_t));
+		portp->magic = STL_PORTMAGIC;
 		portp->portnr = i;
 		portp->brdnr = panelp->brdnr;
 		portp->panelnr = panelp->panelnr;
@@ -2617,6 +2540,7 @@ static int stl_initeio(stlbrd_t *brdp)
 	}
 	memset(panelp, 0, sizeof(stlpanel_t));
 
+	panelp->magic = STL_PANELMAGIC;
 	panelp->brdnr = brdp->brdnr;
 	panelp->panelnr = 0;
 	panelp->nrports = brdp->nrports;
@@ -2722,6 +2646,7 @@ static int stl_initech(stlbrd_t *brdp)
 			break;
 		}
 		memset(panelp, 0, sizeof(stlpanel_t));
+		panelp->magic = STL_PANELMAGIC;
 		panelp->brdnr = brdp->brdnr;
 		panelp->panelnr = panelnr;
 		panelp->iobase = ioaddr;
@@ -2854,6 +2779,7 @@ static int stl_findpcibrds()
 				return(-ENOMEM);
 			}
 			memset(brdp, 0, sizeof(stlbrd_t));
+			brdp->magic = STL_BOARDMAGIC;
 			brdp->brdnr = stl_nrbrds++;
 			brdp->brdtype = BRD_ECHPCI;
 
@@ -2923,6 +2849,7 @@ static int stl_initbrds()
 		}
 		memset(brdp, 0, sizeof(stlbrd_t));
 
+		brdp->magic = STL_BOARDMAGIC;
 		brdp->brdnr = i;
 		brdp->brdtype = confp->brdtype;
 		brdp->ioaddr1 = confp->ioaddr1;
@@ -3020,6 +2947,7 @@ static stlport_t *stl_getport(int brdnr, int panelnr, int portnr)
 static int stl_getportstats(stlport_t *portp, comstats_t *cp)
 {
 	unsigned char	*head, *tail;
+	unsigned long	flags;
 
 	if (portp == (stlport_t *) NULL) {
 		memcpy_fromfs(&stl_comstats, cp, sizeof(comstats_t));
@@ -3031,21 +2959,29 @@ static int stl_getportstats(stlport_t *portp, comstats_t *cp)
 	portp->stats.state = portp->istate;
 	portp->stats.flags = portp->flags;
 	portp->stats.hwid = portp->hwid;
+
+	portp->stats.ttystate = 0;
+	portp->stats.cflags = 0;
+	portp->stats.iflags = 0;
+	portp->stats.oflags = 0;
+	portp->stats.lflags = 0;
+	portp->stats.rxbuffered = 0;
+
+	save_flags(flags);
+	cli();
 	if (portp->tty != (struct tty_struct *) NULL) {
-		portp->stats.ttystate = portp->tty->flags;
-		portp->stats.cflags = portp->tty->termios->c_cflag;
-		portp->stats.iflags = portp->tty->termios->c_iflag;
-		portp->stats.oflags = portp->tty->termios->c_oflag;
-		portp->stats.lflags = portp->tty->termios->c_lflag;
-		portp->stats.rxbuffered = portp->tty->flip.count;
-	} else {
-		portp->stats.ttystate = 0;
-		portp->stats.cflags = 0;
-		portp->stats.iflags = 0;
-		portp->stats.oflags = 0;
-		portp->stats.lflags = 0;
-		portp->stats.rxbuffered = 0;
+		if (portp->tty->driver_data == portp) {
+			portp->stats.ttystate = portp->tty->flags;
+			portp->stats.rxbuffered = portp->tty->flip.count;
+			if (portp->tty->termios != (struct termios *) NULL) {
+				portp->stats.cflags = portp->tty->termios->c_cflag;
+				portp->stats.iflags = portp->tty->termios->c_iflag;
+				portp->stats.oflags = portp->tty->termios->c_oflag;
+				portp->stats.lflags = portp->tty->termios->c_lflag;
+			}
+		}
 	}
+	restore_flags(flags);
 
 	head = portp->tx.head;
 	tail = portp->tx.tail;
@@ -3077,6 +3013,45 @@ static int stl_clrportstats(stlport_t *portp, comstats_t *cp)
 	portp->stats.panel = portp->panelnr;
 	portp->stats.port = portp->portnr;
 	memcpy_tofs(cp, &portp->stats, sizeof(comstats_t));
+	return(0);
+}
+
+/*****************************************************************************/
+
+/*
+ *	Return the entire driver ports structure to a user app.
+ */
+
+static int stl_getportstruct(unsigned long arg)
+{
+	stlport_t	*portp;
+
+	memcpy_fromfs(&stl_dummyport, (void *) arg, sizeof(stlport_t));
+	portp = stl_getport(stl_dummyport.brdnr, stl_dummyport.panelnr,
+		 stl_dummyport.portnr);
+	if (portp == (stlport_t *) NULL)
+		return(-ENODEV);
+	memcpy_tofs((void *) arg, portp, sizeof(stlport_t));
+	return(0);
+}
+
+/*****************************************************************************/
+
+/*
+ *	Return the entire driver board structure to a user app.
+ */
+
+static int stl_getbrdstruct(unsigned long arg)
+{
+	stlbrd_t	*brdp;
+
+	memcpy_fromfs(&stl_dummybrd, (void *) arg, sizeof(stlbrd_t));
+	if ((stl_dummybrd.brdnr < 0) || (stl_dummybrd.brdnr >= STL_MAXBRDS))
+		return(-ENODEV);
+	brdp = stl_brds[stl_dummybrd.brdnr];
+	if (brdp == (stlbrd_t *) NULL)
+		return(-ENODEV);
+	memcpy_tofs((void *) arg, brdp, sizeof(stlbrd_t));
 	return(0);
 }
 
@@ -3118,6 +3093,14 @@ static int stl_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, uns
 	case COM_GETBRDSTATS:
 		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(combrd_t))) == 0)
 			rc = stl_getbrdstats((combrd_t *) arg);
+		break;
+	case COM_READPORT:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(stlport_t))) == 0)
+			rc = stl_getportstruct(arg);
+		break;
+	case COM_READBOARD:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(stlbrd_t))) == 0)
+			rc = stl_getbrdstruct(arg);
 		break;
 	default:
 		rc = -ENOIOCTLCMD;

@@ -176,8 +176,8 @@ static struct symbol_table misc_syms = {
 	X(misc_register),
 	X(misc_deregister),
 #ifndef MODULE
-	X(set_selection),   /* used by the kmisc module, can only */
-	X(clear_selection), /* be exported if misc.c is in linked in */
+	X(set_selection),   /* used by the kmouse module, can only */
+	X(paste_selection), /* be exported if misc.c is in linked in */
 #endif
 #include <linux/symtab_end.h>
 };
@@ -196,7 +196,7 @@ int misc_init(void)
 #ifdef CONFIG_BUSMOUSE
 	bus_mouse_init();
 #endif
-#if defined CONFIG_PSMOUSE || defined CONFIG_82C710_MOUSE
+#if defined CONFIG_PSMOUSE
 	psaux_init();
 #endif
 #ifdef CONFIG_MS_BUSMOUSE

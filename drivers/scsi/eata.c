@@ -1,6 +1,9 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *      16 Apr 1996 rev. 2.10 for linux 1.3.90
+ *          New argument "reset_flags" to the reset routine.
+ *
  *       6 Jul 1995 rev. 2.01 for linux 1.3.7
  *          Update required by the new /proc/scsi support.
  *
@@ -64,7 +67,7 @@
  *          This driver is based on the CAM (Common Access Method Committee)
  *          EATA (Enhanced AT Bus Attachment) rev. 2.0A, using DMA protocol.
  *
- *      Copyright (C) 1994, 1995 Dario Ballabio (dario@milano.europe.dg.com)
+ *  Copyright (C) 1994, 1995, 1996 Dario Ballabio (dario@milano.europe.dg.com)
  *
  */
 
@@ -581,7 +584,7 @@ int eata2x_detect (Scsi_Host_Template * tpnt) {
       }
 
    if (j > 0) 
-      printk("EATA/DMA 2.0x: Copyright (C) 1994, 1995 Dario Ballabio.\n");
+      printk("EATA/DMA 2.0x: Copyright (C) 1994, 1995, 1996 Dario Ballabio.\n");
 
    restore_flags(flags);
    return j;
@@ -639,7 +642,8 @@ int eata2x_queuecommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
 
       if (HD(j)->in_reset) 
 	 printk("%s: qcomm, already in reset.\n", BN(j));
-      else if (eata2x_reset(SCpnt) == SCSI_RESET_SUCCESS) 
+      else if (eata2x_reset(SCpnt, SCSI_RESET_SUGGEST_BUS_RESET)
+               == SCSI_RESET_SUCCESS) 
 	 panic("%s: qcomm, SCSI_RESET_SUCCESS.\n", BN(j));
 
       SCpnt->result = DID_BUS_BUSY << 16; 
@@ -772,7 +776,7 @@ int eata2x_abort (Scsi_Cmnd *SCarg) {
    panic("%s: abort, mbox %d, invalid cp_stat.\n", BN(j), i);
 }
 
-int eata2x_reset (Scsi_Cmnd *SCarg) {
+int eata2x_reset (Scsi_Cmnd *SCarg, unsigned int reset_flags) {
    unsigned int i, j, flags, time, k, limit = 0;
    int arg_done = FALSE;
    Scsi_Cmnd *SCpnt;
@@ -780,8 +784,8 @@ int eata2x_reset (Scsi_Cmnd *SCarg) {
    save_flags(flags);
    cli();
    j = ((struct hostdata *) SCarg->host->hostdata)->board_number;
-   printk("%s: reset, enter, target %d, pid %ld.\n", 
-	  BN(j), SCarg->target, SCarg->pid);
+   printk("%s: reset, enter, target %d, pid %ld, reset_flags %u.\n", 
+	  BN(j), SCarg->target, SCarg->pid, reset_flags);
 
    if (SCarg->host_scribble == NULL)
       printk("%s: reset, pid %ld inactive.\n", BN(j), SCarg->pid);
@@ -847,7 +851,7 @@ int eata2x_reset (Scsi_Cmnd *SCarg) {
    HD(j)->in_reset = TRUE;
    sti();
    time = jiffies;
-   while (jiffies < (time + 100) && limit++ < 100000000);
+   while ((jiffies - time) < HZ && limit++ < 100000000);
    cli();
    printk("%s: reset, interrupts disabled, loops %d.\n", BN(j), limit);
 

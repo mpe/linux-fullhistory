@@ -497,7 +497,7 @@ struct inode * get_empty_inode(void)
 repeat:
 	inode = first_inode;
 	best = NULL;
-	for (i = 0; i<nr_inodes; inode = inode->i_next, i++) {
+	for (i = nr_inodes/2; i > 0; i--,inode = inode->i_next) {
 		if (!inode->i_count) {
 			unsigned long i = value(inode);
 			if (i < badness) {

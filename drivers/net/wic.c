@@ -1,6 +1,7 @@
 /* $Id: wic.c,v 1.0 1995/02/11 10:26:05 hayes Exp $ */
 /* WIC: A parallel port "network" driver for Linux. */
 /* based on the plip network driver */
+/* Modified for Linux 1.3.x by Alan Cox <Alan.Cox@linux.org> */
 
 char *version = "NET3 WIC version 0.9 hayes@netplumbing.com";
 
@@ -90,8 +91,7 @@ int get_byte(struct device *dev, unsigned char *c);
 int ack_resp(struct device *dev);
 int check_bfr(struct device *dev);
 void wic_reset(struct device *dev);
-void wic_set_multicast_list(struct device *dev, int num_addrs, 
-		void *addrs);
+void wic_set_multicast_list(struct device *dev);
 
 #define LOOPCNT 30000	
 unsigned char tog = 3;
@@ -249,12 +249,12 @@ wic_init(struct device *dev)
 	nl->nibble	= WIC_NIBBLE_WAIT;
 
 	/* Initialize task queue structures */
-	nl->immediate.next = &tq_last;
+	nl->immediate.next = NULL;
 	nl->immediate.sync = 0;
 	nl->immediate.routine = (void *)(void *)wic_bh;
 	nl->immediate.data = dev;
 
-	nl->deferred.next = &tq_last;
+	nl->deferred.next = NULL;
 	nl->deferred.sync = 0;
 	nl->deferred.routine = (void *)(void *)wic_kick_bh;
 	nl->deferred.data = dev;
@@ -309,7 +309,7 @@ wic_func connection_state_table[] =
 };
 
 void 
-wic_set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+wic_set_multicast_list(struct device *dev)
 {
 	struct wicconf wc;
 	struct wic_net *wn;
@@ -327,16 +327,22 @@ wic_set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 	while ((wc.len == 1) && (wc.data[0] == 0x7)) /* controller int */
 		wc.len = recv_cmd_resp(dev, (unsigned char *)&wc.data);
 	wn = (struct wic_net *)&wc.data;
-	switch (num_addrs) {
-		case -1:	/* promiscuous mode */
-			wn->mode |= (NET_MODE_ME | NET_MODE_BCAST | 
-				NET_MODE_MCAST | NET_MODE_PROM);
-	printk("%s: Setting promiscuous mode\n", dev->name);
-			break;
-		default:	/* my address and bcast addresses */
-			wn->mode &= ~(NET_MODE_PROM | NET_MODE_MCAST);
-			wn->mode |= (NET_MODE_ME | NET_MODE_BCAST);
-			/* break; */
+	if(dev->flags&IFF_PROMISC)
+	{
+		/* promiscuous mode */
+		wn->mode |= (NET_MODE_ME | NET_MODE_BCAST | 
+			NET_MODE_MCAST | NET_MODE_PROM);
+		printk("%s: Setting promiscuous mode\n", dev->name);
+	}
+	else if((dev->flags&IFF_ALLMULTI) || dev->mc_count)
+	{
+		wn->mode &= ~NET_MODE_PROM;
+		wn->mode |= (NET_MODE_MCAST | NET_MODE_ME | NET_MODE_BCAST);
+	}
+	else
+	{
+		wn->mode &= ~(NET_MODE_PROM | NET_MODE_MCAST);
+		wn->mode |= (NET_MODE_ME | NET_MODE_BCAST);
 	}
 	wc.len = 23;
 	wc.pcmd = WIC_SETNET;
@@ -1381,8 +1387,6 @@ unsigned int cx;
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
-
 struct device dev_wic0 = 
 {
 	"wic0" /*"wic"*/,

@@ -1,9 +1,15 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *      16 Apr 1996 rev. 2.10 for linux 1.3.90
+ *          New argument "reset_flags" to the reset routine.
+ *
+ *      21 Jul 1995 rev. 2.02 for linux 1.3.11
+ *          Fixed Data Transfer Direction for some SCSI commands.
+ *
  *      13 Jun 1995 rev. 2.01 for linux 1.2.10
- *         HAVE_OLD_UX4F_FIRMWARE should be defined for U34F boards when
- *         the firmware prom is not the latest one (28008-006).
+ *          HAVE_OLD_UX4F_FIRMWARE should be defined for U34F boards when
+ *          the firmware prom is not the latest one (28008-006).
  *
  *      11 Mar 1995 rev. 2.00 for linux 1.2.0
  *          Fixed a bug which prevented media change detection for removable
@@ -55,7 +61,7 @@
  * 
  *          Multiple U14F and/or U34F host adapters are supported.
  *
- *      Copyright (C) 1994, 1995 Dario Ballabio (dario@milano.europe.dg.com)
+ *  Copyright (C) 1994, 1995, 1996 Dario Ballabio (dario@milano.europe.dg.com)
  *
  *      WARNING: if your 14/34F board has an old firmware revision (see below)
  *               you must change "#undef" into "#define" in the following
@@ -226,6 +232,8 @@ struct proc_dir_entry proc_scsi_u14_34f = {
 #define ASOK              0x00
 #define ASST              0x91
 
+#define ARRAY_SIZE(arr) (sizeof (arr) / sizeof (arr)[0])
+
 #define PACKED          __attribute__((packed))
 
 /* MailBox SCSI Command Packet */
@@ -330,7 +338,7 @@ static int board_inquiry(unsigned int j) {
 
    sti();
    time = jiffies;
-   while (jiffies < (time + 100) && limit++ < 100000000);
+   while ((jiffies - time) < HZ && limit++ < 100000000);
    cli();
 
    if (cpp->adapter_status || HD(j)->cp_stat[0] != FREE) {
@@ -540,7 +548,7 @@ int u14_34f_detect (Scsi_Host_Template * tpnt) {
       }
 
    if (j > 0) 
-      printk("UltraStor 14F/34F: Copyright (C) 1994, 1995 Dario Ballabio.\n");
+      printk("UltraStor 14F/34F: Copyright (C) 1994, 1995, 1996 Dario Ballabio.\n");
 
    restore_flags(flags);
    return j;
@@ -566,6 +574,12 @@ static inline void build_sg_list(struct mscp *cpp, Scsi_Cmnd *SCpnt) {
 int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    unsigned int i, j, k, flags;
    struct mscp *cpp;
+
+   static const unsigned char data_out_cmds[] = {
+      0x0a, 0x2a, 0x15, 0x55, 0x04, 0x07, 0x0b, 0x10, 0x16, 0x18, 0x1d, 
+      0x24, 0x2b, 0x2e, 0x30, 0x31, 0x32, 0x38, 0x39, 0x3a, 0x3b, 0x3d, 
+      0x3f, 0x40, 0x41, 0x4c, 0xaa, 0xae, 0xb0, 0xb1, 0xb2, 0xb6, 0xea
+      };
 
    save_flags(flags);
    cli();
@@ -593,7 +607,8 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
 
       if (HD(j)->in_reset) 
 	 printk("%s: qcomm, already in reset.\n", BN(j));
-      else if (u14_34f_reset(SCpnt) == SCSI_RESET_SUCCESS) 
+      else if (u14_34f_reset(SCpnt, SCSI_RESET_SUGGEST_BUS_RESET) 
+               == SCSI_RESET_SUCCESS) 
 	 panic("%s: qcomm, SCSI_RESET_SUCCESS.\n", BN(j));
 
       SCpnt->result = DID_BUS_BUSY << 16; 
@@ -615,8 +630,15 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    if (do_trace) printk("%s: qcomm, mbox %d, target %d, pid %ld.\n",
 			BN(j), i, SCpnt->target, SCpnt->pid);
 
+   cpp->xdir = DTD_IN;
+
+   for (k = 0; k < ARRAY_SIZE(data_out_cmds); k++)
+     if (SCpnt->cmnd[0] == data_out_cmds[k]) {
+	cpp->xdir = DTD_OUT;
+	break;
+	}
+
    cpp->opcode = OP_SCSI;
-   cpp->xdir = DTD_SCSI;
    cpp->target = SCpnt->target;
    cpp->lun = SCpnt->lun;
    cpp->SCpnt = SCpnt;
@@ -715,7 +737,7 @@ int u14_34f_abort(Scsi_Cmnd *SCarg) {
    panic("%s: abort, mbox %d, invalid cp_stat.\n", BN(j), i);
 }
 
-int u14_34f_reset(Scsi_Cmnd * SCarg) {
+int u14_34f_reset(Scsi_Cmnd * SCarg, unsigned int reset_flags) {
    unsigned int i, j, flags, time, k, limit = 0;
    int arg_done = FALSE;
    Scsi_Cmnd *SCpnt;
@@ -723,8 +745,8 @@ int u14_34f_reset(Scsi_Cmnd * SCarg) {
    save_flags(flags);
    cli();
    j = ((struct hostdata *) SCarg->host->hostdata)->board_number;
-   printk("%s: reset, enter, target %d, pid %ld.\n", 
-	  BN(j), SCarg->target, SCarg->pid);
+   printk("%s: reset, enter, target %d, pid %ld, reset_flags %u.\n", 
+	  BN(j), SCarg->target, SCarg->pid, reset_flags);
 
    if (SCarg->host_scribble == NULL)
       printk("%s: reset, pid %ld inactive.\n", BN(j), SCarg->pid);
@@ -791,7 +813,7 @@ int u14_34f_reset(Scsi_Cmnd * SCarg) {
    HD(j)->in_reset = TRUE;
    sti();
    time = jiffies;
-   while (jiffies < (time + 100) && limit++ < 100000000);
+   while ((jiffies - time) < HZ && limit++ < 100000000);
    cli();
    printk("%s: reset, interrupts disabled, loops %d.\n", BN(j), limit);
 

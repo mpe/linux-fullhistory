@@ -92,14 +92,20 @@ extern __inline__ void tcp_rtt_estimator(struct sock *sk, struct sk_buff *oskb)
 	 */
 	
 	m = jiffies - oskb->when;  /* RTT */
-	if(m<=0)
-		m=1;		/* IS THIS RIGHT FOR <0 ??? */
-	m -= (sk->rtt >> 3);    /* m is now error in rtt est */
-	sk->rtt += m;           /* rtt = 7/8 rtt + 1/8 new */
-	if (m < 0)
-		m = -m;		/* m is now abs(error) */
-	m -= (sk->mdev >> 2);   /* similar update on mdev */
-	sk->mdev += m;	    	/* mdev = 3/4 mdev + 1/4 new */
+	if (sk->rtt != 0) {
+		if(m<=0)
+			m=1;		/* IS THIS RIGHT FOR <0 ??? */
+		m -= (sk->rtt >> 3);    /* m is now error in rtt est */
+		sk->rtt += m;           /* rtt = 7/8 rtt + 1/8 new */
+		if (m < 0)
+			m = -m;		/* m is now abs(error) */
+		m -= (sk->mdev >> 2);   /* similar update on mdev */
+		sk->mdev += m;	    	/* mdev = 3/4 mdev + 1/4 new */
+	} else {
+		/* no previous measure. */
+		sk->rtt = m<<3;		/* take the measured time to be rtt */
+		sk->mdev = m<<2;	/* make sure rto = 3*rtt */
+	}
 
 	/*
 	 *	Now update timeout.  Note that this removes any backoff.
@@ -714,7 +720,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 * (2) it has the same window as the last ACK,
 	 * (3) we have outstanding data that has not been ACKed
 	 * (4) The packet was not carrying any data.
-	 * I've tried to order these in occurance of most likely to fail
+	 * I've tried to order these in occurrence of most likely to fail
 	 * to least likely to fail.
 	 * [These are the rules BSD stacks use to determine if an ACK is a
 	 *  duplicate.]

@@ -21,8 +21,13 @@ boards.
 
 Supporting Tools:
 -----------------
-Some tools and more detailed up to date information can be found at
+Some tools and more detailed information can be found at
 ftp://ftp.fuller.edu/Linux/digi
+
+WARNING: Most of the stuff available right now uses the WRONG Major Device
+numbers and the wrong call out devices. Be careful and check them first.
+Better not use any of the software in that directory if you run a recent
+1.3.X Kernel or later!
 
 The "ditty" tool described in the Digiboard Manuals for other Unixes
 is also available.
@@ -30,16 +35,11 @@ is also available.
 Currently the Linux MAKEDEV command does not support generating the Digiboard
 Devices. Use the following script to generate the devices:
 
-WARNING: Most of the stuff available right now uses the WRONG Major Device
-numbers and is severely outdated. Be careful and check them first.
-Better not use any of the software in that directory if you run a recent
-1.3.X Kernel!
-
 ------------------ mkdigidev begin
 #!/bin/sh
 #
 # Script to create Digiboard Devices
-# Christoph Lameter, April 6, 1996
+# Christoph Lameter, April 16, 1996
 #
 # Usage:
 # mkdigidev [<number of devices>]
@@ -60,14 +60,53 @@ do
   for c in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15;
   do
 	name=`expr $boardnum \* 16 + $c`
-	mknod /dev/ttyd$name c $DIGIMAJOR $name
+	mknod /dev/cud$name c $DIGIMAJOR $name
 	mknod /dev/ttyD$name c $DIGICUMAJOR $name
   done
   boardnum=`expr $boardnum + 1`
 done
 ------------------ mkdigidev end
+or apply the following patch to /dev/MAKEDEV and do a 
+make digi
+----- MAKDEV Patch
+--- /dev/MAKEDEV	Sun Aug 13 15:48:23 1995
++++ MAKEDEV	Tue Apr 16 17:53:27 1996
+@@ -120,7 +120,7 @@
+ 	while [ $# -ne 0 ]
+ 	do
+ 		case "$1" in
+-			mem|tty|ttyp|cua|cub)	;;
++			mem|tty|ttyp|cua|cub|cud)	;;
+ 			hd)	echo hda hdb hdc hdd ;;
+ 			xd)	echo xda xdb ;;
+ 			fd)	echo fd0 fd1 ;;
+@@ -140,6 +140,7 @@
+ 			dcf)		echo dcf ;;
+ 			pcmcia)	;; # taken care of by its own driver
+ 			ttyC)	echo cyclades ;;
++			ttyD)	echo digi ;;
+ 			*)	echo "$0: don't know what \"$1\" is" >&2 ;;
+ 		esac
+ 		shift
+@@ -208,6 +209,15 @@
+ 		do
+ 			makedev ttyC$i c $major1 `expr 32 + $i` $tty
+ 			makedev cub$i c $major2 `expr 32 + $i` $dialout
++		done
++		;;
++	digi)
++		major1=`Major ttyD` || continue
++		major2=`Major cud` || continue
++		for i in 0 1 2 3 4 5 6 7 # 8 9 10 11 12 13 14 15
++		do
++			makedev ttyD$i c $major1 `expr 32 + $i` $tty
++			makedev cud$i c $major2 `expr 32 + $i` $dialout
+ 		done
+ 		;;
+ 	par[0-2])
+----- End Makedev patch
 
-The ttyd devices behave like the /dev/cua?? devices
+The /dev/cud?? devices behave like the /dev/cua?? devices
 and the ttyD devices are like the /dev/ttyS?? devices.
 
 Sources of Information
@@ -80,7 +119,7 @@ Mailing List: digiboard@list.fuller.edu
 (Write e-mail to that address to subscribe. Common ListServ commands work.
 Archive of messages available)
 
-Christoph Lameter (clameter@fuller.edu) 6. April 1996.
+Christoph Lameter (clameter@fuller.edu) 16. April 1996.
 
 -----------------------------------------------------------------------------
 

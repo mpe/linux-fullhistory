@@ -102,6 +102,18 @@ M:	Leonard N. Zubkoff <lnz@dandelion.com>
 L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
+EATA ISA/EISA SCSI DRIVER
+P:	Dario Ballabio
+M:	dario@milano.europe.dg.com
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+U14-34F SCSI DRIVER
+P:	Dario Ballabio
+M:	dario@milano.europe.dg.com
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 EATA-DMA SCSI DRIVER
 P:	Michael Neuffer
 M:	mike@i-Connect.Net
@@ -205,7 +217,7 @@ M:	lendecke@namu01.gwdg.de
 L:	samba@listproc.anu.edu.au
 S:	Odd Fixes
 
-SMP:
+SMP: (except SPARC)
 P:	Alan Cox
 M:	smp-patches@lxorguk.ukuu.org.uk
 L:	linux-smp@vger.rutgers.edu
@@ -227,6 +239,18 @@ DIGIBOARD DRIVER:
 P:	Christoph Lameter
 M:	clameter@fuller.edu
 L:	digiboard@list.fuller.edu
+S:	Maintained
+
+MOUSE AND MISC DEVICES [GENERAL]
+P:	Alessandro Rubini
+M:	rubini@ipvvis.unipv.it
+L:	linux-kernel@vger.rutgers.edu
+S:	Mantained
+
+MENUCONFIG:
+P:	William Roadcap
+M:	roadcapw@cfw.com
+L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 REST:

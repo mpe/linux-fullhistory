@@ -36,7 +36,7 @@
 /* And dynamically-tunable limits and defaults: */
 extern int max_inodes, nr_inodes;
 extern int max_files, nr_files;
-#define NR_INODE 2048	/* this should be bigger than NR_FILE */
+#define NR_INODE 3072	/* this should be bigger than NR_FILE */
 #define NR_FILE 1024	/* this can well be larger on a larger system */
 
 #define MAY_EXEC 1

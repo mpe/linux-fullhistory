@@ -25,7 +25,7 @@
 
 
 #define BusLogic_DriverVersion		"1.3.2"
-#define BusLogic_DriverDate		"13 April 1996"
+#define BusLogic_DriverDate		"16 April 1996"
 
 
 #include <linux/module.h>
@@ -1676,15 +1676,15 @@ static boolean BusLogic_InquireTargetDevices(BusLogic_HostAdapter_T
       return true;
     }
   /*
-    Issue the Inquire Devices command for "W" and "C" Series boards or the
-    Inquire Installed Devices ID 0 to 7 command for "S" and "A" Series boards.
+    Issue the Inquire Devices command for boards with firmware version 4.25 or
+    later, or the Inquire Installed Devices ID 0 to 7 command for older boards.
     This is necessary to force Synchronous Transfer Negotiation so that the
     Inquire Setup Information and Inquire Synchronous Period commands will
     return valid data.  The Inquire Devices command is preferable to Inquire
     Installed Devices ID 0 to 7 since it only probes Logical Unit 0 of each
     Target Device.
   */
-  if (HostAdapter->FirmwareVersion[0] >= '4')
+  if (strcmp(HostAdapter->FirmwareVersion, "4.25") >= 0)
     {
       if (BusLogic_Command(HostAdapter, BusLogic_InquireDevices, NULL, 0,
 			   &InstalledDevices, sizeof(InstalledDevices))
@@ -2342,7 +2342,7 @@ static void BusLogic_InterruptHandler(int IRQ_Channel,
       {
 	BusLogic_ResetHostAdapter(HostAdapter, NULL, 0);
 	HostAdapter->HostAdapterResetRequested = false;
-	scsi_mark_host_bus_reset(HostAdapter->SCSI_Host);
+	scsi_mark_host_reset(HostAdapter->SCSI_Host);
       }
 }
 
@@ -2788,7 +2788,7 @@ static int BusLogic_ResetHostAdapter(BusLogic_HostAdapter_T *HostAdapter,
       }
   for (TargetID = 0; TargetID < HostAdapter->MaxTargetDevices; TargetID++)
     HostAdapter->LastResetTime[TargetID] = jiffies;
-  Result = SCSI_RESET_SUCCESS | SCSI_RESET_BUS_RESET;
+  Result = SCSI_RESET_SUCCESS | SCSI_RESET_HOST_RESET;
   /*
     Release exclusive access to Host Adapter.
   */
@@ -2973,7 +2973,9 @@ int BusLogic_ResetCommand(SCSI_Command_T *Command, unsigned int ResetFlags)
 	     HostAdapter->HostNumber, TargetID);
     }
   if (ErrorRecoveryStrategy == BusLogic_ErrorRecovery_Default)
-    if (ResetFlags & SCSI_RESET_SUGGEST_BUS_RESET)
+    if (ResetFlags & SCSI_RESET_SUGGEST_HOST_RESET)
+      ErrorRecoveryStrategy = BusLogic_ErrorRecovery_HardReset;
+    else if (ResetFlags & SCSI_RESET_SUGGEST_BUS_RESET)
       ErrorRecoveryStrategy = BusLogic_ErrorRecovery_HardReset;
     else ErrorRecoveryStrategy = BusLogic_ErrorRecovery_BusDeviceReset;
   switch (ErrorRecoveryStrategy)

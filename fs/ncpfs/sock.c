@@ -330,6 +330,7 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 	int timeout;
 	int retrans;
 	int major_timeout_seen;
+	int acknowledge_seen;
 	char *server_name;
 	int n;
 	int addrlen;
@@ -352,9 +353,10 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 		return -EBADF;
 	}
 	init_timeout = server->m.time_out;
-	max_timeout = NCP_MAX_RPC_TIMEOUT*HZ/10;
+	max_timeout = NCP_MAX_RPC_TIMEOUT;
 	retrans = server->m.retry_count;
 	major_timeout_seen = 0;
+	acknowledge_seen = 0;
 	server_name = server->m.server_name;
 	old_mask = current->blocked;
 	current->blocked |= ~(_S(SIGKILL)
@@ -405,12 +407,15 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 		{
 			if (timeout > max_timeout)
 			{
-			  /* JEJB/JSP 2/7/94
-			   * This is useful to see if the system is
-			   * hanging */
-			  printk("NCP max timeout reached on %s\n",
-				 server_name);
-			  timeout = max_timeout;
+				/* JEJB/JSP 2/7/94
+				 * This is useful to see if the system is
+				 * hanging */
+				if (acknowledge_seen == 0)
+				{
+					printk("NCP max timeout reached on "
+					       "%s\n", server_name);
+				}
+				timeout = max_timeout;
 			}
 			current->timeout = jiffies + timeout;
 			schedule();
@@ -438,8 +443,8 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 				init_timeout <<= 1;
 				if (!major_timeout_seen)
 				{
-				  printk("NCP server %s not responding, "
-					 "still trying\n", server_name);
+					printk("NCP server %s not responding, "
+					       "still trying\n", server_name);
 				}
 				major_timeout_seen = 1;
 				continue;
@@ -484,6 +489,9 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 			DPRINTK("ncp_rpc_call: got positive acknowledge\n");
 			_recvfrom(sock, (void *)&reply, sizeof(reply), 1, 0,
 				  NULL, &addrlen);
+			n = 0;
+			timeout = max_timeout;
+			acknowledge_seen = 1;
 			goto re_select;
 		}
 

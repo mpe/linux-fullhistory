@@ -241,37 +241,36 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
  */
 void math_error(void)
 {
-	struct i387_hard_struct * env;
-#ifdef __SMP__
-	env=&current->tss.i387.hard;
-	send_sig(SIGFPE, current, 1);
-	/*
-	 *	Save the info for the exception handler
-	 */
-	__asm__ __volatile__("fnsave %0":"=m" (*env));
-	current->flags&=~PF_USEDFPU;
-	/*
-	 *	Cause a trap if they use the FPU again.
-	 */
-	stts();
-#else
+	struct task_struct * task;
+
 	clts();
-	if (!last_task_used_math) {
+#ifdef __SMP__
+	task = current;
+#else
+	task = last_task_used_math;
+	last_task_used_math = NULL;
+	if (!task) {
 		__asm__("fnclex");
 		return;
 	}
-	env = &last_task_used_math->tss.i387.hard;
-	send_sig(SIGFPE, last_task_used_math, 1);
-	last_task_used_math->tss.trap_no = 16;
-	last_task_used_math->tss.error_code = 0;
-	__asm__ __volatile__("fnsave %0":"=m" (*env));
-	last_task_used_math = NULL;
+#endif
+	/*
+	 *	Save the info for the exception handler
+	 */
+	__asm__ __volatile__("fnsave %0":"=m" (task->tss.i387.hard));
+	task->flags&=~PF_USEDFPU;
+
+	send_sig(SIGFPE, task, 1);
+	task->tss.trap_no = 16;
+	task->tss.error_code = 0;
+
+	/*
+	 * Give the process a clean slate next time they use
+	 * the FPU (and if they haven't accepted the SIGFP before
+	 * that, it's their problem..)
+	 */
 	stts();
-	env->fcs = (env->swd & 0x0000ffff) | (env->fcs & 0xffff0000);
-	env->fos = env->twd;
-	env->swd &= 0xffff3800;
-	env->twd = 0xffffffff;
-#endif	
+	task->used_math = 0;
 }
 
 asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
@@ -289,7 +288,8 @@ asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
  */
 asmlinkage void math_state_restore(void)
 {
-#ifdef __SMP__
+	__asm__ __volatile__("clts");		/* Allow maths ops (or we recurse) */
+
 /*
  *	SMP is actually simpler than uniprocessor for once. Because
  *	we can't pull the delayed FPU switching trick Linus does
@@ -297,10 +297,17 @@ asmlinkage void math_state_restore(void)
  *	set the flag. switch_to() will always save the state in
  *	case we swap processors. We also don't use the coprocessor
  *	timer - IRQ 13 mode isn't used with SMP machines (thank god).
- *
- *	If this actually works it will be a miracle however
  */
-	__asm__ __volatile__("clts");		/* Allow maths ops (or we recurse) */
+#ifndef __SMP__
+	if (last_task_used_math == current)
+		return;
+	if (last_task_used_math)
+		__asm__("fnsave %0":"=m" (last_task_used_math->tss.i387));
+	else
+		__asm__("fnclex");
+	last_task_used_math = current;
+#endif
+
 	if(current->used_math)
 		__asm__("frstor %0": :"m" (current->tss.i387));
 	else
@@ -312,25 +319,6 @@ asmlinkage void math_state_restore(void)
 		current->used_math = 1;
 	}
 	current->flags|=PF_USEDFPU;		/* So we fnsave on switch_to() */
-#else
-	__asm__ __volatile__("clts");
-	if (last_task_used_math == current)
-		return;
-	timer_table[COPRO_TIMER].expires = jiffies+50;
-	timer_active |= 1<<COPRO_TIMER;	
-	if (last_task_used_math)
-		__asm__("fnsave %0":"=m" (last_task_used_math->tss.i387));
-	else
-		__asm__("fnclex");
-	last_task_used_math = current;
-	if (current->used_math) {
-		__asm__("frstor %0": :"m" (current->tss.i387));
-	} else {
-		__asm__("fninit");
-		current->used_math=1;
-	}
-	timer_active &= ~(1<<COPRO_TIMER);
-#endif	
 }
 
 #ifndef CONFIG_MATH_EMULATION

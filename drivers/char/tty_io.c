@@ -1763,6 +1763,9 @@ int tty_unregister_driver(struct tty_driver *driver)
 		else if (p->major == driver->major)
 			othername = p->name;
 	}
+	
+	if (!found)
+		return -ENOENT;
 
 	if (othername == NULL) {
 		retval = unregister_chrdev(driver->major, driver->name);
@@ -1814,6 +1817,8 @@ long console_init(long kmem_start, long kmem_end)
 	return con_init(kmem_start);
 }
 
+static struct tty_driver dev_tty_driver, dev_console_driver;
+
 /*
  * Ok, now we can initialize the rest of the tty devices and can count
  * on memory allocations, interrupts etc..
@@ -1822,6 +1827,31 @@ int tty_init(void)
 {
 	if (sizeof(struct tty_struct) > PAGE_SIZE)
 		panic("size of tty structure > PAGE_SIZE!");
+
+	/*
+	 * dev_tty_driver and dev_console_driver are actually magic
+	 * devices which get redirected at open time.  Nevertheless,
+	 * we register them so that register_chrdev is called
+	 * appropriately.
+	 */
+	memset(&dev_tty_driver, 0, sizeof(struct tty_driver));
+	dev_tty_driver.magic = TTY_DRIVER_MAGIC;
+	dev_tty_driver.name = "tty";
+	dev_tty_driver.name_base = 0;
+	dev_tty_driver.major = TTY_MAJOR;
+	dev_tty_driver.minor_start = 0;
+	dev_tty_driver.num = 1;
+	
+	if (tty_register_driver(&dev_tty_driver))
+		panic("Couldn't register /dev/tty driver\n");
+
+	dev_console_driver = dev_tty_driver;
+	dev_console_driver.name = "console";
+	dev_console_driver.major = TTYAUX_MAJOR;
+
+	if (tty_register_driver(&dev_console_driver))
+		panic("Couldn't register /dev/console driver\n");
+	
 	kbd_init();
 #ifdef CONFIG_SERIAL
 	rs_init();
@@ -1843,10 +1873,6 @@ int tty_init(void)
 #endif
 	pty_init();
 	vcs_init();
-	if (register_chrdev(TTY_MAJOR,"tty",&tty_fops))
-		panic("unable to get major %d for tty device", TTY_MAJOR);
-	if (register_chrdev(TTYAUX_MAJOR,"cua",&tty_fops))
-		panic("unable to get major %d for tty device", TTYAUX_MAJOR);
-
 	return 0;
 }
+

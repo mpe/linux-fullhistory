@@ -4,6 +4,8 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/config.h>
+
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/kernel.h>
@@ -42,6 +44,42 @@ asmlinkage int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long 
 }
 
 /*
+ * FIXME. We don't currently restore emulator state
+ */
+#define restore_i387_soft(x) do { } while (0)
+
+static inline void restore_i387_hard(struct _fpstate *buf)
+{
+#ifdef __SMP__
+	if (current->flags & PF_USEDFPU) {
+		stts();
+	}
+#else
+	if (current == last_task_used_math) {
+		last_task_used_math = NULL;
+		stts();
+	}
+#endif
+	current->used_math = 1;
+	current->flags &= PF_USEDFPU;
+	memcpy_fromfs(&current->tss.i387.hard, buf, sizeof(*buf));
+}
+
+static void restore_i387(struct _fpstate *buf)
+{
+#ifndef CONFIG_MATH_EMULATION
+	restore_i387_hard(buf);
+#else
+	if (hard_math) {
+		restore_i387_hard(buf);
+		return;
+	}
+	restore_i387_soft(buf);
+#endif	
+}
+	
+
+/*
  * This sets regs->esp even though we don't actually use sigstacks yet..
  */
 asmlinkage int sys_sigreturn(unsigned long __unused)
@@ -73,9 +111,53 @@ if (!(context.x & 0xfffc) || (context.x & 3) != 3) goto badframe; COPY(x);
 	regs->eflags &= ~0x40DD5;
 	regs->eflags |= context.eflags & 0x40DD5;
 	regs->orig_eax = -1;		/* disable syscall checks */
+	if (context.fpstate) {
+		struct _fpstate * buf = context.fpstate;
+		if (verify_area(VERIFY_READ, buf, sizeof(*buf)))
+			goto badframe;
+		restore_i387(buf);
+	}
 	return context.eax;
 badframe:
 	do_exit(SIGSEGV);
+}
+
+/*
+ * FIXME. We currently don't save 387 state if we use emulation
+ */
+#define save_i387_soft(x) NULL
+
+static inline struct _fpstate * save_i387_hard(struct _fpstate * buf)
+{
+#ifdef __SMP__
+	if (current->flags & PF_USEDFPU) {
+		__asm__ __volatile__("fnsave %0":"=m" (current->tss.i387.hard));
+		stts();
+		current->flags &= PF_USEDFPU;
+	}
+#else
+	if (current == last_task_used_math) {
+		__asm__ __volatile__("fnsave %0":"=m" (current->tss.i387.hard));
+		last_task_used_math = NULL;
+		__asm__ __volatile__("fwait");	/* not needed on 486+ */
+		stts();
+	}
+#endif
+	current->tss.i387.hard.status = current->tss.i387.hard.swd;
+	memcpy_tofs(buf, &current->tss.i387.hard, sizeof(*buf));
+	current->used_math = 0;
+	return buf;
+}
+
+static struct _fpstate * save_i387(struct _fpstate * buf)
+{
+#ifndef CONFIG_MATH_EMULATION
+	return save_i387_hard(buf);
+#else
+	if (hard_math)
+		return save_i387_hard(buf);
+	return save_i387_soft(buf);
+#endif
 }
 
 /*
@@ -91,8 +173,8 @@ static void setup_frame(struct sigaction * sa,
 	frame = (unsigned long *) regs->esp;
 	if (regs->ss != USER_DS && sa->sa_restorer)
 		frame = (unsigned long *) sa->sa_restorer;
-	frame -= 32;
-	if (verify_area(VERIFY_WRITE,frame,32*4))
+	frame -= 64;
+	if (verify_area(VERIFY_WRITE,frame,64*4))
 		do_exit(SIGSEGV);
 
 /* set up the "normal" stack seen by the signal handler (iBCS2) */
@@ -122,7 +204,7 @@ static void setup_frame(struct sigaction * sa,
 	put_user(regs->eflags, frame+18);
 	put_user(regs->esp, frame+19);
 	put_user(regs->ss, frame+20);
-	put_user(NULL,frame+21);
+	put_user(save_i387((struct _fpstate *)(frame+32)),frame+21);
 /* non-iBCS2 extensions.. */
 	put_user(oldmask, frame+22);
 	put_user(current->tss.cr2, frame+23);
