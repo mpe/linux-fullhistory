@@ -17,12 +17,8 @@
 
 asmlinkage int sys_sysinfo(struct sysinfo *info)
 {
-	int error;
 	struct sysinfo val;
 
-	error = verify_area(VERIFY_WRITE, info, sizeof(struct sysinfo));
-	if (error)
-		return error;
 	memset((char *)&val, 0, sizeof(struct sysinfo));
 
 	val.uptime = jiffies / HZ;
@@ -36,6 +32,7 @@ asmlinkage int sys_sysinfo(struct sysinfo *info)
 	si_meminfo(&val);
 	si_swapinfo(&val);
 
-	copy_to_user(info, &val, sizeof(struct sysinfo));
+	if (copy_to_user(info, &val, sizeof(struct sysinfo)))
+		return -EFAULT;
 	return 0;
 }

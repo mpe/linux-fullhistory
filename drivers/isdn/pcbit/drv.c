@@ -37,6 +37,7 @@
 #include <linux/isdnif.h>
 #include <asm/string.h>
 #include <asm/io.h>
+#include <asm/uaccess.h>
 
 #include "pcbit.h"
 #include "edss1.h"
@@ -428,7 +429,8 @@ int pcbit_writecmd(const u_char* buf, int len, int user, int driver, int channel
 		{
 			u_char cbuf[1024];
 
-			memcpy_fromfs(cbuf, buf, len);
+			if (copy_from_user(cbuf, buf, len))
+				return -EFAULT;
 			for (i=0; i<len; i++)
 				writeb(cbuf[i], dev->sh_mem + i);
 		}
@@ -446,7 +448,11 @@ int pcbit_writecmd(const u_char* buf, int len, int user, int driver, int channel
 			/* get it into kernel space */
 			if ((ptr = kmalloc(len, GFP_KERNEL))==NULL)
 				return -ENOMEM;
-			memcpy_fromfs(ptr, buf, len);
+			if (copy_from_user(ptr, buf, len))
+			{
+				kfree(ptr);
+				return -EFAULT;
+			}
 			loadbuf = ptr;
 		}
 		else
@@ -761,8 +767,13 @@ static int stat_st = 0;
 static int stat_end = 0;
 
 
-#define memcpy_to_COND(flag, d, s, len) \
-(flag ? memcpy_tofs(d, s, len) : memcpy(d, s, len))
+extern inline int memcpy_to_COND(int flag, void *d, void *s, int len)
+{
+	if (flag)
+		return copy_to_user(d, s, len);
+	memcpy(d, s, len);
+	return 0;
+}
 
 
 int pcbit_stat(u_char* buf, int len, int user, int driver, int channel)
@@ -779,24 +790,27 @@ int pcbit_stat(u_char* buf, int len, int user, int driver, int channel)
 
 	if (stat_st < stat_end)
 	{
-		memcpy_to_COND(user, buf, statbuf + stat_st, len);
+		if (memcpy_to_COND(user, buf, statbuf + stat_st, len))
+			return -EFAULT;
 		stat_st += len;	   
 	}
 	else
 	{
 		if (len > STATBUF_LEN - stat_st)
 		{
-			memcpy_to_COND(user, buf, statbuf + stat_st, 
-				       STATBUF_LEN - stat_st);
-			memcpy_to_COND(user, buf, statbuf, 
-				       len - (STATBUF_LEN - stat_st));
-
+			if (memcpy_to_COND(user, buf, statbuf + stat_st, 
+				       STATBUF_LEN - stat_st))
+			       	return -EFAULT;
+			if (memcpy_to_COND(user, buf, statbuf, 
+				       len - (STATBUF_LEN - stat_st)))
+				return -EFAULT;
 			stat_st = len - (STATBUF_LEN - stat_st);
 		}
 		else
 		{
-			memcpy_to_COND(user, buf, statbuf + stat_st, 
-				       len);
+			if (memcpy_to_COND(user, buf, statbuf + stat_st,
+				       len))
+			       return -EFAULT;
 
 			stat_st += len;
 			

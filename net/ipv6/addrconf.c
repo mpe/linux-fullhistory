@@ -862,7 +862,7 @@ int addrconf_set_dstaddr(void *arg)
 		dev = sit_add_tunnel(ireq.addr.s6_addr32[3]);
 		
 		if (dev == NULL)
-			return -ENOMEM;
+			return -ENODEV;
 
 		return 0;
 	}

@@ -161,15 +161,29 @@ struct fdb {
 
 #define IS_BRIDGED	0x2e
 
+
+#define BR_MAX_PROTOCOLS 32
+#define BR_MAX_PROT_STATS BR_MAX_PROTOCOLS
+
+/* policy values for policy field */
+#define BR_ACCEPT 1
+#define BR_REJECT 0
+
 struct br_stat {
 	unsigned int flags;
 	Bridge_data bridge_data;
 	Port_data port_data[No_of_ports];
+	unsigned int policy;
+	unsigned int exempt_protocols;
+	unsigned short protocols[BR_MAX_PROTOCOLS];
+	unsigned short prot_id[BR_MAX_PROT_STATS];	/* Protocol encountered */
+	unsigned int prot_counter[BR_MAX_PROT_STATS];	/* How many packets ? */
 };
 
 /* defined flags for br_stat.flags */
 #define BR_UP		0x0001	/* bridging enabled */
 #define BR_DEBUG	0x0002	/* debugging enabled */
+#define BR_PROT_STATS	0x0004	/* protocol statistics enabled */
 
 struct br_cf {
 	unsigned int cmd;
@@ -188,6 +202,11 @@ struct br_cf {
 #define	BRCMD_DISPLAY_FDB	8	/* arg1 = port */
 #define	BRCMD_ENABLE_DEBUG	9
 #define	BRCMD_DISABLE_DEBUG	10
+#define BRCMD_SET_POLICY	11	/* arg1 = default policy (1==bridge all) */
+#define BRCMD_EXEMPT_PROTOCOL	12	/* arg1 = protocol (see net/if_ether.h) */
+#define BRCMD_ENABLE_PROT_STATS	13
+#define BRCMD_DISABLE_PROT_STATS 14
+#define BRCMD_ZERO_PROT_STATS	15
 
 /* prototypes of all bridging functions... */
 
@@ -260,6 +279,8 @@ int br_learn(struct sk_buff *skb, int port);	/* 3.8 */
 int br_receive_frame(struct sk_buff *skb);	/* 3.5 */
 int br_tx_frame(struct sk_buff *skb);
 int br_ioctl(unsigned int cmd, void *arg);
+
+int br_protocol_ok(unsigned short protocol);
 
 void free_fdb(struct fdb *);
 struct fdb *get_fdb(void);

@@ -777,4 +777,4 @@ sys_call_table:
 	.quad sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler, sys_sched_yield
 	.quad sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, do_entSys /* sys_afs_syscall */, sys_newuname
 	.quad sys_nanosleep, sys_mremap, do_entSys, sys_setresuid, sys_getresuid
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
+	.quad sys_pciconfig_read, sys_pciconfig_write, do_entSys, do_entSys, do_entSys

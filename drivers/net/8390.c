@@ -30,6 +30,7 @@
   Paul Gortmaker	: exchange static int ei_pingpong for a #define,
 			  also add better Tx error handling.
   Paul Gortmaker	: rewrite Rx overrun handling as per NS specs.
+  Alexey Kuznetsov	: use the software multicast filter.
 
 
   Sources:
@@ -679,8 +680,45 @@ static struct enet_statistics *get_stats(struct device *dev)
 
 /*
  *	Set or clear the multicast filter for this adaptor.
+ *	(Don't assume 8bit char..)
  */
  
+extern inline __u32 upd_8390_crc(__u8 b, __u32 x)
+{
+	int i;
+	__u8 ah=0;
+	for(i=0;i<8;i++)
+	{
+		__u8 carry = (x>>31);
+		x<<=1;
+		ah = ((ah<<1)|carry)^b;
+		
+		if(ah&1)
+			x^=0x04C11DB7;
+		ah>>=1;
+		b>>=1;
+	}
+	return x;
+}
+
+extern __inline void make_8390_mc_bits(__u8 *bits, struct device *dev)
+{
+	struct dev_mc_list *dmi;
+	memset(bits,0,8);
+	
+	for(dmi=dev->mc_list;dmi!=NULL;dmi=dmi->next)
+	{
+		int i;
+		__u32 x;
+		if(dmi->dmi_addrlen!=6)
+			continue;	/* !! */
+		x=0xFFFFFFFFUL;
+		for(i=0;i<6;i++)
+			x = upd_8390_crc(dmi->dmi_addr[i],x);
+		bits[x>>29] |= (1<<((x>>26)&7));
+	}
+}
+
 static void set_multicast_list(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
@@ -691,9 +729,22 @@ static void set_multicast_list(struct device *dev)
 	}
 	else if((dev->flags&IFF_ALLMULTI)||dev->mc_list)
 	{
-		/* The multicast-accept list is initialized to accept-all, and we
-		   rely on higher-level filtering for now. */
+		unsigned long flags;
+		__u8 mc_bits[8];
+		int i;
+		
+		if(dev->flags&IFF_ALLMULTI)
+			memset(mc_bits,0xFF,8);
+		else
+			make_8390_mc_bits(mc_bits,dev);
+		save_flags(flags);
+		cli();
+		outb_p(E8390_NODMA + E8390_PAGE1 + E8390_STOP, ioaddr);
+		for(i = 0; i < 8; i++)
+				outb_p(mc_bits[i], ioaddr + EN1_MULT + i);
+		outb_p(E8390_NODMA + E8390_PAGE0 + E8390_START, ioaddr);
 		outb_p(E8390_RXCONFIG | 0x08, ioaddr + EN0_RXCR);
+		restore_flags(flags);
 	} 
 	else
 		outb_p(E8390_RXCONFIG, ioaddr + EN0_RXCR);

@@ -23,6 +23,7 @@
  *		Tom Dyas		:	Module support.
  *		Alan Cox		:	Hooks for PPP (based on the
  *						localtalk hook).
+ *		Alan Cox		:	Posix bits
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -735,7 +736,6 @@ int atif_ioctl(int cmd, void *arg)
 	struct sockaddr_at *sa;
 	struct device *dev;
 	struct atalk_iface *atif;
-	int ro=(cmd==SIOCSIFADDR);
 	int err;
 	int ct;
 	int limit;
@@ -1234,7 +1234,7 @@ static int atalk_autobind(atalk_socket *sk)
  *	Set the address 'our end' of the connection.
  */
  
-static int atalk_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
+static int atalk_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_len)
 {
 	atalk_socket *sk;
 	struct sockaddr_at *addr=(struct sockaddr_at *)uaddr;
@@ -1242,7 +1242,7 @@ static int atalk_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 	sk=(atalk_socket *)sock->data;
 	
 	if(sk->zapped==0)
-		return(-EIO);
+		return(-EINVAL);
 		
 	if(addr_len!=sizeof(struct sockaddr_at))
 		return -EINVAL;
@@ -1289,7 +1289,7 @@ static int atalk_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
  */
  
 static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
-	int addr_len, int flags)
+	size_t addr_len, int flags)
 {
 	atalk_socket *sk=(atalk_socket *)sock->data;
 	struct sockaddr_at *addr;
@@ -1303,9 +1303,9 @@ static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
 	
 	if(addr->sat_family!=AF_APPLETALK)
 		return -EAFNOSUPPORT;
-#if 0 	/* Netatalk doesn't check this */
+#if 0 	/* Netatalk doesn't check this - fix netatalk first!*/
 	if(addr->sat_addr.s_node==ATADDR_BCAST && !sk->broadcast)
-		return -EPERM;
+		return -EACCES;
 #endif		
 	if(sk->zapped)
 	{
@@ -1350,7 +1350,7 @@ static int atalk_accept(struct socket *sock, struct socket *newsock, int flags)
  */
  
 static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
-	int *uaddr_len, int peer)
+	size_t *uaddr_len, int peer)
 {
 	struct sockaddr_at sat;
 	atalk_socket *sk;
@@ -1359,7 +1359,7 @@ static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
 	if(sk->zapped)
 	{
 		if(atalk_autobind(sk)<0)
-			return -EBUSY;
+			return -ENOBUFS;
 	}	
 	
 	*uaddr_len = sizeof(struct sockaddr_at);
@@ -1410,6 +1410,10 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	 *	Fix up the length field	[Ok this is horrible but otherwise
 	 *	I end up with unions of bit fields and messy bit field order
 	 *	compiler/endian dependencies..]
+	 *
+	 *	FIXME: This is a write to a shared object. Granted it
+	 *	happens to be safe BUT.. (Its safe as user space will not
+	 *	run until we put it back)
 	 */
 
 	*((__u16 *)ddp)=ntohs(*((__u16 *)ddp));
@@ -1520,10 +1524,13 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		 *	Send the buffer onwards
 		 */
 		 
-		skb->arp = 1;	/* Resolved */
-		
-		if(aarp_send_ddp(rt->dev, skb, &ta, NULL)==-1)
-			kfree_skb(skb, FREE_READ);
+		skb=skb_unshare(skb, GFP_ATOMIC, FREE_READ);
+		if(skb)
+		{
+			skb->arp = 1;	/* Resolved */
+			if(aarp_send_ddp(rt->dev, skb, &ta, NULL)==-1)
+				kfree_skb(skb, FREE_READ);
+		}
 		return 0;
 	}
 
@@ -1642,7 +1649,6 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 	if(usat)
 	{
 		if(sk->zapped)
-		/* put the autobinding in */
 		{
 			if(atalk_autobind(sk)<0)
 				return -EBUSY;
@@ -1738,7 +1744,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 	if (err)
 	{
 		kfree_skb(skb, FREE_WRITE);
-		return err;
+		return -EFAULT;
 	}
 		
 	if(sk->no_check==1)
@@ -1821,9 +1827,6 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int 
 	struct sk_buff *skb;
 	int er = 0;
 	
-	if(sk->err)
-		return sock_error(sk);
-	
 	if(addr_len)
 		*addr_len=sizeof(*sat);
 
@@ -1836,7 +1839,10 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int 
 	{
 		copied=ddp->deh_len;
 		if(copied > size)
+		{
 			copied=size;
+			msg->msg_flags|=MSG_TRUNC;
+		}
 		er = skb_copy_datagram_iovec(skb,0,msg->msg_iov,copied);
 		if (er)
 			goto out;
@@ -1845,7 +1851,10 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int 
 	{
 		copied=ddp->deh_len - sizeof(*ddp);
 		if (copied > size)
+		{
 			copied = size;
+			msg->msg_flags|=MSG_TRUNC;
+		}
 		er = skb_copy_datagram_iovec(skb,sizeof(*ddp),msg->msg_iov,copied);
 		if (er) 
 			goto out; 
@@ -1881,7 +1890,6 @@ static int atalk_select(struct socket *sock , int sel_type, select_table *wait)
 
 static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 {
-	int err;
 	long amount=0;
 	atalk_socket *sk=(atalk_socket *)sock->data;
 	
@@ -1908,7 +1916,7 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 			{
 				if(sk->stamp.tv_sec==0)
 					return -ENOENT;
-				return copy_to_user((void *)arg,&sk->stamp,sizeof(struct timeval));
+				return copy_to_user((void *)arg,&sk->stamp,sizeof(struct timeval)) ? -EFAULT : 0;
 			}
 			return -EINVAL;
 		/*
@@ -2049,7 +2057,7 @@ void atalk_proto_init(struct net_proto *pro)
 	proc_net_register(&proc_atalk_iface);
 #endif	
 
-	printk(KERN_INFO "Appletalk 0.17 for Linux NET3.035\n");
+	printk(KERN_INFO "Appletalk 0.18 for Linux NET3.037\n");
 }
 
 #ifdef MODULE

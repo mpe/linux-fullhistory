@@ -16,6 +16,7 @@
  *					use output device for accounting.
  *		Jos Vos		:	Call forward firewall after routing
  *					(always use output device).
+ *		Alan Cox	: 	Unshare buffer on forward.
  */
 
 #include <linux/config.h>
@@ -120,6 +121,13 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 	struct sk_buff *skb_in = skb;	/* So we can remember if the masquerader did some swaps */
 #endif /* CONFIG_IP_MASQUERADE */
 #endif /* CONFIG_FIREWALL */
+
+	/*
+	 *	We may be sharing the buffer with a snooper. That won't do
+	 */
+	 
+	if((skb=skb_unshare(skb, GFP_ATOMIC,FREE_READ))==NULL)
+		return -1;
 	
 	/*
 	 *	According to the RFC, we must first decrease the TTL field. If

@@ -597,10 +597,11 @@ void net_bh(void)
 
 		/*
 		 *	If we are bridging then pass the frame up to the
-		 *	bridging code. If it is bridged then move on
+		 *	bridging code (if this protocol is to be bridged).
+		 *      If it is bridged then move on
 		 */
 		 
-		if (br_stats.flags & BR_UP)
+		if (br_stats.flags & BR_UP && br_protocol_ok(ntohs(skb->protocol)))
 		{
 			/*
 			 *	We pass the bridge a complete frame. This means

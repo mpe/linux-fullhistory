@@ -32,10 +32,9 @@ asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 	int error;
 
 	if (set) {
-		error = verify_area(VERIFY_READ, set, sizeof(sigset_t));
+		error = get_user(new_set, set);
 		if (error)
-			return error;
-		get_user(new_set, set);
+			return error;	
 		new_set &= _BLOCKABLE;
 		switch (how) {
 		case SIG_BLOCK:
@@ -52,10 +51,9 @@ asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 		}
 	}
 	if (oset) {
-		error = verify_area(VERIFY_WRITE, oset, sizeof(sigset_t));
+		error = put_user(old_set, oset);
 		if (error)
-			return error;
-		put_user(old_set, oset);
+			return error;	
 	}
 	return 0;
 }
@@ -80,12 +78,8 @@ asmlinkage int sys_ssetmask(int newmask)
 
 asmlinkage int sys_sigpending(sigset_t *set)
 {
-	int error;
 	/* fill in "set" with signals pending but blocked. */
-	error = verify_area(VERIFY_WRITE, set, sizeof(sigset_t));
-	if (!error)
-		put_user(current->blocked & current->signal, set);
-	return error;
+	return put_user(current->blocked & current->signal, set);
 }
 
 /*
@@ -162,7 +156,8 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 			return err;
 		if (signum==SIGKILL || signum==SIGSTOP)
 			return -EINVAL;
-		copy_from_user(&new_sa, action, sizeof(struct sigaction));
+		if (copy_from_user(&new_sa, action, sizeof(struct sigaction)))
+			return -EFAULT;	
 		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
 			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
 			if (err)
@@ -170,10 +165,8 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 		}
 	}
 	if (oldaction) {
-		int err = verify_area(VERIFY_WRITE, oldaction, sizeof(*oldaction));
-		if (err)
-			return err;
-		copy_to_user(oldaction, p, sizeof(struct sigaction));
+		if (copy_to_user(oldaction, p, sizeof(struct sigaction)))
+			return -EFAULT;	
 	}
 	if (action) {
 		*p = new_sa;

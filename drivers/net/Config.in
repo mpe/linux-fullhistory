@@ -1,44 +1,15 @@
 #
 # Network device configuration
 #
+
+tristate 'ARCnet support' CONFIG_ARCNET
+if [ "$CONFIG_ARCNET" != "n" ]; then
+  bool '  Enable arc0e (ARCnet "Ether-Encap" packet format)' CONFIG_ARCNET_ETH
+  bool '  Enable arc0s (ARCnet RFC1051 packet format)' CONFIG_ARCNET_1051
+fi
 tristate 'Dummy net driver support' CONFIG_DUMMY
 tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'Frame relay DLCI support (EXPERIMENTAL)' CONFIG_DLCI
-  if [ "$CONFIG_DLCI" = "y" -o "$CONFIG_DLCI" = "m" ]; then
-    int '  Max open DLCI' CONFIG_DLCI_COUNT 24
-    int '  Max DLCI per device' CONFIG_DLCI_MAX 8
-    dep_tristate '  SDLA (Sangoma S502/S508) support' CONFIG_SDLA $CONFIG_DLCI
-  fi
-fi
-tristate 'PLIP (parallel port) support' CONFIG_PLIP
-tristate 'PPP (point-to-point) support' CONFIG_PPP
-if [ ! "$CONFIG_PPP" = "n" ]; then
-  comment 'CCP compressors for PPP are only built as modules.'
-fi
-tristate 'SLIP (serial line) support' CONFIG_SLIP
-if [ "$CONFIG_SLIP" != "n" ]; then
-  bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
-  bool ' Keepalive and linefill' CONFIG_SLIP_SMART
-  bool ' Six bit SLIP encapsulation' CONFIG_SLIP_MODE_SLIP6
-fi
-bool 'Radio network interfaces' CONFIG_NET_RADIO
-if [ "$CONFIG_NET_RADIO" != "n" ]; then
-  if [ "$CONFIG_AX25" != "n" ]; then
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'BAYCOM ser12 and par96 driver for AX.25' CONFIG_BAYCOM
-      tristate 'Soundcard modem driver for AX.25' CONFIG_SOUNDMODEM
-    fi
-    dep_tristate 'Serial port KISS driver for AX.25' CONFIG_MKISS $CONFIG_AX25
-    dep_tristate 'BPQ Ethernet driver for AX.25' CONFIG_BPQETHER $CONFIG_AX25
-    dep_tristate 'Gracilis PackeTwin support' CONFIG_PT $CONFIG_AX25
-    dep_tristate 'Ottawa PI and PI/2 support' CONFIG_PI $CONFIG_AX25
-  fi
-  tristate 'Z8530 SCC KISS emulation driver for AX.25' CONFIG_SCC
-  tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
-  tristate 'WaveLAN support' CONFIG_WAVELAN
-  tristate 'WIC Radio IP bridge (EXPERIMENTAL)' CONFIG_WIC
-fi
+
 #
 #	Ethernet
 #
@@ -113,13 +84,54 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   fi
 fi
 
+bool 'FDDI driver support' CONFIG_FDDI
+if [ "$CONFIG_FDDI" = "y" ]; then
+  bool 'Digital DEFEA and DEFPA adapter support' CONFIG_DEFXX
+fi
+
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Frame relay DLCI support (EXPERIMENTAL)' CONFIG_DLCI
+  if [ "$CONFIG_DLCI" = "y" -o "$CONFIG_DLCI" = "m" ]; then
+    int '  Max open DLCI' CONFIG_DLCI_COUNT 24
+    int '  Max DLCI per device' CONFIG_DLCI_MAX 8
+    dep_tristate '  SDLA (Sangoma S502/S508) support' CONFIG_SDLA $CONFIG_DLCI
+  fi
+fi
+
+tristate 'PLIP (parallel port) support' CONFIG_PLIP
+
+tristate 'PPP (point-to-point) support' CONFIG_PPP
+if [ ! "$CONFIG_PPP" = "n" ]; then
+  comment 'CCP compressors for PPP are only built as modules.'
+fi
+
+bool 'Radio network interfaces' CONFIG_NET_RADIO
+if [ "$CONFIG_NET_RADIO" != "n" ]; then
+  if [ "$CONFIG_AX25" != "n" ]; then
+    tristate 'Serial port KISS driver for AX.25' CONFIG_MKISS
+    tristate 'BPQ Ethernet driver for AX.25' CONFIG_BPQETHER
+    tristate 'Gracilis PackeTwin driver for AX.25' CONFIG_PT
+    tristate 'Ottawa PI and PI2 driver for AX.25' CONFIG_PI
+    tristate 'Z8530 SCC driver for AX.25' CONFIG_SCC
+  fi
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    tristate 'BAYCOM ser12 and par96 driver for AX.25' CONFIG_BAYCOM
+    tristate 'Soundcard modem driver for AX.25' CONFIG_SOUNDMODEM
+  fi
+  tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
+  tristate 'WaveLAN support' CONFIG_WAVELAN
+  tristate 'WIC Radio IP bridge (EXPERIMENTAL)' CONFIG_WIC
+fi
+
+tristate 'SLIP (serial line) support' CONFIG_SLIP
+if [ "$CONFIG_SLIP" != "n" ]; then
+  bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
+  bool ' Keepalive and linefill' CONFIG_SLIP_SMART
+  bool ' Six bit SLIP encapsulation' CONFIG_SLIP_MODE_SLIP6
+fi
+
 bool 'Token Ring driver support' CONFIG_TR
 if [ "$CONFIG_TR" = "y" ]; then
   tristate 'IBM Tropic chipset based adaptor support' CONFIG_IBMTR
-fi
-tristate 'ARCnet support' CONFIG_ARCNET
-if [ "$CONFIG_ARCNET" != "n" ]; then
-  bool '  Enable arc0e (ARCnet "Ether-Encap" packet format)' CONFIG_ARCNET_ETH
-  bool '  Enable arc0s (ARCnet RFC1051 packet format)' CONFIG_ARCNET_1051
 fi
 

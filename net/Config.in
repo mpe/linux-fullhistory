@@ -3,6 +3,10 @@
 #
 mainmenu_option next_comment
 comment 'Networking options'
+bool 'Kernel/User network link driver' CONFIG_NETLINK
+if [ "$CONFIG_NETLINK" = "y" ]; then
+  bool 'Routing messages' CONFIG_RTNETLINK
+fi
 bool 'Network firewalls' CONFIG_FIREWALL
 bool 'Network aliasing'  CONFIG_NET_ALIAS
 bool 'TCP/IP networking' CONFIG_INET
@@ -27,9 +31,5 @@ if [ "$CONFIG_AX25" != "n" ]; then
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'Bridging (EXPERIMENTAL)' CONFIG_BRIDGE
-fi
-bool 'Kernel/User network link driver' CONFIG_NETLINK
-if [ "$CONFIG_NETLINK" = "y" ]; then
-  bool 'Routing messages' CONFIG_RTNETLINK
 fi
 endmenu

@@ -580,7 +580,7 @@ void get_disc_status(void)
 
 /* The new open. The real opening strategy is defined in cdrom.c. */
 
-static int cm206_open(kdev_t dev, int purpose) 
+static int cm206_open(struct cdrom_device_info *i, int purpose) 
 {
   if (!cd->openfiles) {		/* reset only first time */
     cd->background=0;
@@ -593,7 +593,7 @@ static int cm206_open(kdev_t dev, int purpose)
   return 0;
 }
 
-static void cm206_release(kdev_t dev)
+static void cm206_release(struct cdrom_device_info *i)
 {
   if (cd->openfiles==1) {
     if (cd->background) {
@@ -885,7 +885,7 @@ void get_toc_entry(struct cdrom_tocentry * ep)
  * upon success. Memory checking has been done by cdrom_ioctl(), the
  * calling function, as well as LBA/MSF sanitization.
 */
-int cm206_audio_ioctl(kdev_t dev, unsigned int cmd, void * arg)
+int cm206_audio_ioctl(struct cdrom_device_info *i, unsigned int cmd, void * arg)
 {
   switch (cmd) {
   case CDROMREADTOCHDR: 
@@ -930,7 +930,7 @@ int cm206_audio_ioctl(kdev_t dev, unsigned int cmd, void * arg)
    some driver statistics accessible through ioctl calls.
  */
 
-static int cm206_ioctl(kdev_t dev, unsigned int cmd, unsigned long arg)
+static int cm206_ioctl(struct cdrom_device_info *i, unsigned int cmd, unsigned long arg)
 {
   switch (cmd) {
 #ifdef STATISTICS
@@ -947,7 +947,7 @@ static int cm206_ioctl(kdev_t dev, unsigned int cmd, unsigned long arg)
   }
 }     
 
-int cm206_media_changed(kdev_t dev) 
+int cm206_media_changed(struct cdrom_device_info *i, int n) 
 {
   if (cd != NULL) {
     int r;
@@ -963,14 +963,14 @@ int cm206_media_changed(kdev_t dev)
    the logic should be in cdrom.c */
 
 /* returns number of times device is in use */
-int cm206_open_files(kdev_t dev)	
+int cm206_open_files(struct cdrom_device_info *i)	
 {
   if (cd) return cd->openfiles;
   return -1;
 }
 
 /* controls tray movement */
-int cm206_tray_move(kdev_t dev, int position) 
+int cm206_tray_move(struct cdrom_device_info *i, int position) 
 {
   if (position) {		/* 1: eject */
     type_0_command(c_open_tray,1);
@@ -981,7 +981,7 @@ int cm206_tray_move(kdev_t dev, int position)
 }
 
 /* gives current state of the drive */
-int cm206_drive_status(kdev_t dev)
+int cm206_drive_status(struct cdrom_device_info *i, int n)
 {
   get_drive_status();
   if (cd->dsb & dsb_tray_not_closed) return CDS_TRAY_OPEN;
@@ -991,7 +991,7 @@ int cm206_drive_status(kdev_t dev)
 }
  
 /* gives current state of disc in drive */
-int cm206_disc_status(kdev_t dev)
+int cm206_disc_status(struct cdrom_device_info *i)
 {
   uch xa;
   get_drive_status();
@@ -1009,7 +1009,7 @@ int cm206_disc_status(kdev_t dev)
 }
 
 /* locks or unlocks door lock==1: lock; return 0 upon success */
-int cm206_lock_door(kdev_t dev, int lock)
+int cm206_lock_door(struct cdrom_device_info *i, int lock)
 {
   uch command = (lock) ? c_lock_tray : c_unlock_tray;
   type_0_command(command, 1);	/* wait and get dsb */
@@ -1020,7 +1020,7 @@ int cm206_lock_door(kdev_t dev, int lock)
 /* Although a session start should be in LBA format, we return it in 
    MSF format because it is slightly easier, and the new generic ioctl
    will take care of the necessary conversion. */
-int cm206_get_last_session(kdev_t dev, struct cdrom_multisession * mssp) 
+int cm206_get_last_session(struct cdrom_device_info *i, struct cdrom_multisession * mssp) 
 {
   if (!FIRST_TRACK) get_disc_status();
   if (mssp != NULL) {
@@ -1038,7 +1038,7 @@ int cm206_get_last_session(kdev_t dev, struct cdrom_multisession * mssp)
   return 0;
 }
 
-int cm206_get_upc(kdev_t dev, struct cdrom_mcn * mcn)
+int cm206_get_upc(struct cdrom_device_info *info, struct cdrom_mcn * mcn)
 {
   uch upc[10];
   char * ret = mcn->medium_catalog_number;
@@ -1054,7 +1054,7 @@ int cm206_get_upc(kdev_t dev, struct cdrom_mcn * mcn)
   return 0;
 } 
 
-int cm206_reset(kdev_t dev)
+int cm206_reset(struct cdrom_device_info *i)
 {
   stop_read();
   reset_cm260();
@@ -1070,7 +1070,6 @@ int cm206_reset(kdev_t dev)
 static struct cdrom_device_ops cm206_dops = {
   cm206_open,			/* open */
   cm206_release,		/* release */
-  cm206_open_files,		/* number of open_files */
   cm206_drive_status,		/* drive status */
   cm206_disc_status,		/* disc status */
   cm206_media_changed,		/* media changed */
@@ -1085,21 +1084,30 @@ static struct cdrom_device_ops cm206_dops = {
   cm206_ioctl,			/* device-specific ioctl */
   CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK | CDC_MULTI_SESSION |
     CDC_MEDIA_CHANGED | CDC_MCN | CDC_PLAY_AUDIO, /* capability */
-  0,				/* mask flags */
-  2,				/* maximum speed */
   1,				/* number of minor devices */
-  1,				/* number of discs */
-  0,				/* options, ignored */
-  0				/* mc_flags, ignored */
 };
 
+static struct cdrom_device_info cm206_info= {
+	&cm206_dops,
+	NULL,
+	NULL,
+	CM206_CDROM_MAJOR,
+	CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK | CDC_MULTI_SESSION |
+		CDC_MEDIA_CHANGED | CDC_MCN | CDC_PLAY_AUDIO, /* capability */
+	2,				/* maximum speed */
+	1,				/* number of discs */
+	0,				/* options, ignored */
+	0,				/* mc_flags, ignored */
+	0
+};
+	
 /* This routine gets called during init if thing go wrong, can be used
  * in cleanup_module as well. */
 void cleanup(int level)
 {
   switch (level) {
   case 4: 
-    if (unregister_cdrom(MAJOR_NR, "cm206")) {
+    if (unregister_cdrom(&cm206_info)) {
       printk("Can't unregister cdrom cm206\n");
       return;
     }
@@ -1221,7 +1229,7 @@ int cm206_init(void)
     cleanup(3);
     return -EIO;
   }
-  if (register_cdrom(MAJOR_NR, "cm206", &cm206_dops) != 0) {
+  if (register_cdrom(&cm206_info,"cm206") != 0) {
     printk("Cannot register for cdrom %d!\n", MAJOR_NR);
     cleanup(3);
     return -EIO;

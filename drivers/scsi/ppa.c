@@ -46,7 +46,7 @@ static int      ppa_nybble     = 0;      /* don't force nybble mode  */
 #define   PPA_SPIN_TMO          5000000 /* ppa_wait loop limiter */
 #define   PPA_SECTOR_SIZE       512     /* for a performance hack only */
 
-#include  <unistd.h>
+#include  <linux/stddef.h>
 #include  <linux/module.h>
 #include  <linux/kernel.h>
 #include  <linux/tqueue.h>

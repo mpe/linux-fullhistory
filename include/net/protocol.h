@@ -41,7 +41,7 @@ struct inet_protocol {
 				   int redo, struct inet_protocol *protocol);
   void			(*err_handler)(int type, int code, unsigned char *buff,
 				       __u32 info, __u32 daddr, __u32 saddr,
-				       struct inet_protocol *protocol);
+				       struct inet_protocol *protocol, int len);
   struct inet_protocol *next;
   unsigned char		protocol;
   unsigned char		copy:1;

@@ -1,10 +1,10 @@
 /*
- *	AX.25 release 033
+ *	AX.25 release 034
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
  *
- *	This code REQUIRES 1.2.1 or higher/ NET3.029
+ *	This code REQUIRES 2.1.10 or higher/ NET3.029
  *
  *	This module:
  *		This module is free software; you can redistribute it and/or
@@ -84,6 +84,8 @@
  *	AX.25 033	Jonathan(G4KLX)		Removed auto-router.
  *			Hans(PE1AYX)		Converted to Module.
  *			Joerg(DL1BKE)		Moved BPQ Ethernet to seperate driver.
+ *	AX.25 034	Jonathan(G4KLX)		2.1 changes
+ *			Alan(GW4PTS)		Small POSIXisations
  *
  *	To do:
  *		Restructure the ax25_rcv code to be cleaner/faster and
@@ -1359,7 +1361,7 @@ static int ax25_release(struct socket *sock, struct socket *peer)
  *	BSD 4.4 ADDIFADDR type support. It is however small and trivially backward
  *	compatible 8)
  */
-static int ax25_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
+static int ax25_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_len)
 {
 	struct sock *sk;
 	struct full_sockaddr_ax25 *addr = (struct full_sockaddr_ax25 *)uaddr;
@@ -1369,14 +1371,14 @@ static int ax25_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 	sk = (struct sock *)sock->data;
 	
 	if (sk->zapped == 0)
-		return -EIO;
+		return -EINVAL;
 		
 	if (addr_len != sizeof(struct sockaddr_ax25) && addr_len != sizeof(struct full_sockaddr_ax25))
 		return -EINVAL;
 
 	call = ax25_findbyuid(current->euid);
 	if (call == NULL && ax25_uid_policy && !suser())
-		return -EPERM;
+		return -EACCES;
 		
 	if (call == NULL)
 		sk->protinfo.ax25->source_addr = addr->fsa_ax25.sax25_call;
@@ -1422,7 +1424,7 @@ static int ax25_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 }
 
 static int ax25_connect(struct socket *sock, struct sockaddr *uaddr,
-	int addr_len, int flags)
+	size_t addr_len, int flags)
 {
 	struct sock *sk = (struct sock *)sock->data;
 	struct sockaddr_ax25 *addr = (struct sockaddr_ax25 *)uaddr;
@@ -1460,7 +1462,7 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr,
 
 		if (sk->protinfo.ax25->digipeat == NULL) {
 			if ((sk->protinfo.ax25->digipeat = (ax25_digi *)kmalloc(sizeof(ax25_digi), GFP_KERNEL)) == NULL)
-				return -ENOMEM;
+				return -ENOBUFS;
 		}
 
 		sk->protinfo.ax25->digipeat->ndigi = addr->sax25_ndigis;
@@ -1490,7 +1492,7 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr,
 	}
 		
 	if (sk->type == SOCK_SEQPACKET && ax25_find_cb(&sk->protinfo.ax25->source_addr, &addr->sax25_call, sk->protinfo.ax25->device) != NULL)
-		return -EBUSY;				/* Already such a connection */
+		return -EADDRINUSE;			/* Already such a connection */
 
 	sk->protinfo.ax25->dest_addr = addr->sax25_call;
 	
@@ -1599,7 +1601,7 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 }
 
 static int ax25_getname(struct socket *sock, struct sockaddr *uaddr,
-	int *uaddr_len, int peer)
+	size_t *uaddr_len, int peer)
 {
 	struct full_sockaddr_ax25 *sax = (struct full_sockaddr_ax25 *)uaddr;
 	struct sock *sk;
@@ -1677,6 +1679,10 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	if (dp.lastrepeat + 1 < dp.ndigi) {		/* Not yet digipeated completely */
 		if (ax25cmp(&dp.calls[dp.lastrepeat + 1], dev_addr) == 0) {
 			struct device *dev_out = dev;
+			
+			skb=skb_unshare(skb, GFP_ATOMIC, FREE_READ);
+			if(skb==NULL)
+				return 0;
 
 			/* We are the digipeater. Mark ourselves as repeated
 			   and throw the packet back out of the same device */
@@ -1959,6 +1965,12 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	if (sk->zapped)
 		return -EADDRNOTAVAIL;
 		
+	if (sk->shutdown & SEND_SHUTDOWN)
+	{
+		send_sig(SIGPIPE, current, 0);
+		return -EPIPE;
+	}
+		
 	if (sk->protinfo.ax25->device == NULL)
 		return -ENETUNREACH;
 		
@@ -1994,6 +2006,11 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		else
 			dp = &dtmp;
 	} else {
+		/*
+		 *	FIXME: 1003.1g - if the socket is like this because
+		 *	it has become closed (not started closed) and is VC
+		 *	we ought to SIGPIPE, EPIPE
+		 */
 		if (sk->state != TCP_ESTABLISHED)
 			return -ENOTCONN;
 		sax.sax25_family = AF_AX25;
@@ -2082,9 +2099,6 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 	int er;
 	int dama;
 
-	if (sk->err)
-		return sock_error(sk);
-	
 	if (addr_len != NULL)
 		*addr_len = sizeof(*sax);
 
@@ -2108,7 +2122,12 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 		skb->h.raw = skb->data;
 	}
 
-	copied = (size < length) ? size : length;
+	copied=size;
+	if(copied>length)
+	{
+		copied = length;
+		msg->msg_flags|=MSG_TRUNC;
+	}		
 	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	
 	if (sax) {
@@ -2421,7 +2440,7 @@ void ax25_proto_init(struct net_proto *pro)
 	proc_net_register(&proc_ax25_calls);
 #endif	
 
-	printk(KERN_INFO "G4KLX/GW4PTS AX.25 for Linux. Version 0.33 for Linux NET3.035 (Linux 2.0)\n");
+	printk(KERN_INFO "G4KLX/GW4PTS AX.25 for Linux. Version 0.34 for Linux NET3.037 (Linux 2.1)\n");
 }
 
 /*

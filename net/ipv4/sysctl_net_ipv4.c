@@ -31,7 +31,9 @@ extern int sysctl_arp_check_interval;
 extern int sysctl_arp_confirm_interval;
 extern int sysctl_arp_confirm_timeout;
 
-extern int sysctl_tcp_vegas_cong_avoidance;
+extern int sysctl_tcp_cong_avoidance;
+extern int tcp_sysctl_congavoid(ctl_table *ctl, int write, struct file * filp,
+				void *buffer, size_t *lenp);
 
 ctl_table ipv4_table[] = {
         {NET_IPV4_ARP_RES_TIME, "arp_res_time",
@@ -58,7 +60,7 @@ ctl_table ipv4_table[] = {
 #endif
 
 	{NET_IPV4_TCP_VEGAS_CONG_AVOID, "tcp_vegas_cong_avoid",
-	 &sysctl_tcp_vegas_cong_avoidance, sizeof(int), 0644,
-	 NULL, &proc_dointvec },
+	 &sysctl_tcp_cong_avoidance, sizeof(int), 0644,
+	 NULL, &tcp_sysctl_congavoid },
 	{0}
 };

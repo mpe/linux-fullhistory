@@ -26,7 +26,7 @@ typedef struct {
 } rose_address;
 
 struct sockaddr_rose {
-	short		srose_family;
+	sa_family_t	srose_family;
 	rose_address	srose_addr;
 	ax25_address	srose_call;
 	int		srose_ndigis;

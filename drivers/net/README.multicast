@@ -15,11 +15,12 @@ IP-MRoute	AllMulti	hardware filters are of no help
 Board		Multicast	AllMulti	Promisc		Filter
 ------------------------------------------------------------------------
 3c501		YES		YES		YES		Software
-3c503		YES		YES		YES		Software(#)
+3c503		YES		YES		YES		Hardware
 3c505		YES		NO		YES		Hardware
 3c507		NO		NO		NO		N/A
 3c509		YES		YES		YES		Software
-ac3200		YES		YES		YES		Software(#)
+3c59x		YES		YES		YES		Software
+ac3200		YES		YES		YES		Hardware
 apricot		YES		PROMISC		YES		Hardware
 arcnet		NO		NO		NO		N/A
 at1700		PROMISC		PROMISC		YES		Software
@@ -28,29 +29,28 @@ de4x5		YES		NO		YES		Hardware
 de600		NO		NO		NO		N/A
 de620		PROMISC		PROMISC		YES		Software
 depca		YES		PROMISC		YES		Hardware
-e2100		YES		YES		YES		Software(#)
+e2100		YES		YES		YES		Hardware
 eepro		YES		PROMISC		YES		Hardware
 eexpress	NO		NO		NO		N/A
 ewrk3		YES		PROMISC		YES		Hardware
-hp-plus		YES		YES		YES		Software(#)
-hp		YES		YES		YES		Software(#)
-hp100		YES		YES		YES		Software(#)
+hp-plus		YES		YES		YES		Hardware
+hp		YES		YES		YES		Hardware
+hp100		YES		YES		YES		Hardware
 ibmtr		NO		NO		NO		N/A
 lance		YES		YES		YES		Software(#)
-ne		YES		YES		YES		Software(#)
-ni52
-ni65		NO		NO		NO		N/A
+ne		YES		YES		YES		Hardware
+ni52		<------------------ Buggy ------------------>
+ni65		YES		YES		YES		Software(#)
 seeq		NO		NO		NO		N/A
 sk_g16		NO		NO		YES		N/A
-smc-ultra	YES		YES		YES		Software(#)
+smc-ultra	YES		YES		YES		Hardware
+sunlance	YES		YES		YES		Software(#)
 tulip		YES		YES		YES		Hardware
 wavelan		--------Buggy--------		YES		N/A
-wd		YES		YES		YES		Software(#)
+wd		YES		YES		YES		Hardware
 znet		YES		YES		YES		Software
 
 
 PROMISC = This multicasts mode is in fact promiscuous mode. Avoid using
 cards who go PROMISC on any multicast in a multicast kernel.
 (#) = Hardware multicast support is not used yet.
-
-

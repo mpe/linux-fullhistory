@@ -3,6 +3,10 @@
  *
  *	Originally by John Hayes (Network Plumbing).
  *	Minor hacks to get it to run with 1.3.x by Alan Cox <Alan.Cox@linux.org>
+ *	More hacks to be able to switch protocols on and off by Christoph Lameter
+ *	<clameter@debian.org>
+ *	Software and more Documentation for the bridge is available from ftp.debian.org
+ *	in the bridge package or at ftp.fuller.edu/Linux/bridge
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -78,6 +82,67 @@ static struct notifier_block br_dev_notifier={
 	NULL,
 	0
 };
+
+/*
+ * Implementation of Protocol specific bridging
+ *
+ * The protocols to be bridged or not to be bridged are stored in a hashed array. This is the old type
+ * of unlinked hash array where one simply takes the next cell if the one the hash function points to
+ * is occupied.
+ */
+
+#define BR_PROTOCOL_HASH(x) (x % BR_MAX_PROTOCOLS)
+
+/* Checks if that protocol type is to be bridged */
+int br_protocol_ok(unsigned short protocol)
+{
+	unsigned x;
+	
+	/* See if protocol statistics are to be kept */
+	if (br_stats.flags & BR_PROT_STATS)
+	{ for(x=0;x<BR_MAX_PROT_STATS &&
+	     br_stats.prot_id[x]!=protocol && br_stats.prot_id[x];x++) ;
+	  if (x<BR_MAX_PROT_STATS)
+	  { br_stats.prot_id[x]=protocol;br_stats.prot_counter[x]++;
+	  }
+	}
+
+	for (x=BR_PROTOCOL_HASH(protocol); br_stats.protocols[x]!=0;) {
+		if (br_stats.protocols[x]==protocol) return !br_stats.policy;
+		x++;
+		if (x==BR_MAX_PROTOCOLS) x=0;
+	}
+	return br_stats.policy;
+}
+
+/* Add a protocol to be handled opposite to the standard policy of the bridge */
+
+int br_add_exempt_protocol(unsigned short p)
+{
+	unsigned x;
+	if (p == 0) return -EINVAL;
+	if (br_stats.exempt_protocols > BR_MAX_PROTOCOLS-2) return -EXFULL;
+	for (x=BR_PROTOCOL_HASH(p);br_stats.protocols[x]!=0;) {
+		if (br_stats.protocols[x]==p) return 0;	/* Attempt to add the protocol a second time */
+		x++;
+		if (x==BR_MAX_PROTOCOLS) x=0;
+	}
+	br_stats.protocols[x]=p;
+	br_stats.exempt_protocols++;
+	return 0;
+}
+
+/* Valid Policies are 0=No Protocols bridged 1=Bridge all protocols */
+int br_set_policy(int policy)
+{
+	if (policy>1) return -EINVAL;
+	br_stats.policy=policy;
+	/* Policy change means initializing the exempt table */
+	memset(br_stats.protocols,0,sizeof(br_stats.protocols));
+	br_stats.exempt_protocols = 0;
+	return 0;
+}
+
 
 /** Elements of Procedure (4.6) **/
 
@@ -579,7 +644,7 @@ void br_init(void)
 {						  /* (4.8.1)	 */
 	int             port_no;
 
-	printk(KERN_INFO "Ethernet Bridge 002 for NET3.035 (Linux 2.0)\n");
+	printk(KERN_INFO "Ethernet Bridge 003 for NET3.037 (Linux 2.1)\n");
 	bridge_info.designated_root = bridge_info.bridge_id;	/* (4.8.1.1)	 */
 	bridge_info.root_path_cost = Zero;
 	bridge_info.root_port = No_port;
@@ -611,6 +676,8 @@ void br_init(void)
 
 	register_netdevice_notifier(&br_dev_notifier);
 	br_stats.flags = 0; /*BR_UP | BR_DEBUG*/;	/* enable bridge */
+	br_stats.policy = BR_ACCEPT;			/* Enable bridge to accpet all protocols */
+	br_stats.exempt_protocols = 0;
 	/*start_hello_timer();*/
 }
 
@@ -1052,7 +1119,6 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 {
 	int port;
-	int i;
 	
 	if (br_stats.flags & BR_DEBUG)
 		printk("br_receive_frame: ");
@@ -1511,6 +1577,20 @@ int br_ioctl(unsigned int cmd, void *arg)
 				case BRCMD_DISABLE_DEBUG:
 					br_stats.flags &= ~BR_DEBUG;
 					break;
+				case BRCMD_SET_POLICY:
+					return br_set_policy(bcf.arg1);
+				case BRCMD_EXEMPT_PROTOCOL:
+					return br_add_exempt_protocol(bcf.arg1);
+				case BRCMD_ENABLE_PROT_STATS:
+					br_stats.flags |= BR_PROT_STATS;
+					break;
+				case BRCMD_DISABLE_PROT_STATS:
+					br_stats.flags &= ~BR_PROT_STATS;
+					break;
+				case BRCMD_ZERO_PROT_STATS:
+					memset(&br_stats.prot_id,0,sizeof(br_stats.prot_id));
+					memset(&br_stats.prot_counter,0,sizeof(br_stats.prot_counter));
+					break;
 				default:
 					return -EINVAL;
 			}
@@ -1536,4 +1616,4 @@ int br_cmp(unsigned int *a, unsigned int *b)
 	}
 	return(0);
 }
-		
+

@@ -1,7 +1,7 @@
 # Maintained by Axel Boldt (boldt@math.ucsb.edu) 
 #
 # This version of the Linux kernel configuration help texts
-# corresponds to the kernel versions 2.0.x.
+# corresponds to the kernel versions 2.1.x.
 #
 # International versions of this file available on the WWW:
 #   - http://jf.gee.kyoto-u.ac.jp/JF/JF-ftp/euc/Configure.help.euc
@@ -847,6 +847,13 @@ CONFIG_IP_FIREWALL
   network think they're talking to a remote computer, while in reality
   the traffic is redirected by your Linux firewall to a local proxy
   server).
+
+IP: firewall packet netlink device
+CONFIG_IP_FIREWALL_NETLINK
+  When packets hit the firewall and are blocked the first 128 bytes of each
+  datagram is passed to optional user space monitoring software that can
+  then look for attacks and take actions such as paging the administrator of
+  the site.
 
 IP: accounting
 CONFIG_IP_ACCT

@@ -454,6 +454,10 @@ int inet_setsockopt(struct socket *sock, int level, int optname,
 
 /*
  *	Get a socket option on an AF_INET socket.
+ *
+ *	FIX: POSIX 1003.1g is very ambiguous here. It states that
+ *	asynchronous errors should be reported by getsockopt. We assume
+ *	this means if you specify SO_ERROR (otherwise whats the point of it).
  */
 
 int inet_getsockopt(struct socket *sock, int level, int optname,
@@ -763,7 +767,7 @@ int inet_release(struct socket *sock, struct socket *peer)
 
 
 static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
-	       int addr_len)
+	       size_t addr_len)
 {
 	struct sockaddr_in *addr=(struct sockaddr_in *)uaddr;
 	struct sock *sk=(struct sock *)sock->data, *sk2;
@@ -919,7 +923,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
  */
  
 int inet_connect(struct socket *sock, struct sockaddr * uaddr,
-		 int addr_len, int flags)
+		 size_t addr_len, int flags)
 {
 	struct sock *sk=(struct sock *)sock->data;
 	int err;
@@ -1086,7 +1090,7 @@ int inet_accept(struct socket *sock, struct socket *newsock, int flags)
  */
  
 static int inet_getname(struct socket *sock, struct sockaddr *uaddr,
-		 int *uaddr_len, int peer)
+		 size_t *uaddr_len, int peer)
 {
 	struct sockaddr_in *sin=(struct sockaddr_in *)uaddr;
 	struct sock *sk;
@@ -1616,7 +1620,7 @@ void inet_proto_init(struct net_proto *pro)
 	int i;
 
 
-	printk("Swansea University Computer Society TCP/IP for NET3.034\n");
+	printk("Swansea University Computer Society TCP/IP for NET3.037\n");
 
 	/*
 	 *	Tell SOCKET that we are alive... 

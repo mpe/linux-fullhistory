@@ -1,8 +1,8 @@
 /*
- * arch/alpha/lib/__strlen_user.S
+ * arch/alpha/lib/strlen_user.S
  *
- * Just like strlen except returns -EFAULT if an exception occurs
- * before the terminator is found.
+ * Return the length of the string including the NUL terminator
+ * (strlen+1) or zero if an error occured.
  */
 
 #include <alpha/regdef.h>
@@ -13,7 +13,7 @@
 	99: x,##y;			\
 	.section __ex_table,"a";	\
 	.gprel32 99b;			\
-	lda zero, $exception-99b(zero);	\
+	lda v0, $exception-99b(zero);	\
 	.text
 
 
@@ -34,7 +34,7 @@ __strlen_user:
 	insqh   t1, a0, t1
 	andnot  a0, 7, v0
 	or      t1, t0, t0
-	subq	a0, 1, a0	# return "1+strlen" (0 for exception)
+	subq	a0, 1, a0	# get our +1 for the return 
 	cmpbge  zero, t0, t1	# t1 <- bitmask: bit i == 1 <==> i-th byte == 0
 	bne     t1, $found
 
@@ -56,12 +56,8 @@ $found:	negq    t1, t2		# clear all but least set bit
 	addq	v0, t4, v0
 	addq	v0, t2, v0
 	nop			# dual issue next two on ev4 and ev5
-
 	subq    v0, a0, v0
-	ret
-
 $exception:
-	mov	zero, v0
 	ret
 
 	.end __strlen_user

@@ -49,6 +49,7 @@
 #include <linux/fcntl.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
+#include <linux/net.h>
 #include <linux/in.h>
 #include <linux/string.h>
 #include <asm/system.h>

@@ -431,7 +431,7 @@ static int lo_ioctl(struct inode * inode, struct file * file,
 	unsigned int cmd, unsigned long arg)
 {
 	struct loop_device *lo;
-	int dev, err;
+	int dev;
 
 	if (!inode)
 		return -EINVAL;

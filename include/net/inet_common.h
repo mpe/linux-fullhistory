@@ -17,7 +17,7 @@ extern int			inet_release(struct socket *sock,
 					     struct socket *peer);
 extern int			inet_connect(struct socket *sock, 
 					     struct sockaddr * uaddr,
-					     int addr_len, int flags);
+					     size_t addr_len, int flags);
 extern int			inet_accept(struct socket *sock, 
 					    struct socket *newsock, int flags);
 extern int			inet_recvmsg(struct socket *sock, 

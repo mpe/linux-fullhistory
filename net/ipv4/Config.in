@@ -6,6 +6,9 @@ bool 'IP: multicasting' CONFIG_IP_MULTICAST
 if [ "$CONFIG_FIREWALL" = "y" ]; then
   bool 'IP: firewalling' CONFIG_IP_FIREWALL
   if [ "$CONFIG_IP_FIREWALL" = "y" ]; then
+    if [ "$CONFIG_NETLINK" = "y" ]; then
+	bool 'IP: firewall packet netlink device' CONFIG_IP_FIREWALL_NETLINK
+    fi
     bool 'IP: firewall packet logging' CONFIG_IP_FIREWALL_VERBOSE
     if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_IP_FORWARD" = "y" ]; then
       bool 'IP: masquerading (EXPERIMENTAL)' CONFIG_IP_MASQUERADE

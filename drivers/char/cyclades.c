@@ -1929,7 +1929,7 @@ get_modem_info(struct cyclades_port * info, unsigned int *value)
             | ((status  & CyRI) ? TIOCM_RNG : 0)
             | ((status  & CyDSR) ? TIOCM_DSR : 0)
             | ((status  & CyCTS) ? TIOCM_CTS : 0);
-    put_fs_long(result,(unsigned long *) value);
+    put_user(result,(unsigned int *) value);
     return 0;
 } /* get_modem_info */
 
@@ -1940,7 +1940,9 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
   int card,chip,channel,index;
   unsigned char *base_addr;
   unsigned long flags;
-  unsigned int arg = get_fs_long((unsigned long *) value);
+  unsigned int arg;
+  
+    get_user(arg,(unsigned int *) value);
 
     card = info->card;
     channel = (info->line) - (cy_card[card].first_line);
@@ -2085,7 +2087,7 @@ get_threshold(struct cyclades_port * info, unsigned long *value)
 		   (cy_card[card].base_addr + (cy_chip_offset[chip]<<index));
 
    tmp = base_addr[CyCOR3<<index] & CyREC_FIFO;
-   put_fs_long(tmp,value);
+   put_user(tmp,value);
    return 0;
 }
 
@@ -2099,7 +2101,7 @@ set_default_threshold(struct cyclades_port * info, unsigned long value)
 static int
 get_default_threshold(struct cyclades_port * info, unsigned long *value)
 {
-   put_fs_long(info->default_threshold,value);
+   put_user(info->default_threshold,value);
    return 0;
 }
 
@@ -2137,7 +2139,7 @@ get_timeout(struct cyclades_port * info, unsigned long *value)
 		   (cy_card[card].base_addr + (cy_chip_offset[chip]<<index));
 
    tmp = base_addr[CyRTPR<<index];
-   put_fs_long(tmp,value);
+   put_user(tmp,value);
    return 0;
 }
 
@@ -2151,7 +2153,7 @@ set_default_timeout(struct cyclades_port * info, unsigned long value)
 static int
 get_default_timeout(struct cyclades_port * info, unsigned long *value)
 {
-   put_fs_long(info->default_timeout,value);
+   put_user(info->default_timeout,value);
    return 0;
 }
 
@@ -2254,8 +2256,8 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
                 ret_val = error;
                 break;
             }
-            put_fs_long(C_CLOCAL(tty) ? 1 : 0,
-                        (unsigned long *) arg);
+            put_user(C_CLOCAL(tty) ? 1 : 0,
+                        (unsigned int *) arg);
             break;
         case TIOCSSOFTCAR:
             error = verify_area(VERIFY_READ, (void *) arg
@@ -2265,7 +2267,7 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
                  break;
             }
 
-            arg = get_fs_long((unsigned long *) arg);
+            get_user(arg,(unsigned int *) arg);
             tty->termios->c_cflag =
                     ((tty->termios->c_cflag & ~CLOCAL) |
                      (arg ? CLOCAL : 0));

@@ -1657,13 +1657,14 @@ int elplus_probe(struct device *dev)
 
 #ifdef MODULE
 #define NAMELEN 9
-static char devicename[ELP_MAX_CARDS][NAMELEN] = {0,};
+static char devicename[ELP_MAX_CARDS][NAMELEN] = {{0,}};
 static struct device dev_3c505[ELP_MAX_CARDS] =
 {
-	NULL,		/* device name is inserted by net_init.c */
+	{ NULL,		/* device name is inserted by net_init.c */
 	0, 0, 0, 0,
 	0, 0,
-	0, 0, 0, NULL, elplus_probe};
+	0, 0, 0, NULL, elplus_probe},
+};
 
 static int io[ELP_MAX_CARDS] = { 0, };
 static int irq[ELP_MAX_CARDS] = { 0, };

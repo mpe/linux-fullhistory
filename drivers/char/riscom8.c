@@ -41,6 +41,8 @@
 #include <linux/fcntl.h>
 #include <linux/major.h>
 
+#include <asm/uaccess.h>
+
 #include "riscom8.h"
 #include "riscom8_reg.h"
 
@@ -1369,7 +1371,7 @@ static int rc_set_modem_info(struct riscom_port * port, unsigned int cmd,
 	error = verify_area(VERIFY_READ, value, sizeof(int));
 	if (error) 
 		return error;
-	arg = get_fs_long((unsigned long *) value);
+	get_user(arg,(unsigned int *) value);
 	switch (cmd) {
 	 case TIOCMBIS: 
 		if (arg & TIOCM_RTS) 
@@ -1528,7 +1530,7 @@ static int rc_ioctl(struct tty_struct * tty, struct file * filp,
 			    (unsigned long *) arg);
 		return 0;
 	 case TIOCSSOFTCAR:
-		arg = get_user((unsigned long *) arg);
+		get_user(arg,(unsigned int *) arg);
 		tty->termios->c_cflag =
 			((tty->termios->c_cflag & ~CLOCAL) |
 			(arg ? CLOCAL : 0));

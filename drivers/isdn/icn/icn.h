@@ -118,6 +118,7 @@ typedef struct icn_cdef {
 #if defined(__KERNEL__) || defined(__DEBUGVAR__)
 
 #ifdef __KERNEL__
+
 /* Kernel includes */
 
 #include <linux/module.h>
@@ -127,6 +128,7 @@ typedef struct icn_cdef {
 #include <linux/major.h>
 #include <asm/segment.h>
 #include <asm/io.h>
+#include <asm/uaccess.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/malloc.h>
@@ -136,6 +138,7 @@ typedef struct icn_cdef {
 #include <linux/timer.h>
 #include <linux/wait.h>
 #include <linux/isdnif.h>
+
 
 #endif /* __KERNEL__ */
 

@@ -151,7 +151,7 @@ void udp_cache_zap(void)
  */
 
 void udp_err(int type, int code, unsigned char *header, __u32 info,
-	     __u32 daddr, __u32 saddr, struct inet_protocol *protocol)
+	     __u32 daddr, __u32 saddr, struct inet_protocol *protocol, int len)
 {
 	struct udphdr *uh;
 	struct sock *sk;
@@ -159,6 +159,9 @@ void udp_err(int type, int code, unsigned char *header, __u32 info,
 	/*
 	 *	Find the 8 bytes of post IP header ICMP included for us
 	 */  
+	 
+	if(len<sizeof(struct udphdr))
+		return;
 	
 	uh = (struct udphdr *)header;  
    
@@ -550,7 +553,13 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   		return er;
   
   	truesize = skb->len - sizeof(struct udphdr);
-  	copied = min(len, truesize);
+  	copied = truesize;
+  	
+  	if(len<truesize)
+  	{
+  		copied=len;
+  		msg->msg_flags|=MSG_TRUNC;
+  	}
 
   	/*
   	 *	FIXME : should use udp header size info value 
@@ -590,10 +599,25 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   	return(copied);
 }
 
-int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+int udp_connect(struct sock *sk, struct sockaddr *uaddr, size_t addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *) uaddr;
 	struct rtable *rt;
+	
+	/*
+	 *	1003.1g - break association.
+	 */
+	 
+	if (usin->sin_family==AF_UNSPEC)
+	{
+		sk->saddr=INADDR_ANY;
+		sk->rcv_saddr=INADDR_ANY;
+		sk->daddr=INADDR_ANY;
+		sk->state = TCP_CLOSE;
+		udp_cache_zap();
+		return 0;
+	}
+	
 	if (addr_len < sizeof(*usin)) 
 	  	return(-EINVAL);
 

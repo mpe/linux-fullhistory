@@ -8,8 +8,8 @@
 
 /* limits */
 
-#define MAX_CHRDEV 64
-#define MAX_BLKDEV 64
+#define MAX_CHRDEV 128
+#define MAX_BLKDEV 128
 
 #define UNNAMED_MAJOR	0
 #define MEM_MAJOR	1

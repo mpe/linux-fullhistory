@@ -254,7 +254,7 @@ static int inet6_dup(struct socket *newsock, struct socket *oldsock)
  */
 
 static int inet6_bind(struct socket *sock, struct sockaddr *uaddr,
-		      int addr_len)
+		      size_t addr_len)
 {
 	struct sockaddr_in6 *addr=(struct sockaddr_in6 *)uaddr;
 	struct sock *sk=(struct sock *)sock->data, *sk2;
@@ -271,7 +271,7 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr,
 		
 	/* check this error. */
 	if (sk->state != TCP_CLOSE)
-		return(-EIO);
+		return(-EINVAL);
 
 	if(addr_len < sizeof(struct sockaddr_in6))
 		return -EINVAL;
@@ -434,7 +434,7 @@ static int inet6_socketpair(struct socket *sock1, struct socket *sock2)
  */
  
 static int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
-		 int *uaddr_len, int peer)
+		 size_t *uaddr_len, int peer)
 {
 	struct sockaddr_in6 *sin=(struct sockaddr_in6 *)uaddr;
 	struct sock *sk;
@@ -805,7 +805,7 @@ void inet6_proto_init(struct net_proto *pro)
 {
 	int i;
 
-	printk(KERN_INFO "IPv6 v0.1\n");
+	printk(KERN_INFO "IPv6 v0.1 for NET3.037\n");
 
 	sock_register(inet6_proto_ops.family, &inet6_proto_ops);
 	

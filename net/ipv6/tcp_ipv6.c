@@ -85,7 +85,7 @@ static __u32 tcp_v6_init_sequence(struct sock *sk, struct sk_buff *skb)
 }
 
 static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr, 
-			  int addr_len)
+			  size_t addr_len)
 {
 	struct sockaddr_in6 *usin = (struct sockaddr_in6 *) uaddr;
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;

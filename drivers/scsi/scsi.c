@@ -311,7 +311,7 @@ static int get_device_flags(unsigned char * response_data){
 
 void scsi_make_blocked_list(void)  {
     int block_count = 0, index;
-    unsigned int flags;
+    unsigned long flags;
     struct Scsi_Host * sh[128], * shpnt;
     
     /*
@@ -1009,7 +1009,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
     kdev_t dev;
     struct request * req = NULL;
     int tablesize;
-    unsigned int flags;
+    unsigned long flags;
     struct buffer_head * bh, *bhp;
     struct Scsi_Host * host;
     Scsi_Cmnd * SCpnt = NULL;
@@ -1277,7 +1277,7 @@ inline void internal_cmnd (Scsi_Cmnd * SCpnt)
 
 static void scsi_request_sense (Scsi_Cmnd * SCpnt)
 {
-    unsigned int flags;
+    unsigned long flags;
     
     save_flags(flags);
     cli();

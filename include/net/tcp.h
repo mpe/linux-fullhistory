@@ -240,7 +240,8 @@ extern struct tcp_mib tcp_statistics;
 extern void			tcp_v4_err(int type, int code,
 					   unsigned char *header, __u32 info,
 					   __u32 daddr, __u32 saddr,
-					   struct inet_protocol *protocol);
+					   struct inet_protocol *protocol,
+					   int len);
 
 extern void			tcp_shutdown (struct sock *sk, int how);
 
@@ -315,7 +316,7 @@ extern int			tcp_v4_backlog_rcv(struct sock *sk,
 						   struct sk_buff *skb);
 extern int			tcp_v4_connect(struct sock *sk,
 					       struct sockaddr *uaddr,
-					       int addr_len);
+					       size_t addr_len);
 
 
 extern void tcp_read_wakeup(struct sock *);

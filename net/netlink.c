@@ -30,7 +30,7 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
-static int (*netlink_handler[MAX_LINKS])(struct sk_buff *skb);
+static int (*netlink_handler[MAX_LINKS])(int minor, struct sk_buff *skb);
 static struct sk_buff_head skb_queue_rd[MAX_LINKS]; 
 static int rdq_size[MAX_LINKS];
 static struct wait_queue *read_space_wait[MAX_LINKS];
@@ -46,7 +46,7 @@ static int open_map = 0;
  *	Default write handler.
  */
  
-static int netlink_err(struct sk_buff *skb)
+static int netlink_err(int minor, struct sk_buff *skb)
 {
 	kfree_skb(skb, FREE_READ);
 	return -EUNATCH;
@@ -57,7 +57,7 @@ static int netlink_err(struct sk_buff *skb)
  *	interfaces.
  */
   
-int netlink_donothing(struct sk_buff *skb)
+int netlink_donothing(int minor, struct sk_buff *skb)
 {
 	kfree_skb(skb, FREE_READ);
 	return -EINVAL;
@@ -91,7 +91,7 @@ static long netlink_write(struct inode * inode, struct file * file,
 	skb=alloc_skb(count, GFP_KERNEL);
 	skb->free=1;
 	err = copy_from_user(skb_put(skb,count),buf, count);
-	return err ? -EFAULT : (netlink_handler[minor])(skb);
+	return err ? -EFAULT : (netlink_handler[minor])(minor,skb);
 }
 
 /*
@@ -193,7 +193,7 @@ static struct file_operations netlink_fops = {
  *	queueing.
  */
  
-int netlink_attach(int unit, int (*function)(struct sk_buff *skb))
+int netlink_attach(int unit, int (*function)(int minor, struct sk_buff *skb))
 {
 	if(unit>=MAX_LINKS)
 		return -ENODEV;
@@ -252,7 +252,7 @@ int init_netlink(void)
 
 int init_module(void)
 {
-	printk(KERN_INFO "Network Kernel/User communications module 0.03\n");
+	printk(KERN_INFO "Network Kernel/User communications module 0.04\n");
 	return init_netlink();
 }
 

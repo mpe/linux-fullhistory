@@ -159,7 +159,11 @@ int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 		if(copy_to_user(uaddr,kaddr,len))
 			return -EFAULT;
 	}
- 	return put_user(len, ulen);
+	/*
+	 *	"fromlen shall refer to the value before truncation.."
+	 *			1003.1g
+	 */
+ 	return put_user(klen, ulen);
 }
 
 /*
@@ -724,8 +728,12 @@ asmlinkage int sys_listen(int fd, int backlog)
  *	For accept, we attempt to create a new socket, set up the link
  *	with the client, wake up the client, then return the new
  *	connected fd. We collect the address of the connector in kernel
- *	space and move it to user at the very end. This is buggy because
+ *	space and move it to user at the very end. This is unclean because
  *	we open the socket then return an error.
+ *
+ *	1003.1g addcs the ability to recvmsg() to query connection pending
+ *	status to recvmsg. We need to add that support in a way thats
+ *	clean when we restucture accept also.
  */
 
 asmlinkage int sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
@@ -789,9 +797,16 @@ asmlinkage int sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_ad
 /*
  *	Attempt to connect to a socket with the server address.  The address
  *	is in user space so we verify it is OK and move it to kernel space.
+ *
+ *	For 1003.1g we need to add clean support for a bind to AF_UNSPEC to
+ *	break bindings
+ *
+ *	NOTE: 1003.1g draft 6.3 is broken with respect to AX.25/NetROM and
+ *	other SEQPACKET protocols that take time to connect() as it doesn't
+ *	include the -EINPROGRESS status for such sockets.
  */
  
-asmlinkage int sys_connect(int fd, struct sockaddr *uservaddr, int addrlen)
+asmlinkage int sys_connect(int fd, struct sockaddr *uservaddr, size_t addrlen)
 {
 	struct socket *sock;
 	struct file *file;
@@ -842,7 +857,7 @@ asmlinkage int sys_connect(int fd, struct sockaddr *uservaddr, int addrlen)
  *	name to user space.
  */
 
-asmlinkage int sys_getsockname(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
+asmlinkage int sys_getsockname(int fd, struct sockaddr *usockaddr, size_t *usockaddr_len)
 {
 	struct socket *sock;
 	char address[MAX_SOCK_ADDR];
@@ -867,7 +882,7 @@ asmlinkage int sys_getsockname(int fd, struct sockaddr *usockaddr, int *usockadd
  *	name to user space.
  */
  
-asmlinkage int sys_getpeername(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
+asmlinkage int sys_getpeername(int fd, struct sockaddr *usockaddr, size_t *usockaddr_len)
 {
 	struct socket *sock;
 	char address[MAX_SOCK_ADDR];
@@ -892,7 +907,7 @@ asmlinkage int sys_getpeername(int fd, struct sockaddr *usockaddr, int *usockadd
  *	in user space. We check it can be read.
  */
 
-asmlinkage int sys_send(int fd, void * buff, int len, unsigned flags)
+asmlinkage int sys_send(int fd, void * buff, size_t len, unsigned flags)
 {
 	struct socket *sock;
 	struct file *file;
@@ -926,8 +941,8 @@ asmlinkage int sys_send(int fd, void * buff, int len, unsigned flags)
  *	the protocol.
  */
 
-asmlinkage int sys_sendto(int fd, void * buff, int len, unsigned flags,
-	   struct sockaddr *addr, int addr_len)
+asmlinkage int sys_sendto(int fd, void * buff, size_t len, unsigned flags,
+	   struct sockaddr *addr, size_t addr_len)
 {
 	struct socket *sock;
 	struct file *file;
@@ -971,7 +986,7 @@ asmlinkage int sys_sendto(int fd, void * buff, int len, unsigned flags,
  *	Receive a datagram from a socket. Call the protocol recvmsg method
  */
 
-asmlinkage int sys_recv(int fd, void * ubuf, int size, unsigned flags)
+asmlinkage int sys_recv(int fd, void * ubuf, size_t size, unsigned flags)
 {
 	struct iovec iov;
 	struct msghdr msg;
@@ -1009,8 +1024,8 @@ asmlinkage int sys_recv(int fd, void * ubuf, int size, unsigned flags)
  *	sender address from kernel to user space.
  */
 
-asmlinkage int sys_recvfrom(int fd, void * ubuf, int size, unsigned flags,
-	     struct sockaddr *addr, int *addr_len)
+asmlinkage int sys_recvfrom(int fd, void * ubuf, size_t size, unsigned flags,
+	     struct sockaddr *addr, size_t *addr_len)
 {
 	struct socket *sock;
 	struct file *file;
@@ -1129,7 +1144,7 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned int flags)
 	if(sock->ops->sendmsg==NULL)
 		return -EOPNOTSUPP;
 
-	if ((err = copy_from_user(&msg_sys,msg,sizeof(struct msghdr))))
+	if (copy_from_user(&msg_sys,msg,sizeof(struct msghdr)))
 		return -EFAULT; 
 
 	/* do not move before msg_sys is valid */
@@ -1192,7 +1207,7 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	if (!(sock = sockfd_lookup(fd, NULL)))
 		return(-ENOTSOCK);
 	
-	if ((err = copy_from_user(&msg_sys,msg,sizeof(struct msghdr))))
+	if (copy_from_user(&msg_sys,msg,sizeof(struct msghdr)))
 		return -EFAULT; 
 
 	if(msg_sys.msg_iovlen>UIO_MAXIOV)
@@ -1238,10 +1253,10 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	{
 		if (!err)
 		{
-			int ret;
-			ret = copy_to_user(usr_msg_ctl, krn_msg_ctl,
+			err = copy_to_user(usr_msg_ctl, krn_msg_ctl,
 					   msg_sys.msg_controllen);
-			err = -EFAULT;
+			if (err)
+			    err = -EFAULT; 
 		}
 		kfree(krn_msg_ctl);		
 	}
@@ -1438,7 +1453,7 @@ void sock_init(void)
 {
 	int i;
 
-	printk(KERN_INFO "Swansea University Computer Society NET3.035 for Linux 2.0\n");
+	printk(KERN_INFO "Swansea University Computer Society NET3.037 for Linux 2.1\n");
 
 	/*
 	 *	Initialize all address (protocol) families. 

@@ -37,6 +37,7 @@
 
 #include <linux/config.h>
 #include <linux/types.h>
+#include <linux/net.h>
 #include <linux/in.h>
 #include <linux/if.h>
 #include <linux/malloc.h>

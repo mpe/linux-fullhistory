@@ -185,8 +185,9 @@ static int tcp_write_timeout(struct sock *sk)
 			sk->err=sk->err_soft;
 		else
 			sk->err=ETIMEDOUT;
-
+#ifdef TCP_DEBUG
 		printk(KERN_DEBUG "syn timeout\n");
+#endif
 
 		sk->error_report(sk);
 		tcp_clear_xmit_timers(sk);
@@ -475,17 +476,14 @@ static void tcp_syn_recv_timer(unsigned long data)
 
 				req = tp->syn_wait_queue;
 
-				while (req && tp->syn_wait_queue)
-				{
+				do {
 					struct open_request *conn;
-
+				  
 					conn = req;
 					req = req->dl_next;
 
 					if (conn->sk)
 					{
-						if (req == tp->syn_wait_queue)
-							break;
 						continue;
 					}
 					
@@ -496,11 +494,16 @@ static void tcp_syn_recv_timer(unsigned long data)
 					
 					if (conn->retrans >= TCP_RETR1)
 					{
+#ifdef TCP_DEBUG
 						printk(KERN_DEBUG "syn_recv: "
 						       "too many retransmits\n");
+#endif
 						(*conn->class->destructor)(conn);
 						tcp_dec_slow_timer(TCP_SLT_SYNACK);
 						kfree(conn);
+
+						if (!tp->syn_wait_queue)
+							break;
 					}
 					else
 					{
@@ -509,14 +512,16 @@ static void tcp_syn_recv_timer(unsigned long data)
 						(*conn->class->rtx_syn_ack)(sk, conn);
 
 						conn->retrans++;
+#ifdef TCP_DEBUG
 						printk(KERN_DEBUG "syn_ack rtx %d\n", conn->retrans);
+#endif
 						timeo = min((TCP_TIMEOUT_INIT 
 							     << conn->retrans),
 							    120*HZ);
 						conn->expires = now + timeo;
 						tcp_synq_queue(tp, conn);
 					}
-				}
+				} while (req != tp->syn_wait_queue);
 			}
 			
 			sk = sk->next;

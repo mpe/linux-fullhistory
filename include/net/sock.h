@@ -511,7 +511,7 @@ struct proto
 					unsigned long timeout);
 	int			(*connect)(struct sock *sk,
 				        struct sockaddr *uaddr, 
-					int addr_len);
+					size_t addr_len);
 
 	struct sock *		(*accept) (struct sock *sk, int flags);
 	void			(*retransmit)(struct sock *sk, int all);
@@ -537,7 +537,7 @@ struct proto
 					int len, int noblock, int flags, 
 					int *addr_len);
 	int			(*bind)(struct sock *sk, 
-					struct sockaddr *uaddr, int addr_len);
+					struct sockaddr *uaddr, size_t addr_len);
 
 	int			(*backlog_rcv) (struct sock *sk, 
 						struct sk_buff *skb);

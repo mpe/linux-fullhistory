@@ -759,7 +759,7 @@ static int rose_release(struct socket *sock, struct socket *peer)
 	return 0;
 }
 
-static int rose_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
+static int rose_bind(struct socket *sock, struct sockaddr *uaddr, size_t addr_len)
 {
 	struct sock *sk;
 	struct sockaddr_rose *addr = (struct sockaddr_rose *)uaddr;
@@ -769,7 +769,7 @@ static int rose_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	sk = (struct sock *)sock->data;
 
 	if (sk->zapped == 0)
-		return -EIO;
+		return -EINVAL;
 		
 	if (addr_len != sizeof(struct sockaddr_rose))
 		return -EINVAL;
@@ -784,7 +784,7 @@ static int rose_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	if ((user = ax25_findbyuid(current->euid)) == NULL) {
 		if (ax25_uid_policy && !suser())
-			return -EPERM;
+			return -EACCES;
 		user = source;
 	}
 
@@ -807,7 +807,7 @@ static int rose_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	return 0;
 }
 
-static int rose_connect(struct socket *sock, struct sockaddr *uaddr, int addr_len, int flags)
+static int rose_connect(struct socket *sock, struct sockaddr *uaddr, size_t addr_len, int flags)
 {
 	struct sock *sk = (struct sock *)sock->data;
 	struct sockaddr_rose *addr = (struct sockaddr_rose *)uaddr;
@@ -957,7 +957,7 @@ static int rose_accept(struct socket *sock, struct socket *newsock, int flags)
 }
 
 static int rose_getname(struct socket *sock, struct sockaddr *uaddr,
-	int *uaddr_len, int peer)
+	size_t *uaddr_len, int peer)
 {
 	struct sockaddr_rose *srose = (struct sockaddr_rose *)uaddr;
 	struct sock *sk;
@@ -1181,9 +1181,6 @@ static int rose_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 	struct sk_buff *skb;
 	int er;
 
-	if (sk->err)
-		return sock_error(sk);
-	
 	if (addr_len != NULL)
 		*addr_len = sizeof(*srose);
 
@@ -1203,7 +1200,14 @@ static int rose_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 		skb->h.raw = skb->data;
 	}
 
-	copied = (size < skb->len) ? size : skb->len;
+	copied = skb->len;
+	
+	if(copied>size)
+	{
+		copied=size;
+		msg->msg_flags|=MSG_TRUNC;
+	}
+	
 	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	
 	if (srose != NULL) {
@@ -1404,7 +1408,7 @@ void rose_proto_init(struct net_proto *pro)
 {
 	sock_register(rose_proto_ops.family, &rose_proto_ops);
 	register_netdevice_notifier(&rose_dev_notifier);
-	printk(KERN_INFO "G4KLX Rose for Linux. Version 0.1 for AX25.033 Linux 2.1\n");
+	printk(KERN_INFO "G4KLX Rose for Linux. Version 0.1 for AX25.034 Linux 2.1\n");
 
 	if (!ax25_protocol_register(AX25_P_ROSE, rose_route_frame))
 		printk(KERN_ERR "Rose unable to register protocol with AX.25\n");

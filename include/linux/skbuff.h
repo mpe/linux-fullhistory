@@ -184,6 +184,16 @@ extern __inline__ int skb_queue_empty(struct sk_buff_head *list)
 	return (list->next == (struct sk_buff *) list);
 }
 
+extern __inline__ struct sk_buff *skb_unshare(struct sk_buff *skb, int pri, int dir)
+{
+	struct sk_buff *nskb;
+	if(skb->users==1)
+		return skb;
+	nskb=skb_copy(skb, pri);
+	kfree_skb(skb, dir);	/* Free our shared copy */
+	return nskb;
+}
+
 /*
  *	Peek an sk_buff. Unlike most other operations you _MUST_
  *	be careful with this one. A peek leaves the buffer on the
@@ -402,13 +412,14 @@ extern __inline__ void skb_unlink(struct sk_buff *skb)
  
 extern __inline__ unsigned char *skb_put(struct sk_buff *skb, int len)
 {
+	extern char *skb_put_errstr;
 	unsigned char *tmp=skb->tail;
 	skb->tail+=len;
 	skb->len+=len;
 	if(skb->tail>skb->end)
 	{
 		__label__ here;
-		panic("skput:over: %p:%d", &&here,len);
+		panic(skb_put_errstr,&&here,len);
 here:
 	}
 	return tmp;
@@ -416,12 +427,13 @@ here:
 
 extern __inline__ unsigned char *skb_push(struct sk_buff *skb, int len)
 {
+	extern char *skb_push_errstr;
 	skb->data-=len;
 	skb->len+=len;
 	if(skb->data<skb->head)
 	{
 		__label__ here;
-		panic("skpush:under: %p:%d", &&here,len);
+		panic(skb_push_errstr, &&here,len);
 here:
 	}
 	return skb->data;

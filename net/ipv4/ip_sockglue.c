@@ -495,8 +495,11 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 					}
 				}
 				err = put_user(opt->optlen, optlen);
-				if (!err)
-					err = copy_to_user(optval, opt->__data, opt->optlen);
+				if (!err) 
+				{
+					if(copy_to_user(optval, opt->__data, opt->optlen))
+					    err = -EFAULT;
+				}
 				return err; 
 			}
 			return 0;
@@ -520,7 +523,11 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
   			len=strlen(sk->ip_mc_name);
   			err = put_user(len, optlen);
 			if (!err)
+			{
 				err = copy_to_user((void *)optval,sk->ip_mc_name, len);
+				if (err)
+				    err = -EFAULT;
+			}
 			return err;
 #endif
 		default:

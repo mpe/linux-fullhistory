@@ -245,6 +245,8 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 			sk->bsdism = valbool;
 			break;
 			
+		/* We implementation the SO_SNDLOWAT etc to
+		   not be settable (1003.1g 5.3) */
 		default:
 		  	return(-ENOPROTOOPT);
   	}
@@ -317,12 +319,24 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
 				ling.l_onoff=sk->linger;
 				ling.l_linger=sk->lingertime;
 				err = copy_to_user(optval,&ling,sizeof(ling));
+				if (err)
+				    err = -EFAULT;
 			}
 			return err;
 		
 		case SO_BSDCOMPAT:
 			val = sk->bsdism;
 			break;
+			
+		case SO_RCVTIMEO:
+		case SO_SNDTIMEO:
+		{
+			static struct timeval tm={0,0};
+			return copy_to_user(optval,&tm,sizeof(tm));
+		}
+		case SO_RCVLOWAT:
+		case SO_SNDLOWAT:
+			val=1;
 
 		default:
 			return(-ENOPROTOOPT);

@@ -28,6 +28,7 @@
  *		Nick Nevin	:	recvmsg bugfix.
  *		Alan Cox	:	Started proper garbage collector
  *		Heiko EiBfeldt	:	Missing verify_area check
+ *		Alan Cox	:	Started POSIXisms
  *
  * Known differences from reference BSD that was tested:
  *
@@ -43,6 +44,7 @@
  *		and a null first byte in the path (but not for gethost/peername - BSD bug ??)
  *	socketpair(...SOCK_RAW..) doesn't panic the kernel.
  *	BSD af_unix apparently has connect forgetting to block properly.
+ *		(need to check this with the POSIX spec in detail)
  */
 
 #include <linux/config.h>
@@ -395,7 +397,7 @@ static unix_socket *unix_find_other(char *path, int *error)
 }
 
 
-static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
+static int unix_bind(struct socket *sock, struct sockaddr *uaddr, size_t addr_len)
 {
 	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;
 	unix_socket *sk=sock->data;
@@ -416,7 +418,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	
 	sk->protinfo.af_unix.name=kmalloc(addr_len+1, GFP_KERNEL);
 	if(sk->protinfo.af_unix.name==NULL)
-		return -ENOMEM;
+		return -ENOBUFS;
 	memcpy(sk->protinfo.af_unix.name, sunaddr->sun_path, addr_len+1);
 	
 	old_fs=get_fs();
@@ -442,14 +444,29 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	
 }
 
-static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_len, int flags)
+static int unix_connect(struct socket *sock, struct sockaddr *uaddr, size_t addr_len, int flags)
 {
 	unix_socket *sk=sock->data;
 	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;
 	unix_socket *other;
 	struct sk_buff *skb;
 	int err;
+	
+	/*
+	 *	1003.1g breaking connected state with AF_UNSPEC
+	 */
 
+	if(sunaddr->sun_family==AF_UNSPEC)
+	{
+		if(sk->protinfo.af_unix.other)
+		{
+			sk->protinfo.af_unix.other->protinfo.af_unix.locks--;
+			sk->protinfo.af_unix.other=NULL;
+			sock->state=SS_UNCONNECTED;
+		}
+		return 0;
+	}
+		
 	if(sk->type==SOCK_STREAM && sk->protinfo.af_unix.other)
 	{
 		if(sock->state==SS_CONNECTING && sk->state==TCP_ESTABLISHED)
@@ -652,7 +669,7 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 	return 0;
 }
 
-static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int *uaddr_len, int peer)
+static int unix_getname(struct socket *sock, struct sockaddr *uaddr, size_t *uaddr_len, int peer)
 {
 	unix_socket *sk=sock->data;
 	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;
@@ -1011,13 +1028,15 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
  
 static void unix_data_wait(unix_socket * sk)
 {
-	cli();
+	/*
+	 *	AF_UNIX sockets get no messages during interrupts, so this
+	 *	is safe without cli/sti.
+	 */
 	if (!skb_peek(&sk->receive_queue)) {
 		sk->socket->flags |= SO_WAITDATA;
 		interruptible_sleep_on(sk->sleep);
 		sk->socket->flags &= ~SO_WAITDATA;
 	}
-	sti();
 }
 
 static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, int flags, int *addr_len)
@@ -1033,22 +1052,23 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 	struct cmsghdr *cm=NULL;
 	int ct=msg->msg_iovlen;
 	int err = 0;
+	int target = 1;
 
 	if(flags&MSG_OOB)
 		return -EOPNOTSUPP;
+	if(flags&MSG_WAITALL)
+		target = size;
+		
 		
 	if(addr_len)
 		*addr_len=0;
 		
-	if(sk->err)
-		return sock_error(sk);
-
 	if(msg->msg_control) 
 	{
 		cm=msg->msg_control;
 
 		if(msg->msg_controllen<sizeof(struct cmsghdr)
-#if 0 
+#if 0
 /*		investigate this further -- Stevens example doesn't seem to care */
 		||
 		   cm->cmsg_type!=SCM_RIGHTS ||
@@ -1080,15 +1100,25 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 			if(skb==NULL)
 			{
 				up(&sk->protinfo.af_unix.readsem);
+
+				if(copied >= target)
+					return copied;
+
+				/*
+				 *	POSIX checking order...
+				 */
+				
+				if(sk->err)
+					return sock_error(sk);
 				if(sk->shutdown & RCV_SHUTDOWN)
 					return copied;
-				if(copied)
-					return copied;
-				if(noblock)
-					return -EAGAIN;
-				unix_data_wait(sk);
+				
 				if(current->signal & ~current->blocked)
 					return -ERESTARTSYS;
+				if(noblock)
+					return -EAGAIN;
+
+				unix_data_wait(sk);
 				down(&sk->protinfo.af_unix.readsem);
 				continue;
 			}
@@ -1106,7 +1136,12 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 						*addr_len=sizeof(short);
 			}
 
-			num=min(skb->len,len-done);
+			num=skb->len;
+			if(num>len-done)
+			{
+				num=len-done;
+				msg->msg_flags|=MSG_TRUNC;
+			}
 			err = copy_to_user(sp, skb->data, num);
 
 			if (err)
@@ -1283,7 +1318,7 @@ static struct proc_dir_entry proc_net_unix = {
 
 void unix_proto_init(struct net_proto *pro)
 {
-	printk(KERN_INFO "NET3: Unix domain sockets 0.13 for Linux NET3.035.\n");
+	printk(KERN_INFO "NET3: Unix domain sockets 0.14 for Linux NET3.037.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_unix);

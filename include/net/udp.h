@@ -33,16 +33,11 @@ extern struct proto udp_prot;
 
 extern void	udp_err(int type, int code, unsigned char *header,
 			__u32 info, __u32 daddr, __u32 saddr,
-			struct inet_protocol *protocol);
+			struct inet_protocol *protocol, int len);
 extern void	udp_send_check(struct udphdr *uh, __u32 saddr, 
 			__u32 daddr, int len, struct sock *sk);
-extern int	udp_recvfrom(struct sock *sk, unsigned char *to,
-			     int len, int noblock, unsigned flags,
-			     struct sockaddr_in *sin, int *addr_len);
-extern int	udp_read(struct sock *sk, unsigned char *buff,
-			 int len, int noblock, unsigned flags);
 extern int	udp_connect(struct sock *sk,
-			    struct sockaddr *usin, int addr_len);
+			    struct sockaddr *usin, size_t addr_len);
 
 extern int	udp_sendmsg(struct sock *sk, struct msghdr *msg,
 			    int len, int noblock, int flags);

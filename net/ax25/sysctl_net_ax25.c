@@ -10,9 +10,9 @@
 #include <net/ax25.h>
 
 static int min_ax25[] = {0, 0, 0, 0, 0, 1,  1,  1 * PR_SLOWHZ,  1 * PR_SLOWHZ,
-	   0 * PR_SLOWHZ,     0 * PR_SLOWHZ,  1,   1, 0x00, 1};
+	   0 * PR_SLOWHZ,     0 * PR_SLOWHZ,  1,   1,  1, 0x00};
 static int max_ax25[] = {1, 1, 1, 1, 1, 7, 63, 30 * PR_SLOWHZ, 20 * PR_SLOWHZ,
-	3600 * PR_SLOWHZ, 65535 * PR_SLOWHZ, 31, 512, 0x03, 20};
+	3600 * PR_SLOWHZ, 65535 * PR_SLOWHZ, 31, 512, 20, 0x03};
 
 static struct ctl_table_header *ax25_table_header;
 

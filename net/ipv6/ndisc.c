@@ -15,6 +15,14 @@
  */
 
 /*
+ *	Changes:
+ *
+ *	Lars Fenneberg			:	fixed MTU setting on receipt
+ *						of an RA. 
+ *
+ */
+
+/*
  *	Interface:
  *
  *	ndisc_lookup will be called from eth.c on dev->(re)build_header
@@ -1383,7 +1391,7 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 				int mtu;
 				struct device *dev;
 				
-				mtu = htonl(*(__u32 *)opt+4);
+				mtu = htonl(*(__u32 *)(opt+4));
 				dev = rt->rt_nexthop->dev;
 
 				if (mtu < 576)

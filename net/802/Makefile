@@ -14,6 +14,10 @@ ifdef CONFIG_TR
 O_OBJS += tr.o
 endif
 
+ifdef CONFIG_FDDI
+O_OBJS += fddi.o
+endif
+
 ifdef CONFIG_IPX
 OX_OBJS += p8022.o psnap.o p8022tr.o
 endif

@@ -192,7 +192,13 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   		return err;
   
   	truesize = skb->tail - skb->h.raw - sizeof(struct udphdr);
-  	copied = min(len, truesize);
+  	
+  	copied=truesize;
+  	if(copied>len)
+  	{
+  		copied=len;
+  		msg->msg_flags|=MSG_TRUNC;
+  	}
 
   	/*
   	 *	FIXME : should use udp header size info value 

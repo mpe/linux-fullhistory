@@ -140,7 +140,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
  *	all the local structures required by a serial tty driver.
  */
 static char	*stl_drvname = "Stallion Multiport Serial Driver";
-static char	*stl_drvversion = "1.1.3";
+static char	*stl_drvversion = "1.1.4";
 static char	*stl_serialname = "ttyE";
 static char	*stl_calloutname = "cue";
 
@@ -1153,35 +1153,35 @@ static int stl_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd
 		break;
 	case TIOCGSOFTCAR:
 		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(long))) == 0)
-			put_fs_long(((tty->termios->c_cflag & CLOCAL) ? 1 : 0), (unsigned long *) arg);
+			put_user(((tty->termios->c_cflag & CLOCAL) ? 1 : 0), (unsigned long *) arg);
 		break;
 	case TIOCSSOFTCAR:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			arg = get_fs_long((unsigned long *) arg);
+			get_user(arg, (unsigned long *) arg);
 			tty->termios->c_cflag = (tty->termios->c_cflag & ~CLOCAL) | (arg ? CLOCAL : 0);
 		}
 		break;
 	case TIOCMGET:
 		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned int))) == 0) {
 			val = (unsigned long) stl_getsignals(portp);
-			put_fs_long(val, (unsigned long *) arg);
+			put_user(val, (unsigned long *) arg);
 		}
 		break;
 	case TIOCMBIS:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			arg = get_fs_long((unsigned long *) arg);
+			get_user(arg, (unsigned long *) arg);
 			stl_setsignals(portp, ((arg & TIOCM_DTR) ? 1 : -1), ((arg & TIOCM_RTS) ? 1 : -1));
 		}
 		break;
 	case TIOCMBIC:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			arg = get_fs_long((unsigned long *) arg);
+			get_user(arg, (unsigned long *) arg);
 			stl_setsignals(portp, ((arg & TIOCM_DTR) ? 0 : -1), ((arg & TIOCM_RTS) ? 0 : -1));
 		}
 		break;
 	case TIOCMSET:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			arg = get_fs_long((unsigned long *) arg);
+			get_user(arg, (unsigned long *) arg);
 			stl_setsignals(portp, ((arg & TIOCM_DTR) ? 1 : 0), ((arg & TIOCM_RTS) ? 1 : 0));
 		}
 		break;

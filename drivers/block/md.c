@@ -372,7 +372,7 @@ static void md_release (struct inode *inode, struct file *file)
 
 
 static long md_read (struct inode *inode, struct file *file,
-		    char *buf, int count)
+		    char *buf, unsigned long count)
 {
   int minor=MINOR(inode->i_rdev);
 
@@ -383,7 +383,7 @@ static long md_read (struct inode *inode, struct file *file,
 }
 
 static long md_write (struct inode *inode, struct file *file,
-		     const char *buf, int count)
+		     const char *buf, unsigned long count)
 {
   int minor=MINOR(inode->i_rdev);
 

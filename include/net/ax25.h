@@ -128,8 +128,8 @@
 #define	AX25_VALUES_T1		7	/* Default T1 timeout value */
 #define	AX25_VALUES_T2		8	/* Default T2 timeout value */
 #define	AX25_VALUES_T3		9	/* Default T3 timeout value */
-#define	AX25_VALUES_N2		10	/* Default N2 value */
-#define AX25_VALUES_IDLE	11	/* mode vc idle timer */
+#define AX25_VALUES_IDLE	10	/* mode vc idle timer */
+#define	AX25_VALUES_N2		11	/* Default N2 value */
 #define AX25_VALUES_PACLEN	12	/* AX.25 MTU */
 #define AX25_VALUES_MAXQUEUE	13	/* Maximum number of buffers enqueued */
 #define	AX25_VALUES_DIGI	14	/* Digipeat mode */

@@ -518,7 +518,8 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	p->flags = SWP_WRITEOK;
 	p->pages = j;
 	nr_swap_pages += j;
-	printk("Adding Swap: %dk swap-space\n",j<<(PAGE_SHIFT-10));
+	printk("Adding Swap: %dk swap-space (priority %d)\n",
+	       j<<(PAGE_SHIFT-10), p->prio);
 
 	/* insert swap space into swap_list: */
 	prev = -1;

@@ -62,6 +62,10 @@
 #     DE4X5_DO_MEMCPY   Forces the Intels to use memory copies into sk_buffs
 #	                rather than straight DMA.
 #
+#  DEFXX		The DIGITAL series of FDDI EISA (DEFEA) and PCI (DEFPA)
+#			controllers
+#       DEFXX_DEBUG	Set the desired debug level
+#
 #  TULIP		Tulip (dc21040/dc21041/ds21140) driver
 #	TULIP_PORT	specify default if_port
 #			0: 10TP
@@ -92,5 +96,6 @@ PLIP_OPTS	=
 DEPCA_OPTS	= 
 EWRK3_OPTS	= 
 DE4X5_OPTS	= -DDE4X5_AUTOSENSE=AUTO
+DEFXX_OPTS	=
 ELP_OPTS	=
 TULIP_OPTS	=

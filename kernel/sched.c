@@ -1211,17 +1211,14 @@ found:
 static int setscheduler(pid_t pid, int policy, 
 			struct sched_param *param)
 {
-	int error;
 	struct sched_param lp;
 	struct task_struct *p;
 
 	if (!param || pid < 0)
 		return -EINVAL;
 
-	error = verify_area(VERIFY_READ, param, sizeof(struct sched_param));
-	if (error)
-		return error;
-	copy_from_user(&lp, param, sizeof(struct sched_param));
+	if (copy_from_user(&lp, param, sizeof(struct sched_param)))
+		return -EFAULT;
 
 	p = find_process_by_pid(pid);
 	if (!p)
@@ -1286,25 +1283,18 @@ asmlinkage int sys_sched_getscheduler(pid_t pid)
 
 asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
 {
-	int error;
 	struct task_struct *p;
 	struct sched_param lp;
 
 	if (!param || pid < 0)
 		return -EINVAL;
 
-	error = verify_area(VERIFY_WRITE, param, sizeof(struct sched_param));
-	if (error)
-		return error;
-
 	p = find_process_by_pid(pid);
 	if (!p)
 		return -ESRCH;
 
 	lp.sched_priority = p->rt_priority;
-	copy_to_user(param, &lp, sizeof(struct sched_param));
-
-	return 0;
+	return copy_to_user(param, &lp, sizeof(struct sched_param)) ? -EFAULT : 0;
 }
 
 asmlinkage int sys_sched_yield(void)
@@ -1343,19 +1333,12 @@ asmlinkage int sys_sched_get_priority_min(int policy)
 
 asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 {
-	int error;
 	struct timespec t;
 
-	error = verify_area(VERIFY_WRITE, interval, sizeof(struct timespec));
-	if (error)
-		return error;
-	
 	t.tv_sec = 0;
 	t.tv_nsec = 0;   /* <-- Linus, please fill correct value in here */
 	return -ENOSYS;  /* and then delete this line. Thanks!           */
-	copy_to_user(interval, &t, sizeof(struct timespec));
-
-	return 0;
+	return copy_to_user(interval, &t, sizeof(struct timespec)) ? -EFAULT : 0;
 }
 
 /*
@@ -1387,16 +1370,9 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 	struct timespec t;
 	unsigned long expire;
 
-	error = verify_area(VERIFY_READ, rqtp, sizeof(struct timespec));
+	error = copy_from_user(&t, rqtp, sizeof(struct timespec));
 	if (error)
-		return error;
-	copy_from_user(&t, rqtp, sizeof(struct timespec));
-	if (rmtp) {
-		error = verify_area(VERIFY_WRITE, rmtp,
-				    sizeof(struct timespec));
-		if (error)
-			return error;
-	}
+		return -EFAULT;	
 
 	if (t.tv_nsec >= 1000000000L || t.tv_nsec < 0 || t.tv_sec < 0)
 		return -EINVAL;
@@ -1420,7 +1396,8 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 		if (rmtp) {
 			jiffiestotimespec(expire - jiffies -
 					  (expire > jiffies + 1), &t);
-			copy_to_user(rmtp, &t, sizeof(struct timespec));
+			if (copy_to_user(rmtp, &t, sizeof(struct timespec)))
+				return -EFAULT;	
 		}
 		return -EINTR;
 	}

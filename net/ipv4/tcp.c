@@ -204,8 +204,7 @@
  *
  *		Rewrite output state machine to use a single queue.
  *		Speed up input assembly algorithm.
- *		RFC1323 - PAWS and window scaling. PAWS is required for IPv6 so we
- *		could do with it working on IPv4
+ *		RFC1323 - PAWS and window scaling. 
  *		User settable/learned rtt/max window/mtu
  *
  *		Change the fundamental structure to a single send queue maintained
@@ -905,19 +904,20 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 				    sk->mss - tcp_size > 0 &&
 				    skb->end_seq < tp->snd_una + tp->snd_wnd) 
 				{
+					int tcopy;
 					
-					copy = tcp_append_tail(sk, skb, from,
+					tcopy = tcp_append_tail(sk, skb, from,
 							       tcp_size,
 							       seglen);
-					if (copy == -1)
+					if (tcopy == -1)
 					{
 						return -EFAULT;
 					}
 					
-					from += copy;
-					copied += copy;
-					len -= copy;
-					seglen -= copy;
+					from += tcopy;
+					copied += tcopy;
+					len -= tcopy;
+					seglen -= tcopy;
 					
 					/*
 					 *	FIXME: if we're nagling we
@@ -1092,7 +1092,7 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 			struct msghdr *msg, int len, int flags, 
 			int *addr_len)
 {
-	int err; 
+	int err=0; 
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 	/*
@@ -1125,7 +1125,12 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 		char c = sk->urg_data;
 		if (!(flags & MSG_PEEK))
 			sk->urg_data = URG_READ;
-		err = memcpy_toiovec(msg->msg_iov, &c, 1);
+			
+		if(len>0)
+			err = memcpy_toiovec(msg->msg_iov, &c, 1);
+		else
+			msg->msg_flags|=MSG_TRUNC;
+			
 		if(msg->msg_name)
 		{
 			tp->af_specific->addr2sockaddr(sk, (struct sockaddr *)
@@ -1133,7 +1138,10 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 		}
 		if(addr_len)
 			*addr_len= tp->af_specific->sockaddr_len;
-
+		/* 
+		 *	Read urgent data
+		 */
+		msg->msg_flags|=MSG_OOB;
 		release_sock(sk);
 		return err ? -EFAULT : 1;
 	}
@@ -1214,10 +1222,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 	volatile u32 *seq;	/* So gcc doesn't overoptimise */
 	unsigned long used;
 	int err = 0; 
-
-	/*
-	 *	This error should be checked.
-	 */
+	int target = 1;		/* Read at least this may bytes */
 
 	if (sk->state == TCP_LISTEN)
 		return -ENOTCONN;
@@ -1239,6 +1244,13 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 	seq = &sk->copied_seq;
 	if (flags & MSG_PEEK)
 		seq = &peek_seq;
+		
+	/*
+	 *	Handle the POSIX bogosity MSG_WAITALL
+	 */
+	 
+	if (flags & MSG_WAITALL)
+		target=len;
 
 	add_wait_queue(sk->sleep, &wait);
 	lock_sock(sk);
@@ -1256,14 +1268,13 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 
 		/*
 		 * We need to check signals first, to get correct SIGURG
-		 * handling.
+		 * handling. FIXME: Need to check this doesnt impact 1003.1g
+		 * and move it down to the bottom of the loop
 		 */
 		if (current->signal & ~current->blocked) {
 			if (copied)
 				break;
 			copied = -ERESTARTSYS;
-			if (nonblock)
-				copied = -EAGAIN;
 			break;
 		}
 
@@ -1300,7 +1311,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		}
 		while (skb != (struct sk_buff *)&sk->receive_queue);
 
-		if (copied)
+		if (copied >= target)
 			break;
 
 		if (sk->err && !(flags&MSG_PEEK))
@@ -1393,11 +1404,6 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		 *	a crash when cleanup_rbuf() gets called.
 		 */
 
-		/*
-		 *	FIXME: should break out of the loop early when an
-		 *	error occurs
-		 */
-		
 		err = memcpy_toiovec(msg->msg_iov, ((unsigned char *)skb->h.th) + skb->h.th->doff*4 + offset, used);
 		
 		if (err)
@@ -1427,7 +1433,8 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 			continue;
 
 		/*
-		 *	Process the FIN.
+		 *	Process the FIN. We may also need to handle PSH
+		 *	here and make it break out of MSG_WAITALL
 		 */
 
 		if (skb->h.th->fin)
@@ -1847,104 +1854,6 @@ void tcp_set_keepalive(struct sock *sk, int val)
 	{
 		tcp_dec_slow_timer(TCP_SLT_KEEPALIVE);
 	}
-}
-
-
-/*
- *      This function returns the amount that we can raise the
- *      usable window based on the following constraints
- *  
- *	1. The window can never be shrunk once it is offered (RFC 793)
- *	2. We limit memory per socket
- */
-
-
-unsigned short tcp_select_window(struct sock *sk)
-{
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-	long free_space = sock_rspace(sk);
-	long window;
-	long cur_win;
-	long usable;
-	int mss = sk->mss;
-	
-	if (sk->window_clamp)
-	{
-		free_space = min(sk->window_clamp, free_space);
-		mss = min(sk->window_clamp, mss);
-	}
-	
-	/*
-	 * compute the actual window i.e.
-	 * old_window - received_bytes_on_that_win
-	 */
-
-	cur_win = tp->rcv_wup - (tp->rcv_nxt - tp->rcv_wnd);
-	window  = tp->rcv_wnd;
-	
-	if ( cur_win < 0 )
-	{
-		cur_win = 0;
-		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
-		       tp->rcv_wnd, tp->rcv_nxt, tp->rcv_wup);
-	}
-
-	/*
-	 * RFC 1122:
-	 * "the suggested [SWS] avoidance algoritm for the receiver is to keep
-	 *  RECV.NEXT + RCV.WIN fixed until:
-	 *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
-	 *
-	 * i.e. don't raise the right edge of the window until you can't raise
-	 * it MSS bytes
-	 */
-
-	/*
-	 * It would be a good idea if it didn't break header prediction.
-	 * and BSD made the header predition standard...
-	 * It expects the same value in the header i.e. th->window to be
-	 * constant
-	 */
-
-	usable = free_space - cur_win;
-	if (usable < 0)
-	{
-		usable = 0;
-	}
-
-	if ( window <  usable )
-	{
-		/*
-		 *	Window is not blocking the sender
-		 *	and we have enought free space for it
-		 */
-
-		if (cur_win > (sk->mss << 1))
-			goto out;
-	}
-
-       	
-	if (window >= usable)
-	{
-		/*
-		 *	We are offering too much, cut it down... 
-		 *	but don't shrink the window
-		 */
-		
-		window = max(usable, cur_win);
-	}
-	else
-	{	
-		if ((usable - window) >= mss)
-		{
-			window += mss;
-		}
-	}
-
-  out:
-	tp->rcv_wnd = window;
-	tp->rcv_wup = tp->rcv_nxt;
-	return window;
 }
 
 /*

@@ -245,6 +245,7 @@ static int ax25_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 					if (ax25->sk != NULL) {
 						ax25->sk->state = TCP_CLOSE;
 						ax25->sk->err   = ECONNREFUSED;
+						ax25->sk->shutdown |= SEND_SHUTDOWN;
 						if (!ax25->sk->dead)
 							ax25->sk->state_change(ax25->sk);
 						ax25->sk->dead  = 1;
@@ -289,6 +290,7 @@ static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				if (ax25->sk != NULL) {
 					ax25->sk->state = TCP_CLOSE;
 					ax25->sk->err   = 0;
+					ax25->sk->shutdown |= SEND_SHUTDOWN;
 					if (!ax25->sk->dead)
 						ax25->sk->state_change(ax25->sk);
 					ax25->sk->dead  = 1;
@@ -304,6 +306,7 @@ static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				if (ax25->sk != NULL) {
 					ax25->sk->state = TCP_CLOSE;
 					ax25->sk->err   = 0;
+					ax25->sk->shutdown |= SEND_SHUTDOWN;
 					if (!ax25->sk->dead)
 						ax25->sk->state_change(ax25->sk);
 					ax25->sk->dead  = 1;
@@ -319,6 +322,7 @@ static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				if (ax25->sk != NULL) {
 					ax25->sk->state = TCP_CLOSE;
 					ax25->sk->err   = 0;
+					ax25->sk->shutdown|=SEND_SHUTDOWN;
 					if (!ax25->sk->dead)
 						ax25->sk->state_change(ax25->sk);
 					ax25->sk->dead  = 1;
@@ -400,6 +404,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				if (!ax25->sk->dead)
 					ax25->sk->state_change(ax25->sk);
 				ax25->sk->dead  = 1;
+				ax25->sk->shutdown|=SEND_SHUTDOWN;
 			}
 			break;
 
@@ -411,6 +416,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			if (ax25->sk) {
 				ax25->sk->state = TCP_CLOSE;
 				ax25->sk->err   = ECONNRESET;
+				ax25->sk->shutdown |= SEND_SHUTDOWN;
 				if (!ax25->sk->dead)
 					ax25->sk->state_change(ax25->sk);
 				ax25->sk->dead         = 1;
@@ -594,6 +600,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			if (ax25->sk != NULL) {
 				ax25->sk->state = TCP_CLOSE;
 				ax25->sk->err   = 0;
+				ax25->sk->shutdown |= SEND_SHUTDOWN;
 				if (!ax25->sk->dead)
 					ax25->sk->state_change(ax25->sk);
 				ax25->sk->dead  = 1;
@@ -609,6 +616,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			if (ax25->sk != NULL) {
 				ax25->sk->state = TCP_CLOSE;
 				ax25->sk->err   = ECONNRESET;
+				ax25->sk->shutdown |= SEND_SHUTDOWN;
 				if (!ax25->sk->dead)
 					ax25->sk->state_change(ax25->sk);
 				ax25->sk->dead  = 1;

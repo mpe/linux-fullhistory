@@ -320,7 +320,7 @@ extern struct task_struct *current_set[NR_CPUS];
  *	On a single processor system this comes out as current_set[0] when cpp
  *	has finished with it, which gcc will optimise away.
  */
-#define current (0+current_set[smp_processor_id()])	/* Current on this processor */
+#define current (current_set[smp_processor_id()])	/* Current on this processor */
 extern unsigned long volatile jiffies;
 extern unsigned long itimer_ticks;
 extern unsigned long itimer_next;

@@ -54,7 +54,6 @@ struct module *module_list = &kernel_module;
 static int freeing_modules; /* true if some modules are marked for deletion */
 
 static struct module *find_module( const char *name);
-static int get_mod_name( char *user_name, char *buf);
 static int free_modules( void);
 
 extern struct symbol_table symbol_table; /* in kernel/ksyms.c */
@@ -74,6 +73,21 @@ void init_modules(void) {
 	kernel_module.state = MOD_RUNNING; /* Hah! */
 	kernel_module.name = "";
 }
+
+
+/*
+ * Copy the name of a module from user space.
+ */
+inline int
+get_mod_name(char *user_name, char *buf)
+{
+	/* Should return -EBIG instead of -EFAULT when the name
+       is too long, but that we couldn't detect real faults then.
+       Maybe strncpy_from_user() should return -EBIG, when
+       the source string is too long. */
+	return strncpy_from_user(buf, user_name, MOD_MAX_NAME); 
+}
+
 
 /*
  * Allocate space for a module.
@@ -128,6 +142,7 @@ sys_create_module(char *module_name, unsigned long size)
 	return (unsigned long) addr;
 }
 
+
 /*
  * Initialize a module.
  */
@@ -157,7 +172,8 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 		return error;
 	pr_debug("initializing module `%s', %d (0x%x) bytes\n",
 		name, codesize, codesize);
-	copy_from_user(&rt, routines, sizeof rt);
+	if (copy_from_user(&rt, routines, sizeof rt))
+			return -EFAULT;
 	if ((mp = find_module(name)) == NULL)
 		return -ENOENT;
 	if (codesize & MOD_AUTOCLEAN) {
@@ -170,7 +186,8 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 	}
 	if ((codesize + sizeof (long) + PAGE_SIZE - 1) / PAGE_SIZE > mp->size)
 		return -EINVAL;
-	copy_from_user((char *)mp->addr + sizeof (long), code, codesize);
+	if (copy_from_user((char *)mp->addr + sizeof (long), code, codesize))
+			return -EFAULT;
 	memset((char *)mp->addr + sizeof (long) + codesize, 0,
 		mp->size * PAGE_SIZE - (codesize + sizeof (long)));
 	pr_debug("module init entry = 0x%08lx, cleanup entry = 0x%08lx\n",
@@ -190,19 +207,17 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 		int i;
 		int legal_start;
 
-		if ((error = verify_area(VERIFY_READ, &symtab->size, sizeof(symtab->size))))
-			return error;
-		get_user(size, &symtab->size);
-
+		error = get_user(size, &symtab->size);
+		if (error)
+				return error;
 		if ((newtab = (struct symbol_table*) kmalloc(size, GFP_KERNEL)) == NULL) {
 			return -ENOMEM;
 		}
 
-		if ((error = verify_area(VERIFY_READ, symtab, size))) {
-			kfree_s(newtab, size);
-			return error;
+		if (copy_from_user((char *)(newtab), symtab, size)) {
+				kfree_s(newtab, size);
+				return -EFAULT;
 		}
-		copy_from_user((char *)(newtab), symtab, size);
 
 		/* sanity check */
 		legal_start = sizeof(struct symbol_table) +
@@ -344,6 +359,7 @@ sys_get_kernel_syms(struct kernel_sym *table)
 	struct module *mp = module_list;
 	int i;
 	int nmodsyms = 0;
+	int err;
 
 	for (mp = module_list; mp; mp = mp->next) {
 		if (mp->symtab && mp->symtab->n_symbols) {
@@ -358,16 +374,15 @@ sys_get_kernel_syms(struct kernel_sym *table)
 	if (table != NULL) {
 		to = table;
 
-		if ((i = verify_area(VERIFY_WRITE, to, nmodsyms * sizeof(*table))))
-			return i;
-
 		/* copy all module symbols first (always LIFO order) */
 		for (mp = module_list; mp; mp = mp->next) {
 			if (mp->state == MOD_RUNNING) {
 				/* magic: write module info as a pseudo symbol */
 				isym.value = (unsigned long)mp;
 				sprintf(isym.name, "#%s", mp->name);
-				copy_to_user(to, &isym, sizeof isym);
+				err = copy_to_user(to, &isym, sizeof isym);
+				if (err)
+						return -EFAULT;
 				++to;
 
 				if (mp->symtab != NULL) {
@@ -377,7 +392,9 @@ sys_get_kernel_syms(struct kernel_sym *table)
 
 						isym.value = (unsigned long)from->addr;
 						strncpy(isym.name, from->name, sizeof isym.name);
-						copy_to_user(to, &isym, sizeof isym);
+						err = copy_to_user(to, &isym, sizeof isym);
+						if (err)
+								return -EFAULT;
 					}
 				}
 			}
@@ -386,27 +403,6 @@ sys_get_kernel_syms(struct kernel_sym *table)
 
 	return nmodsyms;
 }
-
-
-/*
- * Copy the name of a module from user space.
- */
-int
-get_mod_name(char *user_name, char *buf)
-{
-	int i;
-
-	i = 0;
-	for (;;) {
-		get_user(buf[i], user_name + i);
-		if (buf[i] == '\0')
-			break;
-		if (++i >= MOD_MAX_NAME)
-			return -E2BIG;
-	}
-	return 0;
-}
-
 
 /*
  * Look for a module by name, ignoring modules marked for deletion.

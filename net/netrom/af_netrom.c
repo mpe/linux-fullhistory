@@ -1,10 +1,10 @@
 /*
- *	NET/ROM release 004
+ *	NET/ROM release 005
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
  *
- *	This code REQUIRES 1.3.0 or higher/ NET3.029
+ *	This code REQUIRES 2.1.0 or higher/ NET3.037
  *
  *	This module:
  *		This module is free software; you can redistribute it and/or
@@ -27,6 +27,8 @@
  *			Alan(GW4PTS)	sendmsg/recvmsg only. Fixed connect clear bug
  *					inherited from AX.25
  *	NET/ROM 004	Jonathan(G4KLX)	Converted to module.
+ *	NET/ROM 005	Jonathan(G4KLX) Linux 2.1
+ *			Alan(GW4PTS)	Started POSIXisms
  */
   
 #include <linux/config.h>
@@ -772,7 +774,7 @@ static int nr_release(struct socket *sock, struct socket *peer)
 	return 0;
 }
 
-static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
+static int nr_bind(struct socket *sock, struct sockaddr *uaddr, size_t addr_len)
 {
 	struct sock *sk;
 	struct full_sockaddr_ax25 *addr = (struct full_sockaddr_ax25 *)uaddr;
@@ -782,7 +784,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	sk = (struct sock *)sock->data;
 
 	if (sk->zapped == 0)
-		return -EIO;
+		return -EINVAL;
 		
 	if (addr_len != sizeof(struct sockaddr_ax25) && addr_len != sizeof(struct full_sockaddr_ax25))
 		return -EINVAL;
@@ -798,7 +800,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	 */
 	if (addr->fsa_ax25.sax25_ndigis == 1) {
 		if (!suser())
-			return -EPERM;
+			return -EACCES;
 		sk->protinfo.nr->user_addr   = addr->fsa_digipeater[0];
 		sk->protinfo.nr->source_addr = addr->fsa_ax25.sax25_call;
 	} else {
@@ -826,7 +828,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 }
 
 static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
-	int addr_len, int flags)
+	size_t addr_len, int flags)
 {
 	struct sock *sk = (struct sock *)sock->data;
 	struct sockaddr_ax25 *addr = (struct sockaddr_ax25 *)uaddr;
@@ -977,7 +979,7 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags)
 }
 
 static int nr_getname(struct socket *sock, struct sockaddr *uaddr,
-	int *uaddr_len, int peer)
+	size_t *uaddr_len, int peer)
 {
 	struct full_sockaddr_ax25 *sax = (struct full_sockaddr_ax25 *)uaddr;
 	struct sock *sk;
@@ -1230,9 +1232,6 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int nob
 	struct sk_buff *skb;
 	int er;
 
-	if (sk->err)
-		return sock_error(sk);
-	
 	if (addr_len != NULL)
 		*addr_len = sizeof(*sax);
 
@@ -1240,6 +1239,7 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int nob
 	 * This works for seqpacket too. The receiver has ordered the queue for
 	 * us! We do one quick check first though
 	 */
+
 	if (sk->state != TCP_ESTABLISHED)
 		return -ENOTCONN;
 
@@ -1252,7 +1252,12 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int nob
 		skb->h.raw = skb->data;
 	}
 
-	copied = (size < skb->len) ? size : skb->len;
+	copied = skb->len;
+	if(copied>size)
+	{
+		copied=size;
+		msg->msg_flags|=MSG_TRUNC;
+	}
 	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	
 	if (sax != NULL) {
@@ -1462,7 +1467,7 @@ void nr_proto_init(struct net_proto *pro)
 {
 	sock_register(nr_proto_ops.family, &nr_proto_ops);
 	register_netdevice_notifier(&nr_dev_notifier);
-	printk(KERN_INFO "G4KLX NET/ROM for Linux. Version 0.5 for AX25.033 Linux 2.0\n");
+	printk(KERN_INFO "G4KLX NET/ROM for Linux. Version 0.5 for AX25.034 Linux 2.1\n");
 
 	if (!ax25_protocol_register(AX25_P_NETROM, nr_route_frame))
 		printk(KERN_ERR "NET/ROM unable to register protocol with AX.25\n");

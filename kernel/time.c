@@ -202,15 +202,13 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 	/* Local copy of parameter */
 	struct timex txc;
 
-	error = verify_area(VERIFY_WRITE, txc_p, sizeof(struct timex));
-	if (error)
-	  return error;
-
 	/* Copy the user data space into the kernel copy
 	 * structure. But bear in mind that the structures
 	 * may change
 	 */
-	copy_from_user(&txc, txc_p, sizeof(struct timex));
+	error = copy_from_user(&txc, txc_p, sizeof(struct timex));
+	if (error)
+		return -EFAULT;	
 
 	/* In order to modify anything, you gotta be super-user! */
 	if (txc.modes && !suser())
@@ -345,6 +343,5 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 
 	sti();
 
-	copy_to_user(txc_p, &txc, sizeof(struct timex));
-	return time_state;
+	return copy_to_user(txc_p, &txc, sizeof(struct timex)) ? -EFAULT : time_state;
 }

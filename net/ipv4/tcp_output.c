@@ -361,7 +361,9 @@ static int tcp_wrxmit_frag(struct sock *sk, struct sk_buff *skb, int size)
 void tcp_write_xmit(struct sock *sk)
 {
 	struct sk_buff *skb;
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;	
+	u16 rcv_wnd;
+	int sent_pkts = 0;
 
 	/*
 	 *	The bytes will have to remain here. In time closedown will
@@ -382,8 +384,14 @@ void tcp_write_xmit(struct sock *sk)
 
 	start_bh_atomic();
 
+	rcv_wnd = htons(tcp_select_window(sk));
+	
 	while((skb = tp->send_head) && tcp_snd_test(sk, skb))
 	{
+		struct tcphdr *th;
+		struct sk_buff *buff;
+		int size;
+
 		IS_SKB(skb);
 				
 		/*
@@ -393,21 +401,18 @@ void tcp_write_xmit(struct sock *sk)
 		if (!after(skb->end_seq, tp->snd_una)) 
 		{
 			tcp_wrxmit_prob(sk, skb);
+			continue;
 		} 
-		else
-		{
-			struct tcphdr *th;
-			struct sk_buff *buff;
-			int size;
 
-			/* 
-			 * Advance the send_head
-			 * This one is going out.
-			 */
 
-			update_send_head(sk);
+		/* 
+		 * Advance the send_head
+		 * This one is going out.
+		 */
 
-			atomic_inc(&sk->packets_out);
+		update_send_head(sk);
+
+		atomic_inc(&sk->packets_out);
 
 
 /*
@@ -418,43 +423,145 @@ void tcp_write_xmit(struct sock *sk)
  * on the write queue.
  */
 
-			th = skb->h.th;
-			size = skb->len - (((unsigned char *) th) - skb->data);
+		th = skb->h.th;
+		size = skb->len - (((unsigned char *) th) - skb->data);
 
-			if (size - (th->doff << 2) > sk->mss)
-			{
-				if (tcp_wrxmit_frag(sk, skb, size))
-					break;
-			}
-			
-			th->ack_seq = htonl(tp->rcv_nxt);
-			th->window = htons(tcp_select_window(sk));
-
-			tp->af_specific->send_check(sk, th, size, skb);
-
-			if (before(skb->end_seq, tp->snd_nxt)) 
-				printk(KERN_DEBUG "tcp_write_xmit:"
-				       " sending already sent seq\n");
-			else
-				tp->snd_nxt = skb->end_seq;
-			
-			clear_delayed_acks(sk);
-			
-			skb->when = jiffies;
-
-			buff = skb_clone(skb, GFP_ATOMIC);
-			atomic_add(buff->truesize, &sk->wmem_alloc);
-
-			tp->af_specific->queue_xmit(sk, skb->dev, buff, 1);
-			
-			if (!tcp_timer_is_set(sk, TIME_RETRANS))
-			{
-				tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
-			}
+		if (size - (th->doff << 2) > sk->mss)
+		{
+			if (tcp_wrxmit_frag(sk, skb, size))
+				break;
 		}
+
+		th->ack_seq = htonl(tp->rcv_nxt);
+		th->window = rcv_wnd;
+
+		tp->af_specific->send_check(sk, th, size, skb);
+
+#ifdef TCP_DEBUG
+		if (before(skb->end_seq, tp->snd_nxt))
+			printk(KERN_DEBUG "tcp_write_xmit:"
+			       " sending already sent seq\n");
+#endif		
+
+		tp->snd_nxt = skb->end_seq;
+
+		skb->when = jiffies;
+		clear_delayed_acks(sk);
+
+		buff = skb_clone(skb, GFP_ATOMIC);
+		atomic_add(buff->truesize, &sk->wmem_alloc);
+
+		sent_pkts = 1;
+		tp->af_specific->queue_xmit(sk, skb->dev, buff, 1);
+
+	}
+	
+	if (sent_pkts && !tcp_timer_is_set(sk, TIME_RETRANS))
+	{
+		tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 	}
 
 	end_bh_atomic();
+}
+
+
+
+/*
+ *      This function returns the amount that we can raise the
+ *      usable window based on the following constraints
+ *  
+ *	1. The window can never be shrunk once it is offered (RFC 793)
+ *	2. We limit memory per socket
+ */
+
+
+unsigned short tcp_select_window(struct sock *sk)
+{
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	int mss = sk->mss;
+	long free_space = sock_rspace(sk);
+	long window;
+	long cur_win;
+	long usable;
+
+	
+	if (sk->window_clamp)
+	{
+		free_space = min(sk->window_clamp, free_space);
+		mss = min(sk->window_clamp, mss);
+	}
+	
+	/*
+	 * compute the actual window i.e.
+	 * old_window - received_bytes_on_that_win
+	 */
+
+	cur_win = tp->rcv_wup - (tp->rcv_nxt - tp->rcv_wnd);
+	window  = tp->rcv_wnd;
+	
+	if ( cur_win < 0 )
+	{
+		cur_win = 0;
+		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
+		       tp->rcv_wnd, tp->rcv_nxt, tp->rcv_wup);
+	}
+
+	/*
+	 * RFC 1122:
+	 * "the suggested [SWS] avoidance algoritm for the receiver is to keep
+	 *  RECV.NEXT + RCV.WIN fixed until:
+	 *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
+	 *
+	 * i.e. don't raise the right edge of the window until you can't raise
+	 * it MSS bytes
+	 */
+
+	/*
+	 * It would be a good idea if it didn't break header prediction.
+	 * and BSD made the header predition standard...
+	 * It expects the same value in the header i.e. th->window to be
+	 * constant
+	 */
+
+	usable = free_space - cur_win;
+	if (usable < 0)
+	{
+		usable = 0;
+	}
+
+	if ( window <  usable )
+	{
+		/*
+		 *	Window is not blocking the sender
+		 *	and we have enought free space for it
+		 */
+
+		if (cur_win > (sk->mss << 1))
+			goto out;
+	}
+
+       	
+	if (window >= usable)
+	{
+		/*
+		 *	We are offering too much, cut it down... 
+		 *	but don't shrink the window
+		 */
+		
+		window = max(usable, cur_win);
+	}
+	else
+	{	
+		if ((usable - window) >= mss)
+		{
+			window += mss;
+		}
+	}
+
+  out:
+	tp->rcv_wnd = window;
+	tp->rcv_wup = tp->rcv_nxt;
+	return window;
 }
 
 static int tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb)
@@ -546,8 +653,10 @@ void tcp_do_retransmit(struct sock *sk, int all)
 	
 	while ((skb = tp->retrans_head) != NULL)
 	{
+		struct sk_buff *buff;
 		struct tcphdr *th;
-		u32 tcp_size;
+		int tcp_size;			
+		int size;
 
 		IS_SKB(skb);
 		
@@ -582,37 +691,35 @@ void tcp_do_retransmit(struct sock *sk, int all)
 			tcp_retrans_try_collapse(sk, skb);
 		}	       		
 
-		if (tp->af_specific->rebuild_header(sk, skb) == 0) 
+		if (tp->af_specific->rebuild_header(sk, skb)) 
 		{
-			struct sk_buff *buff;
-			int size;
-
-			if (sk->debug)
-				printk("retransmit sending\n");
-
-			/*
-			 *	update ack and window
-			 */
-			th->ack_seq = htonl(tp->rcv_nxt);
-			th->window = ntohs(tcp_select_window(sk));
-
-			size = skb->tail - (unsigned char *) th;
-			tp->af_specific->send_check(sk, th, size, skb);
-
-			skb->when = jiffies;
-			buff = skb_clone(skb, GFP_ATOMIC);
-			atomic_add(buff->truesize, &sk->wmem_alloc);
-
-			clear_delayed_acks(sk);
-
-			tp->af_specific->queue_xmit(sk, skb->dev, buff, 1);
-		}
-		else
-		{
+#ifdef TCP_DEBUG
 			printk(KERN_DEBUG "tcp_do_rebuild_header failed\n");
+#endif
 			break;
 		}
 
+		if (sk->debug)
+			printk("retransmit sending\n");
+
+		/*
+		 *	update ack and window
+		 */
+
+		th->ack_seq = htonl(tp->rcv_nxt);
+		th->window = ntohs(tcp_select_window(sk));
+
+		size = skb->tail - (unsigned char *) th;
+		tp->af_specific->send_check(sk, th, size, skb);
+		
+		skb->when = jiffies;
+		buff = skb_clone(skb, GFP_ATOMIC);
+		atomic_add(buff->truesize, &sk->wmem_alloc);
+		
+		clear_delayed_acks(sk);
+		
+		tp->af_specific->queue_xmit(sk, skb->dev, buff, 1);
+		
 		/*
 		 *	Count retransmissions
 		 */

@@ -25,7 +25,7 @@ struct at_addr
 
 struct sockaddr_at 
 {
-	short		sat_family;
+	sa_family_t	sat_family;
 	__u8		sat_port;
 	struct at_addr	sat_addr;
 	char		sat_zero[ 8 ];

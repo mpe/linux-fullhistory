@@ -22,10 +22,24 @@
 #define set_fs(x)	(current->tss.segment = (x))
 #define get_ds()	(KERNEL_DS)
 
+/*
+ * Address Ok:
+ *
+ *			    low two bits of segment
+ *			00 (kernel)		11 (user)
+ *
+ * high		00	1			1
+ * two 		01	1			1
+ * bits of	10	1			1
+ * address	11	1			0
+ */
+#define __addr_ok(x) \
+	((((unsigned long)(x)>>30)&get_fs()) != 3)
+
 #define __user_ok(addr,size) \
 	((size <= 0xC0000000UL) && (addr <= 0xC0000000UL - size))
 #define __kernel_ok \
-	(get_fs() == KERNEL_DS)
+	(!(get_fs() & 3))
 
 extern int __verify_write(const void *, unsigned long);
 
@@ -412,28 +426,25 @@ strncpy_from_user(char *dst, const char *src, long count)
  *
  * Return 0 for error
  */
-extern inline long strlen_user(const char * s)
+
+extern inline long strlen_user(const char *s)
 {
-	long res;
+	unsigned long res;
+
 	__asm__ __volatile__(
-		"\n"
-		"0:\trepne ; scasb\n\t"
-		"notl %0\n"
+		"0:	repne; scasb\n"
+		"	notl %0\n"
 		"1:\n"
 		".section .fixup,\"ax\"\n"
-		"2:\txorl %0,%0\n\t"
-		"jmp 1b\n"
-		".section __ex_table,\"a\"\n\t"
-		".align 4\n\t"
-		".long 0b,2b\n"
+		"2:	xorl %0,%0\n"
+		"	jmp 1b\n"
+		".section __ex_table,\"a\"\n"
+		"	.align 4\n"
+		"	.long 0b,2b\n"
 		".text"
-		:"=c" (res)
-		:"D" (s),"a" (0),"0" (0xffffffff)
-		:"di");
-	if (!access_ok(VERIFY_READ, s, res))
-		res = 0;
-	return res;
+		:"=c" (res), "=D" (s)
+		:"1" (s), "a" (0), "0" (-__addr_ok(s)));
+	return res & -__addr_ok(s);
 }
-
 
 #endif /* __i386_UACCESS_H */

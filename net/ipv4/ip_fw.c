@@ -37,6 +37,8 @@
  *		Willy Konynenberg <willy@xos.nl> 10/5/96.
  *	Make separate accounting on incoming and outgoing packets possible.
  *		Jos Vos <jos@xos.nl> 18/5/1996.
+ *	Added trap out of bad frames.
+ *		Alan Cox <alan@cymru.net> 17/11/1996
  *
  *
  * Masquerading functionality
@@ -102,6 +104,7 @@
 #include <net/udp.h>
 #include <net/sock.h>
 #include <net/icmp.h>
+#include <net/netlink.h>
 #include <linux/firewall.h>
 #include <linux/ip_fw.h>
 
@@ -567,6 +570,20 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 		else
 			answer = FW_BLOCK;
 
+#ifdef CONFIG_IP_FIREWALL_NETLINK
+		if(answer == FW_REJECT || answer == FW_BLOCK)
+		{
+			struct sk_buff *skb=alloc_skb(128, GFP_ATOMIC);
+			if(skb)
+			{
+				int len=min(128,ntohs(ip->tot_len));
+				skb_put(skb,len);
+				memcpy(skb->data,ip,len);
+				if(netlink_post(NETLINK_FIREWALL, skb))
+					kfree_skb(skb, FREE_WRITE);
+			}
+		}
+#endif		
 		return answer;
 	} else
 		/* we're doing accounting, always ok */

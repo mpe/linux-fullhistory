@@ -44,7 +44,9 @@
 #include <linux/malloc.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
+#include <asm/system.h>
 #include <asm/io.h>
+#include <asm/uaccess.h>
 
 /*****************************************************************************/
 
@@ -157,7 +159,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  *	all the local structures required by a serial tty driver.
  */
 static char	*stli_drvname = "Stallion Intelligent Multiport Serial Driver";
-static char	*stli_drvversion = "1.1.3";
+static char	*stli_drvversion = "1.1.4";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 
@@ -1790,11 +1792,11 @@ static int stli_ioctl(struct tty_struct *tty, struct file *file, unsigned int cm
 		break;
 	case TIOCGSOFTCAR:
 		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(long))) == 0)
-			put_fs_long(((tty->termios->c_cflag & CLOCAL) ? 1 : 0), (unsigned long *) arg);
+			put_user(((tty->termios->c_cflag & CLOCAL) ? 1 : 0), (unsigned long *) arg);
 		break;
 	case TIOCSSOFTCAR:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			arg = get_fs_long((unsigned long *) arg);
+			get_user(arg, (unsigned long *) arg);
 			tty->termios->c_cflag = (tty->termios->c_cflag & ~CLOCAL) | (arg ? CLOCAL : 0);
 		}
 		break;
@@ -1803,26 +1805,26 @@ static int stli_ioctl(struct tty_struct *tty, struct file *file, unsigned int cm
 			if ((rc = stli_cmdwait(brdp, portp, A_GETSIGNALS, &portp->asig, sizeof(asysigs_t), 1)) < 0)
 				return(rc);
 			val = stli_mktiocm(portp->asig.sigvalue);
-			put_fs_long(val, (unsigned long *) arg);
+			put_user(val, (unsigned int *) arg);
 		}
 		break;
 	case TIOCMBIS:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			arg = get_fs_long((unsigned long *) arg);
+			get_user(arg, (unsigned long *) arg);
 			stli_mkasysigs(&portp->asig, ((arg & TIOCM_DTR) ? 1 : -1), ((arg & TIOCM_RTS) ? 1 : -1));
 			rc = stli_cmdwait(brdp, portp, A_SETSIGNALS, &portp->asig, sizeof(asysigs_t), 0);
 		}
 		break;
 	case TIOCMBIC:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			arg = get_fs_long((unsigned long *) arg);
+			get_user(arg, (unsigned long *) arg);
 			stli_mkasysigs(&portp->asig, ((arg & TIOCM_DTR) ? 0 : -1), ((arg & TIOCM_RTS) ? 0 : -1));
 			rc = stli_cmdwait(brdp, portp, A_SETSIGNALS, &portp->asig, sizeof(asysigs_t), 0);
 		}
 		break;
 	case TIOCMSET:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			arg = get_fs_long((unsigned long *) arg);
+			get_user(arg, (unsigned long *) arg);
 			stli_mkasysigs(&portp->asig, ((arg & TIOCM_DTR) ? 1 : 0), ((arg & TIOCM_RTS) ? 1 : 0));
 			rc = stli_cmdwait(brdp, portp, A_SETSIGNALS, &portp->asig, sizeof(asysigs_t), 0);
 		}
@@ -1837,11 +1839,11 @@ static int stli_ioctl(struct tty_struct *tty, struct file *file, unsigned int cm
 		break;
 	case STL_GETPFLAG:
 		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned long))) == 0)
-			put_fs_long(portp->pflag, (unsigned long *) arg);
+			put_user(portp->pflag, (unsigned int *) arg);
 		break;
 	case STL_SETPFLAG:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned long))) == 0) {
-			portp->pflag = get_fs_long((unsigned long *) arg);
+			get_user(portp->pflag, (unsigned int *) arg);
 			stli_setport(portp);
 		}
 		break;

@@ -54,6 +54,7 @@
 #define ARPHRD_SKIP	771		/* SKIP vif			*/
 #define ARPHRD_LOOPBACK	772		/* Loopback device		*/
 #define ARPHRD_LOCALTLK 773		/* Localtalk device		*/
+#define ARPHRD_FDDI	774		/* FDDI interfaces		*/
 #define ARPHRD_SIT	776		/* sit0 device - IPv6-in-IPv4	*/
 
 /* ARP protocol opcodes. */

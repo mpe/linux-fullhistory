@@ -272,7 +272,7 @@ void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
 
 #ifdef CONFIG_FIREWALL
 	if (call_fw_firewall(PF_ROSE, skb->dev, skb->data, NULL) != FW_ACCEPT)
-		return 0;
+		return;
 #endif
 
 	if (!ax25_link_up((ax25_address *)neigh->dev->dev_addr, &neigh->callsign, neigh->dev))

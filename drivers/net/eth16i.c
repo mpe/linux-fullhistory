@@ -181,8 +181,8 @@ static char *version =
 #define BUFFER_WIDTH_8         BIT(4)       /* 1 = 8bit, 0 = 16bit */
 #define TBS1                   BIT(3)       
 #define TBS0                   BIT(2)
-#define BS1                    BIT(1)       /* 00=8kb,  01=16kb  */
-#define BS0                    BIT(0)       /* 10=32kb, 11=64kb  */
+#define MBS1                   BIT(1)       /* 00=8kb,  01=16kb  */
+#define MBS0                   BIT(0)       /* 10=32kb, 11=64kb  */
 
 #ifndef ETH16I_TX_BUF_SIZE                   /* 0 = 2kb, 1 = 4kb  */ 
 #define ETH16I_TX_BUF_SIZE     2             /* 2 = 8kb, 3 = 16kb */
@@ -327,7 +327,7 @@ static int eth16i_close(struct device *dev);
 static int eth16i_tx(struct sk_buff *skb, struct device *dev);
 static void eth16i_rx(struct device *dev);
 static void eth16i_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void eth16i_multicast(struct device *dev, int num_addrs, void *addrs); 
+static void eth16i_multicast(struct device *dev); 
 static void eth16i_select_regbank(unsigned char regbank, short ioaddr);
 static void eth16i_initialize(struct device *dev);
 static struct enet_statistics *eth16i_get_stats(struct device *dev);
@@ -505,10 +505,10 @@ static void eth16i_initialize(struct device *dev)
   if( (node_w & 0xFF00) == 0x0800)
     node_byte |= BUFFER_WIDTH_8;
 
-  node_byte |= BS1;
+  node_byte |= MBS1;
 
   if( (node_w & 0x00FF) == 64)
-    node_byte |= BS0;
+    node_byte |= MBS0;
   
   node_byte |= DLC_EN | SRAM_CYCLE_TIME_100NS | (ETH16I_TX_BUF_SIZE << 2);
 
@@ -1147,7 +1147,7 @@ static void eth16i_interrupt(int irq, void *dev_id, struct pt_regs *regs)
   return;
 }
 
-static void eth16i_multicast(struct device *dev, int num_addrs, void *addrs)
+static void eth16i_multicast(struct device *dev)
 {
   short ioaddr = dev->base_addr;
   

@@ -88,11 +88,7 @@ asmlinkage int sys_getitimer(int which, struct itimerval *value)
 	error = _getitimer(which, &get_buffer);
 	if (error)
 		return error;
-	error = verify_area(VERIFY_WRITE, value, sizeof(struct itimerval));
-	if (error)
-		return error;
-	copy_to_user(value, &get_buffer, sizeof(get_buffer));
-	return 0;
+	return copy_to_user(value, &get_buffer, sizeof(get_buffer)) ? -EFAULT : 0;
 }
 
 void it_real_fn(unsigned long __data)
@@ -162,20 +158,17 @@ asmlinkage int sys_setitimer(int which, struct itimerval *value, struct itimerva
 		error = verify_area(VERIFY_READ, value, sizeof(*value));
 		if (error)
 			return error;
-		copy_from_user(&set_buffer, value, sizeof(set_buffer));
+		error = copy_from_user(&set_buffer, value, sizeof(set_buffer));
+		if (error)
+			return -EFAULT;
 	} else
 		memset((char *) &set_buffer, 0, sizeof(set_buffer));
-
-	if (ovalue) {
-		error = verify_area(VERIFY_WRITE, ovalue, sizeof(struct itimerval));
-		if (error)
-			return error;
-	}
 
 	error = _setitimer(which, &set_buffer, ovalue ? &get_buffer : 0);
 	if (error || !ovalue)
 		return error;
 
-	copy_to_user(ovalue, &get_buffer, sizeof(get_buffer));
+	if (copy_to_user(ovalue, &get_buffer, sizeof(get_buffer)))
+		error = -EFAULT; 
 	return error;
 }

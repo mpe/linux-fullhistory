@@ -44,6 +44,8 @@
  *	Revision 0.34:	Module support. <Jim Freeman>
  *	Revision 0.35:  Checksum support. <Neil Turton>, hooked in by <Alan Cox>
  *			Handles WIN95 discovery packets <Volker Lendecke>
+ *	Revision 0.36:	Internal bump up for 2.1
+ *	Revision 0.37:	Began adding POSIXisms.
  *
  *	Protect the module by a MOD_INC_USE_COUNT/MOD_DEC_USE_COUNT
  *	pair. Also, now usage count is managed this way
@@ -141,7 +143,7 @@ ipxcfg_get_config_data(ipx_config_data *arg)
 	
 	vals.ipxcfg_auto_create_interfaces = ipxcfg_auto_create_interfaces;
 	vals.ipxcfg_auto_select_primary = ipxcfg_auto_select_primary;
-	return copy_to_user(arg, &vals, sizeof(vals));
+	return copy_to_user(arg, &vals, sizeof(vals)) ? -EFAULT : 0;
 }
 
 
@@ -785,8 +787,13 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		/* We only route point-to-point packets. */
 		if ((skb->pkt_type != PACKET_BROADCAST) &&
 			(skb->pkt_type != PACKET_MULTICAST))
-			return ipxrtr_route_skb(skb);
-		
+		{
+			skb=skb_unshare(skb, GFP_ATOMIC, FREE_READ);
+			if(skb)
+				return ipxrtr_route_skb(skb);
+			else
+				return 0;
+		}
 		kfree_skb(skb,FREE_READ);
 		return 0;
 	}
@@ -1785,7 +1792,7 @@ ipx_first_free_socketnum(ipx_interface *intrfc)
 	return	ntohs(socketNum);
 }
 	
-static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
+static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_len)
 {
 	ipx_socket *sk;
 	ipx_interface *intrfc;
@@ -1794,7 +1801,7 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 	sk=(ipx_socket *)sock->data;
 	
 	if(sk->zapped==0)
-		return -EIO;
+		return -EINVAL;
 		
 	if(addr_len!=sizeof(struct sockaddr_ipx))
 		return -EINVAL;
@@ -1810,7 +1817,7 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 	}
 
 	if(ntohs(addr->sipx_port)<IPX_MIN_EPHEMERAL_SOCKET && !suser())
-		return -EPERM;	/* protect IPX system stuff like routing/sap */
+		return -EACCES;	/* protect IPX system stuff like routing/sap */
 
 	sk->protinfo.af_ipx.port=addr->sipx_port;
 
@@ -1886,7 +1893,7 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 }
 
 static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
-	int addr_len, int flags)
+	size_t addr_len, int flags)
 {
 	ipx_socket *sk=(ipx_socket *)sock->data;
 	struct sockaddr_ipx *addr;
@@ -1942,7 +1949,7 @@ static int ipx_accept(struct socket *sock, struct socket *newsock, int flags)
 }
 
 static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
-	int *uaddr_len, int peer)
+	size_t *uaddr_len, int peer)
 {
 	ipx_address *addr;
 	struct sockaddr_ipx sipx;
@@ -2149,29 +2156,33 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size, int no
 	int copied = 0;
 	int truesize;
 	struct sk_buff *skb;
-	int er;
-	
-	if(sk->err)
-		return sock_error(sk);
+	int err;
 	
 	if (sk->zapped)
-		return -EIO;
+		return -ENOTCONN;
 
 
-	skb=skb_recv_datagram(sk,flags,noblock,&er);
+	skb=skb_recv_datagram(sk,flags,noblock,&err);
 	if(skb==NULL)
-		return er;
+		return err;
 	
 	if(addr_len)
 		*addr_len=sizeof(*sipx);
 
 	ipx = (ipx_packet *)(skb->h.raw);
 	truesize=ntohs(ipx->ipx_pktsize) - sizeof(ipx_packet);
-	copied = (truesize > size) ? size : truesize;
+	
+	copied = truesize;
+	if(copied > size)
+	{
+		copied=size;
+		msg->msg_flags|=MSG_TRUNC;
+	}
+	
 	err = skb_copy_datagram_iovec(skb,sizeof(struct ipx_packet),msg->msg_iov,copied);
 	
 	if (err)
-		return err; 
+		return err;
 
 	if(sipx)
 	{
@@ -2182,7 +2193,7 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size, int no
 		sipx->sipx_type = ipx->ipx_type;
 	}
 	skb_free_datagram(sk, skb);
-	return(truesize);
+	return(copied);
 }		
 
 static int ipx_shutdown(struct socket *sk,int how)
@@ -2199,7 +2210,6 @@ static int ipx_select(struct socket *sock , int sel_type, select_table *wait)
 
 static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 {
-	int err;
 	long amount=0;
 	ipx_socket *sk=(ipx_socket *)sock->data;
 	
@@ -2363,7 +2373,7 @@ ipx_proto_init(struct net_proto *pro)
 	proc_net_register(&ipx_rt_procinfo);
 #endif	
 		
-	printk(KERN_INFO "Swansea University Computer Society IPX 0.34 for NET3.035\n");
+	printk(KERN_INFO "Swansea University Computer Society IPX 0.35 for NET3.037\n");
 	printk(KERN_INFO "IPX Portions Copyright (c) 1995 Caldera, Inc.\n");
 }
 

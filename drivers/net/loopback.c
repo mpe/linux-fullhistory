@@ -20,6 +20,8 @@
  *              Michael Griffith:       Don't bother computing the checksums
  *                                      on packets received on the loopback
  *                                      interface.
+ *		Alexey Kuznetsov:	Potential hang under some extreme
+ *					cases removed.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -73,9 +75,9 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	{
 	  	struct sk_buff *skb2=skb;
 	  	skb=skb_clone(skb, GFP_ATOMIC);		/* Clone the buffer */
-	  	if(skb==NULL)
-	  		return 1;
 	  	dev_kfree_skb(skb2, FREE_WRITE);
+	  	if(skb==NULL)
+	  		return 0;
   		unlock=0;
 	}
 	else if(skb->sk)

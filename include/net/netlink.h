@@ -2,16 +2,17 @@
 #define __NET_NETLINK_H
 
 #define NET_MAJOR 36		/* Major 18 is reserved for networking 						*/
-#define MAX_LINKS 12		/* 18,0 for route updates, 18,1 for SKIP, 18,2 debug tap 18,3 PPP reserved 	*/
+#define MAX_LINKS 16		/* 18,0 for route updates, 18,1 for SKIP, 18,2 debug tap 18,3 PPP reserved 	*/
 				/* 4-7 are psi0-psi3  8 is arpd 9 is ppp */
 				/* 10 is for IPSEC <John Ioannidis> */
 				/* 11 IPv6 route updates		*/
+				/* 12 is for firewall trapout	*/
 #define MAX_QBYTES 32768	/* Maximum bytes in the queue 							*/
 
 #include <linux/config.h>
 
-extern int netlink_attach(int unit, int (*function)(struct sk_buff *skb));
-extern int netlink_donothing(struct sk_buff *skb);
+extern int netlink_attach(int unit, int (*function)(int,struct sk_buff *skb));
+extern int netlink_donothing(int, struct sk_buff *skb);
 extern void netlink_detach(int unit);
 extern int netlink_post(int unit, struct sk_buff *skb);
 extern int init_netlink(void);
@@ -22,9 +23,9 @@ extern int init_netlink(void);
 #define NETLINK_FIREWALL	3	/* Firewalling hook				*/
 #define NETLINK_PSI		4	/* PSI devices - 4 to 7 */
 #define NETLINK_ARPD		8
-#define NETLINK_NET_PPP		9	/* Non tty PPP devices */
 #define NETLINK_IPSEC		10	/* IPSEC */
 #define NETLINK_ROUTE6		11	/* af_inet6 route comm channel */
+#define NETLINK_
 
 #ifdef CONFIG_RTNETLINK
 extern void ip_netlink_msg(unsigned long, __u32, __u32, __u32, short, short, char *);

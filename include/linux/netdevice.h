@@ -295,6 +295,7 @@ extern __inline__ void dev_lock_wait(void)
 /* These functions live elsewhere (drivers/net/net_init.c, but related) */
 
 extern void		ether_setup(struct device *dev);
+extern void		fddi_setup(struct device *dev);
 extern void		tr_setup(struct device *dev);
 extern int		ether_config(struct device *dev, struct ifmap *map);
 /* Support for loadable net-drivers */

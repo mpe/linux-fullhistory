@@ -49,6 +49,7 @@ char *version = "NET3 WIC version 0.9 hayes@netplumbing.com";
 #include <asm/bitops.h>
 #include <asm/irq.h>
 #include <asm/byteorder.h>
+#include <asm/uaccess.h>
 #include <linux/string.h>
 
 #define NET_DEBUG 1

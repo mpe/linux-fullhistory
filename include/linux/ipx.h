@@ -6,11 +6,11 @@
 
 struct sockaddr_ipx
 {
-	short sipx_family;
-	short sipx_port;
-	unsigned long  sipx_network;
-	unsigned char sipx_node[IPX_NODE_LEN];
-	unsigned char	sipx_type;
+	sa_family_t	 sipx_family;
+	__u16		 sipx_port;
+	__u32		sipx_network;
+	unsigned char 	sipx_node[IPX_NODE_LEN];
+	__u8		sipx_type;
 	unsigned char	sipx_zero;	/* 16 byte fill */
 };
 

@@ -73,6 +73,8 @@
 #include <linux/cdrom.h>
 #include <linux/optcd.h>
 
+#include <asm/uaccess.h>
+
 
 /* Debug support */
 

@@ -436,7 +436,7 @@ static int rarp_req_get(struct arpreq *req)
  *        Copy the information back
  */
   
-	return copy_to_user(req, &r, sizeof(r));
+	return copy_to_user(req, &r, sizeof(r)) ? -EFAULT : 0;
 }
 
 

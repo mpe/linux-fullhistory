@@ -578,14 +578,17 @@ asmlinkage int sys_setfsgid(gid_t gid)
 
 asmlinkage long sys_times(struct tms * tbuf)
 {
+	int error;
 	if (tbuf) {
-		int error = verify_area(VERIFY_WRITE,tbuf,sizeof *tbuf);
+		error = put_user(current->utime,&tbuf->tms_utime);
+		if (!error)
+			error = put_user(current->stime,&tbuf->tms_stime);
+		if (!error)
+			error = put_user(current->cutime,&tbuf->tms_cutime);
+		if (!error)
+			error =	put_user(current->cstime,&tbuf->tms_cstime);
 		if (error)
-			return error;
-		put_user(current->utime,&tbuf->tms_utime);
-		put_user(current->stime,&tbuf->tms_stime);
-		put_user(current->cutime,&tbuf->tms_cutime);
-		put_user(current->cstime,&tbuf->tms_cstime);
+			return error;	
 	}
 	return jiffies;
 }
@@ -706,40 +709,30 @@ asmlinkage int sys_getgroups(int gidsetsize, gid_t *grouplist)
 			break;
 	}
 	if (gidsetsize) {
-		int error;
-		error = verify_area(VERIFY_WRITE, grouplist, sizeof(gid_t) * gidsetsize);
-		if (error)
-			return error;
 		if (i > gidsetsize)
 		        return -EINVAL;
-
-		for (i = 0 ; i < NGROUPS ; i++) {
-			if (groups[i] == NOGROUP)
-				break;
-			put_user(groups[i], grouplist);
-			grouplist++;
-		}
+		if (copy_to_user(grouplist, groups, sizeof(*groups)*i))
+				return -EFAULT;
 	}
 	return i;
 }
 
 asmlinkage int sys_setgroups(int gidsetsize, gid_t *grouplist)
 {
-	int	i;
+	int	err;
 
 	if (!suser())
 		return -EPERM;
 	if (gidsetsize > NGROUPS)
 		return -EINVAL;
-	i = verify_area(VERIFY_READ, grouplist, sizeof(gid_t) * gidsetsize);
-	if (i)
-		return i;
-	for (i = 0; i < gidsetsize; i++, grouplist++) {
-		get_user(current->groups[i], grouplist);
-	}
-	if (i < NGROUPS)
-		current->groups[i] = NOGROUP;
-	return 0;
+	err = copy_from_user(current->groups, grouplist, gidsetsize * sizeof(gid_t));
+	if (err) {
+		gidsetsize = err/sizeof(gid_t); /* +1? */	
+        err = -EFAULT;
+    } 
+	if (gidsetsize < NGROUPS)
+		current->groups[gidsetsize] = NOGROUP;
+	return err;
 }
 
 int in_group_p(gid_t grp)
@@ -786,20 +779,26 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 	int error;
 	if (!name)
 		return -EFAULT;
-	error = verify_area(VERIFY_WRITE, name,sizeof *name);
-	if (error)
-		return error;
-	copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
-	put_user(0,name->sysname+__OLD_UTS_LEN);
-	copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
-	put_user(0,name->nodename+__OLD_UTS_LEN);
-	copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
-	put_user(0,name->release+__OLD_UTS_LEN);
-	copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
-	put_user(0,name->version+__OLD_UTS_LEN);
-	copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
-	put_user(0,name->machine+__OLD_UTS_LEN);
-	return 0;
+	error = copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
+	if (!error)
+		error = put_user(0,name->sysname+__OLD_UTS_LEN);
+	if (!error)
+		error = copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
+	if (!error)
+		error = put_user(0,name->nodename+__OLD_UTS_LEN);
+	if (!error)
+		error = copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
+	if (!error)
+		error = put_user(0,name->release+__OLD_UTS_LEN);
+	if (!error)
+		error = copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
+	if (!error)
+		error = put_user(0,name->version+__OLD_UTS_LEN);
+	if (!error)
+		error = copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
+	if (!error)
+		error = put_user(0,name->machine+__OLD_UTS_LEN);
+	return error ? -EFAULT : 0;
 }
 
 #endif
@@ -812,10 +811,9 @@ asmlinkage int sys_sethostname(char *name, int len)
 		return -EPERM;
 	if (len < 0 || len > __NEW_UTS_LEN)
 		return -EINVAL;
-	error = verify_area(VERIFY_READ, name, len);
+	error = copy_from_user(system_utsname.nodename, name, len);
 	if (error)
-		return error;
-	copy_from_user(system_utsname.nodename, name, len);
+		return -EFAULT;
 	system_utsname.nodename[len] = 0;
 	return 0;
 }
@@ -826,14 +824,10 @@ asmlinkage int sys_gethostname(char *name, int len)
 
 	if (len < 0)
 		return -EINVAL;
-	i = verify_area(VERIFY_WRITE, name, len);
-	if (i)
-		return i;
 	i = 1+strlen(system_utsname.nodename);
 	if (i > len)
 		i = len;
-	copy_to_user(name, system_utsname.nodename, i);
-	return 0;
+	return copy_to_user(name, system_utsname.nodename, i) ? -EFAULT : 0;
 }
 
 /*
@@ -848,25 +842,19 @@ asmlinkage int sys_setdomainname(char *name, int len)
 		return -EPERM;
 	if (len < 0 || len > __NEW_UTS_LEN)
 		return -EINVAL;
-	error = verify_area(VERIFY_READ, name, len);
+	error = copy_from_user(system_utsname.domainname, name, len);
 	if (error)
-		return error;
-	copy_from_user(system_utsname.domainname, name, len);
+		return -EFAULT;
 	system_utsname.domainname[len] = 0;
 	return 0;
 }
 
 asmlinkage int sys_getrlimit(unsigned int resource, struct rlimit *rlim)
 {
-	int error;
-
 	if (resource >= RLIM_NLIMITS)
 		return -EINVAL;
-	error = verify_area(VERIFY_WRITE,rlim,sizeof *rlim);
-	if (error)
-		return error;
-	copy_to_user(rlim, current->rlim + resource, sizeof(*rlim));
-	return 0;	
+	return copy_to_user(rlim, current->rlim + resource, sizeof(*rlim)) 
+			? -EFAULT : 0 ;
 }
 
 asmlinkage int sys_setrlimit(unsigned int resource, struct rlimit *rlim)
@@ -876,10 +864,9 @@ asmlinkage int sys_setrlimit(unsigned int resource, struct rlimit *rlim)
 
 	if (resource >= RLIM_NLIMITS)
 		return -EINVAL;
-	err = verify_area(VERIFY_READ, rlim, sizeof(*rlim));
+	err = copy_from_user(&new_rlim, rlim, sizeof(*rlim));
 	if (err)
-		return err;
-	copy_from_user(&new_rlim, rlim, sizeof(*rlim));
+		return -EFAULT;	
 	old_rlim = current->rlim + resource;
 	if (((new_rlim.rlim_cur > old_rlim->rlim_max) ||
 	     (new_rlim.rlim_max > old_rlim->rlim_max)) &&
@@ -903,12 +890,8 @@ asmlinkage int sys_setrlimit(unsigned int resource, struct rlimit *rlim)
  */
 int getrusage(struct task_struct *p, int who, struct rusage *ru)
 {
-	int error;
 	struct rusage r;
 
-	error = verify_area(VERIFY_WRITE, ru, sizeof *ru);
-	if (error)
-		return error;
 	memset((char *) &r, 0, sizeof(r));
 	switch (who) {
 		case RUSAGE_SELF:
@@ -939,8 +922,7 @@ int getrusage(struct task_struct *p, int who, struct rusage *ru)
 			r.ru_nswap = p->nswap + p->cnswap;
 			break;
 	}
-	copy_to_user(ru, &r, sizeof(r));
-	return 0;
+	return copy_to_user(ru, &r, sizeof(r)) ? -EFAULT : 0;
 }
 
 asmlinkage int sys_getrusage(int who, struct rusage *ru)

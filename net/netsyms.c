@@ -8,8 +8,9 @@
 #include <linux/config.h>
 #include <linux/module.h>
 
-#include <linux/in.h>
+#include <linux/types.h>
 #include <linux/net.h>
+#include <linux/in.h>
 #include <linux/netdevice.h>
 #include <linux/trdevice.h>
 #include <linux/ioport.h>

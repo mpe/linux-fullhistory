@@ -27,6 +27,10 @@ static struct symbol_table arch_symbol_table = {
 	X(apic_reg),		/* Needed internally for the I386 inlines */
 	X(cpu_data),
 	X(syscall_count),
+	X(kernel_flag),
+	X(kernel_counter),
+	X(active_kernel_processor),
+	X(smp_invalidate_needed),
 #endif
 #include <linux/symtab_end.h>
 };

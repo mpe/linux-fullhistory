@@ -127,7 +127,7 @@ static int tcp_unique_address(u32 saddr, u16 snum, u32 daddr, u16 dnum)
  *	This will initiate an outgoing connection. 
  */
  
-int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, size_t addr_len)
 {
 	struct sk_buff *buff;
 	struct sk_buff *skb1;
@@ -199,7 +199,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (buff == NULL) 
 	{
 		release_sock(sk);
-		return(-ENOMEM);
+		return(-ENOBUFS);
 	}
 
 	buff->sk = sk;
@@ -250,21 +250,6 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	else
 		sk->mtu = dev->mtu;
 	
-#ifdef CONFIG_SKIP
-
-	/*
-	 *	SKIP devices set their MTU to 65535. This is so they can take packets
-	 *	unfragmented to security process then fragment. They could lie to the
-	 *	TCP layer about a suitable MTU, but its easier to let skip sort it out
-	 *	simply because the final package we want unfragmented is going to be
-	 *
-	 *	[IPHDR][IPSP][Security data][Modified TCP data][Security data]
-	 */
-
-	if(skip_pick_mtu!=NULL)		/* If SKIP is loaded.. */
-		sk->mtu=skip_pick_mtu(sk->mtu,dev);
-#endif
-
 	if(sk->mtu < 64)
 		sk->mtu = 64;	/* Sanity limit */
 
@@ -370,12 +355,15 @@ out:
  */
 
 void tcp_v4_err(int type, int code, unsigned char *header, __u32 info,
-		__u32 daddr, __u32 saddr, struct inet_protocol *protocol)
+		__u32 daddr, __u32 saddr, struct inet_protocol *protocol, int len)
 {
 	struct tcphdr *th = (struct tcphdr *)header;
 	struct tcp_opt *tp;
 	struct sock *sk;
 
+	if(len<8)	/* We use the first 8 bytes only */
+		return;
+		
 	th =(struct tcphdr *)header;
 	sk = get_sock(&tcp_prot, th->source, daddr, th->dest, saddr, 0, 0);
 
@@ -410,10 +398,7 @@ void tcp_v4_err(int type, int code, unsigned char *header, __u32 info,
 	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED)
 	{
 		struct rtable * rt;
-		/*
-		 * Ugly trick to pass MTU to protocol layer.
-		 * Really we should add argument "info" to error handler.
-		 */
+
 		unsigned short new_mtu = info;
 
 		if ((rt = sk->ip_route_cache) != NULL)
@@ -897,7 +882,7 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	 */
 	newsk->opt = af_req->opt;
 	rt = ip_rt_route(newsk->opt && newsk->opt->srr ? newsk->opt->faddr : 
-			 newsk->saddr, 0);
+			 newsk->daddr, 0);
 
 	newsk->ip_route_cache = rt;
 	
@@ -918,7 +903,7 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 		newsk->mtu = 64;
 	}
 
-	snd_mss -= sizeof(struct iphdr) - sizeof(struct tcphdr);
+	snd_mss -= sizeof(struct iphdr) + sizeof(struct tcphdr);
 
 	if (sk->user_mss)
 	{

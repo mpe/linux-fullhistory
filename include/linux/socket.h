@@ -5,9 +5,15 @@
 #include <linux/sockios.h>		/* the SIOCxxx I/O controls	*/
 #include <linux/uio.h>			/* iovec support		*/
 
+typedef unsigned short	sa_family_t;
+
+/*
+ *	1003.1g requires sa_family_t and that sa_data is char.
+ */
+ 
 struct sockaddr 
 {
-	unsigned short	sa_family;	/* address family, AF_xxx	*/
+	sa_family_t	sa_family;	/* address family, AF_xxx	*/
 	char		sa_data[14];	/* 14 bytes of protocol address	*/
 };
 
@@ -25,11 +31,11 @@ struct linger {
 struct msghdr 
 {
 	void	*	msg_name;	/* Socket name			*/
-	int		msg_namelen;	/* Length of name		*/
+	size_t		msg_namelen;	/* Length of name		*/
 	struct iovec *	msg_iov;	/* Data blocks			*/
-	int 		msg_iovlen;	/* Number of blocks		*/
+	size_t 		msg_iovlen;	/* Number of blocks		*/
 	void 	*	msg_control;	/* Per protocol magic (eg BSD file descriptor passing) */
-	int		msg_controllen;	/* Length of rights list */
+	size_t		msg_controllen;	/* Length of rights list */
 	int		msg_flags;	/* 4.4 BSD item we dont use      */
 };
 
@@ -90,6 +96,7 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 /* Supported address families. */
 #define AF_UNSPEC	0
 #define AF_UNIX		1	/* Unix domain sockets 		*/
+#define AF_LOCAL	1	/* POSIX name for AF_UNIX	*/
 #define AF_INET		2	/* Internet IP Protocol 	*/
 #define AF_AX25		3	/* Amateur Radio AX.25 		*/
 #define AF_IPX		4	/* Novell IPX 			*/
@@ -100,11 +107,14 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 #define AF_X25		9	/* Reserved for X.25 project 	*/
 #define AF_INET6	10	/* IP version 6			*/
 #define AF_ROSE		11	/* Amateur Radio X.25 PLP	*/
-#define AF_MAX		13	/* For now.. */
+#define AF_DECNET	12	/* Reserved for DECnet project	*/
+#define AF_NETBEUI	13	/* Reserved for 802.2LLC project*/
+#define AF_MAX		32	/* For now.. */
 
 /* Protocol families, same as address families. */
 #define PF_UNSPEC	AF_UNSPEC
 #define PF_UNIX		AF_UNIX
+#define PF_LOCAL	AF_LOCAL
 #define PF_INET		AF_INET
 #define PF_AX25		AF_AX25
 #define PF_IPX		AF_IPX
@@ -115,18 +125,26 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 #define PF_X25		AF_X25
 #define PF_INET6	AF_INET6
 #define PR_ROSE		AF_ROSE
+#define PF_DECNET	AF_DECNET
+#define PF_NETBEUI	AF_NETBEUI
 
 #define PF_MAX		AF_MAX
 
 /* Maximum queue length specifiable by listen.  */
 #define SOMAXCONN	128
 
-/* Flags we can use with send/ and recv. */
+/* Flags we can use with send/ and recv. 
+   Added those for 1003.1g not all are supported yet
+ */
+ 
 #define MSG_OOB		1
 #define MSG_PEEK	2
 #define MSG_DONTROUTE	4
-/*#define MSG_CTRUNC	8	- We need to support this for BSD oddments */
+#define MSG_CTRUNC	8	/*  We need to support this for BSD oddments */
 #define MSG_PROXY	16	/* Supply or ask second address. */
+#define MSG_EOR		32	/* End of record */
+#define MSG_TRUNC	64	/* Data was discarded before delivery */
+#define MSG_WAITALL	128	/* Wait for a full request */
 
 /* Setsockoptions(2) level. Thanks to BSD these must match IPPROTO_xxx */
 #define SOL_IP		0
@@ -138,6 +156,7 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 #define SOL_ATALK	258
 #define SOL_NETROM	259
 #define SOL_ROSE	260
+#define SOL_DECNET	261
 #define SOL_TCP		6
 #define SOL_UDP		17
 

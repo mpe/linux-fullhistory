@@ -282,7 +282,7 @@ int packet_attach(struct sock *sk, struct device *dev)
  *	Bind a packet socket to a device
  */
 
-static int packet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+static int packet_bind(struct sock *sk, struct sockaddr *uaddr, size_t addr_len)
 {
 	char name[15];
 	struct device *dev;
@@ -410,9 +410,6 @@ int packet_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	struct sockaddr_pkt *saddr=(struct sockaddr_pkt *)msg->msg_name;
 	int err;
 
-	if (sk->shutdown & RCV_SHUTDOWN) 
-		return(0);
-		
 	/*
 	 *	If there is no protocol hook then the device is down.
 	 */
@@ -450,8 +447,13 @@ int packet_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	 *	user program they can ask the device for its MTU anyway.
 	 */
 	 
-	copied = min(len, skb->len);
-
+	copied = skb->len;
+	if(copied>len)
+	{
+		copied=len;
+		msg->msg_flags|=MSG_TRUNC;
+	}
+	
 	/* We can't use skb_copy_datagram here */
 	err = memcpy_toiovec(msg->msg_iov, skb->data, copied);
 	if (err)

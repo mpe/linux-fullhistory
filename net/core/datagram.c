@@ -19,6 +19,7 @@
  *		Linus Torvalds	:	BSD semantic fixes.
  *		Alan Cox	:	Datagram iovec handling
  *		Darryl Miles	:	Fixed non-blocking SOCK_STREAM.
+ *		Alan Cox	:	POSIXisms
  *
  */
 
@@ -80,6 +81,10 @@ static inline int connection_based(struct sock *sk)
  *
  *	This function will lock the socket if a skb is returned, so the caller
  *	needs to unlock the socket in that case (usually by calling skb_free_datagram)
+ *
+ *	The order of the tests when we find no data waiting are specified
+ *	quite explicitly by POSIX 1003.1g, don't change them without having
+ *	the standard around please.
  */
 
 struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned flags, int noblock, int *err)
@@ -105,14 +110,14 @@ restart:
 		if(connection_based(sk) && sk->state!=TCP_ESTABLISHED)
 			goto no_packet;
 
-		/* User doesn't want to wait */
-		error = -EAGAIN;
-		if (noblock)
-			goto no_packet;
-
 		/* handle signals */
 		error = -ERESTARTSYS;
 		if (current->signal & ~current->blocked)
+			goto no_packet;
+
+		/* User doesn't want to wait */
+		error = -EAGAIN;
+		if (noblock)
 			goto no_packet;
 
 		wait_for_packet(sk);

@@ -37,6 +37,14 @@ int pcibios_present(void)
 {
         return 0;
 }
+asmlinkage int sys_pciconfig_read()
+{
+        return 0;
+}
+asmlinkage int sys_pciconfig_write()
+{
+        return 0;
+}
 
 #else /* CONFIG_PCI */
 
@@ -48,6 +56,7 @@ int pcibios_present(void)
 
 #include <asm/hwrpb.h>
 #include <asm/io.h>
+#include <asm/segment.h>
 
 
 #define KB		1024
@@ -1193,4 +1202,81 @@ const char *pcibios_strerror (int error)
         }
 }
 
+asmlinkage int sys_pciconfig_read(
+	unsigned long bus,
+	unsigned long dfn,
+	unsigned long off,
+	unsigned long len,
+	unsigned char *buf)
+{
+        unsigned char ubyte;
+        unsigned short ushort;
+        unsigned int uint;
+	long err = 0;
+
+	switch (len) {
+	    case 1:
+	        err = pcibios_read_config_byte(bus, dfn, off, &ubyte);
+		if (err != PCIBIOS_SUCCESSFUL)
+		    ubyte = 0xff;
+		put_user(ubyte, buf);
+		break;
+	    case 2:
+	        err = pcibios_read_config_word(bus, dfn, off, &ushort);
+		if (err != PCIBIOS_SUCCESSFUL)
+		    ushort = 0xffff;
+		put_user(ushort, (unsigned short *)buf);
+		break;
+	    case 4:
+	        err = pcibios_read_config_dword(bus, dfn, off, &uint);
+		if (err != PCIBIOS_SUCCESSFUL)
+		    uint = 0xffffffff;
+		put_user(uint, (unsigned int *)buf);
+		break;
+	    default:
+	        err = -EINVAL;
+	        break;
+	}
+        return err;
+}
+asmlinkage int sys_pciconfig_write(
+	unsigned long bus,
+	unsigned long dfn,
+	unsigned long off,
+	unsigned long len,
+	unsigned char *buf)
+{
+        unsigned char ubyte;
+        unsigned short ushort;
+        unsigned int uint;
+        long err = 0;
+
+	switch (len) {
+	    case 1:
+                ubyte = get_user(buf);
+                err = pcibios_write_config_byte(bus, dfn, off, ubyte);
+                if (err != PCIBIOS_SUCCESSFUL) {
+			err = -EFAULT;
+		}
+		break;
+	    case 2:
+                ushort = get_user((unsigned short *)buf);
+                err = pcibios_write_config_word(bus, dfn, off, ushort);
+                if (err != PCIBIOS_SUCCESSFUL) {
+			err = -EFAULT;
+		}
+		break;
+	    case 4:
+                uint = get_user((unsigned int *)buf);
+                err = pcibios_write_config_dword(bus, dfn, off, uint);
+                if (err != PCIBIOS_SUCCESSFUL) {
+			err = -EFAULT;
+		}
+		break;
+	    default:
+	        err = -EINVAL;
+	        break;
+	}
+        return err;
+}
 #endif /* CONFIG_PCI */

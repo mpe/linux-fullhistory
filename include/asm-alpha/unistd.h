@@ -168,6 +168,8 @@
 #define __NR_nfsctl			342
 #define __NR_setresuid			343
 #define __NR_getresuid			344
+#define __NR_pciconfig_read		345
+#define __NR_pciconfig_write		346
 
 #if defined(__LIBRARY__) && defined(__GNUC__)
 

@@ -36,6 +36,7 @@
 #include <linux/etherdevice.h>
 #include <linux/trdevice.h>
 #include <linux/if_arp.h>
+#include <linux/fddidevice.h>
 #ifdef CONFIG_NET_ALIAS
 #include <linux/net_alias.h>
 #endif
@@ -154,6 +155,19 @@ static int eth_change_mtu(struct device *dev, int new_mtu)
 	return 0;
 }
 
+#ifdef CONFIG_FDDI
+
+static int fddi_change_mtu(struct device *dev, int new_mtu)
+{
+	if ((new_mtu < FDDI_K_SNAP_HLEN) || (new_mtu > FDDI_K_SNAP_DLEN))
+		return(-EINVAL);
+	dev->mtu = new_mtu;
+	return(0);
+}
+
+#endif
+
+
 void ether_setup(struct device *dev)
 {
 	int i;
@@ -228,6 +242,43 @@ void tr_setup(struct device *dev)
 	dev->pa_mask	= 0;
 	dev->pa_alen	= 4;
 }
+
+#endif
+
+#ifdef CONFIG_FDDI
+
+void fddi_setup(struct device *dev)
+	{
+	int i;
+
+	/*
+	 * Fill in the fields of the device structure with FDDI-generic values.
+	 * This should be in a common file instead of per-driver.
+	 */
+	for (i=0; i < DEV_NUMBUFFS; i++)
+		skb_queue_head_init(&dev->buffs[i]);
+
+	dev->change_mtu			= fddi_change_mtu;
+	dev->hard_header		= fddi_header;
+	dev->rebuild_header		= fddi_rebuild_header;
+
+	dev->type				= ARPHRD_FDDI;
+	dev->hard_header_len	= FDDI_K_SNAP_HLEN+3;	/* Assume 802.2 SNAP hdr len + 3 pad bytes */
+	dev->mtu				= FDDI_K_SNAP_DLEN;		/* Assume max payload of 802.2 SNAP frame */
+	dev->addr_len			= FDDI_K_ALEN;
+	dev->tx_queue_len		= 100;	/* Long queues on FDDI */
+	
+	memset(dev->broadcast, 0xFF, FDDI_K_ALEN);
+
+	/* New-style flags */
+	dev->flags		= IFF_BROADCAST | IFF_MULTICAST;
+	dev->family		= AF_INET;
+	dev->pa_addr	= 0;
+	dev->pa_brdaddr = 0;
+	dev->pa_mask	= 0;
+	dev->pa_alen	= 4;
+	return;
+	}
 
 #endif
 

@@ -62,6 +62,7 @@ CONFIG_BLK_DEV_RZ1000=y
 #
 # Networking options
 #
+# CONFIG_NETLINK is not set
 # CONFIG_FIREWALL is not set
 # CONFIG_NET_ALIAS is not set
 CONFIG_INET=y
@@ -84,7 +85,6 @@ CONFIG_SKB_LARGE=y
 # CONFIG_IPX is not set
 # CONFIG_ATALK is not set
 # CONFIG_AX25 is not set
-# CONFIG_NETLINK is not set
 
 #
 # SCSI support
@@ -95,12 +95,9 @@ CONFIG_SKB_LARGE=y
 # Network device support
 #
 CONFIG_NETDEVICES=y
+# CONFIG_ARCNET is not set
 CONFIG_DUMMY=m
 # CONFIG_EQUALIZER is not set
-# CONFIG_PLIP is not set
-# CONFIG_PPP is not set
-# CONFIG_SLIP is not set
-# CONFIG_NET_RADIO is not set
 CONFIG_NET_ETHERNET=y
 CONFIG_NET_VENDOR_3COM=y
 # CONFIG_EL1 is not set
@@ -112,8 +109,12 @@ CONFIG_EL3=y
 # CONFIG_NET_ISA is not set
 # CONFIG_NET_EISA is not set
 # CONFIG_NET_POCKET is not set
+# CONFIG_FDDI is not set
+# CONFIG_PLIP is not set
+# CONFIG_PPP is not set
+# CONFIG_NET_RADIO is not set
+# CONFIG_SLIP is not set
 # CONFIG_TR is not set
-# CONFIG_ARCNET is not set
 
 #
 # ISDN subsystem

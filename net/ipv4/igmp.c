@@ -61,6 +61,9 @@
  *					miscalculation fixed in igmp_heard_query
  *					and random() made to return unsigned to
  *					prevent negative expiry times.
+ *		Alexey Kuznetsov:	Wrong group leaving behaviour, backport
+ *					fix from pending 2.1.x patches.
+ *		Alan Cox:		Forget to enable FDDI support earlier.
  */
 
 
@@ -278,6 +281,7 @@ static void igmp_timer_expire(unsigned long data)
 		igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_NEW_MEMBERSHIP_REPORT);
 	else
 		igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_MEMBERSHIP_REPORT);
+	im->reporter=1;
 }
 
 static void igmp_init_timer(struct ip_mc_list *im)
@@ -289,17 +293,24 @@ static void igmp_init_timer(struct ip_mc_list *im)
 }
 
 
-static void igmp_heard_report(struct device *dev, unsigned long address)
+static void igmp_heard_report(struct device *dev, __u32 address, __u32 src)
 {
 	struct ip_mc_list *im;
 
-	if ((address & IGMP_LOCAL_GROUP_MASK) != IGMP_LOCAL_GROUP) {
-	  /* Timers are only set for non-local groups */
-	  for(im=dev->ip_mc_list;im!=NULL;im=im->next) {
-	    if(im->multiaddr==address && im->tm_running) {
-	      igmp_stop_timer(im);
-	    }
-	  }
+	if ((address & IGMP_LOCAL_GROUP_MASK) != IGMP_LOCAL_GROUP) 
+	{
+		/* Timers are only set for non-local groups */
+		for(im=dev->ip_mc_list;im!=NULL;im=im->next) 
+		{
+			if(im->multiaddr==address)
+			{
+				if(im->tm_running) 
+					igmp_stop_timer(im);
+				if(src!=dev->pa_addr)
+					im->reporter=0;
+				return;
+			}
+		}
 	}
 }
 
@@ -391,8 +402,8 @@ extern __inline__ void ip_mc_map(unsigned long addr, char *buf)
 void ip_mc_filter_add(struct device *dev, unsigned long addr)
 {
 	char buf[6];
-	if(dev->type!=ARPHRD_ETHER)
-		return; /* Only do ethernet now */
+	if(dev->type!=ARPHRD_ETHER && dev->type!=ARPHRD_FDDI)
+		return; /* Only do ethernet or FDDI for now */
 	ip_mc_map(addr,buf);
 	dev_mc_add(dev,buf,ETH_ALEN,0);
 }
@@ -404,8 +415,8 @@ void ip_mc_filter_add(struct device *dev, unsigned long addr)
 void ip_mc_filter_del(struct device *dev, unsigned long addr)
 {
 	char buf[6];
-	if(dev->type!=ARPHRD_ETHER)
-		return; /* Only do ethernet now */
+	if(dev->type!=ARPHRD_ETHER && dev->type!=ARPHRD_FDDI)
+		return; /* Only do ethernet or FDDI for now */
 	ip_mc_map(addr,buf);
 	dev_mc_delete(dev,buf,ETH_ALEN,0);
 }
@@ -473,9 +484,9 @@ int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	if(ih->type==IGMP_HOST_MEMBERSHIP_QUERY && daddr==IGMP_ALL_HOSTS)
 		igmp_heard_query(dev,ih->code);
 	if(ih->type==IGMP_HOST_MEMBERSHIP_REPORT && daddr==ih->group)
-		igmp_heard_report(dev,ih->group);
+		igmp_heard_report(dev,ih->group, saddr);
 	if(ih->type==IGMP_HOST_NEW_MEMBERSHIP_REPORT && daddr==ih->group)
-		igmp_heard_report(dev,ih->group);
+		igmp_heard_report(dev,ih->group, saddr);
 	kfree_skb(skb, FREE_READ);
 	return 0;
 }

@@ -842,7 +842,8 @@ static int icn_loadboot(u_char * buffer, icn_card * card)
         icn_lock_channel(card,0);                                  /* Lock Bank 0      */
         restore_flags(flags);
         SLEEP(1);
-        memcpy_fromfs(codebuf, buffer, ICN_CODE_STAGE1);
+        if (copy_from_user(codebuf, buffer, ICN_CODE_STAGE1))
+        	return -EFAULT;
         memcpy_toio(dev.shmem, codebuf, ICN_CODE_STAGE1);           /* Copy code        */
 #ifdef BOOT_DEBUG
         printk(KERN_DEBUG "Bootloader transfered\n");
@@ -913,7 +914,8 @@ static int icn_loadproto(u_char * buffer, icn_card * card)
         while (left) {
                 if (sbfree) {                           /* If there is a free buffer...  */
                         cnt = MIN(256, left);
-                        memcpy_fromfs(codebuf, p, cnt);
+                        if (copy_from_user(codebuf, p, cnt))
+                        	/* FIXME -WRONG */return -EFAULT;
                         memcpy_toio(&sbuf_l, codebuf, cnt); /* copy data                     */ 
                         sbnext;                         /* switch to next buffer         */
                         p += cnt;
@@ -995,7 +997,7 @@ static int icn_readstatus(u_char * buf, int len, int user, icn_card * card)
                 if (card->msg_buf_read == card->msg_buf_write)
                         return count;
                 if (user)
-                        put_fs_byte(*card->msg_buf_read++, p);
+                        put_user(*card->msg_buf_read++, p);
                 else
                         *p = *card->msg_buf_read++;
                 if (card->msg_buf_read > card->msg_buf_end)
@@ -1023,7 +1025,13 @@ static int icn_writecmd(const u_char * buf, int len, int user, icn_card * card, 
                         avail = cmd_free;
                         count = MIN(avail, len);
                         if (user)
-                                memcpy_fromfs(msg, buf, count);
+                        {
+                                if (copy_from_user(msg, buf, count) != 0)
+                                {
+                                	icn_release_channel();
+                                	return -EFAULT;
+                                }
+                        }
                         else
                                 memcpy(msg, buf, count);
                         save_flags(flags);
@@ -1175,13 +1183,15 @@ static int icn_command(isdn_ctrl * c, icn_card * card)
                                                     (void *) a,
                                                     sizeof(ulong) * 2)))
                                         return i;
-                                memcpy_tofs((char *)a,
-                                            (char *)&card, sizeof(ulong));
+                                if (copy_to_user((char *)a,
+                                            (char *)&card, sizeof(ulong)))
+                                            	return -EFAULT;
 				a += sizeof(ulong);
 				{
                                         ulong l = (ulong)&dev;
-                                        memcpy_tofs((char *)a,
-                                                    (char *)&l, sizeof(ulong));
+                                        if (copy_to_user((char *)a,
+                                                    (char *)&l, sizeof(ulong)))
+                                                    return -EFAULT;
                                 }
                                 return 0;
                         case ICN_IOCTL_LOADBOOT:
@@ -1198,7 +1208,8 @@ static int icn_command(isdn_ctrl * c, icn_card * card)
                         case ICN_IOCTL_ADDCARD:
                                 if ((i = verify_area(VERIFY_READ, (void *) a, sizeof(icn_cdef))))
                                         return i;
-                                memcpy_fromfs((char *)&cdef, (char *)a, sizeof(cdef));
+                                if (copy_from_user((char *)&cdef, (char *)a, sizeof(cdef)))
+                                	return -EFAULT;
                                 return (icn_addcard(cdef.port, cdef.id1, cdef.id2));
                                 break;
                         case ICN_IOCTL_LEASEDCFG:

@@ -105,13 +105,13 @@ static void wdt_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 
-static int wdt_lseek(struct inode *inode, struct file *file, off_t offset, 
+static long long wdt_llseek(struct inode *inode, struct file *file, long long offset, 
 	int origin)
 {
 	return -ESPIPE;
 }
 
-static int wdt_write(struct inode *inode, struct file *file, const char *buf, int count)
+static long wdt_write(struct inode *inode, struct file *file, const char *buf, unsigned long count)
 {
 	/* Write a watchdog value */
 	inb_p(WDT_DC);
@@ -125,7 +125,7 @@ static int wdt_write(struct inode *inode, struct file *file, const char *buf, in
  *	Read reports the temperature in farenheit
  */
  
-static int wdt_read(struct inode *inode, struct file *file, char *buf, int count)
+static long wdt_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
 {
 	unsigned short c=inb_p(WDT_RT);
 	unsigned char cp;
@@ -202,7 +202,7 @@ static void wdt_release(struct inode *inode, struct file *file)
  
  
 static struct file_operations wdt_fops = {
-	wdt_lseek,
+	wdt_llseek,
 	wdt_read,
 	wdt_write,
 	NULL,		/* No Readdir */

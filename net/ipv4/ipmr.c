@@ -551,14 +551,16 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 		 *	Control PIM assert.
 		 */
 		case MRT_ASSERT:
+		{
+			int v;
 			if(optlen!=sizeof(int))
 				return -EINVAL;
-
-			/* BUG BUG this is wrong IMHO -AK. */ 
-			if((err=verify_area(VERIFY_READ, optval,sizeof(int)))<0)
-				return err;
-			mroute_do_pim= (optval)?1:0;
+			
+			if(get_user(v,(int *)optval))
+				return -EFAULT;
+			mroute_do_pim=(v)?1:0;
 			return 0;
+		}
 		/*
 		 *	Spurious command, or MRT_VERSION which you cannot
 		 *	set.

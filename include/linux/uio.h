@@ -16,10 +16,14 @@
 
 struct iovec
 {
-	void *iov_base;		/* BSD uses caddr_t (same thing in effect) */
-	int iov_len;
+	void *iov_base;		/* BSD uses caddr_t (1003.1g requires void *) */
+	size_t iov_len;		/* Must be size_t (1003.1g) */
 };
 
+/*
+ *	UIO_MAXIOV shall be at least 16 1003.1g (5.4.1.1)
+ */
+ 
 #define UIO_MAXIOV	16	/* Maximum iovec's in one operation 
 				   16 matches BSD */
 

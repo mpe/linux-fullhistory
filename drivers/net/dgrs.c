@@ -36,6 +36,7 @@ static char *version = "$Id: dgrs.c,v 1.8 1996/04/18 03:11:14 rick Exp $";
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/byteorder.h>
+#include <asm/uaccess.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

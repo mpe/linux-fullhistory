@@ -350,7 +350,12 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	if(skb==NULL)
  		return err;
 
-	copied = min(len, skb->len);
+	copied=skb->len;
+	if(copied>len)
+	{
+		copied=len;
+		msg->msg_flags|=MSG_TRUNC;
+	}
 	
 	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	sk->stamp=skb->stamp;
