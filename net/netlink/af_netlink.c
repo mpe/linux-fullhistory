@@ -1080,9 +1080,11 @@ static int netlink_dump(struct sock *sk)
 	len = cb->dump(skb, cb);
 
 	if (len > 0) {
+		sock_hold(sk);
 		spin_unlock(&nlk->cb_lock);
 		skb_queue_tail(&sk->sk_receive_queue, skb);
 		sk->sk_data_ready(sk, len);
+		sock_put(sk);
 		return 0;
 	}
 

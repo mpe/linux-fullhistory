@@ -599,9 +599,8 @@ static int route4_dump(struct tcf_proto *tp, unsigned long fh,
 
 	rta->rta_len = skb->tail - b;
 
-	if (f->exts.action && f->exts.action->type == TCA_OLD_COMPAT)
-		if (tcf_exts_dump_stats(skb, &f->exts, &route_ext_map) < 0)
-			goto rtattr_failure;
+	if (tcf_exts_dump_stats(skb, &f->exts, &route_ext_map) < 0)
+		goto rtattr_failure;
 
 	return skb->len;
 

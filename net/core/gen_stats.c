@@ -26,7 +26,9 @@
 static inline int
 gnet_stats_copy(struct gnet_dump *d, int type, void *buf, int size)
 {
-	RTA_PUT(d->skb, type, size, buf);
+	if (type)
+		RTA_PUT(d->skb, type, size, buf);
+
 	return 0;
 
 rtattr_failure:
@@ -58,7 +60,8 @@ gnet_stats_start_copy_compat(struct sk_buff *skb, int type, int tc_stats_type,
 {
 	spin_lock_bh(lock);
 	d->lock = lock;
-	d->tail = (struct rtattr *) skb->tail;
+	if (type)
+		d->tail = (struct rtattr *) skb->tail;
 	d->skb = skb;
 	d->compat_tc_stats = tc_stats_type;
 	d->compat_xstats = xstats_type;
@@ -194,7 +197,8 @@ gnet_stats_copy_app(struct gnet_dump *d, void *st, int len)
 int
 gnet_stats_finish_copy(struct gnet_dump *d)
 {
-	d->tail->rta_len = d->skb->tail - (u8 *) d->tail;
+	if (d->tail)
+		d->tail->rta_len = d->skb->tail - (u8 *) d->tail;
 
 	if (d->compat_tc_stats)
 		if (gnet_stats_copy(d, d->compat_tc_stats, &d->tc_stats,

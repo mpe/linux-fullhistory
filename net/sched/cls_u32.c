@@ -775,7 +775,7 @@ static int u32_dump(struct tcf_proto *tp, unsigned long fh,
 	}
 
 	rta->rta_len = skb->tail - b;
-	if (TC_U32_KEY(n->handle) && n->exts.action && n->exts.action->type == TCA_OLD_COMPAT)
+	if (TC_U32_KEY(n->handle))
 		if (tcf_exts_dump_stats(skb, &n->exts, &u32_ext_map) < 0)
 			goto rtattr_failure;
 	return skb->len;
