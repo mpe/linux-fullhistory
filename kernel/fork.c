@@ -157,7 +157,7 @@ extern "C" int sys_fork(struct pt_regs regs)
 	p->tss.cs = KERNEL_CS;
 	p->tss.ss = KERNEL_DS;
 	p->tss.ds = KERNEL_DS;
-	p->tss.fs = KERNEL_DS;
+	p->tss.fs = USER_DS;
 	p->tss.gs = KERNEL_DS;
 	p->tss.ss0 = KERNEL_DS;
 	p->tss.esp0 = p->kernel_stack_page + PAGE_SIZE;
