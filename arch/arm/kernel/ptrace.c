@@ -625,7 +625,7 @@ static int ptrace_getwmmxregs(struct task_struct *tsk, void __user *ufp)
 	/* The iWMMXt state is stored doubleword-aligned.  */
 	if (((long) ptr) & 4)
 		ptr += 4;
-	return copy_to_user(ufp, &ptr, 0x98) ? -EFAULT : 0;
+	return copy_to_user(ufp, ptr, 0x98) ? -EFAULT : 0;
 }
 
 /*
