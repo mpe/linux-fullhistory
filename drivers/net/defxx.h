@@ -1748,6 +1748,10 @@ typedef struct DFX_board_tag
 	/* Store pointers to transmit buffers for transmit completion code */
 
 	XMT_DRIVER_DESCR		xmt_drv_descr_blk[PI_XMT_DATA_K_NUM_ENTRIES];
+	
+	/* Transmit spinlocks */
+	
+	spinlock_t			lock;
 
 	/* Store device, bus-specific, and parameter information for this adapter */
 

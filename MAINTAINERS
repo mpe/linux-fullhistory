@@ -643,6 +643,13 @@ M:	emoenke@gwdg.de
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+SCSI SG DRIVER
+P:	Doug Gilbert
+M:	dgilbert@interlog.com
+L:	linux-scsi@vger.rutgers.edu
+W:	http://www.torque.net/sg
+S:	Maintained
+
 SCSI SUBSYSTEM
 L:	linux-scsi@vger.rutgers.edu
 S:	Unmaintained

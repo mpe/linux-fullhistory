@@ -1911,6 +1911,8 @@ void dfx_interrupt(
 		}
 	bp = (DFX_board_t *) dev->priv;
 
+	spin_lock(&bp->lock);
+	
 	/* See if we're already servicing an interrupt */
 
 	if (dev->interrupt)
@@ -1955,6 +1957,7 @@ void dfx_interrupt(
 		}
 
 	dev->interrupt = DFX_UNMASK_INTERRUPTS;
+	spin_unlock(&bp->lock);
 	return;
 	}
 
@@ -3205,10 +3208,11 @@ int dfx_xmt_queue_pkt(
 	)
 
 	{
-	DFX_board_t			*bp = (DFX_board_t *) dev->priv;
-	u8					prod;				/* local transmit producer index */
+	DFX_board_t		*bp = (DFX_board_t *) dev->priv;
+	u8			prod;				/* local transmit producer index */
 	PI_XMT_DESCR		*p_xmt_descr;		/* ptr to transmit descriptor block entry */
 	XMT_DRIVER_DESCR	*p_xmt_drv_descr;	/* ptr to transmit driver descriptor */
+	unsigned long		flags;
 
 	/*
 	 * Verify that incoming transmit request is OK
@@ -3252,6 +3256,8 @@ int dfx_xmt_queue_pkt(
 			}
 		}
 
+	spin_lock_irqsave(&bp->lock, flags);
+	
 	/* Get the current producer and the next free xmt data descriptor */
 
 	prod		= bp->rcv_xmt_reg.index.xmt_prod;
@@ -3272,9 +3278,10 @@ int dfx_xmt_queue_pkt(
 
 	/* Write the three PRH bytes immediately before the FC byte */
 
-	*((char *)skb->data - 3) = DFX_PRH0_BYTE;	/* these byte values are defined */
-	*((char *)skb->data - 2) = DFX_PRH1_BYTE;	/* in the Motorola FDDI MAC chip */
-	*((char *)skb->data - 1) = DFX_PRH2_BYTE;	/* specification */
+	skb_push(skb,3);
+	skb->data[0] = DFX_PRH0_BYTE;	/* these byte values are defined */
+	skb->data[1] = DFX_PRH1_BYTE;	/* in the Motorola FDDI MAC chip */
+	skb->data[2] = DFX_PRH2_BYTE;	/* specification */
 
 	/*
 	 * Write the descriptor with buffer info and bump producer
@@ -3304,7 +3311,7 @@ int dfx_xmt_queue_pkt(
 	 */
 
 	p_xmt_descr->long_0	= (u32) (PI_XMT_DESCR_M_SOP | PI_XMT_DESCR_M_EOP | ((skb->len + 3) << PI_XMT_DESCR_V_SEG_LEN));
-	p_xmt_descr->long_1 = (u32) virt_to_bus(skb->data - 3);
+	p_xmt_descr->long_1 = (u32) virt_to_bus(skb->data);
 
 	/*
 	 * Verify that descriptor is actually available
@@ -3318,7 +3325,11 @@ int dfx_xmt_queue_pkt(
 	 */
 
 	if (prod == bp->rcv_xmt_reg.index.xmt_comp)
+	{
+		skb_pull(skb,3);
+		spin_unlock_irqrestore(&bp->lock, flags);
 		return(1);			/* requeue packet for later */
+	}
 
 	/*
 	 * Save info for this packet for xmt done indication routine
@@ -3342,6 +3353,7 @@ int dfx_xmt_queue_pkt(
 
 	bp->rcv_xmt_reg.index.xmt_prod = prod;
 	dfx_port_write_long(bp, PI_PDQ_K_REG_TYPE_2_PROD, bp->rcv_xmt_reg.lword);
+	spin_unlock_irqrestore(&bp->lock, flags);
 	return(0);							/* packet queued to adapter */
 	}
 

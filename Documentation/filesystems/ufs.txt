@@ -7,7 +7,7 @@ mount -t ufs -o ufstype=type_of_ufs device dir
 UFS OPTIONS
 ===========
 
-ufstype=string
+ufstype=type_of_ufs
 	UFS is a file system widely used in different operating systems.
 	The problem are differencies among implementations. Features of
 	some implementations are undocumented, so its hard to recognize
@@ -26,7 +26,7 @@ ufstype=string
 	sunx86	used in SunOS for Intel (Solarisx86)
 		supported as read-write
 
-	nextsptep
+	nextstep
 		used in NextStep
 		supported as read-only
 
@@ -46,4 +46,4 @@ BUG REPORTS
 ===========
 
 Any ufs bug report you can send to daniel.pirkl@email.cz (do not send 
-partition tables bug reports).
+partition tables bug reports.)

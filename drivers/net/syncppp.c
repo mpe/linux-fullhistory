@@ -121,6 +121,7 @@ struct cisco_packet {
 	u16 time1;
 };
 #define CISCO_PACKET_LEN 18
+#define CISCO_BIG_PACKET_LEN 20
 
 static struct sppp *spppq;
 static struct timer_list sppp_keepalive_timer;
@@ -649,7 +650,7 @@ static void sppp_cisco_input (struct sppp *sp, struct sk_buff *skb)
 	struct cisco_packet *h;
 	struct device *dev = sp->pp_if;
 
-	if (skb->len != CISCO_PACKET_LEN) {
+	if (skb->len != CISCO_PACKET_LEN && skb->len != CISCO_BIG_PACKET_LEN) {
 		if (sp->pp_flags & PP_DEBUG)
 			printk (KERN_WARNING "%s: invalid cisco packet length: %d bytes\n",
 				dev->name,  skb->len);

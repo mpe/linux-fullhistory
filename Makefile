@@ -343,7 +343,8 @@ endif
 
 clean:	archclean
 	rm -f kernel/ksyms.lst include/linux/compile.h
-	rm -f core `find . -name '*.[oas]' ! -regex '.*lxdialog/.*' -print`
+	rm -f core `find . -name '*.[oas]' ! -regex '.*lxdialog/.*' \
+		! -regex '.*ksymoops/.*' -print`
 	rm -f core `find . -type f -name 'core' -print`
 	rm -f core `find . -name '.*.flags' -print`
 	rm -f vmlinux System.map
@@ -367,6 +368,7 @@ mrproper: clean archmrproper
 	rm -f .version .config* config.in config.old
 	rm -f scripts/tkparse scripts/kconfig.tk scripts/kconfig.tmp
 	rm -f scripts/lxdialog/*.o scripts/lxdialog/lxdialog
+	rm -f scripts/ksymoops/*.o scripts/ksymoops/ksymoops
 	rm -f .menuconfig.log
 	rm -f include/asm
 	rm -rf include/config
@@ -379,8 +381,8 @@ mrproper: clean archmrproper
 
 distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \
-                -o -name '*.bak' -o -name '#*#' -o -name '.*.orig' \
-                -o -name '.*.rej' -o -name '.SUMS' -o -size 0 \) -print` TAGS
+		-o -name '*.bak' -o -name '#*#' -o -name '.*.orig' \
+		-o -name '.*.rej' -o -name '.SUMS' -o -size 0 \) -print` TAGS
 
 backup: mrproper
 	cd .. && tar cf - linux/ | gzip -9 > backup.gz

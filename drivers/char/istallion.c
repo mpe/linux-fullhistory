@@ -26,6 +26,7 @@
 
 /*****************************************************************************/
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>

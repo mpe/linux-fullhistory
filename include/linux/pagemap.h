@@ -17,7 +17,7 @@ static inline unsigned long page_address(struct page * page)
 	return PAGE_OFFSET + PAGE_SIZE * (page - mem_map);
 }
 
-#define PAGE_HASH_BITS 11
+#define PAGE_HASH_BITS 12
 #define PAGE_HASH_SIZE (1 << PAGE_HASH_BITS)
 
 #define PAGE_AGE_VALUE 16

@@ -1,4 +1,3 @@
-#include <linux/config.h>
 #include "../kernel/ppc_defs.h"
 #include "../kernel/ppc_asm.tmpl"
 #include <asm/processor.h>

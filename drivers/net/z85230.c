@@ -416,8 +416,9 @@ static void z8530_dma_rx(struct z8530_channel *chan)
 
 static void z8530_dma_tx(struct z8530_channel *chan)
 {
-	if(!chan->txdma_on)
+	if(!chan->dma_tx)
 	{
+		printk("Hey who turned the DMA off?\n");
 		z8530_tx(chan);
 		return;
 	}
@@ -434,7 +435,7 @@ static void z8530_dma_status(struct z8530_channel *chan)
 	
 	chan->status=status;
 
-	if(chan->txdma_on)
+	if(chan->dma_tx)
 	{
 		if(status&TxEOM)
 		{
@@ -619,6 +620,9 @@ int z8530_sync_open(struct device *dev, struct z8530_channel *c)
 	z8530_rx_done(c);	/* Load the frame ring */
 	z8530_rx_done(c);	/* Load the backup frame */
 	z8530_rtsdtr(c,1);
+	c->dma_tx = 0;
+	c->regs[R1]|=TxINT_ENAB;
+	write_zsreg(c, R1, c->regs[R1]);
 	write_zsreg(c, R3, c->regs[R3]|RxENABLE);
 	return 0;
 }
@@ -706,6 +710,9 @@ int z8530_sync_dma_open(struct device *dev, struct z8530_channel *c)
 	c->regs[R14]|= DTRREQ;
 	write_zsreg(c, R14, c->regs[R14]);     
 
+	c->regs[R1]&= ~TxINT_ENAB;
+	write_zsreg(c, R1, c->regs[R1]);
+	
 	/*
 	 *	RX DMA via W/Req
 	 */	 
@@ -713,6 +720,7 @@ int z8530_sync_dma_open(struct device *dev, struct z8530_channel *c)
 	c->regs[R1]|= WT_FN_RDYFN;
 	c->regs[R1]|= WT_RDY_RT;
 	c->regs[R1]|= INT_ERR_Rx;
+	c->regs[R1]&= ~TxINT_ENAB;
 	write_zsreg(c, R1, c->regs[R1]);
 	c->regs[R1]|= WT_RDY_ENAB;
 	write_zsreg(c, R1, c->regs[R1]);            
@@ -972,7 +980,7 @@ void z8530_describe(struct z8530_dev *dev, char *mapping, int io)
 		dev->name, 
 		z8530_type_name[dev->type],
 		mapping,
-		io,
+		Z8530_PORT_OF(io),
 		dev->irq);
 }
 
@@ -991,7 +999,7 @@ int z8530_init(struct z8530_dev *dev)
 	dev->chanB.irqs=&z8530_nop;
 	/* Reset the chip */
 	write_zsreg(&dev->chanA, R9, 0xC0);
-	udelay(100);
+	udelay(200);
 	/* Now check its valid */
 	write_zsreg(&dev->chanA, R12, 0xAA);
 	if(read_zsreg(&dev->chanA, R12)!=0xAA)
@@ -1108,7 +1116,7 @@ static void z8530_tx_begin(struct z8530_channel *c)
 	if(c->tx_skb==NULL)
 	{
 		/* Idle on */
-		if(c->txdma)
+		if(c->dma_tx)
 		{
 			flags=claim_dma_lock();
 			disable_dma(c->txdma);
@@ -1126,7 +1134,6 @@ static void z8530_tx_begin(struct z8530_channel *c)
 	}
 	else
 	{
-		c->tx_ptr=c->tx_next_ptr;
 		c->txcount=c->tx_skb->len;
 		
 		
@@ -1141,6 +1148,18 @@ static void z8530_tx_begin(struct z8530_channel *c)
 			 
 			flags=claim_dma_lock();
 			disable_dma(c->txdma);
+
+			/*
+			 *	These two are needed by the 8530/85C30
+			 *	and must be issued when idling.
+			 */
+			 
+			if(c->dev->type!=Z85230)
+			{
+				write_zsctrl(c, RES_Tx_CRC);
+				write_zsctrl(c, RES_EOM_L);
+			}	
+			write_zsreg(c, R10, c->regs[10]&~ABUNDER);
 			clear_dma_ff(c->txdma);
 			set_dma_addr(c->txdma, virt_to_bus(c->tx_ptr));
 			set_dma_count(c->txdma, c->txcount);
@@ -1156,7 +1175,7 @@ static void z8530_tx_begin(struct z8530_channel *c)
 			/* ABUNDER off */
 			write_zsreg(c, R10, c->regs[10]);
 			write_zsctrl(c, RES_Tx_CRC);
-			write_zsctrl(c, RES_EOM_L);
+//???			write_zsctrl(c, RES_EOM_L);
 	
 			while(c->txcount && (read_zsreg(c,R0)&Tx_BUF_EMP))
 			{		

@@ -114,7 +114,6 @@ MODULE_DESCRIPTION ("AMI MegaRAID driver");
 #include <linux/sched.h>
 #include <linux/stat.h>
 #include <linux/malloc.h>	/* for kmalloc() */
-#include <linux/config.h>	/* for CONFIG_PCI */
 #if LINUX_VERSION_CODE < 0x20100
 #include <linux/bios32.h>
 #else
@@ -884,7 +883,7 @@ static int MegaIssueCmd (mega_host_config * megaCfg,
 
   spin_lock_irqsave(&mega_lock,flags);
 
-#if !MULTI_IO
+#ifndef CONFIG_MEGARAID_MULTI_IO
   if (megaCfg->flag & PENDING) {
      spin_unlock_irqrestore(&mega_lock,flags);
      return -1;

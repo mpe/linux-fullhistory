@@ -22,7 +22,6 @@
  *
  ********************************************************************/
 
-#include <linux/config.h>
 #include <linux/skbuff.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>

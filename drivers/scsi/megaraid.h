@@ -5,9 +5,6 @@
 #include <linux/version.h>
 #endif
 
-#define MULTI_IO 0    /* change to 1 for fully parallel I/O to adapter */
-                      /* works on some systems, not on others yet */
-
 #define IN_ISR                  0x80000000L
 #define NO_INTR                 0x40000000L
 #define IN_TIMEOUT              0x20000000L

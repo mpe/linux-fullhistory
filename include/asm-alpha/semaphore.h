@@ -123,12 +123,14 @@ extern inline int down_trylock(struct semaphore * sem)
 	   do {
 	       tmp = ldq_l;
 	       sub = 0x0000000100000000;
-	       ret = ((int)tmp <= 0);		// count <= 0 ?
-	       // If we're subtracting one from count, we don't need 
-	       // one from waking and vice versa.
-	       if ((int)tmp > 0) sub = 1;	// count > 0 ?
-	       if ((long)tmp >= 0) ret = 0;	// waking >= 0 ?
-	       if (ret) break;	
+	       ret = ((int)tmp <= 0);		// count =< 0 ?
+	       if ((int)tmp >= 0) sub = 0;	// count >= 0 ?
+			// note that if count=0 subq overflows to the high
+			// longword (i.e waking)
+	       ret &= ((long)tmp < 0);		// waking < 0 ?
+	       sub += 1;
+	       if (ret) 
+			break;	
 	       tmp -= sub;
 	       tmp = stq_c = tmp;
 	   } while (tmp == 0);
@@ -140,13 +142,14 @@ extern inline int down_trylock(struct semaphore * sem)
 		"	addl	%1,0,%2\n"
 		"	sll	%3,32,%3\n"
 		"	cmple	%2,0,%0\n"
-		"	cmovgt	%2,1,%3\n"
-		"	cmovge	%1,0,%0\n"
+		"	cmovge	%2,0,%3\n"
+		"	cmplt	%1,0,%2\n"
+		"	addq	%3,1,%3\n"
+		"	and	%0,%2,%0\n"
 		"	bne	%0,2f\n"
 		"	subq	%1,%3,%1\n"
 		"	stq_c	%1,%4\n"
 		"	beq	%1,3f\n"
-		"	mb\n"
 		"2:\n"
 		".section .text2,\"ax\"\n"
 		"3:	br	1b\n"

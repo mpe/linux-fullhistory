@@ -56,8 +56,6 @@
 #endif
 
 #define KERNEL
-#include <linux/config.h>
-
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/mm.h>		/* for verify_area */
