@@ -36,9 +36,9 @@ This driver provides the following features:
    with the ATAPI 2.6 draft standard (such as the NEC CDR-251).  This
    merely adds a function to switch between the slots of the changer
    under control of an external program.  A sample such program is
-   appended to the end of this file.  I've heard that the Sanyo 3-disc
-   changer does not conform to this standard, so the changer functions
-   will probably not work with that drive.
+   appended to the end of this file.  The Sanyo 3-disc changer
+   (which does not conform to the standard) is also now supported.
+   Please note the driver refers to the first CD as slot # 0.
 
 
 2. Installation

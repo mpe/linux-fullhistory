@@ -100,13 +100,13 @@
  * 3.13  May 19, 1996 -- Fixes for changer code.
  * 3.14  May 29, 1996 -- Add work-around for Vertos 600.
  *                        (From Hennus Bergman <hennus@sky.ow.nl>.)
+ * 3.15  July 2, 1996 -- Added support for Sanyo 3 CD changers
+ *                        from Ben Galliart <bgallia@luc.edu> with 
+ *                        special help from Jeff Lightfoot 
+ *                        <jeffml@netcom.com>
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
- *
- * NOTE: The changer functions were tested with the NEC CDR-251 drive.
- * They may not work with the Sanyo 3-cd changer, which i understand
- * uses a different protocol.
  *
  * ATAPI cd-rom driver.  To be used with ide.c.
  * See Documentation/cdrom/ide-cd for usage information.
@@ -237,7 +237,8 @@ struct ide_cd_state_flags {
 	__u8 toc_valid     : 1; /* Saved TOC information is current. */
 	__u8 door_locked   : 1; /* We think that the drive door is locked. */
 	__u8 eject_on_close: 1; /* Drive should eject when device is closed. */
-	__u8 reserved : 4;
+	__u8 sanyo_slot    : 2; /* Sanyo 3 CD changer support */
+	__u8 reserved      : 2;
 };
 #define CDROM_STATE_FLAGS(drive)  ((struct ide_cd_state_flags *)&((drive)->bios_head))
 
@@ -1503,6 +1504,11 @@ cdrom_check_status (ide_drive_t  *drive,
 	pc.sense_data = reqbuf;
 	pc.c[0] = TEST_UNIT_READY;
 
+        /* the Sanyo 3 CD changer uses byte 7 of TEST_UNIT_READY to 
+           switch CDs instead of supporting the LOAD_UNLOAD opcode   */
+
+        pc.c[7] = CDROM_STATE_FLAGS (drive)->sanyo_slot % 3;
+
 	return cdrom_queue_packet_command (drive, &pc);
 }
 
@@ -1965,15 +1971,38 @@ static int
 cdrom_load_unload (ide_drive_t *drive, int slot,
 		   struct atapi_request_sense *reqbuf)
 {
-	struct packet_command pc;
+	/* if the drive is a Sanyo 3 CD changer then TEST_UNIT_READY
+           (used in the cdrom_check_status function) is used to 
+           switch CDs instead of LOAD_UNLOAD */
 
-	memset (&pc, 0, sizeof (pc));
-	pc.sense_data = reqbuf;
+	if (CDROM_STATE_FLAGS (drive)->sanyo_slot > 0) {
 
-	pc.c[0] = LOAD_UNLOAD;
-	pc.c[4] = 2 + (slot >= 0);
-	pc.c[8] = slot;
-	return cdrom_queue_packet_command (drive, &pc);
+        	if ((slot == 1) || (slot == 2)) {
+			CDROM_STATE_FLAGS (drive)->sanyo_slot = slot;
+		} else if (slot >= 0) {
+			CDROM_STATE_FLAGS (drive)->sanyo_slot = 3;
+		} else {
+			return 0;
+		}
+
+		return cdrom_check_status (drive, NULL);
+
+	} else {
+
+		/* ATAPI Rev. 2.2+ standard for requesting switching of
+                   CDs in a multiplatter device */
+
+		struct packet_command pc;
+
+		memset (&pc, 0, sizeof (pc));
+		pc.sense_data = reqbuf;
+
+		pc.c[0] = LOAD_UNLOAD;
+		pc.c[4] = 2 + (slot >= 0);
+		pc.c[8] = slot;
+		return cdrom_queue_packet_command (drive, &pc);
+
+	}
 }
 
 
@@ -2574,6 +2603,10 @@ void ide_cdrom_setup (ide_drive_t *drive)
 	CDROM_CONFIG_FLAGS (drive)->no_doorlock = 0;
 #endif
 
+	/* by default Sanyo 3 CD changer support is turned off and
+           ATAPI Rev 2.2+ standard support for CD changers is used */
+	CDROM_STATE_FLAGS (drive)->sanyo_slot = 0;
+
 	if (drive->id != NULL)
 		CDROM_CONFIG_FLAGS (drive)->drq_interrupt =
 			((drive->id->config & 0x0060) == 0x20);
@@ -2621,6 +2654,14 @@ void ide_cdrom_setup (ide_drive_t *drive)
 			CDROM_CONFIG_FLAGS (drive)->playmsf_as_bcd = 1;
 			CDROM_CONFIG_FLAGS (drive)->subchan_as_bcd = 1;
 		}
+
+		/* Sanyo 3 CD changer uses a non-standard command 
+                   for CD changing */
+                else if (strcmp (drive->id->model, "CD-ROM CDR-C3 G") == 0) {
+			/* uses CD in slot 0 when value is set to 3 */
+			CDROM_STATE_FLAGS (drive)->sanyo_slot = 3;
+		}
+
 	}
 #endif /* not STANDARD_ATAPI */
 

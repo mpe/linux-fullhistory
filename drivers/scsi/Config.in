@@ -45,11 +45,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
   fi
 fi
 if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
-  if [ "$CONFIG_SCSI" != "n" -a "$CONFIG_SCSI_NCR53C7xx" = "m" ]; then
-    dep_tristate 'NCR53C8XX SCSI support'  CONFIG_SCSI_NCR53C8XX m
-  else
-    dep_tristate 'NCR53C8XX SCSI support'  CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
-  fi
+  dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
   if [ "$CONFIG_SCSI_NCR53C8XX" != "n" ]; then
     bool '  enable tagged command queueing' CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
     bool '  force normal IO' CONFIG_SCSI_NCR53C8XX_IOMAPPED
@@ -57,7 +53,7 @@ if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
     bool '  force asynchronous transfer mode' CONFIG_SCSI_NCR53C8XX_FORCE_ASYNCHRONOUS
     bool '  force synchronous negotiation' CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
   fi
-  if [ "$CONFIG_SCSI_NCR53C8XX" != "n" -a $CONFIG_EXPERIMENTAL = 'y' ]; then
+  if [ "$CONFIG_SCSI_NCR53C8XX" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
     bool '  disable master parity checking' CONFIG_SCSI_NCR53C8XX_DISABLE_MPARITY_CHECK
     bool '  disable scsi parity checking' CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK
   fi

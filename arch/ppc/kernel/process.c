@@ -26,7 +26,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-#include "ppc_machine.h"
+#include <asm/ppc_machine.h>
 
 int
 dump_fpu()
@@ -44,7 +44,6 @@ switch_to(struct task_struct *prev, struct task_struct *new)
 #if 0
 	printk("Task %x(%d) -> %x(%d)", current, current->pid, new, new->pid);
 	printk(" - IP: %x, SR: %x, SP: %x\n", regs->nip, regs->msr, regs);
-	cnpause();
 #endif
 	new_tss = &new->tss;
 	old_tss = &current->tss;
@@ -105,7 +104,6 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	struct pt_regs * childregs;
 #if 0
 printk("copy thread - NR: %d, Flags: %x, USP: %x, Task: %x, Regs: %x\n", nr, clone_flags, usp, p, regs);
-cnpause();
 #endif
 	/* Construct segment registers */
 	segs = p->tss.segs;
@@ -120,7 +118,6 @@ cnpause();
 		p->mm->context = (nr<<4);
 #if 0		
 printk("Setting MM[%x] Context = %x Task = %x Current = %x/%x\n", p->mm, p->mm->context, p, current, current->mm);
-cnpause();
 #endif
 	}
 	/* Last 8 are shared with kernel & everybody else... */
@@ -172,7 +169,6 @@ void start_thread(struct pt_regs * regs, unsigned long eip, unsigned long esp)
 	printk("Start thread [%x] at PC: %x, SR: %x, SP: %x\n", regs, eip, regs->msr, esp);
 	dump_buf(esp, len);
 	dump_buf(eip, 0x80);
-	cnpause();
 }
 #endif	
 }
@@ -243,7 +239,7 @@ print_backtrace(unsigned long *sp)
 		{
 			printk("\n");
 		}
-		if (cnt > 16) break;
+		if (cnt > 32) break;
 	}
 	printk("\n");
 }

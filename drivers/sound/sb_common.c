@@ -261,6 +261,29 @@ sb16_set_dma_hw (sb_devc * devc)
   return 1;
 }
 
+static void
+sb16_set_mpu_port(sb_devc *devc, struct address_info *hw_config)
+{
+/*
+ * This routine initializes new MIDI port setup register of SB Vibra.
+ */
+	unsigned char bits = sb_getmixer(devc, 0x84) & ~0x06;
+	switch (hw_config->io_base)
+	{
+	case 0x300:
+  		sb_setmixer (devc, 0x84, bits | 0x04);
+		break;
+
+	case 0x330:
+  		sb_setmixer (devc, 0x84, bits | 0x00);
+		break;
+
+	default:
+  		sb_setmixer (devc, 0x84, bits | 0x02); /* Disable MPU */
+		printk("SB16: Invalid MIDI I/O port %x\n", hw_config->io_base);
+	}
+}
+
 static int
 sb16_set_irq_hw (sb_devc * devc, int level)
 {
@@ -1150,6 +1173,7 @@ probe_sbmpu (struct address_info *hw_config)
 	}
       hw_config->name = "Sound Blaster 16";
       hw_config->irq = -devc->irq;
+      sb16_set_mpu_port(devc, hw_config)
       break;
 
     case MDL_ESS:

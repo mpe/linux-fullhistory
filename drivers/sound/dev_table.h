@@ -331,7 +331,7 @@ struct sound_timer_operations {
 #ifdef CONFIG_SB
 		{"SBLAST", 0, SNDCARD_SB,	"Sound Blaster",		attach_sb_card, probe_sb, unload_sb},
 #ifdef CONFIG_MIDI
-		{"UART401", 0, SNDCARD_UART401,"MPU-401 UART",	attach_uart401, probe_uart401, unload_uart401},
+		{"SBMPU", 0, SNDCARD_SB16MIDI,"SB MPU-401",	attach_sbmpu, probe_sbmpu, unload_sbmpu},
 #endif
 #endif
 #ifdef CONFIG_GUS16

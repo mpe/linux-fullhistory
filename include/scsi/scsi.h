@@ -94,7 +94,8 @@
 #define INTERMEDIATE_GOOD    0x08
 #define INTERMEDIATE_C_GOOD  0x0a
 #define RESERVATION_CONFLICT 0x0c
-#define QUEUE_FULL           0x1a
+#define COMMAND_TERMINATED   0x11
+#define QUEUE_FULL           0x14
 
 #define STATUS_MASK          0x3e
 

@@ -83,7 +83,7 @@ typedef struct sb_devc {
 	   volatile int intr_active, irq_mode;
 
 	/* Mixer fields */
-	   int levels[SOUND_MIXER_NRDEVICES];
+	   unsigned short levels[SOUND_MIXER_NRDEVICES];
 	   mixer_tab *iomap;
 	   int mixer_caps, recmask, supported_devices;
 	   int supported_rec_devices;

@@ -565,14 +565,14 @@ static inline void add_bitbuffer_word(struct bit_buffer * buf,
 
 /* ---------------------------------------------------------------------- */
 
-static inline unsigned int tenms_to_flags(struct baycom_state *bc, 
+static inline unsigned int tenms_to_2flags(struct baycom_state *bc, 
 					  unsigned int tenms)
 {
 	switch (bc->modem_type) {
 	case BAYCOM_MODEM_SER12:
-		return tenms * 12 / 8;
+		return tenms * 3 / 4;
 	case BAYCOM_MODEM_PAR96:
-		return tenms * 12;
+		return tenms * 6;
 	default:
 		return 0;
 	}
@@ -697,7 +697,7 @@ static unsigned int hdlc_tx_word(struct baycom_state *bc)
 				   &bc->hdlc_tx.len);
 			if (!bc->hdlc_tx.bp || !bc->hdlc_tx.len) {
 				bc->hdlc_tx.tx_state = 1;
-				bc->hdlc_tx.numflags = tenms_to_flags
+				bc->hdlc_tx.numflags = tenms_to_2flags
 					(bc, bc->ch_params.tx_tail);
 				break;
 			}
@@ -777,9 +777,10 @@ static inline void tx_arbitrate(struct baycom_state *bc)
 		if ((random_num() % 256) > bc->ch_params.ppersist)
 			return;
 	}
-	bc->hdlc_tx.ptt = 1;
 	bc->hdlc_tx.tx_state = 0;
-	bc->hdlc_tx.numflags = tenms_to_flags(bc, bc->ch_params.tx_delay);
+	bc->hdlc_tx.numflags = tenms_to_2flags(bc, bc->ch_params.tx_delay);
+	bc->hdlc_tx.numbits = bc->hdlc_tx.bitbuf = bc->hdlc_tx.bitstream = 0;
+	bc->hdlc_tx.ptt = 1;
 	bc->stat.ptt_keyed++;
 }
 
@@ -1160,7 +1161,7 @@ static int ser12_on_open(struct baycom_state *bc)
 	ser12_set_divisor(bc, (bc->options & BAYCOM_OPTIONS_SOFTDCD) ? 4 : 6);
 	outb(0x0d, MCR(bc->iobase));
 	outb(0, IER(bc->iobase));
-	if (request_irq(bc->irq, baycom_ser12_interrupt, 0, 
+	if (request_irq(bc->irq, baycom_ser12_interrupt, SA_INTERRUPT, 
 			"baycom_ser12", bc))
 		return -EBUSY;
 	/*
@@ -1210,7 +1211,7 @@ static void baycom_par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	register struct baycom_state *bc = (struct baycom_state *)dev_id;
 	int i;
-	unsigned int data, mask, mask2;
+	unsigned int data, descx, mask, mask2;
 	
 	if (!bc || bc->magic != BAYCOM_MAGIC)
 		return;
@@ -1269,7 +1270,6 @@ static void baycom_par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 * do receiver; differential decode and descramble on the fly
 	 */
 	for(data = i = 0; i < PAR96_BURSTBITS; i++) {
-		unsigned int descx;
 		bc->modem.par96.descram = (bc->modem.par96.descram << 1);
 		if (inb(LPT_STATUS(bc->iobase)) & PAR96_RXBIT)
 			bc->modem.par96.descram |= 1;
@@ -1307,16 +1307,16 @@ static void baycom_par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		/* check for abort/noise sequences */
 		for(mask = 0x1fe00, mask2 = 0x1fe00, i = 0; 
 		    i < PAR96_BURSTBITS; i++, mask <<= 1, mask2 <<= 1)
-			if ((bc->modem.par96.dcd_shreg & mask) == mask2)
-				if (bc->modem.par96.dcd_count >= 0)
-					bc->modem.par96.dcd_count -= 
-						BAYCOM_MAXFLEN-10;
+			if (((bc->modem.par96.dcd_shreg & mask) == mask2) &&
+			    (bc->modem.par96.dcd_count >= 0))
+				bc->modem.par96.dcd_count -= BAYCOM_MAXFLEN-10;
 		/* decrement and set the dcd variable */
 		if (bc->modem.par96.dcd_count >= 0)
 			bc->modem.par96.dcd_count -= 2;
 		bc->modem.dcd = bc->modem.par96.dcd_count > 0;
 	} else {
-		bc->modem.dcd = !!(inb(LPT_STATUS(bc->iobase)) & PAR96_DCD);
+		bc->modem.dcd = !!(inb(LPT_STATUS(bc->iobase))
+				   & PAR96_DCD);
 	}
 	if (--bc->modem.arb_divider <= 0) {
 #ifdef BAYCOM_USE_BH
@@ -1400,7 +1400,7 @@ static int par96_on_open(struct baycom_state *bc)
 	outb(0, LPT_CONTROL(bc->iobase));      /* disable interrupt */
 	 /* switch off PTT */
 	outb(PAR96_PTT | PAR97_POWER, LPT_DATA(bc->iobase));
-	if (request_irq(bc->irq, baycom_par96_interrupt, 0, 
+	if (request_irq(bc->irq, baycom_par96_interrupt, SA_INTERRUPT, 
 			"baycom_par96", bc))
 		return -EBUSY;
 	outb(LPT_IRQ_ENABLE, LPT_CONTROL(bc->iobase));  /* enable interrupt */
@@ -1586,6 +1586,10 @@ static void baycom_put_char(struct tty_struct *tty, unsigned char ch)
 	}
 	if (!bc->kiss_decode.dec_state)
 		return;
+	if (ch == KISS_FESC) {
+		bc->kiss_decode.escaped = 1;
+		return;
+	}
 	if (bc->kiss_decode.wr >= sizeof(bc->kiss_decode.pkt_buf)) {
 		bc->kiss_decode.wr = 0;
 		bc->kiss_decode.dec_state = 0;
@@ -2269,6 +2273,7 @@ void cleanup_module(void)
 
 	printk(KERN_INFO "baycom: cleanup_module called\n");
 
+	disable_bh(BAYCOM_BH);
 	if (tty_unregister_driver(&baycom_driver))
 		printk(KERN_WARNING "baycom: failed to unregister tty "
 		       "driver\n");
@@ -2320,20 +2325,3 @@ void baycom_setup(char *str, int *ints)
 
 #endif /* MODULE */
 /* --------------------------------------------------------------------- */
-
-/*
- * Overrides for Emacs so that we follow Linus's tabbing style.
- * Emacs will notice this stuff at the end of the file and automatically
- * adjust the settings for this buffer only.  This must remain at the end
- * of the file.
- * ---------------------------------------------------------------------------
- * Local variables:
- * c-indent-level: 8
- * c-brace-imaginary-offset: 0
- * c-brace-offset: -8
- * c-argdecl-indent: 8
- * c-label-offset: -8
- * c-continued-statement-offset: 8
- * c-continued-brace-offset: 0
- * End:
- */

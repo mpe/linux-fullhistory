@@ -216,16 +216,8 @@ static int fifo_select(struct inode * inode, struct file * filp, int sel_type, s
  */
 static int connect_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
-	while (!PIPE_SIZE(*inode)) {
-		if (PIPE_WRITERS(*inode))
-			break;
-		if (filp->f_flags & O_NONBLOCK)
-			return -EAGAIN;
-		wake_up_interruptible(& PIPE_WAIT(*inode));
-		if (current->signal & ~current->blocked)
-			return -ERESTARTSYS;
-		interruptible_sleep_on(& PIPE_WAIT(*inode));
-	}
+	if (PIPE_EMPTY(*inode) && !PIPE_WRITERS(*inode))
+		return 0;
 	filp->f_op = &read_fifo_fops;
 	return pipe_read(inode,filp,buf,count);
 }
@@ -237,6 +229,9 @@ static int connect_select(struct inode * inode, struct file * filp, int sel_type
 			if (!PIPE_EMPTY(*inode)) {
 				filp->f_op = &read_fifo_fops;
 				return 1;
+			}
+			if (PIPE_WRITERS(*inode)) {
+				filp->f_op = &read_fifo_fops;
 			}
 			select_wait(&PIPE_WAIT(*inode), wait);
 			return 0;

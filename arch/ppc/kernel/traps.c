@@ -26,7 +26,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-#include "ppc_machine.h"
+#include <asm/ppc_machine.h>
 
 /*
  * Trap & Exception support
@@ -40,7 +40,7 @@ trap_init(void)
 void
 _exception(int signr, struct pt_regs *regs)
 {
-	dump_regs(regs);
+/*	dump_regs(regs);*/
 	force_sig(signr, current);
 	if (!user_mode(regs))
 	{
@@ -51,13 +51,13 @@ _exception(int signr, struct pt_regs *regs)
 
 MachineCheckException(struct pt_regs *regs)
 {
-	printk("Machine check at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);
+/*	printk("Machine check at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);*/
 	_exception(SIGSEGV, regs);	
 }
 
 ProgramCheckException(struct pt_regs *regs)
 {
-	printk("Program check at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);
+/*	printk("Program check at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);*/
 	if (current->flags & PF_PTRACED)
 	{
 		_exception(SIGTRAP, regs);
@@ -69,30 +69,29 @@ ProgramCheckException(struct pt_regs *regs)
 
 SingleStepException(struct pt_regs *regs)
 {
-	printk("Single step at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);
+/*	printk("Single step at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);*/
 	regs->msr &= ~MSR_SE;  /* Turn off 'trace' bit */
 	_exception(SIGTRAP, regs);	
 }
 
 FloatingPointCheckException(struct pt_regs *regs)
 {
-	printk("Floating point check at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);
+/*	printk("Floating point check at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);*/
 	_exception(SIGFPE, regs);	
 }
 
 AlignmentException(struct pt_regs *regs)
 {
-	printk("Alignment error at PC: %x, SR: %x\n", regs->nip, regs->msr);
+/*	printk("Alignment error at PC: %x, SR: %x\n", regs->nip, regs->msr);
 	dump_regs(regs);
-	cnpause();
-	printk("Alignment error at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);
+	printk("Alignment error at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);*/
 	_exception(SIGBUS, regs);	
 }
 
 bad_stack(struct pt_regs *regs)
 {
-	printk("Kernel stack overflow at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);
-	dump_regs(regs);
+/*	printk("Kernel stack overflow at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);
+	dump_regs(regs);*/
 	while (1) ;
 }
 
@@ -130,7 +129,6 @@ trace_syscall(struct pt_regs *regs)
 	if (++count == 20)
 	{
 		count = 0;
-		cnpause();
 	}
 }
 

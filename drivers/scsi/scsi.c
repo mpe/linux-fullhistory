@@ -1621,6 +1621,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 		break;
 		
 	    case CHECK_CONDITION:
+	    case COMMAND_TERMINATED:
 		switch (check_sense(SCpnt))
 		{
 		case 0:
@@ -1652,6 +1653,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 		break;
 		
 	    case BUSY:
+	    case QUEUE_FULL:
 		update_timeout(SCpnt, oldto);
 		status = REDO;
 		break;

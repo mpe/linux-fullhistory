@@ -41,6 +41,9 @@ pcm_set_speed (int arg)
   int             foo, tmp;
   unsigned long   flags;
 
+  if (arg == 0)
+     return pcm_speed;
+
   if (arg > 44100)
     arg = 44100;
   if (arg < 5000)
@@ -127,6 +130,9 @@ pcm_set_channels (int arg)
 int
 pcm_set_bits (int arg)
 {
+  if (arg == 0)
+     return pcm_bits;
+
   if ((arg & pcm_bitsok) != arg)
     return pcm_bits;
 

@@ -47,50 +47,11 @@ extern void show_net_buffers(void);
 pte_t * __bad_pagetable(void)
 {
 	panic("__bad_pagetable");
-#if 0
-	extern char empty_bad_page_table[PAGE_SIZE];
-	unsigned long dummy;
-
-	__asm__ __volatile__(
-		".set\tnoreorder\n\t"
-		"1:\tsw\t%2,(%0)\n\t"
-		"subu\t%1,%1,1\n\t"
-		"bne\t$0,%1,1b\n\t"
-		"addiu\t%0,%0,1\n\t"
-		".set\treorder"
-		:"=r" (dummy),
-		 "=r" (dummy)
-		:"r" (pte_val(BAD_PAGE)),
-		 "0" ((long) empty_bad_page_table),
-		 "1" (PTRS_PER_PAGE));
-
-	return (pte_t *) empty_bad_page_table;
-#endif
 }
-
 pte_t __bad_page(void)
 {
 	panic("__bad_page");
-#if 0
-	extern char empty_bad_page[PAGE_SIZE];
-	unsigned long dummy;
-
-	__asm__ __volatile__(
-		".set\tnoreorder\n\t"
-		"1:\tsw\t$0,(%0)\n\t"
-		"subu\t%1,%1,1\n\t"
-		"bne\t$0,%1,1b\n\t"
-		"addiu\t%0,%0,1\n\t"
-		".set\treorder"
-		:"=r" (dummy),
-		 "=r" (dummy)
-		:"0" ((long) empty_bad_page),
-		 "1" (PTRS_PER_PAGE));
-
-	return pte_mkdirty(mk_pte((unsigned long) empty_bad_page, PAGE_SHARED));
-#endif
 }
-
 unsigned long __zero_page(void)
 {
 	extern char empty_zero_page[PAGE_SIZE];
@@ -106,7 +67,8 @@ void show_mem(void)
 	printk("Mem-info:\n");
 	show_free_areas();
 	printk("Free swap:       %6dkB\n",nr_swap_pages<<(PAGE_SHIFT-10));
-	i = high_memory >> PAGE_SHIFT;
+	/*i = high_memory >> PAGE_SHIFT;*/
+	i = MAP_NR(high_memory);
 	while (i-- > 0) {
 		total++;
 		if (PageReserved(mem_map+i))
@@ -137,39 +99,6 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
  */
 unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 {
-#if 0	
-	pgd_t * pg_dir;
-	pte_t * pg_table;
-	unsigned long tmp;
-	unsigned long address;
-
-	start_mem = PAGE_ALIGN(start_mem);
-	address = 0;
-	pg_dir = swapper_pg_dir;
-	while (address < end_mem) {
-		if (pgd_none(pg_dir[0])) {
-			pgd_set(pg_dir, (pte_t *) start_mem);
-			start_mem += PAGE_SIZE;
-		}
-		/*
-		 * also map it in at 0x00000000 for init
-		 */
-		pg_table = (pte_t *) pgd_page(pg_dir[0]);
-		pgd_set(pg_dir, pg_table);
-		pg_dir++;
-		for (tmp = 0 ; tmp < PTRS_PER_PAGE ; tmp++,pg_table++) {
-			if (address < end_mem)
-				*pg_table = mk_pte(address, PAGE_SHARED);
-			else
-				pte_clear(pg_table);
-			address += PAGE_SIZE;
-		}
-	}
-#if KERNELBASE == KSEG0
-	cacheflush();
-#endif
-	invalidate();
-#endif	
 	return free_area_init(start_mem, end_mem);
 }
 
@@ -186,9 +115,6 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	/* mark usable pages in the mem_map[] */
 	start_mem = PAGE_ALIGN(start_mem);
 
-#if 0
-_printk("Mem init - Start: %x, End: %x\n", start_mem, high_memory);
-#endif
 	for (tmp = KERNELBASE ; tmp < high_memory ; tmp += PAGE_SIZE)
 	{
 		if (tmp < start_mem)
@@ -239,28 +165,21 @@ void si_meminfo(struct sysinfo *val)
 	return;
 }
 
-/* Kernel MMU setup & lowest level hardware support */
-
-/* Hardwired MMU segments */
-
-/* Segment 0x8XXXXXXX, 0xCXXXXXXX always mapped (for I/O) */
-/* Segment 0x9XXXXXXX mapped during init */
-
 BAT BAT0 =
    {
    	{
    		0x80000000>>17, 	/* bepi */
    		BL_256M,		/* bl */
-   		1,			/* vs */
-   		1,			/* vp */
+   		1,			/* vs -- supervisor mode valid */
+   		1,			/* vp -- user mode valid */
    	},
    	{
    		0x80000000>>17,		/* brpn */
-   		1,			/* w */
-   		1,			/* i (cache disabled) */
-   		0,			/* m */
-   		1,			/* g */
-   		BPP_RW			/* pp */
+   		1,			/* write-through */
+   		1,			/* cache-inhibited */
+   		0,			/* memory coherence */
+   		1,			/* guarded */
+   		BPP_RW			/* protection */
    	}
    };
 BAT BAT1 =
@@ -283,15 +202,15 @@ BAT BAT1 =
 BAT BAT2 =
    {
    	{
-   		0x00000000>>17, 	/* bepi */
-   		BL_256M,		/* bl */
-   		0,			/* vs */
+   		0x90000000>>17, 	/* bepi */
+		BL_16M, /* this should be set to amount of phys ram */
+   		1,			/* vs */
    		0,			/* vp */
    	},
    	{
    		0x00000000>>17,		/* brpn */
-   		1,			/* w */
-   		1,			/* i (cache disabled) */
+   		0,			/* w */
+   		0,			/* i */
    		0,			/* m */
    		0,			/* g */
    		BPP_RW			/* pp */
@@ -318,13 +237,13 @@ BAT TMP_BAT2 =
    { /* 0x9XXXXXXX -> 0x0XXXXXXX */
    	{
    		0x90000000>>17, 	/* bepi */
-   		BL_16M,			/* bl */
+   		BL_256M,		/* bl */
    		1,			/* vs */
    		1,			/* vp */
    	},
    	{
    		0x00000000>>17,		/* brpn */
-   		0,			/* w */
+   		1,			/* w */
    		0,			/* i (cache enabled) */
    		0,			/* m */
    		0,			/* g */
@@ -406,9 +325,9 @@ MMU_init()
 {
 	int i, p;
 	SEGREG *segs;
-	_printk("MMU init - started\n");
+	printk("MMU init - started\n");
 	find_end_of_memory();
-	_printk("  Start at 0x%08X, End at 0x%08X, Hash at 0x%08X\n", _start, _end, Hash);
+	printk("  Start at 0x%08X, End at 0x%08X, Hash at 0x%08X\n", _start, _end, Hash);
 	_SDR1 = ((unsigned long)Hash & 0x00FFFFFF) | Hash_mask;
 	p = (int)mmu_pages;
 	p = (p + (MMU_PAGE_SIZE-1)) & ~(MMU_PAGE_SIZE-1);
@@ -459,7 +378,7 @@ MMU_init()
 	/* Clear all DRAM not explicitly used by kernel */
 	bzero(_end, (unsigned long)end_of_DRAM-(unsigned long)_end);
 #endif
-	_printk("MMU init - done!\n");
+	printk("MMU init - done!\n");
 }
 
 pte *
@@ -470,7 +389,7 @@ MMU_get_page()
 	{
 		bzero((char *)pg, MMU_PAGE_SIZE);
 	}
-	_printk("MMU Allocate Page at %08X\n", pg);
+	printk("MMU Allocate Page at %08X\n", pg);
 	return(pg);
 }
 
@@ -587,7 +506,6 @@ for (i = 0;  i < 8;  i++, _pte++)
 {
 	printk("  V: %d, VSID: %05x, H: %d, RPN: %04x, R: %d, C: %d, PP: %x\n", _pte->v, _pte->vsid, _pte->h, _pte->rpn, _pte->r, _pte->c, _pte->pp);
 }
-cnpause();
 printk("Last mappings:\n");
 for (i = 0;  i < NUM_MAPPINGS;  i++)
 {
@@ -597,14 +515,13 @@ for (i = 0;  i < NUM_MAPPINGS;  i++)
 		last_mappings[next_mapping].task);
 	if (++next_mapping == NUM_MAPPINGS) next_mapping = 0;
 }
-cnpause();
 			_panic("Hash table full!\n");
 		}
 		slot = empty;
 	}
 found_it:
 #if 0
-_printk("Map VA: %08X, Slot: %08X[%08X/%08X], H: %d\n", va, slot, slot0, slot1, h);	
+printk("Map VA: %08X, Slot: %08X[%08X/%08X], H: %d\n", va, slot, slot0, slot1, h);	
 #endif
 	_tlbie(va); /* Clear TLB */
 	if (pg)
@@ -1007,7 +924,7 @@ _verify_addr(long va)
 		hash &= 0x3FF | (Hash_mask << 10);
 		hash *= 8;  /* Eight entries / hash bucket */
 		_pte = &Hash[hash];
-		dump_buf(_pte, 64);
+/*		dump_buf(_pte, 64);*/
 		for (i = 0;  i < 8;  i++, _pte++)
 		{
 			if (_pte->v && _pte->vsid == vsid && _pte->h == _h && _pte->api == api)
@@ -1025,7 +942,6 @@ _verify_addr(long va)
 		}
 	}
 found_it:	
-	cnpause();
 }
 
 flush_cache_all()
@@ -1039,3 +955,4 @@ flush_tlb_mm() {}
 flush_tlb_page() {}
 flush_tlb_range() {}
 flush_page_to_ram() {}
+

@@ -304,7 +304,7 @@ sscapeintr (int irq, void *dev_id, struct pt_regs *dummy)
       printk ("SSCAPE: Host interrupt, data=%02x\n", host_read (devc));
     }
 
-#if defined(CONFIG_MPU401) && defined(CONFIG_MIDI)
+#if defined(CONFIG_MPU_EMU) && defined(CONFIG_MIDI)
   if (bits & 0x01)
     {
       mpuintr (irq, NULL, NULL);
@@ -787,7 +787,7 @@ attach_sscape (struct address_info *hw_config)
   }
 #endif
 
-#if defined(CONFIG_MIDI) && defined(CONFIG_MPU401)
+#if defined(CONFIG_MIDI) && defined(CONFIG_MPU_EMU)
   if (probe_mpu401 (hw_config))
     hw_config->always_detect = 1;
   {
@@ -990,7 +990,7 @@ attach_ss_ms_sound (struct address_info *hw_config)
 void
 unload_sscape (struct address_info *hw_config)
 {
-#if defined(CONFIG_MPU401) && defined(CONFIG_MIDI)
+#if defined(CONFIG_MPU_EMU) && defined(CONFIG_MIDI)
   unload_mpu401 (hw_config);
 #endif
   snd_release_irq (hw_config->irq);

@@ -9,20 +9,20 @@ void sys_newselect(void) {_panic("sys_newselect"); }
 
 halt()
 {
-	_printk("\n...Halt!\n");
+	printk("\n...Halt!\n");
 	abort();
 }
 
 _panic(char *msg)
 {
-	_printk("Panic: %s\n", msg);
+	printk("Panic: %s\n", msg);
 	printk("Panic: %s\n", msg);
 	abort();
 }
 
 _warn(char *msg)
 {
-	_printk("*** Warning: %s UNIMPLEMENTED!\n", msg);
+	printk("*** Warning: %s UNIMPLEMENTED!\n", msg);
 }
 
 

@@ -8023,6 +8023,12 @@ printf("ncr_user_command: data=%ld\n", uc->data);
 		break;
 	}
 
+	/*
+	** Not allow to disable tagged queue
+	*/ 
+	if (uc->cmd == UC_SETTAGS && uc->data < 1)
+		return -EINVAL;
+
 	if (len)
 		return -EINVAL;
 #ifdef SCSI_NCR_USER_COMMAND

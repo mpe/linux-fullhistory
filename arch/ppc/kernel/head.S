@@ -1,14 +1,14 @@
 #include "ppc_asm.tmpl"
 #include "ppc_defs.h"
 #include <linux/errno.h>
-
+#define NEWMM
 #define SYNC() \
 	isync; \
 	sync
 
-/* #define TLB_STATS /* Trace TLB exceptions */
+/* #define TLB_STATS */
 
-/* Keep track of low-level exceptions - rather crude, but informative */	
+/* Keep track of low-level exceptions - rather crude, but informative */  
 #define STATS
 
 /*
@@ -50,9 +50,9 @@
 /* gather some data without disturbing anything - Heisenberg are you watching? */
 
 /* CAUTION! Don't turn on more than one of these at once! */	
-/* #define DO_TRAP_TRACE  /* */
-/* #define DO_TLB_TRACE   /* */
-/* #define DO_RFI_TRACE   /* */
+/* #define DO_TRAP_TRACE   */ 
+/* #define DO_TLB_TRACE    */
+/* #define DO_RFI_TRACE    */
 
 #ifdef DO_RFI_TRACE
 #define DO_RFI_TRACE_UNMAPPED(mark) \
@@ -801,8 +801,14 @@ Reset:
 	lwz	r0,4(r3)
 	mtspr	IBAT1L,r0
 	mtspr	DBAT1L,r0
+/* this BAT mapping will cover all of kernel space */
+#ifdef NEWMM
+	lis	r3,BAT2@h
+	ori	r3,r3,BAT2@l
+#else
 	lis	r3,TMP_BAT2@h
 	ori	r3,r3,TMP_BAT2@l
+#endif
 	andc	r3,r3,r7	/* make unmapped address */
 	lwz	r0,0(r3)
 	mtspr	IBAT2U,r0
@@ -847,7 +853,8 @@ DO_RFI_TRACE_MAPPED(0xDEAD0100)
 DO_RFI_TRACE_MAPPED(0xDEAD0200)	
 	SYNC
 	rfi
-20:	
+20:
+
 DO_RFI_TRACE_UNMAPPED(0xDEAD0400)	
 20:	lis	r3,BAT2@h
 	ori	r3,r3,BAT2@l

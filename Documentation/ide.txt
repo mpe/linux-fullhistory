@@ -90,8 +90,8 @@ There can be up to two drives per interface, as per the ATA-2 spec.
 
 Primary:    ide0, port 0x1f0; major=3;  hda is minor=0; hdb is minor=64
 Secondary:  ide1, port 0x170; major=22; hdc is minor=0; hdd is minor=64
-Tertiary:   ide2, port 0x???; major=33; hde is minor=0; hdf is minor=64
-Quaternary: ide3, port 0x???; major=34; hdg is minor=0; hdh is minor=64
+Tertiary:   ide2, port 0x1e8; major=33; hde is minor=0; hdf is minor=64
+Quaternary: ide3, port 0x168; major=34; hdg is minor=0; hdh is minor=64
 
 To access devices on the 2nd/3rd/4th interfaces, device entries must first be
 created in /dev for them.  To create such entries, simply run the included
@@ -107,11 +107,22 @@ IRQ numbers being used by the interfaces (normally IRQ14 & IRQ15).
 Interfaces beyond the first two are not normally probed for, but may be
 specified using kernel "command line" options.  For example,
 
-	ide3=0x1e8,0x3f0,11	/* ioports 0x1e8-0x1ef,0x3f0, irq 11 */
+	ide3=0x168,0x36e,10	/* ioports 0x1e8-0x1ef,0x3f0, irq 11 */
 
 Normally the irq number need not be specified, as ide.c will probe for it:
 
-	ide3=0x1e8,0x3f0	/* ioports 0x1e8-0x1ef,0x3f0 */
+	ide3=0x168,0x36e	/* ioports 0x168-0x16f,0x36e */
+
+The standard port, and irq values are these:
+
+	ide0=0x1f0,0x3f6,14
+	ide1=0x170,0x376,15
+	ide2=0x1e8,0x3ee,11
+	ide3=0x168,0x36e,10
+
+In all probability the device uses these ports and irqs if it is attached
+to the appropriate ide channel.  Pass the parameter for the correct ide
+channel to the kernel, as explained above.
 
 Any number of interfaces may share a single IRQ if necessary, at a slight
 performance penalty, whether on separate cards or a single VLB card.

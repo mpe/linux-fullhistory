@@ -11,7 +11,7 @@
   Copyright 1992 - 1996 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Sun Jun 30 15:26:23 1996 by root@kai.makisara.fi
+  Last modified: Sun Jul  7 10:08:46 1996 by root@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
 
@@ -1414,6 +1414,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	  SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 	if (total == 0 && STp->eof == ST_FM) {
 	  STp->eof = ST_NOEOF;
+	  STp->eof_hit = 0;
 	  STp->drv_block = 0;
 	  if (STps->moves_after_eof > 1)
 	    STps->moves_after_eof = 0;
@@ -2038,7 +2039,9 @@ st_int_ioctl(struct inode * inode,
 
    if (cmd_in == MTFSF)
      STps->moves_after_eof = 0;
-   else if (cmd_in != MTLOAD)
+   else if (cmd_in != MTLOAD && cmd_in != MTLOCK && cmd_in != MTUNLOCK &&
+	    cmd_in != MTSETBLK && cmd_in != MTSETDENSITY &&
+	    cmd_in != MTSETDRVBUFFER)
      STps->moves_after_eof = 1;
    if (!ioctl_result) {  /* SCSI command successful */
      STp->drv_block = blkno;
@@ -2537,12 +2540,12 @@ st_ioctl(struct inode * inode,struct file * file,
      if (!(STp->device)->was_reset) {
 
        if (STp->eof_hit) {
-	 if (mtc.mt_op == MTFSF || mtc.mt_op == MTEOM) {
+	 if (mtc.mt_op == MTFSF || mtc.mt_op == MTFSFM|| mtc.mt_op == MTEOM) {
 	   mtc.mt_count -= 1;
 	   if ((STp->mt_status)->mt_fileno >= 0)
 	     (STp->mt_status)->mt_fileno += 1;
 	 }
-	 else if (mtc.mt_op == MTBSF) {
+	 else if (mtc.mt_op == MTBSF || mtc.mt_op == MTBSFM) {
 	   mtc.mt_count += 1;
 	   if ((STp->mt_status)->mt_fileno >= 0)
 	     (STp->mt_status)->mt_fileno += 1;

@@ -1388,7 +1388,8 @@ static void sd_finish()
 static int sd_detect(Scsi_Device * SDp){
     if(SDp->type != TYPE_DISK && SDp->type != TYPE_MOD) return 0;
     
-    printk("Detected scsi disk sd%c at scsi%d, channel %d, id %d, lun %d\n", 
+    printk("Detected scsi %sdisk sd%c at scsi%d, channel %d, id %d, lun %d\n", 
+           SDp->removable ? "removable " : "",
 	   'a'+ (sd_template.dev_noticed++),
 	   SDp->host->host_no, SDp->channel, SDp->id, SDp->lun); 
     

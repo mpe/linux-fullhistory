@@ -77,15 +77,15 @@ static __inline__ void __FD_ZERO(__kernel_fd_set *p)
 	unsigned int *tmp = p->fds_bits;
 	int i;
 
-	if (__builtin_constant_p(__FDSET_INTS)) {
-		switch (__FDSET_INTS) {
+	if (__builtin_constant_p(__FDSET_LONGS)) {
+		switch (__FDSET_LONGS) {
 			case 8:
 				tmp[0] = 0; tmp[1] = 0; tmp[2] = 0; tmp[3] = 0;
 				tmp[4] = 0; tmp[5] = 0; tmp[6] = 0; tmp[7] = 0;
 				return;
 		}
 	}
-	i = __FDSET_INTS;
+	i = __FDSET_LONGS;
 	while (i) {
 		i--;
 		*tmp = 0;

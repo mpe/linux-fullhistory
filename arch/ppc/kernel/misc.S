@@ -474,6 +474,7 @@ _GLOBAL(_get_PVR)
  * Create a kernel thread
  *   __kernel_thread(flags, fn, arg)
  */
+#if 0
 #define SYS_CLONE 	120
 _GLOBAL(__kernel_thread)
 __kernel_thread:
@@ -484,7 +485,7 @@ __kernel_thread:
 	mtlr	r4
 	mr	r3,r5
 	blr
-
+#endif
 /* Why isn't this a) automatic, b) written in 'C'? */	
 	.data
 	.align 4
@@ -652,5 +653,7 @@ sys_call_table:
 	.long sys_sched_get_priority_max
 	.long sys_sched_get_priority_min  /* 160 */
 	.long sys_sched_rr_get_interval
-	.space (NR_syscalls-162)*4
+	.long sys_nanosleep
+	.long sys_mremap
+	.space (NR_syscalls-163)*4
 

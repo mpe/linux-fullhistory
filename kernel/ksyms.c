@@ -333,6 +333,7 @@ struct symbol_table symbol_table = {
 	X(insert_inode_hash),
 	X(event),
 	X(__down),
+	X(securelevel),
 /* all busmice */
 	X(add_mouse_randomness),
 	X(fasync_helper),

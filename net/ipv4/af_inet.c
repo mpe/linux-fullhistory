@@ -692,7 +692,6 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->timer.function = &net_timer;
 	skb_queue_head_init(&sk->back_log);
 	sock->data =(void *) sk;
-	sk->dummy_th.doff = sizeof(sk->dummy_th)/4;
 	sk->ip_ttl=ip_statistics.IpDefaultTTL;
 	if(sk->type==SOCK_RAW && protocol==IPPROTO_RAW)
 		sk->ip_hdrincl=1;

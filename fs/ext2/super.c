@@ -375,6 +375,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	int db_count;
 	int i, j;
 
+	sb->u.ext2_sb.s_mount_opt = 0;
 	set_opt (sb->u.ext2_sb.s_mount_opt, CHECK_NORMAL);
 	if (!parse_options ((char *) data, &sb_block, &resuid, &resgid,
 	    &sb->u.ext2_sb.s_mount_opt)) {

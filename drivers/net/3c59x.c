@@ -7,23 +7,23 @@
 
 	This driver is for the 3Com "Vortex" series ethercards.  Members of
 	the series include the 3c590 PCI EtherLink III and 3c595-Tx PCI Fast
-	EtherLink.  It also works with the 10Mbs-only 3c590 PCI EtherLink III.
+	EtherLink.
 
 	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
 	Center of Excellence in Space Data and Information Sciences
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 */
 
-static char *version = "3c59x.c:v0.13 2/13/96 becker@cesdis.gsfc.nasa.gov\n";
+static char *version = "3c59x.c:v0.25 5/17/96 becker@cesdis.gsfc.nasa.gov\n";
 
 /* "Knobs" that turn on special features. */
+/* Enable the experimental automatic media selection code. */
+#define AUTOMEDIA 1
+
 /* Allow the use of bus master transfers instead of programmed-I/O for the
    Tx process.  Bus master transfers are always disabled by default, but
    iff this is set they may be turned on using 'options'. */
 #define VORTEX_BUS_MASTER
-
-/* Put out somewhat more debugging messages. (0 - no msg, 1 minimal msgs). */
-#define VORTEX_DEBUG 1
 
 #include <linux/module.h>
 
@@ -46,10 +46,23 @@ static char *version = "3c59x.c:v0.13 2/13/96 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-#ifdef HAVE_SHARED_IRQ
-#define USE_SHARED_IRQ
-#include <linux/shared_irq.h>
-#endif
+#define RUN_AT(x) (jiffies + (x))
+#define DEV_ALLOC_SKB(len) dev_alloc_skb(len + 2)
+
+#define FREE_IRQ(irqnum, dev) free_irq(irqnum, dev)
+#define REQUEST_IRQ(i,h,f,n, instance) request_irq(i,h,f,n, instance)
+#define IRQ(irq, dev_id, pt_regs) (irq, dev_id, pt_regs)
+
+/* "Knobs" for adjusting internal parameters. */
+/* Put out somewhat more debugging messages. (0 - no msg, 1 minimal msgs). */
+#define VORTEX_DEBUG 2
+
+/* Number of times to check to see if the Tx FIFO has space, used in some
+   limited cases. */
+#define WAIT_TX_AVAIL 200
+
+/* Operational parameter that usually are not changed. */
+#define TX_TIMEOUT  40		/* Time in jiffies before concluding Tx hung */
 
 /* The total size is twice that of the original EtherLinkIII series: the
    runtime register window, window 1, is now always mapped in. */
@@ -117,8 +130,8 @@ IV. Notes
 Thanks to Cameron Spitzer and Terry Murphy of 3Com for providing both
 3c590 and 3c595 boards.
 The name "Vortex" is the internal 3Com project name for the PCI ASIC, and
-the not-yet-released (3/95) EISA version is called "Demon".  According to
-Terry these names come from rides at the local amusement park.
+the EISA version is called "Demon".  According to Terry these names come
+from rides at the local amusement park.
 
 The new chips support both ethernet (1.5K) and FDDI (4.5K) packet sizes!
 This driver only supports ethernet packets because of the skbuff allocation
@@ -176,6 +189,7 @@ enum Window1 {
 };
 enum Window0 {
 	Wn0EepromCmd = 10,		/* Window 0: EEPROM command register. */
+	Wn0EepromData = 12,		/* Window 0: EEPROM results register. */
 };
 enum Win0_EEPROM_bits {
 	EEPROM_Read = 0x80, EEPROM_WRITE = 0x40, EEPROM_ERASE = 0xC0,
@@ -206,7 +220,10 @@ enum Window4 {
 	Wn4_Media = 0x0A,		/* Window 4: Various transcvr/media bits. */
 };
 enum Win4_Media_bits {
-	Media_TP = 0x00C0,		/* Enable link beat and jabber for 10baseT. */
+	Media_SQE = 0x0008,		/* Enable SQE error counting for AUI. */
+	Media_10TP = 0x00C0,	/* Enable link beat and jabber for 10baseT. */
+	Media_Lnk = 0x0080,		/* Enable just link beat for 100TX/100FX. */
+	Media_LnkBeat = 0x0800,
 };
 enum Window7 {					/* Window 7: Bus Master control. */
 	Wn7_MasterAddr = 0, Wn7_MasterLen = 6, Wn7_MasterStatus = 12,
@@ -217,17 +234,36 @@ struct vortex_private {
 	const char *product_name;
 	struct device *next_module;
 	struct enet_statistics stats;
-#ifdef VORTEX_BUS_MASTER
 	struct sk_buff *tx_skb;		/* Packet being eaten by bus master ctrl.  */
-#endif
 	struct timer_list timer;	/* Media selection timer. */
-	int options;				/* User-settable driver options (none yet). */
-	unsigned int media_override:3, full_duplex:1, bus_master:1, autoselect:1;
+	int options;				/* User-settable misc. driver options. */
+	int last_rx_packets;		/* For media autoselection. */
+	unsigned int available_media:8,	/* From Wn3_Options */
+	  media_override:3, 			/* Passed-in media type. */
+	  default_media:3,			/* Read from the EEPROM. */
+	  full_duplex:1, bus_master:1, autoselect:1;
 };
 
-static char *if_names[] = {
-	"10baseT", "10Mbs AUI", "undefined", "10base2",
-	"100baseTX", "100baseFX", "MII", "undefined"};
+/* The action to take with a media selection timer tick.
+   Note that we deviate from the 3Com order by checking 10base2 before AUI.
+ */
+static struct media_table {
+  char *name;
+  unsigned int media_bits:16,		/* Bits to set in Wn4_Media register. */
+	mask:8,				/* The transceiver-present bit in Wn3_Config.*/
+	next:8;				/* The media type to try next. */
+  short wait;			/* Time before we check media status. */
+} media_tbl[] = {
+  {	"10baseT",   Media_10TP,0x08, 3 /* 10baseT->10base2 */, (14*HZ)/10},
+  { "10Mbs AUI", Media_SQE, 0x20, 8 /* AUI->default */, (1*HZ)/10},
+  { "undefined", 0,			0x80, 0 /* Undefined */, 0},
+  { "10base2",   0,			0x10, 1 /* 10base2->AUI. */, (1*HZ)/10},
+  { "100baseTX", Media_Lnk, 0x02, 5 /* 100baseTX->100baseFX */, (14*HZ)/10},
+  { "100baseFX", Media_Lnk, 0x04, 6 /* 100baseFX->MII */, (14*HZ)/10},
+  { "MII",		 0,			0x40, 0 /* MII->10baseT */, (14*HZ)/10},
+  { "undefined", 0,			0x01, 0 /* Undefined/100baseT4 */, 0},
+  { "Default",	 0,			0xFF, 0 /* Use default */, 0},
+};
 
 static int vortex_scan(struct device *dev);
 static int vortex_found_device(struct device *dev, int ioaddr, int irq,
@@ -237,11 +273,11 @@ static int vortex_open(struct device *dev);
 static void vortex_timer(unsigned long arg);
 static int vortex_start_xmit(struct sk_buff *skb, struct device *dev);
 static int vortex_rx(struct device *dev);
-static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs);
+static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs);
 static int vortex_close(struct device *dev);
 static void update_stats(int addr, struct device *dev);
 static struct enet_statistics *vortex_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev);
+static void set_rx_mode(struct device *dev);
 
 
 /* Unlike the other PCI cards the 59x cards don't need a large contiguous
@@ -260,7 +296,7 @@ static void set_multicast_list(struct device *dev);
 */
 /* This driver uses 'options' to pass the media type, full-duplex flag, etc. */
 /* Note: this is the only limit on the number of cards supported!! */
-int options[8] = { -1, -1, -1, -1, -1, -1, -1, -1,};
+static int options[8] = { -1, -1, -1, -1, -1, -1, -1, -1,};
 
 #ifdef MODULE
 static int debug = -1;
@@ -283,7 +319,7 @@ init_module(void)
 }
 
 #else
-unsigned long tc59x_probe(struct device *dev)
+int tc59x_probe(struct device *dev)
 {
 	int cards_found = 0;
 
@@ -302,55 +338,54 @@ static int vortex_scan(struct device *dev)
 
 	if (pcibios_present()) {
 		static int pci_index = 0;
-		for (; pci_index < 8; pci_index++) {
-			unsigned char pci_bus, pci_device_fn, pci_irq_line, pci_latency;
-			unsigned int pci_ioaddr;
-			unsigned short pci_command;
-			int index;
+		static int board_index = 0;
+		for (; product_ids[board_index]; board_index++, pci_index = 0) {
+			for (; pci_index < 16; pci_index++) {
+				unsigned char pci_bus, pci_device_fn, pci_irq_line;
+				unsigned char pci_latency;
+				unsigned int pci_ioaddr;
+				unsigned short pci_command;
 
-			for (index = 0; product_ids[index]; index++) {
-				if ( ! pcibios_find_device(TCOM_VENDOR_ID, product_ids[index],
-										   pci_index, &pci_bus,
-										   &pci_device_fn))
+				if (pcibios_find_device(TCOM_VENDOR_ID,
+										product_ids[board_index], pci_index,
+										&pci_bus, &pci_device_fn))
 					break;
-			}
-			if ( ! product_ids[index])
-				break;
-
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-									 PCI_INTERRUPT_LINE, &pci_irq_line);
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-			/* Remove I/O space marker in bit 0. */
-			pci_ioaddr &= ~3;
+				pcibios_read_config_byte(pci_bus, pci_device_fn,
+										 PCI_INTERRUPT_LINE, &pci_irq_line);
+				pcibios_read_config_dword(pci_bus, pci_device_fn,
+										  PCI_BASE_ADDRESS_0, &pci_ioaddr);
+				/* Remove I/O space marker in bit 0. */
+				pci_ioaddr &= ~3;
 
 #ifdef VORTEX_BUS_MASTER
-			/* Get and check the bus-master and latency values.
-			   Some PCI BIOSes fail to set the master-enable bit, and
-			   the latency timer must be set to the maximum value to avoid
-			   data corruption that occurs when the timer expires during
-			   a transfer.  Yes, it's a bug. */
-			pcibios_read_config_word(pci_bus, pci_device_fn,
-									 PCI_COMMAND, &pci_command);
-			if ( ! (pci_command & PCI_COMMAND_MASTER)) {
-				printk("  PCI Master Bit has not been set! Setting...\n");
-				pci_command |= PCI_COMMAND_MASTER;
-				pcibios_write_config_word(pci_bus, pci_device_fn,
-										  PCI_COMMAND, pci_command);
-			}
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
+				/* Get and check the bus-master and latency values.
+				   Some PCI BIOSes fail to set the master-enable bit, and
+				   the latency timer must be set to the maximum value to avoid
+				   data corruption that occurs when the timer expires during
+				   a transfer.  Yes, it's a bug. */
+				pcibios_read_config_word(pci_bus, pci_device_fn,
+										 PCI_COMMAND, &pci_command);
+				if ( ! (pci_command & PCI_COMMAND_MASTER)) {
+					printk("  PCI Master Bit has not been set! Setting...\n");
+					pci_command |= PCI_COMMAND_MASTER;
+					pcibios_write_config_word(pci_bus, pci_device_fn,
+											  PCI_COMMAND, pci_command);
+				}
+				pcibios_read_config_byte(pci_bus, pci_device_fn,
 										 PCI_LATENCY_TIMER, &pci_latency);
-			if (pci_latency != 255) {
-				printk("  Overriding PCI latency timer (CFLT) setting of %d, new value is 255.\n", pci_latency);
-				pcibios_write_config_byte(pci_bus, pci_device_fn,
-										  PCI_LATENCY_TIMER, 255);
-			}
+				if (pci_latency != 255) {
+					printk("  Overriding PCI latency timer (CFLT) setting of"
+						   " %d, new value is 255.\n", pci_latency);
+					pcibios_write_config_byte(pci_bus, pci_device_fn,
+											  PCI_LATENCY_TIMER, 255);
+				}
 #endif  /* VORTEX_BUS_MASTER */
-			vortex_found_device(dev, pci_ioaddr, pci_irq_line, index,
-								dev && dev->mem_start ? dev->mem_start
-								: options[cards_found]);
-			dev = 0;
-			cards_found++;
+				vortex_found_device(dev, pci_ioaddr, pci_irq_line, board_index,
+									dev && dev->mem_start ? dev->mem_start
+									: options[cards_found]);
+				dev = 0;
+				cards_found++;
+			}
 		}
 	}
 
@@ -361,9 +396,9 @@ static int vortex_scan(struct device *dev)
 			/* Check the standard EISA ID register for an encoded '3Com'. */
 			if (inw(ioaddr + 0xC80) != 0x6d50)
 				continue;
-			/* Check for a product that we support. */
-			if ((inw(ioaddr + 0xC82) & 0xFFF0) != 0x5970
-				&& (inw(ioaddr + 0xC82) & 0xFFF0) != 0x5920)
+			/* Check for a product that we support, 3c59{2,7} any rev. */
+			if ((inw(ioaddr + 0xC82) & 0xF0FF) != 0x7059 		/* 597 */
+				&& (inw(ioaddr + 0xC82) & 0xF0FF) != 0x2059)	/* 592 */
 				continue;
 			vortex_found_device(dev, ioaddr, inw(ioaddr + 0xC88) >> 12,
 								DEMON_INDEX,  dev && dev->mem_start
@@ -452,12 +487,12 @@ static int vortex_probe1(struct device *dev)
 		int timer;
 		outw(EEPROM_Read + PhysAddr01 + i, ioaddr + Wn0EepromCmd);
 		/* Pause for at least 162 us. for the read to take place. */
-		for (timer = 0; timer < 162*4 + 400; timer++) {
+		for (timer = 162*4 + 400; timer >= 0; timer--) {
 			SLOW_DOWN_IO;
 			if ((inw(ioaddr + Wn0EepromCmd) & 0x8000) == 0)
 				break;
 		}
-		phys_addr[i] = htons(inw(ioaddr + 12));
+		phys_addr[i] = htons(inw(ioaddr + Wn0EepromData));
 	}
 	for (i = 0; i < 6; i++)
 		printk("%c%2.2x", i ? ':' : ' ', dev->dev_addr[i]);
@@ -470,6 +505,7 @@ static int vortex_probe1(struct device *dev)
 		char *ram_split[] = {"5:3", "3:1", "1:1", "invalid"};
 		union wn3_config config;
 		EL3WINDOW(3);
+		vp->available_media = inw(ioaddr + Wn3_Options);
 		config.i = inl(ioaddr + Wn3_Config);
 		if (vortex_debug > 1)
 			printk("  Internal config register is %4.4x, transceivers %#x.\n",
@@ -479,8 +515,9 @@ static int vortex_probe1(struct device *dev)
 			   config.u.ram_width ? "word" : "byte",
 			   ram_split[config.u.ram_split],
 			   config.u.autoselect ? "autoselect/" : "",
-			   if_names[config.u.xcvr]);
+			   media_tbl[config.u.xcvr].name);
 		dev->if_port = config.u.xcvr;
+		vp->default_media = config.u.xcvr;
 		vp->autoselect = config.u.autoselect;
 	}
 
@@ -492,10 +529,7 @@ static int vortex_probe1(struct device *dev)
 	dev->hard_start_xmit = &vortex_start_xmit;
 	dev->stop = &vortex_close;
 	dev->get_stats = &vortex_get_stats;
-	dev->set_multicast_list = &set_multicast_list;
-#if defined (HAVE_SET_MAC_ADDR) && 0
-	dev->set_mac_address = &set_mac_address;
-#endif
+	dev->set_multicast_list = &set_rx_mode;
 
 	return 0;
 }
@@ -518,11 +552,29 @@ vortex_open(struct device *dev)
 	if (vp->media_override != 7) {
 		if (vortex_debug > 1)
 			printk("%s: Media override to transceiver %d (%s).\n",
-				   dev->name, vp->media_override, if_names[vp->media_override]);
-		config.u.xcvr = vp->media_override;
+				   dev->name, vp->media_override,
+				   media_tbl[vp->media_override].name);
 		dev->if_port = vp->media_override;
-		outl(config.i, ioaddr + Wn3_Config);
-	}
+	} else if (vp->autoselect) {
+		/* Find first available media type, starting with 100baseTx. */
+		dev->if_port = 4;
+		while (! (vp->available_media & media_tbl[dev->if_port].mask))
+			dev->if_port = media_tbl[dev->if_port].next;
+
+		if (vortex_debug > 1)
+			printk("%s: Initial media type %s.\n",
+				   dev->name, media_tbl[dev->if_port].name);
+
+		init_timer(&vp->timer);
+		vp->timer.expires = RUN_AT(media_tbl[dev->if_port].wait);
+		vp->timer.data = (unsigned long)dev;
+		vp->timer.function = &vortex_timer;    /* timer handler */
+		add_timer(&vp->timer);
+	} else
+		dev->if_port = vp->default_media;
+
+	config.u.xcvr = dev->if_port;
+	outl(config.i, ioaddr + Wn3_Config);
 
 	if (vortex_debug > 1) {
 		printk("%s: vortex_open() InternalConfig %8.8x.\n",
@@ -542,19 +594,11 @@ vortex_open(struct device *dev)
 
 	outw(SetStatusEnb | 0x00, ioaddr + EL3_CMD);
 
-#ifdef USE_SHARED_IRQ
-	i = request_shared_irq(dev->irq, &vortex_interrupt, dev, vp->product_name);
-	if (i)						/* Error */
-		return i;
-#else
-	if (dev->irq == 0  ||  irq2dev_map[dev->irq] != NULL)
-		return -EAGAIN;
-	irq2dev_map[dev->irq] = dev;
-	if (request_irq(dev->irq, &vortex_interrupt, 0, vp->product_name, NULL)) {
-		irq2dev_map[dev->irq] = NULL;
+	/* Use the now-standard shared IRQ implementation. */
+	if (request_irq(dev->irq, &vortex_interrupt, SA_SHIRQ,
+					vp->product_name, dev)) {
 		return -EAGAIN;
 	}
-#endif
 
 	if (vortex_debug > 1) {
 		EL3WINDOW(4);
@@ -572,11 +616,9 @@ vortex_open(struct device *dev)
 	if (dev->if_port == 3)
 		/* Start the thinnet transceiver. We should really wait 50ms...*/
 		outw(StartCoax, ioaddr + EL3_CMD);
-	else if (dev->if_port == 0) {
-		/* 10baseT interface, enabled link beat and jabber check. */
-		EL3WINDOW(4);
-		outw(inw(ioaddr + Wn4_Media) | Media_TP, ioaddr + Wn4_Media);
-	}
+	EL3WINDOW(4);
+	outw((inw(ioaddr + Wn4_Media) & ~(Media_10TP|Media_SQE)) |
+		 media_tbl[dev->if_port].media_bits, ioaddr + Wn4_Media);
 
 	/* Switch to the stats window, and clear all stats by reading. */
 	outw(StatsDisable, ioaddr + EL3_CMD);
@@ -592,8 +634,8 @@ vortex_open(struct device *dev)
 	/* Switch to register set 7 for normal use. */
 	EL3WINDOW(7);
 
-	/* Accept b-case and phys addr only. */
-	outw(SetRxFilter | RxStation | RxBroadcast, ioaddr + EL3_CMD);
+	/* Set reciever mode: presumably accept b-case and phys addr only. */
+	set_rx_mode(dev);
 	outw(StatsEnable, ioaddr + EL3_CMD); /* Turn on statistics. */
 
 	dev->tbusy = 0;
@@ -610,26 +652,83 @@ vortex_open(struct device *dev)
 	outw(SetIntrEnb | IntLatch | TxAvailable | RxComplete | StatsFull
 		 | DMADone, ioaddr + EL3_CMD);
 
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 
-	if (vp->autoselect) {
-		init_timer(&vp->timer);
-		vp->timer.expires = (14*HZ)/10; 			/* 1.4 sec. */
-		vp->timer.data = (unsigned long)dev;
-		vp->timer.function = &vortex_timer;    /* timer handler */
-		add_timer(&vp->timer);
-	}
 	return 0;
 }
 
 static void vortex_timer(unsigned long data)
 {
+#ifdef AUTOMEDIA
 	struct device *dev = (struct device *)data;
-	if (vortex_debug > 2)
-		printk("%s: Media selection timer tick happened.\n", dev->name);
-	/* ToDo: active media selection here! */
+	struct vortex_private *vp = (struct vortex_private *)dev->priv;
+	int ioaddr = dev->base_addr;
+	unsigned long flags;
+	int ok = 0;
+
+	if (vortex_debug > 1)
+		printk("%s: Media selection timer tick happened, %s.\n",
+			   dev->name, media_tbl[dev->if_port].name);
+
+	save_flags(flags);	cli(); {
+	  int old_window = inw(ioaddr + EL3_CMD) >> 13;
+	  int media_status;
+	  EL3WINDOW(4);
+	  media_status = inw(ioaddr + Wn4_Media);
+	  switch (dev->if_port) {
+	  case 0:  case 4:  case 5:		/* 10baseT, 100baseTX, 100baseFX  */
+		if (media_status & Media_LnkBeat) {
+		  ok = 1;
+		  if (vortex_debug > 1)
+			printk("%s: Media %s has link beat, %x.\n",
+				   dev->name, media_tbl[dev->if_port].name, media_status);
+		} else if (vortex_debug > 1)
+		  printk("%s: Media %s is has no link beat, %x.\n",
+				   dev->name, media_tbl[dev->if_port].name, media_status);
+ 
+		break;
+	  default:					/* Other media types handled by Tx timeouts. */
+		if (vortex_debug > 1)
+		  printk("%s: Media %s is has no indication, %x.\n",
+				 dev->name, media_tbl[dev->if_port].name, media_status);
+		ok = 1;
+	  }
+	  if ( ! ok) {
+		union wn3_config config;
+
+		do {
+			dev->if_port = media_tbl[dev->if_port].next;
+		} while ( ! (vp->available_media & media_tbl[dev->if_port].mask));
+		if (dev->if_port == 8) { /* Go back to default. */
+		  dev->if_port = vp->default_media;
+		  if (vortex_debug > 1)
+			printk("%s: Media selection failing, using default %s port.\n",
+				   dev->name, media_tbl[dev->if_port].name);
+		} else {
+		  if (vortex_debug > 1)
+			printk("%s: Media selection failed, now trying %s port.\n",
+				   dev->name, media_tbl[dev->if_port].name);
+		  vp->timer.expires = RUN_AT(media_tbl[dev->if_port].wait);
+		  add_timer(&vp->timer);
+		}
+		outw((media_status & ~(Media_10TP|Media_SQE)) |
+			 media_tbl[dev->if_port].media_bits, ioaddr + Wn4_Media);
+
+		EL3WINDOW(3);
+		config.i = inl(ioaddr + Wn3_Config);
+		config.u.xcvr = dev->if_port;
+		outl(config.i, ioaddr + Wn3_Config);
+
+		outw(dev->if_port == 3 ? StartCoax : StopCoax, ioaddr + EL3_CMD);
+	  }
+	  EL3WINDOW(old_window);
+	}   restore_flags(flags);
+	if (vortex_debug > 1)
+	  printk("%s: Media selection timer finished, %s.\n",
+			 dev->name, media_tbl[dev->if_port].name);
+
+#endif /* AUTOMEDIA*/
+	return;
 }
 
 static int
@@ -638,33 +737,49 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	int ioaddr = dev->base_addr;
 
-	/* Transmitter timeout, serious problems. */
-	if (dev->tbusy) {
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 40)
-			return 1;
-		printk("%s: transmit timed out, tx_status %2.2x status %4.4x.\n",
-			   dev->name, inb(ioaddr + TxStatus), inw(ioaddr + EL3_STATUS));
-		vp->stats.tx_errors++;
-		/* Issue TX_RESET and TX_START commands. */
-		outw(TxReset, ioaddr + EL3_CMD);
-		{
-			int i;
-			for (i = 20; i >= 0 ; i--)
-				if ( ! inw(ioaddr + EL3_STATUS) & CmdInProgress)
-					break;
-		}
-		outw(TxEnable, ioaddr + EL3_CMD);
-		dev->trans_start = jiffies;
-		dev->tbusy = 0;
-		return 0;
-	}
+	/* Part of the following code is inspired by code from Giuseppe Ciaccio,
+	   ciaccio@disi.unige.it.
+	   It works around a ?bug? in the 8K Vortex that only occurs on some
+	   systems: the TxAvailable interrupt seems to be lost.
+	   The ugly work-around is to busy-wait for room available in the Tx
+	   buffer before deciding the transmitter is actually hung.
+	   This busy-wait should never really occur, since the problem is that
+	   there actually *is*  room in the Tx FIFO.
 
-	if (skb == NULL || skb->len <= 0) {
-		printk("%s: Obsolete driver layer request made: skbuff==NULL.\n",
-			   dev->name);
-		dev_tint(dev);
-		return 0;
+	   This pointed out an optimization -- we can ignore dev->tbusy if
+	   we actually have room for this packet.
+	   */
+
+	if (inw(ioaddr + TxFree) > skb->len) /* We actually have free room. */
+	  dev->tbusy = 0;			/* Fake out the check below. */
+	else if (dev->tbusy) {
+		/* Transmitter timeout, serious problems. */
+		int tickssofar = jiffies - dev->trans_start;
+		int i;
+
+		if (tickssofar < 2)		/* We probably aren't empty. */
+			return 1;
+		/* Wait a while to see if there really is room. */
+		for (i = WAIT_TX_AVAIL; i >= 0; i--)
+			if (inw(ioaddr + TxFree) > skb->len)
+			  break;
+		if ( i < 0) {
+			if (tickssofar < TX_TIMEOUT)
+				return 1;
+			printk("%s: transmit timed out, tx_status %2.2x status %4.4x.\n",
+				   dev->name, inb(ioaddr + TxStatus), inw(ioaddr + EL3_STATUS));
+			/* Issue TX_RESET and TX_START commands. */
+			outw(TxReset, ioaddr + EL3_CMD);
+			for (i = 20; i >= 0 ; i--)
+				if ( ! inw(ioaddr + EL3_STATUS) & CmdInProgress)                                        break;
+			outw(TxEnable, ioaddr + EL3_CMD);
+			dev->trans_start = jiffies;
+			dev->tbusy = 0;
+			vp->stats.tx_errors++;
+			vp->stats.tx_dropped++;
+			return 0;			/* Yes, silently *drop* the packet! */
+		}
+		dev->tbusy = 0;
 	}
 
 	/* Block a timer-based transmit from overlapping.  This could better be
@@ -684,6 +799,7 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 		outw((skb->len + 3) & ~3, ioaddr + Wn7_MasterLen);
 		vp->tx_skb = skb;
 		outw(StartDMADown, ioaddr + EL3_CMD);
+		/* dev->tbusy will be cleared at the DMADone interrupt. */
 	} else {
 		/* ... and the packet rounded to a doubleword. */
 		outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
@@ -736,22 +852,14 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 
 /* The interrupt handler does all of the Rx thread work and cleans up
    after the Tx thread. */
-static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 {
-#ifdef USE_SHARED_IRQ
-	struct device *dev = (struct device *)(irq == 0 ? regs : irq2dev_map[irq]);
-#else
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
-#endif
+	/* Use the now-standard shared IRQ implementation. */
+	struct device *dev = dev_id;
 	struct vortex_private *lp;
 	int ioaddr, status;
 	int latency;
 	int i = 0;
-
-	if (dev == NULL) {
-		printk ("vortex_interrupt(): irq %d for unknown device.\n", irq);
-		return;
-	}
 
 	if (dev->interrupt)
 		printk("%s: Re-entering the interrupt handler.\n", dev->name);
@@ -774,7 +882,7 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		if (donedidthis++ > 1) {
 			printk("%s: Bogus interrupt, bailing. Status %4.4x, start=%d.\n",
 				   dev->name, status, dev->start);
-			free_irq(dev->irq, NULL);
+			FREE_IRQ(dev->irq, dev);
 		}
 	}
 
@@ -833,10 +941,7 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				/* Adapter failure requires Rx reset and reinit. */
 				outw(RxReset, ioaddr + EL3_CMD);
 				/* Set the Rx filter to the current state. */
-				outw(SetRxFilter | RxStation | RxBroadcast
-					 | (dev->flags & IFF_ALLMULTI ? RxMulticast : 0)
-					 | (dev->flags & IFF_PROMISC ? RxProm : 0),
-					 ioaddr + EL3_CMD);
+				set_rx_mode(dev);
 				outw(RxEnable, ioaddr + EL3_CMD); /* Re-enable the receiver. */
 				outw(AckIntr | AdapterFailure, ioaddr + EL3_CMD);
 			}
@@ -890,7 +995,7 @@ vortex_rx(struct device *dev)
 			short pkt_len = rx_status & 0x1fff;
 			struct sk_buff *skb;
 
-			skb = dev_alloc_skb(pkt_len + 5);
+			skb = DEV_ALLOC_SKB(pkt_len + 5);
 			if (vortex_debug > 4)
 				printk("Receiving packet size %d status %4.4x.\n",
 					   pkt_len, rx_status);
@@ -927,6 +1032,7 @@ vortex_rx(struct device *dev)
 static int
 vortex_close(struct device *dev)
 {
+	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	int ioaddr = dev->base_addr;
 
 	dev->start = 0;
@@ -935,6 +1041,8 @@ vortex_close(struct device *dev)
 	if (vortex_debug > 1)
 		printk("%s: vortex_close() status %4.4x, Tx status %2.2x.\n",
 			   dev->name, inw(ioaddr + EL3_STATUS), inb(ioaddr + TxStatus));
+
+	del_timer(&vp->timer);
 
 	/* Turn off statistics ASAP.  We update lp->stats below. */
 	outw(StatsDisable, ioaddr + EL3_CMD);
@@ -946,24 +1054,11 @@ vortex_close(struct device *dev)
 	if (dev->if_port == 3)
 		/* Turn off thinnet power.  Green! */
 		outw(StopCoax, ioaddr + EL3_CMD);
-	else if (dev->if_port == 0) {
-		/* Disable link beat and jabber, if_port may change ere next open(). */
-		EL3WINDOW(4);
-		outw(inw(ioaddr + Wn4_Media) & ~Media_TP, ioaddr + Wn4_Media);
-	}
 
-#ifdef USE_SHARED_IRQ
-	free_shared_irq(dev->irq, dev);
-#else
-	free_irq(dev->irq, NULL);
-	/* Mmmm, we should disable all interrupt sources here. */
-	irq2dev_map[dev->irq] = 0;
-#endif
+	FREE_IRQ(dev->irq, dev);
 
 	update_stats(ioaddr, dev);
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 
 	return 0;
 }
@@ -1019,26 +1114,27 @@ static void update_stats(int ioaddr, struct device *dev)
 	return;
 }
 
-/* There are two version of set_multicast_list() to support both v1.2 and
-   v1.4 kernels. */
+/* This new version of set_rx_mode() supports v1.4 kernels.
+   The Vortex chip has no documented multicast filter, so the only
+   multicast setting is to receive all multicast frames.  At least
+   the chip has a very clean way to set the mode, unlike many others. */
 static void
-set_multicast_list(struct device *dev)
+set_rx_mode(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
+	short new_mode;
 
-	if ((dev->mc_list)  ||  (dev->flags & IFF_ALLMULTI)) {
-		outw(SetRxFilter|RxStation|RxMulticast|RxBroadcast, ioaddr + EL3_CMD);
-		if (vortex_debug > 3) {
-			printk("%s: Setting Rx multicast mode, %d addresses.\n",
-				   dev->name, dev->mc_count);
-		}
-	} else if (dev->flags & IFF_PROMISC) {
-		outw(SetRxFilter | RxStation | RxMulticast | RxBroadcast | RxProm,
-			 ioaddr + EL3_CMD);
-	} else
-		outw(SetRxFilter | RxStation | RxBroadcast, ioaddr + EL3_CMD);
+	if (dev->flags & IFF_PROMISC) {
+		if (vortex_debug > 3)
+			printk("%s: Setting promiscuous mode.\n", dev->name);
+		new_mode = SetRxFilter|RxStation|RxMulticast|RxBroadcast|RxProm;
+	} else	if ((dev->mc_list)  ||  (dev->flags & IFF_ALLMULTI)) {
+		new_mode = SetRxFilter|RxStation|RxMulticast|RxBroadcast;
+	} else 
+		new_mode = SetRxFilter | RxStation | RxBroadcast;
+
+	outw(new_mode, ioaddr + EL3_CMD);
 }
-
 
 #ifdef MODULE
 void
@@ -1050,6 +1146,7 @@ cleanup_module(void)
 	while (root_vortex_dev) {
 		next_dev = ((struct vortex_private *)root_vortex_dev->priv)->next_module;
 		unregister_netdev(root_vortex_dev);
+		outw(TotalReset, root_vortex_dev->base_addr + EL3_CMD);
 		release_region(root_vortex_dev->base_addr, VORTEX_TOTAL_SIZE);
 		kfree(root_vortex_dev);
 		root_vortex_dev = next_dev;
@@ -1059,7 +1156,7 @@ cleanup_module(void)
 
 /*
  * Local variables:
- *  compile-command: "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c 3c59x.c -o 3c59x.o"
+ *  compile-command: "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c 3c59x.c -o ../../modules/3c59x.o"
  *  c-indent-level: 4
  *  tab-width: 4
  * End:

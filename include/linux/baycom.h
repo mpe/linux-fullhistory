@@ -8,6 +8,7 @@
 #define _BAYCOM_H
 
 #include <linux/ioctl.h>
+#undef BAYCOM_DEBUG
 
 /* -------------------------------------------------------------------- */
 

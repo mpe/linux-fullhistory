@@ -129,7 +129,13 @@ ufs_read_super(struct super_block * sb, void * data, int silent)
 	/* XXX - redo this so we can free it later... */
 	usb = (struct ufs_superblock *)__get_free_page(GFP_KERNEL); 
 	if (usb == NULL) {
+		sb->s_dev=0;
+		unlock_super(sb);
+		brelse(bh1);
+		brelse(bh2);
 	        printk ("ufs_read_super: get_free_page() failed\n");
+		MOD_DEC_USE_COUNT;
+		return (NULL);
 	}
 
 	memcpy((char *)usb, bh1->b_data, BLOCK_SIZE);

@@ -1052,6 +1052,7 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 {
 	int port;
+	int i;
 	
 	if (br_stats.flags & BR_DEBUG)
 		printk("br_receive_frame: ");
@@ -1130,6 +1131,8 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 					port_info[port].dev->dev_addr, 
 					ETH_ALEN) == 0) 
 			{
+				/* Packet is for us */
+				skb->pkt_type = PACKET_HOST;
 				return(0);	/* pass frame up our stack (this will */
 						/* happen in net_bh() in dev.c) */
 			}
@@ -1159,6 +1162,13 @@ int br_tx_frame(struct sk_buff *skb)	/* 3.5 */
 		printk(KERN_CRIT "br_tx_frame: no skb!\n");
 		return(0);
 	}
+	
+	if (!skb->dev)
+	{
+		printk(KERN_CRIT "br_tx_frame: no dev!\n");
+		return(0);
+	}
+	
 	/* check for loopback */
 	if (skb->dev->flags & IFF_LOOPBACK)
 		return(0);
@@ -1289,7 +1299,7 @@ int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
 		/*
 		 *	Send flood and drop.
 		 */
-		if (!f | !(f->flags & FDB_ENT_VALID)) {
+		if (!f || !(f->flags & FDB_ENT_VALID)) {
 		 	/* not found; flood all ports */
 			br_flood(skb, port);
 			return(br_dev_drop(skb));
@@ -1354,9 +1364,15 @@ int br_flood(struct sk_buff *skb, int port)
 		if (port_info[i].state == Forwarding) 
 		{
 			nskb = skb_clone(skb, GFP_ATOMIC);
+			if(nskb==NULL)
+				continue;
 			/* mark that's we've been here... */
 			nskb->pkt_bridged = IS_BRIDGED;
-			nskb->arp = skb->arp;
+			/* Send to each port in turn */
+			nskb->dev= port_info[i].dev;
+			/* To get here we must have done ARP already,
+			   or have a received valid MAC header */
+			nskb->arp = 1;
 			
 /*			printk("Flood to port %d\n",i);*/
 			nskb->h.raw = nskb->data + ETH_HLEN;

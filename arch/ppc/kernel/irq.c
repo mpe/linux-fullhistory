@@ -264,7 +264,6 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 
 #if 0
 _printk("Request IRQ #%d, Handler: %x\n", irq, handler);
-cnpause();
 #endif
 	if (irq > 15)
 	{

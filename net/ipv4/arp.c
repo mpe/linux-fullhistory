@@ -58,6 +58,8 @@
  *              Jonathan Layes  :       Added arpd support through kerneld 
  *                                      message queue (960314)
  *		Mike Shaver	:	/proc/sys/net/ipv4/arp_* support
+ *		Stuart Cheshire	:	Metricom and grat arp fixes
+ *					*** FOR 2.1 clean this up ***
  */
 
 /* RFC1122 Status:
@@ -1931,18 +1933,10 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		else
 			arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr,sha);
 
-/*
- *	Handle gratuitous arp.
- */
-		arp_fast_lock();
-		arp_update(sip, sha, dev, 0, NULL, 1);
-		arp_unlock();
-		kfree_skb(skb, FREE_READ);
-		return 0;
 	}
 
 	arp_fast_lock();
-	arp_update(sip, sha, dev, 0, NULL, ip_chk_addr(tip) != IS_MYADDR);
+	arp_update(sip, sha, dev, 0, NULL, ip_chk_addr(tip) != IS_MYADDR && dev->type != ARPHRD_METRICOM);
 	arp_unlock();
 	kfree_skb(skb, FREE_READ);
 	return 0;
@@ -1994,7 +1988,7 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 	}
 	else
 	{
-		if (ip_chk_addr(ip))
+		if (ip_chk_addr(ip) && dev->type != ARPHRD_METRICOM)
 			return -EINVAL;
 		if (!dev)
 		{

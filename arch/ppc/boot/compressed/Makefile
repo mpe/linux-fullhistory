@@ -1,5 +1,5 @@
 #
-# linux/arch/i386/boot/compressed/Makefile
+# linux/arch/ppc/boot/compressed/Makefile
 #
 # create a compressed vmlinux image from the original vmlinux
 #

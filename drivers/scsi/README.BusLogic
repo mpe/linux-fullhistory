@@ -1,9 +1,9 @@
 		  BusLogic MultiMaster SCSI Driver for Linux
 
-		       Version 1.2.4 for Linux 1.2.13
-		       Version 2.0.4 for Linux 2.0.0
+		       Version 1.2.5 for Linux 1.2.13
+		       Version 2.0.5 for Linux 2.0.4
 
-				  5 June 1996
+				  7 July 1996
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -31,10 +31,11 @@ the major performance and error recovery features can be configured from the
 Linux kernel command line, allowing individual installations to tune driver
 performance and error recovery to their particular needs.
 
-The most recent versions of this driver will always be available by anonymous
-FTP from ftp.dandelion.com.  While directory listings are not permitted, the
-introductory banner displayed on anonymous FTP login will provide a list of the
-driver versions and any other files that are available for retrieval.
+The most recent versions of this driver will always be available from my Linux
+Home Page at URL "http://www.dandelion.com/Linux/" and by anonymous FTP from
+ftp.dandelion.com.  While only limited FTP directory listings are permitted,
+the introductory banner displayed on anonymous FTP login will provide a list of
+the driver versions and any other files that are available for retrieval.
 
 Bug reports should be sent via electronic mail to "lnz@dandelion.com".  Please
 include with the bug report the complete configuration messages reported by the
@@ -322,10 +323,10 @@ Note that limiting the tagged queue depth or disabling tagged queuing can
 substantially impact performance.
 
 
-			     INSTALLATION
+				 INSTALLATION
 
 This distribution was prepared for Linux kernel version 1.2.13
-(BusLogic-1.2.4.tar.gz) or Linux kernel version 2.0.0 (BusLogic-2.0.4.tar.gz).
+(BusLogic-1.2.5.tar.gz) or Linux kernel version 2.0.4 (BusLogic-2.0.5.tar.gz).
 Installation in later versions will probably be successful as well, though
 BusLogic.patch may not be required.  Installation in earlier versions is not
 recommended.
@@ -335,7 +336,7 @@ replacing "/usr/src" with wherever you keep your Linux kernel source tree
 (substitute "1.2" or "2.0" for "x.y" in the tar command as appropriate):
 
   cd /usr/src
-  tar -xvzf BusLogic-x.y.4.tar.gz
+  tar -xvzf BusLogic-x.y.5.tar.gz
   mv README.* BusLogic.[ch] linux/drivers/scsi
   patch -p < BusLogic.patch	    (on Linux 1.2.13 only)
   patch -p < BusLogic.elf_patch	    (on Linux 1.2.13 ELF systems only)

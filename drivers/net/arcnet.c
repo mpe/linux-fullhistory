@@ -17,6 +17,14 @@
          
 	**********************
 	
+	v2.54 (96/07/05)
+	  - Under some situations, Stage 5 autoprobe was a little bit too
+	    picky about the TXACK flag.
+	  - D_EXTRA removed from default debugging flags.  Hey, it's stable,
+	    right?
+	  - Removed redundant "unknown protocol ID" messages and made remaining
+	    ones D_EXTRA.
+	
 	v2.53 (96/06/06)
 	  - arc0e and arc0s wouldn't initialize in newer kernels, which
 	    don't like dev->open==NULL or dev->stop==NULL.
@@ -184,7 +192,7 @@
 */
 
 static const char *version =
- "arcnet.c: v2.53 96/06/06 Avery Pennarun <apenwarr@foxnet.net>\n";
+ "arcnet.c: v2.54 96/07/05 Avery Pennarun <apenwarr@foxnet.net>\n";
 
  
 
@@ -341,7 +349,7 @@ static const char *version =
 #endif
 
 #ifndef ARCNET_DEBUG
-#define ARCNET_DEBUG (D_NORMAL|D_EXTRA)
+#define ARCNET_DEBUG (D_NORMAL)
 #endif
 int arcnet_debug = ARCNET_DEBUG;
 
@@ -976,7 +984,7 @@ int arcnet_probe(struct device *dev)
 		ioaddr=*port;
 		status=inb(STATUS);
 		
-		if ((status & 0x9F)
+		if ((status & 0x9D)
 			!= (NORXflag|RECONflag|TXFREEflag|RESETflag))
 		{
 			BUGMSG2(D_INIT_REASONS,"(status=%Xh)\n",status);
@@ -2240,7 +2248,7 @@ arcnet_rx(struct device *dev,int recbuf)
 #endif
 	case ARC_P_LANSOFT: /* don't understand.  fall through. */
 	default:
-		BUGMSG(D_NORMAL,"received unknown protocol %d (%Xh) from station %d.\n",
+		BUGMSG(D_EXTRA,"received unknown protocol %d (%Xh) from station %d.\n",
 			arcsoft[0],arcsoft[0],saddr);
 		lp->stats.rx_errors++;
 		lp->stats.rx_crc_errors++;
@@ -2733,8 +2741,6 @@ unsigned short arcnetA_type_trans(struct sk_buff *skb,struct device *dev)
 	case ARC_P_NOVELL_EC:
 		return htons(ETH_P_802_3);
 	default:
-		BUGMSG(D_NORMAL,"received packet of unknown protocol id %d (%Xh)\n",
-				head->protocol_id,head->protocol_id);
 		lp->stats.rx_errors++;
 		lp->stats.rx_crc_errors++;
 		return 0;
@@ -3196,8 +3202,6 @@ unsigned short arcnetS_type_trans(struct sk_buff *skb,struct device *dev)
 	case ARC_P_ARP_RFC1051:	return htons(ETH_P_ARP);
 	case ARC_P_ATALK:   return htons(ETH_P_ATALK); /* untested appletalk */
 	default:
-		BUGMSG(D_NORMAL,"received packet of unknown protocol id %d (%Xh)\n",
-			head->protocol_id,head->protocol_id);
 		lp->stats.rx_errors++;
 		lp->stats.rx_crc_errors++;
 		return 0;

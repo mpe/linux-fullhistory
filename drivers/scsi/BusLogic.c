@@ -24,8 +24,8 @@
 */
 
 
-#define BusLogic_DriverVersion		"2.0.4"
-#define BusLogic_DriverDate		"5 June 1996"
+#define BusLogic_DriverVersion		"2.0.5"
+#define BusLogic_DriverDate		"7 July 1996"
 
 
 #include <linux/module.h>
@@ -601,8 +601,8 @@ static void BusLogic_InitializeAddressProbeList(void)
 	    VendorID == PCI_VENDOR_ID_BUSLOGIC &&
 	    pcibios_read_config_word(Bus, DeviceFunction,
 				     PCI_DEVICE_ID, &DeviceID) == 0 &&
-	    (DeviceID == PCI_DEVICE_ID_BUSLOGIC_946C ||
-	     DeviceID == PCI_DEVICE_ID_BUSLOGIC_946C_2) &&
+	    (DeviceID == PCI_DEVICE_ID_BUSLOGIC_MULTIMASTER ||
+	     DeviceID == PCI_DEVICE_ID_BUSLOGIC_MULTIMASTER_NC) &&
 	    pcibios_read_config_dword(Bus, DeviceFunction,
 				      PCI_BASE_ADDRESS_0, &BaseAddress0) == 0 &&
 	    (BaseAddress0 & PCI_BASE_ADDRESS_SPACE) ==
@@ -936,8 +936,15 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   /*
     Issue the Inquire Board Model Number command.
   */
-  if (!(BoardID.FirmwareVersion1stDigit == '2' &&
-	ExtendedSetupInformation.BusType == 'A'))
+  if (ExtendedSetupInformation.BusType == 'A' &&
+      BoardID.FirmwareVersion1stDigit == '2')
+    /* BusLogic BT-542B ISA 2.xx */
+    strcpy(BoardModelNumber, "542B");
+  else if (ExtendedSetupInformation.BusType == 'E' &&
+	   BoardID.FirmwareVersion1stDigit == '0')
+    /* AMI FastDisk EISA Series 441 0.x */
+    strcpy(BoardModelNumber, "747A");
+  else
     {
       RequestedReplyLength = sizeof(BoardModelNumber);
       if (BusLogic_Command(HostAdapter, BusLogic_InquireBoardModelNumber,
@@ -946,15 +953,16 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
 	  != sizeof(BoardModelNumber))
 	return BusLogic_Failure(HostAdapter, "INQUIRE BOARD MODEL NUMBER");
     }
-  else strcpy(BoardModelNumber, "542B");
   /*
     Issue the Inquire Firmware Version 3rd Digit command.
   */
-  if (BusLogic_Command(HostAdapter, BusLogic_InquireFirmwareVersion3rdDigit,
-		       NULL, 0, &FirmwareVersion3rdDigit,
-		       sizeof(FirmwareVersion3rdDigit))
-      != sizeof(FirmwareVersion3rdDigit))
-    return BusLogic_Failure(HostAdapter, "INQUIRE FIRMWARE 3RD DIGIT");
+  FirmwareVersion3rdDigit = '\0';
+  if (BoardID.FirmwareVersion1stDigit > '0')
+    if (BusLogic_Command(HostAdapter, BusLogic_InquireFirmwareVersion3rdDigit,
+			 NULL, 0, &FirmwareVersion3rdDigit,
+			 sizeof(FirmwareVersion3rdDigit))
+	!= sizeof(FirmwareVersion3rdDigit))
+      return BusLogic_Failure(HostAdapter, "INQUIRE FIRMWARE 3RD DIGIT");
   /*
     BusLogic Host Adapters can be identified by their model number and
     the major version number of their firmware as follows:
@@ -2520,13 +2528,13 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
     the Host Adapter and Target Device can establish Synchronous and Wide
     Transfer before Queue Tag messages can interfere with the Synchronous and
     Wide Negotiation message.  By waiting to enable Tagged Queuing until after
-    the first BusLogic_PreferredQueueDepth commands have been sent, it is
+    the first 2*BusLogic_PreferredQueueDepth commands have been sent, it is
     assured that after a Reset any pending commands are resent before Tagged
     Queuing is enabled and that the Tagged Queuing message will not occur while
     the partition table is being printed.
   */
   if (HostAdapter->TotalCommandCount[TargetID]++ ==
-        BusLogic_PreferredTaggedQueueDepth &&
+        2*BusLogic_PreferredTaggedQueueDepth &&
       (HostAdapter->TaggedQueuingPermitted & (1 << TargetID)) &&
       Command->device->tagged_supported)
     {

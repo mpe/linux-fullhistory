@@ -35,7 +35,7 @@ int main(int argc, char **argv )
     exit(-1);
   }
   
-  fdo = open(argv[2], O_WRONLY|O_CREAT);
+  fdo = open(argv[2], O_WRONLY|O_CREAT|O_TRUNC,0755);
   if ( fdo == -1 )
   {
     fprintf(stderr,"Couldn't open %s\n", argv[2]);

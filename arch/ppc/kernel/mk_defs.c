@@ -2,7 +2,7 @@
  * This program is used to generate definitions needed by
  * assembly language modules.
  */
-
+#define MK_DEFS
 #include <stdio.h> 
 
 #include <linux/config.h>

@@ -184,7 +184,8 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 		newattrs.ia_mtime = get_user(&times->modtime);
 		newattrs.ia_valid |= ATTR_ATIME_SET | ATTR_MTIME_SET;
 	} else {
-		if ((error = permission(inode,MAY_WRITE)) != 0) {
+		if (current->fsuid != inode->i_uid &&
+		    (error = permission(inode,MAY_WRITE)) != 0) {
 			iput(inode);
 			return error;
 		}
