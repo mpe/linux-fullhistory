@@ -402,25 +402,25 @@ static struct pci_device_id nvidiafb_pci_tbl[] = {
 MODULE_DEVICE_TABLE(pci, nvidiafb_pci_tbl);
 
 /* command line data, set in nvidiafb_setup() */
-static int flatpanel __initdata = -1;	/* Autodetect later */
-static int forceCRTC __initdata = -1;
-static int hwcur __initdata = 0;
-static int noaccel __initdata = 0;
-static int noscale __initdata = 0;
-static int paneltweak __initdata = 0;
+static int flatpanel __devinitdata = -1;	/* Autodetect later */
+static int forceCRTC __devinitdata = -1;
+static int hwcur __devinitdata = 0;
+static int noaccel __devinitdata = 0;
+static int noscale __devinitdata = 0;
+static int paneltweak __devinitdata = 0;
 #ifdef CONFIG_MTRR
-static int nomtrr __initdata = 0;
+static int nomtrr __devinitdata = 0;
 #endif
 
-static char *mode_option __initdata = NULL;
+static char *mode_option __devinitdata = NULL;
 
-static struct fb_fix_screeninfo __initdata nvidiafb_fix = {
+static struct fb_fix_screeninfo __devinitdata nvidiafb_fix = {
 	.type = FB_TYPE_PACKED_PIXELS,
 	.xpanstep = 8,
 	.ypanstep = 1,
 };
 
-static struct fb_var_screeninfo __initdata nvidiafb_default_var = {
+static struct fb_var_screeninfo __devinitdata nvidiafb_default_var = {
 	.xres = 640,
 	.yres = 480,
 	.xres_virtual = 640,
@@ -1615,7 +1615,7 @@ static void __exit nvidiafb_remove(struct pci_dev *pd)
  * ------------------------------------------------------------------------- */
 
 #ifndef MODULE
-static int __init nvidiafb_setup(char *options)
+static int __devinit nvidiafb_setup(char *options)
 {
 	char *this_opt;
 
