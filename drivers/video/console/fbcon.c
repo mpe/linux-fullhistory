@@ -2331,6 +2331,9 @@ static int fbcon_set_palette(struct vc_data *vc, unsigned char *table)
 	if (fbcon_is_inactive(vc, info))
 		return -EINVAL;
 
+	if (!CON_IS_VISIBLE(vc))
+		return 0;
+
 	depth = fb_get_color_depth(&info->var);
 	if (depth > 3) {
 		for (i = j = 0; i < 16; i++) {
