@@ -56,6 +56,9 @@ int ntfs_decodeuni(ntfs_volume *vol,char *in, int in_len, ntfs_u16 **out, int *o
 ntfs_time_t ntfs_ntutc2unixutc(ntfs_time64_t ntutc);
 ntfs_time64_t ntfs_unixutc2ntutc(ntfs_time_t t);
 
+/* Attribute names */
+void ntfs_indexname(char *buf, int type);
+
 /*
  * Local variables:
  * c-file-style: "linux"

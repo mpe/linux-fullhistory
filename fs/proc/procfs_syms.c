@@ -23,7 +23,6 @@ EXPORT_SYMBOL(remove_proc_entry);
 EXPORT_SYMBOL(proc_root);
 EXPORT_SYMBOL(proc_root_fs);
 EXPORT_SYMBOL(proc_get_inode);
-EXPORT_SYMBOL(in_group_p);
 EXPORT_SYMBOL(proc_dir_inode_operations);
 EXPORT_SYMBOL(proc_net_inode_operations);
 EXPORT_SYMBOL(proc_net);

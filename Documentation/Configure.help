@@ -1631,9 +1631,13 @@ CONFIG_FB
   information.
 
   Say Y here and to the driver for your graphics board below if you
-  are compiling a kernel for a non-x86 architecture. If you are
-  compiling for the x86 architecture, you can say Y if you want to
-  play with it, but it is not essential.
+  are compiling a kernel for a non-x86 architecture.
+
+  If you are compiling for the x86 architecture, you can say Y if you
+  want to play with it, but it is not essential. Please note that
+  running graphical applications that directly touch the hardware (e.g.
+  and accelerated X server) and that are not frame buffer device-aware
+  may cause unexpected results. If unsure, say N.
 
 Acorn VIDC support
 CONFIG_FB_ACORN
@@ -4356,23 +4360,44 @@ CONFIG_SCSI_PPA
   drive: it will be supported automatically if you said Y to the
   generic "SCSI disk support", above.
 
+  The ZIP Plus drive is supported by the imm driver, also more recent
+  parallel port ZIP drives use an imm compatible interface. If the
+  supplied cable with the drive is labeled "AutoDetect" then you will
+  need the imm driver.
+
   This driver is also available as a module which can be inserted in
   and removed from the running kernel whenever you want. To compile
   this driver as a module, say M here and read
   Documentation/modules.txt. The module will be called ppa.o. 
 
-EPP FIFO Checking
-CONFIG_SCSI_PPA_HAVE_PEDANTIC
+IOMEGA Parallel Port ZIP drive SCSI support
+CONFIG_SCSI_IMM
+  All "new and improved" parallel port to SCSI interface from Iomega.
+  Please read the comments for the ppa driver for further information
+
+Force the Iomega ZIP drivers to use EPP-16
+CONFIG_SCSI_IZIP_EPP16
   EPP (Enhanced Parallel Port) is a standard for parallel ports which
   allows them to act as expansion buses that can handle up to 64
-  peripheral devices. Some parallel port chipsets are slower than
-  their motherboard, and so we have to control the state of the
-  chipset's FIFO queue every now and then to avoid data loss. This
-  will be done if you say Y here. 
+  peripheral devices.
+
+  Some parallel port chipsets are slower than their motherboard, and
+  so we have to control the state of the chipset's FIFO queue every
+  now and then to avoid data loss. This will be done if you say Y here. 
   
-  If your EPP chipset is from the SMC series, you are likely to have
-  to say Y here. Generally, saying Y is the safe option and slows
-  things down a bit.
+  Generally, saying Y is the safe option and slows things down a bit.
+
+Assume slow parallel port control register
+CONFIG_SCSI_IZIP_SLOW_CTR
+  Some parallel ports are known to have excessive delays between changing
+  the parallel port control register and good data being available on
+  the parallel port data/status register. This option forces a small delay
+  (1.0 usec to be exact) after changing the control register to let things
+  settle out. Enabling this option may result in a big drop in performance
+  but some very old parallel ports (found in 386 vintage machines) will
+  not work properly.
+
+  Generally, saying N is fine.
 
 SCSI Debug host simulator.
 CONFIG_SCSI_DEBUG

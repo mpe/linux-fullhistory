@@ -1,11 +1,12 @@
 /*
  *  attr.c
  *
- *  Copyright (C) 1996-1997 Martin von Löwis
+ *  Copyright (C) 1996-1998 Martin von Löwis
  *  Copyright (C) 1996-1997 Régis Duchesne
+ *  Copyright (C) 1998 Joseph Malicki
  */
 
-#include "types.h"
+#include "ntfstypes.h"
 #include "struct.h"
 #include "attr.h"
 
@@ -81,7 +82,7 @@ ntfs_make_attr_resident(ntfs_inode *ino,ntfs_attribute *attr)
 
 /* Store in the inode readable information about a run */
 static void
-ntfs_insert_run(ntfs_attribute *attr,int cnum,int cluster,int len)
+ntfs_insert_run(ntfs_attribute *attr,int cnum,ntfs_cluster_t cluster,int len)
 {
 	/* (re-)allocate space if necessary */
 	if(attr->d.r.len % 8 == 0) {
@@ -107,11 +108,17 @@ int ntfs_extend_attr(ntfs_inode *ino, ntfs_attribute *attr, int *len,
 {
 	int error=0;
 	ntfs_runlist *rl;
-	int rlen,cluster;
+	int rlen;
+	ntfs_cluster_t cluster;
 	int clen;
 	if(attr->compressed)return EOPNOTSUPP;
-	if(attr->resident)return EOPNOTSUPP;
 	if(ino->record_count>1)return EOPNOTSUPP;
+	if(attr->resident) {
+		error = ntfs_make_attr_nonresident(ino,attr);
+		if(error)
+			return error;
+	}
+
 	rl=attr->d.r.runlist;
 	rlen=attr->d.r.len-1;
 	if(rlen>=0)
@@ -121,18 +128,20 @@ int ntfs_extend_attr(ntfs_inode *ino, ntfs_attribute *attr, int *len,
 		cluster=0;
 	/* round up to multiple of cluster size */
 	clen=(*len+ino->vol->clustersize-1)/ino->vol->clustersize;
+	if(clen==0)
+		return 0;
 	/* FIXME: try to allocate smaller pieces */
 	error=ntfs_allocate_clusters(ino->vol,&cluster,&clen,
 				     flags|ALLOC_REQUIRE_SIZE);
 	if(error)return error;
-	attr->allocated+=clen;
+	attr->allocated += clen*ino->vol->clustersize;
 	*len=clen*ino->vol->clustersize;
 	/* contiguous chunk */
 	if(rlen>=0 && cluster==rl[rlen].cluster+rl[rlen].len){
 		rl[rlen].len+=clen;
 		return 0;
 	}
-	ntfs_insert_run(attr,rlen+1,cluster,*len);
+	ntfs_insert_run(attr,rlen+1,cluster,clen);
 	return 0;
 }
 
@@ -158,6 +167,22 @@ ntfs_make_attr_nonresident(ntfs_inode *ino, ntfs_attribute *attr)
 	return ntfs_readwrite_attr(ino,attr,0,&io);
 }
 
+int
+ntfs_attr_allnonresident(ntfs_inode *ino)
+{
+	int i, error=0;
+        ntfs_volume *vol = ino->vol;
+
+	for (i=0; !error && i<ino->attr_count; i++)
+	{
+		if (ino->attrs[i].type != vol->at_security_descriptor
+		    && ino->attrs[i].type != vol->at_data)
+			continue;
+		error = ntfs_make_attr_nonresident (ino, ino->attrs+i);
+	}
+	return error;
+}
+
 /* Resize the attribute to a newsize */
 int ntfs_resize_attr(ntfs_inode *ino, ntfs_attribute *attr, int newsize)
 {
@@ -175,7 +200,7 @@ int ntfs_resize_attr(ntfs_inode *ino, ntfs_attribute *attr, int newsize)
 		return EOPNOTSUPP;
 	if(attr->resident){
 		void *v;
-		if(newsize>ino->vol->clustersize){
+		if(newsize>ino->vol->mft_recordsize){
 			error=ntfs_make_attr_nonresident(ino,attr);
 			if(error)return error;
 			return ntfs_resize_attr(ino,attr,newsize);
@@ -185,8 +210,10 @@ int ntfs_resize_attr(ntfs_inode *ino, ntfs_attribute *attr, int newsize)
 			attr->d.data=ntfs_malloc(newsize);
 			if(!attr->d.data)
 				return ENOMEM;
-			ntfs_bzero(attr->d.data+oldsize,newsize);
-			ntfs_memcpy(attr->d.data,v,min(newsize,oldsize));
+			if(newsize>oldsize)
+				ntfs_bzero((char*)attr->d.data+oldsize,
+					   newsize-oldsize);
+			ntfs_memcpy((char*)attr->d.data,v,min(newsize,oldsize));
 		}else
 			attr->d.data=0;
 		ntfs_free(v);
@@ -199,7 +226,7 @@ int ntfs_resize_attr(ntfs_inode *ino, ntfs_attribute *attr, int newsize)
 		for(i=0,count=0;i<attr->d.r.len;i++){
 			if((count+rl[i].len)*clustersize>newsize)
 				break;
-			count+=rl[i].len;
+			count+=(int)rl[i].len;
 		}
 		newlen=i+1;
 		/* free unused clusters in current run, unless sparse */
@@ -208,7 +235,7 @@ int ntfs_resize_attr(ntfs_inode *ino, ntfs_attribute *attr, int newsize)
 			int rounded=newsize-count*clustersize;
 			rounded=(rounded+clustersize-1)/clustersize;
 			error=ntfs_deallocate_clusters(ino->vol,rl[i].cluster+rounded,
-						       rl[i].len-rounded);
+						       (int)rl[i].len-rounded);
 			if(error)
 				return error; /* FIXME: incomplete operation */
 			rl[i].len=rounded;
@@ -217,7 +244,7 @@ int ntfs_resize_attr(ntfs_inode *ino, ntfs_attribute *attr, int newsize)
 		/* free all other runs */
 		for(i++;i<attr->d.r.len;i++)
 			if(rl[i].cluster!=-1){
-				error=ntfs_deallocate_clusters(ino->vol,rl[i].cluster,rl[i].len);
+				error=ntfs_deallocate_clusters(ino->vol,rl[i].cluster,(int)rl[i].len);
 				if(error)
 					return error; /* FIXME: incomplete operation */
 			}
@@ -232,7 +259,7 @@ int ntfs_resize_attr(ntfs_inode *ino, ntfs_attribute *attr, int newsize)
 	/* fill in new sizes */
 	attr->allocated = newcount*clustersize;
 	attr->size = newsize;
-	attr->initialized = newsize;
+	/* attr->initialized does not change. */
 	if(!newsize)
 		error=ntfs_make_attr_resident(ino,attr);
 	return error;
@@ -296,7 +323,8 @@ ntfs_process_runs(ntfs_inode *ino,ntfs_attribute* attr,unsigned char *data)
 {
 	int startvcn,endvcn;
 	int vcn,cnum;
-	int cluster,len,ctype;
+	ntfs_cluster_t cluster;
+	int len,ctype;
 	startvcn = NTFS_GETU64(data+0x10);
 	endvcn = NTFS_GETU64(data+0x18);
 
@@ -383,13 +411,29 @@ int ntfs_insert_attribute(ntfs_inode *ino, unsigned char* attrdata)
 	return 0;
 }
 
+int
+ntfs_read_zero(ntfs_io *dest,int size)
+{
+	char *sparse=ntfs_calloc(512);
+	if(!sparse)
+		return ENOMEM;
+	while(size){
+		int i=min(size,512);
+		dest->fn_put(dest,sparse,i);
+		size-=i;
+	}
+	ntfs_free(sparse);
+	return 0;
+}
+
 /* process compressed attributes */
 int ntfs_read_compressed(ntfs_inode *ino, ntfs_attribute *attr, int offset,
 	ntfs_io *dest)
 {
 	int error=0;
 	int clustersize,l;
-	int s_vcn,rnum,vcn,cluster,len,chunk,got,cl1,l1,offs1,copied;
+	int s_vcn,rnum,vcn,len,chunk,got,l1,offs1,copied;
+	ntfs_cluster_t cluster,cl1;
 	char *comp=0,*comp1;
 	char *decomp=0;
 	ntfs_io io;
@@ -426,18 +470,13 @@ int ntfs_read_compressed(ntfs_inode *ino, ntfs_attribute *attr, int offset,
 		chunk=0;
 		if(cluster==-1){
 			/* sparse cluster */
-			char *sparse=ntfs_calloc(512);
 			int l1;
-			if(!sparse)return ENOMEM;
 			if((len-(s_vcn-vcn)) & 15)
 				ntfs_error("unexpected sparse chunk size");
 			l1=chunk = min((vcn+len)*clustersize-offset,l);
-			while(l1){
-				int i=min(l1,512);
-				dest->fn_put(dest,sparse,i);
-				l1-=i;
-			}
-			ntfs_free(sparse);
+			error = ntfs_read_zero(dest,l1);
+			if(error)
+				goto out;
 		}else if(dest->do_read){
 			if(!comp){
 				comp=ntfs_malloc(16*clustersize);

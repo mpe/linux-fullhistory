@@ -307,6 +307,13 @@ void proc_print_scsidevice(Scsi_Device *scd, char *buffer, int *size, int len)
     *size = y; 
     return;
 }
+
+#else
+
+void proc_print_scsidevice(Scsi_Device *scd, char *buffer, int *size, int len)
+{
+}
+
 #endif /* CONFIG_PROC_FS */
 
 /*

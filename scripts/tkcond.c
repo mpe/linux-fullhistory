@@ -132,8 +132,8 @@ void fix_choice_cond(void)
 	    }
 	  else
 	    {
-	      fprintf(stderr,"Ooops\n");
-	      exit(0);
+	      fprintf(stderr,"tkparse can't handle this conditional\n");
+	      exit(1);
 	    }
 	}
 

@@ -363,13 +363,23 @@ static int swap_out(unsigned int priority, int gfp_mask)
 	/* 
 	 * We make one or two passes through the task list, indexed by 
 	 * assign = {0, 1}:
-	 *   Pass 1: select the swappable task with maximal swap_cnt.
-	 *   Pass 2: assign new swap_cnt values, then select as above.
+	 *   Pass 1: select the swappable task with maximal RSS that has
+	 *         not yet been swapped out. 
+	 *   Pass 2: re-assign rss swap_cnt values, then select as above.
+	 *
 	 * With this approach, there's no need to remember the last task
 	 * swapped out.  If the swap-out fails, we clear swap_cnt so the 
 	 * task won't be selected again until all others have been tried.
+	 *
+	 * Think of swap_cnt as a "shadow rss" - it tells us which process
+	 * we want to page out (always try largest first).
 	 */
-	counter = ((PAGEOUT_WEIGHT * nr_tasks) >> 10) >> priority;
+	counter = nr_tasks / (priority+1);
+	if (counter < 1)
+		counter = 1;
+	if (counter > nr_tasks)
+		counter = nr_tasks;
+
 	for (; counter >= 0; counter--) {
 		assign = 0;
 		max_cnt = 0;
@@ -382,15 +392,9 @@ static int swap_out(unsigned int priority, int gfp_mask)
 				continue;
 	 		if (p->mm->rss <= 0)
 				continue;
-			if (assign) {
-				/* 
-				 * If we didn't select a task on pass 1, 
-				 * assign each task a new swap_cnt.
-				 * Normalise the number of pages swapped
-				 * by multiplying by (RSS / 1MB)
-				 */
-				p->swap_cnt = AGE_CLUSTER_SIZE(p->mm->rss);
-			}
+			/* Refresh swap_cnt? */
+			if (assign)
+				p->swap_cnt = p->mm->rss;
 			if (p->swap_cnt > max_cnt) {
 				max_cnt = p->swap_cnt;
 				pbest = p;
@@ -404,14 +408,13 @@ static int swap_out(unsigned int priority, int gfp_mask)
 			}
 			goto out;
 		}
-		pbest->swap_cnt--;
 
 		/*
 		 * Nonzero means we cleared out something, but only "1" means
 		 * that we actually free'd up a page as a result.
 		 */
 		if (swap_out_process(pbest, gfp_mask) == 1)
-				return 1;
+			return 1;
 	}
 out:
 	return 0;
@@ -451,19 +454,17 @@ static int kswapd_free_pages(int kswapd_state)
 	/* max one hundreth of a second */
 	end_time = jiffies + (HZ-1)/100;
 	do {
-		int priority = 5;
+		int priority = 8;
 		int count = pager_daemon.swap_cluster;
 
 		switch (kswapd_state) {
 			do {
 			default:
 				free_memory(shrink_mmap(priority, 0));
+				free_memory(swap_out(priority, 0));
 				kswapd_state++;
 			case 1:
 				free_memory(shm_swap(priority, 0));
-				kswapd_state++;
-			case 2:
-				free_memory(swap_out(priority, 0));
 				shrink_dcache_memory(priority, 0);
 				kswapd_state = 0;
 			} while (--priority >= 0);
@@ -562,7 +563,7 @@ int try_to_free_pages(unsigned int gfp_mask, int count)
 
 		current->flags |= PF_MEMALLOC;
 	
-		priority = 5;
+		priority = 8;
 		do {
 			free_memory(shrink_mmap(priority, gfp_mask));
 			free_memory(shm_swap(priority, gfp_mask));

@@ -1,0 +1,358 @@
+  ksymoops.
+
+  Read a kernel Oops file and make the best stab at converting the code to
+  instructions and mapping stack values to kernel symbols.
+
+  Copyright Keith Owens <kaos@ocs.com.au>.
+  Released under the GNU Public Licence, Version 2.
+
+  To compile, simply type "make" in the ksymoops directory.
+
+  TESTERS WANTED.
+
+  ksymoops handles ix86.  It appears to handle Alpha, Sparc, M68K, PPC,
+  MIPS but I have no machine to test on.  I would appreciate feedback
+  from users of non ix86 machines.  In particular, it would be nice if
+  you could run
+
+   ksymoops -VMO -k /proc/ksyms -dd <oops.file >/tmp/ksymoops.log 2>&1
+
+  and mail /tmp/ksymoops.log to kaos@ocs.com.au
+
+  The patches subdirectory contains some arch specific patches to
+  provide more info on their Oops reports.  At the moment (2.1.126),
+  some archs do not print traces or do not print code lines, makes it
+  impossible to report properly.
+
+  TODO:
+  Performance improvements.  Reading a large log is quite slow, probably
+	  one of the Oops regular expressions is pathological.
+  Clean up these docs.
+  Add "guess", "same" options, distinguish between default and supplied
+  values on report (Andries, I get the message :).
+
+  Tue Nov  3 02:31:01 EST 1998
+  Version 0.6
+  Read lsmod (/proc/modules).
+
+  Wed Oct 28 23:14:55 EST 1998
+  Version 0.5
+  No longer read vmlinux by default, it only duplicates System.map.
+
+  Wed Oct 28 13:46:39 EST 1998
+  Version 0.4
+  Split into separate sources.
+
+  Mon Oct 26 00:01:47 EST 1998
+  Version 0.3c
+  Add alpha (arm) processing.
+
+  Mon Oct 26 00:01:47 EST 1998
+  Version 0.3b
+  Add sparc processing.
+  Handle kernel symbol versions.
+
+  Fri Oct 23 13:11:20 EST 1998
+  Version 0.3
+  Add -follow to find command for people who use symlinks to modules.
+  Add Version_ checking.
+
+  Thu Oct 22 22:28:30 EST 1998
+  Version 0.2.
+  Generalise text prefix handling.
+  Handle messages on Code: line.
+  Format addresses with leading zeroes.
+  Minor bug fixes.
+
+  Wed Oct 21 23:28:48 EST 1998
+  Version 0.1.  Rewrite from scratch in C.
+
+  CREDITS.
+  Oops disassembly based on ksymoops.cc,
+    Copyright (C) 1995 Greg McGary <gkm@magilla.cichlid.com>
+  m68k code based on ksymoops.cc changes by
+    Andreas Schwab <schwab@issan.informatik.uni-dortmund.de>
+
+  This code subsumes the Perl script make_System.map.pl which is no longer
+  supported.
+
+  Why another ksymoops I hear you ask?  Various complaints about
+  ksymoops.cc -
+
+  * It requires C++.
+  * It has hard wired limitations on the number of symbols.
+  * It does not handle modules at all.
+  * Very rigid requirements on the format of input, especially the Oops
+    log.
+  * No cross checking between ksyms, modules, System.map etc.
+  * Very little error checking, diagnostics are not suitable for
+    beginners.
+  * It only prints the trace and decoded code, users have to manually
+    extract the other lines from the Oops.
+  * Gives up on the slightest problem.
+  * Only handles i386 and possibly m68k.  The code is difficult to extend
+    to other architectures.
+  * Stops after the first Oops, you have to manually extract each one and
+    run through ksymoops one at a time.
+
+  This version is -
+  * C.
+  * No hard wired limitations (malloc as far as the eye can see).
+  * Handles modules by default.
+  * Uses regular pattern matching so it is a lot more forgiving about
+    input formats.
+  * By default, cross checks ksyms, modules, System.map and vmlinux.
+  * Lots of diagnostics and error checking.
+  * Prints all relevant lines for a complete Oops report.
+  * Tries to provide output no matter how bad the input is.  The level of
+     progress and error reporting is aimed at beginners.
+  * Handles i386, alpha, sparc, m68k.  It is a lot easier to extend to
+    other architectures (patches and/or sample data gratefully accepted).
+  * Handles all Oops in the input file(s).
+
+
+  Usage:	ksymoops
+		  [-v vmlinux]	Where to read vmlinux
+		  [-V]		No vmlinux is available
+		  [-o object_dir]	Directory containing modules
+		  [-O]		No modules is available
+		  [-k ksyms]	Where to read ksyms
+		  [-K]		No ksyms is available
+		  [-l lsmod]	Where to read lsmod
+		  [-L]		No lsmod is available
+		  [-m system.map]	Where to read System.map
+		  [-M]		No System.map is available
+		  [-s save.map]	Save consolidated map
+		  [-d]		Increase debug level by 1
+		  [-h]		Print help text
+		  Oops.file	Oops to decode
+
+	  All flags can occur more than once.  With the exception of -o
+	  and -d which are cumulative, the last occurrence of each flag is
+	  used.  Note that "-v my.vmlinux -V" will be taken as "No vmlinux
+	  available" but "-V -v my.vmlinux" will read my.vmlinux.  You
+	  will be warned about such combinations.
+
+	  Each occurrence of -d increases the debug level.
+
+	  Each -o flag can refer to a directory or to a single object
+	  file.  If a directory is specified then all *.o files in that
+	  directory and its subdirectories are assumed to be modules.
+
+	  If any of the vmlinux, object_dir, ksyms or system.map options
+	  contain the string *r (*m, *n, *s) then it is replaced at run time
+	  by the current value of `uname -r` (-m, -n, -s).
+
+	  The defaults can be changed in the Makefile, typical options are
+
+	  Defaults:	  -V
+			  -o /lib/modules/%r
+			  -k /proc/ksyms
+			  -l /proc/modules
+			  -m /usr/src/linux/System.map
+			  Oops report is read from stdin
+
+  Note:	  Unless you tell ksymoops *NOT* to read a particular file, it
+	  will try to read and reconcile almost all possible sources of kernel
+	  symbol information.  This is intended for beginners, they just
+	  type
+
+	    ksymoops < /var/log/syslog
+
+	  no thinking required.  Experts can point at different files or
+	  suppress the input from selected files.  For example, if you
+	  save /proc/ksyms before doing a test that creates an Oops, you
+	  can point ksymoops at the saved ksyms instead of using
+	  /proc/ksyms.
+
+	  vmlinux is not read by default, it only duplicates the
+	  information in System.map.  If you want to read vmlinux as well
+	  as or instead of System.map, use -v.
+
+	  To get the equivalent of the old ksymoops.cc (no vmlinux, no
+	  modules objects, no ksyms, no System.map) just do ksymoops
+	  -VOKLM.  Or to just read System.map, ksymoops -VOKL -m mapfile.
+
+
+  WARNING:  The user interface will change slightly in 0.7, users will
+            have to give some indication of the state of their
+            environment.  Otherwise it may be too easy to pick the
+            wrong input files.
+
+  Return codes:	0 - normal.
+		  1 - error(s) or warning(s) issued, results may not be
+		      reliable.
+		  2 - fatal error, no useful results.
+
+  Supported architectures
+
+	  i386 tested.
+          m68k code derived from ksymoops.cc and reading traps.c, untested.
+	  MIPS tested.
+	  Sparc tested.
+	  Alpha tested.
+
+	  The term "eip" is generic, for example it includes the i386 EIP
+	  and the m68k PC.  Remember that objdump output always says EIP,
+	  no matter what the architecture, see objfile_head.
+
+	  To support another arch, check the Oops_ procedures between
+	  'Start architecture sensitive code' and 'End architecture
+	  sensitive code'.
+
+	  The pattern matching should take care of different lengths for
+	  the address, i.e. addresses should not be arch sensitive.  I
+	  assume that all addresses are at least 4 characters.
+
+	  If nm output has a different format on your arch, check for uses
+	  of re_nm.
+
+
+
+  Because ksymoops reads kernel information from multiple sources, there
+  could be mismatches.  ksymoops does the following cross checks, but only
+  if the specified files exist -
+
+  * Compare Version_nnn numbers from all sources against each other.  Pity
+    that only vmlinux and System.map have these symbols (as at 2.1.125),
+    however I check ksyms, modules and Oops as well.  If somebody adds
+    symbol Version_nnn to ksyms or modules or adds a Version_nnn line to
+    the Oops log, this code is ready.
+
+  * Compare kernel ksyms against vmlinux.  vmlinux takes precedence.
+
+  * Compare System.map against vmlinux.   vmlinux takes precedence.
+
+  * Compare vmlinux against System.map.   vmlinux takes precedence.
+
+  * Compare kernel ksyms against System.map.  System.map takes precedence.
+
+  * Compare modules against module ksyms.  modules take precedence.  Only
+    if at least one module appears in ksyms.
+
+  * Compare module names in ksyms against lsmod.  Warn if a module
+    appears in lsmod but not in ksyms.  Error if a modules appears in
+    ksyms but is not in lsmod.  Only if both ksyms and lsmod have being
+    read.
+
+  The precedence order is somewhat arbitrary, however it only applies if
+  there is any difference between the various sources.
+
+  Handling modules is awkward.  They can be loaded under different names
+  (insmod -o dummy1 dummy.o) and the text, data and read only data are
+  loaded at different offsets.  Although you can give the -m option to
+  insmod which will output the module map when it is loaded, this has a
+  few problems -
+
+  * No equivalent for removing a module.  If you load and remove a lot of
+    modules, you end up with multiple sets of symbols around the same
+    offsets, which set is correct?
+
+  * "insmod -o dummy1 dummy.o" still reports as dummy.  That is, there is
+     no way of telling which particular version of a multiply loaded
+     module the insmod output refers to.  Therefore there is no way of
+     telling which instantiation failed.
+
+  * Even if the above problems are fixed, how do you tell what the module
+    environment looked like when the Oops occurred?  What if a module is
+    loaded or removed just after Oops, how is the user expected to edit
+    the insmod log?  Rule 1 - make ksymoops easy for beginners.
+
+  Although those problems could be fixed, they require changes to
+  modutils.  Working from ksyms and the module objects can be done without
+  changing modutils and without confusing beginners.
+  
+  Alas the ksyms plus object approach has another problem - matching ksyms
+  to module objects.  Nowhere does the kernel say that module dummy1 came
+  from module /lib/modules/2.1.215/net/dummy.o, ksyms just says dummy1.  I
+  have to match ksyms to the relevant object by finding a globally unique
+  external symbol in each module that can be used to map to the external
+  symbols in ksyms.  This assumes that each module exports at least one
+  text symbol that is unique amongst all modules.
+
+  It may not be possible to correctly map other sections such as data and
+  readonly data for modules because they may not have exported symbols.
+  Since the main aim of ksymoops is to map a code Oops, this should not be
+  a problem.
+
+  Unfortunately some modules export no symbols.  They are marked as
+  EXPORT_NO_SYMBOLS are simply do not export anything.  It is
+  impossible to detect these in ksyms because, by definition, ksyms
+  only contains exported symbols for modules.  Since all modules appear
+  in lsmod (/proc/modules), a cross check of lsmod against the module
+  names will find loaded modules with no symbols, at least I can warn
+  about these.
+
+  After merging the various sources, ksymoops has a (hopefully) accurate
+  map including modules.  The -s option lets you save the merged
+  System.map, but remember that module data and readonly data sections may
+  not be correctly relocated, see above.
+
+  Environment Variables.
+  KSYMOOPS_NM		path for nm, defaults to /usr/bin/nm.
+  KSYMOOPS_FIND		path for find, defaults to /usr/bin/find.
+  KSYMOOPS_OBJDUMP	path for objdump, defaults to /usr/bin/objdump.
+
+
+  Input Oops data.
+
+  The ideal input is to feed the syslog straight into this program.  If
+  you cannot do that, you need to know what the program looks for.
+  Especially if you are typing in the Oops by hand :(.  All input is case
+  insensitive.
+
+  * White space in this context means space or tab.  It does not include
+    newline.
+
+  * Oops in syslog has a syslog prefix.  Leading text up to and including
+    ' kernel: ' is always ignored, there is no need to edit syslog first.
+    This leading text need not exist but if it does, it must end in
+    ' kernel: '.
+
+  * An alternative prefix is <n> where n is the kernel print level.  Also
+    ignored if present.
+
+  * Leading white space is treated as a prefix and ignored, the input is
+    not indentation sensitive.
+
+  * In the following paragraphs, assume that any prefixes have been
+    skipped.  If there is more than one prefix, all are skipped, no matter
+    which order they appear in.
+
+  * A bracketed address is optional '[', required '<', at least 4 hex
+    digits, required '>', optional ']'.  For example [<01234567>] or
+    <1234>.
+
+  * The ix86 EIP line is identified by optional white space followed by
+    'EIP:', followed by a least one white space, followed by a bracketed
+    address.
+
+  * The m68k PC line is identified by optional white space followed by
+    'PC', optionally followed by white space, followed by '=', optionally
+    followed by white space, followed by a bracketed address.
+
+  * The sparc PC line starts with PSR and PC is the second hex value, not
+    bracketed.
+
+  * A call trace line is identified by 'Call Trace:' followed by at least
+    one white space.  Or it is a line starting with a bracketed address,
+    but only if the previous line was a call trace line (I hate multi line
+    output that relies on identation for recognition, especially when
+    lines can have a variable prefix).
+
+  * The Code line is identified by 'Code:' followed by a least one white
+    space character followed by at least one hex value.  The line can
+    contain multiple hex values, each separated by at least one white
+    space.  Each hex value must be 2 to 8 digits and must be a multiple of
+    2 digits.
+
+    Special cases where Code: can be followed by text.
+      'Code: general protection'
+      'Code: <n>'
+    Dump the data anyway, the code was unavailable.
+
+  * Formatted data is only output when the Code: line is seen.  If any
+    data has been stored and more than 5 lines other than Oops text (see
+    Oops_print) or end of file are encountered then ksymoops assumes that
+    the Code: line is missing or garbled and dumps the formatted data
+    anyway.  Fail safe, I hope.

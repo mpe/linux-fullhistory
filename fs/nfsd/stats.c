@@ -27,7 +27,6 @@
 struct nfsd_stats	nfsdstats;
 struct svc_stat		nfsd_svcstats = { &nfsd_program, };
 
-#ifdef CONFIG_PROC_FS
 static int
 nfsd_proc_read(char *buffer, char **start, off_t offset, int count,
 				int *eof, void *data)
@@ -90,4 +89,3 @@ nfsd_stat_shutdown(void)
 {
 	svc_proc_unregister("nfsd");
 }
-#endif /* CONFIG_PROC_FS */

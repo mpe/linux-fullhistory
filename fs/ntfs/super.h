@@ -16,6 +16,6 @@ int ntfs_load_special_files(ntfs_volume *vol);
 int ntfs_release_volume(ntfs_volume *vol);
 void ntfs_insert_fixups(unsigned char *rec, int secsize);
 int ntfs_fixup_record(ntfs_volume *vol, char *record, char *magic, int size);
-int ntfs_allocate_clusters(ntfs_volume *vol, int *location, int *count,
+int ntfs_allocate_clusters(ntfs_volume *vol, ntfs_cluster_t *location, int *count,
   int flags);
-int ntfs_deallocate_clusters(ntfs_volume *vol, int location, int count);
+int ntfs_deallocate_clusters(ntfs_volume *vol, ntfs_cluster_t location, int count);

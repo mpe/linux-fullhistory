@@ -14,7 +14,7 @@
 #include <linux/config.h>
 #endif
 
-#include "types.h"
+#include "ntfstypes.h"
 #include "struct.h"
 #include "util.h"
 #include "inode.h"
@@ -29,6 +29,9 @@
 #include <linux/locks.h>
 #include <linux/init.h>
 
+/* Forward declarations */
+static struct inode_operations ntfs_dir_inode_operations;
+
 #define ITEM_SIZE 2040
 
 /* io functions to user space */
@@ -39,10 +42,19 @@ static void ntfs_putuser(ntfs_io* dest,void *src,ntfs_size_t len)
 }
 
 #ifdef CONFIG_NTFS_RW
-static void ntfs_getuser(void *dest,ntfs_io *src,ntfs_size_t len)
+struct ntfs_getuser_update_vm_s{
+	const char *user;
+	struct inode *ino;
+	loff_t off;
+};
+
+static void ntfs_getuser_update_vm (void *dest, ntfs_io *src, ntfs_size_t len)
 {
-	copy_from_user(dest,src->param,len);
-	src->param+=len;
+	struct ntfs_getuser_update_vm_s *p = src->param;
+	copy_from_user (dest, p->user, len);
+	update_vm_cache (p->ino, p->off, dest, len);
+	p->user += len;
+	p->off += len;
 }
 #endif
 
@@ -77,31 +89,42 @@ ntfs_read(struct file * filp, char *buf, size_t count, loff_t *off)
 static ssize_t
 ntfs_write(struct file *filp,const char* buf,size_t count,loff_t *pos)
 {
-	struct super_block* sb;
 	int ret;
 	ntfs_io io;
-	ntfs_inode *ino=NTFS_LINO2NINO(filp->f_dentry->d_inode);
+	struct inode *inode = filp->f_dentry->d_inode;
+	ntfs_inode *ino = NTFS_LINO2NINO(inode);
+	struct ntfs_getuser_update_vm_s param;
 
-	if(!ino)return -EINVAL;
-	ntfs_debug(DEBUG_OTHER, "ntfs_write %x,%x,%x ->",
-	       (unsigned)ino->i_number,(unsigned)*pos,(unsigned)count);
-	sb = filp->f_dentry->d_inode->i_sb;
+	if (!ino)
+		return -EINVAL;
+	ntfs_debug (DEBUG_LINUX, "ntfs_write %x,%x,%x ->\n",
+	       (unsigned)ino->i_number, (unsigned)*pos, (unsigned)count);
 	/* Allows to lock fs ro at any time */
-	if(sb->s_flags & MS_RDONLY)
+	if (inode->i_sb->s_flags & MS_RDONLY)
 		return -ENOSPC;
-	if(!ntfs_find_attr(ino,ino->vol->at_data,NULL))
+	if (!ntfs_find_attr(ino,ino->vol->at_data,NULL))
 		return -EINVAL;
 
-	io.fn_put=0;
-	io.fn_get=ntfs_getuser;
-	io.param=(void*)buf; /* to get rid of the const */
-	io.size=count;
-	ret = ntfs_write_attr(ino,ino->vol->at_data,NULL,*pos,&io);
-	ntfs_debug(DEBUG_OTHER, "%x\n",ret);
-	if(ret<0)return -EINVAL;
+	/* Evaluating O_APPEND is the file system's job... */
+	if (filp->f_flags & O_APPEND)
+		*pos = inode->i_size;
+	param.user = buf;
+	param.ino = inode;
+	param.off = *pos;
+	io.fn_put = 0;
+	io.fn_get = ntfs_getuser_update_vm;
+	io.param = &param;
+	io.size = count;
+	ret = ntfs_write_attr (ino, ino->vol->at_data, NULL, *pos, &io);
+	ntfs_debug (DEBUG_LINUX, "write -> %x\n", ret);
+	if(ret<0)
+		return -EINVAL;
 
-	*pos+=ret;
-	return ret;
+	*pos += io.size;
+	if (*pos > inode->i_size)
+		inode->i_size = *pos;
+	mark_inode_dirty (filp->f_dentry->d_inode);
+	return io.size;
 }
 #endif
 
@@ -119,10 +142,13 @@ static int ntfs_printcb(ntfs_u8 *entry,void *param)
 {
 	struct ntfs_filldir* nf=param;
 	int flags=NTFS_GETU8(entry+0x51);
-	int show_hidden=0,to_lower=0;
+	int show_hidden=0;
 	int length=NTFS_GETU8(entry+0x50);
 	int inum=NTFS_GETU32(entry);
-	int i,error;
+	int error;
+#ifdef NTFS_NGT_NT_DOES_LOWER
+	int i,to_lower=0;
+#endif
 	switch(nf->type){
 	case ngt_dos:
 		/* Don't display long names */
@@ -133,7 +159,9 @@ static int ntfs_printcb(ntfs_u8 *entry,void *param)
 		/* Don't display short-only names */
 		switch(flags&3){
 		case 2: return 0;
+#ifdef NTFS_NGT_NT_DOES_LOWER
 		case 3: to_lower=1;
+#endif
 		}
 		break;
 	case ngt_posix:
@@ -156,6 +184,7 @@ static int ntfs_printcb(ntfs_u8 *entry,void *param)
 	/* Do not return ".", as this is faked */
 	if(length==1 && *nf->name=='.')
 		return 0;
+#ifdef NTFS_NGT_NT_DOES_LOWER
 	if(to_lower)
 		for(i=0;i<nf->namelen;i++)
 			/* This supports ASCII only. Since only DOS-only
@@ -163,6 +192,7 @@ static int ntfs_printcb(ntfs_u8 *entry,void *param)
 			   to ASCII, this should be correct */
 			if(nf->name[i]>='A' && nf->name[i]<='Z')
 				nf->name[i]+='a'-'A';
+#endif
 	nf->name[nf->namelen]=0;
 	ntfs_debug(DEBUG_OTHER, "readdir got %s,len %d\n",nf->name,nf->namelen);
 	/* filldir expects an off_t rather than an loff_t.
@@ -349,7 +379,7 @@ static int ntfs_lookup(struct inode *dir, struct dentry *d)
 	char *item=0;
 	ntfs_iterate_s walk;
 	int error;
-	ntfs_debug(DEBUG_OTHER, "Looking up %s in %x\n",d->d_name.name,
+	ntfs_debug(DEBUG_NAME1, "Looking up %s in %x\n",d->d_name.name,
 		   (unsigned)dir->i_ino);
 	/* convert to wide string */
 	error=ntfs_decodeuni(NTFS_INO2VOL(dir),(char*)d->d_name.name,
@@ -369,10 +399,11 @@ static int ntfs_lookup(struct inode *dir, struct dentry *d)
 	d_add(d,res);
 	ntfs_free(item);
 	ntfs_free(walk.name);
-	return res?0:-ENOENT;
+	/* Always return success, the dcache will handle negative entries. */
+	return 0;
 }
 
-struct file_operations ntfs_file_operations_nommap = {
+static struct file_operations ntfs_file_operations_nommap = {
 	NULL, /* lseek */
 	ntfs_read,
 #ifdef CONFIG_NTFS_RW
@@ -394,7 +425,7 @@ struct file_operations ntfs_file_operations_nommap = {
 	NULL, /* lock */
 };
 
-struct inode_operations ntfs_inode_operations_nobmap = {
+static struct inode_operations ntfs_inode_operations_nobmap = {
 	&ntfs_file_operations_nommap,
 	NULL, /* create */
 	NULL, /* lookup */
@@ -445,7 +476,7 @@ ntfs_create(struct inode* dir,struct dentry *d,int mode)
 	}
 	r->u.generic_ip=ino;
 #endif
-	error=ntfs_alloc_inode(NTFS_LINO2NINO(dir),ino,(char*)d->d_name.name,
+	error=ntfs_alloc_file(NTFS_LINO2NINO(dir),ino,(char*)d->d_name.name,
 			       d->d_name.len);
 	if(error)goto fail;
 	error=ntfs_update_inode(ino);
@@ -483,6 +514,65 @@ ntfs_create(struct inode* dir,struct dentry *d,int mode)
 	if(r)iput(r);
 	return -error;
 }
+
+static int
+_linux_ntfs_mkdir(struct inode *dir, struct dentry* d, int mode)
+{
+	int error;
+	struct inode *r = 0;
+	ntfs_volume *vol;
+	ntfs_inode *ino;
+	ntfs_attribute *si;
+
+	ntfs_debug (DEBUG_DIR1, "mkdir %s in %x\n",d->d_name.name, dir->i_ino);
+	error = ENAMETOOLONG;
+	if (d->d_name.len > /* FIXME */255)
+		goto out;
+
+	error = EIO;
+	r = get_empty_inode();
+	if (!r)
+		goto out;
+	
+	vol = NTFS_INO2VOL(dir);
+#ifdef NTFS_IN_LINUX_KERNEL
+	ino = NTFS_LINO2NINO(r);
+#else
+	ino = ntfs_malloc(sizeof(ntfs_inode));
+	error = ENOMEM;
+	if(!ino)
+		goto out;
+	r->u.generic_ip = ino;
+#endif
+	error = ntfs_mkdir(NTFS_LINO2NINO(dir), 
+			   d->d_name.name, d->d_name.len, ino);
+	if(error)
+		goto out;
+	r->i_uid = vol->uid;
+	r->i_gid = vol->gid;
+	r->i_nlink = 1;
+	r->i_sb = dir->i_sb;
+	si = ntfs_find_attr(ino,vol->at_standard_information,NULL);
+	if(si){
+		char *attr = si->d.data;
+		r->i_atime = ntfs_ntutc2unixutc(NTFS_GETU64(attr+0x18));
+		r->i_ctime = ntfs_ntutc2unixutc(NTFS_GETU64(attr));
+		r->i_mtime = ntfs_ntutc2unixutc(NTFS_GETU64(attr+8));
+	}
+	/* It's a directory */
+	r->i_op = &ntfs_dir_inode_operations;
+	r->i_mode = S_IFDIR|S_IRUGO|S_IXUGO;
+#ifdef CONFIG_NTFS_RW
+	r->i_mode|=S_IWUGO;
+#endif
+	r->i_mode &= ~vol->umask;	
+	
+	d_instantiate(d, r);
+	error = 0;
+ out:
+ 	ntfs_debug (DEBUG_DIR1, "mkdir returns %d\n", -error);
+	return -error;
+}
 #endif
 
 static int 
@@ -491,10 +581,12 @@ ntfs_bmap(struct inode *ino,int block)
 	int ret=ntfs_vcn_to_lcn(NTFS_LINO2NINO(ino),block);
 	ntfs_debug(DEBUG_OTHER, "bmap of %lx,block %x is %x\n",
 	       ino->i_ino,block,ret);
+	ntfs_error("bmap of %lx,block %x is %x\n", ino->i_ino,block,ret);
+	ntfs_error("super %x\n", ino->i_sb->s_blocksize); 
 	return (ret==-1) ? 0:ret;
 }
 
-struct file_operations ntfs_file_operations = {
+static struct file_operations ntfs_file_operations = {
 	NULL, /* lseek */
 	ntfs_read,
 #ifdef CONFIG_NTFS_RW
@@ -516,7 +608,7 @@ struct file_operations ntfs_file_operations = {
 	NULL, /* lock */
 };
 
-struct inode_operations ntfs_inode_operations = {
+static struct inode_operations ntfs_inode_operations = {
 	&ntfs_file_operations,
 	NULL, /* create */
 	NULL, /* lookup */
@@ -539,7 +631,7 @@ struct inode_operations ntfs_inode_operations = {
 	NULL, /* revalidate */
 };
 
-struct file_operations ntfs_dir_operations = {
+static struct file_operations ntfs_dir_operations = {
 	NULL, /* lseek */
 	NULL, /* read */
 	NULL, /* write */
@@ -557,7 +649,7 @@ struct file_operations ntfs_dir_operations = {
 	NULL, /* lock */
 };
 
-struct inode_operations ntfs_dir_inode_operations = {
+static struct inode_operations ntfs_dir_inode_operations = {
 	&ntfs_dir_operations,
 #ifdef CONFIG_NTFS_RW
 	ntfs_create, /* create */
@@ -568,7 +660,11 @@ struct inode_operations ntfs_dir_inode_operations = {
 	NULL, /* link */
 	NULL, /* unlink */
 	NULL, /* symlink */
-	NULL, /* mkdir */
+#ifdef CONFIG_NTFS_RW
+	_linux_ntfs_mkdir, /* mkdir */
+#else
+	NULL,
+#endif
 	NULL, /* rmdir */
 	NULL, /* mknod */
 	NULL, /* rename */
@@ -669,9 +765,14 @@ static void ntfs_read_inode(struct inode* inode)
 	inode->i_mode &= ~vol->umask;
 }
 
-static void ntfs_put_inode(struct inode *ino)
+#ifdef CONFIG_NTFS_RW
+static void 
+ntfs_write_inode (struct inode *ino)
 {
+	ntfs_debug (DEBUG_LINUX, "ntfs:write inode %x\n", ino->i_ino);
+	ntfs_update_inode (NTFS_LINO2NINO (ino));
 }
+#endif
 
 static void _ntfs_clear_inode(struct inode *ino)
 {
@@ -747,10 +848,14 @@ static int ntfs_remount_fs(struct super_block *sb, int *flags, char *options)
 }
 
 /* Define the super block operation that are implemented */
-struct super_operations ntfs_super_operations = {
+static struct super_operations ntfs_super_operations = {
 	ntfs_read_inode,
-	NULL, /* write_inode */
-	ntfs_put_inode,
+#ifdef CONFIG_NTFS_RW
+	ntfs_write_inode,
+#else
+	NULL,
+#endif
+	NULL, /* put_inode */
 	NULL, /* delete_inode */
 	NULL, /* notify_change */
 	ntfs_put_super,
@@ -898,7 +1003,7 @@ ntfs_read_super_dec:
  * Define SECOND if you cannot unload ntfs, and want to avoid rebooting
  * for just one more test
  */
-struct file_system_type ntfs_fs_type = {
+static struct file_system_type ntfs_fs_type = {
 /* Filesystem name, as used after mount -t */
 #ifndef SECOND
 	"ntfs",

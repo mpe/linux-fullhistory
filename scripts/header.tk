@@ -145,7 +145,7 @@ proc read_config_file { w } {
 			 -relief raised 
 		label $w.bm -bitmap error
 		pack $w.bm $w.m -pady 10 -side top -padx 10
-		wm title $w "Oops" 
+		wm title $w "Xconfig Internal Error" 
 
 		set oldFocus [focus]
 		frame $w.f
@@ -173,7 +173,7 @@ proc write_config_file  { w } {
 			 -relief raised 
 		label $w.bm -bitmap error
 		pack $w.bm $w.m -pady 10 -side top -padx 10
-		wm title $w "Oops" 
+		wm title $w "Xconfig Internal Error" 
 
 		set oldFocus [focus]
 		frame $w.f

@@ -1,12 +1,13 @@
 /*
  *  inode.c
  *
- *  Copyright (C) 1995-1997 Martin von Löwis
+ *  Copyright (C) 1995-1999 Martin von Löwis
  *  Copyright (C) 1996 Albert D. Cahalan
  *  Copyright (C) 1996-1997 Régis Duchesne
+ *  Copyright (C) 1998 Joseph Malicki
  */
 
-#include "types.h"
+#include "ntfstypes.h"
 #include "struct.h"
 #include "inode.h"
 
@@ -187,7 +188,7 @@ void ntfs_insert_mft_attributes(ntfs_inode* ino,char *mft,int mftno)
 /* Read and insert all the attributes of an 'attribute list' attribute
    Return the number of remaining bytes in *plen
 */
-static int parse_attributes(ntfs_inode *ino, void *alist, int *plen)
+static int parse_attributes(ntfs_inode *ino, ntfs_u8 *alist, int *plen)
 {
 	char *mft;
 	int mftno,l,error;
@@ -223,14 +224,14 @@ static void ntfs_load_attributes(ntfs_inode* ino)
 	int offset,len,delta;
 	char *buf;
 	ntfs_volume *vol=ino->vol;
-	ntfs_debug(DEBUG_OTHER, "load_attributes %x 1\n",ino->i_number);
+	ntfs_debug(DEBUG_FILE2, "load_attributes %x 1\n",ino->i_number);
 	ntfs_insert_mft_attributes(ino,ino->attr,ino->i_number);
-	ntfs_debug(DEBUG_OTHER, "load_attributes %x 2\n",ino->i_number);
+	ntfs_debug(DEBUG_FILE2, "load_attributes %x 2\n",ino->i_number);
 	alist=ntfs_find_attr(ino,vol->at_attribute_list,0);
-	ntfs_debug(DEBUG_OTHER, "load_attributes %x 3\n",ino->i_number);
+	ntfs_debug(DEBUG_FILE2, "load_attributes %x 3\n",ino->i_number);
 	if(!alist)
 		return;
-	ntfs_debug(DEBUG_OTHER, "load_attributes %x 4\n",ino->i_number);
+	ntfs_debug(DEBUG_FILE2, "load_attributes %x 4\n",ino->i_number);
 	datasize=alist->size;
 	if(alist->resident)
 	{
@@ -255,7 +256,7 @@ static void ntfs_load_attributes(ntfs_inode* ino)
 			/* move remaining bytes to buffer start */
 			ntfs_memmove(buf,buf+len-delta,delta);
 	}
-	ntfs_debug(DEBUG_OTHER, "load_attributes %x 5\n",ino->i_number);
+	ntfs_debug(DEBUG_FILE2, "load_attributes %x 5\n",ino->i_number);
 	ntfs_free(buf);
 }
 	
@@ -264,7 +265,7 @@ int ntfs_init_inode(ntfs_inode *ino,ntfs_volume *vol,int inum)
 	char *buf;
 	int error;
 
-	ntfs_debug(DEBUG_OTHER, "Initializing inode %x\n",inum);
+	ntfs_debug(DEBUG_FILE1, "Initializing inode %x\n",inum);
 	if(!vol)
 		ntfs_error("NO VOLUME!\n");
 	ino->i_number=inum;
@@ -275,14 +276,14 @@ int ntfs_init_inode(ntfs_inode *ino,ntfs_volume *vol,int inum)
 		ntfs_debug(DEBUG_OTHER, "init inode: %x failed\n",inum);
 		return error;
 	}
-	ntfs_debug(DEBUG_OTHER, "Init: got mft %x\n",inum);
+	ntfs_debug(DEBUG_FILE2, "Init: got mft %x\n",inum);
 	ino->sequence_number=NTFS_GETU16(buf+0x10);
 	ino->attr_count=0;
 	ino->record_count=0;
 	ino->records=0;
 	ino->attrs=0;
 	ntfs_load_attributes(ino);
-	ntfs_debug(DEBUG_OTHER, "Init: done %x\n",inum);
+	ntfs_debug(DEBUG_FILE2, "Init: done %x\n",inum);
 	return 0;
 }
 
@@ -391,40 +392,46 @@ ntfs_attr_is_resident(ntfs_inode*ino,int type,char*name)
  * This function decodes a run. Length is an output parameter, data and cluster
  * are in/out parameters.
  */
-int ntfs_decompress_run(unsigned char **data, int *length, int *cluster,
+int ntfs_decompress_run(unsigned char **data, int *length, ntfs_cluster_t *cluster,
 	int *ctype)
 {
 	unsigned char type=*(*data)++;
 	*ctype=0;
 	switch(type & 0xF)
 	{
-	case 1: *length=NTFS_GETU8(*data);(*data)++;break;
-	case 2: *length=NTFS_GETU16(*data);
-		*data+=2;
-		break;
-	case 3: *length = NTFS_GETU24(*data);
-		*data+=3;
-		break;
-		/* TODO: case 4-8 */
+	case 1: *length=NTFS_GETU8(*data);break;
+	case 2: *length=NTFS_GETU16(*data);break;
+	case 3: *length=NTFS_GETU24(*data);break;
+        case 4: *length=NTFS_GETU32(*data);break;
+        	/* Note: cases 5-8 are probably pointless to code,
+        	   since how many runs > 4GB of length are there?
+        	   at the most, cases 5 and 6 are probably necessary,
+        	   and would also require making length 64-bit
+        	   throughout */
 	default:
 		ntfs_error("Can't decode run type field %x\n",type);
 		return -1;
 	}
+	*data+=(type & 0xF);
+
 	switch(type & 0xF0)
 	{
-	case 0:    *ctype=2;break;
-	case 0x10: *cluster+=NTFS_GETS8(*data);(*data)++;break;
-	case 0x20: *cluster+=NTFS_GETS16(*data);
-		*data+=2;
-		break;
-	case 0x30: 	*cluster+=NTFS_GETS24(*data);
-		*data+=3;
-		break;
-		/* TODO: case 0x40-0x80 */
+	case 0:	   *ctype=2; break;
+	case 0x10: *cluster += NTFS_GETS8(*data);break;
+	case 0x20: *cluster += NTFS_GETS16(*data);break;
+	case 0x30: *cluster += NTFS_GETS24(*data);break;
+	case 0x40: *cluster += NTFS_GETS32(*data);break;
+#if 0 /* Keep for future, in case ntfs_cluster_t ever becomes 64bit */
+	case 0x50: *cluster += NTFS_GETS40(*data);break;
+	case 0x60: *cluster += NTFS_GETS48(*data);break;
+	case 0x70: *cluster += NTFS_GETS56(*data);break;
+	case 0x80: *cluster += NTFS_GETS64(*data);break;	
+#endif
 	default:
 		ntfs_error("Can't decode run type field %x\n",type);
 		return -1;
 	}
+	*data+=(type >> 4);
 	return 0;
 }
 
@@ -435,7 +442,8 @@ int ntfs_readwrite_attr(ntfs_inode *ino, ntfs_attribute *attr, int offset,
 	ntfs_io *dest)
 {
 	int datasize,rnum;
-	int cluster,s_cluster,vcn,len,l,chunk,copied;
+	ntfs_cluster_t cluster,s_cluster,vcn,len;
+	int l,chunk,copied;
 	int s_vcn;
 	int clustersize;
 	int error;
@@ -443,6 +451,8 @@ int ntfs_readwrite_attr(ntfs_inode *ino, ntfs_attribute *attr, int offset,
 	clustersize=ino->vol->clustersize;
 	datasize=attr->size;
 	l=dest->size;
+	if(l==0)
+		return 0;
 	if(dest->do_read)
 	{
 		if(offset>=datasize){
@@ -457,20 +467,30 @@ int ntfs_readwrite_attr(ntfs_inode *ino, ntfs_attribute *attr, int offset,
 			if(error)
 				return error;
 		}
+		if (offset+l > attr->initialized)
+			attr->initialized = offset+l;
 	}
 	if(attr->resident)
 	{
 		if(dest->do_read)
-			dest->fn_put(dest,attr->d.data+offset,l);
+			dest->fn_put(dest,(ntfs_u8*)attr->d.data+offset,l);
 		else
-		{
-			dest->fn_get(attr->d.data+offset,dest,l);
-			ntfs_update_inode(ino);
-		}
+			dest->fn_get((ntfs_u8*)attr->d.data+offset,dest,l);
 		dest->size=l;
 		return 0;
 	}
-	if(attr->compressed) {
+	/* read uninitialized data */
+	if(offset>=attr->initialized && dest->do_read)
+		return ntfs_read_zero(dest,l);
+	if(offset+l>attr->initialized && dest->do_read)
+	{
+		dest->size = chunk = offset+l - attr->initialized;
+		error = ntfs_readwrite_attr(ino,attr,offset,dest);
+		if(error)
+			return error;		
+		return ntfs_read_zero(dest,l-chunk);
+	}
+	if(attr->compressed){
 		if(dest->do_read)
 			return ntfs_read_compressed(ino,attr,offset,dest);
 		else
@@ -544,17 +564,26 @@ int ntfs_write_attr(ntfs_inode *ino, int type, char *name, int offset,
 int ntfs_vcn_to_lcn(ntfs_inode *ino,int vcn)
 {
 	int rnum;
-	ntfs_attribute *data=ntfs_find_attr(ino,ino->vol->at_data,0);
+	ntfs_attribute *data;
+	ntfs_error("bmap %x\n",vcn);
+	data=ntfs_find_attr(ino,ino->vol->at_data,0);
 	/* It's hard to give an error code */
 	if(!data)return -1;
 	if(data->resident)return -1;
 	if(data->compressed)return -1;
-	if(data->size<vcn*ino->vol->clustersize)return -1;
+	if(data->size <= vcn*ino->vol->clustersize)return -1;
+
+
+	/* For Linux, block number 0 represents a hole.
+	   Hopefully, nobody will attempt to bmap $Boot. */
+	if(data->initialized <= vcn*ino->vol->clustersize)
+		return 0;
 
 	for(rnum=0;rnum<data->d.r.len && 
 		    vcn>data->d.r.runlist[rnum].len;rnum++)
 		vcn-=data->d.r.runlist[rnum].len;
 	
+	ntfs_error("result %x\n",data->d.r.runlist[rnum].cluster+vcn);
 	return data->d.r.runlist[rnum].cluster+vcn;
 }
 
@@ -599,7 +628,8 @@ deallocate_store(ntfs_disk_inode* store)
 int 
 layout_runs(ntfs_attribute *attr,char* rec,int* offs,int size)
 {
-	int i,cluster,rclus,len,offset,coffs;
+	int i,len,offset,coffs;
+	ntfs_cluster_t cluster,rclus;
 	ntfs_runlist *rl=attr->d.r.runlist;
 	cluster=0;
 	offset=*offs;
@@ -610,23 +640,21 @@ layout_runs(ntfs_attribute *attr,char* rec,int* offs,int size)
 		if(offset+8>size)
 			return E2BIG; /* it might still fit, but this simplifies testing */
 		if(len<0x100){
-			*(rec+offset)|=1;
 			NTFS_PUTU8(rec+offset+1,len);
-			coffs=2;
+			coffs=1;
 		}else if(len<0x10000){
-			*(rec+offset)|=2;
 			NTFS_PUTU16(rec+offset+1,len);
-			coffs=3;
+			coffs=2;
 		}else if(len<0x1000000){
-			*(rec+offset)|=3;
 			NTFS_PUTU24(rec+offset+1,len);
-			coffs=4;
+			coffs=3;
 		}else{
-			*(rec+offset)|=4;
 			NTFS_PUTU32(rec+offset+1,len);
-			coffs=5;
+			coffs=4;
 		}
     
+		*(rec+offset)|=coffs++;
+
 		if(rl[i].cluster==0) /*compressed run*/
 			/*nothing*/;
 		else if(rclus>-0x80 && rclus<0x7F){
@@ -641,15 +669,42 @@ layout_runs(ntfs_attribute *attr,char* rec,int* offs,int size)
 			*(rec+offset)|=0x30;
 			NTFS_PUTS24(rec+offset+coffs,rclus);
 			coffs+=3;
-		}else{
+		}else
+#if 0 /* In case ntfs_cluster_t ever becomes 64bit */
+	       	if (rclus>-0x80000000LL && rclus<0x7FFFFFFF)
+#endif
+		{
 			*(rec+offset)|=0x40;
 			NTFS_PUTS32(rec+offset+coffs,rclus);
 			coffs+=4;
 		}
+#if 0 /* For 64-bit ntfs_cluster_t */
+		else if (rclus>-0x8000000000 && rclus<0x7FFFFFFFFF){
+			*(rec+offset)|=0x50;
+			NTFS_PUTS40(rec+offset+coffs,rclus);
+			coffs+=5;
+		}else if (rclus>-0x800000000000 && rclus<0x7FFFFFFFFFFF){
+			*(rec+offset)|=0x60;
+			NTFS_PUTS48(rec+offset+coffs,rclus);
+			coffs+=6;
+		}else if (rclus>-0x80000000000000 && rclus<0x7FFFFFFFFFFFFF){
+			*(rec+offset)|=0x70;
+			NTFS_PUTS56(rec+offset+coffs,rclus);
+			coffs+=7;
+		}else{
+			*(rec+offset)|=0x80;
+			NTFS_PUTS64(rec+offset+coffs,rclus);
+			coffs+=8;
+		}
+#endif
 		offset+=coffs;
 		if(rl[i].cluster)
 			cluster=rl[i].cluster;
 	}
+	if(offset>=size)
+		return E2BIG;
+	/* terminating null */
+	*(rec+offset++)=0;
 	*offs=offset;
 	return 0;
 }
@@ -657,14 +712,14 @@ layout_runs(ntfs_attribute *attr,char* rec,int* offs,int size)
 static void 
 count_runs(ntfs_attribute *attr,char *buf)
 {
-	int first,count,last,i;
+	ntfs_u32 first,count,last,i;
 	first=0;
 	for(i=0,count=0;i<attr->d.r.len;i++)
 		count+=attr->d.r.runlist[i].len;
 	last=first+count-1;
 
-	NTFS_PUTU32(buf+0x10,first);
-	NTFS_PUTU32(buf+0x18,last);
+	NTFS_PUTU64(buf+0x10,first);
+	NTFS_PUTU64(buf+0x18,last);
 } 
 
 static int
@@ -814,8 +869,17 @@ int ntfs_update_inode(ntfs_inode *ino)
 	store.records=0;
 	error=layout_inode(ino,&store);
 	if(error==E2BIG){
+		error = ntfs_split_indexroot(ino);
+		if(!error)
+			error = layout_inode(ino,&store);
+	}
+	if(error == E2BIG){
+		error = ntfs_attr_allnonresident(ino);
+		if(!error)
+			error = layout_inode(ino,&store);
+	}
+	if(error == E2BIG){
 		/* should try:
-		   make attributes non-resident
 		   introduce extension records
 		   */
 		ntfs_error("cannot handle saving inode %x\n",ino->i_number);
@@ -844,7 +908,8 @@ int ntfs_update_inode(ntfs_inode *ino)
 		}
 	}
 	return 0;
-}
+}	
+
 
 void ntfs_decompress(unsigned char *dest, unsigned char *src, ntfs_size_t l)
 {
@@ -1030,7 +1095,7 @@ add_standard_information (ntfs_inode *ino)
 
 static int 
 add_filename (ntfs_inode* ino, ntfs_inode* dir, 
-			 const unsigned char *filename, int length)
+	      const unsigned char *filename, int length, ntfs_u32 flags)
 {
 	unsigned char   *position;
 	unsigned int    size;
@@ -1057,7 +1122,7 @@ add_filename (ntfs_inode* ino, ntfs_inode* dir,
 	NTFS_PUTU64(position + 0x20, now);		/* Last access */
 
 	/* Don't know */
-	NTFS_PUTU8(position+0x38, 0x0);  /*should match standard attributes*/
+	NTFS_PUTU32(position+0x38, flags);
 
 	NTFS_PUTU8(position + 0x40, length);	      /* Filename length */
 	NTFS_PUTU8(position + 0x41, 0x0);	      /* only long name */
@@ -1120,10 +1185,9 @@ add_data (ntfs_inode* ino, unsigned char *data, int length)
 	return error;
 }
 
-
 /* We _could_ use 'dir' to help optimise inode allocation */
-int ntfs_alloc_inode (ntfs_inode *dir, ntfs_inode *result, char *filename,
-		int namelen)
+int ntfs_alloc_inode (ntfs_inode *dir, ntfs_inode *result, 
+		      const char *filename, int namelen, ntfs_u32 flags)
 {
 	ntfs_io io;
 	int error;
@@ -1185,15 +1249,23 @@ int ntfs_alloc_inode (ntfs_inode *dir, ntfs_inode *result, char *filename,
 	error=add_standard_information(result);
 	if(error)
 		return error;
-	error=add_filename(result,dir,filename,namelen);
+	error=add_filename(result,dir,filename,namelen,flags);
 	if(error)
 		return error;
 	error=add_security(result,dir);
 	/*FIXME: check error */
-	error=add_data(result,0,0);
+	return 0;
+}
+
+int
+ntfs_alloc_file(ntfs_inode *dir, ntfs_inode *result, char *filename,
+		int namelen)
+{
+	int error = ntfs_alloc_inode(dir,result,filename,namelen,0);
 	if(error)
 		return error;
-	return 0;
+	error = add_data(result,0,0);
+	return error;
 }
 
 /*

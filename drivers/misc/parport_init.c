@@ -98,19 +98,17 @@ __initfunc(void parport_setup(char *str, int *ints))
 #ifdef MODULE
 int init_module(void)
 {
-#ifdef	CONFIG_PROC_FS
 	(void)parport_proc_init();	/* We can go on without it. */
-#endif
 	return 0;
 }
 
 void cleanup_module(void)
 {
-#ifdef	CONFIG_PROC_FS
 	parport_proc_cleanup();
-#endif
 }
+
 #else
+
 __initfunc(int parport_init(void))
 {
 	if (io[0] == PARPORT_DISABLE) 
@@ -145,10 +143,8 @@ EXPORT_SYMBOL(parport_unregister_device);
 EXPORT_SYMBOL(parport_enumerate);
 EXPORT_SYMBOL(parport_ieee1284_nibble_mode_ok);
 EXPORT_SYMBOL(parport_wait_peripheral);
-#ifdef	CONFIG_PROC_FS
 EXPORT_SYMBOL(parport_proc_register);
 EXPORT_SYMBOL(parport_proc_unregister);
-#endif
 EXPORT_SYMBOL(parport_probe_hook);
 EXPORT_SYMBOL(parport_parse_irqs);
 

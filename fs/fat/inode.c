@@ -364,8 +364,8 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 		MSDOS_SB(sb)->root_cluster = CF_LE_L(b->root_cluster);
 		MSDOS_SB(sb)->fsinfo_offset =
 			CF_LE_W(b->info_sector) * logical_sector_size + 0x1e0;
-		if (MSDOS_SB(sb)->fsinfo_offset + sizeof(MSDOS_SB(sb)->fsinfo_offset) >= sizeof(struct fat_boot_sector)) {
-			printk("fat_read_super: Bad fsinfo_offset\n");
+		if (MSDOS_SB(sb)->fsinfo_offset + sizeof(MSDOS_SB(sb)->fsinfo_offset) > sb->s_blocksize) {
+			printk("fat_read_super: Bad fsinfo_offset 0x%x\n", MSDOS_SB(sb)->fsinfo_offset);
 			fat_brelse(sb, bh);
 			goto out_invalid;
 		}

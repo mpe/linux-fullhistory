@@ -1,0 +1,67 @@
+--- linux/arch/ppc/kernel/process.c	1998/10/11 17:47:23	1.67
++++ linux/arch/ppc/kernel/process.c	1998/11/02 03:11:28
+@@ -196,6 +198,19 @@
+ 	_enable_interrupts(s);
+ }
+ 
++void instruction_dump (unsigned long *pc)
++{
++	int i;
++
++	if((((unsigned long) pc) & 3))
++                return;
++
++	printk("Instruction DUMP:");
++	for(i = -3; i < 6; i++)
++		printk("%c%08lx%c",i?' ':'<',pc[i],i?' ':'>');
++	printk("\n");
++}
++
+ void show_regs(struct pt_regs * regs)
+ {
+ 	int i;
+--- linux/arch/ppc/kernel/traps.c	1998/05/05 19:18:53	1.21
++++ linux/arch/ppc/kernel/traps.c	1998/11/02 03:11:36
+@@ -79,6 +79,7 @@
+ 		debugger(regs);
+ #endif
+ 		print_backtrace((unsigned long *)regs->gpr[1]);
++		instruction_dump((unsigned long *)regs->nip);
+ 		panic("Exception in kernel pc %lx signal %d",regs->nip,signr);
+ 	}
+ 	force_sig(signr, current);
+@@ -126,6 +127,7 @@
+ 		debugger(regs);
+ #endif
+ 		print_backtrace((unsigned long *)regs->gpr[1]);
++		instruction_dump((unsigned long *)regs->nip);
+ 		panic("machine check");
+ 	}
+ 	_exception(SIGSEGV, regs);	
+@@ -219,6 +221,7 @@
+ #endif
+ 	show_regs(regs);
+ 	print_backtrace((unsigned long *)regs->gpr[1]);
++	instruction_dump((unsigned long *)regs->nip);
+ 	panic("kernel stack overflow");
+ }
+ 
+--- linux/arch/ppc/mm/fault.c	1998/10/06 03:13:19	1.28
++++ linux/arch/ppc/mm/fault.c	1998/11/02 03:11:36
+@@ -89,6 +89,7 @@
+ 			printk("page fault in interrupt handler, addr=%lx\n",
+ 			       address);
+ 			show_regs(regs);
++			instruction_dump((unsigned long *)regs->nip);
+ #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+ 			if (debugger_kernel_faults)
+ 				debugger(regs);
+@@ -174,6 +175,7 @@
+ 	/* kernel has accessed a bad area */
+ 	show_regs(regs);
+ 	print_backtrace( (unsigned long *)regs->gpr[1] );
++	instruction_dump((unsigned long *)regs->nip);
+ #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+ 	if (debugger_kernel_faults)
+ 		debugger(regs);
+

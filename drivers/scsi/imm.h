@@ -1,7 +1,8 @@
+
 /*  Driver for the Iomega MatchMaker parallel port SCSI HBA embedded in 
  * the Iomega ZIP Plus drive
  * 
- * (c) 1998     David Campbell	   campbell@torque.net
+ * (c) 1998     David Campbell     campbell@torque.net
  *
  * Please note that I live in Perth, Western Australia. GMT+0800
  */
@@ -9,13 +10,13 @@
 #ifndef _IMM_H
 #define _IMM_H
 
-#define   IMM_VERSION   "2.00"
+#define   IMM_VERSION   "2.03 (for Linux 2.0.0)"
 
 /* 
  * 10 Apr 1998 (Good Friday) - Received EN144302 by email from Iomega.
  * Scarry thing is the level of support from one of their managers.
  * The onus is now on us (the developers) to shut up and start coding.
- *						11Apr98	[ 0.10 ]
+ *                                              11Apr98 [ 0.10 ]
  *
  * --- SNIP ---
  *
@@ -24,35 +25,40 @@
  * Removing "Phase" debug messages.
  *
  * PS: Took four hours of coding after I bought a drive.
- *	ANZAC Day (Aus "War Veterans Holiday")	25Apr98 [ 0.14 ]
+ *      ANZAC Day (Aus "War Veterans Holiday")  25Apr98 [ 0.14 ]
  *
  * Ten minutes later after a few fixes.... (LITERALLY!!!)
  * Have mounted disk, copied file, dismounted disk, remount disk, diff file
  *                    -----  It actually works!!! -----
- *						25Apr98 [ 0.15 ]
+ *                                              25Apr98 [ 0.15 ]
  *
  * Twenty minutes of mucking around, rearanged the IEEE negotiate mechanism.
  * Now have byte mode working (only EPP and ECP to go now... :=)
- *						26Apr98 [ 0.16 ]
+ *                                              26Apr98 [ 0.16 ]
  *
  * Thirty minutes of further coding results in EPP working on my machine.
- *						27Apr98 [ 0.17 ]
+ *                                              27Apr98 [ 0.17 ]
  *
  * Due to work commitments and inability to get a "true" ECP mode functioning
  * I have decided to code the parport support into imm.
- *						09Jun98 [ 0.18 ]
+ *                                              09Jun98 [ 0.18 ]
  *
  * Driver is now out of beta testing.
  * Support for parport has been added.
  * Now distributed with the ppa driver.
- *						12Jun98 [ 2.00 ]
+ *                                              12Jun98 [ 2.00 ]
  *
  * Err.. It appears that imm-2.00 was broken....
- *						18Jun98 [ 2.01 ]
+ *                                              18Jun98 [ 2.01 ]
  *
  * Patch applied to sync this against the Linux 2.1.x kernel code
  * Included qboot_zip.sh
- *						21Jun98 [ 2.02 ]
+ *                                              21Jun98 [ 2.02 ]
+ *
+ * Other clean ups include the follow changes:
+ *    CONFIG_SCSI_PPA_HAVE_PEDANTIC => CONFIG_SCSI_IZIP_EPP16
+ *    added CONFIG_SCSI_IZIP_SLOW_CTR option
+ *                                                      [2.03]
  */
 /* ------ END OF USER CONFIGURABLE PARAMETERS ----- */
 
@@ -92,7 +98,11 @@ static char *IMM_MODE_STRING[] =
     "PS/2",
     "EPP 8 bit",
     "EPP 16 bit",
+#ifdef CONFIG_SCSI_IZIP_EPP16
+    "EPP 16 bit",
+#else
     "EPP 32 bit",
+#endif
     "Unknown"};
 
 /* This is a global option */
@@ -110,21 +120,24 @@ int imm_sg = SG_ALL;		/* enable/disable scatter-gather. */
 #define CONNECT_EPP_MAYBE 1
 #define CONNECT_NORMAL  0
 
-#define inb_x inb
-#define r_dtr(x)        (unsigned char)inb_x((x))
-#define r_str(x)        (unsigned char)inb_x((x)+1)
-#define r_ctr(x)        (unsigned char)inb_x((x)+2)
-#define r_epp(x)        (unsigned char)inb_x((x)+4)
-#define r_fifo(x)       (unsigned char)inb_x((x)+0x400)
-#define r_ecr(x)        (unsigned char)inb_x((x)+0x402)
+#define r_dtr(x)        (unsigned char)inb((x))
+#define r_str(x)        (unsigned char)inb((x)+1)
+#define r_ctr(x)        (unsigned char)inb((x)+2)
+#define r_epp(x)        (unsigned char)inb((x)+4)
+#define r_fifo(x)       (unsigned char)inb((x)+0x400)
+#define r_ecr(x)        (unsigned char)inb((x)+0x402)
 
-#define outb_x outb
-#define w_dtr(x,y)      outb_x(y, (x))
-#define w_str(x,y)      outb_x(y, (x)+1)
-#define w_ctr(x,y)      outb_x(y, (x)+2)
-#define w_epp(x,y)      outb_x(y, (x)+4)
-#define w_fifo(x,y)     outb_x(y, (x)+0x400)
-#define w_ecr(x,y)      outb_x(y, (x)+0x402)
+#define w_dtr(x,y)      outb(y, (x))
+#define w_str(x,y)      outb(y, (x)+1)
+#define w_epp(x,y)      outb(y, (x)+4)
+#define w_fifo(x,y)     outb(y, (x)+0x400)
+#define w_ecr(x,y)      outb(y, (x)+0x402)
+
+#ifdef CONFIG_SCSI_IZIP_SLOW_CTR
+#define w_ctr(x,y)      outb_p(y, (x)+2)
+#else
+#define w_ctr(x,y)      outb(y, (x)+2)
+#endif
 
 static int imm_engine(imm_struct *, Scsi_Cmnd *);
 static int imm_in(int, char *, int);
@@ -144,23 +157,25 @@ const char *imm_info(struct Scsi_Host *);
 int imm_command(Scsi_Cmnd *);
 int imm_queuecommand(Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
 int imm_abort(Scsi_Cmnd *);
-int imm_reset(Scsi_Cmnd *, unsigned int);
+int imm_reset(Scsi_Cmnd *);
 int imm_proc_info(char *, char **, off_t, int, int, int);
 int imm_biosparam(Disk *, kdev_t, int *);
 
-#define IMM {	proc_dir:		&proc_scsi_imm,			\
-		proc_info:		imm_proc_info,			\
-		name:			"Iomega ZIP Plus drive",	\
-		detect:			imm_detect,			\
-		release:		imm_release,			\
-		command:		imm_command,			\
-		queuecommand:		imm_queuecommand,		\
-		abort:			imm_abort,			\
-		reset:			imm_reset,			\
-		bios_param:		imm_biosparam,			\
-		this_id:		7,				\
-		sg_tablesize:		SG_ALL,				\
-		cmd_per_lun:		1,				\
-		use_clustering:		ENABLE_CLUSTERING		\
+#define IMM {	proc_dir:			&proc_scsi_imm,		\
+		proc_info:			imm_proc_info,		\
+		name:				"Iomega VPI2 (imm) interface",\
+		detect:				imm_detect,		\
+		release:			imm_release,		\
+		command:			imm_command,		\
+		queuecommand:			imm_queuecommand,	\
+                eh_abort_handler:               imm_abort,              \
+                eh_device_reset_handler:        NULL,                   \
+                eh_bus_reset_handler:           imm_reset,              \
+                eh_host_reset_handler:          imm_reset,              \
+		bios_param:		        imm_biosparam,		\
+		this_id:			7,			\
+		sg_tablesize:			SG_ALL,			\
+		cmd_per_lun:			1,			\
+		use_clustering:			ENABLE_CLUSTERING	\
 }
 #endif				/* _IMM_H */

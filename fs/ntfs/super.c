@@ -5,7 +5,7 @@
  *  Copyright (C) 1996-1997 Régis Duchesne
  */
 
-#include "types.h"
+#include "ntfstypes.h"
 #include "struct.h"
 #include "super.h"
 
@@ -32,7 +32,7 @@
 int ntfs_fixup_record(ntfs_volume *vol, char *record, char *magic, int size)
 {
 	int start, count, offset;
-	unsigned short fixup;
+	ntfs_u16 fixup;
 
 	if(!IS_MAGIC(record,magic))
 		return 0;
@@ -116,7 +116,7 @@ ntfs_init_upcase(ntfs_inode *upcase)
 	upcase->vol->upcase_length = UPCASE_LENGTH;
 	io.fn_put=ntfs_put;
 	io.fn_get=0;
-	io.param=upcase->vol->upcase;
+	io.param=(char*)upcase->vol->upcase;
 	io.size=2*UPCASE_LENGTH;
 	ntfs_read_attr(upcase,upcase->vol->at_data,0,0,&io);
 }
@@ -152,8 +152,8 @@ process_attrdef(ntfs_inode* attrdef,ntfs_u8* def)
 	}else if(ntfs_ua_strncmp(name,"$BITMAP",64)==0){
 		vol->at_bitmap=type;
 		check_type=0xB0;
-	}else if(ntfs_ua_strncmp(name,"$SYMBOLIC_LINK",64) ||
-		 ntfs_ua_strncmp(name,"$REPARSE_POINT",64)){
+	}else if(ntfs_ua_strncmp(name,"$SYMBOLIC_LINK",64)==0 ||
+		 ntfs_ua_strncmp(name,"$REPARSE_POINT",64)==0){
 		vol->at_symlink=type;
 	}
 	if(check_type && check_type!=type){
@@ -170,7 +170,7 @@ ntfs_init_attrdef(ntfs_inode* attrdef)
 	ntfs_io io;
 	int offset,error,i;
 	ntfs_attribute *data;
-	buf=ntfs_malloc(4096);
+	buf=ntfs_malloc(4050); /* 90*45 */
 	if(!buf)return ENOMEM;
 	io.fn_put=ntfs_put;
 	io.fn_get=ntfs_get;
@@ -183,9 +183,9 @@ ntfs_init_attrdef(ntfs_inode* attrdef)
 	}
 	do{
 		io.param=buf;
-		io.size=4096;
+		io.size=4050;
 		error=ntfs_readwrite_attr(attrdef,data,offset,&io);
-		for(i=0;!error && i<io.size;i+=0xA0)
+		for(i=0;!error && i<io.size-0xA0;i+=0xA0)
 			error=process_attrdef(attrdef,buf+i);
 		offset+=4096;
 	}while(!error && io.size);
@@ -200,25 +200,30 @@ int ntfs_load_special_files(ntfs_volume *vol)
 
 	vol->mft_ino=(ntfs_inode*)ntfs_calloc(3*sizeof(ntfs_inode));
 	error=ENOMEM;
+	ntfs_debug(DEBUG_BSD,"Going to load MFT\n");
 	if(!vol->mft_ino || (error=ntfs_init_inode(vol->mft_ino,vol,FILE_MFT)))
 	{
 		ntfs_error("Problem loading MFT\n");
 		return error;
 	}
+	ntfs_debug(DEBUG_BSD,"Going to load MIRR\n");
 	vol->mftmirr=vol->mft_ino+1;
 	if((error=ntfs_init_inode(vol->mftmirr,vol,FILE_MFTMIRR))){
 		ntfs_error("Problem %d loading MFTMirr\n",error);
 		return error;
 	}
+	ntfs_debug(DEBUG_BSD,"Going to load BITMAP\n");
 	vol->bitmap=vol->mft_ino+2;
 	if((error=ntfs_init_inode(vol->bitmap,vol,FILE_BITMAP))){
 		ntfs_error("Problem loading Bitmap\n");
 		return error;
 	}
+	ntfs_debug(DEBUG_BSD,"Going to load UPCASE\n");
 	error=ntfs_init_inode(&upcase,vol,FILE_UPCASE);
 	if(error)return error;
 	ntfs_init_upcase(&upcase);
 	ntfs_clear_inode(&upcase);
+	ntfs_debug(DEBUG_BSD,"Going to load ATTRDEF\n");
 	error=ntfs_init_inode(&attrdef,vol,FILE_ATTRDEF);
 	if(error)return error;
 	error=ntfs_init_attrdef(&attrdef);
@@ -245,7 +250,7 @@ int ntfs_get_volumesize(ntfs_volume *vol)
 {
 	ntfs_io io;
 	char *cluster0=ntfs_malloc(vol->clustersize);
-	int size;
+	ntfs_u64 size;
 
 	io.fn_put=ntfs_put;
 	io.fn_get=ntfs_get;
@@ -255,8 +260,9 @@ int ntfs_get_volumesize(ntfs_volume *vol)
 	ntfs_getput_clusters(vol,0,0,&io);
 	size=NTFS_GETU64(cluster0+0x28);
 	ntfs_free(cluster0);
-	size/=vol->clusterfactor;
-	return size;
+	/* FIXME: more than 2**32 cluster */
+	/* FIXME: gcc will emit udivdi3 if we don't truncate it */
+	return ((unsigned int)size)/vol->clusterfactor;
 }
 
 static int nc[16]={4,3,3,2,3,2,2,1,3,2,2,1,2,1,1,0};
@@ -323,7 +329,7 @@ void ntfs_insert_fixups(unsigned char *rec, int secsize)
    Return the largest block found in *cnt. Return 0 on success, ENOSPC if
    all bits are used */
 static int 
-search_bits(unsigned char* bits,int *loc,int *cnt,int l)
+search_bits(unsigned char* bits,ntfs_cluster_t *loc,int *cnt,int l)
 {
 	unsigned char c=0;
 	int bc=0;
@@ -384,7 +390,7 @@ search_bits(unsigned char* bits,int *loc,int *cnt,int l)
 }
 
 int 
-ntfs_set_bitrange(ntfs_inode* bitmap,int loc,int cnt,int bit)
+ntfs_set_bitrange(ntfs_inode* bitmap,ntfs_cluster_t loc,int cnt,int bit)
 {
 	int bsize,locit,error;
 	unsigned char *bits,*it;
@@ -392,13 +398,13 @@ ntfs_set_bitrange(ntfs_inode* bitmap,int loc,int cnt,int bit)
 
 	io.fn_put=ntfs_put;
 	io.fn_get=ntfs_get;
-	bsize=(cnt+loc%8+7)/8; /* round up */
+	bsize=(cnt+(loc & 7)+7) & ~7; /* round up to multiple of 8*/
 	bits=ntfs_malloc(bsize);
 	io.param=bits;
 	io.size=bsize;
 	if(!bits)
 		return ENOMEM;
-	error=ntfs_read_attr(bitmap,bitmap->vol->at_data,0,loc/8,&io);
+	error=ntfs_read_attr(bitmap,bitmap->vol->at_data,0,loc>>3,&io);
 	if(error || io.size!=bsize){
 		ntfs_free(bits);
 		return error?error:EIO;
@@ -431,7 +437,7 @@ ntfs_set_bitrange(ntfs_inode* bitmap,int loc,int cnt,int bit)
 	/* reset to start */
 	io.param=bits;
 	io.size=bsize;
-	error=ntfs_write_attr(bitmap,bitmap->vol->at_data,0,loc/8,&io);
+	error=ntfs_write_attr(bitmap,bitmap->vol->at_data,0,loc>>3,&io);
 	ntfs_free(bits);
 	if(error)return error;
 	if(io.size!=bsize)
@@ -445,7 +451,7 @@ ntfs_set_bitrange(ntfs_inode* bitmap,int loc,int cnt,int bit)
    it does not matter where the clusters are. Result is 0 if
    success, in which case location and count says what they really got */
 int 
-ntfs_search_bits(ntfs_inode* bitmap, int *location, int *count, int flags)
+ntfs_search_bits(ntfs_inode* bitmap, ntfs_cluster_t *location, int *count, int flags)
 {
 	unsigned char *bits;
 	ntfs_io io;
@@ -459,7 +465,7 @@ ntfs_search_bits(ntfs_inode* bitmap, int *location, int *count, int flags)
 	io.param=bits;
 
 	/* first search within +/- 8192 clusters */
-	start=*location/8;
+	start=*location>>3;
 	start= start>1024 ? start-1024 : 0;
 	io.size=2048;
 	error=ntfs_read_attr(bitmap,bitmap->vol->at_data,0,start,&io);
@@ -483,7 +489,7 @@ ntfs_search_bits(ntfs_inode* bitmap, int *location, int *count, int flags)
 		error=ntfs_read_attr(bitmap,bitmap->vol->at_data,
 				     0,start,&io);
 		if(error)goto fail;
-		if(io.size==0) {
+		if(io.size==0){
 			if(found)
 				goto success;
 			else{
@@ -524,7 +530,7 @@ ntfs_search_bits(ntfs_inode* bitmap, int *location, int *count, int flags)
 	return error;
 }
 
-int ntfs_allocate_clusters(ntfs_volume *vol, int *location, int *count,
+int ntfs_allocate_clusters(ntfs_volume *vol, ntfs_cluster_t *location, int *count,
 	int flags)
 {
 	int error;
@@ -532,7 +538,7 @@ int ntfs_allocate_clusters(ntfs_volume *vol, int *location, int *count,
 	return error;
 }
 
-int ntfs_deallocate_clusters(ntfs_volume *vol, int location, int count)
+int ntfs_deallocate_clusters(ntfs_volume *vol, ntfs_cluster_t location, int count)
 {
 	int error;
 	error=ntfs_set_bitrange(vol->bitmap,location,count,0);

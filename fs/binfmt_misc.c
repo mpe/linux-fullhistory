@@ -30,6 +30,16 @@
 #include <asm/uaccess.h>
 #include <asm/spinlock.h>
 
+/*
+ * We should make this work with a "stub-only" /proc,
+ * which would just not be able to be configured.
+ * Right now the /proc-fs support is too black and white,
+ * though, so just remind people that this should be
+ * fixed..
+ */
+#ifndef CONFIG_PROC_FS
+#error You really need /proc support for binfmt_misc. Please reconfigure!
+#endif
 
 #define VERBOSE_STATUS /* undef this to save 400 bytes kernel memory */
 
@@ -67,9 +77,7 @@ static struct binfmt_entry *entries = NULL;
 static int free_id = 1;
 static int enabled = 1;
 
-#ifdef CONFIG_SMP
-static rwlock_t entries_lock = RW_LOCK_UNLOCKED;
-#endif
+static rwlock_t entries_lock __attribute__((unused)) = RW_LOCK_UNLOCKED;
 
 
 /*
@@ -458,8 +466,10 @@ static int entry_proc_setup(struct binfmt_entry *e)
 {
 	if (!(e->proc_dir = create_proc_entry(e->proc_name,
 			 	S_IFREG | S_IRUGO | S_IWUSR, bm_dir)))
-		return -ENOMEM;
-
+	{
+		printk(KERN_WARNING "Unable to create /proc entry.\n");
+		return -ENOENT;
+	}
 	e->proc_dir->data = (void *) (e->id);
 	e->proc_dir->read_proc = proc_read_status;
 	e->proc_dir->write_proc = proc_write_status;
@@ -486,7 +496,7 @@ static void bm_modcount(struct inode *inode, int fill)
 
 int __init init_misc_binfmt(void)
 {
-	int error = -ENOMEM;
+	int error = -ENOENT;
 	struct proc_dir_entry *status = NULL, *reg;
 
 	bm_dir = create_proc_entry("sys/fs/binfmt_misc", S_IFDIR, NULL);

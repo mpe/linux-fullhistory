@@ -151,6 +151,7 @@ void __free_page(struct page *page)
 	if (!PageReserved(page) && atomic_dec_and_test(&page->count)) {
 		if (PageSwapCache(page))
 			panic ("Freeing swap cache page");
+		page->flags &= ~(1 << PG_referenced);
 		free_pages_ok(page->map_nr, 0);
 		return;
 	}
@@ -172,6 +173,7 @@ void free_pages(unsigned long addr, unsigned long order)
 		if (atomic_dec_and_test(&map->count)) {
 			if (PageSwapCache(map))
 				panic ("Freeing swap cache pages");
+			map->flags &= ~(1 << PG_referenced);
 			free_pages_ok(map_nr, order);
 			return;
 		}
@@ -197,8 +199,9 @@ do { struct free_area_struct * area = free_area+order; \
 	do { struct page *prev = memory_head(area), *ret = prev->next; \
 		while (memory_head(area) != ret) { \
 			if (!dma || CAN_DMA(ret)) { \
-				unsigned long map_nr = ret->map_nr; \
+				unsigned long map_nr; \
 				(prev->next = ret->next)->prev = prev; \
+				map_nr = ret->map_nr; \
 				MARK_USED(map_nr, new_order, area); \
 				nr_free_pages -= 1 << order; \
 				EXPAND(ret, map_nr, order, new_order, area); \

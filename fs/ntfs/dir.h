@@ -18,7 +18,7 @@ typedef struct ntfs_iterate_s{
 	enum ntfs_iterate_e type;
 	ntfs_inode *dir;
 	union{
-		long long pos;
+		ntfs_u64 pos;
 		int flags;
 	}u;
 	char *result;      /* pointer to entry if found */
@@ -37,3 +37,5 @@ int ntfs_getdir_byname(ntfs_iterate_s *walk);
 int ntfs_dir_add(ntfs_inode *dir, ntfs_inode *new, ntfs_attribute *name);
 int ntfs_check_index_record(ntfs_inode *ino, char *record);
 int ntfs_getdir_byposition(ntfs_iterate_s *walk);
+int ntfs_mkdir(ntfs_inode* dir,const char* name,int namelen, ntfs_inode *ino);
+int ntfs_split_indexroot(ntfs_inode *ino);

@@ -675,7 +675,7 @@ int get_cpuinfo(char * buffer)
 			p += sprintf(p, "stepping\t: unknown\n");
 
 		if (c->x86_capability & X86_FEATURE_TSC) {
-			p += sprintf(p, "cpu MHz\t\t: %lu.%02lu\n",
+			p += sprintf(p, "cpu MHz\t\t: %lu.%06lu\n",
 				cpu_hz / 1000000, (cpu_hz % 1000000));
 		}
 
@@ -689,6 +689,8 @@ int get_cpuinfo(char * buffer)
 		} else if (c->x86_vendor == X86_VENDOR_AMD) {
 			x86_cap_flags[16] = "fcmov";
 			x86_cap_flags[31] = "3dnow";
+			if (c->x86 == 5 && c->x86_model == 6)
+				x86_cap_flags[10] = "sep";
 		} else if (c->x86_vendor == X86_VENDOR_INTEL) {
 			x86_cap_flags[6] = "pae";
 			x86_cap_flags[9] = "apic";

@@ -54,8 +54,6 @@ static int	nfsctl_getfd(struct nfsctl_fdparm *, struct knfs_fh *);
 
 static int	initialized = 0;
 
-#ifdef CONFIG_PROC_FS
-
 int exp_procfs_exports(char *buffer, char **start, off_t offset,
                              int length, int *eof, void *data);
 
@@ -70,7 +68,6 @@ void proc_export_init(void)
 	nfs_export_ent->read_proc = exp_procfs_exports;
 }
 
-#endif
 
 /*
  * Initialize nfsd
@@ -79,16 +76,12 @@ static void
 nfsd_init(void)
 {
 	nfsd_xdr_init();	/* XDR */
-#ifdef CONFIG_PROC_FS
 	nfsd_stat_init();	/* Statistics */
-#endif
 	nfsd_cache_init();	/* RPC reply cache */
 	nfsd_export_init();	/* Exports table */
 	nfsd_lockd_init();	/* lockd->nfsd callbacks */
 	nfsd_fh_init();		/* FH table */
-#ifdef CONFIG_PROC_FS
 	proc_export_init();
-#endif
 	initialized = 1;
 }
 
@@ -310,11 +303,9 @@ cleanup_module(void)
 	nfsd_export_shutdown();
 	nfsd_cache_shutdown();
 	nfsd_fh_free();
-#ifdef CONFIG_PROC_FS
 	remove_proc_entry("fs/nfs/exports", NULL);
 	remove_proc_entry("fs/nfs", NULL);
 	nfsd_stat_shutdown();
-#endif
 	nfsd_lockd_shutdown();
 }
 #endif

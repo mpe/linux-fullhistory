@@ -41,9 +41,7 @@ ifeq ($(CONFIG_SCSI),y)
   endif
   L_OBJS += scsi_n_syms.o hosts.o scsi_ioctl.o constants.o scsicam.o
   L_OBJS += scsi_error.o scsi_obsolete.o scsi_queue.o
-  ifeq ($(CONFIG_PROC_FS),y)
-    L_OBJS += scsi_proc.o
-  endif
+  L_OBJS += scsi_proc.o
 else
   ifeq ($(CONFIG_SCSI),m)
     MIX_OBJS += scsi_syms.o

@@ -26,7 +26,6 @@ int eata_pio_set_info(char *buffer, int length, struct Scsi_Host *HBA_ptr)
 int eata_pio_proc_info(char *buffer, char **start, off_t offset, int length, 
 		       int hostno, int inout)
 {
-#ifdef CONFIG_PROC_FS
     Scsi_Device *scd;
     struct Scsi_Host *HBA_ptr;
     static u8 buff[512];
@@ -110,9 +109,6 @@ int eata_pio_proc_info(char *buffer, char **start, off_t offset, int length,
     DBG(DBG_PROC, printk("3pos: %ld offset: %ld len: %d\n", pos, offset, len));
     
     return (len);     
-#else
-    return 0;
-#endif        
 }
 
 /*

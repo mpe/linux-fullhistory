@@ -263,12 +263,8 @@ update_write_request(struct nfs_wreq *req, unsigned int first,
 static inline void
 free_write_request(struct nfs_wreq * req)
 {
-	if (!--req->wb_count) {
-		struct inode *inode = req->wb_inode;
-		remove_write_request(&NFS_WRITEBACK(inode), req);
+	if (!--req->wb_count)
 		kfree(req);
-		nr_write_requests--;
-	}
 }
 
 /*
@@ -698,6 +694,8 @@ nfs_wback_result(struct rpc_task *task)
 		clear_bit(PG_uptodate, &page->flags);
 
 	__free_page(page);
+	remove_write_request(&NFS_WRITEBACK(inode), req);
+	nr_write_requests--;
 	dput(req->wb_dentry);
 
 	wake_up(&req->wb_wait);

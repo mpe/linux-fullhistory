@@ -1126,6 +1126,7 @@ void __init smp_boot_cpus(void)
 	{
 		printk(KERN_NOTICE "SMP motherboard not detected. Using dummy APIC emulation.\n");
 		io_apic_irqs = 0;
+		cpu_online_map = cpu_present_map;
 		goto smp_done;
 	}
 

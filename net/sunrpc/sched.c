@@ -6,7 +6,6 @@
  * Copyright (C) 1996 Olaf Kirch, <okir@monad.swb.de>
  */
 
-#define __NO_VERSION__
 #include <linux/module.h>
 
 #define __KERNEL_SYSCALLS__

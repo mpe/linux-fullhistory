@@ -40,7 +40,7 @@ zlilo: $(CONFIGURE) $(BOOTIMAGE)
 	if [ -x /sbin/lilo ]; then /sbin/lilo; else /etc/lilo/install; fi
 
 install: $(CONFIGURE) $(BOOTIMAGE)
-	sh -x ./install.sh $(VERSION).$(PATCHLEVEL).$(SUBLEVEL) $(BOOTIMAGE) $(TOPDIR)/System.map "$(INSTALL_PATH)"
+	sh -x ./install.sh $(KERNELRELEASE) $(BOOTIMAGE) $(TOPDIR)/System.map "$(INSTALL_PATH)"
 
 tools/build: tools/build.c
 	$(HOSTCC) $(HOSTCFLAGS) -o $@ $< -I$(TOPDIR)/include

@@ -586,9 +586,7 @@ init_one_port(struct linux_ebus_device *dev)
 		printmode(ECPPS2);
 	}
 	printk("]\n");
-#ifdef	CONFIG_PROC_FS
 	parport_proc_register(p);
-#endif
 	p->flags |= PARPORT_FLAG_COMA;
 
 	p->ops->write_control(p, 0x0c);
@@ -631,9 +629,7 @@ cleanup_module(void)
 		if (p->modes & PARPORT_MODE_PCSPP) { 
 			if (!(p->flags & PARPORT_FLAG_COMA)) 
 				parport_quiesce(p);
-#ifdef	CONFIG_PROC_FS
 			parport_proc_unregister(p);
-#endif
 			parport_unregister_port(p);
 		}
 		p = tmp;

@@ -77,9 +77,7 @@
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/poll.h>
-#ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
-#endif
 #include <linux/init.h>
 #include <linux/smp_lock.h>
 
@@ -1966,9 +1964,7 @@ int tty_register_driver(struct tty_driver *driver)
 	if (tty_drivers) tty_drivers->prev = driver;
 	tty_drivers = driver;
 	
-#ifdef CONFIG_PROC_FS
 	proc_tty_register_driver(driver);
-#endif	
 	return error;
 }
 
@@ -2010,9 +2006,7 @@ int tty_unregister_driver(struct tty_driver *driver)
 	if (driver->next)
 		driver->next->prev = driver->prev;
 
-#ifdef CONFIG_PROC_FS
 	proc_tty_unregister_driver(driver);
-#endif
 	return 0;
 }
 

@@ -26,8 +26,10 @@
 #define NTFS_V2INO(ino)		((ntfs_inode*)((ino)->v_data))
 
 /* Classical min and max macros still missing in standard headers... */
+#ifndef min
 #define min(a,b)	((a) <= (b) ? (a) : (b))
 #define max(a,b)	((a) >= (b) ? (a) : (b))
+#endif
 
 #define IS_MAGIC(a,b)		(*(int*)(a)==*(int*)(b))
 #define IS_MFT_RECORD(a)	IS_MAGIC((a),"FILE")
@@ -36,6 +38,13 @@
 
 /* 'NTFS' in little endian */
 #define NTFS_SUPER_MAGIC	0x5346544E
+
+#define NTFS_AFLAG_RO           1
+#define NTFS_AFLAG_HIDDEN       2
+#define NTFS_AFLAG_SYSTEM       4
+#define NTFS_AFLAG_ARCHIVE      20
+#define NTFS_AFLAG_COMPRESSED   0x800
+#define NTFS_AFLAG_DIR          0x10000000
 
 /*
  * Local variables:

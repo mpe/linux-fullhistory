@@ -66,7 +66,16 @@
  *      + lifted 2000 byte mtu limit. now depends on shared-RAM size.
  *        May 25 1998)
  *      + can't allocate 2k recv buff at 8k shared-RAM. (20 October 1998)
+ *
+ *      Changes by Joel Sloan (jjs@c-me.com) :
+ *      + disable verbose debug messages by default - to enable verbose
+ *	  debugging, edit the IBMTR_DEBUG_MESSAGES define below 
  */
+
+/* change the define of IBMTR_DEBUG_MESSAGES to a nonzero value 
+in the event that chatty debug messages are desired - jjs 12/30/98 */
+
+#define IBMTR_DEBUG_MESSAGES 0
 
 #ifdef PCMCIA
 #define MODULE
@@ -95,7 +104,8 @@
 /* version and credits */
 static char *version =
 "ibmtr.c: v1.3.57   8/ 7/94 Peter De Schrijver and Mark Swanson\n"
-"         v2.1.125 10/20/98 Paul Norton <pnorton@ieee.org>\n";
+"         v2.1.125 10/20/98 Paul Norton <pnorton@ieee.org>\n"
+"         v2.2.0   12/30/98 Joel Sloan <jjs@c-me.com>\n";
 
 static char pcchannelid[] = {
 	0x05, 0x00, 0x04, 0x09,
@@ -999,6 +1009,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 						DPRINTK("error on dir_read_log: %02X\n",
 							(int)readb(ti->srb+offsetof(struct srb_read_log, ret_code)));
 					else
+					    if (IBMTR_DEBUG_MESSAGES) {
 						DPRINTK(
 							"Line errors %02X, Internal errors %02X, Burst errors %02X\n"
 							"A/C errors %02X, Abort delimiters %02X, Lost frames %02X\n"
@@ -1023,6 +1034,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 										    frequency_errors)),
 							(int)readb(ti->srb+offsetof(struct srb_read_log,
 												    token_errors)));
+					    }
 					dev->tbusy=0;
 					break;
 

@@ -354,7 +354,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.1.6"
+#define AIC7XXX_C_VERSION  "5.1.7"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -580,6 +580,7 @@ static const char *board_names[] = {
   "Adaptec AHA-294X Ultra2 SCSI host adapter",          /* AIC_7890 */
   "Adaptec AIC-7896/7 Ultra2 SCSI host adapter",        /* AIC_7896 */
   "Adaptec AHA-394X Ultra2 SCSI host adapter",          /* AIC_7897 */
+  "Adaptec AHA-395X Ultra2 SCSI host adapter",          /* AIC_7897 */
   "Adaptec PCMCIA SCSI controller",                     /* card bus stuff */
 };
 
@@ -5815,23 +5816,19 @@ aic7xxx_handle_scsiint(struct aic7xxx_host *p, unsigned char intstat)
        * Put this SCB back on the free list.
        */
       aic7xxx_add_curscb_to_free_list(p);
-      /*
-       * XXX - If we queued an abort tag, go clean up the disconnected list.
-       * We know that this particular SCB had to be the queued abort since
-       * the disconnected SCB would have gotten a reconnect instead.
-       * However, if this is an abort command, then DID_TIMEOUT isn't
-       * appropriate, neither is returning the command for that matter.
-       * What we need to do then is to let the command timeout again so
-       * we get a reset since this abort just failed.
-       */
 #ifdef AIC7XXX_VERBOSE_DEBUGGING
       if (aic7xxx_verbose > 0xffff)
         printk(INFO_LEAD "Selection Timeout.\n", p->host_no, CTL_OF_SCB(scb));
 #endif
-      if (p->flags & SCB_QUEUED_ABORT)
+      if (scb->flags & SCB_QUEUED_ABORT)
       {
+        /*
+         * We know that this particular SCB had to be the queued abort since
+         * the disconnected SCB would have gotten a reconnect instead.
+         * What we need to do then is to let the command timeout again so
+         * we get a reset since this abort just failed.
+         */
         cmd->result = 0;
-        scb->flags &= ~SCB_QUEUED_ABORT;
         scb = NULL;
       }
     }
@@ -7659,7 +7656,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
     aic_outb(p, p->scsi_id_b, SCSIID);
     scsi_conf = aic_inb(p, SCSICONF + 1);
     aic_outb(p, DFON | SPIOEN, SXFRCTL0);
-    aic_outb(p, (scsi_conf & ENSPCHK) | term | 
+    aic_outb(p, (scsi_conf & ENSPCHK) | STIMESEL | term | 
          ENSTIMER | ACTNEGEN, SXFRCTL1);
     aic_outb(p, 0, SIMODE0);
     aic_outb(p, ENSELTIMO | ENSCSIRST | ENSCSIPERR, SIMODE1);
@@ -7676,7 +7673,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
     aic_outb(p, p->scsi_id, SCSIID);
   scsi_conf = aic_inb(p, SCSICONF);
   aic_outb(p, DFON | SPIOEN, SXFRCTL0);
-  aic_outb(p, (scsi_conf & ENSPCHK) | term | 
+  aic_outb(p, (scsi_conf & ENSPCHK) | STIMESEL | term | 
        ENSTIMER | ACTNEGEN, SXFRCTL1);
   aic_outb(p, 0, SIMODE0);
   aic_outb(p, ENSELTIMO | ENSCSIRST | ENSCSIPERR, SIMODE1);
@@ -8856,9 +8853,13 @@ aic7xxx_detect(Scsi_Host_Template *template)
        AHC_PAGESCBS | AHC_NEWEEPROM_FMT | AHC_BIOS_ENABLED | AHC_MULTI_CHANNEL,
        AHC_AIC7896_FE,                                      23,
        32, C56_66 },
+      {PCI_VENDOR_ID_ADAPTEC2, PCI_DEVICE_ID_ADAPTEC2_3950U2D, AHC_AIC7896,
+       AHC_PAGESCBS | AHC_NEWEEPROM_FMT | AHC_BIOS_ENABLED | AHC_MULTI_CHANNEL,
+       AHC_AIC7896_FE,                                      24,
+       32, C56_66 },
       {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_1480A, AHC_AIC7860,
        AHC_PAGESCBS | AHC_NEWEEPROM_FMT | AHC_BIOS_ENABLED,
-       AHC_AIC7860_FE,                                      24,
+       AHC_AIC7860_FE,                                      25,
        32, C46 },
     };
 
@@ -9104,6 +9105,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
             case 15:
             case 18:
             case 19:
+            case 20:
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,92)
               if (PCI_FUNC(temp_p->pdev->devfn) != 0)
               {
@@ -9271,13 +9273,10 @@ aic7xxx_detect(Scsi_Host_Template *template)
           }
 
           /*
-           * We do another switch based on i so that we can exclude all
-           * 3895 devices from the next option since the 3895 cards use
-           * shared external SCB RAM while all other cards have dedicated
-           * external SCB RAM per channel.  Also exclude the 7850 and
-           * 7860 based stuff since they can have garbage in the bit
-           * that indicates external RAM and get some of this stuff
-           * wrong as a result.
+           * We only support external SCB RAM on the 7895/6/7 chipsets.
+           * We could support it on the 7890/1 easy enough, but I don't
+           * know of any 7890/1 based cards that have it.  I do know
+           * of 7895/6/7 cards that have it and they work properly.
            */
           switch(temp_p->chip & AHC_CHIPID_MASK)
           {

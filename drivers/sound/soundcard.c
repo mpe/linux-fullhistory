@@ -909,8 +909,10 @@ void cleanup_module(void)
 	{
 		return;
 	}
+#ifdef CONFIG_PROC_FS	
         if (proc_unregister(&proc_root, PROC_SOUND))
 		printk(KERN_ERR "sound: unregistering /proc/sound failed\n");
+#endif		
 	if (chrdev_registered)
 		destroy_special_devices();
 

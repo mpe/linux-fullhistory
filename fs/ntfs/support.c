@@ -7,7 +7,10 @@
  *
  */
 
-#include "types.h"
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+#include "ntfstypes.h"
 #include "struct.h"
 #include "support.h"
 
@@ -86,17 +89,20 @@ void ntfs_bzero(void *s, int n)
 	memset(s, 0, n);
 }
 
-void *ntfs_memcpy(void *dest, const void *src, ntfs_size_t n)
+/* These functions deliberately return no value. It is dest, anyway,
+   and not used anywhere in the NTFS code.  */
+
+void ntfs_memcpy(void *dest, const void *src, ntfs_size_t n)
 {
-	return memcpy(dest, src, n);
+	memcpy(dest, src, n);
 }
 
-void *ntfs_memmove(void *dest, const void *src, ntfs_size_t n)
+void ntfs_memmove(void *dest, const void *src, ntfs_size_t n)
 {
-	return memmove(dest, src, n);
+	memmove(dest, src, n);
 }
 
-/* Warn that an error occurred. */
+/* Warn that an error occured. */
 void ntfs_error(const char *fmt,...)
 {
         va_list ap;

@@ -90,18 +90,6 @@ extern pager_daemon_t pager_daemon;
 #define PAGE_DECLINE		(swap_control.sc_page_decline)
 #define PAGE_INITIAL_AGE	(swap_control.sc_page_initial_age)
 
-/* Given a resource of N units (pages or buffers etc), we only try to
- * age and reclaim AGE_CLUSTER_FRACT per 1024 resources each time we
- * scan the resource list. */
-static inline int AGE_CLUSTER_SIZE(int resources)
-{
-	unsigned int n = (resources * AGE_CLUSTER_FRACT) >> 10;
-	if (n < AGE_CLUSTER_MIN)
-		return AGE_CLUSTER_MIN;
-	else
-		return n;
-}
-
 #endif /* __KERNEL */
 
 #endif /* _LINUX_SWAPCTL_H */

@@ -993,7 +993,7 @@ out_nfserr:
 static inline void nfsd_double_down(struct semaphore *s1, struct semaphore *s2)
 {
 	if (s1 != s2) {
-		if ((unsigned long) s1 < (unsigned long) s2) {
+		if ((unsigned long) s1 > (unsigned long) s2) {
 			struct semaphore *tmp = s1;
 			s1 = s2;
 			s2 = tmp;

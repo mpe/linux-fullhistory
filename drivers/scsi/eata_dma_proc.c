@@ -69,8 +69,6 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 		   int hostno, int inout)
 {
 
-#ifdef CONFIG_PROC_FS
-
     Scsi_Device *scd, SDev;
     struct Scsi_Host *HBA_ptr;
     Scsi_Cmnd scmd;
@@ -469,9 +467,6 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
     DBG(DBG_PROC, printk("3pos: %ld offset: %ld len: %d\n", pos, offset, len));
     
     return (len);     
-#else /* CONFIG_PROC_FS */
-    return 0;
-#endif        
 }
 
 /*

@@ -518,10 +518,10 @@ int scsi_debug_command(Scsi_Cmnd * SCpnt)
 static void scsi_debug_intr_handle(unsigned long indx)
 {
     Scsi_Cmnd * SCtmp;
-    int pending;
     void (*my_done)(Scsi_Cmnd *); 
-    unsigned long flags;
+#ifdef DEBUG
     int to;
+#endif
     
 #if 0
     del_timer(&timeout[indx]);
@@ -565,9 +565,11 @@ int scsi_debug_detect(Scsi_Host_Template * tpnt)
 
 int scsi_debug_abort(Scsi_Cmnd * SCpnt)
 {
+#if 0
     int j;
     void (*my_done)(Scsi_Cmnd *);
     unsigned long flags;
+#endif
     
     DEB(printk("scsi_debug_abort\n"));
 #if 0

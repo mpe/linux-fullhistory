@@ -254,10 +254,15 @@ static inline int buffer_protected(struct buffer_head * bh)
 /*
  * Deprecated - we don't keep per-buffer reference flags
  * any more.
+ *
+ * We _could_ try to update the page reference, but that
+ * doesn't seem to really be worth it either. If we did,
+ * it would look something like this:
+ *
+ *	#define buffer_page(bh)		(mem_map + MAP_NR((bh)->b_data))
+ *	#define touch_buffer(bh)	set_bit(PG_referenced, &buffer_page(bh)->flags)
  */
-#define buffer_page(bh)		(mem_map + MAP_NR((bh)->b_data))
-#define buffer_touched(bh)	(PageReferenced(buffer_page(bh)))
-#define touch_buffer(bh)	set_bit(PG_referenced, buffer_page(bh))
+#define touch_buffer(bh)	do { } while (0)
 
 #include <linux/pipe_fs_i.h>
 #include <linux/minix_fs_i.h>
