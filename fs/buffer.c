@@ -74,7 +74,6 @@ static struct wait_queue * buffer_wait = NULL;
 
 static int nr_buffers = 0;
 static int nr_buffers_type[NR_LIST] = {0,};
-static int size_buffers_type[NR_LIST] = {0,};
 static int nr_buffer_heads = 0;
 static int nr_unused_buffer_heads = 0;
 
@@ -100,8 +99,7 @@ union bdflush_param{
 				each time we call refill */
 		int nref_dirt; /* Dirty buffer threshold for activating bdflush
 				  when trying to refill buffers. */
-		int pct_dirt;    /* Max %age of mem for dirty buffers before
-				    activating bdflush */
+		int dummy1;    /* unused */
 		int age_buffer;  /* Time for normal buffer to age before 
 				    we flush it */
 		int age_super;  /* Time for superblock to age before we 
@@ -482,7 +480,6 @@ static void remove_from_queues(struct buffer_head * bh)
 		return;
 	}
 	nr_buffers_type[bh->b_list]--;
-	size_buffers_type[bh->b_list] -= bh->b_size;
 	remove_from_hash_queue(bh);
 	remove_from_lru_list(bh);
 }
@@ -556,7 +553,6 @@ static void insert_into_queues(struct buffer_head * bh)
 		(*bhp)->b_prev_free = bh;
 
 		nr_buffers_type[bh->b_list]++;
-		size_buffers_type[bh->b_list] += bh->b_size;
 
 		/* Put the buffer in new hash-queue if it has a device. */
 		bh->b_next = NULL;
@@ -808,19 +804,13 @@ void refile_buffer(struct buffer_head * buf)
 		file_buffer(buf, dispose);
 		if(dispose == BUF_DIRTY) {
 			int too_many = (nr_buffers * bdf_prm.b_un.nfract/100);
-			int too_large = (num_physpages * bdf_prm.b_un.pct_dirt/100);
 
 			/* This buffer is dirty, maybe we need to start flushing.
 			 * If too high a percentage of the buffers are dirty...
 			 */
-			if (nr_buffers_type[BUF_DIRTY] > too_many ||
-			    size_buffers_type[BUF_DIRTY]/PAGE_SIZE > too_large) {
-				if (nr_buffers_type[BUF_LOCKED] > 3 * bdf_prm.b_un.ndirty)
-					wakeup_bdflush(1);
-				else
-					wakeup_bdflush(0);
-			}
-			
+			if (nr_buffers_type[BUF_DIRTY] > too_many)
+				wakeup_bdflush(1);
+
 			/* If this is a loop device, and
 			 * more than half of the buffers are dirty...
 			 * (Prevents no-free-buffers deadlock with loop device.)

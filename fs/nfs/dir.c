@@ -713,17 +713,6 @@ out:
 	return error;
 }
 
-/*
- * To avoid retaining a stale inode reference, we check the dentry
- * use count prior to the operation, and return EBUSY if it has
- * multiple users.
- *
- * We update inode->i_nlink and free the inode prior to the operation
- * to avoid possible races if the server reuses the inode.
- *
- * FIXME! We don't do it anymore (2.1.131) - it interacts badly with
- * new rmdir().  -- AV
- */
 static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 {
 	int error;
@@ -735,10 +724,6 @@ static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		goto out;
 
-	error = -EBUSY;
-	if (!list_empty(&dentry->d_hash))
-		goto out;
-
 #ifdef NFS_PARANOIA
 if (dentry->d_inode->i_count > 1)
 printk("nfs_rmdir: %s/%s inode busy?? i_count=%d, i_nlink=%d\n",
@@ -746,14 +731,17 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 dentry->d_inode->i_count, dentry->d_inode->i_nlink);
 #endif
 
-	/*
-	 * Update i_nlink and free the inode before unlinking.
-	 */
-	if (dentry->d_inode->i_nlink)
-		dentry->d_inode->i_nlink --;
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_rmdir(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
 				dentry->d_name.name);
+
+	/* Update i_nlink and invalidate dentry. */
+	if (!error) {
+		d_drop(dentry);
+		if (dentry->d_inode->i_nlink)
+			dentry->d_inode->i_nlink --;
+	}
+
 out:
 	return error;
 }

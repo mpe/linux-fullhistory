@@ -137,15 +137,9 @@ int do_syslog(int type, char * buf, int len)
 		error = verify_area(VERIFY_WRITE,buf,len);
 		if (error)
 			goto out;
-		cli();
-		error = -ERESTARTSYS;
-		while (!log_size) {
-			if (signal_pending(current)) {
-				sti();
-				goto out;
-			}
-			interruptible_sleep_on(&log_wait);
-		}
+		error = wait_event_interruptible(log_wait, log_size);
+		if (error)
+			goto out;
 		i = 0;
 		while (log_size && i < len) {
 			c = *((char *) log_buf+log_start);

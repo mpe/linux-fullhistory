@@ -672,6 +672,58 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 	write_unlock_irqrestore(&waitqueue_lock, flags); 
 }
 
+#define __wait_event(wq, condition) 					\
+do {									\
+	struct wait_queue __wait;					\
+									\
+	__wait.task = current;						\
+	add_wait_queue(&wq, &__wait);					\
+	for (;;) {							\
+		current->state = TASK_UNINTERRUPTIBLE;			\
+		if (condition)						\
+			break;						\
+		schedule();						\
+	}								\
+	current->state = TASK_RUNNING;					\
+	remove_wait_queue(&wq, &__wait);				\
+} while (0)
+
+#define wait_event(wq, condition) 					\
+do {									\
+	if (condition)	 						\
+		break;							\
+	__wait_event(wq, condition);					\
+} while (0)
+
+#define __wait_event_interruptible(wq, condition, ret)			\
+do {									\
+	struct wait_queue __wait;					\
+									\
+	__wait.task = current;						\
+	add_wait_queue(&wq, &__wait);					\
+	for (;;) {							\
+		current->state = TASK_INTERRUPTIBLE;			\
+		if (condition)						\
+			break;						\
+		if (!signal_pending(current)) {				\
+			schedule();					\
+			continue;					\
+		}							\
+		ret = -ERESTARTSYS;					\
+		break;							\
+	}								\
+	current->state = TASK_RUNNING;					\
+	remove_wait_queue(&wq, &__wait);				\
+} while (0)
+	
+#define wait_event_interruptible(wq, condition)				\
+({									\
+	int __ret = 0;							\
+	if (!(condition))						\
+		__wait_event_interruptible(wq, condition, __ret);	\
+	__ret;								\
+})
+
 #define REMOVE_LINKS(p) do { \
 	(p)->next_task->prev_task = (p)->prev_task; \
 	(p)->prev_task->next_task = (p)->next_task; \
