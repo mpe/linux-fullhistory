@@ -74,6 +74,7 @@ struct mac_model
 #define MAC_IDE_NONE		0
 #define MAC_IDE_QUADRA		1
 #define MAC_IDE_PB		2
+#define MAC_IDE_BABOON		3
 
 #define MAC_SCC_II		1
 #define MAC_SCC_QUADRA		2

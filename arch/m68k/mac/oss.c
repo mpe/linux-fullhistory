@@ -34,7 +34,7 @@ void oss_irq(int, void *, struct pt_regs *);
 void oss_nubus_irq(int, void *, struct pt_regs *);
 
 extern void via1_irq(int, void *, struct pt_regs *);
-extern void mac_SCC_handler(int, void *, struct pt_regs *);
+extern void mac_scc_dispatch(int, void *, struct pt_regs *);
 extern int console_loglevel;
 
 /*
@@ -68,16 +68,16 @@ void __init oss_init(void)
 
 void __init oss_register_interrupts(void)
 {
-	request_irq(OSS_IRQLEV_SCSI, oss_irq, IRQ_FLG_LOCK,
-		    "OSS SCSI Dispatch", (void *) oss);
-	request_irq(OSS_IRQLEV_IOPSCC, mac_SCC_handler, IRQ_FLG_LOCK,
-		    "SCC Dispatch", mac_SCC_handler);
-	request_irq(OSS_IRQLEV_NUBUS, oss_nubus_irq, IRQ_FLG_LOCK,
-		    "Nubus Dispatch", (void *) oss);
-	request_irq(OSS_IRQLEV_SOUND, oss_irq, IRQ_FLG_LOCK,
-		    "OSS Sound Dispatch", (void *) oss);
-	request_irq(OSS_IRQLEV_VIA1, via1_irq, IRQ_FLG_LOCK,
-		    "VIA1 Dispatch", (void *) via1);
+	sys_request_irq(OSS_IRQLEV_SCSI, oss_irq, IRQ_FLG_LOCK,
+			"scsi", (void *) oss);
+	sys_request_irq(OSS_IRQLEV_IOPSCC, mac_scc_dispatch, IRQ_FLG_LOCK,
+			"scc", mac_scc_dispatch);
+	sys_request_irq(OSS_IRQLEV_NUBUS, oss_nubus_irq, IRQ_FLG_LOCK,
+			"nubus", (void *) oss);
+	sys_request_irq(OSS_IRQLEV_SOUND, oss_irq, IRQ_FLG_LOCK,
+			"sound", (void *) oss);
+	sys_request_irq(OSS_IRQLEV_VIA1, via1_irq, IRQ_FLG_LOCK,
+			"via1", (void *) via1);
 }
 
 /*
@@ -86,22 +86,6 @@ void __init oss_register_interrupts(void)
 
 void __init oss_nubus_init(void)
 {
-}
-
-/*
- * Turn off the power via the ROM control register
- *
- * FIXME: not sure how this is supposed to work exactly...
- */
-
-void oss_poweroff(void)
-{
-	oss->rom_ctrl = OSS_POWEROFF;
-
-	/* We should never make it this far... */
-
-	printk ("It is now safe to switch off your machine.\n");
-	while(1);
 }
 
 /*

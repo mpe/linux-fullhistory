@@ -17,13 +17,14 @@
 #include <linux/interrupt.h>
 #include <linux/errno.h>
 #include <linux/keyboard.h>
+#include <linux/kd.h>
+#include <linux/kbd_ll.h>
 #include <linux/delay.h>
 #include <linux/timer.h>
-#include <linux/kd.h>
 #include <linux/random.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/kbd_ll.h>
+#include <linux/kbd_kern.h>
 
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
@@ -230,7 +231,7 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
     /* switch CIA serial port to input mode */
     ciaa.cra &= ~0x40;
 
-    mark_bh(KEYBOARD_BH);
+    tasklet_schedule(&keyboard_tasklet);
 
     /* rotate scan code to get up/down bit in proper position */
     scancode = ((scancode >> 1) & 0x7f) | ((scancode << 7) & 0x80);

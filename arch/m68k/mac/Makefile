@@ -10,6 +10,6 @@
 O_TARGET := mac.o
 OX_OBJS  := mac_ksyms.o
 O_OBJS	 := config.o bootparse.o macints.o iop.o via.o oss.o psc.o \
-		macboing.o debug.o misc.o
+		baboon.o macboing.o debug.o misc.o
 
 include $(TOPDIR)/Rules.make

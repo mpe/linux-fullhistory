@@ -60,7 +60,7 @@ obj-$(CONFIG_FB_CYBER2000)        += cyber2000fb.o
 obj-$(CONFIG_FB_SGIVW)            += sgivwfb.o
 obj-$(CONFIG_FB_RIVA)             += rivafb.o riva_hw.o
 obj-$(CONFIG_FB_3DFX)             += tdfxfb.o
-obj-$(CONFIG_FB_MAC)              += macfb.o
+obj-$(CONFIG_FB_MAC)              += macfb.o macmodes.o
 obj-$(CONFIG_FB_HP300)            += hpfb.o
 obj-$(CONFIG_FB_OF)               += offb.o macmodes.o
 obj-$(CONFIG_FB_IMSTT)            += imsttfb.o
@@ -82,6 +82,8 @@ obj-$(CONFIG_FB_CGFOURTEEN)       += cgfourteenfb.o sbusfb.o
 obj-$(CONFIG_FB_P9100)            += p9100fb.o sbusfb.o
 obj-$(CONFIG_FB_LEO)              += leofb.o sbusfb.o
 obj-$(CONFIG_FB_MATROX)           += matroxfb.o
+obj-$(CONFIG_FB_SUN3)             += sun3fb.o
+obj-$(CONFIG_FB_BWTWO)            += bwtwofb.o
 obj-$(CONFIG_FB_VIRTUAL)          += vfb.o  
 
 # Generic Low Level Drivers

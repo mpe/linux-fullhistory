@@ -207,7 +207,7 @@ void __init paging_init(void)
 {
 	int chunk;
 	unsigned long mem_avail = 0;
-	unsigned int zones_size[3] = { 0, };
+	unsigned long zones_size[3] = { 0, };
 
 #ifdef DEBUG
 	{

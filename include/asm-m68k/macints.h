@@ -43,13 +43,14 @@
 #define PSC5_SOURCE_BASE	40
 #define PSC6_SOURCE_BASE	48
 #define NUBUS_SOURCE_BASE	56
+#define BABOON_SOURCE_BASE	64
 
 /*
- * Maximum IRQ number is NUBUS_SOURCE_BASE + 7,
- * giving us IRQs up through 63.
+ * Maximum IRQ number is BABOON_SOURCE_BASE + 7,
+ * giving us IRQs up through 71
  */
 
-#define NUM_MAC_SOURCES		64
+#define NUM_MAC_SOURCES		72
 
 /* 
  * clean way to separate IRQ into its source and index
@@ -149,6 +150,12 @@
 #define IRQ_NUBUS_D	  (60)
 #define IRQ_NUBUS_E	  (61)
 #define IRQ_NUBUS_F	  (62)
+
+/* Baboon interrupts (cascaded to nubus slot $C) */
+#define IRQ_BABOON_0	  (64)
+#define IRQ_BABOON_1	  (65)
+#define IRQ_BABOON_2	  (66)
+#define IRQ_BABOON_3	  (67)
 
 #define SLOT2IRQ(x)	  (x + 47)
 #define IRQ2SLOT(x)	  (x - 47)

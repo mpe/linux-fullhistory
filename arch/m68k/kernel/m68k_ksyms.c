@@ -18,7 +18,6 @@
 #include <asm/checksum.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
-#include <asm/m68kserial.h>
 
 asmlinkage long long __ashrdi3 (long long, int);
 asmlinkage long long __lshrdi3 (long long, int);

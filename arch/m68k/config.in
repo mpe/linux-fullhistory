@@ -161,10 +161,17 @@ if [ "$CONFIG_SCSI" != "n" ]; then
    comment 'SCSI support type (disk, tape, CD-ROM)'
 
    dep_tristate '  SCSI disk support' CONFIG_BLK_DEV_SD $CONFIG_SCSI
+   if [ "$CONFIG_BLK_DEV_SD" != "n" ]; then
+      int  'Maximum number of SCSI disks that can be loaded as modules' CONFIG_SD_EXTRA_DEVS 40
+   fi
    dep_tristate '  SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
+   if [ "$CONFIG_BLK_DEV_ST" != "n" ]; then
+      int  'Maximum number of SCSI tapes that can be loaded as modules' CONFIG_ST_EXTRA_DEVS 2
+   fi
    dep_tristate '  SCSI CD-ROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
    if [ "$CONFIG_BLK_DEV_SR" != "n" ]; then
       bool '    Enable vendor-specific extensions (for SCSI CDROM)' CONFIG_BLK_DEV_SR_VENDOR
+      int  'Maximum number of CDROM devices that can be loaded as modules' CONFIG_SR_EXTRA_DEVS 2
    fi
    dep_tristate '  SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
 
@@ -273,9 +280,13 @@ if [ "$CONFIG_NET" = "y" ]; then
 	 tristate '  Apollo 3c505 support' CONFIG_APOLLO_ELPLUS
       fi
       if [ "$CONFIG_MAC" = "y" ]; then
-	 bool '  Mac NS 8390 based ethernet cards' CONFIG_DAYNAPORT
-#	 bool '  Macintosh (AV) onboard MACE ethernet' CONFIG_MACMACE
-	 bool '  Macintosh (Quadra) onboard SONIC ethernet' CONFIG_MACSONIC
+	 bool '  Macintosh NS 8390 based ethernet cards' CONFIG_MAC8390
+	 tristate '  Macintosh SONIC based ethernet (onboard, NuBus, LC, CS)' CONFIG_MACSONIC
+	 tristate '  Macintosh SMC 9194 based ethernet cards' CONFIG_SMC9194
+	 tristate '  Macintosh CS89x0 based ethernet cards' CONFIG_MAC89x0
+	 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+		bool '  Macintosh (AV) onboard MACE ethernet (EXPERIMENTAL)' CONFIG_MACMACE
+	 fi
       fi
       if [ "$CONFIG_VME" = "y" -a "$CONFIG_MVME147" = "y" ]; then
 	 tristate '  MVME147 (Lance) Ethernet support' CONFIG_MVME147_NET
@@ -352,12 +363,6 @@ if [ "$CONFIG_ATARI" = "y" ]; then
       define_bool CONFIG_BUSMOUSE y
    fi
 fi
-if [ "$CONFIG_MAC" = "y" ]; then
-   bool 'Mac ADB mouse support' CONFIG_ADBMOUSE
-   if [ "$CONFIG_ADBMOUSE" != "n" ]; then
-      define_bool CONFIG_BUSMOUSE y
-   fi
-fi
 if [ "$CONFIG_ATARI" = "y" ]; then
    tristate 'Atari MFP serial support' CONFIG_ATARI_MFPSER
    tristate 'Atari SCC serial support' CONFIG_ATARI_SCC
@@ -384,7 +389,20 @@ if [ "$CONFIG_PARPORT" = "n" ]; then
    fi
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
-   bool 'Mac SCC serial support' CONFIG_MAC_SCC
+   tristate 'Macintosh serial support' CONFIG_MAC_SCC
+   bool 'Apple Desktop Bus (ADB) support' CONFIG_ADB
+   if [ "$CONFIG_ADB" = "y" ]; then
+      bool '   Support for ADB keyboard' CONFIG_ADB_KEYBOARD 
+      bool '   Support for ADB mouse' CONFIG_ADBMOUSE
+      bool '   Include Mac II ADB driver' CONFIG_ADB_MACII
+      bool '   Include Mac IIsi ADB driver' CONFIG_ADB_MACIISI
+      bool '   Include CUDA ADB driver' CONFIG_ADB_CUDA
+      bool '   Include IOP (IIfx/Quadra 9x0) ADB driver' CONFIG_ADB_IOP
+      bool '   Include PMU (Powerbook) ADB driver' CONFIG_ADB_PMU68K
+   fi
+   if [ "$CONFIG_ADBMOUSE" = "y" ]; then
+      define_bool CONFIG_BUSMOUSE y
+   fi
 fi
 if [ "$CONFIG_HP300" = "y" -a "$CONFIG_DIO" = "y" ]; then
    tristate 'HP DCA serial support' CONFIG_HPDCA

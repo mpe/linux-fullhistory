@@ -98,6 +98,8 @@ extern int g364fb_init(void);
 extern int fm2fb_init(void);
 extern int fm2fb_setup(char*);
 extern int q40fb_init(void);
+extern int sun3fb_init(void);
+extern int sun3fb_setup(char *);
 extern int sgivwfb_init(void);
 extern int sgivwfb_setup(char*);
 extern int rivafb_init(void);
@@ -211,6 +213,9 @@ static struct {
 #ifdef CONFIG_FB_FM2
 	{ "fm2fb", fm2fb_init, fm2fb_setup },
 #endif 
+#ifdef CONFIG_FB_SUN3
+       { "sun3", sun3fb_init, sun3fb_setup },
+#endif
 #ifdef CONFIG_GSP_RESOLVER
 	/* Not a real frame buffer device... */
 	{ "resolver", NULL, resolver_video_setup },
@@ -471,6 +476,9 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	vma->vm_flags |= VM_IO;
 #else
 #if defined(__mc68000__)
+#if defined(CONFIG_SUN3)
+	pgprot_val(vma->vm_page_prot) |= SUN3_PAGE_NOCACHE;
+#else
 	if (CPU_IS_020_OR_030)
 		pgprot_val(vma->vm_page_prot) |= _PAGE_NOCACHE030;
 	if (CPU_IS_040_OR_060) {
@@ -478,6 +486,7 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 		/* Use no-cache mode, serialized */
 		pgprot_val(vma->vm_page_prot) |= _PAGE_NOCACHE_S;
 	}
+#endif
 #elif defined(__powerpc__)
 	pgprot_val(vma->vm_page_prot) |= _PAGE_NO_CACHE|_PAGE_GUARDED;
 #elif defined(__alpha__)

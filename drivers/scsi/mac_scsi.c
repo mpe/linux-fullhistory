@@ -78,7 +78,6 @@
 #define NDEBUG (NDEBUG_ABORT)
 #endif
 
-#define USE_WRAPPER
 #define RESET_BOOT
 #define DRIVER_SETUP
 
@@ -90,30 +89,9 @@
 #undef DRIVER_SETUP
 #endif
 
-/* 
- * Need to define this to make SCSI work on RBV machines; leave undefined
- * to enable interrupts a bit more on other machines 
- * Changes method of SCSI interrupt disable from software mask to VIA IER!
- * (don't know if that's essential)
- *
- * 990502 (jmt) - not needed (and won't work) on new irq architecture
- */
-/* #define RBV_HACK */
-
-#ifdef RBV_HACK
-#define	ENABLE_IRQ()	mac_turnon_irq( IRQ_MAC_SCSI ); 
-#define	DISABLE_IRQ()	mac_turnoff_irq( IRQ_MAC_SCSI );
-#else
 #define	ENABLE_IRQ()	mac_enable_irq( IRQ_MAC_SCSI ); 
 #define	DISABLE_IRQ()	mac_disable_irq( IRQ_MAC_SCSI );
-#endif
 
-#define mac_turnon_irq(x) mac_enable_irq(x)
-#define mac_turnoff_irq(x) mac_disable_irq(x)
-
-extern void via_scsi_clear(void);
-
-static void scsi_mac_intr(int irq, void *dummy, struct pt_regs *fp);
 #ifdef RESET_BOOT
 static void mac_scsi_reset_boot(struct Scsi_Host *instance);
 #endif
@@ -253,7 +231,7 @@ int macscsi_detect(Scsi_Host_Template * tpnt)
     if (macintosh_config->scsi_type != MAC_SCSI_OLD)
 	 return( 0 );
 
-    tpnt->proc_name = "Mac 5380 SCSI";
+    tpnt->proc_name = "mac5380";
 
     /* setup variables */
     tpnt->can_queue =
@@ -306,11 +284,7 @@ int macscsi_detect(Scsi_Host_Template * tpnt)
         ((struct NCR5380_hostdata *)instance->hostdata)->ctrl = 0;
 
 	if (instance->irq != IRQ_NONE)
-#ifdef USE_WRAPPER
-	    if (request_irq(instance->irq, scsi_mac_intr, IRQ_FLG_SLOW, "MacSCSI-5380", NULL)) {
-#else
-	    if (request_irq(instance->irq, macscsi_intr, IRQ_FLG_SLOW, "MacSCSI-5380", NULL)) {
-#endif
+	    if (request_irq(instance->irq, NCR5380_intr, IRQ_FLG_SLOW, "ncr5380", NCR5380_intr)) {
 		printk("scsi%d: IRQ%d not free, interrupts disabled\n",
 		    instance->host_no, instance->irq);
 		instance->irq = IRQ_NONE;
@@ -337,7 +311,7 @@ int macscsi_detect(Scsi_Host_Template * tpnt)
 int macscsi_release (struct Scsi_Host *shpnt)
 {
 	if (shpnt->irq != IRQ_NONE)
-		free_irq (shpnt->irq, NULL);
+		free_irq (shpnt->irq, NCR5380_intr);
 
 	return 0;
 }
@@ -362,7 +336,7 @@ static void mac_scsi_reset_boot(struct Scsi_Host *instance)
 	printk( "Macintosh SCSI: resetting the SCSI bus..." );
 
 	/* switch off SCSI IRQ - catch an interrupt without IRQ bit set else */
-       	mac_turnoff_irq( IRQ_MAC_SCSI );
+       	mac_disable_irq(IRQ_MAC_SCSI);
 
 	/* get in phase */
 	NCR5380_write( TARGET_COMMAND_REG,
@@ -380,7 +354,7 @@ static void mac_scsi_reset_boot(struct Scsi_Host *instance)
 		barrier();
 
 	/* switch on SCSI IRQ again */
-       	mac_turnon_irq( IRQ_MAC_SCSI );
+       	mac_enable_irq(IRQ_MAC_SCSI);
 
 	printk( " done\n" );
 }
@@ -398,49 +372,6 @@ void restore_irq(struct pt_regs *regs)
 	flags = (flags & ~0x0700) | (regs->sr & 0x0700);
 	restore_flags(flags);
 }
-
-#ifdef USE_WRAPPER
-/*
- * SCSI interrupt wrapper - just to make sure it's the proper irq, and 
- * that we leave the handler in a clean state
- */
-
-static void scsi_mac_intr (int irq, void *dev_id, struct pt_regs *fp)
-{
-#ifndef RBV_HACK
-	unsigned long flags;
-#endif
-
-#ifdef RBV_HACK
-	mac_turnoff_irq( IRQ_MAC_SCSI );
-#else
-	mac_disable_irq( IRQ_MAC_SCSI );
-#endif
-
-	if ( irq == IRQ_MAC_SCSI ) {
-#ifndef RBV_HACK
-		save_flags(flags);
-		restore_irq(fp);
-#endif
-		NCR5380_intr (irq, dev_id, fp);
-#ifndef RBV_HACK
-		restore_flags(flags);
-#endif
-	}
-
-	/* To be sure the int is not masked */
-#ifdef RBV_HACK
-	mac_turnon_irq( IRQ_MAC_SCSI );
-#else
-	mac_enable_irq( IRQ_MAC_SCSI );
-#endif
-
-#if 1	/* ??? 0 worked */
-	/* Clear the IRQ */
-	via_scsi_clear();
-#endif
-}
-#endif
 
 /*
  * pseudo-DMA transfer functions, copied and modified from Russel King's
@@ -720,11 +651,7 @@ void scsi_mac_polled (void)
 			printk("SCSI poll\n");
 			save_flags(flags);
 			cli();
-#ifdef USE_WRAPPER
-			scsi_mac_intr(IRQ_MAC_SCSI, instance, NULL);
-#else
-			macscsi_intr(IRQ_MAC_SCSI, instance, NULL);
-#endif
+			NCR5380_intr(IRQ_MAC_SCSI, instance, NULL);
 			restore_flags(flags);
 		}
 #if 0

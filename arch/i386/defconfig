@@ -270,7 +270,7 @@ CONFIG_NET_ETHERNET=y
 # CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_DEPCA is not set
 # CONFIG_NET_ISA is not set
-CONFIG_NET_EISA=y
+CONFIG_NET_PCI=y
 # CONFIG_PCNET32 is not set
 # CONFIG_APRICOT is not set
 # CONFIG_CS89x0 is not set
@@ -279,6 +279,7 @@ CONFIG_NET_EISA=y
 # CONFIG_DGRS is not set
 CONFIG_EEXPRESS_PRO100=y
 # CONFIG_NE2K_PCI is not set
+# CONFIG_8139TOO is not set
 # CONFIG_SIS900 is not set
 # CONFIG_TLAN is not set
 # CONFIG_VIA_RHINE is not set
@@ -453,7 +454,6 @@ CONFIG_EXT2_FS=y
 # CONFIG_SYSV_FS is not set
 # CONFIG_SYSV_FS_WRITE is not set
 # CONFIG_UDF_FS is not set
-# CONFIG_UDF_RW is not set
 # CONFIG_UFS_FS is not set
 # CONFIG_UFS_FS_WRITE is not set
 

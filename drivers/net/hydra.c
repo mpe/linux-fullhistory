@@ -175,17 +175,16 @@ int __init hydra_probe(struct net_device *dev)
 		}
 		strcpy(z->name, "Hydra Ethernet Card");
 
+		dev = init_etherdev(NULL, sizeof(struct hydra_private));
+		memset(dev->priv, 0, sizeof(struct hydra_private));
+    
 		for(j = 0; j < ETHER_ADDR_LEN; j++)
 			dev->dev_addr[j] = *((u8 *)ZTWO_VADDR(board + HYDRA_ADDRPROM + 2*j));
     
 		printk("%s: hydra at 0x%08x, address %02x:%02x:%02x:%02x:%02x:%02x (hydra.c " HYDRA_VERSION ")\n",
 			dev->name, (int)board, dev->dev_addr[0], dev->dev_addr[1], dev->dev_addr[2],
 			dev->dev_addr[3], dev->dev_addr[4], dev->dev_addr[5]);
-		init_etherdev(dev, 0);
-    
-		dev->priv = kmalloc(sizeof(struct hydra_private), GFP_KERNEL);
-		memset(dev->priv, 0, sizeof(struct hydra_private));
-    
+
 		dev->base_addr = ZTWO_VADDR(base_addr);
 		dev->mem_start = ZTWO_VADDR(board);
 		dev->mem_end = dev->mem_start+0x4000;

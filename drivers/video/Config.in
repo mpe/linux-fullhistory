@@ -73,6 +73,8 @@ if [ "$CONFIG_FB" = "y" ]; then
    fi
    if [ "$CONFIG_MAC" = "y" ]; then
       define_bool CONFIG_FB_MAC y
+      bool '  Apple "valkyrie" display support' CONFIG_FB_VALKYRIE
+#      bool '  Apple DAFB display support' CONFIG_FB_DAFB
    fi
    if [ "$CONFIG_HP300" = "y" ]; then
       define_bool CONFIG_FB_HP300 y
@@ -88,6 +90,13 @@ if [ "$CONFIG_FB" = "y" ]; then
    if [ "$CONFIG_VISWS" = "y" ]; then
       tristate '  SGI Visual Workstation framebuffer support' CONFIG_FB_SGIVW
       define_bool CONFIG_BUS_I2C y
+   fi
+   if [ "$CONFIG_SUN3" = "y" -o "$CONFIG_SUN3X" = "y" ]; then
+      bool 'Sun3 framebuffer support' CONFIG_FB_SUN3
+      if [ "$CONFIG_FB_SUN3" != "n" ]; then
+         bool '  BWtwo support' CONFIG_FB_BWTWO
+         bool '  CGsix (GX,TurboGX) support' CONFIG_FB_CGSIX
+      fi
    fi
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       if [ "$CONFIG_PCI" != "n" ]; then

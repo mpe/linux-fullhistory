@@ -319,7 +319,7 @@ void __init iop_register_interrupts(void)
 {
 	if (iop_ism_present) {
 		if (oss_present) {
-			request_irq(OSS_IRQLEV_IOPISM, iop_ism_irq,
+			sys_request_irq(OSS_IRQLEV_IOPISM, iop_ism_irq,
 					IRQ_FLG_LOCK, "ISM IOP",
 					(void *) IOP_NUM_ISM);
 			oss_irq_enable(IRQ_MAC_ADB);

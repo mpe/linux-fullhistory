@@ -30,7 +30,7 @@
 
 extern void mmu_emu_init (void);
 
-extern unsigned long free_area_init(unsigned long, unsigned long);
+extern unsigned long free_area_init(unsigned long *zones_size);
 
 const char bad_pmd_string[] = "Bad pmd in pte_alloc: %08lx\n";
 

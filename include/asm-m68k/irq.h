@@ -15,7 +15,7 @@
  * Currently the Atari has 72 and the Amiga 24, but if both are
  * supported in the kernel it is better to make room for 72.
  */
-#if defined(CONFIG_ATARI)
+#if defined(CONFIG_ATARI) || defined(CONFIG_MAC)
 #define NR_IRQS (72+SYS_IRQS)
 #else
 #define NR_IRQS (24+SYS_IRQS)

@@ -24,6 +24,8 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 
+#include <linux/ide.h>
+
 #include <asm/traps.h>
 #include <asm/bootinfo.h> 
 #include <asm/macintosh.h> 
@@ -60,7 +62,7 @@ static int gIER,gIFR,gBufA,gBufB;
 #define MAC_CLOCK_LOW		(MAC_CLOCK_TICK&0xFF)
 #define MAC_CLOCK_HIGH		(MAC_CLOCK_TICK>>8)
 
-static int  nubus_active;
+static int  nubus_active = 0;
 
 void via_debug_dump(void);
 void via1_irq(int, void *, struct pt_regs *);
@@ -71,7 +73,7 @@ void via_irq_disable(int irq);
 void via_irq_clear(int irq);
 
 extern void mac_bang(int, void *, struct pt_regs *);
-extern void mac_SCC_handler(int, void *, struct pt_regs *);
+extern void mac_scc_dispatch(int, void *, struct pt_regs *);
 extern int console_loglevel;
 extern int oss_present;
 
@@ -260,28 +262,28 @@ void __init via_init_clock(void (*func)(int, void *, struct pt_regs *))
 void __init via_register_interrupts(void)
 {
 	if (via_alt_mapping) {
-		request_irq(IRQ_AUTO_1, via1_irq, IRQ_FLG_LOCK|IRQ_FLG_FAST,
-			    "Software IRQ", (void *) via1);
-		request_irq(IRQ_AUTO_6, via1_irq, IRQ_FLG_LOCK|IRQ_FLG_FAST,
-			    "VIA1 Dispatch", (void *) via1);
+		sys_request_irq(IRQ_AUTO_1, via1_irq, IRQ_FLG_LOCK|IRQ_FLG_FAST,
+				"software", (void *) via1);
+		sys_request_irq(IRQ_AUTO_6, via1_irq, IRQ_FLG_LOCK|IRQ_FLG_FAST,
+				"via1", (void *) via1);
 	} else {
-		request_irq(IRQ_AUTO_1, via1_irq, IRQ_FLG_LOCK|IRQ_FLG_FAST,
-			    "VIA1 Dispatch", (void *) via1);
+		sys_request_irq(IRQ_AUTO_1, via1_irq, IRQ_FLG_LOCK|IRQ_FLG_FAST,
+				"via1", (void *) via1);
 #if 0 /* interferes with serial on some machines */
 		if (!psc_present) {
-			request_irq(IRQ_AUTO_6, mac_bang, IRQ_FLG_LOCK,
+			sys_request_irq(IRQ_AUTO_6, mac_bang, IRQ_FLG_LOCK,
 					"Off Switch", mac_bang);
 		}
 #endif
 	}
-	request_irq(IRQ_AUTO_2, via2_irq, IRQ_FLG_LOCK|IRQ_FLG_FAST,
-		    "VIA2 Dispatch", (void *) via2);
+	sys_request_irq(IRQ_AUTO_2, via2_irq, IRQ_FLG_LOCK|IRQ_FLG_FAST,
+			"via2", (void *) via2);
 	if (!psc_present) {
-		request_irq(IRQ_AUTO_4, mac_SCC_handler, IRQ_FLG_LOCK,
-			    "SCC Dispatch", mac_SCC_handler);
+		sys_request_irq(IRQ_AUTO_4, mac_scc_dispatch, IRQ_FLG_LOCK,
+				"scc", mac_scc_dispatch);
 	}
 	request_irq(IRQ_MAC_NUBUS, via_nubus_irq, IRQ_FLG_LOCK|IRQ_FLG_FAST,
-			"Nubus Dispatch", (void *) via2);
+			"nubus", (void *) via2);
 }
 
 /*
@@ -361,34 +363,13 @@ int via_get_cache_disable(void)
 }
 
 /*
- * VIA-based power switch, for machines that support it.
- */
-
-void via_poweroff(void)
-{
-	if (rbv_present) {
-		via2[rBufB] &= ~0x04;
-	} else {
-		/* Direction of vDirB is output */
-		via2[vDirB] |= 0x04;
-		/* Send a value of 0 on that line */
-		via2[vBufB] &= ~0x04;
-		/* Otherwise it prints "It is now.." then shuts off */
-		mdelay(1000);
-	}
-
-	/* We should never make it this far... */
-	printk ("It is now safe to switch off your machine.\n");
-	while(1);
-}
-
-/*
  * Initialize VIA2 for Nubus access
  */
 
 void __init via_nubus_init(void)
 {
-	nubus_active = 0;
+	/* don't set nubus_active = 0 here, it kills the Baboon */
+	/* interrupt that we've already registered.		*/
 
 	/* unlock nubus transactions */
 
@@ -396,14 +377,22 @@ void __init via_nubus_init(void)
 		/* set the line to be an output on non-RBV machines */
 		via2[vDirB] |= 0x02;
 	}
-	via2[gBufB] |= 0x02;
+
+	/* this seems to be an ADB bit on PMU machines */
+	/* according to MkLinux.  -- jmt               */
+
+	if ((macintosh_config->adb_type != MAC_ADB_PB1) &&
+	    (macintosh_config->adb_type != MAC_ADB_PB2)) {
+		via2[gBufB] |= 0x02;
+	}
 
 	/* disable nubus slot interrupts. */
 	if (rbv_present) {
-		via2[rSIER] = 0x7F;	/* like VIA; bit 7=clr,set */
+		via2[rSIER] = 0x7F;
+		via2[rSIER] = nubus_active | 0x80;
 	} else {
-		via2[vBufA] = 0xFF;	/* active low irqs, force high */
-		via2[vDirA] = 0xFF;	/* ddr to output. */
+		via2[vBufA] = 0xFF;
+		via2[vDirA] = ~nubus_active;
 	}
 }
 
@@ -478,7 +467,7 @@ void via_nubus_irq(int irq, void *dev_id, struct pt_regs *regs)
 	int irq_bit, i;
 	unsigned char events;
 
-	if (!(events = ~via2[gBufA]  & nubus_active)) return;
+	if (!(events = ~via2[gBufA] & nubus_active)) return;
 
 	for (i = 0, irq_bit = 1 ; i < 7 ; i++, irq_bit <<= 1) {
 		if (events & irq_bit) {
@@ -586,189 +575,4 @@ int via_irq_pending(int irq)
 		return ~via2[gBufA] & irq_bit;
 	}
 	return 0;
-}
-
-void via_scsi_clear(void)
-{
-	volatile unsigned char deep_magic;
-
-#ifdef DEBUG_IRQUSE
-	printk("via_scsi_clear()\n");
-#endif
-
-	/* We handle this in oss.c , but this gets called in mac_scsinew.c */
-	if(oss_present) return;
-
-	if (rbv_present) {
-		via2[rIFR] = (1<<3) | (1<<0) | rbv_clear;
-		deep_magic = via2[rBufB];
-	} else {
-		deep_magic = via2[vBufB];
-	}
-	mac_enable_irq(IRQ_MAC_SCSI);
-}
-
-/*
- * PRAM/RTC access routines
- *
- * Must be called with interrupts disabled and
- * the RTC should be enabled.
- */
-
-static __u8 via_pram_readbyte(void)
-{
-	int	i,reg;
-	__u8	data;
-
-	reg = via1[vBufB] & ~VIA1B_vRTCClk;
-
-	/* Set the RTC data line to be an input. */
-
-	via1[vDirB] &= ~VIA1B_vRTCData;
-
-	/* The bits of the byte come out in MSB order */
-
-	data = 0;
-	for (i = 0 ; i < 8 ; i++) {
-		via1[vBufB] = reg;
-		via1[vBufB] = reg | VIA1B_vRTCClk;
-		data = (data << 1) | (via1[vBufB] & VIA1B_vRTCData);
-	}
-
-	/* Return RTC data line to output state */
-
-	via1[vDirB] |= VIA1B_vRTCData;
-
-	return data;
-}
-
-static void via_pram_writebyte(__u8 data)
-{
-	int	i,reg,bit;
-
-	reg = via1[vBufB] & ~(VIA1B_vRTCClk | VIA1B_vRTCData);
-
-	/* The bits of the byte go in in MSB order */
-
-	for (i = 0 ; i < 8 ; i++) {
-		bit = data & 0x80? 1 : 0;
-		data <<= 1;
-		via1[vBufB] = reg | bit;
-		via1[vBufB] = reg | bit | VIA1B_vRTCClk;
-	}
-}
-
-/*
- * Execute a PRAM/RTC command. For read commands
- * data should point to a one-byte buffer for the
- * resulting data. For write commands it should point
- * to the data byte to for the command.
- *
- * This function disables all interrupts while running.
- */
-
-void via_pram_command(int command, __u8 *data)
-{
-	unsigned long cpu_flags;
-	int	is_read;
-
-	save_flags(cpu_flags);
-	cli();
-
-	/* Enable the RTC and make sure the strobe line is high */
-
-	via1[vBufB] = (via1[vBufB] | VIA1B_vRTCClk) & ~VIA1B_vRTCEnb;
-
-	if (command & 0xFF00) {		/* extended (two-byte) command */
-		via_pram_writebyte((command & 0xFF00) >> 8);
-		via_pram_writebyte(command & 0xFF);
-		is_read = command & 0x8000;
-	} else {			/* one-byte command */
-		via_pram_writebyte(command);
-		is_read = command & 0x80;
-	}
-	if (is_read) {
-		*data = via_pram_readbyte();
-	} else {
-		via_pram_writebyte(*data);
-	}
-
-	/* All done, disable the RTC */
-
-	via1[vBufB] |= VIA1B_vRTCEnb;
-
-	restore_flags(cpu_flags);
-}
-
-/*
- * Return the current time in seconds since January 1, 1904.
- *
- * This only works on machines with the VIA-based PRAM/RTC, which
- * is basically any machine with Mac II-style ADB.
- */
-
-__u32 via_read_time(void)
-{
-	union {
-		__u8  cdata[4];
-		__u32 idata;
-	} result, last_result;
-	int	ct;
-
-	/*
-	 * The NetBSD guys say to loop until you get the same reading
-	 * twice in a row.
-	 */
-
-	ct = 0;
-	do {
-		if (++ct > 10) {
-			printk("via_read_time: couldn't get valid time, "
-			       "last read = 0x%08X and 0x%08X\n", last_result.idata,
-			       result.idata);
-			break;
-		}
-
-		last_result.idata = result.idata;
-		result.idata = 0;
-
-		via_pram_command(0x81, &result.cdata[3]);
-		via_pram_command(0x85, &result.cdata[2]);
-		via_pram_command(0x89, &result.cdata[1]);
-		via_pram_command(0x8D, &result.cdata[0]);
-	} while (result.idata != last_result.idata);
-
-	return result.idata;
-}
-
-/*
- * Set the current time to a number of seconds since January 1, 1904.
- *
- * This only works on machines with the VIA-based PRAM/RTC, which
- * is basically any machine with Mac II-style ADB.
- */
-
-void via_write_time(__u32 time)
-{
-	union {
-		__u8  cdata[4];
-		__u32 idata;
-	} data;
-	__u8	temp;
-
-	/* Clear the write protect bit */
-
-	temp = 0x55;
-	via_pram_command(0x35, &temp);
-
-	data.idata = time;
-	via_pram_command(0x01, &data.cdata[3]);
-	via_pram_command(0x05, &data.cdata[2]);
-	via_pram_command(0x09, &data.cdata[1]);
-	via_pram_command(0x0D, &data.cdata[0]);
-
-	/* Set the write protect bit */
-
-	temp = 0xD5;
-	via_pram_command(0x35, &temp);
 }

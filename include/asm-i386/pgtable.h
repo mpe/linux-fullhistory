@@ -26,6 +26,7 @@ extern pgd_t swapper_pg_dir[1024];
 #define flush_cache_page(vma, vmaddr)		do { } while (0)
 #define flush_page_to_ram(page)			do { } while (0)
 #define flush_icache_range(start, end)		do { } while (0)
+#define flush_icache_page(vma,pg)		do { } while (0)
 
 #define __flush_tlb()							\
 	do {								\

@@ -160,6 +160,16 @@ int __init ariadne_probe(struct net_device *dev)
 	    continue;
 	}
 	strcpy(z->name, "Ariadne Ethernet Card and Parallel Ports");
+
+	dev = init_etherdev(NULL, sizeof(struct ariadne_private));
+
+	if (dev == NULL) {
+	    release_mem_region(base_addr, sizeof(struct Am79C960));
+	    release_mem_region(ram_start, ARIADNE_RAM_SIZE);
+	    return -ENOMEM;
+	}
+	memset(dev->priv, 0, sizeof(struct ariadne_private));
+
 	dev->dev_addr[0] = 0x00;
 	dev->dev_addr[1] = 0x60;
 	dev->dev_addr[2] = 0x30;
@@ -170,16 +180,6 @@ int __init ariadne_probe(struct net_device *dev)
 	       "%02x:%02x:%02x:%02x:%02x:%02x\n", dev->name, board,
 	       dev->dev_addr[0], dev->dev_addr[1], dev->dev_addr[2],
 	       dev->dev_addr[3], dev->dev_addr[4], dev->dev_addr[5]);
-
-	init_etherdev(dev, 0);
-
-	dev->priv = kmalloc(sizeof(struct ariadne_private), GFP_KERNEL);
-	if (dev->priv == NULL) {
-	    release_mem_region(base_addr, sizeof(struct Am79C960));
-	    release_mem_region(ram_start, ARIADNE_RAM_SIZE);
-	    return -ENOMEM;
-	}
-	memset(dev->priv, 0, sizeof(struct ariadne_private));
 
 	dev->base_addr = ZTWO_VADDR(base_addr);
 	dev->mem_start = ZTWO_VADDR(ram_start);

@@ -40,7 +40,7 @@ int mvme16x_scsi_detect(Scsi_Host_Template *tpnt)
     if (called)
 	return 0;
 
-    tpnt->proc_name = "MVME16x"
+    tpnt->proc_name = "MVME16x";
 
     options = OPTION_MEMORY_MAPPED|OPTION_DEBUG_TEST1|OPTION_INTFLY|OPTION_SYNCHRONOUS|OPTION_ALWAYS_SYNCHRONOUS|OPTION_DISCONNECT;
 

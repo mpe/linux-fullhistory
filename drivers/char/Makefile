@@ -45,8 +45,12 @@ CONSOLE  =console.o
 SERIAL   =serial.o
 
 ifeq ($(ARCH),m68k)
-  KEYBD    =
-  SERIAL   =
+   ifdef CONFIG_AMIGA
+      KEYBD = amikeyb.o
+   else
+      KEYBD    =
+   endif
+   SERIAL   =
 endif
 
 ifeq ($(ARCH),arm)
@@ -59,6 +63,7 @@ endif
 ifneq ($(CONFIG_SUN_SERIAL),)
   SERIAL   =
 endif
+
 
 obj-$(CONFIG_VT) += vt.o vc_screen.o consolemap.o consolemap_deftbl.o $(CONSOLE) selection.o
 obj-$(CONFIG_SERIAL) += $(SERIAL)
@@ -96,6 +101,7 @@ obj-$(CONFIG_ESPSERIAL) += esp.o
 obj-$(CONFIG_SYNCLINK) += synclink.o
 obj-$(CONFIG_N_HDLC) += n_hdlc.o
 obj-$(CONFIG_SPECIALIX) += specialix.o
+obj-$(CONFIG_AMIGA_BUILTIN_SERIAL) += amiserial.o
 
 ifeq ($(CONFIG_SX),y)
 obj-y += sx.o generic_serial.o

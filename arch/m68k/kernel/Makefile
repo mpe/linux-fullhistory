@@ -27,6 +27,8 @@ endif
 
 head.o: head.S m68k_defs.h
 
+entry.o: entry.S m68k_defs.h
+
 sun3-head.o: sun3-head.S m68k_defs.h
 
 m68k_defs.h: m68k_defs.c m68k_defs.head

@@ -236,12 +236,12 @@ SYMBOL_NAME_LABEL(ret_from_interrupt)
 #endif
 	/* check if we need to do software interrupts */
 
-	movel	SYMBOL_NAME(bh_active),%d0
-	andl	SYMBOL_NAME(bh_mask),%d0
+	movel	SYMBOL_NAME(softirq_state),%d0
+	andl	SYMBOL_NAME(softirq_state)+4,%d0
 	jeq	SYMBOL_NAME(ret_from_exception)
 
 	pea	SYMBOL_NAME(ret_from_exception)
-	jra	SYMBOL_NAME(do_bottom_half)
+	jra	SYMBOL_NAME(do_softirq)
 
 
 /* Handler for uninitialized and spurious interrupts */

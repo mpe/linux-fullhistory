@@ -68,6 +68,10 @@ ifdef CONFIG_ADB_PMU
   L_OBJS += via-pmu.o
 endif
 
+ifdef CONFIG_ADB_PMU68K
+  L_OBJS += via-pmu68k.o
+endif
+
 ifdef CONFIG_ADB_MACIO
   L_OBJS += macio-adb.o
 endif

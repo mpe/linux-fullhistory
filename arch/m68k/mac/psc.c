@@ -119,14 +119,14 @@ void __init psc_init(void)
 
 void __init psc_register_interrupts(void)
 {
-	request_irq(3, psc_irq, IRQ_FLG_LOCK, "PSC Dispatch",
-		    (void *) 0x30);
-	request_irq(4, psc_irq, IRQ_FLG_LOCK, "PSC Dispatch",
-		    (void *) 0x40);
-	request_irq(5, psc_irq, IRQ_FLG_LOCK, "PSC Dispatch",
-		    (void *) 0x50);
-	request_irq(6, psc_irq, IRQ_FLG_LOCK, "PSC Dispatch",
-		    (void *) 0x60);
+	sys_request_irq(3, psc_irq, IRQ_FLG_LOCK, "psc3",
+			(void *) 0x30);
+	sys_request_irq(4, psc_irq, IRQ_FLG_LOCK, "psc4",
+			(void *) 0x40);
+	sys_request_irq(5, psc_irq, IRQ_FLG_LOCK, "psc5",
+			(void *) 0x50);
+	sys_request_irq(6, psc_irq, IRQ_FLG_LOCK, "psc6",
+			(void *) 0x60);
 }
 
 /*
