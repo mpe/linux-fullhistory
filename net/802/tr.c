@@ -68,18 +68,18 @@ int tr_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 
 }
 	
-int tr_rebuild_header(void *buff, struct device *dev, unsigned long dest,
-							 struct sk_buff *skb) {
+int tr_rebuild_header(struct sk_buff *skb) {
 
-	struct trh_hdr *trh=(struct trh_hdr *)buff;
-	struct trllc *trllc=(struct trllc *)(buff+sizeof(struct trh_hdr));
+	struct trh_hdr *trh=(struct trh_hdr *)skb->data;
+	struct trllc *trllc=(struct trllc *)(skb->data+sizeof(struct trh_hdr));
+	struct device *dev = skb->dev;
 
 	if(trllc->ethertype != htons(ETH_P_IP)) {
 		printk("tr_rebuild_header: Don't know how to resolve type %04X addresses ?\n",(unsigned int)htons(	trllc->ethertype));
 		return 0;
 	}
 
-	if(arp_find(trh->daddr, dest, dev, dev->pa_addr, skb)) {
+	if(arp_find(trh->daddr, skb)) {
 			return 1;
 	}
 	else {	

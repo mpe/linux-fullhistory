@@ -122,12 +122,16 @@ extern int ip_mroute_getsockopt(struct sock *, int, char *, int *);
 extern int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg);
 extern void mroute_close(struct sock *sk);
 extern void ipmr_forward(struct sk_buff *skb, int is_frag);
+extern int ip_mr_find_tunnel(__u32, __u32);
 
 
 struct vif_device
 {
-	struct device 	*dev;			/* Device we are using */
-	struct route 	*rt_cache;		/* Tunnel route cache */
+	union
+	{
+		struct device 	*dev;		/* Device we are using */
+		struct rtable	*rt;		/* Route for tunnel    */
+	} u;
 	unsigned long	bytes_in,bytes_out;
 	unsigned long	pkt_in,pkt_out;		/* Statistics 			*/
 	unsigned long	rate_limit;		/* Traffic shaping (NI) 	*/
@@ -146,6 +150,12 @@ struct mfc_cache
 	int mfc_flags;				/* Flags on line		*/
 	struct sk_buff_head mfc_unresolved;	/* Unresolved buffers		*/
 	int mfc_queuelen;			/* Unresolved buffer counter	*/
+	unsigned mfc_last_assert;
+	int mfc_minvif;
+	int mfc_maxvif;
+	unsigned long mfc_bytes;
+	unsigned long mfc_pkt;
+	unsigned long mfc_wrong_if;
 	unsigned char mfc_ttls[MAXVIFS];	/* TTL thresholds		*/
 };
 
@@ -162,6 +172,9 @@ struct mfc_cache
 #endif		
 
 #endif
+
+
+#define MFC_ASSERT_THRESH (3*HZ)		/* Maximal freq. of asserts */
 
 /*
  *	Pseudo messages used by mrouted

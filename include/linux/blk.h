@@ -105,6 +105,9 @@ extern int mount_initrd; /* zero if initrd should not be mounted */
 void initrd_init(void);
 
 #endif
+#ifdef CONFIG_BLK_DEV_PS2
+extern int ps2esdi_init(void);
+#endif
 
 #define RO_IOCTLS(dev,where) \
   case BLKROSET: { int __val;  if (!suser()) return -EACCES; \
@@ -198,6 +201,14 @@ static void floppy_off(unsigned int nr);
 
 #define DEVICE_NAME "xt disk"
 #define DEVICE_REQUEST do_xd_request
+#define DEVICE_NR(device) (MINOR(device) >> 6)
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == PS2ESDI_MAJOR)
+
+#define DEVICE_NAME "PS/2 ESDI"
+#define DEVICE_REQUEST do_ps2esdi_request
 #define DEVICE_NR(device) (MINOR(device) >> 6)
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
@@ -412,7 +423,8 @@ static void end_request(int uptodate) {
 	add_blkdev_randomness(MAJOR(req->rq_dev));
 #endif
 #ifdef IDE_DRIVER
-	blk_dev[MAJOR(req->rq_dev)].current_request = req->next;
+	hwgroup->drive->queue = req->next;
+	blk_dev[MAJOR(req->rq_dev)].current_request = NULL;
 	hwgroup->rq = NULL;
 #else
 	DEVICE_OFF(req->rq_dev);

@@ -35,13 +35,8 @@
 
 /* This is used to register protocols. */
 struct inet_protocol {
-  int			(*handler)(struct sk_buff *skb, struct device *dev,
-				   struct options *opt, __u32 daddr,
-				   unsigned short len, __u32 saddr,
-				   int redo, struct inet_protocol *protocol);
-  void			(*err_handler)(int type, int code, unsigned char *buff,
-				       __u32 info, __u32 daddr, __u32 saddr,
-				       struct inet_protocol *protocol, int len);
+  int			(*handler)(struct sk_buff *skb, unsigned short len);
+  void			(*err_handler)(struct sk_buff *skb, unsigned char *dp);
   struct inet_protocol *next;
   unsigned char		protocol;
   unsigned char		copy:1;

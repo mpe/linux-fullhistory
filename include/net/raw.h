@@ -21,14 +21,7 @@
 extern struct proto raw_prot;
 
 
-extern void	raw_err(int type, int code, unsigned char *header, __u32 daddr,
-			__u32 saddr, struct inet_protocol *protocol);
-extern int	raw_recvfrom(struct sock *sk, unsigned char *to,
-			int len, int noblock, unsigned flags,
-			struct sockaddr_in *sin, int *addr_len);
-extern int	raw_read(struct sock *sk, unsigned char *buff,
-			int len, int noblock, unsigned flags);
-extern int 	raw_rcv(struct sock *, struct sk_buff *, struct device *, 
-			__u32, __u32);
+extern int 	raw_err(struct sock *, struct sk_buff *);
+extern int 	raw_rcv(struct sock *, struct sk_buff *);
 
 #endif	/* _RAW_H */

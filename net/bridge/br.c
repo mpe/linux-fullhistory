@@ -14,6 +14,7 @@
  *	2 of the License, or (at your option) any later version.
  *
  *	Fixes:
+ *		Yury Shevchuk	:	Bridge with non bridging ports
  *
  *	Todo:
  *		Don't bring up devices automatically. Start ports disabled
@@ -1202,7 +1203,13 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 				return(0);	/* pass frame up our stack (this will */
 						/* happen in net_bh() in dev.c) */
 			}
-			/* ok, forward this frame... */
+			/* Now this frame came from one of bridged
+			   ports, and it appears to be not for me;
+			   this means we should attempt to forward it.
+			   But actually this frame can still be for me
+			   [as well] if it is destined to one of our
+			   multicast groups.  br_forward() will not
+			   consume the frame if this is the case */
 			return(br_forward(skb, port));
 		default:
 			printk(KERN_DEBUG "br_receive_frame: port [%i] unknown state [%i]\n",
@@ -1236,6 +1243,11 @@ int br_tx_frame(struct sk_buff *skb)	/* 3.5 */
 	
 	/* check for loopback */
 	if (skb->dev->flags & IFF_LOOPBACK)
+		return(0);
+
+	/* if bridging is not enabled on the port we are going to send
+           to, we have nothing to do with this frame, hands off */
+	if (! find_port(skb->dev))
 		return(0);
 
 	skb->h.raw = skb->data;
@@ -1331,6 +1343,10 @@ int br_dev_drop(struct sk_buff *skb)
 }
 
 /*
+ * Forward the frame SKB to proper port[s].  PORT is the port that the
+ * frame has come from; we will not send the frame back there.  PORT == 0
+ * means we have been called from br_tx_fr(), not from br_receive_frame().
+ *
  * this routine returns 1 if it consumes the frame, 0
  * if not...
  */

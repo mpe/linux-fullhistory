@@ -15,6 +15,10 @@
  *		check_region command due to Alan's suggestion.
  * 960821	Made changes to compile in newer 2.0.x kernels.  Added
  *		"cold reboot sense" entry.
+ * 960825	Made a few changes to code, deleted some defines and made
+ *		typedefs to replace them.  Made heartbeat reset only available
+ *		via ioctl, and removed the write routine.
+ * 960828	Added new items for PC Watchdog Rev.C card.
  */
 
 #include <linux/module.h>
@@ -24,6 +28,7 @@
 #include <linux/sched.h>
 #include <linux/tty.h>
 #include <linux/timer.h>
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/wait.h>
 #include <linux/string.h>
@@ -33,37 +38,67 @@
 #include <linux/miscdevice.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
-#include <linux/pcwd.h>
-
+#include <linux/watchdog.h>
 #include <asm/io.h>
+#include <asm/uaccess.h>
 
-#define WD_VER                  "0.50 (08/21/96)"
-#define	WD_MINOR		130	/* Minor device number */
+typedef struct pcwd_ioports {
+	int first_port;
+	int range;
+} IOPS;
 
-#define	WD_TIMEOUT		3	/* 1 1/2 seconds for a timeout */
+/*
+** These are the auto-probe addresses available for the Rev.A version of the
+** PC Watchdog card.
+*/
 
-#define WD_TIMERRESET_PORT1     0x270	/* Reset port - first choice */
-#define WD_TIMERRESET_PORT2     0x370	/* Reset port - second choice */
-#define WD_CTLSTAT_PORT1        0x271	/* Control port - first choice */
-#define WD_CTLSTAT_PORT2        0x371	/* Control port - second choice */
-#define	WD_PORT_EXTENT		2	/* Takes up two addresses */
+static IOPS pcwd_ioports[] = {
+	{ 0x270, 3 },
+	{ 0x350, 3 },
+	{ 0x370, 3 },
+	{ 0x000, 0 }
+};
 
+#ifdef DEBUG
+#define dprintk(x)	printk(x)
+#else
+#define dprintk(x)
+#endif
+
+#ifdef CONFIG_PCWD_REV_A
+#define CARD_REV	"A"
+#define PORT_OFFSET	0
+#define PORT_RANGE	2
 #define WD_WDRST                0x01	/* Previously reset state */
 #define WD_T110                 0x02	/* Temperature overheat sense */
 #define WD_HRTBT                0x04	/* Heartbeat sense */
 #define WD_RLY2                 0x08	/* External relay triggered */
 #define WD_SRLY2                0x80	/* Software external relay triggered */
+#endif
+#ifdef CONFIG_PCWD_REV_C
+#define CARD_REV	"C"
+#define PORT_OFFSET	1
+#define PORT_RANGE	4
+#define WD_WDRST                0x01	/* Previously reset state */
+#define WD_T110                 0x04	/* Temperature overheat sense */
+#endif
 
-static int current_ctlport, current_readport;
-static int is_open, is_eof;
+#define WD_VER                  "0.52 (08/28/96)"
+#define	WD_MINOR		130	/* Minor device number */
+
+#define	WD_TIMEOUT		3	/* 1 1/2 seconds for a timeout */
+
+
+static int current_readport;
+static int is_open, initial_status, supports_temp, mode_debug;
 
 int pcwd_checkcard(void)
 {
 	int card_dat, prev_card_dat, found = 0, count = 0, done = 0;
 
 	/* As suggested by Alan Cox */
-	if (check_region(current_ctlport, WD_PORT_EXTENT)) {
-		printk("pcwd: Port 0x%x unavailable.\n", current_ctlport);
+	if (check_region(current_readport, PORT_RANGE)) {
+		printk("pcwd: Port 0x%x unavailable.\n", current_readport);
 		return 0;
 	}
 
@@ -71,11 +106,13 @@ int pcwd_checkcard(void)
 	prev_card_dat = 0x00;
 
 	prev_card_dat = inb(current_readport);
+	if (prev_card_dat == 0xFF) {
+		dprintk(("pcwd: No card detected at 0x%03x\n", current_readport));
+		return 0;
+	}
 
 	while(count < WD_TIMEOUT) {
-#ifdef	DEBUG
-		printk("pcwd: Run #%d on port 0x%03x\n", count, current_readport);
-#endif
+		dprintk(("pcwd: Run #%d on port 0x%03x\n", count, current_readport));
 
 	/* Read the raw card data from the port, and strip off the
 	   first 4 bits */
@@ -96,9 +133,7 @@ int pcwd_checkcard(void)
 			count++;
 			done = 1;
 
-#ifdef	DEBUG
-			printk("pcwd: I show nothing on this port.\n");
-#endif
+			dprintk(("pcwd: I show nothing on this port.\n"));
 		}
 
 	/* If there's a heart beat in both instances, then this means we
@@ -109,9 +144,8 @@ int pcwd_checkcard(void)
 			(!done)) {
 			found = 1;
 			done = 1;
-#ifdef	DEBUG
-			printk("pcwd: I show alternate heart beats.  Card detected.\n");
-#endif
+			
+			dprintk(("pcwd: I show alternate heart beats.  Card detected.\n"));
 			break;
 		}
 
@@ -125,9 +159,7 @@ int pcwd_checkcard(void)
 
 		if ((card_dat == prev_card_dat) && (!done)) {
 			count++;
-#ifdef	DEBUG
-			printk("pcwd: The card data is exactly the same (possibility).\n");
-#endif
+			dprintk(("pcwd: The card data is exactly the same (possibility).\n"));
 			done = 1;
 		}
 
@@ -137,9 +169,7 @@ int pcwd_checkcard(void)
 		if ((card_dat != prev_card_dat) && (!done)) {
 			done = 1;
 			found = 1;
-#ifdef	DEBUG
-			printk("pcwd: I show alternate heart beats.  Card detected.\n");
-#endif
+			dprintk(("pcwd: I show alternate heart beats.  Card detected.\n"));
 			break;
 		}
 
@@ -156,43 +186,35 @@ void pcwd_showprevstate(void)
 {
 	int card_status = 0x0000;
 
-	card_status = inb(current_readport);
+	initial_status = card_status = inb(current_readport + PORT_OFFSET);
 
 	if (card_status & WD_WDRST)
 		printk("pcwd: Previous reboot was caused by the card.\n");
 
-	if (card_status & WD_T110)
-		printk("pcwd: CPU overheat sense.\n");
+	if (supports_temp)
+		if(card_status & WD_T110)
+			printk("pcwd: CPU overheat sense.\n");
 
 	if ((!(card_status & WD_WDRST)) &&
 	    (!(card_status & WD_T110)))
 		printk("pcwd: Cold boot sense.\n");
 }
 
-static int pcwd_return_data(void)
-{
-	return(inb(current_readport));
-}
-
-static int pcwd_write(struct inode *inode, struct file *file, const char *data,
-	int len)
+static void pcwd_send_heartbeat(void)
 {
 	int wdrst_stat;
 
 	if (!is_open)
-		return -EIO;
+		return;
 
-#ifdef	DEBUG
-	printk("pcwd: write request\n");
-#endif
+	dprintk(("pcwd: heartbeat\n"));
 
 	wdrst_stat = inb_p(current_readport);
 	wdrst_stat &= 0x0F;
 
 	wdrst_stat |= WD_WDRST;
 
-	outb_p(wdrst_stat, current_ctlport);
-
+	outb_p(wdrst_stat, current_readport + PORT_OFFSET);
 	return(1);
 }
 
@@ -200,56 +222,116 @@ static int pcwd_ioctl(struct inode *inode, struct file *file,
 	unsigned int cmd, unsigned long arg)
 {
 	int i, cdat, rv;
-
+	static struct watchdog_ident ident=
+	{
+		WDIOF_OVERHEAT|WDIOF_CARDRESET,
+#ifdef CONFIG_PCWD_REV_A	
+		1,
+#else
+		3,
+#endif				
+		"PCWD revision "CARD_REV"."
+	};
+		
 	switch(cmd) {
 	default:
 		return -ENOIOCTLCMD;
 
-	case PCWD_GETSTAT:
+	case WDIOC_GETSUPPORT:
+		i = verify_area(VERIFY_WRITE, (void*) arg, sizeof(struct watchdog_info));
+		if (i)
+			return i;
+		else
+			return copy_to_user(arg, &ident, sizeof(ident));
+
+	case WDIOC_GETSTATUS:
 		i = verify_area(VERIFY_WRITE, (void*) arg, sizeof(int));
 		if (i)
 			return i;
 		else {
-			cdat = pcwd_return_data();
+			cdat = inb(current_readport);
 			rv = 0;
 
 			if (cdat & WD_WDRST)
-				rv |= 0x01;
+				rv |= WDIOF_CARDRESET;
 
 			if (cdat & WD_T110)
-				rv |= 0x02;
+				rv |= WDIOF_OVERHEAT;
 
-			put_user(rv, (int *) arg);
-			return 0;
+			return put_user(rv, (int *) arg);
 		}
 		break;
 
-	case PCWD_PING:
-		pcwd_write(NULL, NULL, NULL, 1);	/* Is this legal? */
+	case WDIOC_GETBOOTSTATUS:
+		i = verify_area(VERIFY_WRITE, (void*) arg, sizeof(int));
+		if (i)
+			return i;
+		else {
+			int rv;
+			rv = 0;
+
+			if (initial_status & WD_WDRST)
+				rv |= WDIOF_CARDRESET;
+
+			if (initial_status & WD_T110)
+				rv |= WDIOF_OVERHEAT;
+			return put_user(rv, (int *) arg);
+		}
 		break;
+
+	case WDIOC_GETTEMP:
+		i = verify_area(VERIFY_WRITE, (void*) arg, sizeof(int));
+		if (i)
+			return i;
+		else {
+			int rv;
+
+			rv = 0;
+			if ((supports_temp) && (mode_debug == 0)) {
+				rv = inb(current_readport);
+				return put_user(rv, (int*) arg);
+			} else
+				return put_user(rv, (int*) arg);
+		}
+
+	case WDIOC_KEEPALIVE:
+		pcwd_send_heartbeat();
+		return 0;
 	}
 
 	return 0;
 }
 
+static long pcwd_write(struct file *file, struct inode *inode, const char *buf, unsigned long len)
+{
+	if(len)
+	{
+		pcwd_send_heartbeat();
+		return 1;
+	}
+}
+
 static int pcwd_open(struct inode *ino, struct file *filep)
 {
-#ifdef	DEBUG
-	printk("pcwd: open request\n");
-#endif
+	dprintk(("pcwd: open request\n"));
 
 	MOD_INC_USE_COUNT;
-	is_eof = 0;
 	return(0);
 }
 
 static void pcwd_close(struct inode *ino, struct file *filep)
 {
-#ifdef	DEBUG
-	printk("pcwd: close request\n");
-#endif
+	dprintk(("pcwd: close request\n"));
 
 	MOD_DEC_USE_COUNT;
+}
+
+static void get_support(void)
+{
+#ifdef CONFIG_PCWD_REV_C
+	if (inb(current_readport) != 0xF0)
+#endif	
+		supports_temp = 1;
 }
 
 static struct file_operations pcwd_fops = {
@@ -276,48 +358,57 @@ int init_module(void)
 int pcwatchdog_init(void)
 #endif
 {
-#ifdef	DEBUG
-	printk("pcwd: Success.\n");
-#endif
-	printk("pcwd: v%s Ken Hollis (khollis@bitgate.com)\n", WD_VER);
+	int i, found = 0;
 
-#ifdef	DEBUG
-	printk("pcwd: About to perform card autosense loop.\n");
-#endif
+	dprintk(("pcwd: Success.\n"));
+	printk(KERN_INFO "pcwd: v%s Ken Hollis (khollis@bitgate.com)\n", WD_VER);
 
-	is_eof = 0;
+	dprintk(("pcwd: About to perform card autosense loop.\n"));
+
+	/* Initial variables */
 	is_open = 0;
+	supports_temp = 0;
+	mode_debug = 0;
+	initial_status = 0x0000;
 
-	current_ctlport = WD_TIMERRESET_PORT1;
-	current_readport = WD_CTLSTAT_PORT1;
+	dprintk(("pcwd: Revision " CARD_REV " support defined.\n"));
+
+	for (i = 0; pcwd_ioports[i].first_port != 0; i++) {
+		current_readport = pcwd_ioports[i].first_port;
 
 	if (!pcwd_checkcard()) {
-#ifdef	DEBUG
-		printk("pcwd: Trying port 0x370.\n");
+		dprintk(("pcwd: Trying port 0x%03x.\n", pcwd_ioports[i].first_port));
+		if (pcwd_checkcard()) {
+			found = 1;
+			break;
+		}
+	}
+
+	if (!found) {
+		printk("pcwd: No card detected.\n");
+		return(-EIO);
+	}
+
+	is_open = 1;
+
+	get_support();
+
+#ifdef	CONFIG_PCWD_REV_A
+	printk("pcwd: PC Watchdog (REV.A) detected at port 0x%03x\n", current_readport);
+#endif
+#ifdef	CONFIG_PCWD_REV_C
+	printk("pcwd: PC Watchdog (REV.C) detected at port 0x%03x -%stemp. support\n",
+		current_readport, (supports_temp) ? " Has " : " No ");
 #endif
 
-		current_ctlport = WD_TIMERRESET_PORT2;
-		current_readport = WD_CTLSTAT_PORT2;
-
-		if (!pcwd_checkcard()) {
-			printk("pcwd: No card detected, or wrong port assigned.\n");
-			return(-EIO);
-		} else
-			printk("pcwd: Watchdog Rev.A detected at port 0x370\n");
-	} else
-		printk("pcwd: Watchdog Rev.A detected at port 0x270\n");
-
-	pcwd_showprevstate();
-
-#ifdef	DEBUG
-	printk("pcwd: Requesting region entry\n");
+#ifdef	CONFIG_PCWD_SHOW_PREVSTAT
+  	pcwd_showprevstate();
 #endif
+	dprintk(("pcwd: Requesting region entry\n"));
 
-	request_region(current_ctlport, WD_PORT_EXTENT, "PCWD Rev.A (Berkshire)");
+	request_region(current_readport, PORT_RANGE, "PCWD Rev." CARD_REV "(Berkshire)");
 
-#ifdef	DEBUG
-	printk("pcwd: character device creation.\n");
-#endif
+	dprintk(("pcwd: character device creation.\n"));
 
 	misc_register(&pcwd_miscdev);
 
@@ -328,10 +419,9 @@ int pcwatchdog_init(void)
 void cleanup_module(void)
 {
 	misc_deregister(&pcwd_miscdev);
-	release_region(current_ctlport, 2);
-#ifdef	DEBUG
-	printk("pcwd: Cleanup successful.\n");
-#endif
+	release_region(current_readport, PORT_RANGE);
+
+	dprintk(("pcwd: Cleanup successful.\n"));
 }
 #endif
 
@@ -339,9 +429,7 @@ void cleanup_module(void)
 ** TODO:
 **
 **	Both Revisions:
-**	o) Support for revision B of the Watchdog Card
 **	o) Implement the rest of the IOCTLs as discussed with Alan Cox
-**	o) Implement only card heartbeat reset via IOCTL, not via write
 **	o) Faster card detection routines
 **	o) /proc device creation
 **

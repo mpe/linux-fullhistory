@@ -121,9 +121,10 @@
  *	at the socket level. Everything here is generic.
  */
 
-int sock_setsockopt(struct sock *sk, int level, int optname,
+int sock_setsockopt(struct socket *sock, int level, int optname,
 		    char *optval, int optlen)
 {
+	struct sock *sk=sock->sk;
 	int val;
 	int valbool;
 	int err;
@@ -244,7 +245,11 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 		case SO_BSDCOMPAT:
 			sk->bsdism = valbool;
 			break;
-			
+
+		case SO_PASSCRED:
+			sock->passcred = valbool;
+			break;
+
 		/* We implementation the SO_SNDLOWAT etc to
 		   not be settable (1003.1g 5.3) */
 		default:
@@ -254,9 +259,10 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 }
 
 
-int sock_getsockopt(struct sock *sk, int level, int optname,
-		   char *optval, int *optlen)
-{		
+int sock_getsockopt(struct socket *sock, int level, int optname,
+		    char *optval, int *optlen)
+{
+	struct sock *sk = sock->sk;
   	int val;
   	int err;
   	struct linger ling;
@@ -332,11 +338,24 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
 		case SO_SNDTIMEO:
 		{
 			static struct timeval tm={0,0};
-			return copy_to_user(optval,&tm,sizeof(tm));
+			int err=copy_to_user(optval,&tm,sizeof(tm));
+			if(err!=sizeof(struct timeval))
+				return -EFAULT;
+			return 0;
 		}
 		case SO_RCVLOWAT:
 		case SO_SNDLOWAT:
 			val=1;
+
+		case SO_PASSCRED:
+			val = sock->passcred;
+			break;
+
+		case SO_PEERCRED:
+			err = put_user(sizeof(sk->peercred), optlen);
+			if (!err)
+				err = copy_to_user((void*)optval, &sk->peercred, sizeof(struct ucred));
+			return err;
 
 		default:
 			return(-ENOPROTOOPT);
@@ -362,33 +381,66 @@ void sk_free(struct sock *sk)
 	kfree_s(sk,sizeof(*sk));
 }
 
+void sock_wfree(struct sk_buff *skb)
+{
+	struct sock *sk = skb->sk;
+#if CONFIG_SKB_CHECK
+	IS_SKB(skb);
+#endif
+#if 1
+	if (!sk) {
+		printk("sock_wfree: sk==NULL\n");
+		return;
+	}
+#endif
+	/* In case it might be waiting for more memory. */
+	atomic_sub(skb->truesize, &sk->wmem_alloc);
+	sk->write_space(sk);
+}
+
+
+void sock_rfree(struct sk_buff *skb)
+{
+	struct sock *sk = skb->sk;
+#if CONFIG_SKB_CHECK
+	IS_SKB(skb);
+#endif	
+#if 1
+	if (!sk) {
+		printk("sock_rfree: sk==NULL\n");
+		return;
+	}
+#endif
+	atomic_sub(skb->truesize, &sk->rmem_alloc);
+}
+
 
 struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
-	if (sk) {
-		if (force || sk->wmem_alloc < sk->sndbuf) {
-			struct sk_buff * skb = alloc_skb(size, priority);
-			if (skb)
-				atomic_add(skb->truesize, &sk->wmem_alloc);
-			return skb;
+	if (force || sk->wmem_alloc < sk->sndbuf) {
+		struct sk_buff * skb = alloc_skb(size, priority);
+		if (skb) {
+			atomic_add(skb->truesize, &sk->wmem_alloc);
+			skb->destructor = sock_wfree;
+			skb->sk = sk;
 		}
-		return NULL;
+		return skb;
 	}
-	return alloc_skb(size, priority);
+	return NULL;
 }
 
 struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
-	if (sk) {
-		if (force || sk->rmem_alloc < sk->rcvbuf) {
-			struct sk_buff *skb = alloc_skb(size, priority);
-			if (skb)
-				atomic_add(skb->truesize, &sk->rmem_alloc);
-			return skb;
+	if (force || sk->rmem_alloc < sk->rcvbuf) {
+		struct sk_buff *skb = alloc_skb(size, priority);
+		if (skb) {
+			atomic_add(skb->truesize, &sk->rmem_alloc);
+			skb->destructor = sock_rfree;
+			skb->sk = sk;
 		}
-		return NULL;
+		return skb;
 	}
-	return alloc_skb(size, priority);
+	return NULL;
 }
 
 
@@ -423,34 +475,6 @@ unsigned long sock_wspace(struct sock *sk)
 }
 
 
-void sock_wfree(struct sock *sk, struct sk_buff *skb)
-{
-	int s=skb->truesize;
-#if CONFIG_SKB_CHECK
-	IS_SKB(skb);
-#endif
-	kfree_skbmem(skb);
-	if (sk) 
-	{
-		/* In case it might be waiting for more memory. */
-		sk->write_space(sk);
-		atomic_sub(s, &sk->wmem_alloc);
-	}
-}
-
-
-void sock_rfree(struct sock *sk, struct sk_buff *skb)
-{
-	int s=skb->truesize;
-#if CONFIG_SKB_CHECK
-	IS_SKB(skb);
-#endif	
-	kfree_skbmem(skb);
-	if (sk) 
-	{
-		atomic_sub(s, &sk->rmem_alloc);
-	}
-}
 
 /*
  *	Generic send/receive buffer handlers

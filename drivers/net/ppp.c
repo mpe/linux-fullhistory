@@ -180,10 +180,7 @@ static int ppp_dev_ioctl (struct device *dev, struct ifreq *ifr, int cmd);
 static int ppp_dev_close (struct device *);
 static int ppp_dev_xmit (sk_buff *, struct device *);
 static struct enet_statistics *ppp_dev_stats (struct device *);
-static int ppp_dev_header (sk_buff *, struct device *, __u16,
-			   void *, void *, unsigned int);
-static int ppp_dev_rebuild (void *eth, struct device *dev,
-                            unsigned long raddr, struct sk_buff *skb);
+
 /*
  * TTY callbacks
  */
@@ -389,8 +386,6 @@ ppp_init_dev (struct device *dev)
 {
 	int    indx;
 
-	dev->hard_header      = ppp_dev_header;
-	dev->rebuild_header   = ppp_dev_rebuild;
 	dev->hard_header_len  = PPP_HARD_HDR_LEN;
 
 	/* device INFO */
@@ -1209,7 +1204,6 @@ ppp_rcv_rx (struct ppp *ppp, __u16 proto, __u8 * data, int count)
 /*
  * Tag the frame and kick it to the proper receive routine
  */
-	skb->free = 1;
 	ppp->ddinfo.recv_idle = jiffies;
 	netif_rx (skb);
 	return 1;
@@ -3167,20 +3161,6 @@ ppp_dev_stats (struct device *dev)
 	if (ppp->flags & SC_DEBUG)
 		printk (KERN_INFO "ppp_dev_stats called");
 	return &ppp_stats;
-}
-
-static int ppp_dev_header (sk_buff *skb, struct device *dev,
-			   __u16 type, void *daddr,
-			   void *saddr, unsigned int len)
-{
-	return (0);
-}
-
-static int
-ppp_dev_rebuild (void *eth, struct device *dev,
-                 unsigned long raddr, struct sk_buff *skb)
-{
-	return (0);
 }
 
 /*************************************************************

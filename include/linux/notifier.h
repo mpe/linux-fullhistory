@@ -92,5 +92,16 @@ extern __inline__ int notifier_call_chain(struct notifier_block **n, unsigned lo
 				   detected a hardware crash and restarted
 				   - we can use this eg to kick tcp sessions
 				   once done */
+#define NETDEV_CHANGE	0x0004	/* Notify device state change */
+
+#define SYS_DOWN	0x0001	/* Notify of system down */
+#define SYS_HALT	0x0002	/* Notify of system halt */
+
+/*
+ *	Publically visible notifier objects
+ */
+ 
+extern struct notifier_block *boot_notifier_list;
+ 
 #endif
 #endif

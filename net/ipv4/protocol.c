@@ -46,13 +46,12 @@
 #include <linux/igmp.h>
 
 
-#ifdef CONFIG_IP_FORWARD
 #ifdef CONFIG_NET_IPIP
 
 static struct inet_protocol ipip_protocol = 
 {
 	ipip_rcv,             /* IPIP handler          */
-	NULL,                 /* TUNNEL error control    */
+	ipip_err,             /* TUNNEL error control    */
 	0,                    /* next                 */
 	IPPROTO_IPIP,         /* protocol ID          */
 	0,                    /* copy                 */
@@ -62,13 +61,12 @@ static struct inet_protocol ipip_protocol =
 
 
 #endif
-#endif
 
 static struct inet_protocol tcp_protocol = 
 {
 	tcp_v4_rcv,		/* TCP handler		*/
 	tcp_v4_err,		/* TCP error control	*/  
-#if defined(CONFIG_NET_IPIP) && defined(CONFIG_IP_FORWARD)
+#ifdef CONFIG_NET_IPIP
 	&ipip_protocol,
 #else  
 	NULL,			/* next			*/
@@ -103,9 +101,6 @@ static struct inet_protocol icmp_protocol =
 	"ICMP"			/* name			*/
 };
 
-#ifndef CONFIG_IP_MULTICAST
-struct inet_protocol *inet_protocol_base = &icmp_protocol;
-#else
 static struct inet_protocol igmp_protocol = 
 {
 	igmp_rcv,		/* IGMP handler		*/
@@ -118,7 +113,6 @@ static struct inet_protocol igmp_protocol =
 };
 
 struct inet_protocol *inet_protocol_base = &igmp_protocol;
-#endif
 
 struct inet_protocol *inet_protos[MAX_INET_PROTOS] = 
 {

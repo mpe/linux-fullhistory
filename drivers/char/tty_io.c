@@ -705,7 +705,7 @@ void stop_tty(struct tty_struct *tty)
 
 void start_tty(struct tty_struct *tty)
 {
-	if (!tty->stopped)
+	if (!tty->stopped || tty->flow_stopped)
 		return;
 	tty->stopped = 0;
 	if (tty->link && tty->link->packet) {
@@ -1923,6 +1923,9 @@ int tty_init(void)
 		panic("Couldn't register /dev/console driver\n");
 	
 	kbd_init();
+#ifdef CONFIG_ESP  /* init ESP before rs, so rs doesn't see the port */
+	esp_init();
+#endif
 #ifdef CONFIG_SERIAL
 	rs_init();
 #endif

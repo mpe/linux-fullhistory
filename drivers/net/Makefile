@@ -49,15 +49,23 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SHAPER),y)
+L_OBJS += shaper.o
+else
+  ifeq ($(CONFIG_SHAPER),m)
+  M_OBJS += shaper.o
+  endif
+endif
+
 ifeq ($(CONFIG_SK_G16),y)
 L_OBJS += sk_g16.o
 endif
 
 ifeq ($(CONFIG_NET_IPIP),y)
-L_OBJS += new_tunnel.o
+L_OBJS += tunnel.o
 else
   ifeq ($(CONFIG_NET_IPIP),m)
-  M_OBJS += new_tunnel.o
+  M_OBJS += tunnel.o
   endif
 endif
 
@@ -139,6 +147,9 @@ endif
 ifeq ($(CONFIG_ULTRA),y)
 L_OBJS += smc-ultra.o
 CONFIG_8390_BUILTIN = y
+  ifeq ($(CONFIG_MCA),y)
+  L_OBJS += smc-mca.o
+  endif
 else
   ifeq ($(CONFIG_ULTRA),m)
   CONFIG_8390_MODULE = y
@@ -155,6 +166,17 @@ else
   M_OBJS += e2100.o
   endif
 endif
+
+ifeq ($(CONFIG_ES3210),y)
+L_OBJS += es3210.o
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_ES3210),m)
+  CONFIG_8390_MODULE = y
+  M_OBJS += es3210.o
+  endif
+endif
+
 
 ifeq ($(CONFIG_PLIP),y)
 L_OBJS += plip.o
@@ -289,6 +311,14 @@ L_OBJS += 3c507.o
 else
   ifeq ($(CONFIG_EL16),m)
   M_OBJS += 3c507.o
+  endif
+endif
+
+ifeq ($(CONFIG_ELMC),y)
+L_OBJS += 3c523.o
+else
+  ifeq ($(CONFIG_ELMC),m)
+  M_OBJS += 3c523.o
   endif
 endif
 

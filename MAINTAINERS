@@ -43,11 +43,7 @@ trivial patch so apply some common sense.
 
 7.	Happy hacking.
 
-
-[This file is new: I've just put the existing network contacts in, other
- people please add yourselves] -- AC
-
-		-----------------------------------
+ 		-----------------------------------
 
 Maintainers List (try to look for most precise areas first)
 
@@ -113,8 +109,8 @@ S:	Maintained
 
 APPLETALK NETWORK LAYER
 P:	Alan Cox & University Of Michigan
-M:	net-patches@lxorguk.ukuu.org.uk, Cc: netatalk@umich.edu
-L:	[Someone fill in the netatalk list here]
+M:	net-patches@lxorguk.ukuu.org.uk
+L:	netatalk@umich.edu
 S:	Maintained
 
 AX.25 NETWORK LAYER
@@ -190,7 +186,7 @@ L:	linux-scsi@vger.rutgers.edu
 S:	Odd fixes (e.g., new signatures)
 
 SCSI TAPE DRIVER
-P:	Kai Mäkisara
+P:	Kai Mdkisara
 M:	Kai.Makisara@metla.fi
 L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
@@ -254,7 +250,8 @@ NETWORKING [GENERAL]:
 P:	Alan Cox
 M:	net-patches@lxorguk.ukuu.org.uk
 L:	linux-net@vger.rutgers.edu
-S:	Odd Fixes <-> Maintained subject to workloads
+W:	http://www.uk.linux.org/NetNews.html
+S:	Maintained
 
 PPP PROTOCOL DRIVERS AND COMPRESSORS
 P:	Al Longyear

@@ -165,7 +165,6 @@ void rose_transmit_restart_request(struct rose_neigh *neigh)
 	*dptr++ = 0x00;
 	*dptr++ = 0;
 
-	skb->free = 1;
 	skb->sk   = NULL;
 
 	if (!ax25_send_frame(skb, (ax25_address *)neigh->dev->dev_addr, &neigh->callsign, neigh->digipeat, neigh->dev))
@@ -195,7 +194,6 @@ void rose_transmit_restart_confirmation(struct rose_neigh *neigh)
 	*dptr++ = 0x00;
 	*dptr++ = ROSE_RESTART_CONFIRMATION;
 
-	skb->free = 1;
 	skb->sk   = NULL;
 
 	if (!ax25_send_frame(skb, (ax25_address *)neigh->dev->dev_addr, &neigh->callsign, neigh->digipeat, neigh->dev))
@@ -226,7 +224,6 @@ void rose_transmit_diagnostic(struct rose_neigh *neigh, unsigned char diag)
 	*dptr++ = ROSE_DIAGNOSTIC;
 	*dptr++ = diag;
 
-	skb->free = 1;
 	skb->sk   = NULL;
 
 	if (!ax25_send_frame(skb, (ax25_address *)neigh->dev->dev_addr, &neigh->callsign, neigh->digipeat, neigh->dev))
@@ -259,7 +256,6 @@ void rose_transmit_clear_request(struct rose_neigh *neigh, unsigned int lci, uns
 	*dptr++ = cause;
 	*dptr++ = 0x00;
 
-	skb->free = 1;
 	skb->sk   = NULL;
 
 	if (!ax25_send_frame(skb, (ax25_address *)neigh->dev->dev_addr, &neigh->callsign, neigh->digipeat, neigh->dev))
@@ -282,7 +278,6 @@ void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
 	*dptr++ = AX25_P_ROSE;
 
 	skb->arp  = 1;
-	skb->free = 1;
 
 	if (neigh->restarted) {
 		if (!ax25_send_frame(skb, (ax25_address *)neigh->dev->dev_addr, &neigh->callsign, neigh->digipeat, neigh->dev))

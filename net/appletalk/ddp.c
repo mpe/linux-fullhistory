@@ -78,6 +78,7 @@
 #endif
 
 struct datalink_proto *ddp_dl, *aarp_dl;
+static struct proto_ops atalk_dgram_ops;
 
 #define min(a,b)	(((a)<(b))?(a):(b))
 
@@ -87,7 +88,7 @@ struct datalink_proto *ddp_dl, *aarp_dl;
 *															*
 \***********************************************************************************************************************/
 
-static atalk_socket *volatile atalk_socket_list=NULL;
+static struct sock *volatile atalk_socket_list=NULL;
 
 /*
  *	Note: Sockets may not be removed _during_ an interrupt or inet_bh
@@ -95,10 +96,10 @@ static atalk_socket *volatile atalk_socket_list=NULL;
  *	use this facility.
  */
  
-static void atalk_remove_socket(atalk_socket *sk)
+static void atalk_remove_socket(struct sock *sk)
 {
 	unsigned long flags;
-	atalk_socket *s;
+	struct sock *s;
 	
 	save_flags(flags);
 	cli();
@@ -123,7 +124,7 @@ static void atalk_remove_socket(atalk_socket *sk)
 	restore_flags(flags);
 }
 
-static void atalk_insert_socket(atalk_socket *sk)
+static void atalk_insert_socket(struct sock *sk)
 {
 	unsigned long flags;
 	save_flags(flags);
@@ -133,9 +134,9 @@ static void atalk_insert_socket(atalk_socket *sk)
 	restore_flags(flags);
 }
 
-static atalk_socket *atalk_search_socket(struct sockaddr_at *to, struct atalk_iface *atif)
+static struct sock *atalk_search_socket(struct sockaddr_at *to, struct atalk_iface *atif)
 {
-	atalk_socket *s;
+	struct sock *s;
 
 	for( s = atalk_socket_list; s != NULL; s = s->next ) 
 	{
@@ -167,9 +168,9 @@ static atalk_socket *atalk_search_socket(struct sockaddr_at *to, struct atalk_if
  *	Find a socket in the list.
  */
  
-static atalk_socket *atalk_find_socket(struct sockaddr_at *sat)
+static struct sock *atalk_find_socket(struct sockaddr_at *sat)
 {
-	atalk_socket *s;
+	struct sock *s;
 
 	for ( s = atalk_socket_list; s != NULL; s = s->next ) 
 	{
@@ -197,7 +198,7 @@ static atalk_socket *atalk_find_socket(struct sockaddr_at *sat)
  *	touch it and we are (fairly 8-) ) safe.
  */
 
-static void atalk_destroy_socket(atalk_socket *sk);
+static void atalk_destroy_socket(struct sock *sk);
 
 /*
  *	Handler for deferred kills.
@@ -205,10 +206,10 @@ static void atalk_destroy_socket(atalk_socket *sk);
  
 static void atalk_destroy_timer(unsigned long data)
 {
-	atalk_destroy_socket((atalk_socket *)data);
+	atalk_destroy_socket((struct sock *)data);
 }
 
-static void atalk_destroy_socket(atalk_socket *sk)
+static void atalk_destroy_socket(struct sock *sk)
 {
 	struct sk_buff *skb;
 	atalk_remove_socket(sk);
@@ -243,7 +244,7 @@ static void atalk_destroy_socket(atalk_socket *sk)
  
 int atalk_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
-	atalk_socket *s;
+	struct sock *s;
 	int len=0;
 	off_t pos=0;
 	off_t begin=0;
@@ -1004,7 +1005,7 @@ unsigned short atalk_checksum(struct ddpehdr *ddp, int len)
   
 static int atalk_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
-/*	atalk_socket *sk=(atalk_socket *)sock->data;*/
+/*	struct sock *sk=sock->sk;*/
 	switch(cmd)
 	{
 		default:
@@ -1019,10 +1020,10 @@ static int atalk_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
  
 static int atalk_setsockopt(struct socket *sock, int level, int optname, char *optval, int optlen)
 {
-	atalk_socket *sk;
+	struct sock *sk;
 	int err,opt;
 	
-	sk=(atalk_socket *)sock->data;
+	sk=sock->sk;
 	
 	if(optval==NULL)
 		return(-EINVAL);
@@ -1041,9 +1042,6 @@ static int atalk_setsockopt(struct socket *sock, int level, int optname, char *o
 			}
 			break;
 			
-		case SOL_SOCKET:
-			return sock_setsockopt(sk,level,optname,optval,optlen);
-
 		default:
 			return -EOPNOTSUPP;
 	}
@@ -1057,11 +1055,11 @@ static int atalk_setsockopt(struct socket *sock, int level, int optname, char *o
 static int atalk_getsockopt(struct socket *sock, int level, int optname,
 	char *optval, int *optlen)
 {
-	atalk_socket *sk;
+	struct sock *sk;
 	int val=0;
 	int err;
 	
-	sk=(atalk_socket *)sock->data;
+	sk=sock->sk;
 
 	switch(level)
 	{
@@ -1073,10 +1071,7 @@ static int atalk_getsockopt(struct socket *sock, int level, int optname,
 					return -ENOPROTOOPT;
 			}
 			break;
-			
-		case SOL_SOCKET:
-			return sock_getsockopt(sk,level,optname,optval,optlen);
-			
+
 		default:
 			return -EOPNOTSUPP;
 	}
@@ -1121,8 +1116,8 @@ static void def_callback2(struct sock *sk, int len)
  
 static int atalk_create(struct socket *sock, int protocol)
 {
-	atalk_socket *sk;
-	sk=(atalk_socket *)sk_alloc(GFP_KERNEL);
+	struct sock *sk;
+	sk=sk_alloc(GFP_KERNEL);
 	if(sk==NULL)
 		return(-ENOMEM);
 	switch(sock->type)
@@ -1132,6 +1127,7 @@ static int atalk_create(struct socket *sock, int protocol)
 		case SOCK_RAW:
 		/* We permit DDP datagram sockets */
 		case SOCK_DGRAM:
+			sock->ops = &atalk_dgram_ops;
 			break;
 		default:
 			sk_free((void *)sk);
@@ -1157,8 +1153,8 @@ static int atalk_create(struct socket *sock, int protocol)
 	
 	if(sock!=NULL)
 	{
-		sock->data=(void *)sk;
-		sk->sleep=sock->wait;
+		sk->sleep=&sock->wait;
+		sock->sk=sk;
 	}
 	
 	sk->state_change=def_callback1;
@@ -1185,13 +1181,13 @@ static int atalk_dup(struct socket *newsock,struct socket *oldsock)
  
 static int atalk_release(struct socket *sock, struct socket *peer)
 {
-	atalk_socket *sk=(atalk_socket *)sock->data;
+	struct sock *sk=sock->sk;
 	if(sk==NULL)
 		return(0);
 	if(!sk->dead)
 		sk->state_change(sk);
 	sk->dead=1;
-	sock->data=NULL;
+	sock->sk=NULL;
 	atalk_destroy_socket(sk);
 	return(0);
 }
@@ -1211,7 +1207,7 @@ static int atalk_pick_port(struct sockaddr_at *sat)
 	return -EBUSY;
 }
  		
-static int atalk_autobind(atalk_socket *sk)
+static int atalk_autobind(struct sock *sk)
 {
 	struct at_addr *ap = atalk_find_primary();
 	struct sockaddr_at sat;
@@ -1236,10 +1232,10 @@ static int atalk_autobind(atalk_socket *sk)
  
 static int atalk_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
-	atalk_socket *sk;
+	struct sock *sk;
 	struct sockaddr_at *addr=(struct sockaddr_at *)uaddr;
 	
-	sk=(atalk_socket *)sock->data;
+	sk=sock->sk;
 	
 	if(sk->zapped==0)
 		return(-EINVAL);
@@ -1291,7 +1287,7 @@ static int atalk_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
 	int addr_len, int flags)
 {
-	atalk_socket *sk=(atalk_socket *)sock->data;
+	struct sock *sk=sock->sk;
 	struct sockaddr_at *addr;
 	
 	sk->state = TCP_CLOSE;	
@@ -1339,8 +1335,10 @@ static int atalk_socketpair(struct socket *sock1, struct socket *sock2)
  
 static int atalk_accept(struct socket *sock, struct socket *newsock, int flags)
 {
-	if(newsock->data)
-		sk_free(newsock->data);
+	if(newsock->sk) {	  
+		sk_free(newsock->sk);
+		MOD_DEC_USE_COUNT;
+	}
 	return -EOPNOTSUPP;
 }
 
@@ -1353,9 +1351,9 @@ static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
 	int *uaddr_len, int peer)
 {
 	struct sockaddr_at sat;
-	atalk_socket *sk;
+	struct sock *sk;
 	
-	sk=(atalk_socket *)sock->data;
+	sk=sock->sk;
 	if(sk->zapped)
 	{
 		if(atalk_autobind(sk)<0)
@@ -1392,7 +1390,7 @@ static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
  
 static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
-	atalk_socket *sock;
+	struct sock *sock;
 	struct ddpehdr *ddp=(void *)skb->h.raw;
 	struct atalk_iface *atif;
 	struct sockaddr_at tosat;
@@ -1627,9 +1625,10 @@ static int ltalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	return atalk_rcv(skb,dev,pt);
 }
 
-static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nonblock, int flags)
+static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
+	struct scm_cookie *scm)
 {
-	atalk_socket *sk=(atalk_socket *)sock->data;
+	struct sock *sk=sock->sk;
 	struct sockaddr_at *usat=(struct sockaddr_at *)msg->msg_name;
 	struct sockaddr_at local_satalk, gsat;
 	struct sk_buff *skb;
@@ -1639,10 +1638,11 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 	struct atalk_route *rt;
 	int loopback=0;
 	int err;
+	int flags = msg->msg_flags;
 	
-	if(flags)
+	if(flags&~MSG_DONTWAIT)
 		return -EINVAL;
-		
+
 	if(len>587)
 		return -EMSGSIZE;
 		
@@ -1658,10 +1658,8 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 			return(-EINVAL);
 		if(usat->sat_family != AF_APPLETALK)
 			return -EINVAL;
-#if 0 	/* netatalk doesn't implement this check */
 		if(usat->sat_addr.s_node==ATADDR_BCAST && !sk->broadcast)
 			return -EPERM;
-#endif			
 	}
 	else
 	{
@@ -1704,12 +1702,11 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 	
 	size += dev->hard_header_len;
 
-	skb = sock_alloc_send_skb(sk, size, 0, 0 , &err);
+	skb = sock_alloc_send_skb(sk, size, 0, flags&MSG_DONTWAIT, &err);
 	if(skb==NULL)
 		return err;
 
 	skb->sk=sk;
-	skb->free=1;
 	skb->arp=1;
 	skb_reserve(skb,ddp_dl->header_length);
 	skb_reserve(skb,dev->hard_header_len);
@@ -1789,9 +1786,8 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 		if(sk->debug)
 			printk("SK %p: Loop back.\n", sk);
 		/* loop back */
-		atomic_sub(skb->truesize, &sk->wmem_alloc);
+		skb_orphan(skb);
 		ddp_dl->datalink_header(ddp_dl, skb, dev->dev_addr);
-		skb->sk = NULL;
 		skb->mac.raw=skb->data;
 		skb->h.raw = skb->data + ddp_dl->header_length + dev->hard_header_len;
 		skb_pull(skb,dev->hard_header_len);
@@ -1818,19 +1814,17 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 }
 
 
-static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, int flags, int *addr_len)
+static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, 
+		int flags, struct scm_cookie *scm)
 {
-	atalk_socket *sk=(atalk_socket *)sock->data;
+	struct sock *sk=sock->sk;
 	struct sockaddr_at *sat=(struct sockaddr_at *)msg->msg_name;
 	struct ddpehdr	*ddp = NULL;
 	int copied = 0;
 	struct sk_buff *skb;
 	int er = 0;
-	
-	if(addr_len)
-		*addr_len=sizeof(*sat);
 
-	skb=skb_recv_datagram(sk,flags,noblock,&er);
+	skb=skb_recv_datagram(sk,flags&~MSG_DONTWAIT,flags&MSG_DONTWAIT,&er);
 	if(skb==NULL)
 		return er;
 
@@ -1866,6 +1860,7 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int 
 		sat->sat_addr.s_node=ddp->deh_snode;
 		sat->sat_addr.s_net=ddp->deh_snet;
 	}
+	msg->msg_namelen=sizeof(*sat);
 out:
 	skb_free_datagram(sk, skb);
 	return er ? er : (copied);
@@ -1877,13 +1872,6 @@ static int atalk_shutdown(struct socket *sk,int how)
 	return -EOPNOTSUPP;
 }
 
-static int atalk_select(struct socket *sock , int sel_type, select_table *wait)
-{
-	atalk_socket *sk=(atalk_socket *)sock->data;
-	
-	return datagram_select(sk,sel_type,wait);
-}
-
 /*
  *	Appletalk ioctl calls.
  */
@@ -1891,7 +1879,7 @@ static int atalk_select(struct socket *sock , int sel_type, select_table *wait)
 static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 {
 	long amount=0;
-	atalk_socket *sk=(atalk_socket *)sock->data;
+	struct sock *sk=sock->sk;
 	
 	switch(cmd)
 	{
@@ -1965,10 +1953,14 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 	return put_user(amount, (int *)arg);
 }
 
-static struct proto_ops atalk_proto_ops = {
+static struct net_proto_family atalk_family_ops = {
+	AF_APPLETALK,
+	atalk_create
+};
+
+static struct proto_ops atalk_dgram_ops = {
 	AF_APPLETALK,
 	
-	atalk_create,
 	atalk_dup,
 	atalk_release,
 	atalk_bind,
@@ -1976,7 +1968,7 @@ static struct proto_ops atalk_proto_ops = {
 	atalk_socketpair,
 	atalk_accept,
 	atalk_getname,
-	atalk_select,
+	datagram_select,
 	atalk_ioctl,
 	atalk_listen,
 	atalk_shutdown,
@@ -2038,7 +2030,7 @@ static struct proc_dir_entry proc_atalk_iface = {
 
 void atalk_proto_init(struct net_proto *pro)
 {
-	(void) sock_register(atalk_proto_ops.family, &atalk_proto_ops);
+	(void) sock_register(&atalk_family_ops);
 	if ((ddp_dl = register_snap_client(ddp_snap_id, atalk_rcv)) == NULL)
 		printk(KERN_CRIT "Unable to register DDP with SNAP.\n");
 	

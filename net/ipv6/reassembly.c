@@ -217,8 +217,8 @@ static void reasm_queue(struct frag_queue *fq, struct sk_buff *skb,
 
 	
 	nfp->offset = ntohs(fhdr->frag_off) & ~0x7;
-	nfp->len = (ntohs(skb->ipv6_hdr->payload_len) -
-		    ((u8 *) (fhdr + 1) - (u8 *) (skb->ipv6_hdr + 1)));
+	nfp->len = (ntohs(skb->nh.ipv6h->payload_len) -
+		    ((u8 *) (fhdr + 1) - (u8 *) (skb->nh.ipv6h + 1)));
 
 
 	nfp->skb  = skb;
@@ -286,7 +286,7 @@ static int reasm_frag_1(struct frag_queue *fq, struct sk_buff **skb_in)
 	 * this means we have all fragments.
 	 */
 
-	unfrag_len = (u8 *) (tail->fhdr) - (u8 *) (tail->skb->ipv6_hdr + 1);
+	unfrag_len = (u8 *) (tail->fhdr) - (u8 *) (tail->skb->nh.ipv6h + 1);
 
 	payload_len = (unfrag_len + tail->offset + 
 		       (tail->skb->tail - (__u8 *) (tail->fhdr + 1)));
@@ -302,20 +302,19 @@ static int reasm_frag_1(struct frag_queue *fq, struct sk_buff **skb_in)
 
 	copy = unfrag_len + sizeof(struct ipv6hdr);
 
-	skb->ipv6_hdr = (struct ipv6hdr *) skb->data;
+	skb->nh.ipv6h = (struct ipv6hdr *) skb->data;
 
-	skb->free = 1;
 	skb->dev = fq->dev;
 
 	
 	nh = fq->nexthdr;
 
 	*(fq->nhptr) = nh;
-	memcpy(skb_put(skb, copy), tail->skb->ipv6_hdr, copy);
+	memcpy(skb_put(skb, copy), tail->skb->nh.ipv6h, copy);
 
 	skb->h.raw = skb->tail;
 
-	skb->ipv6_hdr->payload_len = ntohs(payload_len);
+	skb->nh.ipv6h->payload_len = ntohs(payload_len);
 
 	*skb_in = skb;
 

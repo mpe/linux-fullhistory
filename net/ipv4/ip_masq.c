@@ -455,7 +455,7 @@ static void recalc_check(struct udphdr *uh, __u32 saddr,
 int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 {
 	struct sk_buff  *skb=*skb_ptr;
-	struct iphdr	*iph = skb->h.iph;
+	struct iphdr	*iph = skb->nh.iph;
 	__u16	*portptr;
 	struct ip_masq	*ms;
 	int		size;
@@ -504,7 +504,7 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  	 *	Change the fragments origin
  	 */
  	
- 	size = skb->len - ((unsigned char *)portptr - skb->h.raw);
+ 	size = skb->len - ((unsigned char *)portptr - skb->nh.raw);
         /*
          *	Set iph addr and port from ip_masq obj.
          */
@@ -521,9 +521,9 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
                  *	skb has possibly changed, update pointers.
                  */
                 skb = *skb_ptr;
-                iph = skb->h.iph;
+                iph = skb->nh.iph;
                 portptr = (__u16 *)&(((char *)iph)[iph->ihl*4]);
-                size = skb->len - ((unsigned char *)portptr-skb->h.raw);
+                size = skb->len - ((unsigned char *)portptr-skb->nh.raw);
         }
 
  	/*
@@ -566,8 +566,7 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  		else timeout = ip_masq_expire->tcp_timeout;
 
 		skb->csum = csum_partial((void *)(th + 1), size - sizeof(*th), 0);
-		tcp_v4_check(th, size, iph->saddr, iph->daddr,
-			     skb->csum);
+		tcp_v4_check(th, size, iph->saddr, iph->daddr, skb->csum);
  	}
         ip_masq_set_expire(ms, timeout);
  	ip_send_check(iph);
@@ -590,7 +589,7 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
 {
         struct sk_buff 	*skb   = *skb_p;
- 	struct iphdr	*iph   = skb->h.iph;
+ 	struct iphdr	*iph   = skb->nh.iph;
 	struct icmphdr  *icmph = (struct icmphdr *)((char *)iph + (iph->ihl<<2));
 	struct iphdr    *ciph;	/* The ip header contained within the ICMP */
 	__u16	        *pptr;	/* port numbers from TCP/UDP contained header */
@@ -689,7 +688,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
 int ip_fw_demasq_icmp(struct sk_buff **skb_p, struct device *dev)
 {
         struct sk_buff 	*skb   = *skb_p;
- 	struct iphdr	*iph   = skb->h.iph;
+ 	struct iphdr	*iph   = skb->nh.iph;
 	struct icmphdr  *icmph = (struct icmphdr *)((char *)iph + (iph->ihl<<2));
 	struct iphdr    *ciph;	/* The ip header contained within the ICMP */
 	__u16	        *pptr;	/* port numbers from TCP/UDP contained header */
@@ -782,7 +781,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p, struct device *dev)
 int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 {
         struct sk_buff 	*skb = *skb_p;
- 	struct iphdr	*iph = skb->h.iph;
+ 	struct iphdr	*iph = skb->nh.iph;
  	__u16	*portptr;
  	struct ip_masq	*ms;
 	unsigned short len;
@@ -877,7 +876,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
                          */
 
                         skb = *skb_p;
-                        iph = skb->h.iph;
+                        iph = skb->nh.iph;
                         portptr = (__u16 *)&(((char *)iph)[iph->ihl*4]);
                         len = ntohs(iph->tot_len) - (iph->ihl * 4);
                 }
@@ -904,7 +903,6 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 				     skb->csum);
 			
 			/* Check if TCP FIN or RST */
-			
 			if (th->fin)
 			{
 				ms->flags |= IP_MASQ_F_SAW_FIN_IN;

@@ -30,6 +30,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
     bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
   fi
 fi
+bool 'MCA support' CONFIG_MCA
 bool 'System V IPC' CONFIG_SYSVIPC
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF

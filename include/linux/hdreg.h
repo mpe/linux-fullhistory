@@ -91,6 +91,7 @@ struct hd_geometry {
 #define HDIO_GET_32BIT 		0x0309	/* get current io_32bit setting */
 #define HDIO_GET_NOWERR		0x030a	/* get ignore-write-error flag */
 #define HDIO_GET_DMA		0x030b	/* get use-dma flag */
+#define HDIO_GET_NICE		0x030c	/* get nice flags */
 #define HDIO_DRIVE_CMD		0x031f	/* execute a special drive command */
 
 /* hd/ide ctl's that pass (arg) non-ptr values are numbered 0x032n/0x033n */
@@ -102,6 +103,7 @@ struct hd_geometry {
 #define HDIO_SET_DMA		0x0326	/* change use-dma flag */
 #define HDIO_SET_PIO_MODE	0x0327	/* reconfig interface to new speed */
 #define HDIO_SCAN_HWIF		0x0328	/* register and (re)scan interface */
+#define HDIO_SET_NICE		0x0329	/* set nice flags */
 
 /* structure returned by HDIO_GET_IDENTITY, as per ANSI ATA2 rev.2f spec */
 struct hd_driveid {
@@ -153,6 +155,17 @@ struct hd_driveid {
 	/* unsigned short vendor7  [32];*/	/* vendor unique (words 128-159) */
 	/* unsigned short reservedyy[96];*/	/* reserved (words 160-255) */
 };
+
+/*
+ * IDE "nice" flags. These are used on a per drive basis to determine
+ * when to be nice and give more bandwidth to the other devices which
+ * share the same IDE bus.
+ */
+#define IDE_NICE_DSC_OVERLAP	(0)	/* per the DSC overlap protocol */
+#define IDE_NICE_ATAPI_OVERLAP	(1)	/* not supported yet */
+#define IDE_NICE_0		(2)	/* when sure that it won't affect us */
+#define IDE_NICE_1		(3)	/* when probably won't affect us much */
+#define IDE_NICE_2		(4)	/* when we know it's on our expense */
 
 #ifdef __KERNEL__
 /*

@@ -152,7 +152,6 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 		 * Intel Pentium cpu, unfortunately the SMP kernel can't
 		 * handle the 4MB page table optimizations yet
 		 */
-#ifndef __SMP__
 		/*
 		 * This will create page tables that
 		 * span up to the next 4MB virtual
@@ -177,7 +176,6 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 			address += 4*1024*1024;
 			continue;
 		}
-#endif
 		/* map the memory at virtual addr 0xC0000000 */
 		/* pg_table is physical at this point */
 		pg_table = (pte_t *) (PAGE_MASK & pgd_val(pg_dir[768]));
@@ -224,6 +222,9 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 #ifdef __SMP__
 	/*
 	 * But first pinch a few for the stack/trampoline stuff
+	 *	FIXME: Don't need the extra page at 4K, but need to fix
+	 *	trampoline before removing it. (see the GDT stuff)
+	 *
 	 */
 	start_low_mem += PAGE_SIZE;				/* 32bit startup code */
 	start_low_mem = smp_alloc_memory(start_low_mem); 	/* AP processor stacks */

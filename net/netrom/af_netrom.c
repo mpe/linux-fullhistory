@@ -1,10 +1,10 @@
 /*
- *	NET/ROM release 005
+ *	NET/ROM release 006
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
  *
- *	This code REQUIRES 2.1.0 or higher/ NET3.037
+ *	This code REQUIRES 2.1.15 or higher/ NET3.039
  *
  *	This module:
  *		This module is free software; you can redistribute it and/or
@@ -29,6 +29,7 @@
  *	NET/ROM 004	Jonathan(G4KLX)	Converted to module.
  *	NET/ROM 005	Jonathan(G4KLX) Linux 2.1
  *			Alan(GW4PTS)	Started POSIXisms
+ *	NET/ROM 006	Alan(GW4PTS)	Brought in line with the ANK changes
  */
   
 #include <linux/config.h>
@@ -78,6 +79,9 @@ int sysctl_netrom_routing_control                 = 1;
 static unsigned short circuit = 0x101;
 
 static struct sock *volatile nr_list = NULL;
+
+static struct proto_ops nr_proto_ops;
+
 
 /*
  *	Socket removal during an interrupt is now safe.
@@ -233,7 +237,7 @@ static struct sock *nr_find_peer(unsigned char index, unsigned char id)
 /*
  *	Deferred destroy.
  */
-void nr_destroy_socket(struct sock *);
+void nr_destroy_socket(struct sock * sk);
 
 /*
  *	Handler for deferred kills.
@@ -399,11 +403,8 @@ static int nr_setsockopt(struct socket *sock, int level, int optname,
 	struct sock *sk;
 	int err, opt;
 
-	sk = (struct sock *)sock->data;
+	sk = sock->sk;
 	
-	if (level == SOL_SOCKET)
-		return sock_setsockopt(sk, level, optname, optval, optlen);
-
 	if (level != SOL_NETROM)
 		return -EOPNOTSUPP;
 
@@ -468,10 +469,7 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 	int val = 0;
 	int err; 
 
-	sk = (struct sock *)sock->data;
-	
-	if (level == SOL_SOCKET)
-		return sock_getsockopt(sk, level, optname, optval, optlen);
+	sk = sock->sk;
 	
 	if (level != SOL_NETROM)
 		return -EOPNOTSUPP;
@@ -524,7 +522,7 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 
 static int nr_listen(struct socket *sock, int backlog)
 {
-	struct sock *sk = (struct sock *)sock->data;
+	struct sock *sk = sock->sk;
 
 	if (sk->state != TCP_LISTEN) {
 		memset(&sk->protinfo.nr->user_addr, '\0', AX25_ADDR_LEN);
@@ -569,6 +567,8 @@ static int nr_create(struct socket *sock, int protocol)
 	skb_queue_head_init(&sk->back_log);
 
 	init_timer(&sk->timer);
+	
+	sock->ops	  = &nr_proto_ops;
 
 	sk->socket        = sock;
 	sk->type          = sock->type;
@@ -588,8 +588,8 @@ static int nr_create(struct socket *sock, int protocol)
 	sk->error_report = def_callback1;
 
 	if (sock != NULL) {
-		sock->data = (void *)sk;
-		sk->sleep  = sock->wait;
+		sock->sk = sk;
+		sk->sleep  = &sock->wait;
 	}
 
 	skb_queue_head_init(&nr->ack_queue);
@@ -647,7 +647,7 @@ static struct sock *nr_make_new(struct sock *osk)
 	if (osk->type != SOCK_SEQPACKET)
 		return NULL;
 
-	if ((sk = (struct sock *)sk_alloc(GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
 		return NULL;
 
 	if ((nr = (nr_cb *)kmalloc(sizeof(*nr), GFP_ATOMIC)) == NULL) {
@@ -715,14 +715,14 @@ static struct sock *nr_make_new(struct sock *osk)
 
 static int nr_dup(struct socket *newsock, struct socket *oldsock)
 {
-	struct sock *sk = (struct sock *)oldsock->data;
+	struct sock *sk = oldsock->sk;
 
 	return nr_create(newsock, sk->protocol);
 }
 
 static int nr_release(struct socket *sock, struct socket *peer)
 {
-	struct sock *sk = (struct sock *)sock->data;
+	struct sock *sk = sock->sk;
 
 	if (sk == NULL) return 0;
 
@@ -774,7 +774,7 @@ static int nr_release(struct socket *sock, struct socket *peer)
 			break;
 	}
 
-	sock->data = NULL;	
+	sock->sk = NULL;	
 	sk->socket = NULL;	/* Not used, but we should do this. **/
 
 	return 0;
@@ -787,7 +787,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	struct device *dev;
 	ax25_address *user, *source;
 	
-	sk = (struct sock *)sock->data;
+	sk = sock->sk;
 
 	if (sk->zapped == 0)
 		return -EINVAL;
@@ -836,7 +836,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 	int addr_len, int flags)
 {
-	struct sock *sk = (struct sock *)sock->data;
+	struct sock *sk = sock->sk;
 	struct sockaddr_ax25 *addr = (struct sockaddr_ax25 *)uaddr;
 	ax25_address *user, *source = NULL;
 	struct device *dev;
@@ -939,12 +939,12 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags)
 	struct sock *newsk;
 	struct sk_buff *skb;
 
-	if (newsock->data)
-		sk_free(newsock->data);
+	if (newsock->sk)
+		sk_free(newsock->sk);
 
-	newsock->data = NULL;
+	newsock->sk = NULL;
 	
-	sk = (struct sock *)sock->data;
+	sk = sock->sk;
 
 	if (sk->type != SOCK_SEQPACKET)
 		return -EOPNOTSUPP;
@@ -979,7 +979,7 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags)
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_READ);
 	sk->ack_backlog--;
-	newsock->data = newsk;
+	newsock->sk = newsk;
 
 	return 0;
 }
@@ -990,7 +990,7 @@ static int nr_getname(struct socket *sock, struct sockaddr *uaddr,
 	struct full_sockaddr_ax25 *sax = (struct full_sockaddr_ax25 *)uaddr;
 	struct sock *sk;
 	
-	sk = (struct sock *)sock->data;
+	sk = sock->sk;
 	
 	if (peer != 0) {
 		if (sk->state != TCP_ESTABLISHED)
@@ -1126,9 +1126,9 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	return 1;
 }
 
-static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, int noblock, int flags)
+static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct scm_cookie *scm)
 {
-	struct sock *sk = (struct sock *)sock->data;
+	struct sock *sk = sock->sk;
 	struct sockaddr_ax25 *usax = (struct sockaddr_ax25 *)msg->msg_name;
 	int err;
 	struct sockaddr_ax25 sax;
@@ -1136,10 +1136,7 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nobl
 	unsigned char *asmptr;
 	int size;
 	
-	if (sk->err)
-		return sock_error(sk);
-
-	if (flags)
+	if (msg->msg_flags&~MSG_DONTWAIT)
 		return -EINVAL;
 
 	if (sk->zapped)
@@ -1177,11 +1174,10 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nobl
 
 	size = len + AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
 
-	if ((skb = sock_alloc_send_skb(sk, size, 0, 0, &err)) == NULL)
+	if ((skb = sock_alloc_send_skb(sk, size, 0, msg->msg_flags&MSG_DONTWAIT, &err)) == NULL)
 		return err;
 
 	skb->sk   = sk;
-	skb->free = 1;
 	skb->arp  = 1;
 
 	skb_reserve(skb, size - len);
@@ -1234,17 +1230,14 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nobl
 }
 
 
-static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock,
-		   int flags, int *addr_len)
+static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, 
+	int flags, struct scm_cookie *scm)
 {
-	struct sock *sk = (struct sock *)sock->data;
+	struct sock *sk = sock->sk;
 	struct sockaddr_ax25 *sax = (struct sockaddr_ax25 *)msg->msg_name;
 	int copied;
 	struct sk_buff *skb;
 	int er;
-
-	if (addr_len != NULL)
-		*addr_len = sizeof(*sax);
 
 	/*
 	 * This works for seqpacket too. The receiver has ordered the queue for
@@ -1255,7 +1248,7 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int nob
 		return -ENOTCONN;
 
 	/* Now we can treat all alike */
-	if ((skb = skb_recv_datagram(sk, flags, noblock, &er)) == NULL)
+	if ((skb = skb_recv_datagram(sk, flags, msg->msg_flags&MSG_DONTWAIT, &er)) == NULL)
 		return er;
 
 	if (!sk->protinfo.nr->hdrincl) {
@@ -1280,11 +1273,11 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int nob
 
 		*sax = addr;
 
-		*addr_len = sizeof(*sax);
 	}
 
-	skb_free_datagram(sk, skb);
+	msg->msg_namelen=sizeof(*sax);
 
+	skb_free_datagram(sk, skb);
 	return copied;
 }
 
@@ -1293,16 +1286,9 @@ static int nr_shutdown(struct socket *sk, int how)
 	return -EOPNOTSUPP;
 }
 
-static int nr_select(struct socket *sock , int sel_type, select_table *wait)
-{
-	struct sock *sk = (struct sock *)sock->data;
-
-	return datagram_select(sk, sel_type, wait);
-}
-
 static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
-	struct sock *sk = (struct sock *)sock->data;
+	struct sock *sk = sock->sk;
 	int err;
 	long amount = 0;
 
@@ -1427,10 +1413,15 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 	return(len);
 } 
 
-struct proto_ops nr_proto_ops = {
+static struct net_proto_family netrom_family_ops = 
+{
+	AF_NETROM,
+	nr_create
+};
+
+static struct proto_ops nr_proto_ops = {
 	AF_NETROM,
 	
-	nr_create,
 	nr_dup,
 	nr_release,
 	nr_bind,
@@ -1438,7 +1429,7 @@ struct proto_ops nr_proto_ops = {
 	nr_socketpair,
 	nr_accept,
 	nr_getname,
-	nr_select,
+	datagram_select,
 	nr_ioctl,
 	nr_listen,
 	nr_shutdown,
@@ -1477,9 +1468,9 @@ static struct proc_dir_entry proc_net_nr_nodes = {
 
 void nr_proto_init(struct net_proto *pro)
 {
-	sock_register(nr_proto_ops.family, &nr_proto_ops);
+	sock_register(&netrom_family_ops);
 	register_netdevice_notifier(&nr_dev_notifier);
-	printk(KERN_INFO "G4KLX NET/ROM for Linux. Version 0.5 for AX25.034 Linux 2.1\n");
+	printk(KERN_INFO "G4KLX NET/ROM for Linux. Version 0.6 for AX25.034 Linux 2.1\n");
 
 	if (!ax25_protocol_register(AX25_P_NETROM, nr_route_frame))
 		printk(KERN_ERR "NET/ROM unable to register protocol with AX.25\n");

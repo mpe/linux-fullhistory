@@ -213,7 +213,7 @@ struct tty_struct {
 	unsigned long flags;
 	int count;
 	struct winsize winsize;
-	unsigned char stopped:1, hw_stopped:1, packet:1;
+	unsigned char stopped:1, hw_stopped:1, flow_stopped:1, packet:1;
 	unsigned char ctrl_status;
 
 	struct tty_struct *link;
@@ -294,6 +294,7 @@ extern int cy_init(void);
 extern int stl_init(void);
 extern int stli_init(void);
 extern int riscom8_init(void);
+extern int esp_init(void);
 
 extern int tty_paranoia_check(struct tty_struct *tty, kdev_t device,
 			      const char *routine);

@@ -184,7 +184,6 @@ struct async_struct {
 	unsigned short		closing_wait2;
 	int			IER; 	/* Interrupt Enable Register */
 	int			MCR; 	/* Modem control register */
-	int			MCR_noint; /* MCR with interrupts off */
 	unsigned long		event;
 	unsigned long		last_active;
 	int			line;

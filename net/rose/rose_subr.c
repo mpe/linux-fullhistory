@@ -49,13 +49,11 @@ void rose_clear_queues(struct sock *sk)
 
 	while ((skb = skb_dequeue(&sk->write_queue)) != NULL) {
 		skb->sk   = sk;
-		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
 	}
 
 	while ((skb = skb_dequeue(&sk->protinfo.rose->ack_queue)) != NULL) {
 		skb->sk   = sk;
-		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
 	}
 
@@ -80,7 +78,6 @@ void rose_frames_acked(struct sock *sk, unsigned short nr)
 		while (skb_peek(&sk->protinfo.rose->ack_queue) != NULL && sk->protinfo.rose->va != nr) {
 		        skb = skb_dequeue(&sk->protinfo.rose->ack_queue);
 		        skb->sk   = sk;
-			skb->free = 1;
 			kfree_skb(skb, FREE_WRITE);
 			sk->protinfo.rose->va = (sk->protinfo.rose->va + 1) % ROSE_MODULUS;
 		}

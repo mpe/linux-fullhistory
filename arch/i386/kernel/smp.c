@@ -19,6 +19,9 @@
  *		Alan Cox	:	By repeated request 8) - Total BogoMIP report.
  *		Greg Wright	:	Fix for kernel stacks panic.
  *		Erich Boleyn	:	MP v1.4 and additional changes.
+ *	Matthias Sattler	:	Changes for 2.1 kernel map.
+ *	Michel Lespinasse	:	Changes for 2.1 kernel map.
+ *
  */
 
 #include <linux/kernel.h>
@@ -35,7 +38,47 @@
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 #include <asm/smp.h>
+#include <asm/io.h>
 
+/*
+ *	Some notes on processor bugs:
+ *
+ *	Pentium and Pentium Pro (and all CPU's) have bugs. The Linux issues
+ *	for SMP are handled as follows.
+ *
+ *	Pentium Pro
+ *		Occasional delivery of 'spurious interrupt' as trap #16. This
+ *	is very very rare. The kernel logs the event and recovers
+ *
+ *	Pentium
+ *		There is a marginal case where REP MOVS on 100MHz SMP
+ *	machines with B stepping processors can fail. XXX should provide
+ *	an L1cache=Writethrough or L1cache=off option. 
+ *
+ *		B stepping CPU's may hang. There are hardware work arounds
+ *	for this. We warn about it in case your board doesnt have the work
+ *	arounds. Basically thats so I can tell anyone with a B stepping
+ *	CPU and SMP problems "tough".
+ *
+ *	Specific items [From Pentium Processor Specification Update]
+ *
+ *	1AP.	Linux doesn't use remote read
+ *	2AP.	Linux doesn't trust APIC errors
+ *	3AP.	We work around this
+ *	4AP.	Linux never generated 3 interrupts of the same priority
+ *		to cause a lost local interrupt.
+ *	5AP.	Remote read is never used
+ *	9AP.	XXX NEED TO CHECK WE HANDLE THIS XXX
+ *	10AP.	XXX NEED TO CHECK WE HANDLE THIS XXX
+ *	11AP.	Linux read the APIC between writes to avoid this, as per
+ *		the documentation. Make sure you preserve this as it affects
+ *		the C stepping chips too.
+ *
+ *	If this sounds worrying believe me these bugs are ___RARE___ and
+ *	there's about nothing of note with C stepping upwards.
+ */
+ 
+ 
 /*
  *	Why isn't this somewhere standard ??
  */
@@ -47,7 +90,9 @@ extern __inline int max(int a,int b)
 	return b;
 }
 
+static int smp_b_stepping = 0;				/* Set if we find a B stepping CPU			*/
 
+static int max_cpus = -1;				/* Setup configured maximum number of CPUs to activate	*/
 int smp_found_config=0;					/* Have we found an SMP box 				*/
 
 unsigned long cpu_present_map = 0;			/* Bitmask of existing CPU's 				*/
@@ -57,6 +102,7 @@ volatile int cpu_number_map[NR_CPUS];			/* which CPU maps to which logical numbe
 volatile int cpu_logical_map[NR_CPUS];			/* which logical number maps to which CPU		*/
 volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};	/* We always use 0 the rest is ready for parallel delivery */
 volatile unsigned long smp_invalidate_needed;		/* Used for the invalidate map that's also checked in the spinlock */
+volatile unsigned long kstack_ptr;			/* Stack vector for booting CPU's			*/
 struct cpuinfo_x86 cpu_data[NR_CPUS];			/* Per cpu bogomips and other parameters 		*/
 static unsigned int num_processors = 1;			/* Internal processor count				*/
 static unsigned long io_apic_addr = 0xFEC00000;		/* Address of the I/O apic (not yet used) 		*/
@@ -65,7 +111,7 @@ static unsigned char *kstack_base,*kstack_end;		/* Kernel stack list pointers 		
 static int smp_activated = 0;				/* Tripped once we need to start cross invalidating 	*/
 int apic_version[NR_CPUS];				/* APIC version number					*/
 static volatile int smp_commenced=0;			/* Tripped when we start scheduling 		    	*/
-unsigned long apic_addr=0xFEE00000;			/* Address of APIC (defaults to 0xFEE00000)		*/
+unsigned long apic_addr = 0xFEE00000;			/* Address of APIC (defaults to 0xFEE00000)		*/
 unsigned long nlong = 0;				/* dummy used for apic_reg address + 0x20		*/
 unsigned char *apic_reg=((unsigned char *)(&nlong))-0x20;/* Later set to the ioremap() of the APIC 		*/
 unsigned long apic_retval;				/* Just debugging the assembler.. 			*/
@@ -103,6 +149,25 @@ volatile unsigned long smp_process_available=0;
 #else
 #define SMP_PRINTK(x)
 #endif
+
+/*
+ *	Setup routine for controlling SMP activation
+ *
+ *	Command-line option of "nosmp" or "maxcpus=0" will disable SMP
+ *      activation entirely (the MPS table probe still happens, though).
+ *
+ *	Command-line option of "maxcpus=<NUM>", where <NUM> is an integer
+ *	greater than 0, limits the maximum number of CPUs activated in
+ *	SMP mode to <NUM>.
+ */
+
+void smp_setup(char *str, int *ints)
+{
+	if (ints && ints[0] > 0)
+		max_cpus = ints[1];
+	else
+		max_cpus = 0;
+}
 
 
 /* 
@@ -183,7 +248,7 @@ static int smp_read_mpc(struct mp_config_table *mpc)
 	printk("APIC at: 0x%lX\n",mpc->mpc_lapic);
 
 	/* set the local APIC address */
-	apic_addr = mpc->mpc_lapic;
+	apic_addr = (unsigned long)phys_to_virt((unsigned long)mpc->mpc_lapic);
 	
 	/*
 	 *	Now process the configuration blocks.
@@ -259,7 +324,7 @@ static int smp_read_mpc(struct mp_config_table *mpc)
 	                                printk("I/O APIC #%d Version %d at 0x%lX.\n",
 	                                	m->mpc_apicid,m->mpc_apicver,
 	                                	m->mpc_apicaddr);
-	                                io_apic_addr = m->mpc_apicaddr;
+	                                io_apic_addr = (unsigned long)phys_to_virt(m->mpc_apicaddr);
 	                        }
                                 mpt+=sizeof(*m);
                                 count+=sizeof(*m); 
@@ -295,7 +360,7 @@ static int smp_read_mpc(struct mp_config_table *mpc)
  
 int smp_scan_config(unsigned long base, unsigned long length)
 {
-	unsigned long *bp=(unsigned long *)base;
+	unsigned long *bp=phys_to_virt(base);
 	struct intel_mp_floating *mpf;
 	
 	SMP_PRINTK(("Scan SMP from %p for %ld bytes.\n",
@@ -466,13 +531,14 @@ static void install_trampoline(unsigned char *mp)
 unsigned long smp_alloc_memory(unsigned long mem_base)
 {
 	int size=(num_processors-1)*PAGE_SIZE;		/* Number of stacks needed */
+
 	/*
 	 *	Our stacks have to be below the 1Mb line, and mem_base on entry
 	 *	is 4K aligned.
 	 */
 	 
-	if(mem_base+size>=0x9F000)
-		panic("smp_alloc_memory: Insufficient low memory for kernel stacks.\n");
+	if(virt_to_phys((void *)(mem_base+size))>=0x9F000)
+		panic("smp_alloc_memory: Insufficient low memory for kernel stacks 0x%lx.\n", mem_base);
 	kstack_base=(void *)mem_base;
 	mem_base+=size;
 	kstack_end=(void *)mem_base;
@@ -505,6 +571,8 @@ void smp_store_cpu_info(int id)
 	c->x86=x86;
 	c->x86_model=x86_model;
 	c->x86_mask=x86_mask;
+	if(x86_mask>=1 && x86_mask<=4)
+		smp_b_stepping=1;		/* Remember we have B step CPUs */
 	c->x86_capability=x86_capability;
 	c->fdiv_bug=fdiv_bug;
 	c->wp_works_ok=wp_works_ok;		/* Always assumed the same currently */
@@ -529,7 +597,13 @@ void smp_commence(void)
 	/*
 	 *	Lets the callin's below out of their loop.
 	 */
+	SMP_PRINTK(("Setting commenced=1, go go go\n"));
 	smp_commenced=1;
+}
+
+void pointless_func(void)
+{
+	;
 }
  
 void smp_callin(void)
@@ -551,6 +625,8 @@ void smp_callin(void)
 	 *	Get our bogomips.
 	 */	
 	calibrate_delay();
+	SMP_PRINTK(("Stack at about %p\n",&cpuid));
+	
 	/*
 	 *	Save our processor parameters
 	 */
@@ -566,18 +642,20 @@ void smp_callin(void)
 /*	printk("Testing faulting...\n");
 	*(long *)0=1;		 OOPS... */
 	local_flush_tlb();
+	
 	while(!smp_commenced);
+	
+	local_flush_tlb();
+	
 	if (cpu_number_map[cpuid] == -1)
 		while(1);
-	local_flush_tlb();
 	SMP_PRINTK(("Commenced..\n"));
-	
+	local_flush_tlb();
 	load_TR(cpu_number_map[cpuid]);
-/*	while(1);*/
 }
 
 /*
- *	Cycle through the processors sending pentium IPI's to boot each.
+ *	Cycle through the processors sending APIC IPI's to boot each.
  */
  
 void smp_boot_cpus(void)
@@ -585,6 +663,7 @@ void smp_boot_cpus(void)
 	int i;
 	int cpucount=0;
 	unsigned long cfg;
+	pgd_t maincfg;
 	void *stack;
 	extern unsigned long init_user_stack[];
 	
@@ -606,6 +685,16 @@ void smp_boot_cpus(void)
 	cpu_present_map |= (1 << smp_processor_id());
 	cpu_number_map[boot_cpu_id] = 0;
 	active_kernel_processor=boot_cpu_id;
+
+	/*
+	 *	If SMP should be disabled, then really disable it!
+	 */
+
+	if (!max_cpus && smp_found_config)
+	{
+		smp_found_config = 0;
+		printk("SMP mode deactivated, forcing use of dummy APIC emulation.\n");
+	}
 
 	/*
 	 *	If we don't conform to the Intel MPS standard, get out
@@ -686,7 +775,8 @@ void smp_boot_cpus(void)
 		if (i == boot_cpu_id)
 			continue;
 		
-		if (cpu_present_map & (1 << i))
+		if ((cpu_present_map & (1 << i))
+		    && (max_cpus < 0 || max_cpus > cpucount+1))
 		{
 			unsigned long send_status, accept_status;
 			int timeout, num_starts, j;
@@ -698,7 +788,8 @@ void smp_boot_cpus(void)
 			stack=get_kernel_stack();	/* We allocated these earlier */
 			if(stack==NULL)
 				panic("No memory for processor stacks.\n");
-			kernel_stacks[i]=stack;
+				
+			kernel_stacks[i]=(void *)phys_to_virt((unsigned long)stack);
 			install_trampoline(stack);
 
 			printk("Booting processor %d stack %p: ",i,stack);			/* So we set what's up   */
@@ -719,8 +810,11 @@ void smp_boot_cpus(void)
 			CMOS_WRITE(0xa, 0xf);
 			pg0[0]=7;
 			local_flush_tlb();
-			*((volatile unsigned short *) 0x469) = ((unsigned long)stack)>>4;
-			*((volatile unsigned short *) 0x467) = 0;
+			SMP_PRINTK(("1.\n"));
+			*((volatile unsigned short *) phys_to_virt(0x469)) = ((unsigned long)stack)>>4;
+			SMP_PRINTK(("2.\n"));
+			*((volatile unsigned short *) phys_to_virt(0x467)) = 0;
+			SMP_PRINTK(("3.\n"));
 			
 			/*
 			 *	Protect it again
@@ -728,6 +822,17 @@ void smp_boot_cpus(void)
 			 
 			pg0[0]= cfg;
 			local_flush_tlb();
+
+			/*	walken modif
+			 *	enable mapping of the first 4M at virtual
+			 *	address zero
+			 */
+
+			maincfg=swapper_pg_dir[0];
+			((unsigned long *)swapper_pg_dir)[0]=0x102007;
+
+			/* no need to local_flush_tlb :
+			   we are setting this up for the slave processor ! */
 
 			/*
 			 *	Be paranoid about clearing APIC errors.
@@ -800,7 +905,8 @@ void smp_boot_cpus(void)
 				SMP_PRINTK(("Sending STARTUP #%d.\n",j));
 
 				apic_write(APIC_ESR, 0);
-			
+				SMP_PRINTK(("After apic_write.\n"));
+
 				/*
 				 *	STARTUP IPI
 				 */
@@ -812,11 +918,14 @@ void smp_boot_cpus(void)
 				cfg&=~0xCDFFF;								/* Clear bits 		*/
 				cfg |= (APIC_DEST_FIELD
 					| APIC_DEST_DM_STARTUP
-					| (((int) stack) >> 12) );					/* Boot on the stack 	*/		
+					| (((int)virt_to_phys(stack)) >> 12));					/* Boot on the stack 	*/		
+				SMP_PRINTK(("Before start apic_write.\n"));
 				apic_write(APIC_ICR, cfg);						/* Kick the second 	*/
 
+				SMP_PRINTK(("Startup point 1.\n"));
 				timeout = 0;
 				do {
+				        SMP_PRINTK(("Sleeping.\n")); udelay(1000000);	
 					udelay(10);
 				} while ( (send_status = (apic_read(APIC_ICR) & 0x1000))
 					  && (timeout++ < 1000));
@@ -824,6 +933,7 @@ void smp_boot_cpus(void)
 
 				accept_status = (apic_read(APIC_ESR) & 0xEF);
 			}
+			SMP_PRINTK(("After Startup.\n"));
 
 			if (send_status)		/* APIC never delivered?? */
 				printk("APIC never delivered???\n");
@@ -847,15 +957,24 @@ void smp_boot_cpus(void)
 				}
 				else
 				{
-					if(*((volatile unsigned char *)8192)==0xA5)
+					if(*((volatile unsigned char *)phys_to_virt(8192))==0xA5)
 						printk("Stuck ??\n");
 					else
 						printk("Not responding.\n");
 				}
 			}
+			SMP_PRINTK(("CPU has booted.\n"));
+
+                        /*      walken modif
+                         *      restore mapping of the first 4M
+                         */
+
+                        swapper_pg_dir[0]=maincfg;
+                        
+                        local_flush_tlb();
 
 			/* mark "stuck" area as not stuck */
-			*((volatile unsigned long *)8192) = 0;
+			*((volatile unsigned long *)phys_to_virt(8192)) = 0;
 		}
 		
 		/* 
@@ -885,7 +1004,7 @@ void smp_boot_cpus(void)
 
 	CMOS_WRITE(0, 0xf);
 
-	*((volatile long *) 0x467) = 0;
+	*((volatile long *) phys_to_virt(0x467)) = 0;
 
 	/*
 	 *	Restore old page 0 entry.
@@ -898,6 +1017,7 @@ void smp_boot_cpus(void)
 	 *	Allow the user to impress friends.
 	 */
 	
+	SMP_PRINTK(("Before bogomips.\n"));
 	if(cpucount==0)
 	{
 		printk("Error: only one processor found.\n");
@@ -915,9 +1035,13 @@ void smp_boot_cpus(void)
 			cpucount+1, 
 			(bogosum+2500)/500000,
 			((bogosum+2500)/5000)%100);
+		SMP_PRINTK(("Before bogocount - setting activated=1.\n"));
 		smp_activated=1;
 		smp_num_cpus=cpucount+1;
 	}
+	if(smp_b_stepping)
+		printk("WARNING: SMP operation may be unreliable with B stepping processors.\n");
+	SMP_PRINTK(("Boot done.\n"));
 }
 
 
@@ -977,9 +1101,9 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 		panic("CPU #%d: Message pass %d but pass in progress by %d of %d\n",
 			smp_processor_id(),msg,message_cpu, smp_msg_id);
 	}
+
 	message_cpu=smp_processor_id();
 	
-
 	/*
 	 *	We are busy
 	 */
@@ -1094,7 +1218,7 @@ void smp_flush_tlb(void)
 	if(smp_activated && smp_processor_id()!=active_kernel_processor)
 		panic("CPU #%d:Attempted flush tlb IPI when not AKP(=%d)\n",smp_processor_id(),active_kernel_processor);
 /*	printk("SMI-");*/
-	
+
 	/*
 	 *	The assignment is safe because it's volatile so the compiler cannot reorder it,
 	 *	because the i586 has strict memory ordering and because only the kernel lock holder
@@ -1134,11 +1258,13 @@ void smp_flush_tlb(void)
 
 void smp_reschedule_irq(int cpl, struct pt_regs *regs)
 {
+/*#define DEBUGGING_SMP_RESCHED*/
 #ifdef DEBUGGING_SMP_RESCHED
 	static int ct=0;
 	if(ct==0)
 	{
 		printk("Beginning scheduling on CPU#%d\n",smp_processor_id());
+		udelay(1000000);
 		ct=1;
 	}
 #endif	

@@ -327,7 +327,7 @@ int ip_masq_app_pkt_out(struct ip_masq *ms, struct sk_buff **skb_p, struct devic
         if ( (mapp = ms->app) == NULL)
                 return 0;
         
-        iph = (*skb_p)->h.iph;
+        iph = (*skb_p)->nh.iph;
         th = (struct tcphdr *)&(((char *)iph)[iph->ihl*4]);
         
         /*
@@ -390,7 +390,7 @@ int ip_masq_app_pkt_in(struct ip_masq *ms, struct sk_buff **skb_p, struct device
         if ( (mapp = ms->app) == NULL)
                 return 0;
         
-        iph = (*skb_p)->h.iph;
+        iph = (*skb_p)->nh.iph;
         th = (struct tcphdr *)&(((char *)iph)[iph->ihl*4]);
         
         /*
@@ -488,7 +488,7 @@ static struct proc_dir_entry proc_net_ip_masq_app = {
 
 int ip_masq_app_init(void)
 {
-        
+
         register_symtab (&ip_masq_app_syms);
 #ifdef CONFIG_PROC_FS        
 	proc_net_register(&proc_net_ip_masq_app);
@@ -539,7 +539,6 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
                         return skb;
 
                 }
-                n_skb->free = skb->free;
                 skb_reserve(n_skb, MAX_HEADER);
                 skb_put(n_skb, skb->len + diff);
 
@@ -549,14 +548,15 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
                  *	like skb->protocol (PPP driver wants it).
                  */
                 offset = n_skb->data - skb->data;
+                n_skb->nh.raw = skb->nh.raw + offset;
                 n_skb->h.raw = skb->h.raw + offset;
                 n_skb->when = skb->when;
                 n_skb->dev = skb->dev;
                 n_skb->mac.raw = skb->mac.raw + offset;
-                n_skb->ip_hdr = (struct iphdr *)(((char *)skb->ip_hdr)+offset);
                 n_skb->pkt_type = skb->pkt_type;
                 n_skb->protocol = skb->protocol;
                 n_skb->ip_summed = skb->ip_summed;
+		n_skb->dst = dst_clone(skb->dst);
 
                 /*
                  * Copy pkt in new buffer
@@ -600,7 +600,7 @@ struct sk_buff * ip_masq_skb_replace(struct sk_buff *skb, int pri, char *o_buf, 
                 /*
                  * 	update ip header
                  */
-                iph = n_skb->h.iph;
+                iph = n_skb->nh.iph;
                 iph->check = 0;
                 iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
                 iph->tot_len = htons(skb_len + diff);

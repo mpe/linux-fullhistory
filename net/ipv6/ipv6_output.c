@@ -55,23 +55,14 @@ static int __inline__ ipv6_build_mac_header(struct sk_buff *skb,
 	skb->arp = 1;
 	skb->nexthop = neigh;
 
+	skb_reserve(skb, (dev->hard_header_len + 15) & ~15);
 
 	if (dev->hard_header_len)
 	{
-		skb_reserve(skb, (dev->hard_header_len + 15) & ~15);
 
-		if (neigh && (neigh->flags & NCF_HHVALID))
-		{
-			/*
-			 *	Cached hardware header
-			 */
-
-			memcpy(skb_push(skb, dev->hard_header_len),
-			       neigh->hh_data, dev->hard_header_len);
-
-			return dev->hard_header_len;
-		}
-
+		/*
+		 *	FIXME: use cached hardware header if availiable
+		 */
 		if (dev->hard_header)
 		{
 			mac = dev->hard_header(skb, dev, ETH_P_IPV6, 
@@ -91,6 +82,7 @@ static int __inline__ ipv6_build_mac_header(struct sk_buff *skb,
 			hdrlen = dev->hard_header_len;
 	}
 
+	skb->mac.raw = skb->data;
 	return hdrlen;
 }
 
@@ -103,7 +95,7 @@ void ipv6_redo_mac_hdr(struct sk_buff *skb, struct neighbour *neigh, int len)
 	skb->nexthop = neigh;
 	skb->arp = 1;
 
-	skb_pull(skb, (unsigned char *) skb->ipv6_hdr - skb->data);
+	skb_pull(skb, (unsigned char *) skb->nh.ipv6h - skb->data);
 
 	/*
 	 *	neighbour cache should have the ether address
@@ -112,16 +104,9 @@ void ipv6_redo_mac_hdr(struct sk_buff *skb, struct neighbour *neigh, int len)
 
 	if (dev->hard_header)
 	{
-		if (neigh && (neigh->flags & NCF_HHVALID))
-		{
-			/*
-			 *	Cached hardware header
-			 */
-
-			memcpy(skb_push(skb, dev->hard_header_len),
-			       neigh->hh_data, dev->hard_header_len);
-			return;
-		}
+		/*
+		 *	FIXME: use cached hardware header if availiable
+		 */
 
 		mac = dev->hard_header(skb, dev, ETH_P_IPV6, 
 				       NULL, NULL, len);
@@ -132,6 +117,7 @@ void ipv6_redo_mac_hdr(struct sk_buff *skb, struct neighbour *neigh, int len)
 		}
 
 	}
+	skb->mac.raw = skb->data;
 }
 
 void default_output_method(struct sk_buff *skb, struct rt6_info *rt)
@@ -146,14 +132,7 @@ void default_output_method(struct sk_buff *skb, struct rt6_info *rt)
 		 *	otherwise use NORMAL
 		 */
 
-		if (sk != NULL)
-		{
-			dev_queue_xmit(skb, dev, sk->priority);
-		}
-		else
-		{
-			dev_queue_xmit(skb, dev, SOPRI_NORMAL);
-		}
+		dev_queue_xmit(skb);
 	}
 	else
 	{
@@ -193,12 +172,10 @@ int ipv6_xmit(struct sock *sk, struct sk_buff *skb, struct in6_addr *saddr,
 		rt_flags |= RTI_DEVRT;
 	}
 
-	if (skb->localroute)
-	{
+	if (sk && sk->localroute)
 		rt_flags |= RTI_GATEWAY;
-	}
 
-	hdr = skb->ipv6_hdr;
+	hdr = skb->nh.ipv6h;
 	
 
 	if (sk)
@@ -250,9 +227,7 @@ int ipv6_xmit(struct sock *sk, struct sk_buff *skb, struct in6_addr *saddr,
 	 *	Link Layer headers
 	 */
 
-	skb->sk = sk;
 	skb->protocol = __constant_htons(ETH_P_IPV6);
-	skb->free = 1;
 	skb->dev = dev;
 	
 	ipv6_redo_mac_hdr(skb, dc->dc_nexthop, seg_len);
@@ -344,7 +319,7 @@ int ipv6_bld_hdr_2(struct sock *sk, struct sk_buff *skb, struct device *dev,
 
 	
 	hdr = (struct ipv6hdr *) skb_put(skb, sizeof(struct ipv6hdr));
-	skb->ipv6_hdr = hdr;
+	skb->nh.ipv6h = hdr;
 	
 	hdr->version  = 6;
 	hdr->priority = np->priority & 0x0f;
@@ -375,10 +350,8 @@ void ipv6_queue_xmit(struct sock *sk, struct device *dev, struct sk_buff *skb,
 	struct ipv6hdr *hdr;
 	u32 seg_len;
 
-	hdr = skb->ipv6_hdr;
-	skb->sk = sk;
+	hdr = skb->nh.ipv6h;
 	skb->protocol = __constant_htons(ETH_P_IPV6);
-	skb->free=1;
 
 	seg_len = skb->tail - ((unsigned char *) hdr);
 
@@ -406,14 +379,7 @@ void ipv6_queue_xmit(struct sock *sk, struct device *dev, struct sk_buff *skb,
 		 *	otherwise use NORMAL
 		 */
 
-		if (sk != NULL)
-		{
-			dev_queue_xmit(skb, dev, sk->priority);
-		}
-		else
-		{
-			dev_queue_xmit(skb, dev, SOPRI_NORMAL);
-		}
+		dev_queue_xmit(skb);
 	}
 	else
 	{
@@ -588,20 +554,18 @@ int ipv6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 
 		skb->dev=dev;
 		skb->protocol = htons(ETH_P_IPV6);
-		skb->free=1;
 		skb->when=jiffies;
-		skb->sk=sk;
 		skb->arp=0;
 
 		/* build the mac header... */
 		ipv6_build_mac_header(skb, dev, neigh, pktlength);
 
 		hdr = (struct ipv6hdr *) skb->tail;
+		skb->nh.ipv6h = hdr;
 
 		if (!sk->ip_hdrincl)
 		{
 			skb_put(skb, sizeof(struct ipv6hdr));
-			skb->ipv6_hdr = hdr;
 
 			hdr->version = 6;
 			hdr->priority = np->priority;
@@ -728,9 +692,7 @@ int ipv6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 
 		last_skb->dev=dev;
 		last_skb->protocol = htons(ETH_P_IPV6);
-		last_skb->free=1;
 		last_skb->when=jiffies;
-		last_skb->sk=sk;
 		last_skb->arp=0;
 
 		/* 
@@ -741,7 +703,7 @@ int ipv6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 
 		hdr = (struct ipv6hdr *) skb_put(last_skb, 
 						 sizeof(struct ipv6hdr));
-		last_skb->ipv6_hdr = hdr;
+		last_skb->nh.ipv6h = hdr;
 
 		hdr->version = 6;
 		hdr->priority = np->priority;
@@ -872,7 +834,7 @@ void ipv6_forward(struct sk_buff *skb, struct device *dev, int flags)
 	int size;
 	int pmtu;
 
-	if (skb->ipv6_hdr->hop_limit <= 1)
+	if (skb->nh.ipv6h->hop_limit <= 1)
 	{
 		icmpv6_send(skb, ICMPV6_TIME_EXCEEDED, ICMPV6_EXC_HOPLIMIT,
 			    0, dev);
@@ -881,9 +843,9 @@ void ipv6_forward(struct sk_buff *skb, struct device *dev, int flags)
 		return;
 	}
 
-	skb->ipv6_hdr->hop_limit--;
+	skb->nh.ipv6h->hop_limit--;
 
-	if (ipv6_addr_type(&skb->ipv6_hdr->saddr) & IPV6_ADDR_LINKLOCAL)
+	if (ipv6_addr_type(&skb->nh.ipv6h->saddr) & IPV6_ADDR_LINKLOCAL)
 	{
 		printk(KERN_DEBUG "ipv6_forward: link local source addr\n");
 		icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_NOT_NEIGHBOUR,
@@ -899,7 +861,7 @@ void ipv6_forward(struct sk_buff *skb, struct device *dev, int flags)
 		rt_flags |= RTF_GATEWAY;
 	}
 
-	dest = ipv6_dst_route(&skb->ipv6_hdr->daddr, NULL, rt_flags);
+	dest = ipv6_dst_route(&skb->nh.ipv6h->daddr, NULL, rt_flags);
 
 	if (dest == NULL)
 	{
@@ -922,7 +884,8 @@ void ipv6_forward(struct sk_buff *skb, struct device *dev, int flags)
 	    !(flags & IP6_FW_SRCRT))
 	{
 		struct in6_addr *target = NULL;
-
+		struct nd_neigh *ndn = (struct nd_neigh *) neigh;
+		
 		/* 
 		 *	outgoing device equal to incoming device
 		 *	send a redirect
@@ -930,11 +893,11 @@ void ipv6_forward(struct sk_buff *skb, struct device *dev, int flags)
 		
 		if ((dest->dc_flags & RTF_GATEWAY))
 		{
-			target = &neigh->addr;
+			target = &ndn->ndn_addr;
 		}
 		else
 		{
-			target = &skb->ipv6_hdr->daddr;
+			target = &skb->nh.ipv6h->daddr;
 		}
 
 		ndisc_send_redirect(skb, neigh, target);
@@ -942,7 +905,7 @@ void ipv6_forward(struct sk_buff *skb, struct device *dev, int flags)
 
 	pmtu = neigh->dev->mtu;
 
-	size = sizeof(struct ipv6hdr) + ntohs(skb->ipv6_hdr->payload_len);
+	size = sizeof(struct ipv6hdr) + ntohs(skb->nh.ipv6h->payload_len);
 	
 	if (size > pmtu)
 	{
@@ -968,25 +931,25 @@ void ipv6_forward(struct sk_buff *skb, struct device *dev, int flags)
 		skb_reserve(buff, (neigh->dev->hard_header_len + 15) & ~15);
 
 		buff->protocol = __constant_htons(ETH_P_IPV6);
-		buff->free = 1;
 		buff->h.raw = skb_put(buff, size);
 
-		memcpy(buff->h.raw, skb->ipv6_hdr, size);
-		buff->ipv6_hdr = (struct ipv6hdr *) buff->h.raw;
+		memcpy(buff->h.raw, skb->nh.ipv6h, size);
+		buff->nh.ipv6h = (struct ipv6hdr *) buff->h.raw;
 		kfree_skb(skb, FREE_READ);
 		skb = buff;
 	}
 
 	ipv6_redo_mac_hdr(skb, neigh, size);
 
-	priority = skb->ipv6_hdr->priority;
+	priority = skb->nh.ipv6h->priority;
 
 	priority = (priority & 0x7) >> 1;
 	priority = pri_values[priority];
 
 	if (dev->flags & IFF_UP)
 	{
-		dev_queue_xmit(skb, neigh->dev, priority);
+		skb->dev = neigh->dev;
+		dev_queue_xmit(skb);
 	}
 	else
 	{

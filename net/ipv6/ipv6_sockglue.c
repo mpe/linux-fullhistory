@@ -113,12 +113,13 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 				
 				sk->prot = &tcp_prot;
 				tp->af_specific = &ipv4_specific;
+				sk->socket->ops = &inet_stream_ops;
 			}
 			else
 			{
 				sk->prot = &udp_prot;
+				sk->socket->ops = &inet_dgram_ops;
 			}
-			sk->socket->ops = &inet_proto_ops;
 			retv = 0;
 		}
 		else

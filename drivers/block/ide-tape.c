@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.c	Version 1.10 - BETA	Nov   5, 1996
+ * linux/drivers/block/ide-tape.c	Version 1.11 - BETA	Dec   2, 1996
  *
  * Copyright (C) 1995, 1996 Gadi Oxman <gadio@netvision.net.il>
  *
@@ -202,6 +202,10 @@
  *                       Some portability fixes.
  *                       Removed ide-tape.h.
  *                       Additional minor changes.
+ * Ver 1.11  Dec  2 96   Bug fix in previous DSC timeout handling.
+ *                       Use ide_stall_queue() for DSC overlap.
+ *                       Use the maximum speed rather than the current speed
+ *                        to compute the request service time.
  *
  * Here are some words from the first releases of hd.c, which are quoted
  * in ide.c and apply here as well:
@@ -732,7 +736,8 @@ typedef struct {
 /*
  * 	IDETAPE_PC_RQ is used to queue a packet command in the request queue.
  */
-#define IDETAPE_PC_RQ			90
+#define IDETAPE_PC_RQ1			90
+#define IDETAPE_PC_RQ2			91
 
 /*
  *	IDETAPE_READ_RQ and IDETAPE_WRITE_RQ are used by our
@@ -750,13 +755,6 @@ typedef struct {
  *	request command.
  */
 #define IDETAPE_RQ_CMD(cmd) 		((cmd >= IDETAPE_FIRST_RQ) && (cmd <= IDETAPE_LAST_RQ))
-
-/*
- *	We are now able to postpone an idetape request in the stage
- *	where it is polling for DSC and service requests from the other
- *	ide device meanwhile.
- */
-#define	IDETAPE_RQ_POSTPONED		0x1234
 
 /*
  *	Error codes which are returned in rq->errors to the higher part
@@ -1019,9 +1017,6 @@ typedef struct {
 	u8		reserved[2];		/* Reserved */
 } idetape_medium_partition_page_t;
 
-#define IDETAPE_MIN(a,b)	((a)<(b) ? (a):(b))
-#define	IDETAPE_MAX(a,b)	((a)>(b) ? (a):(b))
-
 /*
  *	Run time configurable parameters.
  */
@@ -1052,7 +1047,7 @@ static void idetape_input_buffers (ide_drive_t *drive, idetape_pc_t *pc, unsigne
 {
 	struct buffer_head *bh = pc->bh;
 	int count;
-	
+
 	while (bcount) {
 #if IDETAPE_DEBUG_BUGS
 		if (bh == NULL) {
@@ -1061,7 +1056,7 @@ static void idetape_input_buffers (ide_drive_t *drive, idetape_pc_t *pc, unsigne
 			return;
 		}
 #endif /* IDETAPE_DEBUG_BUGS */
-		count = IDETAPE_MIN (bh->b_size - bh->b_count, bcount);
+		count = IDE_MIN (bh->b_size - bh->b_count, bcount);
 		atapi_input_bytes (drive, bh->b_data + bh->b_count, count);
 		bcount -= count; bh->b_count += count;
 		if (bh->b_count == bh->b_size) {
@@ -1077,7 +1072,7 @@ static void idetape_output_buffers (ide_drive_t *drive, idetape_pc_t *pc, unsign
 {
 	struct buffer_head *bh = pc->bh;
 	int count;
-	
+
 	while (bcount) {
 #if IDETAPE_DEBUG_BUGS
 		if (bh == NULL) {
@@ -1085,7 +1080,7 @@ static void idetape_output_buffers (ide_drive_t *drive, idetape_pc_t *pc, unsign
 			return;
 		}
 #endif /* IDETAPE_DEBUG_BUGS */
-		count = IDETAPE_MIN (pc->b_count, bcount);
+		count = IDE_MIN (pc->b_count, bcount);
 		atapi_output_bytes (drive, pc->b_data, count);
 		bcount -= count; pc->b_data += count; pc->b_count -= count;
 		if (!pc->b_count) {
@@ -1113,7 +1108,7 @@ static void idetape_update_buffers (idetape_pc_t *pc)
 			return;
 		}
 #endif /* IDETAPE_DEBUG_BUGS */
-		count = IDETAPE_MIN (bh->b_size, bcount);
+		count = IDE_MIN (bh->b_size, bcount);
 		bh->b_count = count;
 		if (bh->b_count == bh->b_size)
 			bh = bh->b_reqnext;
@@ -1124,40 +1119,6 @@ static void idetape_update_buffers (idetape_pc_t *pc)
 #endif /* CONFIG_BLK_DEV_TRITON */
 
 /*
- *	idetape_poll_for_dsc gets invoked by a timer (which was set
- *	by idetape_postpone_request) to reinsert our postponed request
- *	into the request queue.
- *
- * 	Note that the procedure done here is different than the method
- *	we are using in idetape_queue_pc_head - There we are putting
- *	request(s) before our currently called request.
- *
- *	Here, on the other hand, HWGROUP(drive)->rq is not our request
- *	but rather a request to another device. Therefore, we will let
- *	it finish and only then service our postponed request --> We don't
- *	touch HWGROUP(drive)->rq.
- */
-static void idetape_poll_for_dsc (unsigned long data)
-{
-	ide_drive_t *drive=(ide_drive_t *) data;
-	idetape_tape_t *tape = drive->driver_data;
-
-	del_timer (&tape->dsc_timer);
-
-#if IDETAPE_DEBUG_LOG
-	printk (KERN_INFO "ide-tape: Putting back postponed request\n");
-#endif /* IDETAPE_DEBUG_LOG */
-#if IDETAPE_DEBUG_BUGS
-	if (tape->postponed_rq == NULL) {
-		printk (KERN_ERR "tape->postponed_rq is NULL in idetape_poll_for_dsc\n");
-		return;
-	}
-#endif /* IDETAPE_DEBUG_BUGS */
-
-	(void) ide_do_drive_cmd (drive, tape->postponed_rq, ide_next);
-}
-
-/*
  *	idetape_postpone_request postpones the current request so that
  *	ide.c will be able to service requests from another device on
  *	the same hwgroup while we are polling for DSC.
@@ -1165,33 +1126,9 @@ static void idetape_poll_for_dsc (unsigned long data)
 static void idetape_postpone_request (ide_drive_t *drive)
 {
 	idetape_tape_t *tape = drive->driver_data;
-	struct request *rq;
-	
-#if IDETAPE_DEBUG_LOG
-	printk (KERN_INFO "Reached idetape_postpone_request\n");
-#endif /* IDETAPE_DEBUG_LOG */
-#if IDETAPE_DEBUG_BUGS
-	if (tape->postponed_rq != NULL)
-		printk (KERN_ERR "ide-tape.c bug - postponed_rq not NULL in idetape_postpone_request\n");
-#endif /* IDETAPE_DEBUG_BUGS */
 
-	/*
-	 *	Set the timer parameters.
-	 */
-	tape->dsc_timer.expires=jiffies + tape->dsc_polling_frequency;
-	tape->dsc_timer.data=(unsigned long) drive;
-	tape->dsc_timer.function = &idetape_poll_for_dsc;
-	init_timer (&tape->dsc_timer);
-
-	/*
-	 * Remove current request from the request queue:
-	 */
-	tape->postponed_rq = rq = HWGROUP(drive)->rq;
-	rq->rq_status = IDETAPE_RQ_POSTPONED;
-	blk_dev[MAJOR(rq->rq_dev)].current_request = rq->next;
-	HWGROUP(drive)->rq = NULL;
-
-	add_timer(&tape->dsc_timer);		/* Activate the polling timer */
+	tape->postponed_rq = HWGROUP(drive)->rq;
+	ide_stall_queue(drive, tape->dsc_polling_frequency);
 }
 
 /*
@@ -1222,7 +1159,7 @@ static void idetape_queue_pc_head (ide_drive_t *drive,idetape_pc_t *pc,struct re
 
 	ide_init_drive_cmd (rq);
 	rq->buffer = (char *) pc;
-	rq->cmd = IDETAPE_PC_RQ;
+	rq->cmd = IDETAPE_PC_RQ1;
 	(void) ide_do_drive_cmd (drive, rq, ide_preempt);
 }
 
@@ -1402,7 +1339,7 @@ static void idetape_copy_stage_from_user (idetape_tape_t *tape, idetape_stage_t 
 			return;
 		}
 #endif /* IDETAPE_DEBUG_BUGS */
-		count = IDETAPE_MIN (bh->b_size - bh->b_count, n);
+		count = IDE_MIN (bh->b_size - bh->b_count, n);
 		copy_from_user (bh->b_data + bh->b_count, buf, count);
 		n -= count; bh->b_count += count; buf += count;
 		if (bh->b_count == bh->b_size) {
@@ -1426,7 +1363,7 @@ static void idetape_copy_stage_to_user (idetape_tape_t *tape, char *buf, idetape
 			return;
 		}
 #endif /* IDETAPE_DEBUG_BUGS */
-		count = IDETAPE_MIN (tape->b_count, n);
+		count = IDE_MIN (tape->b_count, n);
 		copy_to_user (buf, tape->b_data, count);
 		n -= count; tape->b_data += count; tape->b_count -= count; buf += count;
 		if (!tape->b_count) {
@@ -1477,7 +1414,7 @@ static void idetape_increase_max_pipeline_stages (ide_drive_t *drive)
 	printk (KERN_INFO "Reached idetape_increase_max_pipeline_stages\n");
 #endif /* IDETAPE_DEBUG_LOG */
 
-	tape->max_stages = IDETAPE_MIN (tape->max_stages + IDETAPE_INCREASE_STAGES_RATE, IDETAPE_MAX_PIPELINE_STAGES);
+	tape->max_stages = IDE_MIN (tape->max_stages + IDETAPE_INCREASE_STAGES_RATE, IDETAPE_MAX_PIPELINE_STAGES);
 }
 
 /*
@@ -2295,7 +2232,7 @@ static void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned
 	}
 #if IDETAPE_DEBUG_BUGS
 	if (postponed_rq != NULL)
-		if (postponed_rq->rq_status != RQ_ACTIVE || rq != postponed_rq) {
+		if (rq != postponed_rq) {
 			printk (KERN_ERR "ide-tape: ide-tape.c bug - Two DSC requests were queued\n");
 			idetape_end_request (0,HWGROUP (drive));
 			return;
@@ -2309,6 +2246,8 @@ static void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned
 	 *	the other device meanwhile.
 	 */
 	status.all = GET_STAT();
+	if (!drive->dsc_overlap && rq->cmd != IDETAPE_PC_RQ2)
+		set_bit (IDETAPE_IGNORE_DSC, &tape->flags);
 	if (!clear_bit (IDETAPE_IGNORE_DSC, &tape->flags) && !status.b.dsc) {
 		if (postponed_rq == NULL) {
 			tape->dsc_polling_start = jiffies;
@@ -2316,7 +2255,7 @@ static void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned
 			tape->dsc_timeout = jiffies + IDETAPE_DSC_RW_TIMEOUT;
 		} else if ((signed long) (jiffies - tape->dsc_timeout) > 0) {
 			printk (KERN_ERR "ide-tape: %s: DSC timeout\n", tape->name);
-			if (rq->cmd == IDETAPE_PC_RQ)
+			if (rq->cmd == IDETAPE_PC_RQ2)
 				idetape_media_access_finished (drive);
 			else
 				ide_do_reset (drive);
@@ -2340,13 +2279,13 @@ static void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned
 			rq->errors = IDETAPE_ERROR_EOD;
 			idetape_end_request (1, HWGROUP(drive));
 			return;
-		case IDETAPE_PC_RQ:
-			if (postponed_rq != NULL) {
-				idetape_media_access_finished (drive);
-				return;
-			}
+		case IDETAPE_PC_RQ1:
 			pc=(idetape_pc_t *) rq->buffer;
+			rq->cmd = IDETAPE_PC_RQ2;
 			break;
+		case IDETAPE_PC_RQ2:
+			idetape_media_access_finished (drive);
+			return;
 		default:
 			printk (KERN_ERR "ide-tape: bug in IDETAPE_RQ_CMD macro\n");
 			idetape_end_request (0,HWGROUP (drive));
@@ -2381,7 +2320,7 @@ static int idetape_queue_pc_tail (ide_drive_t *drive,idetape_pc_t *pc)
 
 	ide_init_drive_cmd (&rq);
 	rq.buffer = (char *) pc;
-	rq.cmd = IDETAPE_PC_RQ;
+	rq.cmd = IDETAPE_PC_RQ1;
 	return ide_do_drive_cmd (drive, &rq, ide_wait);
 }
 
@@ -2640,11 +2579,11 @@ static void idetape_pad_zeros (ide_drive_t *drive, int bcount)
 	
 	while (bcount) {
 		bh = tape->merge_stage->bh;
-		count = IDETAPE_MIN (tape->stage_size, bcount);
+		count = IDE_MIN (tape->stage_size, bcount);
 		bcount -= count;
 		blocks = count / tape->tape_block_size;
 		while (count) {
-			bh->b_count = IDETAPE_MIN (count, bh->b_size);
+			bh->b_count = IDE_MIN (count, bh->b_size);
 			memset (bh->b_data, 0, bh->b_count);
 			count -= bh->b_count;
 			bh = bh->b_reqnext;
@@ -2839,7 +2778,7 @@ static void idetape_pre_reset (ide_drive_t *drive)
 static ide_drive_t *get_drive_ptr (kdev_t i_rdev)
 {
 	unsigned int i = MINOR(i_rdev) & ~0x80;
-	
+
 	if (i >= MAX_HWIFS * MAX_DRIVES)
 		return NULL;
 	return (idetape_chrdevs[i].drive);
@@ -2948,7 +2887,7 @@ static long idetape_chrdev_read (struct inode *inode, struct file *file, char *b
 {
 	ide_drive_t *drive = get_drive_ptr (inode->i_rdev);
 	idetape_tape_t *tape = drive->driver_data;
-	int bytes_read,temp,actually_read=0, original_count = count;
+	int bytes_read,temp,actually_read=0;
 
 #if IDETAPE_DEBUG_LOG
 	printk (KERN_INFO "Reached idetape_chrdev_read\n");
@@ -2988,7 +2927,7 @@ static long idetape_chrdev_read (struct inode *inode, struct file *file, char *b
 	if (count==0)
 		return (0);
 	if (tape->merge_stage_size) {
-		actually_read=IDETAPE_MIN (tape->merge_stage_size,count);
+		actually_read=IDE_MIN (tape->merge_stage_size,count);
 		idetape_copy_stage_to_user (tape, buf, tape->merge_stage, actually_read);
 		buf += actually_read; tape->merge_stage_size -= actually_read; count-=actually_read;
 	}
@@ -3003,13 +2942,13 @@ static long idetape_chrdev_read (struct inode *inode, struct file *file, char *b
 		bytes_read=idetape_add_chrdev_read_request (drive, tape->capabilities.ctl);
 		if (bytes_read <= 0)
 			goto finish;
-		temp=IDETAPE_MIN (count,bytes_read);
+		temp=IDE_MIN (count,bytes_read);
 		idetape_copy_stage_to_user (tape, buf, tape->merge_stage, temp);
 		actually_read+=temp;
 		tape->merge_stage_size=bytes_read-temp;
 	}
 finish:
-	if (actually_read < original_count && test_bit (IDETAPE_FILEMARK, &tape->flags))
+	if (!actually_read && test_bit (IDETAPE_FILEMARK, &tape->flags))
 		idetape_space_over_filemarks (drive, MTFSF, 1);
 	return (actually_read);
 }
@@ -3063,7 +3002,7 @@ static long idetape_chrdev_write (struct inode *inode, struct file *file, const 
 			tape->merge_stage_size=0;
 		}
 #endif /* IDETAPE_DEBUG_BUGS */
-		actually_written=IDETAPE_MIN (tape->stage_size-tape->merge_stage_size,count);
+		actually_written=IDE_MIN (tape->stage_size-tape->merge_stage_size,count);
 		idetape_copy_stage_from_user (tape, tape->merge_stage, buf, actually_written);
 		buf+=actually_written;tape->merge_stage_size+=actually_written;count-=actually_written;
 
@@ -3577,9 +3516,11 @@ static void idetape_setup (ide_drive_t *drive, idetape_tape_t *tape, int minor)
 {
 	ide_hwif_t *hwif = HWIF(drive);
 	unsigned long t1, tmid, tn, t;
+	u16 speed;
 
 	drive->driver_data = tape;
 	drive->ready_stat = 0;			/* An ATAPI device ignores DRDY */
+	drive->dsc_overlap = 1;
 	memset (tape, 0, sizeof (idetape_tape_t));
 	tape->drive = drive;
 	tape->minor = minor;
@@ -3609,9 +3550,10 @@ static void idetape_setup (ide_drive_t *drive, idetape_tape_t *tape, int minor)
 	 *	good latency and good system throughput. It will be nice to
 	 *	have all this configurable in run time at some point.
 	 */
-	t1 = (tape->stage_size * HZ) / (tape->capabilities.speed * 1000);
-	tmid = (tape->capabilities.buffer_size * 32 * HZ) / (tape->capabilities.speed * 125);
-	tn = (IDETAPE_FIFO_THRESHOLD * tape->stage_size * HZ) / (tape->capabilities.speed * 1000);
+	speed = IDE_MAX (tape->capabilities.speed, tape->capabilities.max_speed);
+	t1 = (tape->stage_size * HZ) / (speed * 1000);
+	tmid = (tape->capabilities.buffer_size * 32 * HZ) / (speed * 125);
+	tn = (IDETAPE_FIFO_THRESHOLD * tape->stage_size * HZ) / (speed * 1000);
 
 	if (tape->max_stages) {
 		if (drive->using_dma)
@@ -3624,12 +3566,12 @@ static void idetape_setup (ide_drive_t *drive, idetape_tape_t *tape, int minor)
 		}
 	} else
 		t = t1;
-	t = IDETAPE_MIN (t, tmid);
+	t = IDE_MIN (t, tmid);
 
 	/*
 	 *	Ensure that the number we got makes sense.
 	 */
-	tape->best_dsc_rw_frequency = IDETAPE_MAX (IDETAPE_MIN (t, IDETAPE_DSC_RW_MAX), IDETAPE_DSC_RW_MIN);
+	tape->best_dsc_rw_frequency = IDE_MAX (IDE_MIN (t, IDETAPE_DSC_RW_MAX), IDETAPE_DSC_RW_MIN);
 	if (tape->best_dsc_rw_frequency != t) {
 		printk (KERN_NOTICE "ide-tape: Although the recommended polling period is %lu jiffies\n", t);
 		printk (KERN_NOTICE "ide-tape: we will use %lu jiffies\n", tape->best_dsc_rw_frequency);
@@ -3681,6 +3623,7 @@ static ide_driver_t idetape_driver = {
 	ide_tape,		/* media */
 	1,			/* busy */
 	1,			/* supports_dma */
+	1,			/* supports_dsc_overlap */
 	idetape_cleanup,	/* cleanup */
 	idetape_do_request,	/* do_request */
 	idetape_end_request,	/* end_request */

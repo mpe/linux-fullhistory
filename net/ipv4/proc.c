@@ -84,9 +84,10 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
  *	a memory timer destroy. Instead of playing with timers we just
  *	concede defeat and cli().
  */
+	start_bh_atomic();
+
 	for(i = 0; i < SOCK_ARRAY_SIZE; i++) 
 	{
-	  	cli();
 		sp = s_array[i];
 
 		while(sp != NULL) 
@@ -130,10 +131,9 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 				format==0?sp->write_seq-tp->snd_una:sp->wmem_alloc, 
 				format==0?tp->rcv_nxt-sp->copied_seq:sp->rmem_alloc,
 				timer_active, timer_expires-jiffies, (unsigned) sp->retransmits,
-				(sp->socket&&SOCK_INODE(sp->socket))?SOCK_INODE(sp->socket)->i_uid:0,
+				sp->socket ? sp->socket->inode->i_uid:0,
 				timer_active?sp->timeout:0,
-				sp->socket && SOCK_INODE(sp->socket) ?
-				SOCK_INODE(sp->socket)->i_ino : 0);
+				sp->socket ? sp->socket->inode->i_ino:0);
 
 			if (timer_active1) add_timer(&sp->retransmit_timer);
 			if (timer_active2) add_timer(&sp->timer);
@@ -147,13 +147,10 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 				break;
 			sp = sp->next;
 		}
-		sti();	/* We only turn interrupts back on for a moment,
-			   but because the interrupt queues anything built
-			   up before this will clear before we jump back
-			   and cli(), so it's not as bad as it looks */
 		if(len>= length)
 			break;
 	}
+	end_bh_atomic();
 	begin = len - (pos - offset);
 	*start = buffer + begin;
 	len -= begin;

@@ -50,13 +50,11 @@ void nr_clear_queues(struct sock *sk)
 
 	while ((skb = skb_dequeue(&sk->write_queue)) != NULL) {
 		skb->sk   = sk;
-		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
 	}
 
 	while ((skb = skb_dequeue(&sk->protinfo.nr->ack_queue)) != NULL) {
 		skb->sk   = sk;
-		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
 	}
 
@@ -85,7 +83,6 @@ void nr_frames_acked(struct sock *sk, unsigned short nr)
 		while (skb_peek(&sk->protinfo.nr->ack_queue) != NULL && sk->protinfo.nr->va != nr) {
 		        skb = skb_dequeue(&sk->protinfo.nr->ack_queue);
 		        skb->sk   = sk;
-			skb->free = 1;
 			kfree_skb(skb, FREE_WRITE);
 			sk->protinfo.nr->va = (sk->protinfo.nr->va + 1) % NR_MODULUS;
 		}
@@ -234,8 +231,6 @@ void nr_write_internal(struct sock *sk, int frametype)
 			break;
 	}
 
-	skb->free = 1;
-
 	nr_transmit_buffer(sk, skb);
 }
 
@@ -279,7 +274,6 @@ void nr_transmit_dm(struct sk_buff *skb)
 	*dptr++ = NR_CONNACK | NR_CHOKE_FLAG;
 	*dptr++ = 0;
 
-	skbn->free = 1;
 	skbn->sk   = NULL;
 
 	if (!nr_route_frame(skbn, NULL))

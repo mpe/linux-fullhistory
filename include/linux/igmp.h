@@ -36,7 +36,7 @@ struct igmphdr
 #define IGMP_HOST_MEMBERSHIP_REPORT	0x12	/* Ditto */
 #define IGMP_DVMRP			0x13	/* DVMRP routing */
 #define IGMP_PIM			0x14	/* PIM routing */
-#define IGMP_TRACE			0x15	/* CISCO trace */
+#define IGMP_TRACE			0x15
 #define IGMP_HOST_NEW_MEMBERSHIP_REPORT 0x16	/* New version of 0x11 */
 #define IGMP_HOST_LEAVE_MESSAGE 	0x17	/* An extra BSD seems to send */
 
@@ -91,9 +91,9 @@ struct ip_mc_list
 	unsigned long multiaddr;
 	struct ip_mc_list *next;
 	struct timer_list timer;
-	short tm_running;
-	short reporter;
 	int users;
+	char tm_running;
+	char reporter;
 };
 
 struct ip_router_info
@@ -108,8 +108,7 @@ struct ip_router_info
 extern struct ip_mc_list *ip_mc_head;
 
 
-extern int igmp_rcv(struct sk_buff *, struct device *, struct options *, __u32, unsigned short,
-	__u32, int , struct inet_protocol *);
+extern int igmp_rcv(struct sk_buff *, unsigned short);
 extern void ip_mc_drop_device(struct device *dev);
 extern int ip_mc_join_group(struct sock *sk, struct device *dev, unsigned long addr);
 extern int ip_mc_leave_group(struct sock *sk, struct device *dev,unsigned long addr);

@@ -12,7 +12,7 @@
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
- *	Alan Cox		:	Added the cache manager code.
+ *	Alan Cox		:	Added the cache manager code
  *	Alan Cox		:	Fixed the clone/copy bug and device race.
  *	Malcolm Beattie		:	Buffer handling fixes.
  *	Alexey Kuznetsov	:	Double buffer free and other fixes.
@@ -59,39 +59,66 @@
 
 static struct vif_device vif_table[MAXVIFS];		/* Devices 		*/
 static unsigned long vifc_map;				/* Active device map	*/
+static int maxvif;
 int mroute_do_pim = 0;					/* Set in PIM assert	*/
 static struct mfc_cache *mfc_cache_array[MFC_LINES];	/* Forwarding cache	*/
-static struct mfc_cache *cache_resolve_queue;		/* Unresolved cache	*/
 int cache_resolve_queue_len = 0;			/* Size of unresolved	*/
 
 /*
  *	Delete a VIF entry
  */
  
-static void vif_delete(struct vif_device *v)
+static int vif_delete(int vifi)
 {
-	if(!(v->flags&VIFF_TUNNEL))
-	{
-		v->dev->flags&=~IFF_ALLMULTI;
-		dev_mc_upload(v->dev);
+	struct vif_device *v;
+	
+	if (vifi < 0 || vifi >= maxvif || !(vifc_map&(1<<vifi)))
+		return -EADDRNOTAVAIL;
+
+	v = &vif_table[vifi];
+
+	start_bh_atomic();
+
+	if (!(v->flags&VIFF_TUNNEL)) {
+		v->u.dev->flags &= ~IFF_ALLMULTI;
+		dev_mc_upload(v->u.dev);
+		ip_rt_multicast_event(v->u.dev);
+		v->u.dev = NULL;
+	} else {
+		ip_rt_put(v->u.rt);
+		v->u.rt = NULL;
 	}
-	v->dev=NULL;
+
+	vifc_map&=~(1<<vifi);
+
+	end_bh_atomic();
+
+	if (vifi+1 == maxvif) {
+		int tmp;
+		for (tmp=vifi-1; tmp>=0; tmp--) {
+			if (vifc_map&(1<<tmp))
+				break;
+		}
+		maxvif = tmp+1;
+	}
+	return 0;
 }
 
-/*
- *	Find a vif
- */
- 
-static int ipmr_vifi_find(struct device *dev)
+static void ipmr_set_bounds(struct mfc_cache *cache)
 {
-	struct vif_device *v=&vif_table[0];
-	int ct;
-	for(ct=0;ct<MAXVIFS;ct++,v++)
-	{
-		if(v->dev==dev)
-			return ct;
+	int vifi;
+	for (vifi=0; vifi<maxvif; vifi++) {
+		if (vifc_map&(1<<vifi) && cache->mfc_ttls[vifi]) {
+			cache->mfc_minvif = vifi;
+			cache->mfc_maxvif = vifi+1;
+			vifi++;
+			break;
+		}
 	}
-	return -1;
+	for ( ; vifi<maxvif; vifi++) {
+		if (vifc_map&(1<<vifi) && cache->mfc_ttls[vifi])
+			cache->mfc_maxvif = vifi+1;
+	}
 }
 
 /*
@@ -108,16 +135,11 @@ static void ipmr_cache_delete(struct mfc_cache *cache)
 	 *	Find the right cache line
 	 */
 
+	line=MFC_HASH(cache->mfc_mcastgrp,cache->mfc_origin);
+	cp=&(mfc_cache_array[line]);
+
 	if(cache->mfc_flags&MFC_QUEUED)
-	{	
-		cp=&cache_resolve_queue;
 		del_timer(&cache->mfc_timer);
-	}	
-	else
-	{
-		line=MFC_HASH(cache->mfc_mcastgrp,cache->mfc_origin);
-		cp=&(mfc_cache_array[line]);
-	}
 	
 	/*
 	 *	Unlink the buffer
@@ -176,14 +198,8 @@ struct mfc_cache *ipmr_cache_find(__u32 origin, __u32 mcastgrp)
 {
 	int line=MFC_HASH(mcastgrp,origin);
 	struct mfc_cache *cache;
+
 	cache=mfc_cache_array[line];
-	while(cache!=NULL)
-	{
-		if(cache->mfc_origin==origin && cache->mfc_mcastgrp==mcastgrp)
-			return cache;
-		cache=cache->next;
-	}
-	cache=cache_resolve_queue;
 	while(cache!=NULL)
 	{
 		if(cache->mfc_origin==origin && cache->mfc_mcastgrp==mcastgrp)
@@ -207,6 +223,9 @@ static struct mfc_cache *ipmr_cache_alloc(int priority)
 	init_timer(&c->mfc_timer);
 	c->mfc_timer.data=(long)c;
 	c->mfc_timer.function=ipmr_cache_timer;
+	c->mfc_last_assert=0;
+	c->mfc_minvif = MAXVIFS;
+	c->mfc_maxvif = 0;
 	return c;
 }
  
@@ -216,37 +235,28 @@ static struct mfc_cache *ipmr_cache_alloc(int priority)
  
 static void ipmr_cache_resolve(struct mfc_cache *cache)
 {
-	struct mfc_cache **p;
 	struct sk_buff *skb;
+
+	start_bh_atomic();
+
 	/*
 	 *	Kill the queue entry timer.
 	 */
+
 	del_timer(&cache->mfc_timer);
-	cache->mfc_flags&=~MFC_QUEUED;
-	/*
-	 *	Remove from the resolve queue
-	 */
-	p=&cache_resolve_queue;
-	while((*p)!=NULL)
-	{
-		if((*p)==cache)
-		{
-			*p=cache->next;
-			break;
-		}
-		p=&((*p)->next);
+
+	if (cache->mfc_flags&MFC_QUEUED) {
+		cache->mfc_flags&=~MFC_QUEUED;
+		cache_resolve_queue_len--;
 	}
-	cache_resolve_queue_len--;
-	sti();
-	/*
-	 *	Insert into the main cache
-	 */
-	ipmr_cache_insert(cache);
+
+	end_bh_atomic();
+
 	/*
 	 *	Play the pending entries through our router
 	 */
 	while((skb=skb_dequeue(&cache->mfc_unresolved)))
-		ipmr_forward(skb, skb->protocol);
+		ip_mr_input(skb);
 }
 
 /*
@@ -254,50 +264,52 @@ static void ipmr_cache_resolve(struct mfc_cache *cache)
  *	expects the following bizarre scheme..
  */
  
-static void ipmr_cache_report(struct sk_buff *pkt)
+static void ipmr_cache_report(struct sk_buff *pkt, vifi_t vifi, int assert)
 {
-	struct sk_buff *skb=alloc_skb(128, GFP_ATOMIC);
-	int ihl=pkt->ip_hdr->ihl<<2;
+	struct sk_buff *skb = alloc_skb(128, GFP_ATOMIC);
+	int ihl = pkt->nh.iph->ihl<<2;
 	struct igmphdr *igmp;
+	struct igmpmsg *msg;
+
 	if(!skb)
 		return;
 		
-	skb->free=1;
-	
 	/*
 	 *	Copy the IP header
 	 */
 
-	skb->ip_hdr=(struct iphdr *)skb_put(skb,ihl);
-	skb->h.iph=skb->ip_hdr;
+	skb->nh.iph = (struct iphdr *)skb_put(skb, ihl);
 	memcpy(skb->data,pkt->data,ihl);
-	skb->ip_hdr->protocol = 0;			/* Flag to the kernel this is a route add */
+	skb->nh.iph->protocol = 0;			/* Flag to the kernel this is a route add */
+	msg = (struct igmpmsg*)skb->nh.iph;
+	if (assert)
+		msg->im_vif = vifi;
 	
 	/*
 	 *	Add our header
 	 */
 	
 	igmp=(struct igmphdr *)skb_put(skb,sizeof(struct igmphdr));
-	igmp->type	=	IGMPMSG_NOCACHE;		/* non IGMP dummy message */
+	igmp->type	=
+	msg->im_msgtype = assert ? IGMPMSG_WRONGVIF : IGMPMSG_NOCACHE;
 	igmp->code 	=	0;
-	skb->ip_hdr->tot_len=htons(skb->len);			/* Fix the length */
+	skb->nh.iph->tot_len=htons(skb->len);			/* Fix the length */
+	skb->h.raw = skb->nh.raw;
 	
 	/*
 	 *	Deliver to mrouted
 	 */
 	if(sock_queue_rcv_skb(mroute_socket,skb)<0)
 	{
-		skb->sk=NULL;
 		kfree_skb(skb, FREE_READ);
 	}
 }
-		
- 
+
 /*
  *	Queue a packet for resolution
  */
  
-static void ipmr_cache_unresolved(struct mfc_cache *cache, vifi_t vifi, struct sk_buff *skb, int is_frag)
+static void ipmr_cache_unresolved(struct mfc_cache *cache, vifi_t vifi, struct sk_buff *skb)
 {
 	if(cache==NULL)
 	{	
@@ -313,14 +325,13 @@ static void ipmr_cache_unresolved(struct mfc_cache *cache, vifi_t vifi, struct s
 		 *	Fill in the new cache entry
 		 */
 		cache->mfc_parent=vifi;
-		cache->mfc_origin=skb->ip_hdr->saddr;
-		cache->mfc_mcastgrp=skb->ip_hdr->daddr;
+		cache->mfc_origin=skb->nh.iph->saddr;
+		cache->mfc_mcastgrp=skb->nh.iph->daddr;
 		cache->mfc_flags=MFC_QUEUED;
 		/*
 		 *	Link to the unresolved list
 		 */
-		cache->next=cache_resolve_queue;
-		cache_resolve_queue=cache;
+		ipmr_cache_insert(cache);
 		cache_resolve_queue_len++;
 		/*
 		 *	Fire off the expiry timer
@@ -331,7 +342,7 @@ static void ipmr_cache_unresolved(struct mfc_cache *cache, vifi_t vifi, struct s
 		 *	Reflect first query at mrouted.
 		 */
 		if(mroute_socket)
-			ipmr_cache_report(skb);
+			ipmr_cache_report(skb, vifi, 0);
 	}
 	/*
 	 *	See if we can append the packet
@@ -341,12 +352,7 @@ static void ipmr_cache_unresolved(struct mfc_cache *cache, vifi_t vifi, struct s
 		kfree_skb(skb, FREE_WRITE);
 		return;
 	}
-	/*
-	 *	Add to our 'pending' list. Cache the is_frag data
-	 *	in skb->protocol now it is spare.
-	 */
 	cache->mfc_queuelen++;
-	skb->protocol=is_frag;
 	skb_queue_tail(&cache->mfc_unresolved,skb);
 }
 
@@ -357,13 +363,14 @@ static void ipmr_cache_unresolved(struct mfc_cache *cache, vifi_t vifi, struct s
 int ipmr_mfc_modify(int action, struct mfcctl *mfc)
 {
 	struct mfc_cache *cache;
+
 	if(!MULTICAST(mfc->mfcc_mcastgrp.s_addr))
 		return -EINVAL;
 	/*
 	 *	Find the cache line
 	 */
 	
-	cli();
+	start_bh_atomic();
 
 	cache=ipmr_cache_find(mfc->mfcc_origin.s_addr,mfc->mfcc_mcastgrp.s_addr);
 	
@@ -375,20 +382,23 @@ int ipmr_mfc_modify(int action, struct mfcctl *mfc)
 		if(cache)
 		{
 			ipmr_cache_delete(cache);
-			sti();
+			end_bh_atomic();
 			return 0;
 		}
-		sti();
+		end_bh_atomic();
 		return -ENOENT;
 	}
 	if(cache)
 	{
+
 		/*
 		 *	Update the cache, see if it frees a pending queue
 		 */
 
 		cache->mfc_flags|=MFC_RESOLVED;
+		cache->mfc_parent=mfc->mfcc_parent;
 		memcpy(cache->mfc_ttls, mfc->mfcc_ttls,sizeof(cache->mfc_ttls));
+		ipmr_set_bounds(cache);
 		 
 		/*
 		 *	Check to see if we resolved a queued list. If so we
@@ -397,9 +407,10 @@ int ipmr_mfc_modify(int action, struct mfcctl *mfc)
 		 
 		if(cache->mfc_flags&MFC_QUEUED)
 			ipmr_cache_resolve(cache);	/* Unhook & send the frames */
-		sti();
+		end_bh_atomic();
 		return 0;
 	}
+
 	/*
 	 *	Unsolicited update - that's ok, add anyway.
 	 */
@@ -408,7 +419,7 @@ int ipmr_mfc_modify(int action, struct mfcctl *mfc)
 	cache=ipmr_cache_alloc(GFP_ATOMIC);
 	if(cache==NULL)
 	{
-		sti();
+		end_bh_atomic();
 		return -ENOMEM;
 	}
 	cache->mfc_flags=MFC_RESOLVED;
@@ -416,8 +427,9 @@ int ipmr_mfc_modify(int action, struct mfcctl *mfc)
 	cache->mfc_mcastgrp=mfc->mfcc_mcastgrp.s_addr;
 	cache->mfc_parent=mfc->mfcc_parent;
 	memcpy(cache->mfc_ttls, mfc->mfcc_ttls,sizeof(cache->mfc_ttls));
+	ipmr_set_bounds(cache);
 	ipmr_cache_insert(cache);
-	sti();
+	end_bh_atomic();
 	return 0;
 }
  
@@ -458,9 +470,11 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 			if(mroute_socket)
 				return -EADDRINUSE;
 			mroute_socket=sk;
+			ipv4_config.multicast_route = 1;
 			/* Initialise state */
 			return 0;
 		case MRT_DONE:
+			ipv4_config.multicast_route = 0;
 			mroute_close(sk);
 			mroute_socket=NULL;
 			return 0;
@@ -481,7 +495,7 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 				if(vifc_map&(1<<vif.vifc_vifi))
 					return -EADDRINUSE;
 				/* Find the interface */
-				dev=ip_dev_find(vif.vifc_lcl_addr.s_addr);
+				dev=ip_dev_find(vif.vifc_lcl_addr.s_addr, NULL);
 				if(!dev)
 					return -EADDRNOTAVAIL;
 				/* Must be tunnelled or multicastable */
@@ -489,7 +503,6 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 				{
 					if(vif.vifc_flags&VIFF_SRCRT)
 						return -EOPNOTSUPP;
-					/* IPIP will do all the work */
 				}
 				else
 				{
@@ -499,6 +512,7 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 						   how to do this yet.. */
 						dev->flags|=IFF_ALLMULTI;
 						dev_mc_upload(dev);
+						ip_rt_multicast_event(dev);
 					}
 					else
 					{
@@ -515,30 +529,21 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 				v->remote=vif.vifc_rmt_addr.s_addr;
 				v->flags=vif.vifc_flags;
 				v->threshold=vif.vifc_threshold;
-				v->dev=dev;
+				v->u.dev=NULL;
+				if (!(vif.vifc_flags&VIFF_TUNNEL))
+					v->u.dev=dev;
 				v->bytes_in = 0;
 				v->bytes_out = 0;
 				v->pkt_in = 0;
 				v->pkt_out = 0;
 				vifc_map|=(1<<vif.vifc_vifi);
+				if (vif.vifc_vifi+1 > maxvif)
+					maxvif = vif.vifc_vifi+1;
 				sti();
 				return 0;
-			}
-			else
-			/*
-			 *	VIF deletion
-			 */
-			{
-				struct vif_device *v=&vif_table[vif.vifc_vifi];
-				if(vifc_map&(1<<vif.vifc_vifi))
-				{
-					vif_delete(v);
-					vifc_map&=~(1<<vif.vifc_vifi);
-					return 0;					
-				}
-				else
-					return -EADDRNOTAVAIL;
-			}
+			} else
+				return vif_delete(vif.vifc_vifi);
+
 		/*
 		 *	Manipulate the forwarding caches. These live
 		 *	in a sort of kernel/user symbiosis.
@@ -609,6 +614,7 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 	struct sioc_sg_req sr;
 	struct sioc_vif_req vr;
 	struct vif_device *vif;
+	struct mfc_cache *c;
 	
 	switch(cmd)
 	{
@@ -616,7 +622,7 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			err = copy_from_user(&vr,(void *)arg,sizeof(vr));
 			if (err)
 				return -EFAULT; 
-			if(vr.vifi>=MAXVIFS)
+			if(vr.vifi>=maxvif)
 				return -EINVAL;
 			vif=&vif_table[vr.vifi];
 			if(vifc_map&(1<<vr.vifi))
@@ -629,15 +635,28 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 				if (err)
 					err = -EFAULT;
 				return err;
+				return 0;
 			}
 			return -EADDRNOTAVAIL;
 		case SIOCGETSGCNT:
 			err = copy_from_user(&sr,(void *)arg,sizeof(sr));
-			if (!err)
-				err = copy_to_user((void *)arg,&sr,sizeof(sr));
 			if (err)
-				err = -EFAULT;
-			return err;
+				return -EFAULT; 
+			for (c = mfc_cache_array[MFC_HASH(sr.grp.s_addr, sr.src.s_addr)];
+			     c; c = c->next) {
+				if (sr.grp.s_addr == c->mfc_mcastgrp &&
+				    sr.src.s_addr == c->mfc_origin) {
+					sr.pktcnt = c->mfc_pkt;
+					sr.bytecnt = c->mfc_bytes;
+					sr.wrong_if = c->mfc_wrong_if;
+					err = copy_to_user((void *)arg,&sr,sizeof(sr));
+					if (err)
+						err = -EFAULT;
+					return err;
+					return 0;
+				}
+			}
+			return -EADDRNOTAVAIL;
 		default:
 			return -EINVAL;
 	}
@@ -650,34 +669,24 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 void mroute_close(struct sock *sk)
 {
 	int i;
-	struct vif_device *v=&vif_table[0];
 		
 	/*
 	 *	Shut down all active vif entries
 	 */
 	 
-	for(i=0;i<MAXVIFS;i++)
-	{
-		if(vifc_map&(1<<i))
-		{
-			if(!(v->flags&VIFF_TUNNEL))
-			{
-				v->dev->flags&=~IFF_ALLMULTI;
-				dev_mc_upload(v->dev);
-			}
-		}
-		v++;
-	}		
-	vifc_map=0;	
+	for(i=0; i<maxvif; i++)
+		vif_delete(i);
+
 	/*
 	 *	Wipe the cache
 	 */
 	for(i=0;i<MFC_LINES;i++)
 	{
+		start_bh_atomic();
 		while(mfc_cache_array[i]!=NULL)
 			ipmr_cache_delete(mfc_cache_array[i]);
-	}	
-	/* The timer will clear any 'pending' stuff */
+		end_bh_atomic();
+	}
 }
 
 static int ipmr_device_event(struct notifier_block *this, unsigned long event, void *ptr)
@@ -687,13 +696,10 @@ static int ipmr_device_event(struct notifier_block *this, unsigned long event, v
 	if(event!=NETDEV_DOWN)
 		return NOTIFY_DONE;
 	v=&vif_table[0];
-	for(ct=0;ct<MAXVIFS;ct++)
+	for(ct=0;ct<maxvif;ct++)
 	{
-		if((vifc_map&(1<<ct)) && v->dev==ptr)
-		{
-			vif_delete(v);
-			vifc_map&=~(1<<ct);
-		}
+		if(vifc_map&(1<<ct) && !(v->flags&VIFF_TUNNEL) && v->u.dev==ptr)
+			vif_delete(ct);
 		v++;
 	}
 	return NOTIFY_DONE;
@@ -707,104 +713,204 @@ static struct notifier_block ip_mr_notifier={
 };
 
 /*
+ * 	Encapsulate a packet by attaching a valid IPIP header to it.
+ *	This avoids tunnel drivers and other mess and gives us the speed so
+ *	important for multicast video.
+ */
+ 
+static void ip_encap(struct sk_buff *skb, u32 saddr, u32 daddr)
+{
+	struct iphdr *iph = (struct iphdr *)skb_push(skb,sizeof(struct iphdr));
+
+	iph->version	= 	4;
+	iph->tos	=	skb->nh.iph->tos;
+	iph->ttl	=	skb->nh.iph->ttl;
+	iph->frag_off	=	0;
+	iph->daddr	=	daddr;
+	iph->saddr	=	saddr;
+	iph->protocol	=	IPPROTO_IPIP;
+	iph->ihl	=	5;
+	iph->tot_len	=	htons(skb->len);
+	iph->id		=	htons(ip_id_count++);
+	ip_send_check(iph);
+
+	skb->h.ipiph = skb->nh.iph;
+	skb->nh.iph = iph;
+}
+
+/*
  *	Processing handlers for ipmr_forward
  */
 
-static void ipmr_queue_xmit(struct sk_buff *skb, struct vif_device *vif, struct device *in_dev, int frag)
+static void ipmr_queue_xmit(struct sk_buff *skb, struct mfc_cache *c,
+			   int vifi, int last)
 {
-	int tunnel=0;
-	__u32 raddr=skb->raddr;
-	if(vif->flags&VIFF_TUNNEL)
-	{
-		tunnel=IPFWD_MULTITUNNEL;
-		raddr=vif->remote;
+	struct iphdr *iph = skb->nh.iph;
+	struct vif_device *vif = &vif_table[vifi];
+	struct device *dev;
+	struct rtable *rt;
+	int    encap = 0;
+	struct sk_buff *skb2;
+	int    err;
+		
+	if (vif->flags&VIFF_TUNNEL) {
+		rt = vif->u.rt;
+		if (!rt || rt->u.dst.obsolete) {
+			ip_rt_put(rt);
+			vif->u.rt = NULL;
+			err = ip_route_output(&rt, vif->remote, vif->local, RT_TOS(iph->tos), NULL);
+			if (err)
+				return;
+			vif->u.rt = rt;
+		}
+		dst_clone(&rt->u.dst);
+		encap = sizeof(struct iphdr);
+	} else {
+		dev = vif->u.dev;
+		if (dev == NULL)
+			return;
+		err = ip_route_output(&rt, iph->daddr, 0, RT_TOS(iph->tos), dev);
+		if (err)
+			return;
 	}
+
+	dev = rt->u.dst.dev;
+
+	if (skb->len+encap > dev->mtu && (ntohs(iph->frag_off) & IP_DF)) {
+		ip_statistics.IpFragFails++;
+		ip_rt_put(rt);
+		return;
+	}
+
+	encap += dev->hard_header_len;
+
+	if (skb->len+encap > 65534) {
+		ip_rt_put(rt);
+		return;
+	}
+
+	if (skb_headroom(skb) < encap || (encap && !last))
+		skb2 = skb_realloc_headroom(skb, (encap + 15)&~15);
+	else
+		skb2 = skb_clone(skb, GFP_ATOMIC);
+
+	if (skb2 == NULL) {
+		ip_rt_put(rt);
+		return;
+	}
+
 	vif->pkt_out++;
 	vif->bytes_out+=skb->len;
-	skb->dev=vif->dev;
-	skb->raddr=skb->h.iph->daddr;
-	/*
-	 *	If the vif went down as we were forwarding.. just throw the
-	 *	frame.
-	 */
-	if(vif->dev==NULL || ip_forward(skb, in_dev, frag|IPFWD_MULTICASTING|tunnel, raddr)==-1)
-		kfree_skb(skb, FREE_WRITE);
+
+	dst_release(skb2->dst);
+	skb2->dst = &rt->u.dst;
+
+	iph = skb2->nh.iph;
+	ip_decrease_ttl(iph);
+
+	if (vif->flags & VIFF_TUNNEL)
+		ip_encap(skb2, vif->local, vif->remote);
+
+	ip_send(skb2);
 }
 
 /*
  *	Multicast packets for forwarding arrive here
  */
 
-void ipmr_forward(struct sk_buff *skb, int is_frag)
+int ip_mr_input(struct sk_buff *skb)
 {
 	struct mfc_cache *cache;
-	struct sk_buff *skb2;
 	int psend = -1;
-	int vif=ipmr_vifi_find(skb->dev);
-	if(vif==-1)
-	{
-		kfree_skb(skb, FREE_WRITE);
-		return;
-	}
+	int vif, ct;
+	int local = 0;
+	int tunneled = IPCB(skb)->flags&IPSKB_TUNNELED;
 
-	/*
-	 *	Without the following addition, skb->h.iph points to something
-	 *	different that is not the ip header.
-	 */
-	
-	skb->h.iph = skb->ip_hdr;  /* Anand, ernet.  */
-
-	vif_table[vif].pkt_in++;
-	vif_table[vif].bytes_in+=skb->len;
-	
-	cache=ipmr_cache_find(skb->ip_hdr->saddr,skb->ip_hdr->daddr);
+	cache = ipmr_cache_find(skb->nh.iph->saddr, skb->nh.iph->daddr);
 	
 	/*
 	 *	No usable cache entry
 	 */
 	 
-	if(cache==NULL || (cache->mfc_flags&MFC_QUEUED))
-		ipmr_cache_unresolved(cache,vif,skb, is_frag);
-	else
-	{
-		/*
-		 *	Forward the frame
-		 */
-		 int ct=0;
-		 while(ct<MAXVIFS)
-		 {
-		 	/*
-		 	 *	0 means don't do it. Silly idea, 255 as don't do it would be cleaner!
-		 	 */
-		 	if(skb->ip_hdr->ttl > cache->mfc_ttls[ct] && cache->mfc_ttls[ct]>0)
-		 	{
-		 		if(psend!=-1)
-		 		{
-		 			/*
-		 			 *	May get variant mac headers
-		 			 *	so must copy -- boo hoo.
-		 			 */
-		 			skb2=skb_copy(skb, GFP_ATOMIC);
-		 			if(skb2)
-		 			{
-		 				skb2->free=1;
-		 				ipmr_queue_xmit(skb2, &vif_table[psend], skb->dev, is_frag);
-		 			}
-				}
-				psend=ct;
-			}
-			ct++;
-		}
-		if(psend==-1)
-			kfree_skb(skb, FREE_WRITE);
-		else
-		{
-			ipmr_queue_xmit(skb, &vif_table[psend], skb->dev, is_frag);
-		}
-		/*
-		 *	Adjust the stats
-		 */
+	if (cache==NULL || (cache->mfc_flags&MFC_QUEUED)) {
+		ipmr_cache_unresolved(cache, ALL_VIFS, skb);
+		return -EAGAIN;
 	}
+
+	vif = cache->mfc_parent;
+	cache->mfc_pkt++;
+	cache->mfc_bytes += skb->len;
+
+	/*
+	 * Wrong interface: drop packet and (maybe) send PIM assert.
+	 */
+	if (vif >= maxvif || !(vifc_map&(1<<vif)) ||
+	    (tunneled && IPCB(skb)->vif != vif) ||
+	    (!tunneled && (vif_table[vif].flags&VIFF_TUNNEL ||
+	     vif_table[vif].u.dev != skb->dev))) {
+		cache->mfc_wrong_if++;
+		if (vif < MAXVIFS && mroute_do_pim &&
+		    !(vif_table[vif].flags&VIFF_TUNNEL) &&
+		    skb->dev->flags&IFF_BROADCAST &&
+		    jiffies - cache->mfc_last_assert > MFC_ASSERT_THRESH) {
+			cache->mfc_last_assert = jiffies;
+			/*
+			 *	It is wrong! Routing daemon can
+			 *	determine vif itself, but it cannot
+			 *	determine REAL device.
+			 *	BSD bug. Fix it later, PIM does not
+			 *	work in any case 8) _ANK_
+			 */
+			ipmr_cache_report(skb, vif, 1);
+		}
+		kfree_skb(skb, FREE_WRITE);
+		return -EINVAL;
+	}
+
+	vif_table[vif].pkt_in++;
+	vif_table[vif].bytes_in+=skb->len;
+
+	if (IPCB(skb)->opt.router_alert ||
+	    ((struct rtable*)skb->dst)->rt_flags&RTF_LOCAL ||
+	    skb->nh.iph->protocol == IPPROTO_IGMP)
+		local = 1;
+
+	/*
+	 *	Forward the frame
+	 */
+	ct = cache->mfc_maxvif-1;
+	while (ct>=cache->mfc_minvif) {
+		/*
+		 *	0 means don't do it. Silly idea, 255 as don't do it would be cleaner!
+		 */
+		if (skb->nh.iph->ttl > cache->mfc_ttls[ct] && cache->mfc_ttls[ct]>0) {
+			if (psend != -1)
+				ipmr_queue_xmit(skb, cache, psend, 0);
+			psend=ct;
+		}
+		ct--;
+	}
+	if (psend != -1)
+		ipmr_queue_xmit(skb, cache, psend, 1);
+	if (!local) {
+		kfree_skb(skb, FREE_READ);
+		return 0;
+	}
+	return ip_local_deliver(skb);
+}
+
+int ip_mr_find_tunnel(u32 local, u32 remote)
+{
+	int ct;
+	struct vif_device *vif;
+
+	for (ct=0; ct<maxvif; ct++) {
+		vif = &vif_table[ct];
+		if (vifc_map&(1<<ct) && vif->flags&VIFF_TUNNEL &&
+		    vif->local == local && vif->remote == remote)
+			return ct;
+	}
+	return -1;
 }
 
 /*
@@ -824,15 +930,13 @@ int ipmr_vif_info(char *buffer, char **start, off_t offset, int length, int dumm
 		 "Interface  Bytes In  Pkts In  Bytes Out  Pkts Out  Flags Local    Remote\n");
 	pos=len;
   
-	for (ct=0;ct<MAXVIFS;ct++) 
+	for (ct=0;ct<maxvif;ct++) 
 	{
 		vif=&vif_table[ct];
 		if(!(vifc_map&(1<<ct)))
 			continue;
-		if(vif->dev==NULL)
-			continue;
-        	size = sprintf(buffer+len, "%-10s %8ld  %7ld  %8ld   %7ld   %05X %08lX %08lX\n",
-        		vif->dev->name,vif->bytes_in, vif->pkt_in, vif->bytes_out,vif->pkt_out,
+        	size = sprintf(buffer+len, "%2d %-10s %8ld  %7ld  %8ld   %7ld   %05X %08lX %08lX\n",
+        		ct, vif->flags&VIFF_TUNNEL ? "Tunnel" : vif->u.dev->name, vif->bytes_in, vif->pkt_in, vif->bytes_out, vif->pkt_out,
         		vif->flags, vif->local, vif->remote);
 		len+=size;
 		pos+=size;
@@ -862,40 +966,44 @@ int ipmr_mfc_info(char *buffer, char **start, off_t offset, int length, int dumm
 	int ct;
 
 	len += sprintf(buffer,
-		 "Group    Origin   SrcIface \n");
+		 "Group    Origin   SrcIface Pkts     Bytes    Wrong    VifTtls\n");
 	pos=len;
   
 	for (ct=0;ct<MFC_LINES;ct++) 
 	{
-		cli();
+		start_bh_atomic();
 		mfc=mfc_cache_array[ct];
 		while(mfc!=NULL)
 		{
 			char *name="none";
-			char vifmap[MAXVIFS+1];
 			int n;
 			/*
 			 *	Device name
 			 */
-			if(vifc_map&(1<<mfc->mfc_parent))
-				name=vif_table[mfc->mfc_parent].dev->name;
+			if(mfc->mfc_parent < maxvif && vifc_map&(1<<mfc->mfc_parent)) {
+				if (vif_table[mfc->mfc_parent].flags&VIFF_TUNNEL)
+					name="Tunnel";
+				else
+					name=vif_table[mfc->mfc_parent].u.dev->name;
+			}
 			/*
 			 *	Interface forwarding map
 			 */
-			for(n=0;n<MAXVIFS;n++)
-				if(vifc_map&(1<<n) && mfc->mfc_ttls[ct])
-					vifmap[n]='X';
-				else
-					vifmap[n]='-';
-			vifmap[n]=0;
-			/*
-			 *	Now print it out
-			 */
-			size = sprintf(buffer+len, "%08lX %08lX %-8s %s\n",
+			size = sprintf(buffer+len, "%08lX %08lX %-8s %8ld %8ld %8ld",
 				(unsigned long)mfc->mfc_mcastgrp,
 				(unsigned long)mfc->mfc_origin,
 				name,
-				vifmap);
+				mfc->mfc_bytes,
+				mfc->mfc_pkt,
+				mfc->mfc_wrong_if);
+			for(n=0;n<maxvif;n++)
+			{
+				if(vifc_map&(1<<n))
+					size += sprintf(buffer+len+size, " %-3d", mfc->mfc_ttls[n]);
+				else
+					size += sprintf(buffer+len+size, " --- ");
+			}
+			size += sprintf(buffer+len+size, "\n");
 			len+=size;
 			pos+=size;
 			if(pos<offset)
@@ -910,7 +1018,7 @@ int ipmr_mfc_info(char *buffer, char **start, off_t offset, int length, int dumm
 			}
 			mfc=mfc->next;
 	  	}
-	  	sti();
+	  	end_bh_atomic();
   	}
 done:
   	*start=buffer+(offset-begin);
@@ -934,6 +1042,7 @@ static struct proc_dir_entry proc_net_ipmr_mfc = {
 	ipmr_mfc_info
 };
 #endif	
+
 
 /*
  *	Setup for IP multicast routing

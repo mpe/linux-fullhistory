@@ -57,38 +57,31 @@ typedef enum {
 #define SO_NOSPACE	(1<<18)		/* no space to write		*/
 
 #ifdef __KERNEL__
-/*
- * Internal representation of a socket. not all the fields are used by
- * all configurations:
- *
- *		server			client
- * conn		client connected to	server connected to
- * iconn	list of clients		-unused-
- *		 awaiting connections
- * wait		sleep for clients,	sleep for connection,
- *		sleep for i/o		sleep for i/o
- */
-struct socket {
-  short			type;		/* SOCK_STREAM, ...		*/
-  socket_state		state;
-  long			flags;
-  struct proto_ops	*ops;		/* protocols do most everything	*/
-  void			*data;		/* protocol data		*/
-  struct socket		*conn;		/* server socket connected to	*/
-  struct socket		*iconn;		/* incomplete client conn.s	*/
-  struct socket		*next;
-  struct wait_queue	**wait;		/* ptr to place to wait on	*/
-  struct inode		*inode;
-  struct fasync_struct  *fasync_list;	/* Asynchronous wake up list	*/
-  struct file		*file;		/* File back pointer for gc	*/
+
+struct socket
+{
+	socket_state		state;
+
+	unsigned long		flags;
+	struct proto_ops	*ops;
+	struct inode		*inode;
+	struct fasync_struct	*fasync_list;	/* Asynchronous wake up list	*/
+	struct file		*file;		/* File back pointer for gc	*/
+	struct sock		*sk;
+	struct wait_queue	*wait;
+
+	short			type;
+	unsigned char		passcred;
+	unsigned char		tli;
 };
 
 #define SOCK_INODE(S)	((S)->inode)
 
+struct scm_cookie;
+
 struct proto_ops {
   int	family;
 
-  int	(*create)	(struct socket *sock, int protocol);
   int	(*dup)		(struct socket *newsock, struct socket *oldsock);
   int	(*release)	(struct socket *sock, struct socket *peer);
   int	(*bind)		(struct socket *sock, struct sockaddr *umyaddr,
@@ -112,8 +105,13 @@ struct proto_ops {
 			 char *optval, int *optlen);
   int	(*fcntl)	(struct socket *sock, unsigned int cmd,
 			 unsigned long arg);	
-  int   (*sendmsg)	(struct socket *sock, struct msghdr *m, int total_len, int nonblock, int flags);
-  int   (*recvmsg)	(struct socket *sock, struct msghdr *m, int total_len, int nonblock, int flags, int *addr_len);
+  int   (*sendmsg)	(struct socket *sock, struct msghdr *m, int total_len, struct scm_cookie *scm);
+  int   (*recvmsg)	(struct socket *sock, struct msghdr *m, int total_len, int flags, struct scm_cookie *scm);
+};
+
+struct net_proto_family {
+	int	family;
+	int	(*create)(struct socket *sock, int protocol);
 };
 
 struct net_proto {
@@ -121,10 +119,14 @@ struct net_proto {
 	void (*init_func)(struct net_proto *);	/* Bootstrap */
 };
 
-extern int	sock_wake_async(struct socket *sock, int how);
-extern int	sock_register(int family, struct proto_ops *ops);
+extern int	sock_wake_async(struct socket *sk, int how);
+extern int	sock_register(struct net_proto_family *fam);
 extern int	sock_unregister(int family);
 extern struct socket *sock_alloc(void);
-extern void	sock_release(struct socket *sock);
+extern void	sock_release(struct socket *);
+extern int   	sock_sendmsg(struct socket *, struct msghdr *m, int len);
+extern int	sock_recvmsg(struct socket *, struct msghdr *m, int len, int flags);
+extern int	sock_readv_writev(int type, struct inode * inode, struct file * file,
+				  const struct iovec * iov, long count, long size);
 #endif /* __KERNEL__ */
 #endif	/* _LINUX_NET_H */

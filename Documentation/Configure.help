@@ -127,15 +127,15 @@ CONFIG_BLK_DEV_LOOP
 Enhanced IDE/MFM/RLL disk/cdrom/tape support
 CONFIG_BLK_DEV_IDE 
   This will use the full-featured IDE driver to control up to four IDE
-  interfaces, for a combination of up to eight IDE disk/cdrom/tape
-  drives.  Useful information about large (>540MB) IDE disks,
-  soundcard IDE ports, and other topics, is all contained in
-  Documentation/ide.txt.  If you have one or more IDE drives, say Y
-  here.  If your system has no IDE drives, or if memory requirements
-  are really tight, you could say N here, and select the Old harddisk
-  driver instead to save about 13kB of memory in the kernel.  To
-  fine-tune IDE drive/interface parameters for improved performance,
-  look for the hdparm package at
+  interfaces, for a combination of up to eight IDE
+  disk/cdrom/tape/floppy drives.  Useful information about large
+  (>540MB) IDE disks, soundcard IDE ports, module support, and other
+  topics, is all contained in Documentation/ide.txt.  If you have one
+  or more IDE drives, say Y here.  If your system has no IDE drives, or
+  if memory requirements are really tight, you could say N here, and
+  select the Old harddisk driver instead to save about 13kB of memory
+  in the kernel.  To fine-tune IDE drive/interface parameters for
+  improved performance, look for the hdparm package at
   sunsite.unc.edu:/pub/Linux/kernel/patches/diskdrives/
 
 Old harddisk (MFM/RLL/IDE) driver
@@ -165,7 +165,13 @@ CONFIG_BLK_DEV_HD_IDE
   address (0x1f0), along with IDE drives at the secondary/3rd/4th port
   addresses.  Normally, just say N here; you will then use the new
   driver for all 4 interfaces.
-  
+
+Include IDE/ATA-2 DISK support
+CONFIG_BLK_DEV_IDEDISK
+  This will include enhanced support for MFM/RLL/IDE disks. If you
+  have a MFM/RLL/IDE disk, and there is no special reason to use the
+  old harddisk driver instead, say Y.
+
 Include IDE/ATAPI CDROM support
 CONFIG_BLK_DEV_IDECD
   If you have a CDROM drive using the ATAPI protocol, say Y.  ATAPI is
@@ -173,7 +179,7 @@ CONFIG_BLK_DEV_IDECD
   SCSI protocol.  Most new CDROM drives use ATAPI, including the
   NEC-260, Mitsumi FX400, Sony 55E, and just about all non-SCSI
   double(2X), quad(4X), and six(6X) speed drives.  At boot time, the
-  TAPE drive will be identified along with other IDE devices, as "hdb"
+  CDROM drive will be identified along with other IDE devices, as "hdb"
   or "hdc", or something similar.
   If this is your only CDROM drive, you can say N to all other CDROM
   options, but be sure to say Y to the ISO9660 filesystem.  Read the
@@ -190,14 +196,24 @@ CONFIG_BLK_DEV_IDETAPE
   ATAPI is a new protocol used by IDE TAPE and ATAPI drives,
   similar to the SCSI protocol.  At boot time, the TAPE drive will
   be identified along with other IDE devices, as "hdb" or "hdc",
-  or something similar.  Be sure to consult the drivers/block/ide-tape.c
-  and Documentation/ide.txt files for usage information.
+  or something similar, and will be mapped to a character device such
+  as "ht0".  Be sure to consult the drivers/block/ide-tape.c and
+  Documentation/ide.txt files for usage information.
 
-Support removable IDE interfaces (PCMCIA)
-CONFIG_BLK_DEV_IDE_PCMCIA
-  This option adds code to the IDE driver to handle hot insertion
-  and removal of IDE interfaces and drives, under direction of an
-  external utility (?).  Normally, just say N here.
+Include IDE/ATAPI FLOPPY support
+CONFIG_BLK_DEV_IDEFLOPPY
+  If you have an IDE floppy drive using the ATAPI protocol, say Y.
+  ATAPI is a new protocol used by IDE CDROM/TAPE/FLOPPY drives,
+  similar to the SCSI protocol.  At boot time, the FLOPPY drive will
+  be identified along with other IDE devices, as "hdb" or "hdc",
+  or something similar.
+
+SCSI emulation support
+CONFIG_BLK_DEV_IDESCSI
+  This will provide SCSI host adapter emulation for IDE ATAPI devices,
+  and will allow you to use a SCSI driver instead of a native ATAPI
+  driver.  If both SCSI emulation and native support are compiled into
+  the kernel, the native support will be used.  Normally, say N.
 
 CMD640 chipset bugfix/support
 CONFIG_BLK_DEV_CMD640
@@ -538,12 +554,9 @@ CONFIG_PCI
   Find out whether you have a PCI motherboard. PCI is the name of a
   bus system, i.e. the way the CPU talks to the other stuff inside
   your box. Other bus systems are ISA, EISA, Microchannel (MCA) or
-  VESA. If you have PCI, say Y, otherwise N. Note1: MCA systems
-  (notably some IBM PS/2's) are not supported by the standard kernels,
-  but patches exist at
-  http://www.undergrad.math.uwaterloo.ca/~cpbeaure/mca-linux.html on
-  the WWW. Note2: some old PCI motherboards have BIOS bugs and may
-  crash if "PCI bios support" is enabled (but they run fine without
+  VESA. If you have PCI, say Y, otherwise N. 
+  Note: some old PCI motherboards have BIOS bugs and may crash if 
+  "PCI bios support" is enabled (but they run fine without
   this option). The PCI-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO, contains valuable information
   about which PCI hardware does work under Linux and which doesn't.
@@ -556,6 +569,11 @@ CONFIG_PCI_OPTIMIZE
   This can improve access times for some hardware devices under
   certain BIOSes if your computer uses a PCI bus system. This is
   recommended; say Y.
+
+MCA support
+CONFIG_MCA
+  MicroChannel Architecture is found in some IBM PS/2 machines and laptops.
+  See Documentation/mca.txt before attempting to build an MCA bus kernel.
 
 Intel 82371 PIIX (Triton I/II) DMA support
 CONFIG_BLK_DEV_TRITON
@@ -889,7 +907,7 @@ CONFIG_IP_FIREWALL_VERBOSE
   packets it received. The information is handled by the klogd demon
   which is responsible for kernel messages ("man klogd").
 
-IP: transparent proxying (EXPERIMENTAL)
+IP: transparent proxying
 CONFIG_IP_TRANSPARENT_PROXY
   This enables your Linux firewall to transparently redirect any
   network traffic originating from the local network and destined
@@ -900,7 +918,7 @@ CONFIG_IP_TRANSPARENT_PROXY
   rules (using the ipfwadm utility) and/or by doing an appropriate
   bind() system call.
 
-IP: masquerading (EXPERIMENTAL)
+IP: masquerading
 CONFIG_IP_MASQUERADE
   If one of the computers on your local network for which your Linux
   box acts as a firewall wants to send something to the outside, your
@@ -919,8 +937,6 @@ CONFIG_IP_MASQUERADE
   from ftp://sunsite.unc.edu/pub/Linux/system/Network/serial/].)
   Details on how to set things up are contained in the
   IP Masquerading FAQ, available at http://www.indyramp.com/masq/
-  This is EXPERIMENTAL code, which means that it need not be completely
-  stable. If you want this, say Y.
 
 IP: always defragment 
 CONFIG_IP_ALWAYS_DEFRAG 
@@ -958,7 +974,7 @@ CONFIG_IP_ALIAS
   syntax explained in Documentation/networking/alias.txt. If you want
   this, say Y. Most people don't need it and say N.
 
-IP: multicast routing (EXPERIMENTAL)
+IP: multicast routing
 CONFIG_IP_MROUTE
   This is used if you want your machine to act as a router for IP
   packets that have several destination addresses. It is needed on the
@@ -1092,6 +1108,18 @@ CONFIG_IPX_INTERN
   full internal net can be found on ftp.gwdg.de:/pub/linux/misc/ncpfs.
   If you don't know what you are doing, say N.
 
+IPX Type 20 Routing
+CONFIG_IPX_PPROP_ROUTING
+  IPX Type 20 packets are special broadcast messages designed to work
+  across routers.  If you are using an internal network, have multiple
+  interfaces that route IPX, or will want to route IPX connections over
+  ppp to internal networks, setting this will allow the type 20 packets
+  to be propogated to all connected networks.  These packets are used by
+  Novell NETBIOS and the NETBIOS name functions of SMB protocols that
+  work over IPX (e.g. the "Network Neighborhood" on another popular OS
+  cum GUI).  In brief, if your Linux box needs to route IPX packets,
+  this should be set to Y.
+
 Appletalk DDP
 CONFIG_ATALK
   Appletalk is the way Apple computers speak to each other on a
@@ -1181,15 +1209,14 @@ CONFIG_BRIDGE
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. The Bridging code is
   still in test. If unsure, say N.
 
-Kernel/User network link driver (EXPERIMENTAL)
+Kernel/User network link driver
 CONFIG_NETLINK
   This driver allows for two-way communication between certain parts
   of the kernel or modules and user processes; the user processes are
   able to read from and write to character special files in the /dev
   directory having major mode 36. So far, the kernel uses it to
   publish some network related information if you enable "Routing
-  messages", below. Say Y if you want to experiment with it; this is
-  EXPERIMENTAL code, which means that it need not be completely stable.
+  messages", below or firewall netlink.
   You need to include this if you want to use arpd, a daemon that
   helps keep the internal ARP cache (a mapping between IP addresses
   and hardware addresses on the local network) small. If unsure, say
@@ -2501,6 +2528,19 @@ CONFIG_AC3200
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
+Racal-Interlan EISA ES3210 support
+CONFIG_ES3210
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
 Apricot Xen-II on board ethernet
 CONFIG_APRICOT
   If you have a network (ethernet) controller of this type, say Y and
@@ -2659,6 +2699,13 @@ CONFIG_IBMTR
   can be inserted in and removed from the running kernel whenever you
   want). If you want to compile it as a module, say M here and read
   Documentation/modules.txt.
+
+Traffic Shaper (EXPERIMENTAL)
+CONFIG_SHAPER
+  The traffic shaper adds a set of devices that may be attached to the
+  other devices in the kernel and used to limit their bandwidth. The
+  shapecfg program for setting up shaper devices is available from
+  ftp://shadow.cabi.net/....
 
 Support non-SCSI/IDE/ATAPI drives
 CONFIG_CD_NO_IDESCSI
@@ -3265,6 +3312,24 @@ CONFIG_ISTALLION
   which can be inserted in and removed from the running kernel
   whenever you want), say M here and read Documentation/modules.txt.
 
+Hayes ESP serial port support
+CONFIG_ESP
+  This is a driver which supports Hayes ESP serial ports.  It uses DMA to
+  transfer data to and from the host.  Make sure to read
+  drivers/char/README.esp.  This driver may be compiled as a loadable module.
+
+Hayes ESP serial port DMA channel
+CONFIG_ESP_DMA_CHANNEL
+  This is the DMA channel to be used to transfer data to and from the host.
+  One DMA channel is shared between all the ESP ports.   Valid values are
+  1 and 3.
+
+Hayes ESP serial port trigger level
+CONFIG_ESP_TRIGGER_LEVEL
+  This is the trigger level (in bytes) of the transmit FIFO and the receive
+  FIFO.  Larger values may result in fewer interrupts; however, a value too
+  high could result in data loss.  Valid values are 1 through 1015.
+
 Parallel printer support
 CONFIG_PRINTER
   If you intend to attach a printer to the parallel port of your Linux
@@ -3536,7 +3601,7 @@ CONFIG_SOFT_WATCHDOG
   from the running kernel whenever you want). If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
 
-Berkshire Products PC Watchdog card
+Berkshire Products PC Watchdog
 CONFIG_PCWATCHDOG
   This is the driver for the Berkshire Products PC Watchdog card.
   This card simply watches your kernel to make sure it doesn't freeze,
@@ -3548,6 +3613,25 @@ CONFIG_PCWATCHDOG
   code which can be inserted in and removed from the running kernel
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt.  Most people will say N.
+
+Support for Revision A cards
+CONFIG_PCWD_REV_A
+  This gives you support for revision A or B of the Berkshire PC Watchdog
+  Card.  The way to tell if you have an A or B style card is to check the
+  manual on page 22.  If it doesn't say "Port 3" at the top, you have a
+  revision A or B card.  Also, if your card doesn't have an audible beep,
+  chances are you have a revision A or B card.
+
+Support for Revision C cards
+CONFIG_PCWD_REV_C
+  This card gives you an audible beep.  It also has support for disabling
+  the card, enabling it, getting firmware versions, and a few other options.
+
+Show card state on reset
+CONFIG_PCWD_SHOW_PREVSTAT
+  Enabling this option will display the previous reset state of your card.
+  It will also give a little more verbose data about the card, or your
+  system's previous status before reset.
 
 Enhanced Real Time Clock Support
 CONFIG_RTC

@@ -172,7 +172,7 @@ static int tcp_write_timeout(struct sock *sk)
 		 *	Attempt to recover if arp has changed (unlikely!) or
 		 *	a route has shifted (not supported prior to 1.3).
 		 */
-		ip_rt_advice(&sk->ip_route_cache, 0);
+		ip_rt_advice((struct rtable**)&sk->dst_cache, 0);
 	}
 	
 	/*
@@ -303,7 +303,8 @@ static __inline__ int tcp_keepopen_proc(struct sock *sk)
 {
 	int res = 0;
 
-	if (sk->state == TCP_ESTABLISHED || sk->state == TCP_CLOSE_WAIT)
+	if (sk->state == TCP_ESTABLISHED || sk->state == TCP_CLOSE_WAIT ||
+	    sk->state == TCP_FIN_WAIT2)
 	{
 		struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 		__u32 elapsed = jiffies - tp->rcv_tstamp;

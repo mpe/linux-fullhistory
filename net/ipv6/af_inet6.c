@@ -101,6 +101,9 @@ static void def_callback3(struct sock *sk)
 
 struct sock * rawv6_sock_array[SOCK_ARRAY_SIZE];
 
+extern struct proto_ops inet6_stream_ops;
+extern struct proto_ops inet6_dgram_ops;
+
 static int inet6_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
@@ -130,6 +133,7 @@ static int inet6_create(struct socket *sock, int protocol)
 			protocol = IPPROTO_TCP;
 			sk->no_check = TCP_NO_CHECK;
 			prot = &tcpv6_prot;
+			sock->ops = &inet6_stream_ops;
 			break;
 
 		case SOCK_DGRAM:
@@ -141,6 +145,7 @@ static int inet6_create(struct socket *sock, int protocol)
 			protocol = IPPROTO_UDP;
 			sk->no_check = UDP_NO_CHECK;
 			prot=&udpv6_prot;
+			sock->ops = &inet6_dgram_ops;
 			break;
       
 		case SOCK_RAW:
@@ -155,6 +160,7 @@ static int inet6_create(struct socket *sock, int protocol)
 				return(-EPROTONOSUPPORT);
 			}
 			prot = &rawv6_prot;
+			sock->ops = &inet6_dgram_ops;
 			sk->reuse = 1;
 			sk->num = protocol;
 			break;
@@ -176,13 +182,14 @@ static int inet6_create(struct socket *sock, int protocol)
 	sk->prot = prot;
 	sk->backlog_rcv = prot->backlog_rcv;
 
-	sk->sleep = sock->wait;
-	sock->data =(void *) sk;
+	sk->sleep = &sock->wait;
+	sock->sk = sk;
 
 	sk->state = TCP_CLOSE;
 
 	skb_queue_head_init(&sk->write_queue);
 	skb_queue_head_init(&sk->receive_queue);
+	skb_queue_head_init(&sk->error_queue);
 	skb_queue_head_init(&sk->back_log);
 
 	sk->timer.data = (unsigned long)sk;
@@ -244,8 +251,7 @@ static int inet6_create(struct socket *sock, int protocol)
 
 static int inet6_dup(struct socket *newsock, struct socket *oldsock)
 {
-	return(inet6_create(newsock, 
-			    ((struct sock *)(oldsock->data))->protocol));
+	return(inet6_create(newsock, oldsock->sk->protocol));
 }
 
 
@@ -257,7 +263,7 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr,
 		      int addr_len)
 {
 	struct sockaddr_in6 *addr=(struct sockaddr_in6 *)uaddr;
-	struct sock *sk=(struct sock *)sock->data, *sk2;
+	struct sock *sk = sock->sk, *sk2;
 	__u32 v4addr = 0;
 	unsigned short snum = 0;
 	int addr_type = 0;
@@ -305,7 +311,7 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr,
 	{
 		v4addr = addr->sin6_addr.s6_addr32[3];
 
-		if (ip_chk_addr(v4addr) != IS_MYADDR)
+		if (__ip_chk_addr(v4addr) != IS_MYADDR)
 			return(-EADDRNOTAVAIL);
 	}
 	else
@@ -440,7 +446,7 @@ static int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
 	struct sock *sk;
   
 	sin->sin6_family = AF_INET6;
-	sk = (struct sock *) sock->data;
+	sk = sock->sk;
 	if (peer) 
 	{
 		if (!tcp_connected(sk->state))
@@ -472,7 +478,7 @@ static int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
 
 static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
-	struct sock *sk=(struct sock *)sock->data;
+	struct sock *sk = sock->sk;
 	int err;
 	int pid;
 
@@ -782,14 +788,13 @@ struct sock *inet6_get_sock_mcast(struct sock *sk,
 }
 	
 
-static struct proto_ops inet6_proto_ops = {
+struct proto_ops inet6_stream_ops = {
 	AF_INET6,
 
-	inet6_create,
 	inet6_dup,
 	inet6_release,
 	inet6_bind,
-	inet_connect,			/* ok		*/
+	inet_stream_connect,		/* ok		*/
 	inet6_socketpair,		/* a do nothing	*/
 	inet_accept,			/* ok		*/
 	inet6_getname, 
@@ -804,6 +809,34 @@ static struct proto_ops inet6_proto_ops = {
 	inet_recvmsg			/* ok		*/
 };
 
+struct proto_ops inet6_dgram_ops = {
+	AF_INET6,
+
+	inet6_dup,
+	inet6_release,
+	inet6_bind,
+	inet_dgram_connect,		/* ok		*/
+	inet6_socketpair,		/* a do nothing	*/
+	inet_accept,			/* ok		*/
+	inet6_getname, 
+	datagram_select,		/* ok		*/
+	inet6_ioctl,			/* must change  */
+	inet_listen,			/* ok		*/
+	inet_shutdown,			/* ok		*/
+	inet_setsockopt,		/* ok		*/
+	inet_getsockopt,		/* ok		*/
+	inet_fcntl,			/* ok		*/
+	inet_sendmsg,			/* ok		*/
+	inet_recvmsg			/* ok		*/
+};
+
+struct net_proto_family inet6_family_ops = {
+	AF_INET6,
+	inet6_create
+};
+
+
+
 #ifdef MODULE
 int init_module(void)
 #else
@@ -814,7 +847,7 @@ void inet6_proto_init(struct net_proto *pro)
 
 	printk(KERN_INFO "IPv6 v0.1 for NET3.037\n");
 
-	sock_register(inet6_proto_ops.family, &inet6_proto_ops);
+  	(void) sock_register(&inet6_family_ops);
 	
 	for(i = 0; i < SOCK_ARRAY_SIZE; i++) 
 	{
@@ -842,8 +875,8 @@ void inet6_proto_init(struct net_proto *pro)
 	
 	ipv6_init();
 
-	icmpv6_init(&inet6_proto_ops);
-	ndisc_init(&inet6_proto_ops);
+	icmpv6_init(&inet6_family_ops);
+	ndisc_init(&inet6_family_ops);
 
         addrconf_init();
  

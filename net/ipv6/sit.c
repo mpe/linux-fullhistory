@@ -51,23 +51,15 @@ static void			sit_mtu_cache_gc(void);
 
 static int			sit_xmit(struct sk_buff *skb, 
 					 struct device *dev);
-static int			sit_rcv(struct sk_buff *skb, 
-					struct device *dev, 
-					struct options *opt,
-					__u32 daddr, unsigned short len,
-					__u32 saddr, int redo, 
-					struct inet_protocol * protocol);
+static int			sit_rcv(struct sk_buff *skb, unsigned short len);
+static void 			sit_err(struct sk_buff *skb, unsigned char *dp);
 
 static int			sit_open(struct device *dev);
 static int			sit_close(struct device *dev);
 
 static struct enet_statistics *	sit_get_stats(struct device *dev);
 
-static void			sit_err(int type, int code, 
-					unsigned char *buff, __u32 info,
-					__u32 daddr, __u32 saddr,
-					struct inet_protocol *protocol,
-					int len);
+extern void	udp_err(struct sk_buff *, unsigned char *);
 
 static struct inet_protocol sit_protocol = {
 	sit_rcv,
@@ -208,7 +200,7 @@ static int sit_init_dev(struct device *dev)
 	dev->hard_header	= NULL;
 	dev->rebuild_header 	= NULL;
 	dev->set_mac_address 	= NULL;
-	dev->header_cache_bind 	= NULL;
+	dev->hard_header_cache 	= NULL;
 	dev->header_cache_update= NULL;
 
 	dev->type		= ARPHRD_SIT;
@@ -349,20 +341,20 @@ void sit_cleanup(void)
  *	receive IPv4 ICMP messages
  */
 
-static void sit_err(int type, int code, unsigned char *buff, __u32 info,
-		    __u32 daddr, __u32 saddr, struct inet_protocol *protocol,
-		    int len)
-		    
+static void sit_err(struct sk_buff *skb, unsigned char *dp)
 {
+	struct iphdr *iph = (struct iphdr*)dp;
+	int type = skb->h.icmph->type;
+	int code = skb->h.icmph->code;
+
 	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED)
 	{
 		struct sit_mtu_info *minfo;
+		unsigned short info = skb->h.icmph->un.frag.mtu - sizeof(struct iphdr);
 
-		info -= sizeof(struct iphdr);
+		minfo = sit_mtu_lookup(iph->daddr);
 
-		minfo = sit_mtu_lookup(daddr);
-
-		printk(KERN_DEBUG "sit: %08lx pmtu = %ul\n", ntohl(saddr),
+		printk(KERN_DEBUG "sit: %08lx pmtu = %ul\n", ntohl(iph->saddr),
 		       info);
 		if (minfo == NULL)
 		{
@@ -373,7 +365,7 @@ static void sit_err(int type, int code, unsigned char *buff, __u32 info,
 				return;
 
 			start_bh_atomic();
-			sit_cache_insert(daddr, info);
+			sit_cache_insert(iph->daddr, info);
 			end_bh_atomic();
 		}
 		else
@@ -383,16 +375,15 @@ static void sit_err(int type, int code, unsigned char *buff, __u32 info,
 	}
 }
 
-static int sit_rcv(struct sk_buff *skb, struct device *idev, 
-		   struct options *opt,
-		   __u32 daddr, unsigned short len,
-		   __u32 saddr, int redo, struct inet_protocol * protocol)
+static int sit_rcv(struct sk_buff *skb, unsigned short len)
 {
 	struct enet_statistics *stats;
 	struct device *dev = NULL;
 	struct sit_vif *vif;	
+	__u32  saddr = skb->nh.iph->saddr;
        
-	skb->h.raw = skb_pull(skb, skb->h.raw - skb->data);
+	skb->h.raw = skb->nh.raw = skb_pull(skb, skb->h.raw - skb->data);
+
 	skb->protocol = __constant_htons(ETH_P_IPV6);
 
 	for (vif = vif_list; vif; vif = vif->next)
@@ -453,21 +444,21 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 	daddr = dev->pa_dstaddr;
 	if (daddr == 0)
 	{
-		struct neighbour *neigh;
+		struct nd_neigh *neigh;
 
-		neigh = skb->nexthop;
+		neigh = (struct nd_neigh *) skb->nexthop;
 		if (neigh == NULL)
 		{
 			printk(KERN_DEBUG "sit: nexthop == NULL\n");
 			goto on_error;
 		}
 		
-		addr6 = &neigh->addr;
+		addr6 = &neigh->ndn_addr;
 		addr_type = ipv6_addr_type(addr6);
 
 		if (addr_type == IPV6_ADDR_ANY)
 		{
-			addr6 = &skb->ipv6_hdr->daddr;
+			addr6 = &skb->nh.ipv6h->daddr;
 			addr_type = ipv6_addr_type(addr6);
 		}
 
@@ -481,12 +472,7 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 
 	len = skb->tail - (skb->data + sizeof(struct ipv6hdr));
 
-	if (skb->sk)
-	{
-		atomic_sub(skb->truesize, &skb->sk->wmem_alloc);
-	}
-
-	skb->sk = NULL;
+	skb_orphan(skb);
 		
 	iph = (struct iphdr *) skb_push(skb, sizeof(struct iphdr));
 	
@@ -494,20 +480,18 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 
 	/* get route */
 
-	rt = ip_rt_route(daddr, skb->localroute);
-	
-	if (rt == NULL)
-	{
+	if (ip_route_output(&rt, daddr, 0, 0, NULL)) {
 		printk(KERN_DEBUG "sit: no route to host\n");
 		goto on_error;
 	}
 
+	skb->dst = dst_clone(&rt->u.dst);
 	minfo = sit_mtu_lookup(daddr);
 
 	if (minfo)
 		mtu = minfo->mtu;
 	else
-		mtu = rt->rt_dev->mtu;
+		mtu = rt->u.dst.dev->mtu;
 
 	if (mtu > 576 && len > mtu)
 	{
@@ -516,7 +500,7 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 	}
 
 	saddr = rt->rt_src;
-	skb->dev = rt->rt_dev;
+	skb->dev = rt->u.dst.dev;
 	raddr = rt->rt_gateway;	
 
 	if (raddr == 0)
@@ -544,7 +528,6 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 			if (mac < 0)
 				skb->arp = 0;
 
-			skb->raddr = raddr;		
 		}
 		
 	}
@@ -567,11 +550,11 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 	iph->saddr    = saddr;
 	iph->daddr    = daddr;
 	iph->protocol = IPPROTO_IPV6;
-	skb->ip_hdr   = iph;
+	skb->nh.iph   = iph;
 
 	ip_send_check(iph);
 
-	ip_queue_xmit(NULL, skb->dev, skb, 1);
+	ip_queue_xmit(skb);
 
 	stats->tx_packets++;
 	dev->tbusy=0;

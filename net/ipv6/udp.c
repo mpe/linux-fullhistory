@@ -224,11 +224,11 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		if (skb->protocol == __constant_htons(ETH_P_IP))
 		{
 			ipv6_addr_set(&sin6->sin6_addr, 0, 0,
-				      __constant_htonl(0xffff), skb->daddr);
+				      __constant_htonl(0xffff), skb->nh.iph->daddr);
 		}
 		else
 		{
-			memcpy(&sin6->sin6_addr, &skb->ipv6_hdr->saddr,
+			memcpy(&sin6->sin6_addr, &skb->nh.ipv6h->saddr,
 			       sizeof(struct in6_addr));
 
 			if (msg->msg_control)
@@ -492,8 +492,7 @@ static int udpv6_getfrag(const void *data, struct in6_addr *addr,
 	return 0;
 }
 
-static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen, 
-			 int noblock, int flags)
+static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 {
 	
 	struct ipv6_options opt_space;
@@ -510,7 +509,7 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen,
 	int err;
 
 	
-	if (flags & ~MSG_DONTROUTE)
+	if (msg->msg_flags & ~(MSG_DONTROUTE|MSG_DONTWAIT))
 		return(-EINVAL);
 
 	if (sin6)
@@ -551,7 +550,7 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen,
 		sin.sin_family = AF_INET;
 		sin.sin_addr.s_addr = daddr->s6_addr32[3];
 
-		return udp_sendmsg(sk, msg, len, noblock, flags);
+		return udp_sendmsg(sk, msg, len);
 	}
 
 	udh.daddr = NULL;
@@ -582,7 +581,7 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen,
 	udh.pl_len = len;
 	
 	err = ipv6_build_xmit(sk, udpv6_getfrag, &udh, daddr, len,
-			      saddr, dev, opt, IPPROTO_UDP, noblock);
+			      saddr, dev, opt, IPPROTO_UDP, msg->msg_flags&MSG_DONTWAIT);
 	
 	if (err < 0)
 		return err;

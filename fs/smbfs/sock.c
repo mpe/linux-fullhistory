@@ -15,6 +15,7 @@
 #include <linux/net.h>
 #include <linux/mm.h>
 #include <linux/netdevice.h>
+#include <net/scm.h>
 #include <net/ip.h>
 
 #include <linux/smb.h>
@@ -26,31 +27,41 @@
 
 static int
 _recvfrom(struct socket *sock, unsigned char *ubuf, int size,
-	  int noblock, unsigned flags, struct sockaddr_in *sa, int *addr_len)
+	  int noblock, unsigned flags, struct sockaddr_in *sa)
 {
 	struct iovec iov;
 	struct msghdr msg;
+	struct scm_cookie scm;
 
+	memset(&scm, 0, sizeof(scm));
+	
 	iov.iov_base = ubuf;
 	iov.iov_len = size;
 
 	msg.msg_name = (void *) sa;
 	msg.msg_namelen = 0;
-	if (addr_len)
-		msg.msg_namelen = *addr_len;
+	if (sa)
+		msg.msg_namelen = sizeof(struct sockaddr_in);
 	msg.msg_control = NULL;
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 
-	return sock->ops->recvmsg(sock, &msg, size, noblock, flags, addr_len);
+	if (noblock) {
+		flags |= MSG_DONTWAIT;
+	}
+
+	return sock->ops->recvmsg(sock, &msg, size, flags, &scm);
 }
 
 static int
 _send(struct socket *sock, const void *buff, int len,
-      int nonblock, unsigned flags)
+      int noblock, unsigned flags)
 {
 	struct iovec iov;
 	struct msghdr msg;
+	struct scm_cookie scm;
+	int err;
+	
 
 	iov.iov_base = (void *) buff;
 	iov.iov_len = len;
@@ -61,7 +72,19 @@ _send(struct socket *sock, const void *buff, int len,
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 
-	return sock->ops->sendmsg(sock, &msg, len, nonblock, flags);
+	if (noblock) {
+		flags |= MSG_DONTWAIT;
+	}
+
+	msg.msg_flags = flags;
+
+	err = scm_send(sock, &msg, &scm);
+        if (err < 0)
+                return err;
+	
+	err = sock->ops->sendmsg(sock, &msg, len, &scm);
+	scm_destroy(&scm);
+	return err;
 }
 
 static void
@@ -79,13 +102,13 @@ smb_data_callback(struct sock *sk, int len)
 		set_fs(get_ds());
 
 		result = _recvfrom(sock, (void *) peek_buf, 1, 1,
-				   MSG_PEEK, NULL, NULL);
+				   MSG_PEEK, NULL);
 
 		while ((result != -EAGAIN) && (peek_buf[0] == 0x85))
 		{
 			/* got SESSION KEEP ALIVE */
 			result = _recvfrom(sock, (void *) peek_buf,
-					   4, 1, 0, NULL, NULL);
+					   4, 1, 0, NULL);
 
 			DDPRINTK("smb_data_callback:"
 				 " got SESSION KEEP ALIVE\n");
@@ -95,8 +118,7 @@ smb_data_callback(struct sock *sk, int len)
 				break;
 			}
 			result = _recvfrom(sock, (void *) peek_buf,
-					   1, 1, MSG_PEEK,
-					   NULL, NULL);
+					   1, 1, MSG_PEEK, NULL);
 		}
 		set_fs(fs);
 
@@ -132,7 +154,7 @@ smb_catch_keepalive(struct smb_server *server)
 		server->data_ready = NULL;
 		return -EINVAL;
 	}
-	sk = (struct sock *) (sock->data);
+	sk = sock->sk;
 
 	if (sk == NULL)
 	{
@@ -178,7 +200,7 @@ smb_dont_catch_keepalive(struct smb_server *server)
 		printk("smb_dont_catch_keepalive: did not get SOCK_STREAM\n");
 		return -EINVAL;
 	}
-	sk = (struct sock *) (sock->data);
+	sk = sock->sk;
 
 	if (sk == NULL)
 	{
@@ -239,8 +261,7 @@ smb_receive_raw(struct socket *sock, unsigned char *target, int length)
 	{
 		result = _recvfrom(sock,
 				   (void *) (target + already_read),
-				   length - already_read, 0, 0,
-				   NULL, NULL);
+				   length - already_read, 0, 0, NULL);
 
 		if (result < 0)
 		{
@@ -480,6 +501,8 @@ smb_receive_trans2(struct smb_server *server,
 	return result;
 }
 
+extern struct net_proto_family inet_family_ops;
+
 int
 smb_release(struct smb_server *server)
 {
@@ -498,8 +521,8 @@ smb_release(struct smb_server *server)
 	   is nothing behind it, so I set it to SS_UNCONNECTED. */
 	sock->state = SS_UNCONNECTED;
 
-	result = sock->ops->create(sock, 0);
-	DPRINTK("smb_release: sock->ops->create = %d\n", result);
+	result = inet_family_ops.create(sock, 0);
+	DPRINTK("smb_release: inet_create = %d\n", result);
 	return result;
 }
 
@@ -588,6 +611,8 @@ smb_send_trans2(struct smb_server *server, __u16 trans2_command,
 		int lparam, unsigned char *param)
 {
 	struct socket *sock = server_sock(server);
+	struct scm_cookie scm;
+	int err;
 
 	/* I know the following is very ugly, but I want to build the
 	   smb packet as efficiently as possible. */
@@ -647,7 +672,13 @@ smb_send_trans2(struct smb_server *server, __u16 trans2_command,
 	msg.msg_iov = iov;
 	msg.msg_iovlen = 4;
 
-	return sock->ops->sendmsg(sock, &msg, packet_length, 0, 0);
+	err = scm_send(sock, &msg, &scm);
+        if (err < 0)
+                return err;
+	
+	err = sock->ops->sendmsg(sock, &msg, packet_length, &scm);
+	scm_destroy(&scm);
+	return err;
 }
 
 /*

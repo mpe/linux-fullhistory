@@ -30,6 +30,9 @@ dep_tristate 'DTC3180/3280 SCSI support' CONFIG_SCSI_DTC3280 $CONFIG_SCSI
 dep_tristate 'EATA-DMA (DPT, NEC, AT&T, SNI, AST, Olivetti, Alphatronix) support' CONFIG_SCSI_EATA_DMA $CONFIG_SCSI
 dep_tristate 'EATA-PIO (old DPT PM2001, PM2012A) support' CONFIG_SCSI_EATA_PIO $CONFIG_SCSI
 dep_tristate 'EATA ISA/EISA/PCI (DPT and generic EATA/DMA-compliant boards) support' CONFIG_SCSI_EATA $CONFIG_SCSI
+  if [ "$CONFIG_SCSI_EATA" != "n" ]; then
+    bool '  enable tagged command queueing' CONFIG_SCSI_EATA_TAGGED_QUEUE
+  fi
 dep_tristate 'Future Domain 16xx SCSI support' CONFIG_SCSI_FUTURE_DOMAIN $CONFIG_SCSI
 dep_tristate 'Generic NCR5380/53c400 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 $CONFIG_SCSI
 if [ "$CONFIG_SCSI_GENERIC_NCR5380" != "n" ]; then
@@ -63,6 +66,9 @@ if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
     bool '  disable scsi parity checking' CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK
     bool '  force synchronous negotiation' CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
   fi
+fi
+if [ "$CONFIG_MCA" = "y" ]; then
+  bool 'IBMMCA SCSI support' CONFIG_SCSI_IBMMCA
 fi
 dep_tristate 'IOMEGA Parallel Port ZIP drive SCSI support' CONFIG_SCSI_PPA $CONFIG_SCSI
 dep_tristate 'PAS16 SCSI support' CONFIG_SCSI_PAS16 $CONFIG_SCSI

@@ -13,6 +13,11 @@ if [ "$CONFIG_STALDRV" = "y" ]; then
   tristate '  Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
 fi
 tristate 'SDL RISCom/8 card support' CONFIG_RISCOM8
+tristate 'Hayes ESP serial port support' CONFIG_ESP
+if [ "$CONFIG_ESP" = "y" -o "$CONFIG_ESP" = "m" ]; then
+  int '  DMA channel' CONFIG_ESP_DMA_CHANNEL 1
+  int '  FIFO trigger level' CONFIG_ESP_TRIGGER_LEVEL 768
+fi
 tristate 'Parallel printer support' CONFIG_PRINTER
 
 
@@ -27,18 +32,25 @@ if [ "$CONFIG_MOUSE" = "y" ]; then
 	fi
 fi
 
-bool 'Support for user misc device modules' CONFIG_UMISC
-
-bool 'QIC-02 tape support' CONFIG_QIC02_TAPE
-if [ "$CONFIG_QIC02_TAPE" = "y" ]; then
-  bool 'Do you want runtime configuration for QIC-02' CONFIG_QIC02_DYNCONF
-  if [ "$CONFIG_QIC02_DYNCONF" != "y" ]; then
-    comment 'Edit configuration parameters in ./include/linux/tpqic02.h!'
-  else
-    comment 'Setting runtime QIC-02 configuration is done with qic02conf'
-    comment 'from the tpqic02-support package.  It is available at'
-    comment 'ftp://titus.cfw.com/pub/Linux/util/'
+if [ "$CONFIG_MODULES" = "y" ]; then
+	bool 'Support for user misc device modules' CONFIG_UMISC
 fi
+
+tristate 'QIC-02 tape support' CONFIG_QIC02_TAPE
+if [ "$CONFIG_QIC02_TAPE" = "y" -o "$CONFIG_QIC02_TAPE" = "m" ]; then
+  if [ "$CONFIG_QIC02_TAPE" = "y" ]; then
+    bool 'Do you want runtime configuration for QIC-02' CONFIG_QIC02_DYNCONF
+    if [ "$CONFIG_QIC02_DYNCONF" = "y" ]; then
+      comment 'Setting runtime QIC-02 configuration is done with qic02conf'
+      comment 'from the tpqic02-support package.  It is available at'
+      comment 'ftp://titus.cfw.com/pub/Linux/util/'
+    else
+      comment 'Edit configuration parameters in ./include/linux/tpqic02.h!'
+    fi
+  fi
+  if [ "$CONFIG_QIC02_TAPE" = "m" ]; then
+    comment 'Edit configuration parameters in ./include/linux/tpqic02.h!'
+  fi
 fi
 
 tristate 'Ftape (QIC-80/Travan) support' CONFIG_FTAPE
@@ -67,6 +79,11 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
      tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
   fi
   tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
+  if [ "$CONFIG_PCWATCHDOG" != "n" ]; then
+      bool '       Support for Revision A cards' CONFIG_PCWD_REV_A
+      bool '       Support for Revision C cards' CONFIG_PCWD_REV_C
+      bool '       Show card state on reset' CONFIG_PCWD_SHOW_PREVSTAT
+  fi
 fi
 bool 'Enhanced Real Time Clock Support' CONFIG_RTC
 endmenu

@@ -12,7 +12,6 @@ bool 'Network aliasing'  CONFIG_NET_ALIAS
 bool 'TCP/IP networking' CONFIG_INET
 if [ "$CONFIG_INET" = "y" ]; then
   source net/ipv4/Config.in
-
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     tristate 'The IPv6 protocol' CONFIG_IPV6
   fi
@@ -22,6 +21,9 @@ comment ' '
 tristate 'The IPX protocol' CONFIG_IPX
 if [ "$CONFIG_IPX" != "n" ]; then
   bool 'Full internal IPX network' CONFIG_IPX_INTERN
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    bool 'IPX Type 20 Routing' CONFIG_IPX_PPROP_ROUTING
+  fi
 fi
 tristate 'Appletalk DDP' CONFIG_ATALK
 tristate 'Amateur Radio AX.25 Level 2' CONFIG_AX25
@@ -32,5 +34,6 @@ fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 # tristate 'CCITT X.25 Packet Layer' CONFIG_X25
   bool 'Bridging (EXPERIMENTAL)' CONFIG_BRIDGE
+#  bool '802.2 LLC (EXPERIMENTAL)' CONFIG_LLC
 fi
 endmenu

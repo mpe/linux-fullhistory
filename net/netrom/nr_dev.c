@@ -110,15 +110,14 @@ static int nr_header(struct sk_buff *skb, struct device *dev, unsigned short typ
 	return -37;	
 }
 
-static int nr_rebuild_header(void *buff, struct device *dev,
-	unsigned long raddr, struct sk_buff *skb)
+static int nr_rebuild_header(struct sk_buff *skb)
 {
+	struct device *dev=skb->dev;
 	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
-	unsigned char *bp = (unsigned char *)buff;
 	struct sk_buff *skbn;
-
-	if (!arp_query(bp + 7, raddr, dev)) {
-		dev_kfree_skb(skb, FREE_WRITE);
+	unsigned char *bp=skb->data;
+	if (!arp_find(bp + 7, skb)) {
+		kfree_skb(skb, FREE_WRITE);
 		return 1;
 	}
 
@@ -132,19 +131,17 @@ static int nr_rebuild_header(void *buff, struct device *dev,
 	bp[6] |= SSSID_SPARE;
 
 	if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
-		dev_kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb, FREE_WRITE);
 		return 1;
 	}
 
-	skbn->sk = skb->sk;
-	
 	if (skbn->sk != NULL)
-		atomic_add(skbn->truesize, &skbn->sk->wmem_alloc);
+		skb_set_owner_w(skbn, skb->sk);
 
-	dev_kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb, FREE_WRITE);
 
 	if (!nr_route_frame(skbn, NULL)) {
-		dev_kfree_skb(skbn, FREE_WRITE);
+		kfree_skb(skbn, FREE_WRITE);
 		stats->tx_errors++;
 	}
 
@@ -214,7 +211,7 @@ static int nr_xmit(struct sk_buff *skb, struct device *dev)
 
 	sti();
 
-	dev_kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb, FREE_WRITE);
 
 	stats->tx_errors++;
 

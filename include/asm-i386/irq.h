@@ -22,8 +22,6 @@ extern void enable_irq(unsigned int);
 #define __STR(x) #x
 #define STR(x) __STR(x)
 
-#define GET_CURRENT \
-	"movl " SYMBOL_NAME_STR(current_set) ",%ebx\n\t"
 
 #define SAVE_ALL \
 	"cld\n\t" \
@@ -143,7 +141,11 @@ extern void enable_irq(unsigned int);
 	"andb $0x0F,%al\n\t"
 
 #define GET_CURRENT \
-	"movl " SYMBOL_NAME_STR(current_set) "(,%eax,4),%ebx\n\t"
+	"movl "SYMBOL_NAME_STR(apic_reg)", %ebx\n\t" \
+	"movl 32(%ebx), %ebx\n\t" \
+	"shrl $22,%ebx\n\t" \
+	"andl $0x3C,%ebx\n\t" \
+	"movl " SYMBOL_NAME_STR(current_set) "(,%ebx),%ebx\n\t"
 	
 #define	ENTER_KERNEL \
 	"pushl %eax\n\t" \
@@ -151,7 +153,6 @@ extern void enable_irq(unsigned int);
 	"pushfl\n\t" \
 	"cli\n\t" \
 	GET_PROCESSOR_ID \
-	GET_CURRENT \
 	"btsl $" STR(SMP_FROM_INT) ","SYMBOL_NAME_STR(smp_proc_in_lock)"(,%eax,4)\n\t" \
 	"1: " \
 	"lock\n\t" \
@@ -220,6 +221,7 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	UNBLK_##chip(mask) \
 	"decl "SYMBOL_NAME_STR(intr_count)"\n\t" \
 	"incl "SYMBOL_NAME_STR(syscall_count)"\n\t" \
+	GET_CURRENT \
 	"jmp ret_from_sys_call\n" \
 "\n"__ALIGN_STR"\n" \
 SYMBOL_NAME_STR(fast_IRQ) #nr "_interrupt:\n\t" \
@@ -267,6 +269,7 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	UNBLK_##chip(mask) \
 	"decl "SYMBOL_NAME_STR(intr_count)"\n\t" \
 	"incl "SYMBOL_NAME_STR(syscall_count)"\n\t" \
+	GET_CURRENT \
 	"jmp ret_from_sys_call\n");
 
 	
@@ -298,6 +301,7 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	"btrl $" STR(SMP_FROM_INT) ","SYMBOL_NAME_STR(smp_proc_in_lock)"(,%eax,4)\n\t" \
 	"decl "SYMBOL_NAME_STR(intr_count)"\n\t" \
 	"incl "SYMBOL_NAME_STR(syscall_count)"\n\t" \
+	GET_CURRENT \
 	"jmp ret_from_sys_call\n" \
 "\n"__ALIGN_STR"\n" \
 SYMBOL_NAME_STR(fast_IRQ) #nr "_interrupt:\n\t" \
@@ -334,8 +338,12 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	"cli\n\t" \
 	"decl "SYMBOL_NAME_STR(intr_count)"\n\t" \
 	"incl "SYMBOL_NAME_STR(syscall_count)"\n\t" \
+	GET_CURRENT \
 	"jmp ret_from_sys_call\n");
 #else
+
+#define GET_CURRENT \
+	"movl " SYMBOL_NAME_STR(current_set) ",%ebx\n\t"
 	
 #define BUILD_IRQ(chip,nr,mask) \
 asmlinkage void IRQ_NAME(nr); \

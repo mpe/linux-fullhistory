@@ -150,25 +150,24 @@ void udp_cache_zap(void)
  * to find the appropriate port.
  */
 
-void udp_err(int type, int code, unsigned char *header, __u32 info,
-	     __u32 daddr, __u32 saddr, struct inet_protocol *protocol, int len)
+void udp_err(struct sk_buff *skb, unsigned char *dp)
 {
-	struct udphdr *uh;
+	struct iphdr *iph = (struct iphdr*)dp;
+	struct udphdr *uh = (struct udphdr*)(dp+(iph->ihl<<2));
+	int type = skb->h.icmph->type;
+	int code = skb->h.icmph->code;
 	struct sock *sk;
 
-	/*
-	 *	Find the 8 bytes of post IP header ICMP included for us
-	 */  
-	 
-	if(len<sizeof(struct udphdr))
-		return;
-	
-	uh = (struct udphdr *)header;  
-   
-	sk = get_sock(&udp_prot, uh->source, daddr, uh->dest, saddr, 0, 0);
+	sk = get_sock(&udp_prot, uh->source, iph->daddr, uh->dest, iph->saddr);
 
-	if (sk == NULL) 
+	if (sk == NULL)
 	  	return;	/* No socket for error */
+
+	if (sk->ip_recverr && !sk->users) {
+		struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
+		if (skb2 && sock_queue_err_skb(sk, skb2))
+			kfree_skb(skb2, FREE_READ);
+	}
   	
 	if (type == ICMP_SOURCE_QUENCH) 
 	{	/* Slow down! */
@@ -181,6 +180,15 @@ void udp_err(int type, int code, unsigned char *header, __u32 info,
 	{
 		sk->err = EPROTO;
 		sk->error_report(sk);
+		return;
+	}
+
+	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED)
+	{
+		if (sk->ip_pmtudisc != IP_PMTUDISC_DONT) {
+			sk->err = EMSGSIZE;
+			sk->error_report(sk);
+		}
 		return;
 	}
 			
@@ -196,7 +204,7 @@ void udp_err(int type, int code, unsigned char *header, __u32 info,
 	/* 4.1.3.3. */
 	/* After the comment above, that should be no surprise. */
 
-	if(code<=NR_ICMP_UNREACH && icmp_err_convert[code].fatal)
+	if (code < NR_ICMP_UNREACH && icmp_err_convert[code].fatal)
 	{
 		/*
 		 *	4.x BSD compatibility item. Break RFC1122 to
@@ -218,10 +226,11 @@ static unsigned short udp_check(struct udphdr *uh, int len, unsigned long saddr,
 struct udpfakehdr 
 {
 	struct udphdr uh;
-	__u32 daddr;
-	__u32 other;
+	u32 saddr;
+	u32 daddr;
+	u32 other;
 	const char *from;
-	__u32 wcheck;
+	u32 wcheck;
 };
 
 /*
@@ -230,31 +239,27 @@ struct udpfakehdr
  *	for direct user->board I/O transfers. That one will be fun.
  */
  
-static int udp_getfrag(const void *p, __u32 saddr, char * to, unsigned int offset, unsigned int fraglen) 
+static int udp_getfrag(const void *p, char * to, unsigned int offset, unsigned int fraglen) 
 {
 	struct udpfakehdr *ufh = (struct udpfakehdr *)p;
 	const char *src;
 	char *dst;
 	unsigned int len;
 
-	if (offset)
-	{
+	if (offset) {
 		len = fraglen;
 	 	src = ufh->from+(offset-sizeof(struct udphdr));
 	 	dst = to;
-	}
-	else 
-	{
+	} else {
 		len = fraglen-sizeof(struct udphdr);
  		src = ufh->from;
 		dst = to+sizeof(struct udphdr);
 	}
 	ufh->wcheck = csum_partial_copy_fromuser(src, dst, len, ufh->wcheck);
-	if (offset == 0) 
-	{
+	if (offset == 0) {
  		ufh->wcheck = csum_partial((char *)ufh, sizeof(struct udphdr),
  				   ufh->wcheck);
-		ufh->uh.check = csum_tcpudp_magic(saddr, ufh->daddr, 
+		ufh->uh.check = csum_tcpudp_magic(ufh->saddr, ufh->daddr, 
 					  ntohs(ufh->uh.len),
 					  IPPROTO_UDP, ufh->wcheck);
 		if (ufh->uh.check == 0)
@@ -271,22 +276,19 @@ static int udp_getfrag(const void *p, __u32 saddr, char * to, unsigned int offse
  *	this is a valid decision.
  */
  
-static int udp_getfrag_nosum(const void *p, __u32 saddr, char * to, unsigned int offset, unsigned int fraglen) 
+static int udp_getfrag_nosum(const void *p, char * to, unsigned int offset, unsigned int fraglen) 
 {
 	struct udpfakehdr *ufh = (struct udpfakehdr *)p;
 	const char *src;
 	char *dst;
+	int err;
 	unsigned int len;
-	int err; 
 
-	if (offset) 
-	{
+	if (offset) {
 		len = fraglen;
 	 	src = ufh->from+(offset-sizeof(struct udphdr));
 	 	dst = to;
-	}
-	else 
-	{
+	} else {
 		len = fraglen-sizeof(struct udphdr);
  		src = ufh->from;
 		dst = to+sizeof(struct udphdr);
@@ -294,162 +296,144 @@ static int udp_getfrag_nosum(const void *p, __u32 saddr, char * to, unsigned int
 	err = copy_from_user(dst,src,len);
 	if (offset == 0) 
 		memcpy(to, ufh, sizeof(struct udphdr));
-	return err; 
+	return err;
 }
 
 
-/*
- *	Send UDP frames.
- */
-
-static int udp_send(struct sock *sk, struct sockaddr_in *sin,
-		      const unsigned char *from, int len, int rt,
-		    __u32 saddr, int noblock) 
+static int udp_sendto(struct sock *sk, const unsigned char *from, int len,
+		      struct msghdr *msg)
 {
 	int ulen = len + sizeof(struct udphdr);
-	int a;
+	struct device *dev = NULL;
+	struct ipcm_cookie ipc;
 	struct udpfakehdr ufh;
-	
-	if(ulen>65535-sizeof(struct iphdr))
+	struct rtable *rt;
+	int free = 0;
+	u32 daddr;
+	u8  tos;
+	int err;
+
+	if (len>65535)
 		return -EMSGSIZE;
 
+	/* 
+	 *	Check the flags.
+	 */
+
+	if (msg->msg_flags&MSG_OOB)		/* Mirror BSD error message compatibility */
+		return -EOPNOTSUPP;
+
+	if (msg->msg_flags&~(MSG_DONTROUTE|MSG_DONTWAIT))
+	  	return -EINVAL;
+
+	/*
+	 *	Get and verify the address. 
+	 */
+	 
+	if (msg->msg_namelen) {
+		struct sockaddr_in * usin = (struct sockaddr_in*)msg->msg_name;
+		if (msg->msg_namelen < sizeof(*usin))
+			return(-EINVAL);
+		if (usin->sin_family != AF_INET) {
+			static int complained;
+			if (!complained++)
+				printk(KERN_WARNING "%s forgot to set AF_INET in udp sendmsg. Fix it!\n", current->comm);
+			if (usin->sin_family)
+				return -EINVAL;
+		}
+		ufh.daddr = usin->sin_addr.s_addr;
+		ufh.uh.dest = usin->sin_port;
+		if (ufh.uh.dest == 0)
+			return -EINVAL;
+	} else {
+		if (sk->state != TCP_ESTABLISHED)
+			return -EINVAL;
+		ufh.daddr = sk->daddr;
+		ufh.uh.dest = sk->dummy_th.dest;
+  	}
+
+	ipc.addr = sk->saddr;
+	ipc.opt = NULL;
+	if (msg->msg_controllen) {
+		err = ip_cmsg_send(msg, &ipc, &dev);
+		if (err)
+			return err;
+		if (ipc.opt)
+			free = 1;
+	}
+	if (!ipc.opt)
+		ipc.opt = sk->opt;
+
+	ufh.saddr = ipc.addr;
+	ipc.addr = daddr = ufh.daddr;
+
+	if (ipc.opt && ipc.opt->srr) {
+		if (!daddr)
+			return -EINVAL;
+		daddr = ipc.opt->faddr;
+	}
+	tos = RT_TOS(sk->ip_tos) | (sk->localroute || (msg->msg_flags&MSG_DONTROUTE) ||
+				    (ipc.opt && ipc.opt->is_strictroute));
+
+	if (MULTICAST(daddr) && sk->ip_mc_name[0] && dev == NULL)
+		err = ip_route_output_dev(&rt, daddr, ufh.saddr, tos, sk->ip_mc_name);
+	else
+		err = ip_route_output(&rt, daddr, ufh.saddr, tos, dev);
+
+	if (err) {
+		if (free) kfree(ipc.opt);
+		return err;
+	}
+
+	if (rt->rt_flags&RTF_BROADCAST && !sk->broadcast) {
+		if (free) kfree(ipc.opt);
+		ip_rt_put(rt);
+		return -EACCES;
+	}
+
+	ufh.saddr = rt->rt_src;
+	if (!ipc.addr)
+		ufh.daddr = ipc.addr = rt->rt_dst;
 	ufh.uh.source = sk->dummy_th.source;
-	ufh.uh.dest = sin->sin_port;
 	ufh.uh.len = htons(ulen);
 	ufh.uh.check = 0;
-	ufh.daddr = sin->sin_addr.s_addr;
 	ufh.other = (htons(ulen) << 16) + IPPROTO_UDP*256;
 	ufh.from = from;
 	ufh.wcheck = 0;
-
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-	if (rt&MSG_PROXY)
-	{
-		/*
-		 * We map the first 8 bytes of a second sockaddr_in
-		 * into the last 8 (unused) bytes of a sockaddr_in.
-		 * This _is_ ugly, but it's the only way to do it
-		 * easily,  without adding system calls.
-		 */
-		struct sockaddr_in *sinfrom =
-			(struct sockaddr_in *) sin->sin_zero;
-
-		if (!suser())
-			return(-EPERM);
-		if (sinfrom->sin_family && sinfrom->sin_family != AF_INET)
-			return(-EINVAL);
-		if (sinfrom->sin_port == 0)
-			return(-EINVAL);
-		saddr = sinfrom->sin_addr.s_addr;
-		ufh.uh.source = sinfrom->sin_port;
-	}
-#endif
 
 	/* RFC1122: OK.  Provides the checksumming facility (MUST) as per */
 	/* 4.1.3.4. It's configurable by the application via setsockopt() */
 	/* (MAY) and it defaults to on (MUST).  Almost makes up for the */
 	/* violation above. -- MS */
 
-	if(sk->no_check)
-		a = ip_build_xmit(sk, udp_getfrag_nosum, &ufh, ulen, 
-			sin->sin_addr.s_addr, saddr, sk->opt, rt, IPPROTO_UDP, noblock);
-	else
-		a = ip_build_xmit(sk, udp_getfrag, &ufh, ulen, 
-			sin->sin_addr.s_addr, saddr, sk->opt, rt, IPPROTO_UDP, noblock);
-	if(a<0)
-		return a;
-	udp_statistics.UdpOutDatagrams++;
-	return len;
-}
-
-
-static int udp_sendto(struct sock *sk, const unsigned char *from, int len, int noblock,
-	   unsigned flags, struct sockaddr_in *usin, int addr_len)
-{
-	struct sockaddr_in sin;
-	int tmp;
-	__u32 saddr=0;
-
-	/* 
-	 *	Check the flags. We support no flags for UDP sending
-	 */
-
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-	if (flags&~(MSG_DONTROUTE|MSG_PROXY))
-#else
-	if (flags&~MSG_DONTROUTE) 
-#endif
-	  	return(-EINVAL);
-	/*
-	 *	Get and verify the address. 
-	 */
-	 
-	if (usin) 
-	{
-		if (addr_len < sizeof(sin)) 
-			return(-EINVAL);
-		if (usin->sin_family && usin->sin_family != AF_INET) 
-			return(-EINVAL);
-		if (usin->sin_port == 0) 
-			return(-EINVAL);
-	} 
-	else 
-	{
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-		/* We need to provide a sockaddr_in when using MSG_PROXY. */
-		if (flags&MSG_PROXY)
-			return(-EINVAL);
-#endif
-		if (sk->state != TCP_ESTABLISHED) 
-			return(-EINVAL);
-		sin.sin_family = AF_INET;
-		sin.sin_port = sk->dummy_th.dest;
-		sin.sin_addr.s_addr = sk->daddr;
-		usin = &sin;
-  	}
-  
-  	/*
-  	 *	BSD socket semantics. You must set SO_BROADCAST to permit
-  	 *	broadcasting of data.
-  	 */
-  	 
-	/* RFC1122: OK.  Allows the application to select the specific */
-	/* source address for an outgoing packet (MUST) as per 4.1.3.5. */
-	/* Optional addition: a mechanism for telling the application what */
-	/* address was used. (4.1.3.5, MAY) -- MS */
-
-	/* RFC1122: MUST ensure that all outgoing packets have one */
-	/* of this host's addresses as a source addr.(4.1.3.6) - bind in  */
-	/* af_inet.c checks these. It does need work to allow BSD style */
-	/* bind to multicast as is done by xntpd		*/
-
-  	if(usin->sin_addr.s_addr==INADDR_ANY)
-  		usin->sin_addr.s_addr=ip_my_addr();
-  		
-  	if(!sk->broadcast && ip_chk_addr(usin->sin_addr.s_addr)==IS_BROADCAST)
-	    	return -EACCES;			/* Must turn broadcast on first */
-
 	lock_sock(sk);
-
-	/* Send the packet. */
-	tmp = udp_send(sk, usin, from, len, flags, saddr, noblock);
-
-	/* The datagram has been sent off.  Release the socket. */
+	if (sk->no_check)
+		err = ip_build_xmit(sk, udp_getfrag_nosum, &ufh, ulen, 
+				    &ipc, rt, msg->msg_flags);
+	else
+		err = ip_build_xmit(sk, udp_getfrag, &ufh, ulen, 
+				    &ipc, rt, msg->msg_flags);
+	ip_rt_put(rt);
 	release_sock(sk);
-	return(tmp);
+
+	if (free)
+		kfree(ipc.opt);
+	if (!err) {
+		udp_statistics.UdpOutDatagrams++;
+		return len;
+	}
+	return err;
 }
 
 /*
  *	Temporary
  */
  
-int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock, 
-		int flags)
+int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 {
 	if(msg->msg_iovlen==1)
-		return udp_sendto(sk,msg->msg_iov[0].iov_base,len, noblock, flags, msg->msg_name, msg->msg_namelen);
-	else
-	{
+		return udp_sendto(sk,msg->msg_iov[0].iov_base,len, msg);
+	else {
 		/*
 		 *	For awkward cases we linearise the buffer first. In theory this is only frames
 		 *	whose iovec's don't split on 4 byte boundaries, and soon encrypted stuff (to keep
@@ -471,7 +455,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock,
 		{
 			fs=get_fs();
 			set_fs(get_ds());
-			err=udp_sendto(sk,buf,len, noblock, flags, msg->msg_name, msg->msg_namelen);
+			err=udp_sendto(sk,buf,len, msg);
 			set_fs(fs);
 		}
 		kfree_s(buf,len);
@@ -513,6 +497,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 				amount = skb->len-sizeof(struct udphdr);
 			}
 			return put_user(amount, (int *)arg);
+			return(0);
 		}
 
 		default:
@@ -542,6 +527,17 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	 
   	if (addr_len) 
   		*addr_len=sizeof(*sin);
+
+	if (sk->ip_recverr && (skb = skb_dequeue(&sk->error_queue)) != NULL) {
+		er = sock_error(sk);
+		if (msg->msg_controllen == 0) {
+			skb_free_datagram(sk, skb);
+			return er;
+		}
+		put_cmsg(msg, SOL_IP, IP_RECVERR, skb->len, skb->data);
+		skb_free_datagram(sk, skb);
+		return 0;
+	}
   
 	/*
 	 *	From here the generic datagram does a lot of the work. Come
@@ -553,13 +549,12 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   		return er;
   
   	truesize = skb->len - sizeof(struct udphdr);
-  	copied = truesize;
-  	
-  	if(len<truesize)
-  	{
-  		copied=len;
-  		msg->msg_flags|=MSG_TRUNC;
-  	}
+	copied = truesize;
+	if (len < truesize)
+	{
+		msg->msg_flags |= MSG_TRUNC;
+		copied = len;
+	}
 
   	/*
   	 *	FIXME : should use udp header size info value 
@@ -571,11 +566,11 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	sk->stamp=skb->stamp;
 
 	/* Copy the address. */
-	if (sin) 
+	if (sin)
 	{
 		sin->sin_family = AF_INET;
 		sin->sin_port = skb->h.uh->source;
-		sin->sin_addr.s_addr = skb->daddr;
+		sin->sin_addr.s_addr = skb->nh.iph->saddr;
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 		if (flags&MSG_PROXY)
 		{
@@ -590,10 +585,12 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 
 			sinto->sin_family = AF_INET;
 			sinto->sin_port = skb->h.uh->dest;
-			sinto->sin_addr.s_addr = skb->saddr;
+			sinto->sin_addr.s_addr = skb->nh.iph->daddr;
 		}
 #endif
   	}
+	if (sk->ip_cmsg_flags)
+		ip_cmsg_recv(msg, skb);
   
   	skb_free_datagram(sk, skb);
   	return(copied);
@@ -603,7 +600,12 @@ int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *) uaddr;
 	struct rtable *rt;
+	int err;
+
 	
+	if (addr_len < sizeof(*usin)) 
+	  	return(-EINVAL);
+
 	/*
 	 *	1003.1g - break association.
 	 */
@@ -617,30 +619,27 @@ int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		udp_cache_zap();
 		return 0;
 	}
-	
-	if (addr_len < sizeof(*usin)) 
-	  	return(-EINVAL);
 
 	if (usin->sin_family && usin->sin_family != AF_INET) 
 	  	return(-EAFNOSUPPORT);
-	if (usin->sin_addr.s_addr==INADDR_ANY)
-		usin->sin_addr.s_addr=ip_my_addr();
 
-	if(!sk->broadcast && ip_chk_addr(usin->sin_addr.s_addr)==IS_BROADCAST)
-		return -EACCES;			/* Must turn broadcast on first */
-  	
-  	rt=ip_rt_route((__u32)usin->sin_addr.s_addr, sk->localroute);
-  	if (rt==NULL)
-  		return -ENETUNREACH;
+	err = ip_route_connect(&rt, usin->sin_addr.s_addr, sk->saddr,
+			       sk->ip_tos|sk->localroute);
+	if (err)
+		return err;
+	if (rt->rt_flags&RTF_BROADCAST && !sk->broadcast) {
+		ip_rt_put(rt);
+		return -EACCES;
+	}
   	if(!sk->saddr)
 	  	sk->saddr = rt->rt_src;		/* Update source address */
 	if(!sk->rcv_saddr)
 		sk->rcv_saddr = rt->rt_src;
-	sk->daddr = usin->sin_addr.s_addr;
+	sk->daddr = rt->rt_dst;
 	sk->dummy_th.dest = usin->sin_port;
 	sk->state = TCP_ESTABLISHED;
 	udp_cache_zap();
-	sk->ip_route_cache = rt;
+	ip_rt_put(rt);
 	return(0);
 }
 
@@ -656,22 +655,18 @@ static void udp_close(struct sock *sk, unsigned long timeout)
 	destroy_sock(sk);
 }
 
-static inline int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
+static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 {
 	/*
 	 *	Charge it to the socket, dropping if the queue is full.
 	 */
 
-	/* I assume this includes the IP options, as per RFC1122 (4.1.3.2). */
-	/* If not, please let me know. -- MS */
-
 	if (__sock_queue_rcv_skb(sk,skb)<0) {
 		udp_statistics.UdpInErrors++;
 		ip_statistics.IpInDiscards++;
 		ip_statistics.IpInDelivers--;
-		skb->sk = NULL;
 		kfree_skb(skb, FREE_WRITE);
-		return 0;
+		return -1;
 	}
 	udp_statistics.UdpInDatagrams++;
 	return 0;
@@ -680,8 +675,6 @@ static inline int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 
 static inline void udp_deliver(struct sock *sk, struct sk_buff *skb)
 {
-	skb->sk = sk;
-
 	if (sk->users) {
 		__skb_queue_tail(&sk->back_log, skb);
 		return;
@@ -697,11 +690,11 @@ static inline void udp_deliver(struct sock *sk, struct sk_buff *skb)
 
 int udp_chkaddr(struct sk_buff *skb)
 {
-	struct iphdr *iph = skb->h.iph;
-	struct udphdr *uh = (struct udphdr *)(skb->h.raw + iph->ihl*4);
+	struct iphdr *iph = skb->nh.iph;
+	struct udphdr *uh = (struct udphdr *)(skb->nh.raw + iph->ihl*4);
 	struct sock *sk;
 
-	sk = get_sock(&udp_prot, uh->dest, iph->saddr, uh->source, iph->daddr, 0, 0);
+	sk = get_sock(&udp_prot, uh->dest, iph->saddr, uh->source, iph->daddr);
 
 	if (!sk) return 0;
 	/* 0 means accept all LOCAL addresses here, not all the world... */
@@ -710,33 +703,49 @@ int udp_chkaddr(struct sk_buff *skb)
 }
 #endif
 
+
+static __inline__ struct sock *
+get_udp_sock(unsigned short dport, unsigned long saddr, unsigned short sport,
+	     unsigned long daddr)
+{
+	struct sock *sk;
+
+	if (saddr==uh_cache_saddr && daddr==uh_cache_daddr &&
+	    dport==uh_cache_dport && sport==uh_cache_sport)
+		 return (struct sock *)uh_cache_sk;
+	sk = get_sock(&udp_prot, dport, saddr, sport, daddr);
+	uh_cache_saddr=saddr;
+	uh_cache_daddr=daddr;
+	uh_cache_dport=dport;
+	uh_cache_sport=sport;
+	uh_cache_sk=sk;
+	return sk;
+}
+
+
 /*
  *	All we need to do is get the socket, and then do a checksum. 
  */
  
-int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
-	__u32 daddr, unsigned short len,
-	__u32 saddr, int redo, struct inet_protocol *protocol)
+int udp_rcv(struct sk_buff *skb, unsigned short len)
 {
   	struct sock *sk;
   	struct udphdr *uh;
 	unsigned short ulen;
-	int addr_type;
+	struct rtable *rt = (struct rtable*)skb->dst;
+	u32 saddr = skb->nh.iph->saddr;
+	u32 daddr = skb->nh.iph->daddr;
 
 	/*
 	 * First time through the loop.. Do all the setup stuff
 	 * (including finding out the socket we go to etc)
 	 */
 
-	addr_type = IS_MYADDR;
-	if(!dev || dev->pa_addr!=daddr)
-		addr_type=ip_chk_addr(daddr);
-		
 	/*
 	 *	Get the header.
 	 */
 	 
-  	uh = (struct udphdr *) skb->h.uh;
+  	uh = skb->h.uh;
   	
   	ip_statistics.IpInDelivers++;
 
@@ -746,8 +755,7 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 
 	ulen = ntohs(uh->len);
 	
-	if (ulen > len || len < sizeof(*uh) || ulen < sizeof(*uh)) 
-	{
+	if (ulen > len || len < sizeof(*uh) || ulen < sizeof(*uh)) {
 		NETDEBUG(printk("UDP: short packet: %d/%d\n", ulen, len));
 		udp_statistics.UdpInErrors++;
 		kfree_skb(skb, FREE_WRITE);
@@ -766,8 +774,7 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		( (skb->ip_summed == CHECKSUM_NONE) && udp_check(uh, len, saddr, daddr,csum_partial((char*)uh, len, 0)))
 			  /* skip if CHECKSUM_UNNECESSARY */
 		         )
-	   )
-	{
+	   ) {
 		/* <mea@utu.fi> wants to know, who sent it, to
 		   go and stomp on the garbage sender... */
 
@@ -783,31 +790,22 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		return(0);
 	}
 
-	/*
-	 *	These are supposed to be switched. 
-	 */
-	 
-	skb->daddr = saddr;
-	skb->saddr = daddr;
 
-	len=ulen;
+	len = ulen;
 
-	skb->dev = dev;
+	/* Wrong! --ANK */
 	skb_trim(skb,len);
 
-#ifdef CONFIG_IP_MULTICAST
-	if (addr_type==IS_BROADCAST || addr_type==IS_MULTICAST)
-	{
+
+	if (rt->rt_flags&(RTF_BROADCAST|RTF_MULTICAST)) {
 		/*
 		 *	Multicasts and broadcasts go to each listener.
 		 */
 		struct sock *sknext=NULL;
 		sk=get_sock_mcast(udp_prot.sock_array[ntohs(uh->dest)&(SOCK_ARRAY_SIZE-1)], uh->dest,
 				saddr, uh->source, daddr);
-		if(sk)
-		{		
-			do
-			{
+		if(sk) {		
+			do {
 				struct sk_buff *skb1;
 
 				sknext=get_sock_mcast(sk->next, uh->dest, saddr, uh->source, daddr);
@@ -818,38 +816,27 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				if(skb1)
 					udp_deliver(sk, skb1);
 				sk=sknext;
-			}
-			while(sknext!=NULL);
-		}
-		else
+			} while(sknext!=NULL);
+		} else
 			kfree_skb(skb, FREE_READ);
 		return 0;
-	}	
-#endif
-	if(saddr==uh_cache_saddr && daddr==uh_cache_daddr && uh->dest==uh_cache_dport && uh->source==uh_cache_sport)
-		sk=(struct sock *)uh_cache_sk;
-	else
-	{
-	  	sk = get_sock(&udp_prot, uh->dest, saddr, uh->source, daddr, dev->pa_addr, skb->redirport);
-  		uh_cache_saddr=saddr;
-  		uh_cache_daddr=daddr;
-  		uh_cache_dport=uh->dest;
-  		uh_cache_sport=uh->source;
-  		uh_cache_sk=sk;
 	}
+
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	if (IPCB(skb)->redirport)
+		sk = get_sock_proxy(&udp_prot, uh->dest, saddr, uh->source, daddr, dev->pa_addr, IPCB(skb)->redirport);
+	else
+#endif
+	sk = get_udp_sock(uh->dest, saddr, uh->source, daddr);
 	
-	if (sk == NULL) 
-  	{
+	if (sk == NULL) {
   		udp_statistics.UdpNoPorts++;
-		if (addr_type != IS_BROADCAST && addr_type != IS_MULTICAST) 
-		{
-			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0, dev);
-		}
+		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
+
 		/*
 		 * Hmm.  We got an UDP broadcast to a port to which we
 		 * don't wanna listen.  Ignore it.
 		 */
-		skb->sk = NULL;
 		kfree_skb(skb, FREE_WRITE);
 		return(0);
   	}
@@ -873,12 +860,11 @@ struct proto udp_prot = {
 	ip_getsockopt,
 	udp_sendmsg,
 	udp_recvmsg,
-	NULL,			/* No special bind function */
-	udp_queue_rcv_skb,     
+	NULL,		/* No special bind function */
+	udp_queue_rcv_skb,
 	128,
 	0,
 	"UDP",
 	0, 0,
-	NULL
+	NULL,
 };
-

@@ -33,6 +33,10 @@
  * because it causes screen to flicker, by Mitja Horvat
  * 5-May-96 <mitja.horvat@guest.arnes.si>
  *
+ * Use 2 outw instead of 4 outb_p to reduce erroneous text 
+ * flashing on RHS of screen during heavy console scrolling .
+ * Oct 1996, Paul Gortmaker.
+ *
  */
 
 #include <linux/sched.h>
@@ -67,6 +71,29 @@
 #define dac_reg (0x3c8)
 #define dac_val (0x3c9)
 
+/*
+ * By replacing the four outb_p with two back to back outw, we can reduce
+ * the window of opportunity to see text mislocated to the RHS of the
+ * console during heavy scrolling activity. However there is the remote
+ * possibility that some pre-dinosaur hardware won't like the back to back
+ * I/O. Since the Xservers get away with it, we should be able to as well.
+ */
+static inline void write_vga(unsigned char reg, unsigned int val)
+{
+#ifndef SLOW_VGA
+	unsigned int v1, v2;
+
+	v1 = reg + (val & 0xff00);
+	v2 = reg + 1 + ((val << 8) & 0xff00);
+	outw(v1, video_port_reg);
+	outw(v2, video_port_reg);
+#else
+	outb_p(reg, video_port_reg);
+	outb_p(val >> 8, video_port_val);
+	outb_p(reg+1, video_port_reg);
+	outb_p(val & 0xff, video_port_val);
+#endif
+}
 
 void
 set_palette (void)
@@ -94,10 +121,7 @@ __set_origin(unsigned short offset)
 
 	save_flags(flags); cli();
 	__origin = offset;
-	outb_p(12, video_port_reg);
-	outb_p(offset >> 8, video_port_val);
-	outb_p(13, video_port_reg);
-	outb_p(offset, video_port_val);
+	write_vga(12, offset);
 	restore_flags(flags);
 }
 
@@ -110,10 +134,7 @@ hide_cursor(void)
   /* This is inefficient, we could just put the cursor at 0xffff,
      but perhaps the delays due to the inefficiency are useful for
      some hardware... */
-	outb_p(14, video_port_reg);
-	outb_p(0xff&((video_mem_term-video_mem_base)>>9), video_port_val);
-	outb_p(15, video_port_reg);
-	outb_p(0xff&((video_mem_term-video_mem_base)>>1), video_port_val);
+	write_vga(14, (video_mem_term - video_mem_base + 1)>>1);
 }
 
 void
@@ -127,10 +148,7 @@ set_cursor(int currcons)
 		__set_origin(__real_origin);
 	save_flags(flags); cli();
 	if (deccm) {
-		outb_p(14, video_port_reg);
-		outb_p(0xff&((pos-video_mem_base)>>9), video_port_val);
-		outb_p(15, video_port_reg);
-		outb_p(0xff&((pos-video_mem_base)>>1), video_port_val);
+		write_vga(14, (pos - video_mem_base)>>1);
 	} else
 		hide_cursor();
 	restore_flags(flags);

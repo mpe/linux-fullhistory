@@ -613,8 +613,7 @@ static struct enet_statistics *arcnet_get_stats(struct device *dev);
 
 int arcnetA_header(struct sk_buff *skb,struct device *dev,
 		unsigned short type,void *daddr,void *saddr,unsigned len);
-int arcnetA_rebuild_header(void *eth,struct device *dev,unsigned long raddr,
-		struct sk_buff *skb);
+int arcnetA_rebuild_header(struct sk_buff *skb);
 unsigned short arcnetA_type_trans(struct sk_buff *skb,struct device *dev);
 
 #ifdef CONFIG_ARCNET_ETH
@@ -635,8 +634,7 @@ static void arcnetS_rx(struct device *dev,u_char *buf,
 	int length,u_char saddr, u_char daddr);
 int arcnetS_header(struct sk_buff *skb,struct device *dev,
 		unsigned short type,void *daddr,void *saddr,unsigned len);
-int arcnetS_rebuild_header(void *eth,struct device *dev,unsigned long raddr,
-		struct sk_buff *skb);
+int arcnetS_rebuild_header(struct sk_buff *skb);
 unsigned short arcnetS_type_trans(struct sk_buff *skb,struct device *dev);
 #endif
 
@@ -2481,11 +2479,6 @@ arcnetA_rx(struct device *dev,u_char *buf,
                 		return;
                 	}
 	                		
-	                /* I don't know what this is for, but it DOES avoid
-	                 * warnings...
-	                 */
-	                skb->free=1;
-	                
                 	soft=(struct ClientData *)skb->data;
                 	
                 	skb->len=sizeof(struct ClientData);
@@ -2692,15 +2685,17 @@ int arcnetA_header(struct sk_buff *skb,struct device *dev,
  * (or in future other address resolution) has completed on this
  * sk_buff. We now let ARP fill in the other fields.
  */
-int arcnetA_rebuild_header(void *buff,struct device *dev,unsigned long dst,
-		struct sk_buff *skb)
+int arcnetA_rebuild_header(struct sk_buff *skb)
 {
-	struct ClientData *head = (struct ClientData *)buff;
+	struct ClientData *head = (struct ClientData *)skb->data;
+	struct device *dev=skb->dev;
 	struct arcnet_local *lp=(struct arcnet_local *)(dev->priv);
 	int status;
 
 	/*
 	 * Only ARP and IP are currently supported
+	 *
+	 * FIXME: Anyone want to spec IPv6 over ARCnet ?
 	 */
 	 
 	if(head->protocol_id != ARC_P_IP) 
@@ -2720,7 +2715,7 @@ int arcnetA_rebuild_header(void *buff,struct device *dev,unsigned long dst,
 #ifdef CONFIG_INET	 
 	BUGMSG(D_DURING,"rebuild header from %d to %d; protocol %Xh\n",
 			head->saddr,head->daddr,head->protocol_id);
-	status=arp_find(&(head->daddr), dst, dev, dev->pa_addr, skb)? 1 : 0;
+	status=arp_find(&(head->daddr),skb)? 1 : 0;
 	BUGMSG(D_DURING," rebuilt: from %d to %d; protocol %Xh\n",
 			head->saddr,head->daddr,head->protocol_id);
 	return status;
@@ -3163,10 +3158,10 @@ int arcnetS_header(struct sk_buff *skb,struct device *dev,
  * (or in future other address resolution) has completed on this
  * sk_buff. We now let ARP fill in the other fields.
  */
-int arcnetS_rebuild_header(void *buff,struct device *dev,unsigned long dst,
-		struct sk_buff *skb)
+int arcnetS_rebuild_header(struct sk_buff *skb)
 {
-	struct S_ClientData *head = (struct S_ClientData *)buff;
+	struct device *dev=skb->dev;
+	struct S_ClientData *head = (struct S_ClientData *)skb->data;
 	struct arcnet_local *lp=(struct arcnet_local *)(dev->priv);
 
 	/*
@@ -3188,7 +3183,7 @@ int arcnetS_rebuild_header(void *buff,struct device *dev,unsigned long dst,
 	 * Try to get ARP to resolve the header.
 	 */
 #ifdef CONFIG_INET	 
-	return arp_find(&(head->daddr), dst, dev, dev->pa_addr, skb)? 1 : 0;
+	return arp_find(&(head->daddr),skb)? 1 : 0;
 #else
 	return 0;	
 #endif	

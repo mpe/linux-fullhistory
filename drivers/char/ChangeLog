@@ -1,3 +1,57 @@
+Wed Dec  4 07:51:52 1996  Theodre Ts'o  <tytso@localhost.mit.edu>
+
+	* serial.c (change_speed): Use save_flags(); cli() and
+		restore_flags() in order to ensure we don't accidentally
+		turn on interrupts when starting up the port.
+		(startup): Move the insertion of serial structure into the
+		IRQ chain earlier into the startup processing.  Interrupts
+		should be off this whole time, but we eventually will want
+		to reduce this window.
+
+Thu Nov 21 10:05:22 1996  Theodre Ts'o  <tytso@localhost.mit.edu>
+
+	* tty_ioctl.c (tty_wait_until_sent): Always check the driver
+ 		wait_until_ready routine, even if there are no characters
+ 		in the xmit buffer.  (There may be charactes in the device
+ 		FIFO.)
+		(n_tty_ioctl): Add new flag tty->flow_stopped which
+ 		indicates whether the tty is stopped due to a request by
+ 		the TCXONC ioctl (used by tcflow).  If so, don't let an
+ 		incoming XOFF character restart the tty.  The tty can only
+ 		be restarted by another TCXONC request.
+
+	* tty_io.c (start_tty): Don't allow the tty to be restarted if
+		tty->flow_stopped is true.
+
+	* n_tty.c (n_tty_receive_char): If tty->flow_stopped is true, and
+ 		IXANY is set, don't eat a character trying to restart the
+ 		tty.
+
+	* serial.c (startup): Remove need for MCR_noint from the
+ 		async_struct structure.  Only turn on DTR and RTS if the
+ 		baud rate is not zero.
+		(change_speed): More accurately calculate the timeout
+ 		value based on the word size.  Move responsibility of
+ 		hangup when speed becomes B0 to rs_set_termios()
+		(set_serial_info): When changing the UART type set the
+ 		current xmit_fifo_size as well as the permanent
+ 		xmit_fifo_size.
+		(rs_ioctl): Fix TCSBRK (used by tcdrain) and TCSBRKP
+ 		ioctls to return EINTR if interrupted by a signal.
+		(rs_set_termios): If the baud rate changes to or from B0,
+ 		this function is now responsible for setting or clearing
+ 		DTR and RTS.  DTR and RTS are only be changed on the
+ 		transition to or from the B0 state.
+		(rs_close): Wait for the characters to drain based on
+ 		info->timeout.  At low baud rates (50bps), it may take a
+ 		long time for the FIFO to completely drain out!
+		(rs_wait_until_sent): Fixed timeout handling.  Now
+ 		releases control to the scheduler, but checks frequently
+ 		enough so that the function is sensitive enough to pass
+ 		the timing requirements of the NIST-PCTS.
+		(block_til_ready): When opening the device, don't turn on
+ 		DTR and RTS if the baud rate is B0.
+
 Thu Nov 14 00:06:09 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 
 	* serial.c (autoconfig): Fix autoconfiguration problems;

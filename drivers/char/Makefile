@@ -78,6 +78,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ESP),y)
+L_OBJS += esp.o
+else
+  ifeq ($(CONFIG_ESP),m)
+  M_OBJS += esp.o
+  endif
+endif
+
 ifeq ($(CONFIG_ATIXL_BUSMOUSE),y)
 M = y
 L_OBJS += atixlmouse.o
@@ -171,7 +179,11 @@ L_OBJS += rtc.o
 endif
 
 ifdef CONFIG_QIC02_TAPE
-L_OBJS += tpqic02.o 
+  ifeq ($(CONFIG_QIC02_TAPE),m)
+    M_OBJS += tpqic02.o
+  else
+    L_OBJS += tpqic02.o 
+  endif
 endif
 
 ifeq ($(CONFIG_FTAPE),y)

@@ -48,25 +48,42 @@ static inline int do_getname(const char *filename, char *page)
 	return retval;
 }
 
+/*
+ * This is a single page for faster getname.
+ *   If the page is available when entering getname, use it.
+ *   If the page is not available, call __get_free_page instead.
+ * This works even though do_getname can block (think about it).
+ * -- Michael Chastain, based on idea of Linus Torvalds, 1 Dec 1996.
+ */
+static unsigned long name_page_cache = 0;
+
 int getname(const char * filename, char **result)
 {
 	unsigned long page;
 	int retval;
 
-	page  = __get_free_page(GFP_KERNEL);
-	retval = -ENOMEM;
-	if (page) {
-		*result = (char *)page;
-		retval = do_getname(filename, (char *) page);
-		if (retval < 0)
-			free_page(page);
+	page = name_page_cache;
+	name_page_cache = 0;
+	if (!page) {
+		page = __get_free_page(GFP_KERNEL);
+		if (!page)
+			return -ENOMEM;
 	}
+
+	retval = do_getname(filename, (char *) page);
+	if (retval < 0)
+		putname( (char *) page );
+	else
+		*result = (char *) page;
 	return retval;
 }
 
 void putname(char * name)
 {
-	free_page((unsigned long) name);
+	if (name_page_cache == 0)
+		name_page_cache = (unsigned long) name;
+	else
+		free_page((unsigned long) name);
 }
 
 /*

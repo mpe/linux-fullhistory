@@ -66,6 +66,7 @@ NEW!	- support for IDE ATAPI *floppy* drives
 	- the hdparm-3.1 package can be used to set PIO modes for some chipsets.
 NEW!	- support for the OPTi 82C621 chipset, courtesy of Jaromir Koutek.
 NEW!	- support for loadable modules
+NEW!	- optional SCSI host adapter emulation for ATAPI devices
 
 
 For work in progress, see the comments in ide.c, ide-cd.c, triton.c, ...
@@ -110,12 +111,12 @@ shell script:   /usr/src/linux/scripts/MAKEDEV.ide
 Apparently many releases of Slackware 2.2/2.3 have incorrect entries
 in /dev for hdc* and hdd* -- this can also be corrected by running MAKEDEV.ide
 
-ide.c automatically probes for the primary and secondary interfaces,
+ide.c automatically probes for the standard four IDE interfaces,
 for the drives/geometries attached to those interfaces, and for the
-IRQ numbers being used by the interfaces (normally IRQ14 & IRQ15).
+IRQ numbers being used by the interfaces (normally 14, 15, 11 and 10).
 
-Interfaces beyond the first two are not normally probed for, but may be
-specified using kernel "command line" options.  For example,
+For special cases, interfaces may be specified using kernel "command line"
+options.  For example,
 
 	ide3=0x168,0x36e,10	/* ioports 0x168-0x16f,0x36e, irq 10 */
 
@@ -234,6 +235,25 @@ and still allows newer hardware to run on the 2nd/3rd/4th IDE ports
 under control of ide.c.   To have ide.c also "take over" the primary
 IDE port in this situation, use the "command line" parameter:  ide0=0x1f0
 
+The IDE driver is partly modularized.  The high level disk/cdrom/tape/floppy
+drivers can always be compiled as loadable modules, the chipset drivers
+can only be compiled into the kernel, and the core code (ide.c) can be
+compiled as a loadable module provided no chipset support and no special
+partition table translations are needed.
+
+When using ide.c/ide-tape.c as modules in combination with kerneld, add:
+
+	alias block-major-3 ide-probe
+	alias char-major-37 ide-tape
+
+respectively to /etc/conf.modules.
+
+When ide.c is used as a module, you can pass command line parameters to the
+driver using the "options=" keyword to insmod, while replacing any ',' with
+';'.  For example:
+
+	insmod ide.o options="ide0=serialize ide2=0x1e8;0x3ee;11"
+
 mlord@pobox.com
 snyder@fnald0.fnal.gov
 ================================================================================
@@ -256,6 +276,7 @@ Summary of ide driver parameters for kernel "command line":
 				older/odd IDE drives.
  "hdx=slow"		: insert a huge pause after each access to the data
 				port. Should be used only as a last resort.
+ "hdx=swapdata"		: when the drive is a disk, byte swap all data
 
  "idebus=xx"		: inform IDE driver of VESA/PCI bus speed in MHz,
 				where "xx" is between 20 and 66 inclusive,
@@ -283,6 +304,7 @@ Summary of ide driver parameters for kernel "command line":
 				This is the default for most chipsets,
 				except the cmd640.
  "idex=serialize"	: do not overlap operations on idex and ide(x^1)
+ "idex=reset"		: reset interface after probe
 
  The following are valid ONLY on ide0,
  and the defaults for the base,ctl ports must not be altered.

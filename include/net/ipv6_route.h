@@ -183,7 +183,7 @@ static __inline__ void rt_release(struct rt6_info *rt)
 	{
 		if (rt->rt_nexthop)
 		{
-			ndisc_dec_neigh(rt->rt_nexthop);
+			neighbour_unlock(rt->rt_nexthop);
 		}
 
 		if (rt->rt_flags & RTI_DCACHE)

@@ -91,32 +91,30 @@ static int rose_header(struct sk_buff *skb, struct device *dev, unsigned short t
 	return -37;	
 }
 
-static int rose_rebuild_header(void *buff, struct device *dev,
-	unsigned long raddr, struct sk_buff *skb)
+static int rose_rebuild_header(struct sk_buff *skb)
 {
+	struct device *dev=skb->dev;
 	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
-	unsigned char *bp = (unsigned char *)buff;
+	unsigned char *bp = (unsigned char *)skb->data;
 	struct sk_buff *skbn;
 
-	if (!arp_query(bp + 7, raddr, dev)) {
-		dev_kfree_skb(skb, FREE_WRITE);
+	if (!arp_find(bp + 7, skb)) {
+		kfree_skb(skb, FREE_WRITE);
 		return 1;
 	}
 
 	if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
-		dev_kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb, FREE_WRITE);
 		return 1;
 	}
 
-	skbn->sk = skb->sk;
-	
 	if (skbn->sk != NULL)
-		atomic_add(skbn->truesize, &skbn->sk->wmem_alloc);
+		skb_set_owner_w(skbn, skb->sk);
 
-	dev_kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb, FREE_WRITE);
 
 	if (!rose_route_frame(skbn, NULL)) {
-		dev_kfree_skb(skbn, FREE_WRITE);
+		kfree_skb(skbn, FREE_WRITE);
 		stats->tx_errors++;
 	}
 
@@ -186,7 +184,7 @@ static int rose_xmit(struct sk_buff *skb, struct device *dev)
 
 	sti();
 
-	dev_kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb, FREE_WRITE);
 
 	stats->tx_errors++;
 

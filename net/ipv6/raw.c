@@ -56,7 +56,6 @@ static inline int rawv6_rcv_skb(struct sock * sk, struct sk_buff * skb)
 	if (sock_queue_rcv_skb(sk,skb)<0)
 	{
 		/* ip_statistics.IpInDiscards++; */
-		skb->sk=NULL;
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
@@ -80,10 +79,20 @@ int rawv6_rcv(struct sk_buff *skb, struct device *dev,
 
 	sk = skb->sk;
 
+#if 1
+/*
+ *	It was wrong for IPv4. It breaks NRL too [ANK]
+ *	Actually i think this is the option that  does make more 
+ *	sense with IPv6 nested headers. [Pedro]
+ */
+
 	if (sk->ip_hdrincl)
 	{
-		skb->h.raw = (unsigned char *) skb->ipv6_hdr;
+		skb->h.raw = skb->nh.raw;
 	}
+#else
+        skb->h.raw = skb->nh.raw;
+#endif
 
 	if (sk->users) {
 		__skb_queue_tail(&sk->back_log, skb);
@@ -134,7 +143,7 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	if (sin6) 
 	{
 		sin6->sin6_family = AF_INET6;
-		memcpy(&sin6->sin6_addr, &skb->ipv6_hdr->saddr, 
+		memcpy(&sin6->sin6_addr, &skb->nh.ipv6h->saddr, 
 		       sizeof(struct in6_addr));
 
 		*addr_len = sizeof(struct sockaddr_in6);
@@ -227,8 +236,7 @@ static int rawv6_frag_cksum(const void *data, struct in6_addr *addr,
 }
 
 
-static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len, 
-			 int noblock, int flags)
+static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 {
 	struct ipv6_options opt_space;
 	struct sockaddr_in6 * sin6 = (struct sockaddr_in6 *) msg->msg_name;
@@ -244,10 +252,10 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 	
 
 	/* Mirror BSD error message compatibility */
-	if (flags & MSG_OOB)		
+	if (msg->msg_flags & MSG_OOB)		
 		return -EOPNOTSUPP;
 			 
-	if (flags & ~MSG_DONTROUTE)
+	if (msg->msg_flags & ~(MSG_DONTROUTE|MSG_DONTWAIT))
 		return(-EINVAL);
 	/*
 	 *	Get and verify the address. 
@@ -338,13 +346,13 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 		}
 
 		err = ipv6_build_xmit(sk, rawv6_frag_cksum, &hdr, daddr, len,
-				      saddr, dev, opt, proto, noblock);
+				      saddr, dev, opt, proto, msg->msg_flags&MSG_DONTWAIT);
 	}
 	else
 	{
 		err = ipv6_build_xmit(sk, rawv6_getfrag, msg->msg_iov, daddr,
 				      len, saddr, dev, opt, proto,
-				      noblock);
+				      msg->msg_flags&MSG_DONTWAIT);
 	}
 
 	return err<0?err:len;

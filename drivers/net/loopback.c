@@ -61,7 +61,6 @@
 static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
-	int unlock=1;
   
 	if (skb == NULL || dev == NULL) 
 		return(0);
@@ -71,24 +70,18 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	 *	instead are lobbed from tx queue to rx queue 
 	 */
 
-	if(skb->free==0)
+	if(skb->users != 1)
 	{
 	  	struct sk_buff *skb2=skb;
 	  	skb=skb_clone(skb, GFP_ATOMIC);		/* Clone the buffer */
-	  	dev_kfree_skb(skb2, FREE_WRITE);
-	  	if(skb==NULL)
-	  		return 0;
-  		unlock=0;
+	  	if(skb==NULL) {
+			kfree_skb(skb2, FREE_WRITE);
+			return 0;
+		}
+	  	kfree_skb(skb2, FREE_WRITE);
 	}
-	else if(skb->sk)
-	{
-	  	/*
-	  	 *	Packet sent but looped back around. Cease to charge
-	  	 *	the socket for the frame.
-	  	 */
-		atomic_sub(skb->truesize, &skb->sk->wmem_alloc);
-	  	skb->sk->write_space(skb->sk);
-	}
+	else
+		skb_orphan(skb);
 
 	skb->protocol=eth_type_trans(skb,dev);
 	skb->dev=dev;
@@ -96,8 +89,6 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 #endif
 	netif_rx(skb);
-	if(unlock)
-	  	skb_device_unlock(skb);
   
 	stats->rx_packets++;
 	stats->tx_packets++;
@@ -125,9 +116,11 @@ int loopback_init(struct device *dev)
 	dev->tbusy		= 0;
 	dev->hard_start_xmit	= loopback_xmit;
 	dev->hard_header	= eth_header;
+	dev->hard_header_cache	= eth_header_cache;
+	dev->header_cache_update= eth_header_cache_update;
 	dev->hard_header_len	= ETH_HLEN;		/* 14			*/
 	dev->addr_len		= ETH_ALEN;		/* 6			*/
-	dev->tx_queue_len	= 50000;		/* No limit on loopback */
+	dev->tx_queue_len	= 0;
 	dev->type		= ARPHRD_LOOPBACK;	/* 0x0001		*/
 	dev->rebuild_header	= eth_rebuild_header;
 	dev->open		= loopback_open;

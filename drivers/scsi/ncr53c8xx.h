@@ -237,11 +237,7 @@
 
 #if defined(HOSTS_C) || defined(MODULE)
 
-#if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,98)
 #include <scsi/scsicam.h>
-#else
-#include <linux/scsicam.h>
-#endif
 
 int ncr53c8xx_abort(Scsi_Cmnd *);
 int ncr53c8xx_detect(Scsi_Host_Template *tpnt);

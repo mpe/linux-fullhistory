@@ -15,12 +15,13 @@
  *		Alan Cox	:	Added all the changed routines Linus
  *					only put in the headers
  *		Ray VanTassle	:	Fixed --skb->lock in free
+ *		Alan Cox	:	skb_copy copy arp field
  *
- *	TO FIX:
- *		The __skb_ routines ought to check interrupts are disabled
- *	when called, and bitch like crazy if not. Unfortunately I don't think
- *	we currently have a portable way to check if interrupts are off - 
- *	Linus ???
+ *	NOTE:
+ *		The __skb_ routines should be called with interrupts 
+ *	disabled, or you better be *real* sure that the operation is atomic 
+ *	with respect to whatever list is being frobbed (e.g. via lock_sock()
+ *	or via disabling bottom half handlers, etc).
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -48,7 +49,7 @@
 #include <net/ip.h>
 #include <net/ipv6.h>
 #include <net/protocol.h>
-#include <net/route.h>
+#include <net/dst.h>
 #include <net/tcp.h>
 #include <net/udp.h>
 #include <net/sock.h>
@@ -61,10 +62,8 @@
  */
 
 atomic_t net_skbcount = 0;
-atomic_t net_locked = 0;
 atomic_t net_allocs = 0;
 atomic_t net_fails  = 0;
-atomic_t net_free_locked = 0;
 
 extern atomic_t ip_frag_mem;
 
@@ -78,10 +77,8 @@ char *skb_put_errstr ="skput:over: %p:%d";
 void show_net_buffers(void)
 {
 	printk(KERN_INFO "Networking buffers in use          : %u\n",net_skbcount);
-	printk(KERN_INFO "Network buffers locked by drivers  : %u\n",net_locked);
 	printk(KERN_INFO "Total network buffer allocations   : %u\n",net_allocs);
 	printk(KERN_INFO "Total failed network buffer allocs : %u\n",net_fails);
-	printk(KERN_INFO "Total free while locked events     : %u\n",net_free_locked);
 #ifdef CONFIG_INET
 	printk(KERN_INFO "IP fragment buffer size            : %u\n",ip_frag_mem);
 #endif	
@@ -581,57 +578,26 @@ void skb_trim(struct sk_buff *skb, unsigned int len)
  *	not need to like protocols and sockets.
  */
 
-void kfree_skb(struct sk_buff *skb, int rw)
+void __kfree_skb(struct sk_buff *skb)
 {
+#if CONFIG_SKB_CHECK
 	if (skb == NULL)
 	{
 		printk(KERN_CRIT "kfree_skb: skb = NULL (from %p)\n",
-			__builtin_return_address(0));
+ 			__builtin_return_address(0));
 		return;
   	}
-#if CONFIG_SKB_CHECK
 	IS_SKB(skb);
 #endif
-	if (skb->lock)
-	{
-		skb->free = 3;    /* Free when unlocked */
-		net_free_locked++;
-		return;
-  	}
-  	if (skb->free == 2)
-		printk(KERN_WARNING "Warning: kfree_skb passed an skb that nobody set the free flag on! (from %p)\n",
-			__builtin_return_address(0));
 	if (skb->list)
 	 	printk(KERN_WARNING "Warning: kfree_skb passed an skb still on a list (from %p).\n",
 			__builtin_return_address(0));
 
+	dst_release(skb->dst);
+
 	if(skb->destructor)
 		skb->destructor(skb);
-	if (skb->sk)
-	{
-		struct sock * sk = skb->sk;
-	        if(sk->prot!=NULL)
-		{
-			if (rw)
-		     		sock_rfree(sk, skb);
-		     	else
-		     		sock_wfree(sk, skb);
-
-		}
-		else
-		{
-			if (rw)
-				atomic_sub(skb->truesize, &sk->rmem_alloc);
-			else {
-				if(!sk->dead)
-					sk->write_space(sk);
-				atomic_sub(skb->truesize, &sk->wmem_alloc);
-			}
-			kfree_skbmem(skb);
-		}
-	}
-	else
-		kfree_skbmem(skb);
+	kfree_skbmem(skb);
 }
 
 /*
@@ -685,33 +651,31 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	skb=(struct sk_buff *)(bptr+size)-1;
 
 	skb->count = 1;		/* only one reference to this */
-	skb->data_skb = NULL;	/* and we're our own data skb */
+	skb->data_skb = skb;	/* and we're our own data skb */
 
-	skb->free = 2;	/* Invalid so we pick up forgetful users */
-	skb->lock = 0;
 	skb->pkt_type = PACKET_HOST;	/* Default type */
 	skb->pkt_bridged = 0;		/* Not bridged */
-	skb->prev = skb->next = skb->link3 = NULL;
+	skb->prev = skb->next = NULL;
 	skb->list = NULL;
 	skb->sk = NULL;
 	skb->truesize=size;
-	skb->localroute=0;
 	skb->stamp.tv_sec=0;	/* No idea about time */
-	skb->localroute = 0;
 	skb->ip_summed = 0;
-	memset(skb->proto_priv, 0, sizeof(skb->proto_priv));
+	skb->dst = NULL;
+	skb->destructor = NULL;
+	memset(skb->cb, 0, sizeof(skb->cb));
+	skb->priority = SOPRI_NORMAL;
 	net_skbcount++;
 #if CONFIG_SKB_CHECK
 	skb->magic_debug_cookie = SK_GOOD_SKB;
 #endif
-	skb->users = 0;
+	skb->users = 1;
 	/* Load the data pointers */
 	skb->head=bptr;
 	skb->data=bptr;
 	skb->tail=bptr;
 	skb->end=bptr+len;
 	skb->len=0;
-	skb->destructor=NULL;
 	skb->inclone = 0;
 	return skb;
 }
@@ -741,7 +705,7 @@ void kfree_skbmem(struct sk_buff *skb)
 		free_head = (skb->inclone != SKB_CLONE_INLINE);
 
 		/* free the skb that contains the actual data if we've clone()'d */
-		if (skb->data_skb) {
+		if (skb->data_skb != skb) {
 			addr = skb;
 			__kfree_skbmem(skb->data_skb);
 		}
@@ -752,8 +716,7 @@ void kfree_skbmem(struct sk_buff *skb)
 }
 
 /*
- *	Duplicate an sk_buff. The new one is not owned by a socket or locked
- *	and will be freed on deletion.
+ *	Duplicate an sk_buff. The new one is not owned by a socket.
  */
 
 struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
@@ -777,20 +740,19 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	}
 	memcpy(n, skb, sizeof(*n));
 	n->count = 1;
-	if (skb->data_skb)
-		skb = skb->data_skb;
+	skb = skb->data_skb;
 	atomic_inc(&skb->count);
 	atomic_inc(&net_allocs);
 	atomic_inc(&net_skbcount);
+	dst_clone(n->dst);
 	n->data_skb = skb;
-	n->next = n->prev = n->link3 = NULL;
+	n->next = n->prev = NULL;
 	n->list = NULL;
 	n->sk = NULL;
-	n->free = 1;
 	n->tries = 0;
-	n->lock = 0;
-	n->users = 0;
+	n->users = 1;
 	n->inclone = inbuff;
+	n->destructor = NULL;
 	return n;
 }
 
@@ -825,82 +787,95 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int priority)
 	skb_put(n,skb->len);
 	/* Copy the bytes */
 	memcpy(n->head,skb->head,skb->end-skb->head);
-	n->link3=NULL;
 	n->list=NULL;
 	n->sk=NULL;
 	n->when=skb->when;
 	n->dev=skb->dev;
+	n->priority=skb->priority;
+	n->protocol=skb->protocol;
+	n->dst=dst_clone(skb->dst);
 	n->h.raw=skb->h.raw+offset;
+	n->nh.raw=skb->nh.raw+offset;
 	n->mac.raw=skb->mac.raw+offset;
-	n->ip_hdr=(struct iphdr *)(((char *)skb->ip_hdr)+offset);
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
-	n->ipv6_hdr=(struct ipv6hdr *)(((char *)skb->ipv6_hdr)+offset);
 	n->nexthop = skb->nexthop;
 #endif
-	n->saddr=skb->saddr;
-	n->daddr=skb->daddr;
-	n->raddr=skb->raddr;
 	n->seq=skb->seq;
 	n->end_seq=skb->end_seq;
 	n->ack_seq=skb->ack_seq;
 	n->acked=skb->acked;
-	memcpy(n->proto_priv, skb->proto_priv, sizeof(skb->proto_priv));
+	memcpy(n->cb, skb->cb, sizeof(skb->cb));
 	n->used=skb->used;
-	n->free=1;
 	n->arp=skb->arp;
 	n->tries=0;
-	n->lock=0;
-	n->users=0;
+	n->users=1;
 	n->pkt_type=skb->pkt_type;
 	n->stamp=skb->stamp;
+	n->arp=skb->arp;
+	n->destructor = NULL;
 	
 	IS_SKB(n);
 	return n;
 }
 
-/*
- *     Skbuff device locking
- */
-
-void skb_device_lock(struct sk_buff *skb)
+struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 {
-	if(skb->lock)
-		printk("double lock on device queue, lock=%d caller=%p\n",
-			skb->lock, (&skb)[-1]);
-	else
-		net_locked++;
-	skb->lock++;
+	struct sk_buff *n;
+	unsigned long offset;
+	int headroom = skb_headroom(skb);
+
+	/*
+	 *	Allocate the copy buffer
+	 */
+ 	 
+	IS_SKB(skb);
+	
+	n=alloc_skb(skb->truesize+newheadroom-headroom-sizeof(struct sk_buff), GFP_ATOMIC);
+	if(n==NULL)
+		return NULL;
+
+	skb_reserve(n,newheadroom);
+
+	/*
+	 *	Shift between the two data areas in bytes
+	 */
+	 
+	offset=n->data-skb->data;
+
+	/* Set the tail pointer and length */
+	skb_put(n,skb->len);
+	/* Copy the bytes */
+	memcpy(n->data,skb->data,skb->len);
+	n->list=NULL;
+	n->sk=NULL;
+	n->when=skb->when;
+	n->priority=skb->priority;
+	n->protocol=skb->protocol;
+	n->dev=skb->dev;
+	n->dst=dst_clone(skb->dst);
+	n->h.raw=skb->h.raw+offset;
+	n->nh.raw=skb->nh.raw+offset;
+	n->mac.raw=skb->mac.raw+offset;
+	memcpy(n->cb, skb->cb, sizeof(skb->cb));
+#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
+ 	n->nexthop = skb->nexthop;
+#endif
+	n->seq=skb->seq;
+ 	n->end_seq=skb->end_seq;
+	n->ack_seq=skb->ack_seq;
+	n->acked=skb->acked;
+	n->used=skb->used;
+	n->arp=skb->arp;
+	n->tries=0;
+	n->users=1;
+	n->pkt_type=skb->pkt_type;
+	n->stamp=skb->stamp;
+	n->destructor = NULL;
+ 	
+	IS_SKB(n);
+	return n;
 }
-
-void skb_device_unlock(struct sk_buff *skb)
-{
-	if(skb->lock==0)
-		printk("double unlock on device queue!\n");
-	skb->lock--;
-	if(skb->lock==0)
-		net_locked--;
-}
-
-void dev_kfree_skb(struct sk_buff *skb, int mode)
-{
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
-	if(skb->lock)
-	{
-		net_locked--;
-		skb->lock--;
-	}
-	if (!skb->lock && (skb->free == 1 || skb->free == 3))
-	{
-		restore_flags(flags);
-		kfree_skb(skb,mode);
-	}
-	else
-		restore_flags(flags);
-}
-
+  
 struct sk_buff *dev_alloc_skb(unsigned int length)
 {
 	struct sk_buff *skb;
@@ -909,9 +884,4 @@ struct sk_buff *dev_alloc_skb(unsigned int length)
 	if (skb)
 		skb_reserve(skb,16);
 	return skb;
-}
-
-int skb_device_locked(struct sk_buff *skb)
-{
-	return skb->lock? 1 : 0;
 }

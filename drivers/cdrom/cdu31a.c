@@ -1979,8 +1979,7 @@ sony_get_subchnl_info(long arg)
       return -EIO;
    }
 
-   err = verify_area(VERIFY_READ, (char *) arg, sizeof(schi)) ||
-         verify_area(VERIFY_WRITE, (char *) arg, sizeof(schi));
+   err = verify_area(VERIFY_WRITE, (char *) arg, sizeof(schi));
    if (err) return err;
 
    copy_from_user(&schi, (char *) arg, sizeof(schi));

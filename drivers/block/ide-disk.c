@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-disk.c	Version 1.0  Oct   6, 1996
+ *  linux/drivers/block/ide-disk.c	Version 1.01  Nov  25, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -36,8 +36,9 @@
  *  code is still sprinkled about.  Think of it as a major evolution, with
  *  inspiration from lots of linux users, esp.  hamish@zot.apana.org.au
  *
- * Version 1.0		move disk only code from ide.c to ide-disk.c
+ * Version 1.00		move disk only code from ide.c to ide-disk.c
  *			support optional byte-swapping of all data
+ * Version 1.01		fix previous byte-swapping code
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -85,9 +86,12 @@ static inline void idedisk_input_data (ide_drive_t *drive, void *buffer, unsigne
 
 static inline void idedisk_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 {
-	ide_output_data(drive, buffer, wcount);
-	if (drive->bswap)
+	if (drive->bswap) {
 		idedisk_bswap_data(buffer, wcount);
+		ide_output_data(drive, buffer, wcount);
+		idedisk_bswap_data(buffer, wcount);
+	} else
+		ide_output_data(drive, buffer, wcount);
 }
 
 /*
@@ -501,6 +505,7 @@ static ide_driver_t idedisk_driver = {
 	ide_disk,		/* media */
 	0,			/* busy */
 	1,			/* supports_dma */
+	0,			/* supports_dsc_overlap */
 	NULL,			/* cleanup */
 	do_rw_disk,		/* do_request */
 	NULL,			/* end_request */

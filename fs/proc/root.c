@@ -139,6 +139,16 @@ struct proc_dir_entry proc_scsi = {
 	NULL, &proc_root, NULL
 };
 
+#ifdef CONFIG_MCA
+struct proc_dir_entry proc_mca = {
+	PROC_MCA, 3, "mca",
+	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
+	0, &proc_dir_inode_operations,
+	NULL, NULL,
+	NULL, &proc_root, NULL
+};
+#endif
+
 struct proc_dir_entry proc_sys_root = {
 	PROC_SYS, 3, "sys",			/* inode, name */
 	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,	/* mode, nlink, uid, gid */
@@ -379,6 +389,9 @@ void proc_root_init(void)
 	proc_register(&proc_root, &proc_net);
 	proc_register(&proc_root, &proc_scsi);
 	proc_register(&proc_root, &proc_sys_root);
+#ifdef CONFIG_MCA
+	proc_register(&proc_root, &proc_mca);
+#endif
 
 #ifdef CONFIG_DEBUG_MALLOC
 	proc_register(&proc_root, &proc_root_malloc);

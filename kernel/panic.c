@@ -53,6 +53,11 @@ NORET_TYPE void panic(const char * fmt, ...)
 		printk(KERN_EMERG "Rebooting in %d seconds..",panic_timeout);
 		for(i = 0; i < (panic_timeout*1000); i++)
 			udelay(1000);
+		/*
+		 *	Should we run the reboot notifier. For the moment Im
+		 *	choosing not too. It might crash, be corrupt or do
+		 *	more harm than good for other reasons.
+		 */
 		hard_reset_now();
 	}
 	for(;;);

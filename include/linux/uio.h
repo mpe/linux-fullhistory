@@ -24,7 +24,12 @@ struct iovec
  *	UIO_MAXIOV shall be at least 16 1003.1g (5.4.1.1)
  */
  
+#define UIO_FASTIOV	8
+#define UIO_MAXIOV	1024
+#if 0
 #define UIO_MAXIOV	16	/* Maximum iovec's in one operation 
 				   16 matches BSD */
+                                /* Beg pardon: BSD has 1024 --ANK */
+#endif
 
 #endif

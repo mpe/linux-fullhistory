@@ -70,8 +70,7 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
 2:	    movl %%edx, %%ecx
 	    andl $0x1c, %%edx
 	    je 4f
-	    shrl $2, %%edx
-	    testl %%esi, %%esi
+	    shrl $2, %%edx	# This clears CF
 3:	    adcl (%%esi), %%eax
 	    lea 4(%%esi), %%esi
 	    dec %%edx
@@ -117,52 +116,48 @@ unsigned int csum_partial_copy(const char *src, char *dst,
 	addw %%bx, %%ax
 	adcl $0, %%eax
 2:
-	movl %%ecx, %%edx
+	pushl %%ecx
 	shrl $5, %%ecx
 	jz 2f
 	testl %%esi, %%esi
 1:	movl (%%esi), %%ebx
+	movl 4(%%esi), %%edx
 	adcl %%ebx, %%eax
 	movl %%ebx, (%%edi)
-
-	movl 4(%%esi), %%ebx
-	adcl %%ebx, %%eax
-	movl %%ebx, 4(%%edi)
+	adcl %%edx, %%eax
+	movl %%edx, 4(%%edi)
 
 	movl 8(%%esi), %%ebx
+	movl 12(%%esi), %%edx
 	adcl %%ebx, %%eax
 	movl %%ebx, 8(%%edi)
-
-	movl 12(%%esi), %%ebx
-	adcl %%ebx, %%eax
-	movl %%ebx, 12(%%edi)
+	adcl %%edx, %%eax
+	movl %%edx, 12(%%edi)
 
 	movl 16(%%esi), %%ebx
+	movl 20(%%esi), %%edx
 	adcl %%ebx, %%eax
 	movl %%ebx, 16(%%edi)
-
-	movl 20(%%esi), %%ebx
-	adcl %%ebx, %%eax
-	movl %%ebx, 20(%%edi)
+	adcl %%edx, %%eax
+	movl %%edx, 20(%%edi)
 
 	movl 24(%%esi), %%ebx
+	movl 28(%%esi), %%edx
 	adcl %%ebx, %%eax
 	movl %%ebx, 24(%%edi)
-
-	movl 28(%%esi), %%ebx
-	adcl %%ebx, %%eax
-	movl %%ebx, 28(%%edi)
+	adcl %%edx, %%eax
+	movl %%edx, 28(%%edi)
 
 	lea 32(%%esi), %%esi
 	lea 32(%%edi), %%edi
 	dec %%ecx
 	jne 1b
 	adcl $0, %%eax
-2:	movl %%edx, %%ecx
-	andl $28, %%edx
+2:	popl %%edx
+	movl %%edx, %%ecx
+	andl $0x1c, %%edx
 	je 4f
-	shrl $2, %%edx
-	testl %%esi, %%esi
+	shrl $2, %%edx		# This clears CF
 3:	movl (%%esi), %%ebx
 	adcl %%ebx, %%eax
 	movl %%ebx, (%%edi)

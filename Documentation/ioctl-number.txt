@@ -1,7 +1,7 @@
 Ioctl Numbers
-5 Oct 1996
+2 Dec 1996
 Michael Chastain
-<mec@duracef.shout.net>
+<mec@shout.net>
 
 If you are adding new ioctl's to the kernel, you should use the _IO
 macros defined in <linux/ioctl.h>:
@@ -51,7 +51,7 @@ Following the convention is good because:
     code to call verify_area to validate parameters.
 
 This table lists ioctls visible from user land for Linux/i386.  It is
-current to Linux 2.1.1
+current to Linux 2.1.14.
 
 Code	Seq#	Include File		Comments
 ========================================================
@@ -64,10 +64,8 @@ Code	Seq#	Include File		Comments
 0x09	all	linux/md.h
 0x12	all	linux/fs.h
 0x20	all	linux/cm206.h
-0x22	all	linux/scc.h		conflict! (version 2.01 of z8530drv)
-0x22	all	scsi/sg.h		conflict!
+0x22	all	scsi/sg.h
 'A'	all	linux/apm_bios.h
-'B'	all	linux/baycom.h
 'C'	all	linux/soundcard.h
 'F'	all	linux/fb.h
 'I'	all	linux/isdn.h
@@ -86,7 +84,6 @@ Code	Seq#	Include File		Comments
 'V'	all	linux/vt.h
 'W'	00-1F	linux/pcwd.h
 'Y'	all	linux/cyclades.h
-'Z'	all	linux/scc.h		version 2.2 of z8530drv
 'a'	all	various, see http://lrcwww.epfl.ch/linux-atm/magic.html
 'c'	all	linux/comstats.h
 'f'	all	linux/ext2_fs.h
@@ -102,7 +99,9 @@ Code	Seq#	Include File		Comments
 'v'	all	linux/ext2_fs.h
 'w'	all	CERN SCI driver (in development)
 0x89	00-0F	asm-i386/sockios.h
-0x89	10-FF	linux/sockios.h
+0x89	10-DF	linux/sockios.h
+0x89	E0-EF	linux/sockios.h		SIOCPROTOPRIVATE range
+0x89	F0-FF	linux/sockios.h		SIOCDEVPRIVATE range
 0x90	00	linux/sbpcd.h
 0x99	00-0F	537-Addinboard driver (in development, e-mail contact:
 					b.kohl@ipn-b.comlink.apc.org)

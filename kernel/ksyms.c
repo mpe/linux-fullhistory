@@ -105,10 +105,12 @@ struct symbol_table symbol_table = {
 	X(pcibios_read_config_byte),
 	X(pcibios_read_config_word),
 	X(pcibios_read_config_dword),
-    	X(pcibios_strerror),
 	X(pcibios_write_config_byte),
 	X(pcibios_write_config_word),
 	X(pcibios_write_config_dword),
+    	X(pcibios_strerror),
+	X(pci_strvendor),
+	X(pci_strdev),
 #endif
 
 	/* process memory management */

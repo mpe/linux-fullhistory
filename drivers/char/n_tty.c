@@ -355,7 +355,8 @@ static inline void n_tty_receive_char(struct tty_struct *tty, unsigned char c)
 		return;
 	}
 	
-	if (tty->stopped && I_IXON(tty) && I_IXANY(tty)) {
+	if (tty->stopped && !tty->flow_stopped &&
+	    I_IXON(tty) && I_IXANY(tty)) {
 		start_tty(tty);
 		return;
 	}

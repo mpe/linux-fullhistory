@@ -22,12 +22,12 @@
 
 #define NDISC_QUEUE_LEN	3
 
-#define NCF_NOARP		0x01	/* no ARP needed on this device */
-#define NCF_SUBNET		0x02    /* NC entry for subnet		*/
-#define NCF_INVALID		0x04
-#define NCF_DELAY_EXPIRED	0x08	/* time to move to PROBE	*/
-#define NCF_ROUTER		0x10	/* neighbour is a router	*/
-#define NCF_HHVALID		0x20	/* Hardware header is valid	*/
+#define NCF_NOARP		0x0100	/* no ARP needed on this device */
+#define NCF_SUBNET		0x0200   /* NC entry for subnet		*/
+#define NCF_INVALID		0x0400
+#define NCF_DELAY_EXPIRED	0x0800	/* time to move to PROBE	*/
+#define NCF_ROUTER		0x1000	/* neighbour is a router	*/
+#define NCF_HHVALID		0x2000	/* Hardware header is valid	*/
 
 /*
  *	ICMP codes for neighbour discovery messages
@@ -64,37 +64,30 @@
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/icmpv6.h>
+#include <net/neighbour.h>
 #include <asm/atomic.h>
 
 /*
  *	neighbour cache entry
  *	used by neighbour discovery module
- *	as similar functions of "struct hh_cache" used in ipv4
  */
-struct neighbour {
-	struct in6_addr		addr;		/* next hop addr */
-	__u8			len;		/* prefix len	 */
-	__u8			type;		/* {unicast, multicast} */
-			
-	struct device *		dev;
 
-	__u8			flags;
+struct nd_neigh {
+	struct neighbour	neigh;
+	struct in6_addr		ndn_addr;	/* next hop addr */
 
+	__u8			ndn_plen,	/* prefix len	 */
+				ndn_type,	/* {unicast, multicast} */
+				ndn_nud_state,
+				ndn_probes;
 	
-	__u8			hh_data[MAX_ADDR_LEN];	/* cached hdr	*/
-	__u8			*h_dest;		/* dest addr	*/
+	unsigned long		ndn_expires;	/* timer expires at	*/
 
-	struct sk_buff_head	arp_queue;	/* packets waiting for ND to
-						   finish */
-	atomic_t		refcnt;
-	__u8			nud_state;
-	__u8			probes;
-	__u32			tstamp;		/* last reachable conf	*/
-
-	unsigned long		expires;	/* timer expires at	*/
-
-	struct neighbour	*next; 		/* for hash chaining	*/
-	struct neighbour	*prev; 		/* for hash chaining	*/
+#define ndn_refcnt		neigh.refcnt
+#define ndn_tstamp		neigh.lastused
+#define ndn_dev			neigh.dev
+#define ndn_flags		neigh.flags
+#define ndn_ha			neigh.ha
 };
 
 struct nd_msg {
@@ -124,17 +117,15 @@ struct ndisc_statistics {
 	__u32	res_failed;		/* address resolution failures	*/
 };
 
-extern struct neighbour *	ndisc_get_neigh(struct device *dev, 
-						struct in6_addr *addr);
+extern struct neighbour *	ndisc_find_neigh(struct device *dev, 
+						 struct in6_addr *addr);
 
 extern void			ndisc_validate(struct neighbour *neigh);
 
-extern void			ndisc_init(struct proto_ops *ops);
+extern void			ndisc_init(struct net_proto_family *ops);
+extern struct neighbour*	ndisc_get_neigh(struct device *dev,
+						struct in6_addr *addr);
 extern void			ndisc_cleanup(void);
-
-extern int			ndisc_eth_resolv(unsigned char *,
-						 struct device *,
-						 struct sk_buff *);
 
 extern int			ndisc_rcv(struct sk_buff *skb,
 					  struct device *dev,
@@ -159,7 +150,9 @@ extern void			ndisc_send_rs(struct device *dev,
 extern int			(*ndisc_eth_hook) (unsigned char *,
 						   struct device *,
 						   struct sk_buff *);
-
+extern int			ndisc_eth_resolv(unsigned char *,
+						struct device *,
+						struct sk_buff *);
 extern void			ndisc_forwarding_on(void);
 extern void			ndisc_forwarding_off(void);
 
@@ -171,12 +164,6 @@ struct rt6_info *		dflt_rt_lookup(void);
 
 extern unsigned long	nd_rand_seed;
 extern int		ipv6_random(void);
-
-
-static __inline__ void ndisc_dec_neigh(struct neighbour *neigh)
-{
-	atomic_dec(&neigh->refcnt);
-}
 
 #endif /* __KERNEL__ */
 

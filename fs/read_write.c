@@ -13,6 +13,7 @@
 #include <linux/file.h>
 #include <linux/mm.h>
 #include <linux/uio.h>
+#include <linux/malloc.h>
 
 #include <asm/uaccess.h>
 
@@ -166,41 +167,14 @@ bad_file:
 	return error;
 }
 
-static long sock_readv_writev(int type, struct inode * inode, struct file * file,
-	const struct iovec * iov, long count, long size)
-{
-	struct msghdr msg;
-	struct socket *sock;
-
-	sock = &inode->u.socket_i;
-	if (!sock->ops)
-		return -EOPNOTSUPP;
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-	msg.msg_control = NULL;
-	msg.msg_iov = (struct iovec *) iov;
-	msg.msg_iovlen = count;
-
-	/* read() does a VERIFY_WRITE */
-	if (type == VERIFY_WRITE) {
-		if (!sock->ops->recvmsg)
-			return -EOPNOTSUPP;
-		return sock->ops->recvmsg(sock, &msg, size,
-			(file->f_flags & O_NONBLOCK), 0, NULL);
-	}
-	if (!sock->ops->sendmsg)
-		return -EOPNOTSUPP;
-	return sock->ops->sendmsg(sock, &msg, size,
-		(file->f_flags & O_NONBLOCK), 0);
-}
-
 typedef long (*IO_fn_t)(struct inode *, struct file *, char *, unsigned long);
 
 static long do_readv_writev(int type, struct inode * inode, struct file * file,
 	const struct iovec * vector, unsigned long count)
 {
 	unsigned long tot_len;
-	struct iovec iov[UIO_MAXIOV];
+	struct iovec iovstack[UIO_FASTIOV];
+	struct iovec *iov=iovstack;
 	long retval, i;
 	IO_fn_t fn;
 
@@ -212,27 +186,46 @@ static long do_readv_writev(int type, struct inode * inode, struct file * file,
 		return 0;
 	if (count > UIO_MAXIOV)
 		return -EINVAL;
-	if (copy_from_user(iov, vector, count*sizeof(*vector)))
+	if (count > UIO_FASTIOV) {
+		iov = kmalloc(count*sizeof(struct iovec), GFP_KERNEL);
+		if (!iov)
+			return -ENOMEM;
+	}
+	if (copy_from_user(iov, vector, count*sizeof(*vector))) {
+		if (iov != iovstack)
+			kfree(iov);
 		return -EFAULT;
+	}
 	tot_len = 0;
 	for (i = 0 ; i < count ; i++)
 		tot_len += iov[i].iov_len;
 
 	retval = locks_verify_area(type == VERIFY_READ ? FLOCK_VERIFY_READ : FLOCK_VERIFY_WRITE,
 				   inode, file, file->f_pos, tot_len);
-	if (retval)
+	if (retval) {
+		if (iov != iovstack)
+			kfree(iov);
 		return retval;
+	}
 
 	/*
 	 * Then do the actual IO.  Note that sockets need to be handled
 	 * specially as they have atomicity guarantees and can handle
 	 * iovec's natively
 	 */
-	if (inode->i_sock)
-		return sock_readv_writev(type, inode, file, iov, count, tot_len);
+	if (inode->i_sock) {
+		int err;
+		err = sock_readv_writev(type, inode, file, iov, count, tot_len);
+		if (iov != iovstack)
+			kfree(iov);
+		return err;
+	}
 
-	if (!file->f_op)
+	if (!file->f_op) {
+		if (iov != iovstack)
+			kfree(iov);
 		return -EINVAL;
+	}
 	/* VERIFY_WRITE actually means a read, as we write to user space */
 	fn = file->f_op->read;
 	if (type == VERIFY_READ)
@@ -257,6 +250,8 @@ static long do_readv_writev(int type, struct inode * inode, struct file * file,
 		if (nr != len)
 			break;
 	}
+	if (iov != iovstack)
+		kfree(iov);
 	return retval;
 }
 

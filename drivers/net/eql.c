@@ -156,11 +156,6 @@ static int eql_ioctl(struct device *dev, struct ifreq *ifr, int cmd); /*  */
 static int eql_slave_xmit(struct sk_buff *skb, struct device *dev); /*  */
 
 static struct enet_statistics *eql_get_stats(struct device *dev); /*  */
-static int eql_header(struct sk_buff *skb, struct device *dev, 
-		      unsigned short type, void *daddr, void *saddr, 
-		      unsigned len); /*  */
-static int eql_rebuild_header(void *buff, struct device *dev, 
-			      unsigned long raddr, struct sk_buff *skb); /*  */
 
 /* ioctl() handlers
    ---------------- */
@@ -260,9 +255,6 @@ int eql_init(struct device *dev)
 
 	for (i = 0; i < DEV_NUMBUFFS; i++)
 		skb_queue_head_init(&dev->buffs[i]);
-
-	dev->hard_header	= eql_header; 
-	dev->rebuild_header	= eql_rebuild_header;
 
 	/*
 	 *	Now we undo some of the things that eth_setup does
@@ -389,7 +381,9 @@ static int eql_slave_xmit(struct sk_buff *skb, struct device *dev)
 				dev->name, eql_number_slaves (eql->queue), skb->len,
 				slave_dev->name);
 #endif
-		dev_queue_xmit (skb, slave_dev, 1);
+		skb->dev = slave_dev;
+		skb->priority = 1;
+		dev_queue_xmit (skb);
 		eql->stats->tx_packets++;
 		slave->bytes_queued += skb->len; 
 	}
@@ -411,21 +405,6 @@ static struct enet_statistics * eql_get_stats(struct device *dev)
 {
 	equalizer_t *eql = (equalizer_t *) dev->priv;
 	return eql->stats;
-}
-
-
-static int  eql_header(struct sk_buff *skb, struct device *dev, 
-	   unsigned short type, void *daddr, void *saddr, 
-	   unsigned len)
-{
-	return 0;
-}
-
-
-static int eql_rebuild_header(void *buff, struct device *dev, 
-		   unsigned long raddr, struct sk_buff *skb)
-{
-	return 0;
 }
 
 /*

@@ -63,7 +63,7 @@ int sr_do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned bufl
 	    printk("Disc change detected.\n");
 	    break;
 	case NOT_READY: /* This happens if there is no disc in drive */
-	    printk("CDROM not ready.  Make sure there is a disc in the drive.\n");
+	    printk(KERN_INFO "CDROM not ready.  Make sure there is a disc in the drive.\n");
 	    break;
 	case ILLEGAL_REQUEST:
 	    printk("CDROM (ioctl) reports ILLEGAL REQUEST.\n");

@@ -44,6 +44,20 @@ asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 	die_if_kernel(str,regs,error_code); \
 }
 
+#define DO_VM86_ERROR(trapnr, signr, str, name, tsk) \
+asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
+{ \
+	if (regs->eflags & VM_MASK) { \
+		if (!handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, trapnr)) \
+			return; \
+		/* else fall through */ \
+	} \
+	tsk->tss.error_code = error_code; \
+	tsk->tss.trap_no = trapnr; \
+	force_sig(signr, tsk); \
+	die_if_kernel(str,regs,error_code); \
+}
+
 #define get_seg_byte(seg,addr) ({ \
 register unsigned char __res; \
 __asm__("push %%fs;mov %%ax,%%fs;movb %%fs:%2,%%al;pop %%fs" \
@@ -164,12 +178,12 @@ int kstack_depth_to_print = 24;
 	do_exit(SIGSEGV);
 }
 
-DO_ERROR( 0, SIGFPE,  "divide error", divide_error, current)
-DO_ERROR( 3, SIGTRAP, "int3", int3, current)
-DO_ERROR( 4, SIGSEGV, "overflow", overflow, current)
-DO_ERROR( 5, SIGSEGV, "bounds", bounds, current)
+DO_VM86_ERROR( 0, SIGFPE,  "divide error", divide_error, current)
+DO_VM86_ERROR( 3, SIGTRAP, "int3", int3, current)
+DO_VM86_ERROR( 4, SIGSEGV, "overflow", overflow, current)
+DO_VM86_ERROR( 5, SIGSEGV, "bounds", bounds, current)
 DO_ERROR( 6, SIGILL,  "invalid operand", invalid_op, current)
-DO_ERROR( 7, SIGSEGV, "device not available", device_not_available, current)
+DO_VM86_ERROR( 7, SIGSEGV, "device not available", device_not_available, current)
 DO_ERROR( 8, SIGSEGV, "double fault", double_fault, current)
 DO_ERROR( 9, SIGFPE,  "coprocessor segment overrun", coprocessor_segment_overrun, last_task_used_math)
 DO_ERROR(10, SIGSEGV, "invalid TSS", invalid_TSS, current)
@@ -181,7 +195,7 @@ DO_ERROR(18, SIGSEGV, "reserved", reserved, current)
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {
 	if (regs->eflags & VM_MASK) {
-		handle_vm86_fault((struct vm86_regs *) regs, error_code);
+		handle_vm86_fault((struct kernel_vm86_regs *) regs, error_code);
 		return;
 	}
 	die_if_kernel("general protection",regs,error_code);
@@ -206,7 +220,7 @@ asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 {
 	if (regs->eflags & VM_MASK) {
-		handle_vm86_debug((struct vm86_regs *) regs, error_code);
+		handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, 1);
 		return;
 	}
 	force_sig(SIGTRAP, current);

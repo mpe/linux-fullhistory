@@ -64,10 +64,8 @@ static int rose_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 		if ((skbn = alloc_skb(sk->protinfo.rose->fraglen, GFP_ATOMIC)) == NULL)
 			return 1;
 
-		skbn->free = 1;
 		skbn->arp  = 1;
-		skbn->sk   = sk;
-		sk->rmem_alloc += skbn->truesize;
+		skb_set_owner_r(skbn, sk);
 		skbn->h.raw = skbn->data;
 
 		skbo = skb_dequeue(&sk->protinfo.rose->frag_queue);

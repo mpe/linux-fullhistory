@@ -34,6 +34,7 @@
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/if_arp.h>
 #include <net/ip.h>
 #include <net/route.h>
 #include <net/protocol.h>
@@ -41,16 +42,26 @@
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/arp.h>
+#include <linux/notifier.h>
+#ifdef CONFIG_NET_ALIAS
+#include <linux/net_alias.h>
+#endif
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
+
+extern struct notifier_block *netdev_chain;
 
 /* 
  *	Determine a default network mask, based on the IP address. 
  */
- 
+
+static
 unsigned long ip_get_mask(unsigned long addr)
 {
   	unsigned long dst;
 
-  	if (addr == 0L) 
+  	if (ZERONET(addr))
   		return(0L);	/* special case */
 
   	dst = ntohl(addr);
@@ -68,184 +79,235 @@ unsigned long ip_get_mask(unsigned long addr)
   	return(0);
 }
 
-/* 
- *	Check the address for our address, broadcasts, etc. 
- *
- *	I intend to fix this to at the very least cache the last
- *	resolved entry.
- */
- 
-int ip_chk_addr(unsigned long addr)
-{
-	struct device *dev;
-#ifndef CONFIG_IP_CLASSLESS
-	unsigned long mask;
-#endif
-
-	/* 
-	 *	Accept both `all ones' and `all zeros' as BROADCAST. 
-	 *	(Support old BSD in other words). This old BSD 
-	 *	support will go very soon as it messes other things
-	 *	up.
-	 *	Also accept `loopback broadcast' as BROADCAST.
-	 */
-
-	if (addr == INADDR_ANY || addr == INADDR_BROADCAST ||
-	    addr == htonl(0x7FFFFFFFL))
-		return IS_BROADCAST;
-
-#ifndef  CONFIG_IP_CLASSLESS
-	mask = ip_get_mask(addr);
-
-	/*
-	 *	Accept all of the `loopback' class A net. 
-	 */
-	 
-	if ((addr & mask) == htonl(0x7F000000L))
-		return IS_MYADDR;
-#else
-	if ((addr & htonl(0x7F000000L)) == htonl(0x7F000000L))
-		return IS_MYADDR;
-#endif
-
-	/*
-	 *	OK, now check the interface addresses. We could
-	 *	speed this by keeping a dev and a dev_up chain.
-	 */
-	 
-	for (dev = dev_base; dev != NULL; dev = dev->next) 
-	{
-		if ((!(dev->flags & IFF_UP)) || dev->family!=AF_INET)
-			continue;
-		/*
-		 *	If the protocol address of the device is 0 this is special
-		 *	and means we are address hunting (eg bootp).
-		 */
-		 
-		if (dev->pa_addr == 0)
-			return IS_MYADDR;
-		/*
-		 *	Is it the exact IP address? 
-		 */
-		 
-		if (addr == dev->pa_addr)
-			return IS_MYADDR;
-		/*
-		 *	Is it our broadcast address? 
-		 */
-		 
-		if ((dev->flags & IFF_BROADCAST) && addr == dev->pa_brdaddr)
-			return IS_BROADCAST;
-		/*
-		 *	Nope. Check for a subnetwork broadcast. 
-		 */
-		 
-		if (((addr ^ dev->pa_addr) & dev->pa_mask) == 0) 
-		{
-			if ((addr & ~dev->pa_mask) == 0)
-				return IS_BROADCAST;
-			if ((addr & ~dev->pa_mask) == ~dev->pa_mask)
-				return IS_BROADCAST;
-		}
-		
-#ifndef CONFIG_IP_CLASSLESS
-		/*
-	 	 *	Nope. Check for Network broadcast. 
-	 	 */
-	 	 
-		if (((addr ^ dev->pa_addr) & mask) == 0) 
-		{
-			if ((addr & ~mask) == 0)
-				return IS_BROADCAST;
-			if ((addr & ~mask) == ~mask)
-				return IS_BROADCAST;
-		}
-#endif
-	}
-	if(IN_MULTICAST(ntohl(addr)))
-		return IS_MULTICAST;
-	return 0;		/* no match at all */
-}
-
-
-/*
- *	Retrieve our own address.
- *
- *	Because the loopback address (127.0.0.1) is already recognized
- *	automatically, we can use the loopback interface's address as
- *	our "primary" interface.  This is the address used by IP et
- *	al when it doesn't know which address to use (i.e. it does not
- *	yet know from or to which interface to go...).
- */
- 
-unsigned long ip_my_addr(void)
-{
-  	struct device *dev;
-
-  	for (dev = dev_base; dev != NULL; dev = dev->next) 
-  	{
-		if (dev->flags & IFF_LOOPBACK) 
-			return(dev->pa_addr);
-  	}
-  	return(0);
-}
-
-/*
- *	Find an interface that can handle addresses for a certain address. 
- */
-
-struct device * ip_dev_bynet(unsigned long addr, unsigned long mask)
-{
-	struct device *dev;
-	struct device *best_dev = NULL;
-	__u32  best_mask = mask;
-
-	for (dev = dev_base; dev; dev = dev->next) 
-	{
-		if (!(dev->flags & IFF_UP))
-			continue;
-		if (dev->flags & IFF_POINTOPOINT)
-		{
-			if (addr == dev->pa_dstaddr)
-				return dev;
-			continue;
-		}
-		if (dev->pa_mask & (addr ^ dev->pa_addr))
-			continue;
-		if (mask == dev->pa_mask)
-			return dev;
-		if (best_dev && (best_mask & dev->pa_mask) != best_mask)
-			continue;
-		best_dev = dev;
-		best_mask = dev->pa_mask;
-	}
-	return best_dev;
-}
-
-/*
- *	Find the first device with a given source address.
- */
- 
-struct device *ip_dev_find(unsigned long addr)
-{
-	struct device *dev;
-	for(dev = dev_base; dev; dev=dev->next)
-	{
-		if((dev->flags&IFF_UP) && dev->pa_addr==addr)
-			return dev;
-	}
-	return NULL;
-}
-
-struct device *dev_getbytype(unsigned short type)
+struct device *dev_getbyhwaddr(unsigned short type, char *ha)
 {
 	struct device *dev;
 
 	for (dev = dev_base; dev != NULL; dev = dev->next) 
 	{
-		if (dev->type == type && !(dev->flags&(IFF_LOOPBACK|IFF_NOARP)))
+		if (dev->type == type &&
+		    !(dev->flags&(IFF_LOOPBACK|IFF_NOARP)) &&
+		    memcmp(dev->dev_addr, ha, dev->addr_len) == 0)
 			return(dev);
 	}
 	return(NULL);
 }
 
+/*
+ *	This checks bitmasks for the ioctl calls for devices.
+ */
+ 
+static inline int bad_mask(unsigned long mask, unsigned long addr)
+{
+	if (addr & (mask = ~mask))
+		return 1;
+	mask = ntohl(mask);
+	if (mask & (mask+1))
+		return 1;
+	return 0;
+}
+
+ 
+int devinet_ioctl(unsigned int cmd, void *arg)
+{
+	struct ifreq ifr;
+	struct device *dev;
+	__u32 addr;
+#ifdef CONFIG_NET_ALIAS
+	int err;
+#endif
+
+	/*
+	 *	Fetch the caller's info block into kernel space
+	 */
+
+	if (copy_from_user(&ifr, arg, sizeof(struct ifreq)))
+		return -EFAULT;
+
+	/*
+	 *	See which interface the caller is talking about. 
+	 */
+	 
+	/*
+	 *
+	 *	net_alias_dev_get(): dev_get() with added alias naming magic.
+	 *	only allow alias creation/deletion if (getset==SIOCSIFADDR)
+	 *
+	 */
+	 
+#ifdef CONFIG_KERNELD
+	dev_load(ifr.ifr_name);
+#endif	
+
+#ifdef CONFIG_NET_ALIAS
+	if ((dev = net_alias_dev_get(ifr.ifr_name, cmd == SIOCSIFADDR, &err, NULL, NULL)) == NULL)
+		return(err);
+#else
+	if ((dev = dev_get(ifr.ifr_name)) == NULL) 	
+		return(-ENODEV);
+#endif
+
+	if (cmd != SIOCSIFADDR && dev->family != AF_INET)
+		return(-EINVAL);
+
+	switch(cmd) 
+	{
+		case SIOCGIFADDR:	/* Get interface address (and family) */
+			if (ifr.ifr_addr.sa_family == AF_UNSPEC)
+			{
+				memcpy(ifr.ifr_hwaddr.sa_data, dev->dev_addr, MAX_ADDR_LEN);
+				ifr.ifr_hwaddr.sa_family = dev->type;			
+			}
+			else
+			{
+				(*(struct sockaddr_in *)
+					  &ifr.ifr_addr).sin_addr.s_addr = dev->pa_addr;
+				(*(struct sockaddr_in *)
+					  &ifr.ifr_addr).sin_family = dev->family;
+				(*(struct sockaddr_in *)
+					  &ifr.ifr_addr).sin_port = 0;
+			}
+			break;
+	
+		case SIOCSIFADDR:	/* Set interface address (and family) */
+		
+			if (!suser())
+				return -EPERM;
+
+			/*
+			 *	BSDism. SIOCSIFADDR family=AF_UNSPEC sets the
+			 *	physical address. We can cope with this now.
+			 */
+			
+			if(ifr.ifr_addr.sa_family==AF_UNSPEC)
+			{
+				if(dev->set_mac_address==NULL)
+					return -EOPNOTSUPP;
+				return dev->set_mac_address(dev,&ifr.ifr_addr);
+			}
+			if(ifr.ifr_addr.sa_family!=AF_INET)
+				return -EINVAL;
+
+			addr = (*(struct sockaddr_in *)&ifr.ifr_addr).sin_addr.s_addr;
+
+			dev_lock_wait();
+			dev_lock_list();
+
+			if (dev->family == AF_INET && addr == dev->pa_addr) {
+				dev_unlock_list();
+				return 0;
+			}
+
+			if (dev->flags & IFF_UP)
+				notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev);
+
+			/*
+			 *	if dev is an alias, must rehash to update
+			 *	address change
+			 */
+
+#ifdef CONFIG_NET_ALIAS
+			if (net_alias_is(dev))
+				net_alias_dev_rehash(dev, &ifr.ifr_addr);
+#endif
+			dev->pa_addr = addr;
+			dev->ip_flags |= IFF_IP_ADDR_OK;
+			dev->ip_flags &= ~(IFF_IP_BRD_OK|IFF_IP_MASK_OK);
+			dev->family = AF_INET;
+			if (dev->flags & IFF_POINTOPOINT) {
+				dev->pa_mask = 0xFFFFFFFF;
+				dev->pa_brdaddr = 0xFFFFFFFF;
+			} else {
+				dev->pa_mask = ip_get_mask(dev->pa_addr);
+				dev->pa_brdaddr = dev->pa_addr|~dev->pa_mask;
+			}
+			if (dev->flags & IFF_UP)
+				notifier_call_chain(&netdev_chain, NETDEV_UP, dev);
+			dev_unlock_list();
+			return 0;
+			
+		case SIOCGIFBRDADDR:	/* Get the broadcast address */
+			(*(struct sockaddr_in *)
+				&ifr.ifr_broadaddr).sin_addr.s_addr = dev->pa_brdaddr;
+			(*(struct sockaddr_in *)
+				&ifr.ifr_broadaddr).sin_family = dev->family;
+			(*(struct sockaddr_in *)
+				&ifr.ifr_broadaddr).sin_port = 0;
+			break;
+
+		case SIOCSIFBRDADDR:	/* Set the broadcast address */
+			if (!suser())
+				return -EPERM;
+
+			addr = (*(struct sockaddr_in *)&ifr.ifr_broadaddr).sin_addr.s_addr;
+
+			if (addr == dev->pa_brdaddr) {
+				dev->ip_flags |= IFF_IP_BRD_OK;
+				return 0;
+			}
+			if (dev->flags & IFF_UP)
+				ip_rt_change_broadcast(dev, addr);
+			dev->pa_brdaddr = addr;
+			dev->ip_flags |= IFF_IP_BRD_OK;
+			return 0;
+			
+		case SIOCGIFDSTADDR:	/* Get the destination address (for point-to-point links) */
+			(*(struct sockaddr_in *)
+				&ifr.ifr_dstaddr).sin_addr.s_addr = dev->pa_dstaddr;
+			(*(struct sockaddr_in *)
+				&ifr.ifr_dstaddr).sin_family = dev->family;
+			(*(struct sockaddr_in *)
+				&ifr.ifr_dstaddr).sin_port = 0;
+			break;
+	
+		case SIOCSIFDSTADDR:	/* Set the destination address (for point-to-point links) */
+			if (!suser())
+				return -EPERM;
+			addr = (*(struct sockaddr_in *)&ifr.ifr_dstaddr).sin_addr.s_addr;
+			if (addr == dev->pa_dstaddr)
+				return 0;
+			if (dev->flags & IFF_UP)
+				ip_rt_change_dstaddr(dev, addr);
+			dev->pa_dstaddr = addr;
+			return 0;
+			
+		case SIOCGIFNETMASK:	/* Get the netmask for the interface */
+			(*(struct sockaddr_in *)
+				&ifr.ifr_netmask).sin_addr.s_addr = dev->pa_mask;
+			(*(struct sockaddr_in *)
+				&ifr.ifr_netmask).sin_family = dev->family;
+			(*(struct sockaddr_in *)
+				&ifr.ifr_netmask).sin_port = 0;
+			break;
+
+		case SIOCSIFNETMASK: 	/* Set the netmask for the interface */
+			if (!suser())
+				return -EPERM;
+			addr = (*(struct sockaddr_in *)&ifr.ifr_netmask).sin_addr.s_addr;
+
+			if (addr == dev->pa_mask) {
+				dev->ip_flags |= IFF_IP_MASK_OK;
+				return 0;
+			}
+
+			/*
+			 *	The mask we set must be legal.
+			 */
+			if (bad_mask(addr, 0))
+				return -EINVAL;
+			if (addr == htonl(0xFFFFFFFE))
+				return -EINVAL;
+			if (dev->flags & IFF_UP)
+				ip_rt_change_netmask(dev, addr);
+			dev->pa_mask = addr;
+			dev->ip_flags |= IFF_IP_MASK_OK;
+			dev->ip_flags &= ~IFF_IP_BRD_OK;
+			return 0;
+		default:
+			return -EINVAL;
+			
+	}
+	if (copy_to_user(arg, &ifr, sizeof(struct ifreq)))
+		return -EFAULT;
+	return 0;
+}

@@ -21,6 +21,7 @@ enum root_directory_inos {
 	PROC_VERSION,
 	PROC_CPUINFO,
 	PROC_PCI,
+	PROC_MCA,
 	PROC_SELF,	/* will change inode # */
 	PROC_NET,
         PROC_SCSI,
@@ -69,6 +70,9 @@ enum net_directory_inos {
 	PROC_NET_UNIX = 128,
 	PROC_NET_ARP,
 	PROC_NET_ROUTE,
+	PROC_NET_RTCLASSES,
+	PROC_NET_RTLOCAL,
+	PROC_NET_RTRULES,
 	PROC_NET_DEV,
 	PROC_NET_RAW,
 	PROC_NET_TCP,
@@ -83,7 +87,7 @@ enum net_directory_inos {
 	PROC_NET_IPFWOUT,
 	PROC_NET_IPACCT,
 	PROC_NET_IPMSQHST,
-	PROC_NET_WAVELAN,
+	PROC_NET_WIRELESS,
 	PROC_NET_IPX_INTERFACE,
 	PROC_NET_IPX_ROUTE,
 	PROC_NET_IPX,
@@ -104,6 +108,7 @@ enum net_directory_inos {
 	PROC_NET_IP_MASQ_APP,
 	PROC_NET_RT6,
 	PROC_NET_RT6_STATS,
+	PROC_NET_NDISC,
 	PROC_NET_STRIP_STATUS,
 	PROC_NET_STRIP_TRACE,
 	PROC_NET_Z8530,
@@ -111,6 +116,7 @@ enum net_directory_inos {
 	PROC_NET_RS_NEIGH,
 	PROC_NET_RS_ROUTES,
 	PROC_NET_RS,
+	PROC_NET_CL2LLC,
 	PROC_NET_LAST
 };
 
@@ -137,6 +143,7 @@ enum scsi_directory_inos {
 	PROC_SCSI_NCR53C8XX,
 	PROC_SCSI_ULTRASTOR,
 	PROC_SCSI_7000FASST,
+	PROC_SCSI_IBMMCA,
 	PROC_SCSI_EATA2X,
 	PROC_SCSI_AM53C974,
 	PROC_SCSI_SSC,
@@ -147,11 +154,21 @@ enum scsi_directory_inos {
 	PROC_SCSI_A2091,
 	PROC_SCSI_GVP11,
 	PROC_SCSI_ATARI,
+	PROC_SCSI_IDESCSI,
 	PROC_SCSI_SCSI_DEBUG,	
 	PROC_SCSI_NOT_PRESENT,
 	PROC_SCSI_FILE,                        /* I'm assuming here that we */
 	PROC_SCSI_LAST = (PROC_SCSI_FILE + 16) /* won't ever see more than */
 };                                             /* 16 HBAs in one machine   */
+
+enum mca_directory_inos {
+	PROC_MCA_MACHINE = (PROC_SCSI_LAST+1),
+	PROC_MCA_REGISTERS,
+	PROC_MCA_VIDEO,
+	PROC_MCA_SCSI,
+	PROC_MCA_SLOT,	/* the 8 adapter slots */
+	PROC_MCA_LAST = (PROC_MCA_SLOT + 8)
+};
 
 /* Finally, the dynamically allocatable proc entries are reserved: */
 
@@ -200,6 +217,7 @@ extern struct proc_dir_entry proc_scsi;
 extern struct proc_dir_entry proc_sys;
 extern struct proc_dir_entry proc_pid;
 extern struct proc_dir_entry proc_pid_fd;
+extern struct proc_dir_entry proc_mca;
 
 extern struct inode_operations proc_scsi_inode_operations;
 

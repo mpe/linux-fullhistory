@@ -43,9 +43,6 @@ typedef struct ipx_packet
 	ipx_address	ipx_source __attribute__ ((packed));
 } ipx_packet;
 
-
-typedef struct sock ipx_socket;
-
 #include <net/ipxcall.h>
 extern int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt);
 extern void ipxrtr_device_down(struct device *dev);
@@ -62,7 +59,7 @@ typedef struct ipx_interface {
 
 	/* socket support */
 	unsigned short	if_sknum;
-	ipx_socket	*if_sklist;
+	struct sock	*if_sklist;
 
 	/* administrative overhead */
 	int		if_ipx_offset;

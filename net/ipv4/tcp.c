@@ -204,7 +204,7 @@
  *
  *		Rewrite output state machine to use a single queue.
  *		Speed up input assembly algorithm.
- *		RFC1323 - PAWS and window scaling. 
+ *		RFC1323 - PAWS and window scaling.[Required for IPv6]
  *		User settable/learned rtt/max window/mtu
  *
  *		Change the fundamental structure to a single send queue maintained
@@ -604,8 +604,9 @@ static int tcp_listen_select(struct sock *sk, int sel_type, select_table *wait)
  *	take care of normal races (between the test and the event) and we don't
  *	go look at any of the socket buffers directly.
  */
-int tcp_select(struct sock *sk, int sel_type, select_table *wait)
+int tcp_select(struct socket *sock, int sel_type, select_table *wait)
 {
+	struct sock *sk = sock->sk;
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 	if (sk->state == TCP_LISTEN)
@@ -802,7 +803,7 @@ static int tcp_append_tail(struct sock *sk, struct sk_buff *skb, u8 *from,
  */
 
 int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
-		   int len, int nonblock, int flags)
+		   int len, int flags)
 {
 	int copied  = 0;
 	struct tcp_opt *tp=&(sk->tp_pinfo.af_tcp);
@@ -826,7 +827,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			return -EPIPE;
 		}
 		
-		if (nonblock)
+		if (flags&MSG_DONTWAIT)
 			return -EAGAIN;
 		
 		if (current->signal & ~current->blocked)
@@ -982,7 +983,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			if (skb == NULL) 
 			{
 				sk->socket->flags |= SO_NOSPACE;
-				if (nonblock) 
+				if (flags&MSG_DONTWAIT)
 				{
 					if (copied) 
 						return copied;
@@ -1000,10 +1001,6 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 				continue;
 			}
 
-			skb->sk = sk;
-			skb->free = 0;
-			skb->localroute = sk->localroute|(flags&MSG_DONTROUTE);
-	
 			/*
 			 * FIXME: we need to optimize this.
 			 * Perhaps some hints here would be good.
@@ -1013,7 +1010,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 
 			if (tmp < 0)
 			{
-				sock_wfree(sk, skb);
+				kfree_skb(skb, FREE_WRITE);
 				if (copied)
 					return(copied);
 				return(tmp);
@@ -1027,7 +1024,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 
                         if (tmp < 0) 
                         {
-                                sock_wfree(sk, skb);
+                                kfree_skb(skb, FREE_WRITE);
                                 if (copied) 
                                         return(copied);
                                 return(tmp);
@@ -1045,7 +1042,6 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			from += copy;
 			copied += copy;
 			len -= copy;
-			skb->free = 0;
 			sk->write_seq += copy;
 		
 			tcp_send_skb(sk, skb);
@@ -1167,7 +1163,6 @@ static inline void tcp_eat_skb(struct sock *sk, struct sk_buff * skb)
 {
 	sk->ack_backlog++;
 
-	skb->sk = sk;
 	__skb_unlink(skb, &sk->receive_queue);
 	kfree_skb(skb, FREE_READ);
 }
@@ -1184,7 +1179,7 @@ static void cleanup_rbuf(struct sock *sk)
 	 */
 
 	while ((skb=skb_peek(&sk->receive_queue)) != NULL) {
-		if (!skb->used || skb->users)
+		if (!skb->used || skb->users>1)
 			break;
 		tcp_eat_skb(sk, skb);
 	}
@@ -1275,6 +1270,8 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 			if (copied)
 				break;
 			copied = -ERESTARTSYS;
+			if (nonblock)
+				copied = -EAGAIN;
 			break;
 		}
 
@@ -1359,7 +1356,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		 *	tcp_data.
 		 */
 
-		skb->users++;
+		atomic_inc(&skb->users);
 
 		/*
 		 *	Ok so how much can we use ?
@@ -1412,7 +1409,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 			 *	exception. bailout!
 			 */
 			*seq -= err;
-			skb->users--;
+			atomic_dec(&skb->users);
 			return -EFAULT;
 		}
 
@@ -1425,7 +1422,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		 *	but you'll just have to fix it neatly ;)
 		 */
 
-		skb->users--;
+		atomic_dec(&skb->users);
 
 		if (after(sk->copied_seq,sk->urg_seq))
 			sk->urg_data = 0;
@@ -1442,7 +1439,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		if (flags & MSG_PEEK)
 			continue;
 		skb->used = 1;
-		if (!skb->users)
+		if (skb->users == 1)
 			tcp_eat_skb(sk, skb);
 		continue;
 

@@ -87,6 +87,8 @@ struct arpreq_old {
 #define	ATF_USETRAILERS	0x10		/* has requested trailers	*/
 #define ATF_NETMASK     0x20            /* want to use a netmask (only
 					   for proxy entries) */
+#define ATF_DONTPUB	0x40		/* don't answer this addresses	*/
+#define ATF_MAGIC	0x80		/* automatically added entry	*/
 
 /*
  *	This structure defines an ethernet arp header.

@@ -56,6 +56,7 @@
 #include <net/tcp.h>
 #include <net/af_unix.h>
 #include <linux/proc_fs.h>
+#include <net/scm.h>
 
 /* Internal data structures and random procedures: */
 
@@ -73,13 +74,14 @@ extern inline unix_socket *unix_get_socket(struct file *filp)
 	 *	Socket ?
 	 */
 	if (inode && inode->i_sock) {
-		struct socket * s = &inode->u.socket_i;
+		struct socket * sock = &inode->u.socket_i;
+		struct sock * s = sock->sk;
 
 		/*
 		 *	AF_UNIX ?
 		 */
-		if (s->ops == &unix_proto_ops)
-			u_sock = s->data;
+		if (s && sock->ops && sock->ops->family == AF_UNIX)
+			u_sock = s;
 	}
 	return u_sock;
 }
@@ -141,6 +143,7 @@ extern inline void maybe_mark_and_push(unix_socket *x)
 void unix_gc(void)
 {
 	static int in_unix_gc=0;
+	int i;
 	unix_socket *s;
 	unix_socket *next;
 	
@@ -171,7 +174,7 @@ void unix_gc(void)
 	 *	Push root set
 	 */
 
-	for(s=unix_socket_list;s!=NULL;s=s->next)
+	forall_unix_sockets(i, s)
 	{
 		/*
 		 *	If all instances of the descriptor are not
@@ -202,13 +205,13 @@ tail:
 			/*
 			 *	Do we have file descriptors ?
 			 */
-			if(skb->h.filp)
+			if(UNIXCB(skb).fp)
 			{
 				/*
 				 *	Process the descriptors of this socket
 				 */
-				int nfd=*(int *)skb->h.filp;
-				struct file **fp=(struct file **)(skb->h.filp+sizeof(int));
+				int nfd=UNIXCB(skb).fp->count;
+				struct file **fp = UNIXCB(skb).fp->fp;
 				while(nfd--)
 				{
 					/*
@@ -250,7 +253,7 @@ tail:
 	 *	Sweep phase.  NOTE: this part dominates the time complexity 
 	 */
 
-	for(s=unix_socket_list;s!=NULL;s=next)
+	forall_unix_sockets(i, s)
 	{
 		next=s->next;
 		if (!(s->protinfo.af_unix.marksweep&MARKED))

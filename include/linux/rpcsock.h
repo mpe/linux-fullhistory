@@ -53,10 +53,10 @@ struct rpc_ioreq {
 	struct rpc_wait *	rq_slot;
 	struct sockaddr	*	rq_addr;
 	int			rq_alen;
-	struct iovec		rq_svec[UIO_MAXIOV];
+	struct iovec		rq_svec[UIO_FASTIOV];
 	unsigned int		rq_snr;
 	unsigned long		rq_slen;
-	struct iovec		rq_rvec[UIO_MAXIOV];
+	struct iovec		rq_rvec[UIO_FASTIOV];
 	unsigned int		rq_rnr;
 	unsigned long		rq_rlen;
 };

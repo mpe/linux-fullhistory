@@ -15,6 +15,7 @@ else
   dep_tristate '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD $CONFIG_BLK_DEV_IDE
   dep_tristate '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE
   dep_tristate '   Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE
+  dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
   if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
     bool '   CMD640 chipset bugfix/support' CONFIG_BLK_DEV_CMD640
     if [ "$CONFIG_BLK_DEV_CMD640" = "y" ]; then
@@ -40,6 +41,9 @@ else
       bool '      UMC 8672        support' CONFIG_BLK_DEV_UMC8672
     fi
   fi
+fi
+if [ "$CONFIG_MCA" = "y" ]; then
+  bool 'PS/2 ESDI harddisk support' CONFIG_BLK_DEV_PS2
 fi
 
 comment 'Additional Block Devices'

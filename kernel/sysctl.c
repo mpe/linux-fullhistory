@@ -140,7 +140,7 @@ static ctl_table kern_table[] = {
 #ifdef CONFIG_ROOT_NFS
 	{KERN_NFSRNAME, "nfs-root-name", nfs_root_name, NFS_ROOT_NAME_LEN,
 	 0644, NULL, &proc_dostring, &sysctl_string },
-	{KERN_NFSRNAME, "nfs-root-addrs", nfs_root_addrs, NFS_ROOT_ADDRS_LEN,
+	{KERN_NFSRADDRS, "nfs-root-addrs", nfs_root_addrs, NFS_ROOT_ADDRS_LEN,
 	 0644, NULL, &proc_dostring, &sysctl_string },
 #endif
 #ifdef CONFIG_BINFMT_JAVA

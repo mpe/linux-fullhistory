@@ -66,9 +66,13 @@ extern void init_modules(void);
 extern long console_init(long, long);
 extern long kmalloc_init(long,long);
 extern void sock_init(void);
-extern long pci_init(long, long);
+extern unsigned long pci_init(unsigned long, unsigned long);
+#ifdef CONFIG_MCA
+extern long mca_init(long, long);
+#endif
 extern void sysctl_init(void);
 
+extern void smp_setup(char *str, int *ints);
 extern void no_scroll(char *str, int *ints);
 extern void swap_setup(char *str, int *ints);
 extern void buff_setup(char *str, int *ints);
@@ -95,6 +99,9 @@ extern void BusLogic_Setup(char *str, int *ints);
 extern void eata2x_setup(char *str, int *ints);
 extern void u14_34f_setup(char *str, int *ints);
 extern void fdomain_setup(char *str, int *ints);
+#ifdef CONFIG_SCSI_IBMMCA
+extern void ibmmca_scsi_setup(char *str, int *ints);
+#endif
 extern void in2000_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
 extern void wd7000_setup(char *str, int *ints);
@@ -105,6 +112,10 @@ extern void reboot_setup(char *str, int *ints);
 #ifdef CONFIG_CDU31A
 extern void cdu31a_setup(char *str, int *ints);
 #endif CONFIG_CDU31A
+#ifdef CONFIG_BLK_DEV_PS2
+extern void ed_setup(char *str, int *ints);
+extern void tp720_setup(char *str, int *ints);
+#endif CONFIG_BLK_DEV_PS2
 #ifdef CONFIG_MCD
 extern void mcd_setup(char *str, int *ints);
 #endif CONFIG_MCD
@@ -255,6 +266,10 @@ struct {
 } bootsetups[] = {
 	{ "reserve=", reserve_setup },
 	{ "profile=", profile_setup },
+#ifdef __SMP__
+	{ "nosmp", smp_setup },
+	{ "maxcpus=", smp_setup },
+#endif
 #ifdef CONFIG_BLK_DEV_RAM
 	{ "ramdisk_start=", ramdisk_start_setup },
 	{ "load_ramdisk=", load_ramdisk },
@@ -348,11 +363,18 @@ struct {
 #ifdef CONFIG_SCSI_PPA
         { "ppa=", ppa_setup },
 #endif
+#ifdef CONFIG_SCSI_IBMMCA
+        { "ibmmcascsi=", ibmmca_scsi_setup },
+#endif
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },
 #endif
 #ifdef CONFIG_BLK_DEV_FD
 	{ "floppy=", floppy_setup },
+#endif
+#ifdef CONFIG_BLK_DEV_PS2
+	{ "ed=", ed_setup },
+	{ "tp720", tp720_setup },
 #endif
 #ifdef CONFIG_CDU31A
 	{ "cdu31a=", cdu31a_setup },
@@ -817,6 +839,9 @@ asmlinkage void start_kernel(void)
 	memory_start = console_init(memory_start,memory_end);
 #ifdef CONFIG_PCI
 	memory_start = pci_init(memory_start,memory_end);
+#endif
+#ifdef CONFIG_MCA
+	memory_start = mca_init(memory_start,memory_end);
 #endif
 	memory_start = kmalloc_init(memory_start,memory_end);
 	sti();

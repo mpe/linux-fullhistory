@@ -31,12 +31,12 @@
 extern int		eth_header(struct sk_buff *skb, struct device *dev,
 				   unsigned short type, void *daddr,
 				   void *saddr, unsigned len);
-extern int		eth_rebuild_header(void *buff, struct device *dev,
-			unsigned long dst, struct sk_buff *skb);
+extern int		eth_rebuild_header(struct sk_buff *skb);
 extern unsigned short	eth_type_trans(struct sk_buff *skb, struct device *dev);
-extern void eth_header_cache_bind(struct hh_cache ** hhp, struct device *dev,
-				  unsigned short htype, __u32 daddr);
-extern void eth_header_cache_update(struct hh_cache *hh, struct device *dev, unsigned char * haddr);
+extern void		eth_header_cache_update(struct hh_cache *hh, struct device *dev,
+						unsigned char * haddr);
+extern int		eth_header_cache(struct dst_entry *dst, struct dst_entry *neigh,
+					 struct hh_cache *hh);
 extern void		eth_copy_and_sum(struct sk_buff *dest,
 				unsigned char *src, int length, int base);
 extern struct device	* init_etherdev(struct device *, int);

@@ -270,7 +270,11 @@ static void release_aux(struct inode * inode, struct file * file)
 	poll_aux_status();
 	/* reenable kbd bh */
 	enable_bh(KEYBOARD_BH);
+#ifdef CONFIG_MCA
+	free_irq(AUX_IRQ, inode);
+#else
 	free_irq(AUX_IRQ, NULL);
+#endif
 	MOD_DEC_USE_COUNT;
 }
 
@@ -319,7 +323,11 @@ static int open_aux(struct inode * inode, struct file * file)
 		return -EBUSY;
 	}
 	queue->head = queue->tail = 0;		/* Flush input queue */
+#ifdef CONFIG_MCA
+	if (request_irq(AUX_IRQ, aux_interrupt, MCA_bus ? SA_SHIRQ : 0, "PS/2 Mouse", inode)) {
+#else
 	if (request_irq(AUX_IRQ, aux_interrupt, 0, "PS/2 Mouse", NULL)) {
+#endif
 		aux_count--;
 		return -EBUSY;
 	}

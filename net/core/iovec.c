@@ -19,6 +19,7 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/malloc.h>
 #include <linux/net.h>
 #include <linux/in6.h>
 #include <asm/uaccess.h>
@@ -42,7 +43,7 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 	int len=0;
 	int ct;
 	
-	if(m->msg_name!=NULL)
+	if(m->msg_namelen)
 	{
 		if(mode==VERIFY_READ)
 		{
@@ -56,13 +57,22 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 		if(err<0)
 			return err;
 		m->msg_name = address;
-	}
-	
-	if(m->msg_control!=NULL)
+	} else
+		m->msg_name = NULL;
+
+	if(m->msg_controllen)
 	{
 		err=verify_area(mode, m->msg_control, m->msg_controllen);
 		if(err)
 			return err;
+	} else
+		m->msg_control = NULL;
+
+	if (m->msg_iovlen > UIO_FASTIOV)
+	{
+		iov = kmalloc(m->msg_iovlen*sizeof(struct iovec), GFP_KERNEL);
+		if (!iov)
+			return -ENOMEM;
 	}
 	
 	for(ct=0;ct<m->msg_iovlen;ct++)
@@ -70,11 +80,19 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 		err = copy_from_user(&iov[ct], &m->msg_iov[ct],
 				     sizeof(struct iovec));
 		if (err)
+		{
+			if (m->msg_iovlen > UIO_FASTIOV)
+				kfree(iov);
 			return err;
+		}
 		
 		err = verify_area(mode, iov[ct].iov_base, iov[ct].iov_len);
 		if(err)
+		{
+			if (m->msg_iovlen > UIO_FASTIOV)
+				kfree(iov);
 			return err;
+		}
 		len+=iov[ct].iov_len;
 	}
 	m->msg_iov=&iov[0];

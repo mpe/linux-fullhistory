@@ -132,7 +132,7 @@ restart:
 		cli();
 		skb=skb_peek(&sk->receive_queue);
 		if(skb!=NULL)
-			skb->users++;
+			atomic_inc(&skb->users);
 		restore_flags(flags);
 		if(skb==NULL)		/* shouldn't happen but .. */
 			goto restart;
@@ -141,7 +141,6 @@ restart:
 	skb = skb_dequeue(&sk->receive_queue);
 	if (!skb)	/* Avoid race if someone beats us to the data */
 		goto restart;
-	skb->users++;
 	return skb;
 
 no_packet:
@@ -152,18 +151,7 @@ no_packet:
 
 void skb_free_datagram(struct sock * sk, struct sk_buff *skb)
 {
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
-	skb->users--;
-	if(skb->users <= 0) {
-		/* See if it needs destroying */
-		/* Been dequeued by someone - ie it's read */
-		if(!skb->next && !skb->prev)
-			kfree_skb(skb,FREE_READ);
-	}
-	restore_flags(flags);
+	kfree_skb(skb, FREE_READ);
 	release_sock(sk);
 }
 
@@ -204,8 +192,10 @@ int skb_copy_datagram_iovec(struct sk_buff *skb, int offset, struct iovec *to,
  *	Now does seqpacket.
  */
 
-int datagram_select(struct sock *sk, int sel_type, select_table *wait)
+int datagram_select(struct socket *sock, int sel_type, select_table *wait)
 {
+	struct sock *sk = sock->sk;
+
 	if (sk->err)
 		return 1;
 	switch(sel_type)

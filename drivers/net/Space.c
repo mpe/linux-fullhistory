@@ -41,6 +41,7 @@
 extern int tulip_probe(struct device *dev);
 extern int hp100_probe(struct device *dev);
 extern int ultra_probe(struct device *dev);
+extern int ultramca_probe(struct device *dev);
 extern int wd_probe(struct device *dev);
 extern int el2_probe(struct device *dev);
 extern int ne_probe(struct device *dev);
@@ -63,8 +64,10 @@ extern int el1_probe(struct device *);
 extern int wavelan_probe(struct device *);
 #endif	/* defined(CONFIG_WAVELAN) */
 extern int el16_probe(struct device *);
+extern int elmc_probe(struct device *);
 extern int elplus_probe(struct device *);
 extern int ac3200_probe(struct device *);
+extern int es_probe(struct device *);
 extern int e2100_probe(struct device *);
 extern int ni52_probe(struct device *);
 extern int ni65_probe(struct device *);
@@ -110,6 +113,9 @@ ethif_probe(struct device *dev)
 #endif	
 #if defined(CONFIG_ULTRA)
 	&& ultra_probe(dev)
+#if defined(CONFIG_MCA)
+        && ultramca_probe(dev)
+#endif
 #endif
 #if defined(CONFIG_SMC9194)
 	&& smc_init(dev)
@@ -128,6 +134,9 @@ ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_AC3200		/* Ansel Communications EISA 3200. */
 	&& ac3200_probe(dev)
+#endif
+#ifdef CONFIG_ES3210
+	&& es_probe(dev)
 #endif
 #ifdef CONFIG_E2100		/* Cabletron E21xx series. */
 	&& e2100_probe(dev)
@@ -179,6 +188,9 @@ ethif_probe(struct device *dev)
 #endif	/* defined(CONFIG_WAVELAN) */
 #ifdef CONFIG_EL16		/* 3c507 */
 	&& el16_probe(dev)
+#endif
+#ifdef CONFIG_ELMC		/* 3c523 */
+	&& elmc_probe(dev)
 #endif
 #ifdef CONFIG_ELPLUS		/* 3c505 */
 	&& elplus_probe(dev)
@@ -402,7 +414,6 @@ struct device eql_dev = {
 
 #endif 
 #ifdef CONFIG_NET_IPIP
-#ifdef CONFIG_IP_FORWARD
 	extern int tunnel_init(struct device *);
 	
 	static struct device tunnel_dev1 = 
@@ -435,7 +446,6 @@ struct device eql_dev = {
 #   undef	NEXT_DEV
 #   define	NEXT_DEV	(&tunnel_dev0)
 
-#endif 
 #endif
 
 #ifdef CONFIG_AP1000

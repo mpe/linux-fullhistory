@@ -145,6 +145,10 @@
 #include "wd7000.h"
 #endif
 
+#ifdef CONFIG_SCSI_IBMMCA
+#include "ibmmca.h"
+#endif
+
 #ifdef CONFIG_SCSI_EATA
 #include "eata.h"
 #endif
@@ -163,6 +167,10 @@
 
 #ifdef CONFIG_SCSI_SUNESP
 #include "esp.h"
+#endif
+
+#ifdef CONFIG_BLK_DEV_IDESCSI
+#include "ide-scsi.h"
 #endif
 
 #ifdef CONFIG_SCSI_DEBUG
@@ -291,6 +299,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_7000FASST
     WD7000,
 #endif
+#ifdef CONFIG_SCSI_IBMMCA
+    IBMMCA,
+#endif
 #ifdef CONFIG_SCSI_EATA
     EATA,
 #endif
@@ -302,6 +313,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_SUNESP
     SCSI_SPARC_ESP,
+#endif
+#ifdef CONFIG_BLK_DEV_IDESCSI
+    IDESCSI,
 #endif
 #ifdef CONFIG_SCSI_DEBUG
     SCSI_DEBUG,

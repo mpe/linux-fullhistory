@@ -52,15 +52,27 @@ gdt:
 
 	.word	0,0,0,0		! unused
 
-	.word	0x07FF		! 8Mb - limit=2047 (2048*4096=8Mb)
-	.word	0x0000		! base address=0
-	.word	0x9A00		! code read/exec
-	.word	0x00C0		! granularity=4096, 386
+!walken modif
+        .word   0xFFFF          ! 4Gb - (0x100000*0x1000 = 4Gb)
+        .word   0x0000          ! base address=0
+        .word   0x9A00          ! code read/exec
+        .word   0x00CF          ! granularity=4096, 386 (+5th nibble of limit)
 
-	.word	0x07FF		! 8Mb - limit=2047 (2048*4096=8Mb)
-	.word	0x0000		! base address=0
-	.word	0x9200		! data read/write
-	.word	0x00C0		! granularity=4096, 386
+        .word   0xFFFF          ! 4Gb - (0x100000*0x1000 = 4Gb)
+        .word   0x0000          ! base address=0
+        .word   0x9200          ! data read/write
+        .word   0x00CF          ! granularity=4096, 386 (+5th nibble of limit)
+!walken modif
+
+!	.word	0x07FF		! 8Mb - limit=2047 (2048*4096=8Mb)
+!	.word	0x0000		! base address=0
+!	.word	0x9A00		! code read/exec
+!	.word	0x00C0		! granularity=4096, 386
+
+!	.word	0x07FF		! 8Mb - limit=2047 (2048*4096=8Mb)
+!	.word	0x0000		! base address=0
+!	.word	0x9200		! data read/write
+!	.word	0x00C0		! granularity=4096, 386
 
 idt_48:
 	.word	0			! idt limit=0

@@ -14,6 +14,7 @@
  *
  *	History
  *	Rose 001	Jonathan(G4KLX)	Cloned from af_netrom.c.
+ *			Alan(GW4PTS)	Hacked up for newer API stuff
  */
   
 #include <linux/config.h>
@@ -57,6 +58,8 @@ int sysctl_rose_no_activity_timeout     = ROSE_DEFAULT_IDLE;
 int sysctl_rose_routing_control         = 1;
 
 static unsigned int lci = 1;
+
+struct proto_ops rose_proto_ops;
 
 static struct sock *volatile rose_list = NULL;
 
@@ -407,11 +410,8 @@ static int rose_setsockopt(struct socket *sock, int level, int optname,
 	struct sock *sk;
 	int err, opt;
 
-	sk = (struct sock *)sock->data;
+	sk = (struct sock *)sock->sk;
 	
-	if (level == SOL_SOCKET)
-		return sock_setsockopt(sk, level, optname, optval, optlen);
-
 	if (level != SOL_ROSE)
 		return -EOPNOTSUPP;
 
@@ -471,10 +471,7 @@ static int rose_getsockopt(struct socket *sock, int level, int optname,
 	int val = 0;
 	int err; 
 
-	sk = (struct sock *)sock->data;
-	
-	if (level == SOL_SOCKET)
-		return sock_getsockopt(sk, level, optname, optval, optlen);
+	sk = (struct sock *)sock->sk;
 	
 	if (level != SOL_ROSE)
 		return -EOPNOTSUPP;
@@ -526,7 +523,7 @@ static int rose_getsockopt(struct socket *sock, int level, int optname,
 
 static int rose_listen(struct socket *sock, int backlog)
 {
-	struct sock *sk = (struct sock *)sock->data;
+	struct sock *sk = (struct sock *)sock->sk;
 
 	if (sk->state != TCP_LISTEN) {
 		sk->protinfo.rose->dest_ndigis = 0;
@@ -575,6 +572,7 @@ static int rose_create(struct socket *sock, int protocol)
 
 	init_timer(&sk->timer);
 
+	sock->ops	  = &rose_proto_ops;
 	sk->socket        = sock;
 	sk->type          = sock->type;
 	sk->protocol      = protocol;
@@ -593,8 +591,8 @@ static int rose_create(struct socket *sock, int protocol)
 	sk->error_report = def_callback1;
 
 	if (sock != NULL) {
-		sock->data = (void *)sk;
-		sk->sleep  = sock->wait;
+		sock->sk = sk;
+		sk->sleep = &sock->wait;
 	}
 
 	skb_queue_head_init(&rose->ack_queue);
@@ -703,14 +701,14 @@ static struct sock *rose_make_new(struct sock *osk)
 
 static int rose_dup(struct socket *newsock, struct socket *oldsock)
 {
-	struct sock *sk = (struct sock *)oldsock->data;
+	struct sock *sk = (struct sock *)oldsock->sk;
 
 	return rose_create(newsock, sk->protocol);
 }
 
 static int rose_release(struct socket *sock, struct socket *peer)
 {
-	struct sock *sk = (struct sock *)sock->data;
+	struct sock *sk = (struct sock *)sock->sk;
 
 	if (sk == NULL) return 0;
 
@@ -759,7 +757,7 @@ static int rose_release(struct socket *sock, struct socket *peer)
 			break;
 	}
 
-	sock->data = NULL;	
+	sock->sk = NULL;	
 	sk->socket = NULL;	/* Not used, but we should do this. **/
 
 	return 0;
@@ -772,7 +770,7 @@ static int rose_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	struct device *dev;
 	ax25_address *user, *source;
 	
-	sk = (struct sock *)sock->data;
+	sk = (struct sock *)sock->sk;
 
 	if (sk->zapped == 0)
 		return -EINVAL;
@@ -815,7 +813,7 @@ static int rose_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 static int rose_connect(struct socket *sock, struct sockaddr *uaddr, int addr_len, int flags)
 {
-	struct sock *sk = (struct sock *)sock->data;
+	struct sock *sk = (struct sock *)sock->sk;
 	struct sockaddr_rose *addr = (struct sockaddr_rose *)uaddr;
 	ax25_address *user;
 	struct device *dev;
@@ -917,12 +915,12 @@ static int rose_accept(struct socket *sock, struct socket *newsock, int flags)
 	struct sock *newsk;
 	struct sk_buff *skb;
 
-	if (newsock->data)
-		sk_free(newsock->data);
+	if (newsock->sk)
+		sk_free(newsock->sk);
 
-	newsock->data = NULL;
+	newsock->sk = NULL;
 	
-	sk = (struct sock *)sock->data;
+	sk = (struct sock *)sock->sk;
 
 	if (sk->type != SOCK_SEQPACKET)
 		return -EOPNOTSUPP;
@@ -957,7 +955,7 @@ static int rose_accept(struct socket *sock, struct socket *newsock, int flags)
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_READ);
 	sk->ack_backlog--;
-	newsock->data = newsk;
+	newsock->sk = newsk;
 
 	return 0;
 }
@@ -968,7 +966,7 @@ static int rose_getname(struct socket *sock, struct sockaddr *uaddr,
 	struct sockaddr_rose *srose = (struct sockaddr_rose *)uaddr;
 	struct sock *sk;
 	
-	sk = (struct sock *)sock->data;
+	sk = (struct sock *)sock->sk;
 	
 	if (peer != 0) {
 		if (sk->state != TCP_ESTABLISHED)
@@ -1064,9 +1062,10 @@ int rose_rx_call_request(struct sk_buff *skb, struct device *dev, struct rose_ne
 	return 1;
 }
 
-static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len, int noblock, int flags)
+static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len, 
+				struct scm_cookie *scm)
 {
-	struct sock *sk = (struct sock *)sock->data;
+	struct sock *sk = (struct sock *)sock->sk;
 	struct sockaddr_rose *usrose = (struct sockaddr_rose *)msg->msg_name;
 	int err;
 	struct sockaddr_rose srose;
@@ -1074,10 +1073,7 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	unsigned char *asmptr;
 	int size;
 	
-	if (sk->err)
-		return sock_error(sk);
-
-	if (flags)
+	if (msg->msg_flags&~MSG_DONTWAIT)
 		return -EINVAL;
 
 	if (sk->zapped)
@@ -1128,11 +1124,11 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 
 	size = len + AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + ROSE_MIN_LEN;
 
-	if ((skb = sock_alloc_send_skb(sk, size, 0, 0, &err)) == NULL)
+	if ((skb = sock_alloc_send_skb(sk, size, 0, msg->msg_flags&MSG_DONTWAIT,
+			&err)) == NULL)
 		return err;
 
 	skb->sk   = sk;
-	skb->free = 1;
 	skb->arp  = 1;
 
 	skb_reserve(skb, size - len);
@@ -1183,17 +1179,14 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 }
 
 
-static int rose_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock,
-		   int flags, int *addr_len)
+static int rose_recvmsg(struct socket *sock, struct msghdr *msg, int size, 
+		   int flags, struct scm_cookie *scm)
 {
-	struct sock *sk = (struct sock *)sock->data;
+	struct sock *sk = (struct sock *)sock->sk;
 	struct sockaddr_rose *srose = (struct sockaddr_rose *)msg->msg_name;
 	int copied;
 	struct sk_buff *skb;
 	int er;
-
-	if (addr_len != NULL)
-		*addr_len = sizeof(*srose);
 
 	/*
 	 * This works for seqpacket too. The receiver has ordered the queue for
@@ -1203,7 +1196,7 @@ static int rose_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 		return -ENOTCONN;
 
 	/* Now we can treat all alike */
-	if ((skb = skb_recv_datagram(sk, flags, noblock, &er)) == NULL)
+	if ((skb = skb_recv_datagram(sk, flags, flags&MSG_DONTWAIT, &er)) == NULL)
 		return er;
 
 	if (!sk->protinfo.rose->hdrincl) {
@@ -1235,8 +1228,8 @@ static int rose_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 
 		*srose = addr;
 
-		*addr_len = sizeof(*srose);
 	}
+	msg->msg_namelen=sizeof(*srose);
 
 	skb_free_datagram(sk, skb);
 
@@ -1248,16 +1241,9 @@ static int rose_shutdown(struct socket *sk, int how)
 	return -EOPNOTSUPP;
 }
 
-static int rose_select(struct socket *sock , int sel_type, select_table *wait)
-{
-	struct sock *sk = (struct sock *)sock->data;
-
-	return datagram_select(sk, sel_type, wait);
-}
-
 static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
-	struct sock *sk = (struct sock *)sock->data;
+	struct sock *sk = (struct sock *)sock->sk;
 	int err;
 	long amount = 0;
 
@@ -1387,10 +1373,14 @@ static int rose_get_info(char *buffer, char **start, off_t offset, int length, i
 	return(len);
 } 
 
+struct net_proto_family rose_family_ops = {
+	AF_ROSE,
+	rose_create
+};
+
 struct proto_ops rose_proto_ops = {
 	AF_ROSE,
 	
-	rose_create,
 	rose_dup,
 	rose_release,
 	rose_bind,
@@ -1398,7 +1388,7 @@ struct proto_ops rose_proto_ops = {
 	rose_socketpair,
 	rose_accept,
 	rose_getname,
-	rose_select,
+	datagram_select,
 	rose_ioctl,
 	rose_listen,
 	rose_shutdown,
@@ -1416,7 +1406,7 @@ struct notifier_block rose_dev_notifier = {
 
 void rose_proto_init(struct net_proto *pro)
 {
-	sock_register(rose_proto_ops.family, &rose_proto_ops);
+	sock_register(&rose_family_ops);
 	register_netdevice_notifier(&rose_dev_notifier);
 	printk(KERN_INFO "G4KLX Rose for Linux. Version 0.1 for AX25.034 Linux 2.1\n");
 

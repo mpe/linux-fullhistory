@@ -1,7 +1,10 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
- *      21 Nov 1996 rev. 2.30 for linux 2.1.11 and 2.0.25
+ *       3 Dec 1996 rev. 2.40 for linux 2.1.14 and 2.0.27
+ *          Added queue depth adjustment.
+ *
+ *      22 Nov 1996 rev. 2.30 for linux 2.1.12 and 2.0.26
  *          The list of i/o ports to be probed can be overwritten by the
  *          "u14-34f=port0, port1,...." boot command line option.
  *          Scatter/gather lists are now allocated by a number of kmalloc
@@ -112,8 +115,8 @@
  *
  *  Here a sample configuration using two U14F boards:
  *
- U14F0: PORT 0x330, BIOS 0xc8000, IRQ 11, DMA 5, SG 32, Mbox 16, CmdLun 2, C1.
- U14F1: PORT 0x340, BIOS 0x00000, IRQ 10, DMA 6, SG 32, Mbox 16, CmdLun 2, C1.
+ U14F0: PORT 0x330, BIOS 0xc8000, IRQ 11, DMA 5, SG 32, Mbox 16, UC 1.
+ U14F1: PORT 0x340, BIOS 0x00000, IRQ 10, DMA 6, SG 32, Mbox 16, UC 1.
  *
  *  The boot controller must have its BIOS enabled, while other boards can
  *  have their BIOS disabled, or enabled to an higher address.
@@ -239,6 +242,7 @@ struct proc_dir_entry proc_scsi_u14_34f = {
 #define MAX_SAFE_SGLIST 16
 #define MAX_INTERNAL_RETRIES 64
 #define MAX_CMD_PER_LUN 2
+#define MAX_TAGGED_CMD_PER_LUN 8
 
 #define FALSE 0
 #define TRUE 1
@@ -291,8 +295,8 @@ struct mscp {
    unsigned char lun: 3;                /* SCSI logical unit number */
    unsigned int data_address PACKED;    /* transfer data pointer */
    unsigned int data_len PACKED;        /* length in bytes */
-   unsigned int command_link PACKED;    /* for linking command chains */
-   unsigned char scsi_command_link_id;  /* identifies command in chain */
+   unsigned int link_address PACKED;    /* for linking command chains */
+   unsigned char link_id;               /* identifies command in chain */
    unsigned char use_sg;                /* (if sg is set) 8 bytes per list */
    unsigned char sense_len;
    unsigned char scsi_cdbs_len;         /* 6, 10, or 12 */
@@ -341,12 +345,14 @@ static unsigned int io_port[] = {
 #define HD(board) ((struct hostdata *) &sh[board]->hostdata)
 #define BN(board) (HD(board)->board_name)
 
-#if defined(__BIG_ENDIAN)
-#define H2DEV(x) ((unsigned long)( \
+#define SWAP_BYTE(x) ((unsigned long)( \
 	(((unsigned long)(x) & 0x000000ffU) << 24) | \
 	(((unsigned long)(x) & 0x0000ff00U) <<  8) | \
 	(((unsigned long)(x) & 0x00ff0000U) >>  8) | \
 	(((unsigned long)(x) & 0xff000000U) >> 24)))
+
+#if defined(__BIG_ENDIAN)
+#define H2DEV(x) SWAP_BYTE(x)
 #else
 #define H2DEV(x) (x)
 #endif
@@ -358,6 +364,52 @@ static unsigned int io_port[] = {
 static void u14_34f_interrupt_handler(int, void *, struct pt_regs *);
 static int do_trace = FALSE;
 static int setup_done = FALSE;
+
+static void select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist) {
+   Scsi_Device *dev;
+   int j, ntag = 0, nuntag = 0, tqd, utqd; 
+   unsigned long flags;
+
+   save_flags(flags);
+   cli();
+
+   j = ((struct hostdata *) host->hostdata)->board_number;
+
+   for(dev = devlist; dev; dev = dev->next) {
+
+      if (dev->host != host) continue;
+
+      if (dev->tagged_supported) ntag++;
+      else                       nuntag++;
+      }
+
+   utqd = MAX_CMD_PER_LUN;
+
+   tqd = (host->can_queue - utqd * nuntag) / (ntag + 1);
+
+   if (tqd > MAX_TAGGED_CMD_PER_LUN) tqd = MAX_TAGGED_CMD_PER_LUN;
+
+   if (tqd < MAX_CMD_PER_LUN) tqd = MAX_CMD_PER_LUN;
+
+   for(dev = devlist; dev; dev = dev->next) {
+      char *tag_suffix = "";
+
+      if (dev->host != host) continue;
+
+      if (dev->tagged_supported) dev->queue_depth = tqd;
+      else                       dev->queue_depth = utqd;
+
+      if (dev->tagged_supported && dev->tagged_queue) tag_suffix = ", tagged";
+      else if (dev->tagged_supported) tag_suffix = ", untagged";
+
+      printk("%s: scsi%d, channel %d, id %d, lun %d, cmds/lun %d%s.\n",
+             BN(j), host->host_no, dev->channel, dev->id, dev->lun,
+             dev->queue_depth, tag_suffix);
+      }
+
+   restore_flags(flags);
+   return;
+}
 
 static inline int wait_on_busy(unsigned int iobase) {
    unsigned int loop = MAXLOOP;
@@ -415,6 +467,7 @@ static inline int port_detect(unsigned int port_base, unsigned int j,
                               Scsi_Host_Template *tpnt) {
    unsigned char irq, dma_channel, subversion, i;
    unsigned char in_byte;
+   char dma_name[16];
 
    /* Allowed BIOS base addresses (NULL indicates reserved) */
    void *bios_segment_table[8] = { 
@@ -508,6 +561,7 @@ static inline int port_detect(unsigned int port_base, unsigned int j,
    sh[j]->this_id = config_2.ha_scsi_id;
    sh[j]->can_queue = MAX_MAILBOXES;
    sh[j]->cmd_per_lun = MAX_CMD_PER_LUN;
+   sh[j]->select_queue_depths = select_queue_depths;
 
 #if defined(DEBUG_DETECT)
    {
@@ -575,6 +629,9 @@ static inline int port_detect(unsigned int port_base, unsigned int j,
 	 }
       }
 
+   if (dma_channel == NO_DMA) sprintf(dma_name, "%s", "NO DMA");
+   else                       sprintf(dma_name, "DMA %u", dma_channel);
+
    for (i = 0; i < sh[j]->can_queue; i++)
       if (! ((&HD(j)->cp[i])->sglist = kmalloc(
             sh[j]->sg_tablesize * sizeof(struct sg_list), 
@@ -584,11 +641,10 @@ static inline int port_detect(unsigned int port_base, unsigned int j,
          return FALSE;
          }
       
-   printk("%s: PORT 0x%03x, BIOS 0x%05x, IRQ %u, DMA %u, SG %d, "\
-	  "Mbox %d, CmdLun %d, C%d.\n", BN(j), sh[j]->io_port, 
-	  (int)sh[j]->base, sh[j]->irq, sh[j]->dma_channel,
-          sh[j]->sg_tablesize, sh[j]->can_queue, sh[j]->cmd_per_lun,
-	  sh[j]->hostt->use_clustering);
+   printk("%s: PORT 0x%03x, BIOS 0x%05x, IRQ %u, %s, SG %d, "\
+	  "Mbox %d, UC %d.\n", BN(j), sh[j]->io_port,
+          (int)sh[j]->base, sh[j]->irq, dma_name, sh[j]->sg_tablesize,
+          sh[j]->can_queue, sh[j]->hostt->use_clustering);
 
    if (sh[j]->max_id > 8 || sh[j]->max_lun > 8)
       printk("%s: wide SCSI support enabled, max_id %u, max_lun %u.\n",
@@ -1135,7 +1191,7 @@ static void u14_34f_interrupt_handler(int irq, void *dev_id,
 	 if ((spp->adapter_status != ASOK && HD(j)->iocount >  1000) ||
 	     (spp->adapter_status != ASOK && 
 	      spp->adapter_status != ASST && HD(j)->iocount <= 1000) ||
-	     do_trace)
+              do_trace || msg_byte(spp->target_status))
 #endif
 	    printk("%s: ihdlr, mbox %2d, err 0x%x:%x,"\
 		   " target %d.%d:%d, pid %ld, count %d.\n",

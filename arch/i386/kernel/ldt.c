@@ -61,7 +61,7 @@ static inline int limits_ok(struct modify_ldt_ldt_s *ldt_info)
 	return (last >= first && last < TASK_SIZE);
 }
 
-static int write_ldt(void * ptr, unsigned long bytecount)
+static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 {
 	struct modify_ldt_ldt_s ldt_info;
 	unsigned long *lp;
@@ -75,10 +75,10 @@ static int write_ldt(void * ptr, unsigned long bytecount)
 
 	copy_from_user(&ldt_info, ptr, sizeof(ldt_info));
 
-	if (ldt_info.contents == 3 || ldt_info.entry_number >= LDT_ENTRIES)
+	if ((ldt_info.contents == 3 && (oldmode || ldt_info.seg_not_present == 0)) || ldt_info.entry_number >= LDT_ENTRIES)
 		return -EINVAL;
 
-	if (!limits_ok(&ldt_info))
+	if (!limits_ok(&ldt_info) && (oldmode || ldt_info.seg_not_present == 0))
 		return -EINVAL;
 
 	if (!current->ldt) {
@@ -95,7 +95,14 @@ static int write_ldt(void * ptr, unsigned long bytecount)
 	
 	lp = (unsigned long *) &current->ldt[ldt_info.entry_number];
    	/* Allow LDTs to be cleared by the user. */
-   	if (ldt_info.base_addr == 0 && ldt_info.limit == 0) {
+   	if (ldt_info.base_addr == 0 && ldt_info.limit == 0
+		&& (oldmode ||
+			(  ldt_info.contents == 0
+			&& ldt_info.read_exec_only == 1
+			&& ldt_info.seg_32bit == 0
+			&& ldt_info.limit_in_pages == 0
+			&& ldt_info.seg_not_present == 1
+			&& ldt_info.useable == 0 )) ) {
 		*lp = 0;
 		*(lp+1) = 0;
 		return 0;
@@ -111,6 +118,7 @@ static int write_ldt(void * ptr, unsigned long bytecount)
 		  (ldt_info.limit_in_pages << 23) |
 		  ((ldt_info.seg_not_present ^1) << 15) |
 		  0x7000;
+	if (!oldmode) *(lp+1) |= (ldt_info.useable << 20);
 	return 0;
 }
 
@@ -119,6 +127,8 @@ asmlinkage int sys_modify_ldt(int func, void *ptr, unsigned long bytecount)
 	if (func == 0)
 		return read_ldt(ptr, bytecount);
 	if (func == 1)
-		return write_ldt(ptr, bytecount);
+		return write_ldt(ptr, bytecount, 1);
+	if (func == 0x11)
+		return write_ldt(ptr, bytecount, 0);
 	return -ENOSYS;
 }

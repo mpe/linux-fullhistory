@@ -46,7 +46,7 @@ sk_g16		NO		NO		YES		N/A
 smc-ultra	YES		YES		YES		Hardware
 sunlance	YES		YES		YES		Software(#)
 tulip		YES		YES		YES		Hardware
-wavelan		--------Buggy--------		YES		N/A
+wavelan		YES		PROMISC		YES		Hardware
 wd		YES		YES		YES		Hardware
 znet		YES		YES		YES		Software
 

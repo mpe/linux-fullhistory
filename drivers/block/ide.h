@@ -145,6 +145,9 @@ typedef unsigned char	byte;	/* used everywhere */
 #define PARTN_MASK	((1<<PARTN_BITS)-1)	/* a useful bit mask */
 #define MAX_DRIVES	2	/* per interface; 2 assumed by lots of code */
 #define SECTOR_WORDS	(512 / 4)	/* number of 32bit words per sector */
+#define IDE_LARGE_SEEK(b1,b2,t)	(((b1) > (b2) + (t)) || ((b2) > (b1) + (t)))
+#define IDE_MIN(a,b)	((a)<(b) ? (a):(b))
+#define IDE_MAX(a,b)	((a)>(b) ? (a):(b))
 
 /*
  * Timeouts for various operations:
@@ -158,6 +161,7 @@ typedef unsigned char	byte;	/* used everywhere */
 #define WAIT_PIDENTIFY	(1*HZ)	/* 1sec   - should be less than 3ms (?) */
 #define WAIT_WORSTCASE	(30*HZ)	/* 30sec  - worst case when spinning up */
 #define WAIT_CMD	(10*HZ)	/* 10sec  - maximum wait for an IRQ to happen */
+#define WAIT_MIN_SLEEP	(2*HZ/100)	/* 20msec - minimum sleep time */
 
 #if defined(CONFIG_BLK_DEV_HT6560B) || defined(CONFIG_BLK_DEV_PROMISE)
 #define SELECT_DRIVE(hwif,drive)				\
@@ -175,6 +179,7 @@ typedef unsigned char	byte;	/* used everywhere */
  * Now for the data we need to maintain per-drive:  ide_drive_t
  */
 
+#define ide_scsi	0x21
 #define ide_disk	0x20
 #define ide_cdrom	0x5
 #define ide_tape	0x1
@@ -192,6 +197,11 @@ typedef union {
 	} special_t;
 
 typedef struct ide_drive_s {
+	struct request		*queue;	/* request queue */
+	struct ide_drive_s 	*next;	/* circular list of hwgroup drives */
+	unsigned long sleep;		/* sleep until this time */
+	unsigned long service_start;	/* time we started last request */
+	unsigned long service_time;	/* service time of last request */
 	special_t	special;	/* special action flags */
 	unsigned present	: 1;	/* drive is physically present */
 	unsigned noprobe 	: 1;	/* from:  hdx=noprobe */
@@ -208,6 +218,11 @@ typedef struct ide_drive_s {
 	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
 	unsigned revalidate	: 1;	/* request revalidation */
 	unsigned bswap		: 1;	/* flag: byte swap data */
+	unsigned dsc_overlap	: 1;	/* flag: DSC overlap */
+	unsigned atapi_overlap	: 1;	/* flag: ATAPI overlap (not supported) */
+	unsigned nice0		: 1;	/* flag: give obvious excess bandwidth */
+	unsigned nice1		: 1;	/* flag: give potential excess bandwidth */
+	unsigned nice2		: 1;	/* flag: give a share in our own bandwidth */
 #if FAKE_FDISK_FOR_EZDRIVE
 	unsigned remap_0_to_1	: 1;	/* flag: partitioned with ezdrive */
 #endif /* FAKE_FDISK_FOR_EZDRIVE */
@@ -325,17 +340,17 @@ typedef struct hwgroup_s {
 	ide_handler_t		*handler;/* irq handler, if active */
 	ide_drive_t		*drive;	/* current drive */
 	ide_hwif_t		*hwif;	/* ptr to current hwif in linked-list */
-	ide_hwif_t		*next_hwif; /* next selected hwif (for tape) */
 	struct request		*rq;	/* current request */
 	struct timer_list	timer;	/* failsafe timer */
 	struct request		wrq;	/* local copy of current write rq */
 	unsigned long		poll_timeout;	/* timeout value during long polls */
+	int			active;	/* set when servicing requests */
 	} ide_hwgroup_t;
 
 /*
  * Subdrivers support.
  */
-#define IDE_SUBDRIVER_VERSION	0
+#define IDE_SUBDRIVER_VERSION	1
 
 typedef int	(ide_cleanup_proc)(ide_drive_t *);
 typedef void 	(ide_do_request_proc)(ide_drive_t *, struct request *, unsigned long);
@@ -352,6 +367,7 @@ typedef struct ide_driver_s {
 	byte				media;
 	unsigned busy			: 1;
 	unsigned supports_dma		: 1;
+	unsigned supports_dsc_overlap	: 1;
 	ide_cleanup_proc		*cleanup;
 	ide_do_request_proc		*do_request;
 	ide_end_request_proc		*end_request;
@@ -513,8 +529,7 @@ typedef enum
  * If action is ide_end, then the rq is queued at the end of the
  * request queue, and the function returns immediately without waiting
  * for the new rq to be completed. This is again intended for careful
- * use by the ATAPI tape/cdrom driver code. (Currently used by ide-tape.c,
- * when operating in the pipelined operation mode).
+ * use by the ATAPI tape/cdrom driver code.
  */
 int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t action);
  
@@ -538,7 +553,16 @@ int ide_system_bus_speed (void);
  */
 void ide_multwrite (ide_drive_t *drive, unsigned int mcount);
 
-void ide_revalidate_drives (void);
+/*
+ * ide_stall_queue() can be used by a drive to give excess bandwidth back
+ * to the hwgroup by sleeping for timeout jiffies.
+ */
+void ide_stall_queue (ide_drive_t *drive, unsigned long timeout);
+
+/*
+ * ide_get_queue() returns the queue which corresponds to a given device.
+ */
+struct request **ide_get_queue (kdev_t dev);
 
 void ide_timer_expiry (unsigned long data);
 void ide_intr (int irq, void *dev_id, struct pt_regs *regs);
@@ -559,6 +583,9 @@ void ide_init_subdrivers (void);
 extern struct file_operations ide_fops[];
 #endif
 
+#ifdef CONFIG_BLK_DEV_IDEDISK
+int idedisk_init (void);
+#endif /* CONFIG_BLK_DEV_IDEDISK */
 #ifdef CONFIG_BLK_DEV_IDECD
 int ide_cdrom_init (void);
 #endif /* CONFIG_BLK_DEV_IDECD */
@@ -568,9 +595,9 @@ int idetape_init (void);
 #ifdef CONFIG_BLK_DEV_IDEFLOPPY
 int idefloppy_init (void);
 #endif /* CONFIG_BLK_DEV_IDEFLOPPY */
-#ifdef CONFIG_BLK_DEV_IDEDISK
-int idedisk_init (void);
-#endif /* CONFIG_BLK_DEV_IDEDISK */
+#ifdef CONFIG_BLK_DEV_IDESCSI
+int idescsi_init (void);
+#endif /* CONFIG_BLK_DEV_IDESCSI */
 
 int ide_register_module (ide_module_t *module);
 void ide_unregister_module (ide_module_t *module);

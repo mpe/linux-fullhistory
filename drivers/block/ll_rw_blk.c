@@ -81,6 +81,16 @@ int * blksize_size[MAX_BLKDEV] = { NULL, NULL, };
  */
 int * hardsect_size[MAX_BLKDEV] = { NULL, NULL, };
 
+static inline struct request **get_queue(kdev_t dev)
+{
+	int major = MAJOR(dev);
+	struct blk_dev_struct *bdev = blk_dev + major;
+
+	if (bdev->queue)
+		return bdev->queue(dev);
+	return &blk_dev[major].current_request;
+}
+
 /*
  * remove the plug and let it rip..
  */
@@ -94,7 +104,7 @@ void unplug_device(void * data)
 	if (dev->current_request == &dev->plug) {
 		struct request * next = dev->plug.next;
 		dev->current_request = next;
-		if (next) {
+		if (next || dev->queue) {
 			dev->plug.next = NULL;
 			(dev->request_fn)();
 		}
@@ -111,6 +121,8 @@ void unplug_device(void * data)
  */
 static inline void plug_device(struct blk_dev_struct * dev)
 {
+	if (dev->current_request)
+		return;
 	dev->current_request = &dev->plug;
 	queue_task_irq_off(&dev->plug_tq, &tq_disk);
 }
@@ -233,7 +245,7 @@ static inline void drive_stat_acct(int cmd, unsigned long nr_sectors,
 
 void add_request(struct blk_dev_struct * dev, struct request * req)
 {
-	struct request * tmp;
+	struct request * tmp, **current_request;
 	short		 disk_index;
 
 	switch (MAJOR(req->rq_dev)) {
@@ -255,12 +267,14 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	}
 
 	req->next = NULL;
+	current_request = get_queue(req->rq_dev);
 	cli();
 	if (req->bh)
 		mark_buffer_clean(req->bh);
-	if (!(tmp = dev->current_request)) {
-		dev->current_request = req;
-		(dev->request_fn)();
+	if (!(tmp = *current_request)) {
+		*current_request = req;
+		if (dev->current_request != &dev->plug)
+			(dev->request_fn)();
 		sti();
 		return;
 	}
@@ -358,7 +372,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	 * Try to coalesce the new request with old requests
 	 */
 	cli();
-	req = blk_dev[major].current_request;
+	req = *get_queue(bh->b_rdev);
 	if (!req) {
 		/* MD and loop can't handle plugging without deadlocking */
 		if (major != MD_MAJOR && major != LOOP_MAJOR)
@@ -378,7 +392,8 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 		 * All other drivers need to jump over the first entry, as that
 		 * entry may be busy being processed and we thus can't change it.
 		 */
-	        req = req->next;
+		if (req == blk_dev[major].current_request)
+	        	req = req->next;
 		if (!req)
 			break;
 		/* fall through */
@@ -614,6 +629,7 @@ int blk_dev_init(void)
 
 	for (dev = blk_dev + MAX_BLKDEV; dev-- != blk_dev;) {
 		dev->request_fn      = NULL;
+		dev->queue           = NULL;
 		dev->current_request = NULL;
 		dev->plug.rq_status  = RQ_INACTIVE;
 		dev->plug.cmd        = -1;
@@ -642,6 +658,9 @@ int blk_dev_init(void)
 #endif
 #ifdef CONFIG_BLK_DEV_HD
 	hd_init();
+#endif
+#ifdef CONFIG_BLK_DEV_PS2
+	ps2esdi_init();
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	xd_init();

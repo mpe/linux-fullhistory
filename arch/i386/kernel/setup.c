@@ -53,6 +53,12 @@ char hlt_works_ok = 1;		/* set if the "hlt" instruction works */
  * Bus types ..
  */
 int EISA_bus = 0;
+int MCA_bus = 0;
+
+/* for MCA, but anyone else can use it if they want */
+unsigned int machine_id = 0;
+unsigned int machine_submodel_id = 0;
+unsigned int BIOS_revision = 0;
 
 /*
  * Setup options
@@ -62,6 +68,10 @@ struct screen_info screen_info;
 #ifdef CONFIG_APM
 struct apm_bios_info apm_bios_info;
 #endif
+struct sys_desc_table_struct {
+	unsigned short length;
+	unsigned char table[0];
+};
 
 unsigned char aux_device_present;
 
@@ -94,6 +104,7 @@ extern char empty_zero_page[PAGE_SIZE];
 #define KERNEL_START (*(unsigned long *) (PARAM+0x214))
 #define INITRD_START (*(unsigned long *) (PARAM+0x218))
 #define INITRD_SIZE (*(unsigned long *) (PARAM+0x21c))
+#define SYS_DESC_TABLE (*(struct sys_desc_table_struct*)(PARAM+0x220))
 #define COMMAND_LINE ((char *) (PARAM+2048))
 #define COMMAND_LINE_SIZE 256
 
@@ -124,6 +135,12 @@ void setup_arch(char **cmdline_p,
 #ifdef CONFIG_APM
 	apm_bios_info = APM_BIOS_INFO;
 #endif
+	if( SYS_DESC_TABLE.length != 0 ) {
+		MCA_bus = SYS_DESC_TABLE.table[3] &0x2;
+		machine_id = SYS_DESC_TABLE.table[0];
+		machine_submodel_id = SYS_DESC_TABLE.table[1];
+		BIOS_revision = SYS_DESC_TABLE.table[2];
+	}
 	aux_device_present = AUX_DEVICE_INFO;
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
 	memory_end &= PAGE_MASK;
@@ -199,7 +216,7 @@ void setup_arch(char **cmdline_p,
 	/* request io space for devices used on all i[345]86 PC'S */
 	request_region(0x00,0x20,"dma1");
 	request_region(0x40,0x20,"timer");
-	request_region(0x80,0x20,"dma page reg");
+	request_region(0x80,0x10,"dma page reg");
 	request_region(0xc0,0x20,"dma2");
 	request_region(0xf0,0x10,"npu");
 }

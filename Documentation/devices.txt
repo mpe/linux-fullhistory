@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		   Last revised: November 18, 1996
+		    Last revised: December 7, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -22,7 +22,7 @@ where that applies (e.g. busmice), please contact me with the
 appropriate device information.  Also, if you have additional
 information regarding any of the devices listed below, or if I have
 made a mistake, I would greatly appreciate a note.  When sending me
-mail, please include the word "device" in the subject so your mail
+mail, *please* include the word "device" in the subject so your mail
 won't accidentally get buried!
 
 Allocations marked (68k/Amiga) apply to Linux/68k on the Amiga
@@ -160,18 +160,19 @@ reply.
 		 64 = /dev/ttyS0	First serial port
 		      ...
 		127 = /dev/ttyS63	64th serial port
-		128 = /dev/ptyp0	First pseudo-tty master
+		128 = /dev/ptyp0	First old pseudo-tty master
 		      ...
-		191 = /dev/ptysf	64th pseudo-tty master
-		192 = /dev/ttyp0	First pseudo-tty slave
+		191 = /dev/ptysf	64th old pseudo-tty master
+		192 = /dev/ttyp0	First old pseudo-tty slave
 		      ...
-		255 = /dev/ttysf	64th pseudo-tty slave
+		255 = /dev/ttysf	64th old pseudo-tty slave
 
 		For compatibility with previous versions of Linux, the
-		first 64 PTYs are replicated under this device
-		number.  This use will be obsolescent with the release
-		of Linux 1.4 and may be removed in a future version of
-		Linux.
+		first 64 PTYs are replicated under this device number.
+		This use is deprecated with the release of Linux 2.0
+		and may be removed in a future version of Linux.  To
+		ensure proper operation, do not mix old and new PTY
+		devices.
 
   5 char	Alternate TTY devices
     		  0 = /dev/tty		Current TTY device
@@ -207,7 +208,7 @@ reply.
 
 		The loopback devices are used to mount filesystems not
 		associated with block devices.  The binding to the
-		loopback devices is usually handled by mount(8).
+		loopback devices is handled by mount(8) or losetup(8).
 
   8 block	SCSI disk devices
     		  0 = /dev/sda		First SCSI disk whole disk
@@ -813,7 +814,31 @@ reply.
 		assigned official numbers, these ranges should be
 		used, in order to avoid conflicting with future assignments.
 
- 64-119		UNALLOCATED
+ 64 char	ENskip kernel encryption package
+		  0 = /dev/enskip	Communication with ENskip kernel module
+
+ 65 char	Sundance "plink" Transputer boards
+		  0 = /dev/plink0	First plink device
+		  1 = /dev/plink1	Second plink device
+		  2 = /dev/plink2	Third plink device
+		  3 = /dev/plink3	Fourth plink device
+		 64 = /dev/rplink0	First plink device, raw
+		 65 = /dev/rplink1	Second plink device, raw
+		 66 = /dev/rplink2	Third plink device, raw
+		 67 = /dev/rplink3	Fourth plink device, raw
+		128 = /dev/plink0d	First plink device, debug
+		129 = /dev/plink1d	Second plink device, debug
+		130 = /dev/plink2d	Third plink device, debug
+		131 = /dev/plink3d	Fourth plink device, debug
+		192 = /dev/rplink0d	First plink device, raw, debug
+		193 = /dev/rplink1d	Second plink device, raw, debug
+		194 = /dev/rplink2d	Third plink device, raw, debug
+		195 = /dev/rplink3d	Fourth plink device, raw, debug
+
+		This is a commercial driver; contact James Howes
+		<jth@prosig.demon.co.uk> for information.
+
+ 66-119		UNALLOCATED
 
 120-127		LOCAL/EXPERIMENTAL USE
 
@@ -822,6 +847,7 @@ reply.
 240-254		LOCAL/EXPERIMENTAL USE
 
 255		RESERVED
+
 
 
 

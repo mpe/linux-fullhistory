@@ -10,6 +10,13 @@
 O_TARGET := 802.o
 O_OBJS	  = p8023.o sysctl_net_802.o
 
+ifeq ($(CONFIG_LLC),y)
+SUB_DIRS += transit
+O_OBJS += llc_macinit.o llc_sendpdu.o llc_utility.o cl2llc.o
+
+
+endif
+
 ifdef CONFIG_TR
 O_OBJS += tr.o
 endif
@@ -29,6 +36,9 @@ endif
 endif
 
 include $(TOPDIR)/Rules.make
+
+cl2llc.c: cl2llc.pre
+	sed -f ./pseudo/opcd2num.sed cl2llc.pre >cl2llc.c
 
 tar:
 		tar -cvf /dev/f1 .

@@ -307,6 +307,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_IBMMCA),y)
+L_OBJS += ibmmca.o
+else
+  ifeq ($(CONFIG_SCSI_IBMMCA),m)
+  M_OBJS += ibmmca.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_T128),y)
 L_OBJS += t128.o
 else
@@ -344,6 +352,14 @@ L_OBJS += NCR53c406a.o
 else
   ifeq ($(CONFIG_SCSI_NCR53C406A),m)
   M_OBJS += NCR53c406a.o
+  endif
+endif
+
+ifeq ($(CONFIG_BLK_DEV_IDESCSI),y)
+L_OBJS += ide-scsi.o
+else
+  ifeq ($(CONFIG_BLK_DEV_IDESCSI),m)
+  M_OBJS += ide-scsi.o
   endif
 endif
 

@@ -44,11 +44,6 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 
-#ifdef ALIAS_USER_LAND_DEBUG
-#include "net_alias.h"
-#include "user_stubs.h"
-#endif
-
 #include <linux/net_alias.h>
 
 #ifdef CONFIG_KERNELD
@@ -59,7 +54,7 @@
  * Only allow the following flags to pass from main device to aliases
  */
 
-#define  NET_ALIAS_IFF_MASK   (IFF_UP|IFF_BROADCAST|IFF_RUNNING|IFF_NOARP|IFF_LOOPBACK|IFF_POINTOPOINT)
+#define  NET_ALIAS_IFF_MASK   (IFF_UP|IFF_RUNNING|IFF_NOARP|IFF_LOOPBACK|IFF_POINTOPOINT|IFF_BROADCAST|IFF_MULTICAST)
 
 static struct net_alias_type * nat_getbytype(int type);
 static int nat_attach_chg(struct net_alias_type *nat, int delta);
@@ -296,6 +291,8 @@ net_alias_devsetup(struct net_alias *alias, struct net_alias_type *nat,
     dev->mtu = main_dev->mtu;
     dev->pa_alen = main_dev->pa_alen;
     dev->hard_header = main_dev->hard_header;
+    dev->hard_header_cache = main_dev->hard_header_cache;
+    dev->header_cache_update = main_dev->header_cache_update;
     dev->rebuild_header = main_dev->rebuild_header;
   }
   

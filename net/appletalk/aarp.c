@@ -115,8 +115,7 @@ static void aarp_send_query(struct aarp_entry *a)
 	skb_reserve(skb,dev->hard_header_len+aarp_dl->header_length);
 	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));
 	skb->arp	=	1;
-	skb->free	=	1;
-	skb->dev	=	a->dev;
+	skb->dev	=	dev;
 	
 	/*
 	 *	Set up the ARP.
@@ -149,8 +148,9 @@ static void aarp_send_query(struct aarp_entry *a)
 	/*
 	 *	Send it.
 	 */	
-	 
-	dev_queue_xmit(skb, dev, SOPRI_NORMAL);
+	
+	skb->priority = SOPRI_NORMAL; 
+	dev_queue_xmit(skb);
 	
 	/*
 	 *	Update the sending count
@@ -175,7 +175,6 @@ static void aarp_send_reply(struct device *dev, struct at_addr *us, struct at_ad
 	skb_reserve(skb,dev->hard_header_len+aarp_dl->header_length);
 	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));	 
 	skb->arp	=	1;
-	skb->free	=	1;
 	skb->dev	=	dev;
 	
 	/*
@@ -212,8 +211,8 @@ static void aarp_send_reply(struct device *dev, struct at_addr *us, struct at_ad
 	/*
 	 *	Send it.
 	 */	
-	 
-	dev_queue_xmit(skb, dev, SOPRI_NORMAL);
+	skb->priority = SOPRI_NORMAL;
+	dev_queue_xmit(skb);
 	
 }
 
@@ -239,7 +238,6 @@ void aarp_send_probe(struct device *dev, struct at_addr *us)
 	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));
 	
 	skb->arp	=	1;
-	skb->free	=	1;
 	skb->dev	=	dev;
 	
 	/*
@@ -273,8 +271,8 @@ void aarp_send_probe(struct device *dev, struct at_addr *us)
 	/*
 	 *	Send it.
 	 */	
-	 
-	dev_queue_xmit(skb, dev, SOPRI_NORMAL);
+	skb->priority = SOPRI_NORMAL; 
+	dev_queue_xmit(skb);
 	
 }
 	
@@ -467,9 +465,11 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 		skb->data[2]=ft;
 		 
 		if(skb->sk==NULL)
-			dev_queue_xmit(skb, skb->dev, SOPRI_NORMAL);
+			skb->priority = SOPRI_NORMAL;
 		else
-			dev_queue_xmit(skb, skb->dev, skb->sk->priority);
+			skb->priority = skb->sk->priority;
+		skb->dev = dev;
+		dev_queue_xmit(skb);
 		return 1;
 	}	
 	 
@@ -497,9 +497,10 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	{
 		ddp_dl->datalink_header(ddp_dl, skb, ddp_eth_multicast);
 		if(skb->sk==NULL)
-			dev_queue_xmit(skb, skb->dev, SOPRI_NORMAL);
+			skb->priority = SOPRI_NORMAL;
 		else
-			dev_queue_xmit(skb, skb->dev, skb->sk->priority);
+			skb->priority = skb->sk->priority;
+		dev_queue_xmit(skb);
 		restore_flags(flags);
 		return 1;
 	}
@@ -513,9 +514,10 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 		a->expires_at=jiffies+AARP_EXPIRY_TIME*10;
 		ddp_dl->datalink_header(ddp_dl, skb, a->hwaddr);
 		if(skb->sk==NULL)
-			dev_queue_xmit(skb, skb->dev, SOPRI_NORMAL);
+			skb->priority = SOPRI_NORMAL;
 		else
-			dev_queue_xmit(skb, skb->dev, skb->sk->priority);
+			skb->priority = skb->sk->priority;
+		dev_queue_xmit(skb);
 		restore_flags(flags);
 		return 1;
 	}
@@ -621,9 +623,10 @@ static void aarp_resolved(struct aarp_entry **list, struct aarp_entry *a, int ha
 				a->expires_at=jiffies+AARP_EXPIRY_TIME*10;
 				ddp_dl->datalink_header(ddp_dl,skb,a->hwaddr);
 				if(skb->sk==NULL)
-					dev_queue_xmit(skb, skb->dev, SOPRI_NORMAL);
+					skb->priority = SOPRI_NORMAL;
 				else
-					dev_queue_xmit(skb, skb->dev, skb->sk->priority);
+					skb->priority = skb->sk->priority;
+				dev_queue_xmit(skb);
 			}
 		}
 		else

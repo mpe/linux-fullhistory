@@ -563,7 +563,6 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack, __u32 *seq,
 		*seq_rtt = now - skb->when;
 				
 		skb_unlink(skb);		
-		skb->free = 1;
 		
 		kfree_skb(skb, FREE_WRITE);
 	}
@@ -1142,7 +1141,8 @@ static void tcp_data_snd_check(struct sock *sk)
 			 */
 
 			tcp_write_xmit(sk);
-			wake_up_interruptible(sk->sleep);
+			if(!sk->dead)
+				sk->write_space(sk);
 		}
 		else if (sk->packets_out == 0 && !tp->pending)
  		{
@@ -1278,8 +1278,8 @@ static void prune_queue(struct sock *sk)
 }
 
 
-void tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
-			 struct tcphdr *th, __u16 len)
+int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
+			struct tcphdr *th, __u16 len)
 {
 	struct tcp_opt *tp;
 	int queued = 0;
@@ -1323,7 +1323,7 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			tcp_data_snd_check(sk);
 
 			kfree_skb(skb, FREE_READ);
-			return;
+			return 0;
 			
 		}
 		else if (skb->ack_seq == tp->snd_una)
@@ -1348,7 +1348,7 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			else
 				tcp_send_ack(sk);
 
-			return;
+			return 0;
 		}
 	}
 
@@ -1365,7 +1365,7 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			}
 			tcp_send_ack(sk);
 			kfree_skb(skb, FREE_READ);
-			return;
+			return 0;
 		}
 	}
 
@@ -1374,14 +1374,14 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 		printk(KERN_DEBUG "syn in established state\n");
 		tcp_reset(sk, skb);
 		kfree_skb(skb, FREE_READ);
-		return;
+		return 1;
 	}
 	
 	if(th->rst)
 	{
 		tcp_reset(sk,skb);
 		kfree_skb(skb, FREE_READ);
-		return;
+		return 0;
 	}
 	
 	if(th->ack)
@@ -1426,10 +1426,9 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	 *	And done
 	 */	
 	
-	if (queued)
-		return;
-
-	kfree_skb(skb, FREE_READ);
+	if (!queued)
+		kfree_skb(skb, FREE_READ);
+	return 0;
 }
 		
 
@@ -1559,12 +1558,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			tcp_set_state(sk, TCP_ESTABLISHED);
 			rcv_mss = tcp_parse_options(th);
 			
-			if (rcv_mss == 0)
-			{
-				rcv_mss = 536;
-			}
-
-			sk->mss = min(sk->mss, rcv_mss);
+			if (rcv_mss)
+				sk->mss = min(sk->mss, rcv_mss);
 			
 			sk->dummy_th.dest = th->source;
 			sk->copied_seq = tp->rcv_nxt;
@@ -1625,8 +1620,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			__u32 isn;
 			int err;
 
-                        atomic_sub(skb->truesize, &sk->rmem_alloc);
-                        skb->sk = NULL;
+			skb_orphan(skb);
                         sk->err = ECONNRESET;
                         tcp_set_state(sk, TCP_CLOSE);
                         sk->shutdown = SHUTDOWN_MASK;
@@ -1638,9 +1632,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			if (sk == NULL)
 				goto discard;
 
-			skb->sk = sk;
+			skb_set_owner_r(skb, sk);
 			tp = &sk->tp_pinfo.af_tcp;
-			atomic_add(skb->truesize, &sk->rmem_alloc);
 			
 			err = tp->af_specific->conn_request(sk, skb, opt, isn);
 

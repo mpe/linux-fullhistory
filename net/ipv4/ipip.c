@@ -20,7 +20,7 @@
  */
  
 #include <linux/module.h>
-
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -30,6 +30,8 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/firewall.h>
+#include <linux/if_arp.h>
+#include <linux/mroute.h>
 
 #include <net/datalink.h>
 #include <net/sock.h>
@@ -38,21 +40,26 @@
 #include <net/protocol.h>
 #include <net/ipip.h>
 
+void ipip_err(struct sk_buff *skb, unsigned char *dp)
+{
+	/* NI */
+	return;
+}
+
 /*
  *	The IPIP protocol driver.
  *
  *	On entry here
  *		skb->data is the original IP header
- *		skb->ip_hdr points to the initial IP header.
- *		skb->h.raw points at the new header.
+ *		skb->nh points to the initial IP header.
+ *		skb->h points at the new header.
  */
 
-int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt, 
-		__u32 daddr, unsigned short len, __u32 saddr,
-                                   int redo, struct inet_protocol *protocol)
+int ipip_rcv(struct sk_buff *skb, unsigned short len)
 {
-	/* Don't unlink in the middle of a turnaround */
-	MOD_INC_USE_COUNT;
+	struct device *dev;
+	struct iphdr *iph;
+
 #ifdef TUNNEL_DEBUG
 	printk("ipip_rcv: got a packet!\n");
 #endif
@@ -60,15 +67,15 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Discard the original IP header
 	 */
 	 
-	skb_pull(skb, ((struct iphdr *)skb->data)->ihl<<2);
+	skb_pull(skb, skb->h.raw - skb->nh.raw);
 	
 	/*
 	 *	Adjust pointers
 	 */
 	 
-	skb->h.iph=(struct iphdr *)skb->data;
-	skb->ip_hdr=(struct iphdr *)skb->data;
-	memset(skb->proto_priv, 0, sizeof(struct options));
+	iph = skb->nh.iph;
+	skb->nh.iph = skb->h.ipiph;
+	memset(&(IPCB(skb)->opt), 0, sizeof(struct ip_options));
 
 	/*
 	 *	If you want to add LZ compressed IP or things like that here,
@@ -77,8 +84,35 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	
 	skb->protocol = htons(ETH_P_IP);
 	skb->ip_summed = 0;
+	skb->pkt_type = PACKET_HOST;
+
+	/*
+	 * Is it draconic? I do not think so. --ANK
+	 */
+	dev = ip_dev_find_tunnel(iph->daddr, iph->saddr);
+	if (dev == NULL) {
+#ifdef CONFIG_IP_MROUTE
+		int vif;
+
+		if (!MULTICAST(skb->nh.iph->daddr) ||
+		    !ipv4_config.multicast_route ||
+		    LOCAL_MCAST(skb->nh.iph->daddr) ||
+		    (vif=ip_mr_find_tunnel(iph->daddr, iph->saddr)) < 0)
+		{
+#endif
+			kfree_skb(skb, FREE_READ);
+			return -EINVAL;
+#ifdef CONFIG_IP_MROUTE
+		}
+		IPCB(skb)->flags |= IPSKB_TUNNELED;
+		IPCB(skb)->vif = vif;
+		dev = skb->dev;
+#endif
+	}
+	skb->dev = dev;
+	dst_release(skb->dst);
+	skb->dst = NULL;
 	netif_rx(skb);
-	MOD_DEC_USE_COUNT;
 	return(0);
 }
 
@@ -86,10 +120,7 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 static struct inet_protocol ipip_protocol = {
   ipip_rcv,             /* IPIP handler          */
-#if 0
-  NULL,                 /* Will be UDP fraglist handler */
-#endif
-  NULL,                 /* TUNNEL error control    */
+  ipip_err,             /* TUNNEL error control */
   0,                    /* next                 */
   IPPROTO_IPIP,         /* protocol ID          */
   0,                    /* copy                 */

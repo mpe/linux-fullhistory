@@ -65,12 +65,10 @@ void ax25_clear_queues(ax25_cb *ax25)
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&ax25->write_queue)) != NULL) {
-		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
 	}
 
 	while ((skb = skb_dequeue(&ax25->ack_queue)) != NULL) {
-		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
 	}
 
@@ -98,7 +96,6 @@ void ax25_frames_acked(ax25_cb *ax25, unsigned short nr)
 	if (ax25->va != nr) {
 		while (skb_peek(&ax25->ack_queue) != NULL && ax25->va != nr) {
 		        skb = skb_dequeue(&ax25->ack_queue);
-			skb->free = 1;
 			kfree_skb(skb, FREE_WRITE);
 			ax25->va = (ax25->va + 1) % ax25->modulus;
 			if (ax25->dama_slave)
@@ -215,10 +212,8 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int poll_bit, int type)
 
 	skb_reserve(skb, AX25_BPQ_HEADER_LEN + size_ax25_addr(ax25->digipeat));
 
-	if (ax25->sk != NULL) {
-		skb->sk = ax25->sk;
-		atomic_add(skb->truesize, &ax25->sk->wmem_alloc);
-	}
+	if (ax25->sk != NULL)
+		skb_set_owner_w(skb, ax25->sk);
 
 	/* Assume a response - address structure for DTE */
 	if (ax25->modulus == MODULUS) {
@@ -239,8 +234,6 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int poll_bit, int type)
 			dptr[1] |= (poll_bit) ? EPF : 0;
 		}
 	}
-
-	skb->free = 1;
 
 	ax25_transmit_buffer(ax25, skb, type);
 }
@@ -279,9 +272,10 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
 	dptr += build_ax25_addr(dptr, dest, src, &retdigi, C_RESPONSE, MODULUS);
 
 	skb->arp  = 1;
-	skb->free = 1;
+	skb->dev = dev;
+	skb->priority = SOPRI_NORMAL;
 
-	ax25_queue_xmit(skb, dev, SOPRI_NORMAL);
+	ax25_queue_xmit(skb);
 }
 
 /*
@@ -531,13 +525,10 @@ void ax25_kiss_cmd(ax25_cb *ax25, unsigned char cmd, unsigned char param)
 	if ((skb = alloc_skb(2, GFP_ATOMIC)) == NULL)
 		return;
 
-	skb->free = 1;
 	skb->arp = 1;
 
-	if (ax25->sk != NULL) {
-		skb->sk = ax25->sk;
-		atomic_add(skb->truesize, &ax25->sk->wmem_alloc);
-	}
+	if (ax25->sk != NULL)
+		skb_set_owner_w(skb, ax25->sk);
 
 	skb->protocol = htons(ETH_P_AX25);
 
@@ -546,7 +537,9 @@ void ax25_kiss_cmd(ax25_cb *ax25, unsigned char cmd, unsigned char param)
 	*p++=cmd;
 	*p  =param;
 
-	dev_queue_xmit(skb, ax25->device, SOPRI_NORMAL);
+	skb->dev=ax25->device;
+	skb->priority=SOPRI_NORMAL;
+	dev_queue_xmit(skb);
 }
 
 void ax25_dama_on(ax25_cb *ax25)

@@ -33,9 +33,14 @@ struct request {
 	struct request * next;
 };
 
+typedef void (request_fn_proc) (void);
+typedef struct request ** (queue_proc) (kdev_t dev);
+
 struct blk_dev_struct {
-	void (*request_fn)(void);
-	struct request * current_request;
+	request_fn_proc		*request_fn;
+	queue_proc		*queue;
+	void			*data;
+	struct request		*current_request;
 	struct request   plug;
 	struct tq_struct plug_tq;
 };

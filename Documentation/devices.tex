@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: November 18, 1996}
+\date{Last revised: December 7, 1996}
 \maketitle
 %
 \noindent
@@ -65,8 +65,8 @@ where that applies (e.g.\ busmice), please contact me with the
 appropriate device information.  Also, if you have additional
 information regarding any of the devices listed below, or if I have
 made a mistake, I would greatly appreciate a note.  When sending me
-mail, please include the word ``device'' in the subject so your mail
-won't accidentally get buried!
+mail, {\em please\/} include the word ``device'' in the subject so
+your mail won't accidentally get buried!
 
 Allocations marked (68k/Amiga) apply to Linux/68k on the Amiga
 platform only.  Allocations marked (68k/Atari) apply to Linux/68k on
@@ -185,7 +185,9 @@ reply.
 \major{58}{}{char }{Hayes ESP serial card -- alternate devices}
 \major{59}{}{char }{sf firewall package}
 \major{60}{--63}{}{Local/experimental use}
-\major{64}{--119}{}{Unallocated}
+\major{64}{}{char }{ENskip kernel encryption package}
+\major{65}{}{char }{Sundance ``plink'' Transputer boards}
+\major{66}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
 \major{128}{--239}{}{Unallocated}
 \major{240}{--254}{}{Local/experimental use}
@@ -333,19 +335,19 @@ partitioning schemes appropriate to their respective architectures.
 	\minor{64}{/dev/ttyS0}{First serial port}
 	\minordots
 	\minor{127}{/dev/ttyS63}{64th serial port}
-	\minor{128}{/dev/ptyp0}{First pseudo-tty master}
+	\minor{128}{/dev/ptyp0}{First old pseudo-tty master}
 	\minordots
-	\minor{191}{/dev/ptysf}{64th pseudo-tty master}
-	\minor{192}{/dev/ttyp0}{First pseudo-tty slave}
+	\minor{191}{/dev/ptysf}{64th old pseudo-tty master}
+	\minor{192}{/dev/ttyp0}{First old pseudo-tty slave}
 	\minordots
-	\minor{255}{/dev/ttysf}{64th pseudo-tty slave}
+	\minor{255}{/dev/ttysf}{64th old pseudo-tty slave}
 \end{devicelist}
 
 \noindent
 For compatibility with previous versions of Linux, the first 64 PTYs
-are replicated under this device number.  This use will be obsolescent
-with the release of Linux 2.0 and may be removed in a future version
-of Linux.
+are replicated under this device number.  This use is deprecated with
+the release of Linux 2.0 and may be removed in a future version of
+Linux.  To ensure proper operation, do not mix old and new PTY devices.
 
 \begin{devicelist}
 \major{ 5}{}{char }{Alternate TTY devices}
@@ -387,6 +389,11 @@ NOTE: These devices permit both read and write access.
 	\minor{1}{/dev/loop1}{Second loopback device}
 	\minordots
 \end{devicelist}
+
+\noindent
+The loopback devices are used to mount filesystems not associated with
+block devices.  The binding to the loopback devices is handled by
+{\bf mount}(8) or {\bf losetup}(8).
 
 \begin{devicelist}
 \major{ 8}{}{block}{SCSI disk devices}
@@ -471,11 +478,6 @@ physical disks.
 	\minor{138}{/dev/qcam2}{QuickCam on {\file lp2}}
 	\minor{139}{/dev/openprom}{SPARC OpenBoot PROM}
 \end{devicelist}
-
-\noindent
-The loopback devices are used to mount filesystems not associated with
-block devices.  The binding to the loopback devices is usually handled
-by {\bf mount}(8).
 
 \begin{devicelist}
 \major{11}{}{char }{Raw keyboard device}
@@ -1162,7 +1164,37 @@ For devices not assigned official numbers, these ranges should be
 used, in order to avoid conflict with future assignments.
 
 \begin{devicelist}
-\major{64}{--119}{}{Unallocated}
+\major{64}{}{char }{ENskip kernel encryption package}
+	\minor{0}{/dev/enskip}{Communication with ENskip kernel
+	module}
+\end{devicelist}
+
+\begin{devicelist}
+\major{65}{}{char }{Sundance ``plink'' Transputer boards}
+	\minor{0}{/dev/plink0}{First plink device}
+	\minor{1}{/dev/plink1}{Second plink device}
+	\minor{2}{/dev/plink2}{Third plink device}
+	\minor{3}{/dev/plink3}{Fourth plink device}
+	\minor{64}{/dev/rplink0}{First plink device, raw}
+	\minor{65}{/dev/rplink1}{Second plink device, raw}
+	\minor{66}{/dev/rplink2}{Third plink device, raw}
+	\minor{67}{/dev/rplink3}{Fourth plink device, raw}
+	\minor{128}{/dev/plink0d}{First plink device, debug}
+	\minor{129}{/dev/plink1d}{Second plink device, debug}
+	\minor{130}{/dev/plink2d}{Third plink device, debug}
+	\minor{131}{/dev/plink3d}{Fourth plink device, debug}
+	\minor{192}{/dev/rplink0d}{First plink device, raw, debug}
+	\minor{193}{/dev/rplink1d}{Second plink device, raw, debug}
+	\minor{194}{/dev/rplink2d}{Third plink device, raw, debug}
+	\minor{195}{/dev/rplink3d}{Fourth plink device, raw, debug}
+\end{devicelist}
+
+\noindent
+This is a commercial driver; contact James Howes
+$<$jth@prosig.demon.co.uk$>$ for information. 
+
+\begin{devicelist}
+\major{66}{--119}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

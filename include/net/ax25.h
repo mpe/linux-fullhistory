@@ -205,11 +205,11 @@ extern void ax25_destroy_socket(ax25_cb *);
 extern struct device *ax25rtr_get_dev(ax25_address *);
 extern int  ax25_encapsulate(struct sk_buff *, struct device *, unsigned short,
 	void *, void *, unsigned int);
-extern int  ax25_rebuild_header(unsigned char *, struct device *, unsigned long, struct sk_buff *);
+extern int  ax25_rebuild_header(struct sk_buff *);
 extern ax25_uid_assoc *ax25_uid_list;
 extern int  ax25_uid_policy;
 extern ax25_address *ax25_findbyuid(uid_t);
-extern void ax25_queue_xmit(struct sk_buff *, struct device *, int);
+extern void ax25_queue_xmit(struct sk_buff *);
 extern int  ax25_dev_is_dama_slave(struct device *);	/* dl1bke 951121 */
 
 #include <net/ax25call.h>

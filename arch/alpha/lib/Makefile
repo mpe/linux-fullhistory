@@ -8,10 +8,10 @@ OBJS  = __divqu.o __remqu.o __divlu.o __remlu.o memset.o memcpy.o io.o \
 	strchr.o strrchr.o \
 	copy_user.o clear_user.o strncpy_from_user.o strlen_user.o
 
-ifeq($(CONFIG_IPV6),y)
+ifeq ($(CONFIG_IPV6),y)
   OBJS += csum_ipv6_magic.o
 else
-  ifeq($(CONFIG_IPV6),m)
+  ifeq ($(CONFIG_IPV6),m)
     OBJS += csum_ipv6_magic.o
   endif
 endif

@@ -108,6 +108,8 @@ static struct datalink_proto	*pEII_datalink = NULL;
 static struct datalink_proto	*p8023_datalink = NULL;
 static struct datalink_proto	*pSNAP_datalink = NULL;
 
+static struct proto_ops ipx_dgram_ops;
+
 static ipx_route 	*ipx_routes = NULL;
 static ipx_interface	*ipx_interfaces = NULL;
 static ipx_interface	*ipx_primary_net = NULL;
@@ -160,9 +162,9 @@ ipxcfg_get_config_data(ipx_config_data *arg)
  */
  
 static void 
-ipx_remove_socket(ipx_socket *sk)
+ipx_remove_socket(struct sock *sk)
 {
-	ipx_socket	*s;
+	struct sock	*s;
 	ipx_interface	*intrfc;
 	unsigned long	flags;
 
@@ -202,7 +204,7 @@ ipx_remove_socket(ipx_socket *sk)
  */
  
 static void 
-ipx_destroy_socket(ipx_socket *sk)
+ipx_destroy_socket(struct sock *sk)
 {
 	struct sk_buff	*skb;
 
@@ -258,9 +260,9 @@ ipxitf_find_using_net(unsigned long net)
 
 /* Sockets are bound to a particular IPX interface. */
 static void
-ipxitf_insert_socket(ipx_interface *intrfc, ipx_socket *sk)
+ipxitf_insert_socket(ipx_interface *intrfc, struct sock *sk)
 {
-	ipx_socket	*s;
+	struct sock	*s;
 
 	sk->protinfo.af_ipx.intrfc = intrfc;
 	sk->next = NULL;
@@ -273,10 +275,10 @@ ipxitf_insert_socket(ipx_interface *intrfc, ipx_socket *sk)
 	}
 }
 
-static ipx_socket *
+static struct sock *
 ipxitf_find_socket(ipx_interface *intrfc, unsigned short port)
 {
-	ipx_socket	*s;
+	struct sock	*s;
 
 	for (s=intrfc->if_sklist; 
 		(s != NULL) && (s->protinfo.af_ipx.port != port); 
@@ -288,11 +290,11 @@ ipxitf_find_socket(ipx_interface *intrfc, unsigned short port)
 
 #ifdef CONFIG_IPX_INTERN
 
-static ipx_socket *
+static struct sock *
 ipxitf_find_internal_socket(ipx_interface *intrfc,
 			    unsigned char *node, unsigned short port)
 {
-	ipx_socket *s = intrfc->if_sklist;
+	struct sock *s = intrfc->if_sklist;
 
 	while (s != NULL)
 	{
@@ -313,7 +315,7 @@ static void
 ipxitf_down(ipx_interface *intrfc)
 {
 	ipx_interface	*i;
-	ipx_socket	*s, *t;
+	struct sock	*s, *t;
 
 	/* Delete all routes associated with this interface */
 	ipxrtr_del_routes(intrfc);
@@ -402,7 +404,7 @@ static int
 ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy) 
 {
 	ipx_packet	*ipx = (ipx_packet *)(skb->h.raw);
-	ipx_socket	*s;
+	struct sock	*s;
 
 	int is_broadcast = (memcmp(ipx->ipx_dest.node, ipx_broadcast_node,
 				   IPX_NODE_LEN) == 0);
@@ -424,7 +426,7 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 				skb1 = skb_clone(skb, GFP_ATOMIC);
 				if (skb1 != NULL)
 				{
-					skb1->arp = skb1->free = 1;
+					skb1->arp = 1;
 				}
 				else
 				{
@@ -466,7 +468,7 @@ static int
 ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy) 
 {
 	ipx_packet	*ipx = (ipx_packet *)(skb->h.raw);
-	ipx_socket	*sock1 = NULL, *sock2 = NULL;
+	struct sock	*sock1 = NULL, *sock2 = NULL;
 	struct sk_buff	*skb1 = NULL, *skb2 = NULL;
 
 	sock1 = ipxitf_find_socket(intrfc, ipx->ipx_dest.sock);
@@ -523,8 +525,8 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 	if (copy) 
 	{
 		skb1 = skb_clone(skb, GFP_ATOMIC);
-		if (skb1 != NULL) 
-			skb1->arp = skb1->free = 1;
+		if (skb1) 
+			skb1->arp=1;
 	} 
 	else 
 	{
@@ -542,7 +544,7 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 	{
 		skb2 = skb_clone(skb1, GFP_ATOMIC);
 		if (skb2 != NULL) 
-			skb2->arp = skb2->free = 1;
+			skb2->arp = 1;
 	}
 	else 
 		skb2 = skb1;
@@ -570,7 +572,7 @@ ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buff *skb)
 
 	/* Hopefully, most cases */
 	if (in_offset >= out_offset) {
-		skb->arp = skb->free = 1;
+		skb->arp = 1;
 		return skb;
 	}
 
@@ -580,7 +582,6 @@ ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buff *skb)
 	if (skb2 != NULL) {
 		skb_reserve(skb2,out_offset);
 		skb2->h.raw=skb_put(skb2,skb->len);
-		skb2->free=1;
 		skb2->arp=1;
 		memcpy(skb2->h.raw, skb->h.raw, skb->len);
 	}
@@ -622,11 +623,7 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 			/*
 			 *	Don't charge sender
 			 */
-			if(skb->sk)
-			{
-				atomic_sub(skb->truesize, &skb->sk->wmem_alloc);
-				skb->sk=NULL;
-			}
+			skb_orphan(skb);
 			/*
 			 *	Will charge receiver
 			 */
@@ -637,11 +634,8 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 		 */
 		if (memcmp(ipx_broadcast_node, node, IPX_NODE_LEN) == 0) 
 		{
-			if (!send_to_wire && skb->sk)
-			{
-				atomic_sub(skb->truesize, &skb->sk->wmem_alloc);
-				skb->sk=NULL;
-			}
+			if (!send_to_wire)
+				skb_orphan(skb);
 			ipxitf_demux_socket(intrfc, skb, send_to_wire);
 			if (!send_to_wire) 
 				return 0;
@@ -702,14 +696,14 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 	 */
 	 
 	dump_pkt("IPX snd:", (ipx_packet *)skb->h.raw);
-	dump_data("ETH hdr:", skb->data, skb->h.raw - skb->data);
+	dump_data("ETH hdr:", skb->sk, skb->h.raw - skb->sk);
 #endif
 
 	/*
 	 *	Send it out 
 	 */
-	 
-	dev_queue_xmit(skb, dev, SOPRI_NORMAL);
+	skb->priority = SOPRI_NORMAL; 
+	dev_queue_xmit(skb);
 	return 0;
 }
 
@@ -766,6 +760,74 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 				ipx_frame_name(intrfc->if_dlink_type));
 		}
 	}
+
+#ifdef CONFIG_IPX_PPROP_ROUTING
+	if( ipx->ipx_type == IPX_TYPE_PPROP && ipx->ipx_tctrl < 8 ) {
+	  int i;
+          ipx_interface *ifcs;
+	  struct sk_buff *skb2;
+  	  long *l;
+	  char *c;
+
+#ifdef DEBUG_IPX_PPROP_ROUTING
+	  printk(KERN_INFO "IPX: PPROP packet received\n"
+		 " Src: %8x:%02x:%02x:%02x:%02x:%02x:%02x:%d/%d\n",
+		 htonl(ipx->ipx_source.net),
+		 ipx->ipx_source.node[0], ipx->ipx_source.node[1],
+		 ipx->ipx_source.node[2], ipx->ipx_source.node[3],
+		 ipx->ipx_source.node[4], ipx->ipx_source.node[5],
+		 htons(ipx->ipx_source.sock),
+		 htons(ipx->ipx_dest.sock)
+		 );
+#endif
+
+	  c = (char *) skb->data;
+	  c += sizeof( struct ipx_packet );
+
+	  l = (long *) c;
+
+#ifdef DEBUG_IPX_PPROP_ROUTING
+	  printk( "IPX: Routing PPROP from net num %08x\n", (unsigned int) htonl(intrfc->if_netnum) );
+	  for( i = 0 ; i < ipx->ipx_tctrl ; i++ )
+	    printk( "IPX: Routing PPROP seen net num %08x\n", (unsigned int) htonl(*l++) );
+	  l = (long *) c;
+#endif
+	  i = 0;
+	  /* dump packet if too many hops or already seen this net */
+	  if( ipx->ipx_tctrl < 8 )
+	    for( ; i < ipx->ipx_tctrl ; i++ )
+	      if( *l++ == intrfc->if_netnum )
+		break;
+
+	  if( i == ipx->ipx_tctrl ) { /* < 8 hops && input itfc not in list */
+	    *l = intrfc->if_netnum; /* insert recvd netnum into list */
+
+	    /* xmit on all other interfaces... */
+	    for ( ifcs = ipx_interfaces; ifcs != NULL ; ifcs = ifcs->if_next) {
+	      /* that aren't in the list */
+	      l = (long *) c;
+	      for( i = 0 ; i <= ipx->ipx_tctrl ; i++ )
+		if( ifcs->if_netnum == *l++ )
+		  break;
+	      if( i - 1 == ipx->ipx_tctrl ) {
+		ipx->ipx_dest.net = ifcs->if_netnum;
+#ifdef DEBUG_IPX_PPROP_ROUTING
+		printk( "IPX: Forward PPROP onto net num %08x\n", (unsigned int) htonl(ifcs->if_netnum) );
+#endif
+		skb2 = skb_clone(skb, GFP_ATOMIC);
+		ipxrtr_route_skb(skb2);
+	      }
+#ifdef DEBUG_IPX_PPROP_ROUTING
+	      else
+		printk( "IPX: Ignoring PPROP for net num %08x\n", (unsigned int) htonl(ifcs->if_netnum) );
+#endif
+	    }
+	    /* reset netnum in packet */
+	    ipx->ipx_dest.net = intrfc->if_netnum;
+	  }
+
+	}
+#endif
 
 	if (ipx->ipx_dest.net == 0L)
 		ipx->ipx_dest.net = intrfc->if_netnum;
@@ -1275,7 +1337,7 @@ static __u16 ipx_set_checksum(ipx_packet *packet,int length)
  *	Route an outgoing frame from a socket.
  */
 
-static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struct iovec *iov, int len, int noblock)
+static int ipxrtr_route_packet(struct sock *sk, struct sockaddr_ipx *usipx, struct iovec *iov, int len, int noblock)
 {
 	struct sk_buff *skb;
 	ipx_interface *intrfc;
@@ -1309,7 +1371,6 @@ static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struc
 		return err;
 
 	skb_reserve(skb,ipx_offset);
-	skb->free=1;
 	skb->arp=1;
 	skb->sk=sk;
 
@@ -1496,7 +1557,7 @@ static int ipx_interface_get_info(char *buffer, char **start, off_t offset,
 static int ipx_get_info(char *buffer, char **start, off_t offset,
 			int length, int dummy)
 {
-	ipx_socket *s;
+	struct sock *s;
 	ipx_interface *i;
 	int len=0;
 	off_t pos=0;
@@ -1626,10 +1687,10 @@ static int ipx_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 static int ipx_setsockopt(struct socket *sock, int level, int optname, char *optval, int optlen)
 {
-	ipx_socket *sk;
+	struct sock *sk;
 	int err,opt;
 	
-	sk=(ipx_socket *)sock->data;
+	sk=sock->sk;
 	
 	if (optval==NULL)
 		return(-EINVAL);
@@ -1651,9 +1712,6 @@ static int ipx_setsockopt(struct socket *sock, int level, int optname, char *opt
 			}
 			break;
 			
-		case SOL_SOCKET:
-			return sock_setsockopt(sk,level,optname,optval,optlen);
-
 		default:
 			return -EOPNOTSUPP;
 	}
@@ -1662,11 +1720,11 @@ static int ipx_setsockopt(struct socket *sock, int level, int optname, char *opt
 static int ipx_getsockopt(struct socket *sock, int level, int optname,
 	char *optval, int *optlen)
 {
-	ipx_socket *sk;
+	struct sock *sk;
 	int val=0;
 	int err;
 	
-	sk=(ipx_socket *)sock->data;
+	sk=sock->sk;
 
 	switch(level)
 	{
@@ -1681,9 +1739,6 @@ static int ipx_getsockopt(struct socket *sock, int level, int optname,
 					return -ENOPROTOOPT;
 			}
 			break;
-			
-		case SOL_SOCKET:
-			return sock_getsockopt(sk,level,optname,optval,optlen);
 			
 		default:
 			return -EOPNOTSUPP;
@@ -1716,16 +1771,17 @@ static void def_callback2(struct sock *sk, int len)
 
 static int ipx_create(struct socket *sock, int protocol)
 {
-	ipx_socket *sk;
-	sk=(ipx_socket *)sk_alloc(GFP_KERNEL);
+	struct sock *sk;
+	sk=sk_alloc(GFP_KERNEL);
 	if(sk==NULL)
 		return(-ENOMEM);
 	switch(sock->type)
 	{
 		case SOCK_DGRAM:
+			sock->ops = &ipx_dgram_ops;
 			break;
 		default:
-			kfree_s((void *)sk,sizeof(*sk));
+			sk_free(sk);
 			return(-ESOCKTNOSUPPORT);
 	}
 	sk->rcvbuf=SK_RMEM_MAX;
@@ -1742,8 +1798,8 @@ static int ipx_create(struct socket *sock, int protocol)
 	sk->no_check = 1;		/* Checksum off by default */	
 	if(sock!=NULL)
 	{
-		sock->data=(void *)sk;
-		sk->sleep=sock->wait;
+		sk->sleep=&sock->wait;
+		sock->sk=sk;
 	}
 	
 	sk->state_change=def_callback1;
@@ -1758,13 +1814,13 @@ static int ipx_create(struct socket *sock, int protocol)
 
 static int ipx_release(struct socket *sock, struct socket *peer)
 {
-	ipx_socket *sk=(ipx_socket *)sock->data;
+	struct sock *sk=sock->sk;
 	if(sk==NULL)
 		return(0);
 	if(!sk->dead)
 		sk->state_change(sk);
 	sk->dead=1;
-	sock->data=NULL;
+	sock->sk=NULL;
 	ipx_destroy_socket(sk);
 	return(0);
 }
@@ -1794,11 +1850,11 @@ ipx_first_free_socketnum(ipx_interface *intrfc)
 	
 static int ipx_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
-	ipx_socket *sk;
+	struct sock *sk;
 	ipx_interface *intrfc;
 	struct sockaddr_ipx *addr=(struct sockaddr_ipx *)uaddr;
 	
-	sk=(ipx_socket *)sock->data;
+	sk=sock->sk;
 	
 	if(sk->zapped==0)
 		return -EINVAL;
@@ -1895,7 +1951,7 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 	int addr_len, int flags)
 {
-	ipx_socket *sk=(ipx_socket *)sock->data;
+	struct sock *sk=sock->sk;
 	struct sockaddr_ipx *addr;
 	
 	sk->state = TCP_CLOSE;	
@@ -1941,8 +1997,8 @@ static int ipx_socketpair(struct socket *sock1, struct socket *sock2)
 
 static int ipx_accept(struct socket *sock, struct socket *newsock, int flags)
 {
-	if(newsock->data) {
-		kfree_s(newsock->data,sizeof(ipx_socket));
+	if(newsock->sk) {
+		sk_free(newsock->sk);
 		MOD_DEC_USE_COUNT;
 	}
 	return -EOPNOTSUPP;
@@ -1953,9 +2009,9 @@ static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
 {
 	ipx_address *addr;
 	struct sockaddr_ipx sipx;
-	ipx_socket *sk;
+	struct sock *sk;
 	
-	sk=(ipx_socket *)sock->data;
+	sk=sock->sk;
 	
 	*uaddr_len = sizeof(struct sockaddr_ipx);
 		
@@ -2052,7 +2108,6 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	ipx_interface	*intrfc;
 	ipx_packet *ipx;
 	
-	
 	ipx=(ipx_packet *)skb->h.raw;
 	
 	/* Too small */
@@ -2091,19 +2146,20 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	return ipxitf_rcv(intrfc, skb);
 }
 
-static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int noblock,
-	int flags)
+static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len,
+	struct scm_cookie *scm)
 {
-	ipx_socket *sk=(ipx_socket *)sock->data;
+	struct sock *sk=sock->sk;
 	struct sockaddr_ipx *usipx=(struct sockaddr_ipx *)msg->msg_name;
 	struct sockaddr_ipx local_sipx;
 	int retval;
+	int flags = msg->msg_flags;
 
 	if (sk->zapped) 
 		return -EIO; /* Socket not bound */
-	if(flags) 
+	if (flags&~MSG_DONTWAIT)
 		return -EINVAL;
-		
+
 	if(usipx) 
 	{
 		if(sk->protinfo.af_ipx.port == 0) 
@@ -2139,7 +2195,7 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nob
 		memcpy(usipx->sipx_node,sk->protinfo.af_ipx.dest_addr.node,IPX_NODE_LEN);
 	}
 	
-	retval = ipxrtr_route_packet(sk, usipx, msg->msg_iov, len, noblock);
+	retval = ipxrtr_route_packet(sk, usipx, msg->msg_iov, len, flags&MSG_DONTWAIT);
 	if (retval < 0) 
 		return retval;
 
@@ -2147,28 +2203,24 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nob
 }
 
 
-static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock,
-		 int flags, int *addr_len)
+static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size,
+		int flags, struct scm_cookie *scm)
 {
-	ipx_socket *sk=(ipx_socket *)sock->data;
+	struct sock *sk=sock->sk;
 	struct sockaddr_ipx *sipx=(struct sockaddr_ipx *)msg->msg_name;
 	struct ipx_packet *ipx = NULL;
 	int copied = 0;
 	int truesize;
 	struct sk_buff *skb;
 	int err;
-	
+
 	if (sk->zapped)
 		return -ENOTCONN;
 
-
-	skb=skb_recv_datagram(sk,flags,noblock,&err);
+	skb=skb_recv_datagram(sk,flags&~MSG_DONTWAIT,flags&MSG_DONTWAIT,&err);
 	if(skb==NULL)
 		return err;
 	
-	if(addr_len)
-		*addr_len=sizeof(*sipx);
-
 	ipx = (ipx_packet *)(skb->h.raw);
 	truesize=ntohs(ipx->ipx_pktsize) - sizeof(ipx_packet);
 	
@@ -2183,6 +2235,8 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size, int no
 	
 	if (err)
 		return err;
+
+	msg->msg_namelen = sizeof(*sipx);
 
 	if(sipx)
 	{
@@ -2201,17 +2255,10 @@ static int ipx_shutdown(struct socket *sk,int how)
 	return -EOPNOTSUPP;
 }
 
-static int ipx_select(struct socket *sock , int sel_type, select_table *wait)
-{
-	ipx_socket *sk=(ipx_socket *)sock->data;
-	
-	return datagram_select(sk,sel_type,wait);
-}
-
 static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 {
 	long amount=0;
-	ipx_socket *sk=(ipx_socket *)sock->data;
+	struct sock *sk=sock->sk;
 	
 	switch(cmd)
 	{
@@ -2271,10 +2318,14 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 	return(0);
 }
 
-static struct proto_ops ipx_proto_ops = {
+static struct net_proto_family ipx_family_ops = {
+	AF_IPX,
+	ipx_create
+};
+
+static struct proto_ops ipx_dgram_ops = {
 	AF_IPX,
 	
-	ipx_create,
 	ipx_dup,
 	ipx_release,
 	ipx_bind,
@@ -2282,7 +2333,7 @@ static struct proto_ops ipx_proto_ops = {
 	ipx_socketpair,
 	ipx_accept,
 	ipx_getname,
-	ipx_select,
+	datagram_select,
 	ipx_ioctl,
 	ipx_listen,
 	ipx_shutdown,
@@ -2347,7 +2398,7 @@ static unsigned char	ipx_snap_id[5] =  { 0x0, 0x0, 0x0, 0x81, 0x37 };
 void
 ipx_proto_init(struct net_proto *pro)
 {
-	(void) sock_register(ipx_proto_ops.family, &ipx_proto_ops);
+	(void) sock_register(&ipx_family_ops);
 
 	pEII_datalink = make_EII_client();
 	ipx_dix_packet_type.type=htons(ETH_P_IPX);
@@ -2427,7 +2478,7 @@ ipx_proto_finito(void)
 	destroy_EII_client(pEII_datalink);
 	pEII_datalink = NULL;
 
-	(void) sock_unregister(ipx_proto_ops.family);
+	(void) sock_unregister(ipx_family_ops.family);
 
 	return;
 }

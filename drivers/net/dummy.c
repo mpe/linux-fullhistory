@@ -93,6 +93,7 @@ int dummy_init(struct device *dev)
 
 	/* Fill in the fields of the device structure with ethernet-generic values. */
 	ether_setup(dev);
+	dev->tx_queue_len = 0;
 	dev->flags |= IFF_NOARP;
 
 	return 0;

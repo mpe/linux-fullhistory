@@ -142,7 +142,7 @@ struct tcp_v4_open_req {
 	struct open_request	req;
 	__u32			loc_addr;
 	__u32			rmt_addr;
-	struct options		*opt;
+	struct ip_options	*opt;
 };
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
@@ -164,10 +164,7 @@ struct tcp_func {
 	int			(*build_net_header)	(struct sock *sk, 
 							 struct sk_buff *skb);
 
-	void			(*queue_xmit)		(struct sock *sk, 
-							 struct device *dev,
-							 struct sk_buff *skb, 
-							 int free);
+	void			(*queue_xmit)		(struct sk_buff *skb);
 
 	void			(*send_check)		(struct sock *sk,
 							 struct tcphdr *th,
@@ -208,6 +205,8 @@ struct tcp_func {
 	void			(*addr2sockaddr)	(struct sock *sk,
 							 struct sockaddr *);
 
+	void			(*send_reset)		(struct sk_buff *skb);
+
 	int sockaddr_len;
 };
 
@@ -237,25 +236,17 @@ extern __inline int between(__u32 seq1, __u32 seq2, __u32 seq3)
 extern struct proto tcp_prot;
 extern struct tcp_mib tcp_statistics;
 
-extern void			tcp_v4_err(int type, int code,
-					   unsigned char *header, __u32 info,
-					   __u32 daddr, __u32 saddr,
-					   struct inet_protocol *protocol,
-					   int len);
+extern void			tcp_v4_err(struct sk_buff *skb,
+					   unsigned char *);
 
 extern void			tcp_shutdown (struct sock *sk, int how);
 
-extern int			tcp_v4_rcv(struct sk_buff *skb, 
-					   struct device *dev,
-					   struct options *opt, __u32 daddr,
-					   unsigned short len, __u32 saddr, 
-					   int redo,
-					   struct inet_protocol *protocol);
+extern int			tcp_v4_rcv(struct sk_buff *skb,
+					   unsigned short len);
 
 extern int			tcp_do_sendmsg(struct sock *sk, 
 					       int iovlen, struct iovec *iov,
-					       int len, int nonblock, 
-					       int flags);
+					       int len, int flags);
 
 extern int			tcp_ioctl(struct sock *sk, 
 					  int cmd, 
@@ -266,7 +257,7 @@ extern int			tcp_rcv_state_process(struct sock *sk,
 						      struct tcphdr *th,
 						      void *opt, __u16 len);
 
-extern void			tcp_rcv_established(struct sock *sk, 
+extern int			tcp_rcv_established(struct sock *sk, 
 						    struct sk_buff *skb,
 						    struct tcphdr *th, 
 						    __u16 len);
@@ -274,7 +265,7 @@ extern void			tcp_rcv_established(struct sock *sk,
 extern void			tcp_close(struct sock *sk, 
 					  unsigned long timeout);
 extern struct sock *		tcp_accept(struct sock *sk, int flags);
-extern int			tcp_select(struct sock *sk, int sel_type, 
+extern int			tcp_select(struct socket *sock, int sel_type, 
 					   select_table *wait);
 extern int			tcp_getsockopt(struct sock *sk, int level, 
 					       int optname, char *optval, 

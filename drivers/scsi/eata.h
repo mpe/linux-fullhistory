@@ -12,7 +12,7 @@ int eata2x_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int eata2x_abort(Scsi_Cmnd *);
 int eata2x_reset(Scsi_Cmnd *, unsigned int);
 
-#define EATA_VERSION "2.30.00"
+#define EATA_VERSION "2.40.00"
 
 
 #define EATA {                                                 \

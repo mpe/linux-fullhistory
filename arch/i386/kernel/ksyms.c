@@ -1,7 +1,9 @@
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/smp.h>
 #include <linux/user.h>
 #include <linux/elfcore.h>
+#include <linux/mca.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
@@ -31,6 +33,17 @@ static struct symbol_table arch_symbol_table = {
 	X(kernel_counter),
 	X(active_kernel_processor),
 	X(smp_invalidate_needed),
+#endif
+#ifdef CONFIG_MCA
+	/* Adapter probing and info methods. */
+	X(mca_write_pos),
+	X(mca_read_pos),
+	X(mca_read_stored_pos),
+	X(mca_set_adapter_name),
+	X(mca_get_adapter_name),
+	X(mca_set_adapter_procfn),
+	X(mca_isenabled),
+	X(mca_isadapter),
 #endif
 #include <linux/symtab_end.h>
 };

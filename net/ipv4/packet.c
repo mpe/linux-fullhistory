@@ -96,7 +96,6 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	 
 	if(sock_queue_rcv_skb(sk,skb)<0)
 	{
-		skb->sk = NULL;
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
@@ -113,8 +112,7 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
  *	protocol layers and you must therefore supply it with a complete frame
  */
  
-static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
-	      int noblock, int flags)
+static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 {
 	struct sk_buff *skb;
 	struct device *dev;
@@ -126,7 +124,7 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 	 *	Check the flags. 
 	 */
 
-	if (flags) 
+	if (msg->msg_flags&~MSG_DONTWAIT) 
 		return(-EINVAL);
 
 	/*
@@ -179,11 +177,11 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 	 *	Fill it in 
 	 */
 	 
-	skb->sk = sk;
-	skb->free = 1;
 	err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
 	skb->arp = 1;	/* No ARP needs doing on this (complete) frame */
 	skb->protocol = proto;
+	skb->dev = dev;
+	skb->priority = sk->priority;
 
 	/*
 	 *	Now send it
@@ -207,7 +205,7 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 		return err;
 	}
 		
-	dev_queue_xmit(skb, dev, sk->priority);
+	dev_queue_xmit(skb);
 	return(len);
 }
 

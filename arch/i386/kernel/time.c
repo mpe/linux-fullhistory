@@ -371,6 +371,21 @@ static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	   closely for now.. */
 	/*smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 0); */
 	    
+#ifdef CONFIG_MCA
+	if( MCA_bus ) {
+		/* The PS/2 uses level-triggered interrupts.  You can't
+		turn them off, nor would you want to (any attempt to
+		enable edge-triggered interrupts usually gets intercepted by a
+		special hardware circuit).  Hence we have to acknowledge
+		the timer interrupt.  Through some incredibly stupid
+		design idea, the reset for IRQ 0 is done by setting the
+		high bit of the PPI port B (0x61).  Note that some PS/2s,
+		notably the 55SX, work fine if this is removed.  */
+
+		irq = inb_p( 0x61 );	/* read the current state */
+		outb_p( irq|0x80, 0x61 );	/* reset the IRQ */
+	}
+#endif
 }
 
 #ifndef	CONFIG_APM	/* cycle counter may be unreliable */

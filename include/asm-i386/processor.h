@@ -29,10 +29,15 @@ extern int  have_cpuid;		/* We have a CPUID */
 
 /*
  * Bus types (default is ISA, but people can check others with these..)
- * MCA_bus hardcoded to 0 for now.
  */
 extern int EISA_bus;
-#define MCA_bus 0
+extern int MCA_bus;
+
+/* from system description table in BIOS.  Mostly for MCA use, but
+others may find it useful. */
+extern unsigned int machine_id;
+extern unsigned int machine_submodel_id;
+extern unsigned int BIOS_revision;
 
 /*
  * User space process size: 3GB. This is hardcoded into a few places,

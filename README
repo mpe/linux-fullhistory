@@ -19,6 +19,9 @@ list.  To do this, e-mail majordomo@vger.rutgers.edu, and put in the body
 of the message "subscribe linux-kernel" or "subscribe linux-kernel-digest"
 for a daily digest of the mailing list (it is a high-traffic list.)
 
+However, please make sure you don't ask questions which are already answered
+in various files in the Documentation directory.  See DOCUMENTATION below.
+
 WHAT IS LINUX?
 
   Linux is a Unix clone written from scratch by Linus Torvalds with
@@ -51,7 +54,9 @@ DOCUMENTATION:
  - There are various readme's in the kernel Documentation/ subdirectory:
    these typically contain kernel-specific installation notes for some 
    drivers for example. See ./Documentation/00-INDEX for a list of what
-   is contained in each file.
+   is contained in each file.  Please read the Changes file, as it
+   contains information about the problems, which may result by upgrading
+   your kernel.
 
 INSTALLING the kernel:
 

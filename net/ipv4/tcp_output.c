@@ -186,9 +186,9 @@ int tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		skb->when = jiffies;
 		
 		buff = skb_clone(skb, GFP_ATOMIC);
-		atomic_add(buff->truesize, &sk->wmem_alloc);
+		skb_set_owner_w(buff, sk);
 
-		tp->af_specific->queue_xmit(sk, skb->dev, buff, 1);
+		tp->af_specific->queue_xmit(buff);
 
 		if (!tcp_timer_is_set(sk, TIME_RETRANS))
 			tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
@@ -232,9 +232,6 @@ static int tcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len)
 	if (buff == NULL)
 		return -1;
 
-	buff->sk = sk;
-	buff->localroute = sk->localroute;
-	    	
 	/*
 	 *	Put headers on the new packet
 	 */
@@ -243,7 +240,7 @@ static int tcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len)
 
 	if (tmp < 0)
 	{
-		sock_wfree(sk, buff);
+		kfree_skb(buff, FREE_WRITE);
 		return -1;
 	}
 		
@@ -318,8 +315,6 @@ static void tcp_wrxmit_prob(struct sock *sk, struct sk_buff *skb)
 	update_send_head(sk);
 
 	skb_unlink(skb);	
-	skb->sk = NULL;
-	skb->free = 1;
 	kfree_skb(skb, FREE_WRITE);
 
 	if (!sk->dead)
@@ -393,7 +388,7 @@ void tcp_write_xmit(struct sock *sk)
 		int size;
 
 		IS_SKB(skb);
-				
+
 		/*
 		 *	See if we really need to send the packet. 
 		 */
@@ -449,10 +444,10 @@ void tcp_write_xmit(struct sock *sk)
 		clear_delayed_acks(sk);
 
 		buff = skb_clone(skb, GFP_ATOMIC);
-		atomic_add(buff->truesize, &sk->wmem_alloc);
+		skb_set_owner_w(buff, sk);
 
 		sent_pkts = 1;
-		tp->af_specific->queue_xmit(sk, skb->dev, buff, 1);
+		tp->af_specific->queue_xmit(buff);
 
 	}
 	
@@ -614,7 +609,6 @@ static int tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb)
 	 * ... and off you go.
 	 */
 
-	buff->free = 1;
 	kfree_skb(buff, FREE_WRITE);
 	atomic_dec(&sk->packets_out);
 
@@ -714,11 +708,11 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		
 		skb->when = jiffies;
 		buff = skb_clone(skb, GFP_ATOMIC);
-		atomic_add(buff->truesize, &sk->wmem_alloc);
+		skb_set_owner_w(buff, sk);
 		
 		clear_delayed_acks(sk);
 		
-		tp->af_specific->queue_xmit(sk, skb->dev, buff, 1);
+		tp->af_specific->queue_xmit(buff);
 		
 		/*
 		 *	Count retransmissions
@@ -791,8 +785,6 @@ void tcp_send_fin(struct sock *sk)
 	 *	Administrivia
 	 */
 	 
-	buff->sk = sk;
-	buff->localroute = sk->localroute;
 	buff->csum = 0;
 
 	/*
@@ -809,8 +801,7 @@ void tcp_send_fin(struct sock *sk)
   		 *	(Not good).
   		 */
   		 
-	  	buff->free = 1;
-		sock_wfree(sk,buff);
+		kfree_skb(buff, FREE_WRITE);
 		sk->write_seq++;
 		t=del_timer(&sk->timer);
 		if(t)
@@ -854,9 +845,9 @@ void tcp_send_fin(struct sock *sk)
 		buff->when = jiffies;
 
 		skb1 = skb_clone(buff, GFP_KERNEL);
-		atomic_add(skb1->truesize, &sk->wmem_alloc);
+		skb_set_owner_w(skb1, sk);
 
-		tp->af_specific->queue_xmit(sk, skb1->dev, skb1, 1);
+		tp->af_specific->queue_xmit(skb1);
 
                 if (!tcp_timer_is_set(sk, TIME_RETRANS))
 			tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
@@ -879,14 +870,10 @@ int tcp_send_synack(struct sock *sk)
 		return -ENOMEM;
 	}
 
-	skb->sk = sk;
-	skb->localroute = sk->localroute;
-
 	tmp = tp->af_specific->build_net_header(sk, skb);
 	
 	if (tmp < 0)
 	{
-		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
 		return tmp;
 	}
@@ -926,9 +913,9 @@ int tcp_send_synack(struct sock *sk)
 	skb->when = jiffies;
 	buff = skb_clone(skb, GFP_ATOMIC);
 
-	atomic_add(skb->truesize, &sk->wmem_alloc);
+	skb_set_owner_w(skb, sk);
 
-	tp->af_specific->queue_xmit(sk, skb->dev, buff, 1);
+	tp->af_specific->queue_xmit(buff);
 
 	tcp_reset_xmit_timer(sk, TIME_RETRANS, TCP_TIMEOUT_INIT);
 
@@ -1016,8 +1003,6 @@ void tcp_send_ack(struct sock *sk)
 	 *	Assemble a suitable TCP frame
 	 */
 	 
-	buff->sk = sk;
-	buff->localroute = sk->localroute;
 	buff->csum = 0;
 
 	/* 
@@ -1028,8 +1013,7 @@ void tcp_send_ack(struct sock *sk)
 
 	if (tmp < 0) 
 	{
-  		buff->free = 1;
-		sock_wfree(sk, buff);
+		kfree_skb(buff, FREE_WRITE);
 		return;
 	}
 
@@ -1055,7 +1039,7 @@ void tcp_send_ack(struct sock *sk)
   		 printk("\rtcp_send_ack: seq %x ack %x\n", 
 			tp->snd_nxt, tp->rcv_nxt);
 
-	tp->af_specific->queue_xmit(sk, buff->dev, buff, 1);
+	tp->af_specific->queue_xmit(buff);
 
   	tcp_statistics.TcpOutSegs++;
 }
@@ -1123,7 +1107,7 @@ void tcp_write_wakeup(struct sock *sk)
 
 		buff = skb_clone(skb, GFP_ATOMIC);
 
-		atomic_add(buff->truesize, &sk->wmem_alloc);
+		skb_set_owner_w(buff, sk);
 		atomic_inc(&sk->packets_out);
 
 		clear_delayed_acks(sk);
@@ -1143,9 +1127,6 @@ void tcp_write_wakeup(struct sock *sk)
 		if (buff == NULL) 
 			return;
 
-		buff->free = 1;
-		buff->sk = sk;
-		buff->localroute = sk->localroute;
 		buff->csum = 0;
 
 		/*
@@ -1156,7 +1137,7 @@ void tcp_write_wakeup(struct sock *sk)
 
 		if (tmp < 0) 
 		{
-			sock_wfree(sk, buff);
+			kfree_skb(buff, FREE_WRITE);
 			return;
 		}
 
@@ -1180,7 +1161,7 @@ void tcp_write_wakeup(struct sock *sk)
 	 *	Send it.
 	 */
 
-	tp->af_specific->queue_xmit(sk, buff->dev, buff, 1);
+	tp->af_specific->queue_xmit(buff);
 	tcp_statistics.TcpOutSegs++;
 }
 

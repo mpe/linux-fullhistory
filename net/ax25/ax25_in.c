@@ -89,14 +89,11 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 						return 1;
 					}
 
-					skbn->free = 1;
 					skbn->arp  = 1;
 					skbn->dev  = ax25->device;
 
-					if (ax25->sk != NULL) {
-						skbn->sk = ax25->sk;
-						atomic_add(skbn->truesize, &ax25->sk->rmem_alloc);
-					}
+					if (ax25->sk != NULL)
+						skb_set_owner_r(skbn, ax25->sk);
 
 					skb_reserve(skbn, AX25_MAX_HEADER_LEN);
 

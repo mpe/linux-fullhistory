@@ -200,6 +200,15 @@
 
 #define REALLY_SLOW_IO		/* it sure is ... */
 
+#include <linux/config.h>
+
+#ifdef MODULE
+  #ifdef CONFIG_QIC02_DYNCONF
+    #error dynamic configuration as module not implemented!
+  #endif
+#endif
+ 
+#include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/fs.h>
@@ -210,9 +219,9 @@
 #include <linux/fcntl.h>
 #include <linux/delay.h>
 #include <linux/tpqic02.h>
-#include <linux/config.h>
 #include <linux/mm.h>
-
+#include <linux/malloc.h>
+ 
 #include <asm/dma.h>
 #include <asm/system.h>
 #include <asm/io.h>
@@ -333,8 +342,12 @@ static int  mode_access;	/* access mode: READ or WRITE */
  * at 512 bytes, to prevent problems with 64k boundaries.
  */
 
+#ifdef MODULE
+static char *qic02_tape_buf = NULL;
+#else
 static volatile char qic02_tape_buf[TPQBUF_SIZE+TAPE_BLKSIZE];
 /* A really good compiler would be able to align this at 512 bytes... :-( */
+#endif /* MODULE */
 
 static unsigned long buffaddr;	/* aligned physical address of buffer */
 
@@ -1920,7 +1933,6 @@ static long long qic02_tape_lseek(struct inode * inode, struct file * file,
 static long qic02_tape_read(struct inode * inode, struct file * filp,
 	char * buf, unsigned long count)
 {
-	int error;
 	kdev_t dev = inode->i_rdev;
 	unsigned short flags = filp->f_flags;
 	unsigned long bytes_todo, bytes_done, total_bytes_done = 0;
@@ -1945,12 +1957,6 @@ static long qic02_tape_read(struct inode * inode, struct file * filp,
 
 	if (status_bytes_wr)	/* Once written, no more reads, 'till after WFM. */
 		return -EACCES;
-
-
-	/* Make sure buffer is safe to write into. */
-	error = verify_area(VERIFY_WRITE, buf, count);
-	if (error)
-		return error;
 
 	/* This is rather ugly because it has to implement a finite state
 	 * machine in order to handle the EOF situations properly.
@@ -2039,7 +2045,10 @@ static long qic02_tape_read(struct inode * inode, struct file * filp,
 			}
 			/* copy buffer to user-space in one go */
 			if (bytes_done>0)
-				copy_to_user( (void *) buf, (void *) bus_to_virt(buffaddr), bytes_done);
+				if (copy_to_user( (void *) buf, (void *) bus_to_virt(buffaddr), 
+						bytes_done))
+					return -EFAULT;
+
 #if 1
 			/* Checks Ton's patch below */
 			if ((return_read_eof == NO) && (status_eof_detected == YES)) {
@@ -2096,7 +2105,6 @@ static long qic02_tape_read(struct inode * inode, struct file * filp,
 static long qic02_tape_write(struct inode * inode, struct file * filp,
 	const char * buf, unsigned long count)
 {
-	int error;
 	kdev_t dev = inode->i_rdev;
 	unsigned short flags = filp->f_flags;
 	unsigned long bytes_todo, bytes_done, total_bytes_done = 0;
@@ -2130,11 +2138,6 @@ static long qic02_tape_write(struct inode * inode, struct file * filp,
 		return -EACCES;	/* don't even try when write protected */
 	}
 
-	/* Make sure buffer is safe to read from. */
-	error = verify_area(VERIFY_READ, buf, count);
-	if (error)
-		return error;
-
 	if (doing_read == YES)
 		terminate_read(0);
 
@@ -2167,7 +2170,9 @@ static long qic02_tape_write(struct inode * inode, struct file * filp,
 
 		/* copy from user to DMA buffer and initiate transfer. */
 		if (bytes_todo>0) {
-			copy_from_user( (void *) bus_to_virt(buffaddr), (const void *) buf, bytes_todo);
+			if (copy_from_user( (void *) bus_to_virt(buffaddr), 
+					(const void *) buf, bytes_todo))
+				return -EFAULT;
 
 /****************** similar problem with read() at FM could happen here at EOT.
  ******************/
@@ -2259,11 +2264,19 @@ static int qic02_tape_open(struct inode * inode, struct file * filp)
 		       kdevname(dev), flags);
 	}
 
-	if (MINOR(dev)==255)	/* special case for resetting */
+#ifdef MODULE
+       MOD_INC_USE_COUNT;
+#endif
+
+	if (MINOR(dev)==255) {	/* special case for resetting */
+#ifdef MODULE
+                MOD_DEC_USE_COUNT;
+#endif
 		if (suser())
 			return (tape_reset(1)==TE_OK) ? -EAGAIN : -ENXIO;
 		else
 			return -EPERM;
+	}
 
 	if (status_dead==YES)
 		/* Allow `mt reset' ioctl() even when already open()ed. */
@@ -2271,6 +2284,9 @@ static int qic02_tape_open(struct inode * inode, struct file * filp)
 
 	/* Only one at a time from here on... */
 	if (filp->f_count>1) {	/* filp->f_count==1 for the first open() */
+#ifdef MODULE
+                MOD_DEC_USE_COUNT;
+#endif
 		return -EBUSY;
 	}
 
@@ -2318,6 +2334,9 @@ static int qic02_tape_open(struct inode * inode, struct file * filp)
 
 	if (s != TE_OK) {
 		tpqputs(TPQD_ALWAYS, "open: sense() failed");
+#ifdef MODULE
+                MOD_DEC_USE_COUNT;
+#endif
 		return -EIO;
 	}
 
@@ -2327,6 +2346,9 @@ static int qic02_tape_open(struct inode * inode, struct file * filp)
 	 */
 	if ((tperror.exs & TP_ST0) && (tperror.exs & TP_CNI)) {
 		tpqputs(TPQD_ALWAYS, "No tape present.");
+#ifdef MODULE
+                MOD_DEC_USE_COUNT;
+#endif
 		return -EIO;
 	}
 
@@ -2355,6 +2377,9 @@ static int qic02_tape_open(struct inode * inode, struct file * filp)
 		s = do_qic_cmd(QCMD_REWIND, TIM_R);
 		if (s != 0) {
 			tpqputs(TPQD_ALWAYS, "open: rewind failed");
+#ifdef MODULE
+			MOD_DEC_USE_COUNT;
+#endif
 			return -EIO;
 		}
 	}
@@ -2366,12 +2391,18 @@ static int qic02_tape_open(struct inode * inode, struct file * filp)
 	if (status_dead==YES) {
 		tpqputs(TPQD_ALWAYS, "open: tape dead, attempting reset");
 		if (tape_reset(1)!=TE_OK) {
+#ifdef MODULE
+			MOD_DEC_USE_COUNT;
+#endif
 			return -ENXIO;
 		} else {
 			status_dead = NO;
 			if (tp_sense(~(TP_ST1|TP_ILL)) != TE_OK) {
 				tpqputs(TPQD_ALWAYS, "open: tp_sense() failed\n");
 				status_dead = YES;	/* try reset next time */
+#ifdef MODULE
+				MOD_DEC_USE_COUNT;
+#endif
 				return -EIO;
 			}
 		}
@@ -2425,6 +2456,9 @@ static int qic02_tape_open(struct inode * inode, struct file * filp)
 	if (s != 0) {
 		status_dead = YES;	/* force reset */
 		current_tape_dev = 0; /* earlier 0xff80 */
+#ifdef MODULE
+		MOD_DEC_USE_COUNT;
+#endif
 		return -EIO;
 	}
 
@@ -2441,6 +2475,9 @@ static void qic02_tape_release(struct inode * inode, struct file * filp)
 		       kdevname(dev));
 
 	if (status_zombie==YES)		/* don't rewind in zombie mode */
+#ifdef MODULE
+		MOD_DEC_USE_COUNT;
+#endif
 		return;
 
 	/* Terminate any pending write cycle. Terminating the read-cycle
@@ -2458,7 +2495,9 @@ static void qic02_tape_release(struct inode * inode, struct file * filp)
 		tpqputs(TPQD_REWIND, "release: Doing rewind...");
 		(void) do_qic_cmd(QCMD_REWIND, TIM_R);
 	}
-
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
 	return;
 } /* qic02_tape_release */
 
@@ -2558,7 +2597,6 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		     unsigned int iocmd, unsigned long ioarg)
 {
 	int error;
-	short i;
 	int dev_maj = MAJOR(inode->i_rdev);
 	int c;
 	struct mtop operation;
@@ -2588,9 +2626,9 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 	if (c == DDIOCSDBG) {
 		if (!suser())
 			return -EPERM;
-		error = verify_area(VERIFY_READ, (int *) ioarg, sizeof(int));
-		if (error) return error;
-		c = get_user(sizeof(int), (int *) ioarg);
+		error = get_user(c, (int *) ioarg);
+		if (error)
+			return error;
 		if (c==0) {
 			QIC02_TAPE_DEBUG = 0;
 			return 0;
@@ -2614,15 +2652,11 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 			return -EFAULT;
 		}
 
-		/* check for valid user address */
-		error = verify_area(VERIFY_WRITE, (void *) ioarg, sizeof(qic02_tape_dynconf));
-		if (error)
-			return error;
-		/* copy current settings to user space */
+		/* check for valid user address and copy current settings to user space */
 		stp = (char *) &qic02_tape_dynconf;
 		argp = (char *) ioarg;
-		for (i=0; i<sizeof(qic02_tape_dynconf); i++) 
-			put_user(*stp++, argp++);
+		if (copy_to_user(stp, argp, sizeof(qic02_tape_dynconf)))
+			return -EFAULT;
 		return 0;
 
 	} else if (c == (MTIOCSETCONFIG & IOCCMD_MASK)) {
@@ -2641,14 +2675,12 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 			return -EPERM;
 		if ((doing_read!=NO) || (doing_write!=NO))
 			return -EBUSY;
-		error = verify_area(VERIFY_READ, (char *) ioarg, sizeof(qic02_tape_dynconf));
-		if (error)
-			return error;
 
 		/* copy struct from user space to kernel space */
 		stp = (char *) &qic02_tape_dynconf;
 		argp = (char *) ioarg;
-		copy_from_user(stp, argp, sizeof(qic02_tape_dynconf));
+		if (copy_from_user(stp, argp, sizeof(qic02_tape_dynconf)))
+			return -EFAULT;
 		if (status_zombie==NO)
 			qic02_release_resources();	/* and go zombie */
 		if (update_ifc_masks(qic02_tape_dynconf.ifc_type))
@@ -2672,14 +2704,12 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 			tpqputs(TPQD_ALWAYS, "sizeof(struct mtop) does not match!");
 			return -EFAULT;
 		}
-		error = verify_area(VERIFY_READ, (char *) ioarg, sizeof(operation));
-		if (error)
-			return error;
 
 		/* copy mtop struct from user space to kernel space */
 		stp = (char *) &operation;
 		argp = (char *) ioarg;
-		copy_from_user(stp, argp, sizeof(operation));
+		if (copy_from_user(stp, argp, sizeof(operation)))
+			return -EFAULT;
 
 		/* ---note: mt_count is signed, negative seeks must be
 		 * ---	    translated to seeks in opposite direction!
@@ -2727,11 +2757,6 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 			return -EFAULT;
 		}
 
-		/* check for valid user address */
-		error =	verify_area(VERIFY_WRITE, (void *) ioarg, sizeof(ioctl_status));
-		if (error)
-			return error;
-
 		/* It appears (gmt(1)) that it is normal behaviour to
 		 * first set the status with MTNOP, and then to read
 		 * it out with MTIOCGET
@@ -2740,8 +2765,8 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		/* copy results to user space */
 		stp = (char *) &ioctl_status;
 		argp = (char *) ioarg;
-		for (i=0; i<sizeof(ioctl_status); i++) 
-			put_user(*stp++, argp++);
+		if (copy_to_user(stp, argp, sizeof(ioctl_status)))
+			return -EFAULT;
 		return 0;
 
 
@@ -2754,11 +2779,6 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 			tpqputs(TPQD_ALWAYS, "sizeof(struct mtpos) does not match!");
 			return -EFAULT;
 		}
-
-		/* check for valid user address */
-		error = verify_area(VERIFY_WRITE, (void *) ioarg, sizeof(ioctl_tell));
-		if (error)
-			return error;
 
 		tpqputs(TPQD_IOCTLS, "MTTELL reading block address");
 		if ((doing_read==YES) || (doing_write==YES))
@@ -2773,8 +2793,8 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		/* copy results to user space */
 		stp = (char *) &ioctl_tell;
 		argp = (char *) ioarg;
-		for (i=0; i<sizeof(ioctl_tell); i++) 
-			put_user(*stp++, argp++);
+		if (copy_to_user(stp, argp, sizeof(ioctl_status)))
+			return -EFAULT;
 		return 0;
 
 	} else
@@ -2914,16 +2934,39 @@ int qic02_tape_init(void)
 
 	printk(TPQIC02_NAME ": DMA buffers: %u blocks", NR_BLK_BUF);
 
-	/* Setup the page-address for the dma transfer.
-	 * This assumes a one-to-one identity mapping between
-	 * kernel addresses and physical memory.
+	/* 
+	 * Setup the page-address for the dma transfer.
 	 */
+#ifdef MODULE
+        qic02_tape_buf = kmalloc(TPQBUF_SIZE+TAPE_BLKSIZE, GFP_DMA);
+        if (qic02_tape_buf == NULL) {
+#ifndef CONFIG_QIC02_DYNCONF
+        /*
+         * irq and dma were requested by qic_get_resources, so
+         * relase them only when _not_ using DYNCONF
+         */
+		qic02_release_resources();
+#endif
+		return -ENODEV;
+       }
+       buffaddr = align_buffer(virt_to_bus((unsigned long *)qic02_tape_buf),
+                               TAPE_BLKSIZE);
+       printk(", at address 0x%lx (0x%lx)\n", buffaddr,
+              virt_to_bus((unsigned long *)qic02_tape_buf));
+#else /* no MODULE */
 	buffaddr = align_buffer(virt_to_bus(qic02_tape_buf), TAPE_BLKSIZE);
 	printk(", at address 0x%lx (0x%lx)\n", buffaddr, (unsigned long) &qic02_tape_buf);
+#endif /* MODULE */
+
 
 #ifndef CONFIG_MAX_16M
 	if (buffaddr+TPQBUF_SIZE>=0x1000000) {
 		printk(TPQIC02_NAME ": DMA buffer *must* be in lower 16MB\n");
+#ifdef MODULE
+		qic02_release_resources();
+                kfree(qic02_tape_buf);
+#endif
+
 		return -ENODEV;
 	}
 #endif
@@ -2932,8 +2975,7 @@ int qic02_tape_init(void)
 	if (register_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME, &qic02_tape_fops)) {
 		printk(TPQIC02_NAME ": Unable to get chrdev major %d\n", QIC02_TAPE_MAJOR);
 #ifndef CONFIG_QIC02_DYNCONF
-		free_irq(QIC02_TAPE_IRQ, NULL);
-		free_dma(QIC02_TAPE_DMA);
+		qic02_release_resources();
 #endif
 		return -ENODEV;
 	}
@@ -2947,10 +2989,8 @@ int qic02_tape_init(void)
 	if (tape_reset(0)!=TE_OK || tp_sense(TP_WRP|TP_POR|TP_CNI)!=TE_OK) {
 		/* No drive detected, so vanish */
 		tpqputs(TPQD_ALWAYS, "No drive detected -- driver going on vacation...");
-		status_dead = YES;
-		free_irq(QIC02_TAPE_IRQ, NULL);
-		free_dma(QIC02_TAPE_DMA);
 		unregister_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME);
+		qic02_release_resources();
 		return -ENODEV;
 	} else {
 		if (is_exception()) {
@@ -2973,3 +3013,22 @@ int qic02_tape_init(void)
 	return 0;
 } /* qic02_tape_init */
 
+#ifdef MODULE
+
+int init_module(void) {
+	return qic02_tape_init();
+}
+
+void cleanup_module(void) {
+	unsigned long flags;
+       
+	save_flags(flags); 
+	cli(); 
+	unregister_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME); 
+	qic02_release_resources();
+	if (qic02_tape_buf) kfree(qic02_tape_buf); 
+	sti(); 
+	restore_flags(flags); 
+}
+
+#endif /* MODULE */

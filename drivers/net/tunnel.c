@@ -25,9 +25,6 @@
 
 		-Sam Lantinga	(slouken@cs.ucdavis.edu) 02/13/96
 		
-	Note:
-		The old driver is in tunnel.c if you have funnies with the
-		new one.
 */
 
 /* Things I wish I had known when writing the tunnel driver:
@@ -62,12 +59,11 @@
 */
 
 #include <linux/module.h>
-#include <linux/config.h>	/* for CONFIG_IP_FORWARD */
-
-/* Only two headers!! :-) */
+#include <linux/types.h>
+#include <linux/socket.h>
+#include <linux/in.h>
 #include <net/ip.h>
 #include <linux/if_arp.h>
-
 
 /*#define TUNNEL_DEBUG*/
 
@@ -126,201 +122,84 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct enet_statistics *stats;		/* This device's statistics */
 	struct rtable *rt;     			/* Route to the other host */
+	struct hh_cache *hh;
 	struct device *tdev;			/* Device to other host */
 	struct iphdr  *iph;			/* Our new IP header */
-	__u32          target;			/* The other host's IP address */
-	int      max_headroom;			/* The extra header space needed */
+	int    max_headroom;			/* The extra header space needed */
 
-	/*
-	 *	Return if there is nothing to do.  (Does this ever happen?)
-	 */
-	if (skb == NULL || dev == NULL) {
-#ifdef TUNNEL_DEBUG
-		printk ( KERN_INFO "tunnel: Nothing to do!\n" );
-#endif
-		return 0;
-	}
-
-	/* 
-	 *	Make sure we are not busy (check lock variable) 
-	 */
-	 
 	stats = (struct enet_statistics *)dev->priv;
-	cli();
-	if (dev->tbusy != 0) 
-	{
-		sti();
-		stats->tx_errors++;
-		return(1);
-	}
-	dev->tbusy = 1;
-	sti();
   
-	/*printk("-");*/
 	/*
 	 *  First things first.  Look up the destination address in the 
 	 *  routing tables
 	 */
-	iph = (struct iphdr *) skb->data;
-	if ((rt = ip_rt_route(iph->daddr, 0)) == NULL)
-	{ 
+	iph = skb->nh.iph;
+
+	if (ip_route_output(&rt, dev->pa_dstaddr, dev->pa_addr, RT_TOS(iph->tos), NULL)) {
 		/* No route to host */
-		/* Where did the packet come from? */
-		/*icmp_send(skb, ICMP_DEST_UNREACH, ICMP_NET_UNREACH, 0, dev);*/
-		printk ( KERN_INFO "%s: Packet with no route!\n", dev->name);
-		dev->tbusy=0;
-		stats->tx_errors++;
-		dev_kfree_skb(skb, FREE_WRITE);
-		return 0;
-	}
-
-	/*
-	 * Get the target address (other end of IP tunnel)
-	 */
-	if (rt->rt_flags & RTF_GATEWAY)
-		target = rt->rt_gateway;
-	else
-		target = dev->pa_dstaddr;
-
-	if ( ! target )
-	{	/* No gateway to tunnel through? */
-		/* Where did the packet come from? */
-		/*icmp_send(skb, ICMP_DEST_UNREACH, ICMP_NET_UNREACH, 0, dev);*/
-		printk ( KERN_INFO "%s: Packet with no target gateway!\n", dev->name);
-		ip_rt_put(rt);
-		dev->tbusy=0;
-		stats->tx_errors++;
-		dev_kfree_skb(skb, FREE_WRITE);
-		return 0;
-	}
-	ip_rt_put(rt);
-
-	if ((rt = ip_rt_route(target, 0)) == NULL)
-	{ 
-		/* No route to host */
-		/* Where did the packet come from? */
-		/*icmp_send(skb, ICMP_DEST_UNREACH, ICMP_NET_UNREACH, 0, dev);*/
 		printk ( KERN_INFO "%s: Can't reach target gateway!\n", dev->name);
-		dev->tbusy=0;
 		stats->tx_errors++;
 		dev_kfree_skb(skb, FREE_WRITE);
 		return 0;
 	}
-	tdev = rt->rt_dev;
+	tdev = rt->u.dst.dev;
+	hh = rt->u.dst.hh;
 
-	if (tdev == dev)
-	{ 
-		/* Tunnel to ourselves?  -- I don't think so. */
+	if (tdev->type == ARPHRD_TUNNEL) { 
+		/* Tunnel to tunnel?  -- I don't think so. */
 		printk ( KERN_INFO "%s: Packet targetted at myself!\n" , dev->name);
 		ip_rt_put(rt);
-		dev->tbusy=0;
 		stats->tx_errors++;
 		dev_kfree_skb(skb, FREE_WRITE);
 		return 0;
 	}
 
-#ifdef TUNNEL_DEBUG
-	printk("Old IP Header....\n");
-	print_ip(iph);
-#endif
+	skb->h.ipiph = skb->nh.iph;
 
 	/*
 	 * Okay, now see if we can stuff it in the buffer as-is.
 	 */
 	max_headroom = (((tdev->hard_header_len+15)&~15)+tunnel_hlen);
-#ifdef TUNNEL_DEBUG
-printk("Room left at head: %d\n", skb_headroom(skb));
-printk("Room left at tail: %d\n", skb_tailroom(skb));
-printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
-#endif
-	if (skb_headroom(skb) >= max_headroom && skb->free) {
-		skb->h.iph = (struct iphdr *) skb_push(skb, tunnel_hlen);
-		skb_device_unlock(skb);
-	} else {
-		struct sk_buff *new_skb;
 
-		if ( !(new_skb = dev_alloc_skb(skb->len+max_headroom)) ) 
-		{
-			printk( KERN_INFO "%s: Out of memory, dropped packet\n",
-				dev->name);
+	if (skb_headroom(skb) < max_headroom || skb->users != 1) {
+		struct sk_buff *new_skb = skb_realloc_headroom(skb, max_headroom);
+		if (!new_skb) {
 			ip_rt_put(rt);
-  			dev->tbusy = 0;
   			stats->tx_dropped++;
 			dev_kfree_skb(skb, FREE_WRITE);
 			return 0;
 		}
-		new_skb->free = 1;
-
-		/*
-		 * Reserve space for our header and the lower device header
-		 */
-		skb_reserve(new_skb, max_headroom);
-
-		/*
-		 * Copy the old packet to the new buffer.
-		 * Note that new_skb->h.iph will be our (tunnel driver's) header
-		 * and new_skb->ip_hdr is the IP header of the old packet.
-		 */
-		new_skb->ip_hdr = (struct iphdr *) skb_put(new_skb, skb->len);
-		new_skb->dev = skb->dev;
-		memcpy(new_skb->ip_hdr, skb->data, skb->len);
-		memset(new_skb->proto_priv, 0, sizeof(skb->proto_priv));
-
-		/* Tack on our header */
-		new_skb->h.iph = (struct iphdr *) skb_push(new_skb, tunnel_hlen);
-
-		/* Free the old packet, we no longer need it */
 		dev_kfree_skb(skb, FREE_WRITE);
 		skb = new_skb;
 	}
+
+	skb->nh.iph = (struct iphdr *) skb_push(skb, tunnel_hlen);
+	dst_release(skb->dst);
+	memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt));
+	dst_release(skb->dst);
+	skb->dst = &rt->u.dst;
 
 	/*
 	 *	Push down and install the IPIP header.
 	 */
 	 
-	iph 			=	skb->h.iph;
+	iph 			=	skb->nh.iph;
 	iph->version		= 	4;
-	iph->tos		=	skb->ip_hdr->tos;
-	iph->ttl		=	skb->ip_hdr->ttl;
+	iph->tos		=	skb->h.ipiph->tos;
+	iph->ttl		=	skb->h.ipiph->ttl;
 	iph->frag_off		=	0;
-	iph->daddr		=	target;
-	iph->saddr		=	tdev->pa_addr;
+	iph->daddr		=	dev->pa_dstaddr;
+	iph->saddr		=	dev->pa_addr;
 	iph->protocol		=	IPPROTO_IPIP;
 	iph->ihl		=	5;
 	iph->tot_len		=	htons(skb->len);
 	iph->id			=	htons(ip_id_count++);	/* Race condition here? */
 	ip_send_check(iph);
-	skb->ip_hdr 		=	skb->h.iph;
-	skb->protocol		=	htons(ETH_P_IP);
-#ifdef TUNNEL_DEBUG
-	printk("New IP Header....\n");
-	print_ip(iph);
-#endif
 
-	/*
-	 *	Send the packet on its way!
-	 *	Note that dev_queue_xmit() will eventually free the skb.
-	 *	If ip_forward() made a copy, it will return 1 so we can free.
-	 */
+	ip_send(skb);
 
-#ifdef CONFIG_IP_FORWARD
-	if (ip_forward(skb, dev, IPFWD_NOTTLDEC, target))
-#endif
-		kfree_skb(skb, FREE_WRITE);
-
-	/*
-	 *	Clean up:  We're done with the route and the packet
-	 */
-	 
-	ip_rt_put(rt);
- 
-#ifdef TUNNEL_DEBUG
-	printk("Packet sent through tunnel interface!\n");
-#endif
-/*printk(">");*/
 	/* Record statistics and return */
 	stats->tx_packets++;
-	dev->tbusy=0;
 	return 0;
 }
 
@@ -363,7 +242,7 @@ int tunnel_init(struct device *dev)
 	dev->hard_header	= NULL;
 	dev->rebuild_header 	= NULL;
 	dev->set_mac_address 	= NULL;
-	dev->header_cache_bind 	= NULL;
+	dev->hard_header_cache 	= NULL;
 	dev->header_cache_update= NULL;
 
 	dev->type				= ARPHRD_TUNNEL;

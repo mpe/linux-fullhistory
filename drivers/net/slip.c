@@ -517,24 +517,6 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 
 /* Return the frame type ID.  This is normally IP but maybe be AX.25. */
 
-/* Fill in the MAC-level header. Not used by SLIP. */
-static int
-sl_header(struct sk_buff *skb, struct device *dev, unsigned short type,
-	  void *daddr, void *saddr, unsigned len)
-{
-	return 0;
-}
-
-
-/* Rebuild the MAC-level header.  Not used by SLIP. */
-static int
-sl_rebuild_header(void *buff, struct device *dev, unsigned long raddr,
-		  struct sk_buff *skb)
-{
-	return 0;
-}
-
-
 /* Open the low-level part of the SLIP channel. Easy! */
 static int
 sl_open(struct device *dev)
@@ -1180,20 +1162,18 @@ slip_init(struct device *dev)
 	dev->hard_start_xmit	= sl_xmit;
 	dev->open		= sl_open_dev;
 	dev->stop		= sl_close;
-	dev->hard_header	= sl_header;
 	dev->get_stats	        = sl_get_stats;
 	dev->hard_header_len	= 0;
 	dev->addr_len		= 0;
 	dev->type		= ARPHRD_SLIP + SL_MODE_DEFAULT;
 	dev->tx_queue_len	= 10;
-	dev->rebuild_header	= sl_rebuild_header;
 
 	for (i = 0; i < DEV_NUMBUFFS; i++)  {
 		skb_queue_head_init(&dev->buffs[i]);
 	}
 
 	/* New-style flags. */
-	dev->flags		= 0;
+	dev->flags		= IFF_NOARP|IFF_MULTICAST;
 	dev->family		= AF_INET;
 	dev->pa_addr		= 0;
 	dev->pa_brdaddr	        = 0;

@@ -25,8 +25,11 @@
 #include <net/tcp.h>
 #include <net/icmp.h>
 #include <net/route.h>
+#include <net/scm.h>
 #include <net/inet_common.h>
 #include <linux/net_alias.h>
+
+extern struct net_proto_family inet_family_ops;
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 #include <linux/in6.h>
@@ -44,10 +47,13 @@
 #include <linux/net_alias.h>
 #endif
 
-#if     defined(CONFIG_ULTRA)   ||      defined(CONFIG_WD80x3)          || \
-        defined(CONFIG_EL2)     ||      defined(CONFIG_NE2000)          || \
-        defined(CONFIG_E2100)   ||      defined(CONFIG_HPLAN_PLUS)      || \
-        defined(CONFIG_HPLAN)   ||      defined(CONFIG_AC3200)
+#include <net/scm.h>
+
+#if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
+	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
+	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
+	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		|| \
+	defined(CONFIG_ES3210)
 #include "../drivers/net/8390.h"
 #endif
 
@@ -88,6 +94,10 @@ static struct symbol_table net_syms = {
 	X(skb_copy_datagram_iovec),
 	X(datagram_select),
 
+	/* ?? needed by smbfs.o */
+	X(__scm_destroy),
+	X(__scm_send),
+
 #ifdef CONFIG_IPX_MODULE
 	X(make_8023_client),
 	X(destroy_8023_client),
@@ -102,23 +112,30 @@ static struct symbol_table net_syms = {
 	X(inet_del_protocol),
 	X(rarp_ioctl_hook),
 	X(init_etherdev),
-	X(ip_rt_route),
+	X(ip_route_output),
 	X(icmp_send),
 	X(ip_options_compile),
 	X(ip_rt_put),
 	X(arp_send),
 	X(ip_id_count),
 	X(ip_send_check),
+	X(inet_family_ops),
+
+	X(__scm_send),
+	X(__scm_destroy),
+
 #ifdef CONFIG_IP_FORWARD
 	X(ip_forward),
 #endif
 
 #ifdef CONFIG_IPV6_MODULE
 	/* inet functions common to v4 and v6 */
-	X(inet_proto_ops),
+	X(inet_stream_ops),
+	X(inet_dgram_ops),
 	X(inet_remove_sock),
 	X(inet_release),
-	X(inet_connect),
+	X(inet_stream_connect),
+	X(inet_dgram_connect),
 	X(inet_accept),
 	X(inet_select),
 	X(inet_listen),
@@ -133,7 +150,6 @@ static struct symbol_table net_syms = {
 	X(destroy_sock),
 	X(ip_queue_xmit),
 	X(csum_partial),
-	X(ip_my_addr),
 	X(skb_copy),
 	X(dev_lockct),
 	X(ndisc_eth_hook),
@@ -159,7 +175,6 @@ static struct symbol_table net_syms = {
 	X(tcp_getsockopt),
 	X(tcp_recvmsg),
 	X(tcp_send_synack),
-	X(sock_wfree),
 	X(sock_wmalloc),
 	X(tcp_reset_xmit_timer),
 	X(tcp_parse_options),
@@ -178,7 +193,7 @@ static struct symbol_table net_syms = {
 	X(tcp_v4_syn_recv_sock),
 	X(tcp_v4_backlog_rcv),
 	X(tcp_v4_connect),
-	X(ip_chk_addr),
+	X(__ip_chk_addr),
 	X(net_reset_timer),
 	X(net_delete_timer),
 	X(udp_prot),
@@ -189,7 +204,8 @@ static struct symbol_table net_syms = {
 #if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
 	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
 	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
-	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)
+	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		|| \
+	defined(CONFIG_ES3210)
 	/* If 8390 NIC support is built in, we will need these. */
 	X(ei_open),
 	X(ei_close),
@@ -228,12 +244,10 @@ static struct symbol_table net_syms = {
 	X(eth_copy_and_sum),
 	X(arp_query),
 	X(alloc_skb),
-	X(kfree_skb),
+	X(__kfree_skb),
 	X(skb_clone),
+	X(skb_copy),
 	X(dev_alloc_skb),
-	X(dev_kfree_skb),
-	X(skb_device_unlock),
-	X(skb_device_locked),
 	X(netif_rx),
 	X(dev_tint),
 	X(irq2dev_map),

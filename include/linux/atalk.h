@@ -125,8 +125,6 @@ struct elapaarp
 	__u8	pa_dst_node		__attribute__ ((packed));	
 };
 
-typedef struct sock	atalk_socket;
-
 #define AARP_EXPIRY_TIME	(5*60*HZ)	/* Not specified - how long till we drop a resolved entry */
 #define AARP_HASH_SIZE		16		/* Size of hash table */
 #define AARP_TICK_TIME		(HZ/5)		/* Fast retransmission timer when resolving */

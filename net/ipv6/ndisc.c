@@ -23,18 +23,7 @@
  *	Janos Farkas			:	kmalloc failure checks
  */
 
-/*
- *	Interface:
- *
- *	ndisc_lookup will be called from eth.c on dev->(re)build_header
- *
- *	ndisc_rcv
- *	ndisc_validate is called by higher layers when they know a neighbour
- *		       is reachable.
- *
- *	Manages neighbour cache
- *
- */
+#define ND_DEBUG 2
 
 #define __NO_VERSION__
 #include <linux/module.h>
@@ -46,7 +35,8 @@
 #include <linux/sched.h>
 #include <linux/net.h>
 #include <linux/in6.h>
-#include <linux/netdevice.h>
+
+#include <net/neighbour.h>
 #include <linux/if_arp.h>
 #include <linux/ipv6.h>
 #include <linux/icmpv6.h>
@@ -61,22 +51,35 @@
 #include <net/addrconf.h>
 
 
+
 #include <net/checksum.h>
 #include <linux/proc_fs.h>
 
 #define NCACHE_NUM_BUCKETS 32
 
-static struct socket ndisc_socket;
+static struct inode ndisc_inode;
+static struct socket *ndisc_socket=&ndisc_inode.u.socket_i;
 
 unsigned long nd_rand_seed = 152L;
 
 struct ndisc_statistics nd_stats;
 
-static struct neighbour *neighbours[NCACHE_NUM_BUCKETS];
+static struct neigh_table nd_tbl;
+
+unsigned int	ndisc_hash(void *primary_key);
+int			ndisc_eth_resolv(unsigned char *h_dest,
+					 struct device *dev,
+					 struct sk_buff *skb);
+
+static struct neigh_ops nd_neigh_ops = {
+	ETH_P_IPV6,
+	ndisc_hash,
+	ndisc_eth_resolv,
+	NULL
+};
+
 static struct timer_list ndisc_timer;
 static struct timer_list ndisc_gc_timer;
-
-static atomic_t	ndisc_lock = 0;
 
 /*
  *	Protocol variables
@@ -99,18 +102,8 @@ int	nd_gc_interval			= 5 * HZ;
 
 int	nd_gc_staletime			= 3 * RECHABLE_TIME;
 
-static struct neighbour ndisc_insert_queue = {
-	{{{0,}}}, 0, 0, NULL, 0,
-	{0,}, NULL, {0,}, 0, 0, 0, 0, 0,
-	&ndisc_insert_queue,
-	&ndisc_insert_queue
-};
 
-static int ndisc_ins_queue_len = 0;
-
-int  ndisc_event_timer(struct neighbour *neigh);
-
-static void ndisc_bh_insert(void);
+static int  ndisc_event_timer(struct nd_neigh *ndn);
 
 int ipv6_random(void)
 {
@@ -133,15 +126,13 @@ static __inline__ unsigned long rand_reach_time(void)
 
 void ndisc_verify_reachability(struct neighbour * neigh);
 
-/*
- *	(inline) support functions
- */
-
-static __inline__ __u32 ndisc_hash(struct in6_addr *addr)
+unsigned int ndisc_hash(void *primary_key)
 {
-        
+        struct in6_addr *addr = (struct in6_addr *) primary_key;
         __u32 hash_val;
         
+	addr = (struct in6_addr *) primary_key;
+	
         hash_val = addr->s6_addr32[2] ^ addr->s6_addr32[3];
 
         hash_val ^= hash_val >> 16;
@@ -149,239 +140,122 @@ static __inline__ __u32 ndisc_hash(struct in6_addr *addr)
         return (hash_val & (NCACHE_NUM_BUCKETS - 1));
 }
 
+static int ndisc_gc_func(struct neighbour *neigh, void *arg);
 
-static __inline__ void ndisc_neigh_queue(struct neighbour *neigh)
+static void ndisc_periodic_timer(unsigned long arg)
 {
-	struct neighbour *next = &ndisc_insert_queue;
-
-	ndisc_ins_queue_len++;
-
-	neigh->prev = next->prev;
-	neigh->prev->next = neigh;
-	next->prev = neigh;
-	neigh->next = next;
-}
-
-static __inline__ struct neighbour * ndisc_dequeue(void)
-{
-	struct neighbour *next = &ndisc_insert_queue;
-	struct neighbour *head;
-
-	ndisc_ins_queue_len--;
-
-	head = next->next;
-
-	if (head == next)
-	{
-		return NULL;
-	}
-
-	head->next->prev = head->prev;
-	next->next = head->next;
-
-	head->next = NULL;
-	head->prev = NULL;
-
-	return head;
-}
-
-static __inline__ void ndisc_release_lock(void)
-{
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
-
-	ndisc_lock--;
-
-	if (ndisc_lock == 0 && ndisc_ins_queue_len)
-	{
-		ndisc_bh_insert();
-	}
-
-	restore_flags(flags);
-}
-
-static void ndisc_insert_neigh(struct neighbour *neigh)
-{
-
-        struct neighbour * bucket;
-        __u32 hash_val = ndisc_hash(&neigh->addr);
-        
-        bucket = neighbours[hash_val];
-        
-        if (!bucket)
-	{
-                neighbours[hash_val] = neigh;
-                return;
-        }
-
-        for (; bucket->next; bucket = bucket->next)
-		;
-	        
-        bucket->next = neigh;
-	neigh->prev = bucket;
-}
-
-static __inline__ struct neighbour * 
-ndisc_retrieve_neigh(struct device *dev, struct in6_addr *addr)
-{
-
-        struct neighbour * iter;
-        iter = neighbours[ndisc_hash(addr)];
-
-        for (; iter; iter = iter->next)
-	{
-		if (dev == iter->dev && ipv6_addr_cmp(addr, &iter->addr) == 0)
-			return iter;
-	}
-        return NULL;
-}
-
-static void ndisc_unlink_neigh(struct neighbour * neigh) 
-{
-	if (neigh->prev)
-		neigh->prev->next = neigh->next;
-	else
-	{
-		int hash = ndisc_hash(&neigh->addr);
-		neighbours[hash] = neigh->next;
-	}
-
-	if (neigh->next)
-		neigh->next->prev = neigh->prev;
-}
-
-static void ndisc_release_neigh(struct neighbour * neigh)
-{
-	struct sk_buff *skb;
-
-	while((skb=skb_dequeue(&neigh->arp_queue)))
-	{
-		dev_kfree_skb(skb, FREE_WRITE);
-	}
-
-	if (neigh->refcnt == 0)
-	{
-		ndisc_unlink_neigh(neigh);
-		kfree(neigh);
-	}
-}
-
-static void ndisc_bh_insert(void)
-{
-	struct neighbour *neigh;
-
-	while((neigh = ndisc_dequeue()))
-	{
-		ndisc_insert_neigh(neigh);
-	}
-}
-
-
-static void ndisc_garbage_collect(unsigned long arg)
-{
-        struct neighbour * neigh;
 	static unsigned long last_rand = 0;
-        unsigned long now = jiffies;
-	unsigned long flags;
-        int i = 0;
-
-
+	unsigned long now = jiffies;
+	
 	/*
 	 *	periodicly compute ReachableTime from random function
 	 */
-	if (now - last_rand > REACH_RANDOM_INTERVAL)
+	
+	if ((now - last_rand) > REACH_RANDOM_INTERVAL)
 	{
 		last_rand = now;
 		nd_reachable_time = rand_reach_time();
 	}
 
-	save_flags(flags);
-	cli();
+	neigh_table_lock(&nd_tbl);
 
-	if (ndisc_lock)
+	start_bh_atomic();
+	if (nd_tbl.tbl_lock == 1)
 	{
-		restore_flags(flags);
-		ndisc_gc_timer.expires = now + HZ;
-		add_timer(&ndisc_gc_timer);
-		return;
+		ntbl_walk_table(&nd_tbl, ndisc_gc_func, 0, 0, NULL);
 	}
-		
-        for (; i < NCACHE_NUM_BUCKETS; i++)
-                for (neigh = neighbours[i]; neigh;)
-		{
-                        /*
-			 *	Release unused entries
-			 */
-                        if (neigh->refcnt == 0 &&
-			    ((neigh->nud_state == NUD_FAILED) ||
-			     ((neigh->nud_state == NUD_REACHABLE) &&
-			      (neigh->tstamp <= (now - nd_gc_staletime))
-			      )
-			     )
-			    )
-			{
-				struct neighbour *prev;
-				
-				prev = neigh;
-				neigh = neigh->next;
-                                ndisc_release_neigh(prev);
-				continue;
-                        }
-			neigh = neigh->next;
-		}
-
-	restore_flags(flags);
-
-        ndisc_gc_timer.expires = now + nd_gc_interval;
-        add_timer(&ndisc_gc_timer);
+	end_bh_atomic();
+	
+	neigh_table_unlock(&nd_tbl);
+	
+	ndisc_gc_timer.expires = now + HZ;
+	ndisc_gc_timer.expires = now + nd_gc_interval;
+	add_timer(&ndisc_gc_timer);
 }
 
-static __inline__ void ndisc_add_timer(struct neighbour *neigh, int timer)
+static int ndisc_gc_func(struct neighbour *neigh, void *arg)
+{
+	struct nd_neigh *ndn = (struct nd_neigh *) neigh;
+        unsigned long now = jiffies;
+
+	if (ndn->ndn_refcnt == 0 &&
+	    ((ndn->ndn_nud_state == NUD_FAILED) ||
+	     ((ndn->ndn_nud_state == NUD_REACHABLE) &&
+	      (ndn->ndn_tstamp <= (now - nd_gc_staletime))
+	      )
+	     )
+	    )
+	{
+		/*
+		 *	Release unused entries
+		 */
+		
+		return 1;
+	}
+	return 0;
+}
+
+static __inline__ void ndisc_add_timer(struct nd_neigh *ndn, int timer)
 {
 	unsigned long now = jiffies;
 	unsigned long tval;
 
-	neigh->expires = now + timer;
+	ndn->ndn_expires = now + timer;
 	tval = del_timer(&ndisc_timer);
 
 	if (tval)
 	{
-		tval = min(tval, neigh->expires);
+		tval = min(tval, ndn->ndn_expires);
 	}
 	else
-		tval = neigh->expires;
+		tval = ndn->ndn_expires;
 
 	ndisc_timer.expires = tval;
 	add_timer(&ndisc_timer);
 }
         
-static void ndisc_del_timer(struct neighbour *neigh)
+static void ndisc_del_timer(struct nd_neigh *ndn)
 {
 	unsigned long tval;
 
-	if (!(neigh->nud_state & NUD_IN_TIMER))
+	if (!(ndn->ndn_nud_state & NUD_IN_TIMER))
 		return;
 
 	tval = del_timer(&ndisc_timer);
 	
-	if (tval == neigh->expires)
+	if (tval == ndn->ndn_expires)
 	{
 		int i;
 		
 		tval = ~0UL;
 
+		neigh_table_lock(&nd_tbl);
+		
 		/* need to search the entire neighbour cache */
-		for (i=0; i < NCACHE_NUM_BUCKETS; i++)
+		for (i=0; i < nd_tbl.tbl_size; i++)
 		{
-			for (neigh = neighbours[i]; neigh; neigh=neigh->next)
-				if (neigh->nud_state & NUD_IN_TIMER)
-				{
-					tval = min(tval, neigh->expires);
-				}
-		}
+			struct neighbour *neigh, *head;
+			head = nd_tbl.hash_buckets[i];
+				
+			if ((neigh = head) == NULL)
+				continue;
+			
+			do
+			{
+				struct nd_neigh *n;
 
+				n = (struct nd_neigh *) neigh;
+
+				if (n->ndn_nud_state & NUD_IN_TIMER)
+				{
+					tval = min(tval, n->ndn_expires);
+				}
+				
+				neigh = neigh->next;
+				
+			} while (neigh != head);
+		}
+		neigh_table_unlock(&nd_tbl);
 	}
 
 	if (tval == ~(0UL))
@@ -391,53 +265,69 @@ static void ndisc_del_timer(struct neighbour *neigh)
 	add_timer(&ndisc_timer);
 }
 
-static struct neighbour * ndisc_new_neigh(struct device *dev,
-					  struct in6_addr *addr)
+static int ndisc_forced_gc(struct neighbour *neigh, void *arg)
 {
-	struct neighbour *neigh;
-	unsigned long flags;
+	struct nd_neigh *ndn = (struct nd_neigh *) neigh;
 
-	neigh = (struct neighbour *) kmalloc(sizeof(struct neighbour),
-					     GFP_ATOMIC);
-
-	if (neigh == NULL)
+	if (ndn->ndn_refcnt == 0)
 	{
-		printk(KERN_DEBUG "ndisc: kmalloc failure\n");
+		if (ndn->ndn_nud_state & NUD_IN_TIMER)
+		{
+			ndisc_del_timer(ndn);
+		}
+		
+		return 1;
+	}
+	return 0;
+}
+
+static struct nd_neigh * ndisc_new_neigh(struct device *dev,
+					 struct in6_addr *addr)
+{
+	struct nd_neigh *ndn;
+
+	ndn = (struct nd_neigh *) neigh_alloc(sizeof(struct nd_neigh),
+					      GFP_ATOMIC);
+	
+	if (ndn == NULL)
+	{
+
+#if ND_DEBUG >= 2
+		printk(KERN_DEBUG "neigh_alloc: out of memory\n");
+#endif
+
+		start_bh_atomic();
+		if (nd_tbl.tbl_lock == 1)
+		{
+
+#if ND_DEBUG >= 2
+			printk(KERN_DEBUG "ndisc_alloc: forcing gc\n");
+#endif
+			ntbl_walk_table(&nd_tbl, ndisc_forced_gc, 0, 0, NULL);
+		}
+		
+		end_bh_atomic();
+#if ND_DEBUG >= 1
+		printk(KERN_DEBUG "ndisc_alloc failed\n");
+#endif
 		return NULL;
 	}
 
 	nd_stats.allocs++;
 
-	memset(neigh, 0, sizeof (struct neighbour));
-	skb_queue_head_init(&neigh->arp_queue);
-
-	ipv6_addr_copy(&neigh->addr, addr);
-	neigh->len = 128;
-	neigh->type = ipv6_addr_type(addr);
-	neigh->dev = dev;
-	neigh->tstamp = jiffies;
+	ipv6_addr_copy(&ndn->ndn_addr, addr);
+	ndn->ndn_plen = 128;
+	ndn->ndn_type = ipv6_addr_type(addr);
+	ndn->ndn_dev = dev;
+	ndn->ndn_tstamp = jiffies;
 
 	if (dev->type == ARPHRD_LOOPBACK || dev->type == ARPHRD_SIT)
 	{
-		neigh->flags |= NCF_NOARP;
+		ndn->ndn_flags |= NCF_NOARP;
 	}
 
-	save_flags(flags);
-	cli();
-
-	if (ndisc_lock == 0)
-	{
-		/* Add to the cache. */
-		ndisc_insert_neigh(neigh);
-	}
-	else
-	{
-		ndisc_neigh_queue(neigh);
-	}
-
-	restore_flags(flags);
-
-	return neigh;
+	neigh_insert(&nd_tbl, (struct neighbour *) ndn);
+	return ndn;
 }
 
 /*
@@ -448,7 +338,7 @@ static struct neighbour * ndisc_new_neigh(struct device *dev,
 
 struct neighbour * ndisc_get_neigh(struct device *dev, struct in6_addr *addr)
 {
-	struct neighbour *neigh;
+	struct nd_neigh *neigh;
 
 	/*
 	 *	neighbour cache:
@@ -457,24 +347,28 @@ struct neighbour * ndisc_get_neigh(struct device *dev, struct in6_addr *addr)
 
 	if (dev == NULL)
 	{
+#if ND_DEBUG >= 1
 		printk(KERN_DEBUG "ncache_get_neigh: NULL device\n");
+#endif
 		return NULL;
 	}
 
-	atomic_inc(&ndisc_lock);
+	neigh_table_lock(&nd_tbl);
 
-        neigh = ndisc_retrieve_neigh(dev, addr);
+        neigh = (struct nd_neigh *) neigh_lookup(&nd_tbl, (void *) addr,
+						 sizeof(struct in6_addr), dev);
 
-	ndisc_release_lock();
-
+	
 	if (neigh == NULL)
 	{
 		neigh = ndisc_new_neigh(dev, addr);
 	}
 
-	atomic_inc(&neigh->refcnt);
+	neigh_table_unlock(&nd_tbl);
+
+	atomic_inc(&neigh->ndn_refcnt);
 	
-	return neigh;	
+	return (struct neighbour *) neigh;	
 }
 
 /*
@@ -486,66 +380,64 @@ struct neighbour * ndisc_get_neigh(struct device *dev, struct in6_addr *addr)
 int ndisc_eth_resolv(unsigned char *h_dest, struct device *dev,
 		     struct sk_buff *skb)
 {
-	struct neighbour *neigh;
+	struct nd_neigh *ndn;
 
-	neigh = skb->nexthop;
-
-	if (neigh == NULL)
+	ndn = (struct nd_neigh *) skb->nexthop;
+	
+	if (ndn == NULL)
 	{
+		struct in6_addr *daddr;
 		int addr_type;
 
-		addr_type = ipv6_addr_type(&skb->ipv6_hdr->daddr);
+		daddr = &skb->nh.ipv6h->daddr;
+		
+		addr_type = ipv6_addr_type(daddr);
 		
 		if (addr_type & IPV6_ADDR_MULTICAST)
 		{
-			ipv6_mc_map(&skb->ipv6_hdr->daddr, h_dest);
+			ipv6_mc_map(daddr, h_dest);
 			return 0;
 		}
 
+#if ND_DEBUG >= 2
 		printk(KERN_DEBUG "ndisc_eth_resolv: nexthop is NULL\n");
+#endif
 		goto discard;
 	}
 
 	if (skb->pkt_type == PACKET_NDISC)
 		goto ndisc_pkt;
 	
-	switch (neigh->nud_state) {	
+	switch (ndn->ndn_nud_state) {	
 	case NUD_FAILED:
 	case NUD_NONE:
-		ndisc_event_send(neigh, skb);
+		ndisc_event_send((struct neighbour *)ndn, skb);
 
 	case NUD_INCOMPLETE:			
-		if (skb_queue_len(&neigh->arp_queue) >= NDISC_QUEUE_LEN)
+		if (skb_queue_len(&ndn->neigh.arp_queue) >= NDISC_QUEUE_LEN)
 		{
 			struct sk_buff *buff;
 			
-			buff = neigh->arp_queue.prev;
+			buff = ndn->neigh.arp_queue.prev;
 			skb_unlink(buff);
 			dev_kfree_skb(buff, FREE_WRITE);
 		}
-		skb_queue_head(&neigh->arp_queue, skb);
+		skb_queue_head(&ndn->neigh.arp_queue, skb);
 		return 1;
 	default:
-		ndisc_event_send(neigh, skb);
+		ndisc_event_send((struct neighbour *)ndn, skb);
 	}
 
   ndisc_pkt:
-
-	if (neigh->h_dest == NULL)
+	
+	if ((ndn->ndn_flags & NTF_COMPLETE) == 0)
 	{
-		printk(KERN_DEBUG "neigh->h_dest is NULL\n");
-		goto discard;
+#if ND_DEBUG >=1
+		/* This shouldn't happen */
+		printk(KERN_DEBUG "ND: using incomplete entry\n");
+#endif
 	}
-
-	memcpy(h_dest, neigh->h_dest, dev->addr_len);
-
-	if ((neigh->flags & NCF_HHVALID) == 0)
-	{
-		/*
-		 * copy header to hh_data and move h_dest pointer
-		 * this is strictly media dependent.
-		 */
-	}
+	memcpy(h_dest, ndn->ndn_ha, dev->addr_len);
 	return 0;
 
   discard:
@@ -555,14 +447,16 @@ int ndisc_eth_resolv(unsigned char *h_dest, struct device *dev,
 }
 
 
-/* Send the actual Neighbour Advertisement */
+/*
+ *	Send a Neighbour Advertisement
+ */
 
-void ndisc_send_na(struct device *dev, struct neighbour *neigh,
+void ndisc_send_na(struct device *dev, struct nd_neigh *ndn,
 		   struct in6_addr *daddr,
 		   struct in6_addr *solicited_addr,
 		   int router, int solicited, int override, int inc_opt) 
 {
-        struct sock *sk = (struct sock *)ndisc_socket.data;
+        struct sock *sk = ndisc_socket->sk;
         struct nd_msg *msg;
         int len, opt_len;
         struct sk_buff *skb;
@@ -581,13 +475,10 @@ void ndisc_send_na(struct device *dev, struct neighbour *neigh,
 	if (skb == NULL)
 	{
 		printk(KERN_DEBUG "send_na: alloc skb failed\n");
-		return;
 	}
 
-	skb->free=1;
-
-	if (ipv6_bld_hdr_2(sk, skb, dev, neigh, solicited_addr, daddr,
-			   IPPROTO_ICMPV6, len) < 0)
+	if (ipv6_bld_hdr_2(sk, skb, dev, (struct neighbour *) ndn, 
+			   solicited_addr, daddr, IPPROTO_ICMPV6, len) < 0)
         {
 		kfree_skb(skb, FREE_WRITE);
 		printk(KERN_DEBUG 
@@ -638,7 +529,7 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 		   struct in6_addr *solicit,
 		   struct in6_addr *daddr, struct in6_addr *saddr) 
 {
-        struct sock *sk = (struct sock *) ndisc_socket.data;
+        struct sock *sk = ndisc_socket->sk;
         struct sk_buff *skb;
         struct nd_msg *msg;
         int len, opt_len;
@@ -649,14 +540,15 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 	len = sizeof(struct icmpv6hdr) + sizeof(struct in6_addr) +
                 (opt_len << 3);
 
-        skb = sock_alloc_send_skb(sk, MAX_HEADER + len, 0, 0, &err);
+	skb = sock_alloc_send_skb(sk, MAX_HEADER + len, 0, 0, &err);
 	if (skb == NULL)
 	{
+#if ND_DEBUG >= 1
 		printk(KERN_DEBUG "send_ns: alloc skb failed\n");
+#endif
 		return;
 	}
 
-	skb->free=1;
 	skb->pkt_type = PACKET_NDISC;
 
 	if (saddr == NULL)
@@ -672,38 +564,38 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 		}
 	}
 
-        if(ipv6_addr_type(daddr) == IPV6_ADDR_MULTICAST)
+	if(ipv6_addr_type(daddr) == IPV6_ADDR_MULTICAST)
 	{
-                nd_stats.snt_probes_mcast++;
+		nd_stats.snt_probes_mcast++;
 	}
         else
 	{
-                nd_stats.snt_probes_ucast++;
+		nd_stats.snt_probes_ucast++;
 	}
 
-        if (ipv6_bld_hdr_2(sk, skb, dev, neigh, saddr, daddr, IPPROTO_ICMPV6,
+	if (ipv6_bld_hdr_2(sk, skb, dev, neigh, saddr, daddr, IPPROTO_ICMPV6,
 			   len) < 0 )
 	{
-                kfree_skb(skb, FREE_WRITE);
-                printk(KERN_DEBUG
-                       "ndisc_send_ns: ipv6_build_header returned < 0\n");
-                return;
-        }
+		kfree_skb(skb, FREE_WRITE);
+		printk(KERN_DEBUG
+		       "ndisc_send_ns: ipv6_build_header returned < 0\n");
+		return;
+	}
 	
-        msg = (struct nd_msg *)skb_put(skb, len);
-        msg->icmph.type = NDISC_NEIGHBOUR_SOLICITATION;
-        msg->icmph.code = 0;
-        msg->icmph.checksum = 0;
-        msg->icmph.icmp6_unused = 0;
+	msg = (struct nd_msg *)skb_put(skb, len);
+	msg->icmph.type = NDISC_NEIGHBOUR_SOLICITATION;
+	msg->icmph.code = 0;
+	msg->icmph.checksum = 0;
+	msg->icmph.icmp6_unused = 0;
 
-        /* Set the target address. */
-        ipv6_addr_copy(&msg->target, solicit);
+	/* Set the target address. */
+	ipv6_addr_copy(&msg->target, solicit);
 
-        /* Set the source link-layer address option. */
-        msg->opt.opt_type = ND_OPT_SOURCE_LL_ADDR;
-        msg->opt.opt_len = opt_len;
+	/* Set the source link-layer address option. */
+	msg->opt.opt_type = ND_OPT_SOURCE_LL_ADDR;
+	msg->opt.opt_len = opt_len;
 
-        memcpy(msg->opt.link_addr, dev->dev_addr, dev->addr_len);
+	memcpy(msg->opt.link_addr, dev->dev_addr, dev->addr_len);
 
 	if ((opt_len << 3) - (2 + dev->addr_len))
 	{
@@ -712,7 +604,7 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 	}
 
 	/* checksum */
-	msg->icmph.checksum = csum_ipv6_magic(&skb->ipv6_hdr->saddr,
+	msg->icmph.checksum = csum_ipv6_magic(&skb->nh.ipv6h->saddr,
 					      daddr, len, 
 					      IPPROTO_ICMPV6,
 					      csum_partial((__u8 *) msg, 
@@ -724,7 +616,7 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 void ndisc_send_rs(struct device *dev, struct in6_addr *saddr,
 		   struct in6_addr *daddr)
 {
-	struct sock *sk = (struct sock *) ndisc_socket.data;
+	struct sock *sk = ndisc_socket->sk;
         struct sk_buff *skb;
         struct icmpv6hdr *hdr;
 	__u8 * opt;
@@ -739,10 +631,7 @@ void ndisc_send_rs(struct device *dev, struct in6_addr *saddr,
 	if (skb == NULL)
 	{
 		printk(KERN_DEBUG "send_ns: alloc skb failed\n");
-		return;
 	}
-
-	skb->free=1;
 
         if (ipv6_bld_hdr_2(sk, skb, dev, NULL, saddr, daddr, IPPROTO_ICMPV6,
 			   len) < 0 )
@@ -774,7 +663,7 @@ void ndisc_send_rs(struct device *dev, struct in6_addr *saddr,
 	}
 
 	/* checksum */
-	hdr->checksum = csum_ipv6_magic(&skb->ipv6_hdr->saddr, daddr, len,
+	hdr->checksum = csum_ipv6_magic(&skb->nh.ipv6h->saddr, daddr, len,
 					IPPROTO_ICMPV6,
 					csum_partial((__u8 *) hdr, len, 0));
 
@@ -783,8 +672,8 @@ void ndisc_send_rs(struct device *dev, struct in6_addr *saddr,
 }
 		   
 
-static int ndisc_store_hwaddr(struct device *dev, __u8 *opt, int opt_len,
-			      __u8 *h_addr, int option)
+static int ndisc_store_hwaddr(struct nd_neigh *ndn, __u8 *opt, int opt_len,
+			      int option)
 {
 	while (*opt != option && opt_len)
 	{
@@ -804,7 +693,7 @@ static int ndisc_store_hwaddr(struct device *dev, __u8 *opt, int opt_len,
 
 	if (*opt == option)
 	{
-		memcpy(h_addr, opt + 2, dev->addr_len); 
+		memcpy(ndn->neigh.ha, opt + 2, ndn->ndn_dev->addr_len); 
 		return 0;
 	}
 
@@ -816,51 +705,41 @@ static int ndisc_store_hwaddr(struct device *dev, __u8 *opt, int opt_len,
 static void ndisc_timer_handler(unsigned long arg) 
 {
 	unsigned long now = jiffies;
-        struct neighbour * neigh;
 	unsigned long ntimer = ~0UL;
         int i;
 
-	atomic_inc(&ndisc_lock);
-
-	for (i=0; i < NCACHE_NUM_BUCKETS; i++)
+	neigh_table_lock(&nd_tbl);
+	
+	for (i=0; i < nd_tbl.tbl_size; i++)
 	{
-                for (neigh = neighbours[i]; neigh;)
-		{
-                        if (neigh->nud_state & NUD_IN_TIMER)
-			{
-				int time;
+		struct nd_neigh *ndn, *head;
 
-				if (neigh->expires <= now)
+		head = (struct nd_neigh *) nd_tbl.hash_buckets[i];
+
+		if ((ndn = head) == NULL)
+			continue;
+		
+		do
+		{
+                        if (ndn->ndn_nud_state & NUD_IN_TIMER)
+			{
+				long time;
+
+				if ((ndn->ndn_expires - now) <= 0)
 				{
-					time = ndisc_event_timer(neigh);
+					time = ndisc_event_timer(ndn);
 				}
 				else
-					time = neigh->expires - now;
-
-				if (time == 0)
+					time = ndn->ndn_expires - now;
+				
+				if (time)
 				{
-					unsigned long flags;
-
-					save_flags(flags);
-					cli();
-
-					if (ndisc_lock == 1)
-					{
-						struct neighbour *old = neigh;
-
-						neigh = neigh->next;
-						ndisc_release_neigh(old);
-						restore_flags(flags);
-						continue;
-					}
-
-					restore_flags(flags);
+					ntimer = min(ntimer, time);
 				}
-
-				ntimer = min(ntimer, time);
 			}
-			neigh = neigh->next;
-		}
+			ndn = (struct nd_neigh *) ndn->neigh.next;
+
+		} while (ndn != head);
 	}
 
 	if (ntimer != (~0UL))
@@ -868,11 +747,12 @@ static void ndisc_timer_handler(unsigned long arg)
 		ndisc_timer.expires = jiffies + ntimer;
 		add_timer(&ndisc_timer);
 	}
-	ndisc_release_lock();
+	
+	neigh_table_unlock(&nd_tbl);
 }
 
 
-int ndisc_event_timer(struct neighbour *neigh)
+static int ndisc_event_timer(struct nd_neigh *ndn)
 {
 	struct in6_addr *daddr;
 	struct in6_addr *target;
@@ -880,66 +760,67 @@ int ndisc_event_timer(struct neighbour *neigh)
 	struct device *dev;
 	int max_probes;
 
-	if (neigh->nud_state == NUD_DELAY)
+	if (ndn->ndn_nud_state == NUD_DELAY)
 	{
-		neigh->nud_state = NUD_PROBE;
+		ndn->ndn_nud_state = NUD_PROBE;
 	}
 
-	max_probes = (neigh->nud_state == NUD_PROBE ? nd_max_unicast_solicit:
+	max_probes = (ndn->ndn_nud_state == NUD_PROBE ? nd_max_unicast_solicit:
 		      nd_max_multicast_solicit);
 
-	if (neigh->probes == max_probes)
+	if (ndn->ndn_probes == max_probes)
 	{
 		struct sk_buff *skb;
 
-		neigh->nud_state = NUD_FAILED;
-		neigh->flags |= NCF_INVALID;
+		ndn->ndn_nud_state = NUD_FAILED;
+		ndn->ndn_flags &= ~NTF_COMPLETE;
 		nd_stats.res_failed++;
 
-		while((skb=skb_dequeue(&neigh->arp_queue)))
+		while((skb=skb_dequeue(&ndn->neigh.arp_queue)))
 		{
 			/*
 			 *	"The sender MUST return an ICMP
 			 *	 destination unreachable"
 			 */
 			icmpv6_send(skb, ICMPV6_DEST_UNREACH,
-				    ICMPV6_ADDR_UNREACH, 0, neigh->dev);
+				    ICMPV6_ADDR_UNREACH, 0, ndn->ndn_dev);
 
 			dev_kfree_skb(skb, FREE_WRITE);
 		}
 		return 0;
 	}
-		
-	neigh->probes++;
 
-	dev = neigh->dev;
-	target = &neigh->addr;
+	ndn->ndn_probes++;
 
-	if (neigh->nud_state == NUD_INCOMPLETE)
+	dev = ndn->ndn_dev;
+	target = &ndn->ndn_addr;
+
+	if (ndn->ndn_nud_state == NUD_INCOMPLETE)
 	{
-		addrconf_addr_solict_mult(&neigh->addr, &mcaddr);
-		daddr = &mcaddr;		
-		neigh = NULL;
+		addrconf_addr_solict_mult(&ndn->ndn_addr, &mcaddr);
+		daddr = &mcaddr;
+		ndn = NULL;
 	}
 	else
 	{
-		daddr = &neigh->addr;		
+		daddr = &ndn->ndn_addr;
 	}
 
-	ndisc_send_ns(dev, neigh, target, daddr, NULL);
+	ndisc_send_ns(dev, (struct neighbour *) ndn, target, daddr, NULL);
 
-	return nd_retrans_timer;	
+	return nd_retrans_timer;
 }
 
 void ndisc_event_send(struct neighbour *neigh, struct sk_buff *skb)
 {
-	unsigned long now = jiffies;
+	struct nd_neigh *ndn = (struct nd_neigh *) neigh;
 	struct in6_addr daddr;
+	unsigned long now = jiffies;
 	struct in6_addr *saddr = NULL;
-
-	switch (neigh->nud_state) {
+	
+	switch (ndn->ndn_nud_state) {
 	case NUD_FAILED:
-		neigh->probes = 0;
+		ndn->ndn_probes = 0;
 	case NUD_NONE:
 
 		if (skb && !skb->stamp.tv_sec)
@@ -949,42 +830,42 @@ void ndisc_event_send(struct neighbour *neigh, struct sk_buff *skb)
 			 *	originating the skb or forwarding it.
 			 *	(it is set on netif_rx)
 			 */
-			saddr = &skb->ipv6_hdr->saddr;
+			saddr = &skb->nh.ipv6h->saddr;
 		}
 
-		neigh->nud_state = NUD_INCOMPLETE;
-		addrconf_addr_solict_mult(&neigh->addr, &daddr);
-		ndisc_send_ns(neigh->dev, NULL, &neigh->addr, &daddr, saddr);
-		ndisc_add_timer(neigh, nd_retrans_timer);
+		ndn->ndn_nud_state = NUD_INCOMPLETE;
+		addrconf_addr_solict_mult(&ndn->ndn_addr, &daddr);
+		ndisc_send_ns(ndn->ndn_dev, NULL, &ndn->ndn_addr, &daddr,
+			      saddr);
+		ndisc_add_timer(ndn, nd_retrans_timer);
 
 		break;
 
 	case NUD_REACHABLE:
-		if (now - neigh->tstamp < nd_reachable_time)
+		if ((now - ndn->ndn_tstamp) < nd_reachable_time)
 			break;
 
 	case NUD_STALE:
-		neigh->nud_state = NUD_DELAY;
-		ndisc_add_timer(neigh, nd_delay_first_probe);
+		ndn->ndn_nud_state = NUD_DELAY;
+		ndisc_add_timer(ndn, nd_delay_first_probe);
 	}
 }
 
 /*
  *	Received a neighbour announce
  */
-void ndisc_event_na(struct neighbour *neigh, unsigned char * opt, int opt_len,
+void ndisc_event_na(struct nd_neigh *ndn, unsigned char *opt, int opt_len,
 		    int solicited, int override)
 {
 	struct sk_buff *skb;
 
-	if (neigh->nud_state == NUD_NONE)
+	if (ndn->ndn_nud_state == NUD_NONE)
 	{
-		neigh->nud_state = NUD_INCOMPLETE;
+		ndn->ndn_nud_state = NUD_INCOMPLETE;
 	}
 
-	if (neigh->nud_state == NUD_INCOMPLETE || override)
+	if (ndn->ndn_nud_state == NUD_INCOMPLETE || override)
 	{
-
 		if (opt_len == 0)
 		{
 			printk(KERN_DEBUG "no opt on NA\n");
@@ -993,58 +874,53 @@ void ndisc_event_na(struct neighbour *neigh, unsigned char * opt, int opt_len,
 		{
 			/* record hardware address */
 
-			neigh->h_dest = neigh->hh_data;
-			neigh->flags &= ~NCF_HHVALID;
+			ndn->ndn_flags |= NTF_COMPLETE;
 
-			if (ndisc_store_hwaddr(neigh->dev, opt, opt_len,
-					       neigh->h_dest, 
+			if (ndisc_store_hwaddr(ndn, opt, opt_len,
 					       ND_OPT_TARGET_LL_ADDR))
 			{
+#if ND_DEBUG >= 2
 				printk(KERN_DEBUG
 				       "event_na: invalid TARGET_LL_ADDR\n");
-				neigh->h_dest = NULL;
-				neigh->nud_state = NUD_NONE;
+#endif
+				ndn->ndn_flags &= ~NTF_COMPLETE;
+				ndn->ndn_nud_state = NUD_NONE;
 				return;
 			}
 		}
 	}
 
 
-	if (solicited || override || neigh->nud_state == NUD_INCOMPLETE)
+	if (solicited || override || ndn->ndn_nud_state == NUD_INCOMPLETE)
 	{
 
-		neigh->probes = 0;
-		neigh->tstamp = jiffies;
+		ndn->ndn_probes = 0;
+		ndn->ndn_tstamp = jiffies;
 
-		if (neigh->nud_state & NUD_IN_TIMER)
+		if (ndn->ndn_nud_state & NUD_IN_TIMER)
 		{
-			ndisc_del_timer(neigh);
+			ndisc_del_timer(ndn);
 		}
 
 		if (solicited)
 		{
-			neigh->nud_state = NUD_REACHABLE;
+			ndn->ndn_nud_state = NUD_REACHABLE;
 		}
 		else
 		{
-			neigh->nud_state = NUD_STALE;
+			ndn->ndn_nud_state = NUD_STALE;
 		}
 	}
 			
-	while ((skb=skb_dequeue(&neigh->arp_queue)))
+	while ((skb=skb_dequeue(&ndn->neigh.arp_queue)))
 	{
-		int priority = SOPRI_NORMAL;
-
-		if (skb->sk)
-			priority = skb->sk->priority;
-		
-		dev_queue_xmit(skb, neigh->dev, priority);
+		dev_queue_xmit(skb);
 	}
 }
 
 static void ndisc_event_ns(struct in6_addr *saddr, struct sk_buff *skb)
 {
-	struct neighbour *neigh;
+	struct nd_neigh *ndn;
 	u8 *opt;
 	int len;
 
@@ -1053,46 +929,53 @@ static void ndisc_event_ns(struct in6_addr *saddr, struct sk_buff *skb)
 
 	len = skb->tail - opt;
 
-	neigh = ndisc_retrieve_neigh(skb->dev, saddr);
+	neigh_table_lock(&nd_tbl);
+	
+	ndn = (struct nd_neigh *) neigh_lookup(&nd_tbl, saddr,
+					       sizeof(struct in6_addr),
+					       skb->dev);
 
-	if (neigh == NULL)
+	if (ndn == NULL)
 	{
-		neigh = ndisc_new_neigh(skb->dev, saddr);
+		ndn = ndisc_new_neigh(skb->dev, saddr);
 	}
-       	
-	switch(neigh->nud_state) {
+
+       	neigh_table_unlock(&nd_tbl);
+
+	switch(ndn->ndn_nud_state) {
 		case NUD_REACHABLE:
 		case NUD_STALE:
 		case NUD_DELAY:
 			if (*opt != ND_OPT_SOURCE_LL_ADDR ||
-			    len != neigh->dev->addr_len ||
-			    memcmp(neigh->h_dest, opt + 2, len))
+			    len != ndn->ndn_dev->addr_len ||
+			    memcmp(ndn->neigh.ha, opt + 2, len))
 			{
 				break;
 			}
 
-			if (neigh->nud_state & NUD_IN_TIMER)
+			if (ndn->ndn_nud_state & NUD_IN_TIMER)
 			{
-				ndisc_del_timer(neigh);
+				ndisc_del_timer(ndn);
 			}
 		default:
-			neigh->flags &= ~NCF_HHVALID;
-			neigh->h_dest = neigh->hh_data;
+			ndn->ndn_flags |= NTF_COMPLETE;
 			
-			if (ndisc_store_hwaddr(neigh->dev, opt, len,
-					       neigh->h_dest,
+			if (ndisc_store_hwaddr(ndn, opt, len,
 					       ND_OPT_SOURCE_LL_ADDR))
 			{
-				printk(KERN_DEBUG 
+#if ND_DEBUG >= 1
+				printk(KERN_DEBUG
 				       "event_ns: invalid SOURCE_LL_ADDR\n");
-				neigh->h_dest = NULL;
-				neigh->nud_state = NUD_NONE;
+#endif
+
+				ndn->ndn_flags &= ~NTF_COMPLETE;
+				ndn->ndn_nud_state = NUD_NONE;
 				return;
 			}
 
-			neigh->nud_state = NUD_STALE;
-			neigh->tstamp = jiffies;
-			neigh->probes = 0;
+			ndn->ndn_nud_state = NUD_STALE;
+			ndn->ndn_tstamp = jiffies;
+			ndn->ndn_probes = 0;
 	}
 
 }
@@ -1172,39 +1055,39 @@ static void ndisc_purge_dflt_routers(void)
 	default_rt_list = NULL;
 }
 
-static void ndisc_ll_addr_update(struct neighbour *neigh, u8* opt, int len,
+static void ndisc_ll_addr_update(struct nd_neigh *ndn, u8* opt, int len,
 				 int type)
 {
-	switch(neigh->nud_state) {
+	switch(ndn->ndn_nud_state) {
 	case NUD_REACHABLE:
 	case NUD_STALE:
 	case NUD_DELAY:
-		if (len == neigh->dev->addr_len &&
-		    memcmp(neigh->h_dest, opt + 2, len) == 0)
+		if (len == ndn->ndn_dev->addr_len &&
+		    memcmp(ndn->neigh.ha, opt + 2, len) == 0)
 		{
 			break;
 		}
 
-		if (neigh->nud_state & NUD_IN_TIMER)
+		if (ndn->ndn_nud_state & NUD_IN_TIMER)
 		{
-			ndisc_del_timer(neigh);
+			ndisc_del_timer(ndn);
 		}
 	default:
-		neigh->flags &= ~NCF_HHVALID;
-		neigh->h_dest = neigh->hh_data;
+		ndn->ndn_flags |= NTF_COMPLETE;
 		
-		if (ndisc_store_hwaddr(neigh->dev, opt, len, neigh->h_dest,
-				       type))
+		if (ndisc_store_hwaddr(ndn, opt, len, type))
 		{
+#if ND_DEBUG >=1
 			printk(KERN_DEBUG "NDISC: invalid LL_ADDR\n");
-			neigh->h_dest = NULL;
-			neigh->nud_state = NUD_NONE;
+#endif
+			ndn->ndn_flags &= ~NTF_COMPLETE;
+			ndn->ndn_nud_state = NUD_NONE;
 			break;
 		}
 		
-		neigh->nud_state = NUD_STALE;
-		neigh->tstamp = jiffies;
-		neigh->probes = 0;
+		ndn->ndn_nud_state = NUD_STALE;
+		ndn->ndn_tstamp = jiffies;
+		ndn->ndn_probes = 0;
 	}
 	
 }
@@ -1219,6 +1102,7 @@ struct rt6_info * dflt_rt_lookup(void)
 	for (rt = default_rt_list; rt; rt=rt->next)
 	{
 		struct neighbour *neigh = rt->rt_nexthop;
+		struct nd_neigh *ndn = (struct nd_neigh *) neigh;
 		
 		if (score < 0)
 		{
@@ -1226,7 +1110,7 @@ struct rt6_info * dflt_rt_lookup(void)
 			match = rt;
 		}
 
-		if (neigh->nud_state == NUD_REACHABLE)
+		if (ndn->ndn_nud_state == NUD_REACHABLE)
 		{
 			if (score < 1)
 			{
@@ -1234,7 +1118,7 @@ struct rt6_info * dflt_rt_lookup(void)
 				match = rt;
 			}
 
-			if (now  - neigh->tstamp < nd_reachable_time)
+			if (now  - ndn->ndn_tstamp < nd_reachable_time)
 			{
 				return rt;
 			}
@@ -1248,7 +1132,7 @@ struct rt6_info * dflt_rt_lookup(void)
 static void ndisc_router_discovery(struct sk_buff *skb)
 {
         struct ra_msg *ra_msg = (struct ra_msg *) skb->h.raw;
-	struct neighbour *neigh;
+	struct nd_neigh *ndn;
 	struct inet6_dev *in6_dev;
 	struct rt6_info *rt;
 	int lifetime;
@@ -1258,9 +1142,9 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 
 	optlen = (skb->tail - skb->h.raw) - sizeof(struct ra_msg);
 
-	if (skb->ipv6_hdr->hop_limit != 255)
+	if (skb->nh.ipv6h->hop_limit != 255)
 	{
-		printk(KERN_WARNING
+		printk(KERN_INFO
 		       "NDISC: fake router advertisment received\n");
 		return;
 	}
@@ -1287,7 +1171,7 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 
 	lifetime = ntohs(ra_msg->icmph.icmp6_rt_lifetime);
 
-	rt = ndisc_get_dflt_router(skb->dev, &skb->ipv6_hdr->saddr);
+	rt = ndisc_get_dflt_router(skb->dev, &skb->nh.ipv6h->saddr);
 
 	if (rt && lifetime == 0)
 	{
@@ -1297,42 +1181,55 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 
 	if (rt == NULL && lifetime)
 	{
+		struct in6_addr *saddr;
+		
+#if ND_DEBUG >= 2
 		printk(KERN_DEBUG "ndisc_rdisc: new default router\n");
+#endif
 
 		rt = (struct rt6_info *) kmalloc(sizeof(struct rt6_info),
 						 GFP_ATOMIC);
-		if (rt)
+
+		if (rt == NULL)
 		{
-			neigh = ndisc_retrieve_neigh(skb->dev,
-						     &skb->ipv6_hdr->saddr);
+			/* We are out-of-memory. Ignore it */
+			return;
+		}
 
-			if (neigh == NULL)
-			{
-				neigh = ndisc_new_neigh(skb->dev,
-							&skb->ipv6_hdr->saddr);
-			}
+		saddr = &skb->nh.ipv6h->saddr;
+		neigh_table_lock(&nd_tbl);
+		
+		ndn = (struct nd_neigh *) neigh_lookup(&nd_tbl, saddr,
+						       sizeof(struct in6_addr),
+						       skb->dev);
 
-			if (neigh)
-			{
-				atomic_inc(&neigh->refcnt);
-				neigh->flags |= NCF_ROUTER;
-				
-				memset(rt, 0, sizeof(struct rt6_info));
-
-				ipv6_addr_copy(&rt->rt_dst,
-					       &skb->ipv6_hdr->saddr);
-				rt->rt_metric = 1;
-				rt->rt_flags = RTF_GATEWAY | RTF_DYNAMIC;
-				rt->rt_dev = skb->dev;
-				rt->rt_nexthop = neigh;
-
-				ndisc_add_dflt_router(rt);
-			}
-			else
+		if (ndn == NULL)
+		{
+			ndn = ndisc_new_neigh(skb->dev, saddr);
+			
+			if (ndn == NULL)
 			{
 				kfree(rt);
+				neigh_table_unlock(&nd_tbl);
+				return;
 			}
 		}
+		
+		neigh_table_unlock(&nd_tbl);
+
+		atomic_inc(&ndn->ndn_refcnt);
+
+		ndn->ndn_flags |= NCF_ROUTER;
+
+		memset(rt, 0, sizeof(struct rt6_info));
+
+		ipv6_addr_copy(&rt->rt_dst, &skb->nh.ipv6h->saddr);
+		rt->rt_metric = 1;
+		rt->rt_flags = RTF_GATEWAY | RTF_DYNAMIC;
+		rt->rt_dev = skb->dev;
+		rt->rt_nexthop = (struct neighbour *) ndn;
+
+		ndisc_add_dflt_router(rt);
 	}
 
 	if (rt)
@@ -1388,9 +1285,9 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 			if (rt == NULL)
 				break;
 			
-			neigh = rt->rt_nexthop;
+			ndn = (struct nd_neigh *) rt->rt_nexthop;
 
-			ndisc_ll_addr_update(neigh, opt, len,
+			ndisc_ll_addr_update(ndn, opt, len,
 					     ND_OPT_SOURCE_LL_ADDR);
 			break;
 
@@ -1461,20 +1358,20 @@ static void ndisc_redirect_rcv(struct sk_buff *skb)
 	struct icmpv6hdr *icmph;
 	struct in6_addr *dest;
 	struct in6_addr *target;	/* new first hop to destination */
-	struct neighbour *neigh;
+	struct nd_neigh *ndn;
 	struct rt6_info *rt;
 	int on_link = 0;
 	int optlen;
 	u8 * opt;
 
-	if (skb->ipv6_hdr->hop_limit != 255)
+	if (skb->nh.ipv6h->hop_limit != 255)
 	{
 		printk(KERN_WARNING
 		       "NDISC: fake ICMP redirect received\n");
 		return;
 	}
 
-	if (!(ipv6_addr_type(&skb->ipv6_hdr->saddr) & IPV6_ADDR_LINKLOCAL))
+	if (!(ipv6_addr_type(&skb->nh.ipv6h->saddr) & IPV6_ADDR_LINKLOCAL))
 	{
 		printk(KERN_WARNING
 		       "ICMP redirect: source address is not linklocal\n");
@@ -1521,7 +1418,7 @@ static void ndisc_redirect_rcv(struct sk_buff *skb)
 		return;
 	}
 
-	neigh = rt->rt_nexthop;
+	ndn = (struct nd_neigh *) rt->rt_nexthop;
 
 	opt = (u8 *) (dest + 1);
 
@@ -1533,7 +1430,7 @@ static void ndisc_redirect_rcv(struct sk_buff *skb)
 
 		if (*opt == ND_OPT_TARGET_LL_ADDR)
 		{
-			ndisc_ll_addr_update(neigh, opt, len,
+			ndisc_ll_addr_update(ndn, opt, len,
 					     ND_OPT_TARGET_LL_ADDR);
 		}
 
@@ -1545,9 +1442,10 @@ static void ndisc_redirect_rcv(struct sk_buff *skb)
 void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 			 struct in6_addr *target)
 {
-	struct sock *sk = (struct sock *) ndisc_socket.data;
+	struct sock *sk = ndisc_socket->sk;
 	int len = sizeof(struct icmpv6hdr) + 2 * sizeof(struct in6_addr);
 	struct sk_buff *buff;
+	struct nd_neigh *ndn = (struct nd_neigh *) neigh;
 	struct inet6_ifaddr *ifp;
 	struct icmpv6hdr *icmph;
 	struct in6_addr *addrp;
@@ -1558,21 +1456,23 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	int err;
 	int hlen;
 
-	rt = fibv6_lookup(&skb->ipv6_hdr->saddr, skb->dev, 0);
+	rt = fibv6_lookup(&skb->nh.ipv6h->saddr, skb->dev, 0);
 	
 	if (rt->rt_flags & RTF_GATEWAY)
 	{
+#if ND_DEBUG >= 1
 		printk(KERN_DEBUG "ndisc_send_redirect: not a neighbour\n");
+#endif
 		return;
 	}
 
-	if (neigh->nud_state == NUD_REACHABLE)
+	if (ndn->ndn_nud_state == NUD_REACHABLE)
 	{
 		ta_len  = ((neigh->dev->addr_len + 1) >> 3) + 1;
 		len += (ta_len << 3);
 	}
 
-	rd_len = min(536 - len, ntohs(skb->ipv6_hdr->payload_len) + 8);
+	rd_len = min(536 - len, ntohs(skb->nh.ipv6h->payload_len) + 8);
 	rd_len &= ~0x7;
 	len += rd_len;
 
@@ -1580,7 +1480,9 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 
 	if (ifp == NULL)
 	{
+#if ND_DEBUG >= 1
 		printk(KERN_DEBUG "redirect: no link_local addr for dev\n");
+#endif
 		return;
 	}
 
@@ -1588,10 +1490,11 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 
 	if (buff == NULL)
 	{
+#if ND_DEBUG >= 2
 		printk(KERN_DEBUG "ndisc_send_redirect: alloc_skb failed\n");
+#endif
 		return;
 	}
-
 	
 	hlen = 0;
 	if (skb->dev->hard_header_len)
@@ -1613,7 +1516,7 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	addrp = (struct in6_addr *)(icmph + 1);
 	ipv6_addr_copy(addrp, target);
 	addrp++;
-	ipv6_addr_copy(addrp, &skb->ipv6_hdr->daddr);
+	ipv6_addr_copy(addrp, &skb->nh.ipv6h->daddr);
 	
 	opt = (u8*) (addrp + 1);
 		
@@ -1628,7 +1531,7 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 		*(opt++) = ND_OPT_TARGET_LL_ADDR;
 		*(opt++) = ta_len;
 
-		memcpy(opt, neigh->h_dest, neigh->dev->addr_len);
+		memcpy(opt, neigh->ha, neigh->dev->addr_len);
 		opt += neigh->dev->addr_len;
 
 		/* 
@@ -1656,30 +1559,33 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	*(opt++) = (rd_len >> 3);
 	opt += 6;
 
-	memcpy(opt, &skb->ipv6_hdr, rd_len - 8);
+	memcpy(opt, &skb->nh.ipv6h, rd_len - 8);
 	
-	icmph->checksum = csum_ipv6_magic(&ifp->addr, &skb->ipv6_hdr->saddr,
+	icmph->checksum = csum_ipv6_magic(&ifp->addr, &skb->nh.ipv6h->saddr,
 					  len, IPPROTO_ICMPV6,
 					  csum_partial((u8 *) icmph, len, 0));
 
-	ipv6_xmit(sk, buff, &ifp->addr, &skb->ipv6_hdr->saddr, NULL, IPPROTO_ICMPV6);
+	ipv6_xmit(sk, buff, &ifp->addr, &skb->nh.ipv6h->saddr, NULL,
+		  IPPROTO_ICMPV6);
 }
 
 /* Called by upper layers to validate neighbour cache entries. */
 
 void ndisc_validate(struct neighbour *neigh)
 {
-        if (neigh->nud_state == NUD_INCOMPLETE)
+	struct nd_neigh *ndn = (struct nd_neigh *) neigh;
+	
+        if (ndn->ndn_nud_state == NUD_INCOMPLETE)
                 return;
 
-        if (neigh->nud_state == NUD_DELAY) 
+        if (ndn->ndn_nud_state == NUD_DELAY) 
 	{
-                ndisc_del_timer(neigh);
+                ndisc_del_timer(ndn);
         }
 
         nd_stats.rcv_upper_conf++;
-        neigh->nud_state = NUD_REACHABLE;
-        neigh->tstamp = jiffies;
+        ndn->ndn_nud_state = NUD_REACHABLE;
+        ndn->ndn_tstamp = jiffies;
 }
 
 int ndisc_rcv(struct sk_buff *skb, struct device *dev,
@@ -1687,7 +1593,7 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 	      struct ipv6_options *opt, unsigned short len)
 {
 	struct nd_msg *msg = (struct nd_msg *) skb->h.raw;
-	struct neighbour *neigh;
+	struct nd_neigh *ndn;
 	struct inet6_ifaddr *ifp;
 
 	switch (msg->icmph.type) {
@@ -1720,29 +1626,42 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 				nd_stats.rcv_probes_ucast++;
 				ndisc_event_ns(saddr, skb);
 
-				/* answer solicitation */
-				neigh = ndisc_retrieve_neigh(dev, saddr);
+				neigh_table_lock(&nd_tbl);
+
+				ndn = (struct nd_neigh *)
+					neigh_lookup(&nd_tbl, saddr,
+						     sizeof(struct in6_addr),
+						     dev);
+
+				neigh_table_unlock(&nd_tbl);
 
 				inc = ipv6_addr_type(daddr);
 				inc &= IPV6_ADDR_MULTICAST;
 
-				ndisc_send_na(dev, neigh, saddr, &ifp->addr, 
+				ndisc_send_na(dev, ndn, saddr, &ifp->addr, 
 					      ifp->idev->router, 1, inc, inc);
 			}
 			else
 			{
+#if ND_DEBUG >= 1
 				/* FIXME */
 				printk(KERN_DEBUG "ns: non unicast saddr\n");
+#endif
 			}
 		}
 		break;
 
 	case NDISC_NEIGHBOUR_ADVERTISEMENT:
+		
+		neigh_table_lock(&nd_tbl);	       
+		ndn = (struct nd_neigh *) 
+			neigh_lookup(&nd_tbl, (void *) &msg->target,
+				     sizeof(struct in6_addr), skb->dev);
+		neigh_table_unlock(&nd_tbl);
 
-		neigh = ndisc_retrieve_neigh(skb->dev, &msg->target);
-		if (neigh)
+		if (ndn)
 		{
-			if (neigh->flags & NCF_ROUTER)
+			if (ndn->ndn_flags & NCF_ROUTER)
 			{
 				if (msg->icmph.icmp6_router == 0)
 				{
@@ -1763,10 +1682,10 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 			{
 				if (msg->icmph.icmp6_router)
 				{
-					neigh->flags |= NCF_ROUTER;
+					ndn->ndn_flags |= NCF_ROUTER;
 				}
 			}
-			ndisc_event_na(neigh, (unsigned char *) &msg->opt,
+			ndisc_event_na(ndn, (unsigned char *) &msg->opt,
 				       skb->tail - (u8 *)&msg->opt /*opt_len*/,
 				       msg->icmph.icmp6_solicited,
 				       msg->icmph.icmp6_override);
@@ -1794,53 +1713,59 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 int ndisc_get_info(char *buffer, char **start, off_t offset, int length,
 		   int dummy)
 {
-	struct neighbour *neigh;
 	unsigned long now = jiffies;
 	int len = 0;
 	int i;
 
-	atomic_inc(&ndisc_lock);
+	neigh_table_lock(&nd_tbl);
 
-	for (i = 0; i < NCACHE_NUM_BUCKETS; i++)
+	for (i = 0; i < nd_tbl.tbl_size; i++)
 	{
-		for(neigh = neighbours[i]; neigh; neigh=neigh->next)
-		{
+		struct neighbour *neigh, *head;
+		head = nd_tbl.hash_buckets[i];
+		
+		if ((neigh = head) == NULL)
+			continue;
+
+		do {
+			struct nd_neigh *ndn = (struct nd_neigh *) neigh;
 			int j;
 
 			for (j=0; j<16; j++)
 			{
 				sprintf(buffer + len, "%02x",
-					neigh->addr.s6_addr[j]);
+					ndn->ndn_addr.s6_addr[j]);
 				len += 2;
 			}
 
 			len += sprintf(buffer + len,
-				       " %02x %02x %08lx %08lx %04x %04x ",
-				       i,
-				       neigh->nud_state,
-				       neigh->expires - now,
-				       now - neigh->tstamp,
-				       neigh->refcnt,
-				       neigh->flags);
+				       " %02x %02x %08lx %08lx %04x %04lx ", i,
+				       ndn->ndn_nud_state,
+				       ndn->ndn_expires - now,
+				       now - ndn->ndn_tstamp,
+				       ndn->ndn_refcnt,
+				       ndn->ndn_flags);
 
-			if (neigh->h_dest)
+			if ((ndn->ndn_flags & NTF_COMPLETE))
 			{
 				for (j=0; j< neigh->dev->addr_len; j++)
 				{
 					sprintf(buffer + len, "%02x",
-						neigh->h_dest[j]);
+						neigh->ha[j]);
 					len += 2;
 				}
 			}
 			else
                                 len += sprintf(buffer + len, "000000000000");
 			len += sprintf(buffer + len, "\n");
-				       
-		}
+			
+			neigh = neigh->next;
+
+		} while (neigh != head);
 	}
 
-	ndisc_release_lock();
-
+	neigh_table_unlock(&nd_tbl);
+	
 	*start = buffer + offset;
 
 	len -= offset;
@@ -1852,42 +1777,43 @@ int ndisc_get_info(char *buffer, char **start, off_t offset, int length,
 
 struct proc_dir_entry ndisc_proc_entry =
 {
-        0, 11, "ndisc_cache",
+        PROC_NET_NDISC, 5, "ndisc",
         S_IFREG | S_IRUGO, 1, 0, 0,
         0, NULL,
         &ndisc_get_info
 };
 
-void ndisc_init(struct proto_ops *ops)
+void ndisc_init(struct net_proto_family *ops)
 {
 	struct sock *sk;
-        int i = 0;
         int err;
 
-	/*
-	 *	Init ndisc_socket
-	 */
-	ndisc_socket.type=SOCK_RAW;
-	ndisc_socket.ops=ops;
+        ndisc_inode.i_mode = S_IFSOCK;
+        ndisc_inode.i_sock = 1;
+        ndisc_inode.i_uid = 0;
+        ndisc_inode.i_gid = 0;
 
-	if((err=ops->create(&ndisc_socket, IPPROTO_ICMPV6))<0)
+        ndisc_socket->inode = &ndisc_inode;
+        ndisc_socket->state = SS_UNCONNECTED;
+        ndisc_socket->type=SOCK_RAW;
+
+	if((err=ops->create(ndisc_socket, IPPROTO_ICMPV6))<0)
 		printk(KERN_DEBUG 
 		       "Failed to create the NDISC control socket.\n");
 
 	MOD_DEC_USE_COUNT;
 
-	sk = ndisc_socket.data;
+	sk = ndisc_socket->sk;
 	sk->allocation = GFP_ATOMIC;
 	sk->net_pinfo.af_inet6.hop_limit = 255;
 	sk->net_pinfo.af_inet6.priority  = 15;
-	sk->num = 256;				/* Don't receive any data */
+	sk->num = 256;
 
         /*
-         * Initialize the neighbours hash buckets.
+         * Initialize the neighbour table
          */
-
-        for (; i < NCACHE_NUM_BUCKETS; i++)
-                neighbours[i] = NULL;
+	
+	neigh_table_init(&nd_tbl, &nd_neigh_ops, NCACHE_NUM_BUCKETS);
  
         /* General ND state machine timer. */
 	init_timer(&ndisc_timer);
@@ -1897,15 +1823,18 @@ void ndisc_init(struct proto_ops *ops)
 
         /* ND GC timer */
         init_timer(&ndisc_gc_timer);
-        ndisc_gc_timer.function = ndisc_garbage_collect;
+        ndisc_gc_timer.function = ndisc_periodic_timer;
         ndisc_gc_timer.data = 0L;
         ndisc_gc_timer.expires = jiffies + nd_gc_interval;
 
 	add_timer(&ndisc_gc_timer);
 
+#ifdef CONFIG_PROC_FS
 #ifdef CONFIG_IPV6_MODULE
-	ndisc_eth_hook = ndisc_eth_resolv;
         proc_register_dynamic(&proc_net, &ndisc_proc_entry);
+#else
+	proc_net_register(&ndisc_proc_entry);
+#endif
 #endif
 }
 
@@ -1913,7 +1842,14 @@ void ndisc_init(struct proto_ops *ops)
 void ndisc_cleanup(void)
 {
 	ndisc_eth_hook = NULL;
+
+#ifdef CONFIG_PROC_FS
+#ifdef CONFIG_IPV6_MODULE
         proc_unregister(&proc_net, ndisc_proc_entry.low_ino);
+#else
+	proc_net_unregister(PROC_NET_NDISC);
+#endif
+#endif
 	del_timer(&ndisc_gc_timer);
 	del_timer(&ndisc_timer);
 }

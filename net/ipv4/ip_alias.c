@@ -79,7 +79,9 @@ int ip_alias_print_1(struct net_alias_type *this, struct net_alias *alias, char 
 struct device *ip_alias_dev_select(struct net_alias_type *this, struct device *main_dev, struct sockaddr *sa)
 {
 	__u32 addr;
+#if 0
 	struct rtable *rt;
+#endif
 	struct device *dev=NULL;
   
 	/*
@@ -102,12 +104,14 @@ struct device *ip_alias_dev_select(struct net_alias_type *this, struct device *m
 	 *	net_alias module will check if returned device is main_dev's alias
 	 */
 
+#if 0
 	rt = ip_rt_route(addr, 0);
 	if(rt)
 	{
 		dev=rt->rt_dev;
 		ip_rt_put(rt);
 	}
+#endif
 	return dev;
 }
 

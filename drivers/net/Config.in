@@ -22,6 +22,9 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate '3c505 support' CONFIG_ELPLUS
       tristate '3c507 support' CONFIG_EL16
+      if [ "$CONFIG_MCA" = "y" ]; then
+        tristate '3c523 support' CONFIG_ELMC
+      fi
     fi
     tristate '3c509/3c579 support' CONFIG_EL3
     tristate '3c590 series (592/595/597) "Vortex" support' CONFIG_VORTEX
@@ -33,7 +36,11 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   bool 'Western Digital/SMC cards' CONFIG_NET_VENDOR_SMC
   if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
     tristate 'WD80*3 support' CONFIG_WD80x3
-    tristate 'SMC Ultra support' CONFIG_ULTRA
+    if [ "$CONFIG_MCA" = "y" ]; then
+		tristate 'SMC Ultra MCA support' CONFIG_ULTRA
+    else
+		tristate 'SMC Ultra support' CONFIG_ULTRA
+    fi
     tristate 'SMC 9194 support' CONFIG_SMC9194
   fi
   bool 'Other ISA cards' CONFIG_NET_ISA
@@ -73,6 +80,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     tristate 'DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP
     tristate 'Digi Intl. RightSwitch SE-X support' CONFIG_DGRS
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate 'Racal-Interlan EISA ES3210 support (EXPERIMENTAL)' CONFIG_ES3210
       bool 'Zenith Z-Note support (EXPERIMENTAL)' CONFIG_ZNET
     fi
   fi
@@ -89,13 +97,11 @@ if [ "$CONFIG_FDDI" = "y" ]; then
   bool 'Digital DEFEA and DEFPA adapter support' CONFIG_DEFXX
 fi
 
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'Frame relay DLCI support (EXPERIMENTAL)' CONFIG_DLCI
-  if [ "$CONFIG_DLCI" = "y" -o "$CONFIG_DLCI" = "m" ]; then
-    int '  Max open DLCI' CONFIG_DLCI_COUNT 24
-    int '  Max DLCI per device' CONFIG_DLCI_MAX 8
-    dep_tristate '  SDLA (Sangoma S502/S508) support' CONFIG_SDLA $CONFIG_DLCI
-  fi
+tristate 'Frame relay DLCI support' CONFIG_DLCI
+if [ "$CONFIG_DLCI" = "y" -o "$CONFIG_DLCI" = "m" ]; then
+  int '  Max open DLCI' CONFIG_DLCI_COUNT 24
+  int '  Max DLCI per device' CONFIG_DLCI_MAX 8
+  dep_tristate '  SDLA (Sangoma S502/S508) support' CONFIG_SDLA $CONFIG_DLCI
 fi
 
 tristate 'PLIP (parallel port) support' CONFIG_PLIP
@@ -120,7 +126,7 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
   fi
   tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
   tristate 'WaveLAN support' CONFIG_WAVELAN
-  tristate 'WIC Radio IP bridge (EXPERIMENTAL)' CONFIG_WIC
+  tristate 'WIC Radio IP bridge' CONFIG_WIC
 fi
 
 tristate 'SLIP (serial line) support' CONFIG_SLIP
@@ -133,5 +139,9 @@ fi
 bool 'Token Ring driver support' CONFIG_TR
 if [ "$CONFIG_TR" = "y" ]; then
   tristate 'IBM Tropic chipset based adaptor support' CONFIG_IBMTR
+fi
+
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Traffic Shaper (EXPERIMENTAL)' CONFIG_SHAPER
 fi
 

@@ -4,6 +4,7 @@
 #include <asm/socket.h>			/* arch-dependent defines	*/
 #include <linux/sockios.h>		/* the SIOCxxx I/O controls	*/
 #include <linux/uio.h>			/* iovec support		*/
+#include <linux/types.h>		/* pid_t			*/
 
 typedef unsigned short	sa_family_t;
 
@@ -33,10 +34,10 @@ struct msghdr
 	void	*	msg_name;	/* Socket name			*/
 	int		msg_namelen;	/* Length of name		*/
 	struct iovec *	msg_iov;	/* Data blocks			*/
-	size_t 		msg_iovlen;	/* Number of blocks		*/
+	size_t		msg_iovlen;	/* Number of blocks		*/
 	void 	*	msg_control;	/* Per protocol magic (eg BSD file descriptor passing) */
-	size_t		msg_controllen;	/* Length of rights list */
-	int		msg_flags;	/* 4.4 BSD item we dont use      */
+	size_t		msg_controllen;	/* Length of cmsg list */
+	unsigned	msg_flags;
 };
 
 /*
@@ -57,9 +58,14 @@ struct cmsghdr {
  *	Table 5-14 of POSIX 1003.1g
  */
 
-#define CMSG_DATA(cmsg)		cmsg->cmsg_data
+#define CMSG_DATA(cmsg)		(cmsg)->cmsg_data
 #define CMSG_NXTHDR(mhdr, cmsg) cmsg_nxthdr(mhdr, cmsg)
-#define CMSG_FIRST(mhdr)	((struct cmsghdr *) (mhdr)->msg_control)
+
+#define CMSG_ALIGN(len) ( ((len)+sizeof(long)-1) & ~(sizeof(long)-1) )
+
+#define	CMSG_FIRST(msg)	((msg)->msg_controllen >= sizeof(struct cmsghdr) ? \
+			 (struct cmsghdr *)(msg)->msg_control : \
+			 (struct cmsghdr *)NULL)
 
 extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 					       struct cmsghdr *cmsg)
@@ -70,16 +76,39 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 	{
 		return NULL;
 	}
-	ptr = ((unsigned char *) cmsg) +  cmsg->cmsg_len;
+	ptr = ((unsigned char *) cmsg) +  CMSG_ALIGN(cmsg->cmsg_len);
 	if (ptr >= (unsigned char *) mhdr->msg_control + mhdr->msg_controllen)
 		return NULL;
 
 	return (struct cmsghdr *) ptr;
 }
 
-/* Control Messages */
+#ifdef __KERNEL__
 
-#define SCM_RIGHTS		1
+#define	KCMSG_NXTHDR(msg, cmsg)	({ \
+	struct cmsghdr * __cmptr = (struct cmsghdr *)((unsigned char*)(cmsg) + CMSG_ALIGN(kcm.cmsg_len)); \
+	( (void *)(__cmptr + 1) <= (msg)->msg_control + (msg)->msg_controllen && \
+	  !copy_from_user(&kcm, __cmptr, sizeof(struct cmsghdr)) ? __cmptr : NULL); })
+
+#define	KCMSG_FIRSTHDR(msg)	((msg)->msg_control && (msg)->msg_controllen >= sizeof(struct cmsghdr) \
+				 && !copy_from_user(&kcm, (msg)->msg_control, sizeof(struct cmsghdr)) ? \
+				 (struct cmsghdr *)(msg)->msg_control : \
+				 (struct cmsghdr *)NULL)
+
+#endif
+
+/* "Socket"-level control message types: */
+
+#define	SCM_RIGHTS	0x01		/* rw: access rights (array of int) */
+#define SCM_CREDENTIALS 0x02		/* rw: struct ucred		*/
+#define SCM_CONNECT	0x03		/* rw: struct scm_connect	*/
+
+struct ucred
+{
+	pid_t	pid;
+	uid_t	uid;
+	gid_t	gid;
+};
 
 /* Socket types. */
 #define SOCK_STREAM	1		/* stream (connection) socket	*/
@@ -140,11 +169,22 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 #define MSG_OOB		1
 #define MSG_PEEK	2
 #define MSG_DONTROUTE	4
-#define MSG_CTRUNC	8	/*  We need to support this for BSD oddments */
-#define MSG_PROXY	16	/* Supply or ask second address. */
-#define MSG_EOR		32	/* End of record */
-#define MSG_TRUNC	64	/* Data was discarded before delivery */
-#define MSG_WAITALL	128	/* Wait for a full request */
+#define MSG_CTRUNC	8
+#define MSG_PROXY	0x10	/* Supply or ask second address. */
+#define MSG_TRUNC	0x20
+#define MSG_DONTWAIT	0x40	/* Nonblocking io		 */
+#define MSG_EOR         0x80	/* End of record */
+#define MSG_WAITALL	0x100	/* Wait for a full request */
+#define MSG_FIN         0x200
+#define MSG_SYN		0x400
+#define MSG_URG		0x800
+#define MSG_RST		0x1000
+
+#define MSG_CTLIGNORE   0x80000000
+
+#define MSG_EOF         MSG_FIN
+#define MSG_CTLFLAGS	(MSG_OOB|MSG_URG|MSG_FIN|MSG_SYN|MSG_RST)
+
 
 /* Setsockoptions(2) level. Thanks to BSD these must match IPPROTO_xxx */
 #define SOL_IP		0
@@ -161,27 +201,6 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 #define SOL_TCP		6
 #define SOL_UDP		17
 
-/* IP options */
-#define IP_TOS		1
-#define	IPTOS_LOWDELAY		0x10
-#define	IPTOS_THROUGHPUT	0x08
-#define	IPTOS_RELIABILITY	0x04
-#define	IPTOS_MINCOST		0x02
-#define IP_TTL		2
-#define IP_HDRINCL	3
-#define IP_OPTIONS	4
-
-#define IP_MULTICAST_IF			32
-#define IP_MULTICAST_TTL 		33
-#define IP_MULTICAST_LOOP 		34
-#define IP_ADD_MEMBERSHIP		35
-#define IP_DROP_MEMBERSHIP		36
-
-/* These need to appear somewhere around here */
-#define IP_DEFAULT_MULTICAST_TTL        1
-#define IP_DEFAULT_MULTICAST_LOOP       1
-#define IP_MAX_MEMBERSHIPS              20
- 
 /* IPX options */
 #define IPX_TYPE	1
 
@@ -207,5 +226,6 @@ extern int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int 
 extern int memcpy_toiovec(struct iovec *v, unsigned char *kdata, int len);
 extern int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen);
 extern int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr);
+extern void put_cmsg(struct msghdr*, int level, int type, int len, void *data);
 #endif
 #endif /* _LINUX_SOCKET_H */

@@ -153,7 +153,7 @@ struct ip_fw *ip_acct_chain;
 static struct ip_fw **chains[] =
 	{&ip_fw_fwd_chain, &ip_fw_in_chain, &ip_fw_out_chain, &ip_acct_chain};
 #endif /* CONFIG_IP_ACCT || CONFIG_IP_FIREWALL */
-
+ 
 #ifdef CONFIG_IP_FIREWALL
 int ip_fw_fwd_policy=IP_FW_F_ACCEPT;
 int ip_fw_in_policy=IP_FW_F_ACCEPT;
@@ -1297,6 +1297,7 @@ static struct proc_dir_entry proc_net_ipfwfwd = {
 #endif
 #endif
 
+
 void ip_fw_init(void)
 {
 #ifdef CONFIG_PROC_FS
@@ -1314,14 +1315,6 @@ void ip_fw_init(void)
 	proc_net_register(&proc_net_ipfwout);
 	proc_net_register(&proc_net_ipfwfwd);
 #endif
-#endif
-#ifdef CONFIG_IP_MASQUERADE
-        
-        /*
-         *	Initialize masquerading. 
-         */
-        
-        ip_masq_init();
 #endif
         
 #if defined(CONFIG_IP_ACCT) || defined(CONFIG_IP_FIREWALL)

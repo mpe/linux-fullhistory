@@ -13,6 +13,7 @@
 #define CONFIG_UNIX		/* always present...	*/
 
 #ifdef	CONFIG_UNIX
+#include <linux/un.h>
 #include <net/af_unix.h>
 #endif
 
@@ -24,13 +25,14 @@ extern void inet6_proto_init(struct net_proto *pro);
 #endif	/* INET */
 
 #if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
+#define NEED_802
 #include <net/ipxcall.h>
-#include <net/p8022call.h>
-#include <net/p8022trcall.h>
 #endif
+
 #ifdef CONFIG_X25
 #include <net/x25call.h>
 #endif
+
 #ifdef CONFIG_AX25
 #include <net/ax25call.h>
 #ifdef CONFIG_NETROM
@@ -40,19 +42,35 @@ extern void inet6_proto_init(struct net_proto *pro);
 #include <net/rosecall.h>
 #endif
 #endif
+
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
-#if ! ( defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE) )
-#include <net/p8022call.h>
-#include <net/p8022trcall.h>
-#endif
+#define NEED_802
 #include <net/atalkcall.h>
 #endif
+
+#if defined(CONFIG_NETBEUI)
+#define NEED_LLC
+#include <net/netbeuicall.h>
+#endif
+
 #include <net/psnapcall.h>
+
 #ifdef CONFIG_TR
 #include <linux/netdevice.h>
 #include <linux/trdevice.h>
 extern void rif_init(struct net_proto *);
 #endif
+
+#ifdef NEED_LLC
+#define NEED_802
+#include <net/llccall.h>
+#endif
+
+#ifdef NEED_802
+#include <net/p8022call.h>
+#include <net/p8022trcall.h>
+#endif
+
 /*
  *	Protocol Table
  */
@@ -61,15 +79,21 @@ struct net_proto protocols[] = {
 #ifdef	CONFIG_UNIX
   { "UNIX",	unix_proto_init	},			/* Unix domain socket family 	*/
 #endif
-#if defined(CONFIG_IPX)   || defined(CONFIG_IPX_MODULE) || \
-    defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
+
+#ifdef NEED_802
   { "802.2",	p8022_proto_init },			/* 802.2 demultiplexor		*/
   { "802.2TR",	p8022tr_proto_init },			/* 802.2 demultiplexor		*/
   { "SNAP",	snap_proto_init },			/* SNAP demultiplexor		*/
 #endif
+
 #ifdef CONFIG_TR
   { "RIF",	rif_init },				/* RIF for Token ring		*/
 #endif  
+
+#ifdef NEED_LLC
+  { "802.2LLC", llc_init },				/* 802.2 LLC */
+#endif  
+
 #ifdef CONFIG_AX25  
   { "AX.25",	ax25_proto_init },			/* Amateur Radio AX.25 */
 #ifdef CONFIG_NETROM
@@ -79,20 +103,25 @@ struct net_proto protocols[] = {
   { "Rose",	rose_proto_init },			/* Amateur Radio X.25 PLP */
 #endif
 #endif  
+
 #ifdef	CONFIG_INET
   { "INET",	inet_proto_init	},			/* TCP/IP			*/
 #ifdef	CONFIG_IPV6
   { "INET6",	inet6_proto_init},			/* IPv6	*/
 #endif
 #endif
+
 #ifdef  CONFIG_IPX
   { "IPX",	ipx_proto_init },			/* IPX				*/
 #endif
+
 #ifdef CONFIG_ATALK
   { "DDP",	atalk_proto_init },			/* Netatalk Appletalk driver	*/
 #endif
+
 #ifdef CONFIG_X25
   { "X.25",	x25_proto_init },			/* CCITT X.25 Packet Layer */
 #endif
+
   { NULL,	NULL		}			/* End marker			*/
 };

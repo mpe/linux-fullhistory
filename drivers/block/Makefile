@@ -72,6 +72,11 @@ ifeq ($(CONFIG_BLK_DEV_TRITON),y)
 L_OBJS += triton.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_PS2),y)
+L_OBJS += ps2esdi.o
+endif
+
+
 ifeq ($(CONFIG_BLK_DEV_DTC2278),y)
 L_OBJS += dtc2278.o
 endif

@@ -64,54 +64,38 @@
 struct sock *mroute_socket=NULL;
 #endif
 
-
 /*
  *	Raw_err does not currently get called by the icmp module - FIXME:
  */
  
-void raw_err (int type, int code, unsigned char *header, __u32 daddr,
-	 __u32 saddr, struct inet_protocol *protocol)
+void raw_err (struct sock *sk, struct sk_buff *skb)
 {
-	struct sock *sk;
-   
-	if (protocol == NULL) 
-		return;
-	sk = (struct sock *) protocol->data;
-	if (sk == NULL) 
-		return;
+	int type = skb->h.icmph->type;
+	int code = skb->h.icmph->code;
 
-	/* This is meaningless in raw sockets. */
-	if (type == ICMP_SOURCE_QUENCH) 
-	{
-		if (sk->cong_window > 1) sk->cong_window = sk->cong_window/2;
-		return;
-	}
-	
-	if(type == ICMP_PARAMETERPROB)
-	{
-		sk->err = EPROTO;
-		sk->error_report(sk);
+	if (sk->ip_recverr && !sk->users) {
+		struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
+		if (skb2 && sock_queue_err_skb(sk, skb2))
+			kfree_skb(skb, FREE_READ);
 	}
 
-	if(code<=NR_ICMP_UNREACH)
-	{
-		sk->err = icmp_err_convert[code & 0xff].errno;
-		sk->error_report(sk);
+	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED) {
+		if (sk->ip_pmtudisc != IP_PMTUDISC_DONT) {
+			sk->err = EMSGSIZE;
+			sk->error_report(sk);
+		}
 	}
-	
-	return;
 }
 
-static inline int raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
+static int raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
 {
 	/* Charge it to the socket. */
 	
 	if (__sock_queue_rcv_skb(sk,skb)<0)
 	{
 		ip_statistics.IpInDiscards++;
-		skb->sk=NULL;
 		kfree_skb(skb, FREE_READ);
-		return 0;
+		return -1;
 	}
 
 	ip_statistics.IpInDelivers++;
@@ -124,27 +108,13 @@ static inline int raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
  *	in ip.c
  */
 
-int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, __u32 saddr, __u32 daddr)
+int raw_rcv(struct sock *sk, struct sk_buff *skb)
 {
 	/* Now we need to copy this into memory. */
-	skb->sk = sk;
-	skb_trim(skb,ntohs(skb->ip_hdr->tot_len));
+	skb_trim(skb, ntohs(skb->nh.iph->tot_len));
 	
-	skb->h.raw = (unsigned char *) skb->ip_hdr;
-	skb->dev = dev;
-	skb->saddr = daddr;
-	skb->daddr = saddr;
+	skb->h.raw = skb->nh.raw;
 
-#if 0	
-	/*
-	 *	For no adequately explained reasons BSD likes to mess up the header of
-	 *	the received frame. 
-	 */
-	 
-	if(sk->bsdism)
-		skb->ip_hdr->tot_len=ntohs(skb->ip_hdr->tot_len-4*skb->ip_hdr->ihl);
-#endif
-	
 	if (sk->users) {
 		__skb_queue_tail(&sk->back_log, skb);
 		return 0;
@@ -152,6 +122,12 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, __u32 sadd
 	raw_rcv_skb(sk, skb);
 	return 0;
 }
+
+struct rawfakehdr 
+{
+	const char *from;
+	u32	saddr;
+};
 
 /*
  *	Send a RAW IP packet.
@@ -161,30 +137,30 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, __u32 sadd
  *	Callback support is trivial for SOCK_RAW
  */
   
-static int raw_getfrag(const void *p, __u32 saddr, char *to,
-		       unsigned int offset, unsigned int fraglen)
+static int raw_getfrag(const void *p, char *to, unsigned int offset, unsigned int fraglen)
 {
-	return copy_from_user(to, (const unsigned char *)p+offset, fraglen);
+	struct rawfakehdr *rfh = (struct rawfakehdr*)p;
+	return copy_from_user(to, (const unsigned char *)rfh->from+offset, fraglen);
 }
 
 /*
  *	IPPROTO_RAW needs extra work.
  */
  
-static int raw_getrawfrag(const void *p, __u32 saddr, char *to, unsigned int offset, unsigned int fraglen)
+static int raw_getrawfrag(const void *p, char *to, unsigned int offset, unsigned int fraglen)
 {
+	struct rawfakehdr *rfh = (struct rawfakehdr*)p;
 	int err; 
 	err = copy_from_user(to, (const unsigned char *)p+offset, fraglen);
 	if (err)
 		return err; 
-	if(offset==0)
-	{
-		struct iphdr *iph=(struct iphdr *)to;
-		if(!iph->saddr)
-			iph->saddr=saddr;
+	if (offset==0) {
+		struct iphdr *iph = (struct iphdr *)to;
+		if (!iph->saddr)
+			iph->saddr = rfh->saddr;
 		iph->check=0;
 		iph->tot_len=htons(fraglen);	/* This is right as you can't frag
-					   RAW packets */
+						   RAW packets */
 		/*
 	 	 *	Deliberate breach of modularity to keep 
 	 	 *	ip_build_xmit clean (well less messy).
@@ -193,87 +169,132 @@ static int raw_getrawfrag(const void *p, __u32 saddr, char *to, unsigned int off
 			iph->id = htons(ip_id_count++);
 		iph->check=ip_fast_csum((unsigned char *)iph, iph->ihl);
 	}
-	return 0; 
+	return 0;
 }
 
 static int raw_sendto(struct sock *sk, const unsigned char *from, 
-	int len, int noblock, unsigned flags, struct sockaddr_in *usin, int addr_len)
+		      int len, struct msghdr *msg)
 {
+	struct device *dev = NULL;
+	struct ipcm_cookie ipc;
+	struct rawfakehdr rfh;
+	struct rtable *rt;
+	int free = 0;
+	u32 daddr;
+	u8  tos;
 	int err;
-	struct sockaddr_in sin;
+
+	if (len>65535)
+		return -EMSGSIZE;
 
 	/*
-	 *	Check the flags. Only MSG_DONTROUTE is permitted.
+	 *	Check the flags.
 	 */
 
-	if (flags & MSG_OOB)		/* Mirror BSD error message compatibility */
+	if (msg->msg_flags & MSG_OOB)		/* Mirror BSD error message compatibility */
 		return -EOPNOTSUPP;
 			 
-	if (flags & ~MSG_DONTROUTE)
+	if (msg->msg_flags & ~(MSG_DONTROUTE|MSG_DONTWAIT))
 		return(-EINVAL);
+
 	/*
 	 *	Get and verify the address. 
 	 */
 
-	if (usin) 
-	{
-		if (addr_len < sizeof(sin)) 
+	if (msg->msg_namelen) {
+		struct sockaddr_in *usin = (struct sockaddr_in*)msg->msg_name;
+		if (msg->msg_namelen < sizeof(*usin))
 			return(-EINVAL);
-		memcpy(&sin, usin, sizeof(sin));
-		if (sin.sin_family && sin.sin_family != AF_INET) 
-			return(-EINVAL);
-		/*
-		 *	Protocol type is host ordered byte.
+		if (usin->sin_family != AF_INET) {
+			static int complained;
+			if (!complained++)
+				printk("%s forgot to set AF_INET in raw sendmsg. Fix it!\n", current->comm);
+			if (usin->sin_family)
+				return -EINVAL;
+		}
+		daddr = usin->sin_addr.s_addr;
+		/* ANK: I did not forget to get protocol from port field.
+		 * I just do not know, who uses this weirdness.
+		 * IP_HDRINCL is much more convenient.
 		 */
-		sin.sin_port=ntohs(sin.sin_port);
-	}
-	else 
-	{
+	} else {
 		if (sk->state != TCP_ESTABLISHED) 
 			return(-EINVAL);
-		sin.sin_family = AF_INET;
-		sin.sin_port = sk->num;
-		sin.sin_addr.s_addr = sk->daddr;
+		daddr = sk->daddr;
 	}
-	if (sin.sin_port == 0) 
-		sin.sin_port = sk->num;
-  
-	if (sin.sin_addr.s_addr == INADDR_ANY)
-		sin.sin_addr.s_addr = ip_my_addr();
 
-	/*
-	 *	BSD raw sockets forget to check SO_BROADCAST ....
-	 */
-	 
-	if (!sk->bsdism && sk->broadcast == 0 && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
-		return -EACCES;
+	ipc.addr = sk->saddr;
+	ipc.opt = NULL;
 
-	if(sk->ip_hdrincl)
-	{
-		if(len>65535)
-			return -EMSGSIZE;
-		err=ip_build_xmit(sk, raw_getrawfrag, from, len, sin.sin_addr.s_addr, 0, sk->opt, flags, sin.sin_port, noblock);
+	if (msg->msg_controllen) {
+		int tmp = ip_cmsg_send(msg, &ipc, &dev);
+		if (tmp)
+			return tmp;
+		if (ipc.opt && sk->ip_hdrincl) {
+			kfree(ipc.opt);
+			return -EINVAL;
+		}
+		if (ipc.opt)
+			free=1;
 	}
+
+	rfh.saddr = ipc.addr;
+	ipc.addr = daddr;
+
+	if (!ipc.opt)
+		ipc.opt = sk->opt;
+	if (ipc.opt && ipc.opt->srr) {
+		if (!daddr)
+			return -EINVAL;
+		daddr = ipc.opt->faddr;
+	}
+	tos = RT_TOS(sk->ip_tos) | (sk->localroute || (msg->msg_flags&MSG_DONTROUTE));
+
+	if (MULTICAST(daddr) && sk->ip_mc_name[0] && dev==NULL)
+		err = ip_route_output_dev(&rt, daddr, rfh.saddr, tos, sk->ip_mc_name);
 	else
-	{
-		if(len>65535-sizeof(struct iphdr))
-			return -EMSGSIZE;
-		err=ip_build_xmit(sk, raw_getfrag, from, len, sin.sin_addr.s_addr, 0, sk->opt, flags, sin.sin_port, noblock);
+		err = ip_route_output(&rt, daddr, rfh.saddr, tos, dev);
+
+	if (err) {
+		if (free) kfree(ipc.opt);
+		return err;
 	}
-	return err<0?err:len;
+
+	if (rt->rt_flags&RTF_BROADCAST && !sk->broadcast) {
+		if (free) kfree(ipc.opt);
+		ip_rt_put(rt);
+		return -EACCES;
+	}
+
+	rfh.from = from;
+	rfh.saddr = rt->rt_src;
+	if (!ipc.addr)
+		ipc.addr = rt->rt_dst;
+	if(sk->ip_hdrincl)
+		err=ip_build_xmit(sk, raw_getrawfrag, &rfh, len, &ipc, rt, msg->msg_flags);
+	else {
+		if (len>65535-sizeof(struct iphdr))
+			err = -EMSGSIZE;
+		else
+			err=ip_build_xmit(sk, raw_getfrag, &rfh, len, &ipc, rt, msg->msg_flags);
+	}
+
+	if (free)
+		kfree(ipc.opt);
+	ip_rt_put(rt);
+
+	return err<0 ? err : len;
 }
 
 /*
  *	Temporary
  */
  
-static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock, 
-	int flags)
+static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 {
-	if(msg->msg_iovlen==1)
-		return raw_sendto(sk,msg->msg_iov[0].iov_base,len, noblock, flags, msg->msg_name, msg->msg_namelen);
-	else
-	{
+	if (msg->msg_iovlen==1)
+		return raw_sendto(sk, msg->msg_iov[0].iov_base,len, msg);
+	else {
 		/*
 		 *	For awkward cases we linearise the buffer first. In theory this is only frames
 		 *	whose iovec's don't split on 4 byte boundaries, and soon encrypted stuff (to keep
@@ -281,7 +302,6 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock
 		 */
 		 
 		unsigned char *buf;
-		int fs;
 		int err;
 		if(len>65515)
 			return -EMSGSIZE;
@@ -291,9 +311,10 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock
 		err = memcpy_fromiovec(buf, msg->msg_iov, len);
 		if (!err)
 		{
+			unsigned short fs;
 			fs=get_fs();
 			set_fs(get_ds());
-			err=raw_sendto(sk,buf,len, noblock, flags, msg->msg_name, msg->msg_namelen);
+			err=raw_sendto(sk,buf,len, msg);
 			set_fs(fs);
 		}
 		else
@@ -310,10 +331,12 @@ static void raw_close(struct sock *sk, unsigned long timeout)
 #ifdef CONFIG_IP_MROUTE	
 	if(sk==mroute_socket)
 	{
+		ipv4_config.multicast_route = 0;
 		mroute_close(sk);
 		mroute_socket=NULL;
 	}
 #endif	
+	sk->dead=1;
 	destroy_sock(sk);
 }
 
@@ -343,29 +366,41 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	if (sk->shutdown & RCV_SHUTDOWN) 
 		return(0);
 
-	if (addr_len) 
+	if (addr_len)
 		*addr_len=sizeof(*sin);
+
+	if (sk->ip_recverr && (skb = skb_dequeue(&sk->error_queue)) != NULL) {
+		err = sock_error(sk);
+		if (msg->msg_controllen == 0) {
+			skb_free_datagram(sk, skb);
+			return err;
+		}
+		put_cmsg(msg, SOL_IP, IP_RECVERR, skb->len, skb->data);
+		skb_free_datagram(sk, skb);
+		return 0;
+	}
 
 	skb=skb_recv_datagram(sk,flags,noblock,&err);
 	if(skb==NULL)
  		return err;
 
-	copied=skb->len;
-	if(copied>len)
+	copied = skb->len;
+	if (len < copied)
 	{
-		copied=len;
-		msg->msg_flags|=MSG_TRUNC;
+		msg->msg_flags |= MSG_TRUNC;
+		copied = len;
 	}
 	
 	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	sk->stamp=skb->stamp;
 
 	/* Copy the address. */
-	if (sin) 
-	{
+	if (sin) {
 		sin->sin_family = AF_INET;
-		sin->sin_addr.s_addr = skb->daddr;
+		sin->sin_addr.s_addr = skb->nh.iph->saddr;
 	}
+	if (sk->ip_cmsg_flags)
+		ip_cmsg_recv(msg, skb);
 	skb_free_datagram(sk, skb);
 	return err ? err : (copied);
 }

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-floppy.c	Version 0.2 - ALPHA	Oct  31, 1996
+ * linux/drivers/block/ide-floppy.c	Version 0.3 - ALPHA	Dec   2, 1996
  *
  * Copyright (C) 1996 Gadi Oxman <gadio@netvision.net.il>
  */
@@ -15,6 +15,7 @@
  *
  * Ver 0.1   Oct 17 96   Initial test version, mostly based on ide-tape.c.
  * Ver 0.2   Oct 31 96   Minor changes.
+ * Ver 0.3   Dec  2 96   Fixed error recovery bug.
  */
 
 #include <linux/config.h>
@@ -451,21 +452,26 @@ static void idefloppy_write_zeros (ide_drive_t *drive, unsigned int bcount)
 static void idefloppy_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 {
 	ide_drive_t *drive = hwgroup->drive;
+	idefloppy_floppy_t *floppy = drive->driver_data;
 	struct request *rq = hwgroup->rq;
+	int error;
 
 #if IDEFLOPPY_DEBUG_LOG
 	printk (KERN_INFO "Reached idefloppy_end_request\n");
 #endif /* IDEFLOPPY_DEBUG_LOG */
 
+	switch (uptodate) {
+		case 0: error = IDEFLOPPY_ERROR_GENERAL; break;
+		case 1: error = 0; break;
+		default: error = uptodate;
+	}
+	if (error)
+		floppy->failed_pc = NULL;
 	if (!IDEFLOPPY_RQ_CMD (rq->cmd)) {
 		ide_end_request (uptodate, hwgroup);
 		return;
 	}
-	switch (uptodate) {
-		case 0: rq->errors = IDEFLOPPY_ERROR_GENERAL; break;
-		case 1: rq->errors = 0; break;
-		default: rq->errors = uptodate;
-	}
+	rq->errors = error;
 	ide_end_drive_cmd (drive, 0, 0);
 }
 
@@ -967,8 +973,11 @@ static void idefloppy_do_request (ide_drive_t *drive, struct request *rq, unsign
 #endif /* IDEFLOPPY_DEBUG_LOG */
 
 	if (rq->errors >= ERROR_MAX) {
-		printk (KERN_ERR "ide-floppy: %s: I/O error, pc = %2x, key = %2x, asc = %2x, ascq = %2x\n",
-			drive->name, floppy->failed_pc->c[0], floppy->sense_key, floppy->asc, floppy->ascq);
+		if (floppy->failed_pc != NULL)
+			printk (KERN_ERR "ide-floppy: %s: I/O error, pc = %2x, key = %2x, asc = %2x, ascq = %2x\n",
+				drive->name, floppy->failed_pc->c[0], floppy->sense_key, floppy->asc, floppy->ascq);
+		else
+			printk (KERN_ERR "ide-floppy: %s: I/O error\n", drive->name);
 		idefloppy_end_request (0, HWGROUP(drive));
 		return;
 	}
@@ -1367,6 +1376,7 @@ static ide_driver_t idefloppy_driver = {
 	ide_floppy,		/* media */
 	0,			/* busy */
 	1,			/* supports_dma */
+	0,			/* supports_dsc_overlap */
 	idefloppy_cleanup,	/* cleanup */
 	idefloppy_do_request,	/* do_request */
 	idefloppy_end_request,	/* end_request */

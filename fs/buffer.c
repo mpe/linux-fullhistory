@@ -17,6 +17,7 @@
  */
  
 /* Some bdflush() changes for the dynamic ramdisk - Paul Gortmaker, 12/94 */
+/* Start bdflush() with kernel_thread not syscall - Paul Gortmaker, 12/95 */
 
 #include <linux/sched.h>
 #include <linux/kernel.h>

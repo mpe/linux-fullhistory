@@ -57,7 +57,7 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 	{
 		struct ipv6_options *opt;
 
-		opt = (struct ipv6_options *) skb->proto_priv;
+		opt = (struct ipv6_options *) skb->cb;
 		opt->srcrt = hdr;
 
 		skb->h.raw += (hdr->hdrlen + 1) << 3;
@@ -71,7 +71,7 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 		 *	Discard 
 		 */
 		
-		pos = (__u8 *) hdr - (__u8 *) skb->ipv6_hdr + 2;
+		pos = (__u8 *) hdr - (__u8 *) skb->nh.ipv6h + 2;
 
 		if (hdr->type)
 			pos += 2;
@@ -92,7 +92,7 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 
 	if (hdr->segments_left > n)
 	{
-		pos = (__u8 *) hdr - (__u8 *) skb->ipv6_hdr + 2;
+		pos = (__u8 *) hdr - (__u8 *) skb->nh.ipv6h + 2;
 
 		pos += 3;
 
@@ -116,8 +116,8 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 	}
 
 	ipv6_addr_copy(&daddr, addr);
-	ipv6_addr_copy(addr, &skb->ipv6_hdr->daddr);
-	ipv6_addr_copy(&skb->ipv6_hdr->daddr, &daddr);
+	ipv6_addr_copy(addr, &skb->nh.ipv6h->daddr);
+	ipv6_addr_copy(&skb->nh.ipv6h->daddr, &daddr);
 
 	/*
 	 *	Check Strick Source Route

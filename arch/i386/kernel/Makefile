@@ -24,6 +24,10 @@ O_TARGET := kernel.o
 O_OBJS   := process.o signal.o entry.o traps.o irq.o vm86.o bios32.o \
             ptrace.o ioport.o ldt.o setup.o time.o sys_i386.o ksyms.o
 
+ifdef CONFIG_MCA
+O_OBJS += mca.o
+endif
+
 ifdef SMP
 
 O_OBJS += smp.o

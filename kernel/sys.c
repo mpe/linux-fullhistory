@@ -24,6 +24,7 @@
 #if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
 #include <linux/apm_bios.h>
 #endif
+#include <linux/notifier.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -31,7 +32,15 @@
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes
  */
+
 int C_A_D = 1;
+
+/*
+ *	List of functions to call at shutdown. This is used to stop any
+ *	idling DMA operations and the like. 
+ */
+ 
+struct notifier_block *boot_notifier_list=NULL;
 
 extern void adjust_clock(void);
 
@@ -187,7 +196,10 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 	if (magic != 0xfee1dead || magic_too != 672274793)
 		return -EINVAL;
 	if (flag == 0x01234567)
+	{
+		notifier_call_chain(&boot_notifier_list, SYS_DOWN, NULL);
 		hard_reset_now();
+	}
 	else if (flag == 0x89ABCDEF)
 		C_A_D = 1;
 	else if (!flag)
@@ -198,6 +210,7 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 #if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
 		apm_set_power_state(APM_STATE_OFF);
 #endif
+		notifier_call_chain(&boot_notifier_list, SYS_HALT, NULL);
 		do_exit(0);
 	} else
 		return -EINVAL;
@@ -212,7 +225,10 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 void ctrl_alt_del(void)
 {
 	if (C_A_D)
+	{
+		notifier_call_chain(&boot_notifier_list, SYS_DOWN, NULL);
 		hard_reset_now();
+	}
 	else
 		kill_proc(1, SIGINT, 1);
 }

@@ -213,11 +213,13 @@
                            with a loopback packet.
       0.442   9-Sep-96    Include AUI in dc21041 media printout. Bug reported
                            by <bhat@mundook.cs.mu.OZ.AU>
+      0.45    8-Dec-96    Include endian functions for PPC use, from work 
+                           by <cort@cs.nmt.edu>.
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:v0.442 96/11/7 davies@maniac.ultranet.com\n";
+static const char *version = "de4x5.c:v0.45 96/12/8 davies@maniac.ultranet.com\n";
 
 #include <linux/module.h>
 
@@ -236,6 +238,7 @@ static const char *version = "de4x5.c:v0.442 96/11/7 davies@maniac.ultranet.com\
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/uaccess.h>
+#include <asm/byteorder.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -851,7 +854,7 @@ de4x5_hw_init(struct device *dev, u_long iobase)
 	** Set up the RX descriptor ring (Intels)
 	** Allocate contiguous receive buffers, long word aligned (Alphas) 
 	*/
-#if !defined(__alpha__) && !defined(DE4X5_DO_MEMCPY)
+#if !defined(__alpha__) && !defined(__powerpc__) && !defined(DE4X5_DO_MEMCPY)
 	for (i=0; i<NUM_RX_DESC; i++) {
 	    lp->rx_ring[i].status = 0;
 	    lp->rx_ring[i].des1 = RX_BUFF_SZ;
@@ -871,8 +874,8 @@ de4x5_hw_init(struct device *dev, u_long iobase)
 	tmp = (char *)(((u_long) tmp + ALIGN) & ~ALIGN);
 	for (i=0; i<NUM_RX_DESC; i++) {
 	    lp->rx_ring[i].status = 0;
-	    lp->rx_ring[i].des1 = RX_BUFF_SZ;
-	    lp->rx_ring[i].buf = virt_to_bus(tmp + i * RX_BUFF_SZ);
+	    lp->rx_ring[i].des1 = cpu_to_le32(RX_BUFF_SZ);
+	    lp->rx_ring[i].buf = cpu_to_le32(virt_to_bus(tmp+i*RX_BUFF_SZ));
 	    lp->rx_ring[i].next = 0;
 	    lp->rx_skb[i] = (struct sk_buff *) 1;     /* Dummy entry */
 	}
@@ -888,8 +891,8 @@ de4x5_hw_init(struct device *dev, u_long iobase)
 	lp->txRingSize = NUM_TX_DESC;
 	    
 	/* Write the end of list marker to the descriptor lists */
-	lp->rx_ring[lp->rxRingSize - 1].des1 |= RD_RER;
-	lp->tx_ring[lp->txRingSize - 1].des1 |= TD_TER;
+	lp->rx_ring[lp->rxRingSize - 1].des1 |= cpu_to_le32(RD_RER);
+	lp->tx_ring[lp->txRingSize - 1].des1 |= cpu_to_le32(TD_TER);
 	    
 	/* Tell the adapter where the TX/RX rings are located. */
 	outl(virt_to_bus(lp->rx_ring), DE4X5_RRBA);
@@ -1063,11 +1066,11 @@ de4x5_sw_reset(struct device *dev)
     lp->tx_new = lp->tx_old = 0;
     
     for (i = 0; i < lp->rxRingSize; i++) {
-	lp->rx_ring[i].status = R_OWN;
+	lp->rx_ring[i].status = cpu_to_le32(R_OWN);
     }
     
     for (i = 0; i < lp->txRingSize; i++) {
-	lp->tx_ring[i].status = 0;
+	lp->tx_ring[i].status = cpu_to_le32(0);
     }
     
     barrier();
@@ -1082,7 +1085,7 @@ de4x5_sw_reset(struct device *dev)
     sti();                                       /* Ensure timer interrupts */
     for (j=0, i=0;(i<500) && (j==0);i++) {       /* Upto 500ms delay */
 	udelay(1000);
-	if (lp->tx_ring[lp->tx_new].status >= 0) j=1;
+	if ((s32)le32_to_cpu(lp->tx_ring[lp->tx_new].status) >= 0) j=1;
     }
     outl(omr, DE4X5_OMR);                        /* Stop everything! */
     
@@ -1253,8 +1256,9 @@ de4x5_rx(struct device *dev)
     int entry;
     s32 status;
     
-    for (entry=lp->rx_new; lp->rx_ring[entry].status>=0;entry=lp->rx_new) {
-	status = lp->rx_ring[entry].status;
+    for (entry=lp->rx_new; (s32)le32_to_cpu(lp->rx_ring[entry].status)>=0;
+	                                                    entry=lp->rx_new) {
+	status = (s32)le32_to_cpu(lp->rx_ring[entry].status);
 	
 	if (lp->rx_ovf) {
 	    if (inl(DE4X5_MFC) & MFC_FOCM) {
@@ -1281,7 +1285,8 @@ de4x5_rx(struct device *dev)
 		if (status & RD_OF)           lp->pktStats.rx_overflow++;
 	    } else {                          /* A valid frame received */
 		struct sk_buff *skb;
-		short pkt_len = (short)(lp->rx_ring[entry].status >> 16) - 4;
+		short pkt_len = (short)(le32_to_cpu(lp->rx_ring[entry].status)
+					                            >> 16) - 4;
 		
 		if ((skb = de4x5_alloc_rx_buff(dev, entry, pkt_len)) == NULL) {
 		    printk("%s: Insufficient memory; nuking packet.\n", 
@@ -1302,10 +1307,10 @@ de4x5_rx(struct device *dev)
 	    
 	    /* Change buffer ownership for this frame, back to the adapter */
 	    for (;lp->rx_old!=entry;lp->rx_old=(++lp->rx_old)%lp->rxRingSize) {
-		lp->rx_ring[lp->rx_old].status = R_OWN;
+		lp->rx_ring[lp->rx_old].status = cpu_to_le32(R_OWN);
 		barrier();
 	    }
-	    lp->rx_ring[entry].status = R_OWN;
+	    lp->rx_ring[entry].status = cpu_to_le32(R_OWN);
 	    barrier();
 	}
 	
@@ -1330,7 +1335,7 @@ de4x5_tx(struct device *dev)
     s32 status;
     
     for (entry = lp->tx_old; entry != lp->tx_new; entry = lp->tx_old) {
-	status = lp->tx_ring[entry].status;
+	status = (s32)le32_to_cpu(lp->tx_ring[entry].status);
 	if (status < 0) {                     /* Buffer not sent yet */
 	    break;
 	} else if (status != 0x7fffffff) {    /* Not setup frame */
@@ -1431,8 +1436,8 @@ de4x5_rx_ovfc(struct device *dev)
     outl(omr & ~OMR_SR, DE4X5_OMR);
     while (inl(DE4X5_STS) & STS_RS);
 
-    for (; lp->rx_ring[lp->rx_new].status>=0;) {
-	lp->rx_ring[lp->rx_new].status = R_OWN;
+    for (; (s32)le32_to_cpu(lp->rx_ring[lp->rx_new].status)>=0;) {
+	lp->rx_ring[lp->rx_new].status = cpu_to_le32(R_OWN);
 	lp->rx_new = (++lp->rx_new % lp->rxRingSize);
     }
 
@@ -1529,12 +1534,12 @@ load_packet(struct device *dev, char *buf, u32 flags, struct sk_buff *skb)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     
-    lp->tx_ring[lp->tx_new].buf = virt_to_bus(buf);
-    lp->tx_ring[lp->tx_new].des1 &= TD_TER;
-    lp->tx_ring[lp->tx_new].des1 |= flags;
+    lp->tx_ring[lp->tx_new].buf = cpu_to_le32(virt_to_bus(buf));
+    lp->tx_ring[lp->tx_new].des1 &= cpu_to_le32(TD_TER);
+    lp->tx_ring[lp->tx_new].des1 |= cpu_to_le32(flags);
     lp->tx_skb[lp->tx_new] = skb;
     barrier();
-    lp->tx_ring[lp->tx_new].status = T_OWN;
+    lp->tx_ring[lp->tx_new].status = cpu_to_le32(T_OWN);
     barrier();
     
     return;
@@ -2670,11 +2675,14 @@ ping_media(struct device *dev, int msec)
     
     sisr = inl(DE4X5_SISR);
 
-    if ((!(sisr & SISR_NCR)) && (lp->tx_ring[lp->tmp].status < 0) && (--lp->timeout)) {
+    if ((!(sisr & SISR_NCR)) && 
+	((s32)le32_to_cpu(lp->tx_ring[lp->tmp].status) < 0) && 
+	 (--lp->timeout)) {
 	sisr = 100 | TIMER_CB;
     } else {
 	if ((!(sisr & SISR_NCR)) && 
-	    !(lp->tx_ring[lp->tmp].status & (T_OWN | TD_ES)) && lp->timeout) {
+	    !(le32_to_cpu(lp->tx_ring[lp->tmp].status) & (T_OWN | TD_ES)) &&
+	    lp->timeout) {
 	    sisr = 0;
 	} else {
 	    sisr = 1;
@@ -2696,7 +2704,7 @@ de4x5_alloc_rx_buff(struct device *dev, int index, int len)
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     struct sk_buff *p;
 
-#if !defined(__alpha__) && !defined(DE4X5_DO_MEMCPY)
+#if !defined(__alpha__) && !defined(__powerpc__) && !defined(DE4X5_DO_MEMCPY)
     struct sk_buff *ret;
     u_long i=0, tmp;
 
@@ -2728,10 +2736,13 @@ de4x5_alloc_rx_buff(struct device *dev, int index, int len)
     skb_reserve(p, 2);	                               /* Align */
     if (index < lp->rx_old) {                          /* Wrapped buffer */
 	short tlen = (lp->rxRingSize - lp->rx_old) * RX_BUFF_SZ;
-	memcpy(skb_put(p,tlen), bus_to_virt(lp->rx_ring[lp->rx_old].buf),tlen);
-	memcpy(skb_put(p,len-tlen), bus_to_virt(lp->rx_ring[0].buf), len-tlen);
+	memcpy(skb_put(p,tlen), 
+	       bus_to_virt(le32_to_cpu(lp->rx_ring[lp->rx_old].buf)),tlen);
+	memcpy(skb_put(p,len-tlen), 
+	       bus_to_virt(le32_to_cpu(lp->rx_ring[0].buf)), len-tlen);
     } else {                                           /* Linear buffer */
-	memcpy(skb_put(p,len), bus_to_virt(lp->rx_ring[lp->rx_old].buf),len);
+	memcpy(skb_put(p,len), 
+	       bus_to_virt(le32_to_cpu(lp->rx_ring[lp->rx_old].buf)),len);
     }
 		    
     return p;
@@ -3702,17 +3713,17 @@ de4x5_dbg_open(struct device *dev)
 	printk("Descriptor buffers:\nRX: ");
 	for (i=0;i<lp->rxRingSize-1;i++){
 	    if (i < 3) {
-		printk("0x%8.8x  ",lp->rx_ring[i].buf);
+		printk("0x%8.8x  ",le32_to_cpu(lp->rx_ring[i].buf));
 	    }
 	}
-	printk("...0x%8.8x\n",lp->rx_ring[i].buf);
+	printk("...0x%8.8x\n",le32_to_cpu(lp->rx_ring[i].buf));
 	printk("TX: ");
 	for (i=0;i<lp->txRingSize-1;i++){
 	    if (i < 3) {
-		printk("0x%8.8x  ", lp->tx_ring[i].buf);
+		printk("0x%8.8x  ", le32_to_cpu(lp->tx_ring[i].buf));
 	    }
 	}
-	printk("...0x%8.8x\n", lp->tx_ring[i].buf);
+	printk("...0x%8.8x\n", le32_to_cpu(lp->tx_ring[i].buf));
 	printk("Ring size: \nRX: %d\nTX: %d\n", 
 	       (short)lp->rxRingSize, 
 	       (short)lp->txRingSize); 
@@ -4042,22 +4053,22 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	
 	for (i=0;i<lp->rxRingSize-1;i++){
 	    if (i < 3) {
-		tmp.lval[j>>2] = (s32)lp->rx_ring[i].buf; j+=4;
+		tmp.lval[j>>2] = (s32)le32_to_cpu(lp->rx_ring[i].buf); j+=4;
 	    }
 	}
-	tmp.lval[j>>2] = (s32)lp->rx_ring[i].buf; j+=4;
+	tmp.lval[j>>2] = (s32)le32_to_cpu(lp->rx_ring[i].buf); j+=4;
 	for (i=0;i<lp->txRingSize-1;i++){
 	    if (i < 3) {
-		tmp.lval[j>>2] = (s32)lp->tx_ring[i].buf; j+=4;
+		tmp.lval[j>>2] = (s32)le32_to_cpu(lp->tx_ring[i].buf); j+=4;
 	    }
 	}
-	tmp.lval[j>>2] = (s32)lp->tx_ring[i].buf; j+=4;
+	tmp.lval[j>>2] = (s32)le32_to_cpu(lp->tx_ring[i].buf); j+=4;
 	
 	for (i=0;i<lp->rxRingSize;i++){
-	    tmp.lval[j>>2] = lp->rx_ring[i].status; j+=4;
+	    tmp.lval[j>>2] = le32_to_cpu(lp->rx_ring[i].status); j+=4;
 	}
 	for (i=0;i<lp->txRingSize;i++){
-	    tmp.lval[j>>2] = lp->tx_ring[i].status; j+=4;
+	    tmp.lval[j>>2] = le32_to_cpu(lp->tx_ring[i].status); j+=4;
 	}
 	
 	tmp.lval[j>>2] = inl(DE4X5_BMR);  j+=4;

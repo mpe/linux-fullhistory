@@ -280,6 +280,9 @@ ENTRY(system_call)
 	ALIGN
 	.globl ret_from_sys_call
 ret_from_sys_call:
+#ifdef __SMP__
+	GET_CURRENT
+#endif
 	cmpl $0,SYMBOL_NAME(intr_count)
 	jne 1f
 9:	movl SYMBOL_NAME(bh_mask),%eax
@@ -572,7 +575,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_iopl)		/* 110 */
 	.long SYMBOL_NAME(sys_vhangup)
 	.long SYMBOL_NAME(sys_idle)
-	.long SYMBOL_NAME(sys_vm86)
+	.long SYMBOL_NAME(sys_vm86old)
 	.long SYMBOL_NAME(sys_wait4)
 	.long SYMBOL_NAME(sys_swapoff)		/* 115 */
 	.long SYMBOL_NAME(sys_sysinfo)
@@ -625,6 +628,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_mremap)
 	.long SYMBOL_NAME(sys_setresuid)
 	.long SYMBOL_NAME(sys_getresuid)
-	.rept NR_syscalls-165
+	.long SYMBOL_NAME(sys_vm86)
+	.rept NR_syscalls-166
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

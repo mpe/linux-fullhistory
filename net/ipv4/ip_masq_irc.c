@@ -65,7 +65,7 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
         char *dcc_p, *addr_beg_p, *addr_end_p;
 
         skb = *skb_p;
-	iph = skb->h.iph;
+	iph = skb->nh.iph;
         th = (struct tcphdr *)&(((char *)iph)[iph->ihl*4]);
         data = (char *)&th[1];
 

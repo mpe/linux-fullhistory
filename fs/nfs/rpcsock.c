@@ -116,10 +116,12 @@ rpc_sendmsg(struct rpc_sock *rsock, struct iovec *iov, int nr, int len,
 	msg.msg_name	= sap;
 	msg.msg_namelen = salen;
 	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	msg.msg_flags = 0;
 
 	oldfs = get_fs();
 	set_fs(get_ds());
-	result = sock->ops->sendmsg(sock, &msg, len, 0, 0);
+	result = sock_sendmsg(sock, &msg, len);
 	set_fs(oldfs);
 
 	dprintk("RPC: rpc_sendmsg(iov %p, len %d) = %d\n", iov, len, result);
@@ -136,17 +138,19 @@ rpc_recvmsg(struct rpc_sock *rsock, struct iovec *iov,
 	struct sockaddr	sa;
 	struct msghdr	msg;
 	unsigned long	oldfs;
-	int		result, alen;
+	int		result;
 
 	msg.msg_iov	= iov;
 	msg.msg_iovlen	= nr;
 	msg.msg_name	= &sa;
 	msg.msg_namelen = sizeof(sa);
 	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	msg.msg_flags = 0;
 
 	oldfs = get_fs();
 	set_fs(get_ds());
-	result = sock->ops->recvmsg(sock, &msg, len, 1, flags, &alen);
+	result = sock_recvmsg(sock, &msg, len, flags|MSG_DONTWAIT);
 	set_fs(oldfs);
 
 	dprintk("RPC: rpc_recvmsg(iov %p, len %d) = %d\n", iov, len, result);
@@ -302,7 +306,7 @@ static inline int
 rpc_send(struct rpc_sock *rsock, struct rpc_wait *slot)
 {
 	struct rpc_ioreq *req = slot->w_req;
-	struct iovec	iov[UIO_MAXIOV];
+	struct iovec	iov[UIO_FASTIOV];
 
 	if (rsock->shutdown)
 		return -EIO;
@@ -336,7 +340,7 @@ rpc_grok(struct rpc_sock *rsock)
 {
 	struct rpc_wait	*rovr;
 	struct rpc_ioreq *req;
-	struct iovec	iov[UIO_MAXIOV];
+	struct iovec	iov[UIO_FASTIOV];
 	u32		xid;
 	int		safe, result;
 
@@ -537,7 +541,7 @@ rpc_makesock(struct file *file)
 		printk(KERN_WARNING "RPC: only UDP sockets supported\n");
 		return NULL;
 	}
-	sk = (struct sock *) sock->data;
+	sk = sock->sk;
 
 	if ((rsock = kmalloc(sizeof(struct rpc_sock), GFP_KERNEL)) == NULL)
 		return NULL;

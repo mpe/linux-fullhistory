@@ -18,6 +18,7 @@
 #include <linux/net.h>
 #include <linux/mm.h>
 #include <linux/netdevice.h>
+#include <net/scm.h>
 #include <linux/ipx.h>
 
 #include <linux/ncp.h>
@@ -29,43 +30,62 @@
 #define _S(nr) (1<<((nr)-1))
 static int _recvfrom(struct socket *sock, unsigned char *ubuf,
 		     int size, int noblock, unsigned flags,
-		     struct sockaddr_ipx *sa, int *addr_len)
+		     struct sockaddr_ipx *sa)
 {
         struct iovec iov;
         struct msghdr msg;
+	struct scm_cookie scm;
+
+	memset(&scm, 0, sizeof(scm));
 
         iov.iov_base = ubuf;
         iov.iov_len  = size;
 
         msg.msg_name      = (void *)sa;
         msg.msg_namelen   = 0;
-        if (addr_len)
-                msg.msg_namelen = *addr_len;
+        if (sa)
+                msg.msg_namelen = sizeof(struct sockaddr_ipx);
         msg.msg_control = NULL;
         msg.msg_iov       = &iov;
         msg.msg_iovlen    = 1;
+	if (noblock) {
+		flags |= MSG_DONTWAIT;
+	}
 
-        return sock->ops->recvmsg(sock, &msg, size, noblock, flags, addr_len);
+        return sock->ops->recvmsg(sock, &msg, size, flags, &scm);
 }
 
 static int _sendto(struct socket *sock, const void *buff,
-		   int len, int nonblock, unsigned flags,
-		   struct sockaddr_ipx *sa, int addr_len)
+		   int len, int noblock, unsigned flags,
+		   struct sockaddr_ipx *sa)
 
 {
         struct iovec iov;
         struct msghdr msg;
+	struct scm_cookie scm;
+	int err;
 
         iov.iov_base = (void *)buff;
         iov.iov_len  = len;
 
         msg.msg_name      = (void *)sa;
-        msg.msg_namelen   = addr_len;
+        msg.msg_namelen   = sizeof(struct sockaddr_ipx);
         msg.msg_control = NULL;
         msg.msg_iov       = &iov;
         msg.msg_iovlen    = 1;
 
-        return sock->ops->sendmsg(sock, &msg, len, nonblock, flags);
+	if (noblock) {
+		flags |= MSG_DONTWAIT;
+	}
+
+	msg.msg_flags = flags;
+
+	err = scm_send(sock, &msg, &scm);
+	if (err < 0)
+		return err;
+        err = sock->ops->sendmsg(sock, &msg, len, &scm);
+	scm_destroy(&scm);
+	return err;
 }
 
 
@@ -78,7 +98,6 @@ ncp_wdog_data_ready(struct sock *sk, int len)
 	{
 		unsigned char packet_buf[2];
 		struct sockaddr_ipx sender;
-		int addr_len = sizeof(struct sockaddr_ipx);
 		int result;
 		unsigned short fs;
 
@@ -86,7 +105,7 @@ ncp_wdog_data_ready(struct sock *sk, int len)
 		set_fs(get_ds());
 
 		result = _recvfrom(sock, (void *)packet_buf, 2, 1, 0,
-				   &sender, &addr_len);
+				   &sender);
 
 		if (   (result != 2)
 		    || (packet_buf[1] != '?')
@@ -111,7 +130,7 @@ ncp_wdog_data_ready(struct sock *sk, int len)
 
 			packet_buf[1] = 'Y';
 			result = _sendto(sock, (void *)packet_buf, 2, 1, 0,
-					 &sender, sizeof(sender));
+					 &sender);
 			DDPRINTK("send result: %d\n", result);
 		}
 		set_fs(fs);
@@ -145,7 +164,7 @@ ncp_catch_watchdog(struct ncp_server *server)
                 return -EINVAL;
         }
 
-        sk   = (struct sock *)(sock->data);
+        sk   = sock->sk;
 
         if (sk == NULL)
 	{
@@ -196,7 +215,7 @@ ncp_dont_catch_watchdog(struct ncp_server *server)
                 return -EINVAL;
         }
 
-        sk = (struct sock *)(sock->data);
+        sk = sock->sk;
 
         if (sk == NULL)
 	{
@@ -237,7 +256,6 @@ ncp_msg_data_ready(struct sock *sk, int len)
 	{
 		unsigned char packet_buf[2];
 		struct sockaddr_ipx sender;
-		int addr_len = sizeof(struct sockaddr_ipx);
 		int result;
 		unsigned short fs;
 
@@ -245,7 +263,7 @@ ncp_msg_data_ready(struct sock *sk, int len)
 		set_fs(get_ds());
 
 		result = _recvfrom(sock, (void *)packet_buf, 2, 1, 0,
-				   &sender, &addr_len);
+				   &sender);
 
 		DPRINTK("ncpfs: got message of size %d from:\n", result);
 		DPRINTK("ncpfs: %08lX:%02X%02X%02X%02X%02X%02X:%04X,"
@@ -288,7 +306,7 @@ ncp_catch_message(struct ncp_server *server)
                 return -EINVAL;
         }
 
-        sk = (struct sock *)(sock->data);
+        sk = sock->sk;
 
         if (sk == NULL)
 	{
@@ -333,7 +351,6 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 	int acknowledge_seen;
 	char *server_name;
 	int n;
-	int addrlen;
 	unsigned long old_mask;
 
 	/* We have to check the result, so store the complete header */
@@ -391,8 +408,7 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 			 request.function);
 
 		result = _sendto(sock, (void *) start, size, 0, 0,
-				 &(server->m.serv_addr),
-				 sizeof(server->m.serv_addr));
+				 &(server->m.serv_addr));
 		if (result < 0)
 		{
 			printk("ncp_rpc_call: send error = %d\n", result);
@@ -455,14 +471,12 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 		else if (wait_table.nr)
 			remove_wait_queue(entry.wait_address, &entry.wait);
 		current->state = TASK_RUNNING;
-		addrlen = 0;
 
 		/* Get the header from the next packet using a peek, so keep it
 		 * on the recv queue.  If it is wrong, it will be some reply
 		 * we don't now need, so discard it */
 		result = _recvfrom(sock, (void *)&reply,
-				   sizeof(reply), 1, MSG_PEEK,
-				   NULL, &addrlen);
+				   sizeof(reply), 1, MSG_PEEK, NULL);
 		if (result < 0)
 		{
 			if (result == -EAGAIN)
@@ -488,7 +502,7 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 			/* Throw away the packet */
 			DPRINTK("ncp_rpc_call: got positive acknowledge\n");
 			_recvfrom(sock, (void *)&reply, sizeof(reply), 1, 0,
-				  NULL, &addrlen);
+				  NULL);
 			n = 0;
 			timeout = max_timeout;
 			acknowledge_seen = 1;
@@ -518,8 +532,7 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 		 * we have xid mismatch, so discard the packet and start
 		 * again.  What a hack! but I can't call recvfrom with
 		 * a null buffer yet. */
-		_recvfrom(sock, (void *)&reply, sizeof(reply), 1, 0, NULL,
-			  &addrlen);
+		_recvfrom(sock, (void *)&reply, sizeof(reply), 1, 0, NULL);
 
 		DPRINTK("ncp_rpc_call: reply mismatch\n");
 		goto re_select;
@@ -529,7 +542,7 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 	 * return it
 	 */
 	result = _recvfrom(sock, (void *)start, server->packet_size,
-			   1, 0, NULL, &addrlen);
+			   1, 0, NULL);
 	if (result < 0)
 	{
 		printk("NCP: notice message: result=%d\n", result);
@@ -538,7 +551,7 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 	{
 		printk("NCP: just caught a too small read memory size..., "
 		       "email to NET channel\n");
-		printk("NCP: result=%d,addrlen=%d\n", result, addrlen);
+		printk("NCP: result=%d\n", result);
 		result = -EIO;
 	}
 

@@ -143,6 +143,7 @@
  * 4.02  Dec 01, 1996  -- Applied patch from Gadi Oxman <gadio@netvision.net.il>
  *                          to fix the drive door locking problems.
  *
+ * 4.03  Dec 04, 1996  -- Added DSC overlap support.
  *
  * MOSTLY DONE LIST:
  *  Query the drive to find what features are available
@@ -969,6 +970,53 @@ static void cdrom_start_read_continuation (ide_drive_t *drive)
 					      &cdrom_read_intr);
 }
 
+#define IDECD_SEEK_THRESHOLD	(1000)			/* 1000 blocks */
+#define IDECD_SEEK_TIMER	(2 * WAIT_MIN_SLEEP)	/* 40 ms */
+#define IDECD_SEEK_TIMEOUT	(20 * IDECD_SEEK_TIMER) /* 0.8 sec */
+
+static void cdrom_seek_intr (ide_drive_t *drive)
+{
+	struct cdrom_info *info = drive->driver_data;
+	int stat;
+	static int retry = 10;
+
+	if (cdrom_decode_status (drive, 0, &stat)) return;
+	CDROM_CONFIG_FLAGS(drive)->seeking = 1;
+
+	if (retry && jiffies - info->start_seek > IDECD_SEEK_TIMER) {
+		if (--retry == 0) {
+			printk ("%s: disabled DSC seek overlap\n", drive->name);
+			drive->dsc_overlap = 0;
+		}
+	}
+}
+
+static void cdrom_start_seek_continuation (ide_drive_t *drive)
+{
+	struct packet_command pc;
+	struct request *rq = HWGROUP(drive)->rq;
+	int sector, frame, nskip;
+
+	sector = rq->sector;
+	nskip = (sector % SECTORS_PER_FRAME);
+	if (nskip > 0)
+		sector -= nskip;
+	frame = sector / SECTORS_PER_FRAME;
+
+	memset (&pc.c, 0, sizeof (pc.c));
+	pc.c[0] = SEEK;
+	put_unaligned(htonl (frame), (unsigned int *) &pc.c[2]);
+	(void) cdrom_transfer_packet_command (drive, pc.c, sizeof (pc.c), &cdrom_seek_intr);
+}
+
+static void cdrom_start_seek (ide_drive_t *drive, unsigned int block)
+{
+	struct cdrom_info *info = drive->driver_data;
+
+	info->dma = 0;
+	info->start_seek = jiffies;
+	cdrom_start_packet_command (drive, 0, cdrom_start_seek_continuation);
+}
 
 /*
  * Start a read request from the CD-ROM.
@@ -1250,8 +1298,28 @@ void ide_do_rw_cdrom (ide_drive_t *drive, struct request *rq, unsigned long bloc
 	} else if (rq -> cmd != READ) {
 		printk ("ide-cd: bad cmd %d\n", rq -> cmd);
 		cdrom_end_request (0, drive);
-	} else
-		cdrom_start_read (drive, block);
+	} else {
+		struct cdrom_info *info = drive->driver_data;
+
+		if (CDROM_CONFIG_FLAGS(drive)->seeking) {
+			unsigned long elpased = jiffies - info->start_seek;
+			int stat = GET_STAT();
+
+			if ((stat & SEEK_STAT) != SEEK_STAT) {
+				if (elpased < IDECD_SEEK_TIMEOUT) {
+					ide_stall_queue (drive, IDECD_SEEK_TIMER);
+					return;
+				}
+				printk ("%s: DSC timeout\n", drive->name);
+			}
+			CDROM_CONFIG_FLAGS(drive)->seeking = 0;
+		}
+		if (IDE_LARGE_SEEK(info->last_block, block, IDECD_SEEK_THRESHOLD) && drive->dsc_overlap)
+			cdrom_start_seek (drive, block);
+		else
+			cdrom_start_read (drive, block);
+		info->last_block = block;
+	}
 }
 
 
@@ -2831,6 +2899,7 @@ static ide_driver_t ide_cdrom_driver = {
 	ide_cdrom,			/* media */
 	0,				/* busy */
 	1,				/* supports_dma */
+	1,				/* supports_dsc_overlap */
 	ide_cdrom_cleanup,		/* cleanup */
 	ide_do_rw_cdrom,		/* do_request */
 	NULL,				/* ??? or perhaps

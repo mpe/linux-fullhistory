@@ -30,7 +30,7 @@
 int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 {
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
-	struct ipv6_options *opt = (struct ipv6_options *) skb->proto_priv;
+	struct ipv6_options *opt = (struct ipv6_options *) skb->cb;
 	struct cmsghdr *cmsg = msg->msg_control;
 	int len = msg->msg_controllen;
 
@@ -58,7 +58,7 @@ int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 
 		src_info->ipi6_ifindex = in6_dev->if_index;
 		ipv6_addr_copy(&src_info->ipi6_addr,
-			       &skb->ipv6_hdr->daddr);
+			       &skb->nh.ipv6h->daddr);
 
 		len -= cmsg->cmsg_len;
 		msg->msg_controllen += cmsg->cmsg_len;

@@ -70,13 +70,13 @@ static __u32 tcp_v6_init_sequence(struct sock *sk, struct sk_buff *skb)
 
 	if (skb->protocol == __constant_htons(ETH_P_IPV6))
 	{
-		si = skb->ipv6_hdr->saddr.s6_addr32[3];
-		di = skb->ipv6_hdr->daddr.s6_addr32[3];
+		si = skb->nh.ipv6h->saddr.s6_addr32[3];
+		di = skb->nh.ipv6h->daddr.s6_addr32[3];
 	}
 	else
 	{
-		si = skb->saddr;
-		di = skb->daddr;
+		si = skb->nh.iph->saddr;
+		di = skb->nh.iph->daddr;
 	}
 
 	return secure_tcp_sequence_number(di, si,
@@ -218,9 +218,6 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 		return(-ENOMEM);
 	}
 	lock_sock(sk);
-	buff->sk = sk;
-	buff->free = 0;
-	buff->localroute = sk->localroute;
 	
 	tmp = tcp_v6_build_header(sk, buff);
 
@@ -278,7 +275,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	sk->packets_out++;
 	buff->when = jiffies;
 	skb1 = skb_clone(buff, GFP_KERNEL);
-	sk->wmem_alloc += skb1->truesize;
+	skb_set_owner_w(skb1, sk);
 
 	tmp = ipv6_xmit(sk, skb1, &np->saddr, &np->daddr, NULL, IPPROTO_TCP);
 
@@ -293,8 +290,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	return(tmp);
 }
 
-static int tcp_v6_sendmsg(struct sock *sk, struct msghdr *msg,
-			  int len, int nonblock, int flags)
+static int tcp_v6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 {
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	int retval = -EINVAL;
@@ -303,7 +299,7 @@ static int tcp_v6_sendmsg(struct sock *sk, struct msghdr *msg,
 	 *	Do sanity checking for sendmsg/sendto/send
 	 */
 
-	if (flags & ~(MSG_OOB|MSG_DONTROUTE))
+	if (msg->msg_flags & ~(MSG_OOB|MSG_DONTROUTE|MSG_DONTWAIT))
 		goto out;
 	if (msg->msg_name) {
 		struct sockaddr_in6 *addr=(struct sockaddr_in6 *)msg->msg_name;
@@ -326,7 +322,7 @@ static int tcp_v6_sendmsg(struct sock *sk, struct msghdr *msg,
 
 	lock_sock(sk);
 	retval = tcp_do_sendmsg(sk, msg->msg_iovlen, msg->msg_iov, 
-				len, nonblock, flags);
+				len, msg->msg_flags);
 
 	release_sock(sk);
 
@@ -407,7 +403,7 @@ static void tcp_v6_send_synack(struct sock *sk, struct open_request *req)
 	}
 
 	skb_reserve(skb, (MAX_HEADER + 15) & ~15);
-	skb->ipv6_hdr = (struct ipv6hdr *) skb_put(skb, sizeof(struct ipv6hdr));
+	skb->nh.ipv6h = (struct ipv6hdr *) skb_put(skb, sizeof(struct ipv6hdr));
 
 	dc = ipv6_dst_route(&af_req->rmt_addr, af_req->dev, 0);
 
@@ -531,8 +527,8 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 
 	req->rmt_port = skb->h.th->source;
 
-	ipv6_addr_copy(&af_req->rmt_addr, &skb->ipv6_hdr->saddr);
-	ipv6_addr_copy(&af_req->loc_addr, &skb->ipv6_hdr->daddr);
+	ipv6_addr_copy(&af_req->rmt_addr, &skb->nh.ipv6h->saddr);
+	ipv6_addr_copy(&af_req->loc_addr, &skb->nh.ipv6h->daddr);
 
 	/* FIXME: options */
 
@@ -610,10 +606,11 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 
 	memcpy(newsk, sk, sizeof(*newsk));
 	newsk->opt = NULL;
-	newsk->ip_route_cache  = NULL;
+	newsk->dst_cache  = NULL;
 	skb_queue_head_init(&newsk->write_queue);
 	skb_queue_head_init(&newsk->receive_queue);
 	skb_queue_head_init(&newsk->out_of_order_queue);
+	skb_queue_head_init(&newsk->error_queue);
 	
 	/*
 	 *	Unused
@@ -681,7 +678,8 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 
 	newsk->dummy_th.source = sk->dummy_th.source;
 	newsk->dummy_th.dest = req->rmt_port;
-	
+	newsk->users=0;
+
 	newtp->rcv_nxt = req->rcv_isn + 1;
 	newtp->rcv_wup = req->rcv_isn + 1;
 	newsk->copied_seq = req->rcv_isn + 1;
@@ -717,6 +715,10 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 
 }
 
+static void tcp_v6_reply_reset(struct sk_buff *skb)
+{
+}
+
 static void tcp_v6_send_reset(struct in6_addr *saddr, struct in6_addr *daddr, 
 			      struct tcphdr *th, struct proto *prot, 
 			      struct ipv6_options *opt,
@@ -737,9 +739,7 @@ static void tcp_v6_send_reset(struct in6_addr *saddr, struct in6_addr *daddr,
 	if (buff == NULL) 
 	  	return;
 
-	buff->sk = NULL;
 	buff->dev = dev;
-	buff->localroute = 0;
 
 	tcp_v6_build_header(NULL, buff);
 
@@ -804,8 +804,8 @@ struct sock *tcp_v6_check_req(struct sock *sk, struct sk_buff *skb)
 
 		af_req = (struct tcp_v6_open_req *) req;
 
-		if (!ipv6_addr_cmp(&af_req->rmt_addr, &skb->ipv6_hdr->saddr) &&
-		    !ipv6_addr_cmp(&af_req->loc_addr, &skb->ipv6_hdr->daddr) &&
+		if (!ipv6_addr_cmp(&af_req->rmt_addr, &skb->nh.ipv6h->saddr) &&
+		    !ipv6_addr_cmp(&af_req->loc_addr, &skb->nh.ipv6h->daddr) &&
 		    req->rmt_port == skb->h.th->source)
 		{
 			u32 flg;
@@ -835,7 +835,7 @@ struct sock *tcp_v6_check_req(struct sock *sk, struct sk_buff *skb)
 				return NULL;
 			}
 
-			atomic_sub(skb->truesize, &sk->rmem_alloc);
+			skb_orphan(skb);
 			sk = tp->af_specific->syn_recv_sock(sk, skb, req);
 
 			tcp_dec_slow_timer(TCP_SLT_SYNACK);
@@ -845,10 +845,9 @@ struct sock *tcp_v6_check_req(struct sock *sk, struct sk_buff *skb)
 				return NULL;
 			}
 
-			atomic_add(skb->truesize, &sk->rmem_alloc);
+			skb_set_owner_r(skb, sk);
 			req->expires = 0UL;
 			req->sk = sk;
-			skb->sk = sk;
 			break;
 		}
 
@@ -925,7 +924,6 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 
 		skb->acked = 0;
 		skb->used = 0;
-		skb->free = 1;
 	}		
 
 	/*
@@ -961,11 +959,12 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 		return(0);
 	}
 
-	atomic_add(skb->truesize, &sk->rmem_alloc);
+	skb_set_owner_r(skb, sk);
 
 	if (sk->state == TCP_ESTABLISHED)
 	{
-		tcp_rcv_established(sk, skb, th, len);
+		if (tcp_rcv_established(sk, skb, th, len))
+			goto no_tcp_socket;
 		return 0;
 	}
 	
@@ -994,7 +993,7 @@ no_tcp_socket:
 	 */
 
 	tcp_v6_send_reset(daddr, saddr, th, &tcpv6_prot, opt, dev, 
-			  skb->ipv6_hdr->priority, 255);
+			  skb->nh.ipv6h->priority, 255);
 
 discard_it:
 
@@ -1034,7 +1033,7 @@ static int tcp_v6_rebuild_header(struct sock *sk, struct sk_buff *skb)
 			 np->dest->rt.fib_node->fn_sernum : 0);
 
 	ipv6_redo_mac_hdr(skb, np->dest->dc_nexthop,
-			  skb->tail - (u8*) skb->ipv6_hdr);
+			  skb->tail - (u8*) skb->nh.ipv6h);
 	return 0;
 }
 
@@ -1043,8 +1042,8 @@ static int tcp_v6_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 	int res;
 
 	res = tcp_v6_rcv(skb, skb->dev,
-			 &skb->ipv6_hdr->saddr, &skb->ipv6_hdr->daddr,
-			 (struct ipv6_options *) skb->proto_priv,
+			 &skb->nh.ipv6h->saddr, &skb->nh.ipv6h->daddr,
+			 (struct ipv6_options *) skb->cb,
 			 skb->len, 1, 
 			 (struct inet6_protocol *) sk->pair);
 	return res;
@@ -1056,8 +1055,8 @@ static struct sock * tcp_v6_get_sock(struct sk_buff *skb, struct tcphdr *th)
 	struct in6_addr *daddr;
 	struct sock *sk;
 
-	saddr = &skb->ipv6_hdr->saddr;
-	daddr = &skb->ipv6_hdr->daddr;
+	saddr = &skb->nh.ipv6h->saddr;
+	daddr = &skb->nh.ipv6h->daddr;
 
 	sk = inet6_get_sock(&tcpv6_prot, daddr, saddr, th->source, th->dest);
 
@@ -1067,7 +1066,7 @@ static struct sock * tcp_v6_get_sock(struct sk_buff *skb, struct tcphdr *th)
 static int tcp_v6_build_header(struct sock *sk, struct sk_buff *skb)
 {
 	skb_reserve(skb, (MAX_HEADER + 15) & ~15);
-	skb->ipv6_hdr = (struct ipv6hdr *) skb_put(skb, sizeof(struct ipv6hdr));
+	skb->nh.ipv6h = (struct ipv6hdr *) skb_put(skb, sizeof(struct ipv6hdr));
 
 	/*
 	 *	FIXME: reserve space for option headers
@@ -1077,9 +1076,9 @@ static int tcp_v6_build_header(struct sock *sk, struct sk_buff *skb)
 	return 0;
 }
 
-static void tcp_v6_xmit(struct sock *sk, struct device *dev, struct sk_buff *skb,
-			int free)
+static void tcp_v6_xmit(struct sk_buff *skb)
 {
+	struct sock *sk = skb->sk;
 	struct ipv6_pinfo * np = &sk->net_pinfo.af_inet6;
 	int err;
 
@@ -1117,6 +1116,7 @@ static struct tcp_func ipv6_specific = {
 	ipv6_setsockopt,
 	ipv6_getsockopt,
 	v6_addr2sockaddr,
+	tcp_v6_reply_reset,
 	sizeof(struct sockaddr_in6)
 };
 
@@ -1136,6 +1136,7 @@ static struct tcp_func ipv6_mapped = {
 	ipv6_setsockopt,
 	ipv6_getsockopt,
 	v6_addr2sockaddr,
+	tcp_v6_reply_reset,
 	sizeof(struct sockaddr_in6)
 };
 
@@ -1203,7 +1204,6 @@ static int tcp_v6_destroy_sock(struct sock *sk)
 	 
   	while((skb = skb_dequeue(&sk->write_queue)) != NULL) {
 		IS_SKB(skb);
-		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
   	}
 

@@ -43,19 +43,21 @@ The original driver has been written for 386bsd and FreeBSD by:
           Wolfgang Stanglmeier        <wolf@cologne.de>
           Stefan Esser                <se@mi.Uni-Koeln.de>
 
-You can find technical information about the NCR 8xx family in the PCI-HOWTO 
-written by Michael Will and in the SCSI-HOWTO written by Drew Eckhardt.
+You can find technical information about the NCR 8xx family in the
+PCI-HOWTO written by Michael Will and in the SCSI-HOWTO written by
+Drew Eckhardt.
 
 Information about new chips is available at SYMBIOS web server:
-          http://www.symbios.com
 
-This short documentation only describes the features of the NCR53C8XX driver, 
-configuration parameters and control commands available through the proc SCSI
-file system read / write operations.
+          http://www.symbios.com/
+
+This short documentation only describes the features of the NCR53C8XX
+driver, configuration parameters and control commands available
+through the proc SCSI file system read / write operations.
 
 This driver has been tested OK with linux/i386 and Linux/Alpha.
 
-I am not a native speaker of English and there are probably lots of 
+I am not a native speaker of English and there are probably lots of
 mistakes in this README file. Any help will be welcome.
 
 
@@ -69,8 +71,8 @@ The following features are supported for all chips:
 	SCSI parity checking
 	Master parity checking
 
-"Wide negotiation" is supported for chips that allow it.
-The following table shows some characteristics of NCR 8xx family chips:
+"Wide negotiation" is supported for chips that allow it.  The
+following table shows some characteristics of NCR 8xx family chips:
 
        On board                        Supported by    Tested with
 Chip   SDMS BIOS   Wide   Ultra SCSI   the driver      the driver
@@ -100,51 +102,52 @@ Chip   SDMS BIOS   Wide   Ultra SCSI   the driver      the driver
 
 4. Memory mapped I/O versus normal I/O
 
-Memory mapped I/O has less latency than normal I/O.
-Since linux-1.3.x, memory mapped I/O is used rather than normal I/O.
-Memory mapped I/O seems to work fine on most hardware configurations, but some 
-poorly designed motherboards may break this feature.
+Memory mapped I/O has less latency than normal I/O.  Since
+linux-1.3.x, memory mapped I/O is used rather than normal I/O.  Memory
+mapped I/O seems to work fine on most hardware configurations, but
+some poorly designed motherboards may break this feature.
 
-The configuration option CONFIG_SCSI_NCR53C8XX_IOMAPPED forces the 
+The configuration option CONFIG_SCSI_NCR53C8XX_IOMAPPED forces the
 driver to use normal I/O in all cases.
 
 
 5. Tagged command queueing
 
-Some SCSI devices do not properly support tagged command queuing.
-A safe configuration is to not enable tagged command queuing support at 
-boot-up, and to enable support of it with the control command "settags" 
-described further in this text.
+Some SCSI devices do not properly support tagged command queuing.  A
+safe configuration is to not enable tagged command queuing support at
+boot-up, and to enable support of it with the control command
+"settags" described further in this text.
 
-Once you are sure that all your devices properly support tagged command queuing,
-you can enable it by default with the CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE 
-configuration option.
+Once you are sure that all your devices properly support tagged
+command queuing, you can enable it by default with the
+CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE configuration option.
 
-The maximum number of simultaneous tagged commands queued to a device is 
-currently set to 4 by default. It is defined in the file ncr53c8xx.h by 
-SCSI_NCR_MAX_TAGS. This value is suitable for most scsi disks.
-With large scsi disks (> 2GB, cache > 512KB average seek time < 10 ms),  
-8 tagged commands may give better performance.
+The maximum number of simultaneous tagged commands queued to a device
+is currently set to 4 by default. It is defined in the file
+ncr53c8xx.h by SCSI_NCR_MAX_TAGS. This value is suitable for most SCSI
+disks.  With large SCSI disks (> 2GB, cache > 512KB average seek time
+< 10 ms), 8 tagged commands may give better performance.
 
-In some special conditions, some scsi disk firmwares may return a QUEUE FULL 
-status for a scsi command. This behaviour is managed by the driver by the 
-following heuristic:
+In some special conditions, some SCSI disk firmwares may return a
+QUEUE FULL status for a SCSI command. This behaviour is managed by the
+driver by the following heuristic:
 
 - Each time a QUEUE FULL status is returned, tagged command queueing is 
   temporarily disabled. 
 
-- Every 100 successfully completed scsi commands, if allowed by the current 
-  limit, the maximum number of queueable commands is incremented and tagged 
-  command queueing is reenabled.
+- Every 100 successfully completed SCSI commands, if allowed by the
+  current limit, the maximum number of queueable commands is
+  incremented and tagged command queueing is reenabled.
 
 
 6. Parity checking
 
-The driver supports SCSI parity checking and PCI bus master parity checking.
-These features must be enabled in order to ensure safe data transfers.
-However, some flawed devices or mother boards will have problems with 
-parity. You can disable parity by choosing first "CONFIG_EXPERIMENTAL".
-Then, "make config" will allow to set the following configuration options:
+The driver supports SCSI parity checking and PCI bus master parity
+checking.  These features must be enabled in order to ensure safe data
+transfers.  However, some flawed devices or mother boards will have
+problems with parity. You can disable parity by choosing first
+"CONFIG_EXPERIMENTAL".  Then, "make config" will allow to set the
+following configuration options:
 
    CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK  (disable SCSI parity checking)
    CONFIG_SCSI_NCR53C8XX_DISABLE_MPARITY_CHECK (disable master parity checking)
@@ -154,16 +157,19 @@ Then, "make config" will allow to set the following configuration options:
 
 Profiling information is available through the proc SCSI file system.
 The device associated with a host has the following pathname:
+
           /proc/scsi/ncr53c8xx/N     (N=0,1,2 ....)
 
 Generally, only 1 board is used on hardware configuration, and that device is:
           /proc/scsi/ncr53c8xx/0
 
-However, if the driver has been made as module, the number of the hosts is 
-incremented each time the driver is loaded.
+However, if the driver has been made as module, the number of the
+hosts is incremented each time the driver is loaded.
 
 In order to display profiling information, just enter:
+
          cat /proc/scsi/ncr53c8xx/0
+
 and you will get something like the following text:
 
 -------------------------------------------------------
@@ -184,7 +190,7 @@ Profiling information:
   ms_post      = 1320
 -------------------------------------------------------
 
-General information is easy to understand. The device ID and the 
+General information is easy to understand. The device ID and the
 revision ID identify the SCSI chip as follows:
 
 Chip    Device id     Revision Id
@@ -198,13 +204,15 @@ Chip    Device id     Revision Id
 875       0xf
 
 The profiling information is updated upon completion of SCSI commands.
-A data structure is allocated and zeroed when the host adapter is 
-attached. So, if the driver is a module, the profile counters are cleared each 
-time the driver is loaded.
-The "clearprof" command allows you to clear these counters at any time.
+A data structure is allocated and zeroed when the host adapter is
+attached. So, if the driver is a module, the profile counters are
+cleared each time the driver is loaded.  The "clearprof" command
+allows you to clear these counters at any time.
 
 The following counters are available:
-("num" prefix means "number of", "ms" means milli-seconds)
+
+("num" prefix means "number of",
+"ms" means milli-seconds)
 
 num_trans
 	Number of completed commands
@@ -247,36 +255,38 @@ ms_post
 	(time from SCSI status get to command completion call)
 	Example above: 1.32 seconds spent for post processing
 
-Due to the 1/100 second tick of the system clock, "ms_post" time may be 
-wrong.
+Due to the 1/100 second tick of the system clock, "ms_post" time may
+be wrong.
 
-In the example above, we got 18038 interrupts "on the fly" and only 1673 script 
-breaks probably due to disconnections inside a segment of the scatter list. 
-This is an excellent result due to the fact that the driver tries to use small 
-data segments (512) for the scatter list. The CPU load of this rescatter process 
-is acceptable. Unlike other SCSI processors, NCR53C8XX controllers do not need  
-large data chunks in order to get better performance, and it seems that it 
-is just the opposite.
-The scatter/gather algorithm of the middle SCSI driver is not optimal for 
-NCR SCSI processors and should be tunable according to host type.
+In the example above, we got 18038 interrupts "on the fly" and only
+1673 script breaks probably due to disconnections inside a segment of
+the scatter list.  This is an excellent result due to the fact that
+the driver tries to use small data segments (512) for the scatter
+list. The CPU load of this rescatter process is acceptable. Unlike
+other SCSI processors, NCR53C8XX controllers do not need large data
+chunks in order to get better performance, and it seems that it is
+just the opposite.  The scatter/gather algorithm of the middle SCSI
+driver is not optimal for NCR SCSI processors and should be tunable
+according to host type.
 
-You can tune the "wished" segment size for the scatterlist by changing the 
-following "define" in the file ncr53c8xx.h.
-Use only power of 2 greater than 512 (1024, 2048 or 4096).
+You can tune the "wished" segment size for the scatterlist by changing
+the following "define" in the file ncr53c8xx.h.  Use only power of 2
+greater than 512 (1024, 2048 or 4096).
 
 SCSI_NCR_SEGMENT_SIZE		(default: 512)
 
 
 8. Control commands
 
-Control commands can be sent to the driver with write operations to the 
-proc SCSI file system. The generic command syntax is the following:
+Control commands can be sent to the driver with write operations to
+the proc SCSI file system. The generic command syntax is the
+following:
 
       echo "<verb> <parameters>" >/proc/scsi/ncr53c8xx/0
       (assumes controller number is 0)
 
-Using "all" for "<target>" parameter with the commands below will apply to 
-all targets of the scsi chain (except the controller).
+Using "all" for "<target>" parameter with the commands below will
+apply to all targets of the SCSI chain (except the controller).
 
 Available commands:
 
@@ -339,8 +349,8 @@ Available commands:
 
     clearprof
 
-    The profile counters are automatically cleared when the amount of data 
-    transfered reaches 1000 GB in order to avoid overflow.
+    The profile counters are automatically cleared when the amount of
+    data transfered reaches 1000 GB in order to avoid overflow.
     The "clearprof" command allows you to clear these counters at any time.
 
 
@@ -351,21 +361,22 @@ Available commands:
     target:    target number
 
     For the moment, only one flag is available:
+
         no_sync:   not allow target to disconnect.
 
     Do not specify any flag in order to reset the flag. For example:
     - setflag 4
       will reset no_sync flag for target 4, so will allow it disconnections.
     - setflag all
-      will allow disconnection for all devices on the scsi bus.
+      will allow disconnection for all devices on the SCSI bus.
 
 9. Configuration parameters
 
-If the firmware of all your devices is perfect enough, all the features 
-supported by the driver can be enabled at start-up.
-However, if only one has a flaw for some SCSI feature, you can disable the 
-support by the driver of this feature at linux start-up and enable this 
-feature after boot-up only for devices that support it safely.
+If the firmware of all your devices is perfect enough, all the
+features supported by the driver can be enabled at start-up.  However,
+if only one has a flaw for some SCSI feature, you can disable the
+support by the driver of this feature at linux start-up and enable
+this feature after boot-up only for devices that support it safely.
 
 CONFIG_SCSI_NCR53C8XX_IOMAPPED       (default answer: n)
     Answer "y" if you suspect your mother board to not allow memory mapped I/O.
@@ -398,9 +409,9 @@ CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT   (default and only reasonnable answer: n)
 
 10. Some constants and flags of the ncr53c8xx.h header files
 
-Some of these are defined from the configuration parameters.
-To change other "defines", you must edit the header file.
-Do that only if you know what you are doing.
+Some of these are defined from the configuration parameters.  To
+change other "defines", you must edit the header file.  Do that only
+if you know what you are doing.
 
 SCSI_NCR_TRUST_BIOS_SETTING	(default: not defined)
 	If defined, the driver will preserve features bits from  
@@ -510,11 +521,11 @@ Prior to installing the driver, you must untar the distribution, as follow:
 
 12. Installation procedure
 
-This install script has been tested with linux-1.2.13 and linux-2.0.22 to 
-2.0.25. It will probably work with linux 2.0.X (X>25).
+This install script has been tested with linux-1.2.13 and linux-2.0.22
+to 2.0.25. It will probably work with linux 2.0.X (X>25).
 
-This procedure copies the new driver files to the kernel tree and applies 
-a patch to some files of the kernel tree.
+This procedure copies the new driver files to the kernel tree and
+applies a patch to some files of the kernel tree.
 
 	If your linux directory is at the standard location
 	"/usr/src/linux", just enter:
@@ -534,14 +545,15 @@ a patch to some files of the kernel tree.
 
 13. Control commands under linux-1.2.13
 
-Profiling data and control commands using the proc SCSI file system are not 
-available for linux-1.2.13.
-The only control command available is "scsitag" which allows you to enable
-tagged command queuing support after linux boot-up.
+Profiling data and control commands using the proc SCSI file system
+are not available for linux-1.2.13.  The only control command
+available is "scsitag" which allows you to enable tagged command
+queuing support after linux boot-up.
 
 Tagged command queueing is disabled by default at system startup.
 
 You can enable tagged queue per device with the following command:
+
 	scsitag device_name (ex: scsitag /dev/sda)
 
 Use "cc -o scsitag scsitag.c" to create the "scsitag" executable.
@@ -551,63 +563,67 @@ Use "cc -o scsitag scsitag.c" to create the "scsitag" executable.
 
 14.1 Tagged commands with Iomega Jaz device
 
-I have not tried this device, however it has been reported to me the following:
-This device is capable of Tagged command queuing. However while spinning up,
-it rejects Tagged commands. This behaviour is conforms to 6.8.2 of SCSI-2 
-specifications. The current behaviour of the driver in that situation is not 
-satisfying. So do not enable Tagged command queuing for devices that are able 
-to spin down.
-The other problem that may appear is timeouts. The only way to avoid timeouts 
-seems to edit linux/drivers/scsi/sd.c and to increase the current timeout 
-values.
+I have not tried this device, however it has been reported to me the
+following: This device is capable of Tagged command queuing. However
+while spinning up, it rejects Tagged commands. This behaviour is
+conforms to 6.8.2 of SCSI-2 specifications. The current behaviour of
+the driver in that situation is not satisfying. So do not enable
+Tagged command queuing for devices that are able to spin down.  The
+other problem that may appear is timeouts. The only way to avoid
+timeouts seems to edit linux/drivers/scsi/sd.c and to increase the
+current timeout values.
 
 
-15. SCSI problems solving
+15. SCSI problem troubleshooting
 
-Most scsi problems are due to a non conformant scsi bus or to buggy devices.
-If infortunately you have scsi problems, you can check the following things:
+Most SCSI problems are due to a non conformant SCSI bus or to buggy
+devices.  If infortunately you have SCSI problems, you can check the
+following things:
 
-- scsi bus cables
-- terminations at both end of the scsi chain
+- SCSI bus cables
+- terminations at both end of the SCSI chain
 - linux syslog messages (some of them may help you)
 
-If you donnot find the source of problems, you can configure the driver with 
-no feature enabled.
+If you donnot find the source of problems, you can configure the
+driver with no features enabled.
 
 - only asynchronous data transfers
 - tagged commands disabled
 - disconnections not allowed
 
-Now, if your scsi bus is ok, your system have every chance to work with this 
-safe configuration but performances will not be optimal.
+Now, if your SCSI bus is ok, your system have every chance to work
+with this safe configuration but performances will not be optimal.
 
-If it still fails, then you can send your problem description to appropriate 
-mailing lists or news-groups.
-Send me a copy in order to be sure I will receive it.
-Obviously, a bug in the driver code is possible.
+If it still fails, then you can send your problem description to
+appropriate mailing lists or news-groups.  Send me a copy in order to
+be sure I will receive it.  Obviously, a bug in the driver code is
+possible.
 
      My email address: Gerard Roudier <groudier@club-internet.fr>
 
-Allowing disconnections is important if you use severall devices on your 
-scsi bus but often causes problems with buggy devices.
-Synchronous data transfers increases throughput of fast devices as hard disks.
-Good scsi hard disks with a large cache gain advantage of tagged commands 
-queuing.
+Allowing disconnections is important if you use several devices on
+your SCSI bus but often causes problems with buggy devices.
+Synchronous data transfers increases throughput of fast devices like
+hard disks.  Good SCSI hard disks with a large cache gain advantage of
+tagged commands queuing.
 
-Try to enable one feature at a time with control commands. For example:
+Try to enable one feature at a time with control commands.  For example:
 
 - echo "setsync all 25" >/proc/scsi/ncr53c8xx/0
   Will enable fast synchronous data transfer negotiation for all targets.
 
 - echo "setflag 3" >/proc/scsi/ncr53c8xx/0
   Will reset flags (no_sync) for target 3, and so will allow it to disconnect 
-  the scsi bus.
+  the SCSI Bus.
 
 - echo "settags 3 4" >/proc/scsi/ncr53c8xx/0
   Will enable tagged command queuing for target 3 if that device supports it.
 
 Once you have found the device and the feature that cause problems, just 
-donnot enable the feature for that device only.
+disable that feature for that device.
 
 ===============================================================================
 End of NCR53C8XX driver README file
+
+
+

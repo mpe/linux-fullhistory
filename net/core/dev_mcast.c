@@ -23,6 +23,7 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -42,6 +43,9 @@
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/arp.h>
+#ifdef CONFIG_NET_ALIAS
+#include <linux/net_alias.h>
+#endif
 
 
 /*
@@ -67,6 +71,10 @@ void dev_mc_upload(struct device *dev)
 	    
 	if(!(dev->flags&IFF_UP))
 		return;
+
+#ifdef CONFIG_NET_ALIAS
+	dev = net_alias_main_dev(dev);
+#endif
 		
 	/*
 	 *	Devices with no set multicast don't get set 
@@ -85,6 +93,9 @@ void dev_mc_upload(struct device *dev)
 void dev_mc_delete(struct device *dev, void *addr, int alen, int all)
 {
 	struct dev_mc_list **dmi;
+#ifdef CONFIG_NET_ALIAS
+	dev = net_alias_main_dev(dev);
+#endif
 	for(dmi=&dev->mc_list;*dmi!=NULL;dmi=&(*dmi)->next)
 	{
 		if(memcmp((*dmi)->dmi_addr,addr,(*dmi)->dmi_addrlen)==0 && alen==(*dmi)->dmi_addrlen)
@@ -108,6 +119,9 @@ void dev_mc_delete(struct device *dev, void *addr, int alen, int all)
 void dev_mc_add(struct device *dev, void *addr, int alen, int newonly)
 {
 	struct dev_mc_list *dmi;
+#ifdef CONFIG_NET_ALIAS
+	dev = net_alias_main_dev(dev);
+#endif
 	for(dmi=dev->mc_list;dmi!=NULL;dmi=dmi->next)
 	{
 		if(memcmp(dmi->dmi_addr,addr,dmi->dmi_addrlen)==0 && dmi->dmi_addrlen==alen)
@@ -135,6 +149,10 @@ void dev_mc_add(struct device *dev, void *addr, int alen, int newonly)
 
 void dev_mc_discard(struct device *dev)
 {
+#ifdef CONFIG_NET_ALIAS
+	if (net_alias_is(dev))
+		return;
+#endif
 	while(dev->mc_list!=NULL)
 	{
 		struct dev_mc_list *tmp=dev->mc_list;

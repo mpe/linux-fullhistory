@@ -120,7 +120,7 @@ static inline void remove_suid(struct inode *inode)
 
 	/* was any of the uid bits set? */
 	mode &= inode->i_mode;
-	if (mode && suser()) {
+	if (mode && !suser()) {
 		inode->i_mode &= ~mode;
 		inode->i_dirt = 1;
 	}

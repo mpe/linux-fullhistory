@@ -84,6 +84,14 @@
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif
+#ifdef CONFIG_NET_RADIO
+#include <linux/wireless.h>
+#endif	/* CONFIG_NET_RADIO */
+
+/*
+ *	The list of devices, that are able to output.
+ */
+static struct device *dev_up_base;
 
 /*
  *	The list of packet types we will receive (as opposed to discard)
@@ -97,7 +105,7 @@ struct packet_type *ptype_all = NULL;		/* Taps */
  *	Device list lock
  */
  
-int dev_lockct=0;
+atomic_t dev_lockct=0;
  
 /*
  *	Our notifier list
@@ -209,7 +217,7 @@ struct device *dev_get(const char *name)
  
 #ifdef CONFIG_KERNELD
 
-extern __inline__ void dev_load(const char *name)
+void dev_load(const char *name)
 {
 	if(!dev_get(name)) {
 #ifdef CONFIG_NET_ALIAS
@@ -230,7 +238,7 @@ extern __inline__ void dev_load(const char *name)
  
 int dev_open(struct device *dev)
 {
-	int ret = -ENODEV;
+	int ret = 0;
 
 	/*
 	 *	Call device private open method
@@ -245,11 +253,23 @@ int dev_open(struct device *dev)
 	if (ret == 0) 
 	{
 		dev->flags |= (IFF_UP | IFF_RUNNING);
+		dev->hash = dev_hash_name(dev->name);
 		/*
 		 *	Initialise multicasting status 
 		 */
 		dev_mc_upload(dev);
 		notifier_call_chain(&netdev_chain, NETDEV_UP, dev);
+#ifdef CONFIG_NET_ALIAS
+		if (!net_alias_is(dev) || dev->tx_queue_len)
+#else
+		if (dev->tx_queue_len)
+#endif
+		{
+			cli();
+			dev->next_up = dev_up_base;
+			dev_up_base = dev;
+			sti();
+		}
 	}
 	return(ret);
 }
@@ -262,6 +282,7 @@ int dev_open(struct device *dev)
 int dev_close(struct device *dev)
 {
 	int ct=0;
+	struct device **devp;
 
 	/*
 	 *	Call the device specific close. This cannot fail.
@@ -293,9 +314,19 @@ int dev_close(struct device *dev)
 	{
 		struct sk_buff *skb;
 		while((skb=skb_dequeue(&dev->buffs[ct]))!=NULL)
-			if(skb->free)
-				kfree_skb(skb,FREE_WRITE);
+			kfree_skb(skb,FREE_WRITE);
 		ct++;
+	}
+
+	devp = &dev_up_base;
+	while (*devp)
+	{
+		if (*devp == dev)
+		{
+			*devp = dev->next_up;
+			break;
+		}
+		devp = &(*devp)->next_up;
 	}
 	return(0);
 }
@@ -332,12 +363,9 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 				/* at the front or the back of the	*/
 				/* queue - front is a retransmit try	*/
 
-	if(pri>=0 && !skb_device_locked(skb))
-		skb_device_lock(skb);	/* Shove a lock on the frame */
 #if CONFIG_SKB_CHECK 
 	IS_SKB(skb);
 #endif    
-	skb->dev = dev;
 
 	/*
 	 *	Negative priority is used to flag a frame that is being pulled from the
@@ -354,31 +382,9 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 #ifdef CONFIG_NET_DEBUG
 	if (pri >= DEV_NUMBUFFS) 
 	{
-		printk(KERN_WARNING "bad priority in dev_queue_xmit.\n");
+		printk(KERN_WARNING "bad priority in do_dev_queue_xmit.\n");
 		pri = 1;
 	}
-#endif
-
-	/*
-	 *	If the address has not been resolved. Call the device header rebuilder.
-	 *	This can cover all protocols and technically not just ARP either.
-	 */
-	 
-	if (!skb->arp && dev->rebuild_header(skb->data, dev, skb->raddr, skb)) {
-		return;
-	}
-
-	/*
-	 *
-	 * 	If dev is an alias, switch to its main device.
-	 *	"arp" resolution has been made with alias device, so
-	 *	arp entries refer to alias, not main.
-	 *
-	 */
-
-#ifdef CONFIG_NET_ALIAS
-	if (net_alias_is(dev))
-	  	skb->dev = dev = net_alias_main_dev(dev);
 #endif
 
 	/*
@@ -424,8 +430,9 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 					struct sk_buff *skb2;
 					if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)
 						break;
-					skb2->h.raw = skb2->data + dev->hard_header_len;
 					skb2->mac.raw = skb2->data;
+					skb2->nh.raw =
+					skb2->h.raw = skb2->data + dev->hard_header_len;
 					ptype->func(skb2, skb->dev, ptype);
 				}
 			}
@@ -433,10 +440,8 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 
 		if (skb_queue_len(list)) {
 			cli();
-			skb_device_unlock(skb);		/* Buffer is on the device queue and can be freed safely */
 			__skb_queue_tail(list, skb);
 			skb = __skb_dequeue(list);
-			skb_device_lock(skb);		/* New buffer needs locking down */
 			restore_flags(flags);
 		}
 	}
@@ -452,17 +457,67 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	 *	no longer device locked (it can be freed safely from the device queue)
 	 */
 	cli();
-	skb_device_unlock(skb);
 	__skb_queue_head(list,skb);
 	restore_flags(flags);
 }
 
-void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
+int dev_queue_xmit(struct sk_buff *skb)
 {
+	struct device *dev = skb->dev;
+
 	start_bh_atomic();
-	do_dev_queue_xmit(skb, dev, pri);
+
+
+#if CONFIG_SKB_CHECK 
+	IS_SKB(skb);
+#endif    
+
+	/*
+	 *	If the address has not been resolved. Call the device header rebuilder.
+	 *	This can cover all protocols and technically not just ARP either.
+	 */
+	 
+	if (!skb->arp) {
+		if (dev->rebuild_header) {
+			if (dev->rebuild_header(skb)) {
+				end_bh_atomic();
+				return 0;
+			}
+		} else
+			printk("%s: !skb->arp & !rebuild_header!\n", dev->name);
+	}
+
+	/*
+	 *
+	 * 	If dev is an alias, switch to its main device.
+	 *	"arp" resolution has been made with alias device, so
+	 *	arp entries refer to alias, not main.
+	 *
+	 */
+
+#ifdef CONFIG_NET_ALIAS
+	if (net_alias_is(dev))
+	  	skb->dev = dev = net_alias_main_dev(dev);
+#endif
+
+	do_dev_queue_xmit(skb, dev, skb->priority);
 	end_bh_atomic();
+	return 0;
 }
+
+void dev_loopback_xmit(struct sk_buff *skb)
+{
+	struct sk_buff *newskb=skb_clone(skb, GFP_ATOMIC);
+	if (newskb==NULL)
+		return;
+
+	skb_pull(newskb, newskb->nh.raw - newskb->data);
+	newskb->ip_summed = CHECKSUM_UNNECESSARY;
+	if (newskb->dst==NULL)
+		printk("BUG: packet without dst looped back 1\n");
+	netif_rx(newskb);
+}
+
 
 /*
  *	Receive a packet from a device driver and queue it for the upper
@@ -481,7 +536,6 @@ void netif_rx(struct sk_buff *skb)
 	 */
 
 	skb->sk = NULL;
-	skb->free = 1;
 	if(skb->stamp.tv_sec==0)
 		get_fast_time(&skb->stamp);
 
@@ -526,7 +580,7 @@ static void dev_transmit(void)
 {
 	struct device *dev;
 
-	for (dev = dev_base; dev != NULL; dev = dev->next)
+	for (dev = dev_up_base; dev != NULL; dev = dev->next_up)
 	{
 		if (dev->flags != 0 && !dev->tbusy) {
 			/*
@@ -557,6 +611,7 @@ void net_bh(void)
 	struct packet_type *ptype;
 	struct packet_type *pt_prev;
 	unsigned short type;
+	int nit = 301;
 
 	/*
 	 *	Can we send anything now? We want to clear the
@@ -591,6 +646,18 @@ void net_bh(void)
 		__skb_unlink(skb, &backlog);
   		backlog_size--;
 		sti();
+
+		/*
+		 *	We do not want to spin in net_bh infinitely. --ANK
+		 */
+		if (--nit <= 0)
+		{
+			if (nit == 0)
+				printk(KERN_WARNING "net_bh: too many loops, dropping...\n");
+			kfree_skb(skb, FREE_WRITE);
+			continue;
+		}
+		
 		
 
 #ifdef CONFIG_BRIDGE
@@ -629,10 +696,11 @@ void net_bh(void)
 	 	 *	Bump the pointer to the next structure.
 		 * 
 		 *	On entry to the protocol layer. skb->data and
-		 *	skb->h.raw point to the MAC and encapsulated data
+		 *	skb->nh.raw point to the MAC and encapsulated data
 		 */
 
-		skb->h.raw = skb->data;
+		/* XXX until we figure out every place to modify.. */
+		skb->h.raw = skb->nh.raw = skb->data;
 
 		/*
 		 * 	Fetch the packet protocol ID. 
@@ -737,7 +805,10 @@ void dev_tint(struct device *dev)
 	 */
 
 #ifdef CONFIG_NET_ALIAS
-	if (net_alias_is(dev)) return;
+	if (net_alias_is(dev)) {
+		printk("net alias %s transmits\n", dev->name);
+		return;
+	}
 #endif
 	head = dev->buffs;
 	save_flags(flags);
@@ -757,7 +828,6 @@ void dev_tint(struct device *dev)
 			/*
 			 *	Stop anyone freeing the buffer while we retransmit it
 			 */
-			skb_device_lock(skb);
 			restore_flags(flags);
 			/*
 			 *	Feed them to the output stage and if it fails
@@ -931,19 +1001,87 @@ int dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 #endif	/* CONFIG_PROC_FS */
 
 
+#ifdef CONFIG_NET_RADIO
+#ifdef CONFIG_PROC_FS
+
 /*
- *	This checks bitmasks for the ioctl calls for devices.
+ * Print one entry of /proc/net/wireless
+ * This is a clone of /proc/net/dev (just above)
  */
- 
-static inline int bad_mask(unsigned long mask, unsigned long addr)
+static int sprintf_wireless_stats(char *buffer, struct device *dev)
 {
-	if (addr & (mask = ~mask))
-		return 1;
-	mask = ntohl(mask);
-	if (mask & (mask+1))
-		return 1;
-	return 0;
+	/* Get stats from the driver */
+	struct iw_statistics *stats = (dev->get_wireless_stats ?
+				       dev->get_wireless_stats(dev) :
+				       (struct iw_statistics *) NULL);
+	int size;
+
+	if(stats != (struct iw_statistics *) NULL)
+		size = sprintf(buffer,
+			       "%6s: %02x  %3d%c %3d%c  %3d%c %5d %5d %5d\n",
+			       dev->name,
+			       stats->status,
+			       stats->qual.qual,
+			       stats->qual.updated & 1 ? '.' : ' ',
+			       stats->qual.level,
+			       stats->qual.updated & 2 ? '.' : ' ',
+			       stats->qual.noise,
+			       stats->qual.updated & 3 ? '.' : ' ',
+			       stats->discard.nwid,
+			       stats->discard.crypt,
+			       stats->discard.misc);
+	else
+		size = 0;
+
+	return size;
 }
+
+/*
+ * Print info for /proc/net/wireless (print all entries)
+ * This is a clone of /proc/net/dev (just above)
+ */
+int dev_get_wireless_info(char * buffer, char **start, off_t offset,
+			  int length, int dummy)
+{
+	int		len = 0;
+	off_t		begin = 0;
+	off_t		pos = 0;
+	int		size;
+	
+	struct device *	dev;
+
+	size = sprintf(buffer,
+		       "Inter-|sta|  Quality       |  Discarded packets\n"
+		       " face |tus|link level noise| nwid crypt  misc\n");
+	
+	pos+=size;
+	len+=size;
+
+	for(dev = dev_base; dev != NULL; dev = dev->next) 
+	{
+		size = sprintf_wireless_stats(buffer+len, dev);
+		len+=size;
+		pos=begin+len;
+
+		if(pos < offset)
+		{
+			len=0;
+			begin=pos;
+		}
+		if(pos > offset + length)
+			break;
+	}
+
+	*start = buffer + (offset - begin);	/* Start of wanted data */
+	len -= (offset - begin);		/* Start slop */
+	if(len > length)
+		len = length;		/* Ending slop */
+
+	return len;
+}
+#endif	/* CONFIG_PROC_FS */
+#endif	/* CONFIG_NET_RADIO */
+
 
 /*
  *	Perform the SIOCxIFxxx calls. 
@@ -1004,6 +1142,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				 */
 				
 				dev_lock_wait();
+				dev_lock_list();
 				
 				/*
 				 *	Set the flags on our device.
@@ -1044,134 +1183,21 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				 */				
 
 				dev_mc_upload(dev);
+				if ((dev->flags&IFF_UP) && ((old_flags^dev->flags)&~(IFF_UP|IFF_RUNNING|IFF_PROMISC)))
+				{
+					printk(KERN_DEBUG "SIFFL %s(%s)\n", dev->name, current->comm);
+					notifier_call_chain(&netdev_chain, NETDEV_CHANGE, dev);
+				}
+				if ((dev->flags^old_flags)&IFF_PROMISC) {
+					if (dev->flags&IFF_PROMISC)
+						printk(KERN_INFO "%s enters promiscuous mode.\n", dev->name);
+					else
+						printk(KERN_INFO "%s leave promiscuous mode.\n", dev->name);
+				}
+				dev_unlock_list();
 			}
 			break;
 		
-		case SIOCGIFADDR:	/* Get interface address (and family) */
-			if(ifr.ifr_addr.sa_family==AF_UNSPEC)
-			{
-				memcpy(ifr.ifr_hwaddr.sa_data,dev->dev_addr, MAX_ADDR_LEN);
-				ifr.ifr_hwaddr.sa_family=dev->type;			
-				goto rarok;
-			}
-			else
-			{
-				(*(struct sockaddr_in *)
-					  &ifr.ifr_addr).sin_addr.s_addr = dev->pa_addr;
-				(*(struct sockaddr_in *)
-					  &ifr.ifr_addr).sin_family = dev->family;
-				(*(struct sockaddr_in *)
-					  &ifr.ifr_addr).sin_port = 0;
-			}
-			goto rarok;
-	
-		case SIOCSIFADDR:	/* Set interface address (and family) */
-
-			/*
-			 *	BSDism. SIOCSIFADDR family=AF_UNSPEC sets the
-			 *	physical address. We can cope with this now.
-			 */
-			
-			if(ifr.ifr_addr.sa_family==AF_UNSPEC)
-			{
-				if(dev->set_mac_address==NULL)
-					return -EOPNOTSUPP;
-				ret=dev->set_mac_address(dev,&ifr.ifr_addr);
-			}
-			else
-			{
-				u32 new_pa_addr = (*(struct sockaddr_in *)
-					 &ifr.ifr_addr).sin_addr.s_addr;
-				u16 new_family = ifr.ifr_addr.sa_family;
-
-				if (new_family == dev->family &&
-				    new_pa_addr == dev->pa_addr) {
-					ret =0;
-					break;
-				}
-				if (dev->flags & IFF_UP)
-					notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev);
-
-				/*
-				 *	if dev is an alias, must rehash to update
-				 *	address change
-				 */
-
-#ifdef CONFIG_NET_ALIAS
-			  	if (net_alias_is(dev))
-				    	net_alias_dev_rehash(dev ,&ifr.ifr_addr);
-#endif
-				dev->pa_addr = new_pa_addr;
-				dev->family = new_family;
-			
-#ifdef CONFIG_INET	
-				/* This is naughty. When net-032e comes out It wants moving into the net032
-				   code not the kernel. Till then it can sit here (SIGH) */		
-				if (!dev->pa_mask)
-					dev->pa_mask = ip_get_mask(dev->pa_addr);
-#endif			
-				if (!dev->pa_brdaddr)
-					dev->pa_brdaddr = dev->pa_addr | ~dev->pa_mask;
-				if (dev->flags & IFF_UP)
-					notifier_call_chain(&netdev_chain, NETDEV_UP, dev);
-				ret = 0;
-			}
-			break;
-			
-		case SIOCGIFBRDADDR:	/* Get the broadcast address */
-			(*(struct sockaddr_in *)
-				&ifr.ifr_broadaddr).sin_addr.s_addr = dev->pa_brdaddr;
-			(*(struct sockaddr_in *)
-				&ifr.ifr_broadaddr).sin_family = dev->family;
-			(*(struct sockaddr_in *)
-				&ifr.ifr_broadaddr).sin_port = 0;
-			goto rarok;
-
-		case SIOCSIFBRDADDR:	/* Set the broadcast address */
-			dev->pa_brdaddr = (*(struct sockaddr_in *)
-				&ifr.ifr_broadaddr).sin_addr.s_addr;
-			ret = 0;
-			break;
-			
-		case SIOCGIFDSTADDR:	/* Get the destination address (for point-to-point links) */
-			(*(struct sockaddr_in *)
-				&ifr.ifr_dstaddr).sin_addr.s_addr = dev->pa_dstaddr;
-			(*(struct sockaddr_in *)
-				&ifr.ifr_dstaddr).sin_family = dev->family;
-			(*(struct sockaddr_in *)
-				&ifr.ifr_dstaddr).sin_port = 0;
-			goto rarok;
-	
-		case SIOCSIFDSTADDR:	/* Set the destination address (for point-to-point links) */
-			dev->pa_dstaddr = (*(struct sockaddr_in *)
-				&ifr.ifr_dstaddr).sin_addr.s_addr;
-			ret = 0;
-			break;
-			
-		case SIOCGIFNETMASK:	/* Get the netmask for the interface */
-			(*(struct sockaddr_in *)
-				&ifr.ifr_netmask).sin_addr.s_addr = dev->pa_mask;
-			(*(struct sockaddr_in *)
-				&ifr.ifr_netmask).sin_family = dev->family;
-			(*(struct sockaddr_in *)
-				&ifr.ifr_netmask).sin_port = 0;
-			goto rarok;
-
-		case SIOCSIFNETMASK: 	/* Set the netmask for the interface */
-			{
-				unsigned long mask = (*(struct sockaddr_in *)
-					&ifr.ifr_netmask).sin_addr.s_addr;
-				ret = -EINVAL;
-				/*
-				 *	The mask we set must be legal.
-				 */
-				if (bad_mask(mask,0))
-					break;
-				dev->pa_mask = mask;
-				ret = 0;
-			}
-			break;
-			
 		case SIOCGIFMETRIC:	/* Get the metric on the interface (currently unused) */
 			
 			ifr.ifr_metric = dev->metric;
@@ -1188,6 +1214,11 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 	
 		case SIOCSIFMTU:	/* Set the MTU of a device */
 		
+			if (ifr.ifr_mtu == dev->mtu) {
+				ret = 0;
+				break;
+			}
+
 			/*
 			 *	MTU must be positive.
 			 */
@@ -1201,6 +1232,10 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			{
 				dev->mtu = ifr.ifr_mtu;
 				ret = 0;
+			}
+			if (!ret && (dev->flags&IFF_UP)) {
+				printk(KERN_DEBUG "SIFMTU %s(%s)\n", dev->name, current->comm);
+				notifier_call_chain(&netdev_chain, NETDEV_CHANGE, dev);
 			}
 			break;
 	
@@ -1273,7 +1308,27 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				}
 				break;
 			}
-			
+
+#ifdef CONFIG_NET_RADIO
+			if((getset >= SIOCIWFIRST) && (getset <= SIOCIWLAST))
+			{
+				if(dev->do_ioctl==NULL)
+					return -EOPNOTSUPP;
+				/* Perform the ioctl */
+				ret=dev->do_ioctl(dev, &ifr, getset);
+				/* If return args... */
+				if(IW_IS_GET(getset))
+				{
+					if (copy_to_user(arg, &ifr,
+							 sizeof(struct ifreq)))
+					{
+						ret = -EFAULT;
+					}
+				}
+				break;
+			}
+#endif	/* CONFIG_NET_RADIO */
+
 			ret = -EINVAL;
 	}
 	return(ret);
@@ -1306,10 +1361,6 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		 */
 		 
 		case SIOCGIFFLAGS:
-		case SIOCGIFADDR:
-		case SIOCGIFDSTADDR:
-		case SIOCGIFBRDADDR:
-		case SIOCGIFNETMASK:
 		case SIOCGIFMETRIC:
 		case SIOCGIFMTU:
 		case SIOCGIFMEM:
@@ -1324,10 +1375,6 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		 */
 		 
 		case SIOCSIFFLAGS:
-		case SIOCSIFADDR:
-		case SIOCSIFDSTADDR:
-		case SIOCSIFBRDADDR:
-		case SIOCSIFNETMASK:
 		case SIOCSIFMETRIC:
 		case SIOCSIFMTU:
 		case SIOCSIFMEM:
@@ -1351,6 +1398,14 @@ int dev_ioctl(unsigned int cmd, void *arg)
 			   (cmd <= (SIOCDEVPRIVATE + 15))) {
 				return dev_ifsioc(arg, cmd);
 			}
+#ifdef CONFIG_NET_RADIO
+			if((cmd >= SIOCIWFIRST) && (cmd <= SIOCIWLAST))
+			{
+				if((IW_IS_SET(cmd)) && (!suser()))
+					return -EPERM;
+				return dev_ifsioc(arg, cmd);
+			}
+#endif	/* CONFIG_NET_RADIO */
 			return -EINVAL;
 	}
 }
@@ -1363,7 +1418,6 @@ int dev_ioctl(unsigned int cmd, void *arg)
  *
  */
 extern int lance_init(void);
-extern int ni65_init(void);
 extern int pi_init(void);
 extern int bpq_init(void);
 extern int scc_init(void);
@@ -1381,6 +1435,17 @@ static struct proc_dir_entry proc_net_dev = {
 	dev_get_info
 };
 #endif
+
+#ifdef CONFIG_NET_RADIO
+#ifdef CONFIG_PROC_FS
+static struct proc_dir_entry proc_net_wireless = {
+	PROC_NET_WIRELESS, 8, "wireless",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	dev_get_wireless_info
+};
+#endif	/* CONFIG_PROC_FS */
+#endif	/* CONFIG_NET_RADIO */
 
 int net_dev_init(void)
 {
@@ -1473,6 +1538,12 @@ int net_dev_init(void)
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_dev);
 #endif
+
+#ifdef CONFIG_NET_RADIO
+#ifdef CONFIG_PROC_FS
+	proc_net_register(&proc_net_wireless);
+#endif	/* CONFIG_PROC_FS */
+#endif	/* CONFIG_NET_RADIO */
 
 	/*	
 	 *	Initialise net_alias engine 

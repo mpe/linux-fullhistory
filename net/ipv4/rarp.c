@@ -330,11 +330,14 @@ static int rarp_req_set(struct arpreq *req)
  *	Is it reachable directly ?
  */
   
-	rt = ip_rt_route(ip, 0);
-	if (rt == NULL)
-		return -ENETUNREACH;
-	dev = rt->rt_dev;
-	ip_rt_put(rt);
+	err = ip_route_output(&rt, ip, 0, 1, NULL);
+	if (err)
+		return err;
+	if (rt->rt_flags&(RTF_LOCAL|RTF_BROADCAST|RTF_MULTICAST|RTF_NAT)) {
+		ip_rt_put(rt);
+		return -EINVAL;
+	}
+	dev = rt->u.dst.dev;
 
 /*
  *	Is there an existing entry for this address?  Find out...

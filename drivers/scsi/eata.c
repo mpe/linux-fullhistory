@@ -1,6 +1,9 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *       3 Dec 1996 rev. 2.40 for linux 2.1.14 and 2.0.27
+ *          Added support for tagged commands and queue depth adjustment.
+ *
  *      22 Nov 1996 rev. 2.30 for linux 2.1.12 and 2.0.26
  *          When CONFIG_PCI is defined, BIOS32 is used to include in the
  *          list of i/o ports to be probed all the PCI SCSI controllers.
@@ -218,6 +221,7 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #define MAX_LARGE_SGLIST 252
 #define MAX_INTERNAL_RETRIES 64
 #define MAX_CMD_PER_LUN 2
+#define MAX_TAGGED_CMD_PER_LUN 16
 
 #define SKIP 1
 #define FALSE 0
@@ -427,6 +431,63 @@ static void eata2x_interrupt_handler(int, void *, struct pt_regs *);
 static int do_trace = FALSE;
 static int setup_done = FALSE;
 
+#if defined (CONFIG_SCSI_EATA_TAGGED_QUEUE)
+static int tagged_commands = TRUE;
+#else
+static int tagged_commands = FALSE;
+#endif
+
+static void select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist) {
+   Scsi_Device *dev;
+   int j, ntag = 0, nuntag = 0, tqd, utqd; 
+   unsigned long flags;
+
+   save_flags(flags);
+   cli();
+
+   j = ((struct hostdata *) host->hostdata)->board_number;
+
+   for(dev = devlist; dev; dev = dev->next) {
+
+      if (dev->host != host) continue;
+
+      if (dev->tagged_supported) ntag++;
+      else                       nuntag++;
+      }
+
+   utqd = MAX_CMD_PER_LUN;
+
+   tqd = (host->can_queue - utqd * nuntag) / (ntag + 1);
+
+   if (tqd > MAX_TAGGED_CMD_PER_LUN) tqd = MAX_TAGGED_CMD_PER_LUN;
+
+   if (tqd < MAX_CMD_PER_LUN) tqd = MAX_CMD_PER_LUN;
+
+   for(dev = devlist; dev; dev = dev->next) {
+      char *tag_suffix = "";
+
+      if (dev->host != host) continue;
+
+      if (dev->tagged_supported) dev->queue_depth = tqd;
+      else                       dev->queue_depth = utqd;
+
+      if (tagged_commands && dev->tagged_supported) {
+         dev->tagged_queue = 1;
+         dev->current_tag = 1;
+         }
+
+      if (dev->tagged_supported && dev->tagged_queue) tag_suffix = ", tagged";
+      else if (dev->tagged_supported) tag_suffix = ", untagged";
+
+      printk("%s: scsi%d, channel %d, id %d, lun %d, cmds/lun %d%s.\n",
+             BN(j), host->host_no, dev->channel, dev->id, dev->lun,
+             dev->queue_depth, tag_suffix);
+      }
+
+   restore_flags(flags);
+   return;
+}
+
 static inline int wait_on_busy(unsigned int iobase) {
    unsigned int loop = MAXLOOP;
 
@@ -472,7 +533,7 @@ static inline int port_detect(unsigned int port_base, unsigned int j,
    unsigned char irq, dma_channel, subversion, i;
    unsigned char protocol_rev;
    struct eata_info info;
-   char *bus_type;
+   char *bus_type, dma_name[16];
 
    /* Allowed DMA channels for ISA (0 indicates reserved) */
    unsigned char dma_channel_table[4] = { 5, 6, 7, 0 };
@@ -590,6 +651,7 @@ static inline int port_detect(unsigned int port_base, unsigned int j,
    sh[j]->this_id = (ushort) info.host_addr[3];
    sh[j]->can_queue = (ushort) ntohs(info.queue_size);
    sh[j]->cmd_per_lun = MAX_CMD_PER_LUN;
+   sh[j]->select_queue_depths = select_queue_depths;
 
    /* Register the I/O space that we use */
    request_region(sh[j]->io_port, sh[j]->n_io_port, driver_name);
@@ -650,6 +712,9 @@ static inline int port_detect(unsigned int port_base, unsigned int j,
    else if (subversion == ESA) bus_type = "EISA";
    else bus_type = "ISA";
 
+   if (dma_channel == NO_DMA) sprintf(dma_name, "%s", "NO DMA");
+   else                       sprintf(dma_name, "DMA %u", dma_channel);
+
    for (i = 0; i < sh[j]->can_queue; i++)
       if (! ((&HD(j)->cp[i])->sglist = kmalloc(
             sh[j]->sg_tablesize * sizeof(struct sg_list), 
@@ -659,10 +724,10 @@ static inline int port_detect(unsigned int port_base, unsigned int j,
          return FALSE;
          }
       
-   printk("%s: rev. 2.0%c, %s, PORT 0x%03x, IRQ %u, DMA %u, SG %d, "\
-	  "Mbox %d, CmdLun %d.\n", BN(j), HD(j)->protocol_rev, bus_type,
-	   sh[j]->io_port, sh[j]->irq, sh[j]->dma_channel,
-	   sh[j]->sg_tablesize, sh[j]->can_queue, sh[j]->cmd_per_lun);
+   printk("%s: rev. 2.0%c, %s, PORT 0x%03x, IRQ %u, %s, SG %d, "\
+	  "Mbox %d, TC %d.\n", BN(j), HD(j)->protocol_rev, bus_type,
+          sh[j]->io_port, sh[j]->irq, dma_name, sh[j]->sg_tablesize,
+          sh[j]->can_queue, tagged_commands);
 
    if (sh[j]->max_id > 8 || sh[j]->max_lun > 8)
       printk("%s: wide SCSI support enabled, max_id %u, max_lun %u.\n",
@@ -874,6 +939,17 @@ int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    cpp->SCpnt = SCpnt;
    cpp->sense_addr = V2DEV(SCpnt->sense_buffer); 
    cpp->sense_len = sizeof SCpnt->sense_buffer;
+   
+   if (SCpnt->device->tagged_queue) {
+
+      if (HD(j)->target_redo[SCpnt->target][SCpnt->channel] || 
+                            HD(j)->target_to[SCpnt->target][SCpnt->channel])
+         cpp->mess[0] = ORDERED_QUEUE_TAG;
+      else
+         cpp->mess[0] = SIMPLE_QUEUE_TAG;
+
+      cpp->mess[1] = SCpnt->device->current_tag++;
+      }
 
    if (SCpnt->use_sg) {
       cpp->sg = TRUE;
@@ -1262,8 +1338,8 @@ static void eata2x_interrupt_handler(int irq, void *dev_id,
 #else
 	    if ((spp->adapter_status != ASOK && HD(j)->iocount >  1000) ||
 		(spp->adapter_status != ASOK && 
-		 spp->adapter_status != ASST && HD(j)->iocount <= 1000) ||
-		do_trace)
+		spp->adapter_status != ASST && HD(j)->iocount <= 1000) ||
+		do_trace || msg_byte(spp->target_status))
 #endif
 	       printk("%s: ihdlr, mbox %2d, err 0x%x:%x,"\
 		      " target %d.%d:%d, pid %ld, count %d.\n",

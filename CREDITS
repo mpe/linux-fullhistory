@@ -544,14 +544,13 @@ E: ajh@primag.co.uk
 D: Selection mechanism
 
 N: Jochen Hein
-E: jochen.hein@informatik.tu-clausthal.de
+E: jochen.hein@delphi.central.de
 P: 1024/4A27F015 25 72 FB E3 85 9F DE 3B  CB 0A DA DA 40 77 05 6C
 D: National Language Support
-D: German Support-Disks for SLS/Slackware called SLT
 D: Linux Internationalization Project
-D: DOSemu
-S: Muehlenweg 19
-S: 34266 Niestetal
+D: German Localization for Linux and GNU software
+S: Frankenstraﬂe
+S: 34131 Kassel
 S: Germany
 
 N: Richard Henderson

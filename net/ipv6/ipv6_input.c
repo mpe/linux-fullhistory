@@ -133,7 +133,7 @@ static int parse_tlv(struct tlvtype_proc *procs, struct sk_buff *skb,
 			if (curr->type==255)
 			{ 
 				/* unkown type */
-				pos= (__u8 *) skb->h.raw - (__u8 *) skb->ipv6_hdr;
+				pos= (__u8 *) skb->h.raw - (__u8 *) skb->nh.raw;
 				/* I think this is correct please check - IPM */
 
 				switch ((hdr->type & 0xC0) >> 6) {
@@ -154,7 +154,7 @@ static int parse_tlv(struct tlvtype_proc *procs, struct sk_buff *skb,
 
 					case 3: /* Send ICMP if not a multicast address 
 						   and drop packet */
-						if (!(ipv6_addr_type(&(skb->ipv6_hdr->daddr)) & IPV6_ADDR_MULTICAST) )
+						if (!(ipv6_addr_type(&(skb->nh.ipv6h->daddr)) & IPV6_ADDR_MULTICAST) )
 							icmpv6_send(skb, ICMPV6_PARAMETER_PROB, 2, pos, dev);
 						kfree_skb(skb, FREE_READ);
 						return 0;
@@ -192,7 +192,7 @@ static __inline__ int icmpv6_filter(struct sock *sk, struct sk_buff *skb)
 	struct raw6_opt *opt;
 
 	opt = &sk->tp_pinfo.tp_raw;
-	icmph = (struct icmpv6hdr *) (skb->ipv6_hdr + 1);
+	icmph = (struct icmpv6hdr *) (skb->nh.ipv6h + 1);
 	return test_bit(icmph->type, &opt->filter);
 }
 
@@ -258,7 +258,7 @@ static struct sock * ipv6_raw_deliver(struct sk_buff *skb,
 int ipv6_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	struct inet6_ifaddr	*ifp;
-	struct ipv6_options	*opt = (struct ipv6_options *) skb->proto_priv;
+	struct ipv6_options	*opt = (struct ipv6_options *) skb->cb;
 	struct ipv6hdr		*hdr;
 	u8			hash;
 	u8			addr_type;
@@ -269,7 +269,8 @@ int ipv6_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	__u8			*nhptr;
 	int			pkt_len;
 
-	hdr = skb->ipv6_hdr = (struct ipv6hdr *) skb->h.raw;
+	hdr = skb->nh.ipv6h;
+	skb->h.raw = (__u8*)hdr;
 
 	if (skb->len < sizeof(struct ipv6hdr) || hdr->version != 6)
 	{
@@ -342,7 +343,7 @@ int ipv6_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 					if ((nexthdr = hdrt->func(&skb, dev, nhptr, opt)))
 					{
 						nhptr = skb->h.raw;
-						hdr = skb->ipv6_hdr;
+						hdr = skb->nh.ipv6h;
 						continue;
 					}
 					return 0;
@@ -401,7 +402,6 @@ int ipv6_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		if (!found)
 		{
 			printk(KERN_DEBUG "proto not found %d\n", nexthdr);
-			skb->sk = NULL;
 			kfree_skb(skb, FREE_READ);
 		}
 			

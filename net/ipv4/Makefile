@@ -13,7 +13,7 @@ IPV4_OBJS := utils.o route.o proc.o timer.o protocol.o packet.o \
 	     ip_output.o ip_sockglue.o \
 	     tcp.o tcp_input.o tcp_output.o tcp_timer.o tcp_ipv4.o\
 	     raw.o udp.o arp.o icmp.o devinet.o af_inet.o igmp.o ip_fw.o \
-	     sysctl_net_ipv4.o
+	     sysctl_net_ipv4.o fib.o ip_nat_dumb.o
 
 MOD_LIST_NAME := IPV4_MODULES
 M_OBJS :=

@@ -32,7 +32,6 @@
 #define	IFF_RUNNING	0x40		/* resources allocated		*/
 #define	IFF_NOARP	0x80		/* no ARP protocol		*/
 #define	IFF_PROMISC	0x100		/* receive all packets		*/
-/* Not supported */
 #define	IFF_ALLMULTI	0x200		/* receive all multicast packets*/
 
 #define IFF_MASTER	0x400		/* master of a load balancer 	*/

@@ -82,7 +82,10 @@ asmlinkage int sys_sigreturn(unsigned long __unused)
 #define COPY(x) regs->x = context->x
 #define COPY_SEG(seg) \
 { unsigned int tmp = context->seg; \
-if ((tmp & 0xfffc) && (tmp & 3) != 3) goto badframe; \
+if (   (tmp & 0xfffc)     /* not a NULL selectors */ \
+    && (tmp & 0x4) != 0x4 /* not a LDT selector */ \
+    && (tmp & 3) != 3     /* not a RPL3 GDT selector */ \
+   ) goto badframe; \
 regs->x##seg = tmp; }
 #define COPY_SEG_STRICT(seg) \
 { unsigned int tmp = context->seg; \
@@ -90,7 +93,10 @@ if ((tmp & 0xfffc) && (tmp & 3) != 3) goto badframe; \
 regs->x##seg = tmp; }
 #define GET_SEG(seg) \
 { unsigned int tmp = context->seg; \
-if ((tmp & 0xfffc) && (tmp & 3) != 3) goto badframe; \
+if (   (tmp & 0xfffc)     /* not a NULL selectors */ \
+    && (tmp & 0x4) != 0x4 /* not a LDT selector */ \
+    && (tmp & 3) != 3     /* not a RPL3 GDT selector */ \
+   ) goto badframe; \
 __asm__("mov %w0,%%" #seg: :"r" (tmp)); }
 	struct sigcontext * context;
 	struct pt_regs * regs;

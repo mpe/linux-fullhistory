@@ -72,6 +72,10 @@ struct icmphdr {
 		__u16	sequence;
 	} echo;
 	__u32	gateway;
+	struct {
+		__u16	__unused;
+		__u16	mtu;
+	} frag;
   } un;
 };
 

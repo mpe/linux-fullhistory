@@ -102,7 +102,7 @@ masq_raudio_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **
 		return 0;
 
         skb = *skb_p;
-	iph = skb->h.iph;
+	iph = skb->nh.iph;
         th = (struct tcphdr *)&(((char *)iph)[iph->ihl*4]);
         data = (char *)&th[1];
 

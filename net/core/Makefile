@@ -9,7 +9,8 @@
 
 O_TARGET := core.o
 
-O_OBJS	:= sock.o skbuff.o iovec.o datagram.o sysctl_net_core.o
+O_OBJS	:= sock.o skbuff.o iovec.o datagram.o sysctl_net_core.o dst.o scm.o \
+	neighbour.o
 
 ifdef CONFIG_NET
 

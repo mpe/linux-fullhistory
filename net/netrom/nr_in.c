@@ -67,10 +67,8 @@ static int nr_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 		if ((skbn = alloc_skb(sk->protinfo.nr->fraglen, GFP_ATOMIC)) == NULL)
 			return 1;
 
-		skbn->free = 1;
 		skbn->arp  = 1;
-		skbn->sk   = sk;
-		sk->rmem_alloc += skbn->truesize;
+		skb_set_owner_r(skbn, sk);
 		skbn->h.raw = skbn->data;
 
 		skbo = skb_dequeue(&sk->protinfo.nr->frag_queue);
@@ -282,7 +280,6 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 					} else if (nr_in_rx_window(sk, ns)) {
 						skb_queue_tail(&temp_queue, skbn);
 					} else {
-						skbn->free = 1;
 						kfree_skb(skbn, FREE_READ);
 					}
 				}

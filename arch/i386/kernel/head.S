@@ -34,9 +34,28 @@ startup_32:
 	mov %ax,%es
 	mov %ax,%fs
 	mov %ax,%gs
+#ifdef __SMP__
+	orw %bx,%bx
+	jz 1f
+/*
+ *	New page tables may be in 4Mbyte page mode
+ */
+#ifdef GAS_KNOWS_CR4
+	movl %cr4,%eax		# Turn on 4Mb pages
+	orl $16,%eax
+	movl %eax,%cr4
+#else
+	.byte 0x0f,0x20,0xe0
+	orl $16,%eax
+	.byte 0x0f,0x22,0xe0
+#endif
+	movl %eax,%cr3		/* flush TLB as per app note */
+	movl %cr0,%eax
+#endif
 /*
  * Setup paging (the tables are already set up, just switch them on)
  */
+1:
 	movl $0x101000,%eax
 	movl %eax,%cr3		/* set the page table pointer.. */
 	movl %cr0,%eax
@@ -54,10 +73,12 @@ startup_32:
 /*
  *	Set up the stack
  */
+        movl $(KERNEL_DS),%eax         /* walken modif */
 	mov %ax,%ss
 	xorl %eax,%eax
 	movw %cx, %ax
 	movl %eax,%esp
+	addl $0xC0000000, %esp		/* shift it to the upper mapping */
 	pushl $0
 	popfl
 	jmp checkCPUtype
@@ -151,6 +172,8 @@ isnew:	pushl %ecx		# restore original EFLAGS
 	popfl
 	incl SYMBOL_NAME(have_cpuid)	# we have CPUID
 	/* get processor type */
+				# LINUS WE HAVE A BUG HERE - MUST CHECK WITH
+				# CPUID#0 THAT CPUID#1 IS SUPPORTED...
 	movl $1, %eax		# Use the CPUID instruction to 
 	.byte 0x0f, 0xa2	# check the processor type
 	movb %al, %cl		# save reg for future use
@@ -187,11 +210,11 @@ is386:	pushl %ecx		# restore original EFLAGS
 2:	movl %eax,%cr0
 	call check_x87
 #ifdef __SMP__
-	movb ready,%eax
-	orb %eax,%eax
-	jz 3f	
+	movb ready,%al		# First CPU if 0
+	orb %al,%al
+	jz 4f			# First CPU skip this stuff
 #ifdef GAS_KNOWS_CR4
-	movl %cr4,%eax
+	movl %cr4,%eax		# Turn on 4Mb pages
 	orl $16,%eax
 	movl %eax,%cr4
 #else
@@ -199,13 +222,14 @@ is386:	pushl %ecx		# restore original EFLAGS
 	orl $16,%eax
 	.byte 0x0f,0x22,0xe0
 #endif
-	jmp 4f
+	movl %cr3, %eax		# Intel specification clarification says
+	movl %eax, %cr3		# to do this. Maybe it makes a difference.
+				# Who knows ?
 #endif
-3:
+4:
 #ifdef __SMP__
 	incb ready
 #endif
-4:
 	lgdt gdt_descr
 	lidt idt_descr
 	ljmp $(KERNEL_CS),$1f

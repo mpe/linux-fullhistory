@@ -535,14 +535,11 @@ static int init_irq (ide_hwif_t *hwif)
 		hwgroup = match->hwgroup;
 	} else {
 		hwgroup = kmalloc(sizeof(ide_hwgroup_t), GFP_KERNEL);
-		hwgroup->hwif 	 = hwgroup->next_hwif = hwif->next = hwif;
+		memset(hwgroup, 0, sizeof(ide_hwgroup_t));
+		hwgroup->hwif 	 = hwif->next = hwif;
 		hwgroup->rq      = NULL;
 		hwgroup->handler = NULL;
-		if (hwif->drives[0].present)
-			hwgroup->drive = &hwif->drives[0];
-		else
-			hwgroup->drive = &hwif->drives[1];
-		hwgroup->poll_timeout = 0;
+		hwgroup->drive   = NULL;
 		init_timer(&hwgroup->timer);
 		hwgroup->timer.function = &ide_timer_expiry;
 		hwgroup->timer.data = (unsigned long) hwgroup;
@@ -567,6 +564,16 @@ static int init_irq (ide_hwif_t *hwif)
 	hwif->next = hwgroup->hwif->next;
 	hwgroup->hwif->next = hwif;
 
+	for (index = 0; index < MAX_DRIVES; ++index) {
+		ide_drive_t *drive = &hwif->drives[index];
+		if (!drive->present)
+			continue;
+		if (!hwgroup->drive)
+			hwgroup->drive = drive;
+		drive->next = hwgroup->drive->next;
+		hwgroup->drive->next = drive;
+	}
+	hwgroup->hwif = HWIF(hwgroup->drive);
 	restore_flags(flags);	/* safe now that hwif->hwgroup is set up */
 
 #ifndef __mc68000__
@@ -671,7 +678,9 @@ static int hwif_init (int h)
 		(void) unregister_blkdev (hwif->major, hwif->name);
 	} else {
 		init_gendisk(hwif);
+		blk_dev[hwif->major].data = hwif;
 		blk_dev[hwif->major].request_fn = rfn;
+		blk_dev[hwif->major].queue = ide_get_queue;
 		read_ahead[hwif->major] = 8;	/* (4kB) */
 		hwif->present = 1;	/* success */
 	}

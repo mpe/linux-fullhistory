@@ -87,7 +87,7 @@ static const char *version = "NET3 PLIP version 2.2 gniibe@mri.co.jp\n";
 */
 
 #include <linux/module.h>
-
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -143,8 +143,7 @@ static void plip_bh(struct device *dev);
 static void plip_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
 /* Functions for DEV methods */
-static int plip_rebuild_header(void *buff, struct device *dev,
-			       unsigned long raddr, struct sk_buff *skb);
+static int plip_rebuild_header(struct sk_buff *skb);
 static int plip_tx_packet(struct sk_buff *skb, struct device *dev);
 static int plip_open(struct device *dev);
 static int plip_close(struct device *dev);
@@ -209,8 +208,7 @@ struct net_local {
 	enum plip_connection_state connection;
 	unsigned short timeout_count;
 	char is_deferred;
-	int (*orig_rebuild_header)(void *eth, struct device *dev,
-				   unsigned long raddr, struct sk_buff *skb);
+	int (*orig_rebuild_header)(struct sk_buff *skb);
 };
 
 /* Entry point of PLIP driver.
@@ -415,7 +413,6 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 	}
 	rcv->state = PLIP_PK_DONE;
 	if (rcv->skb) {
-		rcv->skb->free = 1;
 		kfree_skb(rcv->skb, FREE_READ);
 		rcv->skb = NULL;
 	}
@@ -857,17 +854,21 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 /* We don't need to send arp, for plip is point-to-point. */
 static int
-plip_rebuild_header(void *buff, struct device *dev, unsigned long dst,
-		    struct sk_buff *skb)
+plip_rebuild_header(struct sk_buff *skb)
 {
+	struct device *dev = skb->dev;
 	struct net_local *nl = (struct net_local *)dev->priv;
-	struct ethhdr *eth = (struct ethhdr *)buff;
+	struct ethhdr *eth = (struct ethhdr *)skb->data;
 	int i;
 
 	if ((dev->flags & IFF_NOARP)==0)
-		return nl->orig_rebuild_header(buff, dev, dst, skb);
+		return nl->orig_rebuild_header(skb);
 
-	if (eth->h_proto != htons(ETH_P_IP)) {
+	if (eth->h_proto != __constant_htons(ETH_P_IP)
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+		&& eth->h_proto != __constant_htons(ETH_P_IPV6)
+#endif
+	) {
 		printk("plip_rebuild_header: Don't know how to resolve type %d addresses?\n", (int)eth->h_proto);
 		memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
 		return 0;
@@ -875,7 +876,15 @@ plip_rebuild_header(void *buff, struct device *dev, unsigned long dst,
 
 	for (i=0; i < ETH_ALEN - sizeof(u32); i++)
 		eth->h_dest[i] = 0xfc;
+#if 0
 	*(u32 *)(eth->h_dest+i) = dst;
+#else
+	/* Do not want to include net/route.h here.
+	 * In any case, it is TOP of silliness to emulate
+	 * hardware addresses on PtP link. --ANK
+	 */
+	*(u32 *)(eth->h_dest+i) = 0;
+#endif
 	return 0;
 }
 
@@ -1000,7 +1009,6 @@ plip_close(struct device *dev)
 	}
 	rcv->state = PLIP_PK_DONE;
 	if (rcv->skb) {
-		rcv->skb->free = 1;
 		kfree_skb(rcv->skb, FREE_READ);
 		rcv->skb = NULL;
 	}

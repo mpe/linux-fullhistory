@@ -66,7 +66,8 @@
  *	ICMP socket for flow control.
  */
 
-static struct socket icmpv6_socket;
+struct inode icmpv6_inode;
+struct socket *icmpv6_socket=&icmpv6_inode.u.socket_i;
 
 int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
 	       struct in6_addr *saddr, struct in6_addr *daddr,
@@ -145,7 +146,7 @@ static int icmpv6_getfrag(const void *data, struct in6_addr *saddr,
  */
 static __inline__ int opt_unrec(struct sk_buff *skb, __u32 offset)
 {
-	char *buff = (char *) skb->ipv6_hdr;
+	char *buff = skb->nh.raw;
 
 	return ( ( *(buff + offset) & 0xC0 ) == 0x80 );
 }
@@ -157,8 +158,8 @@ static __inline__ int opt_unrec(struct sk_buff *skb, __u32 offset)
 void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info, 
 		 struct device *dev)
 {
-	struct ipv6hdr *hdr = skb->ipv6_hdr;
-	struct sock *sk = (struct sock *) icmpv6_socket.data;
+	struct ipv6hdr *hdr = skb->nh.ipv6h;
+	struct sock *sk = icmpv6_socket->sk;
 	struct in6_addr *saddr = NULL;
 	struct device *src_dev = NULL;
 	struct icmpv6_msg msg;
@@ -239,7 +240,7 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	msg.icmph.checksum = 0;
 	msg.icmph.icmp6_pointer = htonl(info);
 
-	msg.data = (__u8 *) skb->ipv6_hdr;
+	msg.data = skb->nh.raw;
 	msg.csum = 0;
 	msg.daddr = &hdr->saddr;
         /*
@@ -271,8 +272,8 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 
 static void icmpv6_echo_reply(struct sk_buff *skb)
 {
-	struct sock *sk = (struct sock *) icmpv6_socket.data;
-	struct ipv6hdr *hdr = skb->ipv6_hdr;
+	struct sock *sk = icmpv6_socket->sk;
+	struct ipv6hdr *hdr = skb->nh.ipv6h;
 	struct icmpv6hdr *icmph = (struct icmpv6hdr *) skb->h.raw;
 	struct in6_addr *saddr;
 	struct icmpv6_msg msg;
@@ -493,21 +494,27 @@ int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
 	return 0;
 }
 
-void icmpv6_init(struct proto_ops *ops)
+void icmpv6_init(struct net_proto_family *ops)
 {
 	struct sock *sk;
 	int err;
 
-	icmpv6_socket.type=SOCK_RAW;
-	icmpv6_socket.ops=ops;
+	icmpv6_inode.i_mode = S_IFSOCK;
+	icmpv6_inode.i_sock = 1;
+	icmpv6_inode.i_uid = 0;
+	icmpv6_inode.i_gid = 0;
 
-	if((err=ops->create(&icmpv6_socket, IPPROTO_ICMPV6))<0)
+	icmpv6_socket->inode = &icmpv6_inode;
+	icmpv6_socket->state = SS_UNCONNECTED;
+	icmpv6_socket->type=SOCK_RAW;
+
+	if((err=ops->create(icmpv6_socket, IPPROTO_ICMPV6))<0)
 		printk(KERN_DEBUG 
 		       "Failed to create the ICMP control socket.\n");
 
 	MOD_DEC_USE_COUNT;
 
-	sk = icmpv6_socket.data;
+	sk = icmpv6_socket->sk;
 	sk->allocation = GFP_ATOMIC;
 	sk->num = 256;			/* Don't receive any data */
 

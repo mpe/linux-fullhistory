@@ -1233,7 +1233,7 @@ void ipv6_dst_unlock(struct dest_entry *dc)
 
 			if (dc->dc_nexthop)
 			{
-				ndisc_dec_neigh(dc->dc_nexthop);
+				neighbour_unlock(dc->dc_nexthop);
 			}
 			
 			if (dc->dc_flags & RTI_DCACHE)
@@ -1406,14 +1406,16 @@ struct rt6_info * ipv6_rt_redirect(struct device *dev, struct in6_addr *dest,
 
 	if (rt->rt_nexthop)
 	{
-		if (ipv6_addr_cmp(&rt->rt_nexthop->addr, target) == 0)
+		struct nd_neigh *ndn = (struct nd_neigh *) rt->rt_nexthop;
+		
+		if (ipv6_addr_cmp(&ndn->ndn_addr, target) == 0)
 		{
-			atomic_inc(&rt->rt_nexthop->refcnt);
+			rt->rt_nexthop = neighbour_clone(rt->rt_nexthop);
 			goto exit;
 		}
 		else
 		{
-			ndisc_dec_neigh(rt->rt_nexthop);
+			neighbour_unlock(rt->rt_nexthop);
 		}
 	}
 	
@@ -1688,8 +1690,6 @@ static void rt6_sndrtmsg(struct in6_rtmsg *rtmsg)
 	if (skb == NULL)
 		return;
 
-	skb->free = 1;
-	
 	memcpy(skb_put(skb, sizeof(struct in6_rtmsg)), &rtmsg,
 	       sizeof(struct in6_rtmsg));
 	
@@ -1848,8 +1848,11 @@ static void rt6_info_node(struct fib6_node *fn, void *p_arg)
 		{
 			for (i=0; i<16; i++)
 			{
+				struct nd_neigh *ndn;
+
+				ndn = (struct nd_neigh *) rt->rt_nexthop;
 				sprintf(arg->buffer + arg->len, "%02x",
-					rt->rt_nexthop->addr.s6_addr[i]);
+					ndn->ndn_addr.s6_addr[i]);
 				arg->len += 2;
 			}
 		}
@@ -2011,7 +2014,6 @@ void rt6_sndmsg(__u32 type, struct in6_addr *dst, struct in6_addr *gw,
 	if (skb == NULL)
 		return;
 
-	skb->free = 1;
 
 	msg = (struct in6_rtmsg *) skb_put(skb, sizeof(struct in6_rtmsg));
 	

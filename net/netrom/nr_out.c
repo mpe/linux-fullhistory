@@ -66,7 +66,6 @@ void nr_output(struct sock *sk, struct sk_buff *skb)
 				return;
 
 			skbn->sk   = sk;
-			skbn->free = 1;
 			skbn->arp  = 1;
 
 			skb_reserve(skbn, frontlen);
@@ -87,7 +86,6 @@ void nr_output(struct sock *sk, struct sk_buff *skb)
 			skb_queue_tail(&sk->write_queue, skbn); /* Throw it on the queue */
 		}
 		
-		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
 	} else {
 		skb_queue_tail(&sk->write_queue, skb);		/* Throw it on the queue */

@@ -294,17 +294,14 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 			return -ENOMEM;
 		}
 
-		newskb->free = 1;
 		newskb->arp  = 1;
-		newskb->sk   = skb->sk;
+		if (skb->sk)
+			skb_set_owner_w(newskb, skb->sk);
 
 		skb_reserve(newskb, AX25_BPQ_HEADER_LEN);
 		memcpy(skb_put(newskb, size), skb->data, size);
 		dev_kfree_skb(skb, FREE_WRITE);
 		skb = newskb;
-
-		if (skb->sk != NULL)
-			atomic_add(skb->truesize, &skb->sk->wmem_alloc);
 	}
 	
 	skb->protocol = htons(ETH_P_AX25);

@@ -20,6 +20,8 @@ net-modules.txt
 	- info and "insmod" parameters for all network driver modules.
 ppp.txt
 	- info on what software you should use to run PPP.
+shaper.txt
+	- info on the module that can shape/limit transmitted traffic.
 tcp.txt
 	- short blurb on how TCP output takes place.
 tulip.txt

@@ -33,7 +33,6 @@
 
 #include <linux/config.h>
 #include <linux/timer.h>
-#include <linux/ip.h>		/* struct options */
 #include <linux/in.h>		/* struct sockaddr_in */
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
@@ -87,9 +86,11 @@ struct unix_opt
 	int 			family;
 	char *			name;
 	int  			locks;
+	struct unix_address	*addr;
 	struct inode *		inode;
 	struct semaphore	readsem;
 	struct sock *		other;
+	struct sock **		list;
 	int 			marksweep;
 #define MARKED			1
 	int			inflight;
@@ -295,7 +296,6 @@ struct tcp_opt
 
 struct sock 
 {
-	struct options		*opt;
 	atomic_t		wmem_alloc;
 	atomic_t		rmem_alloc;
 	unsigned long		allocation;		/* Allocation mode */
@@ -344,7 +344,8 @@ struct sock
 
 	struct sk_buff_head	write_queue,
 				receive_queue,
-				out_of_order_queue;
+				out_of_order_queue,
+	                        error_queue;
 
 	unsigned short		family;
 	struct proto		*prot;
@@ -353,6 +354,8 @@ struct sock
 	__u32			daddr;
 	__u32			saddr;		/* Sending source */
 	__u32			rcv_saddr;	/* Bound address */
+
+	struct dst_entry	*dst_cache;
 
 	unsigned short		max_unacked;
 
@@ -409,6 +412,7 @@ struct sock
 	int			sndbuf;
 	unsigned short		type;
 	unsigned char		localroute;	/* Route locally only */
+	struct ucred		peercred;
   
 /*
  *	This is where all the private (optional) areas that don't
@@ -449,19 +453,20 @@ struct sock
  */
 	int			ip_ttl;			/* TTL setting */
 	int			ip_tos;			/* TOS */
+	unsigned	   	ip_cmsg_flags;
 	struct tcphdr		dummy_th;
 	struct timer_list	keepalive_timer;	/* TCP keepalive hack */
 	struct timer_list	retransmit_timer;	/* TCP retransmit timer */
 	struct timer_list	delack_timer;		/* TCP delayed ack timer */
 	int			ip_xmit_timeout;	/* Why the timeout is running */
-	struct rtable		*ip_route_cache;	/* Cached output route */
+	struct ip_options	*opt;
 	unsigned char		ip_hdrincl;		/* Include headers ? */
-#ifdef CONFIG_IP_MULTICAST  
-	int			ip_mc_ttl;		/* Multicasting TTL */
-	int			ip_mc_loop;		/* Loopback */
+	__u8			ip_mc_ttl;		/* Multicasting TTL */
+	__u8			ip_mc_loop;		/* Loopback */
+	__u8			ip_recverr;
+	__u8			ip_pmtudisc;
 	char			ip_mc_name[MAX_ADDR_LEN];/* Multicast device name */
 	struct ip_mc_socklist	*ip_mc_list;		/* Group array */
-#endif  
 
 /*
  *	This part is used for the timeout functions (timer.c). 
@@ -524,11 +529,11 @@ struct proto
 	void			(*write_wakeup)(struct sock *sk);
 	void			(*read_wakeup)(struct sock *sk);
 
-	int			(*select)(struct sock *sk, int which,
-					select_table *wait);
+	int			(*select)(struct socket *sock, int which,
+					  select_table *wait);
 
 	int			(*ioctl)(struct sock *sk, int cmd,
-					unsigned long arg);
+					 unsigned long arg);
 	int			(*init)(struct sock *sk);
 	int			(*destroy)(struct sock *sk);
 	void			(*shutdown)(struct sock *sk, int how);
@@ -538,7 +543,7 @@ struct proto
 					int optname, char *optval, 
 					int *option);  	 
 	int			(*sendmsg)(struct sock *sk, struct msghdr *msg,
-					int len, int noblock, int flags);
+					   int len);
 	int			(*recvmsg)(struct sock *sk, struct msghdr *msg,
 					int len, int noblock, int flags, 
 					int *addr_len);
@@ -651,6 +656,9 @@ extern unsigned short		get_new_socknum(struct proto *,
 extern void			inet_put_sock(unsigned short, struct sock *); 
 extern struct sock		*get_sock(struct proto *, unsigned short,
 					  unsigned long, unsigned short,
+					  unsigned long);
+extern struct sock		*get_sock_proxy(struct proto *, unsigned short,
+					  unsigned long, unsigned short,
 					  unsigned long,
 					  unsigned long, unsigned short);
 extern struct sock		*get_sock_mcast(struct sock *, unsigned short,
@@ -665,18 +673,16 @@ extern struct sk_buff		*sock_wmalloc(struct sock *sk,
 extern struct sk_buff		*sock_rmalloc(struct sock *sk,
 					      unsigned long size, int force,
 					      int priority);
-extern void			sock_wfree(struct sock *sk,
-					   struct sk_buff *skb);
-extern void			sock_rfree(struct sock *sk,
-					   struct sk_buff *skb);
+extern void			sock_wfree(struct sk_buff *skb);
+extern void			sock_rfree(struct sk_buff *skb);
 extern unsigned long		sock_rspace(struct sock *sk);
 extern unsigned long		sock_wspace(struct sock *sk);
 
-extern int			sock_setsockopt(struct sock *sk, int level,
+extern int			sock_setsockopt(struct socket *sock, int level,
 						int op, char *optval,
 						int optlen);
 
-extern int			sock_getsockopt(struct sock *sk, int level,
+extern int			sock_getsockopt(struct socket *sock, int level,
 						int op, char *optval, 
 						int *optlen);
 extern struct sk_buff 		*sock_alloc_send_skb(struct sock *skb,
@@ -694,12 +700,26 @@ extern struct sk_buff 		*sock_alloc_send_skb(struct sock *skb,
  *	packet ever received.
  */
 
+extern __inline__ void skb_set_owner_w(struct sk_buff *skb, struct sock *sk)
+{
+	skb->sk = sk;
+	skb->destructor = sock_wfree;
+	atomic_add(skb->truesize, &sk->wmem_alloc);
+}
+
+extern __inline__ void skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
+{
+	skb->sk = sk;
+	skb->destructor = sock_rfree;
+	atomic_add(skb->truesize, &sk->rmem_alloc);
+}
+
+
 extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
 	if (sk->rmem_alloc + skb->truesize >= sk->rcvbuf)
 		return -ENOMEM;
-	atomic_add(skb->truesize, &sk->rmem_alloc);
-	skb->sk=sk;
+	skb_set_owner_r(skb, sk);
 	skb_queue_tail(&sk->receive_queue,skb);
 	if (!sk->dead)
 		sk->data_ready(sk,skb->len);
@@ -710,9 +730,19 @@ extern __inline__ int __sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
 	if (sk->rmem_alloc + skb->truesize >= sk->rcvbuf)
 		return -ENOMEM;
-	atomic_add(skb->truesize, &sk->rmem_alloc);
-	skb->sk=sk;
+	skb_set_owner_r(skb, sk);
 	__skb_queue_tail(&sk->receive_queue,skb);
+	if (!sk->dead)
+		sk->data_ready(sk,skb->len);
+	return 0;
+}
+
+extern __inline__ int sock_queue_err_skb(struct sock *sk, struct sk_buff *skb)
+{
+	if (sk->rmem_alloc + skb->truesize >= sk->rcvbuf)
+		return -ENOMEM;
+	skb_set_owner_r(skb, sk);
+	__skb_queue_tail(&sk->error_queue,skb);
 	if (!sk->dead)
 		sk->data_ready(sk,skb->len);
 	return 0;
@@ -727,6 +757,7 @@ extern __inline__ int sock_error(struct sock *sk)
 	int err=xchg(&sk->err,0);
 	return -err;
 }
+
 
 /* 
  *	Declarations from timer.c 
@@ -743,6 +774,10 @@ extern void net_timer (unsigned long);
  *	Enable debug/info messages 
  */
 
+#if 0
 #define NETDEBUG(x)	do { } while (0)
+#else
+#define NETDEBUG(x)	do { x; } while (0)
+#endif
 
 #endif	/* _SOCK_H */

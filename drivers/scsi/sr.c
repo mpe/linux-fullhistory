@@ -315,7 +315,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		}
 
 		if (SCpnt->sense_buffer[2] == NOT_READY) {
-			printk("CD-ROM not ready.  Make sure you have a disc in the drive.\n");
+			printk(KERN_INFO "CD-ROM not ready.  Make sure you have a disc in the drive.\n");
 			SCpnt = end_scsi_request(SCpnt, 0, this_count);
 			requeue_sr_request(SCpnt); /* Do next request */
 			return;

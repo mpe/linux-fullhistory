@@ -167,7 +167,11 @@ int el3_probe(struct device *dev)
 		}
 	}
 
-#ifdef CONFIG_MCA
+/*
+ * This has to be coded according to Documentation/mca.txt before
+ * this driver can be used with the 3c529 MCA cards.
+ */
+#if 0 /* #ifdef CONFIG_MCA */
 	if (MCA_bus) {
 		mca_adaptor_select_mode(1);
 		for (i = 0; i < 8; i++)

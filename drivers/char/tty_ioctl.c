@@ -47,8 +47,7 @@ void tty_wait_until_sent(struct tty_struct * tty, int timeout)
 #ifdef TTY_DEBUG_WAIT_UNTIL_SENT
 	printk("%s wait until sent...\n", tty_name(tty));
 #endif
-	if (!tty->driver.chars_in_buffer ||
-	    !tty->driver.chars_in_buffer(tty))
+	if (!tty->driver.chars_in_buffer)
 		return;
 	add_wait_queue(&tty->write_wait, &wait);
 	current->counter = 0;	/* make us low-priority */
@@ -462,10 +461,16 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 				return retval;
 			switch (arg) {
 			case TCOOFF:
-				stop_tty(tty);
+				if (!tty->flow_stopped) {
+					tty->flow_stopped = 1;
+					stop_tty(tty);
+				}
 				break;
 			case TCOON:
-				start_tty(tty);
+				if (tty->flow_stopped) {
+					tty->flow_stopped = 0;
+					start_tty(tty);
+				}
 				break;
 			case TCIOFF:
 				if (STOP_CHAR(tty) != __DISABLED_CHAR)

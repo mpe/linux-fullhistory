@@ -45,6 +45,21 @@
  *	socketpair(...SOCK_RAW..) doesn't panic the kernel.
  *	BSD af_unix apparently has connect forgetting to block properly.
  *		(need to check this with the POSIX spec in detail)
+ *
+ * Differences from 2.0.0-11-... (ANK)
+ *	Bug fixes and improvements.
+ *		- client shutdown killed server socket.
+ *		- removed all useless cli/sti pairs.
+ *		- (suspicious!) not allow connect/send to connected not to us
+ *		  socket, return EPERM.
+ *
+ *	Semantic changes/extensions.
+ *		- generic control message passing.
+ *		- SCM_CREDENTIALS control message.
+ *		- "Abstract" (not FS based) socket bindings.
+ *		  Abstract names are sequences of bytes (not zero terminated)
+ *		  started by 0, so that this name space does not intersect
+ *		  with BSD names.
  */
 
 #include <linux/config.h>
@@ -72,71 +87,144 @@
 #include <net/tcp.h>
 #include <net/af_unix.h>
 #include <linux/proc_fs.h>
+#include <net/scm.h>
 
-unix_socket *unix_socket_list=NULL;
+#include <asm/checksum.h>
 
 #define min(a,b)	(((a)<(b))?(a):(b))
 
-/*
- *	Make sure the unix name is null-terminated.
- */
- 
-static inline void unix_mkname(struct sockaddr_un * sunaddr, unsigned long len)
+
+unix_socket *unix_socket_table[UNIX_HASH_SIZE+1];
+
+#define unix_sockets_unbound	(unix_socket_table[UNIX_HASH_SIZE])
+
+#define UNIX_ABSTRACT(sk)	((sk)->protinfo.af_unix.addr->hash!=UNIX_HASH_SIZE)
+
+static __inline__ unsigned unix_hash_fold(unsigned hash)
 {
-	if (len >= sizeof(*sunaddr))
-		len = sizeof(*sunaddr)-1;
-	((char *)sunaddr)[len]=0;
+	hash ^= hash>>16;
+	hash ^= hash>>8;
+	hash ^= hash>>4;
+	return hash;
 }
 
+#define unix_peer(sk) ((sk)->pair)
+
+static __inline__ int unix_our_peer(unix_socket *sk, unix_socket *osk)
+{
+	return unix_peer(osk) == sk;
+}
+
+static __inline__ int unix_may_send(unix_socket *sk, unix_socket *osk)
+{
+	return !unix_peer(osk) || unix_peer(osk) == sk;
+}
+
+static __inline__ void unix_lock(unix_socket *sk)
+{
+	sk->users++;
+}
+
+static __inline__ int unix_unlock(unix_socket *sk)
+{
+	return sk->users--;
+}
+
+static __inline__ int unix_locked(unix_socket *sk)
+{
+	return sk->users;
+}
+
+static __inline__ void unix_release_addr(struct unix_address *addr)
+{
+	if (addr)
+	{
+		if (atomic_dec_and_test(&addr->refcnt))
+			kfree(addr);
+	}
+}
+
+
 /*
- *	Note: Sockets may not be removed _during_ an interrupt or net_bh
- *	handler using this technique. They can be added although we do not
- *	use this facility.
+ *	Check unix socket name:
+ *		- should be not zero length.
+ *	        - if started by not zero, should be NULL terminated (FS object)
+ *		- if started by zero, it is abstract name.
  */
  
+static int unix_mkname(struct sockaddr_un * sunaddr, int len, unsigned *hashp)
+{
+	if (len <= sizeof(short) || len > sizeof(*sunaddr))
+		return -EINVAL;
+	if (!sunaddr || sunaddr->sun_family != AF_UNIX)
+		return -EINVAL;
+	if (sunaddr->sun_path[0])
+	{
+		if (len >= sizeof(*sunaddr))
+			len = sizeof(*sunaddr)-1;
+		((char *)sunaddr)[len]=0;
+		len = strlen(sunaddr->sun_path)+1+sizeof(short);
+		return len;
+	}
+
+	*hashp = unix_hash_fold(csum_partial((char*)sunaddr, len, 0));
+	return len;
+}
+
 static void unix_remove_socket(unix_socket *sk)
 {
-	unix_socket **s;
-	
-	cli();
-	s=&unix_socket_list;
-
-	while(*s!=NULL)
-	{
-		if(*s==sk)
-		{
-			*s=sk->next;
-			sti();
-			return;
-		}
-		s=&((*s)->next);
-	}
-	sti();
+	unix_socket **list = sk->protinfo.af_unix.list;
+	if (sk->next)
+		sk->next->prev = sk->prev;
+	if (sk->prev)
+		sk->prev->next = sk->next;
+	if (*list == sk)
+		*list = sk->next;
+	sk->protinfo.af_unix.list = NULL;
+	sk->prev = NULL;
+	sk->next = NULL;
 }
 
 static void unix_insert_socket(unix_socket *sk)
 {
-	cli();
-	sk->next=unix_socket_list;
-	unix_socket_list=sk;
-	sti();
+	unix_socket **list = sk->protinfo.af_unix.list;
+	sk->prev = NULL;
+	sk->next = *list;
+	if (*list)
+		(*list)->prev = sk;
+	*list=sk;
 }
 
-static unix_socket *unix_find_socket(struct inode *i)
+static unix_socket *unix_find_socket_byname(struct sockaddr_un *sunname,
+					    int len, int type, unsigned hash)
 {
 	unix_socket *s;
-	cli();
-	s=unix_socket_list;
-	while(s)
+
+	for (s=unix_socket_table[(hash^type)&0xF]; s; s=s->next)
+	{
+		if(s->protinfo.af_unix.addr->len==len &&
+		   memcmp(s->protinfo.af_unix.addr->name, sunname, len) == 0 &&
+		   s->type == type)
+		{
+			unix_lock(s);
+			return(s);
+		}
+	}
+	return(NULL);
+}
+
+static unix_socket *unix_find_socket_byinode(struct inode *i)
+{
+	unix_socket *s;
+
+	for (s=unix_socket_table[i->i_ino & 0xF]; s; s=s->next)
 	{
 		if(s->protinfo.af_unix.inode==i)
 		{
-			sti();
+			unix_lock(s);
 			return(s);
 		}
-		s=s->next;
 	}
-	sti();
 	return(NULL);
 }
 
@@ -147,10 +235,9 @@ static unix_socket *unix_find_socket(struct inode *i)
 static void unix_destroy_timer(unsigned long data)
 {
 	unix_socket *sk=(unix_socket *)data;
-	if(sk->protinfo.af_unix.locks==0 && sk->wmem_alloc==0)
+	if(!unix_locked(sk) && sk->wmem_alloc==0)
 	{
-		if(sk->protinfo.af_unix.name)
-			kfree(sk->protinfo.af_unix.name);
+		unix_release_addr(sk->protinfo.af_unix.addr);
 		sk_free(sk);
 		return;
 	}
@@ -201,10 +288,9 @@ static void unix_destroy_socket(unix_socket *sk)
 		sk->protinfo.af_unix.inode=NULL;
 	}
 	
-	if(--sk->protinfo.af_unix.locks==0 && sk->wmem_alloc==0)
+	if(!unix_unlock(sk) && sk->wmem_alloc==0)
 	{
-		if(sk->protinfo.af_unix.name)
-			kfree(sk->protinfo.af_unix.name);
+		unix_release_addr(sk->protinfo.af_unix.addr);
 		sk_free(sk);
 	}
 	else
@@ -223,35 +309,21 @@ static int unix_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return -EINVAL;
 }
 
-/*
- *	Yes socket options work with the new unix domain socketry!!!!!!!
- */
- 
-static int unix_setsockopt(struct socket *sock, int level, int optname, char *optval, int optlen)
-{
-	unix_socket *sk=sock->data;
-	if(level!=SOL_SOCKET)
-		return -EOPNOTSUPP;
-	return sock_setsockopt(sk,level,optname,optval,optlen);	
-}
-
-static int unix_getsockopt(struct socket *sock, int level, int optname, char *optval, int *optlen)
-{
-	unix_socket *sk=sock->data;
-	if(level!=SOL_SOCKET)
-		return -EOPNOTSUPP;
-	return sock_getsockopt(sk,level,optname,optval,optlen);
-}
-
 static int unix_listen(struct socket *sock, int backlog)
 {
-	unix_socket *sk=sock->data;
-	if(sk->type!=SOCK_STREAM)
+	struct sock *sk = sock->sk;
+
+	if (sock->state != SS_UNCONNECTED) 
+		return(-EINVAL);
+	if (sock->type!=SOCK_STREAM)
 		return -EOPNOTSUPP;		/* Only stream sockets accept */
-	if(sk->protinfo.af_unix.name==NULL)
+	if (!sk->protinfo.af_unix.addr)
 		return -EINVAL;			/* No listens on an unbound socket */
 	sk->max_ack_backlog=backlog;
+	if (sk->ack_backlog < backlog)
+		sk->state_change(sk);
 	sk->state=TCP_LISTEN;
+	sock->flags |= SO_ACCEPTCON;
 	return 0;
 }
 
@@ -279,17 +351,22 @@ static void def_callback3(struct sock *sk)
 	}
 }
 
+extern struct proto_ops unix_stream_ops;
+extern struct proto_ops unix_dgram_ops;
+
 static int unix_create(struct socket *sock, int protocol)
 {
-	unix_socket *sk;
-	if(protocol && protocol != PF_UNIX)
+	struct sock *sk;
+
+	sock->state = SS_UNCONNECTED;
+
+	if (protocol && protocol != PF_UNIX)
 		return -EPROTONOSUPPORT;
-	sk=(unix_socket *)sk_alloc(GFP_KERNEL);
-	if(sk==NULL)
-		return -ENOMEM;
-	switch(sock->type)
+
+	switch (sock->type)
 	{
 		case SOCK_STREAM:
+			sock->ops = &unix_stream_ops;
 			break;
 		/*
 		 *	Believe it or not BSD has AF_UNIX, SOCK_RAW though
@@ -298,19 +375,31 @@ static int unix_create(struct socket *sock, int protocol)
 		case SOCK_RAW:
 			sock->type=SOCK_DGRAM;
 		case SOCK_DGRAM:
+			sock->ops = &unix_dgram_ops;
 			break;
 		default:
-			sk_free(sk);
 			return -ESOCKTNOSUPPORT;
 	}
-	sk->type=sock->type;
+	sk = sk_alloc(GFP_KERNEL);
+	if (!sk)
+		return -ENOMEM;
+	sock->sk = sk;
+	sk->type = sock->type;
+	sk->socket=sock;
+	sk->sleep= &sock->wait;
+
+	sk->peercred.pid = 0;
+	sk->peercred.uid = -1;
+	sk->peercred.gid = -1;
+	
 	init_timer(&sk->timer);
 	skb_queue_head_init(&sk->write_queue);
 	skb_queue_head_init(&sk->receive_queue);
+	skb_queue_head_init(&sk->error_queue);
 	skb_queue_head_init(&sk->back_log);
 	sk->protinfo.af_unix.family=AF_UNIX;
 	sk->protinfo.af_unix.inode=NULL;
-	sk->protinfo.af_unix.locks=1;		/* Us */
+	sk->users=1;				/* Us */
 	sk->protinfo.af_unix.readsem=MUTEX;	/* single task reading lock */
 	sk->rcvbuf=SK_RMEM_MAX;
 	sk->sndbuf=SK_WMEM_MAX;
@@ -322,39 +411,40 @@ static int unix_create(struct socket *sock, int protocol)
 	sk->write_space=def_callback3;
 	sk->error_report=def_callback1;
 	sk->mtu=4096;
-	sk->socket=sock;
-	sock->data=(void *)sk;
-	sk->sleep=sock->wait;
+	sk->protinfo.af_unix.list=&unix_sockets_unbound;
 	unix_insert_socket(sk);
 	return 0;
 }
 
 static int unix_dup(struct socket *newsock, struct socket *oldsock)
 {
-	return unix_create(newsock,0);
+	return unix_create(newsock, 0);
 }
 
 static int unix_release(struct socket *sock, struct socket *peer)
 {
-	unix_socket *sk=sock->data;
+	unix_socket *sk = sock->sk;
 	unix_socket *skpair;
-	
-	/* May not have data attached */
-	
-	if(sk==NULL)
+
+	if (!sk)
 		return 0;
-		
+	
+	if (sock->state != SS_UNCONNECTED)
+		sock->state = SS_DISCONNECTING;
+
 	sk->state_change(sk);
 	sk->dead=1;
-	skpair=(unix_socket *)sk->protinfo.af_unix.other;	/* Person we send to (default) */
-	if(sk->type==SOCK_STREAM && skpair!=NULL && skpair->state!=TCP_LISTEN)
+	skpair=unix_peer(sk);
+	if (sock->type==SOCK_STREAM && skpair)
 	{
-		skpair->shutdown=SHUTDOWN_MASK;		/* No more writes */
-		skpair->state_change(skpair);		/* Wake any blocked writes */
+		if (unix_our_peer(sk, skpair))
+			skpair->shutdown=SHUTDOWN_MASK;	/* No more writes */
+		if (skpair->state!=TCP_LISTEN)
+			skpair->state_change(skpair);	/* Wake any blocked writes */
 	}
-	if(skpair!=NULL)
-		skpair->protinfo.af_unix.locks--;	/* It may now die */
-	sk->protinfo.af_unix.other=NULL;		/* No pair */
+	if (skpair!=NULL)
+		unix_unlock(skpair);			/* It may now die */
+	unix_peer(sk)=NULL;				/* No pair */
 	unix_destroy_socket(sk);			/* Try to flush out this socket. Throw out buffers at least */
 	unix_gc();					/* Garbage collect fds */	
 
@@ -362,33 +452,85 @@ static int unix_release(struct socket *sock, struct socket *peer)
 	 *	FIXME: BSD difference: In BSD all sockets connected to use get ECONNRESET and we die on the spot. In
 	 *	Linux we behave like files and pipes do and wait for the last dereference.
 	 */
+	if (sk->socket)
+	{
+		sk->socket = NULL;
+		sock->sk = NULL;
+	}
 	 
-	sock->data = NULL;
-	sk->socket = NULL;
-	
 	return 0;
 }
 
+static int unix_autobind(struct socket *sock)
+{
+	struct sock *sk = sock->sk;
+	static u32 ordernum = 1;
+	struct unix_address * addr;
+	unix_socket *osk;
 
-static unix_socket *unix_find_other(char *path, int *error)
+	addr = kmalloc(sizeof(*addr) + sizeof(short) + 16, GFP_KERNEL);
+	if (!addr)
+		return -ENOBUFS;
+	if (sk->protinfo.af_unix.addr || sk->protinfo.af_unix.inode)
+	{
+		kfree(addr);
+		return -EINVAL;
+	}
+	memset(addr, 0, sizeof(*addr) + sizeof(short) + 16);
+	addr->name->sun_family = AF_UNIX;
+	addr->refcnt = 1;
+
+retry:
+	addr->len = sprintf(addr->name->sun_path+1, "%08x", ordernum) + 1 + sizeof(short);
+	addr->hash = unix_hash_fold(csum_partial((void*)addr->name, addr->len, 0));
+	ordernum++;
+
+	if ((osk=unix_find_socket_byname(addr->name, addr->len, sock->type,
+					 addr->hash)) != NULL)
+	{
+		unix_unlock(osk);
+		goto retry;
+	}
+
+	sk->protinfo.af_unix.addr = addr;
+	unix_remove_socket(sk);
+	sk->protinfo.af_unix.list = &unix_socket_table[(addr->hash ^ sk->type)&0xF];
+	unix_insert_socket(sk);
+	return 0;
+}
+
+static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
+				    int type, unsigned hash, int *error)
 {
 	int old_fs;
 	int err;
 	struct inode *inode;
 	unix_socket *u;
 	
-	old_fs=get_fs();
-	set_fs(get_ds());
-	err = open_namei(path, 2, S_IFSOCK, &inode, NULL);
-	set_fs(old_fs);
-	if(err<0)
+	if (sunname->sun_path[0])
 	{
-		*error=err;
-		return NULL;
+		old_fs=get_fs();
+		set_fs(get_ds());
+		err = open_namei(sunname->sun_path, 2, S_IFSOCK, &inode, NULL);
+		set_fs(old_fs);
+		if(err<0)
+		{
+			*error=err;
+			return NULL;
+		}
+		u=unix_find_socket_byinode(inode);
+		iput(inode);
+		if (u && u->type != type)
+		{
+			*error=-EPROTOTYPE;
+			unix_unlock(u);
+			return NULL;
+		}
 	}
-	u=unix_find_socket(inode);
-	iput(inode);
-	if(u==NULL)
+	else
+		u=unix_find_socket_byname(sunname, len, type, hash);
+
+	if (u==NULL)
 	{
 		*error=-ECONNREFUSED;
 		return NULL;
@@ -399,173 +541,230 @@ static unix_socket *unix_find_other(char *path, int *error)
 
 static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
+	struct sock *sk = sock->sk;
 	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;
-	unix_socket *sk=sock->data;
+	struct inode * inode;
 	int old_fs;
 	int err;
+	unsigned hash;
+	struct unix_address *addr;
 	
-	if(sk->protinfo.af_unix.name)
-		return -EINVAL;		/* Already bound */
-	
-	if(addr_len>sizeof(struct sockaddr_un) || addr_len<3 || sunaddr->sun_family!=AF_UNIX)
+	if (sk->protinfo.af_unix.addr || sk->protinfo.af_unix.inode ||
+	    sunaddr->sun_family != AF_UNIX)
 		return -EINVAL;
-	unix_mkname(sunaddr, addr_len);
-	/*
-	 *	Put ourselves in the filesystem
-	 */
-	if(sk->protinfo.af_unix.inode!=NULL)
-		return -EINVAL;
-	
-	sk->protinfo.af_unix.name=kmalloc(addr_len+1, GFP_KERNEL);
-	if(sk->protinfo.af_unix.name==NULL)
+
+	if (addr_len==sizeof(short))
+		return unix_autobind(sock);
+
+	addr_len = unix_mkname(sunaddr, addr_len, &hash);
+	if (addr_len < 0)
+		return addr_len;
+
+	addr = kmalloc(sizeof(*addr)+addr_len, GFP_KERNEL);
+	if (!addr)
 		return -ENOBUFS;
-	memcpy(sk->protinfo.af_unix.name, sunaddr->sun_path, addr_len+1);
+
+	/* We sleeped; recheck ... */
+
+	if (sk->protinfo.af_unix.addr || sk->protinfo.af_unix.inode)
+	{
+		kfree(addr);
+		return -EINVAL;		/* Already bound */
+	}
+
+	memcpy(addr->name, sunaddr, addr_len);
+	addr->len = addr_len;
+	addr->hash = hash;
+	addr->refcnt = 1;
+
+	if (!sunaddr->sun_path[0])
+	{
+		unix_socket *osk = unix_find_socket_byname(sunaddr, addr_len,
+							   sk->type, hash);
+		if (osk)
+		{
+			unix_unlock(osk);
+			kfree(addr);
+			return -EADDRINUSE;
+		}
+		unix_remove_socket(sk);
+		sk->protinfo.af_unix.addr = addr;
+		sk->protinfo.af_unix.list = &unix_socket_table[(hash^sk->type)&0xF];
+		unix_insert_socket(sk);
+		return 0;
+	}
+
+	addr->hash = UNIX_HASH_SIZE;
+	sk->protinfo.af_unix.addr = addr;
 	
 	old_fs=get_fs();
 	set_fs(get_ds());
-	
-	err=do_mknod(sk->protinfo.af_unix.name,S_IFSOCK|S_IRWXUGO,0);
-	if(err==0)
-		err=open_namei(sk->protinfo.af_unix.name, 2, S_IFSOCK, &sk->protinfo.af_unix.inode, NULL);
+
+	err=do_mknod(sunaddr->sun_path, S_IFSOCK|S_IRWXUGO, 0);
+	if (!err)
+		err=open_namei(sunaddr->sun_path, 2, S_IFSOCK, &inode, NULL);
 	
 	set_fs(old_fs);
 	
 	if(err<0)
 	{
-		kfree_s(sk->protinfo.af_unix.name,addr_len+1);
-		sk->protinfo.af_unix.name=NULL;
-		if(err==-EEXIST)
+		unix_release_addr(addr);
+		sk->protinfo.af_unix.addr = NULL;
+		if (err==-EEXIST)
 			return -EADDRINUSE;
 		else
 			return err;
 	}
-	
+	unix_remove_socket(sk);
+	sk->protinfo.af_unix.list = &unix_socket_table[inode->i_ino & 0xF];
+	sk->protinfo.af_unix.inode = inode;
+	unix_insert_socket(sk);
+
 	return 0;
-	
 }
 
-static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_len, int flags)
+static int unix_dgram_connect(struct socket *sock, struct sockaddr *addr,
+			      int alen, int flags)
 {
-	unix_socket *sk=sock->data;
-	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;
-	unix_socket *other;
-	struct sk_buff *skb;
+	struct sock *sk = sock->sk;
+	struct sockaddr_un *sun=(struct sockaddr_un*)addr;
+	struct sock *other;
+	unsigned hash;
 	int err;
-	
+
 	/*
 	 *	1003.1g breaking connected state with AF_UNSPEC
 	 */
 
-	if(sunaddr->sun_family==AF_UNSPEC)
+	if(addr->sa_family==AF_UNSPEC)
 	{
-		if(sk->protinfo.af_unix.other)
+		if(unix_peer(sk))
 		{
-			sk->protinfo.af_unix.other->protinfo.af_unix.locks--;
-			sk->protinfo.af_unix.other=NULL;
+			unix_unlock(unix_peer(sk));
+			unix_peer(sk) = NULL;
 			sock->state=SS_UNCONNECTED;
 		}
 		return 0;
 	}
 		
-	if(sk->type==SOCK_STREAM && sk->protinfo.af_unix.other)
+	alen = unix_mkname(sun, alen, &hash);
+	if (alen < 0)
+		return alen;
+
+	other=unix_find_other(sun, alen, sock->type, hash, &err);
+	if (!other)
+		return err;
+	if (!unix_may_send(sk, other))
 	{
-		if(sock->state==SS_CONNECTING && sk->state==TCP_ESTABLISHED)
+		unix_unlock(other);
+		return -EPERM;
+	}
+
+	/*
+	 * If it was connected, reconnect.
+	 */
+	if (unix_peer(sk))
+	{
+		unix_unlock(unix_peer(sk));
+		unix_peer(sk)=NULL;
+	}
+	unix_peer(sk)=other;
+	if (sock->passcred && !sk->protinfo.af_unix.addr)
+		unix_autobind(sock);
+	return 0;
+}
+
+static int unix_stream_connect1(struct socket *sock, struct msghdr *msg,
+				int len, struct unix_skb_parms *cmsg, int nonblock)
+{
+	struct sockaddr_un *sunaddr=(struct sockaddr_un *)msg->msg_name;
+	struct sock *sk = sock->sk;
+	unix_socket *other;
+	struct sk_buff *skb;
+	int err;
+	unsigned hash;
+	int addr_len;
+
+	addr_len = unix_mkname(sunaddr, msg->msg_namelen, &hash);
+	if (addr_len < 0)
+		return addr_len;
+
+	switch (sock->state) 
+	{
+		case SS_UNCONNECTED:
+			/* This is ok... continue with connect */
+			break;
+		case SS_CONNECTED:
+			/* Socket is already connected */
+			return -EISCONN;
+		case SS_CONNECTING:
+			/* Not yet connected... we will check this. */
+			break;
+		default:
+			return(-EINVAL);
+	}
+
+
+	if (unix_peer(sk))
+	{
+		if (sock->state==SS_CONNECTING && sk->state==TCP_ESTABLISHED)
 		{
 			sock->state=SS_CONNECTED;
+			if (!sk->protinfo.af_unix.addr)
+				unix_autobind(sock);
 			return 0;
 		}
-		if(sock->state==SS_CONNECTING && sk->state == TCP_CLOSE)
+		if (sock->state==SS_CONNECTING && sk->state == TCP_CLOSE)
 		{
 			sock->state=SS_UNCONNECTED;
 			return -ECONNREFUSED;
 		}
-		if(sock->state!=SS_CONNECTING)
+		if (sock->state!=SS_CONNECTING)
 			return -EISCONN;
-		if(flags&O_NONBLOCK)
+		if (nonblock)
 			return -EALREADY;
 		/*
 		 *	Drop through the connect up logic to the wait.
 		 */
 	}
-	
-	if(addr_len < sizeof(sunaddr->sun_family)+1 || sunaddr->sun_family!=AF_UNIX)
-		return -EINVAL;
-		
-	unix_mkname(sunaddr, addr_len);
-		
-	if(sk->type==SOCK_DGRAM)
-	{
-		if(sk->protinfo.af_unix.other)
-		{
-			sk->protinfo.af_unix.other->protinfo.af_unix.locks--;
-			sk->protinfo.af_unix.other=NULL;
-			sock->state=SS_UNCONNECTED;
-		}
-		other=unix_find_other(sunaddr->sun_path, &err);
-		if(other==NULL)
-			return err;
-		if(other->type!=sk->type)
-			return -EPROTOTYPE;
-		other->protinfo.af_unix.locks++;
-		sk->protinfo.af_unix.other=other;
-		sock->state=SS_CONNECTED;
-		sk->state=TCP_ESTABLISHED;
-		return 0;			/* Done */
-	}
-	
 
-	if(sock->state==SS_UNCONNECTED)
+	if (sock->state==SS_UNCONNECTED)
 	{
 		/*
 		 *	Now ready to connect
 		 */
 	 
-		skb=sock_alloc_send_skb(sk, 0, 0, 0, &err); /* Marker object */
+		skb=sock_alloc_send_skb(sk, len, 0, nonblock, &err); /* Marker object */
 		if(skb==NULL)
 			return err;
-		skb->sk=sk;				/* So they know it is us */
-		skb->free=1;
-		skb->h.filp=NULL;
+		memcpy(&UNIXCB(skb), cmsg, sizeof(*cmsg));
+		if (len)
+			memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
 		sk->state=TCP_CLOSE;
-		unix_mkname(sunaddr, addr_len);
-		other=unix_find_other(sunaddr->sun_path, &err);
+		other=unix_find_other(sunaddr, addr_len, sk->type, hash, &err);
 		if(other==NULL)
 		{
 			kfree_skb(skb, FREE_WRITE);
 			return err;
 		}
-		if(other->type!=sk->type)
-		{
-			kfree_skb(skb, FREE_WRITE);
-			return -EPROTOTYPE;
-		}
-		other->protinfo.af_unix.locks++;		/* Lock the other socket so it doesn't run off for a moment */
 		other->ack_backlog++;
-		sk->protinfo.af_unix.other=other;
+		unix_peer(sk)=other;
 		skb_queue_tail(&other->receive_queue,skb);
 		sk->state=TCP_SYN_SENT;
 		sock->state=SS_CONNECTING;
-		sti();
 		other->data_ready(other,0);		/* Wake up ! */		
 	}
 			
 	
 	/* Wait for an accept */
 	
-	cli();
 	while(sk->state==TCP_SYN_SENT)
 	{
-		if(flags&O_NONBLOCK)
-		{
-			sti();
+		if(nonblock)
 			return -EINPROGRESS;
-		}
 		interruptible_sleep_on(sk->sleep);
 		if(current->signal & ~current->blocked)
-		{
-			sti();
 			return -ERESTARTSYS;
-		}
 	}
 	
 	/*
@@ -574,10 +773,9 @@ static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	 
 	if(sk->state==TCP_CLOSE)
 	{
-		sk->protinfo.af_unix.other->protinfo.af_unix.locks--;
-		sk->protinfo.af_unix.other=NULL;
+		unix_unlock(unix_peer(sk));
+		unix_peer(sk)=NULL;
 		sock->state=SS_UNCONNECTED;
-		sti();
 		return -ECONNREFUSED;
 	}
 	
@@ -586,315 +784,302 @@ static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	 */
 	 
 	sock->state=SS_CONNECTED;
-	sti();
+	if (!sk->protinfo.af_unix.addr)
+		unix_autobind(sock);
 	return 0;
-	
 }
 
-static int unix_socketpair(struct socket *a, struct socket *b)
+
+static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
+			       int addr_len, int flags)
 {
-	unix_socket *ska,*skb;	
-	
-	ska=a->data;
-	skb=b->data;
+	struct msghdr msg;
+	struct unix_skb_parms cmsg;
+
+	msg.msg_name = uaddr;
+	msg.msg_namelen = addr_len;
+	cmsg.fp = NULL;
+	cmsg.attr = MSG_SYN;
+	cmsg.creds.pid = current->pid;
+	cmsg.creds.uid = current->euid;
+	cmsg.creds.gid = current->egid;
+
+	return unix_stream_connect1(sock, &msg, 0, &cmsg, flags&O_NONBLOCK);
+}
+
+static int unix_socketpair(struct socket *socka, struct socket *sockb)
+{
+	struct sock *ska=socka->sk, *skb = sockb->sk;
 
 	/* Join our sockets back to back */
-	ska->protinfo.af_unix.locks++;
-	skb->protinfo.af_unix.locks++;
-	ska->protinfo.af_unix.other=skb;
-	skb->protinfo.af_unix.other=ska;
-	ska->state=TCP_ESTABLISHED;
-	skb->state=TCP_ESTABLISHED;
+	unix_lock(ska);
+	unix_lock(skb);
+	unix_peer(ska)=skb;
+	unix_peer(skb)=ska;
+
+	if (ska->type != SOCK_DGRAM)
+	{
+		ska->state=TCP_ESTABLISHED;
+		skb->state=TCP_ESTABLISHED;
+		socka->state=SS_CONNECTED;
+		sockb->state=SS_CONNECTED;
+	}
 	return 0;
 }
 
 static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 {
-	unix_socket *sk=sock->data;
-	unix_socket *newsk, *tsk;
+	unix_socket *sk = sock->sk;
+	unix_socket *newsk = newsock->sk;
+	unix_socket *tsk;
 	struct sk_buff *skb;
 	
-	if(sk->type!=SOCK_STREAM)
-	{
+	if (sock->state != SS_UNCONNECTED)
+		return(-EINVAL);
+	if (!(sock->flags & SO_ACCEPTCON)) 
+		return(-EINVAL);
+
+	if (sock->type!=SOCK_STREAM)
 		return -EOPNOTSUPP;
-	}
-	if(sk->state!=TCP_LISTEN)
-	{
+	if (sk->state!=TCP_LISTEN)
 		return -EINVAL;
-	}
 		
-	newsk=newsock->data;
-	if(sk->protinfo.af_unix.name!=NULL)
+	if (sk->protinfo.af_unix.addr)
 	{
-		newsk->protinfo.af_unix.name=kmalloc(strlen(sk->protinfo.af_unix.name)+1, GFP_KERNEL);
-		if(newsk->protinfo.af_unix.name==NULL)
-			return -ENOMEM;
-		strcpy(newsk->protinfo.af_unix.name, sk->protinfo.af_unix.name);
+		atomic_inc(&sk->protinfo.af_unix.addr->refcnt);
+		newsk->protinfo.af_unix.addr=sk->protinfo.af_unix.addr;
+	}
+	if (sk->protinfo.af_unix.inode)
+	{
+		sk->protinfo.af_unix.inode->i_count++;
+		newsk->protinfo.af_unix.inode=sk->protinfo.af_unix.inode;
 	}
 		
 	do
 	{
-		cli();
 		skb=skb_dequeue(&sk->receive_queue);
 		if(skb==NULL)
 		{
 			if(flags&O_NONBLOCK)
-			{
-				sti();
 				return -EAGAIN;
-			}
 			interruptible_sleep_on(sk->sleep);
 			if(current->signal & ~current->blocked)
-			{
-				sti();
 				return -ERESTARTSYS;
-			}
-			sti();
 		}
-	}
-	while(skb==NULL);
+		if (!(UNIXCB(skb).attr & MSG_SYN))
+		{
+			tsk=skb->sk;
+			tsk->state_change(tsk);
+			kfree_skb(skb, FREE_WRITE);
+			skb = NULL;
+		}
+	} while(skb==NULL);
+
 	tsk=skb->sk;
-	kfree_skb(skb, FREE_WRITE);	/* The buffer is just used as a tag */
 	sk->ack_backlog--;
-	newsk->protinfo.af_unix.other=tsk;
-	tsk->protinfo.af_unix.other=newsk;
+	unix_peer(newsk)=tsk;
+	unix_peer(tsk)=newsk;
 	tsk->state=TCP_ESTABLISHED;
 	newsk->state=TCP_ESTABLISHED;
-	newsk->protinfo.af_unix.locks++;	/* Swap lock over */
-	sk->protinfo.af_unix.locks--;	/* Locked to child socket not master */
-	tsk->protinfo.af_unix.locks++;	/* Back lock */
-	sti();
+	memcpy(&newsk->peercred, UNIXCREDS(skb), sizeof(struct ucred));
+	tsk->peercred.pid = current->pid;
+	tsk->peercred.uid = current->euid;
+	tsk->peercred.gid = current->egid;
+	unix_lock(newsk);		/* Swap lock over */
+	unix_unlock(sk);		/* Locked to child socket not master */
+	unix_lock(tsk);			/* Back lock */
+	kfree_skb(skb, FREE_WRITE);	/* The buffer is just used as a tag */
 	tsk->state_change(tsk);		/* Wake up any sleeping connect */
 	sock_wake_async(tsk->socket, 0);
 	return 0;
 }
 
+
 static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int *uaddr_len, int peer)
 {
-	unix_socket *sk=sock->data;
+	struct sock *sk = sock->sk;
 	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;
 	
-	if(peer)
+	if (peer)
 	{
-		if(sk->protinfo.af_unix.other==NULL)
+		if (!unix_peer(sk))
 			return -ENOTCONN;
-		sk=sk->protinfo.af_unix.other;
+		sk=unix_peer(sk);
 	}
-	sunaddr->sun_family=AF_UNIX;
-	if(sk->protinfo.af_unix.name==NULL)
+	if (!sk->protinfo.af_unix.addr)
 	{
-		*sunaddr->sun_path=0;
-		*uaddr_len=sizeof(sunaddr->sun_family)+1;
+		sunaddr->sun_family = AF_UNIX;
+		sunaddr->sun_path[0] = 0;
+		*uaddr_len = sizeof(short);
 		return 0;		/* Not bound */
 	}
-	*uaddr_len=sizeof(sunaddr->sun_family)+strlen(sk->protinfo.af_unix.name)+1;
-	strcpy(sunaddr->sun_path,sk->protinfo.af_unix.name);		/* 108 byte limited */
+	*uaddr_len = sk->protinfo.af_unix.addr->len;
+	memcpy(sunaddr, sk->protinfo.af_unix.addr->name, *uaddr_len);
 	return 0;
 }
 
-/*
- *	Copy file descriptors into system space.
- *	Return number copied or negative error code
- */
- 
-static int unix_fd_copy(struct sock *sk, struct cmsghdr *cmsg, struct file **fp)
-{
-	int num=cmsg->cmsg_len-sizeof(struct cmsghdr);
-	int i;
-	int *fdp=(int *)cmsg->cmsg_data;
-
-	num /= sizeof(int);	/* Odd bytes are forgotten in BSD not errored */
-	if (num >= UNIX_MAX_FD)
-		return -EINVAL;
-	
-	/*
-	 *	Verify the descriptors.
-	 */
-	 
-	for(i=0; i< num; i++)
-	{
-		int fd;
-		
-		fd = fdp[i];	
-		if (fd < 0 || fd >= NR_OPEN)
-			return -EBADF;
-		if (current->files->fd[fd]==NULL)
-			return -EBADF;
-	}
-	
-        /* add another reference to these files */
-	for(i=0; i< num; i++)
-	{
-		fp[i]=current->files->fd[fdp[i]];
-		fp[i]->f_count++;
-		unix_inflight(fp[i]);
-	}
-	
-	return num;
-}
-
-/*
- *	Free the descriptors in the array
- */
-
-static void unix_fd_free(struct sock *sk, struct file **fp, int num)
+static void unix_detach_fds(struct scm_cookie *scm, struct sk_buff *skb)
 {
 	int i;
-	for(i=0;i<num;i++)
-	{
-		close_fp(fp[i]);
-		unix_notinflight(fp[i]);
-	}
-}
 
+	scm->fp = UNIXCB(skb).fp;
+	skb->destructor = sock_wfree;
+	UNIXCB(skb).fp = NULL;
 
-/*
- *	Perform the AF_UNIX file descriptor pass out functionality. This
- *	is nasty and messy as is the whole design of BSD file passing.
- */
-
-static void unix_detach_fds(struct sk_buff *skb, struct cmsghdr *cmsg)
-{
-	int i;
-	/* count of space in parent for fds */
-	int cmnum;
-	struct file **fp;
-	int *cmfptr;
-	int fdnum;
-
-	cmfptr = NULL;
-	cmnum = 0;
-	if (cmsg)
-	{
-		cmnum = (cmsg->cmsg_len-sizeof(struct cmsghdr)) / sizeof(int);
-		cmfptr = (int *)&cmsg->cmsg_data;
-	}
-	
-	fdnum = *(int *)skb->h.filp;
-	fp = (struct file **)(skb->h.filp+sizeof(long));
-
-	if (cmnum > fdnum)
-		cmnum = fdnum;
-
-	/*
-	 *	Copy those that fit
-	 */
-	for (i = 0 ; i < cmnum ; i++)
-	{
-		int new_fd = get_unused_fd();
-		if (new_fd < 0)
-			break;
-		current->files->fd[new_fd]=fp[i];
-		*cmfptr++ = new_fd;
-		unix_notinflight(fp[i]);
-	}
-	/*
-	 *	Dump those that don't
-	 */
-	for( ; i < fdnum ; i++)
-	{
-		close_fp(fp[i]);
-		unix_notinflight(fp[i]);
-	}
-	kfree(skb->h.filp);
-	skb->h.filp=NULL;
-
-	/* no need to use destructor */
-	skb->destructor = NULL;
+	for (i=scm->fp->count-1; i>=0; i--)
+		unix_notinflight(scm->fp->fp[i]);
 }
 
 static void unix_destruct_fds(struct sk_buff *skb)
 {
-	unix_detach_fds(skb,NULL);
+	struct scm_cookie scm;
+	memset(&scm, 0, sizeof(scm));
+	unix_detach_fds(&scm, skb);
+	scm_destroy(&scm);
+	sock_wfree(skb);
 }
-	
-/*
- *	Attach the file descriptor array to an sk_buff
- */
-static void unix_attach_fds(int fpnum,struct file **fp,struct sk_buff *skb)
-{
 
-	skb->h.filp = kmalloc(sizeof(long)+fpnum*sizeof(struct file *), 
-							GFP_KERNEL);
-	/* number of descriptors starts block */
-	*(int *)skb->h.filp = fpnum;
-	/* actual  descriptors */
-	memcpy(skb->h.filp+sizeof(long),fp,fpnum*sizeof(struct file *));
+static void unix_attach_fds(struct scm_cookie *scm, struct sk_buff *skb)
+{
+	int i;
+	for (i=scm->fp->count-1; i>=0; i--)
+		unix_inflight(scm->fp->fp[i]);
+	UNIXCB(skb).fp = scm->fp;
 	skb->destructor = unix_destruct_fds;
+	scm->fp = NULL;
 }
+
 
 /*
  *	Send AF_UNIX data.
  */
-		
-static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nonblock, int flags)
+
+static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
+			      struct scm_cookie *scm)
 {
-	unix_socket *sk=sock->data;
+	struct sock *sk = sock->sk;
+	unix_socket *other;
+	struct sockaddr_un *sunaddr=msg->msg_name;
+	int namelen = 0; /* fake GCC */
+	int err;
+	unsigned hash;
+	struct sk_buff *skb;
+
+	if (msg->msg_flags&MSG_OOB)
+		return -EOPNOTSUPP;
+
+	if (msg->msg_flags&~MSG_DONTWAIT)
+		return -EINVAL;
+
+	if (msg->msg_namelen) {
+		namelen = unix_mkname(sunaddr, msg->msg_namelen, &hash);
+		if (namelen < 0)
+			return namelen;
+	} else {
+		sunaddr = NULL;
+		if (!unix_peer(sk))
+			return -ENOTCONN;
+	}
+
+	if (sock->passcred && !sk->protinfo.af_unix.addr)
+		unix_autobind(sock);
+
+	skb = sock_alloc_send_skb(sk, len, 0, msg->msg_flags&MSG_DONTWAIT, &err);
+		
+	if (skb==NULL)
+		return err;
+
+	memcpy(UNIXCREDS(skb), &scm->creds, sizeof(struct ucred));
+	UNIXCB(skb).attr = msg->msg_flags;
+	if (scm->fp)
+		unix_attach_fds(scm, skb);
+
+	memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
+
+	other = unix_peer(sk);
+	if (other && other->dead)
+	{
+		/* Alan said:
+		 *	Check with 1003.1g - what should
+		 *	datagram error
+		 * 
+		 * Pardon, if POSIX says, that we should return
+		 * error here, it is wrong.
+		 * It is the main idea of SOCK_DGRAM sockets,
+		 * they could die and be borned, and clients
+		 * should not care about it.
+		 * If you want SOCK_STREAM semantics,
+		 * use SOCK_STREAM.
+		 *				--ANK
+		 */
+		unix_unlock(other);
+		unix_peer(sk)=NULL;
+		other = NULL;
+		if (sunaddr == NULL) {
+			kfree_skb(skb, FREE_WRITE);
+			return -ECONNRESET;
+		}
+	}
+	if (!other)
+	{
+		other = unix_find_other(sunaddr, namelen, sk->type, hash, &err);
+		
+		if (other==NULL)
+		{
+			kfree_skb(skb, FREE_WRITE);
+			return err;
+		}
+		if (!unix_may_send(sk, other))
+		{
+			unix_unlock(other);
+			kfree_skb(skb, FREE_WRITE);
+			return -EPERM;
+		}
+	}
+
+	skb_queue_tail(&other->receive_queue, skb);
+	other->data_ready(other,len);
+	
+	if (!unix_peer(sk))
+		unix_unlock(other);
+	return len;
+}
+
+		
+static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
+			       struct scm_cookie *scm)
+{
+	struct sock *sk = sock->sk;
 	unix_socket *other;
 	struct sockaddr_un *sunaddr=msg->msg_name;
 	int err,size;
 	struct sk_buff *skb;
 	int limit=0;
 	int sent=0;
-	struct file *fp[UNIX_MAX_FD];
-	/* number of fds waiting to be passed, 0 means either
-	 * no fds to pass or they've already been passed 
-	 */
-	int fpnum=0;
 
-	if(sk->err)
-		return sock_error(sk);
+	if (sock->flags & SO_ACCEPTCON) 
+		return(-EINVAL);
 
-	if(flags&MSG_OOB)
+	if (msg->msg_flags&MSG_OOB)
 		return -EOPNOTSUPP;
-			
-	if(flags)	/* For now */ {
-		return -EINVAL;
-	}
-		
-	if(sk->shutdown&SEND_SHUTDOWN)
-	{
-		send_sig(SIGPIPE,current,0);
-		return -EPIPE;
-	}
-	
-	if(sunaddr!=NULL)
-	{
-		if(sock->type==SOCK_STREAM)
-		{
-			if(sk->state==TCP_ESTABLISHED)
-				return -EISCONN;
-			else
-				return -EOPNOTSUPP;
-		}
-	}
 
-	if(sunaddr==NULL)
-	{
-		if(sk->protinfo.af_unix.other==NULL)
+	if (msg->msg_flags&~MSG_DONTWAIT)
+		return -EINVAL;
+
+	if (msg->msg_namelen) {
+		if (sk->state==TCP_ESTABLISHED)
+			return -EISCONN;
+		else
+			return -EOPNOTSUPP;
+	} else {
+		sunaddr = NULL;
+		if (!unix_peer(sk))
 			return -ENOTCONN;
 	}
 
-	/*
-	 *	A control message has been attached.
-	 */
-	if(msg->msg_control) 
-	{
-		struct cmsghdr *cm = msg->msg_control;
-
-		if(cm==NULL || msg->msg_controllen<sizeof(struct cmsghdr) ||
-		   cm->cmsg_type!=SCM_RIGHTS ||
-		   cm->cmsg_level!=SOL_SOCKET ||
-		   msg->msg_controllen!=cm->cmsg_len)
-		{
-		   	return -EINVAL;
-		}
-
-		fpnum = unix_fd_copy(sk, cm, fp);
-
-		if(fpnum<0) {
-			return fpnum;
-		}
+	if (sk->shutdown&SEND_SHUTDOWN) {
+		send_sig(SIGPIPE,current,0);
+		return -EPIPE;
 	}
 
 	while(sent < len)
@@ -906,23 +1091,17 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		 
 		size=len-sent;
 
-		if(size>(sk->sndbuf-sizeof(struct sk_buff))/2)	/* Keep two messages in the pipe so it schedules better */
-		{
-			if(sock->type==SOCK_DGRAM)
-			{
-				unix_fd_free(sk,fp,fpnum);
-				return -EMSGSIZE;
-			}
+		if (size>(sk->sndbuf-sizeof(struct sk_buff))/2)	/* Keep two messages in the pipe so it schedules better */
 			size=(sk->sndbuf-sizeof(struct sk_buff))/2;
-		}
+
 		/*
 		 *	Keep to page sized kmalloc()'s as various people
 		 *	have suggested. Big mallocs stress the vm too
 		 *	much.
 		 */
-#define MAX_ALLOC (PAGE_SIZE*7/8)
-		if(size > MAX_ALLOC && sock->type!=SOCK_DGRAM)
-			limit = MAX_ALLOC;	/* Fall back to 4K if we can't grab a big buffer this instant */
+
+		if (size > 4000)
+			limit = 4000;	/* Fall back to 4K if we can't grab a big buffer this instant */
 		else
 			limit = 0;	/* Otherwise just grab and wait */
 
@@ -930,16 +1109,12 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		 *	Grab a buffer
 		 */
 		 
-		skb=sock_alloc_send_skb(sk,size,limit,nonblock, &err);
+		skb=sock_alloc_send_skb(sk,size,limit,msg->msg_flags&MSG_DONTWAIT, &err);
 		
-		if(skb==NULL)
+		if (skb==NULL)
 		{
-			unix_fd_free(sk,fp,fpnum);
-			if(sent)
-			{
-				sk->err=-err;
+			if (sent)
 				return sent;
-			}
 			return err;
 		}
 
@@ -952,70 +1127,25 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		 */
 		size = min(size, skb_tailroom(skb));
 
-		skb->sk=sk;
-		skb->free=1;
-		
-		if(fpnum)
-		{
-			unix_attach_fds(fpnum,fp,skb);
-			fpnum=0;
-		}
-		else
-			skb->h.filp=NULL;
+		memcpy(UNIXCREDS(skb), &scm->creds, sizeof(struct ucred));
+		UNIXCB(skb).attr = msg->msg_flags;
+		if (scm->fp)
+			unix_attach_fds(scm, skb);
 
-		memcpy_fromiovec(skb_put(skb,size),msg->msg_iov, size);
+		memcpy_fromiovec(skb_put(skb,size), msg->msg_iov, size);
 
-		cli();
-		if(sunaddr==NULL)
+		other=unix_peer(sk);
+
+		if (other->dead || (sk->shutdown & SEND_SHUTDOWN))
 		{
-			other=sk->protinfo.af_unix.other;
-			if(sock->type==SOCK_DGRAM && other->dead)
-			{
-				other->protinfo.af_unix.locks--;
-				sk->protinfo.af_unix.other=NULL;
-				sock->state=SS_UNCONNECTED;
-				sti();
-				kfree_skb(skb, FREE_WRITE);
-				/*
-				 *	Check with 1003.1g - what should
-				 *	datagram error
-				 */
-				if (!sent)
-					sent = -ECONNRESET;
+			kfree_skb(skb, FREE_WRITE);
+			if(sent)
 				return sent;
-			}
-			/*
-			 *	Stream sockets SIGPIPE
-			 */
-			if(sock->type==SOCK_STREAM && other->dead)
-			{
-				kfree_skb(skb, FREE_WRITE);
-				sti();
-				if(!sent)
-				{
-					send_sig(SIGPIPE,current,0);
-					sent = -EPIPE;
-				}
-				return sent;
-			}
+			send_sig(SIGPIPE,current,0);
+			return -EPIPE;
 		}
-		else
-		{
-			unix_mkname(sunaddr, msg->msg_namelen);
-			other=unix_find_other(sunaddr->sun_path, &err);
-			if(other==NULL)
-			{
-				sti();
-				kfree_skb(skb, FREE_WRITE);
-				if(sent)
-					return sent;
-				else
-					return err;
-			}
-		}
+
 		skb_queue_tail(&other->receive_queue, skb);
-		sti();
-		/* if we sent an fd, only do it once */
 		other->data_ready(other,size);
 		sent+=size;
 	}
@@ -1028,173 +1158,235 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
  
 static void unix_data_wait(unix_socket * sk)
 {
-	/*
-	 *	AF_UNIX sockets get no messages during interrupts, so this
-	 *	is safe without cli/sti.
-	 */
-	if (!skb_peek(&sk->receive_queue)) {
+	if (!skb_peek(&sk->receive_queue))
+	{
 		sk->socket->flags |= SO_WAITDATA;
 		interruptible_sleep_on(sk->sleep);
 		sk->socket->flags &= ~SO_WAITDATA;
 	}
 }
 
-static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, int flags, int *addr_len)
+static int unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, int size,
+			      int flags, struct scm_cookie *scm)
 {
-	unix_socket *sk=sock->data;
-	struct sockaddr_un *sunaddr=msg->msg_name;
+	struct sock *sk = sock->sk;
+	int noblock = flags & MSG_DONTWAIT;
 	struct sk_buff *skb;
-	int copied=0;
-	unsigned char *sp;
-	int len;
-	int num;
-	struct iovec *iov=msg->msg_iov;
-	struct cmsghdr *cm=NULL;
-	int ct=msg->msg_iovlen;
-	int err = 0;
+
+	if (flags&MSG_OOB)
+		return -EOPNOTSUPP;
+
+	msg->msg_namelen = 0;
+
+retry:
+	skb=skb_dequeue(&sk->receive_queue);
+
+	if (skb==NULL)
+	{
+		if (sk->shutdown & RCV_SHUTDOWN)
+			return 0;
+		if (noblock)
+			return -EAGAIN;
+		unix_data_wait(sk);
+		if (current->signal & ~current->blocked)
+			return -ERESTARTSYS;
+		goto retry;
+	}
+
+	if (msg->msg_name)
+	{
+		if (skb->sk->protinfo.af_unix.addr)
+		{
+			memcpy(msg->msg_name, skb->sk->protinfo.af_unix.addr->name,
+			       skb->sk->protinfo.af_unix.addr->len);
+			msg->msg_namelen=skb->sk->protinfo.af_unix.addr->len;
+		}
+		else
+			msg->msg_namelen=sizeof(short);
+	}
+
+	if (size > skb->len)
+		size = skb->len;
+	else if (size < skb->len)
+		msg->msg_flags |= MSG_TRUNC;
+
+	if (memcpy_toiovec(msg->msg_iov, skb->data, size)) {
+		skb_queue_head(&sk->receive_queue, skb);
+		return -EFAULT;
+	}
+
+	scm->creds = *UNIXCREDS(skb);
+
+	if (!(flags & MSG_PEEK))
+	{
+		if (UNIXCB(skb).fp)
+			unix_detach_fds(scm, skb);
+		kfree_skb(skb, FREE_WRITE);
+		return size;
+	} else 
+		/* It is questionable: on PEEK we could:
+		   - do not return fds - good, but too simple 8)
+		   - return fds, and do not return them on read (old strategy,
+		     apparently wrong)
+		   - clone fds (I choosed it for now, it is the most universal
+		     solution)
+		*/
+		if (UNIXCB(skb).fp)
+			scm->fp = scm_fp_dup(UNIXCB(skb).fp);
+
+	skb_queue_head(&sk->receive_queue, skb);
+	return size;
+}
+
+
+static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size,
+			       int flags, struct scm_cookie *scm)
+{
+	struct sock *sk = sock->sk;
+	int noblock = flags & MSG_DONTWAIT;
+	struct sockaddr_un *sunaddr=msg->msg_name;
+	int copied = 0;
+	int check_creds = 0;
 	int target = 1;
 
-	if(flags&MSG_OOB)
+	if (sock->flags & SO_ACCEPTCON) 
+		return(-EINVAL);
+
+	if (flags&MSG_OOB)
 		return -EOPNOTSUPP;
 	if(flags&MSG_WAITALL)
 		target = size;
 		
 		
-	if(addr_len)
-		*addr_len=0;
-		
-	if(msg->msg_control) 
-	{
-		cm=msg->msg_control;
+	msg->msg_namelen = 0;
 
-		if(msg->msg_controllen<sizeof(struct cmsghdr)
+	/* Lock the socket to prevent queue disordering
+	 * while sleeps in memcpy_tomsg
+	 */
+
+	down(&sk->protinfo.af_unix.readsem);
+
+	do
+	{
+		int chunk;
+		struct sk_buff *skb;
+
+		skb=skb_dequeue(&sk->receive_queue);
+		if (skb==NULL)
+		{
+			if (copied >= target)
+				break;
 #if 0
-/*		investigate this further -- Stevens example doesn't seem to care */
-		||
-		   cm->cmsg_type!=SCM_RIGHTS ||
-		   cm->cmsg_level!=SOL_SOCKET ||
-		   msg->msg_controllen!=cm->cmsg_len
+			/* ANK: sk->err is never set for UNIX */
+			if (sk->err) 
+				return sock_error(sk);
 #endif
-		)
-		{
-			printk(KERN_DEBUG "unix_recvmsg: Bad msg_control\n");
-		   	return -EINVAL;
+			if (sk->shutdown & RCV_SHUTDOWN)
+				break;
+			up(&sk->protinfo.af_unix.readsem);
+			if (noblock)
+				return -EAGAIN;
+			unix_data_wait(sk);
+			if (current->signal & ~current->blocked)
+				return -ERESTARTSYS;
+			down(&sk->protinfo.af_unix.readsem);
+			continue;
 		}
-	}
-	
-	down(&sk->protinfo.af_unix.readsem);		/* Lock the socket */
-	while(ct--)
-	{
-		int done=0;
-		sp=iov->iov_base;
-		len=iov->iov_len;
-		iov++;
-		
-		while(done<len)
+
+		/* Never glue messages from different writers */
+		if (check_creds &&
+		    memcmp(UNIXCREDS(skb), &scm->creds, sizeof(scm->creds)) != 0)
 		{
-			if (copied && (flags & MSG_PEEK))
-				goto out;
-			if (copied == size)
-				goto out;
-			skb=skb_dequeue(&sk->receive_queue);
-			if(skb==NULL)
+			skb_queue_head(&sk->receive_queue, skb);
+			break;
+		}
+
+		/* Copy address just once */
+		if (sunaddr)
+		{
+			if (skb->sk->protinfo.af_unix.addr)
 			{
-				up(&sk->protinfo.af_unix.readsem);
-
-				if(copied >= target)
-					return copied;
-
-				/*
-				 *	POSIX checking order...
-				 */
-				
-				if(sk->err)
-					return sock_error(sk);
-				if(sk->shutdown & RCV_SHUTDOWN)
-					return copied;
-				
-				if(current->signal & ~current->blocked)
-					return -ERESTARTSYS;
-				if(noblock)
-					return -EAGAIN;
-
-				unix_data_wait(sk);
-				down(&sk->protinfo.af_unix.readsem);
-				continue;
+				memcpy(sunaddr, skb->sk->protinfo.af_unix.addr->name,
+				       skb->sk->protinfo.af_unix.addr->len);
+				msg->msg_namelen=skb->sk->protinfo.af_unix.addr->len;
 			}
-			if(msg->msg_name!=NULL)
-			{
-				sunaddr->sun_family=AF_UNIX;
-				if(skb->sk->protinfo.af_unix.name)
-				{
-					memcpy(sunaddr->sun_path, skb->sk->protinfo.af_unix.name, 108);
-					if(addr_len)
-						*addr_len=strlen(sunaddr->sun_path)+sizeof(short);
-				}
-				else
-					if(addr_len)
-						*addr_len=sizeof(short);
-			}
+			else
+				msg->msg_namelen=sizeof(short);
+			sunaddr = NULL;
+		}
 
-			num=skb->len;
-			if(num>len-done)
-			{
-				num=len-done;
-				msg->msg_flags|=MSG_TRUNC;
-			}
-			err = copy_to_user(sp, skb->data, num);
+		chunk = min(skb->len, size);
+		memcpy_toiovec(msg->msg_iov, skb->data, chunk);
+		copied += chunk;
+		size -= chunk;
 
-			if (err)
-			{
-				goto out;
-			}
-			
-			if (skb->h.filp!=NULL)
-				unix_detach_fds(skb,cm);
+		/* Copy credentials */
+		scm->creds = *UNIXCREDS(skb);
+		check_creds = 1;
 
-			copied+=num;
-			done+=num;
-			sp+=num;
-			if (!(flags & MSG_PEEK))
-				skb_pull(skb, num);
+		/* Mark read part of skb as used */
+		if (!(flags & MSG_PEEK))
+		{
+			skb_pull(skb, chunk);
+
+			if (UNIXCB(skb).fp)
+				unix_detach_fds(scm, skb);
+
 			/* put the skb back if we didn't use it up.. */
-			if (skb->len) {
+			if (skb->len)
+			{
 				skb_queue_head(&sk->receive_queue, skb);
-				continue;
+				break;
 			}
-			kfree_skb(skb, FREE_WRITE);
-			if(sock->type==SOCK_DGRAM || cm)
-				goto out;
-		}
-	}
-out:
-	up(&sk->protinfo.af_unix.readsem);
 
-	return err ? -EFAULT : copied;
+			kfree_skb(skb, FREE_WRITE);
+
+			if (scm->fp)
+				break;
+		}
+		else
+		{
+			/* It is questionable,
+			   see note in unix_dgram_recvmsg.
+			 */
+			if (UNIXCB(skb).fp)
+				scm->fp = scm_fp_dup(UNIXCB(skb).fp);
+
+			/* put message back and return */
+			skb_queue_head(&sk->receive_queue, skb);
+			break;
+		}
+	} while (size);
+
+	up(&sk->protinfo.af_unix.readsem);
+	return copied;
 }
 
 static int unix_shutdown(struct socket *sock, int mode)
 {
-	unix_socket *sk=(unix_socket *)sock->data;
-	unix_socket *other=sk->protinfo.af_unix.other;
-	if(mode&SEND_SHUTDOWN)
+	struct sock *sk = sock->sk;
+	unix_socket *other=unix_peer(sk);
+
+	if (mode&SEND_SHUTDOWN)
 	{
 		sk->shutdown|=SEND_SHUTDOWN;
 		sk->state_change(sk);
-		if(other)
+		if(other && sk->type == SOCK_STREAM && other->state != TCP_LISTEN)
 		{
-			other->shutdown|=RCV_SHUTDOWN;
+			if (unix_our_peer(sk, other))
+				other->shutdown|=RCV_SHUTDOWN;
 			other->state_change(other);
 		}
 	}
-	other=sk->protinfo.af_unix.other;
+	other=unix_peer(sk);
 	if(mode&RCV_SHUTDOWN)
 	{
 		sk->shutdown|=RCV_SHUTDOWN;
 		sk->state_change(sk);
-		if(other)
+		if(other && sk->type != SOCK_DGRAM && other->state != TCP_LISTEN)
 		{
-			other->shutdown|=SEND_SHUTDOWN;
+			if (unix_our_peer(sk, other))
+				other->shutdown|=SEND_SHUTDOWN;
 			other->state_change(other);
 		}
 	}
@@ -1202,14 +1394,9 @@ static int unix_shutdown(struct socket *sock, int mode)
 }
 
 		
-static int unix_select(struct socket *sock,  int sel_type, select_table *wait)
-{
-	return datagram_select(sock->data,sel_type,wait);
-}
-
 static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
-	unix_socket *sk=sock->data;
+	struct sock *sk = sock->sk;
 	long amount=0;
 			
 	switch(cmd)
@@ -1247,25 +1434,35 @@ static int unix_get_info(char *buffer, char **start, off_t offset, int length, i
 	off_t pos=0;
 	off_t begin=0;
 	int len=0;
-	unix_socket *s=unix_socket_list;
+	int i;
+	unix_socket *s;
 	
 	len+= sprintf(buffer,"Num       RefCount Protocol Flags    Type St "
 	    "Inode Path\n");
 	
-	while(s!=NULL)
+	forall_unix_sockets (i,s)
 	{
 		len+=sprintf(buffer+len,"%p: %08X %08X %08lX %04X %02X %5ld",
 			s,
-			s->protinfo.af_unix.locks,
+			s->users,
 			0,
-			s->socket->flags,
-			s->socket->type,
-			s->socket->state,
-			s->socket->inode ? s->socket->inode->i_ino : 0);
-		if(s->protinfo.af_unix.name!=NULL)
-			len+=sprintf(buffer+len, " %s\n", s->protinfo.af_unix.name);
-		else
-			buffer[len++]='\n';
+			s->socket ? s->socket->flags : 0,
+			s->type,
+			s->socket ? s->socket->state : 0,
+			s->socket ? s->socket->inode->i_ino : 0);
+
+		if (s->protinfo.af_unix.addr)
+		{
+			buffer[len++] = ' ';
+			memcpy(buffer+len, s->protinfo.af_unix.addr->name->sun_path,
+			       s->protinfo.af_unix.addr->len-sizeof(short));
+			if (!UNIX_ABSTRACT(s))
+				len--;
+			else
+				buffer[len] = '@';
+			len += s->protinfo.af_unix.addr->len - sizeof(short);
+		}
+		buffer[len++]='\n';
 		
 		pos=begin+len;
 		if(pos<offset)
@@ -1274,9 +1471,9 @@ static int unix_get_info(char *buffer, char **start, off_t offset, int length, i
 			begin=pos;
 		}
 		if(pos>offset+length)
-			break;
-		s=s->next;
+			goto done;
 	}
+done:
 	*start=buffer+(offset-begin);
 	len-=(offset-begin);
 	if(len>length)
@@ -1285,26 +1482,51 @@ static int unix_get_info(char *buffer, char **start, off_t offset, int length, i
 }
 #endif
 
-struct proto_ops unix_proto_ops = {
+struct proto_ops unix_stream_ops = {
 	AF_UNIX,
 	
-	unix_create,
 	unix_dup,
 	unix_release,
 	unix_bind,
-	unix_connect,
+	unix_stream_connect,
 	unix_socketpair,
 	unix_accept,
 	unix_getname,
-	unix_select,
+	datagram_select,
 	unix_ioctl,
 	unix_listen,
 	unix_shutdown,
-	unix_setsockopt,
-	unix_getsockopt,
+	NULL,
+	NULL,
 	unix_fcntl,
-	unix_sendmsg,
-	unix_recvmsg
+	unix_stream_sendmsg,
+	unix_stream_recvmsg
+};
+
+struct proto_ops unix_dgram_ops = {
+	AF_UNIX,
+	
+	unix_dup,
+	unix_release,
+	unix_bind,
+	unix_dgram_connect,
+	unix_socketpair,
+	NULL,
+	unix_getname,
+	datagram_select,
+	unix_ioctl,
+	NULL,
+	unix_shutdown,
+	NULL,
+	NULL,
+	unix_fcntl,
+	unix_dgram_sendmsg,
+	unix_dgram_recvmsg
+};
+
+struct net_proto_family unix_family_ops = {
+	AF_UNIX,
+	unix_create
 };
 
 #ifdef CONFIG_PROC_FS
@@ -1316,10 +1538,17 @@ static struct proc_dir_entry proc_net_unix = {
 };
 #endif
 
+
 void unix_proto_init(struct net_proto *pro)
 {
+	struct sk_buff *dummy_skb;
 	printk(KERN_INFO "NET3: Unix domain sockets 0.14 for Linux NET3.037.\n");
-	sock_register(unix_proto_ops.family, &unix_proto_ops);
+	if (sizeof(struct unix_skb_parms) > sizeof(dummy_skb->cb))
+	{
+		printk(KERN_CRIT "unix_proto_init: panic\n");
+		return;
+	}
+	sock_register(&unix_family_ops);
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_unix);
 #endif
