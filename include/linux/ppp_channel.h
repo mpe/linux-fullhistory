@@ -61,8 +61,8 @@ extern int ppp_register_channel(struct ppp_channel *);
 /* Detach a channel from its PPP unit (e.g. on hangup). */
 extern void ppp_unregister_channel(struct ppp_channel *);
 
-/* Get the channel number for a channel */
-extern int ppp_channel_index(struct ppp_channel *);
+/* Get the unit number associated with a channel */
+extern int ppp_unit_number(struct ppp_channel *);
 
 /*
  * SMP locking notes:

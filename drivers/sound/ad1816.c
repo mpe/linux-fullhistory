@@ -30,6 +30,7 @@
  *	Christoph Hellwig: Added isapnp support			2000/03/15
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/isapnp.h>

@@ -16,4 +16,8 @@
 # define PR_UNALIGN_NOPRINT	1	/* silently fix up unaligned user accesses */
 # define PR_UNALIGN_SIGBUS	2	/* generate SIGBUS on unaligned user access */
 
+/* Get/set whether or not to drop capabilities on setuid() away from uid 0 */
+#define PR_GET_KEEPCAPS   7
+#define PR_SET_KEEPCAPS   8
+
 #endif /* _LINUX_PRCTL_H */

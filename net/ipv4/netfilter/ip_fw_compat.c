@@ -2,7 +2,6 @@
    to look as much like the 2.2 infrastructure as possible. */
 struct notifier_block;
 
-#include <linux/config.h>
 #include <linux/netfilter_ipv4.h>
 #include <linux/ip.h>
 #include <net/icmp.h>

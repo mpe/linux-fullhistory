@@ -207,14 +207,12 @@ extern struct module __this_module;
 #define MOD_DEC_USE_COUNT	__MOD_DEC_USE_COUNT(THIS_MODULE)
 #define MOD_IN_USE		__MOD_IN_USE(THIS_MODULE)
 
-#ifndef __NO_VERSION__
 #include <linux/version.h>
-const char __module_kernel_version[] __attribute__((section(".modinfo"))) =
+static const char __module_kernel_version[] __attribute__((section(".modinfo"))) =
 "kernel_version=" UTS_RELEASE;
 #ifdef MODVERSIONS
-const char __module_using_checksums[] __attribute__((section(".modinfo"))) =
+static const char __module_using_checksums[] __attribute__((section(".modinfo"))) =
 "using_checksums=1";
-#endif
 #endif
 
 #else /* MODULE */

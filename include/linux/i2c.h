@@ -23,7 +23,7 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and
    Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c.h,v 1.36 2000/01/18 23:54:07 frodo Exp $ */
+/* $Id: i2c.h,v 1.37 2000/02/15 17:57:27 frodo Exp $ */
 
 #ifndef I2C_H
 #define I2C_H
@@ -441,6 +441,7 @@ union i2c_smbus_data {
 #define I2C_TENBIT	0x0704	/* 0 for 7 bit addrs, != 0 for 10 bit	*/
 
 #define I2C_FUNCS	0x0705	/* Get the adapter functionality */
+#define I2C_RDWR	0x0707	/* Combined R/W transfer (one stop only)*/
 #if 0
 #define I2C_ACK_TEST	0x0710	/* See if a slave is at a specific adress */
 #endif
@@ -451,7 +452,6 @@ union i2c_smbus_data {
 #define I2C_UDELAY	0x0705	/* set delay in microsecs between each	*/
 				/* written byte (except address)	*/
 #define I2C_MDELAY	0x0706	/* millisec delay between written bytes */
-
 
 /* ----- I2C-DEV: char device interface stuff ------------------------- */
 

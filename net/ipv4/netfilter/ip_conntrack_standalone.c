@@ -10,7 +10,6 @@
 #ifdef MODULE
 #define EXPORT_SYMTAB
 #endif
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/ip.h>
 #include <linux/netfilter.h>

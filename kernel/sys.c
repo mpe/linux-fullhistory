@@ -336,12 +336,23 @@ asmlinkage long sys_setgid(gid_t gid)
  *  never happen.
  *
  *  -astor 
+ *
+ * cevans - New behaviour, Oct '99
+ * A process may, via prctl(), elect to keep its capabilities when it
+ * calls setuid() and switches away from uid==0. Both permitted and
+ * effective sets will be retained.
+ * Without this change, it was impossible for a daemon to drop only some
+ * of its privilege. The call to setuid(!=0) would drop all privileges!
+ * Keeping uid 0 is not an option because uid 0 owns too many vital
+ * files..
+ * Thanks to Olaf Kirch and Peter Benie for spotting this.
  */
 extern inline void cap_emulate_setxuid(int old_ruid, int old_euid, 
 				       int old_suid)
 {
 	if ((old_ruid == 0 || old_euid == 0 || old_suid == 0) &&
-	    (current->uid != 0 && current->euid != 0 && current->suid != 0)) {
+	    (current->uid != 0 && current->euid != 0 && current->suid != 0) &&
+	    !current->keep_capabilities) {
 		cap_clear(current->cap_permitted);
 		cap_clear(current->cap_effective);
 	}
@@ -1073,6 +1084,17 @@ asmlinkage long sys_prctl(int option, unsigned long arg2, unsigned long arg3,
 #endif
 			break;
 
+		case PR_GET_KEEPCAPS:
+			if (current->keep_capabilities)
+				error = 1;
+			break;
+		case PR_SET_KEEPCAPS:
+			if (arg2 != 0 && arg2 != 1) {
+				error = -EINVAL;
+				break;
+			}
+			current->keep_capabilities = arg2;
+			break;
 		default:
 			error = -EINVAL;
 			break;

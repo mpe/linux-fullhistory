@@ -89,15 +89,29 @@ ioctl(file,I2C_TENBIT,long select)
 ioctl(file,I2C_FUNCS,unsigned long *funcs)
   Gets the adapter functionality and puts it in *funcs.
 
+ioctl(file,I2C_RDWR,struct i2c_ioctl_rdwr_data *msgset)
+
+  Do combined read/write transaction without stop in between.
+  The argument is a pointer to a struct i2c_ioctl_rdwr_data {
+
+      struct i2c_msg *msgs;  /* ptr to array of simple messages */
+      int nmsgs;             /* number of messages to exchange */
+  }
+
+  The msgs[] themselves contain further pointers into data buffers.
+  The function will write or read data to or from that buffers depending
+  on whether the I2C_M_RD flag is set in a particular message or not.
+  The slave address and whether to use ten bit address mode has to be
+  set in each message, overriding the values set with the above ioctl's.
+
+
 Other values are NOT supported at this moment, except for I2C_SMBUS,
 which you should never directly call; instead, use the access functions
 below.
 
 You can do plain i2c transactions by using read(2) and write(2) calls.
-Combined read/write transactions are not yet supported (they will in
-the future, through an ioctl). You do not need to pass the address
-byte; instead, set it through ioctl I2C_SLAVE before you try to 
-access the device.
+You do not need to pass the address byte; instead, set it through
+ioctl I2C_SLAVE before you try to access the device.
 
 You can do SMBus level transactions (see documentation file smbus-protocol 
 for details) through the following functions:

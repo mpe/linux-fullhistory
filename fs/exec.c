@@ -716,6 +716,8 @@ void compute_creds(struct linux_binprm *bprm)
         if (current->euid != current->uid || current->egid != current->gid ||
 	    !cap_issubset(new_permitted, current->cap_permitted))
                 current->dumpable = 0;
+
+	current->keep_capabilities = 0;
 }
 
 

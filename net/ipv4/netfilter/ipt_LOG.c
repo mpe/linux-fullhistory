@@ -9,7 +9,6 @@
 #include <net/udp.h>
 #include <net/tcp.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
-#include <linux/spinlock.h>
 
 struct in_device;
 #include <net/route.h>

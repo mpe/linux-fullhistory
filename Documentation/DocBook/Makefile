@@ -37,7 +37,7 @@ kernel-api.sgml: kernel-api.tmpl
 
 clean:
 	rm -f core *~
-	rm -f $BOOKS
+	rm -f $(BOOKS)
 
 include $(TOPDIR)/Rules.make
 

@@ -8510,7 +8510,7 @@ Linux telephony support
 CONFIG_PHONE
   This option enable the kernel to manage telephony cards.
 
-  There is very few supported cards at this moment.
+  There are very few supported cards at this moment.
 
   If unsure, say N.
 

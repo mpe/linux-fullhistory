@@ -326,6 +326,7 @@ struct task_struct {
 	int ngroups;
 	gid_t	groups[NGROUPS];
 	kernel_cap_t   cap_effective, cap_inheritable, cap_permitted;
+	int keep_capabilities:1;
 	struct user_struct *user;
 /* limits */
 	struct rlimit rlim[RLIM_NLIMITS];
@@ -414,6 +415,7 @@ struct task_struct {
     cap_effective:	CAP_INIT_EFF_SET,				\
     cap_inheritable:	CAP_INIT_INH_SET,				\
     cap_permitted:	CAP_FULL_SET,					\
+    keep_capabilities:	0,						\
     rlim:		INIT_RLIMITS,					\
     comm:		"swapper",					\
     thread:		INIT_THREAD,					\

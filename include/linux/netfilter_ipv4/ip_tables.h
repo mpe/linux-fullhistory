@@ -318,7 +318,6 @@ ipt_get_target(struct ipt_entry *e)
  */
 #ifdef __KERNEL__
 
-#include <linux/config.h>
 #include <linux/init.h>
 extern void ipt_init(void) __init;
 

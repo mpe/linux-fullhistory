@@ -20,7 +20,7 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi>.
    All SMBus-related things are written by Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c-core.c,v 1.50 2000/02/02 23:29:54 frodo Exp $ */
+/* $Id: i2c-core.c,v 1.52 2000/02/27 10:43:29 frodo Exp $ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -101,6 +101,12 @@ static struct file_operations i2cproc_operations = {
 	read:		i2cproc_bus_read,
 };
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,48))
+static struct inode_operations i2cproc_inode_operations = {
+	&i2cproc_operations
+};
+#endif
+
 static int i2cproc_initialized = 0;
 
 #else /* undef CONFIG_PROC_FS */
@@ -159,7 +165,12 @@ int i2c_add_adapter(struct i2c_adapter *adap)
 			       name);
 			return -ENOENT;
 		}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,48))
 		proc_entry->proc_fops = &i2cproc_operations;
+#else
+		proc_entry->ops = &i2cproc_inode_operations;
+#endif
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,27))
 		proc_entry->owner = THIS_MODULE;
 #else

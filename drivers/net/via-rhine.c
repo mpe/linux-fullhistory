@@ -420,7 +420,7 @@ static int __devinit via_rhine_init_one (struct pci_dev *pdev,
 	if (via_rhine_chip_info[chip_id].flags & PCI_USES_MASTER)
 		pci_set_master (pdev);
 
-	dev = init_etherdev(NULL, 0);
+	dev = init_etherdev(NULL, sizeof(*np));
 	if (dev == NULL) {
 		printk (KERN_ERR "init_ethernet failed for card #%d\n",
 			card_idx);
@@ -466,10 +466,7 @@ static int __devinit via_rhine_init_one (struct pci_dev *pdev,
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 
-	np = (void *)(((long)kmalloc(sizeof(*np), GFP_KERNEL) + 31) & ~31);
-	if(np == NULL)
-		goto err_out_np_failed;
-	dev->priv = np;
+	np = dev->priv;
 	spin_lock_init (&np->lock);
 	np->chip_id = chip_id;
 
@@ -521,7 +518,6 @@ static int __devinit via_rhine_init_one (struct pci_dev *pdev,
 
 	return 0;
 
-err_out_np_failed:
 #ifndef VIA_USE_IO
 /* note this is ifdef'd because the ioremap is ifdef'd...
  * so additional exit conditions above this must move
@@ -1177,7 +1173,6 @@ static void __devexit via_rhine_remove_one (struct pci_dev *pdev)
 	iounmap((char *)(dev->base_addr));
 #endif
 
-	kfree(dev->priv);
 	kfree(dev);
 }
 

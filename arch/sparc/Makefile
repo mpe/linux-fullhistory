@@ -49,6 +49,8 @@ SUBDIRS += arch/sparc/boot
 CORE_FILES_NO_BTFIX := $(CORE_FILES)
 CORE_FILES += arch/sparc/boot/btfix.o
 
+export	CORE_FILES_NO_BTFIX
+
 archclean:
 	rm -f $(TOPDIR)/vmlinux.aout
 	-$(MAKE) -C arch/sparc/boot clean

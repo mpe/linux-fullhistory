@@ -5,8 +5,6 @@
 #ifndef __LINUX_FIREWALL_H
 #define __LINUX_FIREWALL_H
 
-#include <linux/config.h>
-
 /*
  *	Definitions for loadable firewall modules
  */

@@ -3,9 +3,9 @@ PATCHLEVEL = 3
 SUBLEVEL = 99
 EXTRAVERSION = -pre2
 
-ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
+KERNELRELEASE=$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
 
-.EXPORT_ALL_VARIABLES:
+ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
 CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
@@ -15,22 +15,33 @@ TOPDIR	:= $(shell if [ "$$PWD" != "" ]; then echo $$PWD; else pwd; fi)
 HPATH   	= $(TOPDIR)/include
 FINDHPATH	= $(HPATH)/asm $(HPATH)/linux $(HPATH)/scsi $(HPATH)/net
 
-HOSTCC  	=gcc
-HOSTCFLAGS	=-Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
+HOSTCC  	= gcc
+HOSTCFLAGS	= -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
 
 CROSS_COMPILE 	=
 
-AS	=$(CROSS_COMPILE)as
-LD	=$(CROSS_COMPILE)ld
-CC	=$(CROSS_COMPILE)gcc
-CPP	=$(CC) -E
-AR	=$(CROSS_COMPILE)ar
-NM	=$(CROSS_COMPILE)nm
-STRIP	=$(CROSS_COMPILE)strip
-OBJCOPY	=$(CROSS_COMPILE)objcopy
-OBJDUMP	=$(CROSS_COMPILE)objdump
-MAKE	=make
-GENKSYMS=/sbin/genksyms
+#
+# Include the make variables (CC, etc...)
+#
+
+AS		= $(CROSS_COMPILE)as
+LD		= $(CROSS_COMPILE)ld
+CC		= $(CROSS_COMPILE)gcc
+CPP		= $(CC) -E
+AR		= $(CROSS_COMPILE)ar
+NM		= $(CROSS_COMPILE)nm
+STRIP		= $(CROSS_COMPILE)strip
+OBJCOPY		= $(CROSS_COMPILE)objcopy
+OBJDUMP		= $(CROSS_COMPILE)objdump
+MAKE		= make
+MAKEFILES	= $(TOPDIR)/.config
+GENKSYMS	= /sbin/genksyms
+MODFLAGS	= -DMODULE
+PERL		= perl
+
+export	VERSION PATCHLEVEL SUBLEVEL EXTRAVERSION KERNELRELEASE ARCH \
+	CONFIG_SHELL TOPDIR HPATH HOSTCC HOSTCFLAGS CROSS_COMPILE AS LD CC \
+	CPP AR NM STRIP OBJCOPY OBJDUMP MAKE MAKEFILES GENKSYMS MODFLAGS PERL
 
 all:	do-it-all
 
@@ -38,6 +49,7 @@ all:	do-it-all
 # Make "config" the default target if there is no configuration file or
 # "depend" the target if there is no top-level dependency information.
 #
+
 ifeq (.config,$(wildcard .config))
 include .config
 ifeq (.depend,$(wildcard .depend))
@@ -53,35 +65,17 @@ do-it-all:	config
 endif
 
 #
-# ROOT_DEV specifies the default root-device when making the image.
-# This can be either FLOPPY, CURRENT, /dev/xxxx or empty, in which case
-# the default of FLOPPY is used by 'build'.
-#
-
-ROOT_DEV = CURRENT
-
-KERNELRELEASE=$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
-
-#
 # INSTALL_PATH specifies where to place the updated kernel and system map
 # images.  Uncomment if you want to place them anywhere other than root.
+#
 
-#INSTALL_PATH=/boot
+#export	INSTALL_PATH=/boot
 
 #
 # INSTALL_MOD_PATH specifies a prefix to MODLIB for module directory 
 # relocations required by build roots.  This is not defined in the
 # makefile but the arguement can be passed to make if needed.
 #
-
-#
-# If you want to preset the SVGA mode, uncomment the next line and
-# set SVGA_MODE to whatever number you want.
-# Set it to -DSVGA_MODE=NORMAL_VGA if you just want the EGA/VGA mode.
-# The number is the same as you would ordinarily press at bootup.
-#
-
-SVGA_MODE=	-DSVGA_MODE=NORMAL_VGA
 
 #
 # standard CFLAGS
@@ -96,15 +90,34 @@ endif
 CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
 AFLAGS := $(CPPFLAGS)
 
+export	CPPFLAGS CFLAGS AFLAGS
+
+#
+# ROOT_DEV specifies the default root-device when making the image.
+# This can be either FLOPPY, CURRENT, /dev/xxxx or empty, in which case
+# the default of FLOPPY is used by 'build'.
+# This is i386 specific.
+#
+
+export ROOT_DEV = CURRENT
+
+#
+# If you want to preset the SVGA mode, uncomment the next line and
+# set SVGA_MODE to whatever number you want.
+# Set it to -DSVGA_MODE=NORMAL_VGA if you just want the EGA/VGA mode.
+# The number is the same as you would ordinarily press at bootup.
+# This is i386 specific.
+#
+
+export SVGA_MODE = -DSVGA_MODE=NORMAL_VGA
+
 #
 # if you want the RAM disk device, define this to be the
 # size in blocks.
+# This is i386 specific.
 #
 
-#RAMDISK = -DRAMDISK=512
-
-# Include the make variables (CC, etc...)
-#
+#export RAMDISK = -DRAMDISK=512
 
 CORE_FILES	=kernel/kernel.o mm/mm.o fs/fs.o ipc/ipc.o
 NETWORKS	=net/network.a
@@ -165,6 +178,9 @@ DRIVERS-$(CONFIG_PHONE) += drivers/telephony/telephony.a
 DRIVERS += $(DRIVERS-y)
 
 include arch/$(ARCH)/Makefile
+
+export	CORE_FILES NETWORKS DRIVERS LIBS HEAD LDFLAGS LIBS LINKFLAGS \
+	MAKEBOOT ASFLAGS
 
 # use '-fno-strict-aliasing', but only if the compiler can take it
 CFLAGS += $(shell if $(CC) -fno-strict-aliasing -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strict-aliasing"; fi)
@@ -276,7 +292,6 @@ tags: dummy
 	find include -type d \( -name "asm-*" -o -name config \) -prune -o -name '*.h' -print | xargs ctags $$CTAGSF -a && \
 	find $(SUBDIRS) init -name '*.c' | xargs ctags $$CTAGSF -a
 
-MODFLAGS += -DMODULE
 ifdef CONFIG_MODULES
 ifdef CONFIG_MODVERSIONS
 MODFLAGS += -DMODVERSIONS -include $(HPATH)/linux/modversions.h
@@ -405,20 +420,21 @@ dep-files: scripts/mkdep archdep include/linux/version.h
 	scripts/mkdep `find $(FINDHPATH) -follow -name \*.h ! -name modversions.h -print` > .hdepend
 	$(MAKE) $(patsubst %,_sfdep_%,$(SUBDIRS)) _FASTDEP_ALL_SUB_DIRS="$(SUBDIRS)"
 
-MODVERFILE :=
-
 ifdef CONFIG_MODVERSIONS
 MODVERFILE := $(TOPDIR)/include/linux/modversions.h
+else
+MODVERFILE :=
 endif
+export	MODVERFILE
 
 depend dep: dep-files $(MODVERFILE)
 
 # make checkconfig: Prune 'scripts' directory to avoid "false positives".
 checkconfig:
-	find * -name '*.[hcS]' -type f -print | grep -v scripts/ | sort | xargs perl -w scripts/checkconfig.pl
+	find * -name '*.[hcS]' -type f -print | grep -v scripts/ | sort | xargs $(PERL) -w scripts/checkconfig.pl
 
 checkhelp:
-	perl -w scripts/checkhelp.pl `find * -name [cC]onfig.in -print`
+	$(PERL) -w scripts/checkhelp.pl `find * -name [cC]onfig.in -print`
 
 ifdef CONFIGURATION
 ..$(CONFIGURATION):

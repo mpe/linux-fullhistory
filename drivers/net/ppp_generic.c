@@ -1653,13 +1653,13 @@ ppp_register_channel(struct ppp_channel *chan)
 }
 
 /*
- * Return the index of a channel.
+ * Return the unit number associated with a channel.
  */
-int ppp_channel_index(struct ppp_channel *chan)
+int ppp_unit_number(struct ppp_channel *chan)
 {
 	struct channel *pch = chan->ppp;
 
-	return pch->file.index;
+	return pch->ppp->file.index;
 }
 
 /*
@@ -2319,7 +2319,7 @@ module_exit(ppp_cleanup);
 
 EXPORT_SYMBOL(ppp_register_channel);
 EXPORT_SYMBOL(ppp_unregister_channel);
-EXPORT_SYMBOL(ppp_channel_index);
+EXPORT_SYMBOL(ppp_unit_number);
 EXPORT_SYMBOL(ppp_input);
 EXPORT_SYMBOL(ppp_input_error);
 EXPORT_SYMBOL(ppp_output_wakeup);

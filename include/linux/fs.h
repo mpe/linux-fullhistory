@@ -731,7 +731,6 @@ struct file_system_type {
 	struct file_system_type * next;
 };
 
-#ifdef MODULE
 #define DECLARE_FSTYPE(var,type,read,flags) \
 struct file_system_type var = { \
 	name:		type, \
@@ -739,14 +738,6 @@ struct file_system_type var = { \
 	fs_flags:	flags, \
 	owner:		THIS_MODULE, \
 }
-#else
-#define DECLARE_FSTYPE(var,type,read,flags) \
-struct file_system_type var = { \
-	name:		type, \
-	read_super:	read, \
-	fs_flags:	flags, \
-}
-#endif
 
 #define DECLARE_FSTYPE_DEV(var,type,read) \
 	DECLARE_FSTYPE(var,type,read,FS_REQUIRES_DEV)

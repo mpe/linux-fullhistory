@@ -220,7 +220,7 @@ ppp_asynctty_ioctl(struct tty_struct *tty, struct file *file,
 		if (ap == 0)
 			break;
 		err = -EFAULT;
-		if (put_user(ppp_channel_index(&ap->chan), (int *) arg))
+		if (put_user(ppp_unit_number(&ap->chan), (int *) arg))
 			break;
 		err = 0;
 		break;

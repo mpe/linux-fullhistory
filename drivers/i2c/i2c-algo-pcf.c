@@ -21,9 +21,10 @@
 /* ------------------------------------------------------------------------- */
 
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and 
-   Frodo Looijaard <frodol@dds.nl> */
+   Frodo Looijaard <frodol@dds.nl> ,and also from Martin Bailey
+   <mbailey@littlefeet-inc.com> */
 
-/* $Id: i2c-algo-pcf.c,v 1.20 2000/01/24 02:06:33 mds Exp $ */
+/* $Id: i2c-algo-pcf.c,v 1.21 2000/03/16 13:07:34 frodo Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -108,10 +109,12 @@ static int wait_for_bb(struct i2c_algo_pcf_data *adap) {
 	int status;
 
 	status = get_pcf(adap, 1);
+#ifndef STUB_I2C
 	while (timeout-- && !(status & I2C_PCF_BB)) {
 		udelay(1000); /* How much is this? */
 		status = get_pcf(adap, 1);
 	}
+#endif
 	if (timeout<=0)
 		printk("Timeout waiting for Bus Busy\n");
 	/*
@@ -132,10 +135,12 @@ static int wait_for_pin(struct i2c_algo_pcf_data *adap, int *status) {
 	int timeout = DEF_TIMEOUT;
 
 	*status = get_pcf(adap, 1);
+#ifndef STUB_I2C
 	while (timeout-- && (*status & I2C_PCF_PIN)) {
 		adap->waitforpin();
 		*status = get_pcf(adap, 1);
 	}
+#endif
 	if (timeout <= 0)
 		return(-1);
 	else
@@ -268,7 +273,7 @@ static inline int try_address(struct i2c_algo_pcf_data *adap,
 		i2c_start(adap);
 		status = get_pcf(adap, 1);
 		if (wait_for_pin(adap, &status) >= 0) {
-			if ((status && I2C_PCF_LRB) == 0) { 
+			if ((status & I2C_PCF_LRB) == 0) { 
 				i2c_stop(adap);
 				break;	/* success! */
 			}
@@ -287,25 +292,28 @@ static int pcf_sendbytes(struct i2c_adapter *i2c_adap,const char *buf,
 {
 	struct i2c_algo_pcf_data *adap = i2c_adap->algo_data;
 	int wrcount, status, timeout;
-
+    
 	for (wrcount=0; wrcount<count; ++wrcount) {
 		DEB2(printk("i2c-algo-pcf.o: %s i2c_write: writing %2.2X\n",
-		     i2c_adap->name, buf[wrcount]&0xff));
+		      i2c_adap->name, buf[wrcount]&0xff));
 		i2c_outb(adap, buf[wrcount]);
 		timeout = wait_for_pin(adap, &status);
 		if (timeout) {
-			printk("i2c-algo-pcf.o: %s i2c_write: error - timeout.\n",
-			       i2c_adap->name);
 			i2c_stop(adap);
+			printk("i2c-algo-pcf.o: %s i2c_write: "
+			       "error - timeout.\n", i2c_adap->name);
 			return -EREMOTEIO; /* got a better one ?? */
 		}
+#ifndef STUB_I2C
 		if (status & I2C_PCF_LRB) {
-			 printk("i2c-algo-pcf.o: %s i2c_write: error - no ack.\n",
-				i2c_adap->name);
-			 i2c_stop(adap);
-			 return -EREMOTEIO; /* got a better one ?? */
+			i2c_stop(adap);
+			printk("i2c-algo-pcf.o: %s i2c_write: "
+			       "error - no ack.\n", i2c_adap->name);
+			return -EREMOTEIO; /* got a better one ?? */
 		}
+#endif
 	}
+	i2c_stop(adap);
 	return (wrcount);
 }
 
@@ -314,34 +322,48 @@ static int pcf_readbytes(struct i2c_adapter *i2c_adap, char *buf, int count)
 {
 	int rdcount=0, i, status, timeout, dummy=1;
 	struct i2c_algo_pcf_data *adap = i2c_adap->algo_data;
- 
+    
 	for (i=0; i<count-1; ++i) {
-		buf[rdcount] =  i2c_inb(adap);
+		buf[rdcount] = i2c_inb(adap);
 		if (dummy) {
 			dummy = 0;
-		} else
+		} else {
 			rdcount++;
+		}
 		timeout = wait_for_pin(adap, &status);
 		if (timeout) {
-			printk("i2c-algo-pcf.o: i2c_read: i2c_inb timed out.\n");
+			i2c_stop(adap);
+			printk("i2c-algo-pcf.o: i2c_read: "
+			       "i2c_inb timed out.\n");
 			return (-1);
 		}
+#ifndef STUB_I2C
 		if (status & I2C_PCF_LRB) {
+			i2c_stop(adap);
 			printk("i2c-algo-pcf.o: i2c_read: i2c_inb, No ack.\n");
 			return (-1);
 		}
+#endif
 	}
 	set_pcf(adap, 1, I2C_PCF_ESO);
 	buf[rdcount] = i2c_inb(adap);
 	if (dummy) {
 		dummy = 0;
-	} else
+	} else {
 		rdcount++;
+	}
 	timeout = wait_for_pin(adap, &status);
 	if (timeout) {
+		i2c_stop(adap);
 		printk("i2c-algo-pcf.o: i2c_read: i2c_inb timed out.\n");
 		return (-1);
 	}
+    
+	i2c_stop(adap);
+
+	/* Read final byte from S0 register */
+	buf[rdcount++] = i2c_inb(adap);
+
 	return (rdcount);
 }
 
@@ -396,45 +418,76 @@ static int pcf_xfer(struct i2c_adapter *i2c_adap,
 {
 	struct i2c_algo_pcf_data *adap = i2c_adap->algo_data;
 	struct i2c_msg *pmsg;
-	int i, ret, timeout, status;
-
+	int i = 0;
+	int ret, timeout, status;
+    
+	pmsg = &msgs[i];
+    
+	/* Send address here if Read */
+	if (pmsg->flags & I2C_M_RD) {
+		ret = pcf_doAddress(adap, pmsg, i2c_adap->retries);
+	}
+    
+	/* Check for bus busy */
 	timeout = wait_for_bb(adap);
 	if (timeout) {
-		DEB2(printk("i2c-algo-pcf.o: Timeout waiting for BB in pcf_xfer\n");)
+		DEB2(printk("i2c-algo-pcf.o: "
+		            "Timeout waiting for BB in pcf_xfer\n");)
 		return -EIO;
 	}
+    
+	/* Send address here if Write */
+	if (!(pmsg->flags & I2C_M_RD)) {
+		ret = pcf_doAddress(adap, pmsg, i2c_adap->retries);
+	}
+	/* Send START */
 	i2c_start(adap);
-
-	for (i=0; i<num; i++) {
-		pmsg = &msgs[i];
-		if (!(pmsg->flags & I2C_M_NOSTART)) {
-			if (i) 
-				i2c_repstart(adap);
-		 	ret = pcf_doAddress(adap, pmsg, i2c_adap->retries);
-		 	timeout = wait_for_pin(adap, &status);
-		 	if (timeout) {
-				DEB2(printk("i2c-algo-pcf.o: Timeout waiting for PIN(1) in pcf_xfer\n");)
-				return (-EREMOTEIO);
-		 	}
-		 	if (status & I2C_PCF_LRB) {
-				i2c_stop(adap);
-				DEB2(printk("i2c-algo-pcf.o: No LRB(1) in pcf_xfer\n");)
-				return (-EREMOTEIO);
-		 	}
-		}
-		DEB3(printk("i2c-algo-pcf.o: Msg %d, addr=0x%x, flags=0x%x, len=%d\n",
-		            i, msgs[i].addr, msgs[i].flags, msgs[i].len);)
-		if (pmsg->flags & I2C_M_RD ) {
-			/* read bytes into buffer*/
-			ret = pcf_readbytes(i2c_adap, pmsg->buf, pmsg->len);
-			DEB2(printk("i2c-algo-pcf.o: read %d bytes.\n",ret));
+    
+	/* Wait for PIN (pending interrupt NOT) */
+	timeout = wait_for_pin(adap, &status);
+	if (timeout) {
+		i2c_stop(adap);
+		DEB2(printk("i2c-algo-pcf.o: Timeout waiting "
+		            "for PIN(1) in pcf_xfer\n");)
+		return (-EREMOTEIO);
+	}
+    
+#ifndef STUB_I2C
+	/* Check LRB (last rcvd bit - slave ack) */
+	if (status & I2C_PCF_LRB) {
+		i2c_stop(adap);
+		DEB2(printk("i2c-algo-pcf.o: No LRB(1) in pcf_xfer\n");)
+		return (-EREMOTEIO);
+	}
+#endif
+    
+	DEB3(printk("i2c-algo-pcf.o: Msg %d, addr=0x%x, flags=0x%x, len=%d\n",
+	            i, msgs[i].addr, msgs[i].flags, msgs[i].len);)
+    
+	/* Read */
+	if (pmsg->flags & I2C_M_RD) {
+        
+		/* read bytes into buffer*/
+		ret = pcf_readbytes(i2c_adap, pmsg->buf, pmsg->len);
+        
+		if (ret != pmsg->len) {
+			DEB2(printk("i2c-algo-pcf.o: fail: "
+			            "only read %d bytes.\n",ret));
 		} else {
-			/* write bytes from buffer */
-			ret = pcf_sendbytes(i2c_adap, pmsg->buf, pmsg->len);
+			DEB2(printk("i2c-algo-pcf.o: read %d bytes.\n",ret));
+		}
+	} else { /* Write */
+        
+        /* Write bytes from buffer */
+		ret = pcf_sendbytes(i2c_adap, pmsg->buf, pmsg->len);
+        
+		if (ret != pmsg->len) {
+			DEB2(printk("i2c-algo-pcf.o: fail: "
+			            "only wrote %d bytes.\n",ret));
+		} else {
 			DEB2(printk("i2c-algo-pcf.o: wrote %d bytes.\n",ret));
 		}
 	}
-	i2c_stop(adap);	 
 	return (num);
 }
 
@@ -503,7 +556,7 @@ int i2c_pcf_add_bus(struct i2c_adapter *adap)
 			i2c_outb(pcf_adap, i);
 			i2c_start(pcf_adap);
 			if ((wait_for_pin(pcf_adap, &status) >= 0) && 
-			    ((status && I2C_PCF_LRB) == 0)) { 
+			    ((status & I2C_PCF_LRB) == 0)) { 
 				printk("(%02x)",i>>1); 
 			} else {
 				printk("."); 
@@ -528,7 +581,7 @@ int i2c_pcf_del_bus(struct i2c_adapter *adap)
 	return 0;
 }
 
-int __init i2c_algo_pcf_init (void)
+static int __init i2c_algo_pcf_init (void)
 {
 	printk("i2c-algo-pcf.o: i2c pcf8584 algorithm module\n");
 	return 0;

@@ -14,7 +14,6 @@
 
 OBJCOPY		:= $(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
 CPP		:= $(CC) -E
-PERL		:= perl
 LINKFLAGS	:= -p -X -T arch/arm/vmlinux.lds
 ARCHCC		:= $(word 1,$(CC))
 
@@ -100,6 +99,8 @@ ifeq ($(CONFIG_CPU_32),y)
 endif
 
 LIBGCC		:= $(shell $(CC) $(CFLAGS) --print-libgcc-file-name)
+
+export	LIBGCC
 
 ifeq ($(CONFIG_ARCH_A5K),y)
 MACHINE		 = a5k

@@ -23,7 +23,9 @@
    But I have used so much of his original code and ideas that it seems
    only fair to recognize him as co-author -- Frodo */
 
-/* $Id: i2c-dev.c,v 1.25 2000/01/26 14:14:20 frodo Exp $ */
+/* The I2C_RDWR ioctl code is written by Kolja Waschk <waschk@telos.de> */
+
+/* $Id: i2c-dev.c,v 1.30 2000/02/28 21:35:05 frodo Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -143,8 +145,8 @@ static ssize_t i2cdev_read (struct file *file, char *buf, size_t count,
 #endif
 
 	ret = i2c_master_recv(client,tmp,count);
-	if (! ret)
-		ret = copy_to_user(buf,tmp,count)?-EFAULT:0;
+	if (ret >= 0)
+		ret = copy_to_user(buf,tmp,count)?-EFAULT:ret;
 	kfree(tmp);
 	return ret;
 }
@@ -182,9 +184,11 @@ int i2cdev_ioctl (struct inode *inode, struct file *file, unsigned int cmd,
                   unsigned long arg)
 {
 	struct i2c_client *client = (struct i2c_client *)file->private_data;
+	struct i2c_rdwr_ioctl_data rdwr_arg;
 	struct i2c_smbus_ioctl_data data_arg;
 	union i2c_smbus_data temp;
-	int datasize,res;
+	struct i2c_msg *rdwr_pa;
+	int i,datasize,res;
 	unsigned long funcs;
 
 #ifdef DEBUG
@@ -212,6 +216,67 @@ int i2cdev_ioctl (struct inode *inode, struct file *file, unsigned int cmd,
 		funcs = i2c_get_functionality(client->adapter);
 		return (copy_to_user((unsigned long *)arg,&funcs,
 		                     sizeof(unsigned long)))?-EFAULT:0;
+
+        case I2C_RDWR:
+		copy_from_user_ret(&rdwr_arg, 
+			(struct i2c_rdwr_ioctl_data *)arg, 
+			sizeof(rdwr_arg),
+			-EFAULT);
+
+		rdwr_pa = (struct i2c_msg *)
+			kmalloc(rdwr_arg.nmsgs * sizeof(struct i2c_msg), 
+			GFP_KERNEL);
+
+		if (rdwr_pa == NULL) return -ENOMEM;
+
+		res = 0;
+		for( i=0; i<rdwr_arg.nmsgs; i++ )
+		{
+		    	if(copy_from_user(&(rdwr_pa[i]),
+					&(rdwr_arg.msgs[i]),
+					sizeof(rdwr_pa[i])))
+			{
+			        res = -EFAULT;
+				break;
+			}
+			rdwr_pa[i].buf = kmalloc(rdwr_pa[i].len, GFP_KERNEL);
+			if(rdwr_pa[i].buf == NULL)
+			{
+				res = -ENOMEM;
+				break;
+			}
+			if(copy_from_user(rdwr_pa[i].buf,
+				rdwr_arg.msgs[i].buf,
+				rdwr_pa[i].len))
+			{
+			    	kfree(rdwr_pa[i].buf);
+			    	res = -EFAULT;
+				break;
+			}
+		}
+		if (!res) 
+		{
+			res = i2c_transfer(client->adapter,
+				rdwr_pa,
+				rdwr_arg.nmsgs);
+		}
+		while(i-- > 0)
+		{
+			if( res>=0 && (rdwr_pa[i].flags & I2C_M_RD))
+			{
+				if(copy_to_user(
+					rdwr_arg.msgs[i].buf,
+					rdwr_pa[i].buf,
+					rdwr_pa[i].len))
+				{
+					res = -EFAULT;
+				}
+			}
+			kfree(rdwr_pa[i].buf);
+		}
+		kfree(rdwr_pa);
+		return res;
+
 	case I2C_SMBUS:
 		copy_from_user_ret(&data_arg,
 		                   (struct i2c_smbus_ioctl_data *) arg,

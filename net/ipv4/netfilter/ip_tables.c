@@ -409,7 +409,7 @@ find_inlist_lock_noload(struct list_head *head,
 }
 
 #ifndef CONFIG_KMOD
-#define find_inlist_lock(h,n,e,p,m) find_inlist_lock_noload((h),(n),(e),(m))
+#define find_inlist_lock(h,n,p,e,m) find_inlist_lock_noload((h),(n),(e),(m))
 #else
 static void *
 find_inlist_lock(struct list_head *head,

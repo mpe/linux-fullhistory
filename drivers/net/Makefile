@@ -104,11 +104,11 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_ATALK),y)
+ifeq ($(CONFIG_APPLETALK),y)
 SUB_DIRS += appletalk
 MOD_IN_SUB_DIRS += appletalk
 else
-  ifeq ($(CONFIG_ATALK),m)
+  ifeq ($(CONFIG_APPLETALK),m)
   MOD_IN_SUB_DIRS += appletalk
   endif
 endif

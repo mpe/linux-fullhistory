@@ -4,6 +4,7 @@
 /* Define to experiment with fitting everything into one 512MB HAE window.  */
 #define CIA_ONE_HAE_WINDOW 1
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <asm/compiler.h>
 
@@ -551,9 +552,9 @@ __EXTERN_INLINE int cia_is_ioaddr(unsigned long addr)
 # define inb(p)			__inb(p)
 # define inw(p)			__inw(p)
 # define inl(p)			__inl(p)
-# define outb(x,p)		__outb((x),(port))
-# define outw(x,p)		__outw((x),(port))
-# define outl(x,p)		__outl((x),(port))
+# define outb(x,p)		__outb((x),(p))
+# define outw(x,p)		__outw((x),(p))
+# define outl(x,p)		__outl((x),(p))
 # define __raw_readb(a)		__readb(a)
 # define __raw_readw(a)		__readw(a)
 # define __raw_readl(a)		__readl(a)

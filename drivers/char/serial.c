@@ -4315,6 +4315,9 @@ static struct pci_board pnp_devices[] __initdata = {
 	/* Best Data Products Inc. Smart One 336F PnP Modem */
 	{	ISAPNP_VENDOR('B', 'D', 'P'), ISAPNP_DEVICE(0x3336), 0, 0,
 		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+	/* SupraExpress 28.8 Data/Fax PnP modem */
+	{	ISAPNP_VENDOR('S', 'U', 'P'), ISAPNP_DEVICE(0x1310), 0, 0,
+		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
 	/* These ID's are taken from M$ documentation */
 	/* Compaq 14400 Modem */
 	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC000), 0, 0,

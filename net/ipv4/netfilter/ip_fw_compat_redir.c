@@ -7,6 +7,7 @@
    FIXME: Timing is overly simplistic.  If anyone complains, make it
    use conntrack.
 */
+#include <linux/config.h>
 #include <linux/netfilter.h>
 #include <linux/ip.h>
 #include <linux/udp.h>

@@ -22,7 +22,7 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and even
    Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c-elektor.c,v 1.16 2000/01/24 02:06:33 mds Exp $ */
+/* $Id: i2c-elektor.c,v 1.17 2000/03/16 13:07:34 frodo Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/ioport.h>
@@ -73,17 +73,22 @@ static int pcf_pending;
 
 static void pcf_isa_setbyte(void *data, int ctl, int val)
 {
-	if (ctl) {
+        unsigned long j = jiffies + 10;
+
+        if (ctl) {
 		if (gpi.pi_irq > 0) {
-			DEB3(printk("i2c-elektor.o: Write control 0x%x\n",
+			DEB3(printk("i2c-elektor.o: Write Ctrl 0x%02X\n",
 			     val|I2C_PCF_ENI));
+                        DEB3({while (jiffies < j) schedule();})
 			outb(val | I2C_PCF_ENI, CTRL);
 		} else {
-			 DEB3(printk("i2c-elektor.o: Write control 0x%x\n", val));
-			 outb(val, CTRL);
+			 DEB3(printk("i2c-elektor.o: Write Ctrl 0x%02X\n", val|I2C_PCF_ENI));
+                         DEB3({while (jiffies < j) schedule();})
+			 outb(val|I2C_PCF_ENI, CTRL);
 		}
 	} else {
-		DEB3(printk("i2c-elektor.o: Write data 0x%x\n", val));
+		DEB3(printk("i2c-elektor.o: Write Data 0x%02X\n", val&0xff));
+                DEB3({while (jiffies < j) schedule();})
 		outb(val, DATA);
 	}
 }
@@ -94,10 +99,10 @@ static int pcf_isa_getbyte(void *data, int ctl)
 
 	if (ctl) {
 		val = inb(CTRL);
-		DEB3(printk("i2c-elektor.o: Read control 0x%x\n", val));
+		DEB3(printk("i2c-elektor.o: Read Ctrl 0x%02X\n", val));
 	} else {
 		val = inb(DATA);
-		DEB3(printk("i2c-elektor.o: Read data 0x%x\n", val));
+		DEB3(printk("i2c-elektor.o: Read Data 0x%02X\n", val));
 	}
 	return (val);
 }
@@ -226,7 +231,7 @@ static struct i2c_adapter pcf_isa_ops = {
 	pcf_isa_unreg,
 };
 
-int __init i2c_pcfisa_init(void) 
+static int __init i2c_pcfisa_init(void) 
 {
 
 	struct i2c_pcf_isa *pisa = &gpi;
@@ -277,6 +282,7 @@ MODULE_PARM(base, "i");
 MODULE_PARM(irq, "i");
 MODULE_PARM(clock, "i");
 MODULE_PARM(own, "i");
+MODULE_PARM(i2c_debug,"i");
 
 int init_module(void) 
 {
@@ -290,5 +296,3 @@ void cleanup_module(void)
 }
 
 #endif
-
-

@@ -20,7 +20,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		     */
 /* ------------------------------------------------------------------------- */
 
-/* $Id: i2c-id.h,v 1.10 2000/02/04 02:47:41 mds Exp $ */
+/* $Id: i2c-id.h,v 1.15 2000/03/16 14:01:57 frodo Exp $ */
 
 #ifndef I2C_ID_H
 #define I2C_ID_H
@@ -92,9 +92,7 @@
 #define I2C_ALGO_ATI	0x030000	/* ATI video card		*/
 #define I2C_ALGO_SMBUS	0x040000
 #define I2C_ALGO_ISA 	0x050000	/* lm_sensors ISA pseudo-adapter */
-#define I2C_ALGO_SAA714	0x060000	/* SAA 7146 video decoder bus	*/
-#define I2C_ALGO_SAA7146A 0x060001	/* SAA 7146A - enhanced version	*/
-
+#define I2C_ALGO_SAA7146 0x060000	/* SAA 7146 video decoder bus	*/
 
 #define I2C_ALGO_EXP	0x800000	/* experimental			*/
 
@@ -120,6 +118,7 @@
 #define I2C_HW_B_HYDRA	0x08	/* Apple Hydra Mac I/O			*/
 #define I2C_HW_B_G400	0x09	/* Matrox G400				*/
 #define I2C_HW_B_I810	0x0a	/* Intel I810 				*/
+#define I2C_HW_B_VOO	0x0b	/* 3dfx Voodoo 3 / Banshee      	*/
 #define I2C_HW_B_RIVA	0x10	/* Riva based graphics cards		*/
 #define I2C_HW_B_IOC	0x11	/* IOC bit-wiggling			*/
 

@@ -3,7 +3,6 @@
  *
  * Copyright (C) 1999 Paul `Rusty' Russell & Michael J. Neuling
  */
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
 
