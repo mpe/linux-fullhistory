@@ -955,6 +955,9 @@ static int snd_hda_spdif_out_switch_put(snd_kcontrol_t *kcontrol, snd_ctl_elem_v
 	if (change || codec->in_resume) {
 		codec->spdif_ctls = val;
 		snd_hda_codec_write(codec, nid, 0, AC_VERB_SET_DIGI_CONVERT_1, val & 0xff);
+		snd_hda_codec_write(codec, nid, 0, AC_VERB_SET_AMP_GAIN_MUTE,
+				    AC_AMP_SET_RIGHT | AC_AMP_SET_LEFT |
+				    AC_AMP_SET_OUTPUT | ((val & 1) ? 0 : 0x80));
 	}
 	up(&codec->spdif_mutex);
 	return change;
