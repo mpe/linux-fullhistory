@@ -62,8 +62,6 @@ int autoirq_setup(int waittime)
     int i, mask;
     int timeout = jiffies+waittime;
 
-    irq_number = 0;
-    irq_bitmap = 0;
     irq_handled = 0;
     for (i = 0; i < 16; i++) {
 	if (!irqaction(i, &autoirq_sigaction))
@@ -71,6 +69,8 @@ int autoirq_setup(int waittime)
     }
     /* Update our USED lists. */
     irqs_used |= ~irq_handled;
+    irq_number = 0;
+    irq_bitmap = 0;
 
     /* Hang out at least <waittime> jiffies waiting for bogus IRQ hits. */
     while (timeout > jiffies)

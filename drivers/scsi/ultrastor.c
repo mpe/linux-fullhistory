@@ -305,7 +305,7 @@ static inline unsigned char xchgb(unsigned char reg,
 				  volatile unsigned char *mem)
 {
   asm("xchgb %0,%1" :
-      "=r" (reg), "=m" (*(unsigned char *)mem) :
+      "=q" (reg), "=m" (*(unsigned char *)mem) :
       "0" (reg), "1" (*(unsigned char *)mem));
   return reg;
 }

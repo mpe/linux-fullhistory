@@ -59,6 +59,7 @@ struct ext_dir_entry {
 	char name[EXT_NAME_LEN];
 };
 
+#ifdef __KERNEL__
 extern int ext_open(struct inode * inode, struct file * filp);
 extern void ext_release(struct inode * inode, struct file * filp);
 extern int ext_lookup(struct inode * dir,const char * name, int len,
@@ -105,4 +106,5 @@ extern struct inode_operations ext_file_inode_operations;
 extern struct inode_operations ext_dir_inode_operations;
 extern struct inode_operations ext_symlink_inode_operations;
 
+#endif /*__KERNEL__ */
 #endif

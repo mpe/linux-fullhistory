@@ -92,6 +92,8 @@ struct page_info {
 };
 /* end of planning stage */
 
+#ifdef __KERNEL__
+
 /*
  * Free area management
  */
@@ -221,21 +223,76 @@ extern unsigned short * mem_map;
 #define GFP_NOBUFFER	0x04
 
 
-/* vm_ops not present page codes */
+/*
+ * vm_ops not present page codes for shared memory.
+ *
+ * Will go away eventually..
+ */
 #define SHM_SWP_TYPE 0x41
 extern void shm_no_page (ulong *);
 
-/* swap cache stuff (in swap.c) */
+/*
+ * swap cache stuff (in swap.c)
+ */
+#define SWAP_CACHE_INFO
+
 extern unsigned long * swap_cache;
+
+#ifdef SWAP_CACHE_INFO
+extern unsigned long swap_cache_add_total;
+extern unsigned long swap_cache_add_success;
+extern unsigned long swap_cache_del_total;
+extern unsigned long swap_cache_del_success;
+extern unsigned long swap_cache_find_total;
+extern unsigned long swap_cache_find_success;
+#endif
 
 extern inline unsigned long in_swap_cache(unsigned long addr)
 {
 	return swap_cache[addr >> PAGE_SHIFT]; 
 }
 
-extern inline void swap_cache_invalidate(unsigned long addr)
+extern inline long find_in_swap_cache (unsigned long addr)
 {
-	swap_cache[addr >> PAGE_SHIFT] = 0;
+	unsigned long entry;
+
+#ifdef SWAP_CACHE_INFO
+	swap_cache_find_total++;
+#endif
+	__asm__ __volatile__("xchgl %0,%1"
+		:"=m" (swap_cache[addr >> PAGE_SHIFT]),
+		 "=r" (entry)
+		:"0" (swap_cache[addr >> PAGE_SHIFT]),
+		 "1" (0));
+#ifdef SWAP_CACHE_INFO
+	if (entry)
+		swap_cache_find_success++;
+#endif	
+	return entry;
 }
+
+extern inline int delete_from_swap_cache(unsigned long addr)
+{
+	unsigned long entry;
+	
+#ifdef SWAP_CACHE_INFO
+	swap_cache_del_total++;
+#endif	
+	__asm__ __volatile__("xchgl %0,%1"
+		:"=m" (swap_cache[addr >> PAGE_SHIFT]),
+		 "=r" (entry)
+		:"0" (swap_cache[addr >> PAGE_SHIFT]),
+		 "1" (0));
+	if (entry)  {
+#ifdef SWAP_CACHE_INFO
+		swap_cache_del_success++;
+#endif
+		swap_free(entry);
+		return 1;
+	}
+	return 0;
+}
+
+#endif /* __KERNEL__ */
 
 #endif

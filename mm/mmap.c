@@ -21,23 +21,20 @@ static int anon_map(struct inode *, struct file *,
 		    unsigned long);
 /*
  * description of effects of mapping type and prot in current implementation.
- * this is due to the current handling of page faults in memory.c. the expected
+ * this is due to the limited x86 page protection hardware.  The expected
  * behavior is in parens:
  *
  * map_type	prot
  *		PROT_NONE	PROT_READ	PROT_WRITE	PROT_EXEC
- * MAP_SHARED	r: (no) yes	r: (yes) yes	r: (no) yes	r: (no) no
- *		w: (no) yes	w: (no) copy	w: (yes) yes	w: (no) no
- *		x: (no) no	x: (no) no	x: (no) no	x: (yes) no
+ * MAP_SHARED	r: (no) no	r: (yes) yes	r: (no) yes	r: (no) yes
+ *		w: (no) no	w: (no) no	w: (yes) yes	w: (no) no
+ *		x: (no) no	x: (no) yes	x: (no) yes	x: (yes) yes
  *		
- * MAP_PRIVATE	r: (no) yes	r: (yes) yes	r: (no) yes	r: (no) no
- *		w: (no) copy	w: (no) copy	w: (copy) copy	w: (no) no
- *		x: (no) no	x: (no) no	x: (no) no	x: (yes) no
+ * MAP_PRIVATE	r: (no) no	r: (yes) yes	r: (no) yes	r: (no) yes
+ *		w: (no) no	w: (no) no	w: (copy) copy	w: (no) no
+ *		x: (no) no	x: (no) yes	x: (no) yes	x: (yes) yes
  *
  */
-
-#define CODE_SPACE(addr)	\
- (PAGE_ALIGN(addr) < current->start_code + current->end_code)
 
 int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off)
@@ -116,8 +113,8 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 			mask |= PAGE_COPY;
 		else
 			mask |= PAGE_SHARED;
-	if (!mask)
-		return -EINVAL;
+	if (!mask) /* PROT_NONE */
+		mask = PAGE_PRESENT;	/* none of PAGE_USER, PAGE_RW, PAGE_COW */
 
 	do_munmap(addr, len);	/* Clear old maps */
 

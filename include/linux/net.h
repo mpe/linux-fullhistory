@@ -54,7 +54,7 @@ typedef enum {
 
 #define SO_ACCEPTCON	(1<<16)		/* performed a listen		*/
 
-
+#ifdef __KERNEL__
 /*
  * Internal representation of a socket. not all the fields are used by
  * all configurations:
@@ -130,5 +130,5 @@ struct net_proto {
 extern int	sock_awaitconn(struct socket *mysock, struct socket *servsock);
 extern int	sock_register(int family, struct proto_ops *ops);
 
-
+#endif /* __KERNEL__ */
 #endif	/* _LINUX_NET_H */

@@ -8,7 +8,6 @@
  * This file should contain most things doing the swapping from/to disk.
  * Started 18.12.91
  */
-#define SWAP_CACHE_INFO
 
 #include <linux/mm.h>
 #include <linux/sched.h>
@@ -18,6 +17,7 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/stat.h>
+#include <linux/fs.h>
 
 #include <asm/system.h> /* for cli()/sti() */
 #include <asm/bitops.h>
@@ -49,68 +49,30 @@ static struct swap_info_struct {
 extern int shm_swap (int);
 
 unsigned long *swap_cache;
-static unsigned long swap_cache_size;
 
 #ifdef SWAP_CACHE_INFO
-static unsigned long add_calls_total = 0;
-static unsigned long add_calls_success = 0;
-static unsigned long del_calls_total = 0;
-static unsigned long del_calls_success = 0;
-static unsigned long find_calls_total = 0;
-static unsigned long find_calls_success = 0;
+unsigned long swap_cache_add_total = 0;
+unsigned long swap_cache_add_success = 0;
+unsigned long swap_cache_del_total = 0;
+unsigned long swap_cache_del_success = 0;
+unsigned long swap_cache_find_total = 0;
+unsigned long swap_cache_find_success = 0;
 
-extern inline void show_swap_cache_info (void)
+extern inline void show_swap_cache_info(void)
 {
 	printk("Swap cache: add %ld/%ld, delete %ld/%ld, find %ld/%ld\n",
-	       add_calls_total, add_calls_success, 
-	       del_calls_total, del_calls_success,
-	       find_calls_total, find_calls_success);
+		swap_cache_add_total, swap_cache_add_success, 
+		swap_cache_del_total, swap_cache_del_success,
+		swap_cache_find_total, swap_cache_find_success);
 }
 #endif
 
-extern inline unsigned long init_swap_cache (unsigned long mem_start,
-					    unsigned long mem_end)
-{
-	mem_start = (mem_start + 15) & ~15;
-	swap_cache = (unsigned long *) mem_start;
-	swap_cache_size = mem_end >> PAGE_SHIFT;
-	memset(swap_cache, 0, swap_cache_size * sizeof (unsigned long));
-#ifdef SWAP_CACHE_INFO
-	printk("%ld bytes for swap cache allocated\n",
-	       swap_cache_size * sizeof(unsigned long));
-#endif	
-	
-	return (unsigned long) (swap_cache + swap_cache_size);
-}
-
-extern inline long find_in_swap_cache (unsigned long addr)
-{
-	unsigned long entry;
-
-#ifdef SWAP_CACHE_INFO
-	find_calls_total++;
-#endif
-	__asm__ __volatile__ (
-			      "xchgl %0,%1\n"
-			      : "=m" (swap_cache[addr >> PAGE_SHIFT]),
-			        "=r" (entry)
-			      : "0" (swap_cache[addr >> PAGE_SHIFT]),
-			        "1" (0)
-			      );
-#ifdef SWAP_CACHE_INFO
-	if (entry)
-		find_calls_success++;
-#endif	
-	
-	return entry;
-}
-
-extern  inline int add_to_swap_cache (unsigned long addr, unsigned long entry)
+extern inline int add_to_swap_cache(unsigned long addr, unsigned long entry)
 {
 	struct swap_info_struct * p = &swap_info[SWP_TYPE(entry)];
 	
 #ifdef SWAP_CACHE_INFO
-	add_calls_total++;
+	swap_cache_add_total++;
 #endif
 	if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) { 
 		__asm__ __volatile__ (
@@ -124,38 +86,29 @@ extern  inline int add_to_swap_cache (unsigned long addr, unsigned long entry)
 			printk("swap_cache: replacing non-NULL entry\n");
 		}
 #ifdef SWAP_CACHE_INFO
-		add_calls_success++;
+		swap_cache_add_success++;
 #endif
 		return 1;
 	}
 	return 0;
 }
 
-
-extern inline int delete_from_swap_cache(unsigned long addr)
+static unsigned long init_swap_cache(unsigned long mem_start,
+	unsigned long mem_end)
 {
-	unsigned long entry;
-	
-#ifdef SWAP_CACHE_INFO
-	del_calls_total++;
-#endif	
-	__asm__ __volatile__ (
-			      "xchgl %0,%1\n"
-			      : "=m" (swap_cache[addr >> PAGE_SHIFT]),
-			        "=r" (entry)
-			      : "0" (swap_cache[addr >> PAGE_SHIFT]),
-			        "1" (0)
-			      );
-	if (entry)  {
-#ifdef SWAP_CACHE_INFO
-		del_calls_success++;
-#endif
-		swap_free(entry);
-		return 1;
-	}
-	return 0;
-}
+	unsigned long swap_cache_size;
 
+	mem_start = (mem_start + 15) & ~15;
+	swap_cache = (unsigned long *) mem_start;
+	swap_cache_size = mem_end >> PAGE_SHIFT;
+	memset(swap_cache, 0, swap_cache_size * sizeof (unsigned long));
+#ifdef SWAP_CACHE_INFO
+	printk("%ld bytes for swap cache allocated\n",
+	       swap_cache_size * sizeof(unsigned long));
+#endif	
+	
+	return (unsigned long) (swap_cache + swap_cache_size);
+}
 
 void rw_swap_page(int rw, unsigned long entry, char * buf)
 {
@@ -186,18 +139,44 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 	if (p->swap_device) {
 		ll_rw_page(rw,p->swap_device,offset,buf);
 	} else if (p->swap_file) {
+		struct inode *swapf = p->swap_file;
 		unsigned int zones[8];
-		unsigned int block;
-		int i, j;
+		int i;
+		if (swapf->i_op->bmap == NULL
+			&& swapf->i_op->smap != NULL){
+			/*
+				With MsDOS, we use msdos_smap which return
+				a sector number (not a cluster or block number).
+				It is a patch to enable the UMSDOS project.
+				Other people are working on better solution.
 
-		block = offset << (12 - p->swap_file->i_sb->s_blocksize_bits);
+				It sounds like ll_rw_swap_file defined
+				it operation size (sector size) based on
+				PAGE_SIZE and the number of block to read.
+				So using bmap ou smap should work even if
+				smap will requiered more blocks.
+			*/
+			int j;
+			unsigned int block = offset << 3;
 
-		for (i=0, j=0; j< PAGE_SIZE ; i++, j +=p->swap_file->i_sb->s_blocksize)
-			if (!(zones[i] = bmap(p->swap_file,block++))) {
-				printk("rw_swap_page: bad swap file\n");
-				return;
+			for (i=0, j=0; j< PAGE_SIZE ; i++, j += 512){
+				if (!(zones[i] = swapf->i_op->smap(swapf,block++))) {
+					printk("rw_swap_page: bad swap file\n");
+					return;
+				}
 			}
-		ll_rw_swap_file(rw,p->swap_file->i_dev, zones, i,buf);
+		}else{
+			int j;
+			unsigned int block = offset
+				<< (12 - swapf->i_sb->s_blocksize_bits);
+
+			for (i=0, j=0; j< PAGE_SIZE ; i++, j +=swapf->i_sb->s_blocksize)
+				if (!(zones[i] = bmap(swapf,block++))) {
+					printk("rw_swap_page: bad swap file\n");
+					return;
+				}
+		}
+		ll_rw_swap_file(rw,swapf->i_dev, zones, i,buf);
 	} else
 		printk("re_swap_page: no swap file or device\n");
 	if (offset && !clear_bit(offset,p->swap_lockmap))

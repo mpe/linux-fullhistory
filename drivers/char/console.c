@@ -156,7 +156,7 @@ static struct {
 	/* misc */
 	unsigned long	vc_ques		: 1;
 	unsigned long	vc_need_wrap	: 1;
-	unsigned long	vc_report_mouse : 1;
+	unsigned long	vc_report_mouse : 2;
 	unsigned long	vc_tab_stop[5];		/* Tab stops. 160 columns. */
 	unsigned char * vc_translate;
 	unsigned char *	vc_G0_charset;
@@ -848,11 +848,14 @@ static void set_mode(int currcons, int on_off)
 					clr_kbd(decarm);
 				break;
 			case 9:
-				report_mouse = on_off;
+				report_mouse = on_off ? 1 : 0;
 				break;
 			case 25:		/* Cursor on/off */
 				deccm = on_off;
 				set_cursor(currcons);
+				break;
+			case 1000:
+				report_mouse = on_off ? 2 : 0;
 				break;
 		} else switch(par[i]) {		/* ANSI modes set/reset */
 			case 4:			/* Insert Mode on/off */
@@ -1858,11 +1861,11 @@ static inline short limit(const int v, const int l, const int u)
 }
 
 /* invoked via ioctl(TIOCLINUX) */
-int mouse_reporting_p(void)
+int mouse_reporting(void)
 {
 	int currcons = fg_console;
 
-	return ((report_mouse) ? 0 : -EINVAL);
+	return report_mouse;
 }
 
 /* set the current selection. Invoked by ioctl(). */

@@ -45,6 +45,8 @@
 #define NFS_SERVER(inode)		(&(inode)->i_sb->u.nfs_sb.s_server)
 #define NFS_FH(inode)			(&(inode)->u.nfs_i.fhandle)
 
+#ifdef __KERNEL__
+
 /* linux/fs/nfs/proc.c */
 
 extern int nfs_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
@@ -112,5 +114,7 @@ extern struct inode_operations nfs_symlink_inode_operations;
 
 extern int nfs_mmap(struct inode * inode, struct file * file,
                unsigned long addr, size_t len, int prot, unsigned long off);
+
+#endif /* __KERNEL__ */
 
 #endif

@@ -269,10 +269,8 @@ int copy_page_tables(struct task_struct * tsk)
 			}
 			if (pg & PAGE_COW)
 				pg &= ~PAGE_RW;
-			if (in_swap_cache(pg)) {
-				swap_cache_invalidate(pg);
+			if (delete_from_swap_cache(pg))
 				pg |= PAGE_DIRTY;
-			}
 			*new_page_table = pg;
 			*old_page_table = pg;
 			mem_map[MAP_NR(pg)]++;
@@ -586,7 +584,7 @@ void do_wp_page(struct vm_area_struct * vma, unsigned long address,
 	if (old_page & PAGE_RW)
 		goto end_wp_page;
 	vma->vm_task->mm->min_flt++;
-	prot = (old_page & ~PAGE_MASK) | PAGE_RW;
+	prot = (old_page & ~PAGE_MASK) | PAGE_RW | PAGE_DIRTY;
 	old_page &= PAGE_MASK;
 	if (mem_map[MAP_NR(old_page)] != 1) {
 		if (new_page) {
@@ -604,7 +602,7 @@ void do_wp_page(struct vm_area_struct * vma, unsigned long address,
 		invalidate();
 		return;
 	}
-	*(unsigned long *) pte |= PAGE_RW;
+	*(unsigned long *) pte |= PAGE_RW | PAGE_DIRTY;
 	invalidate();
 	if (new_page)
 		free_page(new_page);
@@ -657,6 +655,8 @@ good_area:
 		goto check_wp_fault_by_hand;
 	for (;;) {
 		struct vm_area_struct * next;
+		if (!(vma->vm_page_prot & PAGE_USER))
+			goto bad_area;
 		if (type != VERIFY_READ && !(vma->vm_page_prot & (PAGE_COW | PAGE_RW)))
 			goto bad_area;
 		if (vma->vm_end - start >= size)
@@ -765,7 +765,7 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 			return 0;
 		from |= PAGE_DIRTY;
 		*(unsigned long *) from_page = from;
-		swap_cache_invalidate(from);
+		delete_from_swap_cache(from);
 		invalidate();
 	}
 	mem_map[MAP_NR(from)]++;
@@ -1000,8 +1000,10 @@ good_area:
 		if (bit < 32)
 			current->screen_bitmap |= 1 << bit;
 	}
+	if (!(vma->vm_page_prot & PAGE_USER))
+		goto bad_area;
 	if (error_code & PAGE_PRESENT) {
-		if ((vma->vm_page_prot & (PAGE_RW | PAGE_COW | PAGE_PRESENT)) == PAGE_PRESENT)
+		if (!(vma->vm_page_prot & (PAGE_RW | PAGE_COW)))
 			goto bad_area;
 #ifdef CONFIG_TEST_VERIFY_AREA
 		if (regs->cs == KERNEL_CS)
@@ -1010,8 +1012,6 @@ good_area:
 		do_wp_page(vma, address, error_code);
 		return;
 	}
-	if (!(vma->vm_page_prot & PAGE_PRESENT))
-		goto bad_area;
 	do_no_page(vma, address, error_code);
 	return;
 

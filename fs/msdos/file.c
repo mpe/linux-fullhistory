@@ -15,15 +15,10 @@
 #include <linux/errno.h>
 #include <linux/fcntl.h>
 #include <linux/stat.h>
+#include <linux/string.h>
 
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
-
-static int msdos_file_read(struct inode *inode,struct file *filp,char *buf,
-    int count);
-static int msdos_file_write(struct inode *inode,struct file *filp,char *buf,
-    int count);
-
 
 static struct file_operations msdos_file_operations = {
 	NULL,			/* lseek - default */
@@ -32,7 +27,7 @@ static struct file_operations msdos_file_operations = {
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
-	NULL,			/* mmap */
+	msdos_mmap,		/* mmap */
 	NULL,			/* no special open is needed */
 	NULL,			/* release */
 	file_fsync		/* fsync */
@@ -53,7 +48,8 @@ struct inode_operations msdos_file_inode_operations = {
 	NULL,			/* follow_link */
 	msdos_bmap,		/* bmap */
 	msdos_truncate,		/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	msdos_smap		/* smap */
 };
 
 /* No bmap for MS-DOS FS' that don't align data at kByte boundaries. */
@@ -73,12 +69,19 @@ struct inode_operations msdos_file_inode_operations_no_bmap = {
 	NULL,			/* follow_link */
 	NULL,			/* bmap */
 	msdos_truncate,		/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	msdos_smap		/* smap */
 };
 
 
-static int msdos_file_read(struct inode *inode,struct file *filp,char *buf,
-    int count)
+/*
+	Read a file into user space
+*/
+int msdos_file_read(
+	struct inode *inode,
+	struct file *filp,
+	char *buf,
+	int count)
 {
 	char *start;
 	int left,offset,size,sector,cnt;
@@ -91,7 +94,8 @@ static int msdos_file_read(struct inode *inode,struct file *filp,char *buf,
 		printk("msdos_file_read: inode = NULL\n");
 		return -EINVAL;
 	}
-	if (!S_ISREG(inode->i_mode)) {
+	/* S_ISLNK allows for UMSDOS. Should never happen for normal MSDOS */
+	if (!S_ISREG(inode->i_mode) && !S_ISLNK(inode->i_mode)) {
 		printk("msdos_file_read: mode = %07o\n",inode->i_mode);
 		return -EINVAL;
 	}
@@ -131,9 +135,14 @@ static int msdos_file_read(struct inode *inode,struct file *filp,char *buf,
 	return buf-start;
 }
 
-
-static int msdos_file_write(struct inode *inode,struct file *filp,char *buf,
-    int count)
+/*
+	Write to a file either from user space
+*/
+int msdos_file_write(
+	struct inode *inode,
+	struct file *filp,
+	char *buf,
+	int count)
 {
 	int sector,offset,size,left,written;
 	int error,carry;
@@ -145,7 +154,8 @@ static int msdos_file_write(struct inode *inode,struct file *filp,char *buf,
 		printk("msdos_file_write: inode = NULL\n");
 		return -EINVAL;
 	}
-	if (!S_ISREG(inode->i_mode)) {
+	/* S_ISLNK allows for UMSDOS. Should never happen for normal MSDOS */
+	if (!S_ISREG(inode->i_mode) && !S_ISLNK(inode->i_mode)) {
 		printk("msdos_file_write: mode = %07o\n",inode->i_mode);
 		return -EINVAL;
 	}
@@ -210,7 +220,6 @@ static int msdos_file_write(struct inode *inode,struct file *filp,char *buf,
 	inode->i_dirt = 1;
 	return buf-start;
 }
-
 
 void msdos_truncate(struct inode *inode)
 {

@@ -26,11 +26,11 @@
 
 
 /* Channel n is busy iff dma_chan_busy[n] != 0.
- * DMA0 is reserved for DRAM refresh, I think.
- * DMA4 is reserved for cascading (?).
+ * DMA0 used to be reserved for DRAM refresh, but apparently not any more...
+ * DMA4 is reserved for cascading.
  */
 static volatile unsigned int dma_chan_busy[MAX_DMA_CHANNELS] = {
-	1, 0, 0, 0, 1, 0, 0, 0
+	0, 0, 0, 0, 1, 0, 0, 0
 };
 
 

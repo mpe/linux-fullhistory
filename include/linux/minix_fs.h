@@ -75,6 +75,8 @@ struct minix_dir_entry {
 	char name[0];
 };
 
+#ifdef __KERNEL__
+
 extern int minix_lookup(struct inode * dir,const char * name, int len,
 	struct inode ** result);
 extern int minix_create(struct inode * dir,const char * name, int len, int mode,
@@ -115,5 +117,7 @@ extern int minix_sync_file(struct inode *, struct file *);
 extern struct inode_operations minix_file_inode_operations;
 extern struct inode_operations minix_dir_inode_operations;
 extern struct inode_operations minix_symlink_inode_operations;
+
+#endif /* __KERNEL__ */
 
 #endif

@@ -352,6 +352,8 @@ struct task_struct {
 /* mm */	{ INIT_MM } \
 }
 
+#ifdef __KERNEL__
+
 extern struct task_struct init_task;
 extern struct task_struct *task[NR_TASKS];
 extern struct task_struct *last_task_used_math;
@@ -619,5 +621,7 @@ extern struct desc_struct default_ldt;
 			: /* no output */ \
 			:"m" (current->debugreg[register]) \
 			:"dx");
+
+#endif /* __KERNEL__ */
 
 #endif

@@ -5,6 +5,7 @@
  * 'tty.h' defines some structures used by tty_io.c and some defines.
  */
 
+#ifdef __KERNEL__
 #include <linux/fs.h>
 #include <linux/termios.h>
 #include <linux/tqueue.h>
@@ -12,6 +13,7 @@
 #include <linux/tty_ldisc.h>
 
 #include <asm/system.h>
+
 
 /*
  * Note: don't mess with NR_PTYS until you understand the tty minor 
@@ -322,4 +324,5 @@ extern void unblank_screen(void);
 extern int vt_ioctl(struct tty_struct *tty, struct file * file,
 		    unsigned int cmd, unsigned long arg);
 
+#endif /* __KERNEL__ */
 #endif

@@ -69,7 +69,7 @@
 extern int set_selection(const int arg, struct tty_struct *tty);
 extern int paste_selection(struct tty_struct *tty);
 extern int sel_loadlut(const int arg);
-extern int mouse_reporting_p(void);
+extern int mouse_reporting(void);
 extern int shift_state;
 #endif /* CONFIG_SELECTION */
 extern int do_screendump(int arg);
@@ -1394,7 +1394,8 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 					put_fs_byte(shift_state,arg);
 					return 0;
 				case 7:
-					return mouse_reporting_p();
+					put_fs_byte(mouse_reporting(),arg);
+					return 0;
 #endif /* CONFIG_SELECTION */
 				default: 
 					return -EINVAL;

@@ -117,22 +117,6 @@ struct iso_directory_record {
 	char name			[0];
 };
 
-extern int isonum_711(char *);
-extern int isonum_712(char *);
-extern int isonum_721(char *);
-extern int isonum_722(char *);
-extern int isonum_723(char *);
-extern int isonum_731(char *);
-extern int isonum_732(char *);
-extern int isonum_733(char *);
-extern int iso_date(char *, int);
-
-extern int parse_rock_ridge_inode(struct iso_directory_record *, struct inode *);
-extern int get_rock_ridge_filename(struct iso_directory_record *, char ** name, int * len, struct inode *);
-
-extern char * get_rock_ridge_symlink(struct inode *);
-extern int find_rock_ridge_relocation(struct iso_directory_record *, struct inode *);
-
 #define ISOFS_BLOCK_BITS 11
 #define ISOFS_BLOCK_SIZE 2048
 
@@ -160,6 +144,22 @@ extern int find_rock_ridge_relocation(struct iso_directory_record *, struct inod
 #define ISOFS_FILE_BINARY 2
 #define ISOFS_FILE_TEXT_M 3
 
+#ifdef __KERNEL__
+extern int isonum_711(char *);
+extern int isonum_712(char *);
+extern int isonum_721(char *);
+extern int isonum_722(char *);
+extern int isonum_723(char *);
+extern int isonum_731(char *);
+extern int isonum_732(char *);
+extern int isonum_733(char *);
+extern int iso_date(char *, int);
+
+extern int parse_rock_ridge_inode(struct iso_directory_record *, struct inode *);
+extern int get_rock_ridge_filename(struct iso_directory_record *, char ** name, int * len, struct inode *);
+
+extern char * get_rock_ridge_symlink(struct inode *);
+extern int find_rock_ridge_relocation(struct iso_directory_record *, struct inode *);
 
 /* The stuff that follows may be totally unneeded. I have not checked to see 
  which prototypes we are still using.  */
@@ -211,6 +211,8 @@ extern void leak_check_free_s(void * obj, int size);
 extern struct buffer_head * leak_check_bread(int dev, int block, int size);
 extern void leak_check_brelse(struct buffer_head * bh);
 #endif /* LEAK_CHECK */
+
+#endif /* __KERNEL__ */
 
 #endif
 

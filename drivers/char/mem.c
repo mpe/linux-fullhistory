@@ -411,8 +411,8 @@ long chr_dev_init(long mem_start, long mem_end)
 #ifdef CONFIG_SOUND
 	mem_start = soundcard_init(mem_start);
 #endif
-#if CONFIG_TAPE_QIC02
-	mem_start = tape_qic02_init(mem_start);
+#if CONFIG_QIC02_TAPE
+	mem_start = qic02_tape_init(mem_start);
 #endif
 /*
  *      Rude way to allocate kernel memory buffer for tape device

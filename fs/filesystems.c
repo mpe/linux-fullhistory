@@ -14,6 +14,7 @@
 #include <linux/ext2_fs.h>
 #include <linux/xia_fs.h>
 #include <linux/msdos_fs.h>
+#include <linux/umsdos_fs.h>
 #include <linux/proc_fs.h>
 #include <linux/nfs_fs.h>
 #include <linux/iso_fs.h>
@@ -51,6 +52,10 @@ asmlinkage int sys_setup(void)
 #ifdef CONFIG_XIA_FS
 	register_filesystem(&(struct file_system_type)
 		{xiafs_read_super, "xiafs", 1, NULL});
+#endif
+#ifdef CONFIG_UMSDOS_FS
+	register_filesystem(&(struct file_system_type)
+	{UMSDOS_read_super,	"umsdos",	1, NULL});
 #endif
 
 #ifdef CONFIG_MSDOS_FS

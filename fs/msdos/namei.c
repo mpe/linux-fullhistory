@@ -360,7 +360,11 @@ rmdir_done:
 }
 
 
-int msdos_unlink(struct inode *dir,const char *name,int len)
+static int msdos_unlinkx(
+	struct inode *dir,
+	const char *name,
+	int len,
+	int nospc)	/* Flag special file ? */
 {
 	int res,ino;
 	struct buffer_head *bh;
@@ -375,7 +379,7 @@ int msdos_unlink(struct inode *dir,const char *name,int len)
 		res = -ENOENT;
 		goto unlink_done;
 	}
-	if (!S_ISREG(inode->i_mode)) {
+	if (!S_ISREG(inode->i_mode) && nospc){
 		res = -EPERM;
 		goto unlink_done;
 	}
@@ -392,6 +396,17 @@ unlink_done:
 	return res;
 }
 
+int msdos_unlink(struct inode *dir,const char *name,int len)
+{
+	return msdos_unlinkx (dir,name,len,1);
+}
+/*
+	Special entry for umsdos
+*/
+int msdos_unlink_umsdos(struct inode *dir,const char *name,int len)
+{
+	return msdos_unlinkx (dir,name,len,0);
+}
 
 static int rename_same_dir(struct inode *old_dir,char *old_name,
     struct inode *new_dir,char *new_name,struct buffer_head *old_bh,

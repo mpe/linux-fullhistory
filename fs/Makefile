@@ -33,6 +33,9 @@ endif
 ifdef CONFIG_XIA_FS
 FS_SUBDIRS := $(FS_SUBDIRS) xiafs
 endif
+ifdef CONFIG_UMSDOS_FS
+FS_SUBDIRS := $(FS_SUBDIRS) umsdos
+endif
 ifdef CONFIG_SYSV_FS
 FS_SUBDIRS := $(FS_SUBDIRS) sysv
 endif

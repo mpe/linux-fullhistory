@@ -4,7 +4,6 @@
 /*
  * The MS-DOS filesystem constants/structures
  */
-
 #include <linux/fs.h>
 #include <linux/stat.h>
 #include <linux/fd.h>
@@ -109,6 +108,7 @@ struct fat_cache {
 
 #define MSDOS_MKATTR(m) ((m & S_IWUGO) ? ATTR_NONE : ATTR_RO)
 
+#ifdef __KERNEL__
 
 static inline struct buffer_head *msdos_sread(int dev,int sector,void **start)
 {
@@ -161,6 +161,7 @@ extern int msdos_create(struct inode *dir,const char *name,int len,int mode,
 extern int msdos_mkdir(struct inode *dir,const char *name,int len,int mode);
 extern int msdos_rmdir(struct inode *dir,const char *name,int len);
 extern int msdos_unlink(struct inode *dir,const char *name,int len);
+extern int msdos_unlink_umsdos(struct inode *dir,const char *name,int len);
 extern int msdos_rename(struct inode *old_dir,const char *old_name,int old_len,
 	struct inode *new_dir,const char *new_name,int new_len);
 
@@ -179,12 +180,21 @@ extern int msdos_notify_change(int flags,struct inode *inode);
 /* dir.c */
 
 extern struct inode_operations msdos_dir_inode_operations;
-
+extern int msdos_readdir (struct inode *inode, struct file *filp,
+	struct dirent *dirent, int count);
 /* file.c */
 
 extern struct inode_operations msdos_file_inode_operations;
+extern int msdos_file_read(struct inode *, struct file *, char *, int);
+extern int msdos_file_write(struct inode *, struct file *, char *, int);
 extern struct inode_operations msdos_file_inode_operations_no_bmap;
 
 extern void msdos_truncate(struct inode *inode);
+
+/* mmap.c */
+extern int msdos_mmap (struct inode *, struct file *, unsigned long, size_t
+	,int , unsigned long);
+
+#endif /* __KERNEL__ */
 
 #endif

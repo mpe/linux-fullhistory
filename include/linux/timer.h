@@ -27,7 +27,7 @@
  *
  * COPRO_TIMER		387 timeout for buggy hardware..
  *
- * TAPE_QIC02_TIMER	timer for QIC-02 tape driver (it's not hardcoded)
+ * QIC02_TAPE_TIMER	timer for QIC-02 tape driver (it's not hardcoded)
  *
  * MCD_TIMER		Mitsumi CD-ROM Timer
  */
@@ -43,7 +43,7 @@
 #define SOUND_TIMER	20
 #define COPRO_TIMER	21
 
-#define TAPE_QIC02_TIMER	22	/* hhb */
+#define QIC02_TAPE_TIMER	22	/* hhb */
 #define MCD_TIMER	23
 
 #define HD_TIMER2	24

@@ -58,7 +58,7 @@ OBJS := $(OBJS) psaux.o
 SRCS := $(SRCS) psaux.c
 endif
 
-ifdef CONFIG_TAPE_QIC02
+ifdef CONFIG_QIC02_TAPE
 OBJS := $(OBJS) tpqic02.o 
 SRCS := $(SRCS) tpqic02.c
 endif

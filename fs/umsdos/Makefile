@@ -1,5 +1,5 @@
 #
-# Makefile for the linux MS-DOS-filesystem routines.
+# Makefile for the umsdos unix-like filesystem routines.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
@@ -14,13 +14,23 @@
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS=	namei.o inode.o file.o dir.o misc.o fat.o mmap.o
+OBJS=	dir.o emd.o file.o inode.o ioctl.o mangle.o namei.o\
+	rdir.o symlink.o #check.o
 
-msdos.o: $(OBJS)
-	$(LD) -r -o msdos.o $(OBJS)
+umsdos.o: $(OBJS)
+	$(LD) -r -o umsdos.o $(OBJS)
+
+clean:
+	rm -f core *.o *.a *.s
 
 dep:
 	$(CPP) -M *.c > .depend
+
+p:
+	proto *.c >/usr/include/linux/umsdos_fs.p
+
+doc:
+	nadoc -i -p umsdos.doc - /tmp/umsdos.mpg
 
 #
 # include a dependency file if one exists

@@ -500,6 +500,22 @@ void init(void)
 
 	setup();
 	sprintf(term, "TERM=con%dx%d", ORIG_VIDEO_COLS, ORIG_VIDEO_LINES);
+
+	#ifdef CONFIG_UMSDOS_FS
+	{
+		/*
+			When mounting a umsdos fs as root, we detect
+			the pseudo_root (/linux) and initialise it here.
+			pseudo_root is defined in fs/umsdos/inode.c
+		*/
+		extern struct inode *pseudo_root;
+		if (pseudo_root != NULL){
+			current->fs->root = pseudo_root;
+			current->fs->pwd  = pseudo_root;
+		}
+	}
+	#endif
+
 	(void) open("/dev/tty1",O_RDWR,0);
 	(void) dup(0);
 	(void) dup(0);
