@@ -288,7 +288,7 @@ void __release_region(struct resource *parent, unsigned long start, unsigned lon
 		}
 		p = &res->sibling;
 	}
-	printk("Trying to free nonexistent resource <%04lx-%04lx>\n", start, end);
+	printk("Trying to free nonexistent resource <%08lx-%08lx>\n", start, end);
 }
 
 /*

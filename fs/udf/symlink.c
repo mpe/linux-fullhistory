@@ -83,7 +83,7 @@ static int udf_symlink_filler(struct file *file, struct page *page)
 	struct buffer_head *bh = NULL;
 	char *symlink;
 	int err = -EIO;
-	char *p = (char *)kmap(page);
+	char *p = kmap(page);
 	
 	lock_kernel();
 	if (UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_IN_ICB)

@@ -1,4 +1,4 @@
-/* $Id: envctrl.h,v 1.2 2000/10/17 16:20:36 davem Exp $
+/* $Id: envctrl.h,v 1.3 2000/11/03 00:37:40 davem Exp $
  *
  * envctrl.h: Definitions for access to the i2c environment
  *            monitoring on Ultrasparc systems.
@@ -53,6 +53,8 @@
 #define ENVCTRL_RD_SCSI_TEMPERATURE	_IOR('p', 0x46, int)
 #define ENVCTRL_RD_ETHERNET_TEMPERATURE	_IOR('p', 0x47, int)
 #define ENVCTRL_RD_MTHRBD_TEMPERATURE	_IOR('p', 0x48, int)
+
+#define ENVCTRL_RD_GLOBALADDRESS	_IOR('p', 0x49, int)
 
 /* Read return values for a voltage status request. */
 #define ENVCTRL_VOLTAGE_POWERSUPPLY_GOOD	0x01

@@ -219,39 +219,6 @@ void __init setup_local_APIC (void)
 	if (!test_bit(GET_APIC_ID(apic_read(APIC_ID)), &phys_cpu_present_map))
 		BUG();
 
-	value = apic_read(APIC_SPIV);
-	value &= ~APIC_VECTOR_MASK;
-	/*
-	 * Enable APIC
-	 */
-	value |= (1<<8);
-
-	/*
-	 * Some unknown Intel IO/APIC (or APIC) errata is biting us with
-	 * certain networking cards. If high frequency interrupts are
-	 * happening on a particular IOAPIC pin, plus the IOAPIC routing
-	 * entry is masked/unmasked at a high rate as well then sooner or
-	 * later IOAPIC line gets 'stuck', no more interrupts are received
-	 * from the device. If focus CPU is disabled then the hang goes
-	 * away, oh well :-(
-	 *
-	 * [ This bug can be reproduced easily with a level-triggered
-	 *   PCI Ne2000 networking cards and PII/PIII processors, dual
-	 *   BX chipset. ]
-	 */
-#if 0
-	/* Enable focus processor (bit==0) */
-	value &= ~(1<<9);
-#else
-	/* Disable focus processor (bit==1) */
-	value |= (1<<9);
-#endif
-	/*
-	 * Set spurious IRQ vector
-	 */
-	value |= SPURIOUS_APIC_VECTOR;
-	apic_write_around(APIC_SPIV, value);
-
 	/*
 	 * Set up LVT0, LVT1:
 	 *
@@ -323,6 +290,42 @@ void __init setup_local_APIC (void)
 	 * Must be "all ones" explicitly for 82489DX.
 	 */
 	apic_write_around(APIC_DFR, 0xffffffff);
+
+	/*
+	 * Now that we are all set up, enable the APIC
+	 */
+	value = apic_read(APIC_SPIV);
+	value &= ~APIC_VECTOR_MASK;
+	/*
+	 * Enable APIC
+	 */
+	value |= (1<<8);
+
+	/*
+	 * Some unknown Intel IO/APIC (or APIC) errata is biting us with
+	 * certain networking cards. If high frequency interrupts are
+	 * happening on a particular IOAPIC pin, plus the IOAPIC routing
+	 * entry is masked/unmasked at a high rate as well then sooner or
+	 * later IOAPIC line gets 'stuck', no more interrupts are received
+	 * from the device. If focus CPU is disabled then the hang goes
+	 * away, oh well :-(
+	 *
+	 * [ This bug can be reproduced easily with a level-triggered
+	 *   PCI Ne2000 networking cards and PII/PIII processors, dual
+	 *   BX chipset. ]
+	 */
+#if 0
+	/* Enable focus processor (bit==0) */
+	value &= ~(1<<9);
+#else
+	/* Disable focus processor (bit==1) */
+	value |= (1<<9);
+#endif
+	/*
+	 * Set spurious IRQ vector
+	 */
+	value |= SPURIOUS_APIC_VECTOR;
+	apic_write_around(APIC_SPIV, value);
 }
 
 void __init init_apic_mappings(void)

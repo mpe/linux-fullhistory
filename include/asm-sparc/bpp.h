@@ -70,13 +70,4 @@
 # define BPP_GP_Select 0x0800
 # define BPP_GP_nFault 0x1000
 
-
-/*
- * Prototype for the initialization routine.
- */
-
-#ifdef __KERNEL__
-extern int bpp_init(void);
-#endif
-
 #endif

@@ -462,7 +462,7 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	if (!page)
 		goto read_really;
 
-	ctl.cache = cache = (union ncp_dir_cache *) kmap(page);
+	ctl.cache = cache = kmap(page);
 	ctl.head  = cache->head;
 
 	if (!Page_Uptodate(page) || !ctl.head.eof)
@@ -490,7 +490,7 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 			ctl.page = find_lock_page(&inode->i_data, ctl.ofs);
 			if (!ctl.page)
 				goto invalid_cache;
-			ctl.cache = (union ncp_dir_cache *) kmap(ctl.page);
+			ctl.cache = kmap(ctl.page);
 			if (!Page_Uptodate(ctl.page))
 				goto invalid_cache;
 		}
@@ -635,7 +635,7 @@ ncp_fill_cache(struct file *filp, void *dirent, filldir_t filldir,
 		ctl.ofs  += 1;
 		ctl.page  = grab_cache_page(&inode->i_data, ctl.ofs);
 		if (ctl.page)
-			ctl.cache = (union ncp_dir_cache *) kmap(ctl.page);
+			ctl.cache = kmap(ctl.page);
 	}
 	if (ctl.cache) {
 		ctl.cache->dentry[ctl.idx] = newdent;

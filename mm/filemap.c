@@ -387,7 +387,7 @@ static inline void __add_to_page_cache(struct page * page,
 	if (PageLocked(page))
 		BUG();
 
-	flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error) | (1 << PG_dirty) | (1 << PG_referenced));
+	flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error) | (1 << PG_dirty) | (1 << PG_referenced) | (1 << PG_arch_1));
 	page->flags = flags | (1 << PG_locked);
 	page_cache_get(page);
 	page->index = offset;
@@ -1095,14 +1095,14 @@ no_cached_page:
 
 static int file_read_actor(read_descriptor_t * desc, struct page *page, unsigned long offset, unsigned long size)
 {
-	unsigned long kaddr;
+	char *kaddr;
 	unsigned long left, count = desc->count;
 
 	if (size > count)
 		size = count;
 
 	kaddr = kmap(page);
-	left = __copy_to_user(desc->buf, (void *)(kaddr + offset), size);
+	left = __copy_to_user(desc->buf, kaddr + offset, size);
 	kunmap(page);
 	
 	if (left) {
@@ -1146,7 +1146,7 @@ ssize_t generic_file_read(struct file * filp, char * buf, size_t count, loff_t *
 
 static int file_send_actor(read_descriptor_t * desc, struct page *page, unsigned long offset , unsigned long size)
 {
-	unsigned long kaddr;
+	char *kaddr;
 	ssize_t written;
 	unsigned long count = desc->count;
 	struct file *file = (struct file *) desc->buf;
@@ -1158,8 +1158,7 @@ static int file_send_actor(read_descriptor_t * desc, struct page *page, unsigned
 	set_fs(KERNEL_DS);
 
 	kaddr = kmap(page);
-	written = file->f_op->write(file, (char *)kaddr + offset,
-						 size, &file->f_pos);
+	written = file->f_op->write(file, kaddr + offset, size, &file->f_pos);
 	kunmap(page);
 	set_fs(old_fs);
 	if (written < 0) {

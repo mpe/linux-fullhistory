@@ -1,4 +1,4 @@
-/* $Id: envctrl.c,v 1.18 2000/10/17 16:20:35 davem Exp $
+/* $Id: envctrl.c,v 1.19 2000/11/03 00:37:40 davem Exp $
  * envctrl.c: Temperature and Fan monitoring on Machines providing it.
  *
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
@@ -11,7 +11,9 @@
  * 	http://www-eu2.semiconductors.com/pip/PCF8584P
  * 	http://www-eu2.semiconductors.com/pip/PCF8574AP
  * 	http://www-eu2.semiconductors.com/pip/PCF8591P
- * 
+ *
+ * EB - Added support for CP1500 Global Address and PS/Voltage monitoring.
+ * 		Eric Brower <ebrower@usa.net>
  */
 
 #include <linux/config.h>
@@ -72,15 +74,16 @@
  * Firmware definitions.
  */
 #define PCF8584_MAX_CHANNELS            8
+#define PCF8584_GLOBALADDR_TYPE			6  /* global address monitor */
 #define PCF8584_FANSTAT_TYPE            3  /* fan status monitor */
 #define PCF8584_VOLTAGE_TYPE            2  /* voltage monitor    */
-#define PCF8584_TEMP_TYPE	        1  /* temperature monitor*/
+#define PCF8584_TEMP_TYPE	        	1  /* temperature monitor*/
 
 /* Monitor type of i2c child device.
  * Driver definitions.
  */
-#define ENVCTRL_NOMON			0
-#define ENVCTRL_CPUTEMP_MON		1    /* cpu temperature monitor */
+#define ENVCTRL_NOMON				0
+#define ENVCTRL_CPUTEMP_MON			1    /* cpu temperature monitor */
 #define ENVCTRL_CPUVOLTAGE_MON	  	2    /* voltage monitor         */
 #define ENVCTRL_FANSTAT_MON  		3    /* fan status monitor      */
 #define ENVCTRL_ETHERTEMP_MON		4    /* ethernet temperarture */
@@ -88,6 +91,7 @@
 #define ENVCTRL_VOLTAGESTAT_MON	  	5    /* voltage status monitor  */
 #define ENVCTRL_MTHRBDTEMP_MON		6    /* motherboard temperature */
 #define ENVCTRL_SCSITEMP_MON		7    /* scsi temperarture */
+#define ENVCTRL_GLOBALADDR_MON		8    /* global address */
 
 /* Child device type.
  * Driver definitions.
@@ -108,6 +112,15 @@
 /* Driver miscellaneous definitions. */
 #define ENVCTRL_MAX_CPU			4
 #define CHANNEL_DESC_SZ			256
+
+/* Mask values for combined GlobalAddress/PowerStatus node */
+#define ENVCTRL_GLOBALADDR_ADDR_MASK 	0x1F
+#define ENVCTRL_GLOBALADDR_PSTAT_MASK	0x60
+
+/* Node 0x70 ignored on CompactPCI CP1400/1500 platforms 
+ * (see envctrl_init_i2c_child)
+ */
+#define ENVCTRL_CPCI_IGNORED_NODE		0x70
 
 struct pcf8584_reg {
 	 unsigned char data;
@@ -317,7 +330,6 @@ static unsigned char envctrl_i2c_read_8574(unsigned char addr)
 	/* Do a single byte read and send stop. */
 	rd = envctrl_i2c_read_data();
 	envctrl_i2c_stop();
-
 	return rd;
 }
 
@@ -462,7 +474,32 @@ static int envctrl_i2c_fan_status(struct i2c_child_t *pchild,
 	return 1;
 }
 
-/* Function Description: Read voltage and power supply status.
+/* Function Description: Read global addressing line.
+ * Return : Always 1 byte. Status stored in bufdata.
+ */
+static int envctrl_i2c_globaladdr(struct i2c_child_t *pchild,
+				  unsigned char data,
+				  char *bufdata)
+{
+	/* Translatation table is not necessary, as global
+	 * addr is the integer value of the GA# bits.
+	 *
+	 * NOTE: MSB is documented as zero, but I see it as '1' always....
+	 *
+	 * -----------------------------------------------
+	 * | 0 | FAL | DEG | GA4 | GA3 | GA2 | GA1 | GA0 |
+	 * -----------------------------------------------
+	 * GA0 - GA4	integer value of Global Address (backplane slot#)
+	 * DEG			0 = cPCI Power supply output is starting to degrade
+	 * 				1 = cPCI Power supply output is OK
+	 * FAL			0 = cPCI Power supply has failed
+	 * 				1 = cPCI Power supply output is OK
+	 */
+	bufdata[0] = (data & ENVCTRL_GLOBALADDR_ADDR_MASK);
+	return 1;
+}
+
+/* Function Description: Read standard voltage and power supply status.
  * Return : Always 1 byte. Status stored in bufdata.
  */
 static unsigned char envctrl_i2c_voltage_status(struct i2c_child_t *pchild,
@@ -587,10 +624,20 @@ envctrl_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 		ret = envctrl_i2c_fan_status(pchild,data[0], data);
 		copy_to_user((unsigned char *)buf, data, ret);
 		break;
+	
+	case ENVCTRL_RD_GLOBALADDRESS:
+		if (!(pchild = envctrl_get_i2c_child(ENVCTRL_GLOBALADDR_MON)))
+			return 0;
+		data[0] = envctrl_i2c_read_8574(pchild->addr);
+		ret = envctrl_i2c_globaladdr(pchild, data[0], data);
+		copy_to_user((unsigned char *)buf, data, ret);
+		break;
 
 	case ENVCTRL_RD_VOLTAGE_STATUS:
 		if (!(pchild = envctrl_get_i2c_child(ENVCTRL_VOLTAGESTAT_MON)))
-			return 0;
+			/* If voltage monitor not present, check for CPCI equivalent */
+			if (!(pchild = envctrl_get_i2c_child(ENVCTRL_GLOBALADDR_MON)))
+				return 0;
 		data[0] = envctrl_i2c_read_8574(pchild->addr);
 		ret = envctrl_i2c_voltage_status(pchild, data[0], data);
 		copy_to_user((unsigned char *)buf, data, ret);
@@ -621,6 +668,7 @@ envctrl_ioctl(struct inode *inode, struct file *file,
 	case ENVCTRL_RD_VOLTAGE_STATUS:
 	case ENVCTRL_RD_ETHERNET_TEMPERATURE:
 	case ENVCTRL_RD_SCSI_TEMPERATURE:
+	case ENVCTRL_RD_GLOBALADDRESS:
 		file->private_data = (void *)(long)cmd;
 		break;
 
@@ -714,9 +762,6 @@ static void envctrl_set_mon(struct i2c_child_t *pchild,
 
 	if (!(strcmp(chnl_desc,"temp,ethernet")))
 		pchild->mon_type[chnl_no] = ENVCTRL_ETHERTEMP_MON;
-
-	if (!(strcmp(chnl_desc,"temp,ethernet")))
-		pchild->mon_type[chnl_no] = ENVCTRL_ETHERTEMP_MON;
 }
 
 /* Function Description: Initialize monitor channel with channel desc,
@@ -768,6 +813,39 @@ static void envctrl_init_fanstat(struct i2c_child_t *pchild)
 	 * We dont care which channels since we have the mask already.
 	 */
 	pchild->mon_type[0] = ENVCTRL_FANSTAT_MON;
+}
+
+/* Function Description: Initialize child device for global addressing line.
+ * Return: None.
+ */
+static void envctrl_init_globaladdr(struct i2c_child_t *pchild)
+{
+	int i;
+
+	/* Voltage/PowerSupply monitoring is piggybacked 
+	 * with Global Address on CompactPCI.  See comments
+	 * within envctrl_i2c_globaladdr for bit assignments.
+	 *
+	 * The mask is created here by assigning mask bits to each
+	 * bit position that represents PCF8584_VOLTAGE_TYPE data.
+	 * Channel numbers are not consecutive within the globaladdr
+	 * node (why?), so we use the actual counter value as chnls_mask
+	 * index instead of the chnl_array[x].chnl_no value.
+	 *
+	 * NOTE: This loop could be replaced with a constant representing
+	 * a mask of bits 5&6 (ENVCTRL_GLOBALADDR_PSTAT_MASK).
+	 */
+	for (i = 0; i < pchild->total_chnls; i++) {
+		if (PCF8584_VOLTAGE_TYPE == pchild->chnl_array[i].type) {
+			pchild->voltage_mask |= chnls_mask[i];
+		}
+	}
+
+	/* We only need to know if this child has global addressing 
+	 * line monitored.  We dont care which channels since we know 
+	 * the mask already (ENVCTRL_GLOBALADDR_ADDR_MASK).
+	 */
+	pchild->mon_type[0] = ENVCTRL_GLOBALADDR_MON;
 }
 
 /* Initialize child device monitoring voltage status. */
@@ -822,6 +900,27 @@ static void envctrl_init_i2c_child(struct linux_ebus_child *edev_child,
 		}
 	}
 
+	/* SPARCengine ASM Reference Manual (ref. SMI doc 805-7581-04)
+	 * sections 2.5, 3.5, 4.5 state node 0x70 for CP1400/1500 is
+	 * "For Factory Use Only."
+	 *
+	 * We ignore the node on these platforms by assigning the
+	 * 'NULL' monitor type.
+	 */
+	if (ENVCTRL_CPCI_IGNORED_NODE == pchild->addr) {
+		int len;
+		char prop[56];
+
+		len = prom_getproperty(prom_root_node, "name", prop, sizeof(prop));
+		if (0 < len && (0 == strncmp(prop, "SUNW,UltraSPARC-IIi-cEngine", len)))
+		{
+			for (len = 0; len < PCF8584_MAX_CHANNELS; ++len) {
+				pchild->mon_type[len] = ENVCTRL_NOMON;
+			}
+			return;
+		}
+	}
+
 	/* Get the monitor channels. */
 	len = prom_getproperty(node, "channels-in-use",
 			       (char *) pchild->chnl_array,
@@ -833,6 +932,11 @@ static void envctrl_init_i2c_child(struct linux_ebus_child *edev_child,
 		switch (pchild->chnl_array[i].type) {
 		case PCF8584_TEMP_TYPE:
 			envctrl_init_adc(pchild, node);
+			break;
+
+		case PCF8584_GLOBALADDR_TYPE:
+			envctrl_init_globaladdr(pchild);
+			i = pchild->total_chnls;
 			break;
 
 		case PCF8584_FANSTAT_TYPE:
@@ -865,7 +969,7 @@ static struct i2c_child_t *envctrl_get_i2c_child(unsigned char mon_type)
 	for (i = 0; i < ENVCTRL_MAX_CPU*2; i++) {
 		for (j = 0; j < PCF8584_MAX_CHANNELS; j++) {
 			if (i2c_childlist[i].mon_type[j] == mon_type) {
-				return (struct i2c_child_t*)(&(i2c_childlist[i]));
+				return (struct i2c_child_t *)(&(i2c_childlist[i]));
 			}
 		}
 	}
@@ -932,8 +1036,7 @@ done:
 	 * child devices.
 	 */
 	printk("envctrl: initialized ");
-	for(--i; i >= 0; --i)
-	{
+	for (--i; i >= 0; --i) {
 		printk("[%s 0x%lx]%s", 
 			(I2C_ADC == i2c_childlist[i].i2ctype) ? ("adc") : 
 			((I2C_GPIO == i2c_childlist[i].i2ctype) ? ("gpio") : ("unknown")), 

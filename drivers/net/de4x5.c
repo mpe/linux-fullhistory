@@ -766,6 +766,20 @@ struct de4x5_desc {
 #define DE4X5_PKT_BIN_SZ  128            /* Should be >=100 unless you
                                             increase DE4X5_PKT_STAT_SZ */
 
+struct pkt_stats {
+	u_int bins[DE4X5_PKT_STAT_SZ];      /* Private stats counters       */
+	u_int unicast;
+	u_int multicast;
+	u_int broadcast;
+	u_int excessive_collisions;
+	u_int tx_underruns;
+	u_int excessive_underruns;
+	u_int rx_runt_frames;
+	u_int rx_collision;
+	u_int rx_dribble;
+	u_int rx_overflow;
+};
+
 struct de4x5_private {
     char adapter_name[80];                  /* Adapter name                 */
     u_long interrupt;                       /* Aligned ISR flag             */
@@ -779,19 +793,7 @@ struct de4x5_private {
     char frame[64];                         /* Min sized packet for loopback*/
     spinlock_t lock;                        /* Adapter specific spinlock    */
     struct net_device_stats stats;          /* Public stats                 */
-    struct {
-	u_int bins[DE4X5_PKT_STAT_SZ];      /* Private stats counters       */
-	u_int unicast;
-	u_int multicast;
-	u_int broadcast;
-	u_int excessive_collisions;
-	u_int tx_underruns;
-	u_int excessive_underruns;
-	u_int rx_runt_frames;
-	u_int rx_collision;
-	u_int rx_dribble;
-	u_int rx_overflow;
-    } pktStats;
+    struct pkt_stats pktStats;	            /* Private stats counters	    */
     char rxRingSize;
     char txRingSize;
     int  bus;                               /* EISA or PCI                  */
@@ -5639,6 +5641,7 @@ de4x5_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	break;
 
     case DE4X5_SAY_BOO:              /* Say "Boo!" to the kernel log file */
+	if (!capable(CAP_NET_ADMIN)) return -EPERM;
 	printk("%s: Boo!\n", dev->name);
 	break;
 
@@ -5650,12 +5653,16 @@ de4x5_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	break;
 
     case DE4X5_GET_STATS:            /* Get the driver statistics */
-	ioc->len = sizeof(lp->pktStats);
+    {
+        struct pkt_stats statbuf;
+	ioc->len = sizeof(statbuf);
 	spin_lock_irqsave(&lp->lock, flags);
-	if (copy_to_user(ioc->data, &lp->pktStats, ioc->len)) return -EFAULT; 
+	memcpy(&statbuf, &lp->pktStats, ioc->len);
 	spin_unlock_irqrestore(&lp->lock, flags);
+	if (copy_to_user(ioc->data, &statbuf, ioc->len)) 
+		return -EFAULT; 
 	break;
-
+    }
     case DE4X5_CLR_STATS:            /* Zero out the driver statistics */
 	if (!capable(CAP_NET_ADMIN)) return -EPERM;
 	spin_lock_irqsave(&lp->lock, flags);

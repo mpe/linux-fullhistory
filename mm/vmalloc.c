@@ -9,6 +9,7 @@
 #include <linux/malloc.h>
 #include <linux/vmalloc.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgalloc.h>
@@ -137,24 +138,31 @@ inline int vmalloc_area_pages (unsigned long address, unsigned long size,
 {
 	pgd_t * dir;
 	unsigned long end = address + size;
+	int ret;
 
 	dir = pgd_offset_k(address);
 	flush_cache_all();
+	lock_kernel();
 	do {
 		pmd_t *pmd;
 		
 		pmd = pmd_alloc_kernel(dir, address);
+		ret = -ENOMEM;
 		if (!pmd)
-			return -ENOMEM;
+			break;
 
+		ret = -ENOMEM;
 		if (alloc_area_pmd(pmd, address, end - address, gfp_mask, prot))
-			return -ENOMEM;
+			break;
 
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
+
+		ret = 0;
 	} while (address && (address < end));
+	unlock_kernel();
 	flush_tlb_all();
-	return 0;
+	return ret;
 }
 
 struct vm_struct * get_vm_area(unsigned long size, unsigned long flags)
@@ -165,9 +173,15 @@ struct vm_struct * get_vm_area(unsigned long size, unsigned long flags)
 	area = (struct vm_struct *) kmalloc(sizeof(*area), GFP_KERNEL);
 	if (!area)
 		return NULL;
+	size += PAGE_SIZE;
 	addr = VMALLOC_START;
 	write_lock(&vmlist_lock);
 	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
+		if ((size + addr) < addr) {
+			write_unlock(&vmlist_lock);
+			kfree(area);
+			return NULL;
+		}
 		if (size + addr < (unsigned long) tmp->addr)
 			break;
 		addr = tmp->size + (unsigned long) tmp->addr;
@@ -179,7 +193,7 @@ struct vm_struct * get_vm_area(unsigned long size, unsigned long flags)
 	}
 	area->flags = flags;
 	area->addr = (void *)addr;
-	area->size = size + PAGE_SIZE;
+	area->size = size;
 	area->next = *p;
 	*p = area;
 	write_unlock(&vmlist_lock);

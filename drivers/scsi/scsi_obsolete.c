@@ -370,7 +370,7 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 		   * crashing, all scsi_done() calls during sync resets are ignored.
 		 */
 		printk("scsi%d: device driver called scsi_done() "
-		       "for a syncronous reset.\n", SCpnt->host->host_no);
+		       "for a synchronous reset.\n", SCpnt->host->host_no);
 		return;
 	}
 	if (SCpnt->flags & WAS_SENSE) {

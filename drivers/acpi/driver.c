@@ -284,7 +284,7 @@ acpi_thread(void *context)
 	/*
 	 * initialize
 	 */
-	exit_files(current);
+
 	daemonize();
 	strcpy(current->comm, "acpi");
 

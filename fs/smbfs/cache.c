@@ -47,11 +47,11 @@ smb_get_dircache(struct dentry * dentry)
 		page = grab_cache_page(mapping, 0);
 		if (!page)
 			goto out;
-		cachep = (struct cache_head *)kmap(page);
+		cachep = kmap(page);
 		memset((char*)cachep, 0, PAGE_SIZE);
 		goto out;
 	}
-	cachep = (struct cache_head *)kmap(page);
+	cachep = kmap(page);
 	if (cachep->valid) {
 		/*
 		 * OK, at least the page 0 survived and seems to be promising.
@@ -69,7 +69,7 @@ smb_get_dircache(struct dentry * dentry)
 				cachep->valid = 0;
 				goto out;
 			}
-			index->block = (struct cache_block *) kmap(page);
+			index->block = kmap(page);
 		}
 	}
 out:
@@ -188,7 +188,7 @@ get_block:
 	page_off = PAGE_SIZE + (cachep->idx << PAGE_SHIFT);
 	page = grab_cache_page(mapping, page_off>>PAGE_CACHE_SHIFT);
 	if (page) {
-		block = (struct cache_block *)kmap(page);
+		block = kmap(page);
 		index->block = block;
 		index->space = PAGE_SIZE;
 		goto add_entry;

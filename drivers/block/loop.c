@@ -235,7 +235,7 @@ static int lo_read_actor(read_descriptor_t * desc, struct page *page, unsigned l
 	if (size > count)
 		size = count;
 
-	kaddr = (char*)kmap(page);
+	kaddr = kmap(page);
 	if ((lo->transfer)(lo,READ,kaddr+offset,p->data,size,IV)) {
 		size = 0;
 		printk(KERN_ERR "loop: transfer error block %ld\n",

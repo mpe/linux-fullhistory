@@ -16,6 +16,9 @@
  *	Add *user handling. Checksums are not a win with MMX on any CPU
  *	tested so far for any MMX solution figured.
  *
+ *	22/09/2000 - Arjan van de Ven 
+ *		Improved for non-egineering-sample Athlons 
+ *
  */
  
 void *_mmx_memcpy(void *to, const void *from, size_t len)
@@ -104,28 +107,26 @@ static void fast_clear_page(void *page)
 		"  pxor %%mm0, %%mm0\n" : :
 	);
 
-	for(i=0;i<4096/128;i++)
+	for(i=0;i<4096/64;i++)
 	{
 		__asm__ __volatile__ (
-		"  movq %%mm0, (%0)\n"
-		"  movq %%mm0, 8(%0)\n"
-		"  movq %%mm0, 16(%0)\n"
-		"  movq %%mm0, 24(%0)\n"
-		"  movq %%mm0, 32(%0)\n"
-		"  movq %%mm0, 40(%0)\n"
-		"  movq %%mm0, 48(%0)\n"
-		"  movq %%mm0, 56(%0)\n"
-		"  movq %%mm0, 64(%0)\n"
-		"  movq %%mm0, 72(%0)\n"
-		"  movq %%mm0, 80(%0)\n"
-		"  movq %%mm0, 88(%0)\n"
-		"  movq %%mm0, 96(%0)\n"
-		"  movq %%mm0, 104(%0)\n"
-		"  movq %%mm0, 112(%0)\n"
-		"  movq %%mm0, 120(%0)\n"
+		"  movntq %%mm0, (%0)\n"
+		"  movntq %%mm0, 8(%0)\n"
+		"  movntq %%mm0, 16(%0)\n"
+		"  movntq %%mm0, 24(%0)\n"
+		"  movntq %%mm0, 32(%0)\n"
+		"  movntq %%mm0, 40(%0)\n"
+		"  movntq %%mm0, 48(%0)\n"
+		"  movntq %%mm0, 56(%0)\n"
 		: : "r" (page) : "memory");
-		page+=128;
+		page+=64;
 	}
+	/* since movntq is weakly-ordered, a "sfence" is needed to become
+	 * ordered again.
+	 */
+	__asm__ __volatile__ (
+		"  sfence \n" : :
+	);
 	stts();
 }
 
@@ -140,6 +141,9 @@ static void fast_copy_page(void *to, void *from)
 		current->flags &= ~PF_USEDFPU;
 	}
 
+	/* maybe the prefetch stuff can go before the expensive fnsave...
+	 * but that is for later. -AV
+	 */
 	__asm__ __volatile__ (
 		"1: prefetch (%0)\n"
 		"   prefetch 64(%0)\n"
@@ -162,21 +166,21 @@ static void fast_copy_page(void *to, void *from)
 		__asm__ __volatile__ (
 		"1: prefetch 320(%0)\n"
 		"2: movq (%0), %%mm0\n"
+		"   movntq %%mm0, (%1)\n"
 		"   movq 8(%0), %%mm1\n"
+		"   movntq %%mm1, 8(%1)\n"
 		"   movq 16(%0), %%mm2\n"
+		"   movntq %%mm2, 16(%1)\n"
 		"   movq 24(%0), %%mm3\n"
-		"   movq %%mm0, (%1)\n"
-		"   movq %%mm1, 8(%1)\n"
-		"   movq %%mm2, 16(%1)\n"
-		"   movq %%mm3, 24(%1)\n"
-		"   movq 32(%0), %%mm0\n"
-		"   movq 40(%0), %%mm1\n"
-		"   movq 48(%0), %%mm2\n"
-		"   movq 56(%0), %%mm3\n"
-		"   movq %%mm0, 32(%1)\n"
-		"   movq %%mm1, 40(%1)\n"
-		"   movq %%mm2, 48(%1)\n"
-		"   movq %%mm3, 56(%1)\n"
+		"   movntq %%mm3, 24(%1)\n"
+		"   movq 32(%0), %%mm4\n"
+		"   movntq %%mm4, 32(%1)\n"
+		"   movq 40(%0), %%mm5\n"
+		"   movntq %%mm5, 40(%1)\n"
+		"   movq 48(%0), %%mm6\n"
+		"   movntq %%mm6, 48(%1)\n"
+		"   movq 56(%0), %%mm7\n"
+		"   movntq %%mm7, 56(%1)\n"
 		".section .fixup, \"ax\"\n"
 		"3: movw $0x05EB, 1b\n"	/* jmp on 5 bytes */
 		"   jmp 2b\n"
@@ -189,6 +193,12 @@ static void fast_copy_page(void *to, void *from)
 		from+=64;
 		to+=64;
 	}
+	/* since movntq is weakly-ordered, a "sfence" is needed to become
+	 * ordered again.
+	 */
+	__asm__ __volatile__ (
+		"  sfence \n" : :
+	);
 	stts();
 }
 

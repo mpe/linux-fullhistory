@@ -207,14 +207,11 @@ static int standard_permission(struct inode *inode, int mask)
 	return -EACCES;
 }
 
-static int proc_permission(struct inode *inode, int mask)
+static int proc_check_root(struct inode *inode)
 {
 	struct dentry *de, *base, *root;
 	struct vfsmount *our_vfsmnt, *vfsmnt, *mnt;
 	int res = 0;
-
-	if (standard_permission(inode, mask) != 0)
-		return -EACCES;
 
 	if (proc_root_link(inode, &root, &vfsmnt)) /* Ewww... */
 		return -ENOENT;
@@ -248,6 +245,13 @@ out:
 	spin_unlock(&dcache_lock);
 	res = -EACCES;
 	goto exit;
+}
+
+static int proc_permission(struct inode *inode, int mask)
+{
+	if (standard_permission(inode, mask) != 0)
+		return -EACCES;
+	return proc_check_root(inode);
 }
 
 static ssize_t pid_maps_read(struct file * file, char * buf,
@@ -403,12 +407,14 @@ static struct inode_operations proc_mem_inode_operations = {
 static int proc_pid_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *inode = dentry->d_inode;
-	int error;
+	int error = -EACCES;
 
 	/* We don't need a base pointer in the /proc filesystem */
 	path_release(nd);
 
-	error = proc_permission(inode, MAY_EXEC);
+	if (current->fsuid != inode->i_uid && !capable(CAP_DAC_OVERRIDE))
+		goto out;
+	error = proc_check_root(inode);
 	if (error)
 		goto out;
 
@@ -441,12 +447,14 @@ static int do_proc_readlink(struct dentry *dentry, struct vfsmount *mnt,
 
 static int proc_pid_readlink(struct dentry * dentry, char * buffer, int buflen)
 {
-	int error;
+	int error = -EACCES;
 	struct inode *inode = dentry->d_inode;
 	struct dentry *de;
 	struct vfsmount *mnt = NULL;
 
-	error = proc_permission(inode, MAY_EXEC);
+	if (current->fsuid != inode->i_uid && !capable(CAP_DAC_OVERRIDE))
+		goto out;
+	error = proc_check_root(inode);
 	if (error)
 		goto out;
 

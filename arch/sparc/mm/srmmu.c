@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.223 2000/10/16 14:32:49 anton Exp $
+/* $Id: srmmu.c,v 1.224 2000/11/09 22:40:05 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -1163,7 +1163,7 @@ extern int linux_num_cpus;
 
 void (*poke_srmmu)(void) __initdata = NULL;
 
-extern unsigned long bootmem_init(void);
+extern void bootmem_init(void);
 extern void sun_serial_setup(void);
 
 void __init srmmu_paging_init(void)

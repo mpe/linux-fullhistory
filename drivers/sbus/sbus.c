@@ -1,4 +1,4 @@
-/* $Id: sbus.c,v 1.86 2000/03/16 09:23:57 jj Exp $
+/* $Id: sbus.c,v 1.91 2000/11/08 05:04:06 davem Exp $
  * sbus.c:  SBus support routines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -165,20 +165,8 @@ no_ranges:
 extern void iommu_init(int iommu_node, struct sbus_bus *sbus);
 extern void iounit_init(int sbi_node, int iounit_node, struct sbus_bus *sbus);
 void sun4_init(void);
-#ifdef CONFIG_SUN_OPENPROMIO
-extern int openprom_init(void);
-#endif
 #ifdef CONFIG_SUN_AUXIO
 extern void auxio_probe(void);
-#endif
-#ifdef CONFIG_OBP_FLASH
-extern int flash_init(void);
-#endif
-#ifdef CONFIG_SUN_AURORA
-extern int aurora_init(void);
-#endif
-#ifdef CONFIG_TADPOLE_TS102_UCTRL
-extern int ts102_uctrl_init(void);
 #endif
 
 static void __init sbus_do_child_siblings(int start_node,
@@ -520,24 +508,9 @@ void __init sbus_init(void)
 		firetruck_init();
 	}
 #endif
-#ifdef CONFIG_SUN_OPENPROMIO
-	openprom_init();
-#endif
-#ifdef CONFIG_SUN_BPP
-	bpp_init();
-#endif
 #ifdef CONFIG_SUN_AUXIO
 	if (sparc_cpu_model == sun4u)
 		auxio_probe ();
-#endif
-#ifdef CONFIG_OBP_FLASH
-	flash_init();
-#endif
-#ifdef CONFIG_SUN_AURORA
-	aurora_init();
-#endif
-#ifdef CONFIG_TADPOLE_TS102_UCTRL
-	ts102_uctrl_init();
 #endif
 #ifdef __sparc_v9__
 	if (sparc_cpu_model == sun4u) {

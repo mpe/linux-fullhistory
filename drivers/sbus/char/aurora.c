@@ -1,4 +1,4 @@
-/*	$Id: aurora.c,v 1.7 1999/09/21 14:37:46 davem Exp $
+/*	$Id: aurora.c,v 1.9 2000/11/08 05:33:03 davem Exp $
  *	linux/drivers/sbus/char/aurora.c -- Aurora multiport driver
  *
  *	Copyright (c) 1999 by Oliver Aldulea (oli@bv.ro)
@@ -2387,7 +2387,6 @@ static void aurora_release_drivers(void)
 #endif
 }
 
-#ifndef MODULE
 /*
  * Called at boot time.
  *
@@ -2406,10 +2405,7 @@ void __init aurora_setup(char *str, int *ints)
 		}
 }
 
-int __init aurora_init(void)
-#else
-int aurora_init(void)
-#endif
+static int __init aurora_real_init(void)
 {
 	int found;
 	int i;
@@ -2439,7 +2435,6 @@ int aurora_init(void)
 	return 0;
 }
 
-#ifdef MODULE
 int irq  = 0;
 int irq1 = 0;
 int irq2 = 0;
@@ -2449,16 +2444,16 @@ MODULE_PARM(irq1, "i");
 MODULE_PARM(irq2, "i");
 MODULE_PARM(irq3, "i");
 
-int init_module(void) 
+static int __init aurora_init(void) 
 {
 	if (irq ) irqs[0]=irq ;
 	if (irq1) irqs[1]=irq1;
 	if (irq2) irqs[2]=irq2;
 	if (irq3) irqs[3]=irq3;
-	return aurora_init();
+	return aurora_real_init();
 }
 	
-void cleanup_module(void)
+static void __exit aurora_cleanup(void)
 {
 	int i;
 	
@@ -2473,4 +2468,6 @@ printk("cleanup_module: aurora_release_drivers\n");
 			aurora_release_io_range(&aurora_board[i]);
 		}
 }
-#endif /* MODULE */
+
+module_init(aurora_init);
+module_exit(aurora_cleanup);

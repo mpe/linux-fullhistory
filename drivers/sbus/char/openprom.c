@@ -626,11 +626,7 @@ static struct miscdevice openprom_dev = {
 
 EXPORT_NO_SYMBOLS;
 
-#ifdef MODULE
-int init_module(void)
-#else
-int __init openprom_init(void)
-#endif
+static int __init openprom_init(void)
 {
 	unsigned long flags;
 	int error;
@@ -655,9 +651,10 @@ int __init openprom_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit openprom_cleanup(void)
 {
 	misc_deregister(&openprom_dev);
 }
-#endif
+
+module_init(openprom_init);
+module_exit(openprom_cleanup);

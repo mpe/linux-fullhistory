@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.46 2000/08/05 13:30:33 davem Exp $
+/* $Id: ultra.S,v 1.48 2000/11/06 06:59:04 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997, 2000 David S. Miller (davem@redhat.com)
@@ -208,27 +208,58 @@ iflush2:sub		%o1, 0x20, %g3
 
 	.align		64
 	.globl		__flush_dcache_page
-__flush_dcache_page:
+__flush_dcache_page:	/* %o0=kaddr, %o1=flush_icache */
 	sub		%o0, %g4, %o0
-	clr		%o1
+	clr		%o4
 	srlx		%o0, 11, %o0
 	sethi		%hi(1 << 14), %o2
-1:	ldxa		[%o1] ASI_DCACHE_TAG, %o3
-	andn		%o3, 0x3, %o3
-	cmp		%o0, %o3
-	bne,pt		%xcc, 2f
-	 nop
-	stxa		%g0, [%o1] ASI_DCACHE_TAG
-	membar		#Sync
-2:	add		%o1, (1 << 5), %o1
-	cmp		%o1, %o2
-	bne,pt		%xcc, 1b
-	 nop
+1:	ldxa		[%o4] ASI_DCACHE_TAG, %o3	! LSU	Group
+	add		%o4, (1 << 5), %o4		! IEU0
+	ldxa		[%o4] ASI_DCACHE_TAG, %g1	! LSU	Group
+	add		%o4, (1 << 5), %o4		! IEU0
+	ldxa		[%o4] ASI_DCACHE_TAG, %g2	! LSU	Group	o3 available
+	add		%o4, (1 << 5), %o4		! IEU0
+	andn		%o3, 0x3, %o3			! IEU1
+	ldxa		[%o4] ASI_DCACHE_TAG, %g3	! LSU	Group
+	add		%o4, (1 << 5), %o4		! IEU0
+	andn		%g1, 0x3, %g1			! IEU1
+	cmp		%o0, %o3			! IEU1	Group
+	be,a,pn		%xcc, dflush1			! CTI
+	 sub		%o4, (4 << 5), %o4		! IEU0	(Group)
+	cmp		%o0, %g1			! IEU1	Group
+	andn		%g2, 0x3, %g2			! IEU0
+	be,a,pn		%xcc, dflush2			! CTI
+	 sub		%o4, (3 << 5), %o4		! IEU0	(Group)
+	cmp		%o0, %g2			! IEU1	Group
+	andn		%g3, 0x3, %g3			! IEU0
+	be,a,pn		%xcc, dflush3			! CTI
+	 sub		%o4, (2 << 5), %o4		! IEU0	(Group)
+	cmp		%o0, %g3			! IEU1	Group
+	be,a,pn		%xcc, dflush4			! CTI
+	 sub		%o4, (1 << 5), %o4		! IEU0
+2:	cmp		%o4, %o2			! IEU1	Group
+	bne,pt		%xcc, 1b			! CTI
+	 nop						! IEU0
+
 	/* The I-cache does not snoop local stores so we
-	 * better flush that too.
+	 * better flush that too when necessary.
 	 */
-	ba,pt		%xcc, __flush_icache_page
+	brnz,pt		%o1, __flush_icache_page
 	 sllx		%o0, 11, %o0
+	retl
+	 nop
+
+dflush1:stxa		%g0, [%o4] ASI_DCACHE_TAG
+	add		%o4, (1 << 5), %o4
+dflush2:stxa		%g0, [%o4] ASI_DCACHE_TAG
+	add		%o4, (1 << 5), %o4
+dflush3:stxa		%g0, [%o4] ASI_DCACHE_TAG
+	add		%o4, (1 << 5), %o4
+dflush4:stxa		%g0, [%o4] ASI_DCACHE_TAG
+	add		%o4, (1 << 5), %o4
+	membar		#Sync
+	ba,pt		%xcc, 2b
+	 nop
 
 	.align		32
 __prefill_dtlb:
@@ -250,8 +281,8 @@ __prefill_itlb:
 	retl
 	 wrpr		%g7, %pstate
 
-	.globl		update_mmu_cache
-update_mmu_cache:	/* %o0=vma, %o1=address, %o2=pte */
+	.globl		__update_mmu_cache
+__update_mmu_cache:	/* %o0=vma, %o1=address, %o2=pte */
 	ldub		[%g6 + AOFF_task_thread + AOFF_thread_fault_code], %o3
 	srlx		%o1, 13, %o1
 	ldx		[%o0 + 0x0], %o4		/* XXX vma->vm_mm */

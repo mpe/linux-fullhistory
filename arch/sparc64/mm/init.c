@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.157 2000/10/19 00:49:52 davem Exp $
+/*  $Id: init.c,v 1.159 2000/11/06 06:59:04 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -97,6 +97,20 @@ int do_check_pgt_cache(int low, int high)
         }
 #endif
         return freed;
+}
+
+extern void __update_mmu_cache(struct vm_area_struct *, unsigned long, pte_t);
+
+void update_mmu_cache(struct vm_area_struct *vma, unsigned long address, pte_t pte)
+{
+	struct page *page = pte_page(pte);
+
+	if (VALID_PAGE(page) && page->mapping &&
+	    test_bit(PG_dcache_dirty, &page->flags)) {
+		__flush_dcache_page(page->virtual, 1);
+		clear_bit(PG_dcache_dirty, &page->flags);
+	}
+	__update_mmu_cache(vma, address, pte);
 }
 
 /*

@@ -1861,9 +1861,6 @@ void scsi_error_handler(void *data)
 	 *    Flush resources
 	 */
 
-	exit_files(current);
-	current->files = init_task.files;
-	atomic_inc(&current->files->count);
 	daemonize();
 
 	/*

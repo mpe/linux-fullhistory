@@ -1228,7 +1228,9 @@ void daemonize(void)
 	fs = init_task.fs;
 	current->fs = fs;
 	atomic_inc(&fs->count);
-
+ 	exit_files(current);
+	current->files = init_task.files;
+	atomic_inc(&current->files->count);
 }
 
 void __init init_idle(void)

@@ -968,6 +968,11 @@ int usb_internal_control_msg(struct usb_device *usb_dev, unsigned int pipe,
 }
 
 /*-------------------------------------------------------------------*/
+/* usb_control_msg() -  builds control urb, and waits for completion */
+/* Synchronous behavior - don't use this function  from within an    */
+/* interrupt context, (like a bottom half handler.)  In this case,   */
+/* use usb_submit_urb() directly instead.                            */
+
 int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype,
 			 __u16 value, __u16 index, void *data, __u16 size, int timeout)
 {
@@ -993,8 +998,10 @@ int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u
 }
 
 /*-------------------------------------------------------------------*/
-/* compatibility wrapper, builds bulk urb, and waits for completion */
-/* synchronous behavior */
+/* usb_bulk_msg() Builds a bulk urb, and waits for completion.       */
+/* Synchronous behavior - don't use this function  from within an    */
+/* interrupt context, (like a bottom half handler.)  In this case,   */
+/* use usb_submit_urb() directly instead.                            */
 
 int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, 
 			void *data, int len, int *actual_length, int timeout)

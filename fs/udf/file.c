@@ -54,7 +54,7 @@ static int udf_adinicb_readpage(struct file *file, struct page * page)
 	if (!PageLocked(page))
 		PAGE_BUG(page);
 
-	kaddr = (char *)kmap(page);
+	kaddr = kmap(page);
 	memset(kaddr, 0, PAGE_CACHE_SIZE);
 	block = udf_get_lb_pblock(inode->i_sb, UDF_I_LOCATION(inode), 0);
 	bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize);
@@ -78,7 +78,7 @@ static int udf_adinicb_writepage(struct file *file, struct page *page)
 	if (!PageLocked(page))
 		PAGE_BUG(page);
 
-	kaddr = (char *)kmap(page);
+	kaddr = kmap(page);
 	block = udf_get_lb_pblock(inode->i_sb, UDF_I_LOCATION(inode), 0);
 	bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize);
 	memcpy(bh->b_data + udf_ext0_offset(inode), kaddr, inode->i_size);

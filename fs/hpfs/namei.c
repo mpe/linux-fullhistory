@@ -401,7 +401,7 @@ int hpfs_rmdir(struct inode *dir, struct dentry *dentry)
 
 int hpfs_symlink_readpage(struct file *file, struct page *page)
 {
-	char *link = (char*)kmap(page);
+	char *link = kmap(page);
 	struct inode *i = (struct inode*)page->mapping->host;
 	struct fnode *fnode;
 	struct buffer_head *bh;

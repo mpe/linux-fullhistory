@@ -305,19 +305,23 @@ Here is the new interface:
 	If D-cache aliasing is not an issue, this routine may
 	simply be defined as a nop on that architecture.
 
-        TODO: If we set aside a few bits in page->flags as
-	      "architecture private", these interfaces could
-	      be implemented much more efficiently.  This would
-	      allow one to "defer" (perhaps indefinitely) the
-	      actual flush if there are currently no user processes
-	      mapping this page.
+        There is a bit set aside in page->flags (PG_arch_1) as
+	"architecture private".  The kernel guarentees that,
+	for pagecache pages, it will clear this bit when such
+	a page first enters the pagecache.
 
-	      The idea is, first at flush_dcache_page() time, if
-	      page->mapping->i_mmap is an empty list, just mark
-	      one of the architecture private page flag bits.
-              Later, in update_mmu_cache(), a check could be made
-	      of this flag bit, and if set the flush is done
-	      and the flag bit is cleared.
+	This allows these interfaces to be implemented much more
+	efficiently.  It allows one to "defer" (perhaps indefinitely)
+	the actual flush if there are currently no user processes
+	mapping this page.  See sparc64's flush_dcache_page and
+	update_mmu_cache implementations for an example of how to go
+	about doing this.
+
+	The idea is, first at flush_dcache_page() time, if
+	page->mapping->i_mmap{,_shared} are empty lists, just mark the
+	architecture private page flag bit.  Later, in
+	update_mmu_cache(), a check is made of this flag bit, and if
+	set the flush is done and the flag bit is cleared.
 
 XXX Not documented: flush_icache_page(), need to talk to Paul
                     Mackerras, David Mosberger-Tang, et al.

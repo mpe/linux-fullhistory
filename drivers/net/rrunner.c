@@ -1550,7 +1550,6 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 	rrpriv = (struct rr_private *)dev->priv;
 
-	spin_lock(&rrpriv->lock);
 
 	switch(cmd){
 	case SIOCRRGFW:
@@ -1559,12 +1558,6 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 			goto out;
 		}
 
-		if (rrpriv->fw_running){
-			printk("%s: Firmware already running\n", dev->name);
-			error = -EPERM;
-			goto out;
-		}
-
 		image = kmalloc(EEPROM_WORDS * sizeof(u32), GFP_KERNEL);
 		if (!image){
 			printk(KERN_ERR "%s: Unable to allocate memory "
@@ -1572,50 +1565,62 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 			error = -ENOMEM;
 			goto out;
 		}
+		
+		spin_lock(&rrpriv->lock);
+		
+		if (rrpriv->fw_running){
+			printk("%s: Firmware already running\n", dev->name);
+			kfree(image);
+			error = -EPERM;
+			goto out_spin;
+		}
+
 		i = rr_read_eeprom(rrpriv, 0, image, EEPROM_BYTES);
 		if (i != EEPROM_BYTES){
 			kfree(image);
 			printk(KERN_ERR "%s: Error reading EEPROM\n",
 			       dev->name);
 			error = -EFAULT;
-			goto out;
+			goto out_spin;
 		}
+		spin_unlock(&rrpriv->lock);
 		error = copy_to_user(rq->ifr_data, image, EEPROM_BYTES);
 		if (error)
 			error = -EFAULT;
 		kfree(image);
-		break;
+		return error;
+		
 	case SIOCRRPFW:
 		if (!capable(CAP_SYS_RAWIO)){
-			error = -EPERM;
-			goto out;
-		}
-
-		if (rrpriv->fw_running){
-			printk("%s: Firmware already running\n", dev->name);
-			error = -EPERM;
-			goto out;
+			return -EPERM;
 		}
 
 		image = kmalloc(EEPROM_WORDS * sizeof(u32), GFP_KERNEL);
 		if (!image){
 			printk(KERN_ERR "%s: Unable to allocate memory "
 			       "for EEPROM image\n", dev->name);
-			error = -ENOMEM;
-			goto out;
+			return -ENOMEM;
 		}
 
 		oldimage = kmalloc(EEPROM_WORDS * sizeof(u32), GFP_KERNEL);
 		if (!oldimage){
 			printk(KERN_ERR "%s: Unable to allocate memory "
 			       "for old EEPROM image\n", dev->name);
-			error = -ENOMEM;
-			goto out;
+			return -ENOMEM;
 		}
 
 		error = copy_from_user(image, rq->ifr_data, EEPROM_BYTES);
 		if (error)
 			error = -EFAULT;
+
+		spin_lock(&rrpriv->lock);
+		if (rrpriv->fw_running){
+			kfree(image);
+			kfree(oldimage);
+			printk("%s: Firmware already running\n", dev->name);
+			error = -EPERM;
+			goto out_spin;
+		}
 
 		printk("%s: Updating EEPROM firmware\n", dev->name);
 
@@ -1629,6 +1634,7 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 			printk(KERN_ERR "%s: Error reading back EEPROM "
 			       "image\n", dev->name);
 
+		spin_unlock(&rrpriv->lock);
 		error = memcmp(image, oldimage, EEPROM_BYTES);
 		if (error){
 			printk(KERN_ERR "%s: Error verifying EEPROM image\n",
@@ -1637,16 +1643,15 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		}
 		kfree(image);
 		kfree(oldimage);
-		break;
+		return error;
+		
 	case SIOCRRID:
-		error = put_user(0x52523032, (int *)(&rq->ifr_data[0]));
-		if (error)
-			error = -EFAULT;
-		break;
+		return put_user(0x52523032, (int *)(&rq->ifr_data[0]));
 	default:
+		return error;
 	}
 
- out:
+ out_spin:
 	spin_unlock(&rrpriv->lock);
 	return error;
 }

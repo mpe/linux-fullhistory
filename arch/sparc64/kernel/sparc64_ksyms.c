@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.95 2000/10/30 21:01:40 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.96 2000/11/06 06:59:03 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -87,7 +87,6 @@ extern long sparc32_open(const char * filename, int flags, int mode);
 extern int register_ioctl32_conversion(unsigned int cmd, int (*handler)(unsigned int, unsigned int, unsigned long, struct file *));
 extern int unregister_ioctl32_conversion(unsigned int cmd);
 extern int io_remap_page_range(unsigned long from, unsigned long offset, unsigned long size, pgprot_t prot, int space);
-extern void __flush_dcache_page(void *addr);
                 
 extern int __ashrdi3(int, int);
 

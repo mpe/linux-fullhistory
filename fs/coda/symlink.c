@@ -28,7 +28,7 @@ static int coda_symlink_filler(struct file *file, struct page *page)
 	int error;
 	struct coda_inode_info *cnp;
 	unsigned int len = PAGE_SIZE;
-	char *p = (char*)kmap(page);
+	char *p = kmap(page);
 
 	lock_kernel();
         cnp = ITOC(inode);

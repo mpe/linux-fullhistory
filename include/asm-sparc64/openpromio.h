@@ -64,11 +64,5 @@ struct opiocdesc
 #define	OPIOCGETNEXT	_IOWR('O', 5, int)
 #define	OPIOCGETCHILD	_IOWR('O', 6, int)
 
-
-#ifdef __KERNEL__
-int openprom_init(void);
-#endif
-
-
 #endif /* _SPARC64_OPENPROMIO_H */
 

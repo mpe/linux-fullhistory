@@ -383,11 +383,6 @@ ENTRY(coprocessor_segment_overrun)
 	pushl $ SYMBOL_NAME(do_coprocessor_segment_overrun)
 	jmp error_code
 
-ENTRY(reserved)
-	pushl $0
-	pushl $ SYMBOL_NAME(do_reserved)
-	jmp error_code
-
 ENTRY(double_fault)
 	pushl $ SYMBOL_NAME(do_double_fault)
 	jmp error_code
@@ -418,7 +413,7 @@ ENTRY(page_fault)
 
 ENTRY(machine_check)
 	pushl $0
-	pushl $ SYMBOL_NAME(mcheck_fault)
+	pushl $ SYMBOL_NAME(do_machine_check)
 	jmp error_code
 
 ENTRY(spurious_interrupt_bug)

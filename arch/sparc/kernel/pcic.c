@@ -1,4 +1,4 @@
-/* $Id: pcic.c,v 1.18 2000/09/25 06:09:12 anton Exp $
+/* $Id: pcic.c,v 1.19 2000/11/08 04:49:17 davem Exp $
  * pcic.c: Sparc/PCI controller support
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko

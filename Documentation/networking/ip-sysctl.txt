@@ -203,7 +203,7 @@ tcp_fack - BOOLEAN
 tcp_dsack - BOOLEAN
 	Allows TCP to send "duplicate" SACKs.
 
-tcp_ecn - BOOLEN
+tcp_ecn - BOOLEAN
 	Enable Explicit Congestion Notification in TCP.
 
 tcp_reordering - INTEGER
@@ -376,4 +376,4 @@ kuznet@ms2.inr.ac.ru
 Updated by:
 Andi Kleen
 ak@muc.de
-$Id: ip-sysctl.txt,v 1.16 2000/08/13 18:24:11 davem Exp $
+$Id: ip-sysctl.txt,v 1.17 2000/11/06 07:15:36 davem Exp $

@@ -1,6 +1,6 @@
 /* sis900.c: A SiS 900/7016 PCI Fast Ethernet driver for Linux.
    Copyright 1999 Silicon Integrated System Corporation 
-   Revision:	1.07.04	Sep. 6 2000
+   Revision:	1.07.06	Nov. 7 2000
 
    Modified from the driver which is originally written by Donald Becker.
    
@@ -18,6 +18,8 @@
    preliminary Rev. 1.0 Jan. 18, 1998
    http://www.sis.com.tw/support/databook.htm
 
+   Rev 1.07.06 Nov.  7 2000 Jeff Garzik <jgarzik@mandrakesoft.com> some bug fix and cleaning
+   Rev 1.07.05 Nov.  6 2000 metapirat<metapirat@gmx.de> contribute media type select by ifconfig
    Rev 1.07.04 Sep.  6 2000 Lei-Chun Chang added ICS1893 PHY support
    Rev 1.07.03 Aug. 24 2000 Lei-Chun Chang (lcchang@sis.com.tw) modified 630E eqaulizer workaroung rule
    Rev 1.07.01 Aug. 08 2000 Ollie Lho minor update for SiS 630E and SiS 630E A1
@@ -56,7 +58,7 @@
 #include "sis900.h"
 
 static const char *version =
-"sis900.c: v1.07.04  09/06/2000\n";
+"sis900.c: v1.07.06  11/07/2000\n";
 
 static int max_interrupt_work = 20;
 static int multicast_filter_limit = 128;
@@ -169,6 +171,7 @@ static u16 sis900_compute_hashtable_index(u8 *addr);
 static void set_rx_mode(struct net_device *net_dev);
 static void sis900_reset(struct net_device *net_dev);
 static void sis630e_set_eq(struct net_device *net_dev);
+static int sis900_set_config(struct net_device *dev, struct ifmap *map);
 
 /* older SiS900 and friends, use EEPROM to store MAC address */
 static int __devinit sis900_get_mac_addr(struct pci_dev * pci_dev, struct net_device *net_dev)
@@ -288,6 +291,7 @@ static int __devinit sis900_probe (struct pci_dev *pci_dev, const struct pci_dev
 	net_dev->hard_start_xmit = &sis900_start_xmit;
 	net_dev->stop = &sis900_close;
 	net_dev->get_stats = &sis900_get_stats;
+	net_dev->set_config = &sis900_set_config;
 	net_dev->set_multicast_list = &set_rx_mode;
 	net_dev->do_ioctl = &mii_ioctl;
 	net_dev->tx_timeout = sis900_tx_timeout;
@@ -1311,6 +1315,96 @@ sis900_get_stats(struct net_device *net_dev)
 	return &sis_priv->stats;
 }
 
+/* Support for media type changes via net_device->set_config */
+static int sis900_set_config(struct net_device *dev, struct ifmap *map)
+{    
+	struct sis900_private *sis_priv = (struct sis900_private *)dev->priv;
+	struct mii_phy *mii_phy = sis_priv->mii;
+        
+	u16 status;
+
+	/* we support only port changes. All other runtime configuration
+	   changes will be ignored (io base and interrupt changes for example)*/    
+	if ((map->port != (u_char)(-1)) && (map->port != dev->if_port)) {
+        /* we switch on the ifmap->port field. I couldn't find anything
+           like a definition or standard for the values of that field.
+           I think the meaning of those values is device specific. But
+           since I would like to change the media type via the ifconfig
+           command I use the definition from linux/netdevice.h 
+           (which seems to be different from the ifport(pcmcia) definition) 
+        */
+		switch(map->port){
+			case IF_PORT_UNKNOWN: /* use auto here */   
+                		dev->if_port = map->port;
+                		/* we are going to change the media type, so the Link will
+                		be temporary down and we need to reflect that here. When
+                		the Link comes up again, it will be sensed by the sis_timer
+                		procedure, which also does all the rest for us */
+                		sis_priv->LinkOn=FALSE;
+                
+                		/* read current state */
+                		status = mdio_read(dev, mii_phy->phy_addr, MII_CONTROL);
+                
+                		/* enable auto negotiation and reset the negotioation
+                		(I dont really know what the auto negatiotiation reset
+                		really means, but it sounds for me right to do one here)*/
+                		mdio_write(dev, mii_phy->phy_addr,
+                                           MII_CONTROL, status | MII_CNTL_AUTO | MII_CNTL_RST_AUTO);
+
+            			break;
+            
+            		case IF_PORT_10BASET: /* 10BaseT */         
+                		dev->if_port = map->port;
+                
+                		/* we are going to change the media type, so the Link will
+                		be temporary down and we need to reflect that here. When
+                		the Link comes up again, it will be sensed by the sis_timer
+                		procedure, which also does all the rest for us */
+                		sis_priv->LinkOn=FALSE;
+        
+                		/* set Speed to 10Mbps */
+                		/* read current state */
+                		status = mdio_read(dev, mii_phy->phy_addr, MII_CONTROL);
+                
+                		/* disable auto negotiation and force 10MBit mode*/
+                		mdio_write(dev, mii_phy->phy_addr,
+                                           MII_CONTROL, status & ~(MII_CNTL_SPEED | MII_CNTL_AUTO));
+            			break;
+            
+            		case IF_PORT_100BASET: /* 100BaseT */
+            		case IF_PORT_100BASETX: /* 100BaseTx */ 
+                		dev->if_port = map->port;
+                
+                		/* we are going to change the media type, so the Link will
+                		be temporary down and we need to reflect that here. When
+                		the Link comes up again, it will be sensed by the sis_timer
+                		procedure, which also does all the rest for us */
+                		sis_priv->LinkOn=FALSE;
+                
+                		/* set Speed to 100Mbps */
+                		/* disable auto negotiation and enable 100MBit Mode */
+                		status = mdio_read(dev, mii_phy->phy_addr, MII_CONTROL);
+                		mdio_write(dev, mii_phy->phy_addr,
+                                           MII_CONTROL, (status & ~MII_CNTL_SPEED) | MII_CNTL_SPEED);
+                
+            			break;
+            
+            		case IF_PORT_10BASE2: /* 10Base2 */
+            		case IF_PORT_AUI: /* AUI */
+            		case IF_PORT_100BASEFX: /* 100BaseFx */
+                	/* These Modes are not supported (are they?)*/
+                		printk(KERN_INFO "Not supported");
+                		return -EOPNOTSUPP;
+            			break;
+            
+            		default:
+                		printk(KERN_INFO "Invalid");
+                		return -EINVAL;
+		}
+	}
+	return 0;
+}
+
 /* SiS 900 uses the most sigificant 7 bits to index a 128 bits multicast hash table, which makes
    this function a little bit different from other drivers */
 static u16 sis900_compute_hashtable_index(u8 *addr)
@@ -1448,3 +1542,4 @@ static void __exit sis900_cleanup_module(void)
 
 module_init(sis900_init_module);
 module_exit(sis900_cleanup_module);
+

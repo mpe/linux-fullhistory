@@ -1,4 +1,4 @@
-/* $Id: esp.c,v 1.97 2000/09/19 01:29:27 davem Exp $
+/* $Id: esp.c,v 1.98 2000/11/02 22:34:16 davem Exp $
  * esp.c:  EnhancedScsiProcessor Sun SCSI driver code.
  *
  * Copyright (C) 1995, 1998 David S. Miller (davem@caip.rutgers.edu)
@@ -400,7 +400,7 @@ extern inline void esp_cmd(struct esp *esp, u8 cmd)
  *
  * struct scsi_cmnd:
  *
- *   We keep track of the syncronous capabilities of a target
+ *   We keep track of the synchronous capabilities of a target
  *   in the device member, using sync_min_period and
  *   sync_max_offset.  These are the values we directly write
  *   into the ESP registers while running a command.  If offset
@@ -2661,7 +2661,7 @@ static int esp_do_data_finale(struct esp *esp)
 	 * on HME broken adapters because we skip the HME fifo
 	 * workaround code in esp_handle() if we are doing data
 	 * phase things.  We don't want to fuck directly with
-	 * the fifo like that, especially if doing syncronous
+	 * the fifo like that, especially if doing synchronous
 	 * transfers!  Also, will need to double the count on
 	 * HME if we are doing wide transfers, as the HME fifo
 	 * will move and count 16-bit quantities during wide data.

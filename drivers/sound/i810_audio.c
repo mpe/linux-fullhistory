@@ -14,6 +14,11 @@
  *	Analog Devices (A major AC97 codec maker)
  *	Intel Corp  (you've probably heard of them already)
  *
+ * AC97 clues and assistance provided by
+ *	Analog Devices
+ *	Zach 'Fufu' Brown
+ *	Jeff Garzik
+ *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
  *	the Free Software Foundation; either version 2 of the License, or
@@ -96,7 +101,7 @@
 #endif
 
 static int ftsodell=0;
-static int clocking=48000;
+static unsigned int clocking=48000;
 
 
 #define ADC_RUNNING	1
@@ -377,7 +382,7 @@ static void i810_free_pcm_channel(struct i810_card *card, int channel)
 static unsigned int i810_set_dac_rate(struct i810_state * state, unsigned int rate)
 {	
 	struct dmabuf *dmabuf = &state->dmabuf;
-	u16 dacp, rp;
+	u32 dacp;
 	struct ac97_codec *codec=state->card->ac97_codec[0];
 	
 	if(!(state->card->ac97_features&0x0001))
@@ -403,22 +408,18 @@ static unsigned int i810_set_dac_rate(struct i810_state * state, unsigned int ra
 	if(rate < 8000)
 		rate = 8000;
 
-	/* Power down the DAC */
-	dacp=i810_ac97_get(codec, AC97_POWER_CONTROL);
-	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp|0x0200);
-	
-	/* Load the rate and read the effective rate */
-	i810_ac97_set(codec, AC97_PCM_FRONT_DAC_RATE, rate);
-	rp=i810_ac97_get(codec, AC97_PCM_FRONT_DAC_RATE);
-	
-//	printk("DAC rate set to %d Returned %d\n", 
-//		rate, (int)rp);
-		
-	rate=(rp * 48000) / clocking;
-		
-	/* Power it back up */
-	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp);
-	
+	if(rate != i810_ac97_get(codec, AC97_PCM_FRONT_DAC_RATE))
+	{
+		/* Power down the DAC */
+		dacp=i810_ac97_get(codec, AC97_POWER_CONTROL);
+		i810_ac97_set(codec, AC97_POWER_CONTROL, dacp|0x0200);
+		/* Load the rate and read the effective rate */
+		i810_ac97_set(codec, AC97_PCM_FRONT_DAC_RATE, rate);
+		rate=i810_ac97_get(codec, AC97_PCM_FRONT_DAC_RATE);
+		/* Power it back up */
+		i810_ac97_set(codec, AC97_POWER_CONTROL, dacp);
+	}
+	rate=(rate * 48000) / clocking;
 	dmabuf->rate = rate;
 #ifdef DEBUG
 	printk("i810_audio: called i810_set_dac_rate : rate = %d\n", rate);
@@ -431,7 +432,7 @@ static unsigned int i810_set_dac_rate(struct i810_state * state, unsigned int ra
 static unsigned int i810_set_adc_rate(struct i810_state * state, unsigned int rate)
 {
 	struct dmabuf *dmabuf = &state->dmabuf;
-	u16 dacp, rp;
+	u32 dacp;
 	struct ac97_codec *codec=state->card->ac97_codec[0];
 	
 	if(!(state->card->ac97_features&0x0001))
@@ -457,30 +458,23 @@ static unsigned int i810_set_adc_rate(struct i810_state * state, unsigned int ra
 	if(rate < 8000)
 		rate = 8000;
 
-
-	/* Power down the ADC */
-	dacp=i810_ac97_get(codec, AC97_POWER_CONTROL);
-	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp|0x0100);
-	
-	/* Load the rate and read the effective rate */
-	i810_ac97_set(codec, AC97_PCM_LR_DAC_RATE, rate);
-	rp=i810_ac97_get(codec, AC97_PCM_LR_DAC_RATE);
-	
-//	printk("ADC rate set to %d Returned %d\n", 
-//		rate, (int)rp);
-		
-	rate = (rp * 48000) / clocking;
-		
-	/* Power it back up */
-	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp);
-	
+	if(rate != i810_ac97_get(codec, AC97_PCM_LR_DAC_RATE))
+	{
+		/* Power down the ADC */
+		dacp=i810_ac97_get(codec, AC97_POWER_CONTROL);
+		i810_ac97_set(codec, AC97_POWER_CONTROL, dacp|0x0100);
+		/* Load the rate and read the effective rate */
+		i810_ac97_set(codec, AC97_PCM_LR_DAC_RATE, rate);
+		rate=i810_ac97_get(codec, AC97_PCM_LR_DAC_RATE);
+		/* Power it back up */
+		i810_ac97_set(codec, AC97_POWER_CONTROL, dacp);
+	}
+	rate = (rate * 48000) / clocking;
 	dmabuf->rate = rate;
 #ifdef DEBUG
 	printk("i810_audio: called i810_set_adc_rate : rate = %d\n", rate);
 #endif
-
 	return rate;
-
 }
 
 /* prepare channel attributes for playback */ 
@@ -1726,10 +1720,37 @@ static int __init i810_ac97_init(struct i810_card *card)
 	int ready_2nd = 0;
 	struct ac97_codec *codec;
 	u16 eid;
+	int i=0;
+	u32 reg;
 
-	outl(0, card->iobase + GLOB_CNT);
-	udelay(500);
-	outl(1<<1, card->iobase + GLOB_CNT);
+	reg = inl(card->iobase + GLOB_CNT);
+	
+	if((reg&2)==0)	/* Cold required */
+		reg|=2;
+	else
+		reg|=4;	/* Warm */
+		
+	reg&=~8;	/* ACLink on */
+	outl(reg , card->iobase + GLOB_CNT);
+	
+	while(i<10)
+	{
+		if((inl(card->iobase+GLOB_CNT)&4)==0)
+			break;
+		current->state = TASK_UNINTERRUPTIBLE;
+		schedule_timeout(HZ/20);
+		i++;
+	}
+	if(i==10)
+	{
+		printk(KERN_ERR "i810_audio: AC'97 reset failed.\n");
+		return 0;
+	}
+
+	current->state = TASK_UNINTERRUPTIBLE;
+	schedule_timeout(HZ/5);
+		
+	inw(card->ac97base);
 
 	for (num_ac97 = 0; num_ac97 < NR_AC97; num_ac97++) {
 		if ((codec = kmalloc(sizeof(struct ac97_codec), GFP_KERNEL)) == NULL)

@@ -29,7 +29,7 @@ struct page * prepare_highmem_swapout(struct page * page)
 {
 	struct page *new_page;
 	unsigned long regular_page;
-	unsigned long vaddr;
+
 	/*
 	 * If this is a highmem page so it can't be swapped out directly
 	 * otherwise the b_data buffer addresses will break
@@ -50,8 +50,7 @@ struct page * prepare_highmem_swapout(struct page * page)
 	if (!regular_page)
 		return NULL;
 
-	vaddr = kmap(page);
-	copy_page((void *)regular_page, (void *)vaddr);
+	copy_page((void *)regular_page, kmap(page));
 	kunmap(page);
 
 	/*
@@ -67,7 +66,6 @@ struct page * prepare_highmem_swapout(struct page * page)
 struct page * replace_with_highmem(struct page * page)
 {
 	struct page *highpage;
-	unsigned long vaddr;
 
 	if (PageHighMem(page) || !nr_free_highpages())
 		return page;
@@ -80,8 +78,7 @@ struct page * replace_with_highmem(struct page * page)
 		return page;
 	}
 
-	vaddr = kmap(highpage);
-	copy_page((void *)vaddr, page_address(page));
+	copy_page(kmap(highpage), page_address(page));
 	kunmap(highpage);
 
 	if (page->mapping)
@@ -188,7 +185,7 @@ start:
 	return vaddr;
 }
 
-unsigned long kmap_high(struct page *page)
+void *kmap_high(struct page *page)
 {
 	unsigned long vaddr;
 
@@ -206,7 +203,7 @@ unsigned long kmap_high(struct page *page)
 	if (pkmap_count[PKMAP_NR(vaddr)] < 2)
 		BUG();
 	spin_unlock(&kmap_lock);
-	return vaddr;
+	return (void*) vaddr;
 }
 
 void kunmap_high(struct page *page)
@@ -242,7 +239,7 @@ static inline void copy_from_high_bh (struct buffer_head *to,
 			 struct buffer_head *from)
 {
 	struct page *p_from;
-	unsigned long vfrom;
+	char *vfrom;
 	unsigned long flags;
 
 	p_from = from->b_page;
@@ -254,7 +251,7 @@ static inline void copy_from_high_bh (struct buffer_head *to,
 	__save_flags(flags);
 	__cli();
 	vfrom = kmap_atomic(p_from, KM_BOUNCE_WRITE);
-	memcpy(to->b_data, (char *)vfrom + bh_offset(from), to->b_size);
+	memcpy(to->b_data, vfrom + bh_offset(from), to->b_size);
 	kunmap_atomic(vfrom, KM_BOUNCE_WRITE);
 	__restore_flags(flags);
 }
@@ -263,14 +260,14 @@ static inline void copy_to_high_bh_irq (struct buffer_head *to,
 			 struct buffer_head *from)
 {
 	struct page *p_to;
-	unsigned long vto;
+	char *vto;
 	unsigned long flags;
 
 	p_to = to->b_page;
 	__save_flags(flags);
 	__cli();
 	vto = kmap_atomic(p_to, KM_BOUNCE_READ);
-	memcpy((char *)vto + bh_offset(to), from->b_data, to->b_size);
+	memcpy(vto + bh_offset(to), from->b_data, to->b_size);
 	kunmap_atomic(vto, KM_BOUNCE_READ);
 	__restore_flags(flags);
 }

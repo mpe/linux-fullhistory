@@ -579,8 +579,7 @@ void si_meminfo(struct sysinfo *val)
 
 void flush_page_to_ram(struct page *page)
 {
-	unsigned long vaddr;
-	vaddr = kmap(page);
-	__flush_page_to_ram((unsigned long)page_address(page));
+	unsigned long vaddr = (unsigned long) kmap(page);
+	__flush_page_to_ram(vaddr);
 	kunmap(page);
 }

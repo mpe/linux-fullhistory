@@ -383,7 +383,7 @@ void cb_enable(socket_info_t * s)
 		dev = &s->cb_config[i].dev;
 		pci_writeb(dev, PCI_COMMAND, PCI_COMMAND_MASTER |
 			   PCI_COMMAND_IO | PCI_COMMAND_MEMORY);
-		pci_writeb(dev, PCI_CACHE_LINE_SIZE, 8);
+		pci_writeb(dev, PCI_CACHE_LINE_SIZE, L1_CACHE_BYTES / 4);
 	}
 
 	if (s->irq.AssignedIRQ) {

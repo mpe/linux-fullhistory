@@ -971,6 +971,16 @@ static int __init amd_model(struct cpuinfo_x86 *c)
 	display_cacheinfo(c);
 	return r;
 }
+
+static void __init intel_model(struct cpuinfo_x86 *c)
+{
+	unsigned int *v = (unsigned int *) c->x86_model_id;
+	cpuid(0x80000002, &v[0], &v[1], &v[2], &v[3]);
+	cpuid(0x80000003, &v[4], &v[5], &v[6], &v[7]);
+	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
+	c->x86_model_id[48] = 0;
+	printk("CPU: %s\n", c->x86_model_id);
+}
 			
 
 /*
@@ -1548,7 +1558,7 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 
 			/* Pentium IV. */
 			if (c->x86 == 15) {
-				get_model_name(c);
+				intel_model(c);
 				return;
 			}
 

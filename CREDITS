@@ -2240,11 +2240,12 @@ S: D-68789 St.Leon-Rot
 S: Germany
 
 N: Stephen Rothwell
-E: sfr@linuxcare.com
+E: sfr@linuxcare.com.au
 W: http://linuxcare.com.au/sfr
 P: 1024/BD8C7805 CD A4 9D 01 10 6E 7E 3B  91 88 FA D9 C8 40 AA 02
 D: Boot/setup/build work for setup > 2K
 D: Author, APM driver
+D: Directory notification
 S: 66 Maltby Circuit
 S: Wanniassa ACT 2903
 S: Australia

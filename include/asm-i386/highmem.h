@@ -53,19 +53,19 @@ extern void kmap_init(void) __init;
 #define PKMAP_NR(virt)  ((virt-PKMAP_BASE) >> PAGE_SHIFT)
 #define PKMAP_ADDR(nr)  (PKMAP_BASE + ((nr) << PAGE_SHIFT))
 
-extern unsigned long FASTCALL(kmap_high(struct page *page));
+extern void * FASTCALL(kmap_high(struct page *page));
 extern void FASTCALL(kunmap_high(struct page *page));
 
-extern inline unsigned long kmap(struct page *page)
+static inline void *kmap(struct page *page)
 {
 	if (in_interrupt())
 		BUG();
 	if (page < highmem_start_page)
-		return (unsigned long) page_address(page);
+		return page_address(page);
 	return kmap_high(page);
 }
 
-extern inline void kunmap(struct page *page)
+static inline void kunmap(struct page *page)
 {
 	if (in_interrupt())
 		BUG();
@@ -80,13 +80,13 @@ extern inline void kunmap(struct page *page)
  * be used in IRQ contexts, so in some (very limited) cases we need
  * it.
  */
-extern inline unsigned long kmap_atomic(struct page *page, enum km_type type)
+static inline void *kmap_atomic(struct page *page, enum km_type type)
 {
 	enum fixed_addresses idx;
 	unsigned long vaddr;
 
 	if (page < highmem_start_page)
-		return (unsigned long) page_address(page);
+		return page_address(page);
 
 	idx = type + KM_TYPE_NR*smp_processor_id();
 	vaddr = __fix_to_virt(FIX_KMAP_BEGIN + idx);
@@ -97,12 +97,13 @@ extern inline unsigned long kmap_atomic(struct page *page, enum km_type type)
 	set_pte(kmap_pte-idx, mk_pte(page, kmap_prot));
 	__flush_tlb_one(vaddr);
 
-	return vaddr;
+	return (void*) vaddr;
 }
 
-extern inline void kunmap_atomic(unsigned long vaddr, enum km_type type)
+static inline void kunmap_atomic(void *kvaddr, enum km_type type)
 {
 #if HIGHMEM_DEBUG
+	unsigned long vaddr = (unsigned long) kvaddr;
 	enum fixed_addresses idx = type + KM_TYPE_NR*smp_processor_id();
 
 	if (vaddr < FIXADDR_START) // FIXME

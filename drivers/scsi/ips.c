@@ -4552,6 +4552,8 @@ ips_allocatescbs(ips_ha_t *ha) {
 
    /* Allocate memory for the CCBs */
    ha->scbs = (ips_scb_t *) kmalloc(ha->max_cmds * sizeof(ips_scb_t), GFP_ATOMIC|GFP_DMA);
+   if(ha->scbs == NULL)
+   	return 0;
 
    memset(ha->scbs, 0, ha->max_cmds * sizeof(ips_scb_t));
 

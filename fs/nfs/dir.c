@@ -97,7 +97,7 @@ int nfs_readdir_filler(nfs_readdir_descriptor_t *desc, struct page *page)
 {
 	struct file	*file = desc->file;
 	struct inode	*inode = file->f_dentry->d_inode;
-	void		*buffer = (void *)kmap(page);
+	void		*buffer = kmap(page);
 	int		plus = NFS_USE_READDIRPLUS(inode);
 	int		error;
 
@@ -145,7 +145,7 @@ static inline
 int find_dirent(nfs_readdir_descriptor_t *desc, struct page *page)
 {
 	struct nfs_entry *entry = desc->entry;
-	char		*start = (char *)kmap(page),
+	char		*start = kmap(page),
 			*p = start;
 	int		loop_count = 0,
 			status = 0;
@@ -251,7 +251,7 @@ int nfs_do_filldir(nfs_readdir_descriptor_t *desc, void *dirent,
 {
 	struct file	*file = desc->file;
 	struct nfs_entry *entry = desc->entry;
-	char		*start = (char *)kmap(desc->page),
+	char		*start = kmap(desc->page),
 			*p = start + desc->page_offset;
 	unsigned long	fileid;
 	int		loop_count = 0,
@@ -323,7 +323,7 @@ int uncached_readdir(nfs_readdir_descriptor_t *desc, void *dirent,
 		status = -ENOMEM;
 		goto out;
 	}
-	p = (u32 *)kmap(page);
+	p = kmap(page);
 	status = NFS_PROTO(inode)->readdir(file, desc->target, p,
 					   NFS_SERVER(inode)->dtsize, 0);
 	if (status >= 0) {

@@ -842,7 +842,6 @@ static int i2o_core_evt(void *reply_data)
 	int flags;
 
 	lock_kernel();
-	exit_files(current);
 	daemonize();
 	unlock_kernel();
 
@@ -1005,7 +1004,6 @@ static int i2o_dyn_lct(void *foo)
 	char name[16];
 
 	lock_kernel();
-	exit_files(current);
 	daemonize();
 	unlock_kernel();
 

@@ -72,7 +72,7 @@
 
 		Jean-Jacques Michel - bug fix
 		
-		Tobias - Rx interrupt status checking suggestion
+		Tobias Ringström - Rx interrupt status checking suggestion
 
 	Submitting bug reports:
 

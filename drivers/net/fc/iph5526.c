@@ -3791,6 +3791,9 @@ struct pci_dev *pdev = NULL;
 		sprintf(fi->name, "fc%d", count);
 
 		host = scsi_register(tmpt, sizeof(struct iph5526_hostdata));
+		if(host==NULL)
+			return no_of_hosts;
+			
 		hostdata = (struct iph5526_hostdata *)host->hostdata;
 		memset(hostdata, 0 , sizeof(struct iph5526_hostdata));
 		for (j = 0; j < MAX_SCSI_TARGETS; j++)

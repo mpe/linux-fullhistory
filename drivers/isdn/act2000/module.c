@@ -563,37 +563,6 @@ act2000_readstatus(u_char * buf, int len, int user, act2000_card * card)
         return count;
 }
 
-static void
-act2000_putmsg(act2000_card *card, char c)
-{
-        ulong flags;
-
-        save_flags(flags);
-        cli();
-        *card->status_buf_write++ = c;
-        if (card->status_buf_write == card->status_buf_read) {
-                if (++card->status_buf_read > card->status_buf_end)
-                card->status_buf_read = card->status_buf;
-        }
-        if (card->status_buf_write > card->status_buf_end)
-                card->status_buf_write = card->status_buf;
-        restore_flags(flags);
-}
-
-static void
-act2000_logstat(struct act2000_card *card, char *str)
-{
-        char *p = str;
-        isdn_ctrl c;
-
-	while (*p)
-		act2000_putmsg(card, *p++);
-        c.command = ISDN_STAT_STAVAIL;
-        c.driver = card->myid;
-        c.arg = strlen(str);
-        card->interface.statcallb(&c);
-}
-
 /*
  * Find card with given driverId
  */

@@ -212,7 +212,7 @@ int copy_strings(int argc,char ** argv, struct linux_binprm *bprm)
 					return -ENOMEM;
 				new = 1;
 			}
-			kaddr = (char *)kmap(page);
+			kaddr = kmap(page);
 
 			if (new && offset)
 				memset(kaddr, 0, offset);
@@ -748,7 +748,7 @@ void remove_arg_zero(struct linux_binprm *bprm)
 			kunmap(page);
 inside:
 			page = bprm->page[bprm->p/PAGE_SIZE];
-			kaddr = (char *)kmap(page);
+			kaddr = kmap(page);
 		}
 		kunmap(page);
 		bprm->argc--;

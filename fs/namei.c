@@ -1949,7 +1949,7 @@ static char *page_getlink(struct dentry * dentry, struct page **ppage)
 	if (!Page_Uptodate(page))
 		goto async_fail;
 	*ppage = page;
-	return (char*) kmap(page);
+	return kmap(page);
 
 async_fail:
 	page_cache_release(page);

@@ -356,9 +356,8 @@ endif
 
 clean:	archclean
 	rm -f kernel/ksyms.lst include/linux/compile.h
-	find . -name '*.[oas]' -type f -print | grep -v lxdialog/ | xargs rm -f
-	rm -f core `find . -type f -name 'core' -print`
-	rm -f core `find . -type f -name '.*.flags' -print`
+	find . \( -name '*.[oas]' -o -name core -o -name '.*.flags' \) -type f -print \
+		| grep -v lxdialog/ | xargs rm -f
 	rm -f vmlinux System.map
 	rm -f .tmp*
 	rm -f drivers/char/consolemap_deftbl.c drivers/video/promcon_tbl.c
@@ -392,8 +391,7 @@ mrproper: clean archmrproper
 	rm -f .menuconfig.log
 	rm -f include/asm
 	rm -rf include/config
-	rm -f .depend `find . -type f -name .depend -print`
-	rm -f core `find . -type f -size 0 -print`
+	find . \( -size 0 -o -name .depend \) -type f -print | xargs rm -f
 	rm -f .hdepend scripts/mkdep scripts/split-include scripts/docproc
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -rf $(TOPDIR)/include/linux/modules

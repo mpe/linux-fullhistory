@@ -129,7 +129,7 @@ int umsdos_emd_dir_readentry (struct dentry *demd, loff_t *pos, struct umsdos_di
 	wait_on_page(page);
 	if (!Page_Uptodate(page))
 		goto async_fail;
-	p = (struct umsdos_dirent*)((char*)kmap(page)+offs);
+	p = (struct umsdos_dirent*)(kmap(page)+offs);
 
 	/* if this is an invalid entry (invalid name length), ignore it */
 	if( p->name_len > UMSDOS_MAXNAME )
@@ -158,7 +158,7 @@ int umsdos_emd_dir_readentry (struct dentry *demd, loff_t *pos, struct umsdos_di
 			goto async_fail;
 		}
 		memcpy(entry->spare,p->spare,part);
-		memcpy(entry->spare+part,(char*)kmap(page2),
+		memcpy(entry->spare+part,kmap(page2),
 				recsize+offs-PAGE_CACHE_SIZE);
 		kunmap(page2);
 		page_cache_release(page2);
@@ -399,7 +399,7 @@ static int umsdos_find (struct dentry *demd, struct umsdos_info *info)
 			wait_on_page(page);
 			if (!Page_Uptodate(page))
 				goto async_fail;
-			p = (char*)kmap(page);
+			p = kmap(page);
 		}
 
 		rentry = (struct umsdos_dirent *)(p+offs);
@@ -451,7 +451,7 @@ static int umsdos_find (struct dentry *demd, struct umsdos_info *info)
 				page = next_page;
 				goto async_fail;
 			}
-			q = (char*)kmap(next_page);
+			q = kmap(next_page);
 			if (memcmp(entry->name, rentry->name, len) ||
 			    memcmp(entry->name+len, q, entry->name_len-len)) {
 				kunmap(next_page);

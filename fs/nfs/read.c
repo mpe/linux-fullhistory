@@ -101,7 +101,7 @@ nfs_readpage_sync(struct file *file, struct page *page)
 	 * This works now because the socket layer never tries to DMA
 	 * into this buffer directly.
 	 */
-	buffer = (char *) kmap(page);
+	buffer = kmap(page);
 	do {
 		if (count < rsize)
 			rsize = count;
@@ -257,7 +257,7 @@ nfs_read_rpcsetup(struct list_head *head, struct nfs_read_data *data)
 		struct nfs_page *req = nfs_list_entry(head->next);
 		nfs_list_remove_request(req);
 		nfs_list_add_request(req, &data->pages);
-		iov->iov_base = (void *)(kmap(req->wb_page) + req->wb_offset);
+		iov->iov_base = kmap(req->wb_page) + req->wb_offset;
 		iov->iov_len = req->wb_bytes;
 		count += req->wb_bytes;
 		iov++;

@@ -1,4 +1,4 @@
-/* $Id: flash.c,v 1.19 2000/07/13 08:06:40 davem Exp $
+/* $Id: flash.c,v 1.20 2000/11/08 04:57:49 davem Exp $
  * flash.c: Allow mmap access to the OBP Flash, for OBP updates.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -149,11 +149,7 @@ static struct miscdevice flash_dev = { FLASH_MINOR, "flash", &flash_fops };
 
 EXPORT_NO_SYMBOLS;
 
-#ifdef MODULE
-int init_module(void)
-#else
-int __init flash_init(void)
-#endif
+static int __init flash_init(void)
 {
 	struct sbus_bus *sbus;
 	struct sbus_dev *sdev = 0;
@@ -236,9 +232,10 @@ int __init flash_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit flash_cleanup(void)
 {
 	misc_deregister(&flash_dev);
 }
-#endif
+
+module_init(flash_init);
+module_exit(flash_cleanup);

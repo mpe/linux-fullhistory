@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.48 2000/08/02 06:22:35 davem Exp $
+/* $Id: ebus.c,v 1.53 2000/11/08 05:08:23 davem Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -22,20 +22,8 @@
 
 struct linux_ebus *ebus_chain = 0;
 
-#ifdef CONFIG_SUN_OPENPROMIO
-extern int openprom_init(void);
-#endif
 #ifdef CONFIG_SUN_AUXIO
 extern void auxio_probe(void);
-#endif
-#ifdef CONFIG_OBP_FLASH
-extern int flash_init(void);
-#endif
-#ifdef CONFIG_ENVCTRL
-extern int envctrl_init(void);
-#endif
-#ifdef CONFIG_DISPLAY7SEG
-extern int d7s_init(void);
 #endif
 
 static inline void *ebus_alloc(size_t size)
@@ -372,23 +360,8 @@ void __init ebus_init(void)
 		++num_ebus;
 	}
 
-#ifdef CONFIG_SUN_OPENPROMIO
-	openprom_init();
-#endif
-#ifdef CONFIG_SUN_BPP
-	bpp_init();
-#endif
 #ifdef CONFIG_SUN_AUXIO
 	auxio_probe();
-#endif
-#ifdef CONFIG_ENVCTRL
-	envctrl_init();
-#endif
-#ifdef CONFIG_OBP_FLASH
-	flash_init();
-#endif
-#ifdef CONFIG_DISPLAY7SEG
-	d7s_init();
 #endif
 	clock_probe();
 	power_init();

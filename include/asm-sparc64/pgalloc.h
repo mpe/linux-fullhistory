@@ -1,4 +1,4 @@
-/* $Id */
+/* $Id: pgalloc.h,v 1.13 2000/11/06 06:59:04 davem Exp $ */
 #ifndef _SPARC64_PGALLOC_H
 #define _SPARC64_PGALLOC_H
 
@@ -21,8 +21,15 @@
 /* These operations are unnecessary on the SpitFire since D-CACHE is write-through. */
 #define flush_icache_range(start, end)		do { } while (0)
 #define flush_page_to_ram(page)			do { } while (0)
-extern void __flush_dcache_page(void *addr);
-#define flush_dcache_page(page)	__flush_dcache_page((page)->virtual)
+
+extern void __flush_dcache_page(void *addr, int flush_icache);
+#define flush_dcache_page(page) \
+do {	if ((page)->mapping && !(page)->mapping->i_mmap && !(page)->mapping->i_mmap_shared) \
+		set_bit(PG_dcache_dirty, &(page)->flags); \
+	else \
+		__flush_dcache_page((page)->virtual, \
+				    (page)->mapping != NULL); \
+} while(0)
 
 extern void __flush_dcache_range(unsigned long start, unsigned long end);
 

@@ -117,6 +117,7 @@ if [ "$CONFIG_NET" = "y" ]; then
 else
    # for fs/nls/Config.in
    define_bool CONFIG_NCPFS_NLS n
+   define_bool CONFIG_SMB_FS n
 fi
 
 mainmenu_option next_comment

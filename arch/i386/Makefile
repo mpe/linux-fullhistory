@@ -63,7 +63,7 @@ CFLAGS += $(shell if $(CC) -march=athlon -S -o /dev/null -xc /dev/null >/dev/nul
 endif
 
 ifdef CONFIG_MCRUSOE
-CFLAGS += -march=i586
+CFLAGS += -march=i686 -malign-functions=0 -malign-jumps=0 -malign-loops=0
 endif
 
 ifdef CONFIG_MWINCHIPC6

@@ -204,11 +204,15 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 {
 	struct cmsghdr *cm = (struct cmsghdr*)msg->msg_control;
 
-	int fdmax = (msg->msg_controllen - sizeof(struct cmsghdr))/sizeof(int);
+	int fdmax = 0;
 	int fdnum = scm->fp->count;
 	struct file **fp = scm->fp->fp;
 	int *cmfptr;
 	int err = 0, i;
+
+	if (msg->msg_controllen > sizeof(struct cmsghdr))
+		fdmax = ((msg->msg_controllen - sizeof(struct cmsghdr))
+			 / sizeof(int));
 
 	if (fdnum < fdmax)
 		fdmax = fdnum;
@@ -245,7 +249,7 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 			msg->msg_controllen -= cmlen;
 		}
 	}
-	if (i < fdnum)
+	if (i < fdnum || (fdnum && fdmax <= 0))
 		msg->msg_flags |= MSG_CTRUNC;
 
 	/*

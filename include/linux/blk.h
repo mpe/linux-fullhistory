@@ -115,7 +115,6 @@ void end_that_request_last(struct request *req);
 
 /* ram disk */
 #define DEVICE_NAME "ramdisk"
-#define DEVICE_REQUEST rd_request
 #define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_NO_RANDOM
 

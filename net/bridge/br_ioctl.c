@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_ioctl.c,v 1.3 2000/10/05 01:58:16 davem Exp $
+ *	$Id: br_ioctl.c,v 1.4 2000/11/08 05:16:40 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -53,6 +53,7 @@ static int br_ioctl_device(struct net_bridge *br,
 	{
 		struct __bridge_info b;
 
+		memset(&b, 0, sizeof(struct __bridge_info));
 		memcpy(&b.designated_root, &br->designated_root, 8);
 		memcpy(&b.bridge_id, &br->bridge_id, 8);
 		b.root_path_cost = br->root_path_cost;
@@ -81,7 +82,11 @@ static int br_ioctl_device(struct net_bridge *br,
 
 	case BRCTL_GET_PORT_LIST:
 	{
+		int i;
 		int indices[256];
+
+		for (i=0;i<256;i++)
+			indices[i] = 0;
 
 		br_get_port_ifindices(br, indices);
 		if (copy_to_user((void *)arg0, indices, 256*sizeof(int)))
@@ -124,6 +129,7 @@ static int br_ioctl_device(struct net_bridge *br,
 		if ((pt = br_get_port(br, arg1)) == NULL)
 			return -EINVAL;
 
+		memset(&p, 0, sizeof(struct __port_info));
 		memcpy(&p.designated_root, &pt->designated_root, 8);
 		memcpy(&p.designated_bridge, &pt->designated_bridge, 8);
 		p.port_id = pt->port_id;
@@ -189,7 +195,11 @@ static int br_ioctl_deviceless(unsigned int cmd,
 
 	case BRCTL_GET_BRIDGES:
 	{
+		int i;
 		int indices[64];
+
+		for (i=0;i<64;i++)
+			indices[i] = 0;
 
 		if (arg1 > 64)
 			arg1 = 64;

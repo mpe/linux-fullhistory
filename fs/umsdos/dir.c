@@ -700,7 +700,7 @@ struct dentry *umsdos_solve_hlink (struct dentry *hlink)
 	path = (char *) kmalloc (PATH_MAX, GFP_KERNEL);
 	if (path == NULL)
 		goto out_release;
-	memcpy(path, (char*)kmap(page), hlink->d_inode->i_size);
+	memcpy(path, kmap(page), hlink->d_inode->i_size);
 	kunmap(page);
 	page_cache_release(page);
 

@@ -1,4 +1,4 @@
-/* $Id: uctrl.c,v 1.8 2000/06/19 06:24:47 davem Exp $
+/* $Id: uctrl.c,v 1.9 2000/11/08 05:04:06 davem Exp $
  * uctrl.c: TS102 Microcontroller interface on Tadpole Sparcbook 3
  *
  * Copyright 1999 Derrick J Brashear (shadow@dementia.org)
@@ -363,11 +363,7 @@ void uctrl_get_external_status()
 	
 }
 
-#ifdef MODULE
-int init_module(void)
-#else
-int __init ts102_uctrl_init(void)
-#endif
+static int __init ts102_uctrl_init(void)
 {
 	struct uctrl_driver *driver = &drv;
 	int len, i;
@@ -419,9 +415,7 @@ int __init ts102_uctrl_init(void)
         return 0;
 }
 
-
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit ts102_uctrl_cleanup(void)
 {
 	struct uctrl_driver *driver = &drv;
 
@@ -433,4 +427,6 @@ void cleanup_module(void)
 	if (driver->regs)
 		driver->regs = 0;
 }
-#endif
+
+module_init(ts102_uctrl_init);
+module_exit(ts102_uctrl_cleanup);

@@ -572,9 +572,9 @@ int do_fork(unsigned long clone_flags, unsigned long stack_start,
 	 */
 	if (nr_threads >= max_threads)
 		goto bad_fork_cleanup_count;
+	
+	get_exec_domain(p->exec_domain);
 
-	if (p->exec_domain && p->exec_domain->module)
-		__MOD_INC_USE_COUNT(p->exec_domain->module);
 	if (p->binfmt && p->binfmt->module)
 		__MOD_INC_USE_COUNT(p->binfmt->module);
 

@@ -181,7 +181,8 @@ typedef struct page {
 #define PG_skip			10
 #define PG_inactive_clean	11
 #define PG_highmem		12
-				/* bits 21-30 unused */
+				/* bits 21-29 unused */
+#define PG_arch_1		30
 #define PG_reserved		31
 
 
@@ -328,6 +329,10 @@ typedef struct page {
  * parts of the address space.
  *
  * PG_error is set to indicate that an I/O error occurred on this page.
+ *
+ * PG_arch_1 is an architecture specific page state bit.  The generic
+ * code guarentees that this bit is cleared for a page when it first
+ * is entered into the page cache.
  */
 
 extern mem_map_t * mem_map;
@@ -447,8 +452,6 @@ extern void truncate_inode_pages(struct address_space *, loff_t);
 
 /* generic vm_area_ops exported for stackable file systems */
 extern int filemap_swapout(struct page * page, struct file *file);
-extern pte_t filemap_swapin(struct vm_area_struct * vma,
-			    unsigned long offset, unsigned long entry);
 extern int filemap_sync(struct vm_area_struct * vma, unsigned long address,
 			size_t size, unsigned int flags);
 extern struct page *filemap_nopage(struct vm_area_struct * area,

@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.200 2000/10/16 14:32:49 anton Exp $
+/* $Id: sun4c.c,v 1.201 2000/11/09 22:39:36 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -2509,7 +2509,7 @@ void sun4c_update_mmu_cache(struct vm_area_struct *vma, unsigned long address, p
 
 extern void sparc_context_init(int);
 extern unsigned long end;
-extern unsigned long bootmem_init(void);
+extern void bootmem_init(void);
 extern unsigned long last_valid_pfn;
 extern void sun_serial_setup(void);
 
@@ -2524,7 +2524,8 @@ void __init sun4c_paging_init(void)
 	kernel_end += (SUN4C_REAL_PGDIR_SIZE * 4);
 	kernel_end = SUN4C_REAL_PGDIR_ALIGN(kernel_end);
 
-	last_valid_pfn = end_pfn = bootmem_init();
+	bootmem_init();
+	end_pfn = last_valid_pfn;
 
 	/* This does not logically belong here, but we need to
 	 * call it at the moment we are able to use the bootmem

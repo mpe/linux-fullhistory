@@ -630,7 +630,7 @@ mmu_context_overflow(void)
 
 void flush_page_to_ram(struct page *page)
 {
-	unsigned long vaddr = kmap(page);
+	unsigned long vaddr = (unsigned long) kmap(page);
 	__flush_page_to_ram(vaddr);
 	kunmap(page);
 }

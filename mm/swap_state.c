@@ -58,7 +58,7 @@ void add_to_swap_cache(struct page *page, swp_entry_t entry)
 		BUG();
 	if (page->mapping)
 		BUG();
-	flags = page->flags & ~((1 << PG_error) | (1 << PG_dirty) | (1 << PG_referenced));
+	flags = page->flags & ~((1 << PG_error) | (1 << PG_dirty) | (1 << PG_referenced) | (1 << PG_arch_1));
 	page->flags = flags | (1 << PG_uptodate);
 	add_to_page_cache_locked(page, &swapper_space, entry.val);
 }

@@ -751,9 +751,7 @@ static int usb_hub_thread(void *__hub)
 	 * This thread doesn't need any user-level access,
 	 * so get rid of all our resources
 	 */
-	exit_files(current);  /* daemonize doesn't do exit_files */
-	current->files = init_task.files;
-	atomic_inc(&current->files->count);
+
 	daemonize();
 
 	/* Setup a nice name */

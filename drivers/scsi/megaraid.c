@@ -1491,21 +1491,6 @@ int mega_findCard (Scsi_Host_Template * pHostTmpl,
 	    pciDev,
 	    pdev->slot_name);
 
-    /*
-     *	Dont crash on boot with AMI cards configured for I2O. 
-     *  (our I2O code will find them then they will fail oddly until
-     *   we figure why they upset our I2O code). This driver will die
-     *   if it tries to boot an I2O mode board and we dont stop it now.
-     *     - Alan Cox , Red Hat Software, Jan 2000
-     */
-     	    
-    if((pdev->class >> 8) == PCI_CLASS_INTELLIGENT_I2O)
-    {
-    	printk( KERN_INFO "megaraid: Board configured for I2O, ignoring this card. Reconfigure the card\n"
-		KERN_INFO "megaraid: in the BIOS for \"mass storage\" to use it with this driver.\n");
-	continue;
-    }		
-
     /* Read the base port and IRQ from PCI */
     megaBase = pci_resource_start (pdev, 0);
     megaIrq  = pdev->irq;
@@ -1517,6 +1502,8 @@ int mega_findCard (Scsi_Host_Template * pHostTmpl,
 
     /* Initialize SCSI Host structure */
     host = scsi_register (pHostTmpl, sizeof (mega_host_config));
+    if(host == NULL)
+    	continue;
     megaCfg = (mega_host_config *) host->hostdata;
     memset (megaCfg, 0, sizeof (mega_host_config));
 
@@ -1543,12 +1530,11 @@ int mega_findCard (Scsi_Host_Template * pHostTmpl,
     megaCtlrs[numCtlrs++] = megaCfg; 
     if (flag != BOARD_QUARTZ) {
       /* Request our IO Range */
-      if (check_region (megaBase, 16)) {
+      if (request_region (megaBase, 16, "megaraid")) {
 	printk (KERN_WARNING "megaraid: Couldn't register I/O range!" CRLFSTR);
 	scsi_unregister (host);
 	continue;
       }
-      request_region (megaBase, 16, "megaraid");
     }
 
     /* Request our IRQ */

@@ -696,8 +696,13 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 
 		/* Register the card with the kernel SCSI layer */
 		host = scsi_register(tw_host, sizeof(TW_Device_Extension));
-		
-		/* FIXME - check for NULL */
+		if( host == NULL)
+		{
+			release_region((tw_dev->tw_pci_dev->resource[0].start), TW_IO_ADDRESS_RANGE);
+			tw_free_device_extension(tw_dev);
+			kfree(tw_dev);
+			continue;
+		}
 
 		status_reg_value = inl(tw_dev->registers.status_reg_addr);
 

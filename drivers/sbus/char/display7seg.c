@@ -1,4 +1,4 @@
-/* $Id: display7seg.c,v 1.3 2000/08/29 07:01:55 davem Exp $
+/* $Id: display7seg.c,v 1.4 2000/11/08 05:08:23 davem Exp $
  *
  * display7seg - Driver implementation for the 7-segment display
  * present on Sun Microsystems CP1400 and CP1500
@@ -172,11 +172,7 @@ static struct file_operations d7s_fops = {
 
 static struct miscdevice d7s_miscdev = { D7S_MINOR, D7S_DEVNAME, &d7s_fops };
 
-#ifdef MODULE
-int init_module(void)
-#else
-int __init d7s_init(void)
-#endif
+static int __init d7s_init(void)
 {
 	struct linux_ebus *ebus = NULL;
 	struct linux_ebus_device *edev = NULL;
@@ -222,8 +218,7 @@ ebus_done:
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit d7s_cleanup(void)
 {
 	int regs = readb(d7s_regs);
 
@@ -237,4 +232,6 @@ void cleanup_module(void)
 	misc_deregister(&d7s_miscdev);
 	d7s_free();
 }
-#endif
+
+module_init(d7s_init);
+module_exit(d7s_cleanup);

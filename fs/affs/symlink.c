@@ -20,7 +20,7 @@ static int affs_symlink_readpage(struct file *file, struct page *page)
 {
 	struct buffer_head *bh;
 	struct inode *inode = (struct inode*)page->mapping->host;
-	char *link = (char*)kmap(page);
+	char *link = kmap(page);
 	struct slink_front *lf;
 	int err;
 	int			 i, j;

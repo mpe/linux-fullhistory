@@ -30,7 +30,7 @@
 static int nfs_symlink_filler(struct dentry *dentry, struct page *page)
 {
 	struct inode *inode = dentry->d_inode;
-	void *buffer = (void *)kmap(page);
+	void *buffer = kmap(page);
 	int error;
 
 	/* We place the length at the beginning of the page,
@@ -69,7 +69,7 @@ static char *nfs_getlink(struct dentry *dentry, struct page **ppage)
 	if (!Page_Uptodate(page))
 		goto getlink_read_error;
 	*ppage = page;
-	p = (u32 *) kmap(page);
+	p = kmap(page);
 	return (char*)(p+1);
 		
 getlink_read_error:

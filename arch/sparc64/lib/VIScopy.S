@@ -1,4 +1,4 @@
-/* $Id: VIScopy.S,v 1.23 2000/03/26 09:13:49 davem Exp $
+/* $Id: VIScopy.S,v 1.25 2000/11/01 09:29:19 davem Exp $
  * VIScopy.S: High speed copy operations utilizing the UltraSparc
  *            Visual Instruction Set.
  *
@@ -360,6 +360,38 @@ bcopy:		or		%o0, 0, %g3			! IEU0	Group
 		retl						! CTI	Group brk forced
 		 clr		%o0				! IEU0
 
+
+#ifdef __KERNEL__
+#define BRANCH_ALWAYS	0x10680000
+#define NOP		0x01000000
+#define ULTRA3_DO_PATCH(OLD, NEW)	\
+	sethi	%hi(NEW), %g1; \
+	or	%g1, %lo(NEW), %g1; \
+	sethi	%hi(OLD), %g2; \
+	or	%g2, %lo(OLD), %g2; \
+	sub	%g1, %g2, %g1; \
+	sethi	%hi(BRANCH_ALWAYS), %g3; \
+	srl	%g1, 2, %g1; \
+	or	%g3, %lo(BRANCH_ALWAYS), %g3; \
+	or	%g3, %g1, %g3; \
+	stw	%g3, [%g2]; \
+	sethi	%hi(NOP), %g3; \
+	or	%g3, %lo(NOP), %g3; \
+	stw	%g3, [%g2 + 0x4]; \
+	flush	%g2;
+
+	.globl	cheetah_patch_copyops
+cheetah_patch_copyops:
+	ULTRA3_DO_PATCH(memcpy, U3memcpy)
+	ULTRA3_DO_PATCH(__copy_from_user, U3copy_from_user)
+	ULTRA3_DO_PATCH(__copy_to_user, U3copy_to_user)
+	ULTRA3_DO_PATCH(__copy_in_user, U3copy_in_user)
+	retl
+	 nop
+#undef BRANCH_ALWAYS
+#undef NOP
+#undef ULTRA3_DO_PATCH
+#endif /* __KERNEL__ */
 
 	.align			32
 #ifdef __KERNEL__

@@ -2052,6 +2052,23 @@ CONFIG_IP_NF_COMPAT_IPFWADM
   If you want to compile it as a module, say M here and read
   Documentation/modules.txt.  If unsure, say `N'.
 
+TCP Explicit Congestion Notification support
+CONFIG_INET_ECN
+  Explicit Congestion Notification (ECN) allows routers to notify
+  clients about network congestion, resulting in fewer dropped packets
+  and increased network performance. This option adds ECN support to the
+  Linux kernel, as well as a sysctl (/proc/sys/net/ipv4/tcp_ecn) which
+  allows ECN support to be disabled at runtime.
+
+  Note that, on the Internet, there are many broken firewalls which
+  refuse connections from ECN-enabled machines, and it may be a while
+  before these firewalls are fixed. Until then, to access a site behind
+  such a firewall (some of which are major sites, at the time of this
+  writing) you will have to disable this option, either by saying N now
+  or by using the sysctl.
+
+  If in doubt, say N.
+
 SYN flood protection
 CONFIG_SYN_COOKIES
   Normal TCP/IP networking is open to an attack known as "SYN

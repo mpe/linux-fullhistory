@@ -449,7 +449,7 @@ static char *get_symlink_chunk(char *rpnt, struct rock_ridge *rr)
 static int rock_ridge_symlink_readpage(struct file *file, struct page *page)
 {
 	struct inode *inode = (struct inode*)page->mapping->host;
-	char *link = (char*)kmap(page);
+	char *link = kmap(page);
 	unsigned long bufsize = ISOFS_BUFFER_SIZE(inode);
 	unsigned char bufbits = ISOFS_BUFFER_BITS(inode);
 	struct buffer_head *bh;

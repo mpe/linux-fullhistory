@@ -1017,11 +1017,7 @@ static inline void freeLptPort(int idx)
 
 static devfs_handle_t devfs_handle;
 
-#ifdef MODULE
-int init_module(void)
-#else
-int __init bpp_init(void)
-#endif
+static int __init bpp_init(void)
 {
 	int rc;
 	unsigned idx;
@@ -1046,8 +1042,7 @@ int __init bpp_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit bpp_cleanup(void)
 {
 	unsigned idx;
 
@@ -1059,4 +1054,6 @@ void cleanup_module(void)
 			freeLptPort(idx);
 	}
 }
-#endif
+
+module_init(bpp_init);
+module_exit(bpp_cleanup);

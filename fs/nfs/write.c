@@ -184,7 +184,7 @@ nfs_writepage_sync(struct file *file, struct page *page,
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		count, (long long)(page_offset(page) + offset));
 
-	buffer = (u8 *) kmap(page) + offset;
+	buffer = kmap(page) + offset;
 	base = page_offset(page) + offset;
 
 	flags = ((IS_SWAPFILE(inode)) ? NFS_RW_SWAP : 0) | NFS_RW_SYNC;
@@ -1065,7 +1065,7 @@ nfs_write_rpcsetup(struct list_head *head, struct nfs_write_data *data)
 		struct nfs_page *req = nfs_list_entry(head->next);
 		nfs_list_remove_request(req);
 		nfs_list_add_request(req, &data->pages);
-		iov->iov_base = (void *)(kmap(req->wb_page) + req->wb_offset);
+		iov->iov_base = kmap(req->wb_page) + req->wb_offset;
 		iov->iov_len = req->wb_bytes;
 		count += req->wb_bytes;
 		iov++;

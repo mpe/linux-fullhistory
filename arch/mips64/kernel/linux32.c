@@ -241,7 +241,7 @@ int copy_strings32(int argc, u32 * argv, struct linux_binprm *bprm)
 					return -ENOMEM;
 				new = 1;
 			}
-			kaddr = (char *)kmap(page);
+			kaddr = kmap(page);
 
 			if (new && offset)
 				memset(kaddr, 0, offset);

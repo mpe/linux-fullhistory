@@ -374,7 +374,7 @@ static void raid1_end_bh_io (struct raid1_bh *r1_bh, int uptodate)
 {
 	struct buffer_head *bh = r1_bh->master_bh;
 
-	io_request_done(bh->b_blocknr*(bh->b_size>>9), mddev_to_conf(r1_bh->mddev),
+	io_request_done(bh->b_rsector, mddev_to_conf(r1_bh->mddev),
 			test_bit(R1BH_SyncPhase, &r1_bh->state));
 
 	bh->b_end_io(bh, uptodate);

@@ -194,50 +194,47 @@ __setup("ramdisk_blocksize=", ramdisk_blocksize);
  * 19-JAN-1998  Richard Gooch <rgooch@atnf.csiro.au>  Added devfs support
  *
  */
-static void rd_request(request_queue_t * q)
+static int rd_make_request(request_queue_t * q, int rw, struct buffer_head *sbh)
 {
 	unsigned int minor;
 	unsigned long offset, len;
 	struct buffer_head *rbh;
-	struct buffer_head *sbh;
 
-repeat:
-	INIT_REQUEST;
 	
-	minor = MINOR(CURRENT->rq_dev);
+	minor = MINOR(sbh->b_rdev);
 
-	if (minor >= NUM_RAMDISKS) {
-		end_request(0);
-		goto repeat;
-	}
+	if (minor >= NUM_RAMDISKS)
+		goto fail;
+
 	
-	offset = CURRENT->sector << 9;
-	len = CURRENT->current_nr_sectors << 9;
+	offset = sbh->b_rsector << 9;
+	len = sbh->b_size;
 
-	if ((offset + len) > rd_length[minor]) {
-		end_request(0);
-		goto repeat;
+	if ((offset + len) > rd_length[minor])
+		goto fail;
+
+	if (rw==READA)
+		rw=READ;
+	if ((rw != READ) && (rw != WRITE)) {
+		printk(KERN_INFO "RAMDISK: bad command: %d\n", rw);
+		goto fail;
 	}
 
-	if ((CURRENT->cmd != READ) && (CURRENT->cmd != WRITE)) {
-		printk(KERN_INFO "RAMDISK: bad command: %d\n", CURRENT->cmd);
-		end_request(0);
-		goto repeat;
-	}
-
-	sbh = CURRENT->bh;
-	rbh = getblk(sbh->b_dev, sbh->b_blocknr, sbh->b_size);
-	if (CURRENT->cmd == READ) {
+	rbh = getblk(sbh->b_rdev, sbh->b_rsector/(sbh->b_size>>9), sbh->b_size);
+	if (rw == READ) {
 		if (sbh != rbh)
-			memcpy(CURRENT->buffer, rbh->b_data, rbh->b_size);
+			memcpy(sbh->b_data, rbh->b_data, rbh->b_size);
 	} else
 		if (sbh != rbh)
-			memcpy(rbh->b_data, CURRENT->buffer, rbh->b_size);
+			memcpy(rbh->b_data, sbh->b_data, rbh->b_size);
 	mark_buffer_protected(rbh);
 	brelse(rbh);
 
-	end_request(1);
-	goto repeat;
+	sbh->b_end_io(sbh,1);
+	return 0;
+ fail:
+	sbh->b_end_io(sbh,0);
+	return 0;
 } 
 
 static int rd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
@@ -378,7 +375,6 @@ static void __exit rd_cleanup (void)
 
 	devfs_unregister (devfs_handle);
 	unregister_blkdev( MAJOR_NR, "ramdisk" );
-	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 	hardsect_size[MAJOR_NR] = NULL;
 	blksize_size[MAJOR_NR] = NULL;
 	blk_size[MAJOR_NR] = NULL;
@@ -403,7 +399,7 @@ int __init rd_init (void)
 		return -EIO;
 	}
 
-	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), &rd_request);
+	blk_queue_make_request(BLK_DEFAULT_QUEUE(MAJOR_NR), &rd_make_request);
 
 	for (i = 0; i < NUM_RAMDISKS; i++) {
 		/* rd_size is given in kB */

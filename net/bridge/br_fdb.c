@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_fdb.c,v 1.4 2000/02/24 06:16:45 davem Exp $
+ *	$Id: br_fdb.c,v 1.5 2000/11/08 05:16:40 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -43,6 +43,7 @@ static __inline__ int has_expired(struct net_bridge *br,
 
 static __inline__ void copy_fdb(struct __fdb_entry *ent, struct net_bridge_fdb_entry *f)
 {
+	memset(ent, 0, sizeof(struct __fdb_entry));
 	memcpy(ent->mac_addr, f->addr.addr, ETH_ALEN);
 	ent->port_no = f->dst?f->dst->port_no:0;
 	ent->is_local = f->is_local;

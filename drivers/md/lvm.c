@@ -1928,7 +1928,7 @@ static int lvm_do_lv_create(int minor, char *lv_name, lv_t *lv)
 {
 	int l, le, l_new, p, size;
 	ulong lv_status_save;
-	char *lv_tmp, *lv_buf;
+	char *lv_tmp, *lv_buf = NULL;
 	lv_block_exception_t *lvbe = lv->lv_block_exception;
 	vg_t *vg_ptr = vg[VG_CHR(minor)];
 	lv_t *lv_ptr = NULL;

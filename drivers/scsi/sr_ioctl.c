@@ -274,7 +274,7 @@ int sr_select_speed(struct cdrom_device_info *cdi, int speed)
 
 /* ----------------------------------------------------------------------- */
 /* this is called by the generic cdrom driver. arg is a _kernel_ pointer,  */
-/* becauce the generic cdrom driver does the user access stuff for us.     */
+/* because the generic cdrom driver does the user access stuff for us.     */
 /* only cdromreadtochdr and cdromreadtocentry are left - for use with the  */
 /* sr_disk_status interface for the generic cdrom driver.                  */
 

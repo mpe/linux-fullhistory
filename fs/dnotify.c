@@ -103,14 +103,14 @@ void __inode_dir_notify(struct inode *inode, unsigned long event)
 	write_lock(&dn_lock);
 	prev = &inode->i_dnotify;
 	while ((dn = *prev) != NULL) {
-		if ((dn->dn_mask & event) == 0) {
-			prev = &dn->dn_next;
-			continue;
-		}
 		if (dn->dn_magic != DNOTIFY_MAGIC) {
 		        printk(KERN_ERR "__inode_dir_notify: bad magic "
 				"number in dnotify_struct!\n");
-		        return;
+		        goto out;
+		}
+		if ((dn->dn_mask & event) == 0) {
+			prev = &dn->dn_next;
+			continue;
 		}
 		fown = &dn->dn_filp->f_owner;
 		if (fown->pid)
@@ -125,6 +125,7 @@ void __inode_dir_notify(struct inode *inode, unsigned long event)
 	}
 	if (changed)
 		redo_inode_mask(inode);
+out:
 	write_unlock(&dn_lock);
 }
 

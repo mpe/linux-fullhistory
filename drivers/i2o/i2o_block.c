@@ -584,7 +584,6 @@ static int i2ob_evt(void *dummy)
 	int i;
 
 	lock_kernel();
-	exit_files(current);
 	daemonize();
 	unlock_kernel();
 
@@ -593,6 +592,7 @@ static int i2ob_evt(void *dummy)
 
 	while(1)
 	{
+#warning "RACE"
 		interruptible_sleep_on(&i2ob_evt_wait);
  		if(signal_pending(current)) {
 			evt_running = 0;

@@ -27,11 +27,6 @@
  */
 #include <linux/kernel.h>
 
-#define NULL	0x0
-
-#define REQUEST_IRQ(a,b,c,d,e) request_irq(a,b,c,d,e)
-#define FREE_IRQ(a,b) free_irq(a,b)
-
 inline char *strcpy(char *, const char *);
 
 int dbg_level = 0;
@@ -61,7 +56,7 @@ inline char *strcpy(char *dest, const char *src)
 		*i = *j;
 		i++; j++;
 	}
-	*(++i) = NULL;
+	*(++i) = 0;
 	return dest;
 }
 

@@ -48,7 +48,7 @@ static int ncp_symlink_readpage(struct file *file, struct page *page)
 	struct inode *inode = (struct inode*)page->mapping->host;
 	int error, length, len, cnt;
 	char *link;
-	char *buf = (char*)kmap(page);
+	char *buf = kmap(page);
 
 	error = -ENOMEM;
 	for (cnt = 0; (link=(char *)kmalloc(NCP_MAX_SYMLINK_SIZE, GFP_NFS))==NULL; cnt++) {

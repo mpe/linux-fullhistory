@@ -24,6 +24,7 @@
 #include <asm/hardirq.h>
 
 extern void die(const char *,struct pt_regs *,long);
+extern void bust_spinlocks(void);
 
 /*
  * Ugly, ugly, but the goto's result in better assembly..
@@ -250,6 +251,8 @@ no_context:
  * Oops. The kernel tried to access some bad page. We'll have to
  * terminate things with extreme prejudice.
  */
+
+	bust_spinlocks();
 
 	if (address < PAGE_SIZE)
 		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");

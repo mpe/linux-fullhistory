@@ -353,6 +353,12 @@ W:	http://www.dgii.com/linux,http://lameter.com/digi
 L:	digilnux@dgii.com
 S:	Maintained
 
+DIRECTORY NOTIFICATION
+P:	Stephen Rothwell
+M:	sfr@linuxcare.com.au
+L:	linux-kernel@vger.kernel.org
+S:	Supported
+
 DISK GEOMETRY AND PARTITION HANDLING
 P:     Andries Brouwer
 M:     aeb@veritas.com
@@ -411,9 +417,9 @@ S:	Maintained
 
 ETHERNET BRIDGE
 P:	Lennert Buytenhek
-M:	buytenh@openrock.net
-L:	bridge@openrock.net
-W:	http://openrock.net/bridge
+M:	buytenh@gnu.org
+L:	bridge@math.leidenuniv.nl
+W:	http://www.math.leidenuniv.nl/~buytenh/bridge
 S:	Maintained
 
 ETHERTEAM 16I DRIVER

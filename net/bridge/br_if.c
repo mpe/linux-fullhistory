@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_if.c,v 1.4 2000/10/05 01:58:16 davem Exp $
+ *	$Id: br_if.c,v 1.5 2000/11/08 05:16:40 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -279,11 +279,7 @@ int br_get_bridge_ifindices(int *indices, int num)
 /* called under ioctl_lock */
 void br_get_port_ifindices(struct net_bridge *br, int *ifindices)
 {
-	int i;
 	struct net_bridge_port *p;
-
-	for (i=0;i<256;i++)
-		ifindices[i] = 0;
 
 	p = br->port_list;
 	while (p != NULL) {

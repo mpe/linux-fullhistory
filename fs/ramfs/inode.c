@@ -65,7 +65,8 @@ static struct dentry * ramfs_lookup(struct inode *dir, struct dentry *dentry)
 static int ramfs_readpage(struct file *file, struct page * page)
 {
 	if (!Page_Uptodate(page)) {
-		memset(page_address(page), 0, PAGE_CACHE_SIZE);
+		memset(kmap(page), 0, PAGE_CACHE_SIZE);
+		kunmap(page);
 		flush_dcache_page(page);
 		SetPageUptodate(page);
 	}
@@ -85,9 +86,7 @@ static int ramfs_writepage(struct file *file, struct page *page)
 
 static int ramfs_prepare_write(struct file *file, struct page *page, unsigned offset, unsigned to)
 {
-	void *addr;
-
-	addr = (void *) kmap(page);
+	void *addr = kmap(page);
 	if (!Page_Uptodate(page)) {
 		memset(addr, 0, PAGE_CACHE_SIZE);
 		flush_dcache_page(page);

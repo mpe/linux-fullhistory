@@ -10,7 +10,7 @@
 
 static int banks;
 
-void mcheck_fault(void)
+void do_machine_check(struct pt_regs * regs, long error_code)
 {
 	int recover=1;
 	u32 alow, ahigh, high, low;

@@ -130,7 +130,7 @@ static int __init atmpvc_init(void)
 	error = sock_register(&pvc_family_ops);
 	if (error < 0) {
 		printk(KERN_ERR "ATMPVC: can't register (%d)",error);
-		return;
+		return -EINVAL;
 	}
 #ifdef CONFIG_ATM_CLIP
 	atm_clip_init();

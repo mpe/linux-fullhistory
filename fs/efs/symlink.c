@@ -13,7 +13,7 @@
 
 static int efs_symlink_readpage(struct file *file, struct page *page)
 {
-	char *link = (char*)kmap(page);
+	char *link = kmap(page);
 	struct buffer_head * bh;
 	struct inode * inode = (struct inode*)page->mapping->host;
 	efs_block_t size = inode->i_size;

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.132 2000/10/19 00:50:16 davem Exp $
+/* $Id: pgtable.h,v 1.135 2000/11/08 04:49:24 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -18,6 +18,8 @@
 #include <asm/system.h>
 
 #ifndef __ASSEMBLY__
+
+#define PG_dcache_dirty		PG_arch_1
 
 /* Certain architectures need to do special things when pte's
  * within a page table are directly modified.  Thus, the following
@@ -233,7 +235,7 @@ extern pgd_t swapper_pg_dir[1];
 #define mmu_lockarea(vaddr, len)		(vaddr)
 #define mmu_unlockarea(vaddr, len)		do { } while(0)
 
-extern void update_mmu_cache(struct vm_area_struct *vma, unsigned long address, pte_t pte);
+extern void update_mmu_cache(struct vm_area_struct *, unsigned long, pte_t);
 
 #define flush_icache_page(vma, pg)	do { } while(0)
 
