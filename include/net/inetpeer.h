@@ -35,7 +35,6 @@ void			inet_initpeers(void) __init;
 struct inet_peer	*inet_getpeer(__u32 daddr, int create);
 
 extern spinlock_t inet_peer_unused_lock;
-extern struct inet_peer *inet_peer_unused_head;
 extern struct inet_peer **inet_peer_unused_tailp;
 /* can be called from BH context or outside */
 static inline void	inet_putpeer(struct inet_peer *p)
