@@ -7,7 +7,7 @@
  */
 
 #include <asm/pgtable.h>
-#include <asm/mmu_context.h>
+#include <asm/mmu.h>
 
 #if PAGE_SHIFT == 13
 #define SZ_BITS		_PAGE_SZ8K

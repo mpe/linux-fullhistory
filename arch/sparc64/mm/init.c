@@ -61,7 +61,7 @@ static unsigned long bootmap_base;
 /* get_new_mmu_context() uses "cache + 1".  */
 DEFINE_SPINLOCK(ctx_alloc_lock);
 unsigned long tlb_context_cache = CTX_FIRST_VERSION - 1;
-#define CTX_BMAP_SLOTS (1UL << (CTX_VERSION_SHIFT - 6))
+#define CTX_BMAP_SLOTS (1UL << (CTX_NR_BITS - 6))
 unsigned long mmu_context_bmap[CTX_BMAP_SLOTS];
 
 /* References to special section boundaries */
@@ -195,7 +195,7 @@ void update_mmu_cache(struct vm_area_struct *vma, unsigned long address, pte_t p
 	}
 
 	if (get_thread_fault_code())
-		__update_mmu_cache(vma->vm_mm->context & TAG_CONTEXT_BITS,
+		__update_mmu_cache(CTX_NRBITS(vma->vm_mm->context),
 				   address, pte, get_thread_fault_code());
 }
 
@@ -421,11 +421,15 @@ static void inherit_prom_mappings(void)
 	prom_printf("Remapping the kernel... ");
 
 	/* Spitfire Errata #32 workaround */
+	/* NOTE: Using plain zero for the context value is
+	 *       correct here, we are not using the Linux trap
+	 *       tables yet so we should not use the special
+	 *       UltraSPARC-III+ page size encodings yet.
+	 */
 	__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
 			     "flush	%%g6"
 			     : /* No outputs */
-			     : "r" (0),
-			     "r" (PRIMARY_CONTEXT), "i" (ASI_DMMU));
+			     : "r" (0), "r" (PRIMARY_CONTEXT), "i" (ASI_DMMU));
 
 	switch (tlb_type) {
 	default:
@@ -485,6 +489,11 @@ static void inherit_prom_mappings(void)
 	tte_vaddr = (unsigned long) KERNBASE;
 
 	/* Spitfire Errata #32 workaround */
+	/* NOTE: Using plain zero for the context value is
+	 *       correct here, we are not using the Linux trap
+	 *       tables yet so we should not use the special
+	 *       UltraSPARC-III+ page size encodings yet.
+	 */
 	__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
 			     "flush	%%g6"
 			     : /* No outputs */
@@ -503,6 +512,11 @@ static void inherit_prom_mappings(void)
 
 
 	/* Spitfire Errata #32 workaround */
+	/* NOTE: Using plain zero for the context value is
+	 *       correct here, we are not using the Linux trap
+	 *       tables yet so we should not use the special
+	 *       UltraSPARC-III+ page size encodings yet.
+	 */
 	__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
 			     "flush	%%g6"
 			     : /* No outputs */
@@ -589,6 +603,9 @@ static void __flush_nucleus_vptes(void)
 			unsigned long tag;
 
 			/* Spitfire Errata #32 workaround */
+			/* NOTE: Always runs on spitfire, so no cheetah+
+			 *       page size encodings.
+			 */
 			__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
 					     "flush	%%g6"
 					     : /* No outputs */
@@ -755,6 +772,9 @@ void inherit_locked_prom_mappings(int save_p)
 			unsigned long data;
 
 			/* Spitfire Errata #32 workaround */
+			/* NOTE: Always runs on spitfire, so no cheetah+
+			 *       page size encodings.
+			 */
 			__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
 					     "flush	%%g6"
 					     : /* No outputs */
@@ -766,6 +786,9 @@ void inherit_locked_prom_mappings(int save_p)
 				unsigned long tag;
 
 				/* Spitfire Errata #32 workaround */
+				/* NOTE: Always runs on spitfire, so no
+				 *       cheetah+ page size encodings.
+				 */
 				__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
 						     "flush	%%g6"
 						     : /* No outputs */
@@ -793,6 +816,9 @@ void inherit_locked_prom_mappings(int save_p)
 			unsigned long data;
 
 			/* Spitfire Errata #32 workaround */
+			/* NOTE: Always runs on spitfire, so no
+			 *       cheetah+ page size encodings.
+			 */
 			__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
 					     "flush	%%g6"
 					     : /* No outputs */
@@ -804,6 +830,9 @@ void inherit_locked_prom_mappings(int save_p)
 				unsigned long tag;
 
 				/* Spitfire Errata #32 workaround */
+				/* NOTE: Always runs on spitfire, so no
+				 *       cheetah+ page size encodings.
+				 */
 				__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
 						     "flush	%%g6"
 						     : /* No outputs */
@@ -959,6 +988,9 @@ void __flush_tlb_all(void)
 	if (tlb_type == spitfire) {
 		for (i = 0; i < 64; i++) {
 			/* Spitfire Errata #32 workaround */
+			/* NOTE: Always runs on spitfire, so no
+			 *       cheetah+ page size encodings.
+			 */
 			__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
 					     "flush	%%g6"
 					     : /* No outputs */
@@ -974,6 +1006,9 @@ void __flush_tlb_all(void)
 			}
 
 			/* Spitfire Errata #32 workaround */
+			/* NOTE: Always runs on spitfire, so no
+			 *       cheetah+ page size encodings.
+			 */
 			__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
 					     "flush	%%g6"
 					     : /* No outputs */
@@ -1007,11 +1042,14 @@ void __flush_tlb_all(void)
 void get_new_mmu_context(struct mm_struct *mm)
 {
 	unsigned long ctx, new_ctx;
+	unsigned long orig_pgsz_bits;
 	
+
 	spin_lock(&ctx_alloc_lock);
-	ctx = CTX_HWBITS(tlb_context_cache + 1);
-	new_ctx = find_next_zero_bit(mmu_context_bmap, 1UL << CTX_VERSION_SHIFT, ctx);
-	if (new_ctx >= (1UL << CTX_VERSION_SHIFT)) {
+	orig_pgsz_bits = (mm->context.sparc64_ctx_val & CTX_PGSZ_MASK);
+	ctx = (tlb_context_cache + 1) & CTX_NR_MASK;
+	new_ctx = find_next_zero_bit(mmu_context_bmap, 1 << CTX_NR_BITS, ctx);
+	if (new_ctx >= (1 << CTX_NR_BITS)) {
 		new_ctx = find_next_zero_bit(mmu_context_bmap, ctx, 1);
 		if (new_ctx >= ctx) {
 			int i;
@@ -1040,9 +1078,8 @@ void get_new_mmu_context(struct mm_struct *mm)
 	new_ctx |= (tlb_context_cache & CTX_VERSION_MASK);
 out:
 	tlb_context_cache = new_ctx;
+	mm->context.sparc64_ctx_val = new_ctx | orig_pgsz_bits;
 	spin_unlock(&ctx_alloc_lock);
-
-	mm->context = new_ctx;
 }
 
 #ifndef CONFIG_SMP

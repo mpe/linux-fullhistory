@@ -223,7 +223,15 @@ __update_mmu_cache:	/* %o0=hw_context, %o1=address, %o2=pte, %o3=fault_code */
 	 or		%o5, %o0, %o5
 	ba,a,pt		%xcc, __prefill_itlb
 
-	/* Cheetah specific versions, patched at boot time.  */
+	/* Cheetah specific versions, patched at boot time.
+	 *
+	 * This writes of the PRIMARY_CONTEXT register in this file are
+	 * safe even on Cheetah+ and later wrt. the page size fields.
+	 * The nucleus page size fields do not matter because we make
+	 * no data references, and these instructions execute out of a
+	 * locked I-TLB entry sitting in the fully assosciative I-TLB.
+	 * This sequence should also never trap.
+	 */
 __cheetah_flush_tlb_mm: /* 15 insns */
 	rdpr		%pstate, %g7
 	andn		%g7, PSTATE_IE, %g2

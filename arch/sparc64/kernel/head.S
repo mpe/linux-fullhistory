@@ -25,6 +25,7 @@
 #include <asm/dcu.h>
 #include <asm/head.h>
 #include <asm/ttable.h>
+#include <asm/mmu.h>
 	
 /* This section from from _start to sparc64_boot_end should fit into
  * 0x0000.0000.0040.4000 to 0x0000.0000.0040.8000 and will be sharing space
@@ -515,14 +516,29 @@ cheetah_tlb_fixup:
 	membar	#Sync
 
 	mov	2, %g2		/* Set TLB type to cheetah+. */
-	BRANCH_IF_CHEETAH_PLUS_OR_FOLLOWON(g5,g7,1f)
+	BRANCH_IF_CHEETAH_PLUS_OR_FOLLOWON(g1,g7,1f)
 
 	mov	1, %g2		/* Set TLB type to cheetah. */
 
 1:	sethi	%hi(tlb_type), %g5
 	stw	%g2, [%g5 + %lo(tlb_type)]
 
-	/* Patch copy/page operations to cheetah optimized versions. */
+	BRANCH_IF_CHEETAH_PLUS_OR_FOLLOWON(g1,g7,1f)
+	ba,pt	%xcc, 2f
+	 nop
+
+1:	/* Patch context register writes to support nucleus page
+	 * size correctly.
+	 */
+	call	cheetah_plus_patch_etrap
+	 nop
+	call	cheetah_plus_patch_rtrap
+	 nop
+	call	cheetah_plus_patch_winfixup
+	 nop
+	
+
+2:	/* Patch copy/page operations to cheetah optimized versions. */
 	call	cheetah_patch_copyops
 	 nop
 	call	cheetah_patch_cachetlbops
@@ -685,10 +701,23 @@ spitfire_vpte_base:
 	call	init_irqwork_curcpu
 	 nop
 
-	sethi	%hi(sparc64_ttable_tl0), %g5
 	call	prom_set_trap_table
-	 mov	%g5, %o0
+	 sethi	%hi(sparc64_ttable_tl0), %o0
 
+	BRANCH_IF_CHEETAH_PLUS_OR_FOLLOWON(g2,g3,1f)
+	ba,pt	%xcc, 2f
+	 nop
+
+1:	/* Start using proper page size encodings in ctx register.  */
+	sethi	%uhi(CTX_CHEETAH_PLUS_NUC), %g3
+	mov	PRIMARY_CONTEXT, %g1
+	sllx	%g3, 32, %g3
+	sethi	%hi(CTX_CHEETAH_PLUS_CTX0), %g2
+	or	%g3, %g2, %g3
+	stxa	%g3, [%g1] ASI_DMMU
+	membar	#Sync
+
+2:
 	rdpr	%pstate, %o1
 	or	%o1, PSTATE_IE, %o1
 	wrpr	%o1, 0, %pstate

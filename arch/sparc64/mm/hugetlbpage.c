@@ -20,6 +20,7 @@
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
 #include <asm/cacheflush.h>
+#include <asm/mmu_context.h>
 
 static pte_t *huge_pte_alloc(struct mm_struct *mm, unsigned long addr)
 {
@@ -217,11 +218,49 @@ void unmap_hugepage_range(struct vm_area_struct *vma,
 	flush_tlb_range(vma, start, end);
 }
 
+static void context_reload(void *__data)
+{
+	struct mm_struct *mm = __data;
+
+	if (mm == current->mm)
+		load_secondary_context(mm);
+}
+
 int hugetlb_prefault(struct address_space *mapping, struct vm_area_struct *vma)
 {
 	struct mm_struct *mm = current->mm;
 	unsigned long addr;
 	int ret = 0;
+
+	/* On UltraSPARC-III+ and later, configure the second half of
+	 * the Data-TLB for huge pages.
+	 */
+	if (tlb_type == cheetah_plus) {
+		unsigned long ctx;
+
+		spin_lock(&ctx_alloc_lock);
+		ctx = mm->context.sparc64_ctx_val;
+		ctx &= ~CTX_PGSZ_MASK;
+		ctx |= CTX_PGSZ_BASE << CTX_PGSZ0_SHIFT;
+		ctx |= CTX_PGSZ_HUGE << CTX_PGSZ1_SHIFT;
+
+		if (ctx != mm->context.sparc64_ctx_val) {
+			/* When changing the page size fields, we
+			 * must perform a context flush so that no
+			 * stale entries match.  This flush must
+			 * occur with the original context register
+			 * settings.
+			 */
+			do_flush_tlb_mm(mm);
+
+			/* Reload the context register of all processors
+			 * also executing in this address space.
+			 */
+			mm->context.sparc64_ctx_val = ctx;
+			on_each_cpu(context_reload, mm, 0, 0);
+		}
+		spin_unlock(&ctx_alloc_lock);
+	}
 
 	BUG_ON(vma->vm_start & ~HPAGE_MASK);
 	BUG_ON(vma->vm_end & ~HPAGE_MASK);

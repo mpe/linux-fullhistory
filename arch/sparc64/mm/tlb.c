@@ -26,15 +26,13 @@ void flush_tlb_pending(void)
 	struct mmu_gather *mp = &__get_cpu_var(mmu_gathers);
 
 	if (mp->tlb_nr) {
-		unsigned long context = mp->mm->context;
-
-		if (CTX_VALID(context)) {
+		if (CTX_VALID(mp->mm->context)) {
 #ifdef CONFIG_SMP
 			smp_flush_tlb_pending(mp->mm, mp->tlb_nr,
 					      &mp->vaddrs[0]);
 #else
-			__flush_tlb_pending(CTX_HWBITS(context), mp->tlb_nr,
-					    &mp->vaddrs[0]);
+			__flush_tlb_pending(CTX_HWBITS(mp->mm->context),
+					    mp->tlb_nr, &mp->vaddrs[0]);
 #endif
 		}
 		mp->tlb_nr = 0;

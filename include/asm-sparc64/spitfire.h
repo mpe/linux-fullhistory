@@ -99,46 +99,6 @@ static __inline__ void spitfire_put_dsfsr(unsigned long sfsr)
 			     : "r" (sfsr), "r" (TLB_SFSR), "i" (ASI_DMMU));
 }
 
-static __inline__ unsigned long spitfire_get_primary_context(void)
-{
-	unsigned long ctx;
-
-	__asm__ __volatile__("ldxa	[%1] %2, %0"
-			     : "=r" (ctx)
-			     : "r" (PRIMARY_CONTEXT), "i" (ASI_DMMU));
-	return ctx;
-}
-
-static __inline__ void spitfire_set_primary_context(unsigned long ctx)
-{
-	__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
-			     "membar	#Sync"
-			     : /* No outputs */
-			     : "r" (ctx & 0x3ff),
-			       "r" (PRIMARY_CONTEXT), "i" (ASI_DMMU));
-	__asm__ __volatile__ ("membar #Sync" : : : "memory");
-}
-
-static __inline__ unsigned long spitfire_get_secondary_context(void)
-{
-	unsigned long ctx;
-
-	__asm__ __volatile__("ldxa	[%1] %2, %0"
-			     : "=r" (ctx)
-			     : "r" (SECONDARY_CONTEXT), "i" (ASI_DMMU));
-	return ctx;
-}
-
-static __inline__ void spitfire_set_secondary_context(unsigned long ctx)
-{
-	__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
-			     "membar	#Sync"
-			     : /* No outputs */
-			     : "r" (ctx & 0x3ff),
-			       "r" (SECONDARY_CONTEXT), "i" (ASI_DMMU));
-	__asm__ __volatile__ ("membar #Sync" : : : "memory");
-}
-
 /* The data cache is write through, so this just invalidates the
  * specified line.
  */

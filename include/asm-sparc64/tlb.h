@@ -89,9 +89,7 @@ static inline void tlb_finish_mmu(struct mmu_gather *mp, unsigned long start, un
 	tlb_flush_mmu(mp);
 
 	if (mp->tlb_frozen) {
-		unsigned long context = mm->context;
-
-		if (CTX_VALID(context))
+		if (CTX_VALID(mm->context))
 			do_flush_tlb_mm(mm);
 		mp->tlb_frozen = 0;
 	} else
