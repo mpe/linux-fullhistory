@@ -9,6 +9,7 @@
 
 struct cpuinfo_alpha {
 	unsigned long loops_per_sec;
+	unsigned long last_asn;
 	unsigned long *pgd_cache;
 	unsigned long *pte_cache;
 	unsigned long pgtable_cache_sz;

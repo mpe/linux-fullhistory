@@ -744,20 +744,6 @@ out:
 	return bh;
 }
 
-void set_writetime(struct buffer_head * buf, int flag)
-{
-	int newtime;
-
-	if (buffer_dirty(buf)) {
-		/* Move buffer to dirty list if jiffies is clear. */
-		newtime = jiffies + (flag ? bdf_prm.b_un.age_super : bdf_prm.b_un.age_buffer);
-		if (!buf->b_flushtime || buf->b_flushtime > newtime)
-			 buf->b_flushtime = newtime;
-	} else {
-		buf->b_flushtime = 0;
-	}
-}
-
 /*
  * Put a buffer into the appropriate list, without side-effects.
  */
@@ -796,7 +782,7 @@ void balance_dirty(kdev_t dev)
 
 static inline void __mark_dirty(struct buffer_head *bh, int flag)
 {
-	set_writetime(bh, flag);
+	bh->b_flushtime = jiffies + (flag ? bdf_prm.b_un.age_super : bdf_prm.b_un.age_buffer);
 	refile_buffer(bh);
 }
 
@@ -840,9 +826,6 @@ void refile_buffer(struct buffer_head * buf)
  */
 void __brelse(struct buffer_head * buf)
 {
-	/* If dirty, mark the time this buffer should be written back. */
-	set_writetime(buf, 0);
-	refile_buffer(buf);
 	touch_buffer(buf);
 
 	if (buf->b_count) {
@@ -1556,7 +1539,7 @@ int block_write_partial_page (struct file *file, struct page *page, unsigned lon
 		 * lots of dirty pages.
 		 */
 		if (!test_and_set_bit(BH_Dirty, &bh->b_state)) {
-			__atomic_mark_buffer_dirty(bh,0);
+			__atomic_mark_buffer_dirty(bh, bdf_prm.b_un.age_buffer);
 			if (too_many_dirty_buffers)
 				balance_dirty(bh->b_dev);
 		}

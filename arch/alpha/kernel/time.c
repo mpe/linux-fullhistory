@@ -1,7 +1,7 @@
 /*
  *  linux/arch/alpha/kernel/time.c
  *
- *  Copyright (C) 1991, 1992, 1995  Linus Torvalds
+ *  Copyright (C) 1991, 1992, 1995, 1999  Linus Torvalds
  *
  * This file contains the PC-specific time handling details:
  * reading the RTC at bootup, etc..
@@ -43,7 +43,7 @@
 #include "irq.h"
 
 extern rwlock_t xtime_lock;
-extern volatile unsigned long lost_ticks;	/*kernel/sched.c*/
+extern volatile unsigned long lost_ticks;	/* kernel/sched.c */
 
 static int set_rtc_mmss(unsigned long);
 

@@ -598,7 +598,7 @@ cia_pci_clr_err(void)
 {
 	CIA_jd = *(vuip)CIA_IOC_CIA_ERR;
 	DBGM(("CIA_pci_clr_err: CIA ERR after read 0x%x\n", CIA_jd));
-	*(vuip)CIA_IOC_CIA_ERR = 0x0180;
+	*(vuip)CIA_IOC_CIA_ERR = CIA_jd;
 	mb();
 	return 0;
 }
@@ -698,6 +698,10 @@ cia_machine_check(unsigned long vector, unsigned long la_ptr,
 		reason = buf;
 		break;
 	}
+	mb();
+	mb();  /* magic */
+	draina();
+	cia_pci_clr_err();
 	wrmces(rdmces());	/* reset machine check pending flag */
 	mb();
 

@@ -42,8 +42,6 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 			offset = si->cluster_next++;
 			if (si->swap_map[offset])
 				continue;
-			if (test_bit(offset, si->swap_lockmap))
-				continue;
 			si->cluster_nr--;
 			goto got_page;
 		}
@@ -51,8 +49,6 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 	si->cluster_nr = SWAPFILE_CLUSTER;
 	for (offset = si->lowest_bit; offset <= si->highest_bit ; offset++) {
 		if (si->swap_map[offset])
-			continue;
-		if (test_bit(offset, si->swap_lockmap))
 			continue;
 		si->lowest_bit = offset;
 got_page:
@@ -424,8 +420,6 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	p->swap_device = 0;
 	vfree(p->swap_map);
 	p->swap_map = NULL;
-	vfree(p->swap_lockmap);
-	p->swap_lockmap = NULL;
 	p->flags = 0;
 	err = 0;
 
@@ -505,7 +499,6 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	int lock_map_size = PAGE_SIZE;
 	int nr_good_pages = 0;
 	unsigned long maxpages;
-	unsigned long tmp_lock_map = 0;
 	int swapfilesize;
 	
 	lock_kernel();
@@ -524,7 +517,6 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	p->swap_file = NULL;
 	p->swap_device = 0;
 	p->swap_map = NULL;
-	p->swap_lockmap = NULL;
 	p->lowest_bit = 0;
 	p->highest_bit = 0;
 	p->cluster_nr = 0;
@@ -590,9 +582,8 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		goto bad_swap;
 	}
 
-	p->swap_lockmap = (char *) &tmp_lock_map;
-	rw_swap_page_nocache(READ, SWP_ENTRY(type,0), (char *) swap_header);
-	p->swap_lockmap = NULL;
+	lock_page(mem_map + MAP_NR(swap_header));
+	rw_swap_page_nolock(READ, SWP_ENTRY(type,0), (char *) swap_header, 1);
 
 	if (!memcmp("SWAP-SPACE",swap_header->magic.magic,10))
 		swap_header_version = 1;
@@ -689,11 +680,6 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		goto bad_swap;
 	}
 	p->swap_map[0] = SWAP_MAP_BAD;
-	if (!(p->swap_lockmap = vmalloc (lock_map_size))) {
-		error = -ENOMEM;
-		goto bad_swap;
-	}
-	memset(p->swap_lockmap,0,lock_map_size);
 	p->flags = SWP_WRITEOK;
 	p->pages = nr_good_pages;
 	nr_swap_pages += nr_good_pages;
@@ -720,15 +706,12 @@ bad_swap:
 	if(filp.f_op && filp.f_op->release)
 		filp.f_op->release(filp.f_dentry->d_inode,&filp);
 bad_swap_2:
-	if (p->swap_lockmap)
-		vfree(p->swap_lockmap);
 	if (p->swap_map)
 		vfree(p->swap_map);
 	dput(p->swap_file);
 	p->swap_device = 0;
 	p->swap_file = NULL;
 	p->swap_map = NULL;
-	p->swap_lockmap = NULL;
 	p->flags = 0;
 	if (!(swap_flags & SWAP_FLAG_PREFER))
 		++least_priority;

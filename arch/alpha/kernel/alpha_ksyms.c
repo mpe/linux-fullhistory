@@ -171,8 +171,8 @@ EXPORT_SYMBOL(__global_save_flags);
 EXPORT_SYMBOL(__global_restore_flags);
 #if DEBUG_SPINLOCK
 EXPORT_SYMBOL(spin_unlock);
-EXPORT_SYMBOL(spin_lock);
-EXPORT_SYMBOL(spin_trylock);
+EXPORT_SYMBOL(debug_spin_lock);
+EXPORT_SYMBOL(debug_spin_trylock);
 #endif
 #if DEBUG_RWLOCK
 EXPORT_SYMBOL(write_lock);

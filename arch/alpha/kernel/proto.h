@@ -180,7 +180,7 @@ extern unsigned long alpha_read_fp_reg (unsigned long reg);
 extern void wrmces(unsigned long mces);
 extern void cserve_ena(unsigned long);
 extern void cserve_dis(unsigned long);
-extern void __smp_callin(void);
+extern void __smp_callin(unsigned long);
 
 /* entry.S */
 extern void entArith(void);

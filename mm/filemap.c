@@ -40,7 +40,8 @@ struct page * page_hash_table[PAGE_HASH_SIZE];
 spinlock_t pagecache_lock = SPIN_LOCK_UNLOCKED;
 
 
-void __add_page_to_hash_queue(struct page * page, struct page **p){
+void __add_page_to_hash_queue(struct page * page, struct page **p)
+{
 	atomic_inc(&page_cache_size);
 	if((page->next_hash = *p) != NULL)
 		(*p)->pprev_hash = &page->next_hash;
@@ -459,6 +460,13 @@ static inline void __add_to_page_cache(struct page * page,
 	page->offset = offset;
 	add_page_to_inode_queue(inode, page);
 	__add_page_to_hash_queue(page, hash);
+}
+
+void add_to_page_cache(struct page * page, struct inode * inode, unsigned long offset)
+{
+	spin_lock(&pagecache_lock);
+	__add_to_page_cache(page, inode, offset, page_hash(inode, offset));
+	spin_unlock(&pagecache_lock);
 }
 
 int add_to_page_cache_unique(struct page * page,

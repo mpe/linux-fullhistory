@@ -158,7 +158,7 @@ out:
 }
 
 #define DATA_BUFFER_USED(bh) \
-	((bh->b_count > 1) || buffer_locked(bh))
+	(bh->b_count || buffer_locked(bh))
 
 static int trunc_direct (struct inode * inode)
 {
@@ -177,12 +177,11 @@ static int trunc_direct (struct inode * inode)
 
 		bh = find_buffer(inode->i_dev, tmp, inode->i_sb->s_blocksize);
 		if (bh) {
-			bh->b_count++;
 			if (DATA_BUFFER_USED(bh)) {
-				brelse(bh);
 				retry = 1;
 				continue;
 			}
+			bh->b_count++;
 		}
 
 		*p = 0;
@@ -254,12 +253,11 @@ static int trunc_indirect (struct inode * inode, int offset, u32 * p,
 		 */
 		bh = find_buffer(inode->i_dev, tmp, inode->i_sb->s_blocksize);
 		if (bh) {
-			bh->b_count++;
 			if (DATA_BUFFER_USED(bh)) {
-				brelse(bh);
 				retry = 1;
 				continue;
 			}
+			bh->b_count++;
 		}
 
 		*ind = 0;

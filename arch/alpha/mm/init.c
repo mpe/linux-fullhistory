@@ -174,7 +174,7 @@ show_mem(void)
 
 extern unsigned long free_area_init(unsigned long, unsigned long);
 
-static struct thread_struct *
+static inline struct thread_struct *
 load_PCB(struct thread_struct * pcb)
 {
 	register unsigned long sp __asm__("$30");

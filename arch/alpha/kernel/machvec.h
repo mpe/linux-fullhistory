@@ -36,7 +36,6 @@
 
 #define DO_EV4_MMU							\
 	max_asn:			EV4_MAX_ASN,			\
-	mmu_context_mask:		~0UL,				\
 	mv_get_mmu_context:		ev4_get_mmu_context,		\
 	mv_flush_tlb_current:		ev4_flush_tlb_current,		\
 	mv_flush_tlb_other:		ev4_flush_tlb_other,		\
@@ -44,7 +43,6 @@
 
 #define DO_EV5_MMU							\
 	max_asn:			EV5_MAX_ASN,			\
-	mmu_context_mask:		~0UL,				\
 	mv_get_mmu_context:		ev5_get_mmu_context,		\
 	mv_flush_tlb_current:		ev5_flush_tlb_current,		\
 	mv_flush_tlb_other:		ev5_flush_tlb_other,		\
@@ -52,7 +50,6 @@
 
 #define DO_EV6_MMU							\
 	max_asn:			EV6_MAX_ASN,			\
-	mmu_context_mask:		0xfffffffffful,			\
 	mv_get_mmu_context:		ev5_get_mmu_context,		\
 	mv_flush_tlb_current:		ev5_flush_tlb_current,		\
 	mv_flush_tlb_other:		ev5_flush_tlb_other,		\

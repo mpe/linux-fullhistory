@@ -355,7 +355,6 @@ EXPORT_SYMBOL(read_exec);
 EXPORT_SYMBOL(si_meminfo);
 
 /* Added to make file system as module */
-EXPORT_SYMBOL(set_writetime);
 EXPORT_SYMBOL(sys_tz);
 EXPORT_SYMBOL(__wait_on_super);
 EXPORT_SYMBOL(file_fsync);

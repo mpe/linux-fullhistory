@@ -157,10 +157,9 @@ drop_pte:
 	set_pte(page_table, __pte(entry));
 	flush_tlb_page(vma, address);
 	swap_duplicate(entry);	/* One for the process, one for the swap cache */
+
+	/* This will also lock the page */
 	add_to_swap_cache(page, entry);
-	/* We checked we were unlocked way up above, and we
-	   have been careful not to stall until here */
-	LockPage(page);
 
 	/* OK, do a physical asynchronous write to swap.  */
 	rw_swap_page(WRITE, page, 0);

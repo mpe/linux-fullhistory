@@ -76,6 +76,7 @@ extern void lock_page(struct page *page);
 
 extern void __add_page_to_hash_queue(struct page * page, struct page **p);
 
+extern void add_to_page_cache(struct page * page, struct inode * inode, unsigned long offset);
 extern int add_to_page_cache_unique(struct page * page, struct inode * inode, unsigned long offset, struct page **hash);
 
 static inline void add_page_to_hash_queue(struct page * page, struct inode * inode, unsigned long offset)

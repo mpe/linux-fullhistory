@@ -95,6 +95,8 @@ static inline void __init
 smp_store_cpu_info(int cpuid)
 {
 	cpu_data[cpuid].loops_per_sec = loops_per_sec;
+	cpu_data[cpuid].last_asn
+	  = (cpuid << WIDTH_HARDWARE_ASN) + ASN_FIRST_VERSION;
 }
 
 /*
@@ -151,8 +153,8 @@ smp_callin(void)
 	while (!smp_threads_ready)
 		barrier();
 
-	printk(KERN_INFO "SMP: commencing CPU %d current %p\n",
-	       cpuid, current);
+	DBGS(("smp_callin: commencing CPU %d current %p\n",
+	      cpuid, current));
 
 	/* Do nothing.  */
 	cpu_idle(NULL);
@@ -293,9 +295,9 @@ recv_secondary_console_msg(void)
 		   + hwrpb->processor_offset
 		   + i * hwrpb->processor_size);
 
- 		printk(KERN_INFO "recv_secondary_console_msg: on %d from %d"
-		       " HALT_REASON 0x%lx FLAGS 0x%lx\n",
-		       mycpu, i, cpu->halt_reason, cpu->flags);
+ 		DBGS(("recv_secondary_console_msg: on %d from %d"
+		      " HALT_REASON 0x%lx FLAGS 0x%lx\n",
+		      mycpu, i, cpu->halt_reason, cpu->flags));
 
 		cnt = cpu->ipc_buffer[0] >> 32;
 		if (cnt <= 0 || cnt >= 80)
@@ -790,6 +792,11 @@ handle_ipi(struct pt_regs *regs)
 void
 smp_send_reschedule(int cpu)
 {
+#if DEBUG_IPI_MSG
+	if (cpu == hard_smp_processor_id())
+		printk(KERN_WARNING
+		       "smp_send_reschedule: Sending IPI to self.\n");
+#endif
 	send_ipi_message(1L << cpu, IPI_RESCHEDULE);
 }
 
@@ -797,6 +804,10 @@ void
 smp_send_stop(void)
 {
 	unsigned long to_whom = cpu_present_mask ^ (1L << smp_processor_id());
+#if DEBUG_IPI_MSG
+	if (hard_smp_processor_id() != boot_cpu_id)
+		printk(KERN_WARNING "smp_send_stop: Not on boot cpu.\n");
+#endif
 	send_ipi_message(to_whom, IPI_CPU_STOP);
 }
 
@@ -862,13 +873,13 @@ ipi_flush_tlb_all(void *ignored)
 void
 flush_tlb_all(void)
 {
-	tbia();
-
 	/* Although we don't have any data to pass, we do want to
 	   synchronize with the other processors.  */
 	if (smp_call_function(ipi_flush_tlb_all, NULL, 1, 1)) {
 		printk(KERN_CRIT "flush_tlb_all: timed out\n");
 	}
+
+	tbia();
 }
 
 static void
@@ -948,43 +959,21 @@ smp_info(char *buffer)
 
 
 #if DEBUG_SPINLOCK
-
-#ifdef MANAGE_SPINLOCK_IPL
-
-static inline long 
-spinlock_raise_ipl(spinlock_t * lock)
-{
- 	long min_ipl = lock->target_ipl;
-	long last_ipl = swpipl(7);
-	if (last_ipl < 7 && min_ipl < 7)
-		setipl(min_ipl < last_ipl ? last_ipl : min_ipl);
-	return last_ipl;
-}
-
-static inline void
-spinlock_restore_ipl(long prev)
-{
-	setipl(prev);
-}
-
-#else
-
-#define spinlock_raise_ipl(LOCK)	((void)(LOCK), 0)
-#define spinlock_restore_ipl(PREV)	((void)(PREV))
-
-#endif /* MANAGE_SPINLOCK_IPL */
-
 void
 spin_unlock(spinlock_t * lock)
 {
-	long old_ipl = lock->saved_ipl;
 	mb();
 	lock->lock = 0;
-	spinlock_restore_ipl(old_ipl);
+
+	lock->on_cpu = -1;
+	lock->previous = NULL;
+	lock->task = NULL;
+	lock->base_file = "none";
+	lock->line_no = 0;
 }
 
 void
-spin_lock(spinlock_t * lock)
+debug_spin_lock(spinlock_t * lock, const char *base_file, int line_no)
 {
 	long tmp;
 	long stuck;
@@ -992,7 +981,6 @@ spin_lock(spinlock_t * lock)
 	unsigned long started = jiffies;
 	int printed = 0;
 	int cpu = smp_processor_id();
-	long old_ipl = spinlock_raise_ipl(lock);
 
 	stuck = 1L << 28;
  try_again:
@@ -1020,39 +1008,43 @@ spin_lock(spinlock_t * lock)
 
 	if (stuck < 0) {
 		printk(KERN_WARNING
-		       "spinlock stuck at %p(%d) owner %s at %p(%d) st %ld\n",
-		       inline_pc, cpu, lock->task->comm, lock->previous,
-		       lock->task->processor, lock->task->state);
+		       "%s:%d spinlock stuck in %s at %p(%d)"
+		       " owner %s at %p(%d) %s:%d\n",
+		       base_file, line_no,
+		       current->comm, inline_pc, cpu,
+		       lock->task->comm, lock->previous,
+		       lock->on_cpu, lock->base_file, lock->line_no);
 		stuck = 1L << 36;
 		printed = 1;
 		goto try_again;
 	}
 
 	/* Exiting.  Got the lock.  */
-	lock->saved_ipl = old_ipl;
 	lock->on_cpu = cpu;
 	lock->previous = inline_pc;
 	lock->task = current;
+	lock->base_file = base_file;
+	lock->line_no = line_no;
 
 	if (printed) {
-		printk(KERN_WARNING "spinlock grabbed at %p(%d) %ld ticks\n",
-		       inline_pc, cpu, jiffies - started);
+		printk(KERN_WARNING
+		       "%s:%d spinlock grabbed in %s at %p(%d) %ld ticks\n",
+		       base_file, line_no, current->comm, inline_pc,
+		       cpu, jiffies - started);
 	}
 }
 
 int
-spin_trylock(spinlock_t * lock)
+debug_spin_trylock(spinlock_t * lock, const char *base_file, int line_no)
 {
-	long old_ipl = spinlock_raise_ipl(lock);
 	int ret;
 	if ((ret = !test_and_set_bit(0, lock))) {
-		mb();
-		lock->saved_ipl = old_ipl;
 		lock->on_cpu = smp_processor_id();
 		lock->previous = __builtin_return_address(0);
 		lock->task = current;
 	} else {
-		spinlock_restore_ipl(old_ipl);
+		lock->base_file = base_file;
+		lock->line_no = line_no;
 	}
 	return ret;
 }

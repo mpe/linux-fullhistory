@@ -738,7 +738,6 @@ extern int fs_may_mount(kdev_t);
 
 extern struct file *inuse_filps;
 
-extern void set_writetime(struct buffer_head *, int);
 extern int try_to_free_buffers(struct page *);
 extern void refile_buffer(struct buffer_head * buf);
 

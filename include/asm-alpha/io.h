@@ -29,15 +29,16 @@
  */
 static inline void __set_hae(unsigned long new_hae)
 {
-	unsigned long ipl = swpipl(7);
+	unsigned long flags;
+	__save_and_cli(flags);
 
 	alpha_mv.hae_cache = new_hae;
 	*alpha_mv.hae_register = new_hae;
 	mb();
-
 	/* Re-read to make sure it was written.  */
 	new_hae = *alpha_mv.hae_register;
-	setipl(ipl);
+
+	__restore_flags(flags);
 }
 
 static inline void set_hae(unsigned long new_hae)

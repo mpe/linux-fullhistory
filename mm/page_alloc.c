@@ -374,8 +374,6 @@ void swapin_readahead(unsigned long entry)
 			break;
 		if (swapdev->swap_map[offset] == SWAP_MAP_BAD)
 			break;
-		if (test_bit(offset, swapdev->swap_lockmap))
-			break;
 
 		/* Ok, do the async read-ahead now */
 		new_page = read_swap_cache_async(SWP_ENTRY(SWP_TYPE(entry), offset), 0);

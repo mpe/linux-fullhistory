@@ -66,7 +66,7 @@ void show_swap_cache_info(void)
 }
 #endif
 
-int add_to_swap_cache(struct page *page, unsigned long entry)
+void add_to_swap_cache(struct page *page, unsigned long entry)
 {
 #ifdef SWAP_CACHE_INFO
 	swap_cache_add_total++;
@@ -79,19 +79,12 @@ int add_to_swap_cache(struct page *page, unsigned long entry)
 		printk(KERN_ERR "swap_cache: replacing non-empty entry %08lx "
 			   "on page %08lx\n",
 			   page->offset, page_address(page));
-		return 0;
 	}
 	if (page->inode) {
 		printk(KERN_ERR "swap_cache: replacing page-cached entry "
 			   "on page %08lx\n", page_address(page));
-		return 0;
 	}
-	get_page(page);
-	page->inode = &swapper_inode;
-	page->offset = entry;
-	add_page_to_hash_queue(page, &swapper_inode, entry);
-	add_page_to_inode_queue(&swapper_inode, page);
-	return 1;
+	add_to_page_cache(page, &swapper_inode, entry);
 }
 
 /*
@@ -363,10 +356,7 @@ struct page * read_swap_cache_async(unsigned long entry, int wait)
 	/* 
 	 * Add it to the swap cache and read its contents.
 	 */
-	if (!add_to_swap_cache(new_page, entry))
-		goto out_free_page;
-
-	LockPage(new_page);
+	add_to_swap_cache(new_page, entry);
 	rw_swap_page(READ, new_page, wait);
 #ifdef DEBUG_SWAP
 	printk("DebugVM: read_swap_cache_async created "

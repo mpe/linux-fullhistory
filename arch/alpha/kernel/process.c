@@ -329,7 +329,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	p->tss.ksp = (unsigned long) childstack;
 	p->tss.pal_flags = 1;	/* set FEN, clear everything else */
 	p->tss.flags = current->tss.flags;
-	p->mm->context = 0;
+	p->tss.mm_context = p->tss.asn = 0;
 
 	return 0;
 }

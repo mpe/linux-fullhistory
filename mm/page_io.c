@@ -84,13 +84,6 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 		return;
 	}
 
-	if (dolock) {
-		/* Make sure we are the only process doing I/O with this swap page. */
-		while (test_and_set_bit(offset,p->swap_lockmap)) {
-			run_task_queue(&tq_disk);
-			sleep_on(&lock_queue);
-		}
-	}
 	if (rw == READ) {
 		ClearPageUptodate(page);
 		kstat.pswpin++;
@@ -146,14 +139,6 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 		}
 	} else {
 		printk(KERN_ERR "rw_swap_page: no swap file or device\n");
-		/* Do some cleaning up so if this ever happens we can hopefully
-		 * trigger controlled shutdown.
-		 */
-		if (dolock) {
-			if (!test_and_clear_bit(offset,p->swap_lockmap))
-				printk("rw_swap_page_base: lock already cleared\n");
-			wake_up(&lock_queue);
-		}
 		put_page(page);
 		return;
 	}
@@ -164,6 +149,7 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
  	if (dolock) {
  		/* only lock/unlock swap cache pages! */
  		set_bit(PG_swap_unlock_after, &page->flags);
+		p->swap_map[offset]++;
  	}
  	set_bit(PG_free_after, &page->flags);
 
@@ -190,32 +176,13 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 #endif
 }
 
-/* Note: We could remove this totally asynchronous function,
- * and improve swap performance, and remove the need for the swap lock map,
- * by not removing pages from the swap cache until after I/O has been
- * processed and letting remove_from_page_cache decrement the swap count
- * just before it removes the page from the page cache.
+/*
+ * This is run when asynchronous page I/O has completed.
+ * It decrements the swap bitmap counter
  */
-/* This is run when asynchronous page I/O has completed. */
 void swap_after_unlock_page(unsigned long entry)
 {
-	unsigned long type, offset;
-	struct swap_info_struct * p;
-
-	type = SWP_TYPE(entry);
-	if (type >= nr_swapfiles) {
-		printk("swap_after_unlock_page: bad swap-device\n");
-		return;
-	}
-	p = &swap_info[type];
-	offset = SWP_OFFSET(entry);
-	if (offset >= p->max) {
-		printk("swap_after_unlock_page: weirdness\n");
-		return;
-	}
-	if (!test_and_clear_bit(offset,p->swap_lockmap))
-		printk("swap_after_unlock_page: lock already cleared\n");
-	wake_up(&lock_queue);
+	swap_free(entry);
 }
 
 /*

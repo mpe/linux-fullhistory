@@ -8,10 +8,10 @@
 #define __ASM_ALPHA_PROCESSOR_H
 
 /*
- * Default implementation of macro that returns current
- * instruction pointer ("program counter").
+ * Returns current instruction pointer ("program counter").
  */
-#define current_text_addr() ({ __label__ _l; _l: &&_l;})
+#define current_text_addr() \
+  ({ void *__pc; __asm__ ("br %0,.+4" : "=r"(__pc)); __pc; })
 
 /*
  * We have a 42-bit user address space: 4TB user VM...
@@ -61,6 +61,15 @@ struct thread_struct {
 	 */
 	unsigned long flags;
 
+	/* The full version of the ASN including serial number.
+
+	   Two threads running on two different processors must of necessity
+	   have different serial numbers.  Having this duplicated from
+	   mm->context allows them to be slightly out of sync preventing 
+	   the asn from incrementing each and every time the two threads
+	   are scheduled.  */
+	unsigned long mm_context;
+
 	/* Perform syscall argument validation (get/set_fs). */
 	mm_segment_t fs;
 
@@ -77,7 +86,7 @@ struct thread_struct {
 	0, 0, 0, \
 	0, 0, 0, \
 	0, 0, 0, \
-	0, \
+	0, 0, \
 	KERNEL_DS \
 }
 

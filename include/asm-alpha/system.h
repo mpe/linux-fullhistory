@@ -86,16 +86,6 @@ struct el_common_EV5_uncorrectable_mcheck {
         unsigned long   ld_lock;          /* Contents of EV5 LD_LOCK register*/
 };
 
-
-extern void wrent(void *, unsigned long);
-extern void wrkgp(unsigned long);
-extern void wrusp(unsigned long);
-extern unsigned long rdusp(void);
-extern unsigned long rdmces (void);
-extern void wrmces (unsigned long);
-extern unsigned long whami(void);
-extern void wripir(unsigned long);
-
 extern void halt(void) __attribute__((noreturn));
 
 #define switch_to(prev,next,last)			\
@@ -159,73 +149,86 @@ enum amask_enum {
    __asm__ ("amask %1,%0" : "=r"(__amask) : "rI"(__input));	\
    __amask; })
 
-static inline unsigned long 
-wrperfmon(unsigned long perf_fun, unsigned long arg)
-{
-          register unsigned long __r0 __asm__("$0");
-	  register unsigned long __r16 __asm__("$16");
-	  register unsigned long __r17 __asm__("$17");
-	  __r16 = perf_fun;
-	  __r17 = arg;
-	  __asm__ __volatile__(
-		  "call_pal %1"
-		  : "=r"(__r0)
-		  : "i"(PAL_wrperfmon), "r"(__r16), "r"(__r17)
-		  : "$1", "$22", "$23", "$24", "$25", "$26");
-	  return __r0;
+#define __CALL_PAL_R0(NAME, TYPE)				\
+static inline TYPE NAME(void)					\
+{								\
+	register TYPE __r0 __asm__("$0");			\
+	__asm__ __volatile__(					\
+		"call_pal %1 # " #NAME				\
+		:"=r" (__r0)					\
+		:"i" (PAL_ ## NAME)				\
+		:"$1", "$16", "$22", "$23", "$24", "$25");	\
+	return __r0;						\
 }
 
-
-#define call_pal1(palno,arg)						\
-({									\
-	register unsigned long __r0 __asm__("$0");			\
-	register unsigned long __r16 __asm__("$16"); __r16 = arg;	\
-	__asm__ __volatile__(						\
-		"call_pal %3 #call_pal1"				\
-		:"=r" (__r0),"=r" (__r16)				\
-		:"1" (__r16),"i" (palno)				\
-		:"$1", "$22", "$23", "$24", "$25", "memory");		\
-	__r0;								\
-})
-
-#define getipl()							\
-({									\
-	register unsigned long r0 __asm__("$0");			\
-	__asm__ __volatile__(						\
-		"call_pal %1 #getipl"					\
-		:"=r" (r0)						\
-		:"i" (PAL_rdps)						\
-		:"$1", "$16", "$22", "$23", "$24", "$25", "memory");	\
-	r0;								\
-})
-
-#define setipl(ipl)							\
-({									\
-	register unsigned long __r16 __asm__("$16"); __r16 = (ipl);	\
-	__asm__ __volatile__(						\
-		"call_pal %2 #setipl"					\
-		:"=r" (__r16)						\
-		:"0" (__r16),"i" (PAL_swpipl)				\
-		:"$0", "$1", "$22", "$23", "$24", "$25", "memory");	\
-})
-
-#define swpipl(ipl)						\
-({								\
-	register unsigned long __r0 __asm__("$0");		\
-	register unsigned long __r16 __asm__("$16") = (ipl);	\
+#define __CALL_PAL_W1(NAME, TYPE0)				\
+static inline void NAME(TYPE0 arg0)				\
+{								\
+	register TYPE0 __r16 __asm__("$16") = arg0;		\
 	__asm__ __volatile__(					\
-		"call_pal %3 #swpipl"				\
-		:"=r" (__r0),"=r" (__r16)			\
-		:"1" (__r16),"i" (PAL_swpipl)			\
-		:"$1", "$22", "$23", "$24", "$25", "memory");	\
-	__r0;							\
-})
+		"call_pal %1 # "#NAME				\
+		: "=r"(__r16)					\
+		: "i"(PAL_ ## NAME), "0"(__r16)			\
+		: "$1", "$22", "$23", "$24", "$25");		\
+}
 
-#define __cli()			setipl(7)
-#define __sti()			setipl(0)
-#define __save_flags(flags)	((flags) = getipl())
+#define __CALL_PAL_W2(NAME, TYPE0, TYPE1)			\
+static inline void NAME(TYPE0 arg0, TYPE1 arg1)			\
+{								\
+	register TYPE0 __r16 __asm__("$16") = arg0;		\
+	register TYPE1 __r17 __asm__("$17") = arg1;		\
+	__asm__ __volatile__(					\
+		"call_pal %2 # "#NAME				\
+		: "=r"(__r16), "=r"(__r17)			\
+		: "i"(PAL_ ## NAME), "0"(__r16), "1"(__r17)	\
+		: "$1", "$22", "$23", "$24", "$25");		\
+}
+
+#define __CALL_PAL_RW1(NAME, RTYPE, TYPE0)			\
+static inline RTYPE NAME(TYPE0 arg0)				\
+{								\
+	register RTYPE __r0 __asm__("$0");			\
+	register TYPE0 __r16 __asm__("$16") = arg0;		\
+	__asm__ __volatile__(					\
+		"call_pal %2 # "#NAME				\
+		: "=r"(__r16), "=r"(__r0)			\
+		: "i"(PAL_ ## NAME), "0"(__r16)			\
+		: "$1", "$22", "$23", "$24", "$25");		\
+	return __r0;						\
+}
+
+#define __CALL_PAL_RW2(NAME, RTYPE, TYPE0, TYPE1)		\
+static inline RTYPE NAME(TYPE0 arg0, TYPE1 arg1)		\
+{								\
+	register RTYPE __r0 __asm__("$0");			\
+	register TYPE0 __r16 __asm__("$16") = arg0;		\
+	register TYPE1 __r17 __asm__("$17") = arg1;		\
+	__asm__ __volatile__(					\
+		"call_pal %3 # "#NAME				\
+		: "=r"(__r16), "=r"(__r17), "=r"(__r0)		\
+		: "i"(PAL_ ## NAME), "0"(__r16), "1"(__r17)	\
+		: "$1", "$22", "$23", "$24", "$25");		\
+	return __r0;						\
+}
+
+__CALL_PAL_R0(rdmces, unsigned long);
+__CALL_PAL_R0(rdps, unsigned long);
+__CALL_PAL_R0(rdusp, unsigned long);
+__CALL_PAL_RW1(swpipl, unsigned long, unsigned long);
+__CALL_PAL_R0(whami, unsigned long);
+__CALL_PAL_W2(wrent, void*, unsigned long);
+__CALL_PAL_W1(wripir, unsigned long);
+__CALL_PAL_W1(wrkgp, unsigned long);
+__CALL_PAL_W1(wrmces, unsigned long);
+__CALL_PAL_RW2(wrperfmon, unsigned long, unsigned long, unsigned long);
+__CALL_PAL_W1(wrusp, unsigned long);
+__CALL_PAL_W1(wrvptptr, unsigned long);
+
+#define __cli()			((void) swpipl(7))
+#define __sti()			((void) swpipl(0))
+#define __save_flags(flags)	((flags) = rdps())
 #define __save_and_cli(flags)	((flags) = swpipl(7))
-#define __restore_flags(flags)	setipl(flags)
+#define __restore_flags(flags)	((void) swpipl(flags))
 
 #define local_irq_save(flags)		__save_and_cli(flags)
 #define local_irq_restore(flags)	__restore_flags(flags)
@@ -294,6 +297,7 @@ extern __inline__ unsigned long xchg_u32(volatile int *m, unsigned long val)
 	"	bis $31,%3,%1\n"
 	"	stl_c %1,%2\n"
 	"	beq %1,2f\n"
+	"	mb\n"
 	".section .text2,\"ax\"\n"
 	"2:	br 1b\n"
 	".previous"
@@ -312,6 +316,7 @@ extern __inline__ unsigned long xchg_u64(volatile long * m, unsigned long val)
 	"	bis $31,%3,%1\n"
 	"	stq_c %1,%2\n"
 	"	beq %1,2f\n"
+	"	mb\n"
 	".section .text2,\"ax\"\n"
 	"2:	br 1b\n"
 	".previous"

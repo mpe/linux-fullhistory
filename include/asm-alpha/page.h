@@ -105,6 +105,15 @@ typedef unsigned long pgprot_t;
 #define __pgprot(x)	(x)
 
 #endif /* STRICT_MM_TYPECHECKS */
+
+#define BUG()							\
+do {								\
+	printk("Kernel BUG at %s:%d!\n", __FILE__, __LINE__);	\
+	__asm__ __volatile__("call_pal 129 # bugchk");		\
+} while (1)
+
+#define PAGE_BUG(page) BUG()
+
 #endif /* !ASSEMBLY */
 
 /* to align the pointer to the (next) page boundary */

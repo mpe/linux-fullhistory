@@ -613,7 +613,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	{
 		int i;
 		p->has_cpu = 0;
-		p->processor = NO_PROC_ID;
+		p->processor = current->processor;
 		/* ?? should we just memset this ?? */
 		for(i = 0; i < smp_num_cpus; i++)
 			p->per_cpu_utime[i] = p->per_cpu_stime[i] = 0;

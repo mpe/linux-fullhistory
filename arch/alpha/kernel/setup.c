@@ -106,6 +106,7 @@ WEAK(alcor_mv);
 WEAK(alphabook1_mv);
 WEAK(avanti_mv);
 WEAK(cabriolet_mv);
+WEAK(clipper_mv);
 WEAK(dp264_mv);
 WEAK(eb164_mv);
 WEAK(eb64p_mv);
@@ -330,6 +331,10 @@ find_end_memory(void)
 
 	/* Round it up to an even number of pages. */
 	high = (high + PAGE_SIZE) & (PAGE_MASK*2);
+
+	/* Enforce maximum of 2GB even if there is more.  Blah.  */
+	if (high > 0x80000000UL)
+		high = 0x80000000UL;
 	return PAGE_OFFSET + high;
 }
 
@@ -448,11 +453,11 @@ get_sysvec(long type, long variation, long cpu)
 	static struct alpha_machine_vector *tsunami_vecs[]  __initlocaldata =
 	{
 		NULL,
-		&dp264_mv,		/* dp164 */
+		&dp264_mv,		/* dp264 */
 		&dp264_mv,		/* warhol */
 		&dp264_mv,		/* windjammer */
 		&monet_mv,		/* monet */
-		&dp264_mv,		/* clipper */
+		&clipper_mv,		/* clipper */
 		&dp264_mv,		/* goldrush */
 		&webbrick_mv,		/* webbrick */
 		&dp264_mv,		/* catamaran */
@@ -537,6 +542,7 @@ get_sysvec_byname(const char *name)
 		&alphabook1_mv,
 		&avanti_mv,
 		&cabriolet_mv,
+		&clipper_mv,
 		&dp264_mv,
 		&eb164_mv,
 		&eb64p_mv,
