@@ -12,36 +12,89 @@
 
 extern int sock_fcntl (struct file *, unsigned int cmd, unsigned long arg);
 
-static inline int dupfd(struct file *file, unsigned int arg)
+/*
+ * locate_fd finds a free file descriptor in the open_fds fdset,
+ * expanding the fd arrays if necessary.  The files write lock will be
+ * held on exit to ensure that the fd can be entered atomically.
+ */
+
+static inline int locate_fd(struct files_struct *files, 
+			    struct file *file, int start)
 {
-	struct files_struct * files = current->files;
+	unsigned int newfd;
 	int error;
 
-	error = -EMFILE;
 	write_lock(&files->file_lock);
-	arg = find_next_zero_bit(&files->open_fds, NR_OPEN, arg);
-	if (arg >= current->rlim[RLIMIT_NOFILE].rlim_cur)
-		goto out_putf;
-	FD_SET(arg, &files->open_fds);
-	FD_CLR(arg, &files->close_on_exec);
-	write_unlock(&files->file_lock);
-	fd_install(arg, file);
-	error = arg;
+	
+repeat:
+	error = -EMFILE;
+	if (start < files->next_fd)
+		start = files->next_fd;
+	if (start >= files->max_fdset) {
+	expand:
+		error = expand_files(files, start);
+		if (error < 0)
+			goto out;
+		goto repeat;
+	}
+	
+	newfd = find_next_zero_bit(files->open_fds->fds_bits, 
+				   files->max_fdset, start);
+
+	error = -EMFILE;
+	if (newfd >= current->rlim[RLIMIT_NOFILE].rlim_cur)
+		goto out;
+	if (newfd >= files->max_fdset) 
+		goto expand;
+
+	error = expand_files(files, newfd);
+	if (error < 0)
+		goto out;
+	if (error) /* If we might have blocked, try again. */
+		goto repeat;
+
+	if (start <= files->next_fd)
+		files->next_fd = newfd + 1;
+	
+	error = newfd;
+	
 out:
 	return error;
+}
+
+static inline void allocate_fd(struct files_struct *files, 
+					struct file *file, int fd)
+{
+	FD_SET(fd, files->open_fds);
+	FD_CLR(fd, files->close_on_exec);
+	write_unlock(&files->file_lock);
+	fd_install(fd, file);
+}
+
+static int dupfd(struct file *file, int start)
+{
+	struct files_struct * files = current->files;
+	int ret;
+
+	ret = locate_fd(files, file, start);
+	if (ret < 0) 
+		goto out_putf;
+	allocate_fd(files, file, ret);
+	return ret;
 
 out_putf:
 	write_unlock(&files->file_lock);
 	fput(file);
-	goto out;
+	return ret;
 }
 
 asmlinkage int sys_dup2(unsigned int oldfd, unsigned int newfd)
 {
 	int err = -EBADF;
 	struct file * file;
+	struct files_struct * files = current->files;
 
-	read_lock(&current->files->file_lock);
+	write_lock(&current->files->file_lock);
 	if (!(file = fcheck(oldfd)))
 		goto out_unlock;
 	err = newfd;
@@ -50,15 +103,33 @@ asmlinkage int sys_dup2(unsigned int oldfd, unsigned int newfd)
 	err = -EBADF;
 	if (newfd >= NR_OPEN)
 		goto out_unlock;	/* following POSIX.1 6.2.1 */
-	get_file(file);
-	read_unlock(&current->files->file_lock);
+	get_file(file);			/* We are now finished with oldfd */
 
-	sys_close(newfd);
-	err = dupfd(file, newfd);
+	err = expand_files(files, newfd);
+	if (err < 0) {
+		write_unlock(&files->file_lock);
+		fput(file);
+		goto out;
+	}
+
+	/* To avoid races with open() and dup(), we will mark the fd as
+	 * in-use in the open-file bitmap throughout the entire dup2()
+	 * process.  This is quite safe: do_close() uses the fd array
+	 * entry, not the bitmap, to decide what work needs to be
+	 * done.  --sct */
+	FD_SET(newfd, files->open_fds);
+	write_unlock(&files->file_lock);
+	
+	do_close(newfd, 0);
+
+	write_lock(&files->file_lock);
+	allocate_fd(files, file, newfd);
+	err = newfd;
+
 out:
 	return err;
 out_unlock:
-	read_unlock(&current->files->file_lock);
+	write_unlock(&current->files->file_lock);
 	goto out;
 }
 
@@ -66,6 +137,7 @@ asmlinkage int sys_dup(unsigned int fildes)
 {
 	int ret = -EBADF;
 	struct file * file = fget(fildes);
+
 	if (file)
 		ret = dupfd(file, 0);
 	return ret;
@@ -118,13 +190,13 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			}
 			break;
 		case F_GETFD:
-			err = FD_ISSET(fd, &current->files->close_on_exec);
+			err = FD_ISSET(fd, current->files->close_on_exec);
 			break;
 		case F_SETFD:
 			if (arg&1)
-				FD_SET(fd, &current->files->close_on_exec);
+				FD_SET(fd, current->files->close_on_exec);
 			else
-				FD_CLR(fd, &current->files->close_on_exec);
+				FD_CLR(fd, current->files->close_on_exec);
 			break;
 		case F_GETFL:
 			err = filp->f_flags;
@@ -152,7 +224,6 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			err = filp->f_owner.pid;
 			break;
 		case F_SETOWN:
-			err = 0;
 			filp->f_owner.pid = arg;
 			filp->f_owner.uid = current->uid;
 			filp->f_owner.euid = current->euid;
@@ -172,10 +243,9 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			break;
 		default:
 			/* sockets need a few special fcntls. */
+			err = -EINVAL;
 			if (S_ISSOCK (filp->f_dentry->d_inode->i_mode))
 				err = sock_fcntl (filp, cmd, arg);
-			else
-				err = -EINVAL;
 			break;
 	}
 	fput(filp);

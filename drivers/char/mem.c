@@ -16,6 +16,7 @@
 #include <linux/init.h>
 #include <linux/joystick.h>
 #include <linux/i2c.h>
+#include <linux/raw.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -602,6 +603,7 @@ __initfunc(int chr_dev_init(void))
 	if (register_chrdev(MEM_MAJOR,"mem",&memory_fops))
 		printk("unable to get major %d for memory devs\n", MEM_MAJOR);
 	rand_initialize();
+	raw_init();
 #ifdef CONFIG_USB
 	usb_init();
 #endif

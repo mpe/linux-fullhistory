@@ -685,10 +685,14 @@ int get_unused_fd(void)
 	struct files_struct * files = current->files;
 	int fd, error;
 
-	error = -EMFILE;
-
+  	error = -EMFILE;
 	write_lock(&files->file_lock);
-	fd = find_first_zero_bit(&files->open_fds, NR_OPEN);
+
+repeat:
+ 	fd = find_next_zero_bit(files->open_fds, 
+				current->files->max_fdset, 
+				files->next_fd);
+
 	/*
 	 * N.B. For clone tasks sharing a files structure, this test
 	 * will limit the total number of files that can be opened.
@@ -696,10 +700,31 @@ int get_unused_fd(void)
 	if (fd >= current->rlim[RLIMIT_NOFILE].rlim_cur)
 		goto out;
 
-	/* Check here for fd > files->max_fds to do dynamic expansion */
+	/* Do we need to expand the fdset array? */
+	if (fd >= current->files->max_fdset) {
+		error = expand_fdset(files, 0);
+		if (!error) {
+			error = -EMFILE;
+			goto repeat;
+		}
+		goto out;
+	}
+	
+	/* 
+	 * Check whether we need to expand the fd array.
+	 */
+	if (fd >= files->max_fds) {
+		error = expand_fd_array(files, 0);
+		if (!error) {
+			error = -EMFILE;
+			goto repeat;
+		}
+		goto out;
+	}
 
-	FD_SET(fd, &files->open_fds);
-	FD_CLR(fd, &files->close_on_exec);
+	FD_SET(fd, files->open_fds);
+	FD_CLR(fd, files->close_on_exec);
+	files->next_fd = fd + 1;
 #if 1
 	/* Sanity check */
 	if (files->fd[fd] != NULL) {
@@ -717,7 +742,9 @@ out:
 inline void put_unused_fd(unsigned int fd)
 {
 	write_lock(&current->files->file_lock);
-	FD_CLR(fd, &current->files->open_fds);
+	FD_CLR(fd, current->files->open_fds);
+	if (fd < current->files->next_fd)
+		current->files->next_fd = fd;
 	write_unlock(&current->files->file_lock);
 }
 
@@ -790,8 +817,12 @@ int filp_close(struct file *filp, fl_owner_t id)
  * Careful here! We test whether the file pointer is NULL before
  * releasing the fd. This ensures that one clone task can't release
  * an fd while another clone is opening it.
+ *
+ * The "release" argument tells us whether or not to mark the fd as free
+ * or not in the open-files bitmap.  dup2 uses this to retain the fd
+ * without races.
  */
-asmlinkage int sys_close(unsigned int fd)
+int do_close(unsigned int fd, int release)
 {
 	int error;
 	struct file * filp;
@@ -802,9 +833,10 @@ asmlinkage int sys_close(unsigned int fd)
 	filp = frip(fd);
 	if (!filp)
 		goto out_unlock;
-	FD_CLR(fd, &files->close_on_exec);
+	FD_CLR(fd, files->close_on_exec);
 	write_unlock(&files->file_lock);
-	put_unused_fd(fd);
+	if (release)
+		put_unused_fd(fd);
 	lock_kernel();
 	error = filp_close(filp, files);
 	unlock_kernel();
@@ -813,6 +845,11 @@ out:
 out_unlock:
 	write_unlock(&files->file_lock);
 	goto out;
+}
+
+asmlinkage int sys_close(unsigned int fd)
+{
+	return do_close(fd, 1);
 }
 
 /*

@@ -30,7 +30,7 @@
     {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},				\
     {LONG_MAX, LONG_MAX}, {_STK_LIM, LONG_MAX},				\
     {       0, LONG_MAX}, {LONG_MAX, LONG_MAX},				\
-    {NR_OPEN, NR_OPEN}, {MAX_TASKS_PER_USER, MAX_TASKS_PER_USER},	\
+    {INR_OPEN, INR_OPEN}, {MAX_TASKS_PER_USER, MAX_TASKS_PER_USER},	\
     {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX}                          \
 }
 

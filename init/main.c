@@ -23,6 +23,7 @@
 #include <linux/smp_lock.h>
 #include <linux/blk.h>
 #include <linux/hdreg.h>
+#include <linux/iobuf.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -1193,6 +1194,7 @@ asmlinkage void __init start_kernel(void)
 	vma_init();
 	buffer_init(memory_end-memory_start);
 	page_cache_init(memory_end-memory_start);
+	kiobuf_init();
 	signals_init();
 	inode_init();
 	file_table_init();

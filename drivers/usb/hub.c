@@ -432,38 +432,14 @@ int usb_hub_init(void)
 
 void usb_hub_cleanup(void)
 {
-	struct list_head *next, *tmp, *head = &all_hubs_list;
-	struct usb_hub *hub;
-	unsigned long flags, flags2;
-
-	/* Free the resources allocated by each hub */
-	spin_lock_irqsave(&hub_list_lock, flags);
-	spin_lock_irqsave(&hub_event_lock, flags2);
-
-	tmp = head->next;
-	while (tmp != head) {
-		hub = list_entry(tmp, struct usb_hub, hub_list);
-
-		next = tmp->next;
-
-		list_del(&hub->event_list);
-		INIT_LIST_HEAD(&hub->event_list);
-		list_del(tmp);         /* &hub->hub_list */
-		INIT_LIST_HEAD(tmp);   /* &hub->hub_list */
-
-		/* XXX we should disconnect each connected port here */
-
-		usb_release_irq(hub->dev, hub->irq_handle);
-		hub->irq_handle = NULL;
-		kfree(hub);
-
-		tmp = next;
-	}
-
+	/*
+	 * Hub resources are freed for us by usb_deregister.  It
+	 * usb_driver_purge on every device which in turn calls that
+	 * devices disconnect function if it is using this driver.
+	 * The hub_disconnect function takes care of releasing the
+	 * individual hub resources. -greg
+	 */
 	usb_deregister(&hub_driver);
-
-	spin_unlock_irqrestore(&hub_event_lock, flags2);
-	spin_unlock_irqrestore(&hub_list_lock, flags);
 } /* usb_hub_cleanup() */
 
 #ifdef MODULE

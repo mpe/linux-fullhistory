@@ -1,7 +1,7 @@
 #ifndef _LINUX_LIMITS_H
 #define _LINUX_LIMITS_H
 
-#define NR_OPEN		1024
+#define NR_OPEN	        1024
 
 #define NGROUPS_MAX       32	/* supplemental group IDs are available */
 #define ARG_MAX       131072	/* # bytes of args + environ for exec() */

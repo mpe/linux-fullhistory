@@ -29,7 +29,7 @@
 	{        0, LONG_MAX },				\
 	{ LONG_MAX, LONG_MAX },				\
 	{ 0, 0 },					\
-	{ NR_OPEN, NR_OPEN },				\
+	{ INR_OPEN, INR_OPEN },				\
 	{ LONG_MAX, LONG_MAX },				\
 	{ LONG_MAX, LONG_MAX },				\
 }

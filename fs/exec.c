@@ -449,9 +449,9 @@ static inline void flush_old_files(struct files_struct * files)
 		unsigned long set, i;
 
 		i = j * __NFDBITS;
-		if (i >= files->max_fds)
+		if (i >= files->max_fds || i >= files->max_fdset)
 			break;
-		set = xchg(&files->close_on_exec.fds_bits[j], 0);
+		set = xchg(&files->close_on_exec->fds_bits[j], 0);
 		j++;
 		for ( ; set ; i++,set >>= 1) {
 			if (set & 1)

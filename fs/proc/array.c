@@ -725,11 +725,13 @@ static inline char * task_state(struct task_struct *p, char *buffer)
 		"PPid:\t%d\n"
 		"Uid:\t%d\t%d\t%d\t%d\n"
 		"Gid:\t%d\t%d\t%d\t%d\n"
+		"FDSize:\t%d\n"
 		"Groups:\t",
 		get_task_state(p),
 		p->pid, p->p_pptr->pid,
 		p->uid, p->euid, p->suid, p->fsuid,
-		p->gid, p->egid, p->sgid, p->fsgid);
+		p->gid, p->egid, p->sgid, p->fsgid,
+		p->files ? p->files->max_fds : 0);
 
 	for (g = 0; g < p->ngroups; g++)
 		buffer += sprintf(buffer, "%d ", p->groups[g]);

@@ -56,18 +56,6 @@ extern inline struct file * fget(unsigned int fd)
 }
 
 /*
- * Install a file pointer in the fd array.
- */
-extern inline void fd_install(unsigned int fd, struct file * file)
-{
-	struct files_struct *files = current->files;
-
-	write_lock(&files->file_lock);
-	files->fd[fd] = file;
-	write_unlock(&files->file_lock);
-}
-
-/*
  * 23/12/1998 Marcin Dalecki <dalecki@cs.net.pl>: 
  * 
  * Since those functions where calling other functions, it was compleatly 
@@ -89,5 +77,27 @@ extern inline void fput(struct file * file)
 		_fput(file);
 }
 extern void put_filp(struct file *);
+
+/*
+ * Install a file pointer in the fd array.  
+ *
+ * The VFS is full of places where we drop the files lock between
+ * setting the open_fds bitmap and installing the file in the file
+ * array.  At any such point, we are vulnerable to a dup2() race
+ * installing a file in the array before us.  We need to detect this and
+ * fput() the struct file we are about to overwrite in this case.
+ */
+
+extern inline void fd_install(unsigned int fd, struct file * file)
+{
+	struct files_struct *files = current->files;
+	struct file * result;
+	
+	write_lock(&files->file_lock);
+	result = xchg(&files->fd[fd], file);
+	write_unlock(&files->file_lock);
+	if (result)
+		fput(result);
+}
 
 #endif /* __LINUX_FILE_H */

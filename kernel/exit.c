@@ -149,11 +149,11 @@ static inline void close_files(struct files_struct * files)
 
 	j = 0;
 	for (;;) {
-		unsigned long set = files->open_fds.fds_bits[j];
+		unsigned long set;
 		i = j * __NFDBITS;
-		j++;
-		if (i >= files->max_fds)
+		if (i >= files->max_fdset || i >= files->max_fds)
 			break;
+		set = files->open_fds->fds_bits[j++];
 		while (set) {
 			if (set & 1) {
 				struct file * file = xchg(&files->fd[i], NULL);
@@ -176,12 +176,14 @@ static inline void __exit_files(struct task_struct *tsk)
 		if (atomic_dec_and_test(&files->count)) {
 			close_files(files);
 			/*
-			 * Free the fd array as appropriate ...
+			 * Free the fd and fdset arrays if we expanded them.
 			 */
-			if (NR_OPEN * sizeof(struct file *) == PAGE_SIZE)
-				free_page((unsigned long) files->fd);
-			else
-				kfree(files->fd);
+			if (files->fd != &files->fd_array[0])
+				free_fd_array(files->fd, files->max_fds);
+			if (files->max_fdset > __FD_SETSIZE) {
+				free_fdset(files->open_fds, files->max_fdset);
+				free_fdset(files->close_on_exec, files->max_fdset);
+			}
 			kmem_cache_free(files_cachep, files);
 		}
 	}

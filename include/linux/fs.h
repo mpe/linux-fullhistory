@@ -27,17 +27,19 @@ struct poll_table_struct;
 
 
 /*
- * It's silly to have NR_OPEN bigger than NR_FILE, but I'll fix
- * that later. Anyway, now the file code is no longer dependent
- * on bitmaps in unsigned longs, but uses the new fd_set structure..
+ * It's silly to have NR_OPEN bigger than NR_FILE, but you can change
+ * the file limit at runtime and only root can increase the per-process
+ * nr_file rlimit, so it's safe to set up a ridiculously high absolute
+ * upper limit on files-per-process.
  *
  * Some programs (notably those using select()) may have to be 
- * recompiled to take full advantage of the new limits..
+ * recompiled to take full advantage of the new limits..  
  */
 
 /* Fixed constants first: */
 #undef NR_OPEN
-#define NR_OPEN 1024
+#define NR_OPEN (1024*1024)	/* Absolute upper limit on fd num */
+#define INR_OPEN 1024		/* Initial setting for nfile rlimits */
 
 #define BLOCK_SIZE_BITS 10
 #define BLOCK_SIZE (1<<BLOCK_SIZE_BITS)
@@ -62,6 +64,7 @@ extern int max_super_blocks, nr_super_blocks;
 #define WRITE 1
 #define READA 2		/* read-ahead  - don't block if no resources */
 #define WRITEA 3	/* write-ahead - don't block if no resources */
+#define WRITERAW 5	/* raw write - don't play with buffer lists */
 
 #ifndef NULL
 #define NULL ((void *) 0)
@@ -228,6 +231,7 @@ struct buffer_head {
 
 	unsigned long b_rsector;	/* Real buffer location on disk */
 	wait_queue_head_t b_wait;
+	struct kiobuf * b_kiobuf;	/* kiobuf which owns this IO */
 };
 
 typedef void (bh_end_io_t)(struct buffer_head *bh, int uptodate);
@@ -704,6 +708,7 @@ extern inline int locks_verify_area(int read_write, struct inode *inode,
 
 asmlinkage int sys_open(const char *, int, int);
 asmlinkage int sys_close(unsigned int);		/* yes, it's really unsigned */
+extern int do_close(unsigned int, int);		/* yes, it's really unsigned */
 extern int do_truncate(struct dentry *, unsigned long);
 extern int get_unused_fd(void);
 extern void put_unused_fd(unsigned int);

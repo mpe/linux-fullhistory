@@ -128,24 +128,40 @@ extern signed long FASTCALL(schedule_timeout(signed long timeout));
 asmlinkage void schedule(void);
 
 /*
+ * The default fd array needs to be at least BITS_PER_LONG,
+ * as this is the granularity returned by copy_fdset().
+ */
+#define NR_OPEN_DEFAULT BITS_PER_LONG
+
+/*
  * Open file table structure
  */
 struct files_struct {
 	atomic_t count;
 	rwlock_t file_lock;
 	int max_fds;
+	int max_fdset;
+	int next_fd;
 	struct file ** fd;	/* current fd array */
-	fd_set close_on_exec;
-	fd_set open_fds;
+	fd_set *close_on_exec;
+	fd_set *open_fds;
+	fd_set close_on_exec_init;
+	fd_set open_fds_init;
+	struct file * fd_array[NR_OPEN_DEFAULT];
 };
 
 #define INIT_FILES { \
 	ATOMIC_INIT(1), \
 	RW_LOCK_UNLOCKED, \
-	NR_OPEN, \
-	&init_fd_array[0], \
+	NR_OPEN_DEFAULT, \
+	__FD_SETSIZE, \
+	0, \
+	&init_files.fd_array[0], \
+	&init_files.close_on_exec_init, \
+	&init_files.open_fds_init, \
 	{ { 0, } }, \
-	{ { 0, } } \
+	{ { 0, } }, \
+	{ NULL, } \
 }
 
 struct fs_struct {
@@ -632,6 +648,48 @@ static inline void mmdrop(struct mm_struct * mm)
 extern void mmput(struct mm_struct *);
 /* Remove the current tasks stale references to the old mm_struct */
 extern void mm_release(void);
+
+/*
+ * Routines for handling the fd arrays
+ */
+extern struct file ** alloc_fd_array(int);
+extern int expand_fd_array(struct files_struct *, int nr);
+extern void free_fd_array(struct file **, int);
+
+extern fd_set *alloc_fdset(int);
+extern int expand_fdset(struct files_struct *, int nr);
+extern void free_fdset(fd_set *, int);
+
+/* Expand files.  Return <0 on error; 0 nothing done; 1 files expanded,
+ * we may have blocked. 
+ *
+ * Should be called with the files->file_lock spinlock held for write.
+ */
+static inline int expand_files(struct files_struct *files, int nr)
+{
+	int err, expand = 0;
+#ifdef FDSET_DEBUG	
+	printk (KERN_ERR __FUNCTION__ " %d: nr = %d\n", current->pid, nr);
+#endif
+	
+	if (nr >= files->max_fdset) {
+		expand = 1;
+		if ((err = expand_fdset(files, nr)))
+			goto out;
+	}
+	if (nr >= files->max_fds) {
+		expand = 1;
+		if ((err = expand_fd_array(files, nr)))
+			goto out;
+	}
+	err = expand;
+ out:
+#ifdef FDSET_DEBUG	
+	if (err)
+		printk (KERN_ERR __FUNCTION__ " %d: return %d\n", current->pid, err);
+#endif
+	return err;
+}
 
 extern int  copy_thread(int, unsigned long, unsigned long, struct task_struct *, struct pt_regs *);
 extern void flush_thread(void);

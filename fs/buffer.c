@@ -40,6 +40,7 @@
 #include <linux/file.h>
 #include <linux/init.h>
 #include <linux/quotaops.h>
+#include <linux/iobuf.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -1525,6 +1526,221 @@ skip:
 out:
 	ClearPageUptodate(page);
 	return err;
+}
+
+
+/*
+ * IO completion routine for a buffer_head being used for kiobuf IO: we
+ * can't dispatch the kiobuf callback until io_count reaches 0.  
+ */
+
+static void end_buffer_io_kiobuf(struct buffer_head *bh, int uptodate)
+{
+	struct kiobuf *kiobuf;
+	
+	mark_buffer_uptodate(bh, uptodate);
+
+	kiobuf = bh->b_kiobuf;
+	if (atomic_dec_and_test(&kiobuf->io_count))
+		kiobuf->end_io(kiobuf);
+	if (!uptodate)
+		kiobuf->errno = -EIO;
+}
+
+
+/*
+ * For brw_kiovec: submit a set of buffer_head temporary IOs and wait
+ * for them to complete.  Clean up the buffer_heads afterwards.  
+ */
+
+#define dprintk(x...) 
+
+static int do_kio(struct kiobuf *kiobuf,
+		  int rw, int nr, struct buffer_head *bh[], int size)
+{
+	int iosize;
+	int i;
+	struct buffer_head *tmp;
+
+	struct task_struct *tsk = current;
+	DECLARE_WAITQUEUE(wait, tsk);
+
+	dprintk ("do_kio start %d\n", rw);
+
+	if (rw == WRITE)
+		rw = WRITERAW;
+	atomic_add(nr, &kiobuf->io_count);
+	kiobuf->errno = 0;
+	ll_rw_block(rw, nr, bh);
+
+	kiobuf_wait_for_io(kiobuf);
+	
+	spin_lock(&unused_list_lock);
+	
+	iosize = 0;
+	for (i = nr; --i >= 0; ) {
+		iosize += size;
+		tmp = bh[i];
+		if (!buffer_uptodate(tmp)) {
+			/* We are traversing bh'es in reverse order so
+                           clearing iosize on error calculates the
+                           amount of IO before the first error. */
+			iosize = 0;
+		}
+		__put_unused_buffer_head(tmp);
+	}
+	
+	spin_unlock(&unused_list_lock);
+
+	dprintk ("do_kio end %d %d\n", iosize, err);
+	
+	if (iosize)
+		return iosize;
+	if (kiobuf->errno)
+		return kiobuf->errno;
+	return -EIO;
+}
+
+/*
+ * Start I/O on a physical range of kernel memory, defined by a vector
+ * of kiobuf structs (much like a user-space iovec list).
+ *
+ * The kiobuf must already be locked for IO.  IO is submitted
+ * asynchronously: you need to check page->locked, page->uptodate, and
+ * maybe wait on page->wait.
+ *
+ * It is up to the caller to make sure that there are enough blocks
+ * passed in to completely map the iobufs to disk.
+ */
+
+int brw_kiovec(int rw, int nr, struct kiobuf *iovec[], 
+	       kdev_t dev, unsigned long b[], int size, int bmap)
+{
+	int		err;
+	int		length;
+	int		transferred;
+	int		i;
+	int		bufind;
+	int		pageind;
+	int		bhind;
+	int		offset;
+	unsigned long	blocknr;
+	struct kiobuf *	iobuf = NULL;
+	unsigned long	page;
+	struct page *	map;
+	struct buffer_head *tmp, *bh[KIO_MAX_SECTORS];
+
+	if (!nr)
+		return 0;
+	
+	/* 
+	 * First, do some alignment and validity checks 
+	 */
+	for (i = 0; i < nr; i++) {
+		iobuf = iovec[i];
+		if ((iobuf->offset & (size-1)) ||
+		    (iobuf->length & (size-1)))
+			return -EINVAL;
+		if (!iobuf->locked)
+			panic("brw_kiovec: iobuf not locked for I/O");
+		if (!iobuf->nr_pages)
+			panic("brw_kiovec: iobuf not initialised");
+	}
+
+	/* DEBUG */
+#if 0
+	return iobuf->length;
+#endif
+	dprintk ("brw_kiovec: start\n");
+	
+	/* 
+	 * OK to walk down the iovec doing page IO on each page we find. 
+	 */
+	bufind = bhind = transferred = err = 0;
+	for (i = 0; i < nr; i++) {
+		iobuf = iovec[i];
+		offset = iobuf->offset;
+		length = iobuf->length;
+		dprintk ("iobuf %d %d %d\n", offset, length, size);
+
+		for (pageind = 0; pageind < iobuf->nr_pages; pageind++) {
+			page = iobuf->pagelist[pageind];
+			map  = iobuf->maplist[pageind];
+
+			while (length > 0) {
+				blocknr = b[bufind++];
+				tmp = get_unused_buffer_head(0);
+				if (!tmp) {
+					err = -ENOMEM;
+					goto error;
+				}
+				
+				tmp->b_dev = B_FREE;
+				tmp->b_size = size;
+				tmp->b_data = (char *) (page + offset);
+				tmp->b_this_page = tmp;
+
+				init_buffer(tmp, end_buffer_io_kiobuf, NULL);
+				tmp->b_dev = dev;
+				tmp->b_blocknr = blocknr;
+				tmp->b_state = 1 << BH_Mapped;
+				tmp->b_kiobuf = iobuf;
+
+				if (rw == WRITE) {
+					set_bit(BH_Uptodate, &tmp->b_state);
+					set_bit(BH_Dirty, &tmp->b_state);
+				}
+
+				dprintk ("buffer %d (%d) at %p\n", 
+					 bhind, tmp->b_blocknr, tmp->b_data);
+				bh[bhind++] = tmp;
+				length -= size;
+				offset += size;
+
+				/* 
+				 * Start the IO if we have got too much 
+				 */
+				if (bhind >= KIO_MAX_SECTORS) {
+					err = do_kio(iobuf, rw, bhind, bh, size);
+					if (err >= 0)
+						transferred += err;
+					else
+						goto finished;
+					bhind = 0;
+				}
+				
+				if (offset >= PAGE_SIZE) {
+					offset = 0;
+					break;
+				}
+			} /* End of block loop */
+		} /* End of page loop */		
+	} /* End of iovec loop */
+
+	/* Is there any IO still left to submit? */
+	if (bhind) {
+		err = do_kio(iobuf, rw, bhind, bh, size);
+		if (err >= 0)
+			transferred += err;
+		else
+			goto finished;
+	}
+
+ finished:
+	dprintk ("brw_kiovec: end (%d, %d)\n", transferred, err);
+	if (transferred)
+		return transferred;
+	return err;
+
+ error:
+	/* We got an error allocation the bh'es.  Just free the current
+           buffer_heads and exit. */
+	spin_lock(&unused_list_lock);
+	for (i = bhind; --i >= 0; ) {
+		__put_unused_buffer_head(bh[bhind]);
+	}
+	spin_unlock(&unused_list_lock);
+	goto finished;
 }
 
 /*

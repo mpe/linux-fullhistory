@@ -866,7 +866,7 @@ asmlinkage int solaris_getmsg(unsigned int fd, u32 arg1, u32 arg2, u32 arg3)
 
 	SOLD("entry");
 	lock_kernel();
-	if(fd >= NR_OPEN) goto out;
+	if(fd >= current->files->max_fds) goto out;
 
 	filp = current->files->fd[fd];
 	if(!filp) goto out;
@@ -933,7 +933,7 @@ asmlinkage int solaris_putmsg(unsigned int fd, u32 arg1, u32 arg2, u32 arg3)
 
 	SOLD("entry");
 	lock_kernel();
-	if(fd >= NR_OPEN) goto out;
+	if(fd >= current->files->max_fds) goto out;
 
 	filp = current->files->fd[fd];
 	if(!filp) goto out;

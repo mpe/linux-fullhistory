@@ -29,7 +29,7 @@
 	{        0, LONG_MAX },				\
 	{ LONG_MAX, LONG_MAX },				\
 	{ MAX_TASKS_PER_USER, MAX_TASKS_PER_USER },	\
-	{ NR_OPEN, NR_OPEN },				\
+	{ INR_OPEN, INR_OPEN },				\
 	{ LONG_MAX, LONG_MAX },				\
 	{ LONG_MAX, LONG_MAX },				\
 }
