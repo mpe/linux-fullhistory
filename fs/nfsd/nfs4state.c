@@ -1123,7 +1123,8 @@ release_stateowner(struct nfs4_stateowner *sop)
 }
 
 static inline void
-init_stateid(struct nfs4_stateid *stp, struct nfs4_file *fp, struct nfs4_stateowner *sop, struct nfsd4_open *open) {
+init_stateid(struct nfs4_stateid *stp, struct nfs4_file *fp, struct nfsd4_open *open) {
+	struct nfs4_stateowner *sop = open->op_stateowner;
 	unsigned int hashval = stateid_hashval(sop->so_id, fp->fi_id);
 
 	INIT_LIST_HEAD(&stp->st_hash);
@@ -1529,10 +1530,11 @@ out:
 }
 
 static int
-nfs4_check_open(struct nfs4_file *fp, struct nfs4_stateowner *sop, struct nfsd4_open *open, struct nfs4_stateid **stpp)
+nfs4_check_open(struct nfs4_file *fp, struct nfsd4_open *open, struct nfs4_stateid **stpp)
 {
 	struct nfs4_stateid *local;
 	int status = nfserr_share_denied;
+	struct nfs4_stateowner *sop = open->op_stateowner;
 
 	list_for_each_entry(local, &fp->fi_perfile, st_perfile) {
 		/* ignore lock owners */
@@ -1692,7 +1694,6 @@ out:
 int
 nfsd4_process_open2(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nfsd4_open *open)
 {
-	struct nfs4_stateowner *sop = open->op_stateowner;
 	struct nfs4_file *fp = NULL;
 	struct inode *ino = current_fh->fh_dentry->d_inode;
 	struct nfs4_stateid *stp = NULL;
@@ -1708,7 +1709,7 @@ nfsd4_process_open2(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nf
 	 */
 	fp = find_file(ino);
 	if (fp) {
-		if ((status = nfs4_check_open(fp, sop, open, &stp)))
+		if ((status = nfs4_check_open(fp, open, &stp)))
 			goto out;
 	} else {
 		status = nfserr_resource;
@@ -1735,7 +1736,7 @@ nfsd4_process_open2(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nf
 			flags = MAY_READ;
 		if ((status = nfs4_new_open(rqstp, &stp, current_fh, flags)))
 			goto out;
-		init_stateid(stp, fp, sop, open);
+		init_stateid(stp, fp, open);
 		if (open->op_truncate) {
 			struct iattr iattr = {
 				.ia_valid = ATTR_SIZE,
