@@ -61,6 +61,7 @@
 #include <asm/byteorder.h>
 #include <linux/spinlock.h>
 #include <linux/pci.h>
+#include <linux/dma-mapping.h>
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
