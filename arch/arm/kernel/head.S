@@ -424,7 +424,7 @@ __lookup_processor_type:
 	beq	2f
 	add	r5, r5, #PROC_INFO_SZ		@ sizeof(proc_info_list)
 	cmp	r5, r6
-	blt	1b
+	blo	1b
 	mov	r5, #0				@ unknown processor
 2:	mov	pc, lr
 
@@ -470,7 +470,7 @@ __lookup_machine_type:
 	beq	2f				@ found
 	add	r5, r5, #SIZEOF_MACHINE_DESC	@ next machine_desc
 	cmp	r5, r6
-	blt	1b
+	blo	1b
 	mov	r5, #0				@ unknown machine
 2:	mov	pc, lr
 
