@@ -30,7 +30,7 @@
 #	FDC_82078SL	- If you have a 82078SL, define this.
 
 FTAPE_OPT       = -DVERIFY_HEADERS -DNR_BUFFERS=3 -DCLK_48MHZ=1 \
-	-DNO_TRACE
+	-DNO_TRACE -DFDC_82078SL
 
 #  If you're using a non-standard floppy disk controller for the
 #  tape drive, enable one (only!) of the following lines and set

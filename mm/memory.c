@@ -147,20 +147,16 @@ void clear_page_tables(struct task_struct * tsk)
  * page table directory to the kernel page tables and then frees the old
  * page table directory.
  */
-void free_page_tables(struct task_struct * tsk)
+void free_page_tables(struct mm_struct * mm)
 {
 	int i;
 	pgd_t * page_dir;
 
-	page_dir = tsk->mm->pgd;
+	page_dir = mm->pgd;
 	if (!page_dir || page_dir == swapper_pg_dir) {
-		printk("%s trying to free kernel page-directory: not good\n", tsk->comm);
+		printk("Trying to free kernel page-directory: not good\n");
 		return;
 	}
-	flush_cache_mm(tsk->mm);
-	flush_tlb_mm(tsk->mm);
-	SET_PAGE_DIR(tsk, swapper_pg_dir);
-	tsk->mm->pgd = swapper_pg_dir;	/* or else... */
 	for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
 		free_one_pgd(page_dir + i);
 	pgd_free(page_dir);

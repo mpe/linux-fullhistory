@@ -5,11 +5,12 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/tasks.h>
 #include <linux/config.h>
 
 #include <asm/page.h>
 #include <asm/oplib.h>
-#include <asm/mp.h>
+#include <asm/smp.h>
 #include <asm/system.h>
 
 struct prom_cpuinfo linux_cpus[NCPUS];

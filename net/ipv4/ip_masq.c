@@ -73,6 +73,7 @@ static struct symbol_table ip_masq_syms = {
         X(ip_masq_set_expire),
         X(ip_masq_free_ports),
 	X(ip_masq_expire),
+	X(ip_masq_out_get_2),
 #include <linux/symtab_end.h>
 };
 
@@ -127,14 +128,14 @@ ip_masq_hash(struct ip_masq *ms)
         hash = ip_masq_hash_key(ms->protocol, ms->maddr, ms->mport);
         ms->m_link = ip_masq_m_tab[hash];
         ip_masq_m_tab[hash] = ms;
-        
+
         /*
          *	Hash by proto,s{addr,port}
          */
         hash = ip_masq_hash_key(ms->protocol, ms->saddr, ms->sport);
         ms->s_link = ip_masq_s_tab[hash];
         ip_masq_s_tab[hash] = ms;
-        
+
 
         ms->flags |= IP_MASQ_F_HASHED;
         return 1;
@@ -172,7 +173,7 @@ static __inline__ int ip_masq_unhash(struct ip_masq *ms)
                         *ms_p = ms->s_link;
                         break;
                 }
-       
+
         ms->flags &= ~IP_MASQ_F_HASHED;
         return 1;
 }
@@ -204,7 +205,7 @@ ip_masq_in_get(struct iphdr *iph)
         s_port = portptr[0];
         d_addr = iph->daddr;
         d_port = portptr[1];
-        
+
         hash = ip_masq_hash_key(protocol, d_addr, d_port);
         for(ms = ip_masq_m_tab[hash]; ms ; ms = ms->m_link) {
  		if ( protocol==ms->protocol &&
@@ -224,8 +225,6 @@ ip_masq_in_get(struct iphdr *iph)
 struct ip_masq *
 ip_masq_out_get(struct iphdr *iph)
 {
-        unsigned hash;
-        struct ip_masq *ms;
  	__u16 *portptr;
         int protocol;
         __u32 s_addr, d_addr;
@@ -237,7 +236,24 @@ ip_masq_out_get(struct iphdr *iph)
         s_port = portptr[0];
         d_addr = iph->daddr;
         d_port = portptr[1];
-        
+
+        return ip_masq_out_get_2(protocol, s_addr, s_port, d_addr, d_port);
+}
+
+/*
+ *	Returns ip_masq associated with supplied parameters, either
+ *	broken out of the ip/tcp headers or directly supplied for those
+ *	pathological protocols with address/port in the data stream
+ *	(ftp, irc).  addresses and ports are in network order.
+ *	called for pkts coming from inside-to-OUTside the firewall.
+ */
+
+struct ip_masq *
+ip_masq_out_get_2(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port)
+{
+        unsigned hash;
+        struct ip_masq *ms;
+
         hash = ip_masq_hash_key(protocol, s_addr, s_port);
         for(ms = ip_masq_s_tab[hash]; ms ; ms = ms->s_link) {
 		if (protocol == ms->protocol &&
@@ -245,7 +261,7 @@ ip_masq_out_get(struct iphdr *iph)
                     d_addr == ms->daddr && d_port == ms->dport )
                         return ms;
         }
-        
+
         return NULL;
 }
 
@@ -259,7 +275,7 @@ ip_masq_getbym(int protocol, __u32 m_addr, __u16 m_port)
 {
         unsigned hash;
         struct ip_masq *ms;
-        
+
         hash = ip_masq_hash_key(protocol, m_addr, m_port);
         for(ms = ip_masq_m_tab[hash]; ms ; ms = ms->m_link) {
  		if ( protocol==ms->protocol &&
@@ -288,7 +304,7 @@ static void masq_expire(unsigned long data)
                 ip_masq_unbind_app(ms);
                 kfree_s(ms,sizeof(*ms));
         }
-        
+
 	restore_flags(flags);
 }
 
@@ -304,9 +320,9 @@ struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 s
         int ports_tried, *free_ports_p;
 	unsigned long flags;
         static int n_fails = 0;
-        
+
         free_ports_p = &ip_masq_free_ports[proto==IPPROTO_TCP];
-        
+
         if (*free_ports_p == 0) {
                 if (++n_fails < 5)
                         printk("ip_masq_new(proto=%s): no free ports.\n",
@@ -330,7 +346,8 @@ struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 s
         ms->daddr	   = daddr;
         ms->dport	   = dport;
         ms->flags	   = mflags;
-        
+        ms->app_data	   = NULL;
+
         if (proto == IPPROTO_UDP)
                 ms->flags |= IP_MASQ_F_NO_DADDR;
         
@@ -434,7 +451,7 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 		ntohl(iph->saddr), ntohs(portptr[0]),
 		ntohl(iph->daddr), ntohs(portptr[1]));
 #endif
-        
+
         ms = ip_masq_out_get(iph);
         if (ms!=NULL)
                 ip_masq_set_expire(ms,0);
@@ -442,8 +459,8 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 	/*
 	 *	Nope, not found, create a new entry for it
 	 */
-	 
-	if (ms==NULL) 
+	
+	if (ms==NULL)
 	{
                 ms = ip_masq_new(dev, iph->protocol,
                                  iph->saddr, portptr[0],
@@ -452,18 +469,18 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
                 if (ms == NULL)
 			return;
  	}
- 
+
  	/*
  	 *	Change the fragments origin
  	 */
- 	 
+ 	
  	size = skb->len - ((unsigned char *)portptr - skb->h.raw);
         /*
          *	Set iph addr and port from ip_masq obj.
          */
  	iph->saddr = ms->maddr;
  	portptr[0] = ms->mport;
- 
+
  	/*
  	 *	Attempt ip_masq_app call.
          *	will fix ip_masq and iph seq stuff
@@ -478,42 +495,48 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
                 portptr = (__u16 *)&(((char *)iph)[iph->ihl*4]);
                 size = skb->len - ((unsigned char *)portptr-skb->h.raw);
         }
-        
+
  	/*
  	 *	Adjust packet accordingly to protocol
  	 */
- 	 
- 	if (iph->protocol==IPPROTO_UDP) 
+ 	
+ 	if (iph->protocol==IPPROTO_UDP)
  	{
                 timeout = ip_masq_expire->udp_timeout;
  		recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,size);
  	}
- 	else 
+ 	else
  	{
  		struct tcphdr *th;
  		th = (struct tcphdr *)portptr;
- 
+
  		/*
  		 *	Timeout depends if FIN packet was seen
+		 *	Very short timeout if RST packet seen.
  		 */
- 		if (ms->flags & IP_MASQ_F_SAW_FIN || th->fin)
+ 		if (ms->flags & IP_MASQ_F_SAW_RST || th->rst)
+                {
+                        timeout = 1;
+ 			ms->flags |= IP_MASQ_F_SAW_RST;
+ 		}
+ 		else if (ms->flags & IP_MASQ_F_SAW_FIN || th->fin)
                 {
                         timeout = ip_masq_expire->tcp_fin_timeout;
  			ms->flags |= IP_MASQ_F_SAW_FIN;
  		}
  		else timeout = ip_masq_expire->tcp_timeout;
- 
+
 		skb->csum = csum_partial((void *)(th + 1), size - sizeof(*th), 0);
  		tcp_send_check(th,iph->saddr,iph->daddr,size,skb);
  	}
         ip_masq_set_expire(ms, timeout);
  	ip_send_check(iph);
- 
+
  #ifdef DEBUG_CONFIG_IP_MASQUERADE
  	printk("O-routed from %lX:%X over %s\n",ntohl(ms->maddr),ntohs(ms->mport),dev->name);
  #endif
  }
- 
+
  /*
   *	Check if it's an masqueraded port, look it up,
   *	and send it on it's way...
@@ -530,10 +553,10 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
  	__u16	*portptr;
  	struct ip_masq	*ms;
 	unsigned short  frag;
- 
+
  	if (iph->protocol!=IPPROTO_UDP && iph->protocol!=IPPROTO_TCP)
  		return 0;
- 
+
 	/*
    	 * Toss fragments, since we handle them in ip_rcv()
 	 */
@@ -549,7 +572,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
  	if (ntohs(portptr[1]) < PORT_MASQ_BEGIN ||
  	    ntohs(portptr[1]) > PORT_MASQ_END)
  		return 0;
- 
+
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
  	printk("Incoming %s %lX:%X -> %lX:%X\n",
  		masq_proto_name(iph->protocol),
@@ -559,17 +582,17 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
  	/*
  	 * reroute to original host:port if found...
          */
-        
+
         ms = ip_masq_in_get(iph);
-        
+
         if (ms != NULL)
         {
                 int size;
-        
+
                 /*
                  *	Set dport if not defined yet.
                  */
-                
+
                 if ( ms->flags & IP_MASQ_F_NO_DPORT && ms->protocol == IPPROTO_TCP ) {
                         ms->flags &= ~IP_MASQ_F_NO_DPORT;
                         ms->dport = portptr[0];
@@ -589,34 +612,53 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
                 size = skb->len - ((unsigned char *)portptr - skb->h.raw);
                 iph->daddr = ms->saddr;
                 portptr[1] = ms->sport;
-                
+
                 /*
                  *	Attempt ip_masq_app call.
                  *	will fix ip_masq and iph ack_seq stuff
                  */
-                
+
                 if (ip_masq_app_pkt_in(ms, skb_p, dev) != 0)
                 {
                         /*
                          *	skb has changed, update pointers.
                          */
-                        
+
                         skb = *skb_p;
                         iph = skb->h.iph;
                         portptr = (__u16 *)&(((char *)iph)[iph->ihl*4]);
                         size = skb->len - ((unsigned char *)portptr-skb->h.raw);
                 }
-                
+
                 /*
-                 * Yug! adjust UDP/TCP and IP checksums
+                 * Yug! adjust UDP/TCP and IP checksums, also update
+		 * UDP timeouts since you cannot depend on traffic
+		 * going through the other way to hold the timeout open.
+		 * (With TCP the ACK packets hold the tunnel open).
+		 * If a TCP RST is seen collapse the tunnel!
                  */
                 if (iph->protocol==IPPROTO_UDP)
+		{
+			unsigned long 	timeout;
                         recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,size);
+			ip_masq_set_expire(ms, 0);
+			ip_masq_set_expire(ms, ip_masq_expire->udp_timeout);
+		}
                 else
                 {
+			struct tcphdr *th;
                         skb->csum = csum_partial((void *)(((struct tcphdr *)portptr) + 1),
                                                  size - sizeof(struct tcphdr), 0);
                         tcp_send_check((struct tcphdr *)portptr,iph->saddr,iph->daddr,size,skb);
+			/* Check if TCP RST */
+			th = (struct tcphdr *)portptr;
+			if (th->rst)
+			{
+				ip_masq_set_expire(ms, 0);
+				ms->flags |= IP_MASQ_F_SAW_RST;
+				ip_masq_set_expire(ms, 1);
+			}
+
                 }
                 ip_send_check(iph);
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
@@ -624,7 +666,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 #endif
                 return 1;
  	}
-        
+
  	/* sorry, all this trouble for a no-hit :) */
  	return 0;
 }
@@ -695,7 +737,7 @@ done:
  *	Initialize ip masquerading
  */
 int ip_masq_init(void)
-{  
+{
         register_symtab (&ip_masq_syms);
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IPMSQHST, 13, "ip_masquerade",
@@ -704,6 +746,6 @@ int ip_masq_init(void)
 		ip_msqhst_procinfo
 	});
         ip_masq_app_init();
-        
+
         return 0;
 }

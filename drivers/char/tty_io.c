@@ -1871,6 +1871,9 @@ int tty_init(void)
 #ifdef CONFIG_DIGI
 	pcxe_init();
 #endif
+#ifdef CONFIG_RISCOM8
+	riscom8_init();
+#endif
 	pty_init();
 	vcs_init();
 	return 0;

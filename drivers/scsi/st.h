@@ -31,6 +31,7 @@ typedef struct {
   unsigned char defined;
   unsigned char do_async_writes;
   unsigned char do_buffer_writes;
+  unsigned char do_read_ahead;
   unsigned char defaults_for_writes;
   unsigned char default_compression; /* 0 = don't touch, etc */
   short default_density; /* Forced density, -1 = no value */
@@ -53,7 +54,7 @@ typedef struct {
   ST_buffer * buffer;
 
   /* Drive characteristics */
-  unsigned char do_read_ahead;
+  unsigned char omit_blklims;
   unsigned char do_auto_lock;
   unsigned char can_bsr;
   unsigned char two_fm;

@@ -17,7 +17,7 @@ O_OBJS    = open.o read_write.o inode.o devices.o file_table.o buffer.o \
 
 MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = minix ext ext2 fat msdos vfat proc isofs nfs xiafs umsdos \
-		hpfs sysv smbfs ncpfs
+		hpfs sysv smbfs ncpfs ufs affs
 
 ifeq ($(CONFIG_QUOTA),y)
 O_OBJS += dquot.o
@@ -139,6 +139,14 @@ else
   ifeq ($(CONFIG_HPFS_FS),m)
   MOD_SUB_DIRS += hpfs
   endif
+endif
+
+ifeq ($(CONFIG_UFS_FS),y)
+SUB_DIRS += ufs
+endif
+
+ifeq ($(CONFIG_AFFS_FS),y)
+SUB_DIRS += affs
 endif
 
 ifeq ($(CONFIG_BINFMT_ELF),y)

@@ -34,4 +34,6 @@ fi
 tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS
 tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
+bool 'AFFS filesystem support' CONFIG_AFFS_FS
+bool 'UFS filesystem support (read only)' CONFIG_UFS_FS
 endmenu

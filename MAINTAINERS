@@ -159,7 +159,7 @@ S:	Maintained
 
 FTAPE/QIC-117:
 P:	Kai Harrekilde-Petersen
-M:	khp@@dolphinics.no
+M:	khp@dolphinics.no
 L:	linux-tape@vger.rutgers.edu
 S:	Maintained
 
@@ -260,6 +260,13 @@ P:	Christoph Lameter
 M:	clameter@fuller.edu
 L:	digiboard@list.fuller.edu
 S:	Maintained
+
+RISCOM8 DRIVER:
+P:	Dmitry Gorodchanin
+M:	begemot@bgm.rosprint.net
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 
 MOUSE AND MISC DEVICES [GENERAL]
 P:	Alessandro Rubini

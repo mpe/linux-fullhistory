@@ -290,7 +290,7 @@ extern pte_t * __bad_pagetable(void);
 do { \
 	(tsk)->tss.cr3 = (unsigned long) (pgdir); \
 	if ((tsk) == current) \
-		__asm__ __volatile__("movl %0,%%cr3": :"a" ((tsk)->tss.cr3)); \
+		__asm__ __volatile__("movl %0,%%cr3": :"a" (pgdir)); \
 } while (0)
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }

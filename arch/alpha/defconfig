@@ -96,7 +96,6 @@ CONFIG_BLK_DEV_SR=y
 #
 # CONFIG_SCSI_MULTI_LUN is not set
 CONFIG_SCSI_CONSTANTS=y
-# CONFIG_SCSI_AUTO_BIOSP is not set
 
 #
 # SCSI low-level drivers
@@ -151,6 +150,7 @@ CONFIG_NET_EISA=y
 # CONFIG_APRICOT is not set
 CONFIG_DE4X5=y
 # CONFIG_DEC_ELCP is not set
+# CONFIG_DGRS is not set
 # CONFIG_ZNET is not set
 # CONFIG_NET_POCKET is not set
 # CONFIG_TR is not set
@@ -180,6 +180,7 @@ CONFIG_NFS_FS=y
 CONFIG_ISO9660_FS=y
 # CONFIG_HPFS_FS is not set
 # CONFIG_SYSV_FS is not set
+# CONFIG_UFS_FS is not set
 
 #
 # Character devices
@@ -188,6 +189,7 @@ CONFIG_SERIAL=y
 # CONFIG_DIGI is not set
 # CONFIG_CYCLADES is not set
 # CONFIG_STALDRV is not set
+# CONFIG_RISCOM8 is not set
 # CONFIG_PRINTER is not set
 # CONFIG_BUSMOUSE is not set
 CONFIG_PSMOUSE=y

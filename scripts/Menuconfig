@@ -36,9 +36,9 @@ single_menu_mode=
 [ -z "$BASH" ] && { echo "Menuconfig requires bash" 1>&2; exit 1; }
 
 #
-# Cache function definitions
+# Cache function definitions, turn off posix compliance
 #
-set -h
+set -h +o posix
 
 
 
@@ -84,7 +84,7 @@ function bool () {
 
 	echo -ne "'$2' '[$flag] $1' " >>MCmenu
 
-	echo -e "function $2 () { l_bool '$2' \"\$1\" }\n" >>MCradiolists
+	echo -e "function $2 () { l_bool '$2' \"\$1\" ;}\n" >>MCradiolists
 }
 
 #
@@ -109,7 +109,7 @@ function tristate () {
 		echo -ne "'$2' '<$flag> $1' " >>MCmenu
 	
 		echo -e "
-		function $2 () { l_tristate '$2' \"\$1\" }" >>MCradiolists
+		function $2 () { l_tristate '$2' \"\$1\" ;}" >>MCradiolists
 	fi
 }
 
@@ -147,7 +147,7 @@ function int () {
 
 	echo -ne "'$2' '($x) $1' " >>MCmenu
 
-	echo -e "function $2 () { l_int '$1' '$2' '$3' '$x' }" >>MCradiolists
+	echo -e "function $2 () { l_int '$1' '$2' '$3' '$x' ;}" >>MCradiolists
 }
 
 #
@@ -158,7 +158,7 @@ function hex () {
 
 	echo -ne "'$2' '($x) $1' " >>MCmenu
 
-	echo -e "function $2 () { l_hex '$1' '$2' '$3' '$x' }" >>MCradiolists
+	echo -e "function $2 () { l_hex '$1' '$2' '$3' '$x' ;}" >>MCradiolists
 }
 
 #
@@ -196,7 +196,7 @@ function choice () {
 
 	echo -e "
 	function $firstchoice () \
-		{ l_choice '$title' \"$choices\" $current }" >>MCradiolists
+		{ l_choice '$title' \"$choices\" $current ;}" >>MCradiolists
 }
 
 } # END load_functions()
@@ -331,7 +331,7 @@ function mod_bool () {
 
 	echo -ne "'$2' '<$flag> $1' " >>MCmenu
 
-	echo -e "function $2 () { l_mod_bool '$2' \"\$1\" }" >>MCradiolists
+	echo -e "function $2 () { l_mod_bool '$2' \"\$1\" ;}" >>MCradiolists
 }
 
 #
@@ -1020,7 +1020,7 @@ cleanup2 () {
 set_geometry () {
 	# Some distributions export these with incorrect values
 	# which can really screw up some ncurses programs.
-	unset LINES COLUMNS
+	LINES=  COLUMNS=
 
 	ROWS=${1:-24}  COLS=${2:-80} 
 

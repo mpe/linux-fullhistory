@@ -336,7 +336,10 @@ asmlinkage void schedule(void)
 	/*
 	 *	This is safe as we do not permit re-entry of schedule()
 	 */
-	prev->processor = NO_PROC_ID;	
+	prev->processor = NO_PROC_ID;
+#define idle_task (task[this_cpu])
+#else
+#define idle_task (&init_task)
 #endif	
 
 /*
@@ -346,7 +349,7 @@ asmlinkage void schedule(void)
  */
 /* this is the scheduler proper: */
 	c = -1000;
-	next = &init_task;
+	next = idle_task;
 	while (p != &init_task) {
 		int weight = goodness(p, prev, this_cpu);
 		if (weight > c)
@@ -359,20 +362,13 @@ asmlinkage void schedule(void)
 		for_each_task(p)
 			p->counter = (p->counter >> 1) + p->priority;
 	}
-#ifdef __SMP__	
-	
-	/*
-	 *	Context switching between two idle threads is pointless.
-	 */
-	if(!prev->pid && !next->pid)
-		next=prev;
+#ifdef __SMP__
 	/*
 	 *	Allocate process to CPU
 	 */
 	 
 	 next->processor = this_cpu;
 	 next->last_processor = this_cpu;
-	 
 #endif	 
 #ifdef __SMP_PROF__ 
 	/* mark processor running an idle thread */
@@ -1437,9 +1433,12 @@ void sched_init(void)
 	 *	process right in SMP mode.
 	 */
 	int cpu=smp_processor_id();
+#ifndef __SMP__	
 	current_set[cpu]=&init_task;
-#ifdef __SMP__	
+#else
 	init_task.processor=cpu;
+	for(cpu = 0; cpu < NR_CPUS; cpu++)
+		current_set[cpu] = &init_task;
 #endif
 	init_bh(TIMER_BH, timer_bh);
 	init_bh(TQUEUE_BH, tqueue_bh);

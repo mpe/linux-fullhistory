@@ -2803,6 +2803,15 @@ CONFIG_DIGI
   order to become a BBS. If you have a card like that, say Y here and
   read the file Documentation/digiboard.txt.
 
+SDL RISCom/8 card support
+CONFIG_RISCOM8
+  This is a driver for the SDL Communications RISCom/8 multiport card,
+  that give you many serial ports. You would need something like this
+  to connect more than two modems to your linux box, for instance in
+  order to become a BBS. If you have a card like that, say Y here and
+  read the file Documentation/riscom8.txt. Also it's possible to say
+  M here and compile this driver as kernel loadable module.
+
 Cyclades async mux support
 CONFIG_CYCLADES
   This is a driver for a card that gives you many serial ports. You

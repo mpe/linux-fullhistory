@@ -6,10 +6,7 @@
 #ifndef _SPARC_SMP_H
 #define _SPARC_SMP_H
 
-#ifdef __SMP__
-
 #ifndef __ASSEMBLY__
-
 /* PROM provided per-processor information we need
  * to start them all up.
  */
@@ -18,6 +15,11 @@ struct prom_cpuinfo {
 	int prom_node;
 	int mid;
 };
+#endif /* !(__ASSEMBLY__) */
+
+#ifdef __SMP__
+
+#ifndef __ASSEMBLY__
 
 extern struct prom_cpuinfo linux_cpus[NCPUS];
 

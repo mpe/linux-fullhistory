@@ -29,6 +29,7 @@
 int nr_tasks=1;
 int nr_running=1;
 unsigned long int total_forks=0;	/* Handle normal Linux uptimes. */
+int last_pid=0;
 
 static inline int find_empty_process(void)
 {
@@ -59,7 +60,6 @@ static inline int find_empty_process(void)
 
 static int get_pid(unsigned long flags)
 {
-	static int last_pid = 0;
 	struct task_struct *p;
 
 	if (flags & CLONE_PID)
@@ -114,26 +114,27 @@ static inline int dup_mmap(struct mm_struct * mm)
 
 static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 {
-	if (clone_flags & CLONE_VM) {
-		SET_PAGE_DIR(tsk, current->mm->pgd);
-		current->mm->count++;
+	if (!(clone_flags & CLONE_VM)) {
+		struct mm_struct * mm = kmalloc(sizeof(*tsk->mm), GFP_KERNEL);
+		if (!mm)
+			return -1;
+		*mm = *current->mm;
+		mm->count = 1;
+		mm->def_flags = 0;
+		tsk->mm = mm;
+		tsk->min_flt = tsk->maj_flt = 0;
+		tsk->cmin_flt = tsk->cmaj_flt = 0;
+		tsk->nswap = tsk->cnswap = 0;
+		if (new_page_tables(tsk))
+			return -1;
+		if (dup_mmap(mm)) {
+			free_page_tables(mm);
+			return -1;
+		}
 		return 0;
 	}
-	tsk->mm = kmalloc(sizeof(*tsk->mm), GFP_KERNEL);
-	if (!tsk->mm)
-		return -1;
-	*tsk->mm = *current->mm;
-	tsk->mm->count = 1;
-	tsk->mm->def_flags = 0;
-	tsk->min_flt = tsk->maj_flt = 0;
-	tsk->cmin_flt = tsk->cmaj_flt = 0;
-	tsk->nswap = tsk->cnswap = 0;
-	if (new_page_tables(tsk))
-		return -1;
-	if (dup_mmap(tsk->mm)) {
-		free_page_tables(tsk);
-		return -1;
-	}
+	SET_PAGE_DIR(tsk, current->mm->pgd);
+	current->mm->count++;
 	return 0;
 }
 

@@ -66,12 +66,12 @@ masq_ftp_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 	iph = skb->h.iph;
         th = (struct tcphdr *)&(((char *)iph)[iph->ihl*4]);
         data = (char *)&th[1];
-        
+
         data_limit = skb->h.raw + skb->len - 18;
 
 	while (data < data_limit)
 	{
-		if (memcmp(data,"PORT ",5) && memcmp(data,"port ",5)) 
+		if (memcmp(data,"PORT ",5) && memcmp(data,"port ",5))
 		{
 			data ++;
 			continue;
@@ -99,21 +99,38 @@ masq_ftp_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 		from = (p1<<24) | (p2<<16) | (p3<<8) | p4;
 		port = (p5<<8) | p6;
 #if DEBUG_CONFIG_IP_MASQ_FTP
-		printk("PORT %lX:%X detected\n",from,port);
+		printk("PORT %X:%X detected\n",from,port);
 #endif	
 		/*
-		 * Now create an masquerade entry for it
+		 * Now update or create an masquerade entry for it
 		 */
-                n_ms = ip_masq_new(dev, IPPROTO_TCP,
-                                   htonl(from), htons(port),
-                                   iph->daddr, 0,
-                                   IP_MASQ_F_NO_DPORT);
-                                   
-		if (n_ms==NULL)
-			return 0;
+#if DEBUG_CONFIG_IP_MASQ_FTP
+		printk("protocol %d %lX:%X %X:%X\n", iph->protocol, htonl(from), htons(port), iph->daddr, 0);
 
-                ip_masq_set_expire(n_ms, ip_masq_expire->tcp_fin_timeout);
-                
+#endif	
+		n_ms = ip_masq_out_get_2(iph->protocol,
+					 htonl(from), htons(port),
+					 iph->daddr, 0);
+		if (n_ms) {
+			/* existing masquerade, clear timer */
+			ip_masq_set_expire(n_ms,0);
+		}
+		else {
+			n_ms = ip_masq_new(dev, IPPROTO_TCP,
+					   htonl(from), htons(port),
+					   iph->daddr, 0,
+					   IP_MASQ_F_NO_DPORT);
+					
+			if (n_ms==NULL)
+				return 0;
+		}
+
+                /*
+                 * keep for a bit longer than tcp_fin, caller may not reissue
+                 * PORT before tcp_fin_timeout.
+                 */
+                ip_masq_set_expire(n_ms, ip_masq_expire->tcp_fin_timeout*3);
+
 		/*
 		 * Replace the old PORT with the new one
 		 */
@@ -123,7 +140,10 @@ masq_ftp_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 			from>>24&255,from>>16&255,from>>8&255,from&255,
 			port>>8&255,port&255);
 		buf_len = strlen(buf);
- 
+#if DEBUG_CONFIG_IP_MASQ_FTP
+		printk("new PORT %X:%X\n",from,port);
+#endif	
+
 		/*
 		 * Calculate required delta-offset to keep TCP happy
 		 */
@@ -133,8 +153,8 @@ masq_ftp_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 		/*
 		 *	No shift.
 		 */
-		 
-		if (diff==0) 
+		
+		if (diff==0)
 		{
 			/*
 			 * simple case, just replace the old PORT cmd
@@ -153,6 +173,7 @@ masq_ftp_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 
 struct ip_masq_app ip_masq_ftp = {
         NULL,			/* next */
+	"ftp",			/* name */
         0,                      /* type */
         0,                      /* n_attach */
         masq_ftp_init_1,        /* ip_masq_init_1 */

@@ -61,6 +61,8 @@
 #define IDE3_MAJOR	34
 #define NETLINK_MAJOR	36
 #define IDETAPE_MAJOR	37
+#define RISCOM8_NORMAL_MAJOR 48
+#define RISCOM8_CALLOUT_MAJOR 49
 #define APBLOCK_MAJOR   60   /* AP1000 Block device */
 #define DDV_MAJOR       61   /* AP1000 DDV block device */
 /*

@@ -63,6 +63,7 @@ extern unsigned long avenrun[];		/* Load averages */
 #define CT_TO_USECS(x)	(((x) % HZ) * 1000000/HZ)
 
 extern int nr_running, nr_tasks;
+extern int last_pid;
 
 #define FIRST_TASK task[0]
 #define LAST_TASK task[NR_TASKS-1]

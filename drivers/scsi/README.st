@@ -1,5 +1,5 @@
 This file contains brief information about the SCSI tape driver.
-Last modified: Mon Apr  8 09:34:33 1996 by makisara@kai.makisara.fi
+Last modified: Sun Apr 21 21:19:22 1996 by root@kai.makisara.fi
 
 
 BASICS
@@ -197,13 +197,16 @@ MTSETDRVBUFFER
 	   can be specified differently for each mode):
 	     MT_ST_BUFFER_WRITES write buffering (mode)
 	     MT_ST_ASYNC_WRITES asynchronous writes (mode)
-             MT_ST_READ_AHEAD  read ahead (global)
+             MT_ST_READ_AHEAD  read ahead (mode)
              MT_ST_TWO_FM writing of two filemarks (global)
 	     MT_ST_FAST_EOM using the SCSI spacing to EOD (global)
 	     MT_ST_AUTO_LOCK automatic locking of the drive door (global)
              MT_ST_DEF_WRITES the defaults are meant only for writes (mode)
 	     MT_ST_CAN_BSR backspacing over records can be used for
 		repositioning the tape (global)
+	     MT_ST_NO_BLKLIMS the driver does not ask the block limits
+		from the drive (block size can be changed only to
+		variable) (global)
 	     MT_ST_DEBUGGING debugging (global; debugging must be
 		compiled into the driver)
 	MT_ST_SETBOOLEANS

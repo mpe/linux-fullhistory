@@ -1,0 +1,16 @@
+gcc -D__KERNEL__ -O2 -m68030 -c atacon.c -o atacon.o
+gcc -D__KERNEL__ -O2 -m68030 -c atasound.c -o atasound.o
+gcc -D__KERNEL__ -O2 -m68030 -c ataints.c -o ataints.o
+gcc -D__KERNEL__ -O2 -m68030 -c atapart.c -o atapart.o
+gcc -D__KERNEL__ -O2 -m68030 -c atakeyb.c -o atakeyb.o
+gcc -D__KERNEL__ -O2 -m68030 -c joystick.c -o joystick.o
+gcc -D__KERNEL__ -O2 -m68030 -c mouse.c -o mouse.o
+gcc -D__KERNEL__ -O2 -m68030 -c config.c -o config.o
+gcc -D__KERNEL__ -O2 -m68030 -c font_8x16.c -o font_8x16.o
+gcc -D__KERNEL__ -O2 -m68030 -c font_8x8.c -o font_8x8.o
+gcc -D__KERNEL__ -O2 -m68030 -c stdma.c -o stdma.o
+
+
+lnx-ld -r -o atari.o atacon.o atasound.o ataints.o atapart.o atakeyb.o config.o font_8x8.o font_8x1.o joystick.o mouse.o stdma.o
+
+cp atari.o ..\makedir

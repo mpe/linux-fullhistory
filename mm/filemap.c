@@ -424,8 +424,8 @@ static void profile_readahead(int async, struct file *filp)
  *   We try to have a limit of MAX_READWINDOW = 48K.
  */
 
-#define MAX_READWINDOW (PAGE_SIZE*12)
-#define MAX_READAHEAD (PAGE_SIZE*7)
+#define MAX_READWINDOW (PAGE_SIZE*32)
+#define MAX_READAHEAD (PAGE_SIZE*16)
 #define MIN_READAHEAD (PAGE_SIZE)
 
 static inline unsigned long generic_file_readahead(struct file * filp, struct inode * inode,

@@ -17,6 +17,8 @@
 #include <linux/malloc.h>
 
 #include <asm/segment.h>
+#include <asm/pgtable.h>
+
 extern void sem_exit (void);
 extern void acct_process (long exitcode);
 extern void kerneld_exit(void);
@@ -423,21 +425,26 @@ static inline void __exit_sighand(struct task_struct *tsk)
 
 void exit_sighand(struct task_struct *tsk)
 {
-  __exit_sighand(tsk);
+	__exit_sighand(tsk);
 }
 
 static inline void exit_mm(void)
 {
 	struct mm_struct * mm = current->mm;
 
+	/* Set us up to use the kernel mm state */
+	flush_cache_mm(mm);
+	flush_tlb_mm(mm);
+	init_mm.count++;
+	current->mm = &init_mm;
 	current->swappable = 0;
-	if (mm) {
-		if (!--mm->count) {
-			exit_mmap(mm);
-			free_page_tables(current);
-			kfree(mm);
-		}
-		current->mm = NULL;
+	SET_PAGE_DIR(current, swapper_pg_dir);
+
+	/* free the old state - not used any more */
+	if (!--mm->count) {
+		exit_mmap(mm);
+		free_page_tables(mm);
+		kfree(mm);
 	}
 }
 

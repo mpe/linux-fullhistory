@@ -1365,3 +1365,10 @@ D: Miscellaneous kernel fixes
 S: 3078 Sulphur Spring Court
 S: San Jose, California 95148
 S: USA
+
+N: Dmitry S. Gorodchanin
+E: begemot@bgm.rosprint.net
+D: RISCom/8 driver, misc kernel fixes.
+S: 6/1 M.Koneva bl, apt #125 
+S: Poltava 314023
+S: Ukraine

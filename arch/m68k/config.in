@@ -1,0 +1,171 @@
+#
+# For a description of the syntax of this configuration file,
+# see the Configure script.
+#
+mainmenu_name "Linux/68k Kernel Configuration"
+
+mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
+  bool 'Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
+fi
+endmenu
+
+mainmenu_option next_comment
+comment 'General setup'
+
+bool 'Amiga support' CONFIG_AMIGA
+bool 'Atari support' CONFIG_ATARI
+bool 'Macintosh support' CONFIG_MAC
+bool '68040 floating point software package' CONFIG_FPSP_040
+bool '68060 integer/floating point software package' CONFIG_IFPSP_060
+bool 'Networking support' CONFIG_NET
+bool 'System V IPC' CONFIG_SYSVIPC
+tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
+tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+if [ "$CONFIG_BINFMT_ELF" = "y" ]; then
+  bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF
+fi
+if [ "$CONFIG_AMIGA" = "y" ]; then
+  bool 'Amiga AutoConfig Identification' CONFIG_ZORRO
+fi
+endmenu
+
+#
+# Block device driver configuration
+#
+mainmenu_option next_comment
+comment 'Floppy, IDE, and other block devices'
+
+tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
+bool 'IDE harddisk support' CONFIG_BLK_DEV_IDE
+if [ "$CONFIG_AMIGA" = "y" ]; then
+bool 'Amiga Cybervision support' CONFIG_FB_CYBER
+bool 'Amiga Zorro II ramdisk support' CONFIG_AMIGA_Z2RAM
+fi
+if [ "$CONFIG_ATARI" = "y" ]; then
+bool 'Atari ACSI support' CONFIG_ATARI_ACSI
+fi
+
+tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
+if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
+  bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
+fi
+
+tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
+endmenu
+
+if [ "$CONFIG_NET" = "y" ]; then
+  source net/Config.in
+fi
+
+mainmenu_option next_comment
+comment 'SCSI support'
+
+tristate 'SCSI support' CONFIG_SCSI
+
+if [ "$CONFIG_SCSI" != "n" ]; then
+
+comment 'SCSI support type (disk, tape, CDrom)'
+
+dep_tristate 'SCSI disk support' CONFIG_BLK_DEV_SD $CONFIG_SCSI
+dep_tristate 'SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
+dep_tristate 'SCSI CDROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
+dep_tristate 'SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
+
+comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
+
+bool 'Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN
+
+bool 'Verbose SCSI error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS
+
+mainmenu_option next_comment
+comment 'SCSI low-level drivers'
+
+if [ "$CONFIG_AMIGA" = "y" ]; then
+bool 'A3000 WD33C93A support' CONFIG_A3000_SCSI
+bool 'A2091 WD33C93A support' CONFIG_A2091_SCSI
+bool 'GVP Series II WD33C93A support' CONFIG_GVP11_SCSI
+fi
+if [ "$CONFIG_ATARI" = "y" ]; then
+dep_tristate 'Atari native SCSI support' CONFIG_ATARI_SCSI $CONFIG_SCSI
+fi
+#dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
+endmenu
+
+fi
+endmenu
+
+if [ "$CONFIG_NET" = "y" ]; then
+
+mainmenu_option next_comment
+comment 'Network device support'
+
+bool 'Network device support' CONFIG_NETDEVICES
+if [ "$CONFIG_NETDEVICES" = "y" ]; then
+#
+# Network device configuration
+#
+tristate 'Dummy net driver support' CONFIG_DUMMY
+tristate 'SLIP (serial line) support' CONFIG_SLIP
+if [ "$CONFIG_SLIP" != "n" ]; then
+  bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
+fi
+tristate 'PPP (point-to-point) support' CONFIG_PPP
+if [ ! "$CONFIG_PPP" = "n" ]; then
+  comment 'CCP compressors for PPP are only built as modules.'
+fi
+tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER
+if [ "$CONFIG_AMIGA" = "y" ]; then
+  bool 'Ariadne support' CONFIG_ARIADNE
+  bool 'A2065 support' CONFIG_A2065
+  bool 'Hydra support' CONFIG_HYDRA
+fi
+if [ "$CONFIG_ATARI" = "y" ]; then
+  bool 'Atari Lance support' CONFIG_ATARILANCE
+fi
+fi
+endmenu
+
+fi
+
+source fs/Config.in
+
+mainmenu_option next_comment
+comment 'Character devices'
+
+bool 'Parallel printer support' CONFIG_PRINTER
+if [ "$CONFIG_AMIGA" = "y" ]; then
+  tristate 'Amiga mouse support' CONFIG_AMIGAMOUSE
+fi
+if [ "$CONFIG_ATARI" = "y" ]; then
+  tristate 'Atari mouse support' CONFIG_ATARIMOUSE
+fi
+bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
+if [ "$CONFIG_WATCHDOG" != "n" ]; then
+  bool '   Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT
+  bool '   Software Watchdog' CONFIG_SOFT_WATCHDOG
+fi
+bool 'Support for user misc device modules' CONFIG_UMISC
+endmenu
+
+mainmenu_option next_comment
+comment 'Sound support'
+
+bool 'Sound support' CONFIG_SOUND y
+if [ "$CONFIG_SOUND" != "n" ]; then
+  bool 'Amiga or Atari DMA sound support' CONFIG_DMASOUND y
+fi
+endmenu
+
+mainmenu_option next_comment
+comment 'Kernel hacking'
+
+#bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
+bool 'Kernel profiling support' CONFIG_PROFILE
+if [ "$CONFIG_PROFILE" = "y" ]; then
+  int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
+fi
+endmenu

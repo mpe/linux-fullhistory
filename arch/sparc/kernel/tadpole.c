@@ -41,18 +41,16 @@ static void clk_init(void)
 
 static void clk_slow(void)
 {
-	__asm__ __volatile__("save %sp, -0x68, %sp\n\t"
-			     "set _clk_ctrl, %l0\n\t"
-			     "ld [%l0], %l0\n\t"
-			     "mov 0xcc, %l1\n\t"
-			     "mov 0x4c, %l2\n\t"
-			     "mov 0xcf, %l3\n\t"
-			     "mov 0xdf, %l4\n\t"
-			     "stb %l1, [%l0+3]\n\t"
-			     "stb %l2, [%l0+3]\n\t"
-			     "stb %l3, [%l0+3]\n\t"
-			     "stb %l4, [%l0+3]\n\t"
-			     "restore\n\t");
+	__asm__ __volatile__("mov 0xcc, %%g2\n\t"
+			     "mov 0x4c, %%g3\n\t"
+			     "mov 0xcf, %%g4\n\t"
+			     "mov 0xdf, %%g5\n\t"
+			     "stb %%g2, [%0+3]\n\t"
+			     "stb %%g3, [%0+3]\n\t"
+			     "stb %%g4, [%0+3]\n\t"
+			     "stb %%g5, [%0+3]\n\t" : :
+			     "r" (clk_ctrl) :
+			     "g2", "g3", "g4", "g5");
 }
 
 static void tsu_clockstop(void)

@@ -552,7 +552,6 @@ int get_rtc_status(char *buf)
 	restore_flags(flags);
 
 	p = buf;
-	p += sprintf(p, "Real Time Clock Status:\n");
 
 	get_rtc_time(&tm);
 
@@ -560,9 +559,10 @@ int get_rtc_status(char *buf)
 	 * There is no way to tell if the luser has the RTC set for local
 	 * time or for Universal Standard Time (GMT). Probably local though.
 	 */
-	p += sprintf(p, "\tRTC reports %02d:%02d:%02d of %d-%d-%d.\n",
-		tm.tm_hour, tm.tm_min, tm.tm_sec, tm.tm_mday, 
-		tm.tm_mon + 1, tm.tm_year + 1900);
+	p += sprintf(p, "date          : %04d-%02d-%02d\n",
+		tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
+	p += sprintf(p, "time          : %02d-%02d-%02d\n",
+		tm.tm_hour, tm.tm_min, tm.tm_sec);
 
 	get_rtc_alm_time(&tm);
 
@@ -571,36 +571,44 @@ int get_rtc_status(char *buf)
 	 * match any value for that particular field. Values that are
 	 * greater than a valid time, but less than 0xc0 shouldn't appear.
 	 */
-	p += sprintf(p, "\tAlarm set to match: ");
+	p += sprintf(p, "alarm         : ");
 	if (tm.tm_hour <= 24)
-		p += sprintf(p, "hour=%d, ", tm.tm_hour);
+		p += sprintf(p, "%02d", tm.tm_hour);
 	else
-		p += sprintf(p, "hour=any, ");
+		p += sprintf(p, "**");
+	p += sprintf(p, "-");
 	if (tm.tm_min <= 59)
-		p += sprintf(p, "min=%d, ", tm.tm_min);
+		p += sprintf(p, "%02d", tm.tm_min);
 	else
-		p += sprintf(p, "min=any, ");
+		p += sprintf(p, "**");
+	p += sprintf(p, "-");
 	if (tm.tm_sec <= 59)
-		p += sprintf(p, "sec=%d.\n", tm.tm_sec);
+		p += sprintf(p, "%02d", tm.tm_sec);
 	else
-		p += sprintf(p, "sec=any.\n");
+		p += sprintf(p, "**");
+	p += sprintf(p, "\n");
 
-	p += sprintf(p, "\tMisc. settings: daylight=%s; BCD=%s; 24hr=%s; Sq-Wave=%s.\n",
-		((ctrl & RTC_DST_EN) ? "yes" : "no" ),
-		((ctrl & RTC_DM_BINARY) ? "no" : "yes" ),
-		((ctrl & RTC_24H) ? "yes" : "no" ),
+	p += sprintf(p, "daylight      : %s\n",
+		((ctrl & RTC_DST_EN) ? "yes" : "no" ));
+	p += sprintf(p, "bcd           : %s\n",
+		((ctrl & RTC_DM_BINARY) ? "no" : "yes" ));
+	p += sprintf(p, "24hr          : %s\n",
+		((ctrl & RTC_24H) ? "yes" : "no" ));
+	p += sprintf(p, "sqwave        : %s\n",
 		((ctrl & RTC_SQWE) ? "yes" : "no" ));
 
-	p += sprintf(p, "\tInterrupt for: alarm=%s; update=%s; periodic=%s.\n",
-		((ctrl & RTC_AIE) ? "yes" : "no" ),
-		((ctrl & RTC_UIE) ? "yes" : "no" ),
+	p += sprintf(p, "alarm_int     : %s\n",
+		((ctrl & RTC_AIE) ? "yes" : "no" ));
+	p += sprintf(p, "update_int    : %s\n",
+		((ctrl & RTC_UIE) ? "yes" : "no" ));
+	p += sprintf(p, "periodic_int  : %s\n",
 		((ctrl & RTC_PIE) ? "yes" : "no" ));
 
-	p += sprintf(p, "\tPeriodic interrupt rate set to %dHz.\n",
+	p += sprintf(p, "periodic_freq : %d\n",
 		(freq ? (65536/(1<<freq)) : 0));
 
-	p += sprintf(p, "\tRTC reports that CMOS battery is %s.\n",
-		(batt ? "okay" : "dead"));
+	p += sprintf(p, "battery_ok    : %s\n",
+		(batt ? "yes" : "no"));
 
 	return  p - buf;
 }

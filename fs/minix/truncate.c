@@ -15,8 +15,9 @@
 
 #define DIRECT_BLOCK		((inode->i_size + 1023) >> 10)
 #define INDIRECT_BLOCK(offset)	(DIRECT_BLOCK-offset)
-#define DINDIRECT_BLOCK(offset) ((DIRECT_BLOCK-offset)>>9)
-#define TINDIRECT_BLOCK(offset)	((DIRECT_BLOCK-(offset))>>9)
+#define V1_DINDIRECT_BLOCK(offset) ((DIRECT_BLOCK-offset)>>9)
+#define V2_DINDIRECT_BLOCK(offset) ((DIRECT_BLOCK-offset)>>8)
+#define TINDIRECT_BLOCK(offset) ((DIRECT_BLOCK-(offset))>>8)
 
 /*
  * Truncate has the most races in the whole filesystem: coding it is
@@ -147,10 +148,10 @@ static int V1_trunc_dindirect(struct inode * inode, int offset, unsigned short *
 		return 0;
 	}
 repeat:
-	for (i = DINDIRECT_BLOCK(offset) ; i < 512 ; i ++) {
+	for (i = V1_DINDIRECT_BLOCK(offset) ; i < 512 ; i ++) {
 		if (i < 0)
 			i = 0;
-		if (i < DINDIRECT_BLOCK(offset))
+		if (i < V1_DINDIRECT_BLOCK(offset))
 			goto repeat;
 		dind = i+(unsigned short *) dind_bh->b_data;
 		retry |= V1_trunc_indirect(inode,offset+(i<<9),dind);
@@ -309,13 +310,13 @@ static int V2_trunc_dindirect(struct inode * inode, int offset, unsigned long *p
 		return 0;
 	}
 repeat:
-	for (i = DINDIRECT_BLOCK(offset) ; i < 256 ; i ++) {
+	for (i = V2_DINDIRECT_BLOCK(offset) ; i < 256 ; i ++) {
 		if (i < 0)
 			i = 0;
-		if (i < DINDIRECT_BLOCK(offset))
+		if (i < V2_DINDIRECT_BLOCK(offset))
 			goto repeat;
 		dind = i+(unsigned long *) dind_bh->b_data;
-		retry |= V2_trunc_indirect(inode,offset+(i<<9),dind);
+		retry |= V2_trunc_indirect(inode,offset+(i<<8),dind);
 		mark_buffer_dirty(dind_bh, 1);
 	}
 	dind = (unsigned long *) dind_bh->b_data;
@@ -360,7 +361,7 @@ repeat:
                 if (i < TINDIRECT_BLOCK(offset))
                         goto repeat;
                 tind = i+(unsigned long *) tind_bh->b_data;
-                retry |= V2_trunc_dindirect(inode,offset+(i<<9),tind);
+                retry |= V2_trunc_dindirect(inode,offset+(i<<8),tind);
                 mark_buffer_dirty(tind_bh, 1);
 	}
         tind = (unsigned long *) tind_bh->b_data;

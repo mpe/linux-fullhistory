@@ -27,6 +27,7 @@
 #define IP_MASQ_F_NO_DADDR      	0x08 	/* no daddr yet */
 #define IP_MASQ_F_HASHED		0x10 	/* hashed entry */
 #define IP_MASQ_F_SAW_FIN		0x20 	/* tcp fin pkt seen */
+#define IP_MASQ_F_SAW_RST		0x40 	/* tcp rst pkt seen */
 
 #ifdef __KERNEL__
 
@@ -52,6 +53,7 @@ struct ip_masq {
 	__u32 		saddr, daddr, maddr;	/* src, dst & masq addresses */
         struct ip_masq_seq out_seq, in_seq;
 	struct ip_masq_app *app;	/* bound ip_masq_app object */
+	void		*app_data;	/* Application private data */
 	unsigned  flags;        	/* status flags */
 };
 
@@ -101,6 +103,7 @@ extern void ip_masq_set_expire(struct ip_masq *ms, unsigned long tout);
 struct ip_masq_app
 {
         struct ip_masq_app *next;
+	char *name;		/* name of application proxy */
         unsigned type;          /* type = proto<<16 | port (host byte order)*/
         int n_attach;
         int (*masq_init_1)      /* ip_masq initializer */
@@ -141,6 +144,11 @@ extern int ip_masq_unbind_app(struct ip_masq *ms);
  */
 extern int ip_masq_app_pkt_out(struct ip_masq *, struct sk_buff **skb_p, struct device *dev);
 extern int ip_masq_app_pkt_in(struct ip_masq *, struct sk_buff **skb_p, struct device *dev);
+
+/*
+ *	service routine(s).
+ */
+extern struct ip_masq * ip_masq_out_get_2(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port);
 
 /*
  *	/proc/net entry

@@ -9,16 +9,13 @@
 
 extern __inline__ void __delay(int loops)
 {
-	__asm__("\n\tmovel %0,d0\n1:\tsubql #1,d0\n\tbpls 1b\n"
+	__asm__("\n\tmovel %0,%/d0\n1:\tsubql #1,%/d0\n\tbpls 1b\n"
 		: /* no outputs */
 		: "g" (loops)
 		: "d0");
 }
 
 /*
- * division by multiplication: you don't have to worry about
- * loss of precision.
- *
  * Use only for very small delays ( < 1 msec).  Should probably use a
  * lookup table, really, as the multiplications take much too long with
  * short delays.  This is a "reasonable" implementation, though (and the
@@ -27,14 +24,24 @@ extern __inline__ void __delay(int loops)
  */
 extern __inline__ void udelay(unsigned long usecs)
 {
-	asm ("mulul %1,d0,%0\n\t"
-	     "divul  %2,d0,%0"
+	usecs *= 0x000010c6;		/* 2**32 / 1000000 */
+
+	asm ("mulul %1,%0:%2"
 	     : "=d" (usecs)
 	     : "d" (usecs),
-	       "i" (1000000),
-	       "0" (loops_per_sec)
-	     : "d0");
+	       "d" (loops_per_sec));
 	__delay(usecs);
+}
+
+extern __inline__ unsigned long muldiv(unsigned long a, unsigned long b, unsigned long c)
+{
+	__asm__("mulul %1,%/d0:%0\n\tdivul %2,%/d0:%0"
+		:"=d" (a)
+		:"d" (b),
+		"d" (c),
+		"0" (a)
+		:"d0");
+	return a;
 }
 
 #endif /* defined(_M68K_DELAY_H) */

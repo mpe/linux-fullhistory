@@ -224,6 +224,7 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 
 struct ip_masq_app ip_masq_irc = {
         NULL,			/* next */
+	"irc",			/* name */
         0,                      /* type */
         0,                      /* n_attach */
         masq_irc_init_1,        /* init_1 */

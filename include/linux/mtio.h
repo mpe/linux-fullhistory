@@ -234,6 +234,7 @@ struct mtconfiginfo {
 #define MT_ST_AUTO_LOCK		0x40
 #define MT_ST_DEF_WRITES	0x80
 #define MT_ST_CAN_BSR		0x100
+#define MT_ST_NO_BLKLIMS	0x200
 
 /* The mode parameters to be controlled. Parameter chosen with bits 20-28 */
 #define MT_ST_CLEAR_DEFAULT	0xfffff

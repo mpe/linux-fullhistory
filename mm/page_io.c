@@ -67,8 +67,10 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		return;
 	}
 	/* Make sure we are the only process doing I/O with this swap page. */
-	while (set_bit(offset,p->swap_lockmap))
+	while (set_bit(offset,p->swap_lockmap)) {
+		run_task_queue(&tq_disk);
 		sleep_on(&lock_queue);
+	}
 	if (rw == READ)
 		kstat.pswpin++;
 	else

@@ -60,6 +60,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_RISCOM8),y)
+L_OBJS += riscom8.o
+else
+  ifeq ($(CONFIG_RISCOM8),m)
+  M_OBJS += riscom8.o
+  endif
+endif
+
 ifeq ($(CONFIG_ATIXL_BUSMOUSE),y)
 M = y
 L_OBJS += atixlmouse.o

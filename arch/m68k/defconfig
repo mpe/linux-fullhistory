@@ -1,0 +1,145 @@
+#
+# Automatically generated make config: don't edit
+#
+
+#
+# Loadable module support
+#
+# CONFIG_MODULES is not set
+# CONFIG_MODVERSIONS is not set
+# CONFIG_KERNELD is not set
+
+#
+# General setup
+#
+CONFIG_AMIGA=y
+# CONFIG_ATARI is not set
+# CONFIG_MAC is not set
+CONFIG_FPSP_040=y
+# CONFIG_IFPSP_060 is not set
+# CONFIG_NET is not set
+CONFIG_SYSVIPC=y
+CONFIG_BINFMT_AOUT=y
+CONFIG_BINFMT_ELF=y
+CONFIG_KERNEL_ELF=y
+# CONFIG_ZORRO is not set
+
+#
+# Block device driver configuration
+#
+CONFIG_BLK_DEV_FD=y
+CONFIG_BLK_DEV_RAM=y
+# CONFIG_BLK_DEV_LOOP is not set
+# CONFIG_BLK_DEV_IDE is not set
+# CONFIG_FB_CYBER is not set
+# CONFIG_AMIGA_Z2RAM is not set
+# CONFIG_ATARI_ACSI is not set
+
+#
+# Networking options
+#
+# CONFIG_FIREWALL is not set
+# CONFIG_NET_ALIAS is not set
+CONFIG_INET=y
+# CONFIG_IP_FORWARD is not set
+# CONFIG_IP_MULTICAST is not set
+# CONFIG_IP_FIREWALL is not set
+# CONFIG_IP_ACCT is not set
+
+#
+# (it is safe to leave these untouched)
+#
+# CONFIG_INET_PCTCP is not set
+# CONFIG_INET_RARP is not set
+# CONFIG_NO_PATH_MTU_DISCOVERY is not set
+# CONFIG_TCP_NAGLE_OFF is not set
+CONFIG_IP_NOSR=y
+# CONFIG_SKB_LARGE is not set
+
+#
+#  
+#
+# CONFIG_IPX is not set
+# CONFIG_ATALK is not set
+# CONFIG_AX25 is not set
+# CONFIG_BRIDGE is not set
+# CONFIG_NETLINK is not set
+
+#
+# SCSI support
+#
+CONFIG_SCSI=y
+
+#
+# SCSI support type (disk, tape, CDrom)
+#
+CONFIG_BLK_DEV_SD=y
+CONFIG_CHR_DEV_ST=y
+CONFIG_BLK_DEV_SR=y
+# CONFIG_CHR_DEV_SG is not set
+
+#
+# Some SCSI devices (e.g. CD jukebox) support multiple LUNs
+#
+# CONFIG_SCSI_MULTI_LUN is not set
+
+#
+# SCSI low-level drivers
+#
+CONFIG_A3000_SCSI=y
+# CONFIG_A2091_SCSI is not set
+# CONFIG_GVP11_SCSI is not set
+# CONFIG_ATARI_SCSI is not set
+
+#
+# Network device support
+#
+# CONFIG_NETDEVICES is not set
+# CONFIG_DUMMY is not set
+# CONFIG_SLIP is not set
+# CONFIG_PPP is not set
+# CONFIG_ARIADNE is not set
+# CONFIG_A2065 is not set
+# CONFIG_HYDRA is not set
+# CONFIG_ATARILANCE is not set
+
+#
+# Filesystems
+#
+# CONFIG_QUOTA is not set
+CONFIG_MINIX_FS=y
+# CONFIG_EXT_FS is not set
+CONFIG_EXT2_FS=y
+# CONFIG_XIA_FS is not set
+CONFIG_FAT_FS=y
+CONFIG_MSDOS_FS=y
+# CONFIG_VFAT_FS is not set
+# CONFIG_UMSDOS_FS is not set
+CONFIG_PROC_FS=y
+CONFIG_NFS_FS=y
+# CONFIG_ROOT_NFS is not set
+# CONFIG_SMB_FS is not set
+# CONFIG_ISO9660_FS is not set
+# CONFIG_HPFS_FS is not set
+# CONFIG_SYSV_FS is not set
+# CONFIG_AFFS_FS is not set
+
+#
+# Character devices
+#
+# CONFIG_PRINTER is not set
+CONFIG_AMIGAMOUSE=y
+# CONFIG_ATARIMOUSE is not set
+# CONFIG_UMISC is not set
+
+#
+# Sound
+#
+# CONFIG_SOUND is not set
+# CONFIG_DMASOUND is not set
+
+#
+# Kernel hacking
+#
+# CONFIG_PROFILE is not set
+CONFIG_SCSI_CONSTANTS=y

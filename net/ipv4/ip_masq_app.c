@@ -437,24 +437,35 @@ int ip_masq_app_getinfo(char *buffer, char **start, off_t offset, int length, in
         int len=0;
         struct ip_masq_app * mapp;
         unsigned idx;
-        len=sprintf(buffer,"prot port    n_attach\n");
+
+	if (offset < 22)
+		len=sprintf(buffer,"%-21s\n", "prot port    n_attach");
+	pos = 22;
+
         for (idx=0 ; idx < IP_MASQ_APP_TAB_SIZE; idx++)
                 for (mapp = ip_masq_app_base[idx]; mapp ; mapp = mapp->next) {
-                        len += sprintf(buffer+len, "%s  %-7u %-7d\n",
+			/* 
+			 * If you change the length of this sprintf, then all
+			 * the length calculations need fixing too!
+			 * Line length = 22 (3 + 2 + 7 + 1 + 7 + 1 + 1)
+			 */
+			pos += 22;
+			if (pos < offset)
+				continue;
+
+                        len += sprintf(buffer+len, "%-3s  %-7u %-7d \n",
                                        masq_proto_name(IP_MASQ_APP_PROTO(mapp->type)),
                                        IP_MASQ_APP_PORT(mapp->type), mapp->n_attach);
-                        pos=begin+len;
-                        if(pos<offset) {
-                                len=0;
-                                begin=pos;
-                        }
-                        if(pos>offset+length)
-                                break;
+
+                        if(len >= length)
+                                goto done;
                 }
-        *start=buffer+(offset-begin);
-        len-=(offset-begin);
-        if(len>length)
-                len=length;	
+done:
+	begin = len - (pos - offset);
+        *start = buffer + begin;
+        len -= begin;
+        if (len > length)
+                len = length;	
         return len;
 }
 

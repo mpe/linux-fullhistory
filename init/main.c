@@ -138,6 +138,9 @@ extern void pcxx_setup(char *str, int *ints);
 #ifdef CONFIG_ISDN_DRV_PCBIT
 extern void pcbit_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_RISCOM8
+extern void riscom8_setup(char *str, int *ints);
+#endif
 
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
@@ -345,6 +348,9 @@ struct {
 #endif
 #ifdef CONFIG_DIGI
 	{ "digi=", pcxx_setup },
+#endif
+#ifdef CONFIG_RISCOM8
+	{ "riscom8=", riscom8_setup },
 #endif
 	{ 0, 0 }
 };
@@ -639,6 +645,8 @@ static void smp_init(void)
 
 	for (i=1; i<smp_num_cpus; i++)
 	{
+		struct task_struct *n, *p;
+
 		j = cpu_logical_map[i];
 		/*
 		 *	We use kernel_thread for the idlers which are
@@ -650,6 +658,14 @@ static void smp_init(void)
 		 */
 		current_set[j]=task[i];
 		current_set[j]->processor=j;
+		cli();
+		n = task[i]->next_run;
+		p = task[i]->prev_run;
+		nr_running--;
+		n->prev_run = p;
+		p->next_run = n;
+		task[i]->next_run = task[i]->prev_run = task[i];
+		sti();
 	}
 }		
 
