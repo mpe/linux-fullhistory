@@ -148,8 +148,7 @@ int cifs_open(struct inode *inode, struct file *file)
 	able to simply do a filemap_fdatawrite/filemap_fdatawait first */
 	buf = kmalloc(sizeof(FILE_ALL_INFO), GFP_KERNEL);
 	if (buf == NULL) {
-		if (full_path)
-			kfree(full_path);
+		kfree(full_path);
 		FreeXid(xid);
 		return -ENOMEM;
 	}
@@ -248,10 +247,8 @@ int cifs_open(struct inode *inode, struct file *file)
 		}
 	}
 
-	if (buf)
-		kfree(buf);
-	if (full_path)
-		kfree(full_path);
+	kfree(buf);
+	kfree(full_path);
 	FreeXid(xid);
 	return rc;
 }
@@ -342,8 +339,7 @@ static int cifs_reopen_file(struct inode *inode, struct file *file,
 /*	buf = kmalloc(sizeof(FILE_ALL_INFO), GFP_KERNEL);
 	if (buf == 0) {
 		up(&pCifsFile->fh_sem);
-		if (full_path)
-			kfree(full_path);
+		kfree(full_path);
 		FreeXid(xid);
 		return -ENOMEM;
 	} */
@@ -396,8 +392,7 @@ static int cifs_reopen_file(struct inode *inode, struct file *file,
 		}
 	}
 
-	if (full_path)
-		kfree(full_path);
+	kfree(full_path);
 	FreeXid(xid);
 	return rc;
 }
@@ -431,8 +426,7 @@ int cifs_close(struct inode *inode, struct file *file)
 		list_del(&pSMBFile->flist);
 		list_del(&pSMBFile->tlist);
 		write_unlock(&file->f_owner.lock);
-		if (pSMBFile->search_resume_name)
-			kfree(pSMBFile->search_resume_name);
+		kfree(pSMBFile->search_resume_name);
 		kfree(file->private_data);
 		file->private_data = NULL;
 	} else
