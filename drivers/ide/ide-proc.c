@@ -107,8 +107,6 @@ static int proc_ide_read_identify
 	if (drive) {
 		unsigned short *val = (unsigned short *) page;
 
-		BUG_ON(!drive->driver);
-
 		err = taskfile_lib_get_identify(drive, page);
 		if (!err) {
 			char *out = ((char *)page) + (SECTOR_WORDS * 4);
@@ -312,8 +310,11 @@ static int proc_ide_read_driver
 	ide_driver_t	*driver = drive->driver;
 	int		len;
 
-	len = sprintf(page, "%s version %s\n",
-			driver->name, driver->version);
+	if (driver) {
+		len = sprintf(page, "%s version %s\n",
+				driver->name, driver->version);
+	} else
+		len = sprintf(page, "ide-default version 0.9.newide\n");
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
 
