@@ -77,7 +77,6 @@
 #include <linux/timer.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
-#include <linux/init.h>
 #include <net/checksum.h>
 #include <net/slhc_vj.h>
 #include <asm/unaligned.h>
@@ -749,12 +748,6 @@ int init_module(void)
 void cleanup_module(void)
 {
 	return;
-}
-
-#else /* MODULE */
-int __init slhc_install(void)
-{
-	return 0;
 }
 
 #endif /* MODULE */

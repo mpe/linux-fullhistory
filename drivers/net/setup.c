@@ -12,7 +12,6 @@ extern int mkiss_init_ctrl_dev(void);
 extern int slip_init_ctrl_dev(void);
 extern int strip_init_ctrl_dev(void);
 extern int x25_asy_init_ctrl_dev(void);
-extern int slhc_install(void);
   
 extern int dmascc_init(void);
 extern int yam_init(void);
@@ -78,22 +77,12 @@ struct net_probe pci_probes[] __initdata = {
 #endif
 #if defined(CONFIG_COMX)
 	{comx_init, 0},
-#endif	/*
-	 *	SLHC if present needs attaching so other people see it
-	 *	even if not opened.
-	 */
+#endif
+	 
 #if defined(CONFIG_LANMEDIA)
 	{lmc_setup, 0},
 #endif
 	 
-#ifdef CONFIG_INET	 
-#if (defined(CONFIG_SLIP) && defined(CONFIG_SLIP_COMPRESSED)) \
-	 || defined(CONFIG_PPP) \
-    || (defined(CONFIG_ISDN) && defined(CONFIG_ISDN_PPP))
-	{slhc_install, 0},
-#endif	
-#endif
-
 /*
 *
 *	Wireless non-HAM

@@ -12468,14 +12468,6 @@ CONFIG_APM_DISPLAY_BLANK
   backlight at all, or it might print a lot of errors to the console,
   especially if you are using gpm.
 
-Ignore multiple suspend/standby events
-CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
-  This option is necessary on the IBM Thinkpad 560, but should work on
-  all other laptops. When the APM BIOS returns multiple suspend or
-  standby events while one is already being processed they will be
-  ignored. Without this the Thinkpad 560 has troubles with the user
-  level daemon apmd, and with the PCMCIA package pcmcia-cs.
-
 Ignore multiple suspend/resume cycles
 CONFIG_APM_IGNORE_SUSPEND_BOUNCE
   This option is necessary on the Dell Inspiron 3200 and others, but

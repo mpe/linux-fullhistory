@@ -16,7 +16,7 @@
 #include <linux/usb.h>
 
 
-static const char *version = __FILE__ ": v0.3.9 2000/04/11 Written by Petko Manolov (petkan@spct.net)\n";
+static const char *version = __FILE__ ": v0.3.12 2000/05/22 (C) 1999-2000 Petko Manolov (petkan@spct.net)\n";
 
 
 #define	PEGASUS_MTU		1500
@@ -24,12 +24,15 @@ static const char *version = __FILE__ ": v0.3.9 2000/04/11 Written by Petko Mano
 #define	SROM_WRITE		0x01
 #define	SROM_READ		0x02
 #define	PEGASUS_TX_TIMEOUT	(HZ*5)
+#define	PEGASUS_RESET		1
 #define	ALIGN(x)		x __attribute__((aligned(L1_CACHE_BYTES)))
+
 
 struct pegasus {
 	struct usb_device	*usb;
 	struct net_device	*net;
 	struct net_device_stats	stats;
+	int			flags;
 	spinlock_t		pegasus_lock;
 	struct urb		rx_urb, tx_urb, intr_urb;
 	unsigned char		ALIGN(rx_buff[PEGASUS_MAX_MTU]); 
@@ -44,8 +47,10 @@ struct usb_eth_dev {
 	void	*private;
 };
 
+
 static int loopback = 0;
 static int multicast_filter_limit = 32;
+
 
 MODULE_AUTHOR("Petko Manolov <petkan@spct.net>");
 MODULE_DESCRIPTION("ADMtek AN986 Pegasus USB Ethernet driver");
@@ -98,6 +103,7 @@ static int pegasus_read_phy_word(struct usb_device *dev, __u8 index, __u16 *regd
 	return 1;
 }
 
+
 static int pegasus_write_phy_word(struct usb_device *dev, __u8 index, __u16 regdata)
 {
 	int i;
@@ -114,6 +120,7 @@ static int pegasus_write_phy_word(struct usb_device *dev, __u8 index, __u16 regd
 	warn("write_phy_word() failed");
 	return 1;
 }
+
 
 static int pegasus_rw_srom_word(struct usb_device *dev, __u8 index, __u16 *retdata, __u8 direction)
 {
@@ -134,6 +141,7 @@ static int pegasus_rw_srom_word(struct usb_device *dev, __u8 index, __u16 *retda
 	return 1;
 }
 
+
 static int pegasus_get_node_id(struct usb_device *dev, __u8 *id)
 {
 	int i;
@@ -142,6 +150,7 @@ static int pegasus_get_node_id(struct usb_device *dev, __u8 *id)
 			return 1;
 	return 0;
 }
+
 
 static int pegasus_reset_mac(struct usb_device *dev)
 {
@@ -164,6 +173,7 @@ static int pegasus_reset_mac(struct usb_device *dev)
 
 	return 1;
 }
+
 
 static int pegasus_start_net(struct net_device *dev, struct usb_device *usb)
 {
@@ -195,12 +205,13 @@ static int pegasus_start_net(struct net_device *dev, struct usb_device *usb)
 
 	data[0] = 0xc9;
 	data[1] = (partmedia & 0x100) ? 0x30 : ((partmedia & 0x80) ? 0x10 : 0);
-	data[2] = (loopback & 1) ? 0x08 : 0x00;
+	data[2] = (loopback & 1) ? 0x09 : 0x01;
 
 	pegasus_set_registers(usb, 0, 3, data);
 
 	return 0;
 }
+
 
 static void pegasus_read_bulk(struct urb *urb)
 {
@@ -253,14 +264,15 @@ goon:
 		warn("(prb)failed rx_urb %d", res);
 }
 
+
 static void pegasus_irq(urb_t *urb)
 {
-	if(urb->status) {
-		__u8	*d = urb->transfer_buffer;
-		printk("txst0 %x, txst1 %x, rxst %x, rxlst0 %x, rxlst1 %x, wakest %x",
-			d[0], d[1], d[2], d[3], d[4], d[5]);
-	}
+	__u8	*d = urb->transfer_buffer;
+	
+	if ( d[0] )
+		dbg("txst0=0x%2x", d[0]);
 }
+
 
 static void pegasus_write_bulk(struct urb *urb)
 {
@@ -280,11 +292,14 @@ static void pegasus_tx_timeout(struct net_device *net)
 	struct pegasus *pegasus = net->priv;
 
 	warn("%s: Tx timed out. Reseting...", net->name);
+	usb_unlink_urb(&pegasus->tx_urb);
 	pegasus->stats.tx_errors++;
 	net->trans_start = jiffies;
+	pegasus->flags |= PEGASUS_RESET;
 
 	netif_wake_queue(net);
 }
+
 
 static int pegasus_start_xmit(struct sk_buff *skb, struct net_device *net)
 {
@@ -317,10 +332,12 @@ static int pegasus_start_xmit(struct sk_buff *skb, struct net_device *net)
 	return 0;
 }
 
+
 static struct net_device_stats *pegasus_netdev_stats(struct net_device *dev)
 {
 	return &((struct pegasus *)dev->priv)->stats;
 }
+
 
 static int pegasus_open(struct net_device *net)
 {
@@ -334,14 +351,17 @@ static int pegasus_open(struct net_device *net)
 
 	if ((res = usb_submit_urb(&pegasus->rx_urb)))
 		warn("(open)failed rx_urb %d", res);
-
-/*	usb_submit_urb(&pegasus->intr_urb);*/
+		
+	if ((res = usb_submit_urb(&pegasus->intr_urb)))
+		warn("(open)failed intr_urb %d", res);
+		
 	netif_start_queue(net);
 
 	MOD_INC_USE_COUNT;
 
 	return 0;
 }
+
 
 static int pegasus_close(struct net_device *net)
 {
@@ -351,12 +371,13 @@ static int pegasus_close(struct net_device *net)
 
 	usb_unlink_urb(&pegasus->rx_urb);
 	usb_unlink_urb(&pegasus->tx_urb);
-/*	usb_unlink_urb(&pegasus->intr_urb); */
+	usb_unlink_urb(&pegasus->intr_urb);
 
 	MOD_DEC_USE_COUNT;
 
 	return 0;
 }
+
 
 static int pegasus_ioctl(struct net_device *net, struct ifreq *rq, int cmd)
 {
@@ -379,6 +400,7 @@ static int pegasus_ioctl(struct net_device *net, struct ifreq *rq, int cmd)
 	}
 }
 
+
 static void pegasus_set_rx_mode(struct net_device *net)
 {
 	struct pegasus *pegasus = net->priv;
@@ -400,6 +422,7 @@ static void pegasus_set_rx_mode(struct net_device *net)
 	netif_wake_queue(net);
 }
 
+
 static int check_device_ids( __u16 vendor, __u16 product )
 {
 	int i=0;
@@ -412,6 +435,7 @@ static int check_device_ids( __u16 vendor, __u16 product )
 	}
 	return	-1;
 }
+
 
 static void * pegasus_probe(struct usb_device *dev, unsigned int ifnum)
 {
@@ -463,13 +487,14 @@ static void * pegasus_probe(struct usb_device *dev, unsigned int ifnum)
 			pegasus->tx_buff, PEGASUS_MAX_MTU, pegasus_write_bulk,
 			pegasus);
 	FILL_INT_URB(&pegasus->intr_urb, dev, usb_rcvintpipe(dev, 3),
-			pegasus->intr_buff, 8, pegasus_irq, pegasus, 250);
+			pegasus->intr_buff, 8, pegasus_irq, pegasus, 500);
 
 
 	printk(KERN_INFO "%s: %s\n", net->name, usb_dev_id[dev_indx].name);
 
 	return pegasus;
 }
+
 
 static void pegasus_disconnect(struct usb_device *dev, void *ptr)
 {
@@ -487,10 +512,11 @@ static void pegasus_disconnect(struct usb_device *dev, void *ptr)
 
 	usb_unlink_urb(&pegasus->rx_urb);
 	usb_unlink_urb(&pegasus->tx_urb);
-/*	usb_unlink_urb(&pegasus->intr_urb);*/
+	usb_unlink_urb(&pegasus->intr_urb);
 
 	kfree(pegasus);
 }
+
 
 static struct usb_driver pegasus_driver = {
 	name:		"pegasus",

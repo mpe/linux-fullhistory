@@ -18,9 +18,6 @@
 
 
 #include <linux/config.h>
-
-#ifdef CONFIG_USB_SERIAL_KEYSPAN_PDA
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
@@ -700,4 +697,3 @@ struct usb_serial_device_type keyspan_pda_device = {
 	shutdown:		keyspan_pda_shutdown,
 };
 
-#endif	/* CONFIG_USB_SERIAL_KEYSPAN_PDA */

@@ -14,6 +14,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (05/22/2000) gkh
+ *	Changed the makefile, enabling the big CONFIG_USB_SERIAL_SOMTHING to be 
+ *	removed from the individual device source files.
+ *
  * (05/03/2000) gkh
  *	Added the Digi Acceleport driver from Al Borchers and Peter Berger.
  * 

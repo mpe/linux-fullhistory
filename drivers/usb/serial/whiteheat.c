@@ -21,9 +21,6 @@
  */
 
 #include <linux/config.h>
-
-#ifdef CONFIG_USB_SERIAL_WHITEHEAT
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
@@ -406,7 +403,4 @@ static void whiteheat_shutdown (struct usb_serial *serial)
 
 	return;
 }
-
-#endif	/* CONFIG_USB_SERIAL_WHITEHEAT */
-
 

@@ -118,6 +118,7 @@ EXPORT_SYMBOL(kfree);
 EXPORT_SYMBOL(kfree_s);
 EXPORT_SYMBOL(vmalloc);
 EXPORT_SYMBOL(vfree);
+EXPORT_SYMBOL(__vmalloc);
 EXPORT_SYMBOL(mem_map);
 EXPORT_SYMBOL(remap_page_range);
 EXPORT_SYMBOL(max_mapnr);

@@ -32,9 +32,6 @@
 
 
 #include <linux/config.h>
-
-#ifdef CONFIG_USB_SERIAL_FTDI_SIO
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
@@ -722,7 +719,4 @@ static int ftdi_sio_ioctl (struct usb_serial_port *port, struct file * file, uns
 	dbg("ftdi_sio_ioctl returning 0");
 	return 0;
 } /* ftdi_sio_ioctl */
-
-#endif 	/* CONFIG_USB_SERIAL_FTDI_SIO */
-
 

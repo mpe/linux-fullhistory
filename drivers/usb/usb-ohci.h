@@ -432,7 +432,7 @@ static int ep_unlink(ohci_t * ohci, ed_t * ed);
 static ed_t * ep_add_ed(struct usb_device * usb_dev, unsigned int pipe, int interval, int load);
 static void ep_rm_ed(struct usb_device * usb_dev, ed_t * ed);
 /* td */
-static void td_fill(unsigned int info, void * data, int len, urb_t * urb, int type, int index);
+static void td_fill(unsigned int info, void * data, int len, urb_t * urb, int index);
 static void td_submit_urb(urb_t * urb);
 /* root hub */
 static int rh_submit_urb(urb_t * urb);

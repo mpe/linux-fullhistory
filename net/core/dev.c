@@ -79,7 +79,6 @@
 #include <linux/brlock.h>
 #include <net/sock.h>
 #include <linux/rtnetlink.h>
-#include <net/slhc.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/if_bridge.h>

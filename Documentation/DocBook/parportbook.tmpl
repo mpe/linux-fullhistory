@@ -62,7 +62,7 @@
 
    <para>
     The first parallel port support for Linux came with the line
-    printer driver, <filename>lp</filename>.  The printer driver is a
+    printer driver, <literal>lp</literal>.  The printer driver is a
     character special device, and (in Linux 2.0) had support for
     writing, via <function>write</function>, and configuration and
     statistics reporting via <function>ioctl</function>.
@@ -152,7 +152,7 @@
   -->
 
    <para>
-    The <filename>parport</filename> code in Linux 2.2 was designed to
+    The <literal>parport</literal> code in Linux 2.2 was designed to
     meet these problems of architectural differences in parallel
     ports, of port-sharing between devices with pass-through ports,
     and of lack of support for IEEE 1284 transfer modes.
@@ -161,7 +161,7 @@
    <!-- platform differences -->
 
    <para>
-    There are two layers to the <filename>parport</filename>
+    There are two layers to the <literal>parport</literal>
     subsystem, only one of which deals directly with the hardware.
     The other layer deals with sharing and IEEE 1284 transfer modes.
     In this way, parallel support for a particular architecture comes
@@ -172,13 +172,13 @@
    <!-- sharing model -->
 
    <para>
-    The sharing model provided by the <filename>parport</filename>
+    The sharing model provided by the <literal>parport</literal>
     subsystem is one of exclusive access.  A device driver, such as
-    the printer driver, must ask the <filename>parport</filename>
+    the printer driver, must ask the <literal>parport</literal>
     layer for access to the port, and can only use the port once
     access has been granted.  When it has finished a
     <quote>transaction</quote>, it can tell the
-    <filename>parport</filename> layer that it may release the port
+    <literal>parport</literal> layer that it may release the port
     for other device drivers to use.
    </para>
 
@@ -299,10 +299,10 @@
    <title>Sharing core</title>
 
    <para>
-    At the core of the <filename>parport</filename> subsystem is the
+    At the core of the <literal>parport</literal> subsystem is the
     sharing mechanism (see
     <filename>drivers/parport/share.c</filename>).  This module,
-    <filename>parport</filename>, is responsible for keeping track of
+    <literal>parport</literal>, is responsible for keeping track of
     which ports there are in the system, which device drivers might be
     interested in new ports, and whether or not each port is available
     for use (or if not, which driver is currently using it).
@@ -314,10 +314,10 @@
    <title>Parports and their overrides</title>
 
    <para>
-    The generic <filename>parport</filename> sharing code doesn't
+    The generic <literal>parport</literal> sharing code doesn't
     directly handle the parallel port hardware.  That is done instead
-    by <quote>low-level</quote> <filename>parport</filename> drivers.
-    The function of a low-level <filename>parport</filename> driver is
+    by <quote>low-level</quote> <literal>parport</literal> drivers.
+    The function of a low-level <literal>parport</literal> driver is
     to detect parallel ports, register them with the sharing code, and
     provide a list of access functions for each port.
    </para>
@@ -340,11 +340,11 @@
 
    <para>
     Stacked on top of the sharing mechanism, but still in the
-    <filename>parport</filename> module, are functions for
+    <literal>parport</literal> module, are functions for
     transferring data.  They are provided for the device drivers to
     use, and are very much like library routines.  Since these
     transfer functions are provided by the generic
-    <filename>parport</filename> core they must use the <quote>lowest
+    <literal>parport</literal> core they must use the <quote>lowest
     common denominator</quote> set of access functions: they can set
     the control lines, examine the status lines, and use the data
     lines.  With some parallel ports the data lines can only be set
@@ -356,7 +356,7 @@
    </para>
 
    <para>
-    The low-level <filename>parport</filename> drivers also provide
+    The low-level <literal>parport</literal> drivers also provide
     IEEE 1284 transfer functions, as names in the access function
     list.  The low-level driver can just name the generic IEEE 1284
     transfer functions for this.  Some parallel ports can do IEEE 1284
@@ -373,7 +373,7 @@
 
    <para>
     When a parallel port device driver (such as
-    <filename>lp</filename>) initialises it tells the sharing layer
+    <literal>lp</literal>) initialises it tells the sharing layer
     about itself using <function>parport_register_driver</function>.
     The information is put into a <structname>struct
     parport_driver</structname>, which is put into a linked list.  The
@@ -441,7 +441,7 @@
     the draft specifies the on-the-wire protocol for daisy-chaining
     and multiplexing, and also suggests a programming interface for
     using it.  That interface (or most of it) has been implemented in
-    the <filename>parport</filename> code in Linux.
+    the <literal>parport</literal> code in Linux.
    </para>
 
    <para>
@@ -494,20 +494,27 @@
     <function>parport_device_coords</function>.
    </para>
 
-   <funcsynopsis><funcprototype>
+   <funcsynopsis>
+    <funcsynopsisinfo>
+#include &lt;parport.h&gt;
+    </funcsynopsisinfo>
+    <funcprototype>
      <funcdef>int <function>parport_device_num</function></funcdef>
      <paramdef>int <parameter>parport</parameter></paramdef>
      <paramdef>int <parameter>mux</parameter></paramdef>
      <paramdef>int <parameter>daisy</parameter></paramdef>
-    </funcprototype></funcsynopsis>
+    </funcprototype>
+   </funcsynopsis>
 
-   <funcsynopsis><funcprototype>
+   <funcsynopsis>
+    <funcprototype>
      <funcdef>int <function>parport_device_coords</function></funcdef>
      <paramdef>int <parameter>devnum</parameter></paramdef>
      <paramdef>int *<parameter>parport</parameter></paramdef>
      <paramdef>int *<parameter>mux</parameter></paramdef>
      <paramdef>int *<parameter>daisy</parameter></paramdef>
-    </funcprototype></funcsynopsis>
+    </funcprototype>
+   </funcsynopsis>
 
    <para>
     Any parallel port peripheral will be connected directly or
@@ -524,18 +531,25 @@
     <function>parport_find_class</function>.
    </para>
 
-   <funcsynopsis><funcprototype>
+   <funcsynopsis>
+    <funcsynopsisinfo>
+#include &lt;parport.h&gt;
+    </funcsynopsisinfo>
+    <funcprototype>
      <funcdef>int <function>parport_find_device</function></funcdef>
      <paramdef>const char *<parameter>mfg</parameter></paramdef>
      <paramdef>const char *<parameter>mdl</parameter></paramdef>
      <paramdef>int <parameter>from</parameter></paramdef>
-    </funcprototype></funcsynopsis>
+    </funcprototype>
+   </funcsynopsis>
 
-   <funcsynopsis><funcprototype>
+   <funcsynopsis>
+    <funcprototype>
      <funcdef>int <function>parport_find_class</function></funcdef>
      <paramdef>parport_device_class <parameter>cls</parameter></paramdef>
      <paramdef>int <parameter>from</parameter></paramdef>
-    </funcprototype></funcsynopsis>
+    </funcprototype>
+   </funcsynopsis>
 
    <para>
     These functions take a device number (in addition to some other
@@ -572,7 +586,7 @@
    This section is written from the point of view of the device driver
    programmer, who might be writing a driver for a printer or a
    scanner or else anything that plugs into the parallel port.  It
-   explains how to use the <filename>parport</filename> interface to
+   explains how to use the <literal>parport</literal> interface to
    find parallel ports, use them, and share them with other device
    drivers.
   </para>
@@ -585,55 +599,62 @@
 
   <para>
    The interactions between the device driver and the
-   <filename>parport</filename> layer are as follows.  First, the
+   <literal>parport</literal> layer are as follows.  First, the
    device driver registers its existence with
-   <filename>parport</filename>, in order to get told about any
+   <literal>parport</literal>, in order to get told about any
    parallel ports that have been (or will be) detected.  When it gets
    told about a parallel port, it then tells
-   <filename>parport</filename> that it wants to drive a device on
+   <literal>parport</literal> that it wants to drive a device on
    that port.  Thereafter it can claim exclusive access to the port in
    order to talk to its device.
   </para>
 
   <para>
    So, the first thing for the device driver to do is tell
-   <filename>parport</filename> that it wants to know what parallel
+   <literal>parport</literal> that it wants to know what parallel
    ports are on the system.  To do this, it uses the
    <function>parport_register_device</function> function:
   </para>
 
-  <programlisting>
-   <![CDATA[
+  <funcsynopsis>
+   <funcsynopsisinfo>
+#include &lt;parport.h&gt;
+
 struct parport_driver {
         const char *name;
         void (*attach) (struct parport *);
         void (*detach) (struct parport *);
         struct parport_driver *next;
 };
-   ]]></programlisting>
+   </funcsynopsisinfo>
 
-  <funcsynopsis><funcprototype>
+   <funcprototype>
     <funcdef>int <function>parport_register_driver</function></funcdef>
     <paramdef>struct parport_driver *<parameter>driver</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
   <para>
    In other words, the device driver passes pointers to a couple of
-   functions to <filename>parport</filename>, and
-   <filename>parport</filename> calls <function>attach</function> for
+   functions to <literal>parport</literal>, and
+   <literal>parport</literal> calls <function>attach</function> for
    each port that's detected (and <function>detach</function> for each
    port that disappears---yes, this can happen).
   </para>
 
   <para>
    The next thing that happens is that the device driver tells
-   <filename>parport</filename> that it thinks there's a device on the
+   <literal>parport</literal> that it thinks there's a device on the
    port that it can drive.  This typically will happen in the driver's
    <function>attach</function> function, and is done with
    <function>parport_register_device</function>:
   </para>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcsynopsisinfo>
+#include &lt;parport.h&gt;
+   </funcsynopsisinfo>
+   <funcprototype>
     <funcdef>struct pardevice *<function>parport_register_device</function></funcdef>
     <paramdef>struct parport *<parameter>port</parameter></paramdef>
     <paramdef>const char *<parameter>name</parameter></paramdef>
@@ -645,7 +666,8 @@ struct parport_driver {
      <funcparams>int, void *, struct pt_regs *</funcparams></paramdef>
     <paramdef>int <parameter>flags</parameter></paramdef>
     <paramdef>void *<parameter>handle</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
   <para>
    The <parameter>port</parameter> comes from the parameter supplied
@@ -705,7 +727,7 @@ struct parport_driver {
 
   <para>
    The <parameter>flags</parameter> are for telling
-   <filename>parport</filename> any requirements or hints that are
+   <literal>parport</literal> any requirements or hints that are
    useful.  The only useful value here (other than
    <constant>0</constant>, which is the usual value) is
    <constant>PARPORT_DEV_EXCL</constant>.  The point of that flag is
@@ -738,7 +760,11 @@ struct parport_driver {
    than a pointer to a <structname>struct parport</structname>.
   </para>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcsynopsisinfo>
+#include &lt;parport.h&gt;
+   </funcsynopsisinfo>
+   <funcprototype>
     <funcdef>struct pardevice *<function>parport_open</function></funcdef>
     <paramdef>int <parameter>devnum</parameter></paramdef>
     <paramdef>int <parameter>(*pf)</parameter>
@@ -749,14 +775,18 @@ struct parport_driver {
      <funcparams>int, void *, struct pt_regs *</funcparams></paramdef>
     <paramdef>int <parameter>flags</parameter></paramdef>
     <paramdef>void *<parameter>handle</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcprototype>
     <funcdef>void <function>parport_close</function></funcdef>
     <paramdef>struct pardevice *<parameter>dev</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcprototype>
     <funcdef>struct pardevice *<function>parport_register_device</function></funcdef>
     <paramdef>struct parport *<parameter>port</parameter></paramdef>
     <paramdef>const char *<parameter>name</parameter></paramdef>
@@ -768,12 +798,15 @@ struct parport_driver {
      <funcparams>int, void *, struct pt_regs *</funcparams></paramdef>
     <paramdef>int <parameter>flags</parameter></paramdef>
     <paramdef>void *<parameter>handle</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcprototype>
     <funcdef>void <function>parport_unregister_device</function></funcdef>
     <paramdef>struct pardevice *<parameter>dev</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
   <para>
    The intended use of these functions is during driver initialisation
@@ -799,20 +832,29 @@ while ((devnum = parport_find_class (PARPORT_CLASS_DIGCAM,
    port.
   </para>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcsynopsisinfo>
+#include &lt;parport.h&gt;
+   </funcsynopsisinfo>
+   <funcprototype>
     <funcdef>int <function>parport_claim</function></funcdef>
     <paramdef>struct pardevice *<parameter>dev</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcprototype>
     <funcdef>int <function>parport_claim_or_block</function></funcdef>
     <paramdef>struct pardevice *<parameter>dev</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcprototype>
     <funcdef>void <function>parport_release</function></funcdef>
     <paramdef>struct pardevice *<parameter>dev</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
   <para>
    To claim access to the port, use <function>parport_claim</function>
@@ -866,15 +908,22 @@ while ((devnum = parport_find_class (PARPORT_CLASS_DIGCAM,
    a <filename>/proc</filename> entry.
   </para>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcsynopsisinfo>
+#include &lt;parport.h&gt;
+   </funcsynopsisinfo>
+   <funcprototype>
     <funcdef>int <function>parport_yield</function></funcdef>
     <paramdef>struct pardevice *<parameter>dev</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcprototype>
     <funcdef>int <function>parport_yield_blocking</function></funcdef>
     <paramdef>struct pardevice *<parameter>dev</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
   <para>
    The first of these, <function>parport_yield</function>, will not
@@ -919,14 +968,14 @@ port->ops->write_data (port, d);
 
    <listitem>
     <para>
-     The device driver registers itself with <filename>parport</filename>.
+     The device driver registers itself with <literal>parport</literal>.
     </para>
    </listitem>
 
    <listitem>
     <para>
      A low-level driver finds a parallel port and registers it with
-     <filename>parport</filename> (these first two things can happen
+     <literal>parport</literal> (these first two things can happen
      in either order).  This registration creates a <structname>struct
      parport</structname> which is linked onto a list of known ports.
     </para>
@@ -934,7 +983,7 @@ port->ops->write_data (port, d);
 
    <listitem>
     <para>
-     <filename>parport</filename> calls the
+     <literal>parport</literal> calls the
      <function>attach</function> function of each registered device
      driver, passing it the pointer to the new <structname>struct
      parport</structname>.
@@ -944,7 +993,7 @@ port->ops->write_data (port, d);
    <listitem>
     <para>
      The device driver gets a handle from
-     <filename>parport</filename>, for use with
+     <literal>parport</literal>, for use with
      <function>parport_claim</function>/<function>release</function>.
      This handle takes the form of a pointer to a <structname>struct
      pardevice</structname>, representing a particular device on the
@@ -993,18 +1042,18 @@ port->ops->write_data (port, d);
   <!-- Could even talk about parallel port console here. -->
 
   <para>
-   The printer driver, <filename>lp</filename> is a character special
-   device driver and a <filename>parport</filename> client.  As a
+   The printer driver, <literal>lp</literal> is a character special
+   device driver and a <literal>parport</literal> client.  As a
    character special device driver it registers a <structname>struct
    file_operations</structname> using
    <function>register_chrdev</function>, with pointers filled in for
    <structfield>write</structfield>, <structfield>ioctl</structfield>,
    <structfield>open</structfield> and
    <structfield>release</structfield>.  As a client of
-   <filename>parport</filename>, it registers a <structname>struct
+   <literal>parport</literal>, it registers a <structname>struct
    parport_driver</structname> using
    <function>parport_register_driver</function>, so that
-   <filename>parport</filename> knows to call
+   <literal>parport</literal> knows to call
    <function>lp_attach</function> when a new parallel port is
    discovered (and <function>lp_detach</function> when it goes
    away).
@@ -1012,8 +1061,8 @@ port->ops->write_data (port, d);
 
   <para>
    The parallel port console functionality is also implemented in
-   <filename>lp.c</filename>, but that won't be covered here (it's
-   quite simple though).
+   <filename>drivers/char/lp.c</filename>, but that won't be covered
+   here (it's quite simple though).
   </para>
 
   <para>
@@ -1037,7 +1086,7 @@ port->ops->write_data (port, d);
   <para>
    After successfully registering itself as a character special device
    driver, the printer driver registers itself as a
-   <filename>parport</filename> client using
+   <literal>parport</literal> client using
    <function>parport_register_driver</function>.  It passes a pointer
    to this structure:
   </para>
@@ -1076,14 +1125,14 @@ static struct parport_driver lp_driver = {
 
   <para>
    The other interesting piece of the printer driver, from the point
-   of view of <filename>parport</filename>, is
+   of view of <literal>parport</literal>, is
    <function>lp_write</function>.  In this function, the user space
    process has data that it wants printed, and the printer driver
-   hands it off to the <filename>parport</filename> code to deal with.
+   hands it off to the <literal>parport</literal> code to deal with.
   </para>
 
   <para>
-   The <filename>parport</filename> functions it uses that we have not
+   The <literal>parport</literal> functions it uses that we have not
    seen yet are <function>parport_negotiate</function>,
    <function>parport_set_timeout</function>, and
    <function>parport_write</function>.  These functions are part of
@@ -1106,11 +1155,16 @@ static struct parport_driver lp_driver = {
    <function>parport_negotiate</function>.
   </para>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcsynopsisinfo>
+#include &lt;parport.h&gt;
+   </funcsynopsisinfo>
+   <funcprototype>
     <funcdef>int <function>parport_negotiate</function></funcdef>
     <paramdef>struct parport *<parameter>port</parameter></paramdef>
     <paramdef>int <parameter>mode</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
   <para>
    The <parameter>modes</parameter> parameter is a symbolic constant
@@ -1132,7 +1186,7 @@ static struct parport_driver lp_driver = {
 
   <para>
    The main work is done in the write-loop.  In particular, the line
-   that hands the data over to <filename>parport</filename> reads:
+   that hands the data over to <literal>parport</literal> reads:
   </para>
 
 <programlisting>
@@ -1147,19 +1201,26 @@ static struct parport_driver lp_driver = {
    successfully written:
   </para>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcsynopsisinfo>
+#include &lt;parport.h&gt;
+   </funcsynopsisinfo>
+   <funcprototype>
     <funcdef>ssize_t <function>parport_write</function></funcdef>
     <paramdef>struct parport *<parameter>port</parameter></paramdef>
     <paramdef>const void *<parameter>buf</parameter></paramdef>
     <paramdef>size_t <parameter>len</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcprototype>
     <funcdef>ssize_t <function>parport_read</function></funcdef>
     <paramdef>struct parport *<parameter>port</parameter></paramdef>
     <paramdef>void *<parameter>buf</parameter></paramdef>
     <paramdef>size_t <parameter>len</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
   <para>
    (<function>parport_read</function> does what it sounds like, but
@@ -1186,48 +1247,105 @@ struct parport_operations {
         [...]
 
         /* Block read/write */
-        size_t (*epp_write_data) (struct parport *port, const void *buf,
+        size_t (*epp_write_data) (struct parport *port,
+                                  const void *buf,
                                   size_t len, int flags);
-        size_t (*epp_read_data) (struct parport *port, void *buf, size_t len,
+        size_t (*epp_read_data) (struct parport *port,
+                                 void *buf, size_t len,
                                  int flags);
-        size_t (*epp_write_addr) (struct parport *port, const void *buf,
+        size_t (*epp_write_addr) (struct parport *port,
+                                  const void *buf,
                                   size_t len, int flags);
-        size_t (*epp_read_addr) (struct parport *port, void *buf, size_t len,
+        size_t (*epp_read_addr) (struct parport *port,
+                                 void *buf, size_t len,
                                  int flags);
 
-        size_t (*ecp_write_data) (struct parport *port, const void *buf,
+        size_t (*ecp_write_data) (struct parport *port,
+                                  const void *buf,
                                   size_t len, int flags);
-        size_t (*ecp_read_data) (struct parport *port, void *buf, size_t len,
+        size_t (*ecp_read_data) (struct parport *port,
+                                 void *buf, size_t len,
                                  int flags);
-        size_t (*ecp_write_addr) (struct parport *port, const void *buf,
+        size_t (*ecp_write_addr) (struct parport *port,
+                                  const void *buf,
                                   size_t len, int flags);
 
-        size_t (*compat_write_data) (struct parport *port, const void *buf,
+        size_t (*compat_write_data) (struct parport *port,
+                                     const void *buf,
                                      size_t len, int flags);
-        size_t (*nibble_read_data) (struct parport *port, void *buf,
-                                    size_t len, int flags);
-        size_t (*byte_read_data) (struct parport *port, void *buf,
-                                  size_t len, int flags);
+        size_t (*nibble_read_data) (struct parport *port,
+                                    void *buf, size_t len,
+                                    int flags);
+        size_t (*byte_read_data) (struct parport *port,
+                                  void *buf, size_t len,
+                                  int flags);
 };
    ]]></programlisting>
 
   <para>
-   The transfer code in <filename>parport</filename> will tolerate a
+   The transfer code in <literal>parport</literal> will tolerate a
    data transfer stall only for so long, and this timeout can be
    specified with <function>parport_set_timeout</function>, which
    returns the previous timeout:
   </para>
 
-  <funcsynopsis><funcprototype>
+  <funcsynopsis>
+   <funcsynopsisinfo>
+#include &lt;parport.h&gt;
+   </funcsynopsisinfo>
+   <funcprototype>
     <funcdef>long <function>parport_set_timeout</function></funcdef>
     <paramdef>struct pardevice *<parameter>dev</parameter></paramdef>
     <paramdef>long <parameter>inactivity</parameter></paramdef>
-   </funcprototype></funcsynopsis>
+   </funcprototype>
+  </funcsynopsis>
 
   <para>
    This timeout is specific to the device, and is restored on
    <function>parport_claim</function>.
   </para>
+
+  <para>
+   The next function to look at is the one that allows processes to
+   read from <filename>/dev/lp0</filename>:
+   <function>lp_read</function>.  It's short, like
+   <function>lp_write</function>.
+  </para>
+
+  <para>
+   The semantics of reading from a line printer device are as follows:
+  </para>
+
+  <itemizedlist>
+   <listitem>
+    <para>
+     Switch to reverse nibble mode.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     Try to read data from the peripheral using reverse nibble mode,
+     until either the user-provided buffer is full or the peripheral
+     indicates that there is no more data.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     If there was data, stop, and return it.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     Otherwise, we tried to read data and there was none.  If the user
+     opened the device node with the <constant>O_NONBLOCK</constant>
+     flag, return.  Otherwise wait until an interrupt occurs on the
+     port (or a timeout elapses).
+    </para>
+   </listitem>
+  </itemizedlist>
 
  </chapter>
 
@@ -1260,7 +1378,7 @@ struct parport_operations {
    </para>
 
    <para>
-    In contrast, the <filename>ppdev</filename> driver (accessed via
+    In contrast, the <literal>ppdev</literal> driver (accessed via
     <filename>/dev/parport0</filename>) allows you to:
    </para>
 
@@ -1344,11 +1462,13 @@ struct parport_operations {
    <title>Programming interface</title>
 
    <para>
-    The <filename>ppdev</filename> interface is largely the same as
-    that of other character special devices, in that it supports
+    The <literal>ppdev</literal> interface is largely the same as that
+    of other character special devices, in that it supports
     <function>open</function>, <function>close</function>,
     <function>read</function>, <function>write</function>, and
-    <function>ioctl</function>.
+    <function>ioctl</function>.  The constants for the
+    <function>ioctl</function> commands are in
+    <filename>include/linux/ppdev.h</filename>.
    </para>
 
    <sect2>
@@ -1379,7 +1499,7 @@ struct parport_operations {
      Most of the control is done, naturally enough, via the
      <function>ioctl</function> call.  Using
      <function>ioctl</function>, the user-land driver can control both
-     the <filename>ppdev</filename> driver in the kernel and the
+     the <literal>ppdev</literal> driver in the kernel and the
      physical parallel port itself.  The <function>ioctl</function>
      call takes as parameters a file descriptor (the one returned from
      opening the device node), a command, and optionally (a pointer
@@ -1395,7 +1515,7 @@ struct parport_operations {
 	writer, you will need to do this before you are able to
 	actually change the state of the parallel port in any way.
 	Note that some operations only affect the
-	<filename>ppdev</filename> driver and not the port, such as
+	<literal>ppdev</literal> driver and not the port, such as
 	<constant>PPSETMODE</constant>; they can be performed while
 	access to the port is not claimed.
        </para>
@@ -1486,7 +1606,7 @@ struct parport_operations {
        <para>
 	The <function>ioctl</function> parameter should be a pointer
 	to an <type>int</type>; values for this are in
-	<filename>parport.h</filename> and include:
+	<filename>incluce/linux/parport.h</filename> and include:
        </para>
 
        <itemizedlist spacing=compact>
@@ -1566,7 +1686,7 @@ struct parport_operations {
 	Sets the control lines.  The <function>ioctl</function>
 	parameter is a pointer to an <type>unsigned char</type>, the
 	bitwise OR of the control line values in
-	<filename>parport.h</filename>.
+	<filename>include/linux/parport.h</filename>.
        </para>
 
       </listitem></varlistentry>
@@ -1591,7 +1711,7 @@ struct parport_operations {
 
        <para>
 	The control lines bits are defined in
-	<filename>parport.h</filename>:
+	<filename>include/linux/parport.h</filename>:
        </para>
 
        <itemizedlist spacing=compact>
@@ -1619,7 +1739,7 @@ struct parport_operations {
 	course, each driver could remember what state the control
 	lines are supposed to be in (they are never changed by
 	anything else), but in order to provide
-	<constant>PPRCONTROL</constant>, <filename>ppdev</filename>
+	<constant>PPRCONTROL</constant>, <literal>ppdev</literal>
 	must remember the state of the control lines anyway.
        </para>
 
@@ -1728,7 +1848,7 @@ struct ppdev_frob_struct {
       <listitem>
 
        <para>
-	Clears the interrupt count.  The <filename>ppdev</filename>
+	Clears the interrupt count.  The <literal>ppdev</literal>
 	driver keeps a count of interrupts as they are triggered.
 	<constant>PPCLRIRQ</constant> stores this count in an
 	<type>int</type>, a pointer to which is passed in as the
@@ -1790,7 +1910,7 @@ struct ppdev_frob_struct {
      <function>select</function></title>
 
     <para>
-     The <filename>ppdev</filename> driver provides user-land device
+     The <literal>ppdev</literal> driver provides user-land device
      drivers with the ability to wait for interrupts, and this is done
      using <function>poll</function> (and <function>select</function>,
      which is implemented in terms of <function>poll</function>).
@@ -1799,7 +1919,7 @@ struct ppdev_frob_struct {
     <para>
      When a user-land device driver wants to wait for an interrupt, it
      sleeps with <function>poll</function>.  When the interrupt
-     arrives, <filename>ppdev</filename> wakes it up (with a
+     arrives, <literal>ppdev</literal> wakes it up (with a
      <quote>read</quote> event, although strictly speaking there is
      nothing to actually <function>read</function>).
     </para>
@@ -1813,7 +1933,7 @@ struct ppdev_frob_struct {
 
    <para>
     Presented here are two demonstrations of how to write a simple
-    printer driver for <filename>ppdev</filename>.  Firstly we will
+    printer driver for <literal>ppdev</literal>.  Firstly we will
     use the <function>write</function> function, and after that we
     will drive the control and data lines directly.
    </para>
@@ -1998,7 +2118,7 @@ ssize_t write_printer (int fd, const void *ptr, size_t count)
     ]]></programlisting>
 
    <para>
-    To show a bit more of the <filename>ppdev</filename> interface,
+    To show a bit more of the <literal>ppdev</literal> interface,
     here is a small piece of code that is intended to mimic the
     printer's side of printer protocol.
    </para>
@@ -2048,6 +2168,43 @@ ssize_t write_printer (int fd, const void *ptr, size_t count)
     }
     ]]></programlisting>
 
+   <para>
+    And here is an example (with no error checking at all) to show how
+    to read data from the port, using ECP mode, with optional
+    negotiation to ECP mode first.
+   </para>
+
+   <programlisting><![CDATA[
+    {
+      int fd, mode;
+      fd = open ("/dev/parport0", O_RDONLY | O_NOCTTY);
+      ioctl (fd, PPCLAIM);
+      mode = IEEE1284_MODE_ECP;
+      if (negotiate_first) {
+        ioctl (fd, PPNEGOT, &mode);
+        /* no need for PPSETMODE */
+      } else {
+        ioctl (fd, PPSETMODE, &mode);
+      }
+
+      /* Now do whatever we want with fd */
+      close (0);
+      dup2 (fd, 0);
+      if (!fork()) {
+        /* child */
+        execlp ("cat", "cat", NULL);
+        exit (1);
+      } else {
+        /* parent */
+        wait (NULL);
+      }
+
+      /* Okay, finished */
+      ioctl (fd, PPRELEASE);
+      close (fd);
+    }
+    ]]></programlisting>
+
   </sect1>
 
  </chapter>
@@ -2077,6 +2234,85 @@ ssize_t write_printer (int fd, const void *ptr, size_t count)
 !Fdrivers/parport/ieee1284.c parport_read
 !Fdrivers/parport/ieee1284.c parport_set_timeout
 
+ </appendix>
+
+ <appendix>
+  <title>
+   The Linux 2.2 Parallel Port Subsystem
+  </title>
+
+  <para>
+   Although the interface described in this document is largely new
+   with the 2.4 kernel, the sharing mechanism is available in the 2.2
+   kernel as well.  The functions available in 2.2 are:
+  </para>
+
+  <itemizedlist>
+   <listitem>
+    <para>
+     <function>parport_register_device</function>
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <function>parport_unregister_device</function>
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <function>parport_claim</function>
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <function>parport_claim_or_block</function>
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <function>parport_release</function>
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <function>parport_yield</function>
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <function>parport_yield_blocking</function>
+    </para>
+   </listitem>
+  </itemizedlist>
+
+  <para>
+   In addition, negotiation to reverse nibble mode is supported:
+  </para>
+
+  <funcsynopsis>
+   <funcprototype>
+     <funcdef>int <function>parport_ieee1284_nibble_mode_ok</function></funcdef>
+    <paramdef>struct parport *<parameter>port</parameter></paramdef>
+    <paramdef>unsigned char <parameter>mode</parameter></paramdef>
+   </funcprototype>
+  </funcsynopsis>
+
+  <para>
+   The only valid values for <parameter>mode</parameter> are 0 (for
+   reverse nibble mode) and 4 (for Device ID in reverse nibble mode).
+  </para>
+
+  <para>
+   This function is obsoleted by
+   <function>parport_negotiate</function> in Linux 2.4, and has been
+   removed.
+  </para>
  </appendix>
 </book>
 

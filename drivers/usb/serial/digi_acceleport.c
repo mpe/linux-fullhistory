@@ -47,9 +47,6 @@
 */
 
 #include <linux/config.h>
-
-#ifdef CONFIG_USB_SERIAL_DIGI_ACCELEPORT
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
@@ -1276,4 +1273,3 @@ resubmit:
 
 }
 
-#endif	/* CONFIG_USB_SERIAL_DIGI_ACCELEPORT */

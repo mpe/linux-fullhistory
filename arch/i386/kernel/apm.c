@@ -132,6 +132,9 @@
  *   1.13: Changes for new pm_ interfaces (Andy Henroid
  *         <andy_henroid@yahoo.com>).
  *         Modularize the code.
+ *         Fix the Thinkpad (again) :-( (CONFIG_APM_IGNORE_MULTIPLE_SUSPENDS
+ *         is now the way life works).
+ *         Fix thinko in suspend() (wrong return).
  *
  * APM 1.1 Reference:
  *
@@ -308,9 +311,7 @@ static int			clock_slowed = 0;
 #endif
 static int			suspends_pending = 0;
 static int			standbys_pending = 0;
-#ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
 static int			waiting_for_resume = 0;
-#endif
 
 #ifdef CONFIG_APM_RTC_IS_GMT
 #	define	clock_cmos_diff	0
@@ -866,22 +867,22 @@ static void reinit_timer(void)
 static int suspend(void)
 {
 	int		err;
-	int		ret;
 	struct apm_user	*as;
 
 	get_time_diff();
 	err = apm_set_power_state(APM_STATE_SUSPEND);
 	reinit_timer();
 	set_time();
-	ret = (err == APM_SUCCESS) || (err == APM_NO_ERROR);
-	if (!ret)
+	if (err == APM_NO_ERROR)
+		err = APM_SUCCESS;
+	if (err != APM_SUCCESS)
 		apm_error("suspend", err);
 	for (as = user_list; as != NULL; as = as->next) {
 		as->suspend_wait = 0;
-		as->suspend_result = (ret ? 0 : -EIO);
+		as->suspend_result = ((err == APM_SUCCESS) ? 0 : -EIO);
 	}
 	wake_up_interruptible(&apm_suspend_waitqueue);
-	return ret;
+	return err;
 }
 
 static void standby(void)
@@ -962,14 +963,7 @@ static void check_events(void)
 		switch (event) {
 		case APM_SYS_STANDBY:
 		case APM_USER_STANDBY:
-#ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
-			if (waiting_for_resume)
-				break;
-#endif
 			if (send_event(event, NULL)) {
-#ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
-				waiting_for_resume = 1;
-#endif
 				if (standbys_pending <= 0)
 					standby();
 			}
@@ -986,14 +980,18 @@ static void check_events(void)
 			if (ignore_bounce)
 				break;
 #endif
-#ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
+			/*
+			 * If we are already processing a SUSPEND,
+			 * then further SUSPEND events from the BIOS
+			 * will be ignored.  We also return here to
+			 * cope with the fact that the Thinkpads keep
+			 * sending a SUSPEND event until something else
+			 * happens!
+			 */
 			if (waiting_for_resume)
-				break;
-#endif
+				return;
 			if (send_event(event, NULL)) {
-#ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
 				waiting_for_resume = 1;
-#endif
 				if (suspends_pending <= 0)
 					(void) suspend();
 			}
@@ -1002,9 +1000,7 @@ static void check_events(void)
 		case APM_NORMAL_RESUME:
 		case APM_CRITICAL_RESUME:
 		case APM_STANDBY_RESUME:
-#ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
 			waiting_for_resume = 0;
-#endif
 #ifdef CONFIG_APM_IGNORE_SUSPEND_BOUNCE
 			last_resume = jiffies;
 			ignore_bounce = 1;
@@ -1036,8 +1032,10 @@ static void apm_event_handler(void)
 	int		err;
 
 	if ((standbys_pending > 0) || (suspends_pending > 0)) {
-		if ((apm_bios_info.version > 0x100) && (pending_count-- < 0)) {
+		if ((apm_bios_info.version > 0x100) && (pending_count-- <= 0)) {
 			pending_count = 4;
+			if (debug)
+				printk(KERN_DEBUG "apm: setting state busy\n");
 			err = apm_set_power_state(APM_STATE_BUSY);
 			if (err)
 				apm_error("busy", err);
@@ -1097,7 +1095,7 @@ static void apm_mainloop(void)
 static int check_apm_user(struct apm_user *as, const char *func)
 {
 	if ((as == NULL) || (as->magic != APM_BIOS_MAGIC)) {
-		printk(KERN_ERR "apm: %s passed bad filp", func);
+		printk(KERN_ERR "apm: %s passed bad filp\n", func);
 		return 1;
 	}
 	return 0;
@@ -1200,7 +1198,7 @@ static int do_ioctl(struct inode * inode, struct file *filp,
 		} else if (!send_event(APM_USER_SUSPEND, as))
 			return -EAGAIN;
 		if (suspends_pending <= 0) {
-			if (!suspend())
+			if (suspend() != APM_SUCCESS)
 				return -EIO;
 		} else {
 			as->suspend_wait = 1;
@@ -1251,7 +1249,7 @@ static int do_release(struct inode * inode, struct file * filp)
 		     as1 = as1->next)
 			;
 		if (as1 == NULL)
-			printk(KERN_ERR "apm: filp not in user list");
+			printk(KERN_ERR "apm: filp not in user list\n");
 		else
 			as1->next = as->next;
 	}
@@ -1268,7 +1266,7 @@ static int do_open(struct inode * inode, struct file * filp)
 
 	as = (struct apm_user *)kmalloc(sizeof(*as), GFP_KERNEL);
 	if (as == NULL) {
-		printk(KERN_ERR "apm: cannot allocate struct of size %d bytes",
+		printk(KERN_ERR "apm: cannot allocate struct of size %d bytes\n",
 		       sizeof(*as));
 		MOD_DEC_USE_COUNT;
 		return -ENOMEM;

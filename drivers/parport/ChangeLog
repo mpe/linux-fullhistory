@@ -1,3 +1,7 @@
+2000-05-16  Tim Waugh  <twaugh@redhat.com>
+
+	* share.c (parport_claim): Fix SMP race.
+
 2000-05-15  Gunther Mayer  <gunther.mayer@braunschweig.okersurf.de>
 
 	* parport_pc.c (parport_pc_compat_write_block_pio): Check for

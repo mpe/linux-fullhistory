@@ -20,9 +20,6 @@
  */
 
 #include <linux/config.h>
-
-#ifdef CONFIG_USB_SERIAL_VISOR
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
@@ -206,8 +203,4 @@ static int  visor_startup (struct usb_serial *serial)
 	/* continue on with initialization */
 	return (0);
 }
-
-
-#endif	/* CONFIG_USB_SERIAL_VISOR*/
-
 

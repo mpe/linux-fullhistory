@@ -180,7 +180,6 @@ if [ "$CONFIG_APM" != "n" ]; then
    bool '    Enable PM at boot time' CONFIG_APM_DO_ENABLE
    bool '    Make CPU Idle calls when idle' CONFIG_APM_CPU_IDLE
    bool '    Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
-   bool '    Ignore multiple suspend' CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
    bool '    Ignore multiple suspend/resume cycles' CONFIG_APM_IGNORE_SUSPEND_BOUNCE
    bool '    RTC stores time in GMT' CONFIG_APM_RTC_IS_GMT
    bool '    Allow interrupts during APM BIOS calls' CONFIG_APM_ALLOW_INTS

@@ -13,9 +13,6 @@
  */
 
 #include <linux/config.h>
-
-#ifdef CONFIG_USB_SERIAL_OMNINET
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
@@ -335,7 +332,4 @@ static void omninet_write_bulk_callback (struct urb *urb)
 
 	return;
 }
-
-#endif	/* CONFIG_USB_SERIAL_OMNINET */
-
 

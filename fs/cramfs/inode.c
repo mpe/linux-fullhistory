@@ -84,15 +84,17 @@ static struct inode *get_cramfs_inode(struct super_block *sb, struct cramfs_inod
 #define NEXT_BUFFER(_ix) ((_ix) ^ 1)
 
 /*
- * BLKS_PER_BUF_SHIFT must be at least 1 to allow for "compressed"
- * data that takes up more space than the original.  1 is guaranteed
- * to suffice, though.  Larger values provide more read-ahead and
- * proportionally less wastage at the end of the buffer.
+ * BLKS_PER_BUF_SHIFT should be at least 2 to allow for "compressed"
+ * data that takes up more space than the original and with unlucky
+ * alignment.
  */
-#define BLKS_PER_BUF_SHIFT (2)
-#define BLKS_PER_BUF (1 << BLKS_PER_BUF_SHIFT)
-static unsigned char read_buffers[READ_BUFFERS][BLKS_PER_BUF][PAGE_CACHE_SIZE];
+#define BLKS_PER_BUF_SHIFT	(2)
+#define BLKS_PER_BUF		(1 << BLKS_PER_BUF_SHIFT)
+#define BUFFER_SIZE		(BLKS_PER_BUF*PAGE_CACHE_SIZE)
+
+static unsigned char read_buffers[READ_BUFFERS][BUFFER_SIZE];
 static unsigned buffer_blocknr[READ_BUFFERS];
+static struct super_block * buffer_dev[READ_BUFFERS];
 static int next_buffer = 0;
 
 /*
@@ -102,19 +104,27 @@ static int next_buffer = 0;
 static void *cramfs_read(struct super_block *sb, unsigned int offset, unsigned int len)
 {
 	struct buffer_head * bh_array[BLKS_PER_BUF];
-	unsigned i, blocknr, last_blocknr, buffer;
+	unsigned i, blocknr, buffer;
+	char *data;
 
 	if (!len)
 		return NULL;
 	blocknr = offset >> PAGE_CACHE_SHIFT;
-	last_blocknr = (offset + len - 1) >> PAGE_CACHE_SHIFT;
-	if (last_blocknr - blocknr >= BLKS_PER_BUF)
-		goto eek; resume:
 	offset &= PAGE_CACHE_SIZE - 1;
+
+	/* Check if an existing buffer already has the data.. */
 	for (i = 0; i < READ_BUFFERS; i++) {
-		if ((blocknr >= buffer_blocknr[i]) &&
-		    (last_blocknr - buffer_blocknr[i] < BLKS_PER_BUF))
-			return &read_buffers[i][blocknr - buffer_blocknr[i]][offset];
+		unsigned int blk_offset;
+
+		if (buffer_dev[i] != sb)
+			continue;
+		if (blocknr < buffer_blocknr[i])
+			continue;
+		blk_offset = (blocknr - buffer_blocknr[i]) << PAGE_CACHE_SHIFT;
+		blk_offset += offset;
+		if (blk_offset + len > BUFFER_SIZE)
+			continue;
+		return read_buffers[i] + blk_offset;
 	}
 
 	/* Ok, read in BLKS_PER_BUF pages completely first. */
@@ -125,24 +135,18 @@ static void *cramfs_read(struct super_block *sb, unsigned int offset, unsigned i
 	buffer = next_buffer;
 	next_buffer = NEXT_BUFFER(buffer);
 	buffer_blocknr[buffer] = blocknr;
+	buffer_dev[buffer] = sb;
+	data = read_buffers[buffer];
 	for (i = 0; i < BLKS_PER_BUF; i++) {
 		struct buffer_head * bh = bh_array[i];
 		if (bh) {
-			memcpy(read_buffers[buffer][i], bh->b_data, PAGE_CACHE_SIZE);
+			memcpy(data, bh->b_data, PAGE_CACHE_SIZE);
 			bforget(bh);
 		} else
-			memset(read_buffers[buffer][i], 0, PAGE_CACHE_SIZE);
+			memset(data, 0, PAGE_CACHE_SIZE);
+		data += PAGE_CACHE_SIZE;
 	}
-	return read_buffers[buffer][0] + offset;
-
- eek:
-	printk(KERN_ERR
-	       "cramfs (device %s): requested chunk (%u:+%u) bigger than buffer\n",
-	       bdevname(sb->s_dev), offset, len);
-	/* TODO: return EIO to process or kill the current process
-           instead of resuming. */
-	*((int *)0) = 0; /* XXX: doesn't work on all archs */
-	goto resume;
+	return read_buffers[buffer] + offset;
 }
 			
 

@@ -92,7 +92,6 @@ static void urb_rm_priv (urb_t * urb)
 	kfree (urb->hcpriv);
 	urb->hcpriv = NULL;
 
-	wake_up (&op_wakeup);
 }
 
 /*-------------------------------------------------------------------------*/
@@ -493,6 +492,8 @@ static int sohci_submit_urb (urb_t * urb)
 		urb->start_frame = ((ed->state == ED_OPER)? (ed->last_iso + 1): 
 								(le16_to_cpu (ohci->hcca.frame_no) + 10)) & 0xffff;
 	}	
+	urb->status = USB_ST_URB_PENDING;
+	urb->actual_length = 0;
 	
 	if (ed->state != ED_OPER)  /* link the ed into a chain if is not already */
 		ep_link (ohci, ed);
@@ -527,6 +528,8 @@ static int sohci_unlink_urb (urb_t * urb)
 	urb_print (urb, "UNLINK", 1);
 #endif		  
 
+	usb_dec_dev_use (urb->dev);	
+	
 	if (usb_pipedevice (urb->pipe) == ohci->rh.devnum) 
 		return rh_unlink_urb (urb); /* a request to the virtual root hub */
 	
@@ -544,19 +547,23 @@ static int sohci_unlink_urb (urb_t * urb)
 			ep_rm_ed (urb->dev, urb_priv->ed);
 			urb_priv->ed->state |= ED_URB_DEL;
 			spin_unlock_irqrestore (&usb_ed_lock, flags);
-
-			add_wait_queue (&op_wakeup, &wait);
-			current->state = TASK_UNINTERRUPTIBLE;
-			if (!schedule_timeout (HZ / 10)) /* wait until all TDs are deleted */
-				err("unlink URB timeout!");
-			remove_wait_queue (&op_wakeup, &wait); 
-		} else 
+			if (!(urb->transfer_flags & USB_ASYNC_UNLINK)) {
+				add_wait_queue (&op_wakeup, &wait);
+				current->state = TASK_UNINTERRUPTIBLE;
+				if (!schedule_timeout (HZ / 10)) /* wait until all TDs are deleted */
+					err("unlink URB timeout!");
+				remove_wait_queue (&op_wakeup, &wait); 
+				urb->status = -ENOENT;
+			} else
+				urb->status = -EINPROGRESS;
+		} else {
 			urb_rm_priv (urb);
-
-		urb->status = -ENOENT;	// mark urb as killed		
-		if (urb->complete)
-			urb->complete ((struct urb *) urb);
-		usb_dec_dev_use (urb->dev);		
+			if (urb->complete && (urb->transfer_flags & USB_ASYNC_UNLINK)) {
+				urb->complete (urb); 
+				urb->status = 0;	
+			} else 
+				urb->status = -ENOENT;
+		}	
 	}	
 	return 0;
 }
@@ -965,7 +972,7 @@ static void ep_rm_ed (struct usb_device * usb_dev, ed_t * ed)
 
 /* prepare a TD */
 
-static void td_fill (unsigned int info, void * data, int len, urb_t * urb, int type, int index)
+static void td_fill (unsigned int info, void * data, int len, urb_t * urb, int index)
 {
 	volatile td_t  * td, * td_pt;
 	urb_priv_t * urb_priv = urb->hcpriv;
@@ -982,7 +989,6 @@ static void td_fill (unsigned int info, void * data, int len, urb_t * urb, int t
 	td->index = index;
 	td->urb = urb; 
 	td->hwINFO = cpu_to_le32 (info);
-	td->type = type;
 	if ((td->ed->type & 3) == PIPE_ISOCHRONOUS) {
 		td->hwCBP = cpu_to_le32 (((!data || !len)? 
 								0 : virt_to_bus (data)) & 0xFFFFF000);
@@ -1029,12 +1035,12 @@ static void td_submit_urb (urb_t * urb)
 			info = usb_pipeout (urb->pipe)? 
 				TD_CC | TD_DP_OUT : TD_CC | TD_DP_IN ;
 			while(data_len > 4096) {		
-				td_fill (info | (cnt? TD_T_TOGGLE:toggle), data, 4096, urb, (cnt? 0: ST_ADDR) | ADD_LEN, cnt);
+				td_fill (info | (cnt? TD_T_TOGGLE:toggle), data, 4096, urb, cnt);
 				data += 4096; data_len -= 4096; cnt++;
 			}
 			info = usb_pipeout (urb->pipe)?
 				TD_CC | TD_DP_OUT : TD_CC | TD_R | TD_DP_IN ;
-			td_fill (info | (cnt? TD_T_TOGGLE:toggle), data, data_len, urb, (cnt? 0: ST_ADDR) | ADD_LEN, cnt);
+			td_fill (info | (cnt? TD_T_TOGGLE:toggle), data, data_len, urb, cnt);
 			cnt++;
 			writel (OHCI_BLF, &ohci->regs->cmdstatus); /* start bulk list */
 			break;
@@ -1042,20 +1048,20 @@ static void td_submit_urb (urb_t * urb)
 		case PIPE_INTERRUPT:
 			info = usb_pipeout (urb->pipe)? 
 				TD_CC | TD_DP_OUT | toggle: TD_CC | TD_R | TD_DP_IN | toggle;
-			td_fill (info, data, data_len, urb, ST_ADDR | ADD_LEN, cnt++);
+			td_fill (info, data, data_len, urb, cnt++);
 			break;
 
 		case PIPE_CONTROL:
 			info = TD_CC | TD_DP_SETUP | TD_T_DATA0;
-			td_fill (info, ctrl, 8, urb, ST_ADDR, cnt++); 
+			td_fill (info, ctrl, 8, urb, cnt++); 
 			if (data_len > 0) {  
 				info = usb_pipeout (urb->pipe)? 
 					TD_CC | TD_R | TD_DP_OUT | TD_T_DATA1 : TD_CC | TD_R | TD_DP_IN | TD_T_DATA1;
-				td_fill (info, data, data_len, urb, ADD_LEN, cnt++);  
+				td_fill (info, data, data_len, urb, cnt++);  
 			} 
 			info = usb_pipeout (urb->pipe)? 
  				TD_CC | TD_DP_IN | TD_T_DATA1: TD_CC | TD_DP_OUT | TD_T_DATA1;
-			td_fill (info, NULL, 0, urb, 0, cnt++);
+			td_fill (info, NULL, 0, urb, cnt++);
 			writel (OHCI_CLF, &ohci->regs->cmdstatus); /* start Control list */
 			break;
 
@@ -1063,7 +1069,7 @@ static void td_submit_urb (urb_t * urb)
 			for (cnt = 0; cnt < urb->number_of_packets; cnt++) {
 				td_fill (TD_CC|TD_ISO | ((urb->start_frame + cnt) & 0xffff), 
  					(__u8 *) data + urb->iso_frame_desc[cnt].offset, 
-					urb->iso_frame_desc[cnt].length, urb, (cnt? 0: ST_ADDR) | ADD_LEN, cnt); 
+					urb->iso_frame_desc[cnt].length, urb, cnt); 
 			}
 			break;
 	} 
@@ -1074,7 +1080,55 @@ static void td_submit_urb (urb_t * urb)
 /*-------------------------------------------------------------------------*
  * Done List handling functions
  *-------------------------------------------------------------------------*/
- 
+
+
+/* calculate the transfer length and update the urb */
+
+static void dl_transfer_length(td_t * td)
+{
+	__u32 tdINFO, tdBE, tdCBP;
+ 	__u16 tdPSW;
+ 	urb_t * urb = td->urb;
+ 	urb_priv_t * urb_priv = urb->hcpriv;
+	int dlen = 0;
+	int cc = 0;
+	
+	tdINFO = le32_to_cpup (&td->hwINFO);
+  	tdBE   = le32_to_cpup (&td->hwBE);
+  	tdCBP  = le32_to_cpup (&td->hwCBP);
+
+
+  	if (tdINFO & TD_ISO) {
+ 		tdPSW = le16_to_cpu (td->hwPSW[0]);
+ 		cc = (tdPSW >> 12) & 0xF;
+		if (cc < 0xE)  {
+			if (usb_pipeout(urb->pipe)) {
+				dlen = urb->iso_frame_desc[td->index].length;
+			} else {
+				dlen = tdPSW & 0x3ff;
+			}
+			urb->actual_length += dlen;
+			urb->iso_frame_desc[td->index].actual_length = dlen;
+			if (!(urb->transfer_flags & USB_DISABLE_SPD) && (cc == TD_DATAUNDERRUN))
+				cc = TD_CC_NOERROR;
+					 
+			urb->iso_frame_desc[td->index].status = cc_to_error[cc];
+		}
+	} else { /* BULK, INT, CONTROL DATA */
+		if (!(usb_pipetype (urb->pipe) == PIPE_CONTROL && 
+				((td->index == 0) || (td->index == urb_priv->length - 1)))) {
+ 			if (tdBE != 0) {
+ 				if (td->hwCBP == 0)
+					urb->actual_length = bus_to_virt (tdBE) - urb->transfer_buffer + 1;
+  				else
+					urb->actual_length = bus_to_virt (tdCBP) - urb->transfer_buffer;
+			}
+  		}
+  	}
+}
+
+/*-------------------------------------------------------------------------*/
+
 /* replies to the request have to be on a FIFO basis so
  * we reverse the reversed done-list */
  
@@ -1128,6 +1182,7 @@ static void dl_del_list (ohci_t  * ohci, unsigned int frame)
 	unsigned long flags;
 	ed_t * ed;
 	__u32 edINFO;
+	__u32 tdINFO;
 	td_t * td = NULL, * td_next = NULL, * tdHeadP = NULL, * tdTailP;
 	__u32 * td_p;
 	int ctrl = 0, bulk = 0;
@@ -1139,16 +1194,25 @@ static void dl_del_list (ohci_t  * ohci, unsigned int frame)
 		tdHeadP = bus_to_virt (le32_to_cpup (&ed->hwHeadP) & 0xfffffff0);
 		edINFO = le32_to_cpup (&ed->hwINFO);
 		td_p = &ed->hwHeadP;
-			
+
 		for (td = tdHeadP; td != tdTailP; td = td_next) { 
 			urb_t * urb = td->urb;
 			urb_priv_t * urb_priv = td->urb->hcpriv;
 			
 			td_next = bus_to_virt (le32_to_cpup (&td->hwNextTD) & 0xfffffff0);
 			if ((urb_priv->state == URB_DEL) || (ed->state & ED_DEL)) {
+				tdINFO = le32_to_cpup (&td->hwINFO);
+				if (TD_CC_GET (tdINFO) < 0xE) dl_transfer_length (td);
 				*td_p = td->hwNextTD | (*td_p & cpu_to_le32 (0x3));
 				if(++ (urb_priv->td_cnt) == urb_priv->length) 
 					urb_rm_priv (urb);
+					if (urb->transfer_flags & USB_ASYNC_UNLINK) {
+						usb_dec_dev_use (urb->dev);
+						urb->status = -ECONNRESET;
+						urb->complete (urb); 
+					} else {	
+						wake_up (&op_wakeup);
+					}
 			} else {
 				td_p = &td->hwNextTD;
 			}
@@ -1165,7 +1229,7 @@ static void dl_del_list (ohci_t  * ohci, unsigned int frame)
    	 	}
    	 	else {
    	 		ed->state &= ~ED_URB_DEL;
-   	 		ed->hwINFO  &=  ~cpu_to_le32 (OHCI_ED_SKIP);
+   	 		ed->hwINFO &= ~cpu_to_le32 (OHCI_ED_SKIP);
    	 	}
    	 	
    	 	if ((ed->type & 3) == CTRL) ctrl |= 1;
@@ -1183,6 +1247,8 @@ static void dl_del_list (ohci_t  * ohci, unsigned int frame)
    	spin_unlock_irqrestore (&usb_ed_lock, flags);
 }
 
+
+  		
 /*-------------------------------------------------------------------------*/
 
 /* td done list */
@@ -1191,12 +1257,11 @@ static void dl_done_list (ohci_t * ohci, td_t * td_list)
 {
   	td_t * td_list_next = NULL;
 	ed_t * ed;
-	int dlen = 0;
 	int cc = 0;
 	urb_t * urb;
 	urb_priv_t * urb_priv;
- 	__u32 tdINFO, tdBE, tdCBP, edHeadP, edTailP;
- 	__u16 tdPSW;
+ 	__u32 tdINFO, edHeadP, edTailP;
+ 	
  	unsigned long flags;
  	
   	while (td_list) {
@@ -1205,40 +1270,11 @@ static void dl_done_list (ohci_t * ohci, td_t * td_list)
   		urb = td_list->urb;
   		urb_priv = urb->hcpriv;
   		tdINFO = le32_to_cpup (&td_list->hwINFO);
-  		tdBE   = le32_to_cpup (&td_list->hwBE);
-  		tdCBP  = le32_to_cpup (&td_list->hwCBP);
   		
    		ed = td_list->ed;
    		
-  		if (td_list->type & ST_ADDR) 
-  			urb->actual_length = 0;
-  			
- 		if (td_list->type & ADD_LEN) { /* accumulate length of multi td transfers */
- 			if (tdINFO & TD_ISO) {
- 				tdPSW = le16_to_cpu (td_list->hwPSW[0]);
- 				cc = (tdPSW >> 12) & 0xF;
-				if (cc < 0xE)  {
-					if (usb_pipeout(urb->pipe)) {
-						dlen = urb->iso_frame_desc[td_list->index].length;
-					} else {
-						dlen = tdPSW & 0x3ff;
-					}
-					urb->actual_length += dlen;
-					urb->iso_frame_desc[td_list->index].actual_length = dlen;
-					if (!(urb->transfer_flags & USB_DISABLE_SPD) && (cc == TD_DATAUNDERRUN))
-						cc = TD_CC_NOERROR;
-					 
-					urb->iso_frame_desc[td_list->index].status = cc_to_error[cc];
-				}
- 			} else {
- 				if (tdBE != 0) {
- 					if (td_list->hwCBP == 0)
-						urb->actual_length = bus_to_virt (tdBE) - urb->transfer_buffer + 1;
-  					else
-						urb->actual_length = bus_to_virt (tdCBP) - urb->transfer_buffer;
-  			    }
-  			}
-  		}
+   		dl_transfer_length(td_list);
+ 			
   		/* error code of transfer */
   		cc = TD_CC_GET (tdINFO);
   		if( cc == TD_CC_STALL) usb_endpoint_halt(urb->dev, usb_pipeendpoint(urb->pipe), usb_pipeout(urb->pipe));
