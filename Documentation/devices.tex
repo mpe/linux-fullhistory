@@ -34,15 +34,19 @@
 \newcommand{\link}[4]{{\file #1} \> {\file #2} \> #3 \> #4 \\}
 \newcommand{\vlink}[4]{{\file #1} \> {\em #2 \/} \> #3 \> #4 \\}
 \newcommand{\node}[3]{{\file #1} \> #2 \> #3 \\}
+\newcommand{\tum}{$''$}
 \newenvironment{nodelist}%
  {\begin{tabbing}%
 {\file /dev/crambamboli} \= {\file /proc/self/fd/99} \= symbolicxxx \=
 foo \kill}%
  {\end{tabbing}}
 %
+% If you reformat this document, *please* make sure this information
+% gets included!
+%
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: December 20, 1996}
+\date{Last revised: March 3, 1997}
 \maketitle
 %
 \noindent
@@ -153,7 +157,6 @@ reply.
 \major{34}{}{char }{Z8530 HDLC driver}
 \major{  }{}{block}{Fourth IDE hard disk/CD-ROM interface}
 \major{35}{}{char }{tclmidi MIDI driver}
-\major{  }{}{block}{Modular RAM disk}
 \major{36}{}{char }{Netlink support}
 \major{  }{}{block}{MCA ESDI hard disk}
 \major{37}{}{char }{IDE tape}
@@ -189,7 +192,14 @@ reply.
 \major{65}{}{char }{Sundance ``plink'' Transputer boards}
 \major{66}{}{char }{YARC PowerPC PCI coprocessor card}
 \major{67}{}{char }{Coda network filesystem}
-\major{68}{--119}{}{Unallocated}
+\major{68}{}{char }{CAPI 2.0 interface}
+\major{69}{}{char }{MA16 numeric accelerator card}
+\major{70}{}{char }{SpellCaster Protocol Services Interface}
+\major{71}{}{char }{Computone IntelliPort II serial card}
+\major{72}{}{char }{Computone IntelliPort II serial card -- alternate devices}
+\major{73}{}{char }{Computone IntelliPort II serial card -- control devices}
+\major{74}{}{char }{SCI bridge}
+\major{75}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
 \major{128}{--239}{}{Unallocated}
 \major{240}{--254}{}{Local/experimental use}
@@ -197,7 +207,6 @@ reply.
 \end{devicelist}
 
 \section{Minor numbers}
-
 
 \begin{devicelist}
 \major{0}{}{}{Unnamed devices (e.g. non-device mounts)}
@@ -258,37 +267,38 @@ the position within the series.
 \\
 \major{}{}{}{To specify format, add to the autodetect device number}
 	\minor{  0}{/dev/fd?}{Autodetect format}
-	\minor{  4}{/dev/fd?d360}{5.25" \num{4}{360}K in a \num{4}{360}K drive\1}
-	\minor{ 20}{/dev/fd?h360}{5.25" \num{4}{360}K in a 1200K drive\1}
-	\minor{ 48}{/dev/fd?h410}{5.25" \num{4}{410}K in a 1200K drive}
-	\minor{ 64}{/dev/fd?h420}{5.25" \num{4}{420}K in a 1200K drive}
-	\minor{ 24}{/dev/fd?h720}{5.25" \num{4}{720}K in a 1200K drive}
-	\minor{ 80}{/dev/fd?h880}{5.25" \num{4}{880}K in a 1200K drive\1}
-	\minor{  8}{/dev/fd?h1200}{5.25" 1200K in a 1200K drive\1}
-	\minor{ 40}{/dev/fd?h1440}{5.25" 1440K in a 1200K drive\1}
-	\minor{ 56}{/dev/fd?h1476}{5.25" 1476K in a 1200K drive}
-	\minor{ 72}{/dev/fd?h1494}{5.25" 1494K in a 1200K drive}
-	\minor{ 92}{/dev/fd?h1600}{5.25" 1600K in a 1200K drive\1}
 	\minor{}{}{}
-	\minor{ 12}{/dev/fd?u360}{3.5" \num{4}{360}K Double Density}
-	\minor{ 16}{/dev/fd?u720}{3.5" \num{4}{720}K Double Density\1}
-	\minor{120}{/dev/fd?u800}{3.5" \num{4}{800}K Double Density\2}
-	\minor{ 52}{/dev/fd?u820}{3.5" \num{4}{820}K Double Density}
-	\minor{ 68}{/dev/fd?u830}{3.5" \num{4}{830}K Double Density}
-	\minor{ 84}{/dev/fd?u1040}{3.5" 1040K Double Density\1}
-	\minor{ 88}{/dev/fd?u1120}{3.5" 1120K Double Density\1}
-	\minor{ 28}{/dev/fd?u1440}{3.5" 1440K High Density\1}
-	\minor{124}{/dev/fd?u1600}{3.5" 1600K High Density\1}
-	\minor{ 44}{/dev/fd?u1680}{3.5" 1680K High Density\3}
-	\minor{ 60}{/dev/fd?u1722}{3.5" 1722K High Density}
-	\minor{ 76}{/dev/fd?u1743}{3.5" 1743K High Density}
-	\minor{ 96}{/dev/fd?u1760}{3.5" 1760K High Density}
-	\minor{116}{/dev/fd?u1840}{3.5" 1840K High Density\3}
-	\minor{100}{/dev/fd?u1920}{3.5" 1920K High Density\1}
-	\minor{ 32}{/dev/fd?u2880}{3.5" 2880K Extra Density\1}
-	\minor{104}{/dev/fd?u3200}{3.5" 3200K Extra Density}
-	\minor{108}{/dev/fd?u3520}{3.5" 3520K Extra Density}
-	\minor{112}{/dev/fd?u3840}{3.5" 3840K Extra Density\1}
+	\minor{  4}{/dev/fd?d360}{5.25\tum\ \num{4}{360}K in a \num{4}{360}K drive\1}
+	\minor{ 20}{/dev/fd?h360}{5.25\tum\ \num{4}{360}K in a 1200K drive\1}
+	\minor{ 48}{/dev/fd?h410}{5.25\tum\ \num{4}{410}K in a 1200K drive}
+	\minor{ 64}{/dev/fd?h420}{5.25\tum\ \num{4}{420}K in a 1200K drive}
+	\minor{ 24}{/dev/fd?h720}{5.25\tum\ \num{4}{720}K in a 1200K drive}
+	\minor{ 80}{/dev/fd?h880}{5.25\tum\ \num{4}{880}K in a 1200K drive\1}
+	\minor{  8}{/dev/fd?h1200}{5.25\tum\ 1200K in a 1200K drive\1}
+	\minor{ 40}{/dev/fd?h1440}{5.25\tum\ 1440K in a 1200K drive\1}
+	\minor{ 56}{/dev/fd?h1476}{5.25\tum\ 1476K in a 1200K drive}
+	\minor{ 72}{/dev/fd?h1494}{5.25\tum\ 1494K in a 1200K drive}
+	\minor{ 92}{/dev/fd?h1600}{5.25\tum\ 1600K in a 1200K drive\1}
+	\minor{}{}{}
+	\minor{ 12}{/dev/fd?u360}{3.5\tum\ \num{4}{360}K Double Density}
+	\minor{ 16}{/dev/fd?u720}{3.5\tum\ \num{4}{720}K Double Density\1}
+	\minor{120}{/dev/fd?u800}{3.5\tum\ \num{4}{800}K Double Density\2}
+	\minor{ 52}{/dev/fd?u820}{3.5\tum\ \num{4}{820}K Double Density}
+	\minor{ 68}{/dev/fd?u830}{3.5\tum\ \num{4}{830}K Double Density}
+	\minor{ 84}{/dev/fd?u1040}{3.5\tum\ 1040K Double Density\1}
+	\minor{ 88}{/dev/fd?u1120}{3.5\tum\ 1120K Double Density\1}
+	\minor{ 28}{/dev/fd?u1440}{3.5\tum\ 1440K High Density\1}
+	\minor{124}{/dev/fd?u1600}{3.5\tum\ 1600K High Density\1}
+	\minor{ 44}{/dev/fd?u1680}{3.5\tum\ 1680K High Density\3}
+	\minor{ 60}{/dev/fd?u1722}{3.5\tum\ 1722K High Density}
+	\minor{ 76}{/dev/fd?u1743}{3.5\tum\ 1743K High Density}
+	\minor{ 96}{/dev/fd?u1760}{3.5\tum\ 1760K High Density}
+	\minor{116}{/dev/fd?u1840}{3.5\tum\ 1840K High Density\3}
+	\minor{100}{/dev/fd?u1920}{3.5\tum\ 1920K High Density\1}
+	\minor{ 32}{/dev/fd?u2880}{3.5\tum\ 2880K Extra Density\1}
+	\minor{104}{/dev/fd?u3200}{3.5\tum\ 3200K Extra Density}
+	\minor{108}{/dev/fd?u3520}{3.5\tum\ 3520K Extra Density}
+	\minor{112}{/dev/fd?u3840}{3.5\tum\ 3840K Extra Density\1}
 	\minor{}{}{}
 	\minor{36}{/dev/fd?CompaQ}{Compaq 2880K drive; probably obsolete}
 \\
@@ -298,11 +308,12 @@ the position within the series.
 \end{devicelist}
 
 NOTE: The letter in the device name ({\file d}, {\file q}, {\file h}
-or {\file u}) signifies the type of drive supported: 5.25" Double
-Density ({\file d}), 5.25" Quad Density ({\file q}), 5.25" High
-Density ({\file h}) or 3.5" (any type, {\file u}).  The capital
-letters {\file D}, {\file H}, or {\file E} for the 3.5" models have
-been deprecated, since the drive type is insignificant for these devices.
+or {\file u}) signifies the type of drive supported: 5.25\tum\ Double
+Density ({\file d}), 5.25\tum\ Quad Density ({\file q}), 5.25\tum\
+High Density ({\file h}) or 3.5\tum\ (any type, {\file u}).  The
+capital letters {\file D}, {\file H}, or {\file E} for the 3.5\tum\
+models have been deprecated, since the drive type is insignificant for
+these devices.
 
 \begin{devicelist}
 \major{3}{}{char}{Pseudo-TTY slaves}
@@ -324,9 +335,10 @@ been deprecated, since the drive type is insignificant for these devices.
 \end{devicelist}
 
 \noindent
-For Linux/i386, partitions 1-4 are the primary partitions, partitions
-5 and up are logical partitions.  Other versions of Linux use
-partitioning schemes appropriate to their respective architectures.
+For MS-DOS style partition tables (typically used by Linux/i386),
+partitions 1-4 are the primary partitions, partitions 5 and up are
+logical partitions.  For other partitioning schemes, the meaning of
+the numbers vary.
 
 \begin{devicelist}
 \major{ 4}{}{char }{TTY devices}
@@ -481,6 +493,7 @@ physical disks.
 	\minor{139}{/dev/openprom}{SPARC OpenBoot PROM}
 	\minor{140}{/dev/relay8}{Berkshire Products Octal relay card}
 	\minor{141}{/dev/relay16}{Berkshire Products ISO-16 relay card}
+	\minor{142}{/dev/msr}{x86 model specific registers}
 \end{devicelist}
 
 \begin{devicelist}
@@ -913,14 +926,7 @@ major number 3).
 	\minor{129}{/dev/smpte1}{Second MIDI port, SMPTE timed}
 	\minor{130}{/dev/smpte2}{Third MIDI port, SMPTE timed}
 	\minor{131}{/dev/smpte3}{Fourth MIDI port, SMPTE timed}
-\\
-\major{  }{}{block}{Modular RAM disk}
 \end{devicelist}
-
-\noindent
-This device number is provided for older kernels which did not have
-the modular RAM disk in the standard distribution.  See major number
-1.  This assignment will be removed when the 2.0 kernel is released.
 
 \begin{devicelist}
 \major{36}{}{char }{Netlink support}
@@ -1213,7 +1219,98 @@ $<$jth@prosig.demon.co.uk$>$ for information.
 See {\em http://www.coda.cs.cmu.edu\/} for information about Coda.
 
 \begin{devicelist}
-\major{68}{--119}{}{Unallocated}
+\major{68}{}{char }{CAPI 2.0 interface}
+	\minor{0}{/dev/capi20}{Control device}
+	\minor{1}{/dev/capi20.00}{First CAPI 2.0 application}
+	\minor{2}{/dev/capi20.01}{Second CAPI 2.0 application}
+	\minordots
+	\minor{20}{/dev/capi20.19}{19th CAPI 2.0 application}
+\end{devicelist}
+
+\noindent
+ISDN CAPI 2.0 driver for use with CAPI 2.0 applications; currently
+supports the AVM B1 card.
+
+\begin{devicelist}
+\major{69}{}{char }{MA16 numeric accelerator card}
+	\minor{0}{/dev/ma16}{Board memory access}
+\end{devicelist}
+
+\begin{devicelist}
+\major{70}{}{char }{SpellCaster Protocol Services Interface}
+	\minor{0}{/dev/apscfg}{Configuration interface}
+	\minor{1}{/dev/apsauth}{Authentication interface}
+	\minor{2}{/dev/apslog}{Logging interface}
+	\minor{3}{/dev/apsdbg}{Debugging interface}
+	\minor{64}{/dev/apsisdn}{ISDN command interface}
+	\minor{65}{/dev/apsasync}{Async command interface}
+	\minor{128}{/dev/apsmon}{Monitor interface}
+\end{devicelist}
+
+\begin{devicelist}
+\major{71}{}{char }{Computone IntelliPort II serial card}
+	\minor{0}{/dev/ttyF0}{IntelliPort II board 0, port 0}
+	\minor{1}{/dev/ttyF1}{IntelliPort II board 0, port 1}
+	\minordots
+	\minor{63}{/dev/ttyF63}{IntelliPort II board 0, port 63}
+	\minor{64}{/dev/ttyF64}{IntelliPort II board 1, port 0}
+	\minor{65}{/dev/ttyF65}{IntelliPort II board 1, port 1}
+	\minordots
+	\minor{127}{/dev/ttyF127}{IntelliPort II board 1, port 63}
+	\minor{128}{/dev/ttyF128}{IntelliPort II board 2, port 0}
+	\minor{129}{/dev/ttyF129}{IntelliPort II board 2, port 1}
+	\minordots
+	\minor{191}{/dev/ttyF191}{IntelliPort II board 2, port 63}
+	\minor{192}{/dev/ttyF192}{IntelliPort II board 3, port 0}
+	\minor{193}{/dev/ttyF193}{IntelliPort II board 3, port 1}
+	\minordots
+	\minor{255}{/dev/ttyF255}{IntelliPort II board 3, port 63}
+\end{devicelist}
+
+\begin{devicelist}
+\major{72}{}{char }{Computone IntelliPort II serial card -- alternate devices}
+	\minor{0}{/dev/cuf0}{Callout device corresponding to {\file ttyF0}}
+	\minor{1}{/dev/cuf1}{Callout device corresponding to {\file ttyF1}}
+	\minordots
+	\minor{63}{/dev/cuf63}{Callout device corresponding to {\file ttyF63}}
+	\minor{64}{/dev/cuf64}{Callout device corresponding to {\file ttyF64}}
+	\minor{65}{/dev/cuf65}{Callout device corresponding to {\file ttyF65}}
+	\minordots
+	\minor{127}{/dev/cuf127}{Callout device corresponding to {\file ttyF127}}
+	\minor{128}{/dev/cuf128}{Callout device corresponding to {\file ttyF128}}
+	\minor{129}{/dev/cuf129}{Callout device corresponding to {\file ttyF129}}
+	\minordots
+	\minor{191}{/dev/cuf191}{Callout device corresponding to {\file ttyF191}}
+	\minor{192}{/dev/cuf192}{Callout device corresponding to {\file ttyF192}}
+	\minor{193}{/dev/cuf193}{Callout device corresponding to {\file ttyF193}}
+	\minordots
+	\minor{255}{/dev/cuf255}{Callout device corresponding to {\file ttyF255}}
+\end{devicelist}
+
+\begin{devicelist}
+\major{73}{}{char }{Computone IntelliPort II serial card -- control devices}
+	\minor{0}{/dev/ip2ipl0}{Loadware device for board 0}
+	\minor{1}{/dev/ip2stat0}{Status device for board 0}
+	\minor{4}{/dev/ip2ipl1}{Loadware device for board 1}
+	\minor{5}{/dev/ip2stat1}{Status device for board 1}
+	\minor{8}{/dev/ip2ipl2}{Loadware device for board 2}
+	\minor{9}{/dev/ip2stat2}{Status device for board 2}
+	\minor{12}{/dev/ip2ipl3}{Loadware device for board 3}
+	\minor{13}{/dev/ip2stat3}{Status device for board 3}
+\end{devicelist}
+
+\begin{devicelist}
+\major{74}{}{char }{SCI bridge}
+	\minor{0}{/dev/SCI/0}{SCI device 0}
+	\minor{1}{/dev/SCI/1}{SCI device 1}
+	\minordots
+\end{devicelist}
+
+\noindent
+Currently for Dolphin Interconnect Solutions' PCI-SCI bridge.
+
+\begin{devicelist}
+\major{75}{--119}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}
@@ -1317,5 +1414,108 @@ Common entries are:
 \node{/dev/gpmdata}{socket}{{\file gpm} mouse multiplexer}
 \end{nodelist}
 
-\end{document}
+\section{Terminal devices}
 
+Terminal, or TTY devices are a special class of character devices.  A
+terminal device is any device that could act as a controlling terminal
+for a session; this includes virtual consoles, serial ports, and
+pseudoterminals (PTYs).
+
+All terminal devices share a common set of capabilities known as line
+diciplines; these include the common terminal line dicipline as well
+as SLIP and PPP modes.
+
+All terminal devices are named similarly; this section explains the
+naming and use of the various types of TTYs.  Note that the naming
+conventions include several historical warts; some of these are
+Linux-specific, some were inherited from other systems, and some
+reflect Linux outgrowing a borrowed convention.
+
+A hash mark ($\#$) in a device name is used here to indicate a decimal
+number without leading zeroes.
+
+\subsection{Virtual consoles and the console device}
+
+Virtual consoles are full-screen terminal displays on the system video
+monitor.  Virtual consoles are named {\file /dev/tty$\#$}, with
+numbering starting at {\file /dev/tty1}; {\file /dev/tty0} is the
+current virtual console.  {\file /dev/tty0} is the device that should
+be used to access the system video card on those architectures for
+which the frame buffer devices ({\file /dev/fb*}) do not exist
+(including the x86).  Do not use {\file /dev/console} for this
+purpose.
+
+The {\em console device\/}, {\file /dev/console}, is the device to
+which system messages should be sent, and on which logins should be
+permitted in single-user mode.  {\file /dev/console} should be a
+symbolic link to either {\file /dev/tty0}, a specific virtual console
+such as {\file /dev/tty1}, or to a serial port primary ({\file tty})
+device, depending on the configuration of the system.
+
+\subsection{Serial ports}
+
+Serial ports are RS-232 serial ports and any device which simulates
+one, either in hardware (such as internal modems) or in software (such
+as the ISDN driver.)  Under Linux, each serial ports has two device
+names, the primary or callin device and the alternate or callout one.
+Each kind of device is indicated by a different letter.  For any
+letter $X$, the names of the devices are {\file /dev/tty${X\#}$} and
+{\file /dev/cu${x\#}$}, respectively; for historical reasons, {\file
+/dev/ttyS$\#$} and {\file /dev/ttyC$\#$} correspond to {\file
+/dev/cua$\#$} and {\file /dev/cub$\#$}.  In the future, it should be
+expected that multiple letters will be used; all letters will be upper
+case for the {\file tty} device and lower case for the {\file cu}
+device.
+
+The alternate devices provide for kernel-based exclusion and somewhat
+different defaults than the primary devices.  Their main purpose is to
+allow the use of serial ports with programs with no inherent or broken
+support for serial ports.  For programs with proper knowledge of
+serial port operation, their use should probably be avoided.
+
+Arbitration of serial ports is provided by the use of lock files with
+the names {\file /var/lock/LCK..tty${X\#}$}.  The contents of the lock
+file should be the PID of the locking process as an ASCII number.
+
+It is common practice to install links such as {\file /dev/modem\/}
+which point to serial ports.  In order to ensure proper locking in the
+presence of these links, it is recommended that software chase
+symlinks and lock all possible names; additionally, it is recommended
+that a lock file be installed with the corresponding alternate
+device.  In order to avoid deadlocks, it is recommended that the locks
+are acquired in the following order, and released in the reverse:
+\begin{itemize}
+\item{The symbolic link name, if any ({\file /var/lock/LCK..modem})}
+\item{The {\file tty} name ({\file /var/lock/LCK..ttyS2})}
+\item{The alternate device name ({\file /var/lock/LCK..cua2})}
+\end{itemize}
+In the case of nested symbolic links, the lock files should be
+installed in the order the symlinks are resolved.
+
+Under no circumstances should an application hold a lock while waiting
+for another to be released.  In addition, applications which attempt
+to create lock files for the corresponding alternate device names
+should take into account the possibility of being used on a non-serial
+port TTY, for which no alternate device would exist.
+
+\subsection{Pseudoterminals (PTYs)}
+
+Pseudoterminals, or PTYs, are used to create login sessions or provide
+other capabilities requiring a TTY line dicipline (including SLIP or
+PPP capability) to arbitrary data-generation processes.  Each PTY has
+a {\em master\/} side, named {\file /dev/pty[p-za-e][0-9a-f]\/}, and a
+{\em slave\/} side, named {\file /dev/tty[p-za-e][0-9a-f]\/}.  The
+kernel arbitrates the use of PTYs by allowing each master side to be
+opened only once.
+
+Once the master side has been opened, the corresponding slave device
+can be used in the same manner as any TTY device.  The master and
+slave devices are connected by the kernel, generating the equivalent
+of a bidirectional pipe with TTY capabilities.
+
+The entire namespace {\file /dev/[pt]ty[p-za-o][0-9a-z]\/} should be
+considered reserved for the future use of PTYs.  Should more than 936
+PTYs ever become a necessity, we will likely adopt a System V-like
+scheme by which PTYs use a subdirectory of {\file /dev}.
+
+\end{document}

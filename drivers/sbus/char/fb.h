@@ -1,4 +1,4 @@
-/* $Id: fb.h,v 1.20 1996/12/23 10:16:08 ecd Exp $
+/* $Id: fb.h,v 1.21 1997/02/02 02:12:43 ecd Exp $
  * fb.h: contains the definitions of the structures that various sun
  *       frame buffer can use to do console driver stuff.
  *
@@ -149,6 +149,12 @@ typedef struct fbinfo {
 } fbinfo_t;
 
 #define CM(i, j) [3*(i)+(j)]
+
+extern unsigned char reverse_color_table[];
+
+#define CHARATTR_TO_SUNCOLOR(attr) \
+	((reverse_color_table[(attr) >> 12] << 4) | \
+	  reverse_color_table[((attr) >> 8) & 0x0f])
 
 extern fbinfo_t *fbinfo;
 extern int fbinfos;

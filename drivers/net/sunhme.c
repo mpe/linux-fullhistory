@@ -6,7 +6,7 @@
  */
 
 static char *version =
-        "sunhme.c:v1.1 10/Oct/96 David S. Miller (davem@caipfs.rutgers.edu)\n";
+        "sunhme.c:v1.2 10/Oct/96 David S. Miller (davem@caipfs.rutgers.edu)\n";
 
 #include <linux/module.h>
 
@@ -279,17 +279,9 @@ static int try_next_permutation(struct happy_meal *hp, struct hmeal_tcvregs *tre
 {
 	hp->sw_bmcr = happy_meal_tcvr_read(hp, tregs, DP83840_BMCR);
 
-	/* Downgrade duplex if full. */
-	if(hp->sw_bmcr & BMCR_FULLDPLX) {
-		hp->sw_bmcr &= ~(BMCR_FULLDPLX);
-		happy_meal_tcvr_write(hp, tregs, DP83840_BMCR, hp->sw_bmcr);
-		return 0;
-	}
-
 	/* Downgrade from 100 to 10. */
 	if(hp->sw_bmcr & BMCR_SPEED100) {
 		hp->sw_bmcr &= ~(BMCR_SPEED100);
-		hp->sw_bmcr |= (BMCR_FULLDPLX);
 		happy_meal_tcvr_write(hp, tregs, DP83840_BMCR, hp->sw_bmcr);
 		return 0;
 	}
@@ -346,14 +338,20 @@ static int set_happy_link_modes(struct happy_meal *hp, struct hmeal_tcvregs *tre
 	/* All we care about is making sure the bigmac tx_cfg has a
 	 * proper duplex setting.
 	 */
-	if(hp->timer_state == lupwait) {
+	if(hp->timer_state == arbwait) {
 		hp->sw_lpa = happy_meal_tcvr_read(hp, tregs, DP83840_LPA);
-		if((hp->sw_lpa & LPA_100FULL) ||
-		   (!(hp->sw_lpa & LPA_100HALF) && (hp->sw_lpa & LPA_10FULL)))
+		if(!(hp->sw_lpa & (LPA_10HALF | LPA_10FULL | LPA_100HALF | LPA_100FULL)))
+			goto no_response;
+		if(hp->sw_lpa & LPA_100FULL)
+			full = 1;
+		else if(hp->sw_lpa & LPA_100HALF)
+			full = 0;
+		else if(hp->sw_lpa & LPA_10FULL)
 			full = 1;
 		else
 			full = 0;
 	} else {
+		/* Forcing a link mode. */
 		hp->sw_bmcr = happy_meal_tcvr_read(hp, tregs, DP83840_BMCR);
 		if(hp->sw_bmcr & BMCR_FULLDPLX)
 			full = 1;
@@ -370,6 +368,8 @@ static int set_happy_link_modes(struct happy_meal *hp, struct hmeal_tcvregs *tre
 		hp->bigmacregs->tx_cfg &= ~(BIGMAC_TXCFG_FULLDPLX);
 
 	return 0;
+no_response:
+	return 1;
 }
 
 static int happy_meal_init(struct happy_meal *hp, int from_irq);
@@ -390,11 +390,19 @@ static void happy_meal_timer(unsigned long data)
 			/* Enter force mode. */
 	do_force_mode:
 			hp->sw_bmcr = happy_meal_tcvr_read(hp, tregs, DP83840_BMCR);
-			printk("%s: Auto-Negotiation timeout, trying force link "
-			       "mode BMCR=0x%04x.\n", hp->dev->name, hp->sw_bmcr);
-			hp->sw_bmcr &= ~(BMCR_ANRESTART | BMCR_ANENABLE);
-			hp->sw_bmcr |= (BMCR_FULLDPLX | BMCR_ANENABLE);
+			printk("%s: Auto-Negotiation unsuccessful, trying force link mode\n",
+			       hp->dev->name);
+			hp->sw_bmcr = BMCR_SPEED100;
 			happy_meal_tcvr_write(hp, tregs, DP83840_BMCR, hp->sw_bmcr);
+
+			/* OK, seems we need do disable the transceiver for the first
+			 * tick to make sure we get an accurate link state at the
+			 * second tick.
+			 */
+			hp->sw_csconfig = happy_meal_tcvr_read(hp, tregs, DP83840_CSCONFIG);
+			hp->sw_csconfig &= ~(CSCONFIG_TCVDISAB);
+			happy_meal_tcvr_write(hp, tregs, DP83840_CSCONFIG, hp->sw_csconfig);
+
 			hp->timer_state = ltrywait;
 			hp->timer_ticks = 0;
 			restart_timer = 1;
@@ -409,6 +417,9 @@ static void happy_meal_timer(unsigned long data)
 				if(ret) {
 					/* Ooops, something bad happened, go to force
 					 * mode.
+					 *
+					 * XXX Broken hubs which don't support 802.3u
+					 * XXX auto-negotiation make this happen as well.
 					 */
 					goto do_force_mode;
 				}
@@ -455,6 +466,21 @@ static void happy_meal_timer(unsigned long data)
 		 * error recovery code for the most part.
 		 */
 		hp->sw_bmsr = happy_meal_tcvr_read(hp, tregs, DP83840_BMSR);
+		hp->sw_csconfig = happy_meal_tcvr_read(hp, tregs, DP83840_CSCONFIG);
+		if(hp->timer_ticks == 1) {
+			/* Re-enable transceiver, we'll re-enable the transceiver next
+			 * tick, then check link state on the following tick. */
+			hp->sw_csconfig |= CSCONFIG_TCVDISAB;
+			happy_meal_tcvr_write(hp, tregs, DP83840_CSCONFIG, hp->sw_csconfig);
+			restart_timer = 1;
+			break;
+		}
+		if(hp->timer_ticks == 2) {
+			hp->sw_csconfig &= ~(CSCONFIG_TCVDISAB);
+			happy_meal_tcvr_write(hp, tregs, DP83840_CSCONFIG, hp->sw_csconfig);
+			restart_timer = 1;
+			break;
+		}
 		if(hp->sw_bmsr & BMSR_LSTATUS) {
 			/* Force mode selection success. */
 			display_forced_link_mode(hp, tregs);
@@ -462,7 +488,7 @@ static void happy_meal_timer(unsigned long data)
 			hp->timer_state = asleep;
 			restart_timer = 0;
 		} else {
-			if(hp->timer_ticks >= 3) { /* 6 seconds or so... */
+			if(hp->timer_ticks >= 4) { /* 6 seconds or so... */
 				int ret;
 
 				ret = try_next_permutation(hp, tregs);
@@ -483,6 +509,9 @@ static void happy_meal_timer(unsigned long data)
 					}
 					return;
 				}
+				hp->sw_csconfig = happy_meal_tcvr_read(hp, tregs, DP83840_CSCONFIG);
+				hp->sw_csconfig |= CSCONFIG_TCVDISAB;
+				happy_meal_tcvr_write(hp, tregs, DP83840_CSCONFIG, hp->sw_csconfig);
 				hp->timer_ticks = 0;
 				restart_timer = 1;
 			} else {
@@ -1033,9 +1062,19 @@ static void happy_meal_begin_auto_negotiation(struct happy_meal *hp,
 		 * XXX Should probably reset the DP83840 first
 		 * XXX as this is a gross fatal error...
 		 */
-		hp->sw_bmcr &= ~(BMCR_ANRESTART | BMCR_ANENABLE);
-		hp->sw_bmcr |= (BMCR_FULLDPLX | BMCR_SPEED100);
+		hp->sw_bmcr = BMCR_SPEED100;
 		happy_meal_tcvr_write(hp, tregs, DP83840_BMCR, hp->sw_bmcr);
+
+		/* OK, seems we need do disable the transceiver for the first
+		 * tick to make sure we get an accurate link state at the
+		 * second tick.
+		 */
+		hp->sw_csconfig = happy_meal_tcvr_read(hp, tregs, DP83840_CSCONFIG);
+		printk("%s: CSCONFIG [%04x], disabling transceiver\n", hp->dev->name,
+		       hp->sw_csconfig);
+		hp->sw_csconfig &= ~(CSCONFIG_TCVDISAB);
+		happy_meal_tcvr_write(hp, tregs, DP83840_CSCONFIG, hp->sw_csconfig);
+
 		hp->timer_state = ltrywait;
 	} else {
 		hp->timer_state = arbwait;
@@ -1379,9 +1418,11 @@ static int happy_meal_is_not_so_happy(struct happy_meal *hp,
 		/* Defer-timer expired.  Probably means the happy meal needed
 		 * to back off too much before it could transmit one frame.
 		 */
+#if 0		/* XXX This isn't worth reporting and is in fact a normal condition. */
 		printk("%s: Transmit defer timer expired, subnet congested?\n",
 		       hp->dev->name);
 		reset = 1;
+#endif
 	}
 
 	if(status & GREG_STAT_NORXD) {
@@ -2050,7 +2091,8 @@ static int happy_meal_ether_init(struct device *dev, struct linux_sbus_device *s
 		return ENODEV;
 	}
 
-	prom_apply_sbus_ranges(sdev->my_bus, &sdev->reg_addrs[0], sdev->num_registers);
+	prom_apply_sbus_ranges(sdev->my_bus, &sdev->reg_addrs[0],
+			       sdev->num_registers, sdev);
 	hp->gregs = sparc_alloc_io(sdev->reg_addrs[0].phys_addr, 0,
 				   sizeof(struct hmeal_gregs),
 				   "Happy Meal Global Regs",
@@ -2196,10 +2238,16 @@ cleanup_module(void)
 
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_happy_dev) {
+		struct happy_meal *hp = root_happy_dev;
 		sunshine = root_happy_dev->next_module;
 
-		unregister_netdev(root_happy_dev->dev);
-		kfree(root_happy_dev->dev);
+		sparc_free_io(hp->gregs, sizeof(struct hmeal_gregs));
+		sparc_free_io(hp->etxregs, sizeof(struct hmeal_etxregs));
+		sparc_free_io(hp->erxregs, sizeof(struct hmeal_erxregs));
+		sparc_free_io(hp->bigmacregs, sizeof(struct hmeal_bigmacregs));
+		sparc_free_io(hp->tcvregs, sizeof(struct hmeal_tcvregs));
+		unregister_netdev(hp->dev);
+		kfree(hp->dev);
 		root_happy_dev = sunshine;
 	}
 }

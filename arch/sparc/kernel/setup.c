@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.80 1997/01/25 02:39:54 miguel Exp $
+/*  $Id: setup.c,v 1.81 1997/01/29 10:32:55 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -395,6 +395,7 @@ not_relevant:
 	init_task.mm->mmap->vm_page_prot = PAGE_SHARED;
 	init_task.mm->mmap->vm_start = KERNBASE;
 	init_task.mm->mmap->vm_end = *memory_end_p;
+	init_task.mm->context = (unsigned long) NO_CONTEXT;
 	init_task.tss.kregs = &fake_swapper_regs;
 
 #ifdef CONFIG_SUN_SERIAL

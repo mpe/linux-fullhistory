@@ -400,7 +400,9 @@ function l_int () {
 			answer="`cat MCdialog.out`"
 			answer="${answer:-$3}"
 
-			if expr $answer : '0$\|-\?[1-9][0-9]*$' >/dev/null
+			# Semantics of + and ? in GNU expr changed, so
+			# we avoid them:
+			if expr "$answer" : '0$\|\(-[1-9]\|[1-9]\)[0-9]*$' >/dev/null
 			then
 				eval $2="$answer"
 			else
@@ -433,7 +435,7 @@ function l_hex () {
 			answer="${answer:-$3}"
 			answer="${answer##*[x,X]}"
 
-			if expr $answer : '[0-9a-fA-F]\+$' >/dev/null
+			if expr "$answer" : '[0-9a-fA-F][0-9a-fA-F]*$' >/dev/null
 			then
 				eval $2="$answer"
 			else
@@ -452,7 +454,7 @@ function l_hex () {
 }
 
 #
-# Handle a on-of-many choice list.
+# Handle a one-of-many choice list.
 #
 function l_choice () {
 	#
@@ -493,7 +495,7 @@ function l_choice () {
 	done
 
 	#
-	# Now set the boolean value of each option base on
+	# Now set the boolean value of each option based on
 	# the selection made from the radiolist.
 	#
 	set -- $choices

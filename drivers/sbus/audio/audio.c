@@ -17,6 +17,7 @@
 #include <linux/tqueue.h>
 #include <linux/major.h>
 #include <linux/malloc.h>
+#include <linux/interrupt.h>
 #include <linux/init.h>
 
 #include "audio.h"
@@ -26,14 +27,52 @@
  *	Low-level driver interface.
  */
 
-/* We only support one low-level audio driver. */
-static struct sparcaudio_driver *driver;
+/* We only support one low-level audio driver currently. */
+static struct sparcaudio_driver *driver = NULL;
 
 int register_sparcaudio_driver(struct sparcaudio_driver *drv)
 {
-	/* If a driver is already present, don't allow it to register. */
+	int i;
+
+	/* If a driver is already present, don't allow the register. */
 	if (driver)
 		return -EIO;
+
+	/* Ensure that the driver has a proper operations structure. */
+	if (!drv->ops || !drv->ops->start_output || !drv->ops->stop_output)
+		return -EINVAL;
+
+	/* Setup the circular queue of output buffers. */
+	drv->num_output_buffers = 32;
+	drv->output_front = 0;
+	drv->output_rear = 0;
+	drv->output_count = 0;
+	drv->output_active = 0;
+	drv->output_buffers = kmalloc(32 * sizeof(__u8 *), GFP_KERNEL);
+	drv->output_sizes = kmalloc(32 * sizeof(size_t), GFP_KERNEL);
+	if (!drv->output_buffers || !drv->output_sizes) {
+		if (drv->output_buffers)
+			kfree(drv->output_buffers);
+		if (drv->output_sizes)
+			kfree(drv->output_sizes);
+		return -ENOMEM;
+	}
+
+	/* Allocate the pages for each output buffer. */
+	for (i = 0; i < drv->num_output_buffers; i++) {
+		drv->output_buffers[i] = (void *) __get_free_page(GFP_KERNEL);
+		if (!drv->output_buffers[i]) {
+			int j;
+			for (j = 0; j < i; j++)
+				free_page((unsigned long) drv->output_buffers[j]);
+			kfree(drv->output_buffers);
+			kfree(drv->output_sizes);
+			return -ENOMEM;
+		}
+	}
+
+	/* Ensure that the driver is marked as not being open. */
+	drv->flags = 0;
 
 	MOD_INC_USE_COUNT;
 
@@ -43,9 +82,17 @@ int register_sparcaudio_driver(struct sparcaudio_driver *drv)
 
 int unregister_sparcaudio_driver(struct sparcaudio_driver *drv)
 {
+	int i;
+
 	/* Make sure that the current driver is unregistering. */
 	if (driver != drv)
 		return -EIO;
+
+	/* Deallocate the queue of output buffers. */
+	for (i = 0; i < driver->num_output_buffers; i++)
+		free_page((unsigned long) driver->output_buffers[i]);
+	kfree(driver->output_buffers);
+	kfree(driver->output_sizes);
 
 	MOD_DEC_USE_COUNT;
 
@@ -53,42 +100,57 @@ int unregister_sparcaudio_driver(struct sparcaudio_driver *drv)
 	return 0;
 }
 
-static void sparcaudio_output_done_task(void * unused)
+static void sparcaudio_output_done_task(void * arg)
 {
+	struct sparcaudio_driver *drv = (struct sparcaudio_driver *)arg;
 	unsigned long flags;
 
+	printk(KERN_DEBUG "sparcaudio: next buffer (of=%d)\n",drv->output_front);
 	save_and_cli(flags);
-	printk(KERN_DEBUG "sparcaudio: next buffer\n");
-	driver->ops->start_output(driver, driver->output_buffers[driver->output_front],
-				  driver->output_sizes[driver->output_front]);
-	driver->output_active = 1;
+	drv->ops->start_output(drv,
+			       drv->output_buffers[drv->output_front],
+			       drv->output_sizes[drv->output_front]);
+	drv->output_active = 1;
 	restore_flags(flags);
 }
 
-static struct tq_struct sparcaudio_output_tqueue = {
-	0, 0, sparcaudio_output_done_task, 0 };
-
-void sparcaudio_output_done(void)
+void sparcaudio_output_done(struct sparcaudio_driver * drv)
 {
 	/* Point the queue after the "done" buffer. */
-	driver->output_front++;
-	driver->output_count--;
+	drv->output_front = (drv->output_front + 1) % drv->num_output_buffers;
+	drv->output_count--;
 
 	/* If the output queue is empty, shutdown the driver. */
-	if (driver->output_count == 0) {
+	if (drv->output_count == 0) {
 		/* Stop the lowlevel driver from outputing. */
-		printk(KERN_DEBUG "sparcaudio: lowlevel driver shutdown\n");
-		driver->ops->stop_output(driver);
-		driver->output_active = 0;
+		printk("sparcaudio: lowlevel driver shutdown\n");
+		drv->ops->stop_output(drv);
+		drv->output_active = 0;
+
+		/* Wake up any waiting writers or syncers and return. */
+		wake_up_interruptible(&drv->output_write_wait);
+		wake_up_interruptible(&drv->output_drain_wait);
 		return;
 	}
 
 	/* Otherwise, queue a task to give the driver the next buffer. */
-	queue_task(&sparcaudio_output_tqueue, &tq_immediate);
+	drv->tqueue.next = NULL;
+	drv->tqueue.sync = 0;
+	drv->tqueue.routine = sparcaudio_output_done_task;
+	drv->tqueue.data = drv;
+
+	queue_task(&drv->tqueue, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
 
 	/* Wake up any tasks that are waiting. */
-	wake_up_interruptible(&driver->output_write_wait);
+	wake_up_interruptible(&drv->output_write_wait);
 }
+
+void sparcaudio_input_done(struct sparcaudio_driver * drv)
+{
+	/* XXX Implement! */
+}
+
 
 
 /*
@@ -104,6 +166,7 @@ static int sparcaudio_lseek(struct inode * inode, struct file * file,
 static int sparcaudio_read(struct inode * inode, struct file * file,
 			   char *buf, int count)
 {
+	/* XXX Implement me! */
 	return -EINVAL;
 }
 
@@ -127,18 +190,20 @@ static int sparcaudio_write(struct inode * inode, struct file * file,
 				return bytes_written > 0 ? bytes_written : -EINTR;
 		}
 
-		/* Determine how much we can copy in this run. */
+		/* Determine how much we can copy in this iteration. */
 		bytes_to_copy = count;
 		if (bytes_to_copy > PAGE_SIZE)
 			bytes_to_copy = PAGE_SIZE;
 
-		err = verify_area(VERIFY_READ, buf, bytes_to_copy);
-		if (err)
-			return err;
+		copy_from_user_ret(driver->output_buffers[driver->output_rear],
+			       buf, bytes_to_copy, -EFAULT);
 
-		memcpy_fromfs(driver->output_buffers[driver->output_rear], buf, bytes_to_copy);
+		printk(KERN_DEBUG "Stuffing %d in %d\n",
+			 bytes_to_copy, driver->output_rear);
 
 		/* Update the queue pointers. */
+		buf += bytes_to_copy;
+		count -= bytes_to_copy;
 		bytes_written += bytes_to_copy;
 		driver->output_sizes[driver->output_rear] = bytes_to_copy;
 		driver->output_rear = (driver->output_rear + 1) % driver->num_output_buffers;
@@ -162,76 +227,117 @@ static int sparcaudio_write(struct inode * inode, struct file * file,
 static int sparcaudio_ioctl(struct inode * inode, struct file * file,
 			    unsigned int cmd, unsigned long arg)
 {
+	int retval = 0;
+
 	switch (cmd) {
+	case AUDIO_DRAIN:
+		if (driver->output_count > 0) {
+			interruptible_sleep_on(&driver->output_drain_wait);
+			retval = (current->signal & ~current->blocked) ? -EINTR : 0;
+		}
+		break;
+
+	case AUDIO_GETDEV:
+		if (driver->ops->sunaudio_getdev) {
+			audio_device_t tmp;
+
+			driver->ops->sunaudio_getdev(driver, &tmp);
+
+			copy_to_user_ret((audio_device_t *)arg, &tmp, sizeof(tmp), -EFAULT);
+		} else
+			retval = -EINVAL;
+		break;
+
 	default:
 		if (driver->ops->ioctl)
-			return driver->ops->ioctl(inode,file,cmd,arg,driver);
+			retval = driver->ops->ioctl(inode,file,cmd,arg,driver);
 		else
-			return -EINVAL;
+			retval = -EINVAL;
 	}
-	return 0;
+
+	return retval;
 }
 
 static int sparcaudio_open(struct inode * inode, struct file * file)
 {
-	unsigned int minor = MINOR(inode->i_rdev);
-	int i;
+	int err;
 
-	/* We only support minor #4 (/dev/audio right now. */
-	if (minor != 4)
+	/* A low-level audio driver must exist. */
+	if (!driver)
+		return -ENODEV;
+
+	/* We only support minor #4 (/dev/audio) right now. */
+	if (MINOR(inode->i_rdev) != 4)
 		return -ENXIO;
 
-	/* Make sure that the driver is not busy. */
-	if (driver->busy)
-		return -EBUSY;
+	/* If the driver is busy, then wait to get through. */
+	retry_open:
+	if (file->f_mode & FMODE_READ && driver->flags & SDF_OPEN_READ) {
+		if (file->f_flags & O_NONBLOCK)
+			return -EBUSY;
 
-	/* Setup the queue of output buffers. */
-	driver->num_output_buffers = 32;
-	driver->output_front = 0;
-	driver->output_rear = 0;
-	driver->output_count = 0;
-	driver->output_active = 0;
-	driver->output_buffers = kmalloc(32 * sizeof(__u8 *), GFP_KERNEL);
-	driver->output_sizes = kmalloc(32 * sizeof(__u8 *), GFP_KERNEL);
-	if (!driver->output_buffers || !driver->output_sizes)
-		return -ENOMEM;
+		interruptible_sleep_on(&driver->open_wait);
+		if (current->signal & ~current->blocked)
+			return -EINTR;
+		goto retry_open;
+	}
+	if (file->f_mode & FMODE_WRITE && driver->flags & SDF_OPEN_WRITE) {
+		if (file->f_flags & O_NONBLOCK)
+			return -EBUSY;
 
-	/* Allocate space for the output buffers. */
-	for (i = 0; i < driver->num_output_buffers; i++) {
-		driver->output_buffers[i] = (void *) __get_free_page(GFP_KERNEL);
-		if (!driver->output_buffers[i])
-			return -ENOMEM;
+		interruptible_sleep_on(&driver->open_wait);
+		if (current->signal & ~current->blocked)
+			return -EINTR;
+		goto retry_open;
 	}
 
+	/* Mark the driver as locked for read and/or write. */
+	if (file->f_mode & FMODE_READ)
+		driver->flags |= SDF_OPEN_READ;
+	if (file->f_mode & FMODE_WRITE) {
+		driver->output_front = 0;
+		driver->output_rear = 0;
+		driver->output_count = 0;
+		driver->output_active = 0;
+		driver->flags |= SDF_OPEN_WRITE;
+	}  
+
 	/* Allow the low-level driver to initialize itself. */
-	if (driver->ops->open)
-		driver->ops->open(inode,file,driver);
-
-
-	/* Mark the driver as busy. */
-	driver->busy = 1;
+	if (driver->ops->open) {
+		err = driver->ops->open(inode,file,driver);
+		if (err < 0)
+			return err;
+	}
 
 	MOD_INC_USE_COUNT;
 
-	/* Success return. */
+	/* Success! */
 	return 0;
 }
 
 static void sparcaudio_release(struct inode * inode, struct file * file)
 {
-	int i;
+	/* Wait for any output still in the queue to be played. */
+	if (driver->output_count > 0)
+		interruptible_sleep_on(&driver->output_drain_wait);
 
+	/* Force any output to be stopped. */
+	driver->ops->stop_output(driver);
+	driver->output_active = 0;
+
+	/* Let the low-level driver do any release processing. */
 	if (driver->ops->release)
 		driver->ops->release(inode,file,driver);
 
+	if (file->f_mode & FMODE_READ)
+		driver->flags &= ~(SDF_OPEN_READ);
+
+	if (file->f_mode & FMODE_WRITE)
+		driver->flags &= ~(SDF_OPEN_WRITE);
+
 	MOD_DEC_USE_COUNT;
 
-	driver->busy = 0;
-
-	for (i = 0; i < driver->num_output_buffers; i++)
-		kfree(driver->output_buffers[i]);
-	kfree(driver->output_buffers);
-	kfree(driver->output_sizes);
+	wake_up_interruptible(&driver->open_wait);
 }
 
 static struct file_operations sparcaudio_fops = {
@@ -239,13 +345,17 @@ static struct file_operations sparcaudio_fops = {
 	sparcaudio_read,
 	sparcaudio_write,
 	NULL,			/* sparcaudio_readdir */
-	NULL,			/* sparcaudio_poll */
+	NULL,			/* sparcaudio_select */
 	sparcaudio_ioctl,
 	NULL,			/* sparcaudio_mmap */
 	sparcaudio_open,
 	sparcaudio_release
 };
 
+EXPORT_SYMBOL(register_sparcaudio_driver);
+EXPORT_SYMBOL(unregister_sparcaudio_driver);
+EXPORT_SYMBOL(sparcaudio_output_done);
+EXPORT_SYMBOL(sparcaudio_input_done);
 
 #ifdef MODULE
 int init_module(void)
@@ -261,11 +371,16 @@ __initfunc(int sparcaudio_init(void))
 	amd7930_init();
 #endif
 
+#ifdef CONFIG_SPARCAUDIO_CS4231
+	cs4231_init();
+#endif
+
 	return 0;
 }
 
 #ifdef MODULE
 void cleanup_module(void)
 {
+	unregister_chrdev(SOUND_MAJOR, "sparcaudio");
 }
 #endif

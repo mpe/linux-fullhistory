@@ -370,7 +370,7 @@ struct hmeal_tcvregs {
 #define CSCONFIG_LED4           0x0002  /* Pin for full-dplx LED4      */
 #define CSCONFIG_LED1           0x0004  /* Pin for conn-status LED1    */
 #define CSCONFIG_RESV2          0x0008  /* Unused...                   */
-#define CSCONFIG_TXDISAB        0x0010  /* Turns off the transceiver   */
+#define CSCONFIG_TCVDISAB       0x0010  /* Turns off the transceiver   */
 #define CSCONFIG_DFBYPASS       0x0020  /* Bypass disconnect function  */
 #define CSCONFIG_GLFORCE        0x0040  /* Good link force for 100mbps */
 #define CSCONFIG_CLKTRISTATE    0x0080  /* Tristate 25m clock          */
@@ -528,6 +528,7 @@ struct happy_meal {
 	unsigned short            sw_advertise;   /* SW copy of ADVERTISE              */
 	unsigned short            sw_lpa;         /* SW copy of LPA                    */
 	unsigned short            sw_expansion;   /* SW copy of EXPANSION              */
+	unsigned short            sw_csconfig;    /* SW copy of CSCONFIG               */
 	unsigned int              auto_speed;     /* Auto-nego link speed              */
         unsigned int              forced_speed;   /* Force mode link speed             */
 	unsigned int              poll_data;      /* MIF poll data                     */
@@ -540,7 +541,7 @@ struct happy_meal {
 	enum happy_timer_state    timer_state;    /* State of the auto-neg timer.      */
 	unsigned int              timer_ticks;    /* Number of clicks at each state.   */
 
-	struct net_device_stats	 enet_stats;     /* Statistical counters              */
+	struct net_device_stats	  net_stats;      /* Statistical counters              */
 	struct linux_sbus_device *happy_sbus_dev; /* ;-)                               */
 	struct device            *dev;            /* Backpointer                       */
 	struct happy_meal        *next_module;

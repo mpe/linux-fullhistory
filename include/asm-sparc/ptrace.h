@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.24 1997/01/06 06:53:23 davem Exp $ */
+/* $Id: ptrace.h,v 1.25 1997/03/04 16:27:25 jj Exp $ */
 #ifndef _SPARC_PTRACE_H
 #define _SPARC_PTRACE_H
 
@@ -73,36 +73,7 @@ extern void show_regs(struct pt_regs *);
 #define REGWIN_SZ         0x40
 #endif
 
-/* First generic task_struct offsets. sizeof(task_struct)=1568 */
-#define TASK_STATE        0x000
-#define TASK_PRIORITY     0x008
-#define TASK_SIGNAL       0x00c
-#define TASK_BLOCKED      0x010
-#define TASK_FLAGS        0x014
-#define TASK_SAVED_KSTACK 0x054
-#define TASK_KSTACK_PG    0x058
-#define TASK_LOCK_DEPTH   0x618
-
-/* Thread stuff. */
-#define THREAD_UMASK      0x1e0
-#define THREAD_SADDR      0x1e8
-#define THREAD_SDESC      0x1ec
-#define THREAD_KSP        0x1f0
-#define THREAD_KPC        0x1f4
-#define THREAD_KPSR       0x1f8
-#define THREAD_KWIM       0x1fc
-#define THREAD_FORK_KPSR  0x200
-#define THREAD_FORK_KWIM  0x204
-#define THREAD_REG_WINDOW 0x208
-#define THREAD_STACK_PTRS 0x408
-#define THREAD_W_SAVED    0x428
-#define THREAD_FLOAT_REGS 0x430
-#define THREAD_FSR        0x530
-#define THREAD_SIGSTK     0x5b8
-#define THREAD_FLAGS      0x5c0
-#define THREAD_DS         0x5d8
-#define THREAD_MM         0x608
-#define THREAD_MM_CTX     0x008
+#include <asm/asm_offsets.h>
 
 /* These are for pt_regs. */
 #define PT_PSR    0x0

@@ -65,5 +65,13 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SUN_BPP),y)
+O_OBJS += bpp.o
+else
+  ifeq ($(CONFIG_SUN_BPP),m)
+  M_OBJS += bpp.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 

@@ -1,4 +1,4 @@
-/* $Id: wuf.S,v 1.30 1997/01/06 06:52:44 davem Exp $
+/* $Id: wuf.S,v 1.31 1997/03/04 16:26:37 jj Exp $
  * wuf.S: Window underflow trap handler for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller
@@ -145,7 +145,7 @@ fwin_user_stack_is_bolixed:
 	 * to the trap window and call c-code to deal with this.
 	 */
 	LOAD_CURRENT(l4, l5)
-	ld	[%l4 + TASK_SAVED_KSTACK], %l5
+	ld	[%l4 + AOFF_task_saved_kernel_stack], %l5
 
 	/* Store globals into pt_regs frame. */
 	STORE_PT_GLOBALS(l5)
@@ -178,8 +178,8 @@ fwin_user_stack_is_bolixed:
 	/* Fix users window mask and buffer save count. */
 	mov	0x1, %g5
 	sll	%g5, %g3, %g5
-	st	%g5, [%curptr + THREAD_UMASK]		! one live user window still
-	st	%g0, [%curptr + THREAD_W_SAVED]		! no windows in the buffer
+	st	%g5, [%curptr + AOFF_task_tss + AOFF_thread_uwinmask]		! one live user window still
+	st	%g0, [%curptr + AOFF_task_tss + AOFF_thread_w_saved]		! no windows in the buffer
 
 	wr	%t_psr, PSR_ET, %psr			! enable traps
 	nop

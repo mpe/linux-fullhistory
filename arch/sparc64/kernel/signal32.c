@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.3 1997/01/19 22:32:30 ecd Exp $
+/*  $Id: signal32.c,v 1.4 1997/03/03 16:51:46 jj Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -53,12 +53,12 @@ asmlinkage int do_signal32(unsigned long oldmask, struct pt_regs * regs,
  * ---------------------------------- <-- New %sp
  */
 struct signal_sframe32 {
-	struct reg_window_32 sig_window;
+	struct reg_window32 sig_window;
 	int sig_num;
 	int sig_code;
-	struct sigcontext_32 *sig_scptr;
+	struct sigcontext32 *sig_scptr;
 	int sig_address;
-	struct sigcontext_32 sig_context;
+	struct sigcontext32 sig_context;
 };
 
 /* 
@@ -68,7 +68,7 @@ struct signal_sframe32 {
  */
 
 struct new_signal_frame32 {
-	struct sparc_stackf_32	ss;
+	struct sparc_stackf32	ss;
 	__siginfo32_t		info;
 	__siginfo_fpu32_t	*fpu_save;
 	unsigned int		insns [2];
@@ -123,23 +123,23 @@ asmlinkage void do_sigsuspend32(struct pt_regs *regs)
 
 
 static inline void
-restore_fpu_state(struct pt_regs *regs, __siginfo_fpu32_t *fpu)
+restore_fpu_state32(struct pt_regs *regs, __siginfo_fpu32_t *fpu)
 {
 #ifdef __SMP__
 	if (current->flags & PF_USEDFPU)
-		regs->psr &= ~(TSTATE_PEF);
+		regs->tstate &= ~(TSTATE_PEF);
 #else
 	if (current == last_task_used_math) {
 		last_task_used_math = 0;
-		regs->psr &= ~(TSTATE_PEF);
+		regs->tstate &= ~(TSTATE_PEF);
 	}
 #endif
 	current->used_math = 1;
 	current->flags &= ~PF_USEDFPU;
 
 	copy_32bit_to_kernel_fpuregs(&current->tss.float_regs[0],
-				     &sf->info.si_float_regs[0],
-				     (sizeof(unsigned int) * 64));
+				     &fpu->si_float_regs[0],
+				     (sizeof(unsigned int) * 32));
 	__get_user(current->tss.fsr, &fpu->si_fsr);
 	__get_user(current->tss.fpqdepth, &fpu->si_fpqdepth);
 	if (current->tss.fpqdepth != 0)
@@ -160,7 +160,7 @@ void do_new_sigreturn32(struct pt_regs *regs)
 		do_exit (SIGSEGV);
 		return;
 	}
-	if (((uint) sf) & 3){
+	if (((unsigned long) sf) & 3){
 		do_exit (SIGSEGV);
 		return;
 	}
@@ -179,23 +179,23 @@ void do_new_sigreturn32(struct pt_regs *regs)
 	regs->tstate |= (sf->info.si_regs.psr & PSR_EF);
 
 	if (sf->fpu_save)
-		restore_fpu_state(regs, sf->fpu_state);
+		restore_fpu_state32(regs, sf->fpu_state);
 
 	current->blocked = sf->info.si_mask & _BLOCKABLE;
 }
 
 asmlinkage void do_sigreturn32(struct pt_regs *regs)
 {
-	struct sigcontext *scptr;
+	struct sigcontext32 *scptr;
 	unsigned long pc, npc, psr;
 
 	synchronize_user_stack();
 	if (current->tss.new_signal)
 		return do_new_sigreturn32(regs);
 
-	scptr = (struct sigcontext *) regs->u_regs[UREG_I0];
+	scptr = (struct sigcontext32 *) regs->u_regs[UREG_I0];
 	/* Check sanity of the user arg. */
-	if(verify_area(VERIFY_READ, scptr, sizeof(struct sigcontext)) ||
+	if(verify_area(VERIFY_READ, scptr, sizeof(struct sigcontext32)) ||
 	   (((unsigned long) scptr) & 3)) {
 		printk("%s [%d]: do_sigreturn, scptr is invalid at "
 		       "pc<%08lx> scptr<%p>\n",
@@ -236,7 +236,7 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	      struct pt_regs *regs, int signr, unsigned long oldmask)
 {
 	struct signal_sframe32 *sframep;
-	struct sigcontext *sc;
+	struct sigcontext32 *sc;
 	int window = 0;
 	int old_status = current->tss.sstk_info.cur_status;
 
@@ -302,7 +302,7 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 
 
 static inline void
-save_fpu_state(struct pt_regs *regs, __siginfo_fpu32_t *fpu)
+save_fpu_state32(struct pt_regs *regs, __siginfo_fpu32_t *fpu)
 {
 #ifdef __SMP__
 	if (current->flags & PF_USEDFPU) {
@@ -322,7 +322,7 @@ save_fpu_state(struct pt_regs *regs, __siginfo_fpu32_t *fpu)
 	}
 #endif
 	copy_to_user(&fpu->si_float_regs[0], &current->tss.float_regs[0],
-		     (sizeof(unsigned long) * 64));
+		     (sizeof(unsigned int) * 32));
 	__put_user(current->tss.fsr, &fpu->si_fsr);
 	__put_user(current->tss.fpqdepth, &fpu->si_fpqdepth);
 	if (current->tss.fpqdepth != 0)
@@ -363,7 +363,7 @@ new_setup_frame32(struct sigaction *sa, struct pt_regs *regs,
 	memcpy (&sf->info.si_regs, regs, sizeof (struct pt_regs));
 
 	if (current->used_math) {
-		save_fpu_state(regs, &sf->fpu_state);
+		save_fpu_state32(regs, &sf->fpu_state);
 		sf->fpu_save = &sf->fpu_state;
 	} else {
 		sf->fpu_save = NULL;

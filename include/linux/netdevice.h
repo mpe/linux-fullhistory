@@ -69,10 +69,6 @@
 #define IFF_IP_MASK_OK	2
 #define IFF_IP_BRD_OK	4
 
-#ifdef __KERNEL__
-
-#include <linux/skbuff.h>
-
 /*
  *	We tag multicasts with these structures.
  */
@@ -130,6 +126,9 @@ struct net_device_stats
 	
 };
 
+#ifdef __KERNEL__
+
+#include <linux/skbuff.h>
 
 /*
  *	The DEVICE structure.

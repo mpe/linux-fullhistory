@@ -1,8 +1,9 @@
-/* $Id: fault.c,v 1.86 1997/01/06 06:52:52 davem Exp $
+/* $Id: fault.c,v 1.89 1997/03/04 16:26:46 jj Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost (ecd@skynet.be)
+ * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 #include <asm/head.h>
@@ -133,6 +134,58 @@ asmlinkage void sparc_lvl15_nmi(struct pt_regs *regs, unsigned long serr,
 	prom_halt();
 }
 
+void unhandled_fault(unsigned long address, struct task_struct *tsk,
+                     struct pt_regs *regs)
+{
+	if((unsigned long) address < PAGE_SIZE) {
+		printk(KERN_ALERT "Unable to handle kernel NULL "
+		       "pointer dereference");
+	} else {
+		printk(KERN_ALERT "Unable to handle kernel paging request "
+		       "at virtual address %08lx\n", address);
+	}
+	printk(KERN_ALERT "tsk->mm->context = %08lx\n",
+	       (unsigned long) tsk->mm->context);
+	printk(KERN_ALERT "tsk->mm->pgd = %08lx\n",
+	       (unsigned long) tsk->mm->pgd);
+	die_if_kernel("Oops", regs);
+}
+
+asmlinkage int lookup_fault(unsigned long pc, unsigned long ret_pc, 
+			    unsigned long address)
+{
+	unsigned long g2;
+	int i;
+	unsigned insn;
+	struct pt_regs regs;
+	
+	i = search_exception_table (ret_pc, &g2);
+	switch (i) {
+	/* load & store will be handled by fixup */
+	case 3: return 3;
+	/* store will be handled by fixup, load will bump out */
+	/* for _to_ macros */
+	case 1: insn = (unsigned *)pc; if ((insn >> 21) & 1) return 1; break;
+	/* load will be handled by fixup, store will bump out */
+	/* for _from_ macros */
+	case 2: insn = (unsigned *)pc; 
+		if (!((insn >> 21) & 1) || ((insn>>19)&0x3f) == 15) return 2; 
+		break; 
+	default: break;
+	}
+	memset (&regs, 0, sizeof (regs));
+	regs.pc = pc;
+	regs.npc = pc + 4;
+	__asm__ __volatile__ ("
+		rd %%psr, %0
+		nop
+		nop
+		nop" : "=r" (regs.psr));
+	unhandled_fault (address, current, &regs);
+	/* Not reached */
+	return 0;
+}
+
 asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 			       unsigned long address)
 {
@@ -142,33 +195,10 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 	unsigned int fixup;
 	unsigned long g2;
 	int from_user = !(regs->psr & PSR_PS);
-#if 0
-	static unsigned long last_one;
-#endif
 	lock_kernel();
 	down(&mm->mmap_sem);
 	if(text_fault)
 		address = regs->pc;
-
-#if 0
-	if(current->tss.ex.count) {
-		printk("f<pid=%d,tf=%d,wr=%d,addr=%08lx,pc=%08lx>\n",
-		       tsk->pid, text_fault, write, address, regs->pc);
-		printk("EX: count<%d> pc<%08lx> expc<%08lx> address<%08lx>\n",
-		       (int) current->tss.ex.count, current->tss.ex.pc,
-		       current->tss.ex.expc, current->tss.ex.address);
-#if 0
-		if(last_one == address) {
-			printk("Twice in a row, AIEEE.  Spinning so you can see the dump.\n");
-			show_regs(regs);
-			sti();
-			while(1)
-				barrier();
-		}
-		last_one = address;
-#endif
-	}
-#endif
 
 	/* The kernel referencing a bad kernel pointer can lock up
 	 * a sun4c machine completely, so we must attempt recovery.
@@ -211,32 +241,25 @@ bad_area:
 	
 	g2 = regs->u_regs[UREG_G2];
 	if (!from_user && (fixup = search_exception_table (regs->pc, &g2))) {
-		printk("Exception: PC<%08lx> faddr<%08lx>\n", regs->pc, address);
-		printk("EX_TABLE: insn<%08lx> fixup<%08x> g2<%08lx>\n",
-			regs->pc, fixup, g2);
-		regs->pc = fixup;
-		regs->npc = regs->pc + 4;
-		regs->u_regs[UREG_G2] = g2;
-		goto out;
-	}
-	/* Did we have an exception handler installed? */
-	if(current->tss.ex.count == 1) {
-		if(from_user) {
-			printk("Yieee, exception signalled from user mode.\n");
-		} else {
-			/* Set pc to %g1, set %g1 to -EFAULT and %g2 to
-			 * the faulting address so we can cleanup.
-			 */
+		if (fixup > 10) { /* Values below are reserved for other things */
+			extern const unsigned __memset_start[];
+			extern const unsigned __memset_end[];
+			extern const unsigned __csum_partial_copy_start[];
+			extern const unsigned __csum_partial_copy_end[];
+
 			printk("Exception: PC<%08lx> faddr<%08lx>\n", regs->pc, address);
-			printk("EX: count<%d> pc<%08lx> expc<%08lx> address<%08lx>\n",
-			       (int) current->tss.ex.count, current->tss.ex.pc,
-			       current->tss.ex.expc, current->tss.ex.address);
-			current->tss.ex.count = 0;
-			regs->pc = current->tss.ex.expc;
+			printk("EX_TABLE: insn<%08lx> fixup<%08x> g2<%08lx>\n",
+				regs->pc, fixup, g2);
+			if ((regs->pc >= (unsigned long)__memset_start &&
+			     regs->pc < (unsigned long)__memset_end) ||
+			    (regs->pc >= (unsigned long)__csum_partial_copy_start &&
+			     regs->pc < (unsigned long)__csum_partial_copy_end)) {
+			        regs->u_regs[UREG_I4] = address;
+				regs->u_regs[UREG_I5] = regs->pc;
+			}
+			regs->u_regs[UREG_G2] = g2;
+			regs->pc = fixup;
 			regs->npc = regs->pc + 4;
-			regs->u_regs[UREG_G1] = -EFAULT;
-			regs->u_regs[UREG_G2] = address - current->tss.ex.address;
-			regs->u_regs[UREG_G3] = current->tss.ex.pc;
 			goto out;
 		}
 	}
@@ -250,18 +273,7 @@ bad_area:
 		send_sig(SIGSEGV, tsk, 1);
 		goto out;
 	}
-	if((unsigned long) address < PAGE_SIZE) {
-		printk(KERN_ALERT "Unable to handle kernel NULL "
-		       "pointer dereference");
-	} else {
-		printk(KERN_ALERT "Unable to handle kernel paging request "
-		       "at virtual address %08lx\n", address);
-	}
-	printk(KERN_ALERT "tsk->mm->context = %08lx\n",
-	       (unsigned long) tsk->mm->context);
-	printk(KERN_ALERT "tsk->mm->pgd = %08lx\n",
-	       (unsigned long) tsk->mm->pgd);
-	die_if_kernel("Oops", regs);
+	unhandled_fault (address, tsk, regs);
 out:
 	unlock_kernel();
 }

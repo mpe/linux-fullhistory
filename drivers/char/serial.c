@@ -52,7 +52,7 @@
 #include <asm/bitops.h>
 
 static char *serial_name = "Serial driver";
-static char *serial_version = "4.23";
+static char *serial_version = "4.24";
 
 static DECLARE_TASK_QUEUE(tq_serial);
 
@@ -1053,7 +1053,7 @@ static void figure_IRQ_timeout(int irq)
 static int startup(struct async_struct * info)
 {
 	unsigned long flags;
-	int	retval;
+	int	retval=0;
 	void (*handler)(int, void *, struct pt_regs *);
 	struct serial_state *state= info->state;
 	unsigned long page;
@@ -1070,16 +1070,14 @@ static int startup(struct async_struct * info)
 
 	if (info->flags & ASYNC_INITIALIZED) {
 		free_page(page);
-		restore_flags(flags);
-		return 0;
+		goto errout;
 	}
 
 	if (!state->port || !state->type) {
 		if (info->tty)
 			set_bit(TTY_IO_ERROR, &info->tty->flags);
 		free_page(page);
-		restore_flags(flags);
-		return 0;
+		goto errout;
 	}
 	if (info->xmit_buf)
 		free_page(page);
@@ -1118,13 +1116,12 @@ static int startup(struct async_struct * info)
 	 * here.
 	 */
 	if (serial_inp(info, UART_LSR) == 0xff) {
-		restore_flags(flags);
 		if (suser()) {
 			if (info->tty)
 				set_bit(TTY_IO_ERROR, &info->tty->flags);
-			return 0;
 		} else
-			return -ENODEV;
+			retval = -ENODEV;
+		goto errout;
 	}
 	
 	/*
@@ -1142,7 +1139,8 @@ static int startup(struct async_struct * info)
 #endif
 				handler = rs_interrupt;
 #else
-			return -EBUSY;
+			retval = -EBUSY;
+			goto errout;
 #endif /* CONFIG_SERIAL_SHARE_IRQ */
 		} else 
 			handler = rs_interrupt_single;
@@ -1150,14 +1148,13 @@ static int startup(struct async_struct * info)
 		retval = request_irq(state->irq, handler, IRQ_T(info),
 				     "serial", NULL);
 		if (retval) {
-			restore_flags(flags);
 			if (suser()) {
 				if (info->tty)
 					set_bit(TTY_IO_ERROR,
 						&info->tty->flags);
-				return 0;
-			} else
-				return retval;
+				retval = 0;
+			}
+			goto errout;
 		}
 	}
 
@@ -1246,6 +1243,10 @@ static int startup(struct async_struct * info)
 	info->flags |= ASYNC_INITIALIZED;
 	restore_flags(flags);
 	return 0;
+	
+errout:
+	restore_flags(flags);
+	return retval;
 }
 
 /*
@@ -2879,8 +2880,8 @@ static int inline line_info(char *buf, struct serial_state *state)
 	return ret;
 }
 
-int rs_read_proc(char *page, char **start, off_t off, int count, void
-		 *data)
+int rs_read_proc(char *page, char **start, off_t off, int count,
+		 int *eof, void *data)
 {
 	int i, len = 0;
 	off_t	begin = 0;
@@ -2889,12 +2890,14 @@ int rs_read_proc(char *page, char **start, off_t off, int count, void
 	for (i = 0; i < NR_PORTS && len < 4000; i++) {
 		len += line_info(page + len, &rs_table[i]);
 		if (len+begin > off+count)
-			break;
+			goto done;
 		if (len+begin < off) {
 			begin += len;
 			len = 0;
 		}
 	}
+	*eof = 1;
+done:
 	if (off >= len+begin)
 		return 0;
 	*start = page + (begin-off);
@@ -2919,6 +2922,18 @@ static void show_serial_version(void)
  	printk(KERN_INFO "%s version %s with", serial_name, serial_version);
 #ifdef CONFIG_HUB6
 	printk(" HUB-6");
+#define SERIAL_OPT
+#endif
+#ifdef CONFIG_SERIAL_MANY_PORTS
+	printk(" MANY_PORTS");
+#define SERIAL_OPT
+#endif
+#ifdef CONFIG_SERIAL_MULTIPORT
+	printk(" MULTIPORT");
+#define SERIAL_OPT
+#endif
+#ifdef CONFIG_SERIAL_SHARE_IRQ
+	printk(" SHARE_IRQ");
 #define SERIAL_OPT
 #endif
 #ifdef SERIAL_OPT

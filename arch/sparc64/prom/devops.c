@@ -1,8 +1,8 @@
-/* $Id: devops.c,v 1.1 1996/12/27 08:49:11 jj Exp $
+/* $Id: devops.c,v 1.2 1997/02/25 12:40:20 jj Exp $
  * devops.c:  Device operations using the PROM.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -18,16 +18,16 @@
 int
 prom_devopen(char *dstr)
 {
-	return (*prom_command)("open", P1275_ARG(0,P1275_ARG_IN_STRING)|
-				       P1275_INOUT(1,1),
-				       dstr);
+	return p1275_cmd ("open", P1275_ARG(0,P1275_ARG_IN_STRING)|
+				  P1275_INOUT(1,1),
+				  dstr);
 }
 
 /* Close the device described by device handle 'dhandle'. */
 int
 prom_devclose(int dhandle)
 {
-	(*prom_command)("close", P1275_INOUT(1,0), dhandle);
+	p1275_cmd ("close", P1275_INOUT(1,0), dhandle);
 	return 0;
 }
 
@@ -37,5 +37,5 @@ prom_devclose(int dhandle)
 void
 prom_seek(int dhandle, unsigned int seekhi, unsigned int seeklo)
 {
-	(*prom_command)("seek", P1275_INOUT(3,1), dhandle, seekhi, seeklo);
+	p1275_cmd ("seek", P1275_INOUT(3,1), dhandle, seekhi, seeklo);
 }

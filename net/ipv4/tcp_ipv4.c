@@ -230,8 +230,7 @@ static void tcp_v4_unhash(struct sock *sk)
 		}
 		sk->hashtable = NULL;
 	}
-	if(sk->state == TCP_CLOSE && sk->dead)
-		tcp_sk_unbindify(sk);
+	tcp_sk_unbindify(sk);
 	SOCKHASH_UNLOCK();
 }
 
@@ -251,8 +250,8 @@ static void tcp_v4_rehash(struct sock *sk)
 			}
 			htable = &((*htable)->next);
 		}
+		tcp_sk_unbindify(sk);
 	}
-	tcp_sk_unbindify(sk);
 	htable = NULL;
 	if(state != TCP_CLOSE || !sk->dead) {
 		if(state == TCP_LISTEN) {

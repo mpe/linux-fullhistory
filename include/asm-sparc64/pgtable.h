@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.8 1996/12/28 18:39:52 davem Exp $
+/* $Id: pgtable.h,v 1.10 1997/03/03 16:51:54 jj Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -11,6 +11,9 @@
  * the SpitFire page tables.
  */
 
+#ifndef __ASSEMBLY__
+#include <linux/mm.h>
+#endif
 #include <asm/spitfire.h>
 #include <asm/asi.h>
 #include <asm/mmu_context.h>
@@ -48,32 +51,32 @@
 #endif /* !(__ASSEMBLY__) */
 
 /* SpitFire TTE bits. */
-#define _PAGE_VALID	0x8000000000000000UL	/* Valid TTE                          */
-#define _PAGE_R		0x8000000000000000UL	/* Used to keep ref bit up to date    */
-#define _PAGE_SZ4MB	0x6000000000000000UL	/* 4MB Page                           */
-#define _PAGE_SZ512K	0x4000000000000000UL	/* 512K Page                          */
-#define _PAGE_SZ64K	0x2000000000000000UL	/* 64K Page                           */
-#define _PAGE_SZ8K	0x0000000000000000UL	/* 8K Page                            */
-#define _PAGE_NFO	0x1000000000000000UL	/* No Fault Only                      */
-#define _PAGE_IE	0x0800000000000000UL	/* Invert Endianness                  */
-#define _PAGE_SOFT2	0x07FC000000000000UL	/* Second set of software bits        */
-#define _PAGE_DIAG	0x0003FE0000000000UL	/* Diagnostic TTE bits                */
-#define _PAGE_PADDR	0x000001FFFFFFE000UL	/* Physical Address bits [40:13]      */
-#define _PAGE_SOFT	0x0000000000001F80UL	/* First set of software bits         */
-#define _PAGE_L		0x0000000000000040UL	/* Locked TTE                         */
-#define _PAGE_CP	0x0000000000000020UL	/* Cacheable in Physical Cache        */
-#define _PAGE_CV	0x0000000000000010UL	/* Cacheable in Virtual Cache         */
-#define _PAGE_E		0x0000000000000008UL    /* side-Effect                        */
-#define _PAGE_P		0x0000000000000004UL	/* Privileged Page                    */
-#define _PAGE_W		0x0000000000000002UL	/* Writable                           */
-#define _PAGE_G		0x0000000000000001UL	/* Global                             */
+#define _PAGE_VALID	0x8000000000000000	/* Valid TTE                          */
+#define _PAGE_R		0x8000000000000000	/* Used to keep ref bit up to date    */
+#define _PAGE_SZ4MB	0x6000000000000000	/* 4MB Page                           */
+#define _PAGE_SZ512K	0x4000000000000000	/* 512K Page                          */
+#define _PAGE_SZ64K	0x2000000000000000	/* 64K Page                           */
+#define _PAGE_SZ8K	0x0000000000000000	/* 8K Page                            */
+#define _PAGE_NFO	0x1000000000000000	/* No Fault Only                      */
+#define _PAGE_IE	0x0800000000000000	/* Invert Endianness                  */
+#define _PAGE_SOFT2	0x07FC000000000000	/* Second set of software bits        */
+#define _PAGE_DIAG	0x0003FE0000000000	/* Diagnostic TTE bits                */
+#define _PAGE_PADDR	0x000001FFFFFFE000	/* Physical Address bits [40:13]      */
+#define _PAGE_SOFT	0x0000000000001F80	/* First set of software bits         */
+#define _PAGE_L		0x0000000000000040	/* Locked TTE                         */
+#define _PAGE_CP	0x0000000000000020	/* Cacheable in Physical Cache        */
+#define _PAGE_CV	0x0000000000000010	/* Cacheable in Virtual Cache         */
+#define _PAGE_E		0x0000000000000008	/* side-Effect                        */
+#define _PAGE_P		0x0000000000000004	/* Privileged Page                    */
+#define _PAGE_W		0x0000000000000002	/* Writable                           */
+#define _PAGE_G		0x0000000000000001	/* Global                             */
 
 /* Here are the SpitFire software bits we use in the TTE's. */
-#define _PAGE_PRESENT	0x0000000000001000UL	/* Present Page (ie. not swapped out) */
-#define _PAGE_MODIFIED	0x0000000000000800UL	/* Modified Page (ie. dirty)          */
-#define _PAGE_ACCESSED	0x0000000000000400UL	/* Accessed Page (ie. referenced)     */
-#define _PAGE_READ	0x0000000000000200UL	/* Readable SW Bit                    */
-#define _PAGE_WRITE	0x0000000000000100UL	/* Writable SW Bit                    */
+#define _PAGE_PRESENT	0x0000000000001000	/* Present Page (ie. not swapped out) */
+#define _PAGE_MODIFIED	0x0000000000000800	/* Modified Page (ie. dirty)          */
+#define _PAGE_ACCESSED	0x0000000000000400	/* Accessed Page (ie. referenced)     */
+#define _PAGE_READ	0x0000000000000200	/* Readable SW Bit                    */
+#define _PAGE_WRITE	0x0000000000000100	/* Writable SW Bit                    */
 
 #define _PAGE_CACHE	(_PAGE_CP | _PAGE_CV)
 
@@ -365,18 +368,17 @@ extern inline pte_t pte_mkyoung(pte_t pte)
 
 extern inline void SET_PAGE_DIR(struct task_struct *tsk, pgd_t *pgdir)
 {
-	register unsigned long paddr asm("%o5");
+	register unsigned long paddr asm("o5");
 
 	paddr = ((unsigned long) pgdir) - PAGE_OFFSET;
 
 	if(tsk->mm == current->mm) {
 		__asm__ __volatile__("
 			rdpr		%%pstate, %%g1
-			or		%%g1, %1, %%g2
-			wrpr		%%g2, %2, %%pstate
+			wrpr		%%g1, %2, %%pstate
 			mov		%0, %%g7
 			wrpr		%%g1, 0x0, %%pstate
-		" : : "r" (paddr), "i" (PSTATE_MG), "i" (PSTATE_IE)
+		" : : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE)
 		  : "g1", "g2");
 	}
 }

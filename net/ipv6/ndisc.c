@@ -1843,11 +1843,7 @@ void ndisc_init(struct net_proto_family *ops)
 	add_timer(&ndisc_gc_timer);
 
 #ifdef CONFIG_PROC_FS
-#ifdef CONFIG_IPV6_MODULE
-        proc_register_dynamic(&proc_net, &ndisc_proc_entry);
-#else
 	proc_net_register(&ndisc_proc_entry);
-#endif
 #endif
 #ifdef CONFIG_IPV6_MODULE
 	ndisc_eth_hook = ndisc_eth_resolv;

@@ -46,7 +46,7 @@ extern __inline__ void lock_kernel(void)
 	mov	%%o7, %%g4
 	call	___lock_kernel
 	 ld	[%%g6 + %0], %%g2
-"	: : "i" (TASK_LOCK_DEPTH), "r" (klip), "r" (proc)
+"	: : "i" (AOFF_task_lock_depth), "r" (klip), "r" (proc)
 	: "g2", "g3", "g4", "g7", "memory");
 }
 
@@ -59,7 +59,7 @@ extern __inline__ void unlock_kernel(void)
 	mov	%%o7, %%g4
 	call	___unlock_kernel
 	 ld	[%%g6 + %0], %%g2
-"	: : "i" (TASK_LOCK_DEPTH), "r" (klip)
+"	: : "i" (AOFF_task_lock_depth), "r" (klip)
 	: "g2", "g3", "g4", "memory");
 }
 

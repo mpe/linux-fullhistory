@@ -1,4 +1,4 @@
-/* $Id: sunserial.c,v 1.25 1996/12/30 07:50:26 davem Exp $
+/* $Id: sunserial.c,v 1.27 1997/03/04 19:33:55 davem Exp $
  * serial.c: Serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1736,7 +1736,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.25 $";
+	char *revision = "$Revision: 1.27 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2091,6 +2091,19 @@ rs_cons_check(struct sun_serial *ss, int channel)
 extern void keyboard_zsinit(void);
 extern void sun_mouse_zsinit(void);
 
+/* This is for the auto baud rate detection in the mouse driver. */
+void zs_change_mouse_baud(int newbaud)
+{
+	int channel = MOUSE_LINE;
+	int brg;
+
+	zs_soft[channel].zs_baud = newbaud;
+	brg = BPS_TO_BRG(zs_soft[channel].zs_baud,
+			 (ZS_CLOCK / zs_soft[channel].clk_divisor));
+	write_zsreg(zs_soft[channel].zs_channel, R12, (brg & 0xff));
+	write_zsreg(zs_soft[channel].zs_channel, R13, ((brg >> 8) & 0xff));
+}
+
 __initfunc(unsigned long sun_serial_setup (unsigned long memory_start))
 {
 	char *p;
@@ -2152,6 +2165,7 @@ __initfunc(int rs_init(void))
 	
 	memset(&serial_driver, 0, sizeof(struct tty_driver));
 	serial_driver.magic = TTY_DRIVER_MAGIC;
+	serial_driver.driver_name = "serial";
 	serial_driver.name = "ttyS";
 	serial_driver.major = TTY_MAJOR;
 	serial_driver.minor_start = 64;
@@ -2182,6 +2196,10 @@ __initfunc(int rs_init(void))
 	serial_driver.stop = rs_stop;
 	serial_driver.start = rs_start;
 	serial_driver.hangup = rs_hangup;
+
+	/* I'm too lazy, someone write versions of this for us. -DaveM */
+	serial_driver.read_proc = 0;
+	serial_driver.proc_entry = 0;
 
 	init_zscons_termios(&serial_driver.init_termios);
 
@@ -2308,7 +2326,7 @@ __initfunc(int rs_init(void))
 			write_zsreg(zs_soft[channel].zs_channel, R11,
 				    (TCBR | RCBR));
 
-			zs_soft[channel].zs_baud = 1200;
+			zs_soft[channel].zs_baud = 4800;
 			brg = BPS_TO_BRG(zs_soft[channel].zs_baud,
 					 ZS_CLOCK/zs_soft[channel].clk_divisor);
 			write_zsreg(zs_soft[channel].zs_channel, R12,

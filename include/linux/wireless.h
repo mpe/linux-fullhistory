@@ -1,7 +1,7 @@
 /*
  * This file define a set of standard wireless extensions
  *
- * Version :	3	18.12.96
+ * Version :	4	12.2.97
  *
  * Authors :	Jean Tourrilhes - HPLB - <jt@hplb.hpl.hp.com>
  */
@@ -63,7 +63,7 @@
  * (there is some stuff that will be added in the future...)
  * I just plan to increment with each new version.
  */
-#define WIRELESS_EXT	3
+#define WIRELESS_EXT	4
 
 /*
  * Changes :
@@ -73,6 +73,10 @@
  *	Alan Cox start some imcompatibles changes. I've integrated a bit more.
  *	- Encryption renamed to Encode to avoid US regulation problems
  *	- Frequency changed from float to struct to avoid problems on old 386
+ *
+ * V3 to V4
+ * --------
+ *	- Add sensitivity
  */
 
 /* -------------------------- IOCTL LIST -------------------------- */
@@ -86,6 +90,8 @@
 #define SIOCGIWFREQ	0x8B05		/* get channel/frequency */
 #define SIOCSIWENCODE	0x8B06		/* set encoding info */
 #define SIOCGIWENCODE	0x8B07		/* get encoding info */
+#define SIOCSIWSENS	0x8B08		/* set sensitivity */
+#define SIOCGIWSENS	0x8B09		/* get sensitivity */
 
 /* Informative stuff */
 #define SIOCSIWRANGE	0x8B0A		/* Unused ??? */
@@ -234,6 +240,8 @@ struct	iwreq
 			__u64	code;		/* Data used for algorithm */
 		}	encoding;
 
+		__u32	sensitivity;	/* signal level threshold */
+
 		struct		/* For all data bigger than 16 octets */
 		{
 			caddr_t	pointer;	/* Pointer to the data
@@ -271,6 +279,9 @@ struct	iw_range
 	/* Note : this frequency list doesn't need to fit channel numbers */
 
 	/* Encoder stuff */
+
+	/* signal level threshold range */
+	__u32	sensitivity;
 
 	/* Quality of link & SNR stuff */
 	struct iw_quality	max_qual;	/* Quality of the link */

@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.75 1997/01/26 07:12:31 davem Exp $
+/* $Id: sys_sunos.c,v 1.77 1997/02/15 01:17:04 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -55,6 +55,9 @@
 #include <linux/time.h>
 #include <linux/personality.h>
 
+/* NR_OPEN is now larger and dynamic in recent kernels. */
+#define SUNOS_NR_OPEN	256
+
 extern unsigned long get_unmapped_area(unsigned long addr, unsigned long len);
 
 /* We use the SunOS mmap() semantics. */
@@ -74,7 +77,7 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 	}
 	retval = -EBADF;
 	if(!(flags & MAP_ANONYMOUS))
-		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+		if (fd >= SUNOS_NR_OPEN || !(file = current->files->fd[fd]))
 			goto out;
 	retval = -ENOMEM;
 	if(!(flags & MAP_FIXED) && !addr) {
@@ -340,7 +343,7 @@ out:
  */
 asmlinkage long sunos_getdtablesize(void)
 {
-	return NR_OPEN;
+	return SUNOS_NR_OPEN;
 }
 #define _S(nr) (1<<((nr)-1))
 
@@ -429,7 +432,7 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 	int error = -EBADF;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+	if (fd >= SUNOS_NR_OPEN || !(file = current->files->fd[fd]))
 		goto out;
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
@@ -504,7 +507,7 @@ asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsi
 	int error = -EBADF;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+	if (fd >= SUNOS_NR_OPEN || !(file = current->files->fd[fd]))
 		goto out;
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
@@ -927,6 +930,16 @@ extern asmlinkage unsigned long sunos_gethostid(void)
 	unlock_kernel();
 	return ret;
 }
+
+/* sysconf options, for SunOS compatibility */
+#define   _SC_ARG_MAX             1
+#define   _SC_CHILD_MAX           2
+#define   _SC_CLK_TCK             3
+#define   _SC_NGROUPS_MAX         4
+#define   _SC_OPEN_MAX            5
+#define   _SC_JOB_CONTROL         6
+#define   _SC_SAVED_IDS           7
+#define   _SC_VERSION             8
 
 extern asmlinkage long sunos_sysconf (int name)
 {

@@ -237,7 +237,6 @@ static int get_sgflags(struct tty_struct * tty)
 
 static int get_sgttyb(struct tty_struct * tty, struct sgttyb * sgttyb)
 {
-	int retval;
 	struct sgttyb tmp;
 
 	tmp.sg_ispeed = 0;
@@ -298,7 +297,6 @@ static int set_sgttyb(struct tty_struct * tty, struct sgttyb * sgttyb)
 #ifdef TIOCGETC
 static int get_tchars(struct tty_struct * tty, struct tchars * tchars)
 {
-	int retval;
 	struct tchars tmp;
 
 	tmp.t_intrc = tty->termios->c_cc[VINTR];
@@ -314,7 +312,6 @@ static int get_tchars(struct tty_struct * tty, struct tchars * tchars)
 
 static int set_tchars(struct tty_struct * tty, struct tchars * tchars)
 {
-	int retval;
 	struct tchars tmp;
 
 	if (copy_from_user(&tmp, tchars, sizeof(tmp)))
@@ -332,7 +329,6 @@ static int set_tchars(struct tty_struct * tty, struct tchars * tchars)
 #ifdef TIOCGLTC
 static int get_ltchars(struct tty_struct * tty, struct ltchars * ltchars)
 {
-	int retval;
 	struct ltchars tmp;
 
 	tmp.t_suspc = tty->termios->c_cc[VSUSP];
@@ -348,7 +344,6 @@ static int get_ltchars(struct tty_struct * tty, struct ltchars * ltchars)
 
 static int set_ltchars(struct tty_struct * tty, struct ltchars * ltchars)
 {
-	int retval;
 	struct ltchars tmp;
 
 	if (copy_from_user(&tmp, ltchars, sizeof(tmp)))
@@ -503,13 +498,16 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 				(real_tty->termios_locked,
 				 (struct termios *) arg);
 		case TIOCPKT:
+		{
+			int pktmode;
+
 			if (tty->driver.type != TTY_DRIVER_TYPE_PTY ||
 			    tty->driver.subtype != PTY_TYPE_MASTER)
 				return -ENOTTY;
-			retval = get_user(retval, (int *) arg);
+			retval = get_user(pktmode, (int *) arg);
 			if (retval)
 				return retval;
-			if (retval) {
+			if (pktmode) {
 				if (!tty->packet) {
 					tty->packet = 1;
 					tty->link->ctrl_status = 0;
@@ -517,6 +515,7 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 			} else
 				tty->packet = 0;
 			return 0;
+		}
 		/* These two ioctl's always return success; even if */
 		/* the driver doesn't support them. */
 		case TCSBRK: case TCSBRKP:

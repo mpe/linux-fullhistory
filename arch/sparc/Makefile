@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.23 1997/01/02 14:14:17 jj Exp $
+# $Id: Makefile,v 1.26 1997/03/04 16:26:50 jj Exp $
 # sparc/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -15,8 +15,8 @@ SHELL  =/bin/bash
 # Uncomment the first CFLAGS if you are doing kgdb source level
 # debugging of the kernel to get the proper debugging information.
 
-#CFLAGS := $(CFLAGS) -g -pipe
-CFLAGS := $(CFLAGS) -pipe
+#CFLAGS := $(CFLAGS) -g -pipe -fcall-used-g5 -fcall-used-g7
+CFLAGS := $(CFLAGS) -pipe -fcall-used-g5 -fcall-used-g7
 
 #LINKFLAGS = -N -Ttext 0xf0004000
 LINKFLAGS = -T arch/sparc/vmlinux.lds
@@ -41,3 +41,6 @@ endif
 archclean:
 
 archdep:
+
+check_asm:
+	$(MAKE) -C arch/sparc/kernel check_asm

@@ -152,6 +152,7 @@ struct termios {
 #define  B230400 0x00010003
 #define  B460800 0x00010004
 #define CIBAUD	  0x000f0000  /* input baud rate (not used) */
+#define CMSPAR	  010000000000		/* mark or space (stick) parity */
 #define CRTSCTS	  0x80000000  /* flow control */
 
 /* c_lflag bits */

@@ -1,4 +1,4 @@
-/* $Id: dtlb_prot.S,v 1.3 1996/12/28 18:39:41 davem Exp $
+/* $Id: dtlb_prot.S,v 1.5 1997/02/26 11:09:26 jj Exp $
  * dtlb_prot.S:	Fast TLB protection trap processing.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -35,7 +35,6 @@
 	 * from the miss handlers probing the page tables.
 	 */
 
-dtlb_prot:
 	/* I-cache line 0 */
 	ldxa		[%g0] ASI_DMMU, %g1
 	srlx		%g1, 8, %g3
@@ -49,11 +48,11 @@ dtlb_prot:
 	srlx		%g1, 1, %g1
 	ldxa		[%g4 + %g1] ASI_PHYS_USE_EC, %g3
 	andcc		%g3, _PAGE_WRITE, %g0
-	be,pnt		%xcc, sparc64_dtlb_fault
+	be,pn		%xcc, sparc64_dtlb_fault
 	 or		%g3, (_PAGE_WRITE|_PAGE_W|_PAGE_MODIFIED|_PAGE_ACCESSED), %g3
 
 	/* Blamo... */
-	stxa		%g3, [%g4 + %g1] %asi
+	stxa		%g3, [%g4 + %g1] ASI_DMMU
 	stxa		%g3, [%g0] ASI_DTLB_DATA_IN
 	retry
 

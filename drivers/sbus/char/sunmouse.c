@@ -134,6 +134,56 @@ push_char (char c)
 	wake_up_interruptible (&sunmouse.proc_list);
 }
 
+/* Auto baud rate "detection".  ;-) */
+static int mouse_bogon_bytes = 0;
+static int mouse_baud_changing = 0;	/* For reporting things to the user. */
+static int mouse_baud = 4800;		/* Initial rate set by zilog driver. */
+
+/* Change the baud rate after receiving too many "bogon bytes". */
+void sun_mouse_change_baud(void)
+{
+	extern void zs_change_mouse_baud(int newbaud);
+
+	if(mouse_baud == 1200)
+		mouse_baud = 4800;
+	else
+		mouse_baud = 1200;
+
+	zs_change_mouse_baud(mouse_baud);
+	mouse_baud_changing = 1;
+}
+
+void mouse_baud_detection(unsigned char c)
+{
+	static int wait_for_synchron = 1;
+	static int ctr = 0;
+
+	if(wait_for_synchron) {
+		if((c < 0x80) || (c > 0x87))
+			mouse_bogon_bytes++;
+		else {
+			ctr = 0;
+			wait_for_synchron = 0;
+		}
+	} else {
+		ctr++;
+		if(ctr >= 4) {
+			ctr = 0;
+			wait_for_synchron = 1;
+			if(mouse_baud_changing == 1) {
+				printk("sunmouse: Successfully adjusted to %d baud.\n",
+				       mouse_baud);
+				mouse_baud_changing = 0;
+			}
+		}
+	}
+	if(mouse_bogon_bytes > 12) {
+		sun_mouse_change_baud();
+		mouse_bogon_bytes = 0;
+		wait_for_synchron = 1;
+	}
+}
+
 /* The following is called from the zs driver when bytes are received on
  * the Mouse zs8530 channel.
  */
@@ -147,6 +197,8 @@ sun_mouse_inbyte(unsigned char byte, unsigned char status)
 	add_mouse_randomness (byte);
 	if(!sunmouse.active)
 		return;
+
+	mouse_baud_detection(byte);
 
 	if (!gen_events){
 		push_char (byte);
@@ -419,6 +471,7 @@ __initfunc(int sun_mouse_init(void))
 	sunmouse.delta_x = sunmouse.delta_y = 0;
 	sunmouse.button_state = 0x80;
 	sunmouse.proc_list = NULL;
+	sunmouse.byte = 69;
 	return 0;
 }
 

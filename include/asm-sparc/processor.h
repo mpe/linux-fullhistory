@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.54 1996/12/24 09:19:49 davem Exp $
+/* $Id: processor.h,v 1.57 1997/03/04 16:27:22 jj Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -35,12 +35,9 @@
  */
 #define TASK_SIZE	(page_offset)
 
-/* Ok this is hot.  Sparc exception save area. */
-struct exception_struct {
-	unsigned long count;   /* Exception count */
-	unsigned long pc;      /* Callers PC for copy/clear user */
-	unsigned long expc;    /* Where to jump when exception signaled */
-	unsigned long address; /* Saved user base address for transfer */
+struct fpq {
+	unsigned long *insn_addr;
+	unsigned long insn;
 };
 
 /* The Sparc processor specific thread struct. */
@@ -71,16 +68,12 @@ struct thread_struct {
 	unsigned long w_saved;
 
 	/* Floating point regs */
-	unsigned long   float_regs[64] __attribute__ ((aligned (8)));
+	unsigned long   float_regs[32] __attribute__ ((aligned (8)));
 	unsigned long   fsr;
 	unsigned long   fpqdepth;
-	struct fpq {
-		unsigned long *insn_addr;
-		unsigned long insn;
-	} fpqueue[16];
+	struct fpq	fpqueue[16];
 	struct sigstack sstk_info;
 	unsigned long flags;
-	struct exception_struct ex __attribute__ ((aligned (8)));
 	int current_ds;
 	struct exec core_exec;     /* just what it says. */
 	int new_signal;
@@ -104,15 +97,13 @@ struct thread_struct {
 /* w_saved */ \
    0, \
 /* FPU regs */   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
-                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
-                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }, \
 /* FPU status, FPU qdepth, FPU queue */ \
    0,          0,  { { 0, 0, }, }, \
 /* sstk_info */ \
 { 0, 0, }, \
-/* flags,              ex,       current_ds, */ \
-   SPARC_FLAG_KTHREAD, { 0, }, USER_DS, \
+/* flags,              current_ds, */ \
+   SPARC_FLAG_KTHREAD, USER_DS, \
 /* core_exec */ \
 { 0, }, \
 /* new_signal */ \

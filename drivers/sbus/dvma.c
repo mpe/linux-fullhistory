@@ -76,9 +76,11 @@ dvma_init(struct linux_sbus *sbus, unsigned long memory_start))
 		 * routine only alloc 1 page, that was what the original code did
 		 */
 		if(hme) /* On HME cards, dvma lives with esp, 2 reg sets. */
-			prom_apply_sbus_ranges(sbus, dma->SBus_dev->reg_addrs, 0x2);
+			prom_apply_sbus_ranges(sbus, dma->SBus_dev->reg_addrs,
+					       0x2, dma->SBus_dev);
 		else    /* All others have only 1 reg set. */
-			prom_apply_sbus_ranges(sbus, dma->SBus_dev->reg_addrs, 0x1);
+			prom_apply_sbus_ranges(sbus, dma->SBus_dev->reg_addrs,
+					       0x1, dma->SBus_dev);
 		dma->regs = (struct sparc_dma_registers *)
 			sparc_alloc_io (dma->SBus_dev->reg_addrs[0].phys_addr, 0,
 					PAGE_SIZE, "dma",

@@ -1,12 +1,11 @@
-/* $Id: console.c,v 1.1 1996/12/27 08:49:11 jj Exp $
+/* $Id: console.c,v 1.4 1997/03/04 16:27:07 jj Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -25,9 +24,9 @@ prom_nbgetchar(void)
 {
 	char inc;
 
-	if ((*prom_command)("read", P1275_ARG(1,P1275_ARG_IN_BUF)|
-				    P1275_INOUT(3,1),
-				    prom_stdin, &inc, P1275_SIZE(1)) == 1)
+	if (p1275_cmd("read", P1275_ARG(1,P1275_ARG_OUT_BUF)|
+			      P1275_INOUT(3,1),
+			      prom_stdin, &inc, P1275_SIZE(1)) == 1)
 		return inc;
 	else
 		return -1;
@@ -42,9 +41,9 @@ prom_nbputchar(char c)
 	char outc;
 	
 	outc = c;
-	if ((*prom_command)("write", P1275_ARG(1,P1275_ARG_IN_BUF)|
-				     P1275_INOUT(3,1),
-				     prom_stdin, &inc, P1275_SIZE(1)) == 1)
+	if (p1275_cmd("write", P1275_ARG(1,P1275_ARG_IN_BUF)|
+			       P1275_INOUT(3,1),
+			       prom_stdin, &outc, P1275_SIZE(1)) == 1)
 		return 0;
 	else
 		return -1;
@@ -73,7 +72,6 @@ prom_query_input_device()
 {
 	int st_p;
 	char propb[64];
-	char *p;
 
 	st_p = prom_inst2pkg(prom_stdin);
 	if(prom_node_has_property(st_p, "keyboard"))
@@ -100,7 +98,6 @@ prom_query_output_device()
 {
 	int st_p;
 	char propb[64];
-	char *p;
 	int propl;
 
 	st_p = prom_inst2pkg(prom_stdout);

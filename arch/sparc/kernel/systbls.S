@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.58 1997/01/26 07:12:31 davem Exp $
+/* $Id: systbls.S,v 1.59 1997/02/14 03:12:54 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -42,7 +42,7 @@ C_LABEL(sys_call_table):
 	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_symlink), C_LABEL(sys_readlink)
 	.long C_LABEL(sys_execve), C_LABEL(sys_umask), C_LABEL(sys_chroot)
 	.long C_LABEL(sys_newfstat), C_LABEL(sys_nis_syscall), C_LABEL(sys_getpagesize)
-	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_vfork), C_LABEL(sys_nis_syscall)
+	.long C_LABEL(sys_msync), C_LABEL(sys_vfork), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_mmap), C_LABEL(sys_nis_syscall), C_LABEL(sys_munmap)
 	.long C_LABEL(sys_mprotect), C_LABEL(sys_nis_syscall), C_LABEL(sys_vhangup)

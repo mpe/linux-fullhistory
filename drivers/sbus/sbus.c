@@ -12,6 +12,7 @@
 #include <asm/sbus.h>
 #include <asm/dma.h>
 #include <asm/oplib.h>
+#include <asm/bpp.h>
 
 /* This file has been written to be more dynamic and a bit cleaner,
  * but it still needs some spring cleaning.
@@ -59,6 +60,7 @@ fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev))
 		panic("fill_sbus_device");
 	}
 	sbus_dev->num_registers = (len/sizeof(struct linux_prom_registers));
+	sbus_dev->ranges_applied = 0;
 
 	base = (unsigned long) sbus_dev->reg_addrs[0].phys_addr;
 	if(base>=SUN_SBUS_BVADDR || sparc_cpu_model == sun4m) {
@@ -147,6 +149,9 @@ extern int openprom_init(void);
 #ifdef CONFIG_SUN_MOSTEK_RTC
 extern int rtc_init(void);
 #endif
+#ifdef CONFIG_SPARCAUDIO
+extern int sparcaudio_init(void);
+#endif
 
 __initfunc(static unsigned long 
 sbus_do_child_siblings(unsigned long memory_start, int start_node,
@@ -157,6 +162,7 @@ sbus_do_child_siblings(unsigned long memory_start, int start_node,
 	int this_node = start_node;
 
 	/* Child already filled in, just need to traverse siblings. */
+	child->child = 0;
 	while((this_node = prom_getsibling(this_node)) != 0) {
 		this_dev->next = (struct linux_sbus_device *) memory_start;
 		memory_start += sizeof(struct linux_sbus_device);
@@ -332,6 +338,12 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 #endif
 #ifdef CONFIG_SUN_MOSTEK_RTC
 	rtc_init();
+#endif
+#ifdef CONFIG_SPARCAUDIO
+	sparcaudio_init();
+#endif
+#ifdef CONFIG_SUN_BPP
+	bpp_init();
 #endif
 	return memory_start;
 }

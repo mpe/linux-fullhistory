@@ -1,10 +1,12 @@
 
-Stallion Multiport Serial Drivers
----------------------------------
+Stallion Multiport Serial Driver Readme
+---------------------------------------
 
-Version: 1.1.3
-Date:    23APR96
-Author:  Greg Ungerer (gerg@stallion.oz.au)
+Copyright (C) 1994-1997,  Stallion Technologies (support@stallion.oz.au).
+
+Version:   5.3.2
+Date:      11FEB97
+
 
 
 1. INTRODUCTION
@@ -12,23 +14,27 @@ Author:  Greg Ungerer (gerg@stallion.oz.au)
 There are two drivers that work with the different families of Stallion
 multiport serial boards. One is for the Stallion smart boards - that is
 EasyIO and EasyConnection 8/32, the other for the true Stallion intelligent
-multiport boards - EasyConnection 8/64, ONboard, Brumby and Stallion.
+multiport boards - EasyConnection 8/64, ONboard and Brumby.
 
 If you are using any of the Stallion intelligent multiport boards (Brumby,
-ONboard, Stallion, EasyConnection 8/64) with Linux you will need to get the
-driver utility package. This package is available at most of the Linux
-archive sites (and on CD's that contain these archives). The file will be
-called stallion-X.X.X.tar.gz where X.X.X will be the version number. In
-particular this package contains the board embedded executable images that
-are required for these boards. It also contains the downloader program.
+ONboard, EasyConnection 8/64) with Linux you will need to get the driver
+utility package. This package is available at most of the Linux archive
+sites (and on CD's that contain these archives). The file will be called
+stallion-X.X.X.tar.gz where X.X.X will be the version number. In particular
+this package contains the board embedded executable images that are
+required for these boards. It also contains the downloader program.
 These boards cannot be used without this.
 
 The following ftp sites (and their mirrors) definitely have the stallion
 driver utility package: ftp.stallion.com, tsx-11.mit.edu, sunsite.unc.edu.
 
-ftp.stallion.com:/drivers/ata5/Linux/stallion-1.1.2.tar.gz
-tsx-11.mit.edu:/pub/linux/BETA/serial/stallion/stallion-1.1.2.tar.gz
-sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-1.1.2.tar.gz
+ftp.stallion.com:/drivers/ata5/Linux/stallion-5.3.1.tar.gz
+tsx-11.mit.edu:/pub/linux/BETA/serial/stallion/stallion-5.3.1.tar.gz
+sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-5.3.1.tar.gz
+
+As of the printing of this document the latest version of the driver
+utility package is 5.3.1. If a later version is now available then you
+should use the latest version.
 
 If you are using the EasyIO or EasyConnection 8/32 boards then you don't
 need this package. Although it does have a handy script to create the
@@ -43,7 +49,7 @@ web pages at http://www.stallion.com.
 2. INSTALLATION
 
 The drivers can be used as loadable modules or compiled into the kernel.
-You can choose which when doing a "make config" on the kernel.
+You can choose which when doing a "config" on the kernel.
 
 All ISA, EISA and MCA boards that you want to use need to be entered into
 the driver(s) configuration structures. All PCI boards will be automatically
@@ -63,7 +69,7 @@ To set up the driver(s) for the boards that you want to use you need to
 edit the appropriate driver file and add configuration entries.
 
 If using EasyIO or EasyConnection 8/32 ISA or MCA boards, do:
-   vi stallion.c
+   vi /usr/src/linux/drivers/char/stallion.c
       - find the definition of the stl_brdconf array (of structures)
         near the top of the file
       - modify this to match the boards you are going to install
@@ -71,7 +77,7 @@ If using EasyIO or EasyConnection 8/32 ISA or MCA boards, do:
       - save and exit
 
 If using ONboard, Brumby, Stallion or EasyConnection 8/64 boards then do:
-   vi istallion.c
+   vi /usr/src/linux/drivers/char/istallion.c
       - find the definition of the stli_brdconf array (of structures)
         near the top of the file
       - modify this to match the boards you are going to install
@@ -108,7 +114,7 @@ do a couple of things:
    configuration files for *all* the EasyIO and EasyConnection 8/32 boards
    that are sharing interrupts. The Stallion EasyIO and EasyConnection 8/32
    EISA configuration files required are supplied by Stallion Technologies
-   on the DOS Utilities floppy (usually supplied in the box with the board
+   on the EASY Utilities floppy (usually supplied in the box with the board
    when purchased. If not, you can pick it up from Stallion's FTP site,
    ftp.stallion.com). You will need to edit the board resources to choose
    level triggered interrupts, and make sure to set each board's interrupt
@@ -142,9 +148,9 @@ stallion.c or istallion.c configuration structure and rebuild the kernel or
 modules, or change it on the board. On EasyIO and EasyConnection 8/32 boards
 the IRQ is software programmable, so if there is a conflict you may need to
 change the IRQ used for a board in the stallion.c configuration structure.
-There are no interrupts to worry about for ONboard, Brumby, Stallion or
-EasyConnection 8/64 boards. The memory region on EasyConnection 8/64 and
-ONboard boards is software programmable, but not on the Brumbys or Stallions.
+There are no interrupts to worry about for ONboard, Brumby or EasyConnection
+8/64 boards. The memory region on EasyConnection 8/64 and ONboard boards is
+software programmable, but not on the Brumby boards.
 
 
 
@@ -154,8 +160,8 @@ ONboard boards is software programmable, but not on the Brumbys or Stallions.
 
 The intelligent boards also need to have their "firmware" code downloaded
 to them. This is done via a user level application supplied in the driver
-package called "stlload". Compile this program where ever you dropped the
-package files, by typing "make". In its simplest form you can then type
+utility package called "stlload". Compile this program where ever you dropped
+the package files, by typing "make". In its simplest form you can then type
     ./stlload -i cdk.sys
 in this directory and that will download board 0 (assuming board 0 is an
 EasyConnection 8/64 board). To download to an ONboard, Brumby or Stallion do:
@@ -190,13 +196,12 @@ obviously).
 
 Once the driver is installed you will need to setup some device nodes to
 access the serial ports. The simplest method is to use the stallion utility
-"mkdevnods" script. It will automatically create all possible device entries
-required for all 4 boards. This will create the normal serial port devices as
-/dev/ttyE# where # is the port number starting from 0. A bank of 64 minor
-device numbers is allocated to each board, so the first port on the second
-board is port 64, etc. A set of callout type devices is also created. They
-are created as the devices /dev/cue# where # is the same as for the ttyE
-devices.
+"mkdevnods" script. It will automatically create device entries for Stallion
+boards. This will create the normal serial port devices as /dev/ttyE# where
+# is the port number starting from 0. A bank of 64 minor device numbers is
+allocated to each board, so the first port on the second board is port 64,
+etc. A set of callout type devices is also created. They are created as the
+devices /dev/cue# where # is the same as for the ttyE devices.
 
 For the most part the Stallion driver tries to emulate the standard PC system
 COM ports and the standard Linux serial driver. The idea is that you should
@@ -214,9 +219,10 @@ COM ports. Most importantly "stty" works as expected and "setserial" can be
 also be used (excepting the ability to auto-configure the I/O and IRQ
 addresses of boards). Higher baud rates are supported in the usual fashion
 through setserial or using the CBAUDEX extensions. Note that the EasyIO and
-EasyConnection (all types) support 57600 and 115200 baud. The older boards
-including ONboard, Brumby and the original Stallion support a maximum baud
-rate of 38400.
+EasyConnection (all types) support at least 57600 and 115200 baud. The newer
+EasyConnection XP modules and new EasyIO boards support 230400 and 460800
+baud as well. The older boards including ONboard and Brumby support a
+maximum baud rate of 38400.
 
 If you are unfamiliar with how to use serial ports, then get the Serial-HOWTO
 by Greg Hankins. It will explain everything you need to know!
@@ -278,6 +284,10 @@ program that works with the intelligent boards.
 
 5. DISCLAIMER
 
-I do not speak for Stallion Technologies in any capacity, officially or
-unofficially.
+The information contained in this document is believed to be accurate and
+reliable. However, no responsibility is assumed by Stallion Technologies
+Pty. Ltd. for its use, nor any infringements of patents or other rights
+of third parties resulting from its use. Stallion Technologies reserves
+the right to modify the design of its products and will endeavour to change
+the information in manuals and accompanying documentation accordingly.
 

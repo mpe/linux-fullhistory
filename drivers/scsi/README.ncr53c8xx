@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-12 January 1997
+27 February 1997
 ===============================================================================
 
 1.  Introduction
@@ -91,12 +91,11 @@ Chip   SDMS BIOS   Wide   Ultra SCSI   the driver      the driver
 815        Y         N        N            Y             Y
 825        Y         Y        N            Y             Y
 825A       Y         Y        N            Y             Y
-860        N         N        Y(1)         Y             Y
-875        Y         Y        Y(1)         Y             Y
+860        N         N        Y            Y             Y
+875        Y         Y        Y            Y             Y
+895        Y         Y        Y(1)         Y             not yet 
 
-(1) Ultra (fast20 / fast40) SCSI data transfers are "in theory" supported 
-    by the driver, but not fully tested, since the maintainer does not have 
-    for the moment Ultra SCSI hard disks.
+(1) The 895 chip is supported 'on paper'.
 
 3. Summary of other supported features.
 
@@ -212,6 +211,7 @@ Chip    Device id     Revision Id
 860       0x6
 825A      0x3            >= 0x10
 875       0xf
+895       0xc
 
 The profiling information is updated upon completion of SCSI commands.
 A data structure is allocated and zeroed when the host adapter is
@@ -287,15 +287,20 @@ apply to all targets of the SCSI chain (except the controller).
 
 Available commands:
 
-8.1 Set minimum synchronous period
+8.1 Set minimum synchronous period factor
 
-    setsync <target> <period>
+    setsync <target> <period factor>
 
     target:    target number
-    period:    minimum synchronous period in nano-seconds.
-               Maximum speed = 1000/(4*period) MB/second
+    period:    minimum synchronous period.
+               Maximum speed = 1000/(4*period factor) except for special
+               cases below.
 
     Specify a period of 255, to force asynchronous transfer mode.
+
+      10 means 25 nano-seconds synchronous period
+      11 means 30 nano-seconds synchronous period
+      12 means 50 nano-seconds synchronous period
 
 8.2 Set wide size
 
@@ -403,6 +408,18 @@ CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT   (default and only reasonnable answer: n)
     you can answer "y". Then, all SCSI devices will never disconnect the bus 
     even while performing long SCSI operations.
 
+CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
+    Genuine SYMBIOS boards use GPIO0 in output for controller LED and GPIO3 
+    bit as a flag indicating singled-ended/differential interface.
+    If all the boards of your system are genuine SYMBIOS boards or use
+    BIOS and drivers from SYMBIOS, you would want to enable this option.
+    This option must NOT be enabled if your system has at least one 53C8XX 
+    based scsi board with a vendor-specific BIOS.
+    For example, Tekram DC-390/U, DC-390/W and DC-390/F scsi controllers 
+    use a vendor-specific BIOS and are known to not use SYMBIOS compatible 
+    GPIO wiring. So, this option must not be enabled if your system has 
+    such a board installed.
+
 
 10. Boot setup commands
 
@@ -459,11 +476,14 @@ Number of tagged commands
   If the driver is configured with a maximum of 4 queued commands, tags:4 is 
   the right argument to specify.
 
-Default synchronous negotiation frequency
-      sync:0     disabled (asynchronous transfer mode)
-      sync:#MHz  enabled up to #MHz.
-  #MHz > 10     Ultra SCSI
-  #MHz >  5     Fast  SCSI
+Default synchronous period factor
+      sync:255     disabled (asynchronous transfer mode)
+      sync:#factor
+  #factor = 10     Ultra-2 SCSI 40 Mega-transfers / second
+  #factor = 11     Ultra-2 SCSI 33 Mega-transfers / second
+  #factor < 25     Ultra   SCSI 20 Mega-transfers / second
+  #factor < 50     Fast    SCSI-2
+
   In all cases, the driver will use the minimum transfer period supported by 
   controllers according to NCR53C8XX chip type.
 
@@ -478,7 +498,7 @@ Verbosity level
       verb:2     too much
 
 Debug mode
-      debug:0	clear debug flags
+      debug:0	 clear debug flags
       debug:#x   set debug flags
   #x is an integer value combining the following power-of-2 values:
   DEBUG_ALLOC       0x1
@@ -509,18 +529,71 @@ Burst max
   and revision ids. By default the driver uses the maximum value supported 
   by the chip.
 
+LED support
+     led:1      enable  LED support
+     led:0      disable LED support
+  Donnot enable LED support if your scsi board does not use SDMS BIOS.
+  (See 'Configuration parameters')
+
+Max wide
+    wide:1      wide scsi enabled
+    wide:0      wide scsi disabled
+  Some scsi boards use a 875 (ultra wide) and only supply narrow connectors.
+  If you have connected a wide device with a 50 pins to 68 pins cable 
+  converter, any accepted wide negotiation will break further data transfers.
+  In such a case, using "wide:0" in the bootup command will be helpfull. 
+
+Differential mode
+    diff:0	never set up diff mode
+    diff:1	set up diff mode if BIOS set it
+    diff:2	always set up diff mode
+    diff:3	set diff mode if GPIO3 is not set
+
+IRQ mode
+    irqm:0	always open drain
+    irqm:1	same as initial settings (assumed BIOS settings)
+    irqm:2	always totem pole
+
+Boot fail safe
+    safe:y	load the following assumed fail safe initial setup
+
+  master parity			disabled		mpar:n
+  scsi parity			enabled			spar:y
+  disconnections		not allowed		disc:n
+  special features		disabled		specf:n
+  ultra scsi			disabled		ultra:n
+  force sync negotiation	disabled		fsn:n
+  verbosity level		2			verb:2
+  tagged command queuing	disabled		tags:0
+  synchronous negotiation	disabled		sync:255
+  debug flags			none			debug:0
+  burst length			from BIOS settings	burst:255
+  LED support			disabled		led:0
+  wide support			disabled		wide:0
+  settle time			10 seconds		settle:10
+  differential support		from BIOS settings	diff:1
+  irq mode			from BIOS settings	irqm:1
 
 10.3 Advised boot setup commands
 
 If the driver has been configured with default options, the equivalent 
 boot setup is:
-    ncr53c8xx=mpar:y,spar:y,disc:y,fsn:n,specf:y,ultra:y,sync:5,tags:0,verb:1
 
-For an installation diskette or a safe but not fast system, boot setup is:
-    ncr53c8xx=mpar:y,spar:y,disc:n,fsn:n,specf:n,ultra:n,sync:0,tags:0
+    ncr53c8xx=mpar:y,spar:y,disc:y,specf:y,fsn:n,ultra:y,fsn:n,verb:2,tags:0\
+              sync:50,debug:0,burst:7,led:0,wide:1,settle:2,diff:0,irqm:0
 
-My personnal system works flawlessly with the following setup:
-    ncr53c8xx=mpar:y,spar:y,disc:y,fsn:n,specf:y,ultra:y,sync:20,tags:8
+For an installation diskette or a safe but not fast system,
+boot setup can be:
+
+    ncr53c8xx=safe:y,mpar:y,disc:y
+    ncr53c8xx=safe:y,disc:y
+    ncr53c8xx=safe:y,mpar:y
+    ncr53c8xx=safe:y
+
+My personnal system works flawlessly with the following equivalent setup:
+
+    ncr53c8xx=mpar:y,spar:y,disc:y,specf:y,fsn:n,ultra:y,fsn:n,verb:1,tags:8\
+              sync:12,debug:0,burst:7,led:1,wide:1,settle:2,diff:0,irqm:0
 
 The driver prints its actual setup when verbosity level is 2. You can try 
 "ncr53c8xx=verb:2" to get the "static" setup of the driver, or add "verb:2" 
@@ -560,10 +633,10 @@ SCSI_NCR_MAX_TAGS		(default: 4)
 	Maximum number of simultaneous tagged commands to a device.
 	Can be changed by "settags <target> <maxtags>"
 
-SCSI_NCR_SETUP_DEFAULT_SYNC     (default: 5)
-	Frequency in KHz the driver will use at boot time for synchronous 
+SCSI_NCR_SETUP_DEFAULT_SYNC     (default: 50)
+	Transfer period factor the driver will use at boot time for synchronous 
 	negotiation. 0 means asynchronous.
-	Can be changed by "setsync <target> <period>"
+	Can be changed by "setsync <target> <period factor>"
 
 SCSI_NCR_SETUP_DEFAULT_TAGS     (default: 4)
 	Default number of simultaneous tagged commands to a device.
@@ -635,18 +708,18 @@ Driver and common files:
 	Install.ncr53c8xx	: installation script
 
 	Patch-1.2.13.ncr53c8xx  : patch for linux-1.2.13
-	Patch-2.0.27.ncr53c8xx  : patch for linux-2.0.27
+	Patch-2.0.29.ncr53c8xx  : patch for linux-2.0.29
 
-Prior to installing the driver, you must untar the distribution, as follow:
+You must untar the distribution with the following command:
 
-	mkdir ncrB2L
-	cd ncrB2L
-	tar zxvf ncrBsd2Linux-1.16b-src.tar.gz
+	tar zxvf ncrBsd2Linux-1.18b-src.tar.gz
+
+The sub-directory ncr53c8xx-1.18b will be created. Change to this directory.
 
 
 12.2 Installation procedure
 
-This install script has been tested with linux-1.2.13 and 2.0.27.
+This install script has been tested with linux-1.2.13 and 2.0.29.
 
 This procedure copies the new driver files to the kernel tree and
 applies a patch to some files of the kernel tree.

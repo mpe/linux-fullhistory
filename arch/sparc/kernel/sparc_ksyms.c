@@ -1,9 +1,11 @@
-/* $Id: sparc_ksyms.c,v 1.43 1997/01/26 07:12:30 davem Exp $
+/* $Id: sparc_ksyms.c,v 1.47 1997/03/03 16:51:41 jj Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost (ecd@skynet.be)
  */
+
+#define PROMLIB_INTERNAL
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -43,19 +45,14 @@ extern unsigned long sunos_mmap(unsigned long, unsigned long, unsigned long,
 				unsigned long, unsigned long, unsigned long);
 void _sigpause_common (unsigned int set, struct pt_regs *);
 extern void __copy_1page(void *, const void *);
-extern void __memcpy(void *, const void *, __kernel_size_t);
 extern void __memmove(void *, const void *, __kernel_size_t);
-extern void *__memset(void *, int, __kernel_size_t);
 extern void *bzero_1page(void *);
 extern void *__bzero(void *, size_t);
 extern void *__memscan_zero(void *, size_t);
 extern void *__memscan_generic(void *, int, size_t);
 extern int __memcmp(const void *, const void *, __kernel_size_t);
 extern int __strncmp(const char *, const char *, __kernel_size_t);
-
-extern int __copy_user(unsigned long to, unsigned long from, int size);
-extern int __clear_user(unsigned long addr, int size);
-extern int __strncpy_from_user(unsigned long dest, unsigned long src, int count);
+extern unsigned int __csum_partial_copy_sparc_generic (const char *, char *);
 
 extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
@@ -144,7 +141,6 @@ EXPORT_SYMBOL(prom_getproplen);
 EXPORT_SYMBOL(prom_getproperty);
 EXPORT_SYMBOL(prom_node_has_property);
 EXPORT_SYMBOL(prom_setprop);
-EXPORT_SYMBOL(prom_nodeops);
 EXPORT_SYMBOL(prom_getbootargs);
 EXPORT_SYMBOL(prom_apply_obio_ranges);
 EXPORT_SYMBOL(prom_getname);
@@ -154,6 +150,8 @@ EXPORT_SYMBOL(prom_apply_sbus_ranges);
 EXPORT_SYMBOL(prom_getint);
 EXPORT_SYMBOL(prom_getintdefault);
 EXPORT_SYMBOL(romvec);
+EXPORT_SYMBOL(__prom_getchild);
+EXPORT_SYMBOL(__prom_getsibling);
 
 /* sparc library symbols */
 EXPORT_SYMBOL(bcopy);
@@ -185,9 +183,10 @@ EXPORT_SYMBOL(__memcmp);
 EXPORT_SYMBOL(__strncmp);
 EXPORT_SYMBOL(__memmove);
 
+EXPORT_SYMBOL(__csum_partial_copy_sparc_generic);
+
 /* Moving data to/from userspace. */
 EXPORT_SYMBOL(__copy_user);
-EXPORT_SYMBOL(__clear_user);
 EXPORT_SYMBOL(__strncpy_from_user);
 
 /* No version information on this, heavily used in inline asm,

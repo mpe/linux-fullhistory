@@ -17,6 +17,9 @@ struct prom_cpuinfo {
 	int prom_node;
 	int mid;
 };
+
+extern int linux_num_cpus;	/* number of CPUs probed  */
+
 #endif /* !(__ASSEMBLY__) */
 
 #ifdef __SMP__

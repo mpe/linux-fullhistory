@@ -7,7 +7,7 @@
 
 struct semaphore {
 	atomic_t count;
-	atomic_t waiting;
+	atomic_t waking;
 	struct wait_queue * wait;
 };
 

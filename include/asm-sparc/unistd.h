@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.28 1997/01/26 07:12:06 davem Exp $ */
+/* $Id: unistd.h,v 1.29 1997/02/04 07:14:17 miguel Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -479,15 +479,5 @@ static __inline__ pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned lo
 }
 
 #endif /* __KERNEL_SYSCALLS__ */
-
-/* sysconf options, for SunOS compatibility */
-#define   _SC_ARG_MAX             1
-#define   _SC_CHILD_MAX           2
-#define   _SC_CLK_TCK             3
-#define   _SC_NGROUPS_MAX         4
-#define   _SC_OPEN_MAX            5
-#define   _SC_JOB_CONTROL         6
-#define   _SC_SAVED_IDS           7
-#define   _SC_VERSION             8
 
 #endif /* _SPARC_UNISTD_H */

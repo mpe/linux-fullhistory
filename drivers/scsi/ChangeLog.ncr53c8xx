@@ -1,3 +1,58 @@
+Thu Feb 27 23:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c ncr53c8xx.h revision 1.18b
+	- 'On paper' support of the NCR53C895 Ultra-2 chip.
+	  (Clock quadrupler + 7 clock divisors)
+	- Load the main part of the script into the on-board RAM.
+	- 810A rev. 0x11 PCI problem fixed.
+	  This chip is now supported with all PCI features enabled and 
+	  16 dwords burst transfers. 
+	- Align on 32 boundary some internal structures.
+	  That fixes the 810A problem and allows cache line bursting when 
+	  moving the global header (64 bytes) from/to CCBs to/from NCB.
+	- Synchronous parameters calculation rewritten. The driver 
+	  now uses all available clock divisors and will be able to support 
+          clock frequencies that are not multiple of 40 Mhz if necessary.
+
+Sat Feb 8 22:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c - revision 1.17a
+	- IRQ mode set up from boot setup command.
+	  irqm:0    open drain (default)
+	  irqm:1    preserve initial setting (assumed from BIOS)
+	  irqm:2    totem pole
+	- DIFF mode set up from boot setup command.
+	  Suggested by Richard Waltham.
+	  diff:0    never set up diff mode (default)
+	  diff:1    set up diff mode according to initial setting (BIOS?)
+	  diff:2    always set up diff mode
+	  diff:3    set up diff mode if GPIO3 is zero (SYMBIOS boards)
+	- Change CONFIG option for LED support.
+          CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT allows LED support and 
+	  DIFF support for SYMBIOS boards and compatibles (clones?).
+	- Set 16 DWORD bursts for 810A rev. >= 0x12 since my SC200 with 
+	  such a chip have no problem with it (MB with Triton 2 HX).
+	  810A rev. 0x11 are set to 8 DWORD bursts since they may give
+	  problems with PCI read multiple and Triton 2 HX.
+	  Thanks to Stefan for this information.
+
+Sat Jan 25 22:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c - revision 1.17
+	- Controller LED support.
+	  Only works with LED pin wired to GPIO_FETCHN, so probably with 
+          all boards using SMDS BIOS.
+	  This option can be enabled only if CONFIG_EXPERIMENTAL is set.
+	- Assume clock doubler for 875 chip when clock frequency measurement 
+	  result is 40 MHz. May help when some old stuff as SDMS BIOS 3.0 
+	  or some old driver has broken the normal BIOS settings.
+	- Add wide negotiation control from boot setup command.
+	  May be usefull with systems using a 875 based board connected to 
+	  a wide device through a 50 pins to 68 pins converter.
+	- Add a "boot fail safe option" to the boot setup command line.
+	- Rewrite the "reset_command" routine.
+	  Low-level driver are responsible to keep the involved command 
+	  alive. The new code seems to behave correctly.
+	- Change some variables used by the script from u_long to u_int32.
+	- Remove some useless code.
+
 Sun Jan 12 12:00 1997 Gerard Roudier (groudier@club-internet.fr)
 	* ncr53c8xx.c - revision 1.16e
 	- Add support of PCI burst length control from boot setup command.

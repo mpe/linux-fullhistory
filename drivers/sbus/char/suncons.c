@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.44 1997/01/25 02:47:10 miguel Exp $
+/* $Id: suncons.c,v 1.50 1997/02/26 08:55:22 ecd Exp $
  *
  * suncons.c: Sun SparcStation console support.
  *
@@ -166,39 +166,52 @@ void set_palette (void);
 
 #define COLOR_FBUF_OFFSET(cindex) (*color_fbuf_offset)(cindex)
 
-/* These four routines are optimizations for the _generic routine for the most common cases.
-   I guess doing twice sll is much faster than doing .mul, sra faster than doing .div,
-   and the disadvantage that someone has to call it (it cannot be inline) runs away, 'cause
-   otherwise it would have to call .mul anyway. 
-   The shifting + addition only routines won't eat any stack frame :))
-   Names come from width, screen_num_columns */
-static int
-color_fbuf_offset_1152_128 (int cindex)
-{
-	register int i = (cindex>>7);
-	/* (1152 * CHAR_HEIGHT) == 10010000000.0000 */
-	return skip_bytes + (i << 14) + (i << 11) + ((cindex & 127) << 3);
-}
-
+/* These four routines are optimizations for the _generic routine for
+ * the most common cases.
+ * I guess doing twice sll is much faster than doing .mul, sra faster
+ * than doing .div, and the disadvantage that someone has to call it
+ * (it cannot be inline) runs away, 'cause otherwise it would have to
+ * call .mul anyway. 
+ * The shifting + addition only routines won't eat any stack frame :))
+ * Names come from width, screen_num_columns.
+ */
 static int
 color_fbuf_offset_1280_144 (int cindex)
 {
 	register int i = (cindex/144);
-	/* (1280 * CHAR_HEIGHT) == 10100000000.0000 */
+	/* (1280 * CHAR_HEIGHT) == 101.0000.0000.0000 */
 	return skip_bytes + (i << 14) + (i << 12) + ((cindex % 144) << 3);
 }
-	 
+
+static int
+color_fbuf_offset_1152_128 (int cindex)
+{
+	register int i = (cindex>>7);
+	/* (1152 * CHAR_HEIGHT) == 100.1000.0000.0000 */
+	return skip_bytes + (i << 14) + (i << 11) + ((cindex & 127) << 3);
+}
+
 static int
 color_fbuf_offset_1024_128 (int cindex)
 {
 	register int i = (cindex>>7);
+	/* (1024 * CHAR_HEIGHT) == 100.0000.0000.0000 */
 	return skip_bytes + (i << 14) + ((cindex & 127) << 3);
 }
-	 
+
+static int
+color_fbuf_offset_800_96 (int cindex)
+{
+	register int i = (cindex / 96);
+	/* (800 * CHAR_HEIGHT) == 11.0010.0000.0000 */
+	return skip_bytes + (i<<13) + (i<<12) + (i<<9) + ((cindex % 96)<<3);
+}
+
 static int
 color_fbuf_offset_640_80 (int cindex)
 {
 	register int i = (cindex/80);
+	/* (640 * CHAR_HEIGHT) == 10.1000.0000.0000 */
 	return skip_bytes + (i << 13) + (i << 11) + ((cindex % 80) << 3);
 }
 	 
@@ -345,10 +358,10 @@ set_cursor(int currcons)
 		under_cursor[1] = dst[1];
 		under_cursor[2] = dst[ints_per_line];
 		under_cursor[3] = dst[ints_per_line+1];
-		dst[0] = 0x0f0f0f0f;
-		dst[1] = 0x0f0f0f0f;
-		dst[ints_per_line] = 0x0f0f0f0f;
-		dst[ints_per_line+1] = 0x0f0f0f0f;
+		dst[0] = 0x00000000;
+		dst[1] = 0x00000000;
+		dst[ints_per_line] = 0x00000000;
+		dst[ints_per_line+1] = 0x00000000;
 		break;
 	}
 	default:
@@ -399,7 +412,7 @@ __initfunc(void con_type_init_finish(void))
 		rects [1] = 0;
 		rects [2] = con_width;
 		rects [3] = con_height;
-		(*fbinfo[0].fill)(0, 1, rects);
+		(*fbinfo[0].fill)(reverse_color_table[0], 1, rects);
 		return; /* Dunno how to display logo on leo/zx yet */
 	}
 	if (con_depth == 8 && fbinfo[0].loadcmap) {
@@ -411,7 +424,7 @@ __initfunc(void con_type_init_finish(void))
 		(*fbinfo [0].loadcmap)(&fbinfo [0], 0, LINUX_LOGO_COLORS + 32);
 		for (i = 0; i < 80; i++, p += chars_per_line){
 		        for (cpu = 0; cpu < linux_num_cpus; cpu++){
-				memcpy (p + (cpu * 84), linux_logo + 80 * i, 80);
+				memcpy (p + (cpu * 88), linux_logo + 80 * i, 80);
 			}
 		}
 	} else if (con_depth == 1) {
@@ -419,7 +432,7 @@ __initfunc(void con_type_init_finish(void))
 			memcpy (p, linux_logo_bw + 10 * i, 10);
 	}
 	putconsxy(0, q);
-	ush = (unsigned short *) video_mem_base + video_num_columns * 2 + 20 + 80 * (linux_num_cpus - 1);
+	ush = (unsigned short *) video_mem_base + video_num_columns * 2 + 20 + 11 * (linux_num_cpus - 1);
 
 	for (p = "Linux/SPARC version " UTS_RELEASE; *p; p++, ush++) {
 		*ush = (attr << 8) + *p;
@@ -584,9 +597,10 @@ sun_clear_screen(void)
 		rects [1] = 0;
 		rects [2] = con_width;
 		rects [3] = con_height;
-		(*fbinfo[0].fill)(0, 1, rects);
+		(*fbinfo[0].fill)(reverse_color_table[0], 1, rects);
 	} else if (fbinfo[0].base && fbinfo[0].base_depth)
-		memset (con_fb_base, (con_depth == 1) ? ~(0) : 0,
+		memset (con_fb_base,
+			(con_depth == 1) ? ~(0) : reverse_color_table[0],
 			(con_depth * con_height * con_width) / 8);
 	/* also clear out the "shadow" screen memory */
 	memset((char *)video_mem_base, 0, (video_mem_term - video_mem_base));
@@ -608,12 +622,13 @@ sun_clear_fb(int n)
 		rects [1] = 0;
 		rects [2] = fbinfo[n].type.fb_width;
 		rects [3] = fbinfo[n].type.fb_height;
-		(*fbinfo[n].fill)(0, 1, rects);
+		(*fbinfo[n].fill)(reverse_color_table[0], 1, rects);
 	} 
 #endif		
 	else if (fbinfo[n].base && fbinfo[n].base_depth) {
 		memset((void *)fbinfo[n].base,
-		       (fbinfo[n].base_depth == 1) ? ~(0) : 0,
+		       (fbinfo[n].base_depth == 1) ?
+			~(0) : reverse_color_table[0],
 		       (fbinfo[n].base_depth * fbinfo[n].type.fb_height
 					     * fbinfo[n].type.fb_width) / 8);
 	}
@@ -642,14 +657,14 @@ sun_clear_margin(void)
 		rects [13] = con_height - y_margin;
 		rects [14] = con_width - x_margin;
 		rects [15] = con_height;
-		(*fbinfo[0].fill)(0, 4, rects);
+		(*fbinfo[0].fill)(reverse_color_table[0], 4, rects);
 	} else {
 		memset (con_fb_base, 
-			(con_depth == 1) ? ~(0) : 0,
+			(con_depth == 1) ? ~(0) : reverse_color_table[0],
 			skip_bytes - (x_margin<<1));
 		memset (con_fb_base + chars_per_line * con_height
 					- skip_bytes + (x_margin<<1),
-			(con_depth == 1) ? ~(0) : 0,
+			(con_depth == 1) ? ~(0) : reverse_color_table[0],
 			skip_bytes - (x_margin<<1));
 		he = con_height - 2 * y_margin;
 		i = 2 * x_margin;
@@ -660,7 +675,7 @@ sun_clear_margin(void)
 		} else {
 			for (p = con_fb_base+skip_bytes-(x_margin<<1), h = 0;
 			     h <= he; p += chars_per_line, h++)
-				memset (p, 0, i);
+				memset (p, reverse_color_table[0], i);
 		}
 	}
 	if (fbinfo [0].switch_from_graph)
@@ -687,6 +702,18 @@ void vesa_powerdown(void)
 {
 }
 
+/*
+ * We permutate the colors, so we match the PROM's idea of
+ * black and white.
+ */
+unsigned char reverse_color_table[] = {
+	1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0
+};
+
+static unsigned char sparc_color_table[] = {
+	15, 0, 4, 2, 6, 1, 5, 3, 7, 8, 12, 10, 14, 9, 13, 11
+};
+
 /* Call the frame buffer routine for setting the palette */
 void
 set_palette (void)
@@ -699,7 +726,7 @@ set_palette (void)
 	
 		/* First keep color_map with the palette colors */
 		for (i = 0; i < 16; i++){
-			j = color_table [i];
+			j = sparc_color_table [i];
 			fbinfo[0].color_map CM(i,0) = default_red [j];
 			fbinfo[0].color_map CM(i,1) = default_grn [j];
 			fbinfo[0].color_map CM(i,2) = default_blu [j];
@@ -778,7 +805,8 @@ __initfunc(unsigned long sun_cg_postsetup(fbinfo_t *fb, unsigned long start_mem)
 }
 
 static char *known_cards [] __initdata = {
-	"cgsix", "cgthree", "cgRDI", "cgthree+", "bwtwo", "SUNW,tcx", "cgfourteen", "SUNW,leo", 0
+	"cgsix", "cgthree", "cgRDI", "cgthree+", "bwtwo", "SUNW,tcx",
+	"cgfourteen", "SUNW,leo", 0
 };
 static char *v0_known_cards [] __initdata = {
 	"cgsix", "cgthree", "cgRDI", "cgthree+", "bwtwo", 0
@@ -799,12 +827,13 @@ static struct {
 	int resx, resy;
 	int x_margin, y_margin;
 } scr_def [] = {
-	{ 1, 1152, 900,  8,  18 },
-	{ 8, 1152, 900,  64, 18 },
-	{ 8, 1152, 1024, 64, 80 },
 	{ 8, 1280, 1024, 64, 80 },
+	{ 8, 1152, 1024, 64, 80 },
+	{ 8, 1152, 900,  64, 18 },
 	{ 8, 1024, 768,  0,  0 },
+	{ 8, 800, 600, 16, 12 },
 	{ 8, 640, 480, 0, 0 },
+	{ 1, 1152, 900,  8,  18 },
 	{ 0 },
 };
 
@@ -823,8 +852,10 @@ __initfunc(static int cg14_present(void))
 }
 
 __initfunc(static void
-sparc_framebuffer_setup(int primary, int con_node, int type, struct linux_sbus_device *sbdp, 
-			uint base, uint con_base, int prom_fb, int parent_node))
+	   sparc_framebuffer_setup(int primary, int con_node,
+				   int type, struct linux_sbus_device *sbdp, 
+				   uint base, uint con_base, int prom_fb,
+				   int parent_node))
 {
 	static int frame_buffers = 1;
 	int n, i;
@@ -835,7 +866,8 @@ sparc_framebuffer_setup(int primary, int con_node, int type, struct linux_sbus_d
 	if (primary)
 		n = 0;
 	else {
-		if (frame_buffers == FRAME_BUFFERS) return; /* Silently ignore */
+		if (frame_buffers == FRAME_BUFFERS)
+			return; /* Silently ignore */
 		n = frame_buffers++;
 	}
 	
@@ -934,20 +966,25 @@ sparc_framebuffer_setup(int primary, int con_node, int type, struct linux_sbus_d
 						2 * x_margin / con_depth;
 			ORIG_VIDEO_LINES = (con_height - 2 * y_margin) / 16;
 			switch (chars_per_line) {
-			case 1152:
-				if (ORIG_VIDEO_COLS == 128)
-					color_fbuf_offset =
-						color_fbuf_offset_1152_128;
-				break;
 			case 1280:
 				if (ORIG_VIDEO_COLS == 144)
 					color_fbuf_offset =
 						color_fbuf_offset_1280_144;
 				break;
+			case 1152:
+				if (ORIG_VIDEO_COLS == 128)
+					color_fbuf_offset =
+						color_fbuf_offset_1152_128;
+				break;
 			case 1024:
 				if (ORIG_VIDEO_COLS == 128)
 					color_fbuf_offset =
 						color_fbuf_offset_1024_128;
+				break;
+			case 800:
+				if (ORIG_VIDEO_COLS == 96)
+					color_fbuf_offset =
+						color_fbuf_offset_800_96;
 				break;
 			case 640:
 				if (ORIG_VIDEO_COLS == 80)
@@ -960,7 +997,8 @@ sparc_framebuffer_setup(int primary, int con_node, int type, struct linux_sbus_d
 
 		if (!scr_def [i].depth){
 			x_margin = y_margin = 0;
-			prom_printf ("console: unknown video resolution %dx%d, depth %d\n",
+			prom_printf ("console: unknown video resolution %dx%d,"
+				     " depth %d\n",
 			      	     con_width, con_height, con_depth);
 			prom_halt ();
 		}
@@ -1082,7 +1120,8 @@ __initfunc(static int sparc_console_probe(void))
 		for_all_sbusdev(sbdp, sbus) {
 			if (!known_card (sbdp->prom_name, known_cards)) continue;
 			con_node = sbdp->prom_node;
-			prom_apply_sbus_ranges (sbdp->my_bus, &sbdp->reg_addrs [0], sbdp->num_registers);
+			prom_apply_sbus_ranges (sbdp->my_bus, &sbdp->reg_addrs [0],
+						sbdp->num_registers, sbdp);
 
 			propl = prom_getproperty(con_node, "address", (char *) &con_base, 4);
 			if (propl != 4) con_base = 0;
@@ -1222,6 +1261,7 @@ int
 sun_blitc(uint charattr, unsigned long addr)
 {
 	unsigned int fgmask, bgmask;
+	unsigned char attrib;
 	int j, idx;
 	unsigned char *font_row;
 
@@ -1235,6 +1275,7 @@ sun_blitc(uint charattr, unsigned long addr)
   	/* Invalidate the cursor position if necessary. */
 	idx = (addr - video_mem_base) >> 1;
 
+	attrib = CHARATTR_TO_SUNCOLOR(charattr);
 	font_row = &vga_font[(j = (charattr & 0xff)) << 4];
 
 	switch (con_depth){
@@ -1281,7 +1322,7 @@ sun_blitc(uint charattr, unsigned long addr)
 		"\n\t std	%0, [%1]" \
 		"\n\t std	%0, [%1 + %2]"
 
-			x1 = (charattr >> 12) & 0x0f;
+			x1 = attrib >> 4;
 			x1 |= x1 << 8;
 			x1 |= x1 << 16;
 			x3 = cpl << 1;
@@ -1303,7 +1344,7 @@ sun_blitc(uint charattr, unsigned long addr)
 				__asm__ __volatile__ (BLITC_SPC : : "r" (x1), "r" (under_cursor), "i" (8));
 			restore_flags (flags);
 #else
-			bgmask = (charattr >> 12) & 0x0f;
+			bgmask = attrib >> 4;
 			bgmask |= bgmask << 8;
 			bgmask |= bgmask << 16;
 			
@@ -1328,8 +1369,8 @@ sun_blitc(uint charattr, unsigned long addr)
 	                restore_flags(flags);
 #endif
 		} else /* non-space */ {
-			fgmask = (charattr >> 8) & 0x0f;
-			bgmask = (charattr >> 12) & 0x0f;
+			fgmask = attrib & 0x0f;
+			bgmask = attrib >> 4;
 			fgmask |= fgmask << 8;
 			fgmask |= fgmask << 16;
 			bgmask |= bgmask << 8;

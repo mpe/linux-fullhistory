@@ -16,7 +16,6 @@
 #include <linux/types.h>
 
 /* Register interface presented to the CPU by the amd7930. */
-
 struct amd7930
 {
 	__volatile__ __u8 cr;		/* Command Register (W) */
@@ -32,6 +31,22 @@ struct amd7930
 #define bcrb bctb			/* Bc-channel Receive Buffer (R) */
 	__volatile__ __u8 dsr2;		/* D-channel Status Register 2 (R) */
 };
+
+
+/* Indirect registers in the Main Audio Processor. */
+struct amd7930_map {
+	__u16	x[8];
+	__u16	r[8];
+	__u16	gx;
+	__u16	gr;
+	__u16	ger;
+	__u16	stgr;
+	__u16	ftgr;
+	__u16	atgr;
+	__u8	mmr1;
+	__u8	mmr2;
+};
+
 
 /* The amd7930 has "indirect registers" which are accessed by writing
  * the register number into the Command Register and then reading or
@@ -84,7 +99,7 @@ struct amd7930
 #define	AMR_MAP_GX			0x63
 #define	AMR_MAP_GR			0x64
 #define	AMR_MAP_GER			0x65
-#define	AMR_MAP_STG			0x66
+#define	AMR_MAP_STGR			0x66
 #define	AMR_MAP_FTGR_1_2		0x67
 #define	AMR_MAP_ATGR_1_2		0x68
 #define	AMR_MAP_MMR1			0x69

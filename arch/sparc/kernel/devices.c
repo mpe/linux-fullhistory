@@ -64,10 +64,12 @@ device_scan(unsigned long mem_start))
 	linux_num_cpus = cpu_ctr;
 
 	cpu_probe();
-#if CONFIG_SUN_AUXIO
+#ifdef CONFIG_SUN_AUXIO
 	{
-	  extern void auxio_probe(void);
-	  auxio_probe();
+		extern void auxio_probe(void);
+		extern void auxio_power_probe(void);
+		auxio_probe();
+		auxio_power_probe();
 	}
 #endif
 	clock_stop_probe();

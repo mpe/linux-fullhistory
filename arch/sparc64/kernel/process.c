@@ -1,8 +1,9 @@
-/*  $Id: process.c,v 1.1 1996/12/28 18:39:39 davem Exp $
+/*  $Id: process.c,v 1.3 1997/03/04 16:26:56 jj Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
  *  Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
+ *  Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 /*
@@ -23,6 +24,7 @@
 #include <linux/user.h>
 #include <linux/a.out.h>
 #include <linux/config.h>
+#include <linux/reboot.h>
 
 #include <asm/oplib.h>
 #include <asm/uaccess.h>
@@ -56,7 +58,7 @@ asmlinkage int sys_idle(void)
 #else
 
 /*
- * the idle loop on a SparcMultiPenguin...
+ * the idle loop on a UltraMultiPenguin...
  */
 asmlinkage int sys_idle(void)
 {
@@ -105,7 +107,7 @@ extern void console_restore_palette (void);
 extern int serial_console;
 #endif
 
-void halt_now(void)
+void machine_halt(void)
 {
 	sti();
 	udelay(8000);
@@ -118,7 +120,7 @@ void halt_now(void)
 	panic("Halt failed!");
 }
 
-void hard_reset_now(void)
+void machine_restart(char * cmd)
 {
 	char *p;
 	
@@ -132,10 +134,17 @@ void hard_reset_now(void)
 	if (!serial_console)
 		console_restore_palette ();
 #endif
+	if (cmd)
+		prom_reboot(cmd);
 	if (*reboot_command)
-		prom_reboot (reboot_command);
+		prom_reboot(reboot_command);
 	prom_feval ("reset");
 	panic("Reboot failed!");
+}
+
+void machine_power_off(void)
+{
+	machine_halt();
 }
 
 void show_regwindow(struct reg_window *rw)
@@ -152,12 +161,12 @@ void show_regwindow(struct reg_window *rw)
 
 void show_regwindow32(struct reg_window32 *rw)
 {
-	printk("l0: %08lx l1: %08lx l2: %08lx l3: %08lx\n"
-	       "l4: %08lx l5: %08lx l6: %08lx l7: %08lx\n",
+	printk("l0: %08x l1: %08x l2: %08x l3: %08x\n"
+	       "l4: %08x l5: %08x l6: %08x l7: %08x\n",
 	       rw->locals[0], rw->locals[1], rw->locals[2], rw->locals[3],
 	       rw->locals[4], rw->locals[5], rw->locals[6], rw->locals[7]);
-	printk("i0: %08lx i1: %08lx i2: %08lx i3: %08lx\n"
-	       "i4: %08lx i5: %08lx i6: %08lx i7: %08lx\n",
+	printk("i0: %08x i1: %08x i2: %08x i3: %08x\n"
+	       "i4: %08x i5: %08x i6: %08x i7: %08x\n",
 	       rw->ins[0], rw->ins[1], rw->ins[2], rw->ins[3],
 	       rw->ins[4], rw->ins[5], rw->ins[6], rw->ins[7]);
 }
@@ -193,29 +202,29 @@ void show_stackframe(struct sparc_stackf *sf)
 void show_stackframe32(struct sparc_stackf32 *sf)
 {
 	unsigned long size;
-	unsigned long *stk;
+	unsigned *stk;
 	int i;
 
-	printk("l0: %08lx l1: %08lx l2: %08lx l3: %08lx\n"
-	       "l4: %08lx l5: %08lx l6: %08lx l7: %08lx\n",
+	printk("l0: %08x l1: %08x l2: %08x l3: %08x\n"
+	       "l4: %08x l5: %08x l6: %08x l7: %08x\n",
 	       sf->locals[0], sf->locals[1], sf->locals[2], sf->locals[3],
 	       sf->locals[4], sf->locals[5], sf->locals[6], sf->locals[7]);
-	printk("i0: %08lx i1: %08lx i2: %08lx i3: %08lx\n"
-	       "i4: %08lx i5: %08lx fp: %08lx ret_pc: %08lx\n",
+	printk("i0: %08x i1: %08x i2: %08x i3: %08x\n"
+	       "i4: %08x i5: %08x fp: %08x ret_pc: %08x\n",
 	       sf->ins[0], sf->ins[1], sf->ins[2], sf->ins[3],
-	       sf->ins[4], sf->ins[5], (unsigned long)sf->fp, sf->callers_pc);
-	printk("sp: %08lx x0: %08lx x1: %08lx x2: %08lx\n"
-	       "x3: %08lx x4: %08lx x5: %08lx xx: %08lx\n",
-	       (unsigned long)sf->structptr, sf->xargs[0], sf->xargs[1],
+	       sf->ins[4], sf->ins[5], sf->fp, sf->callers_pc);
+	printk("sp: %08x x0: %08x x1: %08x x2: %08x\n"
+	       "x3: %08x x4: %08x x5: %08x xx: %08x\n",
+	       sf->structptr, sf->xargs[0], sf->xargs[1],
 	       sf->xargs[2], sf->xargs[3], sf->xargs[4], sf->xargs[5],
 	       sf->xxargs[0]);
 	size = ((unsigned long)sf->fp) - ((unsigned long)sf);
-	size -= STACKFRAME_SZ;
-	stk = (unsigned long *)((unsigned long)sf + STACKFRAME_SZ);
+	size -= STACKFRAME32_SZ;
+	stk = (unsigned *)((unsigned long)sf + STACKFRAME32_SZ);
 	i = 0;
 	do {
-		printk("s%d: %08lx\n", i++, *stk++);
-	} while ((size -= sizeof(unsigned long)));
+		printk("s%d: %08x\n", i++, *stk++);
+	} while ((size -= sizeof(unsigned)));
 }
 
 void show_regs(struct pt_regs * regs)
@@ -245,29 +254,31 @@ void show_regs32(struct pt_regs32 *regs)
 #if __MPP__
 	printk("CID: %d\n",mpp_cid());
 #endif
-        printk("PSR: %08lx PC: %08lx NPC: %08lx Y: %08lx\n", regs->psr,
+        printk("PSR: %08x PC: %08x NPC: %08x Y: %08x\n", regs->psr,
 	       regs->pc, regs->npc, regs->y);
-	printk("g0: %08lx g1: %08lx g2: %08lx g3: %08lx\n",
+	printk("g0: %08x g1: %08x g2: %08x g3: %08x\n",
 	       regs->u_regs[0], regs->u_regs[1], regs->u_regs[2],
 	       regs->u_regs[3]);
-	printk("g4: %08lx g5: %08lx g6: %08lx g7: %08lx\n",
+	printk("g4: %08x g5: %08x g6: %08x g7: %08x\n",
 	       regs->u_regs[4], regs->u_regs[5], regs->u_regs[6],
 	       regs->u_regs[7]);
-	printk("o0: %08lx o1: %08lx o2: %08lx o3: %08lx\n",
+	printk("o0: %08x o1: %08x o2: %08x o3: %08x\n",
 	       regs->u_regs[8], regs->u_regs[9], regs->u_regs[10],
 	       regs->u_regs[11]);
-	printk("o4: %08lx o5: %08lx sp: %08lx ret_pc: %08lx\n",
+	printk("o4: %08x o5: %08x sp: %08x ret_pc: %08x\n",
 	       regs->u_regs[12], regs->u_regs[13], regs->u_regs[14],
 	       regs->u_regs[15]);
-	show_regwindow32((struct reg_window32 *)regs->u_regs[14]);
+	show_regwindow32((struct reg_window32 *)((unsigned long)regs->u_regs[14]));
 }
 
 void show_thread(struct thread_struct *tss)
 {
 	int i;
 
+#if 0
 	printk("kregs:             0x%016lx\n", (unsigned long)tss->kregs);
 	show_regs(tss->kregs);
+#endif	
 	printk("sig_address:       0x%016lx\n", tss->sig_address);
 	printk("sig_desc:          0x%016lx\n", tss->sig_desc);
 	printk("ksp:               0x%016lx\n", tss->ksp);
@@ -292,7 +303,7 @@ void show_thread(struct thread_struct *tss)
 	printk("sstk_info.status:  0x%016lx\n",
 	        (unsigned long)tss->sstk_info.cur_status);
 	printk("flags:             0x%016lx\n", tss->flags);
-	printk("current_ds:        0x%016lx\n", tss->current_ds);
+	printk("current_ds:        0x%016x\n", tss->current_ds);
 
 	/* XXX missing: core_exec */
 }
@@ -302,6 +313,7 @@ void show_thread(struct thread_struct *tss)
  */
 void exit_thread(void)
 {
+#if 0
 	kill_user_windows();
 #ifndef __SMP__
 	if(last_task_used_math == current) {
@@ -319,10 +331,12 @@ void exit_thread(void)
 #endif
 	}
 	mmu_exit_hook();
+#endif	
 }
 
 void flush_thread(void)
 {
+#if 0
 	kill_user_windows();
 	current->tss.w_saved = 0;
 	current->tss.uwinmask = 0;
@@ -346,8 +360,8 @@ void flush_thread(void)
 		current->flags &= ~PF_USEDFPU;
 #endif
 	}
-
 	mmu_flush_hook();
+#endif
 	/* Now, this task is no longer a kernel thread. */
 	current->tss.flags &= ~SPARC_FLAG_KTHREAD;
 	current->tss.current_ds = USER_DS;
@@ -407,6 +421,7 @@ clone_stackframe(struct sparc_stackf *dst, struct sparc_stackf *src)
 	unsigned long size;
 	struct sparc_stackf *sp;
 
+#if 0
 	size = ((unsigned long)src->fp) - ((unsigned long)src);
 	sp = (struct sparc_stackf *)(((unsigned long)dst) - size); 
 
@@ -414,6 +429,7 @@ clone_stackframe(struct sparc_stackf *dst, struct sparc_stackf *src)
 		return 0;
 	if (put_user(dst, &sp->fp))
 		return 0;
+#endif		
 	return sp;
 }
 
@@ -439,6 +455,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	struct reg_window *new_stack;
 	unsigned long stack_offset;
 
+#if 0
 #ifndef __SMP__
 	if(last_task_used_math == current) {
 #else
@@ -451,23 +468,29 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		current->flags &= ~PF_USEDFPU;
 #endif
 	}
+#endif	
 
 	/* Calculate offset to stack_frame & pt_regs */
 	stack_offset = ((PAGE_SIZE<<1) - TRACEREG_SZ);
 
+#if 0
 	if(regs->psr & PSR_PS)
 		stack_offset -= REGWIN_SZ;
+#endif		
 	childregs = ((struct pt_regs *) (p->kernel_stack_page + stack_offset));
 	copy_regs(childregs, regs);
 	new_stack = (((struct reg_window *) childregs) - 1);
 	copy_regwin(new_stack, (((struct reg_window *) regs) - 1));
 
+#if 0
 	p->tss.ksp = p->saved_kernel_stack = (unsigned long) new_stack;
 	p->tss.kpc = (((unsigned long) ret_from_syscall) - 0x8);
 	p->tss.kpsr = current->tss.fork_kpsr;
 	p->tss.kwim = current->tss.fork_kwim;
 	p->tss.kregs = childregs;
+#endif	
 
+#if 0
 	if(regs->psr & PSR_PS) {
 		childregs->u_regs[UREG_FP] = p->tss.ksp;
 		p->tss.flags |= SPARC_FLAG_KTHREAD;
@@ -507,6 +530,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 			childregs->u_regs[UREG_FP] = (unsigned long)childstack;
 		}
 	}
+#endif	
 
 	/* Set the return value for the child. */
 	childregs->u_regs[UREG_I0] = current->pid;
@@ -514,7 +538,6 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 
 	/* Set the return value for the parent. */
 	regs->u_regs[UREG_I1] = 0;
-
 	return 0;
 }
 
@@ -524,7 +547,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 void dump_thread(struct pt_regs * regs, struct user * dump)
 {
 	unsigned long first_stack_page;
-
+#if 0
 	dump->magic = SUNOS_CORE_MAGIC;
 	dump->len = sizeof(struct user);
 	dump->regs.psr = regs->psr;
@@ -548,6 +571,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	memcpy(&dump->fpu.fpstatus.fpq[0], &current->tss.fpqueue[0],
 	       ((sizeof(unsigned long) * 2) * 16));
 	dump->sigcode = current->tss.sig_desc;
+#endif	
 }
 
 /*

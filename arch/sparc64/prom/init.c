@@ -1,14 +1,14 @@
-/* $Id: init.c,v 1.1 1996/12/27 08:49:11 jj Exp $
+/* $Id: init.c,v 1.4 1997/03/04 16:27:09 jj Exp $
  * init.c:  Initialize internal variables used by the PROM
  *          library functions.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/string.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -19,7 +19,7 @@ unsigned int prom_rev, prom_prev;
 /* The root node of the prom device tree. */
 int prom_root_node;
 int prom_stdin, prom_stdout;
-(long)(*prom_command)(char *, long, ...);
+int prom_chosen_node;
 
 /* You must call prom_init() before you attempt to use any of the
  * routines in the prom library.  It returns 0 on success, 1 on
@@ -43,18 +43,18 @@ __initfunc(void prom_init(void *cif_handler, void *cif_stack))
 	if((prom_root_node == 0) || (prom_root_node == -1))
 		prom_halt();
 
-	node = prom_finddevice("/chosen");
-	if (!node || node == -1)
+	prom_chosen_node = prom_finddevice("/chosen");
+	if (!prom_chosen_node || prom_chosen_node == -1)
 		prom_halt();
 		
-	prom_stdin = prom_getint (node, "stdin");
-	prom_stdout = prom_getint (node, "stdout");
+	prom_stdin = prom_getint (prom_chosen_node, "stdin");
+	prom_stdout = prom_getint (prom_chosen_node, "stdout");
 
 	node = prom_finddevice("/openprom");
 	if (!node || node == -1)
 		prom_halt();
 		
-	prom_getstring (openprom_node, "version", buffer, sizeof (buffer));
+	prom_getstring (node, "version", buffer, sizeof (buffer));
 	if (strncmp (buffer, "OPB ", 4) || buffer[5] != '.' || buffer[7] != '.') {
 		prom_printf ("Strange OPB version.\n");
 		prom_halt ();

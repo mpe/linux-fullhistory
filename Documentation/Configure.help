@@ -1774,10 +1774,11 @@ CONFIG_SCSI_NCR53C8XX_SYNC
 
 use normal IO
 CONFIG_SCSI_NCR53C8XX_IOMAPPED
-  Warning! Under linux/Alpha only normal io has been currently tested.
   This option allows you to force the driver to use normal IO.
   Memory mapped IO has less latency than normal IO and works for most 
   Intel-based hardware.
+  Under Linux/Alpha only normal IO is currently supported by the driver 
+  and so, this option has no effect.
   The normal answer therefore is N.
 
 not allow targets to disconnect
@@ -1809,6 +1810,21 @@ CONFIG_SCSI_NCR53C8XX_MAX_TAGS
   that can be queued to a device, when tagged command queuing is
   possible.  The default value is 4. Minimum is 2, maximum is 12.  The
   normal answer therefore is the default one.
+
+assume boards are SYMBIOS compatible
+CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
+  This option allows you to enable some features depending on GPIO wiring.
+  These general purpose input/output pins can be used for vendor specific 
+  features or implementation of the standard SYMBIOS features.
+  Genuine SYMBIOS boards use GPIO0 in output for controller LED and GPIO3 
+  bit as a flag indicating singled-ended/differential interface.
+  If all the boards of your system are genuine SYMBIOS boards or use
+  BIOS and drivers from SYMBIOS, you would want to enable this option,
+  obviously at your own risks.
+  The driver behaves correctly on my system with this option enabled.
+  (SDMS 4.0 + Promise SCSI ULTRA 875 rev 0x3 + ASUS SC200 810A rev 0x12).
+  This option must be set to N if your system has at least one 53C8XX based  
+  scsi board with a vendor-specific BIOS (example: Tekram DC-390/U/W/F).
 
 IBMMCA SCSI support
 CONFIG_SCSI_IBMMCA

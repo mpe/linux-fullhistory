@@ -1366,7 +1366,8 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 }
 
 #ifdef CONFIG_PROC_FS
-static int unix_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int unix_read_proc(char *buffer, char **start, off_t offset,
+			  int length, int *eof, void *data)
 {
 	off_t pos=0;
 	off_t begin=0;
@@ -1410,6 +1411,7 @@ static int unix_get_info(char *buffer, char **start, off_t offset, int length, i
 		if(pos>offset+length)
 			goto done;
 	}
+	*eof = 1;
 done:
 	*start=buffer+(offset-begin);
 	len-=(offset-begin);
@@ -1466,19 +1468,11 @@ struct net_proto_family unix_family_ops = {
 	unix_create
 };
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_net_unix = {
-	PROC_NET_UNIX,  4, "unix",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	unix_get_info
-};
-#endif
-
-
 void unix_proto_init(struct net_proto *pro)
 {
 	struct sk_buff *dummy_skb;
+	struct proc_dir_entry *ent;
+	
 	printk(KERN_INFO "NET3: Unix domain sockets 0.15 for Linux NET3.038.\n");
 	if (sizeof(struct unix_skb_parms) > sizeof(dummy_skb->cb))
 	{
@@ -1487,7 +1481,8 @@ void unix_proto_init(struct net_proto *pro)
 	}
 	sock_register(&unix_family_ops);
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_unix);
+	ent = create_proc_entry("net/unix", 0, 0);
+	ent->read_proc = unix_read_proc;
 #endif
 }
 /*

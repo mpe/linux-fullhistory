@@ -1,4 +1,4 @@
-/* $Id: dtlb_miss.S,v 1.4 1996/12/28 18:39:40 davem Exp $
+/* $Id: dtlb_miss.S,v 1.5 1997/02/25 20:00:02 jj Exp $
  * dtlb_miss.S:	Data TLB miss code, this is included directly
  *              into the trap table.
  *
@@ -45,10 +45,9 @@
 	 * XXX I think I can knock off two more instructions here...
 	 */
 
-dtlb_miss:
 	/* I-cache line 0 */
 	ldxa		[%g0] ASI_DMMU, %g1		! grab Tag Target either way
-	brlz,pnt	%g1, 3f				! special kernel processing
+	brlz,pn		%g1, 3f				! special kernel processing
 	 srlx		%g1, 8, %g3			! put high vaddr bits in place
 
 1:
@@ -68,15 +67,15 @@ dtlb_miss:
 2:
 	retry						! return from trap
 
-#define KTTE_HIGH_BITS	(_PAGE_VALID | _PAGE_SZ4MB)
-#define KTTE_LOW_BITS	(_PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_W | _PAGE_G)
+#define KTTE_HIGH_BITS	_PAGE_VALID | _PAGE_SZ4MB
+#define KTTE_LOW_BITS	_PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_W | _PAGE_G
 
 	nop						! align next insn on cache line
 3:
 	/* I-cache line 2 */
 	srax		%g1, 19, %g5			! mask down high bits
 	cmp		%g5, -1				! if -1 this is VMALLOC area
-	be,pnt		%xcc, 1b			! yep
+	be,pn		%xcc, 1b			! yep
 	 sethi		%uhi(KTTE_HIGH_BITS), %g4	! begin pte formation
 
 	sllx		%g1, 23, %g1			! begin masking for physpage

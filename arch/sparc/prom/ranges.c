@@ -1,4 +1,4 @@
-/* $Id: ranges.c,v 1.7 1996/11/13 05:10:12 davem Exp $
+/* $Id: ranges.c,v 1.8 1997/02/04 07:28:29 davem Exp $
  * ranges.c: Handle ranges in newer proms for obio/sbus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -57,11 +57,21 @@ prom_apply_obio_ranges(struct linux_prom_registers *regs, int nregs)
 }
 
 /* Apply probed sbus ranges to registers passed, if no ranges return. */
-void
-prom_apply_sbus_ranges(struct linux_sbus *sbus, struct linux_prom_registers *regs, int nregs)
+void prom_apply_sbus_ranges(struct linux_sbus *sbus, struct linux_prom_registers *regs,
+			    int nregs, struct linux_sbus_device *sdev)
 {
-	if(sbus->num_sbus_ranges)
-	prom_adjust_regs(regs, nregs, sbus->sbus_ranges, sbus->num_sbus_ranges);
+	if(sbus->num_sbus_ranges) {
+		if(sdev && (sdev->ranges_applied == 0)) {
+			sdev->ranges_applied = 1;
+			prom_adjust_regs(regs, nregs, sbus->sbus_ranges,
+					 sbus->num_sbus_ranges);
+		} else if(!sdev) {
+			printk("PROMLIB: Aieee, old SBUS driver, update it to use new "
+			       "prom_apply_sbus_ranges interface now!\n");
+			prom_adjust_regs(regs, nregs, sbus->sbus_ranges,
+					 sbus->num_sbus_ranges);
+		}
+	}
 }
 
 __initfunc(void prom_ranges_init(void))

@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.71 1997/01/19 22:32:21 ecd Exp $
+/*  $Id: signal.c,v 1.72 1997/03/03 16:51:43 jj Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -144,7 +144,7 @@ restore_fpu_state(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 	current->flags &= ~PF_USEDFPU;
 
 	copy_from_user(&current->tss.float_regs[0], &fpu->si_float_regs[0],
-		       (sizeof(unsigned long) * 64));
+		       (sizeof(unsigned long) * 32));
 	__get_user(current->tss.fsr, &fpu->si_fsr);
 	__get_user(current->tss.fpqdepth, &fpu->si_fpqdepth);
 	if (current->tss.fpqdepth != 0)
@@ -343,7 +343,7 @@ save_fpu_state(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 	}
 #endif
 	copy_to_user(&fpu->si_float_regs[0], &current->tss.float_regs[0],
-		     (sizeof(unsigned long) * 64));
+		     (sizeof(unsigned long) * 32));
 	__put_user(current->tss.fsr, &fpu->si_fsr);
 	__put_user(current->tss.fpqdepth, &fpu->si_fpqdepth);
 	if (current->tss.fpqdepth != 0)

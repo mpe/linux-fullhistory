@@ -3,6 +3,7 @@
 /*
  *	istallion.c  -- stallion intelligent multiport serial driver.
  *
+ *	Copyright (C) 1996-1997  Stallion Technologies (support@stallion.oz.au).
  *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
  *
  *	This code is loosely based on the Linux serial driver, written by
@@ -92,6 +93,12 @@
  *	boards can share the same shared memory address space. No interrupt
  *	is required for this board type.
  *	Another example:
+ *		{ BRD_ECPE, 0x5000, 0, 0x80000000, 0, 0 },
+ *	This line will configure an EasyConnection 8/64 EISA in slot 5 and
+ *	shared memory address of 0x80000000 (2 GByte). Multiple
+ *	EasyConnection 8/64 EISA boards can share the same shared memory
+ *	address space. No interrupt is required for this board type.
+ *	Another example:
  *		{ BRD_ONBOARD, 0x240, 0, 0xd0000, 0, 0 },
  *	This line will configure an ONboard (ISA type) at io address 240,
  *	and shared memory address of d0000. Multiple ONboards can share
@@ -121,7 +128,8 @@ typedef struct {
 } stlconf_t;
 
 static stlconf_t	stli_brdconf[] = {
- 	{ BRD_ECP, 0x2a0, 0, 0xcc000, 0, 0 },
+ 	/*{ BRD_ECP, 0x2a0, 0, 0xcc000, 0, 0 },*/
+ 	{ BRD_ECP, 0x2b0, 0, 0xcc000, 0, 0 },
 };
 
 static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
@@ -159,7 +167,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  *	all the local structures required by a serial tty driver.
  */
 static char	*stli_drvname = "Stallion Intelligent Multiport Serial Driver";
-static char	*stli_drvversion = "1.1.4";
+static char	*stli_drvversion = "5.3.2";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 
@@ -475,7 +483,7 @@ int		stli_eisaprobe = STLI_EISAPROBE;
 /*
  *	Define the maximal baud rate, and the default baud base for ports.
  */
-#define	STL_MAXBAUD	230400
+#define	STL_MAXBAUD	921600
 #define	STL_BAUDBASE	115200
 #define	STL_CLOSEDELAY	50
 
@@ -494,7 +502,7 @@ int		stli_eisaprobe = STLI_EISAPROBE;
  */
 static unsigned int	stli_baudrates[] = {
 	0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
-	9600, 19200, 38400, 57600, 115200, 230400
+	9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600
 };
 
 /*****************************************************************************/
@@ -543,8 +551,9 @@ static int	stli_startbrd(stlibrd_t *brdp);
 static long	stli_memread(struct inode *ip, struct file *fp, char *buf, unsigned long count);
 static long	stli_memwrite(struct inode *ip, struct file *fp, const char *buf, unsigned long count);
 static int	stli_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg);
+static void	stli_brdpoll(stlibrd_t *brdp, volatile cdkhdr_t *hdrp);
 static void	stli_poll(unsigned long arg);
-static int	stli_hostcmd(stlibrd_t *brdp, int channr);
+static int	stli_hostcmd(stlibrd_t *brdp, stliport_t *portp);
 static int	stli_initopen(stlibrd_t *brdp, stliport_t *portp);
 static int	stli_rawopen(stlibrd_t *brdp, stliport_t *portp, unsigned long arg, int wait);
 static int	stli_rawclose(stlibrd_t *brdp, stliport_t *portp, unsigned long arg, int wait);
@@ -722,8 +731,7 @@ void cleanup_module()
 			}
 		}
 
-		if (brdp->memaddr >= 0x100000)
-			iounmap(brdp->membase);
+		iounmap(brdp->membase);
 		if ((brdp->brdtype == BRD_ECP) || (brdp->brdtype == BRD_ECPE) || (brdp->brdtype == BRD_ECPMC))
 			release_region(brdp->iobase, ECP_IOSIZE);
 		else
@@ -1056,7 +1064,6 @@ static int stli_rawopen(stlibrd_t *brdp, stliport_t *portp, unsigned long arg, i
 	cp->openarg = arg;
 	cp->open = 1;
 	hdrp = (volatile cdkhdr_t *) EBRDGETMEMPTR(brdp, CDK_CDKADDR);
-	hdrp->slavereq |= portp->reqbit;
 	bits = ((volatile unsigned char *) hdrp) + brdp->slaveoffset + portp->portidx;
 	*bits |= portp->portbit;
 	EBRDDISABLE(brdp);
@@ -1131,7 +1138,6 @@ static int stli_rawclose(stlibrd_t *brdp, stliport_t *portp, unsigned long arg, 
 	cp->closearg = arg;
 	cp->close = 1;
 	hdrp = (volatile cdkhdr_t *) EBRDGETMEMPTR(brdp, CDK_CDKADDR);
-	hdrp->slavereq |= portp->reqbit;
 	bits = ((volatile unsigned char *) hdrp) + brdp->slaveoffset + portp->portidx;
 	*bits |= portp->portbit;
 	EBRDDISABLE(brdp);
@@ -1432,7 +1438,6 @@ static int stli_write(struct tty_struct *tty, int from_user, const unsigned char
 			ap->changed.data &= ~DT_TXEMPTY;
 	}
 	hdrp = (volatile cdkhdr_t *) EBRDGETMEMPTR(brdp, CDK_CDKADDR);
-	hdrp->slavereq |= portp->reqbit;
 	bits = ((volatile unsigned char *) hdrp) + brdp->slaveoffset + portp->portidx;
 	*bits |= portp->portbit;
 	set_bit(ST_TXBUSY, &portp->state);
@@ -1564,7 +1569,6 @@ static void stli_flushchars(struct tty_struct *tty)
 			ap->changed.data &= ~DT_TXEMPTY;
 	}
 	hdrp = (volatile cdkhdr_t *) EBRDGETMEMPTR(brdp, CDK_CDKADDR);
-	hdrp->slavereq |= portp->reqbit;
 	bits = ((volatile unsigned char *) hdrp) + brdp->slaveoffset + portp->portidx;
 	*bits |= portp->portbit;
 	set_bit(ST_TXBUSY, &portp->state);
@@ -1753,7 +1757,8 @@ static int stli_ioctl(struct tty_struct *tty, struct file *file, unsigned int cm
 {
 	stliport_t	*portp;
 	stlibrd_t	*brdp;
-	unsigned long	val;
+	unsigned long	lval;
+	unsigned int	ival;
 	int		rc;
 
 #if DEBUG
@@ -1771,6 +1776,12 @@ static int stli_ioctl(struct tty_struct *tty, struct file *file, unsigned int cm
 	if (brdp == (stlibrd_t *) NULL)
 		return(0);
 
+	if ((cmd != TIOCGSERIAL) && (cmd != TIOCSSERIAL) &&
+ 			(cmd != COM_GETPORTSTATS) && (cmd != COM_CLRPORTSTATS)) {
+		if (tty->flags & (1 << TTY_IO_ERROR))
+			return(-EIO);
+	}
+
 	rc = 0;
 
 	switch (cmd) {
@@ -1778,16 +1789,16 @@ static int stli_ioctl(struct tty_struct *tty, struct file *file, unsigned int cm
 		if ((rc = tty_check_change(tty)) == 0) {
 			tty_wait_until_sent(tty, 0);
 			if (! arg) {
-				val = 250;
-				rc = stli_cmdwait(brdp, portp, A_BREAK, &val, sizeof(unsigned long), 0);
+				lval = 250;
+				rc = stli_cmdwait(brdp, portp, A_BREAK, &lval, sizeof(unsigned long), 0);
 			}
 		}
 		break;
 	case TCSBRKP:
 		if ((rc = tty_check_change(tty)) == 0) {
 			tty_wait_until_sent(tty, 0);
-			val = (arg ? (arg * 100) : 250);
-			rc = stli_cmdwait(brdp, portp, A_BREAK, &val, sizeof(unsigned long), 0);
+			lval = (arg ? (arg * 100) : 250);
+			rc = stli_cmdwait(brdp, portp, A_BREAK, &lval, sizeof(unsigned long), 0);
 		}
 		break;
 	case TIOCGSOFTCAR:
@@ -1796,40 +1807,36 @@ static int stli_ioctl(struct tty_struct *tty, struct file *file, unsigned int cm
 		break;
 	case TIOCSSOFTCAR:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) {
-			unsigned int value;
-			get_user(value, (unsigned int *) arg);
-			tty->termios->c_cflag = (tty->termios->c_cflag & ~CLOCAL) | (value ? CLOCAL : 0);
+			get_user(ival, (unsigned int *) arg);
+			tty->termios->c_cflag = (tty->termios->c_cflag & ~CLOCAL) | (ival ? CLOCAL : 0);
 		}
 		break;
 	case TIOCMGET:
 		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned int))) == 0) {
 			if ((rc = stli_cmdwait(brdp, portp, A_GETSIGNALS, &portp->asig, sizeof(asysigs_t), 1)) < 0)
 				return(rc);
-			val = stli_mktiocm(portp->asig.sigvalue);
-			put_user(val, (unsigned int *) arg);
+			lval = stli_mktiocm(portp->asig.sigvalue);
+			put_user(lval, (unsigned int *) arg);
 		}
 		break;
 	case TIOCMBIS:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) {
-			unsigned int value;
-			get_user(value, (unsigned int *) arg);
-			stli_mkasysigs(&portp->asig, ((value & TIOCM_DTR) ? 1 : -1), ((value & TIOCM_RTS) ? 1 : -1));
+			get_user(ival, (unsigned int *) arg);
+			stli_mkasysigs(&portp->asig, ((ival & TIOCM_DTR) ? 1 : -1), ((ival & TIOCM_RTS) ? 1 : -1));
 			rc = stli_cmdwait(brdp, portp, A_SETSIGNALS, &portp->asig, sizeof(asysigs_t), 0);
 		}
 		break;
 	case TIOCMBIC:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) {
-			unsigned int value;
-			get_user(value, (unsigned int *) arg);
-			stli_mkasysigs(&portp->asig, ((value & TIOCM_DTR) ? 0 : -1), ((value & TIOCM_RTS) ? 0 : -1));
+			get_user(ival, (unsigned int *) arg);
+			stli_mkasysigs(&portp->asig, ((ival & TIOCM_DTR) ? 0 : -1), ((ival & TIOCM_RTS) ? 0 : -1));
 			rc = stli_cmdwait(brdp, portp, A_SETSIGNALS, &portp->asig, sizeof(asysigs_t), 0);
 		}
 		break;
 	case TIOCMSET:
 		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) {
-			unsigned int value;
-			get_user(value, (unsigned int *) arg);
-			stli_mkasysigs(&portp->asig, ((value & TIOCM_DTR) ? 1 : 0), ((value & TIOCM_RTS) ? 1 : 0));
+			get_user(ival, (unsigned int *) arg);
+			stli_mkasysigs(&portp->asig, ((ival & TIOCM_DTR) ? 1 : 0), ((ival & TIOCM_RTS) ? 1 : 0));
 			rc = stli_cmdwait(brdp, portp, A_SETSIGNALS, &portp->asig, sizeof(asysigs_t), 0);
 		}
 		break;
@@ -2223,7 +2230,6 @@ static void stli_sendcmd(stlibrd_t *brdp, stliport_t *portp, unsigned long cmd, 
 	cp->status = 0;
 	cp->cmd = cmd;
 	hdrp = (volatile cdkhdr_t *) EBRDGETMEMPTR(brdp, CDK_CDKADDR);
-	hdrp->slavereq |= portp->reqbit;
 	bits = ((volatile unsigned char *) hdrp) + brdp->slaveoffset + portp->portidx;
 	*bits |= portp->portbit;
 	set_bit(ST_CMDING, &portp->state);
@@ -2348,15 +2354,17 @@ static inline void stli_dodelaycmd(stliport_t *portp, volatile cdkctrl_t *cp)
  *	enabled and interrupts off when called. Notice that by servicing the
  *	read data last we don't need to change the shared memory pointer
  *	during processing (which is a slow IO operation).
+ *	Return value indicates if this port is still awaiting actions from
+ *	the slave (like open, command, or even TX data being sent). If 0
+ *	then port is still busy, otherwise no longer busy.
  */
 
-static inline int stli_hostcmd(stlibrd_t *brdp, int channr)
+static inline int stli_hostcmd(stlibrd_t *brdp, stliport_t *portp)
 {
 	volatile cdkasy_t	*ap;
 	volatile cdkctrl_t	*cp;
 	struct tty_struct	*tty;
 	asynotify_t		nt;
-	stliport_t		*portp;
 	unsigned long		oldsigs;
 	int			rc, donerx;
 
@@ -2364,7 +2372,6 @@ static inline int stli_hostcmd(stlibrd_t *brdp, int channr)
 	printk("stli_hostcmd(brdp=%x,channr=%d)\n", (int) brdp, channr);
 #endif
 
-	portp = brdp->ports[(channr - 1)];
 	ap = (volatile cdkasy_t *) EBRDGETMEMPTR(brdp, portp->addr);
 	cp = &ap->ctrl;
 
@@ -2496,7 +2503,73 @@ static inline int stli_hostcmd(stlibrd_t *brdp, int channr)
 		stli_read(brdp, portp);
 	}
 
-	return(0);
+	return((test_bit(ST_OPENING, &portp->state) ||
+		test_bit(ST_CLOSING, &portp->state) ||
+		test_bit(ST_CMDING, &portp->state) ||
+		test_bit(ST_TXBUSY, &portp->state) ||
+		test_bit(ST_RXING, &portp->state)) ? 0 : 1);
+}
+
+/*****************************************************************************/
+
+/*
+ *	Service all ports on a particular board. Assumes that the boards
+ *	shared memory is enabled, and that the page pointer is pointed
+ *	at the cdk header structure.
+ */
+
+static inline void stli_brdpoll(stlibrd_t *brdp, volatile cdkhdr_t *hdrp)
+{
+	stliport_t	*portp;
+	unsigned char	hostbits[(STL_MAXCHANS / 8) + 1];
+	unsigned char	slavebits[(STL_MAXCHANS / 8) + 1];
+	unsigned char	*slavep;
+	int		bitpos, bitat, bitsize;
+	int 		channr, nrdevs, slavebitchange;
+
+	bitsize = brdp->bitsize;
+	nrdevs = brdp->nrdevs;
+
+/*
+ *	Check if slave wants any service. Basically we try to do as
+ *	little work as possible here. There are 2 levels of service
+ *	bits. So if there is nothing to do we bail early. We check
+ *	8 service bits at a time in the inner loop, so we can bypass
+ *	the lot if none of them want service.
+ */
+	memcpy(&hostbits[0], (((unsigned char *) hdrp) + brdp->hostoffset), bitsize);
+
+	memset(&slavebits[0], 0, bitsize);
+	slavebitchange = 0;
+
+	for (bitpos = 0; (bitpos < bitsize); bitpos++) {
+		if (hostbits[bitpos] == 0)
+			continue;
+		channr = bitpos * 8;
+		for (bitat = 0x1; (channr < nrdevs); channr++, bitat <<= 1) {
+			if (hostbits[bitpos] & bitat) {
+				portp = brdp->ports[(channr - 1)];
+				if (stli_hostcmd(brdp, portp)) {
+					slavebitchange++;
+					slavebits[bitpos] |= bitat;
+				}
+			}
+		}
+	}
+
+/*
+ *	If any of the ports are no longer busy then update them in the
+ *	slave request bits. We need to do this after, since a host port
+ *	service may initiate more slave requests.
+ */
+	if (slavebitchange) {
+		hdrp = (volatile cdkhdr_t *) EBRDGETMEMPTR(brdp, CDK_CDKADDR);
+		slavep = ((unsigned char *) hdrp) + brdp->slaveoffset;
+		for (bitpos = 0; (bitpos < bitsize); bitpos++) {
+			if (slavebits[bitpos])
+				slavep[bitpos] &= ~slavebits[bitpos];
+		}
+	}
 }
 
 /*****************************************************************************/
@@ -2513,12 +2586,8 @@ static inline int stli_hostcmd(stlibrd_t *brdp, int channr)
 static void stli_poll(unsigned long arg)
 {
 	volatile cdkhdr_t	*hdrp;
-	unsigned char		bits[(STL_MAXCHANS / 8) + 1];
-	unsigned char		hostreq, slavereq;
-	stliport_t		*portp;
 	stlibrd_t		*brdp;
-	int			bitpos, bitat, bitsize;
-	int 			brdnr, channr, nrdevs;
+	int 			brdnr;
 
 	stli_timerlist.expires = STLI_TIMEOUT;
 	add_timer(&stli_timerlist);
@@ -2535,67 +2604,8 @@ static void stli_poll(unsigned long arg)
 
 		EBRDENABLE(brdp);
 		hdrp = (volatile cdkhdr_t *) EBRDGETMEMPTR(brdp, CDK_CDKADDR);
-		hostreq = hdrp->hostreq;
-		slavereq = hdrp->slavereq;
-		bitsize = brdp->bitsize;
-		nrdevs = brdp->nrdevs;
-
-/*
- *		Check if slave wants any service. Basically we try to do as
- *		little work as possible here. There are 2 levels of service
- *		bits. So if there is nothing to do we bail early. We check
- *		8 service bits at a time in the inner loop, so we can bypass
- *		the lot if none of them want service.
- */
-		if (hostreq) {
-			memcpy(&bits[0], (((unsigned char *) hdrp) + brdp->hostoffset), bitsize);
-
-			for (bitpos = 0; (bitpos < bitsize); bitpos++) {
-				if (bits[bitpos] == 0)
-					continue;
-				channr = bitpos * 8;
-				for (bitat = 0x1; (channr < nrdevs); channr++, bitat <<= 1) {
-					if (bits[bitpos] & bitat) {
-						stli_hostcmd(brdp, channr);
-					}
-				}
-			}
-		}
-
-/*
- *		Check if any of the out-standing host commands have completed.
- *		It is a bit unfortunate that we need to check stuff that we
- *		initiated!  This ain't pretty, but it needs to be fast.
- */
-		if (slavereq) {
-			slavereq = 0;
-			hostreq = 0;
-			memcpy(&bits[0], (((unsigned char *) hdrp) + brdp->slaveoffset), bitsize);
-
-			for (bitpos = 0; (bitpos < bitsize); bitpos++) {
-				if (bits[bitpos] == 0)
-					continue;
-				channr = bitpos * 8;
-				for (bitat = 0x1; (channr < nrdevs); channr++, bitat <<= 1) {
-					if (bits[bitpos] & bitat) {
-						portp = brdp->ports[(channr - 1)];
-						if (test_bit(ST_OPENING, &portp->state) ||
-								test_bit(ST_CLOSING, &portp->state) ||
-								test_bit(ST_CMDING, &portp->state) ||
-								test_bit(ST_TXBUSY, &portp->state)) {
-							slavereq |= portp->reqbit;
-						} else {
-							bits[bitpos] &= ~bitat;
-							hostreq++;
-						}
-					}
-				}
-			}
-			hdrp->slavereq = slavereq;
-			if (hostreq)
-				memcpy((((unsigned char *) hdrp) + brdp->slaveoffset), &bits[0], bitsize);
-		}
-
+		if (hdrp->hostreq)
+			stli_brdpoll(brdp, hdrp);
 		EBRDDISABLE(brdp);
 	}
 }
@@ -2621,7 +2631,7 @@ static void stli_mkasyport(stliport_t *portp, asyport_t *pp, struct termios *tio
 	pp->baudout = tiosp->c_cflag & CBAUD;
 	if (pp->baudout & CBAUDEX) {
 		pp->baudout &= ~CBAUDEX;
-		if ((pp->baudout < 1) || (pp->baudout > 2))
+		if ((pp->baudout < 1) || (pp->baudout > 5))
 			tiosp->c_cflag &= ~CBAUDEX;
 		else
 			pp->baudout += 15;
@@ -3342,6 +3352,11 @@ static int stli_initecp(stlibrd_t *brdp)
 	if ((brdp->iobase == 0) || (brdp->memaddr == 0))
 		return(-ENODEV);
 
+	if (check_region(brdp->iobase, ECP_IOSIZE)) {
+		printk("STALLION: Warning, unit %d I/O address %x conflicts with another device\n",
+			brdp->brdnr, brdp->iobase);
+	}
+
 /*
  *	Based on the specific board type setup the common vars to access
  *	and enable shared memory. Set all board specific information now
@@ -3394,16 +3409,14 @@ static int stli_initecp(stlibrd_t *brdp)
 /*
  *	The per-board operations structure is all set up, so now let's go
  *	and get the board operational. Firstly initialize board configuration
- *	registers. Then if we are using the higher 1Mb support then set up
- *	the memory mapping info so we can get at the boards shared memory.
+ *	registers. Set the memory mapping info so we can get at the boards
+ *	shared memory.
  */
 	EBRDINIT(brdp);
 
-	if (brdp->memaddr > 0x100000) {
-		brdp->membase = ioremap(brdp->memaddr, brdp->memsize);
-		if (brdp->membase == (void *) NULL)
-			return(-ENOMEM);
-	}
+	brdp->membase = ioremap(brdp->memaddr, brdp->memsize);
+	if (brdp->membase == (void *) NULL)
+		return(-ENOMEM);
 
 /*
  *	Now that all specific code is set up, enable the shared memory and
@@ -3474,6 +3487,11 @@ static int stli_initonb(stlibrd_t *brdp)
  */
 	if ((brdp->iobase == 0) || (brdp->memaddr == 0))
 		return(-ENODEV);
+
+	if (check_region(brdp->iobase, ONB_IOSIZE)) {
+		printk("STALLION: Warning, unit %d I/O address %x conflicts with another device\n",
+			brdp->brdnr, brdp->iobase);
+	}
 
 /*
  *	Based on the specific board type setup the common vars to access
@@ -3550,16 +3568,14 @@ static int stli_initonb(stlibrd_t *brdp)
 /*
  *	The per-board operations structure is all set up, so now let's go
  *	and get the board operational. Firstly initialize board configuration
- *	registers. Then if we are using the higher 1Mb support then set up
- *	the memory mapping info so we can get at the boards shared memory.
+ *	registers. Set the memory mapping info so we can get at the boards
+ *	shared memory.
  */
 	EBRDINIT(brdp);
 
-	if (brdp->memaddr > 0x100000) {
-		brdp->membase = ioremap(brdp->memaddr, brdp->memsize);
-		if (brdp->membase == (void *) NULL)
-			return(-ENOMEM);
-	}
+	brdp->membase = ioremap(brdp->memaddr, brdp->memsize);
+	if (brdp->membase == (void *) NULL)
+		return(-ENOMEM);
 
 /*
  *	Now that all specific code is set up, enable the shared memory and
@@ -3676,6 +3692,8 @@ static int stli_startbrd(stlibrd_t *brdp)
 		portp->portidx = (unsigned char) (i / 8);
 		portp->portbit = (unsigned char) (0x1 << (i % 8));
 	}
+
+	hdrp->slavereq = 0xff;
 
 /*
  *	For each port setup a local copy of the RX and TX buffer offsets
@@ -3820,11 +3838,10 @@ static int stli_eisamemprobe(stlibrd_t *brdp)
 	for (i = 0; (i < stli_eisamempsize); i++) {
 		brdp->memaddr = stli_eisamemprobeaddrs[i];
 		brdp->membase = (void *) brdp->memaddr;
-		if (brdp->memaddr > 0x100000) {
-			brdp->membase = ioremap(brdp->memaddr, brdp->memsize);
-			if (brdp->membase == (void *) NULL)
-				continue;
-		}
+		brdp->membase = ioremap(brdp->memaddr, brdp->memsize);
+		if (brdp->membase == (void *) NULL)
+			continue;
+
 		if (brdp->brdtype == BRD_ECPE) {
 			ecpsigp = (cdkecpsig_t *) stli_ecpeigetmemptr(brdp, CDK_SIGADDR, __LINE__);
 			memcpy(&ecpsig, ecpsigp, sizeof(cdkecpsig_t));
@@ -3837,8 +3854,8 @@ static int stli_eisamemprobe(stlibrd_t *brdp)
 					(onbsig.magic2 == ONB_MAGIC2) && (onbsig.magic3 == ONB_MAGIC3))
 				foundit = 1;
 		}
-		if (brdp->memaddr >= 0x100000)
-			iounmap(brdp->membase);
+
+		iounmap(brdp->membase);
 		if (foundit)
 			break;
 	}
@@ -4051,8 +4068,7 @@ static int stli_initbrds()
  *	the slave image (and debugging :-)
  */
 
-static long stli_memread(struct inode *ip, struct file *fp,
-	char *buf, unsigned long count)
+static long stli_memread(struct inode *ip, struct file *fp, char *buf, unsigned long count)
 {
 	unsigned long	flags;
 	void		*memptr;
@@ -4101,8 +4117,7 @@ static long stli_memread(struct inode *ip, struct file *fp,
  *	the slave image (and debugging :-)
  */
 
-static long stli_memwrite(struct inode *ip, struct file *fp,
-	const char *buf, unsigned long count)
+static long stli_memwrite(struct inode *ip, struct file *fp, const char *buf, unsigned long count)
 {
 	unsigned long	flags;
 	void		*memptr;
@@ -4111,7 +4126,7 @@ static long stli_memwrite(struct inode *ip, struct file *fp,
 	int		brdnr, size, n;
 
 #if DEBUG
-	printk("stli_memwrite(ip=%x,fp=%x,buf=%x,count=%lx)\n", (int) ip, (int) fp, (int) buf, count);
+	printk("stli_memwrite(ip=%x,fp=%x,buf=%x,count=%lu)\n", (int) ip, (int) fp, (int) buf, count);
 #endif
 
 	brdnr = MINOR(ip->i_rdev);

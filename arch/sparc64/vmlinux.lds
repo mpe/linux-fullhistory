@@ -2,10 +2,11 @@
 OUTPUT_FORMAT("elf64-sparc", "elf64-sparc", "elf64-sparc")
 OUTPUT_ARCH(sparc:v9)
 ENTRY(_start)
+
 SECTIONS
 {
-  . = 0x100200 + SIZEOF_HEADERS;
-  .text 0xfffff80000008000 :
+  . = 0x4000;
+  .text 0xfffff80000004000 :
   {
     *(.text)
     *(.gnu.warning)
@@ -35,6 +36,12 @@ SECTIONS
   .data.init : { *(.data.init) }
   . = ALIGN(8192);
   __init_end = .;
+  __p1275_loc = .;
+  .p1275 :
+  {
+	*(.p1275)
+	. = ALIGN(8192);
+  }
   __bss_start = .;
   .sbss      : { *(.sbss) *(.scommon) }
   .bss       :
@@ -45,12 +52,6 @@ SECTIONS
   }
   _end = . ;
   PROVIDE (end = .);
-  __p1275_loc = .;
-  .p1275 0x0000000000008000 :
-  {
-	*(.p1275)
-  }
-  __p1275_end = .;
   /* Stabs debugging sections.  */
   .stab 0 : { *(.stab) }
   .stabstr 0 : { *(.stabstr) }

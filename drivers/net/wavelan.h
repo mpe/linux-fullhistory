@@ -225,7 +225,7 @@ struct mmw_t
   unsigned char	mmw_jam_time;		/* jamming time (after collision) */
   unsigned char	mmw_unused2[1];		/* unused */
   unsigned char	mmw_thr_pre_set;	/* level threshold preset */
-  /* Discard all packet with signal < this value (0) */
+  /* Discard all packet with signal < this value (4) */
   unsigned char	mmw_decay_prm;		/* decay parameters */
   unsigned char	mmw_decay_updat_prm;	/* decay update parameterz */
   unsigned char	mmw_quality_thr;	/* quality (z-quotient) threshold */

@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.4 1996/12/28 18:39:54 davem Exp $ */
+/* $Id: ptrace.h,v 1.7 1997/03/04 16:27:32 jj Exp $ */
 #ifndef _SPARC64_PTRACE_H
 #define _SPARC64_PTRACE_H
 
@@ -102,13 +102,153 @@ extern void show_regs(struct pt_regs *);
 
 #else /* __ASSEMBLY__ */
 /* For assembly code. */
-#define TRACEREG_SZ		XXX
-#define STACKFRAME_SZ		YYY
-#define REGWIN_SZ		ZZZ
+#define TRACEREG_SZ		0xa0
+#define STACKFRAME_SZ		0xc0
+#define REGWIN_SZ		0x80
 
 #define TRACEREG32_SZ		0x50
 #define STACKFRAME32_SZ		0x60
 #define REGWIN32_SZ		0x40
+
+#include <asm/asm_offsets.h>
 #endif
+
+#define STACK_BIAS		2047
+
+/* These are for pt_regs. */
+#define PT_V9_G0     0x00
+#define PT_V9_G1     0x08
+#define PT_V9_G2     0x10
+#define PT_V9_G3     0x18
+#define PT_V9_G4     0x20
+#define PT_V9_G5     0x28
+#define PT_V9_G6     0x30
+#define PT_V9_G7     0x38
+#define PT_V9_I0     0x40
+#define PT_V9_I1     0x48
+#define PT_V9_I2     0x50
+#define PT_V9_I3     0x58
+#define PT_V9_I4     0x60
+#define PT_V9_I5     0x68
+#define PT_V9_I6     0x70
+#define PT_V9_FP     PT_V9_I6
+#define PT_V9_I7     0x78
+#define PT_V9_TSTATE 0x80
+#define PT_V9_TPC    0x88
+#define PT_V9_TNPC   0x90
+#define PT_V9_Y      0x98
+#define PT_TSTATE	PT_V9_TSTATE
+#define PT_TPC		PT_V9_TPC
+#define PT_TNPC		PT_V9_TNPC
+
+/* These for pt_regs32. */
+#define PT_PSR    0x0
+#define PT_PC     0x4
+#define PT_NPC    0x8
+#define PT_Y      0xc
+#define PT_G0     0x10
+#define PT_WIM    PT_G0
+#define PT_G1     0x14
+#define PT_G2     0x18
+#define PT_G3     0x1c
+#define PT_G4     0x20
+#define PT_G5     0x24
+#define PT_G6     0x28
+#define PT_G7     0x2c
+#define PT_I0     0x30
+#define PT_I1     0x34
+#define PT_I2     0x38
+#define PT_I3     0x3c
+#define PT_I4     0x40
+#define PT_I5     0x44
+#define PT_I6     0x48
+#define PT_FP     PT_I6
+#define PT_I7     0x4c
+
+/* Reg_window offsets */
+#define RW_V9_L0     0x00
+#define RW_V9_L1     0x08
+#define RW_V9_L2     0x10
+#define RW_V9_L3     0x18
+#define RW_V9_L4     0x20
+#define RW_V9_L5     0x28
+#define RW_V9_L6     0x30
+#define RW_V9_L7     0x38
+#define RW_V9_I0     0x40
+#define RW_V9_I1     0x48
+#define RW_V9_I2     0x50
+#define RW_V9_I3     0x58
+#define RW_V9_I4     0x60
+#define RW_V9_I5     0x68
+#define RW_V9_I6     0x70
+#define RW_V9_I7     0x78
+
+#define RW_L0     0x00
+#define RW_L1     0x04
+#define RW_L2     0x08
+#define RW_L3     0x0c
+#define RW_L4     0x10
+#define RW_L5     0x14
+#define RW_L6     0x18
+#define RW_L7     0x1c
+#define RW_I0     0x20
+#define RW_I1     0x24
+#define RW_I2     0x28
+#define RW_I3     0x2c
+#define RW_I4     0x30
+#define RW_I5     0x34
+#define RW_I6     0x38
+#define RW_I7     0x3c
+
+/* Stack_frame offsets */
+#define SF_V9_L0     0x00
+#define SF_V9_L1     0x08
+#define SF_V9_L2     0x10
+#define SF_V9_L3     0x18
+#define SF_V9_L4     0x20
+#define SF_V9_L5     0x28
+#define SF_V9_L6     0x30
+#define SF_V9_L7     0x38
+#define SF_V9_I0     0x40
+#define SF_V9_I1     0x48
+#define SF_V9_I2     0x50
+#define SF_V9_I3     0x58
+#define SF_V9_I4     0x60
+#define SF_V9_I5     0x68
+#define SF_V9_FP     0x70
+#define SF_V9_PC     0x78
+#define SF_V9_RETP   0x80
+#define SF_V9_XARG0  0x88
+#define SF_V9_XARG1  0x90
+#define SF_V9_XARG2  0x98
+#define SF_V9_XARG3  0xa0
+#define SF_V9_XARG4  0xa8
+#define SF_V9_XARG5  0xb0
+#define SF_V9_XXARG  0xb8
+
+#define SF_L0     0x00
+#define SF_L1     0x04
+#define SF_L2     0x08
+#define SF_L3     0x0c
+#define SF_L4     0x10
+#define SF_L5     0x14
+#define SF_L6     0x18
+#define SF_L7     0x1c
+#define SF_I0     0x20
+#define SF_I1     0x24
+#define SF_I2     0x28
+#define SF_I3     0x2c
+#define SF_I4     0x30
+#define SF_I5     0x34
+#define SF_FP     0x38
+#define SF_PC     0x3c
+#define SF_RETP   0x40
+#define SF_XARG0  0x44
+#define SF_XARG1  0x48
+#define SF_XARG2  0x4c
+#define SF_XARG3  0x50
+#define SF_XARG4  0x54
+#define SF_XARG5  0x58
+#define SF_XXARG  0x5c
 
 #endif /* !(_SPARC64_PTRACE_H) */

@@ -3924,10 +3924,12 @@ void floppy_setup(char *str, int *ints)
 	DPRINT("Read linux/drivers/block/README.fd\n");
 }
 
+static int have_no_fdc= -EIO;
+
 int floppy_init(void)
 {
 	int i,unit,drive;
-	int have_no_fdc= -EIO;
+
 
 	raw_cmd = 0;
 
@@ -4237,6 +4239,8 @@ MODULE_SUPPORTED_DEVICE("fd");
 void floppy_eject(void)
 {
 	int dummy;
+	if(have_no_fdc)
+		return;
 	floppy_grab_irq_and_dma();
 	lock_fdc(MAXTIMEOUT,0);
 	dummy=fd_eject(0);

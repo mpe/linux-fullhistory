@@ -1,4 +1,4 @@
-/* $Id: leo.c,v 1.10 1996/12/23 10:16:09 ecd Exp $
+/* $Id: leo.c,v 1.11 1997/02/02 02:12:44 ecd Exp $
  * leo.c: SUNW,leo 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -637,7 +637,7 @@ extern unsigned char vga_font [];
 	
 static void leo_blitc(unsigned short charattr, int xoff, int yoff)
 {
-	unsigned char attrib = charattr >> 8;
+	unsigned char attrib = CHARATTR_TO_SUNCOLOR(charattr);
 	unsigned char *p = &vga_font[((unsigned char)charattr) << 4];
 	u32 *u = ((u32 *)fbinfo[0].base) + (yoff << 11) + xoff;
 	GX_BLITC_START(attrib, xoff, yoff, 1)
@@ -648,7 +648,7 @@ static void leo_blitc(unsigned short charattr, int xoff, int yoff)
 
 static void leo_setw(int xoff, int yoff, unsigned short c, int count)
 {
-	unsigned char attrib = c >> 8;
+	unsigned char attrib = CHARATTR_TO_SUNCOLOR(c);
 	unsigned char *p = &vga_font[((unsigned char)c) << 4];
 	register unsigned char *q;
 	u32 *u = ((u32 *)fbinfo[0].base) + (yoff << 11) + xoff;
@@ -664,7 +664,7 @@ static void leo_setw(int xoff, int yoff, unsigned short c, int count)
 
 static void leo_cpyw(int xoff, int yoff, unsigned short *p, int count)
 {
-	unsigned char attrib = *p >> 8;
+	unsigned char attrib = CHARATTR_TO_SUNCOLOR(*p);
 	register unsigned char *q;
 	u32 *u = ((u32 *)fbinfo[0].base) + (yoff << 11) + xoff;
 	GX_BLITC_START(attrib, xoff, yoff, count)

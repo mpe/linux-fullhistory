@@ -887,6 +887,7 @@ asmlinkage void start_kernel(void)
 	}
 #endif
 	mem_init(memory_start,memory_end);
+	proc_root_init();
 	kmem_cache_sizes_init();
 	vma_init();
 	buffer_init();

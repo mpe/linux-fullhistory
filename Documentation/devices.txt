@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		   Last revised: December 20, 1996
+		     Last revised: March 3, 1997
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -628,12 +628,6 @@ reply.
 		129 = /dev/smpte1	Second MIDI port, SMPTE timed
 		130 = /dev/smpte2	Third MIDI port, SMPTE timed
 		131 = /dev/smpte3	Fourth MIDI port, SMPTE timed
-    block	Modular RAM disk device
-
-		This device number is provided for older kernels which
-		did not have the modular RAM disk in the standard
-		distribution.  See major number 1.  This assignment
-		will be removed when the 2.0 kernel is released.
 
  36 char	Netlink support
 		  0 = /dev/route	Routing, device updates, kernel to user
@@ -850,7 +844,83 @@ reply.
 
 		See http://www.coda.cs.cmu.edu for information about Coda.
 
- 68-119		UNALLOCATED
+ 68 char	CAPI 2.0 interface
+		  0 = /dev/capi20	Control device
+		  1 = /dev/capi20.00	First CAPI 2.0 application
+		  2 = /dev/capi20.01	Second CAPI 2.0 application
+		      ...
+		 20 = /dev/capi20.19	19th CAPI 2.0 application
+
+		ISDN CAPI 2.0 driver for use with CAPI 2.0
+		applications; currently supports the AVM B1 card.
+
+ 69 char	MA16 numeric accelerator card
+		  0 = /dev/ma16		Board memory access
+
+ 70 char	SpellCaster Protocol Services Interface
+		  0 = /dev/apscfg	Configuration interface
+		  1 = /dev/apsauth	Authentication interface
+		  2 = /dev/apslog	Logging interface
+		  3 = /dev/apsdbg	Debugging interface
+		 64 = /dev/apsisdn	ISDN command interface
+		 65 = /dev/apsasync	Async command interface
+		128 = /dev/apsmon	Monitor interface
+
+ 71 char	Computone IntelliPort II serial card
+		  0 = /dev/ttyF0	IntelliPort II board 0, port 0
+		  1 = /dev/ttyF1	IntelliPort II board 0, port 1
+		      ...
+		 63 = /dev/ttyF63	IntelliPort II board 0, port 63
+		 64 = /dev/ttyF64	IntelliPort II board 1, port 0
+		 65 = /dev/ttyF65	IntelliPort II board 1, port 1
+		      ...
+		127 = /dev/ttyF127	IntelliPort II board 1, port 63
+		128 = /dev/ttyF128	IntelliPort II board 2, port 0
+		129 = /dev/ttyF129	IntelliPort II board 2, port 1
+		      ...
+		191 = /dev/ttyF191	IntelliPort II board 2, port 63
+		192 = /dev/ttyF192	IntelliPort II board 3, port 0
+		193 = /dev/ttyF193	IntelliPort II board 3, port 1
+		      ...
+		255 = /dev/ttyF255	IntelliPort II board 3, port 63
+
+ 72 char	Computone IntelliPort II serial card - alternate devices
+		  0 = /dev/cuf0		Callout device corresponding to ttyF0
+		  1 = /dev/cuf1		Callout device corresponding to ttyF1
+		      ...
+		 63 = /dev/cuf63	Callout device corresponding to ttyF63
+		 64 = /dev/cuf64	Callout device corresponding to ttyF64
+		 65 = /dev/cuf65	Callout device corresponding to ttyF65
+		      ...
+		127 = /dev/cuf127	Callout device corresponding to ttyF127
+		128 = /dev/cuf128	Callout device corresponding to ttyF128
+		129 = /dev/cuf129	Callout device corresponding to ttyF129
+		      ...
+		191 = /dev/cuf191	Callout device corresponding to ttyF191
+		192 = /dev/cuf192	Callout device corresponding to ttyF192
+		193 = /dev/cuf193	Callout device corresponding to ttyF193
+		      ...
+		255 = /dev/cuf255	Callout device corresponding to ttyF255
+
+ 73 char	Computone IntelliPort II serial card - control devices
+		  0 = /dev/ip2ipl0	Loadware device for board 0
+		  1 = /dev/ip2stat0	Status device for board 0
+		  4 = /dev/ip2ipl1	Loadware device for board 1
+		  5 = /dev/ip2stat1	Status device for board 1
+		  8 = /dev/ip2ipl2	Loadware device for board 2
+		  9 = /dev/ip2stat2	Status device for board 2
+		 12 = /dev/ip2ipl3	Loadware device for board 3
+		 13 = /dev/ip2stat3	Status device for board 3
+
+ 74 char	SCI bridge
+		  0 = /dev/SCI/0	SCI device 0
+		  1 = /dev/SCI/1	SCI device 1
+		      ...
+
+		Currently for Dolphin Interconnect Solutions' PCI-SCI
+		bridge.
+
+ 75-119		UNALLOCATED
 
 120-127		LOCAL/EXPERIMENTAL USE
 
@@ -864,7 +934,7 @@ reply.
 
 
 
-	ADDITIONAL /dev DIRECTORY ENTRIES
+ ****	ADDITIONAL /dev DIRECTORY ENTRIES
 
 This section details additional entries that should or may exist in
 the /dev directory.  It is preferred that symbolic links use the same
@@ -932,3 +1002,104 @@ Non-transient sockets and named pipes may exist in /dev.  Common entries are:
 /dev/printer	socket		lpd local socket
 /dev/log	socket		syslog local socket
 /dev/gpmdata	socket		gpm mouse multiplexer
+
+
+ ****	TERMINAL DEVICES
+
+Terminal, or TTY devices are a special class of character devices.  A
+terminal device is any device that could act as a controlling terminal
+for a session; this includes virtual consoles, serial ports, and
+pseudoterminals (PTYs).
+
+All terminal devices share a common set of capabilities known as line
+diciplines; these include the common terminal line dicipline as well
+as SLIP and PPP modes.
+
+All terminal devices are named similarly; this section explains the
+naming and use of the various types of TTYs.  Note that the naming
+conventions include several historical warts; some of these are
+Linux-specific, some were inherited from other systems, and some
+reflect Linux outgrowing a borrowed convention.
+
+A hash mark (#) in a device name is used here to indicate a decimal
+number without leading zeroes.
+
+	Virtual consoles and the console device
+
+Virtual consoles are full-screen terminal displays on the system video
+monitor.  Virtual consoles are named /dev/tty#, with numbering
+starting at /dev/tty1; /dev/tty0 is the current virtual console.
+/dev/tty0 is the device that should be used to access the system video
+card on those architectures for which the frame buffer devices
+(/dev/fb*) do not exist (including the x86).  Do not use /dev/console
+for this purpose.
+
+The console device, /dev/console, is the device to which system
+messages should be sent, and on which logins should be permitted in
+single-user mode.  /dev/console should be a symbolic link to either
+/dev/tty0, a specific virtual console such as /dev/tty1, or to a
+serial port primary (tty*, not cu*) device, depending on the
+configuration of the system.
+
+	Serial ports
+
+Serial ports are RS-232 serial ports and any device which simulates
+one, either in hardware (such as internal modems) or in software (such
+as the ISDN driver.)  Under Linux, each serial ports has two device
+names, the primary or callin device and the alternate or callout one.
+Each kind of device is indicated by a different letter.  For any
+letter X, the names of the devices are /dev/ttyX# and /dev/cux#,
+respectively; for historical reasons, /dev/ttyS# and /dev/ttyC#
+correspond to /dev/cua# and /dev/cub#.  In the future, it should be
+expected that multiple letters will be used; all letters will be upper
+case for the "tty" device and lower case for the "cu" device.
+
+The alternate devices provide for kernel-based exclusion and somewhat
+different defaults than the primary devices.  Their main purpose is to
+allow the use of serial ports with programs with no inherent or broken
+support for serial ports.  For programs with proper knowledge of
+serial port operation, their use should probably be avoided.
+
+Arbitration of serial ports is provided by the use of lock files with
+the names /var/lock/LCK..ttyX#.  The contents of the lock file should
+be the PID of the locking process as an ASCII number.
+
+It is common practice to install links such as /dev/modem
+which point to serial ports.  In order to ensure proper locking in the
+presence of these links, it is recommended that software chase
+symlinks and lock all possible names; additionally, it is recommended
+that a lock file be installed with the corresponding alternate
+device.  In order to avoid deadlocks, it is recommended that the locks
+are acquired in the following order, and released in the reverse:
+
+	1. The symbolic link name, if any (/var/lock/LCK..modem)
+	2. The "tty" name (/var/lock/LCK..ttyS2)
+	3. The alternate device name (/var/lock/LCK..cua2)
+
+In the case of nested symbolic links, the lock files should be
+installed in the order the symlinks are resolved.
+
+Under no circumstances should an application hold a lock while waiting
+for another to be released.  In addition, applications which attempt
+to create lock files for the corresponding alternate device names
+should take into account the possibility of being used on a non-serial
+port TTY, for which no alternate device would exist.
+
+	Pseudoterminals (PTYs)
+
+Pseudoterminals, or PTYs, are used to create login sessions or provide
+other capabilities requiring a TTY line dicipline (including SLIP or
+PPP capability) to arbitrary data-generation processes.  Each PTY has
+a master side, named /dev/pty[p-za-e][0-9a-f], and a slave side, named
+/dev/tty[p-za-e][0-9a-f].  The kernel arbitrates the use of PTYs by
+allowing each master side to be opened only once.
+
+Once the master side has been opened, the corresponding slave device
+can be used in the same manner as any TTY device.  The master and
+slave devices are connected by the kernel, generating the equivalent
+of a bidirectional pipe with TTY capabilities.
+
+The entire namespace /dev/[pt]ty[p-za-o][0-9a-z] should be considered
+reserved for the future use of PTYs.  Should more than 936 PTYs ever
+become a necessity, we will likely adopt a System V-like scheme by
+which PTYs use a subdirectory of /dev.

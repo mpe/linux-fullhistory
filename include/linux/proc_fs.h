@@ -224,7 +224,7 @@ struct proc_dir_entry {
 	struct proc_dir_entry *next, *parent, *subdir;
 	void *data;
 	int (*read_proc)(char *page, char **start, off_t off,
-			 int count, void *data);
+			 int count, int *eof, void *data);
 	int (*write_proc)(struct file *file, const char *buffer,
 			  unsigned long count, void *data);
 };
@@ -233,8 +233,8 @@ extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
 				off_t offset, int length, int inout);
 
 extern struct proc_dir_entry proc_root;
-extern struct proc_dir_entry proc_net;
-extern struct proc_dir_entry proc_scsi;
+extern struct proc_dir_entry *proc_net;
+extern struct proc_dir_entry *proc_scsi;
 extern struct proc_dir_entry proc_sys;
 extern struct proc_dir_entry proc_openprom;
 extern struct proc_dir_entry proc_pid;
@@ -248,18 +248,16 @@ extern void proc_base_init(void);
 extern void proc_net_init(void);
 
 extern int proc_register(struct proc_dir_entry *, struct proc_dir_entry *);
-extern int proc_register_dynamic(struct proc_dir_entry *, 
-				 struct proc_dir_entry *);
 extern int proc_unregister(struct proc_dir_entry *, int);
 
 static inline int proc_net_register(struct proc_dir_entry * x)
 {
-	return proc_register(&proc_net, x);
+	return proc_register(proc_net, x);
 }
 
 static inline int proc_net_unregister(int x)
 {
-	return proc_unregister(&proc_net, x);
+	return proc_unregister(proc_net, x);
 }
 
 static inline int proc_scsi_register(struct proc_dir_entry *driver, 
@@ -267,7 +265,7 @@ static inline int proc_scsi_register(struct proc_dir_entry *driver,
 {
     x->ops = &proc_scsi_inode_operations;
     if(x->low_ino < PROC_SCSI_FILE){
-	return(proc_register(&proc_scsi, x));
+	return(proc_register(proc_scsi, x));
     }else{
 	return(proc_register(driver, x));
     }
@@ -278,7 +276,7 @@ static inline int proc_scsi_unregister(struct proc_dir_entry *driver, int x)
     extern void scsi_init_free(char *ptr, unsigned int size);
 
     if(x <= PROC_SCSI_FILE)
-	return(proc_unregister(&proc_scsi, x));
+	return(proc_unregister(proc_scsi, x));
     else {
 	struct proc_dir_entry **p = &driver->subdir, *dp;
 	int ret;
@@ -355,6 +353,7 @@ extern struct inode_operations proc_ringbuf_inode_operations;
  */
 struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 					 struct proc_dir_entry *parent);
+void remove_proc_entry(const char *name, struct proc_dir_entry *parent);
 
 /*
  * proc_tty.c

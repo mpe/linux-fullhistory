@@ -1300,8 +1300,9 @@ int wd7000_detect (Scsi_Host_Template *tpnt)
 		        break;
 
 		if ((i == pass) &&
-		    !memcmp ((void *) (wd7000_biosaddr[biosaddr_ptr] +
-		             signatures[sig_ptr].ofs), signatures[sig_ptr].sig,
+		    check_signature(wd7000_biosaddr[biosaddr_ptr] +
+		             signatures[sig_ptr].ofs,
+			     signatures[sig_ptr].sig,
 		             signatures[sig_ptr].len))
 		    goto bios_matched;
 	    }

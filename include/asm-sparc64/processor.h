@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.6 1996/12/28 20:05:14 davem Exp $
+/* $Id: processor.h,v 1.8 1997/03/04 16:27:33 jj Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -32,30 +32,28 @@
 
 #ifndef __ASSEMBLY__
 
-/* Ok this is hot.  Sparc exception save area. */
-struct exception_struct {
-	unsigned long count;   /* Exception count */
-	unsigned long pc;      /* Callers PC for copy/clear user */
-	unsigned long expc;    /* Where to jump when exception signaled */
-	unsigned long address; /* Saved user base address for transfer */
+struct fpq {
+	unsigned long *insn_addr;
+	unsigned long insn;
 };
 
 #define NSWINS		8
 
 /* The Sparc processor specific thread struct. */
 struct thread_struct {
+	/* Floating point regs */
+	/* Please check asm_offsets, so that not to much precious space
+	   is wasted by this alignment and move the float_regs wherever
+	   is better in this structure. Remember every byte of alignment
+	   is multiplied by 512 to get the amount of wasted kernel memory. */
+	unsigned int    float_regs[64] __attribute__ ((aligned (64)));
+	unsigned long   fsr;
+	unsigned long   fpqdepth;
+	struct fpq	fpqueue[16];
+	
 	/* Context switch saved kernel state. */
 	unsigned long user_globals[8];		/* performance hack */
 	unsigned long ksp, kpc;
-
-	/* Floating point regs */
-	unsigned long   float_regs[64] __attribute__ ((aligned (64)));
-	unsigned long   fsr;
-	unsigned long   fpqdepth;
-	struct fpq {
-		unsigned long *insn_addr;
-		unsigned long insn;
-	} fpqueue[16];
 
 	/* Storage for windows when user stack is bogus. */
 	struct reg_window reg_window[NSWINS] __attribute__ ((aligned (16)));
@@ -69,7 +67,6 @@ struct thread_struct {
 	unsigned long sig_address __attribute__ ((aligned (8)));
 	unsigned long sig_desc;
 
-	struct exception_struct;
 	struct sigstack sstk_info;
 	int current_ds, new_signal;
 	struct exec core_exec;     /* just what it says. */
@@ -86,16 +83,16 @@ struct thread_struct {
 		    PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC }
 
 #define INIT_TSS  {							\
-/* user_globals */ 							\
-   { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, 					\
-/* ksp, kpc */ 								\
-   0,   0, 								\
 /* FPU regs */   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	\
                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	\
                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	\
                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },	\
 /* FPU status, FPU qdepth, FPU queue */ 				\
    0,          0,          { { 0, 0, }, }, 				\
+/* user_globals */ 							\
+   { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, 					\
+/* ksp, kpc */ 								\
+   0,   0, 								\
 /* reg_window */							\
 { { { 0, }, { 0, } }, }, 						\
 /* rwbuf_stkptrs */							\
@@ -107,7 +104,7 @@ struct thread_struct {
 /* sig_address, sig_desc */						\
    0,           0,							\
 /* ex,     sstk_info, current_ds, */					\
-   { 0, }, { 0, 0, }, USER_DS,						\
+   { 0, 0, }, USER_DS,							\
 /* new_signal */							\
   0,									\
 /* core_exec */								\

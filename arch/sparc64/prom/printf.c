@@ -1,4 +1,4 @@
-/* $Id: printf.c,v 1.1 1996/12/27 08:49:13 jj Exp $
+/* $Id: printf.c,v 1.2 1997/03/04 16:27:13 jj Exp $
  * printf.c:  Internal prom library printf facility.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -8,7 +8,6 @@
  * about or use it!  It's simple and smelly anyway....
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 
 #include <asm/openprom.h>

@@ -1009,8 +1009,10 @@ wv_mmc_show(device *	dev)
   mmc_read(ioaddr, 0, (u_char *)&m, sizeof(m));
   mmc_out(ioaddr, mmwoff(0, mmw_freeze), 0);
 
+#ifdef WIRELESS_EXT	/* If wireless extension exist in the kernel */
   /* Don't forget to update statistics */
   lp->wstats.discard.nwid += (m.mmr_wrong_nwid_h << 8) | m.mmr_wrong_nwid_l;
+#endif	/* WIRELESS_EXT */
 
   printk(KERN_DEBUG "##### wavelan modem status registers: #####\n");
 #ifdef DEBUG_SHOW_UNUSED
@@ -1548,7 +1550,7 @@ wv_set_frequency(u_short	ioaddr,	/* i/o port of the card */
     }
 
   /* Setting by channel (same as wfreqsel) */
-  /* Warning : each channel is 22MHz wide, so some of the channels
+  /* Warning : each channel is 11MHz wide, so some of the channels
    * will interfere... */
   if((frequency->e == 0) &&
      (frequency->m >= 0) && (frequency->m < BAND_NUM))
@@ -1931,6 +1933,23 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	}
       break;
 
+    case SIOCSIWSENS:
+      /* Set the level threshold */
+      if(!suser())
+	return -EPERM;
+      psa.psa_thr_pre_set = wrq->u.sensitivity & 0x3F;
+      psa_write(ioaddr, lp->hacr, (char *)&psa.psa_thr_pre_set - (char *)&psa,
+	       (unsigned char *) &psa.psa_thr_pre_set, 1);
+      mmc_out(ioaddr, mmwoff(0, mmw_thr_pre_set), psa.psa_thr_pre_set);
+      break;
+
+    case SIOCGIWSENS:
+      /* Read the level threshold */
+      psa_read(ioaddr, lp->hacr, (char *)&psa.psa_thr_pre_set - (char *)&psa,
+	       (unsigned char *) &psa.psa_thr_pre_set, 1);
+      wrq->u.sensitivity = psa.psa_thr_pre_set & 0x3F;
+      break;
+
     case SIOCGIWRANGE:
       /* Basic checking... */
       if(wrq->u.data.pointer != (caddr_t) 0)
@@ -1962,6 +1981,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	  else
 	    range.num_channels = range.num_frequency = 0;
 
+	  range.sensitivity = 0x3F;
 	  range.max_qual.qual = MMR_SGNL_QUAL;
 	  range.max_qual.level = MMR_SIGNAL_LVL;
 	  range.max_qual.noise = MMR_SILENCE_LVL;
@@ -1980,8 +2000,6 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	  {	/* cmd,		set_args,	get_args,	name */
 	    { SIOCSIPQTHR, IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED | 1, 0, "setqualthr" },
 	    { SIOCGIPQTHR, 0, IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED | 1, "getqualthr" },
-	    { SIOCSIPLTHR, IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED | 1, 0, "setlevelthr" },
-	    { SIOCGIPLTHR, 0, IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED | 1, "getlevelthr" },
 
 	    { SIOCSIPHISTO, IW_PRIV_TYPE_BYTE | 16,	0, "sethisto" },
 	    { SIOCGIPHISTO, 0,	    IW_PRIV_TYPE_INT | 16, "gethisto" },
@@ -1994,7 +2012,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	    break;
 
 	  /* Set the number of ioctl available */
-	  wrq->u.data.length = 6;
+	  wrq->u.data.length = 4;
 
 	  /* Copy structure to the user buffer */
 	  copy_to_user(wrq->u.data.pointer, (u_char *) priv,
@@ -2113,21 +2131,6 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
       psa_read(ioaddr, lp->hacr, (char *)&psa.psa_quality_thr - (char *)&psa,
 	       (unsigned char *)&psa.psa_quality_thr, 1);
       *(wrq->u.name) = psa.psa_quality_thr & 0x0F;
-      break;
-
-    case SIOCSIPLTHR:
-      if(!suser())
-	return -EPERM;
-      psa.psa_thr_pre_set = *(wrq->u.name) & 0x3F;
-      psa_write(ioaddr, lp->hacr, (char *)&psa.psa_thr_pre_set - (char *)&psa,
-	       (unsigned char *)&psa.psa_thr_pre_set, 1);
-      mmc_out(ioaddr, mmwoff(0, mmw_thr_pre_set), psa.psa_thr_pre_set);
-      break;
-
-    case SIOCGIPLTHR:
-      psa_read(ioaddr, lp->hacr, (char *)&psa.psa_thr_pre_set - (char *)&psa,
-	       (unsigned char *)&psa.psa_thr_pre_set, 1);
-      *(wrq->u.name) = psa.psa_thr_pre_set & 0x3F;
       break;
 
 #ifdef HISTOGRAM
@@ -4016,9 +4019,11 @@ wavelan_config(device *	dev)
  * the initial value of dev->base_addr.
  * We follow the example in drivers/net/ne.c.)
  * (called in "Space.c")
+ * As this function is called outside the wavelan module, it should be
+ * declared extern, but it seem to cause troubles...
  */
- 
-int wavelan_probe(device *	dev)
+/* extern */ int
+wavelan_probe(device *	dev)
 {
   short		base_addr;
   mac_addr	mac;		/* Mac address (check wavelan existence) */

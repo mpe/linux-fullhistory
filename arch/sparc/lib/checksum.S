@@ -3,6 +3,7 @@
  *  Copyright(C) 1995 Linus Torvalds
  *  Copyright(C) 1995 Miguel de Icaza
  *  Copyright(C) 1996 David S. Miller
+ *  Copyright(C) 1997 Jakub Jelinek
  *
  * derived from:
  *	Linux/Alpha checksum c-code
@@ -12,7 +13,8 @@
  *	BSD4.4 portable checksum routine
  */
 
-#include <asm-sparc/cprefix.h>
+#include <asm/cprefix.h>
+#include <asm/errno.h>
 
 #define CSUM_BIGCHUNK(buf, offset, sum, t0, t1, t2, t3, t4, t5)	\
 	ldd	[buf + offset + 0x00], t0;			\
@@ -140,9 +142,49 @@ cpte:	bne	csum_partial_end_cruft			! yep, handle it
 cpout:	retl						! get outta here
 	 mov	%o2, %o0				! return computed csum
 
+	.globl C_LABEL(__csum_partial_copy_start), C_LABEL(__csum_partial_copy_end)
+C_LABEL(__csum_partial_copy_start):
+
+#define EX(x,y,a,b,z)                           \
+98:     x,y;                                    \
+        .section .fixup,z##alloc,z##execinstr;  \
+        .align  4;                              \
+99:     ba 30f;                                 \
+         a, b, %o3;                             \
+        .section __ex_table,z##alloc;           \
+        .align  4;                              \
+        .word   98b, 99b;                       \
+        .text;                                  \
+        .align  4
+
+#define EX2(x,y,z)                          	\
+98:     x,y;                                    \
+        .section __ex_table,z##alloc;           \
+        .align  4;                              \
+        .word   98b, 30f;                       \
+        .text;                                  \
+        .align  4
+
+#define EX3(x,y,z)                          	\
+98:     x,y;                                    \
+        .section __ex_table,z##alloc;           \
+        .align  4;                              \
+        .word   98b, 96f;                       \
+        .text;                                  \
+        .align  4
+
+#define EXT(start,end,handler,z)                \
+        .section __ex_table,z##alloc;           \
+        .align  4;                              \
+        .word   start, 0, end, handler;         \
+        .text;                                  \
+        .align  4
+
 	/* This aligned version executes typically in 8.5 superscalar cycles, this
 	 * is the best I can do.  I say 8.5 because the final add will pair with
 	 * the next ldd in the main unrolled loop.  Thus the pipe is always full.
+	 * If you change these macros (including order of instructions),
+	 * please check the fixup code below as well.
 	 */
 #define CSUMCOPY_BIGCHUNK_ALIGNED(src, dst, sum, off, t0, t1, t2, t3, t4, t5, t6, t7)	\
 	ldd	[src + off + 0x00], t0;							\
@@ -205,38 +247,38 @@ cpout:	retl						! get outta here
 cc_end_cruft:
 	be	1f
 	 andcc	%o3, 4, %g0
-	ldd	[%o0 + 0x00], %g2
+	EX(ldd	[%o0 + 0x00], %g2, and %o3, 0xf,#)
 	add	%o1, 8, %o1
 	addcc	%g2, %g7, %g7
 	add	%o0, 8, %o0
 	addxcc	%g3, %g7, %g7
-	st	%g2, [%o1 - 0x08]
+	EX2(st	%g2, [%o1 - 0x08],#)
 	addx	%g0, %g7, %g7
 	andcc	%o3, 4, %g0
-	st	%g3, [%o1 - 0x04]
+	EX2(st	%g3, [%o1 - 0x04],#)
 1:	be	1f
 	 andcc	%o3, 3, %o3
-	ld	[%o0 + 0x00], %g2
+	EX(ld	[%o0 + 0x00], %g2, add %o3, 4,#)
 	add	%o1, 4, %o1
 	addcc	%g2, %g7, %g7
-	st	%g2, [%o1 - 0x04]
+	EX2(st	%g2, [%o1 - 0x04],#)
 	addx	%g0, %g7, %g7
-	add	%o0, 4, %o0
 	andcc	%o3, 3, %g0
+	add	%o0, 4, %o0
 1:	be	1f
 	 addcc	%o3, -1, %g0
 	bne	2f
 	 subcc	%o3, 2, %o3
 	b	4f
 	 or	%g0, %g0, %o4
-2:	lduh	[%o0 + 0x00], %o4
+2:	EX(lduh	[%o0 + 0x00], %o4, add %o3, 2,#)
 	add	%o0, 2, %o0
-	sth	%o4, [%o1 + 0x00]
+	EX2(sth	%o4, [%o1 + 0x00],#)
 	be	6f
 	 add	%o1, 2, %o1
 	sll	%o4, 16, %o4
-4:	ldub	[%o0 + 0x00], %o5
-	stb	%o5, [%o1 + 0x00]
+4:	EX(ldub	[%o0 + 0x00], %o5, add %g0, 1,#)
+	EX2(stb	%o5, [%o1 + 0x00],#)
 	sll	%o5, 8, %o5
 	or	%o5, %o4, %o4
 6:	addcc	%o4, %g7, %g7
@@ -253,27 +295,27 @@ cc_dword_align:
 	 andcc	%o0, 0x2, %g0
 	be	1f
 	 andcc	%o0, 0x4, %g0
-	lduh	[%o0 + 0x00], %g2
+	EX(lduh	[%o0 + 0x00], %g4, add %g1, 0,#)
 	sub	%g1, 2, %g1
-	sth	%g2, [%o1 + 0x00]
+	EX2(sth	%g4, [%o1 + 0x00],#)
 	add	%o0, 2, %o0
-	sll	%g2, 16, %g2
-	addcc	%g2, %g7, %g7
+	sll	%g4, 16, %g4
+	addcc	%g4, %g7, %g7
 	add	%o1, 2, %o1
 	srl	%g7, 16, %g3
-	addx	%g0, %g3, %g2
+	addx	%g0, %g3, %g4
 	sll	%g7, 16, %g7
-	sll	%g2, 16, %g3
+	sll	%g4, 16, %g3
 	srl	%g7, 16, %g7
 	andcc	%o0, 0x4, %g0
 	or	%g3, %g7, %g7
 1:	be	3f
 	 andcc	%g1, 0xffffff80, %g0
-	ld	[%o0 + 0x00], %g2
+	EX(ld	[%o0 + 0x00], %g4, add %g1, 0,#)
 	sub	%g1, 4, %g1
-	st	%g2, [%o1 + 0x00]
+	EX2(st	%g4, [%o1 + 0x00],#)
 	add	%o0, 4, %o0
-	addcc	%g2, %g7, %g7
+	addcc	%g4, %g7, %g7
 	add	%o1, 4, %o1
 	addx	%g0, %g7, %g7
 	b	3f
@@ -284,14 +326,13 @@ cc_dword_align:
 	 * out of you, game over, lights out.
 	 */
 	.align	8
-	.globl	C_LABEL(csum_partial_copy)
-C_LABEL(csum_partial_copy):		/* %o0=src, %o1=dest, %o2=len, %o3=sum */
+	.globl	C_LABEL(__csum_partial_copy_sparc_generic)
+C_LABEL(__csum_partial_copy_sparc_generic):
+					/* %o0=src, %o1=dest, %g1=len, %g7=sum */
 	xor	%o0, %o1, %o4		! get changing bits
-	mov	%o2, %g1		! free up %o2
 	andcc	%o4, 3, %g0		! check for mismatched alignment
 	bne	ccslow			! better this than unaligned/fixups
 	 andcc	%o0, 7, %g0		! need to align things?
-	mov	%o3, %g7		! free up %o3
 	bne	cc_dword_align		! yes, we check for short lengths there
 	 andcc	%g1, 0xffffff80, %g0	! can we use unrolled loop?
 3:	be	3f			! nope, less than one loop remains
@@ -301,6 +342,7 @@ C_LABEL(csum_partial_copy):		/* %o0=src, %o1=dest, %o2=len, %o3=sum */
 	CSUMCOPY_BIGCHUNK(%o0,%o1,%g7,0x20,%o4,%o5,%g2,%g3,%g4,%g5,%o2,%o3)
 	CSUMCOPY_BIGCHUNK(%o0,%o1,%g7,0x40,%o4,%o5,%g2,%g3,%g4,%g5,%o2,%o3)
 	CSUMCOPY_BIGCHUNK(%o0,%o1,%g7,0x60,%o4,%o5,%g2,%g3,%g4,%g5,%o2,%o3)
+10:	EXT(5b, 10b, 20f,#)		! note for exception handling
 	sub	%g1, 128, %g1		! detract from length
 	addx	%g0, %g7, %g7		! add in last carry bit
 	andcc	%g1, 0xffffff80, %g0	! more to csum?
@@ -311,12 +353,12 @@ C_LABEL(csum_partial_copy):		/* %o0=src, %o1=dest, %o2=len, %o3=sum */
 ccmerge:be	ccte			! nope, go and check for end cruft
 	 andcc	%g1, 0xf, %o3		! get low bits of length (clears carry btw)
 	srl	%o2, 1, %o4		! begin negative offset computation
-	sethi	%hi(ccte - 8), %o5	! set up table ptr end
+	sethi	%hi(12f), %o5		! set up table ptr end
 	add	%o0, %o2, %o0		! advance src ptr
 	sub	%o5, %o4, %o5		! continue table calculation
 	sll	%o2, 1, %g2		! constant multiplies are fun...
 	sub	%o5, %g2, %o5		! some more adjustments
-	jmp	%o5 + %lo(ccte - 8)	! jump into it, duff style, wheee...
+	jmp	%o5 + %lo(12f)		! jump into it, duff style, wheee...
 	 add	%o1, %o2, %o1		! advance dest ptr (carry is clear btw)
 cctbl:	CSUMCOPY_LASTCHUNK(%o0,%o1,%g7,0x68,%g2,%g3,%g4,%g5)
 	CSUMCOPY_LASTCHUNK(%o0,%o1,%g7,0x58,%g2,%g3,%g4,%g5)
@@ -325,6 +367,7 @@ cctbl:	CSUMCOPY_LASTCHUNK(%o0,%o1,%g7,0x68,%g2,%g3,%g4,%g5)
 	CSUMCOPY_LASTCHUNK(%o0,%o1,%g7,0x28,%g2,%g3,%g4,%g5)
 	CSUMCOPY_LASTCHUNK(%o0,%o1,%g7,0x18,%g2,%g3,%g4,%g5)
 	CSUMCOPY_LASTCHUNK(%o0,%o1,%g7,0x08,%g2,%g3,%g4,%g5)
+12:	EXT(cctbl, 12b, 22f,#)		! note for exception table handling
 	addx	%g0, %g7, %g7
 	andcc	%o3, 0xf, %g0		! check for low bits set
 ccte:	bne	cc_end_cruft		! something left, handle it out of band
@@ -335,6 +378,7 @@ ccdbl:	CSUMCOPY_BIGCHUNK_ALIGNED(%o0,%o1,%g7,0x00,%o4,%o5,%g2,%g3,%g4,%g5,%o2,%o
 	CSUMCOPY_BIGCHUNK_ALIGNED(%o0,%o1,%g7,0x20,%o4,%o5,%g2,%g3,%g4,%g5,%o2,%o3)
 	CSUMCOPY_BIGCHUNK_ALIGNED(%o0,%o1,%g7,0x40,%o4,%o5,%g2,%g3,%g4,%g5,%o2,%o3)
 	CSUMCOPY_BIGCHUNK_ALIGNED(%o0,%o1,%g7,0x60,%o4,%o5,%g2,%g3,%g4,%g5,%o2,%o3)
+11:	EXT(ccdbl, 11b, 21f,#)		! note for exception table handling
 	sub	%g1, 128, %g1		! detract from length
 	addx	%g0, %g7, %g7		! add in last carry bit
 	andcc	%g1, 0xffffff80, %g0	! more to csum?
@@ -344,96 +388,194 @@ ccdbl:	CSUMCOPY_BIGCHUNK_ALIGNED(%o0,%o1,%g7,0x00,%o4,%o5,%g2,%g3,%g4,%g5,%o2,%o
 	b	ccmerge			! finish it off, above
 	 andcc	%g1, 0x70, %o2		! can use table? (clears carry btw)
 
-ccslow:
+ccslow:	cmp	%g1, 0
+	mov	0, %g5
+	bleu	4f
+	 andcc	%o0, 1, %o5		
+	be,a	1f
+	 srl	%g1, 1, %g4		
+	sub	%g1, 1, %g1	
+	EX(ldub	[%o0], %g5, add %g1, 1,#)
+	add	%o0, 1, %o0	
+	EX2(stb	%g5, [%o1],#)
+	srl	%g1, 1, %g4
+	add	%o1, 1, %o1
+1:	cmp	%g4, 0		
+	be,a	3f
+	 andcc	%g1, 1, %g0
+	andcc	%o0, 2, %g0	
+	be,a	1f
+	 srl	%g4, 1, %g4
+	EX(lduh	[%o0], %o4, add %g1, 0,#)
+	sub	%g1, 2, %g1	
+	srl	%o4, 8, %g2
+	sub	%g4, 1, %g4	
+	EX2(stb	%g2, [%o1],#)
+	add	%o4, %g5, %g5
+	EX2(stb	%o4, [%o1 + 1],#)
+	add	%o0, 2, %o0	
+	srl	%g4, 1, %g4
+	add	%o1, 2, %o1
+1:	cmp	%g4, 0		
+	be,a	2f
+	 andcc	%g1, 2, %g0
+	EX3(ld	[%o0], %o4,#)
+5:	srl	%o4, 24, %g2
+	srl	%o4, 16, %g3
+	EX2(stb	%g2, [%o1],#)
+	srl	%o4, 8, %g2
+	EX2(stb	%g3, [%o1 + 1],#)
+	add	%o0, 4, %o0
+	EX2(stb	%g2, [%o1 + 2],#)
+	addcc	%o4, %g5, %g5
+	EX2(stb	%o4, [%o1 + 3],#)
+	addx	%g5, %g0, %g5	! I am now to lazy to optimize this (question it
+	add	%o1, 4, %o1	! is worthy). Maybe some day - with the sll/srl
+	subcc	%g4, 1, %g4	! tricks
+	bne,a	5b
+	 EX3(ld	[%o0], %o4,#)
+	sll	%g5, 16, %g2
+	srl	%g5, 16, %g5
+	srl	%g2, 16, %g2
+	andcc	%g1, 2, %g0
+	add	%g2, %g5, %g5 
+2:	be,a	3f		
+	 andcc	%g1, 1, %g0
+	EX(lduh	[%o0], %o4, and %g1, 3,#)
+	andcc	%g1, 1, %g0
+	srl	%o4, 8, %g2
+	add	%o0, 2, %o0	
+	EX2(stb	%g2, [%o1],#)
+	add	%g5, %o4, %g5
+	EX2(stb	%o4, [%o1 + 1],#)
+	add	%o1, 2, %o1
+3:	be,a	1f		
+	 sll	%g5, 16, %o4
+	EX(ldub	[%o0], %g2, add %g0, 1,#)
+	sll	%g2, 8, %o4	
+	EX2(stb	%g2, [%o1],#)
+	add	%g5, %o4, %g5
+	sll	%g5, 16, %o4
+1:	addcc	%o4, %g5, %g5
+	srl	%g5, 16, %o4
+	addx	%g0, %o4, %g5
+	orcc	%o5, %g0, %g0
+	be	4f
+	 srl	%g5, 8, %o4
+	and	%g5, 0xff, %g2
+	and	%o4, 0xff, %o4
+	sll	%g2, 8, %g2
+	or	%g2, %o4, %g5
+4:	addcc	%g7, %g5, %g7
+	retl	
+	 addx	%g0, %g7, %o0
+C_LABEL(__csum_partial_copy_end):
+
+        .section .fixup,#alloc,#execinstr
+        .align  4
+/* We do these strange calculations for the csum_*_from_user case only, ie.
+ * we only bother with faults on loads... */
+
+/* o2 = ((g2%20)&3)*8
+ * o3 = g1 - (g2/20)*32 - o2 */
+20:
+	cmp	%g2, 20
+	blu,a	1f
+	 and	%g2, 3, %o2
+	sub	%g1, 32, %g1
+	b	20b
+	 sub	%g2, 20, %g2
+1:
+	sll	%o2, 3, %o2
+	b	31f
+	 sub	%g1, %o2, %o3
+
+/* o2 = (!(g2 & 15) ? 0 : (((g2 & 15) + 1) & ~1)*8)
+ * o3 = g1 - (g2/16)*32 - o2 */
+21:
+	andcc	%g2, 15, %o3
+	srl	%g2, 4, %g2
+	be,a	1f
+	 clr	%o2
+	add	%o3, 1, %o3
+	and	%o3, 14, %o3
+	sll	%o3, 3, %o2
+1:
+	sll	%g2, 5, %g2
+	sub	%g1, %g2, %o3
+	b	31f
+	 sub	%o3, %o2, %o3
+
+/* o0 += (g2/10)*16 - 0x70
+ * 01 += (g2/10)*16 - 0x70
+ * o2 = (g2 % 10) ? 8 : 0
+ * o3 += 0x70 - (g2/10)*16 - o2 */
+22:
+	cmp	%g2, 10
+	blu,a	1f
+	 sub	%o0, 0x70, %o0
+	add	%o0, 16, %o0
+	add	%o1, 16, %o1
+	sub	%o3, 16, %o3
+	b	22b
+	 sub	%g2, 10, %g2
+1:
+	sub	%o1, 0x70, %o1
+	add	%o3, 0x70, %o3
+	clr	%o2
+	tst	%g2
+	bne,a	1f
+	 mov	8, %o2
+1:
+	b	31f
+	 sub	%o3, %o2, %o3
+96:
+	and	%g1, 3, %g1
+	sll	%g4, 2, %g4
+	add	%g1, %g4, %o3
+30:
+/* %o1 is dst
+ * %o3 is # bytes to zero out
+ * %o4 is faulting address
+ * %o5 is %pc where fault occured */
+	clr	%o2
+31:
+/* %o0 is src
+ * %o1 is dst
+ * %o2 is # of bytes to copy from src to dst
+ * %o3 is # bytes to zero out
+ * %o4 is faulting address
+ * %o5 is %pc where fault occured */
 	save	%sp, -104, %sp
-	mov	%i0, %g2
-	mov	%g2, %o4
-	orcc	%i2, %g0, %o5
-	ble	.LL37
-	 mov	0, %o3
-	andcc	%g2, 1, %g3
-	be	.LL50
-	 sra	%o5, 1, %o1
-	ldub	[%g2], %o3
-	add	%i2, -1, %o5
-	add	%g2, 1, %o4
-	sra	%o5, 1, %o1
-.LL50:
-	cmp	%o1, 0
-	be	.LL39
-	 andcc	%o4, 2, %g0
-	be,a	.LL51
-	 sra	%o1, 1, %o1
-	add	%o1, -1, %o1
-	lduh	[%o4], %o0
-	add	%o5, -2, %o5
-	add	%o3, %o0, %o3
-	add	%o4, 2, %o4
-	sra	%o1, 1, %o1
-.LL51:
-	cmp	%o1, 0
-	be	.LL41
-	 mov	0, %o2
-.LL42:
-	ld	[%o4], %o0
-	add	%o3, %o2, %o3
-	add	%o3, %o0, %o3
-	cmp	%o3, %o0
-	 addx	%g0, 0, %o2
-	addcc	%o1, -1, %o1
-	bne	.LL42
-	 add	%o4, 4, %o4
-	add	%o3, %o2, %o3
-	sethi	%hi(65535), %o0
-	or	%o0, %lo(65535), %o0
-	and	%o3, %o0, %o0
-	srl	%o3, 16, %o1
-	add	%o0, %o1, %o3
-.LL41:
-	andcc	%o5, 2, %g0
-	be	.LL52
-	 andcc	%o5, 1, %g0
-	lduh	[%o4], %o0
-	add	%o3, %o0, %o3
-	add	%o4, 2, %o4
-.LL39:
-	andcc	%o5, 1, %g0
-.LL52:
-	be	.LL53
-	 sethi	%hi(65535), %o0
-	ldub	[%o4], %o0
-	sll	%o0, 8, %o0
-	add	%o3, %o0, %o3
-	sethi	%hi(65535), %o0
-.LL53:
-	or	%o0, %lo(65535), %o0
-	and	%o3, %o0, %o2
-	srl	%o3, 16, %o1
-	add	%o2, %o1, %o1
-	and	%o1, %o0, %o2
-	srl	%o1, 16, %o1
-	add	%o2, %o1, %o1
-	and	%o1, %o0, %o0
-	srl	%o1, 16, %o1
-	add	%o0, %o1, %o1
-	sll	%o1, 16, %o0
-	cmp	%g3, 0
-	be	.LL37
-	 srl	%o0, 16, %o3
-	srl	%o0, 24, %o1
-	and	%o3, 255, %o0
-	sll	%o0, 8, %o0
-	or	%o1, %o0, %o3
-.LL37:
-	add	%o3, %i3, %o1
-	sethi	%hi(65535), %o0
-	or	%o0, %lo(65535), %o0
-	and	%o1, %o0, %o0
-	srl	%o1, 16, %o1
-	add	%o0, %o1, %i0
+        mov     %i5, %o0
+        mov     %i7, %o1
+        mov	%i4, %o2
+        call    C_LABEL(lookup_fault)
+	 mov	%g7, %i4
+	cmp	%o0, 2
+	bne	1f	
+	 add	%g0, -EFAULT, %i5
+	tst	%i2
+	be	2f
+	 mov	%i0, %o1
 	mov	%i1, %o0
-	mov	%g2, %o1
+5:
 	call	C_LABEL(__memcpy)
 	 mov	%i2, %o2
+	tst	%o0
+	bne,a	2f
+	 add	%i3, %i2, %i3
+	add	%i1, %i2, %i1
+2:
+	mov	%i1, %o0
+	call	C_LABEL(__bzero)
+	 mov	%i3, %o1
+1:
+	ld	[%sp + 168], %o2		! struct_ptr of parent
+	st	%i5, [%o2]
 	ret
 	 restore
+
+        .section __ex_table,#alloc
+        .align 4
+        .word 5b,2

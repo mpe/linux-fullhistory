@@ -1,4 +1,4 @@
-/* $Id: locks.S,v 1.3 1997/01/12 11:36:44 davem Exp $
+/* $Id: locks.S,v 1.4 1997/03/04 16:26:41 jj Exp $
  * locks.S: SMP low-level lock primitives on Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -64,7 +64,7 @@ ___lk_busy_spin:
 ___lock_kernel:
 	addcc	%g2, -1, %g2
 	bcs,a	9f
-	 st	%g2, [%g6 + TASK_LOCK_DEPTH]
+	 st	%g2, [%g6 + AOFF_task_lock_depth]
 	rd	%psr, %g3
 	or	%g3, PSR_PIL, %g2
 	wr	%g2, 0x0, %psr
@@ -86,7 +86,7 @@ ___lock_kernel:
 	st	%g7, [%g2]
 #endif
 2:	mov	-1, %g2
-	st	%g2, [%g6 + TASK_LOCK_DEPTH]
+	st	%g2, [%g6 + AOFF_task_lock_depth]
 	wr	%g3, 0x0, %psr
 	nop; nop; nop
 9:	jmpl	%o7 + 0x8, %g0
@@ -99,7 +99,7 @@ ___lock_kernel:
 ___unlock_kernel:
 	addcc	%g2, 1, %g2
 	bne,a	1f
-	 st	%g2, [%g6 + TASK_LOCK_DEPTH]
+	 st	%g2, [%g6 + AOFF_task_lock_depth]
 	rd	%psr, %g3
 	or	%g3, PSR_PIL, %g2
 	wr	%g2, 0x0, %psr
@@ -107,7 +107,7 @@ ___unlock_kernel:
 	mov	NO_PROC_ID, %g2
 	stb	%g2, [%g1 + 1]
 	stb	%g0, [%g1 + 0]
-	st	%g0, [%g6 + TASK_LOCK_DEPTH]
+	st	%g0, [%g6 + AOFF_task_lock_depth]
 	wr	%g3, 0x0, %psr
 	nop; nop; nop;
 1:	jmpl	%o7 + 0x8, %g0

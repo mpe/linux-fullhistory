@@ -1,12 +1,11 @@
-/* $Id: misc.c,v 1.1 1996/12/27 08:49:12 jj Exp $
+/* $Id: misc.c,v 1.4 1997/03/04 16:27:11 jj Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -17,8 +16,8 @@
 void
 prom_reboot(char *bcommand)
 {
-	(*prom_command)("boot", P1275_ARG(0,P1275_ARG_IN_STRING)|
-				P1275_INOUT(1,0), bcommand);
+	p1275_cmd ("boot", P1275_ARG(0,P1275_ARG_IN_STRING)|
+		           P1275_INOUT(1,0), bcommand);
 }
 
 /* Forth evaluate the expression contained in 'fstring'. */
@@ -27,8 +26,8 @@ prom_feval(char *fstring)
 {
 	if(!fstring || fstring[0] == 0)
 		return;
-	(*prom_command)("interpret", P1275_ARG(0,P1275_ARG_IN_STRING)|
-				     P1275_INOUT(1,1), fstring);
+	p1275_cmd ("interpret", P1275_ARG(0,P1275_ARG_IN_STRING)|
+				P1275_INOUT(1,1), fstring);
 }
 
 /* We want to do this more nicely some day. */
@@ -56,7 +55,7 @@ prom_cmdline(void)
 #endif
 	install_obp_ticker();
 	save_flags(flags); cli();
-	(*prom_command)("enter", P1275_INOUT(0,0));
+	p1275_cmd ("enter", P1275_INOUT(0,0));
 	restore_flags(flags);
 	install_linux_ticker();
 #ifdef CONFIG_SUN_CONSOLE
@@ -71,18 +70,16 @@ prom_cmdline(void)
 void
 prom_halt(void)
 {
-	(*prom_command)("exit", P1275_INOUT(0,0));
+	p1275_cmd ("exit", P1275_INOUT(0,0));
 }
-
-typedef void (*sfunc_t)(void);
 
 /* Set prom sync handler to call function 'funcp'. */
 void
-prom_setsync(sfunc_t funcp)
+prom_setsync(sync_func_t funcp)
 {
 	if(!funcp) return;
-	(*prom_command)("set-callback", P1275_ARG(0,P1275_IN_FUNCTION)|
-					P1275_INOUT(1,1), funcp);
+	p1275_cmd ("set-callback", P1275_ARG(0,P1275_ARG_IN_FUNCTION)|
+				   P1275_INOUT(1,1), funcp);
 }
 
 /* Get the idprom and stuff it into buffer 'idbuf'.  Returns the

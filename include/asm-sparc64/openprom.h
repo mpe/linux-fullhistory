@@ -1,4 +1,4 @@
-/* $Id: openprom.h,v 1.1 1996/12/26 14:22:32 davem Exp $ */
+/* $Id: openprom.h,v 1.2 1997/02/25 12:40:41 jj Exp $ */
 #ifndef __SPARC64_OPENPROM_H
 #define __SPARC64_OPENPROM_H
 
@@ -51,7 +51,7 @@ struct linux_dev_v2_funcs {
 
 struct linux_mlist_v0 {
 	struct linux_mlist_v0 *theres_more;
-	char *start_adr;
+	unsigned start_adr;
 	unsigned num_bytes;
 };
 
@@ -187,8 +187,13 @@ struct linux_nodeops {
 
 struct linux_prom_registers {
 	int which_io;         /* is this in OBIO space? */
-	char *phys_addr;      /* The physical address of this register */
+	unsigned phys_addr;   /* The physical address of this register */
 	int reg_size;         /* How many bytes does this register take up? */
+};
+
+struct linux_prom64_registers {
+	long phys_addr;
+	long reg_size;
 };
 
 struct linux_prom_irqs {

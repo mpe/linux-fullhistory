@@ -282,6 +282,7 @@ static struct dev_info device_list[] =
 {"EMULEX","MD21/S2     ESDI","*", BLIST_SINGLELUN},
 {"CANON","IPUBJD","*", BLIST_SPARSELUN},
 {"MATSHITA","PD","*", BLIST_FORCELUN | BLIST_SINGLELUN},
+{"YAMAHA","CDR102","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 /*
  * Must be at end of list...
  */

@@ -1,4 +1,4 @@
-/* $Id: termios.h,v 1.24 1996/12/31 22:35:45 davem Exp $ */
+/* $Id: termios.h,v 1.25 1997/03/04 19:36:18 davem Exp $ */
 #ifndef _SPARC_TERMIOS_H
 #define _SPARC_TERMIOS_H
 
@@ -88,7 +88,7 @@ struct winsize {
  * Translate a "termio" structure into a "termios". Ugh.
  */
 #define user_termio_to_kernel_termios(termios, termio) \
-do { \
+({ \
 	unsigned short tmp; \
 	get_user(tmp, &(termio)->c_iflag); \
 	(termios)->c_iflag = (0xffff0000 & ((termios)->c_iflag)) | tmp; \
@@ -99,7 +99,8 @@ do { \
 	get_user(tmp, &(termio)->c_lflag); \
 	(termios)->c_lflag = (0xffff0000 & ((termios)->c_lflag)) | tmp; \
 	copy_from_user((termios)->c_cc, (termio)->c_cc, NCC); \
-} while(0)
+	0; \
+})
 
 /*
  * Translate a "termios" structure into a "termio". Ugh.
@@ -107,7 +108,7 @@ do { \
  * Note the "fun" _VMIN overloading.
  */
 #define kernel_termios_to_user_termio(termio, termios) \
-do { \
+({ \
 	put_user((termios)->c_iflag, &(termio)->c_iflag); \
 	put_user((termios)->c_oflag, &(termio)->c_oflag); \
 	put_user((termios)->c_cflag, &(termio)->c_cflag); \
@@ -118,10 +119,11 @@ do { \
 		put_user((termios)->c_cc[VMIN], &(termio)->c_cc[_VMIN]); \
 		put_user((termios)->c_cc[VTIME], &(termio)->c_cc[_VTIME]); \
 	} \
-} while(0)
+	0; \
+})
 
 #define user_termios_to_kernel_termios(k, u) \
-do { \
+({ \
 	get_user((k)->c_iflag, &(u)->c_iflag); \
 	get_user((k)->c_oflag, &(u)->c_oflag); \
 	get_user((k)->c_cflag, &(u)->c_cflag); \
@@ -135,10 +137,11 @@ do { \
 		get_user((k)->c_cc[VMIN],  &(u)->c_cc[_VMIN]); \
 		get_user((k)->c_cc[VTIME], &(u)->c_cc[_VTIME]); \
 	} \
-} while(0)
+	0; \
+})
 
 #define kernel_termios_to_user_termios(u, k) \
-do { \
+({ \
 	put_user((k)->c_iflag, &(u)->c_iflag); \
 	put_user((k)->c_oflag, &(u)->c_oflag); \
 	put_user((k)->c_cflag, &(u)->c_cflag); \
@@ -152,7 +155,8 @@ do { \
 		put_user((k)->c_cc[VEOF], &(u)->c_cc[VEOF]); \
 		put_user((k)->c_cc[VEOL], &(u)->c_cc[VEOL]); \
 	} \
-} while(0)
+	0; \
+})
 
 #endif	/* __KERNEL__ */
 

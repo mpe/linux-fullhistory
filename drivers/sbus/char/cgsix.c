@@ -1,4 +1,4 @@
-/* $Id: cgsix.c,v 1.21 1996/12/23 10:16:05 ecd Exp $
+/* $Id: cgsix.c,v 1.22 1997/02/02 02:12:41 ecd Exp $
  * cgsix.c: cgsix frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -553,7 +553,7 @@ extern unsigned char vga_font[];
 	
 static void cg6_blitc(unsigned short charattr, int xoff, int yoff)
 {
-	unsigned char attrib = charattr >> 8;
+	unsigned char attrib = CHARATTR_TO_SUNCOLOR(charattr);
 	unsigned char *p = &vga_font[((unsigned char)charattr) << 4];
 	GX_BLITC_START(attrib)
 	GX_BLITC_BODY1(xoff, yoff, gx->font=((*p++) << 24))
@@ -562,7 +562,7 @@ static void cg6_blitc(unsigned short charattr, int xoff, int yoff)
 
 static void cg6_setw(int xoff, int yoff, unsigned short c, int count)
 {
-	unsigned char attrib = c >> 8;
+	unsigned char attrib = CHARATTR_TO_SUNCOLOR(c);
 	unsigned char *p = &vga_font[((unsigned char)c) << 4];
 	register unsigned char *q;
 	register uint l;
@@ -584,7 +584,7 @@ static void cg6_setw(int xoff, int yoff, unsigned short c, int count)
 
 static void cg6_cpyw(int xoff, int yoff, unsigned short *p, int count)
 {
-	unsigned char attrib = *p >> 8;
+	unsigned char attrib = CHARATTR_TO_SUNCOLOR(*p);
 	unsigned char *p1, *p2, *p3, *p4;
 	GX_BLITC_START(attrib)
 	if (count >= 4) {

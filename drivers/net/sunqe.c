@@ -777,7 +777,7 @@ static int sun4c_qe_start_xmit(struct sk_buff *skb, struct device *dev)
 	/* Get it going. */
 	qep->qcregs->ctrl = CREG_CTRL_TWAKEUP;
 
-	qep->stats.tx_bytes+=skb->len;
+	qep->net_stats.tx_bytes+=skb->len;
 	
 	dev_kfree_skb(skb, FREE_WRITE);
 
@@ -980,11 +980,13 @@ static int qec_ether_init(struct device *dev, struct linux_sbus_device *sdev)
 			qesdevs[i]->reg_addrs[j].phys_addr += qranges[k].ot_parent_base;
 		}
 
-		prom_apply_sbus_ranges(qesdevs[i]->my_bus, &qesdevs[i]->reg_addrs[0], 2);
+		prom_apply_sbus_ranges(qesdevs[i]->my_bus, &qesdevs[i]->reg_addrs[0],
+				       2, qesdevs[i]);
 	}
 
 	/* Now map in the registers, QEC globals first. */
-	prom_apply_sbus_ranges(sdev->my_bus, &sdev->reg_addrs[0], sdev->num_registers);
+	prom_apply_sbus_ranges(sdev->my_bus, &sdev->reg_addrs[0],
+			       sdev->num_registers, sdev);
 	qecp->gregs = sparc_alloc_io(sdev->reg_addrs[0].phys_addr, 0,
 				     sizeof(struct qe_globreg),
 				     "QEC Global Registers",

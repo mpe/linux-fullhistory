@@ -1,8 +1,9 @@
-/* $Id: string.h,v 1.1 1996/12/26 14:22:40 davem Exp $
+/* $Id: string.h,v 1.3 1997/03/03 17:11:15 jj Exp $
  * string.h: External definitions for optimized assembly string
  *           routines for the Linux Kernel.
  *
- * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1995,1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 #ifndef __SPARC64_STRING_H__
@@ -10,13 +11,27 @@
 
 /* Really, userland/ksyms should not see any of this stuff. */
 
-#if defined(__KERNEL__) && !defined(EXPORT_SYMTAB)
+#ifdef __KERNEL__
+
+extern void __memmove(void *,const void *,__kernel_size_t);
+extern __kernel_size_t __memcpy(void *,const void *,__kernel_size_t);
+extern __kernel_size_t __memset(void *,int,__kernel_size_t);
+
+#ifndef EXPORT_SYMTAB
 
 /* First the mem*() things. */
 #define __HAVE_ARCH_BCOPY
 #define __HAVE_ARCH_MEMMOVE
+
+#undef memmove
+#define memmove(_to, _from, _n) \
+({ \
+	void *_t = (_to); \
+	__memmove(_t, (_from), (_n)); \
+	_t; \
+})
+
 #define __HAVE_ARCH_MEMCPY
-extern void *__memcpy(void *,const void *,__kernel_size_t);
 
 extern inline void *__constant_memcpy(void *to, const void *from, __kernel_size_t n)
 {
@@ -50,12 +65,11 @@ extern inline void *__nonconstant_memcpy(void *to, const void *from, __kernel_si
  __nonconstant_memcpy((t),(f),(n)))
 
 #define __HAVE_ARCH_MEMSET
-extern void *__memset(void *,int,__kernel_size_t);
 
-extern inline void *__constant_c_and_count_memset(void *s, char c, size_t count)
+extern inline void *__constant_c_and_count_memset(void *s, char c, __kernel_size_t count)
 {
 	extern void *bzero_1page(void *);
-	extern void *__bzero(void *, size_t);
+	extern __kernel_size_t __bzero(void *, __kernel_size_t);
 
 	if(!c) {
 		if(count == 8192)
@@ -68,9 +82,9 @@ extern inline void *__constant_c_and_count_memset(void *s, char c, size_t count)
 	return s;
 }
 
-extern inline void *__constant_c_memset(void *s, char c, size_t count)
+extern inline void *__constant_c_memset(void *s, char c, __kernel_size_t count)
 {
-	extern void *__bzero(void *, size_t);
+	extern __kernel_size_t __bzero(void *, __kernel_size_t);
 
 	if(!c)
 		__bzero(s, count);
@@ -79,12 +93,18 @@ extern inline void *__constant_c_memset(void *s, char c, size_t count)
 	return s;
 }
 
+extern inline void *__nonconstant_memset(void *s, char c, __kernel_size_t count)
+{
+	__memset(s, c, count);
+	return s;
+}
+
 #undef memset
 #define memset(s, c, count) \
 (__builtin_constant_p(c) ? (__builtin_constant_p(count) ? \
                             __constant_c_and_count_memset((s), (c), (count)) : \
                             __constant_c_memset((s), (c), (count))) \
-                         : __memset((s), (c), (count)))
+                          : __nonconstant_memset((s), (c), (count)))
 
 #define __HAVE_ARCH_MEMSCAN
 
@@ -173,6 +193,8 @@ extern inline int __constant_strncmp(const char *src, const char *dest, __kernel
  __constant_strncmp(__arg0, __arg1, __arg2) : \
  __strncmp(__arg0, __arg1, __arg2))
 
-#endif /* (__KERNEL__) && !(EXPORT_SYMTAB) */
+#endif /* !EXPORT_SYMTAB */
+
+#endif /* __KERNEL__ */
 
 #endif /* !(__SPARC64_STRING_H__) */

@@ -1,6 +1,6 @@
 /*
  * Linux/SPARC PROM Configuration Driver
- * Copyright (C) 1996 Thomas K. Dyas (tdyas@eden.rutgers.edu)
+ * Copyright (C) 1996 Thomas K. Dyas (tdyas@noc.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost  (ecd@skynet.be)
  *
  * This character device driver allows user programs to access the
@@ -29,6 +29,8 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  */
 
+#define PROMLIB_INTERNAL
+
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -40,8 +42,8 @@
 #include <asm/oplib.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
+#include <asm/openpromio.h>
 
-#include <linux/openpromio.h>
 
 /* Private data kept by the driver for each descriptor. */
 typedef struct openprom_private_data
@@ -214,9 +216,9 @@ static int openprom_sunos_ioctl(struct inode * inode, struct file * file,
 
 		save_and_cli(flags);
 		if (cmd == OPROMNEXT)
-			node = prom_nodeops->no_nextnode(node);
+			node = __prom_getsibling(node);
 		else
-			node = prom_nodeops->no_child(node);
+			node = __prom_getchild(node);
 		restore_flags(flags);
 
 		data->current_node = node;
@@ -447,9 +449,9 @@ static int openprom_bsd_ioctl(struct inode * inode, struct file * file,
 
 		save_and_cli(flags);
 		if (cmd == OPIOCGETNEXT)
-			node = prom_nodeops->no_nextnode(node);
+			node = __prom_getsibling(node);
 		else
-			node = prom_nodeops->no_child(node);
+			node = __prom_getchild(node);
 		restore_flags(flags);
 
 		__copy_to_user_ret((void *)arg, &node, sizeof(int), -EFAULT);
@@ -601,10 +603,8 @@ __initfunc(int openprom_init(void))
 }
 
 #ifdef MODULE
-
 void cleanup_module(void)
 {
 	misc_deregister(&openprom_dev);
 }
-
 #endif

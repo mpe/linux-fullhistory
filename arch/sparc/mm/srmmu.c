@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.128 1997/01/12 12:07:00 davem Exp $
+/* $Id: srmmu.c,v 1.130 1997/02/10 23:33:49 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -2795,7 +2795,7 @@ static void map_kernel(void)
 	tally = 0;
 	for(entry = 0; sp_banks[entry].num_bytes; entry++)
 		tally += sp_banks[entry].num_bytes;
-	if(tally >= (0xfd000000 - KERNBASE))
+	if(tally > (0xfd000000 - KERNBASE))
 		lots_of_ram = 1;
 	else
 		lots_of_ram = 0;
@@ -2846,7 +2846,7 @@ static void map_kernel(void)
 		MKTRACE(("<%d> base=%08lx bs=%08lx ", entry, sp_banks[entry].base_addr, bank_size));
 		if(!bank_size)
 			break;
-		if(((vaddr + bank_size) >= 0xfd000000) ||
+		if(((vaddr + bank_size) > 0xfd000000) ||
 		   ((vaddr + bank_size) < KERNBASE)) {
 			unsigned long orig_base = sp_banks[entry].base_addr;
 			unsigned long orig_len = sp_banks[entry].num_bytes;
@@ -3104,7 +3104,7 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 
 					if((pte_val(*ptep) & SRMMU_ET_MASK) == SRMMU_VALID) {
 #if 1
-						printk("Fixing USER/USER alias [%d:%08lx]\n",
+						printk("Fixing USER/USER alias [%ld:%08lx]\n",
 						       vmaring->vm_mm->context, start);
 #endif
 						flush_cache_page(vmaring, start);

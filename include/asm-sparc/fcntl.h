@@ -1,4 +1,4 @@
-/* $Id: fcntl.h,v 1.8 1996/10/27 08:55:26 davem Exp $ */
+/* $Id: fcntl.h,v 1.9 1997/02/04 07:29:20 davem Exp $ */
 #ifndef _SPARC_FCNTL_H
 #define _SPARC_FCNTL_H
 
@@ -8,7 +8,6 @@
 #define O_WRONLY	0x0001
 #define O_RDWR		0x0002
 #define O_ACCMODE	0x0003
-#define O_NDELAY	0x0004
 #define O_APPEND	0x0008
 #define FASYNC		0x0040	/* fcntl, for BSD compatibility */
 #define O_CREAT		0x0200	/* not fcntl */
@@ -16,6 +15,7 @@
 #define O_EXCL		0x0800	/* not fcntl */
 #define O_SYNC		0x2000
 #define O_NONBLOCK	0x4000
+#define O_NDELAY	(0x0004 | O_NONBLOCK)
 #define O_NOCTTY	0x8000	/* not fcntl */
 
 #define F_DUPFD		0	/* dup */

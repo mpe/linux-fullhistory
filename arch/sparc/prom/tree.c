@@ -1,9 +1,11 @@
-/* $Id: tree.c,v 1.14 1996/12/29 20:46:12 davem Exp $
+/* $Id: tree.c,v 1.15 1997/01/31 00:17:04 tdyas Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
+
+#define PROMLIB_INTERNAL
 
 #include <linux/string.h>
 #include <linux/types.h>
@@ -13,67 +15,80 @@
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 
+
+/* Macro to restore "current" to the g6 register. */
+#define restore_current() __asm__ __volatile__("ld [%0], %%g6\n\t" : : \
+			  "r" (&current_set[smp_processor_id()]) : \
+			  "memory")
+
 static char promlib_buf[128];
+
+/* Internal version of prom_getchild that does not alter return values. */
+int __prom_getchild(int node)
+{
+	unsigned long flags;
+	int cnode;
+
+	save_and_cli(flags);
+	cnode = prom_nodeops->no_child(node);
+	restore_current();
+	restore_flags(flags);
+
+	return cnode;
+}
 
 /* Return the child of node 'node' or zero if no this node has no
  * direct descendent.
  */
-int
-prom_getchild(int node)
+int prom_getchild(int node)
 {
-	int cnode, ret;
+	int cnode;
+
+	if (node == -1)
+		return 0;
+
+	cnode = __prom_getchild(node);
+	if (cnode == 0 || cnode == -1)
+		return 0;
+
+	return cnode;
+}
+
+/* Internal version of prom_getsibling that does not alter return values. */
+int __prom_getsibling(int node)
+{
 	unsigned long flags;
+	int cnode;
 
-	save_flags(flags); cli();
-
-	if(node == -1) {
-		ret = 0;
-	} else {
-		cnode = prom_nodeops->no_child(node);
-		if((cnode == 0) || (cnode == -1))
-			ret = 0;
-		else
-			ret = cnode;
-	}
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
-			     "memory");
+	save_and_cli(flags);
+	cnode = prom_nodeops->no_nextnode(node);
+	restore_current();
 	restore_flags(flags);
-	return ret;
+
+	return cnode;
 }
 
 /* Return the next sibling of node 'node' or zero if no more siblings
  * at this level of depth in the tree.
  */
-int
-prom_getsibling(int node)
+int prom_getsibling(int node)
 {
-	int sibnode, ret;
-	unsigned long flags;
+	int sibnode;
 
-	save_flags(flags); cli();
+	if (node == -1)
+		return 0;
 
-	if(node == -1) {
-		ret = 0;
-	} else {
-		sibnode = prom_nodeops->no_nextnode(node);
-		if((sibnode == 0) || (sibnode == -1))
-			ret = 0;
-		else
-			ret = sibnode;
-	}
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
-			     "memory");
-	restore_flags(flags);
-	return ret;
+	sibnode = __prom_getsibling(node);
+	if (sibnode == 0 || sibnode == -1)
+		return 0;
+
+	return sibnode;
 }
 
 /* Return the length in bytes of property 'prop' at node 'node'.
  * Return -1 on error.
  */
-int
-prom_getproplen(int node, char *prop)
+int prom_getproplen(int node, char *prop)
 {
 	int ret;
 	unsigned long flags;
@@ -84,9 +99,7 @@ prom_getproplen(int node, char *prop)
 		ret = -1;
 	else
 		ret = prom_nodeops->no_proplen(node, prop);
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 	return ret;
 }
@@ -95,8 +108,7 @@ prom_getproplen(int node, char *prop)
  * 'buffer' which has a size of 'bufsize'.  If the acquisition
  * was successful the length will be returned, else -1 is returned.
  */
-int
-prom_getproperty(int node, char *prop, char *buffer, int bufsize)
+int prom_getproperty(int node, char *prop, char *buffer, int bufsize)
 {
 	int plen, ret;
 	unsigned long flags;
@@ -110,9 +122,7 @@ prom_getproperty(int node, char *prop, char *buffer, int bufsize)
 		/* Ok, things seem all right. */
 		ret = prom_nodeops->no_getprop(node, prop, buffer);
 	}
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 	return ret;
 }
@@ -120,8 +130,7 @@ prom_getproperty(int node, char *prop, char *buffer, int bufsize)
 /* Acquire an integer property and return its value.  Returns -1
  * on failure.
  */
-int
-prom_getint(int node, char *prop)
+int prom_getint(int node, char *prop)
 {
 	static int intprop;
 
@@ -134,9 +143,7 @@ prom_getint(int node, char *prop)
 /* Acquire an integer property, upon error return the passed default
  * integer.
  */
-
-int
-prom_getintdefault(int node, char *property, int deflt)
+int prom_getintdefault(int node, char *property, int deflt)
 {
 	int retval;
 
@@ -147,8 +154,7 @@ prom_getintdefault(int node, char *property, int deflt)
 }
 
 /* Acquire a boolean property, 1=TRUE 0=FALSE. */
-int
-prom_getbool(int node, char *prop)
+int prom_getbool(int node, char *prop)
 {
 	int retval;
 
@@ -161,8 +167,7 @@ prom_getbool(int node, char *prop)
  * string on error.  The char pointer is the user supplied string
  * buffer.
  */
-void
-prom_getstring(int node, char *prop, char *user_buf, int ubuf_size)
+void prom_getstring(int node, char *prop, char *user_buf, int ubuf_size)
 {
 	int len;
 
@@ -176,8 +181,7 @@ prom_getstring(int node, char *prop, char *user_buf, int ubuf_size)
 /* Does the device at node 'node' have name 'name'?
  * YES = 1   NO = 0
  */
-int
-prom_nodematch(int node, char *name)
+int prom_nodematch(int node, char *name)
 {
 	static char namebuf[128];
 	prom_getproperty(node, "name", namebuf, sizeof(namebuf));
@@ -188,8 +192,7 @@ prom_nodematch(int node, char *name)
 /* Search siblings at 'node_start' for a node with name
  * 'nodename'.  Return node if successful, zero if not.
  */
-int
-prom_searchsiblings(int node_start, char *nodename)
+int prom_searchsiblings(int node_start, char *nodename)
 {
 
 	int thisnode, error;
@@ -207,8 +210,7 @@ prom_searchsiblings(int node_start, char *nodename)
 }
 
 /* Gets name in the form prom v2+ uses it (name@x,yyyyy or name (if no reg)) */
-int 
-prom_getname (int node, char *buffer, int len)
+int prom_getname (int node, char *buffer, int len)
 {
 	int i;
 	struct linux_prom_registers reg[PROMREG_MAX];
@@ -227,8 +229,7 @@ prom_getname (int node, char *buffer, int len)
 
 /* Return the first property type for node 'node'.
  */
-char *
-prom_firstprop(int node)
+char * prom_firstprop(int node)
 {
 	unsigned long flags;
 	char *ret;
@@ -236,9 +237,7 @@ prom_firstprop(int node)
 	if(node == -1) return "";
 	save_flags(flags); cli();
 	ret = prom_nodeops->no_nextprop(node, (char *) 0x0);
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 	return ret;
 }
@@ -247,8 +246,7 @@ prom_firstprop(int node)
  * at node 'node' .  Returns NULL string if no more
  * property types for this node.
  */
-char *
-prom_nextprop(int node, char *oprop)
+char * prom_nextprop(int node, char *oprop)
 {
 	char *ret;
 	unsigned long flags;
@@ -256,15 +254,12 @@ prom_nextprop(int node, char *oprop)
 	if(node == -1) return "";
 	save_flags(flags); cli();
 	ret = prom_nodeops->no_nextprop(node, oprop);
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 	return ret;
 }
 
-int
-prom_node_has_property(int node, char *prop)
+int prom_node_has_property(int node, char *prop)
 {
 	char *current_property = "";
 
@@ -279,8 +274,7 @@ prom_node_has_property(int node, char *prop)
 /* Set property 'pname' at node 'node' to value 'value' which has a length
  * of 'size' bytes.  Return the number of bytes the prom accepted.
  */
-int
-prom_setprop(int node, char *pname, char *value, int size)
+int prom_setprop(int node, char *pname, char *value, int size)
 {
 	unsigned long flags;
 	int ret;
@@ -289,24 +283,19 @@ prom_setprop(int node, char *pname, char *value, int size)
 	if((pname == 0) || (value == 0)) return 0;
 	save_flags(flags); cli();
 	ret = prom_nodeops->no_setprop(node, pname, value, size);
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 	return ret;
 }
 
-int
-prom_inst2pkg(int inst)
+int prom_inst2pkg(int inst)
 {
 	int node;
 	unsigned long flags;
 	
 	save_flags(flags); cli();
 	node = (*romvec->pv_v2devops.v2_inst2pkg)(inst);
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-		"r" (&current_set[smp_processor_id()]) :
-		"memory");
+	restore_current();
 	restore_flags(flags);
 	if (node == -1) return 0;
 	return node;
@@ -315,8 +304,7 @@ prom_inst2pkg(int inst)
 /* Return 'node' assigned to a particular prom 'path'
  * FIXME: Should work for v0 as well
  */
-int
-prom_pathtoinode(char *path)
+int prom_pathtoinode(char *path)
 {
 	int node, inst;
 	

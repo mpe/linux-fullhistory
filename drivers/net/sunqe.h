@@ -360,7 +360,7 @@ struct sunqe {
 
 	struct sunqec             *parent;
 
-	struct net_device_stats   enet_stats;   /* Statistical counters               */
+	struct net_device_stats   net_stats;   /* Statistical counters               */
 	struct linux_sbus_device  *qe_sbusdev;   /* QE's SBUS device struct            */
 	struct device             *dev;          /* QE's netdevice struct              */
 	int                        channel;      /* Who am I?                          */

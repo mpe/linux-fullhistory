@@ -1,9 +1,10 @@
-/* $Id: head.S,v 1.78 1997/01/06 06:52:20 davem Exp $
+/* $Id: head.S,v 1.79 1997/03/04 16:26:31 jj Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1995 Peter Zaitcev   (Zaitcev@ipmce.su)
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
+ * Copyright (C) 1997 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
  */
 
 #include <linux/version.h>
@@ -65,10 +66,6 @@ sun4_notsup:
 
 sun4e_notsup:
         .asciz  "Sparc-Linux sun4e support does not exist\n\n"
-	.align 4
-
-sun4u_notsup:
-        .asciz  "Sparc-Linux sun4u support does not exist\n\n"
 	.align 4
 
 	/* The Sparc trap table, bootloader gives us control at _start. */
@@ -477,8 +474,11 @@ current_pc:
 1:
 		mov	%o7, %g3
 
-got_pc:
-		mov	%g4, %o7		/* Previous %o7. */
+#ifndef CONFIG_AP1000
+		tst	%o0
+		be	no_sun4u_here
+#endif
+		 mov	%g4, %o7		/* Previous %o7. */
 	
 		mov	%o0, %l0		! stash away romvec
 		mov	%o0, %g7		! put it here too
@@ -991,8 +991,8 @@ sun4c_continue_boot:
 		st	%g6, [%g2]
 
 		set	C_LABEL(bootup_kernel_stack), %g3
-		st	%g3, [%g6 + TASK_KSTACK_PG]
-		st	%g0, [%g6 + THREAD_UMASK]
+		st	%g3, [%g6 + AOFF_task_kernel_stack_page]
+		st	%g0, [%g6 + AOFF_task_tss + AOFF_thread_uwinmask]
 
 /* Compute NWINDOWS and stash it away. Now uses %wim trick explained
  * in the V8 manual. Ok, this method seems to work, Sparc is cool...
@@ -1133,14 +1133,90 @@ no_sun4e_here:
 		b	halt_me
 		 nop
 
-no_sun4u_here:
-		ld	[%g7 + 0x68], %o1
-		set	sun4u_notsup, %o0
-		call	%o1
-		 nop
-		b	halt_me
-		 nop
+		__INITDATA
 
+sun4u_1:
+		.asciz "finddevice"
+		.align	4
+sun4u_2:
+		.asciz "/chosen"
+		.align	4
+sun4u_3:
+		.asciz "getprop"
+		.align	4
+sun4u_4:
+		.asciz "stdout"
+		.align	4
+sun4u_5:
+		.asciz "write"
+		.align	4
+sun4u_6:
+        	.asciz  "\n\rOn sun4u you have to use UltraLinux (64bit) kernel\n\rand not a 32bit sun4[cdem] version\n\r\n\r"
+sun4u_6e:
+		.align	4
+sun4u_7:
+		.asciz "exit"
+		.align	8
+sun4u_a1:
+		.word	0, sun4u_1, 0, 1, 0, 1, 0, sun4u_2, 0
+sun4u_r1:
+		.word	0
+sun4u_a2:
+		.word	0, sun4u_3, 0, 4, 0, 1, 0
+sun4u_i2:
+		.word	0, 0, sun4u_4, 0, sun4u_1, 0, 8, 0
+sun4u_r2:
+		.word	0
+sun4u_a3:
+		.word	0, sun4u_5, 0, 3, 0, 1, 0
+sun4u_i3:
+		.word	0, 0, sun4u_6, 0, sun4u_6e - sun4u_6 - 1, 0
+sun4u_r3:
+		.word	0
+sun4u_a4:
+		.word	0, sun4u_7, 0, 0, 0, 0
+sun4u_r4:
+
+		__INIT
+no_sun4u_here:
+		set	sun4u_a1, %o0
+		set	current_pc, %l2
+		cmp	%l2, %g3
+		be	1f
+		 mov	%o4, %l0
+		sub	%g3, %l2, %l6
+		add	%o0, %l6, %o0
+		mov	%o0, %l4
+		mov	sun4u_r4 - sun4u_a1, %l3
+		ld	[%l4], %l5
+2:
+		add	%l4, 4, %l4
+		cmp	%l5, %l2
+		add	%l5, %l6, %l5
+		bgeu,a	3f
+		 st	%l5, [%l4 - 4]
+3:
+		subcc	%l3, 4, %l3
+		bne	2b
+		 ld	[%l4], %l5
+1:
+		call	%l0
+		 mov	%o0, %l1
+
+		ld	[%l1 + (sun4u_r1 - sun4u_a1)], %o1
+		add	%l1, (sun4u_a2 - sun4u_a1), %o0
+		call	%l0
+		 st	%o1, [%o0 + (sun4u_i2 - sun4u_a2)]
+
+		ld	[%l1 + (sun4u_1 - sun4u_a1)], %o1
+		add	%l1, (sun4u_a3 - sun4u_a1), %o0
+		call	%l0
+		st	%o1, [%o0 + (sun4u_i3 - sun4u_a3)]
+
+		call	%l0
+		 add	%l1, (sun4u_a4 - sun4u_a1), %o0
+
+		/* Not reached */
 halt_me:
 		ld	[%g7 + 0x74], %o0
 		call	%o0			! Get us out of here...

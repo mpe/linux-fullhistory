@@ -3,6 +3,7 @@
 /*
  *	stallion.h  -- stallion multiport serial driver.
  *
+ *	Copyright (C) 1996-1997  Stallion Technologies (support@stallion.oz.au).
  *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
  *
  *	This program is free software; you can redistribute it and/or modify
@@ -30,6 +31,7 @@
  */
 #define	STL_MAXBRDS		4
 #define	STL_MAXPANELS		4
+#define	STL_MAXBANKS		8
 #define	STL_PORTSPERPANEL	16
 #define	STL_MAXPORTS		64
 #define	STL_MAXDEVS		(STL_MAXBRDS * STL_MAXPORTS)
@@ -65,7 +67,7 @@ typedef struct {
  *	is associated with, this makes it (fairly) easy to get back to the
  *	board/panel info for a port.
  */
-typedef struct {
+typedef struct stlport {
 	unsigned long		magic;
 	int			portnr;
 	int			panelnr;
@@ -87,8 +89,11 @@ typedef struct {
 	unsigned int		sigs;
 	unsigned int		rxignoremsk;
 	unsigned int		rxmarkmsk;
+	unsigned int		imr;
+	unsigned int		crenable;
 	unsigned long		clk;
 	unsigned long		hwid;
+	void			*uartp;
 	struct tty_struct	*tty;
 	struct wait_queue	*open_wait;
 	struct wait_queue	*close_wait;
@@ -99,27 +104,31 @@ typedef struct {
 	stlrq_t			tx;
 } stlport_t;
 
-typedef struct {
+typedef struct stlpanel {
 	unsigned long	magic;
 	int		panelnr;
 	int		brdnr;
 	int		pagenr;
 	int		nrports;
 	int		iobase;
+	void		*uartp;
+	void		(*isr)(struct stlpanel *panelp, unsigned int iobase);
 	unsigned int	hwid;
 	unsigned int	ackmask;
 	stlport_t	*ports[STL_PORTSPERPANEL];
 } stlpanel_t;
 
-typedef struct {
+typedef struct stlbrd {
 	unsigned long	magic;
 	int		brdnr;
 	int		brdtype;
 	int		state;
 	int		nrpanels;
 	int		nrports;
+	int		nrbnks;
 	int		irq;
 	int		irqtype;
+	void		(*isr)(struct stlbrd *brdp);
 	unsigned int	ioaddr1;
 	unsigned int	ioaddr2;
 	unsigned int	iostatus;
@@ -127,6 +136,9 @@ typedef struct {
 	unsigned int	ioctrlval;
 	unsigned int	hwid;
 	unsigned long	clk;
+	unsigned int	bnkpageaddr[STL_MAXBANKS];
+	unsigned int	bnkstataddr[STL_MAXBANKS];
+	stlpanel_t	*bnk2panel[STL_MAXBANKS];
 	stlpanel_t	*panels[STL_MAXPANELS];
 } stlbrd_t;
 

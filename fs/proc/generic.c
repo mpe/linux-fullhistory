@@ -41,7 +41,7 @@ static struct file_operations proc_file_operations = {
  * proc files can do almost nothing..
  */
 struct inode_operations proc_file_inode_operations = {
-    &proc_file_operations,  /* default scsi directory file-ops */
+    &proc_file_operations,  /* default proc file-ops */
     NULL,	    /* create	   */
     NULL,	    /* lookup	   */
     NULL,	    /* link	   */
@@ -60,6 +60,30 @@ struct inode_operations proc_file_inode_operations = {
     NULL	    /* permission  */
 };
 
+/*
+ * compatibility to replace fs/proc/net.c
+ */
+struct inode_operations proc_net_inode_operations = {
+	&proc_file_operations,	/* default net file-ops */
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* bmap */
+	NULL,			/* truncate */
+	NULL			/* permission */
+};
+
+
 #ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
@@ -72,7 +96,8 @@ static long proc_file_read(struct inode * inode, struct file * file,
 {
 	char 	*page;
 	int	retval=0;
-	int	n;
+	int	eof=0;
+	int	n, count;
 	char	*start;
 	struct proc_dir_entry * dp;
 
@@ -82,10 +107,11 @@ static long proc_file_read(struct inode * inode, struct file * file,
 	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
 
-	while (nbytes > 0)
+	while ((nbytes > 0) && !eof)
 	{
-		n = MIN(PROC_BLOCK_SIZE, nbytes);
+		count = MIN(PROC_BLOCK_SIZE, nbytes);
 
+		start = NULL;
 		if (dp->get_info) {
 			/*
 			 * Handle backwards compatibility with the old net
@@ -94,14 +120,27 @@ static long proc_file_read(struct inode * inode, struct file * file,
 			 * XXX What gives with the file->f_flags & O_ACCMODE
 			 * test?  Seems stupid to me....
 			 */
-			n = dp->get_info(page, &start, file->f_pos, n,
+			n = dp->get_info(page, &start, file->f_pos, count,
 				 (file->f_flags & O_ACCMODE) == O_RDWR);
+			if (n < count)
+				eof = 1;
 		} else if (dp->read_proc) {
 			n = dp->read_proc(page, &start, file->f_pos,
-					  n, dp->data);
+					  count, &eof, dp->data);
 		} else
 			break;
 			
+		if (!start) {
+			/*
+			 * For proc files that are less than 4k
+			 */
+			start = page + file->f_pos;
+			n -= file->f_pos;
+			if (n <= 0)
+				break;
+			if (n > count)
+				n = count;
+		}
 		if (n == 0)
 			break;	/* End of file */
 		if (n < 0) {
@@ -131,20 +170,16 @@ proc_file_write(struct inode * inode, struct file * file,
 		const char * buffer, unsigned long count)
 {
 	struct proc_dir_entry * dp;
-	char 	*page;
 	
 	if (count < 0)
 		return -EINVAL;
 	dp = (struct proc_dir_entry *) inode->u.generic_ip;
-	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
-		return -ENOMEM;
 
 	if (!dp->write_proc)
 		return -EIO;
 
 	return dp->write_proc(file, buffer, count, dp->data);
 }
-
 
 
 static long long proc_file_lseek(struct inode * inode, struct file * file, 
@@ -164,10 +199,50 @@ static long long proc_file_lseek(struct inode * inode, struct file * file,
     }
 }
 
+/*
+ * This function parses a name such as "tty/driver/serial", and
+ * returns the struct proc_dir_entry for "/proc/tty/driver", and
+ * returns "serial" in residual.
+ */
+static int xlate_proc_name(const char *name,
+			   struct proc_dir_entry **ret, const char **residual)
+{
+	const char     		*cp = name, *next;
+	struct proc_dir_entry	*de;
+	int			len;
+
+	de = &proc_root;
+	while (1) {
+		next = strchr(cp, '/');
+		if (!next)
+			break;
+
+		len = next - cp;
+		for (de = de->subdir; de ; de = de->next) {
+			if (proc_match(len, cp, de))
+				break;
+		}
+		if (!de)
+			return -ENOENT;
+		cp += len + 1;
+	}
+	*residual = cp;
+	*ret = de;
+	return 0;
+}
+
 struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 					 struct proc_dir_entry *parent)
 {
 	struct proc_dir_entry *ent;
+	const char *fn;
+
+	if (parent)
+		fn = name;
+	else {
+		if (xlate_proc_name(name, &parent, &fn))
+			return NULL;
+	}
 
 	ent = kmalloc(sizeof(struct proc_dir_entry), GFP_KERNEL);
 	if (!ent)
@@ -179,17 +254,37 @@ struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 	else if (mode == 0)
 		mode = S_IFREG | S_IRUGO;
 	
-	ent->name = name;
-	ent->namelen = strlen(ent->name);
+	ent->name = fn;
+	ent->namelen = strlen(fn);
 	ent->mode = mode;
 	if (S_ISDIR(mode)) 
 		ent->nlink = 2;
 	else
 		ent->nlink = 1;
 
-	if (parent)
-		proc_register(parent, ent);
+	proc_register(parent, ent);
 	
 	return ent;
 }
 
+void remove_proc_entry(const char *name, struct proc_dir_entry *parent)
+{
+	struct proc_dir_entry *de;
+	const char *fn;
+	int len;
+
+	if (parent)
+		fn = name;
+	else 
+		if (xlate_proc_name(name, &parent, &fn))
+			return;
+	len = strlen(fn);
+
+	for (de = parent->subdir; de ; de = de->next) {
+		if (proc_match(len, fn, de))
+			break;
+	}
+	if (de)
+		proc_unregister(parent, de->low_ino);
+	kfree(de);
+}

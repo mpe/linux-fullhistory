@@ -43,6 +43,9 @@
 #
 # 200396 Tom Dyas (tdyas@eden.rutgers.edu) - when the module option is
 # chosen for an item, define the macro <option_name>_MODULE
+#
+# 090397 Axel Boldt (boldt@math.ucsb.edu) - avoid ? and + in regular 
+# expressions for GNU expr since version 1.15 and up use \? and \+.
 
 #
 # Make sure we're really running bash.
@@ -56,16 +59,6 @@
 # Disable filename globbing once and for all.
 # Enable function cacheing.
 set -f -h
-
-# Newer shellutils have a more POSIX compliant behavior which is
-# sadly not backward compatible.
-if expr "$(expr --version)" : '.*1\.1[56]' > /dev/null; then
-   INT_FILTER='0$\|-\?[1-9][0-9]*$'
-   HEX_FILTER='[0-9a-fA-F]\+$'
-else
-   INT_FILTER='0$\|-?[1-9][0-9]*$'
-   HEX_FILTER='[0-9a-fA-F]+$'
-fi
 
 #
 # Dummy functions for use with a config.in modified for menuconf
@@ -299,7 +292,7 @@ function int () {
 	def=${old:-$3}
 	while :; do
 	  readln "$1 ($2) [$def] " "$def" "$old"
-	  if expr "$ans" : $INT_FILTER > /dev/null; then
+	  if expr "$ans" : '0$\|\(-[1-9]\|[1-9]\)[0-9]*$' > /dev/null; then
 	    define_int "$2" "$ans"
 	    break
 	  else
@@ -330,12 +323,12 @@ function hex () {
 	while :; do
 	  readln "$1 ($2) [$def] " "$def" "$old"
 	  ans=${ans#*[x,X]}
-	 if expr "$ans" : $HEX_FILTER > /dev/null; then
-	   define_hex "$2" "$ans"
-	   break
-	 else
+	  if expr "$ans" : '[0-9a-fA-F][0-9a-fA-F]*$' > /dev/null; then
+	    define_hex "$2" "$ans"
+	    break
+	  else
 	    help "$2"
-	 fi
+	  fi
 	done
 }
 

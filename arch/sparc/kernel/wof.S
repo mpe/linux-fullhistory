@@ -1,4 +1,4 @@
-/* $Id: wof.S,v 1.32 1997/01/06 06:52:43 davem Exp $
+/* $Id: wof.S,v 1.33 1997/03/04 16:26:35 jj Exp $
  * wof.S: Sparc window overflow handler.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -96,7 +96,7 @@ spnwin_patch2:	and	%glob_tmp, 0xff, %glob_tmp
 	 save	%g0, %g0, %g0				! Go where saving will occur
 	
 	/* See if any user windows are active in the set. */
-	ld	[%curptr + THREAD_UMASK], %twin_tmp	! grab win mask
+	ld	[%curptr + AOFF_task_tss + AOFF_thread_uwinmask], %twin_tmp	! grab win mask
 	orcc	%g0, %twin_tmp, %g0			! check for set bits
 	bne	spwin_exist_uwins			! yep, there are some
 	 andn	%twin_tmp, %glob_tmp, %twin_tmp		! compute new umask
@@ -139,7 +139,7 @@ spwin_exist_uwins:
 	 * But first, store the new user window mask calculated
 	 * above.
 	 */
-	st	%twin_tmp, [%curptr + THREAD_UMASK]
+	st	%twin_tmp, [%curptr + AOFF_task_tss + AOFF_thread_uwinmask]
 	save	%g0, %g0, %g0		! Go to where the saving will occur
 
 spwin_fromuser:
@@ -212,15 +212,15 @@ spwin_user_stack_is_bolixed:
 	/* Oh well, throw this one window into the per-task window
 	 * buffer, the first one.
 	 */
-	st	%sp, [%curptr + THREAD_STACK_PTRS]
-	STORE_WINDOW(curptr + THREAD_REG_WINDOW)
+	st	%sp, [%curptr + AOFF_task_tss + AOFF_thread_rwbuf_stkptrs]
+	STORE_WINDOW(curptr + AOFF_task_tss + AOFF_thread_reg_window)
 	restore	%g0, %g0, %g0
 
 	/* LOCATION: Trap Window */
 
 	/* Back in the trap window, update winbuffer save count. */
 	mov	1, %glob_tmp
-	st	%glob_tmp, [%curptr + THREAD_W_SAVED]
+	st	%glob_tmp, [%curptr + AOFF_task_tss + AOFF_thread_w_saved]
 
 		/* Compute new user window mask.  What we are basically
 		 * doing is taking two windows, the invalid one at trap
@@ -232,10 +232,10 @@ spwin_user_stack_is_bolixed:
 		or	%twin_tmp, %t_wim, %twin_tmp
 		not	%twin_tmp
 spnwin_patch3:	and	%twin_tmp, 0xff, %twin_tmp	! patched on 7win Sparcs
-		st	%twin_tmp, [%curptr + THREAD_UMASK]
+		st	%twin_tmp, [%curptr + AOFF_task_tss + AOFF_thread_uwinmask]
 
 	/* Jump onto kernel stack for this process... */
-	ld	[%curptr + TASK_SAVED_KSTACK], %sp
+	ld	[%curptr + AOFF_task_saved_kernel_stack], %sp
 
 	/* Restore the saved globals and build a pt_regs frame. */
 	mov	%saved_g5, %g5

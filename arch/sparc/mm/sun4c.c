@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.137 1996/12/30 06:16:36 davem Exp $
+/* $Id: sun4c.c,v 1.139 1997/01/31 08:05:59 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -1878,6 +1878,7 @@ static pte_t *sun4c_pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 {
 	if(address >= SUN4C_LOCK_VADDR)
 		return NULL;
+	address = (address >> PAGE_SHIFT) & (SUN4C_PTRS_PER_PTE - 1);
 	if (sun4c_pmd_none(*pmd))
 		panic("sun4c_pmd_none for kernel pmd, can't happen...");
 	if (sun4c_pmd_bad(*pmd)) {
@@ -2007,7 +2008,7 @@ void sun4c_update_mmu_cache(struct vm_area_struct *vma, unsigned long address, p
 
 					if(pte_val(*ptep) & _SUN4C_PAGE_PRESENT) {
 #if 1
-						printk("Fixing USER/USER alias [%d:%08lx]\n",
+						printk("Fixing USER/USER alias [%ld:%08lx]\n",
 						       vmaring->vm_mm->context, start);
 #endif
 						sun4c_flush_cache_page(vmaring, start);

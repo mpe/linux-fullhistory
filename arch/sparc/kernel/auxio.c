@@ -3,6 +3,7 @@
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/stddef.h>
 #include <linux/init.h>
 #include <asm/oplib.h>
 #include <asm/io.h>
@@ -49,4 +50,34 @@ __initfunc(void auxio_probe(void))
 		auxio_register = (unsigned char *) ((int)auxio_register | 3);
 
 	TURN_ON_LED;
+}
+
+
+/* sun4m power control register (AUXIO2) */
+
+volatile unsigned char * auxio_power_register = NULL;
+
+__initfunc(void auxio_power_probe(void))
+{
+	struct linux_prom_registers regs;
+	int node;
+
+	/* Attempt to find the sun4m power control node. */
+	node = prom_getchild(prom_root_node);
+	node = prom_searchsiblings(node, "obio");
+	node = prom_getchild(node);
+	node = prom_searchsiblings(node, "power");
+	if (node == 0 || node == -1)
+		return;
+
+	/* Map the power control register. */
+	prom_getproperty(node, "reg", (char *)&regs, sizeof(regs));
+	prom_apply_obio_ranges(&regs, 1);
+	auxio_power_register = (volatile unsigned char *)
+		sparc_alloc_io(regs.phys_addr, 0, regs.reg_size,
+			       "power off control", regs.which_io, 0);
+
+	/* Display a quick message on the console. */
+	if (auxio_power_register)
+		printk(KERN_INFO "Power off control detected.\n");
 }

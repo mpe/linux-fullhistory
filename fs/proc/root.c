@@ -125,22 +125,7 @@ struct proc_dir_entry proc_root = {
 	&proc_root, NULL
 };
 
-struct proc_dir_entry proc_net = {
-	PROC_NET, 3, "net",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
-	0, &proc_dir_inode_operations,
-	NULL, NULL,
-	NULL,
-	NULL, NULL	
-};
-
-struct proc_dir_entry proc_scsi = {
-	PROC_SCSI, 4, "scsi",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
-	0, &proc_dir_inode_operations,
-	NULL, NULL,
-	NULL, &proc_root, NULL
-};
+struct proc_dir_entry *proc_net, *proc_scsi;
 
 #ifdef CONFIG_MCA
 struct proc_dir_entry proc_mca = {
@@ -358,18 +343,6 @@ int proc_unregister(struct proc_dir_entry * dir, int ino)
 	return -EINVAL;
 }	
 
-int proc_register_dynamic(struct proc_dir_entry * dir,
-			  struct proc_dir_entry * dp)
-{
-	/*
-	 * Make sure we use a dynamically allocated inode.
-	 * In the future, all procedures should just call
-	 * proc_register....
-	 */
-	dp->low_ino = 0;
-	return proc_register(dir, dp);
-}
-
 /*
  * /proc/self:
  */
@@ -567,11 +540,6 @@ static struct proc_dir_entry proc_root_slab = {
 
 void proc_root_init(void)
 {
-	static int done = 0;
-
-	if (done)
-		return;
-	done = 1;
 	proc_base_init();
 	proc_register(&proc_root, &proc_root_loadavg);
 	proc_register(&proc_root, &proc_root_uptime);
@@ -586,8 +554,8 @@ void proc_root_init(void)
 #endif
 	proc_register(&proc_root, &proc_root_cpuinfo);
 	proc_register(&proc_root, &proc_root_self);
-	proc_register(&proc_root, &proc_net);
-	proc_register(&proc_root, &proc_scsi);
+	proc_net = create_proc_entry("net", S_IFDIR, 0);
+	proc_scsi = create_proc_entry("scsi", S_IFDIR, 0);
 	proc_register(&proc_root, &proc_sys_root);
 #ifdef CONFIG_MCA
 	proc_register(&proc_root, &proc_mca);

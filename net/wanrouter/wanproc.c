@@ -273,13 +273,13 @@ static struct proc_dir_entry proc_router_stat =
 
 int wanrouter_proc_init (void)
 {
-	int err = proc_register_dynamic(&proc_net, &proc_router);
+	int err = proc_register(&proc_net, &proc_router);
 
 	if (!err)
 	{
-		proc_register_dynamic(&proc_router, &proc_router_info);
-		proc_register_dynamic(&proc_router, &proc_router_conf);
-		proc_register_dynamic(&proc_router, &proc_router_stat);
+		proc_register(&proc_router, &proc_router_info);
+		proc_register(&proc_router, &proc_router_conf);
+		proc_register(&proc_router, &proc_router_stat);
 	}
 	return err;
 }
@@ -313,7 +313,7 @@ int wanrouter_proc_add (wan_device_t* wandev)
 	wandev->dent.ops	= &wandev_inode;
 	wandev->dent.get_info	= &wandev_get_info;
 	wandev->dent.data	= wandev;
-	return proc_register_dynamic(&proc_router, &wandev->dent);
+	return proc_register(&proc_router, &wandev->dent);
 }
 
 /*

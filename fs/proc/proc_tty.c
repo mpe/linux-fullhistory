@@ -19,20 +19,20 @@ extern struct tty_ldisc ldiscs[];
 
 
 static int tty_drivers_read_proc(char *page, char **start, off_t off,
-				 int count, void *data);
+				 int count, int *eof, void *data);
 static int tty_ldiscs_read_proc(char *page, char **start, off_t off,
-				int count, void *data);
+				int count, int *eof, void *data);
 
 /*
  * The /proc/tty directory inodes...
  */
-static struct proc_dir_entry *proc_tty, *proc_tty_ldisc, *proc_tty_driver;
+static struct proc_dir_entry *proc_tty_ldisc, *proc_tty_driver;
 
 /*
  * This is the handler for /proc/tty/drivers
  */
 static int tty_drivers_read_proc(char *page, char **start, off_t off,
-				 int count, void *data)
+				 int count, int *eof, void *data)
 {
 	int	len = 0;
 	off_t	begin = 0;
@@ -87,6 +87,8 @@ static int tty_drivers_read_proc(char *page, char **start, off_t off,
 			len = 0;
 		}
 	}
+	if (!p)
+		*eof = 1;
 	if (off >= len+begin)
 		return 0;
 	*start = page + (begin-off);
@@ -97,7 +99,7 @@ static int tty_drivers_read_proc(char *page, char **start, off_t off,
  * This is the handler for /proc/tty/ldiscs
  */
 static int tty_ldiscs_read_proc(char *page, char **start, off_t off,
-				int count, void *data)
+				int count, int *eof, void *data)
 {
 	int	i;
 	int	len = 0;
@@ -115,6 +117,8 @@ static int tty_ldiscs_read_proc(char *page, char **start, off_t off,
 			len = 0;
 		}
 	}
+	if (i >= NR_LDISCS)
+		*eof = 1;
 	if (off >= len+begin)
 		return 0;
 	*start = page + (begin-off);
@@ -168,16 +172,16 @@ void proc_tty_init(void)
 {
 	struct proc_dir_entry *ent;
 	
-	proc_tty = create_proc_entry("tty", S_IFDIR, &proc_root);
-	if (!proc_tty)
+	ent = create_proc_entry("tty", S_IFDIR, 0);
+	if (!ent)
 		return;
-	proc_tty_ldisc = create_proc_entry("ldisc", S_IFDIR, proc_tty);
-	proc_tty_driver = create_proc_entry("driver", S_IFDIR, proc_tty);
+	proc_tty_ldisc = create_proc_entry("tty/ldisc", S_IFDIR, 0);
+	proc_tty_driver = create_proc_entry("tty/driver", S_IFDIR, 0);
 
-	ent = create_proc_entry("ldiscs", 0, proc_tty);
+	ent = create_proc_entry("tty/ldiscs", 0, 0);
 	ent->read_proc = tty_ldiscs_read_proc;
 
-	ent = create_proc_entry("drivers", 0, proc_tty);
+	ent = create_proc_entry("tty/drivers", 0, 0);
 	ent->read_proc = tty_drivers_read_proc;
 }
 

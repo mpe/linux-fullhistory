@@ -102,6 +102,11 @@ L:	linux-net@vger.rutgers.edu
 W:	http://www.dgii.com/linux/
 S:	Maintained
 
+WAVELAN NETWORK DRIVER & WIRELESS EXTENSIONS
+P:	Jean Tourrilhes
+M:	jt@hplb.hpl.hp.com
+S:	Maintained
+
 APM DRIVER
 P:	Rik Faith & Stephen Rothwell
 M:	faith@cs.unc.edu, Stephen.Rothwell@canb.auug.org.au

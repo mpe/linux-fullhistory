@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.131 1997/01/12 09:06:55 davem Exp $
+/* $Id: entry.S,v 1.133 1997/03/04 16:26:22 jj Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -888,11 +888,11 @@ C_LABEL(invalid_segment_patch1):
 
 	! Flush segment from the cache.
 	sethi	%hi((64 * 1024)), %l7
-1:
+9:
 C_LABEL(vac_hwflush_patch1):
 C_LABEL(vac_linesize_patch):
 	subcc	%l7, 16, %l7
-	bg	1b
+	bg	9b
 C_LABEL(vac_hwflush_patch2):
 	 sta	%g0, [%l3 + %l7] ASI_FLUSHSEG
 
@@ -1209,7 +1209,7 @@ flush_patch_two:
 	rd	%wim, %g5
 	WRITE_PAUSE
 	mov	%fp, %o1			! arg1:	usp
-	std	%g4, [%curptr + THREAD_FORK_KPSR]
+	std	%g4, [%curptr + AOFF_task_tss + AOFF_thread_fork_kpsr]
 	add	%sp, REGWIN_SZ, %o2		! arg2:	pt_regs ptr
 	call	C_LABEL(do_fork)
 	 mov	%l5, %o7
@@ -1231,7 +1231,7 @@ flush_patch_three:
 	 mov	%fp, %o1			! yes, use callers usp
 	andn	%o1, 7, %o1			! no, align to 8 bytes
 1:
-	std	%g4, [%curptr + THREAD_FORK_KPSR]
+	std	%g4, [%curptr + AOFF_task_tss + AOFF_thread_fork_kpsr]
 	add	%sp, REGWIN_SZ, %o2		! arg2:	pt_regs ptr
 	call	C_LABEL(do_fork)
 	 mov	%l5, %o7
@@ -1652,7 +1652,7 @@ kuw_patch1_7win:	sll	%o3, 6, %o3
 	 * traps with the old method of just doing flush_user_windows().
 	 */
 C_LABEL(kill_user_windows):
-	ld	[%g6 + THREAD_UMASK], %o0	! get current umask
+	ld	[%g6 + AOFF_task_tss + AOFF_thread_uwinmask], %o0	! get current umask
 	orcc	%g0, %o0, %g0			! if no bits set, we are done
 	be	3f				! nothing to do
 	 rd	%psr, %o5			! must clear interrupts
@@ -1660,7 +1660,7 @@ C_LABEL(kill_user_windows):
 	wr	%o4, 0x0, %psr			! the uwinmask state
 	WRITE_PAUSE				! burn them cycles
 1:
-	ld	[%g6 + THREAD_UMASK], %o0	! get consistant state
+	ld	[%g6 + AOFF_task_tss + AOFF_thread_uwinmask], %o0	! get consistant state
 	orcc	%g0, %o0, %g0			! did an interrupt come in?
 	be	4f				! yep, we are done
 	 rd	%wim, %o3			! get current wim
@@ -1672,12 +1672,12 @@ kuw_patch1:
 	bne	kuw_patch1			! not done yet
 	 srl	%o3, 1, %o4			! begin another save simulation
 	wr	%o3, 0x0, %wim			! set the new wim
-	st	%g0, [%g6 + THREAD_UMASK]	! clear uwinmask
+	st	%g0, [%g6 + AOFF_task_tss + AOFF_thread_uwinmask]	! clear uwinmask
 4:
 	wr	%o5, 0x0, %psr			! re-enable interrupts
 	WRITE_PAUSE				! burn baby burn
 3:
 	retl					! return
-	 st	%g0, [%g6 + THREAD_W_SAVED]	! no windows saved
+	 st	%g0, [%g6 + AOFF_task_tss + AOFF_thread_w_saved]	! no windows saved
 
 /* End of entry.S */

@@ -375,12 +375,6 @@ static struct miscdevice apm_device = {
 	&apm_bios_fops
 };
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry	apm_proc_entry = {
-        0, 3, "apm", S_IFREG | S_IRUGO, 1, 0, 0, 0, 0, apm_get_info
-};
-#endif
-
 typedef struct callback_list_t {
 	int (*				callback)(apm_event_t);
 	struct callback_list_t *	next;
@@ -1072,6 +1066,7 @@ void apm_bios_init(void)
 	unsigned short	error;
 	char *		power_stat;
 	char *		bat_stat;
+	static struct proc_dir_entry *ent;
 
 	if (apm_bios_info.version == 0) {
 		printk("APM BIOS not found.\n");
@@ -1196,7 +1191,8 @@ void apm_bios_init(void)
 	add_timer(&apm_timer);
 
 #ifdef CONFIG_PROC_FS
-	proc_register_dynamic(&proc_root, &apm_proc_entry);
+	ent = create_proc_entry("apm", 0, 0);
+	ent->get_info = apm_get_info;
 #endif
 
 	misc_register(&apm_device);

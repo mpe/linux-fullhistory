@@ -618,7 +618,8 @@ int qlogicpti_detect(Scsi_Host_Template *tpnt)
 
 			/* Setup the reg property for this device. */
 			prom_apply_sbus_ranges(qpti->qdev->my_bus,
-					       qpti->qdev->reg_addrs, 1);
+					       qpti->qdev->reg_addrs,
+					       1, qpti->qdev);
 
 			/* Map in Qlogic,ISP regs and the PTI status reg. */
 			qpti->qregs = qregs = (struct qlogicpti_regs *)

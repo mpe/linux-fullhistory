@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.3 1997/01/02 14:14:35 jj Exp $
+# $Id: Makefile,v 1.6 1997/03/04 16:27:18 jj Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -22,8 +22,8 @@ RANLIB		= sparc64-linux-ranlib
 # Uncomment the first CFLAGS if you are doing kgdb source level
 # debugging of the kernel to get the proper debugging information.
 
-#CFLAGS := $(CFLAGS) -g -pipe
-CFLAGS := $(CFLAGS) -pipe
+#CFLAGS := $(CFLAGS) -g -pipe -fcall-used-g5 -fcall-used-g7 
+CFLAGS := $(CFLAGS) -pipe -fcall-used-g5 -fcall-used-g7
 
 LINKFLAGS = -T arch/sparc64/vmlinux.lds
 
@@ -40,3 +40,16 @@ LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc64/prom/promlib.a \
 archclean:
 
 archdep:
+
+# <hack> Temporary hack, until we get a clean compile of everything...
+vmlinux64: $(CONFIGURATION) init/main.o init/version.o
+	set -e; for i in arch/sparc64/kernel arch/sparc64/lib arch/sparc64/prom lib; do $(MAKE) -C $$i; done
+	$(LD) $(LINKFLAGS) $(HEAD) init/main.o init/version.o \
+		arch/sparc64/kernel/kernel.o \
+		lib/lib.a arch/sparc64/prom/promlib.a arch/sparc64/lib/lib.a \
+		-o vmlinux
+	$(NM) vmlinux | grep -v '\(compiled\)\|\(\.o$$\)\|\( a \)\|\(\.\.ng$$\)' | sort > System.map
+# </hack>
+
+check_asm:
+	$(MAKE) -C arch/sparc64/kernel check_asm

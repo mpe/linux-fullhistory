@@ -1,10 +1,11 @@
-/* $Id: uaccess.h,v 1.10 1997/01/16 14:19:03 davem Exp $ */
+/* $Id: uaccess.h,v 1.11 1997/02/06 18:57:10 jj Exp $
+ * uaccess.h: User space memore access functions.
+ *
+ * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
-
-/*
- * User space memory access functions
- */
 
 #ifdef __KERNEL__
 #include <linux/sched.h>
@@ -288,14 +289,14 @@ __asm__ __volatile__(							\
 
 extern int __get_user_bad(void);
 
-extern int __copy_user(unsigned long to, unsigned long from, int size);
+extern __kernel_size_t __copy_user(void *to, void *from, __kernel_size_t size);
 
 #define copy_to_user(to,from,n) ({ \
-unsigned long __copy_to = (unsigned long) (to); \
-unsigned long __copy_size = (unsigned long) (n); \
-unsigned long __copy_res; \
-if(__copy_size && __access_ok(__copy_to, __copy_size)) { \
-__copy_res = __copy_user(__copy_to, (unsigned long) (from), __copy_size); \
+void *__copy_to = (void *) (to); \
+__kernel_size_t __copy_size = (__kernel_size_t) (n); \
+__kernel_size_t __copy_res; \
+if(__copy_size && __access_ok((unsigned long)__copy_to, __copy_size)) { \
+__copy_res = __copy_user(__copy_to, (void *) (from), __copy_size); \
 } else __copy_res = __copy_size; \
 __copy_res; })
 
@@ -305,8 +306,8 @@ if (copy_to_user(to,from,n)) \
 })
 
 #define __copy_to_user(to,from,n)		\
-	__copy_user((unsigned long)(to),	\
-		    (unsigned long)(from), n)
+	__copy_user((void *)(to),		\
+		    (void *)(from), n)
 
 #define __copy_to_user_ret(to,from,n,retval) ({ \
 if (__copy_to_user(to,from,n)) \
@@ -314,11 +315,11 @@ if (__copy_to_user(to,from,n)) \
 })
 
 #define copy_from_user(to,from,n) ({ \
-unsigned long __copy_from = (unsigned long) (from); \
-unsigned long __copy_size = (unsigned long) (n); \
-unsigned long __copy_res; \
-if(__copy_size && __access_ok(__copy_from, __copy_size)) { \
-__copy_res = __copy_user((unsigned long) (to), __copy_from, __copy_size); \
+void *__copy_from = (void *) (from); \
+__kernel_size_t __copy_size = (__kernel_size_t) (n); \
+__kernel_size_t __copy_res; \
+if(__copy_size && __access_ok((unsigned long)__copy_from, __copy_size)) { \
+__copy_res = __copy_user((void *) (to), __copy_from, __copy_size); \
 } else __copy_res = __copy_size; \
 __copy_res; })
 
@@ -328,21 +329,37 @@ if (copy_from_user(to,from,n)) \
 })
 
 #define __copy_from_user(to,from,n)		\
-	__copy_user((unsigned long)(to),	\
-		    (unsigned long)(from), n)
+	__copy_user((void *)(to),		\
+		    (void *)(from), n)
 
 #define __copy_from_user_ret(to,from,n,retval) ({ \
 if (__copy_from_user(to,from,n)) \
 	return retval; \
 })
 
-extern int __clear_user(unsigned long addr, int size);
+extern __inline__ __kernel_size_t __clear_user(void *addr, __kernel_size_t size)
+{
+  __kernel_size_t ret;
+  __asm__ __volatile__ ("
+	.section __ex_table,#alloc
+	.align 4
+	.word 1f,3
+	.previous
+1:
+	mov %2, %%o1
+	call __bzero
+	 mov %1, %%o0
+	mov %%o0, %0 
+	" : "=r" (ret) : "r" (addr), "r" (size) :
+	"o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g4", "g5", "g7");
+  return ret;
+}
 
 #define clear_user(addr,n) ({ \
-unsigned long __clear_addr = (unsigned long) (addr); \
-int __clear_size = (int) (n); \
-int __clear_res; \
-if(__clear_size && __access_ok(__clear_addr, __clear_size)) { \
+void *__clear_addr = (void *) (addr); \
+__kernel_size_t __clear_size = (__kernel_size_t) (n); \
+__kernel_size_t __clear_res; \
+if(__clear_size && __access_ok((unsigned long)__clear_addr, __clear_size)) { \
 __clear_res = __clear_user(__clear_addr, __clear_size); \
 } else __clear_res = __clear_size; \
 __clear_res; })

@@ -741,7 +741,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			pt_error_return(regs, -i);
 			goto out;
 		}
-		copy_from_user(&child->tss.float_regs[0], &fps->regs[0], (32 * 4));
+		copy_from_user(&child->tss.float_regs[0], &fps->regs[0], (32 * sizeof(unsigned long)));
 		__get_user(child->tss.fsr, (&fps->fsr));
 		__get_user(child->tss.fpqdepth, (&fps->fpqd));
 		for(i = 0; i < 16; i++) {

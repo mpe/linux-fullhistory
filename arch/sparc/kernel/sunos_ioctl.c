@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl.c,v 1.27 1997/01/06 06:52:33 davem Exp $
+/* $Id: sunos_ioctl.c,v 1.28 1997/02/15 01:17:05 davem Exp $
  * sunos_ioctl.c: The Linux Operating system: SunOS ioctl compatibility.
  * 
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -28,6 +28,9 @@ extern char sunkbd_type;
 extern char sunkbd_layout;
 #endif
 
+/* NR_OPEN is now larger and dynamic in recent kernels. */
+#define SUNOS_NR_OPEN	256
+
 extern asmlinkage int sys_ioctl(unsigned int, unsigned int, unsigned long);
 extern asmlinkage int sys_setsid(void);
 
@@ -37,7 +40,7 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 	int ret = -EBADF;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(filp = current->files->fd [fd]))
+	if (fd >= SUNOS_NR_OPEN || !(filp = current->files->fd [fd]))
 		goto out;
 
 	/* First handle an easy compat. case for tty ldisc. */

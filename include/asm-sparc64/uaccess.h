@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.3 1997/01/16 14:19:08 davem Exp $ */
+/* $Id: uaccess.h,v 1.6 1997/03/03 16:51:54 jj Exp $ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
 
@@ -114,45 +114,45 @@ __get_user_check_ret((x),__gu_addr,sizeof(*(ptr)),__typeof__(*(ptr)),retval); })
 struct __large_struct { unsigned long buf[100]; };
 #define __m(x) ((struct __large_struct *)(x))
 
-#define __put_user_check(x,addr,size) ({ \
+#define __put_user_check(data,addr,size) ({ \
 register int __pu_ret; \
 if (__access_ok(addr,size)) { \
 switch (size) { \
-case 1: __put_user_asm(x,b,addr,__pu_ret); break; \
-case 2: __put_user_asm(x,h,addr,__pu_ret); break; \
-case 4: __put_user_asm(x,w,addr,__pu_ret); break; \
-case 8: __put_user_asm(x,x,addr,__pu_ret); break; \
+case 1: __put_user_asm(data,b,addr,__pu_ret); break; \
+case 2: __put_user_asm(data,h,addr,__pu_ret); break; \
+case 4: __put_user_asm(data,w,addr,__pu_ret); break; \
+case 8: __put_user_asm(data,x,addr,__pu_ret); break; \
 default: __pu_ret = __put_user_bad(); break; \
 } } else { __pu_ret = -EFAULT; } __pu_ret; })
 
-#define __put_user_check_ret(x,addr,size,retval) ({ \
+#define __put_user_check_ret(data,addr,size,retval) ({ \
 register int __foo __asm__ ("l1"); \
 if (__access_ok(addr,size)) { \
 switch (size) { \
-case 1: __put_user_asm_ret(x,b,addr,retval,__foo); break; \
-case 2: __put_user_asm_ret(x,h,addr,retval,__foo); break; \
-case 4: __put_user_asm_ret(x,w,addr,retval,__foo); break; \
-case 8: __put_user_asm_ret(x,x,addr,retval,__foo); break; \
+case 1: __put_user_asm_ret(data,b,addr,retval,__foo); break; \
+case 2: __put_user_asm_ret(data,h,addr,retval,__foo); break; \
+case 4: __put_user_asm_ret(data,w,addr,retval,__foo); break; \
+case 8: __put_user_asm_ret(data,x,addr,retval,__foo); break; \
 default: if (__put_user_bad()) return retval; break; \
 } } else return retval; })
 
-#define __put_user_nocheck(x,addr,size) ({ \
+#define __put_user_nocheck(data,addr,size) ({ \
 register int __pu_ret; \
 switch (size) { \
-case 1: __put_user_asm(x,b,addr,__pu_ret); break; \
-case 2: __put_user_asm(x,h,addr,__pu_ret); break; \
-case 4: __put_user_asm(x,w,addr,__pu_ret); break; \
-case 8: __put_user_asm(x,x,addr,__pu_ret); break; \
+case 1: __put_user_asm(data,b,addr,__pu_ret); break; \
+case 2: __put_user_asm(data,h,addr,__pu_ret); break; \
+case 4: __put_user_asm(data,w,addr,__pu_ret); break; \
+case 8: __put_user_asm(data,x,addr,__pu_ret); break; \
 default: __pu_ret = __put_user_bad(); break; \
 } __pu_ret; })
 
-#define __put_user_nocheck_ret(x,addr,size,retval) ({ \
+#define __put_user_nocheck_ret(data,addr,size,retval) ({ \
 register int __foo __asm__ ("l1"); \
 switch (size) { \
-case 1: __put_user_asm_ret(x,b,addr,retval,__foo); break; \
-case 2: __put_user_asm_ret(x,h,addr,retval,__foo); break; \
-case 4: __put_user_asm_ret(x,w,addr,retval,__foo); break; \
-case 8: __put_user_asm_ret(x,x,addr,retval,__foo); break; \
+case 1: __put_user_asm_ret(data,b,addr,retval,__foo); break; \
+case 2: __put_user_asm_ret(data,h,addr,retval,__foo); break; \
+case 4: __put_user_asm_ret(data,w,addr,retval,__foo); break; \
+case 8: __put_user_asm_ret(data,x,addr,retval,__foo); break; \
 default: if (__put_user_bad()) return retval; break; \
 } })
 
@@ -203,7 +203,7 @@ __asm__ __volatile(							\
 
 extern int __put_user_bad(void);
 
-#define __get_user_check(x,addr,size,type) ({ \
+#define __get_user_check(data,addr,size,type) ({ \
 register int __gu_ret; \
 register unsigned long __gu_val; \
 if (__access_ok(addr,size)) { \
@@ -213,9 +213,9 @@ case 2: __get_user_asm(__gu_val,uh,addr,__gu_ret); break; \
 case 4: __get_user_asm(__gu_val,uw,addr,__gu_ret); break; \
 case 8: __get_user_asm(__gu_val,x,addr,__gu_ret); break; \
 default: __gu_val = 0; __gu_ret = __get_user_bad(); break; \
-} } else { __gu_val = 0; __gu_ret = -EFAULT; } x = (type) __gu_val; __gu_ret; })
+} } else { __gu_val = 0; __gu_ret = -EFAULT; } data = (type) __gu_val; __gu_ret; })
 
-#define __get_user_check_ret(x,addr,size,type,retval) ({ \
+#define __get_user_check_ret(data,addr,size,type,retval) ({ \
 register unsigned long __gu_val __asm__ ("l1"); \
 if (__access_ok(addr,size)) { \
 switch (size) { \
@@ -224,9 +224,9 @@ case 2: __get_user_asm_ret(__gu_val,uh,addr,retval); break; \
 case 4: __get_user_asm_ret(__gu_val,uw,addr,retval); break; \
 case 8: __get_user_asm_ret(__gu_val,x,addr,retval); break; \
 default: if (__get_user_bad()) return retval; \
-} x = (type) __gu_val; } else return retval; })
+} data = (type) __gu_val; } else return retval; })
 
-#define __get_user_nocheck(x,addr,size,type) ({ \
+#define __get_user_nocheck(data,addr,size,type) ({ \
 register int __gu_ret; \
 register unsigned long __gu_val; \
 switch (size) { \
@@ -235,9 +235,9 @@ case 2: __get_user_asm(__gu_val,uh,addr,__gu_ret); break; \
 case 4: __get_user_asm(__gu_val,uw,addr,__gu_ret); break; \
 case 8: __get_user_asm(__gu_val,x,addr,__gu_ret); break; \
 default: __gu_val = 0; __gu_ret = __get_user_bad(); break; \
-} x = (type) __gu_val; __gu_ret; })
+} data = (type) __gu_val; __gu_ret; })
 
-#define __get_user_nocheck_ret(x,addr,size,type,retval) ({ \
+#define __get_user_nocheck_ret(data,addr,size,type,retval) ({ \
 register unsigned long __gu_val __asm__ ("l1"); \
 switch (size) { \
 case 1: __get_user_asm_ret(__gu_val,ub,addr,retval); break; \
@@ -245,7 +245,7 @@ case 2: __get_user_asm_ret(__gu_val,uh,addr,retval); break; \
 case 4: __get_user_asm_ret(__gu_val,uw,addr,retval); break; \
 case 8: __get_user_asm_ret(__gu_val,x,addr,retval); break; \
 default: if (__get_user_bad()) return retval; \
-} x = (type) __gu_val; })
+} data = (type) __gu_val; })
 
 #define __get_user_asm(x,size,addr,ret)					\
 __asm__ __volatile__(							\
@@ -295,14 +295,14 @@ __asm__ __volatile__(							\
 
 extern int __get_user_bad(void);
 
-extern int __copy_user(unsigned long to, unsigned long from, int size);
+extern __kernel_size_t __copy_user(void *to, void *from, __kernel_size_t size);
 
 #define copy_to_user(to,from,n) ({ \
-unsigned long __copy_to = (unsigned long) (to); \
-unsigned long __copy_size = (unsigned long) (n); \
-unsigned long __copy_res; \
+void *__copy_to = (void *) (to); \
+__kernel_size_t __copy_size = (__kernel_size_t) (n); \
+__kernel_size_t __copy_res; \
 if(__copy_size && __access_ok(__copy_to, __copy_size)) { \
-__copy_res = __copy_user(__copy_to, (unsigned long) (from), __copy_size); \
+__copy_res = __copy_user(__copy_to, (void *) (from), __copy_size); \
 } else __copy_res = __copy_size; \
 __copy_res; })
 
@@ -321,11 +321,11 @@ if (__copy_to_user(to,from,n)) \
 })
 
 #define copy_from_user(to,from,n) ({ \
-unsigned long __copy_from = (unsigned long) (from); \
-unsigned long __copy_size = (unsigned long) (n); \
-unsigned long __copy_res; \
+void *__copy_from = (void *) (from); \
+__kernel_size_t __copy_size = (__kernel_size_t) (n); \
+__kernel_size_t __copy_res; \
 if(__copy_size && __access_ok(__copy_from, __copy_size)) { \
-__copy_res = __copy_user((unsigned long) (to), __copy_from, __copy_size); \
+__copy_res = __copy_user((void *) (to), __copy_from, __copy_size); \
 } else __copy_res = __copy_size; \
 __copy_res; })
 

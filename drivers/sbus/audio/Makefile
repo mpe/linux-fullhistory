@@ -15,6 +15,14 @@ O_TARGET := sparcaudio.o
 O_OBJS   :=
 M_OBJS   :=
 
+ifeq ($(CONFIG_SPARCAUDIO),y)
+M=y
+else
+  ifeq ($(CONFIG_SPARCAUDIO),m)
+  MM=y
+  endif
+endif
+
 ifeq ($(CONFIG_SPARCAUDIO_AMD7930),y)
 M=y
 O_OBJS += amd7930.o
@@ -25,11 +33,21 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SPARCAUDIO_CS4231),y)
+M=y
+O_OBJS += cs4231.o
+else
+  ifeq ($(CONFIG_SPARCAUDIO_CS4231),m)
+  MM=y
+  M_OBJS += cs4231.o
+  endif
+endif
+
 ifdef M
-O_OBJS += audio.o
+OX_OBJS += audio.o
 else
   ifdef MM
-  M_OBJS += audio.o
+  MX_OBJS += audio.o
   endif
 endif
 

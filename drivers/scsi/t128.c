@@ -214,13 +214,15 @@ int t128_detect(Scsi_Host_Template * tpnt) {
 	else 
 	    for (; !base && (current_base < NO_BASES); ++current_base) {
 #if (TDEBUG & TDEBUG_INIT)
-    printk("scsi : probing address %08x\n", (unsigned int) bases[current_base].address);
+    printk("scsi-t128 : probing address %08x\n", (unsigned int) bases[current_base].address);
 #endif
 		for (sig = 0; sig < NO_SIGNATURES; ++sig) 
-		    if (!bases[current_base].noauto && !memcmp 
-			(bases[current_base].address + signatures[sig].offset, 
-			signatures[sig].string, strlen(signatures[sig].string))) {
-			base = bases[current_base].address;
+		    if (!bases[current_base].noauto && 
+			check_signature(bases[current_base].address +
+					signatures[sig].offset,
+					signatures[sig].string,
+					strlen(signatures[sig].string))) {
+		      base = bases[current_base].address;
 #if (TDEBUG & TDEBUG_INIT)
 			printk("scsi-t128 : detected board.\n");
 #endif

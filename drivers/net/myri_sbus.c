@@ -998,7 +998,8 @@ static int myri_ether_init(struct device *dev, struct linux_sbus_device *sdev, i
 	determine_reg_space_size(mp);
 
 	/* Map in the MyriCOM register/localram set. */
-	prom_apply_sbus_ranges(sdev->my_bus, &sdev->reg_addrs[0], sdev->num_registers);
+	prom_apply_sbus_ranges(sdev->my_bus, &sdev->reg_addrs[0],
+			       sdev->num_registers, sdev);
 	if(mp->eeprom.cpuvers < CPUVERS_4_0) {
 		/* XXX Makes no sense, if control reg is non-existant this
 		 * XXX driver cannot function at all... maybe pre-4.0 is

@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.12 1996/10/31 06:29:13 davem Exp $
+/* $Id: oplib.h,v 1.13 1997/01/31 00:16:52 tdyas Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -208,7 +208,19 @@ extern void prom_free(char *virt_addr, unsigned int size);
 extern void prom_putsegment(int context, unsigned long virt_addr,
 			    int physical_segment);
 
+
 /* PROM device tree traversal functions... */
+
+#ifdef PROMLIB_INTERNAL
+
+/* Internal version of prom_getchild. */
+extern int __prom_getchild(int parent_node);
+
+/* Internal version of prom_getsibling. */
+extern int __prom_getsibling(int node);
+
+#endif
+
 
 /* Get the child node of the given node, or zero if no child exists. */
 extern int prom_getchild(int parent_node);

@@ -424,11 +424,12 @@ void unregister_sysctl_table(struct ctl_table_header * table)
 /* Scan the sysctl entries in table and add them all into /proc */
 static void register_proc_table(ctl_table * table, struct proc_dir_entry *root)
 {
-	struct proc_dir_entry *de, *tmp;
-	int exists;
+	struct proc_dir_entry *de;
+	int len;
+	mode_t mode;
 	
 	for (; table->ctl_name; table++) {
-		exists = 0;
+		de = 0;
 		/* Can't do anything without a proc name. */
 		if (!table->procname)
 			continue;
@@ -436,46 +437,32 @@ static void register_proc_table(ctl_table * table, struct proc_dir_entry *root)
 		if (!table->proc_handler &&
 		    !table->child)
 			continue;
-		
-		de = kmalloc(sizeof(*de), GFP_KERNEL);
-		if (!de) continue;
-		de->namelen = strlen(table->procname);
-		de->name = table->procname;
-		de->mode = table->mode;
-		de->nlink = 1;
-		de->uid = 0;
-		de->gid = 0;
-		de->size = 0;
-		de->get_info = 0;	/* For internal use if we want it */
-		de->fill_inode = 0;	/* To override struct inode fields */
-		de->next = de->subdir = 0;
-		de->data = (void *) table;
-		/* Is it a file? */
-		if (table->proc_handler) {
-			de->ops = &proc_sys_inode_operations;
-			de->mode |= S_IFREG;
+
+		len = strlen(table->procname);
+		mode = table->mode;
+
+		if (table->proc_handler)
+			mode |= S_IFREG;
+		else {
+			mode |= S_IFDIR;
+			for (de = root->subdir; de; de = de->next) {
+				if (proc_match(len, table->procname, de))
+					break;
+			}
+			/* If the subdir exists already, de is non-NULL */
 		}
-		/* Otherwise it's a subdir */
-		else  {
-			/* First check to see if it already exists */
-			for (tmp = root->subdir; tmp; tmp = tmp->next) {
-				if (tmp->namelen == de->namelen &&
-				    !memcmp(tmp->name,de->name,de->namelen)) {
-					exists = 1;
-					kfree (de);
-					de = tmp;
-				}
-			}
-			if (!exists) {
-				de->ops = &proc_dir_inode_operations;
-				de->nlink++;
-				de->mode |= S_IFDIR;
-			}
+
+		if (!de) {
+			de = create_proc_entry(table->procname, mode, root);
+			if (!de)
+				continue;
+			de->data = (void *) table;
+			if (table->proc_handler)
+				de->ops = &proc_sys_inode_operations;
+
 		}
 		table->de = de;
-		if (!exists)
-			proc_register_dynamic(root, de);
-		if (de->mode & S_IFDIR )
+		if (de->mode & S_IFDIR)
 			register_proc_table(table->child, de);
 	}
 }

@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.8 1997/02/28 09:56:35 davem Exp $
+ *	$Id: udp.c,v 1.9 1997/03/04 10:41:59 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -324,9 +324,10 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	if(skb==NULL)
   		return err;
   
-  	truesize = skb->tail - skb->h.raw - sizeof(struct udphdr);
+ 	truesize=ntohs(((struct udphdr *)skb->h.raw)->len) - sizeof(struct udphdr);
   	
   	copied=truesize;
+
   	if(copied>len)
   	{
   		copied=len;
@@ -357,7 +358,7 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		if (skb->protocol == __constant_htons(ETH_P_IP))
 		{
 			ipv6_addr_set(&sin6->sin6_addr, 0, 0,
-				      __constant_htonl(0xffff), skb->nh.iph->daddr);
+				      __constant_htonl(0xffff), skb->nh.iph->saddr);
 		}
 		else
 		{

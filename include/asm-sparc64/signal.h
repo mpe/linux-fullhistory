@@ -1,4 +1,4 @@
-/* $Id: signal.h,v 1.1 1996/12/26 14:22:37 davem Exp $ */
+/* $Id: signal.h,v 1.2 1997/03/03 16:51:57 jj Exp $ */
 #ifndef _ASMSPARC64_SIGNAL_H
 #define _ASMSPARC64_SIGNAL_H
 
@@ -164,13 +164,12 @@ struct sigaction {
 };
 
 struct sigaction32 {
-	/* XXX 32-bit func ptr... */
-	__sighandler_t  sa_handler;
+	unsigned	sa_handler;
 	sigset32_t      sa_mask;
 	unsigned int    sa_flags;
 
 	/* XXX 32-bit func ptr... */
-	void (*sa_restorer) (void);     /* not used by Linux/SPARC yet */
+	unsigned	sa_restorer;     /* not used by Linux/SPARC yet */
 };
 
 #endif /* !(__ASSEMBLY__) */

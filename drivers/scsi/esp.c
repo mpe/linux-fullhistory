@@ -750,7 +750,8 @@ int esp_detect(Scsi_Host_Template *tpnt)
 			/* Map in the ESP registers from I/O space */
 			if(!hme) {
 				prom_apply_sbus_ranges(esp->edev->my_bus, 
-						       esp->edev->reg_addrs, 1);
+						       esp->edev->reg_addrs,
+						       1, esp->edev);
 
 				esp->eregs = eregs = (struct Sparc_ESP_regs *)
 				sparc_alloc_io(esp->edev->reg_addrs[0].phys_addr, 0,

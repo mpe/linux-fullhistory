@@ -13,7 +13,6 @@ extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
 extern struct inode_operations proc_scsi_inode_operations;
 
 EXPORT_SYMBOL(proc_register);
-EXPORT_SYMBOL(proc_register_dynamic);
 EXPORT_SYMBOL(proc_unregister);
 EXPORT_SYMBOL(proc_root);
 EXPORT_SYMBOL(proc_get_inode);

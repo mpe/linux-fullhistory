@@ -1350,7 +1350,7 @@ void addrconf_init()
 	if (dev && (dev->flags & IFF_UP))
 		addrconf_eth_config(dev);
 	
-	proc_register_dynamic(&proc_net, &iface_proc_entry);
+	proc_register(&proc_net, &iface_proc_entry);
 	
 	addr_chk_timer.expires = jiffies + ADDR_CHECK_FREQUENCY;
 	add_timer(&addr_chk_timer);

@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.89 1997/01/06 06:52:23 davem Exp $
+/*  $Id: process.c,v 1.90 1997/01/31 23:26:16 tdyas Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -25,6 +25,7 @@
 #include <linux/config.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/reboot.h>
 
 #include <asm/auxio.h>
 #include <asm/oplib.h>
@@ -154,7 +155,7 @@ extern void console_restore_palette (void);
 extern int serial_console;
 #endif
 
-void halt_now(void)
+void machine_halt(void)
 {
 	sti();
 	udelay(8000);
@@ -167,7 +168,7 @@ void halt_now(void)
 	panic("Halt failed!");
 }
 
-void hard_reset_now(void)
+void machine_restart(char * cmd)
 {
 	char *p;
 	
@@ -181,10 +182,19 @@ void hard_reset_now(void)
 	if (!serial_console)
 		console_restore_palette ();
 #endif
+	if (cmd)
+		prom_reboot(cmd);
 	if (*reboot_command)
-		prom_reboot (reboot_command);
+		prom_reboot(reboot_command);
 	prom_feval ("reset");
 	panic("Reboot failed!");
+}
+
+void machine_power_off(void)
+{
+	if (auxio_power_register)
+		*auxio_power_register |= AUXIO_POWER_OFF;
+	machine_halt();
 }
 
 void show_regwindow(struct reg_window *rw)

@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.2 1996/12/27 08:49:07 jj Exp $
+/* $Id: oplib.h,v 1.4 1997/02/25 20:00:34 jj Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -28,6 +28,23 @@ extern unsigned int prom_rev, prom_prev;
  * initialization is complete.
  */
 extern int prom_root_node;
+
+/* /chosen node of the prom device tree, this stays constant after
+ * initialization is complete.
+ */
+extern int prom_chosen_node;
+
+struct linux_mlist_p1275 {
+	struct linux_mlist_p1275 *theres_more;
+	unsigned long start_adr;
+	unsigned long num_bytes;
+};
+
+struct linux_mem_p1275 {
+	struct linux_mlist_p1275 **p1275_totphys;
+	struct linux_mlist_p1275 **p1275_prommap;
+	struct linux_mlist_p1275 **p1275_available; /* What we can use */
+};
 
 /* The functions... */
 
@@ -72,7 +89,7 @@ extern void prom_seek(int device_handle, unsigned int seek_hival,
  * These lists are returned pre-sorted, this should make your life easier
  * since the prom itself is way too lazy to do such nice things.
  */
-extern struct linux_mem_v0 *prom_meminfo(void);
+extern struct linux_mem_p1275 *prom_meminfo(void);
 
 /* Miscellaneous routines, don't really fit in any category per se. */
 
@@ -252,17 +269,18 @@ extern void prom_adjust_regs(struct linux_prom_registers *regp, int nregs,
 extern void prom_adjust_ranges(struct linux_prom_ranges *cranges, int ncranges,
 			       struct linux_prom_ranges *pranges, int npranges);
 
-/* Apply promlib probed OBIO ranges to registers. */
-extern void prom_apply_obio_ranges(struct linux_prom_registers *obioregs, int nregs);
-
 /* Apply ranges of any prom node (and optionally parent node as well) to registers. */
 extern void prom_apply_generic_ranges(int node, int parent, 
 				      struct linux_prom_registers *sbusregs, int nregs);
 				      
-extern long (*prom_command)(char *, long, ...);
+extern long p1275_cmd (char *, long, ...);
 				   
 
+#if 0
 #define P1275_SIZE(x) ((((long)((x) / 32)) << 32) | (x))
+#else
+#define P1275_SIZE(x) x
+#endif
 
 /* We support at most 16 input and 1 output argument */
 #define P1275_ARG_NUMBER		0
@@ -270,10 +288,11 @@ extern long (*prom_command)(char *, long, ...);
 #define P1275_ARG_OUT_BUF		2
 #define P1275_ARG_OUT_32B		3
 #define P1275_ARG_IN_FUNCTION		4
+#define P1275_ARG_IN_BUF		5
 
 #define P1275_IN(x) ((x) & 0xf)
 #define P1275_OUT(x) (((x) << 4) & 0xf0)
 #define P1275_INOUT(i,o) (P1275_IN(i)|P1275_OUT(o))
-#define P1275_ARG(n,x) ((x) << ((n)*3 + 8)
+#define P1275_ARG(n,x) ((x) << ((n)*3 + 8))
 
 #endif /* !(__SPARC64_OPLIB_H) */

@@ -65,6 +65,9 @@ if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
     if [ "$CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE" != "y" ]; then
       bool '  not allow targets to disconnect' CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
     fi
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      bool '  assume boards are SYMBIOS compatible' CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
+    fi
   fi
 fi
 if [ "$CONFIG_MCA" = "y" ]; then

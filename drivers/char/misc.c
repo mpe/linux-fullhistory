@@ -74,7 +74,8 @@ extern void pcwatchdog_init(void);
 extern int rtc_init(void);
 
 #ifdef CONFIG_PROC_FS
-static int proc_misc_read(char *buf, char **start, off_t offset, int len, int unused)
+static int misc_read_proc(char *buf, char **start, off_t offset,
+			  int len, int *eof, void *private)
 {
 	struct miscdevice *p;
 
@@ -183,19 +184,16 @@ EXPORT_SYMBOL(paste_selection); /* be exported if misc.c is in linked in */
 #endif
 
 #if defined(CONFIG_PROC_FS) && !defined(MODULE)
-static struct proc_dir_entry proc_misc = {
-	0, 4, "misc",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, NULL /* ops -- default to array */,
-	&proc_misc_read /* get_info */,
-};
+static struct proc_dir_entry *proc_misc;	
 #endif
 
 int misc_init(void)
 {
 #ifndef MODULE
 #ifdef CONFIG_PROC_FS
-	proc_register_dynamic(&proc_root, &proc_misc);	
+	proc_misc = create_proc_entry("misc", 0, 0);
+	if (proc_misc)
+		proc_misc->read_proc = misc_read_proc;
 #endif /* PROC_FS */
 #ifdef CONFIG_BUSMOUSE
 	bus_mouse_init();

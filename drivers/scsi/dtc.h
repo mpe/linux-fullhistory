@@ -28,52 +28,6 @@
 #ifndef DTC3280_H
 #define DTC3280_H
 
-#define DTC_PUBLIC_RELEASE 2
-
-/*#define DTCDEBUG 0x1*/
-#define DTCDEBUG_INIT	0x1
-#define DTCDEBUG_TRANSFER 0x2
-
-/*
- * The DTC3180 & 3280 boards are memory mapped.
- * 
- */
-
-/*
- */ 
-/* Offset from DTC_5380_OFFSET */
-#define DTC_CONTROL_REG		0x100	/* rw */
-#define D_CR_ACCESS		0x80	/* ro set=can access 3280 registers */
-#define CSR_DIR_READ		0x40	/* rw direction, 1 = read 0 = write */
-
-#define CSR_RESET              0x80    /* wo  Resets 53c400 */
-#define CSR_5380_REG           0x80    /* ro  5380 registers can be accessed */
-#define CSR_TRANS_DIR          0x40    /* rw  Data transfer direction */
-#define CSR_SCSI_BUFF_INTR     0x20    /* rw  Enable int on transfer ready */
-#define CSR_5380_INTR          0x10    /* rw  Enable 5380 interrupts */
-#define CSR_SHARED_INTR        0x08    /* rw  Interrupt sharing */
-#define CSR_HOST_BUF_NOT_RDY   0x04    /* ro  Host buffer not ready */
-#define CSR_SCSI_BUF_RDY       0x02    /* ro  SCSI buffer ready */
-#define CSR_GATED_5380_IRQ     0x01    /* ro  Last block xferred */
-#define CSR_INT_BASE (CSR_SCSI_BUFF_INTR | CSR_5380_INTR)
-
-
-#define DTC_BLK_CNT		0x101   /* rw 
-					 * # of 128-byte blocks to transfer */
-
-
-#define D_CR_ACCESS             0x80    /* ro set=can access 3280 registers */
-
-#define DTC_SWITCH_REG		0x3982	/* ro - DIP switches */
-#define DTC_RESUME_XFER		0x3982	/* wo - resume data xfer 
-					   * after disconnect/reconnect*/
-
-#define DTC_5380_OFFSET		0x3880	/* 8 registers here, see NCR5380.h */
-
-/*!!!! for dtc, it's a 128 byte buffer at 3900 !!! */
-#define DTC_DATA_BUF		0x3900  /* rw 128 bytes long */
-
-
 #ifndef ASM
 int dtc_abort(Scsi_Cmnd *);
 int dtc_biosparam(Disk *, kdev_t, int*);

@@ -121,7 +121,6 @@ struct inode * proc_get_inode(struct super_block * s, int ino, struct proc_dir_e
 struct super_block *proc_read_super(struct super_block *s,void *data, 
 				    int silent)
 {
-	proc_root_init();
 	lock_super(s);
 	s->s_blocksize = 1024;
 	s->s_blocksize_bits = 10;

@@ -45,7 +45,7 @@
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 1.16e"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 1.18b"
  
 /*
 **	If SCSI_NCR_SETUP_SPECIAL_FEATURES is defined,
@@ -65,7 +65,7 @@
 **		0x80	burst disabled
 **	CTEST5  0x24	(825a and 875 only)
 **		0x04	burst 128
-**		0x80	dma fifo 536
+**		0x80	large dma fifo
 **
 **	If SCSI_NCR_TRUST_BIOS_SETTING is defined, the driver will use the 
 **	initial value of corresponding bit fields, assuming they have been 
@@ -146,18 +146,12 @@
 */
 
 /*
- * For Ultra SCSI support option, use special features and allow 20Mhz 
+ * For Ultra2 SCSI support option, use special features and allow 40Mhz 
  * synchronous data transfers.
  */
-#if	1 /* CONFIG_SCSI_NCR53C8XX_ULTRA_SUPPORT */
 #define	SCSI_NCR_SETUP_SPECIAL_FEATURES		(1)
-#define SCSI_NCR_SETUP_ULTRA_SCSI		(1)
-#define SCSI_NCR_MAX_SYNC (20000)
-#else
-#define	SCSI_NCR_SETUP_SPECIAL_FEATURES		(0)
-#define SCSI_NCR_SETUP_ULTRA_SCSI		(0)
-#define SCSI_NCR_MAX_SYNC (10000)
-#endif
+#define SCSI_NCR_SETUP_ULTRA_SCSI		(2)
+#define SCSI_NCR_MAX_SYNC			(40)
 
 /*
  * Allow tags from 2 to 12, default 4
@@ -193,20 +187,24 @@
 
 /*
  * Sync transfer frequency at startup.
- * Allow from 5Mhz to 20Mhz default 10 Mhz.
+ * Allow from 5Mhz to 40Mhz default 10 Mhz.
  */
-#ifdef	CONFIG_SCSI_NCR53C8XX_SYNC
-#if	CONFIG_SCSI_NCR53C8XX_SYNC == 0
-#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(0)
-#elif	CONFIG_SCSI_NCR53C8XX_SYNC*1000 < 5000
-#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(5000)
-#elif	CONFIG_SCSI_NCR53C8XX_SYNC*1000 > SCSI_NCR_MAX_SYNC
+#ifndef	CONFIG_SCSI_NCR53C8XX_SYNC
+#define	CONFIG_SCSI_NCR53C8XX_SYNC	(5)
+#elif	CONFIG_SCSI_NCR53C8XX_SYNC > SCSI_NCR_MAX_SYNC
 #define	SCSI_NCR_SETUP_DEFAULT_SYNC	SCSI_NCR_MAX_SYNC
-#else
-#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(CONFIG_SCSI_NCR53C8XX_SYNC * 1000)
 #endif
+
+#if	CONFIG_SCSI_NCR53C8XX_SYNC == 0
+#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(255)
+#elif	CONFIG_SCSI_NCR53C8XX_SYNC <= 5
+#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(50)
+#elif	CONFIG_SCSI_NCR53C8XX_SYNC <= 20
+#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(250/(CONFIG_SCSI_NCR53C8XX_SYNC))
+#elif	CONFIG_SCSI_NCR53C8XX_SYNC <= 33
+#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(11)
 #else
-#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(10000)
+#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(10)
 #endif
 
 /*
@@ -214,7 +212,7 @@
  */
 #ifdef	CONFIG_SCSI_FORCE_ASYNCHRONOUS
 #undef	SCSI_NCR_SETUP_DEFAULT_SYNC
-#define SCSI_NCR_SETUP_DEFAULT_SYNC	(0)
+#define SCSI_NCR_SETUP_DEFAULT_SYNC	(255)
 #endif
 
 /*
@@ -254,6 +252,22 @@
 #endif
 
 /*
+ * Vendor specific stuff
+ */
+#ifdef CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
+#define SCSI_NCR_SETUP_LED_PIN		(1)
+#define SCSI_NCR_SETUP_DIFF_SUPPORT	(3)
+#else
+#define SCSI_NCR_SETUP_LED_PIN		(0)
+#define SCSI_NCR_SETUP_DIFF_SUPPORT	(0)
+#endif
+
+/*
+ * Settle time after reset at boot-up
+ */
+#define SCSI_NCR_SETUP_SETTLE_TIME	(2)
+
+/*
 **	Other parameters not configurable with "make config"
 **	Avoid to change these constants, unless you know what you are doing.
 */
@@ -262,7 +276,6 @@
 #define SCSI_NCR_MAX_SCATTER	(128)
 #define SCSI_NCR_MAX_TARGET	(16)
 #define SCSI_NCR_MAX_HOST	(2)
-#define SCSI_NCR_SETTLE_TIME	(2)
 #define SCSI_NCR_TIMEOUT_ALERT	(3*HZ)
 
 #define SCSI_NCR_CAN_QUEUE	(7*SCSI_NCR_MAX_TAGS)
@@ -293,9 +306,38 @@
 	SCSI_NCR_SETUP_DEFAULT_TAGS,		\
 	SCSI_NCR_SETUP_DEFAULT_SYNC,		\
 	0x00,					\
-	7					\
+	7,					\
+	SCSI_NCR_SETUP_LED_PIN,			\
+	1,					\
+	SCSI_NCR_SETUP_SETTLE_TIME,		\
+	SCSI_NCR_SETUP_DIFF_SUPPORT,		\
+	0					\
 }
 
+/*
+**	Boot fail safe setup.
+**	Override initial setup from boot command line:
+**	ncr53c8xx=safe:y
+*/
+#define SCSI_NCR_DRIVER_SAFE_SETUP		\
+{						\
+	0,					\
+	1,					\
+	0,					\
+	0,					\
+	0,					\
+	0,					\
+	2,					\
+	0,					\
+	255,					\
+	0x00,					\
+	255,					\
+	0,					\
+	0,					\
+	10,					\
+	1,					\
+	1					\
+}
 
 /*
 **	Define Scsi_Host_Template parameters
@@ -670,7 +712,8 @@ struct ncr_reg {
 	#define   CSF    0x02	/* c: clear scsi fifo */
 
 /*50*/  u_short   nc_sidl;	/* Lowlevel: latched from scsi data */
-/*52*/  u_short   nc_52_;
+/*52*/  u_char    nc_stest4;
+/*53*/	u_char    nc_53_;
 /*54*/  u_short   nc_sodl;	/* Lowlevel: data out to scsi data  */
 /*56*/  u_short   nc_56_;
 /*58*/  u_short   nc_sbdl;	/* Lowlevel: data from scsi data    */

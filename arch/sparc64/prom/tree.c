@@ -1,12 +1,11 @@
-/* $Id: tree.c,v 1.1 1996/12/27 08:49:13 jj Exp $
+/* $Id: tree.c,v 1.4 1997/03/04 16:27:14 jj Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
-#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -24,7 +23,18 @@ prom_getchild(int node)
 	long cnode;
 
 	if(node == -1) return 0;
-	cnode = (*prom_command)("child", P1275_INOUT(1, 1), node);
+	cnode = p1275_cmd ("child", P1275_INOUT(1, 1), node);
+	if(cnode == -1) return 0;
+	return (int)cnode;
+}
+
+__inline__ int
+prom_getparent(int node)
+{
+	long cnode;
+
+	if(node == -1) return 0;
+	cnode = p1275_cmd ("parent", P1275_INOUT(1, 1), node);
 	if(cnode == -1) return 0;
 	return (int)cnode;
 }
@@ -38,8 +48,8 @@ prom_getsibling(int node)
 	long sibnode;
 
 	if(node == -1) return 0;
-	sibnode = (*prom_command)("peer", P1275_INOUT(1, 1), node);
-	if(cnode == -1) return 0;
+	sibnode = p1275_cmd ("peer", P1275_INOUT(1, 1), node);
+	if(sibnode == -1) return 0;
 	return (int)sibnode;
 }
 
@@ -50,10 +60,10 @@ __inline__ int
 prom_getproplen(int node, char *prop)
 {
 	if((!node) || (!prop)) return -1;
-	return (*prom_command)("getproplen", 
-			       P1275_ARG(1,P1275_ARG_IN_STRING)|
-			       P1275_INOUT(2, 1), 
-			       node, prop);
+	return p1275_cmd ("getproplen", 
+			  P1275_ARG(1,P1275_ARG_IN_STRING)|
+			  P1275_INOUT(2, 1), 
+			  node, prop);
 }
 
 /* Acquire a property 'prop' at node 'node' and place it in
@@ -70,11 +80,11 @@ prom_getproperty(int node, char *prop, char *buffer, int bufsize)
 		return -1;
 	else {
 		/* Ok, things seem all right. */
-		return (*prom_command)("getprop", 
-				       P1275_ARG(1,P1275_ARG_IN_STRING)|
-				       P1275_ARG(2,P1275_ARG_OUT_BUF)|
-				       P1275_INOUT(4, 1), 
-				       node, prop, buffer, P1275_SIZE(plen));
+		return p1275_cmd ("getprop", 
+				  P1275_ARG(1,P1275_ARG_IN_STRING)|
+				  P1275_ARG(2,P1275_ARG_OUT_BUF)|
+				  P1275_INOUT(4, 1), 
+				  node, prop, buffer, P1275_SIZE(plen));
 	}
 }
 
@@ -172,18 +182,35 @@ prom_searchsiblings(int node_start, char *nodename)
 int 
 prom_getname (int node, char *buffer, int len)
 {
-	int i;
-	struct linux_prom_registers reg[PROMREG_MAX];
+	int i, sbus = 0;
+	struct linux_prom_registers *reg;
+	struct linux_prom64_registers reg64[PROMREG_MAX];
 	
+	for (sbus = prom_getparent (node); sbus; sbus = prom_getparent (sbus)) {
+		i = prom_getproperty (sbus, "name", buffer, len);
+		if (i > 0) {
+			buffer [i] = 0;
+			if (!strcmp (buffer, "sbus"))
+				break;
+		}
+	}
 	i = prom_getproperty (node, "name", buffer, len);
-	if (i <= 0) return -1;
+	if (i <= 0) {
+		buffer [0] = 0;
+		return -1;
+	}
 	buffer [i] = 0;
 	len -= i;
-	i = prom_getproperty (node, "reg", (char *)reg, sizeof (reg));
+	i = prom_getproperty (node, "reg", (char *)reg64, sizeof (reg64));
 	if (i <= 0) return 0;
-	if (len < 11) return -1;
+	if (len < 16) return -1;
 	buffer = strchr (buffer, 0);
-	sprintf (buffer, "@%x,%x", reg[0].which_io, (uint)reg[0].phys_addr);
+	if (sbus) {
+		reg = (struct linux_prom_registers *)reg64;
+		sprintf (buffer, "@%x,%x", reg[0].which_io, (uint)reg[0].phys_addr);
+	} else {
+		sprintf (buffer, "@%x,%x", (unsigned int)(reg64[0].phys_addr >> 36), (unsigned int)(reg64[0].phys_addr));
+	}
 	return 0;
 }
 
@@ -193,11 +220,11 @@ prom_getname (int node, char *buffer, int len)
 __inline__ char *
 prom_firstprop(int node, char *buffer)
 {
-	if(node == -1) return "";
 	*buffer = 0;
-	(*prom_command)("nextprop", P1275_ARG(2,P1275_ARG_OUT_32B)|
-				    P1275_INOUT(3, 0), 
-				    node, (char *) 0x0, buffer);
+	if(node == -1) return buffer;
+	p1275_cmd ("nextprop", P1275_ARG(2,P1275_ARG_OUT_32B)|
+			       P1275_INOUT(3, 0), 
+			       node, (char *) 0x0, buffer);
 	return buffer;
 }
 
@@ -210,14 +237,18 @@ prom_nextprop(int node, char *oprop, char *buffer)
 {
 	char buf[32];
 
-	if(node == -1) return "";
-	*buffer = 0;
-	(*prom_command)("nextprop", P1275_ARG(1,P1275_ARG_IN_STRING)|
+	if(node == -1) {
+		*buffer = 0;
+		return buffer;
+	}
+	if (oprop == buffer) {
+		strcpy (buf, oprop);
+		oprop = buf;
+	}
+	p1275_cmd ("nextprop", P1275_ARG(1,P1275_ARG_IN_STRING)|
 				    P1275_ARG(2,P1275_ARG_OUT_32B)|
 				    P1275_INOUT(3, 0), 
-				    node, oprop, (oprop == buffer) ? 
-				    buf : buffer);
-	if (oprop == buffer) strcpy (buffer, buf);
+				    node, oprop, buffer); 
 	return buffer;
 }
 
@@ -225,42 +256,35 @@ int
 prom_finddevice(char *name)
 {
 	if(!name) return 0;
-	*buffer = 0;
-	(*prom_command)("finddevice", P1275_ARG(0,P1275_ARG_IN_STRING)|
-				      P1275_INOUT(1, 1), 
-				      name);
-	return buffer;
+	return p1275_cmd ("finddevice", P1275_ARG(0,P1275_ARG_IN_STRING)|
+				        P1275_INOUT(1, 1), 
+				        name);
 }
 
-int
-prom_node_has_property(int node, char *prop)
+int prom_node_has_property(int node, char *prop)
 {
-	char buf[32];
-	char *current_property = buf;
-	
+	char buf [32];
+        
 	*buf = 0;
 	do {
-		current_property = prom_nextprop(node, current_property, buf);
-		if(!strcmp(current_property, prop))
+		prom_nextprop(node, buf, buf);
+		if(!strcmp(buf, prop))
 			return 1;
-	} while (*current_property);
+	} while (*buf);
 	return 0;
 }
-
+                                                                                           
 /* Set property 'pname' at node 'node' to value 'value' which has a length
  * of 'size' bytes.  Return the number of bytes the prom accepted.
  */
 int
 prom_setprop(int node, char *pname, char *value, int size)
 {
-	unsigned long flags;
-	int ret;
-
 	if(size == 0) return 0;
 	if((pname == 0) || (value == 0)) return 0;
 	
-	return (*prom_command)("setprop", P1275_ARG(1,P1275_ARG_IN_STRING)|
-					  P1275_ARG(2,P1275_ARG_OUT_BUF)|
+	return p1275_cmd ("setprop", P1275_ARG(1,P1275_ARG_IN_STRING)|
+					  P1275_ARG(2,P1275_ARG_IN_BUF)|
 					  P1275_INOUT(4, 1), 
 					  node, pname, value, P1275_SIZE(size));
 }
@@ -270,7 +294,7 @@ prom_inst2pkg(int inst)
 {
 	int node;
 	
-	node = (*prom_command)("instance-to-package", P1275_INOUT(1, 1), inst);
+	node = p1275_cmd ("instance-to-package", P1275_INOUT(1, 1), inst);
 	if (node == -1) return 0;
 	return node;
 }

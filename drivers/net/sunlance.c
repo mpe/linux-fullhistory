@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.52 1997/01/25 23:29:56 ecd Exp $
+/* $Id: sunlance.c,v 1.55 1997/02/07 09:41:07 ecd Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -477,6 +477,8 @@ static int lance_rx (struct device *dev)
 				return 0;
 			}
 	    
+			lp->stats.rx_bytes += len;
+
 			skb->dev = dev;
 			skb_reserve (skb, 2);		/* 16 byte align */
 			skb_put (skb, len);		/* make room */
@@ -803,7 +805,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 
 	len = (skblen <= ETH_ZLEN) ? ETH_ZLEN : skblen;
 	
-	lp->stats.tx_bytes+=len;
+	lp->stats.tx_bytes += len;
 	
 	entry = lp->tx_new & TX_RING_MOD_MASK;
 	ib->btx_ring [entry].length = (-len) | 0xf000;
@@ -958,7 +960,7 @@ int sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 
 	/* Get the IO region */
 	prom_apply_sbus_ranges (sdev->my_bus, &sdev->reg_addrs [0],
-				sdev->num_registers);
+				sdev->num_registers, sdev);
 	ll = sparc_alloc_io (sdev->reg_addrs [0].phys_addr, 0,
 			     sizeof (struct lance_regs), lancestr,
 			     sdev->reg_addrs[0].which_io, 0x0);
@@ -970,7 +972,8 @@ int sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 	if (lebuffer){
 		prom_apply_sbus_ranges (lebuffer->my_bus,
 					&lebuffer->reg_addrs [0],
-					lebuffer->num_registers);
+					lebuffer->num_registers,
+					lebuffer);
 		lp->init_block = (void *)
 			sparc_alloc_io (lebuffer->reg_addrs [0].phys_addr, 0,
 				sizeof (struct lance_init_block), "lebuffer", 

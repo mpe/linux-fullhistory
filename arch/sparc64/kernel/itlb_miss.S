@@ -1,4 +1,4 @@
-/* $Id: itlb_miss.S,v 1.4 1996/12/28 18:39:42 davem Exp $
+/* $Id: itlb_miss.S,v 1.5 1997/02/25 20:00:05 jj Exp $
  * itlb_miss.S:	Instruction TLB miss code, this is included directly
  *              into the trap table.
  *
@@ -45,7 +45,6 @@
 	 * processes startup when the TSB is cold.
 	 */
 
-itlb_miss:
 	/* I-cache line 0 */
 	ldxa		[%g0] ASI_IMMU, %g1		! grab Tag Target
 	srlx		%g1, 8, %g3			! put high vaddr bits in place

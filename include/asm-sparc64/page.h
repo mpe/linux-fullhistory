@@ -1,16 +1,16 @@
-/* $Id: page.h,v 1.4 1996/12/28 18:39:51 davem Exp $ */
+/* $Id: page.h,v 1.5 1997/02/25 20:00:36 jj Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
 
 #define PAGE_SHIFT   13
 
-#ifndef __ASSEMBLY__
+#ifdef __KERNEL__
 
-#define PAGE_SIZE    (1UL << PAGE_SHIFT)
+#define PAGE_SIZE    (1 << PAGE_SHIFT)
 #define PAGE_MASK    (~(PAGE_SIZE-1))
 
-#ifdef __KERNEL__
+#ifndef __ASSEMBLY__
 
 #define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
 #define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
@@ -73,12 +73,12 @@ typedef unsigned long iopgprot_t;
 
 #endif /* !(__ASSEMBLY__) */
 
-#define TASK_UNMAPPED_BASE	0x0000000070000000UL
+#define TASK_UNMAPPED_BASE	0x0000000070000000
 
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
-#define PAGE_OFFSET		0xFFFFF80000000000UL
+#define PAGE_OFFSET		0xFFFFF80000000000
 #define __pa(x)			((unsigned long)(x) - PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long) (x) + PAGE_OFFSET))
 #define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)

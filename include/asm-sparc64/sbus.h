@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.1 1996/12/26 14:22:36 davem Exp $
+/* $Id: sbus.h,v 1.2 1997/02/25 20:00:35 jj Exp $
  * sbus.h:  Defines for the Sun SBus.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -53,7 +53,7 @@ struct linux_sbus_device {
   char linux_name[64];                 /* Name used internally by Linux */
 
   struct linux_prom_registers reg_addrs[PROMREG_MAX];
-  int num_registers;
+  int num_registers, ranges_applied;
 
   struct linux_prom_irqs irqs[PROMINTR_MAX];
   int num_irqs;
@@ -93,6 +93,7 @@ extern struct linux_sbus *SBus_chain;
 
 /* Apply promlib probed SBUS ranges to registers. */
 extern void prom_apply_sbus_ranges(struct linux_sbus *sbus, 
-				   struct linux_prom_registers *sbusregs, int nregs);
+				   struct linux_prom_registers *sbusregs, int nregs, 
+				   struct linux_sbus_device *sdev);
 
 #endif /* !(_SPARC64_SBUS_H) */

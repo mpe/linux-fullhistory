@@ -139,11 +139,6 @@
  * the code
  * Loeke Brederveld <lbrederv@wavelan.com> from Lucent has given me
  * much needed informations on the Wavelan hardware.
- *
- * Yongguang Zhang <ygz@isl.hrl.hac.com> send me a patch for enabling
- * multicast in the old pcmcia driver. I tried to do the same (with
- * some minor changes) in this driver, but without any luck (I don't
- * know how to enable multicast in the chip...).
  */
 
 /* The original copyrights and litteratures mention others names and
@@ -173,6 +168,7 @@
  *	Robert Morris (rtm@das.harvard.edu),
  *	Jean Tourrilhes (jt@hplb.hpl.hp.com),
  *	Girish Welling (welling@paul.rutgers.edu),
+ *	Clark Woodworth <clark@hiway1.exit109.com>
  *	Yongguang Zhang <ygz@isl.hrl.hac.com>...
  *
  * Thanks go also to:
@@ -257,6 +253,13 @@
  * ----------------------------------
  *	- Update to wireless extensions changes
  *	- Silly bug in card initial configuration (psa_conf_status)
+ *
+ * Changes made for release in 2.1.27 :
+ * ----------------------------------
+ *	- Small bug in debug code (probably not the last one...)
+ *	- Remove extern kerword for wavelan_probe()
+ *	- Level threshold is now a standard wireless extension (version 4 !)
+ *	- modules parameters types (new module interface)
  *
  * Wishes & dreams :
  * ---------------
@@ -344,7 +347,7 @@
 /************************ CONSTANTS & MACROS ************************/
 
 #ifdef DEBUG_VERSION_SHOW
-static const char	*version	= "wavelan.c : v12 (wireless extensions) 1/12/96\n";
+static const char	*version	= "wavelan.c : v15 (wireless extensions) 12/2/97\n";
 #endif
 
 /* Watchdog temporisation */
@@ -608,13 +611,13 @@ static unsigned short	iobase[]	=
 };
 
 #ifdef	MODULE
-/* Name of the devices (memory allocation) */
-static char	devname[4][IFNAMSIZ] = { "", "", "", "" };
-
 /* Parameters set by insmod */
 static int	io[4]	= { 0, 0, 0, 0 };
 static int	irq[4]	= { 0, 0, 0, 0 };
-static char *	name[4] = { devname[0], devname[1], devname[2], devname[3] };
+static char	name[4][IFNAMSIZ] = { "", "", "", "" };
+MODULE_PARM(io, "1-4i");
+MODULE_PARM(irq, "1-4i");
+MODULE_PARM(name, "1-4c" __MODULE_STRING(IFNAMSIZ));
 #endif	/* MODULE */
 
 #endif	/* WAVELAN_P_H */
