@@ -899,6 +899,13 @@ S: Kattreinstr 38
 S: D-64295
 S: Germany
 
+N: Andi Kleen
+E: ak@muc.de
+D: network hacker, syncookies
+S: Schwalbenstr. 96
+S: 85551 Ottobrunn
+S: Germany
+
 N: Ian Kluft
 E: ikluft@thunder.sbay.org
 W: http://www.kluft.com/~ikluft/
@@ -933,13 +940,6 @@ D: The Linux Support Team Erlangen
 N: Andreas Koensgen
 E: ajk@iehk.rwth-aachen.de
 D: 6pack driver for AX.25
-
-N: Andi Kleen
-E: ak@muc.de
-D: network hacker, syncookies
-S: Schwalbenstr. 96
-S: 85551 Ottobrunn
-S: Germany
 
 N: Willy Konynenberg
 E: willy@xos.nl

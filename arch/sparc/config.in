@@ -187,3 +187,4 @@ comment 'Kernel hacking'
 
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 endmenu
+

@@ -241,13 +241,5 @@ extern __inline int hard_smp_processor_id(void)
 
 #define SMP_FROM_INT		1
 #define SMP_FROM_SYSCALL	2
-
-#else
-#ifndef ASSEMBLY
-extern inline int cpu_logical_map(int cpu)
-{
-	return cpu;
-}
-#endif
 #endif
 #endif

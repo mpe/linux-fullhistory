@@ -209,7 +209,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.0.18"
+#define AIC7XXX_C_VERSION  "5.0.20"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -1051,6 +1051,7 @@ static int aic7xxx_7895_irq_hack = -1;       /* This enables a hack to fix
                                               *   1 == Use the Channel B IRQ
                                               */
 static unsigned int aic7xxx_extended = 0;    /* extended translation on? */
+static unsigned int aic7xxx_no_reset = 0;    /* no resetting of SCSI bus */
 static int aic7xxx_irq_trigger = -1;         /*
                                               * -1 use board setting
                                               *  0 use edge triggered
@@ -1222,6 +1223,7 @@ aic7xxx_setup(char *s, int *dummy)
     unsigned int *flag;
   } options[] = {
     { "extended",    &aic7xxx_extended },
+    { "no_reset",    &aic7xxx_no_reset },
     { "irq_trigger", &aic7xxx_irq_trigger },
     { "verbose",     &aic7xxx_verbose },
     { "reverse_scan",&aic7xxx_reverse_scan },
@@ -2292,7 +2294,9 @@ aic7xxx_done(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
       }
 #define WIDE_INQUIRY_BITS 0x60
 #define SYNC_INQUIRY_BITS 0x10
-      if (buffer[7] & WIDE_INQUIRY_BITS)
+      if ( (buffer[7] & WIDE_INQUIRY_BITS) &&
+           (p->needwdtr_copy & (1<<tindex)) &&
+           (p->type & AHC_WIDE) )
       {
         p->needwdtr |= (1<<tindex);
         p->needwdtr_copy |= (1<<tindex);
@@ -3166,17 +3170,17 @@ aic7xxx_reset_current_bus(struct aic7xxx_host *p)
   scsiseq = aic_inb(p, SCSISEQ);
   aic_outb(p, scsiseq | SCSIRSTO, SCSISEQ);
 
-  mdelay(1);
+  mdelay(5);
 
   /* Turn off the bus reset. */
   aic_outb(p, scsiseq & ~SCSIRSTO, SCSISEQ);
 
-  aic7xxx_clear_intstat(p);
+  mdelay(2);
 
+  aic7xxx_clear_intstat(p);
   /* Re-enable reset interrupts. */
   aic_outb(p, aic_inb(p, SIMODE1) | ENSCSIRST, SIMODE1);
 
-  mdelay(1);
 }
 
 /*+F*************************************************************************
@@ -4803,17 +4807,8 @@ aic7xxx_handle_scsiint(struct aic7xxx_host *p, unsigned char intstat)
     Scsi_Cmnd *cmd;
 
     scbptr = aic_inb(p, WAITING_SCBH);
-    if (scbptr >= p->scb_data->maxhscbs)
-    {
-      scb_index = SCB_LIST_NULL;
-      printk(WARN_LEAD "Bad scbptr %d during SELTO.\n", 
-        p->host_no, -1, -1, -1, scbptr);
-    }
-    else
-    {
-      aic_outb(p, scbptr, SCBPTR);
-      scb_index = aic_inb(p, SCB_TAG);
-    }
+    aic_outb(p, scbptr, SCBPTR);
+    scb_index = aic_inb(p, SCB_TAG);
 
     scb = NULL;
     if (scb_index < p->scb_data->numscbs)
@@ -4879,6 +4874,7 @@ aic7xxx_handle_scsiint(struct aic7xxx_host *p, unsigned char intstat)
      * Restarting the sequencer will stop the selection and make sure devices
      * are allowed to reselect in.
      */
+    aic_outb(p, 0, SCSISEQ);
     aic_outb(p, aic_inb(p, SIMODE1) & ~ENREQINIT, SIMODE1);
     p->flags &= ~AHC_HANDLING_REQINITS;
     aic_outb(p, CLRSELTIMEO | CLRBUSFREE | CLRREQINIT, CLRSINT1);
@@ -6407,7 +6403,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
       scsi_conf |= p->scsi_id_b;
       aic_outb(p, scsi_conf | (term) ? TERM_ENB : 0, SCSICONF + 1);
     }
-    if (scsi_conf & RESET_SCSI)
+    if ( (scsi_conf & RESET_SCSI) && !(aic7xxx_no_reset) )
     {
       /* Reset SCSI bus B. */
       if (aic7xxx_verbose & VERBOSE_PROBE)
@@ -6443,7 +6439,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
   }
 
 
-  if (scsi_conf & RESET_SCSI)
+  if ( (scsi_conf & RESET_SCSI) && !(aic7xxx_no_reset) )
   {
     /* Reset SCSI bus A. */
     if (aic7xxx_verbose & VERBOSE_PROBE)
@@ -6543,7 +6539,12 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
       }
     }
 
-    aic_outb(p, target_settings, TARG_SCRATCH + i);
+    /*
+     * If we reset the bus, then clear the transfer ssettings, else leave
+     * them be
+     */
+    if ( (scsi_conf & RESET_SCSI) && !(aic7xxx_no_reset) )
+      aic_outb(p, target_settings, TARG_SCRATCH + i);
     if (p->needsdtr_copy & (0x01 << i))
     {
       short sxfr, j;
@@ -6581,8 +6582,16 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
   }
   p->needsdtr = p->needsdtr_copy;
   p->needwdtr = p->needwdtr_copy;
-  aic_outb(p, 0, ULTRA_ENB);
-  aic_outb(p, 0, ULTRA_ENB + 1);
+
+  /*
+   * If we reset the bus, then clear the transfer ssettings, else leave
+   * them be
+   */
+  if ( (scsi_conf & RESET_SCSI) && !(aic7xxx_no_reset) )
+  {
+    aic_outb(p, 0, ULTRA_ENB);
+    aic_outb(p, 0, ULTRA_ENB + 1);
+  }
 
   /*
    * Allocate enough hardware scbs to handle the maximum number of
@@ -7024,7 +7033,12 @@ load_seeprom (struct aic7xxx_host *p, unsigned char *sxfrctl1)
         target_settings &= ~0x70;
         p->ultraenb &= ~(0x01 << i);
       }
-      aic_outb(p, target_settings, TARG_SCRATCH + i);
+      /*
+       * Don't output these settings if we aren't resetting the bus, instead,
+       * leave the devices current settings in place
+       */
+      if (!(aic7xxx_no_reset))
+        aic_outb(p, target_settings, TARG_SCRATCH + i);
     }
     aic_outb(p, ~(p->discenable & 0xFF), DISC_DSB);
     aic_outb(p, ~((p->discenable >> 8) & 0xFF), DISC_DSB + 1);
@@ -9346,6 +9360,7 @@ aic7xxx_release(struct Scsi_Host *host)
   if(p->irq)
     free_irq(p->irq, p);
   release_region(p->base, MAXREG - MINREG);
+#ifdef MMAPIO
   if(p->maddr)
   {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,0)
@@ -9354,6 +9369,7 @@ aic7xxx_release(struct Scsi_Host *host)
     iounmap((void *) (((unsigned long) p->maddr) & PAGE_MASK));
 #endif
   }
+#endif /* MMAPIO */
   prev = NULL;
   next = first_aic7xxx;
   while(next != NULL)

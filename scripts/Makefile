@@ -17,6 +17,7 @@ kconfig.tk: ${TOPDIR}/Makefile ${TOPDIR}/arch/${ARCH}/config.in \
 	cat ${HEADER} >> ./kconfig.tk
 	./tkparse < ../arch/${ARCH}/config.in >> kconfig.tk
 	echo "set defaults \"arch/${ARCH}/defconfig\"" >> kconfig.tk
+	echo "set ARCH \"${ARCH}\"" >> kconfig.tk
 	cat ${TAIL} >> kconfig.tk
 	chmod 755 kconfig.tk
 

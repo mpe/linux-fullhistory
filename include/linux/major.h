@@ -8,8 +8,12 @@
 
 /* limits */
 
-#define MAX_CHRDEV 128
-#define MAX_BLKDEV 128
+/*
+ * Important: Don't change this to 256.  Major number 255 is and must be
+ * reserved for future expansion into a larger dev_t space.
+ */
+#define MAX_CHRDEV	255
+#define MAX_BLKDEV	255
 
 #define UNNAMED_MAJOR	0
 #define MEM_MAJOR	1
@@ -79,6 +83,10 @@
 
 #define SPECIALIX_NORMAL_MAJOR 75
 #define SPECIALIX_CALLOUT_MAJOR 76
+
+#define UNIX98_PTY_MASTER_MAJOR	128
+#define UNIX98_PTY_MAJOR_COUNT	8
+#define UNIX98_PTY_SLAVE_MAJOR	(UNIX98_PTY_MASTER_MAJOR+UNIX98_PTY_MAJOR_COUNT)
 
 /*
  * Tests for SCSI devices.

@@ -27,7 +27,8 @@ struct devpts_sb_info {
 	gid_t   gid;
 	umode_t mode;
 
-	struct inode *inodes[NR_PTYS];
+	unsigned int max_ptys;
+	struct inode **inodes;
 };
 
 #define DEVPTS_SUPER_MAGIC 0x1cd1

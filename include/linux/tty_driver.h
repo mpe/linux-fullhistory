@@ -139,6 +139,7 @@ struct tty_driver {
 	struct tty_struct **table;
 	struct termios **termios;
 	struct termios **termios_locked;
+	void *driver_state;	/* only used for the PTY driver */
 	
 	/*
 	 * Interface routines from the upper tty layer to the tty

@@ -240,15 +240,6 @@ endmenu
 fi
 fi
 
-source fs/Config.in
-
-if [ "$CONFIG_VME" = "n" ]; then
-  define_bool CONFIG_FB y
-  source drivers/video/Config.in
-fi
-
-source fs/nls/Config.in
-
 mainmenu_option next_comment
 comment 'Character devices'
  
@@ -343,6 +334,14 @@ if [ "$CONFIG_ATARI" = "y" ]; then
 fi
 endmenu
 
+source fs/Config.in
+
+if [ "$CONFIG_VME" = "n" ]; then
+  define_bool CONFIG_FB y
+  source drivers/video/Config.in
+fi
+
+source fs/nls/Config.in
 mainmenu_option next_comment
 comment 'Sound support'
 

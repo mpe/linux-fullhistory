@@ -168,16 +168,16 @@ if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
 fi
 endmenu
 
-source fs/Config.in
-
-source fs/nls/Config.in
-
 mainmenu_option next_comment
 comment 'Console drivers'
 source drivers/video/Config.in
 endmenu
 
 source drivers/char/Config.in
+
+source fs/Config.in
+
+source fs/nls/Config.in
 
 mainmenu_option next_comment
 comment 'Sound'

@@ -30,6 +30,7 @@
 #include <linux/mman.h>
 #include <linux/shm.h>
 #include <linux/poll.h>
+#include <linux/file.h>
 
 #include <asm/fpu.h>
 #include <asm/io.h>
@@ -137,13 +138,11 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 {
 	int error;
 	struct file *file;
+	struct inode *inode;
 	struct osf_dirent_callback buf;
 
 	error = -EBADF;
-	if (fd >= NR_OPEN)
-		goto out;
-
-	file = current->files->fd[fd];
+	file = fget(fd);
 	if (!file)
 		goto out;
 
@@ -154,17 +153,25 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
-		goto out;
+		goto out_putf;
 
+	/*
+	 * Get the inode's semaphore to prevent changes
+	 * to the directory while we read it.
+	 */
+	inode = file->f_dentry->d_inode;
+	down(&inode->i_sem);
 	error = file->f_op->readdir(file, &buf, osf_filldir);
+	up(&inode->i_sem);
 	if (error < 0)
-		goto out;
+		goto out_putf;
 
 	error = buf.error;
-	if (count == buf.count)
-		goto out;
+	if (count != buf.count)
+		error = count - buf.count;
 
-	error = count - buf.count;
+out_putf:
+	fput(file);
 out:
 	return error;
 }
@@ -248,13 +255,17 @@ asmlinkage unsigned long osf_mmap(unsigned long addr, unsigned long len,
 
 	lock_kernel();
 	if (flags & (_MAP_HASSEMAPHORE | _MAP_INHERIT | _MAP_UNALIGNED))
-		printk("%s: unimplemented OSF mmap flags %04lx\n", current->comm, flags);
+		printk("%s: unimplemented OSF mmap flags %04lx\n", 
+			current->comm, flags);
 	if (!(flags & MAP_ANONYMOUS)) {
-		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+		file = fget(fd);
+		if (!file)
 			goto out;
 	}
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	ret = do_mmap(file, addr, len, prot, flags, off);
+	if (file)
+		fput(file);
 out:
 	unlock_kernel();
 	return ret;
@@ -340,11 +351,13 @@ asmlinkage int osf_fstatfs(unsigned long fd, struct osf_statfs *buffer, unsigned
 
 	lock_kernel();
 	retval = -EBADF;
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+	file = fget(fd);
+	if (!file)
 		goto out;
 	dentry = file->f_dentry;
 	if (dentry)
 		retval = do_osf_statfs(dentry, buffer, bufsiz);
+	fput(file);
 out:
 	unlock_kernel();
 	return retval;
@@ -390,38 +403,41 @@ static int getdev(const char *name, int rdonly, struct dentry **dp)
 	if (IS_ERR(dentry))
 		return retval;
 
+	retval = -ENOTBLK;
 	inode = dentry->d_inode;
-	if (!S_ISBLK(inode->i_mode)) {
-		dput(dentry);
-		return -ENOTBLK;
-	}
-	if (IS_NODEV(inode)) {
-		dput(dentry);
-		return -EACCES;
-	}
+	if (!S_ISBLK(inode->i_mode))
+		goto out_dput;
+
+	retval = -EACCES;
+	if (IS_NODEV(inode))
+		goto out_dput;
+
+	retval = -ENXIO;
 	dev = inode->i_rdev;
-	if (MAJOR(dev) >= MAX_BLKDEV) {
-		dput(dentry);
-		return -ENXIO;
-	}
+	if (MAJOR(dev) >= MAX_BLKDEV)
+		goto out_dput;
+
+	retval = -ENODEV;
 	fops = get_blkfops(MAJOR(dev));
-	if (!fops) {
-		dput(dentry);
-		return -ENODEV;
-	}
+	if (!fops)
+		goto out_dput;
 	if (fops->open) {
 		struct file dummy;
 		memset(&dummy, 0, sizeof(dummy));
 		dummy.f_dentry = dentry;
 		dummy.f_mode = rdonly ? 1 : 3;
 		retval = fops->open(inode, &dummy);
-		if (retval) {
-			dput(dentry);
-			return retval;
-		}
+		if (retval)
+			goto out_dput;
 	}
 	*dp = dentry;
-	return 0;
+	retval = 0;
+out:
+	return retval;
+
+out_dput:
+	dput(dentry);
+	goto out;
 }
 
 static void putdev(struct dentry *dentry)
@@ -444,17 +460,19 @@ static int osf_ufs_mount(char *dirname, struct ufs_args *args, int flags)
 	struct dentry *dentry;
 	struct cdfs_args tmp;
 
-	retval = verify_area(VERIFY_READ, args, sizeof(*args));
-	if (retval)
-		return retval;
-	copy_from_user(&tmp, args, sizeof(tmp));
+	retval = -EFAULT;
+	if (copy_from_user(&tmp, args, sizeof(tmp)))
+		goto out;
+
 	retval = getdev(tmp.devname, 0, &dentry);
 	if (retval)
-		return retval;
-	retval = do_mount(dentry->d_inode->i_rdev, tmp.devname, dirname, "ext2", flags, NULL);
+		goto out;
+	retval = do_mount(dentry->d_inode->i_rdev, tmp.devname, dirname, 
+				"ext2", flags, NULL);
 	if (retval)
 		putdev(dentry);
 	dput(dentry);
+out:
 	return retval;
 }
 
@@ -464,17 +482,19 @@ static int osf_cdfs_mount(char *dirname, struct cdfs_args *args, int flags)
 	struct dentry * dentry;
 	struct cdfs_args tmp;
 
-	retval = verify_area(VERIFY_READ, args, sizeof(*args));
-	if (retval)
-		return retval;
-	copy_from_user(&tmp, args, sizeof(tmp));
+	retval = -EFAULT;
+	if (copy_from_user(&tmp, args, sizeof(tmp)))
+		goto out;
+
 	retval = getdev(tmp.devname, 1, &dentry);
 	if (retval)
-		return retval;
-	retval = do_mount(dentry->d_inode->i_rdev, tmp.devname, dirname, "iso9660", flags, NULL);
+		goto out;
+	retval = do_mount(dentry->d_inode->i_rdev, tmp.devname, dirname, 
+				"iso9660", flags, NULL);
 	if (retval)
 		putdev(dentry);
 	dput(dentry);
+out:
 	return retval;
 }
 
@@ -484,10 +504,8 @@ static int osf_procfs_mount(char *dirname, struct procfs_args *args, int flags)
 	int retval;
 	struct procfs_args tmp;
 
-	retval = verify_area(VERIFY_READ, args, sizeof(*args));
-	if (retval)
-		return retval;
-	copy_from_user(&tmp, args, sizeof(tmp));
+	if (copy_from_user(&tmp, args, sizeof(tmp)))
+		return -EFAULT;
 	dev = get_unnamed_dev();
 	if (!dev)
 		return -ENODEV;
@@ -533,21 +551,22 @@ asmlinkage int osf_utsname(char *name)
 {
 	int error;
 
-	lock_kernel();
-	error = verify_area(VERIFY_WRITE, name, 5 * 32);
-	if (error)
-		goto out;
-		
 	down(&uts_sem);
-	copy_to_user(name + 0, system_utsname.sysname, 32);
-	copy_to_user(name + 32, system_utsname.nodename, 32);
-	copy_to_user(name + 64, system_utsname.release, 32);
-	copy_to_user(name + 96, system_utsname.version, 32);
-	copy_to_user(name + 128, system_utsname.machine, 32);
-	up(&uts_sem);
-	
+	error = -EFAULT;
+	if (copy_to_user(name + 0, system_utsname.sysname, 32))
+		goto out;
+	if (copy_to_user(name + 32, system_utsname.nodename, 32))
+		goto out;
+	if (copy_to_user(name + 64, system_utsname.release, 32))
+		goto out;
+	if (copy_to_user(name + 96, system_utsname.version, 32))
+		goto out;
+	if (copy_to_user(name + 128, system_utsname.machine, 32))
+		goto out;
+
+	error = 0;
 out:
-	unlock_kernel();
+	up(&uts_sem);	
 	return error;
 }
 

@@ -531,15 +531,23 @@ we_slept:
 
 static void add_dquot_ref(kdev_t dev, short type)
 {
+	struct super_block *sb = get_super(dev);
 	struct file *filp;
 	struct inode *inode;
 
+	if (!sb || !sb->dq_op)
+		return;	/* nothing to do */
+
 	for (filp = inuse_filps; filp; filp = filp->f_next) {
-		inode = filp->f_dentry->d_inode;
-		if (!inode || inode->i_dev != dev)
+		if (!filp->f_dentry)
 			continue;
-		if (filp->f_mode & FMODE_WRITE && inode->i_sb && inode->i_sb->dq_op) {
-			inode->i_sb->dq_op->initialize(inode, type);
+		if (filp->f_dentry->d_sb != sb)
+			continue;
+		inode = filp->f_dentry->d_inode;
+		if (!inode)
+			continue;
+		if (filp->f_mode & FMODE_WRITE) {
+			sb->dq_op->initialize(inode, type);
 			inode->i_flags |= S_QUOTA;
 		}
 	}
@@ -547,16 +555,23 @@ static void add_dquot_ref(kdev_t dev, short type)
 
 static void reset_dquot_ptrs(kdev_t dev, short type)
 {
+	struct super_block *sb = get_super(dev);
 	struct file *filp;
 	struct inode *inode;
 
+	if (!sb || !sb->dq_op)
+		return;	/* nothing to do */
+
 	for (filp = inuse_filps; filp; filp = filp->f_next) {
+		if (!filp->f_dentry)
+			continue;
+		if (filp->f_dentry->d_sb != sb)
+			continue;
 		inode = filp->f_dentry->d_inode;
-		if (!inode || inode->i_dev != dev)
+		if (!inode)
 			continue;
 		if (IS_QUOTAINIT(inode)) {
-			if (inode->i_sb && inode->i_sb->dq_op)
-				inode->i_sb->dq_op->drop(inode);
+			sb->dq_op->drop(inode);
 			inode->i_dquot[type] = NODQUOT;
 			inode->i_flags &= ~S_QUOTA;
 		}

@@ -98,7 +98,7 @@ static int devpts_root_readdir(struct file *filp, void *dirent, filldir_t filldi
 		filp->f_pos = ++nr;
 		/* fall through */
 	default:
-		while ( nr < NR_PTYS+2 ) {
+		while ( nr < sbi->max_ptys ) {
 			int ptynr = nr - 2;
 			if ( sbi->inodes[ptynr] ) {
 				genptsname(numbuf, ptynr);

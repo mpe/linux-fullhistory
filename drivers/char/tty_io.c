@@ -65,6 +65,7 @@
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/tty.h>
+#include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
 #include <linux/devpts_fs.h>
 #include <linux/file.h>
@@ -107,6 +108,10 @@
 struct termios tty_std_termios;		/* for the benefit of tty drivers  */
 struct tty_driver *tty_drivers = NULL;	/* linked list of tty drivers */
 struct tty_ldisc ldiscs[NR_LDISCS];	/* line disc dispatch table	*/
+
+#ifdef CONFIG_UNIX98_PTYS
+extern struct tty_driver ptm_driver[];	/* Unix98 pty masters; for /dev/ptmx */
+#endif
 
 /*
  * redirect is the pseudo-tty that console output
@@ -1230,34 +1235,33 @@ retry_open:
                 device = c->device(c);
 		noctty = 1;
 	}
+#ifdef CONFIG_UNIX98_PTYS
 	if (device == PTMX_DEV) {
 		/* find a free pty. */
-		struct tty_driver *driver = tty_drivers;
-		int minor, line;
+		int major, minor, line;
+		struct tty_driver *driver;
 
-		/* find the pty driver */
-		for (driver=tty_drivers; driver; driver=driver->next)
-			if (driver->major == PTY_MASTER_MAJOR)
-				break;
-		if (!driver) return -ENODEV;
-
-		/* find a minor device that is not in use. */
-		for (minor=driver->minor_start;
-		     minor<driver->minor_start+driver->num;
-		     minor++) {
-			device = MKDEV(driver->major, minor);
-			retval = init_dev(device, &tty);
-			if (retval==0) break; /* success! */
+		/* find a device that is not in use. */
+		retval = -1;
+		for ( major = 0 ; major < UNIX98_NR_MAJORS ; major++ ) {
+			driver = &ptm_driver[major];
+			for (minor = driver->minor_start ;
+			     minor < driver->minor_start + driver->num ;
+			     minor++) {
+				device = MKDEV(driver->major, minor);
+				if (!init_dev(device, &tty)) goto ptmx_found; /* ok! */
+			}
 		}
-		if (minor==driver->minor_start+driver->num) /* no success */
-			return -EIO; /* no free ptys */
-		
+		return -EIO; /* no free ptys */
+	ptmx_found:
 		set_bit(TTY_PTY_LOCK, &tty->flags); /* LOCK THE SLAVE */
 		line = minor - driver->minor_start;
-		devpts_pty_new(line, MKDEV(driver->other->major, line+driver->other->minor_start));
+		devpts_pty_new(line + major*NR_PTYS, MKDEV(driver->other->major,
+				   line+driver->other->minor_start));
 		noctty = 1;
 		goto init_dev_done;
 	}
+#endif
 	
 	retval = init_dev(device, &tty);
 	if (retval)

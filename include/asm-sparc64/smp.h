@@ -94,13 +94,6 @@ extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
 #define PROC_CHANGE_PENALTY	20
 
 #else /* !(__SMP__) */
-#ifndef __ASSEMBLY__ 
-extern __inline__ int cpu_logical_map(int cpu)
-{
-	return cpu;
-}
-#endif 
-#endif /* !(__SMP__) */
 
 #define NO_PROC_ID		0xFF
 

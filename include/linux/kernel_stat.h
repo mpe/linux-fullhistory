@@ -2,7 +2,6 @@
 #define _LINUX_KERNEL_STAT_H
 
 #include <asm/irq.h>
-#include <asm/smp.h>
 #include <linux/smp.h>
 #include <linux/tasks.h>
 

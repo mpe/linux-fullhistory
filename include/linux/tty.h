@@ -16,7 +16,9 @@
 		   consoles 16 and higher (since it returns a short) */
 
 #ifdef __KERNEL__
+#include <linux/config.h>
 #include <linux/fs.h>
+#include <linux/major.h>
 #include <linux/termios.h>
 #include <linux/tqueue.h>
 #include <linux/tty_driver.h>
@@ -32,8 +34,24 @@
  * (Note: the *_driver.minor_start values 1, 64, 128, 192 are
  * hardcoded at present.)
  */
-#define NR_PTYS		256
+#define NR_PTYS		256	/* ptys/major */
 #define NR_LDISCS	16
+
+/*
+ * Unix98 PTY's can be defined as any multiple of NR_PTYS up to
+ * UNIX98_PTY_MAJOR_COUNT; this section defines what we need from the
+ * config options
+ */
+#ifdef CONFIG_UNIX98_PTYS
+# define UNIX98_NR_MAJORS ((CONFIG_UNIX98_PTY_COUNT+NR_PTYS-1)/NR_PTYS)
+# if UNIX98_NR_MAJORS <= 0
+#  undef CONFIG_UNIX98_PTYS
+# elif UNIX98_NR_MAJORS > UNIX98_PTY_MAJOR_COUNT
+#  error  Too many Unix98 ptys defined
+#  undef  UNIX98_NR_MAJORS
+#  define UNIX98_NR_MAJORS UNIX98_PTY_MAJOR_COUNT
+# endif
+#endif
 
 /*
  * These are set up by the setup-routine at boot-time:

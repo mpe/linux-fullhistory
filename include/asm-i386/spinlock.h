@@ -12,9 +12,9 @@
  *
  * Gcc-2.7.x has a nasty bug with empty initializers.
  */
-#if (__GNUC__ > 2) || (__GNUC_MINOR__ >= 8)
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
   typedef struct { } spinlock_t;
-  #define SPIN_LOCK_UNLOCKED { 0 }
+  #define SPIN_LOCK_UNLOCKED { }
 #else
   typedef struct { int gcc_is_buggy; } spinlock_t;
   #define SPIN_LOCK_UNLOCKED { 0 }
