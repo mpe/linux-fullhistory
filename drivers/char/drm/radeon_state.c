@@ -2788,8 +2788,10 @@ static int radeon_cp_cmdbuf( DRM_IOCTL_ARGS )
 		kbuf = drm_alloc(cmdbuf.bufsz, DRM_MEM_DRIVER);
 		if (kbuf == NULL)
 			return DRM_ERR(ENOMEM);
-		if (DRM_COPY_FROM_USER(kbuf, cmdbuf.buf, cmdbuf.bufsz))
+		if (DRM_COPY_FROM_USER(kbuf, cmdbuf.buf, cmdbuf.bufsz)) {
+			drm_free(kbuf, orig_bufsz, DRM_MEM_DRIVER);
 			return DRM_ERR(EFAULT);
+		}
 		cmdbuf.buf = kbuf;
 	}
 
