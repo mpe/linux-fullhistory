@@ -78,21 +78,18 @@ struct proc_dir_entry		*acpi_fan_dir;
 static int
 acpi_fan_read_state (struct seq_file *seq, void *offset)
 {
-	struct acpi_fan		*fan = (struct acpi_fan *) seq->private;
+	struct acpi_fan		*fan = seq->private;
 	int			state = 0;
 
 	ACPI_FUNCTION_TRACE("acpi_fan_read_state");
 
-	if (!fan)
-		goto end;
-
-	if (acpi_bus_get_power(fan->handle, &state))
-		goto end;
-
-	seq_printf(seq, "status:                  %s\n",
-		!state?"on":"off");
-
-end:
+	if (fan) {
+		if (acpi_bus_get_power(fan->handle, &state))
+			seq_printf(seq, "status:                  ERROR\n");
+		else
+			seq_printf(seq, "status:                  %s\n",
+				     !state?"on":"off");
+	}
 	return_VALUE(0);
 }
 
