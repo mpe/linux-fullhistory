@@ -594,9 +594,9 @@ static inline void __schedule_tail (void)
 	 * We have dropped all locks, and we must make sure that we
 	 * only mark the previous process as no longer having a CPU
 	 * after all other state has been seen by other CPU's. Thus
-	 * the memory barrier!
+	 * the write memory barrier!
 	 */
-	mb();
+	wmb();
 	sched_data->prev->has_cpu = 0;
 #endif /* __SMP__ */
 }

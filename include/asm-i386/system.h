@@ -165,8 +165,19 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
  * Force strict CPU ordering.
  * And yes, this is required on UP too when we're talking
  * to devices.
+ *
+ * For now, "wmb()" doesn't actually do anything, as all
+ * intel CPU's follow what intel calls a *Processor Order*,
+ * in which all writes are seen in the program order even
+ * outside the CPU.
+ *
+ * I expect future intel CPU's to have a weaker ordering,
+ * but I'd also expect them to finally get their act together
+ * and add some real memory barriers if so.
  */
 #define mb() 	__asm__ __volatile__ ("lock; addl $0,0(%%esp)": : :"memory")
+#define rmb()	mb()
+#define wmb()	__asm__ __volatile__ ("": : :"memory")
 
 /* interrupt control.. */
 #define __sti() __asm__ __volatile__ ("sti": : :"memory")

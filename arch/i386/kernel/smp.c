@@ -44,7 +44,6 @@
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
-#include <linux/io_trace.h>
 
 #ifdef CONFIG_MTRR
 #  include <asm/mtrr.h>
@@ -1225,12 +1224,10 @@ static inline unsigned int __get_ICR (void)
 	int count = 0;
 	unsigned int cfg;
 
-	IO_trace (IO_smp_wait_apic_start, 0, 0, 0, 0);
 	while (count < 1000)
 	{
 		cfg = slow_ICR;
 		if (!(cfg&(1<<12))) {
-			IO_trace (IO_smp_wait_apic_end, 0, 0, 0, 0);
 			if (count)
 				atomic_add(count, (atomic_t*)&ipi_count);
 			return cfg;
@@ -1299,9 +1296,6 @@ static inline void __send_IPI_shortcut(unsigned int shortcut, int vector)
 	/*
 	 * Send the IPI. The write to APIC_ICR fires this off.
 	 */
-
-	IO_trace (IO_smp_send_ipi, shortcut, vector, cfg, 0);
-	
 	apic_write(APIC_ICR, cfg);
 #if FORCE_APIC_SERIALIZATION
 	__restore_flags(flags);
@@ -1348,9 +1342,6 @@ static inline void send_IPI_single(int dest, int vector)
 	/*
 	 * Send the IPI. The write to APIC_ICR fires this off.
 	 */
-
-	IO_trace (IO_smp_send_ipi, dest, vector, cfg, 0);
-	
 	apic_write(APIC_ICR, cfg);
 #if FORCE_APIC_SERIALIZATION
 	__restore_flags(flags);
@@ -1389,8 +1380,6 @@ void smp_flush_tlb(void)
 	
 	__save_flags(flags);
 	__cli();
-
-	IO_trace (IO_smp_message, 0, 0, 0, 0);
 
 	send_IPI_allbutself(INVALIDATE_TLB_VECTOR);
 
@@ -1556,9 +1545,6 @@ void smp_apic_timer_interrupt(struct pt_regs * regs)
  */
 asmlinkage void smp_reschedule_interrupt(void)
 {
-	IO_trace (IO_smp_reschedule, current->need_resched,
-			 current->priority, current->counter, 0);
-
 	ack_APIC_irq();
 }
 
@@ -1567,9 +1553,6 @@ asmlinkage void smp_reschedule_interrupt(void)
  */
 asmlinkage void smp_invalidate_interrupt(void)
 {
-	IO_trace (IO_smp_tlbflush,
-		 atomic_read((atomic_t *)&smp_invalidate_needed), 0, 0, 0);
-
 	if (test_and_clear_bit(smp_processor_id(), &smp_invalidate_needed))
 		local_flush_tlb();
 
