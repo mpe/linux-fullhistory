@@ -1053,7 +1053,7 @@ static int do_swap_page(struct task_struct * tsk,
 
 	pte = mk_pte(page, vma->vm_page_prot);
 
-	set_bit(PG_swap_entry, &page->flags);
+	SetPageSwapEntry(page);
 
 	/*
 	 * Freeze the "shared"ness of the page, ie page_count + swap_count.

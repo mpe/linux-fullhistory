@@ -481,7 +481,7 @@ static void attempt_merge(request_queue_t * q,
 	elevator_merge_requests(&q->elevator, req, next);
 	req->bhtail->b_reqnext = next->bh;
 	req->bhtail = next->bhtail;
-	req->nr_sectors += next->nr_sectors;
+	req->nr_sectors = req->hard_nr_sectors += next->hard_nr_sectors;
 	next->rq_status = RQ_INACTIVE;
 	list_del(&next->queue);
 	wake_up (&wait_for_request);
@@ -685,7 +685,7 @@ static inline void __make_request(request_queue_t * q, int rw,
 				break;
 			req->bhtail->b_reqnext = bh;
 			req->bhtail = bh;
-		    	req->nr_sectors += count;
+		    	req->nr_sectors = req->hard_nr_sectors += count;
 			drive_stat_acct(req, count, 0);
 
 			elevator_merge_after(elevator, req, latency);
@@ -714,8 +714,8 @@ static inline void __make_request(request_queue_t * q, int rw,
 		    	req->bh = bh;
 		    	req->buffer = bh->b_data;
 		    	req->current_nr_sectors = count;
-		    	req->sector = sector;
-		    	req->nr_sectors += count;
+		    	req->sector = req->hard_sector = sector;
+		    	req->nr_sectors = req->hard_nr_sectors += count;
 			drive_stat_acct(req, count, 0);
 
 			elevator_merge_before(elevator, req, latency);
@@ -754,8 +754,8 @@ get_rq:
 /* fill up the request-info, and add it to the queue */
 	req->cmd = rw;
 	req->errors = 0;
-	req->sector = sector;
-	req->nr_sectors = count;
+	req->hard_sector = req->sector = sector;
+	req->hard_nr_sectors = req->nr_sectors = count;
 	req->current_nr_sectors = count;
 	req->nr_segments = 1; /* Always 1 for a new request. */
 	req->nr_hw_segments = 1; /* Always 1 for a new request. */
@@ -920,23 +920,21 @@ int end_that_request_first (struct request *req, int uptodate, char *name)
 	int nsect;
 
 	req->errors = 0;
-	if (!uptodate) {
+	if (!uptodate)
 		printk("end_request: I/O error, dev %s (%s), sector %lu\n",
 			kdevname(req->rq_dev), name, req->sector);
-		if ((bh = req->bh) != NULL) {
-			nsect = bh->b_size >> 9;
-			req->nr_sectors--;
-			req->nr_sectors &= ~(nsect - 1);
-			req->sector += nsect;
-			req->sector &= ~(nsect - 1);
-		}
-	}
 
 	if ((bh = req->bh) != NULL) {
+		nsect = bh->b_size >> 9;
 		req->bh = bh->b_reqnext;
 		bh->b_reqnext = NULL;
 		bh->b_end_io(bh, uptodate);
 		if ((bh = req->bh) != NULL) {
+			req->hard_sector += nsect;
+			req->hard_nr_sectors -= nsect;
+			req->sector = req->hard_sector;
+			req->nr_sectors = req->hard_nr_sectors;
+
 			req->current_nr_sectors = bh->b_size >> 9;
 			if (req->nr_sectors < req->current_nr_sectors) {
 				req->nr_sectors = req->current_nr_sectors;

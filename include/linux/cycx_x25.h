@@ -12,6 +12,7 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 2000/04/02	acme		dprintk and cycx_debug
 * 1999/01/03	acme		judicious use of data types
 * 1999/01/02	acme		#define X25_ACK_N3	0x4411
 * 1998/12/28	acme		cleanup: lot'o'things removed
@@ -29,6 +30,11 @@
 /* X.25 shared memory layout. */
 #define	X25_MBOX_OFFS	0x300	/* general mailbox block */
 #define	X25_RXMBOX_OFFS	0x340	/* receive mailbox */
+
+/* Debug */
+#define dprintk(level, format, a...) if (cycx_debug >= level) printk(format, ##a)
+
+extern unsigned int cycx_debug;
 
 /* Data Structures */
 /* X.25 Command Block. */

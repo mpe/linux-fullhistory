@@ -343,7 +343,7 @@ asmlinkage long sys_chdir(const char * filename)
 	if (IS_ERR(name))
 		goto out;
 
-	dentry = lookup_dentry(name, NULL, 0);
+	dentry = lookup_dentry(name, NULL, LOOKUP_FOLLOW);
 	putname(name);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
@@ -432,7 +432,7 @@ asmlinkage long sys_chroot(const char * filename)
 	if (IS_ERR(name))
 		goto out;
 
-	dentry = lookup_dentry(name, NULL, 0);
+	dentry = lookup_dentry(name, NULL, LOOKUP_FOLLOW);
 	putname(name);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
@@ -703,7 +703,7 @@ struct file *dentry_open(struct dentry *dentry, struct vfsmount *mnt, int flags)
 	if (f->f_mode & FMODE_WRITE) {
 		error = get_write_access(inode);
 		if (error)
-			goto cleanup_dentry;
+			goto cleanup_file;
 	}
 
 	f->f_dentry = dentry;
@@ -727,10 +727,11 @@ cleanup_all:
 		put_write_access(inode);
 	f->f_dentry = NULL;
 	f->f_vfsmnt = NULL;
+cleanup_file:
+	put_filp(f);
 cleanup_dentry:
 	dput(dentry);
 	mntput(mnt);
-	put_filp(f);
 	return ERR_PTR(error);
 }
 

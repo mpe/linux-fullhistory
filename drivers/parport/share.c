@@ -103,6 +103,19 @@ static void get_lowlevel_driver (void)
 	request_module ("parport_lowlevel");
 }
 
+/**
+ * parport_register_driver - register a parallel port device driver
+ * @drv: structure describing the driver
+ *
+ * This can be called by a parallel port device driver in order to
+ * receive notifications about ports being found in the system, as
+ * well as ports no longer available.
+ *
+ * The @drv structure is allocated by the caller and must not be
+ * deallocated until after calling parport_unregister_driver().
+ *
+ * Returns 0 on success.  Currently it always succeeds.
+ **/
 int parport_register_driver (struct parport_driver *drv)
 {
 	struct parport *port;
@@ -121,6 +134,23 @@ int parport_register_driver (struct parport_driver *drv)
 	return 0;
 }
 
+/**
+ * parport_unregister_driver - deregister a parallel port device driver
+ * @arg: structure describing the driver that was given to
+ *       parport_register_driver()
+ *
+ * This should be called by a parallel port device driver that has
+ * registered itself using parport_register_driver() when it is about
+ * to be unloaded.
+ *
+ * When it returns, the driver's attach() routine will no longer be
+ * called, and for each port that attach() was called for, the
+ * detach() routine will hae been called.
+ *
+ * If the caller's attach() function can block, it is their
+ * responsibility to make sure to wait for it to exit before
+ * unloading.
+ **/
 void parport_unregister_driver (struct parport_driver *arg)
 {
 	struct parport_driver *drv = driver_chain, *olddrv = NULL;
@@ -149,8 +179,17 @@ void parport_unregister_driver (struct parport_driver *arg)
 	}
 }
 
-/* Return a list of all the ports we know about.  This function shouldn't
- * really be used -- use parport_register_driver instead. */
+/**
+ * parport_enumerate - return a list of the system's parallel ports
+ *
+ * This returns the head of the list of parallel ports in the system.
+ * The structure that is returned describes the first port in the
+ * list, and its 'next' member points to the next port, or %NULL if
+ * it's the last port.
+ *
+ * If there are no parallel ports in the system, parport_enumerate()
+ * will return %NULL.
+ **/
 struct parport *parport_enumerate(void)
 {
 	if (!portlist)
@@ -159,6 +198,33 @@ struct parport *parport_enumerate(void)
 	return portlist;
 }
 
+/**
+ * parport_register_port - register a parallel port
+ * @base: base I/O address
+ * @irq: IRQ line
+ * @dma: DMA channel
+ * @ops: pointer to the port driver's port operations structure
+ *
+ * When a parallel port (lowlevel) driver finds a port that should be
+ * made available to parallel port device drivers, it should call
+ * parport_register_port().  The @base, @irq, and @dma parameters are
+ * for the convenience of port drivers, and for ports where they
+ * aren't meaningful needn't be set to anything special.  They can be
+ * altered afterwards by adjusting the relevant members of the parport
+ * structure that is returned and represents the port.  They should
+ * not be tampered with after calling parport_announce_port, however.
+ *
+ * If there are parallel port device drivers in the system that have
+ * registered themselves using parport_register_driver(), they are not
+ * told about the port at this time; that is done by
+ * parport_announce_port().
+ *
+ * The @ops structure is allocated by the caller, and must not be
+ * deallocated before calling parport_unregister_port().
+ *
+ * If there is no memory to allocate a new parport structure, this
+ * function will return %NULL.
+ **/
 struct parport *parport_register_port(unsigned long base, int irq, int dma,
 				      struct parport_operations *ops)
 {
@@ -243,6 +309,17 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	return tmp;
 }
 
+/**
+ * parport_announce_port - tell device drivers about a parallel port
+ * @port: parallel port to announce
+ *
+ * After a port driver has registered a parallel port with
+ * parport_register_port, and performed any necessary initialisation
+ * or adjustments, it should call parport_announce_port() in order to
+ * notify all device drivers that have called
+ * parport_register_driver().  Their attach() functions will be
+ * called, with @port as the parameter.
+ **/
 void parport_announce_port (struct parport *port)
 {
 #ifdef CONFIG_PARPORT_1284
@@ -286,6 +363,23 @@ static void free_port (struct parport *port)
 	kfree(port);
 }
 
+/**
+ * parport_unregister_port - deregister a parallel port
+ * @port: parallel port to deregister
+ *
+ * When a parallel port driver is forcibly unloaded, or a parallel
+ * port becomes inaccessible, the port driver must call this function
+ * in order to deal with device drivers that still want to use it.
+ *
+ * The parport structure associated with the port has its operations
+ * structure replaced with one containing 'null' operations that
+ * return errors or just don't do anything.
+ *
+ * Any drivers that have registered themselves using
+ * parport_register_driver() are notified that the port is no longer
+ * accessible by having their detach() routines called with @port as
+ * the parameter.
+ **/
 void parport_unregister_port(struct parport *port)
 {
 	struct parport *p;
@@ -320,10 +414,76 @@ void parport_unregister_port(struct parport *port)
 		free_port (port);
 }
 
-struct pardevice *parport_register_device(struct parport *port, const char *name,
-			  int (*pf)(void *), void (*kf)(void *),
-			  void (*irq_func)(int, void *, struct pt_regs *), 
-			  int flags, void *handle)
+/**
+ * parport_register_device - register a device on a parallel port
+ * @port: port to which the device is attached
+ * @name: a name to refer to the device
+ * @pf: preemption callback
+ * @kf: kick callback (wake-up)
+ * @irq_func: interrupt handler
+ * @flags: registration flags
+ * @handle: data for callback functions
+ *
+ * This function, called by parallel port device drivers, declares
+ * that a device is connected to a port, and tells the system all it
+ * needs to know.
+ *
+ * The @name is allocated by the caller and must not be deallocated
+ * until the caller calls @parport_unregister_device for that device.
+ *
+ * The preemption callback function, @pf, is called when this device
+ * driver has claimed access to the port but another device driver
+ * wants to use it.  It is given @handle as its parameter, and should
+ * return zero if it is willing for the system to release the port to
+ * another driver on its behalf.  If it wants to keep control of the
+ * port it should return non-zero, and no action will be taken.  It is
+ * good manners for the driver to try to release the port at the
+ * earliest opportunity after its preemption callback rejects a
+ * preemption attempt.  Note that if a preemption callback is happy
+ * for preemption to go ahead, there is no need to release the port;
+ * it is done automatically.  This function may not block, as it may
+ * be called from interrupt context.  If the device driver does not
+ * support preemption, @pf can be %NULL.
+ *
+ * The wake-up ("kick") callback function, @kf, is called when the
+ * port is available to be claimed for exclusive access; that is,
+ * parport_claim() is guaranteed to succeed when called from inside
+ * the wake-up callback function.  If the driver wants to claim the
+ * port it should do so; otherwise, it need not take any action.  This
+ * function may not block, as it may be called from interrupt context.
+ * If the device driver does not want to be explicitly invited to
+ * claim the port in this way, @kf can be %NULL.
+ *
+ * The interrupt handler, @irq_func, is called when an interrupt
+ * arrives from the parallel port.  Note that if a device driver wants
+ * to use interrupts it should use parport_enable_irq(), and can also
+ * check the irq member of the parport structure representing the
+ * port.
+ *
+ * The parallel port (lowlevel) driver is the one that has called
+ * request_irq() and whose interrupt handler is called first.  This
+ * handler does whatever needs to be done to the hardware to
+ * acknowledge the interrupt (for PC-style ports there is nothing
+ * special to be done).  It then tells the IEEE 1284 code about the
+ * interrupt, which may involve reacting to an IEEE 1284 event
+ * depending on the current IEEE 1284 phase.  After this, it calls
+ * @irq_func.  Needless to say, @irq_func will be called from
+ * interrupt context, and may not block.
+ *
+ * The %PARPORT_DEV_EXCL flag is for preventing port sharing, and so
+ * should only be used when sharing the port with other device drivers
+ * is impossible and would lead to incorrect behaviour.  Use it
+ * sparingly!  Normally, @flags will be zero.
+ *
+ * This function returns a pointer to a structure that represents the
+ * device on the port, or %NULL if there is not enough memory to
+ * allocate space for that structure.
+ **/
+struct pardevice *
+parport_register_device(struct parport *port, const char *name,
+			int (*pf)(void *), void (*kf)(void *),
+			void (*irq_func)(int, void *, struct pt_regs *), 
+			int flags, void *handle)
 {
 	struct pardevice *tmp;
 
@@ -420,6 +580,12 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 	return NULL;
 }
 
+/**
+ * parport_unregister_device - deregister a device on a parallel port
+ * @dev: pointer to structure representing device
+ *
+ * This undoes the effect of parport_register_device().
+ **/
 void parport_unregister_device(struct pardevice *dev)
 {
 	struct parport *port;
@@ -466,6 +632,16 @@ void parport_unregister_device(struct pardevice *dev)
 		free_port (port);
 }
 
+/**
+ * parport_claim - claim access to a parallel port device
+ * @dev: pointer to structure representing a device on the port
+ *
+ * This function will not block and so can be used from interrupt
+ * context.  If parport_claim() succeeds in claiming access to the
+ * port it returns zero and the port is available to use.  It may fail
+ * (returning non-zero) if the port is in use by another driver and
+ * that driver is not willing to relinquish control of the port.
+ **/
 int parport_claim(struct pardevice *dev)
 {
 	struct pardevice *oldcad;
@@ -567,6 +743,15 @@ blocked:
 	return -EAGAIN;
 }
 
+/**
+ * parport_claim_or_block - claim access to a parallel port device
+ * @dev: pointer to structure representing a device on the port
+ *
+ * This behaves like parport_claim(), but will block if necessary to
+ * wait for the port to be free.  A return value of 1 indicates that
+ * it slept; 0 means that it succeeded without needing to sleep.  A
+ * negative error code indicates failure.
+ **/
 int parport_claim_or_block(struct pardevice *dev)
 {
 	int r;
@@ -609,6 +794,14 @@ int parport_claim_or_block(struct pardevice *dev)
 	return r;
 }
 
+/**
+ * parport_release - give up access to a parallel port device
+ * @dev: pointer to structure representing parallel port device
+ *
+ * This function cannot fail, but it should not be called without the
+ * port claimed.  Similarly, if the port is already claimed you should
+ * not try claiming it again.
+ **/
 void parport_release(struct pardevice *dev)
 {
 	struct parport *port = dev->port->physport;

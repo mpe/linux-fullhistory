@@ -716,15 +716,16 @@ int remove_inode_dquot_ref(struct inode *inode, short type, struct list_head *to
 	}
 	inode->i_flags &= ~S_QUOTA;
 put_it:
-	if (dquot != NODQUOT)
+	if (dquot != NODQUOT) {
 		if (dqput_blocks(dquot)) {
 			if (dquot->dq_count != 1)
 				printk(KERN_WARNING "VFS: Adding dquot with dq_count %d to dispose list.\n", dquot->dq_count);
 			list_add(&dquot->dq_free, tofree_head);	/* As dquot must have currently users it can't be on the free list... */
 			return 1;
-		}
-		else
+		} else {
 			dqput(dquot);   /* We have guaranteed we won't block */
+		}
+	}
 	return 0;
 }
 

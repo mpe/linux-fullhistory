@@ -1,4 +1,4 @@
-BOOKS	:= wanbook.sgml z8530book.sgml mcabook.sgml videobook.sgml kernel-api.sgml
+BOOKS	:= wanbook.sgml z8530book.sgml mcabook.sgml videobook.sgml kernel-api.sgml parportbook.sgml
 
 PS	:=	$(patsubst %.sgml, %.ps, $(BOOKS))
 PDF	:=	$(patsubst %.sgml, %.pdf, $(BOOKS))
@@ -46,6 +46,10 @@ kernel-api.sgml: kernel-api.tmpl
 		$(TOPDIR)/kernel/ksyms.c \
 		$(TOPDIR)/net/netsyms.c \
 		<kernel-api.tmpl >kernel-api.sgml
+
+parportbook.sgml: parportbook.tmpl
+	$(TOPDIR)/scripts/docgen $(TOPDIR)/drivers/parport/init.c \
+		<parportbook.tmpl >parportbook.sgml
 
 DVI	:=	$(patsubst %.sgml, %.dvi, $(BOOKS))
 AUX	:=	$(patsubst %.sgml, %.aux, $(BOOKS))

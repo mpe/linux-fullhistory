@@ -63,6 +63,7 @@ struct rpc_task {
 	void			(*tk_callback)(struct rpc_task *);
 	void			(*tk_action)(struct rpc_task *);
 	void			(*tk_exit)(struct rpc_task *);
+	void			(*tk_release)(struct rpc_task *);
 	void *			tk_calldata;
 
 	/*

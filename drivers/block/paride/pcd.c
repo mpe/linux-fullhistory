@@ -765,7 +765,7 @@ static void do_pcd_request (request_queue_t * q)
 			pcd_unit = unit;
 		}
 	        pcd_sector = CURRENT->sector;
-	        pcd_count = CURRENT->nr_sectors;
+	        pcd_count = CURRENT->current_nr_sectors;
 	        pcd_buf = CURRENT->buffer;
 		pcd_busy = 1;
 	        ps_set_intr(do_pcd_read,0,0,nice); 

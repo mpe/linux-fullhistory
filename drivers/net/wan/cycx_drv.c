@@ -48,14 +48,8 @@
 * Aug  8, 1998	acme		Initial version.
 */
 
-#ifdef MODULE
-#ifdef MODVERSIONS
-#include <linux/modversions.h>
-#endif
+#include <linux/init.h>		/* __init */
 #include <linux/module.h>
-#else
-#define EXPORT_SYMBOL(function)
-#endif
 #include <linux/kernel.h>	/* printk(), and other useful stuff */
 #include <linux/stddef.h>	/* offsetof(), etc. */
 #include <linux/errno.h>	/* return codes */
@@ -66,12 +60,10 @@
 #include <asm/io.h>		/* read[wl], write[wl], ioremap, iounmap */
 
 #define	MOD_VERSION	0
-#define	MOD_RELEASE	5
+#define	MOD_RELEASE	6
 
-#ifdef MODULE
 MODULE_AUTHOR("Arnaldo Carvalho de Melo");
 MODULE_DESCRIPTION("Cyclom 2x Sync Card Driver");
-#endif
 
 /* Function Prototypes */
 /* Module entry points. These are called by the OS and must be public. */
@@ -129,20 +121,21 @@ static u32 cycx_2x_irq_options[]  = { 7, 3, 5, 9, 10, 11, 12, 15 };
  * Return:	0	Ok
  *		< 0	error.
  * Context:	process */
-#ifdef MODULE
-int init_module(void)
+
+int __init cycx_drv_init(void)
 {
 	printk(KERN_INFO "%s v%u.%u %s\n", fullname, MOD_VERSION, MOD_RELEASE,
 			 copyright);
 
 	return 0;
 }
+
 /* Module 'remove' entry point.
  * o release all remaining system resources */
-void cleanup_module(void)
+void cycx_drv_cleanup(void)
 {
 }
-#endif
+
 /* Kernel APIs */
 /* Set up adapter.
  * o detect adapter type
@@ -599,4 +592,8 @@ static u16 checksum(u8 *buf, u32 len)
 
 	return crc;
 }
+
+module_init(cycx_drv_init);
+module_exit(cycx_drv_cleanup);
+
 /* End */

@@ -299,6 +299,5 @@ nfs_flushd_exit(struct rpc_task *task)
 		cache->task = NULL;
 	spin_unlock(&nfs_flushd_lock);
 	wake_up(&cache->request_wait);
-	rpc_release_task(task);
 }
 

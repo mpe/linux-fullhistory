@@ -21,7 +21,7 @@ static int autofs4_readlink(struct dentry *dentry, char *buffer, int buflen)
 
 static struct dentry * autofs4_follow_link(struct dentry *dentry,
 					  struct dentry *base,
-					  struct vfsmount *mnt,
+					  struct vfsmount **mnt,
 					  unsigned int flags)
 {
 	struct autofs_info *ino = autofs4_dentry_ino(dentry);

@@ -180,7 +180,7 @@ typedef struct page {
 #define Page_Uptodate(page)	test_bit(PG_uptodate, &(page)->flags)
 #define SetPageUptodate(page)	set_bit(PG_uptodate, &(page)->flags)
 #define ClearPageUptodate(page)	clear_bit(PG_uptodate, &(page)->flags)
-#define Page_Dirty(page)	test_bit(PG_dirty, &(page)->flags)
+#define PageDirty(page)		test_bit(PG_dirty, &(page)->flags)
 #define SetPageDirty(page)	set_bit(PG_dirty, &(page)->flags)
 #define PageLocked(page)	test_bit(PG_locked, &(page)->flags)
 #define LockPage(page)		set_bit(PG_locked, &(page)->flags)
@@ -207,6 +207,9 @@ typedef struct page {
 #define PageClearSwapCache(page)	clear_bit(PG_swap_cache, &(page)->flags)
 
 #define PageTestandClearSwapCache(page)	test_and_clear_bit(PG_swap_cache, &(page)->flags)
+#define PageSwapEntry(page)		test_bit(PG_swap_entry, &(page)->flags)
+#define SetPageSwapEntry(page)		set_bit(PG_swap_entry, &(page)->flags)
+#define ClearPageSwapEntry(page)	clear_bit(PG_swap_entry, &(page)->flags)
 
 #ifdef CONFIG_HIGHMEM
 #define PageHighMem(page)		test_bit(PG_highmem, &(page)->flags)

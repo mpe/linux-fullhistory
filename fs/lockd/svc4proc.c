@@ -497,7 +497,6 @@ nlm4svc_callback_exit(struct rpc_task *task)
 		dprintk("lockd: %4d callback failed (errno = %d)\n",
 					task->tk_pid, -task->tk_status);
 	}
-	rpc_release_task(task);
 	nlm_release_host(call->a_host);
 	kfree(call);
 }

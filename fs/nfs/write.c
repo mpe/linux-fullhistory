@@ -161,7 +161,6 @@ static __inline__ void nfs_writedata_free(struct nfs_write_data *p)
 static void nfs_writedata_release(struct rpc_task *task)
 {
 	struct nfs_write_data	*wdata = (struct nfs_write_data *)task->tk_calldata;
-	rpc_release_task(task);
 	nfs_writedata_free(wdata);
 }
 
@@ -1159,6 +1158,8 @@ nfs_flush_one(struct list_head *head, struct file *file, int how)
 	/* Finalize the task. */
 	rpc_init_task(task, clnt, nfs_writeback_done, flags);
 	task->tk_calldata = data;
+	/* Release requests */
+	task->tk_release = nfs_writedata_release;
 
 #ifdef CONFIG_NFS_V3
 	msg.rpc_proc = (NFS_PROTO(inode)->version == 3) ? NFS3PROC_WRITE : NFSPROC_WRITE;
@@ -1307,7 +1308,6 @@ nfs_writeback_done(struct rpc_task *task)
 	next:
 		nfs_unlock_request(req);
 	}
-	nfs_writedata_release(task);
 }
 
 
@@ -1388,6 +1388,8 @@ nfs_commit_list(struct list_head *head, int how)
 
 	rpc_init_task(task, clnt, nfs_commit_done, flags);
 	task->tk_calldata = data;
+	/* Release requests */
+	task->tk_release = nfs_writedata_release;
 
 	msg.rpc_proc = NFS3PROC_COMMIT;
 	msg.rpc_argp = &data->args;
@@ -1456,7 +1458,6 @@ nfs_commit_done(struct rpc_task *task)
 	next:
 		nfs_unlock_request(req);
 	}
-	nfs_writedata_release(task);
 }
 #endif
 

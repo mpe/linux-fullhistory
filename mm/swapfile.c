@@ -207,7 +207,7 @@ swp_entry_t acquire_swap_entry(struct page *page)
 	unsigned long offset, type;
 	swp_entry_t entry;
 
-	if (!test_bit(PG_swap_entry, &page->flags))
+	if (!PageSwapEntry(page))
 		goto new_swap_entry;
 
 	/* We have the old entry in the page offset still */

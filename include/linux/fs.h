@@ -1015,7 +1015,7 @@ extern struct dentry * lookup_dentry(const char *, struct dentry *, unsigned int
 extern struct dentry * lookup_one(const char *, struct dentry *);
 extern struct dentry * __namei(const char *, unsigned int);
 
-#define namei(pathname)		__namei(pathname, 1)
+#define namei(pathname)		__namei(pathname, LOOKUP_FOLLOW)
 #define lnamei(pathname)	__namei(pathname, 0)
 
 extern void iput(struct inode *);

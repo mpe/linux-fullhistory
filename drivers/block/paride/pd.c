@@ -385,9 +385,62 @@ void pd_init_units( void )
 	}
 }
 
+static inline int pd_new_segment(request_queue_t *q, struct request *req, int max_segments)
+{
+	if (max_segments > cluster)
+		max_segments = cluster;
+
+	if (req->nr_segments < max_segments) {
+		req->nr_segments++;
+		q->elevator.nr_segments++;
+		return 1;
+	}
+	return 0;
+}
+
+static int pd_back_merge_fn(request_queue_t *q, struct request *req, 
+			    struct buffer_head *bh, int max_segments)
+{
+	if (req->bhtail->b_data + req->bhtail->b_size == bh->b_data)
+		return 1;
+	return pd_new_segment(q, req, max_segments);
+}
+
+static int pd_front_merge_fn(request_queue_t *q, struct request *req, 
+			     struct buffer_head *bh, int max_segments)
+{
+	if (bh->b_data + bh->b_size == req->bh->b_data)
+		return 1;
+	return pd_new_segment(q, req, max_segments);
+}
+
+static int pd_merge_requests_fn(request_queue_t *q, struct request *req,
+				struct request *next, int max_segments)
+{
+	int total_segments = req->nr_segments + next->nr_segments;
+	int same_segment;
+
+	if (max_segments > cluster)
+		max_segments = cluster;
+
+	same_segment = 0;
+	if (req->bhtail->b_data + req->bhtail->b_size == next->bh->b_data) {
+		total_segments--;
+		same_segment = 1;
+	}
+    
+	if (total_segments > max_segments)
+		return 0;
+
+	q->elevator.nr_segments -= same_segment;
+	req->nr_segments = total_segments;
+	return 1;
+}
+
 int pd_init (void)
 
 {       int i;
+	request_queue_t * q; 
 
 	if (disable) return -1;
         if (devfs_register_blkdev(MAJOR_NR,name,&pd_fops)) {
@@ -395,7 +448,11 @@ int pd_init (void)
                         name,major);
                 return -1;
         }
-	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
+	q = BLK_DEFAULT_QUEUE(MAJOR_NR);
+	blk_init_queue(q, DEVICE_REQUEST);
+	q->back_merge_fn = pd_back_merge_fn;
+	q->front_merge_fn = pd_front_merge_fn;
+	q->merge_requests_fn = pd_merge_requests_fn;
         read_ahead[MAJOR_NR] = 8;       /* 8 sector (4kB) read ahead */
         
 	pd_gendisk.major = major;
@@ -865,7 +922,6 @@ static int pd_ready( void )
 static void do_pd_request (request_queue_t * q)
 
 {       struct buffer_head * bh;
-	struct request * req;
 	int	unit;
 
         if (pd_busy) return;
@@ -876,12 +932,10 @@ repeat:
         pd_dev = MINOR(CURRENT->rq_dev);
 	pd_unit = unit = DEVICE_NR(CURRENT->rq_dev);
         pd_block = CURRENT->sector;
-        pd_count = CURRENT->nr_sectors;
+        pd_run = CURRENT->nr_sectors;
+        pd_count = CURRENT->current_nr_sectors;
 
 	bh = CURRENT->bh;
-	req = CURRENT;
-	if (bh->b_reqnext)
-		printk("%s: OUCH: b_reqnext != NULL\n",PD.name);
 
         if ((pd_dev >= PD_DEVS) || 
 	    ((pd_block+pd_count) > pd_hd[pd_dev].nr_sects)) {
@@ -890,14 +944,6 @@ repeat:
         }
 
 	pd_cmd = CURRENT->cmd;
-	pd_run = pd_count;
-        while ((pd_run <= cluster) &&
-	       (req = blkdev_next_request(req)) && 
-	       (pd_block+pd_run == req->sector) &&
-	       (pd_cmd == req->cmd) &&
-	       (pd_dev == MINOR(req->rq_dev)))
-			pd_run += req->nr_sectors;
-
 	pd_poffs = pd_hd[pd_dev].start_sect;
         pd_block += pd_poffs;
         pd_buf = CURRENT->buffer;
@@ -932,7 +978,7 @@ static void pd_next_buf( int unit )
 		printk("%s: OUCH: request list changed unexpectedly\n",
 			PD.name);
 
-	pd_count = CURRENT->nr_sectors;
+	pd_count = CURRENT->current_nr_sectors;
 	pd_buf = CURRENT->buffer;
 	spin_unlock_irqrestore(&io_request_lock,saved_flags);
 }

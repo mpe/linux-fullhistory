@@ -32,6 +32,7 @@ struct request {
 	int errors;
 	unsigned long sector;
 	unsigned long nr_sectors;
+	unsigned long hard_sector, hard_nr_sectors;
 	unsigned int nr_segments;
 	unsigned int nr_hw_segments;
 	unsigned long current_nr_sectors;

@@ -201,7 +201,6 @@ rpc_release_client(struct rpc_clnt *clnt)
 static void
 rpc_default_callback(struct rpc_task *task)
 {
-	rpc_release_task(task);
 }
 
 /*
@@ -266,9 +265,10 @@ int rpc_call_sync(struct rpc_clnt *clnt, struct rpc_message *msg, int flags)
 	/* Set up the call info struct and execute the task */
 	if (task->tk_status == 0)
 		status = rpc_execute(task);
-	else
+	else {
 		status = task->tk_status;
-	rpc_release_task(task);
+		rpc_release_task(task);
+	}
 
 	rpc_clnt_sigunmask(clnt, &oldset);		
 
@@ -347,10 +347,9 @@ rpc_call_setup(struct rpc_task *task, struct rpc_message *msg, int flags)
 void
 rpc_restart_call(struct rpc_task *task)
 {
-	if (task->tk_flags & RPC_TASK_KILLED) {
-		rpc_release_task(task);
+	if (RPC_ASSASSINATED(task))
 		return;
-	}
+
 	task->tk_action = call_reserve;
 	rpcproc_count(task->tk_client, task->tk_msg.rpc_proc)++;
 }

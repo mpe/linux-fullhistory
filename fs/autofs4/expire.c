@@ -47,8 +47,7 @@ static int is_tree_busy(struct dentry *root)
 	}
 
 	/* Mountpoints don't count */
-	if (root->d_mounts != root ||
-	    root->d_covers != root) {
+	if (d_mountpoint(root)) {
 		DPRINTK(("is_tree_busy: mountpoint\n"));
 		count--;
 	}
@@ -77,8 +76,7 @@ resume:
 		count += (dentry->d_count - 1);
 
 		/* Mountpoints don't count */
-		if (dentry->d_mounts != dentry ||
-		    dentry->d_covers != dentry) {
+		if (d_mountpoint(dentry)) {
 			DPRINTK(("is_tree_busy: mountpoint\n"));
 			adj++;
 		}

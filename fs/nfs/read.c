@@ -168,7 +168,6 @@ nfs_readpage_result(struct rpc_task *task)
 	UnlockPage(page);
 	page_cache_release(page);
 
-	rpc_release_task(task);
 	kfree(req);
 }
 

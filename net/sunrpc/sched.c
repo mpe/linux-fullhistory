@@ -508,6 +508,7 @@ __rpc_execute(struct rpc_task *task)
 		return 0;
 	}
 
+ restarted:
 	while (1) {
 		/*
 		 * Execute any pending callback.
@@ -586,10 +587,29 @@ __rpc_execute(struct rpc_task *task)
 		}
 	}
 
+	if (task->tk_exit) {
+		task->tk_exit(task);
+		/* If tk_action is non-null, the user wants us to restart */
+		if (task->tk_action) {
+			if (!RPC_ASSASSINATED(task)) {
+				/* Release RPC slot and buffer memory */
+				if (task->tk_rqstp)
+					xprt_release(task);
+				if (task->tk_buffer) {
+					rpc_free(task->tk_buffer);
+					task->tk_buffer = NULL;
+				}
+				goto restarted;
+			}
+			printk(KERN_ERR "RPC: dead task tries to walk away.\n");
+		}
+	}
+
 	dprintk("RPC: %4d exit() = %d\n", task->tk_pid, task->tk_status);
 	status = task->tk_status;
-	if (task->tk_exit)
-		task->tk_exit(task);
+
+	/* Release all resources associated with the task */
+	rpc_release_task(task);
 
 	return status;
 }
@@ -599,22 +619,32 @@ __rpc_execute(struct rpc_task *task)
  *
  * This may be called recursively if e.g. an async NFS task updates
  * the attributes and finds that dirty pages must be flushed.
+ * NOTE: Upon exit of this function the task is guaranteed to be
+ *	 released. In particular note that tk_release() will have
+ *	 been called, so your task memory may have been freed.
  */
 int
 rpc_execute(struct rpc_task *task)
 {
+	int status = -EIO;
 	if (rpc_inhibit) {
 		printk(KERN_INFO "RPC: execution inhibited!\n");
-		return -EIO;
+		goto out_release;
 	}
-	task->tk_flags |= RPC_TASK_RUNNING;
+
+	status = -EWOULDBLOCK;
 	if (task->tk_active) {
 		printk(KERN_ERR "RPC: active task was run twice!\n");
-		return -EWOULDBLOCK;
+		goto out_err;
 	}
+
 	task->tk_active = 1;
-	
+	task->tk_flags |= RPC_TASK_RUNNING;
 	return __rpc_execute(task);
+ out_release:
+	rpc_release_task(task);
+ out_err:
+	return status;
 }
 
 /*
@@ -758,6 +788,13 @@ rpc_init_task(struct rpc_task *task, struct rpc_clnt *clnt,
 				current->pid);
 }
 
+static void
+rpc_default_free_task(struct rpc_task *task)
+{
+	dprintk("RPC: %4d freeing task\n", task->tk_pid);
+	rpc_free(task);
+}
+
 /*
  * Create a new task for the specified client.  We have to
  * clean up after an allocation failure, as the client may
@@ -773,6 +810,9 @@ rpc_new_task(struct rpc_clnt *clnt, rpc_action callback, int flags)
 		goto cleanup;
 
 	rpc_init_task(task, clnt, callback, flags);
+
+	/* Replace tk_release */
+	task->tk_release = rpc_default_free_task;
 
 	dprintk("RPC: %4d allocated task\n", task->tk_pid);
 	task->tk_flags |= RPC_TASK_DYNAMIC;
@@ -849,12 +889,8 @@ rpc_release_task(struct rpc_task *task)
 #ifdef RPC_DEBUG
 	task->tk_magic = 0;
 #endif
-
-	if (task->tk_flags & RPC_TASK_DYNAMIC) {
-		dprintk("RPC: %4d freeing task\n", task->tk_pid);
-		task->tk_flags &= ~RPC_TASK_DYNAMIC;
-		rpc_free(task);
-	}
+	if (task->tk_release)
+		task->tk_release(task);
 }
 
 /*
@@ -886,7 +922,6 @@ rpc_child_exit(struct rpc_task *child)
 		__rpc_wake_up(parent);
 	}
 	spin_unlock_bh(&rpc_queue_lock);
-	rpc_release_task(child);
 }
 
 /*

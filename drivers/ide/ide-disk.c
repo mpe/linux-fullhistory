@@ -813,14 +813,18 @@ static void idedisk_setup (ide_drive_t *drive)
 	    (!drive->forced_geom) && drive->bios_sect && drive->bios_head)
 		drive->bios_cyl = (capacity / drive->bios_sect) / drive->bios_head;
 
-#if 0	/* done instead for entire identify block in arch/ide.h stuff */
-	/* fix byte-ordering of buffer size field */
-	id->buf_size = le16_to_cpu(id->buf_size);
-#endif
-	printk (KERN_INFO "%s: %.40s, %ldMB w/%dkB Cache, CHS=%d/%d/%d",
-			drive->name, id->model,
-			capacity/2048L, id->buf_size/2,
-			drive->bios_cyl, drive->bios_head, drive->bios_sect);
+	printk (KERN_INFO "%s: %ld sectors", drive->name, capacity);
+
+	/* Give size in megabytes (MB), not mebibytes (MiB). */
+	/* We compute the exact rounded value, avoiding overflow. */
+	printk (" (%ld MB)", (capacity - capacity/625 + 974)/1950);
+
+	/* Only print cache size when it was specified */
+	if (id->buf_size)
+		printk (" w/%dKiB Cache", id->buf_size/2);
+
+	printk(", CHS=%d/%d/%d", 
+	       drive->bios_cyl, drive->bios_head, drive->bios_sect);
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (drive->using_dma)
 		(void) HWIF(drive)->dmaproc(ide_dma_verbose, drive);

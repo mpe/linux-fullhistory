@@ -39,6 +39,7 @@
  * 990605	Made changes to code to support Firmware 1.22a, added
  *		fairly useless proc entry.
  * 990610	removed said useless proc code for the merge <alan>
+ * 000403	Removed last traces of proc code. <davej>
  */
 
 #include <linux/module.h>
@@ -539,38 +540,6 @@ static void debug_off(void)
 {
 	outb_p(0x00, current_readport + 2);
 	mode_debug = 0;
-}
-
-static int pcwd_proc_get_info(char *buffer, char **start, off_t offset,
-	int length, int inout)
-{
-	int len;
-	off_t begin = 0;
-	
-	revision = get_revision();
-	len = sprintf(buffer, "Version = " WD_VER "\n");
-	
-	if (revision == PCWD_REVISION_A)
-		len += sprintf(buffer + len, "Revision = A\n");
-	else
-		len += sprintf(buffer + len, "Revision = C\n");
-	
-	if (supports_temp) {
-		unsigned short c = inb(current_readport);
-		
-		len += sprintf(buffer + len, "Temp = Yes\n"
-			"Current temp = %d (Celsius)\n",
-			c);
-	} else
-		len += sprintf(buffer + len, "Temp = No\n");
-	
-	*start = buffer + (offset);
-	len -= offset;
-
-	if (len > length)
-		len = length;
-	
-	return len;
 }
 
 static struct file_operations pcwd_fops = {

@@ -12,6 +12,10 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 2000/04/02	acme		dprintk, cycx_debug
+* 				fixed the bug introduced in get_dev_by_lcn and
+* 				get_dev_by_dte_addr by the anonymous hacker
+* 				that converted this driver to softnet
 * 2000/01/08	acme		cleanup
 * 1999/10/27	acme		use ARPHRD_HWX25 so that the X.25 stack know
 *				that we have a X.25 stack implemented in
@@ -110,7 +114,7 @@ typedef struct x25_channel {
 	u32 idle_tmout;			/* sec, before disconnecting */
 	struct sk_buff *rx_skb;		/* receive socket buffer */
 	cycx_t *card;			/* -> owner */
-	struct enet_statistics ifstats;	/* interface statistics */
+	struct net_device_stats ifstats;/* interface statistics */
 } x25_channel_t;
 
 /* Function Prototypes */
@@ -178,13 +182,11 @@ static void hex_dump(char *msg, unsigned char *p, int len);
 static void x25_dump_config(TX25Config *conf);
 static void x25_dump_stats(TX25Stats *stats);
 static void x25_dump_devs(wan_device_t *wandev);
-#define dprintk(format, a...) printk(format, ##a)
 #else
 #define hex_dump(msg, p, len)
 #define x25_dump_config(conf)
 #define x25_dump_stats(stats)
 #define x25_dump_devs(wandev)
-#define dprintk(format, a...)
 #endif
 /* Public Functions */
 
@@ -846,7 +848,7 @@ static void connect_intr (cycx_t *card, TX25Cmd *cmd)
 	if (sizerem)
 		nibble_to_byte(d + (sizeloc >> 1), rem, sizerem, sizeloc & 1);
 
-	dprintk(KERN_INFO "connect_intr:lcn=%d, local=%s, remote=%s\n",
+	dprintk(1, KERN_INFO "connect_intr:lcn=%d, local=%s, remote=%s\n",
 			  lcn, loc, rem);
 
 	if ((dev = get_dev_by_dte_addr(wandev, rem)) == NULL) {
@@ -872,7 +874,7 @@ static void connect_confirm_intr (cycx_t *card, TX25Cmd *cmd)
 
 	cycx_peek(&card->hw, cmd->buf, &lcn, sizeof(lcn));
 	cycx_peek(&card->hw, cmd->buf + 1, &key, sizeof(key));
-	dprintk(KERN_INFO "%s: connect_confirm_intr:lcn=%d, key=%d\n",
+	dprintk(1, KERN_INFO "%s: connect_confirm_intr:lcn=%d, key=%d\n",
 			  card->devname, lcn, key);
 
 	if ((dev = get_dev_by_lcn(wandev, -key)) == NULL) {
@@ -897,7 +899,7 @@ static void disconnect_confirm_intr (cycx_t *card, TX25Cmd *cmd)
 	u8 lcn;
 
 	cycx_peek(&card->hw, cmd->buf, &lcn, sizeof(lcn));
-	dprintk(KERN_INFO "%s: disconnect_confirm_intr:lcn=%d\n",
+	dprintk(1, KERN_INFO "%s: disconnect_confirm_intr:lcn=%d\n",
 			  card->devname, lcn);
 	if ((dev = get_dev_by_lcn(wandev, lcn)) == NULL) {
 		/* Invalid channel, discard packet */
@@ -917,7 +919,7 @@ static void disconnect_intr (cycx_t *card, TX25Cmd *cmd)
 	u8 lcn;
 
 	cycx_peek(&card->hw, cmd->buf, &lcn, sizeof(lcn));
-	dprintk(KERN_INFO "disconnect_intr:lcn=%d\n", lcn);
+	dprintk(1, KERN_INFO "disconnect_intr:lcn=%d\n", lcn);
 
 	if ((dev = get_dev_by_lcn(wandev, lcn)) != NULL) {
 		x25_channel_t *chan = dev->priv;
@@ -1172,7 +1174,7 @@ static int x25_place_call (cycx_t *card, x25_channel_t *chan)
 	key = ffz(card->u.x.connection_keys);
 	set_bit(key, (void*)&card->u.x.connection_keys);
 	++key;
-	dprintk(KERN_INFO "%s:x25_place_call:key=%d\n", card->devname, key);
+	dprintk(1, KERN_INFO "%s:x25_place_call:key=%d\n", card->devname, key);
 	memset(d, 0, sizeof(d));
 	d[1] = key; /* user key */
 	d[2] = 0x10;
@@ -1259,6 +1261,8 @@ static struct net_device *get_dev_by_lcn (wan_device_t *wandev, s16 lcn)
 	x25_channel_t *chan;
 
 	while (dev) {
+		chan = (x25_channel_t*)dev->priv;
+
 		if (chan->lcn == lcn)
 			break;
 		dev = chan->slave;
@@ -1273,6 +1277,8 @@ static struct net_device *get_dev_by_dte_addr (wan_device_t *wandev, char *dte)
 	x25_channel_t *chan;
 
 	while (dev) {
+		chan = (x25_channel_t*)dev->priv;
+
 		if (!strcmp(chan->addr, dte))
 			break;
 		dev = chan->slave;
@@ -1296,7 +1302,7 @@ static int chan_connect (struct net_device *dev)
                 if (!chan->addr[0])
 			return -EINVAL; /* no destination address */
 
-                dprintk(KERN_INFO "%s: placing X.25 call to %s...\n",
+                dprintk(1, KERN_INFO "%s: placing X.25 call to %s...\n",
 				  card->devname, chan->addr);
 
                 if (x25_place_call(card, chan))

@@ -27,7 +27,6 @@ EXPORT_SYMBOL(rpc_allocate);
 EXPORT_SYMBOL(rpc_free);
 EXPORT_SYMBOL(rpc_execute);
 EXPORT_SYMBOL(rpc_init_task);
-EXPORT_SYMBOL(rpc_release_task);
 EXPORT_SYMBOL(rpc_sleep_on);
 EXPORT_SYMBOL(rpc_wake_up_next);
 EXPORT_SYMBOL(rpc_wake_up_task);

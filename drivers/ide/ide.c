@@ -1662,6 +1662,7 @@ void ide_init_drive_cmd (struct request *rq)
 	rq->cmd = IDE_DRIVE_CMD;
 	rq->sector = 0;
 	rq->nr_sectors = 0;
+	rq->nr_segments = 0;
 	rq->current_nr_sectors = 0;
 	rq->sem = NULL;
 	rq->bh = NULL;

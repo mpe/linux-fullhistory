@@ -517,24 +517,22 @@ nlmclnt_unlock_callback(struct rpc_task *task)
 	if (RPC_ASSASSINATED(task))
 		goto die;
 
-#if 0
-	/* FIXME: rpc_restart_call() is broken! */
 	if (task->tk_status < 0) {
 		dprintk("lockd: unlock failed (err = %d)\n", -task->tk_status);
-		nlm_rebind_host(req->a_host);
-		rpc_restart_call(task);
-		return;
+		goto retry_unlock;
 	}
-#endif
 	if (status != NLM_LCK_GRANTED
 	 && status != NLM_LCK_DENIED_GRACE_PERIOD) {
 		printk("lockd: unexpected unlock status: %d\n", status);
 	}
 
 die:
-	rpc_release_task(task);
 	nlm_release_host(req->a_host);
 	kfree(req);
+	return;
+ retry_unlock:
+	nlm_rebind_host(req->a_host);
+	rpc_restart_call(task);
 }
 
 /*
@@ -609,20 +607,14 @@ nlmclnt_cancel_callback(struct rpc_task *task)
 	}
 
 die:
-retry_cancel:
-	rpc_release_task(task);
 	nlm_release_host(req->a_host);
 	kfree(req);
 	return;
 
-#if 0
-	/* FIXME: rpc_restart_call() is broken */
 retry_cancel:
 	nlm_rebind_host(req->a_host);
 	rpc_restart_call(task);
 	rpc_delay(task, 30 * HZ);
-	return;
-#endif
 }
 
 /*

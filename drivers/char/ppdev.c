@@ -537,7 +537,7 @@ static int pp_release (struct inode * inode, struct file * file)
 	unsigned int minor = MINOR (inode->i_rdev);
 	struct pp_struct *pp = file->private_data;
 
-	if (pp->pdev->port->ieee1284.mode != IEEE1284_MODE_COMPAT) {
+	if (pp->pdev && pp->pdev->port->ieee1284.mode != IEEE1284_MODE_COMPAT) {
 		if (!(pp->flags & PP_CLAIMED)) {
 			parport_claim_or_block (pp->pdev);
 			pp->flags |= PP_CLAIMED;

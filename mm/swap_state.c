@@ -88,6 +88,9 @@ void __delete_from_swap_cache(struct page *page)
  */
 void delete_from_swap_cache_nolock(struct page *page)
 {
+	if (!PageLocked(page))
+		BUG();
+
 	if (block_flushpage(page, 0))
 		lru_cache_del(page);
 
@@ -122,8 +125,8 @@ void free_page_and_swap_cache(struct page *page)
 		}
 		UnlockPage(page);
 	}
-	
-	clear_bit(PG_swap_entry, &page->flags);
+
+	ClearPageSwapEntry(page);
 
 	__free_page(page);
 }
