@@ -164,17 +164,6 @@ out_bad:
 	return;
 }
 
-int new_page_tables(struct task_struct * tsk)
-{
-	pgd_t * new_pg;
-
-	if (!(new_pg = pgd_alloc()))
-		return -ENOMEM;
-	SET_PAGE_DIR(tsk, new_pg);
-	tsk->mm->pgd = new_pg;
-	return 0;
-}
-
 #define PTE_TABLE_MASK	((PTRS_PER_PTE-1) * sizeof(pte_t))
 #define PMD_TABLE_MASK	((PTRS_PER_PMD-1) * sizeof(pmd_t))
 

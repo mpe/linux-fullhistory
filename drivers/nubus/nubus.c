@@ -6,7 +6,6 @@
 #include <linux/ptrace.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/string.h>
 #include <linux/nubus.h>

@@ -903,11 +903,11 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 			       vendor, device);
 	}
 
-	str = 0;	/* to keep gcc shut... */
 	switch (status & PCI_STATUS_DEVSEL_MASK) {
 	      case PCI_STATUS_DEVSEL_FAST:   str = "Fast devsel.  "; break;
 	      case PCI_STATUS_DEVSEL_MEDIUM: str = "Medium devsel.  "; break;
 	      case PCI_STATUS_DEVSEL_SLOW:   str = "Slow devsel.  "; break;
+	      default:			     str = "Unknown devsel.  ";
 	}
 	if (len + strlen(str) > size) {
 		return -1;

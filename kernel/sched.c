@@ -624,8 +624,10 @@ signed long schedule_timeout(signed long timeout)
  */
 static inline void __schedule_tail(struct task_struct *prev)
 {
+	struct mm_struct *mm = NULL;
+	if (!current->active_mm) BUG();
 	if (!prev->mm) {
-		mmput(prev->active_mm);
+		mm = prev->active_mm;
 		prev->active_mm = NULL;
 	}
 #ifdef __SMP__
@@ -635,6 +637,16 @@ static inline void __schedule_tail(struct task_struct *prev)
 	wmb();
 	prev->has_cpu = 0;
 #endif /* __SMP__ */
+
+	reacquire_kernel_lock(current);
+	/*
+	 * mmput can sleep. As such, we have to wait until
+	 * after we released "prev" back into the scheduler
+	 * pool and until we have re-aquired out locking
+	 * state until we can actually do this.
+	 */
+	if (mm)
+		mmput(mm);
 }
 
 void schedule_tail(struct task_struct *prev)
@@ -659,6 +671,7 @@ asmlinkage void schedule(void)
 	struct list_head *tmp;
 	int this_cpu, c;
 
+	if (!current->active_mm) BUG();
 	if (tq_scheduler)
 		goto handle_tq_scheduler;
 tq_scheduler_back:
@@ -799,9 +812,9 @@ still_running_back:
 	get_mmu_context(next);
 	switch_to(prev, next, prev);
 	__schedule_tail(prev);
+	return;
 
 same_process:
-  
 	reacquire_kernel_lock(current);
 	return;
 

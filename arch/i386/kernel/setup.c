@@ -400,10 +400,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 	conswitchp = &dummy_con;
 #endif
 #endif
-	/*
-	 *	Check the bugs that will bite us before we get booting
-	 */
-
 }
 
 __initfunc(static int get_model_name(struct cpuinfo_x86 *c))

@@ -45,7 +45,6 @@
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/in.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/proc_fs.h>
 #include <asm/io.h>
@@ -881,100 +880,60 @@ void find_pio_EISA(struct get_conf *buf, Scsi_Host_Template * tpnt)
 
 void find_pio_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 {
-
 #ifndef CONFIG_PCI
-    printk(KERN_ERR "eata_pio: kernel PCI support not enabled. Skipping scan "
-           "for PCI HBAs.\n");
+    printk("eata_dma: kernel PCI support not enabled. Skipping scan for PCI HBAs.\n");
 #else
-    
-    u8 pci_bus, pci_device_fn;
-    static s16 pci_index = 0;   /* Device index to PCI BIOS calls */
-    u32 base = 0;
-    u16 com_adr;
-    u16 rev_device;
-    u32 error, i, x;
+    struct pci_dev *dev; 
+    u32 base, x;
 
-    if (pci_present()) {
-	for (i = 0; i <= MAXPCI; ++i, ++pci_index) {
-	    if (pcibios_find_device(PCI_VENDOR_ID_DPT, PCI_DEVICE_ID_DPT, 
-				    pci_index, &pci_bus, &pci_device_fn))
-		break;
+    for(dev=NULL; dev = pci_find_device(PCI_VENDOR_ID_DPT, PCI_DEVICE_ID_DPT, dev);) {
 	    DBG(DBG_PROBE && DBG_PCI, 
-		printk("eata_pio: HBA at bus %d, device %d,"
-		       " function %d, index %d\n", (s32)pci_bus, 
-		       (s32)((pci_device_fn & 0xf8) >> 3),
-		       (s32)(pci_device_fn & 7), pci_index));
-	    
-	    if (!(error = pcibios_read_config_word(pci_bus, pci_device_fn, 
-				       PCI_CLASS_DEVICE, &rev_device))) {
-		if (rev_device == PCI_CLASS_STORAGE_SCSI) {
-		    if (!(error = pcibios_read_config_word(pci_bus, 
-					       pci_device_fn, PCI_COMMAND, 
-					       (u16 *) & com_adr))) {
-			if (!((com_adr & PCI_COMMAND_IO) && 
-			      (com_adr & PCI_COMMAND_MASTER))) {
-			    printk("HBA has IO or BUSMASTER mode disabled\n");
-			    continue;
-			}
-		    } else
-			printk("eata_pio: error %x while reading "
-			       "PCI_COMMAND\n", error);
-		} else
-		    printk("DEVICECLASSID %x didn't match\n", rev_device);
-	    } else {
-		printk("eata_pio: error %x while reading PCI_CLASS_BASE\n", 
-		       error);
+		printk("eata_pio: find_PCI, HBA at %s\n", dev->name));
+	    pci_set_master(dev);
+	    base = dev->base_address[0];
+	    if (!(base & PCI_BASE_ADDRESS_SPACE_IO)) {
+		printk("eata_pio: invalid base address of device %s\n", dev->name);
 		continue;
 	    }
-	    
-	    if (!(error = pcibios_read_config_dword(pci_bus, pci_device_fn,
-				       PCI_BASE_ADDRESS_0, (int *) &base))){
-		
-		/* Check if the address is valid */
-		if (base & 0x01) {
-		    base &= 0xfffffffe;
-		    /* EISA tag there ? */
-		    if ((inb(base) == 0x12) && (inb(base + 1) == 0x14))
-			continue;   /* Jep, it's forced, so move on  */
-		    base += 0x10;   /* Now, THIS is the real address */
-		    if (base != 0x1f8) {
-			/* We didn't find it in the primary search */
-			if (get_pio_conf_PIO(base, buf) == TRUE) {
-			    if (buf->FORCADR)   /* If the address is forced */
-				continue;       /* we'll find it later      */
-			    
-			    /* OK. We made it till here, so we can go now  
-			     * and register it. We  only have to check and 
-			     * eventually remove it from the EISA and ISA list 
-			     */
-			    
-			    register_pio_HBA(base, buf, tpnt);
-			    
-			    if (base < 0x1000) {
-				for (x = 0; x < MAXISA; ++x) {
-				    if (ISAbases[x] == base) {
-					ISAbases[x] = 0;
-					break;
-				    }
-				}
-			    } else if ((base & 0x0fff) == 0x0c88) {
-				x = (base >> 12) & 0x0f;
-				EISAbases[x] = 0;
+	    base &= PCI_BASE_ADDRESS_IO_MASK;
+            /* EISA tag there ? */
+	    if ((inb(base) == 0x12) && (inb(base + 1) == 0x14))
+		continue;   /* Jep, it's forced, so move on  */
+	    base += 0x10;   /* Now, THIS is the real address */
+	    if (base != 0x1f8) {
+		/* We didn't find it in the primary search */
+		if (get_pio_conf_PIO(base, buf) == TRUE) {
+		    if (buf->FORCADR)   /* If the address is forced */
+			continue;       /* we'll find it later      */
+		    
+		    /* OK. We made it till here, so we can go now  
+		     * and register it. We  only have to check and 
+		     * eventually remove it from the EISA and ISA list 
+		     */
+		    
+		    register_pio_HBA(base, buf, tpnt);
+		    
+		    if (base < 0x1000) {
+			for (x = 0; x < MAXISA; ++x) {
+			    if (ISAbases[x] == base) {
+				ISAbases[x] = 0;
+				break;
 			    }
-			    continue;  /* break; */
 			}
+		    } else if ((base & 0x0fff) == 0x0c88) {
+			x = (base >> 12) & 0x0f;
+			EISAbases[x] = 0;
 		    }
+		} 
+#if CHECK_BLINK
+		else if (check_blink_state(base) == TRUE) {
+		    printk("eata_pio: HBA is in BLINK state.\n"
+			   "Consult your HBAs manual to correct this.\n");
 		}
-	    } else
-		printk("eata_pio: error %x while reading "
-		       "PCI_BASE_ADDRESS_0\n", error);
+#endif
+	    }
 	}
-    } else
-	printk("eata_pio: No BIOS32 extensions present. This driver release "
-	       "still depends on it.\n"
-	       "          Skipping scan for PCI HBAs.\n");
 #endif /* #ifndef CONFIG_PCI */
-    return;
 }
 
 

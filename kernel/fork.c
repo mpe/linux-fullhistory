@@ -338,6 +338,7 @@ void mm_release(void)
 void mmput(struct mm_struct *mm)
 {
 	if (atomic_dec_and_test(&mm->count)) {
+		if (mm == &init_mm) BUG();
 		release_segments(mm);
 		exit_mmap(mm);
 		free_page_tables(mm);
@@ -354,24 +355,21 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	tsk->cmin_flt = tsk->cmaj_flt = 0;
 	tsk->nswap = tsk->cnswap = 0;
 
+	tsk->mm = NULL;
+	tsk->active_mm = NULL;
+
 	/*
 	 * Are we cloning a kernel thread?
+	 *
+	 * We need to steal a active VM for that..
 	 */
 	mm = current->mm;
-	if (!mm) {
-		tsk->active_mm = NULL;
+	if (!mm)
 		return 0;
-	}
 
 	if (clone_flags & CLONE_VM) {
 		mmget(mm);
-		/*
-		 * No need to worry about the LDT descriptor for the
-		 * cloned task, LDTs get magically loaded at
-		 * __switch_to time if necessary.
-		 */
-		SET_PAGE_DIR(tsk, mm->pgd);
-		return 0;
+		goto good_mm;
 	}
 
 	retval = -ENOMEM;
@@ -396,16 +394,17 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	up(&current->mm->mmap_sem);
 	if (retval)
 		goto free_pt;
+
+good_mm:
+	tsk->mm = mm;
+	tsk->active_mm = mm;
 	SET_PAGE_DIR(tsk, mm->pgd);
 	return 0;
 
 free_mm:
-	tsk->mm = NULL;
-	release_segments(mm);
 	kmem_cache_free(mm_cachep, mm);
 	return retval;
 free_pt:
-	tsk->mm = NULL;
 	mmput(mm);
 fail_nomem:
 	return retval;

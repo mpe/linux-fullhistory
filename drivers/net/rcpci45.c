@@ -63,7 +63,6 @@ static char *version =
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/timer.h>
 #include <asm/irq.h>            /* For NR_IRQS only. */
 #include <asm/bitops.h>
@@ -211,9 +210,8 @@ static int RCscan(struct device *dev)
         int scan_status;
         int board_index = 0;
         unsigned char pci_irq_line;
-        unsigned short pci_command, vendor, device, class;
         unsigned int pci_ioaddr;
-
+	struct pci_dev *pdev;
 
         scan_status =  
             (pcibios_find_device (RC_PCI45_VENDOR_ID, 
@@ -224,75 +222,22 @@ static int RCscan(struct device *dev)
 #ifdef RCDEBUG
         printk("rc scan_status = 0x%X\n", scan_status);
 #endif
-        if (scan_status != PCIBIOS_SUCCESSFUL)
+        if (scan_status != PCIBIOS_SUCCESSFUL ||
+	    !((pdev = pci_find_slot(pci_bus, pci_device_fn))))
             break;
-        pcibios_read_config_word(pci_bus, 
-                                 pci_device_fn, 
-                                 PCI_VENDOR_ID, &vendor);
-        pcibios_read_config_word(pci_bus, 
-                                 pci_device_fn,
-                                 PCI_DEVICE_ID, &device);
-        pcibios_read_config_byte(pci_bus, 
-                                 pci_device_fn,
-                                 PCI_INTERRUPT_LINE, &pci_irq_line);
-        pcibios_read_config_dword(pci_bus, 
-                                  pci_device_fn,
-                                  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-        pcibios_read_config_word(pci_bus, 
-                                 pci_device_fn,
-                                 PCI_CLASS_DEVICE, &class);
-
-        pci_ioaddr &= ~0xf;
+	pci_irq_line = pdev->irq;
+	pci_ioaddr = pdev->base_address[0];
+        pci_ioaddr &= PCI_BASE_ADDRESS_MEM_MASK;
 
 #ifdef RCDEBUG
         printk("rc: Found RedCreek PCI adapter\n");
-        printk("rc: pci class = 0x%x  0x%x \n", class, class>>8);
         printk("rc: pci_bus = %d,  pci_device_fn = %d\n", pci_bus, pci_device_fn);
         printk("rc: pci_irq_line = 0x%x \n", pci_irq_line);
         printk("rc: pci_ioaddr = 0x%x\n", pci_ioaddr);
 #endif
 
-        if (check_region(pci_ioaddr, 2*32768))
-        {
-            printk("rc: check_region failed\n");
-            continue;
-        }
-#ifdef RCDEBUG
-        else
-        {
-            printk("rc: check_region passed\n");
-        }
-#endif
-           
-        /*
-         * Get and check the bus-master and latency values.
-         * Some PCI BIOSes fail to set the master-enable bit.
-         */
+	pci_set_master(pdev);
 
-        pcibios_read_config_word(pci_bus, 
-                                 pci_device_fn,
-                                 PCI_COMMAND, 
-                                 &pci_command);
-        if ( ! (pci_command & PCI_COMMAND_MASTER)) {
-            printk("rc: PCI Master Bit has not been set!\n");
-                        
-            pci_command |= PCI_COMMAND_MASTER;
-            pcibios_write_config_word(pci_bus, 
-                                      pci_device_fn,
-                                      PCI_COMMAND, 
-                                      pci_command);
-        }
-        if ( ! (pci_command & PCI_COMMAND_MEMORY)) {
-            /*
-             * If the BIOS did not set the memory enable bit, what else
-             * did it not initialize?  Skip this adapter.
-             */
-            printk("rc: Adapter %d, PCI Memory Bit has not been set!\n",
-                   cards_found);
-            printk("rc: Bios problem? \n");
-            continue;
-        }
-                
         if (!RCfound_device(dev, pci_ioaddr, pci_irq_line,
                           pci_bus, pci_device_fn,
                           board_index++, cards_found))

@@ -1969,7 +1969,6 @@ asmlinkage int sys_bdflush(int func, long data)
 		goto out;
 
 	if (func == 1) {
-#if 0
 		struct mm_struct *user_mm;
 		/*
 		 * bdflush will spend all of it's time in kernel-space,
@@ -1980,15 +1979,13 @@ asmlinkage int sys_bdflush(int func, long data)
 		user_mm = current->mm;
 		mmget(user_mm);
 		current->mm = NULL;
-#endif
+		/* active_mm is still 'user_mm' */
 
 		error = sync_old_buffers();
 
-#if 0
 		current->mm = user_mm;
 		mmput(current->active_mm);
 		current->active_mm = user_mm;
-#endif
 
 		goto out;
 	}

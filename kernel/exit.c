@@ -235,14 +235,8 @@ static inline void __exit_mm(struct task_struct * tsk)
 
 	/* Lazy TLB process? */
 	if (!mm) {
-		struct mm_struct *active_mm = tsk->active_mm;
-		mmget(&init_mm);
-		tsk->active_mm = &init_mm;
-		tsk->swappable = 0;
-		SET_PAGE_DIR(tsk, swapper_pg_dir);		
-		if (active_mm)
-			mmput(active_mm);
-		return;
+		mm = tsk->active_mm;
+		goto drop_mm;
 	}
 
 	/* Set us up to use the kernel mm state */
@@ -253,8 +247,10 @@ static inline void __exit_mm(struct task_struct * tsk)
 
 	/* This turns us into a task with no MM */
 	tsk->mm = NULL;
-	tsk->active_mm = &init_mm;
+
+drop_mm:
 	mmget(&init_mm);
+	tsk->active_mm = &init_mm;
 	tsk->swappable = 0;
 	SET_PAGE_DIR(tsk, swapper_pg_dir);
 	mmput(mm);

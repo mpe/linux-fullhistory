@@ -352,7 +352,7 @@ static int swap_out(unsigned int priority, int gfp_mask)
 		read_lock(&tasklist_lock);
 		p = init_task.next_task;
 		for (; p != &init_task; p = p->next_task) {
-			if (!p->swappable)
+			if (!p->swappable || !p->mm)
 				continue;
 	 		if (p->mm->rss <= 0)
 				continue;

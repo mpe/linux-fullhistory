@@ -306,7 +306,6 @@ extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,
 
 extern void free_page_tables(struct mm_struct * mm);
 extern void clear_page_tables(struct mm_struct *, unsigned long, int);
-extern int new_page_tables(struct task_struct * tsk);
 
 extern void zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long size);
 extern int copy_page_range(struct mm_struct *dst, struct mm_struct *src, struct vm_area_struct *vma);

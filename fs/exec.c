@@ -366,18 +366,24 @@ end_readexec:
 static int exec_mmap(void)
 {
 	struct mm_struct * mm, * old_mm;
-	int retval;
 
-	if (current->mm && atomic_read(&current->mm->count) == 1) {
-		flush_cache_mm(current->mm);
+	/*
+	 * NOTE: This works even if "old_mm" is a lazy
+	 * memory state. If count == 1 at this point,
+	 * we know that we're the only holders of that
+	 * lazy mm, so we can turn it into a real mm.
+	 */
+	old_mm = current->active_mm;
+	if (atomic_read(&old_mm->count) == 1) {
+		current->mm = old_mm;
+		flush_cache_mm(old_mm);
 		mm_release();
-		release_segments(current->mm);
-		exit_mmap(current->mm);
-		flush_tlb_mm(current->mm);
+		release_segments(old_mm);
+		exit_mmap(old_mm);
+		flush_tlb_mm(old_mm);
 		return 0;
 	}
 
-	retval = -ENOMEM;
 	mm = mm_alloc();
 	if (!mm)
 		goto fail_nomem;
@@ -385,36 +391,22 @@ static int exec_mmap(void)
 	mm->cpu_vm_mask = (1UL << smp_processor_id());
 	mm->total_vm = 0;
 	mm->rss = 0;
+	mm->pgd = pgd_alloc();
+	if (!mm->pgd)
+		goto fail_free;
 
-	/*
-	 * Make sure we have a private LDT if needed ...
-	 */
-	if (current->mm)
-		copy_segments(current, mm);
-
-	old_mm = current->mm;
 	current->mm = mm;
-	retval = new_page_tables(current);
-	if (retval)
-		goto fail_restore;
+	current->active_mm = mm;
+	SET_PAGE_DIR(current, mm->pgd);
 	activate_context(current);
 	mm_release();
-	if (old_mm)
-		mmput(old_mm);
+	mmput(old_mm);
 	return 0;
 
-	/*
-	 * Failure ... restore the prior mm_struct.
-	 */
-fail_restore:
-	current->mm = old_mm;
-	/* restore the ldt for this task */
-	copy_segments(current, NULL);
-	release_segments(mm);
+fail_free:
 	kmem_cache_free(mm_cachep, mm);
-
 fail_nomem:
-	return retval;
+	return -ENOMEM;
 }
 
 /*
