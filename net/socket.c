@@ -187,17 +187,6 @@ static int get_fd(struct inode *inode)
 
 
 /*
- * Reverses the action of get_fd() by releasing the file. it closes
- * the descriptor, but makes sure it does nothing more. Called when
- * an incomplete socket must be closed, along with sock_release().
- */
- 
-static inline void toss_fd(int fd)
-{
-	sys_close(fd);		/* the count protects us from iput */
-}
-
-/*
  *	Go from an inode to its socket slot.
  */
 
@@ -743,7 +732,11 @@ static int sock_socketpair(int family, int type, int protocol, unsigned long uso
 
 	er=verify_area(VERIFY_WRITE, usockvec, 2 * sizeof(int));
 	if(er)
+	{
+		sys_close(fd1);
+		sys_close(fd2);
 	 	return er;
+	}
 	put_fs_long(fd1, &usockvec[0]);
 	put_fs_long(fd2, &usockvec[1]);
 

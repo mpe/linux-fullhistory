@@ -132,6 +132,10 @@ SCSI_OBJS := $(SCSI_OBJS) ultrastor.o
 SCSI_SRCS := $(SCSI_SRCS) ultrastor.c
 endif
 
+ifdef CONFIG_SCSI_EATA
+SCSI_OBJS := $(SCSI_OBJS) eata.o
+SCSI_SRCS := $(SCSI_SRCS) eata.c
+endif
 
 
 scsi.a: $(SCSI_OBJS)

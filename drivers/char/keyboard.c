@@ -113,6 +113,8 @@ static volatile unsigned char reply_expected = 0;
 static volatile unsigned char acknowledge = 0;
 static volatile unsigned char resend = 0;
 
+extern void compute_shiftstate(void);
+
 typedef void (*k_hand)(unsigned char value, char up_flag);
 typedef void (k_handfn)(unsigned char value, char up_flag);
 
@@ -129,12 +131,12 @@ static k_hand key_handler[16] = {
 typedef void (*void_fnp)(void);
 typedef void (void_fn)(void);
 
-static void_fn enter, show_ptregs, send_intr, lastcons, caps_toggle,
+static void_fn do_null, enter, show_ptregs, send_intr, lastcons, caps_toggle,
 	num, hold, scroll_forw, scroll_back, boot_it, caps_on, compose,
 	SAK, decr_console, incr_console;
 
 static void_fnp spec_fn_table[] = {
-	NULL,		enter,		show_ptregs,	show_mem,
+	do_null,	enter,		show_ptregs,	show_mem,
 	show_state,	send_intr,	lastcons,	caps_toggle,
 	num,		hold,		scroll_forw,	scroll_back,
 	boot_it,	caps_on,	compose,	SAK,
@@ -541,7 +543,7 @@ static void keyboard_interrupt(int int_pt_regs)
 		} else {
 			/* maybe beep? */
 			/* we have at least to update shift_state */
-#if 0			/* how? two almost equivalent choices follow */
+#if 1			/* how? two almost equivalent choices follow */
 			compute_shiftstate();
 #else
 			keysym = U(plain_map[keycode]);
@@ -733,13 +735,16 @@ static void do_ignore(unsigned char value, char up_flag)
 {
 }
 
+static void do_null()
+{
+	compute_shiftstate();
+}
+
 static void do_spec(unsigned char value, char up_flag)
 {
 	if (up_flag)
 		return;
 	if (value >= SIZE(spec_fn_table))
-		return;
-	if (!spec_fn_table[value])
 		return;
 	spec_fn_table[value]();
 }

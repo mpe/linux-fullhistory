@@ -396,6 +396,7 @@ asmlinkage int sys_brk(unsigned long brk)
 	int freepages;
 	unsigned long rlim;
 	unsigned long newbrk, oldbrk;
+	struct vm_area_struct * vma;
 
 	if (brk < current->mm->end_code)
 		return current->mm->brk;
@@ -421,6 +422,15 @@ asmlinkage int sys_brk(unsigned long brk)
 	if (brk - current->mm->end_code > rlim ||
 	    brk >= current->mm->start_stack - 16384)
 		return current->mm->brk;
+	/*
+	 * Check against existing mmap mappings.
+	 */
+	for (vma = current->mm->mmap; vma; vma = vma->vm_next) {
+		if (newbrk <= vma->vm_start)
+			break;
+		if (oldbrk < vma->vm_end)
+			return current->mm->brk;
+	}
 	/*
 	 * stupid algorithm to decide if we have enough memory: while
 	 * simple, it hopefully works in most obvious cases.. Easy to

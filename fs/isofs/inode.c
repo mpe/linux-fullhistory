@@ -253,7 +253,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	    case 2048: s -> u.isofs_sb.s_log_zone_size = 11; break;
 
 	    default:
-	      printk("Bad logical zone size %d\n", s -> u.isofs_sb.s_log_zone_size = 10);
+	      printk("Bad logical zone size %ld\n", s -> u.isofs_sb.s_log_zone_size);
 	      goto out;
 	  }
 
@@ -274,7 +274,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	
 	printk("Max size:%ld   Log zone size:%ld\n",
 	       s->u.isofs_sb.s_max_size, 
-	       s->u.isofs_sb.s_log_zone_size);
+	       1UL << s->u.isofs_sb.s_log_zone_size);
 	printk("First datazone:%ld   Root inode number %d\n",
 	       s->u.isofs_sb.s_firstdatazone >> s -> u.isofs_sb.s_log_zone_size,
 	       isonum_733 (rootp->extent) << s -> u.isofs_sb.s_log_zone_size);

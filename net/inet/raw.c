@@ -25,6 +25,7 @@
  *		Alan Cox	:	Use ttl/tos
  *		Alan Cox	:	Cleaned up old debugging
  *		Alan Cox	:	Use new kernel side addresses
+ *	Arnt Gulbrandsen	:	Fixed MSG_DONTROUTE in raw sockets.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -157,7 +158,7 @@ static int raw_sendto(struct sock *sk, unsigned char *from,
 	 *	Check the flags. Only MSG_DONTROUTE is permitted.
 	 */
 	 
-	if (flags&MSG_DONTROUTE)
+	if (flags & ~MSG_DONTROUTE)
 		return(-EINVAL);
 	/*
 	 *	Get and verify the address. 

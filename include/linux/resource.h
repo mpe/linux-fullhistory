@@ -49,7 +49,7 @@ struct	rusage {
 #ifdef notdef
 #define RLIMIT_MEMLOCK	6		/* max locked-in-memory address space*/
 #define RLIMIT_NPROC	7		/* max number of processes */
-#define RLIMIT_OFILE	8		/* max number of open files */
+#define RLIMIT_NOFILE	8		/* max number of open files */
 #endif
 
 #define RLIM_NLIMITS	6

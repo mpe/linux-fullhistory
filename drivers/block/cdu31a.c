@@ -11,6 +11,18 @@
  * include/linux/cdrom.h).  With this interface, CDROMs can be
  * accessed and standard audio CDs can be played back normally.
  *
+ * WARNING - 	All autoprobes have been removed from the driver.
+ *		You MUST configure the CDU31A via a LILO config
+ *		at boot time or in lilo.conf.  I have the
+ *		following in my lilo.conf:
+ *
+ *                append="cdu31a=0x1f88,0,PAS"
+ *
+ *		The first number is the I/O base address of the
+ *		card.  The second is the interrupt (0 means none).
+ *		The third should be "PAS" if on a Pro-Audio
+ *		spectrum, or nothing if on something else.
+ *
  * This interface is (unfortunately) a polled interface.  This is
  * because most Sony interfaces are set up with DMA and interrupts
  * disables.  Some (like mine) do not even have the capability to
@@ -73,6 +85,9 @@
  * writer doesn't have a multi-session disk, this is all theoritical.
  * Also, music operation will obviously only work on one session at a
  * time.
+ *
+ * NOTE: At the current time, multi-session still doesn't work.  Maybe
+ * I'll get a multi-session disk soon so I can play with it.
  * 
  * Raw sector I/O
  *
@@ -195,6 +210,8 @@ static struct
                                    0 means don't use) */
 } cdu31a_addresses[] =
 {
+#if 0	/* No autoconfig any more. See Note at beginning
+	   of this file. */
    { 0x340,     0 },    /* Standard configuration Sony Interface */
    { 0x1f88,    0 },    /* Fusion CD-16 */
    { 0x230,     0 },    /* SoundBlaster 16 card */
@@ -203,6 +220,7 @@ static struct
    { 0x330,     0 },    /* Secondary standard Sony Interface */
    { 0x634,     0 },    /* Sound FX SC400 */
    { 0x654,     0 },    /* Sound FX SC400 */
+#endif
    { 0 }
 };
 
@@ -252,6 +270,9 @@ static int sony_raw_data_mode = 1;         /* 1 if data tracks, 0 if audio.
 
 static unsigned int sony_usage = 0;        /* How many processes have the
                                               drive open. */
+
+static int sony_pas_init = 0;		   /* Initialize the Pro-Audio
+					      Spectrum card? */
 
 static struct s_sony_session_toc *(ses_tocs[MAX_TRACKS]); /* Points to the
 							     table of
@@ -2752,6 +2773,17 @@ cdu31a_setup(char *strings,
    {
       irq_used = ints[2];
    }
+   if (*strings != '\0')
+   {
+      if (strcmp(strings, "PAS") == 0)
+      {
+	 sony_pas_init = 1;
+      }
+      else
+      {
+	 printk("CDU31A: Unknown interface type: %s\n", strings[3]);
+      }
+   }
 }
 
 static int cdu31a_block_size;
@@ -2776,8 +2808,11 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
     *
     * The following turn on the CD-ROM interface for a Fusion CD-16.
     */
-   outb(0xbc, 0x9a01);
-   outb(0xe2, 0x9a01);
+   if (sony_pas_init)
+   {
+      outb(0xbc, 0x9a01);
+      outb(0xe2, 0x9a01);
+   }
 
    drive_found = 0;
 

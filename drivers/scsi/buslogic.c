@@ -1010,6 +1010,7 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
     buslogic_printk("buslogic_detect:\n");
 #endif
 
+    tpnt->can_queue = BUSLOGIC_MAILBOXES;
     for (indx = 0; indx < ARRAY_SIZE(bases); indx++)
 	if (!check_region(bases[indx], 3)) {
 	    shpnt = scsi_register(tpnt, sizeof (struct hostdata));

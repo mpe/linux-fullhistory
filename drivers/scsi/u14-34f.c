@@ -1,7 +1,10 @@
 /*
  *      u14-34f.c - Low-level SCSI driver for UltraStor 14F/34F
  *
- *      28 Oct 1994 rev. 1.09 for linux 1.1.58
+ *      14 Nov 1994 rev. 1.10 for linux 1.1.63
+ *
+ *      28 Oct 1994 rev. 1.09 for linux 1.1.58  Final BETA release.
+ *      16 Jul 1994 rev. 1.00 for linux 1.1.29  Initial ALPHA release.
  *
  *          This driver is a total replacement of the original UltraStor 
  *          scsi driver, but it supports ONLY the 14F and 34F boards.
@@ -26,9 +29,9 @@
  *
  *  14F - ISA first-party DMA HA with floppy support and WD1003 emulation.
  *  24F - EISA Bus Master HA with floppy support and WD1003 emulation.
- *  34F - VL-Bus Bus Master HA with floppy support (no WD1003 emulation).
+ *  34F - VL-Bus Bus Master HA (no WD1003 emulation).
  *
- *  This code has been tested with up to two U14F on boards, using both 
+ *  This code has been tested with up to two U14F boards, using both 
  *  firmware 28004-005/38004-004 (BIOS rev. 2.00) and the latest firmware
  *  28004-006/38004-005 (BIOS rev. 2.01). 
  *
@@ -69,7 +72,7 @@
  *    - adapter_status equal 0x96 or 0xa3 or 0x93 or 0x94;
  *    - adapter_status equal 0 and target_status equal 2 on for all targets
  *      in the next operation following the reset.
- *    This sequence takes a long time (>3 seconds), so in the mantime
+ *    This sequence takes a long time (>3 seconds), so in the meantime
  *    the SD_TIMEOUT in sd.c could expire giving rise to scsi aborts
  *    (SD_TIMEOUT has been increased from 3 to 6 seconds in 1.1.31).
  *    Because of this I had to DISABLE_CLUSTERING and to work around the
@@ -77,7 +80,7 @@
  *    so that the operations are retried without complains from the scsi.c
  *    code.
  *    Any reset of the scsi bus is going to kill tape operations, since
- *    no retry is allowed for tapes. Bus resest are more likely when the
+ *    no retry is allowed for tapes. Bus resets are more likely when the
  *    scsi bus is under heavy load.
  *    Requests using scatter/gather have a maximum length of 16 x 1024 bytes 
  *    when DISABLE_CLUSTERING is in effect, but unscattered requests could be
@@ -136,13 +139,13 @@
 #define DO_BUS_RESET          /* Reset SCSI bus on error */
 #define NO_DEBUG_DETECT
 #define NO_DEBUG_INTERRUPT
-#define DEBUG_STATISTICS
+#define NO_DEBUG_STATISTICS
 
 #define MAX_TARGET 8
 #define MAX_IRQ 16
 #define MAX_BOARDS 4
 #define MAX_MAILBOXES 16
-#define MAX_SGLIST U34F_MAX_SGLIST
+#define MAX_SGLIST 33
 #define MAX_CMD_PER_LUN 2
 
 #define FALSE 0
@@ -323,7 +326,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    sh[j]->base = bios_segment_table[config_1.bios_segment];
    sh[j]->irq = irq;
    sh[j]->this_id = config_2.ha_scsi_id;
-   sh[j]->hostt->can_queue = MAX_MAILBOXES;
+   sh[j]->can_queue = MAX_MAILBOXES;
    sh[j]->hostt->cmd_per_lun = MAX_CMD_PER_LUN;
    sys_mask = inb(sh[j]->io_port + REG_SYS_MASK);
    lcl_mask = inb(sh[j]->io_port + REG_LCL_MASK);
@@ -336,10 +339,12 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    if (sh[j]->base == 0) outb(CMD_ENA_INTR, sh[j]->io_port + REG_SYS_MASK);
 
 #if defined (DO_BUS_RESET)
-   outb(lcl_mask |  0x40, sh[j]->io_port + REG_LCL_MASK);
+   lcl_mask = 0xc2;
 #else
-   outb(lcl_mask & ~0x40, sh[j]->io_port + REG_LCL_MASK);
+   lcl_mask = 0x82;
 #endif
+
+   outb(lcl_mask, sh[j]->io_port + REG_LCL_MASK);
 
    /* Register the I/O space that we use */
    snarf_region(sh[j]->io_port, REG_REGION);
@@ -376,7 +381,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
           "Mbox %d, CmdLun %d, C%d.\n", BN(j), sh[j]->io_port, 
           (int)sh[j]->base, sh[j]->irq, 
           sh[j]->dma_channel, sh[j]->sg_tablesize, 
-          sh[j]->hostt->can_queue, sh[j]->hostt->cmd_per_lun,
+          sh[j]->can_queue, sh[j]->hostt->cmd_per_lun,
           sh[j]->hostt->use_clustering);
    return TRUE;
 }
@@ -447,9 +452,9 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       starting from last_cp_used */
    i = HD(j)->last_cp_used + 1;
 
-   for(k = 0; k < sh[j]->hostt->can_queue; k++, i++) {
+   for(k = 0; k < sh[j]->can_queue; k++, i++) {
 
-      if (i >= sh[j]->hostt->can_queue) i = 0;
+      if (i >= sh[j]->can_queue) i = 0;
 
       if (HD(j)->cp_stat[i] == FREE) {
          HD(j)->last_cp_used = i;
@@ -457,7 +462,7 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
          }
       }
 
-   if (k == sh[j]->hostt->can_queue) {
+   if (k == sh[j]->can_queue) {
       printk("%s: qcomm, no free mailbox, reseting.\n", BN(j));
 
       if (HD(j)->in_reset) 
@@ -542,7 +547,7 @@ int u14_34f_abort(Scsi_Cmnd *SCarg) {
    printk("%s: abort, mbox %d, target %d, pid %ld.\n",
           BN(j), i, SCarg->target, SCarg->pid);
 
-   if (i >= sh[j]->hostt->can_queue)
+   if (i >= sh[j]->can_queue)
       panic("%s: abort, invalid SCarg->host_scribble.\n", BN(j));
 
    if (wait_on_busy(sh[j]->io_port)) {
@@ -611,7 +616,7 @@ int u14_34f_reset(Scsi_Cmnd * SCarg) {
 
    for (k = 0; k < MAX_TARGET; k++) HD(j)->target_reset[k] = TRUE;
 
-   for (i = 0; i < sh[j]->hostt->can_queue; i++) {
+   for (i = 0; i < sh[j]->can_queue; i++) {
 
       if (HD(j)->cp_stat[i] == FREE) continue;
 
@@ -657,7 +662,7 @@ int u14_34f_reset(Scsi_Cmnd * SCarg) {
    cli();
    printk("%s: reset, interrupts disabled, loops %d.\n", BN(j), limit);
 
-   for (i = 0; i < sh[j]->hostt->can_queue; i++) {
+   for (i = 0; i < sh[j]->can_queue; i++) {
 
       /* Skip mailboxes already set free by interrupt */
       if (HD(j)->cp_stat[i] != IN_RESET) continue;
@@ -739,7 +744,7 @@ static void u14_34f_interrupt_handler(int irq) {
 
          i = spp - HD(j)->cp;
 
-         if (i >= sh[j]->hostt->can_queue)
+         if (i >= sh[j]->can_queue)
             panic("%s: ihdlr, invalid mscp address.\n", BN(j));
 
          if (HD(j)->cp_stat[i] == LOCKED) {

@@ -87,6 +87,10 @@
 #include "wd7000.h"
 #endif
 
+#ifdef CONFIG_SCSI_EATA
+#include "eata.h"
+#endif
+ 
 #ifdef CONFIG_SCSI_DEBUG
 #include "scsi_debug.h"
 #endif
@@ -169,6 +173,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_7000FASST
 	WD7000,
+#endif
+#ifdef CONFIG_SCSI_EATA
+	EATA,
 #endif
 #ifdef CONFIG_SCSI_DEBUG
 	SCSI_DEBUG,
