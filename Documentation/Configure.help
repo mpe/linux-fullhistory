@@ -11946,7 +11946,7 @@ CONFIG_USB_ACM
 Support for user-space parallel port device drivers
 CONFIG_PPDEV
   Saying Y to this adds support for /dev/parport device nodes.  This
-  is needed for programs that want portable access to the parallel
+  is needed for programs that want low-level access to the parallel
   port, for instance deviceid (which displays Plug-and-Play device
   IDs) and vlp (which makes a Linux computer act as though it's a
   printer).

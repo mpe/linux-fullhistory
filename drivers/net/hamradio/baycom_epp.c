@@ -3,7 +3,7 @@
 /*
  *	baycom_epp.c  -- baycom epp radio modem driver.
  *
- *	Copyright (C) 1998
+ *	Copyright (C) 1998-1999
  *          Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
@@ -30,6 +30,7 @@
  *   0.2  21.04.98  Massive rework by Thomas Sailer
  *                  Integrated FPGA EPP modem configuration routines
  *   0.3  11.05.98  Took FPGA config out and moved it into a separate program
+ *   0.4  26.07.99  Adapted to new lowlevel parport driver interface
  *
  */
 
@@ -148,7 +149,7 @@ static const char paranoia_str[] = KERN_ERR
 
 static const char bc_drvname[] = "baycom_epp";
 static const char bc_drvinfo[] = KERN_INFO "baycom_epp: (C) 1998 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "baycom_epp: version 0.3 compiled " __TIME__ " " __DATE__ "\n";
+KERN_INFO "baycom_epp: version 0.4 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
@@ -264,7 +265,8 @@ struct baycom_state {
 
 	struct {
 		unsigned int intclk;
-		unsigned int divider;
+		unsigned int fclk;
+		unsigned int bps;
 		unsigned int extmodem;
 		unsigned int loopback;
 	} cfg;
@@ -433,7 +435,7 @@ static void inline baycom_int_freq(struct baycom_state *bc)
  *    eppconfig_path should be setable  via /proc/sys.
  */
 
-char eppconfig_path[256] = "/sbin/eppfpga";
+char eppconfig_path[256] = "/usr/sbin/eppfpga";
 
 static char *envp[] = { "HOME=/", "TERM=linux", "PATH=/usr/bin:/bin", NULL };
 
@@ -448,9 +450,10 @@ static int exec_eppfpga(void *b)
         int i;
 
 	/* set up arguments */
-	sprintf(modearg, "%sclk,%smodem,divider=%d%s,extstat",
+	sprintf(modearg, "%sclk,%smodem,fclk=%d,bps=%d,divider=%d%s,extstat",
 		bc->cfg.intclk ? "int" : "ext",
-		bc->cfg.extmodem ? "ext" : "int", bc->cfg.divider,
+		bc->cfg.extmodem ? "ext" : "int", bc->cfg.fclk, bc->cfg.bps,
+		(bc->cfg.fclk + 8 * bc->cfg.bps) / (16 * bc->cfg.bps),
 		bc->cfg.loopback ? ",loopback" : "");
 	sprintf(portarg, "%ld", bc->pdev->port->base);
 	printk(KERN_DEBUG "%s: %s -s -p %s -m %s\n", bc_drvname, eppconfig_path, portarg, modearg);
@@ -655,10 +658,11 @@ static inline unsigned short random_num(void)
 
 /* ---------------------------------------------------------------------- */
 
-static void transmit(struct baycom_state *bc, int cnt, unsigned char stat)
+static int transmit(struct baycom_state *bc, int cnt, unsigned char stat)
 {
 	struct parport *pp = bc->pdev->port;
-	int i;
+	unsigned char tmp[128];
+	int i, j;
 
 	if (bc->hdlctx.state == tx_tail && !(stat & EPP_PTTBIT))
 		bc->hdlctx.state = tx_idle;
@@ -666,17 +670,17 @@ static void transmit(struct baycom_state *bc, int cnt, unsigned char stat)
 		if (bc->hdlctx.bufcnt <= 0)
 			encode_hdlc(bc);
 		if (bc->hdlctx.bufcnt <= 0)
-			return;
+			return 0;
 		if (!bc->ch_params.fulldup) {
 			if (!(stat & EPP_DCDBIT)) {
 				bc->hdlctx.slotcnt = bc->ch_params.slottime;
-				return;
+				return 0;
 			}
 			if ((--bc->hdlctx.slotcnt) > 0)
-				return;
+				return 0;
 			bc->hdlctx.slotcnt = bc->ch_params.slottime;
 			if ((random_num() % 256) > bc->ch_params.ppersist)
-				return;
+				return 0;
 		}
 	}
 	if (bc->hdlctx.state == tx_idle && bc->hdlctx.bufcnt > 0) {
@@ -692,8 +696,13 @@ static void transmit(struct baycom_state *bc, int cnt, unsigned char stat)
 			bc->hdlctx.flags -= i;
 			if (bc->hdlctx.flags <= 0)
 				bc->hdlctx.state = tx_data;
-			for (; i > 0; i--)
-				parport_epp_write_data(pp, 0x7e);
+			memset(tmp, 0x7e, sizeof(tmp));
+			while (i > 0) {
+				j = (i > sizeof(tmp)) ? sizeof(tmp) : i;
+				if (j != pp->ops->epp_write_data(pp, tmp, j, 0))
+					return -1;
+				i -= j;
+			}
 			break;
 
 		case tx_data:
@@ -708,8 +717,9 @@ static void transmit(struct baycom_state *bc, int cnt, unsigned char stat)
 			i = min(cnt, bc->hdlctx.bufcnt);
 			bc->hdlctx.bufcnt -= i;
 			cnt -= i;
-			for (; i > 0; i--)
-				parport_epp_write_data(pp, *(bc->hdlctx.bufptr)++);
+			if (i != pp->ops->epp_write_data(pp, bc->hdlctx.bufptr, i, 0))
+					return -1;
+			bc->hdlctx.bufptr += i;
 			break;
 			
 		case tx_tail:
@@ -722,22 +732,33 @@ static void transmit(struct baycom_state *bc, int cnt, unsigned char stat)
 			if (i) {
 				cnt -= i;
 				bc->hdlctx.flags -= i;
-				for (; i > 0; i--)
-					parport_epp_write_data(pp, 0x7e);
+				memset(tmp, 0x7e, sizeof(tmp));
+				while (i > 0) {
+					j = (i > sizeof(tmp)) ? sizeof(tmp) : i;
+					if (j != pp->ops->epp_write_data(pp, tmp, j, 0))
+						return -1;
+					i -= j;
+				}
 				break;
 			}
 
 		default:  /* fall through */
 			if (bc->hdlctx.calibrate <= 0)
-				return;
+				return 0;
 			i = min(cnt, bc->hdlctx.calibrate);
 			cnt -= i;
 			bc->hdlctx.calibrate -= i;
-			for (; i > 0; i--)
-				parport_epp_write_data(pp, 0);
+			memset(tmp, 0, sizeof(tmp));
+			while (i > 0) {
+				j = (i > sizeof(tmp)) ? sizeof(tmp) : i;
+				if (j != pp->ops->epp_write_data(pp, tmp, j, 0))
+					return -1;
+				i -= j;
+			}
 			break;
 		}
 	}
+	return 0;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -800,57 +821,68 @@ static void do_rxpacket(struct device *dev)
         goto enditer##j;                                                               \
 })
         
-static void receive(struct device *dev, int cnt)
+static int receive(struct device *dev, int cnt)
 {
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
 	struct parport *pp = bc->pdev->port;
         unsigned int bitbuf, notbitstream, bitstream, numbits, state;
-        unsigned char ch;
+	unsigned char tmp[128];
+        unsigned char *cp;
+	int cnt2, ret = 0;
         
         numbits = bc->hdlcrx.numbits;
 	state = bc->hdlcrx.state;
 	bitstream = bc->hdlcrx.bitstream;
 	bitbuf = bc->hdlcrx.bitbuf;
-	for (; cnt > 0; cnt--) {
-		ch = parport_epp_read_data(pp);
-		bitstream >>= 8;
-                bitstream |= ch << 8;
-                bitbuf >>= 8;
-                bitbuf |= ch << 8;
-                numbits += 8;
-                notbitstream = ~bitstream;
-                DECODEITERA(0);
-                DECODEITERA(1);
-                DECODEITERA(2);
-                DECODEITERA(3);
-                DECODEITERA(4);
-                DECODEITERA(5);
-                DECODEITERA(6);
-                DECODEITERA(7);
-                goto enddec;
-                DECODEITERB(0);
-                DECODEITERB(1);
-                DECODEITERB(2);
-                DECODEITERB(3);
-                DECODEITERB(4);
-                DECODEITERB(5);
-                DECODEITERB(6);
-                DECODEITERB(7);
-          enddec:
-                while (state && numbits >= 8) {
-                        if (bc->hdlcrx.bufcnt >= TXBUFFER_SIZE) {
-                                state = 0;
-                        } else {
-				*(bc->hdlcrx.bufptr)++ = bitbuf >> (16-numbits);
-				bc->hdlcrx.bufcnt++;
-				numbits -= 8;
+	while (cnt > 0) {
+		cnt2 = (cnt > sizeof(tmp)) ? sizeof(tmp) : cnt;
+		cnt -= cnt2;
+		if (cnt2 != pp->ops->epp_read_data(pp, tmp, cnt2, 0)) {
+			ret = -1;
+			break;
+		}
+		cp = tmp;
+		for (; cnt2 > 0; cnt2--, cp++) {
+			bitstream >>= 8;
+			bitstream |= (*cp) << 8;
+			bitbuf >>= 8;
+			bitbuf |= (*cp) << 8;
+			numbits += 8;
+			notbitstream = ~bitstream;
+			DECODEITERA(0);
+			DECODEITERA(1);
+			DECODEITERA(2);
+			DECODEITERA(3);
+			DECODEITERA(4);
+			DECODEITERA(5);
+			DECODEITERA(6);
+			DECODEITERA(7);
+			goto enddec;
+			DECODEITERB(0);
+			DECODEITERB(1);
+			DECODEITERB(2);
+			DECODEITERB(3);
+			DECODEITERB(4);
+			DECODEITERB(5);
+			DECODEITERB(6);
+			DECODEITERB(7);
+		enddec:
+			while (state && numbits >= 8) {
+				if (bc->hdlcrx.bufcnt >= TXBUFFER_SIZE) {
+					state = 0;
+				} else {
+					*(bc->hdlcrx.bufptr)++ = bitbuf >> (16-numbits);
+					bc->hdlcrx.bufcnt++;
+					numbits -= 8;
+				}
 			}
 		}
-        }
+	}
         bc->hdlcrx.numbits = numbits;
 	bc->hdlcrx.state = state;
 	bc->hdlcrx.bitstream = bitstream;
 	bc->hdlcrx.bitbuf = bitbuf;
+	return ret;
 }
 
 /* --------------------------------------------------------------------- */
@@ -870,6 +902,7 @@ static void epp_bh(struct device *dev)
 	struct baycom_state *bc;
 	struct parport *pp;
 	unsigned char stat;
+	unsigned char tmp[2];
 	unsigned int time1 = 0, time2 = 0, time3 = 0;
 	int cnt, cnt2;
 	
@@ -880,26 +913,40 @@ static void epp_bh(struct device *dev)
 	baycom_int_freq(bc);
 	pp = bc->pdev->port;
 	/* update status */
-	bc->stat = stat = parport_epp_read_addr(pp);
+	if (pp->ops->epp_read_addr(pp, &stat, 1, 0) != 1)
+		goto epptimeout;
+	bc->stat = stat;
 	bc->debug_vals.last_pllcorr = stat;
 	GETTICK(time1);
 	if (bc->modem == EPP_FPGAEXTSTATUS) {
 		/* get input count */
-		parport_epp_write_addr(pp, EPP_TX_FIFO_ENABLE|EPP_RX_FIFO_ENABLE|EPP_MODEM_ENABLE|1);
-		cnt = parport_epp_read_addr(pp);
-		cnt |= parport_epp_read_addr(pp) << 8;
+		tmp[0] = EPP_TX_FIFO_ENABLE|EPP_RX_FIFO_ENABLE|EPP_MODEM_ENABLE|1;
+		if (pp->ops->epp_write_addr(pp, tmp, 1, 0) != 1)
+			goto epptimeout;
+		if (pp->ops->epp_read_addr(pp, tmp, 2, 0) != 2)
+			goto epptimeout;
+		cnt = tmp[0] | (tmp[1] << 8);
 		cnt &= 0x7fff;
 		/* get output count */
-		parport_epp_write_addr(pp, EPP_TX_FIFO_ENABLE|EPP_RX_FIFO_ENABLE|EPP_MODEM_ENABLE|2);
-		cnt2 = parport_epp_read_addr(pp);
-		cnt2 |= parport_epp_read_addr(pp) << 8;
+		tmp[0] = EPP_TX_FIFO_ENABLE|EPP_RX_FIFO_ENABLE|EPP_MODEM_ENABLE|2;
+		if (pp->ops->epp_write_addr(pp, tmp, 1, 0) != 1)
+			goto epptimeout;
+		if (pp->ops->epp_read_addr(pp, tmp, 2, 0) != 2)
+			goto epptimeout;
+		cnt2 = tmp[0] | (tmp[1] << 8);
 		cnt2 = 16384 - (cnt2 & 0x7fff);
 		/* return to normal */
-		parport_epp_write_addr(pp, EPP_TX_FIFO_ENABLE|EPP_RX_FIFO_ENABLE|EPP_MODEM_ENABLE);
-		transmit(bc, cnt2, stat);
+		tmp[0] = EPP_TX_FIFO_ENABLE|EPP_RX_FIFO_ENABLE|EPP_MODEM_ENABLE;
+		if (pp->ops->epp_write_addr(pp, tmp, 1, 0) != 1)
+			goto epptimeout;
+		if (transmit(bc, cnt2, stat))
+			goto epptimeout;
 		GETTICK(time2);
-		receive(dev, cnt);
-		bc->stat = stat = parport_epp_read_addr(pp);
+		if (receive(dev, cnt))
+			goto epptimeout;
+		if (pp->ops->epp_read_addr(pp, &stat, 1, 0) != 1)
+			goto epptimeout;
+		bc->stat = stat;
 	} else {
 		/* try to tx */
 		switch (stat & (EPP_NTAEF|EPP_NTHF)) {
@@ -919,7 +966,8 @@ static void epp_bh(struct device *dev)
 			cnt = 2048 - 1025;
 			break;
 		}
-		transmit(bc, cnt, stat);
+		if (transmit(bc, cnt, stat))
+			goto epptimeout;
 		GETTICK(time2);
 		/* do receiver */
 		while ((stat & (EPP_NRAEF|EPP_NRHF)) != EPP_NRHF) {
@@ -936,9 +984,9 @@ static void epp_bh(struct device *dev)
 				cnt = 256;
 				break;
 			}
-			receive(dev, cnt);
-			stat = parport_epp_read_addr(pp);
-			if (parport_epp_check_timeout(pp))
+			if (receive(dev, cnt))
+				goto epptimeout;
+			if (pp->ops->epp_read_addr(pp, &stat, 1, 0) != 1)
 				goto epptimeout;
 		}
 		cnt = 0;
@@ -947,9 +995,11 @@ static void epp_bh(struct device *dev)
 		else if (bc->bitrate < 100000)
 			cnt = 128;
 		while (cnt > 0 && stat & EPP_NREF) {
-			receive(dev, 1);
+			if (receive(dev, 1))
+				goto epptimeout;
 			cnt--;
-			stat = parport_epp_read_addr(pp);
+			if (pp->ops->epp_read_addr(pp, &stat, 1, 0) != 1)
+				goto epptimeout;
 		}
 	}
 	GETTICK(time3);
@@ -957,8 +1007,6 @@ static void epp_bh(struct device *dev)
 	bc->debug_vals.mod_cycles = time2 - time1;
 	bc->debug_vals.demod_cycles = time3 - time2;
 #endif /* BAYCOM_DEBUG */
-	if (parport_epp_check_timeout(pp)) 
-		goto epptimeout;
 	queue_task(&bc->run_bh, &tq_timer);
 	return;
  epptimeout:
@@ -1040,6 +1088,7 @@ static int epp_open(struct device *dev)
 		0, 0, (void *)(void *)epp_bh, dev
 	};
 	unsigned int i, j;
+	unsigned char tmp[128];
 	unsigned char stat;
 	unsigned long tstart;
 	
@@ -1071,8 +1120,8 @@ static int epp_open(struct device *dev)
                 parport_unregister_device(bc->pdev);
                 return -EBUSY;
         }
-	if (!(pp->modes & (PARPORT_MODE_PCECPEPP|PARPORT_MODE_PCEPP))) {
-                printk(KERN_ERR "%s: parport at 0x%lx does not support any EPP mode\n",
+	if (!(pp->modes & PARPORT_MODE_TRISTATE)) {
+                printk(KERN_ERR "%s: parport at 0x%lx does not support bidirectional data transfer\n",
 		       bc_drvname, pp->base);
 		parport_release(bc->pdev);
                 parport_unregister_device(bc->pdev);
@@ -1081,11 +1130,6 @@ static int epp_open(struct device *dev)
         dev->irq = /*pp->irq*/ 0;
 	bc->run_bh = run_bh;
 	bc->bh_running = 1;
-	if (pp->modes & PARPORT_MODE_PCECPEPP) {
-		printk(KERN_INFO "%s: trying to enable EPP mode\n", bc_drvname);
-		parport_frob_econtrol(pp, 0xe0, 0x80);
-	}
-        /* bc->pdev->port->ops->change_mode(bc->pdev->port, PARPORT_MODE_PCEPP);  not yet implemented */
 	bc->modem = EPP_CONVENTIONAL;
 	if (eppconfig(bc))
 		printk(KERN_INFO "%s: no FPGA detected, assuming conventional EPP modem\n", bc_drvname);
@@ -1093,26 +1137,33 @@ static int epp_open(struct device *dev)
 		bc->modem = /*EPP_FPGA*/ EPP_FPGAEXTSTATUS;
 	parport_write_control(pp, LPTCTRL_PROGRAM); /* prepare EPP mode; we aren't using interrupts */
 	/* reset the modem */
-	parport_epp_write_addr(pp, 0);
-	parport_epp_write_addr(pp, EPP_TX_FIFO_ENABLE|EPP_RX_FIFO_ENABLE|EPP_MODEM_ENABLE);
+	tmp[0] = 0;
+	tmp[1] = EPP_TX_FIFO_ENABLE|EPP_RX_FIFO_ENABLE|EPP_MODEM_ENABLE;
+	if (pp->ops->epp_write_addr(pp, tmp, 2, 0) != 2)
+		goto epptimeout;
 	/* autoprobe baud rate */
 	tstart = jiffies;
 	i = 0;
 	while ((signed)(jiffies-tstart-HZ/3) < 0) {
-		stat = parport_epp_read_addr(pp);
+		if (pp->ops->epp_read_addr(pp, &stat, 1, 0) != 1)
+			goto epptimeout;
 		if ((stat & (EPP_NRAEF|EPP_NRHF)) == EPP_NRHF) {
 			schedule();
 			continue;
 		}
-		for (j = 0; j < 256; j++)
-			parport_epp_read_data(pp);
+		if (pp->ops->epp_read_data(pp, tmp, 128, 0) != 128)
+			goto epptimeout;
+		if (pp->ops->epp_read_data(pp, tmp, 128, 0) != 128)
+			goto epptimeout;
 		i += 256;
 	}
 	for (j = 0; j < 256; j++) {
-		stat = parport_epp_read_addr(pp);
+		if (pp->ops->epp_read_addr(pp, &stat, 1, 0) != 1)
+			goto epptimeout;
 		if (!(stat & EPP_NREF))
 			break;
-		parport_epp_read_data(pp);
+		if (pp->ops->epp_read_data(pp, tmp, 1, 0) != 1)
+			goto epptimeout;
 		i++;
 	}
 	tstart = jiffies - tstart;
@@ -1125,7 +1176,9 @@ static int epp_open(struct device *dev)
 	}
 	printk(KERN_INFO "%s: autoprobed bitrate: %d  int divider: %d  int rate: %d\n", 
 	       bc_drvname, bc->bitrate, j, bc->bitrate >> (j+2));
-	parport_epp_write_addr(pp, EPP_TX_FIFO_ENABLE|EPP_RX_FIFO_ENABLE|EPP_MODEM_ENABLE/*|j*/);
+	tmp[0] = EPP_TX_FIFO_ENABLE|EPP_RX_FIFO_ENABLE|EPP_MODEM_ENABLE/*|j*/;
+	if (pp->ops->epp_write_addr(pp, tmp, 1, 0) != 1)
+		goto epptimeout;
 	/*
 	 * initialise hdlc variables
 	 */
@@ -1143,12 +1196,12 @@ static int epp_open(struct device *dev)
 	MOD_INC_USE_COUNT;
 	return 0;
 
-#if 0
-  errreturn:
+ epptimeout:
+	printk(KERN_ERR "%s: epp timeout during bitrate probe\n", bc_drvname);
+	parport_write_control(pp, 0); /* reset the adapter */
         parport_release(bc->pdev);
         parport_unregister_device(bc->pdev);
 	return -EIO;
-#endif
 }
 
 /* --------------------------------------------------------------------- */
@@ -1158,6 +1211,7 @@ static int epp_close(struct device *dev)
 	struct baycom_state *bc;
 	struct parport *pp;
 	struct sk_buff *skb;
+	unsigned char tmp[1];
 
 	baycom_paranoia_check(dev, "epp_close", -EINVAL);
 	if (!dev->start)
@@ -1169,7 +1223,8 @@ static int epp_close(struct device *dev)
 	dev->tbusy = 1;
 	run_task_queue(&tq_timer);  /* dequeue bottom half */
 	bc->stat = EPP_DCDBIT;
-	parport_epp_write_addr(pp, 0);
+	tmp[0] = 0;
+	pp->ops->epp_write_addr(pp, tmp, 1, 0);
 	parport_write_control(pp, 0); /* reset the adapter */
         parport_release(bc->pdev);
         parport_unregister_device(bc->pdev);
@@ -1200,12 +1255,19 @@ static int baycom_setmode(struct baycom_state *bc, const char *modestr)
 		bc->cfg.loopback = 0;
 	if (strstr(modestr,"loopback"))
 		bc->cfg.loopback = 1;
-	if ((cp = strstr(modestr,"divider="))) {
-		bc->cfg.divider = simple_strtoul(cp+8, NULL, 0);
-		if (bc->cfg.divider < 1)
-			bc->cfg.divider = 1;
-		if (bc->cfg.divider > 1023)
-			bc->cfg.divider = 1023;
+	if ((cp = strstr(modestr,"fclk="))) {
+		bc->cfg.fclk = simple_strtoul(cp+5, NULL, 0);
+		if (bc->cfg.fclk < 1000000)
+			bc->cfg.fclk = 1000000;
+		if (bc->cfg.fclk > 25000000)
+			bc->cfg.fclk = 25000000;
+	}
+	if ((cp = strstr(modestr,"bps="))) {
+		bc->cfg.bps = simple_strtoul(cp+4, NULL, 0);
+		if (bc->cfg.bps < 1000)
+			bc->cfg.bps = 1000;
+		if (bc->cfg.bps > 1500000)
+			bc->cfg.bps = 1500000;
 	}
 	return 0;
 }
@@ -1316,9 +1378,9 @@ static int baycom_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		break;
 		
 	case HDLCDRVCTL_GETMODE:
-		sprintf(hi.data.modename, "%sclk,%smodem,divider=%d%s", 
+		sprintf(hi.data.modename, "%sclk,%smodem,fclk=%d,bps=%d%s", 
 			bc->cfg.intclk ? "int" : "ext",
-			bc->cfg.extmodem ? "ext" : "int", bc->cfg.divider,
+			bc->cfg.extmodem ? "ext" : "int", bc->cfg.fclk, bc->cfg.bps,
 			bc->cfg.loopback ? ",loopback" : "");
 		break;
 
@@ -1441,6 +1503,8 @@ __initfunc(int baycom_epp_init(void))
 		memset(bc, 0, sizeof(struct baycom_state));
 		bc->magic = BAYCOM_MAGIC;
 		sprintf(bc->ifname, "bce%d", i);
+		bc->cfg.fclk = 19666600;
+		bc->cfg.bps = 9600;
 		/*
 		 * initialize part of the device struct
 		 */

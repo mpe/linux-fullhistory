@@ -63,3 +63,9 @@ struct ppdev_frob_struct {
 
 /* Negotiate a particular IEEE 1284 mode. */
 #define PPNEGOT		_IOW(PP_IOCTL, 0x91, int)
+
+/* Set control lines when an interrupt occurs. */
+#define PPWCTLONIRQ	_IOW(PP_IOCTL, 0x92, unsigned char)
+
+/* Clear (and return) interrupt count. */
+#define PPCLRIRQ	_IOR(PP_IOCTL, 0x93, int)

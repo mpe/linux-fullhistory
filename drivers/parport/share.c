@@ -24,6 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 #include <linux/sched.h>
+#include <linux/kmod.h>
 
 #include <asm/spinlock.h>
 #include <asm/irq.h>
@@ -40,6 +41,51 @@ spinlock_t parportlist_lock = SPIN_LOCK_UNLOCKED;
 
 static struct parport_driver *driver_chain = NULL;
 spinlock_t driverlist_lock = SPIN_LOCK_UNLOCKED;
+
+/* What you can do to a port that's gone away.. */
+static void dead_write_lines (struct parport *p, unsigned char b){}
+static unsigned char dead_read_lines (struct parport *p) { return 0; }
+static unsigned char dead_frob_lines (struct parport *p, unsigned char b,
+			     unsigned char c) { return 0; }
+static void dead_onearg (struct parport *p){}
+static void dead_irq (int i, void *p, struct pt_regs *r) { }
+static void dead_initstate (struct pardevice *d, struct parport_state *s) { }
+static void dead_state (struct parport *p, struct parport_state *s) { }
+static void dead_noargs (void) { }
+static void dead_fill (struct inode *i, int f) { }
+static size_t dead_write (struct parport *p, const void *b, size_t l, int f)
+{ return 0; }
+static size_t dead_read (struct parport *p, void *b, size_t l, int f)
+{ return 0; }
+static struct parport_operations dead_ops = {
+	dead_write_lines,	/* data */
+	dead_read_lines,
+	dead_write_lines,	/* control */
+	dead_read_lines,
+	dead_frob_lines,
+	dead_read_lines,	/* status */
+	dead_onearg,		/* enable_irq */
+	dead_onearg,		/* disable_irq */
+	dead_onearg,		/* data_forward */
+	dead_onearg,		/* data_reverse */
+	dead_irq,
+	dead_initstate,		/* init_state */
+	dead_state,
+	dead_state,
+	dead_noargs,		/* xxx_use_count */
+	dead_noargs,
+	dead_fill,		/* fill_inode */
+	dead_write,		/* epp */
+	dead_read,
+	dead_write,
+	dead_read,
+	dead_write,		/* ecp */
+	dead_read,
+	dead_write,
+	dead_write,		/* compat */
+	dead_read,		/* nibble */
+	dead_read		/* byte */
+};
 
 static void call_driver_chain(int attach, struct parport *port)
 {
@@ -90,6 +136,18 @@ void parport_unregister_driver (struct parport_driver *arg)
 /* Return a list of all the ports we know about. */
 struct parport *parport_enumerate(void)
 {
+	/* Attempt to make things work on 2.2 systems. */
+	if (!portlist) {
+		request_module ("parport_lowlevel");
+		if (portlist)
+			/* The user has a parport_lowlevel alias in
+			 * conf.modules. Warn them that it won't work
+			 * for long. */
+			printk (KERN_WARNING
+				"parport: 'parport_lowlevel' is deprecated; "
+				"see parport.txt\n");
+	}
+
 	return portlist;
 }
 
@@ -188,10 +246,31 @@ void parport_announce_port (struct parport *port)
 	call_driver_chain (1, port);
 }
 
+static void free_port (struct parport *port)
+{
+	int d;
+	for (d = 0; d < 5; d++) {
+		if (port->probe_info[d].class_name)
+			kfree (port->probe_info[d].class_name);
+		if (port->probe_info[d].mfr)
+			kfree (port->probe_info[d].mfr);
+		if (port->probe_info[d].model)
+			kfree (port->probe_info[d].model);
+		if (port->probe_info[d].cmdset)
+			kfree (port->probe_info[d].cmdset);
+		if (port->probe_info[d].description)
+			kfree (port->probe_info[d].description);
+	}
+
+	kfree(port->name);
+	kfree(port);
+}
+
 void parport_unregister_port(struct parport *port)
 {
 	struct parport *p;
-	int d;
+
+	port->ops = &dead_ops;
 
 	/* Spread the word. */
 	call_driver_chain (0, port);
@@ -217,21 +296,8 @@ void parport_unregister_port(struct parport *port)
 	}
 	spin_unlock(&parportlist_lock);
 
-	for (d = 0; d < 5; d++) {
-		if (port->probe_info[d].class_name)
-			kfree (port->probe_info[d].class_name);
-		if (port->probe_info[d].mfr)
-			kfree (port->probe_info[d].mfr);
-		if (port->probe_info[d].model)
-			kfree (port->probe_info[d].model);
-		if (port->probe_info[d].cmdset)
-			kfree (port->probe_info[d].cmdset);
-		if (port->probe_info[d].description)
-			kfree (port->probe_info[d].description);
-	}
-
-	kfree(port->name);
-	kfree(port);
+	if (!port->devices)
+		free_port (port);
 }
 
 struct pardevice *parport_register_device(struct parport *port, const char *name,
@@ -361,6 +427,11 @@ void parport_unregister_device(struct pardevice *dev)
 
 	dec_parport_count();
 	port->ops->dec_use_count();
+
+	/* If this was the last device on a port that's already gone away,
+	 * free up the resources. */
+	if (port->ops == &dead_ops && !port->devices)
+		free_port (port);
 }
 
 int parport_claim(struct pardevice *dev)

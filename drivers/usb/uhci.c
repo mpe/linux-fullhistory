@@ -361,7 +361,7 @@ static void* uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb
 	unsigned int destination, status;
 
 	/* Destination: pipe destination with INPUT */
-	destination = (pipe & PIPE_DEVEP_MASK) | 0x69;
+	destination = (pipe & PIPE_DEVEP_MASK) | usb_packetid (pipe);
 
 	/* Status:    slow/fast,      Interrupt,   Active,    Short Packet Detect     Infinite Errors */
 	status = (pipe & (1 << 26)) | (1 << 24) | (1 << 23)   |   (1 << 29)       |    (0 << 27);
@@ -371,7 +371,7 @@ static void* uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb
 		       interrupt_qh->element);
 
 	td->link = 1;
-	td->status = status;			/* In */
+	td->status = status;
 	td->info = destination | ((usb_maxpacket(usb_dev, pipe) - 1) << 21) |
 		(usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) << 19);
 	td->buffer = virt_to_bus(dev->data);
@@ -633,12 +633,8 @@ static void *uhci_allocate_isochronous(struct usb_device *usb_dev, unsigned int 
 		td = &isodesc->td[i];
 
 		/* The "pipe" thing contains the destination in bits 8--18 */
-		destination = (pipe & PIPE_DEVEP_MASK);
-
-		if (usb_pipeout(pipe))
-			destination |= 0xE1;	/* OUT */
-		else
-			destination |= 0x69;	/* IN */
+		destination = (pipe & PIPE_DEVEP_MASK)
+			| usb_packetid (pipe);	/* add IN or OUT */
 
 		/* Status:    slow/fast,       Active,       Isochronous */
 		status = (pipe & (1 << 26)) | (1 << 23)   |   (1 << 25);
@@ -1010,18 +1006,8 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	if (len > maxsze * 31)
 		printk("Warning, too much data for a bulk packet, crashing (%d/%d)\n", len, maxsze);
 
-	/* The "pipe" thing contains the destination in bits 8--18, 0x69 is IN */
-	/*
-	  IS THIS NECCESARY? PERHAPS WE CAN JUST USE THE PIPE
-	  LOOK AT: usb_pipeout and the pipe bits
-	  I FORGOT WHAT IT EXACTLY DOES
-	*/
-	if (usb_pipeout(pipe)) {
-		destination = (pipe & PIPE_DEVEP_MASK) | 0xE1;
-	}
-	else {
-		destination = (pipe & PIPE_DEVEP_MASK) | 0x69;
-	}
+	/* The "pipe" thing contains the destination in bits 8--18 */
+	destination = (pipe & PIPE_DEVEP_MASK) | usb_packetid (pipe);
 
 	/* Status:    slow/fast,       Active,    Short Packet Detect     Three Errors */
 	status = (pipe & (1 << 26)) | (1 << 23)   |   (1 << 29)       |    (3 << 27);

@@ -406,6 +406,7 @@ extern int usb_compress_isochronous (struct usb_device *usb_dev, void *_isodesc)
 #define usb_packetid(pipe)	(((pipe) & 0x80) ? 0x69 : 0xE1)
 
 #define usb_pipeout(pipe)	((((pipe) >> 7) & 1) ^ 1)
+#define usb_pipein(pipe)	(((pipe) >> 7) & 1)
 #define usb_pipedevice(pipe)	(((pipe) >> 8) & 0x7f)
 #define usb_pipe_endpdev(pipe)	(((pipe) >> 8) & 0x7ff)
 #define usb_pipeendpoint(pipe)	(((pipe) >> 15) & 0xf)

@@ -26,13 +26,17 @@ static void release(struct task_struct * p)
 {
 	if (p != current) {
 #ifdef __SMP__
+		int has_cpu;
+
 		/*
 		 * Wait to make sure the process isn't on the
 		 * runqueue (active on some other CPU still)
 		 */
 		do {
-			barrier();
-		} while (p->has_cpu);
+			spin_lock_irq(&runqueue_lock);
+			has_cpu = p->has_cpu;
+			spin_unlock_irq(&runqueue_lock);
+		} while (has_cpu);
 #endif
 		free_uid(p);
 		unhash_process(p);
@@ -258,6 +262,31 @@ void exit_itimers(struct task_struct *tsk)
 }
 
 /*
+ * We can use these to temporarily drop into
+ * "lazy TLB" mode and back.
+ */
+struct mm_struct * start_lazy_tlb(void)
+{
+	struct mm_struct *mm = current->mm;
+	current->mm = NULL;
+	/* active_mm is still 'mm' */
+	atomic_inc(&mm->mm_count);
+	return mm;
+}
+
+void end_lazy_tlb(struct mm_struct *mm)
+{
+	struct mm_struct *active_mm = current->active_mm;
+
+	current->mm = mm;
+	if (mm != active_mm) {
+		current->active_mm = mm;
+		switch_mm(active_mm, mm);
+	}
+	mmdrop(active_mm);
+}
+
+/*
  * Turn us into a lazy TLB process if we
  * aren't already..
  */
@@ -266,12 +295,10 @@ static inline void __exit_mm(struct task_struct * tsk)
 	struct mm_struct * mm = tsk->mm;
 
 	if (mm) {
-		atomic_inc(&init_mm.mm_count);
+		atomic_inc(&mm->mm_count);
 		mm_release();
 		if (mm != tsk->active_mm) BUG();
 		tsk->mm = NULL;
-		tsk->active_mm = &init_mm;
-		switch_mm(mm, &init_mm);
 		mmput(mm);
 	}
 }

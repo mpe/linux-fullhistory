@@ -1956,27 +1956,6 @@ static int sync_old_buffers(void)
 	return 0;
 }
 
-struct mm_struct * start_lazy_tlb(void)
-{
-	struct mm_struct *mm = current->mm;
-	atomic_inc(&mm->mm_count);
-	current->mm = NULL;
-	/* active_mm is still 'mm' */
-	return mm;
-}
-
-void end_lazy_tlb(struct mm_struct *mm)
-{
-	struct mm_struct *active_mm = current->active_mm;
-
-	current->mm = mm;
-	if (mm != active_mm) {
-		current->active_mm = mm;
-		switch_mm(active_mm, mm);
-	}
-	mmdrop(active_mm);
-}
-
 /* This is the interface to bdflush.  As we get more sophisticated, we can
  * pass tuning parameters to this "process", to adjust how it behaves. 
  * We would want to verify each parameter, however, to make sure that it 

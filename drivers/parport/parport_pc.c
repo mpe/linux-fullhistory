@@ -1521,6 +1521,7 @@ static int __init probe_one_port(unsigned long int base,
 				 int irq, int dma)
 {
 	struct parport_pc_private *priv;
+	struct parport_operations *ops;
 	struct parport tmp;
 	struct parport *p = &tmp;
 	int probedirq = PARPORT_IRQ_NONE;
@@ -1530,6 +1531,14 @@ static int __init probe_one_port(unsigned long int base,
 		printk (KERN_DEBUG "parport (0x%lx): no memory!\n", base);
 		return 0;
 	}
+	ops = kmalloc (sizeof (struct parport_operations), GFP_KERNEL);
+	if (!ops) {
+		printk (KERN_DEBUG "parport (0x%lx): no memory for ops!\n",
+			base);
+		kfree (priv);
+		return 0;
+	}
+	memcpy (ops, &parport_pc_ops, sizeof (struct parport_operations));
 	priv->ctr = 0xc;
 	priv->ctr_writable = 0xff;
 	priv->ecr = 0;
@@ -1540,7 +1549,7 @@ static int __init probe_one_port(unsigned long int base,
 	p->irq = irq;
 	p->dma = dma;
 	p->modes = PARPORT_MODE_PCSPP;
-	p->ops = &parport_pc_ops;
+	p->ops = ops;
 	p->private_data = priv;
 	p->physport = p;
 	if (base_hi && !check_region(base_hi,3)) {
@@ -1564,8 +1573,9 @@ static int __init probe_one_port(unsigned long int base,
 	parport_PS2_supported (p);
 
 	if (!(p = parport_register_port(base, PARPORT_IRQ_NONE,
-									PARPORT_DMA_NONE, &parport_pc_ops))) {
+					PARPORT_DMA_NONE, ops))) {
 		kfree (priv);
+		kfree (ops);
 		return 0;
 	}
 
@@ -1697,34 +1707,6 @@ static int __init probe_one_port(unsigned long int base,
 /* Look for PCI parallel port cards. */
 static int __init parport_pc_init_pci (int irq, int dma)
 {
-/* These need to go in pci.h: */
-#ifndef PCI_VENDOR_ID_SIIG
-#define PCI_VENDOR_ID_SIIG              0x131f
-#define PCI_DEVICE_ID_SIIG_1S1P_10x_550 0x1010
-#define PCI_DEVICE_ID_SIIG_1S1P_10x_650 0x1011
-#define PCI_DEVICE_ID_SIIG_1S1P_10x_850 0x1012
-#define PCI_DEVICE_ID_SIIG_1P_10x       0x1020
-#define PCI_DEVICE_ID_SIIG_2P_10x       0x1021
-#define PCI_DEVICE_ID_SIIG_2S1P_10x_550 0x1034
-#define PCI_DEVICE_ID_SIIG_2S1P_10x_650 0x1035
-#define PCI_DEVICE_ID_SIIG_2S1P_10x_850 0x1036
-#define PCI_DEVICE_ID_SIIG_1P_20x       0x2020
-#define PCI_DEVICE_ID_SIIG_2P_20x       0x2021
-#define PCI_DEVICE_ID_SIIG_2P1S_20x_550 0x2040
-#define PCI_DEVICE_ID_SIIG_2P1S_20x_650 0x2041
-#define PCI_DEVICE_ID_SIIG_2P1S_20x_850 0x2042
-#define PCI_DEVICE_ID_SIIG_1S1P_20x_550 0x2010
-#define PCI_DEVICE_ID_SIIG_1S1P_20x_650 0x2011
-#define PCI_DEVICE_ID_SIIG_1S1P_20x_850 0x2012
-#define PCI_DEVICE_ID_SIIG_2S1P_20x_550 0x2060
-#define PCI_DEVICE_ID_SIIG_2S1P_20x_650 0x2061
-#define PCI_DEVICE_ID_SIIG_2S1P_20x_850 0x2062
-#define PCI_VENDOR_ID_LAVA              0x1407
-#define PCI_DEVICE_ID_LAVA_PARALLEL     0x8000
-#define PCI_DEVICE_ID_LAVA_DUAL_PAR_A   0x8001 /* The Lava Dual Parallel is */
-#define PCI_DEVICE_ID_LAVA_DUAL_PAR_B   0x8002 /* two PCI devices on a card */
-#endif
-
 	struct {
 		unsigned int vendor;
 		unsigned int device;
@@ -1896,6 +1878,7 @@ void cleanup_module(void)
 			if (priv->dma_buf)
 				free_page((unsigned long) priv->dma_buf);
 			kfree (p->private_data);
+			kfree (p->ops); /* hope no-one cached it */
 			parport_unregister_port(p);
 		}
 		p = tmp;

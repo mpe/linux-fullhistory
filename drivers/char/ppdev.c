@@ -30,6 +30,8 @@
  *   RSTATUS	read_status
  *   NEGOT	parport_negotiate
  *   YIELD	parport_yield_blocking
+ *   WCTLONIRQ	on interrupt, set control lines
+ *   CLRIRQ	clear (and return) interrupt count
  * read/write	read or write in current IEEE 1284 protocol
  * select	wait for interrupt (in readfds)
  */
@@ -53,9 +55,11 @@
 struct pp_struct {
 	struct pardevice * pdev;
 	wait_queue_head_t irq_wait;
-	int got_irq;
+	atomic_t irqc;
 	int mode;
 	unsigned int flags;
+	int irqresponse;
+	unsigned char irqctl;
 };
 
 /* pp_struct.flags bitfields */
@@ -287,7 +291,13 @@ static ssize_t pp_write (struct file * file, const char * buf, size_t count,
 static void pp_irq (int irq, void * private, struct pt_regs * unused)
 {
 	struct pp_struct * pp = (struct pp_struct *) private;
-	pp->got_irq = 1;
+
+	if (pp->irqresponse) {
+		parport_write_control (pp->pdev->port, pp->irqctl);
+		pp->irqresponse = 0;
+	}
+
+	atomic_inc (&pp->irqc);
 	wake_up_interruptible (&pp->irq_wait);
 }
 
@@ -459,10 +469,35 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 	case PPNEGOT:
 		if (copy_from_user (&mode, (int *) arg, sizeof (mode)))
 			return -EFAULT;
-		/* FIXME: validate mode */
-		ret = parport_negotiate (port, mode);
+		switch ((ret = parport_negotiate (port, mode))) {
+		case 0: break;
+		case -1: /* handshake failed, peripheral not IEEE 1284 */
+			ret = -EIO;
+			break;
+		case 1:  /* handshake succeeded, peripheral rejected mode */
+			ret = -ENXIO;
+			break;
+		}
 		enable_irq (pp);
 		return ret;
+
+	case PPWCTLONIRQ:
+		if (copy_from_user (&reg, (unsigned char *) arg,
+				    sizeof (reg)))
+			return -EFAULT;
+
+		/* Remember what to set the control lines to, for next
+		 * time we get an interrupt. */
+		pp->irqctl = reg;
+		pp->irqresponse = 1;
+		return 0;
+
+	case PPCLRIRQ:
+		ret = atomic_read (&pp->irqc);
+		if (copy_to_user ((int *) arg, &ret, sizeof (ret)))
+			return -EFAULT;
+		atomic_sub (ret, &pp->irqc);
+		return 0;
 
 	default:
 		printk (KERN_DEBUG CHRDEV "%x: What? (cmd=0x%x)\n", minor,
@@ -488,7 +523,7 @@ static int pp_open (struct inode * inode, struct file * file)
 
 	pp->mode = IEEE1284_MODE_COMPAT;
 	pp->flags = 0;
-	pp->got_irq = 0;
+	atomic_set (&pp->irqc, 0);
 	init_waitqueue_head (&pp->irq_wait);
 
 	/* Defer the actual device registration until the first claim.
@@ -531,10 +566,10 @@ static unsigned int pp_poll (struct file * file, poll_table * wait)
 {
 	struct pp_struct *pp = file->private_data;
 	unsigned int mask = 0;
-	if (pp->got_irq) {
-		pp->got_irq = 0;
+
+	if (atomic_read (&pp->irqc))
 		mask |= POLLIN | POLLRDNORM;
-	}
+
 	poll_wait (file, &pp->irq_wait, wait);
 	return mask;
 }

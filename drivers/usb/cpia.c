@@ -583,7 +583,7 @@ printk("cpia_open\n");
 
 	cpia->fbuf = rvmalloc(2 * MAX_FRAME_SIZE);
 	if (!cpia->fbuf)
-		return -ENOMEM;
+		goto open_err_ret;
 
 	cpia->frame[0].state = FRAME_DONE;
 	cpia->frame[1].state = FRAME_DONE;
@@ -595,15 +595,15 @@ printk("cpia_open\n");
 
 	cpia->sbuf[0].data = kmalloc(STREAM_BUF_SIZE, GFP_KERNEL);
 	if (!cpia->sbuf[0].data)
-		return -ENOMEM;
+		goto open_err_on0;
 
 	cpia->sbuf[1].data = kmalloc(STREAM_BUF_SIZE, GFP_KERNEL);
 	if (!cpia->sbuf[1].data)
-		return -ENOMEM;
+		goto open_err_on1;
 
 	cpia->sbuf[2].data = kmalloc(STREAM_BUF_SIZE, GFP_KERNEL);
 	if (!cpia->sbuf[2].data)
-		return -ENOMEM;
+		goto open_err_on2;
 
 	printk("sbuf[0] @ %p\n", cpia->sbuf[0].data);
 	printk("sbuf[1] @ %p\n", cpia->sbuf[1].data);
@@ -617,6 +617,15 @@ printk("cpia_open\n");
 	cpia_init_isoc(cpia);
 
 	return 0;
+
+open_err_on2:
+	kfree (cpia->sbuf[1].data);
+open_err_on1:
+	kfree (cpia->sbuf[0].data);
+open_err_on0:
+	rvfree(cpia->fbuf, 2 * MAX_FRAME_SIZE);
+open_err_ret:
+	return -ENOMEM;
 }
 
 static void cpia_close(struct video_device *dev)
