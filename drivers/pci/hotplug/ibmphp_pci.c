@@ -1308,42 +1308,36 @@ static int unconfigure_boot_device (u8 busno, u8 device, u8 function)
 			/* ????????? DO WE NEED TO WRITE ANYTHING INTO THE PCI CONFIG SPACE BACK ?????????? */
 		} else {
 			/* This is Memory */
+			start_address &= PCI_BASE_ADDRESS_MEM_MASK;
 			if (start_address & PCI_BASE_ADDRESS_MEM_PREFETCH) {
 				/* pfmem */
-				start_address &= PCI_BASE_ADDRESS_MEM_MASK;
 				debug ("start address of pfmem is %x\n", start_address);
 
 				if (ibmphp_find_resource (bus, start_address, &pfmem, PFMEM) < 0) {
 					err ("cannot find corresponding PFMEM resource to remove\n");
 					return -EIO;
 				}
-				if (pfmem)
+				if (pfmem) {
 					debug ("pfmem->start = %x\n", pfmem->start);
 
-				ibmphp_remove_resource (pfmem);
-
-				if (tmp_address & PCI_BASE_ADDRESS_MEM_TYPE_64) {
-					/* takes up another dword */
-					count += 1;
+					ibmphp_remove_resource(pfmem);
 				}
-
 			} else {
 				/* regular memory */
-				start_address &= PCI_BASE_ADDRESS_MEM_MASK;
 				debug ("start address of mem is %x\n", start_address);
 				if (ibmphp_find_resource (bus, start_address, &mem, MEM) < 0) {
 					err ("cannot find corresponding MEM resource to remove\n");
 					return -EIO;
 				}
-				if (mem)
+				if (mem) {
 					debug ("mem->start = %x\n", mem->start);
 
-				ibmphp_remove_resource (mem);
-
-				if (tmp_address & PCI_BASE_ADDRESS_MEM_TYPE_64) {
-					/* takes up another dword */
-					count += 1;
+					ibmphp_remove_resource(mem);
 				}
+			}
+			if (tmp_address & PCI_BASE_ADDRESS_MEM_TYPE_64) {
+				/* takes up another dword */
+				count += 1;
 			}
 		}	/* end of mem */
 	}	/* end of for */
@@ -1428,39 +1422,33 @@ static int unconfigure_boot_bridge (u8 busno, u8 device, u8 function)
 			/* ????????? DO WE NEED TO WRITE ANYTHING INTO THE PCI CONFIG SPACE BACK ?????????? */
 		} else {
 			/* This is Memory */
+			start_address &= PCI_BASE_ADDRESS_MEM_MASK;
 			if (start_address & PCI_BASE_ADDRESS_MEM_PREFETCH) {
 				/* pfmem */
-				start_address &= PCI_BASE_ADDRESS_MEM_MASK;
 				if (ibmphp_find_resource (bus, start_address, &pfmem, PFMEM) < 0) {
 					err ("cannot find corresponding PFMEM resource to remove\n");
 					return -EINVAL;
 				}
-				if (pfmem)
+				if (pfmem) {
 					debug ("pfmem->start = %x\n", pfmem->start);
 
-				ibmphp_remove_resource (pfmem);
-
-				if (tmp_address & PCI_BASE_ADDRESS_MEM_TYPE_64) {
-					/* takes up another dword */
-					count += 1;
+					ibmphp_remove_resource(pfmem);
 				}
-
 			} else {
 				/* regular memory */
-				start_address &= PCI_BASE_ADDRESS_MEM_MASK;
 				if (ibmphp_find_resource (bus, start_address, &mem, MEM) < 0) {
 					err ("cannot find corresponding MEM resource to remove\n");
 					return -EINVAL;
 				}
-				if (mem)
+				if (mem) {
 					debug ("mem->start = %x\n", mem->start);
 
-				ibmphp_remove_resource (mem);
-
-				if (tmp_address & PCI_BASE_ADDRESS_MEM_TYPE_64) {
-					/* takes up another dword */
-					count += 1;
+					ibmphp_remove_resource(mem);
 				}
+			}
+			if (tmp_address & PCI_BASE_ADDRESS_MEM_TYPE_64) {
+				/* takes up another dword */
+				count += 1;
 			}
 		}	/* end of mem */
 	}	/* end of for */

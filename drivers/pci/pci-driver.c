@@ -49,13 +49,6 @@ pci_device_probe_dynamic(struct pci_driver *drv, struct pci_dev *pci_dev)
 	return error;
 }
 
-static inline void
-dynid_init(struct dynid *dynid)
-{
-	memset(dynid, 0, sizeof(*dynid));
-	INIT_LIST_HEAD(&dynid->node);
-}
-
 /**
  * store_new_id
  *
@@ -82,8 +75,9 @@ store_new_id(struct device_driver *driver, const char *buf, size_t count)
 	dynid = kmalloc(sizeof(*dynid), GFP_KERNEL);
 	if (!dynid)
 		return -ENOMEM;
-	dynid_init(dynid);
 
+	memset(dynid, 0, sizeof(*dynid));
+	INIT_LIST_HEAD(&dynid->node);
 	dynid->id.vendor = vendor;
 	dynid->id.device = device;
 	dynid->id.subvendor = subvendor;
@@ -167,7 +161,6 @@ static inline int pci_device_probe_dynamic(struct pci_driver *drv, struct pci_de
 {
 	return -ENODEV;
 }
-static inline void dynid_init(struct dynid *dynid) {}
 static inline void pci_init_dynids(struct pci_dynids *dynids) {}
 static inline void pci_free_dynids(struct pci_driver *drv) {}
 static inline int pci_create_newid_file(struct pci_driver *drv)

@@ -313,13 +313,10 @@ static void *pci_seq_start(struct seq_file *m, loff_t *pos)
 	struct pci_dev *dev = NULL;
 	loff_t n = *pos;
 
-	dev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, dev);
-	while (n--) {
-		dev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, dev);
-		if (dev == NULL)
-			goto exit;
+	for_each_pci_dev(dev) {
+		if (!n--)
+			break;
 	}
-exit:
 	return dev;
 }
 
