@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.20 2000/02/27 19:51:38 davem Exp $
+ *	$Id: ipv6.h,v 1.21 2000/07/07 22:29:42 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -188,6 +188,9 @@ extern u8 *			ipv6_parse_hopopts(struct sk_buff *skb, u8 *nhptr);
 extern u8 *			ipv6_parse_exthdrs(struct sk_buff **skb, u8 *nhptr);
 
 extern struct ipv6_txoptions *  ipv6_dup_options(struct sock *sk, struct ipv6_txoptions *opt);
+
+extern int ip6_frag_nqueues;
+extern atomic_t ip6_frag_mem;
 
 #define IPV6_FRAG_TIMEOUT	(60*HZ)		/* 60 seconds */
 

@@ -13,17 +13,19 @@ TARGET	:= $(TOPDIR)/include/asm-$(ARCH)/offset.h
 .S.o:
 	$(CC) $(CFLAGS) -c $< -o $*.o
 
-all: $(TARGET)
-
 $(TARGET): offset.h
 	cmp -s $^ $@ || (cp $^ $(TARGET).new && mv $(TARGET).new $(TARGET))
 
 offset.h: offset.s
 	sed -n '/^@@@/s///p' $^ >$@
 
-offset.s: offset.c
+offset.s: offset.c $(TOPDIR)/include/linux/autoconf.h
 
 clean:
 	rm -f offset.[hs] $(TARGET).new
+	
+mrproper:	
+	rm -f offset.[hs] $(TARGET).new
+	rm -f $(TARGET)
 
 include $(TOPDIR)/Rules.make

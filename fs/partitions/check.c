@@ -31,6 +31,7 @@
 #include "sgi.h"
 #include "sun.h"
 #include "ibm.h"
+#include "ultrix.h"
 
 extern void device_init(void);
 extern void md_run_setup(void);

@@ -155,6 +155,6 @@ void prom_free_prom_memory (void)
 		addr += PAGE_SIZE;
 	}
 
-	printk("Freeing unused PROM memory: %dk freed\n",
+	printk("Freeing unused PROM memory: %ldk freed\n",
 	       (end - PAGE_SIZE) >> 10);
 }

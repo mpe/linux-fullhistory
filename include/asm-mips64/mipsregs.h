@@ -213,6 +213,8 @@ __BUILD_SET_CP0(config,CP0_CONFIG)
 #define ST0_UX			0x00000020
 #define ST0_SX			0x00000040
 #define ST0_KX 			0x00000080
+#define ST0_DE			0x00010000
+#define ST0_CE			0x00020000
 
 /*
  * Status register bits available in all MIPS CPUs.
@@ -234,8 +236,6 @@ __BUILD_SET_CP0(config,CP0_CONFIG)
 #define  STATUSF_IP6		(1   << 14)
 #define  STATUSB_IP7		15
 #define  STATUSF_IP7		(1   << 15)
-#define ST0_DE			0x00010000
-#define ST0_CE			0x00020000
 #define ST0_CH			0x00040000
 #define ST0_SR			0x00100000
 #define ST0_TS			0x00200000

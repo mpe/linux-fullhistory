@@ -14,6 +14,10 @@
 CONFIG_SGI_IP27=y
 # CONFIG_SGI_SN0_N_MODE is not set
 # CONFIG_DISCONTIGMEM is not set
+# CONFIG_NUMA is not set
+# CONFIG_MAPPED_KERNEL is not set
+# CONFIG_REPLICATE_KTEXT is not set
+# CONFIG_REPLICATE_EXHANDLERS is not set
 # CONFIG_SMP is not set
 CONFIG_BOOT_ELF64=y
 CONFIG_ARC64=y
@@ -53,10 +57,13 @@ CONFIG_BINFMT_ELF32=y
 #
 # Loadable module support
 #
-CONFIG_MODULES=y
-# CONFIG_MODVERSIONS is not set
-CONFIG_KMOD=y
+# CONFIG_MODULES is not set
 CONFIG_PCI_NAMES=y
+
+#
+# Memory Technology Devices (MTD)
+#
+# CONFIG_MTD is not set
 
 #
 # Block devices
@@ -66,16 +73,14 @@ CONFIG_PCI_NAMES=y
 # CONFIG_PARIDE is not set
 # CONFIG_BLK_CPQ_DA is not set
 # CONFIG_BLK_DEV_DAC960 is not set
-
-#
-# Additional Block Devices
-#
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_LVM is not set
 # CONFIG_BLK_DEV_MD is not set
 # CONFIG_MD_LINEAR is not set
 # CONFIG_MD_RAID0 is not set
+# CONFIG_MD_RAID1 is not set
+# CONFIG_MD_RAID5 is not set
 # CONFIG_BLK_DEV_RAM is not set
 # CONFIG_BLK_DEV_INITRD is not set
 
@@ -110,6 +115,7 @@ CONFIG_SKB_LARGE=y
 # CONFIG_IPX is not set
 # CONFIG_ATALK is not set
 # CONFIG_DECNET is not set
+# CONFIG_BRIDGE is not set
 
 #
 # Telephony Support
@@ -308,6 +314,7 @@ CONFIG_SERIAL_CONSOLE=y
 # Watchdog Cards
 #
 # CONFIG_WATCHDOG is not set
+# CONFIG_INTEL_RNG is not set
 # CONFIG_NVRAM is not set
 # CONFIG_RTC is not set
 
@@ -342,6 +349,7 @@ CONFIG_SERIAL_CONSOLE=y
 # CONFIG_UMSDOS_FS is not set
 # CONFIG_VFAT_FS is not set
 # CONFIG_EFS_FS is not set
+# CONFIG_JFFS_FS is not set
 # CONFIG_CRAMFS is not set
 # CONFIG_RAMFS is not set
 # CONFIG_ISO9660_FS is not set
@@ -420,6 +428,5 @@ CONFIG_KCORE_ELF=y
 # Kernel hacking
 #
 CONFIG_CROSSCOMPILE=y
-# CONFIG_MIPS_FPE_MODULE is not set
 # CONFIG_REMOTE_DEBUG is not set
 # CONFIG_MAGIC_SYSRQ is not set

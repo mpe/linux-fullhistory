@@ -151,15 +151,15 @@ unsigned long __init r3k_cache_size(unsigned long ca_flags)
 
 static void __init probe_dcache(void)
 {
-	dcache_size = r3k_cache_size(ST0_DE);
+	dcache_size = r3k_cache_size(ST0_ISC);
 	printk("Primary data cache %dkb, linesize 4 bytes\n",
 		dcache_size >> 10);
 }
 
 static void __init probe_icache(void)
 {
-	icache_size = r3k_cache_size(ST0_DE|ST0_CE);
-	printk("Primary instruction cache %dkb, linesize 8 bytes\n",
+	icache_size = r3k_cache_size(ST0_ISC|ST0_SWC);
+	printk("Primary instruction cache %dkb, linesize 4 bytes\n",
 		icache_size >> 10);
 }
 
@@ -174,43 +174,43 @@ static void r3k_flush_icache_range(unsigned long start, unsigned long size)
 	save_and_cli(flags);
 
 	/* isolate cache space */
-	write_32bit_cp0_register(CP0_STATUS, (ST0_DE|ST0_CE|flags)&~ST0_IEC);
+	write_32bit_cp0_register(CP0_STATUS, (ST0_ISC|ST0_SWC|flags)&~ST0_IEC);
 
-	for (i = 0; i < size; i += 0x100) {
+	for (i = 0; i < size; i += 0x080) {
 		asm ( 	"sb\t$0,0x000(%0)\n\t"
+			"sb\t$0,0x004(%0)\n\t"
 			"sb\t$0,0x008(%0)\n\t"
+			"sb\t$0,0x00c(%0)\n\t"
 			"sb\t$0,0x010(%0)\n\t"
+			"sb\t$0,0x014(%0)\n\t"
 			"sb\t$0,0x018(%0)\n\t"
-			"sb\t$0,0x020(%0)\n\t"
+			"sb\t$0,0x01c(%0)\n\t"
+		 	"sb\t$0,0x020(%0)\n\t"
+			"sb\t$0,0x024(%0)\n\t"
 			"sb\t$0,0x028(%0)\n\t"
+			"sb\t$0,0x02c(%0)\n\t"
 			"sb\t$0,0x030(%0)\n\t"
+			"sb\t$0,0x034(%0)\n\t"
 			"sb\t$0,0x038(%0)\n\t"
-		 	"sb\t$0,0x040(%0)\n\t"
+			"sb\t$0,0x03c(%0)\n\t"
+			"sb\t$0,0x040(%0)\n\t"
+			"sb\t$0,0x044(%0)\n\t"
 			"sb\t$0,0x048(%0)\n\t"
+			"sb\t$0,0x04c(%0)\n\t"
 			"sb\t$0,0x050(%0)\n\t"
+			"sb\t$0,0x054(%0)\n\t"
 			"sb\t$0,0x058(%0)\n\t"
-			"sb\t$0,0x060(%0)\n\t"
+			"sb\t$0,0x05c(%0)\n\t"
+		 	"sb\t$0,0x060(%0)\n\t"
+			"sb\t$0,0x064(%0)\n\t"
 			"sb\t$0,0x068(%0)\n\t"
+			"sb\t$0,0x06c(%0)\n\t"
 			"sb\t$0,0x070(%0)\n\t"
+			"sb\t$0,0x074(%0)\n\t"
 			"sb\t$0,0x078(%0)\n\t"
-			"sb\t$0,0x080(%0)\n\t"
-			"sb\t$0,0x088(%0)\n\t"
-			"sb\t$0,0x090(%0)\n\t"
-			"sb\t$0,0x098(%0)\n\t"
-			"sb\t$0,0x0a0(%0)\n\t"
-			"sb\t$0,0x0a8(%0)\n\t"
-			"sb\t$0,0x0b0(%0)\n\t"
-			"sb\t$0,0x0b8(%0)\n\t"
-		 	"sb\t$0,0x0c0(%0)\n\t"
-			"sb\t$0,0x0c8(%0)\n\t"
-			"sb\t$0,0x0d0(%0)\n\t"
-			"sb\t$0,0x0d8(%0)\n\t"
-			"sb\t$0,0x0e0(%0)\n\t"
-			"sb\t$0,0x0e8(%0)\n\t"
-			"sb\t$0,0x0f0(%0)\n\t"
-			"sb\t$0,0x0f8(%0)\n\t"
+			"sb\t$0,0x07c(%0)\n\t"
 			: : "r" (p) );
-		p += 0x100;
+		p += 0x080;
 	}
 
 	restore_flags(flags);
@@ -221,13 +221,13 @@ static void r3k_flush_dcache_range(unsigned long start, unsigned long size)
 	unsigned long i, flags;
 	volatile unsigned char *p = (char *)start;
 
-	if (size > icache_size)
-		size = icache_size;
+	if (size > dcache_size)
+		size = dcache_size;
 
 	save_and_cli(flags);
 
 	/* isolate cache space */
-	write_32bit_cp0_register(CP0_STATUS, (ST0_DE|flags)&~ST0_IEC);
+	write_32bit_cp0_register(CP0_STATUS, (ST0_ISC|flags)&~ST0_IEC);
 
 	for (i = 0; i < size; i += 0x080) {
 		asm ( 	"sb\t$0,0x000(%0)\n\t"
@@ -376,7 +376,7 @@ static void r3k_flush_cache_sigtramp(unsigned long addr)
 
 	save_and_cli(flags);
 
-	write_32bit_cp0_register(CP0_STATUS, (ST0_DE|ST0_CE|flags)&~ST0_IEC);
+	write_32bit_cp0_register(CP0_STATUS, (ST0_ISC|ST0_SWC|flags)&~ST0_IEC);
 
 	asm ( 	"sb\t$0,0x000(%0)\n\t"
 		"sb\t$0,0x008(%0)\n\t"

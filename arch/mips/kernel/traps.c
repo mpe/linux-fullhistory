@@ -1,5 +1,4 @@
-/* $Id: traps.c,v 1.28 2000/03/13 10:33:02 raiko Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -209,7 +208,7 @@ extern void __die(const char * str, struct pt_regs * regs, const char *where,
 		printk(" in %s, line %ld", where, line);
 	printk(":\n");
 	show_regs(regs);
-	printk("Process %s (pid: %ld, stackpage=%08lx)\n",
+	printk("Process %s (pid: %d, stackpage=%08lx)\n",
 		current->comm, current->pid, (unsigned long) current);
 	show_stack((unsigned int *) regs->regs[29]);
 	show_trace((unsigned int *) regs->regs[29]);
@@ -230,7 +229,7 @@ void __die_if_kernel(const char * str, struct pt_regs * regs, const char *where,
 extern const struct exception_table_entry __start___dbe_table[];
 extern const struct exception_table_entry __stop___dbe_table[];
 
-static void __declare_dbe_table(void)
+void __declare_dbe_table(void)
 {
 	__asm__ __volatile__(
 	".section\t__dbe_table,\"a\"\n\t"
@@ -332,7 +331,6 @@ void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 		return;
 	}
 #endif
-	lock_kernel();
 	if (fcr31 & 0x20000) {
 		/* Retry instruction with flush to zero ...  */
 		if (!(fcr31 & (1<<24))) {
@@ -344,7 +342,7 @@ void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 				"ctc1\t%0,$31"
 				: /* No outputs */
 				: "r" (fcr31));
-			goto out;
+			return;
 		}
 		pc = regs->cp0_epc + ((regs->cp0_cause & CAUSEF_BD) ? 4 : 0);
 		if (get_user(insn, (unsigned int *)pc)) {
@@ -358,12 +356,9 @@ void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 	}
 
 	if (compute_return_epc(regs))
-		goto out;
+		return;
 	//force_sig(SIGFPE, current);
 	printk(KERN_DEBUG "Should send SIGFPE to %s\n", current->comm);
-
-out:
-	unlock_kernel();
 }
 
 static inline int get_insn_opcode(struct pt_regs *regs, unsigned int *opcode)
@@ -430,17 +425,15 @@ void do_ri(struct pt_regs *regs)
 {
 	unsigned int opcode;
 
-	lock_kernel();
 	if (!get_insn_opcode(regs, &opcode)) {
 		if ((opcode & OPCODE) == LL)
 			simulate_ll(regs, opcode);
 		if ((opcode & OPCODE) == SC)
 			simulate_sc(regs, opcode);
 	} else {
-	printk("[%s:%ld] Illegal instruction at %08lx ra=%08lx\n",
+	printk("[%s:%d] Illegal instruction at %08lx ra=%08lx\n",
 	       current->comm, current->pid, regs->cp0_epc, regs->regs[31]);
 	}
-	unlock_kernel();
 	if (compute_return_epc(regs))
 		return;
 	force_sig(SIGILL, current);
@@ -526,10 +519,8 @@ void simulate_sc(struct pt_regs *regp, unsigned int opcode)
 
 void do_ri(struct pt_regs *regs)
 {
-	lock_kernel();
-	printk("[%s:%ld] Illegal instruction at %08lx ra=%08lx\n",
+	printk("[%s:%d] Illegal instruction at %08lx ra=%08lx\n",
 	       current->comm, current->pid, regs->cp0_epc, regs->regs[31]);
-	unlock_kernel();
 	if (compute_return_epc(regs))
 		return;
 	force_sig(SIGILL, current);

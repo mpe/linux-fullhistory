@@ -108,7 +108,12 @@ extern struct screen_info screen_info;
 #define VIDEO_TYPE_EGAM		0x20	/* EGA/VGA in Monochrome Mode	*/
 #define VIDEO_TYPE_EGAC		0x21	/* EGA in Color Mode		*/
 #define VIDEO_TYPE_VGAC		0x22	/* VGA+ in Color Mode		*/
-#define VIDEO_TYPE_VLFB		0x23	/* VESA VGA in graphic mode    	*/
+#define VIDEO_TYPE_VLFB		0x23	/* VESA VGA in graphic mode	*/
+
+#define VIDEO_TYPE_PICA_S3	0x30	/* ACER PICA-61 local S3 video	*/
+#define VIDEO_TYPE_MIPS_G364	0x31    /* MIPS Magnum 4000 G364 video  */
+#define VIDEO_TYPE_SNI_RM	0x32    /* SNI RM200 PCI video          */
+#define VIDEO_TYPE_SGI          0x33    /* Various SGI graphics hardware */
 
 #define VIDEO_TYPE_TGAC		0x40	/* DEC TGA */
 
@@ -116,9 +121,6 @@ extern struct screen_info screen_info;
 #define VIDEO_TYPE_SUNPCI       0x51    /* Sun PCI based frame buffer. */
 
 #define VIDEO_TYPE_PMAC		0x60	/* PowerMacintosh frame buffer. */
-
-#define VIDEO_TYPE_SGI          0x70    /* Various SGI graphics hardware */
-#define VIDEO_TYPE_MIPS_G364	0x71    /* MIPS Magnum 4000 G364 video  */
 
 /*
  * This character is the same as _POSIX_VDISABLE: it cannot be used as

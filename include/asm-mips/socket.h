@@ -1,6 +1,3 @@
-/*
- * $Id: socket.h,v 1.6 2000/02/25 21:52:09 ralf Exp $
- */
 #ifndef _ASM_SOCKET_H
 #define _ASM_SOCKET_H
 
@@ -56,9 +53,9 @@ To add: #define SO_REUSEPORT 0x0200	/* Allow local address and port reuse.  */
 #define SO_ATTACH_FILTER        26
 #define SO_DETACH_FILTER        27
 
-#ifdef __KERNEL__
-
 #define SO_PEERNAME             28
+#define SO_TIMESTAMP		29
+#define SCM_TIMESTAMP		SO_TIMESTAMP
 
 /* Nast libc5 fixup - bletch */
 #if defined(__KERNEL__)

@@ -17,6 +17,10 @@ bool 'Support for SGI IP27' CONFIG_SGI_IP27
 if [ "$CONFIG_SGI_IP27" = "y" ]; then
    bool '  IP27 N-Mode' CONFIG_SGI_SN0_N_MODE
    bool '  Discontiguous Memory Support' CONFIG_DISCONTIGMEM
+   bool '  NUMA support' CONFIG_NUMA
+   bool '  Mapped kernel support' CONFIG_MAPPED_KERNEL
+   bool '  Kernel text replication support' CONFIG_REPLICATE_KTEXT
+   bool '  Exception handler replication support' CONFIG_REPLICATE_EXHANDLERS
    bool '  Multi-Processing support (Experimental)' CONFIG_SMP
    #bool '  IP27 XXL' CONFIG_SGI_SN0_XXL
 fi
@@ -40,6 +44,7 @@ if [ "$CONFIG_SGI_IP22" = "y" ]; then
    define_bool CONFIG_ARC32 y
    define_bool CONFIG_BOARD_SCACHE y
    define_bool CONFIG_ARC_MEMORY y
+   define_bool CONFIG_SGI y
 fi
 
 if [ "$CONFIG_SGI_IP27" = "y" ]; then

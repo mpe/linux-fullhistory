@@ -1578,6 +1578,16 @@ CONFIG_BAGET_MIPS
   more details about the Baget see the Linux/MIPS FAQ on 
   http://oss.sgi.com/mips .
 
+Support for Cobalt Microserver
+CONFIG_COBALT_MICRO_SERVER
+  This enables support for the Cobalt Microserver.  For more information
+  see the Linux/MIPS FAQ on http://oss.sgi.com/mips .
+
+Support for 2800
+CONFIG_COBALT_28
+  This adds support for the Cobalt Microserver 2800.  A kernel with this
+  option selected will only work on the 2800.
+
 Support for DECstations
 CONFIG_DECSTATION
   This enables support for DEC's MIPS based workstations.  For details
@@ -4308,12 +4318,10 @@ CONFIG_DMASCC
   modem), in order to send and receive AX.25 packet radio network
   traffic.
 
-  Currently, this driver supports Ottawa PI/PI2
-  (http://hydra.carleton.ca/info/pi2.html ) and Gracilis PackeTwin
-  (http://www.paccomm.com/gracilis.html ) boards. They are detected
-  automatically. If you have one of these cards, say Y here and read
-  the AX25-HOWTO, available from
-  http://www.linuxdoc.org/docs.html#howto .
+  Currently, this driver supports Ottawa PI/PI2, Paccomm/Gracilis
+  PackeTwin, and S5SCC/DMA boards. They are detected automatically.
+  If you have one of these cards, say Y here and read the AX25-HOWTO,
+  available from http://www.linuxdoc.org/docs.html#howto .
 
   This driver can operate multiple boards simultaneously. If you
   compile it as a module (by saying M instead of Y), it will be called
@@ -4329,7 +4337,9 @@ CONFIG_DMASCC
   certain parameters, such as channel access timing, clock mode, and
   DMA channel. This is accomplished with a small utility program,
   dmascc_cfg, available at
-  http://www.nt.tuwien.ac.at/~kkudielk/Linux/ .
+  http://www.nt.tuwien.ac.at/~kkudielk/Linux/ . Please be sure to get
+  at least version 1.27 of dmascc_cfg, as older versions will not
+  work with the current driver.
 
 Z8530 SCC driver for AX.25
 CONFIG_SCC

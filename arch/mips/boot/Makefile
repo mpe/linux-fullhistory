@@ -46,8 +46,25 @@ dep:
 
 clean:
 	rm -f vmlinux.ecoff
+	rm -f zImage zImage.tmp mkboot
+
+mrproper:
+	rm -f vmlinux.ecoff
 	rm -f addinitrd
 	rm -f elf2ecoff
+
+zImage:	$(CONFIGURE) mkboot $(TOPDIR)/vmlinux
+	$(OBJCOPY) $(strip-flags) $(TOPDIR)/vmlinux zImage.tmp
+	./mkboot zImage.tmp zImage
+	rm -f zImage.tmp
+
+mkboot: mkboot.c
+	$(HOSTCC) -o $@ $^
+
+zdisk: 	zImage
+	cp $(TOPDIR)/vmlinux $(TOPDIR)/vm
+	$(STRIP) $(TOPDIR)/vm
+	gzip -9f $(TOPDIR)/vm
 
 dummy:
 

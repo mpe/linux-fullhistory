@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.42 2000/04/16 01:11:37 davem Exp $
+ * Version:	$Id: proc.c,v 1.43 2000/07/07 22:29:42 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -78,6 +78,8 @@ int afinet_get_info(char *buffer, char **start, off_t offset, int length)
 		       fold_prot_inuse(&udp_prot));
 	len += sprintf(buffer+len,"RAW: inuse %d\n",
 		       fold_prot_inuse(&raw_prot));
+	len += sprintf(buffer+len, "FRAG: inuse %d memory %d\n",
+		       ip_frag_nqueues, atomic_read(&ip_frag_mem));
 	if (offset >= len)
 	{
 		*start = buffer;

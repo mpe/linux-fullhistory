@@ -1,5 +1,4 @@
-/* $Id: linux32.c,v 1.14 2000/03/23 00:30:53 ulfc Exp $
- * 
+/* 
  * Conversion between 32-bit and 64-bit native system calls.
  *
  * Copyright (C) 2000 Silicon Graphics, Inc.
@@ -18,6 +17,8 @@
 #include <linux/time.h>
 #include <linux/poll.h>
 #include <linux/slab.h>
+#include <linux/skbuff.h>
+#include <linux/filter.h>
 
 #include <asm/uaccess.h>
 #include <asm/mman.h>
@@ -25,79 +26,6 @@
 
 #define A(__x) ((unsigned long)(__x))
 
-#if 1
-static inline int
-putstat(struct stat32 *ubuf, struct stat *kbuf)
-{
-	int err;
-	
-	err = put_user (kbuf->st_dev, &ubuf->st_dev);
-	err |= __put_user (kbuf->st_ino, &ubuf->st_ino);
-	err |= __put_user (kbuf->st_mode, &ubuf->st_mode);
-	err |= __put_user (kbuf->st_nlink, &ubuf->st_nlink);
-	err |= __put_user (kbuf->st_uid, &ubuf->st_uid);
-	err |= __put_user (kbuf->st_gid, &ubuf->st_gid);
-	err |= __put_user (kbuf->st_rdev, &ubuf->st_rdev);
-	err |= __put_user (kbuf->st_size, &ubuf->st_size);
-	err |= __put_user (kbuf->st_atime, &ubuf->st_atime);
-	err |= __put_user (kbuf->st_mtime, &ubuf->st_mtime);
-	err |= __put_user (kbuf->st_ctime, &ubuf->st_ctime);
-	err |= __put_user (kbuf->st_blksize, &ubuf->st_blksize);
-	err |= __put_user (kbuf->st_blocks, &ubuf->st_blocks);
-	return err;
-}
-
-extern asmlinkage long sys_newstat(char * filename, struct stat * statbuf);
-
-asmlinkage int
-sys32_newstat(char * filename, struct stat32 *statbuf)
-{
-	int ret;
-	struct stat s;
-	mm_segment_t old_fs = get_fs();
-	
-	set_fs (KERNEL_DS);
-	ret = sys_newstat(filename, &s);
-	set_fs (old_fs);
-	if (putstat (statbuf, &s))
-		return -EFAULT;
-	return ret;
-}
-
-extern asmlinkage long sys_newlstat(char * filename, struct stat * statbuf);
-
-asmlinkage int
-sys32_newlstat(char * filename, struct stat32 *statbuf)
-{
-	int ret;
-	struct stat s;
-	mm_segment_t old_fs = get_fs();
-	
-	set_fs (KERNEL_DS);
-	ret = sys_newlstat(filename, &s);
-	set_fs (old_fs);
-	if (putstat (statbuf, &s))
-		return -EFAULT;
-	return ret;
-}
-
-extern asmlinkage long sys_newfstat(unsigned int fd, struct stat * statbuf);
-
-asmlinkage int
-sys32_newfstat(unsigned int fd, struct stat32 *statbuf)
-{
-	int ret;
-	struct stat s;
-	mm_segment_t old_fs = get_fs();
-	
-	set_fs (KERNEL_DS);
-	ret = sys_newfstat(fd, &s);
-	set_fs (old_fs);
-	if (putstat (statbuf, &s))
-		return -EFAULT;
-	return ret;
-}
-#else
 /*
  * Revalidate the inode. This is required for proper NFS attribute caching.
  */
@@ -105,8 +33,10 @@ static __inline__ int
 do_revalidate(struct dentry *dentry)
 {
 	struct inode * inode = dentry->d_inode;
+
 	if (inode->i_op && inode->i_op->revalidate)
 		return inode->i_op->revalidate(dentry);
+
 	return 0;
 }
 
@@ -127,21 +57,22 @@ static int cp_new_stat32(struct inode * inode, struct stat32 * statbuf)
 	tmp.st_atime = inode->i_atime;
 	tmp.st_mtime = inode->i_mtime;
 	tmp.st_ctime = inode->i_ctime;
-/*
- * st_blocks and st_blksize are approximated with a simple algorithm if
- * they aren't supported directly by the filesystem. The minix and msdos
- * filesystems don't keep track of blocks, so they would either have to
- * be counted explicitly (by delving into the file itself), or by using
- * this simple algorithm to get a reasonable (although not 100% accurate)
- * value.
- */
 
-/*
- * Use minix fs values for the number of direct and indirect blocks.  The
- * count is now exact for the minix fs except that it counts zero blocks.
- * Everything is in units of BLOCK_SIZE until the assignment to
- * tmp.st_blksize.
- */
+	/*
+	 * st_blocks and st_blksize are approximated with a simple algorithm if
+	 * they aren't supported directly by the filesystem. The minix and msdos
+	 * filesystems don't keep track of blocks, so they would either have to
+	 * be counted explicitly (by delving into the file itself), or by using
+	 * this simple algorithm to get a reasonable (although not 100%
+	 * accurate) value.
+	 */
+
+	/*
+	 * Use minix fs values for the number of direct and indirect blocks.
+	 * The count is now exact for the minix fs except that it counts zero
+	 * blocks.  Everything is in units of BLOCK_SIZE until the assignment
+	 * to tmp.st_blksize.
+	 */
 #define D_B   7
 #define I_B   (BLOCK_SIZE / sizeof(unsigned short))
 
@@ -163,53 +94,49 @@ static int cp_new_stat32(struct inode * inode, struct stat32 * statbuf)
 		tmp.st_blocks = inode->i_blocks;
 		tmp.st_blksize = inode->i_blksize;
 	}
+
 	return copy_to_user(statbuf,&tmp,sizeof(tmp)) ? -EFAULT : 0;
 }
+
 asmlinkage int sys32_newstat(char * filename, struct stat32 *statbuf)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
-	lock_kernel();
-	dentry = namei(filename);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		error = do_revalidate(dentry);
+	error = user_path_walk(filename, &nd);
+	if (!error) {
+		error = do_revalidate(nd.dentry);
 		if (!error)
-			error = cp_new_stat32(dentry->d_inode, statbuf);
+			error = cp_new_stat32(nd.dentry->d_inode, statbuf);
 
-		dput(dentry);
+		path_release(&nd);
 	}
-	unlock_kernel();
+
 	return error;
 }
-asmlinkage int sys32_newlstat(char *filename, struct stat32 * statbuf)
+
+asmlinkage int sys32_newlstat(char * filename, struct stat32 *statbuf)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
-	lock_kernel();
-	dentry = lnamei(filename);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		error = do_revalidate(dentry);
+	error = user_path_walk_link(filename, &nd);
+	if (!error) {
+		error = do_revalidate(nd.dentry);
 		if (!error)
-			error = cp_new_stat32(dentry->d_inode, statbuf);
+			error = cp_new_stat32(nd.dentry->d_inode, statbuf);
 
-		dput(dentry);
+		path_release(&nd);
 	}
-	unlock_kernel();
+
 	return error;
 }
 
-asmlinkage int sys32_newfstat(unsigned int fd, struct stat32 * statbuf)
+asmlinkage long sys32_newfstat(unsigned int fd, struct stat32 * statbuf)
 {
 	struct file * f;
 	int err = -EBADF;
 
-	lock_kernel();
 	f = fget(fd);
 	if (f) {
 		struct dentry * dentry = f->f_dentry;
@@ -219,10 +146,10 @@ asmlinkage int sys32_newfstat(unsigned int fd, struct stat32 * statbuf)
 			err = cp_new_stat32(dentry->d_inode, statbuf);
 		fput(f);
 	}
-	unlock_kernel();
+
 	return err;
 }
-#endif
+
 asmlinkage int sys_mmap2(void) {return 0;}
 
 asmlinkage long sys_truncate(const char * path, unsigned long length);
@@ -232,7 +159,7 @@ asmlinkage int sys_truncate64(const char *path, unsigned int high,
 {
 	if ((int)high < 0)
 		return -EINVAL;
-	return sys_truncate(path, (high << 32) | low);
+	return sys_truncate(path, ((long) high << 32) | low);
 }
 
 asmlinkage long sys_ftruncate(unsigned int fd, unsigned long length);
@@ -242,28 +169,7 @@ asmlinkage int sys_ftruncate64(unsigned int fd, unsigned int high,
 {
 	if ((int)high < 0)
 		return -EINVAL;
-	return sys_ftruncate(fd, (high << 32) | low);
-}
-
-asmlinkage long sys_newstat(char * filename, struct stat * statbuf);
-
-asmlinkage int sys_stat64(char * filename, struct stat *statbuf)
-{
-	return sys_newstat(filename, statbuf);
-}
-
-asmlinkage long sys_newlstat(char * filename, struct stat * statbuf);
-
-asmlinkage int sys_lstat64(char * filename, struct stat *statbuf)
-{
-	return sys_newlstat(filename, statbuf);
-}
-
-asmlinkage long sys_newfstat(unsigned int fd, struct stat * statbuf);
-
-asmlinkage int sys_fstat64(unsigned int fd, struct stat *statbuf)
-{
-	return sys_newfstat(fd, statbuf);
+	return sys_ftruncate(fd, ((long) high << 32) | low);
 }
 
 #if 0
@@ -304,7 +210,8 @@ int copy_strings32(int argc, u32 * argv, struct linux_binprm *bprm)
 		int len;
 		unsigned long pos;
 
-		if (get_user(str, argv+argc) || !str || !(len = strnlen_user((char *)A(str), bprm->p))) 
+		if (get_user(str, argv+argc) || !str ||
+		     !(len = strnlen_user((char *)A(str), bprm->p))) 
 			return -EFAULT;
 		if (bprm->p < len) 
 			return -E2BIG; 
@@ -338,9 +245,11 @@ int copy_strings32(int argc, u32 * argv, struct linux_binprm *bprm)
 			if (bytes_to_copy > len) {
 				bytes_to_copy = len;
 				if (new)
-					memset(kaddr+offset+len, 0, PAGE_SIZE-offset-len);
+					memset(kaddr+offset+len, 0,
+					       PAGE_SIZE-offset-len);
 			}
-			err = copy_from_user(kaddr + offset, (char *)A(str), bytes_to_copy);
+			err = copy_from_user(kaddr + offset, (char *)A(str),
+			                     bytes_to_copy);
 			flush_page_to_ram(page);
 			kunmap(page);
 
@@ -970,7 +879,7 @@ do_readv_writev32(int type, struct file *file, const struct iovec32 *vector,
 	tot_len = 0;
 	i = count;
 	ivp = iov;
-	while(i > 0) {
+	while (i > 0) {
 		u32 len;
 		u32 buf;
 
@@ -1038,6 +947,7 @@ do_readv_writev32(int type, struct file *file, const struct iovec32 *vector,
 	}
 	if (iov != iovstack)
 		kfree(iov);
+
 	return retval;
 }
 
@@ -1045,22 +955,19 @@ asmlinkage long
 sys32_readv(int fd, struct iovec32 *vector, u32 count)
 {
 	struct file *file;
-	long ret = -EBADF;
+	ssize_t ret;
 
-	lock_kernel();
+	ret = -EBADF;
 	file = fget(fd);
-	if(!file)
+	if (!file)
 		goto bad_file;
+	if (file->f_op && (file->f_mode & FMODE_READ) &&
+	    (file->f_op->readv || file->f_op->read))
+		ret = do_readv_writev32(VERIFY_WRITE, file, vector, count);
 
-	if(!(file->f_mode & 1))
-		goto out;
-
-	ret = do_readv_writev32(VERIFY_WRITE, file,
-				vector, count);
-out:
 	fput(file);
+
 bad_file:
-	unlock_kernel();
 	return ret;
 }
 
@@ -1068,22 +975,18 @@ asmlinkage long
 sys32_writev(int fd, struct iovec32 *vector, u32 count)
 {
 	struct file *file;
-	int ret = -EBADF;
+	ssize_t ret;
 
-	lock_kernel();
+	ret = -EBADF;
 	file = fget(fd);
 	if(!file)
 		goto bad_file;
-
-	if(!(file->f_mode & 2))
-		goto out;
-
-	ret = do_readv_writev32(VERIFY_READ, file,
-				vector, count);
-out:
+	if (file->f_op && (file->f_mode & FMODE_WRITE) &&
+	    (file->f_op->writev || file->f_op->write))
+	        ret = do_readv_writev32(VERIFY_READ, file, vector, count);
 	fput(file);
+
 bad_file:
-	unlock_kernel();
 	return ret;
 }
 
@@ -1302,4 +1205,135 @@ sys32_nanosleep(struct timespec32 *rqtp, struct timespec32 *rmtp)
 			return -EFAULT;
 	}
 	return ret;
+}
+
+struct tms32 {
+	int tms_utime;
+	int tms_stime;
+	int tms_cutime;
+	int tms_cstime;
+};
+
+extern asmlinkage long sys_times(struct tms * tbuf);
+asmlinkage long sys32_times(struct tms32 *tbuf)
+{
+	struct tms t;
+	long ret;
+	mm_segment_t old_fs = get_fs();
+	int err;
+
+	set_fs(KERNEL_DS);
+	ret = sys_times(tbuf ? &t : NULL);
+	set_fs(old_fs);
+	if (tbuf) {
+		err = put_user (t.tms_utime, &tbuf->tms_utime);
+		err |= __put_user (t.tms_stime, &tbuf->tms_stime);
+		err |= __put_user (t.tms_cutime, &tbuf->tms_cutime);
+		err |= __put_user (t.tms_cstime, &tbuf->tms_cstime);
+		if (err)
+			ret = -EFAULT;
+	}
+	return ret;
+}
+
+extern asmlinkage int sys_setsockopt(int fd, int level, int optname,
+				     char *optval, int optlen);
+
+asmlinkage int sys32_setsockopt(int fd, int level, int optname,
+				char *optval, int optlen)
+{
+	if (optname == SO_ATTACH_FILTER) {
+		struct sock_fprog32 {
+			__u16 len;
+			__u32 filter;
+		} *fprog32 = (struct sock_fprog32 *)optval;
+		struct sock_fprog kfprog;
+		struct sock_filter *kfilter;
+		unsigned int fsize;
+		mm_segment_t old_fs;
+		__u32 uptr;
+		int ret;
+
+		if (get_user(kfprog.len, &fprog32->len) ||
+		    __get_user(uptr, &fprog32->filter))
+			return -EFAULT;
+		kfprog.filter = (struct sock_filter *)A(uptr);
+		fsize = kfprog.len * sizeof(struct sock_filter);
+		kfilter = (struct sock_filter *)kmalloc(fsize, GFP_KERNEL);
+		if (kfilter == NULL)
+			return -ENOMEM;
+		if (copy_from_user(kfilter, kfprog.filter, fsize)) {
+			kfree(kfilter);
+			return -EFAULT;
+		}
+		kfprog.filter = kfilter;
+		old_fs = get_fs();
+		set_fs(KERNEL_DS);
+		ret = sys_setsockopt(fd, level, optname,
+				     (char *)&kfprog, sizeof(kfprog));
+		set_fs(old_fs);
+		kfree(kfilter);
+		return ret;
+	}
+	return sys_setsockopt(fd, level, optname, optval, optlen);
+}
+
+struct flock32 {
+	short l_type;
+	short l_whence;
+	__kernel_off_t32 l_start;
+	__kernel_off_t32 l_len;
+	__kernel_pid_t32 l_pid;
+	short __unused;
+};
+
+static inline int get_flock(struct flock *kfl, struct flock32 *ufl)
+{
+	int err;
+	
+	err = get_user(kfl->l_type, &ufl->l_type);
+	err |= __get_user(kfl->l_whence, &ufl->l_whence);
+	err |= __get_user(kfl->l_start, &ufl->l_start);
+	err |= __get_user(kfl->l_len, &ufl->l_len);
+	err |= __get_user(kfl->l_pid, &ufl->l_pid);
+	return err;
+}
+
+static inline int put_flock(struct flock *kfl, struct flock32 *ufl)
+{
+	int err;
+	
+	err = __put_user(kfl->l_type, &ufl->l_type);
+	err |= __put_user(kfl->l_whence, &ufl->l_whence);
+	err |= __put_user(kfl->l_start, &ufl->l_start);
+	err |= __put_user(kfl->l_len, &ufl->l_len);
+	err |= __put_user(kfl->l_pid, &ufl->l_pid);
+	return err;
+}
+
+extern asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg);
+
+asmlinkage long sys32_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
+{
+	switch (cmd) {
+	case F_GETLK:
+	case F_SETLK:
+	case F_SETLKW:
+		{
+			struct flock f;
+			mm_segment_t old_fs;
+			long ret;
+			
+			if(get_flock(&f, (struct flock32 *)arg))
+				return -EFAULT;
+			old_fs = get_fs(); set_fs (KERNEL_DS);
+			ret = sys_fcntl(fd, cmd, (unsigned long)&f);
+			set_fs (old_fs);
+			if(put_flock(&f, (struct flock32 *)arg))
+				return -EFAULT;
+			return ret;
+		}
+	default:
+		return sys_fcntl(fd, cmd, (unsigned long)arg);
+	}
 }

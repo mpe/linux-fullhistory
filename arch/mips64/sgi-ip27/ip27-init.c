@@ -1,4 +1,3 @@
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/sched.h>
@@ -22,6 +21,7 @@
 #include <asm/sn/launch.h>
 #include <asm/sn/sn_private.h>
 #include <asm/sn/sn0/ip27.h>
+#include <asm/sn/mapped_kernel.h>
 
 #define CPU_NONE		(cpuid_t)-1
 
@@ -35,12 +35,13 @@
 #define CNODEMASK_SETB(p, bit)	((p) |= 1ULL << (bit))
 
 cpumask_t	boot_cpumask;
-static volatile cpumask_t boot_barrier;
 hubreg_t	region_mask = 0;
 static int	fine_mode = 0;
 int		maxcpus;
 static spinlock_t hub_mask_lock = SPIN_LOCK_UNLOCKED;
 static cnodemask_t hub_init_mask;
+static atomic_t numstarted = ATOMIC_INIT(1);
+nasid_t master_nasid = INVALID_NASID;
 
 cnodeid_t	nasid_to_compact_node[MAX_NASIDS];
 nasid_t		compact_to_nasid_node[MAX_COMPACT_NODES];
@@ -160,19 +161,6 @@ cpuid_t cpu_node_probe(cpumask_t *boot_cpumask, int *numnodes)
 	return(highest + 1);
 }
 
-void alloc_cpupda(int i)
-{
-	cnodeid_t	node;
-	nasid_t		nasid;
-
-	node = get_cpu_cnode(i);
-	nasid = COMPACT_TO_NASID_NODEID(node);
-
-	cputonasid(i) = nasid;
-	cputocnode(i) = node;
-	cputoslice(i) = get_cpu_slice(i);
-}
-
 int cpu_enabled(cpuid_t cpu)
 {
 	if (cpu == CPU_NONE)
@@ -180,19 +168,11 @@ int cpu_enabled(cpuid_t cpu)
 	return (CPUMASK_TSTB(boot_cpumask, cpu) != 0);
 }
 
-void initpdas(void)
-{
-	cpuid_t i;
-
-	for (i = 0; i < maxcpus; i++)
-		if (cpu_enabled(i))
-			alloc_cpupda(i);
-}
-
 void mlreset (void)
 {
 	int i;
 
+	master_nasid = get_nasid();
 	fine_mode = is_fine_dirmode();
 
 	/*
@@ -202,10 +182,11 @@ void mlreset (void)
 	CPUMASK_CLRALL(boot_cpumask);
 	maxcpus = cpu_node_probe(&boot_cpumask, &numnodes);
 	printk("Discovered %d cpus on %d nodes\n", maxcpus, numnodes);
-	initpdas();
 
 	gen_region_mask(&region_mask, numnodes);
 	CNODEMASK_CLRALL(hub_init_mask);
+
+	setup_replication_mask(numnodes);
 
 	/*
 	 * Set all nodes' calias sizes to 8k
@@ -221,7 +202,11 @@ void mlreset (void)
 		 * thinks it is a node 0 address.
 		 */
 		REMOTE_HUB_S(nasid, PI_REGION_PRESENT, (region_mask | 1));
+#ifdef CONFIG_REPLICATE_EXHANDLERS
+		REMOTE_HUB_S(nasid, PI_CALIAS_SIZE, PI_CALIAS_SIZE_8K);
+#else
 		REMOTE_HUB_S(nasid, PI_CALIAS_SIZE, PI_CALIAS_SIZE_0);
+#endif
 
 #ifdef LATER
 		/*
@@ -283,6 +268,7 @@ void sn_mp_setup(void)
 
 void per_hub_init(cnodeid_t cnode)
 {
+	extern void pcibr_setup(cnodeid_t);
 	cnodemask_t	done;
 
 	spin_lock(&hub_mask_lock);
@@ -290,16 +276,35 @@ void per_hub_init(cnodeid_t cnode)
 	if (!(done = CNODEMASK_TSTB(hub_init_mask, cnode))) {
 		/* Turn our bit on in the mask. */
 		CNODEMASK_SETB(hub_init_mask, cnode);
+		/*
+	 	 * Do the actual initialization if it hasn't been done yet.
+	 	 * We don't need to hold a lock for this work.
+	 	 */
+		hub_rtc_init(cnode);
+		pcibr_setup(cnode); 
+#ifdef CONFIG_REPLICATE_EXHANDLERS
+		/*
+		 * If this is not a headless node initialization, 
+		 * copy over the caliased exception handlers.
+		 */
+		if (get_compact_nodeid() == cnode) {
+			extern char except_vec0, except_vec1_r10k;
+			extern char except_vec2_generic, except_vec3_generic;
+
+			memcpy((void *)(KSEG0 + 0x100), &except_vec2_generic,
+								0x80);
+			memcpy((void *)(KSEG0 + 0x180), &except_vec3_generic,
+								0x80);
+			memcpy((void *)KSEG0, &except_vec0, 0x80);
+			memcpy((void *)KSEG0 + 0x080, &except_vec1_r10k, 0x80);
+			memcpy((void *)(KSEG0 + 0x100), (void *) KSEG0, 0x80);
+			memcpy((void *)(KSEG0 + 0x180), &except_vec3_generic,
+								0x100);
+			flush_cache_all();
+		}
+#endif
 	}
 	spin_unlock(&hub_mask_lock);
-
-	/*
-	 * Do the actual initialization if it hasn't been done yet.
-	 * We don't need to hold a lock for this work.
-	 */
-	if (!done) {
-		hub_rtc_init(cnode);
-	}
 }
 
 /*
@@ -318,10 +323,11 @@ void per_cpu_init(void)
 	extern void install_cpu_nmi_handler(int slice);
 	extern void load_mmu(void);
 	static int is_slave = 0;
-	cpuid_t cpu = getcpuid();
+	int cpu = smp_processor_id();
 	cnodeid_t cnode = get_compact_nodeid();
 
 	current_cpu_data.asid_cache = ASID_FIRST_VERSION;
+	TLBMISS_HANDLER_SETUP();
 #if 0
 	intr_init();
 #endif
@@ -331,7 +337,7 @@ void per_cpu_init(void)
 	if (smp_processor_id())	/* master can't do this early, no kmalloc */
 		install_cpuintr(cpu);
 	/* Install our NMI handler if symmon hasn't installed one. */
-	install_cpu_nmi_handler(cputoslice(smp_processor_id()));
+	install_cpu_nmi_handler(cputoslice(cpu));
 #if 0
 	install_tlbintr(cpu);
 #endif
@@ -343,9 +349,10 @@ void per_cpu_init(void)
 		set_cp0_status(ST0_KX|ST0_SX|ST0_UX, ST0_KX|ST0_SX|ST0_UX);
 		sti();
 		load_mmu();
-	}
-	if (is_slave == 0)
+		atomic_inc(&numstarted);
+	} else {
 		is_slave = 1;
+	}
 }
 
 cnodeid_t get_compact_nodeid(void)
@@ -361,6 +368,24 @@ cnodeid_t get_compact_nodeid(void)
 }
 
 #ifdef CONFIG_SMP
+
+/*
+ * Takes as first input the PROM assigned cpu id, and the kernel
+ * assigned cpu id as the second.
+ */
+static void alloc_cpupda(cpuid_t cpu, int cpunum)
+{
+	cnodeid_t	node;
+	nasid_t		nasid;
+
+	node = get_cpu_cnode(cpu);
+	nasid = COMPACT_TO_NASID_NODEID(node);
+
+	cputonasid(cpunum) = nasid;
+	cputocnode(cpunum) = node;
+	cputoslice(cpunum) = get_cpu_slice(cpu);
+	cpu_data[cpunum].p_cpuid = cpu;
+}
 
 void __init smp_callin(void)
 {
@@ -380,10 +405,10 @@ int __init start_secondary(void)
 	return cpu_idle();
 }
 
-static atomic_t numstarted = ATOMIC_INIT(0);
+static volatile cpumask_t boot_barrier;
+
 void cboot(void)
 {
-	atomic_inc(&numstarted);
 	CPUMASK_CLRB(boot_barrier, getcpuid());	/* needs atomicity */
 	per_cpu_init();
 #if 0
@@ -399,22 +424,24 @@ void cboot(void)
 void allowboot(void)
 {
 	int		num_cpus = 0;
-	cpuid_t		cpu;
+	cpuid_t		cpu, mycpuid = getcpuid();
 	cnodeid_t	cnode;
 	extern void	bootstrap(void);
 
 	sn_mp_setup();
 	/* Master has already done per_cpu_init() */
-	install_cpuintr(getcpuid());
+	install_cpuintr(smp_processor_id());
 #if 0
 	bte_lateinit();
 	ecc_init();
 #endif
 
+	replicate_kernel_text(numnodes);
 	boot_barrier = boot_cpumask;
 	/* Launch slaves. */
 	for (cpu = 0; cpu < maxcpus; cpu++) {
-		if (cpu == smp_processor_id()) {
+		if (cpu == mycpuid) {
+			alloc_cpupda(cpu, num_cpus);
 			num_cpus++;
 			/* We're already started, clear our bit */
 			CPUMASK_CLRB(boot_barrier, cpu);
@@ -433,6 +460,7 @@ void allowboot(void)
 			p = init_task.prev_task;
 			sprintf(p->comm, "%s%d", "Idle", num_cpus);
 			init_tasks[num_cpus] = p;
+			alloc_cpupda(cpu, num_cpus);
 			p->processor = num_cpus;
 			p->has_cpu = 1; /* we schedule the first task manually */
 			del_from_runqueue(p);
@@ -448,10 +476,10 @@ void allowboot(void)
 			 * created idle process, gp to the proc struct
 			 * (so that current-> works).
 		 	 */
-			LAUNCH_SLAVE(cputonasid(cpu), cputoslice(cpu), 
-				(launch_proc_t)bootstrap, 0, 
-				(void *)((unsigned long)p+KERNEL_STACK_SIZE - 32),
-				(void *)p);
+			LAUNCH_SLAVE(cputonasid(num_cpus),cputoslice(num_cpus), 
+				(launch_proc_t)MAPPED_KERN_RW_TO_K0(bootstrap),
+				0, (void *)((unsigned long)p + 
+				KERNEL_STACK_SIZE - 32), (void *)p);
 
 			/*
 			 * Now optimistically set the mapping arrays. We
@@ -461,13 +489,18 @@ void allowboot(void)
 			__cpu_number_map[cpu] = num_cpus;
 			__cpu_logical_map[num_cpus] = cpu;
 			num_cpus++;
-			/* smp_num_cpus++; Do after smp_send_reschedule works */
+			/*
+			 * Wait this cpu to start up and initialize its hub,
+			 * and discover the io devices it will control.
+			 * 
+			 * XXX: We really want to fire up launch all the CPUs
+			 * at once.  We have to preserve the order of the
+			 * devices on the bridges first though.
+			 */
+			while(atomic_read(&numstarted) != num_cpus);
 		}
 	}
 
-	/* while(atomic_read(&numstarted) != (maxcpus - num_cpus)) */
-	if (maxcpus > 1) while(atomic_read(&numstarted) == 0);
-	printk("Holding %d cpus slave\n", atomic_read(&numstarted));
 
 #ifdef LATER
 	Wait logic goes here.
@@ -484,6 +517,7 @@ void allowboot(void)
 	cpu_io_setup();
 	init_mfhi_war();
 #endif
+	smp_num_cpus = num_cpus;
 }
 
 #else /* CONFIG_SMP */

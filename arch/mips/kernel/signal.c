@@ -1,5 +1,4 @@
-/* $Id: signal.c,v 1.24 2000/02/04 07:40:23 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -36,6 +35,8 @@ extern asmlinkage int sys_wait4(pid_t pid, unsigned long *stat_addr,
 extern asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs);
 extern asmlinkage int save_fp_context(struct sigcontext *sc);
 extern asmlinkage int restore_fp_context(struct sigcontext *sc);
+
+extern asmlinkage void syscall_trace(void);
 
 int copy_siginfo_to_user(siginfo_t *to, siginfo_t *from)
 {
@@ -265,6 +266,8 @@ sys_sigreturn(struct pt_regs regs)
 	/*
 	 * Don't let your children do this ...
 	 */
+	if (current->ptrace & PT_TRACESYS)
+		syscall_trace();
 	__asm__ __volatile__(
 		"move\t$29, %0\n\t"
 		"j\tret_from_sys_call"
@@ -585,7 +588,7 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 		if (!signr)
 			break;
 
-		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
+		if ((current->ptrace & PT_PTRACED) && signr != SIGKILL) {
 			/* Let the debugger run.  */
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;
@@ -659,7 +662,6 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 				/* FALLTHRU */
 
 			default:
-				lock_kernel();
 				sigaddset(&current->signal, signr);
 				recalc_sigpending(current);
 				current->flags |= PF_SIGNALED;

@@ -1,4 +1,4 @@
-/* $Id: irixioctl.c,v 1.6 1999/02/06 05:12:56 adevries Exp $
+/*
  * irixioctl.c: A fucking mess...
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -48,7 +48,7 @@ static struct tty_struct *get_tty(int fd)
 
 static struct tty_struct *get_real_tty(struct tty_struct *tp)
 {
-	if(tp->driver.type == TTY_DRIVER_TYPE_PTY &&
+	if (tp->driver.type == TTY_DRIVER_TYPE_PTY &&
 	   tp->driver.subtype == PTY_TYPE_MASTER)
 		return tp->link;
 	else
@@ -61,7 +61,6 @@ asmlinkage int irix_ioctl(int fd, unsigned long cmd, unsigned long arg)
 	mm_segment_t old_fs;
 	int error = 0;
 
-	lock_kernel();
 #ifdef DEBUG_IOCTLS
 	printk("[%s:%d] irix_ioctl(%d, ", current->comm, current->pid, fd);
 #endif
@@ -87,7 +86,7 @@ asmlinkage int irix_ioctl(int fd, unsigned long cmd, unsigned long arg)
 		old_fs = get_fs(); set_fs(get_ds());
 		error = sys_ioctl(fd, TCGETS, (unsigned long) &kt);
 		set_fs(old_fs);
-		if(error)
+		if (error)
 			break;
 		__put_user(kt.c_iflag, &it->c_iflag);
 		__put_user(kt.c_oflag, &it->c_oflag);
@@ -106,7 +105,7 @@ asmlinkage int irix_ioctl(int fd, unsigned long cmd, unsigned long arg)
 #ifdef DEBUG_IOCTLS
 		printk("TCSETS, %08lx) ", arg);
 #endif
-		if(!access_ok(VERIFY_READ, it, sizeof(*it))) {
+		if (!access_ok(VERIFY_READ, it, sizeof(*it))) {
 			error = -EFAULT;
 			break;
 		}
@@ -259,6 +258,5 @@ asmlinkage int irix_ioctl(int fd, unsigned long cmd, unsigned long arg)
 #ifdef DEBUG_IOCTLS
 	printk("error=%d\n", error);
 #endif
-	unlock_kernel();
 	return error;
 }

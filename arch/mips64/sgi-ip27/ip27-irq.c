@@ -1,11 +1,9 @@
-/* $Id: ip27-irq.c,v 1.9 2000/03/14 01:39:27 ralf Exp $
- *
+/*
  * ip27-irq.c: Highlevel interrupt handling for IP27 architecture.
  *
- * Copyright (C) 1999 Ralf Baechle (ralf@gnu.org)
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1999, 2000 Ralf Baechle (ralf@gnu.org)
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
-#include <linux/config.h>
 #include <linux/init.h>
 
 #include <linux/errno.h>
@@ -20,11 +18,11 @@
 #include <linux/smp_lock.h>
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
+#include <linux/irq.h>
 
 #include <asm/bitops.h>
 #include <asm/bootinfo.h>
 #include <asm/io.h>
-#include <asm/irq.h>
 #include <asm/mipsregs.h>
 #include <asm/system.h>
 
@@ -64,9 +62,10 @@
 irq_cpustat_t irq_stat [NR_CPUS];
 
 extern asmlinkage void ip27_irq(void);
+extern int irq_to_bus[], irq_to_slot[], bus_to_cpu[];
 int (*irq_cannonicalize)(int irq);
-int intr_connect_level(cpuid_t cpu, int bit);
-int intr_disconnect_level(cpuid_t cpu, int bit);
+int intr_connect_level(int cpu, int bit);
+int intr_disconnect_level(int cpu, int bit);
 
 unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
@@ -76,15 +75,17 @@ unsigned long spurious_count = 0;
  * we need to map irq's up to at least bit 7 of the INT_MASK0_A register
  * since bits 0-6 are pre-allocated for other purposes.
  */
-#define IRQ_TO_SWLEVEL(i)	i + 7
-#define SWLEVEL_TO_IRQ(s)	s - 7
+#define IRQ_TO_SWLEVEL(cpu, i)	i + 7
+#define SWLEVEL_TO_IRQ(cpu, s)	s - 7
 /*
- * use these macros to get the encoded nasid, widget id, and real irq
+ * use these macros to get the encoded nasid and widget id
  * from the irq value
  */
-#define NASID_FROM_IRQ(i)       ((i >> 16)&(0xff))
-#define WID_FROM_IRQ(i)          ((i >> 8)&(0xff))
-#define IRQ_FROM_IRQ(i)               ((i)&(0xff))
+#define IRQ_TO_BUS(i)			irq_to_bus[(i)]
+#define IRQ_TO_CPU(i)			bus_to_cpu[IRQ_TO_BUS(i)]
+#define NASID_FROM_PCI_IRQ(i)		bus_to_nid[IRQ_TO_BUS(i)]
+#define WID_FROM_PCI_IRQ(i)		bus_to_wid[IRQ_TO_BUS(i)]
+#define	SLOT_FROM_PCI_IRQ(i)		irq_to_slot[i]
 
 void disable_irq(unsigned int irq_nr)
 {
@@ -104,7 +105,7 @@ int get_irq_list(char *buf)
 	int i, len = 0;
 	struct irqaction * action;
 
-	for (i = 0 ; i < 32 ; i++) {
+	for (i = 0 ; i < NR_IRQS ; i++) {
 		action = irq_action[i];
 		if (!action) 
 			continue;
@@ -126,20 +127,18 @@ int get_irq_list(char *buf)
  * do_IRQ handles all normal device IRQ's (the special SMP cross-CPU interrupts
  * have their own specific handlers).
  */
-asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
+static void do_IRQ(cpuid_t thiscpu, int irq, struct pt_regs * regs)
 {
 	struct irqaction *action;
-	int do_random, cpu;
+	int do_random;
 
-	cpu = smp_processor_id();
-	irq_enter(cpu, irq);
-	kstat.irqs[cpu][irq]++;
+	irq_enter(thiscpu, irq);
+	kstat.irqs[thiscpu][irq]++;
 
 	action = *(irq + irq_action);
 	if (action) {
 		if (!(action->flags & SA_INTERRUPT))
 			__sti();
-		action = *(irq + irq_action);
 		do_random = 0;
         	do {
 			do_random |= action->flags;
@@ -150,7 +149,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 			add_interrupt_randomness(irq);
 		__cli();
 	}
-	irq_exit(cpu, irq);
+	irq_exit(thiscpu, irq);
 
 	/* unmasking and bottom half handling is done magically for us. */
 }
@@ -171,31 +170,46 @@ static int ms1bit(unsigned long x)
 
 	return b + (int) (x >> 1);
 }
-	
-/* For now ...  */
+
+/*
+ * This code is unnecessarily complex, because we do SA_INTERRUPT
+ * intr enabling. Basically, once we grab the set of intrs we need
+ * to service, we must mask _all_ these interrupts; firstly, to make
+ * sure the same intr does not intr again, causing recursion that 
+ * can lead to stack overflow. Secondly, we can not just mask the
+ * one intr we are do_IRQing, because the non-masked intrs in the
+ * first set might intr again, causing multiple servicings of the
+ * same intr. This effect is mostly seen for intercpu intrs.
+ * Kanoj 05.13.00
+ */
 void ip27_do_irq(struct pt_regs *regs)
 {
 	int irq, swlevel;
 	hubreg_t pend0, mask0;
-	int pi_int_mask0 = ((cputoslice(smp_processor_id()) == 0) ?
+	cpuid_t thiscpu = smp_processor_id();
+	int pi_int_mask0 = ((cputoslice(thiscpu) == 0) ?
 					PI_INT_MASK0_A : PI_INT_MASK0_B);
 
 	/* copied from Irix intpend0() */
 	while (((pend0 = LOCAL_HUB_L(PI_INT_PEND0)) & 
 				(mask0 = LOCAL_HUB_L(pi_int_mask0))) != 0) {
-		pend0 &= mask0;
-		do {
-			swlevel = ms1bit(pend0);
-			LOCAL_HUB_S(pi_int_mask0, mask0 & ~(1 << swlevel));
-			LOCAL_HUB_CLR_INTR(swlevel);
-			/* "map" swlevel to irq */
-			irq = SWLEVEL_TO_IRQ(swlevel);
-			do_IRQ(irq, regs);
-			/* reset INT_MASK0 register */
+		pend0 &= mask0;		/* Pick intrs we should look at */
+		if (pend0) {
+			/* Prevent any of the picked intrs from recursing */
+			LOCAL_HUB_S(pi_int_mask0, mask0 & ~(pend0));
+			do {
+				swlevel = ms1bit(pend0);
+				LOCAL_HUB_CLR_INTR(swlevel);
+				/* "map" swlevel to irq */
+				irq = SWLEVEL_TO_IRQ(thiscpu, swlevel);
+				do_IRQ(thiscpu, irq, regs);
+				/* clear bit in pend0 */
+				pend0 ^= 1ULL << swlevel;
+			} while(pend0);
+			/* Now allow the set of serviced intrs again */
 			LOCAL_HUB_S(pi_int_mask0, mask0);
-			/* clear bit in pend0 */
-			pend0 ^= 1ULL << swlevel;
-		} while (pend0);
+			LOCAL_HUB_L(PI_INT_PEND0);
+		}
 	}
 }
 
@@ -203,69 +217,38 @@ void ip27_do_irq(struct pt_regs *regs)
 /* Startup one of the (PCI ...) IRQs routes over a bridge.  */
 static unsigned int bridge_startup(unsigned int irq)
 {
-        bridge_t *bridge;
-        int pin, swlevel;
-        int real_irq = IRQ_FROM_IRQ(irq);
+	bridgereg_t device;
+	bridge_t *bridge;
+	int pin, swlevel;
+	cpuid_t cpu;
+	nasid_t master = NASID_FROM_PCI_IRQ(irq);
 
-	DBG("bridge_startup(): irq= 0x%x  real_irq= %d\n", irq, real_irq);
-        bridge = (bridge_t *) NODE_SWIN_BASE(NASID_FROM_IRQ(irq), WID_FROM_IRQ(irq));
+        bridge = (bridge_t *) NODE_SWIN_BASE(master, WID_FROM_PCI_IRQ(irq));
+	pin = SLOT_FROM_PCI_IRQ(irq);
+	cpu = IRQ_TO_CPU(irq);
 
-        /* FIIIIIXME ...  Temporary kludge.  This knows how interrupts are
-           setup in _my_ Origin.  */
+	DBG("bridge_startup(): irq= 0x%x  pin=%d\n", irq, pin);
+	/*
+	 * "map" irq to a swlevel greater than 6 since the first 6 bits
+	 * of INT_PEND0 are taken
+	 */
+	swlevel = IRQ_TO_SWLEVEL(cpu, irq);
+	intr_connect_level(cpu, swlevel);
 
-        if (irq != real_irq)            /* pci device interrupt */
-                switch (real_irq) {
-                        case IRQ_FROM_IRQ(IOC3_ETH_INT):        pin = 2; break;
-			default:		  pin = real_irq; break;
-                }
-        else
-                switch (real_irq) {
-                        case CPU_RESCHED_A_IRQ:
-                        case CPU_RESCHED_B_IRQ:
-                        case CPU_CALL_A_IRQ:
-                        case CPU_CALL_B_IRQ:
-                                                return 0;
-                        default:                panic("bridge_startup: whoops? %d\n", irq);
-                }
-
-        /*
-         * "map" irq to a swlevel greater than 6 since the first 6 bits
-         * of INT_PEND0 are taken
-         */
-        swlevel = IRQ_TO_SWLEVEL(real_irq);
-        intr_connect_level(smp_processor_id(), swlevel);
-
-        bridge->b_int_addr[pin].addr = 0x20000 | swlevel;
-        bridge->b_int_enable |= (1 << pin);
-	/* set more stuff in int_enable reg */
+	bridge->b_int_addr[pin].addr = (0x20000 | swlevel | (master << 8));
+	bridge->b_int_enable |= (1 << pin);
+	/* more stuff in int_enable reg */
 	bridge->b_int_enable |= 0x7ffffe00;
 
-        if (real_irq < 2 || real_irq==4 || real_irq==5) {
-                bridgereg_t device;
-#if 0
-                /*
-                 * Allocate enough RRBs on the bridge for the DMAs.
-                 * Right now allocating 2 RRBs on the normal channel
-                 * and 2 on the virtual channel for slot 0 on the bus.
-                 * And same for slot 1, to get ioc3 eth working.
-                 */
-                Not touching b_even_resp          /* boot doesn't go far */
-                bridge->b_even_resp = 0xdd99cc88; /* boot doesn't go far */
-                bridge->b_even_resp = 0xcccc8888; /* breaks eth0 */
-                bridge->b_even_resp = 0xcc88;     /* breaks eth0 */
-#endif
-                /* Turn on bridge swapping */
-                device = bridge->b_device[real_irq].reg;
-                device |= BRIDGE_DEV_SWAP_DIR;
-                bridge->b_device[real_irq].reg = device;
-                /*
-                 * Associate interrupt pin with device
-                 * XXX This only works if b_int_device is initialized to 0!
-                 */
-                device = bridge->b_int_device;
-                device |= (pin << (real_irq*3));
-                bridge->b_int_device = device;
-        }
+	/*
+	 * XXX This only works if b_int_device is initialized to 0!
+	 * We program the bridge to have a 1:1 mapping between devices
+	 * (slots) and intr pins.
+	 */
+	device = bridge->b_int_device;
+	device |= (pin << (pin*3));
+	bridge->b_int_device = device;
+
         bridge->b_widget.w_tflush;                      /* Flush */
 
         return 0;       /* Never anything pending.  */
@@ -274,70 +257,25 @@ static unsigned int bridge_startup(unsigned int irq)
 /* Shutdown one of the (PCI ...) IRQs routes over a bridge.  */
 static unsigned int bridge_shutdown(unsigned int irq)
 {
-        bridge_t *bridge;
-        int pin, swlevel;
-        int real_irq = IRQ_FROM_IRQ(irq);
-        struct irqaction **p;
-
-        bridge = (bridge_t *) NODE_SWIN_BASE(NASID_FROM_IRQ(irq), WID_FROM_IRQ(irq));
-	DBG("bridge_shutdown: irq 0x%x\n", irq);
-        /* FIIIIIXME ...  Temporary kludge.  This knows how interrupts are
-           setup in _my_ Origin.  */
-
-        if (irq != real_irq)            /* pci device interrupt */
-                switch (real_irq) {
-                        case IRQ_FROM_IRQ(IOC3_ETH_INT):        pin = 2; break;
-			default:		  pin = real_irq; break;
-                }
-        else
-                switch (real_irq) {
-                        case CPU_RESCHED_A_IRQ:
-                        case CPU_RESCHED_B_IRQ:
-                        case CPU_CALL_A_IRQ:
-                        case CPU_CALL_B_IRQ:
-                                                return 0;
-                        default:                panic("bridge_startup: whoops?");
-                }
-
-        /*
-         * map irq to a swlevel greater than 6 since the first 6 bits
-         * of INT_PEND0 are taken
-         */
-        swlevel = IRQ_TO_SWLEVEL(real_irq);
-        intr_disconnect_level(smp_processor_id(), swlevel);
-
-        bridge->b_int_enable &= ~(1 << pin);
-        bridge->b_widget.w_tflush;                      /* Flush */
-
-        return 0;       /* Never anything pending.  */
-}
-
-static void bridge_init(void)
-{
 	bridge_t *bridge;
-	nasid_t   nasid;
-        char    wid;
-        int     bus;
+	int pin, swlevel;
 
-        nasid = get_nasid();
+	bridge = (bridge_t *) NODE_SWIN_BASE(NASID_FROM_PCI_IRQ(irq), 
+	                                     WID_FROM_PCI_IRQ(irq));
+	DBG("bridge_shutdown: irq 0x%x\n", irq);
+	pin = SLOT_FROM_PCI_IRQ(irq);
 
-        for (bus=0; bus<num_bridges; bus++) {
-          bridge = (bridge_t *) NODE_SWIN_BASE(bus_to_nid[bus],bus_to_wid[bus]);          
-          /* Hmm...  IRIX sets additional bits in the address which are
-             documented as reserved in the bridge docs ...  */
-          bridge->b_int_mode = 0x0;                     /* Don't clear ints */
-#if 0
-          bridge->b_wid_int_upper = 0x000a8000;           /* Ints to node 0 */
-          bridge->b_wid_int_lower = 0x01000090;
-          bridge->b_dir_map = 0xa00000;                 /* DMA */
-#endif /* shouldn't lower= 0x01800090 ??? */
-          bridge->b_wid_int_upper = 0x000a8000;           /* Ints to widget A */
-          bridge->b_wid_int_lower = 0x01800090;
-          bridge->b_dir_map = 0xa00000;                   /* DMA */
+	/*
+	 * map irq to a swlevel greater than 6 since the first 6 bits
+	 * of INT_PEND0 are taken
+	 */
+	swlevel = IRQ_TO_SWLEVEL(cpu, irq);
+	intr_disconnect_level(smp_processor_id(), swlevel);
 
-          bridge->b_int_enable = 0;
-          bridge->b_widget.w_tflush;                    /* Flush */
-        }
+	bridge->b_int_enable &= ~(1 << pin);
+	bridge->b_widget.w_tflush;                      /* Flush */
+
+	return 0;       /* Never anything pending.  */
 }
 
 void irq_debug(void)
@@ -346,8 +284,8 @@ void irq_debug(void)
 
 	printk("bridge->b_int_status = 0x%x\n", bridge->b_int_status);
 	printk("bridge->b_int_enable = 0x%x\n", bridge->b_int_enable);
-	printk("PI_INT_PEND0   = 0x%x\n", LOCAL_HUB_L(PI_INT_PEND0));
-	printk("PI_INT_MASK0_A = 0x%x\n", LOCAL_HUB_L(PI_INT_MASK0_A));
+	printk("PI_INT_PEND0   = 0x%lx\n", LOCAL_HUB_L(PI_INT_PEND0));
+	printk("PI_INT_MASK0_A = 0x%lx\n", LOCAL_HUB_L(PI_INT_MASK0_A));
 }
 
 int setup_irq(unsigned int irq, struct irqaction *new)
@@ -357,11 +295,15 @@ int setup_irq(unsigned int irq, struct irqaction *new)
 	unsigned long flags;
 
 	DBG("setup_irq: 0x%x\n", irq);
+	if (irq >= NR_IRQS) {
+		printk("IRQ array overflow %d\n", irq);
+		while(1);
+	}
 	if (new->flags & SA_SAMPLE_RANDOM)
 		rand_initialize_irq(irq);
 
 	save_and_cli(flags);
-	p = irq_action + IRQ_FROM_IRQ(irq);
+	p = irq_action + irq;
 	if ((old = *p) != NULL) {
 		/* Can't share interrupts unless both agree to */
 		if (!(old->flags & new->flags & SA_SHIRQ)) {
@@ -379,7 +321,7 @@ int setup_irq(unsigned int irq, struct irqaction *new)
 
 	*p = new;
 
-	if (!shared) {
+	if ((!shared) && (irq >= BASE_PCI_IRQ)) {
 		bridge_startup(irq);
 	}
 	restore_flags(flags);
@@ -395,8 +337,6 @@ int request_irq(unsigned int irq,
 	struct irqaction *action;
 
 	DBG("request_irq(): irq= 0x%x\n", irq);
-	if (IRQ_FROM_IRQ(irq) > 9)
-		return -EINVAL;
 	if (!handler)
 		return -EINVAL;
 
@@ -424,18 +364,18 @@ void free_irq(unsigned int irq, void *dev_id)
 	struct irqaction * action, **p;
 	unsigned long flags;
 
-	if (IRQ_FROM_IRQ(irq) > 9) {
+	if (irq >= NR_IRQS) {
 		printk("Trying to free IRQ%d\n", irq);
 		return;
 	}
-	for (p = IRQ_FROM_IRQ(irq) + irq_action; (action = *p) != NULL; p = &action->next) {
+	for (p = irq + irq_action; (action = *p) != NULL; p = &action->next) {
 		if (action->dev_id != dev_id)
 			continue;
 
 		/* Found it - now free it */
 		save_and_cli(flags);
 		*p = action->next;
-		if (!irq[irq_action])
+		if (irq >= BASE_PCI_IRQ)
 			bridge_shutdown(irq);
 		restore_flags(flags);
 		kfree(action);
@@ -465,7 +405,6 @@ void __init init_IRQ(void)
 {
 	irq_cannonicalize = indy_irq_cannonicalize;
 
-	bridge_init();
 	set_except_vector(0, ip27_irq);
 }
 
@@ -675,7 +614,7 @@ static hub_intmasks_t *intr_get_ptrs(cpuid_t cpu, int bit, int *new_bit,
 	return hub_intmasks;
 }
 
-int intr_connect_level(cpuid_t cpu, int bit)
+int intr_connect_level(int cpu, int bit)
 {
 	int ip;
 	int slice = cputoslice(cpu);
@@ -701,7 +640,7 @@ int intr_connect_level(cpuid_t cpu, int bit)
 	return(0);
 }
 
-int intr_disconnect_level(cpuid_t cpu, int bit)
+int intr_disconnect_level(int cpu, int bit)
 {
 	int ip;
 	int slice = cputoslice(cpu);
@@ -728,11 +667,14 @@ void handle_resched_intr(int irq, void *dev_id, struct pt_regs *regs)
 	/* Nothing, the return from intr will work for us */
 }
 
-void install_cpuintr(cpuid_t cpu)
+extern void smp_call_function_interrupt(void);
+
+void install_cpuintr(int cpu)
 {
-	int irq;
-	extern void smp_call_function_interrupt(void);
+#ifdef CONFIG_SMP
+#if (CPUS_PER_NODE == 2)
 	static int done = 0;
+	int irq;
 
 	/*
 	 * This is a hack till we have a pernode irqlist. Currently,
@@ -740,15 +682,13 @@ void install_cpuintr(cpuid_t cpu)
 	 * cpu irqs.
 	 */
 
-#ifdef CONFIG_SMP
-#if (CPUS_PER_NODE == 2)
 	irq = CPU_RESCHED_A_IRQ + cputoslice(cpu);
-	intr_connect_level(cpu, IRQ_TO_SWLEVEL(irq));
+	intr_connect_level(cpu, IRQ_TO_SWLEVEL(cpu, irq));
 	if (done == 0)
 	if (request_irq(irq, handle_resched_intr, 0, "resched", 0))
 		panic("intercpu intr unconnectible\n");
 	irq = CPU_CALL_A_IRQ + cputoslice(cpu);
-	intr_connect_level(cpu, IRQ_TO_SWLEVEL(irq));
+	intr_connect_level(cpu, IRQ_TO_SWLEVEL(cpu, irq));
 	if (done == 0)
 	if (request_irq(irq, smp_call_function_interrupt, 0,
 						"callfunc", 0))
@@ -766,12 +706,12 @@ void install_cpuintr(cpuid_t cpu)
 	done = 1;
 	/* HACK ENDS */
 #else /* CPUS_PER_NODE */
-	<< Bomb!  Must redefine this for more than 2 CPUS. >>
+#error Must redefine this for more than 2 CPUS.
 #endif /* CPUS_PER_NODE */
 #endif /* CONFIG_SMP */
 }
 
-void install_tlbintr(cpuid_t cpu)
+void install_tlbintr(int cpu)
 {
 	int intr_bit = N_INTPEND_BITS + TLB_INTR_A + cputoslice(cpu);
 

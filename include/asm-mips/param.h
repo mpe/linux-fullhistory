@@ -20,12 +20,12 @@
     */
 #  define QUOTIENT ((1UL << (32 - LOG_2_HZ)) * 100)
 #  define HZ_TO_STD(a)                            \
-   ({ int __res;                                  \
-        __asm__(                                  \
-           "multu\t%0,%2\n\t"			  \
-           "mfhi\t%0"				  \
-        : "=r" (__res): "0" (a), "r" (QUOTIENT)); \
-        __res;})
+   ({ unsigned int __res;			  \
+      unsigned long lo;				  \
+        __asm__("multu\t%2,%3\n\t"		  \
+		:"=h" (__res), "=l" (lo)	  \
+		:"r" (a),"r" (QUOTIENT));         \
+        (__typeof__(a)) __res;})
 #else
 #  define HZ 100
 #  define HZ_TO_STD(a) (a)

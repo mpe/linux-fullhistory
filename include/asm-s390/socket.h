@@ -47,7 +47,9 @@
 #define SO_ATTACH_FILTER        26
 #define SO_DETACH_FILTER        27
 
-#define SO_PEERNAME            28
+#define SO_PEERNAME		28
+#define SO_TIMESTAMP		29
+#define SCM_TIMESTAMP		SO_TIMESTAMP
 
 /* Nast libc5 fixup - bletch */
 #if defined(__KERNEL__)

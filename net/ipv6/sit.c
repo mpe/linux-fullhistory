@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.39 2000/07/07 01:55:20 davem Exp $
+ *	$Id: sit.c,v 1.41 2000/07/07 23:47:45 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -45,6 +45,7 @@
 #include <net/udp.h>
 #include <net/icmp.h>
 #include <net/ipip.h>
+#include <net/inet_ecn.h>
 
 /*
    This version of net/ipv6/sit.c is cloned of net/ipv4/ip_gre.c
@@ -59,7 +60,7 @@ static int ipip6_fb_tunnel_init(struct net_device *dev);
 static int ipip6_tunnel_init(struct net_device *dev);
 
 static struct net_device ipip6_fb_tunnel_dev = {
-	"", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, ipip6_fb_tunnel_init,
+	"sit0", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, ipip6_fb_tunnel_init,
 };
 
 static struct ip_tunnel ipip6_fb_tunnel = {
@@ -174,10 +175,10 @@ struct ip_tunnel * ipip6_tunnel_locate(struct ip_tunnel_parm *parms, int create)
 	dev->priv = (void*)(dev+1);
 	nt = (struct ip_tunnel*)dev->priv;
 	nt->dev = dev;
-	strcpy(dev->name, nt->parms.name);
 	dev->init = ipip6_tunnel_init;
 	dev->new_style = 1;
 	memcpy(&nt->parms, parms, sizeof(*parms));
+	strcpy(dev->name, nt->parms.name);
 	if (dev->name[0] == 0) {
 		int i;
 		for (i=1; i<100; i++) {
@@ -370,6 +371,13 @@ out:
 #endif
 }
 
+static inline void ipip6_ecn_decapsulate(struct iphdr *iph, struct sk_buff *skb)
+{
+	if (INET_ECN_is_ce(iph->tos) &&
+	    INET_ECN_is_not_ce(ip6_get_dsfield(skb->nh.ipv6h)))
+		IP6_ECN_set_ce(skb->nh.ipv6h);
+}
+
 int ipip6_rcv(struct sk_buff *skb, unsigned short len)
 {
 	struct iphdr *iph;
@@ -394,6 +402,7 @@ int ipip6_rcv(struct sk_buff *skb, unsigned short len)
 		nf_conntrack_put(skb->nfct);
 		skb->nfct = NULL;
 #endif
+		ipip6_ecn_decapsulate(iph, skb);
 		netif_rx(skb);
 		read_unlock(&ipip6_lock);
 		return 0;
@@ -431,6 +440,7 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	int    mtu;
 	struct in6_addr *addr6;	
 	int addr_type;
+	int err;
 
 	if (tunnel->recursion++) {
 		tunnel->stat.collisions++;
@@ -548,7 +558,7 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 		iph->frag_off	=	0;
 
 	iph->protocol		=	IPPROTO_IPV6;
-	iph->tos		=	tos;
+	iph->tos		=	INET_ECN_encapsulate(tos, ip6_get_dsfield(iph6));
 	iph->daddr		=	rt->rt_dst;
 	iph->saddr		=	rt->rt_src;
 
@@ -564,10 +574,17 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	skb->nfct = NULL;
 #endif
 
+	err = NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev, 
+		do_ip_send);
+	if(err < 0) {
+		if(net_ratelimit())
+			printk(KERN_ERR "ipip6_tunnel_xmit: ip_send() failed, err=%d\n", -err);
+		skb = NULL;
+		goto tx_error;
+	}
+
 	stats->tx_bytes += skb->len;
 	stats->tx_packets++;
-	NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
-		do_ip_send);
 
 	tunnel->recursion--;
 	return 0;
@@ -576,7 +593,8 @@ tx_error_icmp:
 	dst_link_failure(skb);
 tx_error:
 	stats->tx_errors++;
-	dev_kfree_skb(skb);
+	if(skb)
+		dev_kfree_skb(skb);
 	tunnel->recursion--;
 	return 0;
 }

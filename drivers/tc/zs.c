@@ -1572,7 +1572,6 @@ static void __init probe_sccs(void)
 {
 	struct dec_serial **pp;
 	int i, n, n_chips = 0, n_channels, chip, channel;
-	unsigned long flags;
 
 	/*
 	 * did we get here by accident?
@@ -1833,7 +1832,6 @@ static void serial_console_write(struct console *co, const char *s,
 {
 	struct dec_serial *info;
 	int i;
-	unsigned char nine;
 
 	info = zs_soft + co->index;
 

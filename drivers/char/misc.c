@@ -75,6 +75,7 @@ extern void pcwatchdog_init(void);
 extern int rtc_sun_init(void);		/* Combines MK48T02 and MK48T08 */
 extern int rtc_DP8570A_init(void);
 extern int rtc_MK48T08_init(void);
+extern int ds1286_init(void);
 extern int dsp56k_init(void);
 extern int radio_init(void);
 extern int pc110pad_init(void);

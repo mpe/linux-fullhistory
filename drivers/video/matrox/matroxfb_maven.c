@@ -892,9 +892,9 @@ static struct matrox_altout maven_altout = {
 
 static int maven_init_client(struct i2c_client* clnt) {
 	struct i2c_adapter* a = clnt->adapter;
-	struct matroxfb_dh_maven_info* m2info = ((struct i2c_bit_adapter*)a)->minfo;
 	struct maven_data* md = clnt->data;
-	struct matrox_fb_info* minfo = m2info->primary_dev;
+	struct matroxfb_dh_maven_info* m2info __attribute__((unused)) = ((struct i2c_bit_adapter*)a)->minfo;
+	MINFO_FROM(m2info->primary_dev);
 
 	md->mode = MODE_MONITOR;
 	md->primary_head = MINFO;

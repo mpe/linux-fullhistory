@@ -665,19 +665,6 @@ static void do_serial_hangup(void *private_)
 }
 
 
-/*
- * This subroutine is called when the RS_TIMER goes off.  It is used
- * by the serial driver to handle ports that do not have an interrupt
- * (irq=0).  This doesn't work at all for 16450's, as a sun has a Z8530.
- */
- 
-static void rs_timer(void)
-{
-	printk("rs_timer called\n");
-	prom_halt();
-	return;
-}
-
 static int startup(struct sgi_serial * info)
 {
 	volatile unsigned char junk;
@@ -2237,7 +2224,8 @@ static struct console sgi_console_driver = {
 /*
  *	Register console.
  */
-void __init serial_console_init(void)
+void __init sgi_serial_console_init(void)
 {
 	register_console(&sgi_console_driver);
 }
+__initcall(rs_init);

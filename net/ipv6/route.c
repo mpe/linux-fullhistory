@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.45 2000/01/16 05:11:38 davem Exp $
+ *	$Id: route.c,v 1.46 2000/07/07 22:40:35 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -769,10 +769,12 @@ int ip6_route_add(struct in6_rtmsg *rtmsg)
 		goto out;
 
 	if (rtmsg->rtmsg_flags & (RTF_GATEWAY|RTF_NONEXTHOP)) {
-		rt->rt6i_nexthop = ndisc_get_neigh(dev, &rt->rt6i_gateway);
-		err = -ENOMEM;
-		if (rt->rt6i_nexthop == NULL)
+		rt->rt6i_nexthop = __neigh_lookup_errno(&nd_tbl, &rt->rt6i_gateway, dev);
+		if (IS_ERR(rt->rt6i_nexthop)) {
+			err = PTR_ERR(rt->rt6i_nexthop);
+			rt->rt6i_nexthop = NULL;
 			goto out;
+		}
 	}
 
 	if (ipv6_addr_is_multicast(&rt->rt6i_dst.addr))

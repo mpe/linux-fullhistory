@@ -1,5 +1,4 @@
-/* $Id: ip27-berr.c,v 1.1 2000/01/20 22:50:29 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -13,6 +12,9 @@
 #include <asm/sn/arch.h>
 #include <asm/sn/sn0/hub.h>
 #include <asm/uaccess.h>
+
+extern void dump_tlb_addr(unsigned long addr);
+extern void dump_tlb_all(void);
 
 extern asmlinkage void handle_ibe(void);
 extern asmlinkage void handle_dbe(void);

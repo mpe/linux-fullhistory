@@ -152,6 +152,7 @@ extern void rs285_console_init(void);
 extern void rs285_init(void);
 extern void sa1100_rs_console_init(void);
 extern void sa1100_rs_init(void);
+extern void sgi_serial_console_init(void);
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -2168,9 +2169,12 @@ void __init console_init(void)
 #ifdef CONFIG_SERIAL_CONSOLE
 #if (defined(CONFIG_8xx) || defined(CONFIG_8260))
 	console_8xx_init();
-#elif defined(CONFIG_SERIAL) 	
+#elif defined(CONFIG_SERIAL)
 	serial_console_init();
 #endif /* CONFIG_8xx */
+#ifdef CONFIG_SGI_SERIAL
+	sgi_serial_console_init();
+#endif
 #if defined(CONFIG_MVME162_SCC) || defined(CONFIG_BVME6000_SCC) || defined(CONFIG_MVME147_SCC)
 	vme_scc_console_init();
 #endif

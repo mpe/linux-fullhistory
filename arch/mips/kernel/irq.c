@@ -1,5 +1,4 @@
-/* $Id: irq.c,v 1.20 2000/02/23 00:41:00 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -7,7 +6,7 @@
  * Code to handle x86 style IRQs plus some generic interrupt stuff.
  *
  * Copyright (C) 1992 Linus Torvalds
- * Copyright (C) 1994, 1995, 1996, 1997, 1998 Ralf Baechle
+ * Copyright (C) 1994 - 2000 Ralf Baechle
  */
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -267,8 +266,10 @@ int i8259_setup_irq(int irq, struct irqaction * new)
 	if (!shared) {
 		if (is_i8259_irq(irq))
 		    unmask_irq(irq);
+#if CONFIG_DDB5074 /* This has no business here  */
 		else
 		    nile4_enable_irq(irq_to_nile4(irq));
+#endif
 	}
 	restore_flags(flags);
 	return 0;
@@ -343,7 +344,7 @@ unsigned long probe_irq_on (void)
 	/* first, enable any unassigned (E)ISA irqs */
 	for (i = 15; i > 0; i--) {
 		if (!irq_action[i]) {
-			enable_irq(i);
+			i8259_enable_irq(i);
 			irqs |= (1 << i);
 		}
 	}

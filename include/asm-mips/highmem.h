@@ -20,9 +20,17 @@ extern pte_t *kmap_pte;
 extern pgprot_t kmap_prot;
 
 #define kmap_init()			do { } while(0)
-#define kmap(page)			page_address(page)
+
+static __inline__ unsigned long kmap(struct page * page) {
+	return page_address(page);
+}
+
 #define kunmap(page)			do { } while(0)
-#define kmap_atomic(page, type)		page_address(page)
+
+static __inline__ unsigned long kmap_atomic(struct page *page, int type) {
+	return page_address(page)
+}
+
 #define kunmap_atomic(page, type)	do { } while(0)
 
 #endif /* _ASM_HIGHMEM_H */

@@ -144,7 +144,7 @@ static inline struct prom_pmemblock *find_largest_memblock(void)
 void __init prom_meminit(void)
 {
 	struct prom_pmemblock *largest;
-	unsigned long bootmap_size, kbegin, kend;
+	unsigned long bootmap_size;
 	struct linux_mdesc *p;
 	int totram;
 	int i = 0;

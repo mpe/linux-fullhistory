@@ -1,5 +1,4 @@
-/* $Id: irixelf.c,v 1.28 2000/03/23 02:25:42 ralf Exp $
- *
+/*
  * irixelf.c: Code to load IRIX ELF executables which conform to
  *            the MIPS ABI.
  *
@@ -467,7 +466,6 @@ static inline int look_for_irix_interpreter(char **name,
 	return 0;
 
 dput_and_out:
-	allow_write_access(file);
 	fput(file);
 out:
 	kfree(*name);
@@ -771,7 +769,7 @@ static int load_irix_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 #endif
 
 	start_thread(regs, elf_entry, bprm->p);
-	if (current->flags & PF_PTRACED)
+	if (current->ptrace & PT_PTRACED)
 		send_sig(SIGTRAP, current, 0);
 	return 0;
 out:
@@ -1284,7 +1282,7 @@ static int __init init_irix_binfmt(void)
 	return register_binfmt(&irix_format);
 }
 
-static void __exit cleanup_module(void)
+static void __exit exit_irix_binfmt(void)
 {
 	/* Remove the IRIX ELF loaders. */
 	unregister_binfmt(&irix_format);

@@ -3,7 +3,8 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995, 1999 Ralf Baechle
+ * Copyright (C) 1995, 1999, 2000 Ralf Baechle
+ * Copyright (C) 2000 Silicon Graphics, Inc.
  */
 #ifndef _ASM_STAT_H
 #define _ASM_STAT_H
@@ -54,35 +55,30 @@ struct stat32 {
 	unsigned int	    st_gen;
 };
 
+/* The memory layout is the same as of struct stat64 of the 32-bit kernel.  */
 struct stat {
 	dev_t		st_dev;
-	long		st_pad1[3];		/* Reserved for network id */
+	unsigned int	st_pad0[3];	/* Reserved for st_dev expansion  */
 	ino_t		st_ino;
 	mode_t		st_mode;
 	nlink_t		st_nlink;
 	uid_t		st_uid;
 	gid_t		st_gid;
 	dev_t		st_rdev;
-	long		st_pad2[2];
+	unsigned int	st_pad1[3];	/* Reserved for st_rdev expansion  */
 	off_t		st_size;
-	long		st_pad3;
 	/*
 	 * Actually this should be timestruc_t st_atime, st_mtime and st_ctime
 	 * but we don't have it under Linux.
 	 */
 	time_t		st_atime;
-	long		reserved0;
+	unsigned int	reserved0;	/* Reserved for st_atime expansion  */
 	time_t		st_mtime;
-	long		reserved1;
+	unsigned int	reserved1;	/* Reserved for st_atime expansion  */
 	time_t		st_ctime;
-	long		reserved2;
-	long		st_blksize;
-	long		st_blocks;
-	char		st_fstype[16];	/* Filesystem type name */
-	long		st_pad4[8];
-	/* Linux specific fields */
-	unsigned int	st_flags;
-	unsigned int	st_gen;
+	unsigned int	reserved2;	/* Reserved for st_atime expansion  */
+	unsigned int	st_blksize;
+	unsigned long	st_blocks;
 };
 
 #endif /* _ASM_STAT_H */

@@ -133,8 +133,6 @@ waking_non_zero_interruptible(struct semaphore *sem, struct task_struct *tsk)
 {
 	long ret, tmp;
 
-#ifdef __MIPSEB__
-
         __asm__ __volatile__("
 	.set	push
 	.set	mips3
@@ -158,46 +156,6 @@ waking_non_zero_interruptible(struct semaphore *sem, struct task_struct *tsk)
 	.set	pop"
 	: "=&r"(ret), "=&r"(tmp), "=m"(*sem)
 	: "r"(signal_pending(tsk)), "i"(-EINTR));
-
-#elif defined(__MIPSEL__)
-
-	__asm__ __volatile__("
-	.set	mips3
-	.set	push
-	.set	noat
-0:
-	lld	%1, %2
-	li	%0, 0
-	blez	%1, 1f
-	dli	$1, 0x0000000100000000
-	dsubu	%1, %1, $1
-	li	%0, 1
-	b	2f
-1:
-	beqz	%3, 2f
-	li	%0, %4
-	/* 
-	 * It would be nice to assume that sem->count
-	 * is != -1, but we will guard against that case
-	 */
-	daddiu	$1, %1, 1
-	dsll32	$1, $1, 0
-	dsrl32	$1, $1, 0
-	dsrl32	%1, %1, 0
-	dsll32	%1, %1, 0
-	or	%1, %1, $1
-2:
-	scd	%1, %2
-	beqz	%1, 0b
-
-	.set	pop
-	.set	mips0"
-	: "=&r"(ret), "=&r"(tmp), "=m"(*sem)
-	: "r"(signal_pending(tsk)), "i"(-EINTR));
-
-#else
-#error "MIPS but neither __MIPSEL__ nor __MIPSEB__?"
-#endif
 
 	return ret;
 }

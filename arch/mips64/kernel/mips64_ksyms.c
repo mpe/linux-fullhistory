@@ -1,13 +1,12 @@
-/* $Id: mips64_ksyms.c,v 1.8 2000/02/24 00:12:41 ralf Exp $
- *
+/*
  * Export MIPS64-specific functions needed for loadable modules.
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996, 1997, 1998, 1999 by Ralf Baechle
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1996, 1997, 1998, 1999, 2000 by Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
 #include <linux/config.h>
 #include <linux/module.h>
@@ -18,7 +17,6 @@
 #include <linux/in6.h>
 #include <linux/pci.h>
 
-#include <asm/checksum.h>
 #include <asm/dma.h>
 #include <asm/floppy.h>
 #include <asm/io.h>
@@ -27,6 +25,7 @@
 #include <asm/semaphore.h>
 #include <asm/softirq.h>
 #include <asm/uaccess.h>
+#include <asm/checksum.h>
 
 extern void *__bzero(void *__s, size_t __count);
 extern long __strncpy_from_user_nocheck_asm(char *__to,

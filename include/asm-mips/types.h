@@ -10,7 +10,7 @@
 #ifndef _ASM_TYPES_H
 #define _ASM_TYPES_H
 
-typedef unsigned long umode_t;
+typedef unsigned short umode_t;
 
 /*
  * __xx is ok: it doesn't pollute the POSIX namespace. Use these in the

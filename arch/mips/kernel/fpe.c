@@ -4,9 +4,7 @@
  * in the kernel space a lot easier.  So far this handler in the released
  * kernel source is just a dummy.
  *
- * Copyright (C) 1997 Ralf Baechle
- *
- * $Id: fpe.c,v 1.3 1998/04/05 11:23:50 ralf Exp $
+ * Copyright (C) 1997, 2000 Ralf Baechle
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -24,7 +22,6 @@ MODULE_SUPPORTED_DEVICE("MIPS FPU");
 
 static void do_fpe(struct pt_regs *regs, unsigned int fcr31)
 {
-	lock_kernel();
 #ifdef CONF_DEBUG_EXCEPTIONS
 	show_regs(regs);
 #endif
@@ -34,7 +31,6 @@ static void do_fpe(struct pt_regs *regs, unsigned int fcr31)
 		goto out;
 	force_sig(SIGFPE, current);
 out:
-	unlock_kernel();
 }
 
 /*

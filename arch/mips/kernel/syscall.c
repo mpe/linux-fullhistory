@@ -1,10 +1,10 @@
-/* $Id: syscall.c,v 1.13 2000/02/04 07:40:23 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995 - 1999 by Ralf Baechle
+ * Copyright (C) 1995 - 2000 by Ralf Baechle
+ * Copyright (C) 2000 Silicon Graphics, Inc.
  *
  * TODO:  Implement the compatibility syscalls.
  *        Don't waste that much memory for empty entries in the syscall
@@ -21,6 +21,7 @@
 #include <linux/mman.h>
 #include <linux/sched.h>
 #include <linux/file.h>
+#include <linux/slab.h>
 #include <linux/utsname.h>
 #include <linux/unistd.h>
 #include <asm/branch.h>

@@ -1,11 +1,10 @@
-/* $Id: scall_o32.S,v 1.18 2000/03/27 21:04:13 ulfc Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995, 1996, 1997, 1998, 1999 by Ralf Baechle
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1995 - 2000 by Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  *
  * Hairy, the userspace application uses a different argument passing
  * convention than the kernel, so we have to translate things from o32
@@ -245,7 +244,7 @@ illegal_syscall:
 	sys	sys_rmdir	1			/* 4040 */
 	sys	sys_dup		1
 	sys	sys_pipe	0
-	sys	sys_times	1
+	sys	sys32_times	1
 	sys	sys_ni_syscall	0
 	sys	sys_brk		1			/* 4045 */
 	sys	sys_setgid	1
@@ -257,7 +256,7 @@ illegal_syscall:
 	sys	sys_umount	2
 	sys	sys_ni_syscall	0
 	sys	sys32_ioctl	3
-	sys	sys_fcntl	3			/* 4055 */
+	sys	sys32_fcntl	3			/* 4055 */
 	sys	sys_ni_syscall	2
 	sys	sys_setpgid	2
 	sys	sys_ni_syscall, 0
@@ -383,7 +382,7 @@ illegal_syscall:
 	sys	sys_send	4
 	sys	sys_sendmsg	3
 	sys	sys_sendto	6			/* 4180 */
-	sys	sys_setsockopt	5
+	sys	sys32_setsockopt	5
 	sys	sys_shutdown	2
 	sys	sys_socket	3
 	sys	sys_socketpair	4
@@ -415,9 +414,9 @@ illegal_syscall:
 	sys	sys_mmap2	6			/* 4210 */
 	sys	sys_truncate64	2
 	sys	sys_ftruncate64	2
-	sys	sys_stat64	3
-	sys	sys_lstat64	3
-	sys	sys_fstat64	3			/* 4210 */
+	sys	sys_newstat	3
+	sys	sys_newlstat	3
+	sys	sys_newfstat	3			/* 4210 */
 	sys	sys_pivot_root	2
 	sys	sys_mincore	3
 	sys	sys_madvise	3

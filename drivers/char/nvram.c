@@ -25,9 +25,12 @@
  * the kernel and is not a module. Since the functions are used by some Atari
  * drivers, this is the case on the Atari.
  *
+ *
+ * 	1.1	Cesar Barros: SMP locking fixes
+ * 		added changelog
  */
 
-#define NVRAM_VERSION		"1.0"
+#define NVRAM_VERSION		"1.1"
 
 #include <linux/module.h>
 #include <linux/config.h>
@@ -81,7 +84,7 @@
 #endif
 
 /* Note that *all* calls to CMOS_READ and CMOS_WRITE must be done with
- * interrupts disabled. Due to the index-port/data-port design of the RTC, we
+ * rtc_lock held. Due to the index-port/data-port design of the RTC, we
  * don't want two different things trying to get to it at once. (e.g. the
  * periodic 11 min sync from time.c vs. this driver.)
  */
@@ -96,11 +99,13 @@
 #include <linux/nvram.h>
 #include <linux/init.h>
 #include <linux/proc_fs.h>
+#include <linux/spinlock.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
+extern spinlock_t rtc_lock;
 
 static int nvram_open_cnt = 0;	/* #times opened */
 static int nvram_open_mode;		/* special open modes */
@@ -163,21 +168,20 @@ unsigned char nvram_read_byte( int i )
 	unsigned long flags;
 	unsigned char c;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave (&rtc_lock, flags);
 	c = nvram_read_int( i );
-	restore_flags(flags);
+	spin_unlock_irqrestore (&rtc_lock, flags);
 	return( c );
 }
 
+/* This races nicely with trying to read with checksum checking (nvram_read) */
 void nvram_write_byte( unsigned char c, int i )
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave (&rtc_lock, flags);
 	nvram_write_int( c, i );
-	restore_flags(flags);
+	spin_unlock_irqrestore (&rtc_lock, flags);
 }
 
 int nvram_check_checksum( void )
@@ -185,10 +189,9 @@ int nvram_check_checksum( void )
 	unsigned long flags;
 	int rv;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave (&rtc_lock, flags);
 	rv = nvram_check_checksum_int();
-	restore_flags(flags);
+	spin_unlock_irqrestore (&rtc_lock, flags);
 	return( rv );
 }
 
@@ -196,10 +199,9 @@ void nvram_set_checksum( void )
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave (&rtc_lock, flags);
 	nvram_set_checksum_int();
-	restore_flags(flags);
+	spin_unlock_irqrestore (&rtc_lock, flags);
 }
 
 #endif /* MACH == ATARI */
@@ -228,63 +230,67 @@ static long long nvram_llseek(struct file *file,loff_t offset, int origin )
 static ssize_t nvram_read(struct file * file,
 	char * buf, size_t count, loff_t *ppos )
 {
-	unsigned long flags;
+	char contents [NVRAM_BYTES];
 	unsigned i = *ppos;
-	char *tmp = buf;
-	
-	if (i != *ppos)
-		return -EINVAL;
+	char *tmp;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irq (&rtc_lock);
 	
-	if (!nvram_check_checksum_int()) {
-		restore_flags(flags);
-		return( -EIO );
-	}
+	if (!nvram_check_checksum_int())
+		goto checksum_err;
 
-	for( ; count-- > 0 && i < NVRAM_BYTES; ++i, ++tmp )
-		put_user( nvram_read_int(i), tmp );
+	for (tmp = contents; count-- > 0 && i < NVRAM_BYTES; ++i, ++tmp)
+		*tmp = nvram_read_int(i);
+
+	spin_unlock_irq (&rtc_lock);
+
+	copy_to_user_ret (buf, contents, tmp - contents, -EFAULT);
+
 	*ppos = i;
 
-	restore_flags(flags);
-	return( tmp - buf );
+	return (tmp - contents);
+
+checksum_err:
+	spin_unlock_irq (&rtc_lock);
+	return -EIO;
 }
 
 static ssize_t nvram_write(struct file * file,
 		const char * buf, size_t count, loff_t *ppos )
 {
-	unsigned long flags;
+	char contents [NVRAM_BYTES];
 	unsigned i = *ppos;
-	const char *tmp = buf;
-	char c;
-	
-	if (i != *ppos)
-		return -EINVAL;
+	char * tmp;
 
-	save_flags(flags);
-	cli();
-	
-	if (!nvram_check_checksum_int()) {
-		restore_flags(flags);
-		return( -EIO );
-	}
+	/* could comebody please help me indent this better? */
+	copy_from_user_ret (contents, buf, (NVRAM_BYTES - i) < count ?
+						(NVRAM_BYTES - i) : count,
+				-EFAULT);
 
-	for( ; count-- > 0 && i < NVRAM_BYTES; ++i, ++tmp ) {
-		get_user( c, tmp );
-		nvram_write_int( c, i );
-	}
+	spin_lock_irq (&rtc_lock);
+
+	if (!nvram_check_checksum_int())
+		goto checksum_err;
+
+	for (tmp = contents; count-- > 0 && i < NVRAM_BYTES; ++i, ++tmp)
+		nvram_write_int (*tmp, i);
+
 	nvram_set_checksum_int();
+
+	spin_unlock_irq (&rtc_lock);
+
 	*ppos = i;
 
-	restore_flags(flags);
-	return( tmp - buf );
+	return (tmp - contents);
+
+checksum_err:
+	spin_unlock_irq (&rtc_lock);
+	return -EIO;
 }
 
 static int nvram_ioctl( struct inode *inode, struct file *file,
 						unsigned int cmd, unsigned long arg )
 {
-	unsigned long flags;
 	int i;
 	
 	switch( cmd ) {
@@ -293,14 +299,13 @@ static int nvram_ioctl( struct inode *inode, struct file *file,
 		if (!capable(CAP_SYS_ADMIN))
 			return( -EACCES );
 
-		save_flags(flags);
-		cli();
+		spin_lock_irq (&rtc_lock);
 
 		for( i = 0; i < NVRAM_BYTES; ++i )
 			nvram_write_int( 0, i );
 		nvram_set_checksum_int();
 		
-		restore_flags(flags);
+		spin_unlock_irq (&rtc_lock);
 		return( 0 );
 	  
 	  case NVRAM_SETCKS:		/* just set checksum, contents unchanged
@@ -309,10 +314,9 @@ static int nvram_ioctl( struct inode *inode, struct file *file,
 		if (!capable(CAP_SYS_ADMIN))
 			return( -EACCES );
 
-		save_flags(flags);
-		cli();
+		spin_lock_irq (&rtc_lock);
 		nvram_set_checksum_int();
-		restore_flags(flags);
+		spin_unlock_irq (&rtc_lock);
 		return( 0 );
 
 	  default:
@@ -355,16 +359,14 @@ static int nvram_read_proc( char *buffer, char **start, off_t offset,
 static int nvram_read_proc( char *buffer, char **start, off_t offset,
 							int size, int *eof, void *data )
 {
-	unsigned long flags;
 	unsigned char contents[NVRAM_BYTES];
     int i, len = 0;
     off_t begin = 0;
-	
-	save_flags(flags);
-	cli();
+
+	spin_lock_irq (&rtc_lock);
 	for( i = 0; i < NVRAM_BYTES; ++i )
 		contents[i] = nvram_read_int( i );
-	restore_flags(flags);
+	spin_unlock_irq (&rtc_lock);
 	
 	*eof = mach_proc_infos( contents, buffer, &len, &begin, offset, size );
 
@@ -475,15 +477,13 @@ static char *gfx_types[] = {
 static int pc_proc_infos( unsigned char *nvram, char *buffer, int *len,
 						  off_t *begin, off_t offset, int size )
 {
-	unsigned long flags;
 	int checksum;
 	int type;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irq (&rtc_lock);
 	checksum = nvram_check_checksum_int();
-	restore_flags(flags);
-	
+	spin_unlock_irq (&rtc_lock);
+
 	PRINT_PROC( "Checksum status: %svalid\n", checksum ? "" : "not " );
 
 	PRINT_PROC( "# floppies     : %d\n",

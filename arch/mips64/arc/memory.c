@@ -28,8 +28,6 @@
 
 #undef DEBUG
 
-extern char _end;
-
 struct linux_mdesc * __init
 ArcGetMemoryDescriptor(struct linux_mdesc *Current)
 {

@@ -326,6 +326,7 @@ static inline void sgiseeq_rx(struct net_device *dev, struct sgiseeq_private *sp
 				skb->protocol = eth_type_trans(skb, dev);
 				netif_rx(skb);
 				sp->stats.rx_packets++;
+				sp->stats.rx_bytes += len;
 			} else {
 				printk ("%s: Memory squeeze, deferring packet.\n",
 					dev->name);
@@ -500,6 +501,7 @@ static int sgiseeq_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Setup... */
 	skblen = skb->len;
 	len = (skblen <= ETH_ZLEN) ? ETH_ZLEN : skblen;
+	sp->stats.tx_bytes += len;
 	entry = sp->tx_new;
 	td = &sp->srings.tx_desc[entry];
 
@@ -690,7 +692,7 @@ static inline void str2eaddr(unsigned char *ea, unsigned char *str)
 
 int sgiseeq_probe(struct net_device *dev)
 {
-	static int initialized;
+	static int initialized = 0;
 	char *ep;
 
 	if (initialized)	/* Already initialized? */

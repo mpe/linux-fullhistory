@@ -14,9 +14,10 @@
 
 #include "check.h"
 
-static int ultrix_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
+int ultrix_partition(struct gendisk *hd, kdev_t dev,
+                            unsigned long first_sector, int first_part_minor)
 {
-	int i, minor = current_minor;
+	int i;
 	struct buffer_head *bh;
 	struct ultrix_disklabel {
 		s32	pt_magic;	/* magic no. indicating part. info exits */
@@ -44,9 +45,9 @@ static int ultrix_partition(struct gendisk *hd, kdev_t dev, unsigned long first_
                                             - sizeof(struct ultrix_disklabel));
 
 	if (label->pt_magic == PT_MAGIC && label->pt_valid == PT_VALID) {
-		for (i=0; i<8; i++, minor++)
+		for (i=0; i<8; i++, first_part_minor++)
 			if (label->pt_part[i].pi_nblocks)
-				add_gd_partition(hd, minor, 
+				add_gd_partition(hd, first_part_minor, 
 					      label->pt_part[i].pi_blkoff,
 					      label->pt_part[i].pi_nblocks);
 		brelse(bh);
@@ -57,4 +58,3 @@ static int ultrix_partition(struct gendisk *hd, kdev_t dev, unsigned long first_
 		return 0;
 	}
 }
-

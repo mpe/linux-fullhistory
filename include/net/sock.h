@@ -515,6 +515,8 @@ struct sock {
 				broadcast,
 				bsdism;
 	unsigned char		debug;
+	unsigned char		rcvtstamp;
+	unsigned char		userlocks;
 	int			proc;
 	unsigned long	        lingertime;
 
@@ -1222,7 +1224,7 @@ extern __inline__ long sock_sndtimeo(struct sock *sk, int noblock)
 
 extern __inline__ int sock_rcvlowat(struct sock *sk, int waitall, int len)
 {
-	return waitall ? len : min(sk->rcvlowat, len);
+	return (waitall ? len : min(sk->rcvlowat, len)) ? : 1;
 }
 
 /* Alas, with timeout socket operations are not restartable.
@@ -1231,6 +1233,15 @@ extern __inline__ int sock_rcvlowat(struct sock *sk, int waitall, int len)
 extern __inline__ int sock_intr_errno(long timeo)
 {
 	return timeo == MAX_SCHEDULE_TIMEOUT ? -ERESTARTSYS : -EINTR;
+}
+
+static __inline__ void
+sock_recv_timestamp(struct msghdr *msg, struct sock *sk, struct sk_buff *skb)
+{
+	if (sk->rcvtstamp)
+		put_cmsg(msg, SOL_SOCKET, SO_TIMESTAMP, sizeof(skb->stamp), &skb->stamp);
+	else
+		sk->stamp = skb->stamp;
 }
 
 /* 

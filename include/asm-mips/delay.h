@@ -36,11 +36,12 @@ __delay(unsigned long loops)
  */
 extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)
 {
+	unsigned long lo;
+
 	usecs *= 0x000010c6;		/* 2**32 / 1000000 */
-	__asm__("multu\t%0,%2\n\t"
-		"mfhi\t%0"
-		:"=r" (usecs)
-		:"0" (usecs),"r" (lps));
+	__asm__("multu\t%2,%3"
+		:"=h" (usecs), "=l" (lo)
+		:"r" (usecs),"r" (lps));
 	__delay(usecs);
 }
 

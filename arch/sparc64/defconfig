@@ -20,6 +20,7 @@ CONFIG_KMOD=y
 CONFIG_VT=y
 CONFIG_VT_CONSOLE=y
 # CONFIG_SMP is not set
+CONFIG_HAVE_DEC_LOCK=y
 # CONFIG_ISA is not set
 # CONFIG_PCMCIA is not set
 CONFIG_SBUS=y
@@ -155,12 +156,8 @@ CONFIG_INET=y
 # CONFIG_NET_IPIP is not set
 # CONFIG_NET_IPGRE is not set
 # CONFIG_IP_ALIAS is not set
+# CONFIG_INET_ECN is not set
 # CONFIG_SYN_COOKIES is not set
-
-#
-# (it is safe to leave these untouched)
-#
-CONFIG_SKB_LARGE=y
 CONFIG_IPV6=m
 # CONFIG_IPV6_EUI64 is not set
 # CONFIG_KHTTPD is not set

@@ -1,12 +1,11 @@
-/* $Id: setup.c,v 1.13 1999/12/04 03:59:00 ralf Exp $
- *
+/*
  * Setup pointers to hardware-dependent routines.
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996, 1997, 1998 by Ralf Baechle
+ * Copyright (C) 1996, 1997, 1998, 2000 by Ralf Baechle
  */
 #include <asm/ptrace.h>
 #include <linux/config.h>
@@ -21,11 +20,11 @@
 #include <linux/console.h>
 #include <linux/fb.h>
 #include <linux/pc_keyb.h>
+#include <linux/ide.h>
 
 #include <asm/bcache.h>
 #include <asm/bootinfo.h>
 #include <asm/keyboard.h>
-#include <asm/ide.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/processor.h>
@@ -78,7 +77,6 @@ static void __init sni_rm200_pci_time_init(struct irqaction *irq)
 }
 
 unsigned char aux_device_present;
-extern struct pci_ops sni_pci_ops;
 extern unsigned char sni_map_isa_cache;
 
 /*
@@ -110,6 +108,7 @@ int __init page_is_ram(unsigned long pagenr)
 
 void __init sni_rm200_pci_setup(void)
 {
+#if 0 /* XXX Tag me deeper  */
 	tag *atag;
 
 	/*
@@ -135,6 +134,7 @@ void __init sni_rm200_pci_setup(void)
 				((mips_arc_DisplayInfo*)TAGVALPTR(atag))->lines;
 		}
 	}
+#endif
 
 	sni_pcimt_detect();
 	sni_pcimt_sc_init();
@@ -168,7 +168,6 @@ void __init sni_rm200_pci_setup(void)
 	 * the I/O port space ...
 	 */
 	request_region(0xcfc,0x04,"PCI config data");
-	pci_ops = &sni_pci_ops;
 
 #ifdef CONFIG_BLK_DEV_IDE
 	ide_ops = &std_ide_ops;

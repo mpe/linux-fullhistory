@@ -242,9 +242,9 @@ __teql_resolve(struct sk_buff *skb, struct sk_buff *skb_res, struct net_device *
 	    memcmp(n->primary_key, mn->primary_key, mn->tbl->key_len) == 0) {
 		atomic_inc(&n->refcnt);
 	} else {
-		n = __neigh_lookup(mn->tbl, mn->primary_key, dev, 1);
-		if (n == NULL)
-			return -ENOBUFS;
+		n = __neigh_lookup_errno(mn->tbl, mn->primary_key, dev);
+		if (IS_ERR(n))
+			return PTR_ERR(n);
 	}
 	if (neigh_event_send(n, skb_res) == 0) {
 		int err;

@@ -133,6 +133,7 @@ EXPORT_SYMBOL(get_fs_type);
 EXPORT_SYMBOL(get_super);
 EXPORT_SYMBOL(get_empty_super);
 EXPORT_SYMBOL(getname);
+EXPORT_SYMBOL(names_cachep);
 EXPORT_SYMBOL(_fput);
 EXPORT_SYMBOL(igrab);
 EXPORT_SYMBOL(iunique);

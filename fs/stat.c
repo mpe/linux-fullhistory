@@ -259,7 +259,7 @@ asmlinkage long sys_readlink(const char * path, char * buf, int bufsiz)
 
 
 /* ---------- LFS-64 ----------- */
-#if !defined(__alpha__) && !defined(__ia64__)
+#if !defined(__alpha__) && !defined (__ia64__) && !defined(__mips64)
 
 static long cp_new_stat64(struct inode * inode, struct stat64 * statbuf)
 {

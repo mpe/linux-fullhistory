@@ -1,5 +1,4 @@
-/* $Id: identify.c,v 1.5 1999/11/19 20:35:21 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -39,7 +38,7 @@ static struct smatch mach_table[] = {
 int prom_flags;
 
 static struct smatch * __init
-string_to_mach(char *s)
+string_to_mach(const char *s)
 {
 	int i;
     

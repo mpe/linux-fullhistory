@@ -256,12 +256,16 @@ void __init paging_init(void)
 	max_dma = virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;
 	low = max_low_pfn;
 
+#if defined(CONFIG_PCI) || defined(CONFIG_ISA)
 	if (low < max_dma)
 		zones_size[ZONE_DMA] = low;
 	else {
 		zones_size[ZONE_DMA] = max_dma;
 		zones_size[ZONE_NORMAL] = low - max_dma;
 	}
+#else
+	zones_size[ZONE_DMA] = low;
+#endif
 
 	free_area_init(zones_size);
 }

@@ -171,6 +171,7 @@ stackargs:
 
 	/*
 	 * The stackpointer for a call with more than 4 arguments is bad.
+	 * We probably should handle this case a bit more drastic.
 	 */
 bad_stack:
 	negu	v0				# error

@@ -30,7 +30,7 @@
  * The IOC3 serials use a 22MHz clock rate with an additional divider by 3.
  */
 #define IOC3_BAUD (22000000 / (3*16))
-#define IOC3_COM_FLAGS (ASYNC_BOOT_AUTOCONF | ASYNC_SKIP_TEST | ASYNC_IOC3)
+#define IOC3_COM_FLAGS (ASYNC_BOOT_AUTOCONF | ASYNC_SKIP_TEST)
 
 /* Let the compiler figure out the size.  */
 #define RS_TABLE_SIZE

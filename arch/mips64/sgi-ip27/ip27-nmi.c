@@ -145,6 +145,10 @@ cont_nmi_dump(void)
 					cpu = CNODE_TO_CPU_BASE(node);
 					for (n=0; n < CNODE_NUM_CPUS(node); cpu++, n++) {
 						CPUMASK_SETB(nmied_cpus, cpu);
+						/* 
+						 * cputonasid, cputoslice
+						 * needs kernel cpuid
+						 */
 						SEND_NMI((cputonasid(cpu)), (cputoslice(cpu)));
 					}
 				}

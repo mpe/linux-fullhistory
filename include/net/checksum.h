@@ -124,5 +124,10 @@ static __inline__ unsigned int csum_and_copy_to_user
 }
 #endif
 
+static inline unsigned int csum_chain(unsigned int csum, unsigned int addend)
+{
+	csum += addend;
+	return csum + (csum < addend);
+}
 
 #endif

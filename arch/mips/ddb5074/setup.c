@@ -18,6 +18,7 @@
 #include <linux/mc146818rtc.h>
 #include <linux/pc_keyb.h>
 #include <linux/pci.h>
+#include <linux/ide.h>
 
 #include <asm/addrspace.h>
 #include <asm/bcache.h>
@@ -38,6 +39,7 @@ extern void breakpoint(void);
 extern void console_setup(char *);
 #endif
 
+extern struct ide_ops std_ide_ops;
 extern struct rtc_ops ddb_rtc_ops;
 
 static void (*back_to_prom)(void) = (void (*)(void))0xbfc00000;
@@ -107,6 +109,9 @@ void __init ddb_setup(void)
     _machine_halt = ddb_machine_halt;
     _machine_power_off = ddb_machine_power_off;
 
+#ifdef CONFIG_BLK_DEV_IDE
+    ide_ops = &std_ide_ops;
+#endif
     rtc_ops = &ddb_rtc_ops;
 
     /* Reboot on panic */

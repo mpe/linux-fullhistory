@@ -259,6 +259,19 @@ __neigh_lookup(struct neigh_table *tbl, const void *pkey, struct net_device *dev
 	if (n || !creat)
 		return n;
 
+	n = neigh_create(tbl, pkey, dev);
+	return IS_ERR(n) ? NULL : n;
+}
+
+extern __inline__ struct neighbour *
+__neigh_lookup_errno(struct neigh_table *tbl, const void *pkey,
+  struct net_device *dev)
+{
+	struct neighbour *n = neigh_lookup(tbl, pkey, dev);
+
+	if (n)
+		return n;
+
 	return neigh_create(tbl, pkey, dev);
 }
 

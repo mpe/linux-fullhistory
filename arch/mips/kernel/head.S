@@ -101,6 +101,15 @@
 	END(except_vec0_r4600)
 
 	/* TLB refill, EXL == 0, R52x0 "Nevada" version */
+        /*
+         * This version has a bug workaround for the Nevada.  It seems
+         * as if under certain circumstances the move from cp0_context
+         * might produce a bogus result when the mfc0 instruction and
+         * it's consumer are in a different cacheline or a load instruction,
+         * probably any memory reference, is between them.  This is
+         * potencially slower than the R4000 version, so we use this
+         * special version.
+         */
 	.set	noreorder
 	.set	noat
 	LEAF(except_vec0_nevada)

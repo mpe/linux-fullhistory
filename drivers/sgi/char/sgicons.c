@@ -1,4 +1,4 @@
-/* $Id: sgicons.c,v 1.11 1999/01/04 16:07:19 ralf Exp $
+/* $Id: sgicons.c,v 1.10 1998/08/25 09:18:58 ralf Exp $
  *
  * sgicons.c: Setting up and registering console I/O on the SGI.
  *

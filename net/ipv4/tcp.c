@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.169 2000/04/20 14:41:16 davem Exp $
+ * Version:	$Id: tcp.c,v 1.170 2000/07/08 00:20:43 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1018,9 +1018,13 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 			tcp_send_skb(sk, skb, queue_it, mss_now);
 		}
 	}
-	sk->err = 0;
 	err = copied;
-	goto out;
+out:
+	__tcp_push_pending_frames(sk, tp, mss_now);
+	TCP_CHECK_TIMER(sk);
+out_unlock:
+	release_sock(sk);
+	return err;
 
 do_sock_err:
 	if(copied)
@@ -1048,12 +1052,7 @@ do_fault:
 	kfree_skb(skb);
 do_fault2:
 	err = -EFAULT;
-out:
-	__tcp_push_pending_frames(sk, tp, mss_now);
-	TCP_CHECK_TIMER(sk);
-out_unlock:
-	release_sock(sk);
-	return err;
+	goto out;
 }
 
 #undef PSH_NEEDED
@@ -1270,10 +1269,6 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 
 	TCP_CHECK_TIMER(sk);
 
-
-	if (sk->err)
-		goto out_err;
-
 	err = -ENOTCONN;
 	if (sk->state == TCP_LISTEN)
 		goto out;
@@ -1292,13 +1287,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 
 	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
 
-	/*
-	 *	BUG BUG BUG
-	 *	This violates 1003.1g compliance. We must wait for 
-	 *	data to exist even if we read none!
-	 */
-	 
-	while (len > 0) {
+	do {
 		struct sk_buff * skb;
 		u32 offset;
 
@@ -1519,29 +1508,6 @@ do_prequeue:
 			continue;
 		skb->used = 1;
 		tcp_eat_skb(sk, skb);
-
-#ifdef TCP_LESS_COARSE_ACKS
-		/* Possible improvement. When sender is faster than receiver,
-		 * traffic looks like: fill window ... wait for window open ...
-		 * fill window. We lose at least one rtt, because call
-		 * cleanup_rbuf only once. Probably, if "len" was large
-		 * we should insert several intermediate cleanup_rbuf(s).
-		 *
-		 * F.e.:
-		 */
-		do {
-			u32 full_space = min(tp->window_clamp, tcp_full_space(sk));
-
-			/* Try to ACK, if total buffer length is larger
-			   than maximal window and if rcv_window has
-			   chances to increase twice. It will result
-			   to exponentially decreased ACKing during
-			   read to huge (usually, mmapped) buffer.
-			 */
-			if (len >= full_space && tp->rcv_wnd <= full_space/2)
-				cleanup_rbuf(sk, copied);
-		} while (0);
-#endif
 		continue;
 
 	found_fin_ok:
@@ -1552,7 +1518,7 @@ do_prequeue:
 		/* All is done. */
 		skb->used = 1;
 		break;
-	}
+	} while (len > 0);
 
 	if (user_recv) {
 		if (skb_queue_len(&tp->ucopy.prequeue)) {
@@ -1583,9 +1549,6 @@ do_prequeue:
 	TCP_CHECK_TIMER(sk);
 	release_sock(sk);
 	return copied;
-
-out_err:
-	err = sock_error(sk);
 
 out:
 	TCP_CHECK_TIMER(sk);
@@ -2012,7 +1975,6 @@ struct sock *tcp_accept(struct sock *sk, int flags, int *err)
 	struct open_request *req;
 	struct sock *newsk;
 	int error;
-	long timeo;
 
 	lock_sock(sk); 
 
@@ -2023,10 +1985,10 @@ struct sock *tcp_accept(struct sock *sk, int flags, int *err)
 	if (sk->state != TCP_LISTEN)
 		goto out;
 
-	timeo = sock_rcvtimeo(sk, flags & O_NONBLOCK);
-
 	/* Find already established connection */
 	if (!tp->accept_queue) {
+		long timeo = sock_rcvtimeo(sk, flags & O_NONBLOCK);
+
 		/* If this is a non blocking socket don't sleep */
 		error = -EAGAIN;
 		if (!timeo)
@@ -2099,6 +2061,8 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval,
 			break;
 		}
 		tp->nonagle = (val == 0) ? 0 : 1;
+		if (val)
+			tcp_push_pending_frames(sk, tp);
 		break;
 
 	case TCP_CORK:

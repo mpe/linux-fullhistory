@@ -77,8 +77,8 @@ sigpending	=  8
 addr_limit	= 12
 exec_domain	= 16
 need_resched	= 20
-processor	= 56
-tsk_ptrace	= 60
+processor	= 48
+tsk_ptrace	= 56
 
 ENOSYS = 38
 

@@ -29,7 +29,7 @@
  * four billion cycles just basically sounds like a good idea,
  * regardless of how fast the machine is. 
  */
-typedef unsigned long cycles_t;
+typedef unsigned long long cycles_t;
 
 extern cycles_t cacheflush_time;
 
@@ -38,10 +38,10 @@ static inline cycles_t get_cycles (void)
 #ifndef CONFIG_X86_TSC
 	return 0;
 #else
-	unsigned long eax, edx;
+	unsigned long long ret;
 
-	rdtsc(eax,edx);
-	return eax;
+	rdtscll(ret);
+	return ret;
 #endif
 }
 

@@ -2858,13 +2858,16 @@ int __init ide_setup (char *s)
 	const char max_drive = 'a' + ((MAX_HWIFS * MAX_DRIVES) - 1);
 	const char max_hwif  = '0' + (MAX_HWIFS - 1);
 
+	
+	if (strncmp(s,"hd",2) == 0 && s[2] == '=')	/* hd= is for hd.c   */
+		return 0;				/* driver and not us */
+
 	if (strncmp(s,"ide",3) &&
 	    strncmp(s,"idebus",6) &&
 #ifdef CONFIG_BLK_DEV_VIA82CXXX
 	    strncmp(s,"splitfifo",9) &&
 #endif /* CONFIG_BLK_DEV_VIA82CXXX */
-	    strncmp(s,"hdxlun",6) &&
-	    (strncmp(s,"hd",2) && s[2] != '='))
+	    strncmp(s,"hd",2))		/* hdx= & hdxlun= */
 		return 0;
 
 	printk("ide_setup: %s", s);

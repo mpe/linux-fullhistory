@@ -355,7 +355,6 @@ static kmem_cache_t cache_cache = {
 	spinlock:	SPIN_LOCK_UNLOCKED,
 	colour_off:	L1_CACHE_BYTES,
 	name:		"kmem_cache",
-	next:		LIST_HEAD_INIT(cache_cache.next)
 };
 
 /* Guard access to the cache-chain. */
@@ -412,7 +411,7 @@ void __init kmem_cache_init(void)
 	size_t left_over;
 
 	init_MUTEX(&cache_chain_sem);
-	list_add(&cache_cache.next,&cache_chain);
+	INIT_LIST_HEAD(&cache_chain);
 
 	kmem_cache_estimate(0, cache_cache.objsize, 0,
 			&left_over, &cache_cache.num);
@@ -443,7 +442,7 @@ void __init kmem_cache_sizes_init(void)
 		 * eliminates "false sharing".
 		 * Note for systems short on memory removing the alignment will
 		 * allow tighter packing of the smaller caches. */
-		sprintf(name,"size-%d",sizes->cs_size);
+		sprintf(name,"size-%Zd",sizes->cs_size);
 		if (!(sizes->cs_cachep =
 			kmem_cache_create(name, sizes->cs_size,
 					0, SLAB_HWCACHE_ALIGN, NULL, NULL))) {
@@ -455,7 +454,7 @@ void __init kmem_cache_sizes_init(void)
 			offslab_limit = sizes->cs_size-sizeof(slab_t);
 			offslab_limit /= 2;
 		}
-		sprintf(name, "size-%d(DMA)",sizes->cs_size);
+		sprintf(name, "size-%Zd(DMA)",sizes->cs_size);
 		sizes->cs_dmacachep = kmem_cache_create(name, sizes->cs_size, 0,
 			      SLAB_CACHE_DMA|SLAB_HWCACHE_ALIGN, NULL, NULL);
 		if (!sizes->cs_dmacachep)

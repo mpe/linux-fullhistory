@@ -25,7 +25,7 @@
 #define FPC_CSR		69
 #define FPC_EIR		70
 
-#ifndef __ASSEMBLY__
+#ifndef _LANGUAGE_ASSEMBLY
 /*
  * This struct defines the way the registers are stored on the stack during a
  * system call/exception. As usual the registers k0/k1 aren't being saved.
@@ -50,13 +50,15 @@ struct pt_regs {
 	unsigned long cp0_cause;
 };
 
-#endif /* !(__ASSEMBLY__) */
+#endif /* !(_LANGUAGE_ASSEMBLY) */
 
+#ifdef _LANGUAGE_ASSEMBLY
 #include <asm/offset.h>
+#endif
 
 #ifdef __KERNEL__
 
-#ifndef __ASSEMBLY__
+#ifndef _LANGUAGE_ASSEMBLY
 /*
  * Does the process account for user or for system time?
  */
@@ -65,7 +67,7 @@ struct pt_regs {
 #define instruction_pointer(regs) ((regs)->cp0_epc)
 
 extern void show_regs(struct pt_regs *);
-#endif /* !(__ASSEMBLY__) */
+#endif /* !(_LANGUAGE_ASSEMBLY) */
 
 #endif
 

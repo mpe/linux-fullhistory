@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.86 2000/04/26 09:36:36 davem Exp $
+ * Version:	$Id: arp.c,v 1.87 2000/07/07 22:40:35 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -424,20 +424,24 @@ int arp_find(unsigned char *haddr, struct sk_buff *skb)
 int arp_bind_neighbour(struct dst_entry *dst)
 {
 	struct net_device *dev = dst->dev;
+	struct neighbour *n = dst->neighbour;
 
 	if (dev == NULL)
-		return 0;
-	if (dst->neighbour == NULL) {
+		return -EINVAL;
+	if (n == NULL) {
 		u32 nexthop = ((struct rtable*)dst)->rt_gateway;
 		if (dev->flags&(IFF_LOOPBACK|IFF_POINTOPOINT))
 			nexthop = 0;
-		dst->neighbour = __neigh_lookup(
+		n = __neigh_lookup_errno(
 #ifdef CONFIG_ATM_CLIP
 		    dev->type == ARPHRD_ATM ? &clip_tbl :
 #endif
-		    &arp_tbl, &nexthop, dev, 1);
+		    &arp_tbl, &nexthop, dev);
+		if (IS_ERR(n))
+			return PTR_ERR(n);
+		dst->neighbour = n;
 	}
-	return (dst->neighbour != NULL);
+	return 0;
 }
 
 /*
@@ -847,9 +851,9 @@ int arp_req_set(struct arpreq *r, struct net_device * dev)
 	if (r->arp_ha.sa_family != dev->type)	
 		return -EINVAL;
 
-	err = -ENOBUFS;
-	neigh = __neigh_lookup(&arp_tbl, &ip, dev, 1);
-	if (neigh) {
+	neigh = __neigh_lookup_errno(&arp_tbl, &ip, dev);
+	err = PTR_ERR(neigh);
+	if (!IS_ERR(neigh)) {
 		unsigned state = NUD_STALE;
 		if (r->arp_flags & ATF_PERM)
 			state = NUD_PERMANENT;

@@ -4,7 +4,7 @@
  *  Created 8 August 1998 by Martin Costabel and Kevin Schoedel
  *
  *  Vmode-switching changes and vmode 15/17 modifications created 29 August
- *  1998 by Barry Nathan <barryn@pobox.com>.
+ *  1998 by Barry K. Nathan <barryn@pobox.com>.
  *
  *  Derived directly from:
  *

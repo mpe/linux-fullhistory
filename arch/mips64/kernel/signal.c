@@ -1,12 +1,11 @@
-/* $Id: signal.c,v 1.4 2000/01/17 23:32:46 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
  * Copyright (C) 1991, 1992  Linus Torvalds
- * Copyright (C) 1994 - 1999  Ralf Baechle
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1994 - 2000  Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
 #include <linux/config.h>
 #include <linux/sched.h>
@@ -37,6 +36,8 @@ extern asmlinkage int sys_wait4(pid_t pid, unsigned long *stat_addr,
 extern asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs);
 extern asmlinkage int save_fp_context(struct sigcontext *sc);
 extern asmlinkage int restore_fp_context(struct sigcontext *sc);
+
+extern asmlinkage void syscall_trace(void);
 
 int copy_siginfo_to_user(siginfo_t *to, siginfo_t *from)
 {
@@ -197,8 +198,6 @@ sys_sigaction(int sig, const struct sigaction *act, struct sigaction *oact)
 		err |= __put_user(old_ka.sa.sa_handler, &oact->sa_handler);
 		err |= __put_user(old_ka.sa.sa_mask.sig[0], oact->sa_mask.sig);
                 err |= __put_user(0, &oact->sa_mask.sig[1]);
-                err |= __put_user(0, &oact->sa_mask.sig[2]);
-                err |= __put_user(0, &oact->sa_mask.sig[3]);
 		err |= __put_user(old_ka.sa.sa_restorer, &oact->sa_restorer);
                 if (err)
 			return -EFAULT;
@@ -294,6 +293,8 @@ sys_sigreturn(abi64_no_regargs, struct pt_regs regs)
 	/*
 	 * Don't let your children do this ...
 	 */
+	if (current->ptrace & PT_TRACESYS)
+		syscall_trace();
 	__asm__ __volatile__(
 		"move\t$29, %0\n\t"
 		"j\tret_from_sys_call"
@@ -354,7 +355,7 @@ setup_sigcontext(struct pt_regs *regs, struct sigcontext *sc)
 
 	err |= __put_user(regs->cp0_epc, &sc->sc_pc);
 
-#define save_gp_reg(i) {						\
+#define save_gp_reg(i) do {						\
 	err |= __put_user(regs->regs[i], &sc->sc_regs[i]);		\
 } while(0)
 	__put_user(0, &sc->sc_regs[0]); save_gp_reg(1); save_gp_reg(2);
@@ -620,7 +621,7 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 		if (!signr)
 			break;
 
-		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
+		if ((current->ptrace & PT_PTRACED) && signr != SIGKILL) {
 			/* Let the debugger run.  */
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;
@@ -694,7 +695,6 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 				/* FALLTHRU */
 
 			default:
-				lock_kernel();
 				sigaddset(&current->signal, signr);
 				recalc_sigpending(current);
 				current->flags |= PF_SIGNALED;

@@ -1,5 +1,4 @@
-/* $Id: ip27-pci.c,v 1.8 2000/02/16 01:07:30 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -15,6 +14,28 @@
 #include <asm/paccess.h>
 #include <asm/sn/sn0/ip27.h>
 #include <asm/sn/sn0/hub.h>
+
+/*
+ * Max #PCI busses we can handle; ie, max #PCI bridges.
+ */
+#define MAX_PCI_BUSSES		20
+
+/*
+ * Max #PCI devices (like scsi controllers) we handle on a bus.
+ */
+#define MAX_DEVICES_PER_PCIBUS	8
+
+/*
+ * No locking needed until PCI initialization is done parallely.
+ */
+int irqstore[MAX_PCI_BUSSES][MAX_DEVICES_PER_PCIBUS];
+int lastirq = BASE_PCI_IRQ;
+
+/*
+ * Translate from irq to software PCI bus number and PCI slot.
+ */
+int irq_to_bus[MAX_PCI_BUSSES * MAX_DEVICES_PER_PCIBUS];
+int irq_to_slot[MAX_PCI_BUSSES * MAX_DEVICES_PER_PCIBUS];
 
 /*
  * The Bridge ASIC supports both type 0 and type 1 access.  Type 1 is
@@ -123,13 +144,12 @@ static struct pci_ops bridge_pci_ops = {
 void __init pcibios_init(void)
 {
 	struct pci_ops *ops = &bridge_pci_ops;
-	nasid_t nid = get_nasid();
 	int	i;
 
 	ioport_resource.end = ~0UL;
 
 	for (i=0; i<num_bridges; i++) {
-		printk("PCI: Probing PCI hardware on host bus %2d, node %d.\n", i, nid);
+		printk("PCI: Probing PCI hardware on host bus %2d.\n", i);
 		pci_scan_bus(i, ops, NULL);
 	}
 }
@@ -154,15 +174,36 @@ pci_swizzle(struct pci_dev *dev, u8 *pinp)
 	return PCI_SLOT(dev->devfn);
 }
 
-/* XXX This should include the node ID into the final interrupt number.  */
+/*
+ * All observed requests have pin == 1. We could have a global here, that
+ * gets incremented and returned every time - unfortunately, pci_map_irq
+ * may be called on the same device over and over, and need to return the
+ * same value. On o2000, pin can be 0 or 1, and PCI slots can be [0..7]. 
+ *
+ * A given PCI device, in general, should be able to intr any of the cpus
+ * on any one of the hubs connected to its xbow.
+ */
 static int __init
 pci_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
-	int rv;
-	rv = (slot + (((pin-1) & 1) << 2)) & 7;
-	rv |= (bus_to_wid[dev->bus->number] << 8);
-	rv |= (bus_to_nid[dev->bus->number] << 16);
-	return rv;
+	if ((dev->bus->number >= MAX_PCI_BUSSES) || (pin != 1) || \
+					(slot >= MAX_DEVICES_PER_PCIBUS)) {
+		printk("Increase supported PCI busses %d,%d,%d\n", \
+						dev->bus->number, slot, pin);
+		while(1);
+	}
+
+	/*
+	 * Already assigned? Then return previously assigned value ...
+	 */
+	if (irqstore[dev->bus->number][slot])
+		return(irqstore[dev->bus->number][slot]);
+	else {
+		lastirq++;	/* IOC3_ETH_INT hack */
+		irq_to_bus[lastirq] = dev->bus->number;
+		irq_to_slot[lastirq] = slot;
+		return(irqstore[dev->bus->number][slot] = lastirq);
+	}
 }
 
 void __init
@@ -222,8 +263,41 @@ pcibios_setup(char *str)
 }
 
 static void __init
+pci_disable_swapping(struct pci_dev *dev)
+{
+	unsigned int bus_id = (unsigned) dev->bus->number;
+	bridge_t *bridge = (bridge_t *) NODE_SWIN_BASE(bus_to_nid[bus_id],
+				     bus_to_wid[bus_id]);
+	int		slot = PCI_SLOT(dev->devfn);
+	bridgereg_t 	devreg;
+
+	devreg = bridge->b_device[slot].reg;
+	devreg &= ~BRIDGE_DEV_SWAP_DIR;		/* turn off byte swapping */
+	bridge->b_device[slot].reg = devreg;
+
+	bridge->b_widget.w_tflush;		/* Flush */
+}
+
+static void __init
+pci_enable_swapping(struct pci_dev *dev)
+{
+	unsigned int bus_id = (unsigned) dev->bus->number;
+	bridge_t *bridge = (bridge_t *) NODE_SWIN_BASE(bus_to_nid[bus_id],
+				     bus_to_wid[bus_id]);
+	int		slot = PCI_SLOT(dev->devfn);
+	bridgereg_t 	devreg;
+
+	devreg = bridge->b_device[slot].reg;
+	devreg |= BRIDGE_DEV_SWAP_DIR;		/* turn on byte swapping */
+	bridge->b_device[slot].reg = devreg;
+
+	bridge->b_widget.w_tflush;		/* Flush */
+}
+
+static void __init
 pci_fixup_ioc3(struct pci_dev *d)
 {
+	unsigned int bus_id = (unsigned) d->bus->number;
 	int i;
 
 	/* IOC3 only decodes 0x20 bytes of the config space, so we end up
@@ -231,6 +305,9 @@ pci_fixup_ioc3(struct pci_dev *d)
 	   INTA, INTB and INTC pins are all wired together as if it'd only
 	   use INTA.  */
 	printk("PCI: Fixing base addresses for IOC3 device %s\n", d->slot_name);
+
+	d->resource[0].start |= NODE_OFFSET(bus_to_nid[bus_id]);
+	d->resource[0].end |= NODE_OFFSET(bus_to_nid[bus_id]);
 
 	for (i = 1; i <= PCI_ROM_RESOURCE; i++) {
 		d->resource[i].start = 0UL;
@@ -240,6 +317,8 @@ pci_fixup_ioc3(struct pci_dev *d)
 	d->subsystem_vendor = 0;
 	d->subsystem_device = 0;
 	d->irq = 1;
+
+	pci_disable_swapping(d);
 }
 
 static void __init
@@ -247,24 +326,25 @@ pci_fixup_isp1020(struct pci_dev *d)
 {
 	unsigned short command;
 
+	d->resource[0].start |= ((unsigned long)(bus_to_nid[d->bus->number])<<32);
 	printk("PCI: Fixing isp1020 in [bus:slot.fn] %s\n", d->slot_name);
 
 	/* Configure device to allow bus mastering, i/o and memory mapping. 
 	 * Older qlogicisp driver expects to have the IO space enable 
-	 * bit set. Things stop working if we program the controllers as not having
-	 * PCI_COMMAND_MEMORY, so we have to fudge the mem_flags.
+	 * bit set. Things stop working if we program the controllers as not 
+	 * having PCI_COMMAND_MEMORY, so we have to fudge the mem_flags.
 	 */
 
-	/* only turn on scsi's on main bus */
-	if (d->bus->number == 0) {
-		pci_set_master(d);
-		pci_read_config_word(d, PCI_COMMAND, &command);
-		command |= PCI_COMMAND_MEMORY;
-		command |= PCI_COMMAND_IO;
-		pci_write_config_word(d, PCI_COMMAND, command);
-		d->resource[1].flags |= 1;
-	}
+	pci_set_master(d);
+	pci_read_config_word(d, PCI_COMMAND, &command);
+	command |= PCI_COMMAND_MEMORY;
+	command |= PCI_COMMAND_IO;
+	pci_write_config_word(d, PCI_COMMAND, command);
+	d->resource[1].flags |= 1;
+
+	pci_enable_swapping(d);
 }
+
 static void __init
 pci_fixup_isp2x00(struct pci_dev *d)
 {
@@ -280,7 +360,7 @@ pci_fixup_isp2x00(struct pci_dev *d)
 	printk("PCI: Fixing isp2x00 in [bus:slot.fn] %s\n", d->slot_name);
 
 	/* set the resource struct for this device */
-	start = (u32) bridge;	/* yes, we want to lose the upper 32 bits here */
+	start = (u32) (u64)bridge;	/* yes, we want to lose the upper 32 bits here */
 	start |= BRIDGE_DEVIO(slot);
 
 	d->resource[0].start = start;
@@ -298,11 +378,9 @@ pci_fixup_isp2x00(struct pci_dev *d)
 	/* point device(x) to it appropriate small window */
 	devreg &= ~BRIDGE_DEV_OFF_MASK;
 	devreg |= (start >> 20) & BRIDGE_DEV_OFF_MASK;
-
-	/* turn on byte swapping in direct map mode (how we currently run dma's) */
-	devreg |= BRIDGE_DEV_SWAP_DIR;		/* turn on byte swapping */
-
 	bridge->b_device[slot].reg = devreg;
+
+	pci_enable_swapping(d);
 
 	/* set card's base addr reg */
 	//pci_conf0_write_config_dword(d, PCI_BASE_ADDRESS_0, 0x500001);
@@ -317,7 +395,6 @@ pci_fixup_isp2x00(struct pci_dev *d)
 	pci_conf0_write_config_dword(d, PCI_BASE_ADDRESS_1, start);
 	//pci_conf0_write_config_dword(d, PCI_ROM_ADDRESS, (start | 0x20000));
 
-
 	/* set cache line size */
 	pci_conf0_write_config_dword(d, PCI_CACHE_LINE_SIZE, 0xf080);
 
@@ -329,7 +406,7 @@ pci_fixup_isp2x00(struct pci_dev *d)
 	/* set host error field */
 	bridge->b_int_host_err = 0x44;
 	bridge->b_wid_tflush;
-		
+
 	bridge->b_wid_tflush;   	/* wait until Bridge PIO complete */
 	for (i=0; i<8; i++)
 		printk("PCI: device(%d)= 0x%x\n",i,bridge->b_device[i].reg);

@@ -1,12 +1,11 @@
-/* $Id: mips_ksyms.c,v 1.25 2000/02/24 00:12:40 ralf Exp $
- *
+/*
  * Export MIPS-specific functions needed for loadable modules.
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996, 1997, 1998 by Ralf Baechle
+ * Copyright (C) 1996, 1997, 1998, 2000 by Ralf Baechle
  */
 #include <linux/config.h>
 #include <linux/module.h>
@@ -16,10 +15,10 @@
 #include <asm/irq.h>
 #include <linux/in6.h>
 #include <linux/pci.h>
+#include <linux/ide.h>
 
 #include <asm/checksum.h>
 #include <asm/dma.h>
-#include <asm/floppy.h>
 #include <asm/io.h>
 #include <asm/page.h>
 #include <asm/pgalloc.h>
@@ -27,6 +26,9 @@
 #include <asm/sgi/sgihpc.h>
 #include <asm/softirq.h>
 #include <asm/uaccess.h>
+#ifdef CONFIG_BLK_DEV_FD
+#include <asm/floppy.h>
+#endif
 
 extern void *__bzero(void *__s, size_t __count);
 extern long __strncpy_from_user_nocheck_asm(char *__to,
@@ -50,11 +52,12 @@ EXPORT_SYMBOL_NOVERS(memmove);
 EXPORT_SYMBOL_NOVERS(strcat);
 EXPORT_SYMBOL_NOVERS(strchr);
 EXPORT_SYMBOL_NOVERS(strlen);
+EXPORT_SYMBOL_NOVERS(strpbrk);
 EXPORT_SYMBOL_NOVERS(strncat);
 EXPORT_SYMBOL_NOVERS(strnlen);
 EXPORT_SYMBOL_NOVERS(strrchr);
+EXPORT_SYMBOL_NOVERS(strstr);
 EXPORT_SYMBOL_NOVERS(strtok);
-EXPORT_SYMBOL_NOVERS(strpbrk);
 
 EXPORT_SYMBOL(_clear_page);
 EXPORT_SYMBOL(enable_irq);
@@ -131,4 +134,9 @@ EXPORT_SYMBOL(unregister_fpe);
 EXPORT_SYMBOL(screen_info);
 #endif
 
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
+EXPORT_SYMBOL(ide_ops);
+#endif
+
 EXPORT_SYMBOL(get_wchan);
+EXPORT_SYMBOL(irq_stat);

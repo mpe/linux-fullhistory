@@ -149,31 +149,10 @@ extern void __bad_pte(pmd_t *pmd);
 extern void __bad_pte_kernel(pmd_t *pmd);
 extern void __bad_pmd(pgd_t *pgd);
 
-#define pte_free_kernel(pte)    free_pte_fast(pte)
 #define pte_free(pte)           free_pte_fast(pte)
-#define pmd_free_kernel(pte)    free_pmd_fast(pte)
 #define pmd_free(pte)           free_pmd_fast(pte)
 #define pgd_free(pgd)           free_pgd_fast(pgd)
 #define pgd_alloc()             get_pgd_fast()
-
-extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
-{
-	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-
-	if (pmd_none(*pmd)) {
-		pte_t *page = get_pte_fast();
-		if (page) {
-			pmd_val(*pmd) = (unsigned long) page;
-			return page + address;
-		}
-		return get_pte_kernel_slow(pmd, address);
-	}
-	if (pmd_bad(*pmd)) {
-		__bad_pte_kernel(pmd);
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + address;
-}
 
 extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 {
@@ -212,35 +191,22 @@ extern inline pmd_t *pmd_alloc(pgd_t * pgd, unsigned long address)
 	return (pmd_t *) pgd_page(*pgd) + address;
 }
 
-#define pmd_alloc_kernel	pmd_alloc
+extern pte_t kptbl[(PAGE_SIZE<<KPTBL_PAGE_ORDER)/sizeof(pte_t)];
+extern pmd_t kpmdtbl[PTRS_PER_PMD];
+
+#define pmd_alloc_kernel(d,a)	(pmd_t *)kpmdtbl
+
+extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
+{
+	return (kptbl + (address >> PAGE_SHIFT));
+}
 
 extern int do_check_pgt_cache(int, int);
 
 extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
-	struct task_struct * p;
-	pgd_t *pgd;
-#ifdef CONFIG_SMP
-	int i;
-#endif	
-        
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		if (!p->mm)
-			continue;
-		*pgd_offset(p->mm, address) = entry;
-	}
-	read_unlock(&tasklist_lock);
-#ifndef CONFIG_SMP
-	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-		pgd[address >> PGDIR_SHIFT] = entry;
-#else
-	/* To pgd_alloc/pgd_free, one holds master kernel lock and so does our
-	   callee, so we can modify pgd caches of other CPUs as well. -jj */
-	for (i = 0; i < NR_CPUS; i++)
-		for (pgd = (pgd_t *)cpu_data[i].pgd_quick; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-			pgd[address >> PGDIR_SHIFT] = entry;
-#endif
+	printk("set_pgdir!\n");
+	while(1);
 }
 
 #endif /* _ASM_PGALLOC_H */

@@ -47,7 +47,7 @@ dump_tlb(int first, int last)
 			printk("Index: %2d ", i);
 
 			printk("va=%08lx asid=%08lx"
-			       "  [pa=%06lx n=%d d=%d v=%d g=%ld]",
+			       "  [pa=%06lx n=%d d=%d v=%d g=%d]",
 			       (entryhi & 0xffffe000),
 			       entryhi & 0xfc0,
 			       entrylo0 & PAGE_MASK,

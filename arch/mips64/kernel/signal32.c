@@ -1,5 +1,4 @@
-/* $Id: signal32.c,v 1.4 2000/03/15 22:46:55 kanoj Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -8,6 +7,7 @@
  * Copyright (C) 1994 - 1999  Ralf Baechle
  * Copyright (C) 1999 Silicon Graphics, Inc.
  */
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
@@ -37,6 +37,8 @@ extern asmlinkage int do_signal32(sigset_t *oldset, struct pt_regs *regs);
 extern asmlinkage int save_fp_context(struct sigcontext *sc);
 extern asmlinkage int restore_fp_context(struct sigcontext *sc);
 
+extern asmlinkage void syscall_trace(void);
+
 /* 32-bit compatibility types */
 
 #define _NSIG32_BPW	32
@@ -60,7 +62,7 @@ struct sigaction32 {
 /* IRIX compatible stack_t  */
 typedef struct sigaltstack32 {
 	void *ss_sp;
-	size_t ss_size;
+	__kernel_size_t32 ss_size;
 	int ss_flags;
 } stack32_t;
 
@@ -94,18 +96,72 @@ static inline int refill_fp_context(struct sigcontext *sc)
 	return err;
 }
 
+extern void __put_sigset_unknown_nsig(void);
+extern void __get_sigset_unknown_nsig(void);
+
+static inline int
+put_sigset(const sigset_t *kbuf, sigset32_t *ubuf)
+{
+	int err = 0;
+
+	if (!access_ok(VERIFY_WRITE, ubuf, sizeof(*ubuf)))
+		return -EFAULT;
+
+	switch (_NSIG_WORDS) {
+	default:
+		__put_sigset_unknown_nsig();
+	case 2:
+		err |= __put_user (kbuf->sig[1] >> 32, &ubuf->sig[3]);
+		err |= __put_user (kbuf->sig[1] & 0xffffffff, &ubuf->sig[2]);
+	case 1:
+		err |= __put_user (kbuf->sig[0] >> 32, &ubuf->sig[1]);
+		err |= __put_user (kbuf->sig[0] & 0xffffffff, &ubuf->sig[0]);
+	}
+
+	return err;
+}
+
+static inline int
+get_sigset(sigset_t *kbuf, const sigset32_t *ubuf)
+{
+	int err = 0;
+	unsigned long sig[4];
+
+	if (!access_ok(VERIFY_READ, ubuf, sizeof(*ubuf)))
+		return -EFAULT;
+
+	switch (_NSIG_WORDS) {
+	default:
+		__get_sigset_unknown_nsig();
+	case 2:
+		err |= __get_user (sig[3], &ubuf->sig[3]);
+		err |= __get_user (sig[2], &ubuf->sig[2]);
+		kbuf->sig[1] = sig[2] | (sig[3] << 32);
+	case 1:
+		err |= __get_user (sig[1], &ubuf->sig[1]);
+		err |= __get_user (sig[0], &ubuf->sig[0]);
+		kbuf->sig[0] = sig[0] | (sig[1] << 32);
+	}
+
+	return err;
+}
+
 /*
  * Atomically swap in the new signal mask, and wait for a signal.
  */
 asmlinkage inline int
 sys32_sigsuspend(abi64_no_regargs, struct pt_regs regs)
 {
-	sigset_t *uset, saveset, newset;
+	sigset32_t *uset;
+	sigset_t newset, saveset;
+
+#if DEBUG_MIPS64
+printk("%s called.\n", __FUNCTION__);
+#endif
 
 	save_static(&regs);
-printk("%s called.\n", __FUNCTION__);
-	uset = (sigset_t *) regs.regs[4];
-	if (copy_from_user(&newset, uset, sizeof(sigset_t)))
+	uset = (sigset32_t *) regs.regs[4];
+	if (get_sigset(&newset, uset))
 		return -EFAULT;
 	sigdelsetmask(&newset, ~_BLOCKABLE);
 
@@ -128,19 +184,22 @@ printk("%s called.\n", __FUNCTION__);
 asmlinkage int
 sys32_rt_sigsuspend(abi64_no_regargs, struct pt_regs regs)
 {
-	sigset_t *unewset, saveset, newset;
+	sigset32_t *uset;
+	sigset_t newset, saveset;
         size_t sigsetsize;
 
-	save_static(&regs);
+#if DEBUG_MIPS64
 printk("%s called.\n", __FUNCTION__);
+#endif
 
+	save_static(&regs);
 	/* XXX Don't preclude handling different sized sigset_t's.  */
 	sigsetsize = regs.regs[5];
-	if (sigsetsize != sizeof(sigset_t))
+	if (sigsetsize != sizeof(sigset32_t))
 		return -EINVAL;
 
-	unewset = (sigset_t *) regs.regs[4];
-	if (copy_from_user(&newset, unewset, sizeof(newset)))
+	uset = (sigset32_t *) regs.regs[4];
+	if (get_sigset(&newset, uset))
 		return -EFAULT;
 	sigdelsetmask(&newset, ~_BLOCKABLE);
 
@@ -172,10 +231,12 @@ asmlinkage int sys32_sigaction(int sig, const struct sigaction32 *act,
 
 		if (!access_ok(VERIFY_READ, act, sizeof(*act)))
 			return -EFAULT;
-		err |= __get_user(new_ka.sa.sa_handler, &act->sa_handler);
+		err |= __get_user((u32)(u64)new_ka.sa.sa_handler,
+		                  &act->sa_handler);
 		err |= __get_user(new_ka.sa.sa_flags, &act->sa_flags);
 		err |= __get_user(mask, &act->sa_mask.sig[0]);
-		err |= __get_user(new_ka.sa.sa_restorer, &act->sa_restorer);
+		err |= __get_user((u32)(u64)new_ka.sa.sa_restorer,
+		                   &act->sa_restorer);
 		if (err)
 			return -EFAULT;
 
@@ -188,12 +249,14 @@ asmlinkage int sys32_sigaction(int sig, const struct sigaction32 *act,
 		if (!access_ok(VERIFY_WRITE, oact, sizeof(*oact)))
                         return -EFAULT;
 		err |= __put_user(old_ka.sa.sa_flags, &oact->sa_flags);
-		err |= __put_user(old_ka.sa.sa_handler, &oact->sa_handler);
+		err |= __put_user((u32)(u64)old_ka.sa.sa_handler,
+		                  &oact->sa_handler);
 		err |= __put_user(old_ka.sa.sa_mask.sig[0], oact->sa_mask.sig);
                 err |= __put_user(0, &oact->sa_mask.sig[1]);
                 err |= __put_user(0, &oact->sa_mask.sig[2]);
                 err |= __put_user(0, &oact->sa_mask.sig[3]);
-		err |= __put_user(old_ka.sa.sa_restorer, &oact->sa_restorer);
+		err |= __put_user((u32)(u64)old_ka.sa.sa_restorer,
+		                  &oact->sa_restorer);
                 if (err)
 			return -EFAULT;
 	}
@@ -204,12 +267,37 @@ asmlinkage int sys32_sigaction(int sig, const struct sigaction32 *act,
 asmlinkage int
 sys32_sigaltstack(abi64_no_regargs, struct pt_regs regs)
 {
-	const stack_t *uss = (const stack_t *) regs.regs[4];
-	stack_t *uoss = (stack_t *) regs.regs[5];
+	const stack32_t *uss = (const stack32_t *) regs.regs[4];
+	stack32_t *uoss = (stack32_t *) regs.regs[5];
 	unsigned long usp = regs.regs[29];
-printk("%s called.\n", __FUNCTION__);
+	stack_t kss, koss;
+	int ret, err = 0;
+	mm_segment_t old_fs = get_fs();
 
-	return do_sigaltstack(uss, uoss, usp);
+	if (uss) {
+		if (!access_ok(VERIFY_READ, uss, sizeof(*uss)))
+			return -EFAULT;
+		err |= __get_user(kss.ss_sp, &uss->ss_sp);
+		err |= __get_user(kss.ss_size, &uss->ss_size);
+		err |= __get_user(kss.ss_flags, &uss->ss_flags);
+		if (err)
+			return -EFAULT;
+	}
+
+	set_fs (KERNEL_DS);
+	ret = do_sigaltstack(uss ? &kss : NULL , uoss ? &koss : NULL, usp);
+	set_fs (old_fs);
+
+	if (!ret && uoss) {
+		if (!access_ok(VERIFY_WRITE, uoss, sizeof(*uoss)))
+			return -EFAULT;
+		err |= __put_user(koss.ss_sp, &uoss->ss_sp);
+		err |= __put_user(koss.ss_size, &uoss->ss_size);
+		err |= __put_user(koss.ss_flags, &uoss->ss_flags);
+		if (err)
+			return -EFAULT;
+	}
+	return ret;
 }
 
 static asmlinkage int
@@ -293,6 +381,8 @@ printk("%s called.\n", __FUNCTION__);
 	/*
 	 * Don't let your children do this ...
 	 */
+	if (current->ptrace & PT_TRACESYS)
+		syscall_trace();
 	__asm__ __volatile__(
 		"move\t$29, %0\n\t"
 		"j\tret_from_sys_call"
@@ -610,7 +700,7 @@ printk("%s: delivering signal.\n", current->comm);
 		if (!signr)
 			break;
 
-		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
+		if ((current->ptrace & PT_PTRACED) && signr != SIGKILL) {
 			/* Let the debugger run.  */
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;
@@ -684,7 +774,6 @@ printk("%s: delivering signal.\n", current->comm);
 				/* FALLTHRU */
 
 			default:
-				lock_kernel();
 				sigaddset(&current->signal, signr);
 				recalc_sigpending(current);
 				current->flags |= PF_SIGNALED;
@@ -723,26 +812,128 @@ extern asmlinkage int sys_sigprocmask(int how, old_sigset_t *set,
 						old_sigset_t *oset);
 
 asmlinkage int sys32_sigprocmask(int how, old_sigset_t32 *set, 
-							old_sigset_t32 *oset)
+				 old_sigset_t32 *oset)
 {
 	old_sigset_t s;
 	int ret;
 	mm_segment_t old_fs = get_fs();
 
-	if (set && get_user (s, set)) return -EFAULT;
+	if (set && get_user (s, set))
+		return -EFAULT;
 	set_fs (KERNEL_DS);
 	ret = sys_sigprocmask(how, set ? &s : NULL, oset ? &s : NULL);
 	set_fs (old_fs);
-	if (ret) return ret;
-	if (oset && put_user (s, oset)) return -EFAULT;
-	return 0;
+	if (!ret && oset && put_user (s, oset))
+		return -EFAULT;
+	return ret;
 }
 
-/* Dummies ... */
+asmlinkage long sys_sigpending(old_sigset_t *set);
 
-asmlinkage void sys32_sigpending(void) { panic(__FUNCTION__ " called."); }
-asmlinkage void sys32_rt_sigaction(void) { panic(__FUNCTION__ " called."); }
-asmlinkage void sys32_rt_sigprocmask(void) { panic(__FUNCTION__ " called."); }
-asmlinkage void sys32_rt_sigpending(void) { panic(__FUNCTION__ " called."); }
+asmlinkage int sys32_sigpending(old_sigset_t32 *set)
+{
+	old_sigset_t pending;
+	int ret;
+	mm_segment_t old_fs = get_fs();
+
+	set_fs (KERNEL_DS);
+	ret = sys_sigpending(&pending);
+	set_fs (old_fs);
+
+	if (put_user(pending, set))
+		return -EFAULT;
+
+	return ret;
+}
+
+asmlinkage int sys32_rt_sigaction(int sig, const struct sigaction32 *act,
+				  struct sigaction32 *oact,
+				  unsigned int sigsetsize)
+{
+	struct k_sigaction new_sa, old_sa;
+	int ret = -EINVAL;
+
+	/* XXX: Don't preclude handling different sized sigset_t's.  */
+	if (sigsetsize != sizeof(sigset_t))
+		goto out;
+
+	if (act) {
+		int err = 0;
+
+		if (!access_ok(VERIFY_READ, act, sizeof(*act)))
+			return -EFAULT;
+		err |= __get_user((u32)(u64)new_sa.sa.sa_handler,
+		                  &act->sa_handler);
+		err |= __get_user(new_sa.sa.sa_flags, &act->sa_flags);
+		err |= __get_user((u32)(u64)new_sa.sa.sa_restorer,
+		                  &act->sa_restorer);
+		err |= get_sigset(&new_sa.sa.sa_mask, &act->sa_mask);
+		if (err)
+			return -EFAULT;
+	}
+
+	ret = do_sigaction(sig, act ? &new_sa : NULL, oact ? &old_sa : NULL);
+
+	if (!ret && oact) {
+		int err = 0;
+
+		if (!access_ok(VERIFY_WRITE, oact, sizeof(*oact)))
+			return -EFAULT;
+
+		err |= __put_user((u32)(u64)new_sa.sa.sa_handler,
+		                   &oact->sa_handler);
+		err |= __put_user(new_sa.sa.sa_flags, &oact->sa_flags);
+		err |= __put_user((u32)(u64)new_sa.sa.sa_restorer,
+		                  &oact->sa_restorer);
+		err |= put_sigset(&new_sa.sa.sa_mask, &oact->sa_mask);
+		if (err)
+			return -EFAULT;
+	}
+out:
+	return ret;
+}
+
+asmlinkage long sys_rt_sigprocmask(int how, sigset_t *set, sigset_t *oset,
+				   size_t sigsetsize);
+
+asmlinkage int sys32_rt_sigprocmask(int how, sigset32_t *set, sigset32_t *oset,
+				    unsigned int sigsetsize)
+{
+	sigset_t old_set, new_set;
+	int ret;
+	mm_segment_t old_fs = get_fs();
+
+	if (set && get_sigset(&new_set, set))
+		return -EFAULT;
+	
+	set_fs (KERNEL_DS);
+	ret = sys_rt_sigprocmask(how, set ? &new_set : NULL,
+				 oset ? &old_set : NULL, sigsetsize);
+	set_fs (old_fs);
+
+	if (!ret && oset && put_sigset(&old_set, oset))
+		return -EFAULT;
+
+	return ret;
+}
+
+asmlinkage long sys_rt_sigpending(sigset_t *set, size_t sigsetsize);
+
+asmlinkage int sys32_rt_sigpending(sigset32_t *uset, unsigned int sigsetsize)
+{
+	int ret;
+	sigset_t set;
+	mm_segment_t old_fs = get_fs();
+
+	set_fs (KERNEL_DS);
+	ret = sys_rt_sigpending(&set, sigsetsize);
+	set_fs (old_fs);
+
+	if (!ret && put_sigset(&set, uset))
+		return -EFAULT;
+
+	return ret;
+}
+
 asmlinkage void sys32_rt_sigtimedwait(void) { panic(__FUNCTION__ " called."); }
 asmlinkage void sys32_rt_sigqueueinfo(void) { panic(__FUNCTION__ " called."); }

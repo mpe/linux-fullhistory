@@ -1,7 +1,7 @@
 /*
  *	Linux NET3:	IP/IP protocol decoder. 
  *
- *	Version: $Id: ipip.c,v 1.35 2000/07/07 01:55:20 davem Exp $
+ *	Version: $Id: ipip.c,v 1.37 2000/07/07 23:47:45 davem Exp $
  *
  *	Authors:
  *		Sam Lantinga (slouken@cs.ucdavis.edu)  02/01/95
@@ -114,6 +114,7 @@
 #include <net/icmp.h>
 #include <net/protocol.h>
 #include <net/ipip.h>
+#include <net/inet_ecn.h>
 
 #define HASH_SIZE  16
 #define HASH(addr) ((addr^(addr>>4))&0xF)
@@ -122,11 +123,11 @@ static int ipip_fb_tunnel_init(struct net_device *dev);
 static int ipip_tunnel_init(struct net_device *dev);
 
 static struct net_device ipip_fb_tunnel_dev = {
-	"tunl%d", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, ipip_fb_tunnel_init,
+	"tunl0", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, ipip_fb_tunnel_init,
 };
 
 static struct ip_tunnel ipip_fb_tunnel = {
-	NULL, &ipip_fb_tunnel_dev, {0, }, 0, 0, 0, 0, 0, 0, 0, {"tunl%d", }
+	NULL, &ipip_fb_tunnel_dev, {0, }, 0, 0, 0, 0, 0, 0, 0, {"tunl0", }
 };
 
 static struct ip_tunnel *tunnels_r_l[HASH_SIZE];
@@ -465,6 +466,13 @@ out:
 #endif
 }
 
+static inline void ipip_ecn_decapsulate(struct iphdr *iph, struct sk_buff *skb)
+{
+	if (INET_ECN_is_ce(iph->tos) &&
+	    INET_ECN_is_not_ce(skb->nh.iph->tos))
+		IP_ECN_set_ce(iph);
+}
+
 int ipip_rcv(struct sk_buff *skb, unsigned short len)
 {
 	struct iphdr *iph;
@@ -489,6 +497,7 @@ int ipip_rcv(struct sk_buff *skb, unsigned short len)
 		nf_conntrack_put(skb->nfct);
 		skb->nfct = NULL;
 #endif
+		ipip_ecn_decapsulate(iph, skb);
 		netif_rx(skb);
 		read_unlock(&ipip_lock);
 		return 0;
@@ -525,6 +534,7 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	int    max_headroom;			/* The extra header space needed */
 	u32    dst = tiph->daddr;
 	int    mtu;
+	int    err;
 
 	if (tunnel->recursion++) {
 		tunnel->stat.collisions++;
@@ -620,7 +630,7 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	iph->ihl		=	sizeof(struct iphdr)>>2;
 	iph->frag_off		=	df;
 	iph->protocol		=	IPPROTO_IPIP;
-	iph->tos		=	tos;
+	iph->tos		=	INET_ECN_encapsulate(tos, old_iph->tos);
 	iph->daddr		=	rt->rt_dst;
 	iph->saddr		=	rt->rt_src;
 
@@ -636,10 +646,17 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	skb->nfct = NULL;
 #endif
 
+	err = NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
+		do_ip_send);
+	if(err < 0) {
+		if(net_ratelimit())
+			printk(KERN_ERR "ipip_tunnel_xmit: ip_send() failed, err=%d\n", -err);
+		skb = NULL;
+		goto tx_error;
+	}
+
 	stats->tx_bytes += skb->len;
 	stats->tx_packets++;
-	NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
-		do_ip_send);
 	tunnel->recursion--;
 	return 0;
 
@@ -647,7 +664,8 @@ tx_error_icmp:
 	dst_link_failure(skb);
 tx_error:
 	stats->tx_errors++;
-	dev_kfree_skb(skb);
+	if(skb)
+		dev_kfree_skb(skb);
 	tunnel->recursion--;
 	return 0;
 }

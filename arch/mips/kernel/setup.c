@@ -76,7 +76,7 @@ extern struct fd_ops no_fd_ops;
 struct fd_ops *fd_ops;
 #endif
 
-#ifdef CONFIG_BLK_DEV_IDE
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
 extern struct ide_ops no_ide_ops;
 struct ide_ops *ide_ops;
 #endif
@@ -84,8 +84,10 @@ struct ide_ops *ide_ops;
 extern struct rtc_ops no_rtc_ops;
 struct rtc_ops *rtc_ops;
 
+#ifdef CONFIG_PC_KEYB
 extern struct kbd_ops no_kbd_ops;
 struct kbd_ops *kbd_ops;
+#endif
 
 /*
  * Setup information
@@ -272,8 +274,11 @@ void __init setup_arch(char **cmdline_p)
 	ide_ops = &no_ide_ops;
 #endif
 
-	rtc_ops = &no_rtc_ops;
+#ifdef CONFIG_PC_KEYB
 	kbd_ops = &no_kbd_ops;
+#endif
+	
+	rtc_ops = &no_rtc_ops;
 
 	switch(mips_machgroup)
 	{

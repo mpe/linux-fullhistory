@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.46 2000/03/26 22:59:01 ralf Exp $
+#
 # For a description of the syntax of this configuration file,
 # see Documentation/kbuild/config-language.txt.
 #
@@ -11,10 +11,14 @@ endmenu
 
 mainmenu_option next_comment
 comment 'Machine selection'
-bool 'Support for Acer PICA 1 chipset' CONFIG_ACER_PICA_61
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   bool 'Support for Acer PICA 1 chipset' CONFIG_ACER_PICA_61
    bool 'Support for Algorithmics P4032 (EXPERIMENTAL)' CONFIG_ALGOR_P4032
    bool 'Support for BAGET MIPS series (EXPERIMENTAL)' CONFIG_BAGET_MIPS
+   bool 'Support for Cobalt Server' CONFIG_COBALT_MICRO_SERVER
+   if [ "$CONFIG_COBALT_MICRO_SERVER" = "y" ]; then
+      bool '  Support for 2800' CONFIG_COBALT_28
+   fi
    bool 'Support for DECstations (EXPERIMENTAL)' CONFIG_DECSTATION
    bool 'Support for NEC DDB Vrc-5074 (EXPERIMENTAL)' CONFIG_DDB5074
 fi
@@ -27,10 +31,11 @@ bool 'Support for SNI RM200 PCI' CONFIG_SNI_RM200_PCI
 # Select some configuration options automatically for certain systems.
 #
 unset CONFIG_ARC32
-unset CONFIG_PCI
 unset CONFIG_ISA
+unset CONFIG_PCI
 unset CONFIG_MIPS_JAZZ
 unset CONFIG_VIDEO_G364
+unset CONFIG_PC_KEYB
 
 define_bool CONFIG_SBUS n
 
@@ -40,25 +45,37 @@ fi
 if [ "$CONFIG_MIPS_MAGNUM_4000" = "y" -o \
      "$CONFIG_OLIVETTI_M700" = "y" ]; then
    define_bool CONFIG_ARC32 y
-   define_bool CONFIG_HAVE_IO_PORTS y
+   define_bool CONFIG_ISA y
    define_bool CONFIG_FB y
    define_bool CONFIG_FB_G364 y	
    define_bool CONFIG_MIPS_JAZZ y
+   define_bool CONFIG_PC_KEYB y
 fi
 if [ "$CONFIG_ACER_PICA_61" = "y" ]; then
    define_bool CONFIG_ARC32 y
-   define_bool CONFIG_HAVE_IO_PORTS y
+   define_bool CONFIG_ISA y
    define_bool CONFIG_MIPS_JAZZ y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_COBALT_MICRO_SERVER" = "y" ]; then
+   define_bool CONFIG_ISA n
+   define_bool CONFIG_COBALT_27 y
+   define_bool CONFIG_COBALT_LCD y
+   define_bool CONFIG_COBALT_SERIAL y
+   define_bool CONFIG_PCI y
 fi
 if [ "$CONFIG_SGI_IP22" = "y" ]; then
    define_bool CONFIG_ARC32 y
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_SGI y
 fi
 if [ "$CONFIG_SNI_RM200_PCI" = "y" ]; then
    define_bool CONFIG_ARC32 y
-   define_bool CONFIG_HAVE_IO_PORTS y
+   define_bool CONFIG_PCI y
+   define_bool CONFIG_ISA y
+   define_bool CONFIG_PC_KEYB y
 fi
 if [ "$CONFIG_DDB5074" = "y" ]; then
-   define_bool CONFIG_HAVE_IO_PORTS y
    define_bool CONFIG_ISA y
    define_bool CONFIG_PCI y
 fi
@@ -85,7 +102,7 @@ mainmenu_option next_comment
 		 R8000 CONFIG_CPU_R8000	\
 		 R10000 CONFIG_CPU_R10000" R4x00
 
-	bool 'Advanced CPU Config' CONFIG_CPU_ADVANCED
+	bool 'Override CPU Options' CONFIG_CPU_ADVANCED
 
 	if [ "$CONFIG_CPU_ADVANCED" = "y" ]; then
 		bool '  ll/sc Instructions available' CONFIG_CPU_HAS_LLSC
@@ -149,6 +166,9 @@ comment 'General setup'
 
 	if [ "$CONFIG_DECSTATION" = "y" ]; then
             bool 'TURBOchannel support' CONFIG_TC
+#           if [ "$CONFIG_TC" = "y" ]; then
+#              bool ' Access.Bus support' CONFIG_ACCESSBUS
+#           fi
 	fi
 endmenu
 
@@ -170,13 +190,13 @@ if [ "$CONFIG_NET" = "y" ]; then
    source net/Config.in
 fi
 
-if [ "$CONFIG_DECSTATION" != "n" -a \
-     "$CONFIG_SGI_IP22" != "n" ]; then
+if [ "$CONFIG_DECSTATION" != "y" -a \
+     "$CONFIG_SGI_IP22" != "y" ]; then
     source drivers/telephony/Config.in
 fi
 
-if [ "$CONFIG_SGI_IP22" != "n" -a \
-     "$CONFIG_DECSTATION" != "n" ]; then
+if [ "$CONFIG_SGI_IP22" != "y" -a \
+     "$CONFIG_DECSTATION" != "y" ]; then
 
     mainmenu_option next_comment
     comment 'ATA/IDE/MFM/RLL support'
@@ -202,8 +222,8 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 fi
 endmenu
 
-if [ "$CONFIG_DECSTATION" != "n" -a \
-     "$CONFIG_SGI_IP22" != "n" ]; then
+if [ "$CONFIG_DECSTATION" != "y" -a \
+     "$CONFIG_SGI_IP22" != "y" ]; then
     source drivers/i2o/Config.in
 fi
 
@@ -270,8 +290,8 @@ if [ "$CONFIG_ISA" = "y" -o "$CONFIG_PCI" = "y" ]; then
    endmenu
 fi
 
-if [ "$CONFIG_DECSTATION" != "n" -a \
-     "$CONFIG_SGI_IP22" != "n" ]; then
+if [ "$CONFIG_DECSTATION" != "y" -a \
+     "$CONFIG_SGI_IP22" != "y" ]; then
    source drivers/char/Config.in
 fi
 
@@ -295,8 +315,9 @@ if [ "$CONFIG_DECSTATION" = "y" ]; then
    if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
       int 'Maximum number of Unix98 PTYs in use (0-2048)' CONFIG_UNIX98_PTY_COUNT 256
    fi
-   bool 'Keyboard Support' CONFIG_KEYBOARD
-   bool 'Mouse Support' CONFIG_MOUSE
+#   if [ "$CONFIG_ACCESSBUS" = "y" ]; then
+#      bool 'MAXINE Access.Bus mouse (VSXXX-BB/GB) support' CONFIG_DTOP_MOUSE
+#   fi
    bool 'Enhanced Real Time Clock Support' CONFIG_RTC
    endmenu
 fi

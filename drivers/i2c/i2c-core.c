@@ -1115,26 +1115,26 @@ static int __init i2c_init(void)
 	extern int i2c_dev_init(void);
 #endif
 #ifdef CONFIG_I2C_ALGOBIT
-	extern int algo_bit_init(void);
+	extern int i2c_algo_bit_init(void);
 #endif
 #ifdef CONFIG_I2C_BITLP
-	extern int bitlp_init(void);
+	extern int i2c_bitlp_init(void);
 #endif
 #ifdef CONFIG_I2C_BITELV
-	extern int bitelv_init(void);
+	extern int i2c_bitelv_init(void);
 #endif
 #ifdef CONFIG_I2C_BITVELLE
-	extern int bitvelle_init(void);
+	extern int i2c_bitvelle_init(void);
 #endif
 #ifdef CONFIG_I2C_BITVIA
-	extern int bitvia_init(void);
+	extern int i2c_bitvia_init(void);
 #endif
 
 #ifdef CONFIG_I2C_ALGOPCF
-	extern int algo_pcf_init(void);	
+	extern int i2c_algo_pcf_init(void);	
 #endif
 #ifdef CONFIG_I2C_PCFISA
-	extern int pcfisa_init(void);
+	extern int i2c_pcfisa_init(void);
 #endif
 
 /* This is needed for automatic patch generation: sensors code starts here */

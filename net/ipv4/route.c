@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.86 2000/04/24 07:03:14 davem Exp $
+ * Version:	$Id: route.c,v 1.88 2000/07/07 23:47:45 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -152,23 +152,29 @@ struct dst_ops ipv4_dst_ops =
 	sizeof(struct rtable),
 };
 
+#ifdef CONFIG_INET_ECN
+#define ECN_OR_COST(class)	TC_PRIO_##class
+#else
+#define ECN_OR_COST(class)	TC_PRIO_FILLER
+#endif
+
 __u8 ip_tos2prio[16] = {
 	TC_PRIO_BESTEFFORT,
-	TC_PRIO_FILLER,
+	ECN_OR_COST(FILLER),
 	TC_PRIO_BESTEFFORT,
-	TC_PRIO_FILLER,
+	ECN_OR_COST(BESTEFFORT),
 	TC_PRIO_BULK,
-	TC_PRIO_FILLER,
+	ECN_OR_COST(BULK),
 	TC_PRIO_BULK,
-	TC_PRIO_FILLER,
+	ECN_OR_COST(BULK),
 	TC_PRIO_INTERACTIVE,
-	TC_PRIO_FILLER,
+	ECN_OR_COST(INTERACTIVE),
 	TC_PRIO_INTERACTIVE,
-	TC_PRIO_FILLER,
+	ECN_OR_COST(INTERACTIVE),
 	TC_PRIO_INTERACTIVE_BULK,
-	TC_PRIO_FILLER,
+	ECN_OR_COST(INTERACTIVE_BULK),
 	TC_PRIO_INTERACTIVE_BULK,
-	TC_PRIO_FILLER
+	ECN_OR_COST(INTERACTIVE_BULK)
 };
 
 
@@ -582,8 +588,14 @@ restart:
 	   route or unicast forwarding path.
 	 */
 	if (rt->rt_type == RTN_UNICAST || rt->key.iif == 0) {
-		if (!arp_bind_neighbour(&rt->u.dst)) {
+		int err = arp_bind_neighbour(&rt->u.dst);
+		if (err) {
 			write_unlock_bh(&rt_hash_table[hash].lock);
+
+			if (err != -ENOBUFS) {
+				rt_drop(rt);
+				return err;
+			}
 
 			/* Neighbour tables are full and nothing
 			   can be released. Try to shrink route cache,
@@ -600,13 +612,8 @@ restart:
 				goto restart;
 			}
 
-			if (net_ratelimit()) {
-				if ((rt->u.dst.dev->flags&IFF_UP) &&
-				    __in_dev_get(rt->u.dst.dev))
-					printk("Neighbour table overflow.\n");
-				else
-					printk("Device %s is down.\n", rt->u.dst.dev->name);
-			}
+			if (net_ratelimit())
+				printk("Neighbour table overflow.\n");
 			rt_drop(rt);
 			return -ENOBUFS;
 		}
@@ -712,7 +719,7 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 	u32  skeys[2] = { saddr, 0 };
 	int  ikeys[2] = { dev->ifindex, 0 };
 
-	tos &= IPTOS_TOS_MASK;
+	tos &= IPTOS_RT_MASK;
 
 	if (!in_dev)
 		return;
@@ -791,7 +798,7 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 				if (rt->peer)
 					atomic_inc(&rt->peer->refcnt);
 
-				if (!arp_bind_neighbour(&rt->u.dst) ||
+				if (arp_bind_neighbour(&rt->u.dst) ||
 				    !(rt->u.dst.neighbour->nud_state&NUD_VALID)) {
 					if (rt->u.dst.neighbour)
 						neigh_event_send(rt->u.dst.neighbour, NULL);
@@ -967,7 +974,7 @@ unsigned short ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu)
 	struct rtable *rth;
 	u32  skeys[2] = { iph->saddr, 0, };
 	u32  daddr = iph->daddr;
-	u8   tos = iph->tos & IPTOS_TOS_MASK;
+	u8   tos = iph->tos & IPTOS_RT_MASK;
 	unsigned short est_mtu = 0;
 
 	if (ipv4_config.no_pmtu_disc)
@@ -1546,7 +1553,7 @@ int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
 	unsigned	hash;
 	int iif = dev->ifindex;
 
-	tos &= IPTOS_TOS_MASK;
+	tos &= IPTOS_RT_MASK;
 	hash = rt_hash_code(daddr, saddr^(iif<<5), tos);
 
 	read_lock(&rt_hash_table[hash].lock);
@@ -1616,10 +1623,10 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 	int free_res = 0;
 	int err;
 
-	tos &= IPTOS_TOS_MASK|RTO_ONLINK;
+	tos &= IPTOS_RT_MASK|RTO_ONLINK;
 	key.dst = daddr;
 	key.src = saddr;
-	key.tos = tos&IPTOS_TOS_MASK;
+	key.tos = tos&IPTOS_RT_MASK;
 	key.iif = loopback_dev.ifindex;
 	key.oif = oif;
 	key.scope = (tos&RTO_ONLINK) ? RT_SCOPE_LINK : RT_SCOPE_UNIVERSE;
@@ -1889,7 +1896,7 @@ int ip_route_output(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int oif)
 		    rth->key.src == saddr &&
 		    rth->key.iif == 0 &&
 		    rth->key.oif == oif &&
-		    !((rth->key.tos^tos)&(IPTOS_TOS_MASK|RTO_ONLINK)) &&
+		    !((rth->key.tos^tos)&(IPTOS_RT_MASK|RTO_ONLINK)) &&
 		    ((tos&RTO_TPROXY) || !(rth->rt_flags&RTCF_TPROXY))
 		) {
 			rth->u.dst.lastuse = jiffies;

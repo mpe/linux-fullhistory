@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.83 2000/06/09 07:35:49 davem Exp $
+ * Version:	$Id: udp.c,v 1.84 2000/07/08 00:20:43 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -710,7 +710,8 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 
 	if (err)
 		goto out_free;
-	sk->stamp=skb->stamp;
+
+	sock_recv_timestamp(msg, sk, skb);
 
 	/* Copy the address. */
 	if (sin)

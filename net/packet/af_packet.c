@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- * Version:	$Id: af_packet.c,v 1.34 2000/04/25 04:13:35 davem Exp $
+ * Version:	$Id: af_packet.c,v 1.36 2000/07/08 00:20:43 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1053,7 +1053,8 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, int len,
 	err = memcpy_toiovec(msg->msg_iov, skb->data, copied);
 	if (err)
 		goto out_free;
-	sk->stamp=skb->stamp;
+
+	sock_recv_timestamp(msg, sk, skb);
 
 	if (msg->msg_name)
 		memcpy(msg->msg_name, skb->cb, msg->msg_namelen);
@@ -1392,6 +1393,23 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg
 
 	switch(cmd) 
 	{
+		case SIOCOUTQ:
+		{
+			int amount = atomic_read(&sk->wmem_alloc);
+			return put_user(amount, (int *)arg);
+		}
+		case SIOCINQ:
+		{
+			struct sk_buff *skb;
+			int amount = 0;
+
+			spin_lock_bh(&sk->receive_queue.lock);
+			skb = skb_peek(&sk->receive_queue);
+			if (skb)
+				amount = skb->len;
+			spin_unlock_bh(&sk->receive_queue.lock);
+			return put_user(amount, (int *)arg);
+		}
 		case FIOSETOWN:
 		case SIOCSPGRP:
 			err = get_user(pid, (int *) arg);

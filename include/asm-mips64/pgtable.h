@@ -1,11 +1,10 @@
-/* $Id: pgtable.h,v 1.14 2000/03/02 02:37:13 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994 - 1999 by Ralf Baechle at alii
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1994 - 2000 by Ralf Baechle at alii
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
 #ifndef _ASM_PGTABLE_H
 #define _ASM_PGTABLE_H
@@ -44,14 +43,32 @@ extern void (*_flush_page_to_ram)(struct page * page);
 #define flush_page_to_ram(page)		_flush_page_to_ram(page)
 
 #define flush_icache_range(start, end)	flush_cache_all()
-#define flush_icache_page(start, page)	do { } while(0)
 
+#define flush_icache_page(vma, page)					\
+do {									\
+	unsigned long addr;						\
+	addr = page_address(page);					\
+	_flush_cache_page(vma, addr);					\
+} while (0)                                                              
 
-/* Basically we have the same two-level (which is the logical three level
- * Linux page table layout folded) page tables as the i386.  Some day
- * when we have proper page coloring support we can have a 1% quicker
- * tlb refill handling mechanism, but for now it is a bit slower but
- * works even with the cache aliasing problem the R4k and above have.
+/*
+ * Each address space has 2 4K pages as its page directory, giving 1024
+ * (== PTRS_PER_PGD) 8 byte pointers to pmd tables. Each pmd table is a
+ * pair of 4K pages, giving 1024 (== PTRS_PER_PMD) 8 byte pointers to
+ * page tables. Each page table is a single 4K page, giving 512 (==
+ * PTRS_PER_PTE) 8 byte ptes. Each pgde is initialized to point to
+ * invalid_pmd_table, each pmde is initialized to point to 
+ * invalid_pte_table, each pte is initialized to 0. When memory is low,
+ * and a pmd table or a page table allocation fails, empty_bad_pmd_table
+ * and empty_bad_page_table is returned back to higher layer code, so
+ * that the failure is recognized later on. Linux does not seem to 
+ * handle these failures very well though. The empty_bad_page_table has
+ * invalid pte entries in it, to force page faults.
+ * Vmalloc handling: vmalloc uses swapper_pg_dir[0] (returned by 
+ * pgd_offset_k), which is initalized to point to kpmdtbl. kpmdtbl is 
+ * the only single page pmd in the system. kpmdtbl entries point into 
+ * kptbl[] array. We reserve 1<<KPTBL_PAGE_ORDER pages to hold the
+ * vmalloc range translations, which the fault handler looks at.
  */
 
 #endif /* !defined (_LANGUAGE_ASSEMBLY) */
@@ -74,9 +91,11 @@ extern void (*_flush_page_to_ram)(struct page * page);
 #define USER_PTRS_PER_PGD	(TASK_SIZE/PGDIR_SIZE)
 #define FIRST_USER_PGD_NR	0
 
+#define KPTBL_PAGE_ORDER  1
 #define VMALLOC_START     XKSEG
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
-#define VMALLOC_END       (KSEG3 + (1UL << 40))	/* 1 TB */
+#define VMALLOC_END       \
+  (VMALLOC_START + ((1 << KPTBL_PAGE_ORDER) * PTRS_PER_PTE * PAGE_SIZE))
 
 /* Note that we shift the lower 32bits of each EntryLo[01] entry
  * 6 bits to the left. That way we can convert the PFN into the
@@ -205,8 +224,10 @@ extern unsigned long zero_page_mask;
 #define PAGE_PTR(address) \
 ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
 
-extern pte_t invalid_pte_table[2*PAGE_SIZE/sizeof(pte_t)];
+extern pte_t invalid_pte_table[PAGE_SIZE/sizeof(pte_t)];
+extern pte_t empty_bad_page_table[PAGE_SIZE/sizeof(pte_t)];
 extern pmd_t invalid_pmd_table[2*PAGE_SIZE/sizeof(pmd_t)];
+extern pmd_t empty_bad_pmd_table[2*PAGE_SIZE/sizeof(pmd_t)];
 
 /*
  * Conversion functions: convert a page and protection to a page entry,
@@ -271,13 +292,7 @@ extern inline int pmd_none(pmd_t pmd)
 
 extern inline int pmd_bad(pmd_t pmd)
 {
-	return ((pmd_page(pmd) > (unsigned long) high_memory) ||
-	        (pmd_page(pmd) < PAGE_OFFSET));
-}
-
-extern inline int pmd_present(pmd_t pmd)
-{
-	return pmd_val(pmd) != (unsigned long) invalid_pte_table;
+	return pmd_val(pmd) == (unsigned long) empty_bad_page_table;
 }
 
 extern inline void pmd_clear(pmd_t *pmdp)
@@ -295,13 +310,7 @@ extern inline int pgd_none(pgd_t pgd)
 
 extern inline int pgd_bad(pgd_t pgd)
 {
-	return ((pgd_page(pgd) > (unsigned long) high_memory) ||
-	        (pgd_page(pgd) < PAGE_OFFSET));
-}
-
-extern inline int pgd_present(pgd_t pgd)
-{
-	return pgd_val(pgd) != (unsigned long) invalid_pmd_table;
+	return pgd_val(pgd) == (unsigned long) empty_bad_pmd_table;
 }
 
 extern inline void pgd_clear(pgd_t *pgdp)
@@ -438,7 +447,7 @@ extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 #define page_pte(page) page_pte_prot(page, __pgprot(0))
 
 /* to find an entry in a kernel page-table-directory */
-#define pgd_offset_k(address) pgd_offset(&init_mm, address)
+#define pgd_offset_k(address) pgd_offset(&init_mm, 0)
 
 #define pgd_index(address)	((address >> PGDIR_SHIFT) & (PTRS_PER_PGD - 1))
 
@@ -465,9 +474,8 @@ extern inline pte_t *pte_offset(pmd_t * dir, unsigned long address)
 /*
  * Initialize a new pgd / pmd table with invalid pointers.
  */
-extern void pte_init(unsigned long page);
 extern void pgd_init(unsigned long page);
-extern void pmd_init(unsigned long page);
+extern void pmd_init(unsigned long page, unsigned long pagetable);
 
 extern pgd_t swapper_pg_dir[1024];
 extern void paging_init(void);

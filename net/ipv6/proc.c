@@ -7,7 +7,7 @@
  *		PROC file system.  This is very similar to the IPv4 version,
  *		except it reports the sockets in the INET6 address family.
  *
- * Version:	$Id: proc.c,v 1.14 2000/04/16 01:11:37 davem Exp $
+ * Version:	$Id: proc.c,v 1.15 2000/07/07 22:29:42 davem Exp $
  *
  * Authors:	David S. Miller (davem@caip.rutgers.edu)
  *
@@ -46,6 +46,8 @@ int afinet6_get_info(char *buffer, char **start, off_t offset, int length, int d
 		       fold_prot_inuse(&udpv6_prot));
 	len += sprintf(buffer+len, "RAW6: inuse %d\n",
 		       fold_prot_inuse(&rawv6_prot));
+	len += sprintf(buffer+len, "FRAG6: inuse %d memory %d\n",
+		       ip6_frag_nqueues, atomic_read(&ip6_frag_mem));
 	*start = buffer + offset;
 	len -= offset;
 	if(len > length)

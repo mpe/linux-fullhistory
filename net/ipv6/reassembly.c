@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: reassembly.c,v 1.17 2000/05/03 06:37:07 davem Exp $
+ *	$Id: reassembly.c,v 1.18 2000/07/07 22:29:42 davem Exp $
  *
  *	Based on: net/ipv4/ip_fragment.c
  *
@@ -21,6 +21,7 @@
  *			More RFC compliance.
  *
  *      Horst von Brand Add missing #include <linux/string.h>
+ *	Alexey Kuznetsov	SMP races, threading, cleanup.
  */
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -46,48 +47,82 @@
 
 int sysctl_ip6frag_high_thresh = 256*1024;
 int sysctl_ip6frag_low_thresh = 192*1024;
+
 int sysctl_ip6frag_time = IPV6_FRAG_TIMEOUT;
 
-atomic_t ip6_frag_mem = ATOMIC_INIT(0);
-
-static spinlock_t ip6_frag_lock = SPIN_LOCK_UNLOCKED;
-
-struct ipv6_frag {
-	__u16			offset;
-	__u16			len;
-	struct sk_buff		*skb;
-
-	struct frag_hdr		*fhdr;
-
-	struct ipv6_frag	*next;
+struct ip6frag_skb_cb
+{
+	struct inet6_skb_parm	h;
+	int			offset;
 };
+
+#define FRAG6_CB(skb)	((struct ip6frag_skb_cb*)((skb)->cb))
+
 
 /*
  *	Equivalent of ipv4 struct ipq
  */
 
-struct frag_queue {
-
+struct frag_queue
+{
 	struct frag_queue	*next;
-	struct frag_queue	*prev;
 
 	__u32			id;		/* fragment id		*/
 	struct in6_addr		saddr;
 	struct in6_addr		daddr;
+
+	spinlock_t		lock;
+	atomic_t		refcnt;
 	struct timer_list	timer;		/* expire timer		*/
-	struct ipv6_frag	*fragments;
-	struct net_device		*dev;
+	struct sk_buff		*fragments;
+	int			len;
+	int			meat;
+	struct net_device	*dev;
 	int			iif;
 	__u8			last_in;	/* has first/last segment arrived? */
+#define COMPLETE		4
 #define FIRST_IN		2
 #define LAST_IN			1
 	__u8			nexthdr;
 	__u16			nhoffset;
+	struct frag_queue	**pprev;
 };
 
-static struct frag_queue ipv6_frag_queue = {
-	&ipv6_frag_queue, &ipv6_frag_queue,
-};
+/* Hash table. */
+
+#define IP6Q_HASHSZ	64
+
+static struct frag_queue *ip6_frag_hash[IP6Q_HASHSZ];
+static rwlock_t ip6_frag_lock = RW_LOCK_UNLOCKED;
+int ip6_frag_nqueues = 0;
+
+static __inline__ void __fq_unlink(struct frag_queue *fq)
+{
+	if(fq->next)
+		fq->next->pprev = fq->pprev;
+	*fq->pprev = fq->next;
+	ip6_frag_nqueues--;
+}
+
+static __inline__ void fq_unlink(struct frag_queue *fq)
+{
+	write_lock(&ip6_frag_lock);
+	__fq_unlink(fq);
+	write_unlock(&ip6_frag_lock);
+}
+
+static __inline__ unsigned int ip6qhashfn(u32 id, struct in6_addr *saddr,
+					  struct in6_addr *daddr)
+{
+	unsigned int h = saddr->s6_addr32[3] ^ daddr->s6_addr32[3] ^ id;
+
+	h ^= (h>>16);
+	h ^= (h>>8);
+	return h & (IP6Q_HASHSZ - 1);
+}
+
+
+atomic_t ip6_frag_mem = ATOMIC_INIT(0);
 
 /* Memory Tracking Functions. */
 extern __inline__ void frag_kfree_skb(struct sk_buff *skb)
@@ -96,55 +131,448 @@ extern __inline__ void frag_kfree_skb(struct sk_buff *skb)
 	kfree_skb(skb);
 }
 
-extern __inline__ void frag_kfree_s(void *ptr, int len)
+extern __inline__ void frag_free_queue(struct frag_queue *fq)
 {
-	atomic_sub(len, &ip6_frag_mem);
-	kfree(ptr);
+	atomic_sub(sizeof(struct frag_queue), &ip6_frag_mem);
+	kfree(fq);
 }
- 
-extern __inline__ void *frag_kmalloc(int size, int pri)
-{
-	void *vp = kmalloc(size, pri);
 
-	if(!vp)
+extern __inline__ struct frag_queue *frag_alloc_queue(void)
+{
+	struct frag_queue *fq = kmalloc(sizeof(struct frag_queue), GFP_ATOMIC);
+
+	if(!fq)
 		return NULL;
-	atomic_add(size, &ip6_frag_mem);
-	return vp;
+	atomic_add(sizeof(struct frag_queue), &ip6_frag_mem);
+	return fq;
 }
 
+/* Destruction primitives. */
 
-static void			create_frag_entry(struct sk_buff *skb, 
-						  __u8 *nhptr,
-						  struct frag_hdr *fhdr);
-static u8 *			reasm_frag(struct frag_queue *fq, 
-					   struct sk_buff **skb_in);
+/* Complete destruction of fq. */
+static void ip6_frag_destroy(struct frag_queue *fq)
+{
+	struct sk_buff *fp;
 
-static void			reasm_queue(struct frag_queue *fq, 
-					    struct sk_buff *skb, 
-					    struct frag_hdr *fhdr,
-					    u8 *nhptr);
+	BUG_TRAP(fq->last_in&COMPLETE);
+	BUG_TRAP(del_timer(&fq->timer) == 0);
 
-static void			fq_free(struct frag_queue *fq);
+	/* Release all fragment data. */
+	fp = fq->fragments;
+	while (fp) {
+		struct sk_buff *xp = fp->next;
 
-static void frag_prune(void)
+		frag_kfree_skb(fp);
+		fp = xp;
+	}
+
+	frag_free_queue(fq);
+}
+
+static __inline__ void fq_put(struct frag_queue *fq)
+{
+	if (atomic_dec_and_test(&fq->refcnt))
+		ip6_frag_destroy(fq);
+}
+
+/* Kill fq entry. It is not destroyed immediately,
+ * because caller (and someone more) holds reference count.
+ */
+static __inline__ void fq_kill(struct frag_queue *fq)
+{
+	if (del_timer(&fq->timer))
+		atomic_dec(&fq->refcnt);
+
+	if (!(fq->last_in & COMPLETE)) {
+		fq_unlink(fq);
+		atomic_dec(&fq->refcnt);
+		fq->last_in |= COMPLETE;
+	}
+}
+
+static void ip6_evictor(void)
+{
+	int i, progress;
+
+	do {
+		if (atomic_read(&ip6_frag_mem) <= sysctl_ip6frag_low_thresh)
+			return;
+		progress = 0;
+		for (i = 0; i < IP6Q_HASHSZ; i++) {
+			struct frag_queue *fq;
+			if (ip6_frag_hash[i] == NULL)
+				continue;
+
+			write_lock(&ip6_frag_lock);
+			if ((fq = ip6_frag_hash[i]) != NULL) {
+				/* find the oldest queue for this hash bucket */
+				while (fq->next)
+					fq = fq->next;
+				__fq_unlink(fq);
+				write_unlock(&ip6_frag_lock);
+
+				spin_lock(&fq->lock);
+				if (del_timer(&fq->timer))
+					atomic_dec(&fq->refcnt);
+				fq->last_in |= COMPLETE;
+				spin_unlock(&fq->lock);
+
+				fq_put(fq);
+				IP6_INC_STATS_BH(Ip6ReasmFails);
+				progress = 1;
+				continue;
+			}
+			write_unlock(&ip6_frag_lock);
+		}
+	} while (progress);
+}
+
+static void ip6_frag_expire(unsigned long data)
+{
+	struct frag_queue *fq = (struct frag_queue *) data;
+
+	spin_lock(&fq->lock);
+
+	if (fq->last_in & COMPLETE)
+		goto out;
+
+	fq_kill(fq);
+
+	IP6_INC_STATS_BH(Ip6ReasmTimeout);
+	IP6_INC_STATS_BH(Ip6ReasmFails);
+
+	/* Send error only if the first segment arrived. */
+	if (fq->last_in&FIRST_IN && fq->fragments) {
+		struct net_device *dev = dev_get_by_index(fq->iif);
+
+		/*
+		   But use as source device on which LAST ARRIVED
+		   segment was received. And do not use fq->dev
+		   pointer directly, device might already disappeared.
+		 */
+		if (dev) {
+			fq->fragments->dev = dev;
+			icmpv6_send(fq->fragments, ICMPV6_TIME_EXCEED, ICMPV6_EXC_FRAGTIME, 0,
+				    dev);
+			dev_put(dev);
+		}
+	}
+out:
+	spin_unlock(&fq->lock);
+	fq_put(fq);
+}
+
+/* Creation primitives. */
+
+
+static struct frag_queue *ip6_frag_intern(unsigned int hash,
+					  struct frag_queue *fq_in)
 {
 	struct frag_queue *fq;
 
-	spin_lock(&ip6_frag_lock);
-	while ((fq = ipv6_frag_queue.next) != &ipv6_frag_queue) {
-		IP6_INC_STATS_BH(Ip6ReasmFails);
-		fq_free(fq);
-		if (atomic_read(&ip6_frag_mem) <= sysctl_ip6frag_low_thresh) {
-			spin_unlock(&ip6_frag_lock);
-			return;
+	write_lock(&ip6_frag_lock);
+#ifdef CONFIG_SMP
+	for (fq = ip6_frag_hash[hash]; fq; fq = fq->next) {
+		if (fq->id == fq_in->id && 
+		    !ipv6_addr_cmp(&fq_in->saddr, &fq->saddr) &&
+		    !ipv6_addr_cmp(&fq_in->daddr, &fq->daddr)) {
+			atomic_inc(&fq->refcnt);
+			write_unlock(&ip6_frag_lock);
+			fq_in->last_in |= COMPLETE;
+			fq_put(fq_in);
+			return fq;
 		}
 	}
-	if (atomic_read(&ip6_frag_mem))
-		printk(KERN_DEBUG "IPv6 frag_prune: memleak\n");
-	atomic_set(&ip6_frag_mem, 0);
-	spin_unlock(&ip6_frag_lock);
+#endif
+	fq = fq_in;
+
+	atomic_inc(&fq->refcnt);
+	if((fq->next = ip6_frag_hash[hash]) != NULL)
+		fq->next->pprev = &fq->next;
+	ip6_frag_hash[hash] = fq;
+	fq->pprev = &ip6_frag_hash[hash];
+	ip6_frag_nqueues++;
+	write_unlock(&ip6_frag_lock);
+	return fq;
 }
 
+
+static struct frag_queue *
+ip6_frag_create(unsigned int hash, u32 id, struct in6_addr *src, struct in6_addr *dst)
+{
+	struct frag_queue *fq;
+
+	if ((fq = frag_alloc_queue()) == NULL)
+		goto oom;
+
+	memset(fq, 0, sizeof(struct frag_queue));
+
+	fq->id = id;
+	ipv6_addr_copy(&fq->saddr, src);
+	ipv6_addr_copy(&fq->daddr, dst);
+
+	/* init_timer has been done by the memset */
+	fq->timer.function = ip6_frag_expire;
+	fq->timer.data = (long) fq;
+	fq->lock = SPIN_LOCK_UNLOCKED;
+	atomic_set(&fq->refcnt, 1);
+
+	return ip6_frag_intern(hash, fq);
+
+oom:
+	IP6_INC_STATS_BH(Ip6ReasmFails);
+	return NULL;
+}
+
+static __inline__ struct frag_queue *
+fq_find(u32 id, struct in6_addr *src, struct in6_addr *dst)
+{
+	struct frag_queue *fq;
+	unsigned int hash = ip6qhashfn(id, src, dst);
+
+	read_lock(&ip6_frag_lock);
+	for(fq = ip6_frag_hash[hash]; fq; fq = fq->next) {
+		if (fq->id == id && 
+		    !ipv6_addr_cmp(src, &fq->saddr) &&
+		    !ipv6_addr_cmp(dst, &fq->daddr)) {
+			atomic_inc(&fq->refcnt);
+			read_unlock(&ip6_frag_lock);
+			return fq;
+		}
+	}
+	read_unlock(&ip6_frag_lock);
+
+	return ip6_frag_create(hash, id, src, dst);
+}
+
+
+static void ip6_frag_queue(struct frag_queue *fq, struct sk_buff *skb, 
+			   struct frag_hdr *fhdr, u8 *nhptr)
+{
+	struct sk_buff *prev, *next;
+	int offset, end;
+
+	if (fq->last_in & COMPLETE)
+		goto err;
+
+	if (!mod_timer(&fq->timer, jiffies + sysctl_ip6frag_time))
+		atomic_inc(&fq->refcnt);
+
+	offset = ntohs(fhdr->frag_off) & ~0x7;
+	end = offset + (ntohs(skb->nh.ipv6h->payload_len) -
+			((u8 *) (fhdr + 1) - (u8 *) (skb->nh.ipv6h + 1)));
+
+	if ((unsigned int)end >= 65536) {
+		icmpv6_param_prob(skb,ICMPV6_HDR_FIELD, (u8*)&fhdr->frag_off); 
+		goto err;
+	}
+
+	/* Is this the final fragment? */
+	if (!(fhdr->frag_off & __constant_htons(0x0001))) {
+		/* If we already have some bits beyond end
+		 * or have different end, the segment is corrupted.
+		 */
+		if (end < fq->len ||
+		    ((fq->last_in & LAST_IN) && end != fq->len))
+			goto err;
+		fq->last_in |= LAST_IN;
+		fq->len = end;
+	} else {
+		/* Check if the fragment is rounded to 8 bytes.
+		 * Required by the RFC.
+		 */
+		if (end & 0x7) {
+			printk(KERN_DEBUG "fragment not rounded to 8bytes\n");
+
+			/*
+			   It is not in specs, but I see no reasons
+			   to send an error in this case. --ANK
+			 */
+			if (offset == 0)
+				icmpv6_param_prob(skb, ICMPV6_HDR_FIELD, 
+						  &skb->nh.ipv6h->payload_len);
+			goto err;
+		}
+		if (end > fq->len) {
+			/* Some bits beyond end -> corruption. */
+			if (fq->last_in & LAST_IN)
+				goto err;
+			fq->len = end;
+		}
+	}
+
+	if (end == offset)
+		goto err;
+
+	/* Point into the IP datagram 'data' part. */
+	skb_pull(skb, (u8 *) (fhdr + 1) - skb->data);
+	skb_trim(skb, end - offset);
+
+	/* Find out which fragments are in front and at the back of us
+	 * in the chain of fragments so far.  We must know where to put
+	 * this fragment, right?
+	 */
+	prev = NULL;
+	for(next = fq->fragments; next != NULL; next = next->next) {
+		if (FRAG6_CB(next)->offset >= offset)
+			break;	/* bingo! */
+		prev = next;
+	}
+
+	/* We found where to put this one.  Check for overlap with
+	 * preceding fragment, and, if needed, align things so that
+	 * any overlaps are eliminated.
+	 */
+	if (prev) {
+		int i = (FRAG6_CB(prev)->offset + prev->len) - offset;
+
+		if (i > 0) {
+			offset += i;
+			if (end <= offset)
+				goto err;
+			skb_pull(skb, i);
+		}
+	}
+
+	/* Look for overlap with succeeding segments.
+	 * If we can merge fragments, do it.
+	 */
+	while (next && FRAG6_CB(next)->offset < end) {
+		int i = end - FRAG6_CB(next)->offset; /* overlap is 'i' bytes */
+
+		if (i < next->len) {
+			/* Eat head of the next overlapped fragment
+			 * and leave the loop. The next ones cannot overlap.
+			 */
+			FRAG6_CB(next)->offset += i;	/* next fragment */
+			skb_pull(next, i);
+			fq->meat -= i;
+			break;
+		} else {
+			struct sk_buff *free_it = next;
+
+			/* Old fragmnet is completely overridden with
+			 * new one drop it.
+			 */
+			next = next->next;
+
+			if (prev)
+				prev->next = next;
+			else
+				fq->fragments = next;
+
+			fq->meat -= free_it->len;
+			frag_kfree_skb(free_it);
+		}
+	}
+
+	FRAG6_CB(skb)->offset = offset;
+
+	/* Insert this fragment in the chain of fragments. */
+	skb->next = next;
+	if (prev)
+		prev->next = skb;
+	else
+		fq->fragments = skb;
+
+	fq->dev = skb->dev;
+	fq->iif = skb->dev->ifindex;
+	fq->meat += skb->len;
+	atomic_add(skb->truesize, &ip6_frag_mem);
+
+	/* First fragment.
+	   nexthdr and nhptr are get from the first fragment.
+	   Moreover, nexthdr is UNDEFINED for all the fragments but the
+	   first one.
+	   (fixed --ANK (980728))
+	 */
+	if (offset == 0) {
+		fq->nexthdr = fhdr->nexthdr;
+		fq->nhoffset = nhptr - skb->nh.raw;
+		fq->last_in |= FIRST_IN;
+	}
+	return;
+
+err:
+	kfree_skb(skb);
+}
+
+/*
+ *	Check if this packet is complete.
+ *	Returns NULL on failure by any reason, and pointer
+ *	to current nexthdr field in reassembled frame.
+ *
+ *	It is called with locked fq, and caller must check that
+ *	queue is eligible for reassembly i.e. it is not COMPLETE,
+ *	the last and the first frames arrived and all the bits are here.
+ */
+static u8* ip6_frag_reasm(struct frag_queue *fq, struct sk_buff **skb_in)
+{
+	struct sk_buff *fp, *head = fq->fragments;
+	struct sk_buff *skb;
+	int    payload_len;
+	int    unfrag_len;
+	int    copy;
+	u8     *nhptr;
+
+	/* 
+	 * we know the m_flag arrived and we have a queue,
+	 * starting from 0, without gaps.
+	 * this means we have all fragments.
+	 */
+
+	fq_kill(fq);
+
+	BUG_TRAP(head != NULL);
+	BUG_TRAP(FRAG6_CB(head)->offset == 0);
+
+	/* Unfragmented part is taken from the first segment. */
+	unfrag_len = head->h.raw - (u8 *) (head->nh.ipv6h + 1);
+	payload_len = unfrag_len + fq->len;
+
+	if (payload_len > 65535)
+		goto out_oversize;
+
+	if ((skb = dev_alloc_skb(sizeof(struct ipv6hdr) + payload_len))==NULL)
+		goto out_oom;
+
+	copy = unfrag_len + sizeof(struct ipv6hdr);
+
+	skb->mac.raw = skb->data;
+	skb->nh.ipv6h = (struct ipv6hdr *) skb->data;
+	skb->dev = fq->dev;
+	skb->protocol = __constant_htons(ETH_P_IPV6);
+	skb->pkt_type = head->pkt_type;
+	FRAG6_CB(skb)->h = FRAG6_CB(head)->h;
+	skb->dst = dst_clone(head->dst);
+
+	memcpy(skb_put(skb, copy), head->nh.ipv6h, copy);
+	nhptr = skb->nh.raw + fq->nhoffset;
+	*nhptr = fq->nexthdr;
+
+	skb->h.raw = skb->tail;
+
+	skb->nh.ipv6h->payload_len = ntohs(payload_len);
+
+	*skb_in = skb;
+
+	for (fp = fq->fragments; fp; fp=fp->next)
+		memcpy(skb_put(skb, fp->len), fp->data, fp->len);
+
+	IP6_INC_STATS_BH(Ip6ReasmOKs);
+	return nhptr;
+
+out_oversize:
+	if (net_ratelimit())
+		printk(KERN_DEBUG "ip6_frag_reasm: payload len = %d\n", payload_len);
+	goto out_fail;
+out_oom:
+	if (net_ratelimit())
+		printk(KERN_DEBUG "ip6_frag_reasm: no memory for reassembly\n");
+out_fail:
+	IP6_INC_STATS_BH(Ip6ReasmFails);
+	return NULL;
+}
 
 u8* ipv6_reassembly(struct sk_buff **skbp, __u8 *nhptr)
 {
@@ -166,342 +594,35 @@ u8* ipv6_reassembly(struct sk_buff **skbp, __u8 *nhptr)
 		icmpv6_param_prob(skb, ICMPV6_HDR_FIELD, skb->h.raw);
 		return NULL;
 	}
+
+	if (!(fhdr->frag_off & __constant_htons(0xFFF9))) {
+		/* It is not a fragmented frame */
+		skb->h.raw += sizeof(struct frag_hdr);
+		IP6_INC_STATS_BH(Ip6ReasmOKs);
+
+		return &fhdr->nexthdr;
+	}
+
 	if (atomic_read(&ip6_frag_mem) > sysctl_ip6frag_high_thresh)
-		frag_prune();
+		ip6_evictor();
 
-	spin_lock(&ip6_frag_lock);
-	for (fq = ipv6_frag_queue.next; fq != &ipv6_frag_queue; fq = fq->next) {
-		if (fq->id == fhdr->identification && 
-		    !ipv6_addr_cmp(&hdr->saddr, &fq->saddr) &&
-		    !ipv6_addr_cmp(&hdr->daddr, &fq->daddr)) {
-			u8 *ret = NULL;
+	if ((fq = fq_find(fhdr->identification, &hdr->saddr, &hdr->daddr)) != NULL) {
+		u8 *ret = NULL;
 
-			reasm_queue(fq, skb, fhdr, nhptr);
+		spin_lock(&fq->lock);
 
-			if (fq->last_in == (FIRST_IN|LAST_IN))
-				ret = reasm_frag(fq, skbp);
+		ip6_frag_queue(fq, skb, fhdr, nhptr);
 
-			spin_unlock(&ip6_frag_lock);
-			return ret;
-		}
+		if (fq->last_in == (FIRST_IN|LAST_IN) &&
+		    fq->meat == fq->len)
+			ret = ip6_frag_reasm(fq, skbp);
+
+		spin_unlock(&fq->lock);
+		fq_put(fq);
+		return ret;
 	}
 
-	create_frag_entry(skb, nhptr, fhdr);
-	spin_unlock(&ip6_frag_lock);
-
-	return NULL;
-}
-
-
-static void fq_free(struct frag_queue *fq)
-{
-	struct ipv6_frag *fp, *back;
-
-	del_timer(&fq->timer);
-
-	for (fp = fq->fragments; fp; ) {
-		frag_kfree_skb(fp->skb);
-		back = fp;
-		fp=fp->next;
-		frag_kfree_s(back, sizeof(*back));
-	}
-
-	fq->prev->next = fq->next;
-	fq->next->prev = fq->prev;
-
-	fq->prev = fq->next = NULL;
-	
-	frag_kfree_s(fq, sizeof(*fq));
-}
-
-static void frag_expire(unsigned long data)
-{
-	struct frag_queue *fq;
-	struct ipv6_frag *frag;
-
-	fq = (struct frag_queue *) data;
-
-	spin_lock(&ip6_frag_lock);
-
-	frag = fq->fragments;
-
-	IP6_INC_STATS_BH(Ip6ReasmTimeout);
 	IP6_INC_STATS_BH(Ip6ReasmFails);
-
-	if (frag == NULL) {
-		spin_unlock(&ip6_frag_lock);
-		printk(KERN_DEBUG "invalid fragment queue\n");
-		return;
-	}
-
-	/* Send error only if the first segment arrived.
-	   (fixed --ANK (980728))
-	 */
-	if (fq->last_in&FIRST_IN) {
-		struct net_device *dev = dev_get_by_index(fq->iif);
-
-		/*
-		   But use as source device on which LAST ARRIVED
-		   segment was received. And do not use fq->dev
-		   pointer directly, device might already disappeared.
-		 */
-		if (dev) {
-			frag->skb->dev = dev;
-			icmpv6_send(frag->skb, ICMPV6_TIME_EXCEED, ICMPV6_EXC_FRAGTIME, 0,
-				    dev);
-			dev_put(dev);
-		}
-	}
-	
-	fq_free(fq);
-	spin_unlock(&ip6_frag_lock);
-}
-
-
-static void create_frag_entry(struct sk_buff *skb,
-			      __u8 *nhptr,
-			      struct frag_hdr *fhdr)
-{
-	struct frag_queue *fq;
-	struct ipv6hdr *hdr; 
-
-	fq = (struct frag_queue *) frag_kmalloc(sizeof(struct frag_queue), 
-						GFP_ATOMIC);
-
-	if (fq == NULL) {
-		IP6_INC_STATS_BH(Ip6ReasmFails);
-		kfree_skb(skb);
-		return;
-	}
-
-	memset(fq, 0, sizeof(struct frag_queue));
-
-	fq->id = fhdr->identification;
-
-	hdr = skb->nh.ipv6h;
-	ipv6_addr_copy(&fq->saddr, &hdr->saddr);
-	ipv6_addr_copy(&fq->daddr, &hdr->daddr);
-
-	/* init_timer has been done by the memset */
-	fq->timer.function = frag_expire;
-	fq->timer.data = (long) fq;
-	fq->timer.expires = jiffies + sysctl_ip6frag_time;
-
-	reasm_queue(fq, skb, fhdr, nhptr);
-
-	if (fq->fragments) {
-		fq->prev = ipv6_frag_queue.prev;
-		fq->next = &ipv6_frag_queue;
-		fq->prev->next = fq;
-		ipv6_frag_queue.prev = fq;
-
-		add_timer(&fq->timer);
-	} else
-		frag_kfree_s(fq, sizeof(*fq));
-}
-
-
-/*
- *	We queue the packet even if it's the last.
- *	It's a trade off. This allows the reassembly 
- *	code to be simpler (=faster) and of the
- *	steps we do for queueing the only unnecessary 
- *	one it's the kmalloc for a struct ipv6_frag.
- *	Feel free to try other alternatives...
- */
-
-static void reasm_queue(struct frag_queue *fq, struct sk_buff *skb, 
-				     struct frag_hdr *fhdr, u8 *nhptr)
-{
-	struct ipv6_frag *nfp, *fp, **bptr;
-
-	nfp = (struct ipv6_frag *) frag_kmalloc(sizeof(struct ipv6_frag), 
-						GFP_ATOMIC);
-
-	if (nfp == NULL) {		
-		kfree_skb(skb);
-		return;
-	}
-
-	nfp->offset = ntohs(fhdr->frag_off) & ~0x7;
-	nfp->len = (ntohs(skb->nh.ipv6h->payload_len) -
-		    ((u8 *) (fhdr + 1) - (u8 *) (skb->nh.ipv6h + 1)));
-
-	if ((u32)nfp->offset + (u32)nfp->len >= 65536) {
-		icmpv6_param_prob(skb,ICMPV6_HDR_FIELD, (u8*)&fhdr->frag_off); 
-		goto err;
-	}
-	if (fhdr->frag_off & __constant_htons(0x0001)) {
-		/* Check if the fragment is rounded to 8 bytes.
-		 * Required by the RFC.
-		 * ... and would break our defragmentation algorithm 8)
-		 */
-		if (nfp->len & 0x7) {
-			printk(KERN_DEBUG "fragment not rounded to 8bytes\n");
-
-			/*
-			   It is not in specs, but I see no reasons
-			   to send an error in this case. --ANK
-			 */
-			if (nfp->offset == 0)
-				icmpv6_param_prob(skb, ICMPV6_HDR_FIELD, 
-						  &skb->nh.ipv6h->payload_len);
-			goto err;
-		}
-	}
-
-	nfp->skb  = skb;
-	nfp->fhdr = fhdr;
-	nfp->next = NULL;
-
-	bptr = &fq->fragments;
-
-	for (fp = fq->fragments; fp; fp=fp->next) {
-		if (nfp->offset <= fp->offset)
-			break;
-		bptr = &fp->next;
-	}
-	if (fp && fp->offset == nfp->offset) {
-		if (nfp->len != fp->len) {
-			printk(KERN_DEBUG "reasm_queue: dup with wrong len\n");
-		}
-
-		/* duplicate. discard it. */
-		goto err;
-	}
-
-	atomic_add(skb->truesize, &ip6_frag_mem);
-
-	/* All the checks are done, fragment is acepted.
-	   Only now we are allowed to update reassembly data!
-	   (fixed --ANK (980728))
-	 */
-
-	/* iif always set to one of the last arrived segment */
-	fq->dev = skb->dev;
-	fq->iif = skb->dev->ifindex;
-
-	/* Last fragment */
-	if ((fhdr->frag_off & __constant_htons(0x0001)) == 0)
-		fq->last_in |= LAST_IN;
-
-	/* First fragment.
-	   nexthdr and nhptr are get from the first fragment.
-	   Moreover, nexthdr is UNDEFINED for all the fragments but the
-	   first one.
-	   (fixed --ANK (980728))
-	 */
-	if (nfp->offset == 0) {
-		fq->nexthdr = fhdr->nexthdr;
-		fq->last_in |= FIRST_IN;
-		fq->nhoffset = nhptr - skb->nh.raw;
-	}
-
-	*bptr = nfp;
-	nfp->next = fp;
-	return;
-
-err:
-	frag_kfree_s(nfp, sizeof(*nfp));
 	kfree_skb(skb);
-}
-
-/*
- *	check if this fragment completes the packet
- *	returns true on success
- */
-static u8* reasm_frag(struct frag_queue *fq, struct sk_buff **skb_in)
-{
-	struct ipv6_frag *fp;
-	struct ipv6_frag *head = fq->fragments;
-	struct ipv6_frag *tail = NULL;
-	struct sk_buff *skb;
-	__u32  offset = 0;
-	__u32  payload_len;
-	__u16  unfrag_len;
-	__u16  copy;
-	u8     *nhptr;
-
-	for(fp = head; fp; fp=fp->next) {
-		if (offset != fp->offset)
-			return NULL;
-
-		offset += fp->len;
-		tail = fp;
-	}
-
-	/* 
-	 * we know the m_flag arrived and we have a queue,
-	 * starting from 0, without gaps.
-	 * this means we have all fragments.
-	 */
-
-	/* Unfragmented part is taken from the first segment.
-	   (fixed --ANK (980728))
-	 */
-	unfrag_len = (u8 *) (head->fhdr) - (u8 *) (head->skb->nh.ipv6h + 1);
-
-	payload_len = (unfrag_len + tail->offset + 
-		       (tail->skb->tail - (__u8 *) (tail->fhdr + 1)));
-
-	if (payload_len > 65535) {
-		if (net_ratelimit())
-			printk(KERN_DEBUG "reasm_frag: payload len = %d\n", payload_len);
-		IP6_INC_STATS_BH(Ip6ReasmFails);
-		fq_free(fq);
-		return NULL;
-	}
-
-	if ((skb = dev_alloc_skb(sizeof(struct ipv6hdr) + payload_len))==NULL) {
-		if (net_ratelimit())
-			printk(KERN_DEBUG "reasm_frag: no memory for reassembly\n");
-		IP6_INC_STATS_BH(Ip6ReasmFails);
-		fq_free(fq);
-		return NULL;
-	}
-
-	copy = unfrag_len + sizeof(struct ipv6hdr);
-
-	skb->nh.ipv6h = (struct ipv6hdr *) skb->data;
-	skb->dev = fq->dev;
-	skb->protocol = __constant_htons(ETH_P_IPV6);
-	skb->pkt_type = head->skb->pkt_type;
-	memcpy(skb->cb, head->skb->cb, sizeof(skb->cb));
-	skb->dst = dst_clone(head->skb->dst);
-
-	memcpy(skb_put(skb, copy), head->skb->nh.ipv6h, copy);
-	nhptr = skb->nh.raw + fq->nhoffset;
-	*nhptr = fq->nexthdr;
-
-	skb->h.raw = skb->tail;
-
-	skb->nh.ipv6h->payload_len = ntohs(payload_len);
-
-	*skb_in = skb;
-
-	/*
-	 *	FIXME: If we don't have a checksum we ought to be able
-	 *	to defragment and checksum in this pass. [AC]
-	 *	Note that we don't really know yet whether the protocol
-	 *	needs checksums at all. It might still be a good idea. -AK
-	 */
-	for(fp = fq->fragments; fp; ) {
-		struct ipv6_frag *back;
-
-		memcpy(skb_put(skb, fp->len), (__u8*)(fp->fhdr + 1), fp->len);
-		frag_kfree_skb(fp->skb);
-		back = fp;
-		fp=fp->next;
-		frag_kfree_s(back, sizeof(*back));
-	}
-
-	del_timer(&fq->timer);
-	fq->prev->next = fq->next;
-	fq->next->prev = fq->prev;
-	fq->prev = fq->next = NULL;
-
-	frag_kfree_s(fq, sizeof(*fq));
-
-	IP6_INC_STATS_BH(Ip6ReasmOKs);
-	return nhptr;
+	return NULL;
 }

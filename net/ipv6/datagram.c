@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: datagram.c,v 1.19 2000/02/27 19:51:47 davem Exp $
+ *	$Id: datagram.c,v 1.20 2000/07/08 00:20:43 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -126,6 +126,8 @@ int ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len)
 	err = memcpy_toiovec(msg->msg_iov, skb->data, copied);
 	if (err)
 		goto out_free_skb;
+
+	sock_recv_timestamp(msg, sk, skb);
 
 	serr = SKB_EXT_ERR(skb);
 

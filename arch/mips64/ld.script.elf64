@@ -16,7 +16,6 @@ SECTIONS
   /* . = 0xa800000000300000; */
   . = 0xffffffff80300000;
   .text : {
-    _ftext = . ;
     *(.text)
     *(.rodata)
     *(.rodata1)
@@ -24,7 +23,6 @@ SECTIONS
     *(.gnu.warning)
   } = 0
   _etext = .;
-  PROVIDE (etext = .);
 
   . = ALIGN(16384);
   .data.init_task : { *(.data.init_task) }
@@ -74,7 +72,6 @@ SECTIONS
     CONSTRUCTORS
   }
   .data1   : { *(.data1) }
-  _gp = . + 0x8000;
   .lit8 : { *(.lit8) }
   .lit4 : { *(.lit4) }
   .ctors         : { *(.ctors)   }
@@ -86,10 +83,7 @@ SECTIONS
      we can shorten the on-disk segment size.  */
   .sdata     : { *(.sdata) }
   _edata  =  .;
-  PROVIDE (edata = .);
 
-  __bss_start = .;
-  _fbss = .;
   .sbss      : { *(.sbss) *(.scommon) }
   .bss       :
   {
@@ -97,7 +91,6 @@ SECTIONS
    *(.bss)
    *(COMMON)
   _end = . ;
-  PROVIDE (end = .);
   }
   /* These are needed for ELF backends which have not yet been
      converted to the new style linker.  */

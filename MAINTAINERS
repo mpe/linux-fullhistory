@@ -438,8 +438,9 @@ S:      Maintained
 
 HIGH-SPEED SCC DRIVER FOR AX.25
 P:	Klaus Kudielka
-M:	oe1kib@oe1kib.ampr.org
+M:	klaus.kudielka@ieee.org
 L:	linux-hams@vger.rutgers.edu
+W:	http://www.nt.tuwien.ac.at/~kkudielk/Linux/
 S:	Maintained
 
 LOGICAL VOLUME MANAGER

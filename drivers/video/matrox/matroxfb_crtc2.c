@@ -85,7 +85,7 @@ static void matroxfb_dh_restore(struct matroxfb_dh_fb_info* m2info,
 		int mode,
 		unsigned int pos) {
 	u_int32_t tmp;
-	struct matrox_fb_info* minfo = m2info->primary_dev;
+	MINFO_FROM(m2info->primary_dev);
 
 	switch (mode) {
 		case 15:
@@ -250,9 +250,9 @@ static void initMatroxDH(struct matroxfb_dh_fb_info* m2info, struct display* p) 
 
 static int matroxfb_dh_open(struct fb_info* info, int user) {
 #define m2info ((struct matroxfb_dh_fb_info*)info)
-	struct matrox_fb_info* minfo = m2info->primary_dev;
+	MINFO_FROM(m2info->primary_dev);
 
-	if (minfo) {
+	if (MINFO) {
 		if (ACCESS_FBINFO(dead)) {
 			return -ENXIO;
 		}
@@ -263,9 +263,9 @@ static int matroxfb_dh_open(struct fb_info* info, int user) {
 
 static int matroxfb_dh_release(struct fb_info* info, int user) {
 #define m2info ((struct matroxfb_dh_fb_info*)info)
-	struct matrox_fb_info* minfo = m2info->primary_dev;
+	MINFO_FROM(m2info->primary_dev);
 
-	if (minfo) {
+	if (MINFO) {
 	}
 	return 0;
 #undef m2info
@@ -320,7 +320,7 @@ static int matroxfb_dh_set_var(struct fb_var_screeninfo* var, int con,
 	int cmap_len;
 	int mode;
 	int err;
-	struct matrox_fb_info* minfo = m2info->primary_dev;
+	MINFO_FROM(m2info->primary_dev);
 
 	if (con < 0)
 		p = m2info->fbcon.disp;
@@ -477,7 +477,7 @@ static int matroxfb_dh_pan_display(struct fb_var_screeninfo* var, int con,
 static int matroxfb_dh_switch(int con, struct fb_info* info);
 
 static int matroxfb_dh_get_vblank(const struct matroxfb_dh_fb_info* m2info, struct fb_vblank* vblank) {
-	struct matrox_fb_info* minfo = m2info->primary_dev;
+	MINFO_FROM(m2info->primary_dev);
 
 	memset(vblank, 0, sizeof(*vblank));
 	vblank->flags = FB_VBLANK_HAVE_VCOUNT | FB_VBLANK_HAVE_VBLANK;
@@ -496,7 +496,7 @@ static int matroxfb_dh_ioctl(struct inode* inode,
 		int con,
 		struct fb_info* info) {
 #define m2info ((struct matroxfb_dh_fb_info*)info)
-	struct matrox_fb_info* minfo = m2info->primary_dev;
+	MINFO_FROM(m2info->primary_dev);
 
 	DBG("matroxfb_crtc2_ioctl")
 
@@ -516,7 +516,7 @@ static int matroxfb_dh_ioctl(struct inode* inode,
 		case MATROXFB_GET_OUTPUT_MODE:
 		case MATROXFB_GET_ALL_OUTPUTS:
 			{
-				return ACCESS_FBINFO(fbcon.fbops)->fb_ioctl(inode, file, cmd, arg, con, &minfo->fbcon);
+				return ACCESS_FBINFO(fbcon.fbops)->fb_ioctl(inode, file, cmd, arg, con, &ACCESS_FBINFO(fbcon));
 			}
 		case MATROXFB_SET_OUTPUT_CONNECTION:
 			{
@@ -660,15 +660,15 @@ static int matroxfb_dh_regit(CPMINFO struct matroxfb_dh_fb_info* m2info) {
 	if (mem < 64*1024)
 		mem *= 1024;
 	mem &= ~0x00000FFF;	/* PAGE_MASK? */
-	if (minfo->video.len_usable + mem <= minfo->video.len)
-		m2info->video.offbase = minfo->video.len - mem;
-	else if (minfo->video.len < mem) {
+	if (ACCESS_FBINFO(video.len_usable) + mem <= ACCESS_FBINFO(video.len))
+		m2info->video.offbase = ACCESS_FBINFO(video.len) - mem;
+	else if (ACCESS_FBINFO(video.len) < mem) {
 		kfree(d);
 		return -ENOMEM;
 	} else { /* check yres on first head... */
 		m2info->video.borrowed = mem;
-		minfo->video.len_usable -= mem;
-		m2info->video.offbase = minfo->video.len_usable;
+		ACCESS_FBINFO(video.len_usable) -= mem;
+		m2info->video.offbase = ACCESS_FBINFO(video.len_usable);
 	}
 	m2info->video.base = ACCESS_FBINFO(video.base) + m2info->video.offbase;
 	m2info->video.len = m2info->video.len_usable = m2info->video.len_maximum = mem;
@@ -698,8 +698,8 @@ static int matroxfb_dh_regit(CPMINFO struct matroxfb_dh_fb_info* m2info) {
 		matroxfb_dh_set_var(&matroxfb_dh_defined, -1, &m2info->fbcon);
 	}
 	down_write(&ACCESS_FBINFO(crtc2.lock));
-	oldcrtc2 = minfo->crtc2.info;
-	minfo->crtc2.info = &m2info->fbcon;
+	oldcrtc2 = ACCESS_FBINFO(crtc2.info);
+	ACCESS_FBINFO(crtc2.info) = &m2info->fbcon;
 	up_write(&ACCESS_FBINFO(crtc2.lock));
 	if (oldcrtc2) {
 		printk(KERN_ERR "matroxfb_crtc2: Internal consistency check failed: crtc2 already present: %p\n",
@@ -731,9 +731,9 @@ static void matroxfb_dh_deregisterfb(struct matroxfb_dh_fb_info* m2info) {
 		struct fb_info* crtc2;
 
 		down_write(&ACCESS_FBINFO(crtc2.lock));
-		crtc2 = minfo->crtc2.info;
+		crtc2 = ACCESS_FBINFO(crtc2.info);
 		if (crtc2 == &m2info->fbcon)
-			minfo->crtc2.info = NULL;
+			ACCESS_FBINFO(crtc2.info) = NULL;
 		up_write(&ACCESS_FBINFO(crtc2.lock));
 		if (crtc2 != &m2info->fbcon) {
 			printk(KERN_ERR "matroxfb_crtc2: Internal consistency check failed: crtc2 mismatch at unload: %p != %p\n",
@@ -756,7 +756,7 @@ static void* matroxfb_crtc2_probe(struct matrox_fb_info* minfo) {
 	struct matroxfb_dh_fb_info* m2info;
 
 	/* hardware is CRTC2 incapable... */
-	if (!minfo->devflags.crtc2)
+	if (!ACCESS_FBINFO(devflags.crtc2))
 		return NULL;
 	m2info = (struct matroxfb_dh_fb_info*)kmalloc(sizeof(*m2info), GFP_KERNEL);
 	if (!m2info) {
@@ -764,7 +764,7 @@ static void* matroxfb_crtc2_probe(struct matrox_fb_info* minfo) {
 		return NULL;
 	}
 	memset(m2info, 0, sizeof(*m2info));
-	m2info->primary_dev = minfo;
+	m2info->primary_dev = MINFO;
 	if (matroxfb_dh_registerfb(m2info)) {
 		kfree(m2info);
 		printk(KERN_ERR "matroxfb_crtc2: CRTC2 framebuffer failed to register\n");

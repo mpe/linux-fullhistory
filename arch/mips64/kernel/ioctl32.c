@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.1 2000/04/05 00:43:25 ulfc Exp $
+/*
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 2000 Silicon Graphics, Inc.
@@ -34,23 +34,6 @@ struct timeval32 {
 #define EXT2_IOC32_SETFLAGS               _IOW('f', 2, int)
 #define EXT2_IOC32_GETVERSION             _IOR('v', 1, int)
 #define EXT2_IOC32_SETVERSION             _IOW('v', 2, int)
-
-static int do_siocgstamp(unsigned int fd, unsigned int cmd, unsigned long arg)
-{
-	struct timeval32 *up = (struct timeval32 *)arg;
-	struct timeval ktv;
-	mm_segment_t old_fs = get_fs();
-	int err;
-
-	set_fs(KERNEL_DS);
-	err = sys_ioctl(fd, cmd, (unsigned long)&ktv);
-	set_fs(old_fs);
-	if(!err) {
-		err = put_user(ktv.tv_sec, &up->tv_sec);
-		err |= __put_user(ktv.tv_usec, &up->tv_usec);
-	}
-	return err;
-}
 
 struct ifmap32 {
 	unsigned int mem_start;

@@ -11,7 +11,7 @@
 #ifndef _ASM_IRQ_H
 #define _ASM_IRQ_H
 
-#define NR_IRQS 64
+#define NR_IRQS 256
 
 #define TIMER_IRQ 0
 

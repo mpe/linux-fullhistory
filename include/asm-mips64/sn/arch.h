@@ -54,7 +54,7 @@ typedef u64	nic_t;
 #define	INVALID_PARTID		(partid_t)-1
 
 extern nasid_t get_nasid(void);
-extern cnodeid_t get_cpu_cnode(int);
+extern cnodeid_t get_cpu_cnode(cpuid_t);
 extern int get_cpu_slice(cpuid_t);
 
 /*

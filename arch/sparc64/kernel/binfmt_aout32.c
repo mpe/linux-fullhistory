@@ -325,7 +325,7 @@ beyond_if:
 		current->thread.flags |= SPARC_FLAG_32BIT;
 	}
 	start_thread32(regs, ex.a_entry, current->mm->start_stack);
-	if (current->flags & PF_PTRACED)
+	if (current->ptrace & PT_PTRACED)
 		send_sig(SIGTRAP, current, 0);
 	return 0;
 }

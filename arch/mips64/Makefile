@@ -86,7 +86,11 @@ SUBDIRS       += arch/mips64/sgi-ip27 arch/mips64/arc
 # must be 16kb aligned or the handling of the current variable will break.
 #
 #LOADADDR      += 0xa80000000001c000
+ifdef CONFIG_MAPPED_KERNEL
+LOADADDR      += 0xc001c000
+else
 LOADADDR      += 0x8001c000
+endif
 endif
 
 #
@@ -126,8 +130,13 @@ else
 64bit-bfd = elf64-bigmips
 endif
 
+ifdef CONFIG_MAPPED_KERNEL
+vmlinux.64: vmlinux
+	$(OBJCOPY) -O $(64bit-bfd) --change-addresses=0xbfffffff40000000 $< $@
+else
 vmlinux.64: vmlinux
 	$(OBJCOPY) -O $(64bit-bfd) --change-addresses=0xa7ffffff80000000 $< $@
+endif
 
 zImage: vmlinux
 	@$(MAKEBOOT) zImage
@@ -144,6 +153,11 @@ archclean:
 	rm -f vmlinux.64
 
 archmrproper:
+	@$(MAKEBOOT) mrproper
+	$(MAKE) -C arch/$(ARCH)/tools mrproper
 
 archdep:
+	if [ ! -f $(TOPDIR)/include/asm-$(ARCH)/offset.h ]; then \
+	 touch $(TOPDIR)/include/asm-$(ARCH)/offset.h; \
+	fi;
 	@$(MAKEBOOT) dep

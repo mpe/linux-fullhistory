@@ -1,11 +1,10 @@
-/* $Id: syscall.c,v 1.3 2000/02/04 07:40:24 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995 - 1999 by Ralf Baechle
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1995 - 2000 by Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
 #include <linux/errno.h>
 #include <linux/linkage.h>
@@ -21,6 +20,7 @@
 #include <linux/sem.h>
 #include <linux/msg.h>
 #include <linux/shm.h>
+#include <linux/slab.h>
 #include <asm/ipc.h>
 #include <asm/cachectl.h>
 #include <asm/offset.h>
@@ -170,39 +170,46 @@ sys_sysmips(int cmd, long arg1, int arg2, int arg3)
 	char	*name;
 	int	flags, tmp, len, errno;
 
-	switch(cmd)
-	{
-	case SETNAME:
+	switch(cmd) {
+	case SETNAME: {
+		char nodename[__NEW_UTS_LEN + 1];
+
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 
 		name = (char *) arg1;
-		len = strlen_user(name);
 
-		if (len == 0 || len > __NEW_UTS_LEN)
-			return -EINVAL;
-		down(&uts_sem);
-		errno = -EFAULT;
-		if (!copy_from_user(system_utsname.nodename, name, len)) {
-			system_utsname.nodename[len] = '\0';
-			errno = 0;
-		}
-		up(&uts_sem);
-		return errno;
+		len = strncpy_from_user(nodename, name, sizeof(nodename));
+		if (len < 0)
+			return -EFAULT;
 
-	case MIPS_ATOMIC_SET:
+		down_write(&uts_sem);
+		strncpy(system_utsname.nodename, name, len);
+		up_write(&uts_sem);
+		system_utsname.nodename[len] = '\0';
+		return 0;
+	}
+
+	case MIPS_ATOMIC_SET: {
 		/* This is broken in case of page faults and SMP ...
-		   Risc/OS fauls after maximum 20 tries with EAGAIN.  */
+		    Risc/OS faults after maximum 20 tries with EAGAIN.  */
+		unsigned int tmp;
+
 		p = (int *) arg1;
 		errno = verify_area(VERIFY_WRITE, p, sizeof(*p));
 		if (errno)
 			return errno;
+		errno = 0;
 		save_and_cli(flags);
-		errno = *p;
-		*p = arg2;
+		errno |= __get_user(tmp, p);
+		errno |= __put_user(arg2, p);
 		restore_flags(flags);
 
-		return errno;		/* This is broken ...  */
+		if (errno)
+			return tmp;
+
+		return tmp;		/* This is broken ...  */
+	}
 
 	case MIPS_FIXADE:
 		tmp = current->thread.mflags & ~3;
@@ -226,7 +233,7 @@ sys_sysmips(int cmd, long arg1, int arg2, int arg3)
  * This is really horribly ugly.
  */
 asmlinkage int sys_ipc (uint call, int first, int second,
-			int third, void *ptr, long fifth)
+			unsigned long third, void *ptr, long fifth)
 {
 	int version, ret;
 

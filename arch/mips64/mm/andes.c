@@ -458,7 +458,6 @@ void __init ld_mmu_andes(void)
 	_user_mode = andes_user_mode;
 
         flush_cache_all();
-        write_32bit_cp0_register(CP0_WIRED, 0);
 
 	/*
 	 * You should never change this register:

@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.36 2000/05/03 06:37:07 davem Exp $
+ *	$Id: raw.c,v 1.39 2000/07/08 00:20:43 davem Exp $
  *
  *	Fixes:
  *	Hideaki YOSHIFUJI	:	sin6_scope_id support
@@ -331,7 +331,6 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   	}
 
 	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
-	sk->stamp=skb->stamp;
 	if (err)
 		goto out_free;
 
@@ -347,6 +346,8 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 			sin6->sin6_scope_id = opt->iif;
 		}
 	}
+
+	sock_recv_timestamp(msg, sk, skb);
 
 	if (sk->net_pinfo.af_inet6.rxopt.all)
 		datagram_recv_ctl(sk, msg, skb);
@@ -535,6 +536,8 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 
 	fl.proto = proto;
 	fl.fl6_dst = daddr;
+	if (fl.fl6_src == NULL && !ipv6_addr_any(&np->saddr))
+		fl.fl6_src = &np->saddr;
 	fl.uli_u.icmpt.type = 0;
 	fl.uli_u.icmpt.code = 0;
 	
@@ -694,6 +697,31 @@ static int rawv6_getsockopt(struct sock *sk, int level, int optname,
 	return 0;
 }
 
+static int rawv6_ioctl(struct sock *sk, int cmd, unsigned long arg)
+{
+	switch(cmd) {
+		case SIOCOUTQ:
+		{
+			int amount = atomic_read(&sk->wmem_alloc);
+			return put_user(amount, (int *)arg);
+		}
+		case SIOCINQ:
+		{
+			struct sk_buff *skb;
+			int amount = 0;
+
+			spin_lock_irq(&sk->receive_queue.lock);
+			skb = skb_peek(&sk->receive_queue);
+			if (skb != NULL)
+				amount = skb->tail - skb->h.raw;
+			spin_unlock_irq(&sk->receive_queue.lock);
+			return put_user(amount, (int *)arg);
+		}
+
+		default:
+			return -ENOIOCTLCMD;
+	}
+}
 
 static void rawv6_close(struct sock *sk, long timeout)
 {
@@ -790,6 +818,7 @@ struct proto rawv6_prot = {
 	close:		rawv6_close,
 	connect:	udpv6_connect,
 	disconnect:	udp_disconnect,
+	ioctl:		rawv6_ioctl,
 	init:		rawv6_init_sk,
 	destroy:	inet6_destroy_sock,
 	setsockopt:	rawv6_setsockopt,

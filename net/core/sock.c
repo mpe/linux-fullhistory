@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.93 2000/04/13 03:13:29 davem Exp $
+ * Version:	$Id: sock.c,v 1.95 2000/07/08 00:20:43 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -308,6 +308,10 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			sock->passcred = valbool;
 			break;
 
+		case SO_TIMESTAMP:
+			sk->rcvtstamp = valbool;
+			break;
+
 		case SO_RCVLOWAT:
 			if (val < 0)
 				val = INT_MAX;
@@ -485,7 +489,11 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		case SO_BSDCOMPAT:
 			v.val = sk->bsdism;
 			break;
-			
+
+		case SO_TIMESTAMP:
+			v.val = sk->rcvtstamp;
+			break;
+
 		case SO_RCVTIMEO:
 			lv=sizeof(struct timeval);
 			if (sk->rcvtimeo == MAX_SCHEDULE_TIMEOUT) {
@@ -599,7 +607,16 @@ void __init sk_init(void)
 {
 	sk_cachep = kmem_cache_create("sock", sizeof(struct sock), 0,
 				      SLAB_HWCACHE_ALIGN, 0, 0);
-
+	
+	if (num_physpages <= 4096) {
+		sysctl_wmem_max = 32767;
+		sysctl_rmem_max = 32767;
+		sysctl_wmem_default = 32767;
+		sysctl_wmem_default = 32767;
+	} else if (num_physpages >= 131072) {
+		sysctl_wmem_max = 131071;
+		sysctl_rmem_max = 131071;
+	}
 }
 
 /*

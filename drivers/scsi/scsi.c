@@ -136,7 +136,6 @@ const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE] =
  */
 extern void scsi_times_out(Scsi_Cmnd * SCpnt);
 void scsi_build_commandblocks(Scsi_Device * SDpnt);
-static int scsi_unregister_device(struct Scsi_Device_Template *tpnt);
 
 /*
  * These are the interface to the old error handling code.  It should go away
@@ -2292,6 +2291,8 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	remove_proc_entry(tpnt->proc_name, proc_scsi);
 	MOD_DEC_USE_COUNT;
 }
+
+static int scsi_unregister_device(struct Scsi_Device_Template *tpnt);
 
 /*
  * This entry point should be called by a loadable module if it is trying

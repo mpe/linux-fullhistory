@@ -85,16 +85,12 @@
 
 /* Sanity hazzard ...  Below all the Origin hacks are following.  */
 
-#define SCSI0_INT		0
-#define SCSI1_INT		1
-#define CPU_RESCHED_A_IRQ	3
-#define CPU_RESCHED_B_IRQ	4
-#define QLOGICFC_SLOT5          5
-#define CPU_CALL_A_IRQ		6
-#define CPU_CALL_B_IRQ		7
-#define IOC3_SERIAL_INT		8
-/*#define IOC3_ETH_INT		9*/
-#define IOC3_ETH_INT		0x0809	/* nasid 0, wid 0x8 */
+#define CPU_RESCHED_A_IRQ	0
+#define CPU_RESCHED_B_IRQ	1
+#define CPU_CALL_A_IRQ		2
+#define CPU_CALL_B_IRQ		3
+#define IOC3_ETH_INT		4
+#define BASE_PCI_IRQ		4
 
 #define SN00_BRIDGE		0x9200000008000000
 #define SN00I_BRIDGE0		0x920000000b000000

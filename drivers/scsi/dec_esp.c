@@ -38,28 +38,42 @@
 #include <asm/dec/ioasic_ints.h>
 #include <asm/dec/machtype.h>
 
+/*
+ * Once upon a time the pmaz code used to be working but
+ * it hasn't been maintained for quite some time.
+ * It isn't working anymore but I'll leave here as a
+ * starting point. #define this an be prepared for tons
+ * of warnings and errors :)
+ */
+#undef PMAZ_A
+
 static int  dma_bytes_sent(struct NCR_ESP *esp, int fifo_count);
 static void dma_drain(struct NCR_ESP *esp);
-static void pmaz_dma_drain(struct NCR_ESP *esp);
-static int dma_can_transfer(struct NCR_ESP *esp, Scsi_Cmnd * sp);
+static int  dma_can_transfer(struct NCR_ESP *esp, Scsi_Cmnd * sp);
 static void dma_dump_state(struct NCR_ESP *esp);
 static void dma_init_read(struct NCR_ESP *esp, __u32 vaddress, int length);
 static void dma_init_write(struct NCR_ESP *esp, __u32 vaddress, int length);
 static void dma_ints_off(struct NCR_ESP *esp);
 static void dma_ints_on(struct NCR_ESP *esp);
-static void pmaz_dma_init_read(struct NCR_ESP *esp, __u32 vaddress, int length);
-static void pmaz_dma_init_write(struct NCR_ESP *esp, __u32 vaddress, int length);
-static void pmaz_dma_ints_off(struct NCR_ESP *esp);
-static void pmaz_dma_ints_on(struct NCR_ESP *esp);
 static int  dma_irq_p(struct NCR_ESP *esp);
 static int  dma_ports_p(struct NCR_ESP *esp);
 static void dma_setup(struct NCR_ESP *esp, __u32 addr, int count, int write);
 static void dma_mmu_get_scsi_one(struct NCR_ESP *esp, Scsi_Cmnd * sp);
 static void dma_mmu_get_scsi_sgl(struct NCR_ESP *esp, Scsi_Cmnd * sp);
+static void dma_advance_sg(Scsi_Cmnd * sp);
+
+#ifdef PMAZ_A
+static void pmaz_dma_drain(struct NCR_ESP *esp);
+static void pmaz_dma_init_read(struct NCR_ESP *esp, __u32 vaddress, int length);
+static void pmaz_dma_init_write(struct NCR_ESP *esp, __u32 vaddress, int length);
+static void pmaz_dma_ints_off(struct NCR_ESP *esp);
+static void pmaz_dma_ints_on(struct NCR_ESP *esp);
 static void pmaz_dma_setup(struct NCR_ESP *esp, __u32 addr, int count, int write);
 static void pmaz_dma_mmu_get_scsi_one(struct NCR_ESP *esp, Scsi_Cmnd * sp);
-// static void pmaz_dma_mmu_get_scsi_sgl(struct NCR_ESP *esp, Scsi_Cmnd * sp);
-static void dma_advance_sg(Scsi_Cmnd * sp);
+static void pmaz_dma_mmu_get_scsi_sgl(struct NCR_ESP *esp, Scsi_Cmnd * sp);
+
+volatile int *scsi_pmaz_dma_ptr_tc;
+#endif
 
 #define TC_ESP_RAM_SIZE 0x20000
 #define ESP_TGT_DMA_SIZE ((TC_ESP_RAM_SIZE/7) & ~(sizeof(int)-1))
@@ -89,18 +103,18 @@ volatile unsigned long *ioasic_ssr;
 volatile unsigned long *scsi_sdr0;
 volatile unsigned long *scsi_sdr1;
 
-volatile int *scsi_pmaz_dma_ptr_tc;
-
 static void scsi_dma_int(int, void *, struct pt_regs *);
 
 /***************************************************************** Detection */
 int dec_esp_detect(Scsi_Host_Template * tpnt)
 {
-    struct NCR_ESP *esp;
-    struct ConfigDev *esp_dev;
+	struct NCR_ESP *esp;
+	struct ConfigDev *esp_dev;
+#ifdef PMAZ_A
 	int slot, i;
 	unsigned long mem_start;
 	volatile unsigned char *buffer;
+#endif
 
 	if (IOASIC) {
 	esp_dev = 0;
@@ -150,10 +164,10 @@ int dec_esp_detect(Scsi_Host_Template * tpnt)
 	/* SCSI chip speed */
 		esp->cfreq = 25000000;
 
-	/* 
+	/*
 	 * we don't give the address of DMA channel, but the number
 	 * of DMA channel, so we can use the jazz DMA functions
-	 * 
+	 *
 	 */
 	esp->dregs = JAZZ_SCSI_DMA;
 	
@@ -164,7 +178,7 @@ int dec_esp_detect(Scsi_Host_Template * tpnt)
 		esp->esp_command = (volatile unsigned char *) cmd_buffer;
 	
 	/* get virtual dma address for command buffer */
-		esp->esp_command_dvma = KSEG1ADDR((volatile unsigned char *) cmd_buffer);
+		esp->esp_command_dvma = (__u32) KSEG1ADDR((volatile unsigned char *) cmd_buffer);
 	
 		esp->irq = SCSI_INT;
 	request_irq(esp->irq, esp_intr, SA_INTERRUPT, "NCR 53C94 SCSI",
@@ -181,8 +195,9 @@ int dec_esp_detect(Scsi_Host_Template * tpnt)
 	
 	}
 
+#ifdef PMAZ_A	
 	if (TURBOCHANNEL) {
-		while ((slot = search_tc_card("PMAZ-AA")) >= 0) {
+		while ((slot = search_tc_card("PMAZ_AA")) >= 0) {
 			claim_tc_card(slot);
 			mem_start = get_tc_base_addr(slot);
 
@@ -242,12 +257,13 @@ int dec_esp_detect(Scsi_Host_Template * tpnt)
 			esp->dma_mmu_release_scsi_sgl = 0;
 			esp->dma_advance_sg = 0;
 
-			request_irq(esp->irq, esp_intr, SA_INTERRUPT, "PMAZ-AA", NULL);
+			request_irq(esp->irq, esp_intr, SA_INTERRUPT, "PMAZ_AA", NULL);
 			esp->scsi_id = 7;
 			esp->diff = 0;
 			esp_initialize(esp);
 		}
 	}
+#endif
 
 	if(nesps) {
 		printk("ESP: Total of %d ESP hosts found, %d actually in use.\n", nesps, esps_in_use);
@@ -321,20 +337,14 @@ static void dma_drain(struct NCR_ESP *esp)
 	}
 }
 
-static void pmaz_dma_drain(struct NCR_ESP *esp)
-{
-	memcpy((volatile void *) (KSEG0ADDR(esp_virt_buffer)),
-		(void *) scsi_pmaz_dma_ptrs_tc[scsi_cur_buff], scsi_current_length);
-}
-
 static int dma_can_transfer(struct NCR_ESP *esp, Scsi_Cmnd * sp)
 {
 	return sp->SCp.this_residual;;
 }
-    
+
 static void dma_dump_state(struct NCR_ESP *esp)
 {
-/*    
+/*
     ESPLOG(("esp%d: dma -- enable <%08x> residue <%08x\n",
 	    esp->esp_id, vdma_get_enable((int)esp->dregs), vdma_get_resdiue((int)esp->dregs)));
  */
@@ -400,33 +410,6 @@ static void dma_ints_on(struct NCR_ESP *esp)
 	enable_irq(SCSI_DMA_INT);
 }
 
-static void pmaz_dma_init_read(struct NCR_ESP *esp, __u32 vaddress, int length)
-{
-
-	if (length > ESP_TGT_DMA_SIZE)
-		length = ESP_TGT_DMA_SIZE;
-
-	*scsi_pmaz_dma_ptr_tc = TC_ESP_DMA_ADDR(scsi_pmaz_dma_ptrs_tc[scsi_cur_buff]);
-	esp_virt_buffer = vaddress;
-	scsi_current_length = length;
-}
-
-static void pmaz_dma_init_write(struct NCR_ESP *esp, __u32 vaddress, int length)
-{
-	memcpy(scsi_pmaz_dma_ptrs_tc[scsi_cur_buff], KSEG0ADDR((void *) vaddress), length);
-
-	*scsi_pmaz_dma_ptr_tc = TC_ESP_DMAR_WRITE | TC_ESP_DMA_ADDR(scsi_pmaz_dma_ptrs_tc[scsi_cur_buff]);
-
-}
-
-static void pmaz_dma_ints_off(struct NCR_ESP *esp)
-{
-}
-
-static void pmaz_dma_ints_on(struct NCR_ESP *esp)
-{
-}
-
 static int dma_irq_p(struct NCR_ESP *esp)
 {
     return (esp->eregs->esp_status & ESP_STAT_INTR);
@@ -442,7 +425,7 @@ static int dma_ports_p(struct NCR_ESP *esp)
 
 static void dma_setup(struct NCR_ESP *esp, __u32 addr, int count, int write)
 {
-    /* 
+    /*
      * On the Sparc, DMA_ST_WRITE means "move data from device to memory"
      * so when (write) is true, it actually means READ!
      */
@@ -453,9 +436,70 @@ static void dma_setup(struct NCR_ESP *esp, __u32 addr, int count, int write)
     }
 }
 
+/*
+ * These aren't used yet
+ */
+static void dma_mmu_get_scsi_one(struct NCR_ESP *esp, Scsi_Cmnd * sp)
+{
+	sp->SCp.have_data_in = PHYSADDR(sp->SCp.buffer);
+	sp->SCp.ptr = (char *) ((unsigned long) sp->SCp.have_data_in);
+}
+
+static void dma_mmu_get_scsi_sgl(struct NCR_ESP *esp, Scsi_Cmnd * sp)
+{
+    int sz = sp->SCp.buffers_residual;
+    struct mmu_sglist *sg = (struct mmu_sglist *) sp->SCp.buffer;
+
+    while (sz >= 0) {
+		sg[sz].dvma_addr = PHYSADDR(sg[sz].addr);
+	sz--;
+    }
+	sp->SCp.ptr = (char *) ((unsigned long) sp->SCp.buffer->dvma_address);
+}
+
+static void dma_advance_sg(Scsi_Cmnd * sp)
+{
+	sp->SCp.ptr = (char *) ((unsigned long) sp->SCp.buffer->dvma_address);
+}
+
+#ifdef PMAZ_A
+
+static void pmaz_dma_drain(struct NCR_ESP *esp)
+{
+	memcpy((void *) (KSEG0ADDR(esp_virt_buffer)),
+		(void *) scsi_pmaz_dma_ptrs_tc[scsi_cur_buff], scsi_current_length);
+}
+
+static void pmaz_dma_init_read(struct NCR_ESP *esp, __u32 vaddress, int length)
+{
+
+	if (length > ESP_TGT_DMA_SIZE)
+		length = ESP_TGT_DMA_SIZE;
+
+	*scsi_pmaz_dma_ptr_tc = TC_ESP_DMA_ADDR(scsi_pmaz_dma_ptrs_tc[scsi_cur_buff]);
+	esp_virt_buffer = vaddress;
+	scsi_current_length = length;
+}
+
+static void pmaz_dma_init_write(struct NCR_ESP *esp, __u32 vaddress, int length)
+{
+	memcpy((void *)scsi_pmaz_dma_ptrs_tc[scsi_cur_buff], KSEG0ADDR((void *) vaddress), length);
+
+	*scsi_pmaz_dma_ptr_tc = TC_ESP_DMAR_WRITE | TC_ESP_DMA_ADDR(scsi_pmaz_dma_ptrs_tc[scsi_cur_buff]);
+
+}
+
+static void pmaz_dma_ints_off(struct NCR_ESP *esp)
+{
+}
+
+static void pmaz_dma_ints_on(struct NCR_ESP *esp)
+{
+}
+
 static void pmaz_dma_setup(struct NCR_ESP *esp, __u32 addr, int count, int write)
 {
-	/* 
+	/*
 	 * On the Sparc, DMA_ST_WRITE means "move data from device to memory"
 	 * so when (write) is true, it actually means READ!
 	 */
@@ -474,35 +518,10 @@ static void pmaz_dma_mmu_release_scsi_one(struct NCR_ESP *esp, Scsi_Cmnd * sp)
 			scsi_pmaz_dma_buff_used[x] = 0;
 }
 
-
 static void pmaz_dma_mmu_get_scsi_one(struct NCR_ESP *esp, Scsi_Cmnd * sp)
 {
 	sp->SCp.have_data_in = (int) sp->SCp.ptr =
 	    (char *) KSEG0ADDR((sp->request_buffer));
 }
 
-/*
- * These aren't used yet
- */
-static void dma_mmu_get_scsi_one(struct NCR_ESP *esp, Scsi_Cmnd * sp)
-{
-	sp->SCp.have_data_in = PHYSADDR(sp->SCp.buffer);
-	sp->SCp.ptr = (char *) ((unsigned long) sp->SCp.have_data_in);
-}
-
-static void dma_mmu_get_scsi_sgl(struct NCR_ESP *esp, Scsi_Cmnd * sp)
-{
-    int sz = sp->SCp.buffers_residual;
-    struct mmu_sglist *sg = (struct mmu_sglist *) sp->SCp.buffer;
-    
-    while (sz >= 0) {
-		sg[sz].dvma_addr = PHYSADDR(sg[sz].addr);
-	sz--;
-    }
-	sp->SCp.ptr = (char *) ((unsigned long) sp->SCp.buffer->dvma_address);
-}
-
-static void dma_advance_sg(Scsi_Cmnd * sp)
-{    
-	sp->SCp.ptr = (char *) ((unsigned long) sp->SCp.buffer->dvma_address);
-}
+#endif

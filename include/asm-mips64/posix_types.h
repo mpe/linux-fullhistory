@@ -1,11 +1,10 @@
-/* $Id: posix_types.h,v 1.5 2000/02/29 20:49:16 ulfc Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996, 1997, 1998, 1999 by Ralf Baechle
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1996, 1997, 1998, 1999, 2000 by Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
 #ifndef _ASM_POSIX_TYPES_H
 #define _ASM_POSIX_TYPES_H
@@ -28,9 +27,9 @@ typedef int		__kernel_gid_t;
 typedef unsigned long	__kernel_size_t;
 typedef long		__kernel_ssize_t;
 typedef long		 __kernel_ptrdiff_t;
-typedef int		__kernel_time_t;
+typedef long		__kernel_time_t;
 typedef long		__kernel_suseconds_t;
-typedef int		__kernel_clock_t;
+typedef long		__kernel_clock_t;
 typedef long		__kernel_daddr_t;
 typedef char *		__kernel_caddr_t;
 
@@ -66,7 +65,7 @@ typedef int		__kernel_time_t32;
 typedef int		__kernel_suseconds_t32;
 typedef int		__kernel_clock_t32;
 typedef int		__kernel_daddr_t32;
-typedef char *		__kernel_caddr_t32;
+typedef unsigned int	__kernel_caddr_t32;
 typedef __kernel_fsid_t	__kernel_fsid_t32;
 
 #if defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2)

@@ -88,12 +88,38 @@ static void default_idle(void)
 }
 
 /*
+ * On SMP it's slightly faster (but much more power-consuming!)
+ * to poll the ->need_resched flag instead of waiting for the
+ * cross-CPU IPI to arrive. Use this option with caution.
+ */
+static void poll_idle (void)
+{
+	int oldval;
+
+	__sti();
+
+	/*
+	 * Deal with another CPU just having chosen a thread to
+	 * run here:
+	 */
+	oldval = xchg(&current->need_resched, -1);
+
+	if (!oldval)
+		asm volatile(
+			"2:"
+			"cmpl $-1, %0;"
+			"rep; nop;"
+			"je 2b;"
+				: :"m" (current->need_resched));
+}
+
+/*
  * The idle thread. There's no useful work to be
  * done, so just try to conserve power and have a
  * low exit latency (ie sit in a loop waiting for
  * somebody to say that they'd like to reschedule)
  */
-void cpu_idle(void)
+void cpu_idle (void)
 {
 	/* endless idle loop with no priority at all */
 	init_idle();
@@ -110,6 +136,18 @@ void cpu_idle(void)
 		check_pgt_cache();
 	}
 }
+
+static int __init idle_setup (char *str)
+{
+	if (!strncmp(str, "poll", 4)) {
+		printk("using polling idle threads.\n");
+		pm_idle = poll_idle;
+	}
+
+	return 1;
+}
+
+__setup("idle=", idle_setup);
 
 static long no_idt[2] = {0, 0};
 static int reboot_mode = 0;

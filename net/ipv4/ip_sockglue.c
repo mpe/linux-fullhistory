@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.47 2000/01/16 05:11:23 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.49 2000/07/08 00:20:43 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -327,6 +327,8 @@ int ip_recv_error(struct sock *sk, struct msghdr *msg, int len)
 	if (err)
 		goto out_free_skb;
 
+	sock_recv_timestamp(msg, sk, skb);
+
 	serr = SKB_EXT_ERR(skb);
 
 	sin = (struct sockaddr_in *)msg->msg_name;
@@ -462,8 +464,15 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			break;
 		case IP_TOS:	/* This sets both TOS and Precedence */
 			  /* Reject setting of unused bits */
+#ifndef CONFIG_INET_ECN
 			if (val & ~(IPTOS_TOS_MASK|IPTOS_PREC_MASK))
 				goto e_inval;
+#else
+			if (sk->type == SOCK_STREAM) {
+				val &= ~3;
+				val |= sk->protinfo.af_inet.tos & 3;
+			}
+#endif
 			if (IPTOS_PREC(val) >= IPTOS_PREC_CRITIC_ECP && 
 			    !capable(CAP_NET_ADMIN)) {
 				err = -EPERM;

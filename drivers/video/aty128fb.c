@@ -75,9 +75,9 @@
 #undef DEBUG
 
 #ifdef DEBUG
-#define DBG(x)		printk(KERN_DEBUG "aty128fb: %s\n",(x));
+#define DBG(fmt, args...)		printk(KERN_DEBUG "aty128fb: %s " fmt, __FUNCTION__, ##args);
 #else
-#define DBG(x)
+#define DBG(fmt, args...)
 #endif
 
 #ifndef CONFIG_PPC
@@ -104,10 +104,20 @@ static struct fb_var_screeninfo default_var = {
 
 #ifndef MODULE
 /* default modedb mode */
+/* 640x480, 60 Hz, Non-Interlaced (25.172 MHz dotclock) */
 static struct fb_videomode defaultmode __initdata = {
-    /* 640x480, 60 Hz, Non-Interlaced (25.172 MHz dotclock) */
-    NULL, 60, 640, 480, 39722, 48, 16, 33, 10, 96, 2,
-    0, FB_VMODE_NONINTERLACED
+	refresh:	60,
+	xres:		640,
+	yres:		480,
+	pixclock:	39722,
+	left_margin:	48,
+	right_margin:	16,
+	upper_margin:	33,
+	lower_margin:	10,
+	hsync_len:	96,
+	vsync_len:	2,
+	sync:		0,
+	vmode:		FB_VMODE_NONINTERLACED
 };
 #endif /* MODULE */
 
@@ -141,32 +151,30 @@ static const struct aty128_chip_info aty128_pci_probe_list[] __initdata =
 
 /* packed BIOS settings */
 #ifndef CONFIG_PPC
-#pragma pack(1)
 typedef struct {
-    u8 clock_chip_type;
-    u8 struct_size;
-    u8 accelerator_entry;
-    u8 VGA_entry;
-    u16 VGA_table_offset;
-    u16 POST_table_offset;
-    u16 XCLK;
-    u16 MCLK;
-    u8 num_PLL_blocks;
-    u8 size_PLL_blocks;
-    u16 PCLK_ref_freq;
-    u16 PCLK_ref_divider;
-    u32 PCLK_min_freq;
-    u32 PCLK_max_freq;
-    u16 MCLK_ref_freq;
-    u16 MCLK_ref_divider;
-    u32 MCLK_min_freq;
-    u32 MCLK_max_freq;
-    u16 XCLK_ref_freq;
-    u16 XCLK_ref_divider;
-    u32 XCLK_min_freq;
-    u32 XCLK_max_freq;
-} PLL_BLOCK;
-#pragma pack()
+	u8 clock_chip_type;
+	u8 struct_size;
+	u8 accelerator_entry;
+	u8 VGA_entry;
+	u16 VGA_table_offset;
+	u16 POST_table_offset;
+	u16 XCLK;
+	u16 MCLK;
+	u8 num_PLL_blocks;
+	u8 size_PLL_blocks;
+	u16 PCLK_ref_freq;
+	u16 PCLK_ref_divider;
+	u32 PCLK_min_freq;
+	u32 PCLK_max_freq;
+	u16 MCLK_ref_freq;
+	u16 MCLK_ref_divider;
+	u32 MCLK_min_freq;
+	u32 MCLK_max_freq;
+	u16 XCLK_ref_freq;
+	u16 XCLK_ref_divider;
+	u32 XCLK_min_freq;
+	u32 XCLK_max_freq;
+} __attribute__ ((packed)) PLL_BLOCK;
 #endif /* !CONFIG_PPC */
 
 /* onboard memory information */
@@ -194,12 +202,9 @@ static const struct aty128_meminfo sdr_sgram =
 static const struct aty128_meminfo ddr_sgram =
     { 4, 4, 3, 3, 2, 3, 1, 16, 31, 16, "64-bit DDR SGRAM" };
 
-static int currcon = 0;
-
-static char *aty128fb_name = "ATY Rage128";
+static const char *aty128fb_name = "ATY Rage128";
 static char fontname[40] __initdata = { 0 };
-static char noaccel __initdata = 0;
-static unsigned int initdepth __initdata = 8;
+static int  noaccel __initdata = 0;
 
 #ifndef MODULE
 static const char *mode_option __initdata = NULL;
@@ -291,13 +296,14 @@ struct fb_info_aty128 {
     u32 cfb32[16];
 #endif
     } fbcon_cmap;
-    int blitter_may_be_busy;
 #ifdef CONFIG_PCI
     struct pci_dev *pdev;
 #endif
 #ifdef CONFIG_MTRR
     struct { int vram; int vram_valid; } mtrr;
 #endif
+    int currcon;
+    int blitter_may_be_busy;
     int fifo_slots;                 /* free slots in FIFO (64 max) */
 };
 
@@ -515,10 +521,8 @@ aty_pll_wait_readupdate(const struct fb_info_aty128 *info)
 	    break;
 	}
 
-#ifdef DEBUG
     if (reset)	/* reset engine?? */
-	DBG("PLL write timeout!");
-#endif
+	printk(KERN_DEBUG "aty128fb: PLL write timeout!");
 }
 
 
@@ -645,9 +649,7 @@ aty128_reset_engine(const struct fb_info_aty128 *info)
     /* use old pio mode */
     aty_st_le32(PM4_BUFFER_CNTL, PM4_BUFFER_CNTL_NONPM4);
 
-#ifdef DEBUG
     DBG("engine reset");
-#endif
 }
 
 
@@ -1075,12 +1077,10 @@ aty128_var_to_pll(u32 period_in_ps, struct aty128_pll *pll,
     pll->feedback_divider = round_div(n, d);
     pll->vclk = vclk;
 
-#ifdef DEBUG
-    printk(KERN_DEBUG "var_to_pll: post %d feedback %d vlck %d output %d ref_divider %d\n", 
-           pll->post_divider, pll->feedback_divider, vclk, output_freq,
-           c.ref_divider);
-    printk(KERN_DEBUG "var_to_pll: vclk_per: %d\n", period_in_ps);
-#endif
+    DBG("post %d feedback %d vlck %d output %d ref_divider %d "
+			"vclk_per: %d\n", pll->post_divider,
+			pll->feedback_divider, vclk, output_freq,
+			c.ref_divider, period_in_ps);
 
     return 0;
 }
@@ -1134,9 +1134,8 @@ aty128_ddafifo(struct aty128_ddafifo *dsp,
 	m->Tr2w +
 	x;
 
-#ifdef DEBUG
-    printk(KERN_DEBUG "aty128fb: x %x\n", x);
-#endif
+    DBG("x %x\n", x);
+
     b = 0;
     while (x) {
 	x >>= 1;
@@ -1155,10 +1154,9 @@ aty128_ddafifo(struct aty128_ddafifo *dsp,
 	return -EINVAL;
     }
 
-#ifdef DEBUG
-    printk(KERN_DEBUG "aty128fb: p: %x rloop: %x x: %x ron: %x roff: %x\n",
-                       p, m->Rloop, x, ron, roff);
-#endif
+    DBG("p: %x rloop: %x x: %x ron: %x roff: %x\n",
+			p, m->Rloop, x, ron, roff);
+
     dsp->dda_config = p << 16 | m->Rloop << 20 | x;
     dsp->dda_on_off = ron << 16 | roff;
 
@@ -1543,7 +1541,12 @@ static int
 aty128fb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			struct fb_info *info)
 {
-    if (con == currcon) /* current console? */
+#if 1
+    fb_copy_cmap(&info->cmap, cmap, kspc ? 0 : 2);
+#else
+    struct fb_info_aty128 fb = (struct fb_info_aty128 *)info;
+
+    if (con == fb->currcon) /* current console? */
 	return fb_get_cmap(cmap, kspc, aty128_getcolreg, info);
     else if (fb_display[con].cmap.len) /* non default colormap? */
 	fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
@@ -1551,6 +1554,7 @@ aty128fb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 	int size = (fb_display[con].var.bits_per_pixel <= 8) ? 256 : 32;
 	fb_copy_cmap(fb_default_cmap(size), cmap, kspc ? 0 : 2);
     }
+#endif
 
     return 0;
 }
@@ -1564,6 +1568,7 @@ aty128fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			struct fb_info *info)
 {
     int err;
+    struct fb_info_aty128 *fb = (struct fb_info_aty128 *)info;
     struct display *disp;  
 
     if (con >= 0)
@@ -1577,7 +1582,7 @@ aty128fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	    return err;
     }
 
-    if (con == currcon) /* current console? */
+    if (con == fb->currcon) /* current console? */
 	return fb_set_cmap(cmap, kspc, aty128_setcolreg, info);
     else
 	fb_copy_cmap(cmap, &disp->cmap, kspc ? 0 : 1);
@@ -1632,24 +1637,6 @@ aty128fb_setup(char *options)
 	    fontname[i] = 0;
 	} else if (!strncmp(this_opt, "noaccel", 7)) {
 	    noaccel = 1;
-	} else if (!strncmp(this_opt, "depth:", 6)) {
-            unsigned int depth = simple_strtoul(this_opt+6, NULL, 0);
-            switch (depth) {
-            case 0 ... 8:
-                initdepth = 8;
-                break;
-            case 9 ... 16:
-                initdepth = 16;
-                break;
-            case 17 ... 24:
-                initdepth = 24;
-                break;
-            case 25 ... 32:
-                initdepth = 32;
-                break;
-            default:
-                initdepth = 8;
-            }
         }
 #ifdef CONFIG_MTRR
         else if(!strncmp(this_opt, "nomtrr", 6)) {
@@ -1762,7 +1749,7 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
 #endif /* CONFIG_PPC */
     {
         if (fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0,
-                          &defaultmode, initdepth) == 0)
+                          &defaultmode, 8) == 0)
             var = default_var;
     }
 #endif /* MODULE */
@@ -1859,16 +1846,6 @@ aty128_pci_register(struct pci_dev *pdev,
     u32 fb_addr, reg_addr, io_addr = 0;
     int err;
 
-#if 0
-    /* Request resources we're going to use */
-    io_addr = pci_resource_start(pdev, 1);
-    if (!request_region(io_addr, pci_resource_len(pdev, 1),
-                        "aty128fb IO")) {
-        printk(KERN_ERR "aty128fb: cannot reserve I/O ports\n");
-        goto err_out_none;
-    }
-#endif
-
     fb_addr = pci_resource_start(pdev, 0);
     if (!request_mem_region(fb_addr, pci_resource_len(pdev, 0),
                             "aty128fb FB")) {
@@ -1893,6 +1870,8 @@ aty128_pci_register(struct pci_dev *pdev,
 
     /* Copy PCI device info into info->pdev */
     info->pdev = pdev;
+
+    info->currcon = -1;
 
     /* Virtualize mmio region */
     info->regbase_phys = reg_addr;
@@ -1966,7 +1945,6 @@ err_free_mmio:
 err_free_fb:
     release_mem_region(pci_resource_start(pdev, 1),
 			pci_resource_len(pdev, 1));
-err_out_none:
     return -ENODEV;
 }
 #endif /* CONFIG_PCI */
@@ -2072,13 +2050,12 @@ aty128_get_pllinfo(struct fb_info_aty128 *info)
     if (bios_seg)
         iounmap(bios_seg);
 
-#ifdef DEBUG
-    printk(KERN_DEBUG "get_pllinfo: ppll_max %d ppll_min %d xclk %d "
-                      "ref_divider %d dotclock %d\n", 
-                   info->constants.ppll_max, info->constants.ppll_min,
-                   info->constants.xclk, info->constants.ref_divider,
-                   info->constants.dotclock);
-#endif
+    DBG("ppll_max %d ppll_min %d xclk %d "
+			"ref_divider %d dotclock %d\n",
+			info->constants.ppll_max, info->constants.ppll_min,
+			info->constants.xclk, info->constants.ref_divider,
+			info->constants.dotclock);
+
     return;
 }           
 #endif /* !CONFIG_PPC */
@@ -2159,11 +2136,12 @@ aty128fbcon_switch(int con, struct fb_info *fb)
     struct aty128fb_par par;
 
     /* Do we have to save the colormap? */
-    if (fb_display[currcon].cmap.len)
-    	fb_get_cmap(&fb_display[currcon].cmap, 1, aty128_getcolreg, fb);
+    if (fb_display[info->currcon].cmap.len)
+    	fb_get_cmap(&fb_display[info->currcon].cmap, 1,
+			aty128_getcolreg, fb);
 
     /* set the current console */
-    currcon = con;
+    info->currcon = con;
 
     aty128_decode_var(&fb_display[con].var, &par, info);
     aty128_set_par(&par, info);
@@ -2319,7 +2297,9 @@ aty128_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 static void
 do_install_cmap(int con, struct fb_info *info)
 {
-    if (con != currcon)
+    struct fb_info_aty128 *fb = (struct fb_info_aty128 *)info;
+
+    if (con != fb->currcon)
 	return;
 
     if (fb_display[con].cmap.len)

@@ -1,11 +1,10 @@
-/* $Id: softfp.S,v 1.2 2000/03/21 23:50:42 ulfc Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1998, 1999 by Ralf Baechle
- * Copyright (C) 1999 by Silicon Graphics, Inc.
+ * Copyright (C) 1998, 1999, 2000 by Ralf Baechle
+ * Copyright (C) 1999, 2000 by Silicon Graphics, Inc.
  *
  * For now it's just a crude hack good enough to run certain fp programs like
  * Mozilla.
@@ -192,15 +191,15 @@ LEAF(simfp)
 #define FMT_switch(insn,opc,temp0,temp1)				\
 insn:	srl	temp0, opc, 18;						\
 	andi	temp0, 0x1c;						\
-	la	temp1, insn ## .tab;					\
+	la	temp1, insn##.tab;					\
 	daddu	temp0, temp1;						\
 	ld	temp0, (temp0);						\
 	jr	temp0;							\
 									\
 	.data;								\
-insn ## .tab:								\
-	.dword	insn ## .s, insn ## .d, unimp, unimp;			\
-	.dword	insn ## .w, insn ## .l, unimp, unimp;			\
+insn##.tab:								\
+	.dword	insn##.s, insn##.d, unimp, unimp;			\
+	.dword	insn##.w, insn##.l, unimp, unimp;			\
 	.previous
 
 	BITCH(add)

@@ -557,7 +557,7 @@ int shrink_dcache_memory(int priority, unsigned int gfp_mask)
 {
 	int count = 0;
 	if (priority)
-		count = dentry_stat.nr_unused >> (priority >> 2);
+		count = dentry_stat.nr_unused / priority;
 	prune_dcache(count);
 	/* FIXME: kmem_cache_shrink here should tell us
 	   the number of pages freed, and it should

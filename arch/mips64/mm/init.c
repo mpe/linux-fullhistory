@@ -56,7 +56,7 @@ void __bad_pte(pmd_t *pmd)
 void __bad_pmd(pgd_t *pgd)
 {
 	printk("Bad pgd in pmd_alloc: %08lx\n", pgd_val(*pgd));
-	pgd_set(pgd, (pmd_t *) BAD_PAGETABLE);
+	pgd_set(pgd, empty_bad_pmd_table);
 }
 
 void pgd_init(unsigned long page)
@@ -93,7 +93,7 @@ pgd_t *get_pgd_slow(void)
 	return ret;
 }
 
-void pmd_init(unsigned long addr)
+void pmd_init(unsigned long addr, unsigned long pagetable)
 {
 	unsigned long *p, *end;
 
@@ -101,14 +101,14 @@ void pmd_init(unsigned long addr)
 	end = p + PTRS_PER_PMD;
 
 	while (p < end) {
-		p[0] = (unsigned long) invalid_pte_table;
-		p[1] = (unsigned long) invalid_pte_table;
-		p[2] = (unsigned long) invalid_pte_table;
-		p[3] = (unsigned long) invalid_pte_table;
-		p[4] = (unsigned long) invalid_pte_table;
-		p[5] = (unsigned long) invalid_pte_table;
-		p[6] = (unsigned long) invalid_pte_table;
-		p[7] = (unsigned long) invalid_pte_table;
+		p[0] = (unsigned long)pagetable;
+		p[1] = (unsigned long)pagetable;
+		p[2] = (unsigned long)pagetable;
+		p[3] = (unsigned long)pagetable;
+		p[4] = (unsigned long)pagetable;
+		p[5] = (unsigned long)pagetable;
+		p[6] = (unsigned long)pagetable;
+		p[7] = (unsigned long)pagetable;
 		p += 8;
 	}
 }
@@ -120,7 +120,7 @@ pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
 	pmd = (pmd_t *) __get_free_pages(GFP_KERNEL, 1);
 	if (pgd_none(*pgd)) {
 		if (pmd) {
-			pmd_init((unsigned long)pmd);
+			pmd_init((unsigned long)pmd, (unsigned long)invalid_pte_table);
 			pgd_set(pgd, pmd);
 			return pmd + offset;
 		}
@@ -161,7 +161,7 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 {
 	pte_t *page;
 
-	page = (pte_t *) __get_free_pages(GFP_KERNEL, 1);
+	page = (pte_t *) __get_free_pages(GFP_KERNEL, 0);
 	if (pmd_none(*pmd)) {
 		if (page) {
 			clear_page(page);
@@ -171,7 +171,7 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 		pmd_set(pmd, BAD_PAGETABLE);
 		return NULL;
 	}
-	free_pages((unsigned long)page, 1);
+	free_pages((unsigned long)page, 0);
 	if (pmd_bad(*pmd)) {
 		__bad_pte(pmd);
 		return NULL;
@@ -246,21 +246,6 @@ unsigned long setup_zero_pages(void)
 	return 1UL << order;
 }
 
-extern inline void pte_init(unsigned long page)
-{
-	unsigned long *p, *end, bp;
-
-	bp = pte_val(BAD_PAGE);
- 	p = (unsigned long *) page;
-	end = p + (2 * PTRS_PER_PTE);
-
-	while (p < end) {
-		p[0] = p[1] = p[2] = p[3] =
-		p[4] = p[5] = p[6] = p[7] = bp;
-		p += 8;
-	}
-}
-
 /*
  * BAD_PAGE is the page that is used for page faults when linux
  * is out-of-memory. Older versions of linux just did a
@@ -276,33 +261,17 @@ extern inline void pte_init(unsigned long page)
  */
 pmd_t * __bad_pmd_table(void)
 {
-	extern pmd_t invalid_pmd_table[PTRS_PER_PMD];
-	unsigned long page;
-
-	page = (unsigned long) invalid_pmd_table;
-	pmd_init(page);
-
-	return (pmd_t *) page;
+	return empty_bad_pmd_table;
 }
 
 pte_t * __bad_pagetable(void)
 {
-	extern char empty_bad_page_table[PAGE_SIZE];
-	unsigned long page;
-
-	page = (unsigned long) empty_bad_page_table;
-	pte_init(page);
-
-	return (pte_t *) page;
+	return empty_bad_page_table;
 }
 
 pte_t __bad_page(void)
 {
-	extern char empty_bad_page[PAGE_SIZE];
-	unsigned long page = (unsigned long) empty_bad_page;
-
-	clear_page((void *)page);
-	return pte_mkdirty(mk_pte_phys(__pa(page), PAGE_SHARED));
+	return __pte(0);
 }
 
 void show_mem(void)
@@ -337,7 +306,7 @@ void show_mem(void)
 #ifndef CONFIG_DISCONTIGMEM
 /* References to section boundaries */
 
-extern char _ftext, _etext, _fdata, _edata;
+extern char _stext, _etext, _fdata, _edata;
 extern char __init_begin, __init_end;
 
 void __init paging_init(void)
@@ -347,8 +316,10 @@ void __init paging_init(void)
 
 	/* Initialize the entire pgd.  */
 	pgd_init((unsigned long)swapper_pg_dir);
-	pmd_init((unsigned long)invalid_pmd_table);
-	memset((void *)invalid_pte_table, 0, sizeof(pte_t) * 2 * PTRS_PER_PTE);
+	pmd_init((unsigned long)invalid_pmd_table, (unsigned long)invalid_pte_table);
+	memset((void *)invalid_pte_table, 0, sizeof(pte_t) * PTRS_PER_PTE);
+	pmd_init((unsigned long)empty_bad_pmd_table, (unsigned long)empty_bad_page_table);
+	memset((void *)empty_bad_page_table, 0, sizeof(pte_t) * PTRS_PER_PTE);
 
 	max_dma =  virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;
 	low = max_low_pfn;
@@ -384,7 +355,7 @@ void __init mem_init(void)
 				reservedpages++;
 		}
 
-	codesize =  (unsigned long) &_etext - (unsigned long) &_ftext;
+	codesize =  (unsigned long) &_etext - (unsigned long) &_stext;
 	datasize =  (unsigned long) &_edata - (unsigned long) &_fdata;
 	initsize =  (unsigned long) &__init_end - (unsigned long) &__init_begin;
 

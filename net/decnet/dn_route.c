@@ -789,13 +789,14 @@ static int dn_route_input_slow(struct sk_buff *skb)
 	if (dn_db->router && ((neigh = neigh_clone(dn_db->router)) != NULL))
 		goto add_entry;
 
-	if ((neigh = neigh_create(&dn_neigh_table, &cb->src, dev)) != NULL) {
+	neigh = neigh_create(&dn_neigh_table, &cb->src, dev);
+	if (!IS_ERR(neigh)) {
 		if (dev->type == ARPHRD_ETHER)
 			memcpy(neigh->ha, skb->mac.ethernet->h_source, ETH_ALEN);
 		goto add_entry;
 	}
 
-	return -ENOBUFS;
+	return PTR_ERR(neigh);
 
 non_local_input:
 

@@ -259,7 +259,6 @@ struct task_struct {
 	struct exec_domain *exec_domain;
 	volatile long need_resched;
 
-	cycles_t avg_slice;
 	int lock_depth;		/* Lock depth. We can context switch in and out of holding a syscall kernel lock... */	
 /* begin intel cache line */
 	long counter;
@@ -267,8 +266,8 @@ struct task_struct {
 	unsigned long policy;
 /* memory management info */
 	struct mm_struct *mm, *active_mm;
-	int has_cpu;
-	int processor;
+	int has_cpu, processor;
+	unsigned long cpus_allowed;
 	unsigned long ptrace;
 	struct list_head run_list;
 	struct task_struct *next_task, *prev_task;
@@ -399,6 +398,7 @@ struct task_struct {
     policy:		SCHED_OTHER,					\
     mm:			NULL,						\
     active_mm:		&init_mm,					\
+    cpus_allowed:	-1,						\
     run_list:		LIST_HEAD_INIT(tsk.run_list),			\
     next_task:		&tsk,						\
     prev_task:		&tsk,						\

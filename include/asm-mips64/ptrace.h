@@ -22,7 +22,7 @@
 #define FPC_CSR		69
 #define FPC_EIR		70
 
-#ifndef __ASSEMBLY__
+#ifndef _LANGUAGE_ASSEMBLY
 
 #define abi64_no_regargs						\
 	unsigned long __dummy0,						\
@@ -55,19 +55,21 @@ struct pt_regs {
 	unsigned long cp0_cause;
 };
 
-#endif /* !(__ASSEMBLY__) */
+#endif /* !(_LANGUAGE_ASSEMBLY__) */
 
+#ifdef _LANGUAGE_ASSEMBLY
 #include <asm/offset.h>
+#endif /* (_LANGUAGE_ASSEMBLY__) */
 
 #ifdef __KERNEL__
 
-#ifndef __ASSEMBLY__
+#ifndef _LANGUAGE_ASSEMBLY
 #define instruction_pointer(regs) ((regs)->cp0_epc)
 
 extern void (*_show_regs)(struct pt_regs *);
 #define show_regs(regs)	_show_regs(regs)
 
-#endif /* !(__ASSEMBLY__) */
+#endif /* !(_LANGUAGE_ASSEMBLY__) */
 
 #endif
 

@@ -1,5 +1,4 @@
-/* $Id: newport_con.c,v 1.14 1999/06/24 01:10:24 ulfc Exp $
- *
+/*
  * newport_con.c: Abscon for newport hardware
  * 
  * (C) 1998 Thomas Bogendoerfer (tsbogend@alpha.franken.de)
@@ -504,7 +503,7 @@ static int newport_scroll(struct vc_data *vc, int t, int b, int dir, int lines)
 	x = 0; y = b-lines;
 	for (count = 0; count < (lines * vc->vc_cols); count++) {
 	    if (scr_readw(d) != vc->vc_video_erase_char) {
-		newport_putc (vc, chattr, y, x);
+		newport_putc (vc, vc->vc_video_erase_char, y, x);
 		scr_writew (vc->vc_video_erase_char, d);
 	    }
 	    d++;

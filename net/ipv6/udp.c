@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.53 2000/05/03 06:37:07 davem Exp $
+ *	$Id: udp.c,v 1.55 2000/07/08 00:20:43 davem Exp $
  *
  *	Fixes:
  *	Hideaki YOSHIFUJI	:	sin6_scope_id support
@@ -400,7 +400,7 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	if (err)
 		goto out_free;
 
-	sk->stamp=skb->stamp;
+	sock_recv_timestamp(msg, sk, skb);
 
 	/* Copy the address. */
 	if (msg->msg_name) {
@@ -868,6 +868,8 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 
 	fl.proto = IPPROTO_UDP;
 	fl.fl6_dst = daddr;
+	if (fl.fl6_src == NULL && !ipv6_addr_any(&np->saddr))
+		fl.fl6_src = &np->saddr;
 	fl.uli_u.ports.dport = udh.uh.dest;
 	fl.uli_u.ports.sport = udh.uh.source;
 

@@ -29,7 +29,7 @@
 #include <linux/lvm.h>
 
 
-static char *lvm_snap_version = "LVM 0.8final (15/02/2000)\n";
+static char *lvm_snap_version __attribute__ ((unused)) = "LVM 0.8final (15/02/2000)\n";
 
 extern const char *const lvm_name;
 extern int lvm_blocksizes[];

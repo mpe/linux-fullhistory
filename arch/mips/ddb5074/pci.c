@@ -320,6 +320,13 @@ int pcibios_enable_resources(struct pci_dev *dev)
 	int idx;
 	struct resource *r;
 
+	/*
+	 *  Don't touch the Nile 4
+	 */
+	if (dev->vendor == PCI_VENDOR_ID_NEC &&
+	    dev->device == PCI_DEVICE_ID_NEC_NILE4)
+	    return 0;
+
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 	old_cmd = cmd;
 	for(idx=0; idx<6; idx++) {

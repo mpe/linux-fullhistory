@@ -407,9 +407,17 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		goto out;
 	if (!elf_check_arch(elf_ex.e_machine))
 		goto out;
-#ifdef __mips__
-	/* IRIX binaries handled elsewhere. */
+#if defined(__mips__) && !defined(__mips64)
+	/* IRIX5 binaries handled elsewhere.  */
 	if (elf_ex.e_flags & EF_MIPS_ARCH) {
+		retval = -ENOEXEC;
+		goto out;
+	}
+#endif
+#if defined(__mips__) && defined(__mips64)
+	/* Linux/MIPS 32-bit binaries handled elsewhere.  */
+	if (sizeof(elf_caddr_t) == 8 &&
+	    elf_ex.e_ident[EI_CLASS] == ELFCLASS32) {
 		retval = -ENOEXEC;
 		goto out;
 	}

@@ -69,17 +69,6 @@ extern int netdev_finish_unregister(struct net_device *dev);
 
 #include <linux/rtnetlink.h>
 
-#if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
-	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
-	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
-	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		|| \
-	defined(CONFIG_ES3210)	||	defined(CONFIG_ULTRA32)		|| \
-	defined(CONFIG_LNE390)	||	defined(CONFIG_NE3210)		|| \
-	defined(CONFIG_NE2K_PCI) ||	defined(CONFIG_APNE)		|| \
-	defined(CONFIG_DAYNAPORT)
-#include "../drivers/net/8390.h"
-#endif
-
 #ifdef CONFIG_IPX_MODULE
 extern struct datalink_proto   *make_EII_client(void);
 extern struct datalink_proto   *make_8023_client(void);

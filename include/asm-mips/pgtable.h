@@ -1,5 +1,4 @@
-/* $Id: pgtable.h,v 1.31 2000/03/02 02:37:13 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -43,7 +42,13 @@ extern void (*_flush_page_to_ram)(struct page * page);
 #define flush_page_to_ram(page)		_flush_page_to_ram(page)
 
 #define flush_icache_range(start, end)	flush_cache_all()
-#define flush_icache_page(start,page)	do { } while(0)
+
+#define flush_icache_page(vma, page)					\
+do {									\
+	unsigned long addr;						\
+	addr = page_address(page);					\
+	_flush_cache_page(vma, addr);					\
+} while (0)
 
 
 /*

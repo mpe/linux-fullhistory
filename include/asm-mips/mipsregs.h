@@ -234,6 +234,8 @@ __BUILD_SET_CP0(config,CP0_CONFIG)
 #define ST0_UX			0x00000020
 #define ST0_SX			0x00000040
 #define ST0_KX 			0x00000080
+#define ST0_DE			0x00010000
+#define ST0_CE			0x00020000
 
 /*
  * Bitfields in the R[23]000 cp0 status register.
@@ -245,6 +247,8 @@ __BUILD_SET_CP0(config,CP0_CONFIG)
 #define ST0_IEO			0x00000010
 #define ST0_KUO			0x00000020
 /* bits 6 & 7 are reserved on R[23]000 */
+#define ST0_ISC			0x00010000
+#define ST0_SWC			0x00020000
 
 /*
  * Bits specific to the R4640/R4650
@@ -273,8 +277,6 @@ __BUILD_SET_CP0(config,CP0_CONFIG)
 #define  STATUSF_IP6		(1   << 14)
 #define  STATUSB_IP7		15
 #define  STATUSF_IP7		(1   << 15)
-#define ST0_DE			0x00010000
-#define ST0_CE			0x00020000
 #define ST0_CH			0x00040000
 #define ST0_SR			0x00100000
 #define ST0_BEV			0x00400000

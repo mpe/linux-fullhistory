@@ -133,28 +133,28 @@ dump_list_process(struct task_struct *t, void *address)
 	pgd_t	*page_dir, *pgd;
 	pmd_t	*pmd;
 	pte_t	*pte, page;
-	unsigned int addr;
+	unsigned long addr;
 	unsigned long val;
 
-	addr = (unsigned int) address;
+	addr = (unsigned long) address;
 
-	printk("Addr                 == %08x\n", addr);
-	printk("tasks->mm.pgd        == %08x\n", (unsigned int) t->mm->pgd);
+	printk("Addr                 == %08lx\n", addr);
+	printk("tasks->mm.pgd        == %08lx\n", (unsigned long) t->mm->pgd);
 
 	page_dir = pgd_offset(t->mm, 0);
-	printk("page_dir == %08x\n", (unsigned int) page_dir);
+	printk("page_dir == %08lx\n", (unsigned long) page_dir);
 
 	pgd = pgd_offset(t->mm, addr);
-	printk("pgd == %08x, ", (unsigned int) pgd);
+	printk("pgd == %08lx, ", (unsigned long) pgd);
 
 	pmd = pmd_offset(pgd, addr);
-	printk("pmd == %08x, ", (unsigned int) pmd);
+	printk("pmd == %08lx, ", (unsigned long) pmd);
 
 	pte = pte_offset(pmd, addr);
-	printk("pte == %08x, ", (unsigned int) pte);
+	printk("pte == %08lx, ", (unsigned long) pte);
 
 	page = *pte;
-	printk("page == %08x\n", (unsigned int) pte_val(page));
+	printk("page == %08lx\n", (unsigned long) pte_val(page));
 
 	val = pte_val(page);
 	if (val & _PAGE_PRESENT) printk("present ");

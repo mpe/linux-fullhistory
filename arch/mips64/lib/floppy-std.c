@@ -1,5 +1,4 @@
-/* $Id: floppy-std.c,v 1.1 1999/08/21 21:43:00 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -23,7 +22,6 @@
 #include <asm/keyboard.h>
 #include <asm/io.h>
 #include <asm/irq.h>
-#include <asm/mc146818rtc.h>
 #include <asm/pgtable.h>
 
 /*

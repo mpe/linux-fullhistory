@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.50 2000/05/03 06:37:06 davem Exp $
+ * Version:	$Id: raw.c,v 1.52 2000/07/08 00:20:43 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -502,7 +502,7 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	if (err)
 		goto done;
 
-	sk->stamp=skb->stamp;
+	sock_recv_timestamp(msg, sk, skb);
 
 	/* Copy the address. */
 	if (sin) {
@@ -580,6 +580,36 @@ static int raw_getsockopt(struct sock *sk, int level, int optname,
 	return -ENOPROTOOPT;
 }
 
+static int raw_ioctl(struct sock *sk, int cmd, unsigned long arg)
+{
+	switch(cmd) {
+		case SIOCOUTQ:
+		{
+			int amount = atomic_read(&sk->wmem_alloc);
+			return put_user(amount, (int *)arg);
+		}
+		case SIOCINQ:
+		{
+			struct sk_buff *skb;
+			int amount = 0;
+
+			spin_lock_irq(&sk->receive_queue.lock);
+			skb = skb_peek(&sk->receive_queue);
+			if (skb != NULL)
+				amount = skb->len;
+			spin_unlock_irq(&sk->receive_queue.lock);
+			return put_user(amount, (int *)arg);
+		}
+
+		default:
+#ifdef CONFIG_IP_MROUTE
+			return ipmr_ioctl(sk, cmd, arg);
+#else
+			return -ENOIOCTLCMD;
+#endif
+	}
+}
+
 static void get_raw_sock(struct sock *sp, char *tmpbuf, int i)
 {
 	unsigned int dest, src;
@@ -648,9 +678,7 @@ struct proto raw_prot = {
 	close:		raw_close,
 	connect:	udp_connect,
 	disconnect:	udp_disconnect,
-#ifdef CONFIG_IP_MROUTE
-	ioctl:		ipmr_ioctl,
-#endif
+	ioctl:		raw_ioctl,
 	init:		raw_init,
 	setsockopt:	raw_setsockopt,
 	getsockopt:	raw_getsockopt,

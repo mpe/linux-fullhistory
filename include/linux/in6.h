@@ -138,7 +138,7 @@ struct in6_flowlabel_req
  */
 #define IPV6_TLV_PAD0		0
 #define IPV6_TLV_PADN		1
-#define IPV6_TLV_ROUTERALERT	20
+#define IPV6_TLV_ROUTERALERT	5
 #define IPV6_TLV_JUMBO		194
 
 /*

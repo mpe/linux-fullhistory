@@ -167,12 +167,14 @@ extern __inline__ int ip_send(struct sk_buff *skb)
 		return ip_finish_output(skb);
 }
 
+/* The function in 2.2 was invalid, producing wrong result for
+ * check=0xFEFF. It was noticed by Arthur Skawina _year_ ago. --ANK(000625) */
 extern __inline__
 int ip_decrease_ttl(struct iphdr *iph)
 {
 	u32 check = iph->check;
 	check += __constant_htons(0x0100);
-	iph->check = check + (check>>16);
+	iph->check = check + (check>=0xFFFF);
 	return --iph->ttl;
 }
 
@@ -220,6 +222,8 @@ extern int	ip_call_ra_chain(struct sk_buff *skb);
  */
  
 struct sk_buff *ip_defrag(struct sk_buff *skb);
+extern int ip_frag_nqueues;
+extern atomic_t ip_frag_mem;
 
 /*
  *	Functions provided by ip_forward.c

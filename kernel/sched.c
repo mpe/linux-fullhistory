@@ -78,18 +78,20 @@ static union {
 } aligned_data [NR_CPUS] __cacheline_aligned = { {{&init_task,0}}};
 
 #define cpu_curr(cpu) aligned_data[(cpu)].schedule_data.curr
+#define last_schedule(cpu) aligned_data[(cpu)].schedule_data.last_schedule
 
 struct kernel_stat kstat = { 0 };
 
 #ifdef CONFIG_SMP
 
 #define idle_task(cpu) (init_tasks[cpu_number_map(cpu)])
-#define can_schedule(p)	(!(p)->has_cpu)
+#define can_schedule(p,cpu) ((!(p)->has_cpu) && \
+				((p)->cpus_allowed & (1 << cpu)))
 
 #else
 
 #define idle_task(cpu) (&init_task)
-#define can_schedule(p) (1)
+#define can_schedule(p,cpu) (1)
 
 #endif
 
@@ -119,7 +121,7 @@ static inline int goodness(struct task_struct * p, int this_cpu, struct mm_struc
 	 * into account).
 	 */
 	if (p->policy != SCHED_OTHER) {
-		weight = 1000 + p->rt_priority;
+		weight = 1000 + 2*DEF_PRIORITY + p->rt_priority;
 		goto out;
 	}
 
@@ -183,87 +185,108 @@ static inline int preemption_goodness(struct task_struct * prev, struct task_str
  * up unlocking it early, so the caller must not unlock the
  * runqueue, it's always done by reschedule_idle().
  */
-static inline void reschedule_idle(struct task_struct * p, unsigned long flags)
+static void reschedule_idle(struct task_struct * p, unsigned long flags)
 {
 #ifdef CONFIG_SMP
-	int this_cpu = smp_processor_id(), target_cpu;
-	struct task_struct *tsk;
-	int cpu, best_cpu, i;
+	int this_cpu = smp_processor_id();
+	struct task_struct *tsk, *target_tsk;
+	int cpu, best_cpu, i, max_prio;
+	cycles_t oldest_idle;
 
 	/*
 	 * shortcut if the woken up task's last CPU is
 	 * idle now.
 	 */
 	best_cpu = p->processor;
-	tsk = idle_task(best_cpu);
-	if (cpu_curr(best_cpu) == tsk)
-		goto send_now;
+	if (can_schedule(p, best_cpu)) {
+		tsk = idle_task(best_cpu);
+		if (cpu_curr(best_cpu) == tsk)
+			goto send_now_idle;
+
+		/*
+		 * Maybe this process has enough priority to preempt
+		 * its preferred CPU. (this is a shortcut):
+		 */
+		tsk = cpu_curr(best_cpu);
+		if (preemption_goodness(tsk, p, best_cpu) > 1)
+			goto preempt_now;
+	}
 
 	/*
 	 * We know that the preferred CPU has a cache-affine current
 	 * process, lets try to find a new idle CPU for the woken-up
-	 * process:
+	 * process. Select the least recently active idle CPU. (that
+	 * one will have the least active cache context.) Also find
+	 * the executing process which has the least priority.
 	 */
-	for (i = smp_num_cpus - 1; i >= 0; i--) {
+	oldest_idle = -1ULL;
+	target_tsk = NULL;
+	max_prio = 1;
+
+	for (i = 0; i < smp_num_cpus; i++) {
 		cpu = cpu_logical_map(i);
-		if (cpu == best_cpu)
+		if (!can_schedule(p, cpu))
 			continue;
 		tsk = cpu_curr(cpu);
 		/*
-		 * We use the last available idle CPU. This creates
+		 * We use the first available idle CPU. This creates
 		 * a priority list between idle CPUs, but this is not
 		 * a problem.
 		 */
-		if (tsk == idle_task(cpu))
-			goto send_now;
-	}
+		if (tsk == idle_task(cpu)) {
+			if (last_schedule(cpu) < oldest_idle) {
+				oldest_idle = last_schedule(cpu);
+				target_tsk = tsk;
+			}
+		} else {
+			if (oldest_idle == -1ULL) {
+				int prio = preemption_goodness(tsk, p, cpu);
 
-	/*
-	 * No CPU is idle, but maybe this process has enough priority
-	 * to preempt it's preferred CPU.
-	 */
-	tsk = cpu_curr(best_cpu);
-	if (preemption_goodness(tsk, p, best_cpu) > 0)
-		goto send_now;
-
-	/*
-	 * We will get here often - or in the high CPU contention
-	 * case. No CPU is idle and this process is either lowprio or
-	 * the preferred CPU is highprio. Try to preempt some other CPU
-	 * only if it's RT or if it's iteractive and the preferred
-	 * cpu won't reschedule shortly.
-	 */
-	if (p->avg_slice < cacheflush_time || (p->policy & ~SCHED_YIELD) != SCHED_OTHER) {
-		for (i = smp_num_cpus - 1; i >= 0; i--) {
-			cpu = cpu_logical_map(i);
-			if (cpu == best_cpu)
-				continue;
-			tsk = cpu_curr(cpu);
-			if (preemption_goodness(tsk, p, cpu) > 0)
-				goto send_now;
+				if (prio > max_prio) {
+					max_prio = prio;
+					target_tsk = tsk;
+				}
+			}
 		}
+	}
+	tsk = target_tsk;
+	if (tsk) {
+		if (oldest_idle != -1ULL)
+			goto send_now_idle;
+		goto preempt_now;
 	}
 
 	spin_unlock_irqrestore(&runqueue_lock, flags);
 	return;
 		
-send_now:
-	target_cpu = tsk->processor;
+send_now_idle:
+	/*
+	 * If need_resched == -1 then we can skip sending the IPI
+	 * altogether, tsk->need_resched is actively watched by the
+	 * idle thread.
+	 */
+	if (!tsk->need_resched)
+		smp_send_reschedule(tsk->processor);
+	tsk->need_resched = 1;
+	spin_unlock_irqrestore(&runqueue_lock, flags);
+	return;
+
+preempt_now:
 	tsk->need_resched = 1;
 	spin_unlock_irqrestore(&runqueue_lock, flags);
 	/*
 	 * the APIC stuff can go outside of the lock because
 	 * it uses no task information, only CPU#.
 	 */
-	if (target_cpu != this_cpu)
-		smp_send_reschedule(target_cpu);
+	if (tsk->processor != this_cpu)
+		smp_send_reschedule(tsk->processor);
 	return;
 #else /* UP */
 	int this_cpu = smp_processor_id();
 	struct task_struct *tsk;
 
 	tsk = cpu_curr(this_cpu);
-	if (preemption_goodness(tsk, p, this_cpu) > 0)
+	if (preemption_goodness(tsk, p, this_cpu) > 1)
 		tsk->need_resched = 1;
 	spin_unlock_irqrestore(&runqueue_lock, flags);
 #endif
@@ -413,10 +436,12 @@ static inline void __schedule_tail(struct task_struct *prev)
 		unsigned long flags;
 
 		spin_lock_irqsave(&runqueue_lock, flags);
+		prev->has_cpu = 0;
 		reschedule_idle(prev, flags); // spin_unlocks runqueue
+	} else {
+		wmb();
+		prev->has_cpu = 0;
 	}
-	wmb();
-	prev->has_cpu = 0;
 #endif /* CONFIG_SMP */
 }
 
@@ -501,7 +526,7 @@ repeat_schedule:
 still_running_back:
 	list_for_each(tmp, &runqueue_head) {
 		p = list_entry(tmp, struct task_struct, run_list);
-		if (can_schedule(p)) {
+		if (can_schedule(p, this_cpu)) {
 			int weight = goodness(p, this_cpu, prev->active_mm);
 			if (weight > c)
 				c = weight, next = p;
@@ -540,13 +565,6 @@ still_running_back:
 		t = get_cycles();
 		this_slice = t - sched_data->last_schedule;
 		sched_data->last_schedule = t;
-
-		/*
-		 * Exponentially fading average calculation, with
-		 * some weight so it doesnt get fooled easily by
-		 * smaller irregularities.
-		 */
-		prev->avg_slice = (this_slice*1 + prev->avg_slice*1)/2;
 	}
 
 	/*
@@ -641,15 +659,20 @@ scheduling_in_interrupt:
 	return;
 }
 
-static inline void __wake_up_common(wait_queue_head_t *q, unsigned int mode, const int sync)
+static inline void __wake_up_common (wait_queue_head_t *q, unsigned int mode,
+						const int sync)
 {
 	struct list_head *tmp, *head;
-	struct task_struct *p;
+	struct task_struct *p, *best_exclusive;
 	unsigned long flags;
+	int best_cpu, irq;
 
         if (!q)
 		goto out;
 
+	best_cpu = smp_processor_id();
+	irq = in_interrupt();
+	best_exclusive = NULL;
 	wq_write_lock_irqsave(&q->lock, flags);
 
 #if WAITQUEUE_DEBUG
@@ -661,9 +684,12 @@ static inline void __wake_up_common(wait_queue_head_t *q, unsigned int mode, con
         if (!head->next || !head->prev)
                 WQ_BUG();
 #endif
-	list_for_each(tmp, head) {
+	tmp = head->next;
+	while (tmp != head) {
 		unsigned int state;
                 wait_queue_t *curr = list_entry(tmp, wait_queue_t, task_list);
+
+		tmp = tmp->next;
 
 #if WAITQUEUE_DEBUG
 		CHECK_MAGIC(curr->__magic);
@@ -674,15 +700,37 @@ static inline void __wake_up_common(wait_queue_head_t *q, unsigned int mode, con
 #if WAITQUEUE_DEBUG
 			curr->__waker = (long)__builtin_return_address(0);
 #endif
-			if (sync)
-				wake_up_process_synchronous(p);
-			else
-				wake_up_process(p);
-			if (state & mode & TASK_EXCLUSIVE)
-				break;
+			/*
+			 * If waking up from an interrupt context then
+			 * prefer processes which are affine to this
+			 * CPU.
+			 */
+			if (irq && (state & mode & TASK_EXCLUSIVE)) {
+				if (!best_exclusive)
+					best_exclusive = p;
+				else if ((p->processor == best_cpu) &&
+					(best_exclusive->processor != best_cpu))
+						best_exclusive = p;
+			} else {
+				if (sync)
+					wake_up_process_synchronous(p);
+				else
+					wake_up_process(p);
+				if (state & mode & TASK_EXCLUSIVE)
+					break;
+			}
 		}
 	}
+	if (best_exclusive)
+		best_exclusive->state = TASK_RUNNING;
 	wq_write_unlock_irqrestore(&q->lock, flags);
+
+	if (best_exclusive) {
+		if (sync)
+			wake_up_process_synchronous(best_exclusive);
+		else
+			wake_up_process(best_exclusive);
+	}
 out:
 	return;
 }
@@ -696,6 +744,7 @@ void __wake_up_sync(wait_queue_head_t *q, unsigned int mode)
 {
 	__wake_up_common(q, mode, 1);
 }
+
 
 #define	SLEEP_ON_VAR				\
 	unsigned long flags;			\
@@ -798,7 +847,7 @@ asmlinkage long sys_nice(int increment)
 	 * timeslice instead (default 200 ms). The rounding is
 	 * why we want to avoid negative values.
 	 */
-	newprio = (newprio * DEF_PRIORITY + 10) / 20;
+	newprio = (newprio * DEF_PRIORITY + 10)/20;
 	increment = newprio;
 	if (increase)
 		increment = -increment;
@@ -812,7 +861,7 @@ asmlinkage long sys_nice(int increment)
 	 */
 	newprio = current->priority - increment;
 	if ((signed) newprio < 1)
-		newprio = 1;
+		newprio = DEF_PRIORITY/20;
 	if (newprio > DEF_PRIORITY*2)
 		newprio = DEF_PRIORITY*2;
 	current->priority = newprio;

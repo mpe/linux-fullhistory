@@ -281,25 +281,27 @@ struct neighbour * neigh_create(struct neigh_table *tbl, const void *pkey,
 	struct neighbour *n, *n1;
 	u32 hash_val;
 	int key_len = tbl->key_len;
+	int error;
 
 	n = neigh_alloc(tbl);
 	if (n == NULL)
-		return NULL;
+		return ERR_PTR(-ENOBUFS);
 
 	memcpy(n->primary_key, pkey, key_len);
 	n->dev = dev;
 	dev_hold(dev);
 
 	/* Protocol specific setup. */
-	if (tbl->constructor &&	tbl->constructor(n) < 0) {
+	if (tbl->constructor &&	(error = tbl->constructor(n)) < 0) {
 		neigh_release(n);
-		return NULL;
+		return ERR_PTR(error);
 	}
 
 	/* Device specific setup. */
-	if (n->parms && n->parms->neigh_setup && n->parms->neigh_setup(n) < 0) {
+	if (n->parms && n->parms->neigh_setup &&
+	    (error = n->parms->neigh_setup(n)) < 0) {
 		neigh_release(n);
-		return NULL;
+		return ERR_PTR(error);
 	}
 
 	n->confirmed = jiffies - (n->parms->base_reachable_time<<1);
@@ -1242,6 +1244,7 @@ int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 		if (nda[NDA_LLADDR-1] != NULL &&
 		    nda[NDA_LLADDR-1]->rta_len != RTA_LENGTH(dev->addr_len))
 			goto out;
+		err = 0;
 		n = neigh_lookup(tbl, RTA_DATA(nda[NDA_DST-1]), dev);
 		if (n) {
 			if (nlh->nlmsg_flags&NLM_F_EXCL)
@@ -1249,9 +1252,11 @@ int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 		} else if (!(nlh->nlmsg_flags&NLM_F_CREATE))
 			err = -ENOENT;
 		else {
-			n = __neigh_lookup(tbl, RTA_DATA(nda[NDA_DST-1]), dev, 1);
-			if (n == NULL)
-				err = -ENOBUFS;
+			n = __neigh_lookup_errno(tbl, RTA_DATA(nda[NDA_DST-1]), dev);
+			if (IS_ERR(n)) {
+				err = PTR_ERR(n);
+				n = NULL;
+			}
 		}
 		if (err == 0) {
 			err = neigh_update(n, nda[NDA_LLADDR-1] ? RTA_DATA(nda[NDA_LLADDR-1]) : NULL,

@@ -1,4 +1,4 @@
-/* $Id: streamable.c,v 1.11 2000/02/23 00:41:21 ralf Exp $
+/* $Id: streamable.c,v 1.10 2000/02/05 06:47:30 ralf Exp $
  *
  * streamable.c: streamable devices. /dev/gfx
  * (C) 1997 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -52,14 +52,14 @@ get_sioc (struct strioctl *sioc, unsigned long arg)
 static int
 sgi_gfx_open (struct inode *inode, struct file *file)
 {
-	printk ("GFX: Opened by %ld\n", current->pid);
+	printk ("GFX: Opened by %d\n", current->pid);
 	return 0;
 }
 
 static int
 sgi_gfx_close (struct inode *inode, struct file *file)
 {
-	printk ("GFX: Closed by %ld\n", current->pid);
+	printk ("GFX: Closed by %d\n", current->pid);
 	return 0;
 }
 

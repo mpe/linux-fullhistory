@@ -69,14 +69,12 @@ static void smp_tune_scheduling (void)
 void __init smp_boot_cpus(void)
 {
 	extern void allowboot(void);
-	extern int maxcpus;
 
 	init_new_context(current, &init_mm);
 	global_irq_holder = 0;
 	current->processor = 0;
 	init_idle();
 	smp_tune_scheduling();
-	smp_num_cpus = maxcpus;
 	allowboot();
 }
 

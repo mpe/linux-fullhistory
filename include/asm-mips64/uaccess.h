@@ -1,11 +1,10 @@
-/* $Id: uaccess.h,v 1.4 2000/02/19 00:33:10 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996, 1997, 1998, 1999 by Ralf Baechle
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1996, 1997, 1998, 1999, 2000 by Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
@@ -70,16 +69,20 @@ extern inline int verify_area(int type, const void * addr, unsigned long size)
  * (a) re-use the arguments for side effects (sizeof is ok)
  * (b) require any knowledge of processes at this stage
  */
-#define put_user(x,ptr)	__put_user_check((x),(ptr),sizeof(*(ptr)),__access_mask)
-#define get_user(x,ptr) __get_user_check((x),(ptr),sizeof(*(ptr)),__access_mask)
+#define put_user(x,ptr)	\
+	__put_user_check((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)))
+#define get_user(x,ptr) \
+	__get_user_check((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)))
 
 /*
  * The "__xxx" versions do not do address space checking, useful when
  * doing multiple accesses to the same area (the user has to do the
  * checks by hand with "access_ok()")
  */
-#define __put_user(x,ptr) __put_user_nocheck((x),(ptr),sizeof(*(ptr)))
-#define __get_user(x,ptr) __get_user_nocheck((x),(ptr),sizeof(*(ptr)))
+#define __put_user(x,ptr) \
+	__put_user_nocheck((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)))
+#define __get_user(x,ptr) \
+	__get_user_nocheck((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)))
 
 /*
  * The "xxx_ret" versions return constant specified in third argument, if
@@ -87,17 +90,11 @@ extern inline int verify_area(int type, const void * addr, unsigned long size)
  * case of just returning from the function xxx_ret is used.
  */
 
-#define put_user_ret(x,ptr,ret) ({ \
-if (put_user(x,ptr)) return ret; })
+#define put_user_ret(x,ptr,ret) ({ if (put_user(x,ptr)) return ret; })
+#define get_user_ret(x,ptr,ret) ({ if (get_user(x,ptr)) return ret; })
 
-#define get_user_ret(x,ptr,ret) ({ \
-if (get_user(x,ptr)) return ret; })
-
-#define __put_user_ret(x,ptr,ret) ({ \
-if (__put_user(x,ptr)) return ret; })
-
-#define __get_user_ret(x,ptr,ret) ({ \
-if (__get_user(x,ptr)) return ret; })
+#define __put_user_ret(x,ptr,ret) ({ if (__put_user(x,ptr)) return ret; })
+#define __get_user_ret(x,ptr,ret) ({ if (__get_user(x,ptr)) return ret; })
 
 struct __large_struct { unsigned long buf[100]; };
 #define __m(x) (*(struct __large_struct *)(x))
@@ -117,14 +114,14 @@ case 8:  __get_user_asm("ld"); break; \
 default: __get_user_unknown(); break; \
 } x = (__typeof__(*(ptr))) __gu_val; __gu_err; })
 
-#define __get_user_check(x,ptr,size,mask) ({ \
+#define __get_user_check(x,ptr,size) ({ \
 long __gu_err; \
 __typeof__(*(ptr)) __gu_val; \
 long __gu_addr; \
 __asm__("":"=r" (__gu_val)); \
 __gu_addr = (long) (ptr); \
 __asm__("":"=r" (__gu_err)); \
-if (__access_ok(__gu_addr,size,mask)) { \
+if (__access_ok(__gu_addr,size,__access_mask)) { \
 switch (size) { \
 case 1: __get_user_asm("lb"); break; \
 case 2: __get_user_asm("lh"); break; \
@@ -167,14 +164,14 @@ case 8: __put_user_asm("sd"); break; \
 default: __put_user_unknown(); break; \
 } __pu_err; })
 
-#define __put_user_check(x,ptr,size,mask) ({ \
+#define __put_user_check(x,ptr,size) ({ \
 long __pu_err; \
 __typeof__(*(ptr)) __pu_val; \
 long __pu_addr; \
 __pu_val = (x); \
 __pu_addr = (long) (ptr); \
 __asm__("":"=r" (__pu_err)); \
-if (__access_ok(__pu_addr,size,mask)) { \
+if (__access_ok(__pu_addr,size,__access_mask)) { \
 switch (size) { \
 case 1: __put_user_asm("sb"); break; \
 case 2: __put_user_asm("sh"); break; \

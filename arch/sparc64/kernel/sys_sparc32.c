@@ -279,7 +279,7 @@ char * getname32(const char *filename)
 	char *tmp, *result;
 
 	result = ERR_PTR(-ENOMEM);
-	tmp = (char *)__get_free_page(GFP_KERNEL);
+	tmp = __getname();
 	if (tmp)  {
 		int retval = do_getname32(filename, tmp);
 

@@ -1,7 +1,6 @@
-/* $Id: time.c,v 1.14 2000/01/26 00:07:44 ralf Exp $
- *
- *  Copyright (C) 1991, 1992, 1995  Linus Torvalds
- *  Copyright (C) 1996, 1997, 1998  Ralf Baechle
+/*
+ * Copyright (C) 1991, 1992, 1995  Linus Torvalds
+ * Copyright (C) 1996 - 2000  Ralf Baechle
  *
  * This file contains the time handling details for PC-style clocks as
  * found in some MIPS systems.
@@ -15,6 +14,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
+#include <linux/kernel_stat.h>
 
 #include <asm/bootinfo.h>
 #include <asm/mipsregs.h>
@@ -26,6 +26,8 @@
 #include <linux/timex.h>
 
 extern volatile unsigned long lost_ticks;
+unsigned long r4k_interval = 0;
+extern rwlock_t xtime_lock;
 
 /*
  * Change this if you have some constant time drift
@@ -219,7 +221,7 @@ void do_gettimeofday(struct timeval *tv)
 {
 	unsigned long flags;
 
-	save_and_cli(flags);
+	read_lock_irqsave (&xtime_lock, flags);
 	*tv = xtime;
 	tv->tv_usec += do_gettimeoffset();
 
@@ -230,7 +232,7 @@ void do_gettimeofday(struct timeval *tv)
 	if (lost_ticks)
 		tv->tv_usec += USECS_PER_JIFFY;
 
-	restore_flags(flags);
+	read_unlock_irqrestore (&xtime_lock, flags);
 
 	if (tv->tv_usec >= 1000000) {
 		tv->tv_usec -= 1000000;
@@ -240,7 +242,7 @@ void do_gettimeofday(struct timeval *tv)
 
 void do_settimeofday(struct timeval *tv)
 {
-	cli();
+	write_lock_irq (&xtime_lock);
 	/* This is revolting. We need to set the xtime.tv_usec
 	 * correctly. However, the value in this location is
 	 * is value at the last tick.
@@ -259,7 +261,7 @@ void do_settimeofday(struct timeval *tv)
 	time_status |= STA_UNSYNC;
 	time_maxerror = NTP_PHASE_LIMIT;
 	time_esterror = NTP_PHASE_LIMIT;
-	sti();
+	write_unlock_irq (&xtime_lock);
 }
 
 /*
@@ -355,7 +357,6 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	     dist = period / 4;
 	}
 #endif
-#ifdef CONFIG_PROFILE
 	if(!user_mode(regs)) {
 		if (prof_buffer && current->pid) {
 			extern int _stext;
@@ -373,7 +374,6 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			atomic_inc((atomic_t *)&prof_buffer[pc]);
 		}
 	}
-#endif
 	do_timer(regs);
 
 	/*
@@ -381,22 +381,26 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
 	 * called as close as possible to 500 ms before the new second starts.
 	 */
+	read_lock (&xtime_lock); 
 	if ((time_status & STA_UNSYNC) == 0 &&
 	    xtime.tv_sec > last_rtc_update + 660 &&
 	    xtime.tv_usec >= 500000 - ((unsigned) tick) / 2 &&
-	    xtime.tv_usec <= 500000 + ((unsigned) tick) / 2)
+	    xtime.tv_usec <= 500000 + ((unsigned) tick) / 2) {
 	  if (set_rtc_mmss(xtime.tv_sec) == 0)
 	    last_rtc_update = xtime.tv_sec;
 	  else
 	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+	}
 	/* As we return to user mode fire off the other CPU schedulers.. this is 
 	   basically because we don't yet share IRQ's around. This message is
 	   rigged to be safe on the 386 - basically it's a hack, so don't look
 	   closely for now.. */
 	/*smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 0); */
+	read_unlock (&xtime_lock); 
 }
 
-static void r4k_timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
+static inline void 
+r4k_timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	unsigned int count;
 
@@ -407,6 +411,18 @@ static void r4k_timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	count = read_32bit_cp0_register(CP0_COUNT);
 	timerhi += (count < timerlo);	/* Wrap around */
 	timerlo = count;
+
+#ifdef CONFIG_SGI_IP22
+	/* Since we don't get anything but r4k timer interrupts, we need to
+	 * set this up so that we'll get one next time. Fortunately since we
+	 * have timerhi/timerlo, we don't care so much if we miss one. So
+	 * we need only ask for the next in r4k_interval counts. On other
+	 * archs we have a real timer, so we don't want this.
+	 */
+	write_32bit_cp0_register (CP0_COMPARE, 
+				  (unsigned long) (count + r4k_interval));
+        kstat.irqs[0][irq]++;
+#endif
 
 	timer_interrupt(irq, dev_id, regs);
 
@@ -419,6 +435,12 @@ static void r4k_timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		 */
 		timerhi = timerlo = 0;
 	}
+}
+
+void indy_r4k_timer_interrupt (struct pt_regs *regs)
+{
+	static const int INDY_R4K_TIMER_IRQ = 7;
+	r4k_timer_interrupt (INDY_R4K_TIMER_IRQ, NULL, regs);
 }
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
@@ -500,7 +522,7 @@ void (*board_time_init)(struct irqaction *irq);
 
 void __init time_init(void)
 {
-	unsigned int epoch, year, mon, day, hour, min, sec;
+	unsigned int epoch = 0, year, mon, day, hour, min, sec;
 	int i;
 
 	/* The Linux interpretation of the CMOS clock register contents:
@@ -543,8 +565,10 @@ void __init time_init(void)
 	}
 	year += epoch;
 
+	write_lock_irq (&xtime_lock);
 	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
 	xtime.tv_usec = 0;
+	write_unlock_irq (&xtime_lock);
 
 	init_cycle_counter();
 

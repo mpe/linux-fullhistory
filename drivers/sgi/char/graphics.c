@@ -1,4 +1,4 @@
-/* $Id: graphics.c,v 1.23 2000/02/23 00:41:21 ralf Exp $
+/* $Id: graphics.c,v 1.22 2000/02/18 00:24:43 ralf Exp $
  *
  * gfx.c: support for SGI's /dev/graphics, /dev/opengl
  *

@@ -44,15 +44,8 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool '  IP: ARP daemon support (EXPERIMENTAL)' CONFIG_ARPD
    fi
 fi
+bool '  IP: TCP Explicit Congestion Notification support' CONFIG_INET_ECN
 bool '  IP: TCP syncookie support (disabled per default)' CONFIG_SYN_COOKIES
-comment '(it is safe to leave these untouched)'
-#bool '  IP: PC/TCP compatibility mode' CONFIG_INET_PCTCP
-#bool '  IP: Path MTU Discovery (normally enabled)' CONFIG_PATH_MTU_DISCOVERY
-#bool '  IP: Disable NAGLE algorithm (normally enabled)' CONFIG_TCP_NAGLE_OFF
-bool '  IP: Allow large windows (not recommended if <16Mb of memory)' CONFIG_SKB_LARGE
-#if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then 
-#   bool '  IP: support checksum copy to user for UDP (EXPERIMENTAL)'  CONFIG_UDP_DELAY_CSUM
-#fi
 if [ "$CONFIG_NETFILTER" != "n" ]; then
    source net/ipv4/netfilter/Config.in
 fi

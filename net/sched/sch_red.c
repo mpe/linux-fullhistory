@@ -39,6 +39,7 @@
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/pkt_sched.h>
+#include <net/inet_ecn.h>
 
 #define RED_ECN_ECT  0x02
 #define RED_ECN_CE   0x01
@@ -170,14 +171,9 @@ static int red_ecn_mark(struct sk_buff *skb)
 		if (!(tos & RED_ECN_ECT))
 			return 0;
 
-		if (!(tos & RED_ECN_CE)) {
-			u32 check = skb->nh.iph->check;
+		if (!(tos & RED_ECN_CE))
+			IP_ECN_set_ce(skb->nh.iph);
 
-			check += __constant_htons(0xFFFE);
-			skb->nh.iph->check = check + (check>>16);
-
-			skb->nh.iph->tos = tos | RED_ECN_CE;
-		}
 		return 1;
 	}
 

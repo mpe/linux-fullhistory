@@ -1,12 +1,11 @@
-/* $Id$
- *
+/*
  * Architecture specific parts of the Floppy driver
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995, 1996, 1997, 1998, 1999 Ralf Baechle
+ * Copyright (C) 1995 - 2000 Ralf Baechle
  */
 #ifndef _ASM_FLOPPY_H
 #define _ASM_FLOPPY_H
@@ -39,30 +38,30 @@ struct fd_ops {
 
 extern struct fd_ops *fd_ops;
 
-#define fd_inb(port)			fd_ops->fd_inb(port)
-#define fd_outb(value,port)		fd_ops->fd_outb(value,port)
+#define fd_inb(port)		fd_ops->fd_inb(port)
+#define fd_outb(value,port)	fd_ops->fd_outb(value,port)
 
-#define fd_enable_dma(channel)		fd_ops->fd_enable_dma(channel)
-#define fd_disable_dma(channel)		fd_ops->fd_disable_dma(channel)
-#define fd_request_dma(channel)		fd_ops->fd_request_dma(channel)
-#define fd_free_dma(channel)		fd_ops->fd_free_dma(channel)
-#define fd_clear_dma_ff(channel)	fd_ops->fd_clear_dma_ff(channel)
-#define fd_set_dma_mode(channel, mode)	fd_ops->fd_set_dma_mode(channel, mode)
-#define fd_set_dma_addr(channel, addr)	fd_ops->fd_set_dma_addr(channel, \
-					         virt_to_bus(addr))
-#define fd_set_dma_count(channel,count)	fd_ops->fd_set_dma_count(channel,count)
-#define fd_get_dma_residue(channel)	fd_ops->fd_get_dma_residue(channel)
+#define fd_enable_dma()		fd_ops->fd_enable_dma(FLOPPY_DMA)
+#define fd_disable_dma()	fd_ops->fd_disable_dma(FLOPPY_DMA)
+#define fd_request_dma()	fd_ops->fd_request_dma(FLOPPY_DMA)
+#define fd_free_dma()		fd_ops->fd_free_dma(FLOPPY_DMA)
+#define fd_clear_dma_ff()	fd_ops->fd_clear_dma_ff(FLOPPY_DMA)
+#define fd_set_dma_mode(mode)	fd_ops->fd_set_dma_mode(FLOPPY_DMA, mode)
+#define fd_set_dma_addr(addr)	fd_ops->fd_set_dma_addr(FLOPPY_DMA, \
+				                       virt_to_bus(addr))
+#define fd_set_dma_count(count)	fd_ops->fd_set_dma_count(FLOPPY_DMA,count)
+#define fd_get_dma_residue()	fd_ops->fd_get_dma_residue(FLOPPY_DMA)
 
-#define fd_enable_irq(irq)		fd_ops->fd_enable_irq(irq)
-#define fd_disable_irq(irq)		fd_ops->fd_disable_irq(irq)
-#define fd_request_irq(irq)		request_irq(irq, floppy_interrupt, \
-						    SA_INTERRUPT \
-					            | SA_SAMPLE_RANDOM, \
-				                    "floppy", NULL)
-#define fd_free_irq(irq)		free_irq(irq, NULL);
-#define fd_dma_mem_alloc(size) fd_ops->fd_dma_mem_alloc(size)
+#define fd_enable_irq()		fd_ops->fd_enable_irq(FLOPPY_IRQ)
+#define fd_disable_irq()	fd_ops->fd_disable_irq(FLOPPY_IRQ)
+#define fd_request_irq()	request_irq(FLOPPY_IRQ, floppy_interrupt, \
+				            SA_INTERRUPT | SA_SAMPLE_RANDOM, \
+				            "floppy", NULL)
+#define fd_free_irq()		free_irq(FLOPPY_IRQ, NULL);
+#define fd_dma_mem_alloc(size)	fd_ops->fd_dma_mem_alloc(size)
 #define fd_dma_mem_free(mem,size) fd_ops->fd_dma_mem_free(mem,size)
-#define fd_drive_type(n)		fd_ops->fd_drive_type(n)
+#define fd_drive_type(n)	fd_ops->fd_drive_type(n)
+#define fd_cacheflush(addr,size) dma_cache_wback_inv(addr,size)
 
 #define MAX_BUFFER_SECTORS 24
 
@@ -77,7 +76,14 @@ extern struct fd_ops *fd_ops;
 #define FLOPPY1_TYPE			fd_drive_type(1)
 
 #define FDC1			fd_ops->fd_getfdaddr1();
-static int __attribute__((__unused__)) FDC2=-1;
+
+/*
+ * Hack: The floppy drivrer defines this, before including fdreg.h.  We use
+ * to define FDC2 only one and keep it a static variable in floppy.c.
+ */
+#ifdef FDPATCHES
+static int FDC2=-1;
+#endif
 
 #define N_FDC 1			/* do you *really* want a second controller? */
 #define N_DRIVE 8

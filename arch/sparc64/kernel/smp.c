@@ -386,6 +386,46 @@ void smp_cross_call(unsigned long *func, u32 ctx, u64 data1, u64 data2)
 	}
 }
 
+struct call_data_struct {
+	void (*func) (void *info);
+	void *info;
+	atomic_t finished;
+	int wait;
+};
+
+extern unsigned long xcall_call_function;
+
+int smp_call_function(void (*func)(void *info), void *info,
+		      int nonatomic, int wait)
+{
+	struct call_data_struct data;
+	int cpus = smp_num_cpus - 1;
+
+	if (!cpus)
+		return 0;
+
+	data.func = func;
+	data.info = info;
+	atomic_set(&data.finished, 0);
+	data.wait = wait;
+
+	smp_cross_call(&xcall_call_function,
+		       0, (u64) &data, 0);
+	if (wait) {
+		while (atomic_read(&data.finished) != cpus)
+			barrier();
+	}
+
+	return 0;
+}
+
+void smp_call_function_client(struct call_data_struct *call_data)
+{
+	call_data->func(call_data->info);
+	if (call_data->wait)
+		atomic_inc(&call_data->finished);
+}
+
 extern unsigned long xcall_flush_tlb_page;
 extern unsigned long xcall_flush_tlb_mm;
 extern unsigned long xcall_flush_tlb_range;
