@@ -79,8 +79,8 @@ sub sp887x {
     wgetfile($sourcefile, $url);
     unzip($sourcefile, $tmpdir);
     unshield("$tmpdir/$cabfile", $tmpdir);
-    verify("$tmpdir/sc_main.mc", $hash);
-    copy("$tmpdir/sc_main.mc", $outfile);
+    verify("$tmpdir/ZEnglish/sc_main.mc", $hash);
+    copy("$tmpdir/ZEnglish/sc_main.mc", $outfile);
 
     $outfile;
 }
@@ -292,7 +292,7 @@ sub unzip {
 sub unshield {
     my ($sourcefile, $todir) = @_;
 
-    system("unshield -d \"$todir\" \"$sourcefile\" > /dev/null" ) and die ("unshield failed - unable to extract firmware");
+    system("unshield x -d \"$todir\" \"$sourcefile\" > /dev/null" ) and die ("unshield failed - unable to extract firmware");
 }
 
 sub verify {
