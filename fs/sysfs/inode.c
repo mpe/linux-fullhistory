@@ -23,7 +23,7 @@ static struct address_space_operations sysfs_aops = {
 
 static struct backing_dev_info sysfs_backing_dev_info = {
 	.ra_pages	= 0,	/* No readahead */
-	.memory_backed	= 1,	/* Does not contribute to dirty memory */
+	.capabilities	= BDI_CAP_NO_ACCT_DIRTY | BDI_CAP_NO_WRITEBACK,
 };
 
 struct inode * sysfs_new_inode(mode_t mode)

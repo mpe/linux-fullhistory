@@ -23,6 +23,7 @@
 #include <linux/devfs_fs_kernel.h>
 #include <linux/ptrace.h>
 #include <linux/device.h>
+#include <linux/backing-dev.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -758,6 +759,10 @@ static struct file_operations zero_fops = {
 	.mmap		= mmap_zero,
 };
 
+static struct backing_dev_info zero_bdi = {
+	.capabilities	= BDI_CAP_MAP_COPY,
+};
+
 static struct file_operations full_fops = {
 	.llseek		= full_lseek,
 	.read		= read_full,
@@ -804,6 +809,7 @@ static int memory_open(struct inode * inode, struct file * filp)
 			break;
 #endif
 		case 5:
+			filp->f_mapping->backing_dev_info = &zero_bdi;
 			filp->f_op = &zero_fops;
 			break;
 		case 7:

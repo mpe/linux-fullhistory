@@ -172,7 +172,7 @@ static int __filemap_fdatawrite_range(struct address_space *mapping,
 		.end = end,
 	};
 
-	if (mapping->backing_dev_info->memory_backed)
+	if (!mapping_cap_writeback_dirty(mapping))
 		return 0;
 
 	ret = do_writepages(mapping, &wbc);
@@ -269,7 +269,7 @@ int sync_page_range(struct inode *inode, struct address_space *mapping,
 	pgoff_t end = (pos + count - 1) >> PAGE_CACHE_SHIFT;
 	int ret;
 
-	if (mapping->backing_dev_info->memory_backed || !count)
+	if (!mapping_cap_writeback_dirty(mapping) || !count)
 		return 0;
 	ret = filemap_fdatawrite_range(mapping, pos, pos + count - 1);
 	if (ret == 0) {
@@ -295,7 +295,7 @@ int sync_page_range_nolock(struct inode *inode, struct address_space *mapping,
 	pgoff_t end = (pos + count - 1) >> PAGE_CACHE_SHIFT;
 	int ret;
 
-	if (mapping->backing_dev_info->memory_backed || !count)
+	if (!mapping_cap_writeback_dirty(mapping) || !count)
 		return 0;
 	ret = filemap_fdatawrite_range(mapping, pos, pos + count - 1);
 	if (ret == 0)

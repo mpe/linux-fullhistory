@@ -315,7 +315,7 @@ sync_sb_inodes(struct super_block *sb, struct writeback_control *wbc)
 		struct backing_dev_info *bdi = mapping->backing_dev_info;
 		long pages_skipped;
 
-		if (bdi->memory_backed) {
+		if (!bdi_cap_writeback_dirty(bdi)) {
 			list_move(&inode->i_list, &sb->s_dirty);
 			if (sb == blockdev_superblock) {
 				/*
@@ -566,7 +566,7 @@ int write_inode_now(struct inode *inode, int sync)
 		.sync_mode = WB_SYNC_ALL,
 	};
 
-	if (inode->i_mapping->backing_dev_info->memory_backed)
+	if (!mapping_cap_writeback_dirty(inode->i_mapping))
 		return 0;
 
 	might_sleep();
