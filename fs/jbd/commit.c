@@ -341,7 +341,7 @@ write_out_data:
 			BUFFER_TRACE(bh, "locked");
 			if (!inverted_lock(journal, bh))
 				goto write_out_data;
-			__journal_unfile_buffer(jh);
+			__journal_temp_unlink_buffer(jh);
 			__journal_file_buffer(jh, commit_transaction,
 						BJ_Locked);
 			jbd_unlock_bh_state(bh);
